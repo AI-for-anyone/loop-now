@@ -1,0 +1,11 @@
+# 字体构建工具（只在更新字体时使用，装在仓库外的虚拟环境 ~/.local/loop-now-font-tools）。
+# 安装：~/.local/loop-now-font-tools/bin/pip install --require-hashes -r web/scripts/fonts/requirements.txt
+fonttools==4.53.1 \
+    --hash=sha256:3b3c8ebafbee8d9002bd8f1195d09ed2bd9ff134ddec37ee8f6a6375e6a4f0e8 \
+    --hash=sha256:d92d3c2a1b39631a6131c2fa25b5406855f97969b068e7e08413325bc0afba58 \
+    --hash=sha256:f1f8758a2ad110bd6432203a344269f445a2907dc24ef6bccfd0ac4e14e0d71d \
+    --hash=sha256:e128778a8e9bc11159ce5447f76766cefbd876f44bd79aff030287254e4752c4
+brotli==1.1.0 \
+    --hash=sha256:32d95b80260d79926f5fab3c41701dbb818fde1c9da590e77e571eefd14abe28 \
+    --hash=sha256:316cc9b17edf613ac76b1f1f305d2a748f1b976b033b049a6ecdfd5612c70409 \
+    --hash=sha256:81de08ac11bcb85841e440c13611c00b67d3bf82698314928d0b676362546724

@@ -1,0 +1,56 @@
+{
+  "purpose": "loopback-only process sandbox capability",
+  "platform": "darwin",
+  "release": "25.5.0",
+  "nativeSDKExecuted": false,
+  "piExecuted": false,
+  "externalAddressProbed": false,
+  "profile": "(version 1)\n(allow default)\n(deny network*)\n(allow network-outbound (remote ip \"localhost:52679\"))\n",
+  "baseline": {
+    "allowed": 200,
+    "denied": 200
+  },
+  "child": {
+    "exitCode": 0,
+    "signal": null,
+    "result": {
+      "allowed": {
+        "status": 200
+      },
+      "denied": {
+        "errorCode": "EPERM"
+      }
+    },
+    "stderr": ""
+  },
+  "allowedHits": 1,
+  "deniedHits": 0,
+  "capabilityPassed": true,
+  "ports": {
+    "allowed": 52679,
+    "denied": 52681
+  },
+  "next": "Main review required before get_state-only/native probe",
+  "previousAttempts": [
+    {
+      "profile": "(version 1)\n(allow default)\n(deny network*)\n(allow network-outbound (remote ip \"127.0.0.1:52489\"))\n",
+      "ports": {
+        "allowed": 52489,
+        "denied": 52490
+      },
+      "baseline": {
+        "allowed": 200,
+        "denied": 200
+      },
+      "child": {
+        "exitCode": 65,
+        "signal": null,
+        "result": null,
+        "stderr": "sandbox-exec: host must be * or localhost in network address\n\nBacktrace: \n<input string>:4:26:\n\t(remote ip \"127.0.0.1:52489\")\n\n"
+      },
+      "allowedHits": 0,
+      "deniedHits": 0,
+      "capabilityPassed": false
+    }
+  ]
+}

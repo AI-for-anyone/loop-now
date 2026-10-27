@@ -1,0 +1,32 @@
+.DS_Store
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+.cache/
+.runtime/
+
+# 本地编译产物
+/bin/
+/fakepi
+
+# Claude Code 临时 worktree
+/.claude/worktrees/
+
+# 本地运行、浏览器验收和构建证据
+/.local-build/
+/.playwright-mcp/
+.vite/
+/web/test-results/
+__pycache__/
+*.py[cod]
+
+# 原生 CLI 集成测试在包目录产生的临时输出
+/internal/server/app/native-error.txt
+/internal/server/app/native-output.json
+
+# 浏览器集成测试结果（测试脚本保留在 integration 目录）
+/web/scripts/integration/**/*.json
+/web/scripts/integration/**/*.png

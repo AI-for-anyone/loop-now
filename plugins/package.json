@@ -1,0 +1,16 @@
+{
+  "name": "@loop-now/plugins-workspace",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24.21.0" },
+  "workspaces": ["sdk", "host"],
+  "scripts": {
+    "build": "npm run build -w @loop-now/plugin-sdk && npm run build -w @loop-now/plugin-host",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test --test-concurrency=1 sdk/test/*.test.ts host/test/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.4",
+    "typescript": "5.9.3"
+  }
+}

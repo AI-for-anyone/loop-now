@@ -1,0 +1,50 @@
+{
+  "name": "lark-cli",
+  "version": "1.0.94",
+  "injection": "files",
+  "fields": [
+    { "name": "appId", "label": "App ID", "type": "string", "required": true },
+    { "name": "appSecret", "label": "App Secret", "type": "secret", "required": true },
+    { "name": "brand", "label": "品牌", "type": "enum", "options": ["feishu", "lark"], "default": "feishu", "required": true }
+  ],
+  "env": {
+    "LARKSUITE_CLI_NO_UPDATE_NOTIFIER": "1",
+    "LARKSUITE_CLI_NO_SKILLS_NOTIFIER": "1",
+    "LARKSUITE_CLI_REMOTE_META": "off"
+  },
+  "credential": {
+    "renderer": "lark-cli",
+    "cleanupPaths": [
+      ".lark-cli/config.json",
+      "Library/Application Support/lark-cli/master.key.file"
+    ]
+  },
+  "reservedEnvPrefixes": ["LARKSUITE_CLI_", "LARK_CLI_", "OPENCLAW_", "HERMES_", "LARK_CHANNEL"],
+  "binary": "lark-cli",
+  "install": {
+    "darwin/arm64": {
+      "url": "https://github.com/larksuite/cli/releases/download/v1.0.94/lark-cli-1.0.94-darwin-arm64.tar.gz",
+      "sha256": "cdf66d35c950c56f17cc180276c16b8ad4b7241eab715d809114cb57c88a825b",
+      "format": "tar.gz",
+      "path": "lark-cli"
+    },
+    "darwin/amd64": {
+      "url": "https://github.com/larksuite/cli/releases/download/v1.0.94/lark-cli-1.0.94-darwin-amd64.tar.gz",
+      "sha256": "ec53158a51f2d30fefacfb70904f503d5c6e92e934ca98510ad80112d680000e",
+      "format": "tar.gz",
+      "path": "lark-cli"
+    },
+    "linux/amd64": {
+      "url": "https://github.com/larksuite/cli/releases/download/v1.0.94/lark-cli-1.0.94-linux-amd64.tar.gz",
+      "sha256": "60f505be65b43b5e58b01ec671199723483c5f630a03dfdd32d89f7f40f47d53",
+      "format": "tar.gz",
+      "path": "lark-cli"
+    },
+    "linux/arm64": {
+      "url": "https://github.com/larksuite/cli/releases/download/v1.0.94/lark-cli-1.0.94-linux-arm64.tar.gz",
+      "sha256": "87ddcba89557936958d8dcba4269d02837a32bb605dc0ac9c1aea8d653cbb7a3",
+      "format": "tar.gz",
+      "path": "lark-cli"
+    }
+  }
+}

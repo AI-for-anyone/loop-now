@@ -1,0 +1,46 @@
+[
+  {
+    "code": 0,
+    "category": ""
+  },
+  {
+    "code": 1,
+    "category": "internal"
+  },
+  {
+    "code": 2,
+    "category": "usage"
+  },
+  {
+    "code": 3,
+    "category": "config"
+  },
+  {
+    "code": 4,
+    "category": "unavailable"
+  },
+  {
+    "code": 5,
+    "category": "unauthenticated"
+  },
+  {
+    "code": 6,
+    "category": "forbidden"
+  },
+  {
+    "code": 7,
+    "category": "not_found"
+  },
+  {
+    "code": 8,
+    "category": "conflict"
+  },
+  {
+    "code": 9,
+    "category": "invalid"
+  },
+  {
+    "code": 10,
+    "category": "server"
+  }
+]

@@ -1,0 +1,25 @@
+{
+  "name": "@loop-now/plugin-sdk",
+  "version": "0.1.0",
+  "description": "Loop Now 插件平台半边的类型与运行库：PluginAPI、事件目录、外发投递与签名、插件目录校验",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "keywords": ["loop-now", "loop-now-plugin", "plugin-sdk"],
+  "sideEffects": false,
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./validate": { "types": "./dist/validate.d.ts", "import": "./dist/validate.js" },
+    "./package.json": "./package.json"
+  },
+  "bin": { "loop-now-plugin": "./dist/cli.js" },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.4",
+    "esbuild": "0.25.12",
+    "typescript": "5.9.3"
+  }
+}

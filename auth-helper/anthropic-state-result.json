@@ -1,0 +1,37 @@
+{
+  "purpose": "actual Pi get_state-only loopback model URL",
+  "piVersion": "1.1.0",
+  "promptSent": false,
+  "nativeModelRequestSent": false,
+  "externalAddressProbed": false,
+  "profile": "(version 1)\n(allow default)\n(deny network*)\n(allow network-outbound (remote ip \"localhost:54186\"))\n",
+  "state": {
+    "provider": "anthropic",
+    "api": "anthropic-messages",
+    "id": "claude-fable-5",
+    "baseUrl": "http://127.0.0.1:54186"
+  },
+  "fixtureHits": 0,
+  "deniedFixtureHits": 0,
+  "passed": true,
+  "ports": {
+    "allowed": 54186,
+    "denied": 54187
+  },
+  "expectedBaseUrl": "http://127.0.0.1:54186",
+  "stderrPresent": false,
+  "previousAttempts": [
+    {
+      "profile": null,
+      "state": null,
+      "passed": false,
+      "ports": {
+        "allowed": 53815,
+        "denied": 53816
+      },
+      "fixtureHits": 0,
+      "deniedFixtureHits": 0,
+      "phase": "before Pi spawn: metadata fixture shape"
+    }
+  ]
+}

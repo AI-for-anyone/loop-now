@@ -1,0 +1,70 @@
+{
+  "name": "@loop-now/plugin-webhook",
+  "version": "1.0.0",
+  "description": "收件箱收到新消息时，把事件 POST 到你的回调地址：HMAC-SHA256 签名，失败自动重试，投递记录可在插件页查看；也可以代管外部身份，对方经回调回复与回答提问",
+  "license": "Apache-2.0",
+  "type": "module",
+  "keywords": ["loop-now-plugin"],
+  "peerDependencies": {
+    "@loop-now/plugin-sdk": "*"
+  },
+  "loopNow": {
+    "id": "webhook",
+    "displayName": "Webhook 通知",
+    "platform": "./platform/index.ts",
+    "events": ["inbox.received"],
+    "permissions": ["state", "identities.manage"],
+    "channels": [{ "id": "identity", "label": "Webhook 回调", "manageIdentities": true }],
+    "http": true,
+    "configSchema": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "title": "回调地址",
+          "description": "http 或 https 地址；为空时不推送。项目里可以填自己的地址。",
+          "pattern": "^(https?://.+)?$",
+          "x-scope": "project"
+        },
+        "secret": {
+          "type": "string",
+          "title": "签名密钥",
+          "description": "设置后每个请求带 x-loop-now-signature 头：sha256=HMAC-SHA256(密钥, \"<时间戳>.<正文>\")。",
+          "x-secret": true,
+          "x-scope": "project"
+        },
+        "recipients": {
+          "type": "string",
+          "title": "推送哪些消息",
+          "description": "只推给外部身份：代替外部身份轮询自己的收件箱；全部收件人：所有收件箱消息都推送。",
+          "oneOf": [
+            { "const": "external", "title": "只推给外部身份" },
+            { "const": "all", "title": "全部收件人" }
+          ],
+          "default": "external",
+          "x-scope": "project"
+        },
+        "manageIdentities": {
+          "type": "boolean",
+          "title": "代管外部身份",
+          "description": "打开后，在外部身份页把身份交给“Webhook 回调”代管：发给它的消息与提问推送到回调地址，对方可以经回答地址以该身份回复或回答。",
+          "default": false
+        },
+        "publicBaseUrl": {
+          "type": "string",
+          "title": "平台外部地址",
+          "description": "对方能访问到的平台外部 TLS 地址（例如 https://loop.example.com:8781）。设置了它和签名密钥后，推送里带 answerUrl = <平台外部地址>/hooks/webhook/answer。",
+          "pattern": "^(https?://.+)?$"
+        },
+        "retryLimit": {
+          "type": "integer",
+          "title": "失败重试次数",
+          "description": "网络错误、超时、408、429 与 5xx 会按 5 秒、30 秒、2 分钟、10 分钟、30 分钟、1 小时的间隔重试。",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 4
+        }
+      }
+    }
+  }
+}

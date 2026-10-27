@@ -1,0 +1,68 @@
+{
+  "name": "gcloud",
+  "version": "568.0.0",
+  "binary": "gcloud",
+  "injection": "files",
+  "fields": [
+    {
+      "name": "serviceAccountJson",
+      "label": "服务账号 JSON",
+      "type": "secret",
+      "required": true,
+      "multiline": true
+    },
+    {
+      "name": "defaultProject",
+      "label": "默认 GCP 项目（可选）",
+      "type": "string",
+      "required": false
+    }
+  ],
+  "credential": {
+    "renderer": "gcloud",
+    "formatVersion": "1",
+    "cleanupPaths": [
+      ".loop-now/gcloud/service-account.json",
+      ".loop-now/gcloud/default-project",
+      ".loop-now/gcloud/grant.json"
+    ]
+  },
+  "env": {
+    "CLOUDSDK_CORE_DISABLE_USAGE_REPORTING": "true",
+    "CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK": "true"
+  },
+  "reservedEnvPrefixes": [
+    "CLOUDSDK_",
+    "GCLOUD_",
+    "LOOP_NOW_GCLOUD_"
+  ],
+  "install": {
+    "darwin/arm64": {
+      "url": "https://storage.googleapis.com/cloud-sdk-release/google-cloud-cli-568.0.0-darwin-arm.tar.gz",
+      "sha256": "09e2f3fc57da5a858523b91cf8a3842d2b30d2390ec0fdaf33ef10926dcc9d3b",
+      "format": "tar.gz",
+      "path": "google-cloud-sdk/bin/gcloud",
+      "layout": "google_sdk",
+      "dependencies": [
+        {
+          "url": "https://dl.google.com/dl/cloudsdk/channels/rapid/python-3.13.7-macos11.tar.gz",
+          "sha256": "2fdf529aa12e06f7b0d701c590dae88e746b45c2ddb6a4182b3a14f06072cf02",
+          "format": "tar.gz",
+          "path": "python-3.13.7-macos11.pkg",
+          "layout": "python_framework"
+        }
+      ]
+    }
+  },
+  "reservedEnv": [
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "GOOGLE_CLOUD_PROJECT",
+    "GOOGLE_CLOUD_QUOTA_PROJECT",
+    "GOOGLE_CLOUD_UNIVERSE_DOMAIN",
+    "GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES",
+    "GOOGLE_AUTH_SUPPRESS_CREDENTIALS_WARNINGS",
+    "GCE_METADATA_HOST",
+    "GCE_METADATA_IP",
+    "GCE_METADATA_ROOT"
+  ]
+}

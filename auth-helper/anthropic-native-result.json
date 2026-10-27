@@ -1,0 +1,460 @@
+{
+  "purpose": "actual Pi + original Anthropic client against loopback only",
+  "piVersion": "1.1.0",
+  "jsFetchPatchUsed": false,
+  "externalAddressProbed": false,
+  "passed": true,
+  "cases": [
+    {
+      "name": "bearer-single",
+      "mode": "bearer",
+      "profile": "(version 1)\n(allow default)\n(deny network*)\n(allow network-outbound (remote ip \"localhost:61532\"))\n",
+      "preflight": {
+        "code": 0,
+        "signal": null,
+        "response": {
+          "allowed": {
+            "status": 200
+          },
+          "denied": {
+            "errorCode": "EPERM"
+          }
+        },
+        "stderrPresent": false
+      },
+      "model": {
+        "provider": "anthropic",
+        "api": "anthropic-messages",
+        "id": "claude-fable-5",
+        "baseUrl": "http://127.0.0.1:61532"
+      },
+      "promptSent": true,
+      "fixturePaths": [
+        "/v1/messages?beta=true"
+      ],
+      "modelRequests": 1,
+      "authMatched": true,
+      "deniedHits": 0,
+      "allowedProbeHits": 1,
+      "passed": true,
+      "ports": {
+        "allowed": 61532,
+        "denied": 61533
+      }
+    },
+    {
+      "name": "oauth-field-single",
+      "mode": "api-key",
+      "profile": "(version 1)\n(allow default)\n(deny network*)\n(allow network-outbound (remote ip \"localhost:61556\"))\n",
+      "preflight": {
+        "code": 0,
+        "signal": null,
+        "response": {
+          "allowed": {
+            "status": 200
+          },
+          "denied": {
+            "errorCode": "EPERM"
+          }
+        },
+        "stderrPresent": false
+      },
+      "model": {
+        "provider": "anthropic",
+        "api": "anthropic-messages",
+        "id": "claude-fable-5",
+        "baseUrl": "http://127.0.0.1:61556"
+      },
+      "promptSent": true,
+      "fixturePaths": [
+        "/v1/messages?beta=true"
+      ],
+      "modelRequests": 1,
+      "authMatched": true,
+      "deniedHits": 0,
+      "allowedProbeHits": 1,
+      "passed": true,
+      "ports": {
+        "allowed": 61556,
+        "denied": 61557
+      }
+    },
+    {
+      "name": "api-single",
+      "mode": "api-key",
+      "profile": "(version 1)\n(allow default)\n(deny network*)\n(allow network-outbound (remote ip \"localhost:61568\"))\n",
+      "preflight": {
+        "code": 0,
+        "signal": null,
+        "response": {
+          "allowed": {
+            "status": 200
+          },
+          "denied": {
+            "errorCode": "EPERM"
+          }
+        },
+        "stderrPresent": false
+      },
+      "model": {
+        "provider": "anthropic",
+        "api": "anthropic-messages",
+        "id": "claude-fable-5",
+        "baseUrl": "http://127.0.0.1:61568"
+      },
+      "promptSent": true,
+      "fixturePaths": [
+        "/v1/messages?beta=true"
+      ],
+      "modelRequests": 1,
+      "authMatched": true,
+      "deniedHits": 0,
+      "allowedProbeHits": 1,
+      "passed": true,
+      "ports": {
+        "allowed": 61568,
+        "denied": 61569
+      }
+    },
+    {
+      "name": "bearer-wins-three",
+      "mode": "bearer",
+      "profile": "(version 1)\n(allow default)\n(deny network*)\n(allow network-outbound (remote ip \"localhost:61576\"))\n",
+      "preflight": {
+        "code": 0,
+        "signal": null,
+        "response": {
+          "allowed": {
+            "status": 200
+          },
+          "denied": {
+            "errorCode": "EPERM"
+          }
+        },
+        "stderrPresent": false
+      },
+      "model": {
+        "provider": "anthropic",
+        "api": "anthropic-messages",
+        "id": "claude-fable-5",
+        "baseUrl": "http://127.0.0.1:61576"
+      },
+      "promptSent": true,
+      "fixturePaths": [
+        "/v1/messages?beta=true"
+      ],
+      "modelRequests": 1,
+      "authMatched": true,
+      "deniedHits": 0,
+      "allowedProbeHits": 1,
+      "passed": true,
+      "ports": {
+        "allowed": 61576,
+        "denied": 61577
+      }
+    },
+    {
+      "name": "oauth-field-wins-two",
+      "mode": "api-key",
+      "profile": "(version 1)\n(allow default)\n(deny network*)\n(allow network-outbound (remote ip \"localhost:61586\"))\n",
+      "preflight": {
+        "code": 0,
+        "signal": null,
+        "response": {
+          "allowed": {
+            "status": 200
+          },
+          "denied": {
+            "errorCode": "EPERM"
+          }
+        },
+        "stderrPresent": false
+      },
+      "model": {
+        "provider": "anthropic",
+        "api": "anthropic-messages",
+        "id": "claude-fable-5",
+        "baseUrl": "http://127.0.0.1:61586"
+      },
+      "promptSent": true,
+      "fixturePaths": [
+        "/v1/messages?beta=true"
+      ],
+      "modelRequests": 1,
+      "authMatched": true,
+      "deniedHits": 0,
+      "allowedProbeHits": 1,
+      "passed": true,
+      "ports": {
+        "allowed": 61586,
+        "denied": 61587
+      }
+    },
+    {
+      "name": "oauth-prefix-native-bearer",
+      "mode": "bearer",
+      "profile": "(version 1)\n(allow default)\n(deny network*)\n(allow network-outbound (remote ip \"localhost:61596\"))\n",
+      "preflight": {
+        "code": 0,
+        "signal": null,
+        "response": {
+          "allowed": {
+            "status": 200
+          },
+          "denied": {
+            "errorCode": "EPERM"
+          }
+        },
+        "stderrPresent": false
+      },
+      "model": {
+        "provider": "anthropic",
+        "api": "anthropic-messages",
+        "id": "claude-fable-5",
+        "baseUrl": "http://127.0.0.1:61596"
+      },
+      "promptSent": true,
+      "fixturePaths": [
+        "/v1/messages?beta=true"
+      ],
+      "modelRequests": 1,
+      "authMatched": true,
+      "deniedHits": 0,
+      "allowedProbeHits": 1,
+      "passed": true,
+      "ports": {
+        "allowed": 61596,
+        "denied": 61597
+      }
+    }
+  ],
+  "previousRuns": [
+    {
+      "passed": true,
+      "cases": [
+        {
+          "name": "bearer-single",
+          "mode": "bearer",
+          "profile": "(version 1)\n(allow default)\n(deny network*)\n(allow network-outbound (remote ip \"localhost:58746\"))\n",
+          "preflight": {
+            "code": 0,
+            "signal": null,
+            "response": {
+              "allowed": {
+                "status": 200
+              },
+              "denied": {
+                "errorCode": "EPERM"
+              }
+            },
+            "stderrPresent": false
+          },
+          "model": {
+            "provider": "anthropic",
+            "api": "anthropic-messages",
+            "id": "claude-fable-5",
+            "baseUrl": "http://127.0.0.1:58746"
+          },
+          "promptSent": true,
+          "fixturePaths": [
+            "/v1/messages?beta=true"
+          ],
+          "modelRequests": 1,
+          "authMatched": true,
+          "deniedHits": 0,
+          "allowedProbeHits": 1,
+          "passed": true,
+          "ports": {
+            "allowed": 58746,
+            "denied": 58747
+          }
+        },
+        {
+          "name": "oauth-field-single",
+          "mode": "api-key",
+          "profile": "(version 1)\n(allow default)\n(deny network*)\n(allow network-outbound (remote ip \"localhost:58752\"))\n",
+          "preflight": {
+            "code": 0,
+            "signal": null,
+            "response": {
+              "allowed": {
+                "status": 200
+              },
+              "denied": {
+                "errorCode": "EPERM"
+              }
+            },
+            "stderrPresent": false
+          },
+          "model": {
+            "provider": "anthropic",
+            "api": "anthropic-messages",
+            "id": "claude-fable-5",
+            "baseUrl": "http://127.0.0.1:58752"
+          },
+          "promptSent": true,
+          "fixturePaths": [
+            "/v1/messages?beta=true"
+          ],
+          "modelRequests": 1,
+          "authMatched": true,
+          "deniedHits": 0,
+          "allowedProbeHits": 1,
+          "passed": true,
+          "ports": {
+            "allowed": 58752,
+            "denied": 58753
+          }
+        },
+        {
+          "name": "api-single",
+          "mode": "api-key",
+          "profile": "(version 1)\n(allow default)\n(deny network*)\n(allow network-outbound (remote ip \"localhost:58764\"))\n",
+          "preflight": {
+            "code": 0,
+            "signal": null,
+            "response": {
+              "allowed": {
+                "status": 200
+              },
+              "denied": {
+                "errorCode": "EPERM"
+              }
+            },
+            "stderrPresent": false
+          },
+          "model": {
+            "provider": "anthropic",
+            "api": "anthropic-messages",
+            "id": "claude-fable-5",
+            "baseUrl": "http://127.0.0.1:58764"
+          },
+          "promptSent": true,
+          "fixturePaths": [
+            "/v1/messages?beta=true"
+          ],
+          "modelRequests": 1,
+          "authMatched": true,
+          "deniedHits": 0,
+          "allowedProbeHits": 1,
+          "passed": true,
+          "ports": {
+            "allowed": 58764,
+            "denied": 58765
+          }
+        },
+        {
+          "name": "bearer-wins-three",
+          "mode": "bearer",
+          "profile": "(version 1)\n(allow default)\n(deny network*)\n(allow network-outbound (remote ip \"localhost:58772\"))\n",
+          "preflight": {
+            "code": 0,
+            "signal": null,
+            "response": {
+              "allowed": {
+                "status": 200
+              },
+              "denied": {
+                "errorCode": "EPERM"
+              }
+            },
+            "stderrPresent": false
+          },
+          "model": {
+            "provider": "anthropic",
+            "api": "anthropic-messages",
+            "id": "claude-fable-5",
+            "baseUrl": "http://127.0.0.1:58772"
+          },
+          "promptSent": true,
+          "fixturePaths": [
+            "/v1/messages?beta=true"
+          ],
+          "modelRequests": 1,
+          "authMatched": true,
+          "deniedHits": 0,
+          "allowedProbeHits": 1,
+          "passed": true,
+          "ports": {
+            "allowed": 58772,
+            "denied": 58773
+          }
+        },
+        {
+          "name": "oauth-field-wins-two",
+          "mode": "api-key",
+          "profile": "(version 1)\n(allow default)\n(deny network*)\n(allow network-outbound (remote ip \"localhost:58778\"))\n",
+          "preflight": {
+            "code": 0,
+            "signal": null,
+            "response": {
+              "allowed": {
+                "status": 200
+              },
+              "denied": {
+                "errorCode": "EPERM"
+              }
+            },
+            "stderrPresent": false
+          },
+          "model": {
+            "provider": "anthropic",
+            "api": "anthropic-messages",
+            "id": "claude-fable-5",
+            "baseUrl": "http://127.0.0.1:58778"
+          },
+          "promptSent": true,
+          "fixturePaths": [
+            "/v1/messages?beta=true"
+          ],
+          "modelRequests": 1,
+          "authMatched": true,
+          "deniedHits": 0,
+          "allowedProbeHits": 1,
+          "passed": true,
+          "ports": {
+            "allowed": 58778,
+            "denied": 58779
+          }
+        },
+        {
+          "name": "oauth-prefix-native-bearer",
+          "mode": "bearer",
+          "profile": "(version 1)\n(allow default)\n(deny network*)\n(allow network-outbound (remote ip \"localhost:58784\"))\n",
+          "preflight": {
+            "code": 0,
+            "signal": null,
+            "response": {
+              "allowed": {
+                "status": 200
+              },
+              "denied": {
+                "errorCode": "EPERM"
+              }
+            },
+            "stderrPresent": false
+          },
+          "model": {
+            "provider": "anthropic",
+            "api": "anthropic-messages",
+            "id": "claude-fable-5",
+            "baseUrl": "http://127.0.0.1:58784"
+          },
+          "promptSent": true,
+          "fixturePaths": [
+            "/v1/messages?beta=true"
+          ],
+          "modelRequests": 1,
+          "authMatched": true,
+          "deniedHits": 0,
+          "allowedProbeHits": 1,
+          "passed": true,
+          "ports": {
+            "allowed": 58784,
+            "denied": 58785
+          }
+        }
+      ]
+    }
+  ]
+}

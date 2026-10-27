@@ -1,0 +1,36 @@
+// Test-only overlay into fixed official internal/transport; no source/binary patch.
+package transport
+import (
+ "context"
+ "errors"
+ "io"
+ "net"
+ "net/http"
+ "os"
+ "testing"
+ "time"
+ sidecartransport "github.com/larksuite/cli/extension/transport/sidecar"
+)
+type platformFaultBody struct {closed bool}
+func (f *platformFaultBody) Read([]byte)(int,error){if f.closed{return 0,io.EOF};return 0,errors.New("synthetic-body-read-failure")}
+func (f *platformFaultBody) Close()error{f.closed=true;return nil}
+func TestPlatformBodyFaultChild(t *testing.T) {
+ target:=os.Getenv("PLATFORM_TEST_TARGET");host,_,e:=net.SplitHostPort(target);if e!=nil||host!="127.0.0.1"{t.Fatal("loopback fixture required")}
+ p:=&sidecartransport.Provider{};interceptor:=p.ResolveInterceptor(context.Background());if interceptor==nil{t.Fatal("official interceptor absent")}
+ rt:=&ExtensionMiddleware{Base:&http.Transport{Proxy:nil},Ext:interceptor,ExtName:"sidecar"}
+ req,e:=http.NewRequest("POST","http://"+target+"/open-apis/im/v1/messages",&platformFaultBody{});if e!=nil{t.Fatal(e)};req.Header.Set("Authorization","Bearer sidecar-managed-uat")
+ response,err:=(&http.Client{Transport:rt,Timeout:time.Second}).Do(req)
+ if os.Getenv("PLATFORM_TEST_DENY")=="1" {if err==nil{response.Body.Close();t.Fatal("direct fallback escaped confinement")}} else {if err!=nil{t.Fatal("control did not reach owned fixture")};defer response.Body.Close();_,_=io.Copy(io.Discard,response.Body)}
+}
+
+// The real official interceptor intentionally passes unauthenticated requests
+// through. Prove both that control and production confinement against an owned
+// original-target listener, without any external hostname or credential.
+func TestPlatformNoSentinelChild(t *testing.T) {
+ target:=os.Getenv("PLATFORM_TEST_TARGET");host,_,e:=net.SplitHostPort(target);if e!=nil||host!="127.0.0.1"{t.Fatal("loopback fixture required")}
+ p:=&sidecartransport.Provider{};interceptor:=p.ResolveInterceptor(context.Background());if interceptor==nil{t.Fatal("official interceptor absent")}
+ rt:=&ExtensionMiddleware{Base:&http.Transport{Proxy:nil},Ext:interceptor,ExtName:"sidecar"}
+ req,e:=http.NewRequest("GET","http://"+target+"/synthetic-presigned-download",nil);if e!=nil{t.Fatal(e)}
+ response,err:=(&http.Client{Transport:rt,Timeout:time.Second}).Do(req)
+ if os.Getenv("PLATFORM_TEST_DENY")=="1"{if err==nil{response.Body.Close();t.Fatal("unauthenticated original target escaped confinement")}}else{if err!=nil{t.Fatal("unauthenticated control failed")};defer response.Body.Close();_,_=io.Copy(io.Discard,response.Body)}
+}

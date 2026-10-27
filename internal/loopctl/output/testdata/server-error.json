@@ -1,0 +1,1 @@
+{"ok":false,"error":{"code":"agent_busy","category":"conflict","message":"忙","httpStatus":409,"details":{"currentRunId":"r","queued":{"interrupt":0,"normal":1}},"fields":[{"field":"text","message":"太长"}]},"warnings":[],"meta":{"clientVersion":"1.2.3","identity":"external","profile":"default","serverVersion":"1.2.3","requestId":"0192f1a2-b3c4-7d8e-9f0a-1b2c3d4e5f60","attempts":1}}

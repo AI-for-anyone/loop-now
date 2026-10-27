@@ -1,0 +1,1 @@
+{"name":"loop-now-auth-helper","private":true,"type":"module","engines":{"node":"24.21.0"},"scripts":{"test":"node --test test/*.test.mjs"}}

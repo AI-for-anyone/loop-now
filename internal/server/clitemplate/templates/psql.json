@@ -1,0 +1,93 @@
+{
+  "name": "psql",
+  "version": "18.3",
+  "binary": "psql",
+  "injection": "files",
+  "fields": [
+    {
+      "name": "host",
+      "label": "主机",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "port",
+      "label": "端口",
+      "type": "string",
+      "required": true,
+      "default": "5432"
+    },
+    {
+      "name": "user",
+      "label": "用户名",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "password",
+      "label": "密码",
+      "type": "secret",
+      "required": true
+    },
+    {
+      "name": "database",
+      "label": "数据库",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "sslMode",
+      "label": "TLS 模式",
+      "type": "enum",
+      "required": true,
+      "options": [
+        "disable",
+        "require",
+        "verify-ca",
+        "verify-full"
+      ],
+      "default": "verify-full"
+    },
+    {
+      "name": "caCert",
+      "label": "CA 证书 PEM",
+      "type": "string",
+      "required": false,
+      "multiline": true
+    },
+    {
+      "name": "clientCert",
+      "label": "客户端证书 PEM",
+      "type": "string",
+      "required": false,
+      "multiline": true
+    },
+    {
+      "name": "clientKey",
+      "label": "客户端私钥 PEM",
+      "type": "secret",
+      "required": false,
+      "multiline": true
+    }
+  ],
+  "credential": {
+    "renderer": "psql",
+    "formatVersion": "1",
+    "cleanupPaths": [
+      ".loop-now/db/psql/credential.json",
+      ".loop-now/db/psql/connections.json"
+    ]
+  },
+  "install": {
+    "darwin/arm64": {
+      "url": "https://get.enterprisedb.com/postgresql/postgresql-18.3-1-osx-binaries.zip",
+      "sha256": "15ee2a45489eba14f8c7376b05f3df3892c07f36d6f8d344ec2a422df97a5e27",
+      "format": "zip",
+      "path": "pgsql/bin/psql",
+      "layout": "tree"
+    }
+  },
+  "reservedEnvPrefixes": [
+    "PG"
+  ]
+}

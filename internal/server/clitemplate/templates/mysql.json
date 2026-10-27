@@ -1,0 +1,93 @@
+{
+  "name": "mysql",
+  "version": "8.4.9",
+  "binary": "mysql",
+  "injection": "files",
+  "fields": [
+    {
+      "name": "host",
+      "label": "主机",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "port",
+      "label": "端口",
+      "type": "string",
+      "required": true,
+      "default": "3306"
+    },
+    {
+      "name": "user",
+      "label": "用户名",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "password",
+      "label": "密码",
+      "type": "secret",
+      "required": true
+    },
+    {
+      "name": "database",
+      "label": "数据库",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "sslMode",
+      "label": "TLS 模式",
+      "type": "enum",
+      "required": true,
+      "options": [
+        "DISABLED",
+        "REQUIRED",
+        "VERIFY_CA",
+        "VERIFY_IDENTITY"
+      ],
+      "default": "VERIFY_IDENTITY"
+    },
+    {
+      "name": "caCert",
+      "label": "CA 证书 PEM",
+      "type": "string",
+      "required": false,
+      "multiline": true
+    },
+    {
+      "name": "clientCert",
+      "label": "客户端证书 PEM",
+      "type": "string",
+      "required": false,
+      "multiline": true
+    },
+    {
+      "name": "clientKey",
+      "label": "客户端私钥 PEM",
+      "type": "secret",
+      "required": false,
+      "multiline": true
+    }
+  ],
+  "credential": {
+    "renderer": "mysql",
+    "formatVersion": "1",
+    "cleanupPaths": [
+      ".loop-now/db/mysql/credential.json",
+      ".loop-now/db/mysql/connections.json"
+    ]
+  },
+  "install": {
+    "darwin/arm64": {
+      "url": "https://cdn.mysql.com/archives/mysql-8.4/mysql-8.4.9-macos15-arm64.tar.gz",
+      "sha256": "5e1e11782219f81e2246f64f5515af451c36c1167c8158760e17a6854e6e8971",
+      "format": "tar.gz",
+      "path": "mysql-8.4.9-macos15-arm64/bin/mysql",
+      "layout": "tree"
+    }
+  },
+  "reservedEnvPrefixes": [
+    "MYSQL"
+  ]
+}

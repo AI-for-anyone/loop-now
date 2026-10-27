@@ -1,0 +1,389 @@
+@import "tailwindcss";
+@import "./styles/shadcn-tailwind.css";
+@import "./styles/fonts.css";
+
+/* 视觉“版 · 孔版印刷”，依据 loop-now-uiux 交接说明（画布 Version 16）。控制台只做浅色。 */
+
+@theme inline {
+    --font-sans: 'Noto Sans SC', 'PingFang SC', sans-serif;
+    --font-heading: var(--font-display-cn);
+    --font-display-cn: 'ZCOOL QingKe HuangYou', 'Noto Sans SC', 'PingFang SC', sans-serif;
+    --font-display-latin: 'Bricolage Grotesque', 'Noto Sans SC', sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+    --color-paper: var(--paper);
+    --color-paper-raised: var(--paper-raised);
+    --color-ink: var(--ink);
+    --color-ink-700: var(--ink-700);
+    --color-ink-500: var(--ink-500);
+    --color-riso-blue: var(--riso-blue);
+    --color-riso-blue-soft: var(--riso-blue-soft);
+    --color-riso-pink: var(--riso-pink);
+    --color-pink-text: var(--pink-text);
+    --color-riso-yellow: var(--riso-yellow);
+    --color-green: var(--green);
+    --color-green-text: var(--green-text);
+    --color-red: var(--red);
+    --color-red-text: var(--red-text);
+    --color-tint-pink: var(--tint-pink);
+    --color-tint-pink-2: var(--tint-pink-2);
+    --color-tint-blue: var(--tint-blue);
+    --color-tint-green: var(--tint-green);
+    --color-tint-red: var(--tint-red);
+    --color-tint-yellow: var(--tint-yellow);
+    --color-error-field: var(--error-field);
+
+    --color-success: var(--tint-green);
+    --color-success-foreground: var(--green-text);
+    --color-warning: var(--tint-yellow);
+    --color-warning-foreground: var(--ink);
+    --color-interrupt: var(--riso-pink);
+    --color-interrupt-foreground: var(--ink);
+
+    --shadow-print-rest: var(--print-rest);
+    --shadow-print-pink: var(--print-pink);
+    --shadow-print-blue: var(--print-blue);
+    --shadow-print-ink: var(--print-ink);
+    --shadow-print-dialog: var(--print-dialog);
+    --shadow-focus: var(--focus-ring);
+
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* 形状：类名为 rounded-stamp、rounded-panel 等，同时输出为 :root 上的同名变量。 */
+@theme {
+    --radius-stamp: 4px;
+    --radius-ticket: 10px;
+    --radius-input: 12px;
+    --radius-card: 14px;
+    --radius-panel: 18px;
+    --radius-bubble: 20px;
+    --radius-dialog: 22px;
+    /* 左侧栏常驻的最小宽度（901px）：更窄时收进抽屉。类名为 nav: 与 max-nav:。 */
+    --breakpoint-nav: 56.3125rem;
+}
+
+:root {
+    /* 纸与油墨 */
+    --paper: #F3EFE6;
+    --paper-raised: #FBF9F4;
+    --ink: #18265E;
+    --ink-700: #3B4778;
+    --ink-500: #5A628A;
+    --riso-blue: #2443B5;
+    /* 孔版蓝的浅色版：只用于蓝底左侧栏里的头像，原色的圆在蓝底上看不见。 */
+    --riso-blue-soft: #8EA2FF;
+    --riso-pink: #FF4FA3;
+    --pink-text: #B8287A;
+    --riso-yellow: #FFE14D;
+    --green: #2BB673;
+    --green-text: #1E7A4D;
+    --red: #D9381E;
+    --red-text: #A8261A;
+    --tint-pink: #FFC9E3;
+    --tint-pink-2: #FFE9F3;
+    --tint-blue: #E3E8F8;
+    --tint-green: #D7F5E6;
+    --tint-red: #FFD0CC;
+    --tint-yellow: #FFF4B8;
+    --error-field: #FFF4F2;
+
+    /* 统计图表：系列按固定顺序取蓝、粉、赭，“其他”为中性灰；回复结果用完成、打断、失败三种状态色；网格线退后 */
+    --chart-blue: #2443B5;
+    --chart-pink: #E0428F;
+    --chart-ochre: #C98500;
+    --chart-other: #B3ADA2;
+    --chart-grid: #E6E1D6;
+    --status-done: #0CA30C;
+    --status-interrupt: #FAB219;
+    --status-fail: #D03B3B;
+
+    /* 印刷投影：只用实色偏移，不加模糊 */
+    --print-rest: 2px 2px 0 rgb(24 38 94 / .12);
+    --print-pink: 4px 4px 0 var(--riso-pink);
+    --print-blue: 4px 4px 0 var(--riso-blue);
+    --print-ink: 3px 3px 0 var(--ink);
+    --print-dialog: 6px 6px 0 var(--riso-blue);
+    --focus-ring: 0 0 0 3px var(--riso-yellow), 0 0 0 5px var(--ink);
+
+    /* shadcn 变量 */
+    --background: var(--paper);
+    --foreground: var(--ink);
+    --card: var(--paper-raised);
+    --card-foreground: var(--ink);
+    --popover: var(--paper-raised);
+    --popover-foreground: var(--ink);
+    --primary: var(--riso-blue);
+    --primary-foreground: #FFFFFF;
+    --secondary: var(--tint-blue);
+    --secondary-foreground: var(--ink);
+    --muted: var(--tint-blue);
+    --muted-foreground: var(--ink-500);
+    --accent: var(--riso-yellow);
+    --accent-foreground: var(--ink);
+    --destructive: var(--red);
+    --border: rgb(24 38 94 / .18);
+    --input: rgb(24 38 94 / .18);
+    --ring: var(--ink);
+    --radius: 0.875rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    @apply font-sans;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    @apply bg-paper text-ink text-[15px] leading-[1.75];
+  }
+  :focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+  }
+}
+
+/* 网点、颗粒、错版与倾斜。倾斜只画在 ::before 上，元素本体不变换。 */
+@layer utilities {
+  .riso-paper {
+    background-color: var(--paper);
+  }
+  .riso-halftone {
+    background-image: radial-gradient(rgb(255 255 255 / .12) 1px, transparent 1.3px);
+    background-size: 6px 6px;
+  }
+  .riso-halftone-pink {
+    background-image: radial-gradient(rgb(255 79 163 / .35) 1.4px, transparent 1.7px);
+    background-size: 7px 7px;
+  }
+  .riso-halftone-red {
+    background-image: radial-gradient(rgb(168 38 26 / .10) 1px, transparent 1.3px);
+    background-size: 6px 6px;
+  }
+  /* 只用于 ≥ 28px 的展示字 */
+  .riso-misreg {
+    text-shadow: 5px 3px 0 rgb(255 79 163 / .85);
+  }
+  .riso-misreg-sm {
+    text-shadow: 3px 2px 0 rgb(255 79 163 / .8);
+  }
+  .riso-mark {
+    position: relative;
+    isolation: isolate;
+  }
+  .riso-mark::before {
+    content: "";
+    position: absolute;
+    left: -6px;
+    right: -10px;
+    bottom: .1em;
+    height: .32em;
+    background: var(--riso-yellow);
+    transform: rotate(-1deg);
+    z-index: -1;
+  }
+  .riso-tilt {
+    position: relative;
+    isolation: isolate;
+  }
+  .riso-tilt::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--tilt-bg, #fff);
+    box-shadow: var(--tilt-shadow, var(--print-rest));
+    transform: rotate(var(--tilt, -1deg));
+  }
+  .riso-skeleton {
+    background-color: var(--tint-blue);
+    background-image: radial-gradient(rgb(36 67 181 / .18) 1.2px, transparent 1.5px);
+    background-size: 6px 6px;
+  }
+  /* 原生 select 右侧的下拉箭头（藏青）。 */
+  .select-chevron {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2318265E' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-position: right 14px center;
+    background-repeat: no-repeat;
+  }
+  .riso-stripes-red {
+    background-image: repeating-linear-gradient(-45deg, rgb(217 56 30 / .08) 0 8px, transparent 8px 16px);
+  }
+  /* 三个动效之二：输出光标 1s 步进闪烁、工具进行中图标 0.9s 匀速旋转（第三个是按钮按下的位移）。 */
+  .riso-cursor {
+    animation: riso-blink 1s steps(2, start) infinite;
+  }
+  .riso-spin {
+    animation: riso-spin 0.9s linear infinite;
+  }
+}
+
+@keyframes riso-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+@keyframes riso-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 减少动态效果时关闭全部动画与过渡；组件上另有 motion-reduce: 变体把旋转图标换成静态显示。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Agent 回复的 Markdown 样式 */
+@layer components {
+  .markdown {
+    @apply text-base leading-[1.8] break-words;
+  }
+  .markdown > * + * {
+    @apply mt-3;
+  }
+  .markdown h1 {
+    @apply text-xl font-black;
+  }
+  .markdown h2 {
+    @apply text-lg font-black;
+  }
+  .markdown h3,
+  .markdown h4 {
+    @apply font-bold;
+  }
+  .markdown ul {
+    @apply list-disc pl-6;
+  }
+  .markdown ol {
+    @apply list-decimal pl-6;
+  }
+  .markdown a {
+    @apply font-bold text-riso-blue underline decoration-2 underline-offset-2;
+  }
+  .markdown blockquote {
+    @apply border-l-4 border-riso-pink pl-3 text-ink-700;
+  }
+  .markdown :not(pre) > code {
+    @apply rounded-stamp bg-tint-blue px-1.5 py-0.5 font-mono text-[0.85em];
+  }
+  .markdown pre {
+    @apply overflow-x-auto px-4 pt-1.5 pb-4 font-mono text-[13px] leading-[1.75];
+  }
+  .markdown pre code.hljs {
+    @apply bg-transparent p-0;
+  }
+}
+
+/* 代码高亮：孔版蓝底上的配色，每一种与底色的对比度都不低于 4.5:1（见 tokens 对比度测试）。 */
+.hljs {
+  color: #FFFFFF;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-type {
+  color: #FFB3D9;
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-symbol,
+.hljs-template-tag {
+  color: #FFE14D;
+}
+.hljs-number,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-attr,
+.hljs-attribute {
+  color: #7CF2B5;
+}
+.hljs-built_in,
+.hljs-selector-class,
+.hljs-selector-id {
+  color: #FFD27A;
+}
+.hljs-comment,
+.hljs-quote,
+.hljs-meta {
+  color: #C9D2F2;
+  font-style: italic;
+}
+.hljs-title,
+.hljs-section,
+.hljs-name {
+  color: #FFFFFF;
+  font-weight: 700;
+}
+.hljs-deletion {
+  color: #FFC9E3;
+}
+.hljs-addition {
+  color: #A7F0CF;
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 700;
+}
+
+/* 文件管理器的代码视图：白底上的浅色配色，沿用纸与油墨的颜色；只作用于 .code-view 之内，对话里的代码块不受影响。 */
+.code-view .hljs { color: var(--ink); }
+.code-view .hljs-keyword,
+.code-view .hljs-selector-tag,
+.code-view .hljs-literal,
+.code-view .hljs-type { color: var(--riso-blue); font-weight: 700; }
+.code-view .hljs-string,
+.code-view .hljs-regexp,
+.code-view .hljs-symbol,
+.code-view .hljs-template-tag { color: var(--green-text); }
+.code-view .hljs-number,
+.code-view .hljs-variable,
+.code-view .hljs-template-variable,
+.code-view .hljs-attr,
+.code-view .hljs-attribute { color: var(--pink-text); }
+.code-view .hljs-built_in,
+.code-view .hljs-selector-class,
+.code-view .hljs-selector-id { color: var(--ink-700); font-weight: 700; }
+.code-view .hljs-comment,
+.code-view .hljs-quote,
+.code-view .hljs-meta { color: var(--ink-500); font-style: italic; }
+.code-view .hljs-title,
+.code-view .hljs-section,
+.code-view .hljs-name { color: var(--ink); font-weight: 700; }
+.code-view .hljs-deletion { color: var(--red-text); }
+.code-view .hljs-addition { color: var(--green-text); }
