@@ -211,7 +211,7 @@ export default function register(api: PluginAPI) {
 
 ## 11. 第三阶段合同细化（2026-10-27 补）
 
-- **插件作为发件方**：`inbox.send` 范围让插件以发件方 `{ kind: "plugin", pluginId, channelId?, displayName }` 给 Agent 发消息（`POST /inbox/messages` 的插件版），在对话里像外部身份一样显示；Agent 的回复按线索路由回该插件，以 `channel.outbound` 事件送达（含 threadId、messageId、文本摘要，正文用 `inbox.read` 取），插件再发到飞书之类。平台不接收渠道的原始消息，所以没有 `channel.inbound` 认领事件：渠道插件自己通过 HTTP 入口或长连接收消息，再调 `inbox.send`。
+- **插件作为发件方**：`inbox.send` 范围让插件以发件方 `{ kind: "plugin", pluginId, channelId?, displayName }` 给 Agent 发消息（`POST /inbox/messages` 的插件版），在对话里像外部身份一样显示；Agent 的回复按线索路由回该插件，以 `channel.outbound` 事件送达（含 threadId、messageId、文本摘要，正文用 `inbox.read` 取），插件再发到飞书之类。Agent 在插件线索里回复时可以带选项提问（2026-10-28 补，迁移 033）：`channel.outbound` 带 `isQuestion` 与 `question: { id, options: [{ id, label }], allowText, deadline | null } | null`，形状与 `identity.inbound` 相同；插件用 `inbox.send` 范围回复该问题（`optionId` 或 `text`，SDK `api.channels.answer`）即作答，效果与外部身份作答一致（已回答、任务由等待转回、提醒 Agent），审计 actor 为 plugin。插件自己不能发出问题（带 options 返回 422），回复不属于自己的线索返回 403。宿主 load 与 `config_changed` 载荷里的 `config.projects` 只含启用了该插件的项目（SDK `api.config.projects()`）。平台不接收渠道的原始消息，所以没有 `channel.inbound` 认领事件：渠道插件自己通过 HTTP 入口或长连接收消息，再调 `inbox.send`。
 - **HTTP 入口**：清单 `http: true` 的插件在外部 TLS 口得到无令牌路径 `/hooks/<id>/*`（供飞书等回调），在控制台口得到 `/api/v1/plugins/<id>/http/*`（需控制台或插件令牌）。平台把方法、路径、头、正文（≤ 1 MiB）转给宿主 `http` 请求，30 秒超时，原样返回插件的状态码、头和正文；签名校验由插件自己做；每插件每秒 20 次限流。
 - **控制台操作按钮**：`POST /plugins/{id}/actions/{actionId}`，体为 `{ where: { projectId?, agentId?, taskId?, identityId? }, input }`，转宿主 `action` 请求，30 秒超时，返回 `{ notice, url? }`；页面按清单 `where` 决定在哪些页面显示按钮，按钮带按 `fields` 生成的表单。
 - **定时**：清单 `schedule[]` 由 Go 按 cron 触发宿主 `schedule` 请求，同一条目不并发，错过的不补；不再有 `schedule.tick` 事件。
