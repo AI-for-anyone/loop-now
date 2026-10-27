@@ -318,6 +318,11 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 		res.Outcome = executor.OutcomeFailed
 		res.ErrorCode, res.ErrorMessage = tr.ErrorCode, tr.ErrorMessage
 		if res.ErrorCode == executor.ErrPiExited {
+			// stdout 读到结束时，stderr 可能还在由 os/exec 的协程拷进缓冲：等进程结束（有上限，同 recordExit）再取尾部。
+			select {
+			case <-p.client.Done():
+			case <-time.After(e.o.StopGrace):
+			}
 			res.ErrorMessage = strings.TrimSpace("Pi 进程异常退出 " + tail(p.client.Stderr(), e.o.StderrTailBytes))
 		}
 	}

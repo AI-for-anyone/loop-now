@@ -218,11 +218,12 @@ func TestGitHubStoreLockWaitPastExpiryAndFinalFence(t *testing.T) {
 			}
 			done <- err
 		}()
+		// 在持锁事务之外轮询：pg_stat_activity 在一个事务里只取第一次读到的快照，在 tx 里轮询看不到之后才开始等锁的会话。
 		application := e.s.Pool.Config().ConnConfig.RuntimeParams["application_name"]
 		deadline := time.Now().Add(3 * time.Second)
 		for {
 			var waiting int
-			if err = tx.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'SELECT deleted_at FROM projects%'`, application).Scan(&waiting); err != nil {
+			if err = e.s.Pool.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'SELECT deleted_at FROM projects%'`, application).Scan(&waiting); err != nil {
 				t.Fatal(err)
 			}
 			if waiting > 0 {
@@ -271,11 +272,12 @@ func TestGitHubStoreLockWaitPastExpiryAndFinalFence(t *testing.T) {
 			}
 			done <- err
 		}()
+		// 在持锁事务之外轮询：pg_stat_activity 在一个事务里只取第一次读到的快照，在 tx 里轮询看不到之后才开始等锁的会话。
 		application := e.s.Pool.Config().ConnConfig.RuntimeParams["application_name"]
 		deadline := time.Now().Add(3 * time.Second)
 		for {
 			var waiting int
-			if err = tx.QueryRow(ctx, `SELECT count(*) FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid WHERE a.application_name=$1 AND l.locktype='relation' AND l.relation='github_cli_identities'::regclass AND l.mode='RowExclusiveLock' AND NOT l.granted`, application).Scan(&waiting); err != nil {
+			if err = e.s.Pool.QueryRow(ctx, `SELECT count(*) FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid WHERE a.application_name=$1 AND l.locktype='relation' AND l.relation='github_cli_identities'::regclass AND l.mode='RowExclusiveLock' AND NOT l.granted`, application).Scan(&waiting); err != nil {
 				t.Fatal(err)
 			}
 			if waiting > 0 {

@@ -195,13 +195,17 @@ func (e *env) waitStarted(msg string) {
 	}
 }
 
+// waitIdle 等到 Agent 空闲：数据库里没有进行中或排队的执行，且忙闲锁已释放（执行先记为结束、再释放锁，
+// 只看状态时紧接着的发送可能还拿不到锁）。
 func (e *env) waitIdle() {
 	e.t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		st, err := e.svc.Status(context.Background(), e.agent)
 		if err == nil && !st.Busy && st.Queued.Interrupt == 0 && st.Queued.Normal == 0 {
-			return
+			if owner, err := e.co.LockOwner(context.Background(), e.agent.String()); err == nil && owner == "" {
+				return
+			}
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
