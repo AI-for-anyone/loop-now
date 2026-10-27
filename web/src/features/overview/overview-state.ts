@@ -31,8 +31,8 @@ function applyEvent(state: OverviewState, event: OverviewEvent, at: string): Ove
   const merge = (incoming: AgentOverview): AgentOverview => {
     const known = state.agents.find(agent => agent.agentId === incoming.agentId)
     if (!known) return incoming
-    const projection = newerSleep(known.status, incoming.status)
-    return { ...incoming, status: incoming.status.sleepRevision < known.status.sleepRevision ? known.status : { ...incoming.status, ...projection } }
+    const { sleep, sleepRevision } = newerSleep(known.status, incoming.status)
+    return { ...incoming, status: incoming.status.sleepRevision < known.status.sleepRevision ? known.status : { ...incoming.status, sleep, sleepRevision } }
   }
   switch (event.type) {
     case 'snapshot':
