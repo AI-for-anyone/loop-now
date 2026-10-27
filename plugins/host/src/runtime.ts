@@ -9,7 +9,6 @@ import type {
   ActionWhere,
   ChannelHandlers,
   ChannelSendInput,
-  IdentityAnswer,
   Disposer,
   EventContext,
   EventType,
@@ -20,6 +19,7 @@ import type {
   PlatformFetchInit,
   PluginAPI,
   PluginEvent,
+  QuestionAnswer,
   ScheduleContext,
   StateEntry,
   StateOptions,
@@ -306,6 +306,17 @@ export class PluginRuntime {
       if (!m.permissions.includes(permission)) throw new Error(`清单没有声明 ${permission} 权限`)
       return platformJson('POST', path, body)
     }
+    // 回答提问的正文：选项（可另附文字），或只有文字。
+    const answerBody = (input: QuestionAnswer): Record<string, unknown> => {
+      const text = isObject(input) && typeof input.text === 'string' && input.text !== '' ? input.text : undefined
+      if (isObject(input) && input.text !== undefined && text === undefined) throw new TypeError('text 须是非空字符串')
+      if (isObject(input) && typeof input.optionId === 'string' && input.optionId !== '') return text === undefined ? { optionId: input.optionId } : { optionId: input.optionId, text }
+      if (isObject(input) && input.optionId === undefined && text !== undefined) return { text }
+      throw new TypeError('须给出 optionId 或 text')
+    }
+    const requireChannel = (channelId: unknown) => {
+      if (!m.channels.some((c) => c.id === channelId)) throw new Error(`渠道 ${String(channelId)} 没有在清单 loopNow.channels 中声明`)
+    }
     const requireManage = (identityId: unknown, id: unknown, what: string) => {
       if (!m.permissions.includes('identities.manage')) throw new Error('清单没有声明 identities.manage 权限')
       if (!m.channels.some((c) => c.manageIdentities)) throw new Error('清单 loopNow.channels 里没有声明 manageIdentities 的渠道')
@@ -376,6 +387,7 @@ export class PluginRuntime {
           if (projectId) Object.assign(merged, this.config.projects[projectId]?.values)
           return structuredClone(merged) as T
         },
+        projects: () => Object.keys(this.config.projects).sort(),
         onChange: (listener: () => unknown) => {
           this.assertOpen('注册配置监听')
           if (typeof listener !== 'function') throw new TypeError('监听函数须是函数')
@@ -428,22 +440,27 @@ export class PluginRuntime {
           return this.register(this.channels, id, handlers, m.channels, '渠道', 'channels')
         },
         send: async (channelId: string, input: ChannelSendInput) => {
-          if (!m.channels.some((c) => c.id === channelId)) throw new Error(`渠道 ${String(channelId)} 没有在清单 loopNow.channels 中声明`)
+          requireChannel(channelId)
           if (!isObject(input) || typeof input.to !== 'string' || typeof input.text !== 'string') throw new TypeError('须给出 to 与 text')
           const body: Record<string, unknown> = { to: input.to, text: input.text, channelId }
           if (input.senderName !== undefined) body.senderName = input.senderName
           if (input.whenBusy !== undefined) body.whenBusy = input.whenBusy
-          if (input.options !== undefined) body.options = input.options
           return inboxCall('inbox.send', '/inbox/messages', body)
         },
-        reply: async (messageId: string, input: { text: string; options?: string[] }) => {
+        reply: async (messageId: string, input: { text: string }) => {
           if (typeof messageId !== 'string' || messageId === '') throw new TypeError('须给出 messageId')
           if (!isObject(input) || typeof input.text !== 'string') throw new TypeError('须给出 text')
-          return inboxCall('inbox.send', `/inbox/messages/${encodeURIComponent(messageId)}/reply`, input.options ? { text: input.text, options: input.options } : { text: input.text })
+          return inboxCall('inbox.send', `/inbox/messages/${encodeURIComponent(messageId)}/reply`, { text: input.text })
         },
         read: async (messageId: string) => {
           if (typeof messageId !== 'string' || messageId === '') throw new TypeError('须给出 messageId')
           return inboxCall('inbox.read', `/inbox/messages/${encodeURIComponent(messageId)}/read`, {})
+        },
+        answer: async (channelId: string, questionId: string, input: QuestionAnswer) => {
+          requireChannel(channelId)
+          if (typeof questionId !== 'string' || questionId === '') throw new TypeError('须给出 questionId')
+          const body = answerBody(input)
+          return inboxCall('inbox.send', `/inbox/messages/${encodeURIComponent(questionId)}/reply`, body)
         },
       }),
       identities: Object.freeze({
@@ -456,12 +473,9 @@ export class PluginRuntime {
           if (!isObject(input) || typeof input.text !== 'string' || input.text === '') throw new TypeError('须给出 text')
           return platformJson('POST', `/inbox/messages/${encodeURIComponent(messageId)}/reply`, { text: input.text, asIdentityId: identityId })
         },
-        answer: async (identityId: string, questionId: string, input: IdentityAnswer) => {
+        answer: async (identityId: string, questionId: string, input: QuestionAnswer) => {
           requireManage(identityId, questionId, 'questionId')
-          const body: Record<string, unknown> = { asIdentityId: identityId }
-          if (isObject(input) && typeof input.optionId === 'string' && input.optionId !== '' && input.text === undefined) body.optionId = input.optionId
-          else if (isObject(input) && typeof input.text === 'string' && input.text !== '' && input.optionId === undefined) body.text = input.text
-          else throw new TypeError('须给出 optionId 或 text 之一')
+          const body = { ...answerBody(input), asIdentityId: identityId }
           return platformJson('POST', `/inbox/messages/${encodeURIComponent(questionId)}/reply`, body)
         },
       }),

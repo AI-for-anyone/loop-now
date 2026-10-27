@@ -116,9 +116,9 @@ interface QuestionFields {
   to: Party
 }
 
-/** 代管的外部身份收到的提问（plugins/SPEC.md §12）。 */
-export interface IdentityQuestion {
-  /** 回答时用的 id（api.identities.answer 的 questionId）。 */
+/** 事件里的提问：代管的外部身份收到的（identity.inbound，plugins/SPEC.md §12），或 Agent 在渠道线索里提的（channel.outbound）。 */
+export interface EventQuestion {
+  /** 提问消息的 id，回答时用它（api.identities.answer / api.channels.answer 的 questionId）。 */
   id: string
   options: { id: string; label: string }[]
   /** 是否允许不选选项、直接用文字回答。 */
@@ -126,6 +126,9 @@ export interface IdentityQuestion {
   /** RFC 3339；过期后不能再回答。 */
   deadline: string | null
 }
+
+/** 旧名，同 EventQuestion。 */
+export type IdentityQuestion = EventQuestion
 
 interface AgentFields {
   name: string
@@ -170,8 +173,20 @@ export interface EventFields {
   'plugin.enabled': { pluginId: string }
   'plugin.disabled': { pluginId: string }
   'plugin.config_changed': { pluginId: string }
-  /** 只发给消息线索所属的插件；正文用 inbox.read 范围另取。 */
-  'channel.outbound': { messageId: string; threadId: string; channelId: string | null; from: Party; excerpt: string }
+  /**
+   * Agent 在插件发来的线索里回复：只发给线索所属的插件，按 channelId 交给该渠道的 outbound。正文用 api.channels.read 另取。
+   * Agent 提问时 isQuestion 为 true、question 给出选项，用 api.channels.answer 作答。
+   */
+  'channel.outbound': {
+    messageId: string
+    threadId: string
+    channelId: string | null
+    from: Party
+    isQuestion: boolean
+    question: EventQuestion | null
+    /** 正文前 80 个字符。 */
+    excerpt: string
+  }
   /**
    * 插件代管的外部身份收到了消息或提问（plugins/SPEC.md §12）：只发给代管插件，按 channelId 交给该渠道的 identityInbound。
    * 正文用 api.identities.read 另取；回复与回答用 api.identities.reply / answer。
@@ -184,7 +199,7 @@ export interface EventFields {
     from: { kind: string; agentId: string | null; name: string }
     nodeRunId: string | null
     isQuestion: boolean
-    question: IdentityQuestion | null
+    question: EventQuestion | null
     /** 正文前 80 个字符。 */
     excerpt: string
   }

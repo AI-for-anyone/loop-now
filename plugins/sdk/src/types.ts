@@ -57,6 +57,8 @@ export type ConfigValues = Record<string, unknown>
 export interface PluginConfig {
   /** 生效的配置（不含 x-secret 字段）：全局值之上叠加该项目的 x-scope: project 字段。 */
   get<T extends object = ConfigValues>(projectId?: string | null): T
+  /** 启用了本插件的项目 id（按 id 排序），例如按项目配置查找某个外部会话属于哪个项目。启用、停用或改配置后随之更新。 */
+  projects(): string[]
   /** 平台改了配置后调用；收到时 get 已返回新值。 */
   onChange(listener: () => void | Promise<void>): Disposer
 }
@@ -196,9 +198,10 @@ export interface ChannelSendInput {
   /** 对话里显示的发件名称，默认为插件的显示名称（例如飞书用户的名字）。 */
   senderName?: string
   whenBusy?: 'queue' | 'interrupt'
-  /** 作为提问发出时的选项。 */
-  options?: string[]
 }
+
+/** 回答一个提问：选一个选项（可另附文字），或在提问允许时只用文字回答。 */
+export type QuestionAnswer = { optionId: string; text?: string } | { text: string; optionId?: never }
 
 export interface PluginChannels {
   /** 清单 channels 里声明的渠道；channel.outbound 事件按 channelId 交给对应渠道的 outbound。 */
@@ -208,13 +211,20 @@ export interface PluginChannels {
    * 需要 inbox.send 权限；渠道须在清单里声明。
    */
   send(channelId: string, input: ChannelSendInput): Promise<InboxMessage>
-  /** 在已有线索里回复一条消息（例如 channel.outbound 的 messageId）。需要 inbox.send 权限。 */
-  reply(messageId: string, input: { text: string; options?: string[] }): Promise<InboxMessage>
+  /** 在已有线索里回复一条消息（例如 channel.outbound 的 messageId）。需要 inbox.send 权限。插件不能提问，所以没有选项。 */
+  reply(messageId: string, input: { text: string }): Promise<InboxMessage>
   /** 读一条发给插件的消息全文并标为已读（channel.outbound 只带摘要）。需要 inbox.read 权限。 */
   read(messageId: string): Promise<InboxMessage>
+  /**
+   * 回答 Agent 在这个渠道的线索里提的问题（channel.outbound 的 question.id）；效果与外部身份作答相同：问题被回答、等待的任务继续。
+   * 需要 inbox.send 权限；渠道须在清单里声明。提问已回答、过期或关闭时平台返回 409（错误的 code 为 already_answered、question_expired
+   * 或 question_closed），选项不存在时 422，线索不属于本插件时 403。
+   */
+  answer(channelId: string, questionId: string, input: QuestionAnswer): Promise<InboxMessage>
 }
 
-export type IdentityAnswer = { optionId: string; text?: never } | { text: string; optionId?: never }
+/** 同 QuestionAnswer。 */
+export type IdentityAnswer = QuestionAnswer
 
 /** 以代管的外部身份的名义读消息、回复与回答（plugins/SPEC.md §12）。需要 identities.manage 权限与声明 manageIdentities 的渠道；只限本插件代管的身份。 */
 export interface PluginIdentities {
@@ -223,7 +233,7 @@ export interface PluginIdentities {
   /** 以该身份回复一条消息；对发起方的效果与该身份亲自回复相同。 */
   reply(identityId: string, messageId: string, input: { text: string }): Promise<InboxMessage>
   /** 以该身份回答一个提问：选一个选项，或在提问允许时用文字回答。 */
-  answer(identityId: string, questionId: string, input: IdentityAnswer): Promise<InboxMessage>
+  answer(identityId: string, questionId: string, input: QuestionAnswer): Promise<InboxMessage>
 }
 
 export interface PluginAPI {

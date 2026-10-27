@@ -42,7 +42,8 @@ export default async function register(api: PluginAPI) {
 | `lifecycle.on('start' \| 'stop', fn)` | `start` 在 register 之后运行，适合起定时器和连接；`stop` 在停用、卸载、更新时运行 |
 | `state.get/set/delete/list` | 持久状态，需要 `state` 权限；`{ projectId }` 为项目级，省略为插件全局。key 1–512 字节，值为 JSON、最多 1 MiB；list 按 key 排序、最多 1000 项 |
 | `config.get(projectId?)` | 生效的配置（不含 secret）：全局值叠加项目的 `x-scope: project` 字段 |
-| `config.onChange(fn)` | 配置改了以后调用 |
+| `config.projects()` | 启用了本插件的项目 id，例如按项目配置查找一个外部会话属于哪个项目；启用、停用、改配置后随之更新 |
+| `config.onChange(fn)` | 配置改了以后调用（含在项目里启用或停用本插件） |
 | `secrets.get(name, projectId?)` | `x-secret` 字段的值，项目值优先。宿主会在插件日志里把这些值替换成 `***` |
 | `accounts.list(projectId, kind)` | 项目里某种账号（清单 `accounts` 声明的种类），按创建顺序，`values` 含 secret 字段明文；需要 `accounts.read`，插件须在该项目启用 |
 | `platform.fetch(path, init)` | 带插件令牌调用平台 `/api/v1`；只能调用清单 `permissions` 范围内的操作，超出返回 403。对象正文按 JSON 发送 |
@@ -52,11 +53,12 @@ export default async function register(api: PluginAPI) {
 | `schedule.on(id, fn)` | 清单 `schedule` 的定时任务，平台按 cron（服务端本地时间）触发，同一条目不并发，错过的不补，10 分钟超时 |
 | `channels.register(id, { outbound })` | 清单 `channels` 的渠道；Agent 回复经这个渠道发来的消息时，`channel.outbound` 事件按 `channelId` 交给 `outbound(event, ctx)` |
 | `channels.send(id, { to, text, senderName? })` | 以插件发件方经渠道给 Agent 发新消息（需要 `inbox.send`），Agent 的回复回到这个渠道 |
-| `channels.reply(messageId, { text })`、`channels.read(messageId)` | 在线索里回复；读一条发给插件的消息全文（需要 `inbox.read`） |
+| `channels.reply(messageId, { text })`、`channels.read(messageId)` | 在线索里回复；读一条发给插件的消息全文（需要 `inbox.read`）。插件不能提问 |
+| `channels.answer(id, questionId, { optionId, text? } \| { text })` | 回答 Agent 在这个渠道的线索里提的问题（`channel.outbound` 的 `question.id`），效果与外部身份作答相同；需要 `inbox.send`。已回答、过期、关闭时 409 |
 | `channels.register(id, { identityInbound })` | 渠道代管的外部身份收到消息或提问（`identity.inbound`，只发给代管插件，处理完才确认）。渠道须声明 `manageIdentities: true`，并有 `identities.manage` 权限 |
 | `identities.read(identityId, messageId)` | 读代管身份收件箱里的一条消息全文（不改已读状态） |
 | `identities.reply(identityId, messageId, { text })` | 以该身份回复；效果与身份亲自回复相同 |
-| `identities.answer(identityId, questionId, { optionId } \| { text })` | 以该身份回答提问；返回的消息 `answerTo` 为 null 表示提问已关闭、只存成了回复 |
+| `identities.answer(identityId, questionId, { optionId, text? } \| { text })` | 以该身份回答提问；返回的消息 `answerTo` 为 null 表示提问已关闭、只存成了回复 |
 
 `actions`、`schedule`、`channels` 的 id 与 `http` 须在清单里声明，否则加载失败。
 
@@ -89,7 +91,10 @@ export default function register(api: PluginAPI) {
   api.channels.register('lark', {
     outbound: async (event) => {
       const full = await api.channels.read(event.messageId) // 事件只带摘要
-      // 把 full.text 发回飞书；同一事件可能重复送达，按 event.id 去重
+      // 把 full.text 发回飞书；同一事件可能重复送达，按 event.id 去重。
+      // event.question 不为 null 时是 Agent 的提问：把 question.options 做成按钮，人选了以后
+      //   await api.channels.answer('lark', event.question.id, { optionId })
+      // question.allowText 为 true 时也可以 { text } 作答。
     },
   })
 }

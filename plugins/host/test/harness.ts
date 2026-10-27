@@ -42,6 +42,7 @@ export class HostHarness {
   private readonly permissions = new Map<string, string[]>()
   private readonly kinds = new Map<string, string[]>()
   private readonly waiters: Waiter[] = []
+  private readonly stderrWaiters: (() => void)[] = []
   private next = 0
 
   private constructor(options: StartOptions) {
@@ -55,6 +56,7 @@ export class HostHarness {
     createInterface({ input: this.child.stdout! }).on('line', (line) => this.receive(line))
     createInterface({ input: this.child.stderr! }).on('line', (line) => {
       this.stderr.push(line)
+      for (const check of [...this.stderrWaiters]) check()
     })
   }
 
@@ -150,6 +152,27 @@ export class HostHarness {
         reject(new Error(`等待消息超时；已收到：${JSON.stringify(this.messages.slice(-5))}；stderr：${this.stderr.slice(-5).join(' | ')}`))
       }, timeoutMs)
       this.waiters.push(w)
+    })
+  }
+
+  /**
+   * 等标准错误满足条件：已经收到的也算，之后每来一行重新判断。
+   * 标准错误与协议消息走两条管道，先后不保证，所以不能用 waitFor 等标准错误。
+   */
+  waitStderr(pred: (lines: string[]) => boolean, timeoutMs = 10_000): Promise<void> {
+    if (pred(this.stderr)) return Promise.resolve()
+    return new Promise((resolve, reject) => {
+      const check = () => {
+        if (!pred(this.stderr)) return
+        this.stderrWaiters.splice(this.stderrWaiters.indexOf(check), 1)
+        clearTimeout(timer)
+        resolve()
+      }
+      const timer = setTimeout(() => {
+        this.stderrWaiters.splice(this.stderrWaiters.indexOf(check), 1)
+        reject(new Error(`等待标准错误超时；已收到：${this.stderr.slice(-5).join(' | ')}`))
+      }, timeoutMs)
+      this.stderrWaiters.push(check)
     })
   }
 

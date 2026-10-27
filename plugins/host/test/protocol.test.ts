@@ -574,7 +574,7 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
     assert.deepEqual((await host.request('schedule', 'cron', { scheduleId: 'other' })).payload, { ok: false, error: '插件没有注册定时任务 other' })
   })
 
-  it('渠道：channel.outbound 按 channelId 交给 outbound；send/reply/read 以插件身份调用收件箱接口', async () => {
+  it('渠道：channel.outbound 按 channelId 交给 outbound；send/reply/read/answer 以插件身份调用收件箱接口', async () => {
     const seen: { method?: string; url?: string; auth?: string; body: unknown }[] = []
     const server = createServer(async (req, res) => {
       let body = ''
@@ -599,6 +599,17 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
           'index.ts': `export default function (api) {
             api.channels.register('lark', {
               outbound: async (event, ctx) => {
+                if (event.question) {
+                  await api.channels.answer('lark', event.question.id, { optionId: event.question.options[0].id })
+                  await api.channels.answer('lark', event.question.id, { text: '都行' })
+                  await api.channels.answer('lark', event.question.id, { optionId: 'o2', text: '下周再发' })
+                  for (const bad of [{}, { optionId: 'o1', text: 7 }, { text: '' }]) {
+                    try { await api.channels.answer('lark', event.question.id, bad) } catch (e) { api.log.info('bad answer: ' + e.message) }
+                  }
+                  try { await api.channels.answer('wechat', event.question.id, { text: 'x' }) } catch (e) { api.log.info('bad channel: ' + e.message) }
+                  api.log.info('answered ' + event.isQuestion)
+                  return
+                }
                 const full = await api.channels.read(event.messageId)
                 await api.channels.reply(event.messageId, { text: 'ack ' + full.text })
                 api.log.info('outbound ' + event.channelId + ' ' + event.excerpt + ' -> ' + full.text + ' attempt ' + ctx.attempt)
@@ -630,11 +641,33 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
           ['POST', '/api/v1/inbox/messages/m9/reply', 'Bearer lnp_channel', { text: 'ack full body' }],
         ],
       )
+      seen.length = 0
+      const question = { id: 'q1', options: [{ id: 'o1', label: '发布' }, { id: 'o2', label: '不发' }], allowText: true, deadline: null }
+      const asked = await host.event('lark', { type: 'channel.outbound', channelId: 'lark', messageId: 'q1', threadId: 't1', from: { kind: 'agent', id: 'a', address: 'demo/manager' }, isQuestion: true, question, excerpt: '发吗？' })
+      assert.deepEqual(asked.payload, { ok: true })
+      await host.waitLog('lark', /^answered true$/)
+      assert.deepEqual(
+        host.logs('lark').filter((l) => /^bad /.test(l.message)).map((l) => l.message),
+        ['bad answer: 须给出 optionId 或 text', 'bad answer: text 须是非空字符串', 'bad answer: text 须是非空字符串', 'bad channel: 渠道 wechat 没有在清单 loopNow.channels 中声明'],
+        '本地校验，不发请求',
+      )
+      assert.deepEqual(
+        seen.map((s) => [s.method, s.url, s.body]),
+        [
+          ['POST', '/api/v1/inbox/messages/q1/reply', { optionId: 'o1' }],
+          ['POST', '/api/v1/inbox/messages/q1/reply', { text: '都行' }],
+          ['POST', '/api/v1/inbox/messages/q1/reply', { optionId: 'o2', text: '下周再发' }],
+        ],
+      )
       const stray = await host.event('lark', { type: 'channel.outbound', channelId: 'other', messageId: 'm10' })
       assert.deepEqual(stray.payload, { ok: false, error: '没有渠道处理 channel.outbound（channelId other）' }, '没有处理者时回失败，平台重投')
-      const noPerm = fx.write('mute', { 'index.ts': `export default function (api) { api.lifecycle.on('start', async () => { try { await api.channels.send('c', { to: 'a', text: 'b' }) } catch (e) { api.log.info(e.message) } }) }` }, { manifest: { channels: [{ id: 'c' }] }, apiUrl })
+      const noPerm = fx.write('mute', { 'index.ts': `export default function (api) { api.lifecycle.on('start', async () => {
+        try { await api.channels.send('c', { to: 'a', text: 'b' }) } catch (e) { api.log.info(e.message) }
+        try { await api.channels.answer('c', 'q1', { optionId: 'o1' }) } catch (e) { api.log.info('answer: ' + e.message) }
+      }) }` }, { manifest: { channels: [{ id: 'c' }] }, apiUrl })
       await host.load(noPerm)
       await host.waitLog('mute', /^清单没有声明 inbox\.send 权限$/)
+      await host.waitLog('mute', /^answer: 清单没有声明 inbox\.send 权限$/)
     } finally {
       server.close()
     }
@@ -676,7 +709,7 @@ describe('代管外部身份', () => {
                 await api.identities.answer(event.identityId, 'q2', { text: '晚点再说' })
                 try { await api.identities.answer(event.identityId, 'q-closed', { optionId: 'yes' }) } catch (e) { api.log.info('closed ' + e.status + ' ' + e.code + ' ' + e.details.state) }
                 const errors = []
-                for (const f of [() => api.identities.answer(event.identityId, 'q3', {}), () => api.identities.answer(event.identityId, 'q3', { optionId: 'a', text: 'b' }), () => api.identities.reply(event.identityId, '', { text: 'x' })]) {
+                for (const f of [() => api.identities.answer(event.identityId, 'q3', {}), () => api.identities.answer(event.identityId, 'q3', { optionId: 'a', text: '' }), () => api.identities.reply(event.identityId, '', { text: 'x' })]) {
                   try { await f() } catch (e) { errors.push(e.message) }
                 }
                 api.log.info('inbound ' + event.channelId + ' ' + full.text + ' -> ' + answered.answerTo.optionLabel + ' attempt ' + ctx.attempt + ' errors ' + errors.join(' | '))
@@ -697,7 +730,7 @@ describe('代管外部身份', () => {
         { attempt: 3 },
       )
       assert.deepEqual(ack.payload, { ok: true })
-      assert.equal((await host.waitLog('mailer', /^inbound/)).message, 'inbound mail 要不要发布？ -> 发布 attempt 3 errors 须给出 optionId 或 text 之一 | 须给出 optionId 或 text 之一 | 须给出 messageId')
+      assert.equal((await host.waitLog('mailer', /^inbound/)).message, 'inbound mail 要不要发布？ -> 发布 attempt 3 errors 须给出 optionId 或 text | text 须是非空字符串 | 须给出 messageId')
       assert.equal((await host.waitLog('mailer', /^closed/)).message, 'closed 409 question_closed closed')
       assert.deepEqual(
         seen.map((s) => [s.method, s.url, s.auth, s.body]),
@@ -757,7 +790,7 @@ describe('配置、密钥与输出', () => {
           api.on('run.ended', (e) => {
             const c = api.config.get(e.projectId)
             const g = api.config.get()
-            api.log.info(JSON.stringify({ c, g, s: api.secrets.get('key', e.projectId), gs: api.secrets.get('key'), none: api.secrets.get('nope') ?? null }))
+            api.log.info(JSON.stringify({ c, g, ps: api.config.projects(), s: api.secrets.get('key', e.projectId), gs: api.secrets.get('key'), none: api.secrets.get('nope') ?? null }))
             console.log('token is lnp_secret_token_1234 and key is', api.secrets.get('key'))
             process.stdout.write('raw out global-key-123\\n')
           })
@@ -780,12 +813,13 @@ describe('配置、密钥与输出', () => {
     assert.deepEqual(data, {
       c: { url: 'https://p', limit: 3 },
       g: { url: 'https://g', limit: 3 },
+      ps: [project],
       s: 'MASKED',
       gs: 'MASKED',
       none: null,
     })
     assert.ok(parsed.includes('token is *** and key is ***'), parsed.join('\n'))
-    await host.waitFor(() => host.stderr.some((l) => l === '[conf] raw out ***'))
+    await host.waitStderr((lines) => lines.includes('[conf] raw out ***'))
     assert.ok(!JSON.stringify(host.messages).includes('global-key-123'))
     assert.ok(!host.stderr.join('\n').includes('project-key-456'))
   })
@@ -814,6 +848,7 @@ describe('配置、密钥与输出', () => {
     assert.equal(uncaught.message.split('\n').length, 2, '只带说明与插件代码里的一帧')
     assert.ok(uncaught.message.split('\n')[1]!.includes(p.root), uncaught.message)
     await host.waitLog('noisy', /^未处理的 Promise 拒绝：没人接的拒绝/)
+    await host.waitStderr((lines) => lines.includes('[noisy] to stderr'))
     assert.deepEqual(
       host.stderr.filter((l) => l.startsWith('[noisy]')),
       ['[noisy] part one and two', '[noisy] second line', '[noisy] to stderr'],
