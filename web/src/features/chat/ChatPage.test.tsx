@@ -342,7 +342,8 @@ describe('排队显示与回复状态', () => {
     expect(screen.getByText('失败：凭证不可用（gh 凭证无法解密）')).toBeInTheDocument()
     expect(screen.getByText('已打断')).toBeInTheDocument()
     expect(screen.getByText('半截')).toBeInTheDocument()
-    expect(await screen.findByText('等待执行名额')).toBeInTheDocument()
+    // 头部也显示当前阶段，这里只看对话里的那一轮。
+    expect(await within(screen.getByRole('log')).findByText('等待执行名额')).toBeInTheDocument()
   })
 
   it('打断时先显示正在打断，结束后显示已打断并保留文字', async () => {
@@ -350,7 +351,7 @@ describe('排队显示与回复状态', () => {
     const { agent, emit } = await renderChat({ messages: [makeMessage({ text: '长任务', run })] })
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: run }, '做到一半'))
     await emit('run.updated', { run: { ...run, status: 'aborting' } })
-    expect(await screen.findByText('正在打断')).toBeInTheDocument()
+    expect(await within(screen.getByRole('log')).findByText('正在打断')).toBeInTheDocument()
     const ended = { ...run, status: 'interrupted' as const, endReason: 'user_interrupt' as const }
     await emit('run.ended', { run: ended, message: makeMessage({ role: 'assistant', text: '做到一半', run: ended }) })
     expect(await screen.findByText('已打断')).toBeInTheDocument()

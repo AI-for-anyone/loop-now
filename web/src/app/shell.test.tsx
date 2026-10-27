@@ -5,7 +5,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { keys } from '@/api/queries'
 import { config } from '@/config'
-import { agentsUrl, apiUrl, defaultAgentPath, defaultAgentsPath, defaultProject, errorBody, makeAgent, platformAgentsUrl, projectsUrl, toListItem } from '@/test/api'
+import { agentsUrl, apiUrl, defaultAgentPath, defaultAgentsPath, defaultProject, errorBody, makeAgent, platformAgentsUrl, toListItem } from '@/test/api'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers, currentSidebarLinks, scopeSwitcher, sidebar, sidebarLinks } from '@/test/shell'
@@ -264,18 +264,17 @@ describe('Agent 列表', () => {
 
 describe('连接与错误展示', () => {
   it('服务端未启动时显示地址与重试，左侧栏的连接状态为无法连接', async () => {
-    server.use(
-      http.get(apiUrl('/context'), () => HttpResponse.error()),
-      http.get(projectsUrl, () => HttpResponse.error()),
-      http.get(agentsUrl, () => HttpResponse.error()),
-      http.get(apiUrl('/health'), () => HttpResponse.error()),
-    )
+    // 所有接口都连不上：默认处理器（如待处理的消息）有响应时，提示会随之消失又出现。
+    server.use(http.all(apiUrl('/*'), () => HttpResponse.error()))
     renderRoutes(routes, defaultAgentsPath)
-    const alert = await findBanner()
-    expect(alert).toHaveTextContent('无法连接到服务端')
-    expect(alert).toHaveTextContent(config.apiBase)
-    expect(within(alert).getByRole('button', { name: '重试' })).toBeInTheDocument()
-    expect(within(screen.getByRole('status', { name: '连接状态' })).getByText('无法连接')).toBeInTheDocument()
+    // 上一个用例遗留的请求可能稍后才收到响应，提示随之重新挂载，所以每次重新取提示。
+    await waitFor(() => {
+      const alert = banner()
+      expect(alert).toHaveTextContent('无法连接到服务端')
+      expect(alert).toHaveTextContent(config.apiBase)
+      expect(within(alert!).getByRole('button', { name: '重试' })).toBeInTheDocument()
+      expect(within(screen.getByRole('status', { name: '连接状态' })).getByText('无法连接')).toBeInTheDocument()
+    })
   })
 
   it('加载之后断连时同样显示全局提示；重试重新获取失败的查询，连上后提示消失', async () => {

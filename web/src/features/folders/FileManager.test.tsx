@@ -129,6 +129,7 @@ describe('文件管理器', () => {
     expect((await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'AGENTS.md' })).value).toContain('Agent 每次启动时先读这个文件')
   })
 
+  // 两次拉取各要等一轮 1.5 秒的轮询，单独运行约 4 秒，全量并行时会超过默认的 5 秒。
   it('从 Git 拉取：进行中与成功显示在状态栏；失败的拉取刷新后仍在，可以看 git 输出', async () => {
     const { source, user, unmount } = setup()
     const start = vi.spyOn(source.git!, 'start')
@@ -157,7 +158,7 @@ describe('文件管理器', () => {
     expect(screen.getByText(/could not read Username/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '关闭' }))
     expect(screen.queryByText('拉取失败：无法克隆仓库')).toBeNull()
-  })
+  }, 15_000)
 
   it('二进制与超过上限的文件只能下载；软链接显示指向并打开目标的内容', async () => {
     const { user } = setup()

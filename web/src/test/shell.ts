@@ -2,6 +2,7 @@ import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import type { Schemas } from '@/api/client'
 import { agentsUrl, apiUrl, context, makeAgent, makeStatus, toListItem } from './api'
+import { emptySelections } from './project-credentials'
 
 // 整个控制台的默认接口处理器。MSW 在一次 server.use 中按顺序匹配，测试中的覆盖要写在它们前面。
 export function baseHandlers(agents: Schemas['Agent'][] = [makeAgent()]) {
@@ -12,6 +13,7 @@ export function baseHandlers(agents: Schemas['Agent'][] = [makeAgent()]) {
     ...agents.map((a) => http.get(apiUrl(`/agents/${a.id}`), () => HttpResponse.json(a))),
     ...agents.map((a) => http.get(apiUrl(`/agents/${a.id}/status`), () => HttpResponse.json(makeStatus(a.id)))),
     ...agents.map((a) => http.get(apiUrl(`/agents/${a.id}/model-auth`), () => HttpResponse.json({ credential: a.modelCredential, operation: null }))),
+    ...agents.map((a) => http.get(apiUrl(`/agents/${a.id}/credential-selections`), () => HttpResponse.json(emptySelections(a)))),
     ...agents.map((a) => http.get(apiUrl(`/agents/${a.id}/skills`), () => HttpResponse.json({ skills: [] }))),
     ...agents.map((a) => http.get(apiUrl(`/agents/${a.id}/messages`), () => HttpResponse.json({ messages: [], hasMore: false }))),
     http.get(apiUrl('/model-providers'), () => HttpResponse.json({ piVersion: '1.1.0', catalogGeneratedAt: null, providers: [] })),

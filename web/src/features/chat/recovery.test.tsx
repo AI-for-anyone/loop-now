@@ -69,7 +69,8 @@ describe('服务端重启与竞态', () => {
     expect(screen.getByText('做了一半的回复')).toBeInTheDocument()
     await emit('run.updated', { run: { ...queued, status: 'starting', phase: 'launching' } }, '2-0')
     await emit('queue.updated', { queuedRuns: [], items: [] }, '3-0')
-    expect(await screen.findByText('启动中')).toBeInTheDocument()
+    // 头部也显示当前阶段，这里只看对话里的那一轮。
+    expect(await within(screen.getByRole('log')).findByText('启动中')).toBeInTheDocument()
     // 开始执行的消息离开排队列表，作为一轮对话出现在对话流中。
     expect(screen.queryByRole('region', { name: '排队消息' })).toBeNull()
     expect(within(screen.getByRole('log')).getByText('排队的')).toBeInTheDocument()

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { routes } from '@/app/routes'
 import type { Schemas } from '@/api/client'
 import { keys } from '@/api/queries'
-import { apiUrl, defaultAgentPath, errorBody, makeAgent, makeRun, makeStatus } from '@/test/api'
+import { agentsUrl, apiUrl, defaultAgentPath, errorBody, makeAgent, makeRun, makeStatus, platformAgentsUrl, toListItem } from '@/test/api'
 import { renderChat } from '@/test/chat'
 import { makeSleep } from '@/test/sleep'
 import { providers } from '@/test/config'
@@ -16,9 +16,11 @@ import { baseHandlers } from '@/test/shell'
 const heading = (name: string) => screen.findByRole('heading', { level: 1, name })
 
 describe('切换 Agent', () => {
+  // 项目 Agent 的模型账号在项目里维护；直接录入 API Key 的对话框只在平台 Agent 上。
   it('后退到已缓存的 Agent 时，不保留上一个 Agent 的凭证对话框，也不会提交到这个 Agent', async () => {
-    const a = makeAgent({ name: 'A 助手' })
-    const b = makeAgent({ name: 'B 助手' })
+    const a = makeAgent({ name: 'A 助手', scope: 'platform', projectId: null })
+    const b = makeAgent({ name: 'B 助手', scope: 'platform', projectId: null })
+    const configPath = (agent: Schemas['Agent']) => `/platform/agents/${agent.id}/config`
     const puts: string[] = []
     server.use(
       http.put(apiUrl('/agents/:agentId/model-credential'), ({ params }) => {
@@ -26,12 +28,14 @@ describe('切换 Agent', () => {
         return HttpResponse.json(errorBody('internal_error'), { status: 500 })
       }),
       http.get(apiUrl('/model-providers'), () => HttpResponse.json(providers)),
+      http.get(platformAgentsUrl, () => HttpResponse.json({ agents: [a, b].map((agent) => toListItem(agent)) })),
+      http.get(agentsUrl, () => HttpResponse.json({ agents: [] })),
       ...baseHandlers([a, b]),
     )
     const user = userEvent.setup()
-    const { router } = renderRoutes(routes, defaultAgentPath(b.id, 'config'))
+    const { router } = renderRoutes(routes, configPath(b))
     await heading('B 助手')
-    await act(() => router.navigate(defaultAgentPath(a.id, 'config')))
+    await act(() => router.navigate(configPath(a)))
     await heading('A 助手')
     const section = await screen.findByRole('region', { name: '模型账号凭证' })
     await user.click(await within(section).findByRole('button', { name: '录入 API Key' }))
@@ -41,7 +45,7 @@ describe('切换 Agent', () => {
     // 浏览器后退（POP）到之前看过、已在缓存中的 B。
     await act(() => router.navigate(-1))
     await heading('B 助手')
-    expect(router.state.location.pathname).toBe(defaultAgentPath(b.id, 'config'))
+    expect(router.state.location.pathname).toBe(configPath(b))
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(document.body.innerHTML).not.toContain('sk-for-a')
     expect(puts).toEqual([])
