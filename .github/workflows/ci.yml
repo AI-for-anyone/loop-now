@@ -1,0 +1,87 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: server (go vet + go test)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: loop_now
+          POSTGRES_PASSWORD: loop_now
+          POSTGRES_DB: loop_now_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U loop_now -d loop_now_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:8
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      LOOP_NOW_TEST_DATABASE_URL: postgres://loop_now:loop_now@127.0.0.1:5432/loop_now_test?sslmode=disable
+      LOOP_NOW_TEST_REDIS_URL: redis://127.0.0.1:6379/1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: go vet
+        run: go vet ./cmd/... ./internal/... ./api/...
+      - name: go test
+        run: go test -count=1 ./cmd/... ./internal/... ./api/...
+
+  web:
+    name: web (typecheck, api:check, lint, test, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run api:check
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  plugins:
+    name: plugins (build, test, validate official)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plugins
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: plugins/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run build
+      - run: npm test
+      - name: validate the official plugins
+        run: |
+          for dir in official/*/; do
+            node host/dist/main.js validate "$dir"
+          done
