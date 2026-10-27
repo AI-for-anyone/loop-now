@@ -51,7 +51,7 @@ Go 服务与插件宿主（Node 常驻进程）之间的 stdio 协议，补充 `
 }
 ```
 
-- `config` 是原样的保存值：全局一份，加上每个有项目级配置的项目一份（只含 `x-scope: project` 字段）。`api.config.get(projectId)` 由宿主合并：全局 values 与 secrets 之上叠加该项目的。`config_changed` 的载荷是 `{"config": <同上>}`，每次给出全部。
+- `config` 是原样的保存值：全局一份，加上每个启用了这个插件的项目一份（只含 `x-scope: project` 字段；没有项目级配置时 values 与 secrets 为空）。`projects` 的键就是启用了插件的全部项目，停用或删除的项目不在其中（即使留有配置）。`api.config.get(projectId)` 由宿主合并：全局 values 与 secrets 之上叠加该项目的。`config_changed` 的载荷是 `{"config": <同上>}`，每次给出全部；全局或项目配置保存、项目启用或停用这个插件时都会发送。
 - `token` 只在本次加载有效：每次加载签发新令牌并吊销这个插件的旧令牌（宿主重启、更新版本都会重新加载）。宿主用它带 `Authorization: Bearer` 调用 `apiUrl`，只能调用接口上标了 `x-plugin-scope` 且在 `permissions` 内的操作。
 - 宿主应在加载时检查插件代码订阅的事件都在 `manifest.events` 内，超出时回 `ok: false`。
 

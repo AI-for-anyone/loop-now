@@ -229,11 +229,17 @@ func lockPlugin(ctx context.Context, tx pgx.Tx, plugin string) error {
 	return notFoundIfNoRows(tx.QueryRow(ctx, `SELECT id FROM plugins WHERE id=$1 FOR SHARE`, plugin).Scan(&id), "插件")
 }
 
-// PluginConfigs 返回插件的全局配置与各项目的配置（宿主加载时一起交给平台半边）。
+// PluginConfigs 返回插件的全局配置与启用了它的各项目的配置（宿主加载时一起交给平台半边）：
+// 只含启用了插件、未删除的项目，没有项目级配置的项目为空配置；停用或删除的项目即使留有配置也不含。
 func (s *Store) PluginConfigs(ctx context.Context, plugin string) (PluginConfigRow, map[uuid.UUID]PluginConfigRow, error) {
 	global := PluginConfigRow{Values: map[string]any{}, Secrets: map[string]string{}}
 	projects := map[uuid.UUID]PluginConfigRow{}
-	rows, err := s.Pool.Query(ctx, `SELECT project_id,values,secrets,revision FROM plugin_config WHERE plugin_id=$1`, plugin)
+	rows, err := s.Pool.Query(ctx, `SELECT NULL::uuid,values,secrets,revision FROM plugin_config WHERE plugin_id=$1 AND project_id IS NULL
+		UNION ALL
+		SELECT pp.project_id,coalesce(c.values,'{}'),coalesce(c.secrets,'{}'),coalesce(c.revision,0)
+		FROM project_plugins pp JOIN projects pr ON pr.id=pp.project_id AND pr.deleted_at IS NULL
+		LEFT JOIN plugin_config c ON c.plugin_id=pp.plugin_id AND c.project_id=pp.project_id
+		WHERE pp.plugin_id=$1 AND pp.enabled`, plugin)
 	if err != nil {
 		return global, nil, err
 	}

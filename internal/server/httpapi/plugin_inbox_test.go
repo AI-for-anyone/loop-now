@@ -60,7 +60,8 @@ func TestPluginInboxSender(t *testing.T) {
 	}
 	var ev map[string]any
 	_ = json.Unmarshal(data, &ev)
-	if ev["messageId"] != reply.ID.String() || ev["threadId"] != sent.ID.String() || ev["channelId"] != "lark" || ev["excerpt"] != "今晚八点上线" {
+	if ev["messageId"] != reply.ID.String() || ev["threadId"] != sent.ID.String() || ev["channelId"] != "lark" || ev["excerpt"] != "今晚八点上线" ||
+		ev["isQuestion"] != false || ev["question"] != nil {
 		t.Fatalf("channel.outbound：%v", ev)
 	}
 
@@ -71,5 +72,63 @@ func TestPluginInboxSender(t *testing.T) {
 	again := decode[apitypes.InboxMessage](t, e.expect(201, "POST", "/inbox/messages/"+reply.ID.String()+"/reply", map[string]any{"text": "好的，已转告"}, auth...))
 	if again.From.Kind != "plugin" || *again.From.ChannelID != "lark" || again.From.Name != "飞书 · 张三" || again.To.ID == nil || *again.To.ID != agent.ID {
 		t.Fatalf("插件继续回复：%+v", again)
+	}
+}
+
+// 插件发来的线索里 Agent 可以提问（SPEC §11）：channel.outbound 带 isQuestion 与 question（形状与 identity.inbound 相同）；
+// 插件回复这道提问即作答，效果与外部身份作答相同（问题记为已回答、提醒 Agent），审计记操作者为插件。
+// 插件不能提问（422），别的插件作答 403，再答 409。
+func TestPluginThreadQuestions(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	for _, id := range []string{"bridge", "other"} {
+		e.installPlugin(writePluginDir(t, id, "inbox.send", "inbox.read"))
+		e.expect(200, "PUT", "/projects/"+e.dc.Project.ID.String()+"/plugins/"+id, map[string]any{"enabled": true, "values": map[string]any{}, "expectedRevision": 0})
+	}
+	agent, path := e.newAgent("助手")
+	bridge := []string{"Authorization", "Bearer " + e.pluginTokenFor("bridge")}
+	other := []string{"Authorization", "Bearer " + e.pluginTokenFor("other")}
+	sent := decode[apitypes.InboxMessage](t, e.expect(201, "POST", "/inbox/messages",
+		map[string]any{"to": "默认项目/助手", "text": "要发版吗", "channelId": "slack", "senderName": "Slack · 李四"}, bridge...))
+	e.waitAgentIdle(path)
+
+	q := decode[apitypes.InboxMessage](t, e.agentCaller(agent.ID).expect(201, "POST", "/inbox/messages/"+sent.ID.String()+"/reply",
+		map[string]any{"text": "今晚发吗？", "options": []string{"发", "不发"}}))
+	if q.Question == nil || q.To.Kind != "plugin" || *q.To.ChannelID != "slack" {
+		t.Fatalf("Agent 在插件线索里提问：%+v", q)
+	}
+	var data []byte
+	if err := e.st.Pool.QueryRow(ctx, `SELECT e.data FROM plugin_events e JOIN plugin_event_deliveries d ON d.event_id=e.id
+		WHERE e.type='channel.outbound' AND d.plugin_id='bridge'`).Scan(&data); err != nil {
+		t.Fatal(err)
+	}
+	var ev map[string]any
+	_ = json.Unmarshal(data, &ev)
+	question, _ := ev["question"].(map[string]any)
+	options, _ := question["options"].([]any)
+	if ev["isQuestion"] != true || ev["messageId"] != q.ID.String() || question["id"] != q.ID.String() || question["allowText"] != true || question["deadline"] == nil ||
+		len(options) != 2 || options[0].(map[string]any)["id"] != "1" || options[1].(map[string]any)["label"] != "不发" {
+		t.Fatalf("channel.outbound 带提问：%v", ev)
+	}
+
+	reply := "/inbox/messages/" + q.ID.String() + "/reply"
+	e.console().expectError(422, "validation_failed", "POST", reply, map[string]any{"text": "反问", "options": []string{"a"}}, bridge...)
+	e.console().expectError(403, "forbidden", "POST", reply, map[string]any{"optionId": "1"}, other...)
+	answer := decode[apitypes.InboxMessage](t, e.expect(201, "POST", reply, map[string]any{"optionId": "1"}, bridge...))
+	if answer.From.Kind != "plugin" || answer.To.ID == nil || *answer.To.ID != agent.ID || answer.AnswerTo == nil || answer.AnswerTo.MessageID != q.ID {
+		t.Fatalf("插件作答：%+v", answer)
+	}
+	if m, err := e.st.GetInboxMessage(ctx, q.ID, 200); err != nil || m.Question.State != "answered" || *m.Question.Answer.OptionID != "1" {
+		t.Fatalf("问题记为已回答：%+v %v", m.Question, err)
+	}
+	e.console().expectError(409, "already_answered", "POST", reply, map[string]any{"optionId": "2"}, bridge...)
+	var actor string
+	if err := e.st.Pool.QueryRow(ctx, `SELECT actor_kind||'|'||actor_address FROM audit_log WHERE operation='replyInboxMessage' AND status=201 ORDER BY at DESC LIMIT 1`).Scan(&actor); err != nil || actor != "plugin|plugin:bridge" {
+		t.Fatalf("审计：%q %v", actor, err)
+	}
+	e.waitAgentIdle(path)
+	var reminders int
+	if err := e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM runs WHERE agent_id=$1 AND origin='inbox_reminder' AND trigger_inbox_message_id=$2`, agent.ID, answer.ID).Scan(&reminders); err != nil || reminders != 1 {
+		t.Fatalf("作答应提醒 Agent 一次：%d %v", reminders, err)
 	}
 }

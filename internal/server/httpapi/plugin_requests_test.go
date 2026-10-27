@@ -361,3 +361,37 @@ func TestPluginAccountsList(t *testing.T) {
 		}
 	}
 }
+
+// 宿主拿到的 config.projects 只含启用了插件、未删除的项目（没有项目级配置时为空配置）；项目启用或停用插件时发 config_changed，
+// 带最新的项目列表。只存了配置、没有启用的项目不在其中。
+func TestPluginConfigProjects(t *testing.T) {
+	e := newEnv(t)
+	e.installPlugin(writePluginDir(t, "bridge"))
+	journal := e.startFakeHost("bridge")
+	other := decode[apitypes.Project](t, e.expect(201, "POST", "/projects", map[string]any{"name": "别的项目"}))
+	project := e.dc.Project.ID.String()
+	last := func(typ string) []any {
+		t.Helper()
+		entries := journalEntries(t, journal, typ)
+		if len(entries) == 0 {
+			t.Fatalf("没有 %s", typ)
+		}
+		got, _ := entries[len(entries)-1]["projects"].([]any)
+		return got
+	}
+	if got := last("load"); len(got) != 0 {
+		t.Fatalf("没有启用的项目时为空：%v", got)
+	}
+	on := decode[map[string]any](t, e.expect(200, "PUT", "/projects/"+project+"/plugins/bridge", map[string]any{"enabled": true, "values": map[string]any{}, "expectedRevision": 0}))
+	if got := last("config_changed"); len(got) != 1 || got[0] != project {
+		t.Fatalf("启用后：%v", got)
+	}
+	e.expect(200, "PUT", "/projects/"+other.ID.String()+"/plugins/bridge", map[string]any{"enabled": false, "values": map[string]any{"channel": "c"}, "expectedRevision": 0})
+	if got := last("config_changed"); len(got) != 1 || got[0] != project {
+		t.Fatalf("只存配置不启用的项目不在其中：%v", got)
+	}
+	e.expect(200, "PUT", "/projects/"+project+"/plugins/bridge", map[string]any{"enabled": false, "values": map[string]any{}, "expectedRevision": on["config"].(map[string]any)["revision"]})
+	if got := last("config_changed"); len(got) != 0 {
+		t.Fatalf("停用后：%v", got)
+	}
+}

@@ -317,7 +317,7 @@ func pluginSide(m store.InboxMessage) (channel, name string) {
 }
 
 // Reply 回复线索中的一条消息：收件人是线索中的另一方，不检查跨组织发送权限。
-// 当前身份不是线索的一方时返回 not_found。
+// 当前身份不是线索的一方时返回 not_found；插件令牌为 forbidden。
 func (s *Service) Reply(ctx context.Context, p auth.Principal, messageID uuid.UUID, text, whenBusy string, extra ...QuestionInput) (store.InboxMessage, error) {
 	input := QuestionInput{ReplyTo: messageID}
 	if len(extra) > 0 {
@@ -369,13 +369,17 @@ func (s *Service) Reply(ctx context.Context, p auth.Principal, messageID uuid.UU
 	case b:
 		other = a
 	default:
+		if me.Kind == "plugin" {
+			return store.InboxMessage{}, apperr.Forbidden("消息不在这个插件的线索里")
+		}
 		return store.InboxMessage{}, apperr.NotFound("消息")
 	}
 	if other.Kind == "platform" {
 		return store.InboxMessage{}, apperr.Forbidden("平台通知不接受回复")
 	}
-	if (me.Kind == "plugin" || other.Kind == "plugin") && (input.Options != nil || input.OptionID != nil) {
-		return store.InboxMessage{}, apperr.Invalid("options", "与插件之间的线索不支持提问")
+	// 插件发来的线索里 Agent 可以提问，插件回复即作答（SPEC §11）；插件自己不能提问。
+	if me.Kind == "plugin" && input.Options != nil {
+		return store.InboxMessage{}, apperr.Invalid("options", "插件不能发出问题")
 	}
 	channel, sender := pluginSide(orig)
 	thread := orig.ThreadID

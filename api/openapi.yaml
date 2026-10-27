@@ -4121,6 +4121,9 @@ paths:
         插件代管外部身份（plugins/SPEC.md §12）：插件令牌带 `asIdentityId` 时以该外部身份的名义回复，效果与该身份亲自回复完全相同（回答问题、任务由等待转回、提醒 Agent）。
         只能是这个插件代管的身份，清单须有 `identities.manage` 范围，这时不需要 `inbox.send`；否则 403。身份已删除或消息不在它的线索里时 404。
         审计记操作者为插件、代表的身份。其他调用方带 `asIdentityId` 时 422。
+        插件作为发件方（plugins/SPEC.md §11）：Agent 在插件发来的线索里回复时可以提问（带 `options`），提问以 `channel.outbound` 送给该插件（带 `question`）。
+        插件令牌（`inbox.send` 范围）直接回复这道提问即作答，带 `optionId` 或只有正文，效果与外部身份作答相同（回答问题、任务由等待转回、提醒 Agent），审计记操作者为插件。
+        插件不能在线索里提问（带 `options` 时 422）；插件令牌回复不属于它的线索时 403。
       requestBody:
         required: true
         content:
@@ -18674,7 +18677,9 @@ components:
         - context.compacted：reason
         - folder.changed：level（agent、project、global）、path、by（PluginEventParty）
         - plugin.enabled、plugin.disabled、plugin.config_changed：pluginId
-        - channel.outbound：只发给消息线索所属的插件；messageId、threadId、channelId、from（回复的 Agent）、excerpt（正文前 80 个字符），正文用 inbox.read 范围另取
+        - channel.outbound：只发给消息线索所属的插件；messageId、threadId、channelId、from（回复的 Agent）、isQuestion、
+          question（与 identity.inbound 相同：id 即提问消息的 ID、options、allowText、deadline，不是提问时为 null）、excerpt（正文前 80 个字符），正文用 inbox.read 范围另取；
+          插件以 `POST /inbox/messages/{messageId}/reply`（messageId 为 question.id，带 optionId 或正文）作答
         - identity.inbound：发给外部身份的消息，只发给代管这个身份的插件（不看订阅与项目启用；这个插件不再收到这条消息的 inbox.received）：
           identityId、channelId（代管的渠道）、messageId、threadId、from（kind、agentId 或 null、name）、projectId、taskId、nodeRunId（可为 null）、isQuestion、
           question（id 即提问消息的 ID、options、allowText、deadline，不是提问时为 null）、excerpt（正文前 80 个字符）；正文用代管身份的收件箱接口另取

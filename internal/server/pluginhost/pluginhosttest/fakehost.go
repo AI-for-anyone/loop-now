@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strconv"
@@ -106,6 +107,16 @@ func Run() {
 		_ = json.Unmarshal(askRaw(typ, plugin, payload), &r)
 		return r.Value
 	}
+	// projects 返回 load 或 config_changed 载荷里 config.projects 的项目 ID（排序）。
+	projects := func(payload json.RawMessage) []string {
+		var p struct {
+			Config struct {
+				Projects map[string]any `json:"projects"`
+			} `json:"config"`
+		}
+		_ = json.Unmarshal(payload, &p)
+		return slices.Sorted(maps.Keys(p.Config.Projects))
+	}
 	handle := func(m fakeMsg) {
 		mu.Lock()
 		cfg := plugins[m.Plugin]
@@ -114,7 +125,7 @@ func Run() {
 		case "load":
 			var p fakePlugin
 			_ = json.Unmarshal(m.Payload, &p)
-			record(map[string]any{"type": "load", "plugin": m.Plugin})
+			record(map[string]any{"type": "load", "plugin": m.Plugin, "projects": projects(m.Payload)})
 			if p.Fail != "" {
 				reply(m.ID, "result", m.Plugin, false, nil, p.Fail)
 				return
@@ -132,7 +143,11 @@ func Run() {
 			fmt.Fprintf(os.Stderr, "[%s] loaded\n", m.Plugin)
 			reply(m.ID, "result", m.Plugin, true, nil, "")
 		case "unload", "config_changed":
-			record(map[string]any{"type": m.Type, "plugin": m.Plugin})
+			entry := map[string]any{"type": m.Type, "plugin": m.Plugin}
+			if m.Type == "config_changed" {
+				entry["projects"] = projects(m.Payload)
+			}
+			record(entry)
 			mu.Lock()
 			if m.Type == "unload" {
 				delete(plugins, m.Plugin)
