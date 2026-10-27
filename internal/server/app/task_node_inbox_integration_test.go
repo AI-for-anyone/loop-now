@@ -35,6 +35,7 @@ import (
 // sessions' old namespaces. No provider, real Pi execution or shared listeners.
 func taskNodeInboxWorld(t *testing.T) *world {
 	t.Helper()
+	requirePi(t)
 	ctx := context.Background()
 	real, e := preflight.Resolve(ctx, preflight.Options{PiBin: "pi", PiVersion: "1.1.0", NodeBin: "node", WorkRoot: filepath.Join(t.TempDir(), "probe"), HomeDirs: []string{"/nonexistent-home"}})
 	if e != nil {

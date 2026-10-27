@@ -366,7 +366,7 @@ func TestInboxReminder(t *testing.T) {
 		t.Fatalf("打断提醒应先于普通提醒执行：%v", order)
 	}
 
-	// 排队期间已读完全部消息：这一轮不启动 Pi，直接结束。
+	// 排队期间已读完全部消息：读走的消息离队，这一轮提醒随即作废（no_pending_messages），不启动 Pi。
 	e.expect(202, "POST", a+"/messages", map[string]any{"text": "block"})
 	sendInbox(con, dev.ID.String(), "很快读掉")
 	for _, s := range decode[apitypes.InboxMessagePage](t, agent.expect(200, "GET", "/inbox/messages?unread=true&limit=100", nil)).Messages {
@@ -374,10 +374,11 @@ func TestInboxReminder(t *testing.T) {
 	}
 	e.expect(202, "POST", a+"/messages", map[string]any{"text": "解除", "whenBusy": "interrupt"})
 	waitIdle(t, e, a)
-	var skipped string
-	if err := e.st.Pool.QueryRow(context.Background(), `SELECT m.text FROM runs r JOIN conversation_messages m ON m.run_id = r.id AND m.role = 'assistant'
-		WHERE r.agent_id = $1 AND r.origin = 'inbox_reminder' ORDER BY r.queued_at DESC LIMIT 1`, dev.ID).Scan(&skipped); err != nil || !strings.Contains(skipped, "本轮未启动 Pi") {
-		t.Fatalf("没有未读时这一轮应直接结束：%q %v", skipped, err)
+	var voided string
+	var replies int
+	if err := e.st.Pool.QueryRow(context.Background(), `SELECT r.status||'/'||coalesce(r.end_reason,''), (SELECT count(*) FROM conversation_messages m WHERE m.run_id = r.id AND m.role = 'assistant')
+		FROM runs r WHERE r.agent_id = $1 AND r.origin = 'inbox_reminder' ORDER BY r.queued_at DESC LIMIT 1`, dev.ID).Scan(&voided, &replies); err != nil || voided != "interrupted/no_pending_messages" || replies != 0 {
+		t.Fatalf("没有未读时这一轮提醒应作废、不回复：%q %d %v", voided, replies, err)
 	}
 }
 

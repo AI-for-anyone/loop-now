@@ -26,8 +26,10 @@ func TestQuestion010UpgradeAndDownProtection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := st.CreateAgent(ctx, store.ProjectScope(dc.Project.ID), "旧Agent", "fixture", "model", "kept")
-	if err != nil {
+	// 与 CreateAgent 写入相同的行，但按旧版本的表结构：CreateAgent 会写后来的迁移才加的列。
+	a := store.Agent{ID: uuid.New()}
+	if _, err = st.Pool.Exec(ctx, `WITH a AS (INSERT INTO agents(id,project_id,name,model_provider,model_id,prompt) VALUES($1,$2,'旧Agent','fixture','model','kept') RETURNING id)
+		INSERT INTO agent_sessions(agent_id) SELECT id FROM a`, a.ID, dc.Project.ID); err != nil {
 		t.Fatal(err)
 	}
 	id := uuid.New()

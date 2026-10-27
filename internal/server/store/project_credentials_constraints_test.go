@@ -25,6 +25,9 @@ import (
 // testenv never falls back to .env.local or an existing database. No test DDL.
 func constraintsOwnPG(t *testing.T) {
 	t.Helper()
+	if _, err := os.Stat("/opt/homebrew/opt/postgresql@18/bin/initdb"); err != nil {
+		t.Skip("required fixed offline dependency unavailable: /opt/homebrew/opt/postgresql@18/bin/initdb")
+	}
 	root, err := os.MkdirTemp("/private/tmp", "ln-constraints-")
 	if err != nil {
 		t.Fatal(err)

@@ -2,6 +2,7 @@ package modelcatalog_test
 
 import (
 	"context"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -11,6 +12,9 @@ import (
 )
 
 func TestInstalledPi14ThinkingCatalogUsesOfficialModelCapabilities(t *testing.T) {
+	if _, err := exec.LookPath("pi"); err != nil {
+		t.Skip("本机没有 pi")
+	}
 	r, e := preflight.Resolve(context.Background(), preflight.Options{PiBin: "pi", PiVersion: "1.4.0", NodeBin: "node", WorkRoot: filepath.Join(t.TempDir(), "work"), HomeDirs: []string{"/nonexistent"}})
 	if e != nil {
 		t.Fatal(e)

@@ -9,13 +9,17 @@ import (
 	"testing"
 )
 
-// loopctl 二进制只依赖标准库与本 module，不引用服务端的包。
+// loopctl 二进制只依赖标准库与本 module，不引用服务端的包；唯一的例外是插件命令与服务端共用的清单校验
+// （internal/pluginmanifest）带来的 JSON Schema 校验库及其依赖。
 func TestDependencies(t *testing.T) {
 	out, err := exec.Command("go", "list", "-deps", "-f", "{{if not .Standard}}{{.ImportPath}}{{end}}", ".").Output()
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, pkg := range strings.Fields(string(out)) {
+		if strings.HasPrefix(pkg, "github.com/santhosh-tekuri/jsonschema/v6") || strings.HasPrefix(pkg, "golang.org/x/text/") {
+			continue
+		}
 		if !strings.HasPrefix(pkg, "loop-now/") {
 			t.Errorf("引用了第三方包 %s", pkg)
 		}

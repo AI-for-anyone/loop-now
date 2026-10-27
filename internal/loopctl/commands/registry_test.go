@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -89,6 +90,10 @@ func sampleArgv(t *testing.T, c *cli.Command) [][]string {
 				}
 			}
 		}
+	}
+	// --run 与 --run-id 是同义选项，命令拒绝同时提供，按互斥组取样。
+	if slices.ContainsFunc(c.Flags, func(f cli.Flag) bool { return f.Name == "run" }) && slices.ContainsFunc(c.Flags, func(f cli.Flag) bool { return f.Name == "run-id" }) {
+		groups = append(groups, []string{"run", "run-id"})
 	}
 	choices := [][]string{nil} // 每组的选择，nil 表示每组取第一个
 	for _, g := range groups {
@@ -205,7 +210,7 @@ func sampleFlag(t *testing.T, c *cli.Command, f cli.Flag) string {
 		return writeFile(t, "cred.json", `{"k":"v"}`)
 	case "expected-prompt-version":
 		return "1"
-	case "account-id", "operation-id", "run", "node-run", "action-id", "expected-node-run":
+	case "account-id", "operation-id", "run", "run-id", "node-run", "action-id", "expected-node-run":
 		return actionUUID
 	case "reason-file", "note-file":
 		return writeFile(t, "note.txt", "继续当前节点")

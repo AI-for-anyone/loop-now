@@ -345,8 +345,10 @@ func TestEnvAndArgs(t *testing.T) {
 
 func TestSyncSkillsAndCredentialFiles(t *testing.T) {
 	tmplDir := t.TempDir()
+	// 当前平台要有安装包才算支持；工具已预装，不会下载。
 	demo := `{"name":"demo","version":"1","injection":"files","fields":[{"name":"token","label":"t","type":"secret","required":true}],
-	"credential":{"files":[{"path":".demo/cred","content":"{{token}}"}]},"binary":"demo","install":{}}`
+	"credential":{"files":[{"path":".demo/cred","content":"{{token}}"}]},"binary":"demo",
+	"install":{"` + clitemplate.Platform() + `":{"url":"https://example.invalid/demo.zip","sha256":"` + strings.Repeat("0", 64) + `","format":"zip","path":"demo"}}}`
 	_ = os.WriteFile(filepath.Join(tmplDir, "demo.json"), []byte(demo), 0o600)
 	h := newHarness(t, nil, tmplDir)
 	preinstall(t, h.root, "demo", "1", "demo")

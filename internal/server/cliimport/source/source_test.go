@@ -389,6 +389,9 @@ func TestPostExtractionRecheckAndCtimeBinding(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
+	// Linux stamps ctime from the coarse clock (one tick is several ms); rewrite
+	// after a tick so only ctime, not timing luck, tells the two writes apart.
+	time.Sleep(50 * time.Millisecond)
 	put(t, home, ".pg_service.conf", body)
 	if e = os.Chtimes(filepath.Join(home, ".pg_service.conf"), info.ModTime(), info.ModTime()); e != nil {
 		t.Fatal(e)

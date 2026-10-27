@@ -146,7 +146,10 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err := openapi3filter.ValidateRequest(req.Context(), in); err != nil && req.Header.Get("X-Contract-Invalid-Request") == "" {
 		v.record("%s %s：请求不符合契约：%v", req.Method, req.URL.Path, err)
 	}
-	req.Body = io.NopCloser(bytes.NewReader(reqBody))
+	// 没有请求体的请求保持没有请求体：换成空读取器会让传输层按长度未知发送。
+	if req.Body != nil {
+		req.Body = io.NopCloser(bytes.NewReader(reqBody))
+	}
 	resp, err := rt.base.RoundTrip(req)
 	if err != nil {
 		return resp, err

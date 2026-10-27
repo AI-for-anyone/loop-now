@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"loop-now/internal/server/executor/local"
 	"loop-now/internal/server/larksidecar"
+	"runtime"
 	"testing"
 
 	"github.com/google/uuid"
@@ -66,6 +67,9 @@ func TestLarkRecoveryAdapterRetainsUnknownGate(t *testing.T) {
 }
 
 func TestLarkStartupMissingNativeProofKeepsBothGates(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("运行时交接的恢复记录（启动标识与进程身份）只在 darwin 上实现，其他平台按无法确认处理")
+	}
 	ctx := context.Background()
 	root := t.TempDir()
 	ids := [2]uuid.UUID{uuid.New(), uuid.New()}

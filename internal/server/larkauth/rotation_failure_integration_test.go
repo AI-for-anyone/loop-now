@@ -208,12 +208,19 @@ func TestLarkStartedLeaseAgentDeleteAndProjectPurge(t *testing.T) {
 			plain, _ := f.credential.Encode()
 			defer clear(plain)
 			e = f.st.CommitLarkCLIRefresh(ctx, f.binding, 1, lease, plain)
-			if scope == "project" || scope == "wrong_lease" {
+			// 删除账号或项目会清空没有进行中任务使用的版本及其授权（迁移 030），已开始的刷新不能再写回。
+			if scope == "account" || scope == "project" || scope == "wrong_lease" {
 				if e == nil {
 					t.Fatal("invalid late owner/lease committed")
 				}
 			} else if e != nil {
 				t.Fatal("retained started lease failed to persist")
+			}
+			if scope == "account" {
+				var grants int
+				if e = f.st.Pool.QueryRow(ctx, `SELECT count(*) FROM lark_cli_grants WHERE version_id=$1`, f.binding.VersionID).Scan(&grants); e != nil || grants != 0 {
+					t.Fatal("account delete retained grant rows", grants, e)
+				}
 			}
 			if scope == "project" {
 				var versions, grants int

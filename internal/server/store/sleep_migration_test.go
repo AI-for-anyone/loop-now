@@ -26,8 +26,10 @@ func TestSleep011MigrationAndHistoryProtection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := s.CreateAgent(ctx, store.ProjectScope(dc.Project.ID), "old", "fixture", "model", "")
-	if err != nil {
+	// 与 CreateAgent 写入相同的行，但按旧版本的表结构：CreateAgent 会写后来的迁移才加的列。
+	a := store.Agent{ID: uuid.New()}
+	if _, err = s.Pool.Exec(ctx, `WITH a AS (INSERT INTO agents(id,project_id,name,model_provider,model_id,prompt) VALUES($1,$2,'old','fixture','model','') RETURNING id)
+		INSERT INTO agent_sessions(agent_id) SELECT id FROM a`, a.ID, dc.Project.ID); err != nil {
 		t.Fatal(err)
 	}
 	r := store.Run{ID: uuid.New()}

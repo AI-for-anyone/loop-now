@@ -10,7 +10,7 @@ import (
 )
 
 func TestReleaseReadOnlyHomePreservesWorkspaceAndSessions(t *testing.T) {
-	e := &Executor{o: Options{WorkRoot: t.TempDir()}}
+	e := &Executor{o: Options{WorkRoot: t.TempDir()}, handoffs: map[uuid.UUID]*RuntimeHandoff{}}
 	id := uuid.New()
 	d := e.dirs(id)
 	if err := d.ensure(); err != nil {
@@ -48,7 +48,7 @@ func TestReleaseReadOnlyHomePreservesWorkspaceAndSessions(t *testing.T) {
 }
 
 func TestReleaseReadOnlyHomeDoesNotFollowLinks(t *testing.T) {
-	e := &Executor{o: Options{WorkRoot: t.TempDir()}}
+	e := &Executor{o: Options{WorkRoot: t.TempDir()}, handoffs: map[uuid.UUID]*RuntimeHandoff{}}
 	id := uuid.New()
 	d := e.dirs(id)
 	if err := d.ensure(); err != nil {
@@ -84,7 +84,7 @@ func TestReleaseReadOnlyHomeDoesNotFollowLinks(t *testing.T) {
 func TestReleaseReadOnlyHomeRejectsManagedPathLinks(t *testing.T) {
 	for _, component := range []string{"root", "agents", "runtime", "home"} {
 		t.Run(component, func(t *testing.T) {
-			e := &Executor{o: Options{WorkRoot: filepath.Join(t.TempDir(), "root")}}
+			e := &Executor{o: Options{WorkRoot: filepath.Join(t.TempDir(), "root")}, handoffs: map[uuid.UUID]*RuntimeHandoff{}}
 			id := uuid.New()
 			d := e.dirs(id)
 			if err := d.ensure(); err != nil {
@@ -133,7 +133,7 @@ func TestReleaseReadOnlyHomePermissionFailure(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("OS directory-access denial requires an unprivileged test uid")
 	}
-	e := &Executor{o: Options{WorkRoot: t.TempDir()}}
+	e := &Executor{o: Options{WorkRoot: t.TempDir()}, handoffs: map[uuid.UUID]*RuntimeHandoff{}}
 	id := uuid.New()
 	d := e.dirs(id)
 	if err := d.ensure(); err != nil {

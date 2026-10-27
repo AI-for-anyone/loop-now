@@ -122,7 +122,7 @@ func newEnv(t *testing.T) *env {
 	models := modelcatalog.New("1.1.0", nil, []modelcatalog.Provider{
 		{ID: "anthropic", APIKeyEnvVars: []string{"ANTHROPIC_API_KEY"}, Models: []modelcatalog.Model{{ID: "claude-x", Name: "Claude X", Input: []string{"text"}}}},
 	})
-	limits := apitypes.Limits{MaxUploadFile: 1 << 20, MaxFolderUpload: 1 << 20, MaxMessage: 1 << 16, MaxInboxMessage: 1 << 16, MaxSkillArchive: 1 << 20, MaxSkillEntries: 50, MaxCredential: 4096,
+	limits := apitypes.Limits{MaxMessageImages: 4, MaxMessageImageBytes: 5 << 20, MaxMessageImagePixels: 20_000_000, MaxUploadFile: 1 << 20, MaxFolderUpload: 1 << 20, MaxMessage: 1 << 16, MaxInboxMessage: 1 << 16, MaxSkillArchive: 1 << 20, MaxSkillEntries: 50, MaxCredential: 4096,
 		TextEdit: apitypes.TextEdit{MaxBytes: 1024, Extensions: []string{".md", ".txt"}}}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ex := &quickExec{running: map[uuid.UUID]chan struct{}{}}
@@ -439,7 +439,7 @@ func TestAllEndpoints(t *testing.T) {
 	}
 	e.expect(202, "POST", a+"/messages", map[string]any{"text": "排队", "whenBusy": "queue"})
 	e.expect(202, "POST", a+"/messages", map[string]any{"text": "打断", "whenBusy": "interrupt"})
-	e.expect(422, "POST", a+"/messages", map[string]any{"text": "  "})
+	e.expect(422, "POST", a+"/messages", map[string]any{"text": "  "}, "X-Contract-Invalid-Request", "1")
 	e.expect(404, "GET", "/agents/not-a-uuid", nil, "X-Contract-Invalid-Request", "1")
 	e.expect(200, "GET", a+"/status", nil)
 	waitIdle(t, e, a)

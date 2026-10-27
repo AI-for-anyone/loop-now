@@ -423,7 +423,9 @@ func TestGooglePGRequiresLoginIsStableSafeClassification(t *testing.T) {
 	}
 }
 
-func TestGooglePGDeletedAccountRetainsBoundInflightGrant(t *testing.T) {
+// 删除账号时（迁移 030）没有进行中任务使用的版本连同授权一起清空：正在刷新的普通对话授权随之失效，
+// 刷新结果不写回、不复活已删除的账号。
+func TestGooglePGDeletedAccountDropsBoundInflightGrant(t *testing.T) {
 	f := newGoogleFixture(t)
 	ctx := context.Background()
 	r, e := f.st.CreateProjectCredential(ctx, f.project, "cli", "gcloud", "A", f.write(t, syntheticGoogle()))
@@ -449,12 +451,12 @@ func TestGooglePGDeletedAccountRetainsBoundInflightGrant(t *testing.T) {
 		t.Fatal(e)
 	}
 	close(release)
-	if e = <-done; e != nil {
-		t.Fatal("account tombstone invalidated captured inflight grant", e)
+	if e = <-done; e == nil {
+		t.Fatal("deleted account grant still resolved")
 	}
-	grant, e := f.st.GetGoogleCLIGrant(ctx, b)
-	if e != nil || grant.Generation != 2 || grant.RefreshState != "ready" {
-		t.Fatal("old account grant not retained")
+	var grants int
+	if e = f.st.Pool.QueryRow(ctx, `SELECT count(*) FROM google_cli_grants WHERE account_id=$1`, r.View.ID).Scan(&grants); e != nil || grants != 0 {
+		t.Fatal("deleted account grant retained or rewritten", grants, e)
 	}
 	current, e := f.st.GetProjectCredential(ctx, f.project, r.View.ID)
 	if e != nil || current.View.DeletedAt == nil || current.View.Revision != removed.View.Revision {

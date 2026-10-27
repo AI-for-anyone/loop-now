@@ -67,7 +67,7 @@ func newFixture(t *testing.T, factory CommandFactory, timeout time.Duration) fix
 	if e = os.WriteFile(filepath.Join(dir, "gh"), []byte("fixture-not-executable"), 0600); e != nil {
 		t.Fatal(e)
 	}
-	s, e := New(ctx, st, catalog, clitemplate.NewInstaller(root, time.Second, nil), nil, Options{WorkRoot: root, NodeBin: "/Users/ljl/.local/node-v24.21.0/bin/node", GuardEntry: mustGuardPath(t), ProbeTimeout: timeout, RecordTimeout: time.Second, StopGrace: 50 * time.Millisecond, CommandFactory: factory}, log)
+	s, e := New(ctx, st, catalog, clitemplate.NewInstaller(root, time.Second, nil), nil, Options{WorkRoot: root, NodeBin: testNode(t), GuardEntry: mustGuardPath(t), ProbeTimeout: timeout, RecordTimeout: time.Second, StopGrace: 50 * time.Millisecond, CommandFactory: factory}, log)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -395,6 +395,24 @@ func mustGuardPath(t *testing.T) string {
 		t.Fatal(e)
 	}
 	return p
+}
+
+// testNode 优先用固定版本的 Node；没有时用 PATH 里的 node（CI 装的是 Node 24），都没有就跳过。
+func testNode(t *testing.T) string {
+	t.Helper()
+	const pinned = "/Users/ljl/.local/node-v24.21.0/bin/node"
+	if _, e := os.Stat(pinned); e == nil {
+		return pinned
+	}
+	p, e := exec.LookPath("node")
+	if e != nil {
+		t.Skip("本机没有 node")
+	}
+	abs, e := filepath.Abs(p)
+	if e != nil {
+		t.Fatal(e)
+	}
+	return abs
 }
 
 func TestNon24NodeRejectsOnlyNewStartBeforeRegistrationOrTools(t *testing.T) {

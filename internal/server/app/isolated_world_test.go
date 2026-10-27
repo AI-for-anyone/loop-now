@@ -3,6 +3,7 @@ package app_test
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,12 +20,24 @@ import (
 	"loop-now/internal/testutil/redistest"
 )
 
+// requirePi 在本机没有 pi 时跳过：这些测试要读真实 Pi 的模型目录（CI 不装 Pi）。
+func requirePi(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("pi"); err != nil {
+		t.Skip("本机没有 pi")
+	}
+}
+
 // isolatedWorld creates/removes only its own schema and Redis prefix, with no
 // stale namespace sweeps, real auth, model, native CLI install or business task.
 func isolatedWorld(t *testing.T) *world {
 	t.Helper()
+	requirePi(t)
 	ctx := context.Background()
 	node := filepath.Join(os.Getenv("HOME"), ".local/node-v24.21.0/bin/node")
+	if _, e := os.Stat(node); e != nil {
+		node = "node" // 没有固定版本的 Node 时用 PATH 里的
+	}
 	real, e := preflight.Resolve(ctx, preflight.Options{PiBin: "pi", PiVersion: "1.4.0", NodeBin: node, WorkRoot: filepath.Join(t.TempDir(), "probe"), HomeDirs: []string{"/nonexistent"}})
 	if e != nil {
 		t.Fatal("offline Pi/catalog unavailable", e)

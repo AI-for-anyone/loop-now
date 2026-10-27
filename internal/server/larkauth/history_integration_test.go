@@ -58,9 +58,7 @@ func TestLarkHistoricalVersionsTwoAgentsAndAtomicProjectPurge(t *testing.T) {
 	if account.View.LarkIdentity != nil || account.View.Status != "saved" {
 		t.Fatal("static replacement retained user identity")
 	}
-	if _, err = f.st.MutateProjectCredential(ctx, f.binding.ProjectID, f.binding.AccountID, account.View.Revision, nil, nil, true); err != nil {
-		t.Fatal(err)
-	}
+	// 删除账号会清空没有进行中任务使用的版本及其授权（迁移 030），所以这里只替换、不删除账号。
 	var calls atomic.Int32
 	rf := larkRefreshFunc(func(_ context.Context, c clicredential.Lark) (clicredential.Lark, error) {
 		calls.Add(1)
@@ -93,7 +91,7 @@ func TestLarkHistoricalVersionsTwoAgentsAndAtomicProjectPurge(t *testing.T) {
 	}
 	v1After, err := f.st.GetLarkCLIGrant(ctx, f.binding)
 	if err != nil || v1After.Generation != 2 {
-		t.Fatal("captured deleted-account grant lost")
+		t.Fatal("captured replaced-version grant lost")
 	}
 	v2After, err := f.st.GetLarkCLIGrant(ctx, v2)
 	if err != nil || v2After.Generation != 1 {

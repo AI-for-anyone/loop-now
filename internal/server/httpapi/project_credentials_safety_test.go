@@ -49,6 +49,11 @@ func (l *safetyLogs) Snapshot() []byte {
 // Only self-owned PG/Redis instances, no .env.local fallback or existing sockets.
 func safetyResources(t *testing.T) string {
 	t.Helper()
+	for _, path := range []string{"/opt/homebrew/opt/postgresql@18/bin/initdb", "/opt/homebrew/bin/redis-server"} {
+		if _, err := os.Stat(path); err != nil {
+			t.Skipf("required fixed offline dependency unavailable: %s", path)
+		}
+	}
 	root, err := os.MkdirTemp("/private/tmp", "ln-safety-")
 	if err != nil {
 		t.Fatal(err)
@@ -159,6 +164,11 @@ func safetyDecode[T any](t *testing.T, data []byte) T {
 func safetyHelper(t *testing.T, root string) *modelauth.Helper {
 	t.Helper()
 	const node = "/Users/ljl/.local/node-v24.21.0/bin/node"
+	for _, path := range []string{"/usr/bin/sandbox-exec", node} {
+		if _, err := os.Stat(path); err != nil {
+			t.Skipf("required fixed offline dependency unavailable: %s", path)
+		}
+	}
 	wrapper := filepath.Join(root, "node-offline")
 	if err := os.WriteFile(wrapper, []byte("#!/bin/sh\nexec /usr/bin/sandbox-exec -p '(version 1) (allow default) (deny network*)' "+node+" \"$@\"\n"), 0700); err != nil {
 		t.Fatal(err)

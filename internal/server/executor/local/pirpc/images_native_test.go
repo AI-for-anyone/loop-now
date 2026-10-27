@@ -21,6 +21,9 @@ import (
 // Installed Pi 1.4, in-process synthetic provider, every socket/fetch denied.
 // This proves visual RPC/model/session plumbing, not real-provider image reasoning.
 func TestInstalledPiImagesReachModelAndPersist(t *testing.T) {
+	if _, err := exec.LookPath("pi"); err != nil {
+		t.Skip("本机没有 pi")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	root := t.TempDir()

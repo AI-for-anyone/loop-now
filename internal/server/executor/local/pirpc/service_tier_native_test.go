@@ -19,6 +19,9 @@ import (
 // intercepted in-process and returns a deterministic 400: no provider call,
 // OAuth, credentials from HOME or real model inference is involved.
 func TestInstalledPi14CodexServiceTierRequests(t *testing.T) {
+	if _, err := exec.LookPath("pi"); err != nil {
+		t.Skip("本机没有 pi")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 	root, err := filepath.EvalSymlinks(t.TempDir())

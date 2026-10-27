@@ -17,6 +17,9 @@ import (
 // Real installed Pi 1.4 RPC, builtin model capabilities and synthetic session;
 // no Prompt/model request, credentials, user HOME or network is used.
 func TestInstalledPi14ThinkingResumeDefaultAndClampVerification(t *testing.T) {
+	if _, err := exec.LookPath("pi"); err != nil {
+		t.Skip("本机没有 pi")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	root := t.TempDir()

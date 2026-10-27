@@ -204,7 +204,7 @@ func platformParticipant() map[string]any {
 }
 
 func pluginSource() map[string]any {
-	return map[string]any{"kind": "builtin", "location": "hello", "ref": nil, "commit": nil, "npmVersion": nil}
+	return map[string]any{"kind": "builtin", "location": "hello", "ref": nil, "commit": nil, "npmVersion": nil, "market": nil}
 }
 
 func pluginSample() map[string]any {

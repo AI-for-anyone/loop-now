@@ -18,6 +18,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -31,6 +32,9 @@ import (
 )
 
 func TestCLIImportLarkCanonicalDedup(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("lark-cli 只在 darwin 上生成随机主密钥文件，这个用例要用它区分同一凭证的两次渲染")
+	}
 	e := newImportEnv(t)
 	ctx := context.Background()
 	dir := filepath.Join(e.home, ".lark-cli")
