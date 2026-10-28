@@ -2,6 +2,7 @@
 node_modules/
 dist/
 coverage/
+docs/.vitepress/cache/
 .env
 .env.*
 !.env.example

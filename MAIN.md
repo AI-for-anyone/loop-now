@@ -19,6 +19,7 @@
 | 账号与工具 | 项目共享模型／CLI 账号；Codex、GitHub、Google、飞书用户认证；连接验证、本机配置扫描导入；gh、lark-cli、gcloud、psql、mysql | `internal/server/cliauth/`、`modelauth/`、`clitemplate/`、`cliimport/`、`cliverify/` |
 | 插件系统 | 第二版：Pi 扩展 + 共享 Node 宿主，四种 Hook，清单优先，官方 webhook／hello／playwright | `plugins/`（SPEC、host、sdk、official）、`internal/server/plugins/`、`internal/server/pluginhost/`、`internal/pluginmanifest/`、`web/src/features/plugins/` |
 | 平台 CLI | Agent 与外部身份共用的 `loopctl`，按身份开放能力，输出 JSON | `cmd/loopctl/`、`internal/loopctl/` |
+| 项目网站 | GitHub Pages 文档站（VitePress，英中双语，Actions 推送 main 自动发布到 `ai-for-anyone.github.io/loop-now/`） | `docs/`、`.github/workflows/pages.yml` |
 
 接口定义在 `api/openapi.yaml` 与 `api/agent-openapi.yaml`；数据库迁移在 `internal/server/store/migrations/`。`auth-helper/` 和 `scripts/lark-user-variant/` 提供认证／运行辅助组件。
 
