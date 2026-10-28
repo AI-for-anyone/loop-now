@@ -7,7 +7,7 @@ import { chooseModel } from '@/test/model-picker'
 import { projectBackend } from '@/test/projects'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
-import { scopeSwitcher, sidebar } from '@/test/shell'
+import { findScopeSwitcher, sidebar } from '@/test/shell'
 
 const base = (name: string) => `/p/${encodeURIComponent(name)}`
 
@@ -35,7 +35,7 @@ describe('项目改名', () => {
     await user.click(within(nameCard).getByRole('button', { name: '保存' }))
     await waitFor(() => expect(router.state.location.pathname).toBe(`${base('模型适配')}/settings`))
     expect(state.requests).toContainEqual({ method: 'PATCH', path: `/api/v1/projects/${other.id}`, body: { name: '模型适配' } })
-    expect(scopeSwitcher('模型适配')).toBeInTheDocument()
+    expect(await findScopeSwitcher('模型适配')).toBeInTheDocument()
     const saved = await within(await card('项目名称')).findByRole('status')
     expect(saved).toHaveTextContent('已保存')
     expect(saved).toHaveTextContent('地址已改为 /p/模型适配/settings')
@@ -135,7 +135,7 @@ describe('删除项目', () => {
     await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '删除项目' }))
     await waitFor(() => expect(router.state.location.pathname).toBe(defaultAgentsPath))
     expect(state.projects.map((p) => p.id)).not.toContain(other.id)
-    await user.click(scopeSwitcher('测试项目'))
+    await user.click(await findScopeSwitcher('测试项目'))
     await waitFor(() =>
       expect(within(screen.getByRole('listbox', { name: '范围' })).queryByRole('option', { name: /模型接入/ })).toBeNull(),
     )

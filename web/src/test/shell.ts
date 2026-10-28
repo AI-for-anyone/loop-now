@@ -28,3 +28,5 @@ export const sidebar = () => screen.getByRole('navigation', { name: '主导航' 
 export const sidebarLinks = () => within(sidebar()).getAllByRole('link')
 export const currentSidebarLinks = () => sidebarLinks().filter((link) => link.getAttribute('aria-current') === 'page')
 export const scopeSwitcher = (name: string) => within(sidebar()).getByRole('button', { name: `切换范围，当前：${name}` })
+// 导航会触发侧栏按新范围重渲染，随后立即查询时用这个异步变体等一拍。
+export const findScopeSwitcher = (name: string) => within(sidebar()).findByRole('button', { name: `切换范围，当前：${name}` })
