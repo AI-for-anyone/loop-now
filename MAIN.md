@@ -71,7 +71,8 @@
 
 - 插件系统第二版（规范 `plugins/SPEC.md`，协议 `api/plugin-host-protocol.md`）已实现，替代并拆除首版（旧表、旧宿主、旧页面、旧 Node 代码全部删除，数据不迁移）。一个插件是一个目录，`package.json` 里 `pi` 段按 Pi 标准声明 Agent 半边（扩展、Skill），`loopNow` 段声明平台半边（事件、权限、配置 Schema、账号、MCP 服务器、CLI、操作按钮、HTTP 入口、定时、渠道）；清单说了算，代码超出声明即加载失败。Agent 半边作为 Pi 扩展随授权挂进该 Agent 的 Pi（`-e`、`--skill`、合并后的 `mcp.json` 加 `-e builtin:mcp`、PATH、环境变量）；平台半边加载进一个共享的常驻 Node 宿主（stdio JSON 行协议，崩溃 5 分钟 3 次停下、可手动重启、全局一键停用）。事件分拦截／修改／认领／观察四种，观察类在业务事务内由触发器写入并至少送达一次；平台半边用 `lnp_` 令牌按声明范围调控制台 API。宿主提供持久状态、密钥（明文存库、不回显、只注入本插件）、配置表单生成；SDK `@loop-now/plugin-sdk` 提供类型和带重试的投递库（投递记录按约定键展示）。安装来源：官方（随平台发布）、本地目录、git、npm、市场索引仓库；先预览展示两半内容、事件和权限，非官方来源需确认；项目启用后按 Agent 授权。官方插件：`webhook`（收件箱有新消息即签名 POST，替代外部轮询）、`hello`（两半最小示例）、`playwright`（专用 Chromium，按 Agent 独立配置目录，一次性准备浏览器）。Pi 扩展的 confirm／select／input 在普通对话里转成对你的提问，任务回合里按取消处理（用户决定：任务里要人决定走收件箱提问）。插件可代管外部身份（规范 §12）：清单里渠道声明 `manageIdentities`、权限 `identities.manage`；外部身份页选代管插件（只限控制台）；发给被代管身份的消息和提问作为 `identity.inbound` 只送给代管插件；插件用 `asIdentityId` 以该身份回复或答题，效果与身份亲自回复一致，审计记代办；官方 `webhook` 是参考实现（推送带选项与回调地址，验签后替身份作答），飞书等渠道由插件作者照此实现。
 - 插件授权规则：Agent 令牌没有管理权限，Agent 半边的权限等于该 Agent 的权限；插件只能给平台 Agent 或已启用它的项目里的 Agent 发消息；删除插件保留发件方历史；不做沙箱，信任靠来源分级、安装前展示和一键停用。
-- 官方插件市场：索引仓库 `AI-for-anyone/loop-now-market`，服务端读取 `https://raw.githubusercontent.com/AI-for-anyone/loop-now-market/main/loop-now-market.json`（每次打开市场页和安装时现场拉取，不缓存）。收录即免确认安装，所以每条经 PR 审阅合并；git 条目一律指向 tag，仓库 CI 用本仓库的宿主校验每个条目。索引目前为空；服务端 `LOOP_NOW_PLUGIN_MARKET_URL` 的默认值就是这个地址（`config.DefaultPluginMarketURL`），设成别的地址即换市场，没有停用开关（用户决定，需要时再加）。
+- 官方插件市场：索引仓库 `AI-for-anyone/loop-now-market`，服务端读取 `https://raw.githubusercontent.com/AI-for-anyone/loop-now-market/main/loop-now-market.json`（每次打开市场页和安装时现场拉取，不缓存）。收录即免确认安装，所以每条经 PR 审阅合并；git 条目一律指向 tag，仓库 CI 用本仓库的宿主校验每个条目。索引目前为空；服务端 `LOOP_NOW_PLUGIN_MARKET_URL` 的默认值就是这个地址（`config.DefaultPluginMarketURL`），设成别的地址即换市场，没有停用开关（用户决定，需要时再加）。每次打开市场页都现场拉取 GitHub，本机已出现过一次 TLS 握手超时，页面只在该市场条目上显示错误。
+- 插件线索提问（迁移 033，2026-10-28）：Agent 在"插件作为发件方"的线索里回复时可带选项提问，`channel.outbound` 带 `isQuestion` 与 `question`（与 `identity.inbound` 同形），插件用 `inbox.send` 范围回复作答（SDK `api.channels.answer`）；插件自己不能发问（422），回复不属于自己的线索 403。宿主 load 与 `config_changed` 的 `config.projects` 只含启用了该插件的项目（SDK `api.config.projects()`）。首个用途是 Slack 插件（用户决定）：单独仓库 `AI-for-anyone/loop-now-plugin-slack`（开发中，将作为官方市场第一条收录），Slack 频道绑项目、私信走默认项目、Socket Mode 不需公网地址、渠道代管一个外部身份让 Agent 反向找人，范围就是启用了该插件的项目。
 
 ## 已交付与未完成
 
@@ -98,6 +99,8 @@
 2026-10-28 切换到 `loop-now-identity-manage-20261028-1`（前后端加插件包，迁移 032）：插件代管外部身份上线，节点对话列表补入节点与外部身份的往来。核对项全部通过，宿主运行中，无启动警告，切换前备份已留。隔离验收：真宿主 Go 测试 7/7（含代管）；Node 侧 56 项；真后端加真宿主的端到端 17 步通过，含 Agent 向外部身份提问与任务节点提问、回调作答、任务由等待恢复、节点对话显示身份回答。尚未在真实业务里绑定任何代管。
 
 2026-10-28 再切换后端到 `loop-now-market-default-20261028-1`（只换服务端与 loopctl，无迁移，前端 5173 未动）：官方插件市场地址成为默认值。由用户亲自执行切换脚本（自动模式拦截了部署命令）；核对项全部通过，无启动警告，`GET /plugin-markets` 返回官方市场且无错误，切换前备份已留。注意：线上后端的插件宿主入口、官方插件目录和前端静态文件仍指向 `.local-build/loop-now-identity-manage-20261028-1/`，该目录在下次完整发布前不能删。同日仓库转移到组织 `AI-for-anyone`，历史压成单个"初始公开版本"提交并重打 v0.1.0。
+
+2026-10-28 切换到 `loop-now-channel-questions-20261028-1`（前后端加插件宿主，迁移 033）：插件线索提问与宿主只列已启用项目上线；概览页实时状态修复（旧状态整条覆盖新状态，只有 sleep 变化才刷新）；Pi 崩溃错误现在等进程回收完再取 stderr 尾部；Web 测试集既有失败清零（6 条过时测试、1 条超时抖动），Go 测试集在 Linux CI 全部通过（前提缺失时跳过、3 处确定性等待、契约样例补 `market` 字段）。由用户执行切换脚本；核对项除官方市场外全部通过，无启动警告，切换前备份已留；官方市场核对当下遇到一次 TLS 握手超时，随后三次重试均正常，属网络抖动。插件宿主与前端静态文件改由本发布目录提供，`loop-now-identity-manage-20261028-1` 目录不再被线上引用。GitHub Actions 从本批起对每次推送跑三组检查，第五轮全绿。
 
 2026-10-26 另单独切换前端到 `loop-now-agent-plugins-ui-20261026-1`（后端不变）：Agent 配置的插件权限改为紧凑列表，每个插件一行显示授权摘要与账号，一次展开一个编辑，权限／账号／资源每项一行、技术 ID 移入悬停提示；项目未启用的插件收在底部只读分组。
 
@@ -139,6 +142,8 @@ cd web
 ```
 
 按改动选择必要检查：后端 `go test ./cmd/... ./internal/... ./api/...`；Web `./bin/npm24 run typecheck`、`run api:check`、`run lint`、`test`、`run build`。接口变化才运行 `run api:gen`，不手改生成类型。
+
+GitHub Actions（`.github/workflows/ci.yml`）在推送 main 和 PR 时跑三组检查：Go vet 与全部 Go 测试（带 Postgres 18 与 Redis 8 服务，测试 Redis 固定用 DB 10）、Web 的 typecheck／api:check／lint／test／build、插件工作区的构建、测试与官方插件校验；Node 钉在 24.21.0 以满足 web 的 engines 约束。依赖本机 Pi、原生 helper 或 macOS 专有能力的测试在前提缺失时跳过，不算通过。
 
 数据库集成测试使用 `LOOP_NOW_TEST_DATABASE_URL`／`LOOP_NOW_TEST_REDIS_URL` 指定的隔离库和前缀，缺配置的跳过不等于通过。浏览器与原生 CLI 测试需要各自夹具；临时产物留 `.local-build/`，凭证及运行数据不进入 Git。
 
