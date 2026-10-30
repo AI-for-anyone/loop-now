@@ -15,12 +15,15 @@ export interface Finding {
   message: string
 }
 
+/** 按语言的文字（plugins/SPEC.md §2）：字符串（各语言都显示它），或以语言标签为键的对象，如 { "zh-CN": "…", "en-US": "…" }。 */
+export type LocalizedText = string | Record<string, string>
+
 export interface ValidatedManifest {
   id: string
   name: string
   version: string
-  displayName: string
-  description: string
+  displayName: LocalizedText
+  description: LocalizedText
   platform: string | null
   extensions: string[]
   skills: string[]
@@ -52,6 +55,9 @@ const ID_PATTERN = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/
 const VERSION_PATTERN = /^[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$/
 const KIND_PATTERN = /^[a-z][a-z0-9_]{0,31}$/
 const SLUG_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/
+/** 语言标签按 BCP 47 的写法：主语言 2 到 3 个字母，后接若干以连字符分隔的子标签（zh-CN、en-US、en、zh-Hant-TW）。 */
+const LANGUAGE_TAG = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/
+const LOCALIZED_RULE = '须是字符串，或以语言标签（如 zh-CN、en-US）为键、非空字符串为值的对象，至少一项'
 const WHERE = ['agent', 'task', 'project', 'identity', 'global']
 const SCHEMA_TYPES = ['object', 'array', 'string', 'number', 'integer', 'boolean', 'null']
 const ENTRY_EXTENSIONS = ['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs']
@@ -88,6 +94,20 @@ function isObject(v: unknown): v is Json {
 
 function strings(v: unknown): v is string[] {
   return Array.isArray(v) && v.every((s) => typeof s === 'string')
+}
+
+/**
+ * 读一个按语言的字段（description、loopNow.displayName）：缺省为 fallback；字符串原样；对象须至少一项，
+ * 键为语言标签，值为去掉空白后非空的字符串。别的形式报错并按 fallback 处理。与服务端 internal/pluginmanifest 同一规则。
+ */
+function localizedField(v: unknown, field: string, fallback: string, error: (p: string, m: string) => void): LocalizedText {
+  if (v === undefined) return fallback
+  if (typeof v === 'string') return v
+  if (isObject(v) && Object.keys(v).length > 0 && Object.entries(v).every(([k, t]) => LANGUAGE_TAG.test(k) && typeof t === 'string' && t.trim() !== '')) {
+    return v as Record<string, string>
+  }
+  error(field, `${field} ${LOCALIZED_RULE}`)
+  return fallback
 }
 
 export function validatePlugin(dir: string, options: ValidateOptions = {}): ValidationResult {
@@ -135,7 +155,7 @@ export function validatePlugin(dir: string, options: ValidateOptions = {}): Vali
 
   const name = typeof pkg.name === 'string' ? pkg.name : ''
   const version = typeof pkg.version === 'string' ? pkg.version : ''
-  const description = typeof pkg.description === 'string' ? pkg.description : ''
+  const description = localizedField(pkg.description, 'description', '', error)
   if (!VERSION_PATTERN.test(version)) error('version', 'version 必须是 1 到 64 个字母、数字、点、加号或连字符')
 
   const list = (obj: Json, key: string, field: string): string[] => {
@@ -166,7 +186,8 @@ export function validatePlugin(dir: string, options: ValidateOptions = {}): Vali
     if (ln !== undefined) warn('loopNow.id', `没有 loopNow.id，将用 npm 名得到 ${JSON.stringify(id)}；建议显式声明，安装后不可改`)
   }
   if (!ID_PATTERN.test(id)) error('loopNow.id', 'loopNow.id 必须是 1 到 64 个小写字母、数字或连字符，不以连字符开头或结尾')
-  const displayName = typeof lnObj.displayName === 'string' && lnObj.displayName !== '' ? lnObj.displayName : name || id
+  const declaredName = localizedField(lnObj.displayName, 'loopNow.displayName', '', error)
+  const displayName = declaredName === '' ? name || id : declaredName
 
   const minPlatform = lnObj.minPlatformVersion
   if (minPlatform !== undefined && minPlatform !== null) {
@@ -297,7 +318,7 @@ export function validatePlugin(dir: string, options: ValidateOptions = {}): Vali
   if (ln !== undefined && !keywords.includes('loop-now-plugin')) warn('keywords', '建议在 keywords 里加上 loop-now-plugin，便于在市场与 npm 上被找到')
   if (extensions.length > 0 && !keywords.includes('pi-package')) warn('keywords', '带 Pi 扩展的插件建议加上 pi-package 关键字（Pi 包的约定）')
   if (description === '') warn('description', '缺少 description，安装确认与插件页会显示为空')
-  if (ln !== undefined && (typeof lnObj.displayName !== 'string' || lnObj.displayName === '')) warn('loopNow.displayName', `缺少 loopNow.displayName，将显示为 ${JSON.stringify(displayName)}`)
+  if (ln !== undefined && (lnObj.displayName === undefined || lnObj.displayName === '')) warn('loopNow.displayName', `缺少 loopNow.displayName，将显示为 ${JSON.stringify(displayName)}`)
   const deps = isObject(pkg.dependencies) ? pkg.dependencies : {}
   for (const dep of HOST_PROVIDED) {
     if (Object.hasOwn(deps, dep)) warn(`dependencies.${dep}`, `${dep} 由宿主或 Pi 提供，应放在 peerDependencies（"*"），不要随插件安装`)
