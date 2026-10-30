@@ -67,6 +67,20 @@ const HOST_PROVIDED = [
 
 type Json = Record<string, unknown>
 
+/**
+ * 一条 mcpServers 条目能否交给 Pi（与 Pi 的 validateMcpServerConfig 选传输的方式相同，服务端 internal/pluginmanifest 同此）：
+ * 有 url 且 type 省略或为 http、streamable-http 时是 streamable HTTP，url 须是 http 或 https 地址；
+ * 否则有非空 command 且 type 省略或为 stdio 时是 stdio。返回 null 表示可以，否则是哪类问题。
+ */
+function mcpEntryProblem(cfg: unknown): 'sse' | 'type' | 'entry' | null {
+  if (!isObject(cfg)) return 'entry'
+  const { type, url, command } = cfg
+  if (type === 'sse') return 'sse'
+  if (type !== undefined && type !== 'stdio' && type !== 'http' && type !== 'streamable-http') return 'type'
+  if (typeof url === 'string' && type !== 'stdio') return URL.canParse(url) && /^https?:$/.test(new URL(url).protocol) ? null : 'entry'
+  return typeof command === 'string' && command !== '' && type !== 'http' && type !== 'streamable-http' ? null : 'entry'
+}
+
 function isObject(v: unknown): v is Json {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
@@ -205,9 +219,17 @@ export function validatePlugin(dir: string, options: ValidateOptions = {}): Vali
   bin.forEach((p, i) => checkPath(root, p, `loopNow.bin[${i}]`, true, error))
 
   for (const [server, cfg] of Object.entries(mcpServers)) {
-    if (!SLUG_PATTERN.test(server) || !isObject(cfg) || typeof cfg.command !== 'string' || cfg.command === '') {
-      error(`loopNow.mcpServers.${server}`, `${JSON.stringify(server)} 须是带 command 的对象，名称为小写字母、数字、下划线或连字符`)
-    }
+    const problem = SLUG_PATTERN.test(server) ? mcpEntryProblem(cfg) : 'entry'
+    if (problem === null) continue
+    const name = JSON.stringify(server)
+    error(
+      `loopNow.mcpServers.${server}`,
+      problem === 'sse'
+        ? `${name} 不支持 SSE，请用 streamable HTTP 的 url`
+        : problem === 'type'
+          ? `${name} 的 type 只能是 stdio、http 或 streamable-http`
+          : `${name} 须是带 command 的 stdio 条目或带 http/https url 的 streamable HTTP 条目，名称为小写字母、数字、下划线或连字符`,
+    )
   }
 
   if (lnObj.configSchema !== undefined) {
