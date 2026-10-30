@@ -281,10 +281,13 @@ describe('连接与错误展示', () => {
     const agent = makeAgent({ name: '开发助手' })
     let up = true
     let listCalls = 0
+    // 断连时所有接口都连不上（连上时交给后面的处理器）：只让列表失败时，页面上其他请求的成功会让提示
+    // 消失又出现，测试拿到的提示可能已被替换，点它的重试不会发出请求。
     server.use(
+      http.all(apiUrl('/*'), () => (up ? undefined : HttpResponse.error())),
       http.get(agentsUrl, () => {
         listCalls += 1
-        return up ? HttpResponse.json({ agents: [toListItem(agent)] }) : HttpResponse.error()
+        return HttpResponse.json({ agents: [toListItem(agent)] })
       }),
       ...baseHandlers([agent]),
     )
