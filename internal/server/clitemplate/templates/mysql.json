@@ -85,6 +85,13 @@
       "format": "tar.gz",
       "path": "mysql-8.4.9-macos15-arm64/bin/mysql",
       "layout": "tree"
+    },
+    "linux/arm64": {
+      "url": "https://cdn.mysql.com/archives/mysql-8.4/mysql-8.4.9-linux-glibc2.28-aarch64.tar.xz",
+      "sha256": "497a4143d542b5b85ec7249016b0ff6ac6e7a855302a9822f667ca293d801aea",
+      "format": "tar.xz",
+      "path": "mysql-8.4.9-linux-glibc2.28-aarch64/bin/mysql",
+      "layout": "tree"
     }
   },
   "reservedEnvPrefixes": [

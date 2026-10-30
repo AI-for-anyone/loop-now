@@ -15,6 +15,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/ulikunitz/xz"
 )
 
 const maxBundleSize int64 = 4 << 30
@@ -97,6 +99,25 @@ func extractTree(archive, format, dest string) error {
 		}
 		return ce
 	}
+	drainTar := func(tr *tar.Reader) error {
+		for {
+			h, e := tr.Next()
+			if e == io.EOF {
+				break
+			}
+			if e != nil {
+				return e
+			}
+			mode := h.FileInfo().Mode()
+			if h.Typeflag == tar.TypeLink {
+				return errors.New("安装包不支持硬链接")
+			}
+			if e = add(h.Name, mode, h.Size, h.Linkname, tr); e != nil {
+				return e
+			}
+		}
+		return nil
+	}
 	switch format {
 	case "zip":
 		z, e := zip.OpenReader(archive)
@@ -136,22 +157,21 @@ func extractTree(archive, format, dest string) error {
 			return e
 		}
 		defer gz.Close()
-		tr := tar.NewReader(gz)
-		for {
-			h, e := tr.Next()
-			if e == io.EOF {
-				break
-			}
-			if e != nil {
-				return e
-			}
-			mode := h.FileInfo().Mode()
-			if h.Typeflag == tar.TypeLink {
-				return errors.New("安装包不支持硬链接")
-			}
-			if e = add(h.Name, mode, h.Size, h.Linkname, tr); e != nil {
-				return e
-			}
+		if e = drainTar(tar.NewReader(gz)); e != nil {
+			return e
+		}
+	case "tar.xz":
+		f, e := os.Open(archive)
+		if e != nil {
+			return e
+		}
+		defer f.Close()
+		xzr, e := xz.NewReader(f)
+		if e != nil {
+			return e
+		}
+		if e = drainTar(tar.NewReader(xzr)); e != nil {
+			return e
 		}
 	default:
 		return errors.New("安装包格式无效")

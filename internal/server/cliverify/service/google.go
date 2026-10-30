@@ -15,20 +15,42 @@ import (
 	"slices"
 )
 
+// googleSelfContained 报告当前 gcloud 运行树是否为 Linux 自包含安装（没有私有 Python.framework）。
+func googleSelfContained(fw string) bool {
+	fi, e := os.Stat(fw)
+	return e != nil || !fi.IsDir()
+}
+
 func (s *Service) googleVersionSpec(home string, env []string, t *clitemplate.Template) CommandSpec {
 	sdk, fw := s.Installer.GoogleRuntimePaths(t)
-	env = append(env, "PYTHONHOME="+filepath.Join(fw, "Versions/3.13"), "PYTHONNOUSERSITE=1", "DYLD_FRAMEWORK_PATH="+filepath.Dir(fw), "DYLD_LIBRARY_PATH="+filepath.Join(fw, "Versions/3.13/lib"), "CLOUDSDK_CONFIG="+filepath.Join(home, ".loop-now/gcloud/config"))
+	env = append(env, "CLOUDSDK_CONFIG="+filepath.Join(home, ".loop-now/gcloud/config"))
+	if googleSelfContained(fw) {
+		// Linux 自包含安装：bin/gcloud 直接执行，Python 由环境提供。
+		if p := clitemplate.ResolveGooglePython(); p != "" {
+			env = append(env, "CLOUDSDK_PYTHON="+p)
+		}
+		return CommandSpec{CLI: "gcloud", Phase: "version", Home: home, Environment: env, Executable: filepath.Join(sdk, "bin", "gcloud"), Args: []string{"--version"}}
+	}
+	env = append(env, "PYTHONHOME="+filepath.Join(fw, "Versions/3.13"), "PYTHONNOUSERSITE=1", "DYLD_FRAMEWORK_PATH="+filepath.Dir(fw), "DYLD_LIBRARY_PATH="+filepath.Join(fw, "Versions/3.13/lib"))
 	return CommandSpec{CLI: "gcloud", Phase: "version", Home: home, Environment: env, Executable: filepath.Join(fw, "Versions/3.13/bin/python3.13"), Args: []string{"-S", filepath.Join(sdk, "lib/gcloud.py"), "--version"}}
 }
 func (s *Service) googleProbe(ctx context.Context, op cliverify.Operation, d descriptor, home string, env []string, row store.CredentialRow, lease *os.File) cliverify.Result {
 	fail := func(code string) cliverify.Result { return cliverify.Result{Outcome: "failed", ErrorCode: &code} }
 	spec := s.googleVersionSpec(home, env, d.Template)
 	spec.Phase = "probe"
-	sdk, _ := s.Installer.GoogleRuntimePaths(d.Template)
-	spec.Args = []string{"-S", s.Options.GoogleEntry, "--sdk-root", sdk}
+	sdk, fw := s.Installer.GoogleRuntimePaths(d.Template)
 	if !filepath.IsAbs(s.Options.GoogleEntry) {
 		return fail("configuration_invalid")
 	}
+	if googleSelfContained(fw) {
+		// Linux 自包含安装：审阅固定的验证脚本由系统 Python 解释执行。
+		py := clitemplate.ResolveGooglePython()
+		if py == "" {
+			return fail("configuration_invalid")
+		}
+		spec.Executable = py
+	}
+	spec.Args = []string{"-S", s.Options.GoogleEntry, "--sdk-root", sdk}
 	if op.AuthMethod == "oauth" {
 		if s.Google == nil {
 			return fail("credential_unavailable")
