@@ -44,4 +44,11 @@ describe('check-ui-text', () => {
     })
     expect(checkDir(dir)).toEqual([])
   })
+
+  it('英文文案表里不能有中文', () => {
+    const dir = fixture({ 'i18n/en-US/common.ts': "export const common = { save: 'Save', cancel: '取消' }\n" })
+    const problems = checkDir(dir)
+    expect(problems).toHaveLength(1)
+    expect(problems[0]).toMatchObject({ text: '取消', english: true })
+  })
 })
