@@ -73,6 +73,9 @@ type Service struct {
 	maintenanceDone    chan struct{}
 	life               context.Context
 	stop               context.CancelFunc
+	// withDeadline derives an accepted operation's work context. Tests replace
+	// it so the deadline arrives on their signal instead of the wall clock.
+	withDeadline func(context.Context, time.Time) (context.Context, context.CancelFunc)
 }
 
 func NewService(st *store.Store, catalog *clitemplate.Catalog, o Options) (*Service, error) {
@@ -104,7 +107,7 @@ func NewService(st *store.Store, catalog *clitemplate.Catalog, o Options) (*Serv
 		o.MaxScansPerProject = 4
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Service{st: st, catalog: catalog, o: o, scans: map[uuid.UUID]*scanEntry{}, jobs: map[uuid.UUID]*job{}, discoveries: map[uuid.UUID]*discovery{}, life: ctx, stop: cancel}, nil
+	return &Service{st: st, catalog: catalog, o: o, scans: map[uuid.UUID]*scanEntry{}, jobs: map[uuid.UUID]*job{}, discoveries: map[uuid.UUID]*discovery{}, life: ctx, stop: cancel, withDeadline: context.WithDeadline}, nil
 }
 
 var safeKind = regexp.MustCompile(`^[a-z0-9_]{1,80}$`)
@@ -420,7 +423,7 @@ func (s *Service) Start(ctx context.Context, project uuid.UUID, in StartInput) (
 	// Reserve active capacity and Reader lease across durable acceptance. The HTTP
 	// request can end; accepted work belongs to service lifetime/deadline.
 	deadline := time.Now().Add(s.o.OperationTimeout)
-	work, cancel := context.WithDeadline(s.life, deadline)
+	work, cancel := s.withDeadline(s.life, deadline)
 	j := &job{project: project, cancel: cancel, done: make(chan struct{}), accepted: make(chan struct{})}
 	s.jobs[in.OperationID] = j
 	s.startMaintenanceLocked()

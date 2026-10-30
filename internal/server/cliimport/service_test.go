@@ -193,6 +193,17 @@ func selected(scan Scan) StartInput {
 	}
 	return in
 }
+
+// waitEntered waits for the controlled Reader to be entered, failing instead
+// of blocking until the package test timeout when it never is.
+func waitEntered(t *testing.T, entered <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("controlled Reader was not entered")
+	}
+}
 func awaitImport(t *testing.T, s *Service, p, id uuid.UUID) Operation {
 	t.Helper()
 	ctx := context.Background()
@@ -225,7 +236,7 @@ func TestCLIImportServiceReplayLeaseAndDeepCopy(t *testing.T) {
 	ctx := context.Background()
 	entered := make(chan struct{}, 1)
 	gate := make(chan struct{})
-	s := e.service(t, Options{ScanTTL: 80 * time.Millisecond}, func(r *controlledReader) { r.entered = entered; r.gate = gate })
+	s := e.service(t, Options{}, func(r *controlledReader) { r.entered = entered; r.gate = gate })
 	scan, err := s.Scan(ctx, e.project)
 	if err != nil {
 		t.Fatal(err)
@@ -239,9 +250,12 @@ func TestCLIImportServiceReplayLeaseAndDeepCopy(t *testing.T) {
 	if _, err = s.Start(ctx, e.project, in); err != nil {
 		t.Fatal(err)
 	}
-	<-entered
-	time.Sleep(100 * time.Millisecond)
-	// Scan GC must not close the accepted operation's Reader.
+	waitEntered(t, entered)
+	// Expire the scan now instead of waiting out a short TTL that Start could
+	// also miss. Scan GC must not close the accepted operation's Reader.
+	s.mu.Lock()
+	s.scans[in.ScanID].view.ExpiresAt = time.Now()
+	s.mu.Unlock()
 	if _, err = s.Scan(ctx, e.project); err != nil {
 		t.Fatal(err)
 	}
@@ -329,7 +343,7 @@ func TestCLIImportServicePrepareFailureCancelAndSourceChange(t *testing.T) {
 		if _, err = s.Start(context.Background(), e.project, in); err != nil {
 			t.Fatal(err)
 		}
-		<-entered
+		waitEntered(t, entered)
 		op, err := s.Cancel(context.Background(), e.project, in.OperationID)
 		if err != nil || op.Status != "cancelled" {
 			t.Fatal(err)
@@ -476,7 +490,11 @@ func TestCLIImportServiceExpiryAndClose(t *testing.T) {
 		e.files(t, false)
 		entered := make(chan struct{}, 1)
 		gate := make(chan struct{})
-		s := e.service(t, Options{OperationTimeout: 60 * time.Millisecond}, func(r *controlledReader) { r.entered = entered; r.gate = gate })
+		s := e.service(t, Options{}, func(r *controlledReader) { r.entered = entered; r.gate = gate })
+		// The deadline arrives once extraction has started, not on a short wall
+		// clock timeout that could also expire Scan, Start or the phase write
+		// before the Reader is entered.
+		due := signalDeadline(s)
 		scan, err := s.Scan(context.Background(), e.project)
 		if err != nil {
 			t.Fatal(err)
@@ -485,7 +503,8 @@ func TestCLIImportServiceExpiryAndClose(t *testing.T) {
 		if _, err = s.Start(context.Background(), e.project, in); err != nil {
 			t.Fatal(err)
 		}
-		<-entered
+		waitEntered(t, entered)
+		close(due)
 		op := awaitImport(t, s, e.project, in.OperationID)
 		if op.Status != "expired" || *op.ErrorCode != "timeout" || e.prepared.Load() != 0 {
 			t.Fatal("expired work saved or did not record with fresh context")
@@ -510,7 +529,7 @@ func TestCLIImportServiceExpiryAndClose(t *testing.T) {
 		}
 		done := make(chan struct{})
 		go func() { defer close(done); _, _ = s.Scan(ctx, e.project) }()
-		<-entered
+		waitEntered(t, entered)
 		deadline, cancel := context.WithTimeout(ctx, time.Second)
 		defer cancel()
 		if err = s.Close(deadline); err != nil {
@@ -568,7 +587,7 @@ func TestCLIImportProjectDeleteTxRollbackAndScopedCancel(t *testing.T) {
 	if _, err = s.Start(ctx, e.project, in); err != nil {
 		t.Fatal(err)
 	}
-	<-entered
+	waitEntered(t, entered)
 	otherScan, err := s.Scan(ctx, other.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -577,7 +596,7 @@ func TestCLIImportProjectDeleteTxRollbackAndScopedCancel(t *testing.T) {
 	if _, err = s.Start(ctx, other.ID, otherIn); err != nil {
 		t.Fatal(err)
 	}
-	<-entered
+	waitEntered(t, entered)
 	s.mu.Lock()
 	targetJob, otherJob := s.jobs[in.OperationID], s.jobs[otherIn.OperationID]
 	s.mu.Unlock()
