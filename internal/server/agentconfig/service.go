@@ -41,7 +41,7 @@ type Service struct {
 	CancelProjectCLILogins func(context.Context, uuid.UUID) error
 	ModelAuth              *modelauth.Service
 	Store                  *store.Store
-	Models                 *modelcatalog.Catalog
+	Models                 modelcatalog.Reader
 	Templates              *clitemplate.Catalog
 	Releaser               Releaser
 	OrgID                  uuid.UUID // 默认组织：项目都建在这里（第一版只有默认组织）

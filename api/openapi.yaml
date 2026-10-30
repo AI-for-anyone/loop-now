@@ -1376,7 +1376,7 @@ paths:
       tags: [models]
       operationId: listModelProviders
       x-access: console-and-external
-      summary: 固定版本 Pi 自带模型目录中的提供方
+      summary: 固定版本 Pi 合并原生 models.json 后的提供方目录
       responses:
         "200":
           headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
@@ -1386,6 +1386,44 @@ paths:
               schema: { $ref: "#/components/schemas/ModelProviderList" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
+
+  /model-settings:
+    get:
+      tags: [models]
+      operationId: getModelSettings
+      x-access: console
+      summary: 读取全局原生 models.json 文档
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: 当前文档与修订号
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModelSettings" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [models]
+      operationId: putModelSettings
+      x-access: console
+      summary: 由固定版本 Pi 校验并保存原生 models.json
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModelSettingsPut" }
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: 保存后的文档与修订号
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModelSettings" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
 
   /model-providers/{providerId}/models:
     parameters:
@@ -9480,6 +9518,24 @@ components:
         ok: { type: boolean }
         error: { type: [string, "null"] }
 
+    ModelSettings:
+      type: object
+      required: [modelsJson, revision]
+      additionalProperties: false
+      properties:
+        modelsJson:
+          type: string
+          description: Pi 原生 models.json 文本；API Key 仍由项目或 Agent 账号管理。
+        revision: { type: integer, format: int64, minimum: 1 }
+
+    ModelSettingsPut:
+      type: object
+      required: [modelsJson, expectedRevision]
+      additionalProperties: false
+      properties:
+        modelsJson: { type: string }
+        expectedRevision: { type: integer, format: int64, minimum: 1 }
+
     ModelProviderList:
       type: object
       required: [piVersion, catalogGeneratedAt, providers]
@@ -9495,6 +9551,7 @@ components:
       type: object
       required:
         - id
+        - source
         - apiKeyEnvVars
         - modelCount
         - authMethods
@@ -9502,6 +9559,10 @@ components:
       properties:
         id:
           type: string
+        source:
+          type: string
+          enum: [builtin, config]
+          description: builtin 为纯内置目录；config 表示该 Provider 有原生 models.json 配置或覆盖。
         apiKeyEnvVars:
           description: 旧环境凭证兼容诊断元数据，不能作为模型凭证录入字段。
           type: array

@@ -37,7 +37,7 @@ type Service struct {
 	Store       *store.Store
 	Helper      LoginHelper
 	Coordinator *Coordinator
-	Models      *modelcatalog.Catalog
+	Models      modelcatalog.Reader
 	Options     ServiceOptions
 	Log         *slog.Logger
 	Changed     func(uuid.UUID)
@@ -55,7 +55,7 @@ type loginWorker struct {
 	done      chan struct{}
 }
 
-func NewService(st *store.Store, h LoginHelper, c *Coordinator, models *modelcatalog.Catalog, o ServiceOptions, log *slog.Logger) *Service {
+func NewService(st *store.Store, h LoginHelper, c *Coordinator, models modelcatalog.Reader, o ServiceOptions, log *slog.Logger) *Service {
 	if o.LoginTimeout <= 0 {
 		o.LoginTimeout = 15 * time.Minute
 	}

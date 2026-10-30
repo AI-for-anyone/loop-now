@@ -64,7 +64,7 @@ describe('创建 Agent', () => {
     let created: Schemas['AgentCreate'] | null = null
     const { user } = setup(body => { created = body; return HttpResponse.json(makeAgent({ name: body.name, model: body.model, serviceTier: body.serviceTier }), { status: 201 }) })
     server.use(
-      http.get(apiUrl('/model-providers'), () => HttpResponse.json({ ...providers, providers: [...providers.providers, { id: 'openai-codex', modelCount: 1, apiKeyEnvVars: [], authMethods: ['oauth'] }] })),
+      http.get(apiUrl('/model-providers'), () => HttpResponse.json({ ...providers, providers: [...providers.providers, { id: 'openai-codex', source: 'builtin', modelCount: 1, apiKeyEnvVars: [], authMethods: ['oauth'] }] })),
       http.get(apiUrl('/model-providers/openai-codex/models'), () => HttpResponse.json({ providerId: 'openai-codex', models: [{ id: 'gpt-a', name: 'GPT A', reasoning: true, contextWindow: 100, maxTokens: 100, input: ['text'], thinkingLevels: ['medium', 'high'], defaultThinkingLevel: 'medium' }] })),
     )
     const dialog = await fill(user, '速度助手', false)

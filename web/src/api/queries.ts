@@ -8,6 +8,7 @@ export const keys = {
   context: ['context'] as const,
   health: ['health'] as const,
   modelProviders: ['modelProviders'] as const,
+  modelSettings: ['modelSettings'] as const,
   models: (providerId: string) => ['models', providerId] as const,
   cliTemplates: ['cliTemplates'] as const,
   projects: ['projects'] as const,
@@ -89,6 +90,34 @@ export function useModels(providerId: string | null) {
     enabled: providerId !== null && providerId !== '',
     staleTime: Infinity,
   })
+}
+
+const getModelSettings = () => call(api.GET('/model-settings'))
+
+export function useModelSettings() {
+  return useQuery({ queryKey: keys.modelSettings, queryFn: getModelSettings, staleTime: Infinity })
+}
+
+export function useSaveModelSettings() {
+  const client = useQueryClient()
+  const mutation = useMutation<Schemas['ModelSettings'], ApiError, Schemas['ModelSettingsPut']>({
+    mutationFn: (body) => call(api.PUT('/model-settings', { body })),
+    onSuccess: async (settings) => {
+      client.setQueryData(keys.modelSettings, settings)
+      await Promise.all([
+        client.invalidateQueries({ queryKey: keys.modelProviders }),
+        client.invalidateQueries({ queryKey: ['models'] }),
+      ])
+    },
+  })
+  return {
+    ...mutation,
+    readLatest: async () => {
+      const latest = await getModelSettings()
+      client.setQueryData(keys.modelSettings, latest)
+      return latest
+    },
+  }
 }
 
 export function useCliTemplates() {

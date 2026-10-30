@@ -29,6 +29,7 @@ import (
 	"loop-now/internal/server/inbox"
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/modelcatalog"
+	"loop-now/internal/server/modelconfig"
 	"loop-now/internal/server/pluginhost"
 	"loop-now/internal/server/plugins"
 	"loop-now/internal/server/reqid"
@@ -57,10 +58,11 @@ type Server struct {
 	CLIAuth            *cliauth.Service
 	ProjectCredentials *modelauth.ProjectService
 	ModelAuth          modelauth.Controller
+	ModelSettings      *modelconfig.Service
 	O                  Options
 	Config             *agentconfig.Service
 	Conv               *conversation.Service
-	Models             *modelcatalog.Catalog
+	Models             modelcatalog.Reader
 	Templates          *clitemplate.Catalog
 	Installer          *clitemplate.Installer
 	Store              *store.Store
@@ -191,6 +193,8 @@ func (s *Server) Routes() []Route {
 		{"GET", "/context", "getContext", ConsoleAndExternal, s.getContext},
 		{"GET", "/health", "getHealth", ConsoleAndExternal, s.getHealth},
 		{"GET", "/model-providers", "listModelProviders", ConsoleAndExternal, s.listModelProviders},
+		{"GET", "/model-settings", "getModelSettings", ConsoleOnly, s.getModelSettings},
+		{"PUT", "/model-settings", "putModelSettings", ConsoleOnly, s.putModelSettings},
 		{"GET", "/model-providers/{providerId}/models", "listModels", ConsoleAndExternal, s.listModels},
 		{"GET", "/cli-templates", "listCliTemplates", ConsoleAndExternal, s.listCliTemplates},
 		{"GET", "/projects", "listProjects", ConsoleAndExternal, s.listProjects},

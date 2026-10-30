@@ -46,7 +46,7 @@ type Source interface {
 
 // Options 是本机执行器的参数，全部来自配置与启动检查。
 type Options struct {
-	Models *modelcatalog.Catalog
+	Models modelcatalog.Reader
 	// Hooks 在每一轮开始前调用插件的 run.before_start；为空时不调用。
 	Hooks pluginhost.Hooker
 	// Dialogs 回答扩展在一轮之中发来的 confirm、select、input（装配为控制台提问）；为空时一律按取消回应。
@@ -119,37 +119,38 @@ type Executor struct {
 }
 
 type proc struct {
-	recoveryIdentity   *RuntimeProcessIdentity // immutable kernel identity captured at launch
-	larkRuntime        *larkResource
-	larkBinding        *clicredential.LarkBinding
-	googleBridge       *cliauth.Broker
-	authBridge         *modelauth.RuntimeBridge
-	log                *slog.Logger
-	agentID            uuid.UUID
-	client             *pirpc.Client
-	version            int64
-	promptIdentity     string
-	credentialIdentity string
-	provider           string // 启动时的提供方与模型，用于压缩用量
-	model              string
-	startedAt          time.Time
-	sessionFile        string // Pi 报告的会话文件路径
-	sessMu             sync.Mutex
-	recorded           string // 已写入数据库的会话文件路径（受 sessMu 保护）
-	busy               bool
-	lastUsed           time.Time
-	idleTimer          *time.Timer
-	dirs               agentDirs
-	stopOnce           sync.Once
-	exitOnce           sync.Once
-	stopping           atomic.Bool               // 平台主动停止，退出不算意外
-	curRun             atomic.Pointer[uuid.UUID] // 正在这个进程上回复的执行
-	exitRun            atomic.Pointer[uuid.UUID] // 进程在哪次执行中退出（在 curRun 清空前设置）
-	tokenID            uuid.UUID                 // 为这个进程签发的 Agent 令牌；未签发时为零值
-	revokeOnce         sync.Once
-	revokeErr          error
-	stopDone           chan struct{}
-	stopErr            error
+	recoveryIdentity    *RuntimeProcessIdentity // immutable kernel identity captured at launch
+	larkRuntime         *larkResource
+	larkBinding         *clicredential.LarkBinding
+	googleBridge        *cliauth.Broker
+	authBridge          *modelauth.RuntimeBridge
+	log                 *slog.Logger
+	agentID             uuid.UUID
+	client              *pirpc.Client
+	version             int64
+	promptIdentity      string
+	credentialIdentity  string
+	modelConfigIdentity string
+	provider            string // 启动时的提供方与模型，用于压缩用量
+	model               string
+	startedAt           time.Time
+	sessionFile         string // Pi 报告的会话文件路径
+	sessMu              sync.Mutex
+	recorded            string // 已写入数据库的会话文件路径（受 sessMu 保护）
+	busy                bool
+	lastUsed            time.Time
+	idleTimer           *time.Timer
+	dirs                agentDirs
+	stopOnce            sync.Once
+	exitOnce            sync.Once
+	stopping            atomic.Bool               // 平台主动停止，退出不算意外
+	curRun              atomic.Pointer[uuid.UUID] // 正在这个进程上回复的执行
+	exitRun             atomic.Pointer[uuid.UUID] // 进程在哪次执行中退出（在 curRun 清空前设置）
+	tokenID             uuid.UUID                 // 为这个进程签发的 Agent 令牌；未签发时为零值
+	revokeOnce          sync.Once
+	revokeErr           error
+	stopDone            chan struct{}
+	stopErr             error
 }
 
 type run struct {
@@ -363,7 +364,7 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 	for {
 		e.mu.Lock()
 		if p := e.procs[snap.AgentID]; p != nil {
-			if p.version == snap.ConfigVersion && p.credentialIdentity == snap.CredentialIdentity && p.promptIdentity == prompts.Identity(snap.PromptLayers) && sameLarkBinding(p.larkBinding, snap.LarkBinding) && alive(p) {
+			if p.version == snap.ConfigVersion && p.credentialIdentity == snap.CredentialIdentity && p.modelConfigIdentity == snap.ModelConfigIdentity && p.promptIdentity == prompts.Identity(snap.PromptLayers) && sameLarkBinding(p.larkBinding, snap.LarkBinding) && alive(p) {
 				p.busy = true
 				if p.idleTimer != nil {
 					p.idleTimer.Stop()
@@ -376,6 +377,10 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 				if err := seedModelAuth(snap, p.dirs); err != nil {
 					e.turnFinished(p)
 					return nil, fail(executor.ErrCredentialUnavailable, "模型凭证缓存重建失败")
+				}
+				if err := syncModelsJSON(snap, p.dirs); err != nil {
+					e.turnFinished(p)
+					return nil, fail(executor.ErrCredentialUnavailable, "模型配置缓存重建失败")
 				}
 				e.event(snap.AgentID, &r.id, store.EventPiReused, map[string]any{"pid": p.client.Pid(), "startedAt": p.startedAt})
 				e.obs.ProcessChanged(snap.AgentID)
@@ -635,7 +640,7 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 	if bridge != nil {
 		bridge.ChildStarted()
 	}
-	p := &proc{larkRuntime: lark, googleBridge: googleBridge, authBridge: bridge, log: e.snapshotLog(snap), agentID: snap.AgentID, client: client, version: snap.ConfigVersion, promptIdentity: prompts.Identity(snap.PromptLayers), credentialIdentity: snap.CredentialIdentity, provider: snap.Provider, model: snap.ModelID,
+	p := &proc{larkRuntime: lark, googleBridge: googleBridge, authBridge: bridge, log: e.snapshotLog(snap), agentID: snap.AgentID, client: client, version: snap.ConfigVersion, promptIdentity: prompts.Identity(snap.PromptLayers), credentialIdentity: snap.CredentialIdentity, modelConfigIdentity: snap.ModelConfigIdentity, provider: snap.Provider, model: snap.ModelID,
 		startedAt: begin, dirs: d, lastUsed: time.Now(), recorded: snap.Session.SessionFile, tokenID: tokenID, stopDone: make(chan struct{})}
 	if identity, identityErr := readRecoveryProcess(client.Pid()); identityErr == nil && validRecoveryProcess(&identity) {
 		p.recoveryIdentity = &identity

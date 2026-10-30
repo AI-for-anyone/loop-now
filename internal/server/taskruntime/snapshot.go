@@ -21,13 +21,13 @@ import (
 
 // schemaVersion 8 stores credentials as a plaintext object. Snapshots converted
 // from schemas 1–7 keep that schema in sourceVersion; its validation rules stay.
-// Schema 9 has the same content; its task workspace is a copy of the base
-// Agent's folder taken at preparation. Schema 8 tasks keep their frozen folder
-// sources (pinned commits, upload files) synced at launch.
-const schemaVersion = 9
+// Schema 9 copies the base Agent folder. Schema 10 additionally freezes the
+// selected Provider's native models.json fragment. Schemas 8 and 9 stay readable.
+const schemaVersion = 10
 
 // frozenSourcesSchema is the last schema whose tasks sync frozen folder sources.
 const frozenSourcesSchema = 8
+const copiedAgentFolderSchema = 9
 
 // latestSemantics are the rules of schema 7, applied to every new capture.
 const latestSemantics = 7
@@ -48,6 +48,7 @@ type Configuration struct {
 	// New captures store the concrete resolved level. Absent legacy fields stay absent.
 	ThinkingLevel       *string         `json:"thinkingLevel,omitempty"`
 	CredentialIdentity  string          `json:"credentialIdentity,omitempty"`
+	ModelsJSON          json.RawMessage `json:"modelsJson,omitempty"`
 	CredentialsRevision int64           `json:"credentialsRevision,omitempty"`
 	Prompts             *prompts.Layers `json:"prompts,omitempty"`
 	AgentID             uuid.UUID       `json:"agentId"`
@@ -223,7 +224,11 @@ func (s *Snapshot) Encode() ([]byte, error) {
 
 // CopiesAgentFolder 报告这个任务的工作区是否复制自基础 Agent 的文件夹（schema 9 起）；
 // 否则按旧规则同步捕获时冻结的文件夹来源。
-func (s *Snapshot) CopiesAgentFolder() bool { return s.env.SchemaVersion >= schemaVersion }
+func (s *Snapshot) CopiesAgentFolder() bool { return s.env.SchemaVersion >= copiedAgentFolderSchema }
+
+func supportedSchema(version int) bool {
+	return version == frozenSourcesSchema || version == copiedAgentFolderSchema || version == schemaVersion
+}
 
 // Decode 验证格式，不调用外部服务；读取凭证时再验证凭证内容。
 func Decode(data []byte) (*Snapshot, error) {
@@ -231,7 +236,7 @@ func Decode(data []byte) (*Snapshot, error) {
 	if strictJSON(data, &e) != nil {
 		return nil, ErrInvalidEncoding
 	}
-	if e.SchemaVersion != schemaVersion && e.SchemaVersion != frozenSourcesSchema {
+	if !supportedSchema(e.SchemaVersion) {
 		return nil, ErrUnsupportedVersion
 	}
 	if validateEnvelope(e) != nil {
@@ -255,7 +260,10 @@ func strictJSON(data []byte, out any) error {
 
 func validateEnvelope(e envelope) error {
 	scope := Scope{e.Scope.AgentID, e.Scope.TaskID}
-	if e.SchemaVersion != schemaVersion && e.SchemaVersion != frozenSourcesSchema || e.SchemaVersion == schemaVersion && e.SourceVersion != 0 || e.SourceVersion < 0 || e.SourceVersion > latestSemantics || e.SnapshotID == uuid.Nil || e.Credentials == nil || !scope.Valid() || !scope.IsTask() {
+	if !supportedSchema(e.SchemaVersion) || e.SchemaVersion == schemaVersion && e.SourceVersion != 0 || e.SourceVersion < 0 || e.SourceVersion > latestSemantics || e.SnapshotID == uuid.Nil || e.Credentials == nil || !scope.Valid() || !scope.IsTask() {
+		return ErrInvalidEncoding
+	}
+	if e.SchemaVersion < schemaVersion && len(e.Configuration.ModelsJSON) > 0 {
 		return ErrInvalidEncoding
 	}
 	version := e.semantics()
@@ -275,6 +283,14 @@ func validateEnvelope(e envelope) error {
 func validateConfig(c Configuration, s Scope) error {
 	if c.AgentID != s.AgentID() || c.ConfigVersion < 1 || strings.TrimSpace(c.Provider) == "" || strings.TrimSpace(c.ModelID) == "" || !utf8.ValidString(c.Provider) || !utf8.ValidString(c.ModelID) || !utf8.ValidString(c.Prompt) {
 		return ErrInvalidInput
+	}
+	if len(c.ModelsJSON) > 0 {
+		var fragment struct {
+			Providers map[string]json.RawMessage `json:"providers"`
+		}
+		if strictJSON(c.ModelsJSON, &fragment) != nil || len(fragment.Providers) != 1 || fragment.Providers[c.Provider] == nil {
+			return ErrInvalidInput
+		}
 	}
 	seen := map[string]bool{}
 	for _, name := range c.CLIs {
@@ -386,6 +402,7 @@ func cloneConfig(c Configuration) Configuration {
 		level := *c.ThinkingLevel
 		c.ThinkingLevel = &level
 	}
+	c.ModelsJSON = slices.Clone(c.ModelsJSON)
 	c.Prompts = prompts.Clone(c.Prompts)
 	c.CLIs = slices.Clone(c.CLIs)
 	slices.Sort(c.CLIs)

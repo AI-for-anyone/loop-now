@@ -13,14 +13,15 @@ export const providers: Schemas['ModelProviderList'] = {
   piVersion: '1.1.0',
   catalogGeneratedAt: null,
   providers: [
-    { id: 'anthropic', apiKeyEnvVars: ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'], modelCount: 2, authMethods: ['api_key'] },
-    { id: 'openai', apiKeyEnvVars: ['OPENAI_API_KEY'], modelCount: 1, authMethods: ['api_key'] },
+    { id: 'anthropic', source: 'builtin', apiKeyEnvVars: ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'], modelCount: 2, authMethods: ['api_key'] },
+    { id: 'openai', source: 'builtin', apiKeyEnvVars: ['OPENAI_API_KEY'], modelCount: 1, authMethods: ['api_key'] },
   ],
 }
 
 const model = (id: string, name: string): Schemas['Model'] => ({ id, name, reasoning: false, contextWindow: 1, maxTokens: 1, input: ['text'] })
 
 export const catalogHandlers = [
+  http.get(apiUrl('/model-settings'), () => HttpResponse.json({ modelsJson: '{"providers":{}}', revision: 1 })),
   http.get(apiUrl('/model-providers'), () => HttpResponse.json(providers)),
   http.get(apiUrl('/model-providers/anthropic/models'), () =>
     HttpResponse.json({ providerId: 'anthropic', models: [model('claude-sonnet-5-5', 'Claude Sonnet 5.5'), model('claude-haiku-5-5', 'Claude Haiku 5.5')] }),

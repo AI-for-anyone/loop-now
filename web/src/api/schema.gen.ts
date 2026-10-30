@@ -318,9 +318,27 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 固定版本 Pi 自带模型目录中的提供方 */
+        /** 固定版本 Pi 合并原生 models.json 后的提供方目录 */
         get: operations["listModelProviders"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/model-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取全局原生 models.json 文档 */
+        get: operations["getModelSettings"];
+        /** 由固定版本 Pi 校验并保存原生 models.json */
+        put: operations["putModelSettings"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3060,6 +3078,17 @@ export interface components {
             ok: boolean;
             error?: string | null;
         };
+        ModelSettings: {
+            /** @description Pi 原生 models.json 文本；API Key 仍由项目或 Agent 账号管理。 */
+            modelsJson: string;
+            /** Format: int64 */
+            revision: number;
+        };
+        ModelSettingsPut: {
+            modelsJson: string;
+            /** Format: int64 */
+            expectedRevision: number;
+        };
         ModelProviderList: {
             piVersion: string;
             /** Format: date-time */
@@ -3068,6 +3097,11 @@ export interface components {
         };
         ModelProvider: {
             id: string;
+            /**
+             * @description builtin 为纯内置目录；config 表示该 Provider 有原生 models.json 配置或覆盖。
+             * @enum {string}
+             */
+            source: "builtin" | "config";
             /**
              * @deprecated
              * @description 旧环境凭证兼容诊断元数据，不能作为模型凭证录入字段。
@@ -8722,6 +8756,61 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    getModelSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前文档与修订号 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    putModelSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelSettingsPut"];
+            };
+        };
+        responses: {
+            /** @description 保存后的文档与修订号 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            412: components["responses"]["PreconditionFailed"];
+            413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     listModels: {

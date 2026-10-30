@@ -293,7 +293,7 @@ func TestMessageImagesUnsupportedModelAndQueuedConfigChange(t *testing.T) {
 	defer s.stop()
 	ctx := context.Background()
 	var provider, model string
-	for _, p := range s.a.API.Models.Providers {
+	for _, p := range s.a.API.Models.Snapshot().Providers {
 		for _, m := range p.Models {
 			if !s.a.API.Models.SupportsImages(p.ID, m.ID) {
 				for _, method := range p.AuthMethods {

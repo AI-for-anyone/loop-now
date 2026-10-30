@@ -50,6 +50,11 @@ if (!Element.prototype.hasPointerCapture) {
   Element.prototype.releasePointerCapture = () => {}
 }
 if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {}
+// CodeMirror 在 jsdom 中测量选区时需要浏览器的 Range 几何接口；返回一个零尺寸矩形即可满足布局计算。
+if (!Range.prototype.getClientRects) {
+  Range.prototype.getClientRects = () => [new DOMRect()] as unknown as DOMRectList
+  Range.prototype.getBoundingClientRect = () => new DOMRect()
+}
 if (!globalThis.ResizeObserver) {
   globalThis.ResizeObserver = class {
     observe() {}

@@ -12,6 +12,8 @@ import { chooseLocale, locale, localeNames, locales, type Locale } from '@/i18n/
 import { selectClass } from '@/lib/field'
 import { cn } from '@/lib/utils'
 import { ContextFolderSection } from '@/features/folders/FolderSections'
+import { ModelSettingsCard } from '@/features/settings/ModelSettingsCard'
+import { DraftNavigationGuard } from '@/features/prompts/DraftNavigationGuard'
 import { pageTitleClass } from '@/lib/page-title'
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -72,7 +74,7 @@ export function SettingsPage() {
   const version = useSyncExternalStore(serverVersionStore.subscribe, serverVersionStore.get)
 
   return (
-    <div className="h-full overflow-y-auto">
+    <DraftNavigationGuard><div className="h-full overflow-y-auto">
       <div className="mx-auto flex max-w-[880px] flex-col gap-[26px] px-4 pt-9 pb-16 sm:px-[30px]">
         <div className="flex flex-wrap items-end gap-x-6 gap-y-3.5">
           <h1 className={pageTitleClass}>{t.settings.title}</h1>
@@ -88,6 +90,8 @@ export function SettingsPage() {
         </div>
 
         <LanguageCard />
+
+        <ModelSettingsCard />
 
         <ContextFolderSection scope={{ kind: 'global' }} />
 
@@ -149,6 +153,6 @@ export function SettingsPage() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </div></DraftNavigationGuard>
   )
 }
