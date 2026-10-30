@@ -1,0 +1,60 @@
+# Loop Now 本地一体化运行：PostgreSQL 18 + Redis 8 + 服务端 + Web 控制台。
+# 控制台没有登录功能，端口只发布到本机回环。首次启动服务端会自动建库迁移。
+name: loop-now
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: loopnow
+      POSTGRES_PASSWORD: loopnow
+      POSTGRES_DB: loopnow
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loopnow -d loopnow"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  redis:
+    image: redis:8
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  server:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.server
+    environment:
+      LOOP_NOW_DATABASE_URL: "postgres://loopnow:loopnow@db:5432/loopnow?sslmode=disable"
+      LOOP_NOW_REDIS_URL: redis://redis:6379/1
+      LOOP_NOW_REDIS_KEY_PREFIX: "loopnow:"
+    ports:
+      - "127.0.0.1:8780:8780"
+    volumes:
+      - loopdata:/var/lib/loop-now
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.web
+    ports:
+      - "127.0.0.1:5173:5173"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  loopdata:

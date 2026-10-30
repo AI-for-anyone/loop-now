@@ -1,0 +1,84 @@
+# syntax=docker/dockerfile:1
+# loop-now 服务端一体化镜像：Go 构建 + Node 24.21.0 运行时 + Pi 1.4.0 + 插件宿主。
+
+ARG NODE_VERSION=24.21.0
+ARG GO_VERSION=1.27.0
+ARG PI_VERSION=1.4.0
+
+# ---- Node 精确版本基础层（官方镜像未必有 24.21.0 这个 tag，直接从 nodejs.org 取） ----
+FROM debian:bookworm-slim AS nodebase
+ARG NODE_VERSION
+ARG TARGETARCH
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl xz-utils \
+ && rm -rf /var/lib/apt/lists/* \
+ && case "$TARGETARCH" in amd64) NODE_ARCH=x64 ;; arm64) NODE_ARCH=arm64 ;; *) echo "unsupported arch: $TARGETARCH" >&2; exit 1 ;; esac \
+ && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" -o /tmp/node.tar.xz \
+ && tar -C /usr/local --strip-components=1 -xf /tmp/node.tar.xz \
+ && rm /tmp/node.tar.xz
+
+# ---- 服务端与 loopctl 构建 ----
+FROM debian:bookworm-slim AS gobuild
+ARG GO_VERSION
+ARG TARGETARCH
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl git xz-utils \
+ && rm -rf /var/lib/apt/lists/* \
+ && curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" -o /tmp/go.tgz \
+ && tar -C /usr/local -xzf /tmp/go.tgz \
+ && rm /tmp/go.tgz
+ENV PATH=/usr/local/go/bin:$PATH
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN go build -o bin/loop-server ./cmd/loop-server \
+ && version="$(bin/loop-server version)" \
+ && go run ./cmd/loopctl-dist -version "$version" -out /out/loopctl-dist
+
+# ---- 插件宿主构建（需要仓库内 plugins 工作区的 lockfile） ----
+FROM nodebase AS pluginbuild
+WORKDIR /src/plugins
+COPY plugins/ ./
+RUN npm ci --ignore-scripts && npm run build
+
+# ---- 运行时 ----
+FROM nodebase AS runtime
+ARG PI_VERSION
+ARG TARGETARCH
+# git：执行器克隆仓库需要；postgresql-client：官方无 Linux 二进制包，psql 模板补不了，
+# 这里用 Debian 自带客户端（15.x，兼容 PostgreSQL 18 服务端）预装到 PATH 供 Agent 使用；
+# libncurses6：MySQL 官方 Linux 客户端的运行依赖；
+# python3.13.7：Linux 版 gcloud 官方包不自带 Python，且验证辅助按 CPython 3.13.7 审阅固定，
+# 用 uv 装精确版本并链接为 python3.13（ResolveGooglePython 优先解析它）。
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git postgresql-client libncurses6 \
+ && rm -rf /var/lib/apt/lists/* \
+ && case "$TARGETARCH" in amd64) UV_ARCH=x86_64 ;; arm64) UV_ARCH=aarch64 ;; esac \
+ && curl -fsSL "https://github.com/astral-sh/uv/releases/download/0.13.6/uv-${UV_ARCH}-unknown-linux-gnu.tar.gz" -o /tmp/uv.tgz \
+ && tar -C /usr/local/bin --strip-components=1 -xzf /tmp/uv.tgz "uv-${UV_ARCH}-unknown-linux-gnu/uv" \
+ && rm /tmp/uv.tgz \
+ && uv python install 3.13.7 \
+ && ln -sf "$(uv python find 3.13)" /usr/local/bin/python3.13 \
+ && npm install -g "npm@11.19.0" "@earendil-works/pi-coding-agent@${PI_VERSION}"
+
+COPY --from=gobuild /src/bin/loop-server /app/loop-server
+COPY --from=gobuild /out/loopctl-dist /app/loopctl-dist
+COPY --from=pluginbuild /src/plugins/host/dist/main.js /app/plugins/host/dist/main.js
+COPY --from=pluginbuild /src/plugins/official /app/plugins/official
+
+ENV LOOP_NOW_LISTEN_ADDR=0.0.0.0:8780 \
+    LOOP_NOW_ALLOWED_HOSTS=localhost,127.0.0.1 \
+    LOOP_NOW_CONSOLE_ORIGINS=http://localhost:5173,http://127.0.0.1:5173 \
+    LOOP_NOW_WORK_ROOT=/var/lib/loop-now \
+    LOOP_NOW_CONTEXT_DIR=/var/lib/loop-now/context \
+    LOOP_NOW_LOOPCTL_DIST_DIR=/app/loopctl-dist \
+    LOOP_NOW_PI_BIN=/usr/local/bin/pi \
+    LOOP_NOW_NODE_BIN=/usr/local/bin/node \
+    LOOP_NOW_PLUGIN_HOST_ENTRY=/app/plugins/host/dist/main.js \
+    LOOP_NOW_PLUGIN_OFFICIAL_DIR=/app/plugins/official
+
+RUN mkdir -p /var/lib/loop-now
+VOLUME /var/lib/loop-now
+EXPOSE 8780
+CMD ["/app/loop-server"]
