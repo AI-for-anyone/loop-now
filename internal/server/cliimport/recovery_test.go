@@ -155,7 +155,7 @@ func TestCLIImportUnknownPendingDeadlineReconciliation(t *testing.T) {
 		if op.Status != "expired" || *op.ErrorCode != "timeout" {
 			t.Fatal("pending unknown did not expire")
 		}
-	case <-time.After(10 * time.Second):
+	case <-time.After(settle):
 		t.Fatal("unknown reconciliation hung")
 	}
 	if e.extracts.Load() != 0 || e.prepared.Load() != 0 {
@@ -350,7 +350,7 @@ func TestCLIImportUnknownExpiryRetriesAfterDBOutage(t *testing.T) {
 	close(due)
 	select {
 	case <-j.done:
-	case <-time.After(10 * time.Second):
+	case <-time.After(settle):
 		t.Fatal("original deadline owner did not end boundedly")
 	}
 	deny.Store(false)
@@ -358,7 +358,7 @@ func TestCLIImportUnknownExpiryRetriesAfterDBOutage(t *testing.T) {
 	if op.Status != "expired" || *op.ErrorCode != "timeout" || e.extracts.Load() != 0 || e.prepared.Load() != 0 {
 		t.Fatal("DB recovery did not expire without secret replay")
 	}
-	closeCtx, cancel := context.WithTimeout(ctx, time.Second)
+	closeCtx, cancel := context.WithTimeout(ctx, settle)
 	defer cancel()
 	if err = s.Close(closeCtx); err != nil {
 		t.Fatal(err)
