@@ -50,7 +50,7 @@ features:
 
 </div>
 
-<p class="ln-caption">The actual console with demonstration data. The interface currently uses Simplified Chinese.</p>
+<p class="ln-caption">The actual console with demonstration data. The interface supports English and Chinese; it follows your browser language, or switch in Global settings.</p>
 
 ## From implementation to review, in one conversation
 
