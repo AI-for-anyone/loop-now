@@ -1,8 +1,6 @@
-import { taskInboxText as inboxCopy } from '@/i18n/task-inbox'
 import { useTaskInboxMessages } from '@/api/task-inbox'
 import { TaskInboxMessageBubble } from './TaskInboxMessageBubble'
 import { ConsoleMessage } from '@/features/console-inbox/ConsoleMessage'
-import { consoleInboxText } from '@/i18n/console-inbox'
 import { TaskMessageBubble } from './TaskMessageBubble'
 import { useLayoutEffect, useRef, useState } from 'react'
 import { NodeMessageComposer } from './NodeMessageComposer'
@@ -30,11 +28,13 @@ import { Markdown } from '@/features/chat/Markdown'
 import { t } from '@/i18n'
 import { SleepUntil } from '@/features/sleep/SleepUntil'
 
+const inboxCopy = t.taskInbox
+
 // 节点的待回答问题：问题本身作为“发给你”的消息排在节点对话里，在那里点选项或回复；这里只写明状态，并可以跳到它。
 export function PendingQuestion({ question }: { question: Schemas['TaskQuestionRef'] }) {
   const locate = () => document.querySelector(`[data-console-message-id="${question.messageId}"]`)?.scrollIntoView({ block: 'center' })
   return <section className="grid gap-3 rounded-card bg-tint-yellow p-4"><h3 className="font-bold">{t.tasks.question}</h3><Badge>{t.tasks.questionState[question.status]}</Badge><Markdown text={question.text} />
-    {question.status === 'open' && question.canAnswer ? <Button className="justify-self-start" onClick={locate}>{consoleInboxText.locateQuestion}</Button> : <p className="text-sm">{question.status === 'open' ? t.tasks.cannotAnswer : t.tasks.questionState[question.status]}</p>}
+    {question.status === 'open' && question.canAnswer ? <Button className="justify-self-start" onClick={locate}>{t.consoleInbox.locateQuestion}</Button> : <p className="text-sm">{question.status === 'open' ? t.tasks.cannotAnswer : t.tasks.questionState[question.status]}</p>}
   </section>
 }
 type Node = Schemas['TaskNodeRun']

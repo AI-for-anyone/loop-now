@@ -10,8 +10,9 @@ import { Badge } from '@/components/ui/badge'
 import { ScopeTag } from '@/features/projects/OverviewScope'
 import { dayLabel } from '@/features/overview/day-label'
 import { t } from '@/i18n'
-import { consoleInboxText as text } from '@/i18n/console-inbox'
 import type { ScopeQuery } from '@/lib/scope'
+
+const text = t.consoleInbox
 
 type Item = Schemas['InboxPendingItem'] & { kind: 'question' | 'unread' }
 

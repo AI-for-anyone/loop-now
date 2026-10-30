@@ -14,9 +14,10 @@ import { Markdown } from '@/features/chat/Markdown'
 import { MessageImages } from '@/features/images/MessageImages'
 import { InboxNotice } from '@/features/inbox/InboxNotice'
 import { t } from '@/i18n'
-import { consoleInboxText as text } from '@/i18n/console-inbox'
 import { QuestionChoices, UnreadDot } from './ConsoleMessage'
 import { useReadOnView } from './useAnswerQuestion'
+
+const text = t.consoleInbox
 
 type Message = Schemas['InboxMessage']
 const encoder = new TextEncoder()

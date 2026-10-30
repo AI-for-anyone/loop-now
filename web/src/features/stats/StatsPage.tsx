@@ -5,7 +5,7 @@ import { SectionError } from '@/components/RequestError'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useOverviewFilter, type OverviewFilter } from '@/features/projects/overview-filter'
 import { OverviewScopeNotFound } from '@/features/projects/OverviewScope'
-import { statsText as text } from '@/i18n/stats'
+import { t } from '@/i18n'
 import { pageTitleClass } from '@/lib/page-title'
 import { PLATFORM, type ScopeQuery } from '@/lib/scope'
 import { cn } from '@/lib/utils'
@@ -27,6 +27,8 @@ import {
   type Axis,
   type ScopeOf,
 } from './StatsCards'
+
+const text = t.stats
 
 type Report = Schemas['StatsReport']
 

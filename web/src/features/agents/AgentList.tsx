@@ -8,11 +8,12 @@ import { useInboxPending } from '@/api/console-inbox'
 import { useAgents } from '@/api/queries'
 import { PendingBadge } from '@/features/console-inbox/PendingBadge'
 import { t } from '@/i18n'
-import { shellText as text } from '@/i18n/shell'
 import { isUnreachable } from '@/lib/errors'
 import { navAddClass, navGroupClass, navRowClass } from '@/lib/nav-row'
 import { agentPath, scopeKey, type Scope } from '@/lib/scope'
 import { cn } from '@/lib/utils'
+
+const text = t.shell
 
 // 参与搜索的文字：显示名称，以及服务端提供时的地址。
 function searchableText(agent: Schemas['AgentListItem']): string[] {

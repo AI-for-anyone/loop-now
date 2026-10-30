@@ -1,7 +1,7 @@
 import { useId, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { Schemas } from '@/api/client'
-import { statsText as text } from '@/i18n/stats'
+import { t } from '@/i18n'
 import { useNow } from '@/lib/use-now'
 import { agentPath, type Scope } from '@/lib/scope'
 import { cn } from '@/lib/utils'
@@ -9,6 +9,8 @@ import { sectionId } from '@/features/agent-config/sections'
 import { Bar, Legend, LineChart, StackedColumns } from './charts'
 import { durationTicks, niceTicks } from './ticks'
 import { estimateCost, modelFamily, type ModelFamily } from './pricing'
+
+const text = t.stats
 
 type Report = Schemas['StatsReport']
 export type ScopeOf = (projectId: string | null) => Scope | null
@@ -393,7 +395,7 @@ export function ToolsCard({ report }: { report: Report }) {
               <li key={tool.name} className="grid grid-cols-[minmax(44px,max-content)_minmax(0,1fr)_auto_44px] items-center gap-2">
                 <code className="max-w-[110px] truncate font-mono text-[12px] font-bold">{tool.name}</code>
                 <Bar value={tool.calls} max={max} color={COLOR.blue} height="h-3" />
-                <b className="text-right text-[12px] tabular-nums">{tool.calls.toLocaleString('en-US')}</b>
+                <b className="text-right text-[12px] tabular-nums">{text.number(tool.calls)}</b>
                 <span title={text.tools.failureRate(tool.name, rate)} className="text-right text-[11.5px] text-ink-700 tabular-nums">
                   {rate}
                 </span>

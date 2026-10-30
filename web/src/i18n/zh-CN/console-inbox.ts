@@ -1,6 +1,6 @@
 // 操作者（@console）的消息不再有单独的收件箱页：Agent 发给你的消息与问题显示在它的对话里，
 // 任务实例的问题显示在节点对话里，外部身份与你的往来显示在它的页面上。
-export const consoleInboxText = {
+export const consoleInbox = {
   toYou: '发给你',
   unread: '未读',
   question: '问题',
@@ -36,4 +36,4 @@ export const consoleInboxText = {
   view: '查看',
   badge: (questions: number, unread: number) => [questions ? `${questions} 个问题` : '', unread ? `${unread} 条新消息` : ''].filter(Boolean).join('、'),
   badgeLabel: (summary: string) => `待你回复：${summary}`,
-}
+} as const
