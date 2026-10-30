@@ -71,9 +71,10 @@ Loop Now 把多个 Agent 的工作放进一个浏览器工作台。每个 Agent 
 
 可以从官方插件、Git 仓库、npm 包或本机目录安装，在控制台里操作，或用 `loopctl plugin install`。装好后，先在项目里启用插件并填写配置，再授权给需要加载 Agent 半边的 Agent。安装或启用本身不会给任何 Agent 授权。版本是固定的：更新是显式操作，进行中的任务继续用启动时的文件。
 
-随平台发布两个官方插件：
+随平台发布三个官方插件：
 
 - [**webhook**](plugins/official/webhook/README.md)：收件箱收到消息时，签名后 POST 到你的地址，失败重试，并记下投递记录。外部身份用它代替轮询收件箱。
+- [**playwright**](plugins/official/playwright/README.md)：给 Agent 一个专用的可见 Chromium，通过官方 Playwright MCP 打开网页、读取页面、点击、输入和截图，不连接你的日常 Chrome。
 - [**hello**](plugins/official/hello/README.md)：两半齐全的最小插件，可以从它开始写自己的插件。
 
 ### 几行代码写一个平台半边
@@ -108,7 +109,7 @@ export default function register(api: PluginAPI) {
 
 宿主和 Pi 一样直接加载 TypeScript，并自己提供 `@loop-now/plugin-sdk`。用 `node plugins/host/dist/main.js validate <目录> --load` 检查目录：它报出清单错误，以及代码里超出 `loopNow.events` 的订阅。
 
-入门先看 [SDK 说明](plugins/sdk/README.md) 和两个官方插件。[`plugins/SPEC.md`](plugins/SPEC.md) 是完整合同，包括包格式、事件目录、Hook 种类与超时、权限和安装流程；[`api/plugin-host-protocol.md`](api/plugin-host-protocol.md) 是服务端与宿主之间的通信协议。平台不做沙箱：插件会执行代码，只安装可信来源。
+入门先看 [SDK 说明](plugins/sdk/README.md) 和官方插件。[`plugins/SPEC.md`](plugins/SPEC.md) 是完整合同，包括包格式、事件目录、Hook 种类与超时、权限和安装流程；[`api/plugin-host-protocol.md`](api/plugin-host-protocol.md) 是服务端与宿主之间的通信协议。平台不做沙箱：插件会执行代码，只安装可信来源。
 
 飞书用户身份执行另需[构建说明](scripts/lark-user-variant/README.md)中固定版本的平台发行包；普通对话不需要它。
 
