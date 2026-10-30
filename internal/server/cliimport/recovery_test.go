@@ -132,7 +132,8 @@ func TestCLIImportUnknownPendingDeadlineReconciliation(t *testing.T) {
 	if early, err := e.st.ExpireCLIImport(ctx, e.project, id); err != nil || early.Status != "pending" {
 		t.Fatal("expiry CAS ignored DB deadline", err)
 	}
-	work := expireOnSignal{Context: ctx, due: make(chan struct{})}
+	due := make(chan struct{})
+	work := newExpireOnSignal(ctx, due)
 	done := make(chan Operation, 1)
 	go func() {
 		op, err := s.resolveUnknown(work, e.project, id)
@@ -147,10 +148,8 @@ func TestCLIImportUnknownPendingDeadlineReconciliation(t *testing.T) {
 			t.Fatal("GET changed pending outcome", err)
 		}
 	}
-	if _, err := e.st.Pool.Exec(ctx, `UPDATE cli_credential_import_operations SET deadline_at=clock_timestamp() WHERE id=$1`, id); err != nil {
-		t.Fatal(err)
-	}
-	close(work.due)
+	expireInDB(t, e.st.Pool, id)
+	close(due)
 	select {
 	case op := <-done:
 		if op.Status != "expired" || *op.ErrorCode != "timeout" {
@@ -165,20 +164,57 @@ func TestCLIImportUnknownPendingDeadlineReconciliation(t *testing.T) {
 }
 
 // expireOnSignal reports context.DeadlineExceeded once due is closed, so a
-// test decides when the operation's deadline arrives.
+// test decides when the operation's deadline arrives; cancelling the parent
+// still ends it.
 type expireOnSignal struct {
 	context.Context
-	due chan struct{}
+	due, done chan struct{}
 }
 
-func (c expireOnSignal) Done() <-chan struct{} { return c.due }
+func newExpireOnSignal(parent context.Context, due chan struct{}) expireOnSignal {
+	c := expireOnSignal{Context: parent, due: due, done: make(chan struct{})}
+	go func() {
+		select {
+		case <-due:
+		case <-parent.Done():
+		}
+		close(c.done)
+	}()
+	return c
+}
+
+func (c expireOnSignal) Done() <-chan struct{} { return c.done }
 
 func (c expireOnSignal) Err() error {
+	select {
+	case <-c.done:
+	default:
+		return nil
+	}
 	select {
 	case <-c.due:
 		return context.DeadlineExceeded
 	default:
-		return nil
+		return c.Context.Err()
+	}
+}
+
+// signalDeadline makes operations started on s from now on reach their
+// deadline when the returned channel is closed. Their DB deadline_at keeps the
+// Start value; tests that rely on the DB deadline move it with expireInDB.
+func signalDeadline(s *Service) chan struct{} {
+	due := make(chan struct{})
+	s.withDeadline = func(parent context.Context, _ time.Time) (context.Context, context.CancelFunc) {
+		return context.WithCancel(newExpireOnSignal(parent, due))
+	}
+	return due
+}
+
+// expireInDB makes the operation's DB deadline due now.
+func expireInDB(t *testing.T, pool *pgxpool.Pool, id uuid.UUID) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), `UPDATE cli_credential_import_operations SET deadline_at=clock_timestamp() WHERE id=$1`, id); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -290,7 +326,8 @@ func TestCLIImportUnknownExpiryRetriesAfterDBOutage(t *testing.T) {
 	}
 	e.st.Pool = pool
 	t.Cleanup(original.Close)
-	s := e.service(t, Options{OperationTimeout: 150 * time.Millisecond, RecordTimeout: 30 * time.Millisecond}, nil)
+	s := e.service(t, Options{}, nil)
+	due := signalDeadline(s)
 	scan, err := s.Scan(ctx, e.project)
 	if err != nil {
 		t.Fatal(err)
@@ -300,22 +337,20 @@ func TestCLIImportUnknownExpiryRetriesAfterDBOutage(t *testing.T) {
 	if op, err := s.Start(ctx, e.project, in); err != nil || op.Status != "pending" || !observed.Load() {
 		t.Fatal("unknown acceptance setup failed", err)
 	}
-	deny.Store(true)
+	s.mu.Lock()
+	j := s.jobs[in.OperationID]
+	s.mu.Unlock()
+	if j == nil {
+		t.Fatal("unknown acceptance has no deadline owner")
+	}
 	// Force the original deadline writeback to fail, then verify it has actually
 	// released its job. Only the independent DB expiry reconciler can close it.
-	ended := false
-	limit := time.Now().Add(2 * time.Second)
-	for time.Now().Before(limit) {
-		s.mu.Lock()
-		_, exists := s.jobs[in.OperationID]
-		s.mu.Unlock()
-		if !exists {
-			ended = true
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	if !ended {
+	deny.Store(true)
+	expireInDB(t, original, in.OperationID)
+	close(due)
+	select {
+	case <-j.done:
+	case <-time.After(10 * time.Second):
 		t.Fatal("original deadline owner did not end boundedly")
 	}
 	deny.Store(false)
@@ -388,7 +423,8 @@ func TestCLIImportBeginUnknownExpiresWithoutExtraction(t *testing.T) {
 	}
 	e.st.Pool = pool
 	t.Cleanup(original.Close)
-	s := e.service(t, Options{OperationTimeout: 300 * time.Millisecond}, nil)
+	s := e.service(t, Options{}, nil)
+	due := signalDeadline(s)
 	scan, err := s.Scan(ctx, e.project)
 	if err != nil {
 		t.Fatal(err)
@@ -399,8 +435,15 @@ func TestCLIImportBeginUnknownExpiresWithoutExtraction(t *testing.T) {
 	if err != nil || op.Status != "pending" || !observed.Load() {
 		t.Fatal("unknown acceptance was not read back", err)
 	}
+	for n := 0; n < 2; n++ {
+		if op, err = s.Get(ctx, e.project, in.OperationID); err != nil || op.Status != "pending" {
+			t.Fatal("GET changed pending outcome", err)
+		}
+	}
 	// GETs remain side-effect-free. The original background owner only expires
 	// under DB locks at deadline; it never launches secret extraction.
+	expireInDB(t, original, in.OperationID)
+	close(due)
 	expired := awaitImport(t, s, e.project, in.OperationID)
 	if expired.Status != "expired" || *expired.ErrorCode != "timeout" || e.extracts.Load() != 0 || e.prepared.Load() != 0 {
 		t.Fatal("unknown acceptance replayed or remained active")
