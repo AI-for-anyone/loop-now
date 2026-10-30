@@ -148,7 +148,7 @@ export function ContextCard({ report }: { report: Report }) {
       {agents.length ? (
         <ul className="flex flex-col gap-2">
           {agents.map((agent) => (
-            <li key={agent.agentId} className="grid grid-cols-[minmax(48px,72px)_minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-0.5 sm:grid-cols-[minmax(48px,72px)_minmax(0,1fr)_54px_118px]">
+            <li key={agent.agentId} className="grid grid-cols-[minmax(48px,120px)_minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-0.5 sm:grid-cols-[minmax(48px,120px)_minmax(0,1fr)_54px_118px]">
               <span className="truncate font-bold">{agent.name}</span>
               <Bar value={agent.avgInputPerCall} max={max} color={COLOR.blue} />
               <span className="text-right font-bold tabular-nums">{text.wan(agent.avgInputPerCall)}</span>
