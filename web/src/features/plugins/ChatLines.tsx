@@ -1,8 +1,9 @@
 import { PlugIcon, TerminalIcon } from 'lucide-react'
 import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
-import { pluginChatText as text } from '@/i18n/plugins'
 import { cn } from '@/lib/utils'
+
+const text = t.plugins.chat
 
 // 对话框里的 / 命令被插件认领：一行淡色说明（命令、哪个插件、时间），下面是插件的回复。不是发出的消息。
 export function CommandLine({ command, result, at }: { command: string; result: Schemas['ConsoleCommandResult']; at: string }) {

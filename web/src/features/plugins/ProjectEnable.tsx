@@ -5,11 +5,10 @@ import { useProjects } from '@/api/queries'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Switch } from '@/components/ui/switch'
 import { t } from '@/i18n'
-import { pluginText } from '@/i18n/plugins'
 import { describeValue, fieldsOf } from './schema-form'
 import { Quiet } from './parts'
 
-const text = pluginText.detail
+const text = t.plugins.detail
 const projectPluginsPath = (project: Schemas['Project']) => `/p/${encodeURIComponent(project.name)}/plugins`
 
 // 一个项目一行：项目名、覆盖了几项，右边是启用开关。开关保存时带上项目现有的项目级配置与版本，配置本身不变。
@@ -28,7 +27,7 @@ function EnableRow({ project, pluginId, schema }: { project: Schemas['Project'];
         {overrides > 0 && <span className="shrink-0 text-[12.5px] text-ink-700">{text.overrides(overrides)}</span>}
         <Switch
           className="ml-auto"
-          aria-label={pluginText.project.enableIn(project.name, item?.displayName ?? pluginId)}
+          aria-label={t.plugins.project.enableIn(project.name, item?.displayName ?? pluginId)}
           checked={item?.enabled ?? false}
           disabled={!item || save.isPending}
           onCheckedChange={(enabled) => item && save.mutate({ enabled, values: item.config.values, expectedRevision: item.config.revision })}

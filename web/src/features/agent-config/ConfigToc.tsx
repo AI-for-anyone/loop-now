@@ -1,4 +1,3 @@
-import { pluginText } from '@/i18n/plugins'
 import { useEffect, useId, useState } from 'react'
 import { useLocation } from 'react-router'
 import { t } from '@/i18n'
@@ -11,7 +10,7 @@ const titles: Record<SectionKey, string> = {
   'model-credential': t.config.modelCredential.title,
   skills: t.config.skills.title,
   clis: t.config.clis.title,
-  plugins: pluginText.agentTitle,
+  plugins: t.plugins.agentTitle,
   danger: t.config.danger.title,
 }
 

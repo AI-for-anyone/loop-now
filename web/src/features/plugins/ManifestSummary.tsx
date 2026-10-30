@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react'
 import type { Schemas } from '@/api/client'
-import { pluginText } from '@/i18n/plugins'
+import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { fieldsOf } from './schema-form'
 
 type Manifest = Schemas['PluginManifest']
-const text = pluginText.confirm
+const text = t.plugins.confirm
 
 export function Chips({ items, className }: { items: string[]; className?: string }) {
   if (!items.length) return null
@@ -72,14 +72,14 @@ export function ManifestSummary({ manifest, columns = true }: { manifest: Manife
       <div className="grid min-w-0 content-start gap-4">
         <Group title={text.events}>
           {manifest.events.length ? (
-            manifest.events.map((event) => <Row key={event} name={event} hint={pluginText.eventHints[event as keyof typeof pluginText.eventHints]} />)
+            manifest.events.map((event) => <Row key={event} name={event} hint={t.plugins.eventHints[event as keyof typeof t.plugins.eventHints]} />)
           ) : (
             <Row name={text.none} hint={text.noEvents} />
           )}
         </Group>
         <Group title={text.permissions}>
           {manifest.permissions.length ? (
-            manifest.permissions.map((permission) => <Row key={permission} name={permission} hint={pluginText.permissionHints[permission]} />)
+            manifest.permissions.map((permission) => <Row key={permission} name={permission} hint={t.plugins.permissionHints[permission]} />)
           ) : (
             <Row name={text.none} hint={text.noPermissions} />
           )}

@@ -1,4 +1,3 @@
-import { pluginText } from '@/i18n/plugins'
 import { credentialText } from '@/i18n/credential-text'
 import { useId, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
@@ -81,7 +80,7 @@ export function ProjectSettingsPage() {
         <NameCard key={`name-${project.id}`} project={project} />
         <Card title={t.prompts.projectTitle}><ProjectPromptForm projectId={project.id} /></Card>
         <ContextFolderSection key={`folder-${project.id}`} scope={{ kind: 'project', projectId: project.id }} />
-        <Card title={pluginText.project.settingsCard}><p>{pluginText.project.settingsCardBody}</p><Link className="font-bold text-riso-blue underline" to={`/p/${encodeURIComponent(project.name)}/plugins`}>{pluginText.project.settingsLink}</Link></Card>
+        <Card title={t.plugins.project.settingsCard}><p>{t.plugins.project.settingsCardBody}</p><Link className="font-bold text-riso-blue underline" to={`/p/${encodeURIComponent(project.name)}/plugins`}>{t.plugins.project.settingsLink}</Link></Card>
         <ManagerCard key={`manager-${project.id}`} project={project} scope={scope} />
         <ProjectCredentialSettings key={`accounts-${project.id}`} projectId={project.id} />
         {project.isDefault ? (

@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react'
 import type { Schemas } from '@/api/client'
-import { pluginText as text } from '@/i18n/plugins'
+import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 // 插件页面共用的小部件：来源标签、id 与版本、状态、卡片外框。
+
+const text = t.plugins
 
 export const cardClass = 'rounded-panel border-2 border-ink bg-white'
 

@@ -1,5 +1,5 @@
 import type { Schemas } from '@/api/client'
-import { pluginText } from '@/i18n/plugins'
+import { t } from '@/i18n'
 
 type Manifest = Schemas['PluginManifest']
 
@@ -11,7 +11,7 @@ export const hasAgentHalf = (manifest: Manifest) => {
 
 // 卡片上的一行小标签：两半各有什么、订阅几个事件、要几项权限。
 export function componentChips(manifest: Manifest): string[] {
-  const c = manifest.components, chips = pluginText.chips
+  const c = manifest.components, chips = t.plugins.chips
   return [
     c.platform ? chips.platform : null,
     hasAgentHalf(manifest) ? chips.agent : null,

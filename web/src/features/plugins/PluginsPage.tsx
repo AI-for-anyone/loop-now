@@ -7,7 +7,6 @@ import { SectionError } from '@/components/RequestError'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { t } from '@/i18n'
-import { pluginText as text } from '@/i18n/plugins'
 import { pageTitleClass } from '@/lib/page-title'
 import { cn } from '@/lib/utils'
 import { InstallSourceDialog } from './InstallFlow'
@@ -17,6 +16,8 @@ import { componentChips, hasAgentHalf } from './manifest'
 import { cardClass, IdVersion, Quiet, SourceBadge, StatusLabel } from './parts'
 import { pluginPath } from './paths'
 import { usePluginInstaller } from './usePluginInstaller'
+
+const text = t.plugins
 
 const hostDot: Record<Schemas['PluginHostStatus']['state'], string> = {
   running: 'bg-[var(--status-done)]',
