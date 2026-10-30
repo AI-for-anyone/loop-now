@@ -119,19 +119,20 @@ func TestCLIImportUnknownPendingDeadlineReconciliation(t *testing.T) {
 	e := newImportEnv(t)
 	ctx := context.Background()
 	s := e.service(t, Options{}, nil)
-	deadline := time.Now().Add(100 * time.Millisecond)
+	// The deadline is far away so the early expiry and the GETs below cannot
+	// race it; the test then moves the DB deadline to now and expires the
+	// reconciliation context itself.
 	h := sha256.Sum256([]byte("pending-outcome"))
 	candidate := uuid.New()
 	id := uuid.New()
-	in := store.CLIImportBegin{ID: id, ProjectID: e.project, ScanID: uuid.New(), InstanceID: s.o.InstanceID, RequestFingerprint: h[:], ExpectedRevision: 1, ProvenanceKeyID: s.o.Hasher.KeyID(), Deadline: deadline, Items: []store.CLIImportItem{{CandidateID: candidate, CLI: "gh", Label: "合成未决"}}}
+	in := store.CLIImportBegin{ID: id, ProjectID: e.project, ScanID: uuid.New(), InstanceID: s.o.InstanceID, RequestFingerprint: h[:], ExpectedRevision: 1, ProvenanceKeyID: s.o.Hasher.KeyID(), Deadline: time.Now().Add(time.Hour), Items: []store.CLIImportItem{{CandidateID: candidate, CLI: "gh", Label: "合成未决"}}}
 	if _, _, err := e.st.BeginCLIImport(ctx, in); err != nil {
 		t.Fatal(err)
 	}
 	if early, err := e.st.ExpireCLIImport(ctx, e.project, id); err != nil || early.Status != "pending" {
 		t.Fatal("expiry CAS ignored DB deadline", err)
 	}
-	work, cancel := context.WithDeadline(ctx, deadline)
-	defer cancel()
+	work := expireOnSignal{Context: ctx, due: make(chan struct{})}
 	done := make(chan Operation, 1)
 	go func() {
 		op, err := s.resolveUnknown(work, e.project, id)
@@ -146,16 +147,38 @@ func TestCLIImportUnknownPendingDeadlineReconciliation(t *testing.T) {
 			t.Fatal("GET changed pending outcome", err)
 		}
 	}
+	if _, err := e.st.Pool.Exec(ctx, `UPDATE cli_credential_import_operations SET deadline_at=clock_timestamp() WHERE id=$1`, id); err != nil {
+		t.Fatal(err)
+	}
+	close(work.due)
 	select {
 	case op := <-done:
 		if op.Status != "expired" || *op.ErrorCode != "timeout" {
 			t.Fatal("pending unknown did not expire")
 		}
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("unknown reconciliation hung")
 	}
 	if e.extracts.Load() != 0 || e.prepared.Load() != 0 {
 		t.Fatal("unknown reconciliation replayed source work")
+	}
+}
+
+// expireOnSignal reports context.DeadlineExceeded once due is closed, so a
+// test decides when the operation's deadline arrives.
+type expireOnSignal struct {
+	context.Context
+	due chan struct{}
+}
+
+func (c expireOnSignal) Done() <-chan struct{} { return c.due }
+
+func (c expireOnSignal) Err() error {
+	select {
+	case <-c.due:
+		return context.DeadlineExceeded
+	default:
+		return nil
 	}
 }
 
