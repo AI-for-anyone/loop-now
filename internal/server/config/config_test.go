@@ -81,6 +81,9 @@ func TestLoadDefaults(t *testing.T) {
 	if c.PluginMarketURL != "https://raw.githubusercontent.com/AI-for-anyone/loop-now-market/main/loop-now-market.json" {
 		t.Errorf("官方插件市场默认地址不对：%q", c.PluginMarketURL)
 	}
+	if c.DefaultOrgName != "default" || c.DefaultProjectName != "default" {
+		t.Errorf("全新安装的默认组织与项目名：%q %q", c.DefaultOrgName, c.DefaultProjectName)
+	}
 }
 
 func TestLogConfig(t *testing.T) {
