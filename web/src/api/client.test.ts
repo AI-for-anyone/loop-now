@@ -2,7 +2,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { apiUrl, errorBody } from '@/test/api'
 import { server } from '@/test/server'
-import { api, ApiError, call, rawBody } from './client'
+import { api, ApiError, call, rawBody, reachability } from './client'
 
 describe('call', () => {
   it('成功时返回数据', async () => {
@@ -63,6 +63,46 @@ describe('call', () => {
     )
     await expect(call(api.GET('/usage'))).rejects.toMatchObject({ status: 500, code: 'internal_error', requestId })
     await expect(call(api.GET('/skills'))).rejects.toMatchObject({ requestId: null })
+  })
+})
+
+describe('reachability', () => {
+  // 一个请求的响应由测试决定何时返回：fail 为 true 时按网络错误结束。
+  function heldHandler(path: string) {
+    let release: (fail: boolean) => void = () => {}
+    const held = new Promise<boolean>((resolve) => (release = resolve))
+    server.use(http.get(apiUrl(path), async () => ((await held) ? HttpResponse.error() : HttpResponse.json({ skills: [], projects: [] }))))
+    return (fail: boolean) => release(fail)
+  }
+
+  it('请求没有到达服务端时为不可达，之后任一请求收到响应即恢复', async () => {
+    server.use(http.get(apiUrl('/skills'), () => HttpResponse.error()), http.get(apiUrl('/projects'), () => HttpResponse.json({ projects: [] })))
+    await api.GET('/skills').catch(() => {})
+    expect(reachability.isReachable()).toBe(false)
+    await api.GET('/projects')
+    expect(reachability.isReachable()).toBe(true)
+  })
+
+  it('断连时发出的请求在恢复后才失败：已过时，不再变回不可达', async () => {
+    const releaseOld = heldHandler('/skills')
+    const old = api.GET('/skills').catch(() => {})
+    server.use(http.get(apiUrl('/projects'), () => HttpResponse.json({ projects: [] })))
+    await api.GET('/projects')
+    expect(reachability.isReachable()).toBe(true)
+    releaseOld(true)
+    await old
+    expect(reachability.isReachable()).toBe(true)
+  })
+
+  it('较早发出的请求在较新的失败之后才成功：同样过时，仍为不可达', async () => {
+    const releaseOld = heldHandler('/skills')
+    const old = api.GET('/skills')
+    server.use(http.get(apiUrl('/projects'), () => HttpResponse.error()))
+    await api.GET('/projects').catch(() => {})
+    expect(reachability.isReachable()).toBe(false)
+    releaseOld(false)
+    await old
+    expect(reachability.isReachable()).toBe(false)
   })
 })
 
