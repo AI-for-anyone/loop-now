@@ -7,13 +7,23 @@ export type ErrorCode = Schemas['ErrorCode']
 
 // 服务端是否可达：最近一次请求收到任何 HTTP 响应即为可达，请求没有到达服务端时为不可达。
 // 全局连接提示订阅这里，覆盖查询、修改以及不进入查询缓存的凭证提交。
+// “最近一次”按请求开始的先后：比已有结果的请求更早开始的请求，结束得再晚也已过时，不再改变可达性
+// （例如断连时发出、恢复后才失败的请求，不能把已经消失的连接提示带回来）。
 let reachable = true
+let started = 0
+let settled = 0
 const reachabilityListeners = new Set<() => void>()
 
 function setReachable(next: boolean) {
   if (reachable === next) return
   reachable = next
   reachabilityListeners.forEach((listener) => listener())
+}
+
+function settle(request: number, next: boolean) {
+  if (request < settled) return
+  settled = request
+  setReachable(next)
 }
 
 export const reachability = {
@@ -24,8 +34,11 @@ export const reachability = {
       reachabilityListeners.delete(listener)
     }
   },
-  // 只供测试在用例之间复位。
-  reset: () => setReachable(true),
+  // 只供测试在用例之间复位：之前的用例里还没结束的请求一律视为过时。
+  reset: () => {
+    settled = started
+    setReachable(true)
+  },
 }
 
 // 服务端版本：取自最近一次响应的 Loop-Now-Version 头（跨域时服务端经 Access-Control-Expose-Headers 暴露），全局设置中显示。
@@ -58,14 +71,15 @@ export const api = createClient<paths>({
   baseUrl: config.apiBase,
   // 每次请求时再取 globalThis.fetch，测试中替换的 fetch 才能生效。
   fetch: async (request) => {
+    const order = ++started
     try {
       const response = await globalThis.fetch(request)
-      setReachable(true)
+      settle(order, true)
       noteVersion(response)
       return response
     } catch (cause) {
       // 主动取消的请求不说明服务端是否可达。
-      if (!(cause instanceof DOMException && cause.name === 'AbortError')) setReachable(false)
+      if (!(cause instanceof DOMException && cause.name === 'AbortError')) settle(order, false)
       throw cause
     }
   },
