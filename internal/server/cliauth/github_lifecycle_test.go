@@ -96,28 +96,48 @@ func TestGitHubCommitDeadlineUsesFreshTerminalContext(t *testing.T) {
 	attempt := provider.Add("101", "alice", nil, "")
 	attempt.Release()
 	ctx := context.Background()
-	if _, err := f.st.Pool.Exec(ctx, `CREATE FUNCTION github_commit_delay() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0.4); RETURN NEW; END $$; CREATE TRIGGER github_commit_delay BEFORE INSERT ON project_credential_accounts FOR EACH ROW EXECUTE FUNCTION github_commit_delay()`); err != nil {
+	// 提交写账号时挡在测试持有的行锁上，提交的期限必然先到；序列不随回滚撤销，记下提交确实走到了这里。
+	// 被取消的提交事务要等取消请求送达才放开项目行锁，终态回写用新的期限等它，期限不能小到在繁忙的 CI 上跟取消请求抢时间。
+	if _, err := f.st.Pool.Exec(ctx, `CREATE TABLE github_commit_gate(id int); INSERT INTO github_commit_gate VALUES (1); CREATE SEQUENCE github_commit_reached;
+		CREATE FUNCTION github_commit_wait() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM nextval('github_commit_reached'); PERFORM 1 FROM github_commit_gate FOR UPDATE; RETURN NEW; END $$;
+		CREATE TRIGGER github_commit_wait BEFORE INSERT ON project_credential_accounts FOR EACH ROW EXECUTE FUNCTION github_commit_wait()`); err != nil {
 		t.Fatal(err)
 	}
-	s := NewService(f.st, nil, nil, ServiceOptions{LoginTimeout: 5 * time.Second, RecordTimeout: 100 * time.Millisecond}, nil)
+	gate, err := f.st.Pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gate.Rollback(ctx)
+	if _, err = gate.Exec(ctx, `SELECT 1 FROM github_commit_gate FOR UPDATE`); err != nil {
+		t.Fatal(err)
+	}
+	s := NewService(f.st, nil, nil, ServiceOptions{LoginTimeout: time.Minute, RecordTimeout: 2 * time.Second}, nil)
 	s.GitHub = provider.Client
 	t.Cleanup(func() { _ = s.Close(context.Background()) })
 	id := uuid.New()
-	if _, err := s.Start(ctx, f.project, cm.CLIAuthStart{OperationID: id, CLI: "gh", AuthType: "github_user"}); err != nil {
+	if _, err = s.Start(ctx, f.project, cm.CLIAuthStart{OperationID: id, CLI: "gh", AuthType: "github_user"}); err != nil {
 		t.Fatal(err)
 	}
-	for until := time.Now().Add(4 * time.Second); time.Now().Before(until); time.Sleep(10 * time.Millisecond) {
-		op, err := f.st.GetProjectCLIAuthOperation(ctx, f.project, id)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if op.Status == "failed" {
-			var accounts int
-			if err = f.st.Pool.QueryRow(ctx, `SELECT count(*) FROM project_credential_accounts`).Scan(&accounts); err != nil || accounts != 0 || op.CompletedAt == nil || op.UserCode != nil || op.AuthorizationURL != nil {
-				t.Fatal("failed commit retained partial data or interaction metadata", err)
-			}
-			return
+	s.mu.Lock()
+	w, running := s.workers[id]
+	s.mu.Unlock()
+	if running {
+		select {
+		case <-w.done:
+		case <-time.After(30 * time.Second):
+			t.Fatal("login worker did not finish")
 		}
 	}
-	t.Fatal("commit context expiry left operation pending")
+	var reached bool
+	if err = f.st.Pool.QueryRow(ctx, `SELECT is_called FROM github_commit_reached`).Scan(&reached); err != nil || !reached {
+		t.Fatal("login ended before the commit", err)
+	}
+	op, err := f.st.GetProjectCLIAuthOperation(ctx, f.project, id)
+	if err != nil || op.Status != "failed" {
+		t.Fatal("commit context expiry left operation pending", op.Status, err)
+	}
+	var accounts int
+	if err = f.st.Pool.QueryRow(ctx, `SELECT count(*) FROM project_credential_accounts`).Scan(&accounts); err != nil || accounts != 0 || op.CompletedAt == nil || op.UserCode != nil || op.AuthorizationURL != nil {
+		t.Fatal("failed commit retained partial data or interaction metadata", err)
+	}
 }
