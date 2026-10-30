@@ -19,7 +19,7 @@
 
 ![Loop Now 控制台：Agent 对话、图表渲染与紧凑输入框](docs/assets/console.png)
 
-<p align="center"><sub>真实控制台，使用演示数据。当前界面为简体中文。</sub></p>
+<p align="center"><sub>真实控制台，使用演示数据。界面支持中文和英文，按浏览器语言或在设置里切换。</sub></p>
 
 Loop Now 把多个 Agent 的工作放进一个浏览器工作台。每个 Agent 保留自己的工作目录和会话，Manager 可以通过任务流程协调不同角色。你可以随时查看对话、检查工具调用、发消息介入，并了解谁在执行、谁在等待。
 

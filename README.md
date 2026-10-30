@@ -19,7 +19,7 @@
 
 ![Loop Now console: an agent conversation with rendered diagrams and a compact message composer](docs/assets/console.png)
 
-<p align="center"><sub>Actual console with demonstration data. The interface currently uses Simplified Chinese.</sub></p>
+<p align="center"><sub>Actual console with demonstration data. The interface supports English and Chinese; it follows your browser language, or switch in Global settings.</sub></p>
 
 Loop Now brings your agents into one browser workspace. An agent keeps its own working directory and conversation; a Manager can coordinate specialists through a task workflow. You can follow the conversation, inspect tool calls, send a message, and see who is working or waiting.
 
