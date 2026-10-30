@@ -4,10 +4,12 @@ import { ApiError, type Schemas } from '@/api/client'
 import { cancelVerification, mergeVerification, startVerification, useVerificationOperation, useVerificationState, verificationActive, verificationKeys, verificationUnsupported, type Verification } from '@/api/cli-verification'
 import { keys } from '@/api/queries'
 import { credentialKeys } from '@/api/project-credentials'
-import { verificationText as copy } from '@/i18n/cli-verification'
+import { t } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { useProjectCredentialsAvailable } from './project-availability'
+
+const copy = t.credentials.verification
 
 const builtin = new Set(['gh', 'lark-cli', 'gcloud', 'psql', 'mysql'])
 export function CLIConnectionVerification({ account }: { account: Schemas['ProjectCredentialAccount'] }) {

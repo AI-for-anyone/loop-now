@@ -5,12 +5,14 @@ import { ApiError, type Schemas } from '@/api/client'
 import { acceptCLIAuthState, cancelCLIAuth, cliAuthActive, cliAuthKeys, useCLIAuthOperation, startCLIAuth, useProjectCLIAuth } from '@/api/cli-auth'
 import { invalidateProjectCredentials } from '@/api/project-credentials'
 import { backendSignals } from '@/api/backend-signals'
-import { githubLoginText as copy } from '@/i18n/github-login'
+import { t } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { useProjectCredentialsAvailable } from './project-availability'
 import { nonzeroUUID } from './import-selection'
 import { githubLocatorKey } from './github-authorization'
+
+const copy = t.credentials.github
 
 type Start = Extract<Schemas['CLIAuthStart'], { cli: 'gh' }>
 export function GitHubLogin({ projectId, account }: { projectId: string; account?: Schemas['ProjectCredentialAccount'] }) {

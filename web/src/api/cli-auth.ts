@@ -1,7 +1,7 @@
 import { focusManager, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import type { Readable } from 'openapi-typescript-helpers'
 import { api, ApiError, call, type Schemas } from './client'
-import { githubLoginText } from '@/i18n/github-login'
+import { t } from '@/i18n'
 
 export type CLIAuthCLI = Schemas['CLIAuthOperation']['cli']
 export type GitHubOperation = Extract<Schemas['CLIAuthOperation'], { cli: 'gh' }>
@@ -54,7 +54,7 @@ function absorbOperation(client: QueryClient, next: Schemas['CLIAuthOperation'])
   return operation
 }
 export function acceptCLIAuthState(client: QueryClient, projectId: string, cli: CLIAuthCLI, id: string, next: Schemas['CLIAuthState']) {
-  if (next.operation.projectId !== projectId || next.operation.cli !== cli || next.operation.id !== id) throw new ApiError({ status: 502, code: 'unknown', serverMessage: githubLoginText.mismatch })
+  if (next.operation.projectId !== projectId || next.operation.cli !== cli || next.operation.id !== id) throw new ApiError({ status: 502, code: 'unknown', serverMessage: t.credentials.github.mismatch })
   const key = cliAuthKeys.operation(projectId, id, cli), previous = client.getQueryData<Schemas['CLIAuthState']>(key)
   const operation = absorbOperation(client, next.operation)
   const state = { ...next, operation, account: operation !== next.operation ? previous?.account ?? null : next.account }
@@ -81,7 +81,7 @@ export function useProjectCLIAuth(projectId: string, enabled: boolean, cli: CLIA
     queryFn: async ({ signal }) => {
       const data = await call(api.GET('/projects/{projectId}/cli-auth/operations', { params: { path: { projectId }, ...(cli !== 'gcloud' ? { query: { cli } } : {}) }, signal, cache: 'no-store' }))
       const operations = data.operations.map(operationResponse).map(operation => {
-        if (operation.projectId !== projectId || operation.cli !== cli) throw new ApiError({ status: 502, code: 'unknown', serverMessage: githubLoginText.mismatch })
+        if (operation.projectId !== projectId || operation.cli !== cli) throw new ApiError({ status: 502, code: 'unknown', serverMessage: t.credentials.github.mismatch })
         return absorbOperation(client, operation)
       }).filter(cliAuthActive)
       return { operations }

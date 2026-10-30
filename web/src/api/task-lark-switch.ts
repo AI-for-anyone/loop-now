@@ -1,7 +1,9 @@
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import type { Readable } from 'openapi-typescript-helpers'
 import { api, ApiError, call, type Schemas } from './client'
-import { larkText as copy } from '@/i18n/lark'
+import { t } from '@/i18n'
+
+const copy = t.credentials.lark
 
 type Receipt = Schemas['TaskLarkSwitchReceipt']
 type Input = Schemas['TaskLarkSwitchInput']

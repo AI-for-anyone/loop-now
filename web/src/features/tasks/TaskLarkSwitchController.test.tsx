@@ -11,8 +11,10 @@ import { taskId } from '@/test/tasks'
 import { larkUserAccount } from '@/test/lark-login'
 import { larkSwitchInput, larkSwitchReceipt, larkSwitchDetail as detail } from '@/test/lark-switch'
 import { taskLarkSwitchLocatorKey } from '@/lib/useOriginalActionLocator'
-import { larkText as copy } from '@/i18n/lark'
+import { t } from '@/i18n'
 import { TaskLarkSwitchController } from './TaskLarkSwitchController'
+
+const copy = t.credentials.lark
 
 const endpoint = apiUrl(`/tasks/${taskId}/lark-account-switches`), account = larkUserAccount()
 function setup() {

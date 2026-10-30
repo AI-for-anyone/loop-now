@@ -1,5 +1,5 @@
 import type { Schemas } from '@/api/client'
-import { importText } from '@/i18n/cli-import'
+import { t } from '@/i18n'
 
 type Candidate = Schemas['CLIImportCandidate']
 export type SupplementDraft = Pick<Schemas['CLIImportSupplement'], 'database' | 'sslMode' | 'caCert'>
@@ -18,21 +18,21 @@ export function publicCertificatePEM(value: string) {
   return count > 0
 }
 export function supplementProblem(candidate: Candidate, draft: SupplementDraft): string | null {
-  if (candidate.status !== 'may_import' && candidate.status !== 'needs_fields') return importText.candidate[candidate.status]
+  if (candidate.status !== 'may_import' && candidate.status !== 'needs_fields') return t.credentials.cliImport.candidate[candidate.status]
   const allowed = candidate.supplementableFields
-  if (candidate.missingFields.some(field => !allowed.includes(field as typeof allowed[number]))) return importText.missingSecret
+  if (candidate.missingFields.some(field => !allowed.includes(field as typeof allowed[number]))) return t.credentials.cliImport.missingSecret
   for (const key of publicFields) {
-    if (draft[key] && !allowed.includes(key)) return importText.errors.supplement_override
-    if (candidate.missingFields.includes(key) && !draft[key]?.trim()) return importText.required
+    if (draft[key] && !allowed.includes(key)) return t.credentials.cliImport.errors.supplement_override
+    if (candidate.missingFields.includes(key) && !draft[key]?.trim()) return t.credentials.cliImport.required
   }
-  if (draft.database && draft.database.length > 1024) return importText.required
+  if (draft.database && draft.database.length > 1024) return t.credentials.cliImport.required
   if (draft.sslMode) {
     const modes = candidate.cli === 'mysql' ? ['DISABLED', 'REQUIRED', 'VERIFY_CA', 'VERIFY_IDENTITY'] : candidate.cli === 'psql' ? ['disable', 'require', 'verify-ca', 'verify-full'] : []
-    if (!modes.includes(draft.sslMode)) return importText.invalidTLS
+    if (!modes.includes(draft.sslMode)) return t.credentials.cliImport.invalidTLS
   }
-  if (draft.caCert && (draft.caCert.length > 65536 || !publicCertificatePEM(draft.caCert))) return importText.invalidCA
-  if (draft.sslMode && ['VERIFY_CA', 'VERIFY_IDENTITY', 'verify-ca', 'verify-full'].includes(draft.sslMode) && allowed.includes('caCert') && !draft.caCert?.trim()) return importText.verifyCA
-  if (draft.caCert && ['DISABLED', 'disable'].includes(draft.sslMode ?? '')) return importText.invalidTLS
+  if (draft.caCert && (draft.caCert.length > 65536 || !publicCertificatePEM(draft.caCert))) return t.credentials.cliImport.invalidCA
+  if (draft.sslMode && ['VERIFY_CA', 'VERIFY_IDENTITY', 'verify-ca', 'verify-full'].includes(draft.sslMode) && allowed.includes('caCert') && !draft.caCert?.trim()) return t.credentials.cliImport.verifyCA
+  if (draft.caCert && ['DISABLED', 'disable'].includes(draft.sslMode ?? '')) return t.credentials.cliImport.invalidTLS
   return null
 }
 export function selectedSupplements(candidates: Candidate[], selected: string[], drafts: Record<string, SupplementDraft>): Schemas['CLIImportSupplement'][] {

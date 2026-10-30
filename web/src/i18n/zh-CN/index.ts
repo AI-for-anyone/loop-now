@@ -4,6 +4,7 @@ import { app, connection } from './app'
 import { chat } from './chat'
 import { common } from './common'
 import { config } from './config'
+import { credentials } from './credentials'
 import { errors } from './errors'
 import { folders } from './folders'
 import { identities } from './identities'
@@ -40,4 +41,5 @@ export const zhCN = {
   overview,
   timeline,
   plugins,
+  credentials,
 } as const

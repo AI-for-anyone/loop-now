@@ -12,7 +12,9 @@ import { renderRoutes, createTestQueryClient } from '@/test/render'
 import { server } from '@/test/server'
 import { GitHubLogin } from './GitHubLogin'
 import { githubLocatorKey } from './github-authorization'
-import { githubLoginText as copy } from '@/i18n/github-login'
+import { t } from '@/i18n'
+
+const copy = t.credentials.github
 
 function renderLogin(account?: Schemas['ProjectCredentialAccount'], operationId?: string) {
   const key = githubLocatorKey(defaultProject.id, account?.id)

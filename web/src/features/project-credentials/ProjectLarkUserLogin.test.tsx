@@ -10,9 +10,11 @@ import { apiUrl, defaultProject } from '@/test/api'
 import { larkApplicationAccount, larkOperation, larkOperationId, larkUserAccount } from '@/test/lark-login'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
-import { larkText as copy } from '@/i18n/lark'
+import { t } from '@/i18n'
 import { larkLoginLocatorKey } from '@/lib/useOriginalActionLocator'
 import { ProjectLarkUserLogin } from './ProjectLarkUserLogin'
+
+const copy = t.credentials.lark
 
 const source = larkApplicationAccount(), key = larkLoginLocatorKey(defaultProject.id)
 function defaults() {
