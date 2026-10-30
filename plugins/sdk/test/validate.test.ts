@@ -78,6 +78,45 @@ describe('validatePlugin', () => {
     ])
   })
 
+  it('description 与 loopNow.displayName 可以是字符串或按语言的对象；对象须至少一项、键为语言标签、值非空', () => {
+    const name = { 'zh-CN': '示例', 'en-US': 'Example' }
+    const description = { 'zh-CN': '一个示例插件', en: 'An example plugin', 'zh-Hant-TW': '一個範例外掛' }
+    const ok = validatePlugin(plugin('i18n-ok', { name: 'i18n-ok', version: '1.0.0', description, keywords: ['loop-now-plugin'], loopNow: { id: 'i18n-ok', displayName: name, mcpServers: { s: { command: 'node' } } } }, { 'README.md': '' }))
+    assert.deepEqual(ok.findings, [])
+    assert.deepEqual(ok.manifest!.displayName, name)
+    assert.deepEqual(ok.manifest!.description, description)
+
+    const bad: [string, unknown][] = [
+      ['empty', {}],
+      ['bad_key', { zh_CN: '示例' }],
+      ['long_key', { 'en-US-abcdefghi': 'x' }],
+      ['blank_value', { 'zh-CN': '  ' }],
+      ['number_value', { 'zh-CN': 1 }],
+      ['number', 42],
+      ['array', ['示例']],
+      ['null', null],
+      ['boolean', true],
+    ]
+    for (const [label, value] of bad) {
+      const r = validatePlugin(plugin(`i18n-${label}`, { name: 'x', version: '1.0.0', description: value, keywords: ['loop-now-plugin'], loopNow: { id: 'x', displayName: value, mcpServers: { s: { command: 'node' } } } }, { 'README.md': '' }))
+      assert.equal(r.ok, false, label)
+      assert.deepEqual(
+        r.findings.filter((f) => f.level === 'error').map((f) => [f.path, f.message]),
+        [
+          ['description', 'description 须是字符串，或以语言标签（如 zh-CN、en-US）为键、非空字符串为值的对象，至少一项'],
+          ['loopNow.displayName', 'loopNow.displayName 须是字符串，或以语言标签（如 zh-CN、en-US）为键、非空字符串为值的对象，至少一项'],
+        ],
+        label,
+      )
+    }
+
+    // 字符串照旧：空或缺省只提醒，displayName 回落到 npm 名。
+    const plain = validatePlugin(plugin('i18n-plain', { name: 'plain-name', version: '1.0.0', description: '', keywords: ['loop-now-plugin'], loopNow: { id: 'plain', displayName: '', mcpServers: { s: { command: 'node' } } } }, { 'README.md': '' }))
+    assert.equal(plain.ok, true)
+    assert.equal(plain.manifest!.displayName, 'plain-name')
+    assert.deepEqual(plain.findings.map((f) => f.path), ['description', 'loopNow.displayName'])
+  })
+
   it('不是插件的目录与坏 JSON', () => {
     assert.match(validatePlugin(plugin('plain', { name: 'x', version: '1.0.0' })).findings[0]!.message, /不是插件/)
     assert.match(validatePlugin(plugin('broken', '{')).findings[0]!.message, /不是合法的 JSON/)

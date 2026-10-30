@@ -71,6 +71,12 @@
 
 - `pi` 段是 Pi 的标准包清单（extensions、skills、prompts），语义以 Pi 文档 `packages.md` 为准。没有 `pi` 段也没有 `loopNow` 段的目录不是插件。
 - `loopNow.id` 是平台内唯一标识，小写字母、数字、连字符，安装后不可改；`name` 是 npm 名，两者无关。
+- `loopNow.displayName` 与顶层 `description` 可以是字符串，也可以是按语言的对象，如 `{ "zh-CN": "Webhook 通知", "en-US": "Webhook notifications" }`。
+  - 对象至少一项；键为语言标签，按 BCP 47 的写法，须匹配 `^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$`（如 zh-CN、en-US、en）；值去掉首尾空白后非空。不合格的对象，以及数字、数组、布尔、null，一律拒绝安装。
+  - 字符串没有指明语言，各语言都显示它。`displayName` 为空或缺省时回落到 npm 名，再回落到 `id`。
+  - 平台原样保存并原样返回，保留作者写的键顺序。
+  - 控制台按当前语言取，没有时依次用 zh-CN、en-US、作者写的第一项；服务端没有语言的地方（插件表的显示名、插件发件人名的兜底）依次用 zh-CN、en-US、第一项。
+  - 发布到 npm 的插件，npm 期望 `description` 是字符串；只从 git、本地目录或市场安装的插件不受影响。
 - `loopNow.platform` 缺省表示没有平台半边；`pi.extensions` 为空表示没有 Agent 半边。只带 skills 的也是合法插件。
 - **清单说了算**：平台半边在代码里订阅的事件、调用的平台接口范围，必须在 `events`、`permissions` 内，超出的订阅在加载时报错并让插件进入"错误"状态；超出范围的 API 调用返回 403 并记录到插件日志。
 - `configSchema` 由平台渲染成表单；`x-secret` 字段只写不回显；`x-scope: project` 字段在项目启用时可覆盖，其余为全局值。
@@ -157,7 +163,7 @@ export default function register(api: PluginAPI) {
 ## 6. 安装、启用、授权、信任
 
 - 来源：`loopctl plugin install <market-name>[@version] | <git url>[@ref] | <local dir>`；`plugin update <id>`、`plugin remove <id>`、`plugin list`、`plugin validate <dir>`、`plugin pack <dir>`。页面上同样三种来源。
-- 市场：一个 git 仓库，根目录 `loop-now-market.json`：`{ "name", "plugins": [{ "id", "source": "git:...@ref" | "npm:...", "version", "displayName", "description", "verified": true }] }`；`version` 是该条目当前版本，检查更新按它和已装版本比较。官方市场地址来自服务设置 `LOOP_NOW_PLUGIN_MARKET_URL`（官方市场建立前为空），全局设置里可加别的市场。
+- 市场：一个 git 仓库，根目录 `loop-now-market.json`：`{ "name", "plugins": [{ "id", "source": "git:...@ref" | "npm:...", "version", "displayName", "description", "verified": true }] }`；`version` 是该条目当前版本，检查更新按它和已装版本比较；`displayName`、`description` 可以按语言写，规则同 §2。官方市场地址来自服务设置 `LOOP_NOW_PLUGIN_MARKET_URL`（官方市场建立前为空），全局设置里可加别的市场。
 - 信任分级：官方市场和 `verified` 的直接装；其他来源在页面上要确认，CLI 要 `--force`。安装前展示：两半各有什么（扩展文件数、Skill、MCP 服务器、CLI、操作按钮、渠道）、订阅的事件、权限范围、配置项、账号种类。
 - 项目启用：在项目插件页启用并填写项目级配置；未启用的项目不产生事件给该插件，该项目的 Agent 不能被授权。
 - Agent 授权：在 Agent 配置页按插件勾选，并选择账号；授权后下次 Pi 启动生效（与上下文入口一致，不打断当前回合）。
