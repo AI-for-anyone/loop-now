@@ -23,8 +23,8 @@ type Manifest struct {
 	ID                 string        `json:"id"`
 	Name               string        `json:"name"`
 	Version            string        `json:"version"`
-	DisplayName        string        `json:"displayName"`
-	Description        string        `json:"description"`
+	DisplayName        Text          `json:"displayName"`
+	Description        Text          `json:"description"`
 	MinPlatformVersion *string       `json:"minPlatformVersion"`
 	Events             []string      `json:"events"`
 	Permissions        []string      `json:"permissions"`
@@ -99,8 +99,8 @@ type PublicManifest struct {
 	ID                 string        `json:"id"`
 	Name               string        `json:"name"`
 	Version            string        `json:"version"`
-	DisplayName        string        `json:"displayName"`
-	Description        string        `json:"description"`
+	DisplayName        Text          `json:"displayName"`
+	Description        Text          `json:"description"`
 	MinPlatformVersion *string       `json:"minPlatformVersion"`
 	Events             []string      `json:"events"`
 	Permissions        []string      `json:"permissions"`
@@ -164,14 +164,14 @@ func ValidID(id string) bool { return idPattern.MatchString(id) }
 type packageJSON struct {
 	Name        string `json:"name"`
 	Version     string `json:"version"`
-	Description string `json:"description"`
+	Description Text   `json:"description"`
 	Pi          *struct {
 		Extensions []string `json:"extensions"`
 		Skills     []string `json:"skills"`
 	} `json:"pi"`
 	LoopNow *struct {
 		ID                 string                     `json:"id"`
-		DisplayName        string                     `json:"displayName"`
+		DisplayName        Text                       `json:"displayName"`
 		MinPlatformVersion *string                    `json:"minPlatformVersion"`
 		Platform           string                     `json:"platform"`
 		Events             []string                   `json:"events"`
@@ -243,10 +243,16 @@ func ReadManifest(dir, platformVersion string) (Manifest, error) {
 	if !idPattern.MatchString(m.ID) {
 		return Manifest{}, invalid("loopNow.id 必须是 1 到 64 个小写字母、数字或连字符，不以连字符开头或结尾")
 	}
-	if m.DisplayName == "" {
-		m.DisplayName = m.Name
-		if m.DisplayName == "" {
-			m.DisplayName = m.ID
+	if err := m.Description.Check("description"); err != nil {
+		return Manifest{}, err
+	}
+	if err := m.DisplayName.Check("loopNow.displayName"); err != nil {
+		return Manifest{}, err
+	}
+	if m.DisplayName.String() == "" {
+		m.DisplayName = PlainText(m.Name)
+		if m.Name == "" {
+			m.DisplayName = PlainText(m.ID)
 		}
 	}
 	if err := m.validate(dir, platformVersion); err != nil {

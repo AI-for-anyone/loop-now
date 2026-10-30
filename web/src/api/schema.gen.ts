@@ -6568,14 +6568,18 @@ export interface components {
                 cron: string;
             }[];
         };
+        /** @description 插件清单与市场条目里可以按语言给出的文字（displayName、description）：字符串，或以语言标签（如 `zh-CN`、`en-US`）为键、 去掉首尾空白后非空的字符串为值的对象，至少一项。服务端原样返回（对象保留作者写的键顺序），不按语言翻译； 控制台按当前语言 → zh-CN → en-US → 第一项取字。缺省时为空字符串。 */
+        LocalizedText: string | {
+            [key: string]: string;
+        };
         /** @description 从插件 `package.json` 读出的清单（pi 段与 loopNow 段），已按规则校验。 */
         PluginManifest: {
             id: string;
             /** @description npm 包名 */
             name: string;
             version: string;
-            displayName: string;
-            description: string;
+            displayName: components["schemas"]["LocalizedText"];
+            description: components["schemas"]["LocalizedText"];
             minPlatformVersion: string | null;
             /** @description 订阅的事件 */
             events: string[];
@@ -6617,8 +6621,8 @@ export interface components {
         };
         Plugin: {
             id: string;
-            displayName: string;
-            description: string;
+            displayName: components["schemas"]["LocalizedText"];
+            description: components["schemas"]["LocalizedText"];
             version: string;
             source: components["schemas"]["PluginResolvedSource"];
             status: components["schemas"]["PluginStatus"];
@@ -6787,8 +6791,8 @@ export interface components {
         };
         PluginMarketEntry: {
             id: string;
-            displayName: string;
-            description: string;
+            displayName: components["schemas"]["LocalizedText"];
+            description: components["schemas"]["LocalizedText"];
             /** @description 条目的来源写法：git:<地址>[@ref] 或 npm:<包规格> */
             source: string;
             version: string | null;
@@ -6810,8 +6814,8 @@ export interface components {
         };
         BuiltinPluginSource: {
             id: string;
-            displayName: string;
-            description: string;
+            displayName: components["schemas"]["LocalizedText"];
+            description: components["schemas"]["LocalizedText"];
             version: string;
         };
         BuiltinPluginSourceList: {
@@ -6825,7 +6829,7 @@ export interface components {
         };
         ProjectPlugin: {
             pluginId: string;
-            displayName: string;
+            displayName: components["schemas"]["LocalizedText"];
             version: string;
             status: components["schemas"]["PluginStatus"];
             enabled: boolean;
@@ -6881,7 +6885,7 @@ export interface components {
         };
         AgentPlugin: {
             pluginId: string;
-            displayName: string;
+            displayName: components["schemas"]["LocalizedText"];
             /** @description 可授权：平台 Agent 总是可以，项目 Agent 要项目已启用 */
             available: boolean;
             granted: boolean;

@@ -18228,6 +18228,18 @@ components:
               id: { type: string }
               cron: { type: string }
 
+    LocalizedText:
+      description: >-
+        插件清单与市场条目里可以按语言给出的文字（displayName、description）：字符串，或以语言标签（如 `zh-CN`、`en-US`）为键、
+        去掉首尾空白后非空的字符串为值的对象，至少一项。服务端原样返回（对象保留作者写的键顺序），不按语言翻译；
+        控制台按当前语言 → zh-CN → en-US → 第一项取字。缺省时为空字符串。
+      oneOf:
+        - type: string
+        - type: object
+          minProperties: 1
+          propertyNames: { pattern: "^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$" }
+          additionalProperties: { type: string, pattern: "\\S" }
+
     PluginManifest:
       description: 从插件 `package.json` 读出的清单（pi 段与 loopNow 段），已按规则校验。
       type: object
@@ -18237,8 +18249,8 @@ components:
         id: { type: string, pattern: "^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$" }
         name: { description: "npm 包名", type: string }
         version: { type: string }
-        displayName: { type: string }
-        description: { type: string }
+        displayName: { $ref: "#/components/schemas/LocalizedText" }
+        description: { $ref: "#/components/schemas/LocalizedText" }
         minPlatformVersion: { type: [string, "null"] }
         events: { description: "订阅的事件", type: array, items: { type: string } }
         permissions: { type: array, items: { $ref: "#/components/schemas/PluginPermission" } }
@@ -18285,8 +18297,8 @@ components:
       additionalProperties: false
       properties:
         id: { type: string }
-        displayName: { type: string }
-        description: { type: string }
+        displayName: { $ref: "#/components/schemas/LocalizedText" }
+        description: { $ref: "#/components/schemas/LocalizedText" }
         version: { type: string }
         source: { $ref: "#/components/schemas/PluginResolvedSource" }
         status: { $ref: "#/components/schemas/PluginStatus" }
@@ -18486,8 +18498,8 @@ components:
       additionalProperties: false
       properties:
         id: { type: string }
-        displayName: { type: string }
-        description: { type: string }
+        displayName: { $ref: "#/components/schemas/LocalizedText" }
+        description: { $ref: "#/components/schemas/LocalizedText" }
         source: { description: "条目的来源写法：git:<地址>[@ref] 或 npm:<包规格>", type: string }
         version: { type: [string, "null"] }
         verified: { description: 市场标为已验证；官方市场与已验证的条目安装时不需确认, type: boolean }
@@ -18518,8 +18530,8 @@ components:
       additionalProperties: false
       properties:
         id: { type: string }
-        displayName: { type: string }
-        description: { type: string }
+        displayName: { $ref: "#/components/schemas/LocalizedText" }
+        description: { $ref: "#/components/schemas/LocalizedText" }
         version: { type: string }
 
     BuiltinPluginSourceList:
@@ -18543,7 +18555,7 @@ components:
       additionalProperties: false
       properties:
         pluginId: { type: string }
-        displayName: { type: string }
+        displayName: { $ref: "#/components/schemas/LocalizedText" }
         version: { type: string }
         status: { $ref: "#/components/schemas/PluginStatus" }
         enabled: { type: boolean }
@@ -18620,7 +18632,7 @@ components:
       additionalProperties: false
       properties:
         pluginId: { type: string }
-        displayName: { type: string }
+        displayName: { $ref: "#/components/schemas/LocalizedText" }
         available: { description: "可授权：平台 Agent 总是可以，项目 Agent 要项目已启用", type: boolean }
         granted: { type: boolean }
         accountIds: { type: array, items: { type: string, format: uuid } }

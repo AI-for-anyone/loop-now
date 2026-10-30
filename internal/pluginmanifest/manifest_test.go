@@ -85,8 +85,68 @@ func TestReadManifest(t *testing.T) {
 
 	pi := writePlugin(t, map[string]any{"name": "@scope/Pi_Tools.X", "version": "0.1.0", "pi": map[string]any{"skills": []any{"./skills"}}}, "skills/")
 	m, err = pluginmanifest.ReadManifest(pi, "2026.11")
-	if err != nil || m.ID != "pi-tools-x" || m.DisplayName != "@scope/Pi_Tools.X" || m.Platform != "" || len(m.Events) != 0 {
+	if err != nil || m.ID != "pi-tools-x" || m.DisplayName.String() != "@scope/Pi_Tools.X" || m.Platform != "" || len(m.Events) != 0 {
 		t.Fatalf("标准 Pi 包：%+v %v", m, err)
+	}
+}
+
+// displayName 与 description 可以是字符串，或以语言标签为键的对象：原样返回（对象保留键的顺序），
+// 服务端需要单个字符串时依次取 zh-CN、en-US、第一项；其余写法拒绝。
+func TestLocalizedText(t *testing.T) {
+	pkg := full()
+	pkg["description"] = map[string]any{"en-US": "POST on new inbox messages", "zh-CN": "收件箱有新消息时 POST"}
+	pkg["loopNow"].(map[string]any)["displayName"] = map[string]any{"en-US": "Webhook", "zh-CN": "Webhook 通知"}
+	dir := writePlugin(t, pkg, "agent/index.ts", "skills/", "platform/index.ts", "bin/")
+	m, err := pluginmanifest.ReadManifest(dir, "2026.11")
+	if err != nil || m.DisplayName.String() != "Webhook 通知" || m.Description.String() != "收件箱有新消息时 POST" {
+		t.Fatalf("对象形式：%v %v", m.DisplayName, err)
+	}
+	if b, _ := json.Marshal(m.Public()); !strings.Contains(string(b), `"displayName":{"en-US":"Webhook","zh-CN":"Webhook 通知"}`) || !strings.Contains(string(b), `"description":{"en-US":`) {
+		t.Fatalf("接口里原样返回：%s", b)
+	}
+	var stored pluginmanifest.Manifest
+	if b, _ := json.Marshal(m); json.Unmarshal(b, &stored) != nil || stored.DisplayName.String() != "Webhook 通知" {
+		t.Fatalf("保存后读回：%s", b)
+	}
+	for _, c := range []struct {
+		text any
+		want string
+	}{
+		{"Webhook", "Webhook"},
+		{map[string]any{"en-US": "Lark", "ja": "ラーク"}, "Lark"},
+		{json.RawMessage(`{"ja": "ラーク", "fr": "Lark"}`), "ラーク"},
+		{map[string]any{"zh-Hant-TW": "飛書"}, "飛書"},
+	} {
+		p := full()
+		p["loopNow"].(map[string]any)["displayName"] = c.text
+		m, err := pluginmanifest.ReadManifest(writePlugin(t, p, "agent/index.ts", "skills/", "platform/index.ts", "bin/"), "2026.11")
+		if err != nil || m.DisplayName.String() != c.want {
+			t.Fatalf("%v：%q %v", c.text, m.DisplayName.String(), err)
+		}
+	}
+	for _, bad := range []any{
+		map[string]any{}, map[string]any{"en-US": " "}, map[string]any{"en_US": "x"}, map[string]any{"english": "x"},
+		map[string]any{"en-US": 3}, []any{"x"}, 3, nil, true,
+	} {
+		for _, field := range []string{"displayName", "description"} {
+			p := full()
+			if field == "description" {
+				p["description"] = bad
+			} else {
+				p["loopNow"].(map[string]any)["displayName"] = bad
+			}
+			_, err := pluginmanifest.ReadManifest(writePlugin(t, p, "agent/index.ts", "skills/", "platform/index.ts", "bin/"), "2026.11")
+			if err == nil || !strings.Contains(err.Error(), field+" 须是字符串，或以语言标签") {
+				t.Fatalf("%s=%v 应拒绝：%v", field, bad, err)
+			}
+		}
+	}
+	p := full()
+	p["loopNow"].(map[string]any)["displayName"] = ""
+	delete(p, "description")
+	m, err = pluginmanifest.ReadManifest(writePlugin(t, p, "agent/index.ts", "skills/", "platform/index.ts", "bin/"), "2026.11")
+	if b, _ := json.Marshal(m.Public()); err != nil || m.DisplayName.String() != "@example/loop-now-webhook" || !strings.Contains(string(b), `"description":""`) {
+		t.Fatalf("空的显示名回落到 npm 名，缺省的描述为空字符串：%s %v", b, err)
 	}
 }
 
