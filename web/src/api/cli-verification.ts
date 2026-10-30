@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Readable } from 'openapi-typescript-helpers'
 import { api, ApiError, call, type Schemas } from './client'
-import { backendSignals } from '@/i18n/backend-signals'
+import { backendSignals } from './backend-signals'
 
 export type Verification = Schemas['CLIVerificationOperation']
 export const verificationKeys = {

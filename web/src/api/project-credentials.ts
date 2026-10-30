@@ -1,4 +1,4 @@
-import { backendSignals } from '@/i18n/backend-signals'
+import { backendSignals } from './backend-signals'
 import { focusManager, useQuery, type QueryClient } from '@tanstack/react-query'
 import type { Readable } from 'openapi-typescript-helpers'
 import { config } from '@/config'

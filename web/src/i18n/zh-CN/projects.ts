@@ -1,0 +1,102 @@
+export const projects = {
+  switcher: {
+    isDefault: '默认',
+    agentCount: (count: number) => `${count} 个 Agent`,
+  },
+  empty: {
+    projectNote: 'Agent 建在哪个项目，就一直属于哪个项目。',
+    platformTitle: '平台还没有 Agent。',
+    platformNote: '平台持有的 Agent 不属于任何项目。',
+  },
+  create: {
+    title: '新建项目',
+    name: '项目名称',
+    hint: '名称会出现在地址中，例如 /p/模型接入/agents。',
+    submit: '创建',
+    submitting: '创建中…',
+    nameRequired: '请填写项目名称',
+    nameConflict: '已有同名的项目，请换一个名称',
+  },
+  notFound: {
+    title: (name: string) => `找不到项目「${name}」`,
+    body: '它可能已改名或删除。可以在左上角的范围切换里找其他项目。',
+  },
+  deleted: {
+    stamp: '已删除',
+    title: (name: string) => `项目「${name}」已删除`,
+    body: '它在别处被删除，其中的 Agent 已从列表中隐藏。',
+  },
+  renamed: (from: string, to: string) => `项目「${from}」已在别处改名为「${to}」，地址已随之更新。`,
+  renamedDismiss: '知道了',
+  // 概览的范围筛选与所属标签（概览页本身的文案在 overview 分组，由 add-observability 维护）。
+  overview: {
+    range: '范围',
+    all: '全部',
+    projectGroup: '项目',
+    platform: '平台',
+    missingOption: (name: string) => `${name}（找不到）`,
+    notFoundTitle: (name: string) => `找不到项目「${name}」`,
+    notFoundBody: '它可能已改名或删除。',
+    backToAll: '回到全部',
+    emptyProject: {
+      title: (name: string) => `「${name}」中还没有 Agent。`,
+      body: '新建 Agent 后，这里只显示这个项目的运行状态、用量和异常。',
+      action: (name: string) => `进入「${name}」的 Agent 页`,
+    },
+    emptyPlatform: {
+      title: '平台还没有 Agent。',
+      body: '新建平台 Agent 后，这里只显示平台的运行状态、用量和异常。',
+      action: '进入平台的 Agent 页',
+    },
+    deletedProject: '已删除的项目',
+  },
+  toDefault: '进入默认项目',
+  settings: {
+    title: '项目设置',
+    name: {
+      title: '项目名称',
+      id: '项目 ID',
+      label: '项目名称',
+      hint: '改名后，项目内 Agent 的地址随之改变，旧地址失效。',
+      saved: '已保存',
+      movedTo: '地址已改为',
+    },
+    manager: {
+      title: 'Manager',
+      intro: '从本项目的 Agent 中选一个担任 Manager。一个项目最多一个，可以随时更换；Agent 正忙时也可以指定。',
+      none: '该项目还没有 Manager',
+      choose: '指定 Manager',
+      change: '更换 Manager',
+      placeholder: '选择 Agent',
+      filter: '按名称过滤 Agent',
+      noMatch: '没有匹配的 Agent',
+      clear: '取消 Manager',
+      assigned: (name: string) => `已指定「${name}」为 Manager`,
+      cleared: '已取消 Manager',
+      noAgents: '项目里还没有 Agent，需要先新建 Agent。',
+      createAgent: '去新建 Agent',
+    },
+    danger: {
+      title: '删除项目',
+      notes: [
+        '项目和其中的 Agent 从列表中隐藏，项目共享账号及凭证将被删除。',
+        '工作文件夹、会话与对话历史保留。',
+        '删除后，项目名称可以再用。',
+        '项目中的 Agent 都空闲且没有未结束任务时才能删除；sleep 任务也须结束。',
+      ],
+      action: '删除这个项目',
+      confirmTitle: (name: string) => `删除项目「${name}」？`,
+      confirmBody: (count: number) =>
+        count > 0
+          ? `将同时删除项目中的 ${count} 个 Agent、项目共享账号及凭证。工作文件夹、会话与对话历史保留；删除后，项目名称可以再用。`
+          : '项目中没有 Agent。项目共享账号及凭证将被删除；工作文件夹、会话与对话历史保留。删除后，项目名称可以再用。',
+      confirm: '删除项目',
+      notIdleTitle: '项目中有 Agent 不空闲，项目没有删除。',
+      notIdleBody: '等这些 Agent 的回复和排队消息处理完，再删除项目：',
+      busyList: '不空闲的 Agent',
+      openChat: '进入对话',
+      openChatOf: (name: string) => `进入「${name}」的对话`,
+      defaultNote: '默认项目不能删除，可以改名。',
+    },
+  },
+} as const
