@@ -7,6 +7,7 @@ import "loop-now/internal/pluginmanifest"
 // 清单的类型沿用 pluginmanifest。
 type (
 	Manifest       = pluginmanifest.Manifest
+	Text           = pluginmanifest.Text
 	PublicManifest = pluginmanifest.PublicManifest
 	AccountKind    = pluginmanifest.AccountKind
 	Action         = pluginmanifest.Action

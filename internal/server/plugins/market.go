@@ -27,8 +27,8 @@ type marketFile struct {
 type marketEntry struct {
 	ID          string  `json:"id"`
 	Source      string  `json:"source"`
-	DisplayName string  `json:"displayName"`
-	Description string  `json:"description"`
+	DisplayName Text    `json:"displayName"`
+	Description Text    `json:"description"`
 	Verified    bool    `json:"verified"`
 	Version     *string `json:"version"`
 }
@@ -36,8 +36,8 @@ type marketEntry struct {
 // MarketEntry 是接口里的 PluginMarketEntry。
 type MarketEntry struct {
 	ID               string  `json:"id"`
-	DisplayName      string  `json:"displayName"`
-	Description      string  `json:"description"`
+	DisplayName      Text    `json:"displayName"`
+	Description      Text    `json:"description"`
 	Source           string  `json:"source"`
 	Version          *string `json:"version"`
 	Verified         bool    `json:"verified"`
@@ -157,6 +157,11 @@ func (s *Service) fetchMarket(ctx context.Context, raw string) (marketFile, erro
 		}
 		if _, err := marketSource(e, ""); err != nil {
 			return file, fmt.Errorf("市场条目 %s：%s", e.ID, apperrMessage(err))
+		}
+		for _, err := range []error{e.DisplayName.Check("displayName"), e.Description.Check("description")} {
+			if err != nil {
+				return file, fmt.Errorf("市场条目 %s：%s", e.ID, err.Error())
+			}
 		}
 	}
 	return file, nil

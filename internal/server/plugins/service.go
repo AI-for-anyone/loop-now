@@ -80,8 +80,8 @@ func (s *Service) Init() error {
 // View 是接口里的 Plugin。
 type View struct {
 	ID              string         `json:"id"`
-	DisplayName     string         `json:"displayName"`
-	Description     string         `json:"description"`
+	DisplayName     Text           `json:"displayName"`
+	Description     Text           `json:"description"`
 	Version         string         `json:"version"`
 	Source          ResolvedSource `json:"source"`
 	Status          string         `json:"status"`
@@ -137,7 +137,7 @@ type ConfigInput struct {
 // ProjectView 是接口里的 ProjectPlugin。
 type ProjectView struct {
 	PluginID      string     `json:"pluginId"`
-	DisplayName   string     `json:"displayName"`
+	DisplayName   Text       `json:"displayName"`
 	Version       string     `json:"version"`
 	Status        string     `json:"status"`
 	Enabled       bool       `json:"enabled"`
@@ -160,7 +160,7 @@ type AccountView struct {
 // AgentView 是接口里的 AgentPlugin。
 type AgentView struct {
 	PluginID     string        `json:"pluginId"`
-	DisplayName  string        `json:"displayName"`
+	DisplayName  Text          `json:"displayName"`
 	Available    bool          `json:"available"`
 	Granted      bool          `json:"granted"`
 	AccountIDs   []uuid.UUID   `json:"accountIds"`
@@ -186,8 +186,8 @@ type HostView struct {
 // BuiltinSource 是接口里的 BuiltinPluginSource。
 type BuiltinSource struct {
 	ID          string `json:"id"`
-	DisplayName string `json:"displayName"`
-	Description string `json:"description"`
+	DisplayName Text   `json:"displayName"`
+	Description Text   `json:"description"`
 	Version     string `json:"version"`
 }
 
@@ -200,7 +200,7 @@ func view(p store.Plugin) (View, Manifest, error) {
 	if err := json.Unmarshal(p.Source, &src); err != nil {
 		return View{}, m, err
 	}
-	return View{ID: p.ID, DisplayName: p.DisplayName, Description: m.Description, Version: p.Version, Source: src, Status: p.Status, LastError: p.LastError,
+	return View{ID: p.ID, DisplayName: m.DisplayName, Description: m.Description, Version: p.Version, Source: src, Status: p.Status, LastError: p.LastError,
 		HasPlatform: m.Platform != "", EnabledProjects: p.EnabledProjects, GrantedAgents: p.GrantedAgents, InstalledAt: p.InstalledAt, UpdatedAt: p.UpdatedAt}, m, nil
 }
 
@@ -456,7 +456,7 @@ func (s *Service) install(ctx context.Context, pv *preview, update string) (View
 	}
 	manifest, _ := json.Marshal(m)
 	source, _ := json.Marshal(pv.view.Source)
-	row := store.Plugin{ID: m.ID, DisplayName: m.DisplayName, Source: source, Version: m.Version, Manifest: manifest, InstallDir: installDir}
+	row := store.Plugin{ID: m.ID, DisplayName: m.DisplayName.String(), Source: source, Version: m.Version, Manifest: manifest, InstallDir: installDir}
 	if update == "" {
 		err = s.Store.InstallPlugin(ctx, row, sum)
 	} else {
