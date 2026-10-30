@@ -19,6 +19,17 @@ import (
 
 const defaultVersion = "1.1.0"
 
+// neutral 为 FAKEPI_NEUTRAL=1 时的中性模式：回复不带平台加的“本轮运行ID”一行、不回显指令词，界面上可见的文字用英文（给英文截图用）。
+var neutral bool
+
+// say 返回默认模式或中性模式下的文字。
+func say(zh, en string) string {
+	if neutral {
+		return en
+	}
+	return zh
+}
+
 func main() {
 	os.Exit(run(os.Args[1:]))
 }
@@ -88,6 +99,7 @@ func parseArgs(args []string) options {
 }
 
 func run(args []string) int {
+	neutral = os.Getenv("FAKEPI_NEUTRAL") == "1"
 	o := parseArgs(args)
 	if o.version {
 		v := os.Getenv("FAKEPI_VERSION")
@@ -624,7 +636,7 @@ func (s *server) runTurn(r *turnRun, msg string, d directives, images []json.Raw
 			aborted = true
 			endAssistant(s.assistant(textContent(sent), "aborted", "Request was aborted"), nil)
 		} else {
-			const retryErr = "fakepi: 模拟可重试错误（529 overloaded）"
+			retryErr := say("fakepi: 模拟可重试错误（529 overloaded）", "fakepi: simulated retryable error (529 overloaded)")
 			endAssistant(s.assistant(textContent(sent), "error", retryErr), nil)
 			s.emit(map[string]any{"type": "agent_end", "messages": produced, "willRetry": true})
 			s.emit(map[string]any{"type": "auto_retry_start", "attempt": 1, "maxAttempts": 3, "delayMs": 0, "errorMessage": retryErr})
@@ -677,7 +689,7 @@ func (s *server) runTurn(r *turnRun, msg string, d directives, images []json.Raw
 
 	if !aborted && d.ask != "" {
 		// 扩展对话：发 extension_ui_request，等回应后把它写进回复文本；abort 时放弃等待。
-		req := map[string]any{"type": "extension_ui_request", "id": "ask-" + shortID(), "method": d.ask, "title": "fakepi 问"}
+		req := map[string]any{"type": "extension_ui_request", "id": "ask-" + shortID(), "method": d.ask, "title": say("fakepi 问", "fakepi asks")}
 		if d.ask == "select" {
 			req["options"] = []string{"staging", "production"}
 		}
@@ -702,7 +714,7 @@ func (s *server) runTurn(r *turnRun, msg string, d directives, images []json.Raw
 		s.emit(map[string]any{"type": "compaction_start", "reason": "threshold"})
 		s.addUsage(*d.compact)
 		s.emit(map[string]any{"type": "compaction_end", "reason": "threshold", "aborted": false, "willRetry": false,
-			"result": map[string]any{"summary": "fakepi 摘要", "firstKeptEntryId": shortID(), "tokensBefore": 1000, "estimatedTokensAfter": 200,
+			"result": map[string]any{"summary": say("fakepi 摘要", "fakepi summary"), "firstKeptEntryId": shortID(), "tokensBefore": 1000, "estimatedTokensAfter": 200,
 				"usage": d.compact.wire(), "details": map[string]any{}}})
 	}
 	if !aborted && d.warm != nil {
@@ -765,7 +777,7 @@ func (s *server) countAssistant(m map[string]any) {
 func (s *server) streamText(r *turnRun, text string, d directives, crash bool) (string, bool) {
 	chunks := split3(text)
 	if crash && len(chunks) == 0 {
-		fmt.Fprintln(os.Stderr, "fakepi: 模拟崩溃")
+		fmt.Fprintln(os.Stderr, say("fakepi: 模拟崩溃", "fakepi: simulated crash"))
 		os.Exit(3)
 	}
 	var sent strings.Builder
@@ -782,7 +794,7 @@ func (s *server) streamText(r *turnRun, text string, d directives, crash bool) (
 		s.emit(s.update(map[string]any{"type": "text_delta", "contentIndex": 0, "delta": c}))
 		sent.WriteString(c)
 		if crash && i == 0 {
-			fmt.Fprintln(os.Stderr, "fakepi: 模拟崩溃")
+			fmt.Fprintln(os.Stderr, say("fakepi: 模拟崩溃", "fakepi: simulated crash"))
 			os.Exit(3)
 		}
 	}
@@ -952,9 +964,31 @@ func parseDirectives(msg string) directives {
 }
 
 // reply 返回本轮回复文本：!text 优先；否则回显消息（有指令时去掉指令词）。
+// 中性模式回显时去掉平台加的“本轮运行ID”一行与指令词、保留换行，前缀为 "Got it: "；什么都不剩时回复 "Got it."。
 func (d directives) reply(msg string) string {
 	if d.hasText {
 		return d.text
+	}
+	if neutral {
+		var lines []string
+		for _, line := range strings.Split(msg, "\n") {
+			if strings.HasPrefix(line, "本轮运行ID：") {
+				continue
+			}
+			var words []string
+			for _, w := range strings.Fields(line) {
+				if !parseDirectives(w).found {
+					words = append(words, w)
+				}
+			}
+			if len(words) > 0 {
+				lines = append(lines, strings.Join(words, " "))
+			}
+		}
+		if len(lines) == 0 {
+			return "Got it."
+		}
+		return "Got it: " + strings.Join(lines, "\n")
 	}
 	if !d.found {
 		return "echo: " + msg
