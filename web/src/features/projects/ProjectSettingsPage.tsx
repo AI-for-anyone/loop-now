@@ -1,4 +1,3 @@
-import { credentialText } from '@/i18n/credential-text'
 import { useId, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { ArrowRightIcon, PlusIcon, SettingsIcon } from 'lucide-react'
@@ -286,8 +285,8 @@ function DangerCard({ project }: { project: Schemas['Project'] }) {
         </Button>
       </div>
       {activeTasks && <div role="alert" className="grid gap-2 rounded-card bg-white p-4 text-[14px]">
-        <p className="font-black text-red-text">{credentialText.projectSettingsPageText1}</p>
-        <ul className="grid gap-2">{activeTasks.map(task => <li key={task.id}><Link className="inline-flex min-h-9 items-center font-bold underline [overflow-wrap:anywhere]" to={`${tasksPath(project.name)}/${task.id}`}>{credentialText.projectSettingsPageText2}{task.id} · {task.status}</Link></li>)}</ul>
+        <p className="font-black text-red-text">{t.credentials.projectSettings.deleteBlocked}</p>
+        <ul className="grid gap-2">{activeTasks.map(task => <li key={task.id}><Link className="inline-flex min-h-9 items-center font-bold underline [overflow-wrap:anywhere]" to={`${tasksPath(project.name)}/${task.id}`}>{t.credentials.projectSettings.viewTaskPrefix}{task.id} · {task.status}</Link></li>)}</ul>
       </div>}
       {busy && (
         <div role="alert" className="flex flex-col gap-2.5 rounded-card bg-white px-[18px] py-4 shadow-[inset_0_0_0_2px_var(--red)]">

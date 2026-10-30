@@ -1,4 +1,3 @@
-import { credentialText } from '@/i18n/credential-text'
 import { useState, type FormEvent } from 'react'
 import { PlusIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -153,7 +152,7 @@ function CliItem({
         open={removing}
         onOpenChange={setRemoving}
         title={t.config.clis.removeTitle(cli.name)}
-        body={project ? credentialText.clisSectionText1 : cli.credential ? t.config.clis.removeBodyWithCredential : t.config.clis.removeBody}
+        body={project ? t.credentials.clis.removeProjectBody : cli.credential ? t.config.clis.removeBodyWithCredential : t.config.clis.removeBody}
         confirmLabel={t.common.remove}
         destructive
         onConfirm={() => remove.mutateAsync(cli.name)}

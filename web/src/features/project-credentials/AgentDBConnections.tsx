@@ -1,4 +1,4 @@
-import { credentialText } from '@/i18n/credential-text'
+import { t } from '@/i18n'
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
@@ -15,11 +15,11 @@ import { useCredentialDraft } from './useCredentialDraft'
 import { accountStatus } from './account-copy'
 
 const statusText: Record<Schemas['DBConnections']['status'], string> = {
-  resolved: credentialText.agentDBConnectionsText1, not_configured: credentialText.agentDBConnectionsText2, selection_required: credentialText.agentDBConnectionsText3,
-  account_deleted: credentialText.agentDBConnectionsText4, scope_mismatch: credentialText.agentDBConnectionsText5, unavailable: credentialText.agentDBConnectionsText6,
+  resolved: t.credentials.dbConnections.statusResolved, not_configured: t.credentials.dbConnections.statusNotConfigured, selection_required: t.credentials.dbConnections.statusSelectionRequired,
+  account_deleted: t.credentials.dbConnections.statusAccountDeleted, scope_mismatch: t.credentials.dbConnections.statusScopeMismatch, unavailable: t.credentials.dbConnections.statusUnavailable,
 }
 function summary(data: Schemas['DBConnections']) {
-  return credentialText.agentDBConnectionsText7(data.mode === 'explicit_set' ? credentialText.agentDBConnectionsText8 : credentialText.agentDBConnectionsText9, statusText[data.status], data.configVersion, data.credentialsRevision, data.connections.map(item => `${item.name || item.accountId} · ${item.accountId} · ${statusText[item.status]}`).join('\n') || credentialText.agentDBConnectionsText10)
+  return t.credentials.dbConnections.summary(data.mode === 'explicit_set' ? t.credentials.dbConnections.modeExplicitSet : t.credentials.dbConnections.modeLegacy, statusText[data.status], data.configVersion, data.credentialsRevision, data.connections.map(item => `${item.name || item.accountId} · ${item.accountId} · ${statusText[item.status]}`).join('\n') || t.credentials.dbConnections.noResolved)
 }
 
 export function AgentDBConnections({ agentId, configVersion, cli }: { agentId: string; configVersion: number; cli: Schemas['DBConnectionCLI'] }) {
@@ -33,10 +33,10 @@ export function AgentDBConnections({ agentId, configVersion, cli }: { agentId: s
   if (identity !== observed) { setObserved(identity); if (!dirty) setSession(value => value + 1) }
   return <div className="grid min-w-0 gap-3">
     <ErrorAlert error={result.error} />
-    {!result.data && !result.isError && <p role="status">{credentialText.agentDBConnectionsText11}{cli}{credentialText.agentDBConnectionsText12}</p>}
+    {!result.data && !result.isError && <p role="status">{t.credentials.dbConnections.loadingBefore}{cli}{t.credentials.dbConnections.loadingAfter}</p>}
     {result.data && <>
-      <p className="text-[13.5px]">{credentialText.agentDBConnectionsText13}{result.data.mode === 'explicit_set' ? credentialText.agentDBConnectionsText14 : credentialText.agentDBConnectionsText15} · {statusText[result.data.status]}</p>
-      {!synchronized && <p role="status">{credentialText.agentDBConnectionsText16}</p>}
+      <p className="text-[13.5px]">{t.credentials.dbConnections.currentModeLabel}{result.data.mode === 'explicit_set' ? t.credentials.dbConnections.currentModeExplicitSet : t.credentials.dbConnections.currentModeLegacy} · {statusText[result.data.status]}</p>
+      {!synchronized && <p role="status">{t.credentials.dbConnections.outOfSync}</p>}
       {result.data.mode === 'legacy_single' && <fieldset disabled={!synchronized || result.isError}><LegacyProjectCliSelection agentId={agentId} configVersion={configVersion} cli={cli} /></fieldset>}
       <ConnectionForm key={`${cli}:${session}`} data={result.data} synchronized={synchronized && !result.isError} onDirty={setDirty} onSaved={() => { setDirty(false); setSession(value => value + 1) }} />
     </>}
@@ -62,29 +62,29 @@ function ConnectionForm({ data, synchronized, onDirty, onSaved }: { data: Schema
   const ids = [...new Set([...candidates.map(item => item.id), ...data.accountIds, ...form.draft.ids])].sort()
   const disabled = form.pending || form.conflict || !synchronized || !accounts.data || !!accounts.error
   return <div className="grid min-w-0 gap-3 rounded-card bg-tint-blue p-4 text-[13.5px]">
-    <p className="font-bold">{data.cli}{credentialText.agentDBConnectionsText17}</p>
-    {data.mode === 'explicit_set' && data.accountIds.length > 0 && data.status !== 'resolved' && <p role="status" className="rounded-input bg-tint-red p-3 font-bold text-red-text">{credentialText.agentDBConnectionsText18}</p>}
-    <p>{credentialText.agentDBConnectionsText19}</p>
+    <p className="font-bold">{data.cli}{t.credentials.dbConnections.setTitleSuffix}</p>
+    {data.mode === 'explicit_set' && data.accountIds.length > 0 && data.status !== 'resolved' && <p role="status" className="rounded-input bg-tint-red p-3 font-bold text-red-text">{t.credentials.dbConnections.setBroken}</p>}
+    <p>{t.credentials.dbConnections.intro}</p>
     <ErrorAlert error={accounts.error} />
-    {!accounts.data && !accounts.isError && <p>{credentialText.agentDBConnectionsText20}</p>}
-    <fieldset disabled={disabled} className="grid min-w-0 gap-2"><legend className="mb-2 font-bold">{credentialText.agentDBConnectionsText21}</legend>
-      {ids.length === 0 && accounts.data && <p>{credentialText.agentDBConnectionsText22}</p>}
+    {!accounts.data && !accounts.isError && <p>{t.credentials.dbConnections.loadingCandidates}</p>}
+    <fieldset disabled={disabled} className="grid min-w-0 gap-2"><legend className="mb-2 font-bold">{t.credentials.dbConnections.chooseLegend}</legend>
+      {ids.length === 0 && accounts.data && <p>{t.credentials.dbConnections.noCandidates}</p>}
       {ids.map(id => {
         const candidate = candidates.find(item => item.id === id), connection = data.connections.find(item => item.accountId === id)
         return <label key={id} className={`flex min-w-0 items-start gap-3 rounded-input p-3 ${connection && connection.status !== 'resolved' ? 'bg-tint-red' : 'bg-white'}`}>
           <input type="checkbox" className="mt-1 size-4 shrink-0" checked={form.draft.ids.includes(id)} onChange={event => form.setDraft({ action: 'set', ids: (event.target.checked ? [...form.draft.ids, id] : form.draft.ids.filter(item => item !== id)).sort() })} />
-          <span className="min-w-0 [overflow-wrap:anywhere]"><span className="font-bold">{candidate?.name ?? connection?.name ?? credentialText.agentDBConnectionsText23}</span><span className="block text-xs">{id}</span><span className="block">{connection ? statusText[connection.status] : candidate ? credentialText.agentDBConnectionsText24(accountStatus[candidate.status]) : credentialText.agentDBConnectionsText25}</span></span>
+          <span className="min-w-0 [overflow-wrap:anywhere]"><span className="font-bold">{candidate?.name ?? connection?.name ?? t.credentials.dbConnections.selectedUnavailable}</span><span className="block text-xs">{id}</span><span className="block">{connection ? statusText[connection.status] : candidate ? t.credentials.dbConnections.candidateNotGranted(accountStatus[candidate.status]) : t.credentials.dbConnections.missingAccount}</span></span>
         </label>
       })}
     </fieldset>
-    <p>{credentialText.agentDBConnectionsText26}</p>
+    <p>{t.credentials.dbConnections.multipleNote}</p>
     {form.conflict && <CredentialConflict base={form.base.summary} latest={form.review} reading={form.reading} error={form.readError} onRefresh={() => void form.refresh()} onAdopt={form.adopt} />}
     {!form.conflict && <ErrorAlert error={form.error} />}
     <div className="flex flex-wrap gap-2">
-      <Button type="button" size="sm" disabled={disabled || (data.mode === 'explicit_set' && !form.dirty)} onClick={() => void form.submit()}>{form.pending ? credentialText.agentDBConnectionsText27 : form.draft.action === 'legacy' ? credentialText.agentDBConnectionsText28 : form.draft.ids.length ? credentialText.agentDBConnectionsText29 : credentialText.agentDBConnectionsText30}</Button>
-      {data.mode === 'explicit_set' && <Button type="button" size="sm" variant="secondary" disabled={disabled} onClick={() => { const draft: Draft = { action: 'legacy', ids: form.draft.ids }; form.setDraft(draft); void form.submit(draft) }}>{credentialText.agentDBConnectionsText31}</Button>}
-      {scope.kind === 'project' && <Link to={projectSettingsPath(scope.project)} className="inline-flex min-h-9 items-center font-bold underline">{credentialText.agentDBConnectionsText32}</Link>}
+      <Button type="button" size="sm" disabled={disabled || (data.mode === 'explicit_set' && !form.dirty)} onClick={() => void form.submit()}>{form.pending ? t.credentials.dbConnections.saving : form.draft.action === 'legacy' ? t.credentials.dbConnections.confirmLegacy : form.draft.ids.length ? t.credentials.dbConnections.saveSet : t.credentials.dbConnections.saveEmpty}</Button>
+      {data.mode === 'explicit_set' && <Button type="button" size="sm" variant="secondary" disabled={disabled} onClick={() => { const draft: Draft = { action: 'legacy', ids: form.draft.ids }; form.setDraft(draft); void form.submit(draft) }}>{t.credentials.dbConnections.deleteSet}</Button>}
+      {scope.kind === 'project' && <Link to={projectSettingsPath(scope.project)} className="inline-flex min-h-9 items-center font-bold underline">{t.credentials.dbConnections.manageInSettings}</Link>}
     </div>
-    <p>{credentialText.agentDBConnectionsText33}</p>
+    <p>{t.credentials.dbConnections.deleteSetNote}</p>
   </div>
 }

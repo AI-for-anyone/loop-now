@@ -1,4 +1,3 @@
-import { credentialText } from '@/i18n/credential-text'
 import { LockIcon } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -7,9 +6,9 @@ import { t } from '@/i18n'
 
 export function CliToolStatus({ template }: { template: Schemas['CliTemplate'] }) {
   return <div className="min-w-0 text-[13px] [overflow-wrap:anywhere]">
-    <p>{credentialText.credentialStatusText1}{t.settings.install[template.install.status]} · {template.name} v{template.version}</p>
+    <p>{t.credentials.status.toolSetupLabel}{t.settings.install[template.install.status]} · {template.name} v{template.version}</p>
     {template.install.error && <p role="status" className="font-bold text-red-text">{template.install.error}</p>}
-    <p className="text-ink-700">{credentialText.credentialStatusText2}</p>
+    <p className="text-ink-700">{t.credentials.status.toolSetupNote}</p>
   </div>
 }
 

@@ -8,8 +8,10 @@ import { server } from '@/test/server'
 import { taskId } from '@/test/tasks'
 import { larkSwitchReceipt, switchActionId } from '@/test/lark-switch'
 import { taskLarkSwitchLocatorKey } from '@/lib/useOriginalActionLocator'
-import { larkText as copy } from '@/i18n/lark'
+import { t } from '@/i18n'
 import { TaskLarkSwitchRecovery } from './TaskLarkSwitchRecovery'
+
+const copy = t.credentials.lark
 
 const key = taskLarkSwitchLocatorKey(taskId), endpoint = apiUrl(`/tasks/${taskId}/lark-account-switches`)
 function renderRecovery(id?: string, currentBlocked = true) {

@@ -5,7 +5,9 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Label } from '@/components/ui/label'
 import { selectClass } from '@/lib/field'
-import { larkText as copy } from '@/i18n/lark'
+import { t } from '@/i18n'
+
+const copy = t.credentials.lark
 
 // UI presentation inputs, not candidate HTTP DTOs. The formal adapter must
 // provide server-authoritative eligibility/members and capture all wire CAS.

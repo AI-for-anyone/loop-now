@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react'
 import type { Schemas } from '@/api/client'
 import { Badge } from '@/components/ui/badge'
-import { larkText as copy } from '@/i18n/lark'
+import { t } from '@/i18n'
 import { accountStatus } from './account-copy'
+
+const copy = t.credentials.lark
 
 // Presentation only. Identity/grants are supplied by the eventual generated
 // contract adapter; never infer them from a remark or requested scopes.

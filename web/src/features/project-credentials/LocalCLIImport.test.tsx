@@ -12,8 +12,10 @@ import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { DraftNavigationGuard } from '@/features/prompts/DraftNavigationGuard'
 import { LocalCLIImport } from './LocalCLIImport'
-import { importText as copy } from '@/i18n/cli-import'
+import { t } from '@/i18n'
 import { publicCertificatePEM, supplementProblem } from './import-selection'
+
+const copy = t.credentials.cliImport
 
 const base = `/projects/${defaultProject.id}/cli-credential-import`
 function setup(scan = importScan()) {

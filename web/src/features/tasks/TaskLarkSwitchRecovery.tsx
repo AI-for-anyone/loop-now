@@ -3,7 +3,9 @@ import { ApiError } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { taskLarkSwitchLocatorKey, useOriginalActionLocator } from '@/lib/useOriginalActionLocator'
-import { larkText as copy } from '@/i18n/lark'
+import { t } from '@/i18n'
+
+const copy = t.credentials.lark
 
 // This controller only reads an existing action. Until the formal participant
 // projection is available there is deliberately no inferred member list/POST.

@@ -1,4 +1,4 @@
-import { credentialText } from '@/i18n/credential-text'
+import { t } from '@/i18n'
 import { useId, useState, type FormEvent } from 'react'
 import { ApiError, type Schemas } from '@/api/client'
 import { Button } from '@/components/ui/button'
@@ -37,21 +37,21 @@ export function CredentialEditor({ id, name = '', mode, template, revision, summ
   const submit = (event: FormEvent) => {
     event.preventDefault()
     const next: Record<string, string> = {}
-    if (editingName && !form.draft.name.trim()) next.name = credentialText.credentialEditorText1
-    if (key && !form.draft.key.trim()) next.key = credentialText.credentialEditorText2
-    if (cli) for (const field of template?.fields ?? []) if (field.required && !form.draft.fields[field.name]) next[field.name] = credentialText.credentialEditorText3
+    if (editingName && !form.draft.name.trim()) next.name = t.credentials.editor.nameRequired
+    if (key && !form.draft.key.trim()) next.key = t.credentials.editor.keyRequired
+    if (cli) for (const field of template?.fields ?? []) if (field.required && !form.draft.fields[field.name]) next[field.name] = t.credentials.editor.fieldRequired
     setErrors(next)
     if (!missingTemplate && Object.keys(next).length === 0) void form.submit()
   }
   return <form className="grid min-w-0 gap-4" onSubmit={submit} autoComplete="off" noValidate>
-    {editingName && <div className="grid gap-1.5"><Label htmlFor={`${prefix}-name`}>{credentialText.credentialEditorText4}</Label><Input id={`${prefix}-name`} maxLength={200} value={form.draft.name} disabled={form.pending} aria-invalid={!!nameError} onChange={e => form.setDraft(v => ({ ...v, name: e.target.value }))} /><FieldError message={nameError} /></div>}
+    {editingName && <div className="grid gap-1.5"><Label htmlFor={`${prefix}-name`}>{t.credentials.editor.nameLabel}</Label><Input id={`${prefix}-name`} maxLength={200} value={form.draft.name} disabled={form.pending} aria-invalid={!!nameError} onChange={e => form.setDraft(v => ({ ...v, name: e.target.value }))} /><FieldError message={nameError} /></div>}
     {key && <div className="grid gap-1.5"><Label htmlFor={`${prefix}-key`}>API Key</Label><Input id={`${prefix}-key`} type="password" autoComplete="new-password" value={form.draft.key} disabled={form.pending} aria-invalid={!!keyError} onChange={e => form.setDraft(v => ({ ...v, key: e.target.value }))} /><FieldError message={keyError} /></div>}
-    {cli && template && <><p className="text-[13px]">{credentialText.credentialEditorText5}{template.name} · v{template.version}</p><WarningList warnings={template.warnings} /><CredentialFields fields={template.fields} values={form.draft.fields} errors={fieldErrors} disabled={form.pending} onChange={(field, value) => form.setDraft(v => ({ ...v, fields: { ...v.fields, [field]: value } }))} /></>}
-    {missingTemplate && <p role="alert">{credentialText.credentialEditorText6}</p>}
-    {mode !== 'rename' && <p className="text-[13px] text-ink-700">{credentialText.credentialEditorText7}</p>}
+    {cli && template && <><p className="text-[13px]">{t.credentials.editor.templatePrefix}{template.name} · v{template.version}</p><WarningList warnings={template.warnings} /><CredentialFields fields={template.fields} values={form.draft.fields} errors={fieldErrors} disabled={form.pending} onChange={(field, value) => form.setDraft(v => ({ ...v, fields: { ...v.fields, [field]: value } }))} /></>}
+    {missingTemplate && <p role="alert">{t.credentials.editor.templateMissing}</p>}
+    {mode !== 'rename' && <p className="text-[13px] text-ink-700">{t.credentials.editor.saveNote}</p>}
     {form.conflict && <CredentialConflict base={form.base.summary} latest={form.review} reading={form.reading} error={form.readError} onRefresh={() => void form.refresh()} onAdopt={form.adopt} />}
     {!form.conflict && <ErrorAlert error={unmatchedFieldError(form.error, inline)} />}
-    {form.error instanceof ApiError && form.error.status === 0 && <p role="status" className="text-[13px] font-bold">{credentialText.credentialEditorText8}</p>}
-    <div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="secondary" disabled={form.pending} onClick={onClose}>{credentialText.credentialEditorText9}</Button><Button type="submit" disabled={form.pending || form.conflict || missingTemplate}>{form.pending ? credentialText.credentialEditorText10 : credentialText.credentialEditorText11}</Button></div>
+    {form.error instanceof ApiError && form.error.status === 0 && <p role="status" className="text-[13px] font-bold">{t.credentials.editor.saveUnknown}</p>}
+    <div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="secondary" disabled={form.pending} onClick={onClose}>{t.credentials.editor.cancel}</Button><Button type="submit" disabled={form.pending || form.conflict || missingTemplate}>{form.pending ? t.credentials.editor.saving : t.credentials.editor.save}</Button></div>
   </form>
 }
