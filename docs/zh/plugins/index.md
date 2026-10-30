@@ -23,9 +23,10 @@
 
 安装或启用插件本身不会给 Agent 授权。版本是钉死的：更新是显式动作，进行中的任务保留启动时的文件。
 
-平台附带两个官方插件：
+平台附带三个官方插件：
 
 - [**webhook**](https://github.com/AI-for-anyone/loop-now/blob/main/plugins/official/webhook/README.md)：把 `inbox.received` 事件带签名 POST 到你的地址，带重试和投递日志。外部身份用它代替轮询收件箱。
+- [**playwright**](https://github.com/AI-for-anyone/loop-now/blob/main/plugins/official/playwright/README.md)：给 Agent 一个专用的可见 Chromium，通过官方 Playwright MCP 打开网页、读取页面、点击、输入和截图，不连接你的日常 Chrome。
 - [**hello**](https://github.com/AI-for-anyone/loop-now/blob/main/plugins/official/hello/README.md)：同时具备两半的最小插件，是编写自己插件的起点。
 
 ## 几行代码写一个平台半边
@@ -68,5 +69,5 @@ export default function register(api: PluginAPI) {
 
 - [规范](/plugins/spec)（英文）——完整契约：包格式、事件目录、Hook 种类与超时、权限和安装。
 - [发布到插件市场](/plugins/publish)（英文）——把插件提交进官方市场索引。
-- [SDK 参考](https://github.com/AI-for-anyone/loop-now/blob/main/plugins/sdk/README.md)与仓库中的两个官方插件。
+- [SDK 参考](https://github.com/AI-for-anyone/loop-now/blob/main/plugins/sdk/README.md)与仓库中的官方插件。
 - [插件宿主协议](https://github.com/AI-for-anyone/loop-now/blob/main/api/plugin-host-protocol.md)——服务端与宿主之间的线路协议。
