@@ -1,11 +1,11 @@
 package service
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/google/uuid"
 	"io"
 	"log/slog"
@@ -21,7 +21,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -241,43 +240,63 @@ func TestProcessBoundsOutputAndReapsGroup(t *testing.T) {
 
 func TestProcessParentExitDoesNotLeaveTermResistantChild(t *testing.T) {
 	home := t.TempDir()
-	pidFile := filepath.Join(home, "child.pid")
-	script := `trap 'exit 0' TERM; /bin/sh -c 'trap "" TERM; echo $$ > "$1"; exec /bin/sleep 30' fixture "$1" >/dev/null 2>&1 & wait`
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	done := make(chan privateOutput, 1)
-	go func() {
-		done <- runProcess(ctx, CommandSpec{Executable: "/bin/sh", Args: []string{"-c", script, "fixture", pidFile}, Home: home, Environment: []string{"PATH=/usr/bin:/bin"}}, 80*time.Millisecond, nil)
-	}()
-	var pid int
-	deadline := time.Now().Add(time.Second)
-	for {
-		b, e := os.ReadFile(pidFile)
-		if e == nil {
-			_, e = fmt.Sscanf(string(b), "%d", &pid)
-			if e != nil {
-				t.Fatal(e)
-			}
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("child start not observed")
-		}
-		time.Sleep(time.Millisecond)
+	readyR, readyW, e := os.Pipe()
+	if e != nil {
+		t.Fatal(e)
 	}
-	defer syscall.Kill(pid, syscall.SIGKILL)
+	defer func() { _ = readyR.Close() }()
+	defer func() { _ = readyW.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	defer func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Error("parent not reaped during cleanup")
+		}
+	}()
+	script := `trap 'exit 0' TERM; /bin/sh -c 'trap "" TERM; printf "ready\n" >&3; exec /bin/sleep 30' >/dev/null 2>&1 & wait`
+	go func() {
+		out := runProcess(ctx, CommandSpec{Executable: "/bin/sh", Args: []string{"-c", script}, Home: home, Environment: []string{"PATH=/usr/bin:/bin"}}, 80*time.Millisecond, func(_ context.Context, spec CommandSpec) (*exec.Cmd, error) {
+			cmd := exec.Command(spec.Executable, spec.Args...)
+			cmd.ExtraFiles = []*os.File{readyW}
+			return cmd, nil
+		})
+		clear(out.Stdout)
+		clear(out.Stderr)
+		close(done)
+	}()
+
+	if e = readyR.SetReadDeadline(time.Now().Add(2 * time.Second)); e != nil {
+		t.Fatal(e)
+	}
+	reader := bufio.NewReader(readyR)
+	line, e := reader.ReadString('\n')
+	if e != nil {
+		t.Fatal("child start not observed:", e)
+	}
+	if line != "ready\n" {
+		t.Fatalf("unexpected child readiness %q", line)
+	}
 	cancel()
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("parent not reaped")
 	}
-	deadline = time.Now().Add(time.Second)
-	for syscall.Kill(pid, 0) == nil {
-		if time.Now().After(deadline) {
-			t.Fatal("TERM-resistant child survived parent completion")
-		}
-		time.Sleep(time.Millisecond)
+	// Wait for cmd.Start to finish before closing the parent's ExtraFiles copy.
+	// EOF then proves that neither the parent nor its TERM-resistant child retains
+	// the inherited descriptor.
+	if e = readyW.Close(); e != nil {
+		t.Fatal(e)
+	}
+	if e = readyR.SetReadDeadline(time.Now().Add(2 * time.Second)); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = reader.ReadString('\n'); !errors.Is(e, io.EOF) {
+		t.Fatalf("TERM-resistant child survived parent completion: %v", e)
 	}
 }
 
