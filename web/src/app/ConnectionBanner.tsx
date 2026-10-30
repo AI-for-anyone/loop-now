@@ -10,8 +10,9 @@ import { isUnreachable } from '@/lib/errors'
 
 const failedToConnect = (query: Query) => isUnreachable(query.state.error)
 
-// 重新获取因无法连接而失败的查询；已在进行中的请求不取消，沿用它的结果。
-const refetchFailed = (client: QueryClient) => client.refetchQueries({ type: 'active', predicate: failedToConnect }, { cancelRefetch: false })
+// 重新获取因无法连接而失败的查询。进行中的请求先取消再重发：它可能是断连时发出的，沿用它的结果会把失败
+// 延续到下一次轮询；重试和重连都要向恢复后的服务端重新发请求。被取消的请求不影响可达性。
+const refetchFailed = (client: QueryClient) => client.refetchQueries({ type: 'active', predicate: failedToConnect }, { cancelRefetch: true })
 
 // 重试时另外探测一次健康检查，只有修改失败时也能确认连接是否恢复。
 async function retry(client: QueryClient) {
