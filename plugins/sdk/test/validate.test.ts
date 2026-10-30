@@ -78,6 +78,42 @@ describe('validatePlugin', () => {
     ])
   })
 
+  it('mcpServers 接受 stdio 与 streamable HTTP 条目（与 Pi 选传输的方式相同），其余报错', () => {
+    const good = {
+      stdio: { command: 'node', args: ['./mcp/server.js'] },
+      typed_stdio: { type: 'stdio', command: 'node' },
+      http: { url: 'http://127.0.0.1:3845/mcp', description: '本机服务' },
+      https: { type: 'streamable-http', url: 'https://mcp.example.com/mcp', oauth: { clientName: 'Loop Now' } },
+      typed_http: { type: 'http', url: 'https://mcp.example.com/mcp' },
+      both: { url: 'https://mcp.example.com/mcp', command: 'node' },
+    }
+    const ok = validatePlugin(plugin('mcp-ok', { name: 'mcp-ok', version: '1.0.0', description: 'MCP', keywords: ['loop-now-plugin'], loopNow: { id: 'mcp-ok', displayName: 'MCP', mcpServers: good } }, { 'README.md': '' }))
+    assert.deepEqual(ok.findings, [])
+    assert.deepEqual(ok.manifest!.mcpServers, Object.keys(good).sort())
+
+    const bad = {
+      sse: { type: 'sse', url: 'https://mcp.example.com/sse' },
+      ws: { type: 'ws', url: 'wss://mcp.example.com/mcp' },
+      file_url: { url: 'file:///tmp/mcp' },
+      not_url: { url: 'mcp.example.com/mcp' },
+      empty_command: { command: '' },
+      http_without_url: { type: 'http', command: 'node' },
+      stdio_without_command: { type: 'stdio', url: 'https://mcp.example.com/mcp' },
+      nothing: { args: [] },
+      not_object: 'node',
+      Bad_Name: { command: 'node' },
+    }
+    const r = validatePlugin(plugin('mcp-bad', { name: 'mcp-bad', version: '1.0.0', description: 'MCP', keywords: ['loop-now-plugin'], loopNow: { id: 'mcp-bad', displayName: 'MCP', mcpServers: bad } }, { 'README.md': '' }))
+    assert.equal(r.ok, false)
+    assert.deepEqual(
+      r.findings.map((f) => [f.level, f.path]),
+      Object.keys(bad).map((k) => ['error', `loopNow.mcpServers.${k}`]),
+    )
+    assert.match(r.findings[0]!.message, /"sse" 不支持 SSE，请用 streamable HTTP 的 url/)
+    assert.match(r.findings[1]!.message, /"ws" 的 type 只能是 stdio、http 或 streamable-http/)
+    assert.match(r.findings[2]!.message, /"file_url" 须是带 command 的 stdio 条目或带 http\/https url 的 streamable HTTP 条目/)
+  })
+
   it('不是插件的目录与坏 JSON', () => {
     assert.match(validatePlugin(plugin('plain', { name: 'x', version: '1.0.0' })).findings[0]!.message, /不是插件/)
     assert.match(validatePlugin(plugin('broken', '{')).findings[0]!.message, /不是合法的 JSON/)
