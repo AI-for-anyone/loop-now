@@ -415,13 +415,16 @@ func TestTriggerAlreadyStartedIsNotInterruptedByItself(t *testing.T) {
 func (e *env) waitIdleOrDump(n names) {
 	e.t.Helper()
 	// One statement, so a run moving from queued to starting between two reads
-	// (as Status does) cannot look idle.
+	// (as Status does) cannot look idle. The run is recorded as finished before
+	// the lock is released, so also wait for the lock, as waitIdle does.
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		var open int
 		err := e.st.Pool.QueryRow(context.Background(), `SELECT count(*) FROM runs WHERE agent_id=$1 AND status IN ('queued','starting','running','aborting')`, e.agent).Scan(&open)
 		if err == nil && open == 0 {
-			return
+			if owner, err := e.co.LockOwner(context.Background(), e.agent.String()); err == nil && owner == "" {
+				return
+			}
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
