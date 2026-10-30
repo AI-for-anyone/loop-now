@@ -385,16 +385,28 @@ func TestPostExtractionRecheckAndCtimeBinding(t *testing.T) {
 	body := "[x]\nhost=h\nport=5432\nuser=u\ndbname=db\nsslmode=disable\npassword=synthetic\n"
 	put(t, home, ".pg_service.conf", body)
 	s := selection(t, r, candidate(t, r, "psql"))
-	info, e := os.Stat(filepath.Join(home, ".pg_service.conf"))
+	path := filepath.Join(home, ".pg_service.conf")
+	info, e := os.Stat(path)
 	if e != nil {
 		t.Fatal(e)
 	}
-	// Linux stamps ctime from the coarse clock (one tick is several ms); rewrite
-	// after a tick so only ctime, not timing luck, tells the two writes apart.
-	time.Sleep(50 * time.Millisecond)
-	put(t, home, ".pg_service.conf", body)
-	if e = os.Chtimes(filepath.Join(home, ".pg_service.conf"), info.ModTime(), info.ModTime()); e != nil {
-		t.Fatal(e)
+	// Linux stamps ctime from the coarse clock (one tick is several ms): rewrite
+	// with the old mtime until ctime alone tells the two writes apart.
+	for give := time.Now().Add(10 * time.Second); ; time.Sleep(time.Millisecond) {
+		put(t, home, ".pg_service.conf", body)
+		if e = os.Chtimes(path, info.ModTime(), info.ModTime()); e != nil {
+			t.Fatal(e)
+		}
+		now, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if identity(now) != identity(info) {
+			break
+		}
+		if time.Now().After(give) {
+			t.Fatal("rewrite never changed ctime")
+		}
 	}
 	expectCode(t, r.Recheck(context.Background(), s), "source_changed")
 	s = selection(t, r, candidate(t, r, "psql"))

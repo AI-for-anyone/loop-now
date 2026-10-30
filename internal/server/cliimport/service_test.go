@@ -176,7 +176,7 @@ func (e *importEnv) service(t *testing.T, o Options, configure func(*controlledR
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), settle)
 		defer cancel()
 		if err := s.Close(ctx); err != nil {
 			t.Error(err)
@@ -194,20 +194,25 @@ func selected(scan Scan) StartInput {
 	return in
 }
 
+// settle bounds waits for work the test has already set going. Cancelled work
+// may still spend two RecordTimeouts (5s each) on DB writes, so the bound only
+// turns a real hang into a failure; it is never what makes a test pass.
+const settle = 30 * time.Second
+
 // waitEntered waits for the controlled Reader to be entered, failing instead
 // of blocking until the package test timeout when it never is.
 func waitEntered(t *testing.T, entered <-chan struct{}) {
 	t.Helper()
 	select {
 	case <-entered:
-	case <-time.After(10 * time.Second):
+	case <-time.After(settle):
 		t.Fatal("controlled Reader was not entered")
 	}
 }
 func awaitImport(t *testing.T, s *Service, p, id uuid.UUID) Operation {
 	t.Helper()
 	ctx := context.Background()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(settle)
 	for time.Now().Before(deadline) {
 		op, err := s.Get(ctx, p, id)
 		if err != nil {
@@ -530,7 +535,7 @@ func TestCLIImportServiceExpiryAndClose(t *testing.T) {
 		done := make(chan struct{})
 		go func() { defer close(done); _, _ = s.Scan(ctx, e.project) }()
 		waitEntered(t, entered)
-		deadline, cancel := context.WithTimeout(ctx, time.Second)
+		deadline, cancel := context.WithTimeout(ctx, settle)
 		defer cancel()
 		if err = s.Close(deadline); err != nil {
 			t.Fatal(err)
@@ -634,7 +639,7 @@ func TestCLIImportProjectDeleteTxRollbackAndScopedCancel(t *testing.T) {
 	default:
 	}
 	deleteTx(true)
-	stop, cancel := context.WithTimeout(ctx, time.Second)
+	stop, cancel := context.WithTimeout(ctx, settle)
 	defer cancel()
 	if err = s.CancelProject(stop, e.project); err != nil {
 		t.Fatal(err)
@@ -705,7 +710,7 @@ func TestCLIImportProjectCancelPreventsLateScanPublication(t *testing.T) {
 	if _, err = e.st.DeleteProject(ctx, e.project); err != nil {
 		t.Fatal(err)
 	}
-	stop, cancel := context.WithTimeout(ctx, time.Second)
+	stop, cancel := context.WithTimeout(ctx, settle)
 	defer cancel()
 	cancelDone := make(chan error, 1)
 	go func() { cancelDone <- s.CancelProject(stop, e.project) }()
