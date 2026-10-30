@@ -1,0 +1,26 @@
+# syntax=docker/dockerfile:1
+# loop-now Web 控制台：Node 24.21.0 精确版本构建，vite preview 提供静态访问。
+
+ARG NODE_VERSION=24.21.0
+
+FROM debian:bookworm-slim AS nodebase
+ARG NODE_VERSION
+ARG TARGETARCH
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl xz-utils \
+ && rm -rf /var/lib/apt/lists/* \
+ && case "$TARGETARCH" in amd64) NODE_ARCH=x64 ;; arm64) NODE_ARCH=arm64 ;; *) echo "unsupported arch: $TARGETARCH" >&2; exit 1 ;; esac \
+ && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" -o /tmp/node.tar.xz \
+ && tar -C /usr/local --strip-components=1 -xf /tmp/node.tar.xz \
+ && rm /tmp/node.tar.xz \
+ && npm install -g npm@11.19.0
+
+WORKDIR /app
+COPY web/package.json web/package-lock.json ./
+RUN npm ci --ignore-scripts
+COPY web/ ./
+# 浏览器从宿主机访问 API，使用发布到本机回环的服务端地址。
+ENV VITE_LOOP_NOW_API_BASE=http://127.0.0.1:8780/api/v1
+RUN npm run build
+EXPOSE 5173
+CMD ["node_modules/.bin/vite", "preview", "--host", "0.0.0.0", "--port", "5173"]
