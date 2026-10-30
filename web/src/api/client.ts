@@ -78,8 +78,9 @@ export const api = createClient<paths>({
       noteVersion(response)
       return response
     } catch (cause) {
-      // 主动取消的请求不说明服务端是否可达。
-      if (!(cause instanceof DOMException && cause.name === 'AbortError')) settle(order, false)
+      // 主动取消的请求不说明服务端是否可达。按请求自己的 signal 判断：取消时抛出的 DOMException 可能来自
+      // 另一个环境（测试中的 jsdom 与 Node 各有一个），instanceof 不可靠。
+      if (!request.signal.aborted) settle(order, false)
       throw cause
     }
   },

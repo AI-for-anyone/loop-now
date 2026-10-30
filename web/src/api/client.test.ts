@@ -104,6 +104,20 @@ describe('reachability', () => {
     await old
     expect(reachability.isReachable()).toBe(false)
   })
+
+  it('请求到达服务端后被主动取消：不改变可达性', async () => {
+    let arrive: () => void = () => {}
+    const arrived = new Promise<void>((resolve) => (arrive = resolve))
+    const releaseOld = heldHandler('/skills')
+    server.use(http.get(apiUrl('/skills'), () => arrive()))
+    const controller = new AbortController()
+    const pending = api.GET('/skills', { signal: controller.signal })
+    await arrived
+    controller.abort()
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    expect(reachability.isReachable()).toBe(true)
+    releaseOld(false)
+  })
 })
 
 describe('rawBody', () => {
