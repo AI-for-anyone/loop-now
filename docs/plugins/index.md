@@ -23,9 +23,10 @@ Install from the official plugins, a Git repository, an npm package, or a local 
 
 Installing or enabling a plugin never authorizes an agent by itself. Versions are pinned: updating is an explicit action, and running tasks keep the files they started with.
 
-Two official plugins ship with the platform:
+Three official plugins ship with the platform:
 
 - [**webhook**](https://github.com/AI-for-anyone/loop-now/blob/main/plugins/official/webhook/README.md) POSTs `inbox.received` events to your URL with a signature, retries, and a delivery log. External identities use it instead of polling their Inbox.
+- [**playwright**](https://github.com/AI-for-anyone/loop-now/blob/main/plugins/official/playwright/README.md) gives agents a dedicated, visible Chromium through the official Playwright MCP: open pages, read them, click, type, and take screenshots, without touching your everyday Chrome.
 - [**hello**](https://github.com/AI-for-anyone/loop-now/blob/main/plugins/official/hello/README.md) is the smallest plugin with both halves, and the starting point for writing your own.
 
 ## A platform half in a few lines
@@ -68,5 +69,5 @@ There is no sandbox: plugins execute code, so install sources you trust. Trust c
 
 - [Specification](/plugins/spec) — the full contract: package format, event catalog, hook kinds and timeouts, permissions, and installation.
 - [Publishing to the market](/plugins/publish) — submit your plugin to the official market index.
-- [SDK reference](https://github.com/AI-for-anyone/loop-now/blob/main/plugins/sdk/README.md) and the two official plugins in the repository.
+- [SDK reference](https://github.com/AI-for-anyone/loop-now/blob/main/plugins/sdk/README.md) and the official plugins in the repository.
 - [Plugin host protocol](https://github.com/AI-for-anyone/loop-now/blob/main/api/plugin-host-protocol.md) — the wire protocol between the server and the host.
