@@ -127,6 +127,9 @@ func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d 
 	if err := seedModelAuth(snap, d); err != nil {
 		return fail(executor.ErrCredentialUnavailable, "模型凭证缓存写入失败")
 	}
+	if err := syncModelsJSON(snap, d); err != nil {
+		return fail(executor.ErrCredentialUnavailable, "模型配置缓存写入失败")
+	}
 	// CLI凭证文件先删后写。
 	if err := e.syncCredentialFiles(snap, d); err != nil {
 		return err
@@ -465,4 +468,25 @@ func seedModelAuth(snap agentconfig.Snapshot, d agentDirs) error {
 	}
 	defer clear(data)
 	return modelcredential.WriteAuthFile(d.pi, data)
+}
+
+// syncModelsJSON 只写当前执行冻结的 Provider 片段；空配置必须删除旧文件。
+func syncModelsJSON(snap agentconfig.Snapshot, d agentDirs) error {
+	root, err := os.OpenRoot(d.pi)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	if len(snap.ModelsJSON) == 0 {
+		if err := root.Remove("models.json"); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		return nil
+	}
+	name := ".models-" + randHex() + ".tmp"
+	defer root.Remove(name)
+	if err := root.WriteFile(name, snap.ModelsJSON, 0o600); err != nil {
+		return err
+	}
+	return root.Rename(name, "models.json")
 }

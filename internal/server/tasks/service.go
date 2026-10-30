@@ -192,10 +192,12 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 			if e != nil {
 				return taskmodel.Record{}, nil, e
 			}
-			level, e := s.Config.Models.ResolveThinking(capture.Agent.ModelProvider, capture.Agent.ModelID, capture.Agent.ThinkingLevel)
+			models := s.Config.Models.Snapshot()
+			level, e := models.ResolveThinking(capture.Agent.ModelProvider, capture.Agent.ModelID, capture.Agent.ThinkingLevel)
 			if e != nil {
 				return taskmodel.Record{}, nil, apperr.Invalid("thinkingLevel", e.Error())
 			}
+			capture.Configuration.ModelsJSON, _ = models.ModelsJSONFor(capture.Agent.ModelProvider)
 			capture.Configuration.ThinkingLevel = &level
 			capture.Configuration.ServiceTier, e = agentconfig.ResolveServiceTier(capture.Agent.ModelProvider, capture.Agent.ServiceTier)
 			if e != nil {

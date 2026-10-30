@@ -4191,6 +4191,7 @@ components:
       type: object
       required:
         - id
+        - source
         - apiKeyEnvVars
         - modelCount
         - authMethods
@@ -4198,6 +4199,10 @@ components:
       properties:
         id:
           type: string
+        source:
+          type: string
+          enum: [builtin, config]
+          description: builtin 为纯内置目录；config 表示该 Provider 有原生 models.json 配置或覆盖。
         apiKeyEnvVars:
           description: 旧环境凭证兼容诊断元数据，不能作为模型凭证录入字段。
           type: array

@@ -1,6 +1,6 @@
 import type { Schemas } from '@/api/client'
 
-export const codexProvider: Schemas['ModelProvider'] = { id: 'openai-codex', apiKeyEnvVars: [], modelCount: 1, authMethods: ['oauth'] }
+export const codexProvider: Schemas['ModelProvider'] = { id: 'openai-codex', source: 'builtin', apiKeyEnvVars: [], modelCount: 1, authMethods: ['oauth'] }
 export function makeModelAccount(overrides: Partial<Schemas['CredentialMeta']> = {}): Schemas['CredentialMeta'] {
   return { status: 'set', updatedAt: '2026-10-14T08:00:00Z', fieldNames: [], envNames: [], filePaths: [], warnings: [], provider: 'openai-codex', authMethod: 'oauth', versionId: '00000000-0000-7000-8000-000000000301', accountLabel: 'fixture-old@example.test', ...overrides }
 }

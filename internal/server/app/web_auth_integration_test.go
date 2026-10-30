@@ -176,7 +176,7 @@ func TestWebAuthIntegration(t *testing.T) {
 	project := contextView["project"].(map[string]any)
 	create := func(name, provider string) uuid.UUID {
 		model := ""
-		for _, p := range a.Config.Models.Providers {
+		for _, p := range a.Config.Models.Snapshot().Providers {
 			if p.ID == provider && len(p.Models) > 0 {
 				model = p.Models[0].ID
 				break

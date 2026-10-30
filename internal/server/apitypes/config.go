@@ -105,6 +105,7 @@ type ModelProviderList struct {
 // ModelProvider 对应 ModelProvider。
 type ModelProvider struct {
 	ID            string   `json:"id"`
+	Source        string   `json:"source"`
 	APIKeyEnvVars []string `json:"apiKeyEnvVars"`
 	AuthMethods   []string `json:"authMethods"`
 	ModelCount    int      `json:"modelCount"`

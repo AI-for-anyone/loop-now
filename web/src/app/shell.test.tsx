@@ -333,7 +333,7 @@ describe('连接与错误展示', () => {
   it('校验失败时在输入项旁显示原因，并保留已填写的内容', async () => {
     server.use(
       http.get(apiUrl('/model-providers'), () =>
-        HttpResponse.json({ piVersion: '1.1.0', catalogGeneratedAt: null, providers: [{ id: 'anthropic', apiKeyEnvVars: ['ANTHROPIC_API_KEY'], modelCount: 1 }] }),
+        HttpResponse.json({ piVersion: '1.1.0', catalogGeneratedAt: null, providers: [{ id: 'anthropic', source: 'builtin', apiKeyEnvVars: ['ANTHROPIC_API_KEY'], modelCount: 1, authMethods: ['api_key'] }] }),
       ),
       http.get(apiUrl('/model-providers/anthropic/models'), () =>
         HttpResponse.json({ providerId: 'anthropic', models: [{ id: 'm1', name: 'M1', reasoning: false, contextWindow: 1, maxTokens: 1, input: [] }] }),

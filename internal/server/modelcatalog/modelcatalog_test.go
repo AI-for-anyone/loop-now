@@ -3,6 +3,7 @@ package modelcatalog_test
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,12 +15,23 @@ import (
 
 func localPi(t *testing.T) *preflight.Resolved {
 	t.Helper()
+	if root := os.Getenv("LOOP_NOW_TEST_PI_PACKAGE_DIR"); root != "" {
+		node, err := exec.LookPath("node")
+		if err != nil {
+			t.Skipf("本机没有 Node：%v", err)
+		}
+		piAIDir := os.Getenv("LOOP_NOW_TEST_PI_AI_DIR")
+		if piAIDir == "" {
+			piAIDir = filepath.Join(root, "node_modules", "@earendil-works", "pi-ai")
+		}
+		return &preflight.Resolved{NodeBin: node, PiAIDir: piAIDir, PiPackageDir: root, ExecBasePath: os.Getenv("PATH")}
+	}
 	r, err := preflight.Resolve(context.Background(), preflight.Options{
-		PiBin: "pi", PiVersion: "1.1.0", NodeBin: "node",
+		PiBin: "pi", PiVersion: "1.4.0", NodeBin: "node",
 		WorkRoot: filepath.Join(t.TempDir(), "root"), HomeDirs: []string{"/nonexistent-home"},
 	})
 	if err != nil {
-		t.Skipf("本机没有可用的 Pi 1.1.0：%v", err)
+		t.Skipf("本机没有可用的 Pi 1.4.0：%v", err)
 	}
 	return r
 }
@@ -28,7 +40,7 @@ func TestLoadFromLocalPi(t *testing.T) {
 	r := localPi(t)
 	// 断网也能读：子进程只拿到 PATH 与临时 HOME，脚本只读本地文件。
 	c, err := modelcatalog.Load(context.Background(), modelcatalog.Options{
-		NodeBin: r.NodeBin, PiAIDir: r.PiAIDir, PiVersion: "1.1.0", Path: r.ExecBasePath,
+		NodeBin: r.NodeBin, PiAIDir: r.PiAIDir, PiVersion: "1.4.0", Path: r.ExecBasePath,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +78,7 @@ func TestLoadDoesNotTouchAgentDir(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	before, _ := os.Stat(filepath.Join(home, ".pi", "agent"))
 	if _, err := modelcatalog.Load(context.Background(), modelcatalog.Options{
-		NodeBin: r.NodeBin, PiAIDir: r.PiAIDir, PiVersion: "1.1.0", Path: r.ExecBasePath,
+		NodeBin: r.NodeBin, PiAIDir: r.PiAIDir, PiVersion: "1.4.0", Path: r.ExecBasePath,
 	}); err != nil {
 		t.Fatal(err)
 	}

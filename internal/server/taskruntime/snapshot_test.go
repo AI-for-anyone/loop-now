@@ -172,8 +172,8 @@ func TestEncodingStoresPlaintextAndSafeDiagnostics(t *testing.T) {
 	if err = json.Unmarshal(b, &wire); err != nil {
 		t.Fatal(err)
 	}
-	if string(wire["schemaVersion"]) != "9" || wire["sourceVersion"] != nil || !bytes.Contains(wire["credentials"], []byte(secretSentinel)) {
-		t.Fatal("new capture is not a plaintext v9 snapshot without sourceVersion")
+	if string(wire["schemaVersion"]) != "10" || wire["sourceVersion"] != nil || !bytes.Contains(wire["credentials"], []byte(secretSentinel)) {
+		t.Fatal("new capture is not a plaintext v10 snapshot without sourceVersion")
 	}
 	restored, err := Decode(b)
 	if err != nil {
@@ -513,7 +513,7 @@ func TestConvertedLegacySourceVersionsRejectNewIdentityFields(t *testing.T) {
 	}
 }
 
-// 新捕获（schema 9）的任务复制基础 Agent 的文件夹；schema 8 的旧任务保留冻结来源的行为。
+// 新捕获复制基础 Agent 的文件夹；schema 8 的旧任务保留冻结来源，schema 9 继续可读。
 func TestSchemaVersionTellsFolderCopyFromFrozenSources(t *testing.T) {
 	scope, id, input := fixture(t)
 	snap, err := Capture(scope, id, input)
@@ -534,11 +534,16 @@ func TestSchemaVersionTellsFolderCopyFromFrozenSources(t *testing.T) {
 	if err != nil || old.CopiesAgentFolder() {
 		t.Fatalf("schema 8 的旧任务应保留冻结来源：%v", err)
 	}
+	env.SchemaVersion = copiedAgentFolderSchema
+	v9, err := Decode(encodeEnvelope(t, env))
+	if err != nil || !v9.CopiesAgentFolder() {
+		t.Fatalf("schema 9 的旧任务应继续复制文件夹：%v", err)
+	}
 	env.SchemaVersion, env.SourceVersion = schemaVersion, 5
 	if _, err := Decode(encodeEnvelope(t, env)); err == nil {
-		t.Fatal("schema 9 不能带 sourceVersion（转换来的旧快照只在 schema 8）")
+		t.Fatal("当前 schema 不能带 sourceVersion")
 	}
-	env.SchemaVersion, env.SourceVersion = 10, 0
+	env.SchemaVersion, env.SourceVersion = schemaVersion+1, 0
 	if _, err := Decode(encodeEnvelope(t, env)); err == nil {
 		t.Fatal("未知 schema 应拒绝")
 	}

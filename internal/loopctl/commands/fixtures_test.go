@@ -113,7 +113,7 @@ func agentStatus() map[string]any {
 
 func modelProviderList() map[string]any {
 	return map[string]any{"piVersion": "1.1.0", "catalogGeneratedAt": nil,
-		"providers": []any{map[string]any{"id": "anthropic", "apiKeyEnvVars": []any{"ANTHROPIC_API_KEY"}, "authMethods": []any{"api_key"}, "modelCount": 1}}}
+		"providers": []any{map[string]any{"id": "anthropic", "source": "builtin", "apiKeyEnvVars": []any{"ANTHROPIC_API_KEY"}, "authMethods": []any{"api_key"}, "modelCount": 1}}}
 }
 
 func modelList() map[string]any {

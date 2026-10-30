@@ -27,6 +27,7 @@ import (
 	"loop-now/internal/server/executor/local"
 	"loop-now/internal/server/folders"
 	"loop-now/internal/server/modelauth"
+	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/modelcredential"
 	"loop-now/internal/server/prompts"
 	"loop-now/internal/server/store"
@@ -117,6 +118,8 @@ func (s *Source) ExecutionSnapshot(ctx context.Context, id uuid.UUID) (agentconf
 	out := agentconfig.Snapshot{LarkBinding: creds.LarkBinding, GoogleBinding: creds.GoogleBinding, ModelBinding: creds.ModelAuth, ModelCredential: model, ConfigurationAgentID: inst.AgentID, TaskID: inst.TaskID, AgentID: id, ConfigVersion: cfg.ConfigVersion, CredentialIdentity: cfg.CredentialIdentity, Provider: cfg.Provider, ModelID: cfg.ModelID, Prompt: cfg.Prompt, PromptLayers: prompts.Clone(cfg.Prompts), CLIs: cfg.CLIs, ModelEnv: creds.Model, CLIPayloads: map[string]clitemplate.Payload{}, Skills: []agentconfig.SkillSnapshot{}, Sources: []store.FolderSource{}, Session: store.AgentSession{State: inst.SessionState, Epoch: 1}}
 	out.ThinkingLevel = cfg.ThinkingLevel
 	out.ServiceTier = cfg.ServiceTier
+	out.ModelsJSON = cfg.ModelsJSON
+	out.ModelConfigIdentity = modelcatalog.ConfigIdentity(cfg.ModelsJSON)
 	if larkRevision > 0 {
 		out.CredentialIdentity = fmt.Sprintf("%s;lark-overlay:%d:%s:%s", out.CredentialIdentity, larkRevision, out.LarkBinding.RuntimeVariantVersion, out.LarkBinding.VersionID)
 	}

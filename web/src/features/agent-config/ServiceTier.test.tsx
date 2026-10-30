@@ -15,7 +15,7 @@ async function setup(tier?: Schemas['CodexServiceTier'] | null, fail = false) {
   let current = makeAgent({ model: { provider: 'openai-codex', modelId: 'gpt-a' }, serviceTier: tier, thinkingLevel: 'high' })
   const agent = current, writes: Schemas['AgentUpdate'][] = []
   const view = await renderConfig({ agent, handlers: [
-    http.get(apiUrl('/model-providers'), () => HttpResponse.json({ ...providers, providers: [...providers.providers, { id: 'openai-codex', modelCount: 2, apiKeyEnvVars: [], authMethods: ['oauth'] }] })),
+    http.get(apiUrl('/model-providers'), () => HttpResponse.json({ ...providers, providers: [...providers.providers, { id: 'openai-codex', source: 'builtin', modelCount: 2, apiKeyEnvVars: [], authMethods: ['oauth'] }] })),
     http.get(apiUrl('/model-providers/openai-codex/models'), () => HttpResponse.json({ providerId: 'openai-codex', models: catalog })),
     http.get(apiUrl(`/agents/${agent.id}`), () => HttpResponse.json(current)),
     http.patch(apiUrl(`/agents/${agent.id}`), async ({ request }) => {

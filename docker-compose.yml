@@ -43,6 +43,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      # 同时确认 HTTP、迁移 034 和 Pi 模型目录已就绪。
+      test: ["CMD", "curl", "-fsS", "http://localhost:8780/api/v1/model-settings"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 20s
     restart: unless-stopped
 
   web:
@@ -52,7 +59,8 @@ services:
     ports:
       - "127.0.0.1:5173:5173"
     depends_on:
-      - server
+      server:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

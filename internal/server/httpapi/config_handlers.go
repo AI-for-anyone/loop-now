@@ -50,9 +50,10 @@ func (s *Server) getHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listModelProviders(w http.ResponseWriter, r *http.Request) {
-	out := apitypes.ModelProviderList{PiVersion: s.Models.PiVersion, CatalogGeneratedAt: s.Models.GeneratedAt, Providers: []apitypes.ModelProvider{}}
-	for _, p := range s.Models.Providers {
-		out.Providers = append(out.Providers, apitypes.ModelProvider{ID: p.ID, APIKeyEnvVars: p.APIKeyEnvVars, AuthMethods: p.AuthMethods, ModelCount: len(p.Models)})
+	models := s.Models.Snapshot()
+	out := apitypes.ModelProviderList{PiVersion: models.PiVersion, CatalogGeneratedAt: models.GeneratedAt, Providers: []apitypes.ModelProvider{}}
+	for _, p := range models.Providers {
+		out.Providers = append(out.Providers, apitypes.ModelProvider{ID: p.ID, Source: p.Source, APIKeyEnvVars: p.APIKeyEnvVars, AuthMethods: p.AuthMethods, ModelCount: len(p.Models)})
 	}
 	writeJSON(w, http.StatusOK, out)
 }

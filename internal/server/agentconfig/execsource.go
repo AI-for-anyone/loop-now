@@ -34,6 +34,8 @@ type Snapshot struct {
 	AgentID              uuid.UUID
 	ConfigVersion        int64
 	CredentialIdentity   string
+	ModelConfigIdentity  string
+	ModelsJSON           []byte
 	Provider             string
 	ModelID              string
 	PromptLayers         *prompts.Layers
@@ -81,10 +83,12 @@ func (s *Service) ExecutionSnapshot(ctx context.Context, agentID uuid.UUID) (Sna
 	a := captured.Agent
 	snap := Snapshot{ContextProjectID: a.ProjectID, AgentID: a.ID, ConfigVersion: a.ConfigVersion, CredentialIdentity: captured.CredentialIdentity, Provider: a.ModelProvider, ModelID: a.ModelID, Prompt: a.Prompt, PromptLayers: prompts.Clone(captured.Prompts),
 		ModelEnv: map[string]string{}, CLIPayloads: map[string]clitemplate.Payload{}}
-	level, err := s.Models.ResolveThinking(a.ModelProvider, a.ModelID, a.ThinkingLevel)
+	models := s.Models.Snapshot()
+	level, err := models.ResolveThinking(a.ModelProvider, a.ModelID, a.ThinkingLevel)
 	if err != nil {
 		return Snapshot{}, err
 	}
+	snap.ModelsJSON, snap.ModelConfigIdentity = models.ModelsJSONFor(a.ModelProvider)
 	snap.ThinkingLevel = &level
 	snap.ServiceTier, err = ResolveServiceTier(a.ModelProvider, a.ServiceTier)
 	if err != nil {

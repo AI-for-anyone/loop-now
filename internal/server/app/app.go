@@ -41,6 +41,7 @@ import (
 	"loop-now/internal/server/loopctldist"
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/modelcatalog"
+	"loop-now/internal/server/modelconfig"
 	"loop-now/internal/server/pluginhost"
 	"loop-now/internal/server/plugins"
 	"loop-now/internal/server/preflight"
@@ -56,6 +57,7 @@ type App struct {
 	Installer       *clitemplate.Installer
 	CLIAuth         *cliauth.Service
 	ModelAuth       *modelauth.Service
+	ModelSettings   *modelconfig.Service
 	Cfg             *config.Config
 	InstanceID      uuid.UUID
 	Log             *slog.Logger
@@ -171,11 +173,17 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		extTLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}
 	}
 
-	models, err := modelcatalog.Load(ctx, modelcatalog.Options{NodeBin: res.NodeBin, PiAIDir: res.PiAIDir, PiVersion: cfg.PiVersion, Path: res.ExecBasePath})
+	packageRoot := res.PiPackageDir
+	if packageRoot == "" {
+		packageRoot = filepath.Dir(filepath.Dir(filepath.Dir(res.PiAIDir)))
+	}
+	modelOptions := modelcatalog.Options{NodeBin: res.NodeBin, PiAIDir: res.PiAIDir, PiPackageDir: packageRoot, PiVersion: cfg.PiVersion, Path: res.ExecBasePath}
+	builtinModels, err := modelcatalog.Load(ctx, modelOptions)
 	if err != nil {
 		return a, err
 	}
-	log.Info("已读取 Pi 模型目录", "providers", len(models.Providers))
+	models := modelcatalog.NewRegistry(builtinModels)
+	log.Info("已读取 Pi 模型目录", "providers", len(builtinModels.Providers))
 
 	templates, err := clitemplate.Load(cfg.CLITemplateDir)
 	if err != nil {
@@ -188,6 +196,12 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	}
 	if err != nil {
 		return a, err
+	}
+	if o.MigrationTarget == 0 || o.MigrationTarget >= 34 {
+		a.ModelSettings = &modelconfig.Service{Store: a.Store, Models: models, Options: modelOptions}
+		if _, err = a.ModelSettings.Reload(ctx); err != nil {
+			return a, fmt.Errorf("读取自定义模型配置失败：%w", err)
+		}
 	}
 	defaults, err := a.Store.EnsureDefaults(ctx, cfg.DefaultOrgName, cfg.DefaultProjectName)
 	if err != nil {
@@ -232,10 +246,6 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	helperEntry, authExtension, err := authhelper.Install(authRoot)
 	if err != nil {
 		return a, err
-	}
-	packageRoot := res.PiPackageDir
-	if packageRoot == "" {
-		packageRoot = filepath.Dir(filepath.Dir(filepath.Dir(res.PiAIDir)))
 	}
 	helper := &modelauth.Helper{Options: modelauth.HelperOptions{NodeBin: res.NodeBin, Entry: helperEntry, WorkRoot: filepath.Dir(authRoot), BasePath: res.ExecBasePath, PiPackageRoot: packageRoot, PiVersion: cfg.PiVersion, Timeout: cfg.AuthLoginTimeout, StopGrace: cfg.PiStopGrace}}
 	var login modelauth.LoginHelper = helper
@@ -314,7 +324,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		}
 	}
 	var modelEnvNames []string
-	for _, provider := range models.Providers {
+	for _, provider := range models.Snapshot().Providers {
 		modelEnvNames = append(modelEnvNames, provider.APIKeyEnvVars...)
 	}
 	host, _ := os.Hostname()
@@ -408,7 +418,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 
 	a.Store.ImageMaxCount = cfg.MaxMessageImages
 	a.Tasks.Hooks = appHooks{a}
-	a.API = &httpapi.Server{Hooks: appHooks{a}, CLIImport: a.CLIImport, CLIVerification: a.CLIVerification, CLIAuth: a.CLIAuth, ModelAuth: a.ModelAuth, ProjectCredentials: projectCredentials,
+	a.API = &httpapi.Server{Hooks: appHooks{a}, CLIImport: a.CLIImport, CLIVerification: a.CLIVerification, CLIAuth: a.CLIAuth, ModelAuth: a.ModelAuth, ModelSettings: a.ModelSettings, ProjectCredentials: projectCredentials,
 		O: httpapi.Options{
 			AllowedHosts: cfg.AllowedHosts, ConsoleOrigins: cfg.ConsoleOrigins, SSEKeepalive: cfg.SSEKeepalive, TaskEventPoll: cfg.TaskEventPoll, Defaults: defaults,
 			Limits: apitypes.Limits{MaxMessageImages: cfg.MaxMessageImages, MaxMessageImageBytes: cfg.MaxMessageImageBytes, MaxMessageImagePixels: cfg.MaxMessageImagePixels, MaxUploadFile: cfg.MaxUploadFile, MaxFolderUpload: maxFolderUpload, MaxMessage: cfg.MaxMessage, MaxInboxMessage: cfg.MaxInboxMessage, MaxSkillArchive: cfg.MaxSkillArchive,
