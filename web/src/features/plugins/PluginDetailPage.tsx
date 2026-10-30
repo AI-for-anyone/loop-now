@@ -11,6 +11,7 @@ import { DraftNavigationGuard } from '@/features/prompts/DraftNavigationGuard'
 import { t } from '@/i18n'
 import { shellText } from '@/i18n/shell'
 import { isNotFound } from '@/lib/errors'
+import { localizedText } from '@/lib/localized-text'
 import { pageTitleClass } from '@/lib/page-title'
 import { cn } from '@/lib/utils'
 import { AccountsManager } from './Accounts'
@@ -230,17 +231,17 @@ export function PluginDetailPage() {
                 </span>
               </nav>
               <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-                <h1 className={pageTitleClass}>{plugin.displayName}</h1>
+                <h1 className={pageTitleClass}>{localizedText(plugin.displayName)}</h1>
                 <SourceBadge source={plugin.source} />
                 <IdVersion id={plugin.id} version={plugin.version} />
                 <StatusLabel status={plugin.status} />
               </div>
               <p className="text-[13px] text-ink-700 [overflow-wrap:anywhere]">
-                {[plugin.description, text.from[plugin.source.kind], copy.installedOn(t.chat.time(plugin.installedAt))].filter(Boolean).join(' · ')}
+                {[localizedText(plugin.description), text.from[plugin.source.kind], copy.installedOn(t.chat.time(plugin.installedAt))].filter(Boolean).join(' · ')}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2.5 sm:ml-auto">
-              <PluginActionButtons plugin={plugin} actions={manifest.components.actions} page="global" where={{}} />
+              <PluginActionButtons plugin={{ id: plugin.id, displayName: localizedText(plugin.displayName) }} actions={manifest.components.actions} page="global" where={{}} />
               <UpdateButton plugin={plugin} installer={installer} />
               <Button size="sm" variant="destructive-link" onClick={() => setRemoving(true)}>
                 {text.uninstall}
@@ -253,7 +254,7 @@ export function PluginDetailPage() {
               {plugin.lastError}
             </p>
           )}
-          <nav aria-label={plugin.displayName} className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+          <nav aria-label={localizedText(plugin.displayName)} className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
             {tabs.map((value) => (
               <NavLink key={value} to={pluginPath(plugin.id, value === 'overview' ? undefined : value)} end className={() => tabClass({ isActive: value === tab })} aria-current={value === tab ? 'page' : undefined}>
                 {copy.tabs[value]}
@@ -289,7 +290,7 @@ export function PluginDetailPage() {
       <ConfirmDialog
         open={removing}
         onOpenChange={setRemoving}
-        title={copy.uninstallTitle(plugin.displayName)}
+        title={copy.uninstallTitle(localizedText(plugin.displayName))}
         body={copy.uninstallBody}
         confirmLabel={text.uninstall}
         destructive

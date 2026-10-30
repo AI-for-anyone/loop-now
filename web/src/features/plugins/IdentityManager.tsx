@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { t } from '@/i18n'
 import { selectClass } from '@/lib/field'
+import { localizedText } from '@/lib/localized-text'
 import { cn } from '@/lib/utils'
 import { pluginPath } from './paths'
 
@@ -31,7 +32,7 @@ function useCandidates() {
     detail.data
       ? detail.data.manifest.components.channels
           .filter((channel) => channel.manageIdentities)
-          .map((channel) => ({ pluginId: detail.data.plugin.id, channelId: channel.id, pluginName: detail.data.plugin.displayName, channelLabel: channel.label, status: list.find((p) => p.id === detail.data.plugin.id)?.status ?? detail.data.plugin.status }))
+          .map((channel) => ({ pluginId: detail.data.plugin.id, channelId: channel.id, pluginName: localizedText(detail.data.plugin.displayName), channelLabel: channel.label, status: list.find((p) => p.id === detail.data.plugin.id)?.status ?? detail.data.plugin.status }))
       : [],
   )
   return { candidates, pending: plugins.isPending || details.some((detail) => detail.isPending), error: plugins.error ?? details.find((detail) => detail.error)?.error ?? null }

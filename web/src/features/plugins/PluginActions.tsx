@@ -5,6 +5,7 @@ import { ErrorAlert } from '@/components/ErrorAlert'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { t } from '@/i18n'
+import { localizedText } from '@/lib/localized-text'
 import { toastStore } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 import { SchemaFields } from './SchemaForm'
@@ -86,7 +87,7 @@ export function PluginActionButtons({ plugin, actions, page, where, className }:
 function OnePlugin({ pluginId, page, where }: { pluginId: string; page: ActionPage; where: Where }) {
   const detail = usePlugin(pluginId)
   if (!detail.data) return null
-  return <PluginActionButtons plugin={detail.data.plugin} actions={detail.data.manifest.components.actions} page={page} where={where} />
+  return <PluginActionButtons plugin={{ id: detail.data.plugin.id, displayName: localizedText(detail.data.plugin.displayName) }} actions={detail.data.manifest.components.actions} page={page} where={where} />
 }
 
 // 任务页、外部身份页用：列出所有已安装插件在这种页面上的操作。给了 projectId 时只列在这个项目启用了的插件。

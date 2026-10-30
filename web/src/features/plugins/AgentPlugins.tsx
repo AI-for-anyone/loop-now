@@ -11,6 +11,7 @@ import { Section } from '@/features/agent-config/Section'
 import { useScope } from '@/features/projects/scope-context'
 import { useDirtyForm } from '@/features/prompts/draft-navigation'
 import { t } from '@/i18n'
+import { localizedText } from '@/lib/localized-text'
 import { projectBase } from '@/lib/scope'
 import { cn } from '@/lib/utils'
 import { Quiet } from './parts'
@@ -68,7 +69,7 @@ function GrantForm({ agent, plugin, onSaved, onCancel, onDirty }: { agent: Schem
     <form className="grid min-w-0 gap-3.5" onSubmit={submit}>
       <label className="inline-flex items-center gap-2 text-[14px] font-bold">
         <input type="checkbox" checked={granted} disabled={save.isPending} onChange={(event) => setGranted(event.target.checked)} className="size-4 accent-riso-blue" />
-        {text.grant(plugin.displayName)}
+        {text.grant(localizedText(plugin.displayName))}
       </label>
       {usesAccounts(agent, plugin) &&
         plugin.accountKinds.map((kind) => {
@@ -112,7 +113,7 @@ function GrantForm({ agent, plugin, onSaved, onCancel, onDirty }: { agent: Schem
 function AgentActions({ agent, plugin }: { agent: Schemas['Agent']; plugin: AgentPlugin }) {
   const detail = usePlugin(plugin.pluginId)
   if (!detail.data) return null
-  return <PluginActionButtons plugin={{ id: plugin.pluginId, displayName: plugin.displayName }} actions={detail.data.manifest.components.actions} page="agent" where={{ agentId: agent.id }} className="border-t border-ink/10 pt-3" />
+  return <PluginActionButtons plugin={{ id: plugin.pluginId, displayName: localizedText(plugin.displayName) }} actions={detail.data.manifest.components.actions} page="agent" where={{ agentId: agent.id }} className="border-t border-ink/10 pt-3" />
 }
 
 // 一次只展开一个插件；展开中的表单有未保存的修改时，收起或切换到别的插件都先确认。
@@ -154,7 +155,7 @@ function GrantList({ agent, plugins }: { agent: Schemas['Agent']; plugins: Agent
         open={asking !== null}
         onOpenChange={(value) => !value && setAsking(null)}
         title={text.discardTitle}
-        body={text.discardBody(current?.displayName ?? '')}
+        body={text.discardBody(current ? localizedText(current.displayName) : '')}
         confirmLabel={text.discard}
         cancelLabel={text.keepEditing}
         onConfirm={() => {
@@ -185,8 +186,8 @@ function Row({ agent, plugin, open, saved, onToggle, onDone, onDirty }: { agent:
           onClick={onToggle}
           className={cn(rowGrid, 'cursor-pointer outline-none hover:bg-ink/[0.03] focus-visible:shadow-[inset_0_0_0_2px_var(--riso-blue)]', open && 'bg-tint-blue/40 hover:bg-tint-blue/40')}
         >
-          <span id={`${id}-name`} className={rowName} title={plugin.displayName}>
-            {plugin.displayName}
+          <span id={`${id}-name`} className={rowName} title={localizedText(plugin.displayName)}>
+            {localizedText(plugin.displayName)}
           </span>
           <Summary agent={agent} plugin={plugin} />
           <span className={rowTrail}>
@@ -227,9 +228,9 @@ function NotEnabled({ plugins, link }: { plugins: AgentPlugin[]; link: string | 
           <p className="text-[13px] text-ink-500">{text.notEnabledHint}</p>
           <ul className={listClass}>
             {plugins.map((plugin) => (
-              <li key={plugin.pluginId} aria-label={plugin.displayName} className={rowGrid}>
-                <span className={cn(rowName, 'text-ink-700')} title={plugin.displayName}>
-                  {plugin.displayName}
+              <li key={plugin.pluginId} aria-label={localizedText(plugin.displayName)} className={rowGrid}>
+                <span className={cn(rowName, 'text-ink-700')} title={localizedText(plugin.displayName)}>
+                  {localizedText(plugin.displayName)}
                 </span>
                 <span className={cn(rowSummary, 'text-ink-500')}>{plugin.granted ? text.granted : text.notGranted}</span>
                 <span className={rowTrail}>

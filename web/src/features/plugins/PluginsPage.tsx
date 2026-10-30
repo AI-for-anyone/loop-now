@@ -7,6 +7,7 @@ import { SectionError } from '@/components/RequestError'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { t } from '@/i18n'
+import { localizedText } from '@/lib/localized-text'
 import { pageTitleClass } from '@/lib/page-title'
 import { cn } from '@/lib/utils'
 import { InstallSourceDialog } from './InstallFlow'
@@ -89,7 +90,7 @@ function InstalledCard({ plugin, installer }: { plugin: Schemas['Plugin']; insta
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <h3 className="font-display-cn text-[21px] leading-tight font-normal [overflow-wrap:anywhere]">
             <Link to={pluginPath(plugin.id)} className="outline-none hover:underline focus-visible:shadow-focus">
-              {plugin.displayName}
+              {localizedText(plugin.displayName)}
             </Link>
           </h3>
           <IdVersion id={plugin.id} version={plugin.version} />
@@ -137,10 +138,10 @@ function BuiltinSection({ installed }: { installed: string[] }) {
         {rest.map((source) => (
           <li key={source.id} className={cn(cardClass, 'flex min-w-0 flex-col gap-2 px-4 py-3.5')}>
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="font-display-cn text-[19px] leading-tight font-normal">{source.displayName}</h3>
+              <h3 className="font-display-cn text-[19px] leading-tight font-normal">{localizedText(source.displayName)}</h3>
               <SourceBadge source={{ kind: 'builtin' }} />
             </div>
-            <p className="text-[13px] leading-snug text-ink-700">{source.description}</p>
+            <p className="text-[13px] leading-snug text-ink-700">{localizedText(source.description)}</p>
             <div className="mt-auto flex items-center justify-between gap-3 pt-1">
               <span className="font-mono text-[12px] text-ink-500">v{source.version}</span>
               <Button size="xs" variant="secondary" disabled={installer.pending !== null} onClick={() => void installer.begin(source.id, { source: { kind: 'builtin', location: source.id } })}>

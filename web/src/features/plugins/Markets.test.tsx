@@ -102,3 +102,34 @@ describe('插件市场的页签', () => {
     expect(await screen.findByRole('button', { name: '已是最新' })).toBeDisabled()
   })
 })
+
+describe('插件作者按语言给出的名称与说明', () => {
+  it('市场条目取当前界面语言，缺当前语言时回退到 en-US，再到作者写的第一项', async () => {
+    renderMarket('/plugins?tab=official', {
+      markets: [
+        makeMarket({
+          plugins: [
+            makeMarketEntry({ id: 'lark-notify', displayName: { 'en-US': 'Lark notify', 'zh-CN': '飞书通知' }, description: { 'en-US': 'Push to Lark', 'zh-CN': '推送到飞书' } }),
+            makeMarketEntry({ id: 'weekly', displayName: { 'en-US': 'Weekly report' }, description: { ja: '週報を送る', 'en-US': 'Send a weekly report' } }),
+            makeMarketEntry({ id: 'ja-only', displayName: { ja: '週報' }, description: '只有一种写法' }),
+          ],
+        }),
+      ],
+    })
+    const card = (name: string) => screen.getByRole('heading', { name }).closest('li')!
+    await screen.findByRole('heading', { name: '飞书通知' })
+    expect(card('飞书通知')).toHaveTextContent('推送到飞书')
+    expect(card('Weekly report')).toHaveTextContent('Send a weekly report')
+    expect(card('週報')).toHaveTextContent('只有一种写法')
+  })
+
+  it('已安装的卡片与插件详情页头同样按语言取名称和说明', async () => {
+    const localized = makeDetail(makePlugin({ id: 'lark-notify', displayName: { 'en-US': 'Lark notify', 'zh-CN': '飞书通知' }, description: { 'en-US': 'Push to Lark', 'zh-CN': '推送到飞书' } }))
+    const { router } = renderMarket('/plugins', { details: [localized] })
+    expect(await screen.findByRole('link', { name: '飞书通知' })).toBeInTheDocument()
+    await router.navigate('/plugins/lark-notify')
+    expect(await screen.findByRole('heading', { name: '飞书通知', level: 1 })).toBeInTheDocument()
+    expect(screen.getByText(/^推送到飞书 · /)).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('[object Object]')
+  })
+})
