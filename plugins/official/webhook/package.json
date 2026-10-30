@@ -1,7 +1,10 @@
 {
   "name": "@loop-now/plugin-webhook",
   "version": "1.0.0",
-  "description": "收件箱收到新消息时，把事件 POST 到你的回调地址：HMAC-SHA256 签名，失败自动重试，投递记录可在插件页查看；也可以代管外部身份，对方经回调回复与回答提问",
+  "description": {
+    "zh-CN": "收件箱收到新消息时，把事件 POST 到你的回调地址：HMAC-SHA256 签名，失败自动重试，投递记录可在插件页查看；也可以代管外部身份，对方经回调回复与回答提问",
+    "en-US": "POSTs an event to your callback URL when a new inbox message arrives, signed with HMAC-SHA256 and retried on failure, with deliveries listed on the plugin page. It can also manage an external identity, whose owner replies and answers questions through the callback"
+  },
   "license": "Apache-2.0",
   "type": "module",
   "keywords": ["loop-now-plugin"],
@@ -10,7 +13,10 @@
   },
   "loopNow": {
     "id": "webhook",
-    "displayName": "Webhook 通知",
+    "displayName": {
+      "zh-CN": "Webhook 通知",
+      "en-US": "Webhook notifications"
+    },
     "platform": "./platform/index.ts",
     "events": ["inbox.received"],
     "permissions": ["state", "identities.manage"],

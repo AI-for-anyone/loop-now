@@ -1,7 +1,10 @@
 {
   "name": "@loop-now/plugin-playwright",
   "version": "1.0.0",
-  "description": "专用可见浏览器：Agent 用官方 Playwright MCP 打开网页、读取页面、点击、输入和截图，不连接日常 Chrome",
+  "description": {
+    "zh-CN": "专用可见浏览器：Agent 用官方 Playwright MCP 打开网页、读取页面、点击、输入和截图，不连接日常 Chrome",
+    "en-US": "A dedicated visible browser: Agents use the official Playwright MCP to open pages, read them, click, type and take screenshots, without touching your everyday Chrome"
+  },
   "license": "Apache-2.0",
   "type": "module",
   "keywords": ["loop-now-plugin", "pi-package"],
@@ -13,7 +16,10 @@
   },
   "loopNow": {
     "id": "playwright",
-    "displayName": "专用浏览器",
+    "displayName": {
+      "zh-CN": "专用浏览器",
+      "en-US": "Dedicated browser"
+    },
     "mcpServers": {
       "browser": {
         "command": "node",
