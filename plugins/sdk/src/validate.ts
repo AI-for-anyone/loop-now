@@ -69,7 +69,8 @@ type Json = Record<string, unknown>
 
 /**
  * 一条 mcpServers 条目能否交给 Pi（与 Pi 的 validateMcpServerConfig 选传输的方式相同，服务端 internal/pluginmanifest 同此）：
- * 有 url 且 type 省略或为 http、streamable-http 时是 streamable HTTP，url 须是 http 或 https 地址；
+ * 有 url 且 type 省略或为 http、streamable-http 时是 streamable HTTP，url 须是写明 http:// 或 https:// 加主机的地址
+ * （URL 会把 http:foo 规范成 http://foo/，服务端按主机非空判断，所以另查写法）；
  * 否则有非空 command 且 type 省略或为 stdio 时是 stdio。返回 null 表示可以，否则是哪类问题。
  */
 function mcpEntryProblem(cfg: unknown): 'sse' | 'type' | 'entry' | null {
@@ -77,7 +78,7 @@ function mcpEntryProblem(cfg: unknown): 'sse' | 'type' | 'entry' | null {
   const { type, url, command } = cfg
   if (type === 'sse') return 'sse'
   if (type !== undefined && type !== 'stdio' && type !== 'http' && type !== 'streamable-http') return 'type'
-  if (typeof url === 'string' && type !== 'stdio') return URL.canParse(url) && /^https?:$/.test(new URL(url).protocol) ? null : 'entry'
+  if (typeof url === 'string' && type !== 'stdio') return /^https?:\/\/[^/]/i.test(url) && URL.canParse(url) ? null : 'entry'
   return typeof command === 'string' && command !== '' && type !== 'http' && type !== 'streamable-http' ? null : 'entry'
 }
 
