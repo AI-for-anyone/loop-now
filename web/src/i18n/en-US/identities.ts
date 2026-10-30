@@ -30,7 +30,8 @@ export const identities = {
     'messages sent to it afterwards are rejected;',
     'the name is freed, so an identity with the same name can be created again.',
   ],
-  riskTitle: 'A token has every permission of the external CLI:',
+  // 标题后面紧接正文，冒号后留一个空格。
+  riskTitle: 'A token has every permission of the external CLI: ',
   riskBody:
     "changing Agent config and credentials, managing the Skills library, viewing Agent status and history, confirming new sessions, and sending and receiving Inbox messages. A leaked token hands control of the platform to whoever has it; revoke it as soon as you notice.",
   riskShort: 'A token has every permission of the external CLI. A leaked token hands control of the platform to whoever has it; revoke it as soon as you notice.',

@@ -2,6 +2,7 @@ import type { Messages } from '..'
 
 export const settings = {
   title: 'Global settings',
+  language: { title: 'Language', hint: 'Applies to this browser only. The page reloads when you switch.' },
   readonlyHint: "The server's config comes from its environment variables. It's shown here read-only; the console can't change it.",
   organization: 'Default organization',
   project: 'Default project',

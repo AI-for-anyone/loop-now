@@ -1,6 +1,7 @@
 import { act, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse, type HttpHandler } from 'msw'
+import { t } from '@/i18n'
 import { routes } from '@/app/routes'
 import type { Schemas } from '@/api/client'
 import { apiUrl, makeRun, makeStatus } from './api'
@@ -89,7 +90,7 @@ export async function renderOverview(setup: OverviewSetup = {}) {
   )
   const user = userEvent.setup()
   const result = renderRoutes(routes, setup.path ?? '/')
-  await screen.findByRole('heading', { name: '概览', level: 1 })
+  await screen.findByRole('heading', { name: t.overview.title, level: 1 })
   const source = () => FakeEventSource.instances.filter((s) => s.url.endsWith('/overview/events')).at(-1)!
   const emit = async (type: string, data: unknown, eventId?: string) => {
     await act(async () => {

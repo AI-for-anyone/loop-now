@@ -2,9 +2,10 @@ import { focusManager } from '@tanstack/react-query'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { keys } from '@/api/queries'
 import { config } from '@/config'
+import { localeStorageKey, page as browserPage } from '@/i18n/locale'
 import { agentsUrl, apiUrl, defaultAgentPath, defaultAgentsPath, defaultProject, errorBody, makeAgent, platformAgentsUrl, toListItem } from '@/test/api'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
@@ -404,5 +405,18 @@ describe('全局设置页', () => {
     )
     renderRoutes(routes, '/settings')
     await waitFor(() => expect(screen.getByText('版本', { selector: 'dt' }).nextElementSibling).toHaveTextContent('dev-d6eed7b50c04'))
+  })
+
+  it('界面语言保存在这个浏览器里，换语言后重新加载页面', async () => {
+    server.use(...baseHandlers([]))
+    const reload = vi.spyOn(browserPage, 'reload').mockImplementation(() => {})
+    const user = userEvent.setup()
+    renderRoutes(routes, '/settings')
+    const select = await screen.findByRole('combobox', { name: '界面语言' })
+    expect(select).toHaveDisplayValue('中文')
+    expect(select).toHaveAccessibleDescription('只影响这个浏览器；切换后页面会重新加载。')
+    await user.selectOptions(select, 'English')
+    expect(window.localStorage.getItem(localeStorageKey)).toBe('en-US')
+    expect(reload).toHaveBeenCalledOnce()
   })
 })

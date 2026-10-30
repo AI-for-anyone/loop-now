@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse, type HttpHandler } from 'msw'
+import { t } from '@/i18n'
 import { routes } from '@/app/routes'
 import type { Schemas } from '@/api/client'
 import { agentsUrl, apiUrl, context, defaultAgentPath, makeAgent, makeStatus, platformAgentsUrl, toListItem } from './api'
@@ -82,6 +83,6 @@ export async function renderConfig(setup: ConfigSetup = {}) {
   )
   const user = userEvent.setup()
   const result = renderRoutes(routes, agent.scope === 'platform' ? `/platform/agents/${agent.id}/config` : defaultAgentPath(agent.id, 'config'))
-  await screen.findByRole('region', { name: '基本信息' })
+  await screen.findByRole('region', { name: t.config.basic.title })
   return { ...result, agent, user }
 }

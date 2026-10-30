@@ -102,7 +102,7 @@ export const stats = {
     title: 'Waiting for your answer',
     unit: 'Questions Agents asked you',
     asked: (range: string) => `Asked · ${range}`,
-    avg: 'Your average reply time',
+    avg: 'Avg reply time',
     max: 'Longest wait',
     pending: 'Still waiting',
     waited: (time: string) => `Waited ${time}`,

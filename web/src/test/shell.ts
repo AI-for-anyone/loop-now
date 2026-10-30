@@ -1,6 +1,7 @@
 import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import type { Schemas } from '@/api/client'
+import { t } from '@/i18n'
 import { agentsUrl, apiUrl, context, makeAgent, makeStatus, toListItem } from './api'
 import { emptySelections } from './project-credentials'
 
@@ -24,9 +25,9 @@ export function baseHandlers(agents: Schemas['Agent'][] = [makeAgent()]) {
 }
 
 // 左侧栏与其中的链接；aria-current 为 page 的是当前项。链接文字含状态标签与“待你回复”的读屏文字。
-export const sidebar = () => screen.getByRole('navigation', { name: '主导航' })
+export const sidebar = () => screen.getByRole('navigation', { name: t.shell.nav })
 export const sidebarLinks = () => within(sidebar()).getAllByRole('link')
 export const currentSidebarLinks = () => sidebarLinks().filter((link) => link.getAttribute('aria-current') === 'page')
-export const scopeSwitcher = (name: string) => within(sidebar()).getByRole('button', { name: `切换范围，当前：${name}` })
+export const scopeSwitcher = (name: string) => within(sidebar()).getByRole('button', { name: t.shell.scope.label(name) })
 // 导航会触发侧栏按新范围重渲染，随后立即查询时用这个异步变体等一拍。
 export const findScopeSwitcher = (name: string) => within(sidebar()).findByRole('button', { name: `切换范围，当前：${name}` })

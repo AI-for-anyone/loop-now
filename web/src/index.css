@@ -387,3 +387,8 @@
 .code-view .hljs-name { color: var(--ink); font-weight: 700; }
 .code-view .hljs-deletion { color: var(--red-text); }
 .code-view .hljs-addition { color: var(--green-text); }
+
+/* 英文界面：ZCOOL 只适合中文，展示字换成仓库自带的 Bricolage Grotesque（只带了 800 一种字重）。 */
+html:lang(en) .font-display-cn {
+  font-family: 'Bricolage Grotesque', 'Noto Sans SC', sans-serif;
+}

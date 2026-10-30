@@ -1,3 +1,5 @@
+import { enUS } from './en-US'
+import { locale } from './locale'
 import { zhCN } from './zh-CN'
 
 type Widen<T> = T extends string
@@ -9,4 +11,5 @@ type Widen<T> = T extends string
 // 文案表的结构。新增语言时，按这个类型提供一份文案表。
 export type Messages = Widen<typeof zhCN>
 
-export const t: Messages = zhCN
+// 当前界面语言的文案表，页面加载时选定。
+export const t: Messages = locale === 'en-US' ? enUS : zhCN
