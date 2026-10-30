@@ -66,13 +66,21 @@ func TestWorkerActualParentSIGKILLThenRecoveryDoesNotReplay(t *testing.T) {
 	if e := cmd.Start(); e != nil {
 		t.Fatal(e)
 	}
-	defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }()
+	var waitErr error
+	waitDone := make(chan struct{})
+	go func() { waitErr = cmd.Wait(); close(waitDone) }()
+	defer func() { _ = cmd.Process.Kill(); <-waitDone }()
 	var info struct {
 		PID, Port int
 		Home      string
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for {
+		select {
+		case <-waitDone:
+			t.Fatal("crash fixture exited before native child was ready:", waitErr)
+		default:
+		}
 		b, e := os.ReadFile(ready)
 		if e == nil && json.Unmarshal(b, &info) == nil && info.PID > 0 && info.Port > 0 {
 			break
@@ -85,7 +93,7 @@ func TestWorkerActualParentSIGKILLThenRecoveryDoesNotReplay(t *testing.T) {
 	if e := cmd.Process.Kill(); e != nil {
 		t.Fatal(e)
 	}
-	_ = cmd.Wait()
+	<-waitDone
 	deadline = time.Now().Add(4 * time.Second)
 	for {
 		_, homeErr := os.Stat(info.Home)
@@ -101,6 +109,24 @@ func TestWorkerActualParentSIGKILLThenRecoveryDoesNotReplay(t *testing.T) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
+	// Native exit and HOME removal can precede the EOF guard closing its inherited
+	// lease. Wait for that release; startup recovery must then remove the orphan.
+	leasePath := filepath.Join(f.s.Options.WorkRoot, ".cli-verification-locks", op.String()+".lock")
+	deadline = time.Now().Add(4 * time.Second)
+	for {
+		lease, openErr := os.OpenFile(leasePath, os.O_RDWR|syscall.O_NOFOLLOW, 0600)
+		if openErr == nil {
+			lockErr := syscall.Flock(int(lease.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+			_ = lease.Close()
+			if lockErr == nil {
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("EOF guard did not release orphan lease")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 	// New real Store/Service startup recovers the original durable operation;
 	// no CommandFactory/credentials/probe work can be triggered by its GET.
 	next, e := New(context.Background(), f.st, f.s.Templates, f.s.Installer, nil, f.s.Options, nil)
@@ -112,7 +138,7 @@ func TestWorkerActualParentSIGKILLThenRecoveryDoesNotReplay(t *testing.T) {
 	if e != nil || recovered.Status != "failed" || recovered.Result == nil || recovered.Result.ErrorCode == nil || *recovered.Result.ErrorCode != "server_restarted" || probes.Load() != 0 {
 		t.Fatal("restart fabricated result or replayed probe", e)
 	}
-	if _, e = os.Stat(filepath.Join(f.s.Options.WorkRoot, ".cli-verification-locks", op.String()+".lock")); !os.IsNotExist(e) {
+	if _, e = os.Stat(leasePath); !os.IsNotExist(e) {
 		t.Fatal("EOF orphan lease not recovered")
 	}
 }
