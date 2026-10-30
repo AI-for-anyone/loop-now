@@ -46,7 +46,7 @@ features:
 
 <div class="ln-hero-image">
 
-![Loop Now console: an agent conversation with rendered diagrams and a compact message composer](/assets/console.png)
+![Loop Now console: an agent conversation with rendered diagrams and a compact message composer](/assets/console-en.png)
 
 </div>
 

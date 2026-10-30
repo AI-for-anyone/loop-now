@@ -17,7 +17,7 @@
   <a href="https://github.com/AI-for-anyone/loop-now/issues">Issues</a>
 </p>
 
-![Loop Now console: an agent conversation with rendered diagrams and a compact message composer](docs/assets/console.png)
+![Loop Now console: an agent conversation with rendered diagrams and a compact message composer](docs/assets/console-en.png)
 
 <p align="center"><sub>Actual console with demonstration data. The interface supports English and Chinese; it follows your browser language, or switch in Global settings.</sub></p>
 
@@ -39,6 +39,8 @@ The platform runs on your machine, with [Pi](https://github.com/earendil-works/p
 | **Run visible workflows** | Follow task nodes, conditional branches, bounded review loops, retries, and saved artifacts. A task's workflow and captured configuration stay fixed after it starts. |
 | **Extend through plugins** | Bring CLI and MCP tools, event hooks, accounts, permissions, and Skills into one package. Add the integrations your team needs. |
 | **See what happened** | Stream replies, send images, render Markdown and Mermaid, and inspect model usage, tool commands, timing, and failures in each reply's run timeline. |
+
+![Loop Now overview: run status for every agent, and today's token usage](docs/assets/overview-en.png)
 
 ### An example: from implementation to review
 
@@ -75,6 +77,8 @@ Two official plugins ship with the platform:
 
 - [**webhook**](plugins/official/webhook/README.md) POSTs `inbox.received` events to your URL with a signature, retries, and a delivery log. External identities use it instead of polling their Inbox.
 - [**hello**](plugins/official/hello/README.md) is the smallest plugin with both halves, and the starting point for writing your own.
+
+![Loop Now plugin market: plugin host status and the official plugins](docs/assets/plugins-en.png)
 
 ### A platform half in a few lines
 
