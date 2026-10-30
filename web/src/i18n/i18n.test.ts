@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { enUS } from './en-US'
 import { grouped, plural } from './format'
 import { t } from './index'
+import { zhCN } from './zh-CN'
 
 describe('文案表', () => {
   it('key 有类型检查，函数文案按参数生成', () => {
@@ -20,5 +22,16 @@ describe('文案表', () => {
     expect(plural('en-US', 1, { one: 'reply', other: 'replies' })).toBe('reply')
     expect(plural('en-US', 3, { one: 'reply', other: 'replies' })).toBe('replies')
     expect(plural('zh-CN', 1, { other: '条' })).toBe('条')
+  })
+
+  // 类型已要求同形；宽松的 Record<string, string> 映射（失败原因、思考等级等）在这里逐键核对。
+  it('英文文案表与中文的键一一对应，函数参数个数相同', () => {
+    const shape = (value: unknown, path: string, out: string[]) => {
+      if (typeof value === 'function') out.push(`${path}()${value.length}`)
+      else if (value && typeof value === 'object') for (const [key, child] of Object.entries(value)) shape(child, `${path}.${key}`, out)
+      else out.push(path)
+      return out
+    }
+    expect(shape(enUS, 't', [])).toEqual(shape(zhCN, 't', []))
   })
 })
