@@ -1,5 +1,5 @@
 import { taskInboxReceipt } from '@/test/task-inbox'
-import { taskInboxText as inboxCopy } from '@/i18n/task-inbox'
+import { t } from '@/i18n'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
@@ -15,6 +15,8 @@ import { taskKeys, tasksPath, useTaskMessages } from '@/api/tasks'
 import { lastScope } from '@/lib/scope'
 import type { Schemas } from '@/api/client'
 import { acceptTaskEvent } from './useTaskLive'
+
+const inboxCopy = t.taskInbox
 
 function setup(initial?: Schemas['TaskDetail']) {
   let detail = initial ?? makeTaskDetail(defaultProject.id, defaultProject.name)

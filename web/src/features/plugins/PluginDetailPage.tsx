@@ -9,7 +9,6 @@ import { SectionError } from '@/components/RequestError'
 import { Button } from '@/components/ui/button'
 import { DraftNavigationGuard } from '@/features/prompts/DraftNavigationGuard'
 import { t } from '@/i18n'
-import { shellText } from '@/i18n/shell'
 import { isNotFound } from '@/lib/errors'
 import { localizedText } from '@/lib/localized-text'
 import { pageTitleClass } from '@/lib/page-title'
@@ -220,7 +219,7 @@ export function PluginDetailPage() {
         <div className="mx-auto flex max-w-[1180px] flex-col gap-4 px-4 pt-[22px] pb-16 sm:px-8">
           <header className="flex flex-wrap items-start gap-x-4 gap-y-3">
             <div className="flex min-w-0 flex-[1_1_28rem] flex-col gap-1.5">
-              <nav aria-label={shellText.breadcrumb} className="text-[12px] font-bold text-ink-500">
+              <nav aria-label={t.shell.breadcrumb} className="text-[12px] font-bold text-ink-500">
                 {`${text.eyebrow} · `}
                 <Link to="/plugins" className="hover:text-ink hover:underline">
                   {copy.crumb}

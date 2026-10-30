@@ -6,7 +6,8 @@ import { Markdown } from '@/features/chat/Markdown'
 import { partyDisplay } from '@/features/inbox/participants'
 import { Badge } from '@/components/ui/badge'
 import { t } from '@/i18n'
-import { taskInboxText as copy } from '@/i18n/task-inbox'
+
+const copy = t.taskInbox
 
 // This is the original formal Inbox message, including durable image references.
 // Viewing it never marks the message read as the Agent.

@@ -1,6 +1,8 @@
 import { pendingTotal, type PendingCounts } from '@/api/console-inbox'
-import { consoleInboxText as text } from '@/i18n/console-inbox'
+import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
+
+const text = t.consoleInbox
 
 // 待你回复的数字：发给你的 open 问题与未读消息之和，荧光粉圆底（原导航上未读数的样式）；为 0 时不显示。
 // 读屏与悬停提示说明其中几个是问题、几条是新消息。左侧栏用 sticker：描边、倾斜的贴纸（倾斜只画在底色层上）。

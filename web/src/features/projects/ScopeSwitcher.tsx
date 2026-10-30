@@ -5,10 +5,11 @@ import { CheckIcon, PlusIcon } from 'lucide-react'
 import type { Schemas } from '@/api/client'
 import { NavIcon } from '@/components/NavIcon'
 import { t } from '@/i18n'
-import { shellText as text } from '@/i18n/shell'
 import { GLOBAL, lastScope, overviewPath, PLATFORM, type ResolvedShellScope, type ShellScope } from '@/lib/scope'
 import { cn } from '@/lib/utils'
 import { CreateProjectDialog } from './CreateProjectDialog'
+
+const text = t.shell
 
 type Option = { kind: 'global' } | { kind: 'project'; project: Schemas['Project'] }
 

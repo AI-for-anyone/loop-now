@@ -6,12 +6,14 @@ import { expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
 import { apiUrl, defaultProject, errorBody } from '@/test/api'
 import { makeTaskDetail, nodeId, taskId } from '@/test/tasks'
-import { taskInboxText as copy } from '@/i18n/task-inbox'
+import { t } from '@/i18n'
 import { taskInboxReceipt } from '@/test/task-inbox'
 import { server } from '@/test/server'
 import { renderWithQuery } from '@/test/render'
 import type { NodeDraft } from './NodeRecordPanel'
 import { NodeMessageComposer } from './NodeMessageComposer'
+
+const copy = t.taskInbox
 
 const node = makeTaskDetail(defaultProject.id).nodes[1]
 const draft = { text: '', agentId: node.agentId, runtimeId: node.runtimeId, nodeRunId: node.id, agentName: node.agentName }

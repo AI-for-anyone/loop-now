@@ -11,7 +11,6 @@ import { useScope } from '@/features/projects/scope-context'
 import { isNotFound } from '@/lib/errors'
 import { agentPath, agentScope, GLOBAL, overviewPath, sameScope } from '@/lib/scope'
 import { pageTitleClass } from '@/lib/page-title'
-import { shellText } from '@/i18n/shell'
 import { cn } from '@/lib/utils'
 import type { AgentOutletContext, AgentStickerState } from './agent-context'
 import { AgentAddress } from './AgentAddress'
@@ -97,15 +96,15 @@ export function AgentDetail() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 flex-col gap-2.5 px-4 pt-[18px] pb-3.5 sm:px-8" data-agent-header>
-        <nav aria-label={shellText.breadcrumb}>
+        <nav aria-label={t.shell.breadcrumb}>
           <ol className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] font-bold text-ink-500">
             <li className="min-w-0">
               <Link to={overviewPath(scope.kind === 'project' ? { kind: 'project', name: scope.project.name } : GLOBAL)} className="[overflow-wrap:anywhere] hover:text-ink hover:underline">
-                {scope.kind === 'project' ? scope.project.name : shellText.global}
+                {scope.kind === 'project' ? scope.project.name : t.shell.global}
               </Link>
             </li>
             <li aria-hidden="true">›</li>
-            <li>{scope.kind === 'project' ? shellText.agentCrumb : shellText.platformAgentCrumb}</li>
+            <li>{scope.kind === 'project' ? t.shell.agentCrumb : t.shell.platformAgentCrumb}</li>
             <li aria-hidden="true">›</li>
             <li aria-current="page" className="min-w-0 [overflow-wrap:anywhere] text-riso-blue">
               {agent.data.name}

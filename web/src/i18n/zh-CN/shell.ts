@@ -1,5 +1,5 @@
 // 左侧栏与主区页头。范围只有“全局”与各个项目两种，平台持有的 Agent 归在全局之下。
-export const shellText = {
+export const shell = {
   nav: '主导航',
   global: '全局',
   scope: {
@@ -43,4 +43,4 @@ export const shellText = {
   breadcrumb: '页面位置',
   agentCrumb: 'Agent',
   platformAgentCrumb: '平台 Agent',
-}
+} as const

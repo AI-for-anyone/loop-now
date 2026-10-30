@@ -1,8 +1,9 @@
+import { formatCount as grouped } from './format'
+
 // 统计页（第二版设计稿）。数值与时长的写法也在这里：token 以“万”为单位，时长按大小换成秒、分、小时。
-const grouped = (value: number) => value.toLocaleString('en-US')
 const oneDecimal = (value: number) => grouped(Math.round(value * 10) / 10)
 
-export const statsText = {
+export const stats = {
   title: '统计',
   global: '全局',
   platform: '平台',
@@ -28,6 +29,7 @@ export const statsText = {
     return `${wan >= 100 ? grouped(Math.round(wan)) : oneDecimal(wan)} 万`
   },
   wanAxis: (wan: number) => grouped(Math.round(wan * 10) / 10),
+  number: (n: number) => grouped(n),
   count: (n: number) => `${grouped(n)} 次`,
   items: (n: number) => `${grouped(n)} 个`,
   percent: (rate: number) => `${oneDecimal(rate * 100)}%`,
@@ -213,4 +215,4 @@ export const statsText = {
     value: (value: number) => oneDecimal(value),
     label: (peak: string | null) => `按小时的平均并发回复数${peak ? `，${peak} 最高` : ''}`,
   },
-}
+} as const

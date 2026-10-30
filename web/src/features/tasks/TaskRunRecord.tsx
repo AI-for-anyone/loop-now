@@ -8,7 +8,8 @@ import { buildSteps, runDurationMs } from '@/features/chat/timeline-steps'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Button } from '@/components/ui/button'
 import { t } from '@/i18n'
-import { taskInboxText as copy } from '@/i18n/task-inbox'
+
+const copy = t.taskInbox
 
 export function TaskRunRecord({ taskId, nodeRunId, runId, agentId, runtimeId }: { taskId: string; nodeRunId: string; runId: string; agentId: string; runtimeId: string }) {
   const timeline = useTaskRunTimeline(taskId, nodeRunId, runId, agentId, runtimeId)

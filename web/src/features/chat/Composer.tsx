@@ -13,7 +13,6 @@ import { uploadMessageImages } from '@/api/message-images'
 import { cn } from '@/lib/utils'
 import { ReplyChip } from '@/features/console-inbox/ConsoleMessage'
 import { useAnswerQuestion } from '@/features/console-inbox/useAnswerQuestion'
-import { consoleInboxText } from '@/i18n/console-inbox'
 
 // 编辑撤回的排队消息时，把原文与图片放回输入框；输入框里已有的内容保留在前面。
 export interface ComposerHandle {
@@ -152,7 +151,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
 
   // 回复问题：只发文字，Agent 正忙时同样按排队或打断发送。是否记为答案以响应为准，记为普通留言时在下方说明。
   const answerQuestion = async (target: QuestionReply, whenBusy: Schemas['WhenBusy']) => {
-    if (images.length) { setLocalError(consoleInboxText.replyNoImages); return }
+    if (images.length) { setLocalError(t.consoleInbox.replyNoImages); return }
     if (target.maxBytes !== undefined && encoder.encode(text).length > target.maxBytes) { setLocalError(t.chat.tooLong(target.maxBytes)); return }
     const sent = text
     busyRequest.current = true; setSubmitting(true)
@@ -177,7 +176,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
   const sendLabel = busy ? t.chat.queueSend : t.chat.send
   const showStop = busy && stop !== undefined && !reply && text.trim() === '' && images.length === 0
   const stopLabel = stop?.pending ? t.chat.stopping : stop?.retry ? t.chat.retryStop : t.chat.stop
-  const editor = <Textarea ref={editorRef} aria-label={t.chat.inputLabel} placeholder={reply ? consoleInboxText.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder} value={text} disabled={disabled} onChange={event => setText(event.target.value)} onKeyDown={onKeyDown} rows={1} className={inputClass} />
+  const editor = <Textarea ref={editorRef} aria-label={t.chat.inputLabel} placeholder={reply ? t.consoleInbox.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder} value={text} disabled={disabled} onChange={event => setText(event.target.value)} onKeyDown={onKeyDown} rows={1} className={inputClass} />
   // 待发送图片排在同一边框里、文字行之上；有图片时边框圆角收小。
   const input = (addButton?: ReactNode, strip?: ReactNode) => <div data-chat-composer className={cn('flex min-h-[60px] min-w-0 flex-col border-2 border-ink/60 bg-white p-2 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/15', strip || reply ? 'rounded-[24px]' : 'rounded-[32px]')}>
     {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}

@@ -1,4 +1,4 @@
-export const imageText = {
+export const images = {
   name: (index: number, width: number, height: number) => `图片 ${index} · ${width}×${height}`,
   receiptMismatch: '图片上传回执与原图片不一致，草稿已保留。',
   add: '添加图片', selectFile: '选择图片文件', help: '可粘贴截图、拖入或选择 PNG、JPEG、WebP 图片。',
@@ -10,4 +10,4 @@ export const imageText = {
   uploading: '上传中', uploadFailed: '上传失败',
   loading: '正在上传图片…', failed: '图片无法加载，请重新读取消息。', unsupported: '当前模型不支持图片输入，请更换支持看图的模型后再发送。',
   limits: (count: number, each: number, total: number) => `最多 ${count} 张，单张 ${Math.floor(each / 1024 / 1024)} MB，合计 ${Math.floor(total / 1024 / 1024)} MB。`,
-}
+} as const

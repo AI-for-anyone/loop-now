@@ -9,7 +9,6 @@ import { ErrorAlert } from '@/components/ErrorAlert'
 import type { ImageDraft } from '@/features/images/image-drafts'
 import { partyDisplay } from '@/features/inbox/participants'
 import { t } from '@/i18n'
-import { imageText } from '@/i18n/images'
 import { cn } from '@/lib/utils'
 import { conflictNotice, useQueueActions, useQueueNotice } from './queue-actions'
 
@@ -140,9 +139,9 @@ function QueueItem({ dense, interrupt, kind, sender, text, images, actions }: Om
         </button>
       )}
       {images.length > 0 && (
-        <ul aria-label={imageText.history} className="flex shrink-0 gap-1">
+        <ul aria-label={t.images.history} className="flex shrink-0 gap-1">
           {images.map((image, imageIndex) => {
-            const name = imageText.name(imageIndex + 1, image.width, image.height)
+            const name = t.images.name(imageIndex + 1, image.width, image.height)
             return (
               <li key={image.id}>
                 <img src={messageImageURL(image.id)} alt={name} title={name} loading="lazy" className="h-6 w-8 rounded-stamp border border-ink/20 object-cover" />

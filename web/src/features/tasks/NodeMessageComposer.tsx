@@ -10,15 +10,15 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { t } from '@/i18n'
-import { taskInboxText as copy } from '@/i18n/task-inbox'
 import { ImagePicker } from '@/features/images/ImagePicker'
 import { imageProblem, type ImageDraft, type ImageLimits, type ImageUploads } from '@/features/images/image-drafts'
 import { uploadMessageImages } from '@/api/message-images'
 import { KeyHint, StopMark, type QuestionReply, type StopControl } from '@/features/chat/Composer'
 import { ReplyChip } from '@/features/console-inbox/ConsoleMessage'
 import { useAnswerQuestion } from '@/features/console-inbox/useAnswerQuestion'
-import { consoleInboxText } from '@/i18n/console-inbox'
 import type { NodeDraft } from './NodeRecordPanel'
+
+const copy = t.taskInbox
 
 // 边框归共同容器所有，文字区按内容增高，上限后独立滚动。
 const inputClass = 'min-h-9 max-h-24 flex-1 resize-none overflow-y-auto rounded-none bg-transparent px-0.5 py-2 text-sm leading-5 shadow-none focus-visible:shadow-none disabled:bg-transparent'
@@ -78,7 +78,7 @@ export function NodeMessageComposer({ taskId, draft, current, disabled, capabili
   const answerQuestion = async (target: QuestionReply, whenBusy: Schemas['WhenBusy']) => {
     if (answering || busy.current) return
     setLocalError('')
-    if (draft.images?.length) { setLocalError(consoleInboxText.replyNoImages); return }
+    if (draft.images?.length) { setLocalError(t.consoleInbox.replyNoImages); return }
     if (!text.trim()) { setLocalError(t.chat.emptyMessage); return }
     if (target.maxBytes !== undefined && new TextEncoder().encode(text).length > target.maxBytes) { setLocalError(t.chat.tooLong(target.maxBytes)); return }
     const sent = text
@@ -96,7 +96,7 @@ export function NodeMessageComposer({ taskId, draft, current, disabled, capabili
     if (reply) void answerQuestion(reply, whenBusy)
     else if (!unknown) void submit(whenBusy)
   }
-  const editor = <Textarea aria-label={t.tasks.draft} placeholder={reply ? consoleInboxText.replyPlaceholder : t.tasks.draftPlaceholder(draft.agentName)} value={text} readOnly={!current} onChange={event => onChange(event.target.value)} onKeyDown={keyDown} rows={1} className={inputClass} />
+  const editor = <Textarea aria-label={t.tasks.draft} placeholder={reply ? t.consoleInbox.replyPlaceholder : t.tasks.draftPlaceholder(draft.agentName)} value={text} readOnly={!current} onChange={event => onChange(event.target.value)} onKeyDown={keyDown} rows={1} className={inputClass} />
   const sendLabel = pending || answering ? t.tasks.sending : t.chat.send
   const showStop = current && stop !== undefined && !reply && !unknown && !text.trim() && !draft.images?.length
   const stopLabel = stop?.pending ? t.chat.stopping : stop?.retry ? t.chat.retryStop : t.chat.stop
