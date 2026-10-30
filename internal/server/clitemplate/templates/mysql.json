@@ -92,6 +92,13 @@
       "format": "tar.xz",
       "path": "mysql-8.4.9-linux-glibc2.28-aarch64/bin/mysql",
       "layout": "tree"
+    },
+    "linux/amd64": {
+      "url": "https://cdn.mysql.com/archives/mysql-8.4/mysql-8.4.9-linux-glibc2.28-x86_64.tar.xz",
+      "sha256": "4297fb5d7dfd3b2b2d405efcc44b834237cd5e0d5dbf9b2cb6e49f6b0152940b",
+      "format": "tar.xz",
+      "path": "mysql-8.4.9-linux-glibc2.28-x86_64/bin/mysql",
+      "layout": "tree"
     }
   },
   "reservedEnvPrefixes": [

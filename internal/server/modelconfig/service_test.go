@@ -3,15 +3,13 @@ package modelconfig_test
 import (
 	"context"
 	"errors"
-	"os"
-	"os/exec"
-	"path/filepath"
+	"strings"
 	"testing"
 
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/modelcatalog"
+	"loop-now/internal/server/modelcatalog/catalogtest"
 	"loop-now/internal/server/modelconfig"
-	"loop-now/internal/server/preflight"
 	"loop-now/internal/server/store"
 )
 
@@ -28,35 +26,16 @@ func (s *memoryStore) CompareAndSwapModelSettings(_ context.Context, text string
 	return s.row, nil
 }
 
-func catalogOptions(t *testing.T) modelcatalog.Options {
-	t.Helper()
-	if root := os.Getenv("LOOP_NOW_TEST_PI_PACKAGE_DIR"); root != "" {
-		node, err := exec.LookPath("node")
-		if err != nil {
-			t.Skipf("本机没有 Node：%v", err)
-		}
-		piAIDir := os.Getenv("LOOP_NOW_TEST_PI_AI_DIR")
-		if piAIDir == "" {
-			piAIDir = filepath.Join(root, "node_modules", "@earendil-works", "pi-ai")
-		}
-		return modelcatalog.Options{NodeBin: node, PiAIDir: piAIDir, PiPackageDir: root, PiVersion: "1.4.0", Path: os.Getenv("PATH")}
-	}
-	r, err := preflight.Resolve(context.Background(), preflight.Options{PiBin: "pi", PiVersion: "1.4.0", NodeBin: "node", WorkRoot: filepath.Join(t.TempDir(), "root"), HomeDirs: []string{"/nonexistent-home"}})
-	if err != nil {
-		t.Skipf("本机没有可用的 Pi 1.4.0：%v", err)
-	}
-	return modelcatalog.Options{NodeBin: r.NodeBin, PiAIDir: r.PiAIDir, PiPackageDir: r.PiPackageDir, PiVersion: "1.4.0", Path: r.ExecBasePath}
-}
-
 func TestPutPublishesOnlyValidLatestRevision(t *testing.T) {
 	ctx := context.Background()
 	st := &memoryStore{row: store.ModelSettings{ModelsJSON: modelconfig.DefaultModelsJSON, Revision: 1}}
-	builtin, err := modelcatalog.Load(ctx, catalogOptions(t))
+	options := catalogtest.Options(t)
+	builtin, err := modelcatalog.Load(ctx, options)
 	if err != nil {
 		t.Fatal(err)
 	}
 	registry := modelcatalog.NewRegistry(builtin)
-	service := &modelconfig.Service{Store: st, Models: registry, Options: catalogOptions(t)}
+	service := &modelconfig.Service{Store: st, Models: registry, Options: options}
 	initial, err := service.Reload(ctx)
 	if err != nil || initial.Revision != 1 {
 		t.Fatal("initial reload", initial, err)
@@ -80,5 +59,68 @@ func TestPutPublishesOnlyValidLatestRevision(t *testing.T) {
 	current, err := service.Get(ctx)
 	if err != nil || current != saved || !registry.HasModel("example", "vision") {
 		t.Fatal("failed save changed settings or catalog", current, err)
+	}
+}
+
+func TestPutRejectsPlaintextAndCommandSecrets(t *testing.T) {
+	ctx := context.Background()
+	st := &memoryStore{row: store.ModelSettings{ModelsJSON: modelconfig.DefaultModelsJSON, Revision: 1}}
+	options := catalogtest.Options(t)
+	builtin, err := modelcatalog.Load(ctx, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := modelcatalog.NewRegistry(builtin)
+	service := &modelconfig.Service{Store: st, Models: registry, Options: options}
+	cases := map[string]string{
+		"plaintext api key": `{"providers":{"example":{"apiKey":"plaintext","models":[]}}}`,
+		"command api key":   `{"providers":{"example":{"apiKey":"!printenv","models":[]}}}`,
+		"provider header":   `{"providers":{"example":{"headers":{"Authorization":"Bearer secret"},"models":[]}}}`,
+		"model header":      `{"providers":{"example":{"models":[{"headers":{"X-Key":"secret"}}]}}}`,
+		"override header":   `{"providers":{"example":{"modelOverrides":{"m":{"headers":{"X-Key":"!command"}}},"models":[]}}}`,
+	}
+	for name, text := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := service.Put(ctx, text, 1)
+			apiErr := new(apperr.Error)
+			if !errors.As(err, &apiErr) || apiErr.Code != apperr.CodeValidationFailed || st.row.Revision != 1 {
+				t.Fatal("unsafe secret reference accepted", err)
+			}
+		})
+	}
+	if _, err = service.Put(ctx, modelconfig.DefaultModelsJSON, 0); !apperr.Is(err, apperr.CodeValidationFailed) {
+		t.Fatal("zero expectedRevision must be a validation error", err)
+	}
+	_, err = service.Put(ctx, `{"providers":{"broken":{"models":[]}}}`, 1)
+	apiErr := new(apperr.Error)
+	if !errors.As(err, &apiErr) || len(apiErr.Fields) != 1 || strings.Contains(apiErr.Fields[0].Message, "loopnow-catalog-") || !strings.Contains(apiErr.Fields[0].Message, "Pi 校验") {
+		t.Fatal("raw Pi error leaked to field message", err)
+	}
+}
+
+func TestReloadFallsBackToBuiltinAndReportsError(t *testing.T) {
+	ctx := context.Background()
+	st := &memoryStore{row: store.ModelSettings{ModelsJSON: `{"providers":`, Revision: 7}}
+	options := catalogtest.Options(t)
+	builtin, err := modelcatalog.Load(ctx, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := modelcatalog.NewRegistry(builtin)
+	service := &modelconfig.Service{Store: st, Models: registry, Options: options}
+	settings, err := service.Reload(ctx)
+	if err != nil || settings.LoadError == "" || settings.ModelsJSON != st.row.ModelsJSON {
+		t.Fatal("invalid saved config must not block startup", settings, err)
+	}
+	current, err := service.Get(ctx)
+	if err != nil || current.LoadError != settings.LoadError {
+		t.Fatal("GET must expose the fallback warning", current, err)
+	}
+	if _, err = service.Put(ctx, modelconfig.DefaultModelsJSON, 7); err != nil {
+		t.Fatal(err)
+	}
+	current, err = service.Get(ctx)
+	if err != nil || current.LoadError != "" || current.Revision != 8 {
+		t.Fatal("successful repair must clear the fallback warning", current, err)
 	}
 }

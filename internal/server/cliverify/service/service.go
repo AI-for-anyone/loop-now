@@ -349,7 +349,11 @@ func (s *Service) run(ctx context.Context, op cliverify.Operation, d descriptor)
 	executable := filepath.Join(bin, d.Template.Binary)
 	versionSpec := CommandSpec{CLI: op.CLI, Phase: "version", Executable: executable, Args: []string{"--version"}, Home: home, Environment: env}
 	if op.CLI == "gcloud" {
-		versionSpec = s.googleVersionSpec(home, env, d.Template)
+		versionSpec, e = s.googleVersionSpec(home, env, d.Template)
+		if e != nil {
+			code = "configuration_invalid"
+			return
+		}
 	}
 	vctx, vcancel := context.WithTimeout(ctx, 10*time.Second)
 	vout := s.execute(vctx, versionSpec, op, lease)

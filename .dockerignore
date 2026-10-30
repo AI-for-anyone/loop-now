@@ -1,8 +1,7 @@
 .git
 .github
 .local-build
-node_modules
-web/node_modules
+**/node_modules
 docs
 bin
 *.dump

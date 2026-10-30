@@ -539,6 +539,10 @@ func TestSchemaVersionTellsFolderCopyFromFrozenSources(t *testing.T) {
 	if err != nil || !v9.CopiesAgentFolder() {
 		t.Fatalf("schema 9 的旧任务应继续复制文件夹：%v", err)
 	}
+	env.SchemaVersion, env.SourceVersion = copiedAgentFolderSchema, 5
+	if _, err := Decode(encodeEnvelope(t, env)); err == nil {
+		t.Fatal("schema 9 不能带 sourceVersion")
+	}
 	env.SchemaVersion, env.SourceVersion = schemaVersion, 5
 	if _, err := Decode(encodeEnvelope(t, env)); err == nil {
 		t.Fatal("当前 schema 不能带 sourceVersion")

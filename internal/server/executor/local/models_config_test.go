@@ -10,6 +10,19 @@ import (
 	"loop-now/internal/server/modelcatalog"
 )
 
+func TestModelSecretEnvUsesLatestCatalog(t *testing.T) {
+	h := newHarness(t, nil, "")
+	registry := modelcatalog.NewRegistry(modelcatalog.New("1.4.0", nil, nil))
+	h.e.o.Models = registry
+	if h.e.modelSecretEnv("EXAMPLE_KEY") {
+		t.Fatal("unrelated environment variable must not be blocked")
+	}
+	registry.Replace(modelcatalog.New("1.4.0", nil, []modelcatalog.Provider{{ID: "example", APIKeyEnvVars: []string{"EXAMPLE_KEY"}}}))
+	if !h.e.modelSecretEnv("EXAMPLE_KEY") {
+		t.Fatal("new provider environment variable must be blocked without restarting the server")
+	}
+}
+
 func TestModelsJSONSyncAndIdentityRestart(t *testing.T) {
 	h := newHarness(t, nil, "")
 	first := []byte(`{"providers":{"example":{"baseUrl":"https://one.example.test","api":"openai-completions","models":[{"id":"m"}]}}}`)

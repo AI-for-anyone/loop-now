@@ -180,8 +180,12 @@ func (e *Executor) modelSecretEnv(name string) bool {
 	if _, reserved := e.tmpl.ReservedEnvBy(name); reserved {
 		return true
 	}
-	if slices.Contains(e.o.ModelSecretEnvNames, name) {
-		return true
+	if e.o.Models != nil {
+		for _, provider := range e.o.Models.Snapshot().Providers {
+			if slices.Contains(provider.APIKeyEnvVars, name) {
+				return true
+			}
+		}
 	}
 	return strings.Contains(name, "API_KEY") || strings.Contains(name, "ACCESS_TOKEN") || strings.Contains(name, "REFRESH_TOKEN") || name == "ANTHROPIC_AUTH_TOKEN" || name == "ANTHROPIC_OAUTH_TOKEN"
 }

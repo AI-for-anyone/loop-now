@@ -97,9 +97,13 @@ func Run(ctx context.Context, args []string, o Options) int {
 		return fail()
 	}
 	env := []string{"HOME=" + home, "CLOUDSDK_CONFIG=" + config, "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "PYTHONNOUSERSITE=1", "CLOUDSDK_CORE_DISABLE_USAGE_REPORTING=true", "CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK=true", "CLOUDSDK_CORE_DISABLE_PROMPTS=true"}
+	selfContained, e := clitemplate.GoogleSelfContained(root)
+	if e != nil {
+		return fail()
+	}
 	// macOS 用私有 Python 解释 lib/gcloud.py；Linux 自包含安装直接执行 bin/gcloud。
 	entry := filepath.Join(sdk, "lib/gcloud.py")
-	if fi, e := os.Lstat(fw); e != nil || !fi.IsDir() {
+	if selfContained {
 		entry = filepath.Join(sdk, "bin", "gcloud")
 	}
 	extra := []string{}
@@ -133,15 +137,23 @@ func Run(ctx context.Context, args []string, o Options) int {
 		}
 	}
 	var script string
-	if fi, e := os.Lstat(fw); e == nil && fi.IsDir() {
+	if !selfContained {
 		// macOS：固定版本的私有 Python.framework 以隔离模式解释 SDK 入口。
 		script = "export DYLD_FRAMEWORK_PATH=" + quote(filepath.Dir(fw)) + " DYLD_LIBRARY_PATH=" + quote(filepath.Join(fw, "Versions/3.13/lib")) + " PYTHONHOME=" + quote(filepath.Join(fw, "Versions/3.13")) + "; exec " + quote(filepath.Join(fw, "Versions/3.13/bin/python3.13")) + " -S " + quote(entry)
 	} else {
-		// Linux 自包含安装：官方包不自带 Python，bin/gcloud 直接使用系统 Python。
-		if p := clitemplate.ResolveGooglePython(); p != "" {
-			env = append(env, "CLOUDSDK_PYTHON="+p)
+		// Linux 自包含安装：普通调用直接执行 bin/gcloud；OAuth helper 必须由系统 Python 解释。
+		python := clitemplate.ResolveGooglePython()
+		if python != "" {
+			env = append(env, "CLOUDSDK_PYTHON="+python)
 		}
-		script = "exec " + quote(entry)
+		if grant != "" {
+			if python == "" {
+				return fail()
+			}
+			script = "exec " + quote(python) + " -S " + quote(entry)
+		} else {
+			script = "exec " + quote(entry)
+		}
 	}
 	for _, arg := range append(extra, args[1:]...) {
 		script += " " + quote(arg)

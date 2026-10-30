@@ -115,9 +115,51 @@ export default function register(api: PluginAPI) {
 
 ## 开始使用
 
-当前通过**源码安装**。主要验证环境是 macOS Apple Silicon；部分组件支持 Linux，但尚未完成同等范围的整套验证。飞书用户 CLI 运行组件目前仅支持 macOS arm64。
+可以用 **Docker Compose** 一体化启动，也可以从源码安装。主要验证环境是 macOS Apple Silicon；部分组件支持 Linux，但尚未完成同等范围的整套验证。飞书用户 CLI 运行组件目前仅支持 macOS arm64。
 
-### 1. 准备依赖
+### Docker Compose（本地一体化）
+
+首次启动会在本机构建服务端和控制台镜像，并启动 PostgreSQL 18、Redis 8：
+
+```sh
+docker compose up --build -d
+```
+
+打开 **[http://localhost:5173](http://localhost:5173)**。控制台没有登录功能，因此 Compose 只把 Web 的 `5173` 和 API 的 `8780` 发布到 `127.0.0.1`；PostgreSQL 与 Redis 不发布到宿主机。数据库默认用户、密码和库名都是 `loopnow`，仅用于 Compose 内部网络，不要把这套默认配置暴露到外部。
+
+`pgdata` 命名卷保存数据库，`loopdata` 保存 Agent 工作区、会话和工具。`docker compose down` 会保留它们；`docker compose down -v` 会删除这些数据，执行前请先备份。
+
+容器中的 Agent 有一些边界：
+
+- 飞书用户 CLI 只支持 macOS arm64，不能在这套 Linux 容器里使用。
+- 容器不会自动看到宿主机目录。已有仓库或资料需要另外挂载到 `server` 容器，并在控制台配置挂载后的容器内路径；`loopdata` 只保存平台自己的工作区。
+- 容器不会共享宿主机上已经登录的 Pi 或 CLI 会话。请预先在项目中配置模型 API Key 和所需工具账号。
+
+### 原生 models.json
+
+在“全局设置 → 模型配置”中可以编辑固定版本 Pi 的原生 `models.json`，添加自定义 Provider 或覆盖内置 Provider。例如：
+
+```json
+{
+  "providers": {
+    "example": {
+      "baseUrl": "https://models.example.com/v1",
+      "api": "openai-completions",
+      "apiKey": "$EXAMPLE_KEY",
+      "headers": { "X-Client": "$EXAMPLE_CLIENT_HEADER" },
+      "models": [
+        { "id": "my-model", "input": ["text", "image"], "contextWindow": 128000, "maxTokens": 8192 }
+      ]
+    }
+  }
+}
+```
+
+`apiKey` 以及 Provider、模型和模型覆盖中的 `headers` 值只接受 `$NAME` 形式的环境变量引用；变量名由英文字母或下划线开头，后接字母、数字或下划线。不要填写明文密钥或 `!命令`。真实密钥仍在项目的模型账号中配置，不会写进 `models.json` 或回显到编辑器。
+
+保存后，常态 Agent 从下一条消息使用新目录，已启动任务继续使用创建时冻结的 Provider 配置。如果重启后已保存配置不再通过当前 Pi 校验，服务会暂时退回内置模型目录，并在设置页显示警告，让你仍能修正并重新保存。
+
+### 源码安装：1. 准备依赖
 
 | 依赖 | 仓库当前版本基线 |
 | --- | --- |

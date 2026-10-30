@@ -199,8 +199,12 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	}
 	if o.MigrationTarget == 0 || o.MigrationTarget >= 34 {
 		a.ModelSettings = &modelconfig.Service{Store: a.Store, Models: models, Options: modelOptions}
-		if _, err = a.ModelSettings.Reload(ctx); err != nil {
-			return a, fmt.Errorf("读取自定义模型配置失败：%w", err)
+		settings, reloadErr := a.ModelSettings.Reload(ctx)
+		if reloadErr != nil {
+			return a, fmt.Errorf("读取自定义模型配置失败：%w", reloadErr)
+		}
+		if settings.LoadError != "" {
+			log.Warn("自定义模型配置无效，已退回内置目录", "error", settings.LoadError)
 		}
 	}
 	defaults, err := a.Store.EnsureDefaults(ctx, cfg.DefaultOrgName, cfg.DefaultProjectName)
@@ -323,10 +327,6 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 			a.Config.AgentChanged(id)
 		}
 	}
-	var modelEnvNames []string
-	for _, provider := range models.Snapshot().Providers {
-		modelEnvNames = append(modelEnvNames, provider.APIKeyEnvVars...)
-	}
 	host, _ := os.Hostname()
 	username := ""
 	if u, err := user.Current(); err == nil {
@@ -351,7 +351,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		maxFolderUpload = 1 << 30
 	}
 	a.Executor = local.New(local.Options{Models: models, Hooks: appHooks{a}, Dialogs: a.askDialog, LarkFactory: larkFactory, GoogleResolver: googleCoordinator, GoogleRuntimeEntry: filepath.Join(authRoot, "google_runtime.py"),
-		AuthResolver: authCoordinator, AuthExtension: authExtension, LegacyAuthExtension: filepath.Join(filepath.Dir(authExtension), "legacy-anthropic.mjs"), CodexServiceTierExtension: filepath.Join(filepath.Dir(authExtension), "codex-service-tier.mjs"), PiPackageRoot: packageRoot, AuthIPCTimeout: cfg.AuthIPCTimeout, ModelSecretEnvNames: modelEnvNames,
+		AuthResolver: authCoordinator, AuthExtension: authExtension, LegacyAuthExtension: filepath.Join(filepath.Dir(authExtension), "legacy-anthropic.mjs"), CodexServiceTierExtension: filepath.Join(filepath.Dir(authExtension), "codex-service-tier.mjs"), PiPackageRoot: packageRoot, AuthIPCTimeout: cfg.AuthIPCTimeout,
 		WorkRoot: res.WorkRoot, PiBin: res.PiBin, GitBin: res.GitBin, ExecBasePath: res.ExecBasePath, Passthrough: cfg.ExecEnvPassthrough,
 		Username: username, MaxProcesses: cfg.PiMaxProcesses, IdleTimeout: cfg.PiIdleTimeout, StartTimeout: cfg.PiStartTimeout,
 		StopGrace: cfg.PiStopGrace, AbortTimeout: cfg.AbortTimeout, CloneTimeout: cfg.GitCloneTimeout, InstanceID: a.InstanceID, Hostname: host,
