@@ -1,0 +1,28 @@
+import type { Messages } from '..'
+
+export const taskInbox = {
+  toolsUnsupported: "This server doesn't support task run logs yet; the regular Agent log wasn't used instead.",
+  scopeMismatch: "The task, run, Agent, or instance returned by the Inbox or run log didn't match, so that response wasn't used.",
+  readOriginal: 'Read the original send result',
+  reading: 'Reading the original action…',
+  notFound: "The original action wasn't found yet. The result is still unconfirmed; nothing is switched or resent automatically.",
+  accepted: 'Received by the Inbox. Reading, the actual run, and replies follow the original record.',
+  links: 'Linked turns',
+  notification: "Reminder turn (doesn't mean read)",
+  readLink: 'Turn that read it',
+  replyLink: 'Turn that replied',
+  notExecuted: "The original node message didn't run",
+  timelinePartial: "The run log hasn't fully loaded; showing what has loaded so far.",
+  timelineMore: 'Load more of the run log',
+  workMode: 'Node work',
+  chatMode: 'Troubleshooting chat in the task',
+  unknownMode: 'Run mode not recorded',
+  recordsLoading: 'Reading task tools and run logs…',
+  message: 'Inbox message',
+  reply: 'Inbox reply',
+  workOutput: 'Agent work output',
+  inReplyTo: 'Reply to the original message',
+  original: 'Original Inbox record',
+  unread: 'Received; unread by the Agent',
+  read: 'Read by the Agent',
+} satisfies Messages['taskInbox']
