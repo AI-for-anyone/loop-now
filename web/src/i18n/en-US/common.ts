@@ -1,0 +1,32 @@
+import type { Messages } from '..'
+import { formatBytes, formatTime } from './format'
+
+export const common = {
+  save: 'Save',
+  saving: 'Saving…',
+  cancel: 'Cancel',
+  confirm: 'Confirm',
+  delete: 'Delete',
+  remove: 'Remove',
+  edit: 'Edit',
+  add: 'Add',
+  close: 'Close',
+  retry: 'Retry',
+  reload: 'Reload',
+  loading: 'Loading…',
+  copy: 'Copy',
+  copied: 'Copied',
+  unknown: (value: string) => `Unknown (${value})`,
+  bytes: (size: number) => formatBytes(size),
+  labelledValue: (label: string, value: string) => `${label}: ${value}`,
+  updatedAt: (time: string) => `Updated ${formatTime(time)}`,
+  time: (time: string) => formatTime(time),
+  unsavedLeave: 'You have unsaved changes. Leave anyway? They will be lost.',
+  unsavedTitle: 'Leave this page?',
+  leave: 'Leave',
+  saved: 'Saved',
+  unsaved: 'Unsaved',
+  required: 'Required',
+  upload: 'Upload',
+  uploading: 'Uploading…',
+} satisfies Messages['common']
