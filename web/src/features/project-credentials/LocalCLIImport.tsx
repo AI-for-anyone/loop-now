@@ -9,12 +9,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ErrorAlert, FieldError } from '@/components/ErrorAlert'
-import { importText as copy } from '@/i18n/cli-import'
+import { t } from '@/i18n'
 import { selectClass } from '@/lib/field'
 import { ScopeContext } from '@/features/projects/scope-context'
 import { useDirtyForm } from '@/features/prompts/draft-navigation'
 import { useProjectCredentialsAvailable } from './project-availability'
 import { nonzeroUUID, selectedSupplements, supplementProblem, type SupplementDraft } from './import-selection'
+
+const copy = t.credentials.cliImport
 
 export function LocalCLIImport({ projectId, projectName }: { projectId: string; projectName?: string }) {
   const scope = useContext(ScopeContext)

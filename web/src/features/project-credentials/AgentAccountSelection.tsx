@@ -1,4 +1,4 @@
-import { credentialText } from '@/i18n/credential-text'
+import { t } from '@/i18n'
 import { larkAccountOptionLabel } from './lark-account-copy'
 import { LarkAccountDetails } from './LarkAccountDetails'
 import { useEffect, useState } from 'react'
@@ -24,11 +24,11 @@ export function ProjectModelSelection({ agent }: { agent: Schemas['Agent'] }) {
   const [known, setKnown] = useState<{ source: typeof result.data; values: Map<string, Schemas['CredentialSelection']> }>({ source: undefined, values: new Map() })
   if (result.data !== known.source) { const values = new Map(known.values); for (const item of result.data?.selections ?? []) if (item.purpose === 'model' && item.provider) values.set(item.provider, item); setKnown({ source: result.data, values }) }
   if (!providers.includes(agent.model.provider)) setProviders([...providers, agent.model.provider])
-  return <Section id="model-credential" title={credentialText.agentAccountSelectionText1}>
-    <p className="text-[13.5px]">{credentialText.agentAccountSelectionText2}</p>
+  return <Section id="model-credential" title={t.credentials.agentSelection.title}>
+    <p className="text-[13.5px]">{t.credentials.agentSelection.intro}</p>
     <ErrorAlert error={result.error} />
-    {!synchronized && result.data && <p role="status" className="text-[13px] font-bold">{credentialText.agentAccountSelectionText3}</p>}
-    {!result.data && !result.isError && <p role="status">{credentialText.agentAccountSelectionText4}</p>}
+    {!synchronized && result.data && <p role="status" className="text-[13px] font-bold">{t.credentials.agentSelection.modelOutOfSync}</p>}
+    {!result.data && !result.isError && <p role="status">{t.credentials.agentSelection.loading}</p>}
     {result.data && providers.map(provider => {
       const selection = known.values.get(provider)
       return selection ? <SelectionEditor key={provider} agentId={agent.id} data={result.data} selection={selection} current={provider === agent.model.provider} synchronized={synchronized} /> : null
@@ -45,7 +45,7 @@ export function LegacyProjectCliSelection({ agentId, configVersion, cli }: { age
   const result = useCredentialSelections(agentId)
   const synchronized = useSelectionSynchronization(agentId, configVersion, result.data?.configVersion)
   const selection = result.data?.selections.find(item => item.purpose === 'cli' && item.cli === cli)
-  return <><ErrorAlert error={result.error} />{!synchronized && result.data && <p role="status" className="text-[13px] font-bold">{credentialText.agentAccountSelectionText5}</p>}{selection && result.data ? <SelectionEditor agentId={agentId} data={result.data} selection={selection} synchronized={synchronized} /> : <p className="text-[13px]">{credentialText.agentAccountSelectionText6}</p>}</>
+  return <><ErrorAlert error={result.error} />{!synchronized && result.data && <p role="status" className="text-[13px] font-bold">{t.credentials.agentSelection.cliOutOfSync}</p>}{selection && result.data ? <SelectionEditor agentId={agentId} data={result.data} selection={selection} synchronized={synchronized} /> : <p className="text-[13px]">{t.credentials.agentSelection.cliLoading}</p>}</>
 }
 
 function useSelectionSynchronization(agentId: string, agentVersion: number, selectionVersion: number | undefined) {
@@ -85,20 +85,20 @@ function SelectionForm({ id, agentId, projectId, configVersion, selection, setti
   const form = useCredentialDraft<string | null>({ id, initial: initial.selectedAccountId, revision: configVersion, summarize: selectionDescription(initial), readLatest: async () => {
     const latest = await readSelections(agentId)
     const item = latest.selections.find(item => item.purpose === initial.purpose && (initial.purpose === 'model' ? item.provider === slot : item.cli === slot))
-    return { revision: latest.configVersion, summary: item ? selectionDescription(item) : credentialText.agentAccountSelectionText7, deleted: !item }
+    return { revision: latest.configVersion, summary: item ? selectionDescription(item) : t.credentials.agentSelection.configRemoved, deleted: !item }
   }, save: async (accountId, expectedConfigVersion) => {
     const latest = await putSelection(agentId, initial.purpose === 'model' ? { purpose: 'model', provider: slot, accountId, expectedConfigVersion } : { purpose: 'cli', cli: slot, accountId, expectedConfigVersion })
     client.setQueryData(credentialKeys.selections(agentId), latest)
   }, onSaved })
   return <div className="grid min-w-0 gap-3">
-    {!current && <p role="status" className="text-[13px] font-bold">{credentialText.agentAccountSelectionText8}{slot}{credentialText.agentAccountSelectionText9}</p>}
-    <AccountSelectionField label={credentialText.agentAccountSelectionText10(slot)} description={selectionDescription(selection)} options={selection.candidates.map(account => ({ value: account.id, label: slot === 'lark-cli' ? larkAccountOptionLabel(account) : `${account.name} · ${accountStatus[account.status]}` }))} value={form.draft ?? ''} currentLabel={selection.mode === 'automatic' ? (selection.resolvedAccountId ? credentialText.agentAccountSelectionText11(selection.candidates.find(account => account.id === selection.resolvedAccountId)?.name ?? selection.resolvedAccountId) : credentialText.agentAccountSelectionText12) : undefined} canRestore={selection.mode !== 'automatic'} restoreLabel={selection.purpose === 'cli' ? credentialText.agentAccountSelectionText13 : undefined} pending={form.pending} disabled={form.conflict || !synchronized} dirty={form.dirty} settingsPath={settingsPath} onChange={value => { form.setDraft(value || null); onDirty(true) }} onSave={() => void form.submit()} onRestore={() => { form.setDraft(null); onDirty(true); void form.submit(null) }} />
+    {!current && <p role="status" className="text-[13px] font-bold">{t.credentials.agentSelection.switchedBefore}{slot}{t.credentials.agentSelection.switchedAfter}</p>}
+    <AccountSelectionField label={t.credentials.agentSelection.fieldLabel(slot)} description={selectionDescription(selection)} options={selection.candidates.map(account => ({ value: account.id, label: slot === 'lark-cli' ? larkAccountOptionLabel(account) : `${account.name} · ${accountStatus[account.status]}` }))} value={form.draft ?? ''} currentLabel={selection.mode === 'automatic' ? (selection.resolvedAccountId ? t.credentials.agentSelection.automaticCurrent(selection.candidates.find(account => account.id === selection.resolvedAccountId)?.name ?? selection.resolvedAccountId) : t.credentials.agentSelection.notChosen) : undefined} canRestore={selection.mode !== 'automatic'} restoreLabel={selection.purpose === 'cli' ? t.credentials.agentSelection.restoreCliAutomatic : undefined} pending={form.pending} disabled={form.conflict || !synchronized} dirty={form.dirty} settingsPath={settingsPath} onChange={value => { form.setDraft(value || null); onDirty(true) }} onSave={() => void form.submit()} onRestore={() => { form.setDraft(null); onDirty(true); void form.submit(null) }} />
     {slot === 'lark-cli' && currentAccount && <LarkAccountDetails account={currentAccount} showName={false} />}
-    {currentId && <p className="min-w-0 rounded-input bg-white px-3 py-2 text-[13.5px] [overflow-wrap:anywhere]">{selection.mode === 'explicit' ? credentialText.agentAccountSelectionText14 : credentialText.agentAccountSelectionText15}{credentialText.agentAccountSelectionText16}<span className="font-black">{currentAccount?.name ?? currentId}</span>{currentAccount && <span> · {accountStatus[currentAccount.status]}</span>}</p>}
+    {currentId && <p className="min-w-0 rounded-input bg-white px-3 py-2 text-[13.5px] [overflow-wrap:anywhere]">{selection.mode === 'explicit' ? t.credentials.agentSelection.explicitLabel : t.credentials.agentSelection.automaticLabel}{t.credentials.agentSelection.labelSeparator}<span className="font-black">{currentAccount?.name ?? currentId}</span>{currentAccount && <span> · {accountStatus[currentAccount.status]}</span>}</p>}
     {selection.candidates.filter(account => account.id === selection.resolvedAccountId || account.id === selection.selectedAccountId).map(account => <WarningList key={account.id} warnings={account.template?.warnings ?? []} />)}
     {form.conflict && <CredentialConflict base={form.base.summary} latest={form.review} reading={form.reading} error={form.readError} onRefresh={() => void form.refresh()} onAdopt={form.adopt} />}
     {!form.conflict && <ErrorAlert error={form.error} />}
     {/* projectId只作来源标识，不从其他项目候选推导账号。 */}
-    <span className="sr-only">{credentialText.agentAccountSelectionText17}{projectId}</span>
+    <span className="sr-only">{t.credentials.agentSelection.projectSourcePrefix}{projectId}</span>
   </div>
 }

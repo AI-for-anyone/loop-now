@@ -2,10 +2,12 @@ import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { projectAccount } from '@/test/project-credentials'
-import { larkText as copy } from '@/i18n/lark'
+import { t } from '@/i18n'
 import { ApiError } from '@/api/client'
 import { LarkUserLogin, type LarkUserLoginProps } from './LarkUserLogin'
 import { LarkAccountDetails } from './LarkAccountDetails'
+
+const copy = t.credentials.lark
 
 const app = projectAccount({ purpose: 'cli', provider: null, cli: 'lark-cli', authMethod: null, name: '原应用' })
 const props = (): LarkUserLoginProps => ({ projectId: app.projectId, available: true, sources: [app], onStart: vi.fn().mockResolvedValue(undefined), onRecover: vi.fn().mockResolvedValue(undefined) })

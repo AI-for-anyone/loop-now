@@ -1,4 +1,3 @@
-import { credentialText } from '@/i18n/credential-text'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Schemas } from '@/api/client'
@@ -81,18 +80,18 @@ export function ProjectLogin({ projectId, account }: { projectId: string; accoun
   const view = starting ? 'opening' : error && !active ? 'failed' : op?.status === 'pending' ? 'opening' : op?.status === 'awaiting_authorization' ? 'waiting' : op?.status === 'succeeded' ? 'success' : op?.status
   return <div className="grid min-w-0 gap-3">
     {!account && <div className="grid gap-1.5">
-      <Label htmlFor={`login-name-${projectId}`}>{credentialText.projectLoginText1}</Label>
+      <Label htmlFor={`login-name-${projectId}`}>{t.credentials.projectLogin.nameLabel}</Label>
       {/* 恢复进行中的操作只投影其固定名称，不覆盖用户尚未提交的本地草稿。 */}
       <Input id={`login-name-${projectId}`} maxLength={200} value={active ? (op?.name ?? name) : name} disabled={starting || active} aria-describedby={active ? `login-name-hint-${projectId}` : undefined} onChange={e => setName(e.target.value)} />
-      {active && <p id={`login-name-hint-${projectId}`} role="status" className="text-[13px] text-ink-700">{credentialText.projectLoginText2}{authorizationHref ? credentialText.projectLoginText3 : rejectedAuthorization ? credentialText.projectLoginText4 : credentialText.projectLoginText5}{credentialText.projectLoginText6}</p>}
+      {active && <p id={`login-name-hint-${projectId}`} role="status" className="text-[13px] text-ink-700">{t.credentials.projectLogin.nameLocked}{authorizationHref ? t.credentials.projectLogin.openOrCancel : rejectedAuthorization ? t.credentials.projectLogin.urlRejected : t.credentials.projectLogin.preparing}{t.credentials.projectLogin.restartNote}</p>}
     </div>}
-    <Button type="button" variant="secondary" className="justify-self-start" disabled={!available || starting || active || (!account && !name.trim()) || collection.isPending} onClick={() => void start()}>{account ? credentialText.projectLoginText7 : credentialText.projectLoginText8}</Button>
-    {op?.name && <p className="text-[13px] [overflow-wrap:anywhere]">{credentialText.projectLoginText9}{op.name}</p>}
+    <Button type="button" variant="secondary" className="justify-self-start" disabled={!available || starting || active || (!account && !name.trim()) || collection.isPending} onClick={() => void start()}>{account ? t.credentials.projectLogin.relogin : t.credentials.projectLogin.login}</Button>
+    {op?.name && <p className="text-[13px] [overflow-wrap:anywhere]">{t.credentials.projectLogin.newAccountLabel}{op.name}</p>}
     {view && <LoginFeedback view={view} detail={op?.errorCode ? loginErrors[op.errorCode] : undefined} hasAccount={!!account && account.status !== 'deleted'} blocked={blocked && !!authorizationHref} cancelling={cancelling} onCancel={active ? () => void cancel() : undefined} onRetry={!active ? () => void start() : undefined} authorizationHref={authorizationHref} onOpen={authorizationHref ? () => {
       // URL已知：由原生链接同步导航，清掉尚未导航的预留窗，避免旧WindowProxy/HMR引用干扰。
       popup.current?.closeUnused(); popup.current = null; navigated.current = op!.id; setBlocked(false)
     } : undefined} />}
-    {rejectedAuthorization && <div role="alert" className="grid gap-2 text-[13px]"><p>{credentialText.projectLoginText10}</p><Button type="button" size="sm" variant="secondary" onClick={() => void detail.refetch()}>{credentialText.projectLoginText11}</Button></div>}
+    {rejectedAuthorization && <div role="alert" className="grid gap-2 text-[13px]"><p>{t.credentials.projectLogin.urlRejectedNoOpen}</p><Button type="button" size="sm" variant="secondary" onClick={() => void detail.refetch()}>{t.credentials.projectLogin.reread}</Button></div>}
     <ErrorAlert error={error ?? detail.error ?? collection.error} />
   </div>
 }

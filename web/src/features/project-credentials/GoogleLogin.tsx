@@ -1,4 +1,4 @@
-import { credentialText } from '@/i18n/credential-text'
+import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, type Schemas } from '@/api/client'
@@ -15,12 +15,12 @@ import { useProjectCredentialsAvailable } from './project-availability'
 import { googleAuthorizationUrl } from './google-authorization'
 
 const errors: Record<Schemas['CLIAuthErrorCode'], string> = {
-  callback_unavailable: credentialText.googleLoginText1,
-  auth_cancelled: credentialText.googleLoginText2, auth_timeout: credentialText.googleLoginText3,
-  network_error: credentialText.googleLoginText4, oauth_failed: credentialText.googleLoginText5,
-  invalid_response: credentialText.googleLoginText6, account_mismatch: credentialText.googleLoginText7,
-  requires_login: credentialText.googleLoginText8, helper_unavailable: credentialText.googleLoginText9,
-  version_conflict: credentialText.googleLoginText10, server_restarted: credentialText.googleLoginText11,
+  callback_unavailable: t.credentials.google.callbackUnavailable,
+  auth_cancelled: t.credentials.google.cancelled, auth_timeout: t.credentials.google.timeout,
+  network_error: t.credentials.google.networkError, oauth_failed: t.credentials.google.oauthFailed,
+  invalid_response: t.credentials.google.invalidResponse, account_mismatch: t.credentials.google.accountMismatch,
+  requires_login: t.credentials.google.requiresLogin, helper_unavailable: t.credentials.google.helperUnavailable,
+  version_conflict: t.credentials.google.versionConflict, server_restarted: t.credentials.google.serverRestarted,
 }
 
 export function GoogleLogin({ projectId, account }: { projectId: string; account?: Schemas['ProjectCredentialAccount'] }) {
@@ -113,16 +113,16 @@ export function GoogleLogin({ projectId, account }: { projectId: string; account
   const view = starting ? 'opening' : active ? op!.status === 'pending' ? 'opening' : 'waiting' : op?.status === 'succeeded' ? 'success' : op?.status === 'failed' || op?.status === 'cancelled' || op?.status === 'expired' ? op.status : error ? 'failed' : undefined
   const lockedName = active ? op?.name ?? name : unknown && pendingBody && 'name' in pendingBody ? pendingBody.name : name
   return <div className="grid min-w-0 gap-3">
-    <p className="font-bold">{credentialText.googleLoginText12}</p>
-    {!account && <div className="grid gap-1.5"><Label htmlFor={`google-cli-name-${projectId}`}>{credentialText.googleLoginText13}</Label><Input id={`google-cli-name-${projectId}`} maxLength={200} value={lockedName} disabled={starting || active || unknown} onChange={event => setName(event.target.value)} /></div>}
-    {active && <p role="status" className="text-[13px]">{credentialText.googleLoginText14}{authorizationHref ? credentialText.googleLoginText15 : rejected ? credentialText.googleLoginText16 : credentialText.googleLoginText17}{credentialText.googleLoginText18}</p>}
-    {op?.name && <p className="text-[13px] [overflow-wrap:anywhere]">{credentialText.googleLoginText19}{op.name}</p>}
-    <Button type="button" variant="secondary" className="justify-self-start" disabled={!available || starting || active || unknown || collection.isPending || collection.isError || (!account && !name.trim())} onClick={() => void start()}>{account ? credentialText.googleLoginText20 : credentialText.googleLoginText21}</Button>
-    {unknown && <div role="status" className="grid gap-2 text-[13px]"><p>{credentialText.googleLoginText22}</p><Button type="button" size="sm" variant="secondary" onClick={() => void recover()}>{credentialText.googleLoginText23}</Button></div>}
-    {view && <LoginFeedback view={view} detail={op?.errorCode ? errors[op.errorCode] : unknown ? credentialText.googleLoginText24 : view === 'opening' ? credentialText.googleLoginText25 : undefined} hasAccount={!!account && account.status !== 'deleted'} blocked={blocked && !!authorizationHref} cancelling={cancelling} retryLabel={unknown ? credentialText.googleLoginText26 : undefined} onCancel={active ? () => void cancel() : undefined} onRetry={!active ? () => void start() : undefined} authorizationHref={authorizationHref} onOpen={authorizationHref ? () => { popup.current?.closeUnused(); popup.current = null; navigated.current = op!.id; setBlocked(false) } : undefined} />}
-    {rejected && <p role="alert" className="text-[13px] font-bold">{credentialText.googleLoginText27}</p>}
-    {(rejected || detail.isError || collection.isError) && <Button type="button" size="sm" variant="secondary" onClick={() => void (operation ? detail.refetch() : collection.refetch())}>{credentialText.googleLoginText28}</Button>}
+    <p className="font-bold">{t.credentials.google.title}</p>
+    {!account && <div className="grid gap-1.5"><Label htmlFor={`google-cli-name-${projectId}`}>{t.credentials.google.nameLabel}</Label><Input id={`google-cli-name-${projectId}`} maxLength={200} value={lockedName} disabled={starting || active || unknown} onChange={event => setName(event.target.value)} /></div>}
+    {active && <p role="status" className="text-[13px]">{t.credentials.google.targetFixed}{authorizationHref ? t.credentials.google.openOrCancel : rejected ? t.credentials.google.urlRejected : t.credentials.google.preparing}{t.credentials.google.refillNote}</p>}
+    {op?.name && <p className="text-[13px] [overflow-wrap:anywhere]">{t.credentials.google.newAccountLabel}{op.name}</p>}
+    <Button type="button" variant="secondary" className="justify-self-start" disabled={!available || starting || active || unknown || collection.isPending || collection.isError || (!account && !name.trim())} onClick={() => void start()}>{account ? t.credentials.google.relogin : t.credentials.google.login}</Button>
+    {unknown && <div role="status" className="grid gap-2 text-[13px]"><p>{t.credentials.google.startUnknown}</p><Button type="button" size="sm" variant="secondary" onClick={() => void recover()}>{t.credentials.google.readActive}</Button></div>}
+    {view && <LoginFeedback view={view} detail={op?.errorCode ? errors[op.errorCode] : unknown ? t.credentials.google.checkResult : view === 'opening' ? t.credentials.google.preparingGcloud : undefined} hasAccount={!!account && account.status !== 'deleted'} blocked={blocked && !!authorizationHref} cancelling={cancelling} retryLabel={unknown ? t.credentials.google.retrySameOperation : undefined} onCancel={active ? () => void cancel() : undefined} onRetry={!active ? () => void start() : undefined} authorizationHref={authorizationHref} onOpen={authorizationHref ? () => { popup.current?.closeUnused(); popup.current = null; navigated.current = op!.id; setBlocked(false) } : undefined} />}
+    {rejected && <p role="alert" className="text-[13px] font-bold">{t.credentials.google.urlRejectedNoOpen}</p>}
+    {(rejected || detail.isError || collection.isError) && <Button type="button" size="sm" variant="secondary" onClick={() => void (operation ? detail.refetch() : collection.refetch())}>{t.credentials.google.reread}</Button>}
     <ErrorAlert error={error ?? detail.error ?? collection.error} />
-    <p className="text-[13px] text-ink-700">{credentialText.googleLoginText29}</p>
+    <p className="text-[13px] text-ink-700">{t.credentials.google.note}</p>
   </div>
 }

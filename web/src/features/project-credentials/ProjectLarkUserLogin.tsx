@@ -5,13 +5,15 @@ import { ApiError, type Schemas } from '@/api/client'
 import { acceptCLIAuthState, cancelCLIAuth, cliAuthActive, cliAuthKeys, startCLIAuth, useCLIAuthOperation, useProjectCLIAuth } from '@/api/cli-auth'
 import { invalidateProjectCredentials, useProjectAccounts } from '@/api/project-credentials'
 import { Button } from '@/components/ui/button'
-import { larkText as copy } from '@/i18n/lark'
+import { t } from '@/i18n'
 import { backendSignals } from '@/api/backend-signals'
 import { larkLoginLocatorKey, useOriginalActionLocator } from '@/lib/useOriginalActionLocator'
 import { LarkUserLogin } from './LarkUserLogin'
 import { LarkAccountDetails } from './LarkAccountDetails'
 import { larkAuthorizationUrl } from './lark-authorization'
 import { useProjectCredentialsAvailable } from './project-availability'
+
+const copy = t.credentials.lark
 
 type LarkOperation = Extract<Schemas['CLIAuthOperation'], { cli: 'lark-cli' }>
 type LarkStart = Extract<Schemas['CLIAuthStart'], { cli: 'lark-cli' }>

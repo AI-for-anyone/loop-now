@@ -5,9 +5,11 @@ import { makeTaskDetail } from '@/test/tasks'
 import { defaultProject } from '@/test/api'
 import { projectAccount } from '@/test/project-credentials'
 import { larkUserAccount } from '@/test/lark-login'
-import { larkText as copy } from '@/i18n/lark'
+import { t } from '@/i18n'
 import { ApiError } from '@/api/client'
 import { TaskLarkAccountSwitch, type TaskLarkAccountSwitchProps } from './TaskLarkAccountSwitch'
+
+const copy = t.credentials.lark
 
 const detail = makeTaskDetail(defaultProject.id), node = detail.nodes[1]
 const account = larkUserAccount()

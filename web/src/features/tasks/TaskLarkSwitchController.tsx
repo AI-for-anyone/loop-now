@@ -11,7 +11,9 @@ import { ErrorAlert } from '@/components/ErrorAlert'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { selectClass } from '@/lib/field'
-import { larkText as copy } from '@/i18n/lark'
+import { t } from '@/i18n'
+
+const copy = t.credentials.lark
 
 type Participant = Schemas['TaskLarkSwitchParticipant']
 type Members = readonly [Participant, Participant]

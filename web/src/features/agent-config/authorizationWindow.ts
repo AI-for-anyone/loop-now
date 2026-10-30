@@ -1,4 +1,4 @@
-import { credentialText } from '@/i18n/credential-text'
+import { t } from '@/i18n'
 export function reserveAuthorizationWindow() {
   let popup: Window | null = null
   let navigated = false
@@ -20,8 +20,8 @@ export function reserveAuthorizationWindow() {
       // 初始异步等待也有明确反馈；这里仅固定文字，不写授权URL/状态秘密。
       try {
         if (popup.document?.body) {
-          popup.document.title = credentialText.authorizationWindowText1
-          popup.document.body.textContent = credentialText.authorizationWindowText2
+          popup.document.title = t.credentials.authWindow.title
+          popup.document.body.textContent = t.credentials.authWindow.body
         }
       } catch { /* 不依赖占位文档写入成功才能提供控制台原生继续入口。 */ }
     }
