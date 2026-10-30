@@ -33,7 +33,7 @@ export function AgentDBConnections({ agentId, configVersion, cli }: { agentId: s
   if (identity !== observed) { setObserved(identity); if (!dirty) setSession(value => value + 1) }
   return <div className="grid min-w-0 gap-3">
     <ErrorAlert error={result.error} />
-    {!result.data && !result.isError && <p role="status">{t.credentials.dbConnections.loadingBefore}{cli}{t.credentials.dbConnections.loadingAfter}</p>}
+    {!result.data && !result.isError && <p role="status">{t.credentials.dbConnections.loading(cli)}</p>}
     {result.data && <>
       <p className="text-[13.5px]">{t.credentials.dbConnections.currentModeLabel}{result.data.mode === 'explicit_set' ? t.credentials.dbConnections.currentModeExplicitSet : t.credentials.dbConnections.currentModeLegacy} · {statusText[result.data.status]}</p>
       {!synchronized && <p role="status">{t.credentials.dbConnections.outOfSync}</p>}
@@ -62,7 +62,7 @@ function ConnectionForm({ data, synchronized, onDirty, onSaved }: { data: Schema
   const ids = [...new Set([...candidates.map(item => item.id), ...data.accountIds, ...form.draft.ids])].sort()
   const disabled = form.pending || form.conflict || !synchronized || !accounts.data || !!accounts.error
   return <div className="grid min-w-0 gap-3 rounded-card bg-tint-blue p-4 text-[13.5px]">
-    <p className="font-bold">{data.cli}{t.credentials.dbConnections.setTitleSuffix}</p>
+    <p className="font-bold">{t.credentials.dbConnections.setTitle(data.cli)}</p>
     {data.mode === 'explicit_set' && data.accountIds.length > 0 && data.status !== 'resolved' && <p role="status" className="rounded-input bg-tint-red p-3 font-bold text-red-text">{t.credentials.dbConnections.setBroken}</p>}
     <p>{t.credentials.dbConnections.intro}</p>
     <ErrorAlert error={accounts.error} />
