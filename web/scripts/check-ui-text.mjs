@@ -1,4 +1,4 @@
-// 检查组件代码中直接书写的中文界面文字：界面文案必须来自 src/i18n/。
+// 检查组件代码中直接书写的中文界面文字：界面文案必须来自 src/i18n/。英文文案表（i18n/en-US）里也不能有中文。
 // 只检查字符串、模板字符串与 JSX 文字，注释不受限制。
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
@@ -7,8 +7,10 @@ import ts from 'typescript'
 
 const CJK = /[\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uff00-\uffef]/
 
+const isEnglishTable = (path) => path.split(sep).includes('en-US')
+
 const IGNORED = [
-  (path) => path.split(sep).includes('i18n'),
+  (path) => path.split(sep).includes('i18n') && !isEnglishTable(path),
   (path) => path.split(sep)[0] === 'test',
   (path) => /\.test\.tsx?$/.test(path),
   (path) => path.endsWith('.gen.ts'),
@@ -54,7 +56,7 @@ export function checkDir(dir) {
   for (const path of listSourceFiles(dir)) {
     const rel = relative(dir, path)
     if (IGNORED.some((ignore) => ignore(rel))) continue
-    for (const hit of findUiText(path, readFileSync(path, 'utf8'))) problems.push({ file: path, ...hit })
+    for (const hit of findUiText(path, readFileSync(path, 'utf8'))) problems.push({ file: path, english: isEnglishTable(rel), ...hit })
   }
   return problems
 }
@@ -62,6 +64,7 @@ export function checkDir(dir) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const dir = process.argv[2] ?? fileURLToPath(new URL('../src', import.meta.url))
   const problems = checkDir(dir)
-  for (const p of problems) console.error(`${p.file}:${p.line}: 直接书写的界面文字「${p.text}」，请改用 src/i18n/ 中的文案`)
+  for (const p of problems)
+    console.error(p.english ? `${p.file}:${p.line}: 英文文案表里有中文「${p.text}」` : `${p.file}:${p.line}: 直接书写的界面文字「${p.text}」，请改用 src/i18n/ 中的文案`)
   if (problems.length > 0) process.exit(1)
 }
