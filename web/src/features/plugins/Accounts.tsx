@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useDirtyForm } from '@/features/prompts/draft-navigation'
-import { pluginFormText, pluginText } from '@/i18n/plugins'
+import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { SchemaFields } from './SchemaForm'
 import { fieldsOf, initialDraft, isDirty, serverFieldErrors, toPayload, validate } from './schema-form'
@@ -15,7 +15,7 @@ import { Quiet } from './parts'
 
 type Account = Schemas['PluginAccount']
 type Kind = Schemas['PluginAccountKind']
-const text = pluginText.accounts
+const text = t.plugins.accounts
 
 // 账号一行的摘要：第一个非空的普通字段（截断），secret 一律不显示。
 function preview(account: Account): string | null {
@@ -42,7 +42,7 @@ function AccountForm({ projectId, pluginId, kind, account, onDone }: { projectId
   const submit = (event: FormEvent) => {
     event.preventDefault()
     const local = validate(fields, draft, saved.secretsSet)
-    const missingName = name.trim() === '' ? pluginFormText.required : undefined
+    const missingName = name.trim() === '' ? t.plugins.form.required : undefined
     setErrors(local)
     setNameError(missingName)
     if (Object.keys(local).length || missingName) return
@@ -64,14 +64,14 @@ function AccountForm({ projectId, pluginId, kind, account, onDone }: { projectId
         <FieldError message={nameError} />
       </div>
       <SchemaFields fields={fields} draft={draft} onChange={setDraft} errors={errors} disabled={mutation.isPending} secretsSet={saved.secretsSet} />
-      {conflict ? <p role="status" className="text-[13px] font-bold">{pluginFormText.conflictBody}</p> : <ErrorAlert error={mutation.error} />}
+      {conflict ? <p role="status" className="text-[13px] font-bold">{t.plugins.form.conflictBody}</p> : <ErrorAlert error={mutation.error} />}
       <div className="flex flex-wrap justify-end gap-2">
         <Button type="button" size="sm" variant="secondary" disabled={mutation.isPending} onClick={onDone}>
           {text.cancel}
         </Button>
         {!conflict && (
           <Button type="submit" size="sm" disabled={mutation.isPending || (account !== undefined && !dirty)}>
-            {mutation.isPending ? pluginFormText.saving : text.save}
+            {mutation.isPending ? t.plugins.form.saving : text.save}
           </Button>
         )}
       </div>

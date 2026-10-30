@@ -7,7 +7,6 @@ import { Switch } from '@/components/ui/switch'
 import { useScope } from '@/features/projects/scope-context'
 import { DraftNavigationGuard } from '@/features/prompts/DraftNavigationGuard'
 import { t } from '@/i18n'
-import { pluginText } from '@/i18n/plugins'
 import { pageTitleClass } from '@/lib/page-title'
 import { cn } from '@/lib/utils'
 import { AccountsManager } from './Accounts'
@@ -19,7 +18,7 @@ import { ConfigForm } from './SchemaForm'
 import { PluginActionButtons } from './PluginActions'
 import { fieldsOf } from './schema-form'
 
-const text = pluginText.project
+const text = t.plugins.project
 
 function SubTitle({ children }: { children: string }) {
   return <h3 className="text-[13px] font-black text-ink-700">{children}</h3>
@@ -46,7 +45,7 @@ function ProjectPluginCard({ project, item }: { project: Schemas['Project']; ite
         </h2>
         {detail.data && <SourceBadge source={detail.data.plugin.source} />}
         <IdVersion id={item.pluginId} version={item.version} />
-        {manifest && <span className="text-[12.5px] text-ink-700">{agentHalf && !platformHalf ? text.agentOnly : agentHalf ? null : pluginText.noAgentHalf}</span>}
+        {manifest && <span className="text-[12.5px] text-ink-700">{agentHalf && !platformHalf ? text.agentOnly : agentHalf ? null : t.plugins.noAgentHalf}</span>}
         <label className="ml-auto inline-flex items-center gap-2 text-[13px] font-black">
           <Switch aria-label={text.enable(item.displayName)} checked={item.enabled} disabled={save.isPending} onCheckedChange={toggle} />
           {item.enabled ? text.enabled : text.disabled}
@@ -75,7 +74,7 @@ function ProjectPluginCard({ project, item }: { project: Schemas['Project']; ite
               </section>
             )}
             {manifest.accounts.length > 0 && (
-              <section className="grid min-w-0 gap-2.5" aria-label={pluginText.detail.tabs.accounts}>
+              <section className="grid min-w-0 gap-2.5" aria-label={t.plugins.detail.tabs.accounts}>
                 <AccountsManager projectId={project.id} pluginId={item.pluginId} kinds={manifest.accounts} />
               </section>
             )}
@@ -126,7 +125,7 @@ function ProjectPlugins({ project }: { project: Schemas['Project'] }) {
           {plugins.isError ? (
             <SectionError title={text.title} error={plugins.error} onRetry={() => void plugins.refetch()} />
           ) : plugins.isPending ? (
-            <Quiet>{pluginText.loading}</Quiet>
+            <Quiet>{t.plugins.loading}</Quiet>
           ) : list.length === 0 ? (
             <Quiet>{text.empty}</Quiet>
           ) : (

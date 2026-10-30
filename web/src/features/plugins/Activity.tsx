@@ -5,7 +5,6 @@ import { ErrorAlert } from '@/components/ErrorAlert'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { t } from '@/i18n'
-import { pluginText } from '@/i18n/plugins'
 import { cn } from '@/lib/utils'
 import { Quiet } from './parts'
 import { RECORD_PREFIX, recordRows, type DeliveryRecord } from './records'
@@ -31,7 +30,7 @@ function More({ query, label }: { query: { hasNextPage: boolean; isFetchingNextP
 // compact 用在概览里：只取前几条，不分页、不筛选。projectId 只看这个项目的事件。
 export function DeliveriesList({ pluginId, compact, projectId }: { pluginId: string; compact?: number; projectId?: string }) {
   const [status, setStatus] = useState<DeliveryStatus | 'all'>('all')
-  const text = pluginText.events
+  const text = t.plugins.events
   const query = usePluginDeliveries(pluginId, { ...(status === 'all' ? {} : { status }), ...(projectId ? { projectId } : {}) }, compact ?? 50)
   const rows = (query.data?.pages ?? []).flatMap((page) => page.deliveries).slice(0, compact ?? Infinity)
   return (
@@ -78,7 +77,7 @@ export function DeliveriesList({ pluginId, compact, projectId }: { pluginId: str
 }
 
 function recordState(record: DeliveryRecord): { label: string; tone: 'done' | 'interrupt' | 'fail' | 'quiet' } {
-  const text = pluginText.records
+  const text = t.plugins.records
   const withCode = (label: string) => (record.lastStatusCode !== null ? text.code(label, record.lastStatusCode) : label)
   switch (record.status) {
     case 'delivered':
@@ -94,7 +93,7 @@ function recordState(record: DeliveryRecord): { label: string; tone: 'done' | 'i
 
 // 投递记录：插件经 SDK 记在 deliveries/* 下的外发记录，按 at 新的在前；认不得的记录原样显示 JSON。
 export function RecordsTable({ pluginId, compact }: { pluginId: string; compact?: number }) {
-  const text = pluginText.records
+  const text = t.plugins.records
   const query = usePluginState(pluginId, RECORD_PREFIX)
   const rows = recordRows(query.data?.entries ?? []).slice(0, compact ?? Infinity)
   if (query.error) return <ErrorAlert error={query.error} />
@@ -152,7 +151,7 @@ const levelTone: Record<Schemas['PluginLogEntry']['level'], string> = { debug: '
 
 // 插件的宿主日志：新的在前，保留 7 天；往下可以加载更早的。
 export function LogsView({ pluginId, compact }: { pluginId: string; compact?: number }) {
-  const text = pluginText.logs
+  const text = t.plugins.logs
   const query = usePluginLogs(pluginId, compact ?? 100)
   const entries = (query.data?.pages ?? []).flatMap((page) => page.entries).slice(0, compact ?? Infinity)
   return (
@@ -163,7 +162,7 @@ export function LogsView({ pluginId, compact }: { pluginId: string; compact?: nu
       ) : entries.length === 0 ? (
         <Quiet>{text.empty}</Quiet>
       ) : (
-        <ol aria-label={pluginText.detail.logs} className="min-w-0 overflow-x-auto rounded-input bg-ink px-3.5 py-3 font-mono text-[12px] leading-[1.7] text-white">
+        <ol aria-label={t.plugins.detail.logs} className="min-w-0 overflow-x-auto rounded-input bg-ink px-3.5 py-3 font-mono text-[12px] leading-[1.7] text-white">
           {entries.map((entry) => (
             <li key={entry.id} className="whitespace-pre-wrap [overflow-wrap:anywhere]">
               <time dateTime={entry.at} className="text-white/60">

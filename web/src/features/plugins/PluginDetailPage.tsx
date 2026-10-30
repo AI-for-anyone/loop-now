@@ -9,7 +9,6 @@ import { SectionError } from '@/components/RequestError'
 import { Button } from '@/components/ui/button'
 import { DraftNavigationGuard } from '@/features/prompts/DraftNavigationGuard'
 import { t } from '@/i18n'
-import { pluginFormText, pluginText as text } from '@/i18n/plugins'
 import { shellText } from '@/i18n/shell'
 import { isNotFound } from '@/lib/errors'
 import { pageTitleClass } from '@/lib/page-title'
@@ -24,6 +23,8 @@ import { ConfigForm } from './SchemaForm'
 import { describeValue, fieldsOf } from './schema-form'
 import { usePluginInstaller } from './usePluginInstaller'
 import { PluginActionButtons } from './PluginActions'
+
+const text = t.plugins
 
 type Detail = Schemas['PluginDetail']
 type Tab = 'overview' | 'config' | 'accounts' | 'events' | 'records' | 'logs'
@@ -93,7 +94,7 @@ function OverrideRow({ project, detail }: { project: Schemas['Project']; detail:
       </span>
       {fields.map((field) => (
         <span key={field.name} className="truncate text-ink-700">
-          {field.label} → {field.secret ? pluginFormText.secretSet : describeValue(field, values[field.name])}
+          {field.label} → {field.secret ? t.plugins.form.secretSet : describeValue(field, values[field.name])}
         </span>
       ))}
     </li>

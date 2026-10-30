@@ -7,14 +7,14 @@ import { pluginKeys, usePlugins } from '@/api/plugins'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { pluginFormText, pluginText } from '@/i18n/plugins'
+import { t } from '@/i18n'
 import { selectClass } from '@/lib/field'
 import { cn } from '@/lib/utils'
 import { pluginPath } from './paths'
 
 type Manager = Schemas['ExternalIdentityManager']
 type Candidate = Manager & { pluginName: string; channelLabel: string; status: Schemas['PluginStatus'] }
-const text = pluginText.manager
+const text = t.plugins.manager
 const keyOf = (manager: Manager | null) => (manager ? `${manager.pluginId}/${manager.channelId}` : '')
 
 // 已安装插件里声明了 manageIdentities 的渠道（清单在插件详情里，与插件页共用缓存）。
@@ -65,7 +65,7 @@ export function IdentityManager({ identity }: { identity: Schemas['ExternalIdent
       {current && (
         <p role="status" className={cn('rounded-input px-3.5 py-2.5 text-[13.5px]', active && active.status !== 'active' ? 'bg-tint-red text-red-text' : 'bg-tint-blue text-ink')}>
           <span className="font-black">{text.current(active ? `${active.pluginName} · ${active.channelLabel}` : `${current.pluginId} · ${current.channelId}`)}</span>
-          {active && active.status !== 'active' && <> · {text.notRunning(pluginText.status[active.status])}</>}
+          {active && active.status !== 'active' && <> · {text.notRunning(t.plugins.status[active.status])}</>}
           {active && (
             <>
               {' '}
@@ -81,7 +81,7 @@ export function IdentityManager({ identity }: { identity: Schemas['ExternalIdent
         <p className="text-[13.5px] text-ink-700">
           {text.none}{' '}
           <Link to="/plugins" className="font-bold text-riso-blue underline">
-            {pluginText.title}
+            {t.plugins.title}
           </Link>
         </p>
       ) : (
@@ -99,7 +99,7 @@ export function IdentityManager({ identity }: { identity: Schemas['ExternalIdent
             </select>
           </div>
           <Button size="sm" disabled={pending || save.isPending || choice === keyOf(current)} onClick={submit}>
-            {save.isPending ? pluginFormText.saving : text.save}
+            {save.isPending ? t.plugins.form.saving : text.save}
           </Button>
         </div>
       )}

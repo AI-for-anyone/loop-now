@@ -1,6 +1,5 @@
 import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
-import { pluginChatText } from '@/i18n/plugins'
 import { cn } from '@/lib/utils'
 import type { StepTone, TimelineStep } from './timeline-steps'
 
@@ -21,7 +20,7 @@ function QuestionLink({ id }: { id: string }) {
   }
   return (
     <button type="button" onClick={jump} className="self-start cursor-pointer text-[12.5px] font-bold text-riso-blue underline outline-none focus-visible:shadow-focus">
-      {pluginChatText.ui.viewQuestion}
+      {t.plugins.chat.ui.viewQuestion}
     </button>
   )
 }
