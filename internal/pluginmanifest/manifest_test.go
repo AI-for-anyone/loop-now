@@ -140,6 +140,48 @@ func TestReadManifestRejects(t *testing.T) {
 	}
 }
 
+// mcpServers 的条目与 Pi mcp.json 相同：带非空 command 的 stdio 条目，或带 http/https url 的 streamable HTTP 条目；
+// type 可省，只能是 stdio、http 或 streamable-http，SSE 拒绝。两者都有又没有 type 时按 url（与 Pi 相同）。
+func TestMCPServerEntries(t *testing.T) {
+	cases := []struct {
+		name  string
+		entry any
+		want  string // 空表示接受
+	}{
+		{"stdio", map[string]any{"command": "node", "args": []any{"./mcp/server.js"}}, ""},
+		{"stdio 带 type", map[string]any{"type": "stdio", "command": "node"}, ""},
+		{"url", map[string]any{"url": "http://127.0.0.1:3845/mcp"}, ""},
+		{"url 带 headers", map[string]any{"type": "http", "url": "https://mcp.figma.com/mcp", "headers": map[string]any{"Authorization": "Bearer ${FIGMA_TOKEN}"}}, ""},
+		{"streamable-http", map[string]any{"type": "streamable-http", "url": "https://example.com/mcp"}, ""},
+		{"两者都有按 url", map[string]any{"command": "node", "url": "https://example.com/mcp"}, ""},
+		{"type stdio 按 command", map[string]any{"type": "stdio", "command": "node", "url": "ftp://x"}, ""},
+		{"sse", map[string]any{"type": "sse", "url": "https://example.com/sse"}, "SSE"},
+		{"未知 type", map[string]any{"type": "websocket", "url": "https://example.com/mcp"}, "type 只能是"},
+		{"type 不是字符串", map[string]any{"type": nil, "command": "node"}, "type 只能是"},
+		{"url 不是 http", map[string]any{"url": "ftp://example.com/mcp"}, "须是带 command"},
+		{"url 大写协议", map[string]any{"url": "HTTPS://mcp.figma.com/mcp"}, ""},
+		{"url 没有主机", map[string]any{"url": "http:foo"}, "须是带 command"},
+		{"url 没有主机 2", map[string]any{"url": "http:///mcp"}, "须是带 command"},
+		{"url 端口越界", map[string]any{"url": "http://127.0.0.1:99999/mcp"}, "须是带 command"},
+		{"http 却只有 command", map[string]any{"type": "http", "command": "node"}, "须是带 command"},
+		{"stdio 却只有 url", map[string]any{"type": "stdio", "url": "https://example.com/mcp"}, "须是带 command"},
+		{"空 command", map[string]any{"command": ""}, "须是带 command"},
+		{"都没有", map[string]any{"args": []any{}}, "须是带 command"},
+		{"不是对象", "node", "须是带 command"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			pkg := full()
+			pkg["loopNow"].(map[string]any)["mcpServers"] = map[string]any{"x": c.entry}
+			dir := writePlugin(t, pkg, "agent/index.ts", "skills/", "platform/index.ts", "bin/")
+			_, err := pluginmanifest.ReadManifest(dir, "2026.11")
+			if c.want == "" && err != nil || c.want != "" && (err == nil || !strings.Contains(err.Error(), c.want)) {
+				t.Fatalf("期望 %q：%v", c.want, err)
+			}
+		})
+	}
+}
+
 func asError(err error, target **pluginmanifest.Error) bool {
 	e, ok := err.(*pluginmanifest.Error)
 	*target = e

@@ -30,7 +30,8 @@ func TestPluginAssetsReachPi(t *testing.T) {
 	}
 	p := agentconfig.PluginAssets{
 		Extensions: []string{"/p/a/agent.ts", "/p/b/agent.ts"}, Skills: []string{"/p/a/skills"},
-		MCPServers: map[string]json.RawMessage{"a-browser": json.RawMessage(`{"command":"node","args":["/p/a/mcp.js"]}`)},
+		MCPServers: map[string]json.RawMessage{"a-browser": json.RawMessage(`{"command":"node","args":["/p/a/mcp.js"]}`),
+			"a-design": json.RawMessage(`{"type":"http","url":"http://127.0.0.1:3845/mcp","headers":{"Authorization":"Bearer ${FIGMA_TOKEN}"}}`)},
 		Bin:        []string{"/p/a/bin"}, Env: map[string]string{"LOOP_NOW_PLUGIN_A_CONFIG": `{"x":1}`, "HOME": "/evil"},
 	}
 	args := pluginArgs(p)
@@ -46,6 +47,10 @@ func TestPluginAssetsReachPi(t *testing.T) {
 	}
 	if err != nil || json.Unmarshal(b, &file) != nil || file.MCPServers["a-browser"]["command"] != "node" {
 		t.Fatalf("mcp.json：%s %v", b, err)
+	}
+	if design := file.MCPServers["a-design"]; design["url"] != "http://127.0.0.1:3845/mcp" || design["type"] != "http" ||
+		design["headers"].(map[string]any)["Authorization"] != "Bearer ${FIGMA_TOKEN}" {
+		t.Fatalf("url 条目应原样写入：%s", b)
 	}
 	env := e.buildEnv(d, agentconfig.Snapshot{Plugins: p}, []string{"/cli/gh"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if !slices.Contains(env, "PATH=/cli/gh:/p/a/bin:/usr/bin") || !slices.Contains(env, `LOOP_NOW_PLUGIN_A_CONFIG={"x":1}`) || !slices.Contains(env, "HOME="+d.home) {

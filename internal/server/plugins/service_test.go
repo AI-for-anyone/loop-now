@@ -72,7 +72,8 @@ func plugin(t *testing.T, dir, id, version string) string {
 				map[string]any{"kind": "mail", "label": "邮箱", "multiple": true, "fields": map[string]any{"type": "object"}},
 			},
 			"mcpServers": map[string]any{"browser": map[string]any{"command": "node", "args": []any{"./mcp/server.js", "--data", "${LOOP_NOW_PLUGIN_DATA}/profiles/${LOOP_NOW_AGENT_ID}"},
-				"env": map[string]any{"HOME_DIR": "${LOOP_NOW_PLUGIN_ROOT}", "OTHER": "${KEEP_ME}"}}},
+				"env": map[string]any{"HOME_DIR": "${LOOP_NOW_PLUGIN_ROOT}", "OTHER": "${KEEP_ME}"}},
+				"design": map[string]any{"type": "http", "url": "http://127.0.0.1:3845/mcp", "headers": map[string]any{"X-Agent": "${LOOP_NOW_AGENT_ID}", "Authorization": "Bearer ${FIGMA_TOKEN}"}}},
 			"bin": []any{"./bin"},
 		},
 	}
@@ -369,6 +370,15 @@ func TestConfigAccountsAndGrants(t *testing.T) {
 	if mcp.Command != "node" || mcp.Args[0] != filepath.Join(root, "mcp/server.js") || mcp.Args[2] != d.DataDir+"/profiles/"+agent.ID.String() ||
 		mcp.Env["HOME_DIR"] != root || mcp.Env["OTHER"] != "${KEEP_ME}" {
 		t.Fatalf("mcp：%+v", mcp)
+	}
+	// url 条目原样交给 Pi：只换这三个占位符（headers 里也换），其余 ${…} 留给 Pi，不按安装目录解析。
+	var design map[string]any
+	if err := json.Unmarshal(assets.MCPServers["cfg-design"], &design); err != nil {
+		t.Fatal(err)
+	}
+	if h, _ := design["headers"].(map[string]any); len(design) != 3 || design["type"] != "http" || design["url"] != "http://127.0.0.1:3845/mcp" ||
+		h["X-Agent"] != agent.ID.String() || h["Authorization"] != "Bearer ${FIGMA_TOKEN}" {
+		t.Fatalf("url 条目：%v", design)
 	}
 	var cfg map[string]any
 	_ = json.Unmarshal([]byte(assets.Env["LOOP_NOW_PLUGIN_CFG_CONFIG"]), &cfg)
