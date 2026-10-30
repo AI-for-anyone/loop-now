@@ -74,7 +74,7 @@
 - `loopNow.platform` 缺省表示没有平台半边；`pi.extensions` 为空表示没有 Agent 半边。只带 skills 的也是合法插件。
 - **清单说了算**：平台半边在代码里订阅的事件、调用的平台接口范围，必须在 `events`、`permissions` 内，超出的订阅在加载时报错并让插件进入"错误"状态；超出范围的 API 调用返回 403 并记录到插件日志。
 - `configSchema` 由平台渲染成表单；`x-secret` 字段只写不回显；`x-scope: project` 字段在项目启用时可覆盖，其余为全局值。
-- `mcpServers` 的条目格式与 Pi `mcp.json` 完全一致，可用 `${...}` 引用环境变量；平台在启动 Pi 前把所有已授权插件的条目合并写入该 Agent 的 Pi 目录 `mcp.json`，并给 Pi 加 `-e builtin:mcp`（因为 `--no-extensions` 会同时关掉内置 MCP）。相对路径以插件安装目录为基准。
+- `mcpServers` 的条目格式与 Pi `mcp.json` 完全一致：带非空 `command` 的是 stdio 条目（`args`、`env`、`cwd`），带 `http`/`https` `url` 的是 streamable HTTP 条目（`headers`、`oauth`）；`type` 可省，只能是 `stdio`、`http` 或 `streamable-http`，`sse` 拒绝（Pi 不支持）。两者都有又没写 `type` 时按 `url`（与 Pi 相同）。平台只查这几项，其余字段原样交给 Pi。`env` 与 `headers` 的值可用 `${...}` 引用环境变量；平台在启动 Pi 前把所有已授权插件的条目合并写入该 Agent 的 Pi 目录 `mcp.json`，并给 Pi 加 `-e builtin:mcp`（因为 `--no-extensions` 会同时关掉内置 MCP）。`command` 与 `args` 里的相对路径以插件安装目录为基准；占位符替换见 §2.1。
 - `bin` 列出的目录在启动 Pi 前加入该 Agent 的 PATH。
 - `accounts` 声明账号种类；账号由人在项目里添加，按 Agent 授权；授权后以环境变量注入该 Agent 的 Pi 和 MCP 进程，变量名 `LOOP_NOW_ACCOUNT_<KIND>_<FIELD>`（多账号时为 JSON 数组 `LOOP_NOW_ACCOUNTS_<KIND>`），同时平台半边可用 `api.accounts.list(projectId, kind)` 读取。
 - `minPlatformVersion` 按平台的发布版本比较（形如 `2026.11`），不满足时拒绝安装。
@@ -93,7 +93,7 @@
 | `loopNow.mcpServers` | 合并写入 `agents/<id>/pi/mcp.json`，并加 `-e builtin:mcp` |
 | `loopNow.bin` | 加入 PATH |
 | 账号与配置 | 环境变量：`LOOP_NOW_PLUGIN_<ID>_CONFIG`（JSON，不含 secret 字段）、账号变量见上 |
-| `${LOOP_NOW_PLUGIN_ROOT}`、`${LOOP_NOW_PLUGIN_DATA}`、`${LOOP_NOW_AGENT_ID}` | 一个 Pi 会装多个插件，所以这三个占位符在合并 mcp.json 时按各自插件替换，`./`、`../` 相对安装目录解析；其余 `${…}` 留给 Pi |
+| `${LOOP_NOW_PLUGIN_ROOT}`、`${LOOP_NOW_PLUGIN_DATA}`、`${LOOP_NOW_AGENT_ID}` | 一个 Pi 会装多个插件，所以这三个占位符在合并 mcp.json 时按各自插件替换（条目里所有字符串，`url` 条目的 `url` 与 `headers` 也一样）；`command` 与 `args` 里以 `./`、`../` 开头的相对安装目录解析；其余 `${…}` 留给 Pi |
 
 Agent 半边调用平台接口用现成的 loopctl 和该 Agent 的进程令牌，不另发令牌；Agent 半边的权限就是该 Agent 的权限。
 

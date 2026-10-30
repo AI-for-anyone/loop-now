@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -316,11 +317,8 @@ func (m *Manifest) validate(dir, platformVersion string) error {
 		}
 	}
 	for name, raw := range m.MCPServers {
-		var srv struct {
-			Command string `json:"command"`
-		}
-		if !slugPattern.MatchString(name) || json.Unmarshal(raw, &srv) != nil || srv.Command == "" {
-			return invalid("loopNow.mcpServers 的 " + strconv.Quote(name) + " 须是带 command 的对象，名称为小写字母、数字、下划线或连字符")
+		if err := checkMCPServer(name, raw); err != nil {
+			return err
 		}
 	}
 	if t, ok := m.ConfigSchema.Map()["type"]; ok && t != "object" {
@@ -396,6 +394,43 @@ func checkPath(dir, rel, field string, allowDir bool) error {
 		return invalid(field + " 的 " + strconv.Quote(rel) + " 须是文件")
 	}
 	return nil
+}
+
+// checkMCPServer 按 Pi mcp.json 的规则与判断顺序检查一条 mcpServers：type 可省，只能是 stdio、http 或 streamable-http
+// （Pi 不支持 SSE）；带 url 且 type 不是 stdio 的是 streamable HTTP 条目，url 须是 http 或 https 地址；
+// 否则须带非空的 command 且 type 不是 http 类。headers、args、env 等其余字段原样交给 Pi。报错文字与 SDK 的 validate 相同。
+func checkMCPServer(name string, raw json.RawMessage) error {
+	field := "loopNow.mcpServers 的 " + strconv.Quote(name)
+	bad := invalid(field + " 须是带 command 的 stdio 条目或带 http/https url 的 streamable HTTP 条目，名称为小写字母、数字、下划线或连字符")
+	var srv map[string]any
+	if !slugPattern.MatchString(name) || json.Unmarshal(raw, &srv) != nil || srv == nil {
+		return bad
+	}
+	typ, _ := srv["type"].(string)
+	if v, ok := srv["type"]; ok && !slices.Contains([]string{"stdio", "http", "streamable-http"}, typ) {
+		if v == "sse" {
+			return invalid(field + " 不支持 SSE，请用 streamable HTTP 的 url")
+		}
+		return invalid(field + " 的 type 只能是 stdio、http 或 streamable-http")
+	}
+	if u, ok := srv["url"].(string); ok && typ != "stdio" {
+		// 与 SDK 相同：写出来须是 http:// 或 https:// 加主机（Pi 的 URL.canParse 会把 "http:foo" 规范成 http://foo/，这里不收），
+		// 端口不超过 65535（URL.canParse 拒绝，url.Parse 不查）。
+		p, err := url.Parse(u)
+		if err != nil || p.Scheme != "http" && p.Scheme != "https" || p.Host == "" || p.Hostname() == "" {
+			return bad
+		}
+		if port := p.Port(); port != "" {
+			if n, err := strconv.Atoi(port); err != nil || n > 65535 {
+				return bad
+			}
+		}
+		return nil
+	}
+	if c, _ := srv["command"].(string); c != "" && typ != "http" && typ != "streamable-http" {
+		return nil
+	}
+	return bad
 }
 
 // versionAtLeast 比较 YYYY.MM 形式的发布版本；平台版本不是这种形式（开发版）时视为满足。
