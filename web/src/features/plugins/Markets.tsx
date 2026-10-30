@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { t } from '@/i18n'
+import { localizedText } from '@/lib/localized-text'
 import { cn } from '@/lib/utils'
 import { cardClass, Quiet, SourceBadge } from './parts'
 import { pluginPath } from './paths'
@@ -26,10 +27,10 @@ function EntryCard({ market, entry, installer }: { market: Market; entry: Entry;
         <h3 className="font-display-cn text-[19px] leading-tight font-normal [overflow-wrap:anywhere]">
           {entry.installedVersion ? (
             <Link to={pluginPath(entry.id)} className="outline-none hover:underline focus-visible:shadow-focus">
-              {entry.displayName}
+              {localizedText(entry.displayName)}
             </Link>
           ) : (
-            entry.displayName
+            localizedText(entry.displayName)
           )}
         </h3>
         {market.official ? (
@@ -40,7 +41,7 @@ function EntryCard({ market, entry, installer }: { market: Market; entry: Entry;
           </span>
         )}
       </div>
-      <p className="text-[13px] leading-snug text-ink-700 [overflow-wrap:anywhere]">{entry.description}</p>
+      <p className="text-[13px] leading-snug text-ink-700 [overflow-wrap:anywhere]">{localizedText(entry.description)}</p>
       <p className="truncate font-mono text-[11.5px] text-ink-500" title={entry.source}>
         {entry.source}
       </p>

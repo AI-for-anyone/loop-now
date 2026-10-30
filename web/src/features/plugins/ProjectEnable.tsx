@@ -5,6 +5,7 @@ import { useProjects } from '@/api/queries'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Switch } from '@/components/ui/switch'
 import { t } from '@/i18n'
+import { localizedText } from '@/lib/localized-text'
 import { describeValue, fieldsOf } from './schema-form'
 import { Quiet } from './parts'
 
@@ -27,7 +28,7 @@ function EnableRow({ project, pluginId, schema }: { project: Schemas['Project'];
         {overrides > 0 && <span className="shrink-0 text-[12.5px] text-ink-700">{text.overrides(overrides)}</span>}
         <Switch
           className="ml-auto"
-          aria-label={t.plugins.project.enableIn(project.name, item?.displayName ?? pluginId)}
+          aria-label={t.plugins.project.enableIn(project.name, item ? localizedText(item.displayName) : pluginId)}
           checked={item?.enabled ?? false}
           disabled={!item || save.isPending}
           onCheckedChange={(enabled) => item && save.mutate({ enabled, values: item.config.values, expectedRevision: item.config.revision })}

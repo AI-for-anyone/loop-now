@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { t } from '@/i18n'
+import { localizedText } from '@/lib/localized-text'
 import { cn } from '@/lib/utils'
 import { ManifestSummary } from './ManifestSummary'
 import { usePluginInstaller } from './usePluginInstaller'
@@ -56,12 +57,12 @@ export function ConfirmInstallDialog({ preview, onClose, onInstalled }: { previe
       <DialogContent className="sm:max-w-[700px]">
         <DialogHeader>
           <DialogTitle className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pr-12">
-            <span>{update ? confirmText.update(manifest.displayName) : confirmText.install(manifest.displayName)}</span>
+            <span>{update ? confirmText.update(localizedText(manifest.displayName)) : confirmText.install(localizedText(manifest.displayName))}</span>
             <code className="rounded-[6px] bg-ink/[0.06] px-2 py-0.5 font-mono text-[12.5px] font-bold">
               {update && !same ? `${manifest.id} · ${confirmText.versionChange(preview.installedVersion!, manifest.version)}` : t.plugins.idVersion(manifest.id, manifest.version)}
             </code>
           </DialogTitle>
-          <DialogDescription>{manifest.description}</DialogDescription>
+          <DialogDescription>{localizedText(manifest.description)}</DialogDescription>
         </DialogHeader>
         {untrusted && (
           <div role="note" className="flex gap-3 rounded-card bg-tint-yellow px-4 py-3 text-[13.5px] leading-normal">
@@ -178,10 +179,10 @@ export function InstallSourceDialog({
                           <input type="radio" name={`${id}-builtin`} value={source.id} disabled={done} checked={builtinId === source.id} onChange={() => setBuiltinId(source.id)} className="mt-1 accent-riso-blue" />
                           <span className="grid min-w-0 gap-0.5">
                             <span className="text-[14px] font-black">
-                              {source.displayName} <span className="font-mono text-[12px] font-bold text-ink-500">{t.plugins.idVersion(source.id, source.version)}</span>
+                              {localizedText(source.displayName)} <span className="font-mono text-[12px] font-bold text-ink-500">{t.plugins.idVersion(source.id, source.version)}</span>
                               {done && <span className="ml-2 text-[12px] font-bold text-ink-500">{t.plugins.installedBadge}</span>}
                             </span>
-                            <span className="text-[13px] text-ink-700">{source.description}</span>
+                            <span className="text-[13px] text-ink-700">{localizedText(source.description)}</span>
                           </span>
                         </label>
                       </li>

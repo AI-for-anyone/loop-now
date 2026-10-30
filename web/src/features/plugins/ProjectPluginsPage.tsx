@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch'
 import { useScope } from '@/features/projects/scope-context'
 import { DraftNavigationGuard } from '@/features/prompts/DraftNavigationGuard'
 import { t } from '@/i18n'
+import { localizedText } from '@/lib/localized-text'
 import { pageTitleClass } from '@/lib/page-title'
 import { cn } from '@/lib/utils'
 import { AccountsManager } from './Accounts'
@@ -40,19 +41,19 @@ function ProjectPluginCard({ project, item }: { project: Schemas['Project']; ite
       <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-2">
         <h2 className="font-display-cn text-[21px] leading-tight font-normal">
           <Link to={pluginPath(item.pluginId)} className="outline-none hover:underline focus-visible:shadow-focus">
-            {item.displayName}
+            {localizedText(item.displayName)}
           </Link>
         </h2>
         {detail.data && <SourceBadge source={detail.data.plugin.source} />}
         <IdVersion id={item.pluginId} version={item.version} />
         {manifest && <span className="text-[12.5px] text-ink-700">{agentHalf && !platformHalf ? text.agentOnly : agentHalf ? null : t.plugins.noAgentHalf}</span>}
         <label className="ml-auto inline-flex items-center gap-2 text-[13px] font-black">
-          <Switch aria-label={text.enable(item.displayName)} checked={item.enabled} disabled={save.isPending} onCheckedChange={toggle} />
+          <Switch aria-label={text.enable(localizedText(item.displayName))} checked={item.enabled} disabled={save.isPending} onCheckedChange={toggle} />
           {item.enabled ? text.enabled : text.disabled}
         </label>
       </div>
       <ErrorAlert error={save.error ?? detail.error} />
-      {item.enabled && manifest && <PluginActionButtons plugin={{ id: item.pluginId, displayName: item.displayName }} actions={manifest.components.actions} page="project" where={{ projectId: project.id }} />}
+      {item.enabled && manifest && <PluginActionButtons plugin={{ id: item.pluginId, displayName: localizedText(item.displayName) }} actions={manifest.components.actions} page="project" where={{ projectId: project.id }} />}
       {item.enabled && manifest && (
         <div className="grid min-w-0 gap-x-6 gap-y-4 border-t border-ink/10 pt-3.5 md:grid-cols-2">
           <div className="grid min-w-0 content-start gap-4">
