@@ -230,8 +230,9 @@ func Load(getenv func(string) string) (*Config, error) {
 		ConsoleOrigins:        p.list(EnvConsoleOrigins, "http://localhost:5173,http://127.0.0.1:5173"),
 		WorkRoot:              p.str(EnvWorkRoot, DefaultWorkRoot()),
 		RedisKeyPrefix:        p.str(EnvRedisKeyPrefix, "loopnow:"),
-		DefaultOrgName:        p.str(EnvDefaultOrgName, "默认组织"),
-		DefaultProjectName:    p.str(EnvDefaultProjectName, "默认项目"),
+		// 只在全新安装时用来创建默认组织与项目；两者都出现在 Agent 地址里（项目名还出现在 URL 里），所以用不需要转义的英文。
+		DefaultOrgName:     p.str(EnvDefaultOrgName, "default"),
+		DefaultProjectName: p.str(EnvDefaultProjectName, "default"),
 
 		PiBin:               p.str(EnvPiBin, "pi"),
 		PiVersion:           p.str(EnvPiVersion, "1.4.0"),
