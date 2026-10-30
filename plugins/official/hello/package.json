@@ -1,7 +1,10 @@
 {
   "name": "@loop-now/plugin-hello",
   "version": "1.0.0",
-  "description": "最小示例：平台半边在每轮结束时写一行日志，Agent 半边给 Pi 加一个 hello 工具",
+  "description": {
+    "zh-CN": "最小示例：平台半边在每轮结束时写一行日志，Agent 半边给 Pi 加一个 hello 工具",
+    "en-US": "Minimal example: the platform half writes a log line at the end of each turn, and the Agent half gives Pi a hello tool"
+  },
   "license": "Apache-2.0",
   "type": "module",
   "keywords": ["loop-now-plugin", "pi-package"],
@@ -15,7 +18,10 @@
   },
   "loopNow": {
     "id": "hello",
-    "displayName": "Hello 示例",
+    "displayName": {
+      "zh-CN": "Hello 示例",
+      "en-US": "Hello example"
+    },
     "platform": "./platform/index.ts",
     "events": ["run.ended"],
     "permissions": [],
