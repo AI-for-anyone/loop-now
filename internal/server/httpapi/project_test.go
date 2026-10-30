@@ -3,23 +3,15 @@ package httpapi_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/contracttest"
 )
 
+// waitAgentIdle 同 waitIdle：只看状态接口时，忙闲锁可能还没释放。
 func (e *env) waitAgentIdle(a string) {
 	e.t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		st := decode[apitypes.AgentStatus](e.t, e.expect(200, "GET", a+"/status", nil))
-		if !st.Busy && st.Queued.Interrupt == 0 && st.Queued.Normal == 0 {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	e.t.Fatal("等待 Agent 空闲超时")
+	waitIdle(e.t, e, a)
 }
 
 // 项目、Manager 与按范围的 Agent 接口（请求与响应都经契约校验）。
