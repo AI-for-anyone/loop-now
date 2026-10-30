@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ulikunitz/xz"
 )
 
 func TestBundleRejectsEscapeAndDuplicate(t *testing.T) {
@@ -169,5 +171,38 @@ func TestBundleRejectsLateSymlinkTargetEscape(t *testing.T) {
 	marker, e := os.ReadFile(filepath.Join(base, "outside"))
 	if e != nil || string(marker) != "outside-marker" {
 		t.Fatal("outside fixture mutated")
+	}
+}
+
+func TestBundleExtractsTarXz(t *testing.T) {
+	var buf bytes.Buffer
+	xzw, e := xz.NewWriter(&buf)
+	if e != nil {
+		t.Fatal(e)
+	}
+	tw := tar.NewWriter(xzw)
+	if e := tw.WriteHeader(&tar.Header{Name: "mysql-8.4.9/bin/mysql", Mode: 0755, Size: 3}); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := tw.Write([]byte("bin")); e != nil {
+		t.Fatal(e)
+	}
+	if e := tw.Close(); e != nil {
+		t.Fatal(e)
+	}
+	if e := xzw.Close(); e != nil {
+		t.Fatal(e)
+	}
+	archive := filepath.Join(t.TempDir(), "bundle.tar.xz")
+	if e := os.WriteFile(archive, buf.Bytes(), 0600); e != nil {
+		t.Fatal(e)
+	}
+	root := t.TempDir()
+	if e := extractTree(archive, "tar.xz", root); e != nil {
+		t.Fatal("tar.xz rejected", e)
+	}
+	b, e := os.ReadFile(filepath.Join(root, "mysql-8.4.9/bin/mysql"))
+	if e != nil || string(b) != "bin" {
+		t.Fatal("tar.xz entry not extracted", e)
 	}
 }

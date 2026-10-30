@@ -24,6 +24,6 @@ export const settings = {
     installing: '安装中',
     installed: '已安装',
     failed: '安装失败',
-    unsupported_platform: '不支持当前平台',
+    unsupported_platform: '无当前平台安装包',
   } satisfies Record<S['CliTemplate']['install']['status'], string>,
 } as const

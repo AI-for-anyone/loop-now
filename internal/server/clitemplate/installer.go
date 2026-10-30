@@ -86,7 +86,7 @@ func (i *Installer) installed(t *Template) bool {
 // Status 返回安装状态与失败原因。
 func (i *Installer) Status(t *Template) (string, string) {
 	if _, ok := t.Asset(); !ok {
-		return StateUnsupportedPlatform, "模板没有当前平台（" + Platform() + "）的安装包"
+		return StateUnsupportedPlatform, "模板没有当前平台（" + Platform() + "）的安装包；环境里已有的同名命令不受影响，可直接使用"
 	}
 	if i.installed(t) {
 		return StateInstalled, ""
@@ -140,7 +140,7 @@ func (i *Installer) EnsureReport(ctx context.Context, t *Template) (dir string, 
 	attempted = !i.installed(t)
 	if !supported {
 		attempted = true
-		c.err = fmt.Errorf("%s 模板没有当前平台（%s）的安装包", t.Name, Platform())
+		c.err = fmt.Errorf("%s 模板没有当前平台（%s）的安装包；可直接使用环境中已安装的同名命令", t.Name, Platform())
 	} else if attempted {
 		installCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), i.timeout)
 		c.err = i.install(installCtx, t, asset)

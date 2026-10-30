@@ -234,7 +234,7 @@ func (t *Template) validate() error {
 		return fmt.Errorf("不认识的渲染器 %q", t.Credential.Renderer)
 	}
 	for plat, a := range t.Install {
-		if a.URL == "" || !sha256Pattern.MatchString(a.SHA256) || (a.Format != "zip" && a.Format != "tar.gz") || a.Path == "" {
+		if a.URL == "" || !sha256Pattern.MatchString(a.SHA256) || (a.Format != "zip" && a.Format != "tar.gz" && a.Format != "tar.xz") || a.Path == "" {
 			return fmt.Errorf("平台 %s 的安装包定义不完整", plat)
 		}
 	}

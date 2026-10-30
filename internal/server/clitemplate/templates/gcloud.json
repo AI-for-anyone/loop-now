@@ -52,6 +52,13 @@
           "layout": "python_framework"
         }
       ]
+    },
+    "linux/arm64": {
+      "url": "https://storage.googleapis.com/cloud-sdk-release/google-cloud-cli-568.0.0-linux-arm.tar.gz",
+      "sha256": "0b31153517665f12a664675b48571938f0beeec46450485e966a4dce7b125cf6",
+      "format": "tar.gz",
+      "path": "google-cloud-sdk/bin/gcloud",
+      "layout": "google_sdk"
     }
   },
   "reservedEnv": [

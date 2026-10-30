@@ -24,15 +24,51 @@ func (i *Installer) GoogleRuntimePaths(t *Template) (sdk, framework string) {
 	root := filepath.Join(i.toolsDir, t.Name, t.Version, "runtime")
 	return filepath.Join(root, "google-cloud-sdk"), filepath.Join(root, "Python.framework")
 }
-func googleDependency(a Asset) (Asset, error) {
-	if len(a.Dependencies) != 1 || a.Dependencies[0].Layout != "python_framework" || a.Dependencies[0].Format != "tar.gz" || a.Dependencies[0].Path != "python-3.13.7-macos11.pkg" {
-		return Asset{}, errors.New("Google私有Python安装清单无效")
+// googleDependency 校验并返回 macOS 私有 Python 依赖；Linux 的自包含安装包自带
+// SDK 全部运行时，没有依赖，第二个返回值为 false。
+func googleDependency(a Asset) (dep Asset, hasDep bool, err error) {
+	if len(a.Dependencies) == 0 {
+		return Asset{}, false, nil
 	}
-	return a.Dependencies[0], nil
+	if len(a.Dependencies) != 1 || a.Dependencies[0].Layout != "python_framework" || a.Dependencies[0].Format != "tar.gz" || a.Dependencies[0].Path != "python-3.13.7-macos11.pkg" {
+		return Asset{}, false, errors.New("Google私有Python安装清单无效")
+	}
+	return a.Dependencies[0], true, nil
 }
 func privatePythonShell(framework string) string {
 	return "export DYLD_FRAMEWORK_PATH=" + shellQuote(filepath.Dir(framework)) + " DYLD_LIBRARY_PATH=" + shellQuote(filepath.Join(framework, "Versions/3.13/lib")) + " PYTHONHOME=" + shellQuote(filepath.Join(framework, "Versions/3.13")) + "; exec " + shellQuote(filepath.Join(framework, "Versions/3.13/bin/python3.13")) + " -S "
 }
+// verifyGoogleSelfContained 验证 Linux 自包含安装：bin/gcloud 在最小环境下能打印固定版本。
+// Linux 官方包不自带 Python，使用系统 python3（镜像/Docker 环境负责提供）。
+func verifyGoogleSelfContained(ctx context.Context, t *Template, root string) error {
+	home, e := os.MkdirTemp(root, ".verify-home-")
+	if e != nil {
+		return e
+	}
+	defer os.RemoveAll(home)
+	sdk := filepath.Join(root, "runtime/google-cloud-sdk")
+	if _, e := os.Stat(filepath.Join(sdk, "bin", t.Binary)); e != nil {
+		return errors.New("Google SDK 启动入口缺失")
+	}
+	env := []string{"HOME=" + home, "CLOUDSDK_CONFIG=" + home, "PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin", "PYTHONNOUSERSITE=1", "CLOUDSDK_CORE_DISABLE_USAGE_REPORTING=true", "CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK=true"}
+	if p := ResolveGooglePython(); p != "" {
+		env = append(env, "CLOUDSDK_PYTHON="+p)
+	}
+	probe, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(probe, "/bin/sh", "-c", shellQuote(filepath.Join(sdk, "bin", t.Binary))+" --version")
+	cmd.Env = env
+	cmd.Dir = home
+	out, err := cmd.CombinedOutput()
+	ok := err == nil && strings.Contains(string(out), "Google Cloud SDK "+t.Version)
+	clear(out)
+	if !ok {
+		return errors.New("Google SDK 自包含安装验证失败")
+	}
+	return nil
+}
+
+// verifyGoogle 验证 macOS 私有安装：固定版本的私有 Python 与 SDK 依赖都完整。
 func verifyGoogle(ctx context.Context, t *Template, root string) error {
 	home, e := os.MkdirTemp(root, ".verify-home-")
 	if e != nil {
@@ -65,7 +101,7 @@ func verifyGoogle(ctx context.Context, t *Template, root string) error {
 func pythonList(paths ...string) string { b, _ := json.Marshal(paths); return string(b) }
 
 func (i *Installer) installGoogle(ctx context.Context, t *Template, a Asset, archive, stage string) error {
-	dep, e := googleDependency(a)
+	dep, hasDep, e := googleDependency(a)
 	if e != nil {
 		return e
 	}
@@ -76,51 +112,57 @@ func (i *Installer) installGoogle(ctx context.Context, t *Template, a Asset, arc
 	if e = extractTree(archive, a.Format, root); e != nil {
 		return e
 	}
-	work, e := os.MkdirTemp(stage, ".python-package-")
-	if e != nil {
-		return e
-	}
-	defer os.RemoveAll(work)
-	pkg, e := os.CreateTemp(work, "download-")
-	if e != nil {
-		return e
-	}
-	e = download(ctx, i.client, dep.URL, pkg, dep.SHA256)
-	ce := pkg.Close()
-	if e != nil {
-		return e
-	}
-	if ce != nil {
-		return ce
-	}
-	unpack := filepath.Join(work, "unpack")
-	if e = os.Mkdir(unpack, 0700); e != nil {
-		return e
-	}
-	if e = extractTree(pkg.Name(), dep.Format, unpack); e != nil {
-		return e
-	}
-	expanded := filepath.Join(work, "expanded")
-	cmd := exec.CommandContext(ctx, "/usr/sbin/pkgutil", "--expand-full", filepath.Join(unpack, dep.Path), expanded)
-	cmd.Env = []string{"HOME=" + work, "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
-	cmd.Dir = work
-	out, err := cmd.CombinedOutput()
-	clear(out)
-	if err != nil {
-		return errors.New("私有Python包解包失败")
-	}
-	// expand-full extracts payload only; no installer scripts are executed.
-	source := filepath.Join(expanded, "Python_Framework.pkg/Payload")
-	if e = copyPrivateTree(source, filepath.Join(root, "Python.framework")); e != nil {
-		return e
-	}
-	if e = verifyGoogle(ctx, t, stage); e != nil {
+	pythonSHA := ""
+	if hasDep {
+		work, e := os.MkdirTemp(stage, ".python-package-")
+		if e != nil {
+			return e
+		}
+		defer os.RemoveAll(work)
+		pkg, e := os.CreateTemp(work, "download-")
+		if e != nil {
+			return e
+		}
+		e = download(ctx, i.client, dep.URL, pkg, dep.SHA256)
+		ce := pkg.Close()
+		if e != nil {
+			return e
+		}
+		if ce != nil {
+			return ce
+		}
+		unpack := filepath.Join(work, "unpack")
+		if e = os.Mkdir(unpack, 0700); e != nil {
+			return e
+		}
+		if e = extractTree(pkg.Name(), dep.Format, unpack); e != nil {
+			return e
+		}
+		expanded := filepath.Join(work, "expanded")
+		cmd := exec.CommandContext(ctx, "/usr/sbin/pkgutil", "--expand-full", filepath.Join(unpack, dep.Path), expanded)
+		cmd.Env = []string{"HOME=" + work, "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
+		cmd.Dir = work
+		out, err := cmd.CombinedOutput()
+		clear(out)
+		if err != nil {
+			return errors.New("私有Python包解包失败")
+		}
+		// expand-full extracts payload only; no installer scripts are executed.
+		source := filepath.Join(expanded, "Python_Framework.pkg/Payload")
+		if e = copyPrivateTree(source, filepath.Join(root, "Python.framework")); e != nil {
+			return e
+		}
+		pythonSHA = dep.SHA256
+		if e = verifyGoogle(ctx, t, stage); e != nil {
+			return e
+		}
+	} else if e = verifyGoogleSelfContained(ctx, t, stage); e != nil {
 		return e
 	}
 	if e = i.writeGoogleLauncher(t, stage); e != nil {
 		return e
 	}
-	b, _ := json.Marshal(googleReady{a.SHA256, dep.SHA256, t.Version})
+	b, _ := json.Marshal(googleReady{a.SHA256, pythonSHA, t.Version})
 	return os.WriteFile(filepath.Join(stage, ".google-ready.json"), b, 0600)
 }
 func copyPrivateTree(source, dest string) error {
@@ -187,9 +229,13 @@ func copyPrivateTree(source, dest string) error {
 	return nil
 }
 func (i *Installer) googleInstalled(t *Template, a Asset) bool {
-	dep, e := googleDependency(a)
+	dep, hasDep, e := googleDependency(a)
 	if e != nil {
 		return false
+	}
+	pythonSHA := ""
+	if hasDep {
+		pythonSHA = dep.SHA256
 	}
 	root := filepath.Join(i.toolsDir, t.Name, t.Version)
 	b, e := os.ReadFile(filepath.Join(root, ".google-ready.json"))
@@ -197,12 +243,16 @@ func (i *Installer) googleInstalled(t *Template, a Asset) bool {
 		return false
 	}
 	var ready googleReady
-	if json.Unmarshal(b, &ready) != nil || ready != (googleReady{a.SHA256, dep.SHA256, t.Version}) {
+	if json.Unmarshal(b, &ready) != nil || ready != (googleReady{a.SHA256, pythonSHA, t.Version}) {
 		return false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	return verifyGoogle(ctx, t, root) == nil && i.writeGoogleLauncher(t, root) == nil
+	verify := verifyGoogleSelfContained
+	if hasDep {
+		verify = verifyGoogle
+	}
+	return verify(ctx, t, root) == nil && i.writeGoogleLauncher(t, root) == nil
 }
 func (i *Installer) writeGoogleLauncher(t *Template, stage string) error {
 	executable, e := os.Executable()
