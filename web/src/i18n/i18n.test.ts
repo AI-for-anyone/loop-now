@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { enUS } from './en-US'
 import { grouped, plural } from './format'
+import { resolveLocale } from './locale'
 import { t } from './index'
 import { zhCN } from './zh-CN'
 
@@ -33,5 +34,16 @@ describe('文案表', () => {
       return out
     }
     expect(shape(enUS, 't', [])).toEqual(shape(zhCN, 't', []))
+  })
+
+  it('界面语言：?lang= 优先，其次是保存的选择，最后按浏览器语言（zh 开头用中文，其余用英文）', () => {
+    expect(resolveLocale('?lang=en-US', 'zh-CN', ['zh-CN'])).toBe('en-US')
+    expect(resolveLocale('?lang=en', null, ['zh-CN'])).toBe('en-US')
+    expect(resolveLocale('?lang=zh', 'en-US', ['en-US'])).toBe('zh-CN')
+    expect(resolveLocale('?lang=fr', 'en-US', ['zh-CN'])).toBe('en-US')
+    expect(resolveLocale('', 'zh-CN', ['en-GB'])).toBe('zh-CN')
+    expect(resolveLocale('', 'ja', ['zh-TW', 'en'])).toBe('zh-CN')
+    expect(resolveLocale('', null, ['fr-FR', 'zh-CN'])).toBe('en-US')
+    expect(resolveLocale('', null, [])).toBe('en-US')
   })
 })

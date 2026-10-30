@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react'
+import { useId, useSyncExternalStore } from 'react'
 import { LockIcon } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -8,6 +8,8 @@ import { serverVersionStore } from '@/api/client'
 import { useCliTemplates, useContextInfo, useHealth } from '@/api/queries'
 import { config } from '@/config'
 import { t } from '@/i18n'
+import { chooseLocale, locale, localeNames, locales, type Locale } from '@/i18n/locale'
+import { selectClass } from '@/lib/field'
 import { cn } from '@/lib/utils'
 import { ContextFolderSection } from '@/features/folders/FolderSections'
 import { pageTitleClass } from '@/lib/page-title'
@@ -28,6 +30,36 @@ function InfoCard({ label, value }: { label: string; value: string }) {
       <dt className="text-[13px] font-black text-ink-500">{label}</dt>
       <dd className="font-display-cn text-[30px] leading-[1.25] break-words">{value}</dd>
     </dl>
+  )
+}
+
+// 界面语言只保存在这个浏览器里，与本页只读的服务端配置无关；换语言后重新加载页面。
+function LanguageCard() {
+  const id = useId()
+  return (
+    <Card className="gap-3">
+      <CardHeader>
+        <CardTitle id={`${id}-title`}>{t.settings.language.title}</CardTitle>
+      </CardHeader>
+      <CardContent className="gap-2">
+        <select
+          aria-labelledby={`${id}-title`}
+          aria-describedby={`${id}-hint`}
+          value={locale}
+          onChange={(event) => chooseLocale(event.target.value as Locale)}
+          className={cn(selectClass, 'max-w-[280px]')}
+        >
+          {locales.map((value) => (
+            <option key={value} value={value} lang={value}>
+              {localeNames[value]}
+            </option>
+          ))}
+        </select>
+        <p id={`${id}-hint`} className="text-[13px] text-ink-700">
+          {t.settings.language.hint}
+        </p>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -54,6 +86,8 @@ export function SettingsPage() {
           <InfoCard label={t.settings.organization} value={context.data?.organization.name ?? '—'} />
           <InfoCard label={t.settings.project} value={context.data?.project.name ?? '—'} />
         </div>
+
+        <LanguageCard />
 
         <ContextFolderSection scope={{ kind: 'global' }} />
 

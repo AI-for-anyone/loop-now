@@ -6,7 +6,7 @@ export default mergeConfig(
   defineConfig({
     test: {
       environment: 'jsdom',
-      setupFiles: ['./src/test/setup.ts'],
+      setupFiles: ['./src/test/locale.ts', './src/test/setup.ts'],
       include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts'],
       css: false,
       restoreMocks: true,

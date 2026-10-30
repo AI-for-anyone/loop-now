@@ -36,7 +36,7 @@ export const folders = {
     create: 'Create AGENTS.md',
     template: '# Working notes\n\nDuties, conventions, and things to watch for, written for the Agent. The Agent reads this file first every time it starts.\n',
   },
-  concurrent: 'The Agent may be editing these files at the same time; the last save of a file wins.',
+  concurrent: 'The Agent may be editing these files too; the last save wins.',
   columns: { name: 'Name', size: 'Size', modified: 'Modified' },
   summary: (dirs: number, files: number) => `${count(dirs, 'folder', 'folders')} · ${count(files, 'file', 'files')}`,
   showMore: 'Show more',

@@ -4,6 +4,8 @@ type S = components['schemas']
 
 export const settings = {
   title: '全局设置',
+  // 界面语言只保存在这个浏览器里，不是服务端配置。
+  language: { title: '界面语言', hint: '只影响这个浏览器；切换后页面会重新加载。' },
   readonlyHint: '服务端的配置来自它的环境变量，这里只显示，控制台不能修改。',
   organization: '默认组织',
   project: '默认项目',

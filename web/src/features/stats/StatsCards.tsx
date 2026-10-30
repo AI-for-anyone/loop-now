@@ -185,7 +185,7 @@ export function QuestionsCard({ report, axis, scopeOf }: { report: Report; axis:
       <dl className="grid grid-cols-3 gap-2">
         {stats.map((stat) => (
           <div key={stat.label} className="flex min-w-0 flex-col gap-0.5 rounded-ticket bg-paper/60 px-2.5 py-2">
-            <dt className="truncate text-[11.5px] text-ink-700">{stat.label}</dt>
+            <dt className="text-[11.5px] leading-snug text-ink-700">{stat.label}</dt>
             <dd className="text-[18px] leading-[1.1] font-bold">{stat.value}</dd>
           </div>
         ))}
