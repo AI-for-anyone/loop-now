@@ -9,10 +9,11 @@ import { CreateAgentDialog } from '@/features/agents/CreateAgentDialog'
 import { PendingBadge } from '@/features/console-inbox/PendingBadge'
 import { ScopeSwitcher } from '@/features/projects/ScopeSwitcher'
 import { t } from '@/i18n'
-import { shellText as text } from '@/i18n/shell'
 import { navGroupClass, navRowClass } from '@/lib/nav-row'
 import { lastScope, overviewPath, projectBase, type ResolvedShellScope, type Scope } from '@/lib/scope'
 import { ConnectionStatus } from './ConnectionStatus'
+
+const text = t.shell
 
 function NavItem({ to, icon, label, current, badge, onClick }: { to: string; icon: NavIconName; label: string; current: boolean; badge?: ReactNode; onClick?: () => void }) {
   return (

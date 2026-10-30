@@ -1,7 +1,9 @@
 import { useSyncExternalStore } from 'react'
 import { useInfiniteQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { api, ApiError, call, type Schemas } from './client'
-import { taskInboxText as copy } from '@/i18n/task-inbox'
+import { t } from '@/i18n'
+
+const copy = t.taskInbox
 
 export const taskInboxKeys = {
   records: (taskId: string, nodeId?: string) => nodeId ? ['taskInbox', taskId, nodeId] as const : ['taskInbox', taskId] as const,

@@ -1,10 +1,11 @@
 import { TaskRunRecord } from './TaskRunRecord'
-import { taskInboxText as copy } from '@/i18n/task-inbox'
 import type { Schemas } from '@/api/client'
 import { UserChatBubble, AgentChatReply, PlatformChatReminder, SleepWakeLine } from '@/features/chat/ChatBubble'
 import { Markdown } from '@/features/chat/Markdown'
 import { Badge } from '@/components/ui/badge'
 import { t } from '@/i18n'
+
+const copy = t.taskInbox
 
 export function TaskMessageBubble({ message, agent, taskId, nodeRunId, runtimeId }: { message: Schemas['TaskMessage']; agent: { id: string; name: string }; taskId?: string; nodeRunId?: string; runtimeId?: string }) {
   // A turn stopped by a person is labelled 已停止, not shown as an error.

@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { api, ApiError, call, type Schemas } from './client'
-import { taskInboxText as copy } from '@/i18n/task-inbox'
+import { t } from '@/i18n'
+
+const copy = t.taskInbox
 
 type Queue = Schemas['TaskNodeQueue']
 

@@ -7,10 +7,11 @@ import { NavIcon } from '@/components/NavIcon'
 import { Toasts } from '@/components/Toasts'
 import { useInboxLive } from '@/features/inbox/useInboxLive'
 import { t } from '@/i18n'
-import { shellText as text } from '@/i18n/shell'
 import { GLOBAL, lastScope, urlScope, type ResolvedShellScope } from '@/lib/scope'
 import { ConnectionBanner } from './ConnectionBanner'
 import { Sidebar } from './Sidebar'
+
+const text = t.shell
 
 // 左侧栏沿用的范围。项目记下解析到的 ID：停留期间项目改名，仍按 ID 找到同一个项目。
 type Kept = { kind: 'global' } | { kind: 'project'; name: string; id: string | null }

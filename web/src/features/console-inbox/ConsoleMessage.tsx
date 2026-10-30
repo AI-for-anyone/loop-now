@@ -8,9 +8,10 @@ import { Markdown } from '@/features/chat/Markdown'
 import { MessageImages } from '@/features/images/MessageImages'
 import { InboxNotice } from '@/features/inbox/InboxNotice'
 import { t } from '@/i18n'
-import { consoleInboxText as text } from '@/i18n/console-inbox'
 import { cn } from '@/lib/utils'
 import { useAnswerQuestion, useReadOnView } from './useAnswerQuestion'
+
+const text = t.consoleInbox
 
 type Message = Schemas['InboxMessage']
 

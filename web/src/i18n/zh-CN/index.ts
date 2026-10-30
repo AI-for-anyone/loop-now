@@ -17,6 +17,11 @@ import { skills } from './skills'
 import { sleep } from './sleep'
 import { tasks } from './tasks'
 import { timeline } from './timeline'
+import { consoleInbox } from './console-inbox'
+import { images } from './images'
+import { shell } from './shell'
+import { stats } from './stats'
+import { taskInbox } from './task-inbox'
 
 // 控制台的中文文案，按功能区分文件。文案表的结构（Messages）由这里推导，其他语言须与它同形。
 export const zhCN = {
@@ -42,4 +47,9 @@ export const zhCN = {
   timeline,
   plugins,
   credentials,
+  consoleInbox,
+  taskInbox,
+  images,
+  shell,
+  stats,
 } as const

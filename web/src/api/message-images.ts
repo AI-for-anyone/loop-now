@@ -1,5 +1,5 @@
 import { api, ApiError, call, type Schemas } from './client'
-import { imageText } from '@/i18n/images'
+import { t } from '@/i18n'
 import { config } from '@/config'
 import type { ImageDraft, ImageLimits, ImageUploads } from '@/features/images/image-drafts'
 export type ImageScope = { kind: 'agent'; agentId: string } | { kind: 'task'; taskId: string; nodeRunId: string }
@@ -23,7 +23,7 @@ export async function uploadMessageImages(scope: ImageScope, images: ImageDraft[
       const ref = scope.kind === 'agent'
         ? await call(api.PUT('/agents/{agentId}/message-images/{imageId}', { params: { path: { agentId: scope.agentId, imageId: image.id } }, ...body }))
         : await call(api.PUT('/tasks/{taskId}/nodes/{nodeRunId}/message-images/{imageId}', { params: { path: { taskId: scope.taskId, nodeRunId: scope.nodeRunId, imageId: image.id } }, ...body }))
-      if (ref.id !== image.id || ref.size !== image.file.size || ref.mimeType !== image.file.type) throw new ApiError({ status: 502, code: 'unknown', serverMessage: imageText.receiptMismatch })
+      if (ref.id !== image.id || ref.size !== image.file.size || ref.mimeType !== image.file.type) throw new ApiError({ status: 502, code: 'unknown', serverMessage: t.images.receiptMismatch })
       refs.push(ref)
     } catch (error) { onUploads?.({ [image.id]: 'failed' }); throw error }
     left.shift(); report()

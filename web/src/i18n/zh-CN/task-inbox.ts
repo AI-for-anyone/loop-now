@@ -1,4 +1,4 @@
-export const taskInboxText = {
+export const taskInbox = {
   toolsUnsupported: '当前服务尚未支持任务运行记录，未改用常态 Agent 记录。',
   scopeMismatch: 'Inbox 或运行记录返回的原任务、执行、Agent 或实例不匹配，未使用该响应。',
   readOriginal: '读取原发送结果', reading: '正在读取原动作…', notFound: '尚未找到原动作；结果仍待确认，不自动换动作或重新发送。',
