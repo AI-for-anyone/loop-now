@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError, call, type Schemas } from './client'
-import { backendSignals } from '@/i18n/backend-signals'
+import { backendSignals } from './backend-signals'
 
 export type ImportOperation = Schemas['CLIImportOperation']
 export const importKey = (projectId: string, operationId: string) => ['cli-import', projectId, operationId] as const

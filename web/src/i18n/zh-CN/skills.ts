@@ -1,0 +1,28 @@
+import { formatBytes, formatTime } from './format'
+
+export const skills = {
+  title: 'Skills 库',
+  empty: 'Skills 库中还没有模板。',
+  uploadZip: '上传 zip',
+  uploadDir: '上传目录',
+  create: '在线新建',
+  count: (count: number) => `共 ${count} 个模板`,
+  files: (count: number) => `${count} 个文件`,
+  fileList: '文件',
+  skillMd: 'SKILL.md',
+  nameConflictHint: '库中已有同名模板。如果要更新它，请打开该模板并使用“替换”。',
+  replace: '替换',
+  replaceTitle: (name: string) => `替换模板「${name}」？`,
+  replaceBody: '模板将被新上传的内容整体替换。已复制给 Agent 的 Skill 副本不受影响。',
+  deleteTitle: (name: string) => `删除模板「${name}」？`,
+  deleteBody: '模板将从库中删除。已复制给 Agent 的 Skill 副本不受影响。',
+  newTitle: '新建 Skill',
+  tooLarge: (limit: number) => `超过压缩包上限（${formatBytes(limit)}）`,
+  tooManyEntries: (limit: number) => `文件数超过上限（${limit} 个）`,
+  packFailed: '读取或打包目录失败，请确认目录中的文件都可以读取后重试。',
+  skeleton: '---\nname: my-skill\ndescription: 一句话说明这个 Skill 做什么、什么时候使用\n---\n\n# my-skill\n\n',
+  detailTitle: '模板详情',
+  notFound: '这个模板不存在或已删除。',
+  updated: (time: string) => `更新于 ${formatTime(time)}`,
+  submitCreate: '创建',
+} as const

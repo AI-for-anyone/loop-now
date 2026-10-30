@@ -6,7 +6,7 @@ import { acceptCLIAuthState, cancelCLIAuth, cliAuthActive, cliAuthKeys, startCLI
 import { invalidateProjectCredentials, useProjectAccounts } from '@/api/project-credentials'
 import { Button } from '@/components/ui/button'
 import { larkText as copy } from '@/i18n/lark'
-import { backendSignals } from '@/i18n/backend-signals'
+import { backendSignals } from '@/api/backend-signals'
 import { larkLoginLocatorKey, useOriginalActionLocator } from '@/lib/useOriginalActionLocator'
 import { LarkUserLogin } from './LarkUserLogin'
 import { LarkAccountDetails } from './LarkAccountDetails'

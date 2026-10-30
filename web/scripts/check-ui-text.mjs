@@ -12,6 +12,8 @@ const IGNORED = [
   (path) => path.split(sep)[0] === 'test',
   (path) => /\.test\.tsx?$/.test(path),
   (path) => path.endsWith('.gen.ts'),
+  // 服务端协议里的固定文字，用于识别旧服务端，不是界面文案。
+  (path) => path === join('api', 'backend-signals.ts'),
 ]
 
 function listSourceFiles(dir) {

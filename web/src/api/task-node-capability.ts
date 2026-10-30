@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { backendSignals } from '@/i18n/backend-signals'
+import { backendSignals } from './backend-signals'
 import { api, ApiError, call } from './client'
 
 export const nodeCapabilityKey = (taskId: string, nodeRunId: string) => ['taskNodeCapability', taskId, nodeRunId] as const

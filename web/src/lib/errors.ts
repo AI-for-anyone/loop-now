@@ -1,13 +1,15 @@
 import { ApiError } from '@/api/client'
 import { t } from '@/i18n'
+import { showServerText } from '@/i18n/locale'
 
-// 把任意错误转换为给人看的中文说明：已知错误码用文案表，未知时用服务端给出的说明。
+// 把任意错误转换为给人看的说明：已知错误码用文案表，未知时用服务端给出的说明。
+// 服务端的说明只有中文，界面不是中文时已知错误码不再附上它。
 export function describeError(error: unknown): string {
   if (!(error instanceof ApiError)) return t.errors.unknown
   if (error.code === 'unreachable') return t.errors.unreachable
   if (error.code === 'unknown') return error.serverMessage ?? t.errors.unknownStatus(error.status)
   const known = t.errors.code[error.code]
-  return error.serverMessage && error.serverMessage !== error.code && error.serverMessage !== known
+  return showServerText && error.serverMessage && error.serverMessage !== error.code && error.serverMessage !== known
     ? t.errors.withDetail(known, error.serverMessage)
     : known
 }
