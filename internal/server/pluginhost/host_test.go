@@ -152,9 +152,11 @@ func TestHostLoadsDeliversEventsAndKeepsState(t *testing.T) {
 	early := e.addEvent("inbox.received", base, "alpha", "beta")
 
 	e.sup.Start(false)
-	e.eventually("投递完成", func() (bool, string) {
+	// alpha 加载后就开始投递，这时 beta 可能还没加载完；全部加载完（状态都已写库）宿主才进入运行中。
+	e.eventually("加载与投递完成", func() (bool, string) {
 		s := e.scalar(`SELECT string_agg(event_id||'='||status||'/'||attempts, ',' ORDER BY event_id) FROM plugin_event_deliveries WHERE plugin_id='alpha'`)
-		return strings.Count(s, "delivered/1") == 2 && strings.Contains(s, failing+"=failed/2"), s
+		st := e.sup.Status().State
+		return st == pluginhost.StateRunning && strings.Count(s, "delivered/1") == 2 && strings.Contains(s, failing+"=failed/2"), st + " " + s
 	})
 	if got := e.scalar(`SELECT status||'|'||coalesce(last_error,'') FROM plugins WHERE id='alpha'`); got != "active|" {
 		t.Fatalf("alpha 状态：%s", got)
@@ -223,9 +225,11 @@ func TestHostRestartPolicyAndCrashReport(t *testing.T) {
 	if n := e.count("event", "alpha", "boom"); n != 3 {
 		t.Fatalf("未确认的事件每次重启后都应重投：%d", n)
 	}
-	if got := e.scalar(`SELECT status FROM plugins WHERE id='alpha'`); got != "host_stopped" {
-		t.Fatalf("插件应标为宿主已停止：%s", got)
-	}
+	// 先记为已停止，再把插件写成宿主已停止。
+	e.eventually("插件标为宿主已停止", func() (bool, string) {
+		s := e.scalar(`SELECT status FROM plugins WHERE id='alpha'`)
+		return s == "host_stopped", s
+	})
 	// 停止后不再拉起：过一会儿投递次数不变。
 	time.Sleep(200 * time.Millisecond)
 	if n := e.count("load", "alpha", ""); n != 3 {
@@ -276,9 +280,12 @@ func TestHostReadyTimeoutAndProtocolMismatch(t *testing.T) {
 func TestHostDisableReloadAndUnload(t *testing.T) {
 	e := newHostEnv(t, "", []pluginhost.Spec{spec("alpha", nil, "inbox.received")}, nil)
 	e.sup.Start(true)
-	time.Sleep(100 * time.Millisecond)
-	if st := e.sup.Status(); st.State != pluginhost.StateDisabled || e.count("load", "", "") != 0 {
-		t.Fatalf("启动时已停用，不应拉起宿主：%+v", st)
+	e.eventually("启动时停用", func() (bool, string) {
+		st := e.sup.Status()
+		return st.State == pluginhost.StateDisabled, st.State
+	})
+	if n := e.count("load", "", ""); n != 0 {
+		t.Fatalf("启动时已停用，不应拉起宿主：加载了 %d 次", n)
 	}
 	e.sup.SetDisabled(false)
 	e.eventually("启用后运行", func() (bool, string) {
@@ -412,18 +419,21 @@ func TestHostPrunesOldEventsAndLogs(t *testing.T) {
 // 定时任务：时钟走到 cron 匹配的那一分钟时发 schedule 请求，每分钟至多一次；加载时所在的那一分钟不触发。
 // 上一次还没有回应的条目跳过这一次并记入日志；错过的分钟不补。
 func TestHostSchedules(t *testing.T) {
-	var now atomic.Int64
+	var now, reads atomic.Int64
 	base := time.Date(2026, 10, 27, 9, 0, 30, 0, time.Local)
 	now.Store(base.UnixNano())
 	sp := spec("cron", map[string]any{"hangSchedules": []string{"slow"}})
 	sp.Schedules = []pluginmanifest.Schedule{{ID: "sweep", Cron: "* * * * *"}, {ID: "slow", Cron: "* * * * *"}, {ID: "hourly", Cron: "0 * * * *"}}
 	e := newHostEnv(t, "", []pluginhost.Spec{sp}, func(o *pluginhost.Options) {
-		o.Now = func() time.Time { return time.Unix(0, now.Load()) }
+		o.Now = func() time.Time { reads.Add(1); return time.Unix(0, now.Load()) }
 		o.ScheduleTick = 10 * time.Millisecond
 	})
 	e.sup.Start(false)
-	e.eventually("加载", func() (bool, string) { return e.count("load", "cron", "") == 1, "" })
-	time.Sleep(50 * time.Millisecond)
+	// 定时协程启动时每个条目读一次时钟记下加载的那一分钟，之后每个刻度读一次：多读两次说明已按 09:00 走完一个刻度，
+	// 这之后再拨钟才不会被当成加载时所在的那一分钟。
+	e.eventually("定时协程开始", func() (bool, string) {
+		return reads.Load() >= int64(len(sp.Schedules))+2, fmt.Sprint(reads.Load())
+	})
 	if n := e.count("schedule", "cron", ""); n != 0 {
 		t.Fatalf("加载时所在的那一分钟不触发：%d", n)
 	}

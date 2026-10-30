@@ -111,9 +111,11 @@ func TestRealHostLoadsDeliversEventsAndKeepsState(t *testing.T) {
 	early := e.addEvent("inbox.received", base, "alpha", "beta")
 
 	e.sup.Start(false)
-	e.eventually("投递完成", func() (bool, string) {
+	// alpha 加载后就开始投递，这时 beta 可能还没加载完；全部加载完（状态都已写库）宿主才进入运行中。
+	e.eventually("加载与投递完成", func() (bool, string) {
 		s := e.scalar(`SELECT string_agg(event_id||'='||status||'/'||attempts, ',' ORDER BY event_id) FROM plugin_event_deliveries WHERE plugin_id='alpha'`)
-		return strings.Count(s, "delivered/1") == 2 && strings.Contains(s, failing+"=failed/2"), s
+		st := e.sup.Status().State
+		return st == pluginhost.StateRunning && strings.Count(s, "delivered/1") == 2 && strings.Contains(s, failing+"=failed/2"), st + " " + s
 	})
 	if got := e.scalar(`SELECT status||'|'||coalesce(last_error,'') FROM plugins WHERE id='alpha'`); got != "active|" {
 		t.Errorf("alpha 状态：%s", got)
@@ -173,9 +175,11 @@ func TestRealHostRestartPolicyAndCrashReport(t *testing.T) {
 	if !strings.Contains(st.LastCrash.Error, "exit status 5") || len(st.LastCrash.InFlight) != 1 {
 		t.Errorf("崩溃原因与未完成的请求：%+v", st.LastCrash)
 	}
-	if got := e.scalar(`SELECT status FROM plugins WHERE id='alpha'`); got != "host_stopped" {
-		t.Errorf("插件应标为宿主已停止：%s", got)
-	}
+	// 先记为已停止，再把插件写成宿主已停止。
+	e.eventually("插件标为宿主已停止", func() (bool, string) {
+		s := e.scalar(`SELECT status FROM plugins WHERE id='alpha'`)
+		return s == "host_stopped", s
+	})
 	e.exec(`UPDATE plugin_event_deliveries SET status='delivered' WHERE event_id=$1`, boom)
 	e.sup.Restart()
 	e.eventually("人工重启", func() (bool, string) {
@@ -202,10 +206,10 @@ export default function (api) {
   api.config.onChange(() => api.log.info('config changed'))
 }`}}, nil)
 	e.sup.Start(true)
-	time.Sleep(100 * time.Millisecond)
-	if st := e.sup.Status(); st.State != pluginhost.StateDisabled {
-		t.Fatalf("启动时已停用，不应拉起宿主：%+v", st)
-	}
+	e.eventually("启动时已停用，不拉起宿主", func() (bool, string) {
+		st := e.sup.Status()
+		return st.State == pluginhost.StateDisabled, st.State
+	})
 	e.sup.SetDisabled(false)
 	e.eventually("启用后运行", func() (bool, string) {
 		st := e.sup.Status()
@@ -318,7 +322,7 @@ func TestRealHostCallPolicies(t *testing.T) {
 
 // 第三阶段：action、http 与 schedule（插件会话接上之前预期失败）。
 func TestRealHostActionsHTTPAndSchedules(t *testing.T) {
-	var now atomic.Int64
+	var now, reads atomic.Int64
 	base := time.Date(2026, 10, 27, 9, 0, 30, 0, time.Local)
 	now.Store(base.UnixNano())
 	e := newRealHostEnv(t, []realPlugin{{id: "alpha", http: true,
@@ -329,13 +333,14 @@ func TestRealHostActionsHTTPAndSchedules(t *testing.T) {
   api.http.handle(async (req) => new Response('echo ' + req.method + ' ' + new URL(req.url).pathname + ' ' + (await req.text()), { status: 201, headers: { 'x-plugin': 'alpha' } }))
   api.schedule.on('sweep', async () => { api.log.info('swept') })
 }`}}, func(o *pluginhost.Options) {
-		o.Now = func() time.Time { return time.Unix(0, now.Load()) }
+		o.Now = func() time.Time { reads.Add(1); return time.Unix(0, now.Load()) }
 		o.ScheduleTick = 10 * time.Millisecond
 	})
 	e.sup.Start(false)
+	// 定时协程启动时读一次时钟记下加载的那一分钟，之后每个刻度读一次：多读两次后再拨钟，才不会被当成加载时所在的那一分钟。
 	e.eventually("加载", func() (bool, string) {
 		st := e.sup.Status()
-		return len(st.Loaded) == 1, e.scalar(`SELECT status||'|'||coalesce(last_error,'') FROM plugins WHERE id='alpha'`)
+		return len(st.Loaded) == 1 && reads.Load() >= 3, e.scalar(`SELECT status||'|'||coalesce(last_error,'') FROM plugins WHERE id='alpha'`)
 	})
 	ctx := context.Background()
 	raw, err := e.sup.Request(ctx, pluginhost.TypeAction, "alpha", map[string]any{"actionId": "resend", "where": map[string]any{"agentId": "01a17d40-0000-7000-8000-000000000000"}, "input": map[string]any{"note": "x"}, "timeoutMs": 5000}, 5*time.Second)
