@@ -24,6 +24,21 @@ func (i *Installer) GoogleRuntimePaths(t *Template) (sdk, framework string) {
 	root := filepath.Join(i.toolsDir, t.Name, t.Version, "runtime")
 	return filepath.Join(root, "google-cloud-sdk"), filepath.Join(root, "Python.framework")
 }
+
+// GoogleSelfContained 只依据安装完成标记中的 Python 依赖校验值判断运行方式。
+// 标记缺失或不可读时必须报错，不能因文件系统探测失败而退回 PATH 中的 Python。
+func GoogleSelfContained(runtimeRoot string) (bool, error) {
+	raw, err := os.ReadFile(filepath.Join(runtimeRoot, "..", ".google-ready.json"))
+	if err != nil {
+		return false, err
+	}
+	var ready googleReady
+	if err := json.Unmarshal(raw, &ready); err != nil {
+		return false, errors.New("Google安装完成标记无效")
+	}
+	return ready.PythonSHA256 == "", nil
+}
+
 // googleDependency 校验并返回 macOS 私有 Python 依赖；Linux 的自包含安装包自带
 // SDK 全部运行时，没有依赖，第二个返回值为 false。
 func googleDependency(a Asset) (dep Asset, hasDep bool, err error) {
@@ -38,6 +53,7 @@ func googleDependency(a Asset) (dep Asset, hasDep bool, err error) {
 func privatePythonShell(framework string) string {
 	return "export DYLD_FRAMEWORK_PATH=" + shellQuote(filepath.Dir(framework)) + " DYLD_LIBRARY_PATH=" + shellQuote(filepath.Join(framework, "Versions/3.13/lib")) + " PYTHONHOME=" + shellQuote(filepath.Join(framework, "Versions/3.13")) + "; exec " + shellQuote(filepath.Join(framework, "Versions/3.13/bin/python3.13")) + " -S "
 }
+
 // verifyGoogleSelfContained 验证 Linux 自包含安装：bin/gcloud 在最小环境下能打印固定版本。
 // Linux 官方包不自带 Python，使用系统 python3（镜像/Docker 环境负责提供）。
 func verifyGoogleSelfContained(ctx context.Context, t *Template, root string) error {

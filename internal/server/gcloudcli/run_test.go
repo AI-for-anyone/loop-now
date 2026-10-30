@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"loop-now/internal/server/clitemplate"
 )
 
 func TestControlledArguments(t *testing.T) {
@@ -35,6 +37,9 @@ func TestRunSelfContained(t *testing.T) {
 	if e := os.WriteFile(bin, body, 0755); e != nil {
 		t.Fatal(e)
 	}
+	if e := os.WriteFile(filepath.Join(base, ".google-ready.json"), []byte(`{"pythonSha256":""}`), 0600); e != nil {
+		t.Fatal(e)
+	}
 	home := filepath.Join(base, "home")
 	credential := filepath.Join(home, ".loop-now", "gcloud", "service-account.json")
 	if e := os.MkdirAll(filepath.Dir(credential), 0755); e != nil {
@@ -59,5 +64,38 @@ func TestRunSelfContained(t *testing.T) {
 	}
 	if code := Run(context.Background(), []string{"relative-root", "--version"}, Options{Getenv: getenv, Stdout: &stdout, Stderr: &stderr}); code != 2 {
 		t.Fatal("relative runtime root accepted", code)
+	}
+}
+
+func TestRunSelfContainedOAuth(t *testing.T) {
+	if clitemplate.ResolveGooglePython() == "" {
+		t.Skip("自包含 gcloud 运行需要系统 Python")
+	}
+	base := t.TempDir()
+	root := filepath.Join(base, "runtime")
+	if e := os.WriteFile(filepath.Join(base, ".google-ready.json"), []byte(`{"pythonSha256":""}`), 0600); e != nil {
+		t.Fatal(e)
+	}
+	home := filepath.Join(base, "home")
+	if e := os.MkdirAll(home, 0700); e != nil {
+		t.Fatal(e)
+	}
+	helper := filepath.Join(base, "google_runtime.py")
+	if e := os.WriteFile(helper, []byte("import sys\nsys.exit(0)\n"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	getenv := func(key string) string {
+		values := map[string]string{
+			"HOME":                              home,
+			"LOOP_NOW_GCLOUD_GRANT_VERSION":     "grant",
+			"LOOP_NOW_GCLOUD_BRIDGE_SOCKET":     filepath.Join(base, "bridge.sock"),
+			"LOOP_NOW_GCLOUD_BRIDGE_CAPABILITY": "capability",
+			"LOOP_NOW_GCLOUD_RUNTIME_ENTRY":     helper,
+		}
+		return values[key]
+	}
+	var stdout, stderr bytes.Buffer
+	if code := Run(context.Background(), []string{root, "--version"}, Options{Getenv: getenv, Stdout: &stdout, Stderr: &stderr}); code != 0 {
+		t.Fatalf("self-contained OAuth helper: exit=%d stderr=%q", code, stderr.String())
 	}
 }

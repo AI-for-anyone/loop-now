@@ -3083,6 +3083,8 @@ export interface components {
             modelsJson: string;
             /** Format: int64 */
             revision: number;
+            /** @description 已保存配置未通过当前 Pi 校验时的警告；此时运行中目录已退回内置配置。 */
+            loadError?: string;
         };
         ModelSettingsPut: {
             modelsJson: string;

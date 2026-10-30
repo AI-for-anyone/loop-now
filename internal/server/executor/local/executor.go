@@ -61,7 +61,6 @@ type Options struct {
 	LegacyAuthExtension       string
 	PiPackageRoot             string
 	AuthIPCTimeout            time.Duration
-	ModelSecretEnvNames       []string
 	WorkRoot                  string
 	PiBin                     string
 	GitBin                    string

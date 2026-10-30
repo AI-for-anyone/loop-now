@@ -58,6 +58,11 @@ func TestWorkerActualParentSIGKILLThenRecoveryDoesNotReplay(t *testing.T) {
 	f := newFixture(t, factory, time.Second)
 	a, v := f.account(t)
 	op := uuid.New()
+	// Only the crash fixture may own this operation. The parent fixture's scan
+	// loop must not race startup recovery or execute its failing probe factory.
+	if e := f.s.Close(context.Background()); e != nil {
+		t.Fatal(e)
+	}
 	ready := filepath.Join(t.TempDir(), "ready.json")
 	cmd := exec.Command(os.Args[0], "-test.run=^TestVerificationCrashChild$")
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=/nonexistent", "LOOP_VERIFY_CRASH_FIXTURE=1", "LOOP_VERIFY_TEST_URL=" + f.st.Pool.Config().ConnString(), "LOOP_VERIFY_TEST_SCHEMA=" + f.st.Pool.Config().ConnConfig.RuntimeParams["search_path"], "LOOP_VERIFY_TEST_ROOT=" + f.s.Options.WorkRoot, "LOOP_VERIFY_TEST_READY=" + ready, "LOOP_VERIFY_TEST_NODE=" + f.s.Options.NodeBin, "LOOP_VERIFY_TEST_GUARD=" + f.s.Options.GuardEntry, "LOOP_VERIFY_TEST_PROJECT=" + f.project.String(), "LOOP_VERIFY_TEST_ACCOUNT=" + a.String(), "LOOP_VERIFY_TEST_VERSION=" + v.String(), "LOOP_VERIFY_TEST_OPERATION=" + op.String()}
@@ -117,6 +122,9 @@ func TestWorkerActualParentSIGKILLThenRecoveryDoesNotReplay(t *testing.T) {
 		lease, openErr := os.OpenFile(leasePath, os.O_RDWR|syscall.O_NOFOLLOW, 0600)
 		if openErr == nil {
 			lockErr := syscall.Flock(int(lease.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+			if lockErr == nil {
+				_ = syscall.Flock(int(lease.Fd()), syscall.LOCK_UN)
+			}
 			_ = lease.Close()
 			if lockErr == nil {
 				break

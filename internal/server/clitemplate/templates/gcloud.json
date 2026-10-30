@@ -59,6 +59,13 @@
       "format": "tar.gz",
       "path": "google-cloud-sdk/bin/gcloud",
       "layout": "google_sdk"
+    },
+    "linux/amd64": {
+      "url": "https://storage.googleapis.com/cloud-sdk-release/google-cloud-cli-568.0.0-linux-x86_64.tar.gz",
+      "sha256": "ee39a260f5d30486c654be018b0e99f396a9c061617d206becaca4456e84ff94",
+      "format": "tar.gz",
+      "path": "google-cloud-sdk/bin/gcloud",
+      "layout": "google_sdk"
     }
   },
   "reservedEnv": [

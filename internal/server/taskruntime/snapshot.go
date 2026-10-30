@@ -260,7 +260,7 @@ func strictJSON(data []byte, out any) error {
 
 func validateEnvelope(e envelope) error {
 	scope := Scope{e.Scope.AgentID, e.Scope.TaskID}
-	if !supportedSchema(e.SchemaVersion) || e.SchemaVersion == schemaVersion && e.SourceVersion != 0 || e.SourceVersion < 0 || e.SourceVersion > latestSemantics || e.SnapshotID == uuid.Nil || e.Credentials == nil || !scope.Valid() || !scope.IsTask() {
+	if !supportedSchema(e.SchemaVersion) || e.SchemaVersion >= copiedAgentFolderSchema && e.SourceVersion != 0 || e.SourceVersion < 0 || e.SourceVersion > latestSemantics || e.SnapshotID == uuid.Nil || e.Credentials == nil || !scope.Valid() || !scope.IsTask() {
 		return ErrInvalidEncoding
 	}
 	if e.SchemaVersion < schemaVersion && len(e.Configuration.ModelsJSON) > 0 {

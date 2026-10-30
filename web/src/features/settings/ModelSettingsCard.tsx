@@ -1,4 +1,4 @@
-import { useEffect, useId, useReducer, useState } from 'react'
+import { useEffect, useId, useMemo, useReducer, useState } from 'react'
 import { BookOpenIcon, ChevronDownIcon } from 'lucide-react'
 import { ApiError } from '@/api/client'
 import { useModelSettings, useSaveModelSettings } from '@/api/queries'
@@ -111,6 +111,7 @@ function ModelSettingsEditor({ initial }: { initial: PromptText }) {
 export function ModelSettingsCard() {
   const settings = useModelSettings()
   const copy = t.settings.models
+  const initial = useMemo(() => settings.data ? asDraft(settings.data) : null, [settings.data])
   return <Card className="gap-4">
     <CardHeader>
       <CardTitle>{copy.title}</CardTitle>
@@ -120,7 +121,8 @@ export function ModelSettingsCard() {
       <p className="text-[13px] leading-relaxed text-ink-500">{copy.effect}</p>
       {settings.isError && <ErrorAlert error={settings.error} />}
       {settings.isPending && <p role="status" className="text-[13px] text-ink-500">{t.common.loading}</p>}
-      {settings.data && <ModelSettingsEditor initial={asDraft(settings.data)} />}
+      {settings.data?.loadError && <Alert variant="warning" role="alert"><AlertDescription>{settings.data.loadError}</AlertDescription></Alert>}
+      {initial && <ModelSettingsEditor initial={initial} />}
     </CardContent>
   </Card>
 }

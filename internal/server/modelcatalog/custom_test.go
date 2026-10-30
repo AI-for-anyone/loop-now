@@ -7,17 +7,19 @@ import (
 	"testing"
 
 	"loop-now/internal/server/modelcatalog"
+	"loop-now/internal/server/modelcatalog/catalogtest"
 )
 
 func TestLoadNativeCustomProviderAndBuiltinOverride(t *testing.T) {
-	r := localPi(t)
-	builtin, err := modelcatalog.Load(context.Background(), modelcatalog.Options{NodeBin: r.NodeBin, PiAIDir: r.PiAIDir, PiVersion: "1.4.0", Path: r.ExecBasePath})
+	options := catalogtest.Options(t)
+	builtin, err := modelcatalog.Load(context.Background(), options)
 	if err != nil {
 		t.Fatal(err)
 	}
 	builtinAnthropic, _ := builtin.Provider("anthropic")
 	config := []byte(`{"providers":{"example":{"baseUrl":"https://models.example.test/v1","api":"openai-completions","apiKey":"$EXAMPLE_MODEL_KEY","models":[{"id":"reasoning-vision","reasoning":true,"input":["text","image"],"contextWindow":12345,"maxTokens":678}]},"anthropic":{"baseUrl":"https://proxy.example.test"}}}`)
-	catalog, err := modelcatalog.Load(context.Background(), modelcatalog.Options{NodeBin: r.NodeBin, PiAIDir: r.PiAIDir, PiPackageDir: r.PiPackageDir, PiVersion: "1.4.0", Path: r.ExecBasePath, ModelsJSON: config, Revision: 7})
+	options.ModelsJSON, options.Revision = config, 7
+	catalog, err := modelcatalog.Load(context.Background(), options)
 	if err != nil {
 		t.Fatal(err)
 	}

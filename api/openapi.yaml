@@ -9527,6 +9527,9 @@ components:
           type: string
           description: Pi 原生 models.json 文本；API Key 仍由项目或 Agent 账号管理。
         revision: { type: integer, format: int64, minimum: 1 }
+        loadError:
+          type: string
+          description: 已保存配置未通过当前 Pi 校验时的警告；此时运行中目录已退回内置配置。
 
     ModelSettingsPut:
       type: object

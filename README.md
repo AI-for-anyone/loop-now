@@ -119,9 +119,51 @@ Lark user execution separately requires the pinned platform bundle described in 
 
 ## Getting started
 
-The current setup is a **source installation**. macOS Apple Silicon is the primary validated environment. Some components target Linux, but equivalent full-system coverage is not yet established; the Lark user CLI runtime is currently macOS arm64 only.
+Run everything with **Docker Compose**, or install from source. macOS Apple Silicon is the primary validated environment. Some components target Linux, but equivalent full-system coverage is not yet established; the Lark user CLI runtime is currently macOS arm64 only.
 
-### 1. Prepare dependencies
+### Docker Compose (local all-in-one)
+
+The first startup builds the server and console images locally, then starts PostgreSQL 18 and Redis 8:
+
+```sh
+docker compose up --build -d
+```
+
+Open **[http://localhost:5173](http://localhost:5173)**. The console has no login, so Compose publishes only Web port `5173` and API port `8780` on `127.0.0.1`; PostgreSQL and Redis are not published to the host. The default database user, password, and database name are all `loopnow`, intended only for the Compose network. Do not expose this default configuration externally.
+
+The `pgdata` named volume stores the database, and `loopdata` stores agent workspaces, sessions, and tools. `docker compose down` preserves them; `docker compose down -v` deletes this data, so back it up first.
+
+Agents running in containers have some boundaries:
+
+- The Lark user CLI supports macOS arm64 only and is unavailable in these Linux containers.
+- Containers do not automatically see host directories. Mount existing repositories or files into the `server` container separately, then configure the container paths in the console; `loopdata` stores only the platform's own workspaces.
+- Containers do not share Pi or CLI login sessions from the host. Configure model API keys and required tool accounts in the project before starting work.
+
+### Native models.json
+
+Go to **Global settings → Model settings** to edit the native `models.json` for the pinned Pi version, add custom providers, or override built-in providers. For example:
+
+```json
+{
+  "providers": {
+    "example": {
+      "baseUrl": "https://models.example.com/v1",
+      "api": "openai-completions",
+      "apiKey": "$EXAMPLE_KEY",
+      "headers": { "X-Client": "$EXAMPLE_CLIENT_HEADER" },
+      "models": [
+        { "id": "my-model", "input": ["text", "image"], "contextWindow": 128000, "maxTokens": 8192 }
+      ]
+    }
+  }
+}
+```
+
+`apiKey` and `headers` values on providers, models, and model overrides accept only `$NAME` environment-variable references. Names start with an ASCII letter or underscore, followed by letters, digits, or underscores. Plaintext secrets and `!commands` are rejected. Configure real credentials in project model accounts; they are not written to `models.json` or returned to the editor.
+
+Persistent agents use the saved catalog from their next message, while running tasks keep the provider configuration frozen at creation. If a saved configuration no longer passes validation after a restart, the server temporarily falls back to the built-in catalog and shows a warning on the settings page so you can repair and save it.
+
+### Source installation: 1. Prepare dependencies
 
 | Dependency | Repository baseline |
 | --- | --- |
