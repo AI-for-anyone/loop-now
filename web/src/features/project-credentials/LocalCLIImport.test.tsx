@@ -90,7 +90,8 @@ describe('本机导入正式合同 Web fixture', () => {
   it.each(['import_scan_expired','import_source_changed','precondition_failed'] as const)('%s拒绝不自动重扫/重发且保选项', async code => {
     const user = userEvent.setup(), env = setup(); let calls = 0
     server.use(http.post(apiUrl(`${base}/imports`), () => { calls++; return HttpResponse.json(errorBody(code), { status: code === 'import_scan_expired' ? 409 : 412 }) }))
-    render(); await discover(user); await confirm(user); await screen.findByRole('alert'); expect(calls).toBe(1); expect(env.scanCalls()).toBe(1); await user.click(screen.getByRole('button', { name: copy.back })); expect(screen.getByRole('checkbox')).toBeChecked()
+    // 被拒后从地址里去掉操作号是路由的过渡更新，可能比错误提示晚一次渲染，所以等返回按钮出现再点。
+    render(); await discover(user); await confirm(user); await screen.findByRole('alert'); expect(calls).toBe(1); expect(env.scanCalls()).toBe(1); await user.click(await screen.findByRole('button', { name: copy.back })); expect(screen.getByRole('checkbox')).toBeChecked()
   })
   it('过期scan不能发Start，未知GET失败不当未提交', async () => {
     const user = userEvent.setup(), env = setup(importScan({ expiresAt: '2020-01-01T00:00:00Z' })); render(); await discover(user)
