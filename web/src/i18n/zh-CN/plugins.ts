@@ -1,7 +1,8 @@
 import type { Schemas } from '@/api/client'
+import { formatClock } from './format'
 
 // 插件（第二版）：插件市场、安装前确认、插件详情、项目插件页与 Agent 配置页的插件段。
-export const pluginText = {
+export const plugins = {
   title: '插件市场',
   eyebrow: '全局',
   agentTitle: '插件权限',
@@ -336,7 +337,7 @@ export const pluginText = {
     more: '加载更早的日志',
     recent: (count: number) => `最近 ${count} 条`,
     // 日志行前的时刻：本地时间的时:分:秒。
-    clock: (at: string) => new Date(at).toLocaleTimeString('zh-CN', { hour12: false }),
+    clock: (at: string) => formatClock(at),
   },
   // 项目插件页。
   project: {
@@ -386,56 +387,54 @@ export const pluginText = {
     discard: '放弃修改',
     keepEditing: '继续编辑',
   },
-}
-
-// 对话里与插件有关的几种行：/ 命令的回复、Agent 半边扩展的通知与状态、插件渠道来的发件人。
-export const pluginChatText = {
-  command: (plugin: string) => `插件 ${plugin} 处理了这条命令`,
-  noReply: '没有回复',
-  sender: (name: string) => `插件 · ${name}`,
-  uninstalled: '已卸载',
-  // 运行记录里的扩展请求（Pi 的 extension_ui_request）。
-  ui: {
-    notify: '扩展通知',
-    setStatus: '扩展状态',
-    dialog: '扩展请求对话',
-    cleared: '已清除',
-    // 对话类请求的结局：在对话里作为问题回答了、立即按取消回应（任务轮次、选项太多、编辑器），或没等到回答（到期或这一轮先结束）。
-    answered: { answered: '已回答', cancelled: '已取消：这种对话不能转成问题，已按取消回应', expired: '已过期：到期前没有回答，或这一轮先结束了' },
-    viewQuestion: '查看问题',
-    level: { info: '提示', warning: '警告', error: '错误' },
+  // 对话里与插件有关的几种行：/ 命令的回复、Agent 半边扩展的通知与状态、插件渠道来的发件人。
+  chat: {
+    command: (plugin: string) => `插件 ${plugin} 处理了这条命令`,
+    noReply: '没有回复',
+    sender: (name: string) => `插件 · ${name}`,
+    uninstalled: '已卸载',
+    // 运行记录里的扩展请求（Pi 的 extension_ui_request）。
+    ui: {
+      notify: '扩展通知',
+      setStatus: '扩展状态',
+      dialog: '扩展请求对话',
+      cleared: '已清除',
+      // 对话类请求的结局：在对话里作为问题回答了、立即按取消回应（任务轮次、选项太多、编辑器），或没等到回答（到期或这一轮先结束）。
+      answered: { answered: '已回答', cancelled: '已取消：这种对话不能转成问题，已按取消回应', expired: '已过期：到期前没有回答，或这一轮先结束了' },
+      viewQuestion: '查看问题',
+      level: { info: '提示', warning: '警告', error: '错误' },
+    },
   },
-}
-
-// 按 JSON Schema 生成的表单。
-export const pluginFormText = {
-  required: '必填',
-  optional: '可选',
-  number: '请填数字',
-  integer: '请填整数',
-  uri: '请填完整地址，例如 https://…',
-  minimum: (n: number) => `不能小于 ${n}`,
-  maximum: (n: number) => `不能大于 ${n}`,
-  maxLength: (n: number) => `最多 ${n} 个字`,
-  yes: '是',
-  no: '否',
-  choose: '请选择',
-  secret: '密钥',
-  secretSet: '已设置',
-  secretReplace: '更换',
-  secretClear: '清除',
-  secretKeep: '保留原值',
-  secretCleared: '保存后清除',
-  secretHint: '页面不回显',
-  unsupported: '这一项不能在页面上编辑，保存时保留原值。',
-  defaultValue: (value: string) => `默认 ${value}`,
-  save: '保存',
-  saving: '正在保存…',
-  saved: '已保存',
-  unsaved: '有未保存的修改',
-  fix: '请先改正标出的项',
-  conflictTitle: '配置已在别处修改',
-  conflictBody: '保存时发现别人（或另一个页面）已经改过这份配置。',
-  reload: '载入最新，放弃我的修改',
-  overwrite: '用我的修改覆盖',
-}
+  // 按 JSON Schema 生成的表单。
+  form: {
+    required: '必填',
+    optional: '可选',
+    number: '请填数字',
+    integer: '请填整数',
+    uri: '请填完整地址，例如 https://…',
+    minimum: (n: number) => `不能小于 ${n}`,
+    maximum: (n: number) => `不能大于 ${n}`,
+    maxLength: (n: number) => `最多 ${n} 个字`,
+    yes: '是',
+    no: '否',
+    choose: '请选择',
+    secret: '密钥',
+    secretSet: '已设置',
+    secretReplace: '更换',
+    secretClear: '清除',
+    secretKeep: '保留原值',
+    secretCleared: '保存后清除',
+    secretHint: '页面不回显',
+    unsupported: '这一项不能在页面上编辑，保存时保留原值。',
+    defaultValue: (value: string) => `默认 ${value}`,
+    save: '保存',
+    saving: '正在保存…',
+    saved: '已保存',
+    unsaved: '有未保存的修改',
+    fix: '请先改正标出的项',
+    conflictTitle: '配置已在别处修改',
+    conflictBody: '保存时发现别人（或另一个页面）已经改过这份配置。',
+    reload: '载入最新，放弃我的修改',
+    overwrite: '用我的修改覆盖',
+  },
+} as const

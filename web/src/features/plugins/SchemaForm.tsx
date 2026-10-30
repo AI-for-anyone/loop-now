@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useDirtyForm } from '@/features/prompts/draft-navigation'
-import { pluginFormText as text, pluginText } from '@/i18n/plugins'
+import { t } from '@/i18n'
 import { selectClass } from '@/lib/field'
 import { cn } from '@/lib/utils'
 import {
@@ -22,6 +22,8 @@ import {
   type FormMode,
   type SecretDraft,
 } from './schema-form'
+
+const text = t.plugins.form
 
 type Config = Schemas['PluginConfig']
 
@@ -71,7 +73,7 @@ export function SchemaFields({
           field.secret ? `${text.secret} · ${text.secretHint}` : null,
           field.description,
           mode === 'global' && field.defaultValue !== undefined ? text.defaultValue(describeValue(field, field.defaultValue) ?? '') : null,
-          mode === 'project' ? (global === null ? pluginText.project.globalUnset : pluginText.project.globalValue(global)) : null,
+          mode === 'project' ? (global === null ? t.plugins.project.globalUnset : t.plugins.project.globalValue(global)) : null,
         ].filter(Boolean)
         const common = { id: inputId, disabled, 'aria-invalid': error ? true : undefined, 'aria-describedby': hintId }
         return (
@@ -109,7 +111,7 @@ export function SchemaFields({
             ) : field.kind === 'enum' || (field.kind === 'boolean' && mode === 'project') ? (
               <select {...common} value={draft.values[field.name] ?? ''} onChange={(event) => setValue(field.name, event.target.value)} className={selectClass}>
                 <option value="" disabled={mode === 'global' && field.required}>
-                  {mode === 'project' ? pluginText.config.useGlobal : text.choose}
+                  {mode === 'project' ? t.plugins.config.useGlobal : text.choose}
                 </option>
                 {field.kind === 'boolean' ? (
                   <>
@@ -320,7 +322,7 @@ export function ConfigForm({
   return (
     <form className="grid min-w-0 gap-4" onSubmit={onSubmit} noValidate>
       {fields.length === 0 ? (
-        <p className="text-[14px] text-ink-700">{emptyText ?? pluginText.config.none}</p>
+        <p className="text-[14px] text-ink-700">{emptyText ?? t.plugins.config.none}</p>
       ) : (
         <SchemaFields
           fields={fields}

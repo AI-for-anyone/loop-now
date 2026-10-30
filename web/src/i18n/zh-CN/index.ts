@@ -8,6 +8,7 @@ import { errors } from './errors'
 import { folders } from './folders'
 import { identities } from './identities'
 import { overview } from './overview'
+import { plugins } from './plugins'
 import { projects } from './projects'
 import { prompts } from './prompts'
 import { settings } from './settings'
@@ -38,4 +39,5 @@ export const zhCN = {
   identities,
   overview,
   timeline,
+  plugins,
 } as const

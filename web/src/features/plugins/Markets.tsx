@@ -6,7 +6,7 @@ import { ErrorAlert, FieldError } from '@/components/ErrorAlert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { pluginText } from '@/i18n/plugins'
+import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { cardClass, Quiet, SourceBadge } from './parts'
 import { pluginPath } from './paths'
@@ -14,7 +14,7 @@ import { usePluginInstaller } from './usePluginInstaller'
 
 type Market = Schemas['PluginMarket']
 type Entry = Schemas['PluginMarketEntry']
-const text = pluginText.markets
+const text = t.plugins.markets
 
 // 市场里的一个插件：名称、官方或已验证、说明、版本；没装的可安装，装了的写已装版本，有新版本时可更新。
 function EntryCard({ market, entry, installer }: { market: Market; entry: Entry; installer: ReturnType<typeof usePluginInstaller> }) {
@@ -48,11 +48,11 @@ function EntryCard({ market, entry, installer }: { market: Market; entry: Entry;
         <span className="font-mono text-[12px] text-ink-500">{entry.installedVersion ? text.installed(entry.installedVersion) : entry.version ? `v${entry.version}` : null}</span>
         {!entry.installedVersion ? (
           <Button size="xs" variant="secondary" disabled={busy} onClick={() => void installer.begin(key, { source: marketSource(market.url, entry) })}>
-            {installer.pending === key ? pluginText.installEntry.reading : pluginText.install}
+            {installer.pending === key ? t.plugins.installEntry.reading : t.plugins.install}
           </Button>
         ) : entry.updateAvailable ? (
           <Button size="xs" disabled={busy} onClick={() => void installer.begin(key, { source: marketSource(market.url, entry) })}>
-            {installer.pending === key ? pluginText.installEntry.reading : text.updateTo(entry.version)}
+            {installer.pending === key ? t.plugins.installEntry.reading : text.updateTo(entry.version)}
           </Button>
         ) : (
           <span className="text-[12.5px] font-bold text-green-text">{text.upToDate}</span>

@@ -10,14 +10,14 @@ import { Button } from '@/components/ui/button'
 import { Section } from '@/features/agent-config/Section'
 import { useScope } from '@/features/projects/scope-context'
 import { useDirtyForm } from '@/features/prompts/draft-navigation'
-import { pluginFormText, pluginText } from '@/i18n/plugins'
+import { t } from '@/i18n'
 import { projectBase } from '@/lib/scope'
 import { cn } from '@/lib/utils'
 import { Quiet } from './parts'
 import { PluginActionButtons } from './PluginActions'
 
 type AgentPlugin = Schemas['AgentPlugin']
-const text = pluginText.agent
+const text = t.plugins.agent
 
 const listClass = 'grid min-w-0 divide-y divide-ink/10 overflow-hidden rounded-card bg-white @container'
 // 宽时名称占固定一列、摘要对齐成一列；窄时名称与展开标记在上、摘要占满下一行，行高都在 48–52px。
@@ -35,7 +35,7 @@ function Summary({ agent, plugin }: { agent: Schemas['Agent']; plugin: AgentPlug
   return (
     <span className={cn(rowSummary, 'gap-1.5 text-ink-700')}>
       {plugin.granted ? <span className="shrink-0 font-bold text-ink">{text.granted}</span> : <span className="shrink-0 text-ink-500">{text.notGranted}</span>}
-      {plugin.granted && names.length > 0 && <span className="min-w-0 truncate">· {text.accountNames(pluginText.confirm.list(names))}</span>}
+      {plugin.granted && names.length > 0 && <span className="min-w-0 truncate">· {text.accountNames(t.plugins.confirm.list(names))}</span>}
     </span>
   )
 }
@@ -98,7 +98,7 @@ function GrantForm({ agent, plugin, onSaved, onCancel, onDirty }: { agent: Schem
       {notEnabled ? <p role="status" className="rounded-input bg-tint-yellow px-3 py-2 text-[13px] font-bold">{text.notEnabledHint}</p> : <ErrorAlert error={save.error} />}
       <div className="flex flex-wrap gap-2">
         <Button type="submit" size="sm" disabled={!dirty || save.isPending}>
-          {save.isPending ? pluginFormText.saving : text.save}
+          {save.isPending ? t.plugins.form.saving : text.save}
         </Button>
         <Button type="button" size="sm" variant="secondary" disabled={save.isPending} onClick={onCancel}>
           {text.cancel}
@@ -255,10 +255,10 @@ export function AgentPlugins({ agent }: { agent: Schemas['Agent'] }) {
   const unavailable = plugins.filter((plugin) => !plugin.available)
   const link = scope.kind === 'project' && scope.project.id === agent.projectId ? `${projectBase(scope.project.name)}/plugins` : null
   return (
-    <Section id="plugins" title={pluginText.agentTitle}>
+    <Section id="plugins" title={t.plugins.agentTitle}>
       <p className="text-[13.5px] text-ink-700">{text.intro}</p>
       <ErrorAlert error={query.error} />
-      {query.isPending && <Quiet>{pluginText.loading}</Quiet>}
+      {query.isPending && <Quiet>{t.plugins.loading}</Quiet>}
       {query.isSuccess && plugins.length === 0 && <Quiet>{text.empty}</Quiet>}
       {available.length > 0 && <GrantList key={agent.id} agent={agent} plugins={available} />}
       {unavailable.length > 0 && <NotEnabled plugins={unavailable} link={link} />}

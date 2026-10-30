@@ -1,6 +1,5 @@
 import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
-import { pluginChatText } from '@/i18n/plugins'
 
 type Entry = Schemas['TimelineEntry']
 type Run = Schemas['Run']
@@ -270,7 +269,7 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
       // Agent 半边扩展经 ctx.ui 发来的请求：通知与状态是淡色的一步，警告、错误带颜色；对话类写明结局（已回答、已取消、已过期），
       // 转成了问题的可以跳到对话里的那个问题。
       case 'extension_ui': {
-        const ui = pluginChatText.ui
+        const ui = t.plugins.chat.ui
         const dialog = entry.method !== 'notify' && entry.method !== 'setStatus'
         steps.push(
           step(entry, index, {

@@ -4,7 +4,7 @@ import { useInvokePluginAction, usePlugin, usePlugins, useProjectPlugins } from 
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { pluginText } from '@/i18n/plugins'
+import { t } from '@/i18n'
 import { toastStore } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 import { SchemaFields } from './SchemaForm'
@@ -13,7 +13,7 @@ import { fieldsOf, initialDraft, serverFieldErrors, toPayload, validate } from '
 type Action = Schemas['PluginAction']
 type Where = Schemas['PluginActionInput']['where']
 export type ActionPage = Action['where'][number]
-const text = pluginText.actions
+const text = t.plugins.actions
 
 // 一个操作的表单弹窗：按操作的 fields 生成；没有字段时只确认一下。结果以轻提示显示，带链接时同时在新窗口打开。
 function ActionDialog({ plugin, action, where, onClose }: { plugin: { id: string; displayName: string }; action: Action; where: Where; onClose: () => void }) {
@@ -54,7 +54,7 @@ function ActionDialog({ plugin, action, where, onClose }: { plugin: { id: string
           {notEnabled ? <p role="status" className="rounded-input bg-tint-yellow px-3 py-2 text-[13px] font-bold">{text.notEnabled}</p> : <ErrorAlert error={invoke.error} />}
           <DialogFooter>
             <Button type="button" variant="secondary" disabled={invoke.isPending} onClick={onClose}>
-              {pluginText.confirm.cancel}
+              {t.plugins.confirm.cancel}
             </Button>
             <Button type="submit" disabled={invoke.isPending}>
               {invoke.isPending ? text.running : text.run}

@@ -1,8 +1,11 @@
-import { pluginFormText as text } from '@/i18n/plugins'
+import { t } from '@/i18n'
 
 // 插件清单里的 configSchema 与账号 fields 是 JSON Schema（一个 object，properties 是各个字段）。
 // 这里只认表单用得到的部分：string（format uri 为地址）、number / integer、boolean、enum（或 oneOf 的 const + title）、
 // required，以及两个扩展：x-secret（只写不回显）与 x-scope: project（项目里可覆盖）。其余类型的字段在页面上只读，原值照旧保存。
+
+const text = t.plugins.form
+
 export type JsonSchema = {
   type?: string | string[]
   title?: string

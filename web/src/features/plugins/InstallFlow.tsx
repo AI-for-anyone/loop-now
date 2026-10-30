@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { pluginText } from '@/i18n/plugins'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { ManifestSummary } from './ManifestSummary'
@@ -15,8 +14,8 @@ import { usePluginInstaller } from './usePluginInstaller'
 
 type Preview = Schemas['PluginPreview']
 type SourceKind = 'builtin' | 'git' | 'local'
-const text = pluginText.installEntry
-const confirmText = pluginText.confirm
+const text = t.plugins.installEntry
+const confirmText = t.plugins.confirm
 
 const sourceLine = (source: Schemas['PluginResolvedSource']) =>
   [source.location, source.ref ?? source.npmVersion].filter(Boolean).join(' @ ') + (source.commit ? ` (${source.commit.slice(0, 7)})` : '')
@@ -59,7 +58,7 @@ export function ConfirmInstallDialog({ preview, onClose, onInstalled }: { previe
           <DialogTitle className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pr-12">
             <span>{update ? confirmText.update(manifest.displayName) : confirmText.install(manifest.displayName)}</span>
             <code className="rounded-[6px] bg-ink/[0.06] px-2 py-0.5 font-mono text-[12.5px] font-bold">
-              {update && !same ? `${manifest.id} · ${confirmText.versionChange(preview.installedVersion!, manifest.version)}` : pluginText.idVersion(manifest.id, manifest.version)}
+              {update && !same ? `${manifest.id} · ${confirmText.versionChange(preview.installedVersion!, manifest.version)}` : t.plugins.idVersion(manifest.id, manifest.version)}
             </code>
           </DialogTitle>
           <DialogDescription>{manifest.description}</DialogDescription>
@@ -68,7 +67,7 @@ export function ConfirmInstallDialog({ preview, onClose, onInstalled }: { previe
           <div role="note" className="flex gap-3 rounded-card bg-tint-yellow px-4 py-3 text-[13.5px] leading-normal">
             <TriangleAlertIcon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-ink" />
             <div className="min-w-0 [overflow-wrap:anywhere]">
-              <p className="font-black">{confirmText.unverifiedTitle(pluginText.from[preview.source.kind])}</p>
+              <p className="font-black">{confirmText.unverifiedTitle(t.plugins.from[preview.source.kind])}</p>
               <p>
                 {sourceLine(preview.source)} · {confirmText.unverifiedBody}
               </p>
@@ -168,8 +167,8 @@ export function InstallSourceDialog({
               <fieldset className="grid gap-2">
                 <legend className="mb-1 text-[13.5px] font-black">{text.builtin}</legend>
                 <ErrorAlert error={builtin.error} />
-                {builtin.isPending && <p role="status">{pluginText.loading}</p>}
-                {builtin.isSuccess && sources.length === 0 && <p className="text-[13.5px] text-ink-700">{pluginText.builtinEmpty}</p>}
+                {builtin.isPending && <p role="status">{t.plugins.loading}</p>}
+                {builtin.isSuccess && sources.length === 0 && <p className="text-[13.5px] text-ink-700">{t.plugins.builtinEmpty}</p>}
                 <ul className="grid gap-1.5">
                   {sources.map((source) => {
                     const done = installed.includes(source.id)
@@ -179,8 +178,8 @@ export function InstallSourceDialog({
                           <input type="radio" name={`${id}-builtin`} value={source.id} disabled={done} checked={builtinId === source.id} onChange={() => setBuiltinId(source.id)} className="mt-1 accent-riso-blue" />
                           <span className="grid min-w-0 gap-0.5">
                             <span className="text-[14px] font-black">
-                              {source.displayName} <span className="font-mono text-[12px] font-bold text-ink-500">{pluginText.idVersion(source.id, source.version)}</span>
-                              {done && <span className="ml-2 text-[12px] font-bold text-ink-500">{pluginText.installedBadge}</span>}
+                              {source.displayName} <span className="font-mono text-[12px] font-bold text-ink-500">{t.plugins.idVersion(source.id, source.version)}</span>
+                              {done && <span className="ml-2 text-[12px] font-bold text-ink-500">{t.plugins.installedBadge}</span>}
                             </span>
                             <span className="text-[13px] text-ink-700">{source.description}</span>
                           </span>
