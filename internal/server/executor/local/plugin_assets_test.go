@@ -32,7 +32,7 @@ func TestPluginAssetsReachPi(t *testing.T) {
 		Extensions: []string{"/p/a/agent.ts", "/p/b/agent.ts"}, Skills: []string{"/p/a/skills"},
 		MCPServers: map[string]json.RawMessage{"a-browser": json.RawMessage(`{"command":"node","args":["/p/a/mcp.js"]}`),
 			"a-design": json.RawMessage(`{"type":"http","url":"http://127.0.0.1:3845/mcp","headers":{"Authorization":"Bearer ${FIGMA_TOKEN}"}}`)},
-		Bin:        []string{"/p/a/bin"}, Env: map[string]string{"LOOP_NOW_PLUGIN_A_CONFIG": `{"x":1}`, "HOME": "/evil"},
+		Bin: []string{"/p/a/bin"}, Env: map[string]string{"LOOP_NOW_PLUGIN_A_CONFIG": `{"x":1}`, "HOME": "/evil"},
 	}
 	args := pluginArgs(p)
 	if strings.Join(args, " ") != "-e /p/a/agent.ts -e /p/b/agent.ts --skill /p/a/skills -e builtin:mcp" {
