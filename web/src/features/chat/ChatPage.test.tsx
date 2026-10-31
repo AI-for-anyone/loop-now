@@ -92,7 +92,7 @@ describe('对话历史与连续对话', () => {
 
   it('会话重开前后的消息之间显示分界', async () => {
     await renderChat({ messages: [...turn('旧会话', '旧回复', {}, 1), ...turn('新会话', '新回复', {}, 2)] })
-    expect(await screen.findByRole('separator')).toHaveTextContent('会话已重开，之前的内容 Agent 不再记得')
+    expect(await screen.findByRole('separator')).toHaveTextContent('会话已切换，页面历史保留')
   })
 })
 
@@ -360,7 +360,7 @@ describe('排队显示与回复状态', () => {
 })
 
 describe('会话文件丢失与确认重开会话', () => {
-  it('显示说明并禁用发送；确认后重开，恢复发送', async () => {
+  it('显示说明并禁用普通发送；确认后重开，恢复发送', async () => {
     let resetCalls = 0
     const { agent, user, emit } = await renderChat({
       agent: makeAgent({ session: { state: 'missing', epoch: 1 } }),
@@ -374,7 +374,7 @@ describe('会话文件丢失与确认重开会话', () => {
     })
     expect(await screen.findByText('会话文件丢失')).toBeInTheDocument()
     expect(screen.getByText(/之后的消息都会失败/)).toBeInTheDocument()
-    expect(screen.getByLabelText('消息')).toBeDisabled()
+    expect(screen.getByLabelText('消息')).toBeEnabled()
     expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: '确认重开会话' }))
     const dialog = await screen.findByRole('alertdialog')
@@ -384,6 +384,47 @@ describe('会话文件丢失与确认重开会话', () => {
     await waitFor(() => expect(screen.queryByText('会话文件丢失')).toBeNull())
     expect(screen.getByLabelText('消息')).toBeEnabled()
     void agent
+  })
+
+  it('missing 仅允许无图片 resume 列表和确认恢复，取消及普通消息不发送', async () => {
+    const sent: Schemas['SendMessageInput'][] = []
+    const { user } = await renderChat({
+      agent: makeAgent({ session: { state: 'missing', epoch: 1 } }),
+      status: { session: { state: 'missing', epoch: 1 } },
+      handlers: [http.post(apiUrl('/agents/:agentId/messages'), async ({ request }) => {
+        const body = await request.json() as Schemas['SendMessageInput']
+        sent.push(body)
+        return HttpResponse.json(body.text === '/resume'
+          ? { handled: true, source: 'platform', plugin: '', reply: null, command: 'resume', resumeSessions: [] }
+          : { handled: true, source: 'platform', plugin: '', reply: null, command: 'resume', resumedSession: { state: 'active', epoch: 2 } })
+      })],
+    })
+    const input = await screen.findByLabelText('消息')
+    expect(input).toBeEnabled()
+    await user.type(input, '普通消息')
+    expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(sent).toEqual([])
+    await user.clear(input)
+    await user.type(input, '/new')
+    expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+
+    await user.clear(input)
+    await user.type(input, '/resume')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+    await screen.findByText('没有可恢复的会话')
+    expect(sent).toEqual([{ text: '/resume' }])
+
+    await user.type(input, '/resume full-session-id')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent('不会回滚工作区、模型配置、Prompt、Skills 或权限')
+    await user.click(screen.getByRole('button', { name: '取消' }))
+    expect(sent).toEqual([{ text: '/resume' }])
+    await user.click(screen.getByRole('button', { name: '发送' }))
+    await user.click(await screen.findByRole('button', { name: '恢复会话' }))
+    await waitFor(() => expect(sent).toEqual([{ text: '/resume' }, { text: '/resume full-session-id' }]))
+    await screen.findByText('已恢复会话（epoch 2），页面历史仍保留')
   })
 
   it('仍有执行未结束时不可重开', async () => {

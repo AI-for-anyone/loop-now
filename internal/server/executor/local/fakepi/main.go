@@ -453,11 +453,13 @@ func (s *server) fail(id json.RawMessage, cmd, msg string) {
 
 func (s *server) handle(line []byte) {
 	var cmd struct {
-		ID      json.RawMessage   `json:"id"`
-		Type    string            `json:"type"`
-		Message string            `json:"message"`
-		Images  []json.RawMessage `json:"images"`
-		Level   string            `json:"level"`
+		ID                 json.RawMessage   `json:"id"`
+		Type               string            `json:"type"`
+		Message            string            `json:"message"`
+		Images             []json.RawMessage `json:"images"`
+		Level              string            `json:"level"`
+		CustomInstructions string            `json:"customInstructions"`
+		OutputPath         string            `json:"outputPath"`
 	}
 	if err := json.Unmarshal(line, &cmd); err != nil {
 		s.fail(nil, "parse", "Failed to parse command: "+err.Error())
@@ -483,6 +485,10 @@ func (s *server) handle(line []byte) {
 		s.ok(cmd.ID, "get_state", s.state())
 	case "prompt":
 		s.prompt(cmd.ID, cmd.Message, cmd.Images)
+	case "compact":
+		s.compact(cmd.ID, cmd.CustomInstructions)
+	case "export_html":
+		s.exportHTML(cmd.ID, cmd.OutputPath)
 	case "abort":
 		s.abort(cmd.ID)
 	case "clear_queue":
@@ -551,9 +557,83 @@ func (s *server) abort(id json.RawMessage) {
 	}
 	r.abortOnce.Do(func() { close(r.abortCh) })
 	go func() {
-		<-r.done // agent_settled 已发出，Pi 回到空闲
+		<-r.done // 本轮或压缩已结束，Pi 回到空闲
 		s.ok(id, "abort", nil)
 	}()
+}
+
+// compact 模拟手动压缩：响应在 compaction_end 后返回；FAKEPI_COMPACT_DELAY 可制造可取消的等待。
+func (s *server) compact(id json.RawMessage, instructions string) {
+	s.mu.Lock()
+	if s.cur != nil {
+		s.mu.Unlock()
+		s.fail(id, "compact", "Agent is already processing")
+		return
+	}
+	r := &turnRun{abortCh: make(chan struct{}), done: make(chan struct{})}
+	s.cur = r
+	s.mu.Unlock()
+	if capture := os.Getenv("FAKEPI_COMPACT_CAPTURE"); capture != "" {
+		if err := os.WriteFile(capture, []byte(instructions), 0o600); err != nil {
+			s.mu.Lock()
+			s.cur = nil
+			s.mu.Unlock()
+			close(r.done)
+			s.fail(id, "compact", err.Error())
+			return
+		}
+	}
+	s.emit(map[string]any{"type": "compaction_start", "reason": "manual"})
+	go func() {
+		aborted := false
+		if delay, err := time.ParseDuration(os.Getenv("FAKEPI_COMPACT_DELAY")); err == nil && delay > 0 {
+			aborted = r.sleep(delay)
+		}
+		aborted = aborted || r.aborted()
+		before, after := int64(1000), int64(200)
+		if value := os.Getenv("FAKEPI_COMPACT_TOKENS"); value != "" {
+			_, _ = fmt.Sscanf(value, "%d,%d", &before, &after)
+		}
+		usage := &usageSpec{}
+		if value := os.Getenv("FAKEPI_COMPACT_USAGE"); value != "" {
+			usage = parseUsage(value)
+		}
+		if aborted {
+			s.emit(map[string]any{"type": "compaction_end", "reason": "manual", "aborted": true, "willRetry": false})
+			s.fail(id, "compact", "aborted")
+		} else {
+			s.addUsage(*usage)
+			s.emit(map[string]any{"type": "compaction_end", "reason": "manual", "aborted": false, "willRetry": false,
+				"result": map[string]any{"summary": say("fakepi 摘要", "fakepi summary"), "firstKeptEntryId": shortID(), "tokensBefore": before, "estimatedTokensAfter": after,
+					"usage": usage.wire(), "details": map[string]any{}}})
+			s.emit(response{ID: id, Type: "response", Command: "compact", Success: true,
+				Data: map[string]any{"tokensBefore": before, "estimatedTokensAfter": after}})
+		}
+		s.mu.Lock()
+		s.cur = nil
+		s.mu.Unlock()
+		close(r.done)
+	}()
+}
+
+func (s *server) exportHTML(id json.RawMessage, outputPath string) {
+	if outputPath == "" {
+		s.fail(id, "export_html", "outputPath is required")
+		return
+	}
+	content := os.Getenv("FAKEPI_EXPORT_CONTENT")
+	if content == "" {
+		content = "<!doctype html><title>fakepi session</title>"
+	}
+	if err := os.WriteFile(outputPath, []byte(content), 0o600); err != nil {
+		s.fail(id, "export_html", err.Error())
+		return
+	}
+	returned := outputPath
+	if override := os.Getenv("FAKEPI_EXPORT_RETURN_PATH"); override != "" {
+		returned = override
+	}
+	s.ok(id, "export_html", map[string]any{"path": returned})
 }
 
 func (s *server) prompt(id json.RawMessage, msg string, images []json.RawMessage) {

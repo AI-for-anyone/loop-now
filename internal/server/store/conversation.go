@@ -68,7 +68,7 @@ var ErrActiveRunExists = errors.New("Agent 已有进行中的执行")
 
 // runColumnsOf 返回 runs 的列，按 runFields 的顺序；prefix 为表别名加点，例如 "r."。
 func runColumnsOf(prefix string) string {
-	return strings.NewReplacer("$.", prefix).Replace(`$.id, $.agent_id, $.user_message_id, $.config_version, $.instance_id, $.priority,
+	return strings.NewReplacer("$.", prefix).Replace(`$.id, $.agent_id, coalesce($.user_message_id, '00000000-0000-0000-0000-000000000000'::uuid), $.config_version, $.instance_id, $.priority,
 	coalesce($.when_busy, ''), $.queue_seq, $.status, coalesce($.phase, ''), coalesce($.end_reason, ''), coalesce($.error_code, ''),
 	coalesce($.error_message, ''), $.queued_at, $.started_at, $.running_at, $.abort_requested_at, $.ended_at,
 	$.origin, $.trigger_inbox_message_id, $.wake_sleep_id`)
@@ -518,16 +518,18 @@ func (s *Store) FinishRun(ctx context.Context, runID uuid.UUID, end RunEnd) (Run
 			return err
 		}
 		finished = true
-		var epoch int
-		if err := tx.QueryRow(ctx, `SELECT epoch FROM agent_sessions WHERE agent_id = $1`, run.AgentID).Scan(&epoch); err != nil {
-			return err
+		if run.Origin != "console_compact" {
+			var epoch int
+			if err := tx.QueryRow(ctx, `SELECT epoch FROM agent_sessions WHERE agent_id = $1`, run.AgentID).Scan(&epoch); err != nil {
+				return err
+			}
+			m, err := scanMessage(tx.QueryRow(ctx, `INSERT INTO conversation_messages (id, agent_id, role, text, run_id, session_epoch)
+				VALUES ($1, $2, 'assistant', $3, $4, $5) RETURNING `+messageColumns, uuid.Must(uuid.NewV7()), run.AgentID, end.Text, run.ID, epoch))
+			if err != nil {
+				return err
+			}
+			msg = &m
 		}
-		m, err := scanMessage(tx.QueryRow(ctx, `INSERT INTO conversation_messages (id, agent_id, role, text, run_id, session_epoch)
-			VALUES ($1, $2, 'assistant', $3, $4, $5) RETURNING `+messageColumns, uuid.Must(uuid.NewV7()), run.AgentID, end.Text, run.ID, epoch))
-		if err != nil {
-			return err
-		}
-		msg = &m
 		data := map[string]any{"status": end.Status}
 		if run.EndReason != "" {
 			data["endReason"] = run.EndReason

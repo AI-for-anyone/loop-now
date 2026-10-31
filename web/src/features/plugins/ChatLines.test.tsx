@@ -23,7 +23,7 @@ const pluginParty = (overrides: Partial<Schemas['InboxParticipant']> = {}): Sche
 describe('对话里的 / 命令', () => {
   it('被插件认领的命令：插件的回复排成一行说明，不算发出的消息，输入框清空', async () => {
     const { user } = await renderChat({
-      handlers: [http.post(apiUrl('/agents/:agentId/messages'), () => HttpResponse.json({ handled: true, plugin: 'webhook', reply: '最近 24 小时送出 9 个事件，失败 0。' }))],
+      handlers: [http.post(apiUrl('/agents/:agentId/messages'), () => HttpResponse.json({ handled: true, source: 'plugin', command: '', plugin: 'webhook', reply: '最近 24 小时送出 9 个事件，失败 0。' }))],
     })
     const box = screen.getByRole('textbox', { name: '消息' })
     await user.type(box, '/webhook status')

@@ -20,6 +20,7 @@ import (
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/executor"
+	"loop-now/internal/server/messageimage"
 	"loop-now/internal/server/reqid"
 	"loop-now/internal/server/store"
 )
@@ -30,6 +31,11 @@ type Options struct {
 	MaxMessage        int64
 	LockRenewInterval time.Duration
 	ReconcileInterval time.Duration
+}
+
+type driverStart struct {
+	run   store.Run
+	owner string
 }
 
 // Service 是对话服务。
@@ -44,14 +50,16 @@ type Service struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
-	mu      sync.Mutex
-	drivers map[uuid.UUID]bool
+	mu             sync.Mutex
+	drivers        map[uuid.UUID]bool
+	pendingDrivers map[uuid.UUID]driverStart
 
 	overviewMu      sync.Mutex
 	overviewWorkers map[uuid.UUID]*overviewWorker
 	overviewWG      sync.WaitGroup
 	sleepRevisions  sync.Map
 	dispatchGates   sync.Map // AgentID -> chan struct{}；任务分叉只阻止新轮派发，不打断当前轮
+	commands        sync.Map // RunID -> *consoleCommandRun；仅手动压缩等待真实执行结果
 
 	// InboxCancelled 在一条 Inbox 消息被人取消、事务提交后调用（追加收件箱事件）；为空时不推送。
 	InboxCancelled func(ctx context.Context, m store.InboxMessage)
@@ -61,7 +69,7 @@ type Service struct {
 func New(st *store.Store, co *coord.Coord, ex executor.Executor, o Options, log *slog.Logger) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Service{st: st, co: co, ex: ex, o: o, log: log, ctx: ctx, cancel: cancel, drivers: map[uuid.UUID]bool{},
-		overviewWorkers: map[uuid.UUID]*overviewWorker{}}
+		pendingDrivers: map[uuid.UUID]driverStart{}, overviewWorkers: map[uuid.UUID]*overviewWorker{}}
 }
 
 // Start 处理上次运行遗留的进行中执行（标为“服务端重启中断”），然后启动对账协程。
@@ -276,8 +284,13 @@ func (s *Service) startNext(ctx context.Context, agentID uuid.UUID, next string)
 func (s *Service) startDriver(agentID uuid.UUID, run store.Run, owner string) {
 	s.mu.Lock()
 	if s.drivers[agentID] {
+		// Handoff 已释放锁、旧驱动尚未删除标记时，新运行已持锁，不能靠 kick 再接管。
+		// 暂存这次启动，旧驱动退出时直接接续；普通消息和维护运行共用此路径。
+		s.pendingDrivers[agentID] = driverStart{run: run, owner: owner}
 		s.mu.Unlock()
-		s.log.Error("驱动循环已存在，放弃重复启动", "agentId", agentID, "runId", run.ID)
+		if h := testHookAfterDriverPending.Load(); h != nil {
+			(*h)(run.ID)
+		}
 		return
 	}
 	s.drivers[agentID] = true
@@ -290,9 +303,15 @@ func (s *Service) drive(agentID uuid.UUID, run store.Run, owner string) {
 	defer func() {
 		s.mu.Lock()
 		delete(s.drivers, agentID)
+		pending, hasPending := s.pendingDrivers[agentID]
+		delete(s.pendingDrivers, agentID)
 		s.mu.Unlock()
 		if ctx.Err() == nil {
-			s.kick(context.Background(), agentID) // 退出期间若有新排队消息，接着处理
+			if hasPending {
+				s.startDriver(agentID, pending.run, pending.owner)
+			} else {
+				s.kick(context.Background(), agentID) // 退出期间若有新排队消息，接着处理
+			}
 		}
 	}()
 	subCtx, cancelSub := context.WithCancel(ctx)
@@ -330,6 +349,11 @@ func (s *Service) drive(agentID uuid.UUID, run store.Run, owner string) {
 			if err != nil {
 				s.log.Warn("交接忙闲锁失败，等待对账", "agentId", agentID, "err", err)
 			}
+			if err == nil && ok && next == "" {
+				if h := testHookAfterDriveHandoff.Load(); h != nil {
+					(*h)(agentID)
+				}
+			}
 			return
 		}
 		started := false
@@ -366,6 +390,12 @@ var testHookBeforeInterrupt atomic.Pointer[func(runID uuid.UUID)]
 // 用来让引发打断的那条执行先被出队并开始。生产环境为空。
 var testHookBeforeMarkAborting atomic.Pointer[func(byRunID uuid.UUID)]
 
+// testHookAfterDriveHandoff 只供测试使用：空队列 Handoff 已释放锁、驱动尚未删除标记时调用。
+var testHookAfterDriveHandoff atomic.Pointer[func(agentID uuid.UUID)]
+
+// testHookAfterDriverPending 只供测试使用：新运行已登记 pendingDrivers 后调用。
+var testHookAfterDriverPending atomic.Pointer[func(runID uuid.UUID)]
+
 func beforeInterrupt(runID uuid.UUID) {
 	if h := testHookBeforeInterrupt.Load(); h != nil {
 		(*h)(runID)
@@ -382,9 +412,19 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	if st, err := s.st.RunStatus(ctx, run.ID); err == nil && st == "aborting" {
 		return executor.Result{Outcome: executor.OutcomeInterrupted}
 	}
-	msg, err := s.st.GetMessage(ctx, run.UserMessageID)
-	if err != nil {
-		return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "读取消息失败：" + err.Error()}
+	msg := store.Message{}
+	if run.Origin == executor.OriginConsoleCompact {
+		value, ok := s.commands.Load(run.ID)
+		if !ok {
+			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "读取压缩指令失败"}
+		}
+		msg.Text = value.(*consoleCommandRun).instructions
+	} else {
+		var err error
+		msg, err = s.st.GetMessage(ctx, run.UserMessageID)
+		if err != nil {
+			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "读取消息失败：" + err.Error()}
+		}
 	}
 	if run.Origin == "sleep_wake" {
 		s.emitMessage(ctx, agentID, msg, run)
@@ -429,18 +469,23 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 		return executor.Result{Outcome: executor.OutcomeInterrupted}
 	}
 	prompt := msg.Text
-	if run.WakeSleepID != nil && run.Origin != "sleep_wake" {
-		prompt = "平台通知：sleep已因新工作结束（sleepId=" + run.WakeSleepID.String() + "）。\n" + prompt
-	}
-	images, imageErr := s.st.ImageContents(ctx, msg.Images)
-	if imageErr != nil {
-		return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "图片内容不可用"}
+	var images []messageimage.Content
+	if run.Origin != executor.OriginConsoleCompact {
+		if run.WakeSleepID != nil && run.Origin != "sleep_wake" {
+			prompt = "平台通知：sleep已因新工作结束（sleepId=" + run.WakeSleepID.String() + "）。\n" + prompt
+		}
+		var imageErr error
+		images, imageErr = s.st.ImageContents(ctx, msg.Images)
+		if imageErr != nil {
+			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "图片内容不可用"}
+		}
+		prompt = fmt.Sprintf("本轮运行ID：%s。\n%s", run.ID, prompt)
 	}
 	trigger := run.UserMessageID
 	if run.TriggerInboxID != nil {
 		trigger = *run.TriggerInboxID
 	}
-	res, err := s.ex.Execute(ctx, executor.Request{Images: images, AgentID: agentID, RunID: run.ID, Message: fmt.Sprintf("本轮运行ID：%s。\n%s", run.ID, prompt),
+	res, err := s.ex.Execute(ctx, executor.Request{Images: images, AgentID: agentID, RunID: run.ID, Message: prompt,
 		Origin: run.Origin, MessageID: trigger}, sink)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -472,6 +517,9 @@ func (s *Service) finish(ctx context.Context, run store.Run, res executor.Result
 	if res.ErrorCode == executor.ErrSessionMissing {
 		s.emitSession(ctx, run.AgentID)
 	}
+	if value, ok := s.commands.Load(run.ID); ok {
+		value.(*consoleCommandRun).done <- res
+	}
 }
 
 func (s *Service) endRun(ctx context.Context, agentID, runID uuid.UUID, end store.RunEnd) {
@@ -498,7 +546,13 @@ func (s *Service) endRun(ctx context.Context, agentID, runID uuid.UUID, end stor
 		attrs = append(attrs, "durationMs", r.EndedAt.Sub(begin).Milliseconds())
 	}
 	s.log.Info("回复结束", attrs...)
-	s.emit(ctx, agentID, apitypes.EventRunEnded, apitypes.SseRunEnded{Run: apitypes.FromRun(r), Message: apitypes.FromMessage(*msg, r)})
+	if msg == nil {
+		// compact 没有对话消息；终态仍通知所有 SSE 订阅者，但保持 run.ended.message 非空的旧契约。
+		s.emit(ctx, agentID, apitypes.EventRunUpdated, apitypes.SseRunUpdated{Run: apitypes.FromRun(r)})
+	} else {
+		converted := apitypes.FromMessage(*msg, r)
+		s.emit(ctx, agentID, apitypes.EventRunEnded, apitypes.SseRunEnded{Run: apitypes.FromRun(r), Message: &converted})
+	}
 	_ = s.co.DeleteRunText(ctx, runID.String())
 	s.EmitAgentStatus(agentID)
 }

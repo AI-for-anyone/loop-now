@@ -262,6 +262,7 @@ func (s *Server) Routes() []Route {
 		{"POST", "/agents/{agentId}/inbox-messages/{messageId}/cancel", "cancelAgentInboxMessage", ConsoleOnly, s.queueAction("messageId", s.Conv.CancelInboxMessage)},
 		{"GET", "/agents/{agentId}/status", "getAgentStatus", ConsoleAndExternal, s.getAgentStatus},
 		{"POST", "/agents/{agentId}/session/reset", "resetSession", ConsoleAndExternal, s.resetSession},
+		{"GET", "/agents/{agentId}/session/export", "exportAgentSession", ConsoleOnly, s.exportSession},
 		{"GET", "/agents/{agentId}/events", "streamAgentEvents", ConsoleOnly, s.streamEvents},
 		{"GET", "/agents/{agentId}/runs/{runId}/timeline", "getRunTimeline", ConsoleAndExternal, s.getRunTimeline},
 		{"GET", "/overview/events", "streamOverviewEvents", ConsoleOnly, s.streamOverview},
@@ -388,7 +389,7 @@ func (s *Server) cors(next http.Handler) http.Handler {
 			h := w.Header()
 			h.Set("Access-Control-Allow-Origin", origin)
 			h.Add("Vary", "Origin")
-			h.Set("Access-Control-Expose-Headers", "ETag, "+RequestIDHeader+", "+VersionHeader)
+			h.Set("Access-Control-Expose-Headers", "ETag, "+RequestIDHeader+", "+VersionHeader+", Content-Disposition")
 			if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
 				h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE")
 				h.Set("Access-Control-Allow-Headers", "Content-Type, If-Match, Last-Event-ID")

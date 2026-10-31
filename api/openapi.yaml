@@ -2874,8 +2874,9 @@ paths:
       x-plugin-scope: agents.write
       summary: 发送消息；Agent 忙时必须选择打断或排队
       description: |
-        发送前交给插件（plugins/SPEC.md §4）：以 `/` 开头且不带图片的消息先作为 `console.command` 交给认领类 Hook，被认领时消息不发给 Agent、
-        不保存，返回 200 ConsoleCommandResult；其余消息经修改类 Hook `message.before_enqueue`，插件可以改写正文。
+        以 `/` 开头且不带图片的消息先匹配平台内置命令 `/session`、`/new`、`/compact [instructions]`、`/reload`、`/copy`、`/export [html|jsonl]`、`/resume [完整ID]`；
+        未匹配时交给插件 `console.command`。命令被认领时不作为普通消息保存，返回 200 ConsoleCommandResult；
+        其余消息经修改类 Hook `message.before_enqueue`，插件可以改写正文。
       requestBody:
         required: true
         content:
@@ -2940,6 +2941,34 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+
+  /agents/{agentId}/session/export:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      tags: [conversation]
+      operationId: exportAgentSession
+      x-access: console
+      summary: 导出当前受管 Pi 会话
+      parameters:
+        - name: format
+          in: query
+          required: true
+          schema: { type: string, enum: [html, jsonl] }
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: 当前会话的 HTML 或 JSONL 文件
+          content:
+            text/html:
+              schema: { type: string, format: binary }
+            application/x-ndjson:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
 
   /agents/{agentId}/events:
     parameters:
@@ -9430,6 +9459,8 @@ components:
 - agent_busy：Agent 正忙且未选择打断或排队（409）
 - agent_not_idle：需要 Agent 空闲的操作（删除 Agent、删除项目、重开会话）在忙时被拒绝（409）
 - session_missing：Agent 处于会话丢失状态，需要先确认重开会话（409）
+- session_none：当前还没有可压缩或导出的 Pi 会话（409）
+- console_command_failed：平台命令已执行但未能完成（409）
 - template_deleted：来源模板已删除，不能重新复制（409）
 - name_conflict：名称重复（409）：项目内或平台内 Agent 重名、项目重名、Skill 名称重复或使用了内置 Skill 的名称 `loopctl`、外部身份重名
 - path_conflict：文件夹来源子目录重复或互相包含（409）
@@ -9464,6 +9495,8 @@ components:
           "agent_busy",
           "agent_not_idle",
           "session_missing",
+          "session_none",
+          "console_command_failed",
           "template_deleted",
           "name_conflict",
           "path_conflict",
@@ -18789,14 +18822,55 @@ components:
         granted: { type: boolean }
         accountIds: { type: array, maxItems: 50, items: { type: string, format: uuid } }
 
+    ConsoleSessionStatus:
+      type: object
+      required: [status, model, thinkingLevel]
+      additionalProperties: false
+      properties:
+        status: { $ref: "#/components/schemas/AgentStatus" }
+        model: { $ref: "#/components/schemas/ModelRef" }
+        thinkingLevel: { type: string }
+
+    ConsoleResumeSession:
+      type: object
+      required: [id, updatedAt, current]
+      additionalProperties: false
+      properties:
+        id: { type: string, minLength: 1, description: Pi 会话头中的完整会话 ID }
+        updatedAt: { type: string, format: date-time }
+        current: { type: boolean }
+
     ConsoleCommandResult:
       type: object
-      required: [handled, plugin, reply]
+      required: [handled, source, plugin, reply, command]
       additionalProperties: false
       properties:
         handled: { type: boolean, enum: [true] }
-        plugin: { description: 认领命令的插件 id, type: string }
-        reply: { description: 插件返回的回复文字；没有时为 null, type: [string, "null"] }
+        source: { type: string, enum: [platform, plugin] }
+        plugin: { description: 认领命令的插件 id；平台命令为空字符串, type: string }
+        reply: { description: 插件返回的回复文字；平台命令或没有回复时为 null, type: [string, "null"] }
+        command: { description: 平台命令名；插件命令为空字符串, type: string }
+        session:
+          oneOf:
+            - $ref: "#/components/schemas/ConsoleSessionStatus"
+            - type: "null"
+        copyText: { type: [string, "null"], description: /copy 待复制的最近成功回复；没有时为 null }
+        exportFormat: { type: [string, "null"], enum: [html, jsonl, null] }
+        processStopped: { type: [boolean, "null"], description: /reload 是否停止了旧进程 }
+        resetSession:
+          oneOf:
+            - $ref: "#/components/schemas/SessionInfo"
+            - type: "null"
+        resumeSessions:
+          type: [array, "null"]
+          items: { $ref: "#/components/schemas/ConsoleResumeSession" }
+          description: /resume 的可恢复会话；按文件修改时间倒序，不含本机路径
+        resumedSession:
+          oneOf:
+            - $ref: "#/components/schemas/SessionInfo"
+            - type: "null"
+        tokensBefore: { type: [integer, "null"], format: int64, minimum: 0 }
+        estimatedTokensAfter: { type: [integer, "null"], format: int64, minimum: 0 }
 
     PluginEventParty:
       description: 参与方；agent 带 id 与地址，external 带 id 与 @名称，plugin（插件令牌，只出现在 folder.changed 的 by）带 plugin:<id> 地址，console 与 platform 只有 kind 与控制台地址。
@@ -18812,7 +18886,7 @@ components:
       description: |
         发给平台半边的事件（plugins/SPEC.md §4），给插件作者的合同：固定字段加该类型自己的字段；正文一律不带，用权限范围内的接口另取。
         观察类事件至少送达一次，按 `id` 去重。各类型的字段：
-        - run.queued、run.started、run.ended：origin（console、inbox_reminder、sleep_wake、task_node、console_node）；
+        - run.queued、run.started、run.ended：origin（console、inbox_reminder、sleep_wake、console_compact、task_node、console_node）；
           run.ended 另有 status（completed、failed、interrupted）、endReason、errorCode 与 tokens（这一轮的 input、output、cacheRead、cacheWrite、total）
         - task.started、task.waiting、task.blocked、task.completed、task.cancelled：title、reason（阻塞、取消的原因，没有时为 null）
         - node.started、node.submitted、node.blocked：nodeRunId、stepId、reason

@@ -4,7 +4,9 @@ import { ArrowUpIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ErrorAlert } from '@/components/ErrorAlert'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ApiError, type Schemas } from '@/api/client'
+import { downloadAgentSession } from '@/api/session-export'
 import { isCommandResult, upsertMessage, useSendMessage } from '@/api/queries'
 import { t } from '@/i18n'
 import { ImagePicker } from '@/features/images/ImagePicker'
@@ -44,6 +46,8 @@ interface ComposerProps {
   agentName: string
   busy: boolean
   disabled: boolean
+  // 会话文件丢失时仍允许无图片的 /resume，其余输入继续受 disabled 门禁约束。
+  allowResumeWhenDisabled?: boolean
   imageLimits?: ImageLimits | null
   maxMessageBytes: number | undefined
   // 发送成功后把结果交给对话页，历史请求进行中时也能显示这条消息。
@@ -61,12 +65,19 @@ interface ComposerProps {
 }
 
 const encoder = new TextEncoder()
+const platformCommands = new Set(['session', 'new', 'compact', 'reload', 'copy', 'export', 'resume'])
+
+function isPlatformCommand(text: string): boolean {
+  const trimmed = text.trim()
+  if (!trimmed.startsWith('/')) return false
+  return platformCommands.has(trimmed.slice(1).split(/\s/, 1)[0])
+}
 
 // 边框归共同容器所有，文字区按内容增高，上限后独立滚动。
 const inputClass =
   'field-sizing-fixed min-h-10 max-h-60 flex-1 resize-none overflow-y-auto rounded-none bg-transparent px-1 py-2 text-base leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent'
 
-export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBytes, imageLimits, onSent, onCommand, queue, status, connection, stop, reply }: ComposerProps) {
+export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeWhenDisabled = false, maxMessageBytes, imageLimits, onSent, onCommand, queue, status, connection, stop, reply }: ComposerProps) {
   const client = useQueryClient()
   const send = useSendMessage(agentId)
   const [text, setText] = useState('')
@@ -75,8 +86,13 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const pending = send.isPending || submitting
   const [localError, setLocalError] = useState<string | null>(null)
+  const [confirmNew, setConfirmNew] = useState(false)
+  const [confirmResume, setConfirmResume] = useState(false)
   const answer = useAnswerQuestion()
   const replyId = reply?.message.id
+  const resumeAllowed = disabled && allowResumeWhenDisabled && !reply && images.length === 0 && /^\/resume(?:\s+\S+)?$/.test(text.trim())
+  const inputDisabled = disabled && !allowResumeWhenDisabled
+  const submitDisabled = disabled && !resumeAllowed
   // 进入回复问题的模式时把光标放进输入框。
   useEffect(() => {
     if (replyId) editorRef.current?.focus()
@@ -108,9 +124,9 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
     return () => observer.disconnect()
   }, [text])
 
-  // 忙时 Enter 排队，⌘／Ctrl+Enter 作为打断发送；点发送按钮为排队。
-  const submit = async (whenBusy: Schemas['WhenBusy'] = 'queue') => {
-    if (disabled || busyRequest.current) return
+  // 忙时 Enter 排队，⌘／Ctrl+Enter 作为打断发送；点发送按钮为排队。平台命令不自动排队重试。
+  const submit = async (whenBusy: Schemas['WhenBusy'] = 'queue', confirmed = false) => {
+    if (submitDisabled || busyRequest.current) return
     setLocalError(null); setImageError(null); setUploads({})
     send.reset()
     if (text.trim() === '' && images.length === 0) {
@@ -119,6 +135,15 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
     }
     if (reply) {
       await answerQuestion(reply, whenBusy)
+      return
+    }
+    const platform = images.length === 0 && isPlatformCommand(text)
+    if (!confirmed && platform && /^\/new(?:\s|$)/.test(text.trim())) {
+      setConfirmNew(true)
+      return
+    }
+    if (!confirmed && platform && /^\/resume\s+\S/.test(text.trim())) {
+      setConfirmResume(true)
       return
     }
     if (maxMessageBytes !== undefined && encoder.encode(text).length > maxMessageBytes) {
@@ -131,13 +156,18 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
     try {
       const refs = await uploadMessageImages({ kind: 'agent', agentId }, sentImages, setUploads)
       const input = { text: sent, ...(refs.length ? { imageIds: refs.map(ref => ref.id) } : {}) }
-      // Agent 正忙时按所选方式发送；以为空闲、发送时才发现正忙的，同样按所选方式再发一次。
-      const result = await send.mutateAsync(busy ? { ...input, whenBusy } : input).catch((error: unknown) => {
-        if (busy || !(error instanceof ApiError && error.code === 'agent_busy')) throw error
-        return send.mutateAsync({ ...input, whenBusy })
-      })
-      if (isCommandResult(result)) onCommand?.(result, sent)
-      else {
+      // 普通消息在空闲判断过期后按所选方式重发；平台命令直接报告忙碌，不转成排队消息。
+      const result = platform
+        ? await send.mutateAsync(input)
+        : await send.mutateAsync(busy ? { ...input, whenBusy } : input).catch((error: unknown) => {
+          if (busy || !(error instanceof ApiError && error.code === 'agent_busy')) throw error
+          return send.mutateAsync({ ...input, whenBusy })
+        })
+      if (isCommandResult(result)) {
+        if (result.source === 'platform' && result.copyText != null) await navigator.clipboard.writeText(result.copyText)
+        if (result.source === 'platform' && result.exportFormat) await downloadAgentSession(agentId, result.exportFormat)
+        onCommand?.(result, sent)
+      } else {
         upsertMessage(client, agentId, result.message)
         onSent(result)
       }
@@ -169,14 +199,14 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
     // 输入法组字时的回车用于上屏，不发送。
     if (event.nativeEvent.isComposing || event.keyCode === 229) return
     event.preventDefault()
-    if (disabled || pending) return
+    if (submitDisabled || pending) return
     void submit(event.metaKey || event.ctrlKey ? 'interrupt' : 'queue')
   }
 
   const sendLabel = busy ? t.chat.queueSend : t.chat.send
   const showStop = busy && stop !== undefined && !reply && text.trim() === '' && images.length === 0
   const stopLabel = stop?.pending ? t.chat.stopping : stop?.retry ? t.chat.retryStop : t.chat.stop
-  const editor = <Textarea ref={editorRef} aria-label={t.chat.inputLabel} placeholder={reply ? t.consoleInbox.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder} value={text} disabled={disabled} onChange={event => setText(event.target.value)} onKeyDown={onKeyDown} rows={1} className={inputClass} />
+  const editor = <Textarea ref={editorRef} aria-label={t.chat.inputLabel} placeholder={reply ? t.consoleInbox.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder} value={text} disabled={inputDisabled} onChange={event => setText(event.target.value)} onKeyDown={onKeyDown} rows={1} className={inputClass} />
   // 待发送图片排在同一边框里、文字行之上；有图片时边框圆角收小。
   const input = (addButton?: ReactNode, strip?: ReactNode) => <div data-chat-composer className={cn('flex min-h-[60px] min-w-0 flex-col border-2 border-ink/60 bg-white p-2 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/15', strip || reply ? 'rounded-[24px]' : 'rounded-[32px]')}>
     {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}
@@ -187,7 +217,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
       {showStop ? (
         <Button type="button" size="icon" className="size-10 bg-ink text-white shadow-none hover:bg-ink-700" aria-label={stopLabel} title={stopLabel} disabled={stop.pending} onClick={stop.onStop}><StopMark /></Button>
       ) : (
-        <Button type="button" size="icon" className="size-10 shadow-none" aria-label={sendLabel} title={busy ? t.chat.queueSendTitle : sendLabel} disabled={disabled || pending} onClick={() => void submit()}><ArrowUpIcon aria-hidden="true" className="size-5" strokeWidth={2.4} /></Button>
+        <Button type="button" size="icon" className="size-10 shadow-none" aria-label={sendLabel} title={busy ? t.chat.queueSendTitle : sendLabel} disabled={submitDisabled || pending} onClick={() => void submit()}><ArrowUpIcon aria-hidden="true" className="size-5" strokeWidth={2.4} /></Button>
       )}
     </div>
   </div>
@@ -214,6 +244,23 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={confirmNew}
+        onOpenChange={setConfirmNew}
+        title={t.chat.commands.newConfirmTitle}
+        body={t.chat.commands.newConfirmBody}
+        confirmLabel={t.chat.commands.newConfirmAction}
+        destructive
+        onConfirm={() => submit('queue', true)}
+      />
+      <ConfirmDialog
+        open={confirmResume}
+        onOpenChange={setConfirmResume}
+        title={t.chat.commands.resumeConfirmTitle}
+        body={t.chat.commands.resumeConfirmBody}
+        confirmLabel={t.chat.commands.resumeConfirmAction}
+        onConfirm={() => submit('queue', true)}
+      />
     </div>
   )
 }
