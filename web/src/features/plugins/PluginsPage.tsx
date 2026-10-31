@@ -177,8 +177,9 @@ export function PluginsPage() {
   const list = plugins.data?.plugins ?? []
   const installed = list.map((plugin) => plugin.id)
   const tab: MarketTab = MARKET_TABS.includes(search.get('tab') as MarketTab) ? (search.get('tab') as MarketTab) : 'installed'
+  // 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="relative h-full overflow-y-auto">
       <div className="mx-auto flex max-w-[1180px] flex-col gap-4 px-4 pt-[22px] pb-16 sm:px-8">
         <header className="flex flex-wrap items-end gap-x-3.5 gap-y-3">
           <div className="flex flex-col gap-1.5">

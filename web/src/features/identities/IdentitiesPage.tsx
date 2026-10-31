@@ -84,7 +84,8 @@ export function IdentitiesPage() {
           })}
         </ul>
       </aside>
-      <section className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 pt-2 pb-16 sm:px-[30px] lg:pt-7 lg:pl-0">
+      {/* 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。 */}
+      <section className="relative min-h-0 min-w-0 flex-1 overflow-y-auto px-4 pt-2 pb-16 sm:px-[30px] lg:pt-7 lg:pl-0">
         {identityId ? (
           <IdentityDetail key={identityId} identityId={identityId} />
         ) : (

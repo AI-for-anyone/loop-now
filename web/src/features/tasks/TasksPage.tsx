@@ -25,7 +25,8 @@ function ProjectTasks({ project }: { project: import('@/api/client').Schemas['Pr
   // Pending for you: questions and new messages the task's instances sent to @console.
   const pending = useInboxPending()
   const pendingByTask = new Map((pending.data?.byTask ?? []).map((row) => [row.taskId, row]))
-  return <div className="h-full overflow-y-auto p-4 sm:p-[30px]">
+  // 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。
+  return <div className="relative h-full overflow-y-auto p-4 sm:p-[30px]">
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3"><div><p className="font-bold">{project.name}</p><h1 className={cn(pageTitleClass, 'my-2')}>{t.tasks.title}</h1><p>{t.tasks.intro}</p></div><LiveState state={connection} /></div>
     <ErrorAlert error={tasks.error} />
     {tasks.isPending && <p>{t.tasks.loading}</p>}

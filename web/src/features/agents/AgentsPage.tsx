@@ -69,8 +69,9 @@ function FirstUse({ scope, onCreate }: { scope: Scope; onCreate: () => void }) {
   const titleId = useId()
   // 与列表头的新建按钮一致，无法连接时禁用。
   const reachable = useSyncExternalStore(reachability.subscribe, reachability.isReachable)
+  // 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。
   return (
-    <section aria-labelledby={titleId} className="flex h-full flex-col items-center justify-center gap-[22px] overflow-y-auto p-6 text-center">
+    <section aria-labelledby={titleId} className="relative flex h-full flex-col items-center justify-center gap-[22px] overflow-y-auto p-6 text-center">
       {/* 叠印插图：网点蓝圆、荧光粉（平台为绿）圆与黄圆，叠印处用 multiply 混色。 */}
       <span aria-hidden="true" className="relative h-40 w-[220px] shrink-0">
         <span className="riso-halftone absolute top-2.5 left-2.5 size-[140px] rounded-full bg-riso-blue" />

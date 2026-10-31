@@ -26,6 +26,12 @@ describe('版面', () => {
     await expect(navigator.clipboard.readText()).resolves.toBe(agent.id)
     expect(within(basic).getByRole('button', { name: '已复制' })).toBeInTheDocument()
   })
+
+  // jsdom 不排版，只能确认滚动区是定位容器；整页不被撑高由浏览器检查。
+  it('页面的滚动区是定位容器，区块里的读屏说明不会撑高整页', async () => {
+    await renderConfig()
+    expect(region('基本信息').closest('.overflow-y-auto')).toHaveClass('relative')
+  })
 })
 
 describe('分区目录', () => {
