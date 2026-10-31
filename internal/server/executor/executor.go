@@ -85,6 +85,8 @@ type SessionExporter interface {
 type ManagedSession struct {
 	ID        string
 	Path      string
+	Title     string
+	Preview   string
 	UpdatedAt time.Time
 	Current   bool
 }

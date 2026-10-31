@@ -18837,6 +18837,8 @@ components:
       additionalProperties: false
       properties:
         id: { type: string, minLength: 1, description: Pi 会话头中的完整会话 ID }
+        title: { type: string, description: 第一条普通用户消息的截短文本；没有文字消息时为空字符串 }
+        preview: { type: string, description: 最后一条普通用户消息的截短文本；没有文字消息时为空字符串 }
         updatedAt: { type: string, format: date-time }
         current: { type: boolean }
 

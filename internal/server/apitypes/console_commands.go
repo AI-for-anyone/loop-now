@@ -5,6 +5,8 @@ import "time"
 // ConsoleResumeSession 是 /resume 列出的受管会话，不暴露本机路径。
 type ConsoleResumeSession struct {
 	ID        string    `json:"id"`
+	Title     string    `json:"title"`
+	Preview   string    `json:"preview"`
 	UpdatedAt time.Time `json:"updatedAt"`
 	Current   bool      `json:"current"`
 }

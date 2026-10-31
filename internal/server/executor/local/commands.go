@@ -156,7 +156,7 @@ func (e *Executor) ExportSession(ctx context.Context, agentID uuid.UUID, format 
 	return executor.SessionExport{Filename: name, ContentType: "text/html; charset=utf-8", Data: data}, nil
 }
 
-// ListSessions 只读取受管目录和 JSONL 首行会话头，不获取执行快照或启动 Pi。
+// ListSessions 流式读取受管 JSONL 的会话头和用户文字，不获取执行快照或启动 Pi。
 func (e *Executor) ListSessions(ctx context.Context, agentID uuid.UUID, currentFile string) ([]executor.ManagedSession, error) {
 	free, err := e.reserveMaintenance(ctx, agentID)
 	if err != nil {
@@ -203,7 +203,12 @@ func (e *Executor) ListSessions(ctx context.Context, agentID uuid.UUID, currentF
 			Type string `json:"type"`
 			ID   string `json:"id"`
 		}
-		err = json.NewDecoder(file).Decode(&header)
+		decoder := json.NewDecoder(file)
+		err = decoder.Decode(&header)
+		title, preview := "", ""
+		if err == nil && header.Type == "session" && header.ID != "" {
+			title, preview = readSessionUserText(decoder)
+		}
 		_ = file.Close()
 		if err != nil || header.Type != "session" || header.ID == "" {
 			continue
@@ -216,7 +221,7 @@ func (e *Executor) ListSessions(ctx context.Context, agentID uuid.UUID, currentF
 			duplicates[header.ID] = true
 		}
 		seen[header.ID] = len(out)
-		out = append(out, executor.ManagedSession{ID: header.ID, Path: path, UpdatedAt: info.ModTime(), Current: path == current})
+		out = append(out, executor.ManagedSession{ID: header.ID, Path: path, Title: title, Preview: preview, UpdatedAt: info.ModTime(), Current: path == current})
 	}
 	if len(duplicates) > 0 {
 		valid := out[:0]
@@ -237,6 +242,74 @@ func (e *Executor) ListSessions(ctx context.Context, agentID uuid.UUID, currentF
 		return out[i].Path < out[j].Path
 	})
 	return out, nil
+}
+
+// readSessionUserText 保留第一条和最后一条普通用户文字；尾部损坏不丢弃已读到的元数据。
+func readSessionUserText(decoder *json.Decoder) (title, preview string) {
+	for {
+		var record struct {
+			Type    string `json:"type"`
+			Message struct {
+				Role    string          `json:"role"`
+				Content json.RawMessage `json:"content"`
+			} `json:"message"`
+		}
+		if err := decoder.Decode(&record); err != nil {
+			return title, preview
+		}
+		if record.Type != "message" || record.Message.Role != "user" {
+			continue
+		}
+		text := sessionMessageText(record.Message.Content)
+		if text == "" || strings.HasPrefix(text, "/") {
+			continue
+		}
+		if title == "" {
+			title = truncateSessionText(text, 80)
+		}
+		preview = truncateSessionText(text, 160)
+	}
+}
+
+func sessionMessageText(content json.RawMessage) string {
+	var plain string
+	if err := json.Unmarshal(content, &plain); err == nil {
+		return normalizeSessionUserText(plain)
+	}
+	var parts []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(content, &parts); err != nil {
+		return ""
+	}
+	texts := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part.Type == "text" && part.Text != "" {
+			texts = append(texts, part.Text)
+		}
+	}
+	return normalizeSessionUserText(strings.Join(texts, " "))
+}
+
+func normalizeSessionUserText(text string) string {
+	text = strings.TrimSpace(text)
+	if strings.HasPrefix(text, "本轮运行ID：") {
+		newline := strings.IndexByte(text, '\n')
+		if newline < 0 {
+			return ""
+		}
+		text = text[newline+1:]
+	}
+	return strings.Join(strings.Fields(text), " ")
+}
+
+func truncateSessionText(text string, limit int) string {
+	runes := []rune(text)
+	if len(runes) <= limit {
+		return text
+	}
+	return string(runes[:limit]) + "…"
 }
 
 // managedSessionFile 只接受 sessions 目录内已存在的直接子文件，并解析软链接后再次验证。

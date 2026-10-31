@@ -183,14 +183,14 @@ func TestPlatformConsoleResumeLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.ex.sessions = []executor.ManagedSession{
-		{ID: "old-full-session-id", Path: oldFile, UpdatedAt: time.Now().Add(-time.Hour)},
-		{ID: "target-full-session-id", Path: targetFile, UpdatedAt: time.Now()},
+		{ID: "old-full-session-id", Path: oldFile, Title: "旧会话标题", Preview: "旧会话最近消息", UpdatedAt: time.Now().Add(-time.Hour)},
+		{ID: "target-full-session-id", Path: targetFile, Title: "目标会话标题", Preview: "目标会话最近消息", UpdatedAt: time.Now()},
 	}
 	events, closeEvents := readSSE(t, e, path, "")
 	defer closeEvents()
 	_ = next(t, events)
 	listed := consoleCommand(t, e, path, "/resume")
-	if listed.ResumeSessions == nil || len(listed.ResumeSessions) != 2 || listed.ResumeSessions[0].ID != "old-full-session-id" || !listed.ResumeSessions[0].Current || listed.ResumedSession != nil {
+	if listed.ResumeSessions == nil || len(listed.ResumeSessions) != 2 || listed.ResumeSessions[0].ID != "old-full-session-id" || listed.ResumeSessions[0].Title != "旧会话标题" || listed.ResumeSessions[0].Preview != "旧会话最近消息" || !listed.ResumeSessions[0].Current || listed.ResumedSession != nil {
 		t.Fatalf("resume 列表不符：%+v", listed)
 	}
 	for _, command := range []string{"/resume unknown", "/resume /managed/target.jsonl", "/resume ../target.jsonl"} {

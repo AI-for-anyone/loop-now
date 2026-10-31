@@ -76,7 +76,7 @@ export function ChatPage() {
     })),
     ...commands
       .filter((item) => item.agentId === agent.id)
-      .map((item) => ({ key: `command:${item.id}`, at: item.at, node: <CommandLine command={item.command} result={item.result} at={item.at} /> })),
+      .map((item) => ({ key: `command:${item.id}`, at: item.at, node: <CommandLine command={item.command} result={item.result} at={item.at} onResume={(sessionId) => composer.current?.resume(sessionId)} /> })),
   ]
 
   // 收到快照之前，忙闲与会话状态取自状态接口与 Agent 详情。

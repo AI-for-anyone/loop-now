@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
-import { apiUrl, defaultAgentPath, errorBody, makeAgent, makeMessage, makeQueueItem, makeRun, makeStatus } from '@/test/api'
+import { apiUrl, context, defaultAgentPath, errorBody, makeAgent, makeMessage, makeQueueItem, makeRun, makeStatus } from '@/test/api'
 import { renderChat } from '@/test/chat'
 import { FakeEventSource } from '@/test/fake-event-source'
 
@@ -357,6 +357,63 @@ describe('排队显示与回复状态', () => {
     expect(await screen.findByText('已打断')).toBeInTheDocument()
     expect(screen.getByText('做到一半')).toBeInTheDocument()
   })
+})
+
+it('确认列表恢复后还原文字草稿，且不上传或清除已有图片', async () => {
+  const sent: Schemas['SendMessageInput'][] = []
+  const { user } = await renderChat({ handlers: [
+    http.get(apiUrl('/context'), () => HttpResponse.json({ ...context, limits: { ...context.limits, maxMessageImages: 4, maxMessageImageBytes: 5 * 1024 * 1024 } })),
+    http.post(apiUrl('/agents/:agentId/messages'), async ({ request }) => {
+      const body = await request.json() as Schemas['SendMessageInput']
+      sent.push(body)
+      return HttpResponse.json(body.text === '/resume'
+        ? { handled: true, source: 'platform', plugin: '', reply: null, command: 'resume', resumeSessions: [
+          { id: 'target-full-session-id', title: '上次讨论的主题', preview: '最后一条用户消息', updatedAt: '2026-10-31T01:00:00Z', current: false },
+          { id: 'current-full-session-id', title: '当前主题', preview: '当前主题', updatedAt: '2026-10-30T01:00:00Z', current: true },
+        ] }
+        : { handled: true, source: 'platform', plugin: '', reply: null, command: 'resume', resumedSession: { state: 'active', epoch: 2 } })
+    }),
+  ] })
+  const input = await screen.findByLabelText('消息')
+  await user.type(input, '/resume')
+  await user.click(screen.getByRole('button', { name: '发送' }))
+  expect(await screen.findByText('上次讨论的主题')).toBeInTheDocument()
+  expect(screen.getByText('最后一条用户消息')).toBeInTheDocument()
+  expect(screen.getAllByRole('button', { name: '恢复' })).toHaveLength(1)
+
+  await user.type(input, '尚未发送的草稿')
+  await user.upload(screen.getByLabelText('选择图片文件'), new File(['synthetic-png'], '保留.png', { type: 'image/png' }))
+  expect(await screen.findByAltText('保留.png')).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: '恢复' }))
+  expect(await screen.findByRole('alertdialog')).toHaveTextContent('不会回滚工作区、模型配置、Prompt、Skills 或权限')
+  expect(input).toHaveValue('/resume target-full-session-id')
+  expect(sent).toEqual([{ text: '/resume' }])
+  await user.click(screen.getByRole('button', { name: '恢复会话' }))
+  await waitFor(() => expect(sent).toEqual([{ text: '/resume' }, { text: '/resume target-full-session-id' }]))
+  expect(screen.getByAltText('保留.png')).toBeInTheDocument()
+  expect(input).toHaveValue('尚未发送的草稿')
+})
+
+it('取消列表恢复后还原文字草稿，不发送恢复请求', async () => {
+  const sent: Schemas['SendMessageInput'][] = []
+  const { user } = await renderChat({ handlers: [http.post(apiUrl('/agents/:agentId/messages'), async ({ request }) => {
+    const body = await request.json() as Schemas['SendMessageInput']
+    sent.push(body)
+    return HttpResponse.json({ handled: true, source: 'platform', plugin: '', reply: null, command: 'resume', resumeSessions: [
+      { id: 'target-full-session-id', title: '上次讨论的主题', preview: '最后一条用户消息', updatedAt: '2026-10-31T01:00:00Z', current: false },
+    ] })
+  })] })
+  const input = await screen.findByLabelText('消息')
+  await user.type(input, '/resume')
+  await user.click(screen.getByRole('button', { name: '发送' }))
+  expect(await screen.findByText('上次讨论的主题')).toBeInTheDocument()
+  await user.type(input, '取消后也要保留的草稿')
+  await user.click(screen.getByRole('button', { name: '恢复' }))
+  expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
+  expect(input).toHaveValue('/resume target-full-session-id')
+  await user.click(screen.getByRole('button', { name: '取消' }))
+  expect(input).toHaveValue('取消后也要保留的草稿')
+  expect(sent).toEqual([{ text: '/resume' }])
 })
 
 describe('会话文件丢失与确认重开会话', () => {

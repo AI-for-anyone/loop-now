@@ -7021,6 +7021,10 @@ export interface components {
         ConsoleResumeSession: {
             /** @description Pi 会话头中的完整会话 ID */
             id: string;
+            /** @description 第一条普通用户消息的截短文本；没有文字消息时为空字符串 */
+            title?: string;
+            /** @description 最后一条普通用户消息的截短文本；没有文字消息时为空字符串 */
+            preview?: string;
             /** Format: date-time */
             updatedAt: string;
             current: boolean;

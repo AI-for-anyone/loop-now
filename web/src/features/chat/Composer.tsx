@@ -19,6 +19,7 @@ import { useAnswerQuestion } from '@/features/console-inbox/useAnswerQuestion'
 // 编辑撤回的排队消息时，把原文与图片放回输入框；输入框里已有的内容保留在前面。
 export interface ComposerHandle {
   refill: (text: string, images: ImageDraft[]) => void
+  resume: (sessionId: string) => void
 }
 
 // 停止当前回复：忙时输入框为空，发送按钮换成停止。
@@ -97,11 +98,13 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
   const [localError, setLocalError] = useState<string | null>(null)
   const [confirmNew, setConfirmNew] = useState(false)
   const [confirmResume, setConfirmResume] = useState(false)
+  // 只有从列表发起的恢复保存原草稿；手动输入命令仍保持原确认行为。
+  const [resumeDraft, setResumeDraft] = useState<string | null>(null)
   const [commandIndex, setCommandIndex] = useState(0)
   const [commandsDismissed, setCommandsDismissed] = useState(false)
   const answer = useAnswerQuestion()
   const replyId = reply?.message.id
-  const resumeAllowed = disabled && allowResumeWhenDisabled && !reply && images.length === 0 && /^\/resume(?:\s+\S+)?$/.test(text.trim())
+  const resumeAllowed = disabled && allowResumeWhenDisabled && !reply && (images.length === 0 || confirmResume) && /^\/resume(?:\s+\S+)?$/.test(text.trim())
   const inputDisabled = disabled && !allowResumeWhenDisabled
   const submitDisabled = disabled && !resumeAllowed
   const commandMatch = /^\/([^\s]*)$/.exec(text.trimStart())
@@ -124,7 +127,14 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
       setImages((current) => [...current, ...drafts])
       editorRef.current?.focus()
     },
-  }), [])
+    resume: (sessionId) => {
+      if (replyId || busyRequest.current) return
+      setResumeDraft(text)
+      setText(`/resume ${sessionId}`)
+      setCommandsDismissed(true)
+      setConfirmResume(true)
+    },
+  }), [replyId, text])
 
   useLayoutEffect(() => {
     const editor = editorRef.current
@@ -157,7 +167,9 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
       await answerQuestion(reply, whenBusy)
       return
     }
-    const platform = images.length === 0 && isPlatformCommand(text)
+    // 从列表确认的恢复始终是平台命令；已有图片留在输入框，不上传也不随命令发送。
+    const confirmedResume = confirmed && confirmResume && /^\/resume\s+\S/.test(text.trim())
+    const platform = confirmedResume || (images.length === 0 && isPlatformCommand(text))
     if (!confirmed && platform && /^\/new(?:\s|$)/.test(text.trim())) {
       setConfirmNew(true)
       return
@@ -170,8 +182,8 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
       setLocalError(t.chat.tooLong(maxMessageBytes))
       return
     }
-    if (images.length && imageLimits) { const problem = imageProblem([], images.map(image => image.file), imageLimits); if (problem) { setLocalError(problem); return } }
-    const sent = text, sentImages = [...images]
+    if (!confirmedResume && images.length && imageLimits) { const problem = imageProblem([], images.map(image => image.file), imageLimits); if (problem) { setLocalError(problem); return } }
+    const sent = text, sentImages = confirmedResume ? [] : [...images]
     busyRequest.current = true; setSubmitting(true)
     try {
       const refs = await uploadMessageImages({ kind: 'agent', agentId }, sentImages, setUploads)
@@ -191,8 +203,13 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
         upsertMessage(client, agentId, result.message)
         onSent(result)
       }
-      // 去掉已发出的部分，只留下发送期间新输入的文字；已发出的部分在发送期间被改动过时全部保留。
-      setText((current) => (current.startsWith(sent) ? current.slice(sent.length) : current))
+      if (confirmedResume && resumeDraft !== null) {
+        setText(resumeDraft)
+        setResumeDraft(null)
+      } else {
+        // 去掉已发出的部分，只留下发送期间新输入的文字；已发出的部分在发送期间被改动过时全部保留。
+        setText((current) => (current.startsWith(sent) ? current.slice(sent.length) : current))
+      }
       setImages(current => current.filter(image => !sentImages.some(sent => sent.id === image.id)))
     } catch (error) {
       setImageError(error)
@@ -343,7 +360,13 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
       />
       <ConfirmDialog
         open={confirmResume}
-        onOpenChange={setConfirmResume}
+        onOpenChange={(open) => {
+          setConfirmResume(open)
+          if (!open && resumeDraft !== null) {
+            setText(resumeDraft)
+            setResumeDraft(null)
+          }
+        }}
         title={t.chat.commands.resumeConfirmTitle}
         body={t.chat.commands.resumeConfirmBody}
         confirmLabel={t.chat.commands.resumeConfirmAction}

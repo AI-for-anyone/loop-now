@@ -94,7 +94,7 @@ func (s *Server) platformConsoleCommand(r *http.Request, agentID uuid.UUID, text
 			}
 			out.ResumeSessions = make([]apitypes.ConsoleResumeSession, 0, len(sessions))
 			for _, sess := range sessions {
-				out.ResumeSessions = append(out.ResumeSessions, apitypes.ConsoleResumeSession{ID: sess.ID, UpdatedAt: sess.UpdatedAt, Current: sess.Current})
+				out.ResumeSessions = append(out.ResumeSessions, apitypes.ConsoleResumeSession{ID: sess.ID, Title: sess.Title, Preview: sess.Preview, UpdatedAt: sess.UpdatedAt, Current: sess.Current})
 			}
 		} else {
 			sess, err := s.Conv.ResumeSession(r.Context(), agentID, args)

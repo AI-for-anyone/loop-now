@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -158,6 +159,39 @@ func TestListSessionsValidatesHeadersSortsAndMarksCurrent(t *testing.T) {
 	}
 	if sessions[0].Path != resolvedNewer || sessions[1].Path != resolvedOlder {
 		t.Fatalf("内部受管路径不符：%+v", sessions)
+	}
+}
+
+func TestListSessionsExtractsUserTextMetadata(t *testing.T) {
+	h := newHarness(t, nil, "")
+	id := h.agent(nil)
+	d := h.e.dirs(id)
+	if err := os.MkdirAll(d.sessions, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	longAssistantText := strings.Repeat("长", 70*1024)
+	content := `{"type":"session","id":"metadata"}` + "\n" +
+		`{"type":"message","message":{"role":"user","content":[{"type":"text","text":"/new"}]}}` + "\n" +
+		`{"type":"message","message":{"role":"user","content":[{"type":"text","text":"本轮运行ID：runtime-id\n  第一条   用户消息\n继续"}]}}` + "\n" +
+		`{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":` + strconv.Quote(longAssistantText) + `}]}}` + "\n" +
+		`{"type":"message","message":{"role":"user","content":[{"type":"image"},{"type":"text","text":"最后一条"},{"type":"text","text":"用户消息"}]}}` + "\n" +
+		`{"type":"message","message":{"role":"user","content":"被后续损坏截断前的文字"}}` + "\n" +
+		`{"type":"message"`
+	if err := os.WriteFile(filepath.Join(d.sessions, "metadata.jsonl"), []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sessions, err := h.e.ListSessions(context.Background(), id, "")
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("读取会话元数据失败：%+v %v", sessions, err)
+	}
+	if sessions[0].Title != "第一条 用户消息 继续" || sessions[0].Preview != "被后续损坏截断前的文字" {
+		t.Fatalf("标题或最近摘要不符：%+v", sessions[0])
+	}
+}
+
+func TestSessionUserTextTruncatesByRune(t *testing.T) {
+	if got := truncateSessionText(strings.Repeat("界", 81), 80); got != strings.Repeat("界", 80)+"…" {
+		t.Fatalf("中文截断不应按字节切断：%q", got)
 	}
 }
 
