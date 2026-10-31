@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { routes } from '@/app/routes'
 import { apiUrl, defaultProject, makeProject } from '@/test/api'
-import { fakePlugins, makeConfig, makeDelivery, makeProjectPlugin } from '@/test/plugins'
+import { fakePlugins, makeConfig, makeDelivery, makeDetail, makePlugin, makeProjectPlugin, makeResolvedSource } from '@/test/plugins'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
@@ -151,5 +151,82 @@ describe('插件详情', () => {
     renderDetail('/plugins/missing')
     expect(await screen.findByText('没有这个插件，可能已被卸载。')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '回到插件市场' })).toHaveAttribute('href', '/plugins')
+  })
+})
+
+describe('插件详情的说明与仓库', () => {
+  const readme = [
+    '# Webhook 通知',
+    '',
+    '## 配置',
+    '',
+    '- `url`：回调地址',
+    '- `retries`：重试上限',
+    '',
+    '```json',
+    '{ "url": "https://hooks.example.com" }',
+    '```',
+    '',
+    '详见[文档](https://docs.example.com/webhook)、[示例](./examples/basic.md)与[邮件](mailto:dev@example.com)。',
+    '',
+    '![架构图](./docs/arch.png)![远程图](https://img.example.com/x.png)',
+    '',
+    '<script>alert(1)</script>',
+  ].join('\n')
+
+  it('概览的说明卡片：按控制台语言读 README；渲染标题、列表、代码块、行内代码与链接，原始 HTML 按文字显示；相对链接与图片只显示文字', async () => {
+    const { fake } = renderDetail('/plugins/webhook', { readmes: { webhook: { file: 'README.zh-CN.md', markdown: readme, truncated: false } } })
+    const card = await screen.findByRole('region', { name: '说明' })
+    expect(fake.requests.find((r) => r.path === '/plugins/webhook/readme')?.query).toEqual({ locale: 'zh-CN' })
+    expect(card).toHaveTextContent('README.zh-CN.md')
+    expect(within(card).getByRole('heading', { level: 2, name: '配置' })).toBeInTheDocument()
+    expect(within(card).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['url：回调地址', 'retries：重试上限'])
+    expect(within(card).getByText('url').tagName).toBe('CODE')
+    expect(card.querySelector('pre code')).toHaveTextContent('{ "url": "https://hooks.example.com" }')
+    const docs = within(card).getByRole('link', { name: '文档' })
+    expect(docs).toHaveAttribute('href', 'https://docs.example.com/webhook')
+    expect(docs).toHaveAttribute('target', '_blank')
+    expect(docs.getAttribute('rel')).toContain('noopener')
+    expect(within(card).getByRole('link', { name: '邮件' })).toHaveAttribute('href', 'mailto:dev@example.com')
+    expect(within(card).queryByRole('link', { name: '示例' })).toBeNull()
+    expect(within(card).getByText('示例')).toBeInTheDocument()
+    expect(card.querySelector('img')).toBeNull()
+    expect(card).toHaveTextContent('架构图远程图')
+    expect(card.querySelector('script')).toBeNull()
+    expect(card).toHaveTextContent('<script>alert(1)</script>')
+    expect(screen.queryByText('说明太长，只显示了开头的部分。')).toBeNull()
+  })
+
+  it('README 被截断时卡片底部说明', async () => {
+    renderDetail('/plugins/webhook', { readmes: { webhook: { file: 'README.md', markdown: '# 很长的说明', truncated: true } } })
+    const card = await screen.findByRole('region', { name: '说明' })
+    expect(card.lastElementChild).toHaveTextContent('说明太长，只显示了开头的部分。')
+  })
+
+  it('没有 README 时不显示说明卡片', async () => {
+    const { client } = renderDetail()
+    await screen.findByRole('region', { name: '这个插件包含' })
+    await waitFor(() => expect(client.getQueryState(['plugins', 'readme', 'webhook'])?.status).toBe('success'))
+    expect(screen.queryByRole('region', { name: '说明' })).toBeNull()
+  })
+
+  it('git 来源：页头链到仓库网页，GitHub 带 ref 时链到 /tree/<ref>；SSH 写法只显示地址', async () => {
+    const git = (location: string, ref: string | null) => makeDetail(makePlugin({ id: 'lark-notify', displayName: '飞书通知', source: makeResolvedSource({ kind: 'git', location, ref, commit: 'abc1234def' }) }))
+    const { unmount } = renderDetail('/plugins/lark-notify', { details: [git('https://github.com/foo/loop-now-lark-notify.git', 'release/0.3')] })
+    const link = await screen.findByRole('link', { name: '仓库' })
+    expect(link).toHaveAttribute('href', 'https://github.com/foo/loop-now-lark-notify/tree/release/0.3')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link.getAttribute('rel')).toContain('noopener')
+    unmount()
+    renderDetail('/plugins/lark-notify', { details: [git('git@github.com:foo/loop-now-lark-notify.git', null)] })
+    await screen.findByRole('heading', { level: 1, name: '飞书通知' })
+    expect(screen.queryByRole('link', { name: '仓库' })).toBeNull()
+    expect(screen.getByText('git@github.com:foo/loop-now-lark-notify.git')).toBeInTheDocument()
+  })
+
+  it('官方插件没有仓库链接', async () => {
+    renderDetail()
+    await screen.findByRole('heading', { level: 1, name: 'Webhook 通知' })
+    expect(screen.queryByRole('link', { name: '仓库' })).toBeNull()
   })
 })

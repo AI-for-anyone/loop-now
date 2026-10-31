@@ -252,6 +252,13 @@ export const plugins = {
     'console.command': '对话框里的 / 命令（可认领）',
     'identity.inbound': '代管的外部身份收到消息或提问',
   } satisfies Record<Schemas['PluginEvent']['type'], string>,
+  // 插件的 README：详情页的卡片与安装前的预览里显示。
+  readme: {
+    title: '说明',
+    truncated: '说明太长，只显示了开头的部分。',
+  },
+  // 来源是 git 仓库时链到它的网页。
+  repository: '仓库',
   // 插件详情。
   detail: {
     crumb: '插件市场',

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link, NavLink, useNavigate, useParams } from 'react-router'
 import type { Schemas } from '@/api/client'
-import { marketEntryOf, marketSource, usePlugin, usePluginConfig, usePluginMarkets, useProjectPlugin, useSavePluginConfig, useUninstallPlugin } from '@/api/plugins'
+import { marketEntryOf, marketSource, usePlugin, usePluginConfig, usePluginMarkets, usePluginReadme, useProjectPlugin, useSavePluginConfig, useUninstallPlugin } from '@/api/plugins'
 import { useProjects } from '@/api/queries'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ErrorAlert } from '@/components/ErrorAlert'
@@ -16,9 +16,11 @@ import { cn } from '@/lib/utils'
 import { AccountsManager } from './Accounts'
 import { DeliveriesList, LogsView, RecordsTable } from './Activity'
 import { ManifestSummary } from './ManifestSummary'
-import { cardClass, IdVersion, PanelTitle, Quiet, SourceBadge, StatusLabel } from './parts'
+import { cardClass, IdVersion, PanelTitle, Quiet, RepositoryLink, SourceBadge, StatusLabel } from './parts'
 import { pluginPath } from './paths'
 import { ProjectEnableList } from './ProjectEnable'
+import { ReadmeMarkdown, TruncatedNote } from './Readme'
+import { repositoryUrl } from './repository'
 import { ConfigForm } from './SchemaForm'
 import { describeValue, fieldsOf } from './schema-form'
 import { usePluginInstaller } from './usePluginInstaller'
@@ -53,6 +55,18 @@ const more = (to: string, label: string) => (
   </Link>
 )
 
+// 概览底部占满一行的说明卡片：当前已装版本的 README；没有 README 时不显示。
+function ReadmePanel({ pluginId }: { pluginId: string }) {
+  const readme = usePluginReadme(pluginId)
+  if (readme.isPending || readme.data?.file === null) return null
+  return (
+    <Panel title={t.plugins.readme.title} hint={readme.data?.file} footer={readme.data?.truncated && <TruncatedNote />} className="lg:col-span-2">
+      <ErrorAlert error={readme.error} />
+      {readme.data && <ReadmeMarkdown readme={readme.data} />}
+    </Panel>
+  )
+}
+
 function Overview({ detail }: { detail: Detail }) {
   const id = detail.plugin.id
   return (
@@ -76,6 +90,7 @@ function Overview({ detail }: { detail: Detail }) {
           <LogsView pluginId={id} compact={3} />
         </Panel>
       </div>
+      <ReadmePanel pluginId={id} />
     </div>
   )
 }
@@ -212,6 +227,8 @@ export function PluginDetailPage() {
     )
   if (!detail) return <Quiet>{text.loading}</Quiet>
   const { plugin, manifest } = detail
+  // git 来源的仓库：有网页时给链接；SSH 写法没有网页，只显示地址。
+  const repository = plugin.source.kind === 'git' ? { location: plugin.source.location, href: repositoryUrl(plugin.source.location, plugin.source.ref) } : null
   const tabs = TABS.filter((value) => value !== 'accounts' || manifest.accounts.length > 0)
   return (
     <DraftNavigationGuard>
@@ -235,6 +252,8 @@ export function PluginDetailPage() {
                 <SourceBadge source={plugin.source} />
                 <IdVersion id={plugin.id} version={plugin.version} />
                 <StatusLabel status={plugin.status} />
+                {repository &&
+                  (repository.href ? <RepositoryLink href={repository.href} /> : <span className="min-w-0 font-mono text-[12px] text-ink-700 [overflow-wrap:anywhere]">{repository.location}</span>)}
               </div>
               <p className="text-[13px] text-ink-700 [overflow-wrap:anywhere]">
                 {[localizedText(plugin.description), text.from[plugin.source.kind], copy.installedOn(t.chat.time(plugin.installedAt))].filter(Boolean).join(' · ')}

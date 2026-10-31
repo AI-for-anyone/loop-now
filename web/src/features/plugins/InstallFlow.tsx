@@ -11,6 +11,7 @@ import { t } from '@/i18n'
 import { localizedText } from '@/lib/localized-text'
 import { cn } from '@/lib/utils'
 import { ManifestSummary } from './ManifestSummary'
+import { PreviewReadme } from './Readme'
 import { usePluginInstaller } from './usePluginInstaller'
 
 type Preview = Schemas['PluginPreview']
@@ -21,7 +22,7 @@ const confirmText = t.plugins.confirm
 const sourceLine = (source: Schemas['PluginResolvedSource']) =>
   [source.location, source.ref ?? source.npmVersion].filter(Boolean).join(' @ ') + (source.commit ? ` (${source.commit.slice(0, 7)})` : '')
 
-// 安装与更新的第二步：展示预览里的清单，人确认后按预览安装。非官方来源要明确确认（confirm），
+// 安装与更新的第二步：展示预览里的清单与 README，人确认后按预览安装。非官方来源要明确确认（confirm），
 // 服务端仍认为需要确认（409 plugin_confirmation_required）时补上警告，再点一次即带 confirm 安装。
 export function ConfirmInstallDialog({ preview, onClose, onInstalled }: { preview: Preview; onClose: () => void; onInstalled?: (plugin: Schemas['Plugin']) => void }) {
   const install = usePluginInstall()
@@ -75,7 +76,14 @@ export function ConfirmInstallDialog({ preview, onClose, onInstalled }: { previe
             </div>
           </div>
         )}
-        {same ? <p role="status" className="text-[14px] font-bold">{confirmText.sameVersion(manifest.version)}</p> : <ManifestSummary manifest={manifest} />}
+        {same ? (
+          <p role="status" className="text-[14px] font-bold">{confirmText.sameVersion(manifest.version)}</p>
+        ) : (
+          <>
+            <ManifestSummary manifest={manifest} />
+            <PreviewReadme previewId={preview.previewId} />
+          </>
+        )}
         <p className="text-[12.5px] text-ink-700">
           {!update && `${confirmText.notEnabled} · `}
           {confirmText.expires(t.chat.time(preview.expiresAt))}

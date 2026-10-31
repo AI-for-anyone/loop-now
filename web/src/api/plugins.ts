@@ -1,4 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { locale } from '@/i18n/locale'
 import { api, call, type ApiError, type Schemas } from './client'
 
 type Plugin = Schemas['Plugin']
@@ -11,6 +12,7 @@ export const pluginKeys = {
   all: ['plugins'] as const,
   list: ['plugins', 'list'] as const,
   detail: (pluginId: string) => ['plugins', 'detail', pluginId] as const,
+  readme: (pluginId: string) => ['plugins', 'readme', pluginId] as const,
   config: (pluginId: string) => ['plugins', 'config', pluginId] as const,
   logs: (pluginId: string) => ['plugins', 'logs', pluginId] as const,
   deliveries: (pluginId: string, filter: DeliveryFilter = {}) => ['plugins', 'deliveries', pluginId, filter.status ?? 'all', filter.projectId ?? 'all'] as const,
@@ -37,6 +39,20 @@ export function usePlugins() {
 
 export function usePlugin(pluginId: string) {
   return useQuery({ queryKey: pluginKeys.detail(pluginId), queryFn: () => call(api.GET('/plugins/{pluginId}', pluginPath(pluginId))) })
+}
+
+// README 按控制台的语言选文件（服务端按 README.<语言>.md → README.<主语言>.md → README.md 兜底）；
+// 已装插件的随更新失效，预览里的不会变，也不放在 ['plugins'] 下：预览用于安装后就读不到了，装好时不能重新读。
+export function usePluginReadme(pluginId: string) {
+  return useQuery({ queryKey: pluginKeys.readme(pluginId), queryFn: () => call(api.GET('/plugins/{pluginId}/readme', { params: { path: { pluginId }, query: { locale } } })) })
+}
+
+export function usePreviewReadme(previewId: string) {
+  return useQuery({
+    queryKey: ['plugin-previews', previewId, 'readme'],
+    queryFn: () => call(api.GET('/plugin-previews/{previewId}/readme', { params: { path: { previewId }, query: { locale } } })),
+    staleTime: Infinity,
+  })
 }
 
 export function usePluginConfig(pluginId: string) {

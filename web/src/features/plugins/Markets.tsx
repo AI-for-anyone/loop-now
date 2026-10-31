@@ -9,18 +9,22 @@ import { Label } from '@/components/ui/label'
 import { t } from '@/i18n'
 import { localizedText } from '@/lib/localized-text'
 import { cn } from '@/lib/utils'
-import { cardClass, Quiet, SourceBadge } from './parts'
+import { cardClass, Quiet, RepositoryLink, SourceBadge } from './parts'
 import { pluginPath } from './paths'
+import { marketGitSource, repositoryUrl } from './repository'
 import { usePluginInstaller } from './usePluginInstaller'
 
 type Market = Schemas['PluginMarket']
 type Entry = Schemas['PluginMarketEntry']
 const text = t.plugins.markets
 
-// 市场里的一个插件：名称、官方或已验证、说明、版本；没装的可安装，装了的写已装版本，有新版本时可更新。
+// 市场里的一个插件：名称、官方或已验证、说明、来源（git 仓库有网页时链过去）、版本；
+// 没装的可安装，装了的写已装版本，有新版本时可更新。
 function EntryCard({ market, entry, installer }: { market: Market; entry: Entry; installer: ReturnType<typeof usePluginInstaller> }) {
   const key = `${market.url}#${entry.id}`
   const busy = installer.pending !== null
+  const git = marketGitSource(entry.source)
+  const repository = git && repositoryUrl(git.location, git.ref)
   return (
     <li className={cn(cardClass, 'flex min-w-0 flex-col gap-2 px-4 py-3.5')}>
       <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -42,9 +46,12 @@ function EntryCard({ market, entry, installer }: { market: Market; entry: Entry;
         )}
       </div>
       <p className="text-[13px] leading-snug text-ink-700 [overflow-wrap:anywhere]">{localizedText(entry.description)}</p>
-      <p className="truncate font-mono text-[11.5px] text-ink-500" title={entry.source}>
-        {entry.source}
-      </p>
+      <div className="flex min-w-0 items-center gap-3">
+        <p className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-ink-500" title={entry.source}>
+          {entry.source}
+        </p>
+        {repository && <RepositoryLink href={repository} />}
+      </div>
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-1">
         <span className="font-mono text-[12px] text-ink-500">{entry.installedVersion ? text.installed(entry.installedVersion) : entry.version ? `v${entry.version}` : null}</span>
         {!entry.installedVersion ? (

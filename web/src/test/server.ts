@@ -28,6 +28,9 @@ export const server = setupServer(
   http.get(apiUrl('/health'), () => HttpResponse.json({ ok: true, postgres: { ok: true, error: null }, redis: { ok: true, error: null } })),
   http.get(apiUrl('/projects/:projectId/prompt'), () => HttpResponse.json({ prompt: '', promptVersion: 1 })),
   http.get(projectsUrl, () => HttpResponse.json({ projects: [defaultProject] })),
+  // 插件的 README：默认没有（已装插件的用 fakePlugins 的 readmes 给出）。
+  http.get(apiUrl('/plugins/:pluginId/readme'), () => HttpResponse.json({ file: null, markdown: null, truncated: false })),
+  http.get(apiUrl('/plugin-previews/:previewId/readme'), () => HttpResponse.json({ file: null, markdown: null, truncated: false })),
   // 左侧栏在全局范围列出平台持有的 Agent：默认没有。
   http.get(apiUrl('/platform/agents'), () => HttpResponse.json({ agents: [] })),
 )

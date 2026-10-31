@@ -79,6 +79,20 @@ function Image(allProps: ComponentProps<'img'> & ExtraProps) {
   return <img {...withoutNode(allProps)} loading="lazy" referrerPolicy="no-referrer" className="max-w-full" />
 }
 
+// 插件的 README 不在控制台里：相对链接没有可解析的位置，只显示文字；绝对链接与页内锚点（如脚注）同回复。
+function ReadmeLink(allProps: ComponentProps<'a'> & ExtraProps) {
+  const href = allProps.href
+  if (href && (/^(https?:\/\/|mailto:)/i.test(href) || href.startsWith('#'))) return <Link {...allProps} />
+  const { title, children } = withoutNode(allProps)
+  return <span title={title}>{children}</span>
+}
+
+// README 里的图片不加载，只显示替代文字。
+function AltText(allProps: ComponentProps<'img'> & ExtraProps) {
+  const { alt } = withoutNode(allProps)
+  return alt ? <span>{alt}</span> : null
+}
+
 // 表格用控制台的表格组件，外层可以单独横向滚动。
 const tableComponents = {
   table: (props: ComponentProps<'table'> & ExtraProps) => <Table {...withoutNode(props)} />,
@@ -133,8 +147,8 @@ function rehypeCursor() {
 // 回复按 Markdown 渲染。不启用原始 HTML：回复中的 HTML 按文字显示，脚本不会执行；
 // 链接经 react-markdown 默认的 urlTransform 过滤危险协议。
 // 每条回复各自渲染，脚注 id 加上本实例的前缀，多条回复同用 [^1] 时 id 不重复。
-// cursor 为真时（回复进行中）在文字末尾显示输出光标。
-export const Markdown = memo(function Markdown({ text, cursor = false }: { text: string; cursor?: boolean }) {
+// cursor 为真时（回复进行中）在文字末尾显示输出光标；readme 为真时按插件 README 处理相对链接与图片。
+export const Markdown = memo(function Markdown({ text, cursor = false, readme = false }: { text: string; cursor?: boolean; readme?: boolean }) {
   const prefix = `md-${useId().replace(/[^\w-]/g, '')}-`
   return (
     <MarkdownSource.Provider value={{ text, streaming: cursor }}>
@@ -147,7 +161,7 @@ export const Markdown = memo(function Markdown({ text, cursor = false }: { text:
           footnoteBackLabel: (referenceIndex, rereferenceIndex) => t.chat.footnoteBackLabel(referenceIndex + 1, rereferenceIndex),
         }}
         rehypePlugins={[[rehypeHighlight, { detect: false, ignore: ['mermaid'] }], [rehypePrefixFootnoteLabel, prefix], ...(cursor ? [rehypeCursor] : [])]}
-        components={{ pre: CodeBlock, a: Link, img: Image, ...tableComponents }}
+        components={{ pre: CodeBlock, a: readme ? ReadmeLink : Link, img: readme ? AltText : Image, ...tableComponents }}
       >
         {text}
       </ReactMarkdown>
