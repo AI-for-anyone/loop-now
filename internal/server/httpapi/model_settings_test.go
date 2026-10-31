@@ -31,8 +31,8 @@ func TestModelSettingsHTTPAndConsoleOnly(t *testing.T) {
 	if initial.Revision != 1 || initial.ModelsJSON != modelconfig.DefaultModelsJSON {
 		t.Fatal("initial settings", initial)
 	}
-	e.expect(http.StatusUnprocessableEntity, http.MethodPut, "/model-settings", map[string]any{"modelsJson": modelconfig.DefaultModelsJSON})
-	e.expect(http.StatusUnprocessableEntity, http.MethodPut, "/model-settings", map[string]any{"modelsJson": modelconfig.DefaultModelsJSON, "expectedRevision": 0})
+	e.expect(http.StatusUnprocessableEntity, http.MethodPut, "/model-settings", map[string]any{"modelsJson": modelconfig.DefaultModelsJSON}, "X-Contract-Invalid-Request", "1")
+	e.expect(http.StatusUnprocessableEntity, http.MethodPut, "/model-settings", map[string]any{"modelsJson": modelconfig.DefaultModelsJSON, "expectedRevision": 0}, "X-Contract-Invalid-Request", "1")
 	custom := `{"providers":{"example":{"baseUrl":"https://models.example.test/v1","api":"openai-completions","apiKey":"$EXAMPLE_KEY","models":[{"id":"vision","reasoning":true,"input":["text","image"]}]}}}`
 	saved := decode[modelconfig.Settings](t, e.expect(http.StatusOK, http.MethodPut, "/model-settings", map[string]any{"modelsJson": custom, "expectedRevision": initial.Revision}))
 	if saved.Revision != 2 {
