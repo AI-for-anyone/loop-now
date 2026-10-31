@@ -84,6 +84,30 @@ describe('安装插件：读取清单 → 确认 → 安装', () => {
     await waitFor(() => expect(installs).toEqual([{ previewId: hello.previewId }]))
   })
 
+  it('确认框在清单下方显示预览里的 README（按控制台语言读取），截断时说明', async () => {
+    const user = userEvent.setup()
+    const hello = makePreview({ manifest: makeManifest({ id: 'hello', displayName: 'hello 示例', version: '1.0.0' }) })
+    handlers({ preview: hello })
+    const reads: string[] = []
+    server.use(
+      http.get(apiUrl('/plugin-previews/:previewId/readme'), ({ request }) => {
+        reads.push(request.url.replace(/^.*\/api\/v1/, ''))
+        return HttpResponse.json({ file: 'README.zh-CN.md', markdown: '## 用法\n\n授权后在对话里输入 `/hello`。', truncated: true })
+      }),
+    )
+    renderInstall()
+    await user.click(await screen.findByRole('radio', { name: /hello 示例/ }))
+    await user.click(screen.getByRole('button', { name: '读取清单' }))
+    const dialog = await screen.findByRole('dialog', { name: /安装 hello 示例/ })
+    const readme = await within(dialog).findByRole('region', { name: '说明' })
+    expect(reads).toEqual([`/plugin-previews/${hello.previewId}/readme?locale=zh-CN`])
+    expect(readme).toHaveTextContent('README.zh-CN.md')
+    expect(within(readme).getByRole('heading', { name: '用法' })).toBeInTheDocument()
+    expect(within(readme).getByText('/hello').tagName).toBe('CODE')
+    expect(readme).toHaveTextContent('说明太长，只显示了开头的部分。')
+    expect(within(dialog).getByText('它要的权限').compareDocumentPosition(readme) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('本地目录要写绝对路径；读取失败时留在来源这一步并显示原因', async () => {
     const user = userEvent.setup()
     handlers()

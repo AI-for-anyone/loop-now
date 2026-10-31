@@ -56,6 +56,32 @@ describe('插件市场的页签', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/plugins/usage-report'))
   })
 
+  it('git 来源的卡片链到仓库网页：按服务端的规则拆出 ref，GitHub 带 ref 时链到 /tree/<ref>；npm 与 SSH 写法没有链接', async () => {
+    renderMarket('/plugins?tab=official', {
+      markets: [
+        makeMarket({
+          plugins: [
+            makeMarketEntry(),
+            makeMarketEntry({ id: 'private-tool', displayName: '带账号的地址', source: 'git:https://ci@github.com/foo/private-tool' }),
+            makeMarketEntry({ id: 'gitlab-tool', displayName: 'GitLab 来源', source: 'git:https://gitlab.com/foo/gitlab-tool.git@main' }),
+            makeMarketEntry({ id: 'ssh-tool', displayName: 'SSH 来源', source: 'git:git@github.com:foo/ssh-tool.git@v1.0.0' }),
+            makeMarketEntry({ id: 'npm-tool', displayName: 'npm 来源', source: 'npm:@foo/npm-tool@1.0.0' }),
+          ],
+        }),
+      ],
+    })
+    const card = (name: string) => screen.getByRole('heading', { name }).closest('li')!
+    await screen.findByRole('heading', { name: '用量周报' })
+    const link = within(card('用量周报')).getByRole('link', { name: '仓库' })
+    expect(link).toHaveAttribute('href', 'https://github.com/loop-now/usage-report/tree/v0.9.0')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link.getAttribute('rel')).toContain('noopener')
+    expect(within(card('带账号的地址')).getByRole('link', { name: '仓库' })).toHaveAttribute('href', 'https://github.com/foo/private-tool')
+    expect(within(card('GitLab 来源')).getByRole('link', { name: '仓库' })).toHaveAttribute('href', 'https://gitlab.com/foo/gitlab-tool.git')
+    expect(within(card('SSH 来源')).queryByRole('link', { name: '仓库' })).toBeNull()
+    expect(within(card('npm 来源')).queryByRole('link', { name: '仓库' })).toBeNull()
+  })
+
   it('其他市场：列出已验证与未验证；读取失败的市场写出原因；可以添加与移除市场地址', async () => {
     const user = userEvent.setup()
     const { fake } = renderMarket('/plugins?tab=other')

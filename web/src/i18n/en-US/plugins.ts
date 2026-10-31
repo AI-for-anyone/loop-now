@@ -248,6 +248,11 @@ export const plugins = {
     'console.command': 'A / command in the chat box (can claim)',
     'identity.inbound': 'A managed external identity received a message or question',
   },
+  readme: {
+    title: 'About',
+    truncated: 'This README is too long; only the beginning is shown.',
+  },
+  repository: 'Repository',
   detail: {
     crumb: 'Plugin market',
     notFound: "This plugin doesn't exist; it may have been uninstalled.",

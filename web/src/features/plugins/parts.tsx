@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { ExternalLinkIcon } from 'lucide-react'
 import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -51,6 +52,16 @@ export function PanelTitle({ title, hint, id, aside }: { title: string; hint?: R
       {hint && <span className="text-[12px] font-bold text-ink-500">{hint}</span>}
       {aside && <div className="ml-auto">{aside}</div>}
     </div>
+  )
+}
+
+// 来源仓库的网页，新窗口打开。
+export function RepositoryLink({ href }: { href: string }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex shrink-0 items-center gap-1 text-[13px] font-bold text-riso-blue underline outline-none focus-visible:shadow-focus">
+      <ExternalLinkIcon aria-hidden="true" className="size-3.5" />
+      {text.repository}
+    </a>
   )
 }
 

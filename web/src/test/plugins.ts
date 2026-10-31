@@ -82,6 +82,8 @@ export function makePreview(overrides: Partial<Schemas['PluginPreview']> = {}): 
   }
 }
 
+export const noReadme: Schemas['PluginReadme'] = { file: null, markdown: null, truncated: false }
+
 export function makeConfig(overrides: Partial<Schemas['PluginConfig']> = {}): Schemas['PluginConfig'] {
   return { values: {}, secretsSet: [], revision: 0, ...overrides } as Schemas['PluginConfig']
 }
@@ -166,6 +168,8 @@ export type FakePluginState = {
   settings: Schemas['PluginSettings']
   builtin: Schemas['BuiltinPluginSource'][]
   markets: Schemas['PluginMarket'][]
+  // 插件 ID → 已装版本的 README；没有给出的插件没有 README。
+  readmes: Record<string, Schemas['PluginReadme']>
   // 操作按钮的回应：按“插件 id/操作 id”给出；没有给出的返回一条默认提示。
   actions: Record<string, (body: Record<string, unknown>) => Response>
 }
@@ -186,6 +190,7 @@ export function fakePlugins(initial: Partial<FakePluginState> = {}) {
     settings: { disabled: false, markets: [] },
     builtin: [],
     markets: [],
+    readmes: {},
     actions: {},
     ...initial,
   }
@@ -232,6 +237,10 @@ export function fakePlugins(initial: Partial<FakePluginState> = {}) {
     http.get(apiUrl('/plugins/:pluginId'), ({ params }) => {
       const found = detail(String(params.pluginId))
       return found ? HttpResponse.json(found) : notFound()
+    }),
+    http.get(apiUrl('/plugins/:pluginId/readme'), async ({ request, params }) => {
+      await note(request)
+      return detail(String(params.pluginId)) ? HttpResponse.json(state.readmes[String(params.pluginId)] ?? noReadme) : notFound()
     }),
     http.delete(apiUrl('/plugins/:pluginId'), async ({ request, params }) => {
       await note(request)
