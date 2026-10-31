@@ -129,6 +129,17 @@ export default function register(api: PluginAPI) {
 - 所有注册都返回取消函数，插件停用或卸载时宿主统一释放；作者不手动清理。
 - `ctx` 带 `eventId`、`projectId`、`agentId`、`signal`（超时或停用时触发）。
 
+### 2.3 README
+
+- 插件根目录的 `README.md` 是默认说明，`README.<语言>.md`（如 `README.zh-CN.md`、`README.en-US.md`）是语言版本，语言标签的写法同 §2 的 `displayName`。
+- 写给使用者：前提、安装、配置、怎么用。
+- 控制台在插件详情和安装预览里展示（`GET /plugins/{id}/readme`、`GET /plugin-previews/{previewId}/readme`，带 `locale`）。Markdown 原样显示，相对链接和图片不解析，需要时写完整地址。
+- 选文件：只看插件根目录的直接子文件，基名不区分大小写。
+  - 给了语言（如 zh-CN）时依次找 `README.zh-CN.md`、`README.zh.md`、`README.md`；没给时先找 `README.md`。都没有时取按语言标签排序的第一个 `README.<语言>.md`。
+  - 软链接解析后须仍在插件目录内，否则当作没有。
+  - 超过 1 MiB 只显示前 1 MiB。
+- 官方插件须有 zh-CN 和 en-US 两份：一份可以是 `README.md`，另一份用 `README.<语言>.md`（如 `README.md` 写英文、`README.zh-CN.md` 写中文）。
+
 ## 3. 宿主进程
 
 - 平台启动时拉起一个宿主：`node <平台内置 host 入口>`，工作目录为 `<work root>/platform/plugins/`，`stdin/stdout` 走协议，`stderr` 逐行进平台日志并标注来源插件（宿主在每行前缀 `[<id>]`）。

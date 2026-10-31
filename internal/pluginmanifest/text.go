@@ -35,6 +35,9 @@ func (t *Text) UnmarshalJSON(b []byte) error {
 // langTag 是语言标签的写法（不做完整的 BCP 47 解析，与 SDK 的检查相同）。
 var langTag = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$`)
 
+// ValidLanguageTag 报告 s 是否是语言标签的写法（如 zh-CN、en-US、en）。
+func ValidLanguageTag(s string) bool { return langTag.MatchString(s) }
+
 var errText = errors.New("须是字符串，或以语言标签（如 zh-CN、en-US）为键、非空字符串为值的对象，至少一项")
 
 // parse 返回字符串形式的值，或对象形式的键（按作者写的顺序）与各项。

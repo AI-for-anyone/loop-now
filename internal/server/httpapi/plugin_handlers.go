@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/pluginmanifest"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/plugins"
@@ -77,6 +78,56 @@ func (s *Server) getPlugin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, d)
+}
+
+// readmeLocale 读查询参数 locale：没给时为空，给了但不是语言标签时 422。
+func readmeLocale(r *http.Request) (string, error) {
+	q := r.URL.Query()
+	if !q.Has("locale") {
+		return "", nil
+	}
+	if l := q.Get("locale"); pluginmanifest.ValidLanguageTag(l) {
+		return l, nil
+	}
+	return "", apperr.Invalid("locale", "须是语言标签，如 zh-CN、en-US")
+}
+
+func (s *Server) getPluginReadme(w http.ResponseWriter, r *http.Request) {
+	id, err := pluginID(r)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	locale, err := readmeLocale(r)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	v, err := s.Plugins.Readme(r.Context(), id, locale)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
+func (s *Server) getPluginPreviewReadme(w http.ResponseWriter, r *http.Request) {
+	id, err := pathUUID(r, "previewId")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	locale, err := readmeLocale(r)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	v, err := s.Plugins.PreviewReadme(id, locale)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
 }
 
 func (s *Server) updatePlugin(w http.ResponseWriter, r *http.Request) {
