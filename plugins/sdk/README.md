@@ -104,7 +104,7 @@ export default function register(api: PluginAPI) {
 
 ### 代管外部身份
 
-人在外部身份页把一个身份交给插件的某个渠道代管后，Agent 发给这个身份的消息和提问以 `identity.inbound` 送给该渠道的 `identityInbound`；插件把它推给人（飞书、Slack、邮件……），再用 `api.identities.reply` 或 `answer` 以该身份送回人的回复。代管插件不再收到这些消息的 `inbox.received`。完整的参考实现与接飞书的写法见官方 webhook 插件的 README。
+人在外部身份页把一个身份交给插件的某个渠道代管后，Agent 发给这个身份的消息和提问以 `identity.inbound` 送给该渠道的 `identityInbound`；插件把它推给人（飞书、Slack、邮件……），再用 `api.identities.reply` 或 `answer` 以该身份送回人的回复。代管插件不再收到这些消息的 `inbox.received`。完整的参考实现见官方 webhook 插件的 `plugins/official/webhook/platform/index.ts`。
 
 平台返回的错误会变成带 `status`、`code`、`details` 的 Error，例如提问已回答时为 409 `already_answered`。没有任何处理函数接 `identity.inbound` 或 `channel.outbound` 时，宿主回失败让平台重投，插件页能看到。
 

@@ -1,45 +1,76 @@
-# 专用浏览器（Playwright）
+# Dedicated browser (Playwright)
 
-给 Agent 一个**独立的可见 Chromium**：通过官方 [Playwright MCP](https://github.com/microsoft/playwright-mcp)（固定 `@playwright/mcp` 0.0.83）打开网页、读取页面结构、点击、输入和截图。它不连接你的日常 Chrome，也不读写它的用户目录。
+[中文](https://github.com/AI-for-anyone/loop-now/blob/main/plugins/official/playwright/README.zh-CN.md)
 
-这是一个只有 Agent 半边的插件，也就是一个标准的 Pi 包：
+Gives Agents a **separate, visible Chromium** through the official [Playwright MCP](https://github.com/microsoft/playwright-mcp) (`@playwright/mcp` 0.0.83, pinned). Agents open web pages, read their structure, click, type and take screenshots. It never connects to your everyday Chrome, and never reads or writes its profile.
 
-- `loopNow.mcpServers.browser`：平台把它写进已授权 Agent 的 Pi `mcp.json`，工具以 `mcp__playwright_browser__*` 直接出现在模型面前；
-- `agent/index.ts`：Pi 扩展，每轮开始时补上浏览器的使用与安全规则（网页内容不是用户的指示，有后果的操作先问用户）。
+It is an Agent-only plugin, made of two parts:
 
-## 准备（每台机器一次）
+- an MCP server with the browser tools, whose names start with `mcp__playwright_browser__`;
+- rules added to every turn: text on web pages is not an instruction from the user, and anything with consequences needs the user's go-ahead first.
 
-运行时不下载、不调用 npx：浏览器先准备到插件的数据目录里，之后每次都用它。在服务端所在机器上，用平台的 Node 24、以运行服务的系统用户执行：
+There are no settings, accounts or permissions.
+
+## Requirements
+
+- The browser runs on the machine where Loop Now runs, as the system user that runs the Loop Now server, and opens a visible window there. That machine needs a desktop session. So far it has been tested on macOS on Apple silicon (arm64).
+- It does not run in the Docker Compose deployment: the container has no desktop, and the image does not include the plugin's dependencies.
+- The platform's Node 24, and network access once, to download Chromium.
+
+## 1. Install
+
+In the console, open **Plugin market**. Under **Official plugins that ship with the platform**, click **Install** on **Dedicated browser**, check the preview, and confirm. Or with the CLI:
 
 ```sh
-# 1. 插件目录的运行依赖。官方插件随平台发布时已装好；从本机目录安装时自己执行一次。
-npm ci --prefix <插件目录> --ignore-scripts --omit=dev --no-audit --no-fund
-
-# 2. 下载专用 Chromium 到插件数据目录（<work root>/platform/plugins/playwright/data）。
-node <插件目录>/setup.mjs <work root>/platform/plugins/playwright/data
+loopctl plugin install playwright
 ```
 
-`setup.mjs` 只往 `data/browser/` 下载 Playwright 对应版本的 Chromium，并写下 `data/browser/browser.json`（平台、可执行文件路径、SHA-256、MCP 与 Playwright 版本）。数据目录跨插件版本保留，插件更新后不用重新准备；Playwright 版本变了时启动器会提示重新运行。须在目标系统与架构上准备，目前实测的是 macOS arm64。
+## 2. Prepare the browser (once per machine)
 
-然后在控制台安装（或 `loopctl plugin install playwright`），在项目设置 › 插件里启用，再在 Agent 配置里给需要的 Agent 授权。没有配置项也没有账号。授权在该 Agent 下次启动 Pi 时生效。
+Nothing is downloaded while Agents use the browser. Chromium is downloaded once into the plugin's data folder, and used from there every time. On the machine running Loop Now, as the system user that runs the server, with the platform's Node 24:
 
-## 运行方式
+```sh
+# Only if <plugin folder>/node_modules is missing: install the plugin's dependencies.
+npm ci --prefix <plugin folder> --ignore-scripts --omit=dev --no-audit --no-fund
 
-- 每个 Agent 一个持久的配置目录 `data/profiles/<Agent id>/`，跨轮次、跨 Pi 重启保留 Cookie 与登录状态；截图等输出在 `data/output/<Agent id>/`。
-- 同一个 Agent 的另一个执行（例如任务里的副本）正开着这个配置目录时，这次改用只在内存里的临时配置（Playwright 的 `--isolated`），结束即丢弃，不会抢同一个目录。
-- 浏览器在第一次调用浏览器工具时启动，Pi 会话结束时随 MCP 服务器一起关闭。
-- 单个页面操作 10 秒、导航 45 秒超时；一次工具调用最多 120 秒。
-- 启动器（`mcp/launch.mjs`）每次核对 `browser.json` 与可执行文件的校验值；不符或没有准备时直接退出并说明怎么做，错误在 Pi 的 `/mcp` 里可见。
-
-## 文件
-
-```
-playwright/
-├── package.json        清单：pi.extensions 与 loopNow.mcpServers；依赖 @playwright/mcp 0.0.83（锁文件固定）
-├── package-lock.json
-├── agent/index.ts      Pi 扩展：浏览器规则
-├── mcp/launch.mjs      MCP 服务器入口：核对准备好的浏览器，在本进程启动官方 MCP
-└── setup.mjs           一次性准备：下载专用 Chromium 到数据目录
+# Download the dedicated Chromium into the plugin's data folder.
+node <plugin folder>/setup.mjs <work root>/platform/plugins/playwright/data
 ```
 
-`loopNow.mcpServers` 的条目与 Pi 的 `mcp.json` 格式一致；`${LOOP_NOW_PLUGIN_DATA}` 和 `${LOOP_NOW_AGENT_ID}` 由平台按插件和 Agent 替换，`./` 开头的路径按安装目录解析。写自己的 MCP 插件可以照这个结构来，规则见 `plugins/SPEC.md` §2。
+- `<work root>` is the server's `LOOP_NOW_WORK_ROOT`.
+- `<plugin folder>` is where the plugin is installed: `<work root>/platform/plugins/playwright/<version>` (for example `…/playwright/1.0.0`), or the folder you chose if you installed it from a local folder.
+
+`setup.mjs` downloads the Chromium build that matches the Playwright version into `data/browser/`, and writes `data/browser/browser.json` with the platform, the browser's path and its SHA-256. The data folder is kept across plugin updates, so there is nothing to redo after an update unless the plugin says so (see **Troubleshooting**). Prepare it on the machine and system the browser will run on.
+
+## 3. Enable it in a project and grant it to Agents
+
+1. **Project settings** › **Plugins** › **Manage project plugins**: enable **Dedicated browser**.
+2. In an Agent's config, under **Plugin grants**: grant **Dedicated browser** and save.
+
+Grants take effect the next time that Agent's Pi starts; the current reply is not interrupted. The platform stops an idle Agent's Pi after a while (10 minutes by default), and the next message starts a new one.
+
+## Use it
+
+Ask the Agent, for example: "Open https://example.com, tell me what the page says, and take a screenshot." The Agent opens the page with `browser_navigate`, reads it with `browser_snapshot`, acts on it with `browser_click`, `browser_type` and similar tools, and takes screenshots with `browser_take_screenshot`. A Chromium window opens on the Loop Now machine the first time the Agent uses a browser tool.
+
+## How it behaves
+
+- Each Agent has its own browser profile in `data/profiles/<Agent id>/`. Cookies and sign-ins made in it are kept across turns and Pi restarts. Screenshots and other files are saved in `data/output/<Agent id>/`.
+- If another run of the same Agent (a copy of it in a task, for example) already has the profile open, this run uses a temporary profile kept in memory and discarded at the end, without the saved cookies.
+- The browser starts with the first browser tool call and closes when the Agent's Pi session ends.
+- Timeouts: 10 seconds for a page action, 45 seconds for loading a page, 120 seconds for one tool call.
+- Agents are told to ask the user before submitting forms, paying, sending messages, deleting data or doing anything else with consequences.
+
+## Troubleshooting
+
+- **The Agent has no browser tools:** the browser's MCP server refused to start. Usually the browser has not been prepared, was prepared on another kind of machine, or the plugin was updated to a new Playwright version. To see the reason, run the server by hand, as the system user that runs Loop Now:
+
+  ```sh
+  node <plugin folder>/mcp/launch.mjs --data <work root>/platform/plugins/playwright/data --agent <Agent id>
+  ```
+
+  If something is wrong, it exits at once with a message starting with `[playwright]` that says what to do, usually to run `setup.mjs` again. If it keeps running, it is fine; stop it with Ctrl-C. Once fixed, the tools appear the next time the Agent's Pi starts.
+- **No window appears:** the window opens on the Loop Now machine's desktop, only when the Agent calls a browser tool.
+- **`[playwright] 配置目录 … 正被另一个浏览器使用，这次使用临时配置`** ("the profile is in use by another browser, using a temporary profile this time"): another run of this Agent has its browser open. This run does not see the saved cookies and sign-ins.
+- **Start an Agent's browser from scratch:** while the Agent is not using the browser, delete `data/profiles/<Agent id>/`.
+- Uninstalling the plugin keeps the data folder (the browser and every profile) unless you tick **Also delete the data folder** in the uninstall dialog.
