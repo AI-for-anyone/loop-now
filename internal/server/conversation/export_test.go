@@ -19,3 +19,21 @@ func SetTestHookBeforeMarkAborting(h func(byRunID uuid.UUID)) {
 	}
 	testHookBeforeMarkAborting.Store(&h)
 }
+
+// SetTestHookAfterDriveHandoff 设置空队列交接后的测试钩子；传 nil 清除。
+func SetTestHookAfterDriveHandoff(h func(agentID uuid.UUID)) {
+	if h == nil {
+		testHookAfterDriveHandoff.Store(nil)
+		return
+	}
+	testHookAfterDriveHandoff.Store(&h)
+}
+
+// SetTestHookAfterDriverPending 设置 pendingDrivers 登记后的测试钩子；传 nil 清除。
+func SetTestHookAfterDriverPending(h func(runID uuid.UUID)) {
+	if h == nil {
+		testHookAfterDriverPending.Store(nil)
+		return
+	}
+	testHookAfterDriverPending.Store(&h)
+}

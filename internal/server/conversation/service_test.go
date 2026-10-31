@@ -42,11 +42,14 @@ func newFakeExec() *fakeExec {
 }
 
 func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink executor.Sink) (executor.Result, error) {
-	prefix := fmt.Sprintf("本轮运行ID：%s。\n", req.RunID)
-	if !strings.HasPrefix(req.Message, prefix) {
-		return executor.Result{}, fmt.Errorf("缺少正确本轮runId说明")
+	compact := req.Origin == executor.OriginConsoleCompact
+	if !compact {
+		prefix := fmt.Sprintf("本轮运行ID：%s。\n", req.RunID)
+		if !strings.HasPrefix(req.Message, prefix) {
+			return executor.Result{}, fmt.Errorf("缺少正确本轮runId说明")
+		}
+		req.Message = strings.TrimPrefix(req.Message, prefix)
 	}
-	req.Message = strings.TrimPrefix(req.Message, prefix)
 	ctl := make(chan string, 4)
 	f.mu.Lock()
 	if f.running[req.AgentID] != nil {
@@ -84,6 +87,9 @@ func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink execu
 	}
 	sink.Tool("call-1", "bash", executor.ToolSucceeded)
 	sink.TextDelta("回复")
+	if compact {
+		return executor.Result{Outcome: executor.OutcomeCompleted, ConfigVersion: 1, Compaction: &executor.CompactionResult{TokensBefore: 100, EstimatedTokensAfter: 40}}, nil
+	}
 	return executor.Result{Outcome: executor.OutcomeCompleted, Text: "回复：" + req.Message, ConfigVersion: 1}, nil
 }
 

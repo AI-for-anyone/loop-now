@@ -66,7 +66,7 @@ export function ChatPage() {
   const toYou = useMemo(() => (consoleMessages.data ?? []).filter((m) => m.from.kind === 'agent' && m.to.kind === 'console'), [consoleMessages.data])
   const [replying, setReplying] = useState<{ agentId: string; messageId: string } | null>(null)
   const replyTarget = replying?.agentId === agent.id ? toYou.find((m) => m.id === replying.messageId && m.question?.state === 'open') : undefined
-  // 被插件认领的 / 命令只在这次打开的对话里按时间排进去（服务端不留消息），换 Agent 时清空。
+  // 被平台或插件认领的 / 命令只在这次打开的对话里按时间排进去（服务端不留命令消息），换 Agent 时清空。
   const [commands, setCommands] = useState<{ agentId: string; id: number; at: string; command: string; result: Schemas['ConsoleCommandResult'] }[]>([])
   const inserts = [
     ...toYou.map((message) => ({
@@ -76,7 +76,7 @@ export function ChatPage() {
     })),
     ...commands
       .filter((item) => item.agentId === agent.id)
-      .map((item) => ({ key: `command:${item.id}`, at: item.at, node: <CommandLine command={item.command} result={item.result} at={item.at} /> })),
+      .map((item) => ({ key: `command:${item.id}`, at: item.at, node: <CommandLine command={item.command} result={item.result} at={item.at} onResume={(sessionId) => composer.current?.resume(sessionId)} /> })),
   ]
 
   // 收到快照之前，忙闲与会话状态取自状态接口与 Agent 详情。
@@ -149,6 +149,7 @@ export function ChatPage() {
           agentName={agent.name}
           busy={busy}
           disabled={sessionMissing}
+          allowResumeWhenDisabled={sessionMissing}
           maxMessageBytes={context.data?.limits.maxMessage}
           imageLimits={messageImageLimits(context.data?.limits)}
           onSent={recordSent}

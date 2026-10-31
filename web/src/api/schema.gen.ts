@@ -1106,8 +1106,9 @@ export interface paths {
         put?: never;
         /**
          * 发送消息；Agent 忙时必须选择打断或排队
-         * @description 发送前交给插件（plugins/SPEC.md §4）：以 `/` 开头且不带图片的消息先作为 `console.command` 交给认领类 Hook，被认领时消息不发给 Agent、
-         *     不保存，返回 200 ConsoleCommandResult；其余消息经修改类 Hook `message.before_enqueue`，插件可以改写正文。
+         * @description 以 `/` 开头且不带图片的消息先匹配平台内置命令 `/session`、`/new`、`/compact [instructions]`、`/reload`、`/copy`、`/export [html|jsonl]`、`/resume [完整ID]`；
+         *     未匹配时交给插件 `console.command`。命令被认领时不作为普通消息保存，返回 200 ConsoleCommandResult；
+         *     其余消息经修改类 Hook `message.before_enqueue`，插件可以改写正文。
          */
         post: operations["sendMessage"];
         delete?: never;
@@ -1148,6 +1149,25 @@ export interface paths {
         put?: never;
         /** 确认重开会话（解除会话丢失标记，会话序号加一） */
         post: operations["resetSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agentId}/session/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        /** 导出当前受管 Pi 会话 */
+        get: operations["exportAgentSession"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3038,10 +3058,10 @@ export interface components {
             };
         };
         /**
-         * @description - not_found：资源不存在（404） - validation_failed：校验失败（422） - precondition_failed：请求前置版本条件不一致（If-Match 或 Prompt 编辑版本，412） - payload_too_large：超过大小上限（413） - agent_busy：Agent 正忙且未选择打断或排队（409） - agent_not_idle：需要 Agent 空闲的操作（删除 Agent、删除项目、重开会话）在忙时被拒绝（409） - session_missing：Agent 处于会话丢失状态，需要先确认重开会话（409） - template_deleted：来源模板已删除，不能重新复制（409） - name_conflict：名称重复（409）：项目内或平台内 Agent 重名、项目重名、Skill 名称重复或使用了内置 Skill 的名称 `loopctl`、外部身份重名 - path_conflict：文件夹来源子目录重复或互相包含（409） - forbidden_origin：Origin 不在白名单（403） - invalid_host：Host 不在允许名单（403） - unauthenticated：令牌缺失、无效、过期或已吊销，或所属身份已删除（401） - forbidden：身份有效，但不允许这个操作（403） - sleep_conflict：运行过期、动作内容冲突、已提交节点或已有不同有效 sleep（409） - run_not_queued：转为打断、撤回或取消的排队项已不在队列：执行已被领取、开始或结束，或消息已读、已取消（409） - run_not_active：停止回复时，这一次执行已经结束（409） - action_conflict：同一 actionId 被用于不同内容的动作（409） - plugin_source_failed：插件来源无法获取，或依赖安装失败（422） - plugin_confirmation_required：非官方来源的插件安装或更新须确认（409） - plugin_version_conflict：同一插件已装同版本号但内容不同（409） - plugin_not_enabled：插件没有在项目里启用，或全局停用（409） - plugin_blocked：插件的拦截类 Hook 阻止了这个操作，message 带插件 id 与原因（409） - plugin_failed：插件处理请求时报错，message 带插件给出的原因（502） - plugin_timeout：插件没有在时限内回应（504） - internal_error：服务端内部错误（500）
+         * @description - not_found：资源不存在（404） - validation_failed：校验失败（422） - precondition_failed：请求前置版本条件不一致（If-Match 或 Prompt 编辑版本，412） - payload_too_large：超过大小上限（413） - agent_busy：Agent 正忙且未选择打断或排队（409） - agent_not_idle：需要 Agent 空闲的操作（删除 Agent、删除项目、重开会话）在忙时被拒绝（409） - session_missing：Agent 处于会话丢失状态，需要先确认重开会话（409） - session_none：当前还没有可压缩或导出的 Pi 会话（409） - console_command_failed：平台命令已执行但未能完成（409） - template_deleted：来源模板已删除，不能重新复制（409） - name_conflict：名称重复（409）：项目内或平台内 Agent 重名、项目重名、Skill 名称重复或使用了内置 Skill 的名称 `loopctl`、外部身份重名 - path_conflict：文件夹来源子目录重复或互相包含（409） - forbidden_origin：Origin 不在白名单（403） - invalid_host：Host 不在允许名单（403） - unauthenticated：令牌缺失、无效、过期或已吊销，或所属身份已删除（401） - forbidden：身份有效，但不允许这个操作（403） - sleep_conflict：运行过期、动作内容冲突、已提交节点或已有不同有效 sleep（409） - run_not_queued：转为打断、撤回或取消的排队项已不在队列：执行已被领取、开始或结束，或消息已读、已取消（409） - run_not_active：停止回复时，这一次执行已经结束（409） - action_conflict：同一 actionId 被用于不同内容的动作（409） - plugin_source_failed：插件来源无法获取，或依赖安装失败（422） - plugin_confirmation_required：非官方来源的插件安装或更新须确认（409） - plugin_version_conflict：同一插件已装同版本号但内容不同（409） - plugin_not_enabled：插件没有在项目里启用，或全局停用（409） - plugin_blocked：插件的拦截类 Hook 阻止了这个操作，message 带插件 id 与原因（409） - plugin_failed：插件处理请求时报错，message 带插件给出的原因（502） - plugin_timeout：插件没有在时限内回应（504） - internal_error：服务端内部错误（500）
          * @enum {string}
          */
-        ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout";
+        ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout";
         /**
          * @description - credential_unavailable：凭证不可用（需要重新录入或已失效）
          *     - cli_install_failed：CLI 安装失败
@@ -6993,13 +7013,48 @@ export interface components {
             granted: boolean;
             accountIds: string[];
         };
+        ConsoleSessionStatus: {
+            status: components["schemas"]["AgentStatus"];
+            model: components["schemas"]["ModelRef"];
+            thinkingLevel: string;
+        };
+        ConsoleResumeSession: {
+            /** @description Pi 会话头中的完整会话 ID */
+            id: string;
+            /** @description 第一条普通用户消息的截短文本；没有文字消息时为空字符串 */
+            title?: string;
+            /** @description 最后一条普通用户消息的截短文本；没有文字消息时为空字符串 */
+            preview?: string;
+            /** Format: date-time */
+            updatedAt: string;
+            current: boolean;
+        };
         ConsoleCommandResult: {
             /** @enum {boolean} */
             handled: true;
-            /** @description 认领命令的插件 id */
+            /** @enum {string} */
+            source: "platform" | "plugin";
+            /** @description 认领命令的插件 id；平台命令为空字符串 */
             plugin: string;
-            /** @description 插件返回的回复文字；没有时为 null */
+            /** @description 插件返回的回复文字；平台命令或没有回复时为 null */
             reply: string | null;
+            /** @description 平台命令名；插件命令为空字符串 */
+            command: string;
+            session?: components["schemas"]["ConsoleSessionStatus"] | null;
+            /** @description /copy 待复制的最近成功回复；没有时为 null */
+            copyText?: string | null;
+            /** @enum {string|null} */
+            exportFormat?: "html" | "jsonl" | null;
+            /** @description /reload 是否停止了旧进程 */
+            processStopped?: boolean | null;
+            resetSession?: components["schemas"]["SessionInfo"] | null;
+            /** @description /resume 的可恢复会话；按文件修改时间倒序，不含本机路径 */
+            resumeSessions?: components["schemas"]["ConsoleResumeSession"][] | null;
+            resumedSession?: components["schemas"]["SessionInfo"] | null;
+            /** Format: int64 */
+            tokensBefore?: number | null;
+            /** Format: int64 */
+            estimatedTokensAfter?: number | null;
         };
         /** @description 参与方；agent 带 id 与地址，external 带 id 与 @名称，plugin（插件令牌，只出现在 folder.changed 的 by）带 plugin:<id> 地址，console 与 platform 只有 kind 与控制台地址。 */
         PluginEventParty: {
@@ -7012,7 +7067,7 @@ export interface components {
         /**
          * @description 发给平台半边的事件（plugins/SPEC.md §4），给插件作者的合同：固定字段加该类型自己的字段；正文一律不带，用权限范围内的接口另取。
          *     观察类事件至少送达一次，按 `id` 去重。各类型的字段：
-         *     - run.queued、run.started、run.ended：origin（console、inbox_reminder、sleep_wake、task_node、console_node）；
+         *     - run.queued、run.started、run.ended：origin（console、inbox_reminder、sleep_wake、console_compact、task_node、console_node）；
          *       run.ended 另有 status（completed、failed、interrupted）、endReason、errorCode 与 tokens（这一轮的 input、output、cacheRead、cacheWrite、total）
          *     - task.started、task.waiting、task.blocked、task.completed、task.cancelled：title、reason（阻塞、取消的原因，没有时为 null）
          *     - node.started、node.submitted、node.blocked：nodeRunId、stepId、reason
@@ -10820,6 +10875,38 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    exportAgentSession: {
+        parameters: {
+            query: {
+                format: "html" | "jsonl";
+            };
+            header?: never;
+            path: {
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前会话的 HTML 或 JSONL 文件 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                    "application/x-ndjson": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     streamAgentEvents: {

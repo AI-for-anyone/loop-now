@@ -45,7 +45,7 @@ function syncCache(client: QueryClient, agentId: string, event: AgentEvent) {
       break
     case 'run.ended':
       updateRunInMessages(client, agentId, event.data.run)
-      upsertMessage(client, agentId, event.data.message)
+      if (event.data.message) upsertMessage(client, agentId, event.data.message)
       void client.invalidateQueries({ queryKey: keys.agents })
       break
     case 'session.updated':

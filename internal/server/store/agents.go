@@ -374,18 +374,45 @@ func (s *Store) ResetSession(ctx context.Context, agentID uuid.UUID) (AgentSessi
 		if _, err := lockAgent(ctx, tx, agentID); err != nil {
 			return err
 		}
-		var active bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM runs WHERE agent_id = $1 AND status IN `+activeRunStatuses+`)`, agentID).Scan(&active); err != nil {
+		if err := ensureIdle(ctx, tx, agentID); err != nil {
 			return err
-		}
-		if active {
-			return apperr.Conflict(apperr.CodeAgentNotIdle, "Agent 正在回复，请等这次回复结束后再重开会话")
 		}
 		if err := s.CancelSleepsTx(ctx, tx, nil, agentID, "session_reopened"); err != nil {
 			return err
 		}
 		if err := tx.QueryRow(ctx, `UPDATE agent_sessions SET session_file = NULL, state = 'none', epoch = epoch + 1, updated_at = now()
 			WHERE agent_id = $1 RETURNING state, epoch, updated_at`, agentID).Scan(&sess.State, &sess.Epoch, &sess.UpdatedAt); err != nil {
+			return err
+		}
+		return s.insertEvent(ctx, tx, LifecycleEvent{AgentID: agentID, Type: EventSessionReset,
+			Data: map[string]any{"fromEpoch": sess.Epoch - 1, "toEpoch": sess.Epoch}})
+	})
+	return sess, err
+}
+
+// ResumeSession 在空闲门禁内切换到已验证的受管会话，保留历史并递增 epoch。
+// expectedFile 防止读取当前指针后又被其他维护操作改变；失败时整个事务回滚。
+func (s *Store) ResumeSession(ctx context.Context, agentID uuid.UUID, expectedFile, targetFile string) (AgentSession, error) {
+	var sess AgentSession
+	var expectedFileArg any
+	if expectedFile != "" {
+		expectedFileArg = expectedFile
+	}
+	err := s.inTx(ctx, func(tx pgx.Tx) error {
+		if _, err := lockAgent(ctx, tx, agentID); err != nil {
+			return err
+		}
+		if err := ensureIdle(ctx, tx, agentID); err != nil {
+			return err
+		}
+		if err := s.CancelSleepsTx(ctx, tx, nil, agentID, "session_reopened"); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(ctx, `UPDATE agent_sessions SET session_file = $3, state = 'active', epoch = epoch + 1, updated_at = now()
+			WHERE agent_id = $1 AND session_file IS NOT DISTINCT FROM $2 RETURNING session_file, state, epoch, updated_at`, agentID, expectedFileArg, targetFile).
+			Scan(&sess.SessionFile, &sess.State, &sess.Epoch, &sess.UpdatedAt); errors.Is(err, pgx.ErrNoRows) {
+			return apperr.Conflict(apperr.CodeConsoleCommandFailed, "当前会话已变化，请重新列出后再恢复")
+		} else if err != nil {
 			return err
 		}
 		return s.insertEvent(ctx, tx, LifecycleEvent{AgentID: agentID, Type: EventSessionReset,

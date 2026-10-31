@@ -43,11 +43,15 @@ import (
 
 // quickExec 立即完成回复；消息含 "block" 时阻塞，直到被打断或放行。
 type quickExec struct {
-	mu      sync.Mutex
-	running map[uuid.UUID]chan struct{}
+	mu       sync.Mutex
+	running  map[uuid.UUID]chan struct{}
+	sessions []executor.ManagedSession
 }
 
 func (q *quickExec) Execute(ctx context.Context, req executor.Request, sink executor.Sink) (executor.Result, error) {
+	if req.Origin == executor.OriginConsoleCompact {
+		return executor.Result{Outcome: executor.OutcomeCompleted, Compaction: &executor.CompactionResult{TokensBefore: 4200, EstimatedTokensAfter: 350}, ConfigVersion: 1}, nil
+	}
 	ch := make(chan struct{})
 	q.mu.Lock()
 	q.running[req.AgentID] = ch
@@ -88,9 +92,26 @@ func (q *quickExec) Process(uuid.UUID) executor.ProcessInfo {
 	return executor.ProcessInfo{State: executor.ProcessStopped}
 }
 func (q *quickExec) Shutdown(context.Context) error { return nil }
+func (q *quickExec) StopIdle(context.Context, uuid.UUID, string) (bool, error) {
+	return true, nil
+}
+func (q *quickExec) ExportSession(_ context.Context, _ uuid.UUID, format string) (executor.SessionExport, error) {
+	if format == "jsonl" {
+		return executor.SessionExport{Filename: "session.jsonl", ContentType: "application/x-ndjson", Data: []byte("{}\n")}, nil
+	}
+	return executor.SessionExport{Filename: "session.html", ContentType: "text/html; charset=utf-8", Data: []byte("<html>exported</html>")}, nil
+}
+func (q *quickExec) ListSessions(_ context.Context, _ uuid.UUID, currentFile string) ([]executor.ManagedSession, error) {
+	out := append([]executor.ManagedSession(nil), q.sessions...)
+	for i := range out {
+		out[i].Current = out[i].Path == currentFile
+	}
+	return out, nil
+}
 
 type env struct {
 	t      *testing.T
+	ex     *quickExec
 	srv    *httptest.Server
 	api    *httpapi.Server
 	v      *contracttest.Validator
@@ -164,7 +185,7 @@ func newEnv(t *testing.T) *env {
 	t.Cleanup(srv.Close)
 	api.Plugins.APIURL = srv.URL + "/api/v1"
 	v := contracttest.New(t, srv.URL)
-	return &env{t: t, srv: srv, api: api, v: v, client: v.Client(), co: co, st: st, conv: conv, dc: dc, rdb: rdb}
+	return &env{t: t, srv: srv, api: api, v: v, client: v.Client(), co: co, st: st, conv: conv, dc: dc, rdb: rdb, ex: ex}
 }
 
 // do 发送请求（经契约校验），返回状态码与响应体。
@@ -341,8 +362,8 @@ func TestHostOriginAndCORS(t *testing.T) {
 		t.Errorf("无 Origin 的本机请求应放行：%d", r.StatusCode)
 	}
 	r = send("GET", "/api/v1/health", "http://localhost:5173", "", nil)
-	if r.Header.Get("Access-Control-Allow-Origin") != "http://localhost:5173" || r.Header.Get("Access-Control-Expose-Headers") != "ETag, Loop-Now-Request-Id, Loop-Now-Version" {
-		t.Errorf("白名单来源的响应应带 CORS 头并暴露 ETag：%v", r.Header)
+	if r.Header.Get("Access-Control-Allow-Origin") != "http://localhost:5173" || r.Header.Get("Access-Control-Expose-Headers") != "ETag, Loop-Now-Request-Id, Loop-Now-Version, Content-Disposition" {
+		t.Errorf("白名单来源的响应应暴露 ETag、请求头与下载文件名：%v", r.Header)
 	}
 	if r := send("GET", "/healthz", "", "", nil); r.StatusCode != http.StatusOK {
 		t.Errorf("/healthz 应可用：%d", r.StatusCode)
