@@ -1554,6 +1554,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/plugin-previews/{previewId}/readme": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 预览 id（`POST /plugin-previews` 返回） */
+                previewId: components["parameters"]["PluginPreviewId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 预览里插件的 README，供安装或更新前阅读
+         * @description 读预览取来的插件目录，选择规则同 `GET /plugins/{pluginId}/readme`。预览过期、已用于安装或不存在返回 404。
+         */
+        get: operations["getPluginPreviewReadme"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/plugins/{pluginId}": {
         parameters: {
             query?: never;
@@ -1574,6 +1597,32 @@ export interface paths {
          *     数据目录 `<work root>/platform/plugins/<id>/data/` 只在 `deleteData=true` 时删除。已经启动的 Pi 继续使用已加载的 Agent 半边，直到下次启动。
          */
         delete: operations["uninstallPlugin"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugins/{pluginId}/readme": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 插件 id（清单 loopNow.id） */
+                pluginId: components["parameters"]["PluginId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 插件的 README（当前已装版本）
+         * @description 读当前已装版本的安装目录（本地目录来源为该目录），只看直接子文件，基名不区分大小写（plugins/SPEC.md §2.3）：
+         *     给了 `locale` 时依次找 `README.<locale>.md`、`README.<主语言>.md`（如 zh-CN 的 zh）、`README.md`，没给时先找 `README.md`；
+         *     都没有时取按语言标签排序的第一个 `README.<语言>.md`。软链接解析后须仍在该目录内，否则当作没有。
+         *     超过 1 MiB 时只返回前 1 MiB，`truncated` 为 true；没有任何 README 时 `file` 与 `markdown` 为 null。
+         */
+        get: operations["getPluginReadme"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -6649,6 +6698,15 @@ export interface components {
             /** @description 同 id 已安装的版本；没有安装时为 null */
             installedVersion: string | null;
         };
+        /** @description 插件的 README（plugins/SPEC.md §2.3），Markdown 原文；相对链接与图片不解析。 */
+        PluginReadme: {
+            /** @description 选中的文件名（如 README.zh-CN.md）；没有任何 README 时为 null */
+            file: string | null;
+            /** @description 文件内容；没有 README 时为 null */
+            markdown: string | null;
+            /** @description 文件超过 1 MiB，只返回了前 1 MiB */
+            truncated: boolean;
+        };
         PluginInstall: {
             /** Format: uuid */
             previewId: string;
@@ -7136,6 +7194,10 @@ export interface components {
         ProjectId: string;
         /** @description 插件 id（清单 loopNow.id） */
         PluginId: string;
+        /** @description 预览 id（`POST /plugin-previews` 返回） */
+        PluginPreviewId: string;
+        /** @description 想读的语言，写法同插件文字的语言键（如 zh-CN、en-US）；不合法返回 422 */
+        PluginReadmeLocale: string;
         PluginAccountId: string;
         /** @description 只看这个项目（未删除）中的 Agent；与 platform 二选一，同时给出时返回 422；都不给表示所有未删除项目与平台 */
         ScopeProjectId: string;
@@ -11336,6 +11398,38 @@ export interface operations {
             422: components["responses"]["ValidationFailed"];
         };
     };
+    getPluginPreviewReadme: {
+        parameters: {
+            query?: {
+                /** @description 想读的语言，写法同插件文字的语言键（如 zh-CN、en-US）；不合法返回 422 */
+                locale?: components["parameters"]["PluginReadmeLocale"];
+            };
+            header?: never;
+            path: {
+                /** @description 预览 id（`POST /plugin-previews` 返回） */
+                previewId: components["parameters"]["PluginPreviewId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description README */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginReadme"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
     getPlugin: {
         parameters: {
             query?: never;
@@ -11391,6 +11485,38 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getPluginReadme: {
+        parameters: {
+            query?: {
+                /** @description 想读的语言，写法同插件文字的语言键（如 zh-CN、en-US）；不合法返回 422 */
+                locale?: components["parameters"]["PluginReadmeLocale"];
+            };
+            header?: never;
+            path: {
+                /** @description 插件 id（清单 loopNow.id） */
+                pluginId: components["parameters"]["PluginId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description README */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginReadme"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     updatePlugin: {
