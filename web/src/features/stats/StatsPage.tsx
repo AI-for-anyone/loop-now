@@ -167,8 +167,9 @@ export function StatsPage() {
   const { from } = statsWindow(range)
   const eyebrow = range === 'today' ? text.today : text.window(text.day(from.getMonth() + 1, from.getDate()), text.today)
   const { filter } = overview
+  // 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="relative h-full overflow-y-auto">
       <div className="mx-auto flex max-w-[1480px] flex-col gap-4 px-4 pt-[22px] pb-16 sm:px-8">
         <header className="flex flex-wrap items-end gap-x-3.5 gap-y-3">
           <div className="flex flex-col gap-1.5">

@@ -215,7 +215,8 @@ export function PluginDetailPage() {
   const tabs = TABS.filter((value) => value !== 'accounts' || manifest.accounts.length > 0)
   return (
     <DraftNavigationGuard>
-      <div className="h-full overflow-y-auto">
+      {/* 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。 */}
+      <div className="relative h-full overflow-y-auto">
         <div className="mx-auto flex max-w-[1180px] flex-col gap-4 px-4 pt-[22px] pb-16 sm:px-8">
           <header className="flex flex-wrap items-start gap-x-4 gap-y-3">
             <div className="flex min-w-0 flex-[1_1_28rem] flex-col gap-1.5">

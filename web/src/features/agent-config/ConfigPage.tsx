@@ -27,8 +27,9 @@ export function ConfigPage() {
   const stale = current !== null && current.configVersion < agent.configVersion
 
   // 宽屏（≥ 1024）时左侧为区块、右侧为吸顶的分区目录；窄屏时目录在上方。目录在 DOM 中排在前面，Tab 顺序与窄屏的视觉顺序一致。
+  // 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。
   return (
-    <DraftNavigationGuard key={agent.id} projectName={scope.kind === 'project' ? scope.project.name : undefined}><div className="h-full overflow-y-auto">
+    <DraftNavigationGuard key={agent.id} projectName={scope.kind === 'project' ? scope.project.name : undefined}><div className="relative h-full overflow-y-auto">
       <div className="flex flex-col gap-6 px-6 pt-5 pb-16 lg:grid lg:grid-cols-[minmax(0,800px)_220px] lg:items-start lg:gap-x-9">
         <ConfigToc className="lg:sticky lg:top-6 lg:col-start-2 lg:row-start-1" />
         <div className="flex min-w-0 flex-col gap-6 lg:col-start-1 lg:row-start-1">

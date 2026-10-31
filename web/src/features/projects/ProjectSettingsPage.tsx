@@ -62,8 +62,9 @@ export function ProjectSettingsPage() {
   const scope = useScope()
   if (scope.kind !== 'project') return null
   const project = scope.project
+  // 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。
   return (
-    <DraftNavigationGuard key={project.id} projectName={project.name}><div className="h-full overflow-y-auto">
+    <DraftNavigationGuard key={project.id} projectName={project.name}><div className="relative h-full overflow-y-auto">
       <div className="mx-auto flex max-w-[860px] flex-col gap-6 px-4 pt-[30px] pb-[72px] sm:px-[30px]">
         <div className="flex flex-col gap-1.5">
           <span className="inline-flex items-center gap-2 text-[13.5px] font-black text-ink-700">

@@ -107,7 +107,8 @@ function ProjectPlugins({ project }: { project: Schemas['Project'] }) {
   const list = plugins.data?.plugins ?? []
   return (
     <DraftNavigationGuard projectName={project.name}>
-      <div className="h-full overflow-y-auto">
+      {/* 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。 */}
+      <div className="relative h-full overflow-y-auto">
         <div className="mx-auto flex max-w-[1180px] flex-col gap-4 px-4 pt-[22px] pb-16 sm:px-8">
           <header className="flex flex-col gap-1.5">
             <span className="text-[12px] font-bold text-ink-500">

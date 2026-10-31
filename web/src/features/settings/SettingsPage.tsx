@@ -73,8 +73,9 @@ export function SettingsPage() {
   const templates = useCliTemplates()
   const version = useSyncExternalStore(serverVersionStore.subscribe, serverVersionStore.get)
 
+  // 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。
   return (
-    <DraftNavigationGuard><div className="h-full overflow-y-auto">
+    <DraftNavigationGuard><div className="relative h-full overflow-y-auto">
       <div className="mx-auto flex max-w-[880px] flex-col gap-[26px] px-4 pt-9 pb-16 sm:px-[30px]">
         <div className="flex flex-wrap items-end gap-x-6 gap-y-3.5">
           <h1 className={pageTitleClass}>{t.settings.title}</h1>
