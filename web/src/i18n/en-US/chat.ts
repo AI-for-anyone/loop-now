@@ -57,6 +57,17 @@ export const chat = {
   sessionDivider: 'Session switched; page history is kept',
   commands: {
     platform: 'Platform command',
+    hintTitle: 'Built-in commands',
+    hintKeyboard: '↑↓ to choose · Enter to insert · Esc to close',
+    hints: {
+      session: 'Show the current session, model, and process',
+      new: 'Start a new session and keep page history',
+      compact: 'Compact the current context, with optional instructions',
+      reload: 'Stop the process; reload on the next message',
+      copy: 'Copy the latest successful reply',
+      export: 'Export the session as html or jsonl',
+      resume: 'List sessions or resume one by its full ID',
+    },
     noReply: 'Command completed',
     sessionState: { none: 'none', active: 'active', missing: 'missing' },
     processState: { stopped: 'stopped', starting: 'starting', idle: 'idle', busy: 'busy' },

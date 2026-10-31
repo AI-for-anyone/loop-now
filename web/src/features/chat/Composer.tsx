@@ -65,12 +65,21 @@ interface ComposerProps {
 }
 
 const encoder = new TextEncoder()
-const platformCommands = new Set(['session', 'new', 'compact', 'reload', 'copy', 'export', 'resume'])
+const platformCommands = [
+  { name: 'session', usage: '/session' },
+  { name: 'new', usage: '/new' },
+  { name: 'compact', usage: '/compact [instructions]' },
+  { name: 'reload', usage: '/reload' },
+  { name: 'copy', usage: '/copy' },
+  { name: 'export', usage: '/export [html|jsonl]' },
+  { name: 'resume', usage: '/resume [sessionId]' },
+] as const
+const platformCommandNames: Set<string> = new Set(platformCommands.map(command => command.name))
 
 function isPlatformCommand(text: string): boolean {
   const trimmed = text.trim()
   if (!trimmed.startsWith('/')) return false
-  return platformCommands.has(trimmed.slice(1).split(/\s/, 1)[0])
+  return platformCommandNames.has(trimmed.slice(1).split(/\s/, 1)[0])
 }
 
 // 边框归共同容器所有，文字区按内容增高，上限后独立滚动。
@@ -88,11 +97,22 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
   const [localError, setLocalError] = useState<string | null>(null)
   const [confirmNew, setConfirmNew] = useState(false)
   const [confirmResume, setConfirmResume] = useState(false)
+  const [commandIndex, setCommandIndex] = useState(0)
+  const [commandsDismissed, setCommandsDismissed] = useState(false)
   const answer = useAnswerQuestion()
   const replyId = reply?.message.id
   const resumeAllowed = disabled && allowResumeWhenDisabled && !reply && images.length === 0 && /^\/resume(?:\s+\S+)?$/.test(text.trim())
   const inputDisabled = disabled && !allowResumeWhenDisabled
   const submitDisabled = disabled && !resumeAllowed
+  const commandMatch = /^\/([^\s]*)$/.exec(text.trimStart())
+  const commandQuery = commandMatch?.[1] ?? ''
+  const commandSuggestions = !commandsDismissed && !reply && images.length === 0 && !inputDisabled && commandMatch
+    ? platformCommands
+      .filter(command => (!disabled || command.name === 'resume') && command.name.startsWith(commandQuery))
+      .map(command => ({ ...command, description: t.chat.commands.hints[command.name] }))
+    : []
+  const activeCommandIndex = Math.max(0, Math.min(commandIndex, commandSuggestions.length - 1))
+  const commandListId = `agent-console-commands-${agentId}`
   // 进入回复问题的模式时把光标放进输入框。
   useEffect(() => {
     if (replyId) editorRef.current?.focus()
@@ -194,7 +214,33 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
     } finally { busyRequest.current = false; setSubmitting(false) }
   }
 
+  const selectCommand = (command: (typeof platformCommands)[number] | undefined) => {
+    if (!command) return
+    setText(`/${command.name}`)
+    setCommandsDismissed(true)
+    setCommandIndex(0)
+    editorRef.current?.focus()
+  }
+
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (commandSuggestions.length > 0 && !event.nativeEvent.isComposing && event.keyCode !== 229) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        const offset = event.key === 'ArrowDown' ? 1 : -1
+        setCommandIndex((activeCommandIndex + offset + commandSuggestions.length) % commandSuggestions.length)
+        return
+      }
+      if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
+        event.preventDefault()
+        selectCommand(commandSuggestions[activeCommandIndex])
+        return
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setCommandsDismissed(true)
+        return
+      }
+    }
     if (event.key !== 'Enter' || event.shiftKey) return
     // 输入法组字时的回车用于上屏，不发送。
     if (event.nativeEvent.isComposing || event.keyCode === 229) return
@@ -206,9 +252,51 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
   const sendLabel = busy ? t.chat.queueSend : t.chat.send
   const showStop = busy && stop !== undefined && !reply && text.trim() === '' && images.length === 0
   const stopLabel = stop?.pending ? t.chat.stopping : stop?.retry ? t.chat.retryStop : t.chat.stop
-  const editor = <Textarea ref={editorRef} aria-label={t.chat.inputLabel} placeholder={reply ? t.consoleInbox.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder} value={text} disabled={inputDisabled} onChange={event => setText(event.target.value)} onKeyDown={onKeyDown} rows={1} className={inputClass} />
+  const editor = <Textarea
+    ref={editorRef}
+    aria-label={t.chat.inputLabel}
+    aria-autocomplete="list"
+    aria-haspopup="listbox"
+    aria-expanded={commandSuggestions.length > 0}
+    aria-controls={commandSuggestions.length > 0 ? commandListId : undefined}
+    aria-activedescendant={commandSuggestions.length > 0 ? `${commandListId}-${commandSuggestions[activeCommandIndex].name}` : undefined}
+    placeholder={reply ? t.consoleInbox.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder}
+    value={text}
+    disabled={inputDisabled}
+    onChange={event => { setText(event.target.value); setCommandIndex(0); setCommandsDismissed(false) }}
+    onFocus={() => setCommandsDismissed(false)}
+    onBlur={() => setCommandsDismissed(true)}
+    onKeyDown={onKeyDown}
+    rows={1}
+    className={inputClass}
+  />
   // 待发送图片排在同一边框里、文字行之上；有图片时边框圆角收小。
-  const input = (addButton?: ReactNode, strip?: ReactNode) => <div data-chat-composer className={cn('flex min-h-[60px] min-w-0 flex-col border-2 border-ink/60 bg-white p-2 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/15', strip || reply ? 'rounded-[24px]' : 'rounded-[32px]')}>
+  const input = (addButton?: ReactNode, strip?: ReactNode) => <div data-chat-composer className={cn('relative flex min-h-[60px] min-w-0 flex-col border-2 border-ink/60 bg-white p-2 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/15', strip || reply ? 'rounded-[24px]' : 'rounded-[32px]')}>
+    {commandSuggestions.length > 0 && (
+      <div className="absolute inset-x-0 bottom-[calc(100%+0.5rem)] z-30 overflow-hidden rounded-card border-2 border-ink bg-paper-raised text-ink shadow-[4px_4px_0_0_var(--riso-blue)]">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink/15 px-3 py-2 text-xs font-bold text-ink-500">
+          <span>{t.chat.commands.hintTitle}</span>
+          <span className="hidden font-medium sm:inline">{t.chat.commands.hintKeyboard}</span>
+        </div>
+        <ul id={commandListId} role="listbox" aria-label={t.chat.commands.hintTitle} className="max-h-[50vh] overflow-y-auto p-1.5">
+          {commandSuggestions.map((command, index) => (
+            <li
+              key={command.name}
+              id={`${commandListId}-${command.name}`}
+              role="option"
+              aria-selected={index === activeCommandIndex}
+              onMouseDown={event => event.preventDefault()}
+              onMouseEnter={() => setCommandIndex(index)}
+              onClick={() => selectCommand(command)}
+              className={cn('cursor-pointer rounded-ticket px-3 py-2 text-sm', index === activeCommandIndex ? 'bg-riso-yellow' : 'hover:bg-tint-blue')}
+            >
+              <div className="font-mono text-[13px] font-bold">{command.usage}</div>
+              <div className="mt-0.5 text-xs text-ink-500">{command.description}</div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
     {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}
     {strip}
     <div className="flex min-w-0 items-end gap-2">

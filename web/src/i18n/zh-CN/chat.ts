@@ -58,6 +58,17 @@ export const chat = {
   sessionDivider: '会话已切换，页面历史保留',
   commands: {
     platform: '平台命令',
+    hintTitle: '内置命令',
+    hintKeyboard: '↑↓ 选择 · Enter 填入 · Esc 关闭',
+    hints: {
+      session: '查看当前会话、模型和进程状态',
+      new: '重开会话，保留页面历史',
+      compact: '压缩当前会话上下文，可附加说明',
+      reload: '停止当前进程，下一条消息重新加载',
+      copy: '复制最近一条成功回复',
+      export: '导出会话，可选 html 或 jsonl',
+      resume: '列出会话，或按完整 ID 恢复',
+    },
     noReply: '命令已执行',
     sessionState: { none: '无会话', active: '活动', missing: '丢失' } satisfies Record<S['SessionState'], string>,
     processState: { stopped: '已停止', starting: '启动中', idle: '空闲', busy: '忙碌' } satisfies Record<S['ProcessState'], string>,

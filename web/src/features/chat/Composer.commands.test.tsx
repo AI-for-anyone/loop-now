@@ -137,3 +137,65 @@ it('/export 取得文件并触发下载后才显示命令结果', async () => {
   expect(revokeObjectURL).toHaveBeenCalledWith('blob:session')
   expect(click.mock.invocationCallOrder[0]).toBeLessThan(onCommand.mock.invocationCallOrder[0])
 })
+
+it('输入 / 显示全部内置命令，过滤后用键盘填入，再次回车才发送', async () => {
+  const sent: Schemas['SendMessageInput'][] = []
+  server.use(http.post(apiUrl('/agents/sleep-agent/messages'), async ({ request }) => {
+    sent.push(await request.json() as Schemas['SendMessageInput'])
+    return HttpResponse.json(commandResult({ command: 'resume', resumeSessions: [] }))
+  }))
+  renderComposer()
+  const box = screen.getByRole('textbox', { name: '消息' })
+  await userEvent.type(box, '/')
+  expect(screen.getByRole('listbox', { name: '内置命令' })).toBeInTheDocument()
+  expect(screen.getAllByRole('option')).toHaveLength(7)
+  for (const usage of ['/session', '/new', '/compact [instructions]', '/reload', '/copy', '/export [html|jsonl]', '/resume [sessionId]']) {
+    expect(screen.getByText(usage)).toBeInTheDocument()
+  }
+  await userEvent.type(box, 're')
+  expect(screen.getAllByRole('option')).toHaveLength(2)
+  expect(screen.getByRole('option', { name: /\/reload/ })).toHaveAttribute('aria-selected', 'true')
+  await userEvent.keyboard('{ArrowDown}')
+  expect(screen.getByRole('option', { name: /\/resume/ })).toHaveAttribute('aria-selected', 'true')
+  await userEvent.keyboard('{Enter}')
+  expect(box).toHaveValue('/resume')
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  expect(sent).toEqual([])
+  await userEvent.keyboard('{Enter}')
+  await waitFor(() => expect(sent).toEqual([{ text: '/resume' }]))
+})
+
+it('鼠标选择命令只填入输入框，不直接发送', async () => {
+  renderComposer()
+  const box = screen.getByRole('textbox', { name: '消息' })
+  await userEvent.type(box, '/')
+  await userEvent.click(screen.getByRole('option', { name: /\/export/ }))
+  expect(box).toHaveValue('/export')
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+})
+
+it('Esc 关闭提示后保留命令，回车仍可直接发送', async () => {
+  const sent: Schemas['SendMessageInput'][] = []
+  server.use(http.post(apiUrl('/agents/sleep-agent/messages'), async ({ request }) => {
+    sent.push(await request.json() as Schemas['SendMessageInput'])
+    return HttpResponse.json(commandResult({ command: 'reload' }))
+  }))
+  renderComposer()
+  const box = screen.getByRole('textbox', { name: '消息' })
+  await userEvent.type(box, '/reload')
+  expect(screen.getByRole('listbox')).toBeInTheDocument()
+  await userEvent.keyboard('{Escape}')
+  expect(box).toHaveValue('/reload')
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  await userEvent.keyboard('{Enter}')
+  await waitFor(() => expect(sent).toEqual([{ text: '/reload' }]))
+})
+
+it('会话丢失时命令提示只开放 /resume', async () => {
+  renderWithQuery(<Composer agentId="sleep-agent" agentName="开发助手" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
+  await userEvent.type(screen.getByRole('textbox', { name: '消息' }), '/')
+  expect(screen.getAllByRole('option')).toHaveLength(1)
+  expect(screen.getByRole('option', { name: /\/resume/ })).toBeInTheDocument()
+  expect(screen.queryByRole('option', { name: /\/new/ })).not.toBeInTheDocument()
+})

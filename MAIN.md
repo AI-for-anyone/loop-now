@@ -69,7 +69,7 @@
 
 - 普通聊天输入框已居中限宽，图片加号与发送键放在框内；已修复自动链接误吞 Markdown 加粗符和中文尾句。导航采用项目概览，点击左上角 LOGO 返回未选项目的全局概览；顶栏收件箱仍是操作者 `@console` 的跨项目往来。本批已统一更新到本地服务。
 
-- 普通 Agent 对话的平台斜杠命令已在 `feature/agent-slash-commands` 完成源码、隔离 QA 及 Compose 更新：`/session`、`/new`、`/compact [instructions]`、`/reload`、`/copy`、`/export [html|jsonl]`、`/resume [完整ID]`，任务节点不开放；内置命令优先插件，压缩复用 Run／SSE／取消／用量且不写对话消息；compact 无回复完成仅发终态 `run.updated`，`run.ended.message` 保持非空旧客户端契约。导出只读受管会话文件。隔离 PG18／Redis8 的 HTTP、并发交接、迁移和 race，以及 SDK、Web 定向与类型检查通过；环境已应用迁移 035，真实模型压缩已验证（86,646 → 约 30,001 tokens），JSONL 含压缩记录与非空摘要，浏览器实际下载和系统剪贴板已核对。`/reload` 后当前会话可重新加载；`/resume` 从受管文件列出并确认恢复历史会话，只切换模型上下文，不回滚工作区或配置，missing 状态仅放开该命令。真实 A／B 会话验证码来回恢复均通过，Web 历史与中性分割线保留，最终已恢复原会话（active、epoch 7）。QA 另发现基线可复现的 `TestRunLifecycleEventsAndTimes` 同时间戳事件排序失败，本分支未扩大修复。
+- 普通 Agent 对话的平台斜杠命令已在 `feature/agent-slash-commands` 完成源码、隔离 QA 及 Compose 更新：`/session`、`/new`、`/compact [instructions]`、`/reload`、`/copy`、`/export [html|jsonl]`、`/resume [完整ID]`，任务节点不开放；Web 输入 `/` 可按前缀过滤内置命令并查看参数说明，支持键盘和鼠标填入，选择不直接执行；内置命令优先插件，压缩复用 Run／SSE／取消／用量且不写对话消息；compact 无回复完成仅发终态 `run.updated`，`run.ended.message` 保持非空旧客户端契约。导出只读受管会话文件。隔离 PG18／Redis8 的 HTTP、并发交接、迁移和 race，以及 SDK、Web 定向与类型检查通过；环境已应用迁移 035，真实模型压缩已验证（86,646 → 约 30,001 tokens），JSONL 含压缩记录与非空摘要，浏览器实际下载和系统剪贴板已核对。`/reload` 后当前会话可重新加载；`/resume` 从受管文件列出并确认恢复历史会话，只切换模型上下文，不回滚工作区或配置，missing 状态仅放开该命令。真实 A／B 会话验证码来回恢复均通过，Web 历史与中性分割线保留，最终已恢复原会话（active、epoch 7）。QA 另发现基线可复现的 `TestRunLifecycleEventsAndTimes` 同时间戳事件排序失败，本分支未扩大修复。
 
 - 专用浏览器改为官方插件 `playwright`（`plugins/official/playwright/`）：Pi 包，`loopNow.mcpServers.browser` 启动固定版本的官方 MCP 0.0.83 与预先准备的 Chromium，按 Agent 独立配置目录，任务副本并发时自动 `--isolated`；运行时不下载、不 npx。首次需用 Node 24 运行它的 `setup.mjs` 准备浏览器到 `<work root>/platform/plugins/playwright/data`（可用 APFS 克隆旧版 Chromium 省去下载）。
 

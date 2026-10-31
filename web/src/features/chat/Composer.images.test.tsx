@@ -111,7 +111,9 @@ it('slash command text with an image is an ordinary message and does not confirm
   uploadFixture(); const sent: Schemas['SendMessageInput'][] = []
   server.use(http.post(apiUrl(`/agents/${agentId}/messages`), async ({ request }) => { const body = await request.json() as Schemas['SendMessageInput']; sent.push(body); return accepted(body) }))
   mount(); await userEvent.type(screen.getByRole('textbox'), '/new')
+  expect(screen.getByRole('listbox', { name: '内置命令' })).toBeInTheDocument()
   await userEvent.upload(screen.getByLabelText('选择图片文件'), file('图文.png'))
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: '发送' }))
   await waitFor(() => expect(sent).toHaveLength(1))
   expect(sent[0]).toEqual({ text: '/new', imageIds: [...refs.keys()] })
