@@ -15,15 +15,9 @@ import (
 	"loop-now/internal/testutil/sqlitetest"
 )
 
-func dbConnectionFixture(t *testing.T) projectMigrationEnv { return dbConnectionFixtureAt(t, 0) }
-
-// dbConnectionFixtureAt 原来可以停在某个 PG 迁移版本；SQLite 只有基线，ceiling 非零的用例跳过。
-func dbConnectionFixtureAt(t *testing.T, ceiling int64) projectMigrationEnv {
+func dbConnectionFixture(t *testing.T) projectMigrationEnv {
 	t.Helper()
 	ctx := context.Background()
-	if ceiling > 0 {
-		t.Skip(noMigrationHistory)
-	}
 	st := sqlitetest.NewStore(t)
 	templates, err := clitemplate.Load("")
 	if err != nil {

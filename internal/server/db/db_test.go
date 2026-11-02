@@ -813,3 +813,30 @@ func TestWriteWaiters(t *testing.T) {
 		t.Fatalf("都拿到后等待数：%d", n)
 	}
 }
+
+// 延迟外键在提交时才检查：提交失败时 SQLite 让事务继续开着，写连接必须回滚后再归还，否则之后的写全部失败。
+func TestCommitFailureRollsBackAndKeepsWriter(t *testing.T) {
+	ctx := context.Background()
+	d := openTest(t)
+	mustExec(t, d, `CREATE TABLE parent(id TEXT PRIMARY KEY)`)
+	mustExec(t, d, `CREATE TABLE child(id TEXT PRIMARY KEY, parent_id TEXT REFERENCES parent(id) DEFERRABLE INITIALLY DEFERRED)`)
+	after := false
+	err := d.InTx(ctx, func(tx *Tx) error {
+		tx.AfterCommit(func() { after = true })
+		_, err := tx.Exec(ctx, `INSERT INTO child VALUES('c1','missing')`)
+		return err
+	})
+	if Code(err) != CodeConstraintFK || after {
+		t.Fatalf("提交时的外键违反应失败且不执行提交后钩子：%v %v", err, after)
+	}
+	var n int
+	if err := d.QueryRow(ctx, `SELECT count(*) FROM child`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("失败的提交不应留下数据：%d %v", n, err)
+	}
+	if err := d.InTx(ctx, func(tx *Tx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO parent VALUES('p1')`)
+		return err
+	}); err != nil {
+		t.Fatalf("提交失败后写连接应仍可用：%v", err)
+	}
+}

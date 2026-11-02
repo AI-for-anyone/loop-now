@@ -34,10 +34,6 @@ func mustExec(t *testing.T, s *store.Store, sql string, args ...any) {
 	}
 }
 
-// noMigrationHistory 标出依赖 PostgreSQL 迁移历史（停在某个旧版本、升级或回退）的用例：SQLite 只有基线，
-// 没有这些中间状态。改写成基线上的等价用例或删除。
-const noMigrationHistory = "SQLITE-PORT(history): 依赖 PostgreSQL 迁移历史，SQLite 基线下没有这种中间状态；改写为基线上的等价用例或删除"
-
 type projectMigrationEnv struct {
 	s         *store.Store
 	templates *clitemplate.Catalog
@@ -66,14 +62,6 @@ func (e projectMigrationEnv) agent(t *testing.T, name, provider string) uuid.UUI
 		t.Fatal(err)
 	}
 	return a.ID
-}
-
-// migrateFixture 迁移到最新；ceiling 非零（迁到某个历史版本）在 SQLite 下不存在。
-func migrateFixture(ctx context.Context, s *store.Store, ceiling int64) error {
-	if ceiling > 0 {
-		return fmt.Errorf("%s（ceiling %d）", noMigrationHistory, ceiling)
-	}
-	return s.Migrate(ctx, quietLogger())
 }
 
 // insertCredentialRow 按当前结构写一行明文凭证（secret 列）。
