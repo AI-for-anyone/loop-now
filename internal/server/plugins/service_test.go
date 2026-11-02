@@ -267,8 +267,7 @@ func TestConfigAccountsAndGrants(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	e.install(plugins.Source{Kind: "local", Location: plugin(t, t.TempDir(), "cfg", "1.0.0")}, true)
-	// SQLITE-PORT(G3): ::cast、jsonb
-	if _, err := e.st.Pool.Exec(ctx, `UPDATE plugins SET manifest=jsonb_set(manifest,'{events}','["plugin.config_changed","plugin.enabled"]')::json`); err != nil {
+	if _, err := e.st.Pool.Exec(ctx, `UPDATE plugins SET manifest=json_set(manifest,'$.events',json('["plugin.config_changed","plugin.enabled"]'))`); err != nil {
 		t.Fatal(err)
 	}
 	tok := "s3cret"
