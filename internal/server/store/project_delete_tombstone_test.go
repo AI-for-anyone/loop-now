@@ -91,7 +91,6 @@ func TestDeleteProjectKeepsLarkBoundVersionAsTombstone(t *testing.T) {
 		}
 		return out
 	}
-	// SQLITE-PORT(G4): octet_length
 	const secretVersions = `SELECT (SELECT count(*) FROM project_cli_versions v JOIN project_credential_accounts a ON a.id=v.account_id WHERE a.project_id=$1 AND octet_length(v.secret)>0)
 		+(SELECT count(*) FROM model_auth_versions v JOIN project_credential_accounts a ON a.id=v.project_account_id WHERE a.project_id=$1)`
 	if n := count(secretVersions, project); n != 5 {

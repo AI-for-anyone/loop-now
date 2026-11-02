@@ -345,7 +345,6 @@ func TestDeleteAccountWipesNowAndDefersVersionsOfUnfinishedTasks(t *testing.T) {
 
 	// The second task ends without a settle (as a crash would leave it); the
 	// startup settle finishes the wipe.
-	// SQLITE-PORT(G4): jsonb
 	mustExec(t, restarted, `UPDATE task_records SET status='cancelled',ended_at=clock_timestamp(),document=json_set(document,'$.view.task.status','cancelled') WHERE id=$1`, second)
 	if err = restarted.SettleCredentialWipes(ctx); err != nil {
 		t.Fatal(err)
