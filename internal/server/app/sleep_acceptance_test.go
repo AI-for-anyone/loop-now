@@ -692,7 +692,7 @@ func TestSleepAppBatchOnePersistentFailureDoesNotStarve(t *testing.T) {
 		scopes = append(scopes, fixture{path, a.ID, receipt.Sleep})
 	}
 	bad, healthy := scopes[0], scopes[1]
-	if _, e := s.a.Store.Pool.Exec(ctx, `CREATE FUNCTION reject_first_sleep_app() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.id='`+bad.sleep.ID.String()+`'::uuid THEN RAISE EXCEPTION 'offline persistent candidate failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_first_sleep_app BEFORE UPDATE ON agent_sleeps FOR EACH ROW WHEN (OLD.state='sleeping' AND NEW.state='woken') EXECUTE FUNCTION reject_first_sleep_app()`); e != nil {
+	if _, e := s.a.Store.Pool.Exec(ctx, `CREATE TRIGGER reject_first_sleep_app BEFORE UPDATE ON agent_sleeps WHEN OLD.state='sleeping' AND NEW.state='woken' AND OLD.id='`+bad.sleep.ID.String()+`' BEGIN SELECT RAISE(ABORT, 'offline persistent candidate failure'); END`); e != nil {
 		t.Fatal(e)
 	}
 	if _, e := s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-CASE WHEN id=$1 THEN 10000000 ELSE 5000000 END WHERE id IN ($1,$2)`, bad.sleep.ID, healthy.sleep.ID); e != nil {

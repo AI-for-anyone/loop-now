@@ -212,9 +212,8 @@ func TestRecordFailureDoesNotAffectRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer st.Close()
-	if _, err := st.Pool.Exec(context.Background(), `CREATE FUNCTION fail_pi_started() RETURNS trigger LANGUAGE plpgsql AS $$
-		BEGIN IF NEW.type = 'pi.started' THEN RAISE EXCEPTION 'boom'; END IF; RETURN NEW; END $$;
-		CREATE TRIGGER fail_pi_started BEFORE INSERT ON lifecycle_events FOR EACH ROW EXECUTE FUNCTION fail_pi_started();`); err != nil {
+	if _, err := st.Pool.Exec(context.Background(), `CREATE TRIGGER ev.fail_pi_started BEFORE INSERT ON lifecycle_events
+		WHEN NEW.type = 'pi.started' BEGIN SELECT RAISE(ABORT, 'boom'); END`); err != nil {
 		t.Fatal(err)
 	}
 	a, _ := s.createAgent("记录失败")
@@ -375,6 +374,7 @@ func TestRecoveryCrashRecords(t *testing.T) {
 	s.waitRunning(a)
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "排队的", "whenBusy": "queue"})
 	_ = s.a.Conv.Stop(context.Background()) // 模拟强制结束：不走优雅退出
+	s.a.ReleaseDataDirLock()
 	s2 := w.start(nil)
 	defer s2.stop()
 	defer func() { _ = s.a.Executor.Shutdown(context.Background()) }()

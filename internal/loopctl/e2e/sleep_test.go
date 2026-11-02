@@ -10,12 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/google/uuid"
 	"loop-now/internal/loopctl/clitest"
 	"loop-now/internal/server/config"
 	"loop-now/internal/server/sleepmodel"
 	"loop-now/internal/server/taskmodel"
+
+	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/google/uuid"
 )
 
 // 手动驱动同版CLI通过实际App HTTP入口；fake Pi不自主调用CLI，不作为真实模型证明。
@@ -201,7 +202,7 @@ func TestSleepCLIRealAppRestart(t *testing.T) {
 			if state != wantState || timers != wantTimers || total != wantTotal {
 				t.Fatalf("state=%s timers=%d total=%d", state, timers, total)
 			}
-			t.Logf("mode=%s sleep=%s originalWakeAt=%v timers=%d runs=%d schema=%s Redis=%s", mode, first.Sleep.ID, wakeAt, timers, total, w.schema, w.cfg.RedisKeyPrefix)
+			t.Logf("mode=%s sleep=%s originalWakeAt=%v timers=%d runs=%d dataDir=%s", mode, first.Sleep.ID, wakeAt, timers, total, w.cfg.DataDir)
 		})
 	}
 }
@@ -301,7 +302,7 @@ func TestSleepCLIRealAppNormal(t *testing.T) {
 			if wakeMessages != wantTimers || linked == 0 {
 				t.Fatal("wake origin or Run wakeSleepId lost", wakeMessages, linked)
 			}
-			t.Logf("mode=%s sleep=%s wakeRun=%s end=%s timers=%d runs=%d schema=%s Redis=%s", mode, first.Sleep.ID, *carrier, reason, timers, total, w.schema, w.cfg.RedisKeyPrefix)
+			t.Logf("mode=%s sleep=%s wakeRun=%s end=%s timers=%d runs=%d dataDir=%s", mode, first.Sleep.ID, *carrier, reason, timers, total, w.cfg.DataDir)
 		})
 	}
 }
@@ -389,7 +390,7 @@ func TestSleepCLIRealAppTaskModes(t *testing.T) {
 			if err = s.a.Store.Pool.QueryRow(context.Background(), `SELECT count(*) FROM agent_sleeps WHERE task_id=$1 AND state IN ('requested','sleeping')`, uuid.MustParse(id)).Scan(&active); err != nil || active != 0 {
 				t.Fatal("cancel retained effective sleep", active, err)
 			}
-			t.Logf("mode=%s first=%s second=%s one timer; session retained; task cancelled; schema=%s Redis=%s", mode, first.Sleep.ID, second.Sleep.ID, w.schema, w.cfg.RedisKeyPrefix)
+			t.Logf("mode=%s first=%s second=%s one timer; session retained; task cancelled; dataDir=%s", mode, first.Sleep.ID, second.Sleep.ID, w.cfg.DataDir)
 		})
 	}
 }

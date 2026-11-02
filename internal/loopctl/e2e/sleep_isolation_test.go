@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/sleepmodel"
+
+	"github.com/google/uuid"
 )
 
 func TestSleepCLIRealAppScopeIsolation(t *testing.T) {
@@ -80,5 +81,5 @@ func TestSleepCLIRealAppScopeIsolation(t *testing.T) {
 			}
 		}
 	}
-	t.Logf("normal sleep=%s; task sleeps=%s,%s; task1 replacement=%s; three scopes, no timer dispatch; schema=%s Redis=%s", ordinary.Sleep.ID, receipts[0].Sleep.ID, receipts[1].Sleep.ID, next.Sleep.ID, w.schema, w.cfg.RedisKeyPrefix)
+	t.Logf("normal sleep=%s; task sleeps=%s,%s; task1 replacement=%s; three scopes, no timer dispatch; dataDir=%s", ordinary.Sleep.ID, receipts[0].Sleep.ID, receipts[1].Sleep.ID, next.Sleep.ID, w.cfg.DataDir)
 }

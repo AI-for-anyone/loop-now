@@ -24,7 +24,7 @@ func TestProjectCredentialCLIWithApp(t *testing.T) {
 	w := newWorld(t, true)
 	s := w.start(nil)
 	defer s.stop()
-	t.Logf("isolated resources: schema=%s redisPrefix=%s consoleAddr=%s tlsAddr=%s", w.schema, w.cfg.RedisKeyPrefix, w.addr, w.extAddr)
+	t.Logf("isolated resources: dataDir=%s consoleAddr=%s tlsAddr=%s", w.cfg.DataDir, w.addr, w.extAddr)
 	_, _, token := s.issueToken("", "project-credential-cli", nil)
 	ext := newLoopctl(t, map[string]string{"LOOPCTL_URL": s.ext, "LOOPCTL_TOKEN": token, "LOOPCTL_CA_FILE": w.caFile})
 	project := s.defaultProject()
@@ -256,5 +256,5 @@ func TestProjectCredentialUnknownWriteWithApp(t *testing.T) {
 	if len(direct.run("project", "model-account", "list", project, "--provider", provider).ok(t)["accounts"].([]any)) != 1 {
 		t.Fatal("unknown response created duplicate account")
 	}
-	t.Logf("actual TLS App response loss: committed once, CLI unknown/exit4, no replay; schema=%s redisPrefix=%s", w.schema, w.cfg.RedisKeyPrefix)
+	t.Logf("actual TLS App response loss: committed once, CLI unknown/exit4, no replay; dataDir=%s", w.cfg.DataDir)
 }

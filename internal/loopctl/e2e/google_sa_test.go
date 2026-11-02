@@ -18,7 +18,7 @@ func TestGoogleSACLIWithApp(t *testing.T) {
 	w := newWorld(t, true)
 	s := w.start(nil)
 	defer s.stop()
-	t.Logf("SA CLI resources: schema=%s redisPrefix=%s consoleAddr=%s tlsAddr=%s", w.schema, w.cfg.RedisKeyPrefix, w.addr, w.extAddr)
+	t.Logf("SA CLI resources: dataDir=%s consoleAddr=%s tlsAddr=%s", w.cfg.DataDir, w.addr, w.extAddr)
 	_, _, token := s.issueToken("", "google-sa-cli", nil)
 	ext := newLoopctl(t, map[string]string{"LOOPCTL_URL": s.ext, "LOOPCTL_TOKEN": token, "LOOPCTL_CA_FILE": w.caFile})
 	project := s.defaultProject()

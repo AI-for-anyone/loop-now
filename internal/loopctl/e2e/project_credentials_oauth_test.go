@@ -85,7 +85,7 @@ func newProjectOAuthWorld(t *testing.T) (*world, *server, *loopctl, *offlineProj
 	t.Cleanup(s.stop)
 	_, _, token := s.issueToken("", "project-oauth-cli", nil)
 	external := newLoopctl(t, map[string]string{"LOOPCTL_URL": s.ext, "LOOPCTL_TOKEN": token, "LOOPCTL_CA_FILE": w.caFile})
-	t.Logf("offline OAuth resources: schema=%s redisPrefix=%s consoleAddr=%s tlsAddr=%s", w.schema, w.cfg.RedisKeyPrefix, w.addr, w.extAddr)
+	t.Logf("offline OAuth resources: dataDir=%s consoleAddr=%s tlsAddr=%s", w.cfg.DataDir, w.addr, w.extAddr)
 	return w, s, external, fixture
 }
 func TestProjectCredentialOAuthCancelWithApp(t *testing.T) {

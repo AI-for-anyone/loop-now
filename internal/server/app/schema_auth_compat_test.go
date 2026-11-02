@@ -18,7 +18,7 @@ import (
 // latestMigration is the highest numbered SQL migration shipped in the repo.
 func latestMigration(t *testing.T) int {
 	t.Helper()
-	entries, err := os.ReadDir(filepath.Join(testenv.RepoRoot(), "internal/server/store/migrations"))
+	entries, err := os.ReadDir(filepath.Join(testenv.RepoRoot(), "internal/server/store/schema/migrations"))
 	if err != nil {
 		t.Fatal(err)
 	}
