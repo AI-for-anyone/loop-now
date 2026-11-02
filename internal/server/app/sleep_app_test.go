@@ -8,6 +8,7 @@ import (
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/config"
 	"loop-now/internal/server/contracttest"
+	"loop-now/internal/server/coord"
 	"loop-now/internal/server/inbox"
 	"loop-now/internal/server/sleepmodel"
 	"loop-now/internal/server/store"
@@ -323,6 +324,7 @@ func TestSleepAppWakeCommitExecutionAndSessionFailure(t *testing.T) {
 			if err = s.a.Store.Pool.QueryRow(ctx, `SELECT wake_run_id FROM agent_sleeps WHERE id=$1`, receipt.Sleep.ID).Scan(&wakeID); err != nil {
 				t.Fatal(err)
 			}
+			var before []coord.Event
 			if mode == "wake-queued-restart" {
 				wake, err := s.a.Store.GetRun(ctx, wakeID)
 				if err != nil || wake.Status != "queued" {
@@ -330,7 +332,7 @@ func TestSleepAppWakeCommitExecutionAndSessionFailure(t *testing.T) {
 				}
 				s.stop()
 				s = nil
-				// Redis client is closed by stop. Remove the owned stale barrier via the next App's PG reconciliation after TTL.
+				// 协调状态在进程内，重启后旧屏障已不在；按原样放开一次（没有持有时是空操作）。
 				s = w.start(nil)
 				if _, err = s.a.Coord.Release(ctx, agent.ID.String(), barrier); err != nil {
 					t.Fatal(err)
@@ -347,6 +349,10 @@ func TestSleepAppWakeCommitExecutionAndSessionFailure(t *testing.T) {
 				wake, err := s.a.Store.GetRun(ctx, wakeID)
 				if err != nil || wake.Status != "running" {
 					t.Fatal("wake never ran", err)
+				}
+				// 事件流在进程内：重启前已经推给 SSE 的事件只在旧实例里。
+				if before, err = s.a.Coord.ReadEvents(ctx, agent.ID.String(), "0-0", 1000, -time.Millisecond); err != nil {
+					t.Fatal(err)
 				}
 				s.stop()
 				s = w.start(nil)
@@ -393,6 +399,7 @@ func TestSleepAppWakeCommitExecutionAndSessionFailure(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			events = append(before, events...)
 			timerUser := 0
 			validator := contracttest.New(t, strings.TrimSuffix(s.url, "/api/v1"))
 			for _, event := range events {
@@ -435,7 +442,7 @@ func TestSleepAppInboxReadBeforeDispatchStillContinues(t *testing.T) {
 	}
 	// Deterministically reproduce a recipient read before the notification driver
 	// can count unread mail; the real message and reminder transaction still runs.
-	if _, err = s.a.Store.Pool.Exec(ctx, `CREATE FUNCTION read_before_dispatch() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.to_agent_id='`+agent.ID.String()+`'::uuid THEN NEW.read_at=now(); END IF; RETURN NEW; END $$; CREATE TRIGGER read_before_dispatch BEFORE INSERT ON inbox_messages FOR EACH ROW EXECUTE FUNCTION read_before_dispatch()`); err != nil {
+	if _, err = s.a.Store.Pool.Exec(ctx, `CREATE TRIGGER read_before_dispatch AFTER INSERT ON inbox_messages WHEN NEW.to_agent_id='`+agent.ID.String()+`' BEGIN UPDATE inbox_messages SET read_at=now() WHERE id=NEW.id; END`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.a.API.Inbox.Send(ctx, auth.Console(), "默认项目/UnreadWake", "valid real message", "queue"); err != nil {
@@ -501,11 +508,12 @@ func TestSleepAppQuestionAnswerAndExpiryWake(t *testing.T) {
 			d := decode[taskmodel.Detail](t, raw)
 			node := d.Nodes[0]
 			p := auth.Principal{Kind: auth.KindAgent, ID: agent.ID, TaskID: d.Task.ID, RuntimeID: node.RuntimeID}
-			taskWait(t, s, d.Task.ID, func(d taskmodel.Detail) bool { return s.a.Executor.Process(node.RuntimeID).State == "busy" })
+			// Pi 先变忙，轮次随后才在库里记为 running：两个都等到。
 			var source uuid.UUID
-			if err = s.a.Store.Pool.QueryRow(ctx, `SELECT id FROM task_turns WHERE runtime_id=$1 AND status='running'`, node.RuntimeID).Scan(&source); err != nil {
-				t.Fatal(err)
-			}
+			taskWait(t, s, d.Task.ID, func(d taskmodel.Detail) bool {
+				return s.a.Executor.Process(node.RuntimeID).State == "busy" &&
+					s.a.Store.Pool.QueryRow(ctx, `SELECT id FROM task_turns WHERE runtime_id=$1 AND status='running'`, node.RuntimeID).Scan(&source) == nil
+			})
 			q, err := s.a.API.Inbox.Send(ctx, p, "@console", "question", "queue", inbox.QuestionInput{Options: []string{"yes"}, NodeRunID: node.ID})
 			if err != nil {
 				t.Fatal(err)
@@ -564,11 +572,12 @@ func TestSleepAppTaskRequestedAndSleepingRestart(t *testing.T) {
 			d := decode[taskmodel.Detail](t, raw)
 			node := d.Nodes[0]
 			p := auth.Principal{Kind: auth.KindAgent, ID: agent.ID, TaskID: d.Task.ID, RuntimeID: node.RuntimeID}
-			taskWait(t, s, d.Task.ID, func(d taskmodel.Detail) bool { return s.a.Executor.Process(node.RuntimeID).State == "busy" })
+			// Pi 先变忙，轮次随后才在库里记为 running：两个都等到。
 			var source uuid.UUID
-			if err = s.a.Store.Pool.QueryRow(ctx, `SELECT id FROM task_turns WHERE runtime_id=$1 AND status='running'`, node.RuntimeID).Scan(&source); err != nil {
-				t.Fatal(err)
-			}
+			taskWait(t, s, d.Task.ID, func(d taskmodel.Detail) bool {
+				return s.a.Executor.Process(node.RuntimeID).State == "busy" &&
+					s.a.Store.Pool.QueryRow(ctx, `SELECT id FROM task_turns WHERE runtime_id=$1 AND status='running'`, node.RuntimeID).Scan(&source) == nil
+			})
 			seconds := int64(2)
 			if mode == "sleeping-after" {
 				seconds = 1

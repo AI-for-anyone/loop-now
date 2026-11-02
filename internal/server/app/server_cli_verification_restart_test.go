@@ -72,6 +72,9 @@ func TestCLIVerificationActualAppSIGKILLRecovery(t *testing.T) {
 	w.cfg.AuthRecordTimeout = time.Second
 	w.cfg.CLIInstallTimeout = time.Second
 	ctx := context.Background()
+	if e := os.MkdirAll(config.DBDir(w.cfg.DataDir), 0o700); e != nil {
+		t.Fatal(e)
+	}
 	st, e := store.Open(ctx, db.Options{Dir: config.DBDir(w.cfg.DataDir)})
 	if e != nil {
 		t.Fatal(e)

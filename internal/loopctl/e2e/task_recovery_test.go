@@ -59,7 +59,7 @@ func TestTaskCLIRecoveryDoesNotReplayAndReplacesProcessTokens(t *testing.T) {
 			if before != 1 {
 				t.Fatal("unexpected initial turn count", before)
 			}
-			// 只停止本测试的临时App，保持相同测试schema/地址/工作根，绝不操作8780旧服务。
+			// 只停止本测试的临时App，保持相同数据目录/地址/工作根，绝不操作8780旧服务。
 			s.stop()
 			active = nil
 			restarted := w.start(nil)

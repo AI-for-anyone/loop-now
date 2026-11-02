@@ -14,10 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/app"
 	"loop-now/internal/server/cliauth"
 	"loop-now/internal/server/credentialmodel"
+
+	"github.com/google/uuid"
 )
 
 // The actual Go ProcessHelper owns fd framing and process cleanup. Its child is
@@ -94,7 +95,7 @@ func TestGoogleOAuthCLIWithApp(t *testing.T) {
 	w.appOptions = func(o *app.Options) { o.CLILoginHelper = f.helper }
 	s := w.start(nil)
 	defer func() { s.stop() }()
-	t.Logf("Google OAuth CLI resources: schema=%s redisPrefix=%s consoleAddr=%s tlsAddr=%s", w.schema, w.cfg.RedisKeyPrefix, w.addr, w.extAddr)
+	t.Logf("Google OAuth CLI resources: dataDir=%s consoleAddr=%s tlsAddr=%s", w.cfg.DataDir, w.addr, w.extAddr)
 	_, _, token := s.issueToken("", "google-oauth-cli", nil)
 	ext := newLoopctl(t, map[string]string{"LOOPCTL_URL": s.ext, "LOOPCTL_TOKEN": token, "LOOPCTL_CA_FILE": w.caFile})
 	project := s.defaultProject()
@@ -123,7 +124,7 @@ func TestGoogleOAuthCLIWithApp(t *testing.T) {
 	if f.count("abort") != 1 {
 		t.Fatal("actual private child not terminated/reaped")
 	}
-	// Success submits a synthetic grant through the actual fd parser and PG CAS.
+	// Success submits a synthetic grant through the actual fd parser and the store CAS.
 	second := uuid.NewString()
 	start(second, "Google success fixture").ok(t)
 	waitGoogleLogin(t, ext, project, second, "awaiting_authorization")

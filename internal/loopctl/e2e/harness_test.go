@@ -30,14 +30,11 @@ import (
 	"loop-now/internal/server/preflight"
 	"loop-now/internal/testutil/fakepibin"
 	"loop-now/internal/testutil/loopctlfake"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
 )
 
-// world 是可在多次启动之间共享的外部状态：测试库中的 schema、Redis 前缀、工作根目录、证书与监听地址。
+// world 是可在多次启动之间共享的外部状态：数据目录、工作根目录、证书与监听地址。
 type world struct {
 	t          *testing.T
-	schema     string
 	cfg        config.Config
 	dump       string // FAKEPI_DUMP：Pi 启动时写入的环境
 	caFile     string
@@ -55,19 +52,17 @@ func newWorld(t *testing.T, external bool) *world {
 	if err != nil {
 		t.Skipf("本机没有可用的 Pi 1.1.0：%v", err)
 	}
-	schema := pgtest.NewSchema(t)
-	_, prefix := redistest.New(t)
 	dump := filepath.Join(t.TempDir(), "dump.json")
 	t.Setenv("FAKEPI_DUMP", dump)
-	w := &world{t: t, schema: schema, dump: dump, external: external, cfg: config.Config{
+	w := &world{t: t, dump: dump, external: external, cfg: config.Config{
 		TaskMaxSteps: 100, TaskMaxEdges: 300, TaskMaxVisits: 1000, TaskMaxRequest: 1 << 20, TaskMaxArtifact: 20 << 20, TaskMaxSession: 100 << 20, TaskReconcileInterval: 100 * time.Millisecond, TaskEventPoll: 10 * time.Millisecond, TaskRecordTimeout: time.Second,
-		DataDir: t.TempDir(), RedisURL: redistest.URL(t),
+		DataDir:    t.TempDir(),
 		ListenAddr: "127.0.0.1:0", AllowedHosts: []string{"localhost", "127.0.0.1", "::1"}, ConsoleOrigins: []string{"http://localhost:5173"},
-		WorkRoot: filepath.Join(t.TempDir(), "work"), RedisKeyPrefix: prefix, DefaultOrgName: "默认组织", DefaultProjectName: "默认项目",
+		WorkRoot: filepath.Join(t.TempDir(), "work"), DefaultOrgName: "默认组织", DefaultProjectName: "默认项目",
 		PiBin: fakepibin.Path(t), PiVersion: "1.1.0", PiMaxProcesses: 2, PiIdleTimeout: time.Minute, PiStartTimeout: 10 * time.Second,
 		PiStopGrace: 2 * time.Second, AbortTimeout: 3 * time.Second, GitCloneTimeout: 30 * time.Second, CLIInstallTimeout: time.Minute,
-		NodeBin: "node", PiAIDir: real.PiAIDir, LockTTL: 5 * time.Second, LockRenewInterval: time.Second, ReconcileInterval: 500 * time.Millisecond,
-		SSEKeepalive: time.Second, EventStreamMaxLen: 1000, RunTextTTL: time.Hour, ShutdownTimeout: 10 * time.Second,
+		NodeBin: "node", PiAIDir: real.PiAIDir, ReconcileInterval: 500 * time.Millisecond,
+		SSEKeepalive: time.Second, EventStreamMaxLen: 1000, ShutdownTimeout: 10 * time.Second,
 		MaxUploadFile: 1 << 20, MaxSkillArchive: 1 << 20, MaxSkillEntries: 50, MaxCredential: 4096, MaxMessage: 1 << 16,
 		TextEditExtensions: []string{".md"}, TextEditMax: 1 << 16, MaxInboxMessage: 1 << 16, InboxPreviewChars: 200, InboxPageMax: 100,
 		LoopctlDistDir: loopctlfake.Dir(t), ExecEnvPassthrough: []string{"FAKEPI_DUMP"},
