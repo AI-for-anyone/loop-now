@@ -68,7 +68,13 @@ type DB struct {
 	writeTxNow atomic.Int64
 	// queryHook 在每条语句执行前调用（见 SetQueryHook）。
 	queryHook atomic.Pointer[QueryHook]
+	// waiters 是正在等待写连接的调用数（见 WriteWaiters）。
+	waiters atomic.Int64
 }
+
+// WriteWaiters 返回正在等待写连接的调用数。测试用它确认某个写入已经停在等写连接上
+// （原来查 pg_stat_activity 里的锁等待）。
+func (d *DB) WriteWaiters() int64 { return d.waiters.Load() }
 
 // QueryHook 在每条语句执行前调用，事务里的语句在事务内调用。测试用它在某条语句前暂停，检验并发下的语义
 // （原来用 pgx 的 QueryTracer 做同样的事）。
@@ -373,7 +379,9 @@ func (d *DB) acquireWriter(ctx context.Context) (*sql.Conn, func(), error) {
 			d.log.Warn("等待写连接超时未得", "waited", d.wait, "holder", caller, "waiter", callerOutsidePackage())
 		})
 	}
+	d.waiters.Add(1)
 	c, err := d.w.Conn(ctx)
+	d.waiters.Add(-1)
 	if warn != nil {
 		warn.Stop()
 	}

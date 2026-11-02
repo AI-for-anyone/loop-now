@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"sync"
 	"testing"
+	"time"
 
 	"loop-now/internal/server/db"
 	"loop-now/internal/server/store"
@@ -96,4 +97,17 @@ func HoldWriter(t testing.TB, d *db.DB) (release func()) {
 	}
 	t.Cleanup(release)
 	return release
+}
+
+// WaitWriteWaiters 等到至少 n 个调用停在等写连接上（ctx 结束或 5 秒后失败），
+// 用来确认并发的写入确实已经走到了等待处，而不是还没开始。
+func WaitWriteWaiters(t testing.TB, ctx context.Context, d *db.DB, n int64) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for d.WriteWaiters() < n {
+		if ctx.Err() != nil || time.Now().After(deadline) {
+			t.Fatalf("没有 %d 个写入在等写连接（现在 %d 个）", n, d.WriteWaiters())
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
