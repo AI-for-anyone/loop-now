@@ -94,7 +94,7 @@ func recordAction(ctx context.Context, tx *db.Tx, a TaskAction, taskID uuid.UUID
 	}
 	hash := sha256.Sum256(a.Body)
 	var stored []byte
-	err = tx.QueryRow(ctx, `INSERT INTO task_actions(actor_key,action_id,operation,task_id,body_hash,response) VALUES($1,$2,$3,$4,$5,$6) RETURNING response`, a.ActorKey, a.ID, a.Operation, taskID, hash[:], b).Scan(&stored)
+	err = tx.QueryRow(ctx, `INSERT INTO task_actions(actor_key,action_id,operation,task_id,body_hash,response) VALUES($1,$2,$3,$4,$5,$6) RETURNING response`, a.ActorKey, a.ID, a.Operation, taskID, hash[:], json.RawMessage(b)).Scan(&stored)
 	return stored, err
 }
 func saveTask(ctx context.Context, tx *db.Tx, r *taskmodel.Record) error {

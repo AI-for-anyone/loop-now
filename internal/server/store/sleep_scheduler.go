@@ -156,7 +156,7 @@ func (s *Store) ReconcileSleeps(ctx context.Context, batch int) error {
 					node = nil
 				}
 				var turn TaskTurn
-				turn, err = scanTaskTurn(scope.Tx.QueryRow(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,wake_sleep_id,execution_mode) VALUES($1,$2,$3,$4,$5,$6,'queued','sleep_wake',1,$7,$8,$9) RETURNING `+taskTurnColumns, r.TimerRunID, r.TaskID, r.RuntimeID, node, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), text, r.ID, r.Mode))
+				turn, err = insertTaskTurn(ctx, scope.Tx, `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,wake_sleep_id,execution_mode`, `$1,$2,$3,$4,$5,$6,'queued','sleep_wake',1,$7,$8,$9`, r.TimerRunID, r.TaskID, r.RuntimeID, node, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), text, r.ID, r.Mode)
 				if err == nil {
 					err = s.taskLifecycle(ctx, scope.Tx, turn, EventRunQueued, map[string]any{"origin": "sleep_wake"})
 				}

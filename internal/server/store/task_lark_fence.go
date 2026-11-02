@@ -114,7 +114,7 @@ func (s *Store) ReserveTaskLarkFenceTx(ctx context.Context, m *TaskMutation, in 
 	if err != nil {
 		return false, err
 	}
-	_, err = m.Tx.Exec(ctx, `INSERT INTO task_lark_switch_actions(actor_key,action_id,task_id,node_run_id,request_hash,status,reservation_task_version,captured_request) VALUES($1,$2,$3,$4,$5,'pending',$6,$7)`, in.ActorKey, in.ActionID, in.TaskID, in.NodeRunID, in.RequestHash[:], m.Record.View.Task.Version+1, encoded)
+	_, err = m.Tx.Exec(ctx, `INSERT INTO task_lark_switch_actions(actor_key,action_id,task_id,node_run_id,request_hash,status,reservation_task_version,captured_request) VALUES($1,$2,$3,$4,$5,'pending',$6,$7)`, in.ActorKey, in.ActionID, in.TaskID, in.NodeRunID, in.RequestHash[:], m.Record.View.Task.Version+1, json.RawMessage(encoded))
 	if err != nil {
 		return false, err
 	}

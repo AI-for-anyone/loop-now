@@ -59,7 +59,7 @@ func (o *Observer) Event(runtime uuid.UUID, run *uuid.UUID, e executor.Event) {
 		o.failed(runtime, run, err)
 		return
 	}
-	_, err = o.Store.Pool.Exec(ctx, `INSERT INTO lifecycle_events(id,at,agent_id,type,data,instance_id,task_id,workflow_node,task_turn_id,inbox_message_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, uuid.Must(uuid.NewV7()), at, inst.AgentID, e.Type, encoded, o.Store.InstanceID, inst.TaskID, node, run, trigger)
+	_, err = o.Store.Pool.Exec(ctx, `INSERT INTO lifecycle_events(id,at,agent_id,type,data,instance_id,task_id,workflow_node,task_turn_id,inbox_message_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, uuid.Must(uuid.NewV7()), at, inst.AgentID, e.Type, json.RawMessage(encoded), o.Store.InstanceID, inst.TaskID, node, run, trigger)
 	if err != nil {
 		o.failed(runtime, run, err)
 	}

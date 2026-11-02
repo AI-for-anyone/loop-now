@@ -122,7 +122,7 @@ func (s *Store) PublishTaskLarkSwitchTx(ctx context.Context, m *TaskMutation, ac
 	if err = m.Emit("node.updated", map[string]any{"node": old}); err != nil {
 		return 0, false, err
 	}
-	turn, err := scanTaskTurn(m.Tx.QueryRow(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,execution_mode,text,lark_binding_revision,lark_switch_action_id,request_id) VALUES($1,$2,$3,$4,$5,$6,'queued','task_node','task_node',$7,$8,$9,$10) RETURNING `+taskTurnColumns, turnID, next.TaskID, next.RuntimeID, next.ID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), prompt, revision, action, taskRequestID(ctx, m, "task_node")))
+	turn, err := insertTaskTurn(ctx, m.Tx, `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,execution_mode,text,lark_binding_revision,lark_switch_action_id,request_id`, `$1,$2,$3,$4,$5,$6,'queued','task_node','task_node',$7,$8,$9,$10`, turnID, next.TaskID, next.RuntimeID, next.ID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), prompt, revision, action, taskRequestID(ctx, m, "task_node"))
 	if err != nil {
 		return 0, false, err
 	}

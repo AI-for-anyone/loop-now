@@ -51,7 +51,7 @@ func larkSwitchReadyFixture(t *testing.T, scopes []string) (*store.Store, store.
 		t.Fatal(err)
 	}
 	// SQLITE-PORT(G5): sha256/encode
-	if _, err := s.Pool.Exec(ctx, `UPDATE task_instances SET snapshot=$2,snapshot_sha=encode(sha256($2),'hex'),session_state='active',session_file=$3 WHERE id=$1`, publisher.RuntimeID, larkSwitchSnapshot(t, in.TaskID, publisher.AgentID, true), session); err != nil {
+	if _, err := s.Pool.Exec(ctx, `UPDATE task_instances SET snapshot=$2,snapshot_sha=$4,session_state='active',session_file=$3 WHERE id=$1`, publisher.RuntimeID, larkSwitchSnapshot(t, in.TaskID, publisher.AgentID, true), session, sha256Hex(larkSwitchSnapshot(t, in.TaskID, publisher.AgentID, true))); err != nil {
 		t.Fatal(err)
 	}
 	r, _ := s.GetTask(ctx, in.TaskID)
@@ -175,7 +175,7 @@ func TestTaskLarkPublishExcludesOtherAuthorizedTaskRuntime(t *testing.T) {
 	runtime := uuid.New()
 	original := larkSwitchSnapshot(t, in.TaskID, agent.ID, true)
 	// SQLITE-PORT(G5): sha256/encode
-	if _, err = s.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha) VALUES($1,$2,$3,$4,$5,encode(sha256($5),'hex'))`, runtime, in.TaskID, agent.ID, agent.Name, original); err != nil {
+	if _, err = s.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha) VALUES($1,$2,$3,$4,$5,$6)`, runtime, in.TaskID, agent.ID, agent.Name, original, sha256Hex(original)); err != nil {
 		t.Fatal(err)
 	}
 	_, err = s.MutateTask(ctx, in.TaskID, nil, func(m *store.TaskMutation) (any, error) {
@@ -211,7 +211,7 @@ func TestTaskLarkPublishExcludesOtherAuthorizedTaskRuntime(t *testing.T) {
 func TestTaskLarkPublishLateSecondMemberBusyHasNoPartialOverlay(t *testing.T) {
 	s, in, next, turn := larkPublishFixture(t)
 	ctx := context.Background()
-	if _, err := s.Pool.Exec(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,status,origin,text,user_message_id,assistant_message_id) VALUES($1,$2,$3,'queued','inbox_reminder','late old work',$4,$5)`, uuid.New(), in.TaskID, in.Members[1].RuntimeID, uuid.New(), uuid.New()); err != nil {
+	if _, err := s.Pool.Exec(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,status,origin,text,user_message_id,assistant_message_id,queue_seq) VALUES($1,$2,$3,'queued','inbox_reminder','late old work',$4,$5,(SELECT coalesce(max(queue_seq),0)+1 FROM task_turns))`, uuid.New(), in.TaskID, in.Members[1].RuntimeID, uuid.New(), uuid.New()); err != nil {
 		t.Fatal(err)
 	}
 	_, err := s.MutateTask(ctx, in.TaskID, nil, func(m *store.TaskMutation) (any, error) {
