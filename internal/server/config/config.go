@@ -45,6 +45,8 @@ const (
 	EnvListenAddr            = "LOOP_NOW_LISTEN_ADDR"
 	EnvAllowedHosts          = "LOOP_NOW_ALLOWED_HOSTS"
 	EnvConsoleOrigins        = "LOOP_NOW_CONSOLE_ORIGINS"
+	EnvWebDir                = "LOOP_NOW_WEB_DIR"
+	EnvReadyFile             = "LOOP_NOW_READY_FILE"
 	EnvMaxMessageImages      = "LOOP_NOW_MAX_MESSAGE_IMAGES"
 	EnvMaxMessageImageBytes  = "LOOP_NOW_MAX_MESSAGE_IMAGE_BYTES"
 	EnvMaxMessageImagePixels = "LOOP_NOW_MAX_MESSAGE_IMAGE_PIXELS"
@@ -124,12 +126,18 @@ type Config struct {
 	// DataDir 是数据根：库文件在 DataDir/db 下（见 DBDir）。默认是服务进程用户 HOME 下的 .loop_now，启动时算一次。
 	DataDir string
 	// BackupDir 是每日备份的目录，默认 DataDir/backups；BackupKeep 是保留的份数。
-	BackupDir      string
-	BackupKeep     int
-	ListenAddr     string
-	AllowedHosts   []string
+	BackupDir    string
+	BackupKeep   int
+	ListenAddr   string
+	AllowedHosts []string
+	// ConsoleOrigins 是允许跨源访问控制台接口的来源（vite 开发服务器）；服务端自己提供的控制台是同源，不需要列出。
+	// 设为 none 时为空，不允许任何跨源访问。
 	ConsoleOrigins []string
-	WorkRoot       string
+	// WebDir 非空时从这个目录提供控制台，代替二进制里内嵌的。
+	WebDir string
+	// ReadyFile 非空时，开始提供服务后把 {"url","pid","version"} 原子地写到这个文件（桌面壳据此找到端口），退出时删除。
+	ReadyFile string
+	WorkRoot  string
 	// ContextDir 是项目与全局上下文文件夹的根（projects/<projectId>/、global/），默认是服务进程用户 HOME 下的 .loop_now。
 	ContextDir         string
 	DefaultOrgName     string
@@ -237,6 +245,8 @@ func Load(getenv func(string) string) (*Config, error) {
 		ListenAddr:            p.str(EnvListenAddr, "127.0.0.1:8780"),
 		AllowedHosts:          p.list(EnvAllowedHosts, "localhost,127.0.0.1,[::1]"),
 		ConsoleOrigins:        p.list(EnvConsoleOrigins, "http://localhost:5173,http://127.0.0.1:5173"),
+		WebDir:                p.str(EnvWebDir, ""),
+		ReadyFile:             p.str(EnvReadyFile, ""),
 		WorkRoot:              p.str(EnvWorkRoot, DefaultWorkRoot()),
 		// 只在全新安装时用来创建默认组织与项目；两者都出现在 Agent 地址里（项目名还出现在 URL 里），所以用不需要转义的英文。
 		DefaultOrgName:     p.str(EnvDefaultOrgName, "default"),
@@ -337,7 +347,15 @@ func Load(getenv func(string) string) (*Config, error) {
 	c.Warnings = append(c.Warnings, p.checkListenAddr(c.ListenAddr)...)
 	p.checkExternal(c)
 	c.AllowedHosts = p.normalizeHosts(c.AllowedHosts)
+	if len(c.ConsoleOrigins) == 1 && strings.EqualFold(c.ConsoleOrigins[0], "none") {
+		c.ConsoleOrigins = nil
+	}
 	p.checkOrigins(c.ConsoleOrigins)
+	for env, v := range map[string]string{EnvWebDir: c.WebDir, EnvReadyFile: c.ReadyFile} {
+		if v != "" && (!filepath.IsAbs(v) || filepath.Clean(v) != v) {
+			p.fail(env, "须为规范的绝对路径（当前 %q）", v)
+		}
+	}
 	c.TextEditExtensions = p.normalizeExtensions(c.TextEditExtensions)
 	if c.MaxMessageImages < 1 || c.MaxMessageImages > 8 {
 		p.fail(EnvMaxMessageImages, "须为1到8")
@@ -378,6 +396,8 @@ func (c *Config) LogValue() slog.Value {
 		slog.String("listenAddr", c.ListenAddr),
 		slog.Any("allowedHosts", c.AllowedHosts),
 		slog.Any("consoleOrigins", c.ConsoleOrigins),
+		slog.String("webDir", c.WebDir),
+		slog.String("readyFile", c.ReadyFile),
 		slog.String("workRoot", c.WorkRoot),
 		slog.String("contextDir", c.ContextDir),
 		slog.String("pluginHostEntry", c.PluginHostEntry),

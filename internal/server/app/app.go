@@ -49,6 +49,7 @@ import (
 	"loop-now/internal/server/runrecord"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/tasks"
+	"loop-now/internal/server/webui"
 )
 
 // App 是装配好的服务端。
@@ -79,9 +80,11 @@ type App struct {
 	Plugins    *plugins.Service
 	PluginHost *pluginhost.Supervisor
 
-	listener   net.Listener
-	http       *http.Server
-	baseCancel context.CancelFunc
+	listener net.Listener
+	// readyWritten 表示本进程写过就绪文件，退出时要删掉它。
+	readyWritten bool
+	http         *http.Server
+	baseCancel   context.CancelFunc
 
 	// 对外端口（未配置时为空）：TLS，只认外部令牌。
 	extListener net.Listener
@@ -406,9 +409,18 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 
 	a.Store.ImageMaxCount = cfg.MaxMessageImages
 	a.Tasks.Hooks = appHooks{a}
+	console, consoleSource, err := consoleFiles(cfg.WebDir)
+	if err != nil {
+		return a, err
+	}
+	if console != nil {
+		log.Info("控制台由服务端提供", "source", consoleSource)
+	} else {
+		log.Info("服务端没有控制台文件，只提供 API（开发时用 vite，或设置 " + config.EnvWebDir + "）")
+	}
 	a.API = &httpapi.Server{Hooks: appHooks{a}, CLIImport: a.CLIImport, CLIVerification: a.CLIVerification, CLIAuth: a.CLIAuth, ModelAuth: a.ModelAuth, ModelSettings: a.ModelSettings, ProjectCredentials: projectCredentials,
 		O: httpapi.Options{
-			AllowedHosts: cfg.AllowedHosts, ConsoleOrigins: cfg.ConsoleOrigins, SSEKeepalive: cfg.SSEKeepalive, TaskEventPoll: cfg.TaskEventPoll, Defaults: defaults,
+			AllowedHosts: cfg.AllowedHosts, ConsoleOrigins: cfg.ConsoleOrigins, Console: webui.Handler(console), SSEKeepalive: cfg.SSEKeepalive, TaskEventPoll: cfg.TaskEventPoll, Defaults: defaults,
 			Limits: apitypes.Limits{MaxMessageImages: cfg.MaxMessageImages, MaxMessageImageBytes: cfg.MaxMessageImageBytes, MaxMessageImagePixels: cfg.MaxMessageImagePixels, MaxUploadFile: cfg.MaxUploadFile, MaxFolderUpload: maxFolderUpload, MaxMessage: cfg.MaxMessage, MaxInboxMessage: cfg.MaxInboxMessage, MaxSkillArchive: cfg.MaxSkillArchive,
 				MaxSkillEntries: cfg.MaxSkillEntries, MaxCredential: cfg.MaxCredential,
 				TextEdit: apitypes.TextEdit{MaxBytes: cfg.TextEditMax, Extensions: cfg.TextEditExtensions}},
@@ -498,6 +510,13 @@ func (a *App) Serve() error {
 		a.Plugins.WakeOnCommit()
 	}
 	a.Log.Info("开始提供服务", "addr", a.Addr())
+	if a.Cfg.ReadyFile != "" {
+		// 监听器早已打开，连接在 Serve 开始前排队，所以这时写出就绪文件不会让人连上一个还不回答的端口。
+		if err := writeReadyFile(a.Cfg.ReadyFile, Ready{URL: "http://" + a.Addr(), PID: os.Getpid(), Version: buildinfo.Version()}); err != nil {
+			return fmt.Errorf("写就绪文件 %s 失败：%w", a.Cfg.ReadyFile, err)
+		}
+		a.readyWritten = true
+	}
 	if err := a.http.Serve(a.listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
@@ -540,6 +559,9 @@ func (a *App) Shutdown(ctx context.Context) error {
 	}
 	if a.ModelAuth != nil {
 		errs = append(errs, a.ModelAuth.Close(ctx))
+	}
+	if a.readyWritten {
+		_ = os.Remove(a.Cfg.ReadyFile)
 	}
 	a.closeResources()
 	a.Log.Info("服务端已停止")

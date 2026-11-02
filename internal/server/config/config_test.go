@@ -123,6 +123,9 @@ func TestLoadErrors(t *testing.T) {
 		{"在线编辑上限大于上传上限", func(m map[string]string) { m[EnvTextEditMax] = "20MiB" }, EnvTextEditMax},
 		{"监听地址格式错误", func(m map[string]string) { m[EnvListenAddr] = "localhost" }, EnvListenAddr},
 		{"控制台来源带路径", func(m map[string]string) { m[EnvConsoleOrigins] = "http://localhost:5173/app" }, EnvConsoleOrigins},
+		{"none 与来源混用", func(m map[string]string) { m[EnvConsoleOrigins] = "none,http://localhost:5173" }, EnvConsoleOrigins},
+		{"控制台目录不是绝对路径", func(m map[string]string) { m[EnvWebDir] = "web/dist" }, EnvWebDir},
+		{"就绪文件不规范", func(m map[string]string) { m[EnvReadyFile] = "/tmp/../ready.json" }, EnvReadyFile},
 		{"默认组织名含斜杠", func(m map[string]string) { m[EnvDefaultOrgName] = "a/b" }, EnvDefaultOrgName},
 		{"默认项目名是 UUID 格式", func(m map[string]string) { m[EnvDefaultProjectName] = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b" }, EnvDefaultProjectName},
 		{"概览事件流保留条数为零", func(m map[string]string) { m[EnvOverviewMaxLen] = "0" }, EnvOverviewMaxLen},
@@ -191,6 +194,21 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if c.MaxCredential != 1024 {
 		t.Errorf("MaxCredential = %d", c.MaxCredential)
+	}
+}
+
+// 控制台来源可以设为 none（不允许任何跨源访问）；控制台目录与就绪文件按原样取用。
+func TestConsoleSettings(t *testing.T) {
+	env := requiredEnv()
+	c, err := Load(envOf(env))
+	if err != nil || len(c.ConsoleOrigins) != 2 || c.WebDir != "" || c.ReadyFile != "" {
+		t.Fatalf("默认值不对：%v %+v", err, c.ConsoleOrigins)
+	}
+	env[EnvConsoleOrigins] = "NONE"
+	env[EnvWebDir] = "/opt/loop-now/web"
+	env[EnvReadyFile] = "/tmp/loop-now-ready.json"
+	if c, err = Load(envOf(env)); err != nil || c.ConsoleOrigins != nil || c.WebDir != "/opt/loop-now/web" || c.ReadyFile != "/tmp/loop-now-ready.json" {
+		t.Fatalf("覆盖值不对：%v %+v %q %q", err, c.ConsoleOrigins, c.WebDir, c.ReadyFile)
 	}
 }
 

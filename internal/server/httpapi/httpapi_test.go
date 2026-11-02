@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,6 +37,7 @@ import (
 	"loop-now/internal/server/plugins"
 	"loop-now/internal/server/runrecord"
 	"loop-now/internal/server/store"
+	"loop-now/internal/server/webui"
 	"loop-now/internal/testutil/sqlitetest"
 )
 
@@ -342,6 +344,69 @@ func TestHostOriginAndCORS(t *testing.T) {
 	}
 	if r := send("GET", "/healthz", "", "", nil); r.StatusCode != http.StatusOK {
 		t.Errorf("/healthz 应可用：%d", r.StatusCode)
+	}
+	// 服务端自己提供的控制台是同源：写请求带的 Origin 等于本请求的 scheme://Host，不需要白名单，也不回 CORS 头。
+	if r := send("POST", "/api/v1/platform/agents", e.srv.URL, "", strings.NewReader(`{"name":"同源","model":{"provider":"anthropic","modelId":"claude-x"}}`)); r.StatusCode != http.StatusCreated || r.Header.Get("Access-Control-Allow-Origin") != "" {
+		t.Errorf("同源的写请求应放行且不回 CORS 头：%d %v", r.StatusCode, r.Header)
+	}
+	// 同端口的另一个允许的主机名不是同源。
+	other := strings.Replace(e.srv.URL, "127.0.0.1", "localhost", 1)
+	if r := send("POST", "/api/v1/platform/agents", other, "", strings.NewReader(`{"name":"跨源","model":{"provider":"anthropic","modelId":"claude-x"}}`)); r.StatusCode != http.StatusForbidden {
+		t.Errorf("Host 与 Origin 不一致时不是同源：%d", r.StatusCode)
+	}
+	// 没有白名单（LOOP_NOW_CONSOLE_ORIGINS=none）时，开发用的 5173 也被拒绝，同源照样放行。
+	e.api.O.ConsoleOrigins = nil
+	locked := httptest.NewServer(e.api.Handler())
+	defer locked.Close()
+	e.srv = locked
+	if r := send("GET", "/api/v1/context", "http://localhost:5173", "", nil); r.StatusCode != http.StatusForbidden {
+		t.Errorf("没有白名单时跨源应拒绝：%d", r.StatusCode)
+	}
+	if r := send("GET", "/api/v1/context", locked.URL, "", nil); r.StatusCode != http.StatusOK {
+		t.Errorf("没有白名单时同源应放行：%d", r.StatusCode)
+	}
+}
+
+// 控制台端口上 API 之外的路径交给控制台的静态文件；API、Agent 接口与 /healthz 不受影响，对外端口不提供控制台。
+func TestConsoleServedBesideAPI(t *testing.T) {
+	e := newEnv(t)
+	e.api.O.Console = webui.Handler(fstest.MapFS{"index.html": {Data: []byte("<title>console</title>")}})
+	srv := httptest.NewServer(e.api.Handler())
+	defer srv.Close()
+	get := func(path string) (int, string) {
+		t.Helper()
+		resp, err := http.Get(srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(b)
+	}
+	for _, p := range []string{"/", "/agents/x"} {
+		if code, body := get(p); code != 200 || !strings.Contains(body, "console") {
+			t.Errorf("%s：%d %q", p, code, body)
+		}
+	}
+	if code, body := get("/api/v1/context"); code != 200 || strings.Contains(body, "console") {
+		t.Errorf("API 不应被控制台接管：%d", code)
+	}
+	if code, body := get("/api/v1/no-such-route"); code != 404 || strings.Contains(body, "console") {
+		t.Errorf("API 下不存在的路径不回退到控制台：%d %q", code, body)
+	}
+	if code, _ := get("/healthz"); code != 200 {
+		t.Errorf("/healthz：%d", code)
+	}
+	ext := httptest.NewServer(e.api.ExternalHandler(nil))
+	defer ext.Close()
+	resp, err := http.Get(ext.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if strings.Contains(string(b), "console") {
+		t.Errorf("对外端口不应提供控制台：%d", resp.StatusCode)
 	}
 }
 
