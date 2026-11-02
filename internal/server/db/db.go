@@ -64,6 +64,8 @@ type DB struct {
 	holder atomic.Pointer[writerHolder]
 	// writeHook 是每个写事务提交前执行的全局钩子（见 SetWriteHook）。
 	writeHook atomic.Pointer[WriteHook]
+	// writeTxNow 是进行中写事务的开始时刻（UTC 微秒），写连接上的 SQL now() 返回它；没有写事务时为 0。
+	writeTxNow atomic.Int64
 }
 
 type writerHolder struct {
@@ -124,7 +126,16 @@ func Open(ctx context.Context, o Options) (*DB, error) {
 	d := &DB{dir: o.Dir, now: o.Now, slowTx: o.SlowTx, wait: o.WriterWaitWarn, log: o.Logger}
 	data, events := filepath.Join(o.Dir, DataFile), filepath.Join(o.Dir, EventsFile)
 
-	w := sql.OpenDB(connector(data, events, "immediate", func(c sqlite.ExecQuerierContext) error {
+	// SQL 里的 now() 与 clock_timestamp() 由本包提供（UTC 微秒，经注入的时钟）：写连接上的 now() 是当前写事务的
+	// 开始时刻，与 PostgreSQL 一致；clock_timestamp() 与只读连接上的 now() 取调用时刻。
+	clock := func() int64 { return d.now().UnixMicro() }
+	writerNow := func() int64 {
+		if v := d.writeTxNow.Load(); v != 0 {
+			return v
+		}
+		return clock()
+	}
+	w := sql.OpenDB(connector(data, events, "immediate", writerNow, clock, func(c sqlite.ExecQuerierContext) error {
 		for _, schema := range []string{"main", EventsSchema} {
 			if err := pragma(c, schema+".journal_mode=WAL"); err != nil {
 				return err
@@ -141,7 +152,7 @@ func Open(ctx context.Context, o Options) (*DB, error) {
 		return nil, fmt.Errorf("db: 打开写连接失败：%w", err)
 	}
 
-	r := sql.OpenDB(connector(data, events, "deferred", func(c sqlite.ExecQuerierContext) error {
+	r := sql.OpenDB(connector(data, events, "deferred", clock, clock, func(c sqlite.ExecQuerierContext) error {
 		return pragma(c, "query_only=1")
 	}))
 	r.SetMaxOpenConns(o.ReadConns)
@@ -158,7 +169,7 @@ func Open(ctx context.Context, o Options) (*DB, error) {
 
 // connector 返回一个只服务本库的驱动实例：挂载与 PRAGMA 写在它自己的连接钩子里，不影响进程里其他 SQLite 连接。
 // 每个新连接：挂载 events.db、设置两个库各自的 PRAGMA，最后执行 hook（写池设 WAL，读池设只读）。
-func connector(data, events, txlock string, hook func(sqlite.ExecQuerierContext) error) driver.Connector {
+func connector(data, events, txlock string, now, clock func() int64, hook func(sqlite.ExecQuerierContext) error) driver.Connector {
 	q := url.Values{}
 	for _, p := range connPragmas {
 		q.Add("_pragma", p)
@@ -166,6 +177,13 @@ func connector(data, events, txlock string, hook func(sqlite.ExecQuerierContext)
 	q.Set("_txlock", txlock)
 	dsn := "file:" + filepath.ToSlash(data) + "?" + q.Encode()
 	drv := &sqlite.Driver{}
+	for name, f := range map[string]func() int64{"now": now, "clock_timestamp": clock} {
+		if err := drv.RegisterFunction(name, &sqlite.FunctionImpl{NArgs: 0, Scalar: func(*sqlite.FunctionContext, []driver.Value) (driver.Value, error) {
+			return f(), nil
+		}}); err != nil {
+			panic(err) // 只会是名字或参数个数写错
+		}
+	}
 	drv.RegisterConnectionHook(func(c sqlite.ExecQuerierContext, _ string) error {
 		if err := attachEvents(c, events); err != nil {
 			return err

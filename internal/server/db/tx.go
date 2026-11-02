@@ -64,8 +64,10 @@ func (d *DB) beginWrite(ctx context.Context) (*Tx, func(error) error, error) {
 		return nil, nil, fmt.Errorf("db: 开始写事务失败：%w", err)
 	}
 	t := &Tx{tx: stx, now: d.now()}
+	d.writeTxNow.Store(t.now.UnixMicro())
 	end := func(fnErr error) error {
 		defer release()
+		defer d.writeTxNow.Store(0)
 		if fnErr == nil {
 			fnErr = t.runBefore(ctx, d.writeHook.Load())
 		}
