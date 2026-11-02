@@ -269,7 +269,7 @@ func (s *Store) StopTaskNodeRunTx(ctx context.Context, m *TaskMutation, target T
 // TaskTurnStoppedTx 报告这一轮是否被人停止（abort_requested 带 stop:true）。
 func TaskTurnStoppedTx(ctx context.Context, tx *db.Tx, turn uuid.UUID) (bool, error) {
 	var stopped bool
-	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM lifecycle_events WHERE task_turn_id=$1 AND type='run.abort_requested' AND data->>'stop'='true')`, turn).Scan(&stopped)
+	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM lifecycle_events WHERE task_turn_id=$1 AND type='run.abort_requested' AND data->'stop'='true')`, turn).Scan(&stopped)
 	return stopped, err
 }
 
