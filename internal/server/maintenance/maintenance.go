@@ -37,7 +37,7 @@ type Options struct {
 	DailyInterval      time.Duration // 每日维护的间隔，默认 24 小时
 	StartDelay         time.Duration // 启动后第一次每日维护至少等多久，默认 1 分钟
 	LogRetention       time.Duration // events.db 日志保留多久，默认 90 天
-	WALWarnBytes       int64         // 单个 WAL 超过多少字节就告警，默认 256 MiB
+	WALWarnBytes       int64         // 单个 WAL 超过多少字节就告警，默认 db.WALWarnBytes
 	PruneBatch         int           // 每个删除事务最多删多少行，默认 10000
 	Now                func() time.Time
 }
@@ -56,7 +56,7 @@ func (o *Options) defaults() {
 		o.LogRetention = 90 * 24 * time.Hour
 	}
 	if o.WALWarnBytes <= 0 {
-		o.WALWarnBytes = 256 << 20
+		o.WALWarnBytes = db.WALWarnBytes
 	}
 	if o.PruneBatch <= 0 {
 		o.PruneBatch = 10000

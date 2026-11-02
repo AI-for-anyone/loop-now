@@ -78,9 +78,6 @@ func (c *Coord) Keys() Keys { return c.keys }
 // LockValue 生成锁持有者的值 "<runID>|<instanceID>"。
 func LockValue(runID, instanceID string) string { return runID + "|" + instanceID }
 
-// Ping 用于健康检查；进程内的协调层总是可用。
-func (c *Coord) Ping(context.Context) error { return nil }
-
 // ---------- 忙闲锁 ----------
 
 // Acquire 仅在锁不存在时设置锁，返回是否拿到。排队中的执行由数据库判断（见 store 的 ErrQueuedRunsExist）。

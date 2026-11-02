@@ -64,11 +64,11 @@ func addOps(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"health"},
-		Summary:    "查看服务端依赖（PostgreSQL、Redis）是否正常；不正常时以 server_unhealthy 失败，details 为各依赖的状态",
+		Summary:    "查看服务端的本地数据库是否正常；不正常时以 server_unhealthy 失败，details 为健康状态",
 		Identities: externalOnly,
 		Network:    true,
 		Retry:      true,
-		Output:     "Health（对外端口只返回各依赖的 ok，不含错误原文）",
+		Output:     "Health（对外端口只返回 database.ok，不含错误原文与 WAL 信息）",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			data, err := get(ctx, inv, nil, "health")
 			var e *output.Error
@@ -87,7 +87,7 @@ func unhealthy(e *output.Error) *output.Error {
 		return e
 	}
 	var down []string
-	for _, dep := range []string{"postgres", "redis"} {
+	for _, dep := range []string{"database"} {
 		var d struct {
 			OK bool `json:"ok"`
 		}

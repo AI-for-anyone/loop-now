@@ -68,6 +68,10 @@ func (d *DB) Optimize(ctx context.Context) error {
 	return err
 }
 
+// WALWarnBytes 是单个 WAL 被认为过大的阈值：超过时通常是长时间不结束的读事务挡住了检查点。
+// 后台维护据此记告警，健康接口据此给出 walWarning。
+const WALWarnBytes int64 = 256 << 20
+
 // WALSize 返回两个库 -wal 文件的字节数（不存在时为 0），供告警与状态页使用。
 func (d *DB) WALSize() (data, events int64) {
 	size := func(name string) int64 {

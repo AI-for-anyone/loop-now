@@ -270,12 +270,12 @@ func TestObservabilityCommands(t *testing.T) {
 		}
 		r := e.run("health")
 		r.fails(t, output.CodeServerUnhealthy, 4)
-		if r.Env.Error.HTTPStatus != 503 || !strings.Contains(r.Env.Error.Message, "postgres") || strings.Contains(r.Env.Error.Message, "redis") || r.Env.Meta.Attempts != 3 {
+		if r.Env.Error.HTTPStatus != 503 || !strings.Contains(r.Env.Error.Message, "database") || r.Env.Meta.Attempts != 3 {
 			t.Fatalf("%s", r.Stdout)
 		}
 		var details map[string]any
 		json.Unmarshal(r.Env.Error.Details, &details)
-		if details["postgres"].(map[string]any)["ok"] != false {
+		if details["database"].(map[string]any)["ok"] != false {
 			t.Fatalf("%v", details)
 		}
 	})
