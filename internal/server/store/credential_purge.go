@@ -374,7 +374,7 @@ func scrubSnapshotsTx(ctx context.Context, tx *db.Tx, instances []uuid.UUID, cli
 	}
 	set, args := `jsonb_set(jsonb_set(x.s,'{credentials,model}','{}'),'{credentials,cli}','{}')`, []any{instances}
 	if cli != nil {
-		set, args = `jsonb_set(x.s,'{credentials,cli}',coalesce(x.s->'credentials'->'cli','{}')-$2::text[])`, append(args, cli)
+		set, args = `jsonb_set(x.s,'{credentials,cli}',coalesce(x.s->'credentials'->'cli','{}')-$2)`, append(args, cli)
 	}
 	// SQLITE-PORT(G4): ::cast、convert_from/to
 	_, e := tx.Exec(ctx, `UPDATE task_instances AS i SET snapshot=convert_to(`+set+`::text,'UTF8')

@@ -40,7 +40,7 @@ func TestStatsValidationAndContract(t *testing.T) {
 	sleep := uuid.New()
 	// SQLITE-PORT(G11): '{}' array、::cast
 	exec(`INSERT INTO agent_sleeps(id,scope_key,scope_kind,mode,agent_id,session_epoch,source_run_id,action_id,body_hash,receipt,state,seconds,entered_at,wake_at,ended_at,end_reason,timer_run_id,wake_run_id,revision)
-		VALUES($1,'normal/'||$2::text,'normal','normal',$2,1,$3,$4,$5,'{}','woken',60,$6,$6,$6,'deadline',$7,$7,1)`, sleep, a.ID, uuid.New(), uuid.New(), make([]byte, 32), base, uuid.New())
+		VALUES($1,'normal/'||$2,'normal','normal',$2,1,$3,$4,$5,'{}','woken',60,$6,$6,$6,'deadline',$7,$7,1)`, sleep, a.ID, uuid.New(), uuid.New(), make([]byte, 32), base, uuid.New())
 	run := func(origin, status string, at time.Time, errorCode *string, wake *uuid.UUID) uuid.UUID {
 		id := uuid.New()
 		exec(`INSERT INTO runs(id,agent_id,user_message_id,config_version,priority,status,origin,error_code,queued_at,started_at,running_at,ended_at,wake_sleep_id)

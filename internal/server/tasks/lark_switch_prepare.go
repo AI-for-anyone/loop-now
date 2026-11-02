@@ -16,7 +16,7 @@ func (s *Source) taskPreparationCheckTx(ctx context.Context, m *store.TaskMutati
 	var task, agent uuid.UUID
 	var raw []byte
 	var prepared, retired bool
-	if err := m.Tx.QueryRow(ctx, `SELECT task_id,agent_id,snapshot,prepared,retired FROM task_instances WHERE id=$1 FOR UPDATE`, inst.ID).Scan(&task, &agent, &raw, &prepared, &retired); err != nil {
+	if err := m.Tx.QueryRow(ctx, `SELECT task_id,agent_id,snapshot,prepared,retired FROM task_instances WHERE id=$1`, inst.ID).Scan(&task, &agent, &raw, &prepared, &retired); err != nil {
 		return false, 0, err
 	}
 	if task != inst.TaskID || agent != inst.AgentID || task != m.Record.View.Task.ID || retired || m.Record.Ended() || !bytes.Equal(raw, inst.Snapshot) {

@@ -206,7 +206,7 @@ func taskNodeInboxVisibleSQL(alias string, p Party) string {
 	if p.Kind != "agent" || p.RuntimeID == uuid.Nil {
 		return "true"
 	}
-	return `NOT EXISTS(SELECT 1 FROM task_node_inbox_messages nb JOIN task_records nt ON nt.id=nb.task_id WHERE nb.message_id=` + alias + `.id AND (nt.ended_at IS NOT NULL OR nb.not_executed_at IS NOT NULL OR nt.document->'view'->'task'->>'currentNodeRunId' IS DISTINCT FROM nb.node_run_id::text OR (CASE WHEN nt.document->'view'->'nodes' @> jsonb_build_array(jsonb_build_object('id',nb.node_run_id::text,'status','blocked')) THEN 'task_conversation' ELSE 'task_node' END)<>nb.execution_mode))`
+	return `NOT EXISTS(SELECT 1 FROM task_node_inbox_messages nb JOIN task_records nt ON nt.id=nb.task_id WHERE nb.message_id=` + alias + `.id AND (nt.ended_at IS NOT NULL OR nb.not_executed_at IS NOT NULL OR nt.document->'view'->'task'->>'currentNodeRunId' IS NOT nb.node_run_id OR (CASE WHEN nt.document->'view'->'nodes' @> jsonb_build_array(jsonb_build_object('id',nb.node_run_id,'status','blocked')) THEN 'task_conversation' ELSE 'task_node' END)<>nb.execution_mode))`
 }
 
 func (s *Store) TaskNodeInboxPageTx(ctx context.Context, m *TaskMutation, node uuid.UUID, cursor string, limit int) (taskmodel.TaskNodeInboxPage, error) {
@@ -239,7 +239,7 @@ func (s *Store) TaskNodeInboxPageTx(ctx context.Context, m *TaskMutation, node u
  UNION ALL
  SELECT m.id,m.created_at FROM inbox_messages m WHERE ((m.from_runtime_id=$6 AND m.to_kind IN ('console','external')) OR (m.to_runtime_id=$6 AND m.from_kind IN ('console','external')))
   AND NOT EXISTS(SELECT 1 FROM task_node_inbox_messages nb WHERE nb.message_id=m.id) AND `+inboxNodeSQL("m")+`=$2
-) x WHERE ($3::timestamptz IS NULL OR (x.created_at,x.id)>($3,$4)) ORDER BY x.created_at,x.id LIMIT $5`, m.Record.View.Task.ID, node, at, id, limit+1, runtime)
+) x WHERE ($3 IS NULL OR (x.created_at,x.id)>($3,$4)) ORDER BY x.created_at,x.id LIMIT $5`, m.Record.View.Task.ID, node, at, id, limit+1, runtime)
 	if e != nil {
 		return out, e
 	}

@@ -29,7 +29,7 @@ func (s *Source) taskLarkOverlay(ctx context.Context, inst store.TaskInstance) (
 		var raw []byte
 		var sha string
 		var prepared, retired bool
-		if err := m.Tx.QueryRow(ctx, `SELECT task_id,agent_id,snapshot,snapshot_sha,prepared,retired FROM task_instances WHERE id=$1 FOR UPDATE`, inst.ID).Scan(&task, &agent, &raw, &sha, &prepared, &retired); err != nil {
+		if err := m.Tx.QueryRow(ctx, `SELECT task_id,agent_id,snapshot,snapshot_sha,prepared,retired FROM task_instances WHERE id=$1`, inst.ID).Scan(&task, &agent, &raw, &sha, &prepared, &retired); err != nil {
 			return nil, err
 		}
 		if task != inst.TaskID || agent != inst.AgentID || !prepared || retired || m.Record.Ended() || !bytes.Equal(raw, inst.Snapshot) {

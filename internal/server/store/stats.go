@@ -192,11 +192,11 @@ type StatsProcess struct {
 }
 
 // statsScope 是范围内未删除 Agent 的条件，a 为 agents，$1、$2 为 ScopeFilter.args()。
-const statsScope = `a.deleted_at IS NULL AND ($1::uuid IS NULL OR a.project_id = $1) AND (NOT $2 OR a.project_id IS NULL)`
+const statsScope = `a.deleted_at IS NULL AND ($1 IS NULL OR a.project_id = $1) AND (NOT $2 OR a.project_id IS NULL)`
 
 // statsBucket 返回时间 x 所在桶的序号：$3 为 from，$5 为桶宽秒数。
 func statsBucket(x string) string {
-	return `floor(extract(epoch FROM (` + x + ` - $3::timestamptz)) / $5::float8)::int`
+	return `floor(extract(epoch FROM (` + x + ` - $3)) / CAST($5 AS REAL))::int`
 }
 
 // Stats 汇总范围内未删除 Agent 在 [from, to) 内的统计，按 step 分桶（第一桶从 from 开始，最后一桶截止于 to）。
@@ -366,7 +366,7 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 		// SQLITE-PORT(G6): GROUPING SETS
 		rows, err = tx.Query(ctx, `SELECT grouping(bucket), bucket, count(*), count(answered), avg(answered), max(answered)
 			FROM (SELECT `+statsBucket("m.created_at")+` AS bucket,
-					CASE WHEN q.state = 'answered' THEN extract(epoch FROM (q.answered_at - m.created_at))::float8 END AS answered
+					CASE WHEN q.state = 'answered' THEN CAST(extract(epoch FROM (q.answered_at - m.created_at)) AS REAL) END AS answered
 				FROM inbox_messages m JOIN inbox_questions q ON q.message_id = m.id JOIN agents a ON a.id = m.from_agent_id
 				WHERE m.from_kind = 'agent' AND m.to_kind = 'console' AND `+statsScope+` AND m.created_at >= $3 AND m.created_at < $4) x
 			GROUP BY GROUPING SETS ((bucket), ())`, args...)
