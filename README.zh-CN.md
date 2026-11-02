@@ -119,15 +119,15 @@ export default function register(api: PluginAPI) {
 
 ### Docker Compose（本地一体化）
 
-首次启动会在本机构建服务端和控制台镜像，并启动 PostgreSQL 18、Redis 8：
+首次启动会在本机构建服务端和控制台镜像，并启动这两者：
 
 ```sh
 docker compose up --build -d
 ```
 
-打开 **[http://localhost:5173](http://localhost:5173)**。控制台没有登录功能，因此 Compose 只把 Web 的 `5173` 和 API 的 `8780` 发布到 `127.0.0.1`；PostgreSQL 与 Redis 不发布到宿主机。数据库默认用户、密码和库名都是 `loopnow`，仅用于 Compose 内部网络，不要把这套默认配置暴露到外部。
+打开 **[http://localhost:5173](http://localhost:5173)**。控制台没有登录功能，因此 Compose 只把 Web 的 `5173` 和 API 的 `8780` 发布到 `127.0.0.1`，不要把这套配置暴露到外部。
 
-`pgdata` 命名卷保存数据库，`loopdata` 保存 Agent 工作区、会话和工具。`docker compose down` 会保留它们；`docker compose down -v` 会删除这些数据，执行前请先备份。
+`loopdata` 命名卷保存数据库（SQLite，含每日备份）、Agent 工作区、会话和工具。`docker compose down` 会保留它们；`docker compose down -v` 会删除这些数据，执行前请先备份。
 
 容器中的 Agent 有一些边界：
 
@@ -165,8 +165,6 @@ docker compose up --build -d
 | --- | --- |
 | Go | 1.27 或以上 |
 | Node.js / npm | **24.21.0 / 11.19.0**；Web 脚本会检查精确版本 |
-| PostgreSQL | 18 |
-| Redis | 8 |
 | Pi coding agent | **1.4.0** |
 | 其他工具 | Git |
 
@@ -180,26 +178,16 @@ git clone --depth 1 --branch main https://github.com/AI-for-anyone/loop-now.git
 cd loop-now
 ```
 
-通过你使用的本地安装方式启动 PostgreSQL 和 Redis。使用本机 PostgreSQL 管理员创建专用角色和数据库：
-
-```sh
-createuser --login --pwprompt loopnow
-createdb --owner=loopnow loopnow
-```
-
 ### 2. 配置服务端
 
-以下命令在仓库根目录运行。把数据库密码替换为刚设置的值，必要时做 URL 编码。Redis 使用专用 DB 和 key 前缀；如果启用了认证，请在连接地址中加入认证信息。
+以下命令在仓库根目录运行：
 
 ```sh
-export LOOP_NOW_DATABASE_URL='postgres://loopnow:YOUR_URL_ENCODED_PASSWORD@127.0.0.1:5432/loopnow?sslmode=disable'
-export LOOP_NOW_REDIS_URL='redis://127.0.0.1:6379/1'
-export LOOP_NOW_REDIS_KEY_PREFIX='loopnow:'
 export LOOP_NOW_NODE_BIN="$(command -v node)"
 export LOOP_NOW_PI_BIN="$(command -v pi)"
 ```
 
-凭证以明文存在 PostgreSQL，请保护好数据库访问权限和备份文件。服务端从进程环境变量读取配置，不会自动加载 `.env` 文件。
+服务端把数据库和每日备份放在数据目录里，默认是服务进程用户主目录下的 `~/.loop_now`（用 `LOOP_NOW_DATA_DIR` 修改），首次启动时自动建库。凭证以明文存在这个数据库里，请保护好数据目录和备份。服务端从进程环境变量读取配置，不会自动加载 `.env` 文件。
 
 执行工作根目录必须持久保存，并位于**用户主目录之外**，它和上级目录不能包含 `AGENTS.md` 或 `CLAUDE.md`，以免 Pi 继承宿主上无关的指令。新安装默认使用 macOS 的 `/Users/Shared/loop-now`，或 Linux 的 `/var/lib/loop-now`：
 
@@ -225,7 +213,7 @@ export LOOP_NOW_LOOPCTL_DIST_DIR="$PWD/.local-build/loopctl-dist"
 bin/loop-server
 ```
 
-启动时会检查依赖、执行待应用的数据库迁移，并创建默认组织和项目。API 监听 `127.0.0.1:8780`。同一套安装只运行一个服务端；更新时保留原数据库、Redis 配置和工作目录。
+启动时会检查依赖、执行待应用的数据库迁移，并创建默认组织和项目。API 监听 `127.0.0.1:8780`。一个数据目录同时只能由一个服务端使用；更新时保留数据目录和工作目录。从基于 PostgreSQL 的版本迁移过来时，先用那个版本再启动一次完成它的迁移，停掉服务，然后把 `LOOP_NOW_DATABASE_URL` 指向旧库，运行一次 `loop-server import-postgres`，它会把全部数据复制到数据目录里的新库。
 
 插件需要 Node 插件宿主，从 `plugins/` 构建（Node 24.21.0）。设置了 `LOOP_NOW_PLUGIN_HOST_ENTRY` 时服务端才运行它；设置了 `LOOP_NOW_PLUGIN_OFFICIAL_DIR` 时，官方插件作为 `builtin` 安装来源提供：
 
@@ -265,8 +253,7 @@ export LOOP_NOW_WEB_NODE_BIN="$(dirname "$(command -v node)")"
 ```mermaid
 flowchart LR
     UI[Web 控制台] <-->|HTTP 与 SSE| Server[Go 服务端]
-    Server <--> PG[(PostgreSQL)]
-    Server <--> Redis[(Redis)]
+    Server <--> DB[(SQLite)]
     Server -->|RPC| Pi[Pi 进程]
     Server <-->|stdio| Host[Node 插件宿主]
     Host -->|HTTP，插件令牌| Server
@@ -274,7 +261,7 @@ flowchart LR
     Pi --> Ext[插件扩展与 MCP 服务]
 ```
 
-PostgreSQL 保存平台状态、凭证、消息与任务记录，Redis 负责协调、队列和实时流，本地文件系统保存 Agent 工作目录、会话与已安装工具。这些组件组成一套本地安装，图中拆分不代表已经支持独立扩缩容。
+数据目录里的 SQLite 保存平台状态、凭证、消息、任务记录和排队；忙闲锁和实时流在服务端进程内，本地文件系统保存 Agent 工作目录、会话与已安装工具。这些组件组成一套本地安装，图中拆分不代表已经支持独立扩缩容。
 
 | 目录 | 用途 |
 | --- | --- |
@@ -292,6 +279,7 @@ PostgreSQL 保存平台状态、凭证、消息与任务记录，Redis 负责协
 | 环境变量 | 用途／默认值 |
 | --- | --- |
 | `LOOP_NOW_LISTEN_ADDR` | 控制台 API；默认 `127.0.0.1:8780` |
+| `LOOP_NOW_DATA_DIR` | 数据库（`db/`）和每日备份（`backups/`）；服务进程用户的 `~/.loop_now` |
 | `LOOP_NOW_WORK_ROOT` | 持久化 Agent 工作目录与运行文件 |
 | `LOOP_NOW_CONTEXT_DIR` | 项目（`projects/<id>/`）与全局（`global/`）上下文文件夹；默认服务运行用户的 `~/.loop_now` |
 | `LOOP_NOW_PLUGIN_HOST_ENTRY` | 插件宿主入口的绝对路径（用 Node 运行）；不设时插件的平台半边不运行 |
@@ -328,7 +316,7 @@ go test ./cmd/... ./internal/... ./api/...
 ./bin/npm24 run build
 ```
 
-数据库集成测试需通过 `LOOP_NOW_TEST_DATABASE_URL` 指向隔离测试库；涉及 Redis 的测试还需 `LOOP_NOW_TEST_REDIS_URL`。原生和浏览器测试有各自的夹具要求，跳过不等于集成验证通过。请勿在贡献中提交凭证、本地运行数据或构建产物。
+后端测试不需要外部服务，每个测试使用自己的临时数据目录；只有一次性 PostgreSQL 导入器的测试需要通过 `LOOP_NOW_TEST_DATABASE_URL` 指向测试库。原生和浏览器测试有各自的夹具要求，跳过不等于集成验证通过。请勿在贡献中提交凭证、本地运行数据或构建产物。
 
 ## 许可证
 

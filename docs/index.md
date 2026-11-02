@@ -80,6 +80,6 @@ The manifest is authoritative: subscribing to an event, or calling an API scope,
 
 ## Early-stage personal edition
 
-This project targets a **single local server**. The console has no login and is intended for loopback access. Credentials are stored in plaintext in your own PostgreSQL — protect database access and backups. Model and tool providers may still receive data when you use their services.
+This project targets a **single local server**. The console has no login and is intended for loopback access. Credentials are stored in plaintext in the local database — protect the data directory and its backups. Model and tool providers may still receive data when you use their services.
 
 Loop Now runs on your machine with [Pi](https://github.com/earendil-works/pi) as its execution engine. You choose the models, credentials, repositories, and tools each agent may use.

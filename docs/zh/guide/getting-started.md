@@ -8,12 +8,14 @@ Loop Now 面向本地单实例。控制台没有登录功能，应通过本机�
 
 ## 1. 准备依赖
 
+运行 Loop Now 只需要 **Node.js 24**（Pi 和插件宿主跑在它上面）、**一个二进制**（`loop-server`）和**一个数据目录**（默认 `~/.loop_now`），不需要另装数据库或缓存。
+
+目前二进制要从源码构建，需要：
+
 | 依赖 | 仓库基线版本 |
 | --- | --- |
 | Go | 1.27 或更高 |
 | Node.js / npm | **24.21.0 / 11.19.0**；Web 脚本会校验这两个精确版本 |
-| PostgreSQL | 18 |
-| Redis | 8 |
 | Pi 编码 Agent | **1.4.0** |
 | 其他 | Git |
 
@@ -27,27 +29,17 @@ git clone --depth 1 --branch main https://github.com/AI-for-anyone/loop-now.git
 cd loop-now
 ```
 
-用你偏好的本地安装方式启动 PostgreSQL 和 Redis，并创建专用的 PostgreSQL 角色与数据库（以本地 PostgreSQL 管理员身份执行）：
-
-```sh
-createuser --login --pwprompt loopnow
-createdb --owner=loopnow loopnow
-```
-
 ## 2. 配置服务端
 
-在仓库根目录执行以下命令。把数据库密码换成你设置的值，必要时做 URL 编码。使用专用的 Redis 数据库与键前缀；如果服务端要求认证，在 URL 中加入。
+在仓库根目录执行以下命令：
 
 ```sh
-export LOOP_NOW_DATABASE_URL='postgres://loopnow:YOUR_URL_ENCODED_PASSWORD@127.0.0.1:5432/loopnow?sslmode=disable'
-export LOOP_NOW_REDIS_URL='redis://127.0.0.1:6379/1'
-export LOOP_NOW_REDIS_KEY_PREFIX='loopnow:'
 export LOOP_NOW_NODE_BIN="$(command -v node)"
 export LOOP_NOW_PI_BIN="$(command -v pi)"
 ```
 
 ::: danger 明文凭证
-凭证以明文保存在 PostgreSQL 中，请保护好数据库访问与备份文件。服务端读取进程环境变量，不会自动加载 `.env` 文件。
+服务端把数据库和每日备份放在数据目录里，默认是服务端用户的 `~/.loop_now`（用 `LOOP_NOW_DATA_DIR` 修改），首次启动时自动建库。凭证以明文保存在这个数据库中，请保护好数据目录与备份。服务端读取进程环境变量，不会自动加载 `.env` 文件。
 :::
 
 选择一个**家目录之外**的持久工作目录，且其祖先目录中没有 `AGENTS.md` 或 `CLAUDE.md`，避免 Pi 继承无关的主机指令。全新安装的默认值是 macOS 的 `/Users/Shared/loop-now` 或 Linux 的 `/var/lib/loop-now`：
@@ -81,7 +73,15 @@ export LOOP_NOW_LOOPCTL_DIST_DIR="$PWD/.local-build/loopctl-dist"
 bin/loop-server
 ```
 
-启动时会检查依赖、应用待执行的数据库迁移，并创建默认组织与项目。API 监听 `127.0.0.1:8780`。每个安装只运行一个服务端实例；升级时保留数据库、Redis 配置和工作目录。
+启动时会检查依赖、应用待执行的数据库迁移，并创建默认组织与项目。API 监听 `127.0.0.1:8780`。一个数据目录同时只能由一个服务端使用；升级时保留数据目录和工作目录。
+
+### 从基于 PostgreSQL 的版本迁移 {#moving-from-a-postgresql-based-release}
+
+SQLite 版之前的版本把数据存在 PostgreSQL 和 Redis 里。把一套安装迁移过来：
+
+1. 用最后一个基于 PostgreSQL 的版本再启动一次，让它完成迁移，然后停掉。
+2. 让 `LOOP_NOW_DATA_DIR` 指向一个还没有库的数据目录，把 `LOOP_NOW_DATABASE_URL` 设为旧库，运行一次 `loop-server import-postgres`。它在一个一致的快照里复制全部数据，核对行数与完整性，并打印每张表的行数；任何一步失败都不留下新库，也从不改动旧库。
+3. 在这个数据目录上启动新的服务端。Redis 不再需要。
 
 插件需要 Node 插件宿主（在 `plugins/` 下构建，Node 24.21.0）。只有设置了 `LOOP_NOW_PLUGIN_HOST_ENTRY` 服务端才会运行宿主；设置 `LOOP_NOW_PLUGIN_OFFICIAL_DIR` 后官方插件会作为 `builtin` 安装来源提供：
 

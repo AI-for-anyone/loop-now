@@ -8,12 +8,14 @@ Loop Now targets a single local server. The console has no login and is intended
 
 ## 1. Prepare dependencies
 
+To run, Loop Now needs **Node.js 24** (Pi and the plugin host run on it), **one binary** (`loop-server`), and **one data directory** (`~/.loop_now` by default). There is no separate database or cache to install.
+
+For now the binary is built from source, which needs:
+
 | Dependency | Repository baseline |
 | --- | --- |
 | Go | 1.27 or later |
 | Node.js / npm | **24.21.0 / 11.19.0**; Web scripts check these exact versions |
-| PostgreSQL | 18 |
-| Redis | 8 |
 | Pi coding agent | **1.4.0** |
 | Other tools | Git |
 
@@ -27,27 +29,17 @@ git clone --depth 1 --branch main https://github.com/AI-for-anyone/loop-now.git
 cd loop-now
 ```
 
-Start PostgreSQL and Redis using your preferred local installation. Create a dedicated PostgreSQL role and database; run these as your local PostgreSQL administrator:
-
-```sh
-createuser --login --pwprompt loopnow
-createdb --owner=loopnow loopnow
-```
-
 ## 2. Configure the server
 
-Run the following from the repository root. Replace the database password with the one you chose, URL-encoded if necessary. Use a dedicated Redis database and key prefix; add Redis authentication to the URL if your server requires it.
+Run the following from the repository root:
 
 ```sh
-export LOOP_NOW_DATABASE_URL='postgres://loopnow:YOUR_URL_ENCODED_PASSWORD@127.0.0.1:5432/loopnow?sslmode=disable'
-export LOOP_NOW_REDIS_URL='redis://127.0.0.1:6379/1'
-export LOOP_NOW_REDIS_KEY_PREFIX='loopnow:'
 export LOOP_NOW_NODE_BIN="$(command -v node)"
 export LOOP_NOW_PI_BIN="$(command -v pi)"
 ```
 
 ::: danger Plaintext credentials
-Credentials are stored in plaintext in PostgreSQL; protect database access and backup files. The server reads process environment variables; it does not automatically load an `.env` file.
+The server keeps its database and daily backups in the data directory, `~/.loop_now` of the server user by default (`LOOP_NOW_DATA_DIR` changes it), and creates the database on first start. Credentials are stored in plaintext in that database; protect the data directory and its backups. The server reads process environment variables; it does not automatically load an `.env` file.
 :::
 
 Choose a persistent working directory **outside your home directory**, with no `AGENTS.md` or `CLAUDE.md` in its ancestor directories. This prevents Pi from inheriting unrelated host instructions. For a fresh installation, the default is `/Users/Shared/loop-now` on macOS or `/var/lib/loop-now` on Linux:
@@ -81,7 +73,15 @@ export LOOP_NOW_LOOPCTL_DIST_DIR="$PWD/.local-build/loopctl-dist"
 bin/loop-server
 ```
 
-Startup checks dependencies, applies pending database migrations, and creates the default organization and project. The API listens on `127.0.0.1:8780`. Run one server per installation; when updating, preserve the database, Redis configuration, and working directory.
+Startup checks dependencies, applies pending database migrations, and creates the default organization and project. The API listens on `127.0.0.1:8780`. A data directory serves one server at a time; when updating, preserve the data directory and the working directory.
+
+### Moving from a PostgreSQL-based release
+
+Releases before the SQLite edition stored their data in PostgreSQL and Redis. To bring an installation over:
+
+1. Start the last PostgreSQL-based release once so its migrations finish, then stop it.
+2. With `LOOP_NOW_DATA_DIR` pointing at a data directory that has no database yet, run `loop-server import-postgres` with `LOOP_NOW_DATABASE_URL` set to the old database. It copies everything in one consistent snapshot, checks row counts and integrity, and prints each table's row count. On any failure it leaves nothing behind and never changes the old database.
+3. Start the new server on that data directory. Redis is no longer used.
 
 Plugins need the Node plugin host, built from `plugins/` (Node 24.21.0). The server runs it only when `LOOP_NOW_PLUGIN_HOST_ENTRY` is set, and offers the official plugins as the `builtin` install source when `LOOP_NOW_PLUGIN_OFFICIAL_DIR` is set:
 

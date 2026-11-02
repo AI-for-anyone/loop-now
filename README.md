@@ -123,15 +123,15 @@ Run everything with **Docker Compose**, or install from source. macOS Apple Sili
 
 ### Docker Compose (local all-in-one)
 
-The first startup builds the server and console images locally, then starts PostgreSQL 18 and Redis 8:
+The first startup builds the server and console images locally, then starts both:
 
 ```sh
 docker compose up --build -d
 ```
 
-Open **[http://localhost:5173](http://localhost:5173)**. The console has no login, so Compose publishes only Web port `5173` and API port `8780` on `127.0.0.1`; PostgreSQL and Redis are not published to the host. The default database user, password, and database name are all `loopnow`, intended only for the Compose network. Do not expose this default configuration externally.
+Open **[http://localhost:5173](http://localhost:5173)**. The console has no login, so Compose publishes only Web port `5173` and API port `8780` on `127.0.0.1`. Do not expose this configuration externally.
 
-The `pgdata` named volume stores the database, and `loopdata` stores agent workspaces, sessions, and tools. `docker compose down` preserves them; `docker compose down -v` deletes this data, so back it up first.
+The `loopdata` named volume stores the database (SQLite, with daily backups), agent workspaces, sessions, and tools. `docker compose down` preserves them; `docker compose down -v` deletes this data, so back it up first.
 
 Agents running in containers have some boundaries:
 
@@ -169,8 +169,6 @@ Persistent agents use the saved catalog from their next message, while running t
 | --- | --- |
 | Go | 1.27 or later |
 | Node.js / npm | **24.21.0 / 11.19.0**; Web scripts check these exact versions |
-| PostgreSQL | 18 |
-| Redis | 8 |
 | Pi coding agent | **1.4.0** |
 | Other tools | Git |
 
@@ -184,26 +182,16 @@ git clone --depth 1 --branch main https://github.com/AI-for-anyone/loop-now.git
 cd loop-now
 ```
 
-Start PostgreSQL and Redis using your preferred local installation. Create a dedicated PostgreSQL role and database; run these as your local PostgreSQL administrator:
-
-```sh
-createuser --login --pwprompt loopnow
-createdb --owner=loopnow loopnow
-```
-
 ### 2. Configure the server
 
-Run the following from the repository root. Replace the database password with the one you chose, URL-encoded if necessary. Use a dedicated Redis database and key prefix; add Redis authentication to the URL if your server requires it.
+Run the following from the repository root:
 
 ```sh
-export LOOP_NOW_DATABASE_URL='postgres://loopnow:YOUR_URL_ENCODED_PASSWORD@127.0.0.1:5432/loopnow?sslmode=disable'
-export LOOP_NOW_REDIS_URL='redis://127.0.0.1:6379/1'
-export LOOP_NOW_REDIS_KEY_PREFIX='loopnow:'
 export LOOP_NOW_NODE_BIN="$(command -v node)"
 export LOOP_NOW_PI_BIN="$(command -v pi)"
 ```
 
-Credentials are stored in plaintext in PostgreSQL; protect database access and backup files. The server reads process environment variables; it does not automatically load an `.env` file.
+The server keeps its database and daily backups in a data directory, `~/.loop_now` of the server user by default (`LOOP_NOW_DATA_DIR` changes it); it creates the database on first start. Credentials are stored in plaintext in that database; protect the data directory and its backups. The server reads process environment variables; it does not automatically load an `.env` file.
 
 Choose a persistent working directory **outside your home directory**, with no `AGENTS.md` or `CLAUDE.md` in its ancestor directories. This prevents Pi from inheriting unrelated host instructions. For a fresh installation, the default is `/Users/Shared/loop-now` on macOS or `/var/lib/loop-now` on Linux:
 
@@ -229,7 +217,7 @@ export LOOP_NOW_LOOPCTL_DIST_DIR="$PWD/.local-build/loopctl-dist"
 bin/loop-server
 ```
 
-Startup checks dependencies, applies pending database migrations, and creates the default organization and project. The API listens on `127.0.0.1:8780`. Run one server per installation; when updating, preserve the database, Redis configuration, and working directory.
+Startup checks dependencies, applies pending database migrations, and creates the default organization and project. The API listens on `127.0.0.1:8780`. A data directory serves one server at a time; when updating, preserve the data directory and the working directory. To move an installation from a PostgreSQL-based release, start that release once more so its migrations finish, stop it, then run `loop-server import-postgres` with `LOOP_NOW_DATABASE_URL` pointing at the old database; it copies everything into a new database in the data directory.
 
 Plugins need the Node plugin host, built from `plugins/` (Node 24.21.0). The server runs it only when `LOOP_NOW_PLUGIN_HOST_ENTRY` is set, and offers the official plugins as the `builtin` install source when `LOOP_NOW_PLUGIN_OFFICIAL_DIR` is set:
 
@@ -269,8 +257,7 @@ Start with one agent and a small task before adding a longer workflow.
 ```mermaid
 flowchart LR
     UI[Web console] <-->|HTTP and SSE| Server[Go server]
-    Server <--> PG[(PostgreSQL)]
-    Server <--> Redis[(Redis)]
+    Server <--> DB[(SQLite)]
     Server -->|RPC| Pi[Pi processes]
     Server <-->|stdio| Host[Node plugin host]
     Host -->|HTTP, plugin token| Server
@@ -278,7 +265,7 @@ flowchart LR
     Pi --> Ext[Plugin extensions and MCP servers]
 ```
 
-PostgreSQL stores platform state, credentials, messages, and task records. Redis handles coordination, queues, and live streams. The local filesystem holds agent workspaces, sessions, and installed tools. These components form one local installation; the diagram does not imply independently scalable services.
+SQLite in the data directory stores platform state, credentials, messages, task records, and queues; busy locks and live streams are kept in the server process. The local filesystem holds agent workspaces, sessions, and installed tools. These components form one local installation; the diagram does not imply independently scalable services.
 
 | Source | Purpose |
 | --- | --- |
@@ -296,6 +283,7 @@ All server options and defaults are defined in [`internal/server/config/config.g
 | Variable | Purpose / default |
 | --- | --- |
 | `LOOP_NOW_LISTEN_ADDR` | Console API; `127.0.0.1:8780` |
+| `LOOP_NOW_DATA_DIR` | Database (`db/`) and daily backups (`backups/`); `~/.loop_now` of the server user |
 | `LOOP_NOW_WORK_ROOT` | Persistent agent workspaces and runtime files |
 | `LOOP_NOW_CONTEXT_DIR` | Shared project (`projects/<id>/`) and global (`global/`) context folders; `~/.loop_now` of the server user |
 | `LOOP_NOW_PLUGIN_HOST_ENTRY` | Absolute path of the plugin host entry run with Node; unset means plugin platform halves do not run |
@@ -332,7 +320,7 @@ go test ./cmd/... ./internal/... ./api/...
 ./bin/npm24 run build
 ```
 
-Database integration tests require an isolated test database through `LOOP_NOW_TEST_DATABASE_URL`; tests using Redis also need `LOOP_NOW_TEST_REDIS_URL`. Native and browser tests have additional fixture requirements. A skipped integration test is not a successful integration run. Keep credentials, local runtime data, and build artifacts out of contributions.
+Backend tests need no external services; each uses its own temporary data directory. Only the one-off PostgreSQL importer's tests need a test database through `LOOP_NOW_TEST_DATABASE_URL`. Native and browser tests have additional fixture requirements. A skipped integration test is not a successful integration run. Keep credentials, local runtime data, and build artifacts out of contributions.
 
 ## License
 
