@@ -31,7 +31,7 @@
 - 常态配置从下一条派发消息生效。任务启动后固定 workflow、配置、权限与账号版本；普通重试不会刷新凭证。支持线性、条件与有限回路，暂不支持并行汇合。
 - Inbox 默认排队，也可选择打断；打断后按新消息继续。任务节点聊天同样走 Inbox。同节点的多次执行连续展示并标记分界，读历史时保留草稿。
 - sleep 是空闲等待，可被排队消息提前唤醒。Agent 每轮自行决定是否再次等待；终点提交并结束本轮后，平台自动完成任务。
-- 项目统一保存模型与 CLI 账号，Agent 按权限和选择规则取用；数据库工具可配置多个账号。个人版不设主密钥，凭证以明文保存在 PostgreSQL，需保护数据库访问与备份；模型凭证通过执行作用域文件提供。
+- 项目统一保存模型与 CLI 账号，Agent 按权限和选择规则取用；数据库工具可配置多个账号。个人版不设主密钥，凭证以明文保存在数据目录的 SQLite 库里，需保护数据目录与备份；模型凭证通过执行作用域文件提供。
 - 已支持对阻塞任务显式切换飞书用户账号：固定提测、结果跟进两个成员及目标版本，保留原成果／会话，只安排新的 QA 续行。账号登录成功、切换成功、QA 已发送和 QA 通过是不同结果。
 - 写动作使用稳定 actionId；结果不明先查原动作，不另建动作猜测或重复发送。
 - 控制台仅本机回环、无登录；Agent 使用进程令牌；外部身份经单独 TLS 端口与明确白名单访问。当前为本机单实例，接受同一系统用户的隔离限制。
@@ -39,7 +39,8 @@
 ## 当前设计方向
 
 - 控制台英文界面已完成（2026-10-30，PR #2、#7、#6、#8、#16、#19）：所有界面文案收进 `web/src/i18n/zh-CN/` 与 `en-US/` 两套同形的表（类型由 zh-CN 推导，en-US 缺键即类型错误，并有"英文表无中文"检查）；语言按 `?lang=`、本浏览器保存的选择、浏览器语言的顺序决定，全局设置里有语言卡片；英文标题用 Bricolage Grotesque；测试环境钉 zh-CN，另有按区域的 en-US 渲染测试；服务端自由文本（错误消息等）在英文模式按错误码映射，映射不到原样显示，`FieldError` 尚无错误码。配套（PR #18）：全新安装的默认组织、项目名改为 `default`（环境变量仍可覆盖，现有库不动）；测试用 fakePi 加 `FAKEPI_NEUTRAL=1` 中性回复模式；README 与 docs 首页换英文截图，官方插件数量改为三个。
-- 仓库流程（2026-10-30 用户决定）：main 受保护，所有人只能经 PR 合并且三项 CI 必须通过（当前还要求分支跟上最新 main，合并因此串行）；内部工作按阶段开 PR，测试修复攒批；PR 合并后立即删分支和 worktree。GitHub Actions 的时序抖动已在 cliauth、conversation、httpapi、pluginhost、cliimport 及 Web 的 shell、chat、import 测试里根治（PR #1、#10、#14、#20）。外部贡献者 airob0t 的 PR #21（Compose 一体化、Linux arm64 CLI 模板、可编辑的 Pi models.json 加迁移 034）已审查并请求修改，合并后的下一次发布要应用 034。
+- 仓库流程（2026-10-30 用户决定）：main 受保护，所有人只能经 PR 合并且三项 CI 必须通过（当前还要求分支跟上最新 main，合并因此串行）；内部工作按阶段开 PR，测试修复攒批；PR 合并后立即删分支和 worktree。GitHub Actions 的时序抖动已在 cliauth、conversation、httpapi、pluginhost、cliimport 及 Web 的 shell、chat、import 测试里根治（PR #1、#10、#14、#20）。外部贡献者 airob0t 的 PR #21（Compose 一体化、Linux arm64 CLI 模板、可编辑的 Pi models.json 加迁移 034）已审查并请求修改，034 已于 2026-10-31 随 `loop-now-page-scroll-20261031-1` 应用。
+- 存储只用 SQLite（2026-11-02 用户决定，为桌面分发铺路；代码在分支 `sqlite`，与 PocketBase 的做法对齐）：删除 PostgreSQL 与 Redis 运行时依赖。驱动 modernc.org/sqlite（钉 v1.60.1，SQLite 3.53.4，与 libc 版本成对钉死）；数据目录 `LOOP_NOW_DATA_DIR`（默认 `~/.loop_now`，库在 `db/`）里 `data.db` 放 84 张业务表（含 plugin_events 与投递这类 outbox），`events.db` 放四张日志表（保留 90 天），全部 STRICT；读池并发、写池单连接、写事务一律 BEGIN IMMEDIATE，PRAGMA 照 PocketBase；两库之间没有一致快照，业务判断不得跨文件读（`stop_requested` 列消掉了唯一一处）。行锁、咨询锁、pg_notify 全部删除；插件事件由五张表上的捕获触发器记入 plugin_changes，Go 在提交前统一生成、提交后唤醒宿主（与旧 PG 触发器 38 个事件逐条对拍一致）；now()、clock_timestamp()、iso_time() 注册进驱动，SQL 照旧写。Redis 的锁、事件流、在途回复改为进程内，排队只在库里，实例锁文件保证同一数据目录只有一个服务端；正常停机落盘在途回复，崩溃时丢失（用户接受）。维护：每 5 分钟 PASSIVE checkpoint，每日 TRUNCATE、optimize、日志清理与 `VACUUM INTO` 备份（`LOOP_NOW_BACKUP_DIR` 默认 `<数据目录>/backups`，`LOOP_NOW_BACKUP_KEEP` 默认 7），`loop-server backup <dir>` 随时手动备份。基线是 SQLite 迁移版本 1，不翻译旧 PG 迁移；现有实例用一次性 `loop-server import-postgres`（源库须在版本 34；已用真实备份在隔离栈验证 87 张表 134,038 行逐列核对一致），`internal/server/pgimport` 子树保留 pgx 与 PG 迁移只供导入，用户切换完后整体删除。健康接口去掉 postgres、redis 字段，改为 database 状态与 WAL 大小告警。凭证暴露面变化（同用户进程可直接读库文件）用户知晓并接受。Windows 尚不能编译服务端（飞书侧车等用了 unix 调用），单独一条线。压测：并发写、随机取消一万二千次、三百轮随机 SIGKILL 下已确认提交零丢失。
 - 原生 `models.json` 管理：全局设置可编辑固定 Pi 的 Provider 配置与内置覆盖，保存时由 Pi 校验并原子发布；常态 Agent 下一次派发使用新目录，任务快照 v10 冻结 Provider 片段，v8/v9 仍可读。Compose 提供本地一体化运行；无效已保存配置启动时退回内置目录并在设置页提示，`apiKey` 与 `headers` 仅接受 `$NAME` 引用。
 - 界面重新设计进行中（逐块定稿后实现）：顺序为导航与范围、概览、统计、插件市场、Skills 库、外部身份与全局设置。导航（方案 A4，设计源 `.local-build/nav-design/project/A4.dc.html`）与统计页（设计源 `.local-build/overview-design/project/Stats.dc.html`）已实现并部署。统计页按用户定下的指标优先级组织：第一屏是无人要求的消耗（定时唤醒占比）、每次回复平均上下文与压缩次数、发出去多久开始回（p50／p90，含排队）、失败与中断及原因、等你回答的问题；"更多·排查时再看"之下是 Agent 体检表、工具调用、模型与进程、一天里有多忙。花费只按 API 单价折算成美元的参考值（价格表在 `web/src/features/stats/pricing.ts`），后端不存价格。概览页新设计（同一画布 `Main.dc.html`）尚未定稿；@console 收件箱已移除；插件系统先讨论再实现。
 
@@ -103,6 +104,8 @@
 
 2026-10-31 切换到 `loop-now-page-scroll-20261031-1`（前后端加插件宿主，应用迁移 034；内容为 PR #21 的模型配置卡片、Compose 与 Linux CLI 模板，PR #23 的滚动修复）：核对项全部通过、无启动警告、备份已留，用户执行切换脚本（主会话的合并与部署命令均被权限分类器拦下，合并也由用户执行）。
 
+2026-11-02 至 11-03：SQLite 版在分支 `sqlite` 上完成（一个 server 会话加 web 的健康接口部分，59 个提交，401 个文件），全量测试在 Linux 容器与 macOS 通过，镜像冒烟通过。本机线上实例仍是 `loop-now-plugin-readme-20261031-1`（PG 版），用户还在日常使用，不动；何时用 `import-postgres` 切换由用户决定。合并后的待办：浏览器集成脚本加 `locale: 'zh-CN'`、8 个写死 5173 的脚本改为自起 Vite、集成测试的 Pi 钉到 1.4.0、main 上原本就失败的几个 App/e2e 测试逐个排查、用户切换后删除 pgimport。之后按计划做 CLI 发布（Go 直接服务控制台静态文件、GitHub Release、Homebrew tap）和 Electron 桌面壳。
+
 2026-10-27 切换到 `loop-now-loopctl-project-20261027-1`（前后端，无迁移）：loopctl 项目治理上线，`project create`、`project rename`、`project delete --yes`、`project manager set/clear` 只开放给外部身份，新建、改名、删除与 Manager 五个接口改为 `console-and-external`，校验与控制台一致；用户决定平台 Agent 不能建项目。
 
 2026-10-28 切换到 `loop-now-plugins-v2-20261028-1`（前后端加插件宿主，迁移 031）：插件系统第二版上线，首版整体拆除。切换时删除了旧版宿主目录 `platform/plugins/host`，后端环境新增 `LOOP_NOW_PLUGIN_HOST_ENTRY` 与 `LOOP_NOW_PLUGIN_OFFICIAL_DIR`（指向发布目录内的 `plugins/host/main.js` 与 `plugins/official`），宿主由 `LOOP_NOW_NODE_BIN`（Node 24.21）拉起。核对项全部通过（宿主在切换核对时仍在启动，随后确认运行中 0.1.0；官方来源 hello、playwright、webhook 可见），无启动警告，切换前备份已留。隔离验收：Go 真宿主协议测试 6/6；Node 侧 51 项；Web 插件与对话测试 199 项；真后端加真宿主的端到端 10 步两次通过（安装 webhook、配置、项目启用、外部身份发消息触发签名投递、详情页、安装 hello、Agent 授权、下一轮 Pi 挂载扩展）。尚未在真实业务里安装任何插件；Playwright 的浏览器数据目录由主会话上线后准备。
@@ -133,9 +136,9 @@
 
 ## 本地开发与运行
 
-依赖：Go 1.27、PostgreSQL 18、Redis 8、默认 Pi 1.4.0、Node 24.21.0。完整运行参数及默认值在 `internal/server/config/`，前端环境配置见 `web/.env.example`。
+依赖：Go 1.27、默认 Pi 1.4.0、Node 24.21.0；不需要 PostgreSQL 和 Redis，数据库是数据目录里的 SQLite（默认 `~/.loop_now`，用 `LOOP_NOW_DATA_DIR` 修改，首次启动自动建库）。完整运行参数及默认值在 `internal/server/config/`，前端环境配置见 `web/.env.example`。
 
-服务端和 loopctl 必须同版；在已配置数据库、Redis 及运行依赖的环境中：
+服务端和 loopctl 必须同版；在装好 Node 与 Pi 的环境中：
 
 ```sh
 go build -o bin/loop-server ./cmd/loop-server
@@ -144,7 +147,7 @@ go run ./cmd/loopctl-dist -version "$version" -out "$PWD/.local-build/loopctl-di
 LOOP_NOW_LOOPCTL_DIST_DIR="$PWD/.local-build/loopctl-dist" bin/loop-server
 ```
 
-启动会执行缺失迁移并恢复平台状态，同一工作根只运行一个实例。已有本地服务更新时沿用原数据库、Redis 和工作根。飞书用户运行另需已审核的 authsidecar 发行包，通过 `LOOP_NOW_LARK_USER_BUNDLE_DIR` 配置；原 bot 使用官方 CLI 包。
+启动会执行缺失迁移并恢复平台状态，同一数据目录同时只运行一个实例（实例锁文件）。已有本地服务更新时沿用原数据目录和工作根；从 PG 版迁移用 `loop-server import-postgres`（docs 的快速上手有步骤）。飞书用户运行另需已审核的 authsidecar 发行包，通过 `LOOP_NOW_LARK_USER_BUNDLE_DIR` 配置；原 bot 使用官方 CLI 包。
 
 ```sh
 cd web
@@ -154,9 +157,9 @@ cd web
 
 按改动选择必要检查：后端 `go test ./cmd/... ./internal/... ./api/...`；Web `./bin/npm24 run typecheck`、`run api:check`、`run lint`、`test`、`run build`。接口变化才运行 `run api:gen`，不手改生成类型。
 
-GitHub Actions（`.github/workflows/ci.yml`）在推送 main 和 PR 时跑三组检查：Go vet 与全部 Go 测试（带 Postgres 18 与 Redis 8 服务，测试 Redis 固定用 DB 10）、Web 的 typecheck／api:check／lint／test／build、插件工作区的构建、测试与官方插件校验；Node 钉在 24.21.0 以满足 web 的 engines 约束。依赖本机 Pi、原生 helper 或 macOS 专有能力的测试在前提缺失时跳过，不算通过。
+GitHub Actions（`.github/workflows/ci.yml`）在推送 main 和 PR 时跑三组必需检查：Go vet（含数据层的 windows 交叉 vet）与全部 Go 测试（不需要外部服务，数据层压测单独一步）、Web 的 typecheck／api:check／lint／test／build、插件工作区的构建、测试与官方插件校验；另有非必需的 `importer (postgres)` job 带 PG 服务只跑导入器测试，导入器删除时一起删；Node 钉在 24.21.0 以满足 web 的 engines 约束。依赖本机 Pi、原生 helper 或 macOS 专有能力的测试在前提缺失时跳过，不算通过。
 
-数据库集成测试使用 `LOOP_NOW_TEST_DATABASE_URL`／`LOOP_NOW_TEST_REDIS_URL` 指定的隔离库和前缀，缺配置的跳过不等于通过。浏览器与原生 CLI 测试需要各自夹具；临时产物留 `.local-build/`，凭证及运行数据不进入 Git。
+后端测试不需要外部服务，每个测试用自己的临时数据目录；只有导入器测试用 `LOOP_NOW_TEST_DATABASE_URL` 指向测试库，缺配置的跳过不等于通过。浏览器与原生 CLI 测试需要各自夹具（集成测试的 newWorld 钉 Pi 1.1.0，本机为 1.4.0 时整批跳过，待改）；临时产物留 `.local-build/`，凭证及运行数据不进入 Git。
 
 ## 文档维护
 
