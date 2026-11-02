@@ -4,9 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/config"
@@ -18,9 +15,10 @@ import (
 	"loop-now/internal/server/workflow"
 	"os"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func TestSleepAppNormalQueueDeadlineAndRestart(t *testing.T) {
@@ -251,7 +249,7 @@ func TestSleepAppTaskNodeAndBlockedConversation(t *testing.T) {
 }
 
 func TestSleepAppWakeCommitExecutionAndSessionFailure(t *testing.T) {
-	for _, mode := range []string{"wake-queued-restart", "wake-running-restart", "session-save-failure", "redis-cleared"} {
+	for _, mode := range []string{"wake-queued-restart", "wake-running-restart", "session-save-failure", "coord-cleared"} {
 		t.Run(mode, func(t *testing.T) {
 			w := newWorld(t)
 			w.cfg.SleepScanInterval = 50 * time.Millisecond
@@ -300,19 +298,22 @@ func TestSleepAppWakeCommitExecutionAndSessionFailure(t *testing.T) {
 					t.Fatal("barrier", e)
 				}
 			}
-			if mode == "redis-cleared" {
-				keys, err := s.a.Redis.Keys(ctx, w.cfg.RedisKeyPrefix+"*").Result()
+			if mode == "coord-cleared" {
+				// 协调数据丢失：Agent 的忙闲锁与两个队列都没了。
+				id := agent.ID.String()
+				owner, err := s.a.Coord.LockOwner(ctx, id)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if len(keys) > 0 {
-					if err = s.a.Redis.Del(ctx, keys...).Err(); err != nil {
-						t.Fatal(err)
-					}
+				if _, err = s.a.Coord.Release(ctx, id, owner); err != nil {
+					t.Fatal(err)
+				}
+				if err = s.a.Coord.RebuildQueues(ctx, id, nil, nil); err != nil {
+					t.Fatal(err)
 				}
 				current, err := s.a.Store.SleepState(ctx, p)
 				if err != nil || current.Sleep == nil || !current.Sleep.WakeAt.Equal(originalWake) {
-					t.Fatal("Redis loss reset durable sleep", err)
+					t.Fatal("coordination loss reset durable sleep", err)
 				}
 			}
 			if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, receipt.Sleep.ID); err != nil {
@@ -771,104 +772,4 @@ func TestSleepAppOldAttemptCannotAffectNewSleep(t *testing.T) {
 	if _, err = s.a.Tasks.Cancel(ctx, auth.Console(), d.Task.ID, taskmodel.CancelInput{ActionID: uuid.New()}); err != nil {
 		t.Fatal(err)
 	}
-}
-
-type sleepMirrorFailure struct {
-	key     string
-	enabled atomic.Bool
-	seen    atomic.Int32
-}
-
-func (h *sleepMirrorFailure) DialHook(next redis.DialHook) redis.DialHook          { return next }
-func (h *sleepMirrorFailure) ProcessHook(next redis.ProcessHook) redis.ProcessHook { return next }
-func (h *sleepMirrorFailure) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
-	return func(ctx context.Context, cmds []redis.Cmder) error {
-		for _, cmd := range cmds {
-			args := cmd.Args()
-			if cmd.Name() == "rpush" && len(args) > 1 && args[1] == h.key && h.enabled.Load() {
-				h.seen.Add(1)
-				return errors.New("offline injected queue mirror failure")
-			}
-		}
-		return next(ctx, cmds)
-	}
-}
-
-func TestSleepAppRedisMirrorFailureRecoversOneCarrier(t *testing.T) {
-	w := newWorld(t)
-	w.cfg.SleepScanInterval = 50 * time.Millisecond
-	w.cfg.SleepScanBatch = 100
-	s := w.start(nil)
-	defer s.stop()
-	ctx := context.Background()
-	path, agent := s.createAgent("MirrorRecovery")
-	s.must(202, "POST", path+"/messages", map[string]any{"text": " !sleep=600ms !text=source"})
-	run := s.waitRunning(path)
-	receipt, err := s.a.Store.RequestSleep(ctx, auth.Principal{Kind: auth.KindAgent, ID: agent.ID}, sleepmodel.Input{ActionID: uuid.New(), RunID: run.ID, Seconds: 120}, 1000)
-	if err != nil {
-		t.Fatal(err)
-	}
-	st := s.waitIdle(path)
-	if st.Sleep == nil {
-		t.Fatal("sleep absent")
-	}
-	originalWake := *st.Sleep.WakeAt
-	hook := &sleepMirrorFailure{key: s.a.Coord.Keys().QueueNormal(agent.ID.String())}
-	hook.enabled.Store(true)
-	defer hook.enabled.Store(false)
-	s.a.Redis.AddHook(hook)
-	if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, receipt.Sleep.ID); err != nil {
-		t.Fatal(err)
-	}
-	if err = s.a.Store.ReconcileSleeps(ctx, 100); err != nil {
-		t.Fatal(err)
-	}
-	limit := time.Now().Add(4 * time.Second)
-	for hook.seen.Load() == 0 && time.Now().Before(limit) {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if hook.seen.Load() == 0 {
-		t.Fatal("mirror fault was not exercised")
-	}
-	queued, err := s.a.Store.QueuedRuns(ctx, agent.ID)
-	if err != nil || len(queued) != 1 || queued[0].Origin != "sleep_wake" {
-		t.Fatal("PG carrier lost on mirror fault", queued, err)
-	}
-	wakeID := queued[0].ID
-	if err = s.a.Store.ReconcileSleeps(ctx, 100); err != nil {
-		t.Fatal(err)
-	}
-	hook.enabled.Store(false)
-	s.waitIdle(path)
-	var count int
-	if err = s.a.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM runs WHERE agent_id=$1 AND origin='sleep_wake'`, agent.ID).Scan(&count); err != nil || count != 1 {
-		t.Fatal("mirror retry duplicated carrier", count, err)
-	}
-	wake, err := s.a.Store.GetRun(ctx, wakeID)
-	if err != nil || wake.Status != "completed" {
-		t.Fatal("original carrier not recovered", err)
-	}
-	sess, err := s.a.Store.GetAgentSession(ctx, agent.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(sess.SessionFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	prompts := 0
-	for _, line := range bytes.Split(data, []byte("\n")) {
-		var entry struct {
-			Message struct {
-				Role string `json:"role"`
-			} `json:"message"`
-		}
-		if json.Unmarshal(line, &entry) == nil && entry.Message.Role == "user" {
-			prompts++
-		}
-	}
-	if prompts != 2 {
-		t.Fatal("mirror retry replayed execution", prompts)
-	}
-	t.Logf("case=mirror-failure sleepId=%s originalWakeAt=%s wakeRunId=%s PiPrompts=%d failures=%d", receipt.Sleep.ID, originalWake.Format(time.RFC3339Nano), wakeID, prompts, hook.seen.Load())
 }

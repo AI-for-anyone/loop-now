@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
-	"loop-now/internal/testutil/redistest"
+
+	"github.com/google/uuid"
 
 	"loop-now/internal/server/db"
 )
@@ -69,8 +69,7 @@ func TestSameAgentTasksHaveIndependentLocksAndRestoreRedisLoss(t *testing.T) {
 			t.Fatal(e)
 		}
 	}
-	redis, prefix := redistest.New(t)
-	s.Coord = coord.New(redis, coord.Options{Prefix: prefix, LockTTL: 500 * time.Millisecond, StreamMaxLen: 100, RunTextTTL: time.Hour})
+	s.Coord = coord.New(coord.Options{LockTTL: 500 * time.Millisecond, StreamMaxLen: 100, RunTextTTL: time.Hour})
 	s.Options.InstanceID = uuid.New()
 	s.Options.LockRenewInterval = 50 * time.Millisecond
 	s.Options.RecordTimeout = time.Second
@@ -122,8 +121,8 @@ func TestSameAgentTasksHaveIndependentLocksAndRestoreRedisLoss(t *testing.T) {
 		if e != nil || owner == "" {
 			t.Fatal("instance lock missing", e)
 		}
-		if e = redis.Del(ctx, s.Coord.Keys().Lock(runtime.String())).Err(); e != nil {
-			t.Fatal(e)
+		if released, e := s.Coord.Release(ctx, runtime.String(), owner); e != nil || !released {
+			t.Fatal("drop instance lock", released, e)
 		}
 	}
 	eventually(t, func() bool {
@@ -143,7 +142,11 @@ func TestSameAgentTasksHaveIndependentLocksAndRestoreRedisLoss(t *testing.T) {
 	if e != nil || len(normal) != 1 {
 		t.Fatal("queued task message not mirrored", e, normal)
 	}
-	if e = redis.Del(ctx, s.Coord.Keys().QueueNormal(p.RuntimeID.String())).Err(); e != nil {
+	interrupt, _, e := s.Coord.QueueContents(ctx, p.RuntimeID.String())
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = s.Coord.RebuildQueues(ctx, p.RuntimeID.String(), interrupt, nil); e != nil {
 		t.Fatal(e)
 	}
 	eventually(t, func() bool {

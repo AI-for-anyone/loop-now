@@ -9,10 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-
 	"loop-now/internal/server/coord"
-	"loop-now/internal/testutil/redistest"
 )
 
 const (
@@ -20,15 +17,34 @@ const (
 	testRunTextTTL = time.Hour
 )
 
-func newCoord(t *testing.T, maxLen int64) (*coord.Coord, *redis.Client) {
+// clock 是只在测试推进时才走的时钟。
+type clock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func (c *clock) now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.t
+}
+
+func (c *clock) advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.t = c.t.Add(d)
+}
+
+func newCoord(t *testing.T, maxLen int64) (*coord.Coord, *clock) {
 	t.Helper()
-	rdb, prefix := redistest.New(t)
-	return coord.New(rdb, coord.Options{
-		Prefix:       prefix,
+	clk := &clock{t: time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)}
+	return coord.New(coord.Options{
+		Prefix:       "test:",
 		LockTTL:      testLockTTL,
 		StreamMaxLen: maxLen,
 		RunTextTTL:   testRunTextTTL,
-	}), rdb
+		Now:          clk.now,
+	}), clk
 }
 
 func must[T any](t *testing.T) func(T, error) T {
@@ -57,12 +73,16 @@ func assertOwner(t *testing.T, c *coord.Coord, agent, want string) {
 	}
 }
 
-func assertPTTL(t *testing.T, rdb *redis.Client, key string, limit time.Duration) {
+// assertLockTTL 确认锁在 TTL 内仍在、过了 TTL 就失效；之后按原持有者补回，不影响后续断言。
+func assertLockTTL(t *testing.T, c *coord.Coord, clk *clock, agent string) {
 	t.Helper()
-	d, err := rdb.PTTL(context.Background(), key).Result()
-	check(t, err)
-	if d <= 0 || d > limit {
-		t.Fatalf("%s 的 PTTL = %v，期望在 (0, %v]", key, d, limit)
+	owner := must[string](t)(c.LockOwner(context.Background(), agent))
+	clk.advance(testLockTTL - time.Millisecond)
+	assertOwner(t, c, agent, owner)
+	clk.advance(time.Millisecond)
+	assertOwner(t, c, agent, "")
+	if !must[bool](t)(c.Restore(context.Background(), agent, owner)) {
+		t.Fatal("锁失效后应能补回")
 	}
 }
 
@@ -84,14 +104,14 @@ func TestKeys(t *testing.T) {
 	if v := coord.LockValue("r1", "i1"); v != "r1|i1" {
 		t.Errorf("LockValue = %q", v)
 	}
-	c := coord.New(nil, coord.Options{Prefix: "p:"})
+	c := coord.New(coord.Options{Prefix: "p:"})
 	if c.Keys().Prefix != "p:" {
 		t.Errorf("Keys().Prefix = %q", c.Keys().Prefix)
 	}
 }
 
 func TestAcquireIfIdle(t *testing.T) {
-	c, rdb := newCoord(t, 1000)
+	c, clk := newCoord(t, 1000)
 	ctx := context.Background()
 	const agent = "agent-1"
 	ownerA := coord.LockValue("run-a", "inst")
@@ -116,7 +136,7 @@ func TestAcquireIfIdle(t *testing.T) {
 		t.Fatal("空闲时应拿到锁")
 	}
 	assertOwner(t, c, agent, ownerA)
-	assertPTTL(t, rdb, c.Keys().Lock(agent), testLockTTL)
+	assertLockTTL(t, c, clk, agent)
 
 	// 已被持有：拒绝且不改变持有者。
 	if must[bool](t)(c.AcquireIfIdle(ctx, agent, coord.LockValue("run-b", "inst"))) {
@@ -151,10 +171,9 @@ func TestAcquireIfIdleConcurrent(t *testing.T) {
 }
 
 func TestRenewRestoreRelease(t *testing.T) {
-	c, rdb := newCoord(t, 1000)
+	c, clk := newCoord(t, 1000)
 	ctx := context.Background()
 	const agent = "agent-2"
-	lockKey := c.Keys().Lock(agent)
 	owner := coord.LockValue("run-a", "inst")
 	other := coord.LockValue("run-b", "inst")
 
@@ -163,16 +182,15 @@ func TestRenewRestoreRelease(t *testing.T) {
 		t.Fatal("锁丢失时 Renew 应补设")
 	}
 	assertOwner(t, c, agent, owner)
-	assertPTTL(t, rdb, lockKey, testLockTTL)
+	assertLockTTL(t, c, clk, agent)
 
-	// 持有者匹配时续期。
-	check(t, rdb.PExpire(ctx, lockKey, time.Second).Err())
+	// 持有者匹配时续期：从续期时刻重新算 TTL。
+	clk.advance(testLockTTL - time.Second)
 	if !must[bool](t)(c.Renew(ctx, agent, owner)) {
 		t.Fatal("持有者匹配时 Renew 应成功")
 	}
-	if d := must[time.Duration](t)(rdb.PTTL(ctx, lockKey).Result()); d <= time.Second {
-		t.Fatalf("续期后 PTTL = %v，应已刷新", d)
-	}
+	clk.advance(testLockTTL - time.Millisecond)
+	assertOwner(t, c, agent, owner)
 
 	// 持有者不匹配时拒绝且不改动。
 	if must[bool](t)(c.Renew(ctx, agent, other)) {
@@ -203,11 +221,11 @@ func TestRenewRestoreRelease(t *testing.T) {
 		t.Fatal("锁不存在时 Restore 应设置")
 	}
 	assertOwner(t, c, agent, other)
-	assertPTTL(t, rdb, lockKey, testLockTTL)
+	assertLockTTL(t, c, clk, agent)
 }
 
 func TestHandoff(t *testing.T) {
-	c, rdb := newCoord(t, 1000)
+	c, clk := newCoord(t, 1000)
 	ctx := context.Background()
 	const agent = "agent-3"
 	const inst = "inst-x"
@@ -248,7 +266,7 @@ func TestHandoff(t *testing.T) {
 		}
 		cur = coord.LockValue(next, inst)
 		assertOwner(t, c, agent, cur)
-		assertPTTL(t, rdb, c.Keys().Lock(agent), testLockTTL)
+		assertLockTTL(t, c, clk, agent)
 	}
 
 	// 队列为空：删除锁。
@@ -276,7 +294,9 @@ func TestHandoff(t *testing.T) {
 	assertOwner(t, c, agent, "n3|inst-y")
 
 	// 锁不存在、队列为空、currentOwner 为空：成功且不产生锁。
-	check(t, rdb.Del(ctx, c.Keys().Lock(agent)).Err())
+	if !must[bool](t)(c.Release(ctx, agent, "n3|inst-y")) {
+		t.Fatal("应释放锁")
+	}
 	next, ok, err = c.Handoff(ctx, agent, "", inst)
 	check(t, err)
 	if !ok || next != "" {
@@ -293,7 +313,7 @@ func must2(t *testing.T, c *coord.Coord, agent string) (interrupt, normal []stri
 }
 
 func TestRebuildQueues(t *testing.T) {
-	c, rdb := newCoord(t, 1000)
+	c, _ := newCoord(t, 1000)
 	ctx := context.Background()
 	const agent = "agent-4"
 	check(t, c.PushNormal(ctx, agent, "old-n"))
@@ -312,15 +332,17 @@ func TestRebuildQueues(t *testing.T) {
 	}
 
 	check(t, c.RebuildQueues(ctx, agent, []string{}, nil))
-	n, err := rdb.Exists(ctx, c.Keys().QueueInterrupt(agent), c.Keys().QueueNormal(agent)).Result()
-	check(t, err)
-	if n != 0 {
-		t.Fatalf("空内容重建后应删除键，仍有 %d 个", n)
+	if qi, qn = must2(t, c, agent); len(qi) != 0 || len(qn) != 0 {
+		t.Fatalf("空内容重建后队列应为空：%v %v", qi, qn)
+	}
+	// 队列清空后可以再拿锁。
+	if !must[bool](t)(c.AcquireIfIdle(ctx, agent, "x|i")) {
+		t.Fatal("队列为空时应拿到锁")
 	}
 }
 
 func TestEventsAndText(t *testing.T) {
-	c, rdb := newCoord(t, 1000)
+	c, clk := newCoord(t, 1000)
 	ctx := context.Background()
 	const agent = "agent-5"
 	const run = "run-5"
@@ -347,7 +369,6 @@ func TestEventsAndText(t *testing.T) {
 		}
 		ids = append(ids, id)
 	}
-	assertPTTL(t, rdb, c.Keys().RunText(run), testRunTextTTL)
 
 	text, last, err = c.Snapshot(ctx, agent, run)
 	check(t, err)
@@ -420,6 +441,15 @@ func TestEventsAndText(t *testing.T) {
 		t.Fatalf("FirstEventID = %q，期望 %q", first, startID)
 	}
 
+	// 回复文字在最后一次追加后 RunTextTTL 内保留，之后丢弃。
+	clk.advance(testRunTextTTL - time.Millisecond)
+	if got := must[string](t)(c.RunText(ctx, run)); got == "" {
+		t.Fatal("TTL 内回复文字应保留")
+	}
+	clk.advance(time.Millisecond)
+	if got := must[string](t)(c.RunText(ctx, run)); got != "" {
+		t.Fatalf("过了 TTL 回复文字应丢弃：%q", got)
+	}
 	check(t, c.DeleteRunText(ctx, run))
 	if got := must[string](t)(c.RunText(ctx, run)); got != "" {
 		t.Fatalf("删除后 RunText = %q", got)
@@ -448,7 +478,10 @@ func TestStreamTrim(t *testing.T) {
 	}
 	retained := must[string](t)(c.FirstEventID(ctx, agent))
 	if coord.CompareIDs(retained, firstID) <= 0 {
-		t.Fatalf("MAXLEN ~ 应裁剪早期条目：最早保留 %s，首条 %s", retained, firstID)
+		t.Fatalf("应裁剪早期条目：最早保留 %s，首条 %s", retained, firstID)
+	}
+	if evs := must[[]coord.Event](t)(c.ReadEvents(ctx, agent, "0-0", 0, 0)); len(evs) != 10 || evs[9].ID != lastID {
+		t.Fatalf("应只保留最近 10 条：%d", len(evs))
 	}
 	if _, last, err := c.Snapshot(ctx, agent, "run-6"); err != nil || last != lastID {
 		t.Fatalf("裁剪后快照 lastID = %q（%v），期望 %q", last, err, lastID)

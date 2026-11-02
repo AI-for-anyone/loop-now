@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 
 	authhelper "loop-now/auth-helper"
 	"loop-now/internal/buildinfo"
@@ -64,7 +63,6 @@ type App struct {
 	Log             *slog.Logger
 
 	Store    *store.Store
-	Redis    *redis.Client
 	Coord    *coord.Coord
 	Executor *local.Executor
 	Conv     *conversation.Service
@@ -142,9 +140,6 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		return a, err
 	}
 	a.Store.InstanceID = &a.InstanceID
-	if err = preflight.CheckRedis(ctx, cfg.RedisURL); err != nil {
-		return a, err
-	}
 	res, err := preflight.Resolve(ctx, preflight.Options{
 		PiBin: cfg.PiBin, PiVersion: cfg.PiVersion, PiAIDir: cfg.PiAIDir, NodeBin: cfg.NodeBin,
 		ExecBasePath: cfg.ExecBasePath, WorkRoot: cfg.WorkRoot, HomeDirs: o.HomeDirs,
@@ -218,9 +213,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		}
 	}
 
-	redisOpts, _ := redis.ParseURL(cfg.RedisURL)
-	a.Redis = redis.NewClient(redisOpts)
-	a.Coord = coord.New(a.Redis, coord.Options{Prefix: cfg.RedisKeyPrefix, LockTTL: cfg.LockTTL, StreamMaxLen: cfg.EventStreamMaxLen,
+	a.Coord = coord.New(coord.Options{Prefix: cfg.RedisKeyPrefix, LockTTL: cfg.LockTTL, StreamMaxLen: cfg.EventStreamMaxLen,
 		RunTextTTL: cfg.RunTextTTL, OverviewMaxLen: cfg.OverviewMaxLen})
 
 	installer := clitemplate.NewInstaller(res.WorkRoot, cfg.CLIInstallTimeout, o.CLIHTTPClient)
@@ -727,9 +720,6 @@ func (a *App) closeResources() {
 			a.Log.Warn("CLI共享安装尚未收敛", "errorCode", "installer_drain_timeout")
 		}
 		cancel()
-	}
-	if a.Redis != nil {
-		_ = a.Redis.Close()
 	}
 	if a.Store != nil {
 		a.Store.Close()

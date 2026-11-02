@@ -12,13 +12,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/modelcredential"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/tasks"
+
+	"github.com/google/uuid"
 )
 
 func taskEnv(t *testing.T) (*env, caller, taskmodel.Detail) {
@@ -274,9 +275,7 @@ func TestTaskSSEResumeBacklogBeforeNewRelay(t *testing.T) {
 				t.Fatal(err)
 			}
 			if test.clearRedis {
-				if err = e.rdb.Del(ctx, e.co.Keys().Events(key)).Err(); err != nil {
-					t.Fatal(err)
-				}
+				trimStream(t, func() (string, error) { return e.co.AppendEvent(ctx, key, "test.filler", []byte(`{}`)) })
 			}
 			relay(expected[len(expected)-1])
 			reader := bufio.NewReader(response.Body)
