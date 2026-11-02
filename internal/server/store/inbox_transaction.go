@@ -32,8 +32,6 @@ func sortedIDs(ids []uuid.UUID) []uuid.UUID {
 func (s *Store) InboxTransaction(ctx context.Context, plan InboxLockPlan, fn func(*InboxTransaction) error) error {
 	changed := false
 	err := s.inTx(ctx, func(tx *db.Tx) error {
-		if plan.MessageID != uuid.Nil {
-		}
 		projects := slices.Clone(plan.Projects)
 		tasks := slices.Clone(plan.Tasks)
 		agents := []uuid.UUID{}
