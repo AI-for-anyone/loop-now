@@ -29,3 +29,11 @@ func TestNewEmptyDBIsolatedAndDetectsNestedWrites(t *testing.T) {
 		t.Fatalf("夹具应打开嵌套写检测，得到 %v", err)
 	}
 }
+
+func TestNewDBMigrated(t *testing.T) {
+	d := sqlitetest.NewDB(t)
+	var n int
+	if err := d.QueryRow(context.Background(), `SELECT count(*) FROM sequences`).Scan(&n); err != nil || n != 3 {
+		t.Fatalf("迁移后应有 sequences 的 3 行：%d %v", n, err)
+	}
+}
