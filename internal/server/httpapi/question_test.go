@@ -3,7 +3,6 @@ package httpapi_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/google/uuid"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/inbox"
@@ -11,10 +10,14 @@ import (
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/tasks"
 	"loop-now/internal/server/workflow"
+	"loop-now/internal/testutil/sqlitetest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"loop-now/internal/server/db"
 )
@@ -400,11 +403,6 @@ func TestInboxQuestionConcurrentFirstAnswerAndCrossTaskLocks(t *testing.T) {
 	}
 }
 
-type pauseInboxWrite struct {
-	once             sync.Once
-	entered, release chan struct{}
-}
-
 func TestInboxQuestionCommitBeforeAcknowledgementDoesNotRedeliver(t *testing.T) {
 	e, _, d := taskEnv(t)
 	ctx := context.Background()
@@ -571,5 +569,108 @@ func TestTaskQuestionNextAfterPersistedExpiryBeforeCallback(t *testing.T) {
 	record, err := e.st.GetTask(ctx, d.Task.ID)
 	if err != nil || record.Current().Question.ID != next.ID || record.Current().Question.Status != "open" {
 		t.Fatal("late old callback changed new question", err)
+	}
+}
+
+func TestInboxQuestionManagerCommitBoundaryAndNoticeIdempotency(t *testing.T) {
+	for _, mode := range []string{"ordinary-reply", "closed-question-reply", "notice"} {
+		t.Run(mode, func(t *testing.T) {
+			e, _, d := taskEnv(t)
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer cancel()
+			e.api.Tasks.Source = &tasks.Source{CloseQuestion: store.CloseInboxQuestion, ViewQuestion: e.api.Inbox.ViewQuestion}
+			node := d.Nodes[0]
+			principal := auth.Principal{Kind: auth.KindAgent, ID: node.AgentID, TaskID: d.Task.ID, RuntimeID: node.RuntimeID}
+			input := inbox.QuestionInput{}
+			if mode == "closed-question-reply" {
+				input = inbox.QuestionInput{Options: []string{"yes"}, NodeRunID: node.ID}
+			}
+			q, err := e.api.Inbox.Send(ctx, principal, "@console", "old thread", "queue", input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = e.api.Tasks.Cancel(ctx, auth.Console(), d.Task.ID, taskmodel.CancelInput{ActionID: uuid.New()}); err != nil {
+				t.Fatal(err)
+			}
+			next, err := e.st.CreateAgent(ctx, store.ProjectScope(e.dc.Project.ID), "NewManager", "anthropic", "claude-x", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			// 不能有后台写入来抢写连接，否则下面的等待计数不准。
+			if err = e.conv.Stop(ctx); err != nil {
+				t.Fatal(err)
+			}
+			// 回复/通知先在事务外读出路由线索，再等唯一的写连接。测试先占住写连接，等它停在等写连接上，
+			// 再在占着的事务里换 Manager、改项目名并提交：它进入写事务后必须按新的 Manager 与名字路由。
+			held, proceed := make(chan struct{}), make(chan struct{})
+			changed := make(chan error, 1)
+			go func() {
+				changed <- e.st.Pool.InTx(ctx, func(tx *db.Tx) error {
+					close(held)
+					select {
+					case <-proceed:
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+					_, err := tx.Exec(ctx, `UPDATE projects SET manager_agent_id=$2,name='改名后',updated_at=$3 WHERE id=$1`, e.dc.Project.ID, next.ID, tx.Now())
+					return err
+				})
+			}()
+			select {
+			case <-held:
+			case <-ctx.Done():
+				t.Fatal("writer not held")
+			}
+			var once sync.Once
+			release := func() { once.Do(func() { close(proceed) }) }
+			defer release()
+			var messageID uuid.UUID
+			if mode == "notice" {
+				if err = e.st.Pool.QueryRow(ctx, `SELECT message_id FROM task_notifications WHERE task_id=$1 LIMIT 1`, d.Task.ID).Scan(&messageID); err != nil {
+					t.Fatal(err)
+				}
+			}
+			done := make(chan error, 1)
+			saved := make(chan store.InboxMessage, 1)
+			go func() {
+				if mode == "notice" {
+					done <- e.api.Inbox.SystemNotice(ctx, node.AgentID, messageID, "")
+					return
+				}
+				msg, err := e.api.Inbox.Reply(ctx, auth.Console(), q.ID, "late ordinary", "queue")
+				saved <- msg
+				done <- err
+			}()
+			sqlitetest.WaitWriteWaiters(t, ctx, e.st.Pool, 1)
+			release()
+			if err = <-changed; err != nil {
+				t.Fatal(err)
+			}
+			if err = <-done; err != nil {
+				t.Fatal(err)
+			}
+			if mode == "notice" {
+				msg, err := e.st.GetInboxMessage(ctx, messageID, 200)
+				if err != nil || msg.To.ID != next.ID || msg.From.Kind != "platform" || !strings.Contains(msg.Text, "/p/"+url.PathEscape("改名后")+"/") {
+					t.Fatal("notice used stale Manager/link", err)
+				}
+				for i := 0; i < 3; i++ {
+					if err = e.api.Inbox.SystemNotice(ctx, node.AgentID, messageID, ""); err != nil {
+						t.Fatal(err)
+					}
+				}
+				var messages, turns int
+				e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM inbox_messages WHERE id=$1`, messageID).Scan(&messages)
+				e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM runs WHERE trigger_inbox_message_id=$1`, messageID).Scan(&turns)
+				if messages != 1 || turns != 1 {
+					t.Fatal("notice retry dispatched twice", messages, turns)
+				}
+			} else {
+				msg := <-saved
+				if msg.To.ID != next.ID || msg.AnswerTo != nil {
+					t.Fatal("late reply used stale Manager or became answer")
+				}
+			}
+		})
 	}
 }
