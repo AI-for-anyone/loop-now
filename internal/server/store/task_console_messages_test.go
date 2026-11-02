@@ -24,14 +24,8 @@ import (
 	"loop-now/internal/testutil/sqlitetest"
 )
 
-func taskConsoleStore(t *testing.T) *store.Store { return taskConsoleStoreAt(t, 0) }
-
-// taskConsoleStoreAt 原来可以停在某个 PG 迁移版本；SQLite 只有基线，ceiling 非零的用例跳过。
-func taskConsoleStoreAt(t *testing.T, ceiling int64) *store.Store {
+func taskConsoleStore(t *testing.T) *store.Store {
 	t.Helper()
-	if ceiling > 0 {
-		t.Skip(noMigrationHistory)
-	}
 	return sqlitetest.NewStore(t)
 }
 
