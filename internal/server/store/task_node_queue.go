@@ -5,9 +5,9 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"loop-now/internal/server/apperr"
+	"loop-now/internal/server/db"
 )
 
 // TaskNodeQueueResult 是节点排队动作的结果。
@@ -44,7 +44,7 @@ func (s *Store) lockTaskNodeMessageTx(ctx context.Context, m *TaskMutation, targ
 			return out, TaskConsoleConflict(m, target, "target_mismatch")
 		}
 		out.strict = true
-	case !errors.Is(e, pgx.ErrNoRows):
+	case !errors.Is(e, db.ErrNoRows):
 		return out, e
 	}
 	if out.msg, e = scanInbox(m.Tx.QueryRow(ctx, inboxSelect(200)+` WHERE m.id=$1 FOR UPDATE OF m`, message)); e != nil {
@@ -267,7 +267,7 @@ func (s *Store) StopTaskNodeRunTx(ctx context.Context, m *TaskMutation, target T
 }
 
 // TaskTurnStoppedTx 报告这一轮是否被人停止（abort_requested 带 stop:true）。
-func TaskTurnStoppedTx(ctx context.Context, tx pgx.Tx, turn uuid.UUID) (bool, error) {
+func TaskTurnStoppedTx(ctx context.Context, tx *db.Tx, turn uuid.UUID) (bool, error) {
 	var stopped bool
 	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM lifecycle_events WHERE task_turn_id=$1 AND type='run.abort_requested' AND data->>'stop'='true')`, turn).Scan(&stopped)
 	return stopped, err
@@ -277,7 +277,7 @@ func TaskTurnStoppedTx(ctx context.Context, tx pgx.Tx, turn uuid.UUID) (bool, er
 func (s *Store) voidReadTaskTurnTx(ctx context.Context, m *TaskMutation, message uuid.UUID) error {
 	var turn *uuid.UUID
 	if e := m.Tx.QueryRow(ctx, `SELECT reminder_run_id FROM task_node_inbox_messages WHERE message_id=$1`, message).Scan(&turn); e != nil || turn == nil {
-		if errors.Is(e, pgx.ErrNoRows) {
+		if errors.Is(e, db.ErrNoRows) {
 			return nil
 		}
 		return e

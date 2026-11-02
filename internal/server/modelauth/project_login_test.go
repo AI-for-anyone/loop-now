@@ -10,14 +10,14 @@ import (
 
 	"loop-now/internal/server/clitemplate"
 	cm "loop-now/internal/server/credentialmodel"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 func TestProjectLoginRealOfflineHelperWindow(t *testing.T) {
 	for _, scenario := range []string{"cancel", "success", "unsafe-url", "safe-provider-diagnostic"} {
 		t.Run(scenario, func(t *testing.T) {
 			ctx := context.Background()
-			st := pgtest.NewStore(t)
+			st := sqlitetest.NewStore(t)
 			dc, err := st.EnsureDefaults(ctx, "组织", "项目")
 			if err != nil {
 				t.Fatal(err)

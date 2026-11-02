@@ -9,12 +9,13 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/messageimage"
 	"loop-now/internal/server/naming"
 	"loop-now/internal/server/taskmodel"
 	"time"
+
+	"loop-now/internal/server/db"
 )
 
 type TaskNodeInboxBinding struct {
@@ -25,7 +26,7 @@ type TaskNodeInboxBinding struct {
 }
 
 type taskInboxQuerier interface {
-	QueryRow(context.Context, string, ...any) pgx.Row
+	QueryRow(context.Context, string, ...any) *db.Row
 }
 
 func (s *Store) TaskNodeInboxBinding(ctx context.Context, id uuid.UUID) (TaskNodeInboxBinding, bool, error) {
@@ -96,13 +97,13 @@ func TaskInboxMessageWire(m InboxMessage) json.RawMessage {
 	return b
 }
 
-func (s *Store) TaskNodeInboxBindingTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (TaskNodeInboxBinding, bool, error) {
+func (s *Store) TaskNodeInboxBindingTx(ctx context.Context, tx *db.Tx, id uuid.UUID) (TaskNodeInboxBinding, bool, error) {
 	return s.taskNodeInboxBinding(ctx, tx, id)
 }
 func (s *Store) taskNodeInboxBinding(ctx context.Context, tx taskInboxQuerier, id uuid.UUID) (TaskNodeInboxBinding, bool, error) {
 	var b TaskNodeInboxBinding
 	e := tx.QueryRow(ctx, `SELECT message_id,root_message_id,task_id,node_run_id,agent_id,runtime_id,execution_mode,reminder_run_id,(not_executed_at IS NOT NULL) FROM task_node_inbox_messages WHERE message_id=$1`, id).Scan(&b.MessageID, &b.RootID, &b.Target.TaskID, &b.Target.NodeRunID, &b.Target.AgentID, &b.Target.RuntimeID, &b.Target.ExecutionMode, &b.ReminderID, &b.Inactive)
-	if e == pgx.ErrNoRows {
+	if e == db.ErrNoRows {
 		return b, false, nil
 	}
 	return b, e == nil, e
@@ -246,7 +247,7 @@ func (s *Store) TaskNodeInboxPageTx(ctx context.Context, m *TaskMutation, node u
 		id uuid.UUID
 		at time.Time
 	}
-	keys, e := pgx.CollectRows(rows, func(r pgx.CollectableRow) (key, error) { var k key; e := r.Scan(&k.id, &k.at); return k, e })
+	keys, e := db.CollectRows(rows, func(r db.CollectableRow) (key, error) { var k key; e := r.Scan(&k.id, &k.at); return k, e })
 	if e != nil {
 		return out, e
 	}
@@ -277,7 +278,7 @@ func (s *Store) TaskNodeInboxPageTx(ctx context.Context, m *TaskMutation, node u
 
 // taskNodeConsoleRecordTx projects a non-strict message between a node runtime
 // and the console: it has no run links and is never marked not executed.
-func taskNodeConsoleRecordTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (taskmodel.TaskNodeInboxRecord, error) {
+func taskNodeConsoleRecordTx(ctx context.Context, tx *db.Tx, id uuid.UUID) (taskmodel.TaskNodeInboxRecord, error) {
 	m, e := scanInbox(tx.QueryRow(ctx, inboxSelect(160)+` WHERE m.id=$1`, id))
 	if e != nil {
 		return taskmodel.TaskNodeInboxRecord{}, e
@@ -293,7 +294,7 @@ func taskNodeConsoleRecordTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (task
 	return out, nil
 }
 
-func (s *Store) TaskNodeInboxRecordTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (taskmodel.TaskNodeInboxRecord, error) {
+func (s *Store) TaskNodeInboxRecordTx(ctx context.Context, tx *db.Tx, id uuid.UUID) (taskmodel.TaskNodeInboxRecord, error) {
 	var out taskmodel.TaskNodeInboxRecord
 	b, ok, e := s.TaskNodeInboxBindingTx(ctx, tx, id)
 	if e != nil {
@@ -319,7 +320,7 @@ func (s *Store) TaskNodeInboxRecordTx(ctx context.Context, tx pgx.Tx, id uuid.UU
 	if e != nil {
 		return out, e
 	}
-	out.RunLinks, e = pgx.CollectRows(rows, func(r pgx.CollectableRow) (taskmodel.TaskNodeInboxRunLink, error) {
+	out.RunLinks, e = db.CollectRows(rows, func(r db.CollectableRow) (taskmodel.TaskNodeInboxRunLink, error) {
 		var l taskmodel.TaskNodeInboxRunLink
 		e := r.Scan(&l.RunID, &l.Role)
 		return l, e
@@ -424,7 +425,7 @@ func (s *Store) findTaskNodeReminderTx(ctx context.Context, m *TaskMutation, tar
 		imageLimit = messageimage.DefaultCount
 	}
 	turn, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE runtime_id=$1 AND node_run_id=$2 AND inbox_scope_node_id=$2 AND execution_mode=$3 AND status='queued' AND origin='inbox_reminder' AND priority=$4 AND (SELECT coalesce(sum(jsonb_array_length(im.images)),0) FROM task_node_inbox_messages b JOIN inbox_messages im ON im.id=b.message_id WHERE b.reminder_run_id=task_turns.id)+$5<=$6 ORDER BY queue_seq LIMIT 1`, target.RuntimeID, target.NodeRunID, mode, priority, images, imageLimit))
-	if e == pgx.ErrNoRows {
+	if e == db.ErrNoRows {
 		return TaskTurn{}, false, nil
 	}
 	return turn, e == nil, e
@@ -454,7 +455,7 @@ func (s *Store) interruptTaskNodeTx(ctx context.Context, m *TaskMutation, target
 	if e != nil {
 		return nil, e
 	}
-	old, e := pgx.CollectRows(rows, func(r pgx.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
+	old, e := db.CollectRows(rows, func(r db.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
 	if e != nil {
 		return nil, e
 	}
@@ -562,7 +563,7 @@ func (s *Store) BindTaskNodeInboxBatchTx(ctx context.Context, m *TaskMutation, t
 	if e != nil {
 		return e
 	}
-	ids, e := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	ids, e := db.CollectRows(rows, db.RowTo[uuid.UUID])
 	if e != nil {
 		return e
 	}
@@ -587,7 +588,7 @@ func (s *Store) ExpireTaskNodeInboxTx(ctx context.Context, m *TaskMutation) erro
 	if e != nil {
 		return e
 	}
-	ids, e := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	ids, e := db.CollectRows(rows, db.RowTo[uuid.UUID])
 	if e != nil {
 		return e
 	}

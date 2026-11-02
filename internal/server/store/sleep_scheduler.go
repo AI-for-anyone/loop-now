@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"sync"
 	"time"
+
+	"loop-now/internal/server/db"
 )
 
 // The cursor is process-local enumeration progress, never persisted sleep state.
@@ -25,7 +26,7 @@ func (s *Store) sleepCandidates(ctx context.Context, batch int) ([]Sleep, error)
 	for pass := 0; pass < 2; pass++ {
 		if s.sleepScan.through == uuid.Nil {
 			e := s.Pool.QueryRow(ctx, `SELECT id FROM agent_sleeps WHERE `+sleepCandidatePredicate+` ORDER BY id DESC LIMIT 1`).Scan(&s.sleepScan.through)
-			if errors.Is(e, pgx.ErrNoRows) {
+			if errors.Is(e, db.ErrNoRows) {
 				return nil, nil
 			}
 			if e != nil {
@@ -36,7 +37,7 @@ func (s *Store) sleepCandidates(ctx context.Context, batch int) ([]Sleep, error)
 		if e != nil {
 			return nil, e
 		}
-		records, e := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Sleep, error) { return scanSleep(row) })
+		records, e := db.CollectRows(rows, func(row db.CollectableRow) (Sleep, error) { return scanSleep(row) })
 		if e != nil {
 			return nil, e
 		}
@@ -139,7 +140,7 @@ func (s *Store) ReconcileSleeps(ctx context.Context, batch int) error {
 			if err == nil {
 				return s.WakeSleepForWorkTx(ctx, scope.Tx, m, r.AgentID, valueUUID(r.RuntimeID), work)
 			}
-			if !errors.Is(err, pgx.ErrNoRows) {
+			if !errors.Is(err, db.ErrNoRows) {
 				return err
 			}
 			text := "平台通知：sleep已到期，请接着原会话处理。sleepId=" + r.ID.String()

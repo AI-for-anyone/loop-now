@@ -7,7 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
+
+	"loop-now/internal/server/db"
 )
 
 // StatsReport 是统计页报表（GET /stats）。秒数为小数；比例为 0 到 1，分母为 0 时为空。
@@ -235,13 +236,13 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 	bucketCtx := make([][2]int64, n) // 每桶的调用数与上下文之和
 	var totalCalls, totalCtx int64
 
-	err := pgx.BeginTxFunc(ctx, s.Pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+	err := s.Pool.ReadTx(ctx, func(tx *db.Tx) error {
 		rows, err := tx.Query(ctx, `SELECT a.id, a.name, a.project_id FROM agents a WHERE `+statsScope, pid, platform)
 		if err != nil {
 			return err
 		}
 		var a StatsAgent
-		if _, err := pgx.ForEachRow(rows, []any{&a.AgentID, &a.Name, &a.ProjectID}, func() error { agents[a.AgentID] = a; return nil }); err != nil {
+		if _, err := db.ForEachRow(rows, []any{&a.AgentID, &a.Name, &a.ProjectID}, func() error { agents[a.AgentID] = a; return nil }); err != nil {
 			return err
 		}
 
@@ -271,7 +272,7 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 		var agent *uuid.UUID
 		var c StatsTokenCounts
 		var calls, ctxSum, compactions, wakeTokens int64
-		_, err = pgx.ForEachRow(rows, []any{&g, &bucket, &origin, &provider, &model, &agent,
+		_, err = db.ForEachRow(rows, []any{&g, &bucket, &origin, &provider, &model, &agent,
 			&c.Input, &c.Output, &c.CacheRead, &c.CacheWrite, &c.Total, &calls, &ctxSum, &compactions, &wakeTokens}, func() error {
 			switch g {
 			case 0b00111:
@@ -331,7 +332,7 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 		var count, wakes int64
 		var o StatsOutcomeCounts
 		var p50, p90, dur, span *float64
-		_, err = pgx.ForEachRow(rows, []any{&g, &bucket, &agent, &kind, &code, &count, &o.Completed, &o.Interrupted, &o.Failed,
+		_, err = db.ForEachRow(rows, []any{&g, &bucket, &agent, &kind, &code, &count, &o.Completed, &o.Interrupted, &o.Failed,
 			&p50, &p90, &dur, &wakes, &span}, func() error {
 			switch g {
 			case 0b0111:
@@ -369,7 +370,7 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 		}
 		var answered int64
 		var avg, maxSecs *float64
-		_, err = pgx.ForEachRow(rows, []any{&g, &bucket, &count, &answered, &avg, &maxSecs}, func() error {
+		_, err = db.ForEachRow(rows, []any{&g, &bucket, &count, &answered, &avg, &maxSecs}, func() error {
 			if g == 1 {
 				out.Questions.Asked, out.Questions.Answered, out.Questions.AvgAnswerSeconds, out.Questions.MaxAnswerSeconds = count, answered, avg, maxSecs
 			} else if inRange(bucket) {
@@ -388,7 +389,7 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 			return err
 		}
 		var pq StatsPendingQuestion
-		_, err = pgx.ForEachRow(rows, []any{&pq.MessageID, &pq.AgentID, &pq.Name, &pq.ProjectID, &pq.Text, &pq.AskedAt}, func() error {
+		_, err = db.ForEachRow(rows, []any{&pq.MessageID, &pq.AgentID, &pq.Name, &pq.ProjectID, &pq.Text, &pq.AskedAt}, func() error {
 			out.Questions.Pending = append(out.Questions.Pending, pq)
 			return nil
 		})
@@ -414,7 +415,7 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 		var name *string
 		var toolCalls, failures, runCount, maxCalls *int64
 		var avgCalls *float64
-		_, err = pgx.ForEachRow(rows, []any{&name, &toolCalls, &failures, &runCount, &avgCalls, &maxCalls}, func() error {
+		_, err = db.ForEachRow(rows, []any{&name, &toolCalls, &failures, &runCount, &avgCalls, &maxCalls}, func() error {
 			if name != nil {
 				out.Tools.ByName = append(out.Tools.ByName, StatsTool{Name: *name, Calls: *toolCalls, Failures: *failures})
 			} else {
@@ -466,7 +467,7 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 			}
 			var slot int64
 			var secs float64
-			if _, err := pgx.ForEachRow(rows, []any{&slot, &secs}, func() error { busy[slot] = secs; return nil }); err != nil {
+			if _, err := db.ForEachRow(rows, []any{&slot, &secs}, func() error { busy[slot] = secs; return nil }); err != nil {
 				return err
 			}
 		}

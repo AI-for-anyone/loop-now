@@ -5,7 +5,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
+
+	"loop-now/internal/server/db"
 )
 
 // Pi 扩展的对话（plugins/SPEC.md §11）：confirm、select、input 作为 Agent 发给控制台的提问，extension_dialogs 标出这类提问。
@@ -18,13 +19,13 @@ type ExtensionDialog struct {
 }
 
 // InsertExtensionDialogTx 在写入提问的事务里标出它是扩展对话。
-func InsertExtensionDialogTx(ctx context.Context, tx pgx.Tx, question uuid.UUID, d ExtensionDialog) error {
+func InsertExtensionDialogTx(ctx context.Context, tx *db.Tx, question uuid.UUID, d ExtensionDialog) error {
 	_, err := tx.Exec(ctx, `INSERT INTO extension_dialogs(question_message_id,run_id,request_id,method) VALUES($1,$2,$3,$4)`, question, d.RunID, d.RequestID, d.Method)
 	return err
 }
 
 // IsExtensionDialogTx 报告提问是不是扩展对话。
-func IsExtensionDialogTx(ctx context.Context, tx pgx.Tx, question uuid.UUID) (bool, error) {
+func IsExtensionDialogTx(ctx context.Context, tx *db.Tx, question uuid.UUID) (bool, error) {
 	var ok bool
 	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM extension_dialogs WHERE question_message_id=$1)`, question).Scan(&ok)
 	return ok, err
@@ -49,7 +50,7 @@ func (s *Store) GetDialogState(ctx context.Context, question uuid.UUID) (DialogS
 
 // EndExtensionDialog 在这一轮结束（或 Pi 不再等待）时让仍未回答的扩展对话提问到期，原因为 run_ended；changed 表示这次由未回答变为到期。
 func (s *Store) EndExtensionDialog(ctx context.Context, question uuid.UUID) (changed bool, err error) {
-	err = s.inTx(ctx, func(tx pgx.Tx) error {
+	err = s.inTx(ctx, func(tx *db.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE inbox_questions SET state='expired',expired_reason='run_ended',notice_state='skipped' WHERE message_id=$1 AND state='open'`, question)
 		if err != nil || tag.RowsAffected() == 0 {
 			return err

@@ -3,11 +3,12 @@ package store
 import (
 	"context"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/taskmodel"
 	"slices"
 	"strings"
+
+	"loop-now/internal/server/db"
 )
 
 type InboxLockPlan struct {
@@ -17,7 +18,7 @@ type InboxLockPlan struct {
 	MessageID             uuid.UUID
 }
 type InboxTransaction struct {
-	Tx    pgx.Tx
+	Tx    *db.Tx
 	Tasks map[uuid.UUID]*TaskMutation
 }
 
@@ -30,7 +31,7 @@ func sortedIDs(ids []uuid.UUID) []uuid.UUID {
 // callback may enter another Store transaction or acquire an earlier lock.
 func (s *Store) InboxTransaction(ctx context.Context, plan InboxLockPlan, fn func(*InboxTransaction) error) error {
 	changed := false
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if plan.MessageID != uuid.Nil {
 			if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "inbox-write:"+plan.MessageID.String()); err != nil {
 				return err
@@ -138,7 +139,7 @@ func (s *Store) InboxTransaction(ctx context.Context, plan InboxLockPlan, fn fun
 }
 
 // QueueInboxReminderTx requires the normal Agent lock acquired by InboxTransaction.
-func (s *Store) QueueInboxReminderTx(ctx context.Context, tx pgx.Tx, msg NewInboxMessage) error {
+func (s *Store) QueueInboxReminderTx(ctx context.Context, tx *db.Tx, msg NewInboxMessage) error {
 	var state string
 	if err := tx.QueryRow(ctx, `SELECT state FROM agent_sessions WHERE agent_id=$1`, msg.To.ID).Scan(&state); err != nil {
 		return err
@@ -174,7 +175,7 @@ func (s *Store) QueueInboxReminderTx(ctx context.Context, tx pgx.Tx, msg NewInbo
 	}
 	return LinkInboxReminderTx(ctx, tx, msg.ID, r.ID)
 }
-func InboxMessageExistsTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (bool, error) {
+func InboxMessageExistsTx(ctx context.Context, tx *db.Tx, id uuid.UUID) (bool, error) {
 	var found bool
 	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM inbox_messages WHERE id=$1)`, id).Scan(&found)
 	return found, err

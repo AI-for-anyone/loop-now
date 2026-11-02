@@ -8,13 +8,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/testutil/redistest"
+
+	"loop-now/internal/server/db"
 )
 
 type controlledExecutor struct {
@@ -49,7 +50,7 @@ func TestSameAgentTasksHaveIndependentLocksAndRestoreRedisLoss(t *testing.T) {
 	node := freshNode(second, r.View.Workflow.Steps[0], inst, 1, 1)
 	other.View.Nodes = []taskmodel.NodeRun{node}
 	setCurrent(&other, node)
-	_, e := s.Store.CreateTask(ctx, r.View.Task.ProjectID, p.ID, store.TaskAction{ActorKey: "fixture2", ID: uuid.New(), Operation: "create", Body: []byte(`{}`)}, func(pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) {
+	_, e := s.Store.CreateTask(ctx, r.View.Task.ProjectID, p.ID, store.TaskAction{ActorKey: "fixture2", ID: uuid.New(), Operation: "create", Body: []byte(`{}`)}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) {
 		return other, []store.TaskInstance{inst}, nil
 	})
 	if e != nil {

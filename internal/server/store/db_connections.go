@@ -3,20 +3,21 @@ package store
 import (
 	"context"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	cm "loop-now/internal/server/credentialmodel"
 	"slices"
 	"strings"
+
+	"loop-now/internal/server/db"
 )
 
 func isDBCLI(cli string) bool { return cli == "psql" || cli == "mysql" }
-func dbSetExistsTx(ctx context.Context, tx pgx.Tx, agent uuid.UUID, cli string) (bool, error) {
+func dbSetExistsTx(ctx context.Context, tx *db.Tx, agent uuid.UUID, cli string) (bool, error) {
 	var present bool
 	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agent_db_connection_sets WHERE agent_id=$1 AND cli_name=$2)`, agent, cli).Scan(&present)
 	return present, err
 }
-func requireDBCLI(ctx context.Context, tx pgx.Tx, a Agent, cli string) error {
+func requireDBCLI(ctx context.Context, tx *db.Tx, a Agent, cli string) error {
 	if !isDBCLI(cli) {
 		return apperr.Invalid("cli", "数据库CLI须为psql或mysql")
 	}
@@ -29,7 +30,7 @@ func requireDBCLI(ctx context.Context, tx pgx.Tx, a Agent, cli string) error {
 	}
 	return nil
 }
-func dbConnectionsTx(ctx context.Context, tx pgx.Tx, a Agent, cli string, rev int64) (cm.DBConnections, error) {
+func dbConnectionsTx(ctx context.Context, tx *db.Tx, a Agent, cli string, rev int64) (cm.DBConnections, error) {
 	out := cm.DBConnections{AgentID: a.ID, ProjectID: *a.ProjectID, CLI: cli, ConfigVersion: a.ConfigVersion, CredentialsRevision: rev, Mode: "legacy_single", AccountIDs: []uuid.UUID{}, Connections: []cm.DBConnection{}, Status: "not_configured"}
 	if err := requireDBCLI(ctx, tx, a, cli); err != nil {
 		return out, err
@@ -52,7 +53,7 @@ func dbConnectionsTx(ctx context.Context, tx pgx.Tx, a Agent, cli string, rev in
 	if err != nil {
 		return out, err
 	}
-	out.AccountIDs, err = pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	out.AccountIDs, err = db.CollectRows(rows, db.RowTo[uuid.UUID])
 	if out.AccountIDs == nil {
 		out.AccountIDs = []uuid.UUID{}
 	}
@@ -85,7 +86,7 @@ func dbConnectionsTx(ctx context.Context, tx pgx.Tx, a Agent, cli string, rev in
 }
 func (s *Store) GetDBConnections(ctx context.Context, agent uuid.UUID, cli string) (cm.DBConnections, error) {
 	var out cm.DBConnections
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		a, rev, e := lockProjectCredentialAgent(ctx, tx, agent, false)
 		if e != nil {
 			return e
@@ -113,7 +114,7 @@ func (s *Store) mutateDBConnections(ctx context.Context, agent uuid.UUID, cli st
 			return out, apperr.Invalid("accountIds", "连接ID须非零且不重复")
 		}
 	}
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		a, rev, e := lockProjectCredentialAgent(ctx, tx, agent, true)
 		if e != nil {
 			return e

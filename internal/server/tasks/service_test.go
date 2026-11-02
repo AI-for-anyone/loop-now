@@ -13,20 +13,21 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/workflow"
-	"loop-now/internal/testutil/pgtest"
+
+	"loop-now/internal/server/db"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 func fixture(t *testing.T, loop bool) (*Service, uuid.UUID, auth.Principal) {
 	t.Helper()
 	ctx := context.Background()
-	st := pgtest.NewStore(t)
+	st := sqlitetest.NewStore(t)
 	dc, e := st.EnsureDefaults(ctx, "组织", "项目")
 	if e != nil {
 		t.Fatal(e)
@@ -50,7 +51,7 @@ func fixture(t *testing.T, loop bool) (*Service, uuid.UUID, auth.Principal) {
 	node := freshNode(id, def.Steps[0], inst, 1, 1)
 	record := taskmodel.Record{View: taskmodel.Detail{Task: taskmodel.Summary{ID: id, ProjectID: dc.Project.ID, Title: "任务", Status: "preparing", CreatedAt: now, UpdatedAt: now, Version: 1}, Request: map[string]any{}, Workflow: def, Nodes: []taskmodel.NodeRun{node}, Artifacts: []taskmodel.Artifact{}, Cleanup: "none"}, EdgeCounts: map[string]int{}}
 	setCurrent(&record, node)
-	_, e = st.CreateTask(ctx, dc.Project.ID, a.ID, store.TaskAction{ActorKey: "fixture", ID: uuid.New(), Operation: "create", Body: []byte(`{}`)}, func(pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) {
+	_, e = st.CreateTask(ctx, dc.Project.ID, a.ID, store.TaskAction{ActorKey: "fixture", ID: uuid.New(), Operation: "create", Body: []byte(`{}`)}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) {
 		return record, []store.TaskInstance{inst}, nil
 	})
 	if e != nil {
@@ -339,7 +340,7 @@ func TestQuestionOneOpenWaitingAndLateAnswerDoesNotWakeNewAttempt(t *testing.T) 
 	messageID := uuid.New()
 	questionID := uuid.New()
 	created := 0
-	create := func(tx pgx.Tx) (taskmodel.Question, error) {
+	create := func(tx *db.Tx) (taskmodel.Question, error) {
 		created++
 		msg := store.NewInboxMessage{ID: messageID, From: store.Party{Kind: "agent", ID: p.ID, RuntimeID: p.RuntimeID}, To: store.ConsoleParty, Text: "请选择"}
 		e := store.InsertInboxMessage(ctx, tx, msg)
@@ -369,7 +370,7 @@ func TestQuestionOneOpenWaitingAndLateAnswerDoesNotWakeNewAttempt(t *testing.T) 
 		t.Fatal(e)
 	}
 	closed := 0
-	s.Source = &Source{CloseQuestion: func(context.Context, pgx.Tx, uuid.UUID, string) (string, error) { closed++; return "closed", nil }}
+	s.Source = &Source{CloseQuestion: func(context.Context, *db.Tx, uuid.UUID, string) (string, error) { closed++; return "closed", nil }}
 	_, e := s.Retry(ctx, auth.Console(), id, taskmodel.RetryInput{ActionID: uuid.New(), ExpectedNodeRunID: nodeID})
 	if e != nil {
 		t.Fatal(e)
@@ -470,7 +471,7 @@ func TestQuestionResolutionBeforeRoundEndKeepsWakeup(t *testing.T) {
 			r := current(t, s, id)
 			nodeID := r.Current().ID
 			questionID, messageID := uuid.New(), uuid.New()
-			_, e := s.OpenQuestion(ctx, p, nodeID, func(tx pgx.Tx) (taskmodel.Question, error) {
+			_, e := s.OpenQuestion(ctx, p, nodeID, func(tx *db.Tx) (taskmodel.Question, error) {
 				e := store.InsertInboxMessage(ctx, tx, store.NewInboxMessage{ID: messageID, From: store.Party{Kind: "agent", ID: p.ID, RuntimeID: p.RuntimeID}, To: store.ConsoleParty, Text: "choose"})
 				return taskmodel.Question{ID: questionID, ThreadID: messageID, MessageID: messageID, Status: "open", CanAnswer: true}, e
 			})
@@ -618,7 +619,7 @@ func TestRetryPreservesQuestionAnsweredDuringClose(t *testing.T) {
 	}
 	r := current(t, s, id)
 	old := r.Current().ID
-	s.Source = &Source{CloseQuestion: func(context.Context, pgx.Tx, uuid.UUID, string) (string, error) { return "answered", nil }}
+	s.Source = &Source{CloseQuestion: func(context.Context, *db.Tx, uuid.UUID, string) (string, error) { return "answered", nil }}
 	if _, e = s.Retry(ctx, auth.Console(), id, taskmodel.RetryInput{ActionID: uuid.New(), ExpectedNodeRunID: old}); e != nil {
 		t.Fatal(e)
 	}

@@ -124,7 +124,7 @@ func TestWebTaskLarkAccountSwitchNativeIntegration(t *testing.T) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		instanceApp, e := app.Build(ctx, &cfg, config.NewLogger(io.Discard, cfg.LogFormat, cfg.LogLevel), app.Options{SearchPath: world.schema, Listener: listener, HomeDirs: []string{"/nonexistent-home"}, LarkHTTPTransport: transport})
+		instanceApp, e := app.Build(ctx, &cfg, config.NewLogger(io.Discard, cfg.LogFormat, cfg.LogLevel), app.Options{Listener: listener, HomeDirs: []string{"/nonexistent-home"}, LarkHTTPTransport: transport})
 		if e != nil {
 			listener.Close()
 			t.Fatal(e)

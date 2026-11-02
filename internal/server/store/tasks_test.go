@@ -9,18 +9,19 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/workflow"
-	"loop-now/internal/testutil/pgtest"
+
+	"loop-now/internal/server/db"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 func taskFixture(t *testing.T) (*store.Store, store.Project, store.Agent, store.Agent, taskmodel.Record, []store.TaskInstance) {
 	t.Helper()
 	ctx := context.Background()
-	s := pgtest.NewStore(t)
+	s := sqlitetest.NewStore(t)
 	dc, err := s.EnsureDefaults(ctx, "组织", "默认项目")
 	if err != nil {
 		t.Fatal(err)
@@ -52,7 +53,7 @@ func TestTaskActionIdempotencyAndDeletionProtection(t *testing.T) {
 	ctx := context.Background()
 	action := store.TaskAction{ActorKey: m.ID.String(), ID: uuid.New(), Operation: "createTask", Body: []byte(`{"title":"通用任务"}`)}
 	builds := 0
-	build := func(pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) { builds++; return r, instances, nil }
+	build := func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) { builds++; return r, instances, nil }
 	first, err := s.CreateTask(ctx, p.ID, m.ID, action, build)
 	if err != nil {
 		t.Fatal(err)
@@ -83,7 +84,7 @@ func TestTaskActionIdempotencyAndDeletionProtection(t *testing.T) {
 func TestTaskMutationsAtomicAndConcurrent(t *testing.T) {
 	s, p, m, _, r, instances := taskFixture(t)
 	ctx := context.Background()
-	_, err := s.CreateTask(ctx, p.ID, m.ID, store.TaskAction{ActorKey: "create", ID: uuid.New(), Operation: "create", Body: []byte("body")}, func(pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) { return r, instances, nil })
+	_, err := s.CreateTask(ctx, p.ID, m.ID, store.TaskAction{ActorKey: "create", ID: uuid.New(), Operation: "create", Body: []byte("body")}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) { return r, instances, nil })
 	if err != nil {
 		t.Fatal(err)
 	}

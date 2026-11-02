@@ -211,10 +211,13 @@ func decodeValue(v reflect.Value, src any) error {
 	return nil
 }
 
-// CollectableRow 是 CollectRows 回调拿到的当前行。
-type CollectableRow interface {
+// Scanner 是能把当前行读入目标的东西：*Row、*Rows 都是。扫描函数的参数用它，同一个函数可用于单行与多行查询。
+type Scanner interface {
 	Scan(dest ...any) error
 }
+
+// CollectableRow 是 CollectRows 回调拿到的当前行（同 pgx 的名字）。
+type CollectableRow = Scanner
 
 // CollectRows 逐行调用 fn 并收集结果，最后关闭 rows。形状同 pgx.CollectRows。
 func CollectRows[T any](rows *Rows, fn func(CollectableRow) (T, error)) ([]T, error) {
@@ -237,18 +240,21 @@ func RowTo[T any](row CollectableRow) (T, error) {
 	return v, err
 }
 
-// ForEachRow 对每一行把列读入 scans 后调用 fn，最后关闭 rows。形状同 pgx.ForEachRow。
-func ForEachRow(rows *Rows, scans []any, fn func() error) error {
+// ForEachRow 对每一行把列读入 scans 后调用 fn，最后关闭 rows；返回值里的 RowsAffected 是读到的行数。
+// 形状同 pgx.ForEachRow。
+func ForEachRow(rows *Rows, scans []any, fn func() error) (Result, error) {
 	defer rows.Close()
+	var n int64
 	for rows.Next() {
 		if err := rows.Scan(scans...); err != nil {
-			return err
+			return Result{}, err
 		}
+		n++
 		if err := fn(); err != nil {
-			return err
+			return Result{}, err
 		}
 	}
-	return rows.Err()
+	return Result{rows: n}, rows.Err()
 }
 
 // IsNoRows 报告 err 是否为没有结果。

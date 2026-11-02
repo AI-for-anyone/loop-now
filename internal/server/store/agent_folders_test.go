@@ -9,13 +9,13 @@ import (
 
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 // 029：拉取记录的幂等与同一目标互斥；有拉取或回放记录时拒绝回退，空库可以回退再升级。
 func TestAgentFolders029PullsAndDown(t *testing.T) {
 	ctx := context.Background()
-	st := pgtest.NewStore(t)
+	st := sqlitetest.NewStore(t)
 	dc, err := st.EnsureDefaults(ctx, "o", "p")
 	if err != nil {
 		t.Fatal(err)

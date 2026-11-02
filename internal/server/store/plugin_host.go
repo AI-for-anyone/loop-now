@@ -9,7 +9,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
+
+	"loop-now/internal/server/db"
 )
 
 // 插件宿主读写的数据（plugins/SPEC.md §3、§8）：持久状态、宿主日志、插件状态与观察类事件的投递。
@@ -27,7 +28,7 @@ const PluginStateListLimit = 1000
 func (s *Store) PluginStateGet(ctx context.Context, plugin string, project *uuid.UUID, key string) (json.RawMessage, error) {
 	var v json.RawMessage
 	err := s.Pool.QueryRow(ctx, `SELECT value FROM plugin_state WHERE plugin_id=$1 AND project_id IS NOT DISTINCT FROM $2 AND key=$3`, plugin, project, key).Scan(&v)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, db.ErrNoRows) {
 		return nil, nil
 	}
 	return v, err
@@ -53,7 +54,7 @@ func (s *Store) PluginStateList(ctx context.Context, plugin string, project *uui
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (PluginStateEntry, error) {
+	return db.CollectRows(rows, func(r db.CollectableRow) (PluginStateEntry, error) {
 		var e PluginStateEntry
 		return e, r.Scan(&e.Key, &e.Value)
 	})
@@ -124,7 +125,7 @@ func (s *Store) AddPluginEvent(ctx context.Context, ev PluginEvent, plugins []st
 	if len(ev.Data) == 0 {
 		ev.Data = json.RawMessage(`{}`)
 	}
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, err := tx.Exec(ctx, `INSERT INTO plugin_events(id,type,at,project_id,agent_id,task_id,run_id,data) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
 			ev.ID, ev.Type, ev.At, ev.ProjectID, ev.AgentID, ev.TaskID, ev.RunID, ev.Data); err != nil {
 			return err
@@ -147,7 +148,7 @@ func (s *Store) ClaimPluginDelivery(ctx context.Context, plugin string, lease ti
 		FROM next, plugin_events e WHERE d.plugin_id=$1 AND d.event_id=next.event_id AND e.id=next.event_id
 		RETURNING e.id,e.type,e.at,e.project_id,e.agent_id,e.task_id,e.run_id,e.data,d.attempts`, plugin, lease).
 		Scan(&d.ID, &d.Type, &d.At, &d.ProjectID, &d.AgentID, &d.TaskID, &d.RunID, &d.Data, &d.Attempts)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, db.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {

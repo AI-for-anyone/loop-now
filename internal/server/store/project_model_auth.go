@@ -3,20 +3,21 @@ package store
 import (
 	"context"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	cm "loop-now/internal/server/credentialmodel"
 	"time"
+
+	"loop-now/internal/server/db"
 )
 
 const projectOperationColumns = `id,project_id,provider,target_account_id,target_revision,name,status,account_id,started_at,expires_at,completed_at,authorization_url,error_code`
 
-func scanProjectOperation(r pgx.Row) (cm.Operation, error) {
+func scanProjectOperation(r db.Scanner) (cm.Operation, error) {
 	var o cm.Operation
 	err := r.Scan(&o.ID, &o.ProjectID, &o.Provider, &o.TargetAccountID, &o.TargetRevision, &o.Name, &o.Status, &o.AccountID, &o.StartedAt, &o.ExpiresAt, &o.CompletedAt, &o.AuthorizationURL, &o.ErrorCode)
 	return o, err
 }
-func projectOperationTx(ctx context.Context, tx pgx.Tx, project, id uuid.UUID, lock bool) (cm.Operation, error) {
+func projectOperationTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, lock bool) (cm.Operation, error) {
 	suffix := ""
 	if lock {
 		suffix = " FOR UPDATE"
@@ -27,7 +28,7 @@ func projectOperationTx(ctx context.Context, tx pgx.Tx, project, id uuid.UUID, l
 func (s *Store) NewProjectModelAuthOperation(ctx context.Context, project uuid.UUID, in cm.LoginStart, expires time.Time) (cm.Operation, bool, error) {
 	var out cm.Operation
 	created := false
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, true); e != nil {
 			return e
 		}
@@ -67,7 +68,7 @@ func (s *Store) NewProjectModelAuthOperation(ctx context.Context, project uuid.U
 			}{project, old.ID}
 			return conflict
 		}
-		if e != pgx.ErrNoRows {
+		if e != db.ErrNoRows {
 			return e
 		}
 		id := uuid.Must(uuid.NewV7())
@@ -79,7 +80,7 @@ func (s *Store) NewProjectModelAuthOperation(ctx context.Context, project uuid.U
 }
 func (s *Store) GetProjectModelAuthOperation(ctx context.Context, project, id uuid.UUID) (cm.Operation, error) {
 	var out cm.Operation
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, false); e != nil {
 			return e
 		}
@@ -91,7 +92,7 @@ func (s *Store) GetProjectModelAuthOperation(ctx context.Context, project, id uu
 }
 func (s *Store) ListProjectModelAuthOperations(ctx context.Context, project uuid.UUID, provider string, account *uuid.UUID) ([]cm.Operation, error) {
 	var out []cm.Operation
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, true); e != nil {
 			return e
 		}
@@ -107,14 +108,14 @@ func (s *Store) ListProjectModelAuthOperations(ctx context.Context, project uuid
 		if e != nil {
 			return e
 		}
-		out, e = pgx.CollectRows(rows, func(r pgx.CollectableRow) (cm.Operation, error) { return scanProjectOperation(r) })
+		out, e = db.CollectRows(rows, func(r db.CollectableRow) (cm.Operation, error) { return scanProjectOperation(r) })
 		return e
 	})
 	return out, err
 }
 func (s *Store) SetProjectModelAuthURL(ctx context.Context, project, id uuid.UUID, url string) (cm.Operation, error) {
 	var out cm.Operation
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, true); e != nil {
 			return e
 		}
@@ -135,7 +136,7 @@ func (s *Store) SetProjectModelAuthURL(ctx context.Context, project, id uuid.UUI
 	})
 	return out, err
 }
-func endProjectOperationTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, status, code string) (cm.Operation, error) {
+func endProjectOperationTx(ctx context.Context, tx *db.Tx, id uuid.UUID, status, code string) (cm.Operation, error) {
 	return scanProjectOperation(tx.QueryRow(ctx, `UPDATE project_model_auth_operations SET status=$2,error_code=$3,authorization_url=NULL,completed_at=clock_timestamp() WHERE id=$1 RETURNING `+projectOperationColumns, id, status, nullIfEmpty(code)))
 }
 func (s *Store) EndProjectModelAuthOperation(ctx context.Context, project, id uuid.UUID, status, code string) (cm.Operation, error) {
@@ -143,7 +144,7 @@ func (s *Store) EndProjectModelAuthOperation(ctx context.Context, project, id uu
 		return cm.Operation{}, apperr.Invalid("status", "非法登录终态")
 	}
 	var out cm.Operation
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		o, e := projectOperationTx(ctx, tx, project, id, true)
 		if e != nil {
 			return e
@@ -160,7 +161,7 @@ func (s *Store) EndProjectModelAuthOperation(ctx context.Context, project, id uu
 func (s *Store) CompleteProjectModelAuthOperation(ctx context.Context, project, id uuid.UUID, w ProjectCredentialWrite) (cm.Operation, *ProjectCredentialRecord, error) {
 	var out cm.Operation
 	var saved *ProjectCredentialRecord
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		initial, e := projectOperationTx(ctx, tx, project, id, false)
 		if e != nil {
 			return e

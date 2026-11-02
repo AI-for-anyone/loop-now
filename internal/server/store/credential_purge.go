@@ -9,15 +9,16 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/clitemplate"
+
+	"loop-now/internal/server/db"
 )
 
 // purgeAgentCredentials is shared by Agent and project soft deletion. Callers
 // already hold all affected Agent locks and have passed task/idle checks. Keep
 // login terminal history but remove active URLs and every account ciphertext in
 // their existing transaction. Post-commit runtime cleanup stays with callers.
-func purgeAgentCredentials(ctx context.Context, tx pgx.Tx, ids []uuid.UUID) error {
+func purgeAgentCredentials(ctx context.Context, tx *db.Tx, ids []uuid.UUID) error {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -41,12 +42,12 @@ func purgeAgentCredentials(ctx context.Context, tx pgx.Tx, ids []uuid.UUID) erro
 // Keep operation/account metadata; clear every project-owned secret and pointer.
 // No task of the project is unfinished, so every version is wiped and every
 // task snapshot of the project loses its plaintext model keys and CLI payloads.
-func purgeProjectCredentials(ctx context.Context, tx pgx.Tx, project uuid.UUID) error {
+func purgeProjectCredentials(ctx context.Context, tx *db.Tx, project uuid.UUID) error {
 	rows, e := tx.Query(ctx, `SELECT id FROM project_credential_accounts WHERE project_id=$1 ORDER BY id FOR UPDATE`, project)
 	if e != nil {
 		return e
 	}
-	accounts, e := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	accounts, e := db.CollectRows(rows, db.RowTo[uuid.UUID])
 	if e != nil {
 		return e
 	}
@@ -71,7 +72,7 @@ func purgeProjectCredentials(ctx context.Context, tx pgx.Tx, project uuid.UUID) 
 	if e != nil {
 		return e
 	}
-	instances, e := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	instances, e := db.CollectRows(rows, db.RowTo[uuid.UUID])
 	if e != nil {
 		return e
 	}
@@ -84,12 +85,12 @@ func purgeProjectCredentials(ctx context.Context, tx pgx.Tx, project uuid.UUID) 
 // scrubAgentSnapshotsTx clears the plaintext credentials of every ended task
 // instance whose base Agent is agent. Agent deletion refuses while the Agent is
 // in an unfinished task, so nothing is left for later.
-func scrubAgentSnapshotsTx(ctx context.Context, tx pgx.Tx, agent uuid.UUID) error {
+func scrubAgentSnapshotsTx(ctx context.Context, tx *db.Tx, agent uuid.UUID) error {
 	rows, e := tx.Query(ctx, `SELECT i.id FROM task_instances i JOIN task_records r ON r.id=i.task_id WHERE i.agent_id=$1 AND r.ended_at IS NOT NULL`, agent)
 	if e != nil {
 		return e
 	}
-	instances, e := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	instances, e := db.CollectRows(rows, db.RowTo[uuid.UUID])
 	if e != nil {
 		return e
 	}
@@ -99,12 +100,12 @@ func scrubAgentSnapshotsTx(ctx context.Context, tx pgx.Tx, agent uuid.UUID) erro
 // settleProjectWipesTx settles the project's deleted accounts that still wait
 // for unfinished tasks. Every task save runs it, so the last task to end wipes
 // what it kept, whichever terminal path ended it.
-func settleProjectWipesTx(ctx context.Context, tx pgx.Tx, project uuid.UUID) error {
+func settleProjectWipesTx(ctx context.Context, tx *db.Tx, project uuid.UUID) error {
 	rows, e := tx.Query(ctx, `SELECT account_id FROM credential_pending_wipes WHERE project_id=$1 ORDER BY account_id`, project)
 	if e != nil {
 		return e
 	}
-	accounts, e := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	accounts, e := db.CollectRows(rows, db.RowTo[uuid.UUID])
 	if e != nil {
 		return e
 	}
@@ -123,12 +124,12 @@ func (s *Store) SettleCredentialWipes(ctx context.Context) error {
 	if e != nil {
 		return e
 	}
-	projects, e := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	projects, e := db.CollectRows(rows, db.RowTo[uuid.UUID])
 	if e != nil {
 		return e
 	}
 	for _, project := range projects {
-		if e = s.inTx(ctx, func(tx pgx.Tx) error {
+		if e = s.inTx(ctx, func(tx *db.Tx) error {
 			// Same order as task saves: project, then the per-account wipe lock.
 			if _, e := tx.Exec(ctx, `SELECT 1 FROM projects WHERE id=$1 FOR SHARE`, project); e != nil {
 				return e
@@ -147,12 +148,12 @@ func (s *Store) SettleCredentialWipes(ctx context.Context) error {
 // payload its snapshot copied. Ended snapshots lose the copies taken from the
 // account; unfinished ones keep them until their task ends. The pending row
 // exists exactly while something is kept.
-func settleDeletedAccountTx(ctx context.Context, tx pgx.Tx, project, account uuid.UUID) error {
+func settleDeletedAccountTx(ctx context.Context, tx *db.Tx, project, account uuid.UUID) error {
 	if _, e := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('credential-wipe:'||$1::text,0))`, account); e != nil {
 		return e
 	}
 	var cli *string
-	if e := tx.QueryRow(ctx, `SELECT cli_name FROM project_credential_accounts WHERE id=$1 AND project_id=$2 AND deleted_at IS NOT NULL`, account, project).Scan(&cli); e == pgx.ErrNoRows {
+	if e := tx.QueryRow(ctx, `SELECT cli_name FROM project_credential_accounts WHERE id=$1 AND project_id=$2 AND deleted_at IS NOT NULL`, account, project).Scan(&cli); e == db.ErrNoRows {
 		// Never a live account's versions; a stray row must not block task saves.
 		_, e = tx.Exec(ctx, `DELETE FROM credential_pending_wipes WHERE account_id=$1`, account)
 		return e
@@ -202,7 +203,7 @@ func settleDeletedAccountTx(ctx context.Context, tx pgx.Tx, project, account uui
 	if e != nil {
 		return e
 	}
-	keep, e := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	keep, e := db.CollectRows(rows, db.RowTo[uuid.UUID])
 	if e != nil {
 		return e
 	}
@@ -338,7 +339,7 @@ func strictDecode(data []byte, out any) error {
 // binding references stays as a tombstone without secret or layout (the
 // binding is immutable); every other version row is deleted. Grants,
 // identities and current pointers of wiped versions go with them.
-func wipeVersionsTx(ctx context.Context, tx pgx.Tx, accounts, keep []uuid.UUID) error {
+func wipeVersionsTx(ctx context.Context, tx *db.Tx, accounts, keep []uuid.UUID) error {
 	if keep == nil {
 		keep = []uuid.UUID{}
 	}
@@ -366,7 +367,7 @@ func wipeVersionsTx(ctx context.Context, tx pgx.Tx, accounts, keep []uuid.UUID) 
 // only the named credentials.cli entries. Bindings carry ids only and stay.
 // snapshot_sha is the frozen capture identity and does not change; the
 // snapshot still decodes, its credentials just empty.
-func scrubSnapshotsTx(ctx context.Context, tx pgx.Tx, instances []uuid.UUID, cli []string) error {
+func scrubSnapshotsTx(ctx context.Context, tx *db.Tx, instances []uuid.UUID, cli []string) error {
 	if len(instances) == 0 {
 		return nil
 	}

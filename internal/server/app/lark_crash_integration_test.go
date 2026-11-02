@@ -36,7 +36,7 @@ func TestLarkPendingCrashAppChild(t *testing.T) {
 	if e != nil {
 		os.Exit(62)
 	}
-	a, e := app.Build(context.Background(), &in.Config, config.NewLogger(io.Discard, "json", 0), app.Options{SearchPath: in.Schema, Listener: listener, HomeDirs: []string{"/nonexistent-home"}, LarkLoginHelper: p.Client})
+	a, e := app.Build(context.Background(), &in.Config, config.NewLogger(io.Discard, "json", 0), app.Options{Listener: listener, HomeDirs: []string{"/nonexistent-home"}, LarkLoginHelper: p.Client})
 	if e != nil {
 		os.Exit(63)
 	}

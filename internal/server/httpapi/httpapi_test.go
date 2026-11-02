@@ -37,8 +37,8 @@ import (
 	"loop-now/internal/server/plugins"
 	"loop-now/internal/server/runrecord"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
 	"loop-now/internal/testutil/redistest"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 // quickExec 立即完成回复；消息含 "block" 时阻塞，直到被打断或放行。
@@ -111,7 +111,7 @@ func (e *env) agents() string { return "/projects/" + e.dc.Project.ID.String() +
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	ctx := context.Background()
-	st := pgtest.NewStore(t)
+	st := sqlitetest.NewStore(t)
 	rdb, prefix := redistest.New(t)
 	co := coord.New(rdb, coord.Options{Prefix: prefix, LockTTL: 5 * time.Second, StreamMaxLen: 1000, RunTextTTL: time.Hour, OverviewMaxLen: 1000})
 	dc, err := st.EnsureDefaults(ctx, "默认组织", "默认项目")

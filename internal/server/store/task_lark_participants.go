@@ -6,9 +6,10 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/taskruntime"
+
+	"loop-now/internal/server/db"
 )
 
 // TaskLarkParticipants is a console read model, never an authorization to
@@ -17,7 +18,7 @@ import (
 func (s *Store) TaskLarkParticipants(ctx context.Context, id uuid.UUID) (taskmodel.Detail, []taskmodel.LarkSwitchParticipant, error) {
 	var r taskmodel.Record
 	out := []taskmodel.LarkSwitchParticipant{}
-	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	tx, err := s.Pool.BeginRead(ctx)
 	if err != nil {
 		return r.View, nil, err
 	}
@@ -51,7 +52,7 @@ func (s *Store) TaskLarkParticipants(ctx context.Context, id uuid.UUID) (taskmod
 	if err != nil {
 		return r.View, nil, err
 	}
-	instances, err := pgx.CollectRows(rows, func(q pgx.CollectableRow) (row, error) {
+	instances, err := db.CollectRows(rows, func(q db.CollectableRow) (row, error) {
 		var v row
 		e := q.Scan(&v.agent, &v.runtime, &v.snapshot, &v.snapshotSHA, &v.prepared, &v.retired, &v.sessionState, &v.sessionFile, &v.revision, &v.bindingSHA, &v.bindingAgent, &v.fenced, &v.hadTurn)
 		return v, e

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
@@ -14,6 +13,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"loop-now/internal/server/db"
 )
 
 type QuestionInput struct {
@@ -33,7 +34,7 @@ type taskQuestionBridge interface {
 	CheckQuestionRunTx(context.Context, *store.TaskMutation, auth.Principal, uuid.UUID, uuid.UUID) error
 	BindQuestionTx(context.Context, *store.TaskMutation, auth.Principal, uuid.UUID, taskmodel.Question) error
 	SyncQuestionTx(context.Context, *store.TaskMutation, uuid.UUID, string) (bool, error)
-	DeliverInboxTx(context.Context, pgx.Tx, *store.TaskMutation, store.NewInboxMessage) error
+	DeliverInboxTx(context.Context, *db.Tx, *store.TaskMutation, store.NewInboxMessage) error
 	InboxCommitted(context.Context, uuid.UUID)
 }
 type inboxCommitter interface {

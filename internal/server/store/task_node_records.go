@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
+
+	"loop-now/internal/server/db"
 )
 
 // TaskNodeRecord reads historical authority from the turn, never current Agent
@@ -42,7 +43,7 @@ func (s *Store) TaskNodeEvents(ctx context.Context, t TaskTurn, cursor string, l
 	if e != nil {
 		return nil, "", e
 	}
-	events, e := pgx.CollectRows(rows, func(r pgx.CollectableRow) (LifecycleEvent, error) {
+	events, e := db.CollectRows(rows, func(r db.CollectableRow) (LifecycleEvent, error) {
 		var v LifecycleEvent
 		var raw []byte
 		e := r.Scan(&v.ID, &v.At, &v.AgentID, &v.Type, &raw)
@@ -74,7 +75,7 @@ func (s *Store) TaskNodeUsageRecords(ctx context.Context, t TaskTurn) ([]UsageRe
 	if e != nil {
 		return nil, e
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (UsageRecord, error) { return scanUsage(r) })
+	return db.CollectRows(rows, func(r db.CollectableRow) (UsageRecord, error) { return scanUsage(r) })
 }
 
 // TaskNodeAllEvents takes a single statement snapshot so tool start/end facts
@@ -84,7 +85,7 @@ func (s *Store) TaskNodeAllEvents(ctx context.Context, t TaskTurn) ([]LifecycleE
 	if e != nil {
 		return nil, e
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (LifecycleEvent, error) {
+	return db.CollectRows(rows, func(r db.CollectableRow) (LifecycleEvent, error) {
 		var ev LifecycleEvent
 		var raw []byte
 		e := r.Scan(&ev.ID, &ev.At, &ev.AgentID, &ev.Type, &raw)

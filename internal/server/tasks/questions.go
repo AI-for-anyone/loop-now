@@ -7,16 +7,17 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
+
+	"loop-now/internal/server/db"
 )
 
 // OpenQuestion 供统一问题服务接入：在同一事务中创建原题并绑定当前节点，保证一节点一未回答问题。
 // create只能写问题/Inbox数据，不能回调本服务再次获取任务锁。
-func (s *Service) OpenQuestion(ctx context.Context, p auth.Principal, nodeID uuid.UUID, create func(pgx.Tx) (taskmodel.Question, error)) (json.RawMessage, error) {
+func (s *Service) OpenQuestion(ctx context.Context, p auth.Principal, nodeID uuid.UUID, create func(*db.Tx) (taskmodel.Question, error)) (json.RawMessage, error) {
 	return s.Store.MutateTask(ctx, p.TaskID, nil, func(m *store.TaskMutation) (any, error) {
 		if e := nodeActor(p, m, nodeID); e != nil {
 			return nil, e

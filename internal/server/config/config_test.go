@@ -13,7 +13,6 @@ func envOf(m map[string]string) func(string) string {
 
 func requiredEnv() map[string]string {
 	return map[string]string{
-		EnvDatabaseURL:    "postgres://loop_now:s3cret@127.0.0.1:5432/loop_now_dev?sslmode=disable",
 		EnvRedisURL:       "redis://127.0.0.1:6379/10",
 		EnvLoopctlDistDir: "/opt/loop-now/loopctl-dist",
 	}
@@ -114,8 +113,8 @@ func TestLoadErrors(t *testing.T) {
 		mutate  func(map[string]string)
 		wantVar string
 	}{
-		{"缺少数据库连接", func(m map[string]string) { delete(m, EnvDatabaseURL) }, EnvDatabaseURL},
-		{"数据库连接协议不对", func(m map[string]string) { m[EnvDatabaseURL] = "mysql://x" }, EnvDatabaseURL},
+		{"数据根不是绝对路径", func(m map[string]string) { m[EnvDataDir] = "relative/dir" }, EnvDataDir},
+		{"数据根不规范", func(m map[string]string) { m[EnvDataDir] = "/data/../loop" }, EnvDataDir},
 		{"缺少 Redis 连接", func(m map[string]string) { delete(m, EnvRedisURL) }, EnvRedisURL},
 		{"时长格式错误", func(m map[string]string) { m[EnvPiIdleTimeout] = "ten minutes" }, EnvPiIdleTimeout},
 		{"时长为零", func(m map[string]string) { m[EnvAbortTimeout] = "0s" }, EnvAbortTimeout},
@@ -327,5 +326,21 @@ func TestLegacyMasterKeyVariableIgnored(t *testing.T) {
 	slog.New(slog.NewTextHandler(&b, nil)).Info("config", "config", c)
 	if out := b.String(); strings.Contains(out, "legacy-master-key-marker") || strings.Contains(strings.ToLower(out), "masterkey") {
 		t.Errorf("日志仍包含主密钥配置：%s", out)
+	}
+}
+
+func TestDataDirDefaultAndDBDir(t *testing.T) {
+	env := requiredEnv()
+	env["HOME"] = "/home/fixture"
+	c, err := Load(envOf(env))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.DataDir != "/home/fixture/.loop_now" || DBDir(c.DataDir) != "/home/fixture/.loop_now/db" {
+		t.Fatalf("默认数据根应为 HOME 下的 .loop_now，库在其 db 子目录：%q", c.DataDir)
+	}
+	env[EnvDataDir] = "/srv/loop-now"
+	if c, err = Load(envOf(env)); err != nil || c.DataDir != "/srv/loop-now" {
+		t.Fatalf("LOOP_NOW_DATA_DIR 应覆盖默认值：%q %v", c.DataDir, err)
 	}
 }

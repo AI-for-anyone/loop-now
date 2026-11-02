@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"loop-now/internal/server/apperr"
+	"loop-now/internal/server/db"
 )
 
 // Run 是对一条用户消息的处理记录。
@@ -82,7 +82,7 @@ func runFields(r *Run) []any {
 		&r.RunningAt, &r.AbortRequestedAt, &r.EndedAt, &r.Origin, &r.TriggerInboxID, &r.WakeSleepID}
 }
 
-func scanRun(row pgx.Row) (Run, error) {
+func scanRun(row db.Scanner) (Run, error) {
 	var r Run
 	err := row.Scan(runFields(&r)...)
 	r.Tools = []ToolEvent{}
@@ -91,7 +91,7 @@ func scanRun(row pgx.Row) (Run, error) {
 
 const messageColumns = `id, agent_id, seq, role, text, run_id, session_epoch, created_at, images`
 
-func scanMessage(row pgx.Row) (Message, error) {
+func scanMessage(row db.Scanner) (Message, error) {
 	var m Message
 	var raw []byte
 	err := row.Scan(&m.ID, &m.AgentID, &m.Seq, &m.Role, &m.Text, &m.RunID, &m.SessionEpoch, &m.CreatedAt, &raw)
@@ -130,7 +130,7 @@ type NewRun struct {
 func (s *Store) InsertMessageAndRun(ctx context.Context, in NewRun) (Message, Run, error) {
 	var msg Message
 	var run Run
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var err error
 		msg, run, err = s.insertMessageAndRunTx(ctx, tx, in)
 		return err
@@ -138,7 +138,7 @@ func (s *Store) InsertMessageAndRun(ctx context.Context, in NewRun) (Message, Ru
 	return msg, run, err
 }
 
-func (s *Store) insertMessageAndRunTx(ctx context.Context, tx pgx.Tx, in NewRun) (Message, Run, error) {
+func (s *Store) insertMessageAndRunTx(ctx context.Context, tx *db.Tx, in NewRun) (Message, Run, error) {
 	var msg Message
 	var run Run
 	err := func() error {
@@ -245,7 +245,7 @@ type ReminderOutcome struct {
 // 会话丢失时不安排提醒，消息照常保存。rem.Start 为 true 时调用方已取得忙闲锁。
 func (s *Store) InsertInboxWithReminder(ctx context.Context, msg *NewInboxMessage, rem NewRun) (ReminderOutcome, error) {
 	var out ReminderOutcome
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		out = ReminderOutcome{}
 		if msg != nil {
 			if err := InsertInboxMessage(ctx, tx, *msg); err != nil {
@@ -277,7 +277,7 @@ func (s *Store) InsertInboxWithReminder(ctx context.Context, msg *NewInboxMessag
 				}
 			}
 			return s.WakeSleepForWorkTx(ctx, tx, nil, rem.AgentID, uuid.Nil, existing.ID)
-		case !errors.Is(err, pgx.ErrNoRows):
+		case !errors.Is(err, db.ErrNoRows):
 			return err
 		}
 		m, r, err := s.insertMessageAndRunTx(ctx, tx, rem)
@@ -317,7 +317,7 @@ func (s *Store) GetMessage(ctx context.Context, id uuid.UUID) (Message, error) {
 // ActiveRun 返回 Agent 进行中的执行；没有时返回 nil。
 func (s *Store) ActiveRun(ctx context.Context, agentID uuid.UUID) (*Run, error) {
 	r, err := scanRun(s.Pool.QueryRow(ctx, `SELECT `+runColumns+` FROM runs WHERE agent_id = $1 AND status IN `+activeRunStatuses, agentID))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, db.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -332,7 +332,7 @@ func (s *Store) QueuedRuns(ctx context.Context, agentID uuid.UUID) ([]Run, error
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (Run, error) { return scanRun(r) })
+	return db.CollectRows(rows, func(r db.CollectableRow) (Run, error) { return scanRun(r) })
 }
 
 // AgentsWithQueuedRuns 返回有排队执行的 Agent。
@@ -341,7 +341,7 @@ func (s *Store) AgentsWithQueuedRuns(ctx context.Context) ([]uuid.UUID, error) {
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	return db.CollectRows(rows, db.RowTo[uuid.UUID])
 }
 
 // ActiveRuns 返回全部进行中的执行。
@@ -350,14 +350,14 @@ func (s *Store) ActiveRuns(ctx context.Context) ([]Run, error) {
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (Run, error) { return scanRun(r) })
+	return db.CollectRows(rows, func(r db.CollectableRow) (Run, error) { return scanRun(r) })
 }
 
 // StartQueuedRun 把排队中的执行转为 starting 并记录派发事件；已不在排队状态时返回 false（已被处理），保证恰好处理一次。
 func (s *Store) StartQueuedRun(ctx context.Context, runID, instanceID uuid.UUID) (Run, bool, error) {
 	var r Run
 	started := false
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var owner uuid.UUID
 		if err := tx.QueryRow(ctx, `SELECT agent_id FROM runs WHERE id=$1`, runID).Scan(&owner); err != nil {
 			return err
@@ -375,7 +375,7 @@ func (s *Store) StartQueuedRun(ctx context.Context, runID, instanceID uuid.UUID)
 		var err error
 		r, err = scanRun(tx.QueryRow(ctx, `UPDATE runs SET status = 'starting', started_at = now(), instance_id = $2
 			WHERE id = $1 AND status = 'queued' RETURNING `+runColumns, runID, instanceID))
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, db.ErrNoRows) {
 			return nil
 		}
 		if err != nil {
@@ -395,10 +395,10 @@ func (s *Store) StartQueuedRun(ctx context.Context, runID, instanceID uuid.UUID)
 
 // SetRunPhase 更新 starting 状态下的阶段，并记录阶段开始事件。
 func (s *Store) SetRunPhase(ctx context.Context, runID uuid.UUID, phase string) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		var agentID uuid.UUID
 		err := tx.QueryRow(ctx, `UPDATE runs SET phase = $2 WHERE id = $1 AND status = 'starting' RETURNING agent_id`, runID, phase).Scan(&agentID)
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, db.ErrNoRows) {
 			return nil
 		}
 		if err != nil {
@@ -410,13 +410,13 @@ func (s *Store) SetRunPhase(ctx context.Context, runID uuid.UUID, phase string) 
 
 // SetRunRunning 把执行转为 running（打断中的执行保持 aborting），记录实际使用的配置版本、进入回复的时间与事件。
 func (s *Store) SetRunRunning(ctx context.Context, runID uuid.UUID, configVersion int64) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		var agentID uuid.UUID
 		var runningAt time.Time
 		err := tx.QueryRow(ctx, `UPDATE runs SET status = CASE WHEN status = 'aborting' THEN status ELSE 'running' END,
 				phase = NULL, config_version = $2, running_at = coalesce(running_at, now())
 			WHERE id = $1 AND status IN ('starting', 'aborting') AND running_at IS NULL RETURNING agent_id, running_at`, runID, configVersion).Scan(&agentID, &runningAt)
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, db.ErrNoRows) {
 			return nil
 		}
 		if err != nil {
@@ -434,17 +434,17 @@ func (s *Store) SetRunRunning(ctx context.Context, runID uuid.UUID, configVersio
 // 否则这里持有执行行、再为写事件等 Agent 的 KEY SHARE，而 FinishRun 持有 Agent、等这一执行行，会成死锁。
 func (s *Store) MarkAborting(ctx context.Context, agentID, byRunID uuid.UUID) (*Run, error) {
 	var out *Run
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var exists bool
 		if err := tx.QueryRow(ctx, `SELECT true FROM agents WHERE id = $1 FOR NO KEY UPDATE`, agentID).Scan(&exists); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, db.ErrNoRows) {
 				return nil
 			}
 			return err
 		}
 		r, err := scanRun(tx.QueryRow(ctx, `UPDATE runs SET status = 'aborting', abort_requested_at = coalesce(abort_requested_at, now())
 			WHERE agent_id = $1 AND status IN `+activeRunStatuses+` AND id <> $2 RETURNING `+runColumns, agentID, byRunID))
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, db.ErrNoRows) {
 			return nil
 		}
 		if err != nil {
@@ -495,7 +495,7 @@ func (s *Store) FinishRun(ctx context.Context, runID uuid.UUID, end RunEnd) (Run
 	var run Run
 	var msg *Message
 	finished := false
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var owner uuid.UUID
 		if err := tx.QueryRow(ctx, `SELECT agent_id FROM runs WHERE id=$1`, runID).Scan(&owner); err != nil {
 			return err
@@ -510,7 +510,7 @@ func (s *Store) FinishRun(ctx context.Context, runID uuid.UUID, end RunEnd) (Run
 				phase = NULL, ended_at = now(), config_version = CASE WHEN $6 > 0 THEN $6 ELSE config_version END
 			WHERE id = $1 AND status IN `+activeRunStatuses+` RETURNING `+runColumns,
 			runID, end.Status, nullIfEmpty(end.EndReason), nullIfEmpty(end.ErrorCode), nullIfEmpty(end.ErrorMessage), end.ConfigVersion))
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, db.ErrNoRows) {
 			run, err = scanRun(tx.QueryRow(ctx, `SELECT `+runColumns+` FROM runs WHERE id = $1`, runID))
 			return notFoundIfNoRows(err, "执行")
 		}
@@ -688,7 +688,7 @@ func (s *Store) historyPage(ctx context.Context, agentID uuid.UUID, cond string,
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (MessageWithRun, error) {
+	return db.CollectRows(rows, func(row db.CollectableRow) (MessageWithRun, error) {
 		var it MessageWithRun
 		m := &it.Message
 		var raw []byte

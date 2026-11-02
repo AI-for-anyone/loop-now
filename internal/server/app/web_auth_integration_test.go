@@ -154,7 +154,7 @@ func TestWebAuthIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal("cannot create temporary App listener")
 	}
-	a, err := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, "text", w.cfg.LogLevel), app.Options{SearchPath: w.schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, AuthLoginHelper: helper, AuthRefresher: helper})
+	a, err := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, "text", w.cfg.LogLevel), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, AuthLoginHelper: helper, AuthRefresher: helper})
 	if err != nil {
 		ln.Close()
 		t.Fatal("isolated App Build failed")

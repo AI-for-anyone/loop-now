@@ -6,10 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	cm "loop-now/internal/server/credentialmodel"
 	"time"
+
+	"loop-now/internal/server/db"
 )
 
 func (s *Store) newProjectLarkAuthOperation(ctx context.Context, project uuid.UUID, in cm.CLIAuthStart, expires time.Time) (cm.CLIAuthOperation, bool, error) {
@@ -27,7 +28,7 @@ func (s *Store) newProjectLarkAuthOperation(ctx context.Context, project uuid.UU
 	}
 	sum := sha256.Sum256(b)
 	hash := hex.EncodeToString(sum[:])
-	e = s.inTx(ctx, func(tx pgx.Tx) error {
+	e = s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, true); e != nil {
 			return e
 		}
@@ -43,7 +44,7 @@ func (s *Store) newProjectLarkAuthOperation(ctx context.Context, project uuid.UU
 			out, e = cliOperationTx(ctx, tx, project, in.OperationID, false)
 			return e
 		}
-		if e != pgx.ErrNoRows {
+		if e != db.ErrNoRows {
 			return e
 		}
 		var sourceVersion *uuid.UUID
@@ -82,7 +83,7 @@ func (s *Store) newProjectLarkAuthOperation(ctx context.Context, project uuid.UU
 		if e == nil {
 			return cliInProgress(project, active, "lark-cli")
 		}
-		if e != pgx.ErrNoRows {
+		if e != db.ErrNoRows {
 			return e
 		}
 		var exists bool
@@ -107,7 +108,7 @@ func (s *Store) newProjectLarkAuthOperation(ctx context.Context, project uuid.UU
 // operation. It never repairs a source with the source account's current value.
 func (s *Store) GetProjectLarkAuthSource(ctx context.Context, project, id uuid.UUID) (CredentialRow, error) {
 	var row CredentialRow
-	e := s.inTx(ctx, func(tx pgx.Tx) error {
+	e := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, false); e != nil {
 			return e
 		}
@@ -150,7 +151,7 @@ func (s *Store) SetProjectLarkAuthorization(ctx context.Context, project, id uui
 	if url == "" || expires.IsZero() || code != nil && (*code == "" || len(*code) > 200) {
 		return out, apperr.Invalid("authorization", "Lark授权交互无效")
 	}
-	e := s.inTx(ctx, func(tx pgx.Tx) error {
+	e := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, true); e != nil {
 			return e
 		}

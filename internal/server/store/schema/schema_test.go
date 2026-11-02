@@ -42,7 +42,7 @@ func tables(t *testing.T, d *db.DB) map[string]tableInfo {
 		}
 		var name, ddl string
 		var strict bool
-		if err := db.ForEachRow(rows, []any{&name, &strict, &ddl}, func() error {
+		if _, err := db.ForEachRow(rows, []any{&name, &strict, &ddl}, func() error {
 			if !ignoredTable(name) {
 				out[name] = tableInfo{schema: s, strict: strict, sql: ddl}
 			}

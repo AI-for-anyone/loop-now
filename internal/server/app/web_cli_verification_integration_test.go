@@ -225,7 +225,7 @@ func TestWebCLIVerificationIntegration(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	a, e := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, w.cfg.LogFormat, w.cfg.LogLevel), app.Options{SearchPath: w.schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIHTTPClient: client, CLIVerificationCommand: factory})
+	a, e := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, w.cfg.LogFormat, w.cfg.LogLevel), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIHTTPClient: client, CLIVerificationCommand: factory})
 	if e != nil {
 		ln.Close()
 		t.Fatal("isolated actual App build failed", e)

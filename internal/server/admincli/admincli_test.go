@@ -3,8 +3,6 @@ package admincli_test
 import (
 	"bytes"
 	"context"
-	"io"
-	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -13,14 +11,16 @@ import (
 	"loop-now/internal/server/admincli"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/config"
-	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/testutil/sqlitetest"
+
+	"os"
+
+	"path/filepath"
 )
 
 type cli struct {
-	t      *testing.T
-	schema string
-	url    string
+	t       *testing.T
+	dataDir string
 }
 
 func (c cli) run(args ...string) (code int, stdout, stderr string) {
@@ -28,12 +28,12 @@ func (c cli) run(args ...string) (code int, stdout, stderr string) {
 	var out, errb bytes.Buffer
 	code = admincli.Run(context.Background(), args, admincli.Options{
 		Getenv: func(k string) string {
-			if k == config.EnvDatabaseURL {
-				return c.url
+			if k == config.EnvDataDir {
+				return c.dataDir
 			}
 			return ""
 		},
-		Stdout: &out, Stderr: &errb, SearchPath: c.schema,
+		Stdout: &out, Stderr: &errb,
 	})
 	return code, out.String(), errb.String()
 }
@@ -48,22 +48,27 @@ func (c cli) ok(args ...string) (stdout, stderr string) {
 }
 
 func TestAdminCommands(t *testing.T) {
-	schema := pgtest.NewSchema(t)
-	st, err := store.Open(context.Background(), pgtest.URL(t), store.OpenOptions{SearchPath: schema})
-	if err != nil {
+	dataDir := t.TempDir()
+	if err := os.MkdirAll(config.DBDir(dataDir), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	st := sqlitetest.NewStoreIn(t, config.DBDir(dataDir))
 	t.Cleanup(st.Close)
-	if err := st.Migrate(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
-		t.Fatal(err)
-	}
-	c := cli{t: t, schema: schema, url: pgtest.URL(t)}
+	c := cli{t: t, dataDir: dataDir}
 
 	if out, _ := c.ok("version"); strings.TrimSpace(out) != buildinfo.Version() {
 		t.Fatalf("version 应打印服务端版本：%q", out)
 	}
 	if code, _, _ := c.run("identity"); code != 2 {
 		t.Fatalf("缺少子命令时应报用法错误：%d", code)
+	}
+	// 数据目录里没有库时报错，不新建空库。
+	empty := cli{t: t, dataDir: t.TempDir()}
+	if code, _, errs := empty.run("identity", "list"); code != 2 || !strings.Contains(errs, "没有库") {
+		t.Fatalf("数据目录里没有库时应报用法错误：%d %q", code, errs)
+	}
+	if _, err := os.Stat(filepath.Join(config.DBDir(empty.dataDir), "data.db")); !os.IsNotExist(err) {
+		t.Fatalf("不应新建空库：%v", err)
 	}
 
 	// 外部身份：创建、重名、名称规则、列出。

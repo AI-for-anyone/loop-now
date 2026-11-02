@@ -6,8 +6,9 @@ import (
 	"encoding/json"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
+
+	"loop-now/internal/server/db"
 )
 
 // TaskLarkRecoveryAction is internal startup coordination, never a public
@@ -135,7 +136,7 @@ func (s *Store) PendingTaskLarkRecovery(ctx context.Context) ([]TaskLarkRecovery
 	if e != nil {
 		return nil, e
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (TaskLarkRecoveryAction, error) {
+	return db.CollectRows(rows, func(r db.CollectableRow) (TaskLarkRecoveryAction, error) {
 		var a TaskLarkRecoveryAction
 		e := r.Scan(&a.TaskID, &a.ActionID, &a.ActorKey, &a.ProcessRecord, &a.RuntimeIDs)
 		return a, e

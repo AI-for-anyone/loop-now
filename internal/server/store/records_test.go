@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/tasks"
 
+	"loop-now/internal/server/db"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 type recEnv struct {
@@ -26,7 +26,7 @@ type recEnv struct {
 
 func newRecEnv(t *testing.T) *recEnv {
 	t.Helper()
-	s := pgtest.NewStore(t)
+	s := sqlitetest.NewStore(t)
 	instance := uuid.Must(uuid.NewV7())
 	s.InstanceID = &instance
 	ctx := context.Background()
@@ -292,14 +292,14 @@ func TestOverviewQueries(t *testing.T) {
 func TestTaskProcessExitsDoNotOverrideNormalOverview(t *testing.T) {
 	st, p, manager, agent, record, instances := taskFixture(t)
 	ctx := context.Background()
-	_, err := st.CreateTask(ctx, p.ID, manager.ID, store.TaskAction{ActorKey: "observe1", ID: uuid.New(), Operation: "create", Body: []byte(`{}`)}, func(pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) { return record, instances, nil })
+	_, err := st.CreateTask(ctx, p.ID, manager.ID, store.TaskAction{ActorKey: "observe1", ID: uuid.New(), Operation: "create", Body: []byte(`{}`)}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) { return record, instances, nil })
 	if err != nil {
 		t.Fatal(err)
 	}
 	second := record
 	second.View.Task.ID = uuid.New()
 	secondInstances := []store.TaskInstance{{ID: uuid.New(), TaskID: second.View.Task.ID, AgentID: agent.ID, AgentName: agent.Name, Snapshot: []byte("fixture"), Sources: []store.TaskFrozenSource{}}}
-	_, err = st.CreateTask(ctx, p.ID, manager.ID, store.TaskAction{ActorKey: "observe2", ID: uuid.New(), Operation: "create", Body: []byte(`{}`)}, func(pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) { return second, secondInstances, nil })
+	_, err = st.CreateTask(ctx, p.ID, manager.ID, store.TaskAction{ActorKey: "observe2", ID: uuid.New(), Operation: "create", Body: []byte(`{}`)}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) { return second, secondInstances, nil })
 	if err != nil {
 		t.Fatal(err)
 	}

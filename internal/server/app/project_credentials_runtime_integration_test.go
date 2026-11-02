@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/app"
@@ -123,7 +122,7 @@ func (r *projectCredentialsRuntime) start() {
 	if e != nil {
 		r.t.Fatal(e)
 	}
-	a, e := app.Build(context.Background(), &r.w.cfg, config.NewLogger(io.Discard, r.w.cfg.LogFormat, r.w.cfg.LogLevel), app.Options{SearchPath: r.w.schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, AuthLoginHelper: r.helper, AuthRefresher: r.helper})
+	a, e := app.Build(context.Background(), &r.w.cfg, config.NewLogger(io.Discard, r.w.cfg.LogFormat, r.w.cfg.LogLevel), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, AuthLoginHelper: r.helper, AuthRefresher: r.helper})
 	if e != nil {
 		ln.Close()
 		r.t.Fatal(e)
@@ -711,16 +710,6 @@ func (r *projectCredentialsRuntime) auditCleanup() {
 	t := r.t
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	conn, e := pgx.Connect(ctx, r.w.cfg.DatabaseURL)
-	if e != nil {
-		t.Error("TEST schema cleanup audit could not connect")
-		return
-	}
-	defer conn.Close(ctx)
-	var exists bool
-	if e = conn.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)`, r.w.schema).Scan(&exists); e != nil || exists {
-		t.Error("owned TEST schema remains after cleanup")
-	}
 	opts, e := redis.ParseURL(r.w.cfg.RedisURL)
 	if e != nil {
 		t.Error("TEST Redis audit configuration invalid")
@@ -746,6 +735,6 @@ func (r *projectCredentialsRuntime) auditCleanup() {
 		}
 	}
 	if !t.Failed() {
-		t.Log("cleanup readback: schemaAbsent=true ownedRedisKeys=0 workRootAbsent=true fakePiAbsent=true ownedListenersClosed=true")
+		t.Log("cleanup readback: ownedRedisKeys=0 workRootAbsent=true fakePiAbsent=true ownedListenersClosed=true")
 	}
 }

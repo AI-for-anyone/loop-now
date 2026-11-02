@@ -92,6 +92,40 @@ func (d *DB) ReadTx(ctx context.Context, fn func(*Tx) error) error {
 	return fn(t)
 }
 
+// BeginRead 在只读池上开始一个只读事务，调用方负责 Commit 或 Rollback（可以 defer Rollback，提交后它不做事）。
+// 能写成回调时用 ReadTx。
+func (d *DB) BeginRead(ctx context.Context) (*Tx, error) {
+	stx, err := d.r.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, fmt.Errorf("db: 开始只读事务失败：%w", err)
+	}
+	return &Tx{tx: stx, now: d.now(), readOnly: true}, nil
+}
+
+// Commit 结束 BeginRead 开始的只读事务。写事务由 InTx 提交，不能调用它。
+func (t *Tx) Commit(context.Context) error {
+	if !t.readOnly {
+		return errors.New("db: 写事务由 InTx 提交")
+	}
+	if t.done {
+		return sql.ErrTxDone
+	}
+	t.done = true
+	return t.tx.Commit()
+}
+
+// Rollback 结束 BeginRead 开始的只读事务；已结束时什么也不做。
+func (t *Tx) Rollback(context.Context) error {
+	if !t.readOnly {
+		return errors.New("db: 写事务由 InTx 回滚")
+	}
+	if t.done {
+		return nil
+	}
+	t.done = true
+	return t.tx.Rollback()
+}
+
 // Now 返回事务开始时刻，对应 PostgreSQL 的 now()：同一事务里所有语句取同一个值。
 func (t *Tx) Now() time.Time { return t.now }
 

@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"loop-now/internal/server/apperr"
+	"loop-now/internal/server/db"
 )
 
 // ---------- 外部身份 ----------
@@ -32,7 +32,7 @@ type IdentityManager struct {
 const identityColumns = `id, name, created_at, deleted_at,
 	(SELECT jsonb_build_object('pluginId', m.plugin_id, 'channelId', m.channel_id) FROM identity_managers m WHERE m.identity_id = external_identities.id)`
 
-func scanIdentity(row pgx.Row) (ExternalIdentity, error) {
+func scanIdentity(row db.Scanner) (ExternalIdentity, error) {
 	var x ExternalIdentity
 	err := row.Scan(&x.ID, &x.Name, &x.CreatedAt, &x.DeletedAt, &x.ManagedBy)
 	return x, err
@@ -40,7 +40,7 @@ func scanIdentity(row pgx.Row) (ExternalIdentity, error) {
 
 // SetIdentityManager 设置（m 为空时清空）代管外部身份的插件渠道；身份不存在或已删除时返回 not_found。插件与渠道由调用方校验。
 func (s *Store) SetIdentityManager(ctx context.Context, identity uuid.UUID, m *IdentityManager) (ExternalIdentity, error) {
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if err := lockLiveIdentity(ctx, tx, identity); err != nil {
 			return notFoundAs(err, "外部身份")
 		}
@@ -90,7 +90,7 @@ func (s *Store) ListExternalIdentities(ctx context.Context) ([]ExternalIdentity,
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (ExternalIdentity, error) { return scanIdentity(r) })
+	return db.CollectRows(rows, func(r db.CollectableRow) (ExternalIdentity, error) { return scanIdentity(r) })
 }
 
 // GetExternalIdentity 返回外部身份，已删除的也返回。
@@ -108,7 +108,7 @@ func (s *Store) GetLiveExternalIdentityByName(ctx context.Context, name string) 
 // DeleteExternalIdentity 软删除外部身份并吊销它的全部令牌；已删除或不存在时返回 not_found。
 func (s *Store) DeleteExternalIdentity(ctx context.Context, id uuid.UUID) (ExternalIdentity, error) {
 	var x ExternalIdentity
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var err error
 		x, err = scanIdentity(tx.QueryRow(ctx, `UPDATE external_identities SET deleted_at = now()
 			WHERE id = $1 AND deleted_at IS NULL RETURNING `+identityColumns, id))
@@ -136,14 +136,14 @@ type ExternalToken struct {
 
 const tokenColumns = `id, identity_id, display_prefix, created_at, expires_at, revoked_at, last_used_at`
 
-func scanToken(row pgx.Row) (ExternalToken, error) {
+func scanToken(row db.Scanner) (ExternalToken, error) {
 	var t ExternalToken
 	err := row.Scan(&t.ID, &t.IdentityID, &t.Prefix, &t.CreatedAt, &t.ExpiresAt, &t.RevokedAt, &t.LastUsedAt)
 	return t, err
 }
 
 // lockLiveIdentity 以 FOR SHARE 锁住未删除的外部身份，与删除身份串行化。
-func lockLiveIdentity(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+func lockLiveIdentity(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
 	var one int
 	err := tx.QueryRow(ctx, `SELECT 1 FROM external_identities WHERE id = $1 AND deleted_at IS NULL FOR SHARE`, id).Scan(&one)
 	return notFoundIfNoRows(err, "外部身份")
@@ -152,7 +152,7 @@ func lockLiveIdentity(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
 // InsertExternalToken 为未删除的外部身份保存令牌；身份已删除或不存在时返回 not_found。
 func (s *Store) InsertExternalToken(ctx context.Context, identityID, tokenID uuid.UUID, hash []byte, prefix string, expiresAt *time.Time) (ExternalToken, error) {
 	var t ExternalToken
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if err := lockLiveIdentity(ctx, tx, identityID); err != nil {
 			return err
 		}
@@ -167,7 +167,7 @@ func (s *Store) InsertExternalToken(ctx context.Context, identityID, tokenID uui
 // ListExternalTokens 列出未删除外部身份的全部令牌（含已吊销与已过期），新的在前。
 func (s *Store) ListExternalTokens(ctx context.Context, identityID uuid.UUID) ([]ExternalToken, error) {
 	var out []ExternalToken
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if err := lockLiveIdentity(ctx, tx, identityID); err != nil {
 			return err
 		}
@@ -175,7 +175,7 @@ func (s *Store) ListExternalTokens(ctx context.Context, identityID uuid.UUID) ([
 		if err != nil {
 			return err
 		}
-		out, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (ExternalToken, error) { return scanToken(r) })
+		out, err = db.CollectRows(rows, func(r db.CollectableRow) (ExternalToken, error) { return scanToken(r) })
 		return err
 	})
 	return out, err
@@ -184,7 +184,7 @@ func (s *Store) ListExternalTokens(ctx context.Context, identityID uuid.UUID) ([
 // RevokeExternalToken 吊销令牌；已吊销时保持原吊销时间。身份已删除、令牌不存在或不属于该身份时返回 not_found。
 func (s *Store) RevokeExternalToken(ctx context.Context, identityID, tokenID uuid.UUID) (ExternalToken, error) {
 	var t ExternalToken
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if err := lockLiveIdentity(ctx, tx, identityID); err != nil {
 			return err
 		}
@@ -309,7 +309,7 @@ func (s *Store) ListAudit(ctx context.Context, limit int) ([]AuditEntry, error) 
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (AuditEntry, error) {
+	return db.CollectRows(rows, func(r db.CollectableRow) (AuditEntry, error) {
 		var e AuditEntry
 		var target []byte
 		if err := r.Scan(&e.ID, &e.At, &e.RequestID, &e.ActorKind, &e.ActorID, &e.ActorAddress, &e.Method, &e.Operation, &target, &e.Status); err != nil {

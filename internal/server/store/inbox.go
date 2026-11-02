@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"loop-now/internal/server/apperr"
+	"loop-now/internal/server/db"
 )
 
 // ---------- 参与方 ----------
@@ -182,7 +182,7 @@ func inboxSelect(previewChars int) string {
  FROM inbox_messages m` + fj + tj
 }
 
-func scanInbox(row pgx.Row) (InboxMessage, error) {
+func scanInbox(row db.Scanner) (InboxMessage, error) {
 	var m InboxMessage
 	var question, answer, notice, images []byte
 	var node *uuid.UUID
@@ -279,7 +279,7 @@ func (s *Store) pageInbox(ctx context.Context, where string, args []any, q Inbox
 	if err != nil {
 		return InboxPage{}, err
 	}
-	msgs, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
+	msgs, err := db.CollectRows(rows, func(r db.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
 	if err != nil {
 		return InboxPage{}, err
 	}
@@ -320,14 +320,14 @@ func (s *Store) ListConsoleConversation(ctx context.Context, agentID uuid.UUID, 
 // 与其他未读消息。两次查询在同一个可重复读事务中，快照与 now() 相同，两张列表恰好互不重复。
 func (s *Store) ConsolePending(ctx context.Context, preview int) (questions, unread []InboxMessage, err error) {
 	open := `EXISTS (SELECT 1 FROM inbox_questions q WHERE q.message_id = m.id AND q.state = 'open' AND q.expires_at > now())`
-	list := func(tx pgx.Tx, where string) ([]InboxMessage, error) {
+	list := func(tx *db.Tx, where string) ([]InboxMessage, error) {
 		rows, err := tx.Query(ctx, inboxSelect(preview)+` WHERE m.to_kind = 'console' AND `+where+` ORDER BY m.created_at DESC, m.id DESC`)
 		if err != nil {
 			return nil, err
 		}
-		return pgx.CollectRows(rows, func(r pgx.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
+		return db.CollectRows(rows, func(r db.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
 	}
-	err = pgx.BeginTxFunc(ctx, s.Pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+	err = s.Pool.ReadTx(ctx, func(tx *db.Tx) error {
 		if questions, err = list(tx, open); err != nil {
 			return err
 		}
@@ -360,7 +360,7 @@ type NewInboxMessage struct {
 
 // InsertInboxMessage 在事务中写入一条消息；收件人是 Agent 或外部身份时，先锁住它并确认未删除。
 // 调用方在同一事务中继续安排提醒，保证消息与提醒一起生效。
-func InsertInboxMessage(ctx context.Context, tx pgx.Tx, in NewInboxMessage) error {
+func InsertInboxMessage(ctx context.Context, tx *db.Tx, in NewInboxMessage) error {
 	switch in.To.Kind {
 	case "agent":
 		if in.To.RuntimeID != uuid.Nil {
@@ -414,7 +414,7 @@ func notFoundAs(err error, what string) error {
 }
 
 // InboxTx 在事务中执行 fn（供 Inbox 服务把写消息与安排提醒放在同一事务中）。
-func (s *Store) InboxTx(ctx context.Context, fn func(pgx.Tx) error) error { return s.inTx(ctx, fn) }
+func (s *Store) InboxTx(ctx context.Context, fn func(*db.Tx) error) error { return s.inTx(ctx, fn) }
 
 // ThreadParties 返回线索的两方（第一条消息的发件人与收件人）；线索不存在时返回 not_found。
 func (s *Store) ThreadParties(ctx context.Context, threadID uuid.UUID) (from, to Party, err error) {
@@ -523,7 +523,7 @@ func (s *Store) markRead(ctx context.Context, p Party, column string, id uuid.UU
 		return out, eff, err
 	case p.Kind == "agent":
 		eff.AgentID = p.ID
-		err := s.inTx(ctx, func(tx pgx.Tx) error {
+		err := s.inTx(ctx, func(tx *db.Tx) error {
 			eff.QueueChanged, eff.Voided = false, nil
 			if err := lockAgentQueue(ctx, tx, p.ID); err != nil {
 				return notFoundAs(err, "消息")
@@ -570,7 +570,7 @@ func markReadTx(ctx context.Context, q queueQuerier, p Party, column string, id 
 		return nil, nil, err
 	}
 	var links []readLink
-	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (ReadReceipt, error) {
+	out, err := db.CollectRows(rows, func(r db.CollectableRow) (ReadReceipt, error) {
 		var x ReadReceipt
 		var l readLink
 		err := r.Scan(&x.ID, &x.ThreadID, &x.ReadAt, &l.run, &l.turn)
@@ -584,7 +584,7 @@ func markReadTx(ctx context.Context, q queueQuerier, p Party, column string, id 
 func (s *Store) EarliestUnreadInbox(ctx context.Context, agentID uuid.UUID) (id uuid.UUID, ok bool, err error) {
 	err = s.Pool.QueryRow(ctx, `SELECT id FROM inbox_messages m WHERE `+unreadCond("m")+` AND `+AgentParty(agentID).cond("m", "to", 1)+`
 		ORDER BY m.created_at, m.id LIMIT 1`, agentID).Scan(&id)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, db.ErrNoRows) {
 		return uuid.Nil, false, nil
 	}
 	return id, err == nil, err
@@ -596,7 +596,7 @@ func (s *Store) CountInboxUnread(ctx context.Context, p Party) (int, error) {
 }
 
 type queryRower interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	QueryRow(ctx context.Context, sql string, args ...any) *db.Row
 }
 
 func countUnread(ctx context.Context, q queryRower, p Party) (int, error) {
@@ -611,7 +611,7 @@ const inboxEventLockKey = 0x6c6e5f696e626f78 // "ln_inbox"
 // WithInboxEventLock 在一个短事务中取 advisory lock，统计控制台操作者的未读总数后调用 fn（追加事件或读取快照位置）。
 // 追加事件因此是串行的：越靠后的事件，其未读总数越新。
 func (s *Store) WithInboxEventLock(ctx context.Context, fn func(consoleUnread int) error) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, int64(inboxEventLockKey)); err != nil {
 			return err
 		}
@@ -661,7 +661,7 @@ func (s *Store) ListInboxThreads(ctx context.Context, p Party, cursor *InboxCurs
 		root, last uuid.UUID
 		unread     int
 	}
-	found, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (row, error) {
+	found, err := db.CollectRows(rows, func(r db.CollectableRow) (row, error) {
 		var x row
 		return x, r.Scan(&x.root, &x.last, &x.unread)
 	})
@@ -700,7 +700,7 @@ func (s *Store) inboxByIDs(ctx context.Context, ids []uuid.UUID, preview int) (m
 	if err != nil {
 		return nil, err
 	}
-	msgs, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
+	msgs, err := db.CollectRows(rows, func(r db.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
 	if err != nil {
 		return nil, err
 	}
@@ -716,7 +716,7 @@ func (s *Store) ListThreadMessages(ctx context.Context, threadID uuid.UUID, prev
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
+	return db.CollectRows(rows, func(r db.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
 }
 
 // ---------- 地址解析 ----------
@@ -760,10 +760,10 @@ func RedactCancelledFor(p Party, m *InboxMessage) {
 
 // IsNotFound 报告错误是否为 not_found。
 func IsNotFound(err error) bool {
-	return errors.Is(err, pgx.ErrNoRows) || apperr.Is(err, apperr.CodeNotFound)
+	return errors.Is(err, db.ErrNoRows) || apperr.Is(err, apperr.CodeNotFound)
 }
 
-func GetInboxMessageTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, preview int) (InboxMessage, error) {
+func GetInboxMessageTx(ctx context.Context, tx *db.Tx, id uuid.UUID, preview int) (InboxMessage, error) {
 	m, err := scanInbox(tx.QueryRow(ctx, inboxSelect(preview)+` WHERE m.id=$1`, id))
 	return m, notFoundIfNoRows(err, "消息")
 }
