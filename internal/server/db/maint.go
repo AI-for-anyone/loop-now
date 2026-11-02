@@ -9,6 +9,9 @@ import (
 	"path/filepath"
 )
 
+// checkpointBusyMS 是检查点期间写连接等待读者的上限（毫秒）。
+const checkpointBusyMS = 200
+
 // CheckpointMode 是 wal_checkpoint 的模式。
 type CheckpointMode string
 
@@ -35,11 +38,22 @@ func (d *DB) Checkpoint(ctx context.Context, mode CheckpointMode) ([]CheckpointR
 		return nil, err
 	}
 	defer release()
+	// TRUNCATE 遇到占着旧快照的读者会按 busy_timeout（10s）等待，而它占着唯一的写连接；
+	// 检查点期间把等待缩短，做不完就报 Busy，下次再做。
+	bg := context.WithoutCancel(ctx)
+	if _, err := c.ExecContext(bg, fmt.Sprintf("PRAGMA busy_timeout=%d", checkpointBusyMS)); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if _, err := c.ExecContext(bg, fmt.Sprintf("PRAGMA busy_timeout=%d", busyTimeoutMS)); err != nil {
+			_ = c.Raw(func(any) error { return driver.ErrBadConn })
+		}
+	}()
 	var out []CheckpointResult
 	for _, schema := range []string{"main", EventsSchema} {
 		r := CheckpointResult{Schema: schema}
 		var busy int
-		if err := c.QueryRowContext(context.WithoutCancel(ctx), fmt.Sprintf("PRAGMA %s.wal_checkpoint(%s)", schema, mode)).Scan(&busy, &r.LogFrames, &r.Checkpointed); err != nil {
+		if err := c.QueryRowContext(bg, fmt.Sprintf("PRAGMA %s.wal_checkpoint(%s)", schema, mode)).Scan(&busy, &r.LogFrames, &r.Checkpointed); err != nil {
 			return out, fmt.Errorf("db: %s 检查点失败：%w", schema, err)
 		}
 		r.Busy = busy != 0
