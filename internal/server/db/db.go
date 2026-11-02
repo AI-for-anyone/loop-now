@@ -66,6 +66,21 @@ type DB struct {
 	writeHook atomic.Pointer[WriteHook]
 	// writeTxNow 是进行中写事务的开始时刻（UTC 微秒），写连接上的 SQL now() 返回它；没有写事务时为 0。
 	writeTxNow atomic.Int64
+	// queryHook 在每条语句执行前调用（见 SetQueryHook）。
+	queryHook atomic.Pointer[QueryHook]
+}
+
+// QueryHook 在每条语句执行前调用，事务里的语句在事务内调用。测试用它在某条语句前暂停，检验并发下的语义
+// （原来用 pgx 的 QueryTracer 做同样的事）。
+type QueryHook func(ctx context.Context, query string)
+
+// SetQueryHook 设置语句钩子，nil 取消。之后开始的事务与语句生效。
+func (d *DB) SetQueryHook(h QueryHook) {
+	if h == nil {
+		d.queryHook.Store(nil)
+		return
+	}
+	d.queryHook.Store(&h)
 }
 
 type writerHolder struct {
@@ -311,6 +326,9 @@ func (d *DB) Query(ctx context.Context, query string, args ...any) (*Rows, error
 		vals, err := convertArgs(args)
 		if err != nil {
 			return nil, err
+		}
+		if h := d.queryHook.Load(); h != nil {
+			(*h)(ctx, query)
 		}
 		rows, err := d.r.QueryContext(ctx, query, vals...)
 		if err != nil {
