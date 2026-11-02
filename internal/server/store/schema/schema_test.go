@@ -3,6 +3,7 @@ package schema_test
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
@@ -10,11 +11,15 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"loop-now/internal/server/db"
 	"loop-now/internal/server/store/schema"
 	"loop-now/internal/testutil/sqlitetest"
+
+	"modernc.org/sqlite"
 )
 
 // events.db 里只放这四张可清理的日志表，加上 lifecycle_events 的插件事件捕获表。
@@ -210,9 +215,21 @@ func TestRegexChecksMatchPostgres(t *testing.T) {
 }
 
 // rawConn 打开迁移后的 data.db 的一个独立连接：关外键、忽略 CHECK，便于只填 NOT NULL 列造数据。
+// rawDriver 是只给 rawConn 用的驱动：表的时间默认值调用 now()，这里按调用时刻提供它。
+var rawDriver = sync.OnceValue(func() string {
+	drv := &sqlite.Driver{}
+	if err := drv.RegisterFunction("now", &sqlite.FunctionImpl{NArgs: 0, Scalar: func(*sqlite.FunctionContext, []driver.Value) (driver.Value, error) {
+		return time.Now().UnixMicro(), nil
+	}}); err != nil {
+		panic(err)
+	}
+	sql.Register("sqlite-schema-raw", drv)
+	return "sqlite-schema-raw"
+})
+
 func rawConn(t *testing.T, d *db.DB) *sql.DB {
 	t.Helper()
-	raw, err := sql.Open("sqlite", "file:"+filepath.Join(d.Dir(), db.DataFile)+"?_pragma=busy_timeout(10000)&_pragma=foreign_keys(0)&_pragma=ignore_check_constraints(1)")
+	raw, err := sql.Open(rawDriver(), "file:"+filepath.Join(d.Dir(), db.DataFile)+"?_pragma=busy_timeout(10000)&_pragma=foreign_keys(0)&_pragma=ignore_check_constraints(1)")
 	if err != nil {
 		t.Fatal(err)
 	}
