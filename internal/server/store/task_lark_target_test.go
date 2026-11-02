@@ -155,9 +155,7 @@ func TestTaskLarkTargetLockWaitCannotCrossGrantExpiry(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("target read not reached")
 	}
-	if until := time.Until(expires.Add(20 * time.Millisecond)); until > 0 {
-		time.Sleep(until)
-	}
+	sleepPastWall(expires)
 	close(resume)
 	var err error
 	select {

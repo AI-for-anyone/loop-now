@@ -163,26 +163,6 @@ func TestGitHubStoreStableIDCLIIsolationAndRollback(t *testing.T) {
 	}
 }
 
-// githubWaitExpired 等到库的时钟也过了操作期限。只按 Go 的时钟睡到期限之后不够：虚拟机里墙钟会被校时往回拨几秒。
-func githubWaitExpired(t *testing.T, e projectMigrationEnv, op cm.CLIAuthOperation) {
-	t.Helper()
-	if pause := time.Until(op.ExpiresAt) + 20*time.Millisecond; pause > 0 {
-		time.Sleep(pause)
-	}
-	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
-		var expired bool
-		if err := e.s.Pool.QueryRow(context.Background(), `SELECT expires_at<clock_timestamp() FROM project_cli_auth_operations WHERE id=$1`, op.ID).Scan(&expired); err != nil {
-			t.Fatal(err)
-		}
-		if expired {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("operation never expired by the database clock")
-		}
-	}
-}
-
 func TestGitHubStoreLockWaitPastExpiryAndFinalFence(t *testing.T) {
 	t.Run("lock_wait", func(t *testing.T) {
 		e := githubStoreFixture(t)
@@ -200,7 +180,7 @@ func TestGitHubStoreLockWaitPastExpiryAndFinalFence(t *testing.T) {
 			done <- err
 		}()
 		sqlitetest.WaitWriteWaiters(t, ctx, e.s.Pool, 1)
-		githubWaitExpired(t, e, op)
+		sleepPastWall(op.ExpiresAt)
 		release()
 		var err error
 		select {
@@ -239,7 +219,7 @@ func TestGitHubStoreLockWaitPastExpiryAndFinalFence(t *testing.T) {
 		case <-time.After(3 * time.Second):
 			t.Fatal("identity write not reached")
 		}
-		githubWaitExpired(t, e, op)
+		sleepPastWall(op.ExpiresAt)
 		close(unblock)
 		var err error
 		select {

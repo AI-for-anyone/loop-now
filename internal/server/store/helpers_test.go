@@ -165,3 +165,12 @@ func sha256Hex(b []byte) string {
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
 }
+
+// sleepPastWall 睡到墙钟（库里 clock_timestamp() 用的同一个时钟）过了 deadline 20ms 之后。
+// 只按单调时钟睡不够：虚拟机里墙钟会被校时往回拨几秒，期限在库看来还没到。
+func sleepPastWall(deadline time.Time) {
+	target := deadline.Round(0).Add(20 * time.Millisecond)
+	for now := time.Now().Round(0); now.Before(target); now = time.Now().Round(0) {
+		time.Sleep(min(target.Sub(now), 50*time.Millisecond))
+	}
+}
