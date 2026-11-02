@@ -26,7 +26,7 @@ npm run build
 npm test
 ```
 
-Database integration tests require an isolated test database through `LOOP_NOW_TEST_DATABASE_URL`; tests using Redis also need `LOOP_NOW_TEST_REDIS_URL`. Native and browser tests have additional fixture requirements. **A skipped integration test is not a successful integration run.**
+Backend tests need no external services; each uses its own temporary data directory. Only the one-off PostgreSQL importer's tests need a test database through `LOOP_NOW_TEST_DATABASE_URL`. Native and browser tests have additional fixture requirements. **A skipped integration test is not a successful integration run.**
 
 Keep credentials, local runtime data, and build artifacts out of contributions.
 

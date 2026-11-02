@@ -7,6 +7,7 @@
 | 变量 | 用途 / 默认值 |
 | --- | --- |
 | `LOOP_NOW_LISTEN_ADDR` | 控制台 API；`127.0.0.1:8780` |
+| `LOOP_NOW_DATA_DIR` | 数据库（`db/`）与每日备份（`backups/`）；默认为服务端用户的 `~/.loop_now` |
 | `LOOP_NOW_WORK_ROOT` | 持久的 Agent 工作区与运行文件 |
 | `LOOP_NOW_CONTEXT_DIR` | 共享的项目（`projects/<id>/`）与全局（`global/`）上下文文件夹；默认为服务端用户的 `~/.loop_now` |
 | `LOOP_NOW_PLUGIN_HOST_ENTRY` | 插件宿主入口的绝对路径，由 Node 运行；不设置则插件平台半边不运行 |
@@ -17,12 +18,22 @@
 | `LOOP_NOW_CONSOLE_ORIGINS` | 允许的浏览器来源；默认本地 5173 端口 |
 | `LOOP_NOW_LARK_USER_BUNDLE_DIR` | 可选的已验证飞书用户 CLI 包 |
 
+## 数据目录与备份
+
+数据库是 SQLite：`data.db` 保存平台状态与凭证（明文），`events.db` 保存运行与审计日志。一个数据目录同时只能由一个服务端使用。服务端每天做一次检查点、清理 90 天前的运行与审计日志，并写一份备份。
+
+| 变量 | 用途 / 默认值 |
+| --- | --- |
+| `LOOP_NOW_DATA_DIR` | 数据目录；默认为服务端用户的 `~/.loop_now` |
+| `LOOP_NOW_BACKUP_DIR` | 每日备份的目录，每份一个以时刻命名的子目录；默认 `<数据目录>/backups` |
+| `LOOP_NOW_BACKUP_KEEP` | 保留几份每日备份；默认 `7` |
+
+`loop-server backup <目录>` 随时写一份备份，服务运行中也可以。`loop-server import-postgres` 用于一次性从基于 PostgreSQL 的版本迁移（见[快速上手](/zh/guide/getting-started#moving-from-a-postgresql-based-release)）。
+
 ## 源码安装必需
 
 | 变量 | 用途 |
 | --- | --- |
-| `LOOP_NOW_DATABASE_URL` | PostgreSQL 连接串；凭证以明文保存在该数据库中 |
-| `LOOP_NOW_REDIS_URL` | Redis 连接串；请使用专用数据库并设置 `LOOP_NOW_REDIS_KEY_PREFIX` |
 | `LOOP_NOW_NODE_BIN` | 用于运行插件宿主的 Node 二进制路径 |
 | `LOOP_NOW_PI_BIN` | Pi 编码 Agent 二进制路径 |
 | `LOOP_NOW_LOOPCTL_DIST_DIR` | 存放配套版本 `loopctl` 发行包的目录 |

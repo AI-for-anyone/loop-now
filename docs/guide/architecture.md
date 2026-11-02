@@ -1,12 +1,11 @@
 # Architecture
 
-Loop Now is one **local installation**: a Go server, a React console, a PostgreSQL database, Redis, per-agent Pi processes, and a shared Node plugin host. The components below form a single working system; the diagram does not imply independently scalable services.
+Loop Now is one **local installation**: a Go server, a React console, a SQLite database in a local data directory, per-agent Pi processes, and a shared Node plugin host. The components below form a single working system; the diagram does not imply independently scalable services.
 
 ```mermaid
 flowchart LR
     UI[Web console] <-->|HTTP and SSE| Server[Go server]
-    Server <--> PG[(PostgreSQL)]
-    Server <--> Redis[(Redis)]
+    Server <--> DB[(SQLite)]
     Server -->|RPC| Pi[Pi processes]
     Server <-->|stdio| Host[Node plugin host]
     Host -->|HTTP, plugin token| Server
@@ -14,8 +13,8 @@ flowchart LR
     Pi --> Ext[Plugin extensions and MCP servers]
 ```
 
-- **PostgreSQL** stores platform state, credentials, messages, and task records.
-- **Redis** handles coordination, queues, and live streams.
+- **SQLite** in the data directory stores platform state, credentials, messages, task records, and queues; run and audit logs live in a second file next to it.
+- **The server process** keeps busy locks and live event streams in memory; a restart begins new streams.
 - **The local filesystem** holds agent workspaces, sessions, and installed tools.
 - **Pi processes** execute the agents' turns. Each agent runs in its own working directory; the server launches, recycles, and bounds them.
 - **The plugin host** runs platform halves in one long-lived Node process, talks to the server over stdio JSON-lines, and calls back over HTTP with scoped plugin tokens.
