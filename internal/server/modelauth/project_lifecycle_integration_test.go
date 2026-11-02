@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -351,5 +352,89 @@ func TestProjectLifecycleProjectDeleteRollbackKeepsLiveHelper(t *testing.T) {
 	state, err := e.p.GetLogin(context.Background(), e.project, op.ID)
 	if err != nil || state.Operation.Status != "succeeded" || state.Account == nil || state.Account.CurrentVersionID == nil || *state.Account.CurrentVersionID == *old.CurrentVersionID || e.writes() != 1 {
 		t.Fatal("rollback did not leave usable live login", err)
+	}
+}
+
+func TestProjectLifecycleRecordDeadlineFreshTerminalContext(t *testing.T) {
+	e := newLifecycleEnv(t, ServiceOptions{RecordTimeout: 200 * time.Millisecond})
+	old := e.seedAccount()
+	op := e.start(&old)
+	// 凭证提交写版本时停在语句钩子里，直到提交的期限到（写事务回滚）；终态回写用新的上下文，之后拿到写连接。
+	var blocked atomic.Bool
+	e.st.Pool.SetQueryHook(func(ctx context.Context, q string) {
+		// 停住的写入在上下文结束后不会执行，不计入尝试次数。
+		if strings.Contains(q, "INSERT INTO model_auth_versions") && blocked.CompareAndSwap(false, true) {
+			select {
+			case <-ctx.Done():
+			case <-time.After(10 * time.Second):
+			}
+		}
+	})
+	e.release()
+	e.waitDone(op.ID)
+	status, url, code := e.rawOperation(op.ID)
+	if status != "failed" || url != nil || code == nil || !blocked.Load() {
+		t.Fatal("expired commit context poisoned terminal write")
+	}
+	e.assertNoSeal()
+	e.assertOld(old)
+	if !strings.Contains(e.logs.String(), `"stage":"credential_commit"`) {
+		t.Fatal("deadline did not occur at credential commit")
+	}
+}
+
+func TestProjectLifecycleSuccessMetadataAfterActualCommit(t *testing.T) {
+	e := newLifecycleEnv(t, ServiceOptions{RecordTimeout: 3 * time.Second})
+	old := e.seedAccount()
+	op := e.start(&old)
+	ctx := context.Background()
+	// 提交事务写完账号与操作之后、真正提交之前停住：每个写事务提交前最后一条语句是插件变更的收取，
+	// 写过凭证版本的那个事务停在那里，直到测试放开；结果因此不能在提交可见之前就显示为成功。
+	var sawVersion, blocking atomic.Bool
+	unblock := make(chan struct{})
+	var unblockOnce sync.Once
+	releaseCommit := func() { unblockOnce.Do(func() { close(unblock) }) }
+	defer releaseCommit()
+	e.st.Pool.SetQueryHook(func(_ context.Context, q string) {
+		switch {
+		case strings.Contains(q, "INSERT INTO model_auth_versions"):
+			e.attempts.Add(1)
+			sawVersion.Store(true)
+		case strings.Contains(q, "FROM plugin_changes") && sawVersion.Load() && blocking.CompareAndSwap(false, true):
+			<-unblock
+		}
+	})
+	e.release()
+	waitAuth(t, func() bool { return blocking.Load() })
+	status, _, _ := e.rawOperation(op.ID)
+	if status != "awaiting_authorization" {
+		t.Fatal("uncommitted success visible")
+	}
+	var current uuid.UUID
+	if err := e.st.Pool.QueryRow(ctx, `SELECT current_model_version_id FROM project_credential_accounts WHERE id=$1`, old.ID).Scan(&current); err != nil || current != *old.CurrentVersionID {
+		t.Fatal("uncommitted account pointer visible", err)
+	}
+	type readResult struct {
+		state cm.LoginState
+		err   error
+	}
+	reads := make(chan readResult, 8)
+	for i := 0; i < 8; i++ {
+		go func() { state, err := e.p.GetLogin(ctx, e.project, op.ID); reads <- readResult{state, err} }()
+	}
+	releaseCommit()
+	e.waitDone(op.ID)
+	for i := 0; i < 8; i++ {
+		select {
+		case read := <-reads:
+			if read.err != nil || read.state.Operation.Status != "succeeded" || read.state.Operation.AccountID == nil || *read.state.Operation.AccountID != old.ID || read.state.Account == nil || read.state.Account.CurrentVersionID == nil || *read.state.Account.CurrentVersionID == *old.CurrentVersionID || read.state.Account.Revision != old.Revision+1 || read.state.Operation.AuthorizationURL != nil {
+				t.Fatal("success paired with stale/precommit metadata", read.err)
+			}
+		case <-time.After(4 * time.Second):
+			t.Fatal("concurrent success projection blocked")
+		}
+	}
+	if e.writes() != 1 {
+		t.Fatal("success was written more than once")
 	}
 }
