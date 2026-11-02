@@ -18,7 +18,7 @@ type Store struct {
 	ImageMaxCount int
 	// sleepScan tracks a bounded round of due candidates; it is not sleep authority.
 	sleepScan sleepScanProgress
-	// TaskCommitted在任务事务提交后唤醒Redis中继；启动时配置，运行中不修改。
+	// TaskCommitted在任务事务提交后唤醒事件流中继；启动时配置，运行中不修改。
 	TaskCommitted func()
 	// VerificationInvalidated runs only after a credential/project mutation commits.
 	VerificationInvalidated func(uuid.UUID, *uuid.UUID)

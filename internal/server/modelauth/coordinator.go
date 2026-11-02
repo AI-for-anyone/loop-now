@@ -18,7 +18,7 @@ type Refresher interface {
 	Refresh(context.Context, modelcredential.Credential) (modelcredential.Credential, error)
 }
 
-// RefreshStore permits failure injection at the PG acknowledgement boundary.
+// RefreshStore permits failure injection at the database acknowledgement boundary.
 // Production uses Store, including its durable conditional recovery update.
 type RefreshStore interface {
 	GetModelAuthVersion(context.Context, uuid.UUID) (store.ModelAuthVersion, error)

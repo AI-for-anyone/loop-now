@@ -18,7 +18,7 @@ import (
 // defer Close: stop or COMMIT uncertainty must retain coordination until its
 // result is independently known. Stop/revoke/drain must be sealed-ready before
 // C; only then may confirmed C be followed by pure in-memory gate release.
-// If C is unknown, retain this lease and pause dispatch. The PG fence may
+// If C is unknown, retain this lease and pause dispatch. The database fence may
 // already have been atomically removed by C: do not claim it still exists.
 func acquireTaskLarkHandoff(ctx context.Context, ex *local.Executor, runtimes []uuid.UUID) (*local.RuntimeHandoff, error) {
 	return acquireTaskLarkHandoffBeforeStop(ctx, ex, runtimes, nil)

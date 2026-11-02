@@ -27,7 +27,7 @@ type Binding struct {
 }
 
 // TokenSource must be bound to Binding by the caller. It must return only a
-// committed token for that exact version. The PG coordinator owns independent,
+// committed token for that exact version. The database coordinator owns independent,
 // bounded refresh/persistence; cancellation here cancels waiting, not rotation.
 type TokenSource interface {
 	AccessToken(context.Context) (string, error)
