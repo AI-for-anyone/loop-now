@@ -13,7 +13,6 @@ func envOf(m map[string]string) func(string) string {
 
 func requiredEnv() map[string]string {
 	return map[string]string{
-		EnvRedisURL:       "redis://127.0.0.1:6379/10",
 		EnvLoopctlDistDir: "/opt/loop-now/loopctl-dist",
 	}
 }
@@ -56,7 +55,7 @@ func TestLoadDefaults(t *testing.T) {
 	if len(c.Warnings) != 0 {
 		t.Errorf("默认配置不应有告警：%v", c.Warnings)
 	}
-	if c.PiMaxProcesses != 0 || c.PiIdleTimeout != 10*time.Minute || c.LockTTL != 30*time.Second {
+	if c.PiMaxProcesses != 0 || c.PiIdleTimeout != 10*time.Minute {
 		t.Errorf("执行器默认值不对：%+v", c)
 	}
 	if c.MaxUploadFile != 10<<20 || c.MaxMessage != 64<<10 || c.TextEditMax != 1<<20 || c.MaxInboxMessage != 64<<10 {
@@ -115,12 +114,11 @@ func TestLoadErrors(t *testing.T) {
 	}{
 		{"数据根不是绝对路径", func(m map[string]string) { m[EnvDataDir] = "relative/dir" }, EnvDataDir},
 		{"数据根不规范", func(m map[string]string) { m[EnvDataDir] = "/data/../loop" }, EnvDataDir},
-		{"缺少 Redis 连接", func(m map[string]string) { delete(m, EnvRedisURL) }, EnvRedisURL},
+		{"备份目录不是绝对路径", func(m map[string]string) { m[EnvBackupDir] = "backups" }, EnvBackupDir},
+		{"备份份数为零", func(m map[string]string) { m[EnvBackupKeep] = "0" }, EnvBackupKeep},
 		{"时长格式错误", func(m map[string]string) { m[EnvPiIdleTimeout] = "ten minutes" }, EnvPiIdleTimeout},
 		{"时长为零", func(m map[string]string) { m[EnvAbortTimeout] = "0s" }, EnvAbortTimeout},
 		{"大小格式错误", func(m map[string]string) { m[EnvMaxUploadFile] = "10MB" }, EnvMaxUploadFile},
-		{"续期间隔不小于锁 TTL", func(m map[string]string) { m[EnvLockTTL] = "10s"; m[EnvLockRenewInterval] = "10s" }, EnvLockRenewInterval},
-		{"对账周期不小于锁 TTL", func(m map[string]string) { m[EnvReconcileInterval] = "40s" }, EnvReconcileInterval},
 		{"进程上限为负", func(m map[string]string) { m[EnvPiMaxProcesses] = "-1" }, EnvPiMaxProcesses},
 		{"在线编辑上限大于上传上限", func(m map[string]string) { m[EnvTextEditMax] = "20MiB" }, EnvTextEditMax},
 		{"监听地址格式错误", func(m map[string]string) { m[EnvListenAddr] = "localhost" }, EnvListenAddr},
@@ -339,8 +337,15 @@ func TestDataDirDefaultAndDBDir(t *testing.T) {
 	if c.DataDir != "/home/fixture/.loop_now" || DBDir(c.DataDir) != "/home/fixture/.loop_now/db" {
 		t.Fatalf("默认数据根应为 HOME 下的 .loop_now，库在其 db 子目录：%q", c.DataDir)
 	}
+	if c.BackupDir != "/home/fixture/.loop_now/backups" || c.BackupKeep != 7 {
+		t.Fatalf("默认备份在数据根的 backups 下、保留 7 份：%q %d", c.BackupDir, c.BackupKeep)
+	}
 	env[EnvDataDir] = "/srv/loop-now"
-	if c, err = Load(envOf(env)); err != nil || c.DataDir != "/srv/loop-now" {
-		t.Fatalf("LOOP_NOW_DATA_DIR 应覆盖默认值：%q %v", c.DataDir, err)
+	if c, err = Load(envOf(env)); err != nil || c.DataDir != "/srv/loop-now" || c.BackupDir != "/srv/loop-now/backups" {
+		t.Fatalf("LOOP_NOW_DATA_DIR 应覆盖默认值，备份目录随之：%q %q %v", c.DataDir, c.BackupDir, err)
+	}
+	env[EnvBackupDir], env[EnvBackupKeep] = "/mnt/backup", "3"
+	if c, err = Load(envOf(env)); err != nil || c.BackupDir != "/mnt/backup" || c.BackupKeep != 3 {
+		t.Fatalf("备份目录与份数可以覆盖：%q %d %v", c.BackupDir, c.BackupKeep, err)
 	}
 }

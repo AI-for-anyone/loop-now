@@ -13,8 +13,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-
-	"github.com/redis/go-redis/v9"
 )
 
 // Resolved 是检查通过后得到的本机绝对路径与推导值。
@@ -45,22 +43,6 @@ type Options struct {
 	WorkRoot     string
 	// HomeDirs 是不允许包含工作根目录的 home 目录；为空时取当前用户的 home。
 	HomeDirs []string
-}
-
-// CheckRedis 确认 Redis 可连接。
-func CheckRedis(ctx context.Context, redisURL string) error {
-	opts, err := redis.ParseURL(redisURL)
-	if err != nil {
-		return errors.New("Redis 连接串无法解析")
-	}
-	client := redis.NewClient(opts)
-	defer client.Close()
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	if err := client.Ping(ctx).Err(); err != nil {
-		return fmt.Errorf("Redis 不可用：%w", err)
-	}
-	return nil
 }
 
 // Resolve 检查 Pi、node、git 与工作根目录，并推导执行 PATH 与 pi-ai 目录。

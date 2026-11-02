@@ -212,3 +212,25 @@ func NewPluginEventID() string {
 	}
 	return string(out[:])
 }
+
+// eventLogTables 是 events.db 里按时间清理的日志表（plugin_host_log 由插件宿主自己按 7 天清理）。
+var eventLogTables = []string{"lifecycle_events", "run_tool_events", "audit_log"}
+
+// PruneEventLogs 删除三张日志表里 before 之前的行，每次最多删 batch 行一个事务，避免长时间占住写连接。
+// 返回删掉的行数。
+func (s *Store) PruneEventLogs(ctx context.Context, before time.Time, batch int) (int64, error) {
+	var total int64
+	for _, table := range eventLogTables {
+		for {
+			tag, err := s.Pool.Exec(ctx, `DELETE FROM `+table+` WHERE rowid IN (SELECT rowid FROM `+table+` WHERE at < $1 LIMIT $2)`, before, batch)
+			if err != nil {
+				return total, err
+			}
+			total += tag.RowsAffected()
+			if tag.RowsAffected() < int64(batch) {
+				break
+			}
+		}
+	}
+	return total, nil
+}

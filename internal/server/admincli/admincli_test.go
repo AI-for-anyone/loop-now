@@ -11,6 +11,7 @@ import (
 	"loop-now/internal/server/admincli"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/config"
+	"loop-now/internal/server/db"
 	"loop-now/internal/testutil/sqlitetest"
 
 	"os"
@@ -141,5 +142,37 @@ func TestAdminCommands(t *testing.T) {
 	}
 	if ops["identity.create"] != 3 || ops["token.issue"] != 2 || ops["token.revoke"] != 2 || ops["identity.delete"] != 1 {
 		t.Fatalf("改变状态的命令都应记审计（含失败的）：%v", ops)
+	}
+}
+
+// backup 在给定目录下写一份能打开的完整备份，服务开着库时也可以；目录参数缺失时报用法错误。
+func TestAdminBackup(t *testing.T) {
+	dataDir := t.TempDir()
+	if err := os.MkdirAll(config.DBDir(dataDir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	st := sqlitetest.NewStoreIn(t, config.DBDir(dataDir))
+	t.Cleanup(st.Close)
+	if _, err := st.EnsureDefaults(context.Background(), "o", "p"); err != nil {
+		t.Fatal(err)
+	}
+	c := cli{t: t, dataDir: dataDir}
+	if code, _, _ := c.run("backup"); code != 2 {
+		t.Fatalf("缺少目录时应报用法错误：%d", code)
+	}
+	target := t.TempDir()
+	out, _ := c.ok("backup", target)
+	path := strings.TrimSpace(out)
+	if filepath.Dir(path) != target {
+		t.Fatalf("备份应在目标目录下：%q", path)
+	}
+	restored, err := db.Open(context.Background(), db.Options{Dir: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restored.Close()
+	var projects int
+	if err := restored.QueryRow(context.Background(), `SELECT count(*) FROM projects`).Scan(&projects); err != nil || projects != 1 {
+		t.Fatalf("备份内容不对：%d %v", projects, err)
 	}
 }

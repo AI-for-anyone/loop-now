@@ -95,7 +95,7 @@ func (s *Service) executeTurn(ctx context.Context, turn store.TaskTurn, sink exe
 	}
 	owner := coord.LockValue(turn.ID.String(), s.Options.InstanceID.String())
 	key := turn.RuntimeID.String()
-	ok, e := s.Coord.Renew(ctx, key, owner)
+	ok, e := s.Coord.Hold(ctx, key, owner)
 	if e != nil || !ok {
 		return executor.Result{}, errors.New("任务实例忙闲锁不可用")
 	}
@@ -115,7 +115,7 @@ func (s *Service) executeTurn(ctx context.Context, turn store.TaskTurn, sink exe
 	}()
 	go func() {
 		defer close(done)
-		ticker := time.NewTicker(s.Options.LockRenewInterval)
+		ticker := time.NewTicker(s.Options.abortPollInterval())
 		defer ticker.Stop()
 		for {
 			select {
@@ -130,13 +130,8 @@ func (s *Service) executeTurn(ctx context.Context, turn store.TaskTurn, sink exe
 					_ = s.Executor.Interrupt(child, turn.RuntimeID, turn.ID)
 				}
 			case <-ticker.C:
-				ok, e := s.Coord.Renew(child, key, owner)
-				if e != nil || !ok {
-					cancel()
-					return
-				}
 				var aborting bool
-				if e = s.Store.Pool.QueryRow(child, `SELECT status='aborting' FROM task_turns WHERE id=$1`, turn.ID).Scan(&aborting); e == nil && aborting {
+				if e := s.Store.Pool.QueryRow(child, `SELECT status='aborting' FROM task_turns WHERE id=$1`, turn.ID).Scan(&aborting); e == nil && aborting {
 					_ = s.Executor.Interrupt(child, turn.RuntimeID, turn.ID)
 				}
 			}

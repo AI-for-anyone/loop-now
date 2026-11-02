@@ -39,6 +39,7 @@ import (
 	"loop-now/internal/server/inbox"
 	"loop-now/internal/server/larkauth"
 	"loop-now/internal/server/loopctldist"
+	"loop-now/internal/server/maintenance"
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/modelconfig"
@@ -62,14 +63,16 @@ type App struct {
 	InstanceID      uuid.UUID
 	Log             *slog.Logger
 
-	Store    *store.Store
-	Coord    *coord.Coord
-	Executor *local.Executor
-	Conv     *conversation.Service
-	Tasks    *tasks.Service
-	Folders  *folders.Service
-	Config   *agentconfig.Service
-	API      *httpapi.Server
+	Store *store.Store
+	Coord *coord.Coord
+	// Maintenance 定时做检查点、清理旧日志与备份。
+	Maintenance *maintenance.Service
+	Executor    *local.Executor
+	Conv        *conversation.Service
+	Tasks       *tasks.Service
+	Folders     *folders.Service
+	Config      *agentconfig.Service
+	API         *httpapi.Server
 	// Plugins 是插件第二版的安装与配置；PluginHost 在配置了宿主入口时监护插件宿主，否则为空。
 	Plugins    *plugins.Service
 	PluginHost *pluginhost.Supervisor
@@ -213,8 +216,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		}
 	}
 
-	a.Coord = coord.New(coord.Options{Prefix: cfg.RedisKeyPrefix, LockTTL: cfg.LockTTL, StreamMaxLen: cfg.EventStreamMaxLen,
-		RunTextTTL: cfg.RunTextTTL, OverviewMaxLen: cfg.OverviewMaxLen})
+	a.Coord = coord.New(coord.Options{StreamMaxLen: cfg.EventStreamMaxLen, OverviewMaxLen: cfg.OverviewMaxLen})
 
 	installer := clitemplate.NewInstaller(res.WorkRoot, cfg.CLIInstallTimeout, o.CLIHTTPClient)
 	a.Installer = installer
@@ -362,12 +364,11 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	}
 
 	a.Conv = conversation.New(a.Store, a.Coord, a.Executor, conversation.Options{
-		InstanceID: a.InstanceID, MaxMessage: cfg.MaxMessage, LockRenewInterval: cfg.LockRenewInterval,
-		ReconcileInterval: cfg.ReconcileInterval,
+		InstanceID: a.InstanceID, MaxMessage: cfg.MaxMessage, ReconcileInterval: cfg.ReconcileInterval,
 	}, log)
 	taskSource.PauseNormal = a.Conv.PauseDispatch
 	taskSource.FreezeNormal = a.Executor.FreezeForFork
-	a.Tasks = tasks.New(a.Store, a.Config, a.Executor, tasks.Options{InstanceID: a.InstanceID, MaxSteps: cfg.TaskMaxSteps, MaxEdges: cfg.TaskMaxEdges, MaxVisits: cfg.TaskMaxVisits, MaxRequest: cfg.TaskMaxRequest, MaxArtifact: cfg.TaskMaxArtifact, ReconcileInterval: cfg.TaskReconcileInterval, LockRenewInterval: cfg.LockRenewInterval, RecordTimeout: cfg.TaskRecordTimeout}, log)
+	a.Tasks = tasks.New(a.Store, a.Config, a.Executor, tasks.Options{InstanceID: a.InstanceID, MaxSteps: cfg.TaskMaxSteps, MaxEdges: cfg.TaskMaxEdges, MaxVisits: cfg.TaskMaxVisits, MaxRequest: cfg.TaskMaxRequest, MaxArtifact: cfg.TaskMaxArtifact, ReconcileInterval: cfg.TaskReconcileInterval, RecordTimeout: cfg.TaskRecordTimeout}, log)
 	a.Tasks.Source = taskSource
 	if larkRuntime != nil {
 		a.Tasks.LarkSwitchNative = larkRuntime
@@ -432,6 +433,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	if err = a.Tasks.Start(ctx); err != nil {
 		return a, err
 	}
+	a.Maintenance = maintenance.Start(a.Store, maintenance.Options{BackupDir: cfg.BackupDir, BackupKeep: cfg.BackupKeep}, log)
 
 	a.Conv.StartSleepMaintenance(cfg.SleepScanInterval, cfg.SleepScanBatch, func(id uuid.UUID) {
 		a.Tasks.Kick(id)
@@ -514,6 +516,9 @@ func (a *App) Shutdown(ctx context.Context) error {
 	}
 	if a.Tasks != nil {
 		errs = append(errs, a.Tasks.Stop(ctx))
+	}
+	if a.Maintenance != nil {
+		errs = append(errs, a.Maintenance.Stop(ctx))
 	}
 	if a.Folders != nil {
 		errs = append(errs, a.Folders.Stop(ctx))

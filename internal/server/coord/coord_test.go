@@ -12,12 +12,9 @@ import (
 	"loop-now/internal/server/coord"
 )
 
-const (
-	testLockTTL    = 30 * time.Second
-	testRunTextTTL = time.Hour
-)
+const ()
 
-// clock 是只在测试推进时才走的时钟。
+// clock 是固定不走的时钟：同一毫秒里的事件 ID 靠序号递增。
 type clock struct {
 	mu sync.Mutex
 	t  time.Time
@@ -29,20 +26,12 @@ func (c *clock) now() time.Time {
 	return c.t
 }
 
-func (c *clock) advance(d time.Duration) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.t = c.t.Add(d)
-}
-
 func newCoord(t *testing.T, maxLen int64) (*coord.Coord, *clock) {
 	t.Helper()
 	clk := &clock{t: time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)}
 	return coord.New(coord.Options{
 		Prefix:       "test:",
-		LockTTL:      testLockTTL,
 		StreamMaxLen: maxLen,
-		RunTextTTL:   testRunTextTTL,
 		Now:          clk.now,
 	}), clk
 }
@@ -73,19 +62,6 @@ func assertOwner(t *testing.T, c *coord.Coord, agent, want string) {
 	}
 }
 
-// assertLockTTL 确认锁在 TTL 内仍在、过了 TTL 就失效；之后按原持有者补回，不影响后续断言。
-func assertLockTTL(t *testing.T, c *coord.Coord, clk *clock, agent string) {
-	t.Helper()
-	owner := must[string](t)(c.LockOwner(context.Background(), agent))
-	clk.advance(testLockTTL - time.Millisecond)
-	assertOwner(t, c, agent, owner)
-	clk.advance(time.Millisecond)
-	assertOwner(t, c, agent, "")
-	if !must[bool](t)(c.Restore(context.Background(), agent, owner)) {
-		t.Fatal("锁失效后应能补回")
-	}
-}
-
 func TestKeys(t *testing.T) {
 	k := coord.Keys{Prefix: "loopnow:"}
 	cases := map[string]string{
@@ -109,7 +85,7 @@ func TestKeys(t *testing.T) {
 }
 
 func TestAcquire(t *testing.T) {
-	c, clk := newCoord(t, 1000)
+	c, _ := newCoord(t, 1000)
 	ctx := context.Background()
 	const agent = "agent-1"
 	ownerA := coord.LockValue("run-a", "inst")
@@ -119,7 +95,6 @@ func TestAcquire(t *testing.T) {
 		t.Fatal("空闲时应拿到锁")
 	}
 	assertOwner(t, c, agent, ownerA)
-	assertLockTTL(t, c, clk, agent)
 
 	// 已被持有：拒绝且不改变持有者。
 	if must[bool](t)(c.Acquire(ctx, agent, coord.LockValue("run-b", "inst"))) {
@@ -153,31 +128,26 @@ func TestAcquireConcurrent(t *testing.T) {
 	}
 }
 
-func TestRenewRestoreRelease(t *testing.T) {
-	c, clk := newCoord(t, 1000)
+func TestHoldRestoreRelease(t *testing.T) {
+	c, _ := newCoord(t, 1000)
 	ctx := context.Background()
 	const agent = "agent-2"
 	owner := coord.LockValue("run-a", "inst")
 	other := coord.LockValue("run-b", "inst")
 
-	// 锁不存在时 Renew 按 owner 补设。
-	if !must[bool](t)(c.Renew(ctx, agent, owner)) {
-		t.Fatal("锁丢失时 Renew 应补设")
+	// 锁空闲时 Hold 设为 owner；已是 owner 时不变。
+	if !must[bool](t)(c.Hold(ctx, agent, owner)) {
+		t.Fatal("锁空闲时 Hold 应拿到")
 	}
 	assertOwner(t, c, agent, owner)
-	assertLockTTL(t, c, clk, agent)
-
-	// 持有者匹配时续期：从续期时刻重新算 TTL。
-	clk.advance(testLockTTL - time.Second)
-	if !must[bool](t)(c.Renew(ctx, agent, owner)) {
-		t.Fatal("持有者匹配时 Renew 应成功")
+	if !must[bool](t)(c.Hold(ctx, agent, owner)) {
+		t.Fatal("持有者匹配时 Hold 应成功")
 	}
-	clk.advance(testLockTTL - time.Millisecond)
 	assertOwner(t, c, agent, owner)
 
 	// 持有者不匹配时拒绝且不改动。
-	if must[bool](t)(c.Renew(ctx, agent, other)) {
-		t.Fatal("持有者不匹配时 Renew 应失败")
+	if must[bool](t)(c.Hold(ctx, agent, other)) {
+		t.Fatal("持有者不匹配时 Hold 应失败")
 	}
 	assertOwner(t, c, agent, owner)
 
@@ -204,11 +174,10 @@ func TestRenewRestoreRelease(t *testing.T) {
 		t.Fatal("锁不存在时 Restore 应设置")
 	}
 	assertOwner(t, c, agent, other)
-	assertLockTTL(t, c, clk, agent)
 }
 
 func TestSwap(t *testing.T) {
-	c, clk := newCoord(t, 1000)
+	c, _ := newCoord(t, 1000)
 	ctx := context.Background()
 	const agent = "agent-3"
 	owner := coord.LockValue("run-0", "inst")
@@ -228,7 +197,6 @@ func TestSwap(t *testing.T) {
 		t.Fatal("应换锁")
 	}
 	assertOwner(t, c, agent, next)
-	assertLockTTL(t, c, clk, agent)
 	// 没有下一条：删除锁；锁不存在时非空 current 不匹配。
 	if !must[bool](t)(c.Swap(ctx, agent, next, "")) {
 		t.Fatal("应删除锁")
@@ -249,7 +217,7 @@ func TestSwap(t *testing.T) {
 }
 
 func TestEventsAndText(t *testing.T) {
-	c, clk := newCoord(t, 1000)
+	c, _ := newCoord(t, 1000)
 	ctx := context.Background()
 	const agent = "agent-5"
 	const run = "run-5"
@@ -348,15 +316,6 @@ func TestEventsAndText(t *testing.T) {
 		t.Fatalf("FirstEventID = %q，期望 %q", first, startID)
 	}
 
-	// 回复文字在最后一次追加后 RunTextTTL 内保留，之后丢弃。
-	clk.advance(testRunTextTTL - time.Millisecond)
-	if got := must[string](t)(c.RunText(ctx, run)); got == "" {
-		t.Fatal("TTL 内回复文字应保留")
-	}
-	clk.advance(time.Millisecond)
-	if got := must[string](t)(c.RunText(ctx, run)); got != "" {
-		t.Fatalf("过了 TTL 回复文字应丢弃：%q", got)
-	}
 	check(t, c.DeleteRunText(ctx, run))
 	if got := must[string](t)(c.RunText(ctx, run)); got != "" {
 		t.Fatalf("删除后 RunText = %q", got)

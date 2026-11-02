@@ -137,7 +137,7 @@ type env struct {
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	st := sqlitetest.NewStore(t)
-	co := coord.New(coord.Options{Prefix: "test:", LockTTL: 5 * time.Second, StreamMaxLen: 1000, RunTextTTL: time.Hour})
+	co := coord.New(coord.Options{Prefix: "test:", StreamMaxLen: 1000})
 	ctx := context.Background()
 	dc, err := st.EnsureDefaults(ctx, "o", "p")
 	if err != nil {
@@ -158,7 +158,7 @@ func newEnv(t *testing.T) *env {
 
 func (e *env) newService() *conversation.Service {
 	return conversation.New(e.st, e.co, e.ex, conversation.Options{
-		InstanceID: e.inst, MaxMessage: 1 << 16, LockRenewInterval: 100 * time.Millisecond, ReconcileInterval: 200 * time.Millisecond,
+		InstanceID: e.inst, MaxMessage: 1 << 16, AbortPollInterval: 100 * time.Millisecond, ReconcileInterval: 200 * time.Millisecond,
 	}, slog.New(slog.NewTextHandler(debugLogs, nil)))
 }
 

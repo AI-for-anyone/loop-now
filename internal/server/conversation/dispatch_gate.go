@@ -8,7 +8,7 @@ import (
 )
 
 // PauseDispatch 等当前一轮完全退出后占用派发门禁。取消等待不会阻塞旧轮或泄漏门禁。
-// 返回的release可重复调用；门禁期间队列与锁续期仍由原驱动循环管理。
+// 返回的release可重复调用；门禁期间队列与锁仍由原驱动循环管理。
 func (s *Service) PauseDispatch(ctx context.Context, agentID uuid.UUID) (func(), error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

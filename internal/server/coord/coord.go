@@ -40,9 +40,7 @@ func (k Keys) agent(agentID, suffix string) string {
 // Options 是协调层的配置；取值由 config 包校验。
 type Options struct {
 	Prefix       string
-	LockTTL      time.Duration // 忙闲锁多久不续期就失效；≤ 0 时不失效
-	StreamMaxLen int64         // 每条事件流最多保留的条数；≤ 0 时不裁剪
-	RunTextTTL   time.Duration // 回复文字多久不追加就丢弃；≤ 0 时不丢弃
+	StreamMaxLen int64 // 每条事件流最多保留的条数；≤ 0 时不裁剪
 	// OverviewMaxLen 是概览事件流最多保留的条数；≤ 0 时不裁剪。
 	OverviewMaxLen int64
 	// Now 是时钟，测试可替换；为空时用 time.Now。
@@ -56,21 +54,13 @@ type Coord struct {
 	opts Options
 	now  func() time.Time
 
-	mu        sync.Mutex
-	locks     map[string]expiring // 键：Agent ID 或任务实例 ID
-	streams   map[string]*stream  // 键：Keys 生成的流名
-	texts     map[string]expiring // 键：执行 ID
-	subs      map[string]map[chan string]struct{}
-	lastSweep time.Time
+	// 忙闲锁不过期：持有者结束时释放；进程退出后为空，启动时按数据库里进行中的执行恢复。
+	mu      sync.Mutex
+	locks   map[string]string  // 键：Agent ID 或任务实例 ID；值：持有者
+	streams map[string]*stream // 键：Keys 生成的流名
+	texts   map[string]string  // 键：执行 ID；执行结束时删除
+	subs    map[string]map[chan string]struct{}
 }
-
-// expiring 是带失效时刻的值；until 为零表示不失效。
-type expiring struct {
-	value string
-	until time.Time
-}
-
-func (e expiring) live(now time.Time) bool { return e.until.IsZero() || now.Before(e.until) }
 
 // New 创建协调层。
 func New(o Options) *Coord {
@@ -79,7 +69,7 @@ func New(o Options) *Coord {
 		now = time.Now
 	}
 	return &Coord{keys: Keys{Prefix: o.Prefix}, opts: o, now: now,
-		locks: map[string]expiring{}, streams: map[string]*stream{}, texts: map[string]expiring{}, subs: map[string]map[chan string]struct{}{}}
+		locks: map[string]string{}, streams: map[string]*stream{}, texts: map[string]string{}, subs: map[string]map[chan string]struct{}{}}
 }
 
 // Keys 返回键名生成器。
@@ -91,77 +81,42 @@ func LockValue(runID, instanceID string) string { return runID + "|" + instanceI
 // Ping 用于健康检查；进程内的协调层总是可用。
 func (c *Coord) Ping(context.Context) error { return nil }
 
-func after(now time.Time, d time.Duration) time.Time {
-	if d <= 0 {
-		return time.Time{}
-	}
-	return now.Add(d)
-}
-
 // ---------- 忙闲锁 ----------
-
-// owner 返回未失效的锁值；没有时为 ""。调用方持有 c.mu。
-func (c *Coord) owner(agentID string, now time.Time) string {
-	l, ok := c.locks[agentID]
-	if !ok {
-		return ""
-	}
-	if !l.live(now) {
-		delete(c.locks, agentID)
-		return ""
-	}
-	return l.value
-}
-
-func (c *Coord) setLock(agentID, owner string, now time.Time) {
-	c.locks[agentID] = expiring{value: owner, until: after(now, c.opts.LockTTL)}
-}
 
 // Acquire 仅在锁不存在时设置锁，返回是否拿到。排队中的执行由数据库判断（见 store 的 ErrQueuedRunsExist）。
 func (c *Coord) Acquire(_ context.Context, agentID, owner string) (bool, error) {
 	return c.Swap(context.Background(), agentID, "", owner)
 }
 
-// Renew 续期锁：持有者匹配时延长；锁不存在时按 owner 补设；被其他持有者占用时返回 false 且不做改动。
-func (c *Coord) Renew(_ context.Context, agentID, owner string) (bool, error) {
+// Hold 让 owner 持有锁：锁空闲时设为 owner，已是 owner 时不变，被别人占用时返回 false 且不做改动。
+func (c *Coord) Hold(_ context.Context, agentID, owner string) (bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	now := c.now()
-	if v := c.owner(agentID, now); v != "" && v != owner {
+	if v := c.locks[agentID]; v != "" && v != owner {
 		return false, nil
 	}
-	c.setLock(agentID, owner, now)
+	c.locks[agentID] = owner
 	return true, nil
 }
 
 // Restore 仅在锁不存在时设置锁，用于按已有的进行中执行恢复锁。返回是否设置。
 func (c *Coord) Restore(_ context.Context, agentID, owner string) (bool, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	now := c.now()
-	if c.owner(agentID, now) != "" {
-		return false, nil
-	}
-	c.setLock(agentID, owner, now)
-	return true, nil
+	return c.Swap(context.Background(), agentID, "", owner)
 }
 
 // Release 按持有者比对后删除锁，返回是否删除。
 func (c *Coord) Release(_ context.Context, agentID, owner string) (bool, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.owner(agentID, c.now()) != owner || owner == "" {
+	if owner == "" {
 		return false, nil
 	}
-	delete(c.locks, agentID)
-	return true, nil
+	return c.Swap(context.Background(), agentID, owner, "")
 }
 
 // LockOwner 返回当前锁的值；锁不存在时返回 ""。
 func (c *Coord) LockOwner(_ context.Context, agentID string) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.owner(agentID, c.now()), nil
+	return c.locks[agentID], nil
 }
 
 // Swap 原子地把锁从 current 换成 next：current 为空表示锁必须不存在，next 为空表示删除锁。
@@ -169,14 +124,13 @@ func (c *Coord) LockOwner(_ context.Context, agentID string) (string, error) {
 func (c *Coord) Swap(_ context.Context, agentID, current, next string) (bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	now := c.now()
-	if c.owner(agentID, now) != current {
+	if c.locks[agentID] != current {
 		return false, nil
 	}
 	if next == "" {
 		delete(c.locks, agentID)
 	} else {
-		c.setLock(agentID, next, now)
+		c.locks[agentID] = next
 	}
 	return true, nil
 }
@@ -334,31 +288,12 @@ func (c *Coord) ReadInbox(ctx context.Context, afterID string, count int64, bloc
 	return c.readStream(ctx, c.keys.Inbox(), afterID, count, block)
 }
 
-// AppendText 原子地把 delta 追加到执行的回复文字（刷新 RunTextTTL），同时向 Agent 的事件流追加一条事件。返回条目 ID。
+// AppendText 原子地把 delta 追加到执行的回复文字，同时向 Agent 的事件流追加一条事件。返回条目 ID。
 func (c *Coord) AppendText(_ context.Context, agentID, runID, delta, eventType string, data []byte) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	now := c.now()
-	c.sweepTexts(now)
-	t := c.texts[runID]
-	if !t.live(now) {
-		t.value = ""
-	}
-	c.texts[runID] = expiring{value: t.value + delta, until: after(now, c.opts.RunTextTTL)}
-	return c.stream(c.keys.Events(agentID)).add(now, c.opts.StreamMaxLen, eventType, data), nil
-}
-
-// sweepTexts 每分钟至多一次丢弃过期的回复文字。调用方持有 c.mu。
-func (c *Coord) sweepTexts(now time.Time) {
-	if now.Sub(c.lastSweep) < time.Minute {
-		return
-	}
-	c.lastSweep = now
-	for id, t := range c.texts {
-		if !t.live(now) {
-			delete(c.texts, id)
-		}
-	}
+	c.texts[runID] += delta
+	return c.stream(c.keys.Events(agentID)).add(c.now(), c.opts.StreamMaxLen, eventType, data), nil
 }
 
 // Snapshot 原子地读取执行的回复文字（runID 为空或不存在时为 ""）与 Agent 事件流最新条目 ID（为空时 "0-0"），两者互相一致。
@@ -366,9 +301,7 @@ func (c *Coord) Snapshot(_ context.Context, agentID, runID string) (text, lastID
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if runID != "" {
-		if t, ok := c.texts[runID]; ok && t.live(c.now()) {
-			text = t.value
-		}
+		text = c.texts[runID]
 	}
 	lastID = "0-0"
 	if s := c.streams[c.keys.Events(agentID)]; s != nil {
@@ -443,10 +376,7 @@ func parseID(id string) (ms, seq uint64) {
 func (c *Coord) RunText(_ context.Context, runID string) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if t, ok := c.texts[runID]; ok && t.live(c.now()) {
-		return t.value, nil
-	}
-	return "", nil
+	return c.texts[runID], nil
 }
 
 // DeleteRunText 删除执行的累计回复文字。
