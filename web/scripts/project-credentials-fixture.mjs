@@ -39,7 +39,7 @@ await context.route('**/*', async route => {
   // 本驱动不验Inbox事件；明确终止默认shell事件流，不能把它当真实SSE或重连证据。
   if (path === '/inbox/events') return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': origin } })
   if (method !== 'GET') writes.push({ method, path }) // 不记录秘密载荷。
-  if (path === '/health') return json(route, { ok: true, postgres: { ok: true, error: null }, redis: { ok: true, error: null } })
+  if (path === '/health') return json(route, { ok: true, database: { ok: true, error: null, walBytes: { data: 0, events: 0 }, walWarning: false } })
   if (path === '/context') return json(route, { organization: { id: project.organizationId, name: '测试组织' }, project: { id: project.id, name: project.name }, limits })
   if (path === '/projects') return json(route, { projects: [defaultProject, project] })
   if (path === '/platform/agents') return json(route, { agents: [{ ...platformAgent, sessionState: 'active', sleep: null, sleepRevision: 0 }] })

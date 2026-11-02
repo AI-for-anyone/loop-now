@@ -25,7 +25,7 @@ export const server = setupServer(
   http.get(apiUrl('/inbox/pending'), () => HttpResponse.json({ questions: [], unread: [], byAgent: [], byTask: [] })),
   http.get(apiUrl('/tasks/:taskId/nodes/:nodeRunId/queue'), ({ params }) => HttpResponse.json({ taskId: params.taskId, nodeRunId: params.nodeRunId, runtimeId: '00000000-0000-7000-8000-000000000000', items: [] })),
   http.get(apiUrl('/tasks/:taskId/nodes/:nodeRunId/runs/:runId/timeline'), () => HttpResponse.json({ error: { code: 'not_found', message: '接口不存在' } }, { status: 404 })),
-  http.get(apiUrl('/health'), () => HttpResponse.json({ ok: true, postgres: { ok: true, error: null }, redis: { ok: true, error: null } })),
+  http.get(apiUrl('/health'), () => HttpResponse.json({ ok: true, database: { ok: true, error: null, walBytes: { data: 0, events: 0 }, walWarning: false } })),
   http.get(apiUrl('/projects/:projectId/prompt'), () => HttpResponse.json({ prompt: '', promptVersion: 1 })),
   http.get(projectsUrl, () => HttpResponse.json({ projects: [defaultProject] })),
   // 插件的 README：默认没有（已装插件的用 fakePlugins 的 readmes 给出）。

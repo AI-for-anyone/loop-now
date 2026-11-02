@@ -58,7 +58,7 @@ export function useContextInfo() {
 }
 
 
-// 健康检查在依赖不可用时返回 503，响应体同样是 Health，这里两种都作为数据返回。
+// 健康检查在数据库不可用时返回 503，响应体同样是 Health，这里两种都作为数据返回。
 // 顶栏常驻显示连接状态：按 Agent 列表的刷新间隔定期查询，窗口重新获得焦点时也查询。
 export function useHealth() {
   return useQuery({

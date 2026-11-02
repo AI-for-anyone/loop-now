@@ -301,7 +301,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** PostgreSQL 与 Redis 的健康状态 */
+        /** 本地数据库的健康状态（含 WAL 大小） */
         get: operations["getHealth"];
         put?: never;
         post?: never;
@@ -1165,7 +1165,7 @@ export interface paths {
         };
         /**
          * Agent 事件流（SSE）
-         * @description `text/event-stream`，每条事件都带 `id`（Redis Stream 条目 ID），事件名与 data 结构的对应见 `x-sse-events`，保活为注释行。
+         * @description `text/event-stream`，每条事件都带 `id`（事件流条目 ID，形如 `<毫秒>-<序号>`，服务端重启后从头编号），事件名与 data 结构的对应见 `x-sse-events`，保活为注释行。
          *
          *     - 不带 `Last-Event-ID`，或它已超出保留范围：先发一条 `snapshot`，其 `id` 是快照时刻事件流的最新位置；
          *       `snapshot.currentText` 恰好包含到这个位置为止的全部文字增量。之后只发送这个位置之后的事件，不重放之前的事件。
@@ -3117,15 +3117,24 @@ export interface components {
             /** Format: int64 */
             maxMessageImagePixels?: number;
         };
-        /** @description 外部身份查询时，结构与状态码规则相同，但 `postgres`、`redis` 中没有 `error` 字段，只表明是否可用 */
+        /** @description 外部身份查询时，结构与状态码规则相同，但 `database` 只有 `ok`，没有错误原文与 WAL 信息 */
         Health: {
             ok: boolean;
-            postgres: components["schemas"]["DependencyHealth"];
-            redis: components["schemas"]["DependencyHealth"];
+            database: components["schemas"]["DatabaseHealth"];
         };
-        DependencyHealth: {
+        /** @description 本地 SQLite 库（data.db 与 events.db）是否可用。WAL 只影响告警，不影响 `ok` 与状态码。 */
+        DatabaseHealth: {
             ok: boolean;
             error?: string | null;
+            /** @description 两个库当前 -wal 文件的字节数 */
+            walBytes?: {
+                /** Format: int64 */
+                data: number;
+                /** Format: int64 */
+                events: number;
+            };
+            /** @description 任一 WAL 超过告警阈值（256 MiB）：通常是有长时间不结束的读事务挡住了检查点 */
+            walWarning?: boolean;
         };
         ModelSettings: {
             /** @description Pi 原生 models.json 文本；API Key 仍由项目或 Agent 账号管理。 */

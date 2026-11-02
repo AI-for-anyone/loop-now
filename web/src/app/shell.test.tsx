@@ -359,7 +359,7 @@ describe('连接与错误展示', () => {
 describe('全局设置页', () => {
   it('显示默认组织与项目、连接状态与 CLI 模板，服务端信息没有修改操作；全局文件夹可以编辑', async () => {
     server.use(
-      http.get(apiUrl('/health'), () => HttpResponse.json({ ok: false, postgres: { ok: true }, redis: { ok: false, error: '连接被拒绝' } }, { status: 503 })),
+      http.get(apiUrl('/health'), () => HttpResponse.json({ ok: false, database: { ok: false, error: '无法打开数据库文件' } }, { status: 503 })),
       http.get(apiUrl('/cli-templates'), () =>
         HttpResponse.json({
           templates: [
@@ -381,10 +381,10 @@ describe('全局设置页', () => {
     // 测试数据的名称与行标签不同，断言限定在标签对应的值上。
     await waitFor(() => expect(screen.getByText('默认组织').nextElementSibling).toHaveTextContent('测试组织'))
     expect(screen.getByText('默认项目').nextElementSibling).toHaveTextContent('测试项目')
-    // 左侧栏的连接状态也显示“部分依赖不可用”，这里限定在页面主体内。
+    // 左侧栏的连接状态也显示“数据库不可用”，这里限定在页面主体内。
     const page = screen.getByRole('main')
-    expect(await within(page).findByText('部分依赖不可用')).toBeInTheDocument()
-    expect(within(page).getByText('Redis：连接被拒绝')).toBeInTheDocument()
+    expect(await within(page).findByText('数据库不可用')).toBeInTheDocument()
+    expect(within(page).getByText('数据库：无法打开数据库文件')).toBeInTheDocument()
     const gh = await screen.findByRole('region', { name: 'gh' })
     expect(within(gh).getByText('安装失败')).toBeInTheDocument()
     expect(within(gh).getByText('摘要不符')).toBeInTheDocument()
@@ -399,12 +399,24 @@ describe('全局设置页', () => {
   it('服务端一栏显示版本：取自服务端响应的 Loop-Now-Version 头', async () => {
     server.use(
       http.get(apiUrl('/health'), () =>
-        HttpResponse.json({ ok: true, postgres: { ok: true, error: null }, redis: { ok: true, error: null } }, { headers: { 'Loop-Now-Version': 'dev-d6eed7b50c04' } }),
+        HttpResponse.json({ ok: true, database: { ok: true, error: null, walBytes: { data: 0, events: 0 }, walWarning: false } }, { headers: { 'Loop-Now-Version': 'dev-d6eed7b50c04' } }),
       ),
       ...baseHandlers([]),
     )
     renderRoutes(routes, '/settings')
     await waitFor(() => expect(screen.getByText('版本', { selector: 'dt' }).nextElementSibling).toHaveTextContent('dev-d6eed7b50c04'))
+  })
+
+  it('数据库日志过大时，连接状态一行下面给出提示，左侧栏仍显示已连接', async () => {
+    server.use(
+      http.get(apiUrl('/health'), () => HttpResponse.json({ ok: true, database: { ok: true, error: null, walBytes: { data: 300 << 20, events: 1 << 20 }, walWarning: true } })),
+      ...baseHandlers([]),
+    )
+    renderRoutes(routes, '/settings')
+    const page = screen.getByRole('main')
+    expect(await within(page).findByText('数据库：正常')).toBeInTheDocument()
+    expect(within(page).getByText(/^数据库日志文件过大/).closest('[role="note"]')).toHaveTextContent('服务仍可用，稍后会自动整理。')
+    expect(within(screen.getByRole('status', { name: '连接状态' })).getByText('已连接')).toBeInTheDocument()
   })
 
   it('界面语言保存在这个浏览器里，换语言后重新加载页面', async () => {
