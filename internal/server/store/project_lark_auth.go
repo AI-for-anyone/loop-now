@@ -166,8 +166,7 @@ func (s *Store) SetProjectLarkAuthorization(ctx context.Context, project, id uui
 		if out.CLI != "lark-cli" {
 			return apperr.Invalid("cli", "Lark授权操作类型不匹配")
 		}
-		// SQLITE-PORT(G4): greatest/least
-		if _, e = tx.Exec(ctx, `UPDATE project_cli_auth_operations SET status='awaiting_authorization',authorization_url=$2,user_code=$3,expires_at=LEAST(expires_at,$4) WHERE id=$1 AND $4>clock_timestamp()`, id, url, code, expires); e != nil {
+		if _, e = tx.Exec(ctx, `UPDATE project_cli_auth_operations SET status='awaiting_authorization',authorization_url=$2,user_code=$3,expires_at=min(expires_at,$4) WHERE id=$1 AND $4>clock_timestamp()`, id, url, code, expires); e != nil {
 			return e
 		}
 		out, e = cliOperationTx(ctx, tx, project, id, false)

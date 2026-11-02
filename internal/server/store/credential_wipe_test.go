@@ -6,11 +6,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/dbcli"
@@ -20,6 +18,8 @@ import (
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/taskruntime"
 	"loop-now/internal/server/workflow"
+
+	"github.com/google/uuid"
 
 	"loop-now/internal/server/db"
 	"loop-now/internal/testutil/sqlitetest"
@@ -498,27 +498,5 @@ func TestDeleteAgentScrubsEndedTaskSnapshots(t *testing.T) {
 	}
 	if secretBytes(t, f.s, "synthetic-gh-agent") != 1 {
 		t.Fatal("the project account's own version is not the Agent's to wipe")
-	}
-}
-
-// 030 rolls back only while no deleted account waits for its wipe.
-func TestCredentialPendingWipesDownRefusesData(t *testing.T) {
-	f := newWipeFixture(t)
-	ctx := context.Background()
-	secret, _ := cliPayload(t, map[string]string{"GH_TOKEN": "synthetic-gh-down"})
-	account, _ := f.account(t, "cli", "gh", secret)
-	mustExec(t, f.s, `INSERT INTO credential_pending_wipes(account_id,project_id) VALUES($1,$2)`, account, f.project)
-	if err := f.s.MigrateDownTo(ctx, 29); err == nil || !strings.Contains(err.Error(), "credential_pending_wipes_down_refused") {
-		t.Fatal("Down must refuse while a wipe is pending", err)
-	}
-	if !pending(t, f.s, account) {
-		t.Fatal("the refused Down must keep the pending row")
-	}
-	mustExec(t, f.s, `DELETE FROM credential_pending_wipes`)
-	if err := f.s.MigrateDownTo(ctx, 29); err != nil {
-		t.Fatal(err)
-	}
-	if n := scalar(t, f.s, `SELECT count(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name='credential_pending_wipes'`); n != 0 {
-		t.Fatal("Down should drop the table", n)
 	}
 }

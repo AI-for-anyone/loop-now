@@ -233,16 +233,14 @@ func (s *Store) SetProjectGitHubAuthorization(ctx context.Context, project, id u
 			return apperr.Invalid("cli", "GitHub授权操作类型不匹配")
 		}
 		var live bool
-		// SQLITE-PORT(G4): greatest/least
-		if e = tx.QueryRow(ctx, `SELECT least($1,$2)>clock_timestamp()`, expires, out.ExpiresAt).Scan(&live); e != nil {
+		if e = tx.QueryRow(ctx, `SELECT min($1,$2)>clock_timestamp()`, expires, out.ExpiresAt).Scan(&live); e != nil {
 			return e
 		}
 		if !live {
 			out, e = scanCLIOperation(tx.QueryRow(ctx, `UPDATE project_cli_auth_operations SET status='expired',authorization_url=NULL,user_code=NULL,error_code='auth_timeout',completed_at=clock_timestamp() WHERE id=$1 RETURNING `+cliOperationColumns, id))
 			return e
 		}
-		// SQLITE-PORT(G4): greatest/least
-		out, e = scanCLIOperation(tx.QueryRow(ctx, `UPDATE project_cli_auth_operations SET status='awaiting_authorization',authorization_url=$2,user_code=$3,expires_at=least(expires_at,$4) WHERE id=$1 RETURNING `+cliOperationColumns, id, url, code, expires))
+		out, e = scanCLIOperation(tx.QueryRow(ctx, `UPDATE project_cli_auth_operations SET status='awaiting_authorization',authorization_url=$2,user_code=$3,expires_at=min(expires_at,$4) WHERE id=$1 RETURNING `+cliOperationColumns, id, url, code, expires))
 		return e
 	})
 	return out, e
