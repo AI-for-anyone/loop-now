@@ -29,7 +29,19 @@ type Tx struct {
 	before   []func(context.Context, *Tx) error
 	after    []func()
 	done     bool
+	values   map[any]any
 }
+
+// SetValue 在事务上记一个值（例如“写过插件事件”），供同一事务里后执行的钩子读取；key 用调用方私有的类型。
+func (t *Tx) SetValue(key, value any) {
+	if t.values == nil {
+		t.values = map[any]any{}
+	}
+	t.values[key] = value
+}
+
+// Value 返回 SetValue 记下的值；没有时为 nil。
+func (t *Tx) Value(key any) any { return t.values[key] }
 
 // InTx 在写事务中执行 fn：fn 返回 nil 时依次执行 BeforeCommit 钩子与全局写钩子（SetWriteHook）再提交，提交成功后
 // 依次执行 AfterCommit 钩子；任一步出错则回滚并返回该错误。等待写连接受 ctx 约束；BEGIN 之后语句仍用调用方 ctx
