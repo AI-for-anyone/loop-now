@@ -208,6 +208,8 @@ func TestLarkNativeAppCapturedAThenNextRoundB(t *testing.T) {
 	http.DefaultTransport = transport
 	defer func() { transport.CloseIdleConnections(); http.DefaultTransport = original }()
 	w := githubAppWorld(t)
+	// 只有设了 FAKEPI_PROMPT_DELAY 之后启动的 Pi 进程才会变慢（见下面的阻塞对话）。
+	w.cfg.ExecEnvPassthrough = append(w.cfg.ExecEnvPassthrough, "FAKEPI_PROMPT_DELAY")
 	// Execute the real controlled command before fake Pi starts its normal RPC.
 	// Its output stays in the isolated workspace and never corrupts RPC stdout.
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
@@ -325,6 +327,9 @@ func TestLarkNativeAppCapturedAThenNextRoundB(t *testing.T) {
 		t.Fatal(e)
 	}
 	nodeBefore := *latest.View.Task.CurrentNodeRunID
+	// 提醒轮次的提示词不带消息原文，消息里的 !sleep 到不了 fakePi：让接下来启动的 Pi 每轮都慢一些，
+	// 下面才能在轮次运行中登记睡眠，而不是赌结束写入恰好够慢。
+	t.Setenv("FAKEPI_PROMPT_DELAY", "800ms")
 	if _, e = s.a.API.Inbox.Send(context.Background(), auth.Console(), "默认项目/native scoped#"+task.Task.ID.String(), " !sleep=800ms !text=lark_blocked_conversation", "queue"); e != nil {
 		t.Fatal(e)
 	}
