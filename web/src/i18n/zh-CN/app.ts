@@ -1,7 +1,7 @@
 export const app = {
   title: 'Loop Now 控制台',
   brand: 'LOOP NOW',
-  // 左侧栏底部的连接状态；区域名称复用 settings.health，部分依赖不可用复用 settings.healthDegraded。
+  // 左侧栏底部的连接状态；区域名称复用 settings.health，数据库不可用复用 settings.healthDegraded。
   topbar: { connected: '已连接', unreachable: '无法连接', checking: '检查中…' },
 } as const
 

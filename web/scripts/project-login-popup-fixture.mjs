@@ -35,7 +35,7 @@ try{
   if(method==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'content-type','Access-Control-Allow-Methods':'GET,POST'}})
   const path=u.pathname.slice('/api/v1'.length)
   if(path==='/inbox/events')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':origin}})
-  if(path==='/health')return json({ok:true,postgres:{ok:true,error:null},redis:{ok:true,error:null}})
+  if(path==='/health')return json({ok:true,database:{ok:true,error:null,walBytes:{data:0,events:0},walWarning:false}})
   if(path==='/context')return json({organization:{id:project.organizationId,name:'测试组织'},project:{id:project.id,name:project.name},limits})
   if(path==='/projects')return json({projects:[defaultProject,project]})
   if(path.endsWith('/prompt'))return json({prompt:'',promptVersion:1})

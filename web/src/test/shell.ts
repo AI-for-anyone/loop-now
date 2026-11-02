@@ -9,7 +9,7 @@ import { emptySelections } from './project-credentials'
 export function baseHandlers(agents: Schemas['Agent'][] = [makeAgent()]) {
   return [
     http.get(apiUrl('/context'), () => HttpResponse.json(context)),
-    http.get(apiUrl('/health'), () => HttpResponse.json({ ok: true, postgres: { ok: true }, redis: { ok: true } })),
+    http.get(apiUrl('/health'), () => HttpResponse.json({ ok: true, database: { ok: true } })),
     http.get(agentsUrl, () => HttpResponse.json({ agents: agents.map((a) => toListItem(a)) })),
     ...agents.map((a) => http.get(apiUrl(`/agents/${a.id}`), () => HttpResponse.json(a))),
     ...agents.map((a) => http.get(apiUrl(`/agents/${a.id}/status`), () => HttpResponse.json(makeStatus(a.id)))),
