@@ -73,9 +73,8 @@ type App struct {
 	Config   *agentconfig.Service
 	API      *httpapi.Server
 	// Plugins 是插件第二版的安装与配置；PluginHost 在配置了宿主入口时监护插件宿主，否则为空。
-	Plugins      *plugins.Service
-	PluginHost   *pluginhost.Supervisor
-	pluginCancel context.CancelFunc
+	Plugins    *plugins.Service
+	PluginHost *pluginhost.Supervisor
 
 	listener   net.Listener
 	http       *http.Server
@@ -491,10 +490,8 @@ func (a *App) Serve() error {
 		if err != nil {
 			return fmt.Errorf("读取插件设置失败：%w", err)
 		}
-		ctx, cancel := context.WithCancel(context.Background())
-		a.pluginCancel = cancel
 		a.PluginHost.Start(settings.Disabled)
-		go a.Plugins.Listen(ctx)
+		a.Plugins.WakeOnCommit()
 	}
 	a.Log.Info("开始提供服务", "addr", a.Addr())
 	if err := a.http.Serve(a.listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -520,9 +517,6 @@ func (a *App) Shutdown(ctx context.Context) error {
 		}
 	}
 	if a.PluginHost != nil {
-		if a.pluginCancel != nil {
-			a.pluginCancel()
-		}
 		errs = append(errs, a.PluginHost.Stop(ctx))
 	}
 	if a.Tasks != nil {

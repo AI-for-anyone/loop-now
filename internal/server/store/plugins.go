@@ -151,27 +151,25 @@ type PluginConfigRow struct {
 
 // PluginConfig 读取全局（project 为空）或项目级配置。
 func (s *Store) PluginConfig(ctx context.Context, plugin string, project *uuid.UUID) (PluginConfigRow, error) {
-	return pluginConfigTx(ctx, s.Pool, plugin, project, false)
+	return pluginConfigTx(ctx, s.Pool, plugin, project)
 }
 
 type queryer interface {
 	QueryRow(ctx context.Context, sql string, args ...any) *db.Row
 }
 
-func pluginConfigTx(ctx context.Context, q queryer, plugin string, project *uuid.UUID, lock bool) (PluginConfigRow, error) {
+// pluginConfigTx 读出插件的全局（project 为空）或项目配置；没有时返回空配置。
+func pluginConfigTx(ctx context.Context, q queryer, plugin string, project *uuid.UUID) (PluginConfigRow, error) {
 	c := PluginConfigRow{Values: map[string]any{}, Secrets: map[string]string{}}
-	sql := `SELECT values,secrets,revision FROM plugin_config WHERE plugin_id=$1 AND project_id IS $2`
-	if lock {
-		sql += ` FOR UPDATE`
-	}
-	err := q.QueryRow(ctx, sql, plugin, project).Scan(&c.Values, &c.Secrets, &c.Revision)
+	err := q.QueryRow(ctx, `SELECT "values",secrets,revision FROM plugin_config WHERE plugin_id=$1 AND project_id IS $2`, plugin, project).
+		Scan(&c.Values, &c.Secrets, &c.Revision)
 	if errors.Is(err, db.ErrNoRows) {
 		return c, nil
 	}
 	return c, err
 }
 
-// PluginConfigUpdate 是一次配置保存：Apply 在锁住当前行后算出要保存的值，返回错误时不保存。
+// PluginConfigUpdate 是一次配置保存：Apply 在写事务里按当前配置算出要保存的值，返回错误时不保存。
 type PluginConfigUpdate struct {
 	ExpectedRevision int64
 	Apply            func(current PluginConfigRow) (PluginConfigRow, error)
@@ -189,10 +187,10 @@ func (s *Store) SavePluginConfig(ctx context.Context, plugin string, project *uu
 }
 
 func (s *Store) savePluginConfigTx(ctx context.Context, tx *db.Tx, plugin string, project *uuid.UUID, u PluginConfigUpdate) (PluginConfigRow, error) {
-	if err := lockPlugin(ctx, tx, plugin); err != nil {
+	if err := requirePlugin(ctx, tx, plugin); err != nil {
 		return PluginConfigRow{}, err
 	}
-	cur, err := pluginConfigTx(ctx, tx, plugin, project, true)
+	cur, err := pluginConfigTx(ctx, tx, plugin, project)
 	if err != nil {
 		return PluginConfigRow{}, err
 	}
@@ -208,8 +206,8 @@ func (s *Store) savePluginConfigTx(ctx context.Context, tx *db.Tx, plugin string
 		return cur, nil
 	}
 	next.Revision = cur.Revision + 1
-	if _, err = tx.Exec(ctx, `INSERT INTO plugin_config(plugin_id,project_id,values,secrets,revision) VALUES($1,$2,$3,$4,$5)
-		ON CONFLICT (plugin_id,project_id) DO UPDATE SET values=EXCLUDED.values, secrets=EXCLUDED.secrets, revision=EXCLUDED.revision`,
+	if _, err = tx.Exec(ctx, `INSERT INTO plugin_config(plugin_id,project_id,"values",secrets,revision) VALUES($1,$2,$3,$4,$5)
+		ON CONFLICT (plugin_id, coalesce(project_id, '')) DO UPDATE SET "values"=excluded."values", secrets=excluded.secrets, revision=excluded.revision`,
 		plugin, project, next.Values, next.Secrets, next.Revision); err != nil {
 		return PluginConfigRow{}, err
 	}
@@ -223,8 +221,8 @@ func nonEmpty(m map[string]any) map[string]any {
 	return m
 }
 
-// lockPlugin 锁住插件行（与卸载、更新互斥）；插件不存在时返回 not_found。
-func lockPlugin(ctx context.Context, tx *db.Tx, plugin string) error {
+// requirePlugin 确认插件存在（写事务串行，与卸载、更新互斥，不需要锁行）；不存在时返回 not_found。
+func requirePlugin(ctx context.Context, tx *db.Tx, plugin string) error {
 	var id string
 	return notFoundIfNoRows(tx.QueryRow(ctx, `SELECT id FROM plugins WHERE id=$1`, plugin).Scan(&id), "插件")
 }
@@ -234,10 +232,9 @@ func lockPlugin(ctx context.Context, tx *db.Tx, plugin string) error {
 func (s *Store) PluginConfigs(ctx context.Context, plugin string) (PluginConfigRow, map[uuid.UUID]PluginConfigRow, error) {
 	global := PluginConfigRow{Values: map[string]any{}, Secrets: map[string]string{}}
 	projects := map[uuid.UUID]PluginConfigRow{}
-	// SQLITE-PORT(G3): '{}' array
-	rows, err := s.Pool.Query(ctx, `SELECT NULL,values,secrets,revision FROM plugin_config WHERE plugin_id=$1 AND project_id IS NULL
+	rows, err := s.Pool.Query(ctx, `SELECT NULL,"values",secrets,revision FROM plugin_config WHERE plugin_id=$1 AND project_id IS NULL
 		UNION ALL
-		SELECT pp.project_id,coalesce(c.values,'{}'),coalesce(c.secrets,'{}'),coalesce(c.revision,0)
+		SELECT pp.project_id,coalesce(c."values",'{}'),coalesce(c.secrets,'{}'),coalesce(c.revision,0)
 		FROM project_plugins pp JOIN projects pr ON pr.id=pp.project_id AND pr.deleted_at IS NULL
 		LEFT JOIN plugin_config c ON c.plugin_id=pp.plugin_id AND c.project_id=pp.project_id
 		WHERE pp.plugin_id=$1 AND pp.enabled`, plugin)
@@ -373,7 +370,7 @@ func (s *Store) SaveAgentPluginGrant(ctx context.Context, agent uuid.UUID, plugi
 		if err := tx.QueryRow(ctx, `SELECT project_id,deleted_at FROM agents WHERE id=$1`, agent).Scan(&project, &deleted); err != nil || deleted != nil {
 			return notFoundIfNoRows(orNoRows(err, deleted != nil), "Agent")
 		}
-		if err := lockPlugin(ctx, tx, plugin); err != nil {
+		if err := requirePlugin(ctx, tx, plugin); err != nil {
 			return err
 		}
 		if !granted {
@@ -421,7 +418,7 @@ type PluginAccount struct {
 	Revision  int64
 }
 
-const pluginAccountColumns = `id,plugin_id,project_id,kind,name,values,revision`
+const pluginAccountColumns = `id,plugin_id,project_id,kind,name,"values",revision`
 
 func scanPluginAccount(r db.Scanner) (PluginAccount, error) {
 	var a PluginAccount
@@ -460,7 +457,7 @@ func (s *Store) CreatePluginAccount(ctx context.Context, a PluginAccount, single
 		if err := tx.QueryRow(ctx, `SELECT deleted_at FROM projects WHERE id=$1`, a.ProjectID).Scan(&deleted); err != nil || deleted != nil {
 			return notFoundIfNoRows(orNoRows(err, deleted != nil), "项目")
 		}
-		if err := lockPlugin(ctx, tx, a.PluginID); err != nil {
+		if err := requirePlugin(ctx, tx, a.PluginID); err != nil {
 			return err
 		}
 		// 同一项目同一插件的账号创建串行，单账号检查才可靠。
@@ -476,7 +473,7 @@ func (s *Store) CreatePluginAccount(ctx context.Context, a PluginAccount, single
 			return apperr.Conflict(apperr.CodeNameConflict, "账号名称重复")
 		}
 		var err error
-		a, err = scanPluginAccount(tx.QueryRow(ctx, `INSERT INTO plugin_accounts(id,plugin_id,project_id,kind,name,values) VALUES($1,$2,$3,$4,$5,$6) RETURNING `+pluginAccountColumns,
+		a, err = scanPluginAccount(tx.QueryRow(ctx, `INSERT INTO plugin_accounts(id,plugin_id,project_id,kind,name,"values") VALUES($1,$2,$3,$4,$5,$6) RETURNING `+pluginAccountColumns,
 			uuid.Must(uuid.NewV7()), a.PluginID, a.ProjectID, a.Kind, a.Name, a.Values))
 		return err
 	})
@@ -506,7 +503,7 @@ func (s *Store) UpdatePluginAccount(ctx context.Context, project uuid.UUID, plug
 		if dup {
 			return apperr.Conflict(apperr.CodeNameConflict, "账号名称重复")
 		}
-		out, err = scanPluginAccount(tx.QueryRow(ctx, `UPDATE plugin_accounts SET name=$2, values=$3, revision=revision+1 WHERE id=$1 RETURNING `+pluginAccountColumns, id, next.Name, next.Values))
+		out, err = scanPluginAccount(tx.QueryRow(ctx, `UPDATE plugin_accounts SET name=$2, "values"=$3, revision=revision+1 WHERE id=$1 RETURNING `+pluginAccountColumns, id, next.Name, next.Values))
 		return err
 	})
 	return out, err
@@ -515,17 +512,15 @@ func (s *Store) UpdatePluginAccount(ctx context.Context, project uuid.UUID, plug
 // DeletePluginAccount 删除账号（字段清空），并从各 Agent 的授权中移除对它的引用。
 func (s *Store) DeletePluginAccount(ctx context.Context, project uuid.UUID, plugin string, id uuid.UUID) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
-		// SQLITE-PORT(G3): '{}' array
-		tag, err := tx.Exec(ctx, `UPDATE plugin_accounts SET deleted=true, values='{}', revision=revision+1 WHERE id=$1 AND project_id=$2 AND plugin_id=$3 AND NOT deleted`, id, project, plugin)
+		tag, err := tx.Exec(ctx, `UPDATE plugin_accounts SET deleted=true, "values"='{}', revision=revision+1 WHERE id=$1 AND project_id=$2 AND plugin_id=$3 AND NOT deleted`, id, project, plugin)
 		if err != nil {
 			return err
 		}
 		if tag.RowsAffected() == 0 {
 			return apperr.NotFound("账号")
 		}
-		// SQLITE-PORT(G3): jsonb、jsonb op
-		_, err = tx.Exec(ctx, `UPDATE agent_plugin_grants SET account_ids=(SELECT coalesce(jsonb_agg(v),'[]') FROM jsonb_array_elements(account_ids) v WHERE v<>to_jsonb($2))
-			WHERE plugin_id=$1 AND account_ids @> jsonb_build_array($2)`, plugin, id.String())
+		_, err = tx.Exec(ctx, `UPDATE agent_plugin_grants SET account_ids=(SELECT json_group_array(v.value) FROM json_each(account_ids) v WHERE v.value<>$2)
+			WHERE plugin_id=$1 AND EXISTS (SELECT 1 FROM json_each(account_ids) v WHERE v.value=$2)`, plugin, id.String())
 		return err
 	})
 }
@@ -629,16 +624,4 @@ func (s *Store) PluginDeliveries(ctx context.Context, plugin string, q PluginDel
 		var d PluginDeliveryRow
 		return d, r.Scan(&d.ID, &d.Type, &d.At, &d.ProjectID, &d.AgentID, &d.TaskID, &d.RunID, &d.Status, &d.Attempts, &d.LastError, &d.AckedAt, &d.DurationMs)
 	})
-}
-
-// EmitPluginEvent 写一条观察类事件（事务外的改动，例如文件夹变化）。
-func (s *Store) EmitPluginEvent(ctx context.Context, typ string, project, agent, task, run *uuid.UUID, data map[string]any) error {
-	_, err := s.Pool.Exec(ctx, `SELECT plugin_emit($1,now(),$2,$3,$4,$5,$6)`, typ, project, agent, task, run, data)
-	return err
-}
-
-// emitPluginEventTx 在当前事务里写一条观察类事件（经 plugin_emit，按订阅与启用生成投递）。
-func emitPluginEventTx(ctx context.Context, tx *db.Tx, typ string, project, agent, task, run *uuid.UUID, data map[string]any) error {
-	_, err := tx.Exec(ctx, `SELECT plugin_emit($1,now(),$2,$3,$4,$5,$6)`, typ, project, agent, task, run, data)
-	return err
 }

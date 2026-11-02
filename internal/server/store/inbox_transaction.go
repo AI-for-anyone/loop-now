@@ -89,7 +89,7 @@ func (s *Store) InboxTransaction(ctx context.Context, plan InboxLockPlan, fn fun
 			}
 		}
 		for _, id := range sortedIDs(identities) {
-			if err := lockLiveIdentity(ctx, tx, id); err != nil {
+			if err := requireLiveIdentity(ctx, tx, id); err != nil {
 				return err
 			}
 		}

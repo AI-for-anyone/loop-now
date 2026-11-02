@@ -73,6 +73,9 @@ type writerHolder struct {
 	goid   int64
 }
 
+// changeOrder 是 SQL 函数 change_order() 的计数器，进程内所有库共用。
+var changeOrder atomic.Int64
+
 // DetectNestedWrites 打开后，同一 goroutine 在持有写连接时再次请求写连接会立即返回 ErrNestedWrite，
 // 而不是等到超时。需要解析 goroutine 栈，只在测试中打开（sqlitetest 会打开）。
 var DetectNestedWrites atomic.Bool
@@ -183,6 +186,12 @@ func connector(data, events, txlock string, now, clock func() int64, hook func(s
 		}}); err != nil {
 			panic(err) // 只会是名字或参数个数写错
 		}
+	}
+	// change_order() 返回进程内单调递增的序号：捕获触发器在两个库的变更表里都记下它，读的时候按它还原写入顺序。
+	if err := drv.RegisterFunction("change_order", &sqlite.FunctionImpl{NArgs: 0, Scalar: func(*sqlite.FunctionContext, []driver.Value) (driver.Value, error) {
+		return changeOrder.Add(1), nil
+	}}); err != nil {
+		panic(err)
 	}
 	// iso_time(微秒) 把时间列转成 RFC 3339（UTC，保留微秒），供 SQL 里拼出的 JSON 使用：Go 解 JSON 时 time.Time
 	// 只认这种字符串。NULL 进 NULL 出。

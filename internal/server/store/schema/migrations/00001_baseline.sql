@@ -1794,3 +1794,98 @@ BEGIN
     SELECT RAISE(ABORT, 'task_lark_binding_is_append_only');
 END;
 -- +goose StatementEnd
+
+-- ===== 种子数据 =====
+-- PG 迁移里随建表写入的单例行（031 的插件设置、034 的模型配置）。
+INSERT INTO plugin_settings DEFAULT VALUES;
+INSERT INTO model_settings (singleton) VALUES (1);
+
+-- ===== 插件事件捕获 =====
+-- PostgreSQL 里由触发器直接写插件事件；这里的触发器只记下“发生了什么”，条件与原触发器相同。
+-- 每个写事务提交前，store 的写钩子在同一事务里读出这些记录、生成插件事件（订阅与启用过滤、事件内容都在 Go 里），
+-- 然后清空。lifecycle_events 在 events.db，触发器只能写同一个库，所以它的记录单独放在 ev.plugin_lifecycle_changes；
+-- 两张表都记下 change_order()（db 包提供的进程内序号），读的时候按它还原原来触发器的先后。
+CREATE TABLE plugin_changes (
+    seq     INTEGER PRIMARY KEY,
+    ord     INTEGER NOT NULL,
+    kind    TEXT NOT NULL CHECK (kind IN ('agent.created', 'agent.updated', 'agent.deleted', 'sleep.requested', 'sleep.woken',
+                                          'inbox.inserted', 'inbox.read', 'inbox.cancelled', 'question.asked', 'question.answered')),
+    row_id  TEXT NOT NULL,
+    data    TEXT NOT NULL DEFAULT '{}' CHECK (json_type(data) = 'object')
+) STRICT;
+
+CREATE TABLE ev.plugin_lifecycle_changes (
+    seq     INTEGER PRIMARY KEY,
+    ord     INTEGER NOT NULL,
+    row_id  TEXT NOT NULL
+) STRICT;
+
+-- +goose StatementBegin
+CREATE TRIGGER plugin_capture_agent_insert AFTER INSERT ON agents
+BEGIN
+    INSERT INTO plugin_changes (ord, kind, row_id, data) VALUES (change_order(), 'agent.created', NEW.id, json_object('name', NEW.name));
+END;
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TRIGGER plugin_capture_agent_update AFTER UPDATE ON agents
+WHEN (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL)
+    OR (NEW.deleted_at IS NULL AND (NEW.config_version <> OLD.config_version OR NEW.name <> OLD.name))
+BEGIN
+    INSERT INTO plugin_changes (ord, kind, row_id, data)
+    VALUES (change_order(), CASE WHEN OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL THEN 'agent.deleted' ELSE 'agent.updated' END,
+            NEW.id, json_object('name', NEW.name));
+END;
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TRIGGER plugin_capture_sleep_insert AFTER INSERT ON agent_sleeps
+BEGIN
+    INSERT INTO plugin_changes (ord, kind, row_id, data) VALUES (change_order(), 'sleep.requested', NEW.id,
+        json_object('at', NEW.requested_at, 'agentId', NEW.agent_id, 'taskId', NEW.task_id, 'runId', NEW.source_run_id, 'wakeAt', NEW.wake_at));
+END;
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TRIGGER plugin_capture_sleep_woken AFTER UPDATE ON agent_sleeps
+WHEN OLD.state <> 'woken' AND NEW.state = 'woken'
+BEGIN
+    INSERT INTO plugin_changes (ord, kind, row_id, data) VALUES (change_order(), 'sleep.woken', NEW.id,
+        json_object('at', NEW.ended_at, 'agentId', NEW.agent_id, 'taskId', NEW.task_id, 'runId', NEW.wake_run_id, 'wakeAt', NEW.wake_at,
+                    'endReason', NEW.end_reason));
+END;
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TRIGGER plugin_capture_inbox_insert AFTER INSERT ON inbox_messages
+BEGIN
+    INSERT INTO plugin_changes (ord, kind, row_id) VALUES (change_order(), 'inbox.inserted', NEW.id);
+END;
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TRIGGER plugin_capture_inbox_update AFTER UPDATE ON inbox_messages
+WHEN (OLD.read_at IS NULL AND NEW.read_at IS NOT NULL) OR (OLD.cancelled_at IS NULL AND NEW.cancelled_at IS NOT NULL)
+BEGIN
+    INSERT INTO plugin_changes (ord, kind, row_id, data)
+    VALUES (change_order(), CASE WHEN OLD.read_at IS NULL AND NEW.read_at IS NOT NULL THEN 'inbox.read' ELSE 'inbox.cancelled' END, NEW.id,
+            json_object('at', CASE WHEN OLD.read_at IS NULL AND NEW.read_at IS NOT NULL THEN NEW.read_at ELSE NEW.cancelled_at END));
+END;
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TRIGGER plugin_capture_question_insert AFTER INSERT ON inbox_questions
+BEGIN
+    INSERT INTO plugin_changes (ord, kind, row_id) VALUES (change_order(), 'question.asked', NEW.message_id);
+END;
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TRIGGER plugin_capture_question_answered AFTER UPDATE ON inbox_questions
+WHEN OLD.state <> 'answered' AND NEW.state = 'answered'
+BEGIN
+    INSERT INTO plugin_changes (ord, kind, row_id, data) VALUES (change_order(), 'question.answered', NEW.message_id,
+        json_object('at', NEW.answered_at, 'optionId', NEW.answer_option_id));
+END;
+-- +goose StatementEnd
+-- +goose StatementBegin
+CREATE TRIGGER ev.plugin_capture_lifecycle AFTER INSERT ON lifecycle_events
+WHEN NEW.type IN ('run.queued', 'run.dispatched', 'run.running', 'run.ended', 'pi.started', 'pi.exited', 'pi.stopped',
+                  'model.retry_started', 'context.compaction')
+BEGIN
+    INSERT INTO plugin_lifecycle_changes (ord, row_id) VALUES (change_order(), NEW.id);
+END;
+-- +goose StatementEnd

@@ -29,9 +29,8 @@ type IdentityManager struct {
 	ChannelID string `json:"channelId"`
 }
 
-// SQLITE-PORT(G3): jsonb
 const identityColumns = `id, name, created_at, deleted_at,
-	(SELECT jsonb_build_object('pluginId', m.plugin_id, 'channelId', m.channel_id) FROM identity_managers m WHERE m.identity_id = external_identities.id)`
+	(SELECT json_object('pluginId', m.plugin_id, 'channelId', m.channel_id) FROM identity_managers m WHERE m.identity_id = external_identities.id)`
 
 func scanIdentity(row db.Scanner) (ExternalIdentity, error) {
 	var x ExternalIdentity
@@ -42,7 +41,7 @@ func scanIdentity(row db.Scanner) (ExternalIdentity, error) {
 // SetIdentityManager 设置（m 为空时清空）代管外部身份的插件渠道；身份不存在或已删除时返回 not_found。插件与渠道由调用方校验。
 func (s *Store) SetIdentityManager(ctx context.Context, identity uuid.UUID, m *IdentityManager) (ExternalIdentity, error) {
 	err := s.inTx(ctx, func(tx *db.Tx) error {
-		if err := lockLiveIdentity(ctx, tx, identity); err != nil {
+		if err := requireLiveIdentity(ctx, tx, identity); err != nil {
 			return notFoundAs(err, "外部身份")
 		}
 		if m == nil {
@@ -143,8 +142,8 @@ func scanToken(row db.Scanner) (ExternalToken, error) {
 	return t, err
 }
 
-// lockLiveIdentity 以 FOR SHARE 锁住未删除的外部身份，与删除身份串行化。
-func lockLiveIdentity(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
+// requireLiveIdentity 确认外部身份存在且未删除（写事务串行，不需要锁行）。
+func requireLiveIdentity(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
 	var one int
 	err := tx.QueryRow(ctx, `SELECT 1 FROM external_identities WHERE id = $1 AND deleted_at IS NULL`, id).Scan(&one)
 	return notFoundIfNoRows(err, "外部身份")
@@ -154,7 +153,7 @@ func lockLiveIdentity(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
 func (s *Store) InsertExternalToken(ctx context.Context, identityID, tokenID uuid.UUID, hash []byte, prefix string, expiresAt *time.Time) (ExternalToken, error) {
 	var t ExternalToken
 	err := s.inTx(ctx, func(tx *db.Tx) error {
-		if err := lockLiveIdentity(ctx, tx, identityID); err != nil {
+		if err := requireLiveIdentity(ctx, tx, identityID); err != nil {
 			return err
 		}
 		var err error
@@ -169,7 +168,7 @@ func (s *Store) InsertExternalToken(ctx context.Context, identityID, tokenID uui
 func (s *Store) ListExternalTokens(ctx context.Context, identityID uuid.UUID) ([]ExternalToken, error) {
 	var out []ExternalToken
 	err := s.inTx(ctx, func(tx *db.Tx) error {
-		if err := lockLiveIdentity(ctx, tx, identityID); err != nil {
+		if err := requireLiveIdentity(ctx, tx, identityID); err != nil {
 			return err
 		}
 		rows, err := tx.Query(ctx, `SELECT `+tokenColumns+` FROM external_tokens WHERE identity_id = $1 ORDER BY created_at DESC, id DESC`, identityID)
@@ -186,7 +185,7 @@ func (s *Store) ListExternalTokens(ctx context.Context, identityID uuid.UUID) ([
 func (s *Store) RevokeExternalToken(ctx context.Context, identityID, tokenID uuid.UUID) (ExternalToken, error) {
 	var t ExternalToken
 	err := s.inTx(ctx, func(tx *db.Tx) error {
-		if err := lockLiveIdentity(ctx, tx, identityID); err != nil {
+		if err := requireLiveIdentity(ctx, tx, identityID); err != nil {
 			return err
 		}
 		var err error
@@ -299,7 +298,7 @@ func (s *Store) InsertAudit(ctx context.Context, e AuditEntry) error {
 	}
 	_, err = s.Pool.Exec(ctx, `INSERT INTO audit_log (id, request_id, actor_kind, actor_id, actor_address, method, operation, target, status, on_behalf_of)
 		VALUES ($1, $2, $3, $4, nullif($5, ''), $6, $7, $8, $9, $10)`,
-		uuid.Must(uuid.NewV7()), e.RequestID, e.ActorKind, e.ActorID, e.ActorAddress, e.Method, e.Operation, target, e.Status, e.OnBehalfOf)
+		uuid.Must(uuid.NewV7()), e.RequestID, e.ActorKind, e.ActorID, e.ActorAddress, e.Method, e.Operation, json.RawMessage(target), e.Status, e.OnBehalfOf)
 	return err
 }
 

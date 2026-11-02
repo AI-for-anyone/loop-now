@@ -49,14 +49,12 @@ func (s *Store) QuestionBinding(ctx context.Context, id uuid.UUID) (*QuestionBin
 	}
 	return &b, err
 }
-func GetQuestionTx(ctx context.Context, tx *db.Tx, id uuid.UUID, lock bool, preview ...int) (*InboxQuestion, error) {
+
+// GetQuestionTx 读出提问。第四个参数原来决定是否锁行；写事务串行后不再需要，保留只为调用方不变。
+func GetQuestionTx(ctx context.Context, tx *db.Tx, id uuid.UUID, _ bool, preview ...int) (*InboxQuestion, error) {
 	size := 200
 	if len(preview) > 0 {
 		size = preview[0]
-	}
-	suffix := ""
-	if lock {
-		suffix = " FOR UPDATE OF q"
 	}
 	var q InboxQuestion
 	var opts, by []byte
@@ -64,7 +62,7 @@ func GetQuestionTx(ctx context.Context, tx *db.Tx, id uuid.UUID, lock bool, prev
 	var optionID *string
 	var at *time.Time
 	var textPreview *string
-	err := tx.QueryRow(ctx, `SELECT q.options,q.expires_at,q.state,q.answer_message_id,q.answer_option_id,q.answered_by,q.answered_at,left(a.text,$2) FROM inbox_questions q LEFT JOIN inbox_messages a ON a.id=q.answer_message_id WHERE q.message_id=$1`+suffix, id, size).Scan(&opts, &q.ExpiresAt, &q.State, &answerID, &optionID, &by, &at, &textPreview)
+	err := tx.QueryRow(ctx, `SELECT q.options,q.expires_at,q.state,q.answer_message_id,q.answer_option_id,q.answered_by,q.answered_at,substr(a.text,1,$2) FROM inbox_questions q LEFT JOIN inbox_messages a ON a.id=q.answer_message_id WHERE q.message_id=$1`, id, size).Scan(&opts, &q.ExpiresAt, &q.State, &answerID, &optionID, &by, &at, &textPreview)
 	if errors.Is(err, db.ErrNoRows) {
 		return nil, nil
 	}

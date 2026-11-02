@@ -1052,23 +1052,14 @@ func (s *Service) Hook(ctx context.Context, kind pluginhost.Kind, event map[stri
 	return s.Host.Call(ctx, kind, event, include)
 }
 
-// Listen 唤醒投递协程；ctx 结束时返回。
-// SQLITE-PORT(G3): 原来由 PG 的 LISTEN/pg_notify 唤醒；G3 改为写事件的事务提交后（AfterCommit）直接唤醒，
-// 这里先每秒唤醒一次兜底。
-func (s *Service) Listen(ctx context.Context) {
+// WakeOnCommit 让写了插件事件的事务一提交就唤醒投递协程（原来靠 PostgreSQL 的 LISTEN/NOTIFY），并先唤醒一次，
+// 投递启动前已经写入的事件。重投由投递协程自己按时轮询。
+func (s *Service) WakeOnCommit() {
 	if s.Host == nil {
 		return
 	}
-	t := time.NewTicker(time.Second)
-	defer t.Stop()
-	for {
-		s.Host.Notify()
-		select {
-		case <-t.C:
-		case <-ctx.Done():
-			return
-		}
-	}
+	s.Store.SetPluginEventsCommitted(s.Host.Notify)
+	s.Host.Notify()
 }
 
 func nonNilMap(m map[string]any) map[string]any {

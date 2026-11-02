@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 
 	"github.com/google/uuid"
 
@@ -28,6 +29,8 @@ type Store struct {
 	Pool                *db.DB
 	// InstanceID 写入运行记录事件，表示由哪个服务端实例记录（多实例预留）；为空时不记录。
 	InstanceID *uuid.UUID
+	// pluginWake 在写了插件事件的事务提交后调用，见 SetPluginEventsCommitted。
+	pluginWake atomic.Pointer[func()]
 }
 
 // Open 打开数据目录下的库。迁移由调用方另外调用 Migrate。
@@ -45,10 +48,6 @@ func New(d *db.DB) *Store {
 	d.SetWriteHook(s.beforeCommit)
 	return s
 }
-
-// beforeCommit 在每个写事务提交前执行（见 db.SetWriteHook）。
-// SQLITE-PORT(G3): 这里把捕获触发器记下的 plugin_changes 变成插件事件。
-func (s *Store) beforeCommit(context.Context, *db.Tx) error { return nil }
 
 // Close 关闭连接池。
 func (s *Store) Close() { _ = s.Pool.Close() }

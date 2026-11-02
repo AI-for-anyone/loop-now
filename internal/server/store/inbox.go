@@ -48,7 +48,7 @@ func (p Party) cond(alias, side string, arg int) string {
 	case "agent":
 		runtime := fmt.Sprintf("%s.%s_runtime_id IS NULL", alias, side)
 		if p.RuntimeID != uuid.Nil {
-			runtime = fmt.Sprintf("%s.%s_runtime_id = '%s'::uuid", alias, side, p.RuntimeID.String())
+			runtime = fmt.Sprintf("%s.%s_runtime_id = '%s'", alias, side, p.RuntimeID.String())
 		}
 		return fmt.Sprintf("(%s.%s_kind = 'agent' AND %s.%s_agent_id = $%d AND %s AND %s)", alias, side, alias, side, arg, runtime, taskNodeInboxVisibleSQL(alias, p))
 	case "external":
@@ -57,7 +57,7 @@ func (p Party) cond(alias, side string, arg int) string {
 		return fmt.Sprintf("(%s.%s_kind = 'plugin' AND %s.%s_plugin_party_id = $%d)", alias, side, alias, side, arg)
 	}
 	if p.Kind == "console" {
-		return fmt.Sprintf("(%s.%s_kind = 'console' AND $%d::uuid IS NOT NULL)", alias, side, arg)
+		return fmt.Sprintf("(%s.%s_kind = 'console' AND $%d IS NOT NULL)", alias, side, arg)
 	}
 	return "false"
 }
@@ -174,14 +174,20 @@ func partyJoin(p, side string) (cols, joins string) {
 func inboxSelect(previewChars int) string {
 	fc, fj := partyJoin("f", "from")
 	tc, tj := partyJoin("t", "to")
-	// SQLITE-PORT(G3): jsonb
-	// SQLITE-PORT(G3): jsonb
-	return `SELECT m.id, m.thread_id, m.in_reply_to, m.text, left(m.text, ` + strconv.Itoa(previewChars) + `), coalesce(m.when_busy, ''),
+	n := strconv.Itoa(previewChars)
+	// 提问与回答拼成 JSON：嵌套的 JSON 列要包 json()，时间用 iso_time() 转成 Go 能解析的字符串。
+	return `SELECT m.id, m.thread_id, m.in_reply_to, m.text, substr(m.text, 1, ` + n + `), coalesce(m.when_busy, ''),
 		m.created_at, m.read_at, ` + fc + `, ` + tc + `,
- (SELECT jsonb_build_object('options',q.options,'expiresAt',q.expires_at,'state',q.state,'answer',CASE WHEN q.answer_message_id IS NULL THEN NULL ELSE jsonb_build_object('messageId',q.answer_message_id,'optionId',q.answer_option_id,'optionLabel',(SELECT opt->>'label' FROM jsonb_array_elements(q.options)opt WHERE opt->>'id'=q.answer_option_id),'textPreview',left(a.text,` + strconv.Itoa(previewChars) + `),'by',q.answered_by,'at',q.answered_at) END) FROM inbox_questions q LEFT JOIN inbox_messages a ON a.id=q.answer_message_id WHERE q.message_id=m.id),
- CASE WHEN m.answers_message_id IS NULL THEN NULL ELSE jsonb_build_object('messageId',m.answers_message_id,'optionId',m.answer_option_id,'optionLabel',(SELECT opt->>'label' FROM inbox_questions q,jsonb_array_elements(q.options)opt WHERE q.message_id=m.answers_message_id AND opt->>'id'=m.answer_option_id))END,m.notice,m.images,
- m.cancelled_at,m.reminder_run_id,m.reminder_turn_id,` + inboxNodeSQL("m") + `
- FROM inbox_messages m` + fj + tj
+		(SELECT json_object('options', json(q.options), 'expiresAt', iso_time(q.expires_at), 'state', q.state, 'answer',
+			CASE WHEN q.answer_message_id IS NULL THEN NULL ELSE json_object('messageId', q.answer_message_id, 'optionId', q.answer_option_id,
+				'optionLabel', (SELECT opt.value ->> 'label' FROM json_each(q.options) opt WHERE opt.value ->> 'id' = q.answer_option_id),
+				'textPreview', substr(a.text, 1, ` + n + `), 'by', json(q.answered_by), 'at', iso_time(q.answered_at)) END)
+			FROM inbox_questions q LEFT JOIN inbox_messages a ON a.id = q.answer_message_id WHERE q.message_id = m.id),
+		CASE WHEN m.answers_message_id IS NULL THEN NULL ELSE json_object('messageId', m.answers_message_id, 'optionId', m.answer_option_id,
+			'optionLabel', (SELECT opt.value ->> 'label' FROM inbox_questions q, json_each(q.options) opt
+				WHERE q.message_id = m.answers_message_id AND opt.value ->> 'id' = m.answer_option_id)) END, m.notice, m.images,
+		m.cancelled_at, m.reminder_run_id, m.reminder_turn_id, ` + inboxNodeSQL("m") + `
+	FROM inbox_messages m` + fj + tj
 }
 
 func scanInbox(row db.Scanner) (InboxMessage, error) {
@@ -275,7 +281,7 @@ func (s *Store) pageInbox(ctx context.Context, where string, args []any, q Inbox
 	if q.Cursor != nil {
 		cAt, cID = &q.Cursor.At, &q.Cursor.ID
 	}
-	sql += fmt.Sprintf(` AND ($%d::timestamptz IS NULL OR (m.created_at, m.id) < ($%d, $%d::uuid)) ORDER BY m.created_at DESC, m.id DESC LIMIT $%d`,
+	sql += fmt.Sprintf(` AND ($%d IS NULL OR (m.created_at, m.id) < ($%d, $%d)) ORDER BY m.created_at DESC, m.id DESC LIMIT $%d`,
 		n+1, n+1, n+2, n+3)
 	rows, err := s.Pool.Query(ctx, sql, append(args, cAt, cID, q.Limit+1)...)
 	if err != nil {
@@ -379,7 +385,7 @@ func InsertInboxMessage(ctx context.Context, tx *db.Tx, in NewInboxMessage) erro
 		}
 
 	case "external":
-		if err := lockLiveIdentity(ctx, tx, in.To.ID); err != nil {
+		if err := requireLiveIdentity(ctx, tx, in.To.ID); err != nil {
 			return notFoundAs(err, "收件人")
 		}
 	}
@@ -645,14 +651,15 @@ func (s *Store) ListInboxThreads(ctx context.Context, p Party, cursor *InboxCurs
 	if cursor != nil {
 		cAt, cID = &cursor.At, &cursor.ID
 	}
-	// SQLITE-PORT(G3): LATERAL
-	rows, err := s.Pool.Query(ctx, `SELECT root.id, last.id,
-			(SELECT count(*) FROM inbox_messages u WHERE u.thread_id = root.id AND `+unreadCond("u")+` AND `+p.cond("u", "to", 1)+`)
-		FROM inbox_messages root
-		CROSS JOIN LATERAL (SELECT l.id, l.created_at FROM inbox_messages l WHERE l.thread_id = root.id
-			ORDER BY l.created_at DESC, l.id DESC LIMIT 1) last
-		WHERE root.id = root.thread_id AND (`+p.cond("root", "from", 1)+` OR `+p.cond("root", "to", 1)+`)
-			AND ($2::timestamptz IS NULL OR (last.created_at, last.id) < ($2, $3::uuid))
+	// 先按参与方筛出线索的第一条，再用相关子查询取每条线索的最后一条（走 thread_id 索引）。
+	rows, err := s.Pool.Query(ctx, `SELECT t.root_id, last.id, t.unread FROM (
+			SELECT root.id AS root_id,
+				(SELECT l.id FROM inbox_messages l WHERE l.thread_id = root.id ORDER BY l.created_at DESC, l.id DESC LIMIT 1) AS last_id,
+				(SELECT count(*) FROM inbox_messages u WHERE u.thread_id = root.id AND `+unreadCond("u")+` AND `+p.cond("u", "to", 1)+`) AS unread
+			FROM inbox_messages root
+			WHERE root.id = root.thread_id AND (`+p.cond("root", "from", 1)+` OR `+p.cond("root", "to", 1)+`)) t
+		JOIN inbox_messages last ON last.id = t.last_id
+		WHERE ($2 IS NULL OR (last.created_at, last.id) < ($2, $3))
 		ORDER BY last.created_at DESC, last.id DESC LIMIT $4`, p.ID, cAt, cID, limit+1)
 	if err != nil {
 		return InboxThreadPage{}, err
@@ -696,7 +703,7 @@ func (s *Store) inboxByIDs(ctx context.Context, ids []uuid.UUID, preview int) (m
 	if len(ids) == 0 {
 		return out, nil
 	}
-	rows, err := s.Pool.Query(ctx, inboxSelect(preview)+` WHERE m.id = ANY($1)`, ids)
+	rows, err := s.Pool.Query(ctx, inboxSelect(preview)+` WHERE m.id  IN (SELECT value FROM json_each($1))`, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -727,7 +734,7 @@ func (s *Store) FindAgentByPath(ctx context.Context, orgName string, orgID *uuid
 		JOIN projects p ON p.id = agents.project_id AND p.deleted_at IS NULL
 		JOIN organizations o ON o.id = p.organization_id
 		WHERE agents.deleted_at IS NULL AND agents.name = $1 AND p.name = $2
-			AND (($3::uuid IS NOT NULL AND o.id = $3) OR ($3::uuid IS NULL AND o.name = $4))`, name, project, orgID, orgName))
+			AND (($3 IS NOT NULL AND o.id = $3) OR ($3 IS NULL AND o.name = $4))`, name, project, orgID, orgName))
 	return a, notFoundIfNoRows(err, "Agent")
 }
 

@@ -17,8 +17,8 @@ import (
 	"loop-now/internal/testutil/sqlitetest"
 )
 
-// events.db 里只放这四张可清理的日志表。
-var eventsTables = []string{"audit_log", "lifecycle_events", "plugin_host_log", "run_tool_events"}
+// events.db 里只放这四张可清理的日志表，加上 lifecycle_events 的插件事件捕获表。
+var eventsTables = []string{"audit_log", "lifecycle_events", "plugin_host_log", "plugin_lifecycle_changes", "run_tool_events"}
 
 // 不属于业务结构的表。
 func ignoredTable(name string) bool {
@@ -71,8 +71,8 @@ func TestBaselineShape(t *testing.T) {
 	if !slices.Equal(inEvents, eventsTables) {
 		t.Errorf("events.db 的表 = %v，应为 %v", inEvents, eventsTables)
 	}
-	if len(ts) != 88 {
-		t.Errorf("业务表共 %d 张，应为 88（PG 的 87 张加 sequences）", len(ts))
+	if len(ts) != 90 {
+		t.Errorf("业务表共 %d 张，应为 90（PG 的 87 张加 sequences 与两张插件事件捕获表）", len(ts))
 	}
 	for _, name := range eventsTables {
 		var n int
