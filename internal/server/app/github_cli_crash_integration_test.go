@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/app"
 	"loop-now/internal/server/cliauth"
@@ -24,12 +23,14 @@ import (
 	"loop-now/internal/server/githubauth/githubtest"
 	"loop-now/internal/server/store"
 
+	"github.com/google/uuid"
+
 	"loop-now/internal/server/db"
 )
 
 type githubCrashInput struct {
-	Config                        config.Config
-	Schema, Ready, Barrier, Phase string
+	Config                config.Config
+	Ready, Barrier, Phase string
 }
 
 // githubCrashBeforeCommit holds the verified device/identity result before the
@@ -134,7 +135,7 @@ func TestGitHubActualAppSIGKILLCommitBoundary(t *testing.T) {
 			}
 			defer observer.Close()
 			dir := t.TempDir()
-			input := githubCrashInput{Config: w.cfg, Schema: w.schema, Ready: filepath.Join(dir, "api.json"), Barrier: filepath.Join(dir, "barrier.json"), Phase: phase}
+			input := githubCrashInput{Config: w.cfg, Ready: filepath.Join(dir, "api.json"), Barrier: filepath.Join(dir, "barrier.json"), Phase: phase}
 			read, write, e := os.Pipe()
 			if e != nil {
 				t.Fatal(e)

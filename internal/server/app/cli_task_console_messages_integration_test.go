@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/inbox"
@@ -17,7 +15,8 @@ import (
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/workflow"
-	"loop-now/internal/testutil/redistest"
+
+	"github.com/google/uuid"
 )
 
 // Actual temporary App, TEST PG/Redis and fakePi RPC. No real models, database
@@ -31,7 +30,7 @@ func taskConsoleApp(t *testing.T) (*world, *server) {
 	s := w.start(nil)
 	c := decode[apitypes.Context](t, s.must(200, "GET", "/context", nil))
 	s.must(201, "POST", "/projects/"+c.Project.ID.String()+"/credential-accounts", map[string]any{"purpose": "model", "provider": "anthropic", "name": "strict-node synthetic model account", "credential": map[string]string{"type": "api_key", "key": "synthetic-task-console-key"}})
-	t.Logf("strict App schema=%s redisPrefix=%s console=%s", w.schema, w.cfg.RedisKeyPrefix, s.url)
+	t.Logf("strict App dataDir=%s console=%s", w.cfg.DataDir, s.url)
 	return w, s
 }
 
@@ -378,16 +377,7 @@ func TestTaskConsoleAppQueuedRecoveryAfterRedisLoss(t *testing.T) {
 	}
 	s.stop()
 	s = nil
-	options, e := redis.ParseURL(w.cfg.RedisURL)
-	if e != nil {
-		t.Fatal("invalid TEST Redis configuration")
-	}
-	client := redis.NewClient(options)
-	if e = redistest.DeletePrefix(ctx, client, w.cfg.RedisKeyPrefix); e != nil {
-		client.Close()
-		t.Fatal(e)
-	}
-	client.Close()
+	// 重启后内存里的协调状态是空的：排队只在数据库里。
 	s = w.start(nil)
 	completed := taskConsoleWaitRun(t, s, r.RunID, "completed")
 	if completed.NodeRunID != n.ID || completed.ExecutionMode != "task_conversation" {
@@ -408,7 +398,7 @@ func TestTaskConsoleAppQueuedRecoveryAfterRedisLoss(t *testing.T) {
 	if count := sleepNativePrompts(t, *inst.SessionFile); count != 2 {
 		t.Fatalf("recovered queue native prompt count=%d want2", count)
 	}
-	t.Log("actual queued PG receipt/lineage survived temporary App restart+own Redis prefix loss, original blocked node/session, exactly one new native prompt")
+	t.Log("actual queued receipt/lineage survived temporary App restart with empty coordination state, original blocked node/session, exactly one new native prompt")
 }
 
 func TestTaskConsoleAppTerminalSleepAndQueuedInvalidation(t *testing.T) {

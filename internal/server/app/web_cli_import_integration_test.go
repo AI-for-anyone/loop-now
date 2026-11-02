@@ -7,26 +7,20 @@ import (
 	"encoding/json"
 	"io"
 	"net"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/app"
 	"loop-now/internal/server/cliimport"
 	"loop-now/internal/server/cliimport/source"
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/config"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
 	"loop-now/internal/testutil/testenv"
 )
 
@@ -36,18 +30,10 @@ func TestWebCLIImportIntegration(t *testing.T) {
 	if os.Getenv("LOOP_NOW_WEB_CLI_IMPORT_INTEGRATION") != "1" {
 		t.Skip("explicit isolated TEST browser slice")
 	}
-	db, e := url.Parse(pgtest.URL(t))
-	if e != nil || !strings.HasSuffix(db.Path, "_test") {
-		t.Fatal("TEST database required")
-	}
-	ro, e := redis.ParseURL(redistest.URL(t))
-	if e != nil || ro.DB != 10 {
-		t.Fatal("TEST Redis DB10 required")
-	}
 	root := testenv.RepoRoot()
 	runID := time.Now().UTC().Format("20060102T150405.000000000Z")
 	evidence := filepath.Join(root, "web/test-results/add-local-cli-credential-import/app", runID)
-	if e = os.MkdirAll(evidence, 0700); e != nil {
+	if e := os.MkdirAll(evidence, 0700); e != nil {
 		t.Fatal(e)
 	}
 	webCLIImportJSON(t, filepath.Join(root, "web/test-results/add-local-cli-credential-import/latest-app.json"), map[string]any{"runId": runID, "evidenceDir": evidence})
@@ -65,30 +51,8 @@ func TestWebCLIImportIntegration(t *testing.T) {
 		if w == nil {
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		c, err := pgx.Connect(ctx, pgtest.URL(t))
-		if err != nil {
-			t.Error("cleanup PG unavailable")
-			return
-		}
-		defer c.Close(ctx)
-		var exists bool
-		err = c.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)", w.schema).Scan(&exists)
-		audit["schemaRemoved"] = err == nil && !exists
-		if err != nil || exists {
-			t.Error("TEST schema remains")
-		}
-		rc := redis.NewClient(ro)
-		defer rc.Close()
-		it := rc.Scan(ctx, 0, w.cfg.RedisKeyPrefix+"*", 100).Iterator()
-		found := it.Next(ctx)
-		audit["redisPrefixEmpty"] = !found && it.Err() == nil
-		if found || it.Err() != nil {
-			t.Error("TEST prefix remains")
-		}
 		for key, path := range map[string]string{"workRootRemoved": w.cfg.WorkRoot, "syntheticRootRemoved": syntheticRoot} {
-			_, err = os.Stat(path)
+			_, err := os.Stat(path)
 			audit[key] = os.IsNotExist(err)
 			if !os.IsNotExist(err) {
 				t.Error("temporary root remains", key)
@@ -116,10 +80,10 @@ func TestWebCLIImportIntegration(t *testing.T) {
 	before := map[string][32]byte{}
 	for name, value := range files {
 		p := filepath.Join(syntheticRoot, name)
-		if e = os.MkdirAll(filepath.Dir(p), 0700); e != nil {
+		if e := os.MkdirAll(filepath.Dir(p), 0700); e != nil {
 			t.Fatal(e)
 		}
-		if e = os.WriteFile(p, []byte(value), 0600); e != nil {
+		if e := os.WriteFile(p, []byte(value), 0600); e != nil {
 			t.Fatal(e)
 		}
 		before[name] = sha256.Sum256([]byte(value))
@@ -201,8 +165,7 @@ func TestWebCLIImportIntegration(t *testing.T) {
 	audit["sourceUnchanged"] = unchanged
 	audit["sourceFactoryCalls"] = opened.Load()
 	audit["pgCounts"] = counts
-	audit["schema"] = w.schema
-	audit["redisPrefix"] = w.cfg.RedisKeyPrefix
+	audit["dataDir"] = w.cfg.DataDir
 	if !unchanged || opened.Load() != 2 {
 		t.Error("unexpected source mutation/read count")
 	}

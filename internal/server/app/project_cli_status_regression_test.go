@@ -3,33 +3,21 @@ package app_test
 import (
 	"context"
 	"errors"
-	"net/url"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/clicredential"
 	cm "loop-now/internal/server/credentialmodel"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
+
+	"github.com/google/uuid"
 )
 
 // Management HTTP, single-account resolution and real execution capture share
 // the same isolated App. No message is dispatched or CLI/provider contacted.
 func TestProjectCLIAccountSavedState(t *testing.T) {
-	db, err := url.Parse(pgtest.URL(t))
-	if err != nil || !strings.HasSuffix(db.Path, "_test") {
-		t.Fatal("isolated TEST database required")
-	}
-	rd, err := redis.ParseURL(redistest.URL(t))
-	if err != nil || rd.DB != 10 {
-		t.Fatal("TEST Redis DB10 required")
-	}
 	w := newWorld(t)
 	s := w.start(nil)
 	defer s.stop()

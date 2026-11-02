@@ -9,28 +9,23 @@ import (
 	"encoding/pem"
 	"io"
 	"net"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/app"
 	"loop-now/internal/server/cliauth"
 	"loop-now/internal/server/clicredential"
 	"loop-now/internal/server/config"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
 	"loop-now/internal/testutil/testenv"
+
+	"github.com/google/uuid"
 )
 
 // Web owns only this file; production and shared test helpers are read-only.
@@ -50,14 +45,6 @@ func webDBConnectionsIntegration(t *testing.T, slice string) {
 	if os.Getenv("LOOP_NOW_WEB_DB_INTEGRATION") != "1" {
 		t.Skip("explicit TEST-only React DB management integration")
 	}
-	db, err := url.Parse(pgtest.URL(t))
-	if err != nil || !strings.HasSuffix(db.Path, "_test") {
-		t.Fatal("TEST database required")
-	}
-	ro, err := redis.ParseURL(redistest.URL(t))
-	if err != nil || ro.DB != 10 {
-		t.Fatal("TEST Redis DB10 required")
-	}
 	root := testenv.RepoRoot()
 	evidence := filepath.Join(root, "web/test-results/add-cloud-database-cli-templates/app-"+slice)
 	if err := os.MkdirAll(evidence, 0700); err != nil {
@@ -70,31 +57,8 @@ func webDBConnectionsIntegration(t *testing.T, slice string) {
 		if w == nil {
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		audit["schema"] = w.schema
-		audit["redisPrefix"] = w.cfg.RedisKeyPrefix
-		conn, e := pgx.Connect(ctx, pgtest.URL(t))
-		if e != nil {
-			t.Error("cleanup PG read failed")
-			return
-		}
-		defer conn.Close(ctx)
-		var exists bool
-		e = conn.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)`, w.schema).Scan(&exists)
-		audit["schemaRemoved"] = e == nil && !exists
-		if e != nil || exists {
-			t.Error("schema cleanup not verified")
-		}
-		rc := redis.NewClient(ro)
-		defer rc.Close()
-		iter := rc.Scan(ctx, 0, w.cfg.RedisKeyPrefix+"*", 100).Iterator()
-		found := iter.Next(ctx)
-		audit["redisPrefixEmpty"] = !found && iter.Err() == nil
-		if found || iter.Err() != nil {
-			t.Error("Redis cleanup not verified")
-		}
-		_, e = os.Stat(w.cfg.WorkRoot)
+		audit["dataDir"] = w.cfg.DataDir
+		_, e := os.Stat(w.cfg.WorkRoot)
 		audit["workRootRemoved"] = os.IsNotExist(e)
 		if !os.IsNotExist(e) {
 			t.Error("work root cleanup not verified")

@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/config"
@@ -21,8 +20,8 @@ import (
 	"loop-now/internal/server/workflow"
 	"loop-now/internal/testutil/fakepibin"
 	"loop-now/internal/testutil/loopctlfake"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
+
+	"github.com/google/uuid"
 )
 
 // promoteWorld is newWorld against the installed Pi 1.4 model catalog, with
@@ -38,16 +37,15 @@ func promoteWorld(t *testing.T) *world {
 	if err = os.WriteFile(wrapper, []byte("#!/bin/sh\nif [ \"$1\" = --version ] || [ \"$1\" = -v ]; then echo 1.4.0; exit 0; fi\nexec "+fakepibin.Path(t)+" \"$@\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_, prefix := redistest.New(t)
-	return &world{t: t, schema: pgtest.NewSchema(t), piAIDir: real.PiAIDir, cfg: config.Config{
+	return &world{t: t, piAIDir: real.PiAIDir, cfg: config.Config{
 		TaskMaxSteps: 100, TaskMaxEdges: 300, TaskMaxVisits: 1000, TaskMaxRequest: 1 << 20, TaskMaxArtifact: 20 << 20, TaskMaxSession: 100 << 20, TaskReconcileInterval: 50 * time.Millisecond, TaskEventPoll: 10 * time.Millisecond, TaskRecordTimeout: time.Second,
-		DataDir: t.TempDir(), RedisURL: redistest.URL(t),
+		DataDir:    t.TempDir(),
 		ListenAddr: "127.0.0.1:0", AllowedHosts: []string{"localhost", "127.0.0.1", "::1"}, ConsoleOrigins: []string{"http://localhost:5173"},
-		WorkRoot: filepath.Join(t.TempDir(), "work"), RedisKeyPrefix: prefix, DefaultOrgName: "默认组织", DefaultProjectName: "默认项目",
+		WorkRoot: filepath.Join(t.TempDir(), "work"), DefaultOrgName: "默认组织", DefaultProjectName: "默认项目",
 		PiBin: wrapper, PiVersion: "1.4.0", PiMaxProcesses: 2, PiIdleTimeout: time.Minute, PiStartTimeout: 10 * time.Second,
 		PiStopGrace: 2 * time.Second, AbortTimeout: 2 * time.Second, GitCloneTimeout: 30 * time.Second, CLIInstallTimeout: time.Minute,
-		NodeBin: "node", PiAIDir: real.PiAIDir, LockTTL: 5 * time.Second, LockRenewInterval: time.Second, ReconcileInterval: 500 * time.Millisecond,
-		SSEKeepalive: time.Second, EventStreamMaxLen: 1000, RunTextTTL: time.Hour, ShutdownTimeout: 10 * time.Second,
+		NodeBin: "node", PiAIDir: real.PiAIDir, ReconcileInterval: 500 * time.Millisecond,
+		SSEKeepalive: time.Second, EventStreamMaxLen: 1000, ShutdownTimeout: 10 * time.Second,
 		MaxUploadFile: 1 << 20, MaxSkillArchive: 1 << 20, MaxSkillEntries: 50, MaxCredential: 4096, MaxMessage: 1 << 16,
 		TextEditExtensions: []string{".md"}, TextEditMax: 1 << 16, MaxInboxMessage: 1 << 16, InboxPreviewChars: 200, InboxPageMax: 100,
 		LoopctlDistDir: loopctlfake.Dir(t), SleepScanInterval: 50 * time.Millisecond, SleepScanBatch: 100,

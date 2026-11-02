@@ -4,16 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/inbox"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/workflow"
-	"loop-now/internal/testutil/pgtest"
 	"loop-now/internal/testutil/testenv"
 	"net"
 	"net/http"
@@ -24,6 +20,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Exclusive Web driver allocated by Main/server; shared server helpers stay read-only.
@@ -44,38 +42,10 @@ func TestWebTaskQuestionsIntegration(t *testing.T) {
 		if w == nil {
 			return
 		}
-		audit["schema"] = w.schema
-		audit["redisPrefix"] = w.cfg.RedisKeyPrefix
+		audit["dataDir"] = w.cfg.DataDir
 		audit["appAddress"] = addr
 		audit["controlAddress"] = controlAddr
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		conn, err := pgx.Connect(ctx, pgtest.URL(t))
-		if err != nil {
-			t.Error("cleanup PG verification failed")
-			return
-		}
-		defer conn.Close(ctx)
-		var exists bool
-		if err = conn.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)`, w.schema).Scan(&exists); err != nil || exists {
-			t.Error("isolated schema cleanup not verified")
-		}
-		audit["schemaRemoved"] = !exists && err == nil
-		options, err := redis.ParseURL(w.cfg.RedisURL)
-		if err != nil {
-			t.Error("cleanup Redis configuration invalid")
-			return
-		}
-		rc := redis.NewClient(options)
-		defer rc.Close()
-		iterator := rc.Scan(ctx, 0, w.cfg.RedisKeyPrefix+"*", 100).Iterator()
-		found := iterator.Next(ctx)
-		err = iterator.Err()
-		audit["redisPrefixEmpty"] = err == nil && !found
-		if err != nil || found {
-			t.Error("isolated Redis cleanup not verified")
-		}
-		_, err = os.Stat(w.cfg.WorkRoot)
+		_, err := os.Stat(w.cfg.WorkRoot)
 		audit["workRootRemoved"] = os.IsNotExist(err)
 		if !os.IsNotExist(err) {
 			t.Error("isolated work root cleanup not verified")

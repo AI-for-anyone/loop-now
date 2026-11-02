@@ -5,40 +5,27 @@ import (
 	"context"
 	"encoding/json"
 	"net"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/inbox"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/workflow"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
 	"loop-now/internal/testutil/testenv"
+
+	"github.com/google/uuid"
 )
 
 // Web owns only this new file. Shared helpers and production code are read-only.
 func TestWebTaskConsoleMessagesIntegration(t *testing.T) {
 	if os.Getenv("LOOP_NOW_WEB_TASK_CONSOLE_INTEGRATION") != "1" {
 		t.Skip("explicit isolated TEST App/fakePi browser integration")
-	}
-	db, e := url.Parse(pgtest.URL(t))
-	if e != nil || !strings.HasSuffix(db.Path, "_test") {
-		t.Fatal("TEST PG required")
-	}
-	ro, e := redis.ParseURL(redistest.URL(t))
-	if e != nil || ro.DB != 10 {
-		t.Fatal("TEST Redis DB10 required")
 	}
 	root := testenv.RepoRoot()
 	evidence := filepath.Join(root, "web/test-results/improve-task-console-interaction/app")
@@ -52,31 +39,8 @@ func TestWebTaskConsoleMessagesIntegration(t *testing.T) {
 		if w == nil {
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		audit["schema"] = w.schema
-		audit["redisPrefix"] = w.cfg.RedisKeyPrefix
-		c, err := pgx.Connect(ctx, pgtest.URL(t))
-		if err != nil {
-			t.Error("PG cleanup read failed")
-			return
-		}
-		defer c.Close(ctx)
-		var exists bool
-		err = c.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)`, w.schema).Scan(&exists)
-		audit["schemaRemoved"] = err == nil && !exists
-		if err != nil || exists {
-			t.Error("schema cleanup failed")
-		}
-		rc := redis.NewClient(ro)
-		defer rc.Close()
-		it := rc.Scan(ctx, 0, w.cfg.RedisKeyPrefix+"*", 100).Iterator()
-		found := it.Next(ctx)
-		audit["redisPrefixEmpty"] = !found && it.Err() == nil
-		if found || it.Err() != nil {
-			t.Error("Redis cleanup failed")
-		}
-		_, err = os.Stat(w.cfg.WorkRoot)
+		audit["dataDir"] = w.cfg.DataDir
+		_, err := os.Stat(w.cfg.WorkRoot)
 		audit["workRootRemoved"] = os.IsNotExist(err)
 		if !os.IsNotExist(err) {
 			t.Error("work root remains")
