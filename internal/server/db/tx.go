@@ -31,55 +31,83 @@ type Tx struct {
 	done     bool
 }
 
-// InTx 在写事务中执行 fn：fn 返回 nil 时依次执行 BeforeCommit 钩子再提交，提交成功后依次执行 AfterCommit 钩子；
-// 任一步出错则回滚并返回该错误。等待写连接受 ctx 约束；BEGIN 之后语句仍用调用方 ctx（取消会中断语句、
-// 事务回滚），提交本身不可取消。
-func (d *DB) InTx(ctx context.Context, fn func(*Tx) error) error {
-	c, release, err := d.acquireWriter(ctx)
+// InTx 在写事务中执行 fn：fn 返回 nil 时依次执行 BeforeCommit 钩子与全局写钩子（SetWriteHook）再提交，提交成功后
+// 依次执行 AfterCommit 钩子；任一步出错则回滚并返回该错误。等待写连接受 ctx 约束；BEGIN 之后语句仍用调用方 ctx
+// （取消会中断语句、事务回滚），提交本身不可取消。
+func (d *DB) InTx(ctx context.Context, fn func(*Tx) error) (err error) {
+	t, end, err := d.beginWrite(ctx)
 	if err != nil {
 		return err
 	}
-	defer release()
-	stx, err := c.BeginTx(context.WithoutCancel(ctx), nil)
-	if err != nil {
-		return fmt.Errorf("db: 开始写事务失败：%w", err)
-	}
-	t := &Tx{tx: stx, now: d.now()}
+	ended := false
 	defer func() {
-		// fn 恐慌时也要回滚，否则连接带着未结束的事务回到池里。
-		if !t.done {
-			t.done = true
-			_ = stx.Rollback()
+		// fn 恐慌时也要回滚并归还连接，否则连接带着未结束的事务回到池里。
+		if !ended {
+			_ = end(errors.New("db: 写事务回调恐慌"))
 		}
 	}()
-	if err := t.run(ctx, fn); err != nil {
-		// 语句被中断等错误会让 SQLite 自己回滚整个事务，此时再回滚会报“没有活动事务”，忽略即可。
-		t.done = true
-		_ = stx.Rollback()
-		return err
-	}
-	t.done = true
-	if err := stx.Commit(); err != nil {
-		return fmt.Errorf("db: 提交失败：%w", err)
-	}
-	for _, f := range t.after {
-		f()
-	}
-	return nil
+	fnErr := fn(t)
+	ended = true
+	return end(fnErr)
 }
 
-func (t *Tx) run(ctx context.Context, fn func(*Tx) error) error {
-	if err := fn(t); err != nil {
-		return err
+// beginWrite 取得写连接并以 BEGIN IMMEDIATE 开始事务；end(fnErr) 结束它：fnErr 为 nil 时执行提交前钩子与全局写钩子
+// 并提交，否则回滚；无论如何都归还写连接。end 只能调用一次。
+func (d *DB) beginWrite(ctx context.Context) (*Tx, func(error) error, error) {
+	c, release, err := d.acquireWriter(ctx)
+	if err != nil {
+		return nil, nil, err
 	}
-	// 钩子可以再登记钩子（例如插件事件在提交前补写投递记录），按登记顺序执行到没有新的为止。
+	stx, err := c.BeginTx(context.WithoutCancel(ctx), nil)
+	if err != nil {
+		release()
+		return nil, nil, fmt.Errorf("db: 开始写事务失败：%w", err)
+	}
+	t := &Tx{tx: stx, now: d.now()}
+	end := func(fnErr error) error {
+		defer release()
+		if fnErr == nil {
+			fnErr = t.runBefore(ctx, d.writeHook.Load())
+		}
+		if fnErr != nil {
+			// 语句被中断等错误会让 SQLite 自己回滚整个事务，此时再回滚会报“没有活动事务”，忽略即可。
+			t.done = true
+			_ = stx.Rollback()
+			return fnErr
+		}
+		t.done = true
+		if err := stx.Commit(); err != nil {
+			return fmt.Errorf("db: 提交失败：%w", err)
+		}
+		for _, f := range t.after {
+			f()
+		}
+		return nil
+	}
+	return t, end, nil
+}
+
+// runBefore 按登记顺序执行提交前钩子（钩子可以再登记钩子），最后执行全局写钩子。
+func (t *Tx) runBefore(ctx context.Context, global *WriteHook) error {
 	for i := 0; i < len(t.before); i++ {
 		if err := t.before[i](ctx, t); err != nil {
 			return err
 		}
 	}
+	if global != nil && *global != nil {
+		if err := (*global)(ctx, t); err != nil {
+			return err
+		}
+	}
 	return nil
 }
+
+// WriteHook 在每个写事务提交前、所有 BeforeCommit 钩子之后执行，包括 *DB 上的单条写语句。
+// store 用它把触发器记下的变更（plugin_changes）在同一事务里变成插件事件。
+type WriteHook func(context.Context, *Tx) error
+
+// SetWriteHook 设置全局写钩子；在开始写入之前设置。
+func (d *DB) SetWriteHook(h WriteHook) { d.writeHook.Store(&h) }
 
 // ReadTx 在只读池上执行 fn，fn 内的查询看到同一个快照。只读事务里登记的钩子不会执行。
 func (d *DB) ReadTx(ctx context.Context, fn func(*Tx) error) error {
