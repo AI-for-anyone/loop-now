@@ -573,7 +573,7 @@ type readLink struct{ run, turn *uuid.UUID }
 
 func markReadTx(ctx context.Context, q queueQuerier, p Party, column string, id uuid.UUID) ([]ReadReceipt, []readLink, error) {
 	rows, err := q.Query(ctx, `UPDATE inbox_messages AS m SET read_at = now()
-		WHERE `+column+` = $2 AND `+unreadCond("m")+` AND `+p.cond("m", "to", 1)+` RETURNING m.id, m.thread_id, m.read_at, m.reminder_run_id, m.reminder_turn_id`, p.ID, id)
+		WHERE `+column+` = $2 AND `+unreadCond("m")+` AND `+p.cond("m", "to", 1)+` RETURNING id, thread_id, read_at, reminder_run_id, reminder_turn_id`, p.ID, id)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -241,7 +241,7 @@ func TestTaskNodeStopMarksOnlyThisTurn(t *testing.T) {
 		t.Fatalf("已在停止中：%s %v", raw, e)
 	}
 	var stopped bool
-	if e := f.s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM lifecycle_events WHERE task_turn_id=$1 AND type='run.abort_requested' AND data->>'stop'='true')`, f.active.ID).Scan(&stopped); e != nil || !stopped {
+	if e := f.s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM lifecycle_events WHERE task_turn_id=$1 AND type='run.abort_requested' AND data->'stop'='true')`, f.active.ID).Scan(&stopped); e != nil || !stopped {
 		t.Fatalf("应记下停止：%v %v", stopped, e)
 	}
 	if _, e := f.s.UpdateTaskTurn(ctx, f.task, f.active.ID, "interrupted", "", nil, nil); e != nil {
