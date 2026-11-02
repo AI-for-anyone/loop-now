@@ -649,3 +649,53 @@ func TestWriteHookRunsForEveryWrite(t *testing.T) {
 	// 写连接已归还：可以继续写。
 	mustExec(t, d, `INSERT INTO t VALUES (7)`)
 }
+
+// SQL 的 now() 在写事务里是事务开始时刻（同一事务各语句相同），clock_timestamp() 是调用时刻；都走注入的时钟。
+func TestSQLNowAndClockTimestamp(t *testing.T) {
+	var mu sync.Mutex
+	clock := time.Date(2026, 11, 2, 8, 0, 0, 123456000, time.UTC)
+	tick := func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		clock = clock.Add(time.Second)
+		return clock
+	}
+	d, err := Open(context.Background(), Options{Dir: t.TempDir(), Now: tick})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	ctx := context.Background()
+	mustExec(t, d, `CREATE TABLE t (a INTEGER NOT NULL, b INTEGER NOT NULL) STRICT`)
+	var txNow time.Time
+	if err := d.InTx(ctx, func(tx *Tx) error {
+		txNow = tx.Now()
+		for range 2 {
+			if _, err := tx.Exec(ctx, `INSERT INTO t VALUES (now(), clock_timestamp())`); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := d.Query(ctx, `SELECT a, b FROM t ORDER BY rowid`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var as, bs []time.Time
+	var a, b time.Time
+	if _, err := ForEachRow(rows, []any{&a, &b}, func() error { as, bs = append(as, a), append(bs, b); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if !as[0].Equal(txNow) || !as[1].Equal(txNow) {
+		t.Errorf("now() 应为事务开始时刻 %v，得到 %v", txNow, as)
+	}
+	if !bs[0].After(txNow) || !bs[1].After(bs[0]) {
+		t.Errorf("clock_timestamp() 应逐次取时钟：%v（事务开始 %v）", bs, txNow)
+	}
+	var readNow time.Time
+	if err := d.QueryRow(ctx, `SELECT now()`).Scan(&readNow); err != nil || !readNow.After(bs[1]) {
+		t.Errorf("只读连接上的 now() 取调用时刻：%v %v", readNow, err)
+	}
+}
