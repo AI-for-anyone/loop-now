@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/url"
@@ -104,7 +105,7 @@ func saveTask(ctx context.Context, tx *db.Tx, r *taskmodel.Record) error {
 		return err
 	}
 	var project uuid.UUID
-	err = tx.QueryRow(ctx, `UPDATE task_records SET status=$2,document=$3,version=$4,updated_at=$5,ended_at=$6 WHERE id=$1 RETURNING project_id`, r.View.Task.ID, r.View.Task.Status, b, r.View.Task.Version, r.View.Task.UpdatedAt, r.View.Task.EndedAt).Scan(&project)
+	err = tx.QueryRow(ctx, `UPDATE task_records SET status=$2,document=$3,version=$4,updated_at=$5,ended_at=$6 WHERE id=$1 RETURNING project_id`, r.View.Task.ID, r.View.Task.Status, json.RawMessage(b), r.View.Task.Version, r.View.Task.UpdatedAt, r.View.Task.EndedAt).Scan(&project)
 	if err != nil || r.View.Task.EndedAt == nil {
 		return err
 	}
@@ -328,7 +329,7 @@ func (s *Store) CreateTask(ctx context.Context, projectID, managerID uuid.UUID, 
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO task_records(id,project_id,status,document,version,created_at,updated_at) VALUES($1,$2,$3,$4,1,$5,$5)`, r.View.Task.ID, projectID, r.View.Task.Status, encoded, r.View.Task.CreatedAt)
+		_, err = tx.Exec(ctx, `INSERT INTO task_records(id,project_id,status,document,version,created_at,updated_at) VALUES($1,$2,$3,$4,1,$5,$5)`, r.View.Task.ID, projectID, r.View.Task.Status, json.RawMessage(encoded), r.View.Task.CreatedAt)
 		if err != nil {
 			return err
 		}
@@ -337,8 +338,8 @@ func (s *Store) CreateTask(ctx context.Context, projectID, managerID uuid.UUID, 
 			if err != nil {
 				return err
 			}
-			// SQLITE-PORT(G5): sha256/encode
-			_, err = tx.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,sources,fork_source) VALUES($1,$2,$3,$4,$5,encode(sha256($5),'hex'),$6,$7)`, inst.ID, r.View.Task.ID, inst.AgentID, inst.AgentName, inst.Snapshot, sources, inst.ForkSource)
+			sum := sha256.Sum256(inst.Snapshot)
+			_, err = tx.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,sources,fork_source) VALUES($1,$2,$3,$4,$5,$8,$6,$7)`, inst.ID, r.View.Task.ID, inst.AgentID, inst.AgentName, inst.Snapshot, json.RawMessage(sources), inst.ForkSource, hex.EncodeToString(sum[:]))
 			if err != nil {
 				return err
 			}
