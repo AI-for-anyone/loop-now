@@ -174,10 +174,10 @@ func partyJoin(p, side string) (cols, joins string) {
 func inboxSelect(previewChars int) string {
 	fc, fj := partyJoin("f", "from")
 	tc, tj := partyJoin("t", "to")
+	// SQLITE-PORT(G3): jsonb
+	// SQLITE-PORT(G3): jsonb
 	return `SELECT m.id, m.thread_id, m.in_reply_to, m.text, left(m.text, ` + strconv.Itoa(previewChars) + `), coalesce(m.when_busy, ''),
-		// SQLITE-PORT(G3): jsonb
 		m.created_at, m.read_at, ` + fc + `, ` + tc + `,
- // SQLITE-PORT(G3): jsonb
  (SELECT jsonb_build_object('options',q.options,'expiresAt',q.expires_at,'state',q.state,'answer',CASE WHEN q.answer_message_id IS NULL THEN NULL ELSE jsonb_build_object('messageId',q.answer_message_id,'optionId',q.answer_option_id,'optionLabel',(SELECT opt->>'label' FROM jsonb_array_elements(q.options)opt WHERE opt->>'id'=q.answer_option_id),'textPreview',left(a.text,` + strconv.Itoa(previewChars) + `),'by',q.answered_by,'at',q.answered_at) END) FROM inbox_questions q LEFT JOIN inbox_messages a ON a.id=q.answer_message_id WHERE q.message_id=m.id),
  CASE WHEN m.answers_message_id IS NULL THEN NULL ELSE jsonb_build_object('messageId',m.answers_message_id,'optionId',m.answer_option_id,'optionLabel',(SELECT opt->>'label' FROM inbox_questions q,jsonb_array_elements(q.options)opt WHERE q.message_id=m.answers_message_id AND opt->>'id'=m.answer_option_id))END,m.notice,m.images,
  m.cancelled_at,m.reminder_run_id,m.reminder_turn_id,` + inboxNodeSQL("m") + `
@@ -645,8 +645,8 @@ func (s *Store) ListInboxThreads(ctx context.Context, p Party, cursor *InboxCurs
 	if cursor != nil {
 		cAt, cID = &cursor.At, &cursor.ID
 	}
+	// SQLITE-PORT(G3): LATERAL
 	rows, err := s.Pool.Query(ctx, `SELECT root.id, last.id,
-			// SQLITE-PORT(G3): LATERAL
 			(SELECT count(*) FROM inbox_messages u WHERE u.thread_id = root.id AND `+unreadCond("u")+` AND `+p.cond("u", "to", 1)+`)
 		FROM inbox_messages root
 		CROSS JOIN LATERAL (SELECT l.id, l.created_at FROM inbox_messages l WHERE l.thread_id = root.id
