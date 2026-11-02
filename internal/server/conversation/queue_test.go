@@ -80,16 +80,12 @@ func (e *env) queueViews() (get, snap, event []string) {
 		e.t.Fatal(err)
 	}
 	snap = queueNames(s.QueueItems)
-	msgs, err := e.rdb.XRevRangeN(ctx, e.co.Keys().Events(e.agent.String()), "+", "-", 500).Result()
-	if err != nil {
-		e.t.Fatal(err)
-	}
-	for _, m := range msgs {
-		if m.Values["type"] != apitypes.EventQueueUpdated {
+	for _, m := range e.newestEvents() {
+		if m.Type != apitypes.EventQueueUpdated {
 			continue
 		}
 		var ev apitypes.SseQueueUpdated
-		if err := json.Unmarshal([]byte(m.Values["data"].(string)), &ev); err != nil {
+		if err := json.Unmarshal(m.Data, &ev); err != nil {
 			e.t.Fatal(err)
 		}
 		return get, snap, queueNames(ev.Items)
@@ -403,7 +399,7 @@ func TestStopOnlyStopsThisReplyAndQueueContinues(t *testing.T) {
 		t.Fatalf("已结束的回复应 run_not_active：%v", err)
 	}
 	var stop string
-	if err := e.st.Pool.QueryRow(context.Background(), `SELECT data->>'stop' FROM lifecycle_events WHERE run_id=$1 AND type=$2`, cur.Run.ID, store.EventRunAbortRequested).Scan(&stop); err != nil || stop != "true" {
+	if err := e.st.Pool.QueryRow(context.Background(), `SELECT data->'stop' FROM lifecycle_events WHERE run_id=$1 AND type=$2`, cur.Run.ID, store.EventRunAbortRequested).Scan(&stop); err != nil || stop != "true" {
 		t.Fatalf("abort_requested 应带 stop：%q %v", stop, err)
 	}
 }

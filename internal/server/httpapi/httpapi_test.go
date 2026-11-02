@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/apitypes"
@@ -37,7 +36,6 @@ import (
 	"loop-now/internal/server/plugins"
 	"loop-now/internal/server/runrecord"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/redistest"
 	"loop-now/internal/testutil/sqlitetest"
 )
 
@@ -99,7 +97,6 @@ type env struct {
 	st     *store.Store
 	conv   *conversation.Service
 	dc     store.DefaultContext
-	rdb    *redis.Client
 
 	ext          *httptest.Server // 对外端口（按需启动）
 	extV, agentV *contracttest.Validator
@@ -112,8 +109,7 @@ func newEnv(t *testing.T) *env {
 	t.Helper()
 	ctx := context.Background()
 	st := sqlitetest.NewStore(t)
-	rdb, prefix := redistest.New(t)
-	co := coord.New(rdb, coord.Options{Prefix: prefix, LockTTL: 5 * time.Second, StreamMaxLen: 1000, RunTextTTL: time.Hour, OverviewMaxLen: 1000})
+	co := coord.New(coord.Options{Prefix: "test:", LockTTL: 5 * time.Second, StreamMaxLen: 1000, RunTextTTL: time.Hour, OverviewMaxLen: 1000})
 	dc, err := st.EnsureDefaults(ctx, "默认组织", "默认项目")
 	if err != nil {
 		t.Fatal(err)
@@ -164,7 +160,7 @@ func newEnv(t *testing.T) *env {
 	t.Cleanup(srv.Close)
 	api.Plugins.APIURL = srv.URL + "/api/v1"
 	v := contracttest.New(t, srv.URL)
-	return &env{t: t, srv: srv, api: api, v: v, client: v.Client(), co: co, st: st, conv: conv, dc: dc, rdb: rdb}
+	return &env{t: t, srv: srv, api: api, v: v, client: v.Client(), co: co, st: st, conv: conv, dc: dc}
 }
 
 // do 发送请求（经契约校验），返回状态码与响应体。
@@ -605,3 +601,14 @@ func TestSSE(t *testing.T) {
 }
 
 var _ = store.Agent{}
+
+// trimStream 追加比事件流保留条数（env 里是 1000）更多的填充事件，使之前的事件全部被裁掉：
+// 相当于原来 Redis 中的事件丢失，或服务端重启后事件流从空开始。
+func trimStream(t *testing.T, add func() (string, error)) {
+	t.Helper()
+	for range 1001 {
+		if _, err := add(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

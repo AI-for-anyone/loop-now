@@ -6,8 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/coord"
@@ -16,7 +14,8 @@ import (
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/tasks"
-	"loop-now/internal/testutil/redistest"
+
+	"github.com/google/uuid"
 )
 
 func larkPublishedFixture(t *testing.T) (*store.Store, store.TaskLarkFenceReservation, taskmodel.NodeRun, uuid.UUID) {
@@ -46,19 +45,7 @@ func TestTaskLarkRecoveryQuestionWaitUsesExplicitActualRun(t *testing.T) {
 	if err = s.MarkTaskRunning(ctx, turn, 1); err != nil {
 		t.Fatal(err)
 	}
-	opts, err := redis.ParseURL(redistest.URL(t))
-	if err != nil {
-		t.Fatal("TEST Redis URL invalid")
-	}
-	rdb := redis.NewClient(opts)
-	prefix := "loopnow:test:lark-recovery-question:" + uuid.NewString() + ":"
-	t.Cleanup(func() {
-		if err := redistest.DeletePrefix(ctx, rdb, prefix); err != nil {
-			t.Error(err)
-		}
-		rdb.Close()
-	})
-	inboxSvc := &inbox.Service{St: s, Tasks: svc, Co: coord.New(rdb, coord.Options{Prefix: prefix, StreamMaxLen: 100}), Log: quietLogger(), O: inbox.Options{MaxMessage: 65536, PreviewChars: 160}}
+	inboxSvc := &inbox.Service{St: s, Tasks: svc, Co: coord.New(coord.Options{StreamMaxLen: 100}), Log: quietLogger(), O: inbox.Options{MaxMessage: 65536, PreviewChars: 160}}
 	for _, id := range []uuid.UUID{uuid.Nil, uuid.New()} {
 		if _, err = inboxSvc.Send(ctx, p, auth.ConsoleAddress, "must not create stale wait", "queue", inbox.QuestionInput{NodeRunID: next.ID, RunID: id, Options: []string{"continue"}}); !apperr.Is(err, "task_conflict") {
 			t.Fatal("wait guessed active turn", err)

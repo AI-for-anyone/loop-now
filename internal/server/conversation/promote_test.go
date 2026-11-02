@@ -106,16 +106,12 @@ func (e *env) redisQueues(n names) ([]string, []string) {
 // lastQueueEvent returns the newest queue.updated payload on the agent stream.
 func (e *env) lastQueueEvent(n names) []string {
 	e.t.Helper()
-	msgs, err := e.rdb.XRevRangeN(context.Background(), e.co.Keys().Events(e.agent.String()), "+", "-", 200).Result()
-	if err != nil {
-		e.t.Fatal(err)
-	}
-	for _, m := range msgs {
-		if m.Values["type"] != apitypes.EventQueueUpdated {
+	for _, m := range e.newestEvents() {
+		if m.Type != apitypes.EventQueueUpdated {
 			continue
 		}
 		var ev apitypes.SseQueueUpdated
-		if err := json.Unmarshal([]byte(m.Values["data"].(string)), &ev); err != nil {
+		if err := json.Unmarshal(m.Data, &ev); err != nil {
 			e.t.Fatal(err)
 		}
 		return n.of(ev.QueuedRuns)

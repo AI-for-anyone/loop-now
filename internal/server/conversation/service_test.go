@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
@@ -21,7 +20,6 @@ import (
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/redistest"
 	"loop-now/internal/testutil/sqlitetest"
 )
 
@@ -127,22 +125,19 @@ func (f *fakeExec) messages() []string {
 }
 
 type env struct {
-	t      *testing.T
-	st     *store.Store
-	co     *coord.Coord
-	prefix string
-	rdb    *redis.Client
-	ex     *fakeExec
-	svc    *conversation.Service
-	agent  uuid.UUID
-	inst   uuid.UUID
+	t     *testing.T
+	st    *store.Store
+	co    *coord.Coord
+	ex    *fakeExec
+	svc   *conversation.Service
+	agent uuid.UUID
+	inst  uuid.UUID
 }
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	st := sqlitetest.NewStore(t)
-	rdb, prefix := redistest.New(t)
-	co := coord.New(rdb, coord.Options{Prefix: prefix, LockTTL: 5 * time.Second, StreamMaxLen: 1000, RunTextTTL: time.Hour})
+	co := coord.New(coord.Options{Prefix: "test:", LockTTL: 5 * time.Second, StreamMaxLen: 1000, RunTextTTL: time.Hour})
 	ctx := context.Background()
 	dc, err := st.EnsureDefaults(ctx, "o", "p")
 	if err != nil {
@@ -152,7 +147,7 @@ func newEnv(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &env{t: t, st: st, co: co, prefix: prefix, rdb: rdb, ex: newFakeExec(), agent: a.ID, inst: uuid.Must(uuid.NewV7())}
+	e := &env{t: t, st: st, co: co, ex: newFakeExec(), agent: a.ID, inst: uuid.Must(uuid.NewV7())}
 	e.svc = e.newService()
 	if err := e.svc.Start(ctx); err != nil {
 		t.Fatal(err)
@@ -371,7 +366,13 @@ func TestRedisDataLoss(t *testing.T) {
 	e.waitStarted("block 当前")
 	e.mustSend("排队1", "queue")
 	e.mustSend("排队2", "queue")
-	if err := redistest.DeletePrefix(context.Background(), e.rdb, e.prefix); err != nil {
+	// 协调数据丢失（锁与两个队列都没了）。
+	ctx := context.Background()
+	owner, _ := e.co.LockOwner(ctx, e.agent.String())
+	if _, err := e.co.Release(ctx, e.agent.String(), owner); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.co.RebuildQueues(ctx, e.agent.String(), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	// 数据丢失后仍判定为忙，不会开始第二次执行。
@@ -511,4 +512,15 @@ func TestStatusAndHistoryPaging(t *testing.T) {
 	}
 	e.ex.signal(e.agent, "release")
 	e.waitIdle()
+}
+
+// newestEvents 返回 Agent 事件流里保留的全部事件，最新的在前。
+func (e *env) newestEvents() []coord.Event {
+	e.t.Helper()
+	evs, err := e.co.ReadEvents(context.Background(), e.agent.String(), "0-0", 0, 0)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	slices.Reverse(evs)
+	return evs
 }

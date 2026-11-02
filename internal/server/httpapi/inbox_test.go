@@ -570,10 +570,8 @@ func TestInboxEvents(t *testing.T) {
 		t.Fatalf("续传应从断开处继续：%+v", first)
 	}
 	stop2()
-	// 续传位置超出范围（Redis 中的事件被清掉）：先发快照。
-	if err := e.rdb.Del(context.Background(), e.co.Keys().Inbox()).Err(); err != nil {
-		t.Fatal(err)
-	}
+	// 续传位置超出范围（事件已被裁掉，或服务端重启过）：先发快照。
+	trimStream(t, func() (string, error) { return e.co.AppendInbox(context.Background(), "test.filler", []byte(`{}`)) })
 	evs3, stop3 := readSSEPath(t, e, "/inbox/events", first.id)
 	defer stop3()
 	if s := next(t, evs3); s.event != "snapshot" || !strings.Contains(s.data, `"unreadTotal":1`) {
@@ -681,7 +679,7 @@ func TestExternalAccess(t *testing.T) {
 
 	// 审计中没有令牌与请求体。
 	// SQLITE-PORT(G11): ::cast
-	rows, err := e.st.Pool.Query(context.Background(), `SELECT row_to_json(a)::text FROM audit_log a`)
+	rows, err := e.st.Pool.Query(context.Background(), `SELECT concat_ws('|', id, at, request_id, actor_kind, actor_id, actor_address, method, operation, target, status, on_behalf_of) FROM audit_log`)
 	if err != nil {
 		t.Fatal(err)
 	}
