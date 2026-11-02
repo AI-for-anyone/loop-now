@@ -120,10 +120,7 @@ func TestPromptLegacyAgentAndCAS(t *testing.T) {
 	if successes != 1 || conflicts != 1 {
 		t.Fatal("Agent CAS lost concurrent editor", successes, conflicts)
 	}
-	if _, err = st.Pool.Exec(ctx, `CREATE FUNCTION reject_project_prompt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic project fault'; END $$`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = st.Pool.Exec(ctx, `CREATE TRIGGER reject_project_prompt BEFORE UPDATE ON projects FOR EACH ROW EXECUTE FUNCTION reject_project_prompt()`); err != nil {
+	if _, err = st.Pool.Exec(ctx, `CREATE TRIGGER reject_project_prompt BEFORE UPDATE ON projects BEGIN SELECT RAISE(ABORT, 'synthetic project fault'); END`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = st.PutProjectPrompt(ctx, defaults.Project.ID, "failed", p.PromptVersion); err == nil {
@@ -134,10 +131,8 @@ func TestPromptLegacyAgentAndCAS(t *testing.T) {
 		t.Fatal("project failure partially committed", err)
 	}
 	// A DB failure after computing a successful CAS cannot commit text or either version.
-	for _, q := range []string{`CREATE FUNCTION reject_prompt_update() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic prompt write failure'; END $$`, `CREATE TRIGGER reject_prompt_update BEFORE UPDATE ON agents FOR EACH ROW EXECUTE FUNCTION reject_prompt_update()`} {
-		if _, err = st.Pool.Exec(ctx, q); err != nil {
-			t.Fatal(err)
-		}
+	if _, err = st.Pool.Exec(ctx, `CREATE TRIGGER reject_prompt_update BEFORE UPDATE ON agents BEGIN SELECT RAISE(ABORT, 'synthetic prompt write failure'); END`); err != nil {
+		t.Fatal(err)
 	}
 	text = "failed"
 	if _, err = st.UpdateAgent(ctx, id, store.AgentPatch{Prompt: &text, ExpectedPromptVersion: promptExpected(2)}); err == nil {
