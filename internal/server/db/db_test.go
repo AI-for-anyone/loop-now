@@ -699,3 +699,19 @@ func TestSQLNowAndClockTimestamp(t *testing.T) {
 		t.Errorf("只读连接上的 now() 取调用时刻：%v %v", readNow, err)
 	}
 }
+
+func TestISOTime(t *testing.T) {
+	d := openTest(t)
+	at := time.Date(2026, 11, 2, 8, 0, 0, 123456000, time.UTC)
+	var raw string
+	if err := d.QueryRow(context.Background(), `SELECT json_object('at', iso_time($1), 'none', iso_time(NULL))`, at).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	var v struct {
+		At   time.Time  `json:"at"`
+		None *time.Time `json:"none"`
+	}
+	if err := json.Unmarshal([]byte(raw), &v); err != nil || !v.At.Equal(at) || v.None != nil {
+		t.Fatalf("iso_time 应保留微秒并可被 Go 解析：%s %+v %v", raw, v, err)
+	}
+}

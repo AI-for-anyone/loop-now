@@ -184,6 +184,19 @@ func connector(data, events, txlock string, now, clock func() int64, hook func(s
 			panic(err) // 只会是名字或参数个数写错
 		}
 	}
+	// iso_time(微秒) 把时间列转成 RFC 3339（UTC，保留微秒），供 SQL 里拼出的 JSON 使用：Go 解 JSON 时 time.Time
+	// 只认这种字符串。NULL 进 NULL 出。
+	if err := drv.RegisterFunction("iso_time", &sqlite.FunctionImpl{NArgs: 1, Deterministic: true, Scalar: func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
+		switch v := args[0].(type) {
+		case nil:
+			return nil, nil
+		case int64:
+			return time.UnixMicro(v).UTC().Format(time.RFC3339Nano), nil
+		}
+		return nil, fmt.Errorf("iso_time 需要整数微秒，得到 %T", args[0])
+	}}); err != nil {
+		panic(err)
+	}
 	drv.RegisterConnectionHook(func(c sqlite.ExecQuerierContext, _ string) error {
 		if err := attachEvents(c, events); err != nil {
 			return err
