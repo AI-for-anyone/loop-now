@@ -17,6 +17,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"text/tabwriter"
 	"time"
@@ -31,13 +32,14 @@ import (
 	"loop-now/internal/server/gcloudcli"
 	"loop-now/internal/server/identity"
 	"loop-now/internal/server/maintenance"
+	"loop-now/internal/server/pgimport"
 	"loop-now/internal/server/store"
 
 	"path/filepath"
 )
 
 // Commands 是全部管理子命令的名称；第一个参数是其中之一时，loop-server 执行子命令而不是启动服务。
-var Commands = []string{"version", "identity", "token", "backup"}
+var Commands = []string{"version", "identity", "token", "backup", "import-postgres"}
 
 // IsCommand 报告参数是否为管理子命令。
 func IsCommand(arg string) bool {
@@ -68,6 +70,8 @@ const usage = `用法：
   loop-server token list <身份名称>
   loop-server token revoke <令牌 ID>
   loop-server backup <目录>        在目录下以当前时刻命名的子目录里写一份完整备份（服务运行中也可以）
+  loop-server import-postgres      把 LOOP_NOW_DATABASE_URL 指向的 PostgreSQL 库一次性导入到数据目录的新库
+                                   （源库须已由最后一个 PostgreSQL 版本完成迁移，服务须已停下）
 `
 
 // Options 是运行子命令所需的环境。库在 LOOP_NOW_DATA_DIR（默认 HOME 下的 .loop_now）的 db 子目录。
@@ -93,15 +97,14 @@ func Run(ctx context.Context, args []string, o Options) int {
 		fmt.Fprintln(o.Stdout, buildinfo.Version())
 		return exitOK
 	}
+	if args[0] == "import-postgres" {
+		return importPostgres(ctx, args, o)
+	}
 	if len(args) < 2 {
 		fmt.Fprint(o.Stderr, usage)
 		return exitUsage
 	}
-	dataDir := o.Getenv(config.EnvDataDir)
-	if dataDir == "" {
-		dataDir = config.DefaultDataDir(o.Getenv)
-	}
-	dbDir := config.DBDir(dataDir)
+	dbDir := config.DBDir(dataDir(o))
 	// 只打开服务已经建好的库：数据目录写错时不能悄悄建一个空库。
 	if _, err := os.Stat(filepath.Join(dbDir, db.DataFile)); err != nil {
 		fmt.Fprintf(o.Stderr, "数据目录 %s 里没有库（%s 设置对了吗？）\n", dbDir, config.EnvDataDir)
@@ -169,6 +172,40 @@ func Run(ctx context.Context, args []string, o Options) int {
 }
 
 var errUsage = errors.New("用法错误")
+
+func dataDir(o Options) string {
+	if d := o.Getenv(config.EnvDataDir); d != "" {
+		return d
+	}
+	return config.DefaultDataDir(o.Getenv)
+}
+
+// importPostgres 执行一次性导入：源库来自 pgimport.EnvSourceURL，目标是数据目录里还不存在的新库。
+// 只打印表名与行数，不打印连接串与任何行内容。
+func importPostgres(ctx context.Context, args []string, o Options) int {
+	if len(args) != 1 {
+		fmt.Fprint(o.Stderr, usage)
+		return exitUsage
+	}
+	src := o.Getenv(pgimport.EnvSourceURL)
+	if src == "" {
+		fmt.Fprintf(o.Stderr, "设置 %s 为原来的 PostgreSQL 库的连接串再导入\n", pgimport.EnvSourceURL)
+		return exitUsage
+	}
+	dbDir := config.DBDir(dataDir(o))
+	report, err := pgimport.Import(ctx, pgimport.Options{SourceURL: src, DBDir: dbDir, Log: slog.New(slog.NewTextHandler(o.Stderr, nil))})
+	if err != nil {
+		fmt.Fprintln(o.Stderr, "导入失败（新库没有留下）：", err)
+		return exitFail
+	}
+	var rows int64
+	for _, t := range report.Tables {
+		fmt.Fprintf(o.Stdout, "%s\t%d\n", t.Name, t.Rows)
+		rows += t.Rows
+	}
+	fmt.Fprintf(o.Stderr, "导入完成：源库迁移版本 %d，%d 张表，共 %d 行，新库在 %s\n", report.Version, len(report.Tables), rows, dbDir)
+	return exitOK
+}
 
 type cmd struct {
 	ctx context.Context

@@ -3,6 +3,7 @@ package admincli_test
 import (
 	"bytes"
 	"context"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -12,16 +13,21 @@ import (
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/config"
 	"loop-now/internal/server/db"
+	"loop-now/internal/server/pgimport"
+	"loop-now/internal/testutil/pgtest"
 	"loop-now/internal/testutil/sqlitetest"
 
 	"os"
 
 	"path/filepath"
+
+	"github.com/google/uuid"
 )
 
 type cli struct {
 	t       *testing.T
 	dataDir string
+	env     map[string]string
 }
 
 func (c cli) run(args ...string) (code int, stdout, stderr string) {
@@ -32,7 +38,7 @@ func (c cli) run(args ...string) (code int, stdout, stderr string) {
 			if k == config.EnvDataDir {
 				return c.dataDir
 			}
-			return ""
+			return c.env[k]
 		},
 		Stdout: &out, Stderr: &errb,
 	})
@@ -174,5 +180,51 @@ func TestAdminBackup(t *testing.T) {
 	var projects int
 	if err := restored.QueryRow(context.Background(), `SELECT count(*) FROM projects`).Scan(&projects); err != nil || projects != 1 {
 		t.Fatalf("备份内容不对：%d %v", projects, err)
+	}
+}
+
+// import-postgres 只从 LOOP_NOW_DATABASE_URL 读源库：没设时报用法错误；连不上时失败，不留下库，也不打印连接参数。
+func TestAdminImportPostgresRefusals(t *testing.T) {
+	dataDir := t.TempDir()
+	c := cli{t: t, dataDir: dataDir}
+	if code, _, errs := c.run("import-postgres"); code != 2 || !strings.Contains(errs, pgimport.EnvSourceURL) {
+		t.Fatalf("没有源库时应报用法错误：%d %s", code, errs)
+	}
+	c.env = map[string]string{pgimport.EnvSourceURL: "postgres://fixture-user:fixture-secret@127.0.0.1:1/fixture-db?connect_timeout=2"}
+	if code, _, _ := c.run("import-postgres", "extra"); code != 2 {
+		t.Fatalf("多余参数应报用法错误：%d", code)
+	}
+	code, out, errs := c.run("import-postgres")
+	if code != 1 {
+		t.Fatalf("连不上源库应失败：%d", code)
+	}
+	for _, s := range []string{"fixture-user", "fixture-secret", "fixture-db"} {
+		if strings.Contains(out+errs, s) {
+			t.Fatalf("输出里带了连接参数：%s", errs)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(config.DBDir(dataDir), db.DataFile)); !os.IsNotExist(err) {
+		t.Fatal("失败的导入留下了库", err)
+	}
+}
+
+// 成功导入后每张表一行“表名<TAB>行数”，新库能被其他子命令打开。
+func TestAdminImportPostgres(t *testing.T) {
+	pool := pgtest.NewMigratedPool(t)
+	u := pgtest.URL(t)
+	sep := "?"
+	if strings.Contains(u, "?") {
+		sep = "&"
+	}
+	if _, err := pool.Exec(context.Background(), `INSERT INTO external_identities(id,name) VALUES($1,'imported-ci')`, uuid.New()); err != nil {
+		t.Fatal(err)
+	}
+	c := cli{t: t, dataDir: t.TempDir(), env: map[string]string{pgimport.EnvSourceURL: u + sep + "search_path=" + url.QueryEscape(pool.Config().ConnConfig.RuntimeParams["search_path"])}}
+	out, _ := c.ok("import-postgres")
+	if !strings.Contains(out, "external_identities\t1\n") {
+		t.Fatalf("输出里没有导入的行数：%s", out)
+	}
+	if list, _ := c.ok("identity", "list"); !strings.Contains(list, "imported-ci") {
+		t.Fatalf("导入的身份不在新库里：%s", list)
 	}
 }
