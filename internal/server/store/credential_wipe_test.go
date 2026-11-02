@@ -205,6 +205,7 @@ func scalar(t *testing.T, s *store.Store, q string, args ...any) int {
 // credential copy: version secrets, and task snapshots.
 func secretBytes(t *testing.T, s *store.Store, marker string) int {
 	t.Helper()
+	// SQLITE-PORT(G4): convert_from/to
 	return scalar(t, s, `SELECT (SELECT count(*) FROM project_cli_versions WHERE position(convert_to($1,'UTF8') IN secret)>0)
 		+(SELECT count(*) FROM model_auth_versions WHERE position(convert_to($1,'UTF8') IN secret)>0)
 		+(SELECT count(*) FROM task_instances WHERE position(convert_to($1,'UTF8') IN snapshot)>0)`, marker)
@@ -217,7 +218,7 @@ func pending(t *testing.T, s *store.Store, account uuid.UUID) bool {
 
 func versionRows(t *testing.T, s *store.Store, ids ...uuid.UUID) int {
 	t.Helper()
-	return scalar(t, s, `SELECT (SELECT count(*) FROM project_cli_versions WHERE id=ANY($1))+(SELECT count(*) FROM model_auth_versions WHERE id=ANY($1))`, ids)
+	return scalar(t, s, `SELECT (SELECT count(*) FROM project_cli_versions WHERE id IN (SELECT value FROM json_each($1)))+(SELECT count(*) FROM model_auth_versions WHERE id IN (SELECT value FROM json_each($1)))`, ids)
 }
 
 // Deleting single accounts: versions no unfinished task uses are deleted in the
@@ -345,6 +346,7 @@ func TestDeleteAccountWipesNowAndDefersVersionsOfUnfinishedTasks(t *testing.T) {
 
 	// The second task ends without a settle (as a crash would leave it); the
 	// startup settle finishes the wipe.
+	// SQLITE-PORT(G4): jsonb
 	mustExec(t, restarted, `UPDATE task_records SET status='cancelled',ended_at=clock_timestamp(),document=jsonb_set(document,'{view,task,status}','"cancelled"') WHERE id=$1`, second)
 	if err = restarted.SettleCredentialWipes(ctx); err != nil {
 		t.Fatal(err)

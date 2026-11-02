@@ -85,7 +85,7 @@ func (s *Store) ClaimTaskInboxTurn(ctx context.Context, taskID, runtime uuid.UUI
 		var e error
 		// 提醒轮次领取时已没有待处理消息就作废，接着领取下一轮。
 		for {
-			t, e = scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE runtime_id=$1 AND status='queued' AND (origin='inbox_reminder' OR (origin='console_node' AND execution_mode='task_conversation') OR (origin='sleep_wake' AND EXISTS(SELECT 1 FROM agent_sleeps z WHERE z.id=task_turns.wake_sleep_id AND z.wake_run_id=task_turns.id AND z.mode='task_conversation' AND z.state='woken'))) ORDER BY priority,queue_seq LIMIT 1 FOR UPDATE`, runtime))
+			t, e = scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE runtime_id=$1 AND status='queued' AND (origin='inbox_reminder' OR (origin='console_node' AND execution_mode='task_conversation') OR (origin='sleep_wake' AND EXISTS(SELECT 1 FROM agent_sleeps z WHERE z.id=task_turns.wake_sleep_id AND z.wake_run_id=task_turns.id AND z.mode='task_conversation' AND z.state='woken'))) ORDER BY priority,queue_seq LIMIT 1`, runtime))
 			if e == db.ErrNoRows {
 				return nil, nil
 			}

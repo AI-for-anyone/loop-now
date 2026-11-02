@@ -23,13 +23,13 @@ func purgeAgentCredentials(ctx context.Context, tx *db.Tx, ids []uuid.UUID) erro
 		return nil
 	}
 	for _, query := range []string{
-		`DELETE FROM agent_db_connection_sets WHERE agent_id=ANY($1)`,
-		`DELETE FROM agent_credential_selections WHERE agent_id=ANY($1)`,
-		`DELETE FROM agent_model_legacy_cleared WHERE agent_id=ANY($1)`,
-		`DELETE FROM agent_credentials WHERE agent_id=ANY($1)`,
-		`UPDATE model_auth_operations SET status='cancelled',authorization_url=NULL,error_code=NULL,completed_at=now() WHERE agent_id=ANY($1) AND status IN ('pending','awaiting_authorization')`,
-		`DELETE FROM agent_model_auth WHERE agent_id=ANY($1)`,
-		`DELETE FROM model_auth_versions WHERE agent_id=ANY($1)`,
+		`DELETE FROM agent_db_connection_sets WHERE agent_id IN (SELECT value FROM json_each($1))`,
+		`DELETE FROM agent_credential_selections WHERE agent_id IN (SELECT value FROM json_each($1))`,
+		`DELETE FROM agent_model_legacy_cleared WHERE agent_id IN (SELECT value FROM json_each($1))`,
+		`DELETE FROM agent_credentials WHERE agent_id IN (SELECT value FROM json_each($1))`,
+		`UPDATE model_auth_operations SET status='cancelled',authorization_url=NULL,error_code=NULL,completed_at=now() WHERE agent_id IN (SELECT value FROM json_each($1)) AND status IN ('pending','awaiting_authorization')`,
+		`DELETE FROM agent_model_auth WHERE agent_id IN (SELECT value FROM json_each($1))`,
+		`DELETE FROM model_auth_versions WHERE agent_id IN (SELECT value FROM json_each($1))`,
 	} {
 		if _, err := tx.Exec(ctx, query, ids); err != nil {
 			return err
@@ -43,7 +43,7 @@ func purgeAgentCredentials(ctx context.Context, tx *db.Tx, ids []uuid.UUID) erro
 // No task of the project is unfinished, so every version is wiped and every
 // task snapshot of the project loses its plaintext model keys and CLI payloads.
 func purgeProjectCredentials(ctx context.Context, tx *db.Tx, project uuid.UUID) error {
-	rows, e := tx.Query(ctx, `SELECT id FROM project_credential_accounts WHERE project_id=$1 ORDER BY id FOR UPDATE`, project)
+	rows, e := tx.Query(ctx, `SELECT id FROM project_credential_accounts WHERE project_id=$1 ORDER BY id`, project)
 	if e != nil {
 		return e
 	}
@@ -131,7 +131,7 @@ func (s *Store) SettleCredentialWipes(ctx context.Context) error {
 	for _, project := range projects {
 		if e = s.inTx(ctx, func(tx *db.Tx) error {
 			// Same order as task saves: project, then the per-account wipe lock.
-			if _, e := tx.Exec(ctx, `SELECT 1 FROM projects WHERE id=$1 FOR SHARE`, project); e != nil {
+			if _, e := tx.Exec(ctx, `SELECT 1 FROM projects WHERE id=$1`, project); e != nil {
 				return e
 			}
 			return settleProjectWipesTx(ctx, tx, project)
@@ -149,9 +149,6 @@ func (s *Store) SettleCredentialWipes(ctx context.Context) error {
 // account; unfinished ones keep them until their task ends. The pending row
 // exists exactly while something is kept.
 func settleDeletedAccountTx(ctx context.Context, tx *db.Tx, project, account uuid.UUID) error {
-	if _, e := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('credential-wipe:'||$1::text,0))`, account); e != nil {
-		return e
-	}
 	var cli *string
 	if e := tx.QueryRow(ctx, `SELECT cli_name FROM project_credential_accounts WHERE id=$1 AND project_id=$2 AND deleted_at IS NOT NULL`, account, project).Scan(&cli); e == db.ErrNoRows {
 		// Never a live account's versions; a stray row must not block task saves.
@@ -162,6 +159,7 @@ func settleDeletedAccountTx(ctx context.Context, tx *db.Tx, project, account uui
 	}
 	// Versions still holding secret material, with the payload a task could copy.
 	payloads := map[uuid.UUID]*clitemplate.Payload{}
+	// SQLITE-PORT(G4): '{}' array、octet_length
 	rows, e := tx.Query(ctx, `SELECT id,secret,auth_method FROM project_cli_versions WHERE account_id=$1 AND (octet_length(secret)>0 OR field_names<>'{}' OR env_names<>'{}' OR file_paths<>'{}')
 		UNION ALL SELECT id,NULL,NULL FROM model_auth_versions WHERE project_account_id=$1`, account)
 	if e != nil {
@@ -193,13 +191,14 @@ func settleDeletedAccountTx(ctx context.Context, tx *db.Tx, project, account uui
 	for id := range payloads {
 		versions = append(versions, id.String())
 	}
-	rows, e = tx.Query(ctx, `SELECT DISTINCT v::uuid FROM (
+	// SQLITE-PORT(G4): ::cast、LATERAL、array、convert_from/to
+	rows, e = tx.Query(ctx, `SELECT DISTINCT v FROM (
 			SELECT x.c->k->>'versionId' v FROM task_instances i JOIN task_records r ON r.id=i.task_id
 			CROSS JOIN LATERAL (SELECT convert_from(i.snapshot,'UTF8')::jsonb->'credentials' c) x
 			CROSS JOIN unnest(ARRAY['modelAuth','googleBinding','larkBinding']) k
 			WHERE r.project_id=$1 AND r.ended_at IS NULL
-			UNION ALL SELECT b.version_id::text FROM task_lark_credential_bindings b JOIN task_records r ON r.id=b.task_id WHERE r.project_id=$1 AND r.ended_at IS NULL
-		) u WHERE v=ANY($2)`, project, versions)
+			UNION ALL SELECT b.version_id FROM task_lark_credential_bindings b JOIN task_records r ON r.id=b.task_id WHERE r.project_id=$1 AND r.ended_at IS NULL
+		) u WHERE v IN (SELECT value FROM json_each($2))`, project, versions)
 	if e != nil {
 		return e
 	}
@@ -209,6 +208,7 @@ func settleDeletedAccountTx(ctx context.Context, tx *db.Tx, project, account uui
 	}
 	if cli != nil {
 		var ended []uuid.UUID
+		// SQLITE-PORT(G4): ::cast、LATERAL、convert_from/to、jsonb op
 		rows, e = tx.Query(ctx, `SELECT i.id,r.ended_at IS NOT NULL,x.s->'credentials'->'cli'->$2 FROM task_instances i JOIN task_records r ON r.id=i.task_id
 			CROSS JOIN LATERAL (SELECT convert_from(i.snapshot,'UTF8')::jsonb s) x
 			WHERE r.project_id=$1 AND x.s->'credentials'->'cli' ? $2 ORDER BY i.id`, project, *cli)
@@ -344,16 +344,17 @@ func wipeVersionsTx(ctx context.Context, tx *db.Tx, accounts, keep []uuid.UUID) 
 		keep = []uuid.UUID{}
 	}
 	for _, q := range []string{
-		`UPDATE project_credential_accounts SET current_model_version_id=NULL WHERE id=ANY($1) AND current_model_version_id<>ALL($2)`,
-		`UPDATE project_credential_accounts SET current_cli_version_id=NULL WHERE id=ANY($1) AND current_cli_version_id<>ALL($2)`,
-		`DELETE FROM google_cli_grants WHERE account_id=ANY($1) AND version_id<>ALL($2)`,
-		`DELETE FROM github_cli_identities WHERE account_id=ANY($1) AND version_id<>ALL($2)`,
-		`DELETE FROM lark_cli_identities WHERE account_id=ANY($1) AND version_id<>ALL($2)`,
-		`DELETE FROM project_cli_versions v WHERE account_id=ANY($1) AND id<>ALL($2)
+		`UPDATE project_credential_accounts SET current_model_version_id=NULL WHERE id IN (SELECT value FROM json_each($1)) AND current_model_version_id NOT IN (SELECT value FROM json_each($2))`,
+		`UPDATE project_credential_accounts SET current_cli_version_id=NULL WHERE id IN (SELECT value FROM json_each($1)) AND current_cli_version_id NOT IN (SELECT value FROM json_each($2))`,
+		`DELETE FROM google_cli_grants WHERE account_id IN (SELECT value FROM json_each($1)) AND version_id NOT IN (SELECT value FROM json_each($2))`,
+		`DELETE FROM github_cli_identities WHERE account_id IN (SELECT value FROM json_each($1)) AND version_id NOT IN (SELECT value FROM json_each($2))`,
+		`DELETE FROM lark_cli_identities WHERE account_id IN (SELECT value FROM json_each($1)) AND version_id NOT IN (SELECT value FROM json_each($2))`,
+		`DELETE FROM project_cli_versions AS v WHERE account_id IN (SELECT value FROM json_each($1)) AND id NOT IN (SELECT value FROM json_each($2))
 			AND NOT EXISTS(SELECT 1 FROM task_lark_credential_bindings b WHERE b.version_id=v.id AND b.account_id=v.account_id)`,
+		// SQLITE-PORT(G4): '{}' array、::cast、octet_length
 		`UPDATE project_cli_versions SET secret='\x'::bytea,field_names='{}',env_names='{}',file_paths='{}',updated_at=clock_timestamp()
-			WHERE account_id=ANY($1) AND id<>ALL($2) AND (octet_length(secret)>0 OR field_names<>'{}' OR env_names<>'{}' OR file_paths<>'{}')`,
-		`DELETE FROM model_auth_versions WHERE project_account_id=ANY($1) AND id<>ALL($2)`,
+			WHERE account_id IN (SELECT value FROM json_each($1)) AND id NOT IN (SELECT value FROM json_each($2)) AND (octet_length(secret)>0 OR field_names<>'{}' OR env_names<>'{}' OR file_paths<>'{}')`,
+		`DELETE FROM model_auth_versions WHERE project_account_id IN (SELECT value FROM json_each($1)) AND id NOT IN (SELECT value FROM json_each($2))`,
 	} {
 		if _, e := tx.Exec(ctx, q, accounts, keep); e != nil {
 			return e
@@ -375,7 +376,8 @@ func scrubSnapshotsTx(ctx context.Context, tx *db.Tx, instances []uuid.UUID, cli
 	if cli != nil {
 		set, args = `jsonb_set(x.s,'{credentials,cli}',coalesce(x.s->'credentials'->'cli','{}')-$2::text[])`, append(args, cli)
 	}
-	_, e := tx.Exec(ctx, `UPDATE task_instances i SET snapshot=convert_to(`+set+`::text,'UTF8')
-		FROM (SELECT id,convert_from(snapshot,'UTF8')::jsonb s FROM task_instances WHERE id=ANY($1)) x WHERE i.id=x.id`, args...)
+	// SQLITE-PORT(G4): ::cast、convert_from/to
+	_, e := tx.Exec(ctx, `UPDATE task_instances AS i SET snapshot=convert_to(`+set+`::text,'UTF8')
+		FROM (SELECT id,convert_from(snapshot,'UTF8')::jsonb s FROM task_instances WHERE id IN (SELECT value FROM json_each($1))) x WHERE i.id=x.id`, args...)
 	return e
 }

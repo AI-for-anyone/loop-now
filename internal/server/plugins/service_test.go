@@ -267,7 +267,8 @@ func TestConfigAccountsAndGrants(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	e.install(plugins.Source{Kind: "local", Location: plugin(t, t.TempDir(), "cfg", "1.0.0")}, true)
-	if _, err := e.st.Pool.Exec(ctx, `UPDATE plugins SET manifest=jsonb_set(manifest::jsonb,'{events}','["plugin.config_changed","plugin.enabled"]')::json`); err != nil {
+	// SQLITE-PORT(G3): ::cast、jsonb
+	if _, err := e.st.Pool.Exec(ctx, `UPDATE plugins SET manifest=jsonb_set(manifest,'{events}','["plugin.config_changed","plugin.enabled"]')::json`); err != nil {
 		t.Fatal(err)
 	}
 	tok := "s3cret"
@@ -298,7 +299,7 @@ func TestConfigAccountsAndGrants(t *testing.T) {
 		t.Fatalf("项目配置：%+v %v", pp, err)
 	}
 	var events []string
-	rows, _ := e.st.Pool.Query(ctx, `SELECT type||':'||coalesce(project_id::text,'-') FROM plugin_events ORDER BY id`)
+	rows, _ := e.st.Pool.Query(ctx, `SELECT type||':'||coalesce(project_id,'-') FROM plugin_events ORDER BY id`)
 	for rows.Next() {
 		var s string
 		rows.Scan(&s)

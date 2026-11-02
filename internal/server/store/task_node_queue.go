@@ -33,7 +33,7 @@ func (s *Store) lockTaskNodeMessageTx(ctx context.Context, m *TaskMutation, targ
 	var out taskNodeMessage
 	var task, node, agent, runtime uuid.UUID
 	var carrier *uuid.UUID
-	e := m.Tx.QueryRow(ctx, `SELECT b.task_id,b.node_run_id,b.agent_id,b.runtime_id,b.execution_mode,b.reminder_run_id,b.not_executed_at IS NOT NULL FROM task_node_inbox_messages b WHERE b.message_id=$1 FOR UPDATE OF b`, message).
+	e := m.Tx.QueryRow(ctx, `SELECT b.task_id,b.node_run_id,b.agent_id,b.runtime_id,b.execution_mode,b.reminder_run_id,b.not_executed_at IS NOT NULL FROM task_node_inbox_messages b WHERE b.message_id=$1`, message).
 		Scan(&task, &node, &agent, &runtime, &out.mode, &carrier, &out.expired)
 	switch {
 	case e == nil:
@@ -61,7 +61,7 @@ func (s *Store) lockTaskNodeMessageTx(ctx context.Context, m *TaskMutation, targ
 		carrier = out.msg.ReminderTurnID
 	}
 	if carrier != nil {
-		t, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1 FOR UPDATE`, *carrier))
+		t, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1`, *carrier))
 		if e != nil {
 			return out, e
 		}
@@ -237,7 +237,7 @@ func (s *Store) CancelTaskNodeMessageTx(ctx context.Context, m *TaskMutation, ta
 // 已在停止或打断中时 Changed=false；这一轮已结束时返回 task_conflict，reason=run_not_active。
 func (s *Store) StopTaskNodeRunTx(ctx context.Context, m *TaskMutation, target TaskConsoleLineage, run uuid.UUID) (TaskNodeQueueResult, error) {
 	var out TaskNodeQueueResult
-	t, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1 AND task_id=$2 AND node_run_id=$3 FOR UPDATE`, run, target.TaskID, target.NodeRunID))
+	t, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1 AND task_id=$2 AND node_run_id=$3`, run, target.TaskID, target.NodeRunID))
 	if e != nil {
 		return out, notFoundIfNoRows(e, "任务轮次")
 	}

@@ -67,6 +67,7 @@ func TestTaskLarkSourceFenceAndFixedOverlay(t *testing.T) {
 		{"corrupt_original", []byte(`{"broken":true}`)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			// SQLITE-PORT(G5): sha256/encode
 			if _, err := s.Pool.Exec(ctx, `UPDATE task_instances SET snapshot=$2,snapshot_sha=encode(sha256($2),'hex') WHERE id=$1`, publisher.RuntimeID, tc.raw); err != nil {
 				t.Fatal(err)
 			}
@@ -181,6 +182,7 @@ func TestTaskLarkSourceUnselectedSchema7RetainsBaseBinding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// SQLITE-PORT(G5): sha256/encode
 	if _, err = s.Pool.Exec(ctx, `UPDATE task_instances SET snapshot=$2,snapshot_sha=encode(sha256($2),'hex') WHERE id=$1`, inst.ID, raw); err != nil {
 		t.Fatal(err)
 	}

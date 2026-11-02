@@ -378,7 +378,7 @@ func TestTaskNodeInboxAppBlockedRecoveryAndSleep(t *testing.T) {
 		t.Fatal("restart changed original sleep state")
 	}
 	// Advance only the existing deadline in this test's private schema.
-	if _, e = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=clock_timestamp()-interval '1 second' WHERE id=$1`, first.Sleep.ID); e != nil {
+	if _, e = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=clock_timestamp()-1000000 WHERE id=$1`, first.Sleep.ID); e != nil {
 		t.Fatal(e)
 	}
 	if e = s.a.Store.ReconcileSleeps(ctx, 100); e != nil {

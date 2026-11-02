@@ -43,7 +43,7 @@ func TestClaimAckLossRecoversWithoutRestartOrProviderReplay(t *testing.T) {
 	}
 	// Advance only the persisted abandoned attempt's age, not credential expiry
 	// or the coordinator's wall clock; no active provider operation exists.
-	if _, err := st.Pool.Exec(ctx, `UPDATE model_auth_versions SET refresh_started_at=clock_timestamp()-interval '1 hour' WHERE id=$1`, v.ID); err != nil {
+	if _, err := st.Pool.Exec(ctx, `UPDATE model_auth_versions SET refresh_started_at=clock_timestamp()-3600000000 WHERE id=$1`, v.ID); err != nil {
 		t.Fatal(err)
 	}
 	waitAuth(t, func() bool {
@@ -99,7 +99,7 @@ func TestCommitAndFailureWriteOutageRecoversAfterPGReturnsWithoutRestart(t *test
 	if err != nil || row.RefreshState != "refreshing" {
 		t.Fatal("double failure did not retain durable attempt", err)
 	}
-	if _, err := st.Pool.Exec(ctx, `UPDATE model_auth_versions SET refresh_started_at=clock_timestamp()-interval '1 hour' WHERE id=$1`, v.ID); err != nil {
+	if _, err := st.Pool.Exec(ctx, `UPDATE model_auth_versions SET refresh_started_at=clock_timestamp()-3600000000 WHERE id=$1`, v.ID); err != nil {
 		t.Fatal(err)
 	}
 	failing.down.Store(false)

@@ -27,7 +27,7 @@ const PluginStateListLimit = 1000
 // PluginStateGet 读取一项状态；不存在时返回 nil。project 为空表示插件全局。
 func (s *Store) PluginStateGet(ctx context.Context, plugin string, project *uuid.UUID, key string) (json.RawMessage, error) {
 	var v json.RawMessage
-	err := s.Pool.QueryRow(ctx, `SELECT value FROM plugin_state WHERE plugin_id=$1 AND project_id IS NOT DISTINCT FROM $2 AND key=$3`, plugin, project, key).Scan(&v)
+	err := s.Pool.QueryRow(ctx, `SELECT value FROM plugin_state WHERE plugin_id=$1 AND project_id IS $2 AND key=$3`, plugin, project, key).Scan(&v)
 	if errors.Is(err, db.ErrNoRows) {
 		return nil, nil
 	}
@@ -43,13 +43,14 @@ func (s *Store) PluginStateSet(ctx context.Context, plugin string, project *uuid
 
 // PluginStateDelete 删除一项状态；不存在时也成功。
 func (s *Store) PluginStateDelete(ctx context.Context, plugin string, project *uuid.UUID, key string) error {
-	_, err := s.Pool.Exec(ctx, `DELETE FROM plugin_state WHERE plugin_id=$1 AND project_id IS NOT DISTINCT FROM $2 AND key=$3`, plugin, project, key)
+	_, err := s.Pool.Exec(ctx, `DELETE FROM plugin_state WHERE plugin_id=$1 AND project_id IS $2 AND key=$3`, plugin, project, key)
 	return err
 }
 
 // PluginStateList 按键排序列出以 prefix 开头的状态，最多 PluginStateListLimit 项。
 func (s *Store) PluginStateList(ctx context.Context, plugin string, project *uuid.UUID, prefix string) ([]PluginStateEntry, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT key,value FROM plugin_state WHERE plugin_id=$1 AND project_id IS NOT DISTINCT FROM $2 AND starts_with(key,$3)
+	// SQLITE-PORT(G3): starts_with
+	rows, err := s.Pool.Query(ctx, `SELECT key,value FROM plugin_state WHERE plugin_id=$1 AND project_id IS $2 AND starts_with(key,$3)
 		ORDER BY key LIMIT $4`, plugin, project, prefix, PluginStateListLimit)
 	if err != nil {
 		return nil, err
@@ -130,7 +131,8 @@ func (s *Store) AddPluginEvent(ctx context.Context, ev PluginEvent, plugins []st
 			ev.ID, ev.Type, ev.At, ev.ProjectID, ev.AgentID, ev.TaskID, ev.RunID, ev.Data); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `INSERT INTO plugin_event_deliveries(plugin_id,event_id) SELECT unnest($1::text[]), $2`, plugins, ev.ID)
+		// SQLITE-PORT(G3): array
+		_, err := tx.Exec(ctx, `INSERT INTO plugin_event_deliveries(plugin_id,event_id) SELECT unnest($1), $2`, plugins, ev.ID)
 		return err
 	})
 	return ev.ID, err
@@ -143,8 +145,8 @@ func (s *Store) ClaimPluginDelivery(ctx context.Context, plugin string, lease ti
 	err := s.Pool.QueryRow(ctx, `WITH next AS (
 			SELECT d.event_id FROM plugin_event_deliveries d JOIN plugin_events e ON e.id=d.event_id
 			WHERE d.plugin_id=$1 AND d.status='pending' AND d.next_attempt_at<=now()
-			ORDER BY e.at, e.id LIMIT 1 FOR UPDATE OF d SKIP LOCKED)
-		UPDATE plugin_event_deliveries d SET attempts=d.attempts+1, next_attempt_at=now()+$2::interval
+			ORDER BY e.at, e.id LIMIT 1)
+		UPDATE plugin_event_deliveries AS d SET attempts=d.attempts+1, next_attempt_at=now()+$2
 		FROM next, plugin_events e WHERE d.plugin_id=$1 AND d.event_id=next.event_id AND e.id=next.event_id
 		RETURNING e.id,e.type,e.at,e.project_id,e.agent_id,e.task_id,e.run_id,e.data,d.attempts`, plugin, lease).
 		Scan(&d.ID, &d.Type, &d.At, &d.ProjectID, &d.AgentID, &d.TaskID, &d.RunID, &d.Data, &d.Attempts)
@@ -176,7 +178,7 @@ func (s *Store) PluginDeliveryCounts(ctx context.Context, since time.Time) (deli
 // FailPluginDelivery 记录一次投递失败：retryAt 不为空时到时重投，为空时标为 failed、不再重投。
 func (s *Store) FailPluginDelivery(ctx context.Context, plugin, eventID, reason string, retryAt *time.Time) error {
 	_, err := s.Pool.Exec(ctx, `UPDATE plugin_event_deliveries SET last_error=$3,
-			status=CASE WHEN $4::timestamptz IS NULL THEN 'failed' ELSE 'pending' END, next_attempt_at=coalesce($4,next_attempt_at)
+			status=CASE WHEN $4 IS NULL THEN 'failed' ELSE 'pending' END, next_attempt_at=coalesce($4,next_attempt_at)
 		WHERE plugin_id=$1 AND event_id=$2 AND status='pending'`, plugin, eventID, reason, retryAt)
 	return err
 }

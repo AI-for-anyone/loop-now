@@ -115,7 +115,7 @@ func CloseInboxQuestion(ctx context.Context, tx *db.Tx, id uuid.UUID, reason str
 }
 func (s *Store) ExpireInboxQuestions(ctx context.Context) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
-		rows, err := tx.Query(ctx, `WITH due AS (SELECT message_id FROM inbox_questions WHERE state='open' AND expires_at<=now() ORDER BY message_id FOR UPDATE SKIP LOCKED LIMIT 100) UPDATE inbox_questions SET state='expired',expired_reason='deadline',notice_state=CASE WHEN EXISTS(SELECT 1 FROM inbox_messages m WHERE m.id=inbox_questions.message_id AND m.from_kind='agent') AND NOT EXISTS(SELECT 1 FROM extension_dialogs d WHERE d.question_message_id=inbox_questions.message_id) THEN 'pending' ELSE 'none' END WHERE message_id IN(SELECT message_id FROM due) RETURNING message_id`)
+		rows, err := tx.Query(ctx, `WITH due AS (SELECT message_id FROM inbox_questions WHERE state='open' AND expires_at<=now() ORDER BY message_id LIMIT 100) UPDATE inbox_questions SET state='expired',expired_reason='deadline',notice_state=CASE WHEN EXISTS(SELECT 1 FROM inbox_messages m WHERE m.id=inbox_questions.message_id AND m.from_kind='agent') AND NOT EXISTS(SELECT 1 FROM extension_dialogs d WHERE d.question_message_id=inbox_questions.message_id) THEN 'pending' ELSE 'none' END WHERE message_id IN(SELECT message_id FROM due) RETURNING message_id`)
 		if err != nil {
 			return err
 		}

@@ -172,7 +172,7 @@ func TestSameAgentTasksHaveIndependentLocksAndRestoreRedisLoss(t *testing.T) {
 		previous = persistent.ID
 	}
 	var tools int
-	if e = s.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM lifecycle_events WHERE agent_id=$1 AND task_id=ANY($2) AND task_turn_id IS NOT NULL AND type='tool.changed'`, p.ID, []uuid.UUID{first, second}).Scan(&tools); e != nil || tools != 2 {
+	if e = s.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM lifecycle_events WHERE agent_id=$1 AND task_id IN (SELECT value FROM json_each($2)) AND task_turn_id IS NOT NULL AND type='tool.changed'`, p.ID, []uuid.UUID{first, second}).Scan(&tools); e != nil || tools != 2 {
 		t.Fatal("task tools not associated", e, tools)
 	}
 }

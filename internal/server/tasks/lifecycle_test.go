@@ -150,6 +150,7 @@ func TestTaskUnboundInboxLifecycleKeepsNullNode(t *testing.T) {
 		t.Fatal(e)
 	}
 	runtime := uuid.New()
+	// SQLITE-PORT(G5): sha256/encode
 	if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared) VALUES($1,$2,$3,$4,$5,encode(sha256($5),'hex'),true)`, runtime, id, agent.ID, agent.Name, []byte("fixture")); e != nil {
 		t.Fatal(e)
 	}
@@ -267,6 +268,7 @@ func TestTaskNoncurrentInboxRunsWhileCurrentBusy(t *testing.T) {
 		t.Fatal(e)
 	}
 	runtime := uuid.New()
+	// SQLITE-PORT(G5): sha256/encode
 	if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared) VALUES($1,$2,$3,$4,$5,encode(sha256($5),'hex'),true)`, runtime, id, agent.ID, agent.Name, []byte("fixture")); e != nil {
 		t.Fatal(e)
 	}
@@ -338,6 +340,7 @@ func TestRestartOfUnboundInboxDoesNotBlockWaitingNode(t *testing.T) {
 		t.Fatal(e)
 	}
 	runtime := uuid.New()
+	// SQLITE-PORT(G5): sha256/encode
 	if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared) VALUES($1,$2,$3,$4,$5,encode(sha256($5),'hex'),true)`, runtime, id, agent.ID, agent.Name, []byte("fixture")); e != nil {
 		t.Fatal(e)
 	}

@@ -98,7 +98,8 @@ func (s *Store) MarkTaskSessionMissing(ctx context.Context, runtimeID uuid.UUID)
 }
 
 func (s *Store) FrozenTaskSource(ctx context.Context, sourceID uuid.UUID) (TaskFrozenSource, uuid.UUID, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT id,sources FROM task_instances WHERE sources @> $1::jsonb`, []byte(`[{"Source":{"ID":"`+sourceID.String()+`"}}]`))
+	// SQLITE-PORT(G5): jsonb op
+	rows, err := s.Pool.Query(ctx, `SELECT id,sources FROM task_instances WHERE sources @> $1`, []byte(`[{"Source":{"ID":"`+sourceID.String()+`"}}]`))
 	if err != nil {
 		return TaskFrozenSource{}, uuid.Nil, err
 	}
@@ -124,7 +125,7 @@ func (s *Store) FrozenTaskSource(ctx context.Context, sourceID uuid.UUID) (TaskF
 func (s *Store) MarkTaskSourceSynced(ctx context.Context, runtimeID, sourceID uuid.UUID, files []SyncFile) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
 		var raw []byte
-		if err := tx.QueryRow(ctx, `SELECT sources FROM task_instances WHERE id=$1 FOR UPDATE`, runtimeID).Scan(&raw); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT sources FROM task_instances WHERE id=$1`, runtimeID).Scan(&raw); err != nil {
 			return err
 		}
 		var list []TaskFrozenSource

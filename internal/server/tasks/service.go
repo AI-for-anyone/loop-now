@@ -163,7 +163,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 				runtime = &p.RuntimeID
 			}
 			var received bool
-			if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM inbox_messages WHERE id=$1 AND to_kind='agent' AND to_agent_id=$2 AND to_runtime_id IS NOT DISTINCT FROM $3::uuid)`, *in.SourceInboxMessageID, p.ID, runtime).Scan(&received); e != nil {
+			if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM inbox_messages WHERE id=$1 AND to_kind='agent' AND to_agent_id=$2 AND to_runtime_id IS $3)`, *in.SourceInboxMessageID, p.ID, runtime).Scan(&received); e != nil {
 				return taskmodel.Record{}, nil, e
 			}
 			if !received {

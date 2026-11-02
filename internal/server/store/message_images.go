@@ -41,7 +41,7 @@ func (s *Store) MessageImage(ctx context.Context, id uuid.UUID) (StoredImage, er
 func (s *Store) SaveMessageImage(ctx context.Context, id uuid.UUID, owner ImageOwner, ref messageimage.Ref, data []byte) (messageimage.Ref, error) {
 	var result messageimage.Ref
 	e := s.inTx(ctx, func(tx *db.Tx) error {
-		if e := tx.QueryRow(ctx, `SELECT id FROM agents WHERE id=$1 AND deleted_at IS NULL FOR SHARE`, owner.AgentID).Scan(new(uuid.UUID)); e != nil {
+		if e := tx.QueryRow(ctx, `SELECT id FROM agents WHERE id=$1 AND deleted_at IS NULL`, owner.AgentID).Scan(new(uuid.UUID)); e != nil {
 			return notFoundIfNoRows(e, "Agent")
 		}
 		sha, e := putBlob(ctx, tx, data)
@@ -107,7 +107,7 @@ func (s *Store) lockMessageImagesTx(ctx context.Context, tx *db.Tx, owner ImageO
 	sort.Slice(ordered, func(i, j int) bool { return ordered[i].String() < ordered[j].String() })
 	byID := map[uuid.UUID]messageimage.Ref{}
 	for _, id := range ordered {
-		v, e := scanImage(tx.QueryRow(ctx, `SELECT `+imageColumns+` FROM message_images WHERE id=$1 FOR UPDATE`, id))
+		v, e := scanImage(tx.QueryRow(ctx, `SELECT `+imageColumns+` FROM message_images WHERE id=$1`, id))
 		if e != nil {
 			return nil, e
 		}

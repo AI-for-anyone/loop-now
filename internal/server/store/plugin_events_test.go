@@ -23,6 +23,7 @@ type pluginEvent struct {
 
 func readPluginEvents(t *testing.T, s *store.Store) []pluginEvent {
 	t.Helper()
+	// SQLITE-PORT(G3): array
 	rows, err := s.Pool.Query(context.Background(), `SELECT e.type,e.project_id,e.agent_id,e.task_id,e.run_id,e.data,
 		(SELECT array_agg(plugin_id ORDER BY plugin_id) FROM plugin_event_deliveries d WHERE d.event_id=e.id) FROM plugin_events e ORDER BY e.id`)
 	if err != nil {
@@ -51,6 +52,7 @@ func eventTypes(evs []pluginEvent) []string {
 func subscribe(t *testing.T, s *store.Store, id string, events []string) {
 	t.Helper()
 	m, _ := json.Marshal(map[string]any{"events": events})
+	// SQLITE-PORT(G3): '{}' array
 	if _, err := s.Pool.Exec(context.Background(), `INSERT INTO plugins(id,display_name,source,version,manifest,install_dir,status) VALUES($1,$1,'{}','1',$2,'/x','installed')`, id, m); err != nil {
 		t.Fatal(err)
 	}

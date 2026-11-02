@@ -373,7 +373,7 @@ func TestTaskNodeInboxSleepLineageAndQueueWake(t *testing.T) {
 		t.Fatal(e)
 	}
 	finish(turn.ID)
-	if _, e = s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=clock_timestamp()-interval '1 second' WHERE id=$1`, first.Sleep.ID); e != nil {
+	if _, e = s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=clock_timestamp()-1000000 WHERE id=$1`, first.Sleep.ID); e != nil {
 		t.Fatal(e)
 	}
 	if e = s.ReconcileSleeps(ctx, 100); e != nil {

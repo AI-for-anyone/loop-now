@@ -63,6 +63,7 @@ func TestRealHostManagesIdentity(t *testing.T) {
 		}
 		if time.Now().After(deadline) {
 			var log string
+			// SQLITE-PORT(G11): bool_or/and
 			_ = e.st.Pool.QueryRow(ctx, `SELECT coalesce(string_agg(level||':'||line, ' | ' ORDER BY id),'') FROM plugin_host_log`).Scan(&log)
 			t.Fatalf("问题没有被回答：%v；宿主日志：%s", err, log)
 		}
@@ -71,6 +72,7 @@ func TestRealHostManagesIdentity(t *testing.T) {
 	var log string
 	deadline = time.Now().Add(5 * time.Second)
 	for !strings.Contains(log, "answered 再等等") && time.Now().Before(deadline) {
+		// SQLITE-PORT(G11): bool_or/and
 		_ = e.st.Pool.QueryRow(ctx, `SELECT coalesce(string_agg(level||':'||line, ' | ' ORDER BY id),'') FROM plugin_host_log WHERE plugin_id='bridge'`).Scan(&log)
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -117,13 +119,14 @@ func TestRealHostAnswersChannelQuestion(t *testing.T) {
 	e.startHost([]string{node, entry}, []string{"PATH=" + filepath.Dir(node) + ":/usr/bin:/bin", "HOME=" + root, "LANG=C.UTF-8", "LOOP_NOW_PLUGINS_ROOT=" + root, "LOOP_NOW_API_URL=" + e.api.Plugins.APIURL}, "bridge")
 	hostLog := func() string {
 		var log string
+		// SQLITE-PORT(G11): bool_or/and
 		_ = e.st.Pool.QueryRow(ctx, `SELECT coalesce(string_agg(level||':'||line, ' | ' ORDER BY id),'') FROM plugin_host_log WHERE plugin_id='bridge'`).Scan(&log)
 		return log
 	}
 
 	var sent string
 	deadline := time.Now().Add(20 * time.Second)
-	for e.st.Pool.QueryRow(ctx, `SELECT id::text FROM inbox_messages WHERE from_kind='plugin' AND to_agent_id=$1`, agent.ID).Scan(&sent) != nil {
+	for e.st.Pool.QueryRow(ctx, `SELECT id FROM inbox_messages WHERE from_kind='plugin' AND to_agent_id=$1`, agent.ID).Scan(&sent) != nil {
 		if time.Now().After(deadline) {
 			t.Fatalf("插件没有发出消息；宿主日志：%s", hostLog())
 		}

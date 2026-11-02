@@ -34,7 +34,7 @@ func (s *Store) CaptureTaskLarkMemberTx(ctx context.Context, m *TaskMutation, me
 	var snapshotSHA string
 	var retired bool
 	var sessionState string
-	err := m.Tx.QueryRow(ctx, `SELECT task_id,agent_id,snapshot,snapshot_sha,prepared,retired,session_state,session_file FROM task_instances WHERE id=$1 FOR UPDATE`, member.RuntimeID).Scan(&task, &agent, &snapshot, &snapshotSHA, &out.Prepared, &retired, &sessionState, &out.SessionFile)
+	err := m.Tx.QueryRow(ctx, `SELECT task_id,agent_id,snapshot,snapshot_sha,prepared,retired,session_state,session_file FROM task_instances WHERE id=$1`, member.RuntimeID).Scan(&task, &agent, &snapshot, &snapshotSHA, &out.Prepared, &retired, &sessionState, &out.SessionFile)
 	if err != nil {
 		return out, notFoundIfNoRows(err, "任务实例")
 	}

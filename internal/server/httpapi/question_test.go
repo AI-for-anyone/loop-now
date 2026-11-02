@@ -50,7 +50,7 @@ func TestInboxQuestionRealHTTPStatesAndContract(t *testing.T) {
 	e.console().expectError(409, "already_answered", "POST", path, map[string]any{"optionId": "1"})
 	e.expect(201, "POST", path, map[string]any{"text": "已回答后的普通文字"})
 	expired := create("expires")
-	if _, err = e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-interval '1 second' WHERE message_id=$1`, expired.ID); err != nil {
+	if _, err = e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, expired.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err = e.api.Inbox.ReconcileQuestions(ctx); err != nil {
@@ -167,7 +167,7 @@ func TestTaskQuestionAnswerAndExpiryOneRecoveryTurn(t *testing.T) {
 			if mode == "answer" {
 				e.expect(201, "POST", "/inbox/messages/"+q.ID.String()+"/reply", map[string]any{"text": "回答在原轮settled前"})
 			} else {
-				if _, err := e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-interval '1 second' WHERE message_id=$1`, q.ID); err != nil {
+				if _, err := e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, q.ID); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -231,7 +231,7 @@ func TestInboxQuestionConfiguredPreviewAndBlockedExpiry(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-interval '1 second' WHERE message_id=$1`, next.ID); err != nil {
+	if _, err = e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, next.ID); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 3; i++ {
@@ -289,7 +289,7 @@ func TestInboxQuestionOutboxAfterTaskProjectDeletion(t *testing.T) {
 	other := e.platformAgent("仍需收到到期")
 	sender := e.agentCaller(other.ID)
 	later := decode[apitypes.InboxMessage](t, sender.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "later", "options": []string{"yes"}}))
-	if _, err = e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-interval '1 second' WHERE message_id=$1`, later.ID); err != nil {
+	if _, err = e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, later.ID); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 3; i++ {
@@ -421,7 +421,7 @@ func TestInboxQuestionCommitBeforeAcknowledgementDoesNotRedeliver(t *testing.T) 
 		t.Fatal(err)
 	}
 	q := decode[apitypes.InboxMessage](t, instance.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "ack lost", "options": []string{"yes"}, "nodeRunId": node.ID}))
-	if _, err := e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-interval '1 second' WHERE message_id=$1`, q.ID); err != nil {
+	if _, err := e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, q.ID); err != nil {
 		t.Fatal(err)
 	}
 	for _, sql := range []string{`CREATE FUNCTION fail_question_ack() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic acknowledgement failure'; END $$`, `CREATE TRIGGER fail_question_ack BEFORE UPDATE OF delivered_at ON inbox_question_outbox FOR EACH ROW EXECUTE FUNCTION fail_question_ack()`} {
@@ -555,7 +555,7 @@ func TestTaskQuestionNextAfterPersistedExpiryBeforeCallback(t *testing.T) {
 		return decode[apitypes.InboxMessage](t, sender.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": text, "options": []string{"yes"}, "nodeRunId": node.ID}))
 	}
 	old := create("old question")
-	if _, err := e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-interval '1 second' WHERE message_id=$1`, old.ID); err != nil {
+	if _, err := e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, old.ID); err != nil {
 		t.Fatal(err)
 	}
 	// Real expiry transaction commits first; intentionally hold its reliable task

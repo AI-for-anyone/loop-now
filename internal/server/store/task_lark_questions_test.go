@@ -30,7 +30,7 @@ func TestTaskLarkPublishPreservesQuestionFourStatesAndRejectsLateAnswer(t *testi
 				if err := store.InsertInboxMessage(ctx, m.Tx, store.NewInboxMessage{ID: q, From: store.Party{Kind: "agent", ID: publisher.AgentID, RuntimeID: publisher.RuntimeID}, To: store.ConsoleParty, Text: "original question"}); err != nil {
 					return nil, err
 				}
-				if _, err := m.Tx.Exec(ctx, `INSERT INTO inbox_questions(message_id,options,expires_at,state,closed_at,closed_reason) VALUES($1,'[{"id":"1","label":"continue"}]',now()+interval '1 hour',$2,CASE WHEN $2='closed' THEN now() ELSE NULL END,CASE WHEN $2='closed' THEN 'task_cancel' ELSE NULL END)`, q, before); err != nil {
+				if _, err := m.Tx.Exec(ctx, `INSERT INTO inbox_questions(message_id,options,expires_at,state,closed_at,closed_reason) VALUES($1,'[{"id":"1","label":"continue"}]',now()+3600000000,$2,CASE WHEN $2='closed' THEN now() ELSE NULL END,CASE WHEN $2='closed' THEN 'task_cancel' ELSE NULL END)`, q, before); err != nil {
 					return nil, err
 				}
 				if _, err := m.Tx.Exec(ctx, `INSERT INTO task_questions(question_message_id,task_id,runtime_id,node_run_id) VALUES($1,$2,$3,$4)`, q, in.TaskID, publisher.RuntimeID, in.NodeRunID); err != nil {

@@ -155,7 +155,7 @@ func (s *Store) RecordTaskConsoleEligibilityTx(ctx context.Context, m *TaskMutat
 	}
 	tag, err := m.Tx.Exec(ctx, `INSERT INTO task_console_chat_eligibility(task_id,node_run_id,source_run_id)
  SELECT task_id,node_run_id,id FROM task_turns t WHERE id=$1 AND task_id=$2 AND node_run_id=$3 AND runtime_id=$4 AND execution_mode='task_node' AND status IN ('failed','interrupted')
- AND (error_code='server_restarted' OR (error_code IS DISTINCT FROM 'task_conflict' AND EXISTS(SELECT 1 FROM lifecycle_events e WHERE e.task_turn_id=t.id AND e.type='run.running')))
+ AND (error_code='server_restarted' OR (error_code IS NOT 'task_conflict' AND EXISTS(SELECT 1 FROM lifecycle_events e WHERE e.task_turn_id=t.id AND e.type='run.running')))
  ON CONFLICT(task_id,node_run_id) DO UPDATE SET source_run_id=EXCLUDED.source_run_id WHERE task_console_chat_eligibility.source_run_id=EXCLUDED.source_run_id`, source, m.Record.View.Task.ID, n.ID, n.RuntimeID)
 	if err != nil {
 		return err

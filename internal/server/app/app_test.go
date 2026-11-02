@@ -274,7 +274,7 @@ func TestRestartGraceful(t *testing.T) {
 		t.Fatalf("锁的值应为 <执行 ID>|<实例 ID>：%s", owner)
 	}
 	var runInst string
-	if err := s.a.Store.Pool.QueryRow(context.Background(), `SELECT instance_id::text FROM runs WHERE id = $1`, run.ID).Scan(&runInst); err != nil || runInst != inst {
+	if err := s.a.Store.Pool.QueryRow(context.Background(), `SELECT instance_id FROM runs WHERE id = $1`, run.ID).Scan(&runInst); err != nil || runInst != inst {
 		t.Fatalf("runs.instance_id 应为本实例：%s %v", runInst, err)
 	}
 	pidJSON, err := os.ReadFile(filepath.Join(w.cfg.WorkRoot, "agents", agentID, "pi.pid"))

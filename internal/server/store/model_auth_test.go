@@ -217,7 +217,7 @@ func TestModelAuthRejectsExpiredChangedOrDeletedCallbacks(t *testing.T) {
 			o := e.operation()
 			switch kind {
 			case "expired":
-				if _, err := e.s.Pool.Exec(e.ctx, `UPDATE model_auth_operations SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1`, o.ID); err != nil {
+				if _, err := e.s.Pool.Exec(e.ctx, `UPDATE model_auth_operations SET expires_at=clock_timestamp()-1000000 WHERE id=$1`, o.ID); err != nil {
 					t.Fatal(err)
 				}
 			case "config":

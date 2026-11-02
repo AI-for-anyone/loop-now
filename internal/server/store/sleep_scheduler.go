@@ -67,7 +67,7 @@ func (s *Store) ReconcileSleeps(ctx context.Context, batch int) error {
 			plan.Parties[0].RuntimeID = *candidate.RuntimeID
 		}
 		e = s.InboxTransaction(ctx, plan, func(scope *InboxTransaction) error {
-			r, err := scanSleep(scope.Tx.QueryRow(ctx, `SELECT `+sleepColumns+` FROM agent_sleeps WHERE id=$1 FOR UPDATE`, candidate.ID))
+			r, err := scanSleep(scope.Tx.QueryRow(ctx, `SELECT `+sleepColumns+` FROM agent_sleeps WHERE id=$1`, candidate.ID))
 			if err != nil {
 				return err
 			}

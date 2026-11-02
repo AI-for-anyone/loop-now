@@ -117,7 +117,7 @@ func (s *Store) NewProjectCLIAuthOperation(ctx context.Context, project uuid.UUI
 			}
 		}
 		var active uuid.UUID
-		e = tx.QueryRow(ctx, `SELECT id FROM project_cli_auth_operations WHERE project_id=$1 AND target_account_id IS NOT DISTINCT FROM $2::uuid AND cli_name=$3 AND status IN('pending','awaiting_authorization')`, project, in.AccountID, in.CLI).Scan(&active)
+		e = tx.QueryRow(ctx, `SELECT id FROM project_cli_auth_operations WHERE project_id=$1 AND target_account_id IS $2 AND cli_name=$3 AND status IN('pending','awaiting_authorization')`, project, in.AccountID, in.CLI).Scan(&active)
 		if e == nil {
 			return cliInProgress(project, active, in.CLI)
 		}
@@ -237,13 +237,15 @@ func (s *Store) SetProjectGitHubAuthorization(ctx context.Context, project, id u
 			return apperr.Invalid("cli", "GitHub授权操作类型不匹配")
 		}
 		var live bool
-		if e = tx.QueryRow(ctx, `SELECT least($1::timestamptz,$2::timestamptz)>clock_timestamp()`, expires, out.ExpiresAt).Scan(&live); e != nil {
+		// SQLITE-PORT(G4): greatest/least
+		if e = tx.QueryRow(ctx, `SELECT least($1,$2)>clock_timestamp()`, expires, out.ExpiresAt).Scan(&live); e != nil {
 			return e
 		}
 		if !live {
 			out, e = scanCLIOperation(tx.QueryRow(ctx, `UPDATE project_cli_auth_operations SET status='expired',authorization_url=NULL,user_code=NULL,error_code='auth_timeout',completed_at=clock_timestamp() WHERE id=$1 RETURNING `+cliOperationColumns, id))
 			return e
 		}
+		// SQLITE-PORT(G4): greatest/least
 		out, e = scanCLIOperation(tx.QueryRow(ctx, `UPDATE project_cli_auth_operations SET status='awaiting_authorization',authorization_url=$2,user_code=$3,expires_at=least(expires_at,$4) WHERE id=$1 RETURNING `+cliOperationColumns, id, url, code, expires))
 		return e
 	})
@@ -253,7 +255,7 @@ func (s *Store) EndProjectCLIAuthOperation(ctx context.Context, project, id uuid
 	var out cm.CLIAuthOperation
 	e := s.inTx(ctx, func(tx *db.Tx) error {
 		// May run after owner deletion; never changes credentials or revives an op.
-		if _, e := tx.Exec(ctx, `SELECT 1 FROM projects WHERE id=$1 FOR UPDATE`, project); e != nil {
+		if _, e := tx.Exec(ctx, `SELECT 1 FROM projects WHERE id=$1`, project); e != nil {
 			return e
 		}
 		var e error
@@ -280,7 +282,7 @@ func (s *Store) CompleteProjectCLIAuthOperation(ctx context.Context, project, id
 	var saved *ProjectCredentialRecord
 	e := s.inTx(ctx, func(tx *db.Tx) error {
 		var deleted *time.Time
-		if e := tx.QueryRow(ctx, `SELECT deleted_at FROM projects WHERE id=$1 FOR UPDATE`, project).Scan(&deleted); e != nil {
+		if e := tx.QueryRow(ctx, `SELECT deleted_at FROM projects WHERE id=$1`, project).Scan(&deleted); e != nil {
 			return notFoundIfNoRows(e, "项目")
 		}
 		initial, e := cliOperationTx(ctx, tx, project, id, false)

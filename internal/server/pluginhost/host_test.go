@@ -33,6 +33,7 @@ func newHostEnv(t *testing.T, mode string, specs []pluginhost.Spec, tune func(*p
 	t.Helper()
 	e := &hostEnv{t: t, st: sqlitetest.NewStore(t), journal: filepath.Join(t.TempDir(), "journal.jsonl"), specs: specs}
 	for _, s := range specs {
+		// SQLITE-PORT(G3): '{}' array
 		e.exec(`INSERT INTO plugins(id,display_name,source,version,manifest,install_dir,status) VALUES($1,$1,'{}','1.0.0','{}','/x','installed')`, s.ID)
 	}
 	o := pluginhost.Options{
@@ -154,6 +155,7 @@ func TestHostLoadsDeliversEventsAndKeepsState(t *testing.T) {
 	e.sup.Start(false)
 	// alpha 加载后就开始投递，这时 beta 可能还没加载完；全部加载完（状态都已写库）宿主才进入运行中。
 	e.eventually("加载与投递完成", func() (bool, string) {
+		// SQLITE-PORT(G3): bool_or/and
 		s := e.scalar(`SELECT string_agg(event_id||'='||status||'/'||attempts, ',' ORDER BY event_id) FROM plugin_event_deliveries WHERE plugin_id='alpha'`)
 		st := e.sup.Status().State
 		return st == pluginhost.StateRunning && strings.Count(s, "delivered/1") == 2 && strings.Contains(s, failing+"=failed/2"), st + " " + s
@@ -179,19 +181,21 @@ func TestHostLoadsDeliversEventsAndKeepsState(t *testing.T) {
 	if len(order) != 4 || order[0] != early || order[1] != failing || order[3] != failing || order[2] != late {
 		t.Fatalf("投递顺序（按事件时间，失败的稍后重投）：%v，期望 %s %s %s %s", order, early, failing, late, failing)
 	}
+	// SQLITE-PORT(G3): ::cast
 	if got := e.scalar(`SELECT count(*)::text||'/'||count(duration_ms)::text FROM plugin_event_deliveries WHERE plugin_id='alpha' AND status='delivered'`); got != "2/2" {
 		t.Fatalf("送达的投递应记下处理时长：%s", got)
 	}
-	if got := e.scalar(`SELECT coalesce(duration_ms::text,'null') FROM plugin_event_deliveries WHERE plugin_id='alpha' AND event_id=$1`, failing); got != "null" {
+	if got := e.scalar(`SELECT coalesce(duration_ms,'null') FROM plugin_event_deliveries WHERE plugin_id='alpha' AND event_id=$1`, failing); got != "null" {
 		t.Fatalf("失败的投递没有处理时长：%s", got)
 	}
 	if got := e.scalar(`SELECT last_error FROM plugin_event_deliveries WHERE plugin_id='alpha' AND event_id=$1`, failing); got != "boom" {
 		t.Fatalf("失败原因：%s", got)
 	}
-	if got := e.scalar(`SELECT value::text FROM plugin_state WHERE plugin_id='alpha' AND project_id IS NULL AND key='probe/a'`); got != `{"n": 1}` {
+	if got := e.scalar(`SELECT value FROM plugin_state WHERE plugin_id='alpha' AND project_id IS NULL AND key='probe/a'`); got != `{"n": 1}` {
 		t.Fatalf("状态：%s", got)
 	}
 	e.eventually("宿主日志", func() (bool, string) {
+		// SQLITE-PORT(G3): bool_or/and
 		s := e.scalar(`SELECT string_agg(coalesce(plugin_id,'-')||':'||level||':'||line, ' | ' ORDER BY id) FROM plugin_host_log`)
 		return strings.Contains(s, "alpha:warn:loaded") && strings.Contains(s, `alpha:info:state {"n":1} [{"key":"probe/a","value":{"n":1}}]`) &&
 			strings.Contains(s, "-:warn:fake host booting") && strings.Contains(s, "beta:error:加载失败：清单与代码订阅不符"), s
@@ -405,12 +409,14 @@ func TestHostPrunesOldEventsAndLogs(t *testing.T) {
 	e := newHostEnv(t, "", []pluginhost.Spec{spec("alpha", nil, "inbox.received")}, nil)
 	old := e.addEvent("inbox.received", time.Now().Add(-31*24*time.Hour), "alpha")
 	recent := e.addEvent("inbox.received", time.Now().Add(-29*24*time.Hour), "alpha")
-	e.exec(`INSERT INTO plugin_host_log(at,plugin_id,level,line) VALUES(now()-interval '8 days','alpha','info','旧'),(now()-interval '6 days','alpha','info','新')`)
+	e.exec(`INSERT INTO plugin_host_log(at,plugin_id,level,line) VALUES(now()-691200000000,'alpha','info','旧'),(now()-518400000000,'alpha','info','新')`)
 	e.sup.Start(true) // 停用时也清理
 	e.eventually("清理", func() (bool, string) {
+		// SQLITE-PORT(G3): bool_or/and
 		s := e.scalar(`SELECT string_agg(id, ',' ORDER BY id) FROM plugin_events`) + " " + e.scalar(`SELECT string_agg(line, ',') FROM plugin_host_log`)
 		return s == recent+" 新", s
 	})
+	// SQLITE-PORT(G3): ::cast
 	if got := e.scalar(`SELECT count(*)::text FROM plugin_event_deliveries WHERE event_id=$1`, old); got != "0" {
 		t.Fatalf("投递记录随事件删除：%s", got)
 	}
@@ -460,6 +466,7 @@ func TestHostSchedules(t *testing.T) {
 		t.Fatalf("slow 上一次没有回应应跳过，hourly 未到：%d %d", schedules("slow"), schedules("hourly"))
 	}
 	e.eventually("跳过记入日志", func() (bool, string) {
+		// SQLITE-PORT(G3): bool_or/and
 		s := e.scalar(`SELECT string_agg(line, '|') FROM plugin_host_log WHERE plugin_id='cron'`)
 		return strings.Contains(s, "定时任务 slow 上一次还没有结束"), s
 	})

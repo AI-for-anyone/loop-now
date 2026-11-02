@@ -94,13 +94,17 @@ func TestProjectCredentialDeletionPurgesWholeOwnerAtomically(t *testing.T) {
 			}
 			if withAgent {
 				// Shadowed legacy credentials are a separate project-owned inventory.
+				// SQLITE-PORT(G4): '{}' array
 				mustExec(t, e.s, `INSERT INTO project_credential_legacy_rows(id,project_id,source_agent_id,secret,field_names,env_names,file_paths,updated_at)VALUES($1,$2,$3,$4,'{}','{}','{}',now())`, uuid.New(), p.ID, agent, plain)
 			}
 			counts := func() []int {
 				out := make([]int, 7)
 				queries := []string{
+					// SQLITE-PORT(G4): octet_length
 					`SELECT count(*) FROM model_auth_versions v JOIN project_credential_accounts a ON a.id=v.project_account_id WHERE a.project_id=$1 AND octet_length(v.secret)>0`,
+					// SQLITE-PORT(G4): octet_length
 					`SELECT count(*) FROM project_cli_versions v JOIN project_credential_accounts a ON a.id=v.account_id WHERE a.project_id=$1 AND octet_length(v.secret)>0`,
+					// SQLITE-PORT(G4): octet_length
 					`SELECT count(*) FROM project_credential_legacy_rows WHERE project_id=$1 AND octet_length(secret)>0`,
 					`SELECT count(*) FROM project_credential_accounts WHERE project_id=$1 AND (current_model_version_id IS NOT NULL OR current_cli_version_id IS NOT NULL)`,
 					`SELECT count(*) FROM project_model_auth_operations WHERE project_id=$1 AND (status IN('pending','awaiting_authorization') OR authorization_url IS NOT NULL)`,

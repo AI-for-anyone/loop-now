@@ -128,7 +128,7 @@ func TestSleepAppTaskWakeCommitAndExecutionRestart(t *testing.T) {
 				t.Fatal(e)
 			}
 			defer st.Close()
-			if _, e = st.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, receipt.Sleep.ID); e != nil {
+			if _, e = st.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, receipt.Sleep.ID); e != nil {
 				t.Fatal(e)
 			}
 			if e = st.ReconcileSleeps(ctx, 100); e != nil {
@@ -238,7 +238,7 @@ func TestSleepAppRetireAndOwnerDeletionRejectOldTimer(t *testing.T) {
 		if _, e = os.Stat(filepath.Join(w.cfg.WorkRoot, "agents", p.RuntimeID.String())); !os.IsNotExist(e) {
 			t.Fatal("retired directory remains", e)
 		}
-		if _, e = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, receipt.Sleep.ID); e != nil {
+		if _, e = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, receipt.Sleep.ID); e != nil {
 			t.Fatal(e)
 		}
 		if e = s.a.Store.ReconcileSleeps(ctx, 100); e != nil {
@@ -307,7 +307,7 @@ func TestSleepAppRetireAndOwnerDeletionRejectOldTimer(t *testing.T) {
 			t.Fatal(e)
 		}
 		defer st.Close()
-		if _, e = st.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, receipt.Sleep.ID); e != nil {
+		if _, e = st.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, receipt.Sleep.ID); e != nil {
 			t.Fatal(e)
 		}
 		if e = st.ReconcileSleeps(ctx, 100); e != nil {
@@ -547,7 +547,7 @@ func TestSleepAppProjectDeletionCancelsOldSleep(t *testing.T) {
 		t.Fatal(n)
 	}
 	s.must(204, "DELETE", "/projects/"+project.ID.String(), nil)
-	if _, e = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, receipt.Sleep.ID); e != nil {
+	if _, e = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, receipt.Sleep.ID); e != nil {
 		t.Fatal(e)
 	}
 	if e = s.a.Store.ReconcileSleeps(ctx, 100); e != nil {
@@ -594,7 +594,7 @@ func TestSleepAppQueuedTaskTimerCannotSurviveRetirement(t *testing.T) {
 	if _, e = s.a.Store.Pool.Exec(ctx, `CREATE FUNCTION hold_timer_claim() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.origin='sleep_wake' AND NEW.status='starting' THEN RAISE EXCEPTION 'offline timer claim barrier'; END IF; RETURN NEW; END $$; CREATE TRIGGER hold_timer_claim BEFORE UPDATE ON task_turns FOR EACH ROW EXECUTE FUNCTION hold_timer_claim()`); e != nil {
 		t.Fatal(e)
 	}
-	if _, e = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, receipt.Sleep.ID); e != nil {
+	if _, e = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, receipt.Sleep.ID); e != nil {
 		t.Fatal(e)
 	}
 	if e = s.a.Store.ReconcileSleeps(ctx, 100); e != nil {
@@ -695,7 +695,7 @@ func TestSleepAppBatchOnePersistentFailureDoesNotStarve(t *testing.T) {
 	if _, e := s.a.Store.Pool.Exec(ctx, `CREATE FUNCTION reject_first_sleep_app() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.id='`+bad.sleep.ID.String()+`'::uuid THEN RAISE EXCEPTION 'offline persistent candidate failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_first_sleep_app BEFORE UPDATE ON agent_sleeps FOR EACH ROW WHEN (OLD.state='sleeping' AND NEW.state='woken') EXECUTE FUNCTION reject_first_sleep_app()`); e != nil {
 		t.Fatal(e)
 	}
-	if _, e := s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-CASE WHEN id=$1 THEN interval '10 seconds' ELSE interval '5 seconds' END WHERE id IN ($1,$2)`, bad.sleep.ID, healthy.sleep.ID); e != nil {
+	if _, e := s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-CASE WHEN id=$1 THEN 10000000 ELSE 5000000 END WHERE id IN ($1,$2)`, bad.sleep.ID, healthy.sleep.ID); e != nil {
 		t.Fatal(e)
 	}
 	limit := time.Now().Add(6 * time.Second)

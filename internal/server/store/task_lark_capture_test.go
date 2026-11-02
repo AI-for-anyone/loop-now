@@ -65,6 +65,7 @@ func TestTaskLarkCaptureOriginalScopeAndPermission(t *testing.T) {
 		{"invalid-original-credentials", tampered, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			// SQLITE-PORT(G5): sha256/encode
 			if _, err := s.Pool.Exec(ctx, `UPDATE task_instances SET snapshot=$2,snapshot_sha=encode(sha256($2),'hex'),prepared=true,session_state='active',session_file=$3 WHERE id=$1`, turn.RuntimeID, tc.raw, session); err != nil {
 				t.Fatal(err)
 			}
@@ -89,6 +90,7 @@ func TestTaskLarkCaptureOriginalScopeAndPermission(t *testing.T) {
 		})
 	}
 	valid := larkSwitchSnapshot(t, task, agent, true)
+	// SQLITE-PORT(G5): sha256/encode
 	if _, err := s.Pool.Exec(ctx, `UPDATE task_instances SET snapshot=$2,snapshot_sha=encode(sha256($2),'hex'),prepared=false,session_state='none',session_file=NULL WHERE id=$1`, turn.RuntimeID, valid); err != nil {
 		t.Fatal(err)
 	}
@@ -148,6 +150,7 @@ func TestTaskLarkCapturePreparedNeverRunFollowup(t *testing.T) {
 		t.Fatal(e)
 	}
 	var originalNode uuid.UUID
+	// SQLITE-PORT(G5): ::cast
 	if e := s.Pool.QueryRow(ctx, `SELECT (document->'view'->'task'->>'currentNodeRunId')::uuid FROM task_records WHERE id=$1`, in.TaskID).Scan(&originalNode); e != nil {
 		t.Fatal(e)
 	}

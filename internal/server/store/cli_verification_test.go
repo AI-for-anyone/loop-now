@@ -124,7 +124,7 @@ func TestCLIVerificationTargetChangeAndProjectPurge(t *testing.T) {
 	}
 	// Model a persisted management refresh lease without claiming native/Go
 	// coordinator integration. That matrix is independent task 2.1.
-	mustExec(t, e.s, `UPDATE google_cli_grants SET refresh_state='refreshing',lease_id=$2,lease_until=clock_timestamp()+interval '1 minute',lease_verification_id=$3 WHERE version_id=$1`, version, uuid.New(), in.OperationID)
+	mustExec(t, e.s, `UPDATE google_cli_grants SET refresh_state='refreshing',lease_id=$2,lease_until=clock_timestamp()+60000000,lease_verification_id=$3 WHERE version_id=$1`, version, uuid.New(), in.OperationID)
 	// Force the final project tombstone write to fail: cancellation and purge
 	// must roll back with it, retaining both original lease and operation.
 	mustExec(t, e.s, `CREATE FUNCTION reject_probe_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic rollback'; END $$`)
