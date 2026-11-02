@@ -424,6 +424,7 @@ func (s *Store) findTaskNodeReminderTx(ctx context.Context, m *TaskMutation, tar
 	if imageLimit <= 0 {
 		imageLimit = messageimage.DefaultCount
 	}
+	// SQLITE-PORT(G5): array、jsonb
 	turn, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE runtime_id=$1 AND node_run_id=$2 AND inbox_scope_node_id=$2 AND execution_mode=$3 AND status='queued' AND origin='inbox_reminder' AND priority=$4 AND (SELECT coalesce(sum(jsonb_array_length(im.images)),0) FROM task_node_inbox_messages b JOIN inbox_messages im ON im.id=b.message_id WHERE b.reminder_run_id=task_turns.id)+$5<=$6 ORDER BY queue_seq LIMIT 1`, target.RuntimeID, target.NodeRunID, mode, priority, images, imageLimit))
 	if e == db.ErrNoRows {
 		return TaskTurn{}, false, nil
@@ -584,7 +585,7 @@ func (s *Store) ExpireTaskNodeInboxTx(ctx context.Context, m *TaskMutation) erro
 			mode = "task_conversation"
 		}
 	}
-	rows, e := m.Tx.Query(ctx, `SELECT b.message_id FROM task_node_inbox_messages b JOIN task_turns t ON b.reminder_run_id=t.id WHERE b.task_id=$1 AND b.not_executed_at IS NULL AND (t.status='interrupted' OR $2::uuid IS NULL OR b.node_run_id<>$2 OR b.execution_mode<>$3) AND NOT EXISTS(SELECT 1 FROM task_node_inbox_run_links l WHERE l.message_id=b.message_id AND l.role IN ('read','reply'))`, m.Record.View.Task.ID, current, mode)
+	rows, e := m.Tx.Query(ctx, `SELECT b.message_id FROM task_node_inbox_messages b JOIN task_turns t ON b.reminder_run_id=t.id WHERE b.task_id=$1 AND b.not_executed_at IS NULL AND (t.status='interrupted' OR $2 IS NULL OR b.node_run_id<>$2 OR b.execution_mode<>$3) AND NOT EXISTS(SELECT 1 FROM task_node_inbox_run_links l WHERE l.message_id=b.message_id AND l.role IN ('read','reply'))`, m.Record.View.Task.ID, current, mode)
 	if e != nil {
 		return e
 	}

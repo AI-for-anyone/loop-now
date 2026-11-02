@@ -261,7 +261,8 @@ func TestMessageImagesTaskQueueBatchRetainsScope(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	rows, e := s.a.Store.Pool.Query(ctx, `SELECT sum(jsonb_array_length(m.images))::int FROM task_node_inbox_messages b JOIN inbox_messages m ON m.id=b.message_id WHERE b.runtime_id=$1 GROUP BY b.reminder_run_id ORDER BY sum(jsonb_array_length(m.images))`, p.RuntimeID)
+	// SQLITE-PORT(G11): array、jsonb
+	rows, e := s.a.Store.Pool.Query(ctx, `SELECT CAST(sum(jsonb_array_length(m.images)) AS INTEGER) FROM task_node_inbox_messages b JOIN inbox_messages m ON m.id=b.message_id WHERE b.runtime_id=$1 GROUP BY b.reminder_run_id ORDER BY sum(jsonb_array_length(m.images))`, p.RuntimeID)
 	if e != nil {
 		t.Fatal(e)
 	}

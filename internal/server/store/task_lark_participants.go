@@ -48,6 +48,7 @@ func (s *Store) TaskLarkParticipants(ctx context.Context, id uuid.UUID) (taskmod
 		fenced            bool
 		hadTurn           bool
 	}
+	// SQLITE-PORT(G5): LATERAL
 	rows, err := tx.Query(ctx, `SELECT i.agent_id,i.id,i.snapshot,i.snapshot_sha,i.prepared,i.retired,i.session_state,i.session_file,coalesce(b.revision,0),b.base_snapshot_sha,b.agent_id,EXISTS(SELECT 1 FROM task_lark_switch_fences f WHERE f.runtime_id=i.id),EXISTS(SELECT 1 FROM task_turns t WHERE t.task_id=i.task_id AND t.runtime_id=i.id) FROM task_instances i LEFT JOIN LATERAL (SELECT p.revision,p.base_snapshot_sha,p.agent_id FROM task_lark_binding_members p JOIN task_lark_credential_bindings b ON b.task_id=p.task_id AND b.revision=p.revision JOIN task_lark_switch_actions a ON a.task_id=b.task_id AND a.actor_key=b.actor_key AND a.action_id=b.action_id AND a.status='succeeded' WHERE p.task_id=i.task_id AND p.runtime_id=i.id ORDER BY p.revision DESC LIMIT 1) b ON true WHERE i.task_id=$1 ORDER BY i.id`, id)
 	if err != nil {
 		return r.View, nil, err

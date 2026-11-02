@@ -212,7 +212,7 @@ func TestTaskConsoleAppBlockedSleepLineageAndRecovery(t *testing.T) {
 		t.Fatal("restart changed original sleep deadline/state")
 	}
 	// TEST-only advancement of the already persisted deadline, not a new source.
-	if _, e = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, first.Sleep.ID); e != nil {
+	if _, e = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, first.Sleep.ID); e != nil {
 		t.Fatal(e)
 	}
 	if e = s.a.Store.ReconcileSleeps(ctx, 100); e != nil {
@@ -231,7 +231,7 @@ func TestTaskConsoleAppBlockedSleepLineageAndRecovery(t *testing.T) {
 	})
 	work := taskConsoleSend(t, s, d.Task.ID, n, uuid.New(), " !sleep=150ms !text=queue_wakes_second_sleep", "")
 	taskConsoleWaitRun(t, s, work.RunID, "completed")
-	if _, e = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, second.Sleep.ID); e != nil {
+	if _, e = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, second.Sleep.ID); e != nil {
 		t.Fatal(e)
 	}
 	if e = s.a.Store.ReconcileSleeps(ctx, 100); e != nil {
@@ -292,7 +292,7 @@ func TestTaskConsoleAppBlockedSleepLineageAndRecovery(t *testing.T) {
 	if e = s.a.Store.Pool.QueryRow(ctx, `SELECT state FROM agent_sleeps WHERE id=$1`, third.Sleep.ID).Scan(&oldSleepState); e != nil || oldSleepState != "cancelled" {
 		t.Fatal("retry kept old-node strict sleep live", e)
 	}
-	if _, e = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, third.Sleep.ID); e != nil {
+	if _, e = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, third.Sleep.ID); e != nil {
 		t.Fatal(e)
 	}
 	if e = s.a.Store.ReconcileSleeps(ctx, 100); e != nil {
@@ -458,7 +458,7 @@ func TestTaskConsoleAppTerminalSleepAndQueuedInvalidation(t *testing.T) {
 				if e := s.a.Store.Pool.QueryRow(ctx, `SELECT state FROM agent_sleeps WHERE id=$1`, sleepID).Scan(&state); e != nil || state != "cancelled" {
 					t.Fatal("terminal kept strict sleep active", state, e)
 				}
-				if _, e := s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, sleepID); e != nil {
+				if _, e := s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, sleepID); e != nil {
 					t.Fatal(e)
 				}
 				if e := s.a.Store.ReconcileSleeps(ctx, 100); e != nil {

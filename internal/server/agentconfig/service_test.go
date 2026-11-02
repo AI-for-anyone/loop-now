@@ -321,6 +321,7 @@ func TestCLIsAndCredentials(t *testing.T) {
 
 	// 凭证以明文存入 secret 列。
 	var stored bool
+	// SQLITE-PORT(G2): ::cast
 	_ = e.st.Pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agent_credentials WHERE agent_id = $1 AND cli_name = 'gh' AND position('ghp_example'::bytea in secret) > 0)`, a.ID).Scan(&stored)
 	if !stored {
 		t.Fatal("secret 列中没有明文凭证")

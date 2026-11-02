@@ -57,6 +57,7 @@ func (s *Service) StartSleepMaintenance(interval time.Duration, batch int, kickT
 func (s *Service) emitSleep(ctx context.Context, agent uuid.UUID) {
 	var raw []byte
 	// Read the latest state and its revision together, including a terminal reference.
+	// SQLITE-PORT(G2): LATERAL、jsonb
 	err := s.st.Pool.QueryRow(ctx, `SELECT jsonb_build_object('scopeKind',z.scope_kind,'agentId',z.agent_id,'taskId',z.task_id,'runtimeId',z.runtime_id,'nodeRunId',z.node_run_id,'sleepRevision',a.sleep_revision,'sleep',NULL,'endedSleepId',CASE WHEN z.state IN ('woken','cancelled') THEN z.id ELSE NULL END) FROM agent_sessions a JOIN LATERAL(SELECT * FROM agent_sleeps WHERE agent_id=a.agent_id AND task_id IS NULL ORDER BY revision DESC LIMIT 1) z ON true WHERE a.agent_id=$1`, agent).Scan(&raw)
 	if err != nil {
 		return

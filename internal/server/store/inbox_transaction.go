@@ -33,9 +33,6 @@ func (s *Store) InboxTransaction(ctx context.Context, plan InboxLockPlan, fn fun
 	changed := false
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if plan.MessageID != uuid.Nil {
-			if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "inbox-write:"+plan.MessageID.String()); err != nil {
-				return err
-			}
 		}
 		projects := slices.Clone(plan.Projects)
 		tasks := slices.Clone(plan.Tasks)
@@ -80,7 +77,7 @@ func (s *Store) InboxTransaction(ctx context.Context, plan InboxLockPlan, fn fun
 		for _, pid := range sortedIDs(projects) {
 			var name string
 			var manager *uuid.UUID
-			if err := tx.QueryRow(ctx, `SELECT name,manager_agent_id FROM projects WHERE id=$1 AND (deleted_at IS NULL OR $2) FOR SHARE`, pid, plan.AllowEndedTaskHistory).Scan(&name, &manager); err != nil {
+			if err := tx.QueryRow(ctx, `SELECT name,manager_agent_id FROM projects WHERE id=$1 AND (deleted_at IS NULL OR $2)`, pid, plan.AllowEndedTaskHistory).Scan(&name, &manager); err != nil {
 				return notFoundIfNoRows(err, "项目")
 			}
 			names[pid] = name
@@ -99,7 +96,7 @@ func (s *Store) InboxTransaction(ctx context.Context, plan InboxLockPlan, fn fun
 		scope := &InboxTransaction{Tx: tx, Tasks: map[uuid.UUID]*TaskMutation{}}
 		for _, id := range tasks {
 			var data []byte
-			if err := tx.QueryRow(ctx, `SELECT document FROM task_records WHERE id=$1 FOR UPDATE`, id).Scan(&data); err != nil {
+			if err := tx.QueryRow(ctx, `SELECT document FROM task_records WHERE id=$1`, id).Scan(&data); err != nil {
 				return err
 			}
 			var record taskmodel.Record

@@ -62,7 +62,7 @@ func TestSleepNormalTransactionsAndTimerReplacement(t *testing.T) {
 		t.Fatal("changed replay accepted")
 	}
 	// Due time is persisted. Reconciliation commits one stable queued timer.
-	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, receipt.Sleep.ID); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, receipt.Sleep.ID); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
@@ -243,10 +243,10 @@ func TestSleepTaskModesAtomicFinishAndCommittedVersion(t *testing.T) {
 				t.Fatal("conversation altered workflow")
 			}
 			var eventVersion int64
-			if err = s.Pool.QueryRow(ctx, `SELECT (data->>'taskVersion')::bigint FROM task_events WHERE task_id=$1 AND type='sleep.updated' ORDER BY id DESC LIMIT 1`, r.View.Task.ID).Scan(&eventVersion); err != nil || eventVersion != record.View.Task.Version {
+			if err = s.Pool.QueryRow(ctx, `SELECT CAST((data->>'taskVersion') AS INTEGER) FROM task_events WHERE task_id=$1 AND type='sleep.updated' ORDER BY id DESC LIMIT 1`, r.View.Task.ID).Scan(&eventVersion); err != nil || eventVersion != record.View.Task.Version {
 				t.Fatal("event used pre-save version", eventVersion, record.View.Task.Version, err)
 			}
-			if _, err = s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, receipt.Sleep.ID); err != nil {
+			if _, err = s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, receipt.Sleep.ID); err != nil {
 				t.Fatal(err)
 			}
 			if err = s.ReconcileSleeps(ctx, 100); err != nil {
@@ -307,7 +307,7 @@ func TestSleepExpiryWorkCompetitionAndMonotonicRevision(t *testing.T) {
 		if _, _, _, err = e.s.FinishRun(ctx, run.ID, store.RunEnd{Status: "completed"}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, receipt.Sleep.ID); err != nil {
+		if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, receipt.Sleep.ID); err != nil {
 			t.Fatal(err)
 		}
 		done := make(chan error, 2)
@@ -368,7 +368,7 @@ func TestSleepBatchFailureContinuesAndLifecycleCancelsTimer(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second'`); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = e.s.Pool.Exec(ctx, `CREATE FUNCTION reject_one_sleep() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.agent_id='`+e.agent.String()+`'::uuid THEN RAISE EXCEPTION 'offline injected'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_one_sleep BEFORE UPDATE ON agent_sleeps FOR EACH ROW EXECUTE FUNCTION reject_one_sleep()`); err != nil {
@@ -545,7 +545,7 @@ func TestSleepSameAgentNormalAndTwoTasksAreIndependent(t *testing.T) {
 	}
 	wake := *before.Sleep.WakeAt
 	e.send(false, "queue")
-	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, sleepIDs[0]); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, sleepIDs[0]); err != nil {
 		t.Fatal(err)
 	}
 	if err = e.s.ReconcileSleeps(ctx, 100); err != nil {
@@ -599,10 +599,10 @@ func TestSleepBatchOnePersistentFailureIsFair(t *testing.T) {
 	}
 	bad := createSleep(e.agent)
 	healthy := createSleep(other.ID)
-	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '10 seconds' WHERE id=$1;`, bad.ID); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-10000000 WHERE id=$1;`, bad.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '5 seconds' WHERE id=$1;`, healthy.ID); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-5000000 WHERE id=$1;`, healthy.ID); err != nil {
 		t.Fatal(err)
 	}
 	var originalWake time.Time
@@ -624,7 +624,7 @@ func TestSleepBatchOnePersistentFailureIsFair(t *testing.T) {
 		t.Fatal(err)
 	}
 	late := createSleep(lateAgent.ID)
-	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, late.ID); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, late.ID); err != nil {
 		t.Fatal(err)
 	}
 

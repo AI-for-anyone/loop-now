@@ -24,7 +24,7 @@ func (s *Store) WakeSleepForWorkTx(ctx context.Context, tx *db.Tx, m *TaskMutati
 	if m != nil {
 		key = sleepKey(agent, m.Record.View.Task.ID)
 	}
-	r, e := scanSleep(tx.QueryRow(ctx, `SELECT `+sleepColumns+` FROM agent_sleeps WHERE scope_key=$1 AND (state='sleeping' OR (state='woken' AND wake_run_id=timer_run_id)) ORDER BY requested_at DESC LIMIT 1 FOR UPDATE`, key))
+	r, e := scanSleep(tx.QueryRow(ctx, `SELECT `+sleepColumns+` FROM agent_sleeps WHERE scope_key=$1 AND (state='sleeping' OR (state='woken' AND wake_run_id=timer_run_id)) ORDER BY requested_at DESC LIMIT 1`, key))
 	if errors.Is(e, db.ErrNoRows) {
 		return nil
 	}
@@ -82,7 +82,7 @@ func (s *Store) attachSleepCarrierTx(ctx context.Context, tx *db.Tx, m *TaskMuta
 
 // FinishSleepTx must share the source Run/TaskTurn completion transaction.
 func (s *Store) FinishSleepTx(ctx context.Context, tx *db.Tx, m *TaskMutation, run uuid.UUID, status string) (bool, error) {
-	r, e := scanSleep(tx.QueryRow(ctx, `SELECT `+sleepColumns+` FROM agent_sleeps WHERE source_run_id=$1 AND state='requested' FOR UPDATE`, run))
+	r, e := scanSleep(tx.QueryRow(ctx, `SELECT `+sleepColumns+` FROM agent_sleeps WHERE source_run_id=$1 AND state='requested'`, run))
 	if errors.Is(e, db.ErrNoRows) {
 		return false, nil
 	}
@@ -180,10 +180,10 @@ func (s *Store) cancelSleepTx(ctx context.Context, tx *db.Tx, m *TaskMutation, r
 	return s.saveSleepTx(ctx, tx, m, r)
 }
 func (s *Store) CancelSleepsTx(ctx context.Context, tx *db.Tx, m *TaskMutation, agent uuid.UUID, why string) error {
-	query := `SELECT ` + sleepColumns + ` FROM agent_sleeps WHERE agent_id=$1 AND task_id IS NULL AND (state IN ('requested','sleeping') OR (state='woken' AND wake_run_id=timer_run_id AND EXISTS(SELECT 1 FROM runs WHERE id=agent_sleeps.timer_run_id AND status='queued'))) ORDER BY id FOR UPDATE`
+	query := `SELECT ` + sleepColumns + ` FROM agent_sleeps WHERE agent_id=$1 AND task_id IS NULL AND (state IN ('requested','sleeping') OR (state='woken' AND wake_run_id=timer_run_id AND EXISTS(SELECT 1 FROM runs WHERE id=agent_sleeps.timer_run_id AND status='queued'))) ORDER BY id`
 	arg := agent
 	if m != nil {
-		query = `SELECT ` + sleepColumns + ` FROM agent_sleeps WHERE task_id=$1 AND (state IN ('requested','sleeping') OR (state='woken' AND wake_run_id=timer_run_id AND EXISTS(SELECT 1 FROM task_turns WHERE id=agent_sleeps.timer_run_id AND status='queued'))) ORDER BY id FOR UPDATE`
+		query = `SELECT ` + sleepColumns + ` FROM agent_sleeps WHERE task_id=$1 AND (state IN ('requested','sleeping') OR (state='woken' AND wake_run_id=timer_run_id AND EXISTS(SELECT 1 FROM task_turns WHERE id=agent_sleeps.timer_run_id AND status='queued'))) ORDER BY id`
 		arg = m.Record.View.Task.ID
 	}
 	rows, e := tx.Query(ctx, query, arg)

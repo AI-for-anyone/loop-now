@@ -106,7 +106,7 @@ func (s *Store) SetModelAuthOperationURL(ctx context.Context, operationID uuid.U
 	var o ModelAuthOperation
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var err error
-		o, err = scanModelAuthOperation(tx.QueryRow(ctx, `SELECT `+modelAuthOperationColumns+` FROM model_auth_operations WHERE id=$1 FOR UPDATE`, operationID))
+		o, err = scanModelAuthOperation(tx.QueryRow(ctx, `SELECT `+modelAuthOperationColumns+` FROM model_auth_operations WHERE id=$1`, operationID))
 		if err != nil {
 			return notFoundIfNoRows(err, "模型登录操作")
 		}
@@ -128,7 +128,7 @@ func (s *Store) EndModelAuthOperation(ctx context.Context, operationID uuid.UUID
 	var o ModelAuthOperation
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var err error
-		o, err = scanModelAuthOperation(tx.QueryRow(ctx, `SELECT `+modelAuthOperationColumns+` FROM model_auth_operations WHERE id=$1 FOR UPDATE`, operationID))
+		o, err = scanModelAuthOperation(tx.QueryRow(ctx, `SELECT `+modelAuthOperationColumns+` FROM model_auth_operations WHERE id=$1`, operationID))
 		if err != nil {
 			return notFoundIfNoRows(err, "模型登录操作")
 		}
@@ -166,11 +166,11 @@ func (s *Store) CompleteModelAuthOperation(ctx context.Context, operationID uuid
 		var config int64
 		var deleted *time.Time
 		var project *uuid.UUID
-		if err := tx.QueryRow(ctx, `SELECT model_provider,config_version,deleted_at,project_id FROM agents WHERE id=$1 FOR UPDATE`, agentID).Scan(&provider, &config, &deleted, &project); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT model_provider,config_version,deleted_at,project_id FROM agents WHERE id=$1`, agentID).Scan(&provider, &config, &deleted, &project); err != nil {
 			return notFoundIfNoRows(err, "Agent")
 		}
 		var err error
-		o, err = scanModelAuthOperation(tx.QueryRow(ctx, `SELECT `+modelAuthOperationColumns+` FROM model_auth_operations WHERE id=$1 FOR UPDATE`, operationID))
+		o, err = scanModelAuthOperation(tx.QueryRow(ctx, `SELECT `+modelAuthOperationColumns+` FROM model_auth_operations WHERE id=$1`, operationID))
 		if err != nil {
 			return err
 		}
@@ -178,7 +178,7 @@ func (s *Store) CompleteModelAuthOperation(ctx context.Context, operationID uuid
 			return nil
 		}
 		var expired bool
-		if err = tx.QueryRow(ctx, `SELECT $1::timestamptz <= clock_timestamp()`, o.ExpiresAt).Scan(&expired); err != nil {
+		if err = tx.QueryRow(ctx, `SELECT $1 <= clock_timestamp()`, o.ExpiresAt).Scan(&expired); err != nil {
 			return err
 		}
 		if expired {

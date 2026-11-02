@@ -67,7 +67,7 @@ func (s *Store) ClaimLarkCLIRefresh(ctx context.Context, b clicredential.LarkBin
 			return nil
 		}
 		// Use the database clock after both project and grant locks were acquired.
-		tag, e := tx.Exec(ctx, `UPDATE lark_cli_grants SET refresh_state='refreshing',lease_id=$2,lease_agent_id=$3,lease_until=$4,error_code=NULL,updated_at=clock_timestamp() WHERE version_id=$1 AND $4::timestamptz>clock_timestamp()`, b.VersionID, lease, b.AgentID, until)
+		tag, e := tx.Exec(ctx, `UPDATE lark_cli_grants SET refresh_state='refreshing',lease_id=$2,lease_agent_id=$3,lease_until=$4,error_code=NULL,updated_at=clock_timestamp() WHERE version_id=$1 AND $4>clock_timestamp()`, b.VersionID, lease, b.AgentID, until)
 		claimed = e == nil && tag.RowsAffected() == 1
 		return e
 	})

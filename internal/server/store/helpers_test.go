@@ -167,6 +167,7 @@ func (e projectMigrationEnv) oldTask(t *testing.T, agent uuid.UUID, version int,
 	}
 	document, _ := json.Marshal(map[string]any{"view": map[string]any{"task": map[string]any{"status": status, "version": 1}}})
 	mustExec(t, e.s, `INSERT INTO task_records(id,project_id,status,document,version,ended_at)VALUES($1,$2,$3,$4,1,$5)`, task, e.project, status, document, endedAt)
+	// SQLITE-PORT(G7): sha256/encode
 	mustExec(t, e.s, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared,retired)VALUES($1,$2,$3,'fixture',$4,encode(sha256($4),'hex'),true,$5)`, runtime, task, agent, raw, retired)
 	return runtime, task, raw
 }

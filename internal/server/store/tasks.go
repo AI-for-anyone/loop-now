@@ -71,9 +71,6 @@ func actionLock(ctx context.Context, tx *db.Tx, a TaskAction) (json.RawMessage, 
 	if a.ID == uuid.Nil || a.ActorKey == "" || a.Operation == "" {
 		return nil, false, apperr.Invalid("actionId", "必须提供有效动作ID")
 	}
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, a.ActorKey+":"+a.ID.String()); err != nil {
-		return nil, false, err
-	}
 	var op string
 	var hash, body []byte
 	err := tx.QueryRow(ctx, `SELECT operation,body_hash,response FROM task_actions WHERE actor_key=$1 AND action_id=$2`, a.ActorKey, a.ID).Scan(&op, &hash, &body)
@@ -116,9 +113,6 @@ func saveTask(ctx context.Context, tx *db.Tx, r *taskmodel.Record) error {
 }
 func emitTaskEvents(ctx context.Context, tx *db.Tx, m *TaskMutation) error {
 	// 项目事件跨任务续传：序号分配与事务提交必须串行，否则后提交的小序号会被游标跳过。
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, int64(0x6c6e5f7461736b65)); err != nil {
-		return err
-	}
 	if err := m.Emit("task.updated", map[string]any{"task": m.Record.View.Task}); err != nil {
 		return err
 	}
@@ -224,11 +218,11 @@ func (s *Store) MutateTask(ctx context.Context, id uuid.UUID, action *TaskAction
 		}
 		var manager *uuid.UUID
 		var projectName string
-		if err := tx.QueryRow(ctx, `SELECT manager_agent_id,name FROM projects WHERE id=$1 FOR SHARE`, pid).Scan(&manager, &projectName); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT manager_agent_id,name FROM projects WHERE id=$1`, pid).Scan(&manager, &projectName); err != nil {
 			return err
 		}
 		var raw []byte
-		if err := tx.QueryRow(ctx, `SELECT document FROM task_records WHERE id=$1 FOR UPDATE`, id).Scan(&raw); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT document FROM task_records WHERE id=$1`, id).Scan(&raw); err != nil {
 			return notFoundIfNoRows(err, "任务")
 		}
 		var record, before taskmodel.Record
@@ -311,7 +305,7 @@ func (s *Store) CreateTask(ctx context.Context, projectID, managerID uuid.UUID, 
 		}
 		var current *uuid.UUID
 		var projectName string
-		if err = tx.QueryRow(ctx, `SELECT manager_agent_id,name FROM projects WHERE id=$1 AND deleted_at IS NULL FOR SHARE`, projectID).Scan(&current, &projectName); err != nil {
+		if err = tx.QueryRow(ctx, `SELECT manager_agent_id,name FROM projects WHERE id=$1 AND deleted_at IS NULL`, projectID).Scan(&current, &projectName); err != nil {
 			return notFoundIfNoRows(err, "项目")
 		}
 		if current == nil || *current != managerID {
@@ -343,6 +337,7 @@ func (s *Store) CreateTask(ctx context.Context, projectID, managerID uuid.UUID, 
 			if err != nil {
 				return err
 			}
+			// SQLITE-PORT(G5): sha256/encode
 			_, err = tx.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,sources,fork_source) VALUES($1,$2,$3,$4,$5,encode(sha256($5),'hex'),$6,$7)`, inst.ID, r.View.Task.ID, inst.AgentID, inst.AgentName, inst.Snapshot, sources, inst.ForkSource)
 			if err != nil {
 				return err
@@ -430,7 +425,7 @@ func (s *Store) ListTasks(ctx context.Context, projectID uuid.UUID, cursor strin
 		}
 		at, after = &t, &id
 	}
-	rows, err := s.Pool.Query(ctx, `SELECT t.document,p.name FROM task_records t JOIN projects p ON p.id=t.project_id WHERE t.project_id=$1 AND ($2::timestamptz IS NULL OR (t.created_at,t.id)<($2,$3)) ORDER BY t.created_at DESC,t.id DESC LIMIT $4`, projectID, at, after, limit+1)
+	rows, err := s.Pool.Query(ctx, `SELECT t.document,p.name FROM task_records t JOIN projects p ON p.id=t.project_id WHERE t.project_id=$1 AND ($2 IS NULL OR (t.created_at,t.id)<($2,$3)) ORDER BY t.created_at DESC,t.id DESC LIMIT $4`, projectID, at, after, limit+1)
 	if err != nil {
 		return taskmodel.Page{}, err
 	}
@@ -491,7 +486,7 @@ func (s *Store) TaskInstances(ctx context.Context, taskID uuid.UUID) ([]TaskInst
 	return out, nil
 }
 func (s *Store) TaskIDs(ctx context.Context, statuses []string) ([]uuid.UUID, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT id FROM task_records WHERE status=ANY($1) ORDER BY created_at,id`, statuses)
+	rows, err := s.Pool.Query(ctx, `SELECT id FROM task_records WHERE status IN (SELECT value FROM json_each($1)) ORDER BY created_at,id`, statuses)
 	if err != nil {
 		return nil, err
 	}
@@ -499,7 +494,7 @@ func (s *Store) TaskIDs(ctx context.Context, statuses []string) ([]uuid.UUID, er
 }
 
 func (s *Store) TaskEvents(ctx context.Context, taskID, projectID *uuid.UUID, after int64, limit int) ([]TaskEvent, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT id,task_id,project_id,type,data,created_at FROM task_events WHERE ($1::uuid IS NULL OR task_id=$1) AND ($2::uuid IS NULL OR project_id=$2) AND id>$3 ORDER BY id LIMIT $4`, taskID, projectID, after, limit)
+	rows, err := s.Pool.Query(ctx, `SELECT id,task_id,project_id,type,data,created_at FROM task_events WHERE ($1 IS NULL OR task_id=$1) AND ($2 IS NULL OR project_id=$2) AND id>$3 ORDER BY id LIMIT $4`, taskID, projectID, after, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -511,7 +506,7 @@ func (s *Store) TaskEvents(ctx context.Context, taskID, projectID *uuid.UUID, af
 }
 func (s *Store) TaskEventPosition(ctx context.Context, taskID, projectID *uuid.UUID) (int64, error) {
 	var pos int64
-	err := s.Pool.QueryRow(ctx, `SELECT coalesce(max(id),0) FROM task_events WHERE ($1::uuid IS NULL OR task_id=$1) AND ($2::uuid IS NULL OR project_id=$2)`, taskID, projectID).Scan(&pos)
+	err := s.Pool.QueryRow(ctx, `SELECT coalesce(max(id),0) FROM task_events WHERE ($1 IS NULL OR task_id=$1) AND ($2 IS NULL OR project_id=$2)`, taskID, projectID).Scan(&pos)
 	return pos, err
 }
 func TaskEventID(e TaskEvent) string { return strconv.FormatInt(e.ID, 10) }

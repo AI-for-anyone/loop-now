@@ -79,6 +79,7 @@ func TestProjectLoginRealOfflineHelperWindow(t *testing.T) {
 				t.Fatal("terminal URL remained", err)
 			}
 			var secretsCount int
+			// SQLITE-PORT(G4): octet_length
 			if err = st.Pool.QueryRow(ctx, `SELECT count(*) FROM model_auth_versions v JOIN project_credential_accounts a ON a.id=v.project_account_id WHERE a.project_id=$1 AND octet_length(v.secret)>0`, dc.Project.ID).Scan(&secretsCount); err != nil {
 				t.Fatal(err)
 			}

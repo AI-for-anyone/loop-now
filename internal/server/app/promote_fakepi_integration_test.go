@@ -219,7 +219,7 @@ func TestPromoteTaskNodeInboxActualAppFakePi(t *testing.T) {
 		if !t.Failed() {
 			return
 		}
-		rows, _ := s.a.Store.Pool.Query(ctx, `SELECT id::text,status,priority,origin,coalesce(execution_mode,''),started_at IS NOT NULL,coalesce(error_code,'') FROM task_turns WHERE runtime_id=$1 ORDER BY queue_seq`, runtime)
+		rows, _ := s.a.Store.Pool.Query(ctx, `SELECT id,status,priority,origin,coalesce(execution_mode,''),started_at IS NOT NULL,coalesce(error_code,'') FROM task_turns WHERE runtime_id=$1 ORDER BY queue_seq`, runtime)
 		for rows.Next() {
 			var id, st, origin, mode, code string
 			var p int

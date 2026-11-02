@@ -160,7 +160,7 @@ type queryer interface {
 
 func pluginConfigTx(ctx context.Context, q queryer, plugin string, project *uuid.UUID, lock bool) (PluginConfigRow, error) {
 	c := PluginConfigRow{Values: map[string]any{}, Secrets: map[string]string{}}
-	sql := `SELECT values,secrets,revision FROM plugin_config WHERE plugin_id=$1 AND project_id IS NOT DISTINCT FROM $2`
+	sql := `SELECT values,secrets,revision FROM plugin_config WHERE plugin_id=$1 AND project_id IS $2`
 	if lock {
 		sql += ` FOR UPDATE`
 	}
@@ -226,7 +226,7 @@ func nonEmpty(m map[string]any) map[string]any {
 // lockPlugin 锁住插件行（与卸载、更新互斥）；插件不存在时返回 not_found。
 func lockPlugin(ctx context.Context, tx *db.Tx, plugin string) error {
 	var id string
-	return notFoundIfNoRows(tx.QueryRow(ctx, `SELECT id FROM plugins WHERE id=$1 FOR SHARE`, plugin).Scan(&id), "插件")
+	return notFoundIfNoRows(tx.QueryRow(ctx, `SELECT id FROM plugins WHERE id=$1`, plugin).Scan(&id), "插件")
 }
 
 // PluginConfigs 返回插件的全局配置与启用了它的各项目的配置（宿主加载时一起交给平台半边）：
@@ -234,7 +234,8 @@ func lockPlugin(ctx context.Context, tx *db.Tx, plugin string) error {
 func (s *Store) PluginConfigs(ctx context.Context, plugin string) (PluginConfigRow, map[uuid.UUID]PluginConfigRow, error) {
 	global := PluginConfigRow{Values: map[string]any{}, Secrets: map[string]string{}}
 	projects := map[uuid.UUID]PluginConfigRow{}
-	rows, err := s.Pool.Query(ctx, `SELECT NULL::uuid,values,secrets,revision FROM plugin_config WHERE plugin_id=$1 AND project_id IS NULL
+	// SQLITE-PORT(G3): '{}' array
+	rows, err := s.Pool.Query(ctx, `SELECT NULL,values,secrets,revision FROM plugin_config WHERE plugin_id=$1 AND project_id IS NULL
 		UNION ALL
 		SELECT pp.project_id,coalesce(c.values,'{}'),coalesce(c.secrets,'{}'),coalesce(c.revision,0)
 		FROM project_plugins pp JOIN projects pr ON pr.id=pp.project_id AND pr.deleted_at IS NULL
@@ -295,11 +296,11 @@ func (s *Store) SaveProjectPlugin(ctx context.Context, project uuid.UUID, plugin
 	changed := false
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var deleted *time.Time
-		if err := tx.QueryRow(ctx, `SELECT deleted_at FROM projects WHERE id=$1 FOR SHARE`, project).Scan(&deleted); err != nil || deleted != nil {
+		if err := tx.QueryRow(ctx, `SELECT deleted_at FROM projects WHERE id=$1`, project).Scan(&deleted); err != nil || deleted != nil {
 			return notFoundIfNoRows(orNoRows(err, deleted != nil), "项目")
 		}
 		var before *bool
-		if err := tx.QueryRow(ctx, `SELECT enabled FROM project_plugins WHERE project_id=$1 AND plugin_id=$2 FOR UPDATE`, project, plugin).Scan(&before); err != nil && !errors.Is(err, db.ErrNoRows) {
+		if err := tx.QueryRow(ctx, `SELECT enabled FROM project_plugins WHERE project_id=$1 AND plugin_id=$2`, project, plugin).Scan(&before); err != nil && !errors.Is(err, db.ErrNoRows) {
 			return err
 		}
 		changed = (before == nil && enabled) || (before != nil && *before != enabled)
@@ -369,7 +370,7 @@ func (s *Store) SaveAgentPluginGrant(ctx context.Context, agent uuid.UUID, plugi
 	return s.inTx(ctx, func(tx *db.Tx) error {
 		var project *uuid.UUID
 		var deleted *time.Time
-		if err := tx.QueryRow(ctx, `SELECT project_id,deleted_at FROM agents WHERE id=$1 FOR SHARE`, agent).Scan(&project, &deleted); err != nil || deleted != nil {
+		if err := tx.QueryRow(ctx, `SELECT project_id,deleted_at FROM agents WHERE id=$1`, agent).Scan(&project, &deleted); err != nil || deleted != nil {
 			return notFoundIfNoRows(orNoRows(err, deleted != nil), "Agent")
 		}
 		if err := lockPlugin(ctx, tx, plugin); err != nil {
@@ -393,7 +394,7 @@ func (s *Store) SaveAgentPluginGrant(ctx context.Context, agent uuid.UUID, plugi
 				return apperr.Invalid("accountIds", "平台 Agent 没有项目账号")
 			}
 			var n int
-			if err := tx.QueryRow(ctx, `SELECT count(*) FROM plugin_accounts WHERE id=ANY($1) AND plugin_id=$2 AND project_id=$3 AND NOT deleted`, accounts, plugin, *project).Scan(&n); err != nil {
+			if err := tx.QueryRow(ctx, `SELECT count(*) FROM plugin_accounts WHERE id IN (SELECT value FROM json_each($1)) AND plugin_id=$2 AND project_id=$3 AND NOT deleted`, accounts, plugin, *project).Scan(&n); err != nil {
 				return err
 			}
 			if n != len(accounts) {
@@ -456,16 +457,13 @@ func (s *Store) GetPluginAccount(ctx context.Context, project uuid.UUID, plugin 
 func (s *Store) CreatePluginAccount(ctx context.Context, a PluginAccount, single bool) (PluginAccount, error) {
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var deleted *time.Time
-		if err := tx.QueryRow(ctx, `SELECT deleted_at FROM projects WHERE id=$1 FOR SHARE`, a.ProjectID).Scan(&deleted); err != nil || deleted != nil {
+		if err := tx.QueryRow(ctx, `SELECT deleted_at FROM projects WHERE id=$1`, a.ProjectID).Scan(&deleted); err != nil || deleted != nil {
 			return notFoundIfNoRows(orNoRows(err, deleted != nil), "项目")
 		}
 		if err := lockPlugin(ctx, tx, a.PluginID); err != nil {
 			return err
 		}
 		// 同一项目同一插件的账号创建串行，单账号检查才可靠。
-		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('plugin_accounts:'||$1::text||':'||$2))`, a.ProjectID, a.PluginID); err != nil {
-			return err
-		}
 		var dup bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM plugin_accounts WHERE project_id=$1 AND plugin_id=$2 AND kind=$3 AND NOT deleted AND ($4 OR name=$5))`,
 			a.ProjectID, a.PluginID, a.Kind, single, a.Name).Scan(&dup); err != nil {
@@ -489,7 +487,7 @@ func (s *Store) CreatePluginAccount(ctx context.Context, a PluginAccount, single
 func (s *Store) UpdatePluginAccount(ctx context.Context, project uuid.UUID, plugin string, id uuid.UUID, expected int64, apply func(PluginAccount) (PluginAccount, error)) (PluginAccount, error) {
 	var out PluginAccount
 	err := s.inTx(ctx, func(tx *db.Tx) error {
-		cur, err := scanPluginAccount(tx.QueryRow(ctx, `SELECT `+pluginAccountColumns+` FROM plugin_accounts WHERE id=$1 AND project_id=$2 AND plugin_id=$3 AND NOT deleted FOR UPDATE`, id, project, plugin))
+		cur, err := scanPluginAccount(tx.QueryRow(ctx, `SELECT `+pluginAccountColumns+` FROM plugin_accounts WHERE id=$1 AND project_id=$2 AND plugin_id=$3 AND NOT deleted`, id, project, plugin))
 		if err != nil {
 			return notFoundIfNoRows(err, "账号")
 		}
@@ -517,6 +515,7 @@ func (s *Store) UpdatePluginAccount(ctx context.Context, project uuid.UUID, plug
 // DeletePluginAccount 删除账号（字段清空），并从各 Agent 的授权中移除对它的引用。
 func (s *Store) DeletePluginAccount(ctx context.Context, project uuid.UUID, plugin string, id uuid.UUID) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
+		// SQLITE-PORT(G3): '{}' array
 		tag, err := tx.Exec(ctx, `UPDATE plugin_accounts SET deleted=true, values='{}', revision=revision+1 WHERE id=$1 AND project_id=$2 AND plugin_id=$3 AND NOT deleted`, id, project, plugin)
 		if err != nil {
 			return err
@@ -524,8 +523,9 @@ func (s *Store) DeletePluginAccount(ctx context.Context, project uuid.UUID, plug
 		if tag.RowsAffected() == 0 {
 			return apperr.NotFound("账号")
 		}
-		_, err = tx.Exec(ctx, `UPDATE agent_plugin_grants SET account_ids=(SELECT coalesce(jsonb_agg(v),'[]') FROM jsonb_array_elements(account_ids) v WHERE v<>to_jsonb($2::text))
-			WHERE plugin_id=$1 AND account_ids @> jsonb_build_array($2::text)`, plugin, id.String())
+		// SQLITE-PORT(G3): jsonb、jsonb op
+		_, err = tx.Exec(ctx, `UPDATE agent_plugin_grants SET account_ids=(SELECT coalesce(jsonb_agg(v),'[]') FROM jsonb_array_elements(account_ids) v WHERE v<>to_jsonb($2))
+			WHERE plugin_id=$1 AND account_ids @> jsonb_build_array($2)`, plugin, id.String())
 		return err
 	})
 }
@@ -620,7 +620,7 @@ type PluginDeliveryQuery struct {
 func (s *Store) PluginDeliveries(ctx context.Context, plugin string, q PluginDeliveryQuery) ([]PluginDeliveryRow, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT e.id,e.type,e.at,e.project_id,e.agent_id,e.task_id,e.run_id,d.status,d.attempts,d.last_error,d.acked_at,d.duration_ms
 		FROM plugin_event_deliveries d JOIN plugin_events e ON e.id=d.event_id
-		WHERE d.plugin_id=$1 AND ($2='' OR d.status=$2) AND ($3::uuid IS NULL OR e.project_id=$3) AND ($4='' OR e.id<$4)
+		WHERE d.plugin_id=$1 AND ($2='' OR d.status=$2) AND ($3 IS NULL OR e.project_id=$3) AND ($4='' OR e.id<$4)
 		ORDER BY e.id DESC LIMIT $5`, plugin, q.Status, q.Project, q.Before, q.Limit)
 	if err != nil {
 		return nil, err

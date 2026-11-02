@@ -29,7 +29,7 @@ func (s *Store) SaveTaskLarkRecoveryTx(ctx context.Context, m *TaskMutation, act
 	}
 	var old []byte
 	var status string
-	if e := m.Tx.QueryRow(ctx, `SELECT status,recovery_record FROM task_lark_switch_actions WHERE task_id=$1 AND actor_key=$2 AND action_id=$3 FOR UPDATE`, m.Record.View.Task.ID, actor, action).Scan(&status, &old); e != nil {
+	if e := m.Tx.QueryRow(ctx, `SELECT status,recovery_record FROM task_lark_switch_actions WHERE task_id=$1 AND actor_key=$2 AND action_id=$3`, m.Record.View.Task.ID, actor, action).Scan(&status, &old); e != nil {
 		return notFoundIfNoRows(e, "Lark切换动作")
 	}
 	if status != "pending" && status != "handoff" {
@@ -82,7 +82,7 @@ func (s *Store) ConsumeTaskLarkRecoveryTx(ctx context.Context, m *TaskMutation, 
 	var same bool
 	var failure *string
 	var captured []byte
-	if e := m.Tx.QueryRow(ctx, `SELECT status,coalesce(recovery_record=$4::jsonb,false),failure_reason,captured_request FROM task_lark_switch_actions WHERE task_id=$1 AND actor_key=$2 AND action_id=$3 FOR UPDATE`, m.Record.View.Task.ID, actor, action, expected).Scan(&status, &same, &failure, &captured); e != nil {
+	if e := m.Tx.QueryRow(ctx, `SELECT status,coalesce(recovery_record=$4,false),failure_reason,captured_request FROM task_lark_switch_actions WHERE task_id=$1 AND actor_key=$2 AND action_id=$3`, m.Record.View.Task.ID, actor, action, expected).Scan(&status, &same, &failure, &captured); e != nil {
 		return notFoundIfNoRows(e, "Lark切换动作")
 	}
 	if !same {
@@ -132,6 +132,7 @@ func (s *Store) ConsumeTaskLarkRecoveryTx(ctx context.Context, m *TaskMutation, 
 // so that owner can exclude precisely these unresolved runtimes. A nil record
 // remains unknown; callers must not manufacture an empty/absent generation.
 func (s *Store) PendingTaskLarkRecovery(ctx context.Context) ([]TaskLarkRecoveryAction, error) {
+	// SQLITE-PORT(G5): array
 	rows, e := s.Pool.Query(ctx, `SELECT a.task_id,a.action_id,a.actor_key,a.recovery_record,array_agg(f.runtime_id ORDER BY f.runtime_id) FROM task_lark_switch_actions a JOIN task_lark_switch_fences f ON f.task_id=a.task_id AND f.actor_key=a.actor_key AND f.action_id=a.action_id WHERE a.status IN ('pending','handoff') GROUP BY a.task_id,a.action_id,a.actor_key,a.recovery_record ORDER BY a.task_id,a.action_id`)
 	if e != nil {
 		return nil, e

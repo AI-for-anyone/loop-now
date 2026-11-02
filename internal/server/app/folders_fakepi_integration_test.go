@@ -172,7 +172,7 @@ func TestTaskCopiesAgentFolderActualAppFakePi(t *testing.T) {
 	}
 	var snapshot []byte
 	var sources string
-	if err := s.a.Store.Pool.QueryRow(ctx, `SELECT snapshot, sources::text FROM task_instances WHERE id=$1`, runtime).Scan(&snapshot, &sources); err != nil {
+	if err := s.a.Store.Pool.QueryRow(ctx, `SELECT snapshot, sources FROM task_instances WHERE id=$1`, runtime).Scan(&snapshot, &sources); err != nil {
 		t.Fatal(err)
 	}
 	var env struct {

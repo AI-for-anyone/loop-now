@@ -87,7 +87,7 @@ func (s *Store) ReserveTaskLarkFenceTx(ctx context.Context, m *TaskMutation, in 
 		}
 		var task, agent uuid.UUID
 		var retired bool
-		if err := m.Tx.QueryRow(ctx, `SELECT task_id,agent_id,retired FROM task_instances WHERE id=$1 FOR UPDATE`, member.RuntimeID).Scan(&task, &agent, &retired); err != nil {
+		if err := m.Tx.QueryRow(ctx, `SELECT task_id,agent_id,retired FROM task_instances WHERE id=$1`, member.RuntimeID).Scan(&task, &agent, &retired); err != nil {
 			return false, notFoundIfNoRows(err, "任务实例")
 		}
 		if task != in.TaskID || agent != member.AgentID || retired {

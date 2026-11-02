@@ -315,7 +315,7 @@ func TestSleepAppWakeCommitExecutionAndSessionFailure(t *testing.T) {
 					t.Fatal("Redis loss reset durable sleep", err)
 				}
 			}
-			if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, receipt.Sleep.ID); err != nil {
+			if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, receipt.Sleep.ID); err != nil {
 				t.Fatal(err)
 			}
 			if err = s.a.Store.ReconcileSleeps(ctx, 100); err != nil {
@@ -520,7 +520,7 @@ func TestSleepAppQuestionAnswerAndExpiryWake(t *testing.T) {
 			if mode == "answer" {
 				s.must(201, "POST", "/inbox/messages/"+q.ID.String()+"/reply", map[string]any{"optionId": "1"})
 			} else {
-				if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-interval '1 second' WHERE message_id=$1`, q.ID); err != nil {
+				if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, q.ID); err != nil {
 					t.Fatal(err)
 				}
 				if err = s.a.API.Inbox.ReconcileQuestions(ctx); err != nil {
@@ -735,7 +735,7 @@ func TestSleepAppOldAttemptCannotAffectNewSleep(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, first.Sleep.ID); err != nil {
+	if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, first.Sleep.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.a.Store.ReconcileSleeps(ctx, 100); err != nil {
@@ -817,7 +817,7 @@ func TestSleepAppRedisMirrorFailureRecoversOneCarrier(t *testing.T) {
 	hook.enabled.Store(true)
 	defer hook.enabled.Store(false)
 	s.a.Redis.AddHook(hook)
-	if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, receipt.Sleep.ID); err != nil {
+	if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, receipt.Sleep.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.a.Store.ReconcileSleeps(ctx, 100); err != nil {

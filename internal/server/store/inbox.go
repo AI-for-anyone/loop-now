@@ -154,12 +154,12 @@ func inboxNodeSQL(a string) string {
 // partyJoin 生成某一方的 JOIN 与列；p 为别名前缀，side 为 from 或 to。
 func partyJoin(p, side string) (cols, joins string) {
 	r := strings.NewReplacer("$p", p, "$s", side)
-	cols = r.Replace(`m.$s_kind, coalesce(m.$s_agent_id, m.$s_identity_id, m.$s_plugin_party_id, '00000000-0000-0000-0000-000000000000'::uuid),
+	cols = r.Replace(`m.$s_kind, coalesce(m.$s_agent_id, m.$s_identity_id, m.$s_plugin_party_id, '00000000-0000-0000-0000-000000000000'),
 		coalesce($pa.name, $pi.name, CASE WHEN m.$s_kind = 'plugin' THEN coalesce(m.plugin_sender_name, $pq.display_name) END, ''), coalesce($pg.name, ''), coalesce($pp.name, ''),
 		($pa.id IS NOT NULL AND $pa.project_id IS NULL), $pa.project_id,
 		coalesce($pa.deleted_at IS NOT NULL, false) OR coalesce($pi.deleted_at IS NOT NULL, false)
 			OR ($pq.id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM plugins pl WHERE pl.id = $pq.plugin_id)),
- coalesce(m.$s_runtime_id,'00000000-0000-0000-0000-000000000000'::uuid), $pr.task_id,
+ coalesce(m.$s_runtime_id,'00000000-0000-0000-0000-000000000000'), $pr.task_id,
 		coalesce($pq.plugin_id, ''), CASE WHEN m.$s_kind = 'plugin' THEN coalesce(m.plugin_channel, '') ELSE '' END`)
 	joins = r.Replace(`
 		LEFT JOIN plugin_parties $pq ON $pq.id = m.$s_plugin_party_id
@@ -175,7 +175,9 @@ func inboxSelect(previewChars int) string {
 	fc, fj := partyJoin("f", "from")
 	tc, tj := partyJoin("t", "to")
 	return `SELECT m.id, m.thread_id, m.in_reply_to, m.text, left(m.text, ` + strconv.Itoa(previewChars) + `), coalesce(m.when_busy, ''),
+		// SQLITE-PORT(G3): jsonb
 		m.created_at, m.read_at, ` + fc + `, ` + tc + `,
+ // SQLITE-PORT(G3): jsonb
  (SELECT jsonb_build_object('options',q.options,'expiresAt',q.expires_at,'state',q.state,'answer',CASE WHEN q.answer_message_id IS NULL THEN NULL ELSE jsonb_build_object('messageId',q.answer_message_id,'optionId',q.answer_option_id,'optionLabel',(SELECT opt->>'label' FROM jsonb_array_elements(q.options)opt WHERE opt->>'id'=q.answer_option_id),'textPreview',left(a.text,` + strconv.Itoa(previewChars) + `),'by',q.answered_by,'at',q.answered_at) END) FROM inbox_questions q LEFT JOIN inbox_messages a ON a.id=q.answer_message_id WHERE q.message_id=m.id),
  CASE WHEN m.answers_message_id IS NULL THEN NULL ELSE jsonb_build_object('messageId',m.answers_message_id,'optionId',m.answer_option_id,'optionLabel',(SELECT opt->>'label' FROM inbox_questions q,jsonb_array_elements(q.options)opt WHERE q.message_id=m.answers_message_id AND opt->>'id'=m.answer_option_id))END,m.notice,m.images,
  m.cancelled_at,m.reminder_run_id,m.reminder_turn_id,` + inboxNodeSQL("m") + `
@@ -420,7 +422,7 @@ func (s *Store) InboxTx(ctx context.Context, fn func(*db.Tx) error) error { retu
 func (s *Store) ThreadParties(ctx context.Context, threadID uuid.UUID) (from, to Party, err error) {
 	var fa, fi, fp, ta, ti, tp *uuid.UUID
 	err = s.Pool.QueryRow(ctx, `SELECT from_kind, from_agent_id, from_identity_id, from_plugin_party_id, to_kind, to_agent_id, to_identity_id, to_plugin_party_id,
-			coalesce(from_runtime_id,'00000000-0000-0000-0000-000000000000'::uuid),coalesce(to_runtime_id,'00000000-0000-0000-0000-000000000000'::uuid)
+			coalesce(from_runtime_id,'00000000-0000-0000-0000-000000000000'),coalesce(to_runtime_id,'00000000-0000-0000-0000-000000000000')
 		FROM inbox_messages WHERE id = $1 AND thread_id = id`, threadID).Scan(&from.Kind, &fa, &fi, &fp, &to.Kind, &ta, &ti, &tp, &from.RuntimeID, &to.RuntimeID)
 	if err != nil {
 		return from, to, notFoundIfNoRows(err, "线索")
@@ -564,7 +566,7 @@ func (s *Store) markRead(ctx context.Context, p Party, column string, id uuid.UU
 type readLink struct{ run, turn *uuid.UUID }
 
 func markReadTx(ctx context.Context, q queueQuerier, p Party, column string, id uuid.UUID) ([]ReadReceipt, []readLink, error) {
-	rows, err := q.Query(ctx, `UPDATE inbox_messages m SET read_at = now()
+	rows, err := q.Query(ctx, `UPDATE inbox_messages AS m SET read_at = now()
 		WHERE `+column+` = $2 AND `+unreadCond("m")+` AND `+p.cond("m", "to", 1)+` RETURNING m.id, m.thread_id, m.read_at, m.reminder_run_id, m.reminder_turn_id`, p.ID, id)
 	if err != nil {
 		return nil, nil, err
@@ -612,9 +614,6 @@ const inboxEventLockKey = 0x6c6e5f696e626f78 // "ln_inbox"
 // 追加事件因此是串行的：越靠后的事件，其未读总数越新。
 func (s *Store) WithInboxEventLock(ctx context.Context, fn func(consoleUnread int) error) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
-		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, int64(inboxEventLockKey)); err != nil {
-			return err
-		}
 		n, err := countUnread(ctx, tx, ConsoleParty)
 		if err != nil {
 			return err
@@ -647,6 +646,7 @@ func (s *Store) ListInboxThreads(ctx context.Context, p Party, cursor *InboxCurs
 		cAt, cID = &cursor.At, &cursor.ID
 	}
 	rows, err := s.Pool.Query(ctx, `SELECT root.id, last.id,
+			// SQLITE-PORT(G3): LATERAL
 			(SELECT count(*) FROM inbox_messages u WHERE u.thread_id = root.id AND `+unreadCond("u")+` AND `+p.cond("u", "to", 1)+`)
 		FROM inbox_messages root
 		CROSS JOIN LATERAL (SELECT l.id, l.created_at FROM inbox_messages l WHERE l.thread_id = root.id

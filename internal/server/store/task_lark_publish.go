@@ -24,7 +24,7 @@ func (s *Store) PublishTaskLarkSwitchTx(ctx context.Context, m *TaskMutation, ac
 	var reservedVersion int64
 	var originalNode uuid.UUID
 	var raw []byte
-	err := m.Tx.QueryRow(ctx, `SELECT status,reservation_task_version,node_run_id,captured_request FROM task_lark_switch_actions WHERE actor_key=$1 AND action_id=$2 AND task_id=$3 FOR UPDATE`, actor, action, m.Record.View.Task.ID).Scan(&state, &reservedVersion, &originalNode, &raw)
+	err := m.Tx.QueryRow(ctx, `SELECT status,reservation_task_version,node_run_id,captured_request FROM task_lark_switch_actions WHERE actor_key=$1 AND action_id=$2 AND task_id=$3`, actor, action, m.Record.View.Task.ID).Scan(&state, &reservedVersion, &originalNode, &raw)
 	if err != nil {
 		return 0, false, notFoundIfNoRows(err, "Lark切换动作")
 	}
@@ -101,7 +101,7 @@ func (s *Store) PublishTaskLarkSwitchTx(ctx context.Context, m *TaskMutation, ac
 	}
 	// Invalidate only the two named members, never the task's other runtimes.
 	for _, member := range capture.Members {
-		rows, err := m.Tx.Query(ctx, `SELECT `+sleepColumns+` FROM agent_sleeps WHERE task_id=$1 AND runtime_id=$2 AND state IN ('requested','sleeping','woken') ORDER BY id FOR UPDATE`, m.Record.View.Task.ID, member.RuntimeID)
+		rows, err := m.Tx.Query(ctx, `SELECT `+sleepColumns+` FROM agent_sleeps WHERE task_id=$1 AND runtime_id=$2 AND state IN ('requested','sleeping','woken') ORDER BY id`, m.Record.View.Task.ID, member.RuntimeID)
 		if err != nil {
 			return 0, false, err
 		}

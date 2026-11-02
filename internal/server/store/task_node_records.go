@@ -39,7 +39,7 @@ func (s *Store) TaskNodeEvents(ctx context.Context, t TaskTurn, cursor string, l
 		at = &a
 		id = &b
 	}
-	rows, e := s.Pool.Query(ctx, `SELECT id,at,agent_id,type,data FROM lifecycle_events WHERE task_id=$1 AND task_turn_id=$2 AND workflow_node=$3 AND ($4::timestamptz IS NULL OR (at,id)>($4,$5)) ORDER BY at,id LIMIT $6`, t.TaskID, t.ID, t.NodeRunID.String(), at, id, limit+1)
+	rows, e := s.Pool.Query(ctx, `SELECT id,at,agent_id,type,data FROM lifecycle_events WHERE task_id=$1 AND task_turn_id=$2 AND workflow_node=$3 AND ($4 IS NULL OR (at,id)>($4,$5)) ORDER BY at,id LIMIT $6`, t.TaskID, t.ID, t.NodeRunID.String(), at, id, limit+1)
 	if e != nil {
 		return nil, "", e
 	}

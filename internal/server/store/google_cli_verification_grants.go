@@ -22,14 +22,14 @@ func verificationGoogleGrantTx(ctx context.Context, tx *db.Tx, b clicredential.V
 	}
 	var current *uuid.UUID
 	var deleted *time.Time
-	if e := tx.QueryRow(ctx, `SELECT current_cli_version_id,deleted_at FROM project_credential_accounts WHERE id=$1 AND project_id=$2 AND purpose='cli' AND cli_name='gcloud' FOR SHARE`, b.AccountID, b.ProjectID).Scan(&current, &deleted); e != nil {
+	if e := tx.QueryRow(ctx, `SELECT current_cli_version_id,deleted_at FROM project_credential_accounts WHERE id=$1 AND project_id=$2 AND purpose='cli' AND cli_name='gcloud'`, b.AccountID, b.ProjectID).Scan(&current, &deleted); e != nil {
 		return out, notFoundIfNoRows(e, "管理验证账号")
 	}
 	var version uuid.UUID
 	var live *uuid.UUID
 	var status string
 	var unexpired bool
-	if e := tx.QueryRow(ctx, `SELECT version_id,live_version_id,status,expires_at>clock_timestamp() FROM cli_credential_verifications WHERE id=$1 AND project_id=$2 AND account_id=$3 AND cli_name='gcloud' AND auth_method='oauth' FOR SHARE`, b.OperationID, b.ProjectID, b.AccountID).Scan(&version, &live, &status, &unexpired); e != nil {
+	if e := tx.QueryRow(ctx, `SELECT version_id,live_version_id,status,expires_at>clock_timestamp() FROM cli_credential_verifications WHERE id=$1 AND project_id=$2 AND account_id=$3 AND cli_name='gcloud' AND auth_method='oauth'`, b.OperationID, b.ProjectID, b.AccountID).Scan(&version, &live, &status, &unexpired); e != nil {
 		return out, notFoundIfNoRows(e, "管理验证操作")
 	}
 	if version != b.VersionID {

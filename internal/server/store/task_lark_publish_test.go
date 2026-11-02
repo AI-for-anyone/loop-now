@@ -50,6 +50,7 @@ func larkSwitchReadyFixture(t *testing.T, scopes []string) (*store.Store, store.
 	if err := os.WriteFile(session, []byte("original retained session\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	// SQLITE-PORT(G5): sha256/encode
 	if _, err := s.Pool.Exec(ctx, `UPDATE task_instances SET snapshot=$2,snapshot_sha=encode(sha256($2),'hex'),session_state='active',session_file=$3 WHERE id=$1`, publisher.RuntimeID, larkSwitchSnapshot(t, in.TaskID, publisher.AgentID, true), session); err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +92,7 @@ func TestTaskLarkPublishUnknownGrantedScopesStaysUnknown(t *testing.T) {
 		t.Fatal("unknown actual scopes rejected C", err)
 	}
 	var unknown bool
-	if err = s.Pool.QueryRow(ctx, `SELECT captured_request->'Target'->'Identity'->'grantedScopes'='null'::jsonb FROM task_lark_switch_actions WHERE actor_key=$1 AND action_id=$2`, in.ActorKey, in.ActionID).Scan(&unknown); err != nil || !unknown {
+	if err = s.Pool.QueryRow(ctx, `SELECT captured_request->'Target'->'Identity'->'grantedScopes'='null' FROM task_lark_switch_actions WHERE actor_key=$1 AND action_id=$2`, in.ActorKey, in.ActionID).Scan(&unknown); err != nil || !unknown {
 		t.Fatal("switch captured requested scopes instead of actual unknown", err)
 	}
 }
@@ -173,6 +174,7 @@ func TestTaskLarkPublishExcludesOtherAuthorizedTaskRuntime(t *testing.T) {
 	}
 	runtime := uuid.New()
 	original := larkSwitchSnapshot(t, in.TaskID, agent.ID, true)
+	// SQLITE-PORT(G5): sha256/encode
 	if _, err = s.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha) VALUES($1,$2,$3,$4,$5,encode(sha256($5),'hex'))`, runtime, in.TaskID, agent.ID, agent.Name, original); err != nil {
 		t.Fatal(err)
 	}

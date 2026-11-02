@@ -181,6 +181,7 @@ func webProjectCredentialsIntegration(t *testing.T, slice string) {
 	}
 	if slice == "focus" {
 		readCount("untouchedMainAccount", `SELECT count(*) FROM project_credential_accounts WHERE id=$1 AND deleted_at IS NULL`, mainAccount.ID)
+		// SQLITE-PORT(G11): octet_length
 		readCount("platformPrivateVersion", `SELECT count(*) FROM model_auth_versions WHERE agent_id=$1 AND project_account_id IS NULL AND octet_length(secret)>0`, private.ID)
 		readCount("runs", `SELECT count(*) FROM runs`)
 		readCount("usageRecords", `SELECT count(*) FROM usage_records`)
@@ -198,8 +199,11 @@ func webProjectCredentialsIntegration(t *testing.T, slice string) {
 	if deleteOnly {
 		readCount("accountDeletedTombstone", `SELECT count(*) FROM project_credential_accounts WHERE id=$1 AND deleted_at IS NOT NULL`, mainAccount.ID)
 		readCount("selectedDeletedPointerRetained", `SELECT count(*) FROM agent_credential_selections WHERE agent_id=$1 AND account_id=$2 AND mode='explicit'`, worker.ID, mainAccount.ID)
+		// SQLITE-PORT(G11): octet_length
 		readCount("deletedAccountVersionsRetained", `SELECT count(*) FROM model_auth_versions WHERE project_account_id=$1 AND octet_length(secret)>0`, mainAccount.ID)
+		// SQLITE-PORT(G11): octet_length
 		readCount("platformPrivateVersion", `SELECT count(*) FROM model_auth_versions WHERE agent_id=$1 AND project_account_id IS NULL AND octet_length(secret)>0`, private.ID)
+		// SQLITE-PORT(G11): octet_length
 		readCount("deletedProjectSecrets", `SELECT count(*) FROM model_auth_versions WHERE project_account_id=$1 AND octet_length(secret)>0`, removeAccount.ID)
 		readCount("deletedProjectVersionRows", `SELECT count(*) FROM model_auth_versions WHERE project_account_id=$1`, removeAccount.ID)
 		readCount("deletedProjectTombstone", `SELECT count(*) FROM projects WHERE id=$1 AND deleted_at IS NOT NULL`, removeProject.ID)
@@ -219,10 +223,14 @@ func webProjectCredentialsIntegration(t *testing.T, slice string) {
 	readCount("liveProjectModelAccounts", `SELECT count(*) FROM project_credential_accounts WHERE project_id=$1 AND purpose='model' AND deleted_at IS NULL`, dc.Project.ID)
 	readCount("deletedSelectedAccount", `SELECT count(*) FROM project_credential_accounts WHERE id=$1 AND deleted_at IS NOT NULL`, result.IDs["accountB"])
 	readCount("selectedDeletedPointerRetained", `SELECT count(*) FROM agent_credential_selections WHERE agent_id=$1 AND account_id=$2 AND mode='explicit'`, worker.ID, result.IDs["accountB"])
+	// SQLITE-PORT(G11): octet_length
 	readCount("accountAVersions", `SELECT count(*) FROM model_auth_versions WHERE project_account_id=$1 AND octet_length(secret)>0`, result.IDs["accountA"])
 	readCount("deletedAccountVersionsRetained", `SELECT count(*) FROM model_auth_versions WHERE project_account_id=$1`, result.IDs["accountB"])
+	// SQLITE-PORT(G11): octet_length
 	readCount("projectCLIVersion", `SELECT count(*) FROM project_cli_versions WHERE account_id=$1 AND octet_length(secret)>0`, result.IDs["cliAccount"])
+	// SQLITE-PORT(G11): octet_length
 	readCount("platformPrivateVersion", `SELECT count(*) FROM model_auth_versions WHERE agent_id=$1 AND project_account_id IS NULL AND octet_length(secret)>0`, private.ID)
+	// SQLITE-PORT(G11): octet_length
 	readCount("deletedProjectSecrets", `SELECT count(*) FROM model_auth_versions WHERE project_account_id=$1 AND octet_length(secret)>0`, removeAccount.ID)
 	readCount("deletedProjectVersionRows", `SELECT count(*) FROM model_auth_versions WHERE project_account_id=$1`, removeAccount.ID)
 	readCount("deletedProjectTombstone", `SELECT count(*) FROM projects WHERE id=$1 AND deleted_at IS NOT NULL`, removeProject.ID)

@@ -32,7 +32,7 @@ func importCode(v string) string {
 func importProjectLock(ctx context.Context, tx *db.Tx, project uuid.UUID) (int64, bool, error) {
 	var rev int64
 	var deleted *time.Time
-	err := tx.QueryRow(ctx, `SELECT credentials_revision,deleted_at FROM projects WHERE id=$1 FOR UPDATE`, project).Scan(&rev, &deleted)
+	err := tx.QueryRow(ctx, `SELECT credentials_revision,deleted_at FROM projects WHERE id=$1`, project).Scan(&rev, &deleted)
 	return rev, deleted != nil, notFoundIfNoRows(err, "项目")
 }
 func importOperationTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, lock bool) (CLIImportOperation, error) {
@@ -336,7 +336,7 @@ func (s *Store) FinalizeCLIImport(ctx context.Context, project, id, instance uui
 			var oldContent []byte
 			var account, version uuid.UUID
 			var cli, format string
-			e = tx.QueryRow(ctx, `SELECT content_mac,account_id,version_id,cli_name,credential_format FROM cli_credential_import_receipts WHERE project_id=$1 AND provenance_key_id=$2 AND origin_mac=$3 FOR UPDATE`, project, key, v.OriginMAC).Scan(&oldContent, &account, &version, &cli, &format)
+			e = tx.QueryRow(ctx, `SELECT content_mac,account_id,version_id,cli_name,credential_format FROM cli_credential_import_receipts WHERE project_id=$1 AND provenance_key_id=$2 AND origin_mac=$3`, project, key, v.OriginMAC).Scan(&oldContent, &account, &version, &cli, &format)
 			if e == nil {
 				if !bytes.Equal(oldContent, v.ContentMAC) || cli != v.CLI || format != v.CredentialFormat {
 					return importItemFailure(v.CandidateID, "source_conflict", importConflict("import_source_conflict"))
@@ -453,7 +453,7 @@ func (s *Store) TerminateProjectCLIImportsTx(ctx context.Context, tx *db.Tx, pro
 	if project == uuid.Nil {
 		return apperr.Invalid("projectId", "UUID不能为零")
 	}
-	rows, err := tx.Query(ctx, `SELECT id FROM cli_credential_import_operations WHERE project_id=$1 AND status IN('pending','running') ORDER BY id FOR UPDATE`, project)
+	rows, err := tx.Query(ctx, `SELECT id FROM cli_credential_import_operations WHERE project_id=$1 AND status IN('pending','running') ORDER BY id`, project)
 	if err != nil {
 		return err
 	}
@@ -464,9 +464,9 @@ func (s *Store) TerminateProjectCLIImportsTx(ctx context.Context, tx *db.Tx, pro
 	if len(ids) == 0 {
 		return nil
 	}
-	if _, err = tx.Exec(ctx, `UPDATE cli_credential_import_items SET status='not_committed',account_id=NULL,version_id=NULL,error_code=NULL WHERE operation_id=ANY($1)`, ids); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE cli_credential_import_items SET status='not_committed',account_id=NULL,version_id=NULL,error_code=NULL WHERE operation_id IN (SELECT value FROM json_each($1))`, ids); err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, `UPDATE cli_credential_import_operations SET status='cancelled',phase=NULL,completed_at=clock_timestamp(),error_code='project_deleted' WHERE id=ANY($1) AND status IN('pending','running')`, ids)
+	_, err = tx.Exec(ctx, `UPDATE cli_credential_import_operations SET status='cancelled',phase=NULL,completed_at=clock_timestamp(),error_code='project_deleted' WHERE id IN (SELECT value FROM json_each($1)) AND status IN('pending','running')`, ids)
 	return err
 }

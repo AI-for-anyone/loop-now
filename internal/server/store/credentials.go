@@ -141,7 +141,7 @@ func (s *Store) PutCredential(ctx context.Context, agentID uuid.UUID, purpose, c
 			source := "builtin"
 			templateSource = &source
 		}
-		if _, err := tx.Exec(ctx, `DELETE FROM agent_credentials WHERE agent_id = $1 AND purpose = $2 AND cli_name IS NOT DISTINCT FROM $3`, agentID, purpose, cli); err != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM agent_credentials WHERE agent_id = $1 AND purpose = $2 AND cli_name IS $3`, agentID, purpose, cli); err != nil {
 			return err
 		}
 		id := uuid.Must(uuid.NewV7())
@@ -171,7 +171,7 @@ func (s *Store) DeleteCredential(ctx context.Context, agentID uuid.UUID, purpose
 		if purpose == PurposeCLI {
 			cli = &cliName
 		}
-		tag, err := tx.Exec(ctx, `DELETE FROM agent_credentials WHERE agent_id = $1 AND purpose = $2 AND cli_name IS NOT DISTINCT FROM $3`, agentID, purpose, cli)
+		tag, err := tx.Exec(ctx, `DELETE FROM agent_credentials WHERE agent_id = $1 AND purpose = $2 AND cli_name IS $3`, agentID, purpose, cli)
 		if err != nil {
 			return err
 		}

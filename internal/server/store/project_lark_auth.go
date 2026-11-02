@@ -79,7 +79,7 @@ func (s *Store) newProjectLarkAuthOperation(ctx context.Context, project uuid.UU
 			}
 		}
 		var active uuid.UUID
-		e = tx.QueryRow(ctx, `SELECT id FROM project_cli_auth_operations WHERE project_id=$1 AND cli_name='lark-cli' AND target_account_id IS NOT DISTINCT FROM $2::uuid AND status IN('pending','awaiting_authorization')`, project, in.AccountID).Scan(&active)
+		e = tx.QueryRow(ctx, `SELECT id FROM project_cli_auth_operations WHERE project_id=$1 AND cli_name='lark-cli' AND target_account_id IS $2 AND status IN('pending','awaiting_authorization')`, project, in.AccountID).Scan(&active)
 		if e == nil {
 			return cliInProgress(project, active, "lark-cli")
 		}
@@ -166,7 +166,8 @@ func (s *Store) SetProjectLarkAuthorization(ctx context.Context, project, id uui
 		if out.CLI != "lark-cli" {
 			return apperr.Invalid("cli", "Lark授权操作类型不匹配")
 		}
-		if _, e = tx.Exec(ctx, `UPDATE project_cli_auth_operations SET status='awaiting_authorization',authorization_url=$2,user_code=$3,expires_at=LEAST(expires_at,$4) WHERE id=$1 AND $4::timestamptz>clock_timestamp()`, id, url, code, expires); e != nil {
+		// SQLITE-PORT(G4): greatest/least
+		if _, e = tx.Exec(ctx, `UPDATE project_cli_auth_operations SET status='awaiting_authorization',authorization_url=$2,user_code=$3,expires_at=LEAST(expires_at,$4) WHERE id=$1 AND $4>clock_timestamp()`, id, url, code, expires); e != nil {
 			return e
 		}
 		out, e = cliOperationTx(ctx, tx, project, id, false)

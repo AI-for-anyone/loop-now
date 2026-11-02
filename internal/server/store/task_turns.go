@@ -130,7 +130,7 @@ func (s *Store) ClaimTaskTurn(ctx context.Context, taskID, runtimeID uuid.UUID) 
 		var e error
 		// 提醒轮次领取时已没有待处理消息就作废，接着领取下一轮。
 		for {
-			t, e = scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE runtime_id=$1 AND node_run_id=$2 AND status='queued' AND (origin<>'sleep_wake' OR EXISTS(SELECT 1 FROM agent_sleeps z WHERE z.id=task_turns.wake_sleep_id AND z.wake_run_id=task_turns.id AND z.state='woken' AND z.mode='task_node')) ORDER BY priority,queue_seq LIMIT 1 FOR UPDATE`, runtimeID, node.ID))
+			t, e = scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE runtime_id=$1 AND node_run_id=$2 AND status='queued' AND (origin<>'sleep_wake' OR EXISTS(SELECT 1 FROM agent_sleeps z WHERE z.id=task_turns.wake_sleep_id AND z.wake_run_id=task_turns.id AND z.state='woken' AND z.mode='task_node')) ORDER BY priority,queue_seq LIMIT 1`, runtimeID, node.ID))
 			if e == db.ErrNoRows {
 				return nil, nil
 			}
@@ -197,7 +197,7 @@ func (s *Store) UpdateTaskTurn(ctx context.Context, taskID, turnID uuid.UUID, st
 	return turn, err
 }
 func (s *Store) UpdateTaskTurnTx(ctx context.Context, m *TaskMutation, turnID uuid.UUID, status, reply string, errorCode, errorMessage *string) (TaskTurn, error) {
-	t, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1 AND task_id=$2 FOR UPDATE`, turnID, m.Record.View.Task.ID))
+	t, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1 AND task_id=$2`, turnID, m.Record.View.Task.ID))
 	if e != nil {
 		return TaskTurn{}, notFoundIfNoRows(e, "任务轮次")
 	}
@@ -256,9 +256,9 @@ func (s *Store) TaskNodeMessages(ctx context.Context, taskID, nodeID uuid.UUID, 
 		at, after = &t, &id
 	}
 	rows, err := s.Pool.Query(ctx, `SELECT id,run_id,node_run_id,role,text,origin,status,created_at,error_code,error_message,wake_sleep_id,void_reason FROM (
-	 SELECT user_message_id AS id,id AS run_id,node_run_id,'user' AS role,text,origin,status,queued_at AS created_at,NULL::text AS error_code,NULL::text AS error_message,wake_sleep_id,void_reason FROM task_turns WHERE task_id=$1 AND node_run_id=$2
+	 SELECT user_message_id AS id,id AS run_id,node_run_id,'user' AS role,text,origin,status,queued_at AS created_at,NULL AS error_code,NULL AS error_message,wake_sleep_id,void_reason FROM task_turns WHERE task_id=$1 AND node_run_id=$2
 	 UNION ALL SELECT assistant_message_id,id,node_run_id,'assistant',reply,origin,status,coalesce(started_at,queued_at),error_code,error_message,wake_sleep_id,void_reason FROM task_turns WHERE task_id=$1 AND node_run_id=$2 AND status<>'queued'
-	) m WHERE ($3::timestamptz IS NULL OR (created_at,id)>($3,$4)) ORDER BY created_at,id LIMIT $5`, taskID, nodeID, at, after, limit+1)
+	) m WHERE ($3 IS NULL OR (created_at,id)>($3,$4)) ORDER BY created_at,id LIMIT $5`, taskID, nodeID, at, after, limit+1)
 	if err != nil {
 		return taskmodel.MessagePage{}, err
 	}

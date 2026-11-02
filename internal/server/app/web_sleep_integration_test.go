@@ -199,7 +199,7 @@ func TestWebSleepIntegration(t *testing.T) {
 			record := normalSleep()
 			_ = json.NewEncoder(rw).Encode(record)
 		case "/normal-deadline":
-			if _, err := s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE agent_id=$1 AND scope_kind='normal' AND state='sleeping'`, worker.ID); err != nil {
+			if _, err := s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE agent_id=$1 AND scope_kind='normal' AND state='sleeping'`, worker.ID); err != nil {
 				http.Error(rw, "test deadline failed", 500)
 				return
 			}

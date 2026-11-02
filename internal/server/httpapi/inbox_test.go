@@ -680,6 +680,7 @@ func TestExternalAccess(t *testing.T) {
 	e.expect(409, "POST", "/external-identities", map[string]any{"name": "ci.bot_2-x"})
 
 	// 审计中没有令牌与请求体。
+	// SQLITE-PORT(G11): ::cast
 	rows, err := e.st.Pool.Query(context.Background(), `SELECT row_to_json(a)::text FROM audit_log a`)
 	if err != nil {
 		t.Fatal(err)

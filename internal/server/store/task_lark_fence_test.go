@@ -43,6 +43,7 @@ func larkFenceFixture(t *testing.T) (*store.Store, store.TaskLarkFenceReservatio
 		t.Fatal(err)
 	}
 	runtime := uuid.New()
+	// SQLITE-PORT(G5): sha256/encode
 	if _, err = s.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha) VALUES($1,$2,$3,$4,$5,encode(sha256($5),'hex'))`, runtime, task, followup.ID, followup.Name, larkSwitchSnapshot(t, task, followup.ID, true)); err != nil {
 		t.Fatal(err)
 	}
@@ -431,6 +432,7 @@ func TestTaskLarkFenceSuspendsOriginalSleepAndFailureKeepsDeadline(t *testing.T)
 		t.Fatal(err)
 	}
 	otherRuntime := uuid.New()
+	// SQLITE-PORT(G5): sha256/encode
 	if _, err = s.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared,session_state,session_file) VALUES($1,$2,$3,$4,$5,encode(sha256($5),'hex'),true,'active',$6)`, otherRuntime, in.TaskID, other.ID, other.Name, larkSwitchSnapshot(t, in.TaskID, other.ID, true), session); err != nil {
 		t.Fatal(err)
 	}

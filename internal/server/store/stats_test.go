@@ -115,10 +115,12 @@ func TestStatsAttributionWaitAndPendingQuestions(t *testing.T) {
 	task, runtime := uuid.New(), uuid.New()
 	doc, _ := json.Marshal(map[string]any{"view": map[string]any{"task": map[string]any{"status": "running", "version": 1}}})
 	mustExec(t, s, `INSERT INTO task_records(id,project_id,status,document,version) VALUES($1,$2,'running',$3,1)`, task, dc.Project.ID, doc)
+	// SQLITE-PORT(G6): sha256/encode
 	mustExec(t, s, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha) VALUES($1,$2,$3,'beta',$4,encode(sha256($4),'hex'))`, runtime, task, B, []byte(`{}`))
 	sleep, timer := uuid.New(), uuid.New()
+	// SQLITE-PORT(G6): '{}' array、::cast
 	mustExec(t, s, `INSERT INTO agent_sleeps(id,scope_key,scope_kind,mode,agent_id,session_epoch,source_run_id,action_id,body_hash,receipt,state,seconds,entered_at,wake_at,ended_at,end_reason,timer_run_id,wake_run_id,revision)
-		VALUES($1,'normal/'||$2::uuid::text,'normal','normal',$2::uuid,1,$3,$4,$5,'{}','woken',60,$6,$6,$6,'deadline',$7,$7,1)`, sleep, A, uuid.New(), uuid.New(), make([]byte, 32), e.at(0), timer)
+		VALUES($1,'normal/'||$2::text,'normal','normal',$2,1,$3,$4,$5,'{}','woken',60,$6,$6,$6,'deadline',$7,$7,1)`, sleep, A, uuid.New(), uuid.New(), make([]byte, 32), e.at(0), timer)
 
 	// Bucket 0 (day 1) and bucket 1 (day 2). Console waits: 10, 30, 20 | 50.
 	r1 := e.run(A, "console", "completed", 1*h, 10*sec, 70*sec, nil, nil, nil, nil)

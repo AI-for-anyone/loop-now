@@ -55,7 +55,7 @@ func TestTaskQuestionAppAnswerAndExpiryBeforeSettled(t *testing.T) {
 				if mode == "blocked-expiry" {
 					taskWait(t, s, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "blocked" })
 				}
-				if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-interval '1 second' WHERE message_id=$1`, q.ID); err != nil {
+				if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, q.ID); err != nil {
 					t.Fatal(err)
 				}
 				if err = s.a.API.Inbox.ReconcileQuestions(ctx); err != nil {
@@ -126,7 +126,7 @@ func TestTaskQuestionAppRestartRecoversPendingOutbox(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-interval '1 second' WHERE message_id=$1`, q.ID); err != nil {
+	if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, q.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.a.API.Inbox.ReconcileQuestions(ctx); err == nil {

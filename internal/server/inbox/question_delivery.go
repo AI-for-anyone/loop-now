@@ -158,7 +158,7 @@ func (s *Service) deliverQuestionEvent(ctx context.Context, id, qid, messageID u
 	var recipient *store.Party
 	err = s.St.InboxTransaction(ctx, plan, func(scope *store.InboxTransaction) error {
 		var delivered *time.Time
-		if err := scope.Tx.QueryRow(ctx, `SELECT delivered_at FROM inbox_question_outbox WHERE id=$1 FOR UPDATE`, id).Scan(&delivered); err != nil {
+		if err := scope.Tx.QueryRow(ctx, `SELECT delivered_at FROM inbox_question_outbox WHERE id=$1`, id).Scan(&delivered); err != nil {
 			return err
 		}
 		if delivered != nil {

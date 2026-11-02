@@ -167,7 +167,7 @@ func (s *Store) CompleteProjectModelAuthOperation(ctx context.Context, project, 
 			return e
 		}
 		var deleted *time.Time
-		if e = tx.QueryRow(ctx, `SELECT deleted_at FROM projects WHERE id=$1 FOR UPDATE`, project).Scan(&deleted); e != nil {
+		if e = tx.QueryRow(ctx, `SELECT deleted_at FROM projects WHERE id=$1`, project).Scan(&deleted); e != nil {
 			return notFoundIfNoRows(e, "项目")
 		}
 		var target *ProjectCredentialRecord

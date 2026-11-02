@@ -35,13 +35,10 @@ type ProjectCredentialWrite struct {
 	Secret         []byte
 }
 
+// SQLITE-PORT(G4): write 原来决定行锁强度（FOR SHARE/FOR UPDATE）；写事务串行后不再需要，可以去掉这个参数。
 func lockCredentialProject(ctx context.Context, tx *db.Tx, id uuid.UUID, write bool) (int64, error) {
-	mode := "FOR SHARE"
-	if write {
-		mode = "FOR UPDATE"
-	}
 	var rev int64
-	err := tx.QueryRow(ctx, `SELECT credentials_revision FROM projects WHERE id=$1 AND deleted_at IS NULL `+mode, id).Scan(&rev)
+	err := tx.QueryRow(ctx, `SELECT credentials_revision FROM projects WHERE id=$1 AND deleted_at IS NULL`, id).Scan(&rev)
 	return rev, notFoundIfNoRows(err, "项目")
 }
 func bumpCredentialProject(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
@@ -380,11 +377,7 @@ func lockProjectCredentialAgent(ctx context.Context, tx *db.Tx, agent uuid.UUID,
 	if e != nil {
 		return Agent{}, 0, e
 	}
-	mode := "FOR SHARE"
-	if write {
-		mode = "FOR UPDATE"
-	}
-	a, e := scanAgent(tx.QueryRow(ctx, `SELECT `+agentColumns+` FROM agents WHERE id=$1 AND deleted_at IS NULL `+mode, agent))
+	a, e := scanAgent(tx.QueryRow(ctx, `SELECT `+agentColumns+` FROM agents WHERE id=$1 AND deleted_at IS NULL`, agent))
 	return a, rev, notFoundIfNoRows(e, "Agent")
 }
 func resolveProjectCredentialTx(ctx context.Context, tx *db.Tx, a Agent, purpose, slot string) (cm.Selection, *ProjectCredentialRecord, error) {
@@ -481,7 +474,7 @@ func selectionResolutionError(a Agent, v cm.Selection) error {
 }
 func selectionsTx(ctx context.Context, tx *db.Tx, a Agent, rev int64) (cm.Selections, error) {
 	out := cm.Selections{AgentID: a.ID, ProjectID: *a.ProjectID, ConfigVersion: a.ConfigVersion, CredentialsRevision: rev, Selections: []cm.Selection{}}
-	rows, e := tx.Query(ctx, `SELECT purpose,slot_key FROM (SELECT 'model'::text purpose,$2::text slot_key UNION SELECT purpose,slot_key FROM agent_credential_selections WHERE agent_id=$1 AND purpose='model' UNION SELECT 'cli',cli_name FROM agent_clis WHERE agent_id=$1) slots ORDER BY purpose,slot_key`, a.ID, a.ModelProvider)
+	rows, e := tx.Query(ctx, `SELECT purpose,slot_key FROM (SELECT 'model' purpose,$2 slot_key UNION SELECT purpose,slot_key FROM agent_credential_selections WHERE agent_id=$1 AND purpose='model' UNION SELECT 'cli',cli_name FROM agent_clis WHERE agent_id=$1) slots ORDER BY purpose,slot_key`, a.ID, a.ModelProvider)
 	if e != nil {
 		return out, e
 	}
@@ -755,7 +748,7 @@ func (s *Store) ProjectCredentialRevisionTx(ctx context.Context, tx *db.Tx, proj
 }
 
 func lockAgentProjectTx(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
-	_, e := tx.Exec(ctx, `SELECT 1 FROM projects WHERE id=(SELECT project_id FROM agents WHERE id=$1) FOR UPDATE`, id)
+	_, e := tx.Exec(ctx, `SELECT 1 FROM projects WHERE id=(SELECT project_id FROM agents WHERE id=$1)`, id)
 	return e
 }
 

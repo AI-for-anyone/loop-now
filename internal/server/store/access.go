@@ -29,6 +29,7 @@ type IdentityManager struct {
 	ChannelID string `json:"channelId"`
 }
 
+// SQLITE-PORT(G3): jsonb
 const identityColumns = `id, name, created_at, deleted_at,
 	(SELECT jsonb_build_object('pluginId', m.plugin_id, 'channelId', m.channel_id) FROM identity_managers m WHERE m.identity_id = external_identities.id)`
 
@@ -70,7 +71,7 @@ func (s *Store) PruneIdentityManagers(ctx context.Context, plugin string, channe
 	if channels == nil {
 		channels = []string{}
 	}
-	_, err := s.Pool.Exec(ctx, `DELETE FROM identity_managers WHERE plugin_id=$1 AND NOT channel_id = ANY($2)`, plugin, channels)
+	_, err := s.Pool.Exec(ctx, `DELETE FROM identity_managers WHERE plugin_id=$1 AND NOT channel_id  IN (SELECT value FROM json_each($2))`, plugin, channels)
 	return err
 }
 
@@ -145,7 +146,7 @@ func scanToken(row db.Scanner) (ExternalToken, error) {
 // lockLiveIdentity 以 FOR SHARE 锁住未删除的外部身份，与删除身份串行化。
 func lockLiveIdentity(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
 	var one int
-	err := tx.QueryRow(ctx, `SELECT 1 FROM external_identities WHERE id = $1 AND deleted_at IS NULL FOR SHARE`, id).Scan(&one)
+	err := tx.QueryRow(ctx, `SELECT 1 FROM external_identities WHERE id = $1 AND deleted_at IS NULL`, id).Scan(&one)
 	return notFoundIfNoRows(err, "外部身份")
 }
 
@@ -218,7 +219,7 @@ func (s *Store) LookupExternalToken(ctx context.Context, tokenID uuid.UUID) (Ext
 // TouchExternalToken 记录令牌的最近使用时间，最多每分钟更新一次。
 func (s *Store) TouchExternalToken(ctx context.Context, tokenID uuid.UUID) error {
 	_, err := s.Pool.Exec(ctx, `UPDATE external_tokens SET last_used_at = now()
-		WHERE id = $1 AND (last_used_at IS NULL OR last_used_at < now() - interval '1 minute')`, tokenID)
+		WHERE id = $1 AND (last_used_at IS NULL OR last_used_at < now() - 60000000)`, tokenID)
 	return err
 }
 
