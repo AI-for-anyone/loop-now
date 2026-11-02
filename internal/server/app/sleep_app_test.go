@@ -271,7 +271,7 @@ func TestSleepAppWakeCommitExecutionAndSessionFailure(t *testing.T) {
 				t.Fatal(err)
 			}
 			if mode == "session-save-failure" {
-				if _, err = s.a.Store.Pool.Exec(ctx, `CREATE FUNCTION reject_session_save() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'offline injected'; END $$; CREATE TRIGGER reject_session_save BEFORE UPDATE OF session_file ON agent_sessions FOR EACH ROW EXECUTE FUNCTION reject_session_save()`); err != nil {
+				if _, err = s.a.Store.Pool.Exec(ctx, `CREATE TRIGGER reject_session_save BEFORE UPDATE OF session_file ON agent_sessions BEGIN SELECT RAISE(ABORT, 'offline injected'); END`); err != nil {
 					t.Fatal(err)
 				}
 				s.waitIdle(path)

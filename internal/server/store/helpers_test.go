@@ -44,10 +44,9 @@ type projectMigrationEnv struct {
 	project   uuid.UUID
 }
 
-// projectMigrationFixture 原来停在 PG 的 011 供调用方继续升级；SQLite 下没有这个状态。
+// projectMigrationFixture 返回基线上的默认项目与模板目录（名字沿用 PostgreSQL 时期：那时先停在 011 再升级）。
 func projectMigrationFixture(t *testing.T) projectMigrationEnv {
 	t.Helper()
-	t.Skip(noMigrationHistory)
 	s := sqlitetest.NewStore(t)
 	dc, err := s.EnsureDefaults(context.Background(), "组织", "项目")
 	if err != nil {

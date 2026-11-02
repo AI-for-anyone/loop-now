@@ -10,9 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/store"
+
+	"github.com/google/uuid"
 )
 
 func TestCLIImportAtomicMixedAndHistory(t *testing.T) {
@@ -161,13 +162,10 @@ func TestCLIImportAtomicMixedAndHistory(t *testing.T) {
 	if err = e.s.Pool.QueryRow(ctx, `SELECT count(*) FROM cli_credential_import_receipts WHERE project_id=$1 AND origin_mac=$2`, e.project, againB.OriginMAC).Scan(&receipts); err != nil || receipts != 2 {
 		t.Fatal("old receipt not retained beside the new one", receipts, err)
 	}
-	if err = e.s.MigrateDownTo(ctx, 16); err == nil {
-		t.Fatal("Down erased history")
-	}
 }
 
 func TestCLIImportCancelCommitRecovery(t *testing.T) {
-	e := dbConnectionFixtureAt(t, 25)
+	e := dbConnectionFixture(t)
 	ctx := context.Background()
 	base, err := e.s.GetProject(ctx, e.project)
 	if err != nil {
@@ -179,17 +177,6 @@ func TestCLIImportCancelCommitRecovery(t *testing.T) {
 	}
 	e.project = p.ID
 	instance := uuid.New()
-	// Empty 017 down/up is lawful, history later blocks it.
-	if err := e.s.MigrateDownTo(ctx, 16); err != nil {
-		t.Fatal(err)
-	}
-	if err := e.s.MigrateUpTo(ctx, 17); err != nil {
-		t.Fatal(err)
-	}
-	// Current Store code requires the latest schema.
-	if err := e.s.Migrate(ctx, quietLogger()); err != nil {
-		t.Fatal(err)
-	}
 	makeBegin := func() store.CLIImportBegin {
 		t.Helper()
 		h := sha256.Sum256([]byte(uuid.NewString()))
@@ -243,8 +230,5 @@ func TestCLIImportCancelCommitRecovery(t *testing.T) {
 	}
 	if _, err = e.s.FinishCLIImport(ctx, e.project, late.ID, "failed", "internal_error", uuid.Nil); err != nil {
 		t.Fatal("deleted project history cleanup", err)
-	}
-	if err = e.s.MigrateDownTo(ctx, 16); err == nil {
-		t.Fatal("project deletion bypassed Down history guard")
 	}
 }

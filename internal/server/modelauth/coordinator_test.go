@@ -12,9 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/modelcredential"
 	"loop-now/internal/server/store"
+
+	"github.com/google/uuid"
 
 	"loop-now/internal/testutil/sqlitetest"
 )
@@ -268,11 +269,8 @@ func TestProviderRotationCommitFailurePreservesEvidenceAndNeverRetries(t *testin
 	st, a := authFixture(t)
 	ctx := context.Background()
 	old := grant(t, st, a.ID, oauth(t, "account-A", "old", time.Now().Add(-time.Hour)))
-	_, err := st.Pool.Exec(ctx, `CREATE FUNCTION reject_rotated_token() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.generation>OLD.generation THEN RAISE EXCEPTION 'synthetic-write-failure'; END IF; RETURN NEW; END $$`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.Pool.Exec(ctx, `CREATE TRIGGER reject_rotated_token BEFORE UPDATE ON model_auth_versions FOR EACH ROW EXECUTE FUNCTION reject_rotated_token()`); err != nil {
+	if _, err := st.Pool.Exec(ctx, `CREATE TRIGGER reject_rotated_token BEFORE UPDATE ON model_auth_versions WHEN NEW.generation>OLD.generation
+		BEGIN SELECT RAISE(ABORT, 'synthetic-write-failure'); END`); err != nil {
 		t.Fatal(err)
 	}
 	var calls atomic.Int32

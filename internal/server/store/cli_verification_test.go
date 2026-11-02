@@ -2,7 +2,6 @@ package store_test
 
 import (
 	"context"
-	"github.com/google/uuid"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/cliverify"
 	"loop-now/internal/server/store"
@@ -11,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func verificationMeta() store.VerificationMetadata {
@@ -127,8 +128,7 @@ func TestCLIVerificationTargetChangeAndProjectPurge(t *testing.T) {
 	mustExec(t, e.s, `UPDATE google_cli_grants SET refresh_state='refreshing',lease_id=$2,lease_until=clock_timestamp()+60000000,lease_verification_id=$3 WHERE version_id=$1`, version, uuid.New(), in.OperationID)
 	// Force the final project tombstone write to fail: cancellation and purge
 	// must roll back with it, retaining both original lease and operation.
-	mustExec(t, e.s, `CREATE FUNCTION reject_probe_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic rollback'; END $$`)
-	mustExec(t, e.s, `CREATE TRIGGER reject_probe_delete BEFORE UPDATE OF deleted_at ON projects FOR EACH ROW EXECUTE FUNCTION reject_probe_delete()`)
+	mustExec(t, e.s, `CREATE TRIGGER reject_probe_delete BEFORE UPDATE OF deleted_at ON projects BEGIN SELECT RAISE(ABORT, 'synthetic rollback'); END`)
 	if _, err = e.s.DeleteProject(ctx, project.ID); err == nil {
 		t.Fatal("rollback injection did not fire")
 	}
@@ -140,7 +140,7 @@ func TestCLIVerificationTargetChangeAndProjectPurge(t *testing.T) {
 	if err = e.s.Pool.QueryRow(ctx, `SELECT lease_verification_id FROM google_cli_grants WHERE version_id=$1`, version).Scan(&owner); err != nil || owner != in.OperationID {
 		t.Fatal("rollback lost original lease", err)
 	}
-	mustExec(t, e.s, `DROP TRIGGER reject_probe_delete ON projects`)
+	mustExec(t, e.s, `DROP TRIGGER reject_probe_delete`)
 	if _, err = e.s.DeleteProject(ctx, project.ID); err != nil {
 		t.Fatal("project purge blocked by history FK", err)
 	}

@@ -262,7 +262,7 @@ func TestTaskLarkPublishFinalCASFailuresPreserveOriginalBinding(t *testing.T) {
 				}
 				_, err = s.Pool.Exec(ctx, `UPDATE task_instances SET prepared=true,session_state='active',session_file=$2 WHERE id=$1`, member.RuntimeID, path)
 			case "commit_trigger_failure":
-				_, err = s.Pool.Exec(ctx, `CREATE FUNCTION reject_switch_final_task_save() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic_final_save_failure'; END $$; CREATE TRIGGER reject_switch_final_task_save BEFORE UPDATE ON task_records FOR EACH ROW EXECUTE FUNCTION reject_switch_final_task_save()`)
+				_, err = s.Pool.Exec(ctx, `CREATE TRIGGER reject_switch_final_task_save BEFORE UPDATE ON task_records BEGIN SELECT RAISE(ABORT, 'synthetic_final_save_failure'); END`)
 			}
 			if err != nil {
 				t.Fatal(err)

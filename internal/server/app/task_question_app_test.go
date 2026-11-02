@@ -121,7 +121,7 @@ func TestTaskQuestionAppRestartRecoversPendingOutbox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, sql := range []string{`CREATE FUNCTION fail_platform_before_restart() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.from_kind='platform' THEN RAISE EXCEPTION 'synthetic delivery outage'; END IF; RETURN NEW; END $$`, `CREATE TRIGGER fail_platform_before_restart BEFORE INSERT ON inbox_messages FOR EACH ROW EXECUTE FUNCTION fail_platform_before_restart()`} {
+	for _, sql := range []string{`CREATE TRIGGER fail_platform_before_restart BEFORE INSERT ON inbox_messages WHEN NEW.from_kind='platform' BEGIN SELECT RAISE(ABORT, 'synthetic delivery outage'); END`} {
 		if _, err = s.a.Store.Pool.Exec(ctx, sql); err != nil {
 			t.Fatal(err)
 		}
@@ -135,7 +135,7 @@ func TestTaskQuestionAppRestartRecoversPendingOutbox(t *testing.T) {
 	s.stop()
 	second := w.start(nil)
 	defer second.stop()
-	if _, err = second.a.Store.Pool.Exec(ctx, `DROP TRIGGER fail_platform_before_restart ON inbox_messages`); err != nil {
+	if _, err = second.a.Store.Pool.Exec(ctx, `DROP TRIGGER fail_platform_before_restart`); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 3; i++ {

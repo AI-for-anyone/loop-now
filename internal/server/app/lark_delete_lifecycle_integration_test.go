@@ -25,7 +25,7 @@ func TestLarkAppDeleteRollbackPreservesWorkerThenCommittedDeleteDrains(t *testin
 	id := uuid.New()
 	s.must(202, "POST", base, map[string]any{"operationId": id, "cli": "lark-cli", "authType": "lark_user", "sourceAccountId": source.ID, "expectedSourceRevision": source.Revision})
 	waitLarkApp(t, s, base, id, "awaiting_authorization")
-	if _, err := s.a.Store.Pool.Exec(ctx, `CREATE FUNCTION stop_lark_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.deleted_at IS NOT NULL THEN RAISE EXCEPTION 'synthetic rollback'; END IF; RETURN NEW; END $$; CREATE TRIGGER stop_lark_delete BEFORE UPDATE ON projects FOR EACH ROW EXECUTE FUNCTION stop_lark_delete()`); err != nil {
+	if _, err := s.a.Store.Pool.Exec(ctx, `CREATE TRIGGER stop_lark_delete BEFORE UPDATE ON projects WHEN NEW.deleted_at IS NOT NULL BEGIN SELECT RAISE(ABORT, 'synthetic rollback'); END`); err != nil {
 		t.Fatal(err)
 	}
 	s.must(500, "DELETE", "/projects/"+project.ID.String(), nil)
@@ -38,7 +38,7 @@ func TestLarkAppDeleteRollbackPreservesWorkerThenCommittedDeleteDrains(t *testin
 		t.Fatal("rollback cancelled the pending protocol worker")
 	}
 	waitLarkApp(t, s, base, id, "awaiting_authorization")
-	if _, err := s.a.Store.Pool.Exec(ctx, `DROP TRIGGER stop_lark_delete ON projects; DROP FUNCTION stop_lark_delete()`); err != nil {
+	if _, err := s.a.Store.Pool.Exec(ctx, `DROP TRIGGER stop_lark_delete`); err != nil {
 		t.Fatal(err)
 	}
 	s.must(204, "DELETE", "/projects/"+project.ID.String(), nil)

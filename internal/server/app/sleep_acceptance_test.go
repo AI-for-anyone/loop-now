@@ -591,7 +591,7 @@ func TestSleepAppQueuedTaskTimerCannotSurviveRetirement(t *testing.T) {
 	waiting := taskWait(t, s, d.Task.ID, func(d taskmodel.Detail) bool { return len(d.SleepingInstances) == 1 })
 	// Deterministically reject only the timer's claim transaction. Cancellation
 	// and cleanup remain the real App paths and are not replaced by callbacks.
-	if _, e = s.a.Store.Pool.Exec(ctx, `CREATE FUNCTION hold_timer_claim() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.origin='sleep_wake' AND NEW.status='starting' THEN RAISE EXCEPTION 'offline timer claim barrier'; END IF; RETURN NEW; END $$; CREATE TRIGGER hold_timer_claim BEFORE UPDATE ON task_turns FOR EACH ROW EXECUTE FUNCTION hold_timer_claim()`); e != nil {
+	if _, e = s.a.Store.Pool.Exec(ctx, `CREATE TRIGGER hold_timer_claim BEFORE UPDATE ON task_turns WHEN NEW.origin='sleep_wake' AND NEW.status='starting' BEGIN SELECT RAISE(ABORT, 'offline timer claim barrier'); END`); e != nil {
 		t.Fatal(e)
 	}
 	if _, e = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, receipt.Sleep.ID); e != nil {
@@ -612,7 +612,7 @@ func TestSleepAppQueuedTaskTimerCannotSurviveRetirement(t *testing.T) {
 		t.Fatal(e)
 	}
 	taskWait(t, s, d.Task.ID, func(d taskmodel.Detail) bool { return d.Cleanup == "archived" })
-	if _, e = s.a.Store.Pool.Exec(ctx, `DROP TRIGGER hold_timer_claim ON task_turns; DROP FUNCTION hold_timer_claim()`); e != nil {
+	if _, e = s.a.Store.Pool.Exec(ctx, `DROP TRIGGER hold_timer_claim`); e != nil {
 		t.Fatal(e)
 	}
 	if e = s.a.Store.ReconcileSleeps(ctx, 100); e != nil {
@@ -728,7 +728,7 @@ func TestSleepAppBatchOnePersistentFailureDoesNotStarve(t *testing.T) {
 		t.Fatal("healthy real RPC lost/replayed", n)
 	}
 	t.Logf("case=batch1-live-scanner failingSleepId=%s healthySleepId=%s wakeRunId=%s loggedFailures=%d healthyPiPrompts=2 healthyTimers=1", bad.sleep.ID, healthy.sleep.ID, wake, log.failures.Load())
-	if _, e = s.a.Store.Pool.Exec(ctx, `DROP TRIGGER reject_first_sleep_app ON agent_sleeps; DROP FUNCTION reject_first_sleep_app()`); e != nil {
+	if _, e = s.a.Store.Pool.Exec(ctx, `DROP TRIGGER reject_first_sleep_app`); e != nil {
 		t.Fatal(e)
 	}
 }

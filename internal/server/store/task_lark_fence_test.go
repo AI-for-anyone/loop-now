@@ -1,7 +1,6 @@
 package store_test
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"os"
@@ -10,13 +9,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/sleepmodel"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/tasks"
+
+	"github.com/google/uuid"
 )
 
 func larkFenceFixture(t *testing.T) (*store.Store, store.TaskLarkFenceReservation) {
@@ -106,9 +106,6 @@ func TestTaskLarkFenceReservationAndSafeFailure(t *testing.T) {
 	var fences, bindings, turns int
 	if err = s.Pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM task_lark_switch_fences),(SELECT count(*) FROM task_lark_credential_bindings),(SELECT count(*) FROM task_turns WHERE task_id=$1)`, in.TaskID).Scan(&fences, &bindings, &turns); err != nil || fences != 0 || bindings != 0 || turns != 1 {
 		t.Fatal("A/failure created binding or continuation", fences, bindings, turns, err)
-	}
-	if err = s.MigrateDownTo(ctx, 20); err == nil {
-		t.Fatal("Down discarded action audit")
 	}
 }
 
@@ -224,27 +221,6 @@ func TestTaskLarkFenceInvalidReservationHasNoSideEffects(t *testing.T) {
 				t.Fatal("rejected reservation changed task or published state", actions, fences, bindings)
 			}
 		})
-	}
-}
-
-func TestTaskLarkMigrationEmptyRoundTrip(t *testing.T) {
-	// 026 cannot be rolled back; the 021 round trip runs on a 025 schema.
-	s := taskConsoleStoreAt(t, 25)
-	ctx := context.Background()
-	_, runtime := rawTaskAt25(t, s)
-	var before []byte
-	if err := s.Pool.QueryRow(ctx, `SELECT snapshot FROM task_instances WHERE id=$1`, runtime).Scan(&before); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.MigrateDownTo(ctx, 20); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.MigrateUpTo(ctx, 25); err != nil {
-		t.Fatal(err)
-	}
-	var after []byte
-	if err := s.Pool.QueryRow(ctx, `SELECT snapshot FROM task_instances WHERE id=$1`, runtime).Scan(&after); err != nil || !bytes.Equal(before, after) {
-		t.Fatal("migration rewrote/resealed original task snapshot")
 	}
 }
 

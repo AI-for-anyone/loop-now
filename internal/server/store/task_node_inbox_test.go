@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/google/uuid"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/executor"
@@ -16,6 +15,8 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func inboxReceipt(t *testing.T, raw []byte) taskmodel.TaskNodeInboxReceipt {
@@ -253,10 +254,7 @@ func TestTaskNodeInboxTargetChangeAndOrdinaryIsolation(t *testing.T) {
 	if _, _, e = s.ReplyTaskNodeInbox(ctx, store.ConsoleParty, mid, uuid.Nil, "revive old thread", ""); e == nil {
 		t.Fatal("reply revived recorded nonexecution")
 	}
-	if e = s.MigrateDownTo(ctx, 18); e == nil {
-		t.Fatal("lossy019 Down allowed")
-	}
-	t.Log("strict/ordinary reminder coexist; original-action GET/replay after attempt switch; Agent list/read/thread/reply all reject; console history and019 Down guard")
+	t.Log("strict/ordinary reminder coexist; original-action GET/replay after attempt switch; Agent list/read/thread/reply all reject; console history kept")
 }
 
 func TestTaskNodeInboxBlockedConversationMode(t *testing.T) {
@@ -539,31 +537,6 @@ func TestTaskNodeInboxInterruptedNotificationKeepsUnreadMessage(t *testing.T) {
 		t.Fatal("actual B read not linked to A")
 	}
 	t.Log("notification interruption alone does not expire Inbox; same-node B run reads A with real many-to-many link")
-}
-
-func TestTaskNodeInboxMigrationRoundTripWithoutNewData(t *testing.T) {
-	ctx := context.Background()
-	// 026 cannot be rolled back, so the 019 round trip runs on a 025 schema
-	// with task rows written in their own column shape.
-	s := taskConsoleStoreAt(t, 25)
-	task, runtime := rawTaskAt25(t, s)
-	for _, origin := range []string{"task_node", "inbox_reminder"} {
-		mustExec(t, s, `INSERT INTO task_turns(id,task_id,runtime_id,user_message_id,assistant_message_id,status,origin,text,queue_seq)VALUES($1,$2,$3,$4,$5,'completed',$6,'old turn',(SELECT coalesce(max(queue_seq),0)+1 FROM task_turns))`, uuid.New(), task, runtime, uuid.New(), uuid.New(), origin)
-	}
-	if e := s.MigrateDownTo(ctx, 18); e != nil {
-		t.Fatal("empty-new-data Down", e)
-	}
-	var count int
-	if e := s.Pool.QueryRow(ctx, `SELECT count(*) FROM task_turns WHERE runtime_id=$1`, runtime).Scan(&count); e != nil || count != 2 {
-		t.Fatal("old turns changed", e)
-	}
-	if e := s.MigrateUpTo(ctx, 25); e != nil {
-		t.Fatal("Up again", e)
-	}
-	if e := s.Pool.QueryRow(ctx, `SELECT count(*) FROM task_node_inbox_messages`).Scan(&count); e != nil || count != 0 {
-		t.Fatal("old history converted to Inbox", e)
-	}
-	t.Log("actual TEST019 Down/Up preserves old ordinary and task turns; no history backfill")
 }
 
 // rawTaskAt25 writes one running task with an opaque pre-026 snapshot.
