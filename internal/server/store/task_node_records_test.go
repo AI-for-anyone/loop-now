@@ -84,7 +84,6 @@ func TestTaskNodeRecordScopeAndHistory(t *testing.T) {
 	}
 	at := time.Now().UTC()
 	for _, kind := range []string{"tool.changed", "run.phase", "run.ended"} {
-		// SQLITE-PORT(G5): '{}' array
 		_, e = s.Pool.Exec(ctx, `INSERT INTO lifecycle_events(id,at,agent_id,type,data,task_id,workflow_node,task_turn_id) VALUES($1,$2,$3,$4,'{}',$5,$6,$7)`, uuid.Must(uuid.NewV7()), at, agent, kind, task, node.String(), turn.ID)
 		if e != nil {
 			t.Fatal(e)

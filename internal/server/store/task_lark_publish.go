@@ -8,9 +8,10 @@ import (
 	"slices"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/taskmodel"
+
+	"github.com/google/uuid"
 
 	"loop-now/internal/server/db"
 )
@@ -163,8 +164,36 @@ func (s *Store) PublishTaskLarkSwitchTx(ctx context.Context, m *TaskMutation, ac
 	if _, err = m.Tx.Exec(ctx, `DELETE FROM task_lark_switch_fences WHERE actor_key=$1 AND action_id=$2 AND task_id=$3`, actor, action, next.TaskID); err != nil {
 		return 0, false, err
 	}
+	// 提交前按事务最终的状态再核对一次发布组（原来是 PostgreSQL 的延迟约束触发器 task_lark_complete_group）。
+	taskID := next.TaskID
+	m.Tx.BeforeCommit(func(ctx context.Context, tx *db.Tx) error {
+		return checkTaskLarkPublishedGroupTx(ctx, tx, taskID, revision)
+	})
 	m.Changed()
 	return revision, true, nil
+}
+
+// errIncompleteLarkGroup 与原来的触发器报同样的错误。
+var errIncompleteLarkGroup = errors.New("task_lark_switch_requires_complete_published_group")
+
+// checkTaskLarkPublishedGroupTx 核对一次发布的组完整：恰好两个成员，续接轮次属于发布方成员、
+// 节点与版本对得上，原动作已成功。不完整时返回 errIncompleteLarkGroup，使整个发布回滚。
+func checkTaskLarkPublishedGroupTx(ctx context.Context, tx *db.Tx, task uuid.UUID, revision int64) error {
+	var complete bool
+	err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM task_lark_binding_members WHERE task_id=b.task_id AND revision=b.revision)=2
+		AND EXISTS(SELECT 1 FROM task_lark_binding_members p JOIN task_turns t ON t.id=b.continuation_turn_id
+			WHERE p.task_id=b.task_id AND p.revision=b.revision AND p.member_role='publisher'
+			AND t.task_id=p.task_id AND t.runtime_id=p.runtime_id AND t.node_run_id=b.continuation_node_run_id
+			AND t.lark_binding_revision=b.revision AND t.lark_switch_action_id=b.action_id)
+		AND EXISTS(SELECT 1 FROM task_lark_switch_actions a WHERE a.actor_key=b.actor_key AND a.action_id=b.action_id AND a.task_id=b.task_id AND a.status='succeeded')
+		FROM task_lark_credential_bindings b WHERE b.task_id=$1 AND b.revision=$2`, task, revision).Scan(&complete)
+	if err != nil {
+		return err
+	}
+	if !complete {
+		return errIncompleteLarkGroup
+	}
+	return nil
 }
 
 func sameLarkSession(a, b *string) bool {

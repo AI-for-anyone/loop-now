@@ -99,8 +99,7 @@ func (s *Store) MarkTaskSessionMissing(ctx context.Context, runtimeID uuid.UUID)
 }
 
 func (s *Store) FrozenTaskSource(ctx context.Context, sourceID uuid.UUID) (TaskFrozenSource, uuid.UUID, error) {
-	// SQLITE-PORT(G5): jsonb op
-	rows, err := s.Pool.Query(ctx, `SELECT id,sources FROM task_instances WHERE sources @> $1`, []byte(`[{"Source":{"ID":"`+sourceID.String()+`"}}]`))
+	rows, err := s.Pool.Query(ctx, `SELECT id,sources FROM task_instances WHERE EXISTS(SELECT 1 FROM json_each(sources) j WHERE j.value->'Source'->>'ID'=$1)`, sourceID)
 	if err != nil {
 		return TaskFrozenSource{}, uuid.Nil, err
 	}
