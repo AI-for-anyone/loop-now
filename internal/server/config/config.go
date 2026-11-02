@@ -184,6 +184,7 @@ type Config struct {
 	InboxPreviewChars int // Inbox 摘要中正文的字符数
 	InboxPageMax      int // Inbox 列表每页条数的上限
 	// LoopctlDistDir 是 loopctl 构建产物的根目录，其中 <版本>/manifest.json 必须与服务端同版本。
+	// 没有设置时取 loop-server 旁边的 loopctl-dist（发布包），都没有则拒绝启动。
 	LoopctlDistDir string
 	// ExternalListenAddr 为空时不开启对外端口；开启时必须配置 TLS 证书与私钥。
 	ExternalListenAddr string
@@ -221,6 +222,41 @@ func DefaultWorkRoot() string {
 	return "/var/lib/loop-now"
 }
 
+// 发布包的布局：这些文件与 loop-server 放在同一目录下（见 scripts/release/build.sh）。对应的配置没有设置、
+// 而文件存在时，默认就用它们，所以解开发布包不必另外配置；环境变量仍然优先。
+const (
+	BundledNode           = "runtime/node/bin/node"
+	BundledPi             = "runtime/pi/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"
+	BundledLoopctlDist    = "loopctl-dist"
+	BundledPluginHost     = "plugins/host/main.js"
+	BundledPluginOfficial = "plugins/official"
+)
+
+// executableDir 返回本程序可执行文件所在的目录（解析符号链接）；取不到时为空。测试可以替换。
+var executableDir = func() string {
+	p, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	if real, err := filepath.EvalSymlinks(p); err == nil {
+		p = real
+	}
+	return filepath.Dir(p)
+}
+
+// bundled 返回可执行文件旁边的 rel；不存在时返回 fallback。
+func bundled(rel, fallback string) string {
+	dir := executableDir()
+	if dir == "" {
+		return fallback
+	}
+	p := filepath.Join(dir, rel)
+	if _, err := os.Stat(p); err != nil {
+		return fallback
+	}
+	return p
+}
+
 // DefaultPluginMarketURL 是官方插件市场索引仓库 AI-for-anyone/loop-now-market 的 loop-now-market.json。
 const DefaultPluginMarketURL = "https://raw.githubusercontent.com/AI-for-anyone/loop-now-market/main/loop-now-market.json"
 
@@ -252,7 +288,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		DefaultOrgName:     p.str(EnvDefaultOrgName, "default"),
 		DefaultProjectName: p.str(EnvDefaultProjectName, "default"),
 
-		PiBin:               p.str(EnvPiBin, "pi"),
+		PiBin:               p.str(EnvPiBin, bundled(BundledPi, "pi")),
 		PiVersion:           p.str(EnvPiVersion, "1.4.0"),
 		PiMaxProcesses:      p.integer(EnvPiMaxProcesses, 0),
 		PiIdleTimeout:       p.duration(EnvPiIdleTimeout, "10m"),
@@ -267,7 +303,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		LarkUserBundleDir:   p.str(EnvLarkUserBundleDir, ""),
 		ExecBasePath:        p.str(EnvExecBasePath, ""),
 		ExecEnvPassthrough:  p.list(EnvExecEnvPassthrough, "LANG,LC_ALL,TZ"),
-		NodeBin:             p.str(EnvNodeBin, "node"),
+		NodeBin:             p.str(EnvNodeBin, bundled(BundledNode, "node")),
 		PiAIDir:             p.str(EnvPiAIDir, ""),
 
 		ReconcileInterval: p.duration(EnvReconcileInterval, "5s"),
@@ -287,7 +323,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		InboxQuestionTTL:   p.duration(EnvInboxQuestionTTL, "168h"),
 		InboxPreviewChars:  p.integer(EnvInboxPreviewChars, 200),
 		InboxPageMax:       p.integer(EnvInboxPageMax, 100),
-		LoopctlDistDir:     p.required(EnvLoopctlDistDir),
+		LoopctlDistDir:     p.str(EnvLoopctlDistDir, bundled(BundledLoopctlDist, "")),
 		ExternalListenAddr: p.str(EnvExternalListenAddr, ""),
 		ExternalTLSCert:    p.str(EnvExternalTLSCert, ""),
 		ExternalTLSKey:     p.str(EnvExternalTLSKey, ""),
@@ -332,8 +368,11 @@ func Load(getenv func(string) string) (*Config, error) {
 		p.fail(EnvContextDir, "须为规范的绝对路径（当前 %q；未设置时取 HOME 下的 .loop_now）", c.ContextDir)
 	}
 
-	c.PluginHostEntry = p.str(EnvPluginHostEntry, "")
-	c.PluginOfficialDir = p.str(EnvPluginOfficialDir, "")
+	if c.LoopctlDistDir == "" {
+		p.fail(EnvLoopctlDistDir, "必需配置，未设置（发布包里默认取 loop-server 旁边的 %s）", BundledLoopctlDist)
+	}
+	c.PluginHostEntry = p.str(EnvPluginHostEntry, bundled(BundledPluginHost, ""))
+	c.PluginOfficialDir = p.str(EnvPluginOfficialDir, bundled(BundledPluginOfficial, ""))
 	for env, v := range map[string]string{EnvPluginHostEntry: c.PluginHostEntry, EnvPluginOfficialDir: c.PluginOfficialDir} {
 		if v != "" && (!filepath.IsAbs(v) || filepath.Clean(v) != v) {
 			p.fail(env, "须为规范的绝对路径（当前 %q）", v)
@@ -503,14 +542,6 @@ func (p *parser) fail(name, format string, args ...any) {
 func (p *parser) raw(name string) (string, bool) {
 	v := strings.TrimSpace(p.getenv(name))
 	return v, v != ""
-}
-
-func (p *parser) required(name string) string {
-	v, ok := p.raw(name)
-	if !ok {
-		p.fail(name, "必需配置，未设置")
-	}
-	return v
 }
 
 func (p *parser) str(name, def string) string {
