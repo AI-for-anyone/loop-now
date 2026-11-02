@@ -35,13 +35,9 @@ func importProjectLock(ctx context.Context, tx *db.Tx, project uuid.UUID) (int64
 	err := tx.QueryRow(ctx, `SELECT credentials_revision,deleted_at FROM projects WHERE id=$1`, project).Scan(&rev, &deleted)
 	return rev, deleted != nil, notFoundIfNoRows(err, "项目")
 }
-func importOperationTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, lock bool) (CLIImportOperation, error) {
+func importOperationTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, _ bool) (CLIImportOperation, error) {
 	var o CLIImportOperation
-	suffix := ""
-	if lock {
-		suffix = " FOR UPDATE"
-	}
-	err := tx.QueryRow(ctx, `SELECT id,project_id,scan_id,status,phase,created_at,deadline_at,completed_at,error_code,committed_credentials_revision FROM cli_credential_import_operations WHERE id=$1 AND project_id=$2`+suffix, id, project).Scan(&o.ID, &o.ProjectID, &o.ScanID, &o.Status, &o.Phase, &o.CreatedAt, &o.DeadlineAt, &o.CompletedAt, &o.ErrorCode, &o.CredentialsRevision)
+	err := tx.QueryRow(ctx, `SELECT id,project_id,scan_id,status,phase,created_at,deadline_at,completed_at,error_code,committed_credentials_revision FROM cli_credential_import_operations WHERE id=$1 AND project_id=$2`, id, project).Scan(&o.ID, &o.ProjectID, &o.ScanID, &o.Status, &o.Phase, &o.CreatedAt, &o.DeadlineAt, &o.CompletedAt, &o.ErrorCode, &o.CredentialsRevision)
 	if err != nil {
 		return o, notFoundIfNoRows(err, "导入操作")
 	}

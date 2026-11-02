@@ -38,11 +38,7 @@ func verificationGoogleGrantTx(ctx context.Context, tx *db.Tx, b clicredential.V
 	if !finish && (deleted != nil || current == nil || *current != version || live == nil || *live != version || (status != "pending" && status != "running") || !unexpired) {
 		return out, errors.New("管理验证操作已失效")
 	}
-	mode := "FOR SHARE OF g,v"
-	if write {
-		mode = "FOR UPDATE OF g,v"
-	}
-	e := tx.QueryRow(ctx, `SELECT v.account_label,v.secret,g.generation,g.refresh_state,g.lease_id,g.lease_agent_id,g.lease_verification_id,g.lease_until,g.error_code FROM google_cli_grants g JOIN project_cli_versions v ON v.id=g.version_id AND v.account_id=g.account_id WHERE g.version_id=$1 AND g.account_id=$2 AND v.auth_method='oauth' `+mode, b.VersionID, b.AccountID).Scan(&out.AccountLabel, &out.Secret, &out.Generation, &out.RefreshState, &out.LeaseID, &out.LeaseAgentID, &out.LeaseVerificationID, &out.LeaseUntil, &out.ErrorCode)
+	e := tx.QueryRow(ctx, `SELECT v.account_label,v.secret,g.generation,g.refresh_state,g.lease_id,g.lease_agent_id,g.lease_verification_id,g.lease_until,g.error_code FROM google_cli_grants g JOIN project_cli_versions v ON v.id=g.version_id AND v.account_id=g.account_id WHERE g.version_id=$1 AND g.account_id=$2 AND v.auth_method='oauth' `, b.VersionID, b.AccountID).Scan(&out.AccountLabel, &out.Secret, &out.Generation, &out.RefreshState, &out.LeaseID, &out.LeaseAgentID, &out.LeaseVerificationID, &out.LeaseUntil, &out.ErrorCode)
 	if e != nil {
 		return out, notFoundIfNoRows(e, "管理验证授权")
 	}

@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"io"
 	"slices"
+	"strconv"
 	"strings"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/clitemplate"
+
+	"github.com/google/uuid"
 
 	"loop-now/internal/server/db"
 )
@@ -159,8 +161,7 @@ func settleDeletedAccountTx(ctx context.Context, tx *db.Tx, project, account uui
 	}
 	// Versions still holding secret material, with the payload a task could copy.
 	payloads := map[uuid.UUID]*clitemplate.Payload{}
-	// SQLITE-PORT(G4): '{}' array、octet_length
-	rows, e := tx.Query(ctx, `SELECT id,secret,auth_method FROM project_cli_versions WHERE account_id=$1 AND (octet_length(secret)>0 OR field_names<>'{}' OR env_names<>'{}' OR file_paths<>'{}')
+	rows, e := tx.Query(ctx, `SELECT id,secret,auth_method FROM project_cli_versions WHERE account_id=$1 AND (`+versionHoldsSecret+`)
 		UNION ALL SELECT id,NULL,NULL FROM model_auth_versions WHERE project_account_id=$1`, account)
 	if e != nil {
 		return e
@@ -191,11 +192,10 @@ func settleDeletedAccountTx(ctx context.Context, tx *db.Tx, project, account uui
 	for id := range payloads {
 		versions = append(versions, id.String())
 	}
-	// SQLITE-PORT(G4): ::cast、LATERAL、array、convert_from/to
+	// 快照是 JSON 文本的字节（BLOB），先转成文本再按 JSON 读。
 	rows, e = tx.Query(ctx, `SELECT DISTINCT v FROM (
-			SELECT x.c->k->>'versionId' v FROM task_instances i JOIN task_records r ON r.id=i.task_id
-			CROSS JOIN LATERAL (SELECT convert_from(i.snapshot,'UTF8')::jsonb->'credentials' c) x
-			CROSS JOIN unnest(ARRAY['modelAuth','googleBinding','larkBinding']) k
+			SELECT json_extract(CAST(i.snapshot AS TEXT), '$.credentials.' || k.value || '.versionId') v FROM task_instances i JOIN task_records r ON r.id=i.task_id
+			CROSS JOIN json_each('["modelAuth","googleBinding","larkBinding"]') k
 			WHERE r.project_id=$1 AND r.ended_at IS NULL
 			UNION ALL SELECT b.version_id FROM task_lark_credential_bindings b JOIN task_records r ON r.id=b.task_id WHERE r.project_id=$1 AND r.ended_at IS NULL
 		) u WHERE v IN (SELECT value FROM json_each($2))`, project, versions)
@@ -208,10 +208,8 @@ func settleDeletedAccountTx(ctx context.Context, tx *db.Tx, project, account uui
 	}
 	if cli != nil {
 		var ended []uuid.UUID
-		// SQLITE-PORT(G4): ::cast、LATERAL、convert_from/to、jsonb op
-		rows, e = tx.Query(ctx, `SELECT i.id,r.ended_at IS NOT NULL,x.s->'credentials'->'cli'->$2 FROM task_instances i JOIN task_records r ON r.id=i.task_id
-			CROSS JOIN LATERAL (SELECT convert_from(i.snapshot,'UTF8')::jsonb s) x
-			WHERE r.project_id=$1 AND x.s->'credentials'->'cli' ? $2 ORDER BY i.id`, project, *cli)
+		rows, e = tx.Query(ctx, `SELECT i.id,r.ended_at IS NOT NULL,CAST(i.snapshot AS TEXT)->'$.credentials.cli'->$2 FROM task_instances i JOIN task_records r ON r.id=i.task_id
+			WHERE r.project_id=$1 AND json_type(CAST(i.snapshot AS TEXT)->'$.credentials.cli', '$.'||json_quote($2)) IS NOT NULL ORDER BY i.id`, project, *cli)
 		if e != nil {
 			return e
 		}
@@ -351,9 +349,8 @@ func wipeVersionsTx(ctx context.Context, tx *db.Tx, accounts, keep []uuid.UUID) 
 		`DELETE FROM lark_cli_identities WHERE account_id IN (SELECT value FROM json_each($1)) AND version_id NOT IN (SELECT value FROM json_each($2))`,
 		`DELETE FROM project_cli_versions AS v WHERE account_id IN (SELECT value FROM json_each($1)) AND id NOT IN (SELECT value FROM json_each($2))
 			AND NOT EXISTS(SELECT 1 FROM task_lark_credential_bindings b WHERE b.version_id=v.id AND b.account_id=v.account_id)`,
-		// SQLITE-PORT(G4): '{}' array、::cast、octet_length
-		`UPDATE project_cli_versions SET secret='\x'::bytea,field_names='{}',env_names='{}',file_paths='{}',updated_at=clock_timestamp()
-			WHERE account_id IN (SELECT value FROM json_each($1)) AND id NOT IN (SELECT value FROM json_each($2)) AND (octet_length(secret)>0 OR field_names<>'{}' OR env_names<>'{}' OR file_paths<>'{}')`,
+		`UPDATE project_cli_versions SET secret=X'',field_names='[]',env_names='[]',file_paths='[]',updated_at=clock_timestamp()
+			WHERE account_id IN (SELECT value FROM json_each($1)) AND id NOT IN (SELECT value FROM json_each($2)) AND (` + versionHoldsSecret + `)`,
 		`DELETE FROM model_auth_versions WHERE project_account_id IN (SELECT value FROM json_each($1)) AND id NOT IN (SELECT value FROM json_each($2))`,
 	} {
 		if _, e := tx.Exec(ctx, q, accounts, keep); e != nil {
@@ -372,12 +369,21 @@ func scrubSnapshotsTx(ctx context.Context, tx *db.Tx, instances []uuid.UUID, cli
 	if len(instances) == 0 {
 		return nil
 	}
-	set, args := `jsonb_set(jsonb_set(x.s,'{credentials,model}','{}'),'{credentials,cli}','{}')`, []any{instances}
+	// 快照是 JSON 文本的字节（BLOB）：转成文本改完再存回字节。没有 credentials 对象的快照不动（与 jsonb_set 相同）。
+	set, args := `json_set(CAST(snapshot AS TEXT),'$.credentials.model',json('{}'),'$.credentials.cli',json('{}'))`, []any{instances}
 	if cli != nil {
-		set, args = `jsonb_set(x.s,'{credentials,cli}',coalesce(x.s->'credentials'->'cli','{}')-$2)`, append(args, cli)
+		paths := make([]string, len(cli))
+		for i, name := range cli {
+			quoted, _ := json.Marshal(name)
+			args = append(args, "$."+string(quoted))
+			paths[i] = "$" + strconv.Itoa(i+2)
+		}
+		set = `json_set(CAST(snapshot AS TEXT),'$.credentials.cli',json(json_remove(coalesce(CAST(snapshot AS TEXT)->'$.credentials.cli','{}'),` + strings.Join(paths, ",") + `)))`
 	}
-	// SQLITE-PORT(G4): ::cast、convert_from/to
-	_, e := tx.Exec(ctx, `UPDATE task_instances AS i SET snapshot=convert_to(`+set+`::text,'UTF8')
-		FROM (SELECT id,convert_from(snapshot,'UTF8')::jsonb s FROM task_instances WHERE id IN (SELECT value FROM json_each($1))) x WHERE i.id=x.id`, args...)
+	_, e := tx.Exec(ctx, `UPDATE task_instances SET snapshot=CAST(`+set+` AS BLOB)
+		WHERE id IN (SELECT value FROM json_each($1)) AND json_type(CAST(snapshot AS TEXT),'$.credentials')='object'`, args...)
 	return e
 }
+
+// versionHoldsSecret 是 project_cli_versions 一行还留有密文或布局的条件。
+const versionHoldsSecret = `length(secret)>0 OR json_array_length(field_names)>0 OR json_array_length(env_names)>0 OR json_array_length(file_paths)>0`

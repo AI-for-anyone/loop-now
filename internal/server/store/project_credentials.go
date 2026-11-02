@@ -35,8 +35,9 @@ type ProjectCredentialWrite struct {
 	Secret         []byte
 }
 
-// SQLITE-PORT(G4): write 原来决定行锁强度（FOR SHARE/FOR UPDATE）；写事务串行后不再需要，可以去掉这个参数。
-func lockCredentialProject(ctx context.Context, tx *db.Tx, id uuid.UUID, write bool) (int64, error) {
+// lockCredentialProject 返回项目的凭证版本；项目不存在或已删除时返回 not_found。
+// 最后一个参数原来决定行锁强度，写事务串行后不起作用（读事务里也不需要）。
+func lockCredentialProject(ctx context.Context, tx *db.Tx, id uuid.UUID, _ bool) (int64, error) {
 	var rev int64
 	err := tx.QueryRow(ctx, `SELECT credentials_revision FROM projects WHERE id=$1 AND deleted_at IS NULL`, id).Scan(&rev)
 	return rev, notFoundIfNoRows(err, "项目")
@@ -75,14 +76,10 @@ func projectCredentialRequired(a Agent) error {
 
 const projectAccountColumns = `id,project_id,purpose,provider,cli_name,name,revision,coalesce(current_model_version_id,current_cli_version_id),created_at,updated_at,deleted_at`
 
-func projectAccountTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, lock bool) (ProjectCredentialRecord, error) {
+func projectAccountTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, _ bool) (ProjectCredentialRecord, error) {
 	var r ProjectCredentialRecord
 	a := &r.View
-	suffix := ""
-	if lock {
-		suffix = " FOR UPDATE"
-	}
-	err := tx.QueryRow(ctx, `SELECT `+projectAccountColumns+` FROM project_credential_accounts WHERE id=$1 AND project_id=$2`+suffix, id, project).Scan(&a.ID, &a.ProjectID, &a.Purpose, &a.Provider, &a.CLI, &a.Name, &a.Revision, &a.CurrentVersionID, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt)
+	err := tx.QueryRow(ctx, `SELECT `+projectAccountColumns+` FROM project_credential_accounts WHERE id=$1 AND project_id=$2`, id, project).Scan(&a.ID, &a.ProjectID, &a.Purpose, &a.Provider, &a.CLI, &a.Name, &a.Revision, &a.CurrentVersionID, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt)
 	if err != nil {
 		return r, notFoundIfNoRows(err, "项目账号")
 	}

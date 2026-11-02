@@ -33,12 +33,8 @@ func scanVerification(row db.Scanner) (cliverify.Operation, error) {
 	}
 	return op, notFoundIfNoRows(err, "CLI验证操作")
 }
-func verificationTx(ctx context.Context, tx *db.Tx, project, account, id uuid.UUID, lock bool) (cliverify.Operation, error) {
-	suffix := ""
-	if lock {
-		suffix = " FOR UPDATE OF o"
-	}
-	return scanVerification(tx.QueryRow(ctx, `SELECT `+verificationColumns+` FROM cli_credential_verifications o JOIN project_credential_accounts a ON a.id=o.account_id WHERE o.project_id=$1 AND o.account_id=$2 AND o.id=$3`+suffix, project, account, id))
+func verificationTx(ctx context.Context, tx *db.Tx, project, account, id uuid.UUID, _ bool) (cliverify.Operation, error) {
+	return scanVerification(tx.QueryRow(ctx, `SELECT `+verificationColumns+` FROM cli_credential_verifications o JOIN project_credential_accounts a ON a.id=o.account_id WHERE o.project_id=$1 AND o.account_id=$2 AND o.id=$3`, project, account, id))
 }
 func lockVerificationAccount(ctx context.Context, tx *db.Tx, project, account uuid.UUID, write bool) (ProjectCredentialRecord, error) {
 	if _, err := lockCredentialProject(ctx, tx, project, false); err != nil {
@@ -101,7 +97,7 @@ func (s *Store) BeginCLIVerification(ctx context.Context, project, account uuid.
 			return apperr.Invalid("accountId", "CLI模板来源或格式已更改")
 		}
 		// SQLITE-PORT(G4): extract/epoch、greatest/least
-		if _, e = tx.Exec(ctx, `UPDATE cli_credential_verifications SET status='expired',phase=NULL,completed_at=clock_timestamp(),result_outcome='expired',verified_at=NULL,duration_ms=CAST(greatest(0,floor(extract(epoch FROM clock_timestamp()-started_at)*1000)) AS INTEGER),error_code='timeout',http_status=NULL WHERE account_id=$1 AND status IN('pending','running') AND expires_at<=clock_timestamp()`, account); e != nil {
+		if _, e = tx.Exec(ctx, `UPDATE cli_credential_verifications SET status='expired',phase=NULL,completed_at=clock_timestamp(),result_outcome='expired',verified_at=NULL,duration_ms=max(0,coalesce((clock_timestamp()-started_at)/1000,0)),error_code='timeout',http_status=NULL WHERE account_id=$1 AND status IN('pending','running') AND expires_at<=clock_timestamp()`, account); e != nil {
 			return e
 		}
 		var active uuid.UUID
@@ -184,7 +180,7 @@ func terminateVerificationsTx(ctx context.Context, tx *db.Tx, project uuid.UUID,
 		status, outcome = "failed", "failed"
 	}
 	// SQLITE-PORT(G4): extract/epoch、greatest/least
-	_, e := tx.Exec(ctx, `UPDATE cli_credential_verifications SET status=$3,phase=NULL,completed_at=clock_timestamp(),result_outcome=$4,verified_at=NULL,duration_ms=CAST(greatest(0,floor(extract(epoch FROM clock_timestamp()-started_at)*1000)) AS INTEGER),error_code=$5,http_status=NULL WHERE project_id=$1 AND ($2 IS NULL OR account_id=$2) AND status IN('pending','running')`, project, account, status, outcome, code)
+	_, e := tx.Exec(ctx, `UPDATE cli_credential_verifications SET status=$3,phase=NULL,completed_at=clock_timestamp(),result_outcome=$4,verified_at=NULL,duration_ms=max(0,coalesce((clock_timestamp()-started_at)/1000,0)),error_code=$5,http_status=NULL WHERE project_id=$1 AND ($2 IS NULL OR account_id=$2) AND status IN('pending','running')`, project, account, status, outcome, code)
 	return e
 }
 func (s *Store) CancelCLIVerification(ctx context.Context, project, account, id uuid.UUID) (cliverify.Operation, error) {
@@ -202,7 +198,7 @@ func (s *Store) CancelCLIVerification(ctx context.Context, project, account, id 
 			return nil
 		}
 		// SQLITE-PORT(G4): extract/epoch、greatest/least
-		_, e = tx.Exec(ctx, `UPDATE cli_credential_verifications SET status='cancelled',phase=NULL,completed_at=clock_timestamp(),result_outcome='cancelled',verified_at=NULL,duration_ms=CAST(greatest(0,floor(extract(epoch FROM clock_timestamp()-started_at)*1000)) AS INTEGER),error_code=NULL,http_status=NULL WHERE id=$1`, id)
+		_, e = tx.Exec(ctx, `UPDATE cli_credential_verifications SET status='cancelled',phase=NULL,completed_at=clock_timestamp(),result_outcome='cancelled',verified_at=NULL,duration_ms=max(0,coalesce((clock_timestamp()-started_at)/1000,0)),error_code=NULL,http_status=NULL WHERE id=$1`, id)
 		if e != nil {
 			return e
 		}
@@ -251,7 +247,7 @@ func (s *Store) ClaimCLIVerification(ctx context.Context, project, account, id u
 }
 func expireVerificationsTx(ctx context.Context, tx *db.Tx, id *uuid.UUID) error {
 	// SQLITE-PORT(G4): extract/epoch、greatest/least
-	_, e := tx.Exec(ctx, `UPDATE cli_credential_verifications SET status='expired',phase=NULL,completed_at=clock_timestamp(),result_outcome='expired',verified_at=NULL,duration_ms=CAST(greatest(0,floor(extract(epoch FROM clock_timestamp()-started_at)*1000)) AS INTEGER),error_code='timeout',http_status=NULL WHERE ($1 IS NULL OR id=$1) AND status IN('pending','running') AND expires_at<=clock_timestamp()`, id)
+	_, e := tx.Exec(ctx, `UPDATE cli_credential_verifications SET status='expired',phase=NULL,completed_at=clock_timestamp(),result_outcome='expired',verified_at=NULL,duration_ms=max(0,coalesce((clock_timestamp()-started_at)/1000,0)),error_code='timeout',http_status=NULL WHERE ($1 IS NULL OR id=$1) AND status IN('pending','running') AND expires_at<=clock_timestamp()`, id)
 	return e
 }
 func (s *Store) CLIVerificationPhase(ctx context.Context, project, account, id uuid.UUID, phase string, tool *string) error {
@@ -331,7 +327,7 @@ func (s *Store) FinishCLIVerification(ctx context.Context, project, account, id 
 			return errors.New("验证结果无效")
 		}
 		// SQLITE-PORT(G4): extract/epoch、greatest/least
-		tag, e := tx.Exec(ctx, `UPDATE cli_credential_verifications SET status=$2,phase=NULL,completed_at=clock_timestamp(),result_outcome=$3,verified_at=$4,duration_ms=CAST(greatest(0,floor(extract(epoch FROM clock_timestamp()-started_at)*1000)) AS INTEGER),error_code=$5,http_status=$6 WHERE id=$1 AND status IN('pending','running')`, id, status, result.Outcome, verified, result.ErrorCode, result.HTTPStatus)
+		tag, e := tx.Exec(ctx, `UPDATE cli_credential_verifications SET status=$2,phase=NULL,completed_at=clock_timestamp(),result_outcome=$3,verified_at=$4,duration_ms=max(0,coalesce((clock_timestamp()-started_at)/1000,0)),error_code=$5,http_status=$6 WHERE id=$1 AND status IN('pending','running')`, id, status, result.Outcome, verified, result.ErrorCode, result.HTTPStatus)
 		if e != nil {
 			return e
 		}
@@ -349,7 +345,7 @@ func (s *Store) RecoverCLIVerifications(ctx context.Context) error {
 			return e
 		}
 		// SQLITE-PORT(G4): extract/epoch、greatest/least
-		_, e := tx.Exec(ctx, `UPDATE cli_credential_verifications SET status='failed',phase=NULL,completed_at=clock_timestamp(),result_outcome='failed',verified_at=NULL,duration_ms=CAST(greatest(0,floor(extract(epoch FROM clock_timestamp()-started_at)*1000)) AS INTEGER),error_code='server_restarted',http_status=NULL WHERE status IN('pending','running')`)
+		_, e := tx.Exec(ctx, `UPDATE cli_credential_verifications SET status='failed',phase=NULL,completed_at=clock_timestamp(),result_outcome='failed',verified_at=NULL,duration_ms=max(0,coalesce((clock_timestamp()-started_at)/1000,0)),error_code='server_restarted',http_status=NULL WHERE status IN('pending','running')`)
 		return e
 	})
 }

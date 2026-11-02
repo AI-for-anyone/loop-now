@@ -293,7 +293,7 @@ func TestConfigAccountsAndGrants(t *testing.T) {
 	}
 	key := "pk"
 	pp, err := e.svc.PutProject(ctx, e.project, "cfg", plugins.ProjectInput{Enabled: true, Values: map[string]any{"channel": "#ops"}, Secrets: map[string]*string{"key": &key}})
-	// 上面用 jsonb_set 改过清单，属性的先后已被 jsonb 重排；这里只核对有哪些字段（先后见 httpapi 的 TestPluginSchemaOrder）。
+	// 上面用 json_set 改过清单；这里只核对有哪些字段（先后见 httpapi 的 TestPluginSchemaOrder）。
 	if err != nil || !pp.Enabled || pp.Config.Revision != 1 || pp.Config.SecretsSet[0] != "key" || !slices.Equal(slices.Sorted(slices.Values(pp.ProjectFields)), []string{"channel", "key"}) {
 		t.Fatalf("项目配置：%+v %v", pp, err)
 	}
