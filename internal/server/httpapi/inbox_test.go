@@ -617,15 +617,15 @@ func TestExternalAccess(t *testing.T) {
 		t.Fatalf("外部身份的修改应记审计：%+v %v", audits, err)
 	}
 
-	// 健康状态对外脱敏：没有 error 字段。
+	// 健康状态对外脱敏：库只有 ok，没有错误原文与 WAL 信息。
 	_, hb, _ := ext.do("GET", "/health", nil)
 	var raw map[string]map[string]any
 	_ = json.Unmarshal(hb, &raw)
-	if _, has := raw["postgres"]["error"]; has || strings.Contains(string(hb), `"error"`) {
-		t.Fatalf("对外的健康状态不应含 error 字段：%s", hb)
+	if len(raw["database"]) != 1 || raw["database"]["ok"] != true || strings.Contains(string(hb), `"error"`) || strings.Contains(string(hb), "wal") {
+		t.Fatalf("对外的健康状态只应有 database.ok：%s", hb)
 	}
-	if _, cb, _ := e.do("GET", "/health", nil); !strings.Contains(string(cb), `"error"`) {
-		t.Fatalf("控制台的健康状态应含 error 字段：%s", cb)
+	if _, cb, _ := e.do("GET", "/health", nil); !strings.Contains(string(cb), `"error"`) || !strings.Contains(string(cb), `"walBytes"`) || !strings.Contains(string(cb), `"walWarning":false`) {
+		t.Fatalf("控制台的健康状态应含 error 与 WAL 信息：%s", cb)
 	}
 
 	// 只限控制台的接口：403。

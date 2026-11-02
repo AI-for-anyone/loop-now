@@ -1442,7 +1442,7 @@
     },
     {
       "path": "health",
-      "summary": "查看服务端依赖（PostgreSQL、Redis）是否正常；不正常时以 server_unhealthy 失败，details 为各依赖的状态",
+      "summary": "查看服务端的本地数据库是否正常；不正常时以 server_unhealthy 失败，details 为健康状态",
       "identities": [
         "external"
       ],
@@ -1452,7 +1452,7 @@
       "destructive": false,
       "stdin": false,
       "retry": true,
-      "output": "Health（对外端口只返回各依赖的 ok，不含错误原文）"
+      "output": "Health（对外端口只返回 database.ok，不含错误原文与 WAL 信息）"
     },
     {
       "path": "inbox list",

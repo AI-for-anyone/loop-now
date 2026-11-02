@@ -412,8 +412,3 @@ func TestInterruptPubSub(t *testing.T) {
 		t.Fatal("ctx 结束后通道应关闭")
 	}
 }
-
-func TestPing(t *testing.T) {
-	c, _ := newCoord(t, 1000)
-	check(t, c.Ping(context.Background()))
-}
