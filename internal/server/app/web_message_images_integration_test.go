@@ -15,7 +15,7 @@ import (
 )
 
 // Server owns this harness. Web owns only its driver/product files. All data are
-// synthetic and live in this test's own schema, Redis prefix and temporary root.
+// synthetic and live in this test's own temporary data directory and root.
 func TestWebMessageImagesIntegration(t *testing.T) {
 	if os.Getenv("LOOP_NOW_WEB_IMAGE_APP") != "1" {
 		t.Skip("explicit isolated browser slice")

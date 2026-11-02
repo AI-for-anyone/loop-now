@@ -9,7 +9,7 @@ import { taskKeys } from '@/api/tasks'
 import type { ConnectionState } from '@/api/events'
 import { sleepProjections } from '@/features/sleep/projection'
 
-// Decimal persistent event IDs are compared numerically, independently of Redis stream IDs.
+// Decimal persistent event IDs are compared numerically, independently of event stream entry IDs.
 export function acceptTaskEvent(previous: string, next: string) {
   return !previous || !/^\d+$/.test(next) || !/^\d+$/.test(previous) || BigInt(next) > BigInt(previous)
 }

@@ -52,6 +52,6 @@ try{
  await region(page,'gh').scrollIntoViewIfNeeded();await page.screenshot({path:out+'/terminal-version-390.png',fullPage:true})
  }
  assert.ok(posts.every(p=>p.status===202||p.status===412));assert.deepEqual(errors,[]);assert.deepEqual(denied,[])
- writeFileSync(out+'/browser-results.json',JSON.stringify({boundary:'actual React -> actual temporary App/TEST PG/Redis worker; native --version + explicit probe command child fixture; no native network/provider acceptance',checks,posts,controls,forwarded,errors,denied,consoleKinds,safeResults,inputs},null,2))
+ writeFileSync(out+'/browser-results.json',JSON.stringify({boundary:'actual React -> actual temporary App/temporary SQLite worker; native --version + explicit probe command child fixture; no native network/provider acceptance',checks,posts,controls,forwarded,errors,denied,consoleKinds,safeResults,inputs},null,2))
 }catch(error){writeFileSync(out+'/browser-failure.json',JSON.stringify({errorType:error.name,sourceLine:error.stack?.match(/cli-verification-app\.mjs:\d+:\d+/)?.[0]??null,checks,posts,controls,forwarded,errors,denied,consoleKinds,safeResults,inputs},null,2));process.exitCode=1}
 finally{await context?.close();await browser?.close();if(preview&&preview.exitCode===null){preview.kill('SIGTERM');await new Promise(resolve=>{const timer=setTimeout(resolve,3000);preview.once('exit',()=>{clearTimeout(timer);resolve()})})}}

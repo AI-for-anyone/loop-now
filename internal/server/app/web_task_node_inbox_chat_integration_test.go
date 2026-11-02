@@ -25,14 +25,14 @@ import (
 // Web owns this file only. Production and shared helpers remain read-only.
 func TestWebTaskNodeInboxChatIntegration(t *testing.T) {
 	if os.Getenv("LOOP_NOW_WEB_TASK_INBOX_INTEGRATION") != "1" {
-		t.Skip("explicit isolated React/App/TEST PG/fakePi/controlled actual CLI")
+		t.Skip("explicit isolated React/App/temporary SQLite/fakePi/controlled actual CLI")
 	}
 	root := testenv.RepoRoot()
 	evidence := filepath.Join(root, "web/test-results/add-task-node-inbox-chat/app")
 	if e := os.MkdirAll(evidence, 0700); e != nil {
 		t.Fatal("evidence directory unavailable")
 	}
-	audit := map[string]any{"boundary": "actual React -> isolated App/PG/Redis/fakePi; controlled actual runtime CLI, not autonomous model", "webOrigin": "http://127.0.0.1:4326"}
+	audit := map[string]any{"boundary": "actual React -> isolated App/SQLite/fakePi; controlled actual runtime CLI, not autonomous model", "webOrigin": "http://127.0.0.1:4326"}
 	var w *world
 	var address string
 	t.Cleanup(func() {
@@ -146,7 +146,7 @@ func TestWebTaskNodeInboxChatIntegration(t *testing.T) {
 	} {
 		var count int
 		if e = s.a.Store.Pool.QueryRow(context.Background(), query, d.Task.ID).Scan(&count); e != nil {
-			t.Fatal("scoped PG proof failed", name, e)
+			t.Fatal("scoped SQLite proof failed", name, e)
 		}
 		counts[name] = count
 	}
@@ -157,7 +157,7 @@ func TestWebTaskNodeInboxChatIntegration(t *testing.T) {
 	raw, _ = json.MarshalIndent(counts, "", "  ")
 	_ = os.WriteFile(filepath.Join(evidence, "pg-readback.json"), raw, 0600)
 	if browserErr != nil {
-		t.Fatal("browser failed; safe browser/PG evidence retained")
+		t.Fatal("browser failed; safe browser/SQLite evidence retained")
 	}
 	if counts["roots"] != 2 || counts["replies"] != 2 || counts["acceptedActions"] != 2 || counts["readRoots"] != 2 || counts["readLinks"] != 2 || counts["replyLinks"] != 4 || counts["replyRootLinks"] != 2 || counts["replyMessageLinks"] != 2 || counts["consoleTurns"] != 0 {
 		t.Fatal("real Inbox/turn mapping counts differ", counts)

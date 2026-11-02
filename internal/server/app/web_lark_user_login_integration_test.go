@@ -38,7 +38,7 @@ func TestWebLarkUserLoginIntegration(t *testing.T) {
 	if e := os.MkdirAll(evidence, 0700); e != nil {
 		t.Fatal(e)
 	}
-	audit := map[string]any{"boundary": "actual React -> forwarded temporary App -> TEST PG; real Lark client protocol rewritten to loopback provider; no native/provider/model/QA"}
+	audit := map[string]any{"boundary": "actual React -> forwarded temporary App -> temporary SQLite; real Lark client protocol rewritten to loopback provider; no native/provider/model/QA"}
 	save := func(name string, v any) {
 		b, e := json.MarshalIndent(v, "", "  ")
 		if e != nil || os.WriteFile(filepath.Join(evidence, name), b, 0600) != nil {
@@ -132,7 +132,7 @@ func TestWebLarkUserLoginIntegration(t *testing.T) {
 	for name, q := range map[string]string{"accounts": "SELECT count(*) FROM project_credential_accounts WHERE deleted_at IS NULL", "grants": "SELECT count(*) FROM lark_cli_grants", "operations": "SELECT count(*) FROM project_cli_auth_operations WHERE cli_name='lark-cli'", "succeeded": "SELECT count(*) FROM project_cli_auth_operations WHERE cli_name='lark-cli' AND status='succeeded'", "cancelled": "SELECT count(*) FROM project_cli_auth_operations WHERE cli_name='lark-cli' AND status='cancelled'", "terminalURLs": "SELECT count(*) FROM project_cli_auth_operations WHERE cli_name='lark-cli' AND status NOT IN ('pending','awaiting_authorization') AND authorization_url IS NOT NULL", "runs": "SELECT count(*) FROM runs", "turns": "SELECT count(*) FROM task_turns"} {
 		var n int
 		if e := a.Store.Pool.QueryRow(ctx, q).Scan(&n); e != nil {
-			t.Fatalf("PG read failed: %s", name)
+			t.Fatalf("SQLite read failed: %s", name)
 		}
 		counts[name] = n
 	}
@@ -145,7 +145,7 @@ func TestWebLarkUserLoginIntegration(t *testing.T) {
 	}
 	for key, want := range map[string]int{"accounts": 3, "grants": 2, "operations": 3, "succeeded": 2, "cancelled": 1, "terminalURLs": 0, "runs": 0, "turns": 0} {
 		if counts[key] != want {
-			t.Errorf("PG %s=%d want %d", key, counts[key], want)
+			t.Errorf("SQLite %s=%d want %d", key, counts[key], want)
 		}
 	}
 	if p.DeviceCalls.Load() != 3 || p.DeniedDials.Load() != 0 {
@@ -168,7 +168,7 @@ func TestWebLarkSwitchPublicationIntegration(t *testing.T) {
 	if os.MkdirAll(evidence, 0700) != nil {
 		t.Fatal("evidence directory failed")
 	}
-	audit := map[string]any{"boundary": "actual desktop React -> temporary App/TEST PG/Redis; real empty-scope local/sidecar gates; synthetic original blocked history; stopped task driver so queued intent only; no native/Pi/model/QA execution"}
+	audit := map[string]any{"boundary": "actual desktop React -> temporary App/temporary SQLite; real empty-scope local/sidecar gates; synthetic original blocked history; stopped task driver so queued intent only; no native/Pi/model/QA execution"}
 	save := func(name string, value any) {
 		b, e := json.MarshalIndent(value, "", "  ")
 		if e != nil || os.WriteFile(filepath.Join(evidence, name), b, 0600) != nil {
@@ -272,7 +272,7 @@ func TestWebLarkSwitchPublicationIntegration(t *testing.T) {
 		for key, q := range map[string]string{"actions": "SELECT count(*) FROM task_lark_switch_actions", "bindings": "SELECT count(*) FROM task_lark_credential_bindings", "members": "SELECT count(*) FROM task_lark_binding_members", "fences": "SELECT count(*) FROM task_lark_switch_fences", "turns": "SELECT count(*) FROM task_turns", "runs": "SELECT count(*) FROM runs"} {
 			var n int
 			if s.a.Store.Pool.QueryRow(ctx, q).Scan(&n) != nil {
-				t.Fatalf("PG read failed: %s", key)
+				t.Fatalf("SQLite read failed: %s", key)
 			}
 			counts[key] = n
 		}
@@ -301,7 +301,7 @@ func TestWebLarkSwitchPublicationIntegration(t *testing.T) {
 		}
 		for key, want := range wantCounts {
 			if counts[key] != want {
-				t.Errorf("PG %s=%d want%d", key, counts[key], want)
+				t.Errorf("SQLite %s=%d want%d", key, counts[key], want)
 			}
 		}
 		if !unchanged || !followupUnprepared || provider.DeniedDials.Load() != 0 {
@@ -341,7 +341,7 @@ func TestWebLarkUserLoginFailureDeleteIntegration(t *testing.T) {
 	if e := os.MkdirAll(evidence, 0700); e != nil {
 		t.Fatal(e)
 	}
-	audit := map[string]any{"boundary": "desktop React -> temporary App/TEST PG; new-login failure and account deletion only; not public re-login/native/task/OAuth"}
+	audit := map[string]any{"boundary": "desktop React -> temporary App/temporary SQLite; new-login failure and account deletion only; not public re-login/native/task/OAuth"}
 	save := func(name string, value any) {
 		b, e := json.MarshalIndent(value, "", "  ")
 		if e != nil || os.WriteFile(filepath.Join(evidence, name), b, 0600) != nil {
@@ -441,7 +441,7 @@ func TestWebLarkUserLoginFailureDeleteIntegration(t *testing.T) {
 	for key, q := range map[string]string{"activeAccounts": "SELECT count(*) FROM project_credential_accounts WHERE deleted_at IS NULL", "deletedAccounts": "SELECT count(*) FROM project_credential_accounts WHERE deleted_at IS NOT NULL", "versions": "SELECT count(*) FROM project_cli_versions", "grants": "SELECT count(*) FROM lark_cli_grants", "operations": "SELECT count(*) FROM project_cli_auth_operations WHERE cli_name='lark-cli'", "failed": "SELECT count(*) FROM project_cli_auth_operations WHERE status='failed'", "succeeded": "SELECT count(*) FROM project_cli_auth_operations WHERE status='succeeded'", "terminalURLs": "SELECT count(*) FROM project_cli_auth_operations WHERE status NOT IN('pending','awaiting_authorization') AND authorization_url IS NOT NULL", "runs": "SELECT count(*) FROM runs", "turns": "SELECT count(*) FROM task_turns"} {
 		var n int
 		if s.a.Store.Pool.QueryRow(ctx, q).Scan(&n) != nil {
-			t.Fatalf("PG read failed: %s", key)
+			t.Fatalf("SQLite read failed: %s", key)
 		}
 		counts[key] = n
 	}
@@ -455,7 +455,7 @@ func TestWebLarkUserLoginFailureDeleteIntegration(t *testing.T) {
 	}
 	for key, want := range map[string]int{"activeAccounts": 0, "deletedAccounts": 2, "versions": 2, "grants": 1, "operations": 2, "failed": 1, "succeeded": 1, "terminalURLs": 0, "runs": 0, "turns": 0} {
 		if counts[key] != want {
-			t.Errorf("PG %s=%d want%d", key, counts[key], want)
+			t.Errorf("SQLite %s=%d want%d", key, counts[key], want)
 		}
 	}
 	if before != hashVersions() || p.DeviceCalls.Load() != 2 || p.DeniedDials.Load() != 0 {

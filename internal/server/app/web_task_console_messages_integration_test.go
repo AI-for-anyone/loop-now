@@ -34,7 +34,7 @@ func TestWebTaskConsoleMessagesIntegration(t *testing.T) {
 	}
 	var w *world
 	var address string
-	audit := map[string]any{"boundary": "actual React -> forwarded temporary app.Build/TEST PG/Redis/fakePi; no provider/model/current services", "webOrigin": "http://127.0.0.1:4320"}
+	audit := map[string]any{"boundary": "actual React -> forwarded temporary app.Build/temporary SQLite/fakePi; no provider/model/current services", "webOrigin": "http://127.0.0.1:4320"}
 	t.Cleanup(func() {
 		if w == nil {
 			return
@@ -134,7 +134,7 @@ func TestWebTaskConsoleMessagesIntegration(t *testing.T) {
 			err = s.a.Store.Pool.QueryRow(ctx, query, created.Task.ID).Scan(&n)
 		}
 		if err != nil {
-			t.Fatal("PG proof read failed", name)
+			t.Fatal("SQLite proof read failed", name)
 		}
 		counts[name] = n
 	}
@@ -145,7 +145,7 @@ func TestWebTaskConsoleMessagesIntegration(t *testing.T) {
 	raw, _ = json.MarshalIndent(counts, "", "  ")
 	_ = os.WriteFile(filepath.Join(evidence, "pg-readback.json"), raw, 0600)
 	if browserErr != nil {
-		t.Fatal("browser assertion failed; sanitized failure/PG evidence retained")
+		t.Fatal("browser assertion failed; sanitized failure/SQLite evidence retained")
 	}
 	final := taskWait(t, s, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "cancelled" && d.Cleanup == "archived" })
 	if len(final.Nodes) != 1 || final.Nodes[0].ID != node.ID || final.Nodes[0].Attempt != node.Attempt {
@@ -157,7 +157,7 @@ func TestWebTaskConsoleMessagesIntegration(t *testing.T) {
 	}
 	audit["normalSessionUnchanged"] = true
 	if counts["consoleTurns"] != 2 || counts["consoleLineage"] != 2 || counts["foreignNodeConsoleTurns"] != 0 || counts["consoleCompleted"] != 1 || counts["consoleInterrupted"] != 1 {
-		t.Fatal("strict PG outcome mismatch")
+		t.Fatal("strict SQLite outcome mismatch")
 	}
 	audit["passed"] = true
 }

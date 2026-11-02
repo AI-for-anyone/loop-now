@@ -47,7 +47,7 @@ func TestWebTaskLarkAccountSwitchNativeIntegration(t *testing.T) {
 	if os.MkdirAll(evidence, 0700) != nil {
 		t.Fatal("evidence directory failed")
 	}
-	audit := map[string]any{"boundary": "actual desktop React -> temporary production App/TEST PG/Redis -> pinned014 native/private channel + fakePi -> owned TLS provider fixture; no real OAuth/model/QA"}
+	audit := map[string]any{"boundary": "actual desktop React -> temporary production App/temporary SQLite -> pinned014 native/private channel + fakePi -> owned TLS provider fixture; no real OAuth/model/QA"}
 	var workRoot, address string
 	passed := t.Run("isolated", func(t *testing.T) {
 		bundle := unpackLarkVariant(t)

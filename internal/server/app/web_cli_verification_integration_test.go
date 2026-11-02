@@ -30,7 +30,7 @@ import (
 )
 
 // Web owns this file only. Native provider protocol acceptance belongs to the
-// native harness; this test exercises real App/PG workers with explicit children.
+// native harness; this test exercises real App/SQLite workers with explicit children.
 func TestWebCLIVerificationIntegration(t *testing.T) {
 	if os.Getenv("LOOP_NOW_WEB_CLI_VERIFICATION_INTEGRATION") != "1" {
 		t.Skip("explicit isolated TEST App browser slice")
@@ -53,7 +53,7 @@ func TestWebCLIVerificationIntegration(t *testing.T) {
 	control := t.TempDir()
 	var w *world
 	var address string
-	audit := map[string]any{"boundary": "actual React -> forwarded temporary App -> isolated TEST PG/Redis; actual installer/native versions; probe child fixtures, not native network or real provider acceptance"}
+	audit := map[string]any{"boundary": "actual React -> forwarded temporary App -> temporary SQLite; actual installer/native versions; probe child fixtures, not native network or real provider acceptance"}
 	if executable, err := os.Executable(); err == nil {
 		if file, err := os.Open(executable); err == nil {
 			hash := sha256.New()
@@ -260,7 +260,7 @@ func TestWebCLIVerificationIntegration(t *testing.T) {
 	for name, query := range map[string]string{"operations": `SELECT count(*) FROM cli_credential_verifications`, "passed": `SELECT count(*) FROM cli_credential_verifications WHERE status='succeeded'`, "cancelled": `SELECT count(*) FROM cli_credential_verifications WHERE status='cancelled'`, "failed": `SELECT count(*) FROM cli_credential_verifications WHERE status='failed'`, "running": `SELECT count(*) FROM cli_credential_verifications WHERE status IN('pending','running')`, "runs": `SELECT count(*) FROM runs`, "taskTurns": `SELECT count(*) FROM task_turns`, "versions": `SELECT count(*) FROM project_cli_versions`} {
 		var n int
 		if e = s.a.Store.Pool.QueryRow(context.Background(), query).Scan(&n); e != nil {
-			t.Error("isolated PG count failed")
+			t.Error("isolated SQLite count failed")
 		} else {
 			values[name] = n
 		}
@@ -276,7 +276,7 @@ func TestWebCLIVerificationIntegration(t *testing.T) {
 	}
 	for key, expected := range expectedCounts {
 		if values[key] != expected {
-			t.Errorf("PG %s count: expected %d actual %d", key, expected, values[key])
+			t.Errorf("SQLite %s count: expected %d actual %d", key, expected, values[key])
 		}
 	}
 	if values["running"] != 0 || values["runs"] != 0 || values["taskTurns"] != 0 {

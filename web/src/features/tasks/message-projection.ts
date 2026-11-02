@@ -9,7 +9,7 @@ const decimal = (id: string) => /^\d+$/.test(id)
 const belongs = (a: Message, b: Message) => a.nodeRunId === b.nodeRunId && a.runId === b.runId && a.role === b.role
 
 // UI projection, not a wire DTO. Full-text events and HTTP reads share a local
-// observation clock; neither text length nor a Redis cursor decides freshness.
+// observation clock; neither text length nor an event stream cursor decides freshness.
 class TaskMessageProjection {
   private tasks = new Map<string, Map<string, Map<string, Entry>>>()
   private clock = 0

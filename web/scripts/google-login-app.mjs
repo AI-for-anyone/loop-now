@@ -119,7 +119,7 @@ try {
   const posts=forwarded.filter(item=>item.method==='POST'&&item.path.endsWith('/cli-auth/operations'))
   assert.equal(posts.length,3);assert.ok(posts.every(item=>item.status===202));assert.equal(starts.length,3);assert.equal(cancels.length,1)
   assert.ok(!forwarded.some(item=>item.method!=='GET'&&/model-auth|messages/.test(item.path)))
-  writeFileSync(new URL('browser-results.json',out),JSON.stringify({boundary:'actual React -> forwarded isolated App/TEST PG; App-injected offline Google helper and intercepted provider page only; no SDK/callback/provider/model',checks,ids,starts,cancels,issuer,forwarded,errors,denied,screenshots},null,2))
+  writeFileSync(new URL('browser-results.json',out),JSON.stringify({boundary:'actual React -> forwarded isolated App/temporary SQLite; App-injected offline Google helper and intercepted provider page only; no SDK/callback/provider/model',checks,ids,starts,cancels,issuer,forwarded,errors,denied,screenshots},null,2))
 } catch (error) {
   // No request bodies, private JSON or provider content in the audit.
   writeFileSync(new URL('browser-failure.json', out), JSON.stringify({ errorType: error.name, message: 'sanitized Google browser assertion failed; see passed checks and safe forwarded statuses', sourceLine: error.stack?.match(/google-login-app\.mjs:\d+:\d+/)?.[0] ?? null, starts, cancels, issuer, checks, ids, forwarded, errors, denied }, null, 2)); process.exitCode = 1

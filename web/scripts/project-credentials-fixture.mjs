@@ -142,7 +142,7 @@ try {
   await shot(dialog, 'platform-keyboard-mobile'); ok('平台私有表单保留，键盘打开及遮蔽字段')
   assert.deepEqual(errors, []); assert.deepEqual(blocked, []); assert.deepEqual(unhandled, [])
   ok('浏览器0异常，所有API为HTTP fixture，0供应商或DEV网络请求')
-  writeFileSync(new URL('results.json', out), JSON.stringify({ level: 'React + intercepted HTTP fixture; no App/PG/OAuth', origin, viewports: ['1440x1000', '390x844'], screenshotBoundary: 'region screenshots may exceed viewport height', checks, errors, blocked, unhandled, httpConsole, writes }, null, 2))
+  writeFileSync(new URL('results.json', out), JSON.stringify({ level: 'React + intercepted HTTP fixture; no App/database/OAuth', origin, viewports: ['1440x1000', '390x844'], screenshotBoundary: 'region screenshots may exceed viewport height', checks, errors, blocked, unhandled, httpConsole, writes }, null, 2))
 } catch (error) {
   writeFileSync(new URL('failure.json', out), JSON.stringify({ message: error.message, checks, errors, blocked, unhandled }, null, 2)); throw error
 } finally { await browser.close() }

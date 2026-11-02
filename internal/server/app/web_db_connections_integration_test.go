@@ -52,7 +52,7 @@ func webDBConnectionsIntegration(t *testing.T, slice string) {
 	}
 	var w *world
 	var address string
-	audit := map[string]any{"boundary": "actual React -> route.fetch temporary App -> isolated TEST PG/Redis; management only; no model/OAuth/database client execution"}
+	audit := map[string]any{"boundary": "actual React -> route.fetch temporary App -> temporary SQLite; management only; no model/OAuth/database client execution"}
 	t.Cleanup(func() {
 		if w == nil {
 			return
@@ -127,7 +127,7 @@ func webDBConnectionsIntegration(t *testing.T, slice string) {
 			t.Fatal("synthetic metadata seed failed")
 		}
 		manifest["accountId"] = record.View.ID
-		audit["boundary"] = "actual React readonly GET -> isolated App/TEST PG; directly seeded synthetic Google metadata, not login lifecycle; zero auth POST/model/provider"
+		audit["boundary"] = "actual React readonly GET -> isolated App/temporary SQLite; directly seeded synthetic Google metadata, not login lifecycle; zero auth POST/model/provider"
 	}
 	manifestPath := filepath.Join(t.TempDir(), "web-db-manifest.json")
 	raw, _ := json.Marshal(manifest)
@@ -169,19 +169,19 @@ func webDBConnectionsIntegration(t *testing.T, slice string) {
 	} {
 		var n int
 		if err := s.a.Store.Pool.QueryRow(ctx, query).Scan(&n); err != nil {
-			t.Fatalf("PG read-back failed: %s", name)
+			t.Fatalf("SQLite read-back failed: %s", name)
 		}
 		counts[name] = n
 	}
 	if helper != nil {
-		audit["boundary"] = "actual React -> isolated App/TEST PG/Redis; explicit offline CLILoginHelper; context-wide local issuer fulfillment; no SDK/callback/provider/model"
+		audit["boundary"] = "actual React -> isolated App/temporary SQLite; explicit offline CLILoginHelper; context-wide local issuer fulfillment; no SDK/callback/provider/model"
 		audit["helperStarts"] = helper.starts.Load()
 		audit["helperCancels"] = helper.cancels.Load()
 		audit["helperRefreshes"] = helper.refreshes.Load()
 		for name, query := range map[string]string{"googleGrants": "SELECT count(*) FROM google_cli_grants", "googleOperations": "SELECT count(*) FROM project_cli_auth_operations", "googleSucceeded": "SELECT count(*) FROM project_cli_auth_operations WHERE status='succeeded'", "googleFailed": "SELECT count(*) FROM project_cli_auth_operations WHERE status='failed'", "googleCancelled": "SELECT count(*) FROM project_cli_auth_operations WHERE status='cancelled'", "syntheticGoogleVersions": "SELECT count(*) FROM project_cli_versions WHERE auth_method='oauth' AND account_label='synthetic-web@example.test'", "retainedTerminalURLs": "SELECT count(*) FROM project_cli_auth_operations WHERE status NOT IN ('pending','awaiting_authorization') AND authorization_url IS NOT NULL"} {
 			var n int
 			if err := s.a.Store.Pool.QueryRow(ctx, query).Scan(&n); err != nil {
-				t.Fatalf("PG safe read failed: %s", name)
+				t.Fatalf("SQLite safe read failed: %s", name)
 			}
 			counts[name] = n
 		}
@@ -189,10 +189,10 @@ func webDBConnectionsIntegration(t *testing.T, slice string) {
 	audit["pgCounts"] = counts
 	earlyProof, _ := json.MarshalIndent(counts, "", "  ")
 	if os.WriteFile(filepath.Join(evidence, "pg-readback.json"), earlyProof, 0600) != nil {
-		t.Fatal("PG proof write failed")
+		t.Fatal("SQLite proof write failed")
 	}
 	if browserErr != nil {
-		t.Fatal("browser failed; sanitized failure and PG read-back retained")
+		t.Fatal("browser failed; sanitized failure and SQLite read-back retained")
 	}
 	sets, members, versions := 2, 3, 4
 	if slice == "sa" {
@@ -206,7 +206,7 @@ func webDBConnectionsIntegration(t *testing.T, slice string) {
 		sets, members, versions, deleted = 0, 0, 1, 0
 	}
 	if counts["sets"] != sets || counts["members"] != members || counts["cliVersions"] != versions || counts["deletedAccounts"] != deleted || counts["runs"] != 0 || counts["taskTurns"] != 0 || counts["oauthOperations"] != 0 {
-		t.Fatalf("PG proof mismatch: %+v", counts)
+		t.Fatalf("SQLite proof mismatch: %+v", counts)
 	}
 	if slice == "sa" {
 		for name, query := range map[string]string{"googleGrants": `SELECT count(*) FROM google_cli_grants`, "googleOperations": `SELECT count(*) FROM project_cli_auth_operations`} {
@@ -219,14 +219,14 @@ func webDBConnectionsIntegration(t *testing.T, slice string) {
 	}
 	if slice == "google" {
 		if counts["syntheticGoogleVersions"] != 1 || counts["retainedTerminalURLs"] != 0 {
-			t.Fatal("synthetic subject or terminal URL PG mismatch")
+			t.Fatal("synthetic subject or terminal URL SQLite mismatch")
 		}
 		expected := map[string]int{"googleGrants": 1, "googleOperations": 3, "googleSucceeded": 1, "googleFailed": 1, "googleCancelled": 1}
 		queries := map[string]string{"googleGrants": "SELECT count(*) FROM google_cli_grants", "googleOperations": "SELECT count(*) FROM project_cli_auth_operations", "googleSucceeded": "SELECT count(*) FROM project_cli_auth_operations WHERE status='succeeded'", "googleFailed": "SELECT count(*) FROM project_cli_auth_operations WHERE status='failed'", "googleCancelled": "SELECT count(*) FROM project_cli_auth_operations WHERE status='cancelled'"}
 		for name, query := range queries {
 			var n int
 			if err := s.a.Store.Pool.QueryRow(ctx, query).Scan(&n); err != nil || n != expected[name] {
-				t.Fatalf("Google PG proof mismatch: %s", name)
+				t.Fatalf("Google SQLite proof mismatch: %s", name)
 			}
 			counts[name] = n
 		}
@@ -241,7 +241,7 @@ func webDBConnectionsIntegration(t *testing.T, slice string) {
 	audit["pgCounts"] = counts
 	proof, _ := json.MarshalIndent(counts, "", "  ")
 	if os.WriteFile(filepath.Join(evidence, "pg-readback.json"), proof, 0600) != nil {
-		t.Fatal("PG proof write failed")
+		t.Fatal("SQLite proof write failed")
 	}
 }
 

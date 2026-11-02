@@ -84,8 +84,8 @@ func TestWebAuthIntegration(t *testing.T) {
 	evidence := filepath.Join(root, "web/scripts/integration/codex-auth")
 	var w *world
 	var addr, controlAddr string
-	audit := map[string]any{"mode": "actual React -> route.fetch -> app.Build -> isolated PG; DI offline auth helper; no provider/model calls"}
-	// Registered first, runs after App shutdown and existing schema/prefix/temp cleanup.
+	audit := map[string]any{"mode": "actual React -> route.fetch -> app.Build -> temporary SQLite; DI offline auth helper; no provider/model calls"}
+	// Registered first, runs after App shutdown and existing temporary directory cleanup.
 	t.Cleanup(func() {
 		if w == nil {
 			return
@@ -212,7 +212,7 @@ func TestWebAuthIntegration(t *testing.T) {
 				return
 			}
 
-			// PG readback exposes only allowed metadata and whether a credential is stored.
+			// SQLite readback exposes only allowed metadata and whether a credential is stored.
 			result := map[string]any{"agentId": id.String(), "versionId": v.ID.String(), "accountLabel": v.AccountLabel, "authMethod": v.AuthMethod, "stored": len(v.Secret) > 0}
 			expectedAccount := r.URL.Query().Get("expectedAccount")
 			if expectedAccount != "" {
@@ -270,7 +270,7 @@ func TestWebAuthIntegration(t *testing.T) {
 	}
 	current, _, err := a.Store.CurrentModelAuthVersion(context.Background(), codexID)
 	if err != nil || current == nil {
-		t.Fatal("final PG OAuth account mismatch")
+		t.Fatal("final SQLite OAuth account mismatch")
 	}
 	saved, err := modelcredential.Decode(current.Secret)
 	expected, _ := webAuthSyntheticCredential("web-account-B")
@@ -298,5 +298,5 @@ func TestWebAuthIntegration(t *testing.T) {
 	}
 	audit["runCount"] = runs
 	audit["passed"] = true
-	t.Log(fmt.Sprintf("actual Web/App/PG verified: helper logins=%d, OAuth versions=%d, model runs=%d", helper.logins.Load(), versions, runs))
+	t.Log(fmt.Sprintf("actual Web/App/SQLite verified: helper logins=%d, OAuth versions=%d, model runs=%d", helper.logins.Load(), versions, runs))
 }

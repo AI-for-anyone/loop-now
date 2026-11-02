@@ -25,15 +25,12 @@ func TestWebTasksIntegration(t *testing.T) {
 	if os.Getenv("LOOP_NOW_WEB_TASKS_INTEGRATION") != "1" {
 		t.Skip("explicit isolated real-browser task integration only")
 	}
-	if os.Getenv("LOOP_NOW_TEST_DATABASE_URL") == "" || os.Getenv("LOOP_NOW_TEST_REDIS_URL") == "" {
-		t.Fatal("explicit TEST endpoints required; no local configuration fallback")
-	}
 	root := testenv.RepoRoot()
 	evidence := filepath.Join(root, "web/scripts/integration/tasks")
 	var w *world
 	var addr, controlAddr string
-	audit := map[string]any{"mode": "actual React -> route.fetch -> app.Build -> TEST PG; fakepi; non-question tasks only"}
-	// Registered first, runs after App shutdown and existing schema/prefix/temp cleanup.
+	audit := map[string]any{"mode": "actual React -> route.fetch -> app.Build -> temporary SQLite; fakepi; non-question tasks only"}
+	// Registered first, runs after App shutdown and existing temporary directory cleanup.
 	t.Cleanup(func() {
 		if w == nil {
 			return
