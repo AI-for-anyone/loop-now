@@ -84,9 +84,27 @@ func (s *Service) Stop(ctx context.Context) error {
 	go func() { s.wg.Wait(); s.overviewWG.Wait(); close(done) }()
 	select {
 	case <-done:
-		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+	s.endInFlight(ctx)
+	return nil
+}
+
+// endInFlight 在驱动循环都退出之后，把本实例进行中的执行按服务端重启中断收尾，写入已产生的回复文字。
+// 回复文字只在内存里：留到下次启动再收尾（recoverAfterRestart）就丢了。进程崩溃时来不及做，那一段文字会丢失。
+func (s *Service) endInFlight(ctx context.Context) {
+	runs, err := s.st.ActiveRuns(ctx)
+	if err != nil {
+		s.log.Warn("停止：读取进行中的执行失败，留到下次启动收尾", "err", err)
+		return
+	}
+	for _, r := range runs {
+		if r.InstanceID == nil || *r.InstanceID != s.o.InstanceID {
+			continue
+		}
+		text, _ := s.co.RunText(ctx, r.ID.String())
+		s.endRun(ctx, r.AgentID, r.ID, store.RunEnd{Status: "interrupted", EndReason: "server_restart", Text: text})
 	}
 }
 
