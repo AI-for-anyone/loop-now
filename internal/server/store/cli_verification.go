@@ -6,10 +6,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/cliverify"
 	"time"
+
+	"loop-now/internal/server/db"
 )
 
 // VerificationMetadata is trusted registry output, never an HTTP input.
@@ -19,7 +20,7 @@ type VerificationMetadata struct {
 
 const verificationColumns = `o.id,o.project_id,o.account_id,o.version_id,o.cli_name,o.auth_method,o.template_source,o.credential_format,o.template_fingerprint,o.tool_version,o.adapter_revision,o.probe_kind,o.status,o.phase,o.started_at,o.expires_at,o.completed_at,o.result_outcome,o.verified_at,o.duration_ms,o.error_code,o.http_status,coalesce(a.deleted_at IS NULL AND a.current_cli_version_id=o.version_id,false)`
 
-func scanVerification(row pgx.Row) (cliverify.Operation, error) {
+func scanVerification(row db.Scanner) (cliverify.Operation, error) {
 	var op cliverify.Operation
 	var outcome *string
 	var verified *time.Time
@@ -32,14 +33,14 @@ func scanVerification(row pgx.Row) (cliverify.Operation, error) {
 	}
 	return op, notFoundIfNoRows(err, "CLI验证操作")
 }
-func verificationTx(ctx context.Context, tx pgx.Tx, project, account, id uuid.UUID, lock bool) (cliverify.Operation, error) {
+func verificationTx(ctx context.Context, tx *db.Tx, project, account, id uuid.UUID, lock bool) (cliverify.Operation, error) {
 	suffix := ""
 	if lock {
 		suffix = " FOR UPDATE OF o"
 	}
 	return scanVerification(tx.QueryRow(ctx, `SELECT `+verificationColumns+` FROM cli_credential_verifications o JOIN project_credential_accounts a ON a.id=o.account_id WHERE o.project_id=$1 AND o.account_id=$2 AND o.id=$3`+suffix, project, account, id))
 }
-func lockVerificationAccount(ctx context.Context, tx pgx.Tx, project, account uuid.UUID, write bool) (ProjectCredentialRecord, error) {
+func lockVerificationAccount(ctx context.Context, tx *db.Tx, project, account uuid.UUID, write bool) (ProjectCredentialRecord, error) {
 	if _, err := lockCredentialProject(ctx, tx, project, false); err != nil {
 		return ProjectCredentialRecord{}, err
 	}
@@ -71,7 +72,7 @@ func (s *Store) BeginCLIVerification(ctx context.Context, project, account uuid.
 	if err := in.Validate(); err != nil {
 		return out, false, err
 	}
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		r, e := lockVerificationAccount(ctx, tx, project, account, true)
 		if e != nil {
 			return e
@@ -111,7 +112,7 @@ func (s *Store) BeginCLIVerification(ctx context.Context, project, account uuid.
 			}
 			return verificationConflict(apperr.CodeVerificationInProgress, other)
 		}
-		if e != pgx.ErrNoRows {
+		if e != db.ErrNoRows {
 			return e
 		}
 		method := "static"
@@ -133,7 +134,7 @@ func (s *Store) BeginCLIVerification(ctx context.Context, project, account uuid.
 }
 func (s *Store) GetCLIVerification(ctx context.Context, project, account, id uuid.UUID) (cliverify.Operation, error) {
 	var out cliverify.Operation
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockVerificationAccount(ctx, tx, project, account, false); e != nil {
 			return e
 		}
@@ -145,7 +146,7 @@ func (s *Store) GetCLIVerification(ctx context.Context, project, account, id uui
 }
 func (s *Store) CLIVerificationState(ctx context.Context, project, account uuid.UUID) (cliverify.State, error) {
 	var out cliverify.State
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		a, e := lockVerificationAccount(ctx, tx, project, account, false)
 		if e != nil {
 			return e
@@ -159,7 +160,7 @@ func (s *Store) CLIVerificationState(ctx context.Context, project, account uuid.
 		}
 		var id uuid.UUID
 		e = tx.QueryRow(ctx, `SELECT id FROM cli_credential_verifications WHERE account_id=$1 AND version_id=$2 ORDER BY started_at DESC,id DESC LIMIT 1`, account, *out.CurrentVersionID).Scan(&id)
-		if e == pgx.ErrNoRows {
+		if e == db.ErrNoRows {
 			return nil
 		}
 		if e != nil {
@@ -176,7 +177,7 @@ func (s *Store) CLIVerificationState(ctx context.Context, project, account uuid.
 
 // terminateVerificationsTx is also used by account/project mutation while their
 // existing locks are held. It never opens another transaction or touches secrets.
-func terminateVerificationsTx(ctx context.Context, tx pgx.Tx, project uuid.UUID, account *uuid.UUID, code *string) error {
+func terminateVerificationsTx(ctx context.Context, tx *db.Tx, project uuid.UUID, account *uuid.UUID, code *string) error {
 	status, outcome := "cancelled", "cancelled"
 	if code != nil {
 		status, outcome = "failed", "failed"
@@ -186,7 +187,7 @@ func terminateVerificationsTx(ctx context.Context, tx pgx.Tx, project uuid.UUID,
 }
 func (s *Store) CancelCLIVerification(ctx context.Context, project, account, id uuid.UUID) (cliverify.Operation, error) {
 	var out cliverify.Operation
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockVerificationAccount(ctx, tx, project, account, false); e != nil {
 			return e
 		}
@@ -210,7 +211,7 @@ func (s *Store) CancelCLIVerification(ctx context.Context, project, account, id 
 func (s *Store) ClaimCLIVerification(ctx context.Context, project, account, id uuid.UUID) (cliverify.Operation, bool, error) {
 	var out cliverify.Operation
 	claimed := false
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		a, e := lockVerificationAccount(ctx, tx, project, account, false)
 		if e != nil {
 			return e
@@ -245,7 +246,7 @@ func (s *Store) ClaimCLIVerification(ctx context.Context, project, account, id u
 	})
 	return out, claimed && err == nil, err
 }
-func expireVerificationsTx(ctx context.Context, tx pgx.Tx, id *uuid.UUID) error {
+func expireVerificationsTx(ctx context.Context, tx *db.Tx, id *uuid.UUID) error {
 	_, e := tx.Exec(ctx, `UPDATE cli_credential_verifications SET status='expired',phase=NULL,completed_at=clock_timestamp(),result_outcome='expired',verified_at=NULL,duration_ms=greatest(0,floor(extract(epoch FROM clock_timestamp()-started_at)*1000))::bigint,error_code='timeout',http_status=NULL WHERE ($1::uuid IS NULL OR id=$1) AND status IN('pending','running') AND expires_at<=clock_timestamp()`, id)
 	return e
 }
@@ -255,7 +256,7 @@ func (s *Store) CLIVerificationPhase(ctx context.Context, project, account, id u
 	default:
 		return errors.New("验证阶段无效")
 	}
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockVerificationAccount(ctx, tx, project, account, false); e != nil {
 			return e
 		}
@@ -276,7 +277,7 @@ func (s *Store) CLIVerificationPhase(ctx context.Context, project, account, id u
 func (s *Store) FinishCLIVerification(ctx context.Context, project, account, id uuid.UUID, result cliverify.Result) (cliverify.Operation, bool, error) {
 	var out cliverify.Operation
 	changed := false
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		a, e := lockVerificationAccount(ctx, tx, project, account, false)
 		if e != nil {
 			return e
@@ -338,7 +339,7 @@ func (s *Store) FinishCLIVerification(ctx context.Context, project, account, id 
 
 // Recovery never retries a native probe or extracts credentials again.
 func (s *Store) RecoverCLIVerifications(ctx context.Context) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		if e := expireVerificationsTx(ctx, tx, nil); e != nil {
 			return e
 		}
@@ -347,5 +348,5 @@ func (s *Store) RecoverCLIVerifications(ctx context.Context) error {
 	})
 }
 func (s *Store) ExpireCLIVerifications(ctx context.Context) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error { return expireVerificationsTx(ctx, tx, nil) })
+	return s.inTx(ctx, func(tx *db.Tx) error { return expireVerificationsTx(ctx, tx, nil) })
 }

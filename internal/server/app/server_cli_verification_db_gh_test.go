@@ -433,7 +433,7 @@ func TestCLIVerificationDatabaseGitHubActualNativeApp(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	a, e := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, "json", w.cfg.LogLevel), app.Options{SearchPath: w.schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIHTTPClient: &http.Client{Transport: files}, CLIVerificationCommand: factory})
+	a, e := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, "json", w.cfg.LogLevel), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIHTTPClient: &http.Client{Transport: files}, CLIVerificationCommand: factory})
 	if e != nil {
 		t.Fatal(e)
 	}

@@ -8,7 +8,6 @@ import (
 
 func TestCLIImportBudgets(t *testing.T) {
 	env := requiredEnv()
-	env[EnvDatabaseURL] = "postgres://fixture@localhost/loop_now_test"
 	c, e := Load(envOf(env))
 	if e != nil {
 		t.Fatal(e)
@@ -19,7 +18,6 @@ func TestCLIImportBudgets(t *testing.T) {
 	for _, key := range []string{EnvCLIImportScanTTL, EnvCLIImportTimeout, EnvCLIImportRecordTimeout, EnvCLIImportMaxBatch, EnvCLIImportMaxActive, EnvCLIImportMaxScans} {
 		t.Run(key, func(t *testing.T) {
 			v := requiredEnv()
-			v[EnvDatabaseURL] = env[EnvDatabaseURL]
 			v[key] = "0"
 			if _, e := Load(envOf(v)); e == nil || !strings.Contains(e.Error(), key) {
 				t.Fatal("invalid limit accepted", e)

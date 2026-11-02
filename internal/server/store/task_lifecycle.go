@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/taskmodel"
+
+	"loop-now/internal/server/db"
 )
 
 func (s *Store) taskLifecycle(ctx context.Context, q execer, t TaskTurn, kind string, data map[string]any) error {
@@ -32,7 +33,7 @@ func (s *Store) taskLifecycle(ctx context.Context, q execer, t TaskTurn, kind st
 	}
 	tag, e := q.Exec(ctx, `INSERT INTO lifecycle_events(id,agent_id,type,data,instance_id,task_id,workflow_node,task_turn_id,inbox_message_id) SELECT $1,agent_id,$2,$3,$4,$5,$6,$7,$8 FROM task_instances WHERE id=$9 AND task_id=$5`, uuid.Must(uuid.NewV7()), kind, b, s.InstanceID, t.TaskID, node, t.ID, t.TriggerInboxID, t.RuntimeID)
 	if e == nil && tag.RowsAffected() != 1 {
-		return pgx.ErrNoRows
+		return db.ErrNoRows
 	}
 	return e
 }
@@ -78,7 +79,7 @@ func (s *Store) InterruptTaskRuntime(ctx context.Context, m *TaskMutation, runti
 	if e != nil {
 		return e
 	}
-	turns, e := pgx.CollectRows(rows, func(r pgx.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
+	turns, e := db.CollectRows(rows, func(r db.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
 	if e != nil {
 		return e
 	}
@@ -114,7 +115,7 @@ func (s *Store) RecoverTaskTurns(ctx context.Context, m *TaskMutation) (int, boo
 	if e != nil {
 		return 0, false, e
 	}
-	turns, e := pgx.CollectRows(rows, func(r pgx.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
+	turns, e := db.CollectRows(rows, func(r db.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
 	if e != nil {
 		return 0, false, e
 	}
@@ -143,7 +144,7 @@ func (s *Store) cancelUnboundInboxQueue(ctx context.Context, m *TaskMutation, ru
 	if e != nil {
 		return e
 	}
-	turns, e := pgx.CollectRows(rows, func(r pgx.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
+	turns, e := db.CollectRows(rows, func(r db.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
 	if e != nil {
 		return e
 	}

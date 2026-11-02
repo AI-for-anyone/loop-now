@@ -23,6 +23,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"loop-now/internal/server/db"
 )
 
 type verificationAppCrashConfig struct {
@@ -51,7 +53,7 @@ func TestCLIVerificationAppCrashChild(t *testing.T) {
 	if e != nil {
 		os.Exit(42)
 	}
-	a, e := app.Build(context.Background(), &input.Config, config.NewLogger(io.Discard, "json", 0), app.Options{SearchPath: input.Schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIVerificationCommand: factory})
+	a, e := app.Build(context.Background(), &input.Config, config.NewLogger(io.Discard, "json", 0), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIVerificationCommand: factory})
 	if e != nil {
 		os.Exit(43)
 	}
@@ -69,7 +71,7 @@ func TestCLIVerificationActualAppSIGKILLRecovery(t *testing.T) {
 	w.cfg.AuthRecordTimeout = time.Second
 	w.cfg.CLIInstallTimeout = time.Second
 	ctx := context.Background()
-	st, e := store.Open(ctx, w.cfg.DatabaseURL, store.OpenOptions{SearchPath: w.schema})
+	st, e := store.Open(ctx, db.Options{Dir: config.DBDir(w.cfg.DataDir)})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -183,7 +185,7 @@ func TestCLIVerificationActualAppSIGKILLRecovery(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	a, e := app.Build(ctx, &w.cfg, config.NewLogger(io.Discard, "json", 0), app.Options{SearchPath: w.schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIVerificationCommand: func(context.Context, verifyservice.CommandSpec) (*exec.Cmd, error) {
+	a, e := app.Build(ctx, &w.cfg, config.NewLogger(io.Discard, "json", 0), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIVerificationCommand: func(context.Context, verifyservice.CommandSpec) (*exec.Cmd, error) {
 		commands.Add(1)
 		return nil, io.EOF
 	}})

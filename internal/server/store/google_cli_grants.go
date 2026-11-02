@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/clicredential"
 	"time"
+
+	"loop-now/internal/server/db"
 )
 
 type GoogleCLIGrant struct {
@@ -24,7 +25,7 @@ type GoogleCLIGrant struct {
 
 // finishClaim is reserved for conditional Commit/Fail of an existing lease.
 // It never grants read access or permits a deleted owner to start a refresh.
-func googleGrantTx(ctx context.Context, tx pgx.Tx, b clicredential.Binding, write, finishClaim bool) (GoogleCLIGrant, error) {
+func googleGrantTx(ctx context.Context, tx *db.Tx, b clicredential.Binding, write, finishClaim bool) (GoogleCLIGrant, error) {
 	out := GoogleCLIGrant{Binding: b}
 	if !b.Valid() {
 		return out, errors.New("CLI授权绑定无效")
@@ -41,12 +42,12 @@ func googleGrantTx(ctx context.Context, tx pgx.Tx, b clicredential.Binding, writ
 }
 func (s *Store) GetGoogleCLIGrant(ctx context.Context, b clicredential.Binding) (GoogleCLIGrant, error) {
 	var out GoogleCLIGrant
-	e := s.inTx(ctx, func(tx pgx.Tx) error { var e error; out, e = googleGrantTx(ctx, tx, b, false, false); return e })
+	e := s.inTx(ctx, func(tx *db.Tx) error { var e error; out, e = googleGrantTx(ctx, tx, b, false, false); return e })
 	return out, e
 }
 func (s *Store) ClaimGoogleCLIRefresh(ctx context.Context, b clicredential.Binding, generation int64, lease uuid.UUID, until time.Time) (bool, error) {
 	claimed := false
-	e := s.inTx(ctx, func(tx pgx.Tx) error {
+	e := s.inTx(ctx, func(tx *db.Tx) error {
 		r, e := googleGrantTx(ctx, tx, b, true, false)
 		if e != nil {
 			return e
@@ -68,7 +69,7 @@ func (s *Store) ClaimGoogleCLIRefresh(ctx context.Context, b clicredential.Bindi
 	return claimed, e
 }
 func (s *Store) CommitGoogleCLIRefresh(ctx context.Context, b clicredential.Binding, generation int64, lease uuid.UUID, secret []byte) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		r, e := googleGrantTx(ctx, tx, b, true, true)
 		if e != nil {
 			return e
@@ -97,7 +98,7 @@ func (s *Store) FailGoogleCLIRefresh(ctx context.Context, b clicredential.Bindin
 	default:
 		code = "refresh_failed"
 	}
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := googleGrantTx(ctx, tx, b, true, true); e != nil {
 			return e
 		}

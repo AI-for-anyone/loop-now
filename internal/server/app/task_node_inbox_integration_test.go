@@ -68,7 +68,7 @@ func taskNodeInboxWorld(t *testing.T) *world {
 		rc.Close()
 	})
 	w := &world{t: t, schema: schema, piAIDir: real.PiAIDir, cfg: config.Config{
-		DatabaseURL: pgtest.URL(t), RedisURL: redistest.URL(t), RedisKeyPrefix: prefix,
+		DataDir: t.TempDir(), RedisURL: redistest.URL(t), RedisKeyPrefix: prefix,
 		ListenAddr: "127.0.0.1:0", AllowedHosts: []string{"localhost", "127.0.0.1", "::1"}, ConsoleOrigins: []string{"http://localhost:5173"}, DefaultOrgName: "默认组织", DefaultProjectName: "默认项目",
 		WorkRoot: filepath.Join(t.TempDir(), "work"), PiBin: fakepibin.Path(t), PiVersion: "1.1.0", PiMaxProcesses: 2, PiIdleTimeout: time.Minute, PiStartTimeout: 10 * time.Second, PiStopGrace: 2 * time.Second, AbortTimeout: 3 * time.Second, GitCloneTimeout: 30 * time.Second, CLIInstallTimeout: time.Minute,
 		NodeBin: "node", PiAIDir: real.PiAIDir, LockTTL: 5 * time.Second, LockRenewInterval: time.Second, ReconcileInterval: 100 * time.Millisecond, SSEKeepalive: time.Second, EventStreamMaxLen: 1000, RunTextTTL: time.Hour, ShutdownTimeout: 10 * time.Second,

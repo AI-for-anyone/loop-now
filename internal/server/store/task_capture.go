@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/modelcredential"
 	"loop-now/internal/server/prompts"
 	"loop-now/internal/server/taskruntime"
+
+	"loop-now/internal/server/db"
 )
 
 type TaskCapture struct {
@@ -23,7 +24,7 @@ type TaskCapture struct {
 }
 
 // CaptureTaskAgent 在调用者创建事务中锁住Agent，配置变更同样锁Agent，因此本次读取不混版本。
-func (s *Store) CaptureTaskAgent(ctx context.Context, tx pgx.Tx, agentID, runtimeID uuid.UUID, project prompts.ProjectRules, credentialRevision ...int64) (TaskCapture, error) {
+func (s *Store) CaptureTaskAgent(ctx context.Context, tx *db.Tx, agentID, runtimeID uuid.UUID, project prompts.ProjectRules, credentialRevision ...int64) (TaskCapture, error) {
 	var out TaskCapture
 	var err error
 	out.Agent, err = scanAgent(tx.QueryRow(ctx, `SELECT `+agentColumns+` FROM agents WHERE id=$1 AND deleted_at IS NULL FOR SHARE`, agentID))
@@ -38,7 +39,7 @@ func (s *Store) CaptureTaskAgent(ctx context.Context, tx pgx.Tx, agentID, runtim
 	if err != nil {
 		return out, err
 	}
-	out.Configuration.CLIs, err = pgx.CollectRows(rows, pgx.RowTo[string])
+	out.Configuration.CLIs, err = db.CollectRows(rows, db.RowTo[string])
 	if err != nil {
 		return out, err
 	}
@@ -118,10 +119,10 @@ func (s *Store) FrozenTaskSource(ctx context.Context, sourceID uuid.UUID) (TaskF
 			}
 		}
 	}
-	return TaskFrozenSource{}, uuid.Nil, notFoundIfNoRows(pgx.ErrNoRows, "任务来源")
+	return TaskFrozenSource{}, uuid.Nil, notFoundIfNoRows(db.ErrNoRows, "任务来源")
 }
 func (s *Store) MarkTaskSourceSynced(ctx context.Context, runtimeID, sourceID uuid.UUID, files []SyncFile) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		var raw []byte
 		if err := tx.QueryRow(ctx, `SELECT sources FROM task_instances WHERE id=$1 FOR UPDATE`, runtimeID).Scan(&raw); err != nil {
 			return err

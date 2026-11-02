@@ -11,12 +11,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/executor/local"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
+
+	"loop-now/internal/server/db"
 )
 
 // Actual manager adapters must atomically reject active/unknown native work
@@ -314,7 +315,7 @@ func (s *Service) larkSwitchReceiptTx(ctx context.Context, m *store.TaskMutation
 	var failure *string
 	err := m.Tx.QueryRow(ctx, `SELECT task_id,action_id,node_run_id,status,reservation_task_version,captured_request,receipt,failure_reason,created_at,finished_at FROM task_lark_switch_actions WHERE task_id=$1 AND actor_key=$2 AND action_id=$3`, m.Record.View.Task.ID, actor, action).Scan(&out.TaskID, &out.ActionID, &out.SourceNodeRunID, &out.Status, &out.ReservationTaskVersion, &captureRaw, &receiptRaw, &failure, &out.CreatedAt, &out.FinishedAt)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, db.ErrNoRows) {
 			return out, apperr.NotFound("Lark切换动作")
 		}
 		return out, err

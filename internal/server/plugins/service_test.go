@@ -18,7 +18,7 @@ import (
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/plugins"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 type env struct {
@@ -31,7 +31,7 @@ type env struct {
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	st := pgtest.NewStore(t)
+	st := sqlitetest.NewStore(t)
 	dc, err := st.EnsureDefaults(context.Background(), "org", "project")
 	if err != nil {
 		t.Fatal(err)

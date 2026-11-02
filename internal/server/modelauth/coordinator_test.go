@@ -15,7 +15,8 @@ import (
 	"github.com/google/uuid"
 	"loop-now/internal/server/modelcredential"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 type refreshFunc func(context.Context, modelcredential.Credential) (modelcredential.Credential, error)
@@ -25,7 +26,7 @@ func (f refreshFunc) Refresh(ctx context.Context, c modelcredential.Credential) 
 }
 func authFixture(t *testing.T) (*store.Store, store.Agent) {
 	t.Helper()
-	st := pgtest.NewStore(t)
+	st := sqlitetest.NewStore(t)
 	ctx := context.Background()
 	_, e := st.EnsureDefaults(ctx, "组织", "项目")
 	if e != nil {

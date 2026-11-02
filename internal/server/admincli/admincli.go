@@ -1,5 +1,5 @@
 // Package admincli 实现服务端命令行的管理子命令：外部身份与外部令牌的管理，以及打印版本号。
-// 子命令直接读写数据库，只需要 LOOP_NOW_DATABASE_URL；改变状态的操作记审计，操作者为 cli。
+// 子命令直接读写数据库（与服务同一个数据目录，SQLite 支持多进程短写）；改变状态的操作记审计，操作者为 cli。
 //
 //	loop-server version
 //	loop-server identity create <名称>
@@ -25,10 +25,13 @@ import (
 	"loop-now/internal/buildinfo"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/config"
+	"loop-now/internal/server/db"
 	"loop-now/internal/server/dbcli"
 	"loop-now/internal/server/gcloudcli"
 	"loop-now/internal/server/identity"
 	"loop-now/internal/server/store"
+
+	"path/filepath"
 )
 
 // Commands 是全部管理子命令的名称；第一个参数是其中之一时，loop-server 执行子命令而不是启动服务。
@@ -64,12 +67,11 @@ const usage = `用法：
   loop-server token revoke <令牌 ID>
 `
 
-// Options 是运行子命令所需的环境；SearchPath 只供测试限定 schema。
+// Options 是运行子命令所需的环境。库在 LOOP_NOW_DATA_DIR（默认 HOME 下的 .loop_now）的 db 子目录。
 type Options struct {
-	Getenv     func(string) string
-	Stdout     io.Writer
-	Stderr     io.Writer
-	SearchPath string
+	Getenv func(string) string
+	Stdout io.Writer
+	Stderr io.Writer
 }
 
 // Run 执行子命令，返回退出码。签发的令牌只打印一次到标准输出，其余提示写到标准错误。
@@ -92,14 +94,19 @@ func Run(ctx context.Context, args []string, o Options) int {
 		fmt.Fprint(o.Stderr, usage)
 		return exitUsage
 	}
-	dbURL := o.Getenv(config.EnvDatabaseURL)
-	if dbURL == "" {
-		fmt.Fprintf(o.Stderr, "需要环境变量 %s\n", config.EnvDatabaseURL)
+	dataDir := o.Getenv(config.EnvDataDir)
+	if dataDir == "" {
+		dataDir = config.DefaultDataDir(o.Getenv)
+	}
+	dbDir := config.DBDir(dataDir)
+	// 只打开服务已经建好的库：数据目录写错时不能悄悄建一个空库。
+	if _, err := os.Stat(filepath.Join(dbDir, db.DataFile)); err != nil {
+		fmt.Fprintf(o.Stderr, "数据目录 %s 里没有库（%s 设置对了吗？）\n", dbDir, config.EnvDataDir)
 		return exitUsage
 	}
-	st, err := store.Open(ctx, dbURL, store.OpenOptions{SearchPath: o.SearchPath})
+	st, err := store.Open(ctx, db.Options{Dir: dbDir})
 	if err != nil {
-		fmt.Fprintln(o.Stderr, "连接数据库失败：", err)
+		fmt.Fprintln(o.Stderr, "打开数据库失败：", err)
 		return exitFail
 	}
 	defer st.Close()

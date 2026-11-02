@@ -39,7 +39,7 @@ const (
 	EnvTaskMaxVisits         = "LOOP_NOW_TASK_MAX_VISITS"
 	EnvTaskMaxEdges          = "LOOP_NOW_TASK_MAX_EDGES"
 	EnvTaskMaxSteps          = "LOOP_NOW_TASK_MAX_STEPS"
-	EnvDatabaseURL           = "LOOP_NOW_DATABASE_URL"
+	EnvDataDir               = "LOOP_NOW_DATA_DIR"
 	EnvRedisURL              = "LOOP_NOW_REDIS_URL"
 	EnvListenAddr            = "LOOP_NOW_LISTEN_ADDR"
 	EnvAllowedHosts          = "LOOP_NOW_ALLOWED_HOSTS"
@@ -124,12 +124,13 @@ type Config struct {
 	TaskMaxVisits                                              int
 	TaskMaxEdges                                               int
 	TaskMaxSteps                                               int
-	DatabaseURL                                                string
-	RedisURL                                                   string
-	ListenAddr                                                 string
-	AllowedHosts                                               []string
-	ConsoleOrigins                                             []string
-	WorkRoot                                                   string
+	// DataDir 是数据根：库文件在 DataDir/db 下（见 DBDir）。默认是服务进程用户 HOME 下的 .loop_now，启动时算一次。
+	DataDir        string
+	RedisURL       string
+	ListenAddr     string
+	AllowedHosts   []string
+	ConsoleOrigins []string
+	WorkRoot       string
 	// ContextDir 是项目与全局上下文文件夹的根（projects/<projectId>/、global/），默认是服务进程用户 HOME 下的 .loop_now。
 	ContextDir         string
 	RedisKeyPrefix     string
@@ -194,6 +195,21 @@ type Config struct {
 	Warnings []string
 }
 
+// DefaultDataDir 返回数据根的默认值：HOME 下的 .loop_now；取不到 HOME 时为空。
+func DefaultDataDir(getenv func(string) string) string {
+	home := getenv("HOME")
+	if home == "" {
+		home, _ = os.UserHomeDir()
+	}
+	if home == "" {
+		return ""
+	}
+	return filepath.Join(home, ".loop_now")
+}
+
+// DBDir 返回数据根下存放 data.db 与 events.db 的目录。
+func DBDir(dataDir string) string { return filepath.Join(dataDir, "db") }
+
 // DefaultWorkRoot 返回当前平台的工作根目录默认值。
 func DefaultWorkRoot() string {
 	if runtime.GOOS == "darwin" {
@@ -223,7 +239,6 @@ func Load(getenv func(string) string) (*Config, error) {
 		TaskMaxVisits:         p.integer(EnvTaskMaxVisits, 1000),
 		TaskMaxEdges:          p.integer(EnvTaskMaxEdges, 300),
 		TaskMaxSteps:          p.integer(EnvTaskMaxSteps, 100),
-		DatabaseURL:           p.required(EnvDatabaseURL),
 		RedisURL:              p.required(EnvRedisURL),
 		ListenAddr:            p.str(EnvListenAddr, "127.0.0.1:8780"),
 		AllowedHosts:          p.list(EnvAllowedHosts, "localhost,127.0.0.1,[::1]"),
@@ -285,6 +300,13 @@ func Load(getenv func(string) string) (*Config, error) {
 		p.fail(EnvLogFormat, "只能是 text 或 json（当前 %q）", c.LogFormat)
 	}
 	p.cliImport(c)
+	c.DataDir = p.str(EnvDataDir, "")
+	if c.DataDir == "" {
+		c.DataDir = DefaultDataDir(getenv)
+	}
+	if !filepath.IsAbs(c.DataDir) || filepath.Clean(c.DataDir) != c.DataDir || c.DataDir == string(filepath.Separator) {
+		p.fail(EnvDataDir, "须为规范的绝对路径（当前 %q；未设置时取 HOME 下的 .loop_now）", c.DataDir)
+	}
 	c.ContextDir = p.str(EnvContextDir, "")
 	if c.ContextDir == "" {
 		home := getenv("HOME")
@@ -311,7 +333,6 @@ func Load(getenv func(string) string) (*Config, error) {
 		p.checkURL(EnvPluginMarketURL, c.PluginMarketURL, "https")
 	}
 
-	p.checkURL(EnvDatabaseURL, c.DatabaseURL, "postgres", "postgresql")
 	p.checkURL(EnvRedisURL, c.RedisURL, "redis", "rediss")
 	c.Warnings = append(c.Warnings, p.checkListenAddr(c.ListenAddr)...)
 	p.checkExternal(c)
@@ -351,7 +372,7 @@ func (c *Config) LogValue() slog.Value {
 		slog.Duration("taskEventPoll", c.TaskEventPoll),
 		slog.Duration("taskRecordTimeout", c.TaskRecordTimeout),
 		slog.Duration("authLoginTimeout", c.AuthLoginTimeout), slog.Duration("authRefreshTimeout", c.AuthRefreshTimeout), slog.Duration("authRecordTimeout", c.AuthRecordTimeout), slog.Duration("authIPCTimeout", c.AuthIPCTimeout),
-		slog.String("databaseURL", RedactURL(c.DatabaseURL)),
+		slog.String("dataDir", c.DataDir),
 		slog.String("redisURL", RedactURL(c.RedisURL)),
 		slog.String("listenAddr", c.ListenAddr),
 		slog.Any("allowedHosts", c.AllowedHosts),

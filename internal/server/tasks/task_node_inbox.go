@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
@@ -13,6 +12,8 @@ import (
 	"loop-now/internal/server/taskmodel"
 	"strings"
 	"unicode/utf8"
+
+	"loop-now/internal/server/db"
 )
 
 func (s *Service) SendNodeInboxMessage(ctx context.Context, p auth.Principal, task, node uuid.UUID, in taskmodel.TaskNodeMessageInput, maxBytes int) (json.RawMessage, error) {
@@ -233,7 +234,7 @@ func (s *Service) NodeInboxAction(ctx context.Context, p auth.Principal, task, n
 	actor := string(p.Kind) + ":" + p.ID.String() + ":" + p.RuntimeID.String()
 	var raw json.RawMessage
 	e := s.Store.Pool.QueryRow(ctx, `SELECT response FROM task_actions WHERE actor_key=$1 AND action_id=$2 AND task_id=$3 AND operation='sendTaskNodeInboxMessage'`, actor, action, task).Scan(&raw)
-	if errors.Is(e, pgx.ErrNoRows) {
+	if errors.Is(e, db.ErrNoRows) {
 		return nil, apperr.NotFound("节点Inbox动作")
 	}
 	if e != nil {

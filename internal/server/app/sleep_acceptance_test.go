@@ -18,6 +18,9 @@ import (
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/workflow"
+
+	"loop-now/internal/server/config"
+	"loop-now/internal/server/db"
 )
 
 func boolInt(b bool) int {
@@ -120,7 +123,7 @@ func TestSleepAppTaskWakeCommitAndExecutionRestart(t *testing.T) {
 			// an independent connection before any driver exists to claim its work.
 			s.stop()
 			s = nil
-			st, e := store.Open(ctx, w.cfg.DatabaseURL, store.OpenOptions{SearchPath: w.schema})
+			st, e := store.Open(ctx, db.Options{Dir: config.DBDir(w.cfg.DataDir)})
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -299,7 +302,7 @@ func TestSleepAppRetireAndOwnerDeletionRejectOldTimer(t *testing.T) {
 		}
 		s.stop()
 		s = nil
-		st, e := store.Open(ctx, w.cfg.DatabaseURL, store.OpenOptions{SearchPath: w.schema})
+		st, e := store.Open(ctx, db.Options{Dir: config.DBDir(w.cfg.DataDir)})
 		if e != nil {
 			t.Fatal(e)
 		}

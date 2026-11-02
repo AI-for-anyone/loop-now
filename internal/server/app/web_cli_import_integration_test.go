@@ -137,7 +137,7 @@ func TestWebCLIImportIntegration(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	a, e := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, "json", 0), app.Options{SearchPath: w.schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIImportReaderFactory: factory})
+	a, e := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, "json", 0), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIImportReaderFactory: factory})
 	if e != nil {
 		ln.Close()
 		t.Fatal("isolated App build failed", e)

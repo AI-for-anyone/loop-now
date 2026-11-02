@@ -29,7 +29,7 @@ func (w *world) startDeletionAuth(helper modelauth.LoginHelper) *server {
 	if err != nil {
 		w.t.Fatal(err)
 	}
-	a, err := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, "text", w.cfg.LogLevel), app.Options{SearchPath: w.schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, AuthLoginHelper: helper, AuthRefresher: &taskAuthOffline{}})
+	a, err := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, "text", w.cfg.LogLevel), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, AuthLoginHelper: helper, AuthRefresher: &taskAuthOffline{}})
 	if err != nil {
 		ln.Close()
 		w.t.Fatal(err)

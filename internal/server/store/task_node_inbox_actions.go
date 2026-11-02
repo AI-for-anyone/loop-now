@@ -3,8 +3,9 @@ package store
 import (
 	"context"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
+
+	"loop-now/internal/server/db"
 )
 
 func (s *Store) ReplyTaskNodeInbox(ctx context.Context, p Party, id, run uuid.UUID, text, whenBusy string) (InboxMessage, bool, error) {
@@ -64,7 +65,7 @@ func (s *Store) TaskNodeInboxThread(ctx context.Context, p Party, thread, run uu
 		if e != nil {
 			return e
 		}
-		out, e = pgx.CollectRows(rows, func(r pgx.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
+		out, e = db.CollectRows(rows, func(r db.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
 		if e != nil {
 			return e
 		}
@@ -103,7 +104,7 @@ func (s *Store) TaskNodeInboxThread(ctx context.Context, p Party, thread, run uu
 		if e != nil {
 			return e
 		}
-		out, e = pgx.CollectRows(rows, func(r pgx.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
+		out, e = db.CollectRows(rows, func(r db.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
 		return e
 	})
 	return out, handled, e

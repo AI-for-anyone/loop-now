@@ -5,7 +5,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
+
+	"loop-now/internal/server/db"
 )
 
 // UsageRow 是按（Agent、提供方、模型）分组的用量统计；Provider 与 Model 都为空表示未知模型。
@@ -33,7 +34,7 @@ func (s *Store) UsageSummary(ctx context.Context, f ScopeFilter, from, to *time.
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (UsageRow, error) {
+	return db.CollectRows(rows, func(row db.CollectableRow) (UsageRow, error) {
 		var r UsageRow
 		err := row.Scan(&r.AgentID, &r.AgentName, &r.AgentDeleted, &r.ProjectID, &r.Provider, &r.Model,
 			&r.Calls, &r.Input, &r.Output, &r.CacheRead, &r.CacheWrite, &r.Total)
@@ -77,7 +78,7 @@ func (s *Store) Anomalies(ctx context.Context, f ScopeFilter, from *time.Time, c
 	if err != nil {
 		return nil, 0, nil, err
 	}
-	items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (AnomalyRow, error) {
+	items, err := db.CollectRows(rows, func(row db.CollectableRow) (AnomalyRow, error) {
 		var it AnomalyRow
 		err := row.Scan(append(runFields(&it.Run), &it.AgentName, &it.ProjectID)...)
 		it.Run.Tools = []ToolEvent{}
@@ -106,7 +107,7 @@ func (s *Store) LastEndedRuns(ctx context.Context, agentIDs []uuid.UUID) (map[uu
 	if err != nil {
 		return nil, err
 	}
-	runs, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Run, error) { return scanRun(r) })
+	runs, err := db.CollectRows(rows, func(r db.CollectableRow) (Run, error) { return scanRun(r) })
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +170,7 @@ func (s *Store) LatestCLIInstalls(ctx context.Context) ([]CLIInstallResult, erro
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (CLIInstallResult, error) {
+	return db.CollectRows(rows, func(row db.CollectableRow) (CLIInstallResult, error) {
 		var r CLIInstallResult
 		err := row.Scan(&r.CLI, &r.Version, &r.Succeeded, &r.Error)
 		return r, err

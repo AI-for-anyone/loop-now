@@ -3,14 +3,15 @@ package store
 import (
 	"context"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/sleepmodel"
 	"loop-now/internal/server/taskmodel"
+
+	"loop-now/internal/server/db"
 )
 
 // ProjectTaskSleepsTx reads under the same transaction snapshot/owner lock as
 // task.version. It is a projection only; agent_sleeps remains the authority.
-func (s *Store) ProjectTaskSleepsTx(ctx context.Context, tx pgx.Tx, d *taskmodel.Detail) error {
+func (s *Store) ProjectTaskSleepsTx(ctx context.Context, tx *db.Tx, d *taskmodel.Detail) error {
 	d.SleepingInstances = []sleepmodel.Record{}
 	revisions := map[uuid.UUID]int64{}
 	rows, e := tx.Query(ctx, `SELECT id,sleep_revision FROM task_instances WHERE task_id=$1`, d.Task.ID)
@@ -39,7 +40,7 @@ func (s *Store) ProjectTaskSleepsTx(ctx context.Context, tx pgx.Tx, d *taskmodel
 	if e != nil {
 		return e
 	}
-	records, e := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Sleep, error) { return scanSleep(row) })
+	records, e := db.CollectRows(rows, func(row db.CollectableRow) (Sleep, error) { return scanSleep(row) })
 	if e != nil {
 		return e
 	}

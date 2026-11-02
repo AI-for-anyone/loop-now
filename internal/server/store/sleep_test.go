@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/sleepmodel"
@@ -15,6 +14,8 @@ import (
 	"loop-now/internal/server/workflow"
 	"testing"
 	"time"
+
+	"loop-now/internal/server/db"
 )
 
 func TestSleepNormalTransactionsAndTimerReplacement(t *testing.T) {
@@ -137,7 +138,7 @@ func TestSleepTaskModesAtomicFinishAndCommittedVersion(t *testing.T) {
 			if mode == "task_conversation" {
 				r.View.Nodes[0].Status = "blocked"
 			}
-			_, err := s.CreateTask(ctx, project.ID, manager.ID, store.TaskAction{ActorKey: "fixture", ID: uuid.New(), Operation: "create", Body: []byte("fixture")}, func(pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) { return r, instances, nil })
+			_, err := s.CreateTask(ctx, project.ID, manager.ID, store.TaskAction{ActorKey: "fixture", ID: uuid.New(), Operation: "create", Body: []byte("fixture")}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) { return r, instances, nil })
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -415,7 +416,7 @@ func TestSleepTaskSubmitCompetesWithRequest(t *testing.T) {
 		node := taskmodel.NodeRun{ID: uuid.New(), TaskID: r.View.Task.ID, RuntimeID: inst.ID, AgentID: agent.ID, StepID: "a", Status: "queued", RunIDs: []uuid.UUID{}, Inputs: map[string]any{}}
 		r.View.Nodes = []taskmodel.NodeRun{node}
 		r.View.Task.CurrentNodeRunID = &node.ID
-		if _, err := s.CreateTask(ctx, project.ID, manager.ID, store.TaskAction{ActorKey: "fixture", ID: uuid.New(), Operation: "create", Body: []byte("fixture")}, func(pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) { return r, instances, nil }); err != nil {
+		if _, err := s.CreateTask(ctx, project.ID, manager.ID, store.TaskAction{ActorKey: "fixture", ID: uuid.New(), Operation: "create", Body: []byte("fixture")}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) { return r, instances, nil }); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := s.Pool.Exec(ctx, `UPDATE task_instances SET prepared=true WHERE id=$1`, inst.ID); err != nil {
@@ -497,7 +498,7 @@ func TestSleepSameAgentNormalAndTwoTasksAreIndependent(t *testing.T) {
 		n := taskmodel.NodeRun{ID: nodeID, TaskID: id, RuntimeID: runtime, AgentID: e.agent, StepID: "work", Status: "queued", RunIDs: []uuid.UUID{}, Inputs: map[string]any{}}
 		r := taskmodel.Record{View: taskmodel.Detail{Task: taskmodel.Summary{ID: id, ProjectID: e.dc.Project.ID, Title: "scope", Status: "preparing", Version: 1, CreatedAt: now, UpdatedAt: now, CurrentNodeRunID: &nodeID}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "work", AgentID: e.agent}}, Edges: []workflow.Edge{}}, Nodes: []taskmodel.NodeRun{n}, Request: map[string]any{}, Artifacts: []taskmodel.Artifact{}, Cleanup: "none"}, EdgeCounts: map[string]int{}}
 		inst := store.TaskInstance{ID: runtime, TaskID: id, AgentID: e.agent, AgentName: "A", Snapshot: []byte("fixture"), Sources: []store.TaskFrozenSource{}}
-		if _, err := e.s.CreateTask(ctx, e.dc.Project.ID, e.agent, store.TaskAction{ActorKey: "scope", ID: uuid.New(), Operation: "create", Body: []byte("fixture")}, func(pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) {
+		if _, err := e.s.CreateTask(ctx, e.dc.Project.ID, e.agent, store.TaskAction{ActorKey: "scope", ID: uuid.New(), Operation: "create", Body: []byte("fixture")}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) {
 			return r, []store.TaskInstance{inst}, nil
 		}); err != nil {
 			t.Fatal(err)

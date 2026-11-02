@@ -11,8 +11,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
+
+	"loop-now/internal/server/db"
 )
 
 func importConflict(code string) error {
@@ -28,13 +29,13 @@ func importCode(v string) string {
 	}
 	return "internal_error"
 }
-func importProjectLock(ctx context.Context, tx pgx.Tx, project uuid.UUID) (int64, bool, error) {
+func importProjectLock(ctx context.Context, tx *db.Tx, project uuid.UUID) (int64, bool, error) {
 	var rev int64
 	var deleted *time.Time
 	err := tx.QueryRow(ctx, `SELECT credentials_revision,deleted_at FROM projects WHERE id=$1 FOR UPDATE`, project).Scan(&rev, &deleted)
 	return rev, deleted != nil, notFoundIfNoRows(err, "项目")
 }
-func importOperationTx(ctx context.Context, tx pgx.Tx, project, id uuid.UUID, lock bool) (CLIImportOperation, error) {
+func importOperationTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, lock bool) (CLIImportOperation, error) {
 	var o CLIImportOperation
 	suffix := ""
 	if lock {
@@ -48,7 +49,7 @@ func importOperationTx(ctx context.Context, tx pgx.Tx, project, id uuid.UUID, lo
 	if err != nil {
 		return o, err
 	}
-	o.Items, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (CLIImportItem, error) {
+	o.Items, err = db.CollectRows(rows, func(r db.CollectableRow) (CLIImportItem, error) {
 		var i CLIImportItem
 		e := r.Scan(&i.CandidateID, &i.CLI, &i.Label, &i.Status, &i.AccountID, &i.VersionID, &i.ErrorCode)
 		return i, e
@@ -65,7 +66,7 @@ func (s *Store) FindCLIImport(ctx context.Context, project, id uuid.UUID, finger
 	if project == uuid.Nil || id == uuid.Nil {
 		return out, apperr.Invalid("operationId", "UUID不能为零")
 	}
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, false); e != nil {
 			return e
 		}
@@ -104,7 +105,7 @@ func (s *Store) BeginCLIImport(ctx context.Context, in CLIImportBegin) (CLIImpor
 		}
 		seen[v.CandidateID] = true
 	}
-	err := s.cliImportTx(ctx, func(tx pgx.Tx) error {
+	err := s.cliImportTx(ctx, func(tx *db.Tx) error {
 		rev, deleted, e := importProjectLock(ctx, tx, in.ProjectID)
 		if e != nil {
 			return e
@@ -169,7 +170,7 @@ func (s *Store) SetCLIImportPhase(ctx context.Context, project, id, instance uui
 	if phase != "extracting" && phase != "validating" && phase != "committing" {
 		return apperr.Invalid("phase", "阶段无效")
 	}
-	return s.cliImportTx(ctx, func(tx pgx.Tx) error {
+	return s.cliImportTx(ctx, func(tx *db.Tx) error {
 		_, deleted, e := importProjectLock(ctx, tx, project)
 		if e != nil {
 			return e
@@ -185,7 +186,7 @@ func (s *Store) SetCLIImportPhase(ctx context.Context, project, id, instance uui
 	})
 }
 
-func finishImportTx(ctx context.Context, tx pgx.Tx, o CLIImportOperation, status, code string, failed uuid.UUID) (CLIImportOperation, error) {
+func finishImportTx(ctx context.Context, tx *db.Tx, o CLIImportOperation, status, code string, failed uuid.UUID) (CLIImportOperation, error) {
 	if o.Terminal() {
 		return o, nil
 	}
@@ -203,7 +204,7 @@ func finishImportTx(ctx context.Context, tx pgx.Tx, o CLIImportOperation, status
 }
 func (s *Store) FinishCLIImport(ctx context.Context, project, id uuid.UUID, status, code string, failed uuid.UUID) (CLIImportOperation, error) {
 	var out CLIImportOperation
-	err := s.cliImportTx(ctx, func(tx pgx.Tx) error {
+	err := s.cliImportTx(ctx, func(tx *db.Tx) error {
 		_, deleted, e := importProjectLock(ctx, tx, project)
 		if e != nil {
 			return e
@@ -228,7 +229,7 @@ func (s *Store) CancelCLIImport(ctx context.Context, project, id uuid.UUID) (CLI
 // operation deadline is checked under the same locks as Finalize/Cancel.
 func (s *Store) ExpireCLIImport(ctx context.Context, project, id uuid.UUID) (CLIImportOperation, error) {
 	var out CLIImportOperation
-	err := s.cliImportTx(ctx, func(tx pgx.Tx) error {
+	err := s.cliImportTx(ctx, func(tx *db.Tx) error {
 		_, deleted, e := importProjectLock(ctx, tx, project)
 		if e != nil {
 			return e
@@ -263,7 +264,7 @@ func (s *Store) ExpireCLIImport(ctx context.Context, project, id uuid.UUID) (CLI
 func (s *Store) FinalizeCLIImport(ctx context.Context, project, id, instance uuid.UUID, items []CLIImportPreparedItem, recheck func(context.Context) error) (CLIImportOperation, bool, error) {
 	var out CLIImportOperation
 	changed := false
-	err := s.cliImportTx(ctx, func(tx pgx.Tx) error {
+	err := s.cliImportTx(ctx, func(tx *db.Tx) error {
 		rev, deleted, e := importProjectLock(ctx, tx, project)
 		if e != nil {
 			return e
@@ -350,7 +351,7 @@ func (s *Store) FinalizeCLIImport(ctx context.Context, project, id, instance uui
 				results = append(results, result{v.CandidateID, account, version, "already_imported"})
 				continue
 			}
-			if e != pgx.ErrNoRows {
+			if e != db.ErrNoRows {
 				return e
 			}
 			if len(v.Secret) == 0 {
@@ -410,7 +411,7 @@ func (s *Store) RecoverCLIImports(ctx context.Context, instance uuid.UUID) error
 		return err
 	}
 	type pair struct{ p, id uuid.UUID }
-	pairs, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (pair, error) { var p pair; e := r.Scan(&p.p, &p.id); return p, e })
+	pairs, err := db.CollectRows(rows, func(r db.CollectableRow) (pair, error) { var p pair; e := r.Scan(&p.p, &p.id); return p, e })
 	if err != nil {
 		return err
 	}
@@ -433,7 +434,7 @@ func (s *Store) ExpireDueCLIImports(ctx context.Context, instance uuid.UUID) err
 		return err
 	}
 	type pair struct{ project, id uuid.UUID }
-	items, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (pair, error) { var p pair; e := r.Scan(&p.project, &p.id); return p, e })
+	items, err := db.CollectRows(rows, func(r db.CollectableRow) (pair, error) { var p pair; e := r.Scan(&p.project, &p.id); return p, e })
 	if err != nil {
 		return err
 	}
@@ -448,7 +449,7 @@ func (s *Store) ExpireDueCLIImports(ctx context.Context, instance uuid.UUID) err
 // TerminateProjectCLIImportsTx is configured by trusted App wiring after migration17.
 // The caller already holds the project row lock. It neither opens a transaction
 // nor swallows undefined-table errors; target16 fixtures simply must not wire it.
-func (s *Store) TerminateProjectCLIImportsTx(ctx context.Context, tx pgx.Tx, project uuid.UUID) error {
+func (s *Store) TerminateProjectCLIImportsTx(ctx context.Context, tx *db.Tx, project uuid.UUID) error {
 	if project == uuid.Nil {
 		return apperr.Invalid("projectId", "UUID不能为零")
 	}
@@ -456,7 +457,7 @@ func (s *Store) TerminateProjectCLIImportsTx(ctx context.Context, tx pgx.Tx, pro
 	if err != nil {
 		return err
 	}
-	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	ids, err := db.CollectRows(rows, db.RowTo[uuid.UUID])
 	if err != nil {
 		return err
 	}

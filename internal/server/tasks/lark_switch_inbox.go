@@ -4,8 +4,9 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/store"
+
+	"loop-now/internal/server/db"
 )
 
 // ReconcileTaskLarkInbox drains only persisted messages for their original
@@ -22,7 +23,7 @@ func (s *Service) ReconcileTaskLarkInbox(ctx context.Context, task uuid.UUID) er
 		if err != nil {
 			return nil, err
 		}
-		messages, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (store.NewInboxMessage, error) {
+		messages, err := db.CollectRows(rows, func(row db.CollectableRow) (store.NewInboxMessage, error) {
 			var msg store.NewInboxMessage
 			msg.To.Kind = "agent"
 			err := row.Scan(&msg.ID, &msg.To.RuntimeID, &msg.To.ID, &msg.WhenBusy)

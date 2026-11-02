@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"loop-now/internal/server/db"
+	"loop-now/internal/server/store"
 	"loop-now/internal/server/store/schema"
 )
 
@@ -23,6 +24,26 @@ func NewDB(t testing.TB) *db.DB {
 		t.Fatalf("迁移测试库失败：%v", err)
 	}
 	return d
+}
+
+// NewStore 返回一个已迁移、独立数据目录的 Store（对应原来的 pgtest.NewStore）。
+func NewStore(t testing.TB) *store.Store {
+	t.Helper()
+	return &store.Store{Pool: NewDB(t)}
+}
+
+// NewStoreIn 在给定数据目录打开并迁移 Store，供需要在同一目录重开库的测试使用；调用方负责关闭。
+func NewStoreIn(t testing.TB, dir string) *store.Store {
+	t.Helper()
+	s, err := store.Open(context.Background(), db.Options{Dir: dir})
+	if err != nil {
+		t.Fatalf("打开测试库失败：%v", err)
+	}
+	if err := s.Migrate(context.Background(), slog.New(slog.DiscardHandler)); err != nil {
+		s.Close()
+		t.Fatalf("迁移测试库失败：%v", err)
+	}
+	return s
 }
 
 // NewEmptyDB 返回一个没有任何表的库，供只测封装层或自建表的测试使用。

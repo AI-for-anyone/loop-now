@@ -357,7 +357,7 @@ func webDBStartGoogle(t *testing.T, w *world, helper *webDBGoogleHelper) *server
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, w.cfg.LogFormat, w.cfg.LogLevel), app.Options{SearchPath: w.schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLILoginHelper: helper, CLIRefresher: helper})
+	a, err := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, w.cfg.LogFormat, w.cfg.LogLevel), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLILoginHelper: helper, CLIRefresher: helper})
 	if err != nil {
 		ln.Close()
 		t.Fatal(err)

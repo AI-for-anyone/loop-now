@@ -1052,39 +1052,22 @@ func (s *Service) Hook(ctx context.Context, kind pluginhost.Kind, event map[stri
 	return s.Host.Call(ctx, kind, event, include)
 }
 
-// Listen 等待数据库里新事件的通知，唤醒投递协程；ctx 结束时返回。
+// Listen 唤醒投递协程；ctx 结束时返回。
+// SQLITE-PORT(G3): 原来由 PG 的 LISTEN/pg_notify 唤醒；G3 改为写事件的事务提交后（AfterCommit）直接唤醒，
+// 这里先每秒唤醒一次兜底。
 func (s *Service) Listen(ctx context.Context) {
 	if s.Host == nil {
 		return
 	}
-	for ctx.Err() == nil {
-		if err := s.listenOnce(ctx); err != nil && ctx.Err() == nil {
-			s.Log.Warn("监听插件事件通知失败，稍后重试", "err", err)
-			select {
-			case <-time.After(5 * time.Second):
-			case <-ctx.Done():
-			}
-		}
-	}
-}
-
-func (s *Service) listenOnce(ctx context.Context) error {
-	pc, err := s.Store.Pool.Acquire(ctx)
-	if err != nil {
-		return err
-	}
-	conn := pc.Hijack()
-	defer conn.Close(context.Background())
-	if _, err := conn.Exec(ctx, `LISTEN loop_now_plugin_events`); err != nil {
-		return err
-	}
-	// 连上之前可能已有事件写入：先唤醒一次。
-	s.Host.Notify()
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
 	for {
-		if _, err := conn.WaitForNotification(ctx); err != nil {
-			return err
-		}
 		s.Host.Notify()
+		select {
+		case <-t.C:
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 

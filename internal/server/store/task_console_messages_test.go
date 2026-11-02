@@ -5,13 +5,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/prompts"
@@ -20,42 +18,20 @@ import (
 	"loop-now/internal/server/taskruntime"
 	"loop-now/internal/server/tasks"
 	"loop-now/internal/server/workflow"
-	"loop-now/internal/testutil/pgtest"
+
+	"loop-now/internal/server/db"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
-// Own schema only. No stale-schema sweep, Redis, helper, Pi or external network.
 func taskConsoleStore(t *testing.T) *store.Store { return taskConsoleStoreAt(t, 0) }
 
-// taskConsoleStoreAt stops at ceiling (0: latest); 026 cannot be rolled back.
+// taskConsoleStoreAt 原来可以停在某个 PG 迁移版本；SQLite 只有基线，ceiling 非零的用例跳过。
 func taskConsoleStoreAt(t *testing.T, ceiling int64) *store.Store {
 	t.Helper()
-	ctx := context.Background()
-	url := pgtest.URL(t)
-	c, err := pgx.Connect(ctx, url)
-	if err != nil {
-		t.Fatal("TEST connection unavailable")
+	if ceiling > 0 {
+		t.Skip(noMigrationHistory)
 	}
-	schema := "task_console_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if _, err = c.Exec(ctx, `CREATE SCHEMA `+pgx.Identifier{schema}.Sanitize()); err != nil {
-		c.Close(ctx)
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		defer c.Close(ctx)
-		if _, err := c.Exec(ctx, `DROP SCHEMA `+pgx.Identifier{schema}.Sanitize()+` CASCADE`); err != nil {
-			t.Error(err)
-		}
-	})
-	s, err := store.Open(ctx, url, store.OpenOptions{SearchPath: schema})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(s.Close)
-	if err = migrateFixture(ctx, s, ceiling); err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("isolated schema=%s", schema)
-	return s
+	return sqlitetest.NewStore(t)
 }
 
 func taskConsoleRecord(t *testing.T, s *store.Store) (uuid.UUID, uuid.UUID, uuid.UUID, store.TaskTurn) {
@@ -85,7 +61,7 @@ func taskConsoleRecord(t *testing.T, s *store.Store) (uuid.UUID, uuid.UUID, uuid
 	}
 	n := taskmodel.NodeRun{ID: node, TaskID: id, StepID: "work", AgentID: a.ID, AgentName: a.Name, RuntimeID: runtime, Visit: 1, Attempt: 1, Status: "running", Inputs: map[string]any{}, InputVersions: []workflow.InputVersion{}, RunIDs: []uuid.UUID{}}
 	r := taskmodel.Record{View: taskmodel.Detail{Task: taskmodel.Summary{ID: id, ProjectID: d.Project.ID, Status: "preparing", Title: "fixture", Version: 1, CreatedAt: now, UpdatedAt: now, CurrentNodeRunID: &node}, Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "work", AgentID: a.ID}}, Edges: []workflow.Edge{}}, Nodes: []taskmodel.NodeRun{n}, Artifacts: []taskmodel.Artifact{}, Cleanup: "none"}, EdgeCounts: map[string]int{}}
-	_, err = s.CreateTask(ctx, d.Project.ID, a.ID, store.TaskAction{ActorKey: a.ID.String(), ID: uuid.New(), Operation: "fixture", Body: []byte(`{}`)}, func(pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) {
+	_, err = s.CreateTask(ctx, d.Project.ID, a.ID, store.TaskAction{ActorKey: a.ID.String(), ID: uuid.New(), Operation: "fixture", Body: []byte(`{}`)}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) {
 		return r, []store.TaskInstance{{ID: runtime, TaskID: id, AgentID: a.ID, AgentName: a.Name, Snapshot: encoded, Sources: []store.TaskFrozenSource{}, Prepared: true}}, nil
 	})
 	if err != nil {

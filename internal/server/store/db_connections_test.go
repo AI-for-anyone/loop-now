@@ -5,50 +5,29 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/clitemplate"
 	cm "loop-now/internal/server/credentialmodel"
 	"loop-now/internal/server/modelcredential"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
-	"strings"
 	"sync"
 	"testing"
+
+	"loop-now/internal/testutil/sqlitetest"
 )
 
-// Uses only a self-owned schema; never runs pgtest's stale-schema sweep.
 func dbConnectionFixture(t *testing.T) projectMigrationEnv { return dbConnectionFixtureAt(t, 0) }
 
-// dbConnectionFixtureAt stops at ceiling (0: latest); 026 cannot be rolled back.
+// dbConnectionFixtureAt 原来可以停在某个 PG 迁移版本；SQLite 只有基线，ceiling 非零的用例跳过。
 func dbConnectionFixtureAt(t *testing.T, ceiling int64) projectMigrationEnv {
 	t.Helper()
 	ctx := context.Background()
-	url := pgtest.URL(t)
-	conn, err := pgx.Connect(ctx, url)
-	if err != nil {
-		t.Fatal("TEST connection unavailable")
+	if ceiling > 0 {
+		t.Skip(noMigrationHistory)
 	}
-	schema := "db_connections_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if _, err = conn.Exec(ctx, `CREATE SCHEMA `+pgx.Identifier{schema}.Sanitize()); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		defer conn.Close(ctx)
-		if _, err := conn.Exec(ctx, `DROP SCHEMA `+pgx.Identifier{schema}.Sanitize()+` CASCADE`); err != nil {
-			t.Error(err)
-		}
-	})
-	st, err := store.Open(ctx, url, store.OpenOptions{SearchPath: schema})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(st.Close)
+	st := sqlitetest.NewStore(t)
 	templates, err := clitemplate.Load("")
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err = migrateFixture(ctx, st, ceiling); err != nil {
 		t.Fatal(err)
 	}
 	defaults, err := st.EnsureDefaults(ctx, "组织", "项目")

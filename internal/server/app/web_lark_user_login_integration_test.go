@@ -129,7 +129,7 @@ func TestWebLarkUserLoginIntegration(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	a, e := app.Build(ctx, &w.cfg, config.NewLogger(io.Discard, w.cfg.LogFormat, w.cfg.LogLevel), app.Options{SearchPath: w.schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, LarkLoginHelper: p.Client})
+	a, e := app.Build(ctx, &w.cfg, config.NewLogger(io.Discard, w.cfg.LogFormat, w.cfg.LogLevel), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, LarkLoginHelper: p.Client})
 	if e != nil {
 		ln.Close()
 		t.Fatal(e)

@@ -3,11 +3,12 @@ package store
 import (
 	"context"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	cm "loop-now/internal/server/credentialmodel"
 	"loop-now/internal/server/modelcredential"
 	"loop-now/internal/server/prompts"
+
+	"loop-now/internal/server/db"
 )
 
 // ExecutionIdentity captures configuration and credential identity under the
@@ -26,7 +27,7 @@ type ExecutionIdentity struct {
 
 func (s *Store) CaptureExecutionIdentity(ctx context.Context, agentID uuid.UUID) (ExecutionIdentity, error) {
 	var out ExecutionIdentity
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var err error
 		var projectID *uuid.UUID
 		if err = tx.QueryRow(ctx, `SELECT project_id FROM agents WHERE id=$1 AND deleted_at IS NULL`, agentID).Scan(&projectID); err != nil {
@@ -52,7 +53,7 @@ func (s *Store) CaptureExecutionIdentity(ctx context.Context, agentID uuid.UUID)
 		if e != nil {
 			return e
 		}
-		out.CLIs, e = pgx.CollectRows(cliRows, pgx.RowTo[string])
+		out.CLIs, e = db.CollectRows(cliRows, db.RowTo[string])
 		if e != nil {
 			return e
 		}
@@ -71,7 +72,7 @@ func (s *Store) CaptureExecutionIdentity(ctx context.Context, agentID uuid.UUID)
 		}
 		var version *uuid.UUID
 		err = tx.QueryRow(ctx, `SELECT version_id FROM agent_model_auth WHERE agent_id=$1`, agentID).Scan(&version)
-		if err != nil && err != pgx.ErrNoRows {
+		if err != nil && err != db.ErrNoRows {
 			return err
 		}
 		out.ModelAuthManaged = err == nil
@@ -89,7 +90,7 @@ func (s *Store) CaptureExecutionIdentity(ctx context.Context, agentID uuid.UUID)
 		if err != nil {
 			return err
 		}
-		out.CredentialRows, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (CredentialRow, error) {
+		out.CredentialRows, err = db.CollectRows(rows, func(r db.CollectableRow) (CredentialRow, error) {
 			var c CredentialRow
 			err := r.Scan(&c.ID, &c.AgentID, &c.Purpose, &c.CLIName, &c.TemplateVersion, &c.TemplateSource, &c.Secret, &c.FieldNames, &c.EnvNames, &c.FilePaths, &c.UpdatedAt)
 			return c, err

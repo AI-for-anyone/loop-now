@@ -9,8 +9,9 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
+
+	"loop-now/internal/server/db"
 )
 
 // TaskLarkFenceMember is an internal, already validated reservation member.
@@ -54,7 +55,7 @@ func (s *Store) ReserveTaskLarkFenceTx(ctx context.Context, m *TaskMutation, in 
 		}
 		return false, nil
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
+	if !errors.Is(err, db.ErrNoRows) {
 		return false, err
 	}
 	n := m.Record.Current()
@@ -154,7 +155,7 @@ func (s *Store) DeferTaskLarkInboxTx(ctx context.Context, m *TaskMutation, messa
 	var actor string
 	var action uuid.UUID
 	err := m.Tx.QueryRow(ctx, `SELECT actor_key,action_id FROM task_lark_switch_fences WHERE task_id=$1 AND runtime_id=$2`, m.Record.View.Task.ID, runtime).Scan(&actor, &action)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, db.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {

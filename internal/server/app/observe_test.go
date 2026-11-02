@@ -20,8 +20,8 @@ import (
 
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/config"
+	"loop-now/internal/server/db"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
 )
 
 type timelineEntry struct {
@@ -209,7 +209,7 @@ func TestRecordFailureDoesNotAffectRun(t *testing.T) {
 	w.logTo = logs
 	s := w.start(nil)
 	defer s.stop()
-	st, err := store.Open(context.Background(), pgtest.URL(t), store.OpenOptions{SearchPath: w.schema})
+	st, err := store.Open(context.Background(), db.Options{Dir: config.DBDir(w.cfg.DataDir)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +299,7 @@ func TestServerLogs(t *testing.T) {
 	}
 
 	// 接口内部出错：错误日志带请求编号，与响应头一致。
-	st, err := store.Open(context.Background(), pgtest.URL(t), store.OpenOptions{SearchPath: w.schema})
+	st, err := store.Open(context.Background(), db.Options{Dir: config.DBDir(w.cfg.DataDir)})
 	if err != nil {
 		t.Fatal(err)
 	}

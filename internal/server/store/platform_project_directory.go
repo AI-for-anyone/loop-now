@@ -4,7 +4,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
+
+	"loop-now/internal/server/db"
 )
 
 // PlatformProjectDirectoryItem deliberately does not embed Project or Agent:
@@ -37,7 +38,7 @@ func (s *Store) ListPlatformProjectDirectory(ctx context.Context) ([]PlatformPro
 	if err != nil {
 		return nil, err
 	}
-	items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (PlatformProjectDirectoryItem, error) {
+	items, err := db.CollectRows(rows, func(row db.CollectableRow) (PlatformProjectDirectoryItem, error) {
 		var item PlatformProjectDirectoryItem
 		var managerID *uuid.UUID
 		var managerName *string

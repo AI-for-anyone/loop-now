@@ -22,7 +22,8 @@ import (
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/modelcredential"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 // Actual CLI/RPC and native Pi credential storage; the model stream and refresh
@@ -38,7 +39,7 @@ func TestActualPiRPCUsesPGCoordinatorAcrossTwoProcessesAndLongRound(t *testing.T
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	st := pgtest.NewStore(t)
+	st := sqlitetest.NewStore(t)
 	_, err := st.EnsureDefaults(ctx, "认证测试组织", "认证测试项目")
 	if err != nil {
 		t.Fatal(err)

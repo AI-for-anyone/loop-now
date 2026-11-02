@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
@@ -30,6 +29,8 @@ import (
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/taskruntime"
 	"loop-now/internal/server/workflow"
+
+	"loop-now/internal/server/db"
 )
 
 type Options struct {
@@ -153,7 +154,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 		return nil, apperr.Forbidden("只有当前项目Manager可创建任务")
 	}
 	action := bodyAction(p, in.ActionID, "createTask", in)
-	out, err := s.Store.CreateTask(ctx, *a.ProjectID, p.ID, *action, func(tx pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) {
+	out, err := s.Store.CreateTask(ctx, *a.ProjectID, p.ID, *action, func(tx *db.Tx) (taskmodel.Record, []store.TaskInstance, error) {
 
 		id := uuid.Must(uuid.NewV7())
 		if in.SourceInboxMessageID != nil {

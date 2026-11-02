@@ -1,4 +1,4 @@
-// Package pgtest 为组件测试提供隔离的 PostgreSQL 环境：
+// Package pgtest 为迁移到 SQLite 期间的 parity 与导入测试提供隔离的 PostgreSQL 环境：
 // 每次调用在测试库 loop_now_test 中创建独立 schema，测试结束后删除。
 // 只操作 LOOP_NOW_TEST_DATABASE_URL 指向的数据库，不触碰其他库。
 package pgtest
@@ -18,8 +18,12 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"loop-now/internal/server/store"
+	"loop-now/internal/server/store/pgschema"
 	"loop-now/internal/testutil/testenv"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/jackc/pgx/v5/stdlib"
 )
 
 // EnvTestDatabaseURL 指向测试库。
@@ -75,19 +79,28 @@ func NewSchema(t testing.TB) string {
 	return name
 }
 
-// NewStore 创建独立 schema、执行迁移，并返回连接到该 schema 的 Store。
-func NewStore(t testing.TB) *store.Store {
+// NewMigratedPool 创建独立 schema、执行全部 PostgreSQL 迁移，并返回连接到该 schema 的连接池。
+// 迁移到 SQLite 期间只给 parity 测试与导入器测试使用。
+func NewMigratedPool(t testing.TB) *pgxpool.Pool {
 	t.Helper()
+	ctx := context.Background()
 	schema := NewSchema(t)
-	s, err := store.Open(context.Background(), URL(t), store.OpenOptions{SearchPath: schema})
+	cfg, err := pgxpool.ParseConfig(URL(t))
+	if err != nil {
+		t.Fatalf("解析测试库连接串失败：%v", err)
+	}
+	cfg.ConnConfig.RuntimeParams["search_path"] = schema
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		t.Fatalf("打开测试库失败：%v", err)
 	}
-	t.Cleanup(s.Close)
-	if err := s.Migrate(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
+	t.Cleanup(pool.Close)
+	sqlDB := stdlib.OpenDBFromPool(pool)
+	defer sqlDB.Close()
+	if err := pgschema.Migrate(ctx, sqlDB, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
 		t.Fatalf("迁移测试 schema 失败：%v", err)
 	}
-	return s
+	return pool
 }
 
 // sweepStale 删除超过 24 小时的遗留测试 schema（只匹配 t_<unix>_<hex> 格式）。

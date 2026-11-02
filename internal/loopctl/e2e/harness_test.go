@@ -61,7 +61,7 @@ func newWorld(t *testing.T, external bool) *world {
 	t.Setenv("FAKEPI_DUMP", dump)
 	w := &world{t: t, schema: schema, dump: dump, external: external, cfg: config.Config{
 		TaskMaxSteps: 100, TaskMaxEdges: 300, TaskMaxVisits: 1000, TaskMaxRequest: 1 << 20, TaskMaxArtifact: 20 << 20, TaskMaxSession: 100 << 20, TaskReconcileInterval: 100 * time.Millisecond, TaskEventPoll: 10 * time.Millisecond, TaskRecordTimeout: time.Second,
-		DatabaseURL: pgtest.URL(t), RedisURL: redistest.URL(t),
+		DataDir: t.TempDir(), RedisURL: redistest.URL(t),
 		ListenAddr: "127.0.0.1:0", AllowedHosts: []string{"localhost", "127.0.0.1", "::1"}, ConsoleOrigins: []string{"http://localhost:5173"},
 		WorkRoot: filepath.Join(t.TempDir(), "work"), RedisKeyPrefix: prefix, DefaultOrgName: "默认组织", DefaultProjectName: "默认项目",
 		PiBin: fakepibin.Path(t), PiVersion: "1.1.0", PiMaxProcesses: 2, PiIdleTimeout: time.Minute, PiStartTimeout: 10 * time.Second,
@@ -110,7 +110,7 @@ func (w *world) start(mutate func(c *config.Config)) *server {
 		w.t.Fatalf("监听 %s 失败：%v", addr, err)
 		return nil
 	}
-	o := app.Options{SearchPath: w.schema, Listener: listen(w.addr), HomeDirs: []string{"/nonexistent-home"}}
+	o := app.Options{Listener: listen(w.addr), HomeDirs: []string{"/nonexistent-home"}}
 	if w.external {
 		o.ExternalListener = listen(w.extAddr)
 	}

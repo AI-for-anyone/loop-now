@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/clicredential"
 	cm "loop-now/internal/server/credentialmodel"
 	"math"
 	"time"
+
+	"loop-now/internal/server/db"
 )
 
 type LarkCLIGrant struct {
@@ -22,7 +23,7 @@ type LarkCLIGrant struct {
 	ErrorCode             *string
 }
 
-func larkGrantTx(ctx context.Context, tx pgx.Tx, b clicredential.LarkBinding, write, finish bool) (LarkCLIGrant, error) {
+func larkGrantTx(ctx context.Context, tx *db.Tx, b clicredential.LarkBinding, write, finish bool) (LarkCLIGrant, error) {
 	var r LarkCLIGrant
 	if !b.Valid() {
 		return r, errors.New("Lark授权绑定无效")
@@ -45,12 +46,12 @@ func larkGrantTx(ctx context.Context, tx pgx.Tx, b clicredential.LarkBinding, wr
 }
 func (s *Store) GetLarkCLIGrant(ctx context.Context, b clicredential.LarkBinding) (LarkCLIGrant, error) {
 	var r LarkCLIGrant
-	e := s.inTx(ctx, func(tx pgx.Tx) error { var e error; r, e = larkGrantTx(ctx, tx, b, false, false); return e })
+	e := s.inTx(ctx, func(tx *db.Tx) error { var e error; r, e = larkGrantTx(ctx, tx, b, false, false); return e })
 	return r, e
 }
 func (s *Store) ClaimLarkCLIRefresh(ctx context.Context, b clicredential.LarkBinding, generation int64, lease uuid.UUID, until time.Time) (bool, error) {
 	claimed := false
-	e := s.inTx(ctx, func(tx pgx.Tx) error {
+	e := s.inTx(ctx, func(tx *db.Tx) error {
 		r, e := larkGrantTx(ctx, tx, b, true, false)
 		if e != nil {
 			return e
@@ -73,7 +74,7 @@ func (s *Store) ClaimLarkCLIRefresh(ctx context.Context, b clicredential.LarkBin
 	return claimed, e
 }
 func (s *Store) CommitLarkCLIRefresh(ctx context.Context, b clicredential.LarkBinding, generation int64, lease uuid.UUID, secret []byte) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		r, e := larkGrantTx(ctx, tx, b, true, true)
 		if e != nil {
 			return e
@@ -107,7 +108,7 @@ func (s *Store) FailLarkCLIRefresh(ctx context.Context, b clicredential.LarkBind
 	default:
 		code = "refresh_failed"
 	}
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := larkGrantTx(ctx, tx, b, true, true); e != nil {
 			return e
 		}

@@ -50,13 +50,13 @@ type column struct {
 }
 
 func TestBaselineMatchesPostgres(t *testing.T) {
-	pg := pgtest.NewStore(t)
+	pg := pgtest.NewMigratedPool(t)
 	lite := sqlitetest.NewDB(t)
 	ctx := context.Background()
 
 	// ---- PostgreSQL ----
 	pgCols := map[string][]column{}
-	rows, err := pg.Pool.Query(ctx, `SELECT c.table_name, c.column_name, c.data_type, c.is_nullable = 'NO', c.column_default IS NOT NULL, c.is_generated = 'ALWAYS'
+	rows, err := pg.Query(ctx, `SELECT c.table_name, c.column_name, c.data_type, c.is_nullable = 'NO', c.column_default IS NOT NULL, c.is_generated = 'ALWAYS'
 		FROM information_schema.columns c JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name
 		WHERE c.table_schema = current_schema() AND t.table_type = 'BASE TABLE' AND c.table_name NOT LIKE 'goose%'
 		ORDER BY c.table_name, c.ordinal_position`)
@@ -89,7 +89,7 @@ func TestBaselineMatchesPostgres(t *testing.T) {
 			WHERE r.relnamespace = current_schema()::regnamespace AND r.relname NOT LIKE 'goose%'
 			AND (NOT EXISTS (SELECT 1 FROM pg_constraint k WHERE k.conindid = i.indexrelid) OR i.indnullsnotdistinct)`},
 	} {
-		rows, err := pg.Pool.Query(ctx, q.sql)
+		rows, err := pg.Query(ctx, q.sql)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -114,7 +114,7 @@ func TestBaselineMatchesPostgres(t *testing.T) {
 			t.Fatal(err)
 		}
 		var c column
-		if err := db.ForEachRow(rows, []any{&c.name, &c.typ, &c.notNull, &c.hasDefault, &c.generated, &c.pk}, func() error {
+		if _, err := db.ForEachRow(rows, []any{&c.name, &c.typ, &c.notNull, &c.hasDefault, &c.generated, &c.pk}, func() error {
 			liteCols[table] = append(liteCols[table], c)
 			return nil
 		}); err != nil {

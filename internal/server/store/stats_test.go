@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 type statsSeed struct {
@@ -93,7 +93,7 @@ func near(got *float64, want float64) bool { return got != nil && math.Abs(*got-
 // percentiles over console runs (queue time included), and lists pending
 // questions regardless of the window; deleted agents never count.
 func TestStatsAttributionWaitAndPendingQuestions(t *testing.T) {
-	s := pgtest.NewStore(t)
+	s := sqlitetest.NewStore(t)
 	ctx := context.Background()
 	dc, err := s.EnsureDefaults(ctx, "org", "project")
 	if err != nil {

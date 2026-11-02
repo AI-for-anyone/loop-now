@@ -17,7 +17,7 @@ import (
 	"loop-now/internal/pluginmanifest"
 	"loop-now/internal/server/pluginhost"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 type hostEnv struct {
@@ -31,7 +31,7 @@ type hostEnv struct {
 // newHostEnv 建一个迁移好的测试库，登记 specs 里的插件，并准备以假宿主运行的监护（尚未 Start）。
 func newHostEnv(t *testing.T, mode string, specs []pluginhost.Spec, tune func(*pluginhost.Options)) *hostEnv {
 	t.Helper()
-	e := &hostEnv{t: t, st: pgtest.NewStore(t), journal: filepath.Join(t.TempDir(), "journal.jsonl"), specs: specs}
+	e := &hostEnv{t: t, st: sqlitetest.NewStore(t), journal: filepath.Join(t.TempDir(), "journal.jsonl"), specs: specs}
 	for _, s := range specs {
 		e.exec(`INSERT INTO plugins(id,display_name,source,version,manifest,install_dir,status) VALUES($1,$1,'{}','1.0.0','{}','/x','installed')`, s.ID)
 	}

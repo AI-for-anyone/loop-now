@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+
+	"loop-now/internal/server/db"
 )
 
 // 运行记录事件的类型（lifecycle_events.type）。
@@ -90,7 +90,7 @@ type ModelRef struct {
 }
 
 type execer interface {
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Exec(ctx context.Context, sql string, args ...any) (db.Result, error)
 }
 
 // insertEvent 写入一条事件；At 为零时取当前时间。可以在事务中调用。
@@ -152,7 +152,7 @@ func (s *Store) queryEvents(ctx context.Context, sql string, args ...any) ([]Lif
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (LifecycleEvent, error) {
+	return db.CollectRows(rows, func(row db.CollectableRow) (LifecycleEvent, error) {
 		var ev LifecycleEvent
 		var raw []byte
 		if err := row.Scan(&ev.ID, &ev.At, &ev.AgentID, &ev.RunID, &ev.Type, &raw); err != nil {
@@ -166,7 +166,7 @@ func (s *Store) queryEvents(ctx context.Context, sql string, args ...any) ([]Lif
 const usageColumns = `id, at, agent_id, run_id, kind, coalesce(provider, ''), coalesce(model, ''), coalesce(response_model, ''),
 	coalesce(stop_reason, ''), input, output, cache_read, cache_write, reasoning, total, duration_ms`
 
-func scanUsage(row pgx.Row) (UsageRecord, error) {
+func scanUsage(row db.Scanner) (UsageRecord, error) {
 	var u UsageRecord
 	err := row.Scan(&u.ID, &u.At, &u.AgentID, &u.RunID, &u.Kind, &u.Provider, &u.Model, &u.ResponseModel,
 		&u.StopReason, &u.Input, &u.Output, &u.CacheRead, &u.CacheWrite, &u.Reasoning, &u.Total, &u.DurationMs)
@@ -179,7 +179,7 @@ func (s *Store) RunUsage(ctx context.Context, runID uuid.UUID) ([]UsageRecord, e
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (UsageRecord, error) { return scanUsage(r) })
+	return db.CollectRows(rows, func(r db.CollectableRow) (UsageRecord, error) { return scanUsage(r) })
 }
 
 // AgentUsage 返回一个 Agent 的全部用量记录，按时间排序（测试与排查用）。
@@ -188,7 +188,7 @@ func (s *Store) AgentUsage(ctx context.Context, agentID uuid.UUID) ([]UsageRecor
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (UsageRecord, error) { return scanUsage(r) })
+	return db.CollectRows(rows, func(r db.CollectableRow) (UsageRecord, error) { return scanUsage(r) })
 }
 
 // usageFor 返回各执行的用量合计，以及最后一次 assistant 调用的提供方与模型。

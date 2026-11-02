@@ -9,9 +9,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/taskmodel"
+
+	"loop-now/internal/server/db"
 )
 
 // PublishTaskLarkSwitchTx is the persistence half of final phase C. The caller
@@ -104,7 +105,7 @@ func (s *Store) PublishTaskLarkSwitchTx(ctx context.Context, m *TaskMutation, ac
 		if err != nil {
 			return 0, false, err
 		}
-		sleeps, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Sleep, error) { return scanSleep(row) })
+		sleeps, err := db.CollectRows(rows, func(row db.CollectableRow) (Sleep, error) { return scanSleep(row) })
 		if err != nil {
 			return 0, false, err
 		}

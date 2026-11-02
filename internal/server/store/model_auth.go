@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"loop-now/internal/server/apperr"
+
+	"loop-now/internal/server/db"
 )
 
 // ErrModelAuthBusy indicates an Agent already has a nonterminal login operation.
@@ -44,12 +44,12 @@ const modelAuthVersionColumns = `id,coalesce(agent_id,'00000000-0000-0000-0000-0
 const modelAuthOperationColumns = `id,agent_id,provider,config_version,status,authorization_url,error_code,started_at,expires_at,completed_at`
 const modelAuthActive = `('pending','awaiting_authorization')`
 
-func scanModelAuthVersion(row pgx.Row) (ModelAuthVersion, error) {
+func scanModelAuthVersion(row db.Scanner) (ModelAuthVersion, error) {
 	var v ModelAuthVersion
 	err := row.Scan(&v.ID, &v.AgentID, &v.Provider, &v.AuthMethod, &v.AccountLabel, &v.Secret, &v.Generation, &v.RefreshState, &v.RefreshAttemptID, &v.RefreshStartedAt, &v.ErrorCode, &v.CreatedAt, &v.UpdatedAt, &v.ProjectAccountID)
 	return v, err
 }
-func scanModelAuthOperation(row pgx.Row) (ModelAuthOperation, error) {
+func scanModelAuthOperation(row db.Scanner) (ModelAuthOperation, error) {
 	var o ModelAuthOperation
 	err := row.Scan(&o.ID, &o.AgentID, &o.Provider, &o.ConfigVersion, &o.Status, &o.AuthorizationURL, &o.ErrorCode, &o.StartedAt, &o.ExpiresAt, &o.CompletedAt)
 	return o, err
@@ -69,7 +69,7 @@ func validateModelAuthAgent(a Agent, provider string, expected *int64) error {
 
 func (s *Store) NewModelAuthOperation(ctx context.Context, agentID uuid.UUID, provider string, expectedConfigVersion int64, expiresAt time.Time) (ModelAuthOperation, error) {
 	var o ModelAuthOperation
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		a, err := lockAgent(ctx, tx, agentID)
 		if err != nil {
 			return err
@@ -81,8 +81,7 @@ func (s *Store) NewModelAuthOperation(ctx context.Context, agentID uuid.UUID, pr
 			return err
 		}
 		o, err = scanModelAuthOperation(tx.QueryRow(ctx, `INSERT INTO model_auth_operations(id,agent_id,provider,config_version,expires_at) VALUES($1,$2,$3,$4,$5) RETURNING `+modelAuthOperationColumns, uuid.Must(uuid.NewV7()), agentID, provider, expectedConfigVersion, expiresAt))
-		var pe *pgconn.PgError
-		if errors.As(err, &pe) && pe.Code == "23505" && pe.ConstraintName == "model_auth_operations_one_active" {
+		if isUniqueViolation(err, "model_auth_operations_one_active") {
 			return ErrModelAuthBusy
 		}
 		return err
@@ -95,7 +94,7 @@ func (s *Store) GetModelAuthOperation(ctx context.Context, agentID, operationID 
 }
 func (s *Store) LatestModelAuthOperation(ctx context.Context, agentID uuid.UUID) (*ModelAuthOperation, error) {
 	o, err := scanModelAuthOperation(s.Pool.QueryRow(ctx, `SELECT `+modelAuthOperationColumns+` FROM model_auth_operations WHERE agent_id=$1 ORDER BY started_at DESC,id DESC LIMIT 1`, agentID))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, db.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -105,7 +104,7 @@ func (s *Store) LatestModelAuthOperation(ctx context.Context, agentID uuid.UUID)
 }
 func (s *Store) SetModelAuthOperationURL(ctx context.Context, operationID uuid.UUID, url string) (ModelAuthOperation, error) {
 	var o ModelAuthOperation
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var err error
 		o, err = scanModelAuthOperation(tx.QueryRow(ctx, `SELECT `+modelAuthOperationColumns+` FROM model_auth_operations WHERE id=$1 FOR UPDATE`, operationID))
 		if err != nil {
@@ -119,7 +118,7 @@ func (s *Store) SetModelAuthOperationURL(ctx context.Context, operationID uuid.U
 	})
 	return o, err
 }
-func endModelAuthOperation(ctx context.Context, tx pgx.Tx, id uuid.UUID, status, code string) (ModelAuthOperation, error) {
+func endModelAuthOperation(ctx context.Context, tx *db.Tx, id uuid.UUID, status, code string) (ModelAuthOperation, error) {
 	return scanModelAuthOperation(tx.QueryRow(ctx, `UPDATE model_auth_operations SET status=$2,error_code=$3,authorization_url=NULL,completed_at=clock_timestamp() WHERE id=$1 RETURNING `+modelAuthOperationColumns, id, status, nullIfEmpty(code)))
 }
 func (s *Store) EndModelAuthOperation(ctx context.Context, operationID uuid.UUID, status, code string) (ModelAuthOperation, error) {
@@ -127,7 +126,7 @@ func (s *Store) EndModelAuthOperation(ctx context.Context, operationID uuid.UUID
 		return ModelAuthOperation{}, apperr.Invalid("status", "非法登录终态")
 	}
 	var o ModelAuthOperation
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var err error
 		o, err = scanModelAuthOperation(tx.QueryRow(ctx, `SELECT `+modelAuthOperationColumns+` FROM model_auth_operations WHERE id=$1 FOR UPDATE`, operationID))
 		if err != nil {
@@ -143,11 +142,11 @@ func (s *Store) EndModelAuthOperation(ctx context.Context, operationID uuid.UUID
 }
 
 // insertModelAuthVersion stores a new account version before switching the pointer.
-func insertModelAuthVersion(ctx context.Context, tx pgx.Tx, agentID uuid.UUID, provider, method string, label *string, secret []byte) (ModelAuthVersion, error) {
+func insertModelAuthVersion(ctx context.Context, tx *db.Tx, agentID uuid.UUID, provider, method string, label *string, secret []byte) (ModelAuthVersion, error) {
 	id := uuid.Must(uuid.NewV7())
 	return scanModelAuthVersion(tx.QueryRow(ctx, `INSERT INTO model_auth_versions(id,agent_id,provider,auth_method,account_label,secret) VALUES($1,$2,$3,$4,$5,$6) RETURNING `+modelAuthVersionColumns, id, agentID, provider, method, label, secret))
 }
-func setModelAuthPointer(ctx context.Context, tx pgx.Tx, agentID uuid.UUID, versionID *uuid.UUID) error {
+func setModelAuthPointer(ctx context.Context, tx *db.Tx, agentID uuid.UUID, versionID *uuid.UUID) error {
 	_, err := tx.Exec(ctx, `INSERT INTO agent_model_auth(agent_id,version_id) VALUES($1,$2) ON CONFLICT(agent_id) DO UPDATE SET version_id=excluded.version_id,updated_at=clock_timestamp()`, agentID, versionID)
 	if err != nil {
 		return err
@@ -157,7 +156,7 @@ func setModelAuthPointer(ctx context.Context, tx pgx.Tx, agentID uuid.UUID, vers
 func (s *Store) CompleteModelAuthOperation(ctx context.Context, operationID uuid.UUID, accountLabel *string, secret []byte) (ModelAuthOperation, *ModelAuthVersion, error) {
 	var o ModelAuthOperation
 	var v *ModelAuthVersion
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var agentID uuid.UUID
 		if err := tx.QueryRow(ctx, `SELECT agent_id FROM model_auth_operations WHERE id=$1`, operationID).Scan(&agentID); err != nil {
 			return notFoundIfNoRows(err, "模型登录操作")
@@ -210,7 +209,7 @@ func (s *Store) CompleteModelAuthOperation(ctx context.Context, operationID uuid
 }
 func (s *Store) PutModelAuthKey(ctx context.Context, agentID uuid.UUID, provider string, expectedConfigVersion *int64, secret []byte) (ModelAuthVersion, error) {
 	var v ModelAuthVersion
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		a, err := lockAgent(ctx, tx, agentID)
 		if err != nil {
 			return err
@@ -232,7 +231,7 @@ func (s *Store) PutModelAuthKey(ctx context.Context, agentID uuid.UUID, provider
 func (s *Store) CurrentModelAuthVersion(ctx context.Context, agentID uuid.UUID) (*ModelAuthVersion, bool, error) {
 	var id *uuid.UUID
 	err := s.Pool.QueryRow(ctx, `SELECT version_id FROM agent_model_auth WHERE agent_id=$1`, agentID).Scan(&id)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, db.ErrNoRows) {
 		return nil, false, nil
 	}
 	if err != nil {
@@ -253,7 +252,7 @@ func (s *Store) GetModelAuthVersion(ctx context.Context, versionID uuid.UUID) (M
 	return v, notFoundIfNoRows(err, "模型账号版本")
 }
 func (s *Store) ClearModelAuthVersion(ctx context.Context, agentID uuid.UUID) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		if a, err := lockAgent(ctx, tx, agentID); err != nil {
 			return err
 		} else if a.ProjectID != nil {
@@ -275,7 +274,7 @@ func (s *Store) FailModelAuthRefresh(ctx context.Context, versionID, attemptID u
 	return err
 }
 func (s *Store) RecoverModelAuth(ctx context.Context) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		if _, err := tx.Exec(ctx, `UPDATE model_auth_operations SET status='failed',error_code='server_restarted',authorization_url=NULL,completed_at=clock_timestamp() WHERE status IN `+modelAuthActive); err != nil {
 			return err
 		}

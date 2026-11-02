@@ -4,14 +4,15 @@ import (
 	"context"
 	"errors"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/clicredential"
 	"time"
+
+	"loop-now/internal/server/db"
 )
 
 // Lock project -> account -> operation -> grant/version. Finish is solely for
 // an existing exact lease; it never permits a cancelled operation to claim.
-func verificationGoogleGrantTx(ctx context.Context, tx pgx.Tx, b clicredential.VerificationGrantBinding, write, finish bool) (GoogleCLIGrant, error) {
+func verificationGoogleGrantTx(ctx context.Context, tx *db.Tx, b clicredential.VerificationGrantBinding, write, finish bool) (GoogleCLIGrant, error) {
 	var out GoogleCLIGrant
 	if !b.Valid() {
 		return out, errors.New("管理验证授权绑定无效")
@@ -62,7 +63,7 @@ func verificationGoogleGrantTx(ctx context.Context, tx pgx.Tx, b clicredential.V
 }
 func (s *Store) GetGoogleCLIVerificationGrant(ctx context.Context, b clicredential.VerificationGrantBinding) (GoogleCLIGrant, error) {
 	var out GoogleCLIGrant
-	e := s.inTx(ctx, func(tx pgx.Tx) error {
+	e := s.inTx(ctx, func(tx *db.Tx) error {
 		var e error
 		out, e = verificationGoogleGrantTx(ctx, tx, b, false, false)
 		return e
@@ -71,7 +72,7 @@ func (s *Store) GetGoogleCLIVerificationGrant(ctx context.Context, b clicredenti
 }
 func (s *Store) ClaimGoogleCLIVerificationRefresh(ctx context.Context, b clicredential.VerificationGrantBinding, generation int64, lease uuid.UUID, until time.Time) (bool, error) {
 	claimed := false
-	e := s.inTx(ctx, func(tx pgx.Tx) error {
+	e := s.inTx(ctx, func(tx *db.Tx) error {
 		r, e := verificationGoogleGrantTx(ctx, tx, b, true, false)
 		if e != nil {
 			return e
@@ -93,7 +94,7 @@ func (s *Store) ClaimGoogleCLIVerificationRefresh(ctx context.Context, b clicred
 	return claimed, e
 }
 func (s *Store) CommitGoogleCLIVerificationRefresh(ctx context.Context, b clicredential.VerificationGrantBinding, generation int64, lease uuid.UUID, secret []byte) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		r, e := verificationGoogleGrantTx(ctx, tx, b, true, true)
 		if e != nil {
 			return e
@@ -121,7 +122,7 @@ func (s *Store) FailGoogleCLIVerificationRefresh(ctx context.Context, b clicrede
 	default:
 		code = "refresh_failed"
 	}
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := verificationGoogleGrantTx(ctx, tx, b, true, true); e != nil {
 			return e
 		}

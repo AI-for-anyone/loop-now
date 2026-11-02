@@ -222,7 +222,7 @@ func TestCollectHelpers(t *testing.T) {
 		t.Fatal(err)
 	}
 	var v, sum int
-	if err := ForEachRow(rows, []any{&v}, func() error { sum += v; return nil }); err != nil || sum != 6 {
+	if res, err := ForEachRow(rows, []any{&v}, func() error { sum += v; return nil }); err != nil || sum != 6 || res.RowsAffected() != 3 {
 		t.Fatalf("ForEachRow: %d %v", sum, err)
 	}
 	if err := d.QueryRow(ctx, `SELECT 1 WHERE 0`).Scan(&v); !IsNoRows(err) {

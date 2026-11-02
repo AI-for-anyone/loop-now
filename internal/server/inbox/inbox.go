@@ -12,12 +12,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/coord"
+	"loop-now/internal/server/db"
 	"loop-now/internal/server/naming"
 	"loop-now/internal/server/store"
 )
@@ -437,7 +437,7 @@ func (s *Service) deliver(ctx context.Context, msg store.NewInboxMessage) (store
 		}
 	} else {
 		msg.WhenBusy = ""
-		err = s.St.InboxTx(ctx, func(tx pgx.Tx) error { return store.InsertInboxMessage(ctx, tx, msg) })
+		err = s.St.InboxTx(ctx, func(tx *db.Tx) error { return store.InsertInboxMessage(ctx, tx, msg) })
 	}
 	if apperr.Is(err, apperr.CodeTaskConflict) && msg.To.RuntimeID != uuid.Nil && s.Tasks != nil {
 		inst, e := s.St.TaskInstance(ctx, msg.To.RuntimeID)

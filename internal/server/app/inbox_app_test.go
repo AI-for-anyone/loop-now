@@ -157,7 +157,7 @@ func TestStartupRejectsLoopctlMismatch(t *testing.T) {
 	cfg := w.cfg
 	cfg.LoopctlDistDir = t.TempDir() // 没有与服务端同版本的产物
 	_, err := app.Build(context.Background(), &cfg, config.NewLogger(io.Discard, "text", cfg.LogLevel),
-		app.Options{SearchPath: w.schema, HomeDirs: []string{"/nonexistent-home"}})
+		app.Options{HomeDirs: []string{"/nonexistent-home"}})
 	if err == nil || !strings.Contains(err.Error(), buildinfo.Version()) {
 		t.Fatalf("没有同版本的 loopctl 产物时应拒绝启动，并给出服务端版本：%v", err)
 	}

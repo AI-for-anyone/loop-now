@@ -1,4 +1,4 @@
-package store
+package pgschema
 
 import (
 	"context"
@@ -81,7 +81,7 @@ CREATE UNIQUE INDEX project_model_auth_active_new ON project_model_auth_operatio
 CREATE UNIQUE INDEX project_model_auth_active_target ON project_model_auth_operations(target_account_id) WHERE target_account_id IS NOT NULL AND status IN('pending','awaiting_authorization');
 `
 
-func (s *Store) projectCredentialMigration() *goose.Migration {
+func projectCredentialMigration() *goose.Migration {
 	return goose.NewGoMigration(12, &goose.GoFunc{RunTx: func(ctx context.Context, tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, projectCredentialDDL); err != nil {
 			return err

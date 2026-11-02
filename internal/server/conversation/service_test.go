@@ -21,8 +21,8 @@ import (
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
 	"loop-now/internal/testutil/redistest"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 // fakeExec 是可控的执行器替身：消息中含 "block" 时阻塞，直到被放行或打断；
@@ -140,7 +140,7 @@ type env struct {
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	st := pgtest.NewStore(t)
+	st := sqlitetest.NewStore(t)
 	rdb, prefix := redistest.New(t)
 	co := coord.New(rdb, coord.Options{Prefix: prefix, LockTTL: 5 * time.Second, StreamMaxLen: 1000, RunTextTTL: time.Hour})
 	ctx := context.Background()

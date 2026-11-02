@@ -32,6 +32,7 @@ import (
 	"loop-now/internal/server/content"
 	"loop-now/internal/server/conversation"
 	"loop-now/internal/server/coord"
+	"loop-now/internal/server/db"
 	"loop-now/internal/server/executor/local"
 	"loop-now/internal/server/executor/local/pirpc"
 	"loop-now/internal/server/folders"
@@ -102,10 +103,6 @@ type Options struct {
 	LarkHTTPTransport http.RoundTripper
 	AuthLoginHelper   modelauth.LoginHelper
 	AuthRefresher     modelauth.Refresher
-	// SearchPath 非空时，数据库连接限定在该 schema（测试用）。
-	SearchPath string
-	// MigrationTarget is an explicit Go-only isolated fixture ceiling; production uses all migrations.
-	MigrationTarget int64
 	// Listener 非空时直接使用（测试用），否则按配置的监听地址监听。
 	Listener net.Listener
 	// ExternalListener 非空时作为对外端口的监听器（测试用，仍按配置的证书启用 TLS），否则按配置的对外监听地址监听。
@@ -138,7 +135,11 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	}
 
 	// 依赖检查。
-	if a.Store, err = store.Open(ctx, cfg.DatabaseURL, store.OpenOptions{SearchPath: o.SearchPath}); err != nil {
+	dbDir := config.DBDir(cfg.DataDir)
+	if err = os.MkdirAll(dbDir, 0o700); err != nil {
+		return a, fmt.Errorf("创建数据目录失败：%w", err)
+	}
+	if a.Store, err = store.Open(ctx, db.Options{Dir: dbDir, Logger: log}); err != nil {
 		return a, err
 	}
 	a.Store.InstanceID = &a.InstanceID
@@ -189,23 +190,16 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	if err != nil {
 		return a, err
 	}
-	if o.MigrationTarget > 0 {
-		err = a.Store.MigrateThrough(ctx, log, o.MigrationTarget)
-	} else {
-		err = a.Store.Migrate(ctx, log)
-	}
-	if err != nil {
+	if err = a.Store.Migrate(ctx, log); err != nil {
 		return a, err
 	}
-	if o.MigrationTarget == 0 || o.MigrationTarget >= 34 {
-		a.ModelSettings = &modelconfig.Service{Store: a.Store, Models: models, Options: modelOptions}
-		settings, reloadErr := a.ModelSettings.Reload(ctx)
-		if reloadErr != nil {
-			return a, fmt.Errorf("读取自定义模型配置失败：%w", reloadErr)
-		}
-		if settings.LoadError != "" {
-			log.Warn("自定义模型配置无效，已退回内置目录", "error", settings.LoadError)
-		}
+	a.ModelSettings = &modelconfig.Service{Store: a.Store, Models: models, Options: modelOptions}
+	settings, reloadErr := a.ModelSettings.Reload(ctx)
+	if reloadErr != nil {
+		return a, fmt.Errorf("读取自定义模型配置失败：%w", reloadErr)
+	}
+	if settings.LoadError != "" {
+		log.Warn("自定义模型配置无效，已退回内置目录", "error", settings.LoadError)
 	}
 	defaults, err := a.Store.EnsureDefaults(ctx, cfg.DefaultOrgName, cfg.DefaultProjectName)
 	if err != nil {
@@ -333,11 +327,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		username = u.Username
 	}
 	taskSource := &tasks.Source{ModelAuth: authCoordinator, Normal: a.Config, Store: a.Store, WorkRoot: res.WorkRoot, GitBin: res.GitBin, BasePath: res.ExecBasePath, MaxSessionBytes: cfg.TaskMaxSession, CloneTimeout: cfg.GitCloneTimeout, Templates: templates, Installer: installer}
-	// Production always enables the canonical task-switch resolver. Only an
-	// explicit pre-021 historical-schema fixture omits the module.
-	if o.MigrationTarget == 0 || o.MigrationTarget >= 21 {
-		taskSource.EnableLarkOverlay()
-	}
+	taskSource.EnableLarkOverlay()
 	taskSource.Log = log
 	taskSource.PluginAssets = a.pluginAssets
 	taskObserver := &tasks.Observer{Store: a.Store, Normal: recorder, Timeout: cfg.TaskRecordTimeout, Log: log}
@@ -363,18 +353,14 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	// remove stale PID records. Missing/invalid provenance fails closed.
 	var protectedLark []local.PendingRuntimeHandoff
 	var pendingLark []store.TaskLarkRecoveryAction
-	// Explicit historical-schema fixtures have no switch tables. Production
-	// always migrates fully and must never swallow a recovery-query failure.
-	if o.MigrationTarget == 0 || o.MigrationTarget >= 21 {
-		var readErr error
-		pendingLark, readErr = a.Store.PendingTaskLarkRecovery(ctx)
-		if readErr != nil {
-			return a, readErr
-		}
-		protectedLark, err = larkPendingHandoffs(pendingLark)
-		if err != nil {
-			return a, err
-		}
+	var readErr error
+	pendingLark, readErr = a.Store.PendingTaskLarkRecovery(ctx)
+	if readErr != nil {
+		return a, readErr
+	}
+	protectedLark, err = larkPendingHandoffs(pendingLark)
+	if err != nil {
+		return a, err
 	}
 	if err = a.Executor.CleanupStaleExceptPending(ctx, protectedLark); err != nil {
 		return a, err
@@ -428,26 +414,22 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		Config: a.Config, Conv: a.Conv, Models: models, Templates: templates, Installer: installer, Store: a.Store, Coord: a.Coord,
 		Tasks: a.Tasks, Records: &runrecord.Service{Store: a.Store}, Inbox: inboxSvc, Folders: a.Folders, Log: log,
 	}
-	if o.MigrationTarget == 0 || o.MigrationTarget >= 31 {
-		if err = a.assemblePlugins(cfg, res, log); err != nil {
-			return a, err
-		}
+	if err = a.assemblePlugins(cfg, res, log); err != nil {
+		return a, err
 	}
 	baseCtx, baseCancel := context.WithCancel(context.Background())
 	a.baseCancel = baseCancel
 	// 文件夹：中断的拉取标为失败、清空回收区；在任何 Pi 启动之前一次性回放退役文件夹来源中未落到磁盘的人工修改。
-	if o.MigrationTarget == 0 || o.MigrationTarget >= 29 {
-		if err = a.Folders.Start(ctx); err != nil {
-			return a, err
-		}
-		legacy, err := a.Folders.ApplyLegacyFolderSources(ctx)
-		if err != nil {
-			return a, fmt.Errorf("回放退役文件夹来源失败：%w", err)
-		}
-		if legacy.Sources > 0 || legacy.UnclonedGitDirs > 0 {
-			log.Info("已回放退役文件夹来源", "sources", legacy.Sources, "filesWritten", legacy.FilesWritten, "filesDeleted", legacy.FilesDeleted,
-				"filesSkipped", legacy.FilesSkipped, "unclonedGitSources", legacy.UnclonedGitDirs)
-		}
+	if err = a.Folders.Start(ctx); err != nil {
+		return a, err
+	}
+	legacy, err := a.Folders.ApplyLegacyFolderSources(ctx)
+	if err != nil {
+		return a, fmt.Errorf("回放退役文件夹来源失败：%w", err)
+	}
+	if legacy.Sources > 0 || legacy.UnclonedGitDirs > 0 {
+		log.Info("已回放退役文件夹来源", "sources", legacy.Sources, "filesWritten", legacy.FilesWritten, "filesDeleted", legacy.FilesDeleted,
+			"filesSkipped", legacy.FilesSkipped, "unclonedGitSources", legacy.UnclonedGitDirs)
 	}
 	for _, p := range local.AncestorEntryFiles(res.WorkRoot) {
 		log.Warn("工作根目录的上级目录中有上下文入口文件，Pi 会把它读进每个 Agent 的系统提示；请移走", "path", p)

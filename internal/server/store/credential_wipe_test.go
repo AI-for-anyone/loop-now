@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/dbcli"
@@ -21,7 +20,9 @@ import (
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/taskruntime"
 	"loop-now/internal/server/workflow"
-	"loop-now/internal/testutil/pgtest"
+
+	"loop-now/internal/server/db"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 type wipeFixture struct {
@@ -120,7 +121,7 @@ func (f wipeFixture) task(t *testing.T, agent store.Agent, clis []string, creds 
 	now := time.Now().UTC()
 	n := taskmodel.NodeRun{ID: node, TaskID: id, StepID: "work", AgentID: agent.ID, AgentName: agent.Name, RuntimeID: runtime, Visit: 1, Attempt: 1, Status: "queued", Inputs: map[string]any{}, InputVersions: []workflow.InputVersion{}, RunIDs: []uuid.UUID{}}
 	r := taskmodel.Record{View: taskmodel.Detail{Task: taskmodel.Summary{ID: id, ProjectID: f.project, Status: "preparing", Title: "fixture", Version: 1, CreatedAt: now, UpdatedAt: now, CurrentNodeRunID: &node}, Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "work", AgentID: agent.ID}}, Edges: []workflow.Edge{}}, Nodes: []taskmodel.NodeRun{n}, Artifacts: []taskmodel.Artifact{}, Cleanup: "none"}, EdgeCounts: map[string]int{}}
-	_, err = f.s.CreateTask(ctx, f.project, f.manager.ID, store.TaskAction{ActorKey: f.manager.ID.String(), ID: uuid.New(), Operation: "fixture", Body: []byte(`{}`)}, func(pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) {
+	_, err = f.s.CreateTask(ctx, f.project, f.manager.ID, store.TaskAction{ActorKey: f.manager.ID.String(), ID: uuid.New(), Operation: "fixture", Body: []byte(`{}`)}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) {
 		return r, []store.TaskInstance{{ID: runtime, TaskID: id, AgentID: agent.ID, AgentName: agent.Name, Snapshot: encoded, Sources: []store.TaskFrozenSource{}}}, nil
 	})
 	if err != nil {
@@ -321,15 +322,8 @@ func TestDeleteAccountWipesNowAndDefersVersionsOfUnfinishedTasks(t *testing.T) {
 	}
 	stillUsable(f.s)
 
-	// Restart: a new Store on the same schema, as after a server restart.
-	var schema string
-	if err := f.s.Pool.QueryRow(ctx, `SELECT current_schema()`).Scan(&schema); err != nil {
-		t.Fatal(err)
-	}
-	restarted, err := store.Open(ctx, pgtest.URL(t), store.OpenOptions{SearchPath: schema})
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Restart: a new Store on the same data directory, as after a server restart.
+	restarted := sqlitetest.NewStoreIn(t, f.s.Pool.Dir())
 	t.Cleanup(restarted.Close)
 	if err = restarted.SettleCredentialWipes(ctx); err != nil {
 		t.Fatal(err)

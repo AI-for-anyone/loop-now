@@ -19,7 +19,7 @@ import (
 	"loop-now/internal/server/content"
 	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 type fakeReleaser struct {
@@ -43,7 +43,7 @@ type env struct {
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	st := pgtest.NewStore(t)
+	st := sqlitetest.NewStore(t)
 	dc, err := st.EnsureDefaults(context.Background(), "默认组织", "默认项目")
 	if err != nil {
 		t.Fatal(err)

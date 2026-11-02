@@ -23,6 +23,8 @@ import (
 	"loop-now/internal/server/githubauth"
 	"loop-now/internal/server/githubauth/githubtest"
 	"loop-now/internal/server/store"
+
+	"loop-now/internal/server/db"
 )
 
 type githubCrashInput struct {
@@ -66,7 +68,7 @@ func TestGitHubCrashAppChild(t *testing.T) {
 	if err != nil {
 		os.Exit(52)
 	}
-	a, err := app.Build(context.Background(), &in.Config, config.NewLogger(io.Discard, "json", 0), app.Options{SearchPath: in.Schema, Listener: listener, HomeDirs: []string{"/nonexistent-home"}})
+	a, err := app.Build(context.Background(), &in.Config, config.NewLogger(io.Discard, "json", 0), app.Options{Listener: listener, HomeDirs: []string{"/nonexistent-home"}})
 	if err != nil {
 		os.Exit(53)
 	}
@@ -126,7 +128,7 @@ func TestGitHubActualAppSIGKILLCommitBoundary(t *testing.T) {
 			}
 			oldHash := sha256.Sum256(oldRow.Secret)
 			seed.stop()
-			observer, e := store.Open(context.Background(), w.cfg.DatabaseURL, store.OpenOptions{SearchPath: w.schema})
+			observer, e := store.Open(context.Background(), db.Options{Dir: config.DBDir(w.cfg.DataDir)})
 			if e != nil {
 				t.Fatal(e)
 			}

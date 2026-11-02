@@ -2,29 +2,20 @@ package store_test
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 func promptExpected(v int64) *int64 { return &v }
-func TestPromptMigrationAndCAS(t *testing.T) {
+func TestPromptLegacyAgentAndCAS(t *testing.T) {
 	ctx := context.Background()
-	schema := pgtest.NewSchema(t)
-	st, err := store.Open(ctx, pgtest.URL(t), store.OpenOptions{SearchPath: schema})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-	if err = st.MigrateUpTo(ctx, 8); err != nil {
-		t.Fatal(err)
-	}
+	st := sqlitetest.NewStore(t)
 	defaults, err := st.EnsureDefaults(ctx, "旧组织", "旧项目")
 	if err != nil {
 		t.Fatal(err)
@@ -32,9 +23,6 @@ func TestPromptMigrationAndCAS(t *testing.T) {
 	id := uuid.New()
 	original := "原始Prompt\n必须保留空白\n"
 	if _, err = st.Pool.Exec(ctx, `INSERT INTO agents(id,project_id,name,model_provider,model_id,prompt,config_version)VALUES($1,$2,'旧Agent','fixture','model',$3,8)`, id, defaults.Project.ID, original); err != nil {
-		t.Fatal(err)
-	}
-	if err = st.Migrate(ctx, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
 		t.Fatal(err)
 	}
 	a, err := st.GetAgent(ctx, id)
@@ -163,7 +151,7 @@ func TestPromptMigrationAndCAS(t *testing.T) {
 
 func TestPromptCaptureScopes(t *testing.T) {
 	ctx := context.Background()
-	st := pgtest.NewStore(t)
+	st := sqlitetest.NewStore(t)
 	dc, err := st.EnsureDefaults(ctx, "组织", "项目")
 	if err != nil {
 		t.Fatal(err)

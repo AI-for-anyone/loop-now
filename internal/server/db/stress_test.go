@@ -278,7 +278,7 @@ func TestStressCancellation(t *testing.T) {
 	found := 0
 	var id, wv int
 	var both bool
-	if err := ForEachRow(rows, []any{&id, &wv, &both}, func() error {
+	if _, err := ForEachRow(rows, []any{&id, &wv, &both}, func() error {
 		w := id / perWriter
 		if !acked[w][id] {
 			return fmt.Errorf("未确认的事务 %d 却在库里", id)
