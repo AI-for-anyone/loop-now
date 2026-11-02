@@ -15,7 +15,7 @@
 | `LOOP_NOW_PLUGIN_MARKET_URL` | 官方插件市场 `loop-now-market.json` 的 `https` 地址；默认为官方市场索引，可指向其他地址 |
 | `LOOP_NOW_PI_MAX_PROCESSES` | `0` 表示不限；正数限制本地 Pi 进程数量 |
 | `LOOP_NOW_PI_IDLE_TIMEOUT` | Pi 进程空闲回收超时；`10m` |
-| `LOOP_NOW_CONSOLE_ORIGINS` | 允许的浏览器来源；默认本地 5173 端口 |
+| `LOOP_NOW_CONSOLE_ORIGINS` | 允许跨源调用 API 的浏览器来源（Vite 开发服务器）；默认本地 5173 端口，`none` 表示一个都不允许。服务端自己提供的控制台是同源，不需要列出 |
 | `LOOP_NOW_LARK_USER_BUNDLE_DIR` | 可选的已验证飞书用户 CLI 包 |
 
 ## 数据目录与备份
@@ -36,7 +36,28 @@
 | --- | --- |
 | `LOOP_NOW_NODE_BIN` | 用于运行插件宿主的 Node 二进制路径 |
 | `LOOP_NOW_PI_BIN` | Pi 编码 Agent 二进制路径 |
-| `LOOP_NOW_LOOPCTL_DIST_DIR` | 存放配套版本 `loopctl` 发行包的目录 |
+| `LOOP_NOW_LOOPCTL_DIST_DIR` | 存放配套版本 `loopctl` 发行包的目录（发行包里默认取 `loop-server` 旁边的） |
+
+## 发行包与桌面壳
+
+发行包（`scripts/release/build.sh` 或 `release` 工作流产出）解开是一个目录：
+
+| 路径 | 内容 |
+| --- | --- |
+| `loop-server` | 内嵌控制台的服务端，在自己的端口上于 `/` 提供控制台 |
+| `loopctl-dist/` | 各平台的 `loopctl` |
+| `plugins/host/main.js`、`plugins/official/` | 插件宿主与官方插件 |
+| `runtime/node/` | Node 24.21.0（带 npm） |
+| `runtime/pi/` | 用这个 Node 安装的 Pi 编码 Agent 1.4.0 |
+
+`LOOP_NOW_NODE_BIN`、`LOOP_NOW_PI_BIN`、`LOOP_NOW_LOOPCTL_DIST_DIR`、`LOOP_NOW_PLUGIN_HOST_ENTRY`、`LOOP_NOW_PLUGIN_OFFICIAL_DIR` 没有设置、而 `loop-server` 旁边有对应文件时就用它们，机器上不必另装 Node 和 Pi。配置的 Node 所在目录排在 Agent 的 `PATH` 最前。
+
+| 变量 | 用途 |
+| --- | --- |
+| `LOOP_NOW_WEB_DIR` | 从这个目录提供控制台，代替内嵌的 |
+| `LOOP_NOW_READY_FILE` | 开始提供服务后把 `{"url","pid","version"}` 写到这个文件（退出时删除）；配合 `LOOP_NOW_LISTEN_ADDR=127.0.0.1:0` 得知端口。就绪检查：`GET <url>/healthz` |
+
+`loop-server` 的退出码：`0` 正常退出，`1` 其他启动失败或退出过程出错，`2` 配置有误，`3` 数据目录正被另一个实例使用，`4` 监听地址已被占用。
 
 ## 安全边界
 

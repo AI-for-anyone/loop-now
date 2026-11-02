@@ -15,7 +15,7 @@ All server options and defaults are defined in [`internal/server/config/config.g
 | `LOOP_NOW_PLUGIN_MARKET_URL` | `https` address of the official plugin market's `loop-now-market.json`; defaults to the official market index and can point elsewhere |
 | `LOOP_NOW_PI_MAX_PROCESSES` | `0` means unlimited; a positive value caps local Pi processes |
 | `LOOP_NOW_PI_IDLE_TIMEOUT` | Idle Pi process timeout; `10m` |
-| `LOOP_NOW_CONSOLE_ORIGINS` | Allowed browser origins; local port 5173 by default |
+| `LOOP_NOW_CONSOLE_ORIGINS` | Cross-origin browser origins allowed to call the API, for the Vite dev server; local port 5173 by default, `none` allows none. The console the server serves itself is same-origin and needs no entry |
 | `LOOP_NOW_LARK_USER_BUNDLE_DIR` | Optional verified Lark user CLI bundle |
 
 ## Data directory and backups
@@ -36,7 +36,28 @@ The database is SQLite: `data.db` holds platform state and credentials (in plain
 | --- | --- |
 | `LOOP_NOW_NODE_BIN` | Path of the Node binary used to run the plugin host |
 | `LOOP_NOW_PI_BIN` | Path of the Pi coding agent binary |
-| `LOOP_NOW_LOOPCTL_DIST_DIR` | Directory holding the matching-version `loopctl` distribution |
+| `LOOP_NOW_LOOPCTL_DIST_DIR` | Directory holding the matching-version `loopctl` distribution (a release bundle uses the one next to `loop-server`) |
+
+## Release bundle and desktop shell
+
+A release bundle (`scripts/release/build.sh`, or the `release` workflow) unpacks to one directory:
+
+| Path | Contents |
+| --- | --- |
+| `loop-server` | The server, with the console built in and served on its port at `/` |
+| `loopctl-dist/` | `loopctl` for every platform |
+| `plugins/host/main.js`, `plugins/official/` | Plugin host and official plugins |
+| `runtime/node/` | Node 24.21.0 with npm |
+| `runtime/pi/` | Pi coding agent 1.4.0 installed with that Node |
+
+When `LOOP_NOW_NODE_BIN`, `LOOP_NOW_PI_BIN`, `LOOP_NOW_LOOPCTL_DIST_DIR`, `LOOP_NOW_PLUGIN_HOST_ENTRY` or `LOOP_NOW_PLUGIN_OFFICIAL_DIR` is unset and the matching file sits next to `loop-server`, the server uses it, so the machine needs no Node or Pi of its own. The configured Node's directory comes first on the agents' `PATH`.
+
+| Variable | Purpose |
+| --- | --- |
+| `LOOP_NOW_WEB_DIR` | Serve the console from this directory instead of the built-in one |
+| `LOOP_NOW_READY_FILE` | Once serving, write `{"url","pid","version"}` to this file (removed on shutdown); use it with `LOOP_NOW_LISTEN_ADDR=127.0.0.1:0` to learn the port. Readiness: `GET <url>/healthz` |
+
+Exit codes of `loop-server`: `0` normal shutdown, `1` other startup failure or an error while shutting down, `2` invalid configuration, `3` the data directory is used by another instance, `4` a listen address is already in use.
 
 ## Security boundaries
 
