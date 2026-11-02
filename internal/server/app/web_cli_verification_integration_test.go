@@ -20,16 +20,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/app"
 	verifyservice "loop-now/internal/server/cliverify/service"
 	"loop-now/internal/server/config"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
 	"loop-now/internal/testutil/testenv"
+
+	"github.com/google/uuid"
 )
 
 // Web owns this file only. Native provider protocol acceptance belongs to the
@@ -37,14 +34,6 @@ import (
 func TestWebCLIVerificationIntegration(t *testing.T) {
 	if os.Getenv("LOOP_NOW_WEB_CLI_VERIFICATION_INTEGRATION") != "1" {
 		t.Skip("explicit isolated TEST App browser slice")
-	}
-	db, e := url.Parse(pgtest.URL(t))
-	if e != nil || !strings.HasSuffix(db.Path, "_test") {
-		t.Fatal("TEST database required")
-	}
-	ro, e := redis.ParseURL(redistest.URL(t))
-	if e != nil || ro.DB != 10 {
-		t.Fatal("TEST Redis DB10 required")
 	}
 	root := testenv.RepoRoot()
 	slice := os.Getenv("LOOP_NOW_WEB_CLI_VERIFICATION_SLICE")
@@ -57,7 +46,7 @@ func TestWebCLIVerificationIntegration(t *testing.T) {
 	}
 	runID := time.Now().UTC().Format("20060102T150405.000000000Z")
 	evidence := filepath.Join(root, "web/test-results/add-cli-credential-verification", folder, runID)
-	if e = os.MkdirAll(evidence, 0700); e != nil {
+	if e := os.MkdirAll(evidence, 0700); e != nil {
 		t.Fatal(e)
 	}
 	webCLIVerificationJSON(t, filepath.Join(root, "web/test-results/add-cli-credential-verification", "latest-"+folder+".json"), map[string]any{"runId": runID, "evidenceDir": evidence, "slice": slice})
@@ -79,29 +68,7 @@ func TestWebCLIVerificationIntegration(t *testing.T) {
 		if w == nil {
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		conn, e := pgx.Connect(ctx, pgtest.URL(t))
-		if e != nil {
-			t.Error("cleanup PG unavailable")
-			return
-		}
-		defer conn.Close(ctx)
-		var exists bool
-		e = conn.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)`, w.schema).Scan(&exists)
-		audit["schemaRemoved"] = e == nil && !exists
-		if e != nil || exists {
-			t.Error("TEST schema cleanup not verified")
-		}
-		rc := redis.NewClient(ro)
-		defer rc.Close()
-		it := rc.Scan(ctx, 0, w.cfg.RedisKeyPrefix+"*", 100).Iterator()
-		found := it.Next(ctx)
-		audit["redisPrefixEmpty"] = !found && it.Err() == nil
-		if found || it.Err() != nil {
-			t.Error("TEST prefix cleanup not verified")
-		}
-		_, e = os.Stat(w.cfg.WorkRoot)
+		_, e := os.Stat(w.cfg.WorkRoot)
 		audit["workRootRemoved"] = os.IsNotExist(e)
 		if !os.IsNotExist(e) {
 			t.Error("TEST work root cleanup not verified")
@@ -135,7 +102,7 @@ func TestWebCLIVerificationIntegration(t *testing.T) {
 	destinations := map[string]string{}
 	i := 0
 	for remote, file := range archives {
-		if _, e = os.Stat(file); e != nil {
+		if _, e := os.Stat(file); e != nil {
 			t.Fatal("fixed local public tool archive prerequisite missing")
 		}
 		i++
@@ -263,8 +230,7 @@ func TestWebCLIVerificationIntegration(t *testing.T) {
 	manifest := map[string]any{"apiBase": s.url, "webOrigin": "http://127.0.0.1:4320", "projectId": dc.Project.ID, "projectName": dc.Project.Name, "accounts": accountIDs, "controlDir": control, "evidenceDir": evidence, "slice": slice, "installTimeoutMs": w.cfg.CLIInstallTimeout.Milliseconds()}
 	manifestPath := filepath.Join(t.TempDir(), "web-verification-manifest.json")
 	webCLIVerificationJSON(t, manifestPath, manifest)
-	audit["schema"] = w.schema
-	audit["redisPrefix"] = w.cfg.RedisKeyPrefix
+	audit["dataDir"] = w.cfg.DataDir
 	audit["appStarted"] = true
 	webCLIVerificationJSON(t, filepath.Join(evidence, "app-ready.json"), map[string]any{"apiBase": s.url, "webOrigin": "http://127.0.0.1:4320", "boundary": "self-owned TEST App; synthetic accounts; no current service"})
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)

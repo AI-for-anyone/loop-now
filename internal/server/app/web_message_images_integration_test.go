@@ -80,7 +80,6 @@ func TestWebMessageImagesIntegration(t *testing.T) {
 	if e = s.a.Store.Pool.QueryRow(ctx, `SELECT count(*),count(*) FILTER(WHERE conversation_message_id IS NOT NULL OR inbox_message_id IS NOT NULL) FROM message_images`).Scan(&images, &bound); e != nil || images != 3 || bound != 3 {
 		t.Fatal(images, bound, e)
 	}
-	// SQLITE-PORT(G11): array、jsonb
 	if e = s.a.Store.Pool.QueryRow(ctx, `SELECT count(*),count(*) FILTER(WHERE read_at IS NOT NULL) FROM inbox_messages WHERE json_array_length(images)>0`).Scan(&inbox, &read); e != nil || inbox != 1 || read != 0 {
 		t.Fatal("delivery changed true read semantics", inbox, read, e)
 	}

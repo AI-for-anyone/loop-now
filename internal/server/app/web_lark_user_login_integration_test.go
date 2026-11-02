@@ -14,9 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/app"
 	"loop-now/internal/server/config"
@@ -26,9 +23,9 @@ import (
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/workflow"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
 	"loop-now/internal/testutil/testenv"
+
+	"github.com/google/uuid"
 )
 
 // Web owns only this file. Production code/shared helpers are read-only.
@@ -54,34 +51,7 @@ func TestWebLarkUserLoginIntegration(t *testing.T) {
 		if w == nil {
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		conn, e := pgx.Connect(ctx, pgtest.URL(t))
-		if e != nil {
-			t.Error("cleanup PG unavailable")
-			return
-		}
-		defer conn.Close(ctx)
-		var exists bool
-		e = conn.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)", w.schema).Scan(&exists)
-		audit["schemaRemoved"] = e == nil && !exists
-		if e != nil || exists {
-			t.Error("schema remains")
-		}
-		ro, e := redis.ParseURL(redistest.URL(t))
-		if e != nil {
-			t.Error("TEST Redis unavailable")
-			return
-		}
-		rc := redis.NewClient(ro)
-		defer rc.Close()
-		it := rc.Scan(ctx, 0, w.cfg.RedisKeyPrefix+"*", 100).Iterator()
-		found := it.Next(ctx)
-		audit["redisPrefixEmpty"] = !found && it.Err() == nil
-		if found || it.Err() != nil {
-			t.Error("prefix remains")
-		}
-		_, e = os.Stat(w.cfg.WorkRoot)
+		_, e := os.Stat(w.cfg.WorkRoot)
 		audit["workRootRemoved"] = os.IsNotExist(e)
 		if !os.IsNotExist(e) {
 			t.Error("work root remains")
@@ -205,16 +175,12 @@ func TestWebLarkSwitchPublicationIntegration(t *testing.T) {
 			t.Error("safe audit write failed")
 		}
 	}
-	var schema, prefix, workRoot, address string
+	var workRoot, address string
 	t.Run("isolated", func(t *testing.T) {
 		s, in, before, provider := taskLarkSwitchAppReady(t)
 		ctx := context.Background()
 		address = s.a.Addr()
-		prefix = s.a.Coord.Keys().Prefix
 		workRoot = s.a.Cfg.WorkRoot
-		if s.a.Store.Pool.QueryRow(ctx, "SELECT current_schema()").Scan(&schema) != nil {
-			t.Fatal("schema read failed")
-		}
 		// Only this self-owned, idle test server changes its allowed browser origin.
 		s.a.API.O.ConsoleOrigins = []string{"http://127.0.0.1:4336"}
 		// Delegate to the actual Manager/RuntimeGate, never a successful no-op.
@@ -342,35 +308,6 @@ func TestWebLarkSwitchPublicationIntegration(t *testing.T) {
 			t.Error("original scope/provider boundary changed")
 		}
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if schema != "" {
-		conn, e := pgx.Connect(ctx, pgtest.URL(t))
-		if e != nil {
-			t.Fatal("cleanup PG unavailable")
-		}
-		defer conn.Close(ctx)
-		var exists bool
-		e = conn.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)", schema).Scan(&exists)
-		audit["schemaRemoved"] = e == nil && !exists
-		if e != nil || exists {
-			t.Error("schema remains")
-		}
-	}
-	if prefix != "" {
-		ro, e := redis.ParseURL(redistest.URL(t))
-		if e != nil {
-			t.Fatal("cleanup Redis unavailable")
-		}
-		rc := redis.NewClient(ro)
-		defer rc.Close()
-		it := rc.Scan(ctx, 0, prefix+"*", 100).Iterator()
-		found := it.Next(ctx)
-		audit["redisPrefixEmpty"] = !found && it.Err() == nil
-		if found || it.Err() != nil {
-			t.Error("prefix remains")
-		}
-	}
 	if workRoot != "" {
 		_, e := os.Stat(workRoot)
 		audit["workRootRemoved"] = os.IsNotExist(e)
@@ -417,34 +354,7 @@ func TestWebLarkUserLoginFailureDeleteIntegration(t *testing.T) {
 		if w == nil {
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		conn, e := pgx.Connect(ctx, pgtest.URL(t))
-		if e != nil {
-			t.Error("cleanup PG unavailable")
-			return
-		}
-		defer conn.Close(ctx)
-		var exists bool
-		e = conn.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)", w.schema).Scan(&exists)
-		audit["schemaRemoved"] = e == nil && !exists
-		if e != nil || exists {
-			t.Error("schema remains")
-		}
-		ro, e := redis.ParseURL(redistest.URL(t))
-		if e != nil {
-			t.Error("cleanup Redis unavailable")
-			return
-		}
-		rc := redis.NewClient(ro)
-		defer rc.Close()
-		it := rc.Scan(ctx, 0, w.cfg.RedisKeyPrefix+"*", 100).Iterator()
-		found := it.Next(ctx)
-		audit["redisPrefixEmpty"] = !found && it.Err() == nil
-		if found || it.Err() != nil {
-			t.Error("prefix remains")
-		}
-		_, e = os.Stat(w.cfg.WorkRoot)
+		_, e := os.Stat(w.cfg.WorkRoot)
 		audit["workRootRemoved"] = os.IsNotExist(e)
 		if !os.IsNotExist(e) {
 			t.Error("work root remains")

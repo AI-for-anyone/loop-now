@@ -16,8 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/config"
 	"loop-now/internal/server/db"
@@ -401,41 +399,23 @@ func TestRecoveryCrashRecords(t *testing.T) {
 	}
 }
 
-// 8.2：Redis 数据丢失（含概览事件流）：重连得到快照，数据库中的运行记录与用量不受影响。
-func TestRecoveryRedisLoss(t *testing.T) {
+// 8.2：客户端带着事件流里没有的位置重连（例如服务端重启过、事件已裁掉）：得到快照，数据库中的运行记录与用量不受影响。
+func TestRecoveryUnknownStreamPosition(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)
 	defer s.stop()
-	a, _ := s.createAgent("Redis 丢失")
+	a, _ := s.createAgent("位置失效")
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "!usage=10,5 你好"})
 	s.waitIdle(a)
 	_, data := s.firstOverviewEvent("")
 	_ = data
 	before := s.replies(a)[0]
-
-	opts, _ := redis.ParseURL(w.cfg.RedisURL)
-	rdb := redis.NewClient(opts)
-	defer rdb.Close()
-	ctx := context.Background()
-	var cursor uint64
-	for {
-		keys, next, err := rdb.Scan(ctx, cursor, w.cfg.RedisKeyPrefix+"*", 200).Result()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(keys) > 0 {
-			rdb.Unlink(ctx, keys...)
-		}
-		if cursor = next; cursor == 0 {
-			break
-		}
-	}
 	if ev, _ := s.firstOverviewEvent("9999999999999-0"); ev != "snapshot" {
 		t.Fatalf("事件流丢失后重连应推送快照：%s", ev)
 	}
 	after := s.replies(a)[0]
 	if after.Run.Usage != before.Run.Usage || len(s.timeline(a, after.Run.ID.String())) == 0 {
-		t.Fatalf("Redis 丢失不应影响运行记录与用量：%+v %+v", before.Run.Usage, after.Run.Usage)
+		t.Fatalf("重连不应影响运行记录与用量：%+v %+v", before.Run.Usage, after.Run.Usage)
 	}
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "继续"})
 	s.waitIdle(a)

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/google/uuid"
 	"io"
 	"loop-now/internal/server/app"
 	"loop-now/internal/server/clitemplate"
@@ -24,12 +23,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"loop-now/internal/server/db"
 )
 
 type verificationAppCrashConfig struct {
-	Config                        config.Config
-	Schema, APIReady, NativeReady string
+	Config                config.Config
+	APIReady, NativeReady string
 }
 
 func TestCLIVerificationAppCrashChild(t *testing.T) {
@@ -97,7 +98,7 @@ func TestCLIVerificationActualAppSIGKILLRecovery(t *testing.T) {
 		t.Fatal(e)
 	}
 	control := t.TempDir()
-	input := verificationAppCrashConfig{Config: w.cfg, Schema: w.schema, APIReady: filepath.Join(control, "api.json"), NativeReady: filepath.Join(control, "native.json")}
+	input := verificationAppCrashConfig{Config: w.cfg, APIReady: filepath.Join(control, "api.json"), NativeReady: filepath.Join(control, "native.json")}
 	read, write, e := os.Pipe()
 	if e != nil {
 		t.Fatal(e)

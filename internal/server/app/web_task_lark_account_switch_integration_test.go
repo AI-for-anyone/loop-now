@@ -8,9 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
 	"io"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/app"
@@ -21,8 +18,6 @@ import (
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/workflow"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
 	"loop-now/internal/testutil/testenv"
 	"net"
 	"net/http"
@@ -37,6 +32,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Web owns this test file only. Existing world/native helpers are read-only.
@@ -51,7 +48,7 @@ func TestWebTaskLarkAccountSwitchNativeIntegration(t *testing.T) {
 		t.Fatal("evidence directory failed")
 	}
 	audit := map[string]any{"boundary": "actual desktop React -> temporary production App/TEST PG/Redis -> pinned014 native/private channel + fakePi -> owned TLS provider fixture; no real OAuth/model/QA"}
-	var schema, prefix, workRoot, address string
+	var workRoot, address string
 	passed := t.Run("isolated", func(t *testing.T) {
 		bundle := unpackLarkVariant(t)
 		ctx := context.Background()
@@ -107,7 +104,7 @@ func TestWebTaskLarkAccountSwitchNativeIntegration(t *testing.T) {
 		}
 		defer transport.CloseIdleConnections()
 		world := taskNodeInboxWorld(t)
-		schema, prefix, workRoot = world.schema, "", world.cfg.WorkRoot
+		workRoot = world.cfg.WorkRoot
 		quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
 		wrapper := filepath.Join(t.TempDir(), "switch-native-before-fakepi")
 		script := "#!/bin/sh\nset -eu\nif [ \"${1-}\" = --version ]; then exec " + quote(world.cfg.PiBin) + " \"$@\"; fi\nif [ -n \"${LOOP_NOW_LARK_EXEC_URL-}\" ]; then\nlark-cli api GET /open-apis/im/v1/messages --params '{\"container_id_type\":\"chat\",\"container_id\":\"oc_synthetic\"}' --as user > switch-native-output.json 2> switch-native-error.txt\nfi\nexec " + quote(world.cfg.PiBin) + " \"$@\"\n"
@@ -133,7 +130,6 @@ func TestWebTaskLarkAccountSwitchNativeIntegration(t *testing.T) {
 		server := &server{t: t, a: instanceApp, url: "http://" + instanceApp.Addr() + "/api/v1"}
 		defer server.stop()
 		address = instanceApp.Addr()
-		prefix = instanceApp.Coord.Keys().Prefix
 		instanceApp.API.O.ConsoleOrigins = []string{"http://127.0.0.1:4336"}
 		provider := larktest.New(t)
 		server.a.CLIAuth.Lark = provider.Client
@@ -340,35 +336,6 @@ func TestWebTaskLarkAccountSwitchNativeIntegration(t *testing.T) {
 		audit["continuationTurns"] = continuations
 
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if schema != "" {
-		conn, e := pgx.Connect(ctx, pgtest.URL(t))
-		if e != nil {
-			t.Fatal("cleanup PG unavailable")
-		}
-		defer conn.Close(ctx)
-		var exists bool
-		e = conn.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)", schema).Scan(&exists)
-		audit["schemaRemoved"] = e == nil && !exists
-		if e != nil || exists {
-			t.Error("schema remains")
-		}
-	}
-	if prefix != "" {
-		ro, e := redis.ParseURL(redistest.URL(t))
-		if e != nil {
-			t.Fatal("cleanup Redis unavailable")
-		}
-		rc := redis.NewClient(ro)
-		defer rc.Close()
-		it := rc.Scan(ctx, 0, prefix+"*", 100).Iterator()
-		found := it.Next(ctx)
-		audit["redisPrefixEmpty"] = !found && it.Err() == nil
-		if found || it.Err() != nil {
-			t.Error("prefix remains")
-		}
-	}
 	if workRoot != "" {
 		_, e := os.Stat(workRoot)
 		audit["workRootRemoved"] = os.IsNotExist(e)

@@ -5,26 +5,21 @@ import (
 	"context"
 	"encoding/json"
 	"net"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"syscall"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/inbox"
 	"loop-now/internal/server/taskmodel"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
 	"loop-now/internal/testutil/testenv"
+
+	"github.com/google/uuid"
 )
 
 // Web owns this file only. Production and shared helpers remain read-only.
@@ -32,17 +27,9 @@ func TestWebTaskNodeInboxChatIntegration(t *testing.T) {
 	if os.Getenv("LOOP_NOW_WEB_TASK_INBOX_INTEGRATION") != "1" {
 		t.Skip("explicit isolated React/App/TEST PG/fakePi/controlled actual CLI")
 	}
-	db, e := url.Parse(pgtest.URL(t))
-	if e != nil || !strings.HasSuffix(db.Path, "_test") {
-		t.Fatal("TEST PG required")
-	}
-	ro, e := redis.ParseURL(redistest.URL(t))
-	if e != nil || ro.DB != 10 {
-		t.Fatal("TEST Redis DB10 required")
-	}
 	root := testenv.RepoRoot()
 	evidence := filepath.Join(root, "web/test-results/add-task-node-inbox-chat/app")
-	if e = os.MkdirAll(evidence, 0700); e != nil {
+	if e := os.MkdirAll(evidence, 0700); e != nil {
 		t.Fatal("evidence directory unavailable")
 	}
 	audit := map[string]any{"boundary": "actual React -> isolated App/PG/Redis/fakePi; controlled actual runtime CLI, not autonomous model", "webOrigin": "http://127.0.0.1:4326"}
@@ -52,31 +39,8 @@ func TestWebTaskNodeInboxChatIntegration(t *testing.T) {
 		if w == nil {
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		audit["schema"] = w.schema
-		audit["redisPrefix"] = w.cfg.RedisKeyPrefix
-		c, e := pgx.Connect(ctx, pgtest.URL(t))
-		if e != nil {
-			t.Error("cleanup PG read unavailable")
-			return
-		}
-		defer c.Close(ctx)
-		var exists bool
-		e = c.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)`, w.schema).Scan(&exists)
-		audit["schemaRemoved"] = e == nil && !exists
-		if e != nil || exists {
-			t.Error("private schema cleanup failed")
-		}
-		rc := redis.NewClient(ro)
-		defer rc.Close()
-		it := rc.Scan(ctx, 0, w.cfg.RedisKeyPrefix+"*", 100).Iterator()
-		found := it.Next(ctx)
-		audit["redisPrefixEmpty"] = !found && it.Err() == nil
-		if found || it.Err() != nil {
-			t.Error("private Redis cleanup failed")
-		}
-		_, e = os.Stat(w.cfg.WorkRoot)
+		audit["dataDir"] = w.cfg.DataDir
+		_, e := os.Stat(w.cfg.WorkRoot)
 		audit["workRootRemoved"] = os.IsNotExist(e)
 		conn, e := net.DialTimeout("tcp", address, 150*time.Millisecond)
 		audit["appListenerClosed"] = e != nil
@@ -119,7 +83,7 @@ func TestWebTaskNodeInboxChatIntegration(t *testing.T) {
 	// before a separate Manager process may overwrite the shared dump. No token
 	// is included in screenshots, logs, manifests or persisted evidence.
 	for end := time.Now().Add(4 * time.Second); ; time.Sleep(10 * time.Millisecond) {
-		if _, e = os.Stat(dump); e == nil {
+		if _, e := os.Stat(dump); e == nil {
 			break
 		}
 		if time.Now().After(end) {

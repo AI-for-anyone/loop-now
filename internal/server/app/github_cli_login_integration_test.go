@@ -7,30 +7,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/apitypes"
 	cm "loop-now/internal/server/credentialmodel"
 	"loop-now/internal/server/githubauth/githubtest"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
+
+	"github.com/google/uuid"
 )
 
 func githubAppWorld(t *testing.T) *world {
 	t.Helper()
-	db, err := url.Parse(pgtest.URL(t))
-	if err != nil || strings.TrimPrefix(db.Path, "/") != "loop_now_test" {
-		t.Fatal("GitHub App requires dedicated TEST database")
-	}
-	rd, err := redis.ParseURL(redistest.URL(t))
-	if err != nil || rd.DB != 10 {
-		t.Fatal("GitHub App requires TEST Redis DB10")
-	}
 	w := newWorld(t)
 	w.cfg.AuthLoginTimeout = 10 * time.Second
 	w.cfg.AuthRecordTimeout = time.Second
