@@ -180,7 +180,7 @@ func (s *Store) ReconcileSleeps(ctx context.Context, batch int) error {
 			return s.saveSleepTx(ctx, scope.Tx, m, &r)
 		})
 		// Advance after every attempted owner, including rollback/failure.
-		// Restart may repeat a bounded round; PG rechecks and stable timer IDs
+		// Restart may repeat a bounded round; database rechecks and stable timer IDs
 		// remain the authority, so resetting this cursor cannot duplicate work.
 		s.sleepScan.after = candidate.ID
 		if e != nil {
