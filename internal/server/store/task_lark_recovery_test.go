@@ -102,7 +102,7 @@ func TestTaskLarkRecoveryConsumeOriginalPreCommitCAS(t *testing.T) {
 					return nil, s.FailTaskLarkFenceTx(ctx, m, in.ActorKey, in.ActionID, "some_other_failure")
 				})
 			case "commit-failure":
-				_, e = s.Pool.Exec(ctx, `CREATE FUNCTION reject_lark_recovery_save() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic recovery save failure'; END $$; CREATE TRIGGER reject_lark_recovery_save BEFORE UPDATE ON task_records FOR EACH ROW EXECUTE FUNCTION reject_lark_recovery_save()`)
+				_, e = s.Pool.Exec(ctx, `CREATE TRIGGER reject_lark_recovery_save BEFORE UPDATE ON task_records BEGIN SELECT RAISE(ABORT, 'synthetic recovery save failure'); END`)
 			}
 			if e != nil {
 				t.Fatal(e)

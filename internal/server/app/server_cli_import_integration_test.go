@@ -288,7 +288,7 @@ func TestCLIImportActualAppProjectDeleteCommitAndRollback(t *testing.T) {
 	if e = s.a.Store.Pool.QueryRow(ctx, "SELECT status FROM cli_credential_import_operations WHERE id=$1", id).Scan(&status); e != nil || status != "running" {
 		t.Fatal("rollback ended original operation", e)
 	}
-	if _, e = s.a.Store.Pool.Exec(ctx, "DROP TRIGGER fail_import_project_delete ON projects; DROP FUNCTION fail_import_project_delete()"); e != nil {
+	if _, e = s.a.Store.Pool.Exec(ctx, "DROP TRIGGER fail_import_project_delete"); e != nil {
 		t.Fatal(e)
 	}
 	s.must(204, "DELETE", "/projects/"+p.ID.String(), nil)

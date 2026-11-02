@@ -6,10 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	cm "loop-now/internal/server/credentialmodel"
 	"loop-now/internal/server/modelcredential"
 	"loop-now/internal/server/store"
+
+	"github.com/google/uuid"
 )
 
 func TestProjectCredentialDeletionPurgesWholeOwnerAtomically(t *testing.T) {
@@ -95,7 +96,7 @@ func TestProjectCredentialDeletionPurgesWholeOwnerAtomically(t *testing.T) {
 			if withAgent {
 				// Shadowed legacy credentials are a separate project-owned inventory.
 				// SQLITE-PORT(G4): '{}' array
-				mustExec(t, e.s, `INSERT INTO project_credential_legacy_rows(id,project_id,source_agent_id,secret,field_names,env_names,file_paths,updated_at)VALUES($1,$2,$3,$4,'{}','{}','{}',now())`, uuid.New(), p.ID, agent, plain)
+				mustExec(t, e.s, `INSERT INTO project_credential_legacy_rows(id,project_id,source_agent_id,secret,field_names,env_names,file_paths,updated_at)VALUES($1,$2,$3,$4,'[]','[]','[]',now())`, uuid.New(), p.ID, agent, plain)
 			}
 			counts := func() []int {
 				out := make([]int, 7)
@@ -123,8 +124,7 @@ func TestProjectCredentialDeletionPurgesWholeOwnerAtomically(t *testing.T) {
 				t.Fatal("incomplete deletion fixture", before)
 			}
 			// Failure at the last project write rolls back all prior purges and URL changes.
-			mustExec(t, e.s, `CREATE FUNCTION reject_project_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.deleted_at IS NOT NULL THEN RAISE EXCEPTION 'injected delete rollback'; END IF; RETURN NEW; END $$`)
-			mustExec(t, e.s, `CREATE TRIGGER reject_project_delete BEFORE UPDATE ON projects FOR EACH ROW EXECUTE FUNCTION reject_project_delete()`)
+			mustExec(t, e.s, `CREATE TRIGGER reject_project_delete BEFORE UPDATE ON projects WHEN NEW.deleted_at IS NOT NULL BEGIN SELECT RAISE(ABORT, 'injected delete rollback'); END`)
 			if _, err = e.s.DeleteProject(ctx, p.ID); err == nil {
 				t.Fatal("injected failure committed")
 			}
@@ -134,7 +134,7 @@ func TestProjectCredentialDeletionPurgesWholeOwnerAtomically(t *testing.T) {
 			if _, err = e.s.GetProject(ctx, p.ID); err != nil {
 				t.Fatal("rollback deleted owner", err)
 			}
-			mustExec(t, e.s, `DROP TRIGGER reject_project_delete ON projects`)
+			mustExec(t, e.s, `DROP TRIGGER reject_project_delete`)
 			ids, err := e.s.DeleteProject(ctx, p.ID)
 			if err != nil {
 				t.Fatal(err)

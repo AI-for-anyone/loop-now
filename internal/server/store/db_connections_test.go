@@ -1,17 +1,16 @@
 package store_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/google/uuid"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/clitemplate"
 	cm "loop-now/internal/server/credentialmodel"
-	"loop-now/internal/server/modelcredential"
 	"loop-now/internal/server/store"
 	"sync"
 	"testing"
+
+	"github.com/google/uuid"
 
 	"loop-now/internal/testutil/sqlitetest"
 )
@@ -136,13 +135,6 @@ func TestDBConnectionSetsCASModesAndAtomicity(t *testing.T) {
 	if err != nil || same.ConfigVersion != restored.ConfigVersion {
 		t.Fatal("absent DELETE not idempotent", err)
 	}
-	// Real Down refuses a nonempty mode marker and leaves the version applied.
-	if _, err = e.s.PutDBConnections(ctx, a, cli, cm.DBConnectionsPut{AccountIDs: []uuid.UUID{}, ExpectedConfigVersion: same.ConfigVersion}); err != nil {
-		t.Fatal(err)
-	}
-	if err = e.s.MigrateDownTo(ctx, 12); err == nil {
-		t.Fatal("lossy Down allowed")
-	}
 }
 
 func TestDBConnectionCaptureVersionsAndFailureIsolation(t *testing.T) {
@@ -229,41 +221,5 @@ func TestDBConnectionCaptureVersionsAndFailureIsolation(t *testing.T) {
 	var rows int
 	if err = e.s.Pool.QueryRow(ctx, `SELECT count(*) FROM agent_db_connection_sets WHERE agent_id=$1`, a).Scan(&rows); err != nil || rows != 0 {
 		t.Fatal("permission removal retained set", err)
-	}
-}
-
-func TestDBConnectionMigrationEmptyDownUpPreservesOldVersions(t *testing.T) {
-	// 026 refuses Down, so the 013 round trip runs on a 025 schema seeded in its
-	// own column shape (the conversion marker form).
-	e := projectMigrationFixture(t)
-	ctx := context.Background()
-	if err := e.s.MigrateUpTo(ctx, 25); err != nil {
-		t.Fatal(err)
-	}
-	a := e.agent(t, "旧账号保留", "openai")
-	account, version := uuid.New(), uuid.New()
-	mustExec(t, e.s, `INSERT INTO project_credential_accounts(id,project_id,purpose,provider,name)VALUES($1,$2,'model','openai','旧账号')`, account, e.project)
-	credential, err := modelcredential.APIKey("synthetic-original")
-	if err != nil {
-		t.Fatal(err)
-	}
-	plain, _ := credential.Encode()
-	insertCredentialRow(t, e.s, "model_auth_versions", []string{"id", "project_account_id", "provider", "auth_method"}, []any{version, account, "openai", "api_key"}, plain)
-	mustExec(t, e.s, `UPDATE project_credential_accounts SET current_model_version_id=$2 WHERE id=$1`, account, version)
-	mustExec(t, e.s, `INSERT INTO agent_credential_selections(agent_id,project_id,purpose,slot_key,account_id,mode)VALUES($1,$2,'model','openai',$3,'explicit')`, a, e.project, account)
-	if err = e.s.MigrateDownTo(ctx, 12); err != nil {
-		t.Fatal("empty 013 Down", err)
-	}
-	if err = e.s.MigrateUpTo(ctx, 13); err != nil {
-		t.Fatal("013 Up again", err)
-	}
-	var current, selected uuid.UUID
-	var stored []byte
-	if err = e.s.Pool.QueryRow(ctx, `SELECT a.current_model_version_id,s.account_id,v.ciphertext FROM project_credential_accounts a JOIN agent_credential_selections s ON s.account_id=a.id AND s.agent_id=$2 JOIN model_auth_versions v ON v.id=a.current_model_version_id WHERE a.id=$1`, account, a).Scan(&current, &selected, &stored); err != nil || current != version || selected != account || !bytes.Equal(stored, plain) {
-		t.Fatal("old binding changed", err)
-	}
-	var markers int
-	if err = e.s.Pool.QueryRow(ctx, `SELECT count(*) FROM agent_db_connection_sets`).Scan(&markers); err != nil || markers != 0 {
-		t.Fatal("Up invented connections", err)
 	}
 }

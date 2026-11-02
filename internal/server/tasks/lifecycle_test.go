@@ -22,12 +22,13 @@ import (
 func rejectEvent(t *testing.T, s *Service) func(string) {
 	t.Helper()
 	ctx := context.Background()
-	_, e := s.Store.Pool.Exec(ctx, `CREATE TABLE reject_task_event(kind text);
- CREATE FUNCTION reject_task_observation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
- IF EXISTS(SELECT 1 FROM reject_task_event WHERE kind=NEW.type) THEN RAISE EXCEPTION 'injected observation failure'; END IF; RETURN NEW; END $$;
- CREATE TRIGGER reject_task_observation BEFORE INSERT ON lifecycle_events FOR EACH ROW EXECUTE FUNCTION reject_task_observation()`)
-	if e != nil {
-		t.Fatal(e)
+	// lifecycle_events 在 events.db（ev）：触发器只能用同一个库里的表，所以拒绝表也建在 ev。
+	for _, q := range []string{`CREATE TABLE ev.reject_task_event(kind TEXT)`,
+		`CREATE TRIGGER ev.reject_task_observation BEFORE INSERT ON lifecycle_events WHEN EXISTS(SELECT 1 FROM reject_task_event WHERE kind=NEW.type)
+		BEGIN SELECT RAISE(ABORT, 'injected observation failure'); END`} {
+		if _, e := s.Store.Pool.Exec(ctx, q); e != nil {
+			t.Fatal(e)
+		}
 	}
 	return func(kind string) {
 		t.Helper()

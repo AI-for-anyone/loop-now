@@ -152,7 +152,7 @@ func TestDeletedLoginHelperResources(t *testing.T) {
 				path = "/agents/" + a.ID.String()
 			}
 			if mode == "project-rollback" {
-				for _, q := range []string{`CREATE FUNCTION reject_helper_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.deleted_at IS NOT NULL THEN RAISE EXCEPTION 'synthetic rollback'; END IF; RETURN NEW; END $$`, `CREATE TRIGGER reject_helper_delete BEFORE UPDATE ON projects FOR EACH ROW EXECUTE FUNCTION reject_helper_delete()`} {
+				for _, q := range []string{`CREATE TRIGGER reject_helper_delete BEFORE UPDATE ON projects WHEN NEW.deleted_at IS NOT NULL BEGIN SELECT RAISE(ABORT, 'synthetic rollback'); END`} {
 					if _, err := s.a.Store.Pool.Exec(context.Background(), q); err != nil {
 						t.Fatal(err)
 					}
@@ -172,7 +172,7 @@ func TestDeletedLoginHelperResources(t *testing.T) {
 						t.Fatal("rollback changed active login", err)
 					}
 				}
-				if _, err := s.a.Store.Pool.Exec(context.Background(), `DROP TRIGGER reject_helper_delete ON projects`); err != nil {
+				if _, err := s.a.Store.Pool.Exec(context.Background(), `DROP TRIGGER reject_helper_delete`); err != nil {
 					t.Fatal(err)
 				}
 			}

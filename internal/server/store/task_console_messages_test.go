@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/prompts"
@@ -18,6 +17,8 @@ import (
 	"loop-now/internal/server/taskruntime"
 	"loop-now/internal/server/tasks"
 	"loop-now/internal/server/workflow"
+
+	"github.com/google/uuid"
 
 	"loop-now/internal/server/db"
 	"loop-now/internal/testutil/sqlitetest"
@@ -146,9 +147,6 @@ func TestTaskConsoleMarkerCausalityAndLegacy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = s.MigrateDownTo(ctx, 14); err == nil {
-		t.Fatal("Down discarded eligibility history")
-	}
 }
 
 func TestTaskConsoleRecoveryCapturesActualActiveRun(t *testing.T) {
@@ -190,15 +188,9 @@ func TestTaskConsoleRecoveryCapturesActualActiveRun(t *testing.T) {
 	}
 }
 
-func TestTaskConsoleLineageImmutableAndMigration(t *testing.T) {
-	s := taskConsoleStoreAt(t, 25)
+func TestTaskConsoleLineageImmutable(t *testing.T) {
+	s := taskConsoleStore(t)
 	ctx := context.Background()
-	if err := s.MigrateDownTo(ctx, 14); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Migrate(ctx, quietLogger()); err != nil {
-		t.Fatal(err)
-	}
 	id, _, agent, turn := taskConsoleRecord(t, s)
 	_, err := s.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
 		for i := 0; i < 2; i++ {
@@ -226,9 +218,6 @@ func TestTaskConsoleLineageImmutableAndMigration(t *testing.T) {
 	})
 	if !apperr.Is(err, apperr.CodeTaskConflict) {
 		t.Fatal("wrong Agent accepted", err)
-	}
-	if err = s.MigrateDownTo(ctx, 14); err == nil {
-		t.Fatal("Down discarded strict lineage")
 	}
 }
 

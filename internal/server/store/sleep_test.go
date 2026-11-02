@@ -205,7 +205,7 @@ func TestSleepTaskModesAtomicFinishAndCommittedVersion(t *testing.T) {
 				})
 				return e
 			}
-			if _, err = s.Pool.Exec(ctx, `CREATE FUNCTION reject_sleep_save() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'offline injected'; END $$; CREATE TRIGGER reject_sleep_save BEFORE UPDATE ON task_records FOR EACH ROW EXECUTE FUNCTION reject_sleep_save()`); err != nil {
+			if _, err = s.Pool.Exec(ctx, `CREATE TRIGGER reject_sleep_save BEFORE UPDATE ON task_records BEGIN SELECT RAISE(ABORT, 'offline injected'); END`); err != nil {
 				t.Fatal(err)
 			}
 			if err = finish(); err == nil {
@@ -219,7 +219,7 @@ func TestSleepTaskModesAtomicFinishAndCommittedVersion(t *testing.T) {
 			if err != nil || state.Sleep.State != "requested" {
 				t.Fatal("sleep escaped atomic rollback", err)
 			}
-			if _, err = s.Pool.Exec(ctx, `DROP TRIGGER reject_sleep_save ON task_records;DROP FUNCTION reject_sleep_save()`); err != nil {
+			if _, err = s.Pool.Exec(ctx, `DROP TRIGGER reject_sleep_save`); err != nil {
 				t.Fatal(err)
 			}
 			if err = finish(); err != nil {
@@ -371,7 +371,7 @@ func TestSleepBatchFailureContinuesAndLifecycleCancelsTimer(t *testing.T) {
 	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = e.s.Pool.Exec(ctx, `CREATE FUNCTION reject_one_sleep() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.agent_id='`+e.agent.String()+`'::uuid THEN RAISE EXCEPTION 'offline injected'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_one_sleep BEFORE UPDATE ON agent_sleeps FOR EACH ROW EXECUTE FUNCTION reject_one_sleep()`); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `CREATE TRIGGER reject_one_sleep BEFORE UPDATE ON agent_sleeps WHEN OLD.agent_id='`+e.agent.String()+`' BEGIN SELECT RAISE(ABORT, 'offline injected'); END`); err != nil {
 		t.Fatal(err)
 	}
 	if err = e.s.ReconcileSleeps(ctx, 100); err == nil {
@@ -381,7 +381,7 @@ func TestSleepBatchFailureContinuesAndLifecycleCancelsTimer(t *testing.T) {
 	if err = e.s.Pool.QueryRow(ctx, `SELECT state FROM agent_sleeps WHERE id=$1`, sleeps[1]).Scan(&state); err != nil || state != "woken" {
 		t.Fatal("first error starved other scope", state, err)
 	}
-	if _, err = e.s.Pool.Exec(ctx, `DROP TRIGGER reject_one_sleep ON agent_sleeps;DROP FUNCTION reject_one_sleep()`); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `DROP TRIGGER reject_one_sleep`); err != nil {
 		t.Fatal(err)
 	}
 	if err = e.s.ReconcileSleeps(ctx, 100); err != nil {
@@ -609,7 +609,7 @@ func TestSleepBatchOnePersistentFailureIsFair(t *testing.T) {
 	if err = e.s.Pool.QueryRow(ctx, `SELECT wake_at FROM agent_sleeps WHERE id=$1`, bad.ID).Scan(&originalWake); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = e.s.Pool.Exec(ctx, `CREATE FUNCTION reject_earliest_sleep() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.id='`+bad.ID.String()+`'::uuid THEN RAISE EXCEPTION 'offline persistent first candidate failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_earliest_sleep BEFORE UPDATE ON agent_sleeps FOR EACH ROW EXECUTE FUNCTION reject_earliest_sleep()`); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `CREATE TRIGGER reject_earliest_sleep BEFORE UPDATE ON agent_sleeps WHEN OLD.id='`+bad.ID.String()+`' BEGIN SELECT RAISE(ABORT, 'offline persistent first candidate failure'); END`); err != nil {
 		t.Fatal(err)
 	}
 	failures := 0
@@ -661,7 +661,7 @@ func TestSleepBatchOnePersistentFailureIsFair(t *testing.T) {
 	if err = e.s.Pool.QueryRow(ctx, `SELECT state FROM agent_sleeps WHERE id=$1`, late.ID).Scan(&state); err != nil || state != "woken" {
 		t.Fatal("new due scope starved", state, err)
 	}
-	if _, err = e.s.Pool.Exec(ctx, `DROP TRIGGER reject_earliest_sleep ON agent_sleeps; DROP FUNCTION reject_earliest_sleep()`); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `DROP TRIGGER reject_earliest_sleep`); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 4; i++ {

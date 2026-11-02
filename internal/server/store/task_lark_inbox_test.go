@@ -40,7 +40,7 @@ func TestTaskLarkDeferredInboxReconcilesOriginalMessageOnce(t *testing.T) {
 	}
 	// Fail after the production enqueue but before the delivery marker. Both
 	// must roll back; a later reconciliation may notify the same real message.
-	if _, err = s.Pool.Exec(ctx, `CREATE FUNCTION reject_lark_delivery() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic delivery commit failure'; END $$; CREATE TRIGGER reject_lark_delivery BEFORE UPDATE ON task_lark_deferred_inbox FOR EACH ROW EXECUTE FUNCTION reject_lark_delivery()`); err != nil {
+	if _, err = s.Pool.Exec(ctx, `CREATE TRIGGER reject_lark_delivery BEFORE UPDATE ON task_lark_deferred_inbox BEGIN SELECT RAISE(ABORT, 'synthetic delivery commit failure'); END`); err != nil {
 		t.Fatal(err)
 	}
 	if err = svc.ReconcileTaskLarkInbox(ctx, in.TaskID); err == nil {
@@ -50,7 +50,7 @@ func TestTaskLarkDeferredInboxReconcilesOriginalMessageOnce(t *testing.T) {
 	if err = s.Pool.QueryRow(ctx, `SELECT count(*) FROM task_turns WHERE trigger_inbox_message_id=$1`, message).Scan(&count); err != nil || count != 0 {
 		t.Fatal("failed delivery committed partial turn", count, err)
 	}
-	if _, err = s.Pool.Exec(ctx, `DROP TRIGGER reject_lark_delivery ON task_lark_deferred_inbox; DROP FUNCTION reject_lark_delivery()`); err != nil {
+	if _, err = s.Pool.Exec(ctx, `DROP TRIGGER reject_lark_delivery`); err != nil {
 		t.Fatal(err)
 	}
 	var wg sync.WaitGroup

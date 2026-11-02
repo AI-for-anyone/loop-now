@@ -102,7 +102,7 @@ func TestTaskQuestionRealStorageCloseRollbackAndLateOptions(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	for _, sql := range []string{`CREATE FUNCTION fail_question_task_write() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic task save fault'; END $$`, `CREATE TRIGGER fail_question_task_write BEFORE UPDATE ON task_records FOR EACH ROW EXECUTE FUNCTION fail_question_task_write()`} {
+	for _, sql := range []string{`CREATE TRIGGER fail_question_task_write BEFORE UPDATE ON task_records BEGIN SELECT RAISE(ABORT, 'synthetic task save fault'); END`} {
 		if _, err := e.st.Pool.Exec(ctx, sql); err != nil {
 			t.Fatal(err)
 		}
@@ -118,7 +118,7 @@ func TestTaskQuestionRealStorageCloseRollbackAndLateOptions(t *testing.T) {
 	if err = e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM inbox_question_outbox WHERE question_message_id=$1`, q.ID).Scan(&pending); err != nil || pending != 0 {
 		t.Fatal("rollback left outbox", pending, err)
 	}
-	if _, err = e.st.Pool.Exec(ctx, `DROP TRIGGER fail_question_task_write ON task_records`); err != nil {
+	if _, err = e.st.Pool.Exec(ctx, `DROP TRIGGER fail_question_task_write`); err != nil {
 		t.Fatal(err)
 	}
 	retried := decode[taskmodel.Detail](t, e.expect(200, "POST", "/tasks/"+d.Task.ID.String()+"/retry", body))
@@ -384,7 +384,7 @@ func TestInboxQuestionConcurrentFirstAnswerAndCrossTaskLocks(t *testing.T) {
 	var messages, questions int
 	e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM inbox_messages`).Scan(&messages)
 	e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM inbox_questions`).Scan(&questions)
-	for _, sql := range []string{`CREATE FUNCTION fail_question_reminder() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic reminder fault'; END $$`, `CREATE TRIGGER fail_question_reminder BEFORE INSERT ON lifecycle_events FOR EACH ROW EXECUTE FUNCTION fail_question_reminder()`} {
+	for _, sql := range []string{`CREATE TRIGGER ev.fail_question_reminder BEFORE INSERT ON lifecycle_events BEGIN SELECT RAISE(ABORT, 'synthetic reminder fault'); END`} {
 		if _, err = e.st.Pool.Exec(ctx, sql); err != nil {
 			t.Fatal(err)
 		}
@@ -424,7 +424,7 @@ func TestInboxQuestionCommitBeforeAcknowledgementDoesNotRedeliver(t *testing.T) 
 	if _, err := e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, q.ID); err != nil {
 		t.Fatal(err)
 	}
-	for _, sql := range []string{`CREATE FUNCTION fail_question_ack() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic acknowledgement failure'; END $$`, `CREATE TRIGGER fail_question_ack BEFORE UPDATE OF delivered_at ON inbox_question_outbox FOR EACH ROW EXECUTE FUNCTION fail_question_ack()`} {
+	for _, sql := range []string{`CREATE TRIGGER fail_question_ack BEFORE UPDATE OF delivered_at ON inbox_question_outbox BEGIN SELECT RAISE(ABORT, 'synthetic acknowledgement failure'); END`} {
 		if _, err := e.st.Pool.Exec(ctx, sql); err != nil {
 			t.Fatal(err)
 		}
@@ -436,7 +436,7 @@ func TestInboxQuestionCommitBeforeAcknowledgementDoesNotRedeliver(t *testing.T) 
 	if err := e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM inbox_question_outbox WHERE question_message_id=$1 AND delivered_at IS NULL`, q.ID).Scan(&pending); err != nil || pending != 1 {
 		t.Fatal("failed ack discarded durable event", err)
 	}
-	if _, err := e.st.Pool.Exec(ctx, `DROP TRIGGER fail_question_ack ON inbox_question_outbox`); err != nil {
+	if _, err := e.st.Pool.Exec(ctx, `DROP TRIGGER fail_question_ack`); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 3; i++ {

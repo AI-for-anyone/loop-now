@@ -7,14 +7,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/clitemplate"
 	cm "loop-now/internal/server/credentialmodel"
 	"loop-now/internal/server/modelcredential"
 	"loop-now/internal/server/store"
+
+	"github.com/google/uuid"
 
 	"loop-now/internal/testutil/sqlitetest"
 )
@@ -32,6 +34,8 @@ type lifecycleEnv struct {
 	helper  *Helper
 	seeded  int64
 	logs    bytes.Buffer
+	// attempts 数尝试写入凭证版本的语句（回滚的也算），由语句钩子计数。
+	attempts atomic.Int64
 }
 
 func newLifecycleEnv(t *testing.T, options ServiceOptions) *lifecycleEnv {
@@ -46,12 +50,6 @@ func newLifecycleEnv(t *testing.T, options ServiceOptions) *lifecycleEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Sequence increments survive rollback, so attempted writes stay observable.
-	if _, err = st.Pool.Exec(ctx, `CREATE SEQUENCE lifecycle_version_writes;
- CREATE FUNCTION lifecycle_count_write() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM nextval('lifecycle_version_writes'); RETURN NEW; END $$;
- CREATE TRIGGER lifecycle_count_write BEFORE INSERT ON model_auth_versions FOR EACH ROW EXECUTE FUNCTION lifecycle_count_write()`); err != nil {
-		t.Fatal(err)
-	}
 	templates, err := clitemplate.Load("")
 	if err != nil {
 		t.Fatal(err)
@@ -61,6 +59,11 @@ func newLifecycleEnv(t *testing.T, options ServiceOptions) *lifecycleEnv {
 	helper := fakeGoHelper(t, `if(frame.type==='abort'){fs.appendFileSync(new URL('./events',import.meta.url),'abort\n');send({type:'result',id:operation.id,status:'succeeded',credential});}else{fs.appendFileSync(new URL('./events',import.meta.url),'login\n');const timer=setInterval(()=>{if(fs.existsSync(new URL('./release',import.meta.url))){clearInterval(timer);fs.appendFileSync(new URL('./events',import.meta.url),'result\n');send({type:'result',id:operation.id,status:'succeeded',credential});}},5);}`)
 	helper.Options.Timeout = 10 * time.Second
 	e := &lifecycleEnv{t: t, st: st, project: project.ID, helper: helper}
+	st.Pool.SetQueryHook(func(_ context.Context, q string) {
+		if strings.Contains(q, "INSERT INTO model_auth_versions") {
+			e.attempts.Add(1)
+		}
+	})
 	if options.LoginTimeout <= 0 {
 		options.LoginTimeout = 8 * time.Second
 	}
@@ -75,21 +78,10 @@ func newLifecycleEnv(t *testing.T, options ServiceOptions) *lifecycleEnv {
 			t.Error("lifecycle diagnostic leaked secret/URL")
 		}
 	})
-	var database, schema string
-	if err := st.Pool.QueryRow(ctx, `SELECT current_database(),current_schema()`).Scan(&database, &schema); err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("isolated PG database=%s schema=%s project=%s; actual Helper fd fixture, no provider/network", database, schema, project.ID)
+	t.Logf("isolated SQLite store project=%s; actual Helper fd fixture, no provider/network", project.ID)
 	return e
 }
-func (e *lifecycleEnv) totalWrites() int64 {
-	e.t.Helper()
-	var n int64
-	if err := e.st.Pool.QueryRow(context.Background(), `SELECT CASE WHEN is_called THEN last_value ELSE 0 END FROM lifecycle_version_writes`).Scan(&n); err != nil {
-		e.t.Fatal(err)
-	}
-	return n
-}
+func (e *lifecycleEnv) totalWrites() int64 { return e.attempts.Load() }
 
 // writes counts credential version writes attempted by logins after seeding.
 func (e *lifecycleEnv) writes() int64 { return e.totalWrites() - e.seeded }
@@ -295,8 +287,8 @@ func TestProjectLifecycleDeferredCommitFailurePreservesOld(t *testing.T) {
 	e := newLifecycleEnv(t, ServiceOptions{})
 	old := e.seedAccount()
 	op := e.start(&old)
-	_, err := e.st.Pool.Exec(context.Background(), `CREATE FUNCTION lifecycle_fail_commit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic deferred commit failure'; END $$;
- CREATE CONSTRAINT TRIGGER lifecycle_fail_commit AFTER INSERT ON model_auth_versions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION lifecycle_fail_commit()`)
+	// SQLite 没有延迟到提交时的触发器：在写入版本时失败，整个事务同样回滚。
+	_, err := e.st.Pool.Exec(context.Background(), `CREATE TRIGGER lifecycle_fail_commit AFTER INSERT ON model_auth_versions BEGIN SELECT RAISE(ABORT, 'synthetic deferred commit failure'); END`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,8 +325,7 @@ func TestProjectLifecycleProjectDeleteRollbackKeepsLiveHelper(t *testing.T) {
 	e := newLifecycleEnv(t, ServiceOptions{})
 	old := e.seedAccount()
 	op := e.start(&old)
-	_, err := e.st.Pool.Exec(context.Background(), `CREATE FUNCTION lifecycle_fail_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.deleted_at IS NOT NULL THEN RAISE EXCEPTION 'synthetic project delete rollback'; END IF; RETURN NEW; END $$;
- CREATE TRIGGER lifecycle_fail_delete BEFORE UPDATE ON projects FOR EACH ROW EXECUTE FUNCTION lifecycle_fail_delete()`)
+	_, err := e.st.Pool.Exec(context.Background(), `CREATE TRIGGER lifecycle_fail_delete BEFORE UPDATE ON projects WHEN NEW.deleted_at IS NOT NULL BEGIN SELECT RAISE(ABORT, 'synthetic project delete rollback'); END`)
 	if err != nil {
 		t.Fatal(err)
 	}
