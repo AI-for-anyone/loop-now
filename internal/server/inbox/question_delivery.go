@@ -232,7 +232,7 @@ func (s *Service) deliverQuestionEvent(ctx context.Context, id, qid, messageID u
 			s.emitCreated(ctx, msg)
 		}
 	}
-	// Redis carries a projection upsert. An append failure leaves the durable
+	// The inbox stream carries a projection upsert. An append failure leaves the durable
 	// outbox pending; retry may duplicate SSE updates but never messages or turns.
 	latest, err := s.St.GetInboxMessage(ctx, qid, s.O.PreviewChars)
 	if err != nil {

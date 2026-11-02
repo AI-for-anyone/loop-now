@@ -56,7 +56,6 @@ func (s *Service) DeliverInbox(ctx context.Context, msg store.NewInboxMessage) e
 		return nil, s.DeliverInboxTx(ctx, m.Tx, m, msg)
 	})
 	if err == nil {
-		_ = s.mirrorQueue(ctx, inst.ID)
 		s.interruptOldTurns(ctx, inst.TaskID)
 		s.Kick(inst.TaskID)
 		s.KickInbox(inst.ID)
@@ -136,7 +135,6 @@ func (s *Service) InboxCommitted(ctx context.Context, runtime uuid.UUID) {
 	if err != nil {
 		return
 	}
-	_ = s.mirrorQueue(ctx, runtime)
 	s.interruptOldTurns(ctx, inst.TaskID)
 	s.Kick(inst.TaskID)
 	s.KickInbox(runtime)

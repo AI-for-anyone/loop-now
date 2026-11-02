@@ -20,7 +20,7 @@ func (s *Service) Start(ctx context.Context) error {
 		return errors.New("任务对账间隔必须为正")
 	}
 	if s.Coord != nil && (s.Options.LockRenewInterval <= 0 || s.Options.RecordTimeout <= 0 || s.Options.InstanceID == uuid.Nil) {
-		return errors.New("任务Redis协调参数未完整配置")
+		return errors.New("任务协调参数未完整配置")
 	}
 	s.mu.Lock()
 	if s.started {
@@ -166,9 +166,6 @@ func (s *Service) reconcile() {
 		instances, e := s.Store.TaskInstances(s.ctx, id)
 		if e == nil {
 			for _, inst := range instances {
-				if s.Coord != nil {
-					_ = s.mirrorQueue(s.ctx, inst.ID)
-				}
 				s.KickInbox(inst.ID)
 			}
 		}
@@ -231,9 +228,6 @@ func (s *Service) drive(ctx context.Context, id uuid.UUID) error {
 		n := r.Current()
 		if n == nil {
 			return errors.New("任务缺少当前节点")
-		}
-		if e := s.mirrorQueue(ctx, n.RuntimeID); e != nil {
-			return e
 		}
 		if n.Status == "queued" && s.Hooks != nil {
 			// node.before_start（plugins/SPEC.md §4）：节点第一次开始前询问插件，不在任务事务里等待；被阻止时任务进入阻塞并写明原因。

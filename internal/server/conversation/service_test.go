@@ -360,35 +360,31 @@ func TestConcurrentSendsExactlyOnce(t *testing.T) {
 	}
 }
 
-func TestRedisDataLoss(t *testing.T) {
+func TestLockLoss(t *testing.T) {
 	e := newEnv(t)
 	e.mustSend("block 当前", "")
 	e.waitStarted("block 当前")
 	e.mustSend("排队1", "queue")
 	e.mustSend("排队2", "queue")
-	// 协调数据丢失（锁与两个队列都没了）。
+	// 忙闲锁丢了（例如没有续期、过了 TTL）。
 	ctx := context.Background()
 	owner, _ := e.co.LockOwner(ctx, e.agent.String())
 	if _, err := e.co.Release(ctx, e.agent.String(), owner); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.co.RebuildQueues(ctx, e.agent.String(), nil, nil); err != nil {
-		t.Fatal(err)
-	}
-	// 数据丢失后仍判定为忙，不会开始第二次执行。
+	// 锁丢了仍判定为忙（数据库里有进行中与排队的执行），不会开始第二次执行。
 	if _, err := e.send("没选择", ""); !apperr.Is(err, apperr.CodeAgentBusy) {
-		t.Fatalf("Redis 数据丢失后仍应判定为忙：%v", err)
+		t.Fatalf("锁丢了仍应判定为忙：%v", err)
 	}
-	// 对账在默认配置下应在 30 秒内（这里是 200ms 周期）重建锁与队列。
+	// 按数据库补回锁（发送时或对账时）。
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		i, n, _ := e.co.QueueContents(context.Background(), e.agent.String())
 		owner, _ := e.co.LockOwner(context.Background(), e.agent.String())
-		if len(i)+len(n) == 2 && owner != "" {
+		if owner != "" {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("对账未能重建锁与队列")
+			t.Fatal("未能按数据库补回锁")
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -410,11 +406,10 @@ func TestRestartRecovery(t *testing.T) {
 	}
 	_, _ = e.co.AppendText(ctx, e.agent.String(), run.ID.String(), "已产生的文字", "run.text", []byte(`{}`))
 	_, _ = e.co.Restore(ctx, e.agent.String(), coord.LockValue(run.ID.String(), other.String()))
-	_, queued, err := e.st.InsertMessageAndRun(ctx, store.NewRun{AgentID: e.agent, RunID: uuid.Must(uuid.NewV7()), Text: "排队的", WhenBusy: "queue", InstanceID: other})
+	_, _, err = e.st.InsertMessageAndRun(ctx, store.NewRun{AgentID: e.agent, RunID: uuid.Must(uuid.NewV7()), Text: "排队的", WhenBusy: "queue", InstanceID: other})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = e.co.PushNormal(ctx, e.agent.String(), queued.ID.String())
 
 	svc2 := e.newService()
 	if err := svc2.Start(ctx); err != nil {

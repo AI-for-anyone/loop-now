@@ -138,24 +138,13 @@ func TestSameAgentTasksHaveIndependentLocksAndRestoreRedisLoss(t *testing.T) {
 	if e = s.DeliverInbox(ctx, msg); e != nil {
 		t.Fatal(e)
 	}
-	_, normal, e := s.Coord.QueueContents(ctx, p.RuntimeID.String())
-	if e != nil || len(normal) != 1 {
-		t.Fatal("queued task message not mirrored", e, normal)
+	var queued int
+	if e = s.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM task_turns WHERE runtime_id=$1 AND status='queued'`, p.RuntimeID).Scan(&queued); e != nil || queued != 1 {
+		t.Fatal("queued task message not queued", e, queued)
 	}
-	interrupt, _, e := s.Coord.QueueContents(ctx, p.RuntimeID.String())
-	if e != nil {
-		t.Fatal(e)
-	}
-	if e = s.Coord.RebuildQueues(ctx, p.RuntimeID.String(), interrupt, nil); e != nil {
-		t.Fatal(e)
-	}
-	eventually(t, func() bool {
-		_, normal, e := s.Coord.QueueContents(ctx, p.RuntimeID.String())
-		return e == nil && len(normal) == 1
-	})
 	mu.Lock()
 	if calls[p.RuntimeID] != 1 || calls[runtime2] != 1 {
-		t.Fatal("Redis loss replayed tools")
+		t.Fatal("lock loss replayed tools")
 	}
 	mu.Unlock()
 	close(release)
@@ -164,7 +153,7 @@ func TestSameAgentTasksHaveIndependentLocksAndRestoreRedisLoss(t *testing.T) {
 	})
 	events, e := s.Coord.ReadEvents(ctx, coord.ProjectTaskStream(r.View.Task.ProjectID.String()), "0-0", 1000, 0)
 	if e != nil || len(events) == 0 {
-		t.Fatal("project Redis relay missing", e)
+		t.Fatal("project event relay missing", e)
 	}
 	var previous int64
 	for _, event := range events {

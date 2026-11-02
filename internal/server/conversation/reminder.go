@@ -59,7 +59,7 @@ func (s *Service) scheduleReminder(ctx context.Context, agentID, triggerID uuid.
 	}
 	runID := uuid.Must(uuid.NewV7())
 	owner := coord.LockValue(runID.String(), s.o.InstanceID.String())
-	acquired, err := s.co.AcquireIfIdle(ctx, agentID.String(), owner)
+	acquired, err := s.co.Acquire(ctx, agentID.String(), owner)
 	if err != nil {
 		return err
 	}
@@ -73,8 +73,8 @@ func (s *Service) scheduleReminder(ctx context.Context, agentID, triggerID uuid.
 	out, err := s.st.InsertInboxWithReminder(ctx, msg, rem)
 	if acquired && (err != nil || !out.Created) {
 		_, _ = s.co.Release(ctx, agentID.String(), owner)
-		if errors.Is(err, store.ErrActiveRunExists) {
-			// Redis 丢了锁：按数据库中的进行中执行恢复锁，然后按“忙”排队。
+		if errors.Is(err, store.ErrActiveRunExists) || errors.Is(err, store.ErrQueuedRunsExist) {
+			// 锁是空的，但数据库里有进行中或排队的执行（例如刚重启、交接之间）：按数据库恢复锁，然后按“忙”排队。
 			s.restoreLock(ctx, agentID)
 			rem.Start, rem.RunID = false, uuid.Must(uuid.NewV7())
 			s.queueReminder(ctx, &rem, whenBusy)
@@ -109,19 +109,9 @@ func (s *Service) scheduleReminder(ctx context.Context, agentID, triggerID uuid.
 	return nil
 }
 
-// queueReminder 把提醒设为排队：按 whenBusy 进入打断队列或普通队列。
-func (s *Service) queueReminder(ctx context.Context, rem *store.NewRun, whenBusy string) {
-	agentID := rem.AgentID
+// queueReminder 把提醒设为排队：按 whenBusy 排在打断或普通执行之后。
+func (s *Service) queueReminder(_ context.Context, rem *store.NewRun, whenBusy string) {
 	rem.WhenBusy = whenBusy
-	rem.Enqueue = func(r store.Run) error {
-		if whenBusy == "interrupt" {
-			return s.co.PushInterrupt(ctx, agentID.String(), r.ID.String())
-		}
-		return s.co.PushNormal(ctx, agentID.String(), r.ID.String())
-	}
-	rem.OnEnqueueError = func(err error) {
-		s.log.Warn("写入 Redis 队列失败，等待对账补回", "agentId", agentID, "runId", rem.RunID, "err", err)
-	}
 }
 
 // prepareReminder 在平台提醒那一轮开始执行时调用：先收养没有承载提醒的待处理消息，再在提醒文字中点名本轮承载的消息，

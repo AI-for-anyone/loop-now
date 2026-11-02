@@ -289,8 +289,7 @@ func TestWebSleepIntegration(t *testing.T) {
 	if err = s.a.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM runs WHERE agent_id=$1`, worker.ID).Scan(&runs); err != nil || runs != 6 || prompts != 6 {
 		t.Fatal("normal run/native prompt mismatch", runs, prompts, err)
 	}
-	interrupt, normal, err := s.a.Coord.QueueContents(ctx, worker.ID.String())
-	if err != nil || len(interrupt) != 0 || len(normal) != 0 {
+	if queued, err := s.a.Store.QueuedRuns(ctx, worker.ID); err != nil || len(queued) != 0 {
 		t.Fatal("normal queue not drained", err)
 	}
 	audit["normalRunCount"] = runs

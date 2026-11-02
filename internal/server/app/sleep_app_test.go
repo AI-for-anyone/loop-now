@@ -293,22 +293,19 @@ func TestSleepAppWakeCommitExecutionAndSessionFailure(t *testing.T) {
 			originalWake := *st.Sleep.WakeAt
 			barrier := "offline-test-owner"
 			if mode == "wake-queued-restart" {
-				ok, e := s.a.Coord.AcquireIfIdle(ctx, agent.ID.String(), barrier)
+				ok, e := s.a.Coord.Acquire(ctx, agent.ID.String(), barrier)
 				if e != nil || !ok {
 					t.Fatal("barrier", e)
 				}
 			}
 			if mode == "coord-cleared" {
-				// 协调数据丢失：Agent 的忙闲锁与两个队列都没了。
+				// 协调数据丢失：Agent 的忙闲锁没了。
 				id := agent.ID.String()
 				owner, err := s.a.Coord.LockOwner(ctx, id)
 				if err != nil {
 					t.Fatal(err)
 				}
 				if _, err = s.a.Coord.Release(ctx, id, owner); err != nil {
-					t.Fatal(err)
-				}
-				if err = s.a.Coord.RebuildQueues(ctx, id, nil, nil); err != nil {
 					t.Fatal(err)
 				}
 				current, err := s.a.Store.SleepState(ctx, p)
