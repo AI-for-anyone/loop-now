@@ -198,8 +198,8 @@ type InboxPromotion struct {
 
 // PromoteInboxMessageTx 把一条排队中的 Inbox 消息（任何发件人）移到排队中的打断提醒：没有就新建一个，
 // queue_seq 新取值，排在已有打断之后、全部普通排队之前；消息的 whenBusy 改为 interrupt，原提醒空了即作废（merged_into_interrupt）。
-// 已经由打断提醒承载时 Changed=false。新建提醒时 enqueue 在事务内被调用（推入 Redis 打断队列）。
-func (s *Store) PromoteInboxMessageTx(ctx context.Context, tx *db.Tx, agentID, messageID, instanceID uuid.UUID, enqueue func(Run) error) (InboxPromotion, error) {
+// 已经由打断提醒承载时 Changed=false。
+func (s *Store) PromoteInboxMessageTx(ctx context.Context, tx *db.Tx, agentID, messageID, instanceID uuid.UUID) (InboxPromotion, error) {
 	var out InboxPromotion
 	if err := requireLiveAgent(ctx, tx, agentID); err != nil {
 		return out, err
@@ -221,7 +221,7 @@ func (s *Store) PromoteInboxMessageTx(ctx context.Context, tx *db.Tx, agentID, m
 		ORDER BY queue_seq LIMIT 1`, agentID))
 	if errors.Is(err, db.ErrNoRows) {
 		_, out.Target, err = s.insertMessageAndRunTx(ctx, tx, NewRun{AgentID: agentID, RunID: uuid.Must(uuid.NewV7()), Text: "平台提醒", WhenBusy: "interrupt",
-			InstanceID: instanceID, TriggerInboxID: &messageID, Enqueue: enqueue})
+			InstanceID: instanceID, TriggerInboxID: &messageID})
 		out.Created = true
 	}
 	if err != nil {

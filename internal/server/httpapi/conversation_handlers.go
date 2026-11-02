@@ -243,7 +243,7 @@ func (s *Server) pumpEventsFiltered(w http.ResponseWriter, r *http.Request, curs
 	read func(ctx context.Context, after string, block time.Duration) ([]coord.Event, error), keep func(coord.Event) bool, logAttrs ...any) {
 	ctx := r.Context()
 	rc := http.NewResponseController(w)
-	// Redis 的阻塞读不响应取消，所以每次最多阻塞 1 秒，保活按时间间隔判断，连接或服务端关闭时能及时退出。
+	// 每次最多阻塞 1 秒，保活按时间间隔判断，连接或服务端关闭时能及时退出。
 	block := min(s.O.SSEKeepalive, time.Second)
 	lastWrite := time.Now()
 	for ctx.Err() == nil {

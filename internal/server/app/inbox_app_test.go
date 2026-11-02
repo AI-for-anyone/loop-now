@@ -298,22 +298,14 @@ func TestReminderRecovery(t *testing.T) {
 		t.Fatalf("重启后排队中的提醒应照常执行一次：%v", got)
 	}
 
-	// 协调数据丢失（普通队列没了）：提醒按数据库补回，且不重复执行。
+	// 忙时排队的提醒按数据库出队，且只执行一次。
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=30s 又一个很长的回复"})
 	s.waitRunning(a)
 	s.must(201, "POST", "/inbox/messages", map[string]any{"to": ag.ID.String(), "text": "丢失前一"})
 	s.must(201, "POST", "/inbox/messages", map[string]any{"to": ag.ID.String(), "text": "丢失前二"})
-	interrupt, _, err := s.a.Coord.QueueContents(context.Background(), ag.ID.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.a.Coord.RebuildQueues(context.Background(), ag.ID.String(), interrupt, nil); err != nil {
-		t.Fatal(err)
-	}
-	time.Sleep(1500 * time.Millisecond) // 对账间隔为 500ms
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "结束长回复", "whenBusy": "interrupt"})
 	s.waitIdle(a)
 	if got := reminders(t, s, ag.ID); len(got) != 2 || got[1] != "completed" {
-		t.Fatalf("协调数据丢失后提醒应按数据库补回并只执行一次：%v", got)
+		t.Fatalf("排队的提醒应按数据库出队并只执行一次：%v", got)
 	}
 }

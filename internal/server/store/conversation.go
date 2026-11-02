@@ -66,6 +66,12 @@ type Message struct {
 // ErrActiveRunExists 表示该 Agent 已有进行中的执行（单一执行约束）。
 var ErrActiveRunExists = errors.New("Agent 已有进行中的执行")
 
+// ErrQueuedRunsExist 表示该 Agent 还有可以开始的排队执行：新消息不能越过它们直接开始。
+var ErrQueuedRunsExist = errors.New("Agent 还有排队的执行")
+
+// dispatchableQueued 是可以开始的排队执行的条件（表名 runs，不用别名）：sleep 唤醒那一轮要等 sleep 真的醒来，与 StartQueuedRun 的判断相同。
+const dispatchableQueued = `runs.status = 'queued' AND (runs.origin <> 'sleep_wake' OR EXISTS(SELECT 1 FROM agent_sleeps z WHERE z.id = runs.wake_sleep_id AND z.wake_run_id = runs.id AND z.state = 'woken'))`
+
 // runColumnsOf 返回 runs 的列，按 runFields 的顺序；prefix 为表别名加点，例如 "r."。
 func runColumnsOf(prefix string) string {
 	return strings.NewReplacer("$.", prefix).Replace(`$.id, $.agent_id, $.user_message_id, $.config_version, $.instance_id, $.priority,
@@ -113,11 +119,6 @@ type NewRun struct {
 	InstanceID uuid.UUID
 	// RequestID 是发起这条消息的接口请求编号，记入入队或派发事件；可为空。
 	RequestID string
-	// Enqueue 在同一事务内、提交前调用（仅排队时），用于把执行推入 Redis 队列。
-	// 事务锁住了 Agent 行，同一 Agent 的入队因此串行，Redis 队列顺序与数据库编号一致。
-	// 返回的错误只记录、不回滚：Redis 中缺少的排队执行由对账补回。
-	Enqueue        func(run Run) error
-	OnEnqueueError func(error)
 	// TriggerInboxID 不为空表示这是一轮平台提醒（origin = inbox_reminder），记下创建它的 Inbox 消息。
 	TriggerInboxID *uuid.UUID
 	Origin         string
@@ -126,7 +127,7 @@ type NewRun struct {
 
 // InsertMessageAndRun 在一个事务中写入用户消息、对应执行，以及入队或派发事件。
 // Agent 不存在或已删除返回 not_found；会话丢失返回 session_missing；
-// Start 为 true 但已有进行中的执行时返回 ErrActiveRunExists。
+// Start 为 true 但已有进行中的执行时返回 ErrActiveRunExists，还有可以开始的排队执行时返回 ErrQueuedRunsExist。
 func (s *Store) InsertMessageAndRun(ctx context.Context, in NewRun) (Message, Run, error) {
 	var msg Message
 	var run Run
@@ -162,6 +163,13 @@ func (s *Store) insertMessageAndRunTx(ctx context.Context, tx *db.Tx, in NewRun)
 		var instance *uuid.UUID
 		now := tx.Now()
 		if in.Start {
+			var queued bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM runs WHERE agent_id = $1 AND `+dispatchableQueued+`)`, in.AgentID).Scan(&queued); err != nil {
+				return err
+			}
+			if queued {
+				return ErrQueuedRunsExist
+			}
 			status, startedAt, instance = "starting", &now, &in.InstanceID
 		}
 		queueSeq, err := tx.NextSeq(ctx, "runs.queue_seq")
@@ -226,11 +234,6 @@ func (s *Store) insertMessageAndRunTx(ctx context.Context, tx *db.Tx, in NewRun)
 			run, err = scanRun(tx.QueryRow(ctx, `SELECT `+runColumns+` FROM runs WHERE id=$1`, run.ID))
 			if err != nil {
 				return err
-			}
-		}
-		if !in.Start && in.Enqueue != nil {
-			if qerr := in.Enqueue(run); qerr != nil && in.OnEnqueueError != nil {
-				in.OnEnqueueError(qerr)
 			}
 		}
 		return nil
@@ -340,6 +343,15 @@ func (s *Store) QueuedRuns(ctx context.Context, agentID uuid.UUID) ([]Run, error
 		return nil, err
 	}
 	return db.CollectRows(rows, func(r db.CollectableRow) (Run, error) { return scanRun(r) })
+}
+
+// NextQueuedRun 返回 Agent 下一条可以开始的排队执行（先打断、后普通，各自按排入顺序）；没有时 ok 为 false。
+func (s *Store) NextQueuedRun(ctx context.Context, agentID uuid.UUID) (id uuid.UUID, ok bool, err error) {
+	err = s.Pool.QueryRow(ctx, `SELECT id FROM runs WHERE agent_id = $1 AND `+dispatchableQueued+` ORDER BY priority, queue_seq LIMIT 1`, agentID).Scan(&id)
+	if errors.Is(err, db.ErrNoRows) {
+		return uuid.Nil, false, nil
+	}
+	return id, err == nil, err
 }
 
 // AgentsWithQueuedRuns 返回有排队执行的 Agent。

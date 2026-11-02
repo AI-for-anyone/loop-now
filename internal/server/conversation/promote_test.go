@@ -87,20 +87,22 @@ func (e *env) snapshotQueue(n names) []string {
 	return n.of(snap.QueuedRuns)
 }
 
-func (e *env) redisQueues(n names) ([]string, []string) {
+// queues 返回数据库里的排队执行（打断、普通，各自按出队顺序）的名字。
+func (e *env) queues(n names) ([]string, []string) {
 	e.t.Helper()
-	qi, qn, err := e.co.QueueContents(context.Background(), e.agent.String())
+	queued, err := e.st.QueuedRuns(context.Background(), e.agent)
 	if err != nil {
 		e.t.Fatal(err)
 	}
-	conv := func(ids []string) []string {
-		out := []string{}
-		for _, id := range ids {
-			out = append(out, n[uuid.MustParse(id)])
+	qi, qn := []string{}, []string{}
+	for _, r := range queued {
+		if r.Priority == 0 {
+			qi = append(qi, n[r.ID])
+		} else {
+			qn = append(qn, n[r.ID])
 		}
-		return out
 	}
-	return conv(qi), conv(qn)
+	return qi, qn
 }
 
 // lastQueueEvent returns the newest queue.updated payload on the agent stream.
@@ -196,7 +198,7 @@ func TestPromoteOrderingAfterExistingInterrupts(t *testing.T) {
 	if !slices.Equal(n.of(got.QueuedRuns), want) || !slices.Equal(e.snapshotQueue(n), want) || !slices.Equal(e.lastQueueEvent(n), want) {
 		t.Fatalf("第一次转换后顺序不对：结果 %v 快照 %v", n.of(got.QueuedRuns), e.snapshotQueue(n))
 	}
-	if qi, qn := e.redisQueues(n); !slices.Equal(qi, []string{"打断1", "普通2"}) || !slices.Equal(qn, []string{"普通1", "普通3"}) {
+	if qi, qn := e.queues(n); !slices.Equal(qi, []string{"打断1", "普通2"}) || !slices.Equal(qn, []string{"普通1", "普通3"}) {
 		t.Fatalf("Redis 队列不对：%v / %v", qi, qn)
 	}
 	got = e.mustPromote(three.Run.ID)
@@ -204,7 +206,7 @@ func TestPromoteOrderingAfterExistingInterrupts(t *testing.T) {
 	if !slices.Equal(n.of(got.QueuedRuns), want) || !slices.Equal(e.snapshotQueue(n), want) {
 		t.Fatalf("连续转换应按转换先后：%v", n.of(got.QueuedRuns))
 	}
-	if qi, qn := e.redisQueues(n); !slices.Equal(qi, []string{"打断1", "普通2", "普通3"}) || !slices.Equal(qn, []string{"普通1"}) {
+	if qi, qn := e.queues(n); !slices.Equal(qi, []string{"打断1", "普通2", "普通3"}) || !slices.Equal(qn, []string{"普通1"}) {
 		t.Fatalf("Redis 队列不对：%v / %v", qi, qn)
 	}
 	events := func(kind string) int {
@@ -344,7 +346,7 @@ func TestPromoteRacesHandoffExactlyOnce(t *testing.T) {
 				t.Fatalf("第 %d 轮：%s 派发 %d 次、状态 %s、执行 %d 次", round, text, dispatched, status, counts[text])
 			}
 		}
-		if qi, qn := e.redisQueues(n); len(qi) != 0 || len(qn) != 0 {
+		if qi, qn := e.queues(n); len(qi) != 0 || len(qn) != 0 {
 			t.Fatalf("第 %d 轮：Redis 队列应为空：%v / %v", round, qi, qn)
 		}
 	}
@@ -447,7 +449,7 @@ func (e *env) waitIdleOrDump(n names) {
 		}
 	}
 	raceLogs.mu.Unlock()
-	qi, qn := e.redisQueues(n)
+	qi, qn := e.queues(n)
 	owner, _ := e.co.LockOwner(context.Background(), e.agent.String())
 	e.t.Fatalf("等待 Agent 空闲超时：redis 打断 %v 普通 %v 锁 %q 执行顺序 %v", qi, qn, owner, e.ex.messages())
 }

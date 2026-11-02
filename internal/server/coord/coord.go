@@ -1,6 +1,6 @@
-// Package coord 在进程内保存可重建的协调数据：Agent 忙闲锁、两条排队队列、
+// Package coord 在进程内保存可重建的协调数据：Agent（与任务实例）忙闲锁、
 // 控制台事件流、执行的累计回复文字，以及打断命令的转发。
-// 数据库才是事实来源；进程重启后这里为空，按数据库重建。
+// 数据库才是事实来源（包括排队：status='queued' 的执行按 priority、queue_seq 出队）；进程重启后这里为空，按数据库重建。
 package coord
 
 import (
@@ -17,12 +17,6 @@ type Keys struct{ Prefix string }
 
 // Lock 是 Agent 忙闲锁：<prefix>agent:<id>:lock。
 func (k Keys) Lock(agentID string) string { return k.agent(agentID, "lock") }
-
-// QueueInterrupt 是打断队列：<prefix>agent:<id>:q:interrupt。
-func (k Keys) QueueInterrupt(agentID string) string { return k.agent(agentID, "q:interrupt") }
-
-// QueueNormal 是普通队列：<prefix>agent:<id>:q:normal。
-func (k Keys) QueueNormal(agentID string) string { return k.agent(agentID, "q:normal") }
 
 // Cmd 是打断转发的频道：<prefix>agent:<id>:cmd。
 func (k Keys) Cmd(agentID string) string { return k.agent(agentID, "cmd") }
@@ -63,9 +57,7 @@ type Coord struct {
 	now  func() time.Time
 
 	mu        sync.Mutex
-	locks     map[string]expiring // 键：Agent ID
-	interrupt map[string][]string // 键：Agent ID
-	normal    map[string][]string
+	locks     map[string]expiring // 键：Agent ID 或任务实例 ID
 	streams   map[string]*stream  // 键：Keys 生成的流名
 	texts     map[string]expiring // 键：执行 ID
 	subs      map[string]map[chan string]struct{}
@@ -87,8 +79,7 @@ func New(o Options) *Coord {
 		now = time.Now
 	}
 	return &Coord{keys: Keys{Prefix: o.Prefix}, opts: o, now: now,
-		locks: map[string]expiring{}, interrupt: map[string][]string{}, normal: map[string][]string{},
-		streams: map[string]*stream{}, texts: map[string]expiring{}, subs: map[string]map[chan string]struct{}{}}
+		locks: map[string]expiring{}, streams: map[string]*stream{}, texts: map[string]expiring{}, subs: map[string]map[chan string]struct{}{}}
 }
 
 // Keys 返回键名生成器。
@@ -126,16 +117,9 @@ func (c *Coord) setLock(agentID, owner string, now time.Time) {
 	c.locks[agentID] = expiring{value: owner, until: after(now, c.opts.LockTTL)}
 }
 
-// AcquireIfIdle 仅在锁不存在且两个队列都为空时设置锁，返回是否拿到。
-func (c *Coord) AcquireIfIdle(_ context.Context, agentID, owner string) (bool, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	now := c.now()
-	if c.owner(agentID, now) != "" || len(c.interrupt[agentID]) > 0 || len(c.normal[agentID]) > 0 {
-		return false, nil
-	}
-	c.setLock(agentID, owner, now)
-	return true, nil
+// Acquire 仅在锁不存在时设置锁，返回是否拿到。排队中的执行由数据库判断（见 store 的 ErrQueuedRunsExist）。
+func (c *Coord) Acquire(_ context.Context, agentID, owner string) (bool, error) {
+	return c.Swap(context.Background(), agentID, "", owner)
 }
 
 // Renew 续期锁：持有者匹配时延长；锁不存在时按 owner 补设；被其他持有者占用时返回 false 且不做改动。
@@ -180,117 +164,21 @@ func (c *Coord) LockOwner(_ context.Context, agentID string) (string, error) {
 	return c.owner(agentID, c.now()), nil
 }
 
-// Handoff 原子地交接锁。前置条件：currentOwner 非空时锁值必须等于它；为空时锁必须不存在。
-// 不满足时返回 ("", false, nil)。满足时先从打断队列、再从普通队列取队首：
-// 取到则把锁设为 runID|instanceID 并返回 (runID, true, nil)；
-// 两个队列都为空则删除锁（仅 currentOwner 非空时），返回 ("", true, nil)。
-func (c *Coord) Handoff(_ context.Context, agentID, currentOwner, instanceID string) (string, bool, error) {
+// Swap 原子地把锁从 current 换成 next：current 为空表示锁必须不存在，next 为空表示删除锁。
+// 锁当前不是 current 时不做改动并返回 false。交接下一次执行时由调用方先按数据库选出下一条，再用它换锁。
+func (c *Coord) Swap(_ context.Context, agentID, current, next string) (bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	now := c.now()
-	if c.owner(agentID, now) != currentOwner {
-		return "", false, nil
+	if c.owner(agentID, now) != current {
+		return false, nil
 	}
-	next := ""
-	for _, q := range []map[string][]string{c.interrupt, c.normal} {
-		if ids := q[agentID]; len(ids) > 0 {
-			next = ids[0]
-			setQueue(q, agentID, ids[1:])
-			break
-		}
-	}
-	if next != "" {
-		c.setLock(agentID, LockValue(next, instanceID), now)
-		return next, true, nil
-	}
-	if currentOwner != "" {
+	if next == "" {
 		delete(c.locks, agentID)
+	} else {
+		c.setLock(agentID, next, now)
 	}
-	return "", true, nil
-}
-
-// ---------- 队列 ----------
-
-func setQueue(q map[string][]string, agentID string, ids []string) {
-	if len(ids) == 0 {
-		delete(q, agentID)
-		return
-	}
-	q[agentID] = ids
-}
-
-func without(ids []string, runID string) ([]string, bool) {
-	out := ids[:0:0]
-	found := false
-	for _, id := range ids {
-		if id == runID {
-			found = true
-			continue
-		}
-		out = append(out, id)
-	}
-	return out, found
-}
-
-// PushNormal 把执行 ID 追加到普通队列尾部。
-func (c *Coord) PushNormal(_ context.Context, agentID, runID string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.normal[agentID] = append(c.normal[agentID], runID)
-	return nil
-}
-
-// PushInterrupt 把执行 ID 追加到打断队列尾部。
-func (c *Coord) PushInterrupt(_ context.Context, agentID, runID string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.interrupt[agentID] = append(c.interrupt[agentID], runID)
-	return nil
-}
-
-// Promote 原子地把执行从普通队列移到打断队列尾部，与 Handoff 的出队互斥：同一执行不会同时在两个队列，也不会丢。
-// 返回 1：已从普通队列移到打断队列；2：已在打断队列；0：两个队列都没有（已被交接取走），由调用方按数据库判断。
-func (c *Coord) Promote(_ context.Context, agentID, runID string) (int64, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if rest, found := without(c.normal[agentID], runID); found {
-		setQueue(c.normal, agentID, rest)
-		c.interrupt[agentID] = append(c.interrupt[agentID], runID)
-		return 1, nil
-	}
-	for _, id := range c.interrupt[agentID] {
-		if id == runID {
-			return 2, nil
-		}
-	}
-	return 0, nil
-}
-
-// Remove 把执行 ID 从两个队列中移除（撤回或作废的排队执行）。已被交接取走时无影响：开始前会按数据库状态跳过它。
-func (c *Coord) Remove(_ context.Context, agentID, runID string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for _, q := range []map[string][]string{c.interrupt, c.normal} {
-		rest, _ := without(q[agentID], runID)
-		setQueue(q, agentID, rest)
-	}
-	return nil
-}
-
-// QueueContents 原子地读取两个队列的全部内容（按出队顺序）。
-func (c *Coord) QueueContents(_ context.Context, agentID string) (interrupt, normal []string, err error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return append([]string{}, c.interrupt[agentID]...), append([]string{}, c.normal[agentID]...), nil
-}
-
-// RebuildQueues 原子地把两个队列替换为给定的有序内容；空切片表示清空对应的队列。
-func (c *Coord) RebuildQueues(_ context.Context, agentID string, interrupt, normal []string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	setQueue(c.interrupt, agentID, append([]string{}, interrupt...))
-	setQueue(c.normal, agentID, append([]string{}, normal...))
-	return nil
+	return true, nil
 }
 
 // ---------- 事件流与回复文字 ----------
