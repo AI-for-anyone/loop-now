@@ -247,6 +247,7 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 		}
 
 		// 用量：按（桶、来源）、（提供方、模型）、Agent 与全部四种分组。
+		// SQLITE-PORT(G6): GROUPING SETS
 		rows, err = tx.Query(ctx, `WITH x AS (
 			SELECT u.agent_id, `+statsBucket("u.at")+` AS bucket,
 				CASE WHEN r.id IS NOT NULL THEN CASE r.origin WHEN 'console' THEN 'console' WHEN 'inbox_reminder' THEN 'inboxReminder' WHEN 'sleep_wake' THEN 'sleepWake' ELSE 'other' END
@@ -257,7 +258,6 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 			FROM usage_records u JOIN agents a ON a.id = u.agent_id
 				LEFT JOIN runs r ON r.id = u.run_id
 				LEFT JOIN task_turns t ON t.id = u.task_turn_id
-			// SQLITE-PORT(G6): GROUPING SETS
 			WHERE `+statsScope+` AND u.at >= $3 AND u.at < $4)
 		SELECT grouping(bucket, origin, provider, model, agent_id), bucket, origin, provider, model, agent_id,
 			coalesce(sum(input), 0), coalesce(sum(output), 0), coalesce(sum(cache_read), 0), coalesce(sum(cache_write), 0), coalesce(sum(total), 0),
@@ -304,6 +304,8 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 		// 执行：常态执行与派发过的任务轮次，按排入时间计入；按桶、Agent、未完成原因与全部四种分组。
 		// 被人停止的常态执行以 endReason user_stopped 结束，任务轮次以 errorCode user_stopped 结束。
 		// SQLITE-PORT(G6): extract/epoch
+		// SQLITE-PORT(G6): extract/epoch
+		// SQLITE-PORT(G6): GROUPING SETS、extract/epoch、percentile
 		rows, err = tx.Query(ctx, `WITH ex AS (
 			SELECT r.agent_id, r.origin, r.status, r.queued_at,
 				CASE WHEN r.origin = 'console' THEN CAST(extract(epoch FROM (r.running_at - r.queued_at)) AS REAL) END AS wait,
@@ -311,7 +313,6 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 				CASE r.status WHEN 'failed' THEN 'failed' WHEN 'interrupted' THEN CASE WHEN r.end_reason = 'user_stopped' THEN 'stopped' ELSE 'interrupted' END END AS kind,
 				CASE r.status WHEN 'failed' THEN r.error_code WHEN 'interrupted' THEN r.end_reason END AS code
 			FROM runs r JOIN agents a ON a.id = r.agent_id
-			// SQLITE-PORT(G6): extract/epoch
 			WHERE `+statsScope+` AND r.started_at IS NOT NULL AND r.queued_at >= $3 AND r.queued_at < $4
 			UNION ALL
 			SELECT i.agent_id, t.origin, t.status, t.queued_at, NULL,
@@ -320,7 +321,6 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 				CASE WHEN t.status IN ('failed', 'interrupted') THEN t.error_code END
 			FROM task_turns t JOIN task_instances i ON i.id = t.runtime_id JOIN agents a ON a.id = i.agent_id
 			WHERE `+statsScope+` AND t.started_at IS NOT NULL AND t.queued_at >= $3 AND t.queued_at < $4),
-		// SQLITE-PORT(G6): GROUPING SETS、extract/epoch、percentile
 		x AS (SELECT ex.*, `+statsBucket("ex.queued_at")+` AS bucket FROM ex)
 		SELECT grouping(bucket, agent_id, kind, code), bucket, agent_id, kind, code, count(*),
 			count(*) FILTER (WHERE status = 'completed'), count(*) FILTER (WHERE status = 'interrupted'), count(*) FILTER (WHERE status = 'failed'),
@@ -403,9 +403,9 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 		}
 
 		// 工具：时间窗内排入并开始回复的常态执行；每次调用按（执行、调用 ID）计一次。
+		// SQLITE-PORT(G6): bool_or/and
 		rows, err = tx.Query(ctx, `WITH r AS (
 			SELECT r.id FROM runs r JOIN agents a ON a.id = r.agent_id
-			// SQLITE-PORT(G6): bool_or/and
 			WHERE `+statsScope+` AND r.running_at IS NOT NULL AND r.queued_at >= $3 AND r.queued_at < $4),
 		c AS (
 			SELECT e.run_id, e.tool_call_id, min(e.tool_name) AS name, bool_or(e.state = 'failed') AS failed
@@ -459,14 +459,14 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 		busy := map[int64]float64{}
 		if end.After(from) {
 			// SQLITE-PORT(G6): greatest/least
+			// SQLITE-PORT(G6): greatest/least
+			// SQLITE-PORT(G6): extract/epoch、generate_series、greatest/least
 			rows, err = tx.Query(ctx, `WITH iv AS (
 				SELECT greatest(r.running_at, $3) AS lo, least(coalesce(r.ended_at, $4), $4) AS hi FROM runs r JOIN agents a ON a.id = r.agent_id
-				// SQLITE-PORT(G6): greatest/least
 				WHERE `+statsScope+` AND r.running_at IS NOT NULL AND r.running_at < $4 AND coalesce(r.ended_at, $4) > $3
 				UNION ALL
 				SELECT greatest(t.started_at, $3), least(coalesce(t.ended_at, $4), $4)
 				FROM task_turns t JOIN task_instances i ON i.id = t.runtime_id JOIN agents a ON a.id = i.agent_id
-				// SQLITE-PORT(G6): extract/epoch、generate_series、greatest/least
 				WHERE `+statsScope+` AND t.started_at IS NOT NULL AND t.started_at < $4 AND coalesce(t.ended_at, $4) > $3)
 			SELECT CAST(floor(extract(epoch FROM (s - $5)) / 3600) AS INTEGER),
 				CAST(sum(extract(epoch FROM (least(s + 3600000000, iv.hi) - greatest(s, iv.lo)))) AS REAL)
