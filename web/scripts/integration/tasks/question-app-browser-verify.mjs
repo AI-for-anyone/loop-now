@@ -138,7 +138,7 @@ try {
   assert.equal(streams.some(e => e.messageId === next.id && e.state === 'closed'), true)
   assert.deepEqual(blocked, []); assert.deepEqual(errors, [])
   ok('actual console permission denies foreign question; real terminal events and single-POST/no-fallback audit pass')
-  writeFileSync(dir + 'question-app-browser-results.json', JSON.stringify({ mode: 'actual React + explicitly marked browser fetch -> forwarded temporary App -> TEST PG; fakepi; real SSE; selected GETs delayed for stale view without response stubs', checks, forwarded: all, auxiliary, streams, blocked, errors }, null, 2))
+  writeFileSync(dir + 'question-app-browser-results.json', JSON.stringify({ mode: 'actual React + explicitly marked browser fetch -> forwarded temporary App -> temporary SQLite; fakepi; real SSE; selected GETs delayed for stale view without response stubs', checks, forwarded: all, auxiliary, streams, blocked, errors }, null, 2))
 } catch (error) {
   writeFileSync(dir + 'question-app-browser-failure.json', JSON.stringify({ phase, errorType: error.name, checks, forwarded: forwarded.flat(), auxiliary, streams, blocked, errors }, null, 2))
   console.error('Actual question integration failed at: ' + phase); process.exitCode = 1

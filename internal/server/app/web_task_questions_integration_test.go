@@ -29,15 +29,12 @@ func TestWebTaskQuestionsIntegration(t *testing.T) {
 	if os.Getenv("LOOP_NOW_WEB_TASKS_INTEGRATION") != "1" {
 		t.Skip("explicit isolated browser question integration only")
 	}
-	if os.Getenv("LOOP_NOW_TEST_DATABASE_URL") == "" || os.Getenv("LOOP_NOW_TEST_REDIS_URL") == "" {
-		t.Fatal("explicit TEST endpoints required")
-	}
 	root := testenv.RepoRoot()
 	evidence := filepath.Join(root, "web/scripts/integration/tasks")
 	var w *world
 	var addr, controlAddr string
-	audit := map[string]any{"mode": "actual React -> route.fetch -> app.Build -> TEST PG; fakepi; ordinary question task integration"}
-	// Registered first, runs after App shutdown and existing schema/prefix/temp cleanup.
+	audit := map[string]any{"mode": "actual React -> route.fetch -> app.Build -> temporary SQLite; fakepi; ordinary question task integration"}
+	// Registered first, runs after App shutdown and existing temporary directory cleanup.
 	t.Cleanup(func() {
 		if w == nil {
 			return
@@ -217,11 +214,11 @@ func TestWebTaskQuestionsIntegration(t *testing.T) {
 	}
 	var answerCount int
 	if e = s.a.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM inbox_questions WHERE message_id=$1 AND state='answered' AND answer_option_id='1'`, aq.ID).Scan(&answerCount); e != nil || answerCount != 1 {
-		t.Fatal("original option answer PG mismatch")
+		t.Fatal("original option answer SQLite mismatch")
 	}
 	var closedCount int
 	if e = s.a.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM task_questions q JOIN inbox_questions i ON i.message_id=q.question_message_id WHERE q.task_id=$1 AND i.state='closed'`, b.Task.ID).Scan(&closedCount); e != nil || closedCount != 2 {
-		t.Fatal("old/new close PG mismatch", closedCount, e)
+		t.Fatal("old/new close SQLite mismatch", closedCount, e)
 	}
 	final, e := s.a.Store.GetTask(ctx, b.Task.ID)
 	if e != nil || final.View.Task.Status != "cancelled" {

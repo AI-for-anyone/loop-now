@@ -38,11 +38,6 @@ func webProjectCredentialsIntegration(t *testing.T, slice string) {
 	if os.Getenv("LOOP_NOW_WEB_PROJECT_CREDENTIALS_INTEGRATION") != "1" {
 		t.Skip("explicit isolated project credential CRUD browser integration only")
 	}
-	for _, key := range []string{"LOOP_NOW_TEST_DATABASE_URL", "LOOP_NOW_TEST_REDIS_URL"} {
-		if os.Getenv(key) == "" {
-			t.Fatal("explicit TEST database and Redis endpoints required")
-		}
-	}
 	root := testenv.RepoRoot()
 	deleteOnly := slice != "crud"
 	evidence := filepath.Join(root, "web/test-results/add-project-credentials/app-"+slice)
@@ -51,8 +46,8 @@ func webProjectCredentialsIntegration(t *testing.T, slice string) {
 	}
 	var w *world
 	var address string
-	audit := map[string]any{"mode": "actual React -> route.fetch -> temporary app.Build -> isolated TEST PostgreSQL/Redis; CRUD only; no OAuth/model requests"}
-	// Runs last: existing world cleanup removes schema, prefix and work root;
+	audit := map[string]any{"mode": "actual React -> route.fetch -> temporary app.Build -> temporary SQLite; CRUD only; no OAuth/model requests"}
+	// Runs last: existing world cleanup removes the data directory and work root;
 	// App shutdown and Node's self-owned frontend cleanup must already finish.
 	t.Cleanup(func() {
 		if w == nil {
@@ -141,7 +136,7 @@ func webProjectCredentialsIntegration(t *testing.T, slice string) {
 		t.Helper()
 		var count int
 		if err := s.a.Store.Pool.QueryRow(ctx, query, args...).Scan(&count); err != nil {
-			t.Fatalf("PG read-back %s failed", name)
+			t.Fatalf("SQLite read-back %s failed", name)
 		}
 		counts[name] = count
 	}
@@ -154,7 +149,7 @@ func webProjectCredentialsIntegration(t *testing.T, slice string) {
 		readCount("privateOAuthOperations", `SELECT count(*) FROM model_auth_operations`)
 		for name, expected := range map[string]int{"untouchedMainAccount": 1, "platformPrivateVersion": 1, "runs": 0, "usageRecords": 0, "projectOAuthOperations": 0, "privateOAuthOperations": 0} {
 			if counts[name] != expected {
-				t.Errorf("PG %s got %d want %d", name, counts[name], expected)
+				t.Errorf("SQLite %s got %d want %d", name, counts[name], expected)
 			}
 		}
 		audit["pgReadback"] = counts
@@ -175,7 +170,7 @@ func webProjectCredentialsIntegration(t *testing.T, slice string) {
 		readCount("privateOAuthOperations", `SELECT count(*) FROM model_auth_operations`)
 		for name, expected := range map[string]int{"accountDeletedTombstone": 1, "selectedDeletedPointerRetained": 1, "deletedAccountVersionsRetained": 1, "platformPrivateVersion": 1, "deletedProjectSecrets": 0, "deletedProjectVersionRows": 0, "deletedProjectTombstone": 1, "runs": 0, "usageRecords": 0, "projectOAuthOperations": 0, "privateOAuthOperations": 0} {
 			if counts[name] != expected {
-				t.Errorf("PG %s got %d want %d", name, counts[name], expected)
+				t.Errorf("SQLite %s got %d want %d", name, counts[name], expected)
 			}
 		}
 		audit["pgReadback"] = counts
@@ -198,7 +193,7 @@ func webProjectCredentialsIntegration(t *testing.T, slice string) {
 	readCount("privateOAuthOperations", `SELECT count(*) FROM model_auth_operations`)
 	for name, expected := range map[string]int{"liveProjectModelAccounts": 1, "deletedSelectedAccount": 1, "selectedDeletedPointerRetained": 1, "accountAVersions": 2, "deletedAccountVersionsRetained": 1, "projectCLIVersion": 1, "platformPrivateVersion": 1, "deletedProjectSecrets": 0, "deletedProjectVersionRows": 0, "deletedProjectTombstone": 1, "runs": 0, "usageRecords": 0, "projectOAuthOperations": 0, "privateOAuthOperations": 0} {
 		if counts[name] != expected {
-			t.Errorf("PG %s got %d want %d", name, counts[name], expected)
+			t.Errorf("SQLite %s got %d want %d", name, counts[name], expected)
 		}
 	}
 	audit["pgReadback"] = counts

@@ -32,9 +32,6 @@ func TestWebSleepIntegration(t *testing.T) {
 	if os.Getenv("LOOP_NOW_WEB_SLEEP_INTEGRATION") != "1" {
 		t.Skip("explicit isolated sleep browser integration only")
 	}
-	if os.Getenv("LOOP_NOW_TEST_DATABASE_URL") == "" || os.Getenv("LOOP_NOW_TEST_REDIS_URL") == "" {
-		t.Fatal("explicit TEST endpoints required")
-	}
 	root := testenv.RepoRoot()
 	phase := os.Getenv("LOOP_NOW_WEB_SLEEP_PHASE")
 	if phase == "" {
@@ -49,8 +46,8 @@ func TestWebSleepIntegration(t *testing.T) {
 	}
 	var w *world
 	var addr, controlAddr string
-	audit := map[string]any{"mode": "actual React -> route.fetch -> app.Build -> isolated TEST PG/Redis; fakepi; sleep"}
-	// Registered first, runs after App shutdown and existing schema/prefix/temp cleanup.
+	audit := map[string]any{"mode": "actual React -> route.fetch -> app.Build -> temporary SQLite; fakepi; sleep"}
+	// Registered first, runs after App shutdown and existing temporary directory cleanup.
 	t.Cleanup(func() {
 		if w == nil {
 			return
@@ -287,9 +284,6 @@ func TestWebSleepReconnectIntegration(t *testing.T) {
 	if os.Getenv("LOOP_NOW_WEB_SLEEP_INTEGRATION") != "1" {
 		t.Skip("explicit isolated browser reconnect slice only")
 	}
-	if os.Getenv("LOOP_NOW_TEST_DATABASE_URL") == "" || os.Getenv("LOOP_NOW_TEST_REDIS_URL") == "" {
-		t.Fatal("explicit TEST endpoints required")
-	}
 	root := testenv.RepoRoot()
 	phase := os.Getenv("LOOP_NOW_WEB_SLEEP_PHASE")
 	if phase != "ordinary" && phase != "race" {
@@ -301,8 +295,8 @@ func TestWebSleepReconnectIntegration(t *testing.T) {
 	}
 	var w *world
 	var addr, controlAddr, proxyAddr string
-	audit := map[string]any{"mode": "actual React -> route.fetch -> app.Build -> isolated TEST PG/Redis; fakepi; sleep"}
-	// Registered first, runs after App shutdown and existing schema/prefix/temp cleanup.
+	audit := map[string]any{"mode": "actual React -> route.fetch -> app.Build -> temporary SQLite; fakepi; sleep"}
+	// Registered first, runs after App shutdown and existing temporary directory cleanup.
 	t.Cleanup(func() {
 		if w == nil {
 			return

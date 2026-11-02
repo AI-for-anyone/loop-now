@@ -88,7 +88,7 @@ try {
   assert.deepEqual(blocked, [])
   assert.deepEqual(errors, [])
   ok('actual forwarded responses audited; no supplier requests, fixture responses or browser exceptions')
-  writeFileSync(dir + 'app-browser-results.json', JSON.stringify({ mode: 'actual React -> route.fetch/actual SSE -> temporary App -> isolated TEST PG; fakepi; no question integration or real model', checks, forwarded, blocked, errors }, null, 2))
+  writeFileSync(dir + 'app-browser-results.json', JSON.stringify({ mode: 'actual React -> route.fetch/actual SSE -> temporary App -> temporary SQLite; fakepi; no question integration or real model', checks, forwarded, blocked, errors }, null, 2))
 } catch (error) {
   writeFileSync(dir + 'app-browser-failure.json', JSON.stringify({ phase, errorType: error.name, checks, forwarded, blocked, errors }, null, 2))
   console.error('Integration failed at phase: ' + phase)

@@ -108,7 +108,7 @@ try {
   assert.equal(posts.length + faults.length, input.slice === 'missing-participants' ? 0 : 1)
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false)
   await page.screenshot({ path: input.evidenceDir + '/task-1440.png', fullPage: true })
-  save('browser-results.json', { passed: true, checks, starts, faults, forwarded, denied, errors, boundary: 'actual React -> temporary App; no native-manager success stub or provider navigation; PG/native assertions belong to Go harness' })
+  save('browser-results.json', { passed: true, checks, starts, faults, forwarded, denied, errors, boundary: 'actual React -> temporary App; no native-manager success stub or provider navigation; SQLite/native assertions belong to Go harness' })
   await context.close()
 } catch (error) {
   save('browser-failure.json', { passed: false, errorType: error.name, sourceLine: error.stack?.match(/lark-switch-app\.mjs:\d+:\d+/)?.[0] ?? null, checks, starts, faults, forwarded, denied, errors })

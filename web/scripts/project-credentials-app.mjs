@@ -123,7 +123,7 @@ try {
     await page.goto(web.origin + config)
     await modelRegion().getByText('明确选择的账号已删除，不自动换用其他账号', { exact: true }).waitFor()
     assert.equal(findModel(await getSelections()).selectedAccountId, manifest.mainAccountId)
-    ok('delete-only actual account deletion retains explicit invalid selection; historical version checked by PG')
+    ok('delete-only actual account deletion retains explicit invalid selection; historical version checked in SQLite')
     await page.goto(web.origin + `/p/${encodeURIComponent(manifest.deleteProjectName)}/settings`)
     await page.getByRole('region', { name: '删除项目', exact: true }).getByRole('button', { name: '删除这个项目', exact: true }).click()
     await screenshot(page.getByRole('alertdialog'), 'project-delete-mobile')
@@ -257,14 +257,14 @@ try {
   await page.getByRole('alertdialog').getByRole('button', { name: '删除项目', exact: true }).click()
   await page.waitForURL(url => url.pathname.endsWith('/agents'))
   await actual('GET', `/projects/${manifest.deleteProjectId}/credential-accounts`, undefined, 404)
-  ok('actual legal project deletion removes project credential access; isolated PG read-back follows in Go')
+  ok('actual legal project deletion removes project credential access; isolated SQLite read-back follows in Go')
   }
   assert.deepEqual(errors, []); assert.deepEqual(blocked, [])
   if (manifest.slice === 'crud') {
     assert.ok(forwarded.some(item => item.status === 412 && item.path.endsWith('/credential-selections')))
     assert.ok(forwarded.some(item => item.status === 412 && item.path.endsWith('/credential')))
   }
-  writeFileSync(new URL('browser-results.json', out), JSON.stringify({ mode: 'actual React -> route.fetch -> temporary app.Build -> isolated TEST PostgreSQL/Redis; CRUD only', checks, ids, forwarded, raceWrites, errors, blocked, viewports: ['1440x1000', '390x844'], screenshotBoundary: 'region screenshots may exceed viewport height; no OAuth/model requests' }, null, 2))
+  writeFileSync(new URL('browser-results.json', out), JSON.stringify({ mode: 'actual React -> route.fetch -> temporary app.Build -> temporary SQLite; CRUD only', checks, ids, forwarded, raceWrites, errors, blocked, viewports: ['1440x1000', '390x844'], screenshotBoundary: 'region screenshots may exceed viewport height; no OAuth/model requests' }, null, 2))
 } catch (error) {
   writeFileSync(new URL('browser-failure.json', out), JSON.stringify({ errorType: error.name, message: error.message, checks, ids, forwarded, raceWrites, errors, blocked }, null, 2)); throw error
 } finally {

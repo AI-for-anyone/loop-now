@@ -24,8 +24,8 @@ import (
 	"loop-now/internal/testutil/testenv"
 )
 
-// This Web-owned harness uses only a synthetic source root and a fresh TEST
-// schema/prefix. The real source adapter/HTTP/App/transaction are not mocked.
+// This Web-owned harness uses only a synthetic source root and a fresh temporary
+// SQLite data directory. The real source adapter/HTTP/App/transaction are not mocked.
 func TestWebCLIImportIntegration(t *testing.T) {
 	if os.Getenv("LOOP_NOW_WEB_CLI_IMPORT_INTEGRATION") != "1" {
 		t.Skip("explicit isolated TEST browser slice")
@@ -37,7 +37,7 @@ func TestWebCLIImportIntegration(t *testing.T) {
 		t.Fatal(e)
 	}
 	webCLIImportJSON(t, filepath.Join(root, "web/test-results/add-local-cli-credential-import/latest-app.json"), map[string]any{"runId": runID, "evidenceDir": evidence})
-	audit := map[string]any{"boundary": "actual React -> route.fetch temporary schema17 App/TEST PG/Redis; real source adapter on synthetic root; no host/provider"}
+	audit := map[string]any{"boundary": "actual React -> route.fetch temporary App/temporary SQLite; real source adapter on synthetic root; no host/provider"}
 	if exe, err := os.Executable(); err == nil {
 		if b, err := os.ReadFile(exe); err == nil {
 			h := sha256.Sum256(b)
@@ -144,14 +144,14 @@ func TestWebCLIImportIntegration(t *testing.T) {
 	for name, q := range map[string]string{"accounts": "SELECT count(*) FROM project_credential_accounts", "versions": "SELECT count(*) FROM project_cli_versions", "operations": "SELECT count(*) FROM cli_credential_import_operations", "succeeded": "SELECT count(*) FROM cli_credential_import_operations WHERE status='succeeded'", "itemsImported": "SELECT count(*) FROM cli_credential_import_items WHERE status='imported'", "itemsAlreadyImported": "SELECT count(*) FROM cli_credential_import_items WHERE status='already_imported'", "receipts": "SELECT count(*) FROM cli_credential_import_receipts", "verifications": "SELECT count(*) FROM cli_credential_verifications", "runs": "SELECT count(*) FROM runs", "taskTurns": "SELECT count(*) FROM task_turns"} {
 		var n int
 		if err := a.Store.Pool.QueryRow(context.Background(), q).Scan(&n); err != nil {
-			t.Error("PG readback failed", name)
+			t.Error("SQLite readback failed", name)
 		}
 		counts[name] = n
 	}
 	webCLIImportJSON(t, filepath.Join(evidence, "pg-readback.json"), counts)
 	for key, want := range map[string]int{"accounts": 2, "versions": 2, "operations": 2, "succeeded": 2, "itemsImported": 2, "itemsAlreadyImported": 2, "receipts": 2, "verifications": 0, "runs": 0, "taskTurns": 0} {
 		if counts[key] != want {
-			t.Errorf("PG %s expected %d got %d", key, want, counts[key])
+			t.Errorf("SQLite %s expected %d got %d", key, want, counts[key])
 		}
 	}
 	unchanged := true

@@ -134,7 +134,7 @@ try {
   assert.ok(history.messages.some(m => m.origin === 'sleep_wake' && m.run?.wakeSleepId === next.id))
   ok('actual busy queue retains console origin; sleep_wake alone has platform origin and matching wakeSleepId')
   assert.deepEqual(errors, []); assert.deepEqual(blocked, [])
-  writeFileSync(new URL('sleep-app-browser-results.json', dir), JSON.stringify({ mode: 'actual React -> actual temporary App -> TEST PG/Redis + fakepi; HTTP route.fetch and real SSE; not live model', checks, forwarded: forwarded.flat(), events: [...await page.evaluate(() => window.__sleepEvents), ...await taskPage.evaluate(() => window.__sleepEvents)], errors, blocked, passed: true }, null, 2))
+  writeFileSync(new URL('sleep-app-browser-results.json', dir), JSON.stringify({ mode: 'actual React -> actual temporary App -> temporary SQLite + fakepi; HTTP route.fetch and real SSE; not live model', checks, forwarded: forwarded.flat(), events: [...await page.evaluate(() => window.__sleepEvents), ...await taskPage.evaluate(() => window.__sleepEvents)], errors, blocked, passed: true }, null, 2))
 } catch (error) {
   writeFileSync(new URL('sleep-app-browser-failure.json', dir), JSON.stringify({ phase, message: error.message, errors, blocked, history: await (await fetch(`${f.apiBase}/agents/${f.agentId}/messages`)).json(), forwarded: forwarded.flat() }, null, 2))
   await page.screenshot({ path: new URL('sleep-app-failure.png', dir).pathname }).catch(() => {})

@@ -101,7 +101,7 @@ try {
   assert.ok(requests.every(request => request.status < 400))
   await page.screenshot({ path: out + '/task-images-1440.png', fullPage: true })
   checks.push('text plus selected/dropped two PNGs; one strict task Inbox POST without normal fallback; real task SSE and durable history reload')
-  save('browser-results.json', { passed: true, boundary: 'real React -> isolated temporary App HTTP/SSE; synthetic PNGs; server harness owns PG/fakePi image payload assertions and cleanup; no real model/provider/OAuth/QA', checks, requests, errors, denied })
+  save('browser-results.json', { passed: true, boundary: 'real React -> isolated temporary App HTTP/SSE; synthetic PNGs; server harness owns SQLite/fakePi image payload assertions and cleanup; no real model/provider/OAuth/QA', checks, requests, errors, denied })
   await context.close()
 } catch (error) { save('browser-failure.json', { passed: false, errorType: error.name, sourceLine: error.stack?.match(/image-app-browser\.mjs:\d+:\d+/)?.[0] ?? null, checks, requests, errors, denied }); process.exitCode = 1 }
 finally { await browser?.close(); await server?.close() }
