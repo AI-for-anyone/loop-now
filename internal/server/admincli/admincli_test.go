@@ -3,7 +3,6 @@ package admincli_test
 import (
 	"bytes"
 	"context"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -14,7 +13,7 @@ import (
 	"loop-now/internal/server/config"
 	"loop-now/internal/server/db"
 	"loop-now/internal/server/pgimport"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/server/pgimport/pgimporttest"
 	"loop-now/internal/testutil/sqlitetest"
 
 	"os"
@@ -210,16 +209,11 @@ func TestAdminImportPostgresRefusals(t *testing.T) {
 
 // 成功导入后每张表一行“表名<TAB>行数”，新库能被其他子命令打开。
 func TestAdminImportPostgres(t *testing.T) {
-	pool := pgtest.NewMigratedPool(t)
-	u := pgtest.URL(t)
-	sep := "?"
-	if strings.Contains(u, "?") {
-		sep = "&"
-	}
+	pool, src := pgimporttest.Source(t)
 	if _, err := pool.Exec(context.Background(), `INSERT INTO external_identities(id,name) VALUES($1,'imported-ci')`, uuid.New()); err != nil {
 		t.Fatal(err)
 	}
-	c := cli{t: t, dataDir: t.TempDir(), env: map[string]string{pgimport.EnvSourceURL: u + sep + "search_path=" + url.QueryEscape(pool.Config().ConnConfig.RuntimeParams["search_path"])}}
+	c := cli{t: t, dataDir: t.TempDir(), env: map[string]string{pgimport.EnvSourceURL: src}}
 	out, _ := c.ok("import-postgres")
 	if !strings.Contains(out, "external_identities\t1\n") {
 		t.Fatalf("输出里没有导入的行数：%s", out)

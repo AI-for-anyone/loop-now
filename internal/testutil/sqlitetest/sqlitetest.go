@@ -28,7 +28,7 @@ func NewDB(t testing.TB) *db.DB {
 	return d
 }
 
-// NewStore 返回一个已迁移、独立数据目录的 Store（对应原来的 pgtest.NewStore）。
+// NewStore 返回一个已迁移、独立数据目录的 Store。
 func NewStore(t testing.TB) *store.Store {
 	t.Helper()
 	return store.New(NewDB(t))
