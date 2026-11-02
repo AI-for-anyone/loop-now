@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -93,7 +94,7 @@ func TestDefaultProjectCannotBeDeleted(t *testing.T) {
 	_, err := e.s.DeleteProject(e.ctx, e.dc.Project.ID)
 	wantErrCode(t, err, apperr.CodeValidationFailed)
 	// 数据库约束兜底。
-	if _, err := e.s.Pool.Exec(e.ctx, `UPDATE projects SET deleted_at = now() WHERE is_default`); err == nil {
+	if _, err := e.s.Pool.Exec(e.ctx, `UPDATE projects SET deleted_at = $1 WHERE is_default`, time.Now()); err == nil {
 		t.Fatal("数据库应拒绝删除默认项目")
 	}
 	// 默认项目可以改名。
@@ -219,7 +220,7 @@ func TestDeleteProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := e.s.Pool.Exec(e.ctx, `INSERT INTO agent_credentials (id, agent_id, purpose, cli_name, template_version, secret, field_names, env_names, file_paths, template_source)
-		VALUES ($1, $2, 'cli', 'gh', '1', '\x00', '{}', '{}', '{}', 'builtin')`, uuid.Must(uuid.NewV7()), idle.ID); err != nil {
+		VALUES ($1, $2, 'cli', 'gh', '1', x'00', '[]', '[]', '[]', 'builtin')`, uuid.Must(uuid.NewV7()), idle.ID); err != nil {
 		t.Fatal(err)
 	}
 	_, run, err := e.s.InsertMessageAndRun(e.ctx, store.NewRun{AgentID: busy.ID, RunID: uuid.Must(uuid.NewV7()), Text: "hi", Start: false,
@@ -240,7 +241,7 @@ func TestDeleteProject(t *testing.T) {
 	}
 
 	// 执行结束后删除：Agent 软删除、凭证密文删除、Manager 取消、名称可再用。
-	if _, err := e.s.Pool.Exec(e.ctx, `UPDATE runs SET status = 'completed', ended_at = now() WHERE id = $1`, run.ID); err != nil {
+	if _, err := e.s.Pool.Exec(e.ctx, `UPDATE runs SET status = 'completed', ended_at = $2 WHERE id = $1`, run.ID, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	ids, err := e.s.DeleteProject(e.ctx, p.ID)

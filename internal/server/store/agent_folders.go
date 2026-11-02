@@ -105,15 +105,15 @@ func (s *Store) FinishFolderGitPull(ctx context.Context, id uuid.UUID, code, mes
 	if code != "" {
 		status = "failed"
 	}
-	_, err := s.Pool.Exec(ctx, `UPDATE agent_folder_git_pulls SET status = $2, error_code = nullif($3, ''), error_message = nullif($4, ''), finished_at = now()
-		WHERE id = $1 AND status IN ('queued', 'running')`, id, status, code, message)
+	_, err := s.Pool.Exec(ctx, `UPDATE agent_folder_git_pulls SET status = $2, error_code = nullif($3, ''), error_message = nullif($4, ''), finished_at = $5
+		WHERE id = $1 AND status IN ('queued', 'running')`, id, status, code, message, s.Pool.Now())
 	return err
 }
 
 // FailInterruptedFolderGitPulls 在启动时把上次运行中断的拉取标为失败（server_restart），返回它们（用于清理临时目录）。
 func (s *Store) FailInterruptedFolderGitPulls(ctx context.Context) ([]FolderGitPull, error) {
-	rows, err := s.Pool.Query(ctx, `UPDATE agent_folder_git_pulls SET status = 'failed', error_code = 'server_restart', error_message = '服务重启时仍在进行，已中止', finished_at = now()
-		WHERE status IN ('queued', 'running') RETURNING `+gitPullColumns)
+	rows, err := s.Pool.Query(ctx, `UPDATE agent_folder_git_pulls SET status = 'failed', error_code = 'server_restart', error_message = '服务重启时仍在进行，已中止', finished_at = $1
+		WHERE status IN ('queued', 'running') RETURNING `+gitPullColumns, s.Pool.Now())
 	if err != nil {
 		return nil, err
 	}

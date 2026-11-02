@@ -112,7 +112,7 @@ func (s *Store) insertEvent(ctx context.Context, q execer, ev LifecycleEvent) er
 	// 平台提醒那一轮的事件记下创建它的 Inbox 消息（runs.trigger_inbox_message_id）；普通对话为空。
 	_, err = q.Exec(ctx, `INSERT INTO lifecycle_events (id, at, agent_id, run_id, type, data, instance_id, inbox_message_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, (SELECT trigger_inbox_message_id FROM runs WHERE id = $4))`,
-		ev.ID, ev.At, ev.AgentID, ev.RunID, ev.Type, b, s.InstanceID)
+		ev.ID, ev.At, ev.AgentID, ev.RunID, ev.Type, json.RawMessage(b), s.InstanceID)
 	return err
 }
 
@@ -199,7 +199,7 @@ func (s *Store) usageFor(ctx context.Context, runIDs []uuid.UUID) (map[uuid.UUID
 		return totals, models, nil
 	}
 	rows, err := s.Pool.Query(ctx, `SELECT run_id, count(*), sum(input), sum(output), sum(cache_read), sum(cache_write), sum(total)
-		FROM usage_records WHERE run_id = ANY($1) GROUP BY run_id`, runIDs)
+		FROM usage_records WHERE run_id IN (SELECT value FROM json_each($1)) GROUP BY run_id`, runIDs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -215,8 +215,10 @@ func (s *Store) usageFor(ctx context.Context, runIDs []uuid.UUID) (map[uuid.UUID
 	if err := rows.Err(); err != nil {
 		return nil, nil, err
 	}
-	rows, err = s.Pool.Query(ctx, `SELECT DISTINCT ON (run_id) run_id, provider, model FROM usage_records
-		WHERE run_id = ANY($1) AND kind = 'assistant' AND provider IS NOT NULL ORDER BY run_id, at DESC, id DESC`, runIDs)
+	rows, err = s.Pool.Query(ctx, `SELECT run_id, provider, model FROM (
+			SELECT run_id, provider, model, row_number() OVER (PARTITION BY run_id ORDER BY at DESC, id DESC) AS n FROM usage_records
+			WHERE run_id IN (SELECT value FROM json_each($1)) AND kind = 'assistant' AND provider IS NOT NULL)
+		WHERE n = 1`, runIDs)
 	if err != nil {
 		return nil, nil, err
 	}

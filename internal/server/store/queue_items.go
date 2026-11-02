@@ -29,11 +29,10 @@ type queueQuerier interface {
 	Exec(ctx context.Context, sql string, args ...any) (db.Result, error)
 }
 
-// lockAgentQueue 以 FOR NO KEY UPDATE 锁住未删除的 Agent 行：与出队（StartQueuedRun）、结束（FinishRun）、
-// 写入消息的 FOR UPDATE 互斥，但不挡外键需要的 KEY SHARE。排队动作与读取都先取这把锁，再锁执行行与消息行。
-func lockAgentQueue(ctx context.Context, tx *db.Tx, agentID uuid.UUID) error {
+// requireLiveAgent 确认 Agent 存在且未删除。排队动作都在写事务里，与出队、结束执行、写入消息串行，不需要锁行。
+func requireLiveAgent(ctx context.Context, tx *db.Tx, agentID uuid.UUID) error {
 	var live bool
-	err := tx.QueryRow(ctx, `SELECT true FROM agents WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`, agentID).Scan(&live)
+	err := tx.QueryRow(ctx, `SELECT true FROM agents WHERE id = $1 AND deleted_at IS NULL`, agentID).Scan(&live)
 	return notFoundIfNoRows(err, "Agent")
 }
 
@@ -106,7 +105,7 @@ func agentQueue(ctx context.Context, q queueQuerier, agentID uuid.UUID) ([]Queue
 	}
 	byRun := map[uuid.UUID][]InboxMessage{}
 	if len(reminders) > 0 {
-		rows, err := q.Query(ctx, inboxSelect(200)+` WHERE m.reminder_run_id = ANY($1) AND `+unreadCond("m")+` ORDER BY m.created_at, m.id`, reminders)
+		rows, err := q.Query(ctx, inboxSelect(200)+` WHERE m.reminder_run_id IN (SELECT value FROM json_each($1)) AND `+unreadCond("m")+` ORDER BY m.created_at, m.id`, reminders)
 		if err != nil {
 			return nil, err
 		}
@@ -149,12 +148,11 @@ func consoleRunItem(ctx context.Context, q queueQuerier, r Run) (QueueItem, erro
 }
 
 // voidRunIfEmptyTx 作废没有待处理消息、也不承载 sleep 唤醒的排队提醒，并写入结束事件；返回是否作废。
-// 调用方已按“先 Agent、后执行”持锁。
 func (s *Store) voidRunIfEmptyTx(ctx context.Context, tx *db.Tx, runID uuid.UUID, reason string) (bool, error) {
-	r, err := scanRun(tx.QueryRow(ctx, `UPDATE runs r SET status = 'interrupted', end_reason = $2, ended_at = now()
+	r, err := scanRun(tx.QueryRow(ctx, `UPDATE runs AS r SET status = 'interrupted', end_reason = $2, ended_at = $3
 		WHERE r.id = $1 AND r.status = 'queued' AND r.origin = 'inbox_reminder' AND r.wake_sleep_id IS NULL
 			AND NOT EXISTS (SELECT 1 FROM inbox_messages m WHERE m.reminder_run_id = r.id AND `+unreadCond("m")+`)
-		RETURNING `+runColumns, runID, reason))
+		RETURNING `+runColumns, runID, reason, tx.Now()))
 	if errors.Is(err, db.ErrNoRows) {
 		return false, nil
 	}
@@ -172,9 +170,9 @@ const taskTurnPendingSQL = `(EXISTS (SELECT 1 FROM inbox_messages m WHERE m.remi
 
 // voidTaskTurnIfEmptyTx 作废没有待处理消息、也不承载 sleep 唤醒或问题结束唤醒的排队提醒轮次（TaskMessage.voidReason=reason）；返回是否作废。
 func (s *Store) voidTaskTurnIfEmptyTx(ctx context.Context, m *TaskMutation, turnID uuid.UUID, reason string) (bool, error) {
-	t, err := scanTaskTurn(m.Tx.QueryRow(ctx, `UPDATE task_turns t SET status = 'interrupted', ended_at = now(), void_reason = $2
+	t, err := scanTaskTurn(m.Tx.QueryRow(ctx, `UPDATE task_turns AS t SET status = 'interrupted', ended_at = $3, void_reason = $2
 		WHERE t.id = $1 AND t.status = 'queued' AND t.origin = 'inbox_reminder' AND t.wake_sleep_id IS NULL AND NOT t.question_wakeup AND NOT `+taskTurnPendingSQL+`
-		RETURNING `+taskTurnColumns, turnID, reason))
+		RETURNING `+taskTurnColumns, turnID, reason, m.Tx.Now()))
 	if errors.Is(err, db.ErrNoRows) {
 		return false, nil
 	}
@@ -206,7 +204,7 @@ func LinkInboxTurnTx(ctx context.Context, tx *db.Tx, messageID, turnID uuid.UUID
 // AdoptTaskInboxOrphansTx 把发给任务实例、仍待处理但没有排队中承载轮次的非严格消息挂到 turn 上
 // （例如所在轮次被打断或随节点变化结束）。
 func AdoptTaskInboxOrphansTx(ctx context.Context, tx *db.Tx, runtime, turn uuid.UUID) error {
-	_, err := tx.Exec(ctx, `UPDATE inbox_messages m SET reminder_turn_id = $2 WHERE m.to_kind = 'agent' AND m.to_runtime_id = $1 AND `+unreadCond("m")+`
+	_, err := tx.Exec(ctx, `UPDATE inbox_messages AS m SET reminder_turn_id = $2 WHERE m.to_kind = 'agent' AND m.to_runtime_id = $1 AND `+unreadCond("m")+`
 		AND NOT EXISTS (SELECT 1 FROM task_node_inbox_messages b WHERE b.message_id = m.id)
 		AND (m.reminder_turn_id IS NULL OR EXISTS (SELECT 1 FROM task_turns o WHERE o.id = m.reminder_turn_id AND o.status IN ('completed', 'failed', 'interrupted')))`, runtime, turn)
 	return err
@@ -214,7 +212,7 @@ func AdoptTaskInboxOrphansTx(ctx context.Context, tx *db.Tx, runtime, turn uuid.
 
 // adoptAgentInboxOrphansTx 把发给常态 Agent、仍待处理但没有排队中或进行中承载提醒的消息挂到 run 上。
 func adoptAgentInboxOrphansTx(ctx context.Context, q queueQuerier, agentID, run uuid.UUID) error {
-	_, err := q.Exec(ctx, `UPDATE inbox_messages m SET reminder_run_id = $2 WHERE m.to_kind = 'agent' AND m.to_agent_id = $1 AND m.to_runtime_id IS NULL AND `+unreadCond("m")+`
+	_, err := q.Exec(ctx, `UPDATE inbox_messages AS m SET reminder_run_id = $2 WHERE m.to_kind = 'agent' AND m.to_agent_id = $1 AND m.to_runtime_id IS NULL AND `+unreadCond("m")+`
 		AND (m.reminder_run_id IS NULL OR EXISTS (SELECT 1 FROM runs o WHERE o.id = m.reminder_run_id AND o.status IN ('completed', 'failed', 'interrupted')))`, agentID, run)
 	return err
 }

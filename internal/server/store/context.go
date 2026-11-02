@@ -40,7 +40,7 @@ func (s *Store) EnsureDefaults(ctx context.Context, orgName, projectName string)
 	var dc DefaultContext
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, err := tx.Exec(ctx, `INSERT INTO organizations (id, name, is_default) VALUES ($1, $2, true)
-			ON CONFLICT ((true)) WHERE is_default DO NOTHING`, uuid.Must(uuid.NewV7()), orgName); err != nil {
+			ON CONFLICT (is_default) WHERE is_default DO NOTHING`, uuid.Must(uuid.NewV7()), orgName); err != nil {
 			return err
 		}
 		if err := tx.QueryRow(ctx, `SELECT id, name, created_at FROM organizations WHERE is_default`).
