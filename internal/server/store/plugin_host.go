@@ -37,7 +37,7 @@ func (s *Store) PluginStateGet(ctx context.Context, plugin string, project *uuid
 // PluginStateSet 写入一项状态，已有则覆盖。
 func (s *Store) PluginStateSet(ctx context.Context, plugin string, project *uuid.UUID, key string, value json.RawMessage) error {
 	_, err := s.Pool.Exec(ctx, `INSERT INTO plugin_state(plugin_id,project_id,key,value) VALUES($1,$2,$3,$4)
-		ON CONFLICT (plugin_id,project_id,key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()`, plugin, project, key, value)
+		ON CONFLICT (plugin_id, coalesce(project_id, ''), key) DO UPDATE SET value=excluded.value, updated_at=now()`, plugin, project, key, value)
 	return err
 }
 
@@ -49,8 +49,7 @@ func (s *Store) PluginStateDelete(ctx context.Context, plugin string, project *u
 
 // PluginStateList 按键排序列出以 prefix 开头的状态，最多 PluginStateListLimit 项。
 func (s *Store) PluginStateList(ctx context.Context, plugin string, project *uuid.UUID, prefix string) ([]PluginStateEntry, error) {
-	// SQLITE-PORT(G3): starts_with
-	rows, err := s.Pool.Query(ctx, `SELECT key,value FROM plugin_state WHERE plugin_id=$1 AND project_id IS $2 AND starts_with(key,$3)
+	rows, err := s.Pool.Query(ctx, `SELECT key,value FROM plugin_state WHERE plugin_id=$1 AND project_id IS $2 AND substr(key,1,length($3))=$3
 		ORDER BY key LIMIT $4`, plugin, project, prefix, PluginStateListLimit)
 	if err != nil {
 		return nil, err
@@ -131,8 +130,7 @@ func (s *Store) AddPluginEvent(ctx context.Context, ev PluginEvent, plugins []st
 			ev.ID, ev.Type, ev.At, ev.ProjectID, ev.AgentID, ev.TaskID, ev.RunID, ev.Data); err != nil {
 			return err
 		}
-		// SQLITE-PORT(G3): array
-		_, err := tx.Exec(ctx, `INSERT INTO plugin_event_deliveries(plugin_id,event_id) SELECT unnest($1), $2`, plugins, ev.ID)
+		_, err := tx.Exec(ctx, `INSERT INTO plugin_event_deliveries(plugin_id,event_id,next_attempt_at) SELECT value, $2, now() FROM json_each($1)`, plugins, ev.ID)
 		return err
 	})
 	return ev.ID, err
@@ -141,22 +139,30 @@ func (s *Store) AddPluginEvent(ctx context.Context, ev PluginEvent, plugins []st
 // ClaimPluginDelivery 取出该插件最早（按事件时间）到期的一条待投递事件：次数加一，下次时间推到 lease 之后，
 // 这样服务端在等待确认期间退出时，租约到期后会重投。没有到期的事件时返回 nil。
 func (s *Store) ClaimPluginDelivery(ctx context.Context, plugin string, lease time.Duration) (*PluginDelivery, error) {
-	var d PluginDelivery
-	err := s.Pool.QueryRow(ctx, `WITH next AS (
-			SELECT d.event_id FROM plugin_event_deliveries d JOIN plugin_events e ON e.id=d.event_id
+	var d *PluginDelivery
+	err := s.inTx(ctx, func(tx *db.Tx) error {
+		var eventID string
+		err := tx.QueryRow(ctx, `SELECT d.event_id FROM plugin_event_deliveries d JOIN plugin_events e ON e.id=d.event_id
 			WHERE d.plugin_id=$1 AND d.status='pending' AND d.next_attempt_at<=now()
-			ORDER BY e.at, e.id LIMIT 1)
-		UPDATE plugin_event_deliveries AS d SET attempts=d.attempts+1, next_attempt_at=now()+$2
-		FROM next, plugin_events e WHERE d.plugin_id=$1 AND d.event_id=next.event_id AND e.id=next.event_id
-		RETURNING e.id,e.type,e.at,e.project_id,e.agent_id,e.task_id,e.run_id,e.data,d.attempts`, plugin, lease).
-		Scan(&d.ID, &d.Type, &d.At, &d.ProjectID, &d.AgentID, &d.TaskID, &d.RunID, &d.Data, &d.Attempts)
-	if errors.Is(err, db.ErrNoRows) {
-		return nil, nil
-	}
+			ORDER BY e.at, e.id LIMIT 1`, plugin).Scan(&eventID)
+		if errors.Is(err, db.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		d = &PluginDelivery{}
+		if err := tx.QueryRow(ctx, `UPDATE plugin_event_deliveries SET attempts=attempts+1, next_attempt_at=now()+$3
+			WHERE plugin_id=$1 AND event_id=$2 RETURNING attempts`, plugin, eventID, lease.Microseconds()).Scan(&d.Attempts); err != nil {
+			return err
+		}
+		return tx.QueryRow(ctx, `SELECT id,type,at,project_id,agent_id,task_id,run_id,data FROM plugin_events WHERE id=$1`, eventID).
+			Scan(&d.ID, &d.Type, &d.At, &d.ProjectID, &d.AgentID, &d.TaskID, &d.RunID, &d.Data)
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &d, nil
+	return d, nil
 }
 
 // AckPluginDelivery 记录宿主已确认处理完成，duration 是从发出到收到 ack 的时长。

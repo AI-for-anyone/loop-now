@@ -20,7 +20,7 @@ import (
 // 基线有意与 PG 不同的地方。
 var (
 	sqliteOnlyColumns = map[string][]string{"runs": {"stop_requested"}, "task_turns": {"stop_requested"}}
-	sqliteOnlyTables  = []string{"sequences"}
+	sqliteOnlyTables  = []string{"sequences", "plugin_changes", "plugin_lifecycle_changes"}
 	// events.db 不能有指向 data.db 的外键。
 	droppedForeignKeys = []string{"lifecycle_events_agent_id_fkey", "lifecycle_events_run_id_fkey", "lifecycle_events_task_turn_id_fkey", "run_tool_events_run_id_fkey"}
 	// 自增主键写成 INTEGER PRIMARY KEY，没有约束名。
@@ -189,6 +189,19 @@ func TestBaselineMatchesPostgres(t *testing.T) {
 		return slices.Contains(droppedForeignKeys, n) || slices.Contains(inlinePrimaryKeys, n)
 	})
 	wantConstraints = append(wantConstraints, sqliteOnlyConstraints...)
+	// 刚迁移完的库里，每张表的行数也要一致：PG 迁移随建表写入的种子行（例如单例设置）基线里也要有。
+	for table := range pgCols {
+		var pgRows, liteRows int
+		if err := pg.QueryRow(ctx, `SELECT count(*) FROM `+table).Scan(&pgRows); err != nil {
+			t.Fatal(err)
+		}
+		if err := lite.QueryRow(ctx, `SELECT count(*) FROM `+table).Scan(&liteRows); err != nil {
+			t.Fatal(err)
+		}
+		if pgRows != liteRows {
+			t.Errorf("%s 迁移后的行数：PG %d，基线 %d（缺种子数据？）", table, pgRows, liteRows)
+		}
+	}
 	diffSets(t, "约束名", wantConstraints, liteConstraints)
 	diffSets(t, "索引名", pgIndexes, liteIndexes)
 	n := 0
