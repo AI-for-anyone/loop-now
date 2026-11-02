@@ -30,6 +30,7 @@ type Tx struct {
 	after    []func()
 	done     bool
 	values   map[any]any
+	hook     *QueryHook
 }
 
 // SetValue 在事务上记一个值（例如“写过插件事件”），供同一事务里后执行的钩子读取；key 用调用方私有的类型。
@@ -75,7 +76,7 @@ func (d *DB) beginWrite(ctx context.Context) (*Tx, func(error) error, error) {
 		release()
 		return nil, nil, fmt.Errorf("db: 开始写事务失败：%w", err)
 	}
-	t := &Tx{tx: stx, now: d.now()}
+	t := &Tx{tx: stx, now: d.now(), hook: d.queryHook.Load()}
 	d.writeTxNow.Store(t.now.UnixMicro())
 	end := func(fnErr error) error {
 		defer release()
@@ -129,7 +130,7 @@ func (d *DB) ReadTx(ctx context.Context, fn func(*Tx) error) error {
 	if err != nil {
 		return fmt.Errorf("db: 开始只读事务失败：%w", err)
 	}
-	t := &Tx{tx: stx, now: d.now(), readOnly: true}
+	t := &Tx{tx: stx, now: d.now(), readOnly: true, hook: d.queryHook.Load()}
 	defer func() { t.done = true; _ = stx.Rollback() }()
 	return fn(t)
 }
@@ -141,7 +142,7 @@ func (d *DB) BeginRead(ctx context.Context) (*Tx, error) {
 	if err != nil {
 		return nil, fmt.Errorf("db: 开始只读事务失败：%w", err)
 	}
-	return &Tx{tx: stx, now: d.now(), readOnly: true}, nil
+	return &Tx{tx: stx, now: d.now(), readOnly: true, hook: d.queryHook.Load()}, nil
 }
 
 // Commit 结束 BeginRead 开始的只读事务。写事务由 InTx 提交，不能调用它。
@@ -185,7 +186,7 @@ func (t *Tx) AfterCommit(fn func()) {
 
 // Exec 在事务内执行语句。
 func (t *Tx) Exec(ctx context.Context, query string, args ...any) (Result, error) {
-	if err := t.usable(query); err != nil {
+	if err := t.usable(ctx, query); err != nil {
 		return Result{}, err
 	}
 	vals, err := convertArgs(args)
@@ -202,7 +203,7 @@ func (t *Tx) Exec(ctx context.Context, query string, args ...any) (Result, error
 
 // Query 在事务内执行查询。
 func (t *Tx) Query(ctx context.Context, query string, args ...any) (*Rows, error) {
-	if err := t.usable(query); err != nil {
+	if err := t.usable(ctx, query); err != nil {
 		return nil, err
 	}
 	vals, err := convertArgs(args)
@@ -222,12 +223,15 @@ func (t *Tx) QueryRow(ctx context.Context, query string, args ...any) *Row {
 	return &Row{rows: rows, err: err}
 }
 
-func (t *Tx) usable(query string) error {
+func (t *Tx) usable(ctx context.Context, query string) error {
 	if t.done {
 		return sql.ErrTxDone
 	}
 	if t.readOnly && isWrite(query) {
 		return errors.New("db: 只读事务里不能写")
+	}
+	if t.hook != nil {
+		(*t.hook)(ctx, query)
 	}
 	return nil
 }

@@ -715,3 +715,61 @@ func TestISOTime(t *testing.T) {
 		t.Fatalf("iso_time 应保留微秒并可被 Go 解析：%s %+v %v", raw, v, err)
 	}
 }
+
+// 语句钩子在每条语句前、在它所在的事务里调用：在写事务里停住时，别的写入等它；只读池上的查询也经过它。
+func TestQueryHookPausesInsideTransaction(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	mustExec(t, d, `CREATE TABLE t (v INTEGER)`)
+	entered, release := make(chan struct{}), make(chan struct{})
+	var seen sync.Map
+	var once sync.Once
+	d.SetQueryHook(func(_ context.Context, q string) {
+		seen.Store(q, true)
+		if strings.Contains(q, "pause here") {
+			once.Do(func() { close(entered); <-release })
+		}
+	})
+	done := make(chan error, 1)
+	go func() {
+		done <- d.InTx(ctx, func(tx *Tx) error {
+			if _, err := tx.Exec(ctx, `INSERT INTO t VALUES (1)`); err != nil {
+				return err
+			}
+			_, err := tx.Exec(ctx, `INSERT INTO t VALUES (2) -- pause here`)
+			return err
+		})
+	}()
+	<-entered
+	other := make(chan error, 1)
+	go func() { _, err := d.Exec(ctx, `INSERT INTO t VALUES (3)`); other <- err }()
+	select {
+	case err := <-other:
+		t.Fatalf("停在写事务里时，别的写入应等待：%v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	var n int
+	if err := d.QueryRow(ctx, `SELECT count(*) FROM t`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("读到未提交的写入：%d %v", n, err)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-other; err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{`INSERT INTO t VALUES (1)`, `INSERT INTO t VALUES (3)`, `SELECT count(*) FROM t`} {
+		if _, ok := seen.Load(q); !ok {
+			t.Errorf("钩子没有看到：%s", q)
+		}
+	}
+	d.SetQueryHook(nil)
+	seen.Delete(`SELECT count(*) FROM t`)
+	if err := d.QueryRow(ctx, `SELECT count(*) FROM t`).Scan(&n); err != nil || n != 3 {
+		t.Fatalf("%d %v", n, err)
+	}
+	if _, ok := seen.Load(`SELECT count(*) FROM t`); ok {
+		t.Fatal("取消后钩子仍被调用")
+	}
+}
