@@ -147,7 +147,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	// 一个数据目录只给一个服务进程：后台维护、迁移与内存里的协调状态都假定只有本进程在写。
 	if a.dirLock, err = db.LockDir(dbDir); err != nil {
 		if errors.Is(err, db.ErrLocked) {
-			return a, fmt.Errorf("数据目录 %s 已被另一个服务进程使用（%s）", dbDir, config.EnvDataDir)
+			return a, fmt.Errorf("数据目录 %s 已被另一个服务进程使用（%s）：%w", dbDir, config.EnvDataDir, err)
 		}
 		return a, err
 	}

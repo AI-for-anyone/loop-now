@@ -2,6 +2,8 @@ package config
 
 import (
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -365,5 +367,45 @@ func TestDataDirDefaultAndDBDir(t *testing.T) {
 	env[EnvBackupDir], env[EnvBackupKeep] = "/mnt/backup", "3"
 	if c, err = Load(envOf(env)); err != nil || c.BackupDir != "/mnt/backup" || c.BackupKeep != 3 {
 		t.Fatalf("备份目录与份数可以覆盖：%q %d %v", c.BackupDir, c.BackupKeep, err)
+	}
+}
+
+// 发布包里与 loop-server 并列的 runtime、loopctl-dist 与插件目录在没有配置时自动取用；环境变量仍然优先；
+// 什么都没有时 loopctl-dist 是必需配置。
+func TestBundledDefaults(t *testing.T) {
+	dir := t.TempDir()
+	old := executableDir
+	executableDir = func() string { return dir }
+	t.Cleanup(func() { executableDir = old })
+	if _, err := Load(envOf(map[string]string{})); err == nil || !strings.Contains(err.Error(), EnvLoopctlDistDir) {
+		t.Fatalf("没有 loopctl-dist 时应要求配置：%v", err)
+	}
+	c, err := Load(envOf(requiredEnv()))
+	if err != nil || c.NodeBin != "node" || c.PiBin != "pi" || c.PluginHostEntry != "" || c.PluginOfficialDir != "" {
+		t.Fatalf("没有随包文件时应保持原默认值：%v %+v", err, c)
+	}
+	for _, rel := range []string{BundledNode, BundledPi, BundledPluginHost} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, rel)), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, rel), nil, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, rel := range []string{BundledLoopctlDist, BundledPluginOfficial} {
+		if err := os.MkdirAll(filepath.Join(dir, rel), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if c, err = Load(envOf(map[string]string{})); err != nil {
+		t.Fatal(err)
+	}
+	for got, want := range map[string]string{c.NodeBin: BundledNode, c.PiBin: BundledPi, c.LoopctlDistDir: BundledLoopctlDist, c.PluginHostEntry: BundledPluginHost, c.PluginOfficialDir: BundledPluginOfficial} {
+		if got != filepath.Join(dir, want) {
+			t.Errorf("应取随包的 %s：%q", want, got)
+		}
+	}
+	if c, err = Load(envOf(map[string]string{EnvNodeBin: "/opt/node/bin/node", EnvLoopctlDistDir: "/opt/loopctl-dist"})); err != nil || c.NodeBin != "/opt/node/bin/node" || c.LoopctlDistDir != "/opt/loopctl-dist" {
+		t.Fatalf("环境变量应优先：%v %q %q", err, c.NodeBin, c.LoopctlDistDir)
 	}
 }

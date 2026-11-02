@@ -22,7 +22,7 @@ func TestSecondInstanceOnSameDataDirRefused(t *testing.T) {
 	}
 	defer ln.Close()
 	if _, err = app.Build(context.Background(), &cfg, config.NewLogger(io.Discard, cfg.LogFormat, cfg.LogLevel),
-		app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}}); err == nil || !strings.Contains(err.Error(), "已被另一个服务进程使用") {
+		app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}}); err == nil || !strings.Contains(err.Error(), "已被另一个服务进程使用") || app.ExitCode(err) != app.ExitDataDirLocked {
 		t.Fatalf("第二个实例应拒绝启动：%v", err)
 	}
 	s.createAgent("仍可用")
