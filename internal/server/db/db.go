@@ -5,6 +5,8 @@
 // SQLite 存储之间转换：时间是 UTC 微秒整数，UUID 是小写文本，数组与 JSON 是 JSON 文本，布尔是 0/1。
 //
 // 写入一律经写连接：事务以 BEGIN IMMEDIATE 开始，单连接使所有写天然串行，因此不需要行锁与咨询锁。
+// 两个文件之间没有一致性：一个事务对 data.db 与 events.db 分别提交，读者对两个文件的快照也是先后各取，
+// 所以 events.db 只放丢几条、晚几条都无妨的日志，业务判断不读它。
 // 取得写连接受调用方 ctx 约束；取得之后提交不可取消，调用方看到的结果只有“已提交”或“未提交”。
 package db
 
@@ -73,9 +75,13 @@ var DetectNestedWrites atomic.Bool
 // ErrNestedWrite 表示在写事务回调里又经 *DB 发起了写：写连接只有一个，这样会自己等自己。
 var ErrNestedWrite = errors.New("db: 写事务内又经 *DB 发起写入（应使用事务对象 tx）")
 
+// busyTimeoutMS 是遇到其他进程（管理子命令、备份工具）持锁时的等待上限。进程内的写已由单个写连接串行，
+// 平时碰不到它。
+const busyTimeoutMS = 10000
+
 // 每个连接都设置的 PRAGMA。busy_timeout 必须最先设置，驱动会把它排到最前。
 var connPragmas = []string{
-	"busy_timeout(10000)",
+	fmt.Sprintf("busy_timeout(%d)", busyTimeoutMS),
 	"foreign_keys(1)",
 	"temp_store(MEMORY)",
 }
