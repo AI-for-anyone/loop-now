@@ -1,0 +1,680 @@
+[
+  {
+    "type": "agent.created",
+    "at": "\u003cnow\u003e",
+    "project": "project",
+    "agent": "agent:甲",
+    "data": {
+      "address": "组织/项目/甲",
+      "name": "甲"
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "agent.created",
+    "at": "\u003cnow\u003e",
+    "agent": "agent:乙",
+    "data": {
+      "address": "乙",
+      "name": "乙"
+    },
+    "to": [
+      "obs",
+      "other"
+    ]
+  },
+  {
+    "type": "agent.updated",
+    "at": "\u003cnow\u003e",
+    "project": "project",
+    "agent": "agent:甲",
+    "data": {
+      "address": "组织/项目/甲2",
+      "name": "甲2"
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "agent.deleted",
+    "at": "\u003cnow\u003e",
+    "agent": "agent:乙",
+    "data": {
+      "address": "乙",
+      "name": "乙"
+    },
+    "to": [
+      "obs",
+      "other"
+    ]
+  },
+  {
+    "type": "agent.created",
+    "at": "\u003cnow\u003e",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "address": "组织/项目/工",
+      "name": "工"
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "run.queued",
+    "at": "\u003cnow\u003e",
+    "project": "project",
+    "agent": "agent:工",
+    "run": "run:1",
+    "data": {
+      "origin": "console"
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "run.queued",
+    "at": "\u003cnow\u003e",
+    "project": "project",
+    "agent": "agent:工",
+    "run": "run:1",
+    "data": {
+      "origin": "console"
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "run.started",
+    "at": "\u003cnow\u003e",
+    "project": "project",
+    "agent": "agent:工",
+    "run": "run:1",
+    "data": {
+      "origin": "console"
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "model.retry",
+    "at": "T+3",
+    "project": "project",
+    "agent": "agent:工",
+    "run": "run:1",
+    "data": {
+      "attempt": 2,
+      "delayMs": 4000
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "context.compacted",
+    "at": "T+4",
+    "project": "project",
+    "agent": "agent:工",
+    "run": "run:1",
+    "data": {
+      "reason": "threshold"
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "pi.started",
+    "at": "T+5",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "reason": null
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "run.ended",
+    "at": "\u003cnow\u003e",
+    "project": "project",
+    "agent": "agent:工",
+    "run": "run:1",
+    "data": {
+      "endReason": null,
+      "errorCode": null,
+      "origin": "console",
+      "status": "completed",
+      "tokens": {
+        "cacheRead": 300,
+        "cacheWrite": 0,
+        "input": 100,
+        "output": 20,
+        "total": 420
+      }
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "run.queued",
+    "at": "\u003cnow\u003e",
+    "project": "project",
+    "agent": "agent:工",
+    "run": "run:2",
+    "data": {
+      "origin": "console"
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "run.ended",
+    "at": "\u003cnow\u003e",
+    "project": "project",
+    "agent": "agent:工",
+    "run": "run:2",
+    "data": {
+      "endReason": "user_interrupt",
+      "errorCode": "x",
+      "origin": "console",
+      "status": "interrupted",
+      "tokens": {
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "input": 0,
+        "output": 0,
+        "total": 0
+      }
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "pi.exited",
+    "at": "T+6",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "reason": "idle_timeout"
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "pi.exited",
+    "at": "T+7",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "reason": "unexpected_exit"
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "inbox.received",
+    "at": "T+10",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "excerpt": "长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长",
+      "from": {
+        "address": "组织/项目/工",
+        "id": "agent:工",
+        "kind": "agent"
+      },
+      "isQuestion": true,
+      "messageId": "msg:1",
+      "threadId": "msg:1",
+      "to": {
+        "address": null,
+        "id": null,
+        "kind": "console"
+      }
+    },
+    "to": [
+      "bridge",
+      "chat",
+      "obs"
+    ]
+  },
+  {
+    "type": "question.asked",
+    "at": "T+10",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "from": {
+        "address": "组织/项目/工",
+        "id": "agent:工",
+        "kind": "agent"
+      },
+      "messageId": "msg:1",
+      "threadId": "msg:1",
+      "to": {
+        "address": null,
+        "id": null,
+        "kind": "console"
+      }
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "inbox.read",
+    "at": "T+11",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "excerpt": "长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长",
+      "from": {
+        "address": "组织/项目/工",
+        "id": "agent:工",
+        "kind": "agent"
+      },
+      "isQuestion": true,
+      "messageId": "msg:1",
+      "threadId": "msg:1",
+      "to": {
+        "address": null,
+        "id": null,
+        "kind": "console"
+      }
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "question.answered",
+    "at": "T+12",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "from": {
+        "address": "组织/项目/工",
+        "id": "agent:工",
+        "kind": "agent"
+      },
+      "messageId": "msg:1",
+      "optionId": "yes",
+      "threadId": "msg:1",
+      "to": {
+        "address": null,
+        "id": null,
+        "kind": "console"
+      }
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "inbox.received",
+    "at": "T+13",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "excerpt": "稍后处理",
+      "from": {
+        "address": null,
+        "id": null,
+        "kind": "console"
+      },
+      "isQuestion": false,
+      "messageId": "msg:2",
+      "threadId": "msg:2",
+      "to": {
+        "address": "组织/项目/工",
+        "id": "agent:工",
+        "kind": "agent"
+      }
+    },
+    "to": [
+      "bridge",
+      "chat",
+      "obs"
+    ]
+  },
+  {
+    "type": "inbox.cancelled",
+    "at": "T+14",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "excerpt": "稍后处理",
+      "from": {
+        "address": null,
+        "id": null,
+        "kind": "console"
+      },
+      "isQuestion": false,
+      "messageId": "msg:2",
+      "threadId": "msg:2",
+      "to": {
+        "address": "组织/项目/工",
+        "id": "agent:工",
+        "kind": "agent"
+      }
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "identity.inbound",
+    "at": "T+20",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "channelId": "lark",
+      "excerpt": "上线吗？",
+      "from": {
+        "agentId": "agent:工",
+        "kind": "agent",
+        "name": "工"
+      },
+      "identityId": "identity:boss",
+      "isQuestion": true,
+      "messageId": "msg:3",
+      "nodeRunId": null,
+      "projectId": "project",
+      "question": {
+        "allowText": true,
+        "deadline": "T+80",
+        "id": "msg:3",
+        "options": [
+          {
+            "id": "1",
+            "label": "上线"
+          }
+        ]
+      },
+      "taskId": null,
+      "threadId": "msg:3"
+    },
+    "to": [
+      "bridge"
+    ]
+  },
+  {
+    "type": "inbox.received",
+    "at": "T+20",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "excerpt": "上线吗？",
+      "from": {
+        "address": "组织/项目/工",
+        "id": "agent:工",
+        "kind": "agent"
+      },
+      "isQuestion": true,
+      "messageId": "msg:3",
+      "threadId": "msg:3",
+      "to": {
+        "address": "@boss",
+        "id": "identity:boss",
+        "kind": "external"
+      }
+    },
+    "to": [
+      "chat",
+      "obs"
+    ]
+  },
+  {
+    "type": "question.asked",
+    "at": "T+20",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "from": {
+        "address": "组织/项目/工",
+        "id": "agent:工",
+        "kind": "agent"
+      },
+      "messageId": "msg:3",
+      "threadId": "msg:3",
+      "to": {
+        "address": "@boss",
+        "id": "identity:boss",
+        "kind": "external"
+      }
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "inbox.received",
+    "at": "T+21",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "excerpt": "没人代管",
+      "from": {
+        "address": "组织/项目/工",
+        "id": "agent:工",
+        "kind": "agent"
+      },
+      "isQuestion": false,
+      "messageId": "msg:4",
+      "threadId": "msg:4",
+      "to": {
+        "address": "@ops",
+        "id": "identity:ops",
+        "kind": "external"
+      }
+    },
+    "to": [
+      "bridge",
+      "chat",
+      "obs"
+    ]
+  },
+  {
+    "type": "channel.outbound",
+    "at": "T+22",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "channelId": "c1",
+      "excerpt": "回复线索",
+      "from": {
+        "address": "组织/项目/工",
+        "id": "agent:工",
+        "kind": "agent"
+      },
+      "isQuestion": false,
+      "messageId": "msg:5",
+      "question": null,
+      "threadId": "msg:5"
+    },
+    "to": [
+      "chat"
+    ]
+  },
+  {
+    "type": "inbox.received",
+    "at": "T+22",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "excerpt": "回复线索",
+      "from": {
+        "address": "组织/项目/工",
+        "id": "agent:工",
+        "kind": "agent"
+      },
+      "isQuestion": false,
+      "messageId": "msg:5",
+      "threadId": "msg:5",
+      "to": {
+        "address": "plugin:chat/c1",
+        "id": null,
+        "kind": "plugin"
+      }
+    },
+    "to": [
+      "bridge",
+      "chat",
+      "obs"
+    ]
+  },
+  {
+    "type": "pi.exited",
+    "at": "T+24",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "reason": "idle_timeout"
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "agent.updated",
+    "at": "\u003cnow\u003e",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "address": "组织/项目/工2",
+      "name": "工2"
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "pi.exited",
+    "at": "T+25",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "reason": "unexpected_exit"
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "inbox.received",
+    "at": "T+23",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "excerpt": "混合",
+      "from": {
+        "address": "组织/项目/工2",
+        "id": "agent:工",
+        "kind": "agent"
+      },
+      "isQuestion": false,
+      "messageId": "msg:6",
+      "threadId": "msg:6",
+      "to": {
+        "address": null,
+        "id": null,
+        "kind": "console"
+      }
+    },
+    "to": [
+      "bridge",
+      "chat",
+      "obs"
+    ]
+  },
+  {
+    "type": "sleep.requested",
+    "at": "T+30",
+    "project": "project",
+    "agent": "agent:工",
+    "run": "run:1",
+    "data": {
+      "sleepId": "sleep",
+      "wakeAt": null
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "sleep.woken",
+    "at": "T+32",
+    "project": "project",
+    "agent": "agent:工",
+    "run": "run:2",
+    "data": {
+      "endReason": "deadline",
+      "sleepId": "sleep",
+      "wakeAt": "T+32"
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "plugin.config_changed",
+    "at": "\u003cnow\u003e",
+    "project": "project",
+    "data": {
+      "pluginId": "obs"
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "plugin.enabled",
+    "at": "\u003cnow\u003e",
+    "project": "project",
+    "data": {
+      "pluginId": "other"
+    },
+    "to": [
+      "obs",
+      "other"
+    ]
+  },
+  {
+    "type": "plugin.disabled",
+    "at": "\u003cnow\u003e",
+    "project": "project",
+    "data": {
+      "pluginId": "other"
+    },
+    "to": [
+      "obs"
+    ]
+  },
+  {
+    "type": "folder.changed",
+    "at": "\u003cnow\u003e",
+    "project": "project",
+    "agent": "agent:工",
+    "data": {
+      "level": "agent",
+      "path": "notes"
+    },
+    "to": [
+      "obs"
+    ]
+  }
+]
