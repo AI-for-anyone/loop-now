@@ -6,12 +6,24 @@ package sqlitetest
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 
 	"loop-now/internal/server/db"
+	"loop-now/internal/server/store/schema"
 )
 
 func init() { db.DetectNestedWrites.Store(true) }
+
+// NewDB 返回一个已执行全部迁移的库（基线约 20ms，不需要模板复制）。
+func NewDB(t testing.TB) *db.DB {
+	t.Helper()
+	d := open(t, t.TempDir())
+	if err := schema.Migrate(context.Background(), d, slog.New(slog.DiscardHandler)); err != nil {
+		t.Fatalf("迁移测试库失败：%v", err)
+	}
+	return d
+}
 
 // NewEmptyDB 返回一个没有任何表的库，供只测封装层或自建表的测试使用。
 func NewEmptyDB(t testing.TB) *db.DB {
