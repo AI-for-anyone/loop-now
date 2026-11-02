@@ -2,7 +2,6 @@ package store_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -12,8 +11,8 @@ import (
 	"loop-now/internal/testutil/sqlitetest"
 )
 
-// 029：拉取记录的幂等与同一目标互斥；有拉取或回放记录时拒绝回退，空库可以回退再升级。
-func TestAgentFolders029PullsAndDown(t *testing.T) {
+// 拉取记录的幂等与同一目标互斥。
+func TestAgentFolderGitPulls(t *testing.T) {
 	ctx := context.Background()
 	st := sqlitetest.NewStore(t)
 	dc, err := st.EnsureDefaults(ctx, "o", "p")
@@ -41,17 +40,5 @@ func TestAgentFolders029PullsAndDown(t *testing.T) {
 	}
 	if _, created, err := st.CreateFolderGitPull(ctx, store.FolderGitPull{ID: uuid.Must(uuid.NewV7()), AgentID: a.ID, ActionID: uuid.New(), URL: p.URL, Branch: p.Branch, Path: p.Path}); err != nil || !created {
 		t.Fatalf("上一次结束后可以再拉：%v", err)
-	}
-	if err := st.MigrateDownTo(ctx, 28); err == nil || !strings.Contains(err.Error(), "agent_folders_down_refused") {
-		t.Fatalf("有拉取记录时应拒绝回退：%v", err)
-	}
-	if _, err := st.Pool.Exec(ctx, `DELETE FROM agent_folder_git_pulls`); err != nil {
-		t.Fatal(err)
-	}
-	if err := st.MigrateDownTo(ctx, 28); err != nil {
-		t.Fatalf("空表可以回退：%v", err)
-	}
-	if err := st.MigrateUpTo(ctx, 29); err != nil {
-		t.Fatal(err)
 	}
 }

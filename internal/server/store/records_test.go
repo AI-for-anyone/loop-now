@@ -132,8 +132,7 @@ func TestEventFailureRollsBackState(t *testing.T) {
 	e := newRecEnv(t)
 	r := e.send(true, "")
 	// 让结束事件的插入失败（instance_id 外的列都受约束保护，这里用触发器模拟写入失败）。
-	if _, err := e.s.Pool.Exec(e.ctx, `CREATE FUNCTION fail_event() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'boom'; END $$;
-		CREATE TRIGGER fail_event BEFORE INSERT ON lifecycle_events FOR EACH ROW EXECUTE FUNCTION fail_event();`); err != nil {
+	if _, err := e.s.Pool.Exec(e.ctx, `CREATE TRIGGER ev.fail_event BEFORE INSERT ON lifecycle_events BEGIN SELECT RAISE(ABORT, 'boom'); END`); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, _, err := e.s.FinishRun(e.ctx, r.ID, store.RunEnd{Status: "completed"}); err == nil {

@@ -168,7 +168,7 @@ func TestDeleteAgent(t *testing.T) {
 	}
 	// 有排队消息时拒绝删除。
 	runID := uuid.Must(uuid.NewV7())
-	if _, err := e.st.Pool.Exec(ctx, `INSERT INTO runs (id, agent_id, user_message_id, config_version, priority, status) VALUES ($1, $2, $3, 1, 1, 'queued')`,
+	if _, err := e.st.Pool.Exec(ctx, `INSERT INTO runs (id, agent_id, user_message_id, config_version, priority, queue_seq, status) VALUES ($1, $2, $3, 1, 1, 1, 'queued')`,
 		runID, a.ID, uuid.Must(uuid.NewV7())); err != nil {
 		t.Fatal(err)
 	}
@@ -321,8 +321,7 @@ func TestCLIsAndCredentials(t *testing.T) {
 
 	// 凭证以明文存入 secret 列。
 	var stored bool
-	// SQLITE-PORT(G2): ::cast
-	_ = e.st.Pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agent_credentials WHERE agent_id = $1 AND cli_name = 'gh' AND position('ghp_example'::bytea in secret) > 0)`, a.ID).Scan(&stored)
+	_ = e.st.Pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agent_credentials WHERE agent_id = $1 AND cli_name = 'gh' AND instr(secret, CAST('ghp_example' AS BLOB)) > 0)`, a.ID).Scan(&stored)
 	if !stored {
 		t.Fatal("secret 列中没有明文凭证")
 	}
