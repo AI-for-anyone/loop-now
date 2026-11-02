@@ -47,7 +47,7 @@ func (s *Store) lockTaskNodeMessageTx(ctx context.Context, m *TaskMutation, targ
 	case !errors.Is(e, db.ErrNoRows):
 		return out, e
 	}
-	if out.msg, e = scanInbox(m.Tx.QueryRow(ctx, inboxSelect(200)+` WHERE m.id=$1 FOR UPDATE OF m`, message)); e != nil {
+	if out.msg, e = scanInbox(m.Tx.QueryRow(ctx, inboxSelect(200)+` WHERE m.id=$1`, message)); e != nil {
 		return out, notFoundIfNoRows(e, "节点Inbox消息")
 	}
 	if !out.strict {

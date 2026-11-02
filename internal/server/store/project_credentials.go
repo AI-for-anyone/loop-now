@@ -595,7 +595,7 @@ func (s *Store) ProjectCredentialImpact(ctx context.Context, project uuid.UUID, 
 				return apperr.Invalid("accountId", "账号用途定位不匹配")
 			}
 		}
-		rows, e := tx.Query(ctx, `SELECT `+agentColumns+` FROM agents WHERE project_id=$1 AND deleted_at IS NULL ORDER BY id FOR SHARE`, project)
+		rows, e := tx.Query(ctx, `SELECT `+agentColumns+` FROM agents WHERE project_id=$1 AND deleted_at IS NULL ORDER BY id`, project)
 		if e != nil {
 			return e
 		}

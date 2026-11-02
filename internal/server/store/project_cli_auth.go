@@ -168,7 +168,7 @@ func (s *Store) ListProjectCLIAuthOperations(ctx context.Context, project uuid.U
 		if e := expireCLIOperationsTx(ctx, tx, project); e != nil {
 			return e
 		}
-		rows, e := tx.Query(ctx, `SELECT `+cliOperationColumns+` FROM project_cli_auth_operations WHERE project_id=$1 AND cli_name=$3 AND status IN('pending','awaiting_authorization') AND ($2::uuid IS NULL OR target_account_id=$2) ORDER BY started_at,id`, project, account, cli)
+		rows, e := tx.Query(ctx, `SELECT `+cliOperationColumns+` FROM project_cli_auth_operations WHERE project_id=$1 AND cli_name=$3 AND status IN('pending','awaiting_authorization') AND ($2 IS NULL OR target_account_id=$2) ORDER BY started_at,id`, project, account, cli)
 		if e != nil {
 			return e
 		}

@@ -53,7 +53,7 @@ func (s *Store) NewProjectModelAuthOperation(ctx context.Context, project uuid.U
 		if _, e := tx.Exec(ctx, `UPDATE project_model_auth_operations SET status='expired',authorization_url=NULL,error_code='auth_timeout',completed_at=clock_timestamp() WHERE project_id=$1 AND status IN('pending','awaiting_authorization') AND expires_at<=clock_timestamp()`, project); e != nil {
 			return e
 		}
-		old, e := scanProjectOperation(tx.QueryRow(ctx, `SELECT `+projectOperationColumns+` FROM project_model_auth_operations WHERE project_id=$1 AND provider=$2 AND target_account_id IS NOT DISTINCT FROM $3::uuid AND status IN('pending','awaiting_authorization')`, project, in.Provider, in.AccountID))
+		old, e := scanProjectOperation(tx.QueryRow(ctx, `SELECT `+projectOperationColumns+` FROM project_model_auth_operations WHERE project_id=$1 AND provider=$2 AND target_account_id IS $3 AND status IN('pending','awaiting_authorization')`, project, in.Provider, in.AccountID))
 		if e == nil {
 			sameName := (old.Name == nil && in.Name == nil) || (old.Name != nil && in.Name != nil && *old.Name == *in.Name)
 			sameRevision := (old.TargetRevision == nil && in.ExpectedRevision == nil) || (old.TargetRevision != nil && in.ExpectedRevision != nil && *old.TargetRevision == *in.ExpectedRevision)
@@ -104,7 +104,7 @@ func (s *Store) ListProjectModelAuthOperations(ctx context.Context, project uuid
 		if _, e := tx.Exec(ctx, `UPDATE project_model_auth_operations SET status='expired',authorization_url=NULL,error_code='auth_timeout',completed_at=clock_timestamp() WHERE project_id=$1 AND status IN('pending','awaiting_authorization') AND expires_at<=clock_timestamp()`, project); e != nil {
 			return e
 		}
-		rows, e := tx.Query(ctx, `SELECT `+projectOperationColumns+` FROM project_model_auth_operations WHERE project_id=$1 AND ($2='' OR provider=$2) AND ($3::uuid IS NULL OR target_account_id=$3) AND status IN('pending','awaiting_authorization') ORDER BY started_at,id`, project, provider, account)
+		rows, e := tx.Query(ctx, `SELECT `+projectOperationColumns+` FROM project_model_auth_operations WHERE project_id=$1 AND ($2='' OR provider=$2) AND ($3 IS NULL OR target_account_id=$3) AND status IN('pending','awaiting_authorization') ORDER BY started_at,id`, project, provider, account)
 		if e != nil {
 			return e
 		}

@@ -29,5 +29,5 @@ type ScopeFilter struct {
 	Platform  bool       // 只看平台 Agent
 }
 
-// args 返回 SQL 条件 `($n::uuid IS NULL OR a.project_id = $n) AND (NOT $m OR a.project_id IS NULL)` 的两个参数。
+// args 返回 SQL 条件 `($n IS NULL OR a.project_id = $n) AND (NOT $m OR a.project_id IS NULL)` 的两个参数。
 func (f ScopeFilter) args() (*uuid.UUID, bool) { return f.ProjectID, f.Platform }

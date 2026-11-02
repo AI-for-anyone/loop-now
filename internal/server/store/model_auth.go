@@ -40,7 +40,7 @@ type ModelAuthOperation struct {
 	CompletedAt                 *time.Time
 }
 
-const modelAuthVersionColumns = `id,coalesce(agent_id,'00000000-0000-0000-0000-000000000000'::uuid),provider,auth_method,account_label,secret,generation,refresh_state,refresh_attempt_id,refresh_started_at,error_code,created_at,updated_at,project_account_id`
+const modelAuthVersionColumns = `id,coalesce(agent_id,'00000000-0000-0000-0000-000000000000'),provider,auth_method,account_label,secret,generation,refresh_state,refresh_attempt_id,refresh_started_at,error_code,created_at,updated_at,project_account_id`
 const modelAuthOperationColumns = `id,agent_id,provider,config_version,status,authorization_url,error_code,started_at,expires_at,completed_at`
 const modelAuthActive = `('pending','awaiting_authorization')`
 

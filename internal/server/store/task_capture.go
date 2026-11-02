@@ -27,7 +27,7 @@ type TaskCapture struct {
 func (s *Store) CaptureTaskAgent(ctx context.Context, tx *db.Tx, agentID, runtimeID uuid.UUID, project prompts.ProjectRules, credentialRevision ...int64) (TaskCapture, error) {
 	var out TaskCapture
 	var err error
-	out.Agent, err = scanAgent(tx.QueryRow(ctx, `SELECT `+agentColumns+` FROM agents WHERE id=$1 AND deleted_at IS NULL FOR SHARE`, agentID))
+	out.Agent, err = scanAgent(tx.QueryRow(ctx, `SELECT `+agentColumns+` FROM agents WHERE id=$1 AND deleted_at IS NULL`, agentID))
 	if err != nil {
 		return out, notFoundIfNoRows(err, "Agent")
 	}
