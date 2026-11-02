@@ -1,6 +1,6 @@
 // Package config 解析与校验服务端的环境变量配置。
 //
-// 除数据库连接与 Redis 连接外，每一项都有默认值且可以覆盖；
+// 每一项都有默认值且可以覆盖；
 // 业务代码中的超时、上限等运行参数都应取自这里，不另行写死。
 package config
 
@@ -40,7 +40,8 @@ const (
 	EnvTaskMaxEdges          = "LOOP_NOW_TASK_MAX_EDGES"
 	EnvTaskMaxSteps          = "LOOP_NOW_TASK_MAX_STEPS"
 	EnvDataDir               = "LOOP_NOW_DATA_DIR"
-	EnvRedisURL              = "LOOP_NOW_REDIS_URL"
+	EnvBackupDir             = "LOOP_NOW_BACKUP_DIR"
+	EnvBackupKeep            = "LOOP_NOW_BACKUP_KEEP"
 	EnvListenAddr            = "LOOP_NOW_LISTEN_ADDR"
 	EnvAllowedHosts          = "LOOP_NOW_ALLOWED_HOSTS"
 	EnvConsoleOrigins        = "LOOP_NOW_CONSOLE_ORIGINS"
@@ -49,7 +50,6 @@ const (
 	EnvMaxMessageImagePixels = "LOOP_NOW_MAX_MESSAGE_IMAGE_PIXELS"
 	EnvWorkRoot              = "LOOP_NOW_WORK_ROOT"
 	EnvContextDir            = "LOOP_NOW_CONTEXT_DIR"
-	EnvRedisKeyPrefix        = "LOOP_NOW_REDIS_KEY_PREFIX"
 	EnvDefaultOrgName        = "LOOP_NOW_DEFAULT_ORG_NAME"
 	EnvDefaultProjectName    = "LOOP_NOW_DEFAULT_PROJECT_NAME"
 
@@ -74,12 +74,9 @@ const (
 	EnvPluginMarketURL     = "LOOP_NOW_PLUGIN_MARKET_URL"
 	EnvPiAIDir             = "LOOP_NOW_PI_AI_DIR"
 
-	EnvLockTTL            = "LOOP_NOW_LOCK_TTL"
-	EnvLockRenewInterval  = "LOOP_NOW_LOCK_RENEW_INTERVAL"
 	EnvReconcileInterval  = "LOOP_NOW_RECONCILE_INTERVAL"
 	EnvSSEKeepalive       = "LOOP_NOW_SSE_KEEPALIVE"
 	EnvEventStreamMaxLen  = "LOOP_NOW_EVENT_STREAM_MAXLEN"
-	EnvRunTextTTL         = "LOOP_NOW_RUN_TEXT_TTL"
 	EnvOverviewMaxLen     = "LOOP_NOW_OVERVIEW_STREAM_MAXLEN"
 	EnvPiStderrTail       = "LOOP_NOW_PI_STDERR_TAIL_BYTES"
 	EnvShutdownTimeout    = "LOOP_NOW_SHUTDOWN_TIMEOUT"
@@ -125,15 +122,16 @@ type Config struct {
 	TaskMaxEdges                                               int
 	TaskMaxSteps                                               int
 	// DataDir 是数据根：库文件在 DataDir/db 下（见 DBDir）。默认是服务进程用户 HOME 下的 .loop_now，启动时算一次。
-	DataDir        string
-	RedisURL       string
+	DataDir string
+	// BackupDir 是每日备份的目录，默认 DataDir/backups；BackupKeep 是保留的份数。
+	BackupDir      string
+	BackupKeep     int
 	ListenAddr     string
 	AllowedHosts   []string
 	ConsoleOrigins []string
 	WorkRoot       string
 	// ContextDir 是项目与全局上下文文件夹的根（projects/<projectId>/、global/），默认是服务进程用户 HOME 下的 .loop_now。
 	ContextDir         string
-	RedisKeyPrefix     string
 	DefaultOrgName     string
 	DefaultProjectName string
 
@@ -161,12 +159,9 @@ type Config struct {
 	// PluginMarketURL 是官方插件市场 loop-now-market.json 的 https 地址；默认是官方市场的索引地址，可改成别的地址。
 	PluginMarketURL string
 
-	LockTTL           time.Duration
-	LockRenewInterval time.Duration
 	ReconcileInterval time.Duration
 	SSEKeepalive      time.Duration
 	EventStreamMaxLen int64
-	RunTextTTL        time.Duration
 	OverviewMaxLen    int64
 	PiStderrTailBytes int
 	ShutdownTimeout   time.Duration
@@ -239,12 +234,10 @@ func Load(getenv func(string) string) (*Config, error) {
 		TaskMaxVisits:         p.integer(EnvTaskMaxVisits, 1000),
 		TaskMaxEdges:          p.integer(EnvTaskMaxEdges, 300),
 		TaskMaxSteps:          p.integer(EnvTaskMaxSteps, 100),
-		RedisURL:              p.required(EnvRedisURL),
 		ListenAddr:            p.str(EnvListenAddr, "127.0.0.1:8780"),
 		AllowedHosts:          p.list(EnvAllowedHosts, "localhost,127.0.0.1,[::1]"),
 		ConsoleOrigins:        p.list(EnvConsoleOrigins, "http://localhost:5173,http://127.0.0.1:5173"),
 		WorkRoot:              p.str(EnvWorkRoot, DefaultWorkRoot()),
-		RedisKeyPrefix:        p.str(EnvRedisKeyPrefix, "loopnow:"),
 		// 只在全新安装时用来创建默认组织与项目；两者都出现在 Agent 地址里（项目名还出现在 URL 里），所以用不需要转义的英文。
 		DefaultOrgName:     p.str(EnvDefaultOrgName, "default"),
 		DefaultProjectName: p.str(EnvDefaultProjectName, "default"),
@@ -267,12 +260,9 @@ func Load(getenv func(string) string) (*Config, error) {
 		NodeBin:             p.str(EnvNodeBin, "node"),
 		PiAIDir:             p.str(EnvPiAIDir, ""),
 
-		LockTTL:           p.duration(EnvLockTTL, "30s"),
-		LockRenewInterval: p.duration(EnvLockRenewInterval, "10s"),
 		ReconcileInterval: p.duration(EnvReconcileInterval, "5s"),
 		SSEKeepalive:      p.duration(EnvSSEKeepalive, "15s"),
 		EventStreamMaxLen: int64(p.integer(EnvEventStreamMaxLen, 5000)),
-		RunTextTTL:        p.duration(EnvRunTextTTL, "24h"),
 		OverviewMaxLen:    int64(p.integer(EnvOverviewMaxLen, 1000)),
 		PiStderrTailBytes: p.integer(EnvPiStderrTail, 1000),
 		ShutdownTimeout:   p.duration(EnvShutdownTimeout, "15s"),
@@ -307,6 +297,17 @@ func Load(getenv func(string) string) (*Config, error) {
 	if !filepath.IsAbs(c.DataDir) || filepath.Clean(c.DataDir) != c.DataDir || c.DataDir == string(filepath.Separator) {
 		p.fail(EnvDataDir, "须为规范的绝对路径（当前 %q；未设置时取 HOME 下的 .loop_now）", c.DataDir)
 	}
+	c.BackupDir = p.str(EnvBackupDir, "")
+	if c.BackupDir == "" && c.DataDir != "" {
+		c.BackupDir = filepath.Join(c.DataDir, "backups")
+	}
+	if !filepath.IsAbs(c.BackupDir) || filepath.Clean(c.BackupDir) != c.BackupDir || c.BackupDir == string(filepath.Separator) {
+		p.fail(EnvBackupDir, "须为规范的绝对路径（当前 %q；未设置时取数据根下的 backups）", c.BackupDir)
+	}
+	c.BackupKeep = p.integer(EnvBackupKeep, 7)
+	if c.BackupKeep < 1 {
+		p.fail(EnvBackupKeep, "必须至少为 1")
+	}
 	c.ContextDir = p.str(EnvContextDir, "")
 	if c.ContextDir == "" {
 		home := getenv("HOME")
@@ -333,7 +334,6 @@ func Load(getenv func(string) string) (*Config, error) {
 		p.checkURL(EnvPluginMarketURL, c.PluginMarketURL, "https")
 	}
 
-	p.checkURL(EnvRedisURL, c.RedisURL, "redis", "rediss")
 	c.Warnings = append(c.Warnings, p.checkListenAddr(c.ListenAddr)...)
 	p.checkExternal(c)
 	c.AllowedHosts = p.normalizeHosts(c.AllowedHosts)
@@ -373,7 +373,8 @@ func (c *Config) LogValue() slog.Value {
 		slog.Duration("taskRecordTimeout", c.TaskRecordTimeout),
 		slog.Duration("authLoginTimeout", c.AuthLoginTimeout), slog.Duration("authRefreshTimeout", c.AuthRefreshTimeout), slog.Duration("authRecordTimeout", c.AuthRecordTimeout), slog.Duration("authIPCTimeout", c.AuthIPCTimeout),
 		slog.String("dataDir", c.DataDir),
-		slog.String("redisURL", RedactURL(c.RedisURL)),
+		slog.String("backupDir", c.BackupDir),
+		slog.Int("backupKeep", c.BackupKeep),
 		slog.String("listenAddr", c.ListenAddr),
 		slog.Any("allowedHosts", c.AllowedHosts),
 		slog.Any("consoleOrigins", c.ConsoleOrigins),
@@ -382,7 +383,6 @@ func (c *Config) LogValue() slog.Value {
 		slog.String("pluginHostEntry", c.PluginHostEntry),
 		slog.String("pluginOfficialDir", c.PluginOfficialDir),
 		slog.String("pluginMarketURL", c.PluginMarketURL),
-		slog.String("redisKeyPrefix", c.RedisKeyPrefix),
 		slog.String("piBin", c.PiBin),
 		slog.String("piVersion", c.PiVersion),
 		slog.Int("piMaxProcesses", c.PiMaxProcesses),
@@ -400,12 +400,9 @@ func (c *Config) LogValue() slog.Value {
 		slog.Any("execEnvPassthrough", c.ExecEnvPassthrough),
 		slog.String("nodeBin", c.NodeBin),
 		slog.String("piAIDir", c.PiAIDir),
-		slog.Duration("lockTTL", c.LockTTL),
-		slog.Duration("lockRenewInterval", c.LockRenewInterval),
 		slog.Duration("reconcileInterval", c.ReconcileInterval),
 		slog.Duration("sseKeepalive", c.SSEKeepalive),
 		slog.Int64("eventStreamMaxLen", c.EventStreamMaxLen),
-		slog.Duration("runTextTTL", c.RunTextTTL),
 		slog.Int64("overviewStreamMaxLen", c.OverviewMaxLen),
 		slog.Int("piStderrTailBytes", c.PiStderrTailBytes),
 		slog.Duration("shutdownTimeout", c.ShutdownTimeout),
@@ -706,12 +703,6 @@ func (p *parser) checkConstraints(c *Config) {
 	if c.TaskMaxSteps <= 0 {
 		p.fail(EnvTaskMaxSteps, "必须为正")
 	}
-	if c.LockTTL > 0 && c.LockRenewInterval >= c.LockTTL {
-		p.fail(EnvLockRenewInterval, "必须小于 %s（当前 %s ≥ %s）", EnvLockTTL, c.LockRenewInterval, c.LockTTL)
-	}
-	if c.LockTTL > 0 && c.ReconcileInterval >= c.LockTTL {
-		p.fail(EnvReconcileInterval, "必须小于 %s（当前 %s ≥ %s）", EnvLockTTL, c.ReconcileInterval, c.LockTTL)
-	}
 	if msg := naming.Validate("默认组织名", c.DefaultOrgName); msg != "" {
 		p.fail(EnvDefaultOrgName, "%s", msg)
 	}
@@ -741,8 +732,5 @@ func (p *parser) checkConstraints(c *Config) {
 	}
 	if c.TextEditMax > 0 && c.MaxUploadFile > 0 && c.TextEditMax > c.MaxUploadFile {
 		p.fail(EnvTextEditMax, "不能大于 %s", EnvMaxUploadFile)
-	}
-	if c.RedisKeyPrefix == "" {
-		p.fail(EnvRedisKeyPrefix, "不能为空")
 	}
 }

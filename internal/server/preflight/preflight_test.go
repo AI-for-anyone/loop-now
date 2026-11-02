@@ -55,13 +55,6 @@ func TestPiVersionMismatch(t *testing.T) {
 	}
 }
 
-func TestCheckRedisUnavailable(t *testing.T) {
-	err := CheckRedis(context.Background(), "redis://127.0.0.1:1/0")
-	if err == nil || !strings.Contains(err.Error(), "Redis") {
-		t.Fatalf("Redis 不可用时应指出 Redis：%v", err)
-	}
-}
-
 func TestDeriveExecBasePathOrder(t *testing.T) {
 	p := DeriveExecBasePath("/usr/bin/true", "/usr/bin/git")
 	parts := strings.Split(p, ":")

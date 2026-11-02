@@ -109,7 +109,7 @@ func newEnv(t *testing.T) *env {
 	t.Helper()
 	ctx := context.Background()
 	st := sqlitetest.NewStore(t)
-	co := coord.New(coord.Options{Prefix: "test:", LockTTL: 5 * time.Second, StreamMaxLen: 1000, RunTextTTL: time.Hour, OverviewMaxLen: 1000})
+	co := coord.New(coord.Options{Prefix: "test:", StreamMaxLen: 1000, OverviewMaxLen: 1000})
 	dc, err := st.EnsureDefaults(ctx, "默认组织", "默认项目")
 	if err != nil {
 		t.Fatal(err)
@@ -137,7 +137,7 @@ func newEnv(t *testing.T) *env {
 		}
 	})
 	conv := conversation.New(st, co, ex, conversation.Options{InstanceID: uuid.Must(uuid.NewV7()), MaxMessage: limits.MaxMessage,
-		LockRenewInterval: time.Second, ReconcileInterval: time.Second}, log)
+		AbortPollInterval: time.Second, ReconcileInterval: time.Second}, log)
 	cfg.AgentChanged, cfg.AgentRemoved = conv.EmitAgentStatus, conv.EmitAgentStatus
 	if err := conv.Start(ctx); err != nil {
 		t.Fatal(err)

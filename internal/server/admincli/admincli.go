@@ -1,4 +1,4 @@
-// Package admincli 实现服务端命令行的管理子命令：外部身份与外部令牌的管理，以及打印版本号。
+// Package admincli 实现服务端命令行的管理子命令：外部身份与外部令牌的管理、手动备份，以及打印版本号。
 // 子命令直接读写数据库（与服务同一个数据目录，SQLite 支持多进程短写）；改变状态的操作记审计，操作者为 cli。
 //
 //	loop-server version
@@ -8,6 +8,7 @@
 //	loop-server token issue <身份名称> [--expires-in 720h]
 //	loop-server token list <身份名称>
 //	loop-server token revoke <令牌 ID>
+//	loop-server backup <目录>
 package admincli
 
 import (
@@ -29,13 +30,14 @@ import (
 	"loop-now/internal/server/dbcli"
 	"loop-now/internal/server/gcloudcli"
 	"loop-now/internal/server/identity"
+	"loop-now/internal/server/maintenance"
 	"loop-now/internal/server/store"
 
 	"path/filepath"
 )
 
 // Commands 是全部管理子命令的名称；第一个参数是其中之一时，loop-server 执行子命令而不是启动服务。
-var Commands = []string{"version", "identity", "token"}
+var Commands = []string{"version", "identity", "token", "backup"}
 
 // IsCommand 报告参数是否为管理子命令。
 func IsCommand(arg string) bool {
@@ -65,6 +67,7 @@ const usage = `用法：
   loop-server token issue <身份名称> [--expires-in 720h]
   loop-server token list <身份名称>
   loop-server token revoke <令牌 ID>
+  loop-server backup <目录>        在目录下以当前时刻命名的子目录里写一份完整备份（服务运行中也可以）
 `
 
 // Options 是运行子命令所需的环境。库在 LOOP_NOW_DATA_DIR（默认 HOME 下的 .loop_now）的 db 子目录。
@@ -110,6 +113,24 @@ func Run(ctx context.Context, args []string, o Options) int {
 		return exitFail
 	}
 	defer st.Close()
+	if args[0] == "backup" {
+		if len(args) != 2 {
+			fmt.Fprint(o.Stderr, usage)
+			return exitUsage
+		}
+		dir, err := filepath.Abs(args[1])
+		if err != nil {
+			fmt.Fprintln(o.Stderr, err)
+			return exitFail
+		}
+		path, err := maintenance.Backup(ctx, st.Pool, dir, time.Now())
+		if err != nil {
+			fmt.Fprintln(o.Stderr, "备份失败：", err)
+			return exitFail
+		}
+		fmt.Fprintln(o.Stdout, path)
+		return exitOK
+	}
 	c := &cmd{ctx: ctx, st: st, o: o}
 	var run func([]string) error
 	switch args[0] + " " + args[1] {

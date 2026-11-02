@@ -37,7 +37,7 @@ func eventually(t *testing.T, fn func() bool) {
 	}
 	t.Fatal("condition not reached")
 }
-func TestSameAgentTasksHaveIndependentLocksAndRestoreRedisLoss(t *testing.T) {
+func TestSameAgentTasksHaveIndependentLocks(t *testing.T) {
 	s, first, p := fixture(t, false)
 	ctx := context.Background()
 	r := current(t, s, first)
@@ -69,9 +69,9 @@ func TestSameAgentTasksHaveIndependentLocksAndRestoreRedisLoss(t *testing.T) {
 			t.Fatal(e)
 		}
 	}
-	s.Coord = coord.New(coord.Options{LockTTL: 500 * time.Millisecond, StreamMaxLen: 100, RunTextTTL: time.Hour})
+	s.Coord = coord.New(coord.Options{StreamMaxLen: 100})
 	s.Options.InstanceID = uuid.New()
-	s.Options.LockRenewInterval = 50 * time.Millisecond
+	s.Options.AbortPollInterval = 50 * time.Millisecond
 	s.Options.RecordTimeout = time.Second
 	s.Options.ReconcileInterval = 50 * time.Millisecond
 	starts := make(chan executor.Request, 4)
@@ -121,19 +121,7 @@ func TestSameAgentTasksHaveIndependentLocksAndRestoreRedisLoss(t *testing.T) {
 		if e != nil || owner == "" {
 			t.Fatal("instance lock missing", e)
 		}
-		if released, e := s.Coord.Release(ctx, runtime.String(), owner); e != nil || !released {
-			t.Fatal("drop instance lock", released, e)
-		}
 	}
-	eventually(t, func() bool {
-		for _, runtime := range []uuid.UUID{p.RuntimeID, runtime2} {
-			owner, e := s.Coord.LockOwner(ctx, runtime.String())
-			if e != nil || owner == "" {
-				return false
-			}
-		}
-		return true
-	})
 	msg := store.NewInboxMessage{ID: uuid.New(), From: store.ConsoleParty, To: store.Party{Kind: "agent", ID: p.ID, RuntimeID: p.RuntimeID}, Text: "queued while busy", WhenBusy: "queue"}
 	if e = s.DeliverInbox(ctx, msg); e != nil {
 		t.Fatal(e)

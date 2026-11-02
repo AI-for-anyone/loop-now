@@ -26,10 +26,18 @@ import (
 
 // Options 是对话服务的参数。
 type Options struct {
-	InstanceID        uuid.UUID
-	MaxMessage        int64
-	LockRenewInterval time.Duration
+	InstanceID uuid.UUID
+	MaxMessage int64
+	// AbortPollInterval 是回复期间检查数据库里打断标记的间隔（打断通知丢失时的兜底）；为 0 时取 10 秒。
+	AbortPollInterval time.Duration
 	ReconcileInterval time.Duration
+}
+
+func (o Options) abortPollInterval() time.Duration {
+	if o.AbortPollInterval > 0 {
+		return o.AbortPollInterval
+	}
+	return 10 * time.Second
 }
 
 // Service 是对话服务。
@@ -401,7 +409,7 @@ func beforeInterrupt(runID uuid.UUID) {
 	}
 }
 
-// execute 调用执行器处理一次执行，期间续期忙闲锁，并定时检查数据库中的打断标记（防止打断通知丢失）。
+// execute 调用执行器处理一次执行，期间定时检查数据库中的打断标记（防止打断通知丢失）。
 func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run, owner string) executor.Result {
 	attrs := []any{"runId", run.ID, "agentId", agentID, "whenBusy", run.WhenBusy}
 	if run.StartedAt != nil {
@@ -428,22 +436,19 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 		}
 		msg.Text = text
 	}
-	renewCtx, stopRenew := context.WithCancel(ctx)
-	defer stopRenew()
+	pollCtx, stopPoll := context.WithCancel(ctx)
+	defer stopPoll()
 	go func() {
-		t := time.NewTicker(s.o.LockRenewInterval)
+		t := time.NewTicker(s.o.abortPollInterval())
 		defer t.Stop()
 		for {
 			select {
-			case <-renewCtx.Done():
+			case <-pollCtx.Done():
 				return
 			case <-t.C:
-				if ok, err := s.co.Renew(renewCtx, agentID.String(), owner); err != nil || !ok {
-					s.log.Warn("续期忙闲锁失败", "agentId", agentID, "ok", ok, "err", err)
-				}
-				if st, err := s.st.RunStatus(renewCtx, run.ID); err == nil && st == "aborting" {
+				if st, err := s.st.RunStatus(pollCtx, run.ID); err == nil && st == "aborting" {
 					beforeInterrupt(run.ID)
-					_ = s.ex.Interrupt(renewCtx, agentID, run.ID)
+					_ = s.ex.Interrupt(pollCtx, agentID, run.ID)
 				}
 			}
 		}

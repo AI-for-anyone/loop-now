@@ -19,7 +19,7 @@ func (s *Service) Start(ctx context.Context) error {
 	if s.Options.ReconcileInterval <= 0 {
 		return errors.New("任务对账间隔必须为正")
 	}
-	if s.Coord != nil && (s.Options.LockRenewInterval <= 0 || s.Options.RecordTimeout <= 0 || s.Options.InstanceID == uuid.Nil) {
+	if s.Coord != nil && (s.Options.RecordTimeout <= 0 || s.Options.InstanceID == uuid.Nil) {
 		return errors.New("任务协调参数未完整配置")
 	}
 	s.mu.Lock()

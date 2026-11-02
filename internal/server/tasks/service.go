@@ -34,12 +34,22 @@ import (
 )
 
 type Options struct {
-	InstanceID                       uuid.UUID
-	LockRenewInterval, RecordTimeout time.Duration
-	MaxSteps, MaxEdges, MaxVisits    int
-	MaxRequest, MaxArtifact          int64
-	ReconcileInterval                time.Duration
+	InstanceID uuid.UUID
+	// AbortPollInterval 是一轮执行期间检查数据库里打断标记的间隔（打断通知丢失时的兜底）；为 0 时取 10 秒。
+	AbortPollInterval             time.Duration
+	RecordTimeout                 time.Duration
+	MaxSteps, MaxEdges, MaxVisits int
+	MaxRequest, MaxArtifact       int64
+	ReconcileInterval             time.Duration
 }
+
+func (o Options) abortPollInterval() time.Duration {
+	if o.AbortPollInterval > 0 {
+		return o.AbortPollInterval
+	}
+	return 10 * time.Second
+}
+
 type Service struct {
 	// Hooks 在任务节点第一次开始前调用插件的 node.before_start；为空时不调用。
 	Hooks pluginhost.Hooker
