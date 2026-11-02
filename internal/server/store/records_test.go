@@ -6,10 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/tasks"
+
+	"github.com/google/uuid"
 
 	"loop-now/internal/server/db"
 	"loop-now/internal/server/store"
@@ -170,7 +171,7 @@ func TestMigrationConstraints(t *testing.T) {
 	if err := e.s.AddEvent(e.ctx, store.LifecycleEvent{AgentID: e.agent, Type: store.EventPiStopped, Data: map[string]any{"reason": "idle_timeout"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.s.Pool.QueryRow(e.ctx, `SELECT task_id::text, workflow_node, inbox_message_id::text, source FROM lifecycle_events WHERE agent_id = $1`, e.agent).
+	if err := e.s.Pool.QueryRow(e.ctx, `SELECT task_id, workflow_node, inbox_message_id, source FROM ev.lifecycle_events WHERE agent_id = $1`, e.agent).
 		Scan(&task, &node, &inbox, &source); err != nil {
 		t.Fatal(err)
 	}

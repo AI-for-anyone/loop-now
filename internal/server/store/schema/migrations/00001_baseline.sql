@@ -183,7 +183,8 @@ CREATE TABLE organizations (
     CONSTRAINT organizations_pkey PRIMARY KEY (id)
 ) STRICT;
 CREATE UNIQUE INDEX organizations_name_unique ON organizations (name);
-CREATE UNIQUE INDEX organizations_one_default ON organizations ((1)) WHERE is_default;
+-- 只能有一个默认组织。PG 写成 ((true))；SQLite 的 ON CONFLICT 认不出常量表达式索引，改按 is_default 建，约束相同。
+CREATE UNIQUE INDEX organizations_one_default ON organizations (is_default) WHERE is_default;
 
 CREATE TABLE projects (
     id                    TEXT NOT NULL,

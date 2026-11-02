@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
+
+	"loop-now/internal/server/store"
 
 	"github.com/google/uuid"
-	"loop-now/internal/server/store"
 )
 
 func TestPlatformProjectDirectoryStore(t *testing.T) {
@@ -116,9 +118,9 @@ func TestPlatformProjectDirectoryStore(t *testing.T) {
 			t.Fatal("deleted project exposed")
 		}
 	}
-	exec(`UPDATE projects SET deleted_at=now() WHERE NOT is_default`)
+	exec(`UPDATE projects SET deleted_at=$1 WHERE NOT is_default`, time.Now())
 	// Even no rows are serialized as [] rather than null.
-	exec(`UPDATE projects SET is_default=false,deleted_at=now()`)
+	exec(`UPDATE projects SET is_default=false,deleted_at=$1`, time.Now())
 	if v := get(); v == nil || len(v) != 0 {
 		t.Fatal("empty directory is not []")
 	}

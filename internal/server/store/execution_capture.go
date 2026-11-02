@@ -35,11 +35,11 @@ func (s *Store) CaptureExecutionIdentity(ctx context.Context, agentID uuid.UUID)
 		}
 		layer := &prompts.Layers{Format: prompts.FormatV1, ProjectID: projectID}
 		if projectID != nil {
-			if err = tx.QueryRow(ctx, `SELECT prompt,prompt_version FROM projects WHERE id=$1 AND deleted_at IS NULL FOR SHARE`, *projectID).Scan(&layer.ProjectPrompt, &layer.ProjectVersion); err != nil {
+			if err = tx.QueryRow(ctx, `SELECT prompt,prompt_version FROM projects WHERE id=$1 AND deleted_at IS NULL`, *projectID).Scan(&layer.ProjectPrompt, &layer.ProjectVersion); err != nil {
 				return notFoundIfNoRows(err, "项目")
 			}
 		}
-		out.Agent, err = scanAgent(tx.QueryRow(ctx, `SELECT `+agentColumns+` FROM agents WHERE id=$1 AND deleted_at IS NULL FOR SHARE`, agentID))
+		out.Agent, err = scanAgent(tx.QueryRow(ctx, `SELECT `+agentColumns+` FROM agents WHERE id=$1 AND deleted_at IS NULL`, agentID))
 		if err != nil {
 			return notFoundIfNoRows(err, "Agent")
 		}

@@ -63,7 +63,7 @@ func (s *Store) ListSourceFilesForSync(ctx context.Context, sourceID uuid.UUID) 
 // 只清除 updated_at 与处理时一致的记录：处理期间人又改过的文件保留标记，下次再同步。
 func (s *Store) MarkSourceSynced(ctx context.Context, sourceID uuid.UUID, processed []SyncFile) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
-		if _, err := tx.Exec(ctx, `UPDATE agent_folder_sources SET synced_at = coalesce(synced_at, now()) WHERE id = $1`, sourceID); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE agent_folder_sources SET synced_at = coalesce(synced_at, $2) WHERE id = $1`, sourceID, tx.Now()); err != nil {
 			return err
 		}
 		for _, f := range processed {

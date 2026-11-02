@@ -525,7 +525,7 @@ func (s *Store) markRead(ctx context.Context, p Party, column string, id uuid.UU
 		eff.AgentID = p.ID
 		err := s.inTx(ctx, func(tx *db.Tx) error {
 			eff.QueueChanged, eff.Voided = false, nil
-			if err := lockAgentQueue(ctx, tx, p.ID); err != nil {
+			if err := requireLiveAgent(ctx, tx, p.ID); err != nil {
 				return notFoundAs(err, "消息")
 			}
 			var err error

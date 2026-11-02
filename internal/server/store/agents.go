@@ -86,7 +86,7 @@ func notFoundIfNoRows(err error, what string) error {
 }
 
 // CreateAgent 在指定范围内创建 Agent 及其会话记录。项目范围时，项目必须未删除；
-// 以 FOR SHARE 锁住项目行，与删除项目串行化，不会在刚删除的项目中建出 Agent。
+// 与删除项目同在写事务里串行，不会在刚删除的项目中建出 Agent。
 func (s *Store) CreateAgent(ctx context.Context, scope Scope, name, provider, modelID, prompt string, modelOptions ...*string) (Agent, error) {
 	var a Agent
 	var level, tier *string
@@ -98,7 +98,7 @@ func (s *Store) CreateAgent(ctx context.Context, scope Scope, name, provider, mo
 	}
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if !scope.Platform {
-			if err := lockLiveProject(ctx, tx, scope.ProjectID, "FOR SHARE"); err != nil {
+			if err := requireLiveProject(ctx, tx, scope.ProjectID); err != nil {
 				return err
 			}
 		}
@@ -123,7 +123,7 @@ func (s *Store) GetAgent(ctx context.Context, id uuid.UUID) (Agent, error) {
 
 // ListAgents 列出某个范围内未删除的 Agent，附带是否忙碌与会话状态。
 func (s *Store) ListAgents(ctx context.Context, scope Scope) ([]AgentListItem, error) {
-	return s.listAgents(ctx, `agents.project_id IS NOT DISTINCT FROM $1`, scope.projectArg())
+	return s.listAgents(ctx, `agents.project_id IS $1`, scope.projectArg())
 }
 
 // GetAgentListItem 返回一个未删除 Agent 的列表项。
@@ -141,7 +141,7 @@ func (s *Store) GetAgentListItem(ctx context.Context, id uuid.UUID) (AgentListIt
 // ListAgentsFiltered 按筛选条件列出所有未删除项目与平台中未删除的 Agent（概览使用）。
 func (s *Store) ListAgentsFiltered(ctx context.Context, f ScopeFilter) ([]AgentListItem, error) {
 	pid, platform := f.args()
-	return s.listAgents(ctx, `($1::uuid IS NULL OR agents.project_id = $1) AND (NOT $2 OR agents.project_id IS NULL)
+	return s.listAgents(ctx, `($1 IS NULL OR agents.project_id = $1) AND (NOT $2 OR agents.project_id IS NULL)
 		AND (agents.project_id IS NULL OR EXISTS (SELECT 1 FROM projects lp WHERE lp.id = agents.project_id AND lp.deleted_at IS NULL))`, pid, platform)
 }
 
@@ -237,8 +237,8 @@ func (s *Store) UpdateAgent(ctx context.Context, id uuid.UUID, p AgentPatch) (Ag
 			inc = 1
 		}
 		a, err = scanAgent(tx.QueryRow(ctx, `UPDATE agents SET name = $2, model_provider = $3, model_id = $4, prompt = $5,
-				config_version = config_version + $6, prompt_version=prompt_version+$7, thinking_level=$8, service_tier=$9, updated_at = now()
-			WHERE id = $1 RETURNING `+agentColumns, id, next.Name, next.ModelProvider, next.ModelID, next.Prompt, inc, promptInc, next.ThinkingLevel, next.ServiceTier))
+				config_version = config_version + $6, prompt_version=prompt_version+$7, thinking_level=$8, service_tier=$9, updated_at = $10
+			WHERE id = $1 RETURNING `+agentColumns, id, next.Name, next.ModelProvider, next.ModelID, next.Prompt, inc, promptInc, next.ThinkingLevel, next.ServiceTier, tx.Now()))
 		return agentNameConflict(err, next.Name)
 	})
 	return a, err
@@ -257,10 +257,6 @@ func (s *Store) AgentBusy(ctx context.Context, id uuid.UUID) (bool, error) {
 // 有进行中的执行或排队消息时返回 agent_not_idle。
 func (s *Store) SoftDeleteAgent(ctx context.Context, id uuid.UUID) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
-		// 加锁顺序统一为“先项目、后 Agent”（与删除项目、指定 Manager、创建 Agent 一致），避免与它们互相等待。
-		if _, err := tx.Exec(ctx, `SELECT 1 FROM projects WHERE id = (SELECT project_id FROM agents WHERE id = $1) FOR UPDATE`, id); err != nil {
-			return err
-		}
 		if _, err := lockAgent(ctx, tx, id); err != nil {
 			return err
 		}
@@ -281,13 +277,13 @@ func (s *Store) SoftDeleteAgent(ctx context.Context, id uuid.UUID) error {
 			return err
 		}
 		// 担任项目 Manager 时，同时取消。
-		if _, err := tx.Exec(ctx, `UPDATE projects SET manager_agent_id = NULL, updated_at = now() WHERE manager_agent_id = $1`, id); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE projects SET manager_agent_id = NULL, updated_at = $2 WHERE manager_agent_id = $1`, id, tx.Now()); err != nil {
 			return err
 		}
 		if err := s.CancelSleepsTx(ctx, tx, nil, id, "owner_deleted"); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `UPDATE agents SET deleted_at = now(), updated_at = now() WHERE id = $1`, id)
+		_, err := tx.Exec(ctx, `UPDATE agents SET deleted_at = $2, updated_at = $2 WHERE id = $1`, id, tx.Now())
 		return err
 	})
 }
@@ -303,9 +299,9 @@ func agentNameConflict(err error, name string) error {
 	return err
 }
 
-// lockAgent 以 FOR UPDATE 锁定未删除的 Agent 行，与发送消息、删除等操作串行化。
+// lockAgent 在写事务里读出未删除的 Agent。名字沿用 PostgreSQL 时的行锁；写事务本身串行，不再需要锁。
 func lockAgent(ctx context.Context, tx *db.Tx, id uuid.UUID) (Agent, error) {
-	a, err := scanAgent(tx.QueryRow(ctx, `SELECT `+agentColumns+` FROM agents WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, id))
+	a, err := scanAgent(tx.QueryRow(ctx, `SELECT `+agentColumns+` FROM agents WHERE id = $1 AND deleted_at IS NULL`, id))
 	return a, notFoundIfNoRows(err, "Agent")
 }
 
@@ -323,7 +319,7 @@ func ensureIdle(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
 
 // bumpConfig 递增配置版本；调用前须已用 lockAgent 锁定该 Agent。
 func bumpConfig(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
-	_, err := tx.Exec(ctx, `UPDATE agents SET config_version = config_version + 1, updated_at = now() WHERE id = $1`, id)
+	_, err := tx.Exec(ctx, `UPDATE agents SET config_version = config_version + 1, updated_at = $2 WHERE id = $1`, id, tx.Now())
 	return err
 }
 
@@ -341,7 +337,7 @@ func (s *Store) GetAgentSession(ctx context.Context, agentID uuid.UUID) (AgentSe
 
 // RecordSessionFile 记录已确认写入磁盘的会话文件，状态设为 active。
 func (s *Store) RecordSessionFile(ctx context.Context, agentID uuid.UUID, path string) error {
-	_, err := s.Pool.Exec(ctx, `UPDATE agent_sessions SET session_file = $2, state = 'active', updated_at = now() WHERE agent_id = $1`, agentID, path)
+	_, err := s.Pool.Exec(ctx, `UPDATE agent_sessions SET session_file = $2, state = 'active', updated_at = $3 WHERE agent_id = $1`, agentID, path, s.Pool.Now())
 	return err
 }
 
@@ -350,8 +346,8 @@ func (s *Store) MarkSessionMissing(ctx context.Context, agentID uuid.UUID, runID
 	return s.inTx(ctx, func(tx *db.Tx) error {
 		var file *string
 		var epoch int
-		err := tx.QueryRow(ctx, `UPDATE agent_sessions SET state = 'missing', updated_at = now() WHERE agent_id = $1 AND state = 'active'
-			RETURNING session_file, epoch`, agentID).Scan(&file, &epoch)
+		err := tx.QueryRow(ctx, `UPDATE agent_sessions SET state = 'missing', updated_at = $2 WHERE agent_id = $1 AND state = 'active'
+			RETURNING session_file, epoch`, agentID, tx.Now()).Scan(&file, &epoch)
 		if errors.Is(err, db.ErrNoRows) {
 			return nil
 		}
@@ -384,8 +380,8 @@ func (s *Store) ResetSession(ctx context.Context, agentID uuid.UUID) (AgentSessi
 		if err := s.CancelSleepsTx(ctx, tx, nil, agentID, "session_reopened"); err != nil {
 			return err
 		}
-		if err := tx.QueryRow(ctx, `UPDATE agent_sessions SET session_file = NULL, state = 'none', epoch = epoch + 1, updated_at = now()
-			WHERE agent_id = $1 RETURNING state, epoch, updated_at`, agentID).Scan(&sess.State, &sess.Epoch, &sess.UpdatedAt); err != nil {
+		if err := tx.QueryRow(ctx, `UPDATE agent_sessions SET session_file = NULL, state = 'none', epoch = epoch + 1, updated_at = $2
+			WHERE agent_id = $1 RETURNING state, epoch, updated_at`, agentID, tx.Now()).Scan(&sess.State, &sess.Epoch, &sess.UpdatedAt); err != nil {
 			return err
 		}
 		return s.insertEvent(ctx, tx, LifecycleEvent{AgentID: agentID, Type: EventSessionReset,

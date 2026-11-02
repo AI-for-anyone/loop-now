@@ -153,7 +153,7 @@ func (s *Store) UpdateSkillTemplateMarkdown(ctx context.Context, id uuid.UUID, m
 }
 
 func updateTemplateMeta(ctx context.Context, tx *db.Tx, id uuid.UUID, meta content.SkillMeta) error {
-	tag, err := tx.Exec(ctx, `UPDATE skill_templates SET name = $2, description = $3, updated_at = now() WHERE id = $1`, id, meta.Name, meta.Description)
+	tag, err := tx.Exec(ctx, `UPDATE skill_templates SET name = $2, description = $3, updated_at = $4 WHERE id = $1`, id, meta.Name, meta.Description, tx.Now())
 	if err != nil {
 		if isUniqueViolation(err, "") {
 			return nameConflict(meta.Name)
@@ -249,7 +249,7 @@ func (s *Store) AddAgentSkill(ctx context.Context, agentID, templateID uuid.UUID
 			return err
 		}
 		var name, desc string
-		if err := tx.QueryRow(ctx, `SELECT name, description FROM skill_templates WHERE id = $1 FOR SHARE`, templateID).Scan(&name, &desc); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT name, description FROM skill_templates WHERE id = $1`, templateID).Scan(&name, &desc); err != nil {
 			return notFoundIfNoRows(err, "Skill 模板")
 		}
 		if err := agentSkillNameConflict(ctx, tx, agentID, name, uuid.Nil); err != nil {
@@ -271,7 +271,7 @@ func (s *Store) AddAgentSkill(ctx context.Context, agentID, templateID uuid.UUID
 }
 
 func lockAgentSkill(ctx context.Context, tx *db.Tx, agentID, skillID uuid.UUID) (AgentSkill, error) {
-	k, err := scanAgentSkill(tx.QueryRow(ctx, `SELECT `+agentSkillColumns+` FROM agent_skills k WHERE k.id = $1 AND k.agent_id = $2 FOR UPDATE`, skillID, agentID))
+	k, err := scanAgentSkill(tx.QueryRow(ctx, `SELECT `+agentSkillColumns+` FROM agent_skills k WHERE k.id = $1 AND k.agent_id = $2`, skillID, agentID))
 	return k, notFoundIfNoRows(err, "Skill")
 }
 
@@ -287,7 +287,7 @@ func (s *Store) UpdateAgentSkillMarkdown(ctx context.Context, agentID, skillID u
 		if err := agentSkillNameConflict(ctx, tx, agentID, meta.Name, skillID); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE agent_skills SET name = $2, description = $3, updated_at = now() WHERE id = $1`, skillID, meta.Name, meta.Description); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE agent_skills SET name = $2, description = $3, updated_at = $4 WHERE id = $1`, skillID, meta.Name, meta.Description, tx.Now()); err != nil {
 			return err
 		}
 		if err := upsertSkillMD(ctx, tx, "agent_skill_files", "agent_skill_id", skillID, md); err != nil {
@@ -315,7 +315,7 @@ func (s *Store) RecopyAgentSkill(ctx context.Context, agentID, skillID uuid.UUID
 			return apperr.Conflict(apperr.CodeTemplateDeleted, "来源模板已删除，不能重新复制")
 		}
 		var name, desc string
-		if err := tx.QueryRow(ctx, `SELECT name, description FROM skill_templates WHERE id = $1 FOR SHARE`, *k.SourceTemplateID).Scan(&name, &desc); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT name, description FROM skill_templates WHERE id = $1`, *k.SourceTemplateID).Scan(&name, &desc); err != nil {
 			if err == db.ErrNoRows {
 				return apperr.Conflict(apperr.CodeTemplateDeleted, "来源模板已删除，不能重新复制")
 			}
@@ -330,7 +330,7 @@ func (s *Store) RecopyAgentSkill(ctx context.Context, agentID, skillID uuid.UUID
 		if err := copyTemplateFiles(ctx, tx, *k.SourceTemplateID, skillID); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE agent_skills SET name = $2, description = $3, copied_at = now(), updated_at = now() WHERE id = $1`, skillID, name, desc); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE agent_skills SET name = $2, description = $3, copied_at = $4, updated_at = $4 WHERE id = $1`, skillID, name, desc, tx.Now()); err != nil {
 			return err
 		}
 		return bumpConfig(ctx, tx, agentID)
