@@ -132,8 +132,7 @@ func (s *Store) ConsumeTaskLarkRecoveryTx(ctx context.Context, m *TaskMutation, 
 // so that owner can exclude precisely these unresolved runtimes. A nil record
 // remains unknown; callers must not manufacture an empty/absent generation.
 func (s *Store) PendingTaskLarkRecovery(ctx context.Context) ([]TaskLarkRecoveryAction, error) {
-	// SQLITE-PORT(G5): array
-	rows, e := s.Pool.Query(ctx, `SELECT a.task_id,a.action_id,a.actor_key,a.recovery_record,array_agg(f.runtime_id ORDER BY f.runtime_id) FROM task_lark_switch_actions a JOIN task_lark_switch_fences f ON f.task_id=a.task_id AND f.actor_key=a.actor_key AND f.action_id=a.action_id WHERE a.status IN ('pending','handoff') GROUP BY a.task_id,a.action_id,a.actor_key,a.recovery_record ORDER BY a.task_id,a.action_id`)
+	rows, e := s.Pool.Query(ctx, `SELECT a.task_id,a.action_id,a.actor_key,a.recovery_record,json_group_array(f.runtime_id ORDER BY f.runtime_id) FROM task_lark_switch_actions a JOIN task_lark_switch_fences f ON f.task_id=a.task_id AND f.actor_key=a.actor_key AND f.action_id=a.action_id WHERE a.status IN ('pending','handoff') GROUP BY a.task_id,a.action_id,a.actor_key,a.recovery_record ORDER BY a.task_id,a.action_id`)
 	if e != nil {
 		return nil, e
 	}

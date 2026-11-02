@@ -67,8 +67,7 @@ func TestTaskLarkDeferredInboxReconcilesOriginalMessageOnce(t *testing.T) {
 		}
 	}
 	var runtime uuid.UUID
-	// SQLITE-PORT(G5): ::cast
-	if err = s.Pool.QueryRow(ctx, `SELECT count(*),min(runtime_id)::uuid FROM task_turns WHERE trigger_inbox_message_id=$1`, message).Scan(&count, &runtime); err != nil || count != 1 || runtime != member.RuntimeID {
+	if err = s.Pool.QueryRow(ctx, `SELECT count(*),min(runtime_id) FROM task_turns WHERE trigger_inbox_message_id=$1`, message).Scan(&count, &runtime); err != nil || count != 1 || runtime != member.RuntimeID {
 		t.Fatal("duplicate or retargeted reminder", count, err)
 	}
 	msg, err := s.GetInboxMessage(ctx, message, 160)

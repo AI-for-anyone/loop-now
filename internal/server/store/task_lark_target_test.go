@@ -3,13 +3,16 @@ package store_test
 import (
 	"context"
 	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/clicredential"
 	"loop-now/internal/server/credentialmodel"
 	"loop-now/internal/server/store"
+
+	"github.com/google/uuid"
 )
 
 func larkSwitchTarget(t *testing.T, s *store.Store, project uuid.UUID, refreshExpiry time.Time) store.ProjectCredentialRecord {
@@ -119,5 +122,50 @@ func TestTaskLarkTargetExpiredOrUnavailableIsNotRefreshed(t *testing.T) {
 	var state string
 	if err = s.Pool.QueryRow(ctx, `SELECT generation,refresh_state FROM lark_cli_grants WHERE version_id=$1`, *account.View.CurrentVersionID).Scan(&generation, &state); err != nil || generation != 1 || state != "ready" {
 		t.Fatal("local selection started a provider refresh", generation, state, err)
+	}
+}
+
+func TestTaskLarkTargetLockWaitCannotCrossGrantExpiry(t *testing.T) {
+	s, reservation := larkFenceFixture(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	r, _ := s.GetTask(ctx, reservation.TaskID)
+	expires := time.Now().Add(time.Second)
+	account := larkSwitchTarget(t, s, r.View.Task.ProjectID, expires)
+	// 任务事务里读目标版本时停住，直到授权过期：校验必须用读到之后的时刻，而不是事务开始的时刻。
+	entered, resume := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	s.Pool.SetQueryHook(func(_ context.Context, q string) {
+		if strings.Contains(q, "a.current_cli_version_id,a.deleted_at,v.auth_method") {
+			once.Do(func() { close(entered); <-resume })
+		}
+	})
+	defer s.Pool.SetQueryHook(nil)
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.MutateTask(ctx, reservation.TaskID, nil, func(m *store.TaskMutation) (any, error) {
+			m.Unchanged()
+			_, err := s.CaptureTaskLarkTargetTx(ctx, m, account.View.ID, *account.View.CurrentVersionID, account.View.Revision)
+			return nil, err
+		})
+		done <- err
+	}()
+	select {
+	case <-entered:
+	case <-ctx.Done():
+		t.Fatal("target read not reached")
+	}
+	if until := time.Until(expires.Add(20 * time.Millisecond)); until > 0 {
+		time.Sleep(until)
+	}
+	close(resume)
+	var err error
+	select {
+	case err = <-done:
+		if err == nil {
+			t.Fatal("transaction-start time allowed an expired grant after lock wait")
+		}
+	case <-ctx.Done():
+		t.Fatal("target validation did not complete")
 	}
 }

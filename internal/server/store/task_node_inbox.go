@@ -424,7 +424,6 @@ func (s *Store) findTaskNodeReminderTx(ctx context.Context, m *TaskMutation, tar
 	if imageLimit <= 0 {
 		imageLimit = messageimage.DefaultCount
 	}
-	// SQLITE-PORT(G5): array、jsonb
 	turn, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE runtime_id=$1 AND node_run_id=$2 AND inbox_scope_node_id=$2 AND execution_mode=$3 AND status='queued' AND origin='inbox_reminder' AND priority=$4 AND (SELECT coalesce(sum(json_array_length(im.images)),0) FROM task_node_inbox_messages b JOIN inbox_messages im ON im.id=b.message_id WHERE b.reminder_run_id=task_turns.id)+$5<=$6 ORDER BY queue_seq LIMIT 1`, target.RuntimeID, target.NodeRunID, mode, priority, images, imageLimit))
 	if e == db.ErrNoRows {
 		return TaskTurn{}, false, nil

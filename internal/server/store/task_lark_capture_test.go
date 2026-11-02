@@ -65,7 +65,6 @@ func TestTaskLarkCaptureOriginalScopeAndPermission(t *testing.T) {
 		{"invalid-original-credentials", tampered, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			// SQLITE-PORT(G5): sha256/encode
 			if _, err := s.Pool.Exec(ctx, `UPDATE task_instances SET snapshot=$2,snapshot_sha=$4,prepared=true,session_state='active',session_file=$3 WHERE id=$1`, turn.RuntimeID, tc.raw, session, sha256Hex(tc.raw)); err != nil {
 				t.Fatal(err)
 			}
@@ -90,7 +89,6 @@ func TestTaskLarkCaptureOriginalScopeAndPermission(t *testing.T) {
 		})
 	}
 	valid := larkSwitchSnapshot(t, task, agent, true)
-	// SQLITE-PORT(G5): sha256/encode
 	if _, err := s.Pool.Exec(ctx, `UPDATE task_instances SET snapshot=$2,snapshot_sha=$3,prepared=false,session_state='none',session_file=NULL WHERE id=$1`, turn.RuntimeID, valid, sha256Hex(valid)); err != nil {
 		t.Fatal(err)
 	}
@@ -150,8 +148,7 @@ func TestTaskLarkCapturePreparedNeverRunFollowup(t *testing.T) {
 		t.Fatal(e)
 	}
 	var originalNode uuid.UUID
-	// SQLITE-PORT(G5): ::cast
-	if e := s.Pool.QueryRow(ctx, `SELECT (document->'view'->'task'->>'currentNodeRunId')::uuid FROM task_records WHERE id=$1`, in.TaskID).Scan(&originalNode); e != nil {
+	if e := s.Pool.QueryRow(ctx, `SELECT document->'view'->'task'->>'currentNodeRunId' FROM task_records WHERE id=$1`, in.TaskID).Scan(&originalNode); e != nil {
 		t.Fatal(e)
 	}
 	_, e := s.Pool.Exec(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,text,queue_seq) VALUES($1,$2,$3,$4,$5,$6,'completed','inbox_reminder','original history',(SELECT coalesce(max(queue_seq),0)+1 FROM task_turns))`, uuid.New(), in.TaskID, member.RuntimeID, originalNode, uuid.New(), uuid.New())

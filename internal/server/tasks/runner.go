@@ -139,8 +139,7 @@ func (s *Service) Kick(id uuid.UUID) {
 					return
 				}
 				var pending bool
-				// SQLITE-PORT(G5): ::cast
-				err := s.Store.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM task_turns q JOIN task_records t ON t.id=q.task_id WHERE t.id=$1 AND t.status IN ('running','waiting') AND q.status='queued' AND NOT EXISTS(SELECT 1 FROM task_lark_switch_fences f WHERE f.runtime_id=q.runtime_id) AND NOT EXISTS(SELECT 1 FROM task_turns a WHERE a.runtime_id=q.runtime_id AND a.status IN ('starting','running','aborting')) AND q.node_run_id=(t.document->'view'->'task'->>'currentNodeRunId')::uuid)`, id).Scan(&pending)
+				err := s.Store.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM task_turns q JOIN task_records t ON t.id=q.task_id WHERE t.id=$1 AND t.status IN ('running','waiting') AND q.status='queued' AND NOT EXISTS(SELECT 1 FROM task_lark_switch_fences f WHERE f.runtime_id=q.runtime_id) AND NOT EXISTS(SELECT 1 FROM task_turns a WHERE a.runtime_id=q.runtime_id AND a.status IN ('starting','running','aborting')) AND q.node_run_id=t.document->'view'->'task'->>'currentNodeRunId')`, id).Scan(&pending)
 				if err == nil && pending {
 					s.Kick(id)
 				}
