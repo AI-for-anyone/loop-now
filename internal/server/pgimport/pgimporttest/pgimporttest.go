@@ -1,7 +1,6 @@
-// Package pgtest 为迁移到 SQLite 期间的 parity 与导入测试提供隔离的 PostgreSQL 环境：
-// 每次调用在测试库 loop_now_test 中创建独立 schema，测试结束后删除。
-// 只操作 LOOP_NOW_TEST_DATABASE_URL 指向的数据库，不触碰其他库。
-package pgtest
+// Package pgimporttest 为导入器的测试提供隔离的 PostgreSQL 源库：每次调用在测试库中创建独立 schema、
+// 执行全部 PostgreSQL 迁移，测试结束后删除。只操作 LOOP_NOW_TEST_DATABASE_URL 指向的数据库；未设置时跳过。
+package pgimporttest
 
 import (
 	"context"
@@ -10,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,7 +18,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"loop-now/internal/server/store/pgschema"
+	"loop-now/internal/server/pgimport/pgschema"
 	"loop-now/internal/testutil/testenv"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -80,7 +80,6 @@ func NewSchema(t testing.TB) string {
 }
 
 // NewMigratedPool 创建独立 schema、执行全部 PostgreSQL 迁移，并返回连接到该 schema 的连接池。
-// 迁移到 SQLite 期间只给 parity 测试与导入器测试使用。
 func NewMigratedPool(t testing.TB) *pgxpool.Pool {
 	t.Helper()
 	ctx := context.Background()
@@ -127,4 +126,16 @@ func sweepStale(ctx context.Context, t testing.TB, conn *pgx.Conn) {
 			t.Logf("删除遗留测试 schema %s 失败：%v", n, err)
 		}
 	}
+}
+
+// Source 返回一个迁移到最新 PostgreSQL 版本的独立源库：连接池（写测试数据用）和指向该 schema 的连接串（交给导入器）。
+func Source(t testing.TB) (*pgxpool.Pool, string) {
+	t.Helper()
+	pool := NewMigratedPool(t)
+	u := URL(t)
+	sep := "?"
+	if strings.Contains(u, "?") {
+		sep = "&"
+	}
+	return pool, u + sep + "search_path=" + url.QueryEscape(pool.Config().ConnConfig.RuntimeParams["search_path"])
 }

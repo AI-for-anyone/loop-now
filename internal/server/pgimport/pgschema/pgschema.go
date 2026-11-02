@@ -1,5 +1,5 @@
-// Package pgschema 是迁移到 SQLite 期间临时保留的 PostgreSQL 表结构迁移（001–034，含版本 12 的 Go 迁移），
-// 只给两处用：parity 测试据此核对 SQLite 基线，import-postgres 据此确认源库的版本。PG 代码删除时（G14）一并删除。
+// Package pgschema 是 PostgreSQL 时期的表结构迁移（001–034，含版本 12 的 Go 迁移），只供导入器使用：
+// 导入器据此确认源库版本，导入器的测试据此建出源库。运行时代码不引用它；用户切换到 SQLite 之后随导入器一起删除。
 package pgschema
 
 import (

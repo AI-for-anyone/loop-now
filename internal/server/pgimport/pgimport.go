@@ -19,8 +19,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"loop-now/internal/server/db"
+	"loop-now/internal/server/pgimport/pgschema"
 	"loop-now/internal/server/store"
-	"loop-now/internal/server/store/pgschema"
 )
 
 // EnvSourceURL 是源库连接串所在的环境变量：沿用 PostgreSQL 时期服务端读的那个。

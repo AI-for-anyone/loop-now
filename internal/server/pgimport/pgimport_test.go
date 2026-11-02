@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -17,22 +16,10 @@ import (
 
 	"loop-now/internal/server/db"
 	"loop-now/internal/server/pgimport"
+	"loop-now/internal/server/pgimport/pgimporttest"
+	"loop-now/internal/server/pgimport/pgschema"
 	"loop-now/internal/server/store"
-	"loop-now/internal/server/store/pgschema"
-	"loop-now/internal/testutil/pgtest"
 )
-
-// source 返回一个迁移到最新 PG 版本的独立 schema，以及指向它的连接串。
-func source(t *testing.T) (*pgxpool.Pool, string) {
-	t.Helper()
-	pool := pgtest.NewMigratedPool(t)
-	u := pgtest.URL(t)
-	sep := "?"
-	if strings.Contains(u, "?") {
-		sep = "&"
-	}
-	return pool, u + sep + "search_path=" + url.QueryEscape(pool.Config().ConnConfig.RuntimeParams["search_path"])
-}
 
 func exec(t *testing.T, pool *pgxpool.Pool, q string, args ...any) {
 	t.Helper()
@@ -76,7 +63,7 @@ func openTarget(t *testing.T, dir string) *store.Store {
 
 func TestImportConvertsValuesAndKeepsInvariants(t *testing.T) {
 	ctx := context.Background()
-	pool, src := source(t)
+	pool, src := pgimporttest.Source(t)
 	f := seed(t, pool)
 	dir := filepath.Join(t.TempDir(), "db")
 	report, err := pgimport.Import(ctx, pgimport.Options{SourceURL: src, DBDir: dir})
@@ -172,7 +159,7 @@ func dbFiles(t *testing.T, dir string) []string {
 func TestImportRefusals(t *testing.T) {
 	ctx := context.Background()
 	t.Run("version", func(t *testing.T) {
-		pool, src := source(t)
+		pool, src := pgimporttest.Source(t)
 		exec(t, pool, `INSERT INTO goose_db_version(version_id,is_applied) VALUES($1,true)`, pgschema.Latest+1)
 		dir := filepath.Join(t.TempDir(), "db")
 		if _, err := pgimport.Import(ctx, pgimport.Options{SourceURL: src, DBDir: dir}); err == nil || !strings.Contains(err.Error(), "迁移版本") {
@@ -183,7 +170,7 @@ func TestImportRefusals(t *testing.T) {
 		}
 	})
 	t.Run("existing", func(t *testing.T) {
-		_, src := source(t)
+		_, src := pgimporttest.Source(t)
 		dir := t.TempDir()
 		if err := os.WriteFile(filepath.Join(dir, db.DataFile), []byte("keep"), 0o600); err != nil {
 			t.Fatal(err)
@@ -196,7 +183,7 @@ func TestImportRefusals(t *testing.T) {
 		}
 	})
 	t.Run("running", func(t *testing.T) {
-		_, src := source(t)
+		_, src := pgimporttest.Source(t)
 		dir := t.TempDir()
 		lock, err := db.LockDir(dir)
 		if err != nil {
@@ -208,7 +195,7 @@ func TestImportRefusals(t *testing.T) {
 		}
 	})
 	t.Run("structure", func(t *testing.T) {
-		pool, src := source(t)
+		pool, src := pgimporttest.Source(t)
 		exec(t, pool, `ALTER TABLE agents ADD COLUMN extra text`)
 		dir := filepath.Join(t.TempDir(), "db")
 		if _, err := pgimport.Import(ctx, pgimport.Options{SourceURL: src, DBDir: dir}); err == nil || !strings.Contains(err.Error(), "新库的 agents 没有列 extra") {
@@ -220,7 +207,7 @@ func TestImportRefusals(t *testing.T) {
 	})
 	// 源库里不成立的外键在提交时被拒绝，整个导入回滚并删掉新建的库文件。
 	t.Run("foreign key", func(t *testing.T) {
-		pool, src := source(t)
+		pool, src := pgimporttest.Source(t)
 		seed(t, pool)
 		exec(t, pool, `ALTER TABLE agents DROP CONSTRAINT agents_project_id_fkey`)
 		exec(t, pool, `INSERT INTO agents(id,project_id,name,model_provider,model_id) VALUES($1,$2,'孤儿','anthropic','m')`, uuid.New(), uuid.New())
