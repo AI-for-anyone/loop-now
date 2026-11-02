@@ -7,6 +7,7 @@ package sqlitetest
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"testing"
 
 	"loop-now/internal/server/db"
@@ -64,4 +65,35 @@ func open(t testing.TB, dir string) *db.DB {
 		}
 	})
 	return d
+}
+
+// HoldWriter 在一个写事务里占住唯一的写连接，返回时已经占住；调用返回的函数放开它（可以多次调用）。
+// 测试用它让并发的写入停在“等写连接”上，代替 PostgreSQL 时期持有行锁的做法。测试结束时自动放开。
+func HoldWriter(t testing.TB, d *db.DB) (release func()) {
+	t.Helper()
+	held, done := make(chan struct{}), make(chan struct{})
+	ended := make(chan error, 1)
+	go func() {
+		ended <- d.InTx(context.Background(), func(*db.Tx) error {
+			close(held)
+			<-done
+			return nil
+		})
+	}()
+	select {
+	case <-held:
+	case err := <-ended:
+		t.Fatalf("占住写连接失败：%v", err)
+	}
+	var once sync.Once
+	release = func() {
+		once.Do(func() {
+			close(done)
+			if err := <-ended; err != nil {
+				t.Errorf("放开写连接失败：%v", err)
+			}
+		})
+	}
+	t.Cleanup(release)
+	return release
 }
