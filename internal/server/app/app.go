@@ -65,6 +65,8 @@ type App struct {
 
 	Store *store.Store
 	Coord *coord.Coord
+	// dirLock 是数据目录的实例锁，关闭时最后放开。
+	dirLock *db.DirLock
 	// Maintenance 定时做检查点、清理旧日志与备份。
 	Maintenance *maintenance.Service
 	Executor    *local.Executor
@@ -138,6 +140,13 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	dbDir := config.DBDir(cfg.DataDir)
 	if err = os.MkdirAll(dbDir, 0o700); err != nil {
 		return a, fmt.Errorf("创建数据目录失败：%w", err)
+	}
+	// 一个数据目录只给一个服务进程：后台维护、迁移与内存里的协调状态都假定只有本进程在写。
+	if a.dirLock, err = db.LockDir(dbDir); err != nil {
+		if errors.Is(err, db.ErrLocked) {
+			return a, fmt.Errorf("数据目录 %s 已被另一个服务进程使用（%s）", dbDir, config.EnvDataDir)
+		}
+		return a, err
 	}
 	if a.Store, err = store.Open(ctx, db.Options{Dir: dbDir, Logger: log}); err != nil {
 		return a, err
@@ -728,5 +737,8 @@ func (a *App) closeResources() {
 	}
 	if a.Store != nil {
 		a.Store.Close()
+	}
+	if a.dirLock != nil {
+		_ = a.dirLock.Release()
 	}
 }
