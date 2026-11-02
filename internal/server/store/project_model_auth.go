@@ -17,12 +17,8 @@ func scanProjectOperation(r db.Scanner) (cm.Operation, error) {
 	err := r.Scan(&o.ID, &o.ProjectID, &o.Provider, &o.TargetAccountID, &o.TargetRevision, &o.Name, &o.Status, &o.AccountID, &o.StartedAt, &o.ExpiresAt, &o.CompletedAt, &o.AuthorizationURL, &o.ErrorCode)
 	return o, err
 }
-func projectOperationTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, lock bool) (cm.Operation, error) {
-	suffix := ""
-	if lock {
-		suffix = " FOR UPDATE"
-	}
-	o, e := scanProjectOperation(tx.QueryRow(ctx, `SELECT `+projectOperationColumns+` FROM project_model_auth_operations WHERE id=$1 AND project_id=$2`+suffix, id, project))
+func projectOperationTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, _ bool) (cm.Operation, error) {
+	o, e := scanProjectOperation(tx.QueryRow(ctx, `SELECT `+projectOperationColumns+` FROM project_model_auth_operations WHERE id=$1 AND project_id=$2`, id, project))
 	return o, notFoundIfNoRows(e, "项目登录操作")
 }
 func (s *Store) NewProjectModelAuthOperation(ctx context.Context, project uuid.UUID, in cm.LoginStart, expires time.Time) (cm.Operation, bool, error) {

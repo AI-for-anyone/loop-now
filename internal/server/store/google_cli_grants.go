@@ -33,11 +33,7 @@ func googleGrantTx(ctx context.Context, tx *db.Tx, b clicredential.Binding, writ
 	if _, e := lockCredentialProject(ctx, tx, b.ProjectID, false); e != nil {
 		return out, e
 	}
-	mode := "FOR SHARE OF g,v"
-	if write {
-		mode = "FOR UPDATE OF g,v"
-	}
-	e := tx.QueryRow(ctx, `SELECT v.account_label,v.secret,g.generation,g.refresh_state,g.lease_id,g.lease_agent_id,g.lease_verification_id,g.lease_until,g.error_code FROM google_cli_grants g JOIN project_cli_versions v ON v.id=g.version_id AND v.account_id=g.account_id JOIN project_credential_accounts a ON a.id=v.account_id JOIN agents owner ON owner.id=$4 WHERE g.version_id=$1 AND g.account_id=$2 AND a.project_id=$3 AND a.purpose='cli' AND a.cli_name='gcloud' AND v.auth_method='oauth' AND owner.project_id=$3 AND (owner.deleted_at IS NULL OR $5) `+mode, b.VersionID, b.AccountID, b.ProjectID, b.AgentID, finishClaim).Scan(&out.AccountLabel, &out.Secret, &out.Generation, &out.RefreshState, &out.LeaseID, &out.LeaseAgentID, &out.LeaseVerificationID, &out.LeaseUntil, &out.ErrorCode)
+	e := tx.QueryRow(ctx, `SELECT v.account_label,v.secret,g.generation,g.refresh_state,g.lease_id,g.lease_agent_id,g.lease_verification_id,g.lease_until,g.error_code FROM google_cli_grants g JOIN project_cli_versions v ON v.id=g.version_id AND v.account_id=g.account_id JOIN project_credential_accounts a ON a.id=v.account_id JOIN agents owner ON owner.id=$4 WHERE g.version_id=$1 AND g.account_id=$2 AND a.project_id=$3 AND a.purpose='cli' AND a.cli_name='gcloud' AND v.auth_method='oauth' AND owner.project_id=$3 AND (owner.deleted_at IS NULL OR $5) `, b.VersionID, b.AccountID, b.ProjectID, b.AgentID, finishClaim).Scan(&out.AccountLabel, &out.Secret, &out.Generation, &out.RefreshState, &out.LeaseID, &out.LeaseAgentID, &out.LeaseVerificationID, &out.LeaseUntil, &out.ErrorCode)
 	return out, notFoundIfNoRows(e, "CLI授权")
 }
 func (s *Store) GetGoogleCLIGrant(ctx context.Context, b clicredential.Binding) (GoogleCLIGrant, error) {

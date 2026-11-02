@@ -31,11 +31,7 @@ func larkGrantTx(ctx context.Context, tx *db.Tx, b clicredential.LarkBinding, wr
 	if _, e := lockCredentialProject(ctx, tx, b.ProjectID, false); e != nil {
 		return r, e
 	}
-	lock := " FOR SHARE OF g,v"
-	if write {
-		lock = " FOR UPDATE OF g,v"
-	}
-	e := tx.QueryRow(ctx, `SELECT i.brand,i.app_id,i.open_id,i.display_name,i.granted_scopes,i.verified_at,i.runtime_variant_version,v.secret,g.generation,g.refresh_state,g.lease_id,g.lease_agent_id,g.lease_until,g.error_code FROM lark_cli_grants g JOIN lark_cli_identities i ON i.version_id=g.version_id JOIN project_cli_versions v ON v.id=i.version_id AND v.account_id=i.account_id JOIN project_credential_accounts a ON a.id=i.account_id JOIN agents owner ON owner.id=$4 WHERE g.version_id=$1 AND i.account_id=$2 AND a.project_id=$3 AND a.purpose='cli' AND a.cli_name='lark-cli' AND owner.project_id=$3 AND (owner.deleted_at IS NULL OR $5)`+lock, b.VersionID, b.AccountID, b.ProjectID, b.AgentID, finish).Scan(&r.Identity.Brand, &r.Identity.AppID, &r.Identity.OpenID, &r.Identity.DisplayName, &r.Identity.GrantedScopes, &r.Identity.VerifiedAt, &r.RuntimeVariantVersion, &r.Secret, &r.Generation, &r.RefreshState, &r.LeaseID, &r.LeaseAgentID, &r.LeaseUntil, &r.ErrorCode)
+	e := tx.QueryRow(ctx, `SELECT i.brand,i.app_id,i.open_id,i.display_name,i.granted_scopes,i.verified_at,i.runtime_variant_version,v.secret,g.generation,g.refresh_state,g.lease_id,g.lease_agent_id,g.lease_until,g.error_code FROM lark_cli_grants g JOIN lark_cli_identities i ON i.version_id=g.version_id JOIN project_cli_versions v ON v.id=i.version_id AND v.account_id=i.account_id JOIN project_credential_accounts a ON a.id=i.account_id JOIN agents owner ON owner.id=$4 WHERE g.version_id=$1 AND i.account_id=$2 AND a.project_id=$3 AND a.purpose='cli' AND a.cli_name='lark-cli' AND owner.project_id=$3 AND (owner.deleted_at IS NULL OR $5)`, b.VersionID, b.AccountID, b.ProjectID, b.AgentID, finish).Scan(&r.Identity.Brand, &r.Identity.AppID, &r.Identity.OpenID, &r.Identity.DisplayName, &r.Identity.GrantedScopes, &r.Identity.VerifiedAt, &r.RuntimeVariantVersion, &r.Secret, &r.Generation, &r.RefreshState, &r.LeaseID, &r.LeaseAgentID, &r.LeaseUntil, &r.ErrorCode)
 	if e != nil {
 		return r, notFoundIfNoRows(e, "Lark授权")
 	}

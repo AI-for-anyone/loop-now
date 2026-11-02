@@ -28,12 +28,8 @@ func scanCLIOperation(row db.Scanner) (cm.CLIAuthOperation, error) {
 	e := row.Scan(&o.ID, &o.ProjectID, &o.CLI, &o.AuthType, &o.TargetAccountID, &o.TargetRevision, &o.Name, &o.Status, &o.AccountID, &o.StartedAt, &o.ExpiresAt, &o.CompletedAt, &o.AuthorizationURL, &o.ErrorCode, &o.UserCode)
 	return o, e
 }
-func cliOperationTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, lock bool) (cm.CLIAuthOperation, error) {
-	mode := ""
-	if lock {
-		mode = " FOR UPDATE"
-	}
-	o, e := scanCLIOperation(tx.QueryRow(ctx, `SELECT `+cliOperationColumns+` FROM project_cli_auth_operations WHERE id=$1 AND project_id=$2`+mode, id, project))
+func cliOperationTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, _ bool) (cm.CLIAuthOperation, error) {
+	o, e := scanCLIOperation(tx.QueryRow(ctx, `SELECT `+cliOperationColumns+` FROM project_cli_auth_operations WHERE id=$1 AND project_id=$2`, id, project))
 	if e == nil && o.CLI == "lark-cli" {
 		e = tx.QueryRow(ctx, `SELECT source_account_id,source_version_id,source_revision FROM project_cli_auth_operations WHERE id=$1 AND project_id=$2`, id, project).Scan(&o.SourceAccountID, &o.SourceVersionID, &o.SourceRevision)
 	}
