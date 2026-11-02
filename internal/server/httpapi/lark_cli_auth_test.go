@@ -15,10 +15,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// Actual router, validators, worker, cipher store and loopback provider. The
-// self-owned database/Redis sockets prevent any fallback to a developer store.
+// Actual router, validators, worker, cipher store and loopback provider.
 func TestLarkLoginHTTPPermissionsPresenceAndSafeProjection(t *testing.T) {
-	safetyResources(t)
 	e := newEnv(t)
 	p := larktest.New(t)
 	logs := &safetyLogs{}

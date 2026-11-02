@@ -116,19 +116,8 @@ func safetyHelper(t *testing.T, root string) *modelauth.Helper {
 	return &modelauth.Helper{Options: modelauth.HelperOptions{NodeBin: wrapper, Entry: entry, WorkRoot: root, BasePath: "/usr/bin:/bin", PiPackageRoot: root, Timeout: 5 * time.Second, StopGrace: time.Second}}
 }
 
-// safetyResources 返回本测试自有的临时目录（假 node 与助手脚本放在这里）。
-func safetyResources(t *testing.T) string {
-	t.Helper()
-	root, err := os.MkdirTemp("/private/tmp", "ln-safety-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(root) })
-	return root
-}
-
 func TestProjectCredentialSecretChannels(t *testing.T) {
-	root := safetyResources(t)
+	root := t.TempDir()
 	e := newEnv(t)
 	ctx := context.Background()
 	logs := &safetyLogs{}
