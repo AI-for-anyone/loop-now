@@ -1,0 +1,74 @@
+name: release
+
+# 发布构建：每个平台在对应架构的机器上运行 scripts/release/build.sh（Pi 的依赖要在目标架构上安装），
+# 用产物实际启动一次，再把压缩包与校验和作为 artifact 上传。不签名、不公证，也不创建 GitHub Release。
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 版本号（不带 v），例如 0.9.0
+        required: true
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-15, target: darwin/arm64 }
+          - { runner: macos-15-intel, target: darwin/amd64 }
+          - { runner: ubuntu-24.04, target: linux/amd64 }
+          - { runner: ubuntu-24.04-arm, target: linux/arm64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - name: version
+        id: version
+        env:
+          INPUT: ${{ inputs.version }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          v="${INPUT:-${TAG#v}}"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "artifact=loop-now-$v-$(echo '${{ matrix.target }}' | tr / -)" >> "$GITHUB_OUTPUT"
+      - name: build and smoke test
+        run: scripts/release/build.sh --only ${{ matrix.target }} --smoke "${{ steps.version.outputs.version }}" out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.version.outputs.artifact }}
+          path: |
+            out/*.tar.gz
+            out/*.tar.gz.sha256
+          if-no-files-found: error
+
+  checksums:
+    name: checksums
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: SHA256SUMS
+        run: |
+          cd dist
+          cat *.tar.gz.sha256 | sort -k2 > SHA256SUMS
+          sha256sum -c SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SHA256SUMS
+          path: dist/SHA256SUMS
