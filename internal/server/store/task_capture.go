@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	cm "loop-now/internal/server/credentialmodel"
 	"time"
 
@@ -146,7 +147,7 @@ func (s *Store) MarkTaskSourceSynced(ctx context.Context, runtimeID, sourceID uu
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `UPDATE task_instances SET sources=$2 WHERE id=$1`, runtimeID, b)
+		_, err = tx.Exec(ctx, `UPDATE task_instances SET sources=$2 WHERE id=$1`, runtimeID, json.RawMessage(b))
 		return err
 	})
 }

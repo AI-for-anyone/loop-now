@@ -161,7 +161,7 @@ func (s *Store) RequestSleep(ctx context.Context, p auth.Principal, in sleepmode
 		rec.RequestedAt = rec.RequestedAt.UTC()
 		out = sleepmodel.Receipt{Sleep: rec.Record, EndTurn: true}
 		b, _ := json.Marshal(out)
-		_, err = tx.Exec(ctx, `INSERT INTO agent_sleeps(id,scope_key,scope_kind,mode,agent_id,task_id,runtime_id,node_run_id,session_epoch,source_run_id,action_id,body_hash,receipt,state,seconds,reason,timer_run_id,revision,requested_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'requested',$14,$15,$16,$17,$18)`, rec.ID, key, rec.ScopeKind, rec.Mode, rec.AgentID, rec.TaskID, rec.RuntimeID, rec.NodeRunID, rec.Epoch, rec.SourceRunID, in.ActionID, hash[:], b, rec.Seconds, rec.Reason, rec.TimerRunID, rec.Revision, rec.RequestedAt)
+		_, err = tx.Exec(ctx, `INSERT INTO agent_sleeps(id,scope_key,scope_kind,mode,agent_id,task_id,runtime_id,node_run_id,session_epoch,source_run_id,action_id,body_hash,receipt,state,seconds,reason,timer_run_id,revision,requested_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'requested',$14,$15,$16,$17,$18)`, rec.ID, key, rec.ScopeKind, rec.Mode, rec.AgentID, rec.TaskID, rec.RuntimeID, rec.NodeRunID, rec.Epoch, rec.SourceRunID, in.ActionID, hash[:], json.RawMessage(b), rec.Seconds, rec.Reason, rec.TimerRunID, rec.Revision, rec.RequestedAt)
 		if err != nil {
 			return err
 		}

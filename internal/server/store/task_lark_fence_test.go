@@ -44,7 +44,7 @@ func larkFenceFixture(t *testing.T) (*store.Store, store.TaskLarkFenceReservatio
 	}
 	runtime := uuid.New()
 	// SQLITE-PORT(G5): sha256/encode
-	if _, err = s.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha) VALUES($1,$2,$3,$4,$5,encode(sha256($5),'hex'))`, runtime, task, followup.ID, followup.Name, larkSwitchSnapshot(t, task, followup.ID, true)); err != nil {
+	if _, err = s.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha) VALUES($1,$2,$3,$4,$5,$6)`, runtime, task, followup.ID, followup.Name, larkSwitchSnapshot(t, task, followup.ID, true), sha256Hex(larkSwitchSnapshot(t, task, followup.ID, true))); err != nil {
 		t.Fatal(err)
 	}
 	_, err = s.MutateTask(ctx, task, nil, func(m *store.TaskMutation) (any, error) {
@@ -116,7 +116,7 @@ func TestTaskLarkFenceRejectsBusyFollowupAtomically(t *testing.T) {
 	s, in := larkFenceFixture(t)
 	ctx := context.Background()
 	member := in.Members[1]
-	if _, err := s.Pool.Exec(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,status,origin,text,user_message_id,assistant_message_id) VALUES($1,$2,$3,'queued','inbox_reminder','real queued work',$4,$5)`, uuid.New(), in.TaskID, member.RuntimeID, uuid.New(), uuid.New()); err != nil {
+	if _, err := s.Pool.Exec(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,status,origin,text,user_message_id,assistant_message_id,queue_seq) VALUES($1,$2,$3,'queued','inbox_reminder','real queued work',$4,$5,(SELECT coalesce(max(queue_seq),0)+1 FROM task_turns))`, uuid.New(), in.TaskID, member.RuntimeID, uuid.New(), uuid.New()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := reserveLarkFence(ctx, s, in); err == nil {
@@ -370,7 +370,7 @@ func TestTaskLarkFencePublicStrictAndOrdinaryInbox(t *testing.T) {
 	}
 	// A queue created by another original path must remain unclaimed while the
 	// handoff fence is held, without turning it into a failed/expired message.
-	if _, err = s.Pool.Exec(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,status,origin,text,user_message_id,assistant_message_id) VALUES($1,$2,$3,'queued','inbox_reminder','retained queue',$4,$5)`, uuid.New(), in.TaskID, publisher.RuntimeID, uuid.New(), uuid.New()); err != nil {
+	if _, err = s.Pool.Exec(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,status,origin,text,user_message_id,assistant_message_id,queue_seq) VALUES($1,$2,$3,'queued','inbox_reminder','retained queue',$4,$5,(SELECT coalesce(max(queue_seq),0)+1 FROM task_turns))`, uuid.New(), in.TaskID, publisher.RuntimeID, uuid.New(), uuid.New()); err != nil {
 		t.Fatal(err)
 	}
 	if _, found, err := s.ClaimTaskInboxTurn(ctx, in.TaskID, publisher.RuntimeID); err != nil || found {
@@ -433,7 +433,7 @@ func TestTaskLarkFenceSuspendsOriginalSleepAndFailureKeepsDeadline(t *testing.T)
 	}
 	otherRuntime := uuid.New()
 	// SQLITE-PORT(G5): sha256/encode
-	if _, err = s.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared,session_state,session_file) VALUES($1,$2,$3,$4,$5,encode(sha256($5),'hex'),true,'active',$6)`, otherRuntime, in.TaskID, other.ID, other.Name, larkSwitchSnapshot(t, in.TaskID, other.ID, true), session); err != nil {
+	if _, err = s.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared,session_state,session_file) VALUES($1,$2,$3,$4,$5,$7,true,'active',$6)`, otherRuntime, in.TaskID, other.ID, other.Name, larkSwitchSnapshot(t, in.TaskID, other.ID, true), session, sha256Hex(larkSwitchSnapshot(t, in.TaskID, other.ID, true))); err != nil {
 		t.Fatal(err)
 	}
 	_, err = s.MutateTask(ctx, in.TaskID, nil, func(m *store.TaskMutation) (any, error) {

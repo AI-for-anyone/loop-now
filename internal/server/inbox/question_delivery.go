@@ -215,7 +215,7 @@ func (s *Service) deliverQuestionEvent(ctx context.Context, id, qid, messageID u
 			return err
 		}
 		notice, _ := json.Marshal(store.InboxNotice{Type: "question_expired", MessageID: qid, Reason: "deadline"})
-		if _, err = scope.Tx.Exec(ctx, `UPDATE inbox_messages SET notice=$2 WHERE id=$1`, messageID, notice); err != nil {
+		if _, err = scope.Tx.Exec(ctx, `UPDATE inbox_messages SET notice=$2 WHERE id=$1`, messageID, json.RawMessage(notice)); err != nil {
 			return err
 		}
 		if _, err = scope.Tx.Exec(ctx, `UPDATE inbox_questions SET notice_state='sent' WHERE message_id=$1`, qid); err != nil {

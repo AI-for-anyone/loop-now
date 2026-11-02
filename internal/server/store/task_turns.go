@@ -2,12 +2,14 @@ package store
 
 import (
 	"context"
+	"strconv"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/reqid"
 	"loop-now/internal/server/taskmodel"
+
+	"github.com/google/uuid"
 
 	"loop-now/internal/server/db"
 )
@@ -24,6 +26,16 @@ type TaskTurn struct {
 	WakeSleepID                                                         *uuid.UUID
 	RequestID                                                           *uuid.UUID
 	VoidReason                                                          *string
+}
+
+// insertTaskTurn 插入一个任务轮次并返回它：cols、vals 不含 queue_seq，排队号从序列 task_turns.queue_seq 取
+// （原来是 identity 列）。args 依次对应 vals 里的 $1…$n。
+func insertTaskTurn(ctx context.Context, tx *db.Tx, cols, vals string, args ...any) (TaskTurn, error) {
+	seq, err := tx.NextSeq(ctx, "task_turns.queue_seq")
+	if err != nil {
+		return TaskTurn{}, err
+	}
+	return scanTaskTurn(tx.QueryRow(ctx, `INSERT INTO task_turns(`+cols+`,queue_seq) VALUES(`+vals+`,$`+strconv.Itoa(len(args)+1)+`) RETURNING `+taskTurnColumns, append(args, seq)...))
 }
 
 const taskTurnColumns = `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,queue_seq,text,reply,error_code,error_message,queued_at,started_at,ended_at,trigger_inbox_message_id,request_id,wake_sleep_id,execution_mode,void_reason`
@@ -64,7 +76,7 @@ func (s *Store) EnqueueTaskTurn(ctx context.Context, m *TaskMutation, text, orig
 		}
 	}
 	id, user, assistant := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
-	t, err := scanTaskTurn(m.Tx.QueryRow(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,trigger_inbox_message_id,request_id) VALUES($1,$2,$3,$4,$5,$6,'queued',$7,$8,$9,$10,$11) RETURNING `+taskTurnColumns, id, m.Record.View.Task.ID, node.RuntimeID, node.ID, user, assistant, origin, priority, text, trigger, taskRequestID(ctx, m, origin)))
+	t, err := insertTaskTurn(ctx, m.Tx, `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,trigger_inbox_message_id,request_id`, `$1,$2,$3,$4,$5,$6,'queued',$7,$8,$9,$10,$11`, id, m.Record.View.Task.ID, node.RuntimeID, node.ID, user, assistant, origin, priority, text, trigger, taskRequestID(ctx, m, origin))
 	if err != nil {
 		return t, err
 	}

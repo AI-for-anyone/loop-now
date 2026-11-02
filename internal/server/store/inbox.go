@@ -402,7 +402,7 @@ func InsertInboxMessage(ctx context.Context, tx *db.Tx, in NewInboxMessage) erro
 			plugin_channel,plugin_sender_name)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, nullif($11, ''),$12,$13,$14,$15,$16,nullif($17,''),nullif($18,''))`,
 		in.ID, thread, in.InReplyTo, in.From.Kind, in.From.agentID(), in.From.identityID(),
-		in.To.Kind, in.To.agentID(), in.To.identityID(), in.Text, in.WhenBusy, runtimePtr(in.From.RuntimeID), runtimePtr(in.To.RuntimeID), images,
+		in.To.Kind, in.To.agentID(), in.To.identityID(), in.Text, in.WhenBusy, runtimePtr(in.From.RuntimeID), runtimePtr(in.To.RuntimeID), json.RawMessage(images),
 		in.From.pluginPartyID(), in.To.pluginPartyID(), in.PluginChannel, in.PluginSender)
 	return err
 }

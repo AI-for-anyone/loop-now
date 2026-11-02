@@ -4,6 +4,8 @@ package store_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -141,7 +143,7 @@ func (e projectMigrationEnv) legacyTask(t *testing.T, agent uuid.UUID) {
 	t.Helper()
 	task := uuid.New()
 	document, _ := json.Marshal(map[string]any{"view": map[string]any{"task": map[string]any{"status": "running", "version": 1}}})
-	mustExec(t, e.s, `INSERT INTO task_records(id,project_id,status,document,version)VALUES($1,$2,'running',$3,1)`, task, e.project, document)
+	mustExec(t, e.s, `INSERT INTO task_records(id,project_id,status,document,version)VALUES($1,$2,'running',$3,1)`, task, e.project, json.RawMessage(document))
 	mustExec(t, e.s, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot)VALUES($1,$2,$3,'fixture',$4)`, uuid.New(), task, agent, []byte(`{"schemaVersion":3}`))
 }
 
@@ -166,8 +168,13 @@ func (e projectMigrationEnv) oldTask(t *testing.T, agent uuid.UUID, version int,
 		endedAt = &now
 	}
 	document, _ := json.Marshal(map[string]any{"view": map[string]any{"task": map[string]any{"status": status, "version": 1}}})
-	mustExec(t, e.s, `INSERT INTO task_records(id,project_id,status,document,version,ended_at)VALUES($1,$2,$3,$4,1,$5)`, task, e.project, status, document, endedAt)
-	// SQLITE-PORT(G7): sha256/encode
-	mustExec(t, e.s, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared,retired)VALUES($1,$2,$3,'fixture',$4,encode(sha256($4),'hex'),true,$5)`, runtime, task, agent, raw, retired)
+	mustExec(t, e.s, `INSERT INTO task_records(id,project_id,status,document,version,ended_at)VALUES($1,$2,$3,$4,1,$5)`, task, e.project, status, json.RawMessage(document), endedAt)
+	mustExec(t, e.s, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared,retired)VALUES($1,$2,$3,'fixture',$4,$6,true,$5)`, runtime, task, agent, raw, retired, sha256Hex(raw))
 	return runtime, task, raw
+}
+
+// sha256Hex 是快照内容的 SHA-256 十六进制串（task_instances.snapshot_sha）。
+func sha256Hex(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }

@@ -30,7 +30,7 @@ func (s *Store) EnqueueTaskInboxTurn(ctx context.Context, m *TaskMutation, inst 
 	if n != nil && n.RuntimeID == inst.ID && n.Status == "blocked" {
 		nodeID = &n.ID
 	}
-	t, e := scanTaskTurn(m.Tx.QueryRow(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,trigger_inbox_message_id,request_id) VALUES($1,$2,$3,$4,$5,$6,'queued','inbox_reminder',$7,$8,$9,$10) RETURNING `+taskTurnColumns, uuid.Must(uuid.NewV7()), inst.TaskID, inst.ID, nodeID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), priority, text, trigger, taskRequestID(ctx, m, "inbox_reminder")))
+	t, e := insertTaskTurn(ctx, m.Tx, `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,trigger_inbox_message_id,request_id`, `$1,$2,$3,$4,$5,$6,'queued','inbox_reminder',$7,$8,$9,$10`, uuid.Must(uuid.NewV7()), inst.TaskID, inst.ID, nodeID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), priority, text, trigger, taskRequestID(ctx, m, "inbox_reminder"))
 	if e != nil {
 		return t, e
 	}

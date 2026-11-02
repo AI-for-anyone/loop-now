@@ -378,7 +378,7 @@ func (s *Store) enqueueTaskNodeInboxTx(ctx context.Context, m *TaskMutation, tar
 			return out, nil, e
 		}
 		raw, _ := json.Marshal(images)
-		if _, e = m.Tx.Exec(ctx, `UPDATE inbox_messages SET images=$2 WHERE id=$1`, id, raw); e != nil {
+		if _, e = m.Tx.Exec(ctx, `UPDATE inbox_messages SET images=$2 WHERE id=$1`, id, json.RawMessage(raw)); e != nil {
 			return out, nil, e
 		}
 	}
@@ -434,7 +434,7 @@ func (s *Store) findTaskNodeReminderTx(ctx context.Context, m *TaskMutation, tar
 
 // newTaskNodeReminderTx queues a fresh node notification turn for trigger.
 func (s *Store) newTaskNodeReminderTx(ctx context.Context, m *TaskMutation, target TaskConsoleLineage, mode string, priority int, trigger uuid.UUID) (TaskTurn, error) {
-	turn, e := scanTaskTurn(m.Tx.QueryRow(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,trigger_inbox_message_id,execution_mode,inbox_scope_node_id,request_id) VALUES($1,$2,$3,$4,$5,$6,'queued','inbox_reminder',$7,$8,$9,$10,$4,$11) RETURNING `+taskTurnColumns, uuid.Must(uuid.NewV7()), target.TaskID, target.RuntimeID, target.NodeRunID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), priority, taskNodeReminderPrompt, trigger, mode, taskRequestID(ctx, m, "inbox_reminder")))
+	turn, e := insertTaskTurn(ctx, m.Tx, `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,trigger_inbox_message_id,execution_mode,inbox_scope_node_id,request_id`, `$1,$2,$3,$4,$5,$6,'queued','inbox_reminder',$7,$8,$9,$10,$4,$11`, uuid.Must(uuid.NewV7()), target.TaskID, target.RuntimeID, target.NodeRunID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), priority, taskNodeReminderPrompt, trigger, mode, taskRequestID(ctx, m, "inbox_reminder"))
 	if e != nil {
 		return turn, e
 	}

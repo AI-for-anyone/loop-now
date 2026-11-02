@@ -548,7 +548,7 @@ func TestTaskNodeInboxMigrationRoundTripWithoutNewData(t *testing.T) {
 	s := taskConsoleStoreAt(t, 25)
 	task, runtime := rawTaskAt25(t, s)
 	for _, origin := range []string{"task_node", "inbox_reminder"} {
-		mustExec(t, s, `INSERT INTO task_turns(id,task_id,runtime_id,user_message_id,assistant_message_id,status,origin,text)VALUES($1,$2,$3,$4,$5,'completed',$6,'old turn')`, uuid.New(), task, runtime, uuid.New(), uuid.New(), origin)
+		mustExec(t, s, `INSERT INTO task_turns(id,task_id,runtime_id,user_message_id,assistant_message_id,status,origin,text,queue_seq)VALUES($1,$2,$3,$4,$5,'completed',$6,'old turn',(SELECT coalesce(max(queue_seq),0)+1 FROM task_turns))`, uuid.New(), task, runtime, uuid.New(), uuid.New(), origin)
 	}
 	if e := s.MigrateDownTo(ctx, 18); e != nil {
 		t.Fatal("empty-new-data Down", e)

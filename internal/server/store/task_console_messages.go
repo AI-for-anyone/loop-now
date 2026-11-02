@@ -222,7 +222,7 @@ func (s *Store) EnqueueTaskConsoleMessageTx(ctx context.Context, m *TaskMutation
 	if whenBusy == "interrupt" {
 		priority = 0
 	}
-	turn, e := scanTaskTurn(m.Tx.QueryRow(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,request_id,execution_mode) VALUES($1,$2,$3,$4,$5,$6,'queued','console_node',$7,$8,$9,$10) RETURNING `+taskTurnColumns, uuid.Must(uuid.NewV7()), target.TaskID, target.RuntimeID, target.NodeRunID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), priority, text, taskRequestID(ctx, m, "console_node"), mode))
+	turn, e := insertTaskTurn(ctx, m.Tx, `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,request_id,execution_mode`, `$1,$2,$3,$4,$5,$6,'queued','console_node',$7,$8,$9,$10`, uuid.Must(uuid.NewV7()), target.TaskID, target.RuntimeID, target.NodeRunID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), priority, text, taskRequestID(ctx, m, "console_node"), mode)
 	if e != nil {
 		return receipt, nil, e
 	}

@@ -3,17 +3,20 @@ package tasks
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
+
+	"github.com/google/uuid"
 )
 
 func rejectEvent(t *testing.T, s *Service) func(string) {
@@ -151,7 +154,7 @@ func TestTaskUnboundInboxLifecycleKeepsNullNode(t *testing.T) {
 	}
 	runtime := uuid.New()
 	// SQLITE-PORT(G5): sha256/encode
-	if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared) VALUES($1,$2,$3,$4,$5,encode(sha256($5),'hex'),true)`, runtime, id, agent.ID, agent.Name, []byte("fixture")); e != nil {
+	if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared) VALUES($1,$2,$3,$4,$5,$6,true)`, runtime, id, agent.ID, agent.Name, []byte("fixture"), sha256Hex([]byte("fixture"))); e != nil {
 		t.Fatal(e)
 	}
 	message := uuid.New()
@@ -269,7 +272,7 @@ func TestTaskNoncurrentInboxRunsWhileCurrentBusy(t *testing.T) {
 	}
 	runtime := uuid.New()
 	// SQLITE-PORT(G5): sha256/encode
-	if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared) VALUES($1,$2,$3,$4,$5,encode(sha256($5),'hex'),true)`, runtime, id, agent.ID, agent.Name, []byte("fixture")); e != nil {
+	if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared) VALUES($1,$2,$3,$4,$5,$6,true)`, runtime, id, agent.ID, agent.Name, []byte("fixture"), sha256Hex([]byte("fixture"))); e != nil {
 		t.Fatal(e)
 	}
 	_, e = s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
@@ -341,7 +344,7 @@ func TestRestartOfUnboundInboxDoesNotBlockWaitingNode(t *testing.T) {
 	}
 	runtime := uuid.New()
 	// SQLITE-PORT(G5): sha256/encode
-	if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared) VALUES($1,$2,$3,$4,$5,encode(sha256($5),'hex'),true)`, runtime, id, agent.ID, agent.Name, []byte("fixture")); e != nil {
+	if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared) VALUES($1,$2,$3,$4,$5,$6,true)`, runtime, id, agent.ID, agent.Name, []byte("fixture"), sha256Hex([]byte("fixture"))); e != nil {
 		t.Fatal(e)
 	}
 	_, e = s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
@@ -371,4 +374,10 @@ func TestRestartOfUnboundInboxDoesNotBlockWaitingNode(t *testing.T) {
 	if e != nil || v.Status != "interrupted" || v.ErrorCode == nil || *v.ErrorCode != "server_restarted" {
 		t.Fatal("side round replayed or lost recovery record", e)
 	}
+}
+
+// sha256Hex 是快照内容的 SHA-256 十六进制串（task_instances.snapshot_sha）。
+func sha256Hex(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }

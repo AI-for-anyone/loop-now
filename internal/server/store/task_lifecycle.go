@@ -31,7 +31,7 @@ func (s *Store) taskLifecycle(ctx context.Context, q execer, t TaskTurn, kind st
 	if e != nil {
 		return e
 	}
-	tag, e := q.Exec(ctx, `INSERT INTO lifecycle_events(id,agent_id,type,data,instance_id,task_id,workflow_node,task_turn_id,inbox_message_id) SELECT $1,agent_id,$2,$3,$4,$5,$6,$7,$8 FROM task_instances WHERE id=$9 AND task_id=$5`, uuid.Must(uuid.NewV7()), kind, b, s.InstanceID, t.TaskID, node, t.ID, t.TriggerInboxID, t.RuntimeID)
+	tag, e := q.Exec(ctx, `INSERT INTO lifecycle_events(id,agent_id,type,data,instance_id,task_id,workflow_node,task_turn_id,inbox_message_id) SELECT $1,agent_id,$2,$3,$4,$5,$6,$7,$8 FROM task_instances WHERE id=$9 AND task_id=$5`, uuid.Must(uuid.NewV7()), kind, json.RawMessage(b), s.InstanceID, t.TaskID, node, t.ID, t.TriggerInboxID, t.RuntimeID)
 	if e == nil && tag.RowsAffected() != 1 {
 		return db.ErrNoRows
 	}
