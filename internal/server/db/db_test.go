@@ -773,3 +773,43 @@ func TestQueryHookPausesInsideTransaction(t *testing.T) {
 		t.Fatal("取消后钩子仍被调用")
 	}
 }
+
+// WriteWaiters 数正在等写连接的调用，拿到或放弃后减掉。
+func TestWriteWaiters(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	held, release, ended := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	go func() { ended <- d.InTx(ctx, func(*Tx) error { close(held); <-release; return nil }) }()
+	<-held
+	if n := d.WriteWaiters(); n != 0 {
+		t.Fatalf("持有者不算等待：%d", n)
+	}
+	waitCtx, cancel := context.WithCancel(ctx)
+	results := make(chan error, 2)
+	go func() { results <- d.InTx(ctx, func(*Tx) error { return nil }) }()
+	go func() { results <- d.InTx(waitCtx, func(*Tx) error { return nil }) }()
+	deadline := time.Now().Add(5 * time.Second)
+	for d.WriteWaiters() != 2 {
+		if time.Now().After(deadline) {
+			t.Fatalf("等待数：%d", d.WriteWaiters())
+		}
+		time.Sleep(time.Millisecond)
+	}
+	cancel()
+	if err := <-results; !errors.Is(err, context.Canceled) {
+		t.Fatalf("取消的等待应返回取消：%v", err)
+	}
+	if n := d.WriteWaiters(); n != 1 {
+		t.Fatalf("取消后等待数：%d", n)
+	}
+	close(release)
+	if err := <-ended; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-results; err != nil {
+		t.Fatal(err)
+	}
+	if n := d.WriteWaiters(); n != 0 {
+		t.Fatalf("都拿到后等待数：%d", n)
+	}
+}
