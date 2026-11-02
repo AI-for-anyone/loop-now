@@ -395,6 +395,41 @@ func TestLockLoss(t *testing.T) {
 	}
 }
 
+// 停止服务时，本实例进行中的执行按服务端重启中断收尾，已产生的回复文字写入消息（回复文字只在内存里）。
+func TestStopEndsInFlightRunsWithTheirText(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	e.mustSend("block 当前", "")
+	e.waitStarted("block 当前")
+	active, err := e.st.ActiveRun(ctx, e.agent)
+	if err != nil || active == nil {
+		t.Fatal("应有进行中的执行", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for text, _ := e.co.RunText(ctx, active.ID.String()); text != "部分"; text, _ = e.co.RunText(ctx, active.ID.String()) {
+		if time.Now().After(deadline) {
+			t.Fatalf("回复文字没有到：%q", text)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := e.svc.Stop(ctx); err != nil {
+		t.Fatal(err)
+	}
+	r, _ := e.st.GetRun(ctx, active.ID)
+	if r.Status != "interrupted" || r.EndReason != "server_restart" {
+		t.Fatalf("停止时进行中的执行应按服务端重启中断收尾：%+v", r)
+	}
+	var reply *apitypes.Message
+	for _, m := range e.history() {
+		if m.Role == "assistant" && m.Run.ID == active.ID {
+			reply = &m
+		}
+	}
+	if reply == nil || reply.Text != "部分" {
+		t.Fatalf("应写入已产生的文字：%+v", reply)
+	}
+}
+
 func TestRestartRecovery(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
