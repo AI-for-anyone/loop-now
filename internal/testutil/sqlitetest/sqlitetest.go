@@ -29,7 +29,7 @@ func NewDB(t testing.TB) *db.DB {
 // NewStore 返回一个已迁移、独立数据目录的 Store（对应原来的 pgtest.NewStore）。
 func NewStore(t testing.TB) *store.Store {
 	t.Helper()
-	return &store.Store{Pool: NewDB(t)}
+	return store.New(NewDB(t))
 }
 
 // NewStoreIn 在给定数据目录打开并迁移 Store，供需要在同一目录重开库的测试使用；调用方负责关闭。

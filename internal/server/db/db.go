@@ -8,6 +8,7 @@
 // 两个文件之间没有一致性：一个事务对 data.db 与 events.db 分别提交，读者对两个文件的快照也是先后各取，
 // 所以 events.db 只放丢几条、晚几条都无妨的日志，业务判断不读它。
 // 取得写连接受调用方 ctx 约束；取得之后提交不可取消，调用方看到的结果只有“已提交”或“未提交”。
+// 每个写入都是一个事务（单条 Exec 也是），提交前执行全局写钩子（SetWriteHook）。
 package db
 
 import (
@@ -61,6 +62,8 @@ type DB struct {
 	log    *slog.Logger
 	// holder 记录当前持有写连接的调用点，供等待告警与嵌套写检测使用。
 	holder atomic.Pointer[writerHolder]
+	// writeHook 是每个写事务提交前执行的全局钩子（见 SetWriteHook）。
+	writeHook atomic.Pointer[WriteHook]
 }
 
 type writerHolder struct {
@@ -250,49 +253,41 @@ type Result struct{ rows int64 }
 // RowsAffected 返回受影响的行数。
 func (r Result) RowsAffected() int64 { return r.rows }
 
-// Exec 在写连接上执行一条自动提交的语句。取得写连接后执行不可取消。
+// Exec 在写连接上执行一条语句。它自成一个写事务（BEGIN IMMEDIATE、钩子、提交），与 InTx 的保证相同。
 func (d *DB) Exec(ctx context.Context, query string, args ...any) (Result, error) {
-	vals, err := convertArgs(args)
-	if err != nil {
-		return Result{}, err
-	}
-	c, release, err := d.acquireWriter(ctx)
-	if err != nil {
-		return Result{}, err
-	}
-	defer release()
-	res, err := c.ExecContext(context.WithoutCancel(ctx), query, vals...)
-	if err != nil {
-		return Result{}, err
-	}
-	n, _ := res.RowsAffected()
-	return Result{rows: n}, nil
+	var res Result
+	err := d.InTx(ctx, func(tx *Tx) error {
+		r, err := tx.Exec(ctx, query, args...)
+		res = r
+		return err
+	})
+	return res, err
 }
 
-// Query 执行查询。只读语句走只读池；带 INSERT/UPDATE/DELETE 的语句（如 … RETURNING）在写连接上自动提交，
-// 写连接一直占用到 Rows 关闭。
+// Query 执行查询。只读语句走只读池；带 INSERT/UPDATE/DELETE 的语句（如 … RETURNING）在写连接上自成一个写事务，
+// 写连接一直占用到 Rows 关闭，关闭时执行钩子并提交，提交的错误由 Rows.Err（或 Row.Scan）返回。
 func (d *DB) Query(ctx context.Context, query string, args ...any) (*Rows, error) {
-	vals, err := convertArgs(args)
-	if err != nil {
-		return nil, err
-	}
 	if !isWrite(query) {
+		vals, err := convertArgs(args)
+		if err != nil {
+			return nil, err
+		}
 		rows, err := d.r.QueryContext(ctx, query, vals...)
 		if err != nil {
 			return nil, err
 		}
 		return &Rows{rows: rows}, nil
 	}
-	c, release, err := d.acquireWriter(ctx)
+	t, end, err := d.beginWrite(ctx)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := c.QueryContext(context.WithoutCancel(ctx), query, vals...)
+	rows, err := t.Query(ctx, query, args...)
 	if err != nil {
-		release()
-		return nil, err
+		return nil, end(err)
 	}
-	return &Rows{rows: rows, release: release}, nil
+	rows.finish = end
+	return rows, nil
 }
 
 // QueryRow 执行只取一行的查询；路由同 Query。

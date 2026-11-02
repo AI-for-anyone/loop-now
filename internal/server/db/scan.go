@@ -14,9 +14,11 @@ var ErrNoRows = sql.ErrNoRows
 
 // Rows 是查询结果，用法同 pgx.Rows：Next、Scan、Err、Close（Close 没有返回值，可重复调用）。
 type Rows struct {
-	rows    *sql.Rows
-	release func()
-	closed  bool
+	rows *sql.Rows
+	// finish 结束 Query 在写连接上开的事务：参数是迭代中的错误，返回提交（或回滚）的结果。
+	finish    func(error) error
+	finishErr error
+	closed    bool
 }
 
 // Next 前进到下一行；没有更多行或出错时返回 false 并自动关闭。
@@ -39,18 +41,23 @@ func (r *Rows) Scan(dest ...any) error {
 	return scanInto(r.rows, dest)
 }
 
-// Err 返回迭代中遇到的错误。
-func (r *Rows) Err() error { return r.rows.Err() }
+// Err 返回迭代中遇到的错误；写语句的结果集关闭后还包括提交的错误。
+func (r *Rows) Err() error {
+	if r.finishErr != nil {
+		return r.finishErr
+	}
+	return r.rows.Err()
+}
 
-// Close 关闭结果集；若它占着写连接，同时归还写连接。
+// Close 关闭结果集；若它是写连接上的写语句，同时执行钩子、提交并归还写连接。
 func (r *Rows) Close() {
 	if r.closed {
 		return
 	}
 	r.closed = true
 	_ = r.rows.Close()
-	if r.release != nil {
-		r.release()
+	if r.finish != nil {
+		r.finishErr = r.finish(r.rows.Err())
 	}
 }
 
@@ -63,12 +70,27 @@ type Row struct {
 	err  error
 }
 
-// Scan 读入第一行并关闭结果；没有行时返回 ErrNoRows。
+// Scan 读入第一行并关闭结果；没有行时返回 ErrNoRows。写语句（… RETURNING）的提交错误也由它返回。
 func (r *Row) Scan(dest ...any) error {
 	if r.err != nil {
 		return r.err
 	}
-	defer r.rows.Close()
+	err := r.scan(dest)
+	if err != nil && r.rows.finish != nil && !r.rows.closed {
+		// 扫描失败：写语句的事务回滚。
+		r.rows.closed = true
+		_ = r.rows.rows.Close()
+		_ = r.rows.finish(err)
+		return err
+	}
+	r.rows.Close()
+	if err == nil {
+		err = r.rows.finishErr
+	}
+	return err
+}
+
+func (r *Row) scan(dest []any) error {
 	if !r.rows.rows.Next() {
 		if err := r.rows.rows.Err(); err != nil {
 			return err

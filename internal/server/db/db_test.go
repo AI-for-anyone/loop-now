@@ -577,3 +577,75 @@ func TestModerncLibcPinned(t *testing.T) {
 		}
 	}
 }
+
+// 全局写钩子在每个写事务提交前执行：InTx、单条 Exec、写连接上的 Query/QueryRow 都算；钩子出错则整个写入回滚。
+func TestWriteHookRunsForEveryWrite(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	mustExec(t, d, `CREATE TABLE t (v INTEGER NOT NULL) STRICT`)
+	mustExec(t, d, `CREATE TABLE seen (n INTEGER NOT NULL) STRICT`)
+	var calls int
+	var fail bool
+	d.SetWriteHook(func(ctx context.Context, tx *Tx) error {
+		calls++
+		if fail {
+			return errors.New("hook failed")
+		}
+		var n int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM t`).Scan(&n); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `INSERT INTO seen VALUES (?)`, n)
+		return err
+	})
+	mustExec(t, d, `INSERT INTO t VALUES (1)`)
+	if err := d.InTx(ctx, func(tx *Tx) error { _, err := tx.Exec(ctx, `INSERT INTO t VALUES (2)`); return err }); err != nil {
+		t.Fatal(err)
+	}
+	var v int
+	if err := d.QueryRow(ctx, `INSERT INTO t VALUES (3) RETURNING v`).Scan(&v); err != nil || v != 3 {
+		t.Fatalf("RETURNING: %d %v", v, err)
+	}
+	rows, err := d.Query(ctx, `UPDATE t SET v = v * 10 RETURNING v`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := CollectRows(rows, RowTo[int])
+	if err != nil || len(got) != 3 {
+		t.Fatalf("写连接上的 Query：%v %v", got, err)
+	}
+	if calls != 4 {
+		t.Fatalf("钩子应执行 4 次，实际 %d", calls)
+	}
+	var seen string
+	if err := d.QueryRow(ctx, `SELECT group_concat(n) FROM seen`).Scan(&seen); err != nil || seen != "1,2,3,3" {
+		t.Fatalf("钩子应在同一事务里看到每次写入：%q %v", seen, err)
+	}
+	// 没有命中行的 RETURNING：ErrNoRows，事务回滚（钩子仍不应留下痕迹）。
+	if err := d.QueryRow(ctx, `UPDATE t SET v = 0 WHERE v < 0 RETURNING v`).Scan(&v); !IsNoRows(err) {
+		t.Fatalf("应得 ErrNoRows：%v", err)
+	}
+	fail = true
+	if _, err := d.Exec(ctx, `INSERT INTO t VALUES (4)`); err == nil {
+		t.Fatal("钩子失败时写入应失败")
+	}
+	if err := d.QueryRow(ctx, `INSERT INTO t VALUES (5) RETURNING v`).Scan(&v); err == nil {
+		t.Fatal("钩子失败时 RETURNING 写入应失败")
+	}
+	rows, err = d.Query(ctx, `INSERT INTO t VALUES (6) RETURNING v`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+	}
+	if rows.Err() == nil {
+		t.Fatal("钩子失败应由 Rows.Err 报出")
+	}
+	fail = false
+	var n, s int
+	if err := d.QueryRow(ctx, `SELECT (SELECT count(*) FROM t), (SELECT count(*) FROM seen)`).Scan(&n, &s); err != nil || n != 3 || s != 4 {
+		t.Fatalf("失败的写入与钩子都应回滚：t=%d seen=%d %v", n, s, err)
+	}
+	// 写连接已归还：可以继续写。
+	mustExec(t, d, `INSERT INTO t VALUES (7)`)
+}

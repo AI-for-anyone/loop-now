@@ -36,8 +36,19 @@ func Open(ctx context.Context, o db.Options) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Store{Pool: d}, nil
+	return New(d), nil
 }
+
+// New 在已打开的库上建 Store，并装上每个写事务提交前执行的钩子。
+func New(d *db.DB) *Store {
+	s := &Store{Pool: d}
+	d.SetWriteHook(s.beforeCommit)
+	return s
+}
+
+// beforeCommit 在每个写事务提交前执行（见 db.SetWriteHook）。
+// SQLITE-PORT(G3): 这里把捕获触发器记下的 plugin_changes 变成插件事件。
+func (s *Store) beforeCommit(context.Context, *db.Tx) error { return nil }
 
 // Close 关闭连接池。
 func (s *Store) Close() { _ = s.Pool.Close() }
