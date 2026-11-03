@@ -254,15 +254,17 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	}
 	a.Config.PluginAssets = a.pluginAssets
 
-	authRoot := filepath.Join(res.WorkRoot, "platform", "auth-helper-v"+cfg.PiVersion)
-	if err = os.MkdirAll(filepath.Dir(authRoot), 0700); err != nil {
+	// 登录 helper 与平台扩展按内容寻址装在 platform/auth-helper/<摘要>/ 下：不同构建的文件互不覆盖。
+	platformDir := filepath.Join(res.WorkRoot, "platform")
+	if err = os.MkdirAll(platformDir, 0700); err != nil {
 		return a, err
 	}
-	helperEntry, authExtension, err := authhelper.Install(authRoot)
+	helperEntry, authExtension, err := authhelper.Install(filepath.Join(platformDir, "auth-helper"))
 	if err != nil {
 		return a, err
 	}
-	helper := &modelauth.Helper{Options: modelauth.HelperOptions{NodeBin: res.NodeBin, Entry: helperEntry, WorkRoot: filepath.Dir(authRoot), BasePath: res.ExecBasePath, PiPackageRoot: packageRoot, PiVersion: cfg.PiVersion, Timeout: cfg.AuthLoginTimeout, StopGrace: cfg.PiStopGrace}}
+	authRoot := filepath.Dir(helperEntry)
+	helper := &modelauth.Helper{Options: modelauth.HelperOptions{NodeBin: res.NodeBin, Entry: helperEntry, WorkRoot: platformDir, BasePath: res.ExecBasePath, PiPackageRoot: packageRoot, PiVersion: cfg.PiVersion, Timeout: cfg.AuthLoginTimeout, StopGrace: cfg.PiStopGrace}}
 	var login modelauth.LoginHelper = helper
 	var refresher modelauth.Refresher = helper
 	if o.AuthLoginHelper != nil {
@@ -284,7 +286,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		return a, err
 	}
 	projectCredentials := modelauth.NewProjectService(a.ModelAuth, templates, cfg.MaxCredential)
-	googleHelper := &cliauth.ProcessHelper{Options: cliauth.HelperOptions{WorkRoot: filepath.Dir(authRoot), StopGrace: cfg.PiStopGrace, Runtime: func(ctx context.Context) (cliauth.HelperRuntime, error) {
+	googleHelper := &cliauth.ProcessHelper{Options: cliauth.HelperOptions{WorkRoot: platformDir, StopGrace: cfg.PiStopGrace, Runtime: func(ctx context.Context) (cliauth.HelperRuntime, error) {
 		template, ok := templates.Get("gcloud")
 		if !ok {
 			return cliauth.HelperRuntime{}, cliauth.ErrUnavailable

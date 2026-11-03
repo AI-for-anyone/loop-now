@@ -33,7 +33,7 @@ server 按进程身份绑定的授权版本协调，不传Agent/task/grant选择
 
 ## 随 binary 部署
 
-Go `Install(root)` 嵌入根目录*.mjs，不依赖repo cwd或测试目录。server传入已规范化工作根下的 `platform/auth-helper-v1.1.0` 绝对路径；逐层拒symlink，安装根及直接父目录须0700（缺少时创建，现有公开目录不自动chmod）。资产以0600、Sync+Rename逐文件原子替换，返回固定main.mjs与runtime-refresh.mjs；错误时不得启动入口，保留无关文件。legacy-anthropic虽随资产打包，当前native验收暂停，不能因文件可安装就启用它或声称兼容通过。
+Go `Install(parent)` 嵌入根目录*.mjs，不依赖repo cwd或测试目录。server传入已规范化工作根下的 `platform/auth-helper` 绝对路径，资产装在按内容寻址的 `<parent>/<Digest()>`（内嵌资产sha256前12位），不同构建互不覆盖；逐层拒symlink，parent、其父目录及摘要目录须0700（缺少时创建，现有公开目录不自动chmod）。摘要目录已存在时只逐字节校验、不重写（不符即报错，删目录后重装）；不存在时在旁边暂存（资产0600、Sync）后一次Rename发布。返回固定main.mjs与runtime-refresh.mjs；错误时不得启动入口，保留无关文件与其他摘要目录。legacy-anthropic虽随资产打包，当前native验收暂停，不能因文件可安装就启用它或声称兼容通过。
 
 ## 旧 Anthropic 字段的限定兼容入口
 

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -14,7 +16,7 @@ func assetRoot(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return filepath.Join(base, "platform", "auth-helper-v1.1.0")
+	return filepath.Join(base, "platform", "auth-helper", Digest())
 }
 func checkAssets(t *testing.T, root string) {
 	t.Helper()
@@ -45,7 +47,7 @@ func checkAssets(t *testing.T, root string) {
 			t.Fatal("install directory is not private")
 		}
 	}
-	matches, err := filepath.Glob(filepath.Join(root, ".auth-helper-*"))
+	matches, err := filepath.Glob(filepath.Join(filepath.Dir(root), ".stage-*"))
 	if err != nil || len(matches) != 0 {
 		t.Fatal("asset stages were retained")
 	}
@@ -53,9 +55,23 @@ func checkAssets(t *testing.T, root string) {
 		t.Fatal("test fixtures installed")
 	}
 }
-func TestInstallEmbeddedAssetsAndAtomicReplacement(t *testing.T) {
+func TestDigestNamesTheInstallDirectory(t *testing.T) {
+	if !regexp.MustCompile(`^[0-9a-f]{12}$`).MatchString(Digest()) {
+		t.Fatalf("digest %q is not 12 hex digits", Digest())
+	}
+}
+func TestInstallPublishesOnceAndOnlyVerifiesAfterwards(t *testing.T) {
 	root := assetRoot(t)
-	helper, extension, err := Install(root)
+	parent := filepath.Dir(root)
+	// Another build's directory beside this one is never touched.
+	other := filepath.Join(parent, "000000000000")
+	if err := os.MkdirAll(other, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(other, "main.mjs"), []byte("other build"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	helper, extension, err := Install(parent)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,29 +79,52 @@ func TestInstallEmbeddedAssetsAndAtomicReplacement(t *testing.T) {
 		t.Fatal("incorrect fixed entry paths")
 	}
 	checkAssets(t, root)
-	// An open old file remains unchanged while its pathname is atomically replaced.
-	if err := os.WriteFile(helper, []byte("old fixture"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	old, err := os.Open(helper)
+	before, err := os.Stat(helper)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer old.Close()
 	sentinel := filepath.Join(root, "unrelated.txt")
 	if err := os.WriteFile(sentinel, []byte("keep"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := Install(root); err != nil {
+	if _, _, err := Install(parent); err != nil {
 		t.Fatal(err)
 	}
-	data := make([]byte, 11)
-	if _, err := old.Read(data); err != nil || string(data) != "old fixture" {
-		t.Fatal("old inode was modified in place")
+	if after, err := os.Stat(helper); err != nil || !os.SameFile(before, after) {
+		t.Fatal("an installed digest directory was rewritten")
 	}
 	checkAssets(t, root)
 	if data, err := os.ReadFile(sentinel); err != nil || string(data) != "keep" {
 		t.Fatal("unrelated file changed")
+	}
+	if data, err := os.ReadFile(filepath.Join(other, "main.mjs")); err != nil || string(data) != "other build" {
+		t.Fatal("another build's assets changed")
+	}
+}
+func TestInstallRejectsChangedOrMissingAssets(t *testing.T) {
+	for _, change := range []string{"content", "missing"} {
+		t.Run(change, func(t *testing.T) {
+			root := assetRoot(t)
+			helper, _, err := Install(filepath.Dir(root))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if change == "content" {
+				err = os.WriteFile(helper, []byte("changed"), 0600)
+			} else {
+				err = os.Remove(helper)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := Install(filepath.Dir(root)); err == nil || !strings.Contains(err.Error(), "main.mjs") {
+				t.Fatalf("changed assets accepted: %v", err)
+			}
+			data, err := os.ReadFile(helper)
+			if change == "content" && (err != nil || string(data) != "changed") || change == "missing" && !os.IsNotExist(err) {
+				t.Fatal("a verified directory was rewritten")
+			}
+		})
 	}
 }
 func TestInstallRejectsSymlinksAndPublicDirectories(t *testing.T) {
@@ -98,7 +137,7 @@ func TestInstallRejectsSymlinksAndPublicDirectories(t *testing.T) {
 		t.Run(target, func(t *testing.T) {
 			root := assetRoot(t)
 			parent := filepath.Dir(root)
-			if err := os.Mkdir(parent, 0700); err != nil {
+			if err := os.MkdirAll(parent, 0700); err != nil {
 				t.Fatal(err)
 			}
 			outside := t.TempDir()
@@ -140,7 +179,7 @@ func TestInstallRejectsSymlinksAndPublicDirectories(t *testing.T) {
 					}
 				}
 			}
-			if _, _, err := Install(root); err == nil {
+			if _, _, err := Install(parent); err == nil {
 				t.Fatal("unsafe install target accepted")
 			}
 			if data, err := os.ReadFile(marker); err != nil || string(data) != "keep" {
@@ -156,7 +195,7 @@ func TestInstallConcurrentIdenticalBinaryAssets(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if _, _, err := Install(root); err != nil {
+			if _, _, err := Install(filepath.Dir(root)); err != nil {
 				t.Error(err)
 			}
 		}()
