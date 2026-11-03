@@ -41,5 +41,6 @@ module.exports = {
   },
   // 在 Resources/bin/loopctl 放指向当前版本 loopctl 的固定链接（托盘"安装命令行工具"用）。
   afterPack: './scripts/after-pack.js',
-  publish: null,
+  // electron-updater 读 Resources/app-update.yml 找更新：GitHub Releases 的 dev 通道（预发布）。这里只打包，不上传（--publish never）。
+  publish: { provider: 'github', owner: 'AI-for-anyone', repo: 'loop-now', channel: 'dev', releaseType: 'prerelease' },
 }

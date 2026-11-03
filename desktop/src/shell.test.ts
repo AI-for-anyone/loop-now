@@ -16,6 +16,7 @@ import { RestartPolicy, restartWindowMs } from './restart'
 import { SettingsFile } from './settings'
 import { stringsFor } from './strings'
 import { trayItems } from './tray'
+import { UpdateChecker, type Updater } from './updates'
 
 const dir = mkdtempSync(join(tmpdir(), 'loop-now-desktop-test-'))
 after(() => rmSync(dir, { recursive: true, force: true }))
@@ -254,5 +255,51 @@ describe('安装命令行工具', () => {
       installScript('/Applications/Loop "Now".app/x\\y'),
       'do shell script "mkdir -p " & quoted form of "/usr/local/bin" & " && ln -sfn " & quoted form of "/Applications/Loop \\"Now\\".app/x\\\\y" & " " & quoted form of "/usr/local/bin/loopctl" with administrator privileges',
     )
+  })
+})
+
+describe('检查更新', () => {
+  const fake = () => {
+    let listener: ((info: { version: string }) => void) | undefined
+    const updater: Updater & { found: (version: string) => void; fail?: Error } = {
+      autoDownload: true,
+      autoInstallOnAppQuit: true,
+      allowPrerelease: false,
+      allowDowngrade: true,
+      channel: null,
+      logger: null,
+      on: (_event, l) => (listener = l),
+      checkForUpdates: async () => {
+        if (updater.fail) throw updater.fail
+      },
+      found: (version) => listener?.({ version }),
+    }
+    return updater
+  }
+
+  test('只检查 dev 通道、不自动下载安装、不降级；同一版本只提示一次', () => {
+    const updater = fake()
+    const checker = new UpdateChecker(updater, () => undefined)
+    assert.deepEqual([updater.autoDownload, updater.autoInstallOnAppQuit, updater.allowPrerelease, updater.allowDowngrade, updater.channel], [false, false, true, false, 'dev'])
+    const seen: string[] = []
+    checker.on('available', (v) => seen.push(v))
+    updater.found('0.2.0')
+    updater.found('0.2.0')
+    updater.found('0.2.1')
+    assert.deepEqual(seen, ['0.2.0', '0.2.1'])
+    assert.equal(checker.available, '0.2.1')
+  })
+
+  test('检查失败只记日志', async () => {
+    const updater = fake()
+    const notes: string[] = []
+    updater.fail = new Error('找不到 dev-mac.yml')
+    await new UpdateChecker(updater, (n) => notes.push(n)).check()
+    assert.deepEqual(notes, ['检查更新失败：找不到 dev-mac.yml'])
+  })
+
+  test('有新版本时菜单栏多一项去下载页', () => {
+    const items = trayItems('running', 'http://127.0.0.1:8780', undefined, stringsFor('zh-CN'), true, '0.2.0')
+    assert.deepEqual(items[1], { label: '有新版本 0.2.0，去下载…', enabled: true, action: 'update' })
   })
 })
