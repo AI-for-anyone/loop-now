@@ -6,6 +6,7 @@ import { useProjects } from '@/api/queries'
 import { NavIcon } from '@/components/NavIcon'
 import { Toasts } from '@/components/Toasts'
 import { useInboxLive } from '@/features/inbox/useInboxLive'
+import { useDesktopNavigation } from '@/features/desktop/desktop'
 import { t } from '@/i18n'
 import { GLOBAL, lastScope, urlScope, type ResolvedShellScope } from '@/lib/scope'
 import { ConnectionBanner } from './ConnectionBanner'
@@ -87,6 +88,7 @@ export function AppLayout() {
 
   // 进入控制台后建立一条收件箱事件流，发给你的消息、待你处理的汇总与各个收件箱视图都靠它实时更新。
   useInboxLive()
+  useDesktopNavigation()
   return (
     <div className="riso-paper flex min-h-screen text-ink lg:h-screen">
       <div className="sticky top-0 h-screen w-[244px] shrink-0 self-start max-nav:hidden">

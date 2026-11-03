@@ -5,6 +5,7 @@ import { mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { RotatingLog } from './log'
 import { setAppMenu } from './menu'
+import { handleNotifications } from './notifications'
 import { choosePort, defaultPort, portOf } from './port'
 import { gitUsable, installCommandLineTools } from './git'
 import { profileArg, profileEnv, profileFromFile, resolveProfile, type Profile } from './profile'
@@ -187,6 +188,7 @@ function run(): void {
     // 开发时 Electron.app 自带的是 Electron 的图标；打包后用 app 自己的图标。
     if (!app.isPackaged) app.dock?.setIcon(join(__dirname, '..', 'assets', 'icon.png'))
     setAppMenu(() => void quit(true))
+    handleNotifications({ trusted: (event) => window.trusts(event), open: (path) => window.navigate(path) })
     session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
       callback(permission === 'clipboard-sanitized-write' || permission === 'fullscreen'),
     )

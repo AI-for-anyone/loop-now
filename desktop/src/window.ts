@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen, shell } from 'electron'
+import { app, BrowserWindow, screen, shell, type IpcMainEvent } from 'electron'
 import { join } from 'node:path'
 import { classifyNavigation } from './links'
 
@@ -73,6 +73,23 @@ export class MainWindow {
     void win.loadFile(statusPage, { query })
   }
 
+  // 页面经 preload 发来的调用是否来自窗口里服务端提供的控制台（主框架、同源），不是状态页或别处。
+  trusts(event: IpcMainEvent): boolean {
+    const frame = event.senderFrame
+    if (!this.win || this.win.isDestroyed() || event.sender !== this.win.webContents || !frame || frame.parent || !this.consoleURL) return false
+    try {
+      return new URL(frame.url).origin === new URL(this.consoleURL).origin
+    } catch {
+      return false
+    }
+  }
+
+  // 点了系统通知：显示窗口，让控制台在自己的路由里跳到 path。
+  navigate(path: string): void {
+    this.show()
+    if (this.consoleURL !== undefined) this.win?.webContents.send('loop-now:navigate', path)
+  }
+
   showConsole(url: string): void {
     const win = this.ensure()
     if (this.consoleURL === url) return
@@ -95,8 +112,9 @@ export class MainWindow {
         contextIsolation: true,
         sandbox: true,
         nodeIntegration: false,
-        // 窗口隐藏时控制台的事件流照常工作。
+        // 窗口隐藏时控制台的事件流照常工作（系统通知靠它）。
         backgroundThrottling: false,
+        preload: join(__dirname, 'preload.js'),
         spellcheck: false,
       },
     })
