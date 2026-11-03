@@ -10,7 +10,7 @@ import { RestartPolicy } from './restart'
 // restarting：崩溃后等待重启；failed：就绪前退出或超时；crashed：崩溃次数超限，不再重启；stopping：正在停。
 export type ServerState = 'stopped' | 'starting' | 'running' | 'degraded' | 'restarting' | 'failed' | 'crashed' | 'stopping'
 
-// 启动失败的原因，由界面换成文字。服务端的退出码：2 配置错误，3 数据目录被另一个实例占用，4 监听地址被占用。
+// 启动失败的原因，由界面换成文字。服务端的退出码：2 配置错误，3 数据目录或工作根被另一个实例占用，4 监听地址被占用。
 export type StartFailure =
   | { kind: 'spawn'; message: string }
   | { kind: 'config' }
