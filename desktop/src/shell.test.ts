@@ -5,6 +5,7 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, describe, test } from 'node:test'
+import { parseBadge, parseNotification } from './bridge'
 import { classifyNavigation } from './links'
 import { RotatingLog } from './log'
 import { choosePort, portFree, portOf } from './port'
@@ -200,5 +201,28 @@ describe('git 检测', () => {
   test('有命令行工具时以 git --version 为准', async () => {
     assert.equal(await gitUsable(async () => true), true)
     assert.equal(await gitUsable(async (file) => file !== '/usr/bin/git'), false)
+  })
+})
+
+describe('页面发来的通知与未读数', () => {
+  const ok = { id: 'm1', title: '待你回复：审查员', body: '要合并吗？', path: '/agents/a/chat' }
+
+  test('合规的通知原样收下，过长的标题与正文截断', () => {
+    assert.deepEqual(parseNotification(ok), ok)
+    const long = parseNotification({ ...ok, title: 'x'.repeat(500), body: 'y'.repeat(900) })
+    assert.equal(long?.title.length, 200)
+    assert.equal(long?.body.length, 500)
+  })
+
+  test('地址必须是控制台里的路径，其余丢掉', () => {
+    for (const path of ['https://evil.example', '//evil.example/x', '/\\evil.example', 'agents/a', '']) assert.equal(parseNotification({ ...ok, path }), undefined, path)
+    assert.equal(parseNotification({ ...ok, id: '' }), undefined)
+    assert.equal(parseNotification('not an object'), undefined)
+  })
+
+  test('未读数是非负整数', () => {
+    assert.equal(parseBadge(3), 3)
+    assert.equal(parseBadge(0), 0)
+    for (const v of [-1, 1.5, '3', null]) assert.equal(parseBadge(v), undefined)
   })
 })

@@ -32,6 +32,13 @@ export const consoleInbox = {
   pendingKind: { question: '问题', unread: '新消息' },
   inTask: (title: string) => `任务「${title}」`,
   taskFallback: '任务实例',
+  // 桌面壳的系统通知。
+  desktop: {
+    question: (name: string) => `待你回复：${name}`,
+    task: (title: string) => `任务等待：${title}`,
+    inTask: (title: string, preview: string) => `任务「${title}」：${preview}`,
+    from: (name: string, preview: string) => `${name}：${preview}`,
+  },
   answer: '去回答',
   view: '查看',
   badge: (questions: number, unread: number) => [questions ? `${questions} 个问题` : '', unread ? `${unread} 条新消息` : ''].filter(Boolean).join('、'),
