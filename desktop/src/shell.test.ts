@@ -8,7 +8,8 @@ import { after, describe, test } from 'node:test'
 import { classifyNavigation } from './links'
 import { RotatingLog } from './log'
 import { choosePort, portFree, portOf } from './port'
-import { profileArg, profileEnv, resolveProfile } from './profile'
+import { gitUsable } from './git'
+import { profileArg, profileEnv, profileFromFile, resolveProfile } from './profile'
 import { RestartPolicy, restartWindowMs } from './restart'
 import { SettingsFile } from './settings'
 import { stringsFor } from './strings'
@@ -119,6 +120,15 @@ describe('隔离配置', () => {
     assert.deepEqual([p.shellDir, p.logDir, p.dataDir, p.contextDir, p.workRoot], ['/private/tmp/x/shell', '/private/tmp/x/logs', '/private/tmp/x/data', '/private/tmp/x/context', '/private/tmp/x/work'])
   })
 
+  test('从 Finder 打开时读 desktop.json 的 profile；没有或格式不对时为空', () => {
+    const file = join(dir, 'desktop.json')
+    assert.equal(profileFromFile(file), undefined)
+    writeFileSync(file, JSON.stringify({ profile: 'try' }))
+    assert.equal(profileFromFile(file), 'try')
+    writeFileSync(file, JSON.stringify({ profile: 3 }))
+    assert.equal(profileFromFile(file), undefined)
+  })
+
   test('不合规的名字报错', () => {
     assert.throws(() => resolveProfile('../live'))
     assert.throws(() => resolveProfile('Try'))
@@ -173,5 +183,22 @@ describe('托盘菜单', () => {
     assert.equal(stringsFor('zh-Hans-CN'), s)
     assert.deepEqual(Object.keys(en.tray), Object.keys(s.tray))
     assert.equal(labels(trayItems('degraded', 'http://127.0.0.1:9000', undefined, en))[0], 'Database unavailable · 127.0.0.1:9000（不可点）')
+  })
+})
+
+describe('git 检测', () => {
+  test('xcode-select -p 失败时不运行 git（它只是占位，会弹系统的安装框）', async () => {
+    const calls: string[] = []
+    const usable = await gitUsable(async (file) => {
+      calls.push(file)
+      return false
+    })
+    assert.equal(usable, false)
+    assert.deepEqual(calls, ['/usr/bin/xcode-select'])
+  })
+
+  test('有命令行工具时以 git --version 为准', async () => {
+    assert.equal(await gitUsable(async () => true), true)
+    assert.equal(await gitUsable(async (file) => file !== '/usr/bin/git'), false)
   })
 })

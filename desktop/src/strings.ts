@@ -26,6 +26,12 @@ const zhCN = {
     confirm: '停止并退出',
     cancel: '取消',
   },
+  git: {
+    message: '需要 Git',
+    detail: 'Loop Now 用 Git 拉取和提交代码，但这台 Mac 还没有安装命令行工具（/usr/bin/git 只是占位）。装好后重新打开 Loop Now。',
+    install: '安装命令行工具',
+    later: '以后再说',
+  },
   page: {
     startingTitle: '正在启动 Loop Now',
     startingBody: '服务端就绪后会自动打开控制台。',
@@ -73,6 +79,12 @@ const enUS: typeof zhCN = {
     detail: 'This stops the server and every running Agent.',
     confirm: 'Stop and Quit',
     cancel: 'Cancel',
+  },
+  git: {
+    message: 'Git is required',
+    detail: 'Loop Now uses Git to fetch and commit code, but the command line tools are not installed on this Mac (/usr/bin/git is only a placeholder). Reopen Loop Now once they are installed.',
+    install: 'Install Command Line Tools',
+    later: 'Not Now',
   },
   page: {
     startingTitle: 'Starting Loop Now',

@@ -1,12 +1,13 @@
 // Loop Now 桌面壳：拉起并守护 loop-server，窗口加载它在同一端口提供的控制台，菜单栏图标显示状态。
 // 壳只做壳，不含业务逻辑。
-import { app, dialog, powerMonitor, session, shell } from 'electron'
+import { app, dialog, powerMonitor, session, shell, type BrowserWindow } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { RotatingLog } from './log'
 import { setAppMenu } from './menu'
 import { choosePort, defaultPort, portOf } from './port'
-import { profileArg, profileEnv, resolveProfile, type Profile } from './profile'
+import { gitUsable, installCommandLineTools } from './git'
+import { profileArg, profileEnv, profileFromFile, resolveProfile, type Profile } from './profile'
 import { readyTimeoutMs, ServerProcess, type ServerState, type StartFailure } from './server'
 import { SettingsFile } from './settings'
 import { strings } from './strings'
@@ -16,7 +17,7 @@ import { MainWindow, type StatusView } from './window'
 // 隔离配置要在 app 就绪前定下：userData 决定设置、浏览器存储与单实例锁的位置。
 let profile: Profile | undefined
 let profileError: string | undefined
-const requested = profileArg(process.argv, process.env)
+const requested = profileArg(process.argv, process.env) ?? profileFromFile(join(app.getPath('userData'), 'desktop.json'))
 if (requested !== undefined) {
   try {
     profile = resolveProfile(requested)
@@ -68,6 +69,7 @@ function run(): void {
   const window = new MainWindow({
     profile: profile?.label,
     background,
+    onFirstShow: (win) => void checkGit(win),
     quitting: () => quitting,
     note,
     onAction: (action) => (action === 'retry' ? void server.restart() : void shell.openPath(logDir)),
@@ -96,6 +98,22 @@ function run(): void {
       default:
         return ''
     }
+  }
+
+  // 第一次显示窗口时查一次 git（服务端用它拉取仓库）；不可用就提示一句，可以直接打开系统的安装框。不打包 git。
+  async function checkGit(win: BrowserWindow): Promise<void> {
+    if (await gitUsable()) return
+    note('git 不可用：没有安装命令行工具')
+    const s = strings().git
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning',
+      message: s.message,
+      detail: s.detail,
+      buttons: [s.install, s.later],
+      defaultId: 0,
+      cancelId: 1,
+    })
+    if (response === 0) installCommandLineTools()
   }
 
   let previous: ServerState = server.state
