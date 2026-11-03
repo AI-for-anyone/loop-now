@@ -1,7 +1,7 @@
 {
   "name": "loop-now-desktop",
   "productName": "Loop Now",
-  "version": "0.1.0-desktop.1",
+  "version": "0.1.0-desktop.2",
   "private": true,
   "description": "Loop Now 桌面壳：拉起并守护 loop-server，窗口加载它提供的控制台",
   "license": "Apache-2.0",
