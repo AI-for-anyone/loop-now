@@ -52,6 +52,9 @@ import (
 	"loop-now/internal/server/webui"
 )
 
+// WorkRootLockFile 是工作根里的实例锁文件名。
+const WorkRootLockFile = ".loop-now-server.lock"
+
 // App 是装配好的服务端。
 type App struct {
 	CLIImport       *cliimport.Service
@@ -66,8 +69,8 @@ type App struct {
 
 	Store *store.Store
 	Coord *coord.Coord
-	// dirLock 是数据目录的实例锁，关闭时最后放开。
-	dirLock *db.DirLock
+	// dirLock、workLock 是数据目录与工作根的实例锁，关闭时最后放开。
+	dirLock, workLock *db.DirLock
 	// Maintenance 定时做检查点、清理旧日志与备份。
 	Maintenance *maintenance.Service
 	Executor    *local.Executor
@@ -151,10 +154,6 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		}
 		return a, err
 	}
-	if a.Store, err = store.Open(ctx, db.Options{Dir: dbDir, Logger: log}); err != nil {
-		return a, err
-	}
-	a.Store.InstanceID = &a.InstanceID
 	res, err := preflight.Resolve(ctx, preflight.Options{
 		PiBin: cfg.PiBin, PiVersion: cfg.PiVersion, PiAIDir: cfg.PiAIDir, NodeBin: cfg.NodeBin,
 		ExecBasePath: cfg.ExecBasePath, WorkRoot: cfg.WorkRoot, HomeDirs: o.HomeDirs,
@@ -162,7 +161,19 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	if err != nil {
 		return a, err
 	}
+	// 一个工作根也只给一个服务进程：Agent 目录、共享的工具与平台文件，以及启动时的各项清理都假定工作根里只有本实例。
+	// 在建库之前取锁，被拒绝的实例不在自己的数据目录里留下新库。
+	if a.workLock, err = db.LockPath(filepath.Join(res.WorkRoot, WorkRootLockFile)); err != nil {
+		if errors.Is(err, db.ErrLocked) {
+			return a, fmt.Errorf("工作根 %s 已被另一个服务进程使用（%s）：%w", res.WorkRoot, config.EnvWorkRoot, err)
+		}
+		return a, err
+	}
 	log.Info("启动检查通过", "piBin", res.PiBin, "piAIDir", res.PiAIDir, "workRoot", res.WorkRoot, "execBasePath", res.ExecBasePath)
+	if a.Store, err = store.Open(ctx, db.Options{Dir: dbDir, Logger: log}); err != nil {
+		return a, err
+	}
+	a.Store.InstanceID = &a.InstanceID
 
 	// 同版本的 loopctl：校验构建产物，安装本机平台的二进制，放进 Agent 的 PATH。
 	dist, err := loopctldist.Load(cfg.LoopctlDistDir, buildinfo.Version())
@@ -760,7 +771,6 @@ func (a *App) closeResources() {
 	if a.Store != nil {
 		a.Store.Close()
 	}
-	if a.dirLock != nil {
-		_ = a.dirLock.Release()
-	}
+	_ = a.workLock.Release()
+	_ = a.dirLock.Release()
 }
