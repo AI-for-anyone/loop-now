@@ -11,7 +11,7 @@ import { classifyNavigation } from './links'
 import { RotatingLog } from './log'
 import { choosePort, portFree, portOf } from './port'
 import { gitUsable } from './git'
-import { profileArg, profileEnv, profileFromFile, resolveProfile } from './profile'
+import { defaultProfile, profileArg, profileEnv, profileFromFile, resolveProfile } from './profile'
 import { RestartPolicy, restartWindowMs } from './restart'
 import { SettingsFile } from './settings'
 import { stringsFor } from './strings'
@@ -98,23 +98,31 @@ describe('导航', () => {
   })
 })
 
-describe('隔离配置', () => {
+describe('配置', () => {
   test('命令行参数优先于环境变量', () => {
     assert.equal(profileArg(['electron', '.', '--profile=try'], { LOOP_NOW_DESKTOP_PROFILE: 'env' }), 'try')
     assert.equal(profileArg(['electron', '.'], { LOOP_NOW_DESKTOP_PROFILE: 'env' }), 'env')
     assert.equal(profileArg(['electron', '.'], {}), undefined)
   })
 
-  test('名字放在自己的位置，工作根在 HOME 之外', () => {
+  test('名字放在壳自己的位置，工作根在 HOME 之外', () => {
     const p = resolveProfile('try', '/Users/someone')
     assert.equal(p.label, 'try')
-    assert.equal(p.dataDir, '/Users/someone/Library/Application Support/Loop Now Profiles/try/data')
-    assert.equal(p.workRoot, '/Users/Shared/loop-now-profiles/try')
+    assert.equal(p.shellDir, '/Users/someone/Library/Application Support/Loop Now/try/shell')
+    assert.equal(p.logDir, '/Users/someone/Library/Logs/Loop Now/try')
     assert.deepEqual(profileEnv(p), {
-      LOOP_NOW_DATA_DIR: p.dataDir,
-      LOOP_NOW_CONTEXT_DIR: '/Users/someone/Library/Application Support/Loop Now Profiles/try/context',
-      LOOP_NOW_WORK_ROOT: p.workRoot,
+      LOOP_NOW_DATA_DIR: '/Users/someone/Library/Application Support/Loop Now/try/data',
+      LOOP_NOW_CONTEXT_DIR: '/Users/someone/Library/Application Support/Loop Now/try/context',
+      LOOP_NOW_WORK_ROOT: '/Users/Shared/loop-now-desktop/try',
     })
+  })
+
+  test('默认配置也是一个配置，从不落到服务端的默认目录', () => {
+    const p = resolveProfile(defaultProfile, '/Users/someone')
+    assert.equal(p.dataDir, '/Users/someone/Library/Application Support/Loop Now/default/data')
+    assert.equal(p.contextDir, '/Users/someone/Library/Application Support/Loop Now/default/context')
+    assert.equal(p.workRoot, '/Users/Shared/loop-now-desktop/default')
+    for (const d of [p.dataDir, p.contextDir, p.workRoot]) assert.ok(!d.includes('.loop_now') && !d.startsWith('/Users/Shared/loop-now/'))
   })
 
   test('绝对路径时全部放在它下面', () => {
@@ -155,8 +163,9 @@ describe('托盘菜单', () => {
   const labels = (items: ReturnType<typeof trayItems>) => items.map((i) => (i === 'separator' ? '—' : `${i.label}${i.enabled ? '' : '（不可点）'}`))
 
   test('运行中：状态行带主机和端口，可在浏览器打开', () => {
-    assert.deepEqual(labels(trayItems('running', 'http://127.0.0.1:8780', undefined, s)), [
+    assert.deepEqual(labels(trayItems('running', 'http://127.0.0.1:8780', defaultProfile, s)), [
       '运行中 · 127.0.0.1:8780（不可点）',
+      '配置：默认（不可点）',
       '—',
       '打开窗口',
       '在默认浏览器打开',
@@ -169,28 +178,28 @@ describe('托盘菜单', () => {
     ])
   })
 
-  test('启动中不能在浏览器打开、不能重启；隔离配置在状态行带名字', () => {
+  test('启动中不能在浏览器打开、不能重启；第二行是当前配置', () => {
     const items = labels(trayItems('starting', undefined, 'try', s))
-    assert.equal(items[0], '正在启动… (try)（不可点）')
-    assert.equal(items[3], '在默认浏览器打开（不可点）')
-    assert.equal(items[7], '重启服务（不可点）')
+    assert.deepEqual(items.slice(0, 2), ['正在启动…（不可点）', '配置：try（不可点）'])
+    assert.equal(items[4], '在默认浏览器打开（不可点）')
+    assert.equal(items[8], '重启服务（不可点）')
   })
 
   test('多次崩溃停下后可以手动重启', () => {
     const items = labels(trayItems('crashed', undefined, undefined, s))
     assert.equal(items[0], '已停止：多次崩溃（不可点）')
-    assert.equal(items[7], '重启服务')
+    assert.equal(items[8], '重启服务')
   })
 
   test('开发时（没打包）不能安装命令行工具', () => {
-    assert.equal(labels(trayItems('running', 'http://127.0.0.1:8780', undefined, s, false))[6], '安装命令行工具…（不可点）')
+    assert.equal(labels(trayItems('running', 'http://127.0.0.1:8780', undefined, s, false))[7], '安装命令行工具…（不可点）')
   })
 
   test('中英文两套文字同形', () => {
     const en = stringsFor('en-US')
     assert.equal(stringsFor('zh-Hans-CN'), s)
     assert.deepEqual(Object.keys(en.tray), Object.keys(s.tray))
-    assert.equal(labels(trayItems('degraded', 'http://127.0.0.1:9000', undefined, en))[0], 'Database unavailable · 127.0.0.1:9000（不可点）')
+    assert.deepEqual(labels(trayItems('degraded', 'http://127.0.0.1:9000', defaultProfile, en)).slice(0, 2), ['Database unavailable · 127.0.0.1:9000（不可点）', 'Profile: default（不可点）'])
   })
 })
 
@@ -300,6 +309,6 @@ describe('检查更新', () => {
 
   test('有新版本时菜单栏多一项去下载页', () => {
     const items = trayItems('running', 'http://127.0.0.1:8780', undefined, stringsFor('zh-CN'), true, '0.2.0')
-    assert.deepEqual(items[1], { label: '有新版本 0.2.0，去下载…', enabled: true, action: 'update' })
+    assert.deepEqual(items[2], { label: '有新版本 0.2.0，去下载…', enabled: true, action: 'update' })
   })
 })

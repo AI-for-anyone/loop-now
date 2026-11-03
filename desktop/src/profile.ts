@@ -2,10 +2,10 @@ import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join, normalize } from 'node:path'
 
-// 隔离配置：用 --profile=<名字或绝对路径>、LOOP_NOW_DESKTOP_PROFILE，或默认 userData 下 desktop.json 的 profile 选择（依次优先）。选了之后壳的设置、日志，
-// 服务端的数据目录、上下文目录与工作根都放到这个配置自己的位置，覆盖环境里的同名变量，
-// 线上实例还在用默认目录（~/.loop_now、/Users/Shared/loop-now）时也能放心试。
-// 不选时是默认配置：服务端用自己的默认目录，壳用 Electron 的默认位置。
+// 配置：用 --profile=<名字或绝对路径>、LOOP_NOW_DESKTOP_PROFILE，或 ~/Library/Application Support/Loop Now/desktop.json 的 profile 选择
+// （依次优先），都没选时是名为 default 的默认配置。壳的设置、日志，服务端的数据目录、上下文目录与工作根都放在配置自己的位置，
+// 显式交给服务端、覆盖环境里的同名变量：桌面版从不使用服务端的默认目录（~/.loop_now、/Users/Shared/loop-now），
+// 那是单独部署的服务端在用的。
 export type Profile = {
   // 显示在窗口标题与菜单栏里的名字：配置名，或绝对路径的最后一段。
   label: string
@@ -21,6 +21,8 @@ export type Profile = {
 }
 
 const namePattern = /^[a-z0-9][a-z0-9_-]{0,31}$/
+
+export const defaultProfile = 'default'
 
 export function profileArg(argv: string[], env: NodeJS.ProcessEnv): string | undefined {
   for (const arg of argv) {
@@ -39,7 +41,8 @@ export function profileFromFile(file: string): string | undefined {
   }
 }
 
-// 名字：放在 ~/Library/Application Support/Loop Now Profiles/<名字>，工作根在 /Users/Shared/loop-now-profiles/<名字>。
+// 名字：放在 ~/Library/Application Support/Loop Now/<名字>（壳的文件在其中的 shell），日志在 ~/Library/Logs/Loop Now/<名字>，
+// 工作根在 /Users/Shared/loop-now-desktop/<名字>（服务端要求工作根在 HOME 之外）。
 // 绝对路径：所有东西都放在这个目录下（工作根是其中的 work，目录本身须在 HOME 之外），用于临时目录里联调。
 export function resolveProfile(value: string, home = homedir()): Profile {
   if (isAbsolute(value)) {
@@ -55,15 +58,15 @@ export function resolveProfile(value: string, home = homedir()): Profile {
     }
   }
   if (!namePattern.test(value)) throw new Error(`配置名只能用小写字母、数字、下划线与连字符，最长 32 个字符：${value}`)
-  const root = join(home, 'Library', 'Application Support', 'Loop Now Profiles', value)
+  const root = join(home, 'Library', 'Application Support', 'Loop Now', value)
   return {
     label: value,
     root,
     shellDir: join(root, 'shell'),
-    logDir: join(root, 'logs'),
+    logDir: join(home, 'Library', 'Logs', 'Loop Now', value),
     dataDir: join(root, 'data'),
     contextDir: join(root, 'context'),
-    workRoot: join('/Users/Shared/loop-now-profiles', value),
+    workRoot: join('/Users/Shared/loop-now-desktop', value),
   }
 }
 

@@ -1,5 +1,6 @@
 import { app, Menu, Tray, nativeImage } from 'electron'
 import { join } from 'node:path'
+import { defaultProfile } from './profile'
 import type { ServerState } from './server'
 import { strings, type Strings } from './strings'
 
@@ -8,17 +9,20 @@ export type TrayItem = { label: string; enabled: boolean; action?: TrayAction } 
 
 const serving = (state: ServerState, url: string | undefined): url is string => (state === 'running' || state === 'degraded') && url !== undefined
 
-// 菜单第一行与提示文字：服务端状态，就绪时带主机和端口，隔离配置时带配置名。
-export function trayStatus(state: ServerState, url: string | undefined, profile: string | undefined, s: Strings): string {
-  const status = serving(state, url) ? `${s.state[state]} · ${new URL(url).host}` : s.state[state]
-  return profile ? `${status} (${profile})` : status
+// 菜单第一行：服务端状态，就绪时带主机和端口。
+export function trayStatus(state: ServerState, url: string | undefined, s: Strings): string {
+  return serving(state, url) ? `${s.state[state]} · ${new URL(url).host}` : s.state[state]
 }
 
-// 菜单栏图标的菜单：第一行是状态（不可点），有新版本时下面多一项去下载页，再下面是打开窗口、在浏览器打开、日志、
+// 当前配置的名字；默认配置显示成"默认"。
+const profileName = (profile: string | undefined, s: Strings) => (profile === undefined || profile === defaultProfile ? s.tray.defaultProfile : profile)
+
+// 菜单栏图标的菜单：前两行是状态与当前配置（不可点），有新版本时下面多一项去下载页，再下面是打开窗口、在浏览器打开、日志、
 // 安装命令行工具（只在打包后的 app 里）、重启与退出。
 export function trayItems(state: ServerState, url: string | undefined, profile: string | undefined, s: Strings, packaged = true, update?: string): TrayItem[] {
   return [
-    { label: trayStatus(state, url, profile, s), enabled: false },
+    { label: trayStatus(state, url, s), enabled: false },
+    { label: s.tray.profile(profileName(profile, s)), enabled: false },
     ...(update ? [{ label: s.tray.update(update), enabled: true, action: 'update' as const }] : []),
     'separator',
     { label: s.tray.open, enabled: true, action: 'open' },
@@ -48,7 +52,7 @@ export class StatusTray {
 
   update(state: ServerState, url: string | undefined): void {
     const s = strings()
-    this.tray.setToolTip(`Loop Now — ${trayStatus(state, url, this.profile, s)}`)
+    this.tray.setToolTip(`Loop Now · ${profileName(this.profile, s)} — ${trayStatus(state, url, s)}`)
     this.tray.setContextMenu(
       Menu.buildFromTemplate(
         trayItems(state, url, this.profile, s, app.isPackaged, this.newVersion()).map((item) => {
