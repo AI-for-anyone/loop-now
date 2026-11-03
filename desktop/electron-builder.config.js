@@ -24,8 +24,8 @@ module.exports = {
     // 证书到位前用 ad-hoc 签名；ad-hoc 下开 hardened runtime 会拒绝加载 Electron 自带签名的框架。
     identity: '-',
     // loopctl-dist 里的二进制是服务端按清单（大小、SHA-256）核对后发给 Agent 的载荷，签名会改动它们的内容，
-    // 服务端就会拒绝启动；它们自己是 Go 链接时签好的。
-    signIgnore: ['/Contents/Resources/server/loopctl-dist/'],
+    // 服务端就会拒绝启动；它们自己是 Go 链接时签好的。Resources/bin/loopctl 是指向其中一个的链接，签它会顺着链接改到原文件。
+    signIgnore: ['/Contents/Resources/server/loopctl-dist/', '/Contents/Resources/bin/'],
     hardenedRuntime: false,
     gatekeeperAssess: false,
     notarize: false,
