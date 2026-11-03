@@ -7,10 +7,10 @@ import { join, resolve } from 'node:path'
 import { RotatingLog } from './log'
 import { setAppMenu } from './menu'
 import { handleNotifications } from './notifications'
-import { choosePort, defaultPort, portOf } from './port'
+import { choosePort, portOf } from './port'
 import { cliLink, installLink, linkState } from './cli'
 import { gitUsable, installCommandLineTools } from './git'
-import { profileArg, profileEnv, profileFromFile, resolveProfile, type Profile } from './profile'
+import { defaultProfile, profileArg, profileEnv, profileFromFile, resolveProfile, type Profile } from './profile'
 import { readyTimeoutMs, ServerProcess, type ServerState, type StartFailure } from './server'
 import { SettingsFile } from './settings'
 import { strings } from './strings'
@@ -18,10 +18,12 @@ import { StatusTray } from './tray'
 import { releasePage, UpdateChecker } from './updates'
 import { MainWindow, type StatusView } from './window'
 
-// 隔离配置要在 app 就绪前定下：userData 决定设置、浏览器存储与单实例锁的位置。
+// 配置要在 app 就绪前定下：userData 决定设置、浏览器存储与单实例锁的位置。打包后的 app 什么都没选时用默认配置；
+// 开发时必须明确选一个，开发时的默认配置就是装好的 app 自己在用的那一套。
 let profile: Profile | undefined
 let profileError: string | undefined
-const requested = profileArg(process.argv, process.env) ?? profileFromFile(join(app.getPath('userData'), 'desktop.json'))
+const chosen = profileArg(process.argv, process.env) ?? profileFromFile(join(app.getPath('userData'), 'desktop.json'))
+const requested = chosen ?? (app.isPackaged ? defaultProfile : undefined)
 if (requested !== undefined) {
   try {
     profile = resolveProfile(requested)
@@ -45,6 +47,13 @@ function run(): void {
   const serverLog = new RotatingLog(join(logDir, 'server.log'))
   const settings = new SettingsFile(join(userData, 'settings.json'))
   const note = (text: string) => shellLog.line(text)
+  // 每次启动的第一行：用的哪个配置、交给服务端的三个目录。
+  const which = profile
+    ? `配置 ${profile.label}，数据目录 ${profile.dataDir}，上下文目录 ${profile.contextDir}，工作根 ${profile.workRoot}`
+    : profileError
+      ? `配置不可用（${profileError}）`
+      : '没有选配置'
+  note(`壳启动：${which}；Electron ${process.versions.electron}${background ? '，后台启动' : ''}`)
 
   let quitting = false // 已确认退出：关窗口不再只是隐藏
   let confirming = false
@@ -52,12 +61,12 @@ function run(): void {
   // 打包后服务端在 app 资源的 server/ 下；开发时用 LOOP_NOW_DESKTOP_SERVER 指定（服务端以自己所在目录为 cwd 启动，所以转成绝对路径）。
   const devBin = process.env.LOOP_NOW_DESKTOP_SERVER
   const bin = app.isPackaged ? join(process.resourcesPath, 'server', 'loop-server') : devBin ? resolve(devBin) : undefined
-  // 起不了服务端的情形（在 app 就绪后调用，语言要到那时才确定）。开发时必须用隔离配置：服务端的默认目录正是线上实例在用的。
+  // 起不了服务端的情形（在 app 就绪后调用，语言要到那时才确定）。没有配置只会发生在开发时没选的情况下。
   const blocked = (): StatusView | undefined => {
     const s = strings().page
     if (profileError) return { title: s.badProfileTitle, body: profileError }
     if (!bin) return { title: s.noServerTitle, body: s.noServerBody }
-    if (!app.isPackaged && !profile) return { title: s.noProfileTitle, body: s.noProfileBody }
+    if (!profile) return { title: s.noProfileTitle, body: s.noProfileBody }
     return undefined
   }
 
@@ -67,11 +76,12 @@ function run(): void {
     env: profile ? { ...process.env, ...profileEnv(profile) } : process.env,
     log: serverLog,
     note,
-    // 默认配置第一次试 8780；隔离配置第一次就交给系统选，免得占住线上实例的端口。
-    choosePort: () => choosePort(settings.read().port ?? (profile ? 0 : defaultPort)),
+    // 第一次交给系统选，之后沿用记住的端口（见 port.ts）。
+    choosePort: () => choosePort(settings.read().port ?? 0),
   })
   const window = new MainWindow({
-    profile: profile?.label,
+    // 默认配置的窗口标题不带名字。
+    profile: profile?.label === defaultProfile ? undefined : profile?.label,
     background,
     onFirstShow: (win) => void checkGit(win),
     quitting: () => quitting,
@@ -217,7 +227,6 @@ function run(): void {
   app.on('window-all-closed', () => undefined)
 
   void app.whenReady().then(() => {
-    note(`壳启动：Electron ${process.versions.electron}${profile ? `，隔离配置 ${profile.root}` : ''}${background ? '，后台启动' : ''}`)
     if (background) app.dock?.hide()
     // 开发时 Electron.app 自带的是 Electron 的图标；打包后用 app 自己的图标。
     if (!app.isPackaged) app.dock?.setIcon(join(__dirname, '..', 'assets', 'icon.png'))
