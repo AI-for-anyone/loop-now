@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { serverVersionStore } from '@/api/client'
 import { useCliTemplates, useContextInfo, useHealth } from '@/api/queries'
-import { config } from '@/config'
+import { absoluteApiBase } from '@/config'
 import { t } from '@/i18n'
 import { chooseLocale, locale, localeNames, locales, type Locale } from '@/i18n/locale'
 import { selectClass } from '@/lib/field'
@@ -103,7 +103,7 @@ export function SettingsPage() {
           <CardContent>
             <dl className="grid grid-cols-[minmax(110px,140px)_minmax(0,1fr)] gap-x-[18px] gap-y-3.5 text-[14.5px]">
               <Row label={t.settings.apiBase}>
-                <span className="font-mono text-[13.5px] break-all">{config.apiBase}</span>
+                <span className="font-mono text-[13.5px] break-all">{absoluteApiBase()}</span>
               </Row>
               <Row label={t.settings.version}>
                 <span className="font-mono text-[13.5px] break-all">{version ?? '—'}</span>

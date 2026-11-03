@@ -29,6 +29,18 @@ describe('顶栏连接状态', () => {
     expect(within(topStatus()).getByText('127.0.0.1:8780')).toBeInTheDocument()
   })
 
+  it('接口地址是相对路径（服务端在同一端口提供控制台）时，按当前页面显示主机和端口', async () => {
+    server.use(...baseHandlers([]))
+    const original = config.apiBase
+    config.apiBase = '/api/v1'
+    try {
+      renderRoutes(routes, defaultAgentsPath)
+      expect(within(topStatus()).getByText(window.location.host)).toBeInTheDocument()
+    } finally {
+      config.apiBase = original
+    }
+  })
+
   it('健康检查报告数据库正常时显示已连接', async () => {
     server.use(...baseHandlers([]))
     renderRoutes(routes, defaultAgentsPath)
