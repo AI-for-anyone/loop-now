@@ -1135,7 +1135,8 @@ func TestKnownLegacyAuthUsesOnlyControlledExtensionAndPrivateFile(t *testing.T) 
 	if err := os.WriteFile(entry, []byte("export default ()=>{};"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	h := newHarness(t, func(o *Options) { o.LegacyAuthExtension = entry; o.PiPackageRoot = root }, "")
+	aiDir := filepath.Join(filepath.Dir(root), "pi-ai")
+	h := newHarness(t, func(o *Options) { o.LegacyAuthExtension = entry; o.PiPackageRoot = root; o.PiAIDir = aiDir }, "")
 	dumpPath := filepath.Join(root, "dump.json")
 	h.env["FAKEPI_DUMP"] = dumpPath
 	input := map[string]string{"ANTHROPIC_AUTH_TOKEN": "synthetic-A-bearer", "ANTHROPIC_OAUTH_TOKEN": "synthetic-A-oauth", "ANTHROPIC_API_KEY": "synthetic-A-key"}
@@ -1159,7 +1160,7 @@ func TestKnownLegacyAuthUsesOnlyControlledExtensionAndPrivateFile(t *testing.T) 
 			t.Fatal("legacy secret entered process env")
 		}
 	}
-	if dump.Env["LOOP_NOW_PI_PACKAGE_ROOT"] != root {
+	if dump.Env["LOOP_NOW_PI_PACKAGE_ROOT"] != root || dump.Env["LOOP_NOW_PI_AI_DIR"] != aiDir {
 		t.Fatal("pinned installed source not selected")
 	}
 	data, err := os.ReadFile(filepath.Join(h.root, "agents", id.String(), "pi", "auth.json"))

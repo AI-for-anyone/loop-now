@@ -51,6 +51,18 @@ func TestGoHelperPrivateLoginAndHostSecretIsolation(t *testing.T) {
 		t.Fatal("isolated helper login failed", err)
 	}
 }
+
+// Login and refresh frames carry the pi-ai directory preflight resolved, so the helper never guesses it.
+func TestGoHelperFramesCarryResolvedPiAIDir(t *testing.T) {
+	helper := fakeGoHelper(t, `if(frame.type!=='abort')send({type:'result',id:frame.id,status:frame.piAIDir==='/resolved/pi-ai'?'succeeded':'failed',credential});`)
+	helper.Options.PiAIDir = "/resolved/pi-ai"
+	if _, err := helper.Login(context.Background(), uuid.New(), func(string) error { return nil }); err != nil {
+		t.Fatal("login frame lacks the resolved pi-ai directory", err)
+	}
+	if _, err := helper.Refresh(context.Background(), oauth(t, "account-A", "old", time.Now())); err != nil {
+		t.Fatal("refresh frame lacks the resolved pi-ai directory", err)
+	}
+}
 func TestGoHelperCancellationDrainsSuccessfulRefresh(t *testing.T) {
 	helper := fakeGoHelper(t, `if(frame.type==='abort')send({type:'result',id:operation.id,status:'succeeded',credential,cancelRequested:true});else fs.writeFileSync(new URL('./started',import.meta.url),'started');`)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)

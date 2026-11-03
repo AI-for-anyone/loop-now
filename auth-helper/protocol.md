@@ -7,7 +7,7 @@
 - login可输出独立安全诊断帧 `{type:"diagnostic",id,stage,category?,httpStatus?}`；失败result可附同结构的 `diagnostic`（不含type/id）。stage固定为 provider_loaded/exchange_started/exchange_http/exchange_json/credential_received/credential_validated/result_queued，category固定为 network_error/timeout_error/tls_error/http_error/json_error/credential_error/unknown_error；HTTP必须整数100..599。exchange_json额外只允许字段存在/类型布尔，Go不将它们记日志。不得包含URL、code、token、响应正文或原异常；Go二次白名单，只在失败日志保存安全投影，API保持原错误码。refresh不输出这些诊断帧。
 
 - 输出 ready：`{type:"ready",protocolVersion:1,expectedPiVersion:"1.1.0"}`；仅声明桥协议，不表示包已验证。
-- 输入 `{type:"login"|"refresh",id,provider:"openai-codex",timeoutMs,piPackageRoot,credential?}`；id 为1–100位字母数字/下划线/短横线，timeoutMs 为正整数（不超过Node定时器范围）。包路径为服务端已配置的实际安装根目录，不从Agent工作目录解析。credential 仅用于refresh。
+- 输入 `{type:"login"|"refresh",id,provider:"openai-codex",timeoutMs,piPackageRoot,piAIDir,credential?}`；id 为1–100位字母数字/下划线/短横线，timeoutMs 为正整数（不超过Node定时器范围）。包路径为服务端已配置的实际安装根目录，不从Agent工作目录解析；piAIDir 是服务端预检解析出的 pi-ai 目录（全局安装在 pi-coding-agent 之内，`npm install --prefix` 则提升到与它并列），helper 不自行推断。credential 仅用于refresh。
 - 输出 notify：`{type:"notify",id,event:{type:"auth_url",url}}`，仅固定供应商授权URL；不得将它记日志。普通进度消息固定文字，原provider文本/异常/body不传。
 - 浏览器模式自动选择 browser，不启用device code。需要手工回调时输出 `{type:"prompt",id,promptId,kind:"manual_code",message}`；输入 `{type:"prompt_reply",id,promptId,value}` 只能是含匹配state/code的完整 `http://localhost:1455/auth/callback` URL，不接受无state授权码。prompt_closed 撤销输入，迟到reply忽略。该秘密交互暂不等于Web已提供手工输入界面。
 - 输入 `{type:"abort",id}`；输出 result 恰好一次：`{type:"result",id,status:"succeeded"|"failed"|"cancelled"|"expired"|"protocol_error",code?,credential?,cancelRequested?,protocolFault?}`。成功credential固定为 `{type:"oauth",access,refresh,expires,accountId}`，expires为Unix毫秒，单份credential JSON最多64KiB；只在fd4秘密路径交付，不进状态API。错误码固定，不包含原异常或凭证。
@@ -37,6 +37,6 @@ Go `Install(parent)` 嵌入根目录*.mjs，不依赖repo cwd或测试目录。s
 
 ## 旧 Anthropic 字段的限定兼容入口
 
-`legacy-anthropic.mjs` 仅由平台对旧snapshot credential.env显式-e加载；`LOOP_NOW_PI_PACKAGE_ROOT`为非秘密固定安装路径，coding-agent/pi-ai都核1.1.0。它包装原apiKey.resolve，在每调用内存AuthContext映射已知AUTH_TOKEN/OAUTH_TOKEN/API_KEY，保留原resolver及原生API行为，不写process.env。未知env项拒绝，proxy不据此兼容，新标准credential.key无需加载该扩展。
+`legacy-anthropic.mjs` 仅由平台对旧snapshot credential.env显式-e加载；`LOOP_NOW_PI_PACKAGE_ROOT`与`LOOP_NOW_PI_AI_DIR`（预检解析出的 pi-ai 目录）为非秘密固定安装路径，coding-agent/pi-ai都核1.1.0。它包装原apiKey.resolve，在每调用内存AuthContext映射已知AUTH_TOKEN/OAUTH_TOKEN/API_KEY，保留原resolver及原生API行为，不写process.env。未知env项拒绝，proxy不据此兼容，新标准credential.key无需加载该扩展。
 
 重构后的native SDK探针已在CLI初始化前的process sandbox、固定本机endpoint和最终URL前置断言下验证6种合成场景；仅本机SDK路径通过，真实供应商/迁移/任务回放另记。旧HTTPS/preload测试体已替换，沙盒不可用时fail停止，不退回旧保护方式。

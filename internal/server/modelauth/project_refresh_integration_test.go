@@ -351,7 +351,7 @@ globalThis.fetch=(input,init)=>{
 	if err = os.WriteFile(wrapper, []byte(wrapperBody), 0700); err != nil {
 		t.Fatal(err)
 	}
-	e.helper = &Helper{Options: HelperOptions{NodeBin: wrapper, Entry: entry, WorkRoot: e.root, BasePath: "/usr/bin:/bin", PiPackageRoot: projectRefreshPi, Timeout: 5 * time.Second}}
+	e.helper = &Helper{Options: HelperOptions{NodeBin: wrapper, Entry: entry, WorkRoot: e.root, BasePath: "/usr/bin:/bin", PiPackageRoot: projectRefreshPi, PiAIDir: filepath.Join(projectRefreshPi, "node_modules", "@earendil-works", "pi-ai"), Timeout: 5 * time.Second}}
 	return e
 }
 

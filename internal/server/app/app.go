@@ -264,7 +264,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		return a, err
 	}
 	authRoot := filepath.Dir(helperEntry)
-	helper := &modelauth.Helper{Options: modelauth.HelperOptions{NodeBin: res.NodeBin, Entry: helperEntry, WorkRoot: platformDir, BasePath: res.ExecBasePath, PiPackageRoot: packageRoot, PiVersion: cfg.PiVersion, Timeout: cfg.AuthLoginTimeout, StopGrace: cfg.PiStopGrace}}
+	helper := &modelauth.Helper{Options: modelauth.HelperOptions{NodeBin: res.NodeBin, Entry: helperEntry, WorkRoot: platformDir, BasePath: res.ExecBasePath, PiPackageRoot: packageRoot, PiAIDir: res.PiAIDir, PiVersion: cfg.PiVersion, Timeout: cfg.AuthLoginTimeout, StopGrace: cfg.PiStopGrace}}
 	var login modelauth.LoginHelper = helper
 	var refresher modelauth.Refresher = helper
 	if o.AuthLoginHelper != nil {
@@ -360,7 +360,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		maxFolderUpload = 1 << 30
 	}
 	a.Executor = local.New(local.Options{Models: models, Hooks: appHooks{a}, Dialogs: a.askDialog, LarkFactory: larkFactory, GoogleResolver: googleCoordinator, GoogleRuntimeEntry: filepath.Join(authRoot, "google_runtime.py"),
-		AuthResolver: authCoordinator, AuthExtension: authExtension, LegacyAuthExtension: filepath.Join(filepath.Dir(authExtension), "legacy-anthropic.mjs"), CodexServiceTierExtension: filepath.Join(filepath.Dir(authExtension), "codex-service-tier.mjs"), PiPackageRoot: packageRoot, AuthIPCTimeout: cfg.AuthIPCTimeout,
+		AuthResolver: authCoordinator, AuthExtension: authExtension, LegacyAuthExtension: filepath.Join(filepath.Dir(authExtension), "legacy-anthropic.mjs"), CodexServiceTierExtension: filepath.Join(filepath.Dir(authExtension), "codex-service-tier.mjs"), PiPackageRoot: packageRoot, PiAIDir: res.PiAIDir, AuthIPCTimeout: cfg.AuthIPCTimeout,
 		WorkRoot: res.WorkRoot, PiBin: res.PiBin, GitBin: res.GitBin, ExecBasePath: res.ExecBasePath, Passthrough: cfg.ExecEnvPassthrough,
 		Username: username, MaxProcesses: cfg.PiMaxProcesses, IdleTimeout: cfg.PiIdleTimeout, StartTimeout: cfg.PiStartTimeout,
 		StopGrace: cfg.PiStopGrace, AbortTimeout: cfg.AbortTimeout, CloneTimeout: cfg.GitCloneTimeout, InstanceID: a.InstanceID, Hostname: host,

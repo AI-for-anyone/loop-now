@@ -110,6 +110,22 @@ if [ "$smoke" = 1 ]; then
 	curl -fsS "$url/healthz" | grep -q '"ok":true' || fail "健康检查没有通过"
 	curl -fsS "$url/" | grep -qi '<!doctype html' || fail "没有提供内嵌的控制台"
 	curl -fsS "$url/api/v1/model-providers" | grep -q "\"piVersion\":\"$PI_VERSION\"" || fail "模型目录不是随包的 Pi $PI_VERSION"
+	# 登录 helper 与旧 Anthropic 扩展（服务端刚装进工作根的那份）用随包的 Node 加载随包 Pi 的 provider；
+	# pi-ai 的位置按服务端预检的规则取：在 pi-coding-agent 之内，否则与它并列（npm --prefix 会把它提升上来）。
+	assets="$(find "$tmp/work/platform/auth-helper" -mindepth 1 -maxdepth 1 -type d ! -name '.*')"
+	pkg="$bundle/runtime/pi/node_modules/@earendil-works/pi-coding-agent"
+	ai="$pkg/node_modules/@earendil-works/pi-ai"
+	[ -d "$ai" ] || ai="$(dirname "$pkg")/pi-ai"
+	env -i PATH=/usr/bin:/bin LOOP_NOW_AUTH_PI_VERSION="$PI_VERSION" LOOP_NOW_PI_PACKAGE_ROOT="$pkg" LOOP_NOW_PI_AI_DIR="$ai" \
+		"$bundle/runtime/node/bin/node" --input-type=module -e '
+import { pathToFileURL } from "node:url";
+const [assets, pkg, ai] = process.argv.slice(1);
+const { loadPiProvider } = await import(pathToFileURL(assets + "/pi-provider.mjs").href);
+await loadPiProvider(pkg, ai);
+let registered;
+await (await import(pathToFileURL(assets + "/legacy-anthropic.mjs").href)).default({ registerProvider: p => { registered = p; } });
+if (registered?.id !== "anthropic") throw new Error("anthropic provider not registered");
+' "$assets" "$pkg" "$ai" || fail "登录 helper 加载不了随包 Pi 的 provider"
 	set +e
 	(run "$tmp/ready2.json") 2>/dev/null
 	code=$?

@@ -4,13 +4,14 @@ import { pathToFileURL } from 'node:url';
 
 // Resolve the actual installed distribution, never the Pi source checkout or a
 // coding-agent session. No AuthStorage, extensions, Skills or HOME are loaded.
-export async function loadPiProvider(root) {
- if (typeof root !== 'string' || !isAbsolute(root)) throw new Error('pi_incompatible');
+// aiRoot is the pi-ai package the server resolved: npm installs it inside
+// pi-coding-agent (global installs) or hoists it beside it (--prefix installs).
+export async function loadPiProvider(root, aiRoot) {
+ if (typeof root !== 'string' || !isAbsolute(root) || typeof aiRoot !== 'string' || !isAbsolute(aiRoot)) throw new Error('pi_incompatible');
  const expected = process.env.LOOP_NOW_AUTH_PI_VERSION ?? '1.4.0';
  if (!['1.1.0','1.4.0'].includes(expected)) throw new Error('pi_incompatible');
  const meta = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
  if (meta.name !== '@earendil-works/pi-coding-agent' || meta.version !== expected) throw new Error('pi_incompatible');
- const aiRoot = join(root, 'node_modules', '@earendil-works', 'pi-ai');
  const entry = join(aiRoot, 'dist/providers/openai-codex.js');
  const aiMeta = JSON.parse(await readFile(join(aiRoot, 'package.json'), 'utf8'));
  if (aiMeta.name !== '@earendil-works/pi-ai' || aiMeta.version !== expected || aiMeta.exports?.['./providers/*']?.import !== './dist/providers/*.js') throw new Error('pi_incompatible');
