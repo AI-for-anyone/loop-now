@@ -39,5 +39,7 @@ module.exports = {
     onlyLoadAppFromAsar: true,
     resetAdHocDarwinSignature: true,
   },
+  // 在 Resources/bin/loopctl 放指向当前版本 loopctl 的固定链接（托盘"安装命令行工具"用）。
+  afterPack: './scripts/after-pack.js',
   publish: null,
 }
