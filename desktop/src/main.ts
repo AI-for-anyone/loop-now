@@ -4,6 +4,7 @@ import { app, dialog, powerMonitor, session, shell } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { RotatingLog } from './log'
+import { setAppMenu } from './menu'
 import { choosePort, defaultPort, portOf } from './port'
 import { profileArg, profileEnv, resolveProfile, type Profile } from './profile'
 import { readyTimeoutMs, ServerProcess, type ServerState, type StartFailure } from './server'
@@ -42,7 +43,6 @@ function run(): void {
 
   let quitting = false // 已确认退出：关窗口不再只是隐藏
   let confirming = false
-  let skipConfirm = false // 关机、注销或收到终止信号时不弹框
 
   // 打包后服务端在 app 资源的 server/ 下；开发时用 LOOP_NOW_DESKTOP_SERVER 指定（服务端以自己所在目录为 cwd 启动，所以转成绝对路径）。
   const devBin = process.env.LOOP_NOW_DESKTOP_SERVER
@@ -121,11 +121,14 @@ function run(): void {
     window.showConsole(url)
   })
 
-  async function quit(): Promise<void> {
+  // 退出：停掉服务端（它会停掉所有 Agent）再退出。只有人从托盘或 Cmd+Q 选"退出"时 confirm 为 true，先问一句；
+  // 信号、关机注销、Dock 菜单等其他途径都经 before-quit 直接退出，不弹框（Electron 自己处理 SIGTERM 时也走 before-quit，
+  // 和我们的信号处理谁先到不固定，所以 before-quit 一律不问）。macOS 上没有父窗口的确认框会阻塞主线程，期间到的信号等人答完再处理。
+  async function quit(confirm: boolean): Promise<void> {
     if (confirming || quitting) return
     confirming = true
     try {
-      if (!skipConfirm && server.alive) {
+      if (confirm && server.alive) {
         const s = strings().quit
         app.focus({ steal: true })
         const { response } = await dialog.showMessageBox({
@@ -141,7 +144,9 @@ function run(): void {
       quitting = true
       await server.stop()
       note('退出')
-      app.quit()
+      // 放到下一轮再退：没有服务端要停时上面的 await 只隔一个微任务，还在 Electron 分发 before-quit 的调用里，
+      // 这时再调 app.quit() 会被丢掉，进程不退出（收到 SIGTERM、启动失败后退出时都会遇到）。
+      setImmediate(() => app.quit())
     } finally {
       confirming = false
     }
@@ -150,14 +155,9 @@ function run(): void {
   app.on('before-quit', (event) => {
     if (quitting) return
     event.preventDefault()
-    void quit()
+    void quit(false)
   })
-  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-    process.on(signal, () => {
-      skipConfirm = true
-      void quit()
-    })
-  }
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => void quit(false))
   app.on('second-instance', () => window.show())
   app.on('activate', () => window.show())
   // 关窗口只是隐藏，不退出。
@@ -166,14 +166,16 @@ function run(): void {
   void app.whenReady().then(() => {
     note(`壳启动：Electron ${process.versions.electron}${profile ? `，隔离配置 ${profile.root}` : ''}${background ? '，后台启动' : ''}`)
     if (background) app.dock?.hide()
+    // 开发时 Electron.app 自带的是 Electron 的图标；打包后用 app 自己的图标。
+    if (!app.isPackaged) app.dock?.setIcon(join(__dirname, '..', 'assets', 'icon.png'))
+    setAppMenu(() => void quit(true))
     session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
       callback(permission === 'clipboard-sanitized-write' || permission === 'fullscreen'),
     )
-    // 关机、重启或注销：不弹框，先推迟系统关机，停掉服务端再退出。类型声明里没有参数，实际传入可 preventDefault 的事件。
+    // 关机、重启或注销：先推迟系统关机，停掉服务端再退出。类型声明里没有参数，实际传入可 preventDefault 的事件。
     powerMonitor.on('shutdown', ((event: Electron.Event) => {
       event.preventDefault()
-      skipConfirm = true
-      void quit()
+      void quit(false)
     }) as () => void)
     tray = new StatusTray(
       {
@@ -181,7 +183,7 @@ function run(): void {
         browser: () => server.url && void shell.openExternal(server.url),
         logs: () => void shell.openPath(logDir),
         restart: () => void server.restart(),
-        quit: () => void quit(),
+        quit: () => void quit(true),
       },
       profile?.label,
     )
