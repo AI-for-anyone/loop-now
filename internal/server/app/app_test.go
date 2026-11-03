@@ -301,9 +301,9 @@ func TestRestartAfterCrash(t *testing.T) {
 	a, _ := s.createAgent("崩溃测试")
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=30s 很长"})
 	s.waitRunning(a)
-	// 模拟进程被强制结束：不走优雅退出，不结束 Pi 进程，只停掉对话协调与 HTTP，并像进程退出那样放开数据目录锁。
+	// 模拟进程被强制结束：不走优雅退出，不结束 Pi 进程，只停掉对话协调与 HTTP，并像进程退出那样放开实例锁。
 	_ = s.a.Conv.Stop(context.Background())
-	s.a.ReleaseDataDirLock()
+	s.a.ReleaseInstanceLocks()
 	if !fakepiAlive(t, w.cfg.WorkRoot) {
 		t.Fatal("模拟崩溃时 Pi 进程应仍在运行")
 	}

@@ -374,7 +374,7 @@ func TestRecoveryCrashRecords(t *testing.T) {
 	s.waitRunning(a)
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "排队的", "whenBusy": "queue"})
 	_ = s.a.Conv.Stop(context.Background()) // 模拟强制结束：不走优雅退出
-	s.a.ReleaseDataDirLock()
+	s.a.ReleaseInstanceLocks()
 	s2 := w.start(nil)
 	defer s2.stop()
 	defer func() { _ = s.a.Executor.Shutdown(context.Background()) }()

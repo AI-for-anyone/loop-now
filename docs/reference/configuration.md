@@ -8,7 +8,7 @@ All server options and defaults are defined in [`internal/server/config/config.g
 | --- | --- |
 | `LOOP_NOW_LISTEN_ADDR` | Console API; `127.0.0.1:8780` |
 | `LOOP_NOW_DATA_DIR` | Database (`db/`) and daily backups (`backups/`); `~/.loop_now` of the server user |
-| `LOOP_NOW_WORK_ROOT` | Persistent agent workspaces and runtime files |
+| `LOOP_NOW_WORK_ROOT` | Persistent agent workspaces and runtime files; like the data directory, one server instance at a time (locked by `.loop-now-server.lock`) |
 | `LOOP_NOW_CONTEXT_DIR` | Shared project (`projects/<id>/`) and global (`global/`) context folders; `~/.loop_now` of the server user |
 | `LOOP_NOW_PLUGIN_HOST_ENTRY` | Absolute path of the plugin host entry run with Node; unset means plugin platform halves do not run |
 | `LOOP_NOW_PLUGIN_OFFICIAL_DIR` | Absolute path of the official plugins shipped with the platform (one directory per plugin); unset means no `builtin` install source |
@@ -57,7 +57,7 @@ When `LOOP_NOW_NODE_BIN`, `LOOP_NOW_PI_BIN`, `LOOP_NOW_LOOPCTL_DIST_DIR`, `LOOP_
 | `LOOP_NOW_WEB_DIR` | Serve the console from this directory instead of the built-in one |
 | `LOOP_NOW_READY_FILE` | Once serving, write `{"url","pid","version"}` to this file (removed on shutdown); use it with `LOOP_NOW_LISTEN_ADDR=127.0.0.1:0` to learn the port. Readiness: `GET <url>/healthz` |
 
-Exit codes of `loop-server`: `0` normal shutdown, `1` other startup failure or an error while shutting down, `2` invalid configuration, `3` the data directory is used by another instance, `4` a listen address is already in use.
+Exit codes of `loop-server`: `0` normal shutdown, `1` other startup failure or an error while shutting down, `2` invalid configuration, `3` the data directory or the work root is used by another instance, `4` a listen address is already in use.
 
 ## Security boundaries
 
