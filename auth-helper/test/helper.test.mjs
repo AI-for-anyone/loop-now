@@ -6,17 +6,19 @@ import { createHelper } from '../helper.mjs';
 import { loadPiProvider, credential } from '../pi-provider.mjs';
 
 const piRoot='/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent';
+const piAI=piRoot+'/node_modules/@earendil-works/pi-ai';
 const cred={type:'oauth',access:'access-private-marker',refresh:'refresh-private-marker',expires:Date.now()+3600000,accountId:'account-A'};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function eventually(fn){for(let i=0;i<200;i++){if(fn())return;await sleep(5);}throw new Error('condition timed out');}
-function harness(oauth,options={}) {const records=[];const helper=createHelper({send:r=>records.push(r),loadProvider:async()=>({oauth}),callbackPort:0,...options});return {helper,records,start:(type='login',timeoutMs=1000)=>helper.receive({type,id:'op1',provider:'openai-codex',timeoutMs,piPackageRoot:piRoot,...(type==='refresh'?{credential:cred}:{})})};}
+function harness(oauth,options={}) {const records=[];const helper=createHelper({send:r=>records.push(r),loadProvider:async()=>({oauth}),callbackPort:0,...options});return {helper,records,start:(type='login',timeoutMs=1000)=>helper.receive({type,id:'op1',provider:'openai-codex',timeoutMs,piPackageRoot:piRoot,piAIDir:piAI,...(type==='refresh'?{credential:cred}:{})})};}
 const result=h=>h.records.find(r=>r.type==='result');
 
 test('installed package public models and canonical credential shape',async()=>{
- const p=await loadPiProvider(piRoot);assert.equal(p.version,'1.4.0');assert(p.models.length>0);assert.equal(typeof p.oauth.login,'function');assert.equal(typeof p.oauth.refresh,'function');assert.equal(typeof p.oauth.toAuth,'function');
+ const p=await loadPiProvider(piRoot,piAI);assert.equal(p.version,'1.4.0');assert(p.models.length>0);assert.equal(typeof p.oauth.login,'function');assert.equal(typeof p.oauth.refresh,'function');assert.equal(typeof p.oauth.toAuth,'function');
  assert.deepEqual(credential({...cred,unexpected:'drop'}),cred);
  assert.throws(()=>credential({...cred,access:'a'.repeat(65536)}));
- await assert.rejects(loadPiProvider('/does-not-exist'));
+ await assert.rejects(loadPiProvider('/does-not-exist',piAI));
+ await assert.rejects(loadPiProvider(piRoot));
 });
 test('notify/prompt/reply is state-bound; secrets appear only in result',async()=>{
  const h=harness({async login(i){assert.equal(await i.prompt({type:'select',options:[{id:'browser'}]}),'browser');i.notify({type:'auth_url',url:'https://auth.openai.com/oauth/authorize?state=state-marker'});i.notify({type:'progress',message:cred.access});await i.prompt({type:'manual_code'});return cred;}});h.start();
@@ -53,7 +55,7 @@ test('actual installed Pi login callback: offline fetch stub, wrong state, abort
  const originalFetch=globalThis.fetch;let exchanges=0;
  const jwt='x.'+Buffer.from(JSON.stringify({'https://api.openai.com/auth':{chatgpt_account_id:'account-A'}})).toString('base64')+'.x';
  globalThis.fetch=async(input)=>{assert.equal(String(input),'https://auth.openai.com/oauth/token');exchanges++;return new Response(JSON.stringify({access_token:jwt,refresh_token:cred.refresh,expires_in:3600}),{status:200});};
- const provider=await loadPiProvider(piRoot);
+ const provider=await loadPiProvider(piRoot,piAI);
  // Avoid PKCE's asynchronous node:crypto initialization race before login.
  await import(provider.aiRoot+'/dist/auth/oauth/openai-codex.js');await sleep(10);
  const request=url=>new Promise((resolve,reject)=>{http.get(url,r=>{r.resume();r.on('end',()=>resolve(r.statusCode));}).on('error',reject);});

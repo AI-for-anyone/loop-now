@@ -60,6 +60,7 @@ type Options struct {
 	CodexServiceTierExtension string
 	LegacyAuthExtension       string
 	PiPackageRoot             string
+	PiAIDir                   string // 预检解析出的 pi-ai 目录（在 pi-coding-agent 之内或与之并列）
 	AuthIPCTimeout            time.Duration
 	WorkRoot                  string
 	PiBin                     string
@@ -577,12 +578,12 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 		env = append(slices.Clone(env), "LOOP_NOW_AUTH_REFRESH_TIMEOUT_MS="+strconv.FormatInt(max(int64(1), ipcTimeout.Milliseconds()), 10))
 	}
 	if snap.ModelCredential.NeedsLegacyAnthropic() {
-		if snap.Provider != "anthropic" || !modelauth.ValidateEntry(e.o.LegacyAuthExtension) || !filepath.IsAbs(e.o.PiPackageRoot) {
+		if snap.Provider != "anthropic" || !modelauth.ValidateEntry(e.o.LegacyAuthExtension) || !filepath.IsAbs(e.o.PiPackageRoot) || !filepath.IsAbs(e.o.PiAIDir) {
 			e.revokeToken(tokenID, e.snapshotLog(snap))
 			return nil, fail(executor.ErrCredentialUnavailable, "旧认证适配未配置")
 		}
 		args = append(args, "-e", e.o.LegacyAuthExtension)
-		env = append(slices.Clone(env), "LOOP_NOW_PI_PACKAGE_ROOT="+e.o.PiPackageRoot)
+		env = append(slices.Clone(env), "LOOP_NOW_PI_PACKAGE_ROOT="+e.o.PiPackageRoot, "LOOP_NOW_PI_AI_DIR="+e.o.PiAIDir)
 	}
 	var googleBridge *cliauth.Broker
 	if snap.GoogleBinding != nil {

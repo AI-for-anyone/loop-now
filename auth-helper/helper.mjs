@@ -95,7 +95,7 @@ export function createHelper({ send, loadProvider = loadPiProvider, callbackPort
     if(record.type==='refresh')current=credential(record.credential);
     else await portAvailable(callbackPort);
     if(ended)return;
-    const provider=await loadProvider(record.piPackageRoot);
+    const provider=await loadProvider(record.piPackageRoot,record.piAIDir);
     if(ended)return;
     if(record.type==='login')restore=guardCallbacks(operation.controller.signal,()=>{fail(new Error('callback_port_in_use'));operation.controller.abort();},callbackPort);
     diagnostic({stage:'provider_loaded'});
