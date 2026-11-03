@@ -7,6 +7,7 @@ import { RotatingLog } from './log'
 import { setAppMenu } from './menu'
 import { handleNotifications } from './notifications'
 import { choosePort, defaultPort, portOf } from './port'
+import { cliLink, installLink, linkState } from './cli'
 import { gitUsable, installCommandLineTools } from './git'
 import { profileArg, profileEnv, profileFromFile, resolveProfile, type Profile } from './profile'
 import { readyTimeoutMs, ServerProcess, type ServerState, type StartFailure } from './server'
@@ -117,6 +118,32 @@ function run(): void {
     if (response === 0) installCommandLineTools()
   }
 
+  // 托盘"安装命令行工具"：/usr/local/bin/loopctl 链到包内固定的 Resources/bin/loopctl（打包时链到当前版本的二进制）。
+  // 由人从菜单里触发，确认框和系统的管理员密码框都在这时出现。
+  async function installCli(): Promise<void> {
+    const s = strings().cli
+    const info = (message: string, detail: string, type: 'info' | 'warning' = 'info') => dialog.showMessageBox({ type, message, detail })
+    if (!app.isInApplicationsFolder()) return void (await info(s.moveFirst, s.moveFirstDetail, 'warning'))
+    const target = join(process.resourcesPath, 'bin', 'loopctl')
+    const current = await linkState(cliLink, target)
+    if (current.state === 'ours') return void (await info(s.already, `${cliLink} → ${target}\n\n${s.external}`))
+    const ask =
+      current.state === 'other'
+        ? { message: s.replace(cliLink), detail: `${s.replaceDetail(current.points ?? cliLink)}\n\n${s.external}`, button: s.replaceButton }
+        : { message: s.confirm, detail: `${s.confirmDetail(cliLink)}\n\n${s.external}`, button: s.install }
+    app.focus({ steal: true })
+    const { response } = await dialog.showMessageBox({ type: 'question', message: ask.message, detail: ask.detail, buttons: [ask.button, s.cancel], defaultId: 0, cancelId: 1 })
+    if (response !== 0) return
+    const result = await installLink(target)
+    if (result === 'cancelled') return
+    if (result instanceof Error) {
+      note(`安装 loopctl 失败：${result.message}`)
+      return void (await info(s.failed, result.message, 'warning'))
+    }
+    note(`已安装 loopctl：${cliLink} → ${target}`)
+    await info(s.done, `${cliLink} → ${target}\n\n${s.external}`)
+  }
+
   let previous: ServerState = server.state
   server.on('state', (state) => {
     note(`状态：${previous} → ${state}`)
@@ -202,6 +229,7 @@ function run(): void {
         open: () => window.show(),
         browser: () => server.url && void shell.openExternal(server.url),
         logs: () => void shell.openPath(logDir),
+        cli: () => void installCli(),
         restart: () => void server.restart(),
         quit: () => void quit(true),
       },

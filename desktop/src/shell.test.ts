@@ -1,11 +1,12 @@
 // 壳里不依赖 Electron 运行的纯逻辑：重启计数、端口选择、日志轮转、导航分类、隔离配置、设置文件、托盘菜单。
 import assert from 'node:assert/strict'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, describe, test } from 'node:test'
 import { parseBadge, parseNotification } from './bridge'
+import { installScript, linkState } from './cli'
 import { classifyNavigation } from './links'
 import { RotatingLog } from './log'
 import { choosePort, portFree, portOf } from './port'
@@ -160,6 +161,7 @@ describe('托盘菜单', () => {
       '在默认浏览器打开',
       '—',
       '查看日志',
+      '安装命令行工具…',
       '重启服务',
       '—',
       '退出 Loop Now',
@@ -170,13 +172,17 @@ describe('托盘菜单', () => {
     const items = labels(trayItems('starting', undefined, 'try', s))
     assert.equal(items[0], '正在启动… (try)（不可点）')
     assert.equal(items[3], '在默认浏览器打开（不可点）')
-    assert.equal(items[6], '重启服务（不可点）')
+    assert.equal(items[7], '重启服务（不可点）')
   })
 
   test('多次崩溃停下后可以手动重启', () => {
     const items = labels(trayItems('crashed', undefined, undefined, s))
     assert.equal(items[0], '已停止：多次崩溃（不可点）')
-    assert.equal(items[6], '重启服务')
+    assert.equal(items[7], '重启服务')
+  })
+
+  test('开发时（没打包）不能安装命令行工具', () => {
+    assert.equal(labels(trayItems('running', 'http://127.0.0.1:8780', undefined, s, false))[6], '安装命令行工具…（不可点）')
   })
 
   test('中英文两套文字同形', () => {
@@ -224,5 +230,29 @@ describe('页面发来的通知与未读数', () => {
     assert.equal(parseBadge(3), 3)
     assert.equal(parseBadge(0), 0)
     for (const v of [-1, 1.5, '3', null]) assert.equal(parseBadge(v), undefined)
+  })
+})
+
+describe('安装命令行工具', () => {
+  test('看出链接是不存在、已指向自带的 loopctl，还是别的', async () => {
+    const target = '/Applications/Loop Now.app/Contents/Resources/bin/loopctl'
+    const link = join(dir, 'cli', 'loopctl')
+    mkdirSync(join(dir, 'cli'), { recursive: true })
+    assert.deepEqual(await linkState(link, target), { state: 'missing' })
+    symlinkSync(target, link)
+    assert.deepEqual(await linkState(link, target), { state: 'ours' })
+    rmSync(link)
+    symlinkSync('/opt/homebrew/bin/loopctl', link)
+    assert.deepEqual(await linkState(link, target), { state: 'other', points: '/opt/homebrew/bin/loopctl' })
+    rmSync(link)
+    writeFileSync(link, '')
+    assert.deepEqual(await linkState(link, target), { state: 'other' })
+  })
+
+  test('AppleScript 里的路径转义后用 quoted form 交给 shell', () => {
+    assert.equal(
+      installScript('/Applications/Loop "Now".app/x\\y'),
+      'do shell script "mkdir -p " & quoted form of "/usr/local/bin" & " && ln -sfn " & quoted form of "/Applications/Loop \\"Now\\".app/x\\\\y" & " " & quoted form of "/usr/local/bin/loopctl" with administrator privileges',
+    )
   })
 })
