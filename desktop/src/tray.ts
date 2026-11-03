@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import type { ServerState } from './server'
 import { strings, type Strings } from './strings'
 
-export type TrayAction = 'open' | 'browser' | 'logs' | 'cli' | 'restart' | 'quit'
+export type TrayAction = 'update' | 'open' | 'browser' | 'logs' | 'cli' | 'restart' | 'quit'
 export type TrayItem = { label: string; enabled: boolean; action?: TrayAction } | 'separator'
 
 const serving = (state: ServerState, url: string | undefined): url is string => (state === 'running' || state === 'degraded') && url !== undefined
@@ -14,10 +14,12 @@ export function trayStatus(state: ServerState, url: string | undefined, profile:
   return profile ? `${status} (${profile})` : status
 }
 
-// 菜单栏图标的菜单：第一行是状态（不可点），下面是打开窗口、在浏览器打开、日志、安装命令行工具（只在打包后的 app 里）、重启与退出。
-export function trayItems(state: ServerState, url: string | undefined, profile: string | undefined, s: Strings, packaged = true): TrayItem[] {
+// 菜单栏图标的菜单：第一行是状态（不可点），有新版本时下面多一项去下载页，再下面是打开窗口、在浏览器打开、日志、
+// 安装命令行工具（只在打包后的 app 里）、重启与退出。
+export function trayItems(state: ServerState, url: string | undefined, profile: string | undefined, s: Strings, packaged = true, update?: string): TrayItem[] {
   return [
     { label: trayStatus(state, url, profile, s), enabled: false },
+    ...(update ? [{ label: s.tray.update(update), enabled: true, action: 'update' as const }] : []),
     'separator',
     { label: s.tray.open, enabled: true, action: 'open' },
     { label: s.tray.browser, enabled: serving(state, url), action: 'browser' },
@@ -35,7 +37,9 @@ export class StatusTray {
 
   constructor(
     private readonly actions: Record<TrayAction, () => void>,
-    private readonly profile?: string,
+    private readonly profile: string | undefined,
+    // 检查到的新版本号；没有时为空。
+    private readonly newVersion: () => string | undefined,
   ) {
     // 文件名以 Template 结尾，macOS 按菜单栏的深浅色自动着色；同目录的 @2x 用于高分屏。
     this.tray = new Tray(nativeImage.createFromPath(join(__dirname, '..', 'assets', 'trayTemplate.png')))
@@ -47,7 +51,7 @@ export class StatusTray {
     this.tray.setToolTip(`Loop Now — ${trayStatus(state, url, this.profile, s)}`)
     this.tray.setContextMenu(
       Menu.buildFromTemplate(
-        trayItems(state, url, this.profile, s, app.isPackaged).map((item) => {
+        trayItems(state, url, this.profile, s, app.isPackaged, this.newVersion()).map((item) => {
           if (item === 'separator') return { type: 'separator' }
           const action = item.action
           return { label: item.label, enabled: item.enabled, click: action ? this.actions[action] : undefined }

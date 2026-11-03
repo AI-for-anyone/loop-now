@@ -1,6 +1,7 @@
 // Loop Now 桌面壳：拉起并守护 loop-server，窗口加载它在同一端口提供的控制台，菜单栏图标显示状态。
 // 壳只做壳，不含业务逻辑。
 import { app, dialog, powerMonitor, session, shell, type BrowserWindow } from 'electron'
+import { autoUpdater } from 'electron-updater'
 import { mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { RotatingLog } from './log'
@@ -14,6 +15,7 @@ import { readyTimeoutMs, ServerProcess, type ServerState, type StartFailure } fr
 import { SettingsFile } from './settings'
 import { strings } from './strings'
 import { StatusTray } from './tray'
+import { releasePage, UpdateChecker } from './updates'
 import { MainWindow, type StatusView } from './window'
 
 // 隔离配置要在 app 就绪前定下：userData 决定设置、浏览器存储与单实例锁的位置。
@@ -77,6 +79,11 @@ function run(): void {
     onAction: (action) => (action === 'retry' ? void server.restart() : void shell.openPath(logDir)),
   })
   let tray: StatusTray | undefined
+  const updates = new UpdateChecker(autoUpdater, note)
+  updates.on('available', (version) => {
+    note(`有新版本 ${version}`)
+    tray?.update(server.state, server.url)
+  })
 
   const startingView = (): StatusView => ({ title: strings().page.startingTitle, body: strings().page.startingBody, busy: true })
   const failureView = (title: string, body: string): StatusView => {
@@ -226,6 +233,7 @@ function run(): void {
     }) as () => void)
     tray = new StatusTray(
       {
+        update: () => updates.available && void shell.openExternal(releasePage(updates.available)),
         open: () => window.show(),
         browser: () => server.url && void shell.openExternal(server.url),
         logs: () => void shell.openPath(logDir),
@@ -234,8 +242,10 @@ function run(): void {
         quit: () => void quit(true),
       },
       profile?.label,
+      () => updates.available,
     )
     tray.update(server.state, server.url)
+    if (app.isPackaged) updates.start()
     const view = blocked()
     if (view) {
       window.showStatus(view)

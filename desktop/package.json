@@ -21,5 +21,8 @@
     "electron": "45.2.1",
     "electron-builder": "26.17.0",
     "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.10"
   }
 }
