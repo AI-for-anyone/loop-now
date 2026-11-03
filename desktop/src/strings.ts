@@ -1,0 +1,109 @@
+import { app } from 'electron'
+import type { ServerState } from './server'
+
+// 壳自己的界面文字，按系统首选语言选中文或英文。控制台的语言由控制台自己决定。
+const zhCN = {
+  state: {
+    stopped: '已停止',
+    starting: '正在启动…',
+    running: '运行中',
+    degraded: '数据库不可用',
+    restarting: '正在重启…',
+    failed: '启动失败',
+    crashed: '已停止：多次崩溃',
+    stopping: '正在停止…',
+  } satisfies Record<ServerState, string>,
+  tray: {
+    open: '打开窗口',
+    browser: '在默认浏览器打开',
+    logs: '查看日志',
+    restart: '重启服务',
+    quit: '退出 Loop Now',
+  },
+  quit: {
+    message: '退出 Loop Now？',
+    detail: '会停掉服务端和所有正在运行的 Agent。',
+    confirm: '停止并退出',
+    cancel: '取消',
+  },
+  page: {
+    startingTitle: '正在启动 Loop Now',
+    startingBody: '服务端就绪后会自动打开控制台。',
+    failedTitle: '服务端没能启动',
+    crashedTitle: '服务端多次崩溃，已停止重启',
+    crashedBody: '5 分钟内崩溃超过 3 次。查看日志找到原因后，可以重试。',
+    spawn: (bin: string, message: string) => `无法运行 ${bin}：${message}`,
+    config: '服务端配置有误，详见下面的日志。',
+    locked: '另一个 Loop Now 服务端正在使用同一个数据目录。先停掉它，或用 --profile 换一个隔离配置。',
+    exited: (exit: string) => `服务端在就绪前退出（${exit}）。`,
+    exitCode: (code: number | null) => `退出码 ${code}`,
+    exitSignal: (signal: string) => `信号 ${signal}`,
+    timeout: (seconds: number) => `服务端 ${seconds} 秒内没有就绪。`,
+    profileRoot: (root: string) => `隔离配置目录：${root}`,
+    noServerTitle: '找不到服务端',
+    noServerBody: '开发模式下用 LOOP_NOW_DESKTOP_SERVER 指向 loop-server。',
+    noProfileTitle: '开发模式需要隔离配置',
+    noProfileBody: '用 --profile=<名字或临时目录> 或 LOOP_NOW_DESKTOP_PROFILE 启动，免得碰到线上实例的数据目录。',
+    badProfileTitle: '配置名不可用',
+    retry: '重试',
+    logs: '打开日志',
+  },
+}
+
+const enUS: typeof zhCN = {
+  state: {
+    stopped: 'Stopped',
+    starting: 'Starting…',
+    running: 'Running',
+    degraded: 'Database unavailable',
+    restarting: 'Restarting…',
+    failed: 'Failed to start',
+    crashed: 'Stopped after repeated crashes',
+    stopping: 'Stopping…',
+  },
+  tray: {
+    open: 'Open Window',
+    browser: 'Open in Browser',
+    logs: 'Show Logs',
+    restart: 'Restart Server',
+    quit: 'Quit Loop Now',
+  },
+  quit: {
+    message: 'Quit Loop Now?',
+    detail: 'This stops the server and every running Agent.',
+    confirm: 'Stop and Quit',
+    cancel: 'Cancel',
+  },
+  page: {
+    startingTitle: 'Starting Loop Now',
+    startingBody: 'The console opens as soon as the server is ready.',
+    failedTitle: 'The server did not start',
+    crashedTitle: 'The server kept crashing, so it was not restarted',
+    crashedBody: 'It crashed more than 3 times in 5 minutes. Check the logs, then try again.',
+    spawn: (bin, message) => `Could not run ${bin}: ${message}`,
+    config: 'The server configuration is invalid; see the log below.',
+    locked: 'Another Loop Now server is using the same data directory. Stop it, or use --profile for an isolated profile.',
+    exited: (exit) => `The server exited before it was ready (${exit}).`,
+    exitCode: (code) => `exit code ${code}`,
+    exitSignal: (signal) => `signal ${signal}`,
+    timeout: (seconds) => `The server was not ready within ${seconds} seconds.`,
+    profileRoot: (root) => `Isolated profile directory: ${root}`,
+    noServerTitle: 'Server not found',
+    noServerBody: 'In development, point LOOP_NOW_DESKTOP_SERVER at loop-server.',
+    noProfileTitle: 'Development needs an isolated profile',
+    noProfileBody: 'Start with --profile=<name or temporary directory> or LOOP_NOW_DESKTOP_PROFILE so the live instance’s data directory stays untouched.',
+    badProfileTitle: 'Unusable profile name',
+    retry: 'Try Again',
+    logs: 'Open Logs',
+  },
+}
+
+export type Strings = typeof zhCN
+
+export function stringsFor(language: string): Strings {
+  return language.toLowerCase().startsWith('zh') ? zhCN : enUS
+}
+
+export function strings(): Strings {
+  return stringsFor(app.getPreferredSystemLanguages()[0] ?? app.getLocale())
+}
