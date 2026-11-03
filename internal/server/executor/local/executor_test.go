@@ -818,6 +818,62 @@ func TestCleanupStale(t *testing.T) {
 	}
 }
 
+// pi.pid 记下进程的启动时刻：启动后改了进程标题的 Pi（命令行里不再有 --mode rpc 与会话目录）照样被认出并结束；
+// 启动时刻对不上的（PID 已被别的进程复用）不碰。
+func TestCleanupStaleRecognizesRetitledPiByStartTime(t *testing.T) {
+	h := newHarness(t, nil, "")
+	id := h.agent(nil)
+	if res, _ := h.exec(id, "hi"); res.Outcome != executor.OutcomeCompleted {
+		t.Fatalf("执行失败：%+v", res)
+	}
+	var written pidRecord
+	if raw, err := os.ReadFile(h.e.dirs(id).pidFile); err != nil || json.Unmarshal(raw, &written) != nil {
+		t.Fatal("读不到 pi.pid", err)
+	}
+	if start, err := processStart(h.pid(id)); err != nil {
+		t.Skip("本平台读不到进程启动时刻")
+	} else if written.PID != h.pid(id) || written.ProcessStart != start {
+		t.Fatalf("pi.pid 应记下进程启动时刻：%+v，期望 %s", written, start)
+	}
+
+	spawn := func(pidFile string, start func(pid int) string) (*exec.Cmd, chan struct{}) {
+		cmd := exec.Command("/bin/sleep", "60")
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) })
+		waited := make(chan struct{})
+		go func() { _ = cmd.Wait(); close(waited) }()
+		b, _ := json.Marshal(pidRecord{PID: cmd.Process.Pid, InstanceID: uuid.NewString(), Hostname: "test-host", SessionDir: filepath.Join(filepath.Dir(pidFile), "sessions"), ProcessStart: start(cmd.Process.Pid)})
+		if err := os.MkdirAll(filepath.Dir(pidFile), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(pidFile, b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return cmd, waited
+	}
+	_, leftover := spawn(h.e.dirs(uuid.Must(uuid.NewV7())).pidFile, func(pid int) string { s, _ := processStart(pid); return s })
+	reused, unrelated := spawn(h.e.dirs(uuid.Must(uuid.NewV7())).pidFile, func(int) string { return "1.000000" })
+	if err := h.e.CleanupStale(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-leftover:
+	case <-time.After(5 * time.Second):
+		t.Fatal("改了标题的遗留 Pi 应被结束")
+	}
+	select {
+	case <-unrelated:
+		t.Fatal("启动时刻对不上的进程不应被结束")
+	default:
+	}
+	if !processAlive(reused.Process.Pid) {
+		t.Fatal("启动时刻对不上的进程不应被结束")
+	}
+}
+
 func TestReleaseRemovesHome(t *testing.T) {
 	h := newHarness(t, nil, "")
 	id := h.agent(nil)
