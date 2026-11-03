@@ -101,3 +101,22 @@ jobs:
           for dir in official/*/; do
             node host/dist/main.js validate "$dir"
           done
+
+  desktop:
+    name: desktop (typecheck, build, test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      # electron 只在第一次运行时下载二进制，这里只做类型检查、编译和单测，不下载也不出安装包。
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
