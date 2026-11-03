@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { reachability } from '@/api/client'
 import { useHealth } from '@/api/queries'
-import { config } from '@/config'
+import { absoluteApiBase } from '@/config'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 
@@ -41,7 +41,7 @@ export function ConnectionStatus({ className }: { className?: string }) {
     >
       <span aria-hidden="true" className={cn('size-[9px] shrink-0 rounded-full', style.dot)} />
       <span>{style.label}</span>
-      <span className="font-mono text-[11.5px] font-bold">{apiHost(config.apiBase)}</span>
+      <span className="font-mono text-[11.5px] font-bold">{apiHost(absoluteApiBase())}</span>
     </div>
   )
 }
