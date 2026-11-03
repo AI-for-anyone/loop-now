@@ -1,7 +1,8 @@
+import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join, normalize } from 'node:path'
 
-// 隔离配置：用 --profile=<名字或绝对路径> 或 LOOP_NOW_DESKTOP_PROFILE 选择。选了之后壳的设置、日志，
+// 隔离配置：用 --profile=<名字或绝对路径>、LOOP_NOW_DESKTOP_PROFILE，或默认 userData 下 desktop.json 的 profile 选择（依次优先）。选了之后壳的设置、日志，
 // 服务端的数据目录、上下文目录与工作根都放到这个配置自己的位置，覆盖环境里的同名变量，
 // 线上实例还在用默认目录（~/.loop_now、/Users/Shared/loop-now）时也能放心试。
 // 不选时是默认配置：服务端用自己的默认目录，壳用 Electron 的默认位置。
@@ -26,6 +27,16 @@ export function profileArg(argv: string[], env: NodeJS.ProcessEnv): string | und
     if (arg.startsWith('--profile=')) return arg.slice('--profile='.length)
   }
   return env.LOOP_NOW_DESKTOP_PROFILE || undefined
+}
+
+// 从 Finder、Dock 打开或登录时启动带不了参数，就读这个文件：{"profile": "<名字或绝对路径>"}。读不到或没写时为空。
+export function profileFromFile(file: string): string | undefined {
+  try {
+    const value = (JSON.parse(readFileSync(file, 'utf8')) as { profile?: unknown }).profile
+    return typeof value === 'string' && value !== '' ? value : undefined
+  } catch {
+    return undefined
+  }
 }
 
 // 名字：放在 ~/Library/Application Support/Loop Now Profiles/<名字>，工作根在 /Users/Shared/loop-now-profiles/<名字>。

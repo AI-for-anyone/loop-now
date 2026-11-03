@@ -18,6 +18,8 @@ type Options = {
   profile?: string
   // 后台启动：人第一次要求显示之前不显示窗口，也不占 Dock。
   background: boolean
+  // 窗口第一次显示出来时调用。
+  onFirstShow?: (win: BrowserWindow) => void
   // 已确认退出时关窗口才真正关闭，否则只是隐藏，服务端照常运行。
   quitting: () => boolean
   onAction: (action: StatusAction) => void
@@ -99,6 +101,7 @@ export class MainWindow {
       },
     })
     win.once('ready-to-show', () => this.opened && win.show())
+    win.once('show', () => this.o.onFirstShow?.(win))
     win.on('close', (event) => {
       if (this.o.quitting()) return
       event.preventDefault()
