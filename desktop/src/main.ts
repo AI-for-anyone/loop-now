@@ -10,7 +10,7 @@ import { handleNotifications } from './notifications'
 import { choosePort, portOf } from './port'
 import { cliLink, installLink, linkState } from './cli'
 import { gitUsable, installCommandLineTools } from './git'
-import { defaultProfile, profileArg, profileEnv, profileFromFile, resolveProfile, type Profile } from './profile'
+import { defaultProfile, overridesFromFile, profileArg, profileEnv, profileFromFile, profileSummary, resolveProfile, type Profile } from './profile'
 import { readyTimeoutMs, ServerProcess, type ServerState, type StartFailure } from './server'
 import { SettingsFile } from './settings'
 import { strings } from './strings'
@@ -19,14 +19,15 @@ import { releasePage, UpdateChecker } from './updates'
 import { MainWindow, type StatusView } from './window'
 
 // 配置要在 app 就绪前定下：userData 决定设置、浏览器存储与单实例锁的位置。打包后的 app 什么都没选时用默认配置；
-// 开发时必须明确选一个，开发时的默认配置就是装好的 app 自己在用的那一套。
+// 开发时必须明确选一个，开发时的默认配置就是装好的 app 自己在用的那一套。desktop.json 还可以为配置指定目录。
 let profile: Profile | undefined
 let profileError: string | undefined
-const chosen = profileArg(process.argv, process.env) ?? profileFromFile(join(app.getPath('userData'), 'desktop.json'))
+const desktopFile = join(app.getPath('userData'), 'desktop.json')
+const chosen = profileArg(process.argv, process.env) ?? profileFromFile(desktopFile)
 const requested = chosen ?? (app.isPackaged ? defaultProfile : undefined)
 if (requested !== undefined) {
   try {
-    profile = resolveProfile(requested)
+    profile = resolveProfile(requested, undefined, overridesFromFile(desktopFile, requested))
     mkdirSync(profile.shellDir, { recursive: true })
     app.setPath('userData', profile.shellDir)
   } catch (err) {
@@ -48,11 +49,7 @@ function run(): void {
   const settings = new SettingsFile(join(userData, 'settings.json'))
   const note = (text: string) => shellLog.line(text)
   // 每次启动的第一行：用的哪个配置、交给服务端的三个目录。
-  const which = profile
-    ? `配置 ${profile.label}，数据目录 ${profile.dataDir}，上下文目录 ${profile.contextDir}，工作根 ${profile.workRoot}`
-    : profileError
-      ? `配置不可用（${profileError}）`
-      : '没有选配置'
+  const which = profile ? profileSummary(profile) : profileError ? `配置不可用（${profileError}）` : '没有选配置'
   note(`壳启动：${which}；Electron ${process.versions.electron}${background ? '，后台启动' : ''}`)
 
   let quitting = false // 已确认退出：关窗口不再只是隐藏
@@ -250,7 +247,7 @@ function run(): void {
         restart: () => void server.restart(),
         quit: () => void quit(true),
       },
-      profile?.label,
+      profile,
       () => updates.available,
     )
     tray.update(server.state, server.url)

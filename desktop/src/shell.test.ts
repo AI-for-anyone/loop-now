@@ -14,7 +14,7 @@ import { classifyNavigation, handOffOnce } from './links'
 import { RotatingLog } from './log'
 import { choosePort, portFree, portOf } from './port'
 import { gitUsable } from './git'
-import { defaultProfile, profileArg, profileEnv, profileFromFile, resolveProfile } from './profile'
+import { defaultProfile, overridesFromFile, profileArg, profileEnv, profileFromFile, profileSummary, resolveProfile } from './profile'
 import { RestartPolicy, restartWindowMs } from './restart'
 import { SettingsFile } from './settings'
 import { stringsFor } from './strings'
@@ -131,12 +131,54 @@ describe('配置', () => {
     })
   })
 
-  test('默认配置也是一个配置，从不落到服务端的默认目录', () => {
+  test('默认配置也是一个配置，没有指定目录时从不落到服务端的默认目录', () => {
     const p = resolveProfile(defaultProfile, '/Users/someone')
     assert.equal(p.dataDir, '/Users/someone/Library/Application Support/Loop Now/default/data')
     assert.equal(p.contextDir, '/Users/someone/Library/Application Support/Loop Now/default/context')
     assert.equal(p.workRoot, '/Users/Shared/loop-now-desktop/default')
+    assert.deepEqual(p.overrides, {})
     for (const d of [p.dataDir, p.contextDir, p.workRoot]) assert.ok(!d.includes('.loop_now') && !d.startsWith('/Users/Shared/loop-now/'))
+    assert.equal(
+      profileSummary(p),
+      '配置 default，数据目录 /Users/someone/Library/Application Support/Loop Now/default/data，上下文目录 /Users/someone/Library/Application Support/Loop Now/default/context，工作根 /Users/Shared/loop-now-desktop/default',
+    )
+  })
+
+  test('desktop.json 指定的目录换掉默认位置，交给服务端，日志首行标出', () => {
+    const p = resolveProfile(defaultProfile, '/Users/someone', { workRoot: '/Users/Shared/loop-now' })
+    assert.deepEqual(profileEnv(p), {
+      LOOP_NOW_DATA_DIR: '/Users/someone/Library/Application Support/Loop Now/default/data',
+      LOOP_NOW_CONTEXT_DIR: '/Users/someone/Library/Application Support/Loop Now/default/context',
+      LOOP_NOW_WORK_ROOT: '/Users/Shared/loop-now',
+    })
+    assert.equal(p.shellDir, '/Users/someone/Library/Application Support/Loop Now/default/shell')
+    assert.match(profileSummary(p), /，工作根 \/Users\/Shared\/loop-now（desktop\.json 指定）$/)
+    assert.doesNotMatch(profileSummary(p), /data（desktop\.json 指定）/)
+
+    const all = resolveProfile('/private/tmp/x', undefined, { workRoot: '/Users/Shared/w', dataDir: '/Users/someone/.loop_now', contextDir: '/Users/someone/.loop_now/context' })
+    assert.deepEqual([all.shellDir, all.logDir, all.dataDir, all.contextDir, all.workRoot], ['/private/tmp/x/shell', '/private/tmp/x/logs', '/Users/someone/.loop_now', '/Users/someone/.loop_now/context', '/Users/Shared/w'])
+  })
+
+  test('desktop.json 按配置名取指定的目录；没有文件、没有这一项时不指定，写错时报错', () => {
+    const file = join(dir, 'overrides.json')
+    assert.deepEqual(overridesFromFile(file, defaultProfile), {})
+    writeFileSync(file, 'not json')
+    assert.deepEqual(overridesFromFile(file, defaultProfile), {})
+    writeFileSync(file, JSON.stringify({ profile: 'try' }))
+    assert.deepEqual(overridesFromFile(file, defaultProfile), {})
+    writeFileSync(file, JSON.stringify({ profile: 'default', profiles: { default: { workRoot: '/Users/Shared/loop-now/', dataDir: '/Users/someone/.loop_now' } } }))
+    assert.deepEqual(overridesFromFile(file, defaultProfile), { workRoot: '/Users/Shared/loop-now', dataDir: '/Users/someone/.loop_now' })
+    assert.deepEqual(overridesFromFile(file, 'try'), {})
+    assert.deepEqual(overridesFromFile(file, 'constructor'), {})
+    for (const [entry, message] of [
+      [{ workRoot: 'loop-now' }, /profiles\.default\.workRoot 应是绝对路径："loop-now"/],
+      [{ workRoot: 3 }, /应是绝对路径：3/],
+      [{ workroot: '/Users/Shared/loop-now' }, /只能写 workRoot、dataDir、contextDir，不认识 workroot/],
+      ['/Users/Shared/loop-now', /profiles\.default 应是对象/],
+    ] as const) {
+      writeFileSync(file, JSON.stringify({ profiles: { default: entry } }))
+      assert.throws(() => overridesFromFile(file, defaultProfile), message)
+    }
   })
 
   test('绝对路径时全部放在它下面', () => {
@@ -175,9 +217,10 @@ describe('设置文件', () => {
 describe('托盘菜单', () => {
   const s = stringsFor('zh-CN')
   const labels = (items: ReturnType<typeof trayItems>) => items.map((i) => (i === 'separator' ? '—' : `${i.label}${i.enabled ? '' : '（不可点）'}`))
+  const profile = (name: string) => resolveProfile(name, '/Users/someone')
 
   test('运行中：状态行带主机和端口，可在浏览器打开', () => {
-    assert.deepEqual(labels(trayItems('running', 'http://127.0.0.1:8780', defaultProfile, s)), [
+    assert.deepEqual(labels(trayItems('running', 'http://127.0.0.1:8780', profile(defaultProfile), s)), [
       '运行中 · 127.0.0.1:8780（不可点）',
       '配置：默认（不可点）',
       '—',
@@ -193,10 +236,20 @@ describe('托盘菜单', () => {
   })
 
   test('启动中不能在浏览器打开、不能重启；第二行是当前配置', () => {
-    const items = labels(trayItems('starting', undefined, 'try', s))
+    const items = labels(trayItems('starting', undefined, profile('try'), s))
     assert.deepEqual(items.slice(0, 2), ['正在启动…（不可点）', '配置：try（不可点）'])
     assert.equal(items[4], '在默认浏览器打开（不可点）')
     assert.equal(items[8], '重启服务（不可点）')
+  })
+
+  test('desktop.json 指定了目录时，配置行跟上实际用的路径', () => {
+    const migrated = resolveProfile(defaultProfile, '/Users/someone', { workRoot: '/Users/Shared/loop-now' })
+    assert.equal(labels(trayItems('running', 'http://127.0.0.1:8780', migrated, s))[1], '配置：默认 · 工作根 /Users/Shared/loop-now（不可点）')
+    const all = resolveProfile('try', '/Users/someone', { contextDir: '/Volumes/c', dataDir: '/Volumes/d', workRoot: '/Volumes/w' })
+    assert.equal(
+      labels(trayItems('running', 'http://127.0.0.1:8780', all, stringsFor('en-US')))[1],
+      'Profile: try · work root /Volumes/w · data /Volumes/d · context /Volumes/c（不可点）',
+    )
   })
 
   test('多次崩溃停下后可以手动重启', () => {
@@ -213,7 +266,8 @@ describe('托盘菜单', () => {
     const en = stringsFor('en-US')
     assert.equal(stringsFor('zh-Hans-CN'), s)
     assert.deepEqual(Object.keys(en.tray), Object.keys(s.tray))
-    assert.deepEqual(labels(trayItems('degraded', 'http://127.0.0.1:9000', defaultProfile, en)).slice(0, 2), ['Database unavailable · 127.0.0.1:9000（不可点）', 'Profile: default（不可点）'])
+    assert.deepEqual(labels(trayItems('degraded', 'http://127.0.0.1:9000', profile(defaultProfile), en)).slice(0, 2), ['Database unavailable · 127.0.0.1:9000（不可点）', 'Profile: default（不可点）'])
+    assert.deepEqual(Object.keys(en.tray.dirs), Object.keys(s.tray.dirs))
   })
 })
 
