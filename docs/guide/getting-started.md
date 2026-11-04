@@ -14,11 +14,44 @@ One DMG carries the server, the console, Node and Pi; nothing else is required.
 2. First launch: the package is not yet notarized by Apple, so macOS says it cannot verify the developer. Open System Settings › Privacy & Security, find the Security section and click "Open Anyway"; the prompt does not return.
 3. A Loop Now icon appears in the menu bar and the window shows the console. Closing the window keeps the server and the agents running in the background; choose "Quit" from the menu bar icon to stop everything.
 
-Where the data lives: the database and daily backups are in `~/Library/Application Support/Loop Now/default/data`, agent workspaces in `/Users/Shared/loop-now-desktop/default`, logs in `~/Library/Logs/Loop Now/default`. The desktop app never touches the source installation's `~/.loop_now` or `/Users/Shared/loop-now`, so both can coexist. To try it with a separate data set, start it with a profile: `open -a "Loop Now" --args --profile=trial`.
+Where the data lives: the database and daily backups are in `~/Library/Application Support/Loop Now/default/data`, agent workspaces in `/Users/Shared/loop-now-desktop/default`, logs in `~/Library/Logs/Loop Now/default`. By default the desktop app never touches the source installation's `~/.loop_now` or `/Users/Shared/loop-now`, so both can coexist; to take a source installation over, see [below](#moving-to-the-desktop-app). To try it with a separate data set, start it with a profile: `open -a "Loop Now" --args --profile=trial`.
 
 Updating: quit Loop Now, replace the app in Applications with the new DMG's copy and open it again; data is kept. "Check for updates" in the menu bar announces new versions and opens the download page; automatic installation arrives once the app is signed and notarized.
 
 Agents in the desktop app run on the bundled Pi 1.4.0 and Node 24.21; model accounts, CLI accounts and plugins are configured in the console exactly as in a source installation. External identities and `loopctl` need the external TLS port, which the desktop app cannot open yet.
+
+### Moving over from a source installation {#moving-to-the-desktop-app}
+
+The desktop app can take over a source installation's data and keep using its work root, so agent workspaces and sessions stay where they are.
+
+1. Stop the source installation's server and quit Loop Now (menu bar icon › Quit). The two must not run on the same directories at the same time.
+2. If you have opened the desktop app before, it already has a database, and the import does not write over one. Move it aside:
+
+   ```sh
+   mv "$HOME/Library/Application Support/Loop Now/default/data" "$HOME/Library/Application Support/Loop Now/default/data.before-import"
+   ```
+
+3. Import the old database into the desktop app's data directory with `loop-server` from the darwin-arm64 [server release bundle](#server-release-bundle-linux-macos) of the same version. Bring the old database to the last PostgreSQL migration first; v0.1.0 is not there yet (see [Moving from a PostgreSQL-based release](#moving-from-a-postgresql-based-release), step 1):
+
+   ```sh
+   cd loop-now-<version>-darwin-arm64
+   LOOP_NOW_DATA_DIR="$HOME/Library/Application Support/Loop Now/default/data" \
+   LOOP_NOW_DATABASE_URL='<old database URL>' \
+   ./loop-server import-postgres
+   ```
+
+4. In `~/Library/Application Support/Loop Now/desktop.json`, give the default profile the source installation's work root and context directory: its `LOOP_NOW_WORK_ROOT` and `LOOP_NOW_CONTEXT_DIR`, shown here with their defaults. Without `contextDir`, the project and global context folders would come up empty. Paths must be absolute; if the file already exists, add the `profiles` entry to it instead of replacing it:
+
+   ```sh
+   mkdir -p "$HOME/Library/Application Support/Loop Now"
+   cat > "$HOME/Library/Application Support/Loop Now/desktop.json" <<EOF
+   {"profile": "default", "profiles": {"default": {"workRoot": "/Users/Shared/loop-now", "contextDir": "$HOME/.loop_now"}}}
+   EOF
+   ```
+
+5. Open Loop Now. The profile line in the menu bar icon shows the directories in use, marked where desktop.json set them; the work root should be `/Users/Shared/loop-now`.
+
+The import leaves the old database unchanged. A source installation already on v0.2.0 or later keeps its data in SQLite and needs no import: skip steps 2 and 3 and also set `dataDir` to its data directory (`$HOME/.loop_now` by default).
 
 Continue with [Give your first agent a job](#give-your-first-agent-a-job).
 
