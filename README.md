@@ -233,7 +233,7 @@ export LOOP_NOW_LOOPCTL_DIST_DIR="$PWD/.local-build/loopctl-dist"
 bin/loop-server
 ```
 
-Startup checks dependencies, applies pending database migrations, and creates the default organization and project. The API listens on `127.0.0.1:8780`. A data directory serves one server at a time; when updating, preserve the data directory and the working directory. To move an installation from a PostgreSQL-based release, start that release once more so its migrations finish, stop it, then run `loop-server import-postgres` with `LOOP_NOW_DATABASE_URL` pointing at the old database; it copies everything into a new database in the data directory.
+Startup checks dependencies, applies pending database migrations, and creates the default organization and project. The API listens on `127.0.0.1:8780`. A data directory serves one server at a time; when updating, preserve the data directory and the working directory. To move an installation from a PostgreSQL-based release (up to v0.1.0), first build and start `647fe00`, the last PostgreSQL-based commit, once so the old database reaches its last migration, stop it, then run `loop-server import-postgres` with `LOOP_NOW_DATABASE_URL` pointing at the old database; it copies everything into a new database in the data directory.
 
 Plugins need the Node plugin host, built from `plugins/` (Node 24.21.0). The server runs it only when `LOOP_NOW_PLUGIN_HOST_ENTRY` is set, and offers the official plugins as the `builtin` install source when `LOOP_NOW_PLUGIN_OFFICIAL_DIR` is set:
 
