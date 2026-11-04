@@ -82,7 +82,7 @@
 - `configSchema` 由平台渲染成表单；`x-secret` 字段只写不回显；`x-scope: project` 字段在项目启用时可覆盖，其余为全局值。
 - `mcpServers` 的条目格式与 Pi `mcp.json` 完全一致：带非空 `command` 的是 stdio 条目（`args`、`env`、`cwd`），带 `http`/`https` `url` 的是 streamable HTTP 条目（`headers`、`oauth`）；`type` 可省，只能是 `stdio`、`http` 或 `streamable-http`，`sse` 拒绝（Pi 不支持）。两者都有又没写 `type` 时按 `url`（与 Pi 相同）。平台只查这几项，其余字段原样交给 Pi。`env` 与 `headers` 的值可用 `${...}` 引用环境变量；平台在启动 Pi 前把所有已授权插件的条目合并写入该 Agent 的 Pi 目录 `mcp.json`，并给 Pi 加 `-e builtin:mcp`（因为 `--no-extensions` 会同时关掉内置 MCP）。`command` 与 `args` 里的相对路径以插件安装目录为基准；占位符替换见 §2.1。
 - `bin` 列出的目录在启动 Pi 前加入该 Agent 的 PATH。
-- `accounts` 声明账号种类；账号由人在项目里添加，按 Agent 授权；授权后以环境变量注入该 Agent 的 Pi 和 MCP 进程，变量名 `LOOP_NOW_ACCOUNT_<KIND>_<FIELD>`（多账号时为 JSON 数组 `LOOP_NOW_ACCOUNTS_<KIND>`），同时平台半边可用 `api.accounts.list(projectId, kind)` 读取。
+- `accounts` 声明账号种类，`fields` 是账号字段的 JSON Schema：顶层字段加 `"x-secret": true` 的与配置的 secret 字段一样只写不回显（控制台只显示是否已填），`x-scope` 只对 `configSchema` 有效；账号由人在项目里添加，按 Agent 授权；授权后以环境变量注入该 Agent 的 Pi 和 MCP 进程，变量名 `LOOP_NOW_ACCOUNT_<KIND>_<FIELD>`（多账号时为 JSON 数组 `LOOP_NOW_ACCOUNTS_<KIND>`），同时平台半边可用 `api.accounts.list(projectId, kind)` 读取。
 - `minPlatformVersion` 按平台的发布版本比较（形如 `2026.11`），不满足时拒绝安装。
 - 安装目录为 `<work root>/platform/plugins/<id>/<version>/`，数据目录为 `<work root>/platform/plugins/<id>/data/`（跨版本保留，卸载时询问是否删除）。两者分别以环境变量 `LOOP_NOW_PLUGIN_ROOT`、`LOOP_NOW_PLUGIN_DATA` 提供给宿主和 Pi。
 - 依赖安装：npm 与 git 来源在安装时执行 `npm ci --ignore-scripts --omit=dev`（无锁文件则 `npm install --ignore-scripts --omit=dev`）；本地目录来源不安装不修改，依赖由作者负责（与 Pi 一致）。

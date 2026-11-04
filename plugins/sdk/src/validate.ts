@@ -258,7 +258,7 @@ export function validatePlugin(dir: string, options: ValidateOptions = {}): Vali
     if (!isObject(lnObj.configSchema)) error('loopNow.configSchema', 'loopNow.configSchema 须是对象')
     else {
       if (lnObj.configSchema.type !== undefined && lnObj.configSchema.type !== 'object') error('loopNow.configSchema.type', 'loopNow.configSchema 的 type 须为 object')
-      checkSchema(lnObj.configSchema, 'loopNow.configSchema', true, error, warn)
+      checkSchema(lnObj.configSchema, 'loopNow.configSchema', { secret: true, scope: true }, error, warn)
     }
   }
 
@@ -273,7 +273,7 @@ export function validatePlugin(dir: string, options: ValidateOptions = {}): Vali
     }
     kinds.add(a.kind)
     if (!isObject(a.fields)) error(`${p}.fields`, `loopNow.accounts 的 ${a.kind} 缺少 fields`)
-    else checkSchema(a.fields, `${p}.fields`, false, error, warn)
+    else checkSchema(a.fields, `${p}.fields`, { secret: true, scope: false }, error, warn)
   })
 
   const actionIds = new Set<string>()
@@ -287,7 +287,7 @@ export function validatePlugin(dir: string, options: ValidateOptions = {}): Vali
     if (a.where.some((w) => !WHERE.includes(w))) error(`${p}.where`, `loopNow.actions 的 where 只能是 ${WHERE.join('、')}`)
     if (a.fields !== undefined) {
       if (!isObject(a.fields)) error(`${p}.fields`, `loopNow.actions 的 ${a.id} fields 须是对象`)
-      else checkSchema(a.fields, `${p}.fields`, false, error, warn)
+      else checkSchema(a.fields, `${p}.fields`, { secret: false, scope: false }, error, warn)
     }
   })
   const channelIds: string[] = []
@@ -367,11 +367,12 @@ function checkPath(root: string, rel: string, field: string, allowDir: boolean, 
   return true
 }
 
-// checkSchema 做结构检查：type、properties、required、items、enum 的形状，以及 x-secret 与 x-scope 只用在顶层字段。
+// checkSchema 做结构检查：type、properties、required、items、enum 的形状，以及 x-secret 与 x-scope 只用在生效的位置：
+// top 说明这份 Schema 的顶层字段上哪个生效（服务端对配置与账号字段的顶层认 x-secret，只对配置的顶层认 x-scope），其余位置给提醒。
 function checkSchema(
   schema: Json,
   at: string,
-  top: boolean,
+  top: { secret: boolean; scope: boolean },
   error: (p: string, m: string) => void,
   warn: (p: string, m: string) => void,
 ): void {
@@ -398,12 +399,12 @@ function checkSchema(
           if (!isObject(v)) continue
           if (v['x-secret'] !== undefined) {
             if (typeof v['x-secret'] !== 'boolean') error(`${fp}.x-secret`, 'x-secret 须是布尔值')
-            else if (depth > 0 || !top) warn(`${fp}.x-secret`, 'x-secret 只对配置的顶层字段生效')
+            else if (depth > 0 || !top.secret) warn(`${fp}.x-secret`, 'x-secret 只对配置与账号字段的顶层生效')
             else if (v['x-secret'] && v.type !== undefined && v.type !== 'string') error(`${fp}.x-secret`, 'x-secret 字段的 type 须为 string')
           }
           if (v['x-scope'] !== undefined) {
             if (v['x-scope'] !== 'project') error(`${fp}.x-scope`, 'x-scope 只能是 "project"')
-            else if (depth > 0 || !top) warn(`${fp}.x-scope`, 'x-scope 只对配置的顶层字段生效')
+            else if (depth > 0 || !top.scope) warn(`${fp}.x-scope`, 'x-scope 只对配置的顶层字段生效')
           }
         }
         if (strings(s.required)) {
