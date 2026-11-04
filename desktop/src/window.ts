@@ -107,6 +107,10 @@ export class MainWindow {
       minHeight: 600,
       show: false,
       title: this.o.profile ? `Loop Now · ${this.o.profile}` : 'Loop Now',
+      // 不要系统标题栏：页面铺到窗口顶部，四角由系统圆角裁切。红绿灯放在页面顶部 48px 那条拖动区的正中，
+      // 与控制台左侧栏的标志左对齐（web/src/app/Sidebar.tsx、static/status.html）。
+      titleBarStyle: 'hiddenInset',
+      trafficLightPosition: { x: 18, y: 16 },
       backgroundColor: '#FBF9F4',
       webPreferences: {
         contextIsolation: true,

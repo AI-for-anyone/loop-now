@@ -6,9 +6,10 @@ import { useProjects } from '@/api/queries'
 import { NavIcon } from '@/components/NavIcon'
 import { Toasts } from '@/components/Toasts'
 import { useInboxLive } from '@/features/inbox/useInboxLive'
-import { useDesktopNavigation } from '@/features/desktop/desktop'
+import { inDesktopWindow, useDesktopNavigation } from '@/features/desktop/desktop'
 import { t } from '@/i18n'
 import { GLOBAL, lastScope, urlScope, type ResolvedShellScope } from '@/lib/scope'
+import { cn } from '@/lib/utils'
 import { ConnectionBanner } from './ConnectionBanner'
 import { Sidebar } from './Sidebar'
 
@@ -38,6 +39,7 @@ const wide = '(min-width: 56.3125rem)'
 // 控制台的外框：左侧栏加主区。左侧栏的范围来自地址（项目页与概览）；全局页面不带范围，沿用之前的范围，
 // 所以从项目里打开插件市场、全局设置等不会丢掉当前项目。宽度 ≤ 900 时左侧栏收进抽屉，顶部换成一条窄的蓝色栏。
 // 宽度 ≥ 1024 时外框固定为视口高度，各栏在自己的区域内滚动；更窄时整页一起滚动，左侧栏贴在视口里。
+// 在桌面壳的窗口里，窄屏顶部的蓝色栏也用来拖动窗口，菜单按钮让到系统的红绿灯按钮右边。
 export function AppLayout() {
   const location = useLocation()
   const projects = useProjects()
@@ -113,7 +115,12 @@ export function AppLayout() {
         </DialogPrimitive.Portal>
       </DialogPrimitive.Root>
       <div className="flex min-w-0 flex-1 flex-col lg:min-h-0">
-        <header className="riso-halftone sticky top-0 z-30 flex h-12 shrink-0 items-center gap-3 bg-riso-blue px-4 text-white nav:hidden">
+        <header
+          className={cn(
+            'riso-halftone sticky top-0 z-30 flex h-12 shrink-0 items-center gap-3 bg-riso-blue px-4 text-white nav:hidden',
+            inDesktopWindow() && 'window-drag pl-[84px]',
+          )}
+        >
           <button
             type="button"
             aria-label={text.menu}
