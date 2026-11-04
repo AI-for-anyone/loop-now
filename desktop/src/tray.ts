@@ -1,6 +1,6 @@
 import { app, Menu, Tray, nativeImage } from 'electron'
 import { join } from 'node:path'
-import { defaultProfile } from './profile'
+import { defaultProfile, overridableDirs, type Profile } from './profile'
 import type { ServerState } from './server'
 import { strings, type Strings } from './strings'
 
@@ -15,14 +15,18 @@ export function trayStatus(state: ServerState, url: string | undefined, s: Strin
 }
 
 // 当前配置的名字；默认配置显示成"默认"。
-const profileName = (profile: string | undefined, s: Strings) => (profile === undefined || profile === defaultProfile ? s.tray.defaultProfile : profile)
+const profileName = (profile: Profile | undefined, s: Strings) => (profile === undefined || profile.label === defaultProfile ? s.tray.defaultProfile : profile.label)
+
+// 配置行：配置名；desktop.json 为它指定了目录时，后面跟上实际用的路径。
+const profileLine = (profile: Profile | undefined, s: Strings) =>
+  [s.tray.profile(profileName(profile, s)), ...overridableDirs.flatMap((key) => (profile?.overrides[key] ? [s.tray.dirs[key](profile[key])] : []))].join(' · ')
 
 // 菜单栏图标的菜单：前两行是状态与当前配置（不可点），有新版本时下面多一项去下载页，再下面是打开窗口、在浏览器打开、日志、
 // 安装命令行工具（只在打包后的 app 里）、重启与退出。
-export function trayItems(state: ServerState, url: string | undefined, profile: string | undefined, s: Strings, packaged = true, update?: string): TrayItem[] {
+export function trayItems(state: ServerState, url: string | undefined, profile: Profile | undefined, s: Strings, packaged = true, update?: string): TrayItem[] {
   return [
     { label: trayStatus(state, url, s), enabled: false },
-    { label: s.tray.profile(profileName(profile, s)), enabled: false },
+    { label: profileLine(profile, s), enabled: false },
     ...(update ? [{ label: s.tray.update(update), enabled: true, action: 'update' as const }] : []),
     'separator',
     { label: s.tray.open, enabled: true, action: 'open' },
@@ -41,7 +45,7 @@ export class StatusTray {
 
   constructor(
     private readonly actions: Record<TrayAction, () => void>,
-    private readonly profile: string | undefined,
+    private readonly profile: Profile | undefined,
     // 检查到的新版本号；没有时为空。
     private readonly newVersion: () => string | undefined,
   ) {

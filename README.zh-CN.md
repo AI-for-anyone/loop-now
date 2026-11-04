@@ -126,7 +126,7 @@ export default function register(api: PluginAPI) {
 2. 第一次打开：安装包目前没有 Apple 公证，macOS 会提示无法验证开发者。到"系统设置 › 隐私与安全性"，在"安全性"一栏点"仍要打开"，之后不再提示。
 3. 启动后菜单栏出现 Loop Now 图标，窗口里就是控制台。关掉窗口，服务端和 Agent 仍在后台运行；要彻底停止，从菜单栏图标选"退出"。
 
-数据在哪：数据库和每日备份在 `~/Library/Application Support/Loop Now/default/data`，Agent 工作区在 `/Users/Shared/loop-now-desktop/default`，日志在 `~/Library/Logs/Loop Now/default`。桌面版不使用源码安装的 `~/.loop_now` 和 `/Users/Shared/loop-now`，两种安装可以并存。要用一套独立的数据试用，带参数启动：`open -a "Loop Now" --args --profile=试用`。
+数据在哪：数据库和每日备份在 `~/Library/Application Support/Loop Now/default/data`，Agent 工作区在 `/Users/Shared/loop-now-desktop/default`，日志在 `~/Library/Logs/Loop Now/default`。桌面版默认不使用源码安装的 `~/.loop_now` 和 `/Users/Shared/loop-now`，两种安装可以并存。要用一套独立的数据试用，带参数启动：`open -a "Loop Now" --args --profile=trial`。从源码安装迁移过来、想沿用原来的工作根：先停掉源码安装的服务端并退出 Loop Now，在 `~/Library/Application Support/Loop Now/desktop.json` 里写上 `{"profiles": {"default": {"workRoot": "/Users/Shared/loop-now"}}}`（`dataDir`、`contextDir` 也可以这样指定，都写绝对路径），再打开；菜单栏图标里的配置一行会显示实际用的路径。
 
 更新：退出 Loop Now，用新的 DMG 替换"应用程序"里的 app，再打开，数据保留。菜单栏的"检查更新"会提示新版本并打开下载页；签名公证完成后才会改为自动安装。
 

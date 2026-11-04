@@ -16,6 +16,12 @@ const zhCN = {
   tray: {
     profile: (name: string) => `配置：${name}`,
     defaultProfile: '默认',
+    // desktop.json 指定的目录，跟在配置行后面。
+    dirs: {
+      workRoot: (path: string) => `工作根 ${path}`,
+      dataDir: (path: string) => `数据目录 ${path}`,
+      contextDir: (path: string) => `上下文目录 ${path}`,
+    },
     open: '打开窗口',
     browser: '在默认浏览器打开',
     logs: '查看日志',
@@ -69,7 +75,7 @@ const zhCN = {
     noServerBody: '开发模式下用 LOOP_NOW_DESKTOP_SERVER 指向 loop-server。',
     noProfileTitle: '开发模式需要选一个配置',
     noProfileBody: '用 --profile=<名字或临时目录> 或 LOOP_NOW_DESKTOP_PROFILE 启动，免得和装好的 Loop Now 共用默认配置。',
-    badProfileTitle: '配置名不可用',
+    badProfileTitle: '配置不可用',
     retry: '重试',
     logs: '打开日志',
   },
@@ -89,6 +95,11 @@ const enUS: typeof zhCN = {
   tray: {
     profile: (name) => `Profile: ${name}`,
     defaultProfile: 'default',
+    dirs: {
+      workRoot: (path) => `work root ${path}`,
+      dataDir: (path) => `data ${path}`,
+      contextDir: (path) => `context ${path}`,
+    },
     open: 'Open Window',
     browser: 'Open in Browser',
     logs: 'Show Logs',
@@ -142,7 +153,7 @@ const enUS: typeof zhCN = {
     noServerBody: 'In development, point LOOP_NOW_DESKTOP_SERVER at loop-server.',
     noProfileTitle: 'Development needs a profile',
     noProfileBody: 'Start with --profile=<name or temporary directory> or LOOP_NOW_DESKTOP_PROFILE so the installed Loop Now keeps its default profile to itself.',
-    badProfileTitle: 'Unusable profile name',
+    badProfileTitle: 'Unusable profile',
     retry: 'Try Again',
     logs: 'Open Logs',
   },
