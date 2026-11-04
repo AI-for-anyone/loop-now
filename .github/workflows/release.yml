@@ -1,7 +1,8 @@
 name: release
 
 # 发布构建：每个平台在对应架构的机器上运行 scripts/release/build.sh（Pi 的依赖要在目标架构上安装），
-# 用产物实际启动一次，再把压缩包与校验和作为 artifact 上传。不签名、不公证，也不创建 GitHub Release。
+# 用产物实际启动一次，再把压缩包与校验和作为 artifact 上传。macOS arm64 另把服务端发行包装进桌面壳，出 DMG 与更新用的 zip，
+# 只做 ad-hoc 签名。都不公证，也不创建 GitHub Release。
 on:
   workflow_dispatch:
     inputs:
@@ -72,3 +73,60 @@ jobs:
         with:
           name: SHA256SUMS
           path: dist/SHA256SUMS
+
+  # 桌面版（macOS arm64）：把上面 darwin/arm64 的服务端发行包整个放进 app 的 Resources/server，
+  # 出 DMG、更新用的 zip、两者的 blockmap 与 dev-mac.yml（electron-updater 的 dev 通道）。x64 以后再加。
+  desktop-mac:
+    name: desktop (darwin/arm64)
+    needs: build
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: version
+        id: version
+        env:
+          INPUT: ${{ inputs.version }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          v="${INPUT:-${TAG#v}}"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "server=loop-now-$v-darwin-arm64" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.version.outputs.server }}
+          path: ${{ runner.temp }}/server
+      - name: unpack the server bundle
+        env:
+          SERVER: ${{ steps.version.outputs.server }}
+        run: |
+          cd "$RUNNER_TEMP/server"
+          shasum -a 256 -c "$SERVER.tar.gz.sha256"
+          tar -xzf "$SERVER.tar.gz"
+          echo "LOOP_NOW_DESKTOP_BUNDLE=$RUNNER_TEMP/server/$SERVER" >> "$GITHUB_ENV"
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+      # 版本号以 tag（或手动输入）为准，打包前写进 package.json 与 lock；DMG、zip 的文件名和 dev-mac.yml 都从这里取。
+      - name: set version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+      - run: npm run dist:mac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: loop-now-desktop-${{ steps.version.outputs.version }}-mac-arm64
+          path: |
+            .local-build/desktop/*.dmg
+            .local-build/desktop/*.zip
+            .local-build/desktop/*.blockmap
+            .local-build/desktop/dev-mac.yml
+          if-no-files-found: error
