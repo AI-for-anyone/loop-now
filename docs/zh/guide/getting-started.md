@@ -14,11 +14,44 @@ Loop Now 面向本地单实例。控制台没有登录功能，应通过本机�
 2. 第一次打开：安装包目前没有 Apple 公证，macOS 会提示无法验证开发者。到"系统设置 › 隐私与安全性"，在"安全性"一栏点"仍要打开"，之后不再提示。
 3. 启动后菜单栏出现 Loop Now 图标，窗口里就是控制台。关掉窗口，服务端和 Agent 仍在后台运行；要彻底停止，从菜单栏图标选"退出"。
 
-数据在哪：数据库和每日备份在 `~/Library/Application Support/Loop Now/default/data`，Agent 工作区在 `/Users/Shared/loop-now-desktop/default`，日志在 `~/Library/Logs/Loop Now/default`。桌面版不使用源码安装的 `~/.loop_now` 和 `/Users/Shared/loop-now`，两种安装可以并存。要用一套独立的数据试用，带参数启动：`open -a "Loop Now" --args --profile=试用`。
+数据在哪：数据库和每日备份在 `~/Library/Application Support/Loop Now/default/data`，Agent 工作区在 `/Users/Shared/loop-now-desktop/default`，日志在 `~/Library/Logs/Loop Now/default`。桌面版默认不使用源码安装的 `~/.loop_now` 和 `/Users/Shared/loop-now`，两种安装可以并存；要接过源码安装，见[下文](#moving-to-the-desktop-app)。要用一套独立的数据试用，带参数启动：`open -a "Loop Now" --args --profile=trial`。
 
 更新：退出 Loop Now，用新的 DMG 替换"应用程序"里的 app，再打开，数据保留。菜单栏的"检查更新"会提示新版本并打开下载页；签名公证完成后才会改为自动安装。
 
 桌面版里的 Agent 用随包的 Pi 1.4.0 和 Node 24.21；模型账号、CLI 账号、插件都在控制台里配置，和源码安装相同。外部身份和 `loopctl` 需要对外 TLS 端口，桌面版目前还不能开启。
+
+### 从源码安装迁移到桌面版 {#moving-to-the-desktop-app}
+
+桌面版可以接过源码安装的数据并沿用它的工作根，Agent 的工作区和会话都留在原处。
+
+1. 停掉源码安装的服务端，退出 Loop Now（菜单栏图标 › 退出）。两者不能同时在同一套目录上运行。
+2. 如果之前打开过桌面版，它已经有了自己的库，导入不会覆盖已有的库。先把它挪开：
+
+   ```sh
+   mv "$HOME/Library/Application Support/Loop Now/default/data" "$HOME/Library/Application Support/Loop Now/default/data.before-import"
+   ```
+
+3. 用同一版本 darwin-arm64 [服务端发行包](#server-release-bundle-linux-macos)里的 `loop-server`，把旧库导入桌面版的数据目录。导入前旧库要先迁移到 PostgreSQL 版的最后一个迁移，v0.1.0 还没有到（见[从基于 PostgreSQL 的版本迁移](#moving-from-a-postgresql-based-release)第 1 步）：
+
+   ```sh
+   cd loop-now-<版本>-darwin-arm64
+   LOOP_NOW_DATA_DIR="$HOME/Library/Application Support/Loop Now/default/data" \
+   LOOP_NOW_DATABASE_URL='<旧库地址>' \
+   ./loop-server import-postgres
+   ```
+
+4. 在 `~/Library/Application Support/Loop Now/desktop.json` 里给默认配置指定源码安装原来的工作根和上下文目录，也就是它的 `LOOP_NOW_WORK_ROOT` 和 `LOOP_NOW_CONTEXT_DIR`（下面写的是默认值）。不指定 `contextDir`，项目与全局上下文文件夹会是空的。路径要写绝对路径；文件已经存在时，把 `profiles` 一项加进去，不要整个覆盖：
+
+   ```sh
+   mkdir -p "$HOME/Library/Application Support/Loop Now"
+   cat > "$HOME/Library/Application Support/Loop Now/desktop.json" <<EOF
+   {"profile": "default", "profiles": {"default": {"workRoot": "/Users/Shared/loop-now", "contextDir": "$HOME/.loop_now"}}}
+   EOF
+   ```
+
+5. 打开 Loop Now。菜单栏图标里的配置一行会显示实际用的目录，并标出哪些由 desktop.json 指定；工作根应是 `/Users/Shared/loop-now`。
+
+导入不会改动旧库。源码安装如果已经是 v0.2.0 或更新的版本，数据本来就在 SQLite 里，不需要导入：跳过第 2、3 步，同时把 `dataDir` 指到它的数据目录（默认 `$HOME/.loop_now`）。
 
 接下来看[给第一个 Agent 派活](#give-your-first-agent-a-job)。
 
