@@ -58,7 +58,7 @@ describe('项目凭证本地表单生命周期（尚未接HTTP）', () => {
     await user.click(screen.getByRole('button', { name: '取消' })); await user.click(screen.getByRole('button', { name: '重新打开' }))
     expect(screen.getByLabelText('API Key')).toHaveValue('')
     await user.type(screen.getByLabelText('账号名称'), '账号A'); await user.type(screen.getByLabelText('API Key'), 'success-secret')
-    await user.dblClick(screen.getByRole('button', { name: '保存' }))
+    await user.dblClick(screen.getByRole('button', { name: '保存密钥' }))
     expect(save).toHaveBeenCalledOnce()
     await act(async () => finish?.())
     await user.click(screen.getByRole('button', { name: '重新打开' }))
