@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a><br />
+  <a href="https://github.com/AI-for-anyone/loop-now/releases/latest">Download the desktop app</a> ·
   <a href="#getting-started">Getting started</a> ·
   <a href="#what-you-can-do">Features</a> ·
   <a href="#built-to-extend-the-plugin-system">Plugins</a> ·
@@ -119,7 +120,22 @@ Lark user execution separately requires the pinned platform bundle described in 
 
 ## Getting started
 
-Run everything with **Docker Compose**, or install from source. macOS Apple Silicon is the primary validated environment. Some components target Linux, but equivalent full-system coverage is not yet established; the Lark user CLI runtime is currently macOS arm64 only.
+Three ways to run it: the **desktop app** (macOS, nothing to install), **Docker Compose**, or a source installation. macOS Apple Silicon is the primary validated environment. Some components target Linux, but equivalent full-system coverage is not yet established; the Lark user CLI runtime is currently macOS arm64 only.
+
+### Desktop app (macOS Apple Silicon)
+
+One DMG carries the server, the console, Node and Pi; nothing else is required.
+
+1. Download `loop-now-desktop-<version>-mac-arm64.dmg` from [Releases](https://github.com/AI-for-anyone/loop-now/releases/latest), open it and drag Loop Now into Applications.
+2. First launch: the package is not yet notarized by Apple, so macOS says it cannot verify the developer. Open System Settings › Privacy & Security, find the Security section and click "Open Anyway"; the prompt does not return.
+3. A Loop Now icon appears in the menu bar and the window shows the console. Closing the window keeps the server and the agents running in the background; choose "Quit" from the menu bar icon to stop everything.
+
+Where the data lives: the database and daily backups are in `~/Library/Application Support/Loop Now/default/data`, agent workspaces in `/Users/Shared/loop-now-desktop/default`, logs in `~/Library/Logs/Loop Now/default`. The desktop app never touches the source installation's `~/.loop_now` or `/Users/Shared/loop-now`, so both can coexist. To try it with a separate data set, start it with a profile: `open -a "Loop Now" --args --profile=trial`.
+
+Updating: quit Loop Now, replace the app in Applications with the new DMG's copy and open it again; data is kept. "Check for updates" in the menu bar announces new versions and opens the download page; automatic installation arrives once the app is signed and notarized.
+
+Agents in the desktop app run on the bundled Pi 1.4.0 and Node 24.21; model accounts, CLI accounts and plugins are configured in the console exactly as in a source installation. External identities and `loopctl` need the external TLS port, which the desktop app cannot open yet.
+
 
 ### Docker Compose (local all-in-one)
 
