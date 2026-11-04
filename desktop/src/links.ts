@@ -14,3 +14,14 @@ export function classifyNavigation(url: string, appOrigin?: string): LinkAction 
   if (appOrigin !== undefined && parsed.origin === appOrigin) return 'app'
   return externalProtocols.has(parsed.protocol) ? 'external' : 'deny'
 }
+
+// 授权弹窗只交给系统浏览器一次：同一次导航会先后触发 did-start-navigation 与 will-navigate，
+// 第一个不是 about:blank 的地址交出去，之后这个弹窗上的导航都不再交（它正被关掉）。
+export function handOffOnce(handOff: (url: string) => void): (url: string) => void {
+  let done = false
+  return (url) => {
+    if (done || url === 'about:blank') return
+    done = true
+    handOff(url)
+  }
+}

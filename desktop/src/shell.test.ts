@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { after, describe, test } from 'node:test'
 import { parseBadge, parseNotification } from './bridge'
 import { installScript, linkState } from './cli'
-import { classifyNavigation } from './links'
+import { classifyNavigation, handOffOnce } from './links'
 import { RotatingLog } from './log'
 import { choosePort, portFree, portOf } from './port'
 import { gitUsable } from './git'
@@ -95,6 +95,17 @@ describe('导航', () => {
 
   test('新窗口不传源，同源页面也交给系统浏览器', () => {
     assert.equal(classifyNavigation('http://127.0.0.1:8780/projects'), 'external')
+  })
+
+  test('授权弹窗只交一次：同一次导航的 did-start-navigation 与 will-navigate 只打开一个页面，about:blank 不算', () => {
+    const opened: string[] = []
+    const handOff = handOffOnce((url) => opened.push(url))
+    const url = 'https://auth.openai.com/oauth/authorize?state=x'
+    handOff('about:blank')
+    handOff(url)
+    handOff(url)
+    handOff('https://auth.openai.com/log-in')
+    assert.deepEqual(opened, [url])
   })
 })
 
