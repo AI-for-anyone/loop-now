@@ -1,6 +1,6 @@
 # Getting started
 
-Run Loop Now as the **desktop app** (macOS Apple Silicon, nothing else to install) or from a **source installation**; the [README](https://github.com/AI-for-anyone/loop-now#getting-started) also covers Docker Compose. macOS Apple Silicon is the primary validated environment. Some components target Linux, but equivalent full-system coverage is not yet established; the Lark user CLI runtime is currently macOS arm64 only.
+Run Loop Now as the **desktop app** (macOS Apple Silicon, nothing else to install), from a **server release bundle** (Linux and macOS), or from a **source installation**; the [README](https://github.com/AI-for-anyone/loop-now#getting-started) also covers Docker Compose. macOS Apple Silicon is the primary validated environment. Some components target Linux, but equivalent full-system coverage is not yet established; the Lark user CLI runtime is currently macOS arm64 only.
 
 ::: warning Early-stage personal edition
 Loop Now targets a single local server. The console has no login and is intended for loopback access. Model and tool providers may still receive data when you use their services.
@@ -21,6 +21,39 @@ Updating: quit Loop Now, replace the app in Applications with the new DMG's copy
 Agents in the desktop app run on the bundled Pi 1.4.0 and Node 24.21; model accounts, CLI accounts and plugins are configured in the console exactly as in a source installation. External identities and `loopctl` need the external TLS port, which the desktop app cannot open yet.
 
 Continue with [Give your first agent a job](#give-your-first-agent-a-job).
+
+## Server release bundle (Linux / macOS)
+
+Each release also carries a server bundle per platform, `loop-now-<version>-<platform>.tar.gz` for `darwin-arm64`, `darwin-amd64`, `linux-amd64` and `linux-arm64`. It holds `loop-server` with the console built in, `loopctl`, the plugin host, the official plugins, and its own Node 24.21.0 and Pi 1.4.0, so the machine needs only Git.
+
+1. Download your platform's bundle and `SHA256SUMS` from [Releases](https://github.com/AI-for-anyone/loop-now/releases/latest), then check the download:
+
+   ```sh
+   sha256sum -c --ignore-missing SHA256SUMS        # Linux
+   shasum -a 256 -c --ignore-missing SHA256SUMS    # macOS
+   ```
+
+2. Unpack it with `tar` in a terminal. On macOS, unpacking it in Finder marks the files as downloaded from the internet, and Gatekeeper then blocks the unsigned binaries.
+
+   ```sh
+   tar -xzf loop-now-<version>-<platform>.tar.gz
+   cd loop-now-<version>-<platform>
+   ```
+
+3. Set the data directory and the work root, then start the server. The work root follows the same rules as in a source installation and is created the same way ([step 2](#configure-the-server)):
+
+   ```sh
+   export LOOP_NOW_DATA_DIR="$HOME/.loop_now"
+   export LOOP_NOW_WORK_ROOT='/var/lib/loop-now'   # macOS: /Users/Shared/loop-now
+   ./loop-server
+   ```
+
+4. Open **[http://127.0.0.1:8780/](http://127.0.0.1:8780/)**. The console is served at the root of the server's port; there is no separate console process.
+
+The bundled Node and Pi are used automatically, so there is nothing else to install; variables such as `LOOP_NOW_NODE_BIN` still take precedence when set. Credentials are stored in plaintext in the data directory; protect it and its backups. To update, stop the server, unpack the new bundle and start its `loop-server` with the same `LOOP_NOW_DATA_DIR` and `LOOP_NOW_WORK_ROOT`, then delete the old directory.
+
+Continue with [Give your first agent a job](#give-your-first-agent-a-job).
+
 
 ## Source installation
 
@@ -45,7 +78,7 @@ git clone --depth 1 --branch main https://github.com/AI-for-anyone/loop-now.git
 cd loop-now
 ```
 
-### 2. Configure the server
+### 2. Configure the server {#configure-the-server}
 
 Run the following from the repository root:
 
