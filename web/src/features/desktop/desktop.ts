@@ -79,6 +79,10 @@ export async function forwardToDesktop(client: QueryClient, event: InboxEvent): 
   )
 }
 
+// 在桌面壳的窗口里：窗口没有系统标题栏（macOS 的 hiddenInset），页面铺到窗口顶部，左上角是系统的红绿灯按钮，
+// 页面顶部要留出能拖动窗口的一条（index.css 的 window-drag）。浏览器里打开控制台时不受影响。
+export const inDesktopWindow = () => window.loopNowDesktop !== undefined
+
 // 点了系统通知：桌面壳显示窗口后把地址交给页面，在控制台里跳转。
 export function useDesktopNavigation() {
   const navigate = useNavigate()

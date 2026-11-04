@@ -25,7 +25,10 @@
       }
       body {
         margin: 0;
+        box-sizing: border-box;
         min-height: 100vh;
+        /* 顶部 48px 是拖动窗口的那一条（窗口没有系统标题栏，红绿灯在这一条里），内容在它下面居中。 */
+        padding-top: 48px;
         display: grid;
         place-items: center;
         background: var(--paper);
@@ -97,12 +100,19 @@
         background: var(--blue);
         color: var(--paper);
       }
+      .titlebar {
+        position: fixed;
+        inset: 0 0 auto;
+        height: 48px;
+        -webkit-app-region: drag;
+      }
       [hidden] {
         display: none !important;
       }
     </style>
   </head>
   <body>
+    <div class="titlebar" aria-hidden="true"></div>
     <main>
       <svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
         <rect width="64" height="64" rx="15" fill="#2443B5" />

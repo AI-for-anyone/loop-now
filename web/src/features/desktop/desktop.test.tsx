@@ -11,7 +11,7 @@ import { baseHandlers } from '@/test/shell'
 import { makeTaskDetail, nodeId, taskId } from '@/test/tasks'
 import type { DesktopBridge } from './desktop'
 
-// 桌面壳的窗口里：收件箱事件交给它显示 Dock 未读数与系统通知，点通知后由它把地址交回页面。
+// 桌面壳的窗口里：收件箱事件交给它显示 Dock 未读数与系统通知，点通知后由它把地址交回页面；页面顶部留出拖动窗口的区域。
 const agent = makeAgent({ name: '审查员' })
 const question = (overrides: Partial<Schemas['InboxMessage']> = {}) =>
   summaryOf(
@@ -101,6 +101,24 @@ describe('桌面壳的通知与 Dock 未读数', () => {
     await emitInbox('inbox.message.created', { message: question({ question: { options: [], expiresAt: '2026-12-01T00:00:00Z', state: 'answered', answer: null } }), unreadTotal: 3 })
     await emitInbox('inbox.message.created', { message: summaryOf(makeInboxMessage({ from: consoleParty, to: agentParty(agent), text: '继续' })), unreadTotal: 3 })
     expect(bridge.notify).not.toHaveBeenCalled()
+  })
+
+  it('窗口没有系统标题栏：左侧栏顶部一条、窄屏的蓝色顶栏可以拖动窗口；浏览器里打开时都没有', async () => {
+    server.use(...baseHandlers([agent]))
+    const { unmount } = renderRoutes(routes, defaultAgentsPath)
+    await openInboxStream(0)
+    const nav = screen.getByRole('navigation', { name: '主导航' })
+    expect(nav.firstElementChild).toHaveClass('window-drag')
+    expect(nav.firstElementChild).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.getByRole('button', { name: '打开导航' }).closest('header')).toHaveClass('window-drag')
+    unmount()
+
+    delete window.loopNowDesktop
+    renderRoutes(routes, defaultAgentsPath)
+    await openInboxStream(0)
+    expect(screen.getByRole('navigation', { name: '主导航' }).firstElementChild).not.toHaveClass('window-drag')
+    expect(screen.getByRole('button', { name: '打开导航' }).closest('header')).not.toHaveClass('window-drag')
+    expect(document.querySelector('.window-drag')).toBeNull()
   })
 
   it('点了通知：桌面壳把地址交回页面，控制台跳过去', async () => {
