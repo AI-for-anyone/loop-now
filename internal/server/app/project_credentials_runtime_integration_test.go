@@ -71,7 +71,7 @@ func projectCredentialsRuntimeNew(t *testing.T) *projectCredentialsRuntime {
 	entry := filepath.Join(dir, "offline-helper.mjs")
 	source := `import fs from 'node:fs'; import readline from 'node:readline';
 const control=CONTROL, log=LOG;
-fs.writeSync(4, JSON.stringify({type:'ready',protocolVersion:1,expectedPiVersion:'1.1.0'})+'\n');
+fs.writeSync(4, JSON.stringify({type:'ready',protocolVersion:1,expectedPiVersion:'1.4.0'})+'\n');
 for await (const line of readline.createInterface({input:fs.createReadStream(null,{fd:3})})) {
  const c=JSON.parse(line); if(c.type!=='login'&&c.type!=='refresh') continue;
  const ctl=JSON.parse(fs.readFileSync(control,'utf8'));

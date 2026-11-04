@@ -34,7 +34,7 @@ func TestActualPiRPCUsesPGCoordinatorAcrossTwoProcessesAndLongRound(t *testing.T
 	const cli = "/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"
 	for _, path := range []string{node, cli, "/usr/bin/sandbox-exec"} {
 		if _, err := os.Stat(path); err != nil {
-			t.Skip("requires installed Pi 1.1.0, pinned Node and OS network sandbox")
+			t.Skip("requires installed Pi 1.4.0, pinned Node and OS network sandbox")
 		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

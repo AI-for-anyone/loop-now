@@ -90,7 +90,7 @@ func TestResolveWithLocalPi(t *testing.T) {
 		t.Skip("本机没有 pi")
 	}
 	r, err := Resolve(context.Background(), Options{
-		PiBin: "pi", PiVersion: "1.1.0", NodeBin: "node",
+		PiBin: "pi", PiVersion: "1.4.0", NodeBin: "node",
 		WorkRoot: filepath.Join(t.TempDir(), "root"), HomeDirs: []string{"/nonexistent-home"},
 	})
 	if err != nil {

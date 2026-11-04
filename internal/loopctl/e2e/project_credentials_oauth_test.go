@@ -35,7 +35,7 @@ func newOfflineProjectLogin(t *testing.T) *offlineProjectLogin {
  const credential={type:'oauth',access:'synthetic-project-oauth-access',refresh:'synthetic-project-oauth-refresh',expires:1893456000000,accountId:'synthetic-shared-grant'};
  let operation,done=false;
  const result=(status)=>{if(done)return;done=true;event('result:'+status);send({type:'result',id:operation.id,status,credential:status==='succeeded'?credential:undefined,code:status==='failed'?'auth_failed':undefined});};
- send({type:'ready',protocolVersion:1,expectedPiVersion:'1.1.0'});
+ send({type:'ready',protocolVersion:1,expectedPiVersion:'1.4.0'});
  readline.createInterface({input:fs.createReadStream('',{fd:3})}).on('line',line=>{
   const frame=JSON.parse(line);
   if(frame.type==='abort'){event('abort');if(operation)result('succeeded');return;}
