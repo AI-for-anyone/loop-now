@@ -333,8 +333,8 @@ func TestFakeDumpAndVersion(t *testing.T) {
 	}
 
 	out, err := exec.Command(fakepiBin, "--version").Output()
-	if err != nil || strings.TrimSpace(string(out)) != "1.1.0" {
-		t.Fatalf("默认版本应为 1.1.0：%q %v", out, err)
+	if err != nil || strings.TrimSpace(string(out)) != "1.4.0" {
+		t.Fatalf("默认版本应为 1.4.0：%q %v", out, err)
 	}
 	cmd := exec.Command(fakepiBin, "--version")
 	cmd.Env = []string{"FAKEPI_VERSION=9.9.9"}

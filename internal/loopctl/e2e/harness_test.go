@@ -44,13 +44,13 @@ type world struct {
 	appOptions func(*app.Options) // isolated dependency injection only
 }
 
-// newWorld 按服务端 app 测试的做法准备配置；本机没有 Pi 1.1.0（读取模型目录需要）时跳过。
+// newWorld 按服务端 app 测试的做法准备配置；本机没有 Pi 1.4.0（读取模型目录需要）时跳过。
 func newWorld(t *testing.T, external bool) *world {
 	t.Helper()
-	real, err := preflight.Resolve(context.Background(), preflight.Options{PiBin: "pi", PiVersion: "1.1.0", NodeBin: "node",
+	real, err := preflight.Resolve(context.Background(), preflight.Options{PiBin: "pi", PiVersion: "1.4.0", NodeBin: "node",
 		WorkRoot: filepath.Join(t.TempDir(), "probe"), HomeDirs: []string{"/nonexistent-home"}})
 	if err != nil {
-		t.Skipf("本机没有可用的 Pi 1.1.0：%v", err)
+		t.Skipf("本机没有可用的 Pi 1.4.0：%v", err)
 	}
 	dump := filepath.Join(t.TempDir(), "dump.json")
 	t.Setenv("FAKEPI_DUMP", dump)
@@ -59,7 +59,7 @@ func newWorld(t *testing.T, external bool) *world {
 		DataDir:    t.TempDir(),
 		ListenAddr: "127.0.0.1:0", AllowedHosts: []string{"localhost", "127.0.0.1", "::1"}, ConsoleOrigins: []string{"http://localhost:5173"},
 		WorkRoot: filepath.Join(t.TempDir(), "work"), DefaultOrgName: "默认组织", DefaultProjectName: "默认项目",
-		PiBin: fakepibin.Path(t), PiVersion: "1.1.0", PiMaxProcesses: 2, PiIdleTimeout: time.Minute, PiStartTimeout: 10 * time.Second,
+		PiBin: fakepibin.Path(t), PiVersion: "1.4.0", PiMaxProcesses: 2, PiIdleTimeout: time.Minute, PiStartTimeout: 10 * time.Second,
 		PiStopGrace: 2 * time.Second, AbortTimeout: 3 * time.Second, GitCloneTimeout: 30 * time.Second, CLIInstallTimeout: time.Minute,
 		NodeBin: "node", PiAIDir: real.PiAIDir, ReconcileInterval: 500 * time.Millisecond,
 		SSEKeepalive: time.Second, EventStreamMaxLen: 1000, ShutdownTimeout: 10 * time.Second,

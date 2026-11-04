@@ -34,14 +34,14 @@ func taskNodeInboxWorld(t *testing.T) *world {
 	t.Helper()
 	requirePi(t)
 	ctx := context.Background()
-	real, e := preflight.Resolve(ctx, preflight.Options{PiBin: "pi", PiVersion: "1.1.0", NodeBin: "node", WorkRoot: filepath.Join(t.TempDir(), "probe"), HomeDirs: []string{"/nonexistent-home"}})
+	real, e := preflight.Resolve(ctx, preflight.Options{PiBin: "pi", PiVersion: "1.4.0", NodeBin: "node", WorkRoot: filepath.Join(t.TempDir(), "probe"), HomeDirs: []string{"/nonexistent-home"}})
 	if e != nil {
 		t.Fatal("offline catalog preflight unavailable", e)
 	}
 	w := &world{t: t, piAIDir: real.PiAIDir, cfg: config.Config{
 		DataDir:    t.TempDir(),
 		ListenAddr: "127.0.0.1:0", AllowedHosts: []string{"localhost", "127.0.0.1", "::1"}, ConsoleOrigins: []string{"http://localhost:5173"}, DefaultOrgName: "默认组织", DefaultProjectName: "默认项目",
-		WorkRoot: filepath.Join(t.TempDir(), "work"), PiBin: fakepibin.Path(t), PiVersion: "1.1.0", PiMaxProcesses: 2, PiIdleTimeout: time.Minute, PiStartTimeout: 10 * time.Second, PiStopGrace: 2 * time.Second, AbortTimeout: 3 * time.Second, GitCloneTimeout: 30 * time.Second, CLIInstallTimeout: time.Minute,
+		WorkRoot: filepath.Join(t.TempDir(), "work"), PiBin: fakepibin.Path(t), PiVersion: "1.4.0", PiMaxProcesses: 2, PiIdleTimeout: time.Minute, PiStartTimeout: 10 * time.Second, PiStopGrace: 2 * time.Second, AbortTimeout: 3 * time.Second, GitCloneTimeout: 30 * time.Second, CLIInstallTimeout: time.Minute,
 		NodeBin: "node", PiAIDir: real.PiAIDir, ReconcileInterval: 100 * time.Millisecond, SSEKeepalive: time.Second, EventStreamMaxLen: 1000, ShutdownTimeout: 10 * time.Second,
 		TaskMaxSteps: 100, TaskMaxEdges: 300, TaskMaxVisits: 1000, TaskMaxRequest: 1 << 20, TaskMaxArtifact: 20 << 20, TaskMaxSession: 100 << 20, TaskReconcileInterval: 50 * time.Millisecond, TaskEventPoll: 10 * time.Millisecond, TaskRecordTimeout: time.Second, SleepScanInterval: 50 * time.Millisecond, SleepScanBatch: 100,
 		MaxUploadFile: 1 << 20, MaxSkillArchive: 1 << 20, MaxSkillEntries: 50, MaxCredential: 4096, MaxMessage: 1 << 16, MaxInboxMessage: 1 << 16, InboxPreviewChars: 200, InboxPageMax: 100, TextEditExtensions: []string{".md"}, TextEditMax: 1 << 16, LoopctlDistDir: loopctlfake.Dir(t),

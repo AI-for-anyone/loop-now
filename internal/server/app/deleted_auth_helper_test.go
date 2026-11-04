@@ -74,7 +74,7 @@ func nodeDeletionHelper(t *testing.T) (*modelauth.Helper, string) {
 	marker, _ := json.Marshal(root)
 	code := `import fs from 'node:fs';import readline from 'node:readline';import net from 'node:net';
  const root=` + string(marker) + `;const send=x=>fs.writeSync(4,JSON.stringify(x)+'\n');let op,server;
- send({type:'ready',protocolVersion:1,expectedPiVersion:'1.1.0'});
+ send({type:'ready',protocolVersion:1,expectedPiVersion:'1.4.0'});
  readline.createInterface({input:fs.createReadStream('',{fd:3})}).on('line',line=>{
  const f=JSON.parse(line);
  if(f.type==='login'){op=f;server=net.createServer(c=>c.end());server.listen(0,'127.0.0.1',()=>{

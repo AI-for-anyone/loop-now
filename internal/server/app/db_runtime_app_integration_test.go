@@ -70,7 +70,7 @@ func newToolsRuntimeApp(t *testing.T, options app.Options, customize func(*confi
 	root := t.TempDir()
 	dump := filepath.Join(root, "private-dump.json")
 	t.Setenv("FAKEPI_DUMP", dump)
-	probe, e := preflight.Resolve(ctx, preflight.Options{PiBin: "pi", PiVersion: "1.1.0", NodeBin: "node", WorkRoot: filepath.Join(root, "probe"), HomeDirs: []string{"/nonexistent-home"}})
+	probe, e := preflight.Resolve(ctx, preflight.Options{PiBin: "pi", PiVersion: "1.4.0", NodeBin: "node", WorkRoot: filepath.Join(root, "probe"), HomeDirs: []string{"/nonexistent-home"}})
 	if e != nil {
 		t.Fatal("fixed local catalog prerequisite unavailable")
 	}
