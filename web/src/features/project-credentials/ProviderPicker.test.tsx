@@ -151,12 +151,16 @@ describe('模型提供方选择器', () => {
     expect(screen.getByRole('radio', { name: '中国 Coding' })).not.toBeChecked()
   })
 
-  it('账号列表每一行显示提供方的名称、id 和认证方式；不在表里的 id 直接显示 id', async () => {
+  it('账号列表每一行显示提供方的名称、id、认证方式和本地格式的更新时间；不在表里的 id 直接显示 id', async () => {
     start([codexAccount, projectAccount({ provider: 'zz-new', name: '新提供方账号' })])
     const codex = (await screen.findByRole('heading', { name: 'Codex 账号' })).closest('li')!
     expect(within(codex).getByText('OpenAI Codex')).toBeInTheDocument()
     expect(within(codex).getByText('openai-codex')).toBeInTheDocument()
     expect(within(codex).getByText('登录')).toBeInTheDocument()
+    const updated = codex.querySelector('time')!
+    expect(updated).toHaveAttribute('dateTime', codexAccount.updatedAt)
+    expect(updated).toHaveTextContent(zhCN.chat.time(codexAccount.updatedAt))
+    expect(codex).not.toHaveTextContent(codexAccount.updatedAt)
     const unknown = screen.getByRole('heading', { name: '新提供方账号' }).closest('li')!
     expect(within(unknown).getAllByText('zz-new')).toHaveLength(1)
     expect(within(unknown).getByText('API 密钥')).toBeInTheDocument()
