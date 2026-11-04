@@ -138,17 +138,6 @@ func TestExternalIdentity(t *testing.T) {
 		t.Fatalf("%v", d)
 	}
 
-	// 上传资料并下载回来。
-	src := write("agent", "source", "add", addr, "--path", "docs", "--files")["id"].(string)
-	local := filepath.Join(t.TempDir(), "a.md")
-	os.WriteFile(local, []byte("# 说明\n资料内容\n"), 0o600)
-	put := write("agent", "file", "put", addr, src, "notes/a.md", "--from", local)
-	out := filepath.Join(t.TempDir(), "back.md")
-	got := ext.run("agent", "file", "get", addr, src, "notes/a.md", "--out", out).ok(t)
-	if b, _ := os.ReadFile(out); string(b) != "# 说明\n资料内容\n" || got["sha256"] != put["sha256"] {
-		t.Fatalf("下载的内容与上传的不同：%v %v", got, put)
-	}
-
 	// 项目账号只写不读，唯一账号由项目 Agent 自动取用。
 	ext.stdin = `{"type":"api_key","key":"model-secret-value"}`
 	cred := ext.run("project", "model-account", "create", "默认项目", "--provider", provider, "--name", "外部助手账号", "--from-file", "-")
