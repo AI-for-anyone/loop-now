@@ -41,6 +41,8 @@ module.exports = {
   },
   // 在 Resources/bin/loopctl 放指向当前版本 loopctl 的固定链接（托盘"安装命令行工具"用）。
   afterPack: './scripts/after-pack.js',
-  // electron-updater 读 Resources/app-update.yml 找更新：GitHub Releases 的 dev 通道（预发布）。这里只打包，不上传（--publish never）。
-  publish: { provider: 'github', owner: 'AI-for-anyone', repo: 'loop-now', channel: 'dev', releaseType: 'prerelease' },
+  // electron-updater 读 Resources/app-update.yml 找更新：GitHub Releases，正式版与预发布都看（通道的取舍见 src/updates.ts）。
+  // 不设 channel，更新信息文件就是 latest-mac.yml，预发布的 release 里也是它：electron-updater 先找 rc-mac.yml，没有就读 latest-mac.yml。
+  // 这里只打包，不上传（--publish never）；Release 由 release.yml 创建，是否预发布按 tag 定。
+  publish: { provider: 'github', owner: 'AI-for-anyone', repo: 'loop-now' },
 }

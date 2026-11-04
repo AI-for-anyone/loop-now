@@ -17,7 +17,7 @@ export const checkIntervalMs = 6 * 60 * 60_000
 
 export const releasePage = (version: string) => `https://github.com/AI-for-anyone/loop-now/releases/tag/v${version}`
 
-// 自动更新（GitHub Releases 的 dev 通道）：启动 10 秒后与每 6 小时检查一次，有新版本时由菜单栏提示去下载页，
+// 自动更新（GitHub Releases，正式版与预发布）：启动 10 秒后与每 6 小时检查一次，有新版本时由菜单栏提示去下载页，
 // 不自动下载、不自动安装——macOS 上安装更新要求 app 有正式签名，签名到位之前装不上。开发模式下不检查（由调用方决定是否 start）。
 export class UpdateChecker extends EventEmitter<{ available: [version: string] }> {
   available: string | undefined
@@ -30,9 +30,12 @@ export class UpdateChecker extends EventEmitter<{ available: [version: string] }
     super()
     updater.autoDownload = false
     updater.autoInstallOnAppQuit = false
+    // 允许预发布、不设通道：electron-updater 的 GitHub 提供方设了通道时只认预发布段等于通道名的 tag
+    // （'dev' 只认 v0.2.0-dev.N，'latest' 一个也不认），正式版 v0.2.0 和 v0.2.0-rc.N 都会被跳过。不设通道时，
+    // 已装正式版取 Releases 里最新的一个，正式版或预发布都算；已装的是预发布时通道取自它的版本号：
+    // 装的是 rc 只认 rc 的 tag，装的是 beta 或 alpha 另外也认正式版。
     updater.allowPrerelease = true
-    updater.channel = 'dev'
-    // 设置通道会顺带允许降级，这里只要更新的版本。
+    // 只要更新的版本。
     updater.allowDowngrade = false
     const log = (message?: unknown) => note(`更新：${String(message)}`)
     updater.logger = { info: log, warn: log, error: log, debug: () => undefined }
