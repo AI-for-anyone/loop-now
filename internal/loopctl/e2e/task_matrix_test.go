@@ -85,7 +85,7 @@ func TestTaskCLIMultipleTasksIsolateAgentWorkspaceAndSession(t *testing.T) {
 	defer s.stop()
 	_, manager := newTaskManager(t, s, "隔离Manager")
 	worker := s.createAgent("共享执行者")
-	// 建立常态历史和磁盘积累，任务可分叉历史但不能复制积累文件。
+	// 建立常态历史和文件夹里的文件：任务开始时复制整个 Agent 文件夹，之后各自独立，会话也不共用。
 	s.console(202, "POST", "/agents/"+worker+"/messages", map[string]any{"text": "normal baseline"})
 	s.waitIdle(worker)
 	normal, err := s.a.Store.GetAgentSession(context.Background(), uuid.MustParse(worker))
@@ -122,8 +122,8 @@ func TestTaskCLIMultipleTasksIsolateAgentWorkspaceAndSession(t *testing.T) {
 	for i, n := range nodes {
 		instances[i] = waitCLISessionPath(t, w, n.RuntimeID)
 		root := filepath.Join(w.cfg.WorkRoot, "agents", n.RuntimeID.String(), "workspace")
-		if _, e := os.Stat(filepath.Join(root, "normal-only.txt")); !os.IsNotExist(e) {
-			t.Fatal("normal accumulated file copied into task", e)
+		if b, e := os.ReadFile(filepath.Join(root, "normal-only.txt")); e != nil || string(b) != "normal" {
+			t.Fatal("task did not start from a copy of the Agent folder", e)
 		}
 	}
 	if instances[0] == instances[1] || instances[0] == normal.SessionFile || instances[1] == normal.SessionFile {
@@ -136,6 +136,9 @@ func TestTaskCLIMultipleTasksIsolateAgentWorkspaceAndSession(t *testing.T) {
 	bRoot := filepath.Join(w.cfg.WorkRoot, "agents", nodes[1].RuntimeID.String(), "workspace")
 	if _, err = os.Stat(filepath.Join(bRoot, "task-a-only.txt")); !os.IsNotExist(err) {
 		t.Fatal("task A file leaked into B")
+	}
+	if _, err = os.Stat(filepath.Join(normalRoot, "task-a-only.txt")); !os.IsNotExist(err) {
+		t.Fatal("task A file leaked into the Agent folder")
 	}
 	after, err := os.ReadFile(normal.SessionFile)
 	if err != nil || !bytes.Equal(after, baseline) {
