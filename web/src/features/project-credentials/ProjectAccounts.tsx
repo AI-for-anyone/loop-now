@@ -6,7 +6,7 @@ import { ProjectLarkUserLogin } from './ProjectLarkUserLogin'
 import { LarkAccountDetails } from './LarkAccountDetails'
 import { LocalCLIImport } from './LocalCLIImport'
 import { CLIConnectionVerification } from './CLIConnectionVerification'
-import { useId, useState, type ReactNode } from 'react'
+import { useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { Schemas } from '@/api/client'
 import { createProjectAccount, deleteProjectAccount, invalidateProjectCredentials, projectCredentialsUnsupported, readProjectAccount, renameProjectAccount, replaceProjectAccount, useCredentialImpact, useProjectAccounts } from '@/api/project-credentials'
@@ -24,6 +24,8 @@ import { ProjectLogin } from './ProjectLogin'
 import { GoogleLogin } from './GoogleLogin'
 import { GitHubLogin } from './GitHubLogin'
 import { ProjectCredentialsAvailable, useProjectCredentialsAvailable } from './project-availability'
+import { providerEntries, providerName } from './provider-catalog'
+import { AuthBadges, ProviderPicker } from './ProviderPicker'
 
 // 单次能力读取统一模型/CLI错误；已有表单在暂时不可用时保留，不转为其他凭证身份。
 export function ProjectCredentialSettings({ projectId }: { projectId: string }) {
@@ -58,16 +60,32 @@ function Accounts({ projectId, purpose, cli, initialSlot = cli ?? '' }: Accounts
   const accounts = useProjectAccounts(projectId), templates = useCliTemplates(), providers = useModelProviders(), client = useQueryClient()
   const [slot, setSlot] = useState(initialSlot), [creating, setCreating] = useState(false)
   const [retained, setRetained] = useState<Record<string, Schemas['ProjectCredentialAccount']>>({})
+  const [picking, setPicking] = useState(false), saved = useRef(false)
   const id = useId()
   const provider = providers.data?.providers.find(item => item.id === slot)
   const template = templates.data?.templates.find(item => item.name === slot)
-  const options = purpose === 'model' ? (providers.data?.providers ?? []).filter(item => item.authMethods.length > 0).map(item => ({ value: item.id, label: item.id })) : (templates.data?.templates ?? []).map(item => ({ value: item.name, label: item.name }))
+  const entries = useMemo(() => providerEntries((providers.data?.providers ?? []).filter(item => item.authMethods.length > 0)), [providers.data])
+  const entry = entries.find(item => item.options.some(option => option.id === slot))
+  const options = (templates.data?.templates ?? []).map(item => ({ value: item.name, label: item.name }))
   const live = accounts.data?.accounts.filter(account => account.purpose === purpose && (!cli || account.cli === cli)) ?? []
   // 远端删除不能把仍在编辑的秘密表单直接卸载；保留编辑拥有者，提交/GET再读安全tombstone。
   const list = [...live, ...Object.values(retained).filter(account => !live.some(item => item.id === account.id))]
   const saveNew = async (input: CredentialInput) => {
     await createProjectAccount(projectId, purpose === 'model' ? { purpose, provider: slot, name: input.name.trim(), credential: { type: 'api_key', key: input.key } } : { purpose, cli: slot, name: input.name.trim(), credential: { type: 'cli', fields: input.fields } })
+    saved.current = true
     await invalidateProjectCredentials(client, projectId)
+  }
+  // 换了一家提供方时，只能填密钥的直接打开录入表单；同一家切换地区变体不动已填的内容。
+  const pick = (next: string) => {
+    const methods = providers.data?.providers.find(item => item.id === next)?.authMethods ?? []
+    if (!entry?.options.some(option => option.id === next)) setCreating(methods.includes('api_key') && !methods.includes('oauth'))
+    setSlot(next)
+  }
+  // 模型账号的录入表单关上后回到选提供方：取消时重开面板，保存成功后收起。
+  const closeNew = () => {
+    setCreating(false)
+    if (purpose === 'model') { setSlot(''); setPicking(!saved.current) }
+    saved.current = false
   }
   return <AccountCard title={purpose === 'model' ? t.credentials.accounts.modelTitle : t.credentials.accounts.cliTitle}>
     <p className="text-[13.5px]">{purpose === 'model' ? t.credentials.accounts.modelIntro : t.credentials.accounts.cliIntro}</p>
@@ -77,17 +95,22 @@ function Accounts({ projectId, purpose, cli, initialSlot = cli ?? '' }: Accounts
     <ul className="grid min-w-0 gap-3">{list.map(account => <AccountRow key={account.id} account={account} missing={!live.some(item => item.id === account.id)} onEditing={editing => setRetained(previous => { const next = { ...previous }; if (editing) next[account.id] = account; else delete next[account.id]; return next })} template={templates.data?.templates.find(item => item.name === account.cli)} methods={providers.data?.providers.find(item => item.id === account.provider)?.authMethods ?? []} />)}</ul>
     {purpose === 'cli' && !cli && <LocalCLIImport projectId={projectId} />}
     <div className="grid min-w-0 gap-3 border-t border-ink/10 pt-4">
-      <Label htmlFor={id}>{purpose === 'model' ? t.credentials.accounts.addModelLabel : t.credentials.accounts.addCliLabel}</Label>
-      <select id={id} className={selectClass} disabled={creating || !!cli} value={slot} onChange={e => setSlot(e.target.value)}><option value="">{t.credentials.accounts.choose}</option>{options.filter(option => !cli || option.value === cli).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
+      {purpose === 'model'
+        ? <ProviderPicker label={t.credentials.accounts.addModelLabel} entries={entries} accounts={live} value={slot} open={picking} onOpenChange={setPicking} onChange={pick} />
+        : <><Label htmlFor={id}>{t.credentials.accounts.addCliLabel}</Label>
+          <select id={id} className={selectClass} disabled={creating || !!cli} value={slot} onChange={e => setSlot(e.target.value)}><option value="">{t.credentials.accounts.choose}</option>{options.filter(option => !cli || option.value === cli).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></>}
       <ErrorAlert error={purpose === 'model' ? providers.error : templates.error} />
+      {/* 重开面板选别家时，下面的表单先藏起来，已填的内容保留；Esc 收起面板后原样回来。 */}
+      <div className="contents" hidden={picking}>
       {purpose === 'cli' && template && <CliToolStatus template={template} />}
       {slot && <AccountImpact projectId={projectId} purpose={purpose} slot={slot} />}
-      {purpose === 'model' && provider?.authMethods.includes('oauth') && slot === 'openai-codex' && <ProjectLogin key={slot} projectId={projectId} />}
+      {purpose === 'model' && provider?.authMethods.includes('oauth') && slot === 'openai-codex' && <ProjectLogin key={slot} projectId={projectId} label={entry && t.credentials.providerPicker.login(entry.name)} />}
       {purpose === 'cli' && slot === 'gcloud' && template && <GoogleLogin key={`${projectId}:gcloud:new`} projectId={projectId} />}
       {purpose === 'cli' && slot === 'lark-cli' && template && <ProjectLarkUserLogin projectId={projectId} applicationSetup={<Button type="button" variant="secondary" disabled={creating} onClick={() => setCreating(true)}>{t.credentials.lark.prepareApplication}</Button>} />}
       {purpose === 'cli' && slot === 'gh' && template && <><p className="text-[13px]">{t.credentials.github.purpose}</p><GitHubLogin projectId={projectId} /><p className="text-[13px]">{t.credentials.github.patDescription}</p><a className="text-[13px] font-bold text-riso-blue underline" href="https://cli.github.com/manual/gh_auth_login" target="_blank" rel="noopener noreferrer">{t.credentials.github.patHelp}</a></>}
       {!creating && (purpose === 'model' ? provider?.authMethods.includes('api_key') : !!template) && <Button type="button" variant="secondary" className="justify-self-start" onClick={() => setCreating(true)}>{purpose === 'model' ? t.credentials.accounts.enterApiKey : slot === 'gcloud' ? t.credentials.accounts.enterServiceAccount : slot === 'gh' ? t.credentials.github.pat : slot === 'lark-cli' ? t.credentials.lark.botCreate : t.credentials.accounts.enterTemplate}</Button>}
-      {creating && <CredentialEditor key={`${purpose}:${slot}`} id={`new:${projectId}:${purpose}:${slot}`} mode={purpose === 'model' ? 'create-key' : 'create-cli'} template={template} revision={0} summary={t.credentials.accounts.newAccount} readLatest={async () => ({ revision: 0, summary: t.credentials.accounts.newUnknown })} onSave={saveNew} onClose={() => setCreating(false)} />}
+      {creating && <CredentialEditor key={`${purpose}:${entry?.key ?? slot}`} id={`new:${projectId}:${purpose}:${entry?.key ?? slot}`} mode={purpose === 'model' ? 'create-key' : 'create-cli'} template={template} revision={0} summary={t.credentials.accounts.newAccount} readLatest={async () => ({ revision: 0, summary: t.credentials.accounts.newUnknown })} onSave={saveNew} onClose={closeNew} />}
+      </div>
     </div>
   </AccountCard>
 }
@@ -117,7 +140,9 @@ function AccountRow({ account, template, methods, missing, onEditing }: { accoun
   return <li className="grid min-w-0 gap-3 rounded-card bg-white p-4">
     {missing && <p role="status" className="text-[13px] font-bold text-red-text">{t.credentials.accounts.missingFromList}</p>}
     <div className="flex min-w-0 flex-wrap items-center gap-2"><h3 className="min-w-0 flex-[1_1_160px] font-black [overflow-wrap:anywhere]">{account.name}</h3><Badge tone={account.status === 'saved' || account.status === 'logged_in' ? 'success' : 'danger'}>{accountStatus[account.status]}</Badge></div>
-    <p className="text-[13px] [overflow-wrap:anywhere]">{slot} · {account.authMethod === 'oauth' ? account.cli === 'gcloud' ? t.credentials.accounts.methodGoogleBrowser : t.credentials.accounts.methodBrowser : account.purpose === 'model' ? 'API Key' : account.cli === 'gcloud' ? t.credentials.accounts.methodServiceAccount : t.credentials.accounts.methodTemplate}{account.accountLabel ? ` · ${account.accountLabel}` : ''}{t.credentials.accounts.updatedPrefix}{account.updatedAt}</p>
+    {account.purpose === 'model'
+      ? <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] [overflow-wrap:anywhere]"><span className="font-bold">{providerName(slot)}</span>{providerName(slot) !== slot && <span className="font-mono text-[12px] text-ink-500">{slot}</span>}<AuthBadges methods={[account.authMethod]} />{account.accountLabel && <span>{account.accountLabel}</span>}<span>{t.credentials.accounts.updated}{account.updatedAt}</span></p>
+      : <p className="text-[13px] [overflow-wrap:anywhere]">{slot} · {account.authMethod === 'oauth' ? account.cli === 'gcloud' ? t.credentials.accounts.methodGoogleBrowser : t.credentials.accounts.methodBrowser : account.cli === 'gcloud' ? t.credentials.accounts.methodServiceAccount : t.credentials.accounts.methodTemplate}{account.accountLabel ? ` · ${account.accountLabel}` : ''}{t.credentials.accounts.updatedPrefix}{account.updatedAt}</p>}
     {account.cli === 'gh' && <GitHubIdentity account={account} />}
     {account.cli === 'lark-cli' && <LarkAccountDetails account={account} showName={false} />}
     {template && (account.cli === 'lark-cli' && account.authMethod === 'oauth' ? <p className="text-[13px]">{t.credentials.lark.executionSeparate}</p> : <CliToolStatus template={template} />)}

@@ -59,9 +59,8 @@ describe('旧后台项目凭证兼容', () => {
     server.use(http.get(apiUrl('/projects/:projectId/credential-account-impact'), () => HttpResponse.json({ projectId: defaultProject.id, credentialsRevision: 0, accountId: null, agents: [] })))
     const { client } = renderSettings()
     await screen.findByLabelText('添加模型账号 · 提供方')
-    await screen.findByRole('option', { name: 'anthropic' })
-    await user.selectOptions(screen.getByLabelText('添加模型账号 · 提供方'), 'anthropic')
-    await user.click(screen.getByRole('button', { name: '录入 API Key' }))
+    await user.click(screen.getByLabelText('添加模型账号 · 提供方'))
+    await user.click(await screen.findByRole('option', { name: /^Anthropic/ }))
     await user.type(screen.getByLabelText('API Key'), 'local-fixture-draft')
     gone = true
     await act(() => client.invalidateQueries({ queryKey: credentialKeys.project(defaultProject.id) }))

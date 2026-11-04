@@ -14,7 +14,8 @@ import { useProjectCredentialsAvailable } from './project-availability'
 import { useDirtyForm } from '@/features/prompts/draft-navigation'
 const loginErrors: Readonly<Record<string, string>> = t.config.modelLogin.errors
 
-export function ProjectLogin({ projectId, account }: { projectId: string; account?: Schemas['ProjectCredentialAccount'] }) {
+// label：新建登录的按钮文字，默认是"登录 Codex"。
+export function ProjectLogin({ projectId, account, label }: { projectId: string; account?: Schemas['ProjectCredentialAccount']; label?: string }) {
   const available = useProjectCredentialsAvailable()
   const client = useQueryClient(), collection = useProjectLogins(projectId, available)
   const [name, setName] = useState(''), [local, setLocal] = useState<Schemas['ProjectModelAuthState'] | null>(null)
@@ -85,7 +86,7 @@ export function ProjectLogin({ projectId, account }: { projectId: string; accoun
       <Input id={`login-name-${projectId}`} maxLength={200} value={active ? (op?.name ?? name) : name} disabled={starting || active} aria-describedby={active ? `login-name-hint-${projectId}` : undefined} onChange={e => setName(e.target.value)} />
       {active && <p id={`login-name-hint-${projectId}`} role="status" className="text-[13px] text-ink-700">{t.credentials.projectLogin.nameLocked}{authorizationHref ? t.credentials.projectLogin.openOrCancel : rejectedAuthorization ? t.credentials.projectLogin.urlRejected : t.credentials.projectLogin.preparing}{t.credentials.projectLogin.restartNote}</p>}
     </div>}
-    <Button type="button" variant="secondary" className="justify-self-start" disabled={!available || starting || active || (!account && !name.trim()) || collection.isPending} onClick={() => void start()}>{account ? t.credentials.projectLogin.relogin : t.credentials.projectLogin.login}</Button>
+    <Button type="button" variant="secondary" className="justify-self-start" disabled={!available || starting || active || (!account && !name.trim()) || collection.isPending} onClick={() => void start()}>{account ? t.credentials.projectLogin.relogin : label ?? t.credentials.projectLogin.login}</Button>
     {op?.name && <p className="text-[13px] [overflow-wrap:anywhere]">{t.credentials.projectLogin.newAccountLabel}{op.name}</p>}
     {view && <LoginFeedback view={view} detail={op?.errorCode ? loginErrors[op.errorCode] : undefined} hasAccount={!!account && account.status !== 'deleted'} blocked={blocked && !!authorizationHref} cancelling={cancelling} onCancel={active ? () => void cancel() : undefined} onRetry={!active ? () => void start() : undefined} authorizationHref={authorizationHref} onOpen={authorizationHref ? () => {
       // URL已知：由原生链接同步导航，清掉尚未导航的预留窗，避免旧WindowProxy/HMR引用干扰。
