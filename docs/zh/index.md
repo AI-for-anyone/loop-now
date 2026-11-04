@@ -14,13 +14,16 @@ hero:
       text: 快速上手
       link: /zh/guide/getting-started
     - theme: alt
+      text: 下载 macOS 桌面版
+      link: https://github.com/AI-for-anyone/loop-now/releases/latest
+    - theme: alt
       text: GitHub
       link: https://github.com/AI-for-anyone/loop-now
     - theme: alt
       text: English
       link: /
     - theme: alt
-      text: v0.1.0
+      text: v0.2.0
       link: https://github.com/AI-for-anyone/loop-now/releases
 
 features:
