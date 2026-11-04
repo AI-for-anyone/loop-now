@@ -1,6 +1,6 @@
 # 快速上手
 
-可以用**桌面版**（macOS Apple Silicon，什么都不用另装），也可以**从源码安装**；Docker Compose 一体化启动见 [README](https://github.com/AI-for-anyone/loop-now/blob/main/README.zh-CN.md#开始使用)。macOS Apple Silicon 是主要验证环境，部分组件支持 Linux，但尚未建立等效的整系统覆盖；飞书用户 CLI 运行时目前仅支持 macOS arm64。
+可以用**桌面版**（macOS Apple Silicon，什么都不用另装）、**服务端发行包**（Linux、macOS），也可以**从源码安装**；Docker Compose 一体化启动见 [README](https://github.com/AI-for-anyone/loop-now/blob/main/README.zh-CN.md#开始使用)。macOS Apple Silicon 是主要验证环境，部分组件支持 Linux，但尚未建立等效的整系统覆盖；飞书用户 CLI 运行时目前仅支持 macOS arm64。
 
 ::: warning 早期个人版
 Loop Now 面向本地单实例。控制台没有登录功能，应通过本机回环地址访问。使用模型或工具供应商时，相关数据仍会发送给对应服务。
@@ -21,6 +21,39 @@ Loop Now 面向本地单实例。控制台没有登录功能，应通过本机�
 桌面版里的 Agent 用随包的 Pi 1.4.0 和 Node 24.21；模型账号、CLI 账号、插件都在控制台里配置，和源码安装相同。外部身份和 `loopctl` 需要对外 TLS 端口，桌面版目前还不能开启。
 
 接下来看[给第一个 Agent 派活](#give-your-first-agent-a-job)。
+
+## 服务端发行包（Linux / macOS） {#server-release-bundle-linux-macos}
+
+每个版本在 Releases 里还有各平台的服务端发行包 `loop-now-<版本>-<平台>.tar.gz`，平台有 `darwin-arm64`、`darwin-amd64`、`linux-amd64`、`linux-arm64`。包里有内嵌控制台的 `loop-server`、`loopctl`、插件宿主、官方插件，以及随包的 Node 24.21.0 和 Pi 1.4.0，机器上只需要有 Git。
+
+1. 从 [Releases](https://github.com/AI-for-anyone/loop-now/releases/latest) 下载对应平台的包和 `SHA256SUMS`，校验下载：
+
+   ```sh
+   sha256sum -c --ignore-missing SHA256SUMS        # Linux
+   shasum -a 256 -c --ignore-missing SHA256SUMS    # macOS
+   ```
+
+2. 在终端里用 `tar` 解开。macOS 上如果在访达里解开，文件会被标记为来自互联网，未签名的程序会被 Gatekeeper 拦下。
+
+   ```sh
+   tar -xzf loop-now-<版本>-<平台>.tar.gz
+   cd loop-now-<版本>-<平台>
+   ```
+
+3. 设置数据目录和工作根后启动服务端。工作根的要求和创建方法与源码安装相同（见[第 2 步](#configure-the-server)）：
+
+   ```sh
+   export LOOP_NOW_DATA_DIR="$HOME/.loop_now"
+   export LOOP_NOW_WORK_ROOT='/var/lib/loop-now'   # macOS 用 /Users/Shared/loop-now
+   ./loop-server
+   ```
+
+4. 打开 **[http://127.0.0.1:8780/](http://127.0.0.1:8780/)**。控制台就在服务端口的根路径，不需要另起控制台。
+
+随包的 Node 和 Pi 会自动使用，不用另装；设置了 `LOOP_NOW_NODE_BIN` 等变量时仍以变量为准。凭证以明文保存在数据目录里，请保护好数据目录和备份。升级时停掉服务端，解开新版本的包，用同样的 `LOOP_NOW_DATA_DIR` 和 `LOOP_NOW_WORK_ROOT` 启动新目录里的 `loop-server`，然后删掉旧目录。
+
+接下来看[给第一个 Agent 派活](#give-your-first-agent-a-job)。
+
 
 ## 从源码安装 {#source-installation}
 
@@ -45,7 +78,7 @@ git clone --depth 1 --branch main https://github.com/AI-for-anyone/loop-now.git
 cd loop-now
 ```
 
-### 2. 配置服务端
+### 2. 配置服务端 {#configure-the-server}
 
 在仓库根目录执行以下命令：
 
