@@ -2,8 +2,9 @@ name: release
 
 # 发布构建：每个平台在对应架构的机器上运行 scripts/release/build.sh（Pi 的依赖要在目标架构上安装），
 # 用产物实际启动一次，再把压缩包与校验和作为 artifact 上传。macOS arm64 另把服务端发行包装进桌面壳，出 DMG 与更新用的 zip，
-# 只做 ad-hoc 签名，都不公证。最后汇总全部产物写 SHA256SUMS；推 v* tag 时据此创建 GitHub Release（tag 带 - 的标为预发布），
-# 说明取自 CHANGELOG.md 里该版本的一节或 tag 注解（scripts/release/notes.sh）。手动运行只构建，不建 Release。
+# 只做 ad-hoc 签名，都不公证。最后汇总全部产物写 SHA256SUMS；推 v* tag 时据此创建 GitHub Release，tag 带 - 的标为预发布
+# （预发布一律用 -beta.N，如 v0.3.0-beta.1）。说明取自 CHANGELOG.md 里该版本的一节或 tag 注解（scripts/release/notes.sh）。
+# 手动运行只构建，不建 Release。
 on:
   workflow_dispatch:
     inputs:

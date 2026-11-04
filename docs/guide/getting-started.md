@@ -105,7 +105,7 @@ Set these before starting `bin/loop-server`. `dist/main.js` is a single self-con
 
 Releases before the SQLite edition, up to v0.1.0, stored their data in PostgreSQL and Redis. To bring an installation over:
 
-1. The import needs the database at the last PostgreSQL migration, which v0.1.0 has not reached. Check out `647fe00`, the last PostgreSQL-based commit, build it, start it once with your existing configuration so its migrations finish, then stop it.
+1. The import needs the database at the last PostgreSQL migration, which v0.1.0 has not reached. Check out the tag `pg-final` (the last PostgreSQL-based commit), build it, start it once with your existing configuration so its migrations finish, then stop it.
 2. With `LOOP_NOW_DATA_DIR` pointing at a data directory that has no database yet, run `loop-server import-postgres` with `LOOP_NOW_DATABASE_URL` set to the old database. It copies everything in one consistent snapshot, checks row counts and integrity, and prints each table's row count. On any failure it leaves nothing behind and never changes the old database.
 3. Keep `LOOP_NOW_WORK_ROOT` as it was and start the new server on that data directory. Redis is no longer used.
 

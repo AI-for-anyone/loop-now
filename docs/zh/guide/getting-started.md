@@ -105,7 +105,7 @@ export LOOP_NOW_PLUGIN_OFFICIAL_DIR="$PWD/plugins/official"
 
 SQLite 版之前的版本（到 v0.1.0 为止）把数据存在 PostgreSQL 和 Redis 里。把一套安装迁移过来：
 
-1. 导入要求旧库处在 PostgreSQL 版的最后一个迁移，v0.1.0 还没有到。先检出 PostgreSQL 版的最后一个提交 `647fe00`，构建后用原来的配置启动一次，让它完成迁移，然后停掉。
+1. 导入要求旧库处在 PostgreSQL 版的最后一个迁移，v0.1.0 还没有到。先检出 tag `pg-final`（PostgreSQL 版的最后一个提交），构建后用原来的配置启动一次，让它完成迁移，然后停掉。
 2. 让 `LOOP_NOW_DATA_DIR` 指向一个还没有库的数据目录，把 `LOOP_NOW_DATABASE_URL` 设为旧库，运行一次 `loop-server import-postgres`。它在一个一致的快照里复制全部数据，核对行数与完整性，并打印每张表的行数；任何一步失败都不留下新库，也从不改动旧库。
 3. 保持原来的 `LOOP_NOW_WORK_ROOT`，在这个数据目录上启动新的服务端。Redis 不再需要。
 
