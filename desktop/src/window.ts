@@ -1,6 +1,6 @@
 import { app, BrowserWindow, screen, shell, type IpcMainEvent } from 'electron'
 import { join } from 'node:path'
-import { classifyNavigation } from './links'
+import { classifyNavigation, handOffOnce } from './links'
 
 // 壳自带的状态页（启动中、启动失败）显示的内容；文字已按语言选好。
 export type StatusView = {
@@ -156,13 +156,12 @@ export class MainWindow {
   }
 
   // 授权登录先同步开一个空白弹窗，再把它导航到 https 的授权地址（web/src/features/agent-config/authorizationWindow.ts）。
-  // 壳不在自己的窗口里登录：弹窗一开始导航，就把地址交给系统浏览器并关掉它；页面不以弹窗是否关闭判断成败。
+  // 壳不在自己的窗口里登录：弹窗一开始导航，就把地址交给系统浏览器（只交一次，见 handOffOnce）并关掉它；页面不以弹窗是否关闭判断成败。
   private handOffWhenNavigated(child: BrowserWindow): void {
-    const handOff = (url: string) => {
-      if (url === 'about:blank' || child.isDestroyed()) return
+    const handOff = handOffOnce((url) => {
       this.openExternal(url)
       setImmediate(() => child.isDestroyed() || child.destroy())
-    }
+    })
     child.webContents.setWindowOpenHandler(({ url }) => {
       this.openExternal(url)
       return { action: 'deny' }
