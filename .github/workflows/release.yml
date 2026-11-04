@@ -2,7 +2,8 @@ name: release
 
 # 发布构建：每个平台在对应架构的机器上运行 scripts/release/build.sh（Pi 的依赖要在目标架构上安装），
 # 用产物实际启动一次，再把压缩包与校验和作为 artifact 上传。macOS arm64 另把服务端发行包装进桌面壳，出 DMG 与更新用的 zip，
-# 只做 ad-hoc 签名。都不公证，也不创建 GitHub Release。
+# 只做 ad-hoc 签名，都不公证。最后汇总全部产物写 SHA256SUMS；推 v* tag 时据此创建 GitHub Release（tag 带 - 的标为预发布），
+# 说明取自 CHANGELOG.md 里该版本的一节或 tag 注解（scripts/release/notes.sh）。手动运行只构建，不建 Release。
 on:
   workflow_dispatch:
     inputs:
@@ -16,8 +17,23 @@ permissions:
   contents: read
 
 jobs:
+  # 推 tag 时先确认发布说明有内容，没有就不开始构建。actions/checkout 拉下的 tag 是轻量的，注解要另外取一次。
+  notes:
+    name: release notes
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: check
+        if: github.event_name == 'push'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          git fetch --no-tags --depth=1 --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          scripts/release/notes.sh "$TAG"
+
   build:
     name: build (${{ matrix.target }})
+    needs: notes
     strategy:
       fail-fast: false
       matrix:
@@ -54,25 +70,6 @@ jobs:
             out/*.tar.gz
             out/*.tar.gz.sha256
           if-no-files-found: error
-
-  checksums:
-    name: checksums
-    needs: build
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-      - name: SHA256SUMS
-        run: |
-          cd dist
-          cat *.tar.gz.sha256 | sort -k2 > SHA256SUMS
-          sha256sum -c SHA256SUMS
-      - uses: actions/upload-artifact@v4
-        with:
-          name: SHA256SUMS
-          path: dist/SHA256SUMS
 
   # 桌面版（macOS arm64）：把上面 darwin/arm64 的服务端发行包整个放进 app 的 Resources/server，
   # 出 DMG、更新用的 zip、两者的 blockmap 与 dev-mac.yml（electron-updater 的 dev 通道）。x64 以后再加。
@@ -130,3 +127,41 @@ jobs:
             .local-build/desktop/*.blockmap
             .local-build/desktop/dev-mac.yml
           if-no-files-found: error
+
+  # 汇总：全部 artifact（四个平台的服务端包、桌面版的 DMG、zip、blockmap、dev-mac.yml）平铺到一个目录，
+  # 构建时写的单个校验和核对后并进 SHA256SUMS（不另外挂出）；推 tag 时把目录里的文件全部挂到 GitHub Release。
+  release:
+    name: release
+    needs: [notes, build, desktop-mac]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: SHA256SUMS
+        working-directory: dist
+        run: |
+          sha256sum -c -- *.tar.gz.sha256
+          rm -- *.tar.gz.sha256
+          sha256sum -- * > "$RUNNER_TEMP/SHA256SUMS"
+          mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
+          sha256sum -c SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SHA256SUMS
+          path: dist/SHA256SUMS
+      - name: GitHub Release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          git fetch --no-tags --depth=1 --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          scripts/release/notes.sh "$TAG" > "$RUNNER_TEMP/notes.md"
+          prerelease=""
+          case "$TAG" in *-*) prerelease=--prerelease ;; esac
+          gh release create "$TAG" dist/* --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" $prerelease
