@@ -5,6 +5,9 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, describe, test } from 'node:test'
+import type { AppUpdater } from 'electron-updater'
+import { GitHubProvider } from 'electron-updater/out/providers/GitHubProvider'
+import type { ProviderRuntimeOptions } from 'electron-updater/out/providers/Provider'
 import { parseBadge, parseNotification } from './bridge'
 import { installScript, linkState } from './cli'
 import { classifyNavigation, handOffOnce } from './links'
@@ -297,10 +300,49 @@ describe('检查更新', () => {
     return updater
   }
 
-  test('只检查 dev 通道、不自动下载安装、不降级；同一版本只提示一次', () => {
+  // 打包配置的 publish 会写进 app-update.yml，提供方的 options 就是它。读配置要求有发行包目录，读的时候临时给一个。
+  const publish = () => {
+    const saved = process.env.LOOP_NOW_DESKTOP_BUNDLE
+    process.env.LOOP_NOW_DESKTOP_BUNDLE = dir
+    try {
+      return require('../electron-builder.config.js').publish
+    } finally {
+      if (saved === undefined) delete process.env.LOOP_NOW_DESKTOP_BUNDLE
+      else process.env.LOOP_NOW_DESKTOP_BUNDLE = saved
+    }
+  }
+
+  // 用 electron-updater 真实的 GitHub 提供方读一份假的 releases.atom（tags 从新到旧）：每个 release 里只有 latest-mac.yml，
+  // 别的文件一律 404。updater 的设置来自 UpdateChecker，提供方的 options 来自打包配置。
+  const latestRelease = async (current: string, tags: string[]) => {
+    const updater = fake()
+    new UpdateChecker(updater, () => undefined)
+    const fetched: string[] = []
+    const entry = (tag: string) => `<entry><title>${tag}</title><link rel="alternate" type="text/html" href="https://github.com/AI-for-anyone/loop-now/releases/tag/${tag}"/><content>notes</content></entry>`
+    const executor = {
+      request: async ({ path }: { path: string }) => {
+        fetched.push(path.replace('/AI-for-anyone/loop-now/releases', ''))
+        if (path.endsWith('.atom')) return `<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom">${tags.map(entry).join('')}</feed>`
+        const version = /\/download\/v([^/]+)\/latest-mac\.yml$/.exec(path)?.[1]
+        if (version) return `version: ${version}\npath: update.zip\nsha512: x\nfiles: [{ url: update.zip, sha512: x }]\n`
+        throw new Error(`404 ${path}`)
+      },
+    }
+    // 提供方只用到 updater 的 allowPrerelease、channel 与当前版本（semver 也认字符串）。
+    const provider = new GitHubProvider(publish(), { ...updater, currentVersion: current, fullChangelog: false } as unknown as AppUpdater, {
+      executor: executor as unknown as ProviderRuntimeOptions['executor'],
+      platform: 'darwin',
+      isUseMultipleRangeRequest: true,
+    })
+    const { version } = await provider.getLatestVersion()
+    return { version, fetched }
+  }
+
+  test('正式版与预发布都检查、不设通道、不自动下载安装、不降级；同一版本只提示一次', () => {
     const updater = fake()
     const checker = new UpdateChecker(updater, () => undefined)
-    assert.deepEqual([updater.autoDownload, updater.autoInstallOnAppQuit, updater.allowPrerelease, updater.allowDowngrade, updater.channel], [false, false, true, false, 'dev'])
+    assert.deepEqual([updater.autoDownload, updater.autoInstallOnAppQuit, updater.allowPrerelease, updater.allowDowngrade, updater.channel], [false, false, true, false, null])
+    assert.equal(publish().channel, undefined)
     const seen: string[] = []
     checker.on('available', (v) => seen.push(v))
     updater.found('0.2.0')
@@ -313,9 +355,21 @@ describe('检查更新', () => {
   test('检查失败只记日志', async () => {
     const updater = fake()
     const notes: string[] = []
-    updater.fail = new Error('找不到 dev-mac.yml')
+    updater.fail = new Error('找不到 latest-mac.yml')
     await new UpdateChecker(updater, (n) => notes.push(n)).check()
-    assert.deepEqual(notes, ['检查更新失败：找不到 dev-mac.yml'])
+    assert.deepEqual(notes, ['检查更新失败：找不到 latest-mac.yml'])
+  })
+
+  test('已装正式版：最新的是预发布或正式版都检查得到', async () => {
+    // 预发布的 release 先找 rc-mac.yml，没有就读 latest-mac.yml。
+    assert.deepEqual(await latestRelease('0.2.0', ['v0.3.0-rc.1', 'v0.2.1', 'v0.2.0']), {
+      version: '0.3.0-rc.1',
+      fetched: ['.atom', '/download/v0.3.0-rc.1/rc-mac.yml', '/download/v0.3.0-rc.1/latest-mac.yml'],
+    })
+    assert.deepEqual(await latestRelease('0.2.0', ['v0.2.1', 'v0.2.1-rc.1', 'v0.2.0']), {
+      version: '0.2.1',
+      fetched: ['.atom', '/download/v0.2.1/latest-mac.yml'],
+    })
   })
 
   test('有新版本时菜单栏多一项去下载页', () => {

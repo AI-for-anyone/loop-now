@@ -72,7 +72,7 @@ jobs:
           if-no-files-found: error
 
   # 桌面版（macOS arm64）：把上面 darwin/arm64 的服务端发行包整个放进 app 的 Resources/server，
-  # 出 DMG、更新用的 zip、两者的 blockmap 与 dev-mac.yml（electron-updater 的 dev 通道）。x64 以后再加。
+  # 出 DMG、更新用的 zip、两者的 blockmap 与 latest-mac.yml（electron-updater 读的更新信息）。x64 以后再加。
   desktop-mac:
     name: desktop (darwin/arm64)
     needs: build
@@ -112,7 +112,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
-      # 版本号以 tag（或手动输入）为准，打包前写进 package.json 与 lock；DMG、zip 的文件名和 dev-mac.yml 都从这里取。
+      # 版本号以 tag（或手动输入）为准，打包前写进 package.json 与 lock；DMG、zip 的文件名和 latest-mac.yml 都从这里取。
       - name: set version
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -125,10 +125,10 @@ jobs:
             .local-build/desktop/*.dmg
             .local-build/desktop/*.zip
             .local-build/desktop/*.blockmap
-            .local-build/desktop/dev-mac.yml
+            .local-build/desktop/latest-mac.yml
           if-no-files-found: error
 
-  # 汇总：全部 artifact（四个平台的服务端包、桌面版的 DMG、zip、blockmap、dev-mac.yml）平铺到一个目录，
+  # 汇总：全部 artifact（四个平台的服务端包、桌面版的 DMG、zip、blockmap、latest-mac.yml）平铺到一个目录，
   # 构建时写的单个校验和核对后并进 SHA256SUMS（不另外挂出）；推 tag 时把目录里的文件全部挂到 GitHub Release。
   release:
     name: release
