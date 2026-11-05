@@ -85,7 +85,7 @@
 - `accounts` 声明账号种类，`fields` 是账号字段的 JSON Schema：顶层字段加 `"x-secret": true` 的与配置的 secret 字段一样只写不回显（控制台只显示是否已填），`x-scope` 只对 `configSchema` 有效；账号由人在项目里添加，按 Agent 授权；授权后以环境变量注入该 Agent 的 Pi 和 MCP 进程，变量名 `LOOP_NOW_ACCOUNT_<KIND>_<FIELD>`（多账号时为 JSON 数组 `LOOP_NOW_ACCOUNTS_<KIND>`），同时平台侧可用 `api.accounts.list(projectId, kind)` 读取。
 - `minPlatformVersion` 按平台的发布版本比较（形如 `2026.11`），不满足时拒绝安装。
 - 安装目录为 `<work root>/platform/plugins/<id>/<version>/`，数据目录为 `<work root>/platform/plugins/<id>/data/`（跨版本保留，卸载时询问是否删除）。两者分别以环境变量 `LOOP_NOW_PLUGIN_ROOT`、`LOOP_NOW_PLUGIN_DATA` 提供给宿主和 Pi。
-- 依赖安装：npm 与 git 来源在安装时执行 `npm ci --ignore-scripts --omit=dev`（无锁文件则 `npm install --ignore-scripts --omit=dev`）；本地目录来源不安装不修改，依赖由作者负责（与 Pi 一致）。
+- 依赖安装：npm 与 git 来源在安装时执行 `npm ci --ignore-scripts --omit=dev --omit=peer`（无锁文件则 `npm install`，参数相同）；本地目录来源不安装不修改，依赖由作者负责（与 Pi 一致）。不装 `peerDependencies`（Pi 包按约定把 Pi 自己的包声明为 peer），所以插件的运行依赖要用的 peer 依赖须直接列进插件自己的 `dependencies`。
 
 ### 2.1 Agent 侧给 Pi 的东西
 
