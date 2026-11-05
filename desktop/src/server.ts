@@ -1,9 +1,11 @@
-import { execFile, spawn, type ChildProcess } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { EventEmitter } from 'node:events'
-import { readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { RotatingLog } from './log'
+import { current, type PlatformId } from './platform'
+import { isOurServer, processInfo, spawnPlan, terminateChild, terminateStale, type Stamp } from './process'
 import { RestartPolicy } from './restart'
 
 // stopped：没有进程；starting：已拉起、等就绪；running／degraded：就绪，健康接口 200／503；
@@ -25,6 +27,8 @@ const exitAddressInUse = 4
 export type ServerOptions = {
   bin: string
   readyFile: string
+  // 壳记下的服务端 pid 与启动时刻（就绪后写），下次启动清理孤儿时和就绪文件里的 pid 核对，免得 pid 被复用时认错。
+  stampFile: string
   env: NodeJS.ProcessEnv
   // 服务端的 stdout、stderr 原样写进这里。
   log: RotatingLog
@@ -32,6 +36,7 @@ export type ServerOptions = {
   note: (text: string) => void
   // 这次监听的端口；0 表示交给系统选。
   choosePort: () => Promise<number>
+  platform?: PlatformId
 }
 
 export const readyTimeoutMs = 90_000
@@ -54,8 +59,11 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
   private restartTimer: NodeJS.Timeout | undefined
   private healthTimer: NodeJS.Timeout | undefined
 
+  private readonly platform: PlatformId
+
   constructor(private readonly o: ServerOptions) {
     super()
+    this.platform = o.platform ?? current
   }
 
   // 有没有服务端进程（包括还没就绪的）。
@@ -78,17 +86,22 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
     this.o.log.resetTail()
     this.o.note(`启动服务端 ${this.o.bin}，端口 ${port === 0 ? '由系统选择' : port}`)
     rmSync(this.o.readyFile, { force: true })
+    // Windows 握着 stdin、带 LOOP_NOW_STOP_ON_STDIN_CLOSE=1，退出时关掉 stdin 让服务端优雅停机（见 process.ts）。
+    const plan = spawnPlan(this.platform)
     const child = spawn(this.o.bin, [], {
       cwd: dirname(this.o.bin),
       env: {
         ...this.o.env,
+        ...plan.env,
         LOOP_NOW_LISTEN_ADDR: `127.0.0.1:${port}`,
         LOOP_NOW_READY_FILE: this.o.readyFile,
         LOOP_NOW_CONSOLE_ORIGINS: 'none',
       },
-      stdio: ['ignore', 'pipe', 'pipe'],
-      // 自成进程组：终端里按 Ctrl+C 不会直接打到服务端，由壳按顺序停它。
-      detached: true,
+      stdio: [plan.stdin, 'pipe', 'pipe'],
+      // 自成进程组：终端里按 Ctrl+C 不会直接打到服务端，由壳按顺序停它。Windows 上 detached 会给控制台程序开一个窗口，不用；
+      // windowsHide 不让服务端出现控制台窗口。
+      detached: this.platform !== 'win32',
+      windowsHide: true,
     })
     const run: Run = { child, port, exited: undefined as unknown as Promise<Exit> }
     run.exited = new Promise<Exit>((resolve) => {
@@ -150,6 +163,7 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
 
     this.url = ready.url
     this.o.note(`服务端已就绪：${ready.url}（${ready.version}，pid ${ready.pid}）`)
+    await this.writeStamp(ready.pid)
     this.setState(ready.healthy ? 'running' : 'degraded')
     this.emit('ready', ready.url)
     this.healthTimer = setInterval(() => void this.checkHealth(), healthIntervalMs)
@@ -192,34 +206,34 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
     if (healthy !== undefined && (this.state === 'running' || this.state === 'degraded')) this.setState(healthy ? 'running' : 'degraded')
   }
 
-  // 先 SIGTERM 等它自己收尾，超时再对整个进程组 SIGKILL。
+  // 先让它自己收尾（macOS SIGTERM，Windows 关 stdin），超时再强制结束（平台差异见 process.ts）。
   private async terminate(run: Run): Promise<void> {
     const { child } = run
     if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return
-    child.kill('SIGTERM')
-    const inTime = await Promise.race([run.exited.then(() => true), sleep(stopGraceMs).then(() => false)])
-    if (inTime) return
-    this.o.note(`服务端 ${stopGraceMs / 1000} 秒内没有退出，强制结束`)
-    try {
-      process.kill(-child.pid, 'SIGKILL')
-    } catch {
-      child.kill('SIGKILL')
-    }
-    await run.exited
+    const inTime = await terminateChild(child, run.exited, stopGraceMs, this.platform)
+    if (!inTime) this.o.note(`服务端 ${stopGraceMs / 1000} 秒内没有退出，强制结束`)
   }
 
-  // 壳上次异常退出时留下的服务端会占着数据目录：就绪文件里的 pid 还活着、而且正是这个可执行文件，就先停掉它。
+  // 壳上次异常退出时留下的服务端会占着数据目录：就绪文件里的 pid 还活着、正是这个可执行文件、启动时刻也对得上壳记下的，就先停掉它。
   private async clearStale(): Promise<void> {
     const ready = readReady(this.o.readyFile)
-    if (ready && (await runsExecutable(ready.pid, this.o.bin))) {
+    if (ready && isOurServer(await processInfo(ready.pid, this.platform), this.o.bin, ready.pid, readStamp(this.o.stampFile), this.platform)) {
       this.o.note(`停掉上次留下的服务端（pid ${ready.pid}）`)
-      signal(ready.pid, 'SIGTERM')
-      if (!(await waitGone(ready.pid, stopGraceMs))) {
-        signal(ready.pid, 'SIGKILL')
-        await waitGone(ready.pid, 5_000)
-      }
+      await terminateStale(ready.pid, stopGraceMs, this.platform)
     }
     rmSync(this.o.readyFile, { force: true })
+    rmSync(this.o.stampFile, { force: true })
+  }
+
+  private async writeStamp(pid: number): Promise<void> {
+    const info = await processInfo(pid, this.platform)
+    if (!info) return
+    try {
+      mkdirSync(dirname(this.o.stampFile), { recursive: true })
+      writeFileSync(this.o.stampFile, JSON.stringify({ pid, started: info.started } satisfies Stamp))
+    } catch (err) {
+      this.o.note(`记不下服务端的启动时刻：${(err as Error).message}`)
+    }
   }
 
   private fail(failure: StartFailure): void {
@@ -262,36 +276,12 @@ function describeExit(exit: Exit): string {
   return exit.signal ? `信号 ${exit.signal}` : `退出码 ${exit.code}`
 }
 
-function signal(pid: number, name: NodeJS.Signals): void {
+function readStamp(file: string): Stamp | undefined {
   try {
-    process.kill(pid, name)
+    const value = JSON.parse(readFileSync(file, 'utf8')) as Partial<Stamp>
+    if (typeof value.pid === 'number' && typeof value.started === 'string') return { pid: value.pid, started: value.started }
   } catch {
-    // 已经退出
+    // 没记过
   }
-}
-
-function alive(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
-  }
-}
-
-async function waitGone(pid: number, ms: number): Promise<boolean> {
-  const deadline = Date.now() + ms
-  while (Date.now() < deadline) {
-    if (!alive(pid)) return true
-    await sleep(100)
-  }
-  return !alive(pid)
-}
-
-// pid 是否还活着、并且运行的正是 bin（服务端不带参数启动，命令行就是可执行文件路径）。
-function runsExecutable(pid: number, bin: string): Promise<boolean> {
-  if (!Number.isInteger(pid) || pid <= 0 || !alive(pid)) return Promise.resolve(false)
-  return new Promise((resolve) => {
-    execFile('/bin/ps', ['-p', String(pid), '-o', 'command='], (err, stdout) => resolve(!err && stdout.trim() === bin))
-  })
+  return undefined
 }

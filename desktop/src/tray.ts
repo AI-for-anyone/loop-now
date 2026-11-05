@@ -1,5 +1,6 @@
 import { app, Menu, Tray, nativeImage } from 'electron'
 import { join } from 'node:path'
+import { current, trayIcon, type PlatformId } from './platform'
 import { defaultProfile, overridableDirs, type Profile } from './profile'
 import type { ServerState } from './server'
 import { strings, type Strings } from './strings'
@@ -48,10 +49,13 @@ export class StatusTray {
     private readonly profile: Profile | undefined,
     // 检查到的新版本号；没有时为空。
     private readonly newVersion: () => string | undefined,
+    platform: PlatformId = current,
   ) {
-    // 文件名以 Template 结尾，macOS 按菜单栏的深浅色自动着色；同目录的 @2x 用于高分屏。
-    this.tray = new Tray(nativeImage.createFromPath(join(__dirname, '..', 'assets', 'trayTemplate.png')))
+    // macOS：文件名以 Template 结尾，按菜单栏的深浅色自动着色，同目录的 @2x 用于高分屏。Windows：.ico，多个尺寸由系统按 DPI 选。
+    this.tray = new Tray(nativeImage.createFromPath(join(__dirname, '..', 'assets', trayIcon(platform))))
     this.tray.setIgnoreDoubleClickEvents(true)
+    // Windows 的习惯：左键点通知区图标打开窗口，右键出菜单（macOS 上点图标就是出菜单）。
+    if (platform === 'win32') this.tray.on('click', () => this.actions.open())
   }
 
   update(state: ServerState, url: string | undefined): void {
