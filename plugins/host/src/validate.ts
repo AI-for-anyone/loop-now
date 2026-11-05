@@ -1,4 +1,4 @@
-// validate 子命令：静态校验（SDK 的 validatePlugin），加 --load 时再在隔离的运行时里加载平台半边、调用 register，
+// validate 子命令：静态校验（SDK 的 validatePlugin），加 --load 时再在隔离的运行时里加载平台侧、调用 register，
 // 核对代码实际订阅与注册的和清单是否一致。--load 会执行插件代码，只用于自己的或已审阅的目录。
 
 import path from 'node:path'
@@ -77,7 +77,7 @@ async function dryRun(root: string, m: Manifest): Promise<Finding[]> {
     }
     await withTimeout(runAs(m.id, async () => register(rt.api)), 'register')
   } catch (err) {
-    if (rt.violations.length === 0) error(`加载平台半边失败：${describeError(err)}`)
+    if (rt.violations.length === 0) error(`加载平台侧失败：${describeError(err)}`)
   }
   for (const v of rt.violations) error(v)
   const got = rt.registrations()

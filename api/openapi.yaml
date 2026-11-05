@@ -18,14 +18,14 @@ info:
       - 外部身份：对外端口（TLS）上的同一组 `/api/v1`，必须带 `Authorization: Bearer lne_…`，缺失或无效时返回 401 `unauthenticated`，调用 `x-access: console` 的操作返回 403 `forbidden`；
       - 对外端口另外提供 loopctl 下载（不在本文件中）：`GET /downloads/loopctl/manifest.json`、`GET /downloads/loopctl/SHA256SUMS`、`GET /downloads/loopctl/{file}`，同样需要外部令牌，响应带 `X-Content-SHA256`。
       - Agent 专用接口见 `api/agent-openapi.yaml`。
-      - 插件令牌（插件第二版，plugins/SPEC.md §5）：插件的平台半边在回环监听器的 `/api/v1` 上带 `Authorization: Bearer lnp_…` 调用。
+      - 插件令牌（插件第二版，plugins/SPEC.md §5）：插件的平台侧在回环监听器的 `/api/v1` 上带 `Authorization: Bearer lnp_…` 调用。
         只能调用标了 `x-plugin-scope` 且该范围在令牌内的操作，否则返回 403 `forbidden`；路径中的项目、Agent、任务须属于启用了该插件的项目（平台 Agent 与全局上下文文件夹除外），否则返回 403。
         插件宿主协议见 `api/plugin-host-protocol.md`。
         插件令牌调用“我的 Inbox”（listInboxMessages、readInboxMessage、线索）时当前身份是这个插件，读到的是发给它的消息（Agent 对它的回复）；
         以 inbox.send 发出的消息发件方为 plugin（plugins/SPEC.md §11），只能发给平台 Agent 或启用了该插件的项目里的 Agent。
       - 插件 HTTP 入口（不在本文件的操作中）：清单 `http: true` 的插件在对外端口（TLS）上有无令牌的 `/hooks/<插件 id>/<任意路径>`，
         在回环监听器上有 `/api/v1/plugins/<插件 id>/http/<任意路径>`（控制台，或该插件自己的插件令牌）。方法、路径、查询、头与正文（不超过 1 MiB，超过返回 413）
-        原样交给平台半边，30 秒内的回应原样返回（超时 504 plugin_timeout）；签名校验由插件自己做；每个插件每秒最多 20 次，超出返回 429。
+        原样交给平台侧，30 秒内的回应原样返回（超时 504 plugin_timeout）；签名校验由插件自己做；每个插件每秒最多 20 次，超出返回 429。
         插件不存在、没有 HTTP 入口或没有在宿主里时返回 404。
     - 项目层（变更 add-project-layer）：项目的管理与 Manager；Agent 属于某个项目或平台，列出与创建按范围进行（`/projects/{projectId}/agents`、`/platform/agents`），单个 Agent 仍按 ID 访问；概览、用量与异常可按 `projectId` 或 `platform` 筛选。
 servers:
@@ -3526,8 +3526,8 @@ paths:
       x-access: console-and-external
       summary: 卸载插件
       description: |
-        宿主内卸载平台半边，删除插件的配置、启用、授权、账号、状态、事件投递与令牌，删除各版本的安装目录（本地目录来源不删）。
-        数据目录 `<work root>/platform/plugins/<id>/data/` 只在 `deleteData=true` 时删除。已经启动的 Pi 继续使用已加载的 Agent 半边，直到下次启动。
+        宿主内卸载平台侧，删除插件的配置、启用、授权、账号、状态、事件投递与令牌，删除各版本的安装目录（本地目录来源不删）。
+        数据目录 `<work root>/platform/plugins/<id>/data/` 只在 `deleteData=true` 时删除。已经启动的 Pi 继续使用已加载的 Agent 侧，直到下次启动。
       parameters:
         - name: deleteData
           in: query
@@ -3877,7 +3877,7 @@ paths:
       x-access: console-and-external
       summary: 保存全局插件设置
       description: |
-        disabled 为 true 时停止宿主、不再给新启动的 Pi 挂载任何 Agent 半边（已经启动的不受影响，下次启动生效）；改回 false 时恢复。
+        disabled 为 true 时停止宿主、不再给新启动的 Pi 挂载任何 Agent 侧（已经启动的不受影响，下次启动生效）；改回 false 时恢复。
         markets 在第三阶段使用，现在只保存。
       requestBody:
         required: true
@@ -11211,7 +11211,7 @@ components:
 
     TimelineExtensionUI:
       description: |
-        Agent 半边的扩展经 ctx.ui 发来的请求（Pi RPC 的 extension_ui_request）。notify 是通知（level 为 info、warning、error），
+        Agent 侧的扩展经 ctx.ui 发来的请求（Pi RPC 的 extension_ui_request）。notify 是通知（level 为 info、warning、error），
         setStatus 设置或清除一条状态（message 为空时清除）。select、confirm、input、editor 是对话，message 为对话标题：
         常态 Agent 一轮之中的 confirm、select、input 成为这个 Agent 发给控制台的提问（questionId，期限为请求的超时，没有时 30 分钟），
         回答后交还给扩展，这条记录在对话结束时写入，answered 为 answered（有人回答）、cancelled（回答为取消）或 expired（到期或这一轮结束，
@@ -18273,8 +18273,8 @@ components:
 
     PluginStatus:
       description: |
-        - installed：已安装，平台半边没有在宿主里（没有平台半边、全局停用或宿主尚未启动）
-        - active：平台半边已在宿主里加载
+        - installed：已安装，平台侧没有在宿主里（没有平台侧、全局停用或宿主尚未启动）
+        - active：平台侧已在宿主里加载
         - error：加载失败（清单与代码不符、register 抛错等），原因见 lastError
         - host_stopped：宿主崩溃次数达到上限，已停止
       type: string
@@ -18333,7 +18333,7 @@ components:
           items: { type: string, enum: [agent, task, project, identity, global] }
 
     PluginComponents:
-      description: 安装前展示的组成：两半各有什么。
+      description: 安装前展示的组成：两侧各有什么。
       type: object
       required: [agentExtensions, skills, mcpServers, bin, platform, actions, channels, http, schedules]
       additionalProperties: false
@@ -18342,7 +18342,7 @@ components:
         skills: { description: "pi.skills 的目录", type: array, items: { type: string } }
         mcpServers: { description: "loopNow.mcpServers 的名称", type: array, items: { type: string } }
         bin: { description: "loopNow.bin 的目录", type: array, items: { type: string } }
-        platform: { description: "是否有平台半边", type: boolean }
+        platform: { description: "是否有平台侧", type: boolean }
         actions: { type: array, items: { $ref: "#/components/schemas/PluginAction" } }
         channels:
           type: array
@@ -18595,7 +18595,7 @@ components:
       required: [configured, state, pid, startedAt, hostVersion, recentExits, lastCrash, loaded, today]
       additionalProperties: false
       properties:
-        configured: { description: "服务端是否有宿主入口；为 false 时插件的平台半边不运行", type: boolean }
+        configured: { description: "服务端是否有宿主入口；为 false 时插件的平台侧不运行", type: boolean }
         state: { type: string, enum: [disabled, starting, running, restarting, stopped, idle] }
         pid: { type: [integer, "null"] }
         startedAt: { type: [string, "null"], format: date-time }
@@ -18821,7 +18821,7 @@ components:
 
     PluginEvent:
       description: |
-        发给平台半边的事件（plugins/SPEC.md §4），给插件作者的合同：固定字段加该类型自己的字段；正文一律不带，用权限范围内的接口另取。
+        发给平台侧的事件（plugins/SPEC.md §4），给插件作者的合同：固定字段加该类型自己的字段；正文一律不带，用权限范围内的接口另取。
         观察类事件至少送达一次，按 `id` 去重。各类型的字段：
         - run.queued、run.started、run.ended：origin（console、inbox_reminder、sleep_wake、task_node、console_node）；
           run.ended 另有 status（completed、failed、interrupted）、endReason、errorCode 与 tokens（这一轮的 input、output、cacheRead、cacheWrite、total）

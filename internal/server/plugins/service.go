@@ -26,7 +26,7 @@ import (
 // Service 管理已安装的插件。安装、更新与卸载串行执行。
 type Service struct {
 	Store *store.Store
-	// Host 是宿主监护；服务端没有宿主入口时为空，平台半边不运行。
+	// Host 是宿主监护；服务端没有宿主入口时为空，平台侧不运行。
 	Host *pluginhost.Supervisor
 	// Root 是 <work root>/platform/plugins：安装目录 <Root>/<id>/<version>/，数据目录 <Root>/<id>/data/。
 	Root string
@@ -986,7 +986,7 @@ type loadPayload struct {
 	APIURL   string        `json:"apiUrl"`
 }
 
-// Specs 返回有平台半边的插件，按安装时间排序（宿主加载与同步调用的顺序）。
+// Specs 返回有平台侧的插件，按安装时间排序（宿主加载与同步调用的顺序）。
 // 每个插件的 load 载荷在加载前才组装，这时签发新的插件令牌并吊销旧的。
 func (s *Service) Specs(ctx context.Context) ([]pluginhost.Spec, error) {
 	ps, err := s.Store.ListPlugins(ctx)

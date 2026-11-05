@@ -227,7 +227,7 @@ func requirePlugin(ctx context.Context, tx *db.Tx, plugin string) error {
 	return notFoundIfNoRows(tx.QueryRow(ctx, `SELECT id FROM plugins WHERE id=$1`, plugin).Scan(&id), "插件")
 }
 
-// PluginConfigs 返回插件的全局配置与启用了它的各项目的配置（宿主加载时一起交给平台半边）：
+// PluginConfigs 返回插件的全局配置与启用了它的各项目的配置（宿主加载时一起交给平台侧）：
 // 只含启用了插件、未删除的项目，没有项目级配置的项目为空配置；停用或删除的项目即使留有配置也不含。
 func (s *Store) PluginConfigs(ctx context.Context, plugin string) (PluginConfigRow, map[uuid.UUID]PluginConfigRow, error) {
 	global := PluginConfigRow{Values: map[string]any{}, Secrets: map[string]string{}}

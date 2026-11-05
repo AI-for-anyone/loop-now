@@ -54,7 +54,7 @@ type Snapshot struct {
 	Plugins PluginAssets
 }
 
-// PluginAssets 是 Agent 已授权插件的 Agent 半边（plugins/SPEC.md §2.1），路径都是绝对路径；没有授权插件或全局停用时为空。
+// PluginAssets 是 Agent 已授权插件的 Agent 侧（plugins/SPEC.md §2.1），路径都是绝对路径；没有授权插件或全局停用时为空。
 type PluginAssets struct {
 	Extensions []string                   // 每个一条 -e，在平台自己的 -e 之后
 	Skills     []string                   // 每个一条 --skill

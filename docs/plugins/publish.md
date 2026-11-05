@@ -5,7 +5,7 @@ The official plugin market is a Git repository: [`AI-for-anyone/loop-now-market`
 ## How listing works
 
 1. **Publish your plugin as a Git repository** with proper release tags. Entries in the index point at a tag, never a moving branch.
-2. **Open a PR against the market repository** adding your entry to the index. Every entry is reviewed before merge: the plugin's two halves, declared events, permissions, and install source are checked.
+2. **Open a PR against the market repository** adding your entry to the index. Every entry is reviewed before merge: the plugin's two sides, declared events, permissions, and install source are checked.
 3. **The market's CI validates each entry** with this repository's plugin host, so a broken manifest fails before it ever reaches users.
 4. **Once merged, installation needs no confirmation** — that is exactly why the review step exists.
 

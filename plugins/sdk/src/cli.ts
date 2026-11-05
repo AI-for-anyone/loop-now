@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // loop-now-plugin validate <目录> [--platform-version YYYY.MM]：按 plugins/SPEC.md §2 校验插件目录，向标准输出写 JSON。
-// 有错误时退出码为 1，参数不对时为 2。只做静态检查；加载平台半边核对订阅用插件宿主的 validate --load。
+// 有错误时退出码为 1，参数不对时为 2。只做静态检查；加载平台侧核对订阅用插件宿主的 validate --load。
 
 import { validatePlugin } from './validate.ts'
 

@@ -243,7 +243,7 @@ describe('官方插件 webhook 代管外部身份', () => {
 })
 
 describe('官方插件 hello', () => {
-  it('平台半边在 run.ended 时写插件日志', async () => {
+  it('平台侧在 run.ended 时写插件日志', async () => {
     const host = await HostHarness.start()
     try {
       assert.deepEqual((await host.load(officialPayload('hello'))).payload, { ok: true })

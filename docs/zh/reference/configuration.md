@@ -10,7 +10,7 @@
 | `LOOP_NOW_DATA_DIR` | 数据库（`db/`）与每日备份（`backups/`）；默认为服务端用户的 `~/.loop_now` |
 | `LOOP_NOW_WORK_ROOT` | 持久的 Agent 工作区与运行文件；和数据目录一样，同时只给一个服务端实例（由 `.loop-now-server.lock` 锁定） |
 | `LOOP_NOW_CONTEXT_DIR` | 共享的项目（`projects/<id>/`）与全局（`global/`）上下文文件夹；默认为服务端用户的 `~/.loop_now` |
-| `LOOP_NOW_PLUGIN_HOST_ENTRY` | 插件宿主入口的绝对路径，由 Node 运行；不设置则插件平台半边不运行 |
+| `LOOP_NOW_PLUGIN_HOST_ENTRY` | 插件宿主入口的绝对路径，由 Node 运行；不设置则插件的平台侧不运行 |
 | `LOOP_NOW_PLUGIN_OFFICIAL_DIR` | 随平台发布的官方插件目录（每个插件一个目录）；不设置则没有 `builtin` 安装来源 |
 | `LOOP_NOW_PLUGIN_MARKET_URL` | 官方插件市场 `loop-now-market.json` 的 `https` 地址；默认为官方市场索引，可指向其他地址 |
 | `LOOP_NOW_PI_MAX_PROCESSES` | `0` 表示不限；正数限制本地 Pi 进程数量 |

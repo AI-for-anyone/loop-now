@@ -165,7 +165,7 @@ func previewForInstall(ctx context.Context, inv *cli.Invocation, body map[string
 	if !pv.Trusted && !force {
 		m := pv.Manifest
 		return "", output.Errorf(output.CodeConfirmationRequired,
-			"插件 %s %s 来自非官方来源（%s %s）：Agent 扩展 %d 个、Skill %d 个、MCP 服务器 %v、CLI 目录 %v、平台半边 %v；订阅 %v；权限 %v。确认后加 --force 重新执行",
+			"插件 %s %s 来自非官方来源（%s %s）：Agent 扩展 %d 个、Skill %d 个、MCP 服务器 %v、CLI 目录 %v、平台侧 %v；订阅 %v；权限 %v。确认后加 --force 重新执行",
 			m.ID, m.Version, pv.Source.Kind, pv.Source.Location, m.Components.AgentExtensions, len(m.Components.Skills), m.Components.MCPServers,
 			m.Components.Bin, m.Components.Platform, m.Events, m.Permissions)
 	}

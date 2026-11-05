@@ -54,7 +54,7 @@ func nodeBin() string {
 	return ""
 }
 
-// plugin 写一个插件目录：平台半边、Agent 扩展、Skill、CLI 目录、MCP 服务器、配置与账号都有。
+// plugin 写一个插件目录：平台侧、Agent 扩展、Skill、CLI 目录、MCP 服务器、配置与账号都有。
 func plugin(t *testing.T, dir, id, version string) string {
 	t.Helper()
 	pkg := map[string]any{

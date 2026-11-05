@@ -65,7 +65,7 @@ A workflow can move from development to review and back for a bounded number of 
 
 ## Plugins are the extension point
 
-A plugin is one directory whose `package.json` is the manifest. The **agent half** is a standard [Pi package](https://pi.dev/packages) loaded into each granted agent's Pi process; the **platform half** runs in a long-lived Node host next to the server, subscribing to platform events with a scoped token.
+A plugin is one directory whose `package.json` is the manifest. The **agent side** is a standard [Pi package](https://pi.dev/packages) loaded into each granted agent's Pi process; the **platform side** runs in a long-lived Node host next to the server, subscribing to platform events with a scoped token.
 
 ```ts twoslash
 import { createDelivery, type PluginAPI } from '@loop-now/plugin-sdk'
@@ -79,7 +79,7 @@ export default function register(api: PluginAPI) {
 }
 ```
 
-The manifest is authoritative: subscribing to an event, or calling an API scope, that the manifest does not declare fails — and install shows both halves, the events, and the permissions before anything runs. [Read the plugin overview →](/plugins/)
+The manifest is authoritative: subscribing to an event, or calling an API scope, that the manifest does not declare fails — and install shows both sides, the events, and the permissions before anything runs. [Read the plugin overview →](/plugins/)
 
 ## Early-stage personal edition
 

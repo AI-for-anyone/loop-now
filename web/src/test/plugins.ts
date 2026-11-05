@@ -2,7 +2,7 @@ import { http, HttpResponse } from 'msw'
 import type { Schemas } from '@/api/client'
 import { apiUrl, errorBody } from './api'
 
-// 插件（第二版）的测试数据：按契约构造，默认是随平台发布的 webhook 插件（只有平台半边）。
+// 插件（第二版）的测试数据：按契约构造，默认是随平台发布的 webhook 插件（只有平台侧）。
 const at = '2026-10-27T03:19:00Z'
 
 // webhook 的配置表单：回调地址（项目可覆盖、必填）、签名密钥（密钥）、重试上限（整数，默认 5）。

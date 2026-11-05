@@ -1,4 +1,4 @@
-// 官方插件的 Agent 半边在真实的 Pi（RPC 模式）里加载并被调用：用进程内的离线模型（fixtures/pi-offline-provider.ts）按脚本发出工具调用。
+// 官方插件的 Agent 侧在真实的 Pi（RPC 模式）里加载并被调用：用进程内的离线模型（fixtures/pi-offline-provider.ts）按脚本发出工具调用。
 // 没有可用的 Pi 时跳过（LOOP_NOW_TEST_PI_ROOT 指定 Pi 包目录）；playwright 另需准备好的数据目录（LOOP_NOW_TEST_PLAYWRIGHT_DATA，见 setup.mjs）。
 
 import assert from 'node:assert/strict'
@@ -80,7 +80,7 @@ async function runPi(o: PiRun): Promise<{ messages: NonNullable<Rec['data']>['me
   }
 }
 
-describe('官方插件的 Agent 半边', { skip: noPi }, () => {
+describe('官方插件的 Agent 侧', { skip: noPi }, () => {
   it('hello：注册 hello 工具，按插件配置问候', { timeout: 60_000 }, async () => {
     const { messages } = await runPi({
       extensions: [path.join(official, 'hello/agent/index.ts')],

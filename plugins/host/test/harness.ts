@@ -297,7 +297,7 @@ export function loadPayload(id: string, root: string, entry: string, o: PayloadO
   }
 }
 
-/** 在临时目录里写一个只有平台半边的插件，返回 load 载荷。 */
+/** 在临时目录里写一个只有平台侧的插件，返回 load 载荷。 */
 export class Fixtures {
   readonly dir = mkdtempSync(path.join(tmpdir(), 'loop-now-fixtures-'))
 

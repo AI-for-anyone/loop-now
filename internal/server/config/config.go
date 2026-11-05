@@ -160,7 +160,7 @@ type Config struct {
 	ExecEnvPassthrough  []string
 	NodeBin             string
 	PiAIDir             string // 为空时在启动检查中推导
-	// PluginHostEntry 是插件宿主的入口文件（node 运行它）；为空时插件的平台半边不运行。
+	// PluginHostEntry 是插件宿主的入口文件（node 运行它）；为空时插件的平台侧不运行。
 	PluginHostEntry string
 	// PluginOfficialDir 是随平台发布的官方插件目录；为空时没有 builtin 安装来源。
 	PluginOfficialDir string

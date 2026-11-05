@@ -25,7 +25,7 @@ const lark = makePreview({
 function handlers({ preview = lark, install }: { preview?: typeof lark; install?: (body: Record<string, unknown>) => Response | undefined } = {}) {
   const previews: unknown[] = [], installs: Record<string, unknown>[] = []
   server.use(
-    http.get(apiUrl('/plugin-sources/builtin'), () => HttpResponse.json({ sources: [{ id: 'hello', displayName: 'hello 示例', description: '两半各一个最小例子', version: '1.0.0' }, { id: 'webhook', displayName: 'Webhook 通知', description: '收件箱有新消息时 POST', version: '1.2.0' }] })),
+    http.get(apiUrl('/plugin-sources/builtin'), () => HttpResponse.json({ sources: [{ id: 'hello', displayName: 'hello 示例', description: '两侧各一个最小例子', version: '1.0.0' }, { id: 'webhook', displayName: 'Webhook 通知', description: '收件箱有新消息时 POST', version: '1.2.0' }] })),
     http.post(apiUrl('/plugin-previews'), async ({ request }) => {
       previews.push(await request.json())
       return HttpResponse.json(preview, { status: 201 })

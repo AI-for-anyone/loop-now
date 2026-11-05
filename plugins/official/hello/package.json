@@ -2,8 +2,8 @@
   "name": "@loop-now/plugin-hello",
   "version": "1.0.0",
   "description": {
-    "zh-CN": "最小示例：平台半边在每轮结束时写一行日志，Agent 半边给 Pi 加一个 hello 工具",
-    "en-US": "Minimal example: the platform half writes a log line at the end of each turn, and the Agent half gives Pi a hello tool"
+    "zh-CN": "最小示例：平台侧在每轮结束时写一行日志，Agent 侧给 Pi 加一个 hello 工具",
+    "en-US": "Minimal example: the platform side writes a log line at the end of each turn, and the Agent side gives Pi a hello tool"
   },
   "license": "Apache-2.0",
   "type": "module",

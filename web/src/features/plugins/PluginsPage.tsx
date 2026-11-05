@@ -77,7 +77,7 @@ function HostStrip() {
   )
 }
 
-// 已安装的一个插件：名称、id 与版本、来源；两半各有什么（来自详情里的清单）；启用的项目数与授权的 Agent 数；状态与入口。
+// 已安装的一个插件：名称、id 与版本、来源；两侧各有什么（来自详情里的清单）；启用的项目数与授权的 Agent 数；状态与入口。
 function InstalledCard({ plugin, installer }: { plugin: Schemas['Plugin']; installer: ReturnType<typeof usePluginInstaller> }) {
   const detail = usePlugin(plugin.id)
   const markets = usePluginMarkets()

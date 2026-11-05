@@ -40,7 +40,7 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 
 const list = text.list
 
-// 安装前确认与插件详情共用：两半各有什么、订阅的事件、要的权限，每项一行说明。
+// 安装前确认与插件详情共用：两侧各有什么、订阅的事件、要的权限，每项一行说明。
 export function ManifestSummary({ manifest, columns = true }: { manifest: Manifest; columns?: boolean }) {
   const c = manifest.components
   const configFields = fieldsOf(manifest.configSchema)

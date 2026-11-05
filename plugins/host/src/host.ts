@@ -1,4 +1,4 @@
-// 插件宿主：按 Go 的 load 加载平台半边，分发观察类事件（回 ack）与同步调用（回 result），state_* 经 Go 读写，
+// 插件宿主：按 Go 的 load 加载平台侧，分发观察类事件（回 ack）与同步调用（回 result），state_* 经 Go 读写，
 // 插件的日志与输出归到插件。任何插件的错误都只回成 {ok:false}，不让宿主退出。
 
 import path from 'node:path'

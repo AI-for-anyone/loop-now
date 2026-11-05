@@ -664,7 +664,7 @@ func (a *App) assemblePlugins(cfg *config.Config, res *preflight.Resolved, log *
 	}
 	a.API.Plugins = a.Plugins
 	if cfg.PluginHostEntry == "" {
-		log.Info("没有配置插件宿主入口，插件的平台半边不运行", "env", config.EnvPluginHostEntry)
+		log.Info("没有配置插件宿主入口，插件的平台侧不运行", "env", config.EnvPluginHostEntry)
 		return nil
 	}
 	env := []string{"PATH=" + res.ExecBasePath, "HOME=" + root, "LANG=C.UTF-8", "LOOP_NOW_PLUGINS_ROOT=" + root, "LOOP_NOW_API_URL=" + a.Plugins.APIURL}

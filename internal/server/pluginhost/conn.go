@@ -78,7 +78,7 @@ func startConn(command []string, dir string, env []string, onMessage func(*conn,
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Dir, cmd.Env = dir, env
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = inR, outW, errW
-	// 单独的进程组：退出或被停止时连同平台半边起的子进程一起结束。
+	// 单独的进程组：退出或被停止时连同平台侧拉起的子进程一起结束。
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	err = cmd.Start()
 	// 子进程持有自己那一端；父进程关掉，宿主退出后读端才能读到 EOF。

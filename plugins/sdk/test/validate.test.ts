@@ -121,7 +121,7 @@ describe('validatePlugin', () => {
     assert.match(validatePlugin(plugin('plain', { name: 'x', version: '1.0.0' })).findings[0]!.message, /不是插件/)
     assert.match(validatePlugin(plugin('broken', '{')).findings[0]!.message, /不是合法的 JSON/)
     assert.match(validatePlugin(path.join(tmp, 'absent')).findings[0]!.message, /不是目录/)
-    assert.match(validatePlugin(plugin('empty', { name: 'x', version: '1.0.0', loopNow: { id: 'x' } })).findings[0]!.message, /既没有 Agent 半边/)
+    assert.match(validatePlugin(plugin('empty', { name: 'x', version: '1.0.0', loopNow: { id: 'x' } })).findings[0]!.message, /既没有 Agent 侧/)
   })
 
   it('description 与 loopNow.displayName 可以是字符串或按语言的对象；对象须至少一项、键为语言标签、值非空', () => {

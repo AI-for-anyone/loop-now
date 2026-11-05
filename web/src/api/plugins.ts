@@ -199,7 +199,7 @@ export function useRestartPluginHost() {
   })
 }
 
-// 一键停用：停止宿主、不再给新启动的 Pi 挂载 Agent 半边；宿主状态与各插件状态随之变化。
+// 一键停用：停止宿主、不再给新启动的 Pi 挂载 Agent 侧；宿主状态与各插件状态随之变化。
 export function useSavePluginSettings() {
   const client = useQueryClient()
   return useMutation<Schemas['PluginSettings'], ApiError, Schemas['PluginSettings']>({

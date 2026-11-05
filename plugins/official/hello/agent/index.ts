@@ -1,4 +1,4 @@
-// Agent 半边：标准的 Pi 扩展，由已授权 Agent 的 Pi 进程加载（plugins/SPEC.md §2.1）。
+// Agent 侧：标准的 Pi 扩展，由已授权 Agent 的 Pi 进程加载（plugins/SPEC.md §2.1）。
 // 平台把生效的配置（不含 secret 字段）放在环境变量 LOOP_NOW_PLUGIN_HELLO_CONFIG 里。
 
 import { defineTool, type ExtensionAPI } from '@earendil-works/pi-coding-agent'
@@ -16,7 +16,7 @@ function greeting(): string {
 const helloTool = defineTool({
   name: 'hello',
   label: 'Hello',
-  description: '向某人问好。用于演示 Loop Now 插件的 Agent 半边。',
+  description: '向某人问好。用于演示 Loop Now 插件的 Agent 侧。',
   parameters: Type.Object({
     name: Type.String({ description: '要问候的人' }),
   }),
