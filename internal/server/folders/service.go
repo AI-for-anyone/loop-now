@@ -13,12 +13,12 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/sys/unix"
 
+	"loop-now/internal/privatefs"
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/content"
 	"loop-now/internal/server/store"
@@ -239,10 +239,9 @@ func (s *Service) clone(ctx context.Context, p store.FolderGitPull, f Folder) (c
 	cmd := exec.CommandContext(ctx, s.O.GitBin, args...)
 	cmd.Env = env
 	cmd.Dir = filepath.Dir(tmp)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.Cancel = procgroup.Cancel(cmd)
 	cmd.WaitDelay = 5 * time.Second
-	out, err := cmd.CombinedOutput()
+	out, err := procgroup.CombinedOutput(cmd)
 	if err != nil {
 		switch {
 		case s.ctx.Err() != nil:
@@ -288,12 +287,12 @@ func (f Folder) place(src, rel string) error {
 		return mapErr("path", err)
 	}
 	defer parent.Close()
-	srcDir, err := unix.Open(filepath.Dir(src), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	srcDir, err := privatefs.OpenNoFollow(filepath.Dir(src), os.O_RDONLY, 0)
 	if err != nil {
 		return err
 	}
-	defer unix.Close(srcDir)
-	return unix.Renameat(srcDir, filepath.Base(src), int(parent.Fd()), path.Base(rel))
+	defer srcDir.Close()
+	return renameAt(srcDir, filepath.Base(src), parent, path.Base(rel))
 }
 
 func tail(s string, n int) string {

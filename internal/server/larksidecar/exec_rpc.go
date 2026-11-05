@@ -10,8 +10,9 @@ import (
 	"net/http"
 	"os/exec"
 	"sync"
-	"syscall"
 	"time"
+
+	"loop-now/internal/procgroup"
 )
 
 const ExecURLEnv = "LOOP_NOW_LARK_EXEC_URL"
@@ -116,18 +117,8 @@ func (s *ManagedScope) execute(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503)
 		return
 	}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.WaitDelay = 200 * time.Millisecond
-	cmd.Cancel = func() error {
-		if cmd.Process == nil {
-			return nil
-		}
-		e := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		if e == syscall.ESRCH {
-			return nil
-		}
-		return e
-	}
+	cmd.Cancel = procgroup.Cancel(cmd)
 	// No inherited stdin/exec capability: finite @file was already snapshotted by
 	// Command. Native env is exclusively the Command clean environment.
 	cmd.Stdin = nil
@@ -142,7 +133,7 @@ func (s *ManagedScope) execute(w http.ResponseWriter, r *http.Request) {
 	cmd.Stderr = frameStream{out: out, stream: "stderr"}
 	code := 2
 	category := "lark_execution_rejected"
-	if e = cmd.Start(); e == nil {
+	if e = procgroup.Start(cmd); e == nil {
 		completionConfirmed = false
 		identity, identityErr := readNativeProcess(cmd.Process.Pid)
 		s.manager.mu.Lock()
@@ -194,8 +185,8 @@ func (s *ManagedScope) execute(w http.ResponseWriter, r *http.Request) {
 // terminate its owned group after Wait, including normal parent exit. Unknown
 // completion keeps the consumer registered, rather than manufacturing idle.
 func confirmProcessGroupExit(pid int) bool {
-	e := syscall.Kill(-pid, syscall.SIGKILL)
-	if e == syscall.ESRCH {
+	e := procgroup.Kill(pid)
+	if errors.Is(e, procgroup.ErrNotFound) {
 		return true
 	}
 	if e != nil {
@@ -203,7 +194,7 @@ func confirmProcessGroupExit(pid int) bool {
 	}
 	until := time.Now().Add(time.Second)
 	for time.Now().Before(until) {
-		if syscall.Kill(-pid, 0) == syscall.ESRCH {
+		if errors.Is(procgroup.Probe(pid), procgroup.ErrNotFound) {
 			return true
 		}
 		time.Sleep(5 * time.Millisecond)

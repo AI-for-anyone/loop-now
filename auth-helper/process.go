@@ -12,6 +12,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"loop-now/internal/execenv"
+	"loop-now/internal/privatefs"
 )
 
 type ProcessOptions struct {
@@ -42,7 +45,7 @@ func Command(ctx context.Context, o ProcessOptions) (*exec.Cmd, error) {
 		return nil, errors.New("invalid auth helper process options")
 	}
 	info, err := os.Lstat(o.Home)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != 0700 {
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || !privatefs.IsPrivate(o.Home, info) {
 		return nil, errors.New("auth helper requires a private HOME")
 	}
 	tmp := filepath.Join(o.Home, "tmp")
@@ -50,12 +53,12 @@ func Command(ctx context.Context, o ProcessOptions) (*exec.Cmd, error) {
 		return nil, errors.New("cannot prepare auth helper temporary directory")
 	}
 	info, err = os.Lstat(tmp)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != 0700 {
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || !privatefs.IsPrivate(tmp, info) {
 		return nil, errors.New("auth helper temporary directory must be private")
 	}
 	cmd := exec.CommandContext(ctx, o.NodeBin, o.Entry)
 	cmd.Dir = o.Home
-	cmd.Env = []string{"HOME=" + o.Home, "TMPDIR=" + tmp, "PATH=" + o.BasePath, "NODE_ENV=production"}
+	cmd.Env = append(execenv.Base(o.Home, tmp), "HOME="+o.Home, "TMPDIR="+tmp, "PATH="+o.BasePath, "NODE_ENV=production")
 	if o.DrainTimeout > 0 {
 		ms := o.DrainTimeout.Milliseconds()
 		if ms < 1 || ms > 2147483647 {

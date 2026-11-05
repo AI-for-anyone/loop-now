@@ -13,6 +13,9 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"loop-now/internal/execenv"
+	"loop-now/internal/privatefs"
 )
 
 // Resolved 是检查通过后得到的本机绝对路径与推导值。
@@ -27,11 +30,11 @@ type Resolved struct {
 	WorkRoot     string // 解析符号链接后的绝对路径
 }
 
-// HostCommonDirs 是执行 PATH 中排在系统目录之前的宿主常用目录（存在的才加入）。
-var HostCommonDirs = []string{"/opt/homebrew/bin", "/usr/local/bin"}
+// HostCommonDirs 是执行 PATH 中排在系统目录之前的宿主常用目录（存在的才加入）；按平台取自 execenv。
+var HostCommonDirs = execenv.HostCommonDirs()
 
-// SystemDirs 是执行 PATH 末尾的系统目录。
-var SystemDirs = []string{"/usr/bin", "/bin", "/usr/sbin", "/sbin"}
+// SystemDirs 是执行 PATH 末尾的系统目录；按平台取自 execenv。
+var SystemDirs = execenv.SystemDirs()
 
 // Options 是检查所需的输入。
 type Options struct {
@@ -68,7 +71,7 @@ func Resolve(ctx context.Context, o Options) (*Resolved, error) {
 		r.ExecBasePath = DeriveExecBasePath(r.NodeBin, r.GitBin)
 	}
 
-	if err := checkPiVersion(ctx, r.PiBin, o.PiVersion, r.ExecBasePath); err != nil {
+	if err := checkPiVersion(ctx, r.NodeBin, r.PiBin, o.PiVersion, r.ExecBasePath); err != nil {
 		return nil, err
 	}
 
@@ -131,12 +134,35 @@ func DeriveExecBasePath(nodeBin, gitBin string) string {
 	return strings.Join(dirs, string(os.PathListSeparator))
 }
 
-func checkPiVersion(ctx context.Context, piBin, want, path string) error {
+// PiCommand 返回启动 Pi 的命令：piBin 是 JavaScript 入口（随包布局的 dist/bundle/cli.js）时由 node 运行它——
+// Windows 没有 shebang，Unix 上 `#!/usr/bin/env node` 的效果也是如此；否则直接执行 piBin（PATH 上的 pi 命令）。
+// nodeBin 为空时按 PATH 找 node。
+func PiCommand(nodeBin, piBin string, args ...string) *exec.Cmd {
+	if IsJavaScriptEntry(piBin) {
+		if nodeBin == "" {
+			nodeBin = "node"
+		}
+		return exec.Command(nodeBin, append([]string{piBin}, args...)...)
+	}
+	return exec.Command(piBin, args...)
+}
+
+// IsJavaScriptEntry 报告 path 是否是要交给 node 运行的脚本文件。
+func IsJavaScriptEntry(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".js", ".mjs", ".cjs":
+		return true
+	}
+	return false
+}
+
+func checkPiVersion(ctx context.Context, nodeBin, piBin, want, path string) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, piBin, "--version")
-	// Pi 以 `#!/usr/bin/env node` 启动，需要能在 PATH 中找到 node；其余环境一律不传。
-	cmd.Env = []string{"PATH=" + path, "PI_OFFLINE=1", "PI_SKIP_VERSION_CHECK=1", "HOME=" + os.TempDir()}
+	cmd := PiCommand(nodeBin, piBin, "--version")
+	cmd = exec.CommandContext(ctx, cmd.Path, cmd.Args[1:]...)
+	// Pi 以 `#!/usr/bin/env node` 启动（或由 node 直接运行 cli.js），需要能在 PATH 中找到 node；其余环境一律不传。
+	cmd.Env = append(execenv.Base(os.TempDir(), os.TempDir()), "PATH="+path, "PI_OFFLINE=1", "PI_SKIP_VERSION_CHECK=1", "HOME="+os.TempDir())
 	out, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("执行 %s --version 失败：%w", piBin, err)
@@ -239,9 +265,9 @@ func PrepareWorkRoot(workRoot string, homes []string) (string, error) {
 	if !fi.IsDir() {
 		return "", fmt.Errorf("工作根目录 %s 不是目录", real)
 	}
-	if fi.Mode().Perm() != 0o700 {
-		if err := os.Chmod(real, 0o700); err != nil {
-			return "", fmt.Errorf("把工作根目录权限设为 0700 失败：%w", err)
+	if !privatefs.IsPrivate(real, fi) {
+		if err := privatefs.MakePrivate(real); err != nil {
+			return "", fmt.Errorf("把工作根目录设为只有当前用户可访问失败：%w", err)
 		}
 	}
 	return real, nil

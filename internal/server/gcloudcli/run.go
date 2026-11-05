@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"loop-now/internal/execenv"
+	"loop-now/internal/privatefs"
 	"loop-now/internal/server/clitemplate"
 )
 
@@ -96,7 +98,7 @@ func Run(ctx context.Context, args []string, o Options) int {
 	if e := os.MkdirAll(config, 0700); e != nil {
 		return fail()
 	}
-	env := []string{"HOME=" + home, "CLOUDSDK_CONFIG=" + config, "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "PYTHONNOUSERSITE=1", "CLOUDSDK_CORE_DISABLE_USAGE_REPORTING=true", "CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK=true", "CLOUDSDK_CORE_DISABLE_PROMPTS=true"}
+	env := append(execenv.Base(home, ""), "HOME="+home, "CLOUDSDK_CONFIG="+config, "PATH="+execenv.SystemPath(), "PYTHONNOUSERSITE=1", "CLOUDSDK_CORE_DISABLE_USAGE_REPORTING=true", "CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK=true", "CLOUDSDK_CORE_DISABLE_PROMPTS=true")
 	selfContained, e := clitemplate.GoogleSelfContained(root)
 	if e != nil {
 		return fail()
@@ -125,7 +127,7 @@ func Run(ctx context.Context, args []string, o Options) int {
 	} else {
 		credential := filepath.Join(home, ".loop-now/gcloud/service-account.json")
 		fi, e := os.Lstat(credential)
-		if e != nil || !fi.Mode().IsRegular() || fi.Mode().Perm() != 0600 {
+		if e != nil || !fi.Mode().IsRegular() || !privatefs.IsPrivate(credential, fi) {
 			return fail()
 		}
 		env = append(env, "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="+credential)

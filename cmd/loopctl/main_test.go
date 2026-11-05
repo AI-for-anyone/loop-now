@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"loop-now/internal/testutil/testenv"
 )
 
 // loopctl 二进制只依赖标准库与本 module，不引用服务端的包；唯一的例外是插件命令与服务端共用的清单校验
@@ -31,7 +33,7 @@ func TestDependencies(t *testing.T) {
 
 // 真实进程：每次调用只向标准输出写一个 JSON 对象，标准错误为空，退出码与类别一致。
 func TestProcessOutput(t *testing.T) {
-	bin := filepath.Join(t.TempDir(), "loopctl")
+	bin := testenv.Exe(filepath.Join(t.TempDir(), "loopctl"))
 	if out, err := exec.Command("go", "build", "-ldflags", "-X loop-now/internal/buildinfo.version=9.9.9-test", "-o", bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("构建失败：%v\n%s", err, out)
 	}

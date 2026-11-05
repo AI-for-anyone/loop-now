@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/executor"
 )
@@ -111,10 +111,10 @@ func TestRuntimeHandoffPreservesGroupAndRejectsOldGeneration(t *testing.T) {
 			t.Fatal("old process still published")
 		}
 	}
-	if err := syscall.Kill(oldPID, 0); !errors.Is(err, syscall.ESRCH) {
-		t.Fatalf("old Pi not reaped: %v", err)
+	if procgroup.ProcessAlive(oldPID) {
+		t.Fatal("old Pi not reaped")
 	}
-	if err := syscall.Kill(-oldPID, 0); !errors.Is(err, syscall.ESRCH) {
+	if err := procgroup.Probe(oldPID); !errors.Is(err, procgroup.ErrNotFound) {
 		t.Fatalf("old Pi process group survived: %v", err)
 	}
 	for p, v := range want {
@@ -151,7 +151,7 @@ func TestRuntimeHandoffPreservesGroupAndRejectsOldGeneration(t *testing.T) {
 	// A watcher may already have captured removed=true before the handoff.
 	// Even that delayed unlink must revalidate the persisted process epoch.
 	h.e.removeProcPidFile(oldProc)
-	if h.pid(a) != newPID || syscall.Kill(newPID, 0) != nil {
+	if h.pid(a) != newPID || !procgroup.ProcessAlive(newPID) {
 		t.Fatal("late old callback touched replacement")
 	}
 	if _, err := os.Stat(h.e.dirs(a).pidFile); err != nil {
@@ -310,7 +310,7 @@ func TestRuntimeHandoffBusyAndQueuedRejectWholeGroup(t *testing.T) {
 		h.e.mu.Lock()
 		count := len(h.e.handoffs)
 		h.e.mu.Unlock()
-		if count != 0 || h.pid(busy) != pid || syscall.Kill(pid, 0) != nil {
+		if count != 0 || h.pid(busy) != pid || !procgroup.ProcessAlive(pid) {
 			t.Fatal("partial gate or busy process stopped")
 		}
 	}
@@ -419,7 +419,7 @@ func TestRuntimeHandoffMissingSessionAndRevocationFailure(t *testing.T) {
 		if err := lease.StopIdle(context.Background(), a, handoffHandle(t, lease, a)); !errors.Is(err, ErrRuntimeSessionMissing) {
 			t.Fatal(err)
 		}
-		if h.pid(a) != pid || syscall.Kill(pid, 0) != nil {
+		if h.pid(a) != pid || !procgroup.ProcessAlive(pid) {
 			t.Fatal("missing session should fail before stop")
 		}
 		if _, err := os.Stat(session); !os.IsNotExist(err) {

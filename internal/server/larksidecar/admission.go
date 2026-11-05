@@ -14,8 +14,9 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
+
+	"loop-now/internal/procgroup"
 )
 
 const probeProtocol = "loop-now-lark-sandbox-probe-v2"
@@ -140,22 +141,12 @@ func (b *Broker) admitSandboxWith(ctx context.Context, cfg LaunchConfig, profile
 	cmd.Dir = cfg.WorkingDir
 	cmd.Env = []string{"HOME=" + cfg.Home, "PATH=/usr/bin:/bin", "GODEBUG=netdns=go"}
 	cmd.Stdin = bytes.NewReader(raw)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.WaitDelay = 100 * time.Millisecond
-	cmd.Cancel = func() error {
-		if cmd.Process == nil {
-			return nil
-		}
-		e := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		if e == syscall.ESRCH {
-			return nil
-		}
-		return e
-	}
+	cmd.Cancel = procgroup.Cancel(cmd)
 	var out probeOutput
 	cmd.Stdout = &out
 	cmd.Stderr = io.Discard
-	if e = cmd.Run(); e != nil || out.overflow || child.Err() != nil {
+	if e = procgroup.Run(cmd); e != nil || out.overflow || child.Err() != nil {
 		code := -1
 		if exit, ok := e.(*exec.ExitError); ok {
 			code = exit.ExitCode()

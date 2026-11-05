@@ -17,7 +17,8 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"golang.org/x/sys/unix"
+
+	"loop-now/internal/privatefs"
 	"loop-now/internal/server/clitemplate"
 )
 
@@ -66,7 +67,7 @@ type entry struct {
 type Reader struct {
 	tools            *MySQLTools
 	base             string
-	root             *os.File
+	root             *sourceRoot
 	catalog, builtin *clitemplate.Catalog
 	mu               sync.Mutex
 	entries          map[string]*entry
@@ -77,13 +78,13 @@ func New(home string, catalog *clitemplate.Catalog) (*Reader, error) {
 	if home == "" || !filepath.IsAbs(home) {
 		return nil, fail("source_unreadable", "root")
 	}
-	fd, e := unix.Open(home, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	root, e := openSourceRoot(home)
 	if e != nil {
-		return nil, fail("source_unreadable", "root")
+		return nil, e
 	}
 	builtin, e := clitemplate.Load("")
 	if e != nil {
-		unix.Close(fd)
+		root.Close()
 		return nil, fail("template_unavailable", "template")
 	}
 	if catalog == nil {
@@ -91,42 +92,25 @@ func New(home string, catalog *clitemplate.Catalog) (*Reader, error) {
 	}
 	base, err := filepath.Abs(home)
 	if err != nil {
-		unix.Close(fd)
+		root.Close()
 		return nil, fail("source_unreadable", "root")
 	}
-	return &Reader{base: base, root: os.NewFile(uintptr(fd), "local-source-root"), catalog: catalog, builtin: builtin, entries: map[string]*entry{}}, nil
+	return &Reader{base: base, root: root, catalog: catalog, builtin: builtin, entries: map[string]*entry{}}, nil
 }
 func (r *Reader) Close() error { return r.root.Close() }
 
-// open traverses every path component with NOFOLLOW, including intermediate
-// directories. Native error paths are intentionally discarded.
+// open never follows a symlink in any path component (see sourceRoot.open).
+// Native error paths are intentionally discarded.
 func (r *Reader) open(name string) (*os.File, error)          { return r.openPath(name, false) }
 func (r *Reader) openDirectory(name string) (*os.File, error) { return r.openPath(name, true) }
 func (r *Reader) openPath(name string, directory bool) (*os.File, error) {
 	if name == "" || path.IsAbs(name) || path.Clean(name) != name || name == ".." || strings.HasPrefix(name, "../") || strings.Contains(name, "\\") {
 		return nil, fail("unsupported", "source_reference")
 	}
-	fd, e := unix.Dup(int(r.root.Fd()))
+	f, e := r.root.open(name, directory)
 	if e != nil {
-		return nil, fail("source_unreadable", "source")
+		return nil, e
 	}
-	parts := strings.Split(name, "/")
-	for i, p := range parts {
-		flags := unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NOFOLLOW | unix.O_NONBLOCK
-		if i < len(parts)-1 || directory {
-			flags |= unix.O_DIRECTORY
-		}
-		next, err := unix.Openat(fd, p, flags, 0)
-		unix.Close(fd)
-		if err != nil {
-			if errors.Is(err, unix.ENOENT) {
-				return nil, os.ErrNotExist
-			}
-			return nil, fail("source_unreadable", "source")
-		}
-		fd = next
-	}
-	f := os.NewFile(uintptr(fd), "local-source")
 	info, e := f.Stat()
 	if e != nil || (!directory && (!info.Mode().IsRegular() || info.Size() > maxFile)) || (directory && !info.IsDir()) {
 		f.Close()
@@ -178,7 +162,7 @@ func (r *Reader) read(ctx context.Context, name string, pin *stamp, private bool
 	if pin != nil && *pin != (stamp{true, identity(before)}) {
 		return nil, fail("source_changed", "source")
 	}
-	if (private && before.Mode().Perm()&0077 != 0) || (name == ".my.cnf" && before.Mode().Perm()&0002 != 0) {
+	if (private && !privatefs.IsPrivateFile(f)) || (name == ".my.cnf" && privatefs.WorldWritableFile(f)) {
 		return nil, fail("source_unreadable", "permissions")
 	}
 	b, e := io.ReadAll(io.LimitReader(f, maxFile+1))
@@ -325,12 +309,10 @@ func (s Selection) WithOrigin(consume func([]byte) error) error {
 	if !known {
 		return fail("candidate_not_found", "candidate")
 	}
-	info, err := s.reader.root.Stat()
+	rootID, err := s.reader.root.id()
 	if err != nil {
 		return fail("source_unreadable", "root")
 	}
-	v := reflect.Indirect(reflect.ValueOf(info.Sys()))
-	rootID := fmt.Sprint(v.FieldByName("Dev").Interface(), "/", v.FieldByName("Ino").Interface())
 	b, err := json.Marshal([]string{"local-cli-source-v1", rootID, s.entry.candidate.CLI, s.entry.candidate.SourceKind, s.entry.file, s.entry.section, "adapter-v1"})
 	if err != nil {
 		return fail("source_unreadable", "origin")

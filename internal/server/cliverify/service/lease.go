@@ -9,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
+
+	"loop-now/internal/filelock"
+	"loop-now/internal/privatefs"
 )
 
 type homeOwner struct {
@@ -23,11 +25,10 @@ func privateDirectory(path string) error {
 		return e
 	}
 	info, e := os.Lstat(path)
-	if e != nil || !info.IsDir() || info.Mode().Perm() != 0700 || info.Mode()&os.ModeSymlink != 0 {
+	if e != nil || !info.IsDir() || !privatefs.IsPrivate(path, info) || info.Mode()&os.ModeSymlink != 0 {
 		return errors.New("验证私有目录无效")
 	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || stat.Uid != uint32(os.Getuid()) {
+	if !privatefs.OwnedByCurrentUserPath(path, info) {
 		return errors.New("验证目录归属无效")
 	}
 	return nil
@@ -43,7 +44,7 @@ func (s *Service) privateRoots() error {
 func (s *Service) operationHome(op uuid.UUID) (string, *os.File, error) {
 	home := filepath.Join(s.Options.WorkRoot, ".cli-verification", s.InstanceID.String(), op.String())
 	path := filepath.Join(s.Options.WorkRoot, ".cli-verification-locks", op.String()+".lock")
-	lease, e := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_RDWR|syscall.O_NOFOLLOW, 0600)
+	lease, e := privatefs.OpenNoFollow(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
 	if e != nil {
 		return "", nil, e
 	}
@@ -54,7 +55,7 @@ func (s *Service) operationHome(op uuid.UUID) (string, *os.File, error) {
 			os.Remove(path)
 		}
 	}()
-	if e = syscall.Flock(int(lease.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); e != nil {
+	if e = filelock.TryLock(lease); e != nil {
 		return "", nil, e
 	}
 	if e = os.Mkdir(home, 0700); e != nil {
@@ -80,11 +81,10 @@ func readOwner(home string) (homeOwner, error) {
 	var owner homeOwner
 	path := filepath.Join(home, ".owner")
 	info, e := os.Lstat(path)
-	if e != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 {
+	if e != nil || !info.Mode().IsRegular() || !privatefs.IsPrivate(path, info) {
 		return owner, errors.New("验证owner标记无效")
 	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || stat.Uid != uint32(os.Getuid()) {
+	if !privatefs.OwnedByCurrentUserPath(path, info) {
 		return owner, errors.New("验证owner归属无效")
 	}
 	raw, e := os.ReadFile(path)
@@ -111,7 +111,7 @@ func (s *Service) recoverHomes() error {
 		}
 		parent := filepath.Join(root, instance.Name())
 		info, e := os.Lstat(parent)
-		if e != nil || !info.IsDir() || info.Mode().Perm() != 0700 || info.Mode()&os.ModeSymlink != 0 {
+		if e != nil || !info.IsDir() || !privatefs.IsPrivate(parent, info) || info.Mode()&os.ModeSymlink != 0 {
 			continue
 		}
 		operations, e := os.ReadDir(parent)
@@ -125,7 +125,7 @@ func (s *Service) recoverHomes() error {
 			}
 			home := filepath.Join(parent, operation.Name())
 			info, e := os.Lstat(home)
-			if e != nil || !info.IsDir() || info.Mode().Perm() != 0700 || info.Mode()&os.ModeSymlink != 0 {
+			if e != nil || !info.IsDir() || !privatefs.IsPrivate(home, info) || info.Mode()&os.ModeSymlink != 0 {
 				continue
 			}
 			owner, e := readOwner(home)
@@ -133,22 +133,21 @@ func (s *Service) recoverHomes() error {
 				continue
 			}
 			leasePath := filepath.Join(s.Options.WorkRoot, ".cli-verification-locks", op.String()+".lock")
-			lease, e := os.OpenFile(leasePath, os.O_RDWR|syscall.O_NOFOLLOW, 0600)
+			lease, e := privatefs.OpenNoFollow(leasePath, os.O_RDWR, 0600)
 			if e != nil {
 				continue
 			}
 			before, e := os.Lstat(leasePath)
 			opened, oe := lease.Stat()
-			if e != nil || oe != nil || !before.Mode().IsRegular() || before.Mode().Perm() != 0600 || !os.SameFile(before, opened) {
+			if e != nil || oe != nil || !before.Mode().IsRegular() || !privatefs.IsPrivate(leasePath, before) || !os.SameFile(before, opened) {
 				lease.Close()
 				continue
 			}
-			stat, ok := opened.Sys().(*syscall.Stat_t)
-			if !ok || stat.Uid != uint32(os.Getuid()) {
+			if !privatefs.OwnedByCurrentUser(lease) {
 				lease.Close()
 				continue
 			}
-			if e = syscall.Flock(int(lease.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); e != nil {
+			if e = filelock.TryLock(lease); e != nil {
 				lease.Close()
 				continue
 			}
@@ -194,22 +193,21 @@ func (s *Service) recoverOrphanLeases() error {
 			continue
 		}
 		path := filepath.Join(root, name)
-		file, e := os.OpenFile(path, os.O_RDWR|syscall.O_NOFOLLOW, 0600)
+		file, e := privatefs.OpenNoFollow(path, os.O_RDWR, 0600)
 		if e != nil {
 			continue
 		}
 		before, e := os.Lstat(path)
 		opened, oe := file.Stat()
-		if e != nil || oe != nil || !before.Mode().IsRegular() || before.Mode().Perm() != 0600 || !os.SameFile(before, opened) {
+		if e != nil || oe != nil || !before.Mode().IsRegular() || !privatefs.IsPrivate(path, before) || !os.SameFile(before, opened) {
 			file.Close()
 			continue
 		}
-		stat, ok := opened.Sys().(*syscall.Stat_t)
-		if !ok || stat.Uid != uint32(os.Getuid()) {
+		if !privatefs.OwnedByCurrentUser(file) {
 			file.Close()
 			continue
 		}
-		if e = syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); e != nil {
+		if e = filelock.TryLock(file); e != nil {
 			file.Close()
 			continue
 		}

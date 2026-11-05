@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"loop-now/internal/testutil/testenv"
 )
 
 var fakepiBin string
@@ -37,7 +39,7 @@ func buildFakepi(dir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	out := filepath.Join(dir, "fakepi")
+	out := testenv.Exe(filepath.Join(dir, "fakepi"))
 	cmd := exec.Command("go", "build", "-o", out, "./internal/server/executor/local/fakepi")
 	cmd.Dir = root
 	if b, err := cmd.CombinedOutput(); err != nil {

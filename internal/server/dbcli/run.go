@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"loop-now/internal/execenv"
 )
 
 type Options struct {
@@ -58,7 +60,7 @@ func nativeConfig(cli, home string, c Connection) ([]string, []string, error) {
 		}
 	}
 	f := c.Fields
-	env := []string{"HOME=" + home, "PATH=/usr/bin:/bin", "LANG=C.UTF-8"}
+	env := append(execenv.Base(home, home), "HOME="+home, "PATH="+execenv.SystemPath(), "LANG=C.UTF-8")
 	if cli == "mysql" {
 		lines := []string{"[client]", "protocol=TCP", "host=" + mysqlQuote(f.Host), "port=" + f.Port, "user=" + mysqlQuote(f.User), "password=" + mysqlQuote(f.Password), "database=" + mysqlQuote(f.Database), "ssl-mode=" + f.SSLMode}
 		for key, name := range map[string]string{"ssl-ca": "ca.pem", "ssl-cert": "cert.pem", "ssl-key": "key.pem"} {
@@ -232,7 +234,7 @@ func Run(ctx context.Context, args []string, o Options) int {
 		return 0
 	}
 	var prefix []string
-	env := []string{"HOME=" + home, "PATH=/usr/bin:/bin", "LANG=C.UTF-8"}
+	env := append(execenv.Base(home, home), "HOME="+home, "PATH="+execenv.SystemPath(), "LANG=C.UTF-8")
 	if !probe {
 		if id == uuid.Nil {
 			if len(connections) == 0 {

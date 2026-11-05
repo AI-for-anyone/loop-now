@@ -13,13 +13,13 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
 	"loop-now/internal/loopctl/guide"
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/content"
@@ -788,7 +788,7 @@ func TestCleanupStale(t *testing.T) {
 	d := h.e.dirs(id)
 	_ = d.ensure()
 	cmd := exec.Command(fakepibin.Path(t), "--mode", "rpc", "--session-dir", d.sessions)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	procgroup.Configure(cmd)
 	stdin, _ := cmd.StdinPipe()
 	defer stdin.Close()
 	if err := cmd.Start(); err != nil {
@@ -838,11 +838,11 @@ func TestCleanupStaleRecognizesRetitledPiByStartTime(t *testing.T) {
 
 	spawn := func(pidFile string, start func(pid int) string) (*exec.Cmd, chan struct{}) {
 		cmd := exec.Command("/bin/sleep", "60")
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		procgroup.Configure(cmd)
 		if err := cmd.Start(); err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) })
+		t.Cleanup(func() { _ = procgroup.Kill(cmd.Process.Pid) })
 		waited := make(chan struct{})
 		go func() { _ = cmd.Wait(); close(waited) }()
 		b, _ := json.Marshal(pidRecord{PID: cmd.Process.Pid, InstanceID: uuid.NewString(), Hostname: "test-host", SessionDir: filepath.Join(filepath.Dir(pidFile), "sessions"), ProcessStart: start(cmd.Process.Pid)})
@@ -965,7 +965,7 @@ func TestAgentTokens(t *testing.T) {
 	}
 
 	// 进程被强制结束：令牌立即作废。
-	if err := syscall.Kill(h.pid(id), syscall.SIGKILL); err != nil {
+	if err := procgroup.Kill(h.pid(id)); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
