@@ -53,10 +53,10 @@ A workflow can move from development to review and back for a bounded number of 
 
 ## Built to extend: the plugin system
 
-**New tools and project-specific behavior belong in plugins.** A plugin is one directory whose `package.json` is the manifest. It has up to two halves, and either one is optional:
+**New tools and project-specific behavior belong in plugins.** A plugin is one directory whose `package.json` is the manifest. It has up to two sides, and either one is optional:
 
-- The **agent half** is a standard [Pi package](https://pi.dev/packages): Pi extensions, Skills, MCP servers, and CLIs, loaded into the Pi process of each agent you grant. An existing Pi package installs unchanged.
-- The **platform half** runs in one long-lived Node plugin host next to the server. It subscribes to platform events and calls the platform API with a scoped plugin token.
+- The **agent side** is a standard [Pi package](https://pi.dev/packages): Pi extensions, Skills, MCP servers, and CLIs, loaded into the Pi process of each agent you grant. An existing Pi package installs unchanged.
+- The **platform side** runs in one long-lived Node plugin host next to the server. It subscribes to platform events and calls the platform API with a scoped plugin token.
 
 | The host provides | What it means for a plugin |
 | --- | --- |
@@ -66,23 +66,23 @@ A workflow can move from development to review and back for a bounded number of 
 | **Reliable outbound HTTP** | The SDK's delivery library keeps a persisted queue, retries with backoff, signs requests with HMAC-SHA256, and writes a delivery log that the plugin page displays. |
 | **Logs + isolation** | Each plugin's output lands in its own log. A plugin that throws, times out, or fails to load affects only itself. |
 
-The manifest is authoritative. Subscribing to an event, or calling an API scope, that the manifest does not declare fails, and install shows the user both halves, the events, and the permissions before anything runs.
+The manifest is authoritative. Subscribing to an event, or calling an API scope, that the manifest does not declare fails, and install shows the user both sides, the events, and the permissions before anything runs.
 
 Observation events, state, secrets, configuration, and the delivery library are available now. Interception and modification hooks, console action buttons, HTTP endpoints, schedules, channels, and plugin accounts are specified in [`plugins/SPEC.md`](plugins/SPEC.md) and are being rolled out.
 
 ### Install once, enable per project, grant per agent
 
-Install from the official plugins, a Git repository, an npm package, or a local directory, in the console or with `loopctl plugin install`. Next, enable the plugin in a project and fill in its configuration. Then grant it to the agents that should load its agent half. Installing or enabling a plugin never authorizes an agent by itself. Versions are pinned: updating is an explicit action, and running tasks keep the files they started with.
+Install from the official plugins, a Git repository, an npm package, or a local directory, in the console or with `loopctl plugin install`. Next, enable the plugin in a project and fill in its configuration. Then grant it to the agents that should load its agent side. Installing or enabling a plugin never authorizes an agent by itself. Versions are pinned: updating is an explicit action, and running tasks keep the files they started with.
 
 Three official plugins ship with the platform:
 
 - [**webhook**](plugins/official/webhook/README.md) POSTs `inbox.received` events to your URL with a signature, retries, and a delivery log. External identities use it instead of polling their Inbox.
 - [**playwright**](plugins/official/playwright/README.md) gives agents a dedicated, visible Chromium through the official Playwright MCP: open pages, read them, click, type, and take screenshots, without touching your everyday Chrome.
-- [**hello**](plugins/official/hello/README.md) is the smallest plugin with both halves, and the starting point for writing your own.
+- [**hello**](plugins/official/hello/README.md) is the smallest plugin with both sides, and the starting point for writing your own.
 
 ![Loop Now plugin market: plugin host status and the official plugins](docs/assets/plugins-en.png)
 
-### A platform half in a few lines
+### A platform side in a few lines
 
 ```ts
 import { createDelivery, type PluginAPI } from '@loop-now/plugin-sdk'
@@ -333,7 +333,7 @@ All server options and defaults are defined in [`internal/server/config/config.g
 | `LOOP_NOW_DATA_DIR` | Database (`db/`) and daily backups (`backups/`); `~/.loop_now` of the server user |
 | `LOOP_NOW_WORK_ROOT` | Persistent agent workspaces and runtime files |
 | `LOOP_NOW_CONTEXT_DIR` | Shared project (`projects/<id>/`) and global (`global/`) context folders; `~/.loop_now` of the server user |
-| `LOOP_NOW_PLUGIN_HOST_ENTRY` | Absolute path of the plugin host entry run with Node; unset means plugin platform halves do not run |
+| `LOOP_NOW_PLUGIN_HOST_ENTRY` | Absolute path of the plugin host entry run with Node; unset means plugins' platform sides do not run |
 | `LOOP_NOW_PLUGIN_OFFICIAL_DIR` | Absolute path of the official plugins shipped with the platform (one directory per plugin); unset means no `builtin` install source |
 | `LOOP_NOW_PLUGIN_MARKET_URL` | `https` address of the official plugin market's `loop-now-market.json`; defaults to the official market index and can point elsewhere |
 | `LOOP_NOW_PI_MAX_PROCESSES` | `0` means unlimited; a positive value caps local Pi processes |

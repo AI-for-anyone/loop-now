@@ -12,10 +12,10 @@ The canonical plugin contract lives in the repository and is versioned with the 
 
 | Section | Declares |
 | --- | --- |
-| `pi` | The agent half: Pi extensions, Skills, MCP servers, CLIs — standard Pi package fields. |
+| `pi` | The agent side: Pi extensions, Skills, MCP servers, CLIs — standard Pi package fields. |
 | `loopNow.id` | Stable plugin identity. |
-| `loopNow.platform` | Entry file of the platform half, loaded into the shared host. |
-| `loopNow.events` | The event catalog entries the platform half subscribes to. |
+| `loopNow.platform` | Entry file of the platform side, loaded into the shared host. |
+| `loopNow.events` | The event catalog entries the platform side subscribes to. |
 | `loopNow.permissions` | API scopes the plugin may call (`state`, `inbox.send`, `identities.manage`, …). |
 | `loopNow.configSchema` | Plain JSON Schema rendered as the plugin's configuration form; `x-secret` fields are write-only, `x-scope: project` fields can be overridden per project. |
 | `loopNow.accounts` / `mcpServers` / `cli` / `buttons` / `http` / `schedules` / `channels` | Optional platform capabilities, each gated by the manifest. |

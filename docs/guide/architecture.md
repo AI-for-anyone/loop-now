@@ -17,7 +17,7 @@ flowchart LR
 - **The server process** keeps busy locks and live event streams in memory; a restart begins new streams.
 - **The local filesystem** holds agent workspaces, sessions, and installed tools.
 - **Pi processes** execute the agents' turns. Each agent runs in its own working directory; the server launches, recycles, and bounds them.
-- **The plugin host** runs platform halves in one long-lived Node process, talks to the server over stdio JSON-lines, and calls back over HTTP with scoped plugin tokens.
+- **The plugin host** runs plugins' platform sides in one long-lived Node process, talks to the server over stdio JSON-lines, and calls back over HTTP with scoped plugin tokens.
 
 ## Repository map
 

@@ -12,7 +12,7 @@ import (
 	"loop-now/internal/server/apitypes"
 )
 
-// writePluginDir 写一个本地插件目录；permissions 为平台半边的权限范围。
+// writePluginDir 写一个本地插件目录；permissions 为平台侧的权限范围。
 func writePluginDir(t *testing.T, id string, permissions ...string) string {
 	t.Helper()
 	dir := t.TempDir()

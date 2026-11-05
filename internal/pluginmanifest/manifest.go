@@ -282,7 +282,7 @@ func (m *Manifest) validate(dir, platformVersion string) error {
 		return invalid(fmt.Sprintf("插件要求平台版本不低于 %s，当前为 %s", *m.MinPlatformVersion, platformVersion))
 	}
 	if len(m.Extensions) == 0 && len(m.Skills) == 0 && m.Platform == "" && len(m.MCPServers) == 0 && len(m.Bin) == 0 {
-		return invalid("插件既没有 Agent 半边（扩展、Skill、MCP 服务器、CLI）也没有平台半边")
+		return invalid("插件既没有 Agent 侧（扩展、Skill、MCP 服务器、CLI）也没有平台侧")
 	}
 	seen := map[string]bool{}
 	for _, e := range m.Events {
@@ -300,7 +300,7 @@ func (m *Manifest) validate(dir, platformVersion string) error {
 		}
 	}
 	if (len(m.Events) > 0 || len(m.Components.Actions) > 0 || len(m.Components.Channels) > 0 || m.Components.HTTP || len(m.Components.Schedules) > 0) && m.Platform == "" {
-		return invalid("订阅事件、操作按钮、渠道、HTTP 与定时都由平台半边处理，须声明 loopNow.platform")
+		return invalid("订阅事件、操作按钮、渠道、HTTP 与定时都由平台侧处理，须声明 loopNow.platform")
 	}
 	if m.Platform != "" {
 		if err := checkPath(dir, m.Platform, "loopNow.platform", false); err != nil {

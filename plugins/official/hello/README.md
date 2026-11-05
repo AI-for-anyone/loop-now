@@ -2,10 +2,10 @@
 
 [中文](https://github.com/AI-for-anyone/loop-now/blob/main/plugins/official/hello/README.zh-CN.md)
 
-The smallest official plugin. It ships with Loop Now to show what the two halves of a plugin do and to check that plugins work on your installation:
+The smallest official plugin. It ships with Loop Now to show what the two sides of a plugin do and to check that plugins work on your installation:
 
-- **Platform half:** whenever an Agent's reply ends in a project where the plugin is enabled, it writes one line to the plugin's log.
-- **Agent half:** Agents you grant it to get a `hello` tool that greets someone, starting with a greeting you can configure.
+- **Platform side:** whenever an Agent's reply ends in a project where the plugin is enabled, it writes one line to the plugin's log.
+- **Agent side:** Agents you grant it to get a `hello` tool that greets someone, starting with a greeting you can configure.
 
 It needs no permissions, accounts or outside services, and does nothing beyond this. Install it to try plugins out, and uninstall it when you are done.
 
@@ -42,7 +42,7 @@ Grants take effect the next time that Agent's Pi starts; the current reply is no
 ## Troubleshooting
 
 - **The Agent has no `hello` tool:** check that the grant was saved, and that the Agent's Pi has started again since then (see step 3).
-- **No log lines:** the plugin must be enabled in the Agent's project; events from other projects do not reach it. The **Plugin market** page also shows the state of the plugin host, which runs platform halves. If it says the server has no plugin host, the server was started without `LOOP_NOW_PLUGIN_HOST_ENTRY`; the `hello` tool still works, but nothing is logged.
+- **No log lines:** the plugin must be enabled in the Agent's project; events from other projects do not reach it. The **Plugin market** page also shows the state of the plugin host, which runs plugins' platform sides. If it says the server has no plugin host, the server was started without `LOOP_NOW_PLUGIN_HOST_ENTRY`; the `hello` tool still works, but nothing is logged.
 - **No official plugins to install:** the server was started without `LOOP_NOW_PLUGIN_OFFICIAL_DIR`.
 - Logs are kept for 7 days. Uninstalling the plugin deletes its config, project enablement and Agent grants; Agents that are already running keep the `hello` tool until their Pi next starts.
 

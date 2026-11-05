@@ -61,7 +61,7 @@ const LOCALIZED_RULE = '须是字符串，或以语言标签（如 zh-CN、en-US
 const WHERE = ['agent', 'task', 'project', 'identity', 'global']
 const SCHEMA_TYPES = ['object', 'array', 'string', 'number', 'integer', 'boolean', 'null']
 const ENTRY_EXTENSIONS = ['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs']
-// Pi 提供给扩展的包（Pi 文档 packages.md）与宿主提供给平台半边的 SDK：应放在 peerDependencies，不随插件安装。
+// Pi 提供给扩展的包（Pi 文档 packages.md）与宿主提供给平台侧的 SDK：应放在 peerDependencies，不随插件安装。
 const HOST_PROVIDED = [
   '@loop-now/plugin-sdk',
   '@earendil-works/pi-ai',
@@ -204,7 +204,7 @@ export function validatePlugin(dir: string, options: ValidateOptions = {}): Vali
   if (lnObj.mcpServers !== undefined && !isObject(lnObj.mcpServers)) error('loopNow.mcpServers', 'loopNow.mcpServers 须是对象')
 
   if (extensions.length === 0 && skills.length === 0 && platform === null && Object.keys(mcpServers).length === 0 && bin.length === 0) {
-    error('', '插件既没有 Agent 半边（扩展、Skill、MCP 服务器、CLI）也没有平台半边')
+    error('', '插件既没有 Agent 侧（扩展、Skill、MCP 服务器、CLI）也没有平台侧')
   }
 
   const seen = new Set<string>()
@@ -231,10 +231,10 @@ export function validatePlugin(dir: string, options: ValidateOptions = {}): Vali
   if (lnObj.http !== undefined && typeof lnObj.http !== 'boolean') error('loopNow.http', 'loopNow.http 须是布尔值')
 
   if ((events.length > 0 || actions.length > 0 || channels.length > 0 || http || schedules.length > 0) && platform === null) {
-    error('loopNow.platform', '订阅事件、操作按钮、渠道、HTTP 与定时都由平台半边处理，须声明 loopNow.platform')
+    error('loopNow.platform', '订阅事件、操作按钮、渠道、HTTP 与定时都由平台侧处理，须声明 loopNow.platform')
   }
   if (platform !== null && checkPath(root, platform, 'loopNow.platform', false, error)) {
-    if (!ENTRY_EXTENSIONS.includes(path.extname(platform))) warn('loopNow.platform', `平台半边入口的扩展名通常是 ${ENTRY_EXTENSIONS.join('、')}`)
+    if (!ENTRY_EXTENSIONS.includes(path.extname(platform))) warn('loopNow.platform', `平台侧入口的扩展名通常是 ${ENTRY_EXTENSIONS.join('、')}`)
   }
   extensions.forEach((p, i) => checkPath(root, p, `pi.extensions[${i}]`, true, error))
   skills.forEach((p, i) => checkPath(root, p, `pi.skills[${i}]`, true, error))

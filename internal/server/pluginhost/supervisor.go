@@ -16,7 +16,7 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// Spec 是一个有平台半边的插件的加载说明，由安装与授权服务给出；顺序就是加载与同步调用的顺序。
+// Spec 是一个有平台侧的插件的加载说明，由安装与授权服务给出；顺序就是加载与同步调用的顺序。
 type Spec struct {
 	ID string
 	// Events 是清单 loopNow.events：观察类事件与同步 Hook 都在内。
@@ -520,7 +520,7 @@ func (s *Supervisor) Reload(ctx context.Context, id string) error {
 	return nil
 }
 
-// Unload 在宿主内卸载一个插件（卸载插件、不再有平台半边）。
+// Unload 在宿主内卸载一个插件（卸载插件、不再有平台侧）。
 func (s *Supervisor) Unload(ctx context.Context, id string) error {
 	s.mu.Lock()
 	c := s.conn

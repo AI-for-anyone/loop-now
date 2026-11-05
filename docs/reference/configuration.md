@@ -10,7 +10,7 @@ All server options and defaults are defined in [`internal/server/config/config.g
 | `LOOP_NOW_DATA_DIR` | Database (`db/`) and daily backups (`backups/`); `~/.loop_now` of the server user |
 | `LOOP_NOW_WORK_ROOT` | Persistent agent workspaces and runtime files; like the data directory, one server instance at a time (locked by `.loop-now-server.lock`) |
 | `LOOP_NOW_CONTEXT_DIR` | Shared project (`projects/<id>/`) and global (`global/`) context folders; `~/.loop_now` of the server user |
-| `LOOP_NOW_PLUGIN_HOST_ENTRY` | Absolute path of the plugin host entry run with Node; unset means plugin platform halves do not run |
+| `LOOP_NOW_PLUGIN_HOST_ENTRY` | Absolute path of the plugin host entry run with Node; unset means plugins' platform sides do not run |
 | `LOOP_NOW_PLUGIN_OFFICIAL_DIR` | Absolute path of the official plugins shipped with the platform (one directory per plugin); unset means no `builtin` install source |
 | `LOOP_NOW_PLUGIN_MARKET_URL` | `https` address of the official plugin market's `loop-now-market.json`; defaults to the official market index and can point elsewhere |
 | `LOOP_NOW_PI_MAX_PROCESSES` | `0` means unlimited; a positive value caps local Pi processes |

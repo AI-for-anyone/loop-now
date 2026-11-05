@@ -23,17 +23,17 @@ function renderMarket(initial: Parameters<typeof fakePlugins>[0] = {}) {
 }
 
 describe('插件市场', () => {
-  it('左侧栏“插件市场”为当前项；已安装的插件列出来源、两半各有什么、启用项目数与授权 Agent 数和状态', async () => {
+  it('左侧栏“插件市场”为当前项；已安装的插件列出来源、两侧各有什么、启用项目数与授权 Agent 数和状态', async () => {
     renderMarket({ host: makeHost({ loaded: ['webhook', 'playwright'], today: { delivered: 412, failed: 1 } }) })
     const webhook = (await screen.findByRole('link', { name: 'Webhook 通知' })).closest('li')!
     expect(currentSidebarLinks().map((link) => link.textContent)).toEqual(['插件市场'])
-    await waitFor(() => expect(webhook).toHaveTextContent('平台半边'))
+    await waitFor(() => expect(webhook).toHaveTextContent('平台侧'))
     expect(webhook).toHaveTextContent('webhook · v1.2.0官方')
     expect(webhook).toHaveTextContent('订阅 1 个事件权限 2 项')
     expect(webhook).toHaveTextContent('3 个项目启用不需要 Agent 授权')
     expect(within(webhook).getByText('运行中')).toBeInTheDocument()
     const browser = screen.getByRole('link', { name: '专用浏览器' }).closest('li')!
-    await waitFor(() => expect(browser).toHaveTextContent('Agent 半边MCP 服务器 1Skill 1'))
+    await waitFor(() => expect(browser).toHaveTextContent('Agent 侧MCP 服务器 1Skill 1'))
     expect(browser).toHaveTextContent('1 个项目启用2 个 Agent 已授权')
     const failing = screen.getByRole('link', { name: '飞书通知' }).closest('li')!
     expect(failing).toHaveTextContent('git · 未审核')
@@ -71,7 +71,7 @@ describe('插件市场', () => {
 
   it('还没装的官方插件单独列出；点安装按 builtin 来源取预览，确认后打开它的详情', async () => {
     const user = userEvent.setup()
-    const { fake, router } = renderMarket({ builtin: [{ id: 'hello', displayName: 'hello 示例', description: '两半各一个最小例子', version: '1.0.0' }, { id: 'webhook', displayName: 'Webhook 通知', description: 'x', version: '1.2.0' }] })
+    const { fake, router } = renderMarket({ builtin: [{ id: 'hello', displayName: 'hello 示例', description: '两侧各一个最小例子', version: '1.0.0' }, { id: 'webhook', displayName: 'Webhook 通知', description: 'x', version: '1.2.0' }] })
     const section = await screen.findByRole('region', { name: '随平台发布的官方插件' })
     expect(within(section).queryByText('Webhook 通知')).toBeNull()
     await user.click(within(section).getByRole('button', { name: '安装' }))

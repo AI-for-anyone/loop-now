@@ -38,13 +38,13 @@ function renderProject() {
 const card = async (name: string) => (await screen.findByRole('link', { name })).closest('li')!
 
 describe('项目插件页', () => {
-  it('每个已安装插件一张卡片：启用开关；只有 Agent 半边的说明去 Agent 配置里授权', async () => {
+  it('每个已安装插件一张卡片：启用开关；只有 Agent 侧的说明去 Agent 配置里授权', async () => {
     renderProject()
     const webhook = await card('Webhook 通知')
     expect(within(webhook).getByRole('switch', { name: '在这个项目启用 Webhook 通知' })).toHaveAttribute('aria-checked', 'true')
     const playwright = await card('专用浏览器')
     expect(within(playwright).getByRole('switch', { name: '在这个项目启用 专用浏览器' })).toHaveAttribute('aria-checked', 'false')
-    await waitFor(() => expect(playwright).toHaveTextContent('只有 Agent 半边。启用后去 Agent 配置里授权。'))
+    await waitFor(() => expect(playwright).toHaveTextContent('只有 Agent 侧。启用后去 Agent 配置里授权。'))
   })
 
   it('启用：带上空的项目级配置与版本 0', async () => {

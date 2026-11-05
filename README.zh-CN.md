@@ -51,10 +51,10 @@ Loop Now 把多个 Agent 的工作放进一个浏览器工作台。每个 Agent 
 
 ## 核心能力：可扩展的插件体系
 
-**新工具与项目特有的行为都放进插件。**一个插件就是一个目录，`package.json` 是它唯一的清单。插件最多分两半，两半都可以没有：
+**新工具与项目特有的行为都放进插件。**一个插件就是一个目录，`package.json` 是它唯一的清单。插件最多有两侧，任一侧都可以没有：
 
-- **Agent 半边**是标准的 [Pi 包](https://pi.dev/packages)：Pi 扩展、Skills、MCP 服务器和 CLI。每个获得授权的 Agent 在自己的 Pi 进程里加载它。现成的 Pi 包不用改就能装。
-- **平台半边**运行在服务端旁边一个常驻的 Node 插件宿主里，订阅平台事件，并用按权限签发的插件令牌调用平台接口。
+- **Agent 侧**是标准的 [Pi 包](https://pi.dev/packages)：Pi 扩展、Skills、MCP 服务器和 CLI。每个获得授权的 Agent 在自己的 Pi 进程里加载它。现成的 Pi 包不用改就能装。
+- **平台侧**运行在服务端旁边一个常驻的 Node 插件宿主里，订阅平台事件，并用按权限签发的插件令牌调用平台接口。
 
 | 宿主提供 | 对插件意味着什么 |
 | --- | --- |
@@ -64,21 +64,21 @@ Loop Now 把多个 Agent 的工作放进一个浏览器工作台。每个 Agent 
 | **可靠的外发 HTTP** | SDK 的投递库带持久队列和退避重试，用 HMAC-SHA256 签名，并写下投递记录，插件页直接展示。 |
 | **日志与隔离** | 每个插件的输出进入它自己的日志。一个插件抛错、超时或加载失败，只影响它自己。 |
 
-清单说了算：订阅清单没有声明的事件、调用清单之外的接口范围都会失败。安装前，平台会把两半各有什么、订阅哪些事件、要哪些权限展示给人看。
+清单说了算：订阅清单没有声明的事件、调用清单之外的接口范围都会失败。安装前，平台会把两侧各有什么、订阅哪些事件、要哪些权限展示给人看。
 
 观察类事件、状态、密钥、配置和投递库已经可用。拦截与修改 Hook、控制台操作按钮、HTTP 入口、定时、渠道和插件账号已在 [`plugins/SPEC.md`](plugins/SPEC.md) 定稿，正在陆续上线。
 
 ### 平台安装，项目启用，Agent 授权
 
-可以从官方插件、Git 仓库、npm 包或本机目录安装，在控制台里操作，或用 `loopctl plugin install`。装好后，先在项目里启用插件并填写配置，再授权给需要加载 Agent 半边的 Agent。安装或启用本身不会给任何 Agent 授权。版本是固定的：更新是显式操作，进行中的任务继续用启动时的文件。
+可以从官方插件、Git 仓库、npm 包或本机目录安装，在控制台里操作，或用 `loopctl plugin install`。装好后，先在项目里启用插件并填写配置，再授权给需要加载 Agent 侧的 Agent。安装或启用本身不会给任何 Agent 授权。版本是固定的：更新是显式操作，进行中的任务继续用启动时的文件。
 
 随平台发布三个官方插件：
 
 - [**webhook**](plugins/official/webhook/README.md)：收件箱收到消息时，签名后 POST 到你的地址，失败重试，并记下投递记录。外部身份用它代替轮询收件箱。
 - [**playwright**](plugins/official/playwright/README.md)：给 Agent 一个专用的可见 Chromium，通过官方 Playwright MCP 打开网页、读取页面、点击、输入和截图，不连接你的日常 Chrome。
-- [**hello**](plugins/official/hello/README.md)：两半齐全的最小插件，可以从它开始写自己的插件。
+- [**hello**](plugins/official/hello/README.md)：两侧齐全的最小插件，可以从它开始写自己的插件。
 
-### 几行代码写一个平台半边
+### 几行代码写出平台侧
 
 ```ts
 import { createDelivery, type PluginAPI } from '@loop-now/plugin-sdk'
@@ -328,7 +328,7 @@ flowchart LR
 | `LOOP_NOW_DATA_DIR` | 数据库（`db/`）和每日备份（`backups/`）；服务进程用户的 `~/.loop_now` |
 | `LOOP_NOW_WORK_ROOT` | 持久化 Agent 工作目录与运行文件 |
 | `LOOP_NOW_CONTEXT_DIR` | 项目（`projects/<id>/`）与全局（`global/`）上下文文件夹；默认服务运行用户的 `~/.loop_now` |
-| `LOOP_NOW_PLUGIN_HOST_ENTRY` | 插件宿主入口的绝对路径（用 Node 运行）；不设时插件的平台半边不运行 |
+| `LOOP_NOW_PLUGIN_HOST_ENTRY` | 插件宿主入口的绝对路径（用 Node 运行）；不设时插件的平台侧不运行 |
 | `LOOP_NOW_PLUGIN_OFFICIAL_DIR` | 随平台发布的官方插件目录的绝对路径（每个插件一个子目录）；不设时没有 `builtin` 安装来源 |
 | `LOOP_NOW_PLUGIN_MARKET_URL` | 官方插件市场 `loop-now-market.json` 的 `https` 地址；默认是官方市场的索引地址，可改成别的地址 |
 | `LOOP_NOW_PI_MAX_PROCESSES` | `0` 表示不限；正数限制本机 Pi 进程数 |

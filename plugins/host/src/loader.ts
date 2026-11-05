@@ -1,4 +1,4 @@
-// 加载平台半边入口：与 Pi 一样用 jiti，TypeScript 不需要先构建；每次加载重新求值（不复用模块缓存），
+// 加载平台侧入口：与 Pi 一样用 jiti，TypeScript 不需要先构建；每次加载重新求值（不复用模块缓存），
 // 卸载后再加载拿到的是新的模块状态。@loop-now/plugin-sdk 由宿主提供，插件不需要自带。
 
 import path from 'node:path'

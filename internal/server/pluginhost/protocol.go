@@ -1,4 +1,4 @@
-// Package pluginhost 监护插件宿主进程（plugins/SPEC.md §3）：拉起与就绪握手、平台半边的加载与卸载、
+// Package pluginhost 监护插件宿主进程（plugins/SPEC.md §3）：拉起与就绪握手、平台侧的加载与卸载、
 // 观察类事件的持久投递、同步调用的超时策略、崩溃重启与全局停用。线上格式见 api/plugin-host-protocol.md。
 package pluginhost
 

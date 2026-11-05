@@ -14,7 +14,7 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// Pi 扩展的对话（plugins/SPEC.md §11）：Agent 半边的扩展经 ctx.ui 发来的 confirm、select、input 变成 Agent 发给控制台的提问，
+// Pi 扩展的对话（plugins/SPEC.md §11）：Agent 侧的扩展经 ctx.ui 发来的 confirm、select、input 变成 Agent 发给控制台的提问，
 // 出现在这个 Agent 的控制台对话里；控制台的回答交还给 Pi，请求的超时到期、这一轮结束时按取消回应。
 
 // DefaultDialogTimeout 是请求没有带超时时提问的期限。

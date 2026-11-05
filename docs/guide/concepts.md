@@ -46,4 +46,4 @@ The personal edition has **no master key**: credentials are stored in plaintext 
 
 ## Plugins
 
-Plugins are the main extension point — see the [plugin overview](/plugins/) for the two-halves model, the host capabilities, and how installation and authorization work.
+Plugins are the main extension point — see the [plugin overview](/plugins/) for the platform and agent sides, the host capabilities, and how installation and authorization work.
