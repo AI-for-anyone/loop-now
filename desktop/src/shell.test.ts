@@ -124,7 +124,7 @@ describe('配置', () => {
   })
 
   test('名字放在壳自己的位置，工作根在 HOME 之外', () => {
-    const p = resolveProfile('try', '/Users/someone')
+    const p = resolveProfile('try', '/Users/someone', {}, 'darwin')
     assert.equal(p.label, 'try')
     assert.equal(p.shellDir, '/Users/someone/Library/Application Support/Loop Now/try/shell')
     assert.equal(p.logDir, '/Users/someone/Library/Logs/Loop Now/try')
@@ -136,7 +136,7 @@ describe('配置', () => {
   })
 
   test('默认配置也是一个配置，没有指定目录时从不落到服务端的默认目录', () => {
-    const p = resolveProfile(defaultProfile, '/Users/someone')
+    const p = resolveProfile(defaultProfile, '/Users/someone', {}, 'darwin')
     assert.equal(p.dataDir, '/Users/someone/Library/Application Support/Loop Now/default/data')
     assert.equal(p.contextDir, '/Users/someone/Library/Application Support/Loop Now/default/context')
     assert.equal(p.workRoot, '/Users/Shared/loop-now-desktop/default')
@@ -149,7 +149,7 @@ describe('配置', () => {
   })
 
   test('desktop.json 指定的目录换掉默认位置，交给服务端，日志首行标出', () => {
-    const p = resolveProfile(defaultProfile, '/Users/someone', { workRoot: '/Users/Shared/loop-now' })
+    const p = resolveProfile(defaultProfile, '/Users/someone', { workRoot: '/Users/Shared/loop-now' }, 'darwin')
     assert.deepEqual(profileEnv(p), {
       LOOP_NOW_DATA_DIR: '/Users/someone/Library/Application Support/Loop Now/default/data',
       LOOP_NOW_CONTEXT_DIR: '/Users/someone/Library/Application Support/Loop Now/default/context',
@@ -159,21 +159,21 @@ describe('配置', () => {
     assert.match(profileSummary(p), /，工作根 \/Users\/Shared\/loop-now（desktop\.json 指定）$/)
     assert.doesNotMatch(profileSummary(p), /data（desktop\.json 指定）/)
 
-    const all = resolveProfile('/private/tmp/x', undefined, { workRoot: '/Users/Shared/w', dataDir: '/Users/someone/.loop_now', contextDir: '/Users/someone/.loop_now/context' })
+    const all = resolveProfile('/private/tmp/x', undefined, { workRoot: '/Users/Shared/w', dataDir: '/Users/someone/.loop_now', contextDir: '/Users/someone/.loop_now/context' }, 'darwin')
     assert.deepEqual([all.shellDir, all.logDir, all.dataDir, all.contextDir, all.workRoot], ['/private/tmp/x/shell', '/private/tmp/x/logs', '/Users/someone/.loop_now', '/Users/someone/.loop_now/context', '/Users/Shared/w'])
   })
 
   test('desktop.json 按配置名取指定的目录；没有文件、没有这一项时不指定，写错时报错', () => {
     const file = join(dir, 'overrides.json')
-    assert.deepEqual(overridesFromFile(file, defaultProfile), {})
+    assert.deepEqual(overridesFromFile(file, defaultProfile, 'darwin'), {})
     writeFileSync(file, 'not json')
-    assert.deepEqual(overridesFromFile(file, defaultProfile), {})
+    assert.deepEqual(overridesFromFile(file, defaultProfile, 'darwin'), {})
     writeFileSync(file, JSON.stringify({ profile: 'try' }))
-    assert.deepEqual(overridesFromFile(file, defaultProfile), {})
+    assert.deepEqual(overridesFromFile(file, defaultProfile, 'darwin'), {})
     writeFileSync(file, JSON.stringify({ profile: 'default', profiles: { default: { workRoot: '/Users/Shared/loop-now/', dataDir: '/Users/someone/.loop_now' } } }))
-    assert.deepEqual(overridesFromFile(file, defaultProfile), { workRoot: '/Users/Shared/loop-now', dataDir: '/Users/someone/.loop_now' })
-    assert.deepEqual(overridesFromFile(file, 'try'), {})
-    assert.deepEqual(overridesFromFile(file, 'constructor'), {})
+    assert.deepEqual(overridesFromFile(file, defaultProfile, 'darwin'), { workRoot: '/Users/Shared/loop-now', dataDir: '/Users/someone/.loop_now' })
+    assert.deepEqual(overridesFromFile(file, 'try', 'darwin'), {})
+    assert.deepEqual(overridesFromFile(file, 'constructor', 'darwin'), {})
     for (const [entry, message] of [
       [{ workRoot: 'loop-now' }, /profiles\.default\.workRoot 应是绝对路径："loop-now"/],
       [{ workRoot: 3 }, /应是绝对路径：3/],
@@ -181,12 +181,12 @@ describe('配置', () => {
       ['/Users/Shared/loop-now', /profiles\.default 应是对象/],
     ] as const) {
       writeFileSync(file, JSON.stringify({ profiles: { default: entry } }))
-      assert.throws(() => overridesFromFile(file, defaultProfile), message)
+      assert.throws(() => overridesFromFile(file, defaultProfile, 'darwin'), message)
     }
   })
 
   test('绝对路径时全部放在它下面', () => {
-    const p = resolveProfile('/private/tmp/x/')
+    const p = resolveProfile('/private/tmp/x/', undefined, {}, 'darwin')
     assert.deepEqual([p.label, p.root], ['x', '/private/tmp/x'])
     assert.deepEqual([p.shellDir, p.logDir, p.dataDir, p.contextDir, p.workRoot], ['/private/tmp/x/shell', '/private/tmp/x/logs', '/private/tmp/x/data', '/private/tmp/x/context', '/private/tmp/x/work'])
   })
@@ -306,7 +306,7 @@ describe('设置文件', () => {
 describe('托盘菜单', () => {
   const s = stringsFor('zh-CN')
   const labels = (items: ReturnType<typeof trayItems>) => items.map((i) => (i === 'separator' ? '—' : `${i.label}${i.enabled ? '' : '（不可点）'}`))
-  const profile = (name: string) => resolveProfile(name, '/Users/someone')
+  const profile = (name: string) => resolveProfile(name, '/Users/someone', {}, 'darwin')
 
   test('运行中：状态行带主机和端口，可在浏览器打开', () => {
     assert.deepEqual(labels(trayItems('running', 'http://127.0.0.1:8780', profile(defaultProfile), s)), [
@@ -332,9 +332,9 @@ describe('托盘菜单', () => {
   })
 
   test('desktop.json 指定了目录时，配置行跟上实际用的路径', () => {
-    const migrated = resolveProfile(defaultProfile, '/Users/someone', { workRoot: '/Users/Shared/loop-now' })
+    const migrated = resolveProfile(defaultProfile, '/Users/someone', { workRoot: '/Users/Shared/loop-now' }, 'darwin')
     assert.equal(labels(trayItems('running', 'http://127.0.0.1:8780', migrated, s))[1], '配置：默认 · 工作根 /Users/Shared/loop-now（不可点）')
-    const all = resolveProfile('try', '/Users/someone', { contextDir: '/Volumes/c', dataDir: '/Volumes/d', workRoot: '/Volumes/w' })
+    const all = resolveProfile('try', '/Users/someone', { contextDir: '/Volumes/c', dataDir: '/Volumes/d', workRoot: '/Volumes/w' }, 'darwin')
     assert.equal(
       labels(trayItems('running', 'http://127.0.0.1:8780', all, stringsFor('en-US')))[1],
       'Profile: try · work root /Volumes/w · data /Volumes/d · context /Volumes/c（不可点）',
@@ -366,14 +366,14 @@ describe('git 检测', () => {
     const usable = await gitUsable(async (file) => {
       calls.push(file)
       return false
-    })
+    }, 'darwin')
     assert.equal(usable, false)
     assert.deepEqual(calls, ['/usr/bin/xcode-select'])
   })
 
   test('有命令行工具时以 git --version 为准', async () => {
-    assert.equal(await gitUsable(async () => true), true)
-    assert.equal(await gitUsable(async (file) => file !== '/usr/bin/git'), false)
+    assert.equal(await gitUsable(async () => true, 'darwin'), true)
+    assert.equal(await gitUsable(async (file) => file !== '/usr/bin/git', 'darwin'), false)
   })
 
   test('Windows：PATH 里找 git.exe，找到再跑 git --version，找不到就是没装，不碰 xcode-select', async () => {
@@ -418,7 +418,8 @@ describe('页面发来的通知与未读数', () => {
 })
 
 describe('安装命令行工具', () => {
-  test('看出链接是不存在、已指向自带的 loopctl，还是别的', async () => {
+  // macOS 专用（Windows 走 PATH，不建链接；Windows 上 readlink 还会把相对目标解析成绝对路径）。
+  test('看出链接是不存在、已指向自带的 loopctl，还是别的', { skip: process.platform === 'win32' && 'macOS 专用' }, async () => {
     const target = '/Applications/Loop Now.app/Contents/Resources/bin/loopctl'
     const link = join(dir, 'cli', 'loopctl')
     mkdirSync(join(dir, 'cli'), { recursive: true })
