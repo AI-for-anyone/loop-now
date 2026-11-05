@@ -18,6 +18,7 @@ import (
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/conversation"
+	"loop-now/internal/server/coord"
 	"loop-now/internal/server/runrecord"
 	"loop-now/internal/server/store"
 )
@@ -40,17 +41,26 @@ func (e *env) send2(n names, text, whenBusy string) apitypes.Message {
 	return m
 }
 
-// promoteResult is the promote receipt plus the queued runs read right after it.
+func (n names) items(q []apitypes.QueueItem) []string {
+	out := []string{}
+	for _, it := range q {
+		out = append(out, n[it.RunID])
+	}
+	return out
+}
+
+// promoteResult is the promote receipt. Queue is the queue as the promotion's own
+// transaction left it: the promotion interrupts the running reply, so by the time
+// the caller reads the database the driver may already have started the promoted run.
 type promoteResult struct {
-	Run        apitypes.Run
-	Status     string
-	QueuedRuns []apitypes.Run
+	Run    apitypes.Run
+	Status string
+	Queue  []apitypes.QueueItem
 }
 
 // promote sends one promote action with a fresh actionId (a new click).
 func (e *env) promote(id uuid.UUID) (promoteResult, error) {
-	ctx := context.Background()
-	raw, err := e.svc.PromoteToInterrupt(ctx, e.agent, id, uuid.New())
+	raw, err := e.svc.PromoteToInterrupt(context.Background(), e.agent, id, uuid.New())
 	if err != nil {
 		return promoteResult{}, err
 	}
@@ -58,15 +68,7 @@ func (e *env) promote(id uuid.UUID) (promoteResult, error) {
 	if err := json.Unmarshal(raw, &rec); err != nil {
 		e.t.Fatal(err)
 	}
-	out := promoteResult{Run: *rec.Run, Status: rec.Status, QueuedRuns: []apitypes.Run{}}
-	queued, err := e.st.QueuedRuns(ctx, e.agent)
-	if err != nil {
-		e.t.Fatal(err)
-	}
-	for _, r := range queued {
-		out.QueuedRuns = append(out.QueuedRuns, apitypes.FromRun(r))
-	}
-	return out, nil
+	return promoteResult{Run: *rec.Run, Status: rec.Status, Queue: rec.Queue}, nil
 }
 
 func (e *env) mustPromote(id uuid.UUID) promoteResult {
@@ -108,7 +110,33 @@ func (e *env) queues(n names) ([]string, []string) {
 // lastQueueEvent returns the newest queue.updated payload on the agent stream.
 func (e *env) lastQueueEvent(n names) []string {
 	e.t.Helper()
-	for _, m := range e.newestEvents() {
+	return e.firstQueueEvent(n, e.newestEvents())
+}
+
+// streamMark returns the newest event ID on the agent stream, so queueEventAfter
+// can find what the next action emitted.
+func (e *env) streamMark() string {
+	e.t.Helper()
+	if evs := e.newestEvents(); len(evs) > 0 {
+		return evs[0].ID
+	}
+	return "0-0"
+}
+
+// queueEventAfter returns the first queue.updated payload after mark: the one the
+// next action emitted, even if the driver has moved the queue on since.
+func (e *env) queueEventAfter(n names, mark string) []string {
+	e.t.Helper()
+	evs, err := e.co.ReadEvents(context.Background(), e.agent.String(), mark, 0, 0)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return e.firstQueueEvent(n, evs)
+}
+
+func (e *env) firstQueueEvent(n names, evs []coord.Event) []string {
+	e.t.Helper()
+	for _, m := range evs {
 		if m.Type != apitypes.EventQueueUpdated {
 			continue
 		}
@@ -142,11 +170,16 @@ func TestPromoteInterruptsRunningReplyAndRunsBeforeQueue(t *testing.T) {
 	e.waitStarted("block A")
 	e.send2(n, "普通1", "queue")
 	two := e.send2(n, "普通2", "queue")
+	mark := e.streamMark()
 	got := e.mustPromote(two.Run.ID)
-	if got.Run.WhenBusy == nil || *got.Run.WhenBusy != "interrupt" || !slices.Equal(n.of(got.QueuedRuns), []string{"普通2", "普通1"}) {
-		t.Fatalf("转换结果不对：%+v %v", got.Run, n.of(got.QueuedRuns))
+	// The promotion interrupts block A and the driver then starts 普通2 on its own.
+	// Wait for that, so the checks below always run after the queue has moved on
+	// and must look at what the promotion itself returned and emitted.
+	e.waitStarted("普通2")
+	if got.Run.WhenBusy == nil || *got.Run.WhenBusy != "interrupt" || !slices.Equal(n.items(got.Queue), []string{"普通2", "普通1"}) {
+		t.Fatalf("转换结果不对：%+v %v", got.Run, n.items(got.Queue))
 	}
-	if q := e.lastQueueEvent(n); !slices.Equal(q, []string{"普通2", "普通1"}) {
+	if q := e.queueEventAfter(n, mark); !slices.Equal(q, []string{"普通2", "普通1"}) {
 		t.Fatalf("queue.updated 顺序不对：%v", q)
 	}
 	e.waitIdleOrDump(names{})
@@ -195,16 +228,16 @@ func TestPromoteOrderingAfterExistingInterrupts(t *testing.T) {
 
 	got := e.mustPromote(two.Run.ID)
 	want := []string{"打断1", "普通2", "普通1", "普通3"}
-	if !slices.Equal(n.of(got.QueuedRuns), want) || !slices.Equal(e.snapshotQueue(n), want) || !slices.Equal(e.lastQueueEvent(n), want) {
-		t.Fatalf("第一次转换后顺序不对：结果 %v 快照 %v", n.of(got.QueuedRuns), e.snapshotQueue(n))
+	if !slices.Equal(n.items(got.Queue), want) || !slices.Equal(e.snapshotQueue(n), want) || !slices.Equal(e.lastQueueEvent(n), want) {
+		t.Fatalf("第一次转换后顺序不对：结果 %v 快照 %v", n.items(got.Queue), e.snapshotQueue(n))
 	}
 	if qi, qn := e.queues(n); !slices.Equal(qi, []string{"打断1", "普通2"}) || !slices.Equal(qn, []string{"普通1", "普通3"}) {
 		t.Fatalf("Redis 队列不对：%v / %v", qi, qn)
 	}
 	got = e.mustPromote(three.Run.ID)
 	want = []string{"打断1", "普通2", "普通3", "普通1"}
-	if !slices.Equal(n.of(got.QueuedRuns), want) || !slices.Equal(e.snapshotQueue(n), want) {
-		t.Fatalf("连续转换应按转换先后：%v", n.of(got.QueuedRuns))
+	if !slices.Equal(n.items(got.Queue), want) || !slices.Equal(e.snapshotQueue(n), want) {
+		t.Fatalf("连续转换应按转换先后：%v", n.items(got.Queue))
 	}
 	if qi, qn := e.queues(n); !slices.Equal(qi, []string{"打断1", "普通2", "普通3"}) || !slices.Equal(qn, []string{"普通1"}) {
 		t.Fatalf("Redis 队列不对：%v / %v", qi, qn)
@@ -218,7 +251,7 @@ func TestPromoteOrderingAfterExistingInterrupts(t *testing.T) {
 	}
 	aborts, promoted := events(store.EventRunAbortRequested), events(store.EventRunPromoted)
 	again := e.mustPromote(two.Run.ID)
-	if !slices.Equal(n.of(again.QueuedRuns), want) || events(store.EventRunAbortRequested) != aborts || events(store.EventRunPromoted) != promoted {
+	if !slices.Equal(n.items(again.Queue), want) || events(store.EventRunAbortRequested) != aborts || events(store.EventRunPromoted) != promoted {
 		t.Fatal("已是打断时应幂等，不重复打断、不重复记录")
 	}
 	snap, _, err := e.svc.Snapshot(context.Background(), e.agent)
