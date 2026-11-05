@@ -55,6 +55,47 @@ const (
 	ToolFailed    = "failed"
 )
 
+// OriginConsoleCompact 是控制台手动压缩；它使用真实运行，但不产生对话消息。
+const OriginConsoleCompact = "console_compact"
+
+// CompactionResult 是一次手动压缩的 Token 变化。
+type CompactionResult struct {
+	TokensBefore         int64
+	EstimatedTokensAfter int64
+}
+
+// SessionExport 是已读取并验证来源的会话下载内容。
+type SessionExport struct {
+	Filename    string
+	ContentType string
+	Data        []byte
+}
+
+// IdleProcessStopper 由支持维护操作的本机执行器实现。
+type IdleProcessStopper interface {
+	StopIdle(ctx context.Context, agentID uuid.UUID, reason string) (bool, error)
+}
+
+// SessionExporter 由能从受管 Pi 会话导出的执行器实现。
+type SessionExporter interface {
+	ExportSession(ctx context.Context, agentID uuid.UUID, format string) (SessionExport, error)
+}
+
+// ManagedSession 是受管 sessions 目录里的一个有效 Pi 会话；Path 只在服务端内部使用。
+type ManagedSession struct {
+	ID        string
+	Path      string
+	Title     string
+	Preview   string
+	UpdatedAt time.Time
+	Current   bool
+}
+
+// SessionLister 枚举可恢复的 Pi 会话，不得因此启动进程。
+type SessionLister interface {
+	ListSessions(ctx context.Context, agentID uuid.UUID, currentFile string) ([]ManagedSession, error)
+}
+
 // Request 是一次执行的输入。
 type Request struct {
 	Images  []messageimage.Content
@@ -72,6 +113,7 @@ type Result struct {
 	Text         string // 最终回复文字（失败或打断时为已产生的部分）
 	ErrorCode    string
 	ErrorMessage string
+	Compaction   *CompactionResult // 仅 console_compact 成功时有值
 	// ConfigVersion 是这次执行实际使用的配置版本。
 	ConfigVersion int64
 }

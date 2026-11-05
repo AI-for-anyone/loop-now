@@ -215,8 +215,8 @@ type SseRunTool struct {
 
 // SseRunEnded 对应 SseRunEnded。
 type SseRunEnded struct {
-	Run     Run     `json:"run"`
-	Message Message `json:"message"`
+	Run     Run      `json:"run"`
+	Message *Message `json:"message"`
 }
 
 // SseSessionUpdated 对应 SseSessionUpdated。

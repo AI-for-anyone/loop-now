@@ -105,11 +105,15 @@ func TestBaselineShape(t *testing.T) {
 		t.Errorf("sequences: %q %v", seqs, err)
 	}
 	// 再迁移一次什么都不做。
+	before, err := schema.Version(ctx, d)
+	if err != nil || before < schema.Baseline {
+		t.Fatalf("版本 = %d %v，应不低于 %d", before, err, schema.Baseline)
+	}
 	if err := schema.Migrate(ctx, d, slog.New(slog.DiscardHandler)); err != nil {
 		t.Fatal(err)
 	}
-	if v, err := schema.Version(ctx, d); err != nil || v != schema.Baseline {
-		t.Fatalf("版本 = %d %v，应为 %d", v, err, schema.Baseline)
+	if v, err := schema.Version(ctx, d); err != nil || v != before {
+		t.Fatalf("版本 = %d %v，应仍为 %d", v, err, before)
 	}
 }
 

@@ -106,3 +106,31 @@ it('busy image send queues directly without a choice dialog', async () => {
   expect(sent[0]).toEqual({ text: '', imageIds: [...refs.keys()], whenBusy: 'queue' })
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 })
+
+it('slash command text with an image is an ordinary message and does not confirm /new', async () => {
+  uploadFixture(); const sent: Schemas['SendMessageInput'][] = []
+  server.use(http.post(apiUrl(`/agents/${agentId}/messages`), async ({ request }) => { const body = await request.json() as Schemas['SendMessageInput']; sent.push(body); return accepted(body) }))
+  mount(); await userEvent.type(screen.getByRole('textbox'), '/new')
+  expect(screen.getByRole('listbox', { name: '内置命令' })).toBeInTheDocument()
+  await userEvent.upload(screen.getByLabelText('选择图片文件'), file('图文.png'))
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: '发送' }))
+  await waitFor(() => expect(sent).toHaveLength(1))
+  expect(sent[0]).toEqual({ text: '/new', imageIds: [...refs.keys()] })
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+})
+
+it('slash command text with an image retries agent_busy as an ordinary queued message', async () => {
+  uploadFixture(); const sent: Schemas['SendMessageInput'][] = []
+  server.use(http.post(apiUrl(`/agents/${agentId}/messages`), async ({ request }) => {
+    const body = await request.json() as Schemas['SendMessageInput']; sent.push(body)
+    if (sent.length === 1) return HttpResponse.json({ error: { code: 'agent_busy', message: 'Agent正忙', details: { currentRunId: crypto.randomUUID(), queued: { interrupt: 0, normal: 0 } } } }, { status: 409 })
+    return accepted(body)
+  }))
+  mount(); await userEvent.type(screen.getByRole('textbox'), '/reload')
+  await userEvent.upload(screen.getByLabelText('选择图片文件'), file('忙时图文.png'))
+  await userEvent.click(screen.getByRole('button', { name: '发送' }))
+  await waitFor(() => expect(sent).toHaveLength(2))
+  expect(sent[0]).toEqual({ text: '/reload', imageIds: [...refs.keys()] })
+  expect(sent[1]).toEqual({ text: '/reload', imageIds: [...refs.keys()], whenBusy: 'queue' })
+})

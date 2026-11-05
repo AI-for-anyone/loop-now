@@ -243,8 +243,73 @@ func (c *Client) SetThinkingLevel(ctx context.Context, level string) error {
 	return nil
 }
 
+// CompactResult 是手动压缩的上下文 Token 变化。EstimatedTokensAfter 是 Pi 的估算值。
+type CompactResult struct {
+	TokensBefore         int64
+	EstimatedTokensAfter int64
+}
+
+// Compact 压缩当前会话。与 Prompt 共用互斥和事件归属，Abort 可以取消这次压缩。
+func (c *Client) Compact(ctx context.Context, customInstructions string) (CompactResult, error) {
+	if !c.busy.CompareAndSwap(false, true) {
+		return CompactResult{}, errors.New("pirpc: 已有进行中的 prompt 或 compact")
+	}
+	defer c.busy.Store(false)
+	if err := ctx.Err(); err != nil {
+		return CompactResult{}, err
+	}
+	t := newTurn(c.newID(), nopSink{})
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return CompactResult{}, ErrExited
+	}
+	c.turn = t
+	c.mu.Unlock()
+	// compact 的响应要等压缩结束才返回；Abort 不能先等这个响应，否则无法取消压缩。
+	t.responseReceived(true)
+	defer c.clearTurn(t)
+	params := map[string]any{}
+	if customInstructions != "" {
+		params["customInstructions"] = customInstructions
+	}
+	resp, err := c.roundTrip(ctx, t.promptID, "compact", params)
+	if err != nil {
+		return CompactResult{}, err
+	}
+	if !resp.Success {
+		return CompactResult{}, fmt.Errorf("pirpc: 命令 compact 失败：%s", resp.Error)
+	}
+	var data struct {
+		TokensBefore         int64 `json:"tokensBefore"`
+		EstimatedTokensAfter int64 `json:"estimatedTokensAfter"`
+	}
+	if err := json.Unmarshal(resp.Data, &data); err != nil {
+		return CompactResult{}, fmt.Errorf("pirpc: 解析 compact 响应失败：%w", err)
+	}
+	return CompactResult{TokensBefore: data.TokensBefore, EstimatedTokensAfter: data.EstimatedTokensAfter}, nil
+}
+
+// ExportHTML 让 Pi 把当前会话导出到平台指定的文件，并返回 Pi 确认的路径。
+func (c *Client) ExportHTML(ctx context.Context, outputPath string) (string, error) {
+	data, err := c.Call(ctx, "export_html", map[string]any{"outputPath": outputPath})
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		return "", fmt.Errorf("pirpc: 解析 export_html 响应失败：%w", err)
+	}
+	if out.Path == "" {
+		return "", errors.New("pirpc: export_html 未返回文件路径")
+	}
+	return out.Path, nil
+}
+
 // Prompt 发送 prompt 并消费事件直到本轮结束（agent_settled），期间回调 sink。
-// 同一时刻只允许一个 Prompt。prompt 未能发出时返回 ErrExited；发出后进程退出则返回
+// 同一时刻只允许一个 Prompt 或 Compact。prompt 未能发出时返回 ErrExited；发出后进程退出则返回
 // Outcome failed / pi_exited 的结果且 error 为 nil。ctx 取消只停止等待，不会中止 Pi。
 func (c *Client) Prompt(ctx context.Context, text string, sink TurnSink, images ...messageimage.Content) (TurnResult, error) {
 	if sink == nil {
