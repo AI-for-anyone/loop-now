@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+
+	"loop-now/internal/filelock"
 )
 
 // LockFile 是数据目录里的实例锁文件名。
@@ -32,9 +34,9 @@ func LockPath(path string) (*DirLock, error) {
 	if err != nil {
 		return nil, fmt.Errorf("db: 打开实例锁文件失败：%w", err)
 	}
-	if err := lockFile(f); err != nil {
+	if err := filelock.TryLock(f); err != nil {
 		f.Close()
-		if errors.Is(err, errWouldBlock) {
+		if errors.Is(err, filelock.ErrWouldBlock) {
 			return nil, ErrLocked
 		}
 		return nil, fmt.Errorf("db: 取得实例锁失败：%w", err)
@@ -50,7 +52,7 @@ func (l *DirLock) Release() error {
 	if l == nil || l.f == nil {
 		return nil
 	}
-	err := errors.Join(unlockFile(l.f), l.f.Close())
+	err := errors.Join(filelock.Unlock(l.f), l.f.Close())
 	l.f = nil
 	return err
 }

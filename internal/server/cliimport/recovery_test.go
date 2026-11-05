@@ -77,7 +77,8 @@ func signalDeadline(s *Service) chan struct{} {
 // expireInDB makes the operation's DB deadline due now.
 func expireInDB(t *testing.T, pool *db.DB, id uuid.UUID) {
 	t.Helper()
-	if _, err := pool.Exec(context.Background(), `UPDATE cli_credential_import_operations SET deadline_at=clock_timestamp() WHERE id=$1`, id); err != nil {
+	// 紧跟在 created_at 之后 1 微秒：CHECK 要求 deadline_at > created_at，而 Windows 的时钟粒度可能让 clock_timestamp() 与 created_at 相等。
+	if _, err := pool.Exec(context.Background(), `UPDATE cli_credential_import_operations SET deadline_at=created_at+1 WHERE id=$1`, id); err != nil {
 		t.Fatal(err)
 	}
 }

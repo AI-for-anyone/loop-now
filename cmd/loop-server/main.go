@@ -29,6 +29,10 @@ func main() {
 	log := config.NewLogger(os.Stderr, cfg.LogFormat, cfg.LogLevel)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if cfg.StopOnStdinClose {
+		// 壳关掉标准输入的写端即等同于发 SIGTERM：Windows 上没有可投递的终止信号，桌面壳靠它优雅停止。
+		ctx = stopOnStdinClose(ctx, os.Stdin, func() { log.Info("stdin 关闭，开始优雅退出") })
+	}
 
 	a, err := app.Build(ctx, cfg, log, app.Options{})
 	if err != nil {

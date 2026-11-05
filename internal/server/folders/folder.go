@@ -19,8 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/sys/unix"
-
+	"loop-now/internal/privatefs"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/content"
 )
@@ -83,7 +82,7 @@ func mapErr(field string, err error) error {
 		return nil
 	case errors.Is(err, fs.ErrNotExist):
 		return notFound()
-	case errors.Is(err, unix.ENOTDIR):
+	case privatefs.IsNotDir(err):
 		return apperr.Invalid(field, "路径中的某一段不是目录")
 	case strings.Contains(err.Error(), "path escapes from parent"):
 		return apperr.Invalid(field, "路径经由软链接指向了文件夹之外")
@@ -288,7 +287,7 @@ func mkdirAll(root *os.Root, dir string) error {
 		return nil
 	}
 	if err := root.MkdirAll(dir, 0o755); err != nil {
-		if errors.Is(err, fs.ErrExist) || errors.Is(err, unix.ENOTDIR) {
+		if errors.Is(err, fs.ErrExist) || privatefs.IsNotDir(err) {
 			return apperr.Conflict(apperr.CodePathConflict, "上级路径中有同名文件")
 		}
 		return mapErr("path", err)
@@ -375,14 +374,14 @@ func (f Folder) Delete(target string) error {
 	if err := os.MkdirAll(f.Trash, 0o700); err != nil {
 		return err
 	}
-	trashFd, err := unix.Open(f.Trash, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	trash, err := privatefs.OpenNoFollow(f.Trash, os.O_RDONLY, 0)
 	if err != nil {
 		return err
 	}
-	defer unix.Close(trashFd)
+	defer trash.Close()
 	name := randHex()
-	err = unix.Renameat(int(parent.Fd()), path.Base(rel), trashFd, name)
-	if errors.Is(err, unix.EXDEV) {
+	err = renameAt(parent, path.Base(rel), trash, name)
+	if privatefs.IsCrossDevice(err) {
 		return mapErr("path", root.RemoveAll(rel))
 	}
 	if err != nil {

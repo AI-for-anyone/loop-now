@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -13,9 +14,17 @@ func envOf(m map[string]string) func(string) string {
 	return func(k string) string { return m[k] }
 }
 
+// fixturePath 把测试里写死的 Unix 绝对路径换成本平台的绝对路径（Windows 上加 C: 并换分隔符），只用于不真正访问的路径。
+func fixturePath(p string) string {
+	if runtime.GOOS == "windows" {
+		return "C:" + filepath.FromSlash(p)
+	}
+	return p
+}
+
 func requiredEnv() map[string]string {
 	return map[string]string{
-		EnvLoopctlDistDir: "/opt/loop-now/loopctl-dist",
+		EnvLoopctlDistDir: fixturePath("/opt/loop-now/loopctl-dist"),
 	}
 }
 
@@ -200,6 +209,24 @@ func TestLoadOverrides(t *testing.T) {
 }
 
 // 控制台来源可以设为 none（不允许任何跨源访问）；控制台目录与就绪文件按原样取用。
+func TestStopOnStdinClose(t *testing.T) {
+	env := requiredEnv()
+	if c, err := Load(envOf(env)); err != nil || c.StopOnStdinClose {
+		t.Fatalf("默认关闭：%v %v", err, c)
+	}
+	for raw, want := range map[string]bool{"1": true, "true": true, "YES": true, "on": true, "0": false, "false": false, "No": false, "off": false, " ": false} {
+		env[EnvStopOnStdinClose] = raw
+		c, err := Load(envOf(env))
+		if err != nil || c.StopOnStdinClose != want {
+			t.Fatalf("%q 应解析为 %v：%v", raw, want, err)
+		}
+	}
+	env[EnvStopOnStdinClose] = "maybe"
+	if _, err := Load(envOf(env)); err == nil || !strings.Contains(err.Error(), EnvStopOnStdinClose) {
+		t.Fatalf("非法值应报错并指明变量：%v", err)
+	}
+}
+
 func TestConsoleSettings(t *testing.T) {
 	env := requiredEnv()
 	c, err := Load(envOf(env))
@@ -207,9 +234,9 @@ func TestConsoleSettings(t *testing.T) {
 		t.Fatalf("默认值不对：%v %+v", err, c.ConsoleOrigins)
 	}
 	env[EnvConsoleOrigins] = "NONE"
-	env[EnvWebDir] = "/opt/loop-now/web"
-	env[EnvReadyFile] = "/tmp/loop-now-ready.json"
-	if c, err = Load(envOf(env)); err != nil || c.ConsoleOrigins != nil || c.WebDir != "/opt/loop-now/web" || c.ReadyFile != "/tmp/loop-now-ready.json" {
+	env[EnvWebDir] = fixturePath("/opt/loop-now/web")
+	env[EnvReadyFile] = fixturePath("/tmp/loop-now-ready.json")
+	if c, err = Load(envOf(env)); err != nil || c.ConsoleOrigins != nil || c.WebDir != fixturePath("/opt/loop-now/web") || c.ReadyFile != fixturePath("/tmp/loop-now-ready.json") {
 		t.Fatalf("覆盖值不对：%v %+v %q %q", err, c.ConsoleOrigins, c.WebDir, c.ReadyFile)
 	}
 }
@@ -348,6 +375,9 @@ func TestLegacyMasterKeyVariableIgnored(t *testing.T) {
 }
 
 func TestDataDirDefaultAndDBDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 的默认数据目录是 %LOCALAPPDATA%\\Loop Now\\data，不按 HOME 推导")
+	}
 	env := requiredEnv()
 	env["HOME"] = "/home/fixture"
 	c, err := Load(envOf(env))
@@ -405,7 +435,7 @@ func TestBundledDefaults(t *testing.T) {
 			t.Errorf("应取随包的 %s：%q", want, got)
 		}
 	}
-	if c, err = Load(envOf(map[string]string{EnvNodeBin: "/opt/node/bin/node", EnvLoopctlDistDir: "/opt/loopctl-dist"})); err != nil || c.NodeBin != "/opt/node/bin/node" || c.LoopctlDistDir != "/opt/loopctl-dist" {
+	if c, err = Load(envOf(map[string]string{EnvNodeBin: fixturePath("/opt/node/bin/node"), EnvLoopctlDistDir: fixturePath("/opt/loopctl-dist")})); err != nil || c.NodeBin != fixturePath("/opt/node/bin/node") || c.LoopctlDistDir != fixturePath("/opt/loopctl-dist") {
 		t.Fatalf("环境变量应优先：%v %q %q", err, c.NodeBin, c.LoopctlDistDir)
 	}
 }

@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"loop-now/internal/filelock"
+	"loop-now/internal/privatefs"
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/cliverify"
@@ -14,9 +17,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
 
@@ -56,6 +59,9 @@ func TestVerificationCrashChild(t *testing.T) {
 }
 
 func TestWorkerActualParentSIGKILLThenRecoveryDoesNotReplay(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("崩溃夹具是 sh 脚本")
+	}
 	var probes atomic.Int32
 	factory := func(context.Context, CommandSpec) (*exec.Cmd, error) { probes.Add(1); return nil, io.EOF }
 	f := newFixture(t, factory, time.Second)
@@ -109,7 +115,7 @@ func TestWorkerActualParentSIGKILLThenRecoveryDoesNotReplay(t *testing.T) {
 		if conn != nil {
 			conn.Close()
 		}
-		if syscall.Kill(info.PID, 0) != nil && os.IsNotExist(homeErr) && e != nil {
+		if !procgroup.ProcessAlive(info.PID) && os.IsNotExist(homeErr) && e != nil {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -122,11 +128,11 @@ func TestWorkerActualParentSIGKILLThenRecoveryDoesNotReplay(t *testing.T) {
 	leasePath := filepath.Join(f.s.Options.WorkRoot, ".cli-verification-locks", op.String()+".lock")
 	deadline = time.Now().Add(4 * time.Second)
 	for {
-		lease, openErr := os.OpenFile(leasePath, os.O_RDWR|syscall.O_NOFOLLOW, 0600)
+		lease, openErr := privatefs.OpenNoFollow(leasePath, os.O_RDWR, 0600)
 		if openErr == nil {
-			lockErr := syscall.Flock(int(lease.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+			lockErr := filelock.TryLock(lease)
 			if lockErr == nil {
-				_ = syscall.Flock(int(lease.Fd()), syscall.LOCK_UN)
+				_ = filelock.Unlock(lease)
 			}
 			_ = lease.Close()
 			if lockErr == nil {

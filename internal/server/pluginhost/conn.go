@@ -13,8 +13,9 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
+
+	"loop-now/internal/procgroup"
 )
 
 // ErrHostExited 表示请求等待期间宿主进程已退出。
@@ -78,9 +79,8 @@ func startConn(command []string, dir string, env []string, onMessage func(*conn,
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Dir, cmd.Env = dir, env
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = inR, outW, errW
-	// 单独的进程组：退出或被停止时连同平台侧拉起的子进程一起结束。
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	err = cmd.Start()
+	// 单独的进程组（Windows 上是 Job Object）：退出或被停止时连同平台侧拉起的子进程一起结束。
+	err = procgroup.Start(cmd)
 	// 子进程持有自己那一端；父进程关掉，宿主退出后读端才能读到 EOF。
 	inR.Close()
 	outW.Close()
@@ -108,7 +108,7 @@ func startConn(command []string, dir string, env []string, onMessage func(*conn,
 	}()
 	go func() {
 		c.exitErr = cmd.Wait()
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		_ = procgroup.Kill(cmd.Process.Pid)
 		// 留一点时间读完宿主退出前写下的最后几行，再关掉读端。
 		finished := make(chan struct{})
 		go func() { readers.Wait(); close(finished) }()
@@ -304,13 +304,13 @@ func (c *conn) stop(grace time.Duration) {
 		return
 	case <-time.After(grace):
 	}
-	_ = syscall.Kill(-c.cmd.Process.Pid, syscall.SIGKILL)
+	_ = procgroup.Kill(c.cmd.Process.Pid)
 	<-c.done
 }
 
 // kill 立即结束宿主进程组（就绪超时、写入卡死）。
 func (c *conn) kill() {
-	_ = syscall.Kill(-c.cmd.Process.Pid, syscall.SIGKILL)
+	_ = procgroup.Kill(c.cmd.Process.Pid)
 	<-c.done
 }
 

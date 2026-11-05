@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -76,12 +75,15 @@ const (
 	EnvPluginMarketURL     = "LOOP_NOW_PLUGIN_MARKET_URL"
 	EnvPiAIDir             = "LOOP_NOW_PI_AI_DIR"
 
-	EnvReconcileInterval  = "LOOP_NOW_RECONCILE_INTERVAL"
-	EnvSSEKeepalive       = "LOOP_NOW_SSE_KEEPALIVE"
-	EnvEventStreamMaxLen  = "LOOP_NOW_EVENT_STREAM_MAXLEN"
-	EnvOverviewMaxLen     = "LOOP_NOW_OVERVIEW_STREAM_MAXLEN"
-	EnvPiStderrTail       = "LOOP_NOW_PI_STDERR_TAIL_BYTES"
-	EnvShutdownTimeout    = "LOOP_NOW_SHUTDOWN_TIMEOUT"
+	EnvReconcileInterval = "LOOP_NOW_RECONCILE_INTERVAL"
+	EnvSSEKeepalive      = "LOOP_NOW_SSE_KEEPALIVE"
+	EnvEventStreamMaxLen = "LOOP_NOW_EVENT_STREAM_MAXLEN"
+	EnvOverviewMaxLen    = "LOOP_NOW_OVERVIEW_STREAM_MAXLEN"
+	EnvPiStderrTail      = "LOOP_NOW_PI_STDERR_TAIL_BYTES"
+	EnvShutdownTimeout   = "LOOP_NOW_SHUTDOWN_TIMEOUT"
+	// EnvStopOnStdinClose 为真时，标准输入到 EOF（或出错）即按收到 SIGTERM 处理：拉起服务端的壳关掉写端就能优雅停止，
+	// Windows 上没有可投递的终止信号，桌面壳靠它；默认关闭，交互运行不读标准输入。
+	EnvStopOnStdinClose   = "LOOP_NOW_STOP_ON_STDIN_CLOSE"
 	EnvMaxUploadFile      = "LOOP_NOW_MAX_UPLOAD_FILE"
 	EnvMaxFolderUpload    = "LOOP_NOW_MAX_FOLDER_UPLOAD"
 	EnvMaxSkillArchive    = "LOOP_NOW_MAX_SKILL_ARCHIVE"
@@ -173,6 +175,7 @@ type Config struct {
 	OverviewMaxLen    int64
 	PiStderrTailBytes int
 	ShutdownTimeout   time.Duration
+	StopOnStdinClose  bool // 标准输入关闭即开始优雅退出（见 EnvStopOnStdinClose）
 	MaxUploadFile     int64
 	MaxFolderUpload   int64 // Agent 文件夹与上下文文件夹单个上传文件的字节上限
 	MaxSkillArchive   int64
@@ -199,33 +202,21 @@ type Config struct {
 	Warnings []string
 }
 
-// DefaultDataDir 返回数据根的默认值：HOME 下的 .loop_now；取不到 HOME 时为空。
-func DefaultDataDir(getenv func(string) string) string {
-	home := getenv("HOME")
-	if home == "" {
-		home, _ = os.UserHomeDir()
-	}
-	if home == "" {
-		return ""
-	}
-	return filepath.Join(home, ".loop_now")
-}
+// DefaultDataDir 返回数据根的默认值：Unix 上是 HOME 下的 .loop_now，Windows 上是 %LOCALAPPDATA%\Loop Now\data；取不到时为空。
+func DefaultDataDir(getenv func(string) string) string { return defaultDataDir(getenv) }
 
 // DBDir 返回数据根下存放 data.db 与 events.db 的目录。
 func DBDir(dataDir string) string { return filepath.Join(dataDir, "db") }
 
-// DefaultWorkRoot 返回当前平台的工作根目录默认值。
-func DefaultWorkRoot() string {
-	if runtime.GOOS == "darwin" {
-		return "/Users/Shared/loop-now"
-	}
-	return "/var/lib/loop-now"
-}
+// DefaultWorkRoot 返回当前平台的工作根目录默认值：macOS /Users/Shared/loop-now，Linux /var/lib/loop-now，
+// Windows %ProgramData%\loop-now。都在用户 home 之外。
+func DefaultWorkRoot() string { return defaultWorkRoot() }
 
 // 发布包的布局：这些文件与 loop-server 放在同一目录下（见 scripts/release/build.sh）。对应的配置没有设置、
 // 而文件存在时，默认就用它们，所以解开发布包不必另外配置；环境变量仍然优先。
+// Windows 包里是 loop-server.exe、loopctl.exe、runtime/node/node.exe，其余相对路径相同；Pi 入口是 cli.js，由随包 node 运行。
 const (
-	BundledNode           = "runtime/node/bin/node"
+	BundledNode           = bundledNode
 	BundledPi             = "runtime/pi/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"
 	BundledLoopctlDist    = "loopctl-dist"
 	BundledPluginHost     = "plugins/host/main.js"
@@ -312,6 +303,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		OverviewMaxLen:    int64(p.integer(EnvOverviewMaxLen, 1000)),
 		PiStderrTailBytes: p.integer(EnvPiStderrTail, 1000),
 		ShutdownTimeout:   p.duration(EnvShutdownTimeout, "15s"),
+		StopOnStdinClose:  p.boolean(EnvStopOnStdinClose, false),
 		MaxUploadFile:     p.size(EnvMaxUploadFile, "10MiB"),
 		MaxFolderUpload:   p.size(EnvMaxFolderUpload, "1GiB"),
 		MaxSkillArchive:   p.size(EnvMaxSkillArchive, "20MiB"),
@@ -341,7 +333,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		c.DataDir = DefaultDataDir(getenv)
 	}
 	if !filepath.IsAbs(c.DataDir) || filepath.Clean(c.DataDir) != c.DataDir || c.DataDir == string(filepath.Separator) {
-		p.fail(EnvDataDir, "须为规范的绝对路径（当前 %q；未设置时取 HOME 下的 .loop_now）", c.DataDir)
+		p.fail(EnvDataDir, "须为规范的绝对路径（当前 %q；未设置时按平台取默认目录）", c.DataDir)
 	}
 	c.BackupDir = p.str(EnvBackupDir, "")
 	if c.BackupDir == "" && c.DataDir != "" {
@@ -356,16 +348,10 @@ func Load(getenv func(string) string) (*Config, error) {
 	}
 	c.ContextDir = p.str(EnvContextDir, "")
 	if c.ContextDir == "" {
-		home := getenv("HOME")
-		if home == "" {
-			home, _ = os.UserHomeDir()
-		}
-		if home != "" {
-			c.ContextDir = filepath.Join(home, ".loop_now")
-		}
+		c.ContextDir = DefaultDataDir(getenv) // 与数据根相同的目录（Unix 上即 HOME 下的 .loop_now）
 	}
 	if !filepath.IsAbs(c.ContextDir) || filepath.Clean(c.ContextDir) != c.ContextDir || c.ContextDir == string(filepath.Separator) {
-		p.fail(EnvContextDir, "须为规范的绝对路径（当前 %q；未设置时取 HOME 下的 .loop_now）", c.ContextDir)
+		p.fail(EnvContextDir, "须为规范的绝对路径（当前 %q；未设置时与数据根的默认目录相同）", c.ContextDir)
 	}
 
 	if c.LoopctlDistDir == "" {
@@ -465,6 +451,7 @@ func (c *Config) LogValue() slog.Value {
 		slog.Int64("overviewStreamMaxLen", c.OverviewMaxLen),
 		slog.Int("piStderrTailBytes", c.PiStderrTailBytes),
 		slog.Duration("shutdownTimeout", c.ShutdownTimeout),
+		slog.Bool("stopOnStdinClose", c.StopOnStdinClose),
 		slog.Int64("maxUploadFile", c.MaxUploadFile),
 		slog.Int64("maxFolderUpload", c.MaxFolderUpload),
 		slog.Int64("maxSkillArchive", c.MaxSkillArchive),
@@ -573,6 +560,22 @@ func (p *parser) integer(name string, def int) int {
 		return def
 	}
 	return n
+}
+
+// boolean 读开关：1/true/yes/on 为真，0/false/no/off 为假（不分大小写），未设置或为空取 def，其他值报错。
+func (p *parser) boolean(name string, def bool) bool {
+	v, ok := p.raw(name)
+	if !ok || strings.TrimSpace(v) == "" {
+		return def
+	}
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	}
+	p.fail(name, "须为 1/true/yes/on 或 0/false/no/off（当前 %q）", v)
+	return def
 }
 
 func (p *parser) duration(name, def string) time.Duration {

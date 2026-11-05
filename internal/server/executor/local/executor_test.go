@@ -13,13 +13,13 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
 	"loop-now/internal/loopctl/guide"
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/content"
@@ -269,6 +269,7 @@ func preinstall(t *testing.T, root, name, version, binary string) string {
 // ---- 6.3 环境与参数 ----
 
 func TestEnvAndArgs(t *testing.T) {
+	skipWithoutCLITemplates(t)
 	h := newHarness(t, nil, "")
 	t.Setenv("LOOP_NOW_MASTER_KEY", "server-secret")
 	dumpPath := filepath.Join(t.TempDir(), "dump.json")
@@ -386,6 +387,7 @@ func TestSyncSkillsAndCredentialFiles(t *testing.T) {
 
 // 5.5：用内置 lark-cli 模板渲染的凭证写入独立 HOME，权限收紧；Pi 环境中没有 lark-cli 的凭证变量；移除后清理。
 func TestLarkCLICredentialFiles(t *testing.T) {
+	skipWithoutCLITemplates(t)
 	h := newHarness(t, nil, "")
 	dumpPath := filepath.Join(t.TempDir(), "dump.json")
 	h.env["FAKEPI_DUMP"] = dumpPath
@@ -788,7 +790,7 @@ func TestCleanupStale(t *testing.T) {
 	d := h.e.dirs(id)
 	_ = d.ensure()
 	cmd := exec.Command(fakepibin.Path(t), "--mode", "rpc", "--session-dir", d.sessions)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	procgroup.Configure(cmd)
 	stdin, _ := cmd.StdinPipe()
 	defer stdin.Close()
 	if err := cmd.Start(); err != nil {
@@ -796,7 +798,8 @@ func TestCleanupStale(t *testing.T) {
 	}
 	waited := make(chan struct{})
 	go func() { _ = cmd.Wait(); close(waited) }()
-	b, _ := json.Marshal(pidRecord{PID: cmd.Process.Pid, InstanceID: uuid.NewString(), Hostname: "test-host", SessionDir: d.sessions})
+	start, _ := processStart(cmd.Process.Pid) // Windows 不读别的进程的命令行，只按启动时刻认进程
+	b, _ := json.Marshal(pidRecord{PID: cmd.Process.Pid, InstanceID: uuid.NewString(), Hostname: "test-host", SessionDir: d.sessions, ProcessStart: start})
 	_ = os.WriteFile(d.pidFile, b, 0o600)
 	deletedID := uuid.Must(uuid.NewV7())
 	_ = os.MkdirAll(h.e.dirs(deletedID).home, 0o700)
@@ -821,6 +824,7 @@ func TestCleanupStale(t *testing.T) {
 // pi.pid 记下进程的启动时刻：启动后改了进程标题的 Pi（命令行里不再有 --mode rpc 与会话目录）照样被认出并结束；
 // 启动时刻对不上的（PID 已被别的进程复用）不碰。
 func TestCleanupStaleRecognizesRetitledPiByStartTime(t *testing.T) {
+	skipOnWindows(t, "夹具用 /bin/sleep 充当被改了标题的 Pi")
 	h := newHarness(t, nil, "")
 	id := h.agent(nil)
 	if res, _ := h.exec(id, "hi"); res.Outcome != executor.OutcomeCompleted {
@@ -838,11 +842,11 @@ func TestCleanupStaleRecognizesRetitledPiByStartTime(t *testing.T) {
 
 	spawn := func(pidFile string, start func(pid int) string) (*exec.Cmd, chan struct{}) {
 		cmd := exec.Command("/bin/sleep", "60")
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		procgroup.Configure(cmd)
 		if err := cmd.Start(); err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) })
+		t.Cleanup(func() { _ = procgroup.Kill(cmd.Process.Pid) })
 		waited := make(chan struct{})
 		go func() { _ = cmd.Wait(); close(waited) }()
 		b, _ := json.Marshal(pidRecord{PID: cmd.Process.Pid, InstanceID: uuid.NewString(), Hostname: "test-host", SessionDir: filepath.Join(filepath.Dir(pidFile), "sessions"), ProcessStart: start(cmd.Process.Pid)})
@@ -965,7 +969,7 @@ func TestAgentTokens(t *testing.T) {
 	}
 
 	// 进程被强制结束：令牌立即作废。
-	if err := syscall.Kill(h.pid(id), syscall.SIGKILL); err != nil {
+	if err := procgroup.Kill(h.pid(id)); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
@@ -992,6 +996,7 @@ func TestAgentTokens(t *testing.T) {
 // ---- loopctl 与内置 Skill ----
 
 func TestLoopctlInPathAndBuiltinSkill(t *testing.T) {
+	skipWithoutCLITemplates(t)
 	binDir := filepath.Join(t.TempDir(), "tools", "loopctl", "v1", "bin")
 	h := newHarness(t, func(o *Options) { o.LoopctlBinDir = binDir }, "")
 	dumpPath := filepath.Join(t.TempDir(), "dump.json")

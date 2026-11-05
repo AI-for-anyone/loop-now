@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/execenv"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/executor"
 )
@@ -91,6 +92,12 @@ func (e *Executor) buildEnv(d agentDirs, snap agentconfig.Snapshot, cliBinDirs [
 			if !executor.IsReservedEnv(k) {
 				set(k, t.Env[k])
 			}
+		}
+	}
+	// Windows 上 node、git 与 PowerShell 还需要 SYSTEMROOT 等系统变量和与 HOME 对应的 USERPROFILE／APPDATA／TEMP；Unix 上为空。
+	for _, kv := range execenv.Base(d.home, d.tmp) {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			set(k, v)
 		}
 	}
 	set("HOME", d.home)

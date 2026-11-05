@@ -9,11 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/app"
 	"loop-now/internal/server/config"
@@ -112,7 +112,7 @@ func deletionReady(t *testing.T, s *server, a apitypes.Agent, op modelauth.Opera
 }
 func assertDeletionResourceGone(t *testing.T, r deletionResource) {
 	t.Helper()
-	if !errors.Is(syscall.Kill(r.PID, 0), syscall.ESRCH) {
+	if procgroup.ProcessAlive(r.PID) {
 		t.Fatal("deleted login child still exists")
 	}
 	if _, err := os.Stat(r.Home); !errors.Is(err, os.ErrNotExist) {
@@ -159,8 +159,8 @@ func TestDeletedLoginHelperResources(t *testing.T) {
 				}
 				s.must(500, "DELETE", path, nil)
 				for i, r := range resources {
-					if err := syscall.Kill(r.PID, 0); err != nil {
-						t.Fatal("rollback cancelled login child", err)
+					if !procgroup.ProcessAlive(r.PID) {
+						t.Fatal("rollback cancelled login child")
 					}
 					ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(r.Port)))
 					if err == nil {
@@ -184,8 +184,8 @@ func TestDeletedLoginHelperResources(t *testing.T) {
 					t.Fatal("deleted login not cancelled", err)
 				}
 			}
-			if err := syscall.Kill(outsideResource.PID, 0); err != nil {
-				t.Fatal("unrelated Agent login was cancelled", err)
+			if !procgroup.ProcessAlive(outsideResource.PID) {
+				t.Fatal("unrelated Agent login was cancelled")
 			}
 			unaffected, err := deletionOperation(s, outside, outsideOp.ID)
 			if err != nil || unaffected.Status != "awaiting_authorization" || unaffected.AuthorizationURL == nil {

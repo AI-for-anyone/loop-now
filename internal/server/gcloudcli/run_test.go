@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -27,6 +28,9 @@ func TestControlledArguments(t *testing.T) {
 // TestRunSelfContained 验证 Linux 式自包含安装的执行路径：没有 Python.framework 时
 // 直接执行 google-cloud-sdk/bin/gcloud，并沿用凭证与参数白名单约束。
 func TestRunSelfContained(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("假的 gcloud 是 sh 脚本")
+	}
 	base := t.TempDir()
 	root := filepath.Join(base, "runtime")
 	bin := filepath.Join(root, "google-cloud-sdk", "bin", "gcloud")
@@ -68,6 +72,9 @@ func TestRunSelfContained(t *testing.T) {
 }
 
 func TestRunSelfContainedOAuth(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("假的 gcloud 是 sh 脚本")
+	}
 	if clitemplate.ResolveGooglePython() == "" {
 		t.Skip("自包含 gcloud 运行需要系统 Python")
 	}

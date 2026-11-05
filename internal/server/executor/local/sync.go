@@ -12,12 +12,12 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
 
 	"loop-now/internal/loopctl/guide"
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/modelcredential"
@@ -393,10 +393,9 @@ func (e *Executor) cloneRepo(ctx context.Context, root *os.Root, d agentDirs, sr
 		cmd := exec.CommandContext(ctx, e.o.GitBin, append(append([]string{}, baseArgs...), args...)...)
 		cmd.Env = env
 		cmd.Dir = d.workspace
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-		cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+		cmd.Cancel = procgroup.Cancel(cmd)
 		cmd.WaitDelay = 5 * time.Second
-		return cmd.CombinedOutput()
+		return procgroup.CombinedOutput(cmd)
 	}
 	failed := func(reason string) error {
 		if ctx.Err() != nil {

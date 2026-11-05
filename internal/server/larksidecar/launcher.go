@@ -16,7 +16,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
+
+	"loop-now/internal/privatefs"
 )
 
 type LaunchConfig struct {
@@ -79,10 +80,7 @@ func (b *Broker) commandWithSandbox(ctx context.Context, cfg LaunchConfig, sandb
 		return reject()
 	}
 	info, e := os.Stat(cfg.Home)
-	if e != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
-		return reject()
-	}
-	if stat, ok := info.Sys().(*syscall.Stat_t); !ok || int(stat.Uid) != os.Geteuid() {
+	if e != nil || !info.IsDir() || !privatefs.IsPrivate(cfg.Home, info) || !privatefs.OwnedByCurrentUserPath(cfg.Home, info) {
 		return reject()
 	}
 	f, e := os.Open(cfg.Binary)
@@ -238,7 +236,7 @@ func validateExecutable(path, digest string) error {
 	}
 	defer f.Close()
 	info, e := f.Stat()
-	if e != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
+	if e != nil || !info.Mode().IsRegular() || !privatefs.IsExecutable(path, info) {
 		return errors.New("invalid executable")
 	}
 	h := sha256.New()

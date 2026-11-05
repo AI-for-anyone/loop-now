@@ -24,14 +24,39 @@ jobs:
           node-version: 24.21.0
       - name: go vet
         run: go vet ./cmd/... ./internal/... ./api/...
-      # 数据层不能引入只有 unix 才有的代码（实例锁等有 Windows 实现）。
-      - name: go vet (windows, data layer)
-        run: GOOS=windows go vet ./internal/server/db/...
+      # 整个服务端都要能交叉编译到 Windows（进程组、锁、权限与不跟随符号链接的打开各有 Windows 实现）；真实运行见 server-windows。
+      - name: go vet (windows cross)
+        run: GOOS=windows GOARCH=amd64 go vet ./cmd/... ./internal/... ./api/... ./auth-helper/...
       - name: go test
         run: go test -count=1 -skip '^TestStress' ./cmd/... ./internal/... ./api/...
       # 并发写、读到自己的写、取消、进程被杀与检查点的压测，单独连跑三次。
       - name: go test (data layer stress)
         run: go test -count=3 -run '^TestStress' ./internal/server/db/...
+
+  # Windows 上的服务端：编译、vet 与全部 Go 测试（依赖本机 Pi、Unix 信号、权限位或 macOS 专有能力的测试在 Windows 上跳过或按 build tag 排除）。
+  server-windows:
+    name: server (windows, go vet + go test)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # 黄金文件与 testdata 按 LF 比对；Windows runner 的 git 默认会把它们转成 CRLF。
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - name: go vet
+        run: go vet ./cmd/... ./internal/... ./api/... ./auth-helper/...
+      - name: go build
+        run: go build ./...
+      - name: go test
+        run: go test -count=1 -skip '^TestStress' ./cmd/... ./internal/... ./api/... ./auth-helper/...
 
   # 一次性 PostgreSQL 导入器的测试需要一个 PostgreSQL；导入器删除时这个 job 一并删除。
   # 不列入分支保护的必需检查。

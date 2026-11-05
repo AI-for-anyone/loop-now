@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"github.com/google/uuid"
 	"io"
+	"loop-now/internal/privatefs"
 	"loop-now/internal/server/clicredential"
 	"net"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -35,7 +37,7 @@ func TestGoogleBrokerScopeCloseAndNoRefreshSecret(t *testing.T) {
 	t.Cleanup(func() { b.Close(context.Background()) })
 	for p, mode := range map[string]os.FileMode{b.path: 0600, b.dir: 0700} {
 		fi, e := os.Stat(p)
-		if e != nil || fi.Mode().Perm() != mode {
+		if e != nil || !privatefs.IsPrivate(p, fi) || (runtime.GOOS != "windows" && fi.Mode().Perm() != mode) {
 			t.Fatal("private socket permissions")
 		}
 	}

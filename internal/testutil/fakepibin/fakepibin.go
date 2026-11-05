@@ -27,7 +27,7 @@ func Path(t testing.TB) string {
 		if err != nil {
 			return
 		}
-		path = filepath.Join(dir, "fakepi")
+		path = testenv.Exe(filepath.Join(dir, "fakepi"))
 		cmd := exec.Command("go", "build", "-o", path, "./internal/server/executor/local/fakepi")
 		cmd.Dir = testenv.RepoRoot()
 		if out, e := cmd.CombinedOutput(); e != nil {

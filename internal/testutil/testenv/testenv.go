@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 )
@@ -44,6 +45,14 @@ func load() {
 			values[strings.TrimSpace(k)] = strings.TrimSpace(v)
 		}
 	}
+}
+
+// Exe 给测试时 go build 出来的程序路径加上平台的可执行扩展名（Windows 上 .exe，其他平台原样）。
+func Exe(path string) string {
+	if runtime.GOOS == "windows" && filepath.Ext(path) != ".exe" {
+		return path + ".exe"
+	}
+	return path
 }
 
 // RepoRoot 从当前目录向上查找 go.mod 所在目录。

@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -67,6 +68,9 @@ func terminal(t *testing.T, f fixture, a, id uuid.UUID) cliverify.Operation {
 }
 
 func TestProcessBoundsOutputAndReapsGroup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("夹具是 /bin/sh 脚本")
+	}
 	for _, kind := range []string{"overflow", "cancel"} {
 		t.Run(kind, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -96,6 +100,9 @@ func TestProcessBoundsOutputAndReapsGroup(t *testing.T) {
 }
 
 func TestProcessParentExitDoesNotLeaveTermResistantChild(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("夹具是 /bin/sh 脚本，且经 ExtraFiles 传管道")
+	}
 	home := t.TempDir()
 	readyR, readyW, e := os.Pipe()
 	if e != nil {
@@ -230,6 +237,7 @@ func newFixture(t *testing.T, factory CommandFactory, timeout time.Duration) fix
 }
 
 func TestWorkerPersistsFixedProbeAndDoesNotReplay(t *testing.T) {
+	skipWithoutCLITemplates(t)
 	var calls atomic.Int32
 	factory := func(ctx context.Context, spec CommandSpec) (*exec.Cmd, error) {
 		if spec.Phase == "version" {
@@ -280,6 +288,7 @@ func TestWorkerPersistsFixedProbeAndDoesNotReplay(t *testing.T) {
 }
 
 func TestWorkerCancellationRollbackAndTargetChange(t *testing.T) {
+	skipWithoutCLITemplates(t)
 	entered := make(chan struct{}, 1)
 	factory := func(_ context.Context, spec CommandSpec) (*exec.Cmd, error) {
 		if spec.Phase == "version" {
@@ -330,6 +339,7 @@ func TestWorkerCancellationRollbackAndTargetChange(t *testing.T) {
 }
 
 func TestWorkerUnreadableCredentialCannotExecute(t *testing.T) {
+	skipWithoutCLITemplates(t)
 	var probes atomic.Int32
 	f := newFixture(t, func(_ context.Context, spec CommandSpec) (*exec.Cmd, error) {
 		if spec.Phase == "probe" {
@@ -352,6 +362,7 @@ func TestWorkerUnreadableCredentialCannotExecute(t *testing.T) {
 }
 
 func TestWorkerRecordCommitFailureDoesNotClaimSuccessOrReplay(t *testing.T) {
+	skipWithoutCLITemplates(t)
 	var probes atomic.Int32
 	f := newFixture(t, func(_ context.Context, spec CommandSpec) (*exec.Cmd, error) {
 		if spec.Phase == "version" {
@@ -402,6 +413,7 @@ func TestWorkerRecordCommitFailureDoesNotClaimSuccessOrReplay(t *testing.T) {
 }
 
 func TestRecoveryRespectsHomeLeaseBetweenCommands(t *testing.T) {
+	skipWithoutCLITemplates(t)
 	f := newFixture(t, func(context.Context, CommandSpec) (*exec.Cmd, error) { return nil, errors.New("must not execute") }, time.Second)
 	op := uuid.New()
 	home, held, e := f.s.operationHome(op)
@@ -437,6 +449,7 @@ func TestRecoveryRespectsHomeLeaseBetweenCommands(t *testing.T) {
 }
 
 func TestNon24NodeRejectsOnlyNewStartBeforeRegistrationOrTools(t *testing.T) {
+	skipWithoutCLITemplates(t)
 	var commands atomic.Int32
 	f := newFixture(t, func(_ context.Context, spec CommandSpec) (*exec.Cmd, error) {
 		commands.Add(1)
@@ -504,6 +517,7 @@ func TestRegistryRejectsSameNameOverrideBeforeRegistration(t *testing.T) {
 }
 
 func TestWorkerWrongActualVersionAndRawFailureStaySafe(t *testing.T) {
+	skipWithoutCLITemplates(t)
 	for _, kind := range []string{"version", "provider_error"} {
 		t.Run(kind, func(t *testing.T) {
 			var probes atomic.Int32
@@ -553,6 +567,7 @@ func TestWorkerWrongActualVersionAndRawFailureStaySafe(t *testing.T) {
 }
 
 func TestWorkerProbeDeadlinePersistsTimeout(t *testing.T) {
+	skipWithoutCLITemplates(t)
 	f := newFixture(t, func(_ context.Context, spec CommandSpec) (*exec.Cmd, error) {
 		if spec.Phase == "version" {
 			return exec.Command("/bin/sh", "-c", "printf 'gh version 2.100.0\\n'"), nil
@@ -571,6 +586,7 @@ func TestWorkerProbeDeadlinePersistsTimeout(t *testing.T) {
 }
 
 func TestWorkerToolDigestFailureNeverFallsBackToHost(t *testing.T) {
+	skipWithoutCLITemplates(t)
 	var commands, downloads atomic.Int32
 	f := newFixture(t, func(context.Context, CommandSpec) (*exec.Cmd, error) { commands.Add(1); return nil, io.EOF }, time.Second)
 	if e := os.RemoveAll(filepath.Join(f.s.Options.WorkRoot, "tools")); e != nil {
@@ -606,6 +622,7 @@ func TestWorkerToolDigestFailureNeverFallsBackToHost(t *testing.T) {
 }
 
 func TestWorkerDecryptedUnknownEnvironmentCannotExecute(t *testing.T) {
+	skipWithoutCLITemplates(t)
 	var probes atomic.Int32
 	f := newFixture(t, func(_ context.Context, spec CommandSpec) (*exec.Cmd, error) {
 		if spec.Phase == "probe" {

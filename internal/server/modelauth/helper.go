@@ -10,11 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
 	authhelper "loop-now/auth-helper"
+	"loop-now/internal/privatefs"
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/modelcredential"
 )
 
@@ -101,7 +102,7 @@ func (h *Helper) run(ctx context.Context, id, kind string, c modelcredential.Cre
 		return modelcredential.Credential{}, failed("operation_directory")
 	}
 	defer os.RemoveAll(root)
-	if e = os.Chmod(root, 0700); e != nil {
+	if e = privatefs.MakePrivate(root); e != nil {
 		return modelcredential.Credential{}, failed("operation_permissions")
 	}
 	childIn, parentWrite, e := os.Pipe()
@@ -127,18 +128,8 @@ func (h *Helper) run(ctx context.Context, id, kind string, c modelcredential.Cre
 		expectedPiVersion = "1.4.0"
 	}
 	cmd.Env = append(cmd.Env, "LOOP_NOW_AUTH_PI_VERSION="+expectedPiVersion)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error {
-		if cmd.Process == nil {
-			return os.ErrProcessDone
-		}
-		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		if errors.Is(err, syscall.ESRCH) {
-			return os.ErrProcessDone
-		}
-		return err
-	}
-	if e = cmd.Start(); e != nil {
+	cmd.Cancel = procgroup.Cancel(cmd)
+	if e = procgroup.Start(cmd); e != nil {
 		return modelcredential.Credential{}, failed("helper_start")
 	}
 	childIn.Close()

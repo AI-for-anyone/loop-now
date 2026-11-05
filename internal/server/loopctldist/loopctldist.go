@@ -134,7 +134,7 @@ func (d *Dist) Local() (Artifact, error) {
 	return d.Manifest.Artifacts[i], nil
 }
 
-// Install 把本机平台的二进制安装到 <workRoot>/tools/loopctl/<版本>/bin/loopctl，复制后再校验一次摘要，返回 bin 目录。
+// Install 把本机平台的二进制安装到 <workRoot>/tools/loopctl/<版本>/bin/loopctl（Windows 上是 loopctl.exe），复制后再校验一次摘要，返回 bin 目录。
 // 已安装且摘要相符时不重复复制。
 func (d *Dist) Install(workRoot string) (string, error) {
 	a, err := d.Local()
@@ -142,7 +142,7 @@ func (d *Dist) Install(workRoot string) (string, error) {
 		return "", err
 	}
 	binDir := filepath.Join(workRoot, "tools", Program, d.Manifest.Version, "bin")
-	target := filepath.Join(binDir, Program)
+	target := filepath.Join(binDir, localProgram())
 	if got, _, err := fileSum(target); err == nil && got == a.SHA256 {
 		return binDir, nil
 	}
