@@ -209,6 +209,24 @@ func TestLoadOverrides(t *testing.T) {
 }
 
 // 控制台来源可以设为 none（不允许任何跨源访问）；控制台目录与就绪文件按原样取用。
+func TestStopOnStdinClose(t *testing.T) {
+	env := requiredEnv()
+	if c, err := Load(envOf(env)); err != nil || c.StopOnStdinClose {
+		t.Fatalf("默认关闭：%v %v", err, c)
+	}
+	for raw, want := range map[string]bool{"1": true, "true": true, "YES": true, "on": true, "0": false, "false": false, "No": false, "off": false, " ": false} {
+		env[EnvStopOnStdinClose] = raw
+		c, err := Load(envOf(env))
+		if err != nil || c.StopOnStdinClose != want {
+			t.Fatalf("%q 应解析为 %v：%v", raw, want, err)
+		}
+	}
+	env[EnvStopOnStdinClose] = "maybe"
+	if _, err := Load(envOf(env)); err == nil || !strings.Contains(err.Error(), EnvStopOnStdinClose) {
+		t.Fatalf("非法值应报错并指明变量：%v", err)
+	}
+}
+
 func TestConsoleSettings(t *testing.T) {
 	env := requiredEnv()
 	c, err := Load(envOf(env))
