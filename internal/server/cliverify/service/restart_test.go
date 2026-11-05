@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -58,6 +59,9 @@ func TestVerificationCrashChild(t *testing.T) {
 }
 
 func TestWorkerActualParentSIGKILLThenRecoveryDoesNotReplay(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("崩溃夹具是 sh 脚本")
+	}
 	var probes atomic.Int32
 	factory := func(context.Context, CommandSpec) (*exec.Cmd, error) { probes.Add(1); return nil, io.EOF }
 	f := newFixture(t, factory, time.Second)

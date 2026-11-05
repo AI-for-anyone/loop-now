@@ -38,7 +38,7 @@ func checkAssets(t *testing.T, root string) {
 			t.Fatalf("asset mismatch: %s", f.Name())
 		}
 		info, err := os.Stat(filepath.Join(root, f.Name()))
-		if err != nil || info.Mode().Perm() != 0600 {
+		if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0600) { // Windows 上由继承的 ACL 决定
 			t.Fatal("asset is not private")
 		}
 	}
@@ -159,6 +159,9 @@ func TestInstallRejectsSymlinksAndPublicDirectories(t *testing.T) {
 					t.Fatal(err)
 				}
 			case "public-parent":
+				if runtime.GOOS == "windows" {
+					t.Skip("chmod 在 Windows 上改不了 ACL，无法制造公开目录")
+				}
 				if err := os.Chmod(parent, 0755); err != nil {
 					t.Fatal(err)
 				}

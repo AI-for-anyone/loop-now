@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"loop-now/internal/server/loopctldist"
+	"loop-now/internal/testutil/testenv"
 )
 
 func build(t *testing.T, version string) (*Manifest, string) {
@@ -45,7 +46,7 @@ func TestBuild(t *testing.T) {
 	if err := json.Unmarshal(b, &onDisk); err != nil || len(onDisk.Artifacts) != 5 {
 		t.Fatalf("manifest.json：%v", err)
 	}
-	if shasum, err := exec.LookPath("shasum"); err == nil {
+	if shasum, err := exec.LookPath("shasum"); err == nil && runtime.GOOS != "windows" { // runner 上的 shasum.bat 不能直接运行
 		cmd := exec.Command(shasum, "-a", "256", "-c", "SHA256SUMS")
 		cmd.Dir = dir
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -155,7 +156,7 @@ func TestServerAcceptsArtifacts(t *testing.T) {
 	}
 	srv := httptest.NewServer(d.Handler())
 	defer srv.Close()
-	for _, name := range []string{"manifest.json", "SHA256SUMS", "loopctl-" + runtime.GOOS + "-" + runtime.GOARCH} {
+	for _, name := range []string{"manifest.json", "SHA256SUMS", testenv.Exe("loopctl-" + runtime.GOOS + "-" + runtime.GOARCH)} {
 		resp, err := http.Get(srv.URL + "/downloads/loopctl/" + name)
 		if err != nil {
 			t.Fatal(err)

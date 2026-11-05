@@ -14,6 +14,7 @@ import (
 	"loop-now/internal/buildinfo"
 	"loop-now/internal/server/loopctldist"
 	"loop-now/internal/testutil/loopctlfake"
+	"loop-now/internal/testutil/testenv"
 )
 
 func TestLoadAndInstall(t *testing.T) {
@@ -34,7 +35,7 @@ func TestLoadAndInstall(t *testing.T) {
 	if bin != filepath.Join(work, "tools", "loopctl", buildinfo.Version(), "bin") {
 		t.Fatalf("安装目录：%s", bin)
 	}
-	b, err := os.ReadFile(filepath.Join(bin, "loopctl"))
+	b, err := os.ReadFile(testenv.Exe(filepath.Join(bin, "loopctl")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +68,7 @@ func TestLoadRejects(t *testing.T) {
 			rewrite(t, filepath.Join(dir, "manifest.json"), `"program": "loopctl"`, `"program": "pi"`)
 		},
 		"文件被改动": func(dir string) {
-			f := filepath.Join(dir, "loopctl-"+runtime.GOOS+"-"+runtime.GOARCH)
+			f := testenv.Exe(filepath.Join(dir, "loopctl-"+runtime.GOOS+"-"+runtime.GOARCH))
 			b, _ := os.ReadFile(f)
 			_ = os.WriteFile(f, append(b, '#'), 0o755)
 		},

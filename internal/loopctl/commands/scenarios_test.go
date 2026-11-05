@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -35,7 +36,7 @@ func TestConfigCommands(t *testing.T) {
 		t.Fatalf("摘要 %v", d)
 	}
 	path := config.Path(e.home)
-	if info, _ := os.Stat(path); info.Mode().Perm() != 0o600 {
+	if info, _ := os.Stat(path); runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 { // Windows 上是 ACL
 		t.Fatalf("权限 %o", info.Mode().Perm())
 	}
 	f, _, _ := config.Load(path)
