@@ -3432,7 +3432,8 @@ paths:
       description: |
         先用 `POST /plugin-previews` 取得预览并展示给人，再带 previewId 安装。非官方来源（本地目录、git、npm）须带 `confirm: true`，
         否则返回 409 `plugin_confirmation_required`。插件 id 已安装时返回 409 `name_conflict`（更新用 `POST /plugins/{pluginId}/update`）。
-        git 与 npm 来源在这一步执行 `npm ci --ignore-scripts --omit=dev`（没有锁文件时 `npm install`），失败返回 422 `plugin_source_failed`；
+        git 与 npm 来源在这一步执行 `npm ci --ignore-scripts --omit=dev --omit=peer`（没有锁文件时 `npm install`，参数相同），失败返回 422 `plugin_source_failed`；
+        不装 peer 依赖，插件的运行依赖要用的 peer 依赖须直接列进插件自己的 `dependencies`。
         本地目录来源原地使用，不安装依赖、不修改。预览过期或不存在返回 404。
       requestBody:
         required: true

@@ -139,7 +139,7 @@ export const plugins = {
     localPath: '服务端本机目录的绝对路径',
     localPathPlaceholder: '/Users/you/plugins/my-plugin',
     localHint: '原地使用，不安装依赖、不修改目录，依赖由你负责。',
-    gitHint: '会克隆仓库并执行 npm ci --ignore-scripts --omit=dev。',
+    gitHint: '会克隆仓库并执行 npm ci --ignore-scripts --omit=dev --omit=peer。',
     read: '读取清单',
     reading: '正在读取…',
     required: '请填写',
