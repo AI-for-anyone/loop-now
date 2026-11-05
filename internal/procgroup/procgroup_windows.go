@@ -83,11 +83,16 @@ func watch(pid int, proc, job windows.Handle) {
 	windows.CloseHandle(job)
 }
 
-func lookup(pid int) (windows.Handle, bool) {
+// withJob 在持锁期间把本进程登记的 Job 句柄交给 fn：watch 协程只在拿到锁之后才从表里删掉并关闭句柄，
+// fn 里用的句柄因此一定有效。没有登记时返回 false。
+func withJob(pid int, fn func(windows.Handle) error) (bool, error) {
 	jobs.Lock()
 	defer jobs.Unlock()
 	job, ok := jobs.m[pid]
-	return job, ok
+	if !ok {
+		return false, nil
+	}
+	return true, fn(job)
 }
 
 // jobBasicAccounting 是 JOBOBJECT_BASIC_ACCOUNTING_INFORMATION（x/sys 没有定义）。
@@ -114,11 +119,13 @@ func activeProcesses(job windows.Handle) (uint32, error) {
 // kill 结束整组：本进程建的 Job 用 TerminateJobObject；上一个服务端实例留下的进程（只有 pid，没有 Job）退回到
 // 结束该进程本身——它的后代在上一个实例退出、Job 句柄关闭时已经随之结束。
 func kill(pid int) error {
-	if job, ok := lookup(pid); ok {
+	if ok, err := withJob(pid, func(job windows.Handle) error {
 		if n, err := activeProcesses(job); err == nil && n == 0 {
 			return errNotFound
 		}
 		return windows.TerminateJobObject(job, 1)
+	}); ok {
+		return err
 	}
 	proc, err := windows.OpenProcess(windows.PROCESS_TERMINATE|windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
 	if err != nil {
@@ -138,7 +145,7 @@ func kill(pid int) error {
 func terminate(pid int) error { return kill(pid) }
 
 func probe(pid int) error {
-	if job, ok := lookup(pid); ok {
+	if ok, err := withJob(pid, func(job windows.Handle) error {
 		n, err := activeProcesses(job)
 		if err != nil {
 			return err
@@ -147,6 +154,8 @@ func probe(pid int) error {
 			return errNotFound
 		}
 		return nil
+	}); ok {
+		return err
 	}
 	if processAlive(pid) {
 		return nil
