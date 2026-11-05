@@ -137,7 +137,7 @@ export const plugins = {
     localPath: 'Absolute path to a folder on the server machine',
     localPathPlaceholder: '/Users/you/plugins/my-plugin',
     localHint: "Used in place: dependencies aren't installed and the folder isn't modified. Dependencies are up to you.",
-    gitHint: 'Clones the repository and runs npm ci --ignore-scripts --omit=dev.',
+    gitHint: 'Clones the repository and runs npm ci --ignore-scripts --omit=dev --omit=peer.',
     read: 'Read manifest',
     reading: 'Reading…',
     required: 'Required',
