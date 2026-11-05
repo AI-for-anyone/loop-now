@@ -4,12 +4,14 @@ import { app, dialog, powerMonitor, session, shell, type BrowserWindow } from 'e
 import { autoUpdater } from 'electron-updater'
 import { mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { Badge } from './badge'
 import { RotatingLog } from './log'
 import { setAppMenu } from './menu'
 import { handleNotifications } from './notifications'
 import { choosePort, portOf } from './port'
-import { cliLink, installLink, linkState } from './cli'
-import { gitUsable, installCommandLineTools } from './git'
+import { addToUserPath, cliLink, installLink, linkState, readUserPath, userPathHas } from './cli'
+import { gitUsable, installGit } from './git'
+import { cliBinary, cliInstallMode, current as platform, serverBinary } from './platform'
 import { defaultProfile, overridesFromFile, profileArg, profileEnv, profileFromFile, profileSummary, resolveProfile, type Profile } from './profile'
 import { readyTimeoutMs, ServerProcess, type ServerState, type StartFailure } from './server'
 import { SettingsFile } from './settings'
@@ -57,7 +59,7 @@ function run(): void {
 
   // 打包后服务端在 app 资源的 server/ 下；开发时用 LOOP_NOW_DESKTOP_SERVER 指定（服务端以自己所在目录为 cwd 启动，所以转成绝对路径）。
   const devBin = process.env.LOOP_NOW_DESKTOP_SERVER
-  const bin = app.isPackaged ? join(process.resourcesPath, 'server', 'loop-server') : devBin ? resolve(devBin) : undefined
+  const bin = app.isPackaged ? join(process.resourcesPath, 'server', serverBinary(platform)) : devBin ? resolve(devBin) : undefined
   // 起不了服务端的情形（在 app 就绪后调用，语言要到那时才确定）。没有配置只会发生在开发时没选的情况下。
   const blocked = (): StatusView | undefined => {
     const s = strings().page
@@ -70,6 +72,7 @@ function run(): void {
   const server = new ServerProcess({
     bin: bin ?? '',
     readyFile: join(userData, 'run', 'server-ready.json'),
+    stampFile: join(userData, 'run', 'server-stamp.json'),
     env: profile ? { ...process.env, ...profileEnv(profile) } : process.env,
     log: serverLog,
     note,
@@ -86,6 +89,7 @@ function run(): void {
     onAction: (action) => (action === 'retry' ? void server.restart() : void shell.openPath(logDir)),
   })
   let tray: StatusTray | undefined
+  const badge = new Badge(() => window.browserWindow)
   const updates = new UpdateChecker(autoUpdater, note)
   updates.on('available', (version) => {
     note(`有新版本 ${version}`)
@@ -116,29 +120,31 @@ function run(): void {
     }
   }
 
-  // 第一次显示窗口时查一次 git（服务端用它拉取仓库）；不可用就提示一句，可以直接打开系统的安装框。不打包 git。
+  // 第一次显示窗口时查一次 git（服务端用它拉取仓库）；不可用就提示一句，可以直接打开系统的安装框（Windows 打开 git-scm.com）。不打包 git。
   async function checkGit(win: BrowserWindow): Promise<void> {
     if (await gitUsable()) return
-    note('git 不可用：没有安装命令行工具')
+    note(platform === 'win32' ? 'git 不可用：PATH 里没有 git.exe' : 'git 不可用：没有安装命令行工具')
     const s = strings().git
     const { response } = await dialog.showMessageBox(win, {
       type: 'warning',
       message: s.message,
-      detail: s.detail,
-      buttons: [s.install, s.later],
+      detail: platform === 'win32' ? s.detailWindows : s.detail,
+      buttons: [platform === 'win32' ? s.installWindows : s.install, s.later],
       defaultId: 0,
       cancelId: 1,
     })
-    if (response === 0) installCommandLineTools()
+    if (response === 0) installGit()
   }
 
-  // 托盘"安装命令行工具"：/usr/local/bin/loopctl 链到包内固定的 Resources/bin/loopctl（打包时链到当前版本的二进制）。
+  // 托盘"安装命令行工具"。macOS：/usr/local/bin/loopctl 链到包内固定的 Resources/bin/loopctl（打包时链到当前版本的二进制）。
+  // Windows：把 resources\bin（里面是复制出来的 loopctl.exe）加进用户 PATH（取舍见 platform.ts 的 cliInstallMode）。
   // 由人从菜单里触发，确认框和系统的管理员密码框都在这时出现。
   async function installCli(): Promise<void> {
     const s = strings().cli
     const info = (message: string, detail: string, type: 'info' | 'warning' = 'info') => dialog.showMessageBox({ type, message, detail })
+    if (cliInstallMode(platform) === 'path') return installCliOnPath(info)
     if (!app.isInApplicationsFolder()) return void (await info(s.moveFirst, s.moveFirstDetail, 'warning'))
-    const target = join(process.resourcesPath, 'bin', 'loopctl')
+    const target = join(process.resourcesPath, 'bin', cliBinary(platform))
     const current = await linkState(cliLink, target)
     if (current.state === 'ours') return void (await info(s.already, `${cliLink} → ${target}\n\n${s.external}`))
     const ask =
@@ -156,6 +162,27 @@ function run(): void {
     }
     note(`已安装 loopctl：${cliLink} → ${target}`)
     await info(s.done, `${cliLink} → ${target}\n\n${s.external}`)
+  }
+
+  async function installCliOnPath(info: (message: string, detail: string, type?: 'info' | 'warning') => Promise<unknown>): Promise<void> {
+    const s = strings().cli
+    const dir = join(process.resourcesPath, 'bin')
+    const current = await readUserPath()
+    if (current instanceof Error) {
+      note(`读不到用户 PATH：${current.message}`)
+      return void (await info(s.failed, current.message, 'warning'))
+    }
+    if (userPathHas(current, dir)) return void (await info(s.pathAlready, `${s.pathAlreadyDetail(dir)}\n\n${s.external}`))
+    app.focus({ steal: true })
+    const { response } = await dialog.showMessageBox({ type: 'question', message: s.pathConfirm, detail: `${s.pathConfirmDetail(dir)}\n\n${s.external}`, buttons: [s.add, s.cancel], defaultId: 0, cancelId: 1 })
+    if (response !== 0) return
+    const result = await addToUserPath(dir)
+    if (result instanceof Error) {
+      note(`把 loopctl 加进 PATH 失败：${result.message}`)
+      return void (await info(s.failed, result.message, 'warning'))
+    }
+    note(`已把 ${dir} 加进用户 PATH`)
+    await info(s.pathDone, `${s.pathDoneDetail(dir)}\n\n${s.external}`)
   }
 
   let previous: ServerState = server.state
@@ -181,7 +208,7 @@ function run(): void {
     window.showConsole(url)
   })
 
-  // 退出：停掉服务端（它会停掉所有 Agent）再退出。只有人从托盘或 Cmd+Q 选"退出"时 confirm 为 true，先问一句；
+  // 退出：停掉服务端（它会停掉所有 Agent）再退出。只有人从托盘或 Cmd+Q（Windows 只有托盘：关窗口只是收进托盘）选"退出"时 confirm 为 true，先问一句；
   // 信号、关机注销、Dock 菜单等其他途径都经 before-quit 直接退出，不弹框（Electron 自己处理 SIGTERM 时也走 before-quit，
   // 和我们的信号处理谁先到不固定，所以 before-quit 一律不问）。macOS 上没有父窗口的确认框会阻塞主线程，期间到的信号等人答完再处理。
   async function quit(confirm: boolean): Promise<void> {
@@ -228,7 +255,7 @@ function run(): void {
     // 开发时 Electron.app 自带的是 Electron 的图标；打包后用 app 自己的图标。
     if (!app.isPackaged) app.dock?.setIcon(join(__dirname, '..', 'assets', 'icon.png'))
     setAppMenu(() => void quit(true))
-    handleNotifications({ trusted: (event) => window.trusts(event), open: (path) => window.navigate(path) })
+    handleNotifications({ trusted: (event) => window.trusts(event), open: (path) => window.navigate(path), badge: (count) => badge.set(count) })
     session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
       callback(permission === 'clipboard-sanitized-write' || permission === 'fullscreen'),
     )

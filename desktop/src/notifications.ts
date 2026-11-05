@@ -1,4 +1,4 @@
-import { app, ipcMain, Notification, type IpcMainEvent } from 'electron'
+import { ipcMain, Notification, type IpcMainEvent } from 'electron'
 import { parseBadge, parseNotification } from './bridge'
 
 type Options = {
@@ -6,12 +6,14 @@ type Options = {
   trusted: (event: IpcMainEvent) => boolean
   // 点了通知：显示窗口，让控制台跳到 path。
   open: (path: string) => void
+  // 未读数（Dock 角标或任务栏 overlay，见 badge.ts）。
+  badge: (count: number) => void
 }
 
 // 最多留着这么多条通知的引用：macOS 上通知对象被回收后，点它不再回调。
 const keep = 100
 
-// 接收页面发来的系统通知与 Dock 未读数。发什么、什么时候发都由页面决定，壳只负责显示。
+// 接收页面发来的系统通知与未读数。发什么、什么时候发都由页面决定，壳只负责显示。
 export function handleNotifications(o: Options): void {
   const shown = new Map<string, Notification>()
   ipcMain.on('loop-now:notify', (event, value: unknown) => {
@@ -30,6 +32,6 @@ export function handleNotifications(o: Options): void {
   })
   ipcMain.on('loop-now:badge', (event, value: unknown) => {
     const count = parseBadge(value)
-    if (count !== undefined && o.trusted(event)) app.setBadgeCount(count)
+    if (count !== undefined && o.trusted(event)) o.badge(count)
   })
 }
