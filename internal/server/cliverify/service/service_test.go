@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -67,6 +68,9 @@ func terminal(t *testing.T, f fixture, a, id uuid.UUID) cliverify.Operation {
 }
 
 func TestProcessBoundsOutputAndReapsGroup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("夹具是 /bin/sh 脚本")
+	}
 	for _, kind := range []string{"overflow", "cancel"} {
 		t.Run(kind, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -96,6 +100,9 @@ func TestProcessBoundsOutputAndReapsGroup(t *testing.T) {
 }
 
 func TestProcessParentExitDoesNotLeaveTermResistantChild(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("夹具是 /bin/sh 脚本，且经 ExtraFiles 传管道")
+	}
 	home := t.TempDir()
 	readyR, readyW, e := os.Pipe()
 	if e != nil {

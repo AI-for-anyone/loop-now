@@ -80,7 +80,11 @@ func repo(t *testing.T) string {
 	git(t, dir, "add", ".")
 	git(t, dir, "commit", "-q", "-m", "feature")
 	git(t, dir, "checkout", "-q", "main")
-	return "file://" + dir
+	url := "file://" + filepath.ToSlash(dir)
+	if !strings.HasPrefix(dir, "/") { // Windows：file:///C:/...
+		url = "file:///" + filepath.ToSlash(dir)
+	}
+	return url
 }
 
 func (f *fixture) wait(id uuid.UUID) store.FolderGitPull {

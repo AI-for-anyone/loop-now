@@ -34,9 +34,12 @@ func Dir(t testing.TB) string {
 	}
 	var arts []artifact
 	var sums strings.Builder
-	platforms := [][2]string{{"darwin", "arm64"}, {"darwin", "amd64"}, {"linux", "amd64"}, {"linux", "arm64"}}
+	platforms := [][2]string{{"darwin", "arm64"}, {"darwin", "amd64"}, {"linux", "amd64"}, {"linux", "arm64"}, {"windows", "amd64"}}
 	for _, p := range platforms {
 		file := "loopctl-" + p[0] + "-" + p[1]
+		if p[0] == "windows" {
+			file += ".exe"
+		}
 		body := []byte(fmt.Sprintf("#!/bin/sh\necho '{\"version\":\"%s\",\"platform\":\"%s/%s\"}'\n", version, p[0], p[1]))
 		if err := os.WriteFile(filepath.Join(dir, file), body, 0o755); err != nil {
 			t.Fatal(err)

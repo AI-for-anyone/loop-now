@@ -37,12 +37,12 @@ func TestBuild(t *testing.T) {
 		t.Skip("交叉编译 4 个平台较慢")
 	}
 	m, dir := build(t, "0.0.0-disttest")
-	if m.Program != "loopctl" || m.Version != "0.0.0-disttest" || m.SchemaVersion != 1 || len(m.Artifacts) != 4 || m.GoVersion != runtime.Version() {
+	if m.Program != "loopctl" || m.Version != "0.0.0-disttest" || m.SchemaVersion != 1 || len(m.Artifacts) != 5 || m.GoVersion != runtime.Version() {
 		t.Fatalf("%+v", m)
 	}
 	var onDisk Manifest
 	b, _ := os.ReadFile(filepath.Join(dir, "manifest.json"))
-	if err := json.Unmarshal(b, &onDisk); err != nil || len(onDisk.Artifacts) != 4 {
+	if err := json.Unmarshal(b, &onDisk); err != nil || len(onDisk.Artifacts) != 5 {
 		t.Fatalf("manifest.json：%v", err)
 	}
 	if shasum, err := exec.LookPath("shasum"); err == nil {

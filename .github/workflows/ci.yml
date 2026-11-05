@@ -41,6 +41,8 @@ jobs:
       run:
         shell: bash
     steps:
+      # 黄金文件与 testdata 按 LF 比对；Windows runner 的 git 默认会把它们转成 CRLF。
+      - run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:

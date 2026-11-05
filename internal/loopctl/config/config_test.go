@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -26,7 +27,7 @@ func TestSaveAndLoad(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Mode().Perm() != want {
+		if runtime.GOOS != "windows" && info.Mode().Perm() != want { // Windows 上是 ACL，见 privatefs
 			t.Errorf("%s 的权限为 %o，应为 %o", p, info.Mode().Perm(), want)
 		}
 	}
@@ -37,6 +38,9 @@ func TestSaveAndLoad(t *testing.T) {
 }
 
 func TestSaveTightensDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("权限位在 Windows 上无意义，私有性由 ACL 决定")
+	}
 	home := t.TempDir()
 	path := Path(home)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -52,6 +56,9 @@ func TestSaveTightensDirectory(t *testing.T) {
 }
 
 func TestLoadRejectsInsecurePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod 在 Windows 上改不了 ACL，无法制造过宽的权限")
+	}
 	path := Path(t.TempDir())
 	if err := Save(path, &File{SchemaVersion: 1, Profiles: map[string]Profile{"default": {Token: "lne_secret"}}}); err != nil {
 		t.Fatal(err)
@@ -110,7 +117,7 @@ func TestSaveFailureKeepsOriginal(t *testing.T) {
 		if e.Name() != "config.json" {
 			t.Errorf("残留文件 %s", e.Name())
 		}
-		if info.Mode().Perm()&0o077 != 0 {
+		if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
 			t.Errorf("%s 的权限 %o 宽于 0600", e.Name(), info.Mode().Perm())
 		}
 	}

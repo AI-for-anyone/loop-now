@@ -53,7 +53,7 @@ func TestPluginAssetsReachPi(t *testing.T) {
 		t.Fatalf("url 条目应原样写入：%s", b)
 	}
 	env := e.buildEnv(d, agentconfig.Snapshot{Plugins: p}, []string{"/cli/gh"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	if !slices.Contains(env, "PATH=/cli/gh:/p/a/bin:/usr/bin") || !slices.Contains(env, `LOOP_NOW_PLUGIN_A_CONFIG={"x":1}`) || !slices.Contains(env, "HOME="+d.home) {
+	if !slices.Contains(env, "PATH="+strings.Join([]string{"/cli/gh", "/p/a/bin", "/usr/bin"}, string(os.PathListSeparator))) || !slices.Contains(env, `LOOP_NOW_PLUGIN_A_CONFIG={"x":1}`) || !slices.Contains(env, "HOME="+d.home) {
 		t.Fatalf("环境：%v", env)
 	}
 	if err := writePluginMCP(d, agentconfig.PluginAssets{}); err != nil {

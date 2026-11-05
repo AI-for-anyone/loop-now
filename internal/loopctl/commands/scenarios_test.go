@@ -23,7 +23,10 @@ import (
 func TestConfigCommands(t *testing.T) {
 	e := newEnv(t)
 	ca := writeCAFile(t)
-	rel, _ := filepath.Rel(mustGetwd(t), ca)
+	rel, err := filepath.Rel(mustGetwd(t), ca)
+	if err != nil { // Windows 上临时目录与工作目录可能不在同一个盘
+		rel = ca
+	}
 	e.stdin = "  " + extToken + "  \nignored second line\n"
 	d := e.run("config", "set", "default", "--server", "https://loop.example.com:8781/", "--ca-file", rel, "--token-stdin").ok(t)
 	want := map[string]any{"name": "default", "server": "https://loop.example.com:8781", "caFile": ca, "tokenSet": true,
