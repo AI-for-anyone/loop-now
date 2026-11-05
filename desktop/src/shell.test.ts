@@ -16,7 +16,7 @@ import { classifyNavigation, handOffOnce } from './links'
 import { RotatingLog } from './log'
 import { badgeStyle, cliBinary, cliInstallMode, serverBinary, trayIcon, windowChrome, windowsWorkRootBase } from './platform'
 import { choosePort, portFree, portOf } from './port'
-import { isOurServer, parseWindowsProcess, taskkillArgs, windowsProcessQuery } from './process'
+import { isOurServer, parseWindowsProcess, spawnPlan, taskkillArgs, windowsProcessQuery } from './process'
 import { findInPath, gitUsable } from './git'
 import { defaultProfile, overridesFromFile, profileArg, profileEnv, profileFromFile, profileSummary, resolveProfile } from './profile'
 import { RestartPolicy, restartWindowMs } from './restart'
@@ -215,9 +215,12 @@ describe('配置', () => {
     assert.deepEqual(profileEnv(p), {
       LOOP_NOW_DATA_DIR: 'C:\\Users\\someone\\AppData\\Local\\Loop Now\\try\\data',
       LOOP_NOW_CONTEXT_DIR: 'C:\\Users\\someone\\AppData\\Local\\Loop Now\\try\\context',
-      LOOP_NOW_WORK_ROOT: 'C:\\Users\\someone\\AppData\\Local\\loop-now-desktop\\try',
+      LOOP_NOW_WORK_ROOT: 'C:\\ProgramData\\loop-now-desktop\\try',
     })
-    assert.equal(p.workRoot, `${windowsWorkRootBase(env.LOCALAPPDATA)}\\try`)
+    assert.equal(p.workRoot, `${windowsWorkRootBase('C:\\ProgramData')}\\try`)
+    // 工作根不得在 %USERPROFILE% 之内（服务端的 PrepareWorkRoot 会拒绝）；ProgramData 挪了位置时跟着走。
+    assert.ok(!p.workRoot.toLowerCase().startsWith('c:\\users\\someone\\'))
+    assert.equal(resolveProfile('try', 'C:\\Users\\someone', {}, 'win32', { ...env, ProgramData: 'D:\\ProgramData' }).workRoot, 'D:\\ProgramData\\loop-now-desktop\\try')
     // 没有 LOCALAPPDATA 时按 HOME 推。
     assert.equal(resolveProfile('try', 'C:\\Users\\someone', {}, 'win32', {}).dataDir, 'C:\\Users\\someone\\AppData\\Local\\Loop Now\\try\\data')
   })
@@ -282,7 +285,12 @@ describe('服务端进程核对（孤儿清理）', () => {
     assert.equal(isOurServer({ command: `${mac} --x`, started: '' }, mac, 1, undefined, 'darwin'), false)
   })
 
-  test('Windows：PowerShell 查进程的输出按 JSON 读；停进程用 taskkill 整棵树强制结束', () => {
+  test('Windows：握着服务端的 stdin 并带 LOOP_NOW_STOP_ON_STDIN_CLOSE=1，关 stdin 即优雅停止；macOS 不给 stdin', () => {
+    assert.deepEqual(spawnPlan('win32'), { stdin: 'pipe', env: { LOOP_NOW_STOP_ON_STDIN_CLOSE: '1' } })
+    assert.deepEqual(spawnPlan('darwin'), { stdin: 'ignore', env: {} })
+  })
+
+  test('Windows：PowerShell 查进程的输出按 JSON 读；超时或孤儿用 taskkill 整棵树强制结束', () => {
     assert.match(windowsProcessQuery(4321), /ProcessId=4321/)
     assert.deepEqual(parseWindowsProcess('{"ExecutablePath":"C:\\\\x\\\\loop-server.exe","Started":133700000000000000}'), { command: 'C:\\x\\loop-server.exe', started: '133700000000000000' })
     assert.equal(parseWindowsProcess('{"ExecutablePath":null,"Started":1}'), undefined)

@@ -5,7 +5,7 @@ import { dirname } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { RotatingLog } from './log'
 import { current, type PlatformId } from './platform'
-import { isOurServer, processInfo, terminateChild, terminateStale, type Stamp } from './process'
+import { isOurServer, processInfo, spawnPlan, terminateChild, terminateStale, type Stamp } from './process'
 import { RestartPolicy } from './restart'
 
 // stopped：没有进程；starting：已拉起、等就绪；running／degraded：就绪，健康接口 200／503；
@@ -86,15 +86,18 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
     this.o.log.resetTail()
     this.o.note(`启动服务端 ${this.o.bin}，端口 ${port === 0 ? '由系统选择' : port}`)
     rmSync(this.o.readyFile, { force: true })
+    // Windows 握着 stdin、带 LOOP_NOW_STOP_ON_STDIN_CLOSE=1，退出时关掉 stdin 让服务端优雅停机（见 process.ts）。
+    const plan = spawnPlan(this.platform)
     const child = spawn(this.o.bin, [], {
       cwd: dirname(this.o.bin),
       env: {
         ...this.o.env,
+        ...plan.env,
         LOOP_NOW_LISTEN_ADDR: `127.0.0.1:${port}`,
         LOOP_NOW_READY_FILE: this.o.readyFile,
         LOOP_NOW_CONSOLE_ORIGINS: 'none',
       },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [plan.stdin, 'pipe', 'pipe'],
       // 自成进程组：终端里按 Ctrl+C 不会直接打到服务端，由壳按顺序停它。Windows 上 detached 会给控制台程序开一个窗口，不用；
       // windowsHide 不让服务端出现控制台窗口。
       detached: this.platform !== 'win32',
@@ -203,13 +206,12 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
     if (healthy !== undefined && (this.state === 'running' || this.state === 'degraded')) this.setState(healthy ? 'running' : 'degraded')
   }
 
-  // 先让它自己收尾，超时再强制结束（平台差异见 process.ts；Windows 上只能强制）。
+  // 先让它自己收尾（macOS SIGTERM，Windows 关 stdin），超时再强制结束（平台差异见 process.ts）。
   private async terminate(run: Run): Promise<void> {
     const { child } = run
     if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return
-    if (this.platform === 'win32') this.o.note('Windows 上服务端还没有优雅停止方式，taskkill 结束进程树')
     const inTime = await terminateChild(child, run.exited, stopGraceMs, this.platform)
-    if (!inTime && this.platform !== 'win32') this.o.note(`服务端 ${stopGraceMs / 1000} 秒内没有退出，强制结束`)
+    if (!inTime) this.o.note(`服务端 ${stopGraceMs / 1000} 秒内没有退出，强制结束`)
   }
 
   // 壳上次异常退出时留下的服务端会占着数据目录：就绪文件里的 pid 还活着、正是这个可执行文件、启动时刻也对得上壳记下的，就先停掉它。

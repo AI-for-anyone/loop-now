@@ -4,9 +4,10 @@ import { current, type PlatformId } from './platform'
 
 // 服务端进程的平台相关操作：查一个 pid 跑的是什么、什么时候启动的，停掉它（优雅或强制）。
 // macOS／Linux：SIGTERM 让服务端自己收尾（它会停掉所有 Agent），超时再对整个进程组 SIGKILL。
-// Windows：没有 SIGTERM，服务端也还没有 HTTP 或文件信号的停止方式（Go 在 Windows 上只认控制台的 Ctrl+C／Ctrl+Break 事件，
-// Node 发不出去；child.kill() 是 TerminateProcess，只杀服务端自己，Pi 与插件宿主会变成孤儿），所以用 taskkill /T /F
-// 连同子进程一起强制结束。服务端提供优雅停止方式之前，Windows 上退出等于崩溃式停机（在途回复丢失）。
+// Windows：没有 SIGTERM（Go 在 Windows 上只认控制台的 Ctrl+C／Ctrl+Break 事件，Node 发不出去；child.kill() 是 TerminateProcess，
+// 只杀服务端自己，Pi 与插件宿主会变成孤儿）。壳以 LOOP_NOW_STOP_ON_STDIN_CLOSE=1 启动服务端并握着它的 stdin，停的时候关掉 stdin，
+// 服务端读到 EOF 就走和 SIGTERM 一样的优雅停机（LOOP_NOW_SHUTDOWN_TIMEOUT 默认 15 秒）；超时再 taskkill /T /F 连同子进程强制结束。
+// 上次留下的孤儿没有 stdin 可关，只能 taskkill。
 
 export type ProcessInfo = {
   // macOS 是 ps 的 command（服务端不带参数启动，就是可执行文件路径）；Windows 是可执行文件的完整路径。
@@ -83,22 +84,31 @@ function signal(pid: number, name: NodeJS.Signals): void {
   }
 }
 
-// 停掉自己拉起的服务端进程。macOS：SIGTERM 等它收尾，超时后整个进程组 SIGKILL；Windows：taskkill 进程树。
-// 返回是否在宽限期内自己退出（Windows 一律 false）。
+// 拉起服务端时按平台定的 stdin 与环境：Windows 握着 stdin 用来优雅停止，其余平台不给 stdin。
+export function spawnPlan(p: PlatformId = current): { stdin: 'pipe' | 'ignore'; env: NodeJS.ProcessEnv } {
+  return p === 'win32' ? { stdin: 'pipe', env: { LOOP_NOW_STOP_ON_STDIN_CLOSE: '1' } } : { stdin: 'ignore', env: {} }
+}
+
+// 停掉自己拉起的服务端进程：macOS 发 SIGTERM，Windows 关 stdin；等它收尾，超时后 macOS 整个进程组 SIGKILL、Windows taskkill 进程树。
+// 返回是否在宽限期内自己退出。
 export async function terminateChild(child: ChildProcess, exited: Promise<unknown>, graceMs: number, p: PlatformId = current): Promise<boolean> {
   if (child.pid === undefined) return true
   if (p === 'win32') {
-    await taskkill(child.pid)
-    await exited
-    return false
+    if (child.stdin && !child.stdin.destroyed) child.stdin.end()
+    else return taskkill(child.pid).then(() => exited).then(() => false)
+  } else {
+    child.kill('SIGTERM')
   }
-  child.kill('SIGTERM')
   const inTime = await Promise.race([exited.then(() => true), sleep(graceMs).then(() => false)])
   if (inTime) return true
-  try {
-    process.kill(-child.pid, 'SIGKILL')
-  } catch {
-    child.kill('SIGKILL')
+  if (p === 'win32') {
+    await taskkill(child.pid)
+  } else {
+    try {
+      process.kill(-child.pid, 'SIGKILL')
+    } catch {
+      child.kill('SIGKILL')
+    }
   }
   await exited
   return false

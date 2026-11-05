@@ -35,6 +35,8 @@ export const cliInstallMode = (p: PlatformId): 'symlink' | 'path' => (p === 'win
 // Windows 没有命令行工具安装框，提示去 git-scm.com 下载。
 export const gitDownloadPage = 'https://git-scm.com/download/win'
 
-// Windows 的工作根：服务端要求工作根在 HOME 之外，Windows 的约定由服务端那边定并写进 MAIN.md；
-// 定下之前先放在 %LOCALAPPDATA%\loop-now-desktop\<配置名>，要改只改这一处。
-export const windowsWorkRootBase = (localAppData: string) => win32.join(localAppData, 'loop-now-desktop')
+// Windows 的工作根：服务端的 PrepareWorkRoot 拒绝 %USERPROFILE% 之内的工作根（%LOCALAPPDATA% 也在其中），它自己的默认是
+// %ProgramData%\loop-now（ProgramData 相当于 /Users/Shared，普通用户能在里面建目录，服务端把它改成只有自己能读写）。
+// 桌面版照 macOS 的 /Users/Shared/loop-now-desktop/<配置名>，放在 %ProgramData%\loop-now-desktop\<配置名>。
+export const windowsWorkRootBase = (programData: string) => win32.join(programData, 'loop-now-desktop')
+export const defaultProgramData = 'C:\\ProgramData'

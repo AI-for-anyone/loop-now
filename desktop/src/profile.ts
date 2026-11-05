@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { current, pathOf, windowsWorkRootBase, type PlatformId } from './platform'
+import { current, defaultProgramData, pathOf, windowsWorkRootBase, type PlatformId } from './platform'
 
 // 配置：用 --profile=<名字或绝对路径>、LOOP_NOW_DESKTOP_PROFILE，或 ~/Library/Application Support/Loop Now/desktop.json
 // （Windows：%APPDATA%\Loop Now\desktop.json，即 Electron 的 userData）的 profile 选择
@@ -76,7 +76,8 @@ export function overridesFromFile(file: string, profile: string, p: PlatformId =
 
 // 名字：macOS 放在 ~/Library/Application Support/Loop Now/<名字>（壳的文件在其中的 shell），日志在 ~/Library/Logs/Loop Now/<名字>，
 // 工作根在 /Users/Shared/loop-now-desktop/<名字>（服务端要求工作根在 HOME 之外）。
-// Windows 放在 %LOCALAPPDATA%\Loop Now\<名字>（shell、data、context、logs 都在其中），工作根见 platform.ts 的 windowsWorkRootBase。
+// Windows 放在 %LOCALAPPDATA%\Loop Now\<名字>（shell、data、context、logs 都在其中），工作根在 %ProgramData%\loop-now-desktop\<名字>
+// （%LOCALAPPDATA% 在 %USERPROFILE% 之内，服务端不接受；见 platform.ts 的 windowsWorkRootBase）。
 // 绝对路径：所有东西都放在这个目录下（工作根是其中的 work，目录本身须在 HOME 之外），用于临时目录里联调。
 // overrides（desktop.json 指定的目录）换掉对应的默认位置。
 export function resolveProfile(value: string, home = homedir(), overrides: DirOverrides = {}, p: PlatformId = current, env: NodeJS.ProcessEnv = process.env): Profile {
@@ -106,7 +107,7 @@ export function resolveProfile(value: string, home = homedir(), overrides: DirOv
       logDir: join(root, 'logs'),
       dataDir: join(root, 'data'),
       contextDir: join(root, 'context'),
-      workRoot: join(windowsWorkRootBase(localAppData), value),
+      workRoot: join(windowsWorkRootBase(env.ProgramData || defaultProgramData), value),
       ...overrides,
       overrides,
     }
