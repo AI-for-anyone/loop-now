@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -184,6 +185,9 @@ func TestGitPullSingleBranchFullHistory(t *testing.T) {
 
 // 失败：分支不存在、超时；参数校验；服务重启时进行中的拉取标为 server_restart。
 func TestGitPullFailures(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("慢 git 夹具是 sh 脚本")
+	}
 	ctx := context.Background()
 	f := newFixture(t, "git", time.Minute)
 	url := repo(t)
