@@ -2,13 +2,15 @@
 // 回答 GET /healthz，收到 Interrupt／SIGTERM 时删掉就绪文件退出。没有任何业务。
 // 桌面壳的单测（src/server.test.ts）用 go build 把它编出来拉起；CI 里 Windows 的 NSIS 打包也拿它充当 loop-server.exe。
 //
-//	LOOP_NOW_FAKE_EXIT_CODE=<n>  启动后不监听，直接以 n 退出（测试就绪前退出的失败路径）。
+//	LOOP_NOW_FAKE_EXIT_CODE=<n>       启动后不监听，直接以 n 退出（测试就绪前退出的失败路径）。
+//	LOOP_NOW_STOP_ON_STDIN_CLOSE=1   和真服务端一样：读 stdin，读到 EOF 就走优雅停机（Windows 上壳靠这个停它）。
 package main
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -58,8 +60,17 @@ func main() {
 	}
 	fmt.Fprintln(os.Stderr, "fake loop-server listening on", url)
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if os.Getenv("LOOP_NOW_STOP_ON_STDIN_CLOSE") == "1" {
+		go func() {
+			_, _ = io.Copy(io.Discard, os.Stdin)
+			fmt.Fprintln(os.Stderr, "stdin closed, shutting down")
+			cancel()
+		}()
+	}
 	<-ctx.Done()
 	shutdown, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
