@@ -44,7 +44,7 @@ func checkAssets(t *testing.T, root string) {
 	}
 	for _, dir := range []string{root, filepath.Dir(root)} {
 		info, err := os.Stat(dir)
-		if err != nil || info.Mode().Perm() != 0700 {
+		if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0700) { // Windows 上由继承的 ACL 决定
 			t.Fatal("install directory is not private")
 		}
 	}
