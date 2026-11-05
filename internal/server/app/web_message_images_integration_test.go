@@ -15,7 +15,7 @@ import (
 )
 
 // Server owns this harness. Web owns only its driver/product files. All data are
-// synthetic and live in this test's own schema, Redis prefix and temporary root.
+// synthetic and live in this test's own temporary data directory and root.
 func TestWebMessageImagesIntegration(t *testing.T) {
 	if os.Getenv("LOOP_NOW_WEB_IMAGE_APP") != "1" {
 		t.Skip("explicit isolated browser slice")
@@ -80,7 +80,7 @@ func TestWebMessageImagesIntegration(t *testing.T) {
 	if e = s.a.Store.Pool.QueryRow(ctx, `SELECT count(*),count(*) FILTER(WHERE conversation_message_id IS NOT NULL OR inbox_message_id IS NOT NULL) FROM message_images`).Scan(&images, &bound); e != nil || images != 3 || bound != 3 {
 		t.Fatal(images, bound, e)
 	}
-	if e = s.a.Store.Pool.QueryRow(ctx, `SELECT count(*),count(*) FILTER(WHERE read_at IS NOT NULL) FROM inbox_messages WHERE jsonb_array_length(images)>0`).Scan(&inbox, &read); e != nil || inbox != 1 || read != 0 {
+	if e = s.a.Store.Pool.QueryRow(ctx, `SELECT count(*),count(*) FILTER(WHERE read_at IS NOT NULL) FROM inbox_messages WHERE json_array_length(images)>0`).Scan(&inbox, &read); e != nil || inbox != 1 || read != 0 {
 		t.Fatal("delivery changed true read semantics", inbox, read, e)
 	}
 	t.Logf("browser image references + actual fakePi RPC session normal=1/task=2; images3/bound3/visualInbox1/unread1; evidence=%s", evidence)

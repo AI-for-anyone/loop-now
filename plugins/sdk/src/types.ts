@@ -1,4 +1,4 @@
-// 平台半边的接口（plugins/SPEC.md §2.2）。宿主为每个插件建一个 PluginAPI 交给它的 register；
+// 平台侧的接口（plugins/SPEC.md §2.2）。宿主为每个插件建一个 PluginAPI 交给它的 register；
 // 所有注册都返回取消函数，插件停用或卸载时宿主统一释放，作者不需要手动清理。
 
 import type { EventResult, EventType, PluginEvent } from './events.ts'
@@ -264,5 +264,5 @@ export interface PluginAPI {
   identities: PluginIdentities
 }
 
-/** 平台半边入口的默认导出。 */
+/** 平台侧入口的默认导出。 */
 export type PluginRegister = (api: PluginAPI) => void | Promise<void>

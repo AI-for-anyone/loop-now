@@ -67,22 +67,28 @@ type TextEdit struct {
 
 // Health 对应 Health。
 type Health struct {
-	OK       bool             `json:"ok"`
-	Postgres DependencyHealth `json:"postgres"`
-	Redis    DependencyHealth `json:"redis"`
+	OK       bool           `json:"ok"`
+	Database DatabaseHealth `json:"database"`
 }
 
-// DependencyHealth 对应 DependencyHealth。
-type DependencyHealth struct {
-	OK    bool    `json:"ok"`
-	Error *string `json:"error"`
+// DatabaseHealth 对应 DatabaseHealth。
+type DatabaseHealth struct {
+	OK         bool     `json:"ok"`
+	Error      *string  `json:"error"`
+	WALBytes   WALBytes `json:"walBytes"`
+	WALWarning bool     `json:"walWarning"`
 }
 
-// RedactedHealth 是给外部身份的健康状态：结构相同，但各依赖没有 error 字段。
+// WALBytes 是 DatabaseHealth.walBytes。
+type WALBytes struct {
+	Data   int64 `json:"data"`
+	Events int64 `json:"events"`
+}
+
+// RedactedHealth 是给外部身份的健康状态：结构相同，但库只表明是否可用。
 type RedactedHealth struct {
 	OK       bool               `json:"ok"`
-	Postgres RedactedDependency `json:"postgres"`
-	Redis    RedactedDependency `json:"redis"`
+	Database RedactedDependency `json:"database"`
 }
 
 // RedactedDependency 只表明依赖是否可用。
@@ -90,9 +96,9 @@ type RedactedDependency struct {
 	OK bool `json:"ok"`
 }
 
-// Redacted 返回去掉错误信息的健康状态。
+// Redacted 返回去掉错误原文与 WAL 信息的健康状态。
 func (h Health) Redacted() RedactedHealth {
-	return RedactedHealth{OK: h.OK, Postgres: RedactedDependency{OK: h.Postgres.OK}, Redis: RedactedDependency{OK: h.Redis.OK}}
+	return RedactedHealth{OK: h.OK, Database: RedactedDependency{OK: h.Database.OK}}
 }
 
 // ModelProviderList 对应 ModelProviderList。

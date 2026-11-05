@@ -1,19 +1,103 @@
 # 快速上手
 
-当前的安装方式是**源码安装**。macOS Apple Silicon 是主要验证环境，部分组件支持 Linux，但尚未建立等效的整系统覆盖；飞书用户 CLI 运行时目前仅支持 macOS arm64。
+可以用**桌面版**（macOS Apple Silicon，什么都不用另装）、**服务端发行包**（Linux、macOS），也可以**从源码安装**；Docker Compose 一体化启动见 [README](https://github.com/AI-for-anyone/loop-now/blob/main/README.zh-CN.md#开始使用)。macOS Apple Silicon 是主要验证环境，部分组件支持 Linux，但尚未建立等效的整系统覆盖；飞书用户 CLI 运行时目前仅支持 macOS arm64。
 
 ::: warning 早期个人版
 Loop Now 面向本地单实例。控制台没有登录功能，应通过本机回环地址访问。使用模型或工具供应商时，相关数据仍会发送给对应服务。
 :::
 
-## 1. 准备依赖
+## 桌面版（macOS Apple Silicon） {#desktop-app-macos-apple-silicon}
+
+一个 DMG 里带着服务端、控制台、Node 和 Pi，不需要另装任何东西。
+
+1. 从 [Releases](https://github.com/AI-for-anyone/loop-now/releases/latest) 下载 `loop-now-desktop-<版本>-mac-arm64.dmg`，打开后把 Loop Now 拖进"应用程序"。
+2. 第一次打开：安装包目前没有 Apple 公证，macOS 会提示无法验证开发者。到"系统设置 › 隐私与安全性"，在"安全性"一栏点"仍要打开"，之后不再提示。
+3. 启动后菜单栏出现 Loop Now 图标，窗口里就是控制台。关掉窗口，服务端和 Agent 仍在后台运行；要彻底停止，从菜单栏图标选"退出"。
+
+数据在哪：数据库和每日备份在 `~/Library/Application Support/Loop Now/default/data`，Agent 工作区在 `/Users/Shared/loop-now-desktop/default`，日志在 `~/Library/Logs/Loop Now/default`。桌面版默认不使用源码安装的 `~/.loop_now` 和 `/Users/Shared/loop-now`，两种安装可以并存；要接过源码安装，见[下文](#moving-to-the-desktop-app)。要用一套独立的数据试用，带参数启动：`open -a "Loop Now" --args --profile=trial`。
+
+更新：退出 Loop Now，用新的 DMG 替换"应用程序"里的 app，再打开，数据保留。菜单栏的"检查更新"会提示新版本并打开下载页；签名公证完成后才会改为自动安装。
+
+桌面版里的 Agent 用随包的 Pi 1.4.0 和 Node 24.21；模型账号、CLI 账号、插件都在控制台里配置，和源码安装相同。外部身份和 `loopctl` 需要对外 TLS 端口，桌面版目前还不能开启。
+
+### 从源码安装迁移到桌面版 {#moving-to-the-desktop-app}
+
+桌面版可以接过源码安装的数据并沿用它的工作根，Agent 的工作区和会话都留在原处。
+
+1. 停掉源码安装的服务端，退出 Loop Now（菜单栏图标 › 退出）。两者不能同时在同一套目录上运行。
+2. 如果之前打开过桌面版，它已经有了自己的库，导入不会覆盖已有的库。先把它挪开：
+
+   ```sh
+   mv "$HOME/Library/Application Support/Loop Now/default/data" "$HOME/Library/Application Support/Loop Now/default/data.before-import"
+   ```
+
+3. 用同一版本 darwin-arm64 [服务端发行包](#server-release-bundle-linux-macos)里的 `loop-server`，把旧库导入桌面版的数据目录。导入前旧库要先迁移到 PostgreSQL 版的最后一个迁移，v0.1.0 还没有到（见[从基于 PostgreSQL 的版本迁移](#moving-from-a-postgresql-based-release)第 1 步）：
+
+   ```sh
+   cd loop-now-<版本>-darwin-arm64
+   LOOP_NOW_DATA_DIR="$HOME/Library/Application Support/Loop Now/default/data" \
+   LOOP_NOW_DATABASE_URL='<旧库地址>' \
+   ./loop-server import-postgres
+   ```
+
+4. 在 `~/Library/Application Support/Loop Now/desktop.json` 里给默认配置指定源码安装原来的工作根和上下文目录，也就是它的 `LOOP_NOW_WORK_ROOT` 和 `LOOP_NOW_CONTEXT_DIR`（下面写的是默认值）。不指定 `contextDir`，项目与全局上下文文件夹会是空的。路径要写绝对路径；文件已经存在时，把 `profiles` 一项加进去，不要整个覆盖：
+
+   ```sh
+   mkdir -p "$HOME/Library/Application Support/Loop Now"
+   cat > "$HOME/Library/Application Support/Loop Now/desktop.json" <<EOF
+   {"profile": "default", "profiles": {"default": {"workRoot": "/Users/Shared/loop-now", "contextDir": "$HOME/.loop_now"}}}
+   EOF
+   ```
+
+5. 打开 Loop Now。菜单栏图标里的配置一行会显示实际用的目录，并标出哪些由 desktop.json 指定；工作根应是 `/Users/Shared/loop-now`。
+
+导入不会改动旧库。源码安装如果已经是 v0.2.0 或更新的版本，数据本来就在 SQLite 里，不需要导入：跳过第 2、3 步，同时把 `dataDir` 指到它的数据目录（默认 `$HOME/.loop_now`）。
+
+接下来看[给第一个 Agent 派活](#give-your-first-agent-a-job)。
+
+## 服务端发行包（Linux / macOS） {#server-release-bundle-linux-macos}
+
+每个版本在 Releases 里还有各平台的服务端发行包 `loop-now-<版本>-<平台>.tar.gz`，平台有 `darwin-arm64`、`darwin-amd64`、`linux-amd64`、`linux-arm64`。包里有内嵌控制台的 `loop-server`、`loopctl`、插件宿主、官方插件，以及随包的 Node 24.21.0 和 Pi 1.4.0，机器上只需要有 Git。
+
+1. 从 [Releases](https://github.com/AI-for-anyone/loop-now/releases/latest) 下载对应平台的包和 `SHA256SUMS`，校验下载：
+
+   ```sh
+   sha256sum -c --ignore-missing SHA256SUMS        # Linux
+   shasum -a 256 -c --ignore-missing SHA256SUMS    # macOS
+   ```
+
+2. 在终端里用 `tar` 解开。macOS 上如果在访达里解开，文件会被标记为来自互联网，未签名的程序会被 Gatekeeper 拦下。
+
+   ```sh
+   tar -xzf loop-now-<版本>-<平台>.tar.gz
+   cd loop-now-<版本>-<平台>
+   ```
+
+3. 设置数据目录和工作根后启动服务端。工作根的要求和创建方法与源码安装相同（见[第 2 步](#configure-the-server)）：
+
+   ```sh
+   export LOOP_NOW_DATA_DIR="$HOME/.loop_now"
+   export LOOP_NOW_WORK_ROOT='/var/lib/loop-now'   # macOS 用 /Users/Shared/loop-now
+   ./loop-server
+   ```
+
+4. 打开 **[http://127.0.0.1:8780/](http://127.0.0.1:8780/)**。控制台就在服务端口的根路径，不需要另起控制台。
+
+随包的 Node 和 Pi 会自动使用，不用另装；设置了 `LOOP_NOW_NODE_BIN` 等变量时仍以变量为准。凭证以明文保存在数据目录里，请保护好数据目录和备份。升级时停掉服务端，解开新版本的包，用同样的 `LOOP_NOW_DATA_DIR` 和 `LOOP_NOW_WORK_ROOT` 启动新目录里的 `loop-server`，然后删掉旧目录。
+
+接下来看[给第一个 Agent 派活](#give-your-first-agent-a-job)。
+
+
+## 从源码安装 {#source-installation}
+
+### 1. 准备依赖
+
+源码安装运行**一个二进制**（`loop-server`），跑在 **Node.js 24** 上（Pi 和插件宿主也用它），使用**一个数据目录**（默认 `~/.loop_now`），不需要另装数据库或缓存。构建需要：
 
 | 依赖 | 仓库基线版本 |
 | --- | --- |
 | Go | 1.27 或更高 |
 | Node.js / npm | **24.21.0 / 11.19.0**；Web 脚本会校验这两个精确版本 |
-| PostgreSQL | 18 |
-| Redis | 8 |
 | Pi 编码 Agent | **1.4.0** |
 | 其他 | Git |
 
@@ -27,27 +111,17 @@ git clone --depth 1 --branch main https://github.com/AI-for-anyone/loop-now.git
 cd loop-now
 ```
 
-用你偏好的本地安装方式启动 PostgreSQL 和 Redis，并创建专用的 PostgreSQL 角色与数据库（以本地 PostgreSQL 管理员身份执行）：
+### 2. 配置服务端 {#configure-the-server}
+
+在仓库根目录执行以下命令：
 
 ```sh
-createuser --login --pwprompt loopnow
-createdb --owner=loopnow loopnow
-```
-
-## 2. 配置服务端
-
-在仓库根目录执行以下命令。把数据库密码换成你设置的值，必要时做 URL 编码。使用专用的 Redis 数据库与键前缀；如果服务端要求认证，在 URL 中加入。
-
-```sh
-export LOOP_NOW_DATABASE_URL='postgres://loopnow:YOUR_URL_ENCODED_PASSWORD@127.0.0.1:5432/loopnow?sslmode=disable'
-export LOOP_NOW_REDIS_URL='redis://127.0.0.1:6379/1'
-export LOOP_NOW_REDIS_KEY_PREFIX='loopnow:'
 export LOOP_NOW_NODE_BIN="$(command -v node)"
 export LOOP_NOW_PI_BIN="$(command -v pi)"
 ```
 
 ::: danger 明文凭证
-凭证以明文保存在 PostgreSQL 中，请保护好数据库访问与备份文件。服务端读取进程环境变量，不会自动加载 `.env` 文件。
+服务端把数据库和每日备份放在数据目录里，默认是服务端用户的 `~/.loop_now`（用 `LOOP_NOW_DATA_DIR` 修改），首次启动时自动建库。凭证以明文保存在这个数据库中，请保护好数据目录与备份。服务端读取进程环境变量，不会自动加载 `.env` 文件。
 :::
 
 选择一个**家目录之外**的持久工作目录，且其祖先目录中没有 `AGENTS.md` 或 `CLAUDE.md`，避免 Pi 继承无关的主机指令。全新安装的默认值是 macOS 的 `/Users/Shared/loop-now` 或 Linux 的 `/var/lib/loop-now`：
@@ -67,7 +141,7 @@ chmod 700 "$LOOP_NOW_WORK_ROOT"
 ```
 :::
 
-## 3. 构建并启动后端
+### 3. 构建并启动后端
 
 一起构建服务端和配套版本的 `loopctl`：
 
@@ -81,7 +155,7 @@ export LOOP_NOW_LOOPCTL_DIST_DIR="$PWD/.local-build/loopctl-dist"
 bin/loop-server
 ```
 
-启动时会检查依赖、应用待执行的数据库迁移，并创建默认组织与项目。API 监听 `127.0.0.1:8780`。每个安装只运行一个服务端实例；升级时保留数据库、Redis 配置和工作目录。
+启动时会检查依赖、应用待执行的数据库迁移，并创建默认组织与项目。API 监听 `127.0.0.1:8780`。一个数据目录同时只能由一个服务端使用；升级时保留数据目录和工作目录。
 
 插件需要 Node 插件宿主（在 `plugins/` 下构建，Node 24.21.0）。只有设置了 `LOOP_NOW_PLUGIN_HOST_ENTRY` 服务端才会运行宿主；设置 `LOOP_NOW_PLUGIN_OFFICIAL_DIR` 后官方插件会作为 `builtin` 安装来源提供：
 
@@ -93,7 +167,15 @@ export LOOP_NOW_PLUGIN_OFFICIAL_DIR="$PWD/plugins/official"
 
 请在启动 `bin/loop-server` 之前设置好这些变量。`dist/main.js` 是自包含的单文件，可以复制到其他位置。可选的工具集成可能需要各自的依赖与凭证。
 
-## 4. 启动控制台
+#### 从基于 PostgreSQL 的版本迁移 {#moving-from-a-postgresql-based-release}
+
+SQLite 版之前的版本（到 v0.1.0 为止）把数据存在 PostgreSQL 和 Redis 里。把一套安装迁移过来：
+
+1. 导入要求旧库处在 PostgreSQL 版的最后一个迁移，v0.1.0 还没有到。先检出 tag `pg-final`（PostgreSQL 版的最后一个提交），构建后用原来的配置启动一次，让它完成迁移，然后停掉。
+2. 让 `LOOP_NOW_DATA_DIR` 指向一个还没有库的数据目录，把 `LOOP_NOW_DATABASE_URL` 设为旧库，运行一次 `loop-server import-postgres`。它在一个一致的快照里复制全部数据，核对行数与完整性，并打印每张表的行数；任何一步失败都不留下新库，也从不改动旧库。
+3. 保持原来的 `LOOP_NOW_WORK_ROOT`，在这个数据目录上启动新的服务端。Redis 不再需要。
+
+### 4. 启动控制台
 
 在第二个终端中，仓库根目录，激活 Node 24.21.0 与 npm 11.19.0：
 
@@ -106,7 +188,7 @@ export LOOP_NOW_WEB_NODE_BIN="$(dirname "$(command -v node)")"
 
 打开 **[http://localhost:5173](http://localhost:5173)**。默认 API 地址已经配置好；如需修改，参见 [`web/.env.example`](https://github.com/AI-for-anyone/loop-now/blob/main/web/.env.example)。
 
-## 5. 给第一个 Agent 派活
+## 给第一个 Agent 派活 {#give-your-first-agent-a-job}
 
 1. 打开一个项目，用支持的登录方式或 API Key 添加一个模型账号。
 2. 创建 Agent，选择它的模型与账号，并添加指令或 Skills。

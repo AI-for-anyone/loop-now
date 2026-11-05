@@ -2,21 +2,16 @@ package cliauth
 
 import (
 	"context"
-	"io"
-	"log/slog"
+	cm "loop-now/internal/server/credentialmodel"
+	"loop-now/internal/server/db"
+	"loop-now/internal/server/store"
 	"testing"
 	"time"
-
-	cm "loop-now/internal/server/credentialmodel"
-	"loop-now/internal/server/store"
 )
 
 func TestLarkLoginCommitSourceLockCrossesDeadlineWithoutSeal(t *testing.T) {
 	f := newGoogleFixture(t)
 	ctx := context.Background()
-	if e := f.st.MigrateThrough(ctx, slog.New(slog.NewTextHandler(io.Discard, nil)), 20); e != nil {
-		t.Fatal(e)
-	}
 	source := larkSource(t, f)
 	in := larkStart(source)
 	deadline := time.Now().Add(time.Second)
@@ -24,53 +19,30 @@ func TestLarkLoginCommitSourceLockCrossesDeadlineWithoutSeal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	block, err := f.st.Pool.Begin(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer block.Rollback(ctx)
-	var pid int
-	if err = block.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&pid); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = block.Exec(ctx, `SELECT id FROM project_credential_accounts WHERE id=$1 FOR UPDATE`, source.View.ID); err != nil {
-		t.Fatal(err)
-	}
+	// 测试占住唯一的写连接，提交登录结果的写事务只能在它放开之后开始；放开时操作的期限已过。
+	held, release, released := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	go func() {
+		released <- f.st.Pool.InTx(ctx, func(*db.Tx) error {
+			close(held)
+			<-release
+			return nil
+		})
+	}()
+	<-held
 	done := make(chan error, 1)
 	identity := cm.LarkIdentity{Brand: "feishu", AppID: "app-fixture", OpenID: "ou-fixture", DisplayName: "test", VerifiedAt: time.Now()}
 	go func() {
 		_, _, e := f.st.CompleteProjectCLIAuthOperation(ctx, f.project, op.ID, store.ProjectCredentialWrite{AuthMethod: "oauth", LarkIdentity: &identity, Secret: []byte("must-not-write")})
 		done <- e
 	}()
-	// Observe a real PostgreSQL lock waiter blocked by this transaction, not
-	// merely a goroutine scheduled after the operation already expired.
-	waitCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-	for {
-		var blocked bool
-		if err = block.QueryRow(waitCtx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)))`, pid).Scan(&blocked); err != nil {
-			t.Fatal(err)
-		}
-		if blocked {
-			break
-		}
-		select {
-		case <-waitCtx.Done():
-			t.Fatal("commit did not reach the held source row lock")
-		case <-time.After(time.Millisecond):
-		}
+	time.Sleep(time.Until(deadline) + 10*time.Millisecond)
+	select {
+	case e := <-done:
+		t.Fatal("commit finished while the writer was held", e)
+	default:
 	}
-	for {
-		var expired bool
-		if err = block.QueryRow(waitCtx, `SELECT clock_timestamp()>$1::timestamptz`, deadline).Scan(&expired); err != nil {
-			t.Fatal(err)
-		}
-		if expired {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
-	if err = block.Commit(ctx); err != nil {
+	close(release)
+	if err = <-released; err != nil {
 		t.Fatal(err)
 	}
 	if err = <-done; err != nil {

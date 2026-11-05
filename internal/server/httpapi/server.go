@@ -42,10 +42,12 @@ import (
 type Options struct {
 	AllowedHosts   []string
 	ConsoleOrigins []string
-	SSEKeepalive   time.Duration
-	TaskEventPoll  time.Duration
-	Limits         apitypes.Limits
-	Defaults       store.DefaultContext
+	// Console 回答控制台端口上 API 之外的路径（控制台的静态文件）；为空时这些路径 404。
+	Console       http.Handler
+	SSEKeepalive  time.Duration
+	TaskEventPoll time.Duration
+	Limits        apitypes.Limits
+	Defaults      store.DefaultContext
 }
 
 // Server 持有各业务服务。
@@ -329,7 +331,7 @@ func (s *Server) AgentRoutes() []Route {
 	}
 }
 
-// Handler 返回回环监听器的处理器：控制台接口 /api/v1 与 Agent 专用接口 /agent/v1。
+// Handler 返回回环监听器的处理器：控制台接口 /api/v1、Agent 专用接口 /agent/v1，其余路径交给控制台的静态文件。
 func (s *Server) Handler() http.Handler {
 	root := http.NewServeMux()
 	root.Handle("/api/v1/", s.cors(s.consoleAuth(s.newMux("/api/v1", s.Routes()))))
@@ -338,6 +340,9 @@ func (s *Server) Handler() http.Handler {
 	root.Handle("/api/v1/plugins/{pluginId}/http/{path...}", ingress)
 	root.Handle("/agent/v1/", s.agentAuth(s.newMux("/agent/v1", s.AgentRoutes())))
 	root.HandleFunc("GET /healthz", s.getHealth)
+	if s.O.Console != nil {
+		root.Handle("/", s.O.Console)
+	}
 	return withCommonHeaders(s.logRequests(s.checkHost(root)))
 }
 
@@ -378,10 +383,12 @@ func (s *Server) checkHost(next http.Handler) http.Handler {
 }
 
 // cors 只对白名单来源回 CORS 头；带有不在白名单中的 Origin 的请求一律拒绝，且不执行任何写入。
+// 同源请求（服务端自己提供的控制台）不需要白名单：浏览器在同源的写请求上也带 Origin，它等于本请求的
+// scheme://Host，而 Host 已经过 checkHost 的白名单。
 func (s *Server) cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin != "" {
+		if origin != "" && !sameOrigin(r, origin) {
 			if !slices.Contains(s.O.ConsoleOrigins, origin) {
 				writeError(w, &apperr.Error{Status: http.StatusForbidden, Code: apperr.CodeForbiddenOrigin, Message: "来源不在控制台白名单中"})
 				return
@@ -400,6 +407,15 @@ func (s *Server) cors(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// sameOrigin 报告 origin 是否就是本请求的来源。
+func sameOrigin(r *http.Request, origin string) bool {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	return strings.EqualFold(origin, scheme+"://"+r.Host)
 }
 
 type statusRecorder struct {

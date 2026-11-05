@@ -4,16 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
 	"io"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/sleepmodel"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/workflow"
-	"loop-now/internal/testutil/pgtest"
 	"loop-now/internal/testutil/testenv"
 	"net"
 	"net/http"
@@ -27,15 +23,14 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Main granted this single new server test file to Web. Other helpers are read-only.
 func TestWebSleepIntegration(t *testing.T) {
 	if os.Getenv("LOOP_NOW_WEB_SLEEP_INTEGRATION") != "1" {
 		t.Skip("explicit isolated sleep browser integration only")
-	}
-	if os.Getenv("LOOP_NOW_TEST_DATABASE_URL") == "" || os.Getenv("LOOP_NOW_TEST_REDIS_URL") == "" {
-		t.Fatal("explicit TEST endpoints required")
 	}
 	root := testenv.RepoRoot()
 	phase := os.Getenv("LOOP_NOW_WEB_SLEEP_PHASE")
@@ -51,44 +46,16 @@ func TestWebSleepIntegration(t *testing.T) {
 	}
 	var w *world
 	var addr, controlAddr string
-	audit := map[string]any{"mode": "actual React -> route.fetch -> app.Build -> isolated TEST PG/Redis; fakepi; sleep"}
-	// Registered first, runs after App shutdown and existing schema/prefix/temp cleanup.
+	audit := map[string]any{"mode": "actual React -> route.fetch -> app.Build -> temporary SQLite; fakepi; sleep"}
+	// Registered first, runs after App shutdown and existing temporary directory cleanup.
 	t.Cleanup(func() {
 		if w == nil {
 			return
 		}
-		audit["schema"] = w.schema
-		audit["redisPrefix"] = w.cfg.RedisKeyPrefix
+		audit["dataDir"] = w.cfg.DataDir
 		audit["appAddress"] = addr
 		audit["controlAddress"] = controlAddr
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		conn, err := pgx.Connect(ctx, pgtest.URL(t))
-		if err != nil {
-			t.Error("cleanup PG verification failed")
-			return
-		}
-		defer conn.Close(ctx)
-		var exists bool
-		if err = conn.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)`, w.schema).Scan(&exists); err != nil || exists {
-			t.Error("isolated schema cleanup not verified")
-		}
-		audit["schemaRemoved"] = !exists && err == nil
-		options, err := redis.ParseURL(w.cfg.RedisURL)
-		if err != nil {
-			t.Error("cleanup Redis configuration invalid")
-			return
-		}
-		rc := redis.NewClient(options)
-		defer rc.Close()
-		iterator := rc.Scan(ctx, 0, w.cfg.RedisKeyPrefix+"*", 100).Iterator()
-		found := iterator.Next(ctx)
-		err = iterator.Err()
-		audit["redisPrefixEmpty"] = err == nil && !found
-		if err != nil || found {
-			t.Error("isolated Redis cleanup not verified")
-		}
-		_, err = os.Stat(w.cfg.WorkRoot)
+		_, err := os.Stat(w.cfg.WorkRoot)
 		audit["workRootRemoved"] = os.IsNotExist(err)
 		if !os.IsNotExist(err) {
 			t.Error("isolated work root cleanup not verified")
@@ -199,7 +166,7 @@ func TestWebSleepIntegration(t *testing.T) {
 			record := normalSleep()
 			_ = json.NewEncoder(rw).Encode(record)
 		case "/normal-deadline":
-			if _, err := s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE agent_id=$1 AND scope_kind='normal' AND state='sleeping'`, worker.ID); err != nil {
+			if _, err := s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE agent_id=$1 AND scope_kind='normal' AND state='sleeping'`, worker.ID); err != nil {
 				http.Error(rw, "test deadline failed", 500)
 				return
 			}
@@ -289,8 +256,7 @@ func TestWebSleepIntegration(t *testing.T) {
 	if err = s.a.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM runs WHERE agent_id=$1`, worker.ID).Scan(&runs); err != nil || runs != 6 || prompts != 6 {
 		t.Fatal("normal run/native prompt mismatch", runs, prompts, err)
 	}
-	interrupt, normal, err := s.a.Coord.QueueContents(ctx, worker.ID.String())
-	if err != nil || len(interrupt) != 0 || len(normal) != 0 {
+	if queued, err := s.a.Store.QueuedRuns(ctx, worker.ID); err != nil || len(queued) != 0 {
 		t.Fatal("normal queue not drained", err)
 	}
 	audit["normalRunCount"] = runs
@@ -318,9 +284,6 @@ func TestWebSleepReconnectIntegration(t *testing.T) {
 	if os.Getenv("LOOP_NOW_WEB_SLEEP_INTEGRATION") != "1" {
 		t.Skip("explicit isolated browser reconnect slice only")
 	}
-	if os.Getenv("LOOP_NOW_TEST_DATABASE_URL") == "" || os.Getenv("LOOP_NOW_TEST_REDIS_URL") == "" {
-		t.Fatal("explicit TEST endpoints required")
-	}
 	root := testenv.RepoRoot()
 	phase := os.Getenv("LOOP_NOW_WEB_SLEEP_PHASE")
 	if phase != "ordinary" && phase != "race" {
@@ -332,45 +295,17 @@ func TestWebSleepReconnectIntegration(t *testing.T) {
 	}
 	var w *world
 	var addr, controlAddr, proxyAddr string
-	audit := map[string]any{"mode": "actual React -> route.fetch -> app.Build -> isolated TEST PG/Redis; fakepi; sleep"}
-	// Registered first, runs after App shutdown and existing schema/prefix/temp cleanup.
+	audit := map[string]any{"mode": "actual React -> route.fetch -> app.Build -> temporary SQLite; fakepi; sleep"}
+	// Registered first, runs after App shutdown and existing temporary directory cleanup.
 	t.Cleanup(func() {
 		if w == nil {
 			return
 		}
-		audit["schema"] = w.schema
-		audit["redisPrefix"] = w.cfg.RedisKeyPrefix
+		audit["dataDir"] = w.cfg.DataDir
 		audit["appAddress"] = addr
 		audit["controlAddress"] = controlAddr
 		audit["proxyAddress"] = proxyAddr
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		conn, err := pgx.Connect(ctx, pgtest.URL(t))
-		if err != nil {
-			t.Error("cleanup PG verification failed")
-			return
-		}
-		defer conn.Close(ctx)
-		var exists bool
-		if err = conn.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)`, w.schema).Scan(&exists); err != nil || exists {
-			t.Error("isolated schema cleanup not verified")
-		}
-		audit["schemaRemoved"] = !exists && err == nil
-		options, err := redis.ParseURL(w.cfg.RedisURL)
-		if err != nil {
-			t.Error("cleanup Redis configuration invalid")
-			return
-		}
-		rc := redis.NewClient(options)
-		defer rc.Close()
-		iterator := rc.Scan(ctx, 0, w.cfg.RedisKeyPrefix+"*", 100).Iterator()
-		found := iterator.Next(ctx)
-		err = iterator.Err()
-		audit["redisPrefixEmpty"] = err == nil && !found
-		if err != nil || found {
-			t.Error("isolated Redis cleanup not verified")
-		}
-		_, err = os.Stat(w.cfg.WorkRoot)
+		_, err := os.Stat(w.cfg.WorkRoot)
 		audit["workRootRemoved"] = os.IsNotExist(err)
 		if !os.IsNotExist(err) {
 			t.Error("isolated work root cleanup not verified")

@@ -2,7 +2,6 @@ package cliauth
 
 import (
 	"context"
-	"github.com/google/uuid"
 	"loop-now/internal/server/agentconfig"
 	cm "loop-now/internal/server/credentialmodel"
 	"net"
@@ -12,6 +11,8 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func TestGoogleActualPendingHelperProjectDeleteRollbackAndCleanup(t *testing.T) {
@@ -53,7 +54,7 @@ func TestGoogleActualPendingHelperProjectDeleteRollbackAndCleanup(t *testing.T) 
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	if _, e := f.st.Pool.Exec(ctx, `CREATE FUNCTION block_google_project_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.deleted_at IS NOT NULL THEN RAISE EXCEPTION 'synthetic delete rollback'; END IF; RETURN NEW; END $$; CREATE TRIGGER block_google_project_delete BEFORE UPDATE ON projects FOR EACH ROW EXECUTE FUNCTION block_google_project_delete()`); e != nil {
+	if _, e := f.st.Pool.Exec(ctx, `CREATE TRIGGER block_google_project_delete BEFORE UPDATE ON projects WHEN NEW.deleted_at IS NOT NULL BEGIN SELECT RAISE(ABORT, 'synthetic delete rollback'); END`); e != nil {
 		t.Fatal(e)
 	}
 	config := &agentconfig.Service{Store: f.st, CancelProjectCLILogins: service.CancelProject}
@@ -68,7 +69,7 @@ func TestGoogleActualPendingHelperProjectDeleteRollbackAndCleanup(t *testing.T) 
 		ln.Close()
 		t.Fatal("rollback released active helper port")
 	}
-	if _, e = f.st.Pool.Exec(ctx, `DROP TRIGGER block_google_project_delete ON projects; DROP FUNCTION block_google_project_delete()`); e != nil {
+	if _, e = f.st.Pool.Exec(ctx, `DROP TRIGGER block_google_project_delete`); e != nil {
 		t.Fatal(e)
 	}
 	if e = config.DeleteProject(ctx, f.project); e != nil {

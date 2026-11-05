@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/messageimage"
 	"sort"
 	"strings"
+
+	"loop-now/internal/server/db"
 )
 
 type ImageOwner struct{ AgentID, TaskID, NodeRunID, RuntimeID uuid.UUID }
@@ -20,7 +21,7 @@ type StoredImage struct {
 	ConversationID, InboxID *uuid.UUID
 }
 
-func scanImage(row pgx.Row) (StoredImage, error) {
+func scanImage(row db.Scanner) (StoredImage, error) {
 	var v StoredImage
 	var task, node, runtime *uuid.UUID
 	e := row.Scan(&v.ID, &v.AgentID, &task, &node, &runtime, &v.BlobSHA, &v.MimeType, &v.Size, &v.Width, &v.Height, &v.ConversationID, &v.InboxID)
@@ -39,8 +40,8 @@ func (s *Store) MessageImage(ctx context.Context, id uuid.UUID) (StoredImage, er
 }
 func (s *Store) SaveMessageImage(ctx context.Context, id uuid.UUID, owner ImageOwner, ref messageimage.Ref, data []byte) (messageimage.Ref, error) {
 	var result messageimage.Ref
-	e := s.inTx(ctx, func(tx pgx.Tx) error {
-		if e := tx.QueryRow(ctx, `SELECT id FROM agents WHERE id=$1 AND deleted_at IS NULL FOR SHARE`, owner.AgentID).Scan(new(uuid.UUID)); e != nil {
+	e := s.inTx(ctx, func(tx *db.Tx) error {
+		if e := tx.QueryRow(ctx, `SELECT id FROM agents WHERE id=$1 AND deleted_at IS NULL`, owner.AgentID).Scan(new(uuid.UUID)); e != nil {
 			return notFoundIfNoRows(e, "Agent")
 		}
 		sha, e := putBlob(ctx, tx, data)
@@ -72,7 +73,7 @@ func nullableUUID(id uuid.UUID) any {
 
 // Bind uses the same transaction as the message and queue. Reusing an image for
 // another message, Agent, node, or runtime is refused, never silently copied.
-func (s *Store) BindMessageImagesTx(ctx context.Context, tx pgx.Tx, owner ImageOwner, message uuid.UUID, ids []uuid.UUID, maxCount int) ([]messageimage.Ref, error) {
+func (s *Store) BindMessageImagesTx(ctx context.Context, tx *db.Tx, owner ImageOwner, message uuid.UUID, ids []uuid.UUID, maxCount int) ([]messageimage.Ref, error) {
 	out, e := s.lockMessageImagesTx(ctx, tx, owner, ids, maxCount)
 	if e != nil {
 		return nil, e
@@ -88,7 +89,7 @@ func (s *Store) BindMessageImagesTx(ctx context.Context, tx pgx.Tx, owner ImageO
 	}
 	return out, nil
 }
-func (s *Store) lockMessageImagesTx(ctx context.Context, tx pgx.Tx, owner ImageOwner, ids []uuid.UUID, maxCount int) ([]messageimage.Ref, error) {
+func (s *Store) lockMessageImagesTx(ctx context.Context, tx *db.Tx, owner ImageOwner, ids []uuid.UUID, maxCount int) ([]messageimage.Ref, error) {
 	if maxCount <= 0 {
 		maxCount = messageimage.DefaultCount
 	}
@@ -106,7 +107,7 @@ func (s *Store) lockMessageImagesTx(ctx context.Context, tx pgx.Tx, owner ImageO
 	sort.Slice(ordered, func(i, j int) bool { return ordered[i].String() < ordered[j].String() })
 	byID := map[uuid.UUID]messageimage.Ref{}
 	for _, id := range ordered {
-		v, e := scanImage(tx.QueryRow(ctx, `SELECT `+imageColumns+` FROM message_images WHERE id=$1 FOR UPDATE`, id))
+		v, e := scanImage(tx.QueryRow(ctx, `SELECT `+imageColumns+` FROM message_images WHERE id=$1`, id))
 		if e != nil {
 			return nil, e
 		}

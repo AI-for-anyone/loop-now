@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"loop-now/internal/server/apperr"
+	"loop-now/internal/server/db"
 )
 
 // FolderGitPull 是一次“从 Git 拉取”到 Agent 文件夹的操作。
@@ -28,7 +28,7 @@ type FolderGitPull struct {
 
 const gitPullColumns = `id, agent_id, action_id, url, branch, path, status, error_code, error_message, created_at, finished_at`
 
-func scanGitPull(row pgx.Row) (FolderGitPull, error) {
+func scanGitPull(row db.Scanner) (FolderGitPull, error) {
 	var p FolderGitPull
 	err := row.Scan(&p.ID, &p.AgentID, &p.ActionID, &p.URL, &p.Branch, &p.Path, &p.Status, &p.ErrorCode, &p.ErrorMessage, &p.CreatedAt, &p.FinishedAt)
 	return p, err
@@ -39,7 +39,7 @@ func scanGitPull(row pgx.Row) (FolderGitPull, error) {
 func (s *Store) CreateFolderGitPull(ctx context.Context, p FolderGitPull) (FolderGitPull, bool, error) {
 	var out FolderGitPull
 	created := false
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, err := lockAgent(ctx, tx, p.AgentID); err != nil {
 			return err
 		}
@@ -51,7 +51,7 @@ func (s *Store) CreateFolderGitPull(ctx context.Context, p FolderGitPull) (Folde
 			out = existing
 			return nil
 		}
-		if !errors.Is(err, pgx.ErrNoRows) {
+		if !errors.Is(err, db.ErrNoRows) {
 			return err
 		}
 		var busy bool
@@ -72,7 +72,7 @@ func (s *Store) CreateFolderGitPull(ctx context.Context, p FolderGitPull) (Folde
 // FindFolderGitPull 按 actionId 查找 Agent 已受理的拉取。
 func (s *Store) FindFolderGitPull(ctx context.Context, agentID, actionID uuid.UUID) (FolderGitPull, bool, error) {
 	p, err := scanGitPull(s.Pool.QueryRow(ctx, `SELECT `+gitPullColumns+` FROM agent_folder_git_pulls WHERE agent_id = $1 AND action_id = $2`, agentID, actionID))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, db.ErrNoRows) {
 		return p, false, nil
 	}
 	return p, err == nil, err
@@ -90,7 +90,7 @@ func (s *Store) ListFolderGitPulls(ctx context.Context, agentID uuid.UUID, limit
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (FolderGitPull, error) { return scanGitPull(r) })
+	return db.CollectRows(rows, func(r db.CollectableRow) (FolderGitPull, error) { return scanGitPull(r) })
 }
 
 // StartFolderGitPull 把排队的拉取标为进行中；已不在排队时返回 false。
@@ -105,19 +105,19 @@ func (s *Store) FinishFolderGitPull(ctx context.Context, id uuid.UUID, code, mes
 	if code != "" {
 		status = "failed"
 	}
-	_, err := s.Pool.Exec(ctx, `UPDATE agent_folder_git_pulls SET status = $2, error_code = nullif($3, ''), error_message = nullif($4, ''), finished_at = now()
-		WHERE id = $1 AND status IN ('queued', 'running')`, id, status, code, message)
+	_, err := s.Pool.Exec(ctx, `UPDATE agent_folder_git_pulls SET status = $2, error_code = nullif($3, ''), error_message = nullif($4, ''), finished_at = $5
+		WHERE id = $1 AND status IN ('queued', 'running')`, id, status, code, message, s.Pool.Now())
 	return err
 }
 
 // FailInterruptedFolderGitPulls 在启动时把上次运行中断的拉取标为失败（server_restart），返回它们（用于清理临时目录）。
 func (s *Store) FailInterruptedFolderGitPulls(ctx context.Context) ([]FolderGitPull, error) {
-	rows, err := s.Pool.Query(ctx, `UPDATE agent_folder_git_pulls SET status = 'failed', error_code = 'server_restart', error_message = '服务重启时仍在进行，已中止', finished_at = now()
-		WHERE status IN ('queued', 'running') RETURNING `+gitPullColumns)
+	rows, err := s.Pool.Query(ctx, `UPDATE agent_folder_git_pulls SET status = 'failed', error_code = 'server_restart', error_message = '服务重启时仍在进行，已中止', finished_at = $1
+		WHERE status IN ('queued', 'running') RETURNING `+gitPullColumns, s.Pool.Now())
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (FolderGitPull, error) { return scanGitPull(r) })
+	return db.CollectRows(rows, func(r db.CollectableRow) (FolderGitPull, error) { return scanGitPull(r) })
 }
 
 // LegacyFolderSource 是一个尚未回放的退役上传资料来源。
@@ -137,7 +137,7 @@ func (s *Store) PendingLegacyFolderSources(ctx context.Context) ([]LegacyFolderS
 	if err != nil {
 		return nil, err
 	}
-	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (LegacyFolderSource, error) {
+	out, err := db.CollectRows(rows, func(r db.CollectableRow) (LegacyFolderSource, error) {
 		var x LegacyFolderSource
 		return x, r.Scan(&x.ID, &x.AgentID, &x.Path, &x.SyncedAt)
 	})
@@ -172,7 +172,7 @@ func (s *Store) LegacyGitSources(ctx context.Context) ([]LegacyGitSource, error)
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (LegacyGitSource, error) {
+	return db.CollectRows(rows, func(r db.CollectableRow) (LegacyGitSource, error) {
 		var x LegacyGitSource
 		return x, r.Scan(&x.AgentID, &x.Path)
 	})

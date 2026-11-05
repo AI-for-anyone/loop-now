@@ -5,11 +5,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/clicredential"
 	cm "loop-now/internal/server/credentialmodel"
+	"loop-now/internal/server/db"
 )
 
 // 凭证用途。
@@ -50,12 +50,12 @@ func (s *Store) ListAgentCLIs(ctx context.Context, agentID uuid.UUID) ([]string,
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, pgx.RowTo[string])
+	return db.CollectRows(rows, db.RowTo[string])
 }
 
 // AddAgentCLI 把 CLI 加入可用列表；已存在时不变。
 func (s *Store) AddAgentCLI(ctx context.Context, agentID uuid.UUID, name string) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		if err := lockAgentProjectTx(ctx, tx, agentID); err != nil {
 			return err
 		}
@@ -75,7 +75,7 @@ func (s *Store) AddAgentCLI(ctx context.Context, agentID uuid.UUID, name string)
 
 // RemoveAgentCLI 从可用列表移除 CLI，其凭证经外键级联删除。
 func (s *Store) RemoveAgentCLI(ctx context.Context, agentID uuid.UUID, name string) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		if err := lockAgentProjectTx(ctx, tx, agentID); err != nil {
 			return err
 		}
@@ -99,7 +99,7 @@ func (s *Store) RemoveAgentCLI(ctx context.Context, agentID uuid.UUID, name stri
 const credentialColumns = `id, agent_id, purpose, coalesce(cli_name, ''), coalesce(template_version, ''), coalesce(template_source, ''), secret,
 	field_names, env_names, file_paths, updated_at`
 
-func scanCredential(row pgx.Row) (CredentialRow, error) {
+func scanCredential(row db.Scanner) (CredentialRow, error) {
 	var c CredentialRow
 	err := row.Scan(&c.ID, &c.AgentID, &c.Purpose, &c.CLIName, &c.TemplateVersion, &c.TemplateSource, &c.Secret,
 		&c.FieldNames, &c.EnvNames, &c.FilePaths, &c.UpdatedAt)
@@ -112,7 +112,7 @@ func (s *Store) ListCredentials(ctx context.Context, agentID uuid.UUID) ([]Crede
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (CredentialRow, error) { return scanCredential(r) })
+	return db.CollectRows(rows, func(r db.CollectableRow) (CredentialRow, error) { return scanCredential(r) })
 }
 
 // PutCredential 整体覆盖 Agent 的一条凭证。
@@ -120,7 +120,7 @@ func (s *Store) ListCredentials(ctx context.Context, agentID uuid.UUID) ([]Crede
 func (s *Store) PutCredential(ctx context.Context, agentID uuid.UUID, purpose, cliName string, meta CredentialMeta,
 	secret []byte) (CredentialRow, error) {
 	var row CredentialRow
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if a, err := lockAgent(ctx, tx, agentID); err != nil {
 			return err
 		} else if a.ProjectID != nil {
@@ -141,7 +141,7 @@ func (s *Store) PutCredential(ctx context.Context, agentID uuid.UUID, purpose, c
 			source := "builtin"
 			templateSource = &source
 		}
-		if _, err := tx.Exec(ctx, `DELETE FROM agent_credentials WHERE agent_id = $1 AND purpose = $2 AND cli_name IS NOT DISTINCT FROM $3`, agentID, purpose, cli); err != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM agent_credentials WHERE agent_id = $1 AND purpose = $2 AND cli_name IS $3`, agentID, purpose, cli); err != nil {
 			return err
 		}
 		id := uuid.Must(uuid.NewV7())
@@ -161,7 +161,7 @@ func (s *Store) PutCredential(ctx context.Context, agentID uuid.UUID, purpose, c
 
 // DeleteCredential 删除一条凭证。
 func (s *Store) DeleteCredential(ctx context.Context, agentID uuid.UUID, purpose, cliName string) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		if a, err := lockAgent(ctx, tx, agentID); err != nil {
 			return err
 		} else if a.ProjectID != nil {
@@ -171,7 +171,7 @@ func (s *Store) DeleteCredential(ctx context.Context, agentID uuid.UUID, purpose
 		if purpose == PurposeCLI {
 			cli = &cliName
 		}
-		tag, err := tx.Exec(ctx, `DELETE FROM agent_credentials WHERE agent_id = $1 AND purpose = $2 AND cli_name IS NOT DISTINCT FROM $3`, agentID, purpose, cli)
+		tag, err := tx.Exec(ctx, `DELETE FROM agent_credentials WHERE agent_id = $1 AND purpose = $2 AND cli_name IS $3`, agentID, purpose, cli)
 		if err != nil {
 			return err
 		}

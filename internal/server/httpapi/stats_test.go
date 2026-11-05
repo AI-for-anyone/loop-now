@@ -39,11 +39,11 @@ func TestStatsValidationAndContract(t *testing.T) {
 	}
 	sleep := uuid.New()
 	exec(`INSERT INTO agent_sleeps(id,scope_key,scope_kind,mode,agent_id,session_epoch,source_run_id,action_id,body_hash,receipt,state,seconds,entered_at,wake_at,ended_at,end_reason,timer_run_id,wake_run_id,revision)
-		VALUES($1,'normal/'||$2::uuid::text,'normal','normal',$2::uuid,1,$3,$4,$5,'{}','woken',60,$6,$6,$6,'deadline',$7,$7,1)`, sleep, a.ID, uuid.New(), uuid.New(), make([]byte, 32), base, uuid.New())
+		VALUES($1,'normal/'||$2,'normal','normal',$2,1,$3,$4,$5,'{}','woken',60,$6,$6,$6,'deadline',$7,$7,1)`, sleep, a.ID, uuid.New(), uuid.New(), make([]byte, 32), base, uuid.New())
 	run := func(origin, status string, at time.Time, errorCode *string, wake *uuid.UUID) uuid.UUID {
 		id := uuid.New()
-		exec(`INSERT INTO runs(id,agent_id,user_message_id,config_version,priority,status,origin,error_code,queued_at,started_at,running_at,ended_at,wake_sleep_id)
-			VALUES($1,$2,$3,1,1,$4,$5,$6,$7,$7,$8,$9,$10)`, id, a.ID, uuid.New(), status, origin, errorCode, at, at.Add(3*time.Second), at.Add(time.Minute), wake)
+		exec(`INSERT INTO runs(id,agent_id,user_message_id,config_version,priority,queue_seq,status,origin,error_code,queued_at,started_at,running_at,ended_at,wake_sleep_id)
+			VALUES($1,$2,$3,1,1,(SELECT coalesce(max(queue_seq),0)+1 FROM runs),$4,$5,$6,$7,$7,$8,$9,$10)`, id, a.ID, uuid.New(), status, origin, errorCode, at, at.Add(3*time.Second), at.Add(time.Minute), wake)
 		return id
 	}
 	failed := "pi_exited"
@@ -62,7 +62,7 @@ func TestStatsValidationAndContract(t *testing.T) {
 	for i, state := range []string{"answered", "open"} {
 		id := uuid.New()
 		exec(`INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,to_kind,text,created_at) VALUES($1,$1,'agent',$2,'console','要继续吗？',$3)`, id, a.ID, base.Add(time.Duration(i+1)*time.Hour))
-		exec(`INSERT INTO inbox_questions(message_id,options,expires_at,state,answered_at) VALUES($1,'[]',$2,$3,CASE WHEN $3='answered' THEN $4::timestamptz END)`,
+		exec(`INSERT INTO inbox_questions(message_id,options,expires_at,state,answered_at) VALUES($1,'[]',$2,$3,CASE WHEN $3='answered' THEN $4 END)`,
 			id, time.Now().Add(time.Hour), state, base.Add(2*time.Hour))
 	}
 

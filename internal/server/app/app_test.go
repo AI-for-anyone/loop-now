@@ -21,14 +21,11 @@ import (
 	"loop-now/internal/server/preflight"
 	"loop-now/internal/testutil/fakepibin"
 	"loop-now/internal/testutil/loopctlfake"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
 )
 
 // world 是一组可在多个服务端实例之间共享的外部状态：数据库 schema、Redis 前缀、工作根目录。
 type world struct {
 	t       *testing.T
-	schema  string
 	cfg     config.Config
 	piAIDir string
 	logTo   io.Writer // 为空时丢弃日志
@@ -36,22 +33,20 @@ type world struct {
 
 func newWorld(t *testing.T) *world {
 	t.Helper()
-	real, err := preflight.Resolve(context.Background(), preflight.Options{PiBin: "pi", PiVersion: "1.1.0", NodeBin: "node",
+	real, err := preflight.Resolve(context.Background(), preflight.Options{PiBin: "pi", PiVersion: "1.4.0", NodeBin: "node",
 		WorkRoot: filepath.Join(t.TempDir(), "probe"), HomeDirs: []string{"/nonexistent-home"}})
 	if err != nil {
-		t.Skipf("本机没有可用的 Pi 1.1.0（读取模型目录需要）：%v", err)
+		t.Skipf("本机没有可用的 Pi 1.4.0（读取模型目录需要）：%v", err)
 	}
-	schema := pgtest.NewSchema(t)
-	_, prefix := redistest.New(t)
-	return &world{t: t, schema: schema, piAIDir: real.PiAIDir, cfg: config.Config{
+	return &world{t: t, piAIDir: real.PiAIDir, cfg: config.Config{
 		TaskMaxSteps: 100, TaskMaxEdges: 300, TaskMaxVisits: 1000, TaskMaxRequest: 1 << 20, TaskMaxArtifact: 20 << 20, TaskMaxSession: 100 << 20, TaskReconcileInterval: 100 * time.Millisecond, TaskEventPoll: 10 * time.Millisecond, TaskRecordTimeout: time.Second,
-		DatabaseURL: pgtest.URL(t), RedisURL: redistest.URL(t),
+		DataDir:    t.TempDir(),
 		ListenAddr: "127.0.0.1:0", AllowedHosts: []string{"localhost", "127.0.0.1", "::1"}, ConsoleOrigins: []string{"http://localhost:5173"},
-		WorkRoot: filepath.Join(t.TempDir(), "work"), RedisKeyPrefix: prefix, DefaultOrgName: "默认组织", DefaultProjectName: "默认项目",
-		PiBin: fakepibin.Path(t), PiVersion: "1.1.0", PiMaxProcesses: 2, PiIdleTimeout: time.Minute, PiStartTimeout: 10 * time.Second,
+		WorkRoot: filepath.Join(t.TempDir(), "work"), DefaultOrgName: "默认组织", DefaultProjectName: "默认项目",
+		PiBin: fakepibin.Path(t), PiVersion: "1.4.0", PiMaxProcesses: 2, PiIdleTimeout: time.Minute, PiStartTimeout: 10 * time.Second,
 		PiStopGrace: 2 * time.Second, AbortTimeout: 3 * time.Second, GitCloneTimeout: 30 * time.Second, CLIInstallTimeout: time.Minute,
-		NodeBin: "node", PiAIDir: real.PiAIDir, LockTTL: 5 * time.Second, LockRenewInterval: time.Second, ReconcileInterval: 500 * time.Millisecond,
-		SSEKeepalive: time.Second, EventStreamMaxLen: 1000, RunTextTTL: time.Hour, ShutdownTimeout: 10 * time.Second,
+		NodeBin: "node", PiAIDir: real.PiAIDir, ReconcileInterval: 500 * time.Millisecond,
+		SSEKeepalive: time.Second, EventStreamMaxLen: 1000, ShutdownTimeout: 10 * time.Second,
 		MaxUploadFile: 1 << 20, MaxSkillArchive: 1 << 20, MaxSkillEntries: 50, MaxCredential: 4096, MaxMessage: 1 << 16,
 		TextEditExtensions: []string{".md"}, TextEditMax: 1 << 16, MaxInboxMessage: 1 << 16, InboxPreviewChars: 200, InboxPageMax: 100,
 		LoopctlDistDir: loopctlfake.Dir(t),
@@ -79,7 +74,7 @@ func (w *world) start(mutate func(c *config.Config)) *server {
 		logTo = io.Discard
 	}
 	a, err := app.Build(context.Background(), &cfg, config.NewLogger(logTo, cfg.LogFormat, cfg.LogLevel),
-		app.Options{SearchPath: w.schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}})
+		app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}})
 	if err != nil {
 		w.t.Fatalf("启动服务端失败：%v", err)
 	}
@@ -274,7 +269,7 @@ func TestRestartGraceful(t *testing.T) {
 		t.Fatalf("锁的值应为 <执行 ID>|<实例 ID>：%s", owner)
 	}
 	var runInst string
-	if err := s.a.Store.Pool.QueryRow(context.Background(), `SELECT instance_id::text FROM runs WHERE id = $1`, run.ID).Scan(&runInst); err != nil || runInst != inst {
+	if err := s.a.Store.Pool.QueryRow(context.Background(), `SELECT instance_id FROM runs WHERE id = $1`, run.ID).Scan(&runInst); err != nil || runInst != inst {
 		t.Fatalf("runs.instance_id 应为本实例：%s %v", runInst, err)
 	}
 	pidJSON, err := os.ReadFile(filepath.Join(w.cfg.WorkRoot, "agents", agentID, "pi.pid"))
@@ -306,8 +301,9 @@ func TestRestartAfterCrash(t *testing.T) {
 	a, _ := s.createAgent("崩溃测试")
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=30s 很长"})
 	s.waitRunning(a)
-	// 模拟进程被强制结束：不走优雅退出，不结束 Pi 进程，只停掉对话协调与 HTTP。
+	// 模拟进程被强制结束：不走优雅退出，不结束 Pi 进程，只停掉对话协调与 HTTP，并像进程退出那样放开实例锁。
 	_ = s.a.Conv.Stop(context.Background())
+	s.a.ReleaseInstanceLocks()
 	if !fakepiAlive(t, w.cfg.WorkRoot) {
 		t.Fatal("模拟崩溃时 Pi 进程应仍在运行")
 	}

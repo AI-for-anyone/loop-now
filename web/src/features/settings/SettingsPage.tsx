@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { serverVersionStore } from '@/api/client'
 import { useCliTemplates, useContextInfo, useHealth } from '@/api/queries'
-import { config } from '@/config'
+import { absoluteApiBase } from '@/config'
 import { t } from '@/i18n'
 import { chooseLocale, locale, localeNames, locales, type Locale } from '@/i18n/locale'
 import { selectClass } from '@/lib/field'
@@ -103,7 +103,7 @@ export function SettingsPage() {
           <CardContent>
             <dl className="grid grid-cols-[minmax(110px,140px)_minmax(0,1fr)] gap-x-[18px] gap-y-3.5 text-[14.5px]">
               <Row label={t.settings.apiBase}>
-                <span className="font-mono text-[13.5px] break-all">{config.apiBase}</span>
+                <span className="font-mono text-[13.5px] break-all">{absoluteApiBase()}</span>
               </Row>
               <Row label={t.settings.version}>
                 <span className="font-mono text-[13.5px] break-all">{version ?? '—'}</span>
@@ -113,12 +113,16 @@ export function SettingsPage() {
                 {health.data && (
                   <div className="flex flex-col items-start gap-2.5">
                     <Badge tone={health.data.ok ? 'success' : 'warning'}>{health.data.ok ? t.settings.healthOk : t.settings.healthDegraded}</Badge>
-                    {(['postgres', 'redis'] as const).map((key) => (
-                      <span key={key} className={cn('inline-flex items-center gap-2', !health.data[key].ok && 'font-bold text-red-text')}>
-                        <span aria-hidden="true" className={cn('size-[9px] shrink-0 rounded-full', health.data[key].ok ? 'bg-green' : 'bg-red')} />
-                        <span>{t.settings.dependency(t.settings[key], health.data[key].ok ? t.settings.healthOk : (health.data[key].error ?? t.errors.unknown))}</span>
-                      </span>
-                    ))}
+                    <span className={cn('inline-flex items-center gap-2', !health.data.database.ok && 'font-bold text-red-text')}>
+                      <span aria-hidden="true" className={cn('size-[9px] shrink-0 rounded-full', health.data.database.ok ? 'bg-green' : 'bg-red')} />
+                      <span>{t.settings.dependency(t.settings.database, health.data.database.ok ? t.settings.healthOk : (health.data.database.error ?? t.errors.unknown))}</span>
+                    </span>
+                    {/* WAL 过大只是提示，不影响 ok，左侧栏的连接状态不变。 */}
+                    {health.data.database.walWarning && (
+                      <Alert variant="warning" role="note" className="text-[13.5px]">
+                        <AlertDescription className="text-[13.5px] text-ink">{t.settings.walWarning}</AlertDescription>
+                      </Alert>
+                    )}
                   </div>
                 )}
               </Row>

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"loop-now/internal/server/config"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -21,13 +20,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/app"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
+	"loop-now/internal/server/config"
 	"loop-now/internal/server/contracttest"
 	cm "loop-now/internal/server/credentialmodel"
 	"loop-now/internal/server/executor/local"
@@ -38,6 +35,10 @@ import (
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/tasks"
 	"loop-now/internal/server/workflow"
+	"loop-now/internal/testutil/sqlitetest"
+
+	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/google/uuid"
 )
 
 // Real App/TEST PG/Redis and canonical HTTP account/login/task capture, with a
@@ -392,7 +393,7 @@ func taskLarkActualNativeScope(t *testing.T, unknownC bool) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	instanceApp, e := app.Build(ctx, &cfg, config.NewLogger(io.Discard, cfg.LogFormat, cfg.LogLevel), app.Options{SearchPath: world.schema, Listener: listener, HomeDirs: []string{"/nonexistent-home"}, LarkHTTPTransport: transport})
+	instanceApp, e := app.Build(ctx, &cfg, config.NewLogger(io.Discard, cfg.LogFormat, cfg.LogLevel), app.Options{Listener: listener, HomeDirs: []string{"/nonexistent-home"}, LarkHTTPTransport: transport})
 	if e != nil {
 		listener.Close()
 		t.Fatal(e)
@@ -461,15 +462,15 @@ func taskLarkActualNativeScope(t *testing.T, unknownC bool) {
 			t.Fatal(e)
 		}
 		var once atomic.Bool
-		var held []*pgxpool.Conn
+		var release func()
 		var heldMu sync.Mutex
 		unhold := func() {
 			heldMu.Lock()
 			defer heldMu.Unlock()
-			for _, c := range held {
-				c.Release()
+			if release != nil {
+				release()
+				release = nil
 			}
-			held = nil
 		}
 		defer unhold()
 		barrier := make(chan struct{})
@@ -485,22 +486,14 @@ func taskLarkActualNativeScope(t *testing.T, unknownC bool) {
 				return
 			}
 			defer close(barrier)
-			bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
-			defer cancel()
+			// C 已提交：占住唯一的写连接，确认 C 结果的写事务等到超时，结果未知。
 			heldMu.Lock()
 			defer heldMu.Unlock()
-			for i := 0; i < int(server.a.Store.Pool.Config().MaxConns); i++ {
-				c, e := server.a.Store.Pool.Acquire(bounded)
-				if e != nil {
-					t.Error("commit barrier did not saturate own TEST pool", e)
-					return
-				}
-				held = append(held, c)
-			}
+			release = sqlitetest.HoldWriter(t, server.a.Store.Pool)
 		}
 		// Invoke the real assembled task service directly for this injected DB
-		// outage: HTTP audit uses the same starved pool and would itself block
-		// response completion. HTTP write/recovery is covered by the other case.
+		// outage: HTTP audit writes through the same held writer and would itself
+		// block response completion. HTTP write/recovery is covered by the other case.
 		if _, e = server.a.Tasks.SwitchLarkAccount(ctx, auth.Console(), detail.Task.ID, input); !apperr.Is(e, apperr.CodeInternal) {
 			t.Fatal("unconfirmed C did not fail closed", e)
 		}

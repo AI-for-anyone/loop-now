@@ -33,7 +33,7 @@ func main() {
 	a, err := app.Build(ctx, cfg, log, app.Options{})
 	if err != nil {
 		log.Error("启动失败", "err", err)
-		os.Exit(1)
+		os.Exit(app.ExitCode(err))
 	}
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- a.Serve() }()

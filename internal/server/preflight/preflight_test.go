@@ -55,13 +55,6 @@ func TestPiVersionMismatch(t *testing.T) {
 	}
 }
 
-func TestCheckRedisUnavailable(t *testing.T) {
-	err := CheckRedis(context.Background(), "redis://127.0.0.1:1/0")
-	if err == nil || !strings.Contains(err.Error(), "Redis") {
-		t.Fatalf("Redis 不可用时应指出 Redis：%v", err)
-	}
-}
-
 func TestDeriveExecBasePathOrder(t *testing.T) {
 	p := DeriveExecBasePath("/usr/bin/true", "/usr/bin/git")
 	parts := strings.Split(p, ":")
@@ -76,12 +69,28 @@ func TestDeriveExecBasePathOrder(t *testing.T) {
 	}
 }
 
+// node 所在目录排在最前，宿主上另装的 node 不会盖过配置的那个。
+func TestDeriveExecBasePathNodeFirst(t *testing.T) {
+	dir := t.TempDir()
+	node := filepath.Join(dir, "node")
+	if err := os.WriteFile(node, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	real, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := DeriveExecBasePath(node, "/usr/bin/git"); !strings.HasPrefix(p, real+":") {
+		t.Fatalf("node 所在目录应排在最前：%s", p)
+	}
+}
+
 func TestResolveWithLocalPi(t *testing.T) {
 	if _, err := lookPath("pi"); err != nil {
 		t.Skip("本机没有 pi")
 	}
 	r, err := Resolve(context.Background(), Options{
-		PiBin: "pi", PiVersion: "1.1.0", NodeBin: "node",
+		PiBin: "pi", PiVersion: "1.4.0", NodeBin: "node",
 		WorkRoot: filepath.Join(t.TempDir(), "root"), HomeDirs: []string{"/nonexistent-home"},
 	})
 	if err != nil {

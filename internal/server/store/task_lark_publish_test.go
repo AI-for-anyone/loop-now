@@ -6,12 +6,15 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
+	"loop-now/internal/server/db"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
+
+	"github.com/google/uuid"
 )
 
 func larkPublishFixture(t *testing.T) (*store.Store, store.TaskLarkFenceReservation, taskmodel.NodeRun, uuid.UUID) {
@@ -50,7 +53,7 @@ func larkSwitchReadyFixture(t *testing.T, scopes []string) (*store.Store, store.
 	if err := os.WriteFile(session, []byte("original retained session\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Pool.Exec(ctx, `UPDATE task_instances SET snapshot=$2,snapshot_sha=encode(sha256($2),'hex'),session_state='active',session_file=$3 WHERE id=$1`, publisher.RuntimeID, larkSwitchSnapshot(t, in.TaskID, publisher.AgentID, true), session); err != nil {
+	if _, err := s.Pool.Exec(ctx, `UPDATE task_instances SET snapshot=$2,snapshot_sha=$4,session_state='active',session_file=$3 WHERE id=$1`, publisher.RuntimeID, larkSwitchSnapshot(t, in.TaskID, publisher.AgentID, true), session, sha256Hex(larkSwitchSnapshot(t, in.TaskID, publisher.AgentID, true))); err != nil {
 		t.Fatal(err)
 	}
 	r, _ := s.GetTask(ctx, in.TaskID)
@@ -91,7 +94,7 @@ func TestTaskLarkPublishUnknownGrantedScopesStaysUnknown(t *testing.T) {
 		t.Fatal("unknown actual scopes rejected C", err)
 	}
 	var unknown bool
-	if err = s.Pool.QueryRow(ctx, `SELECT captured_request->'Target'->'Identity'->'grantedScopes'='null'::jsonb FROM task_lark_switch_actions WHERE actor_key=$1 AND action_id=$2`, in.ActorKey, in.ActionID).Scan(&unknown); err != nil || !unknown {
+	if err = s.Pool.QueryRow(ctx, `SELECT captured_request->'Target'->'Identity'->'grantedScopes'='null' FROM task_lark_switch_actions WHERE actor_key=$1 AND action_id=$2`, in.ActorKey, in.ActionID).Scan(&unknown); err != nil || !unknown {
 		t.Fatal("switch captured requested scopes instead of actual unknown", err)
 	}
 }
@@ -173,7 +176,7 @@ func TestTaskLarkPublishExcludesOtherAuthorizedTaskRuntime(t *testing.T) {
 	}
 	runtime := uuid.New()
 	original := larkSwitchSnapshot(t, in.TaskID, agent.ID, true)
-	if _, err = s.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha) VALUES($1,$2,$3,$4,$5,encode(sha256($5),'hex'))`, runtime, in.TaskID, agent.ID, agent.Name, original); err != nil {
+	if _, err = s.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha) VALUES($1,$2,$3,$4,$5,$6)`, runtime, in.TaskID, agent.ID, agent.Name, original, sha256Hex(original)); err != nil {
 		t.Fatal(err)
 	}
 	_, err = s.MutateTask(ctx, in.TaskID, nil, func(m *store.TaskMutation) (any, error) {
@@ -209,7 +212,7 @@ func TestTaskLarkPublishExcludesOtherAuthorizedTaskRuntime(t *testing.T) {
 func TestTaskLarkPublishLateSecondMemberBusyHasNoPartialOverlay(t *testing.T) {
 	s, in, next, turn := larkPublishFixture(t)
 	ctx := context.Background()
-	if _, err := s.Pool.Exec(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,status,origin,text,user_message_id,assistant_message_id) VALUES($1,$2,$3,'queued','inbox_reminder','late old work',$4,$5)`, uuid.New(), in.TaskID, in.Members[1].RuntimeID, uuid.New(), uuid.New()); err != nil {
+	if _, err := s.Pool.Exec(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,status,origin,text,user_message_id,assistant_message_id,queue_seq) VALUES($1,$2,$3,'queued','inbox_reminder','late old work',$4,$5,(SELECT coalesce(max(queue_seq),0)+1 FROM task_turns))`, uuid.New(), in.TaskID, in.Members[1].RuntimeID, uuid.New(), uuid.New()); err != nil {
 		t.Fatal(err)
 	}
 	_, err := s.MutateTask(ctx, in.TaskID, nil, func(m *store.TaskMutation) (any, error) {
@@ -222,37 +225,6 @@ func TestTaskLarkPublishLateSecondMemberBusyHasNoPartialOverlay(t *testing.T) {
 	var bindings, members, continuation int
 	if err = s.Pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM task_lark_credential_bindings),(SELECT count(*) FROM task_lark_binding_members),(SELECT count(*) FROM task_turns WHERE id=$1)`, turn).Scan(&bindings, &members, &continuation); err != nil || bindings != 0 || members != 0 || continuation != 0 {
 		t.Fatal("failed C left partial overlay", bindings, members, continuation, err)
-	}
-}
-
-func TestTaskLarkMigrationRejectsIncompletePublishedGroup(t *testing.T) {
-	s, in, next, turn := larkPublishFixture(t)
-	ctx := context.Background()
-	record, err := s.GetTask(ctx, in.TaskID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tx, err := s.Pool.Begin(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,execution_mode,text,lark_binding_revision,lark_switch_action_id) VALUES($1,$2,$3,$4,$5,$6,'queued','task_node','task_node','synthetic final C',1,$7)`, turn, in.TaskID, next.RuntimeID, next.ID, uuid.New(), uuid.New(), in.ActionID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = tx.Exec(ctx, `UPDATE task_lark_switch_actions SET status='succeeded',receipt='{}',finished_at=clock_timestamp() WHERE actor_key=$1 AND action_id=$2`, in.ActorKey, in.ActionID); err != nil {
-		t.Fatal(err)
-	}
-	target := in.Capture.Target
-	if _, err = tx.Exec(ctx, `INSERT INTO task_lark_credential_bindings(task_id,revision,project_id,account_id,version_id,app_id,user_id,brand,runtime_variant_version,actor_key,action_id,continuation_node_run_id,continuation_turn_id) VALUES($1,1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, in.TaskID, record.View.Task.ProjectID, target.AccountID, target.VersionID, target.Identity.AppID, target.Identity.OpenID, target.Identity.Brand, target.RuntimeVariantVersion, in.ActorKey, in.ActionID, next.ID, turn); err != nil {
-		t.Fatal(err)
-	}
-	if err = tx.Commit(ctx); err == nil {
-		t.Fatal("deferred migration constraint allowed zero-member publication")
-	}
-	var count int
-	if err = s.Pool.QueryRow(ctx, `SELECT count(*) FROM task_lark_credential_bindings WHERE task_id=$1`, in.TaskID).Scan(&count); err != nil || count != 0 {
-		t.Fatal("failed publication left binding audit", count, err)
 	}
 }
 
@@ -291,7 +263,7 @@ func TestTaskLarkPublishFinalCASFailuresPreserveOriginalBinding(t *testing.T) {
 				}
 				_, err = s.Pool.Exec(ctx, `UPDATE task_instances SET prepared=true,session_state='active',session_file=$2 WHERE id=$1`, member.RuntimeID, path)
 			case "commit_trigger_failure":
-				_, err = s.Pool.Exec(ctx, `CREATE FUNCTION reject_switch_final_task_save() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic_final_save_failure'; END $$; CREATE TRIGGER reject_switch_final_task_save BEFORE UPDATE ON task_records FOR EACH ROW EXECUTE FUNCTION reject_switch_final_task_save()`)
+				_, err = s.Pool.Exec(ctx, `CREATE TRIGGER reject_switch_final_task_save BEFORE UPDATE ON task_records BEGIN SELECT RAISE(ABORT, 'synthetic_final_save_failure'); END`)
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -312,5 +284,36 @@ func TestTaskLarkPublishFinalCASFailuresPreserveOriginalBinding(t *testing.T) {
 				t.Fatal("failed transaction falsely advertised success", err)
 			}
 		})
+	}
+}
+
+// 发布组完整的核对拒绝没有成员的发布（原来由 PostgreSQL 的延迟约束触发器拦截裸 SQL；
+// 现在发布在提交前调用同一个谓词，这里直接对裸写入的状态调用它）。
+func TestTaskLarkPublishedGroupCheckRejectsIncompleteGroup(t *testing.T) {
+	s, in, next, turn := larkPublishFixture(t)
+	ctx := context.Background()
+	record, err := s.GetTask(ctx, in.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = s.Pool.InTx(ctx, func(tx *db.Tx) error {
+		if _, err := tx.Exec(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,execution_mode,text,lark_binding_revision,lark_switch_action_id,queue_seq) VALUES($1,$2,$3,$4,$5,$6,'queued','task_node','task_node','synthetic final C',1,$7,(SELECT coalesce(max(queue_seq),0)+1 FROM task_turns))`, turn, in.TaskID, next.RuntimeID, next.ID, uuid.New(), uuid.New(), in.ActionID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE task_lark_switch_actions SET status='succeeded',receipt='{}',finished_at=clock_timestamp() WHERE actor_key=$1 AND action_id=$2`, in.ActorKey, in.ActionID); err != nil {
+			return err
+		}
+		target := in.Capture.Target
+		if _, err := tx.Exec(ctx, `INSERT INTO task_lark_credential_bindings(task_id,revision,project_id,account_id,version_id,app_id,user_id,brand,runtime_variant_version,actor_key,action_id,continuation_node_run_id,continuation_turn_id) VALUES($1,1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, in.TaskID, record.View.Task.ProjectID, target.AccountID, target.VersionID, target.Identity.AppID, target.Identity.OpenID, target.Identity.Brand, target.RuntimeVariantVersion, in.ActorKey, in.ActionID, next.ID, turn); err != nil {
+			return err
+		}
+		return store.CheckTaskLarkPublishedGroupTx(ctx, tx, in.TaskID, 1)
+	})
+	if err == nil || !strings.Contains(err.Error(), "task_lark_switch_requires_complete_published_group") {
+		t.Fatal("zero-member publication passed the group check", err)
+	}
+	var count int
+	if err = s.Pool.QueryRow(ctx, `SELECT count(*) FROM task_lark_credential_bindings WHERE task_id=$1`, in.TaskID).Scan(&count); err != nil || count != 0 {
+		t.Fatal("failed publication left binding audit", count, err)
 	}
 }

@@ -5,14 +5,14 @@ import (
 	"encoding/json"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"loop-now/internal/server/apitypes"
+	"loop-now/internal/server/db"
 	"loop-now/internal/server/store"
 )
 
 // 控制台的排队动作：逐条列出、转为打断、撤回或取消、停止当前回复。写操作都带 actionId：
-// 同一动作重放返回首次回执且不再产生副作用；Redis、事件与打断只在动作真正生效的那次提交后执行。
+// 同一动作重放返回首次回执且不再产生副作用；事件与打断只在动作真正生效的那次提交后执行。
 
 // Queue 返回排队列表，按实际处理顺序。
 func (s *Service) Queue(ctx context.Context, agentID uuid.UUID) (apitypes.AgentQueue, error) {
@@ -28,13 +28,13 @@ func (s *Service) Queue(ctx context.Context, agentID uuid.UUID) (apitypes.AgentQ
 
 // queueAction 在一个事务中执行排队动作：fn 返回回执（status 之外的部分），这里补上动作信息与动作后的排队列表。
 func (s *Service) queueAction(ctx context.Context, agentID, actionID uuid.UUID, op string, target uuid.UUID,
-	fn func(tx pgx.Tx) (apitypes.AgentQueueActionReceipt, error)) (json.RawMessage, error) {
+	fn func(tx *db.Tx) (apitypes.AgentQueueActionReceipt, error)) (json.RawMessage, error) {
 	if _, err := s.st.GetAgent(ctx, agentID); err != nil {
 		return nil, err
 	}
 	body, _ := json.Marshal(map[string]any{"target": target})
 	action := store.AgentAction{ActorKey: "console", ID: actionID, Operation: op, Body: body}
-	out, _, err := s.st.AgentQueueAction(ctx, agentID, action, func(tx pgx.Tx) (any, error) {
+	out, _, err := s.st.AgentQueueAction(ctx, agentID, action, func(tx *db.Tx) (any, error) {
 		r, err := fn(tx)
 		if err != nil {
 			return nil, err
@@ -60,11 +60,11 @@ func receiptRun(r store.Run) *apitypes.Run {
 }
 
 // PromoteToInterrupt 把控制台发出、仍在普通排队的执行转为打断，效果与发送时选择打断一致：
-// 先在数据库里排到已有打断之后、全部普通排队之前，再原子地移动 Redis 队列，然后打断进行中的回复。
+// 在数据库里排到已有打断之后、全部普通排队之前，然后打断进行中的回复。
 func (s *Service) PromoteToInterrupt(ctx context.Context, agentID, runID, actionID uuid.UUID) (json.RawMessage, error) {
 	var run store.Run
 	changed := false
-	out, err := s.queueAction(ctx, agentID, actionID, apitypes.QueuePromoteRun, runID, func(tx pgx.Tx) (apitypes.AgentQueueActionReceipt, error) {
+	out, err := s.queueAction(ctx, agentID, actionID, apitypes.QueuePromoteRun, runID, func(tx *db.Tx) (apitypes.AgentQueueActionReceipt, error) {
 		r, item, ch, err := s.st.PromoteQueuedRunTx(ctx, tx, agentID, runID)
 		if err != nil {
 			return apitypes.AgentQueueActionReceipt{}, err
@@ -77,9 +77,6 @@ func (s *Service) PromoteToInterrupt(ctx context.Context, agentID, runID, action
 		return apitypes.AgentQueueActionReceipt{Status: status, Item: receiptItem(item), Run: receiptRun(r)}, nil
 	})
 	if err == nil && changed {
-		if _, err := s.co.Promote(ctx, agentID.String(), run.ID.String()); err != nil {
-			s.log.Warn("移到打断队列失败，等待对账按数据库重建", "agentId", agentID, "runId", run.ID, "err", err)
-		}
 		s.emitRun(ctx, agentID, run.ID)
 		s.emitQueue(ctx, agentID)
 		s.interruptActive(ctx, agentID, run.ID)
@@ -91,7 +88,7 @@ func (s *Service) PromoteToInterrupt(ctx context.Context, agentID, runID, action
 // CancelRun 撤回控制台发出、仍在排队的消息：Agent 不会收到。回执的 item 带原文与图片，供“编辑”回填。
 func (s *Service) CancelRun(ctx context.Context, agentID, runID, actionID uuid.UUID) (json.RawMessage, error) {
 	changed := false
-	out, err := s.queueAction(ctx, agentID, actionID, apitypes.QueueCancelRun, runID, func(tx pgx.Tx) (apitypes.AgentQueueActionReceipt, error) {
+	out, err := s.queueAction(ctx, agentID, actionID, apitypes.QueueCancelRun, runID, func(tx *db.Tx) (apitypes.AgentQueueActionReceipt, error) {
 		r, item, ch, err := s.st.CancelQueuedRunTx(ctx, tx, agentID, runID)
 		if err != nil {
 			return apitypes.AgentQueueActionReceipt{}, err
@@ -113,7 +110,7 @@ func (s *Service) CancelRun(ctx context.Context, agentID, runID, actionID uuid.U
 // StopRun 只停止这一次进行中的回复，不发送新消息：沿用打断路径（清空 Pi 队列、abort、超时强制结束），之后排队的消息照常处理。
 func (s *Service) StopRun(ctx context.Context, agentID, runID, actionID uuid.UUID) (json.RawMessage, error) {
 	changed := false
-	out, err := s.queueAction(ctx, agentID, actionID, apitypes.QueueStopRun, runID, func(tx pgx.Tx) (apitypes.AgentQueueActionReceipt, error) {
+	out, err := s.queueAction(ctx, agentID, actionID, apitypes.QueueStopRun, runID, func(tx *db.Tx) (apitypes.AgentQueueActionReceipt, error) {
 		r, ch, err := s.st.StopRunTx(ctx, tx, agentID, runID)
 		if err != nil {
 			return apitypes.AgentQueueActionReceipt{}, err
@@ -138,11 +135,9 @@ func (s *Service) StopRun(ctx context.Context, agentID, runID, actionID uuid.UUI
 // 原提醒空了即作废，然后打断进行中的回复。
 func (s *Service) PromoteInboxMessage(ctx context.Context, agentID, messageID, actionID uuid.UUID) (json.RawMessage, error) {
 	var res store.InboxPromotion
-	out, err := s.queueAction(ctx, agentID, actionID, apitypes.QueuePromoteInboxMessage, messageID, func(tx pgx.Tx) (apitypes.AgentQueueActionReceipt, error) {
+	out, err := s.queueAction(ctx, agentID, actionID, apitypes.QueuePromoteInboxMessage, messageID, func(tx *db.Tx) (apitypes.AgentQueueActionReceipt, error) {
 		var err error
-		res, err = s.st.PromoteInboxMessageTx(ctx, tx, agentID, messageID, s.o.InstanceID, func(r store.Run) error {
-			return s.co.PushInterrupt(ctx, agentID.String(), r.ID.String())
-		})
+		res, err = s.st.PromoteInboxMessageTx(ctx, tx, agentID, messageID, s.o.InstanceID)
 		if err != nil {
 			return apitypes.AgentQueueActionReceipt{}, err
 		}
@@ -172,7 +167,7 @@ func (s *Service) PromoteInboxMessage(ctx context.Context, agentID, messageID, a
 // CancelInboxMessage 由人取消排队中的一条 Inbox 消息（任何发件人）：收件 Agent 不再处理，承载它的提醒空了即作废。
 func (s *Service) CancelInboxMessage(ctx context.Context, agentID, messageID, actionID uuid.UUID) (json.RawMessage, error) {
 	var res store.InboxCancellation
-	out, err := s.queueAction(ctx, agentID, actionID, apitypes.QueueCancelInboxMessage, messageID, func(tx pgx.Tx) (apitypes.AgentQueueActionReceipt, error) {
+	out, err := s.queueAction(ctx, agentID, actionID, apitypes.QueueCancelInboxMessage, messageID, func(tx *db.Tx) (apitypes.AgentQueueActionReceipt, error) {
 		var err error
 		if res, err = s.st.CancelInboxMessageTx(ctx, tx, agentID, messageID); err != nil {
 			return apitypes.AgentQueueActionReceipt{}, err
@@ -199,7 +194,7 @@ func (s *Service) CancelInboxMessage(ctx context.Context, agentID, messageID, ac
 }
 
 // InboxRead 在收件 Agent 读取 Inbox 消息之后由 Inbox 服务调用：读走的消息离开排队列表，
-// 因此作废的提醒从 Redis 队列移除并推送。
+// 因此推送作废的提醒的新状态。
 func (s *Service) InboxRead(ctx context.Context, eff store.InboxReadEffect) {
 	if !eff.QueueChanged || eff.AgentID == uuid.Nil {
 		return
@@ -210,10 +205,7 @@ func (s *Service) InboxRead(ctx context.Context, eff store.InboxReadEffect) {
 	s.emitQueue(ctx, eff.AgentID)
 }
 
-// dequeued 把撤回或作废的执行从 Redis 队列移除并推送它的新状态。
+// dequeued 推送撤回或作废的执行的新状态（排队在数据库里，它已不是 queued，不会再被取出）。
 func (s *Service) dequeued(ctx context.Context, agentID, runID uuid.UUID) {
-	if err := s.co.Remove(ctx, agentID.String(), runID.String()); err != nil {
-		s.log.Warn("移出 Redis 队列失败，出队时按数据库状态跳过", "agentId", agentID, "runId", runID, "err", err)
-	}
 	s.emitRun(ctx, agentID, runID)
 }

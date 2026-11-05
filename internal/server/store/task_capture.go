@@ -2,15 +2,17 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	cm "loop-now/internal/server/credentialmodel"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/modelcredential"
 	"loop-now/internal/server/prompts"
 	"loop-now/internal/server/taskruntime"
+
+	"loop-now/internal/server/db"
 )
 
 type TaskCapture struct {
@@ -23,10 +25,10 @@ type TaskCapture struct {
 }
 
 // CaptureTaskAgent 在调用者创建事务中锁住Agent，配置变更同样锁Agent，因此本次读取不混版本。
-func (s *Store) CaptureTaskAgent(ctx context.Context, tx pgx.Tx, agentID, runtimeID uuid.UUID, project prompts.ProjectRules, credentialRevision ...int64) (TaskCapture, error) {
+func (s *Store) CaptureTaskAgent(ctx context.Context, tx *db.Tx, agentID, runtimeID uuid.UUID, project prompts.ProjectRules, credentialRevision ...int64) (TaskCapture, error) {
 	var out TaskCapture
 	var err error
-	out.Agent, err = scanAgent(tx.QueryRow(ctx, `SELECT `+agentColumns+` FROM agents WHERE id=$1 AND deleted_at IS NULL FOR SHARE`, agentID))
+	out.Agent, err = scanAgent(tx.QueryRow(ctx, `SELECT `+agentColumns+` FROM agents WHERE id=$1 AND deleted_at IS NULL`, agentID))
 	if err != nil {
 		return out, notFoundIfNoRows(err, "Agent")
 	}
@@ -38,7 +40,7 @@ func (s *Store) CaptureTaskAgent(ctx context.Context, tx pgx.Tx, agentID, runtim
 	if err != nil {
 		return out, err
 	}
-	out.Configuration.CLIs, err = pgx.CollectRows(rows, pgx.RowTo[string])
+	out.Configuration.CLIs, err = db.CollectRows(rows, db.RowTo[string])
 	if err != nil {
 		return out, err
 	}
@@ -97,7 +99,7 @@ func (s *Store) MarkTaskSessionMissing(ctx context.Context, runtimeID uuid.UUID)
 }
 
 func (s *Store) FrozenTaskSource(ctx context.Context, sourceID uuid.UUID) (TaskFrozenSource, uuid.UUID, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT id,sources FROM task_instances WHERE sources @> $1::jsonb`, []byte(`[{"Source":{"ID":"`+sourceID.String()+`"}}]`))
+	rows, err := s.Pool.Query(ctx, `SELECT id,sources FROM task_instances WHERE EXISTS(SELECT 1 FROM json_each(sources) j WHERE j.value->'Source'->>'ID'=$1)`, sourceID)
 	if err != nil {
 		return TaskFrozenSource{}, uuid.Nil, err
 	}
@@ -118,12 +120,12 @@ func (s *Store) FrozenTaskSource(ctx context.Context, sourceID uuid.UUID) (TaskF
 			}
 		}
 	}
-	return TaskFrozenSource{}, uuid.Nil, notFoundIfNoRows(pgx.ErrNoRows, "任务来源")
+	return TaskFrozenSource{}, uuid.Nil, notFoundIfNoRows(db.ErrNoRows, "任务来源")
 }
 func (s *Store) MarkTaskSourceSynced(ctx context.Context, runtimeID, sourceID uuid.UUID, files []SyncFile) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		var raw []byte
-		if err := tx.QueryRow(ctx, `SELECT sources FROM task_instances WHERE id=$1 FOR UPDATE`, runtimeID).Scan(&raw); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT sources FROM task_instances WHERE id=$1`, runtimeID).Scan(&raw); err != nil {
 			return err
 		}
 		var list []TaskFrozenSource
@@ -144,7 +146,7 @@ func (s *Store) MarkTaskSourceSynced(ctx context.Context, runtimeID, sourceID uu
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `UPDATE task_instances SET sources=$2 WHERE id=$1`, runtimeID, b)
+		_, err = tx.Exec(ctx, `UPDATE task_instances SET sources=$2 WHERE id=$1`, runtimeID, json.RawMessage(b))
 		return err
 	})
 }

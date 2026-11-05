@@ -82,7 +82,7 @@ try {
   checks.push('actual React impact/DELETE source bot leaves saved user independent with same verified identity and fixed version')
   await remove(user)
   assert.equal((await get(accountBase)).accounts.length, 0)
-  checks.push('actual React impact/DELETE user removes it from new selection; retained PG history audited by harness, no claim about old running tasks')
+  checks.push('actual React impact/DELETE user removes it from new selection; retained SQLite history audited by harness, no claim about old running tasks')
   const posts = forwarded.filter(r => r.method === 'POST')
   assert.equal(posts.length, 1); assert.equal(posts[0].status, 202)
   const deletes = forwarded.filter(r => r.method === 'DELETE')

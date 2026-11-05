@@ -255,7 +255,7 @@ func TestResponses(t *testing.T) {
 		{"统一错误结构", 409, `{"error":{"code":"agent_not_idle","message":"忙","details":{"a":1},"fields":[{"field":"f","message":"m"}]}}`, "agent_not_idle", output.CategoryConflict},
 		{"非 2xx 无法解析", 502, `<html>bad gateway</html>`, output.CodeUnexpectedResponse, output.CategoryUnavailable},
 		{"404 无法解析", 404, `not found`, output.CodeUnexpectedResponse, output.CategoryNotFound},
-		{"503 带其他 JSON", 503, `{"ok":false,"postgres":{"ok":false},"redis":{"ok":true}}`, output.CodeUnexpectedResponse, output.CategoryUnavailable},
+		{"503 带其他 JSON", 503, `{"ok":false,"database":{"ok":false}}`, output.CodeUnexpectedResponse, output.CategoryUnavailable},
 		{"2xx 无法解析", 200, `{"broken"`, output.CodeUnexpectedResponse, output.CategoryInternal},
 		{"401", 401, `{"error":{"code":"unauthenticated","message":"令牌无效"}}`, "unauthenticated", output.CategoryUnauthenticated},
 		{"403", 403, `{"error":{"code":"forbidden","message":"只限控制台"}}`, "forbidden", output.CategoryForbidden},

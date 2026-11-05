@@ -4,16 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/inbox"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/workflow"
-	"loop-now/internal/testutil/pgtest"
 	"loop-now/internal/testutil/testenv"
 	"net"
 	"net/http"
@@ -24,6 +20,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Exclusive Web driver allocated by Main/server; shared server helpers stay read-only.
@@ -31,51 +29,20 @@ func TestWebTaskQuestionsIntegration(t *testing.T) {
 	if os.Getenv("LOOP_NOW_WEB_TASKS_INTEGRATION") != "1" {
 		t.Skip("explicit isolated browser question integration only")
 	}
-	if os.Getenv("LOOP_NOW_TEST_DATABASE_URL") == "" || os.Getenv("LOOP_NOW_TEST_REDIS_URL") == "" {
-		t.Fatal("explicit TEST endpoints required")
-	}
 	root := testenv.RepoRoot()
 	evidence := filepath.Join(root, "web/scripts/integration/tasks")
 	var w *world
 	var addr, controlAddr string
-	audit := map[string]any{"mode": "actual React -> route.fetch -> app.Build -> TEST PG; fakepi; ordinary question task integration"}
-	// Registered first, runs after App shutdown and existing schema/prefix/temp cleanup.
+	audit := map[string]any{"mode": "actual React -> route.fetch -> app.Build -> temporary SQLite; fakepi; ordinary question task integration"}
+	// Registered first, runs after App shutdown and existing temporary directory cleanup.
 	t.Cleanup(func() {
 		if w == nil {
 			return
 		}
-		audit["schema"] = w.schema
-		audit["redisPrefix"] = w.cfg.RedisKeyPrefix
+		audit["dataDir"] = w.cfg.DataDir
 		audit["appAddress"] = addr
 		audit["controlAddress"] = controlAddr
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		conn, err := pgx.Connect(ctx, pgtest.URL(t))
-		if err != nil {
-			t.Error("cleanup PG verification failed")
-			return
-		}
-		defer conn.Close(ctx)
-		var exists bool
-		if err = conn.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)`, w.schema).Scan(&exists); err != nil || exists {
-			t.Error("isolated schema cleanup not verified")
-		}
-		audit["schemaRemoved"] = !exists && err == nil
-		options, err := redis.ParseURL(w.cfg.RedisURL)
-		if err != nil {
-			t.Error("cleanup Redis configuration invalid")
-			return
-		}
-		rc := redis.NewClient(options)
-		defer rc.Close()
-		iterator := rc.Scan(ctx, 0, w.cfg.RedisKeyPrefix+"*", 100).Iterator()
-		found := iterator.Next(ctx)
-		err = iterator.Err()
-		audit["redisPrefixEmpty"] = err == nil && !found
-		if err != nil || found {
-			t.Error("isolated Redis cleanup not verified")
-		}
-		_, err = os.Stat(w.cfg.WorkRoot)
+		_, err := os.Stat(w.cfg.WorkRoot)
 		audit["workRootRemoved"] = os.IsNotExist(err)
 		if !os.IsNotExist(err) {
 			t.Error("isolated work root cleanup not verified")
@@ -247,11 +214,11 @@ func TestWebTaskQuestionsIntegration(t *testing.T) {
 	}
 	var answerCount int
 	if e = s.a.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM inbox_questions WHERE message_id=$1 AND state='answered' AND answer_option_id='1'`, aq.ID).Scan(&answerCount); e != nil || answerCount != 1 {
-		t.Fatal("original option answer PG mismatch")
+		t.Fatal("original option answer SQLite mismatch")
 	}
 	var closedCount int
 	if e = s.a.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM task_questions q JOIN inbox_questions i ON i.message_id=q.question_message_id WHERE q.task_id=$1 AND i.state='closed'`, b.Task.ID).Scan(&closedCount); e != nil || closedCount != 2 {
-		t.Fatal("old/new close PG mismatch", closedCount, e)
+		t.Fatal("old/new close SQLite mismatch", closedCount, e)
 	}
 	final, e := s.a.Store.GetTask(ctx, b.Task.ID)
 	if e != nil || final.View.Task.Status != "cancelled" {

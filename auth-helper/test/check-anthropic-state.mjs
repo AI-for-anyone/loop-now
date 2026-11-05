@@ -24,7 +24,7 @@ try{
  const model=Object.values(metadata).flatMap(group=>Object.values(group)).find(m=>m.type==='chat').id;
  const profile=`(version 1)\n(allow default)\n(deny network*)\n(allow network-outbound (remote ip "localhost:${port}"))\n`;
  result.profile=profile;
- child=spawn('/usr/bin/sandbox-exec',['-p',profile,node,join(root,'dist/bundle/cli.js'),'--mode','rpc','--no-extensions','-e',resolve('auth-helper/legacy-anthropic.mjs'),'--no-skills','--no-prompt-templates','--no-themes','--no-mcp','--no-tools','--no-session','--provider','anthropic','--model',model,'--thinking','off'],{cwd:home,env:{HOME:home,TMPDIR:join(home,'tmp'),PATH:'/usr/bin:/bin',NODE_ENV:'production',PI_CODING_AGENT_DIR:agent,PI_OFFLINE:'1',PI_TELEMETRY:'0',LOOP_NOW_PI_PACKAGE_ROOT:root},stdio:['pipe','pipe','pipe']});
+ child=spawn('/usr/bin/sandbox-exec',['-p',profile,node,join(root,'dist/bundle/cli.js'),'--mode','rpc','--no-extensions','-e',resolve('auth-helper/legacy-anthropic.mjs'),'--no-skills','--no-prompt-templates','--no-themes','--no-mcp','--no-tools','--no-session','--provider','anthropic','--model',model,'--thinking','off'],{cwd:home,env:{HOME:home,TMPDIR:join(home,'tmp'),PATH:'/usr/bin:/bin',NODE_ENV:'production',PI_CODING_AGENT_DIR:agent,PI_OFFLINE:'1',PI_TELEMETRY:'0',LOOP_NOW_PI_PACKAGE_ROOT:root,LOOP_NOW_PI_AI_DIR:join(root,'node_modules/@earendil-works/pi-ai')},stdio:['pipe','pipe','pipe']});
  let stderr='';child.stderr.on('data',b=>stderr+=b);child.stdin.on('error',()=>{});
  const reply=await new Promise(resolveReply=>{
   let settled=false;

@@ -123,7 +123,7 @@ func TestRealHostAnswersChannelQuestion(t *testing.T) {
 
 	var sent string
 	deadline := time.Now().Add(20 * time.Second)
-	for e.st.Pool.QueryRow(ctx, `SELECT id::text FROM inbox_messages WHERE from_kind='plugin' AND to_agent_id=$1`, agent.ID).Scan(&sent) != nil {
+	for e.st.Pool.QueryRow(ctx, `SELECT id FROM inbox_messages WHERE from_kind='plugin' AND to_agent_id=$1`, agent.ID).Scan(&sent) != nil {
 		if time.Now().After(deadline) {
 			t.Fatalf("插件没有发出消息；宿主日志：%s", hostLog())
 		}

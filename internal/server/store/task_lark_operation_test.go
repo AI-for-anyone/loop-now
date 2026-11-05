@@ -4,18 +4,20 @@ import (
 	"context"
 	"errors"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/executor/local"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/tasks"
+	"loop-now/internal/testutil/sqlitetest"
+
+	"github.com/google/uuid"
 )
 
 // Explicit test-only native injection: proves tasks orchestration with real
@@ -175,29 +177,45 @@ func TestTaskLarkOperationLateSealConfirmationAbortsInsteadOfRunningQA(t *testin
 	}
 }
 
+func TestTaskLarkOperationKnownCRollbackSafelyAbortsWithoutRetry(t *testing.T) {
+	requireRuntimeRecovery(t)
+	s, in := larkSwitchReadyFixture(t, nil)
+	ctx := context.Background()
+	n := &larkOperationNative{}
+	n.seal = func() error {
+		_, err := s.MutateTask(ctx, in.TaskID, nil, func(m *store.TaskMutation) (any, error) { m.Changed(); return nil, nil })
+		return err
+	}
+	svc, ex := larkOperationService(t, s, n)
+	receipt, err := svc.SwitchLarkAccount(ctx, auth.Console(), in.TaskID, larkOperationInput(in))
+	if err != nil || receipt.Status != "failed" || receipt.BindingRevision != nil || n.acquires.Load() != 1 || n.releases.Load() != 1 {
+		t.Fatal("known final CAS rollback did not abort safely", err)
+	}
+	lease, err := ex.AcquireRuntimeHandoff(ctx, []uuid.UUID{in.Members[0].RuntimeID, in.Members[1].RuntimeID})
+	if err != nil {
+		t.Fatal("known safe rollback kept unnecessary gate", err)
+	}
+	if err = lease.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var groups, turns, fences int
+	if err = s.Pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM task_lark_credential_bindings),(SELECT count(*) FROM task_turns WHERE task_id=$1),(SELECT count(*) FROM task_lark_switch_fences)`, in.TaskID).Scan(&groups, &turns, &fences); err != nil || groups != 0 || turns != 1 || fences != 0 {
+		t.Fatal("failed C retried/partially published", err)
+	}
+}
+
 func TestTaskLarkOperationUnknownCConfirmsOriginalActionOnly(t *testing.T) {
 	requireRuntimeRecovery(t)
 	s, in := larkSwitchReadyFixture(t, nil)
 	ctx := context.Background()
-	var saturated []*pgxpool.Conn
-	defer func() {
-		for _, c := range saturated {
-			c.Release()
-		}
-	}()
+	release := func() {}
+	var hold sync.Once
 	n := &larkOperationNative{}
 	n.seal = func() error {
-		// Production commit relay runs after C commits and returns its pool
-		// connection. Withhold every real pool connection before confirmation.
+		// Production commit relay runs after C commits. Hold the writer from
+		// then on: the confirmation (a task transaction) cannot get it in time.
 		s.TaskCommitted = func() {
-			for i := 0; i < int(s.Pool.Config().MaxConns); i++ {
-				c, err := s.Pool.Acquire(ctx)
-				if err != nil {
-					t.Error(err)
-					return
-				}
-				saturated = append(saturated, c)
-			}
+			hold.Do(func() { release = sqlitetest.HoldWriter(t, s.Pool) })
 		}
 		return nil
 	}
@@ -207,10 +225,7 @@ func TestTaskLarkOperationUnknownCConfirmsOriginalActionOnly(t *testing.T) {
 		t.Fatal("unconfirmed C released gates", err)
 	}
 	s.TaskCommitted = nil
-	for _, c := range saturated {
-		c.Release()
-	}
-	saturated = nil
+	release()
 	var fences, groups int
 	if err = s.Pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM task_lark_switch_fences),(SELECT count(*) FROM task_lark_credential_bindings)`).Scan(&fences, &groups); err != nil || fences != 0 || groups != 1 {
 		t.Fatal("test did not commit C before confirmation failed", err)
@@ -245,32 +260,5 @@ func TestTaskLarkOperationUnknownCConfirmsOriginalActionOnly(t *testing.T) {
 	var turns int
 	if err = s.Pool.QueryRow(ctx, `SELECT count(*) FROM task_turns WHERE task_id=$1`, in.TaskID).Scan(&turns); err != nil || turns != 2 {
 		t.Fatal("unknown C retried continuation", turns, err)
-	}
-}
-
-func TestTaskLarkOperationKnownCRollbackSafelyAbortsWithoutRetry(t *testing.T) {
-	requireRuntimeRecovery(t)
-	s, in := larkSwitchReadyFixture(t, nil)
-	ctx := context.Background()
-	n := &larkOperationNative{}
-	n.seal = func() error {
-		_, err := s.MutateTask(ctx, in.TaskID, nil, func(m *store.TaskMutation) (any, error) { m.Changed(); return nil, nil })
-		return err
-	}
-	svc, ex := larkOperationService(t, s, n)
-	receipt, err := svc.SwitchLarkAccount(ctx, auth.Console(), in.TaskID, larkOperationInput(in))
-	if err != nil || receipt.Status != "failed" || receipt.BindingRevision != nil || n.acquires.Load() != 1 || n.releases.Load() != 1 {
-		t.Fatal("known final CAS rollback did not abort safely", err)
-	}
-	lease, err := ex.AcquireRuntimeHandoff(ctx, []uuid.UUID{in.Members[0].RuntimeID, in.Members[1].RuntimeID})
-	if err != nil {
-		t.Fatal("known safe rollback kept unnecessary gate", err)
-	}
-	if err = lease.Close(); err != nil {
-		t.Fatal(err)
-	}
-	var groups, turns, fences int
-	if err = s.Pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM task_lark_credential_bindings),(SELECT count(*) FROM task_turns WHERE task_id=$1),(SELECT count(*) FROM task_lark_switch_fences)`, in.TaskID).Scan(&groups, &turns, &fences); err != nil || groups != 0 || turns != 1 || fences != 0 {
-		t.Fatal("failed C retried/partially published", err)
 	}
 }

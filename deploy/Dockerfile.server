@@ -70,6 +70,7 @@ COPY --from=pluginbuild /src/plugins/official /app/plugins/official
 ENV LOOP_NOW_LISTEN_ADDR=0.0.0.0:8780 \
     LOOP_NOW_ALLOWED_HOSTS=localhost,127.0.0.1 \
     LOOP_NOW_CONSOLE_ORIGINS=http://localhost:5173,http://127.0.0.1:5173 \
+    LOOP_NOW_DATA_DIR=/var/lib/loop-now/data \
     LOOP_NOW_WORK_ROOT=/var/lib/loop-now \
     LOOP_NOW_CONTEXT_DIR=/var/lib/loop-now/context \
     LOOP_NOW_LOOPCTL_DIST_DIR=/app/loopctl-dist \

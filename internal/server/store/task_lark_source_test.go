@@ -67,7 +67,7 @@ func TestTaskLarkSourceFenceAndFixedOverlay(t *testing.T) {
 		{"corrupt_original", []byte(`{"broken":true}`)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := s.Pool.Exec(ctx, `UPDATE task_instances SET snapshot=$2,snapshot_sha=encode(sha256($2),'hex') WHERE id=$1`, publisher.RuntimeID, tc.raw); err != nil {
+			if _, err := s.Pool.Exec(ctx, `UPDATE task_instances SET snapshot=$2,snapshot_sha=$3 WHERE id=$1`, publisher.RuntimeID, tc.raw, sha256Hex(tc.raw)); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := src.ExecutionSnapshot(ctx, publisher.RuntimeID); err == nil {
@@ -181,7 +181,7 @@ func TestTaskLarkSourceUnselectedSchema7RetainsBaseBinding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.Pool.Exec(ctx, `UPDATE task_instances SET snapshot=$2,snapshot_sha=encode(sha256($2),'hex') WHERE id=$1`, inst.ID, raw); err != nil {
+	if _, err = s.Pool.Exec(ctx, `UPDATE task_instances SET snapshot=$2,snapshot_sha=$3 WHERE id=$1`, inst.ID, raw, sha256Hex(raw)); err != nil {
 		t.Fatal(err)
 	}
 	src := &tasks.Source{Store: s}

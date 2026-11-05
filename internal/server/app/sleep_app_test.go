@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/config"
 	"loop-now/internal/server/contracttest"
+	"loop-now/internal/server/coord"
 	"loop-now/internal/server/inbox"
 	"loop-now/internal/server/sleepmodel"
 	"loop-now/internal/server/store"
@@ -18,9 +16,10 @@ import (
 	"loop-now/internal/server/workflow"
 	"os"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func TestSleepAppNormalQueueDeadlineAndRestart(t *testing.T) {
@@ -251,7 +250,7 @@ func TestSleepAppTaskNodeAndBlockedConversation(t *testing.T) {
 }
 
 func TestSleepAppWakeCommitExecutionAndSessionFailure(t *testing.T) {
-	for _, mode := range []string{"wake-queued-restart", "wake-running-restart", "session-save-failure", "redis-cleared"} {
+	for _, mode := range []string{"wake-queued-restart", "wake-running-restart", "session-save-failure", "coord-cleared"} {
 		t.Run(mode, func(t *testing.T) {
 			w := newWorld(t)
 			w.cfg.SleepScanInterval = 50 * time.Millisecond
@@ -273,7 +272,7 @@ func TestSleepAppWakeCommitExecutionAndSessionFailure(t *testing.T) {
 				t.Fatal(err)
 			}
 			if mode == "session-save-failure" {
-				if _, err = s.a.Store.Pool.Exec(ctx, `CREATE FUNCTION reject_session_save() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'offline injected'; END $$; CREATE TRIGGER reject_session_save BEFORE UPDATE OF session_file ON agent_sessions FOR EACH ROW EXECUTE FUNCTION reject_session_save()`); err != nil {
+				if _, err = s.a.Store.Pool.Exec(ctx, `CREATE TRIGGER reject_session_save BEFORE UPDATE OF session_file ON agent_sessions BEGIN SELECT RAISE(ABORT, 'offline injected'); END`); err != nil {
 					t.Fatal(err)
 				}
 				s.waitIdle(path)
@@ -295,27 +294,27 @@ func TestSleepAppWakeCommitExecutionAndSessionFailure(t *testing.T) {
 			originalWake := *st.Sleep.WakeAt
 			barrier := "offline-test-owner"
 			if mode == "wake-queued-restart" {
-				ok, e := s.a.Coord.AcquireIfIdle(ctx, agent.ID.String(), barrier)
+				ok, e := s.a.Coord.Acquire(ctx, agent.ID.String(), barrier)
 				if e != nil || !ok {
 					t.Fatal("barrier", e)
 				}
 			}
-			if mode == "redis-cleared" {
-				keys, err := s.a.Redis.Keys(ctx, w.cfg.RedisKeyPrefix+"*").Result()
+			if mode == "coord-cleared" {
+				// 协调数据丢失：Agent 的忙闲锁没了。
+				id := agent.ID.String()
+				owner, err := s.a.Coord.LockOwner(ctx, id)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if len(keys) > 0 {
-					if err = s.a.Redis.Del(ctx, keys...).Err(); err != nil {
-						t.Fatal(err)
-					}
+				if _, err = s.a.Coord.Release(ctx, id, owner); err != nil {
+					t.Fatal(err)
 				}
 				current, err := s.a.Store.SleepState(ctx, p)
 				if err != nil || current.Sleep == nil || !current.Sleep.WakeAt.Equal(originalWake) {
-					t.Fatal("Redis loss reset durable sleep", err)
+					t.Fatal("coordination loss reset durable sleep", err)
 				}
 			}
-			if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, receipt.Sleep.ID); err != nil {
+			if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, receipt.Sleep.ID); err != nil {
 				t.Fatal(err)
 			}
 			if err = s.a.Store.ReconcileSleeps(ctx, 100); err != nil {
@@ -325,6 +324,7 @@ func TestSleepAppWakeCommitExecutionAndSessionFailure(t *testing.T) {
 			if err = s.a.Store.Pool.QueryRow(ctx, `SELECT wake_run_id FROM agent_sleeps WHERE id=$1`, receipt.Sleep.ID).Scan(&wakeID); err != nil {
 				t.Fatal(err)
 			}
+			var before []coord.Event
 			if mode == "wake-queued-restart" {
 				wake, err := s.a.Store.GetRun(ctx, wakeID)
 				if err != nil || wake.Status != "queued" {
@@ -332,7 +332,7 @@ func TestSleepAppWakeCommitExecutionAndSessionFailure(t *testing.T) {
 				}
 				s.stop()
 				s = nil
-				// Redis client is closed by stop. Remove the owned stale barrier via the next App's PG reconciliation after TTL.
+				// 协调状态在进程内，重启后旧屏障已不在；按原样放开一次（没有持有时是空操作）。
 				s = w.start(nil)
 				if _, err = s.a.Coord.Release(ctx, agent.ID.String(), barrier); err != nil {
 					t.Fatal(err)
@@ -349,6 +349,10 @@ func TestSleepAppWakeCommitExecutionAndSessionFailure(t *testing.T) {
 				wake, err := s.a.Store.GetRun(ctx, wakeID)
 				if err != nil || wake.Status != "running" {
 					t.Fatal("wake never ran", err)
+				}
+				// 事件流在进程内：重启前已经推给 SSE 的事件只在旧实例里。
+				if before, err = s.a.Coord.ReadEvents(ctx, agent.ID.String(), "0-0", 1000, -time.Millisecond); err != nil {
+					t.Fatal(err)
 				}
 				s.stop()
 				s = w.start(nil)
@@ -395,6 +399,7 @@ func TestSleepAppWakeCommitExecutionAndSessionFailure(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			events = append(before, events...)
 			timerUser := 0
 			validator := contracttest.New(t, strings.TrimSuffix(s.url, "/api/v1"))
 			for _, event := range events {
@@ -437,7 +442,7 @@ func TestSleepAppInboxReadBeforeDispatchStillContinues(t *testing.T) {
 	}
 	// Deterministically reproduce a recipient read before the notification driver
 	// can count unread mail; the real message and reminder transaction still runs.
-	if _, err = s.a.Store.Pool.Exec(ctx, `CREATE FUNCTION read_before_dispatch() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.to_agent_id='`+agent.ID.String()+`'::uuid THEN NEW.read_at=now(); END IF; RETURN NEW; END $$; CREATE TRIGGER read_before_dispatch BEFORE INSERT ON inbox_messages FOR EACH ROW EXECUTE FUNCTION read_before_dispatch()`); err != nil {
+	if _, err = s.a.Store.Pool.Exec(ctx, `CREATE TRIGGER read_before_dispatch AFTER INSERT ON inbox_messages WHEN NEW.to_agent_id='`+agent.ID.String()+`' BEGIN UPDATE inbox_messages SET read_at=now() WHERE id=NEW.id; END`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.a.API.Inbox.Send(ctx, auth.Console(), "默认项目/UnreadWake", "valid real message", "queue"); err != nil {
@@ -503,11 +508,12 @@ func TestSleepAppQuestionAnswerAndExpiryWake(t *testing.T) {
 			d := decode[taskmodel.Detail](t, raw)
 			node := d.Nodes[0]
 			p := auth.Principal{Kind: auth.KindAgent, ID: agent.ID, TaskID: d.Task.ID, RuntimeID: node.RuntimeID}
-			taskWait(t, s, d.Task.ID, func(d taskmodel.Detail) bool { return s.a.Executor.Process(node.RuntimeID).State == "busy" })
+			// Pi 先变忙，轮次随后才在库里记为 running：两个都等到。
 			var source uuid.UUID
-			if err = s.a.Store.Pool.QueryRow(ctx, `SELECT id FROM task_turns WHERE runtime_id=$1 AND status='running'`, node.RuntimeID).Scan(&source); err != nil {
-				t.Fatal(err)
-			}
+			taskWait(t, s, d.Task.ID, func(d taskmodel.Detail) bool {
+				return s.a.Executor.Process(node.RuntimeID).State == "busy" &&
+					s.a.Store.Pool.QueryRow(ctx, `SELECT id FROM task_turns WHERE runtime_id=$1 AND status='running'`, node.RuntimeID).Scan(&source) == nil
+			})
 			q, err := s.a.API.Inbox.Send(ctx, p, "@console", "question", "queue", inbox.QuestionInput{Options: []string{"yes"}, NodeRunID: node.ID})
 			if err != nil {
 				t.Fatal(err)
@@ -520,7 +526,7 @@ func TestSleepAppQuestionAnswerAndExpiryWake(t *testing.T) {
 			if mode == "answer" {
 				s.must(201, "POST", "/inbox/messages/"+q.ID.String()+"/reply", map[string]any{"optionId": "1"})
 			} else {
-				if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-interval '1 second' WHERE message_id=$1`, q.ID); err != nil {
+				if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, q.ID); err != nil {
 					t.Fatal(err)
 				}
 				if err = s.a.API.Inbox.ReconcileQuestions(ctx); err != nil {
@@ -566,11 +572,12 @@ func TestSleepAppTaskRequestedAndSleepingRestart(t *testing.T) {
 			d := decode[taskmodel.Detail](t, raw)
 			node := d.Nodes[0]
 			p := auth.Principal{Kind: auth.KindAgent, ID: agent.ID, TaskID: d.Task.ID, RuntimeID: node.RuntimeID}
-			taskWait(t, s, d.Task.ID, func(d taskmodel.Detail) bool { return s.a.Executor.Process(node.RuntimeID).State == "busy" })
+			// Pi 先变忙，轮次随后才在库里记为 running：两个都等到。
 			var source uuid.UUID
-			if err = s.a.Store.Pool.QueryRow(ctx, `SELECT id FROM task_turns WHERE runtime_id=$1 AND status='running'`, node.RuntimeID).Scan(&source); err != nil {
-				t.Fatal(err)
-			}
+			taskWait(t, s, d.Task.ID, func(d taskmodel.Detail) bool {
+				return s.a.Executor.Process(node.RuntimeID).State == "busy" &&
+					s.a.Store.Pool.QueryRow(ctx, `SELECT id FROM task_turns WHERE runtime_id=$1 AND status='running'`, node.RuntimeID).Scan(&source) == nil
+			})
 			seconds := int64(2)
 			if mode == "sleeping-after" {
 				seconds = 1
@@ -735,7 +742,7 @@ func TestSleepAppOldAttemptCannotAffectNewSleep(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, first.Sleep.ID); err != nil {
+	if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, first.Sleep.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.a.Store.ReconcileSleeps(ctx, 100); err != nil {
@@ -771,104 +778,4 @@ func TestSleepAppOldAttemptCannotAffectNewSleep(t *testing.T) {
 	if _, err = s.a.Tasks.Cancel(ctx, auth.Console(), d.Task.ID, taskmodel.CancelInput{ActionID: uuid.New()}); err != nil {
 		t.Fatal(err)
 	}
-}
-
-type sleepMirrorFailure struct {
-	key     string
-	enabled atomic.Bool
-	seen    atomic.Int32
-}
-
-func (h *sleepMirrorFailure) DialHook(next redis.DialHook) redis.DialHook          { return next }
-func (h *sleepMirrorFailure) ProcessHook(next redis.ProcessHook) redis.ProcessHook { return next }
-func (h *sleepMirrorFailure) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
-	return func(ctx context.Context, cmds []redis.Cmder) error {
-		for _, cmd := range cmds {
-			args := cmd.Args()
-			if cmd.Name() == "rpush" && len(args) > 1 && args[1] == h.key && h.enabled.Load() {
-				h.seen.Add(1)
-				return errors.New("offline injected queue mirror failure")
-			}
-		}
-		return next(ctx, cmds)
-	}
-}
-
-func TestSleepAppRedisMirrorFailureRecoversOneCarrier(t *testing.T) {
-	w := newWorld(t)
-	w.cfg.SleepScanInterval = 50 * time.Millisecond
-	w.cfg.SleepScanBatch = 100
-	s := w.start(nil)
-	defer s.stop()
-	ctx := context.Background()
-	path, agent := s.createAgent("MirrorRecovery")
-	s.must(202, "POST", path+"/messages", map[string]any{"text": " !sleep=600ms !text=source"})
-	run := s.waitRunning(path)
-	receipt, err := s.a.Store.RequestSleep(ctx, auth.Principal{Kind: auth.KindAgent, ID: agent.ID}, sleepmodel.Input{ActionID: uuid.New(), RunID: run.ID, Seconds: 120}, 1000)
-	if err != nil {
-		t.Fatal(err)
-	}
-	st := s.waitIdle(path)
-	if st.Sleep == nil {
-		t.Fatal("sleep absent")
-	}
-	originalWake := *st.Sleep.WakeAt
-	hook := &sleepMirrorFailure{key: s.a.Coord.Keys().QueueNormal(agent.ID.String())}
-	hook.enabled.Store(true)
-	defer hook.enabled.Store(false)
-	s.a.Redis.AddHook(hook)
-	if _, err = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, receipt.Sleep.ID); err != nil {
-		t.Fatal(err)
-	}
-	if err = s.a.Store.ReconcileSleeps(ctx, 100); err != nil {
-		t.Fatal(err)
-	}
-	limit := time.Now().Add(4 * time.Second)
-	for hook.seen.Load() == 0 && time.Now().Before(limit) {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if hook.seen.Load() == 0 {
-		t.Fatal("mirror fault was not exercised")
-	}
-	queued, err := s.a.Store.QueuedRuns(ctx, agent.ID)
-	if err != nil || len(queued) != 1 || queued[0].Origin != "sleep_wake" {
-		t.Fatal("PG carrier lost on mirror fault", queued, err)
-	}
-	wakeID := queued[0].ID
-	if err = s.a.Store.ReconcileSleeps(ctx, 100); err != nil {
-		t.Fatal(err)
-	}
-	hook.enabled.Store(false)
-	s.waitIdle(path)
-	var count int
-	if err = s.a.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM runs WHERE agent_id=$1 AND origin='sleep_wake'`, agent.ID).Scan(&count); err != nil || count != 1 {
-		t.Fatal("mirror retry duplicated carrier", count, err)
-	}
-	wake, err := s.a.Store.GetRun(ctx, wakeID)
-	if err != nil || wake.Status != "completed" {
-		t.Fatal("original carrier not recovered", err)
-	}
-	sess, err := s.a.Store.GetAgentSession(ctx, agent.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(sess.SessionFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	prompts := 0
-	for _, line := range bytes.Split(data, []byte("\n")) {
-		var entry struct {
-			Message struct {
-				Role string `json:"role"`
-			} `json:"message"`
-		}
-		if json.Unmarshal(line, &entry) == nil && entry.Message.Role == "user" {
-			prompts++
-		}
-	}
-	if prompts != 2 {
-		t.Fatal("mirror retry replayed execution", prompts)
-	}
-	t.Logf("case=mirror-failure sleepId=%s originalWakeAt=%s wakeRunId=%s PiPrompts=%d failures=%d", receipt.Sleep.ID, originalWake.Format(time.RFC3339Nano), wakeID, prompts, hook.seen.Load())
 }

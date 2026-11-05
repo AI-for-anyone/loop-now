@@ -39,7 +39,7 @@ await context.route('**/*', async route => {
   // 本驱动不验Inbox事件；明确终止默认shell事件流，不能把它当真实SSE或重连证据。
   if (path === '/inbox/events') return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': origin } })
   if (method !== 'GET') writes.push({ method, path }) // 不记录秘密载荷。
-  if (path === '/health') return json(route, { ok: true, postgres: { ok: true, error: null }, redis: { ok: true, error: null } })
+  if (path === '/health') return json(route, { ok: true, database: { ok: true, error: null, walBytes: { data: 0, events: 0 }, walWarning: false } })
   if (path === '/context') return json(route, { organization: { id: project.organizationId, name: '测试组织' }, project: { id: project.id, name: project.name }, limits })
   if (path === '/projects') return json(route, { projects: [defaultProject, project] })
   if (path === '/platform/agents') return json(route, { agents: [{ ...platformAgent, sessionState: 'active', sleep: null, sleepRevision: 0 }] })
@@ -142,7 +142,7 @@ try {
   await shot(dialog, 'platform-keyboard-mobile'); ok('平台私有表单保留，键盘打开及遮蔽字段')
   assert.deepEqual(errors, []); assert.deepEqual(blocked, []); assert.deepEqual(unhandled, [])
   ok('浏览器0异常，所有API为HTTP fixture，0供应商或DEV网络请求')
-  writeFileSync(new URL('results.json', out), JSON.stringify({ level: 'React + intercepted HTTP fixture; no App/PG/OAuth', origin, viewports: ['1440x1000', '390x844'], screenshotBoundary: 'region screenshots may exceed viewport height', checks, errors, blocked, unhandled, httpConsole, writes }, null, 2))
+  writeFileSync(new URL('results.json', out), JSON.stringify({ level: 'React + intercepted HTTP fixture; no App/database/OAuth', origin, viewports: ['1440x1000', '390x844'], screenshotBoundary: 'region screenshots may exceed viewport height', checks, errors, blocked, unhandled, httpConsole, writes }, null, 2))
 } catch (error) {
   writeFileSync(new URL('failure.json', out), JSON.stringify({ message: error.message, checks, errors, blocked, unhandled }, null, 2)); throw error
 } finally { await browser.close() }

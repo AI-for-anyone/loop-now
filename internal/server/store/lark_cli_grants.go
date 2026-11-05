@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/clicredential"
 	cm "loop-now/internal/server/credentialmodel"
 	"math"
 	"time"
+
+	"loop-now/internal/server/db"
 )
 
 type LarkCLIGrant struct {
@@ -22,7 +23,7 @@ type LarkCLIGrant struct {
 	ErrorCode             *string
 }
 
-func larkGrantTx(ctx context.Context, tx pgx.Tx, b clicredential.LarkBinding, write, finish bool) (LarkCLIGrant, error) {
+func larkGrantTx(ctx context.Context, tx *db.Tx, b clicredential.LarkBinding, write, finish bool) (LarkCLIGrant, error) {
 	var r LarkCLIGrant
 	if !b.Valid() {
 		return r, errors.New("Lark授权绑定无效")
@@ -30,11 +31,7 @@ func larkGrantTx(ctx context.Context, tx pgx.Tx, b clicredential.LarkBinding, wr
 	if _, e := lockCredentialProject(ctx, tx, b.ProjectID, false); e != nil {
 		return r, e
 	}
-	lock := " FOR SHARE OF g,v"
-	if write {
-		lock = " FOR UPDATE OF g,v"
-	}
-	e := tx.QueryRow(ctx, `SELECT i.brand,i.app_id,i.open_id,i.display_name,i.granted_scopes,i.verified_at,i.runtime_variant_version,v.secret,g.generation,g.refresh_state,g.lease_id,g.lease_agent_id,g.lease_until,g.error_code FROM lark_cli_grants g JOIN lark_cli_identities i ON i.version_id=g.version_id JOIN project_cli_versions v ON v.id=i.version_id AND v.account_id=i.account_id JOIN project_credential_accounts a ON a.id=i.account_id JOIN agents owner ON owner.id=$4 WHERE g.version_id=$1 AND i.account_id=$2 AND a.project_id=$3 AND a.purpose='cli' AND a.cli_name='lark-cli' AND owner.project_id=$3 AND (owner.deleted_at IS NULL OR $5)`+lock, b.VersionID, b.AccountID, b.ProjectID, b.AgentID, finish).Scan(&r.Identity.Brand, &r.Identity.AppID, &r.Identity.OpenID, &r.Identity.DisplayName, &r.Identity.GrantedScopes, &r.Identity.VerifiedAt, &r.RuntimeVariantVersion, &r.Secret, &r.Generation, &r.RefreshState, &r.LeaseID, &r.LeaseAgentID, &r.LeaseUntil, &r.ErrorCode)
+	e := tx.QueryRow(ctx, `SELECT i.brand,i.app_id,i.open_id,i.display_name,i.granted_scopes,i.verified_at,i.runtime_variant_version,v.secret,g.generation,g.refresh_state,g.lease_id,g.lease_agent_id,g.lease_until,g.error_code FROM lark_cli_grants g JOIN lark_cli_identities i ON i.version_id=g.version_id JOIN project_cli_versions v ON v.id=i.version_id AND v.account_id=i.account_id JOIN project_credential_accounts a ON a.id=i.account_id JOIN agents owner ON owner.id=$4 WHERE g.version_id=$1 AND i.account_id=$2 AND a.project_id=$3 AND a.purpose='cli' AND a.cli_name='lark-cli' AND owner.project_id=$3 AND (owner.deleted_at IS NULL OR $5)`, b.VersionID, b.AccountID, b.ProjectID, b.AgentID, finish).Scan(&r.Identity.Brand, &r.Identity.AppID, &r.Identity.OpenID, &r.Identity.DisplayName, &r.Identity.GrantedScopes, &r.Identity.VerifiedAt, &r.RuntimeVariantVersion, &r.Secret, &r.Generation, &r.RefreshState, &r.LeaseID, &r.LeaseAgentID, &r.LeaseUntil, &r.ErrorCode)
 	if e != nil {
 		return r, notFoundIfNoRows(e, "Lark授权")
 	}
@@ -45,12 +42,12 @@ func larkGrantTx(ctx context.Context, tx pgx.Tx, b clicredential.LarkBinding, wr
 }
 func (s *Store) GetLarkCLIGrant(ctx context.Context, b clicredential.LarkBinding) (LarkCLIGrant, error) {
 	var r LarkCLIGrant
-	e := s.inTx(ctx, func(tx pgx.Tx) error { var e error; r, e = larkGrantTx(ctx, tx, b, false, false); return e })
+	e := s.inTx(ctx, func(tx *db.Tx) error { var e error; r, e = larkGrantTx(ctx, tx, b, false, false); return e })
 	return r, e
 }
 func (s *Store) ClaimLarkCLIRefresh(ctx context.Context, b clicredential.LarkBinding, generation int64, lease uuid.UUID, until time.Time) (bool, error) {
 	claimed := false
-	e := s.inTx(ctx, func(tx pgx.Tx) error {
+	e := s.inTx(ctx, func(tx *db.Tx) error {
 		r, e := larkGrantTx(ctx, tx, b, true, false)
 		if e != nil {
 			return e
@@ -66,14 +63,14 @@ func (s *Store) ClaimLarkCLIRefresh(ctx context.Context, b clicredential.LarkBin
 			return nil
 		}
 		// Use the database clock after both project and grant locks were acquired.
-		tag, e := tx.Exec(ctx, `UPDATE lark_cli_grants SET refresh_state='refreshing',lease_id=$2,lease_agent_id=$3,lease_until=$4,error_code=NULL,updated_at=clock_timestamp() WHERE version_id=$1 AND $4::timestamptz>clock_timestamp()`, b.VersionID, lease, b.AgentID, until)
+		tag, e := tx.Exec(ctx, `UPDATE lark_cli_grants SET refresh_state='refreshing',lease_id=$2,lease_agent_id=$3,lease_until=$4,error_code=NULL,updated_at=clock_timestamp() WHERE version_id=$1 AND $4>clock_timestamp()`, b.VersionID, lease, b.AgentID, until)
 		claimed = e == nil && tag.RowsAffected() == 1
 		return e
 	})
 	return claimed, e
 }
 func (s *Store) CommitLarkCLIRefresh(ctx context.Context, b clicredential.LarkBinding, generation int64, lease uuid.UUID, secret []byte) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		r, e := larkGrantTx(ctx, tx, b, true, true)
 		if e != nil {
 			return e
@@ -107,7 +104,7 @@ func (s *Store) FailLarkCLIRefresh(ctx context.Context, b clicredential.LarkBind
 	default:
 		code = "refresh_failed"
 	}
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := larkGrantTx(ctx, tx, b, true, true); e != nil {
 			return e
 		}

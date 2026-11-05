@@ -2,12 +2,12 @@ package cliauth
 
 import (
 	"context"
+	"loop-now/internal/server/clicredential"
+	"loop-now/internal/server/store"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"loop-now/internal/server/clicredential"
-	"loop-now/internal/server/store"
 )
 
 func TestGooglePGAgentDeleteFinishesClaimWithoutNewAccess(t *testing.T) {

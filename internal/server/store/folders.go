@@ -5,7 +5,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
+
+	"loop-now/internal/server/db"
 )
 
 // FolderSource 是已退役的文件夹来源：只用于旧任务（快照 v8）的冻结来源同步，以及启动时的一次性回放。
@@ -24,7 +25,7 @@ type FolderSource struct {
 
 const sourceColumns = `id, agent_id, path, kind, coalesce(git_url, ''), coalesce(git_branch, ''), synced_at, created_at, updated_at`
 
-func scanSource(row pgx.Row) (FolderSource, error) {
+func scanSource(row db.Scanner) (FolderSource, error) {
 	var f FolderSource
 	err := row.Scan(&f.ID, &f.AgentID, &f.Path, &f.Kind, &f.GitURL, &f.GitBranch, &f.SyncedAt, &f.CreatedAt, &f.UpdatedAt)
 	return f, err
@@ -51,7 +52,7 @@ func (s *Store) ListSourceFilesForSync(ctx context.Context, sourceID uuid.UUID) 
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (SyncFile, error) {
+	return db.CollectRows(rows, func(r db.CollectableRow) (SyncFile, error) {
 		var f SyncFile
 		err := r.Scan(&f.Path, &f.SHA256, &f.Pending, &f.UpdatedAt)
 		return f, err
@@ -61,8 +62,8 @@ func (s *Store) ListSourceFilesForSync(ctx context.Context, sourceID uuid.UUID) 
 // MarkSourceSynced 记录来源已同步到磁盘，并清除已处理的人工修改记录。
 // 只清除 updated_at 与处理时一致的记录：处理期间人又改过的文件保留标记，下次再同步。
 func (s *Store) MarkSourceSynced(ctx context.Context, sourceID uuid.UUID, processed []SyncFile) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `UPDATE agent_folder_sources SET synced_at = coalesce(synced_at, now()) WHERE id = $1`, sourceID); err != nil {
+	return s.inTx(ctx, func(tx *db.Tx) error {
+		if _, err := tx.Exec(ctx, `UPDATE agent_folder_sources SET synced_at = coalesce(synced_at, $2) WHERE id = $1`, sourceID, tx.Now()); err != nil {
 			return err
 		}
 		for _, f := range processed {

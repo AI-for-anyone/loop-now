@@ -19,9 +19,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/clicredential"
 	cm "loop-now/internal/server/credentialmodel"
+
+	"github.com/google/uuid"
 )
 
 type offlineBrowser struct {
@@ -37,6 +38,7 @@ func (h offlineBrowser) Login(ctx context.Context, id uuid.UUID, save func(strin
 		return h.onURL(u)
 	})
 }
+
 func TestGoogleActualLoginHelperPG(t *testing.T) {
 	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
 		t.Skip("reviewed private runtime is darwin-arm64 only")

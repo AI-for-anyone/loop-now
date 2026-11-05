@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/clicredential"
@@ -33,6 +32,8 @@ import (
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/taskruntime"
+
+	"loop-now/internal/server/db"
 )
 
 // Source 在现有执行器前适配任务实例；正常Agent仍走原Source。
@@ -52,7 +53,7 @@ type Source struct {
 	LarkOverlay   func(context.Context, store.TaskInstance) (*clicredential.LarkBinding, int64, error)
 	PauseNormal   func(context.Context, uuid.UUID) (func(), error)
 	FreezeNormal  func(context.Context, uuid.UUID) error
-	CloseQuestion func(context.Context, pgx.Tx, uuid.UUID, string) (string, error)
+	CloseQuestion func(context.Context, *db.Tx, uuid.UUID, string) (string, error)
 	ViewQuestion  func(context.Context, auth.Principal, taskmodel.Question) (taskmodel.Question, error)
 	// Log 记录任务工作区复制的方式与耗时；为空时不记录。
 	Log *slog.Logger
@@ -213,7 +214,7 @@ func (s *Source) DeletedAgentIDs(ctx context.Context) ([]uuid.UUID, error) {
 	if err != nil {
 		return nil, err
 	}
-	more, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	more, err := db.CollectRows(rows, db.RowTo[uuid.UUID])
 	return append(ids, more...), err
 }
 

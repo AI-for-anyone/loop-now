@@ -7,14 +7,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
-	"loop-now/internal/testutil/redistest"
+
+	"github.com/google/uuid"
+
+	"loop-now/internal/server/db"
 )
 
 type controlledExecutor struct {
@@ -36,7 +37,7 @@ func eventually(t *testing.T, fn func() bool) {
 	}
 	t.Fatal("condition not reached")
 }
-func TestSameAgentTasksHaveIndependentLocksAndRestoreRedisLoss(t *testing.T) {
+func TestSameAgentTasksHaveIndependentLocks(t *testing.T) {
 	s, first, p := fixture(t, false)
 	ctx := context.Background()
 	r := current(t, s, first)
@@ -49,7 +50,7 @@ func TestSameAgentTasksHaveIndependentLocksAndRestoreRedisLoss(t *testing.T) {
 	node := freshNode(second, r.View.Workflow.Steps[0], inst, 1, 1)
 	other.View.Nodes = []taskmodel.NodeRun{node}
 	setCurrent(&other, node)
-	_, e := s.Store.CreateTask(ctx, r.View.Task.ProjectID, p.ID, store.TaskAction{ActorKey: "fixture2", ID: uuid.New(), Operation: "create", Body: []byte(`{}`)}, func(pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) {
+	_, e := s.Store.CreateTask(ctx, r.View.Task.ProjectID, p.ID, store.TaskAction{ActorKey: "fixture2", ID: uuid.New(), Operation: "create", Body: []byte(`{}`)}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) {
 		return other, []store.TaskInstance{inst}, nil
 	})
 	if e != nil {
@@ -68,10 +69,9 @@ func TestSameAgentTasksHaveIndependentLocksAndRestoreRedisLoss(t *testing.T) {
 			t.Fatal(e)
 		}
 	}
-	redis, prefix := redistest.New(t)
-	s.Coord = coord.New(redis, coord.Options{Prefix: prefix, LockTTL: 500 * time.Millisecond, StreamMaxLen: 100, RunTextTTL: time.Hour})
+	s.Coord = coord.New(coord.Options{StreamMaxLen: 100})
 	s.Options.InstanceID = uuid.New()
-	s.Options.LockRenewInterval = 50 * time.Millisecond
+	s.Options.AbortPollInterval = 50 * time.Millisecond
 	s.Options.RecordTimeout = time.Second
 	s.Options.ReconcileInterval = 50 * time.Millisecond
 	starts := make(chan executor.Request, 4)
@@ -121,37 +121,18 @@ func TestSameAgentTasksHaveIndependentLocksAndRestoreRedisLoss(t *testing.T) {
 		if e != nil || owner == "" {
 			t.Fatal("instance lock missing", e)
 		}
-		if e = redis.Del(ctx, s.Coord.Keys().Lock(runtime.String())).Err(); e != nil {
-			t.Fatal(e)
-		}
 	}
-	eventually(t, func() bool {
-		for _, runtime := range []uuid.UUID{p.RuntimeID, runtime2} {
-			owner, e := s.Coord.LockOwner(ctx, runtime.String())
-			if e != nil || owner == "" {
-				return false
-			}
-		}
-		return true
-	})
 	msg := store.NewInboxMessage{ID: uuid.New(), From: store.ConsoleParty, To: store.Party{Kind: "agent", ID: p.ID, RuntimeID: p.RuntimeID}, Text: "queued while busy", WhenBusy: "queue"}
 	if e = s.DeliverInbox(ctx, msg); e != nil {
 		t.Fatal(e)
 	}
-	_, normal, e := s.Coord.QueueContents(ctx, p.RuntimeID.String())
-	if e != nil || len(normal) != 1 {
-		t.Fatal("queued task message not mirrored", e, normal)
+	var queued int
+	if e = s.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM task_turns WHERE runtime_id=$1 AND status='queued'`, p.RuntimeID).Scan(&queued); e != nil || queued != 1 {
+		t.Fatal("queued task message not queued", e, queued)
 	}
-	if e = redis.Del(ctx, s.Coord.Keys().QueueNormal(p.RuntimeID.String())).Err(); e != nil {
-		t.Fatal(e)
-	}
-	eventually(t, func() bool {
-		_, normal, e := s.Coord.QueueContents(ctx, p.RuntimeID.String())
-		return e == nil && len(normal) == 1
-	})
 	mu.Lock()
 	if calls[p.RuntimeID] != 1 || calls[runtime2] != 1 {
-		t.Fatal("Redis loss replayed tools")
+		t.Fatal("lock loss replayed tools")
 	}
 	mu.Unlock()
 	close(release)
@@ -160,7 +141,7 @@ func TestSameAgentTasksHaveIndependentLocksAndRestoreRedisLoss(t *testing.T) {
 	})
 	events, e := s.Coord.ReadEvents(ctx, coord.ProjectTaskStream(r.View.Task.ProjectID.String()), "0-0", 1000, 0)
 	if e != nil || len(events) == 0 {
-		t.Fatal("project Redis relay missing", e)
+		t.Fatal("project event relay missing", e)
 	}
 	var previous int64
 	for _, event := range events {
@@ -171,7 +152,7 @@ func TestSameAgentTasksHaveIndependentLocksAndRestoreRedisLoss(t *testing.T) {
 		previous = persistent.ID
 	}
 	var tools int
-	if e = s.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM lifecycle_events WHERE agent_id=$1 AND task_id=ANY($2) AND task_turn_id IS NOT NULL AND type='tool.changed'`, p.ID, []uuid.UUID{first, second}).Scan(&tools); e != nil || tools != 2 {
+	if e = s.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM lifecycle_events WHERE agent_id=$1 AND task_id IN (SELECT value FROM json_each($2)) AND task_turn_id IS NOT NULL AND type='tool.changed'`, p.ID, []uuid.UUID{first, second}).Scan(&tools); e != nil || tools != 2 {
 		t.Fatal("task tools not associated", e, tools)
 	}
 }

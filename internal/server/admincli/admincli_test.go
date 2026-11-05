@@ -3,8 +3,6 @@ package admincli_test
 import (
 	"bytes"
 	"context"
-	"io"
-	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -13,14 +11,22 @@ import (
 	"loop-now/internal/server/admincli"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/config"
-	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/server/db"
+	"loop-now/internal/server/pgimport"
+	"loop-now/internal/server/pgimport/pgimporttest"
+	"loop-now/internal/testutil/sqlitetest"
+
+	"os"
+
+	"path/filepath"
+
+	"github.com/google/uuid"
 )
 
 type cli struct {
-	t      *testing.T
-	schema string
-	url    string
+	t       *testing.T
+	dataDir string
+	env     map[string]string
 }
 
 func (c cli) run(args ...string) (code int, stdout, stderr string) {
@@ -28,12 +34,12 @@ func (c cli) run(args ...string) (code int, stdout, stderr string) {
 	var out, errb bytes.Buffer
 	code = admincli.Run(context.Background(), args, admincli.Options{
 		Getenv: func(k string) string {
-			if k == config.EnvDatabaseURL {
-				return c.url
+			if k == config.EnvDataDir {
+				return c.dataDir
 			}
-			return ""
+			return c.env[k]
 		},
-		Stdout: &out, Stderr: &errb, SearchPath: c.schema,
+		Stdout: &out, Stderr: &errb,
 	})
 	return code, out.String(), errb.String()
 }
@@ -48,22 +54,27 @@ func (c cli) ok(args ...string) (stdout, stderr string) {
 }
 
 func TestAdminCommands(t *testing.T) {
-	schema := pgtest.NewSchema(t)
-	st, err := store.Open(context.Background(), pgtest.URL(t), store.OpenOptions{SearchPath: schema})
-	if err != nil {
+	dataDir := t.TempDir()
+	if err := os.MkdirAll(config.DBDir(dataDir), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	st := sqlitetest.NewStoreIn(t, config.DBDir(dataDir))
 	t.Cleanup(st.Close)
-	if err := st.Migrate(context.Background(), slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
-		t.Fatal(err)
-	}
-	c := cli{t: t, schema: schema, url: pgtest.URL(t)}
+	c := cli{t: t, dataDir: dataDir}
 
 	if out, _ := c.ok("version"); strings.TrimSpace(out) != buildinfo.Version() {
 		t.Fatalf("version 应打印服务端版本：%q", out)
 	}
 	if code, _, _ := c.run("identity"); code != 2 {
 		t.Fatalf("缺少子命令时应报用法错误：%d", code)
+	}
+	// 数据目录里没有库时报错，不新建空库。
+	empty := cli{t: t, dataDir: t.TempDir()}
+	if code, _, errs := empty.run("identity", "list"); code != 2 || !strings.Contains(errs, "没有库") {
+		t.Fatalf("数据目录里没有库时应报用法错误：%d %q", code, errs)
+	}
+	if _, err := os.Stat(filepath.Join(config.DBDir(empty.dataDir), "data.db")); !os.IsNotExist(err) {
+		t.Fatalf("不应新建空库：%v", err)
 	}
 
 	// 外部身份：创建、重名、名称规则、列出。
@@ -136,5 +147,78 @@ func TestAdminCommands(t *testing.T) {
 	}
 	if ops["identity.create"] != 3 || ops["token.issue"] != 2 || ops["token.revoke"] != 2 || ops["identity.delete"] != 1 {
 		t.Fatalf("改变状态的命令都应记审计（含失败的）：%v", ops)
+	}
+}
+
+// backup 在给定目录下写一份能打开的完整备份，服务开着库时也可以；目录参数缺失时报用法错误。
+func TestAdminBackup(t *testing.T) {
+	dataDir := t.TempDir()
+	if err := os.MkdirAll(config.DBDir(dataDir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	st := sqlitetest.NewStoreIn(t, config.DBDir(dataDir))
+	t.Cleanup(st.Close)
+	if _, err := st.EnsureDefaults(context.Background(), "o", "p"); err != nil {
+		t.Fatal(err)
+	}
+	c := cli{t: t, dataDir: dataDir}
+	if code, _, _ := c.run("backup"); code != 2 {
+		t.Fatalf("缺少目录时应报用法错误：%d", code)
+	}
+	target := t.TempDir()
+	out, _ := c.ok("backup", target)
+	path := strings.TrimSpace(out)
+	if filepath.Dir(path) != target {
+		t.Fatalf("备份应在目标目录下：%q", path)
+	}
+	restored, err := db.Open(context.Background(), db.Options{Dir: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restored.Close()
+	var projects int
+	if err := restored.QueryRow(context.Background(), `SELECT count(*) FROM projects`).Scan(&projects); err != nil || projects != 1 {
+		t.Fatalf("备份内容不对：%d %v", projects, err)
+	}
+}
+
+// import-postgres 只从 LOOP_NOW_DATABASE_URL 读源库：没设时报用法错误；连不上时失败，不留下库，也不打印连接参数。
+func TestAdminImportPostgresRefusals(t *testing.T) {
+	dataDir := t.TempDir()
+	c := cli{t: t, dataDir: dataDir}
+	if code, _, errs := c.run("import-postgres"); code != 2 || !strings.Contains(errs, pgimport.EnvSourceURL) {
+		t.Fatalf("没有源库时应报用法错误：%d %s", code, errs)
+	}
+	c.env = map[string]string{pgimport.EnvSourceURL: "postgres://fixture-user:fixture-secret@127.0.0.1:1/fixture-db?connect_timeout=2"}
+	if code, _, _ := c.run("import-postgres", "extra"); code != 2 {
+		t.Fatalf("多余参数应报用法错误：%d", code)
+	}
+	code, out, errs := c.run("import-postgres")
+	if code != 1 {
+		t.Fatalf("连不上源库应失败：%d", code)
+	}
+	for _, s := range []string{"fixture-user", "fixture-secret", "fixture-db"} {
+		if strings.Contains(out+errs, s) {
+			t.Fatalf("输出里带了连接参数：%s", errs)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(config.DBDir(dataDir), db.DataFile)); !os.IsNotExist(err) {
+		t.Fatal("失败的导入留下了库", err)
+	}
+}
+
+// 成功导入后每张表一行“表名<TAB>行数”，新库能被其他子命令打开。
+func TestAdminImportPostgres(t *testing.T) {
+	pool, src := pgimporttest.Source(t)
+	if _, err := pool.Exec(context.Background(), `INSERT INTO external_identities(id,name) VALUES($1,'imported-ci')`, uuid.New()); err != nil {
+		t.Fatal(err)
+	}
+	c := cli{t: t, dataDir: t.TempDir(), env: map[string]string{pgimport.EnvSourceURL: src}}
+	out, _ := c.ok("import-postgres")
+	if !strings.Contains(out, "external_identities\t1\n") {
+		t.Fatalf("输出里没有导入的行数：%s", out)
+	}
+	if list, _ := c.ok("identity", "list"); !strings.Contains(list, "imported-ci") {
+		t.Fatalf("导入的身份不在新库里：%s", list)
 	}
 }

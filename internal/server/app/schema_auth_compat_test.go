@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apitypes"
+	"loop-now/internal/server/db"
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/testutil/testenv"
 )
@@ -18,7 +18,7 @@ import (
 // latestMigration is the highest numbered SQL migration shipped in the repo.
 func latestMigration(t *testing.T) int {
 	t.Helper()
-	entries, err := os.ReadDir(filepath.Join(testenv.RepoRoot(), "internal/server/store/migrations"))
+	entries, err := os.ReadDir(filepath.Join(testenv.RepoRoot(), "internal/server/store/schema/migrations"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestSchemaCompatibilityCLIInboxAndOfflineAuth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	versions, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+	versions, err := db.CollectRows(rows, db.RowTo[int64])
 	if err != nil || len(versions) != latestMigration(t) {
 		t.Fatal("not using complete real schema", versions, err)
 	}

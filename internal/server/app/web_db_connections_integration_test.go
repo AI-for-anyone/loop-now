@@ -9,28 +9,23 @@ import (
 	"encoding/pem"
 	"io"
 	"net"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/app"
 	"loop-now/internal/server/cliauth"
 	"loop-now/internal/server/clicredential"
 	"loop-now/internal/server/config"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
 	"loop-now/internal/testutil/testenv"
+
+	"github.com/google/uuid"
 )
 
 // Web owns only this file; production and shared test helpers are read-only.
@@ -50,14 +45,6 @@ func webDBConnectionsIntegration(t *testing.T, slice string) {
 	if os.Getenv("LOOP_NOW_WEB_DB_INTEGRATION") != "1" {
 		t.Skip("explicit TEST-only React DB management integration")
 	}
-	db, err := url.Parse(pgtest.URL(t))
-	if err != nil || !strings.HasSuffix(db.Path, "_test") {
-		t.Fatal("TEST database required")
-	}
-	ro, err := redis.ParseURL(redistest.URL(t))
-	if err != nil || ro.DB != 10 {
-		t.Fatal("TEST Redis DB10 required")
-	}
 	root := testenv.RepoRoot()
 	evidence := filepath.Join(root, "web/test-results/add-cloud-database-cli-templates/app-"+slice)
 	if err := os.MkdirAll(evidence, 0700); err != nil {
@@ -65,36 +52,13 @@ func webDBConnectionsIntegration(t *testing.T, slice string) {
 	}
 	var w *world
 	var address string
-	audit := map[string]any{"boundary": "actual React -> route.fetch temporary App -> isolated TEST PG/Redis; management only; no model/OAuth/database client execution"}
+	audit := map[string]any{"boundary": "actual React -> route.fetch temporary App -> temporary SQLite; management only; no model/OAuth/database client execution"}
 	t.Cleanup(func() {
 		if w == nil {
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		audit["schema"] = w.schema
-		audit["redisPrefix"] = w.cfg.RedisKeyPrefix
-		conn, e := pgx.Connect(ctx, pgtest.URL(t))
-		if e != nil {
-			t.Error("cleanup PG read failed")
-			return
-		}
-		defer conn.Close(ctx)
-		var exists bool
-		e = conn.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)`, w.schema).Scan(&exists)
-		audit["schemaRemoved"] = e == nil && !exists
-		if e != nil || exists {
-			t.Error("schema cleanup not verified")
-		}
-		rc := redis.NewClient(ro)
-		defer rc.Close()
-		iter := rc.Scan(ctx, 0, w.cfg.RedisKeyPrefix+"*", 100).Iterator()
-		found := iter.Next(ctx)
-		audit["redisPrefixEmpty"] = !found && iter.Err() == nil
-		if found || iter.Err() != nil {
-			t.Error("Redis cleanup not verified")
-		}
-		_, e = os.Stat(w.cfg.WorkRoot)
+		audit["dataDir"] = w.cfg.DataDir
+		_, e := os.Stat(w.cfg.WorkRoot)
 		audit["workRootRemoved"] = os.IsNotExist(e)
 		if !os.IsNotExist(e) {
 			t.Error("work root cleanup not verified")
@@ -163,7 +127,7 @@ func webDBConnectionsIntegration(t *testing.T, slice string) {
 			t.Fatal("synthetic metadata seed failed")
 		}
 		manifest["accountId"] = record.View.ID
-		audit["boundary"] = "actual React readonly GET -> isolated App/TEST PG; directly seeded synthetic Google metadata, not login lifecycle; zero auth POST/model/provider"
+		audit["boundary"] = "actual React readonly GET -> isolated App/temporary SQLite; directly seeded synthetic Google metadata, not login lifecycle; zero auth POST/model/provider"
 	}
 	manifestPath := filepath.Join(t.TempDir(), "web-db-manifest.json")
 	raw, _ := json.Marshal(manifest)
@@ -205,19 +169,19 @@ func webDBConnectionsIntegration(t *testing.T, slice string) {
 	} {
 		var n int
 		if err := s.a.Store.Pool.QueryRow(ctx, query).Scan(&n); err != nil {
-			t.Fatalf("PG read-back failed: %s", name)
+			t.Fatalf("SQLite read-back failed: %s", name)
 		}
 		counts[name] = n
 	}
 	if helper != nil {
-		audit["boundary"] = "actual React -> isolated App/TEST PG/Redis; explicit offline CLILoginHelper; context-wide local issuer fulfillment; no SDK/callback/provider/model"
+		audit["boundary"] = "actual React -> isolated App/temporary SQLite; explicit offline CLILoginHelper; context-wide local issuer fulfillment; no SDK/callback/provider/model"
 		audit["helperStarts"] = helper.starts.Load()
 		audit["helperCancels"] = helper.cancels.Load()
 		audit["helperRefreshes"] = helper.refreshes.Load()
 		for name, query := range map[string]string{"googleGrants": "SELECT count(*) FROM google_cli_grants", "googleOperations": "SELECT count(*) FROM project_cli_auth_operations", "googleSucceeded": "SELECT count(*) FROM project_cli_auth_operations WHERE status='succeeded'", "googleFailed": "SELECT count(*) FROM project_cli_auth_operations WHERE status='failed'", "googleCancelled": "SELECT count(*) FROM project_cli_auth_operations WHERE status='cancelled'", "syntheticGoogleVersions": "SELECT count(*) FROM project_cli_versions WHERE auth_method='oauth' AND account_label='synthetic-web@example.test'", "retainedTerminalURLs": "SELECT count(*) FROM project_cli_auth_operations WHERE status NOT IN ('pending','awaiting_authorization') AND authorization_url IS NOT NULL"} {
 			var n int
 			if err := s.a.Store.Pool.QueryRow(ctx, query).Scan(&n); err != nil {
-				t.Fatalf("PG safe read failed: %s", name)
+				t.Fatalf("SQLite safe read failed: %s", name)
 			}
 			counts[name] = n
 		}
@@ -225,10 +189,10 @@ func webDBConnectionsIntegration(t *testing.T, slice string) {
 	audit["pgCounts"] = counts
 	earlyProof, _ := json.MarshalIndent(counts, "", "  ")
 	if os.WriteFile(filepath.Join(evidence, "pg-readback.json"), earlyProof, 0600) != nil {
-		t.Fatal("PG proof write failed")
+		t.Fatal("SQLite proof write failed")
 	}
 	if browserErr != nil {
-		t.Fatal("browser failed; sanitized failure and PG read-back retained")
+		t.Fatal("browser failed; sanitized failure and SQLite read-back retained")
 	}
 	sets, members, versions := 2, 3, 4
 	if slice == "sa" {
@@ -242,7 +206,7 @@ func webDBConnectionsIntegration(t *testing.T, slice string) {
 		sets, members, versions, deleted = 0, 0, 1, 0
 	}
 	if counts["sets"] != sets || counts["members"] != members || counts["cliVersions"] != versions || counts["deletedAccounts"] != deleted || counts["runs"] != 0 || counts["taskTurns"] != 0 || counts["oauthOperations"] != 0 {
-		t.Fatalf("PG proof mismatch: %+v", counts)
+		t.Fatalf("SQLite proof mismatch: %+v", counts)
 	}
 	if slice == "sa" {
 		for name, query := range map[string]string{"googleGrants": `SELECT count(*) FROM google_cli_grants`, "googleOperations": `SELECT count(*) FROM project_cli_auth_operations`} {
@@ -255,14 +219,14 @@ func webDBConnectionsIntegration(t *testing.T, slice string) {
 	}
 	if slice == "google" {
 		if counts["syntheticGoogleVersions"] != 1 || counts["retainedTerminalURLs"] != 0 {
-			t.Fatal("synthetic subject or terminal URL PG mismatch")
+			t.Fatal("synthetic subject or terminal URL SQLite mismatch")
 		}
 		expected := map[string]int{"googleGrants": 1, "googleOperations": 3, "googleSucceeded": 1, "googleFailed": 1, "googleCancelled": 1}
 		queries := map[string]string{"googleGrants": "SELECT count(*) FROM google_cli_grants", "googleOperations": "SELECT count(*) FROM project_cli_auth_operations", "googleSucceeded": "SELECT count(*) FROM project_cli_auth_operations WHERE status='succeeded'", "googleFailed": "SELECT count(*) FROM project_cli_auth_operations WHERE status='failed'", "googleCancelled": "SELECT count(*) FROM project_cli_auth_operations WHERE status='cancelled'"}
 		for name, query := range queries {
 			var n int
 			if err := s.a.Store.Pool.QueryRow(ctx, query).Scan(&n); err != nil || n != expected[name] {
-				t.Fatalf("Google PG proof mismatch: %s", name)
+				t.Fatalf("Google SQLite proof mismatch: %s", name)
 			}
 			counts[name] = n
 		}
@@ -277,7 +241,7 @@ func webDBConnectionsIntegration(t *testing.T, slice string) {
 	audit["pgCounts"] = counts
 	proof, _ := json.MarshalIndent(counts, "", "  ")
 	if os.WriteFile(filepath.Join(evidence, "pg-readback.json"), proof, 0600) != nil {
-		t.Fatal("PG proof write failed")
+		t.Fatal("SQLite proof write failed")
 	}
 }
 
@@ -357,7 +321,7 @@ func webDBStartGoogle(t *testing.T, w *world, helper *webDBGoogleHelper) *server
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, w.cfg.LogFormat, w.cfg.LogLevel), app.Options{SearchPath: w.schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLILoginHelper: helper, CLIRefresher: helper})
+	a, err := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, w.cfg.LogFormat, w.cfg.LogLevel), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLILoginHelper: helper, CLIRefresher: helper})
 	if err != nil {
 		ln.Close()
 		t.Fatal(err)

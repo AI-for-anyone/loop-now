@@ -8,10 +8,12 @@ import (
 	"slices"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/taskmodel"
+
+	"github.com/google/uuid"
+
+	"loop-now/internal/server/db"
 )
 
 // PublishTaskLarkSwitchTx is the persistence half of final phase C. The caller
@@ -23,7 +25,7 @@ func (s *Store) PublishTaskLarkSwitchTx(ctx context.Context, m *TaskMutation, ac
 	var reservedVersion int64
 	var originalNode uuid.UUID
 	var raw []byte
-	err := m.Tx.QueryRow(ctx, `SELECT status,reservation_task_version,node_run_id,captured_request FROM task_lark_switch_actions WHERE actor_key=$1 AND action_id=$2 AND task_id=$3 FOR UPDATE`, actor, action, m.Record.View.Task.ID).Scan(&state, &reservedVersion, &originalNode, &raw)
+	err := m.Tx.QueryRow(ctx, `SELECT status,reservation_task_version,node_run_id,captured_request FROM task_lark_switch_actions WHERE actor_key=$1 AND action_id=$2 AND task_id=$3`, actor, action, m.Record.View.Task.ID).Scan(&state, &reservedVersion, &originalNode, &raw)
 	if err != nil {
 		return 0, false, notFoundIfNoRows(err, "Lark切换动作")
 	}
@@ -100,11 +102,11 @@ func (s *Store) PublishTaskLarkSwitchTx(ctx context.Context, m *TaskMutation, ac
 	}
 	// Invalidate only the two named members, never the task's other runtimes.
 	for _, member := range capture.Members {
-		rows, err := m.Tx.Query(ctx, `SELECT `+sleepColumns+` FROM agent_sleeps WHERE task_id=$1 AND runtime_id=$2 AND state IN ('requested','sleeping','woken') ORDER BY id FOR UPDATE`, m.Record.View.Task.ID, member.RuntimeID)
+		rows, err := m.Tx.Query(ctx, `SELECT `+sleepColumns+` FROM agent_sleeps WHERE task_id=$1 AND runtime_id=$2 AND state IN ('requested','sleeping','woken') ORDER BY id`, m.Record.View.Task.ID, member.RuntimeID)
 		if err != nil {
 			return 0, false, err
 		}
-		sleeps, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Sleep, error) { return scanSleep(row) })
+		sleeps, err := db.CollectRows(rows, func(row db.CollectableRow) (Sleep, error) { return scanSleep(row) })
 		if err != nil {
 			return 0, false, err
 		}
@@ -121,7 +123,7 @@ func (s *Store) PublishTaskLarkSwitchTx(ctx context.Context, m *TaskMutation, ac
 	if err = m.Emit("node.updated", map[string]any{"node": old}); err != nil {
 		return 0, false, err
 	}
-	turn, err := scanTaskTurn(m.Tx.QueryRow(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,execution_mode,text,lark_binding_revision,lark_switch_action_id,request_id) VALUES($1,$2,$3,$4,$5,$6,'queued','task_node','task_node',$7,$8,$9,$10) RETURNING `+taskTurnColumns, turnID, next.TaskID, next.RuntimeID, next.ID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), prompt, revision, action, taskRequestID(ctx, m, "task_node")))
+	turn, err := insertTaskTurn(ctx, m.Tx, `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,execution_mode,text,lark_binding_revision,lark_switch_action_id,request_id`, `$1,$2,$3,$4,$5,$6,'queued','task_node','task_node',$7,$8,$9,$10`, turnID, next.TaskID, next.RuntimeID, next.ID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), prompt, revision, action, taskRequestID(ctx, m, "task_node"))
 	if err != nil {
 		return 0, false, err
 	}
@@ -162,8 +164,36 @@ func (s *Store) PublishTaskLarkSwitchTx(ctx context.Context, m *TaskMutation, ac
 	if _, err = m.Tx.Exec(ctx, `DELETE FROM task_lark_switch_fences WHERE actor_key=$1 AND action_id=$2 AND task_id=$3`, actor, action, next.TaskID); err != nil {
 		return 0, false, err
 	}
+	// 提交前按事务最终的状态再核对一次发布组（原来是 PostgreSQL 的延迟约束触发器 task_lark_complete_group）。
+	taskID := next.TaskID
+	m.Tx.BeforeCommit(func(ctx context.Context, tx *db.Tx) error {
+		return checkTaskLarkPublishedGroupTx(ctx, tx, taskID, revision)
+	})
 	m.Changed()
 	return revision, true, nil
+}
+
+// errIncompleteLarkGroup 与原来的触发器报同样的错误。
+var errIncompleteLarkGroup = errors.New("task_lark_switch_requires_complete_published_group")
+
+// checkTaskLarkPublishedGroupTx 核对一次发布的组完整：恰好两个成员，续接轮次属于发布方成员、
+// 节点与版本对得上，原动作已成功。不完整时返回 errIncompleteLarkGroup，使整个发布回滚。
+func checkTaskLarkPublishedGroupTx(ctx context.Context, tx *db.Tx, task uuid.UUID, revision int64) error {
+	var complete bool
+	err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM task_lark_binding_members WHERE task_id=b.task_id AND revision=b.revision)=2
+		AND EXISTS(SELECT 1 FROM task_lark_binding_members p JOIN task_turns t ON t.id=b.continuation_turn_id
+			WHERE p.task_id=b.task_id AND p.revision=b.revision AND p.member_role='publisher'
+			AND t.task_id=p.task_id AND t.runtime_id=p.runtime_id AND t.node_run_id=b.continuation_node_run_id
+			AND t.lark_binding_revision=b.revision AND t.lark_switch_action_id=b.action_id)
+		AND EXISTS(SELECT 1 FROM task_lark_switch_actions a WHERE a.actor_key=b.actor_key AND a.action_id=b.action_id AND a.task_id=b.task_id AND a.status='succeeded')
+		FROM task_lark_credential_bindings b WHERE b.task_id=$1 AND b.revision=$2`, task, revision).Scan(&complete)
+	if err != nil {
+		return err
+	}
+	if !complete {
+		return errIncompleteLarkGroup
+	}
+	return nil
 }
 
 func sameLarkSession(a, b *string) bool {

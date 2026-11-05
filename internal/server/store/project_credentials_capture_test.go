@@ -2,14 +2,12 @@ package store_test
 
 import (
 	"context"
+	"loop-now/internal/server/store"
+	"loop-now/internal/testutil/sqlitetest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"loop-now/internal/server/store"
 )
 
 type projectCaptureGate struct {
@@ -17,8 +15,9 @@ type projectCaptureGate struct {
 	entered, release chan struct{}
 }
 
-func (g *projectCaptureGate) TraceQueryStart(ctx context.Context, _ *pgx.Conn, d pgx.TraceQueryStartData) context.Context {
-	if strings.Contains(d.SQL, "FROM agents WHERE id=$1") && strings.Contains(d.SQL, "FOR SHARE") {
+// hook 让采集停在读 Agent 行之前：采集所在的写事务已经开始（项目已读），还没结束。
+func (g *projectCaptureGate) hook(ctx context.Context, q string) {
+	if strings.Contains(q, "agents.prompt_version") && strings.Contains(q, "FROM agents WHERE id=$1") {
 		g.once.Do(func() {
 			close(g.entered)
 			select {
@@ -27,9 +26,7 @@ func (g *projectCaptureGate) TraceQueryStart(ctx context.Context, _ *pgx.Conn, d
 			}
 		})
 	}
-	return ctx
 }
-func (*projectCaptureGate) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
 
 func TestProjectCredentialCaptureSerializesEffectiveChanges(t *testing.T) {
 	for _, mutation := range []string{"replace", "permission", "prompt"} {
@@ -37,9 +34,6 @@ func TestProjectCredentialCaptureSerializesEffectiveChanges(t *testing.T) {
 			e := projectMigrationFixture(t)
 			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 			defer cancel()
-			if err := e.s.Migrate(ctx, quietLogger()); err != nil {
-				t.Fatal(err)
-			}
 			id := e.agent(t, "锁内捕获", "openai")
 			w := projectCoreWrite(t, e, "synthetic-capture-A")
 			account, err := e.s.CreateProjectCredential(ctx, e.project, "model", "openai", "模型A", w)
@@ -54,26 +48,9 @@ func TestProjectCredentialCaptureSerializesEffectiveChanges(t *testing.T) {
 				t.Fatal(err)
 			}
 			gate := &projectCaptureGate{entered: make(chan struct{}), release: make(chan struct{})}
-			readConfig := e.s.Pool.Config()
-			readConfig.ConnConfig.Tracer = gate
-			readPool, err := pgxpool.NewWithConfig(ctx, readConfig)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer readPool.Close()
-			reader := &store.Store{Pool: readPool}
-			writeConfig := e.s.Pool.Config()
-			writeConfig.MaxConns = 1
-			writePool, err := pgxpool.NewWithConfig(ctx, writeConfig)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer writePool.Close()
-			writer := &store.Store{Pool: writePool}
-			var pid int
-			if err = writePool.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&pid); err != nil {
-				t.Fatal(err)
-			}
+			e.s.Pool.SetQueryHook(gate.hook)
+			defer e.s.Pool.SetQueryHook(nil)
+			reader, writer := e.s, e.s
 			capture := make(chan store.ExecutionIdentity, 1)
 			failure := make(chan error, 1)
 			var once sync.Once
@@ -101,22 +78,12 @@ func TestProjectCredentialCaptureSerializesEffectiveChanges(t *testing.T) {
 					written <- err
 				}
 			}()
-			// PG's actual lock wait proves the writer reached the project fence.
-			for {
-				var blocked bool
-				if err = e.s.Pool.QueryRow(ctx, `SELECT coalesce(wait_event_type='Lock',false) FROM pg_stat_activity WHERE pid=$1`, pid).Scan(&blocked); err != nil {
-					t.Fatal(err)
-				}
-				if blocked {
-					break
-				}
-				select {
-				case err := <-written:
-					t.Fatal("writer bypassed capture fence", err)
-				case <-ctx.Done():
-					t.Fatal(ctx.Err())
-				default:
-				}
+			// 写入停在等写连接上，证明它到了采集的写事务后面。
+			sqlitetest.WaitWriteWaiters(t, ctx, e.s.Pool, 1)
+			select {
+			case err := <-written:
+				t.Fatal("writer bypassed capture fence", err)
+			default:
 			}
 			release()
 			old := <-capture

@@ -48,7 +48,7 @@ func (w *world) startOfflineAuth(f *taskAuthOffline) *server {
 	if err != nil {
 		w.t.Fatal(err)
 	}
-	a, err := app.Build(context.Background(), &cfg, config.NewLogger(io.Discard, cfg.LogFormat, cfg.LogLevel), app.Options{SearchPath: w.schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, AuthLoginHelper: f, AuthRefresher: f})
+	a, err := app.Build(context.Background(), &cfg, config.NewLogger(io.Discard, cfg.LogFormat, cfg.LogLevel), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, AuthLoginHelper: f, AuthRefresher: f})
 	if err != nil {
 		ln.Close()
 		w.t.Fatal(err)

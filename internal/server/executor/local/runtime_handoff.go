@@ -33,7 +33,7 @@ type handoffStop struct {
 	unsafe bool // a stop began but its completion/revocation could not be confirmed
 }
 
-// RuntimeHandoff fences execution admission, not PostgreSQL queues or native
+// RuntimeHandoff fences execution admission, not database queues or native
 // consumers. The caller must own their persistent/consumer fences first, and
 // retain this lease through the final transaction's independently known result.
 // All fields are protected by Executor.mu; handles remain immutable.

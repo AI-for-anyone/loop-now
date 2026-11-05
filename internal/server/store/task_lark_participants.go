@@ -6,9 +6,10 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/taskruntime"
+
+	"loop-now/internal/server/db"
 )
 
 // TaskLarkParticipants is a console read model, never an authorization to
@@ -17,7 +18,7 @@ import (
 func (s *Store) TaskLarkParticipants(ctx context.Context, id uuid.UUID) (taskmodel.Detail, []taskmodel.LarkSwitchParticipant, error) {
 	var r taskmodel.Record
 	out := []taskmodel.LarkSwitchParticipant{}
-	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	tx, err := s.Pool.BeginRead(ctx)
 	if err != nil {
 		return r.View, nil, err
 	}
@@ -47,11 +48,11 @@ func (s *Store) TaskLarkParticipants(ctx context.Context, id uuid.UUID) (taskmod
 		fenced            bool
 		hadTurn           bool
 	}
-	rows, err := tx.Query(ctx, `SELECT i.agent_id,i.id,i.snapshot,i.snapshot_sha,i.prepared,i.retired,i.session_state,i.session_file,coalesce(b.revision,0),b.base_snapshot_sha,b.agent_id,EXISTS(SELECT 1 FROM task_lark_switch_fences f WHERE f.runtime_id=i.id),EXISTS(SELECT 1 FROM task_turns t WHERE t.task_id=i.task_id AND t.runtime_id=i.id) FROM task_instances i LEFT JOIN LATERAL (SELECT p.revision,p.base_snapshot_sha,p.agent_id FROM task_lark_binding_members p JOIN task_lark_credential_bindings b ON b.task_id=p.task_id AND b.revision=p.revision JOIN task_lark_switch_actions a ON a.task_id=b.task_id AND a.actor_key=b.actor_key AND a.action_id=b.action_id AND a.status='succeeded' WHERE p.task_id=i.task_id AND p.runtime_id=i.id ORDER BY p.revision DESC LIMIT 1) b ON true WHERE i.task_id=$1 ORDER BY i.id`, id)
+	rows, err := tx.Query(ctx, `SELECT i.agent_id,i.id,i.snapshot,i.snapshot_sha,i.prepared,i.retired,i.session_state,i.session_file,coalesce(b.revision,0),b.base_snapshot_sha,b.agent_id,EXISTS(SELECT 1 FROM task_lark_switch_fences f WHERE f.runtime_id=i.id),EXISTS(SELECT 1 FROM task_turns t WHERE t.task_id=i.task_id AND t.runtime_id=i.id) FROM task_instances i LEFT JOIN task_lark_binding_members b ON b.task_id=i.task_id AND b.runtime_id=i.id AND b.revision=(SELECT p.revision FROM task_lark_binding_members p JOIN task_lark_credential_bindings cb ON cb.task_id=p.task_id AND cb.revision=p.revision JOIN task_lark_switch_actions a ON a.task_id=cb.task_id AND a.actor_key=cb.actor_key AND a.action_id=cb.action_id AND a.status='succeeded' WHERE p.task_id=i.task_id AND p.runtime_id=i.id ORDER BY p.revision DESC LIMIT 1) WHERE i.task_id=$1 ORDER BY i.id`, id)
 	if err != nil {
 		return r.View, nil, err
 	}
-	instances, err := pgx.CollectRows(rows, func(q pgx.CollectableRow) (row, error) {
+	instances, err := db.CollectRows(rows, func(q db.CollectableRow) (row, error) {
 		var v row
 		e := q.Scan(&v.agent, &v.runtime, &v.snapshot, &v.snapshotSHA, &v.prepared, &v.retired, &v.sessionState, &v.sessionFile, &v.revision, &v.bindingSHA, &v.bindingAgent, &v.fenced, &v.hadTurn)
 		return v, e

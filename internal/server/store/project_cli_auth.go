@@ -7,11 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	cm "loop-now/internal/server/credentialmodel"
 	"regexp"
 	"time"
+
+	"loop-now/internal/server/db"
 )
 
 const cliOperationColumns = `id,project_id,cli_name,auth_type,target_account_id,target_revision,name,status,account_id,started_at,expires_at,completed_at,authorization_url,error_code,user_code`
@@ -22,17 +23,13 @@ var ErrCLIAuthExpired = errors.New("CLI登录提交期限已过")
 
 var githubUserCode = regexp.MustCompile(`^[A-Z0-9]{4}-[A-Z0-9]{4}$`)
 
-func scanCLIOperation(row pgx.Row) (cm.CLIAuthOperation, error) {
+func scanCLIOperation(row db.Scanner) (cm.CLIAuthOperation, error) {
 	var o cm.CLIAuthOperation
 	e := row.Scan(&o.ID, &o.ProjectID, &o.CLI, &o.AuthType, &o.TargetAccountID, &o.TargetRevision, &o.Name, &o.Status, &o.AccountID, &o.StartedAt, &o.ExpiresAt, &o.CompletedAt, &o.AuthorizationURL, &o.ErrorCode, &o.UserCode)
 	return o, e
 }
-func cliOperationTx(ctx context.Context, tx pgx.Tx, project, id uuid.UUID, lock bool) (cm.CLIAuthOperation, error) {
-	mode := ""
-	if lock {
-		mode = " FOR UPDATE"
-	}
-	o, e := scanCLIOperation(tx.QueryRow(ctx, `SELECT `+cliOperationColumns+` FROM project_cli_auth_operations WHERE id=$1 AND project_id=$2`+mode, id, project))
+func cliOperationTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, _ bool) (cm.CLIAuthOperation, error) {
+	o, e := scanCLIOperation(tx.QueryRow(ctx, `SELECT `+cliOperationColumns+` FROM project_cli_auth_operations WHERE id=$1 AND project_id=$2`, id, project))
 	if e == nil && o.CLI == "lark-cli" {
 		e = tx.QueryRow(ctx, `SELECT source_account_id,source_version_id,source_revision FROM project_cli_auth_operations WHERE id=$1 AND project_id=$2`, id, project).Scan(&o.SourceAccountID, &o.SourceVersionID, &o.SourceRevision)
 	}
@@ -50,7 +47,7 @@ func cliInProgress(project, id uuid.UUID, cli string) error {
 	}{project, id, cli}
 	return e
 }
-func expireCLIOperationsTx(ctx context.Context, tx pgx.Tx, project uuid.UUID) error {
+func expireCLIOperationsTx(ctx context.Context, tx *db.Tx, project uuid.UUID) error {
 	_, e := tx.Exec(ctx, `UPDATE project_cli_auth_operations SET status='expired',authorization_url=NULL,user_code=NULL,error_code='auth_timeout',completed_at=clock_timestamp() WHERE project_id=$1 AND status IN('pending','awaiting_authorization') AND expires_at<=clock_timestamp()`, project)
 	return e
 }
@@ -66,7 +63,7 @@ func (s *Store) NewProjectCLIAuthOperation(ctx context.Context, project uuid.UUI
 	raw, _ := json.Marshal(in)
 	sum := sha256.Sum256(raw)
 	hash := hex.EncodeToString(sum[:])
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, true); e != nil {
 			return e
 		}
@@ -82,7 +79,7 @@ func (s *Store) NewProjectCLIAuthOperation(ctx context.Context, project uuid.UUI
 			out, e = cliOperationTx(ctx, tx, project, in.OperationID, false)
 			return e
 		}
-		if e != pgx.ErrNoRows {
+		if e != db.ErrNoRows {
 			return e
 		}
 		if !(in.CLI == "gcloud" && in.AuthType == "google_user" || in.CLI == "gh" && in.AuthType == "github_user") || in.OperationID == uuid.Nil {
@@ -116,11 +113,11 @@ func (s *Store) NewProjectCLIAuthOperation(ctx context.Context, project uuid.UUI
 			}
 		}
 		var active uuid.UUID
-		e = tx.QueryRow(ctx, `SELECT id FROM project_cli_auth_operations WHERE project_id=$1 AND target_account_id IS NOT DISTINCT FROM $2::uuid AND cli_name=$3 AND status IN('pending','awaiting_authorization')`, project, in.AccountID, in.CLI).Scan(&active)
+		e = tx.QueryRow(ctx, `SELECT id FROM project_cli_auth_operations WHERE project_id=$1 AND target_account_id IS $2 AND cli_name=$3 AND status IN('pending','awaiting_authorization')`, project, in.AccountID, in.CLI).Scan(&active)
 		if e == nil {
 			return cliInProgress(project, active, in.CLI)
 		}
-		if e != pgx.ErrNoRows {
+		if e != db.ErrNoRows {
 			return e
 		}
 		var exists bool
@@ -138,7 +135,7 @@ func (s *Store) NewProjectCLIAuthOperation(ctx context.Context, project uuid.UUI
 }
 func (s *Store) GetProjectCLIAuthOperation(ctx context.Context, project, id uuid.UUID) (cm.CLIAuthOperation, error) {
 	var out cm.CLIAuthOperation
-	e := s.inTx(ctx, func(tx pgx.Tx) error {
+	e := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, true); e != nil {
 			return e
 		}
@@ -160,14 +157,14 @@ func (s *Store) ListProjectCLIAuthOperations(ctx context.Context, project uuid.U
 	if len(cliFilter) > 1 || cli != "gcloud" && cli != "gh" && cli != "lark-cli" {
 		return nil, apperr.Invalid("cli", "CLI登录筛选无效")
 	}
-	e := s.inTx(ctx, func(tx pgx.Tx) error {
+	e := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, true); e != nil {
 			return e
 		}
 		if e := expireCLIOperationsTx(ctx, tx, project); e != nil {
 			return e
 		}
-		rows, e := tx.Query(ctx, `SELECT `+cliOperationColumns+` FROM project_cli_auth_operations WHERE project_id=$1 AND cli_name=$3 AND status IN('pending','awaiting_authorization') AND ($2::uuid IS NULL OR target_account_id=$2) ORDER BY started_at,id`, project, account, cli)
+		rows, e := tx.Query(ctx, `SELECT `+cliOperationColumns+` FROM project_cli_auth_operations WHERE project_id=$1 AND cli_name=$3 AND status IN('pending','awaiting_authorization') AND ($2 IS NULL OR target_account_id=$2) ORDER BY started_at,id`, project, account, cli)
 		if e != nil {
 			return e
 		}
@@ -194,7 +191,7 @@ func (s *Store) ListProjectCLIAuthOperations(ctx context.Context, project uuid.U
 }
 func (s *Store) SetProjectCLIAuthURL(ctx context.Context, project, id uuid.UUID, url string) (cm.CLIAuthOperation, error) {
 	var out cm.CLIAuthOperation
-	e := s.inTx(ctx, func(tx pgx.Tx) error {
+	e := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, true); e != nil {
 			return e
 		}
@@ -220,7 +217,7 @@ func (s *Store) SetProjectGitHubAuthorization(ctx context.Context, project, id u
 	if url != "https://github.com/login/device" || !githubUserCode.MatchString(code) || expires.IsZero() {
 		return out, apperr.Invalid("authorization", "GitHub授权交互无效")
 	}
-	e := s.inTx(ctx, func(tx pgx.Tx) error {
+	e := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, true); e != nil {
 			return e
 		}
@@ -236,23 +233,23 @@ func (s *Store) SetProjectGitHubAuthorization(ctx context.Context, project, id u
 			return apperr.Invalid("cli", "GitHub授权操作类型不匹配")
 		}
 		var live bool
-		if e = tx.QueryRow(ctx, `SELECT least($1::timestamptz,$2::timestamptz)>clock_timestamp()`, expires, out.ExpiresAt).Scan(&live); e != nil {
+		if e = tx.QueryRow(ctx, `SELECT min($1,$2)>clock_timestamp()`, expires, out.ExpiresAt).Scan(&live); e != nil {
 			return e
 		}
 		if !live {
 			out, e = scanCLIOperation(tx.QueryRow(ctx, `UPDATE project_cli_auth_operations SET status='expired',authorization_url=NULL,user_code=NULL,error_code='auth_timeout',completed_at=clock_timestamp() WHERE id=$1 RETURNING `+cliOperationColumns, id))
 			return e
 		}
-		out, e = scanCLIOperation(tx.QueryRow(ctx, `UPDATE project_cli_auth_operations SET status='awaiting_authorization',authorization_url=$2,user_code=$3,expires_at=least(expires_at,$4) WHERE id=$1 RETURNING `+cliOperationColumns, id, url, code, expires))
+		out, e = scanCLIOperation(tx.QueryRow(ctx, `UPDATE project_cli_auth_operations SET status='awaiting_authorization',authorization_url=$2,user_code=$3,expires_at=min(expires_at,$4) WHERE id=$1 RETURNING `+cliOperationColumns, id, url, code, expires))
 		return e
 	})
 	return out, e
 }
 func (s *Store) EndProjectCLIAuthOperation(ctx context.Context, project, id uuid.UUID, status, code string) (cm.CLIAuthOperation, error) {
 	var out cm.CLIAuthOperation
-	e := s.inTx(ctx, func(tx pgx.Tx) error {
+	e := s.inTx(ctx, func(tx *db.Tx) error {
 		// May run after owner deletion; never changes credentials or revives an op.
-		if _, e := tx.Exec(ctx, `SELECT 1 FROM projects WHERE id=$1 FOR UPDATE`, project); e != nil {
+		if _, e := tx.Exec(ctx, `SELECT 1 FROM projects WHERE id=$1`, project); e != nil {
 			return e
 		}
 		var e error
@@ -277,9 +274,9 @@ func (s *Store) EndProjectCLIAuthOperation(ctx context.Context, project, id uuid
 func (s *Store) CompleteProjectCLIAuthOperation(ctx context.Context, project, id uuid.UUID, w ProjectCredentialWrite) (cm.CLIAuthOperation, *ProjectCredentialRecord, error) {
 	var out cm.CLIAuthOperation
 	var saved *ProjectCredentialRecord
-	e := s.inTx(ctx, func(tx pgx.Tx) error {
+	e := s.inTx(ctx, func(tx *db.Tx) error {
 		var deleted *time.Time
-		if e := tx.QueryRow(ctx, `SELECT deleted_at FROM projects WHERE id=$1 FOR UPDATE`, project).Scan(&deleted); e != nil {
+		if e := tx.QueryRow(ctx, `SELECT deleted_at FROM projects WHERE id=$1`, project).Scan(&deleted); e != nil {
 			return notFoundIfNoRows(e, "项目")
 		}
 		initial, e := cliOperationTx(ctx, tx, project, id, false)
@@ -382,7 +379,7 @@ func (s *Store) CompleteProjectCLIAuthOperation(ctx context.Context, project, id
 			return e
 		}
 		out, e = scanCLIOperation(tx.QueryRow(ctx, `UPDATE project_cli_auth_operations SET status='succeeded',account_id=$2,authorization_url=NULL,user_code=NULL,error_code=NULL,completed_at=clock_timestamp() WHERE id=$1 AND expires_at>clock_timestamp() RETURNING `+cliOperationColumns, id, r.View.ID))
-		if errors.Is(e, pgx.ErrNoRows) {
+		if errors.Is(e, db.ErrNoRows) {
 			return ErrCLIAuthExpired
 		}
 		if e == nil && out.CLI == "lark-cli" {

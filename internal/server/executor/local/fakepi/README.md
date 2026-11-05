@@ -1,10 +1,10 @@
 # fakepi
 
-测试替身：模拟平台用到的 Pi 1.1.0 CLI/RPC 子集，不调用任何模型。
+测试替身：模拟平台用到的 Pi CLI/RPC 子集（按 Pi 1.1.0 的源码写成），不调用任何模型。
 
 ```bash
 go build -o /tmp/fakepi ./internal/server/executor/local/fakepi
-/tmp/fakepi --version                      # 输出 $FAKEPI_VERSION，默认 1.1.0
+/tmp/fakepi --version                      # 输出 $FAKEPI_VERSION，默认 1.4.0（平台钉的版本）
 /tmp/fakepi --mode rpc --session-dir /tmp/s  # RPC 模式，stdin/stdout 为 JSONL
 ```
 

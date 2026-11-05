@@ -3,11 +3,12 @@ package store
 import (
 	"context"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/taskmodel"
 	"slices"
 	"strings"
+
+	"loop-now/internal/server/db"
 )
 
 type InboxLockPlan struct {
@@ -17,7 +18,7 @@ type InboxLockPlan struct {
 	MessageID             uuid.UUID
 }
 type InboxTransaction struct {
-	Tx    pgx.Tx
+	Tx    *db.Tx
 	Tasks map[uuid.UUID]*TaskMutation
 }
 
@@ -30,12 +31,7 @@ func sortedIDs(ids []uuid.UUID) []uuid.UUID {
 // callback may enter another Store transaction or acquire an earlier lock.
 func (s *Store) InboxTransaction(ctx context.Context, plan InboxLockPlan, fn func(*InboxTransaction) error) error {
 	changed := false
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
-		if plan.MessageID != uuid.Nil {
-			if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "inbox-write:"+plan.MessageID.String()); err != nil {
-				return err
-			}
-		}
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		projects := slices.Clone(plan.Projects)
 		tasks := slices.Clone(plan.Tasks)
 		agents := []uuid.UUID{}
@@ -79,7 +75,7 @@ func (s *Store) InboxTransaction(ctx context.Context, plan InboxLockPlan, fn fun
 		for _, pid := range sortedIDs(projects) {
 			var name string
 			var manager *uuid.UUID
-			if err := tx.QueryRow(ctx, `SELECT name,manager_agent_id FROM projects WHERE id=$1 AND (deleted_at IS NULL OR $2) FOR SHARE`, pid, plan.AllowEndedTaskHistory).Scan(&name, &manager); err != nil {
+			if err := tx.QueryRow(ctx, `SELECT name,manager_agent_id FROM projects WHERE id=$1 AND (deleted_at IS NULL OR $2)`, pid, plan.AllowEndedTaskHistory).Scan(&name, &manager); err != nil {
 				return notFoundIfNoRows(err, "项目")
 			}
 			names[pid] = name
@@ -91,14 +87,14 @@ func (s *Store) InboxTransaction(ctx context.Context, plan InboxLockPlan, fn fun
 			}
 		}
 		for _, id := range sortedIDs(identities) {
-			if err := lockLiveIdentity(ctx, tx, id); err != nil {
+			if err := requireLiveIdentity(ctx, tx, id); err != nil {
 				return err
 			}
 		}
 		scope := &InboxTransaction{Tx: tx, Tasks: map[uuid.UUID]*TaskMutation{}}
 		for _, id := range tasks {
 			var data []byte
-			if err := tx.QueryRow(ctx, `SELECT document FROM task_records WHERE id=$1 FOR UPDATE`, id).Scan(&data); err != nil {
+			if err := tx.QueryRow(ctx, `SELECT document FROM task_records WHERE id=$1`, id).Scan(&data); err != nil {
 				return err
 			}
 			var record taskmodel.Record
@@ -138,7 +134,7 @@ func (s *Store) InboxTransaction(ctx context.Context, plan InboxLockPlan, fn fun
 }
 
 // QueueInboxReminderTx requires the normal Agent lock acquired by InboxTransaction.
-func (s *Store) QueueInboxReminderTx(ctx context.Context, tx pgx.Tx, msg NewInboxMessage) error {
+func (s *Store) QueueInboxReminderTx(ctx context.Context, tx *db.Tx, msg NewInboxMessage) error {
 	var state string
 	if err := tx.QueryRow(ctx, `SELECT state FROM agent_sessions WHERE agent_id=$1`, msg.To.ID).Scan(&state); err != nil {
 		return err
@@ -174,7 +170,7 @@ func (s *Store) QueueInboxReminderTx(ctx context.Context, tx pgx.Tx, msg NewInbo
 	}
 	return LinkInboxReminderTx(ctx, tx, msg.ID, r.ID)
 }
-func InboxMessageExistsTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (bool, error) {
+func InboxMessageExistsTx(ctx context.Context, tx *db.Tx, id uuid.UUID) (bool, error) {
 	var found bool
 	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM inbox_messages WHERE id=$1)`, id).Scan(&found)
 	return found, err

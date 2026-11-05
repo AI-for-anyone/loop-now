@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
@@ -14,6 +13,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"loop-now/internal/server/db"
 )
 
 type QuestionInput struct {
@@ -33,7 +34,7 @@ type taskQuestionBridge interface {
 	CheckQuestionRunTx(context.Context, *store.TaskMutation, auth.Principal, uuid.UUID, uuid.UUID) error
 	BindQuestionTx(context.Context, *store.TaskMutation, auth.Principal, uuid.UUID, taskmodel.Question) error
 	SyncQuestionTx(context.Context, *store.TaskMutation, uuid.UUID, string) (bool, error)
-	DeliverInboxTx(context.Context, pgx.Tx, *store.TaskMutation, store.NewInboxMessage) error
+	DeliverInboxTx(context.Context, *db.Tx, *store.TaskMutation, store.NewInboxMessage) error
 	InboxCommitted(context.Context, uuid.UUID)
 }
 type inboxCommitter interface {
@@ -220,7 +221,7 @@ func (s *Service) questionDeliverOnce(ctx context.Context, p auth.Principal, msg
 			if err != nil {
 				return err
 			}
-			if _, err = scope.Tx.Exec(ctx, `UPDATE inbox_questions SET state='answered',answer_message_id=$2,answer_option_id=$3,answered_by=$4,answered_at=now() WHERE message_id=$1`, input.ReplyTo, msg.ID, input.OptionID, by); err != nil {
+			if _, err = scope.Tx.Exec(ctx, `UPDATE inbox_questions SET state='answered',answer_message_id=$2,answer_option_id=$3,answered_by=$4,answered_at=now() WHERE message_id=$1`, input.ReplyTo, msg.ID, input.OptionID, json.RawMessage(by)); err != nil {
 				return err
 			}
 			if _, err = scope.Tx.Exec(ctx, `UPDATE inbox_messages SET answers_message_id=$2,answer_option_id=$3 WHERE id=$1`, msg.ID, input.ReplyTo, input.OptionID); err != nil {
@@ -258,7 +259,7 @@ func (s *Service) questionDeliverOnce(ctx context.Context, p auth.Principal, msg
 			if ttl <= 0 {
 				ttl = 7 * 24 * time.Hour
 			}
-			if _, err := scope.Tx.Exec(ctx, `INSERT INTO inbox_questions(message_id,options,expires_at)VALUES($1,$2,$3)`, msg.ID, data, time.Now().UTC().Add(ttl)); err != nil {
+			if _, err := scope.Tx.Exec(ctx, `INSERT INTO inbox_questions(message_id,options,expires_at)VALUES($1,$2,$3)`, msg.ID, json.RawMessage(data), time.Now().UTC().Add(ttl)); err != nil {
 				return err
 			}
 			if input.Dialog != nil {

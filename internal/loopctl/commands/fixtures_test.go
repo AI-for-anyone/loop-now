@@ -97,7 +97,7 @@ func anomalyPage(next any) map[string]any {
 }
 
 func health(pg bool) map[string]any {
-	return map[string]any{"ok": pg, "postgres": map[string]any{"ok": pg}, "redis": map[string]any{"ok": true}}
+	return map[string]any{"ok": pg, "database": map[string]any{"ok": pg}}
 }
 
 func messagePage() map[string]any {

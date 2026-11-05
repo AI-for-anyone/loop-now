@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a><br />
+  <a href="https://github.com/AI-for-anyone/loop-now/releases/latest">Download the desktop app</a> ·
   <a href="#getting-started">Getting started</a> ·
   <a href="#what-you-can-do">Features</a> ·
   <a href="#built-to-extend-the-plugin-system">Plugins</a> ·
@@ -52,10 +53,10 @@ A workflow can move from development to review and back for a bounded number of 
 
 ## Built to extend: the plugin system
 
-**New tools and project-specific behavior belong in plugins.** A plugin is one directory whose `package.json` is the manifest. It has up to two halves, and either one is optional:
+**New tools and project-specific behavior belong in plugins.** A plugin is one directory whose `package.json` is the manifest. It has up to two sides, and either one is optional:
 
-- The **agent half** is a standard [Pi package](https://pi.dev/packages): Pi extensions, Skills, MCP servers, and CLIs, loaded into the Pi process of each agent you grant. An existing Pi package installs unchanged.
-- The **platform half** runs in one long-lived Node plugin host next to the server. It subscribes to platform events and calls the platform API with a scoped plugin token.
+- The **agent side** is a standard [Pi package](https://pi.dev/packages): Pi extensions, Skills, MCP servers, and CLIs, loaded into the Pi process of each agent you grant. An existing Pi package installs unchanged.
+- The **platform side** runs in one long-lived Node plugin host next to the server. It subscribes to platform events and calls the platform API with a scoped plugin token.
 
 | The host provides | What it means for a plugin |
 | --- | --- |
@@ -65,23 +66,23 @@ A workflow can move from development to review and back for a bounded number of 
 | **Reliable outbound HTTP** | The SDK's delivery library keeps a persisted queue, retries with backoff, signs requests with HMAC-SHA256, and writes a delivery log that the plugin page displays. |
 | **Logs + isolation** | Each plugin's output lands in its own log. A plugin that throws, times out, or fails to load affects only itself. |
 
-The manifest is authoritative. Subscribing to an event, or calling an API scope, that the manifest does not declare fails, and install shows the user both halves, the events, and the permissions before anything runs.
+The manifest is authoritative. Subscribing to an event, or calling an API scope, that the manifest does not declare fails, and install shows the user both sides, the events, and the permissions before anything runs.
 
 Observation events, state, secrets, configuration, and the delivery library are available now. Interception and modification hooks, console action buttons, HTTP endpoints, schedules, channels, and plugin accounts are specified in [`plugins/SPEC.md`](plugins/SPEC.md) and are being rolled out.
 
 ### Install once, enable per project, grant per agent
 
-Install from the official plugins, a Git repository, an npm package, or a local directory, in the console or with `loopctl plugin install`. Next, enable the plugin in a project and fill in its configuration. Then grant it to the agents that should load its agent half. Installing or enabling a plugin never authorizes an agent by itself. Versions are pinned: updating is an explicit action, and running tasks keep the files they started with.
+Install from the official plugins, a Git repository, an npm package, or a local directory, in the console or with `loopctl plugin install`. Next, enable the plugin in a project and fill in its configuration. Then grant it to the agents that should load its agent side. Installing or enabling a plugin never authorizes an agent by itself. Versions are pinned: updating is an explicit action, and running tasks keep the files they started with.
 
 Three official plugins ship with the platform:
 
 - [**webhook**](plugins/official/webhook/README.md) POSTs `inbox.received` events to your URL with a signature, retries, and a delivery log. External identities use it instead of polling their Inbox.
 - [**playwright**](plugins/official/playwright/README.md) gives agents a dedicated, visible Chromium through the official Playwright MCP: open pages, read them, click, type, and take screenshots, without touching your everyday Chrome.
-- [**hello**](plugins/official/hello/README.md) is the smallest plugin with both halves, and the starting point for writing your own.
+- [**hello**](plugins/official/hello/README.md) is the smallest plugin with both sides, and the starting point for writing your own.
 
 ![Loop Now plugin market: plugin host status and the official plugins](docs/assets/plugins-en.png)
 
-### A platform half in a few lines
+### A platform side in a few lines
 
 ```ts
 import { createDelivery, type PluginAPI } from '@loop-now/plugin-sdk'
@@ -119,19 +120,65 @@ Lark user execution separately requires the pinned platform bundle described in 
 
 ## Getting started
 
-Run everything with **Docker Compose**, or install from source. macOS Apple Silicon is the primary validated environment. Some components target Linux, but equivalent full-system coverage is not yet established; the Lark user CLI runtime is currently macOS arm64 only.
+Four ways to run it: the **desktop app** (macOS, nothing to install), a **server release bundle** (Linux and macOS), **Docker Compose**, or a source installation. macOS Apple Silicon is the primary validated environment. Some components target Linux, but equivalent full-system coverage is not yet established; the Lark user CLI runtime is currently macOS arm64 only.
+
+### Desktop app (macOS Apple Silicon)
+
+One DMG carries the server, the console, Node and Pi; nothing else is required.
+
+1. Download `loop-now-desktop-<version>-mac-arm64.dmg` from [Releases](https://github.com/AI-for-anyone/loop-now/releases/latest), open it and drag Loop Now into Applications.
+2. First launch: the package is not yet notarized by Apple, so macOS says it cannot verify the developer. Open System Settings › Privacy & Security, find the Security section and click "Open Anyway"; the prompt does not return.
+3. A Loop Now icon appears in the menu bar and the window shows the console. Closing the window keeps the server and the agents running in the background; choose "Quit" from the menu bar icon to stop everything.
+
+Where the data lives: the database and daily backups are in `~/Library/Application Support/Loop Now/default/data`, agent workspaces in `/Users/Shared/loop-now-desktop/default`, logs in `~/Library/Logs/Loop Now/default`. By default the desktop app never touches the source installation's `~/.loop_now` or `/Users/Shared/loop-now`, so both can coexist. To try it with a separate data set, start it with a profile: `open -a "Loop Now" --args --profile=trial`. To move over from a source installation and keep its work root, stop the source installation's server, quit Loop Now, add `{"profiles": {"default": {"workRoot": "/Users/Shared/loop-now"}}}` to `~/Library/Application Support/Loop Now/desktop.json` (`dataDir` and `contextDir` can be set the same way, as absolute paths) and open it again; the profile line in the menu bar shows the paths in use. A PostgreSQL-based installation also needs its database imported first; [Getting started](https://ai-for-anyone.github.io/loop-now/guide/getting-started#moving-to-the-desktop-app) has the full steps.
+
+Updating: quit Loop Now, replace the app in Applications with the new DMG's copy and open it again; data is kept. "Check for updates" in the menu bar announces new versions and opens the download page; automatic installation arrives once the app is signed and notarized.
+
+Agents in the desktop app run on the bundled Pi 1.4.0 and Node 24.21; model accounts, CLI accounts and plugins are configured in the console exactly as in a source installation. External identities and `loopctl` need the external TLS port, which the desktop app cannot open yet.
+
+
+### Server release bundle (Linux / macOS)
+
+Each release also carries a server bundle per platform, `loop-now-<version>-<platform>.tar.gz` for `darwin-arm64`, `darwin-amd64`, `linux-amd64` and `linux-arm64`. It holds `loop-server` with the console built in, `loopctl`, the plugin host, the official plugins, and its own Node 24.21.0 and Pi 1.4.0, so the machine needs only Git.
+
+1. Download your platform's bundle and `SHA256SUMS` from [Releases](https://github.com/AI-for-anyone/loop-now/releases/latest), then check the download:
+
+   ```sh
+   sha256sum -c --ignore-missing SHA256SUMS        # Linux
+   shasum -a 256 -c --ignore-missing SHA256SUMS    # macOS
+   ```
+
+2. Unpack it with `tar` in a terminal. On macOS, unpacking it in Finder marks the files as downloaded from the internet, and Gatekeeper then blocks the unsigned binaries.
+
+   ```sh
+   tar -xzf loop-now-<version>-<platform>.tar.gz
+   cd loop-now-<version>-<platform>
+   ```
+
+3. Set the data directory and the work root, then start the server. The work root follows the same rules as in a source installation and is created the same way ([step 2](#2-configure-the-server)):
+
+   ```sh
+   export LOOP_NOW_DATA_DIR="$HOME/.loop_now"
+   export LOOP_NOW_WORK_ROOT='/var/lib/loop-now'   # macOS: /Users/Shared/loop-now
+   ./loop-server
+   ```
+
+4. Open **[http://127.0.0.1:8780/](http://127.0.0.1:8780/)**. The console is served at the root of the server's port; there is no separate console process.
+
+The bundled Node and Pi are used automatically, so there is nothing else to install; variables such as `LOOP_NOW_NODE_BIN` still take precedence when set. Credentials are stored in plaintext in the data directory; protect it and its backups. To update, stop the server, unpack the new bundle and start its `loop-server` with the same `LOOP_NOW_DATA_DIR` and `LOOP_NOW_WORK_ROOT`, then delete the old directory.
+
 
 ### Docker Compose (local all-in-one)
 
-The first startup builds the server and console images locally, then starts PostgreSQL 18 and Redis 8:
+The first startup builds the server and console images locally, then starts both:
 
 ```sh
 docker compose up --build -d
 ```
 
-Open **[http://localhost:5173](http://localhost:5173)**. The console has no login, so Compose publishes only Web port `5173` and API port `8780` on `127.0.0.1`; PostgreSQL and Redis are not published to the host. The default database user, password, and database name are all `loopnow`, intended only for the Compose network. Do not expose this default configuration externally.
+Open **[http://localhost:5173](http://localhost:5173)**. The console has no login, so Compose publishes only Web port `5173` and API port `8780` on `127.0.0.1`. Do not expose this configuration externally.
 
-The `pgdata` named volume stores the database, and `loopdata` stores agent workspaces, sessions, and tools. `docker compose down` preserves them; `docker compose down -v` deletes this data, so back it up first.
+The `loopdata` named volume stores the database (SQLite, with daily backups), agent workspaces, sessions, and tools. `docker compose down` preserves them; `docker compose down -v` deletes this data, so back it up first.
 
 Agents running in containers have some boundaries:
 
@@ -169,8 +216,6 @@ Persistent agents use the saved catalog from their next message, while running t
 | --- | --- |
 | Go | 1.27 or later |
 | Node.js / npm | **24.21.0 / 11.19.0**; Web scripts check these exact versions |
-| PostgreSQL | 18 |
-| Redis | 8 |
 | Pi coding agent | **1.4.0** |
 | Other tools | Git |
 
@@ -184,26 +229,16 @@ git clone --depth 1 --branch main https://github.com/AI-for-anyone/loop-now.git
 cd loop-now
 ```
 
-Start PostgreSQL and Redis using your preferred local installation. Create a dedicated PostgreSQL role and database; run these as your local PostgreSQL administrator:
-
-```sh
-createuser --login --pwprompt loopnow
-createdb --owner=loopnow loopnow
-```
-
 ### 2. Configure the server
 
-Run the following from the repository root. Replace the database password with the one you chose, URL-encoded if necessary. Use a dedicated Redis database and key prefix; add Redis authentication to the URL if your server requires it.
+Run the following from the repository root:
 
 ```sh
-export LOOP_NOW_DATABASE_URL='postgres://loopnow:YOUR_URL_ENCODED_PASSWORD@127.0.0.1:5432/loopnow?sslmode=disable'
-export LOOP_NOW_REDIS_URL='redis://127.0.0.1:6379/1'
-export LOOP_NOW_REDIS_KEY_PREFIX='loopnow:'
 export LOOP_NOW_NODE_BIN="$(command -v node)"
 export LOOP_NOW_PI_BIN="$(command -v pi)"
 ```
 
-Credentials are stored in plaintext in PostgreSQL; protect database access and backup files. The server reads process environment variables; it does not automatically load an `.env` file.
+The server keeps its database and daily backups in a data directory, `~/.loop_now` of the server user by default (`LOOP_NOW_DATA_DIR` changes it); it creates the database on first start. Credentials are stored in plaintext in that database; protect the data directory and its backups. The server reads process environment variables; it does not automatically load an `.env` file.
 
 Choose a persistent working directory **outside your home directory**, with no `AGENTS.md` or `CLAUDE.md` in its ancestor directories. This prevents Pi from inheriting unrelated host instructions. For a fresh installation, the default is `/Users/Shared/loop-now` on macOS or `/var/lib/loop-now` on Linux:
 
@@ -229,7 +264,7 @@ export LOOP_NOW_LOOPCTL_DIST_DIR="$PWD/.local-build/loopctl-dist"
 bin/loop-server
 ```
 
-Startup checks dependencies, applies pending database migrations, and creates the default organization and project. The API listens on `127.0.0.1:8780`. Run one server per installation; when updating, preserve the database, Redis configuration, and working directory.
+Startup checks dependencies, applies pending database migrations, and creates the default organization and project. The API listens on `127.0.0.1:8780`. A data directory serves one server at a time; when updating, preserve the data directory and the working directory. To move an installation from a PostgreSQL-based release (up to v0.1.0), first check out the tag `pg-final` (the last PostgreSQL-based commit), build it and start it once so the old database reaches its last migration, stop it, then run `loop-server import-postgres` with `LOOP_NOW_DATABASE_URL` pointing at the old database; it copies everything into a new database in the data directory.
 
 Plugins need the Node plugin host, built from `plugins/` (Node 24.21.0). The server runs it only when `LOOP_NOW_PLUGIN_HOST_ENTRY` is set, and offers the official plugins as the `builtin` install source when `LOOP_NOW_PLUGIN_OFFICIAL_DIR` is set:
 
@@ -269,8 +304,7 @@ Start with one agent and a small task before adding a longer workflow.
 ```mermaid
 flowchart LR
     UI[Web console] <-->|HTTP and SSE| Server[Go server]
-    Server <--> PG[(PostgreSQL)]
-    Server <--> Redis[(Redis)]
+    Server <--> DB[(SQLite)]
     Server -->|RPC| Pi[Pi processes]
     Server <-->|stdio| Host[Node plugin host]
     Host -->|HTTP, plugin token| Server
@@ -278,7 +312,7 @@ flowchart LR
     Pi --> Ext[Plugin extensions and MCP servers]
 ```
 
-PostgreSQL stores platform state, credentials, messages, and task records. Redis handles coordination, queues, and live streams. The local filesystem holds agent workspaces, sessions, and installed tools. These components form one local installation; the diagram does not imply independently scalable services.
+SQLite in the data directory stores platform state, credentials, messages, task records, and queues; busy locks and live streams are kept in the server process. The local filesystem holds agent workspaces, sessions, and installed tools. These components form one local installation; the diagram does not imply independently scalable services.
 
 | Source | Purpose |
 | --- | --- |
@@ -296,9 +330,10 @@ All server options and defaults are defined in [`internal/server/config/config.g
 | Variable | Purpose / default |
 | --- | --- |
 | `LOOP_NOW_LISTEN_ADDR` | Console API; `127.0.0.1:8780` |
+| `LOOP_NOW_DATA_DIR` | Database (`db/`) and daily backups (`backups/`); `~/.loop_now` of the server user |
 | `LOOP_NOW_WORK_ROOT` | Persistent agent workspaces and runtime files |
 | `LOOP_NOW_CONTEXT_DIR` | Shared project (`projects/<id>/`) and global (`global/`) context folders; `~/.loop_now` of the server user |
-| `LOOP_NOW_PLUGIN_HOST_ENTRY` | Absolute path of the plugin host entry run with Node; unset means plugin platform halves do not run |
+| `LOOP_NOW_PLUGIN_HOST_ENTRY` | Absolute path of the plugin host entry run with Node; unset means plugins' platform sides do not run |
 | `LOOP_NOW_PLUGIN_OFFICIAL_DIR` | Absolute path of the official plugins shipped with the platform (one directory per plugin); unset means no `builtin` install source |
 | `LOOP_NOW_PLUGIN_MARKET_URL` | `https` address of the official plugin market's `loop-now-market.json`; defaults to the official market index and can point elsewhere |
 | `LOOP_NOW_PI_MAX_PROCESSES` | `0` means unlimited; a positive value caps local Pi processes |
@@ -332,7 +367,7 @@ go test ./cmd/... ./internal/... ./api/...
 ./bin/npm24 run build
 ```
 
-Database integration tests require an isolated test database through `LOOP_NOW_TEST_DATABASE_URL`; tests using Redis also need `LOOP_NOW_TEST_REDIS_URL`. Native and browser tests have additional fixture requirements. A skipped integration test is not a successful integration run. Keep credentials, local runtime data, and build artifacts out of contributions.
+Backend tests need no external services; each uses its own temporary data directory. Only the one-off PostgreSQL importer's tests need a test database through `LOOP_NOW_TEST_DATABASE_URL`. Native and browser tests have additional fixture requirements. A skipped integration test is not a successful integration run. Keep credentials, local runtime data, and build artifacts out of contributions.
 
 ## License
 

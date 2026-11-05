@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/google/uuid"
 	"io"
 	"loop-now/internal/server/app"
 	"loop-now/internal/server/clitemplate"
@@ -23,11 +22,15 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+
+	"loop-now/internal/server/db"
 )
 
 type verificationAppCrashConfig struct {
-	Config                        config.Config
-	Schema, APIReady, NativeReady string
+	Config                config.Config
+	APIReady, NativeReady string
 }
 
 func TestCLIVerificationAppCrashChild(t *testing.T) {
@@ -51,7 +54,7 @@ func TestCLIVerificationAppCrashChild(t *testing.T) {
 	if e != nil {
 		os.Exit(42)
 	}
-	a, e := app.Build(context.Background(), &input.Config, config.NewLogger(io.Discard, "json", 0), app.Options{SearchPath: input.Schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIVerificationCommand: factory})
+	a, e := app.Build(context.Background(), &input.Config, config.NewLogger(io.Discard, "json", 0), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIVerificationCommand: factory})
 	if e != nil {
 		os.Exit(43)
 	}
@@ -69,7 +72,10 @@ func TestCLIVerificationActualAppSIGKILLRecovery(t *testing.T) {
 	w.cfg.AuthRecordTimeout = time.Second
 	w.cfg.CLIInstallTimeout = time.Second
 	ctx := context.Background()
-	st, e := store.Open(ctx, w.cfg.DatabaseURL, store.OpenOptions{SearchPath: w.schema})
+	if e := os.MkdirAll(config.DBDir(w.cfg.DataDir), 0o700); e != nil {
+		t.Fatal(e)
+	}
+	st, e := store.Open(ctx, db.Options{Dir: config.DBDir(w.cfg.DataDir)})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -95,7 +101,7 @@ func TestCLIVerificationActualAppSIGKILLRecovery(t *testing.T) {
 		t.Fatal(e)
 	}
 	control := t.TempDir()
-	input := verificationAppCrashConfig{Config: w.cfg, Schema: w.schema, APIReady: filepath.Join(control, "api.json"), NativeReady: filepath.Join(control, "native.json")}
+	input := verificationAppCrashConfig{Config: w.cfg, APIReady: filepath.Join(control, "api.json"), NativeReady: filepath.Join(control, "native.json")}
 	read, write, e := os.Pipe()
 	if e != nil {
 		t.Fatal(e)
@@ -183,7 +189,7 @@ func TestCLIVerificationActualAppSIGKILLRecovery(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	a, e := app.Build(ctx, &w.cfg, config.NewLogger(io.Discard, "json", 0), app.Options{SearchPath: w.schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIVerificationCommand: func(context.Context, verifyservice.CommandSpec) (*exec.Cmd, error) {
+	a, e := app.Build(ctx, &w.cfg, config.NewLogger(io.Discard, "json", 0), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIVerificationCommand: func(context.Context, verifyservice.CommandSpec) (*exec.Cmd, error) {
 		commands.Add(1)
 		return nil, io.EOF
 	}})

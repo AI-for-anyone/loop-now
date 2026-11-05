@@ -12,10 +12,10 @@
 
 | 字段 | 声明内容 |
 | --- | --- |
-| `pi` | Agent 半边：Pi 扩展、Skills、MCP 服务器、CLI——标准 Pi 包字段。 |
+| `pi` | Agent 侧：Pi 扩展、Skills、MCP 服务器、CLI——标准 Pi 包字段。 |
 | `loopNow.id` | 稳定的插件标识。 |
-| `loopNow.platform` | 平台半边入口文件，加载进共享宿主。 |
-| `loopNow.events` | 平台半边订阅的事件目录条目。 |
+| `loopNow.platform` | 平台侧入口文件，加载进共享宿主。 |
+| `loopNow.events` | 平台侧订阅的事件目录条目。 |
 | `loopNow.permissions` | 插件可调用的 API 范围（`state`、`inbox.send`、`identities.manage` 等）。 |
 | `loopNow.configSchema` | 普通 JSON Schema，渲染为插件的配置表单；`x-secret` 字段只写，`x-scope: project` 字段可按项目覆盖。 |
 | `loopNow.accounts` / `mcpServers` / `cli` / `buttons` / `http` / `schedules` / `channels` | 可选的平台能力，每一项都以清单声明为准。 |

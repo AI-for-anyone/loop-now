@@ -13,11 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/app"
 	"loop-now/internal/server/config"
 	cm "loop-now/internal/server/credentialmodel"
 	"loop-now/internal/server/larkauth/larktest"
+
+	"github.com/google/uuid"
 )
 
 func TestLarkPendingCrashAppChild(t *testing.T) {
@@ -36,7 +37,7 @@ func TestLarkPendingCrashAppChild(t *testing.T) {
 	if e != nil {
 		os.Exit(62)
 	}
-	a, e := app.Build(context.Background(), &in.Config, config.NewLogger(io.Discard, "json", 0), app.Options{SearchPath: in.Schema, Listener: listener, HomeDirs: []string{"/nonexistent-home"}, LarkLoginHelper: p.Client})
+	a, e := app.Build(context.Background(), &in.Config, config.NewLogger(io.Discard, "json", 0), app.Options{Listener: listener, HomeDirs: []string{"/nonexistent-home"}, LarkLoginHelper: p.Client})
 	if e != nil {
 		os.Exit(63)
 	}
@@ -63,7 +64,7 @@ func TestLarkActualAppSIGKILLPendingFlowIsNotResumed(t *testing.T) {
 	}
 	original := sha256.Sum256(row.Secret)
 	seed.stop()
-	input := githubCrashInput{Config: w.cfg, Schema: w.schema, Ready: filepath.Join(t.TempDir(), "ready.json")}
+	input := githubCrashInput{Config: w.cfg, Ready: filepath.Join(t.TempDir(), "ready.json")}
 	r, wr, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)

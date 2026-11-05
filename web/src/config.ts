@@ -33,3 +33,12 @@ export const config = {
   // 文件上传全部成功后，进度卡片停留多久再收起。
   uploadPanelMs: 4000,
 }
+
+// 显示用的接口地址。服务端在同一端口提供控制台时 apiBase 是相对路径 /api/v1，按当前页面解析成绝对地址；解析不了时原样返回。
+export function absoluteApiBase(): string {
+  try {
+    return new URL(config.apiBase, window.location.href).href.replace(/\/+$/, '')
+  } catch {
+    return config.apiBase
+  }
+}

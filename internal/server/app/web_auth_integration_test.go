@@ -19,15 +19,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/app"
 	"loop-now/internal/server/config"
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/modelcredential"
-	"loop-now/internal/testutil/pgtest"
 	"loop-now/internal/testutil/testenv"
+
+	"github.com/google/uuid"
 )
 
 // Exclusive Web-owned integration driver. All control routes belong to this
@@ -86,44 +84,16 @@ func TestWebAuthIntegration(t *testing.T) {
 	evidence := filepath.Join(root, "web/scripts/integration/codex-auth")
 	var w *world
 	var addr, controlAddr string
-	audit := map[string]any{"mode": "actual React -> route.fetch -> app.Build -> isolated PG; DI offline auth helper; no provider/model calls"}
-	// Registered first, runs after App shutdown and existing schema/prefix/temp cleanup.
+	audit := map[string]any{"mode": "actual React -> route.fetch -> app.Build -> temporary SQLite; DI offline auth helper; no provider/model calls"}
+	// Registered first, runs after App shutdown and existing temporary directory cleanup.
 	t.Cleanup(func() {
 		if w == nil {
 			return
 		}
-		audit["schema"] = w.schema
-		audit["redisPrefix"] = w.cfg.RedisKeyPrefix
+		audit["dataDir"] = w.cfg.DataDir
 		audit["appAddress"] = addr
 		audit["controlAddress"] = controlAddr
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		conn, err := pgx.Connect(ctx, pgtest.URL(t))
-		if err != nil {
-			t.Error("cleanup PG verification failed")
-			return
-		}
-		defer conn.Close(ctx)
-		var exists bool
-		if err = conn.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)`, w.schema).Scan(&exists); err != nil || exists {
-			t.Error("isolated schema cleanup not verified")
-		}
-		audit["schemaRemoved"] = !exists && err == nil
-		options, err := redis.ParseURL(w.cfg.RedisURL)
-		if err != nil {
-			t.Error("cleanup Redis configuration invalid")
-			return
-		}
-		rc := redis.NewClient(options)
-		defer rc.Close()
-		iterator := rc.Scan(ctx, 0, w.cfg.RedisKeyPrefix+"*", 100).Iterator()
-		found := iterator.Next(ctx)
-		err = iterator.Err()
-		audit["redisPrefixEmpty"] = err == nil && !found
-		if err != nil || found {
-			t.Error("isolated Redis cleanup not verified")
-		}
-		_, err = os.Stat(w.cfg.WorkRoot)
+		_, err := os.Stat(w.cfg.WorkRoot)
 		audit["workRootRemoved"] = os.IsNotExist(err)
 		if !os.IsNotExist(err) {
 			t.Error("isolated work root cleanup not verified")
@@ -154,7 +124,7 @@ func TestWebAuthIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal("cannot create temporary App listener")
 	}
-	a, err := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, "text", w.cfg.LogLevel), app.Options{SearchPath: w.schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, AuthLoginHelper: helper, AuthRefresher: helper})
+	a, err := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, "text", w.cfg.LogLevel), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, AuthLoginHelper: helper, AuthRefresher: helper})
 	if err != nil {
 		ln.Close()
 		t.Fatal("isolated App Build failed")
@@ -242,7 +212,7 @@ func TestWebAuthIntegration(t *testing.T) {
 				return
 			}
 
-			// PG readback exposes only allowed metadata and whether a credential is stored.
+			// SQLite readback exposes only allowed metadata and whether a credential is stored.
 			result := map[string]any{"agentId": id.String(), "versionId": v.ID.String(), "accountLabel": v.AccountLabel, "authMethod": v.AuthMethod, "stored": len(v.Secret) > 0}
 			expectedAccount := r.URL.Query().Get("expectedAccount")
 			if expectedAccount != "" {
@@ -300,7 +270,7 @@ func TestWebAuthIntegration(t *testing.T) {
 	}
 	current, _, err := a.Store.CurrentModelAuthVersion(context.Background(), codexID)
 	if err != nil || current == nil {
-		t.Fatal("final PG OAuth account mismatch")
+		t.Fatal("final SQLite OAuth account mismatch")
 	}
 	saved, err := modelcredential.Decode(current.Secret)
 	expected, _ := webAuthSyntheticCredential("web-account-B")
@@ -328,5 +298,5 @@ func TestWebAuthIntegration(t *testing.T) {
 	}
 	audit["runCount"] = runs
 	audit["passed"] = true
-	t.Log(fmt.Sprintf("actual Web/App/PG verified: helper logins=%d, OAuth versions=%d, model runs=%d", helper.logins.Load(), versions, runs))
+	t.Log(fmt.Sprintf("actual Web/App/SQLite verified: helper logins=%d, OAuth versions=%d, model runs=%d", helper.logins.Load(), versions, runs))
 }

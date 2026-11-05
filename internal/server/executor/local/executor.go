@@ -60,6 +60,7 @@ type Options struct {
 	CodexServiceTierExtension string
 	LegacyAuthExtension       string
 	PiPackageRoot             string
+	PiAIDir                   string // 预检解析出的 pi-ai 目录（在 pi-coding-agent 之内或与之并列）
 	AuthIPCTimeout            time.Duration
 	WorkRoot                  string
 	PiBin                     string
@@ -583,12 +584,12 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 		env = append(slices.Clone(env), "LOOP_NOW_AUTH_REFRESH_TIMEOUT_MS="+strconv.FormatInt(max(int64(1), ipcTimeout.Milliseconds()), 10))
 	}
 	if snap.ModelCredential.NeedsLegacyAnthropic() {
-		if snap.Provider != "anthropic" || !modelauth.ValidateEntry(e.o.LegacyAuthExtension) || !filepath.IsAbs(e.o.PiPackageRoot) {
+		if snap.Provider != "anthropic" || !modelauth.ValidateEntry(e.o.LegacyAuthExtension) || !filepath.IsAbs(e.o.PiPackageRoot) || !filepath.IsAbs(e.o.PiAIDir) {
 			e.revokeToken(tokenID, e.snapshotLog(snap))
 			return nil, fail(executor.ErrCredentialUnavailable, "旧认证适配未配置")
 		}
 		args = append(args, "-e", e.o.LegacyAuthExtension)
-		env = append(slices.Clone(env), "LOOP_NOW_PI_PACKAGE_ROOT="+e.o.PiPackageRoot)
+		env = append(slices.Clone(env), "LOOP_NOW_PI_PACKAGE_ROOT="+e.o.PiPackageRoot, "LOOP_NOW_PI_AI_DIR="+e.o.PiAIDir)
 	}
 	var googleBridge *cliauth.Broker
 	if snap.GoogleBinding != nil {
@@ -1159,12 +1160,15 @@ type pidRecord struct {
 	InstanceID string    `json:"instanceId"`
 	Hostname   string    `json:"hostname"`
 	SessionDir string    `json:"sessionDir"`
+	// ProcessStart 是内核记录的进程启动时刻（见 processStart）；平台不支持时为空。
+	ProcessStart string `json:"processStart,omitempty"`
 }
 
 func (e *Executor) writePidFile(p *proc) {
+	start, _ := processStart(p.client.Pid())
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	b, _ := json.Marshal(pidRecord{PID: p.client.Pid(), StartedAt: p.startedAt, InstanceID: e.o.InstanceID.String(), Hostname: e.o.Hostname, SessionDir: p.dirs.sessions})
+	b, _ := json.Marshal(pidRecord{PID: p.client.Pid(), StartedAt: p.startedAt, InstanceID: e.o.InstanceID.String(), Hostname: e.o.Hostname, SessionDir: p.dirs.sessions, ProcessStart: start})
 	if err := os.WriteFile(p.dirs.pidFile, b, 0o600); err != nil {
 		p.log.Warn("写入 pi.pid 失败", "err", err)
 	}
@@ -1215,7 +1219,7 @@ func (e *Executor) CleanupStaleExceptPending(ctx context.Context, pending []Pend
 		}
 		var rec pidRecord
 		if json.Unmarshal(b, &rec) == nil && rec.PID > 0 && rec.Hostname == e.o.Hostname && rec.InstanceID != e.o.InstanceID.String() {
-			if isOurPi(rec.PID, rec.SessionDir) {
+			if isOurPi(rec) {
 				e.log.Warn("结束上一次运行遗留的 Pi 进程", "pid", rec.PID, "pidFile", f)
 				_ = syscall.Kill(-rec.PID, syscall.SIGTERM)
 				for i := 0; i < 20 && processAlive(rec.PID); i++ {
@@ -1243,17 +1247,22 @@ func (e *Executor) CleanupStaleExceptPending(ctx context.Context, pending []Pend
 
 func processAlive(pid int) bool { return syscall.Kill(pid, 0) == nil }
 
-// isOurPi 用进程命令行确认它确实是由本平台启动的该 Agent 的 Pi，避免误杀复用了 PID 的其他进程。
-func isOurPi(pid int, sessionDir string) bool {
-	if !processAlive(pid) {
+// isOurPi 确认记录里的 PID 仍是当初启动的那个 Pi 进程，避免误杀复用了 PID 的其他进程：记录了启动时刻时比对它
+// （Pi 会改自己的进程标题，命令行里不再有 --mode rpc 与会话目录）；没有记录时（旧版本写的、或平台不支持）退回到比对命令行。
+func isOurPi(rec pidRecord) bool {
+	if !processAlive(rec.PID) {
 		return false
 	}
-	out, err := exec.Command("ps", "-o", "command=", "-p", strconv.Itoa(pid)).Output()
+	if rec.ProcessStart != "" {
+		start, err := processStart(rec.PID)
+		return err == nil && start == rec.ProcessStart
+	}
+	out, err := exec.Command("ps", "-o", "command=", "-p", strconv.Itoa(rec.PID)).Output()
 	if err != nil {
 		return false
 	}
 	cmd := string(out)
-	return strings.Contains(cmd, "--mode rpc") && sessionDir != "" && strings.Contains(cmd, sessionDir)
+	return strings.Contains(cmd, "--mode rpc") && rec.SessionDir != "" && strings.Contains(cmd, rec.SessionDir)
 }
 
 func (e *Executor) snapshotLog(snap agentconfig.Snapshot) *slog.Logger {

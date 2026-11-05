@@ -5,8 +5,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
+
+	"loop-now/internal/server/db"
 )
 
 // EnqueueTaskInboxTurn给非当前实例或阻塞实例排Inbox回合，不启动workflow节点。
@@ -21,7 +22,7 @@ func (s *Store) EnqueueTaskInboxTurn(ctx context.Context, m *TaskMutation, inst 
 		}
 		return scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1`, old.ID))
 	}
-	if e != pgx.ErrNoRows {
+	if e != db.ErrNoRows {
 		return TaskTurn{}, e
 	}
 	var nodeID *uuid.UUID
@@ -29,7 +30,7 @@ func (s *Store) EnqueueTaskInboxTurn(ctx context.Context, m *TaskMutation, inst 
 	if n != nil && n.RuntimeID == inst.ID && n.Status == "blocked" {
 		nodeID = &n.ID
 	}
-	t, e := scanTaskTurn(m.Tx.QueryRow(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,trigger_inbox_message_id,request_id) VALUES($1,$2,$3,$4,$5,$6,'queued','inbox_reminder',$7,$8,$9,$10) RETURNING `+taskTurnColumns, uuid.Must(uuid.NewV7()), inst.TaskID, inst.ID, nodeID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), priority, text, trigger, taskRequestID(ctx, m, "inbox_reminder")))
+	t, e := insertTaskTurn(ctx, m.Tx, `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,trigger_inbox_message_id,request_id`, `$1,$2,$3,$4,$5,$6,'queued','inbox_reminder',$7,$8,$9,$10`, uuid.Must(uuid.NewV7()), inst.TaskID, inst.ID, nodeID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), priority, text, trigger, taskRequestID(ctx, m, "inbox_reminder"))
 	if e != nil {
 		return t, e
 	}
@@ -84,8 +85,8 @@ func (s *Store) ClaimTaskInboxTurn(ctx context.Context, taskID, runtime uuid.UUI
 		var e error
 		// 提醒轮次领取时已没有待处理消息就作废，接着领取下一轮。
 		for {
-			t, e = scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE runtime_id=$1 AND status='queued' AND (origin='inbox_reminder' OR (origin='console_node' AND execution_mode='task_conversation') OR (origin='sleep_wake' AND EXISTS(SELECT 1 FROM agent_sleeps z WHERE z.id=task_turns.wake_sleep_id AND z.wake_run_id=task_turns.id AND z.mode='task_conversation' AND z.state='woken'))) ORDER BY priority,queue_seq LIMIT 1 FOR UPDATE`, runtime))
-			if e == pgx.ErrNoRows {
+			t, e = scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE runtime_id=$1 AND status='queued' AND (origin='inbox_reminder' OR (origin='console_node' AND execution_mode='task_conversation') OR (origin='sleep_wake' AND EXISTS(SELECT 1 FROM agent_sleeps z WHERE z.id=task_turns.wake_sleep_id AND z.wake_run_id=task_turns.id AND z.mode='task_conversation' AND z.state='woken'))) ORDER BY priority,queue_seq LIMIT 1`, runtime))
+			if e == db.ErrNoRows {
 				return nil, nil
 			}
 			if e != nil {

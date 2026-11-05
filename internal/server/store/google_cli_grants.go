@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/clicredential"
 	"time"
+
+	"loop-now/internal/server/db"
 )
 
 type GoogleCLIGrant struct {
@@ -24,7 +25,7 @@ type GoogleCLIGrant struct {
 
 // finishClaim is reserved for conditional Commit/Fail of an existing lease.
 // It never grants read access or permits a deleted owner to start a refresh.
-func googleGrantTx(ctx context.Context, tx pgx.Tx, b clicredential.Binding, write, finishClaim bool) (GoogleCLIGrant, error) {
+func googleGrantTx(ctx context.Context, tx *db.Tx, b clicredential.Binding, write, finishClaim bool) (GoogleCLIGrant, error) {
 	out := GoogleCLIGrant{Binding: b}
 	if !b.Valid() {
 		return out, errors.New("CLI授权绑定无效")
@@ -32,21 +33,17 @@ func googleGrantTx(ctx context.Context, tx pgx.Tx, b clicredential.Binding, writ
 	if _, e := lockCredentialProject(ctx, tx, b.ProjectID, false); e != nil {
 		return out, e
 	}
-	mode := "FOR SHARE OF g,v"
-	if write {
-		mode = "FOR UPDATE OF g,v"
-	}
-	e := tx.QueryRow(ctx, `SELECT v.account_label,v.secret,g.generation,g.refresh_state,g.lease_id,g.lease_agent_id,g.lease_verification_id,g.lease_until,g.error_code FROM google_cli_grants g JOIN project_cli_versions v ON v.id=g.version_id AND v.account_id=g.account_id JOIN project_credential_accounts a ON a.id=v.account_id JOIN agents owner ON owner.id=$4 WHERE g.version_id=$1 AND g.account_id=$2 AND a.project_id=$3 AND a.purpose='cli' AND a.cli_name='gcloud' AND v.auth_method='oauth' AND owner.project_id=$3 AND (owner.deleted_at IS NULL OR $5) `+mode, b.VersionID, b.AccountID, b.ProjectID, b.AgentID, finishClaim).Scan(&out.AccountLabel, &out.Secret, &out.Generation, &out.RefreshState, &out.LeaseID, &out.LeaseAgentID, &out.LeaseVerificationID, &out.LeaseUntil, &out.ErrorCode)
+	e := tx.QueryRow(ctx, `SELECT v.account_label,v.secret,g.generation,g.refresh_state,g.lease_id,g.lease_agent_id,g.lease_verification_id,g.lease_until,g.error_code FROM google_cli_grants g JOIN project_cli_versions v ON v.id=g.version_id AND v.account_id=g.account_id JOIN project_credential_accounts a ON a.id=v.account_id JOIN agents owner ON owner.id=$4 WHERE g.version_id=$1 AND g.account_id=$2 AND a.project_id=$3 AND a.purpose='cli' AND a.cli_name='gcloud' AND v.auth_method='oauth' AND owner.project_id=$3 AND (owner.deleted_at IS NULL OR $5) `, b.VersionID, b.AccountID, b.ProjectID, b.AgentID, finishClaim).Scan(&out.AccountLabel, &out.Secret, &out.Generation, &out.RefreshState, &out.LeaseID, &out.LeaseAgentID, &out.LeaseVerificationID, &out.LeaseUntil, &out.ErrorCode)
 	return out, notFoundIfNoRows(e, "CLI授权")
 }
 func (s *Store) GetGoogleCLIGrant(ctx context.Context, b clicredential.Binding) (GoogleCLIGrant, error) {
 	var out GoogleCLIGrant
-	e := s.inTx(ctx, func(tx pgx.Tx) error { var e error; out, e = googleGrantTx(ctx, tx, b, false, false); return e })
+	e := s.inTx(ctx, func(tx *db.Tx) error { var e error; out, e = googleGrantTx(ctx, tx, b, false, false); return e })
 	return out, e
 }
 func (s *Store) ClaimGoogleCLIRefresh(ctx context.Context, b clicredential.Binding, generation int64, lease uuid.UUID, until time.Time) (bool, error) {
 	claimed := false
-	e := s.inTx(ctx, func(tx pgx.Tx) error {
+	e := s.inTx(ctx, func(tx *db.Tx) error {
 		r, e := googleGrantTx(ctx, tx, b, true, false)
 		if e != nil {
 			return e
@@ -68,7 +65,7 @@ func (s *Store) ClaimGoogleCLIRefresh(ctx context.Context, b clicredential.Bindi
 	return claimed, e
 }
 func (s *Store) CommitGoogleCLIRefresh(ctx context.Context, b clicredential.Binding, generation int64, lease uuid.UUID, secret []byte) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		r, e := googleGrantTx(ctx, tx, b, true, true)
 		if e != nil {
 			return e
@@ -97,7 +94,7 @@ func (s *Store) FailGoogleCLIRefresh(ctx context.Context, b clicredential.Bindin
 	default:
 		code = "refresh_failed"
 	}
-	return s.inTx(ctx, func(tx pgx.Tx) error {
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := googleGrantTx(ctx, tx, b, true, true); e != nil {
 			return e
 		}

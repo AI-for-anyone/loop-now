@@ -8,8 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/store"
@@ -20,8 +19,8 @@ type pauseExecutionRead struct {
 	entered, release chan struct{}
 }
 
-func (p *pauseExecutionRead) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
-	if strings.Contains(data.SQL, "FROM agent_sessions") {
+func (p *pauseExecutionRead) hook(ctx context.Context, q string) {
+	if strings.Contains(q, "FROM agent_sessions") {
 		p.once.Do(func() {
 			close(p.entered)
 			select {
@@ -30,9 +29,7 @@ func (p *pauseExecutionRead) TraceQueryStart(ctx context.Context, _ *pgx.Conn, d
 			}
 		})
 	}
-	return ctx
 }
-func (*pauseExecutionRead) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
 
 func TestExecutionSnapshotKeepsCapturedConfigAndGrantAcrossSameProviderAccountChange(t *testing.T) {
 	e := newEnv(t)
@@ -53,15 +50,8 @@ func TestExecutionSnapshotKeepsCapturedConfigAndGrantAcrossSameProviderAccountCh
 		t.Fatal(err)
 	}
 	trace := &pauseExecutionRead{entered: make(chan struct{}), release: make(chan struct{})}
-	original := e.st.Pool
-	config := original.Config()
-	config.ConnConfig.Tracer = trace
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	e.st.Pool = pool
-	defer func() { e.st.Pool = original; pool.Close() }()
+	e.st.Pool.SetQueryHook(trace.hook)
+	defer e.st.Pool.SetQueryHook(nil)
 	var releaseOnce sync.Once
 	release := func() { releaseOnce.Do(func() { close(trace.release) }) }
 	defer release()

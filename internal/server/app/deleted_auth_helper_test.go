@@ -29,7 +29,7 @@ func (w *world) startDeletionAuth(helper modelauth.LoginHelper) *server {
 	if err != nil {
 		w.t.Fatal(err)
 	}
-	a, err := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, "text", w.cfg.LogLevel), app.Options{SearchPath: w.schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, AuthLoginHelper: helper, AuthRefresher: &taskAuthOffline{}})
+	a, err := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, "text", w.cfg.LogLevel), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, AuthLoginHelper: helper, AuthRefresher: &taskAuthOffline{}})
 	if err != nil {
 		ln.Close()
 		w.t.Fatal(err)
@@ -74,7 +74,7 @@ func nodeDeletionHelper(t *testing.T) (*modelauth.Helper, string) {
 	marker, _ := json.Marshal(root)
 	code := `import fs from 'node:fs';import readline from 'node:readline';import net from 'node:net';
  const root=` + string(marker) + `;const send=x=>fs.writeSync(4,JSON.stringify(x)+'\n');let op,server;
- send({type:'ready',protocolVersion:1,expectedPiVersion:'1.1.0'});
+ send({type:'ready',protocolVersion:1,expectedPiVersion:'1.4.0'});
  readline.createInterface({input:fs.createReadStream('',{fd:3})}).on('line',line=>{
  const f=JSON.parse(line);
  if(f.type==='login'){op=f;server=net.createServer(c=>c.end());server.listen(0,'127.0.0.1',()=>{
@@ -152,7 +152,7 @@ func TestDeletedLoginHelperResources(t *testing.T) {
 				path = "/agents/" + a.ID.String()
 			}
 			if mode == "project-rollback" {
-				for _, q := range []string{`CREATE FUNCTION reject_helper_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.deleted_at IS NOT NULL THEN RAISE EXCEPTION 'synthetic rollback'; END IF; RETURN NEW; END $$`, `CREATE TRIGGER reject_helper_delete BEFORE UPDATE ON projects FOR EACH ROW EXECUTE FUNCTION reject_helper_delete()`} {
+				for _, q := range []string{`CREATE TRIGGER reject_helper_delete BEFORE UPDATE ON projects WHEN NEW.deleted_at IS NOT NULL BEGIN SELECT RAISE(ABORT, 'synthetic rollback'); END`} {
 					if _, err := s.a.Store.Pool.Exec(context.Background(), q); err != nil {
 						t.Fatal(err)
 					}
@@ -172,7 +172,7 @@ func TestDeletedLoginHelperResources(t *testing.T) {
 						t.Fatal("rollback changed active login", err)
 					}
 				}
-				if _, err := s.a.Store.Pool.Exec(context.Background(), `DROP TRIGGER reject_helper_delete ON projects`); err != nil {
+				if _, err := s.a.Store.Pool.Exec(context.Background(), `DROP TRIGGER reject_helper_delete`); err != nil {
 					t.Fatal(err)
 				}
 			}

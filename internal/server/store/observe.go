@@ -5,7 +5,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
+
+	"loop-now/internal/server/db"
 )
 
 // UsageRow 是按（Agent、提供方、模型）分组的用量统计；Provider 与 Model 都为空表示未知模型。
@@ -26,14 +27,14 @@ func (s *Store) UsageSummary(ctx context.Context, f ScopeFilter, from, to *time.
 	rows, err := s.Pool.Query(ctx, `SELECT a.id, a.name, a.deleted_at IS NOT NULL, a.project_id, coalesce(u.provider, ''), coalesce(u.model, ''),
 			count(*), sum(u.input), sum(u.output), sum(u.cache_read), sum(u.cache_write), sum(u.total)
 		FROM usage_records u JOIN agents a ON a.id = u.agent_id
-		WHERE ($1::uuid IS NULL OR a.project_id = $1) AND (NOT $2 OR a.project_id IS NULL)
-			AND ($3::timestamptz IS NULL OR u.at >= $3) AND ($4::timestamptz IS NULL OR u.at < $4)
+		WHERE ($1 IS NULL OR a.project_id = $1) AND (NOT $2 OR a.project_id IS NULL)
+			AND ($3 IS NULL OR u.at >= $3) AND ($4 IS NULL OR u.at < $4)
 		GROUP BY a.id, a.name, a.deleted_at, a.project_id, u.provider, u.model
-		ORDER BY sum(u.total) DESC, a.name, u.provider NULLS LAST, u.model NULLS LAST`, pid, platform, from, to)
+		ORDER BY sum(u.total) DESC, a.name COLLATE NOCASE, a.name, u.provider NULLS LAST, u.model NULLS LAST`, pid, platform, from, to)
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (UsageRow, error) {
+	return db.CollectRows(rows, func(row db.CollectableRow) (UsageRow, error) {
 		var r UsageRow
 		err := row.Scan(&r.AgentID, &r.AgentName, &r.AgentDeleted, &r.ProjectID, &r.Provider, &r.Model,
 			&r.Calls, &r.Input, &r.Output, &r.CacheRead, &r.CacheWrite, &r.Total)
@@ -60,8 +61,8 @@ func (s *Store) Anomalies(ctx context.Context, f ScopeFilter, from *time.Time, c
 	pid, platform := f.args()
 	const scope = `FROM runs r JOIN agents a ON a.id = r.agent_id
 		WHERE a.deleted_at IS NULL AND r.status IN ('failed', 'interrupted')
-			AND ($1::uuid IS NULL OR a.project_id = $1) AND (NOT $2 OR a.project_id IS NULL)
-			AND ($3::timestamptz IS NULL OR r.ended_at >= $3)`
+			AND ($1 IS NULL OR a.project_id = $1) AND (NOT $2 OR a.project_id IS NULL)
+			AND ($3 IS NULL OR r.ended_at >= $3)`
 	var total int
 	if err := s.Pool.QueryRow(ctx, `SELECT count(*) `+scope, pid, platform, from).Scan(&total); err != nil {
 		return nil, 0, nil, err
@@ -72,12 +73,12 @@ func (s *Store) Anomalies(ctx context.Context, f ScopeFilter, from *time.Time, c
 		cAt, cID = &cursor.EndedAt, &cursor.RunID
 	}
 	rows, err := s.Pool.Query(ctx, `SELECT `+runColumnsOf("r.")+`, a.name, a.project_id `+scope+`
-			AND ($4::timestamptz IS NULL OR (r.ended_at, r.id) < ($4, $5::uuid))
+			AND ($4 IS NULL OR (r.ended_at, r.id) < ($4, $5))
 		ORDER BY r.ended_at DESC, r.id DESC LIMIT $6`, pid, platform, from, cAt, cID, limit+1)
 	if err != nil {
 		return nil, 0, nil, err
 	}
-	items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (AnomalyRow, error) {
+	items, err := db.CollectRows(rows, func(row db.CollectableRow) (AnomalyRow, error) {
 		var it AnomalyRow
 		err := row.Scan(append(runFields(&it.Run), &it.AgentName, &it.ProjectID)...)
 		it.Run.Tools = []ToolEvent{}
@@ -101,12 +102,14 @@ func (s *Store) LastEndedRuns(ctx context.Context, agentIDs []uuid.UUID) (map[uu
 	if len(agentIDs) == 0 {
 		return out, nil
 	}
-	rows, err := s.Pool.Query(ctx, `SELECT DISTINCT ON (agent_id) `+runColumns+` FROM runs
-		WHERE agent_id = ANY($1) AND status IN ('completed', 'failed', 'interrupted') ORDER BY agent_id, ended_at DESC, id DESC`, agentIDs)
+	rows, err := s.Pool.Query(ctx, `SELECT `+runColumns+` FROM (
+			SELECT *, row_number() OVER (PARTITION BY agent_id ORDER BY ended_at DESC, id DESC) AS n FROM runs
+			WHERE agent_id IN (SELECT value FROM json_each($1)) AND status IN ('completed', 'failed', 'interrupted'))
+		WHERE n = 1`, agentIDs)
 	if err != nil {
 		return nil, err
 	}
-	runs, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Run, error) { return scanRun(r) })
+	runs, err := db.CollectRows(rows, func(r db.CollectableRow) (Run, error) { return scanRun(r) })
 	if err != nil {
 		return nil, err
 	}
@@ -135,9 +138,11 @@ func (s *Store) LastProcessExits(ctx context.Context, agentIDs []uuid.UUID) (map
 	if len(agentIDs) == 0 {
 		return out, nil
 	}
-	rows, err := s.Pool.Query(ctx, `SELECT DISTINCT ON (agent_id) agent_id, at,
-			CASE WHEN type = 'pi.exited' THEN 'unexpected_exit' ELSE coalesce(data ->> 'reason', '') END
-		FROM lifecycle_events WHERE agent_id = ANY($1) AND task_id IS NULL AND type IN ('pi.stopped', 'pi.exited') ORDER BY agent_id, at DESC, id DESC`, agentIDs)
+	rows, err := s.Pool.Query(ctx, `SELECT agent_id, at, reason FROM (
+			SELECT agent_id, at, CASE WHEN type = 'pi.exited' THEN 'unexpected_exit' ELSE coalesce(data ->> 'reason', '') END AS reason,
+				row_number() OVER (PARTITION BY agent_id ORDER BY at DESC, id DESC) AS n
+			FROM lifecycle_events WHERE agent_id IN (SELECT value FROM json_each($1)) AND task_id IS NULL AND type IN ('pi.stopped', 'pi.exited'))
+		WHERE n = 1`, agentIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -163,13 +168,15 @@ type CLIInstallResult struct {
 
 // LatestCLIInstalls 返回每个 CLI 版本最近一次安装尝试的结果。
 func (s *Store) LatestCLIInstalls(ctx context.Context) ([]CLIInstallResult, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT DISTINCT ON (data ->> 'cli', data ->> 'version') data ->> 'cli', data ->> 'version',
-			data ->> 'result' = 'succeeded', coalesce(data ->> 'error', '')
-		FROM lifecycle_events WHERE type = 'cli.install' ORDER BY data ->> 'cli', data ->> 'version', at DESC, id DESC`)
+	rows, err := s.Pool.Query(ctx, `SELECT cli, version, succeeded, error FROM (
+			SELECT data ->> 'cli' AS cli, data ->> 'version' AS version, data ->> 'result' = 'succeeded' AS succeeded, coalesce(data ->> 'error', '') AS error,
+				row_number() OVER (PARTITION BY data ->> 'cli', data ->> 'version' ORDER BY at DESC, id DESC) AS n
+			FROM lifecycle_events WHERE type = 'cli.install')
+		WHERE n = 1 ORDER BY cli, version`)
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (CLIInstallResult, error) {
+	return db.CollectRows(rows, func(row db.CollectableRow) (CLIInstallResult, error) {
 		var r CLIInstallResult
 		err := row.Scan(&r.CLI, &r.Version, &r.Succeeded, &r.Error)
 		return r, err

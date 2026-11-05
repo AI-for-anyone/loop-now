@@ -1,7 +1,7 @@
 {
   "name": "@loop-now/plugin-sdk",
   "version": "0.1.0",
-  "description": "Loop Now 插件平台半边的类型与运行库：PluginAPI、事件目录、外发投递与签名、插件目录校验",
+  "description": "Loop Now 插件平台侧的类型与运行库：PluginAPI、事件目录、外发投递与签名、插件目录校验",
   "license": "Apache-2.0",
   "type": "module",
   "engines": { "node": ">=24" },

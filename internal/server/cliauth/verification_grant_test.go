@@ -4,17 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/google/uuid"
 	"io"
 	"loop-now/internal/server/clicredential"
 	"loop-now/internal/server/cliverify"
 	cm "loop-now/internal/server/credentialmodel"
 	"loop-now/internal/server/store"
+	"loop-now/internal/testutil/sqlitetest"
 	"net"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func managementOperation(t *testing.T, f googleFixture, account, version uuid.UUID) clicredential.VerificationGrantBinding {
@@ -26,6 +28,22 @@ func managementOperation(t *testing.T, f googleFixture, account, version uuid.UU
 	}
 	return clicredential.VerificationGrantBinding{ProjectID: f.project, AccountID: account, VersionID: version, OperationID: id}
 }
+
+type managementCommitFault struct {
+	RefreshStore
+	ManagementRefreshStore
+	after bool
+}
+
+func (s managementCommitFault) CommitGoogleCLIVerificationRefresh(ctx context.Context, b clicredential.VerificationGrantBinding, g int64, lease uuid.UUID, secret []byte) error {
+	if s.after {
+		if e := s.ManagementRefreshStore.CommitGoogleCLIVerificationRefresh(ctx, b, g, lease, secret); e != nil {
+			return e
+		}
+	}
+	return errors.New("synthetic commit acknowledgement unavailable")
+}
+
 func TestGoogleManagementAndAgentShareCancelledRotation(t *testing.T) {
 	f := newGoogleFixture(t)
 	ctx, cancelAll := context.WithTimeout(context.Background(), 8*time.Second)
@@ -102,6 +120,7 @@ func TestGoogleManagementAndAgentShareCancelledRotation(t *testing.T) {
 		t.Fatal("cancelled operation accessed grant again")
 	}
 }
+
 func TestGoogleManagementLeaseScopeAndProjectPurge(t *testing.T) {
 	f := newGoogleFixture(t)
 	ctx := context.Background()
@@ -149,6 +168,7 @@ func TestGoogleManagementLeaseScopeAndProjectPurge(t *testing.T) {
 		t.Fatal("project purge lost safe operation history", e)
 	}
 }
+
 func TestGoogleManagementBrokerCannotChooseAnotherPrincipal(t *testing.T) {
 	f := newGoogleFixture(t)
 	ctx := context.Background()
@@ -207,18 +227,16 @@ func TestGoogleManagementClaimWaitPastOperationDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := managementOperation(t, f, r.View.ID, *r.View.CurrentVersionID)
-	if _, err = f.st.Pool.Exec(ctx, `UPDATE cli_credential_verifications SET expires_at=clock_timestamp()+interval '600 milliseconds' WHERE id=$1`, m.OperationID); err != nil {
+	if _, err = f.st.Pool.Exec(ctx, `UPDATE cli_credential_verifications SET expires_at=clock_timestamp()+600000 WHERE id=$1`, m.OperationID); err != nil {
 		t.Fatal(err)
 	}
-	lock, err := f.st.Pool.Begin(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer lock.Rollback(context.Background())
+	expiry := time.Now().Add(600 * time.Millisecond)
 	var generation int64
-	if err = lock.QueryRow(ctx, `SELECT generation FROM google_cli_grants WHERE version_id=$1 FOR UPDATE`, m.VersionID).Scan(&generation); err != nil {
+	if err = f.st.Pool.QueryRow(ctx, `SELECT generation FROM google_cli_grants WHERE version_id=$1`, m.VersionID).Scan(&generation); err != nil {
 		t.Fatal(err)
 	}
+	// 测试占住写连接：领取续期的写事务要等到操作过期之后才能开始。
+	release := sqlitetest.HoldWriter(t, f.st.Pool)
 	done := make(chan error, 1)
 	go func() {
 		claimed, e := f.st.ClaimGoogleCLIVerificationRefresh(ctx, m, generation, uuid.New(), time.Now().Add(time.Minute))
@@ -227,31 +245,13 @@ func TestGoogleManagementClaimWaitPastOperationDeadline(t *testing.T) {
 		}
 		done <- e
 	}()
-	// Observe the real claimant waiting on the row; don't merely sleep and hope
-	// that it started before expiry.
-	for {
-		var waiting bool
-		err = f.st.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND wait_event_type='Lock' AND query LIKE 'SELECT v.account_label%')`).Scan(&waiting)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if waiting {
-			break
-		}
-		select {
-		case e := <-done:
-			t.Fatalf("claim did not wait on grant: %v", e)
-		case <-ctx.Done():
-			t.Fatal("claim lock wait not observed")
-		case <-time.After(time.Millisecond):
-		}
+	time.Sleep(time.Until(expiry) + 30*time.Millisecond)
+	select {
+	case e := <-done:
+		t.Fatalf("claim did not wait for the writer: %v", e)
+	default:
 	}
-	if _, err = f.st.Pool.Exec(ctx, `SELECT pg_sleep(greatest(0,extract(epoch FROM expires_at-clock_timestamp()))+0.03) FROM cli_credential_verifications WHERE id=$1`, m.OperationID); err != nil {
-		t.Fatal(err)
-	}
-	if err = lock.Commit(ctx); err != nil {
-		t.Fatal(err)
-	}
+	release()
 	if err = <-done; err == nil {
 		t.Fatal("expired claimant was not rejected")
 	}
@@ -262,20 +262,6 @@ func TestGoogleManagementClaimWaitPastOperationDeadline(t *testing.T) {
 	}
 }
 
-type managementCommitFault struct {
-	RefreshStore
-	ManagementRefreshStore
-	after bool
-}
-
-func (s managementCommitFault) CommitGoogleCLIVerificationRefresh(ctx context.Context, b clicredential.VerificationGrantBinding, g int64, lease uuid.UUID, secret []byte) error {
-	if s.after {
-		if e := s.ManagementRefreshStore.CommitGoogleCLIVerificationRefresh(ctx, b, g, lease, secret); e != nil {
-			return e
-		}
-	}
-	return errors.New("synthetic commit acknowledgement unavailable")
-}
 func TestGoogleManagementCommitUnknownFailsClosed(t *testing.T) {
 	for _, after := range []bool{false, true} {
 		name := "write_rejected"
@@ -331,6 +317,7 @@ func TestGoogleManagementCommitUnknownFailsClosed(t *testing.T) {
 		})
 	}
 }
+
 func TestGoogleManagementRequiresLoginPersistsToNewBroker(t *testing.T) {
 	f := newGoogleFixture(t)
 	ctx := context.Background()
@@ -375,6 +362,7 @@ func TestGoogleManagementRequiresLoginPersistsToNewBroker(t *testing.T) {
 		t.Fatal("reauth lost across new broker or automatic refresh attempted")
 	}
 }
+
 func TestGoogleManagementExpiredLeaseRejectsCommitAndNewRefresh(t *testing.T) {
 	f := newGoogleFixture(t)
 	ctx := context.Background()
@@ -387,7 +375,7 @@ func TestGoogleManagementExpiredLeaseRejectsCommitAndNewRefresh(t *testing.T) {
 	if ok, e := f.st.ClaimGoogleCLIVerificationRefresh(ctx, b, 1, lease, time.Now().Add(time.Minute)); e != nil || !ok {
 		t.Fatal("claim", e)
 	}
-	if _, e = f.st.Pool.Exec(ctx, `UPDATE google_cli_grants SET lease_until=clock_timestamp()-interval '1 second' WHERE version_id=$1`, b.VersionID); e != nil {
+	if _, e = f.st.Pool.Exec(ctx, `UPDATE google_cli_grants SET lease_until=clock_timestamp()-1000000 WHERE version_id=$1`, b.VersionID); e != nil {
 		t.Fatal(e)
 	}
 	var calls atomic.Int32

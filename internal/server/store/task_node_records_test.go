@@ -31,7 +31,7 @@ func TestTaskNodeToolFinalStateAcrossProjectedPages(t *testing.T) {
 			data = map[string]any{"toolCallId": "single-call", "toolName": "bash", "state": state}
 		}
 		raw, _ := json.Marshal(data)
-		if _, e := s.Pool.Exec(ctx, `INSERT INTO lifecycle_events(id,at,agent_id,type,data,task_id,workflow_node,task_turn_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, uuid.Must(uuid.NewV7()), at.Add(time.Duration(i)*time.Millisecond), agent, kind, raw, task, node.String(), turn.ID); e != nil {
+		if _, e := s.Pool.Exec(ctx, `INSERT INTO lifecycle_events(id,at,agent_id,type,data,task_id,workflow_node,task_turn_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, uuid.Must(uuid.NewV7()), at.Add(time.Duration(i)*time.Millisecond), agent, kind, json.RawMessage(raw), task, node.String(), turn.ID); e != nil {
 			t.Fatal(e)
 		}
 	}

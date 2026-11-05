@@ -6,6 +6,7 @@ import type { MessagePages } from '@/api/inbox'
 import { inboxConnection, inboxUnread } from '@/api/inbox-store'
 import { keys } from '@/api/queries'
 import { consoleKeys, patchConsoleMessage } from '@/api/console-inbox'
+import { forwardToDesktop } from '@/features/desktop/desktop'
 import { taskInboxKeys } from '@/api/task-inbox'
 
 // 重新获取各个收件箱视图：失效后只有正在显示的查询立即重新请求，其余的在下次显示时请求。
@@ -81,14 +82,17 @@ export function applyInboxEvent(client: QueryClient, event: InboxEvent) {
   }
 }
 
-// 进入控制台后建立一条收件箱事件流，不轮询。永久断开后按退避间隔重建，新连接由服务端先推送快照。
+// 进入控制台后建立一条收件箱事件流，不轮询。在桌面壳的窗口里，事件也交给它显示 Dock 未读数与系统通知。永久断开后按退避间隔重建，新连接由服务端先推送快照。
 // 服务端追加事件失败时可能漏掉个别事件，所以重连成功和窗口重新获得焦点时，都重新获取正在显示的收件箱视图。
 export function useInboxLive() {
   const client = useQueryClient()
   useEffect(() => {
     let interrupted = false
     const stop = connectInboxEvents({
-      onEvent: (event) => applyInboxEvent(client, event),
+      onEvent: (event) => {
+        applyInboxEvent(client, event)
+        void forwardToDesktop(client, event)
+      },
       onState: (state) => {
         inboxConnection.set(state)
         if (state === 'reconnecting') interrupted = true

@@ -1,4 +1,4 @@
-// fakepi 是测试替身，模拟平台用到的 Pi 1.1.0 CLI/RPC 子集。
+// fakepi 是测试替身，模拟平台用到的 Pi CLI/RPC 子集（按 Pi 1.1.0 的源码写成，--version 默认报平台钉的 1.4.0）。
 // 回复行为由 prompt 文本中的 '!' 指令控制，见 README.md。
 package main
 
@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-const defaultVersion = "1.1.0"
+const defaultVersion = "1.4.0"
 
 // neutral 为 FAKEPI_NEUTRAL=1 时的中性模式：回复不带平台加的“本轮运行ID”一行、不回显指令词，界面上可见的文字用英文（给英文截图用）。
 var neutral bool

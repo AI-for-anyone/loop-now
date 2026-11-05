@@ -3,20 +3,21 @@ package store_test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"github.com/redis/go-redis/v9"
-	"loop-now/internal/server/coord"
-	"loop-now/internal/testutil/redistest"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
+	"loop-now/internal/server/coord"
 	"loop-now/internal/server/inbox"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/tasks"
+	"loop-now/internal/testutil/sqlitetest"
+
+	"github.com/google/uuid"
 )
 
 func TestTaskLarkPublishPreservesQuestionFourStatesAndRejectsLateAnswer(t *testing.T) {
@@ -35,7 +36,7 @@ func TestTaskLarkPublishPreservesQuestionFourStatesAndRejectsLateAnswer(t *testi
 				if err := store.InsertInboxMessage(ctx, m.Tx, store.NewInboxMessage{ID: q, From: store.Party{Kind: "agent", ID: publisher.AgentID, RuntimeID: publisher.RuntimeID}, To: store.ConsoleParty, Text: "original question"}); err != nil {
 					return nil, err
 				}
-				if _, err := m.Tx.Exec(ctx, `INSERT INTO inbox_questions(message_id,options,expires_at,state,closed_at,closed_reason) VALUES($1,'[{"id":"1","label":"continue"}]',now()+interval '1 hour',$2,CASE WHEN $2='closed' THEN now() ELSE NULL END,CASE WHEN $2='closed' THEN 'task_cancel' ELSE NULL END)`, q, before); err != nil {
+				if _, err := m.Tx.Exec(ctx, `INSERT INTO inbox_questions(message_id,options,expires_at,state,closed_at,closed_reason) VALUES($1,'[{"id":"1","label":"continue"}]',now()+3600000000,$2,CASE WHEN $2='closed' THEN now() ELSE NULL END,CASE WHEN $2='closed' THEN 'task_cancel' ELSE NULL END)`, q, before); err != nil {
 					return nil, err
 				}
 				if _, err := m.Tx.Exec(ctx, `INSERT INTO task_questions(question_message_id,task_id,runtime_id,node_run_id) VALUES($1,$2,$3,$4)`, q, in.TaskID, publisher.RuntimeID, in.NodeRunID); err != nil {
@@ -125,7 +126,7 @@ func TestTaskLarkQuestionFirstAnswerRacesPublication(t *testing.T) {
 				if e := store.InsertInboxMessage(ctx, m.Tx, store.NewInboxMessage{ID: q, From: store.Party{Kind: "agent", ID: publisher.AgentID, RuntimeID: publisher.RuntimeID}, To: store.ConsoleParty, Text: "original question"}); e != nil {
 					return nil, e
 				}
-				if _, e := m.Tx.Exec(ctx, `INSERT INTO inbox_questions(message_id,options,expires_at) VALUES($1,'[{"id":"1","label":"continue"}]',now()+interval '1 hour')`, q); e != nil {
+				if _, e := m.Tx.Exec(ctx, `INSERT INTO inbox_questions(message_id,options,expires_at) VALUES($1,'[{"id":"1","label":"continue"}]',now()+3600000000)`, q); e != nil {
 					return nil, e
 				}
 				if _, e := m.Tx.Exec(ctx, `INSERT INTO task_questions(question_message_id,task_id,runtime_id,node_run_id) VALUES($1,$2,$3,$4)`, q, in.TaskID, publisher.RuntimeID, in.NodeRunID); e != nil {
@@ -160,24 +161,17 @@ func TestTaskLarkQuestionFirstAnswerRacesPublication(t *testing.T) {
 			next.RunIDs = []uuid.UUID{run}
 			svc := tasks.New(s, nil, nil, tasks.Options{}, nil)
 			defer svc.Stop(context.Background())
-			opts, e := redis.ParseURL(redistest.URL(t))
-			if e != nil {
-				t.Fatal(e)
-			}
-			rdb := redis.NewClient(opts)
-			prefix := "loopnow:test:lark-question-race:" + uuid.NewString() + ":"
-			defer func() { redistest.DeletePrefix(context.Background(), rdb, prefix); rdb.Close() }()
-			is := &inbox.Service{St: s, Tasks: svc, Co: coord.New(rdb, coord.Options{Prefix: prefix, StreamMaxLen: 100}), Log: quietLogger(), O: inbox.Options{MaxMessage: 65536, PreviewChars: 100}}
+			is := &inbox.Service{St: s, Tasks: svc, Co: coord.New(coord.Options{StreamMaxLen: 100}), Log: quietLogger(), O: inbox.Options{MaxMessage: 65536, PreviewChars: 100}}
 			answer := func() error {
 				option := "1"
 				_, e := is.Reply(ctx, auth.Console(), q, "first actual answer", "queue", inbox.QuestionInput{OptionID: &option})
 				return e
 			}
-			publish := func(held chan<- uint32, release <-chan struct{}) error {
+			publish := func(held chan<- struct{}, release <-chan struct{}) error {
 				_, e := s.MutateTask(ctx, in.TaskID, nil, func(m *store.TaskMutation) (any, error) {
 					m.Unchanged()
 					if held != nil {
-						held <- m.Tx.Conn().PgConn().PID()
+						held <- struct{}{}
 						select {
 						case <-release:
 						case <-ctx.Done():
@@ -189,62 +183,35 @@ func TestTaskLarkQuestionFirstAnswerRacesPublication(t *testing.T) {
 				})
 				return e
 			}
-			waitBlocker := func(pid uint32) {
-				t.Helper()
-				for ctx.Err() == nil {
-					var blocked bool
-					e := s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::int=ANY(pg_blocking_pids(pid)))`, pid).Scan(&blocked)
-					if e != nil {
-						t.Fatal(e)
-					}
-					if blocked {
-						return
-					}
-					time.Sleep(time.Millisecond * 5)
-				}
-				t.Fatal("expected real lock waiter not reached")
-			}
 			pubDone, answerDone := make(chan error, 1), make(chan error, 1)
 			if winner == "publish" {
-				held, release := make(chan uint32, 1), make(chan struct{})
+				// C 的写事务停在任务事务里（占着写连接），回答停在等写连接上。
+				held, release := make(chan struct{}, 1), make(chan struct{})
 				go func() { pubDone <- publish(held, release) }()
-				pid := <-held
+				<-held
 				go func() { answerDone <- answer() }()
-				waitBlocker(pid)
+				sqlitetest.WaitWriteWaiters(t, ctx, s.Pool, 1)
 				close(release)
 			} else {
-				// Pause the real answer transaction after it owns the aggregate/question
-				// locks; C then genuinely waits for the first-answer commit.
-				conn, e := s.Pool.Acquire(ctx)
-				if e != nil {
-					t.Fatal(e)
-				}
-				defer conn.Release()
-				var key int64
-				if e = conn.QueryRow(ctx, `SELECT floor(random()*1000000000)::bigint+1000000000`).Scan(&key); e != nil {
-					t.Fatal(e)
-				}
-				if _, e = conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, key); e != nil {
-					t.Fatal(e)
-				}
-				defer conn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, key)
-				sql := fmt.Sprintf(`CREATE FUNCTION pause_lark_first_answer() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(%d::bigint); RETURN NEW; END $$; CREATE TRIGGER pause_lark_first_answer BEFORE UPDATE OF state ON inbox_questions FOR EACH ROW WHEN (NEW.state='answered') EXECUTE FUNCTION pause_lark_first_answer()`, key)
-				if _, e = s.Pool.Exec(ctx, sql); e != nil {
-					t.Fatal(e)
-				}
+				// 回答的写事务在把提问改成已回答时停住（占着写连接）；C 只能等它提交。
+				paused, resume := make(chan struct{}), make(chan struct{})
+				var once sync.Once
+				s.Pool.SetQueryHook(func(_ context.Context, q string) {
+					if strings.Contains(q, "UPDATE inbox_questions SET state='answered'") {
+						once.Do(func() { close(paused); <-resume })
+					}
+				})
+				defer s.Pool.SetQueryHook(nil)
 				go func() { answerDone <- answer() }()
-				waitBlocker(conn.Conn().PgConn().PID())
+				<-paused
 				go func() { pubDone <- publish(nil, nil) }()
-				// The answer's xact lock is proven held above. Releasing its own fixture
-				// barrier lets it commit before C can acquire the task lock.
-				if _, e = conn.Exec(ctx, `SELECT pg_advisory_unlock($1)`, key); e != nil {
-					t.Fatal(e)
-				}
+				sqlitetest.WaitWriteWaiters(t, ctx, s.Pool, 1)
+				close(resume)
 			}
 			pe, ae := <-pubDone, <-answerDone
 			var state string
 			var groups, answers int
-			if e = s.Pool.QueryRow(ctx, `SELECT state,(SELECT count(*) FROM task_lark_credential_bindings WHERE task_id=$2),(SELECT count(*) FROM inbox_messages WHERE answers_message_id=$1) FROM inbox_questions WHERE message_id=$1`, q, in.TaskID).Scan(&state, &groups, &answers); e != nil {
+			if e := s.Pool.QueryRow(ctx, `SELECT state,(SELECT count(*) FROM task_lark_credential_bindings WHERE task_id=$2),(SELECT count(*) FROM inbox_messages WHERE answers_message_id=$1) FROM inbox_questions WHERE message_id=$1`, q, in.TaskID).Scan(&state, &groups, &answers); e != nil {
 				t.Fatal(e)
 			}
 			if winner == "publish" {

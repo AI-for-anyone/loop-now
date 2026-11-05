@@ -2,13 +2,16 @@ package store
 
 import (
 	"context"
+	"strconv"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/reqid"
 	"loop-now/internal/server/taskmodel"
+
+	"github.com/google/uuid"
+
+	"loop-now/internal/server/db"
 )
 
 type TaskTurn struct {
@@ -25,9 +28,19 @@ type TaskTurn struct {
 	VoidReason                                                          *string
 }
 
+// insertTaskTurn 插入一个任务轮次并返回它：cols、vals 不含 queue_seq，排队号从序列 task_turns.queue_seq 取
+// （原来是 identity 列）。args 依次对应 vals 里的 $1…$n。
+func insertTaskTurn(ctx context.Context, tx *db.Tx, cols, vals string, args ...any) (TaskTurn, error) {
+	seq, err := tx.NextSeq(ctx, "task_turns.queue_seq")
+	if err != nil {
+		return TaskTurn{}, err
+	}
+	return scanTaskTurn(tx.QueryRow(ctx, `INSERT INTO task_turns(`+cols+`,queue_seq) VALUES(`+vals+`,$`+strconv.Itoa(len(args)+1)+`) RETURNING `+taskTurnColumns, append(args, seq)...))
+}
+
 const taskTurnColumns = `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,queue_seq,text,reply,error_code,error_message,queued_at,started_at,ended_at,trigger_inbox_message_id,request_id,wake_sleep_id,execution_mode,void_reason`
 
-func scanTaskTurn(r pgx.Row) (TaskTurn, error) {
+func scanTaskTurn(r db.Scanner) (TaskTurn, error) {
 	var t TaskTurn
 	var node *uuid.UUID
 	e := r.Scan(&t.ID, &t.TaskID, &t.RuntimeID, &node, &t.UserMessageID, &t.AssistantMessageID, &t.Status, &t.Origin, &t.Priority, &t.QueueSeq, &t.Text, &t.Reply, &t.ErrorCode, &t.ErrorMessage, &t.QueuedAt, &t.StartedAt, &t.EndedAt, &t.TriggerInboxID, &t.RequestID, &t.WakeSleepID, &t.ExecutionMode, &t.VoidReason)
@@ -58,12 +71,12 @@ func (s *Store) EnqueueTaskTurn(ctx context.Context, m *TaskMutation, text, orig
 			}
 			return scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1`, old.ID))
 		}
-		if err != pgx.ErrNoRows {
+		if err != db.ErrNoRows {
 			return TaskTurn{}, err
 		}
 	}
 	id, user, assistant := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
-	t, err := scanTaskTurn(m.Tx.QueryRow(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,trigger_inbox_message_id,request_id) VALUES($1,$2,$3,$4,$5,$6,'queued',$7,$8,$9,$10,$11) RETURNING `+taskTurnColumns, id, m.Record.View.Task.ID, node.RuntimeID, node.ID, user, assistant, origin, priority, text, trigger, taskRequestID(ctx, m, origin)))
+	t, err := insertTaskTurn(ctx, m.Tx, `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,trigger_inbox_message_id,request_id`, `$1,$2,$3,$4,$5,$6,'queued',$7,$8,$9,$10,$11`, id, m.Record.View.Task.ID, node.RuntimeID, node.ID, user, assistant, origin, priority, text, trigger, taskRequestID(ctx, m, origin))
 	if err != nil {
 		return t, err
 	}
@@ -129,8 +142,8 @@ func (s *Store) ClaimTaskTurn(ctx context.Context, taskID, runtimeID uuid.UUID) 
 		var e error
 		// 提醒轮次领取时已没有待处理消息就作废，接着领取下一轮。
 		for {
-			t, e = scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE runtime_id=$1 AND node_run_id=$2 AND status='queued' AND (origin<>'sleep_wake' OR EXISTS(SELECT 1 FROM agent_sleeps z WHERE z.id=task_turns.wake_sleep_id AND z.wake_run_id=task_turns.id AND z.state='woken' AND z.mode='task_node')) ORDER BY priority,queue_seq LIMIT 1 FOR UPDATE`, runtimeID, node.ID))
-			if e == pgx.ErrNoRows {
+			t, e = scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE runtime_id=$1 AND node_run_id=$2 AND status='queued' AND (origin<>'sleep_wake' OR EXISTS(SELECT 1 FROM agent_sleeps z WHERE z.id=task_turns.wake_sleep_id AND z.wake_run_id=task_turns.id AND z.state='woken' AND z.mode='task_node')) ORDER BY priority,queue_seq LIMIT 1`, runtimeID, node.ID))
+			if e == db.ErrNoRows {
 				return nil, nil
 			}
 			if e != nil {
@@ -196,7 +209,7 @@ func (s *Store) UpdateTaskTurn(ctx context.Context, taskID, turnID uuid.UUID, st
 	return turn, err
 }
 func (s *Store) UpdateTaskTurnTx(ctx context.Context, m *TaskMutation, turnID uuid.UUID, status, reply string, errorCode, errorMessage *string) (TaskTurn, error) {
-	t, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1 AND task_id=$2 FOR UPDATE`, turnID, m.Record.View.Task.ID))
+	t, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1 AND task_id=$2`, turnID, m.Record.View.Task.ID))
 	if e != nil {
 		return TaskTurn{}, notFoundIfNoRows(e, "任务轮次")
 	}
@@ -255,13 +268,13 @@ func (s *Store) TaskNodeMessages(ctx context.Context, taskID, nodeID uuid.UUID, 
 		at, after = &t, &id
 	}
 	rows, err := s.Pool.Query(ctx, `SELECT id,run_id,node_run_id,role,text,origin,status,created_at,error_code,error_message,wake_sleep_id,void_reason FROM (
-	 SELECT user_message_id AS id,id AS run_id,node_run_id,'user' AS role,text,origin,status,queued_at AS created_at,NULL::text AS error_code,NULL::text AS error_message,wake_sleep_id,void_reason FROM task_turns WHERE task_id=$1 AND node_run_id=$2
+	 SELECT user_message_id AS id,id AS run_id,node_run_id,'user' AS role,text,origin,status,queued_at AS created_at,NULL AS error_code,NULL AS error_message,wake_sleep_id,void_reason FROM task_turns WHERE task_id=$1 AND node_run_id=$2
 	 UNION ALL SELECT assistant_message_id,id,node_run_id,'assistant',reply,origin,status,coalesce(started_at,queued_at),error_code,error_message,wake_sleep_id,void_reason FROM task_turns WHERE task_id=$1 AND node_run_id=$2 AND status<>'queued'
-	) m WHERE ($3::timestamptz IS NULL OR (created_at,id)>($3,$4)) ORDER BY created_at,id LIMIT $5`, taskID, nodeID, at, after, limit+1)
+	) m WHERE ($3 IS NULL OR (created_at,id)>($3,$4)) ORDER BY created_at,id LIMIT $5`, taskID, nodeID, at, after, limit+1)
 	if err != nil {
 		return taskmodel.MessagePage{}, err
 	}
-	items, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (taskmodel.Message, error) {
+	items, err := db.CollectRows(rows, func(r db.CollectableRow) (taskmodel.Message, error) {
 		var m taskmodel.Message
 		e := r.Scan(&m.ID, &m.RunID, &m.NodeRunID, &m.Role, &m.Text, &m.Origin, &m.Status, &m.CreatedAt, &m.ErrorCode, &m.ErrorMessage, &m.WakeSleepID, &m.VoidReason)
 		m.ErrorMessage = taskmodel.PublicError(m.ErrorCode, m.ErrorMessage)
@@ -288,7 +301,7 @@ func (s *Store) InterruptTaskTurns(ctx context.Context, m *TaskMutation, nodeRun
 	if err != nil {
 		return err
 	}
-	turns, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
+	turns, err := db.CollectRows(rows, func(r db.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
 	if err != nil {
 		return err
 	}

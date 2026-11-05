@@ -58,7 +58,7 @@ func TestCLIVerificationDoesNotRetrofitTaskOrPrivatePAT(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	a, e := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, "json", 0), app.Options{SearchPath: w.schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIVerificationCommand: factory})
+	a, e := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, "json", 0), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIVerificationCommand: factory})
 	if e != nil {
 		t.Fatal(e)
 	}

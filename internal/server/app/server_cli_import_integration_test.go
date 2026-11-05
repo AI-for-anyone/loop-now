@@ -60,7 +60,7 @@ func TestCLIImportActualAppExplicitScanAtomicSaveReplayAndRecovery(t *testing.T)
 		if e != nil {
 			t.Fatal(e)
 		}
-		a, e := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, "json", 0), app.Options{SearchPath: w.schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIImportReaderFactory: factory})
+		a, e := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, "json", 0), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIImportReaderFactory: factory})
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -205,7 +205,7 @@ func startCLIImportWorld(t *testing.T, w *world, factory func(context.Context) (
 	if e != nil {
 		t.Fatal(e)
 	}
-	a, e := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, "json", 0), app.Options{SearchPath: w.schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIImportReaderFactory: factory})
+	a, e := app.Build(context.Background(), &w.cfg, config.NewLogger(io.Discard, "json", 0), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, CLIImportReaderFactory: factory})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -274,9 +274,14 @@ func TestCLIImportActualAppProjectDeleteCommitAndRollback(t *testing.T) {
 	}
 	id, r := start(p.ID)
 	other, neighbor := start(q.ID)
-	_, e = s.a.Store.Pool.Exec(ctx, `CREATE FUNCTION fail_import_project_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.deleted_at IS NOT NULL THEN RAISE EXCEPTION 'synthetic commit refusal'; END IF; RETURN NEW; END $$; CREATE CONSTRAINT TRIGGER fail_import_project_delete AFTER UPDATE ON projects DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION fail_import_project_delete()`)
-	if e != nil {
-		t.Fatal(e)
+	// 在提交时才失败：删除项目时插入一行指向不存在项目的记录，延迟外键在 COMMIT 时拒绝。
+	for _, q := range []string{
+		`CREATE TABLE fail_import_project_delete(ref TEXT REFERENCES projects(id) DEFERRABLE INITIALLY DEFERRED)`,
+		`CREATE TRIGGER fail_import_project_delete AFTER UPDATE OF deleted_at ON projects WHEN NEW.deleted_at IS NOT NULL BEGIN INSERT INTO fail_import_project_delete VALUES('synthetic commit refusal'); END`,
+	} {
+		if _, e = s.a.Store.Pool.Exec(ctx, q); e != nil {
+			t.Fatal(e)
+		}
 	}
 	s.must(500, "DELETE", "/projects/"+p.ID.String(), nil)
 	select {
@@ -288,7 +293,7 @@ func TestCLIImportActualAppProjectDeleteCommitAndRollback(t *testing.T) {
 	if e = s.a.Store.Pool.QueryRow(ctx, "SELECT status FROM cli_credential_import_operations WHERE id=$1", id).Scan(&status); e != nil || status != "running" {
 		t.Fatal("rollback ended original operation", e)
 	}
-	if _, e = s.a.Store.Pool.Exec(ctx, "DROP TRIGGER fail_import_project_delete ON projects; DROP FUNCTION fail_import_project_delete()"); e != nil {
+	if _, e = s.a.Store.Pool.Exec(ctx, "DROP TRIGGER fail_import_project_delete"); e != nil {
 		t.Fatal(e)
 	}
 	s.must(204, "DELETE", "/projects/"+p.ID.String(), nil)

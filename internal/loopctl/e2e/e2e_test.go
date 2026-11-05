@@ -138,17 +138,6 @@ func TestExternalIdentity(t *testing.T) {
 		t.Fatalf("%v", d)
 	}
 
-	// 上传资料并下载回来。
-	src := write("agent", "source", "add", addr, "--path", "docs", "--files")["id"].(string)
-	local := filepath.Join(t.TempDir(), "a.md")
-	os.WriteFile(local, []byte("# 说明\n资料内容\n"), 0o600)
-	put := write("agent", "file", "put", addr, src, "notes/a.md", "--from", local)
-	out := filepath.Join(t.TempDir(), "back.md")
-	got := ext.run("agent", "file", "get", addr, src, "notes/a.md", "--out", out).ok(t)
-	if b, _ := os.ReadFile(out); string(b) != "# 说明\n资料内容\n" || got["sha256"] != put["sha256"] {
-		t.Fatalf("下载的内容与上传的不同：%v %v", got, put)
-	}
-
 	// 项目账号只写不读，唯一账号由项目 Agent 自动取用。
 	ext.stdin = `{"type":"api_key","key":"model-secret-value"}`
 	cred := ext.run("project", "model-account", "create", "默认项目", "--provider", provider, "--name", "外部助手账号", "--from-file", "-")
@@ -219,13 +208,13 @@ func TestExternalIdentity(t *testing.T) {
 		var kind, actor string
 		var status int
 		err := s.a.Store.Pool.QueryRow(context.Background(),
-			`SELECT actor_kind, actor_id::text, status FROM audit_log WHERE request_id = $1`, id).Scan(&kind, &actor, &status)
+			`SELECT actor_kind, actor_id, status FROM audit_log WHERE request_id = $1`, id).Scan(&kind, &actor, &status)
 		if err != nil || kind != "external" || actor != identity || status >= 300 {
 			t.Errorf("请求 %s 的审计记录：%s %s %d %v", id, kind, actor, status, err)
 		}
 	}
 	var leaked int
-	s.a.Store.Pool.QueryRow(context.Background(), `SELECT count(*) FROM audit_log WHERE audit_log::text LIKE '%' || $1 || '%' OR audit_log::text LIKE '%model-secret-value%'`,
+	s.a.Store.Pool.QueryRow(context.Background(), `SELECT count(*) FROM audit_log WHERE audit_log LIKE '%' || $1 || '%' OR audit_log LIKE '%model-secret-value%'`,
 		secret[strings.LastIndex(secret, "_")+1:]).Scan(&leaked)
 	if leaked != 0 {
 		t.Errorf("审计记录中出现了令牌或凭证")

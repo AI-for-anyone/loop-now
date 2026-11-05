@@ -2,19 +2,16 @@ package larkauth
 
 import (
 	"context"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"io"
-	"log/slog"
 	"loop-now/internal/server/clicredential"
 	cm "loop-now/internal/server/credentialmodel"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
-	"strings"
+	"loop-now/internal/testutil/sqlitetest"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type larkFixture struct {
@@ -23,32 +20,16 @@ type larkFixture struct {
 	credential clicredential.Lark
 }
 
+type larkRefreshFunc func(context.Context, clicredential.Lark) (clicredential.Lark, error)
+
+func (f larkRefreshFunc) Refresh(ctx context.Context, c clicredential.Lark) (clicredential.Lark, error) {
+	return f(ctx, c)
+}
+
 func newLarkFixture(t *testing.T) larkFixture {
 	t.Helper()
 	ctx := context.Background()
-	dsn := pgtest.URL(t)
-	conn, e := pgx.Connect(ctx, dsn)
-	if e != nil {
-		t.Fatal("TEST PG unavailable")
-	}
-	schema := "lark_user_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if _, e = conn.Exec(ctx, `CREATE SCHEMA `+pgx.Identifier{schema}.Sanitize()); e != nil {
-		t.Fatal(e)
-	}
-	t.Cleanup(func() {
-		defer conn.Close(ctx)
-		if _, e := conn.Exec(ctx, `DROP SCHEMA `+pgx.Identifier{schema}.Sanitize()+` CASCADE`); e != nil {
-			t.Error("TEST schema cleanup failed")
-		}
-	})
-	st, e := store.Open(ctx, dsn, store.OpenOptions{SearchPath: schema})
-	if e != nil {
-		t.Fatal(e)
-	}
-	t.Cleanup(st.Close)
-	if e = st.Migrate(ctx, slog.New(slog.NewTextHandler(io.Discard, nil))); e != nil {
-		t.Fatal(e)
-	}
+	st := sqlitetest.NewStore(t)
 	d, e := st.EnsureDefaults(ctx, "Lark TEST组织", "默认项目")
 	if e != nil {
 		t.Fatal(e)
@@ -76,11 +57,6 @@ func newLarkFixture(t *testing.T) larkFixture {
 	return larkFixture{st, b, c}
 }
 
-type larkRefreshFunc func(context.Context, clicredential.Lark) (clicredential.Lark, error)
-
-func (f larkRefreshFunc) Refresh(ctx context.Context, c clicredential.Lark) (clicredential.Lark, error) {
-	return f(ctx, c)
-}
 func TestLarkPGTwoCoordinatorsCancelWaiterAndFreshProcess(t *testing.T) {
 	f := newLarkFixture(t)
 	ctx := context.Background()
@@ -154,17 +130,12 @@ func TestLarkPGTwoCoordinatorsCancelWaiterAndFreshProcess(t *testing.T) {
 		t.Fatal("wrong identity resolved")
 	}
 }
+
 func TestLarkClaimWaitingAcrossLeaseDeadlineDoesNotClaim(t *testing.T) {
 	f := newLarkFixture(t)
 	ctx := context.Background()
-	tx, e := f.st.Pool.Begin(ctx)
-	if e != nil {
-		t.Fatal(e)
-	}
-	defer tx.Rollback(ctx)
-	if _, e = tx.Exec(ctx, `SELECT version_id FROM lark_cli_grants WHERE version_id=$1 FOR UPDATE`, f.binding.VersionID); e != nil {
-		t.Fatal(e)
-	}
+	// 测试占住写连接，领取停在等写连接上，直到租约期限已过才放开。
+	release := sqlitetest.HoldWriter(t, f.st.Pool)
 	until := time.Now().Add(100 * time.Millisecond)
 	result := make(chan bool, 1)
 	errs := make(chan error, 1)
@@ -173,24 +144,15 @@ func TestLarkClaimWaitingAcrossLeaseDeadlineDoesNotClaim(t *testing.T) {
 		result <- ok
 		errs <- e
 	}()
-	// Keep the grant lock until a real DB-clock observation proves expiry.
-	for {
-		var expired bool
-		if e = tx.QueryRow(ctx, `SELECT clock_timestamp()>$1::timestamptz`, until).Scan(&expired); e != nil {
-			t.Fatal(e)
-		}
-		if expired {
-			break
-		}
+	sqlitetest.WaitWriteWaiters(t, ctx, f.st.Pool, 1)
+	for !time.Now().After(until) {
 		time.Sleep(time.Millisecond)
 	}
-	if e = tx.Commit(ctx); e != nil {
-		t.Fatal(e)
-	}
+	release()
 	if <-result {
 		t.Fatal("late claim crossed its lease deadline")
 	}
-	if e = <-errs; e != nil {
+	if e := <-errs; e != nil {
 		t.Fatal(e)
 	}
 	r, e := f.st.GetLarkCLIGrant(ctx, f.binding)

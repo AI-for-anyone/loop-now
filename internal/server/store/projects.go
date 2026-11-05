@@ -5,16 +5,16 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"loop-now/internal/server/apperr"
+	"loop-now/internal/server/db"
 )
 
 // projectColumns 返回项目及其未删除 Agent 的数量。
 const projectColumns = `p.id, p.organization_id, p.name, p.created_at, p.is_default, p.manager_agent_id, p.updated_at,
 	(SELECT count(*) FROM agents ca WHERE ca.project_id = p.id AND ca.deleted_at IS NULL)`
 
-func scanProject(row pgx.Row) (Project, error) {
+func scanProject(row db.Scanner) (Project, error) {
 	var p Project
 	err := row.Scan(&p.ID, &p.OrganizationID, &p.Name, &p.CreatedAt, &p.IsDefault, &p.ManagerAgentID, &p.UpdatedAt, &p.AgentCount)
 	return p, err
@@ -34,11 +34,11 @@ type ProjectNotIdleDetails struct {
 // ListProjects 列出组织下未删除的项目：默认项目在前，其余按名称排序。
 func (s *Store) ListProjects(ctx context.Context, orgID uuid.UUID) ([]Project, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT `+projectColumns+` FROM projects p
-		WHERE p.organization_id = $1 AND p.deleted_at IS NULL ORDER BY p.is_default DESC, p.name, p.id`, orgID)
+		WHERE p.organization_id = $1 AND p.deleted_at IS NULL ORDER BY p.is_default DESC, p.name COLLATE NOCASE, p.name, p.id`, orgID)
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Project, error) { return scanProject(row) })
+	return db.CollectRows(rows, func(row db.CollectableRow) (Project, error) { return scanProject(row) })
 }
 
 // GetProject 返回未删除的项目。
@@ -58,11 +58,11 @@ func (s *Store) CreateProject(ctx context.Context, orgID uuid.UUID, name string)
 
 // RenameProject 改名。地址由名称拼出，Agent 的地址随之变化，不需要改其他数据。
 func (s *Store) RenameProject(ctx context.Context, id uuid.UUID, name string) (Project, error) {
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
-		if err := lockLiveProject(ctx, tx, id, "FOR UPDATE"); err != nil {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
+		if err := requireLiveProject(ctx, tx, id); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `UPDATE projects SET name = $2, updated_at = now() WHERE id = $1`, id, name)
+		_, err := tx.Exec(ctx, `UPDATE projects SET name = $2, updated_at = $3 WHERE id = $1`, id, name, tx.Now())
 		return projectNameConflict(err, name)
 	})
 	if err != nil {
@@ -72,14 +72,14 @@ func (s *Store) RenameProject(ctx context.Context, id uuid.UUID, name string) (P
 }
 
 // DeleteProject 软删除项目，返回随之删除的 Agent。
-// 锁住项目与其中未删除的 Agent；任一 Agent 有进行中的执行或排队消息时返回 agent_not_idle（details 列出这些 Agent）。
+// 任一未删除的 Agent 有进行中的执行或排队消息时返回 agent_not_idle（details 列出这些 Agent）。
 // 通过后：删除这些 Agent 的凭证密文，软删除 Agent 与项目，并取消 Manager。默认项目不能删除。
 // 停止 Pi 进程与删除凭证文件由调用方在提交后完成。
 func (s *Store) DeleteProject(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error) {
 	var ids []uuid.UUID
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var isDefault bool
-		if err := tx.QueryRow(ctx, `SELECT is_default FROM projects WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, id).Scan(&isDefault); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT is_default FROM projects WHERE id = $1 AND deleted_at IS NULL`, id).Scan(&isDefault); err != nil {
 			return notFoundIfNoRows(err, "项目")
 		}
 		if isDefault {
@@ -98,7 +98,7 @@ func (s *Store) DeleteProject(ctx context.Context, id uuid.UUID) ([]uuid.UUID, e
 			if e != nil {
 				return e
 			}
-			active, e := pgx.CollectRows(rows, func(r pgx.CollectableRow) (activeTask, error) {
+			active, e := db.CollectRows(rows, func(r db.CollectableRow) (activeTask, error) {
 				var a activeTask
 				e := r.Scan(&a.ID, &a.Status)
 				return a, e
@@ -113,23 +113,22 @@ func (s *Store) DeleteProject(ctx context.Context, id uuid.UUID) ([]uuid.UUID, e
 			}{id, active}
 			return conflict
 		}
-		// 先锁住项目内未删除的 Agent，再用新的语句检查忙闲：READ COMMITTED 下新语句能看到在等锁期间已提交的执行；
-		// 若在同一条带 FOR UPDATE 的语句里判断忙闲，子查询仍按语句开始时的快照，会漏掉刚排队的消息。
-		lockRows, err := tx.Query(ctx, `SELECT id FROM agents WHERE project_id = $1 AND deleted_at IS NULL ORDER BY id FOR UPDATE`, id)
+		// 写事务串行：从这里查忙闲到软删除之间不会有新的执行排进来。
+		agentRows, err := tx.Query(ctx, `SELECT id FROM agents WHERE project_id = $1 AND deleted_at IS NULL ORDER BY id`, id)
 		if err != nil {
 			return err
 		}
-		ids, err = pgx.CollectRows(lockRows, pgx.RowTo[uuid.UUID])
+		ids, err = db.CollectRows(agentRows, db.RowTo[uuid.UUID])
 		if err != nil {
 			return err
 		}
 		busyRows, err := tx.Query(ctx, `SELECT a.id, a.name FROM agents a
-			WHERE a.id = ANY($1) AND EXISTS (SELECT 1 FROM runs r WHERE r.agent_id = a.id AND r.status IN ('queued', 'starting', 'running', 'aborting') AND NOT(r.status='queued' AND r.origin='sleep_wake'))
+			WHERE a.id IN (SELECT value FROM json_each($1)) AND EXISTS (SELECT 1 FROM runs r WHERE r.agent_id = a.id AND r.status IN ('queued', 'starting', 'running', 'aborting') AND NOT(r.status='queued' AND r.origin='sleep_wake'))
 			ORDER BY a.id`, ids)
 		if err != nil {
 			return err
 		}
-		busy, err := pgx.CollectRows(busyRows, func(row pgx.CollectableRow) (ProjectBusyAgent, error) {
+		busy, err := db.CollectRows(busyRows, func(row db.CollectableRow) (ProjectBusyAgent, error) {
 			var b ProjectBusyAgent
 			err := row.Scan(&b.ID, &b.Name)
 			return b, err
@@ -159,7 +158,7 @@ func (s *Store) DeleteProject(ctx context.Context, id uuid.UUID) ([]uuid.UUID, e
 					return err
 				}
 			}
-			if _, err := tx.Exec(ctx, `UPDATE agents SET deleted_at = now(), updated_at = now() WHERE id = ANY($1)`, ids); err != nil {
+			if _, err := tx.Exec(ctx, `UPDATE agents SET deleted_at = $2, updated_at = $2 WHERE id IN (SELECT value FROM json_each($1))`, ids, tx.Now()); err != nil {
 				return err
 			}
 		}
@@ -169,7 +168,7 @@ func (s *Store) DeleteProject(ctx context.Context, id uuid.UUID) ([]uuid.UUID, e
 		if err := purgeProjectCredentials(ctx, tx, id); err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `UPDATE projects SET deleted_at = now(), updated_at = now() WHERE id = $1`, id)
+		_, err = tx.Exec(ctx, `UPDATE projects SET deleted_at = $2, updated_at = $2 WHERE id = $1`, id, tx.Now())
 		return err
 	})
 	if err != nil {
@@ -186,20 +185,20 @@ func (s *Store) DeleteProject(ctx context.Context, id uuid.UUID) ([]uuid.UUID, e
 
 // SetProjectManager 指定或更换项目 Manager。Agent 必须是本项目内未删除的 Agent，否则字段 agentId 校验失败。
 func (s *Store) SetProjectManager(ctx context.Context, projectID, agentID uuid.UUID) (Project, error) {
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
-		if err := lockLiveProject(ctx, tx, projectID, "FOR UPDATE"); err != nil {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
+		if err := requireLiveProject(ctx, tx, projectID); err != nil {
 			return err
 		}
 		var ok bool
-		// 锁住 Agent 行，与删除该 Agent 串行化，不会把已删除的 Agent 设为 Manager。
-		err := tx.QueryRow(ctx, `SELECT true FROM agents WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL FOR SHARE`, agentID, projectID).Scan(&ok)
+		// 与删除 Agent 同在写事务里串行，不会把已删除的 Agent 设为 Manager。
+		err := tx.QueryRow(ctx, `SELECT true FROM agents WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL`, agentID, projectID).Scan(&ok)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, db.ErrNoRows) {
 				return apperr.Invalid("agentId", "Manager 必须是本项目内未删除的 Agent")
 			}
 			return err
 		}
-		_, err = tx.Exec(ctx, `UPDATE projects SET manager_agent_id = $2, updated_at = now() WHERE id = $1`, projectID, agentID)
+		_, err = tx.Exec(ctx, `UPDATE projects SET manager_agent_id = $2, updated_at = $3 WHERE id = $1`, projectID, agentID, tx.Now())
 		return err
 	})
 	if err != nil {
@@ -210,11 +209,11 @@ func (s *Store) SetProjectManager(ctx context.Context, projectID, agentID uuid.U
 
 // ClearProjectManager 取消项目 Manager；原本没有时也成功。
 func (s *Store) ClearProjectManager(ctx context.Context, projectID uuid.UUID) (Project, error) {
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
-		if err := lockLiveProject(ctx, tx, projectID, "FOR UPDATE"); err != nil {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
+		if err := requireLiveProject(ctx, tx, projectID); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `UPDATE projects SET manager_agent_id = NULL, updated_at = now() WHERE id = $1`, projectID)
+		_, err := tx.Exec(ctx, `UPDATE projects SET manager_agent_id = NULL, updated_at = $2 WHERE id = $1`, projectID, tx.Now())
 		return err
 	})
 	if err != nil {
@@ -223,10 +222,10 @@ func (s *Store) ClearProjectManager(ctx context.Context, projectID uuid.UUID) (P
 	return s.GetProject(ctx, projectID)
 }
 
-// lockLiveProject 锁住未删除的项目行；lock 为 "FOR UPDATE" 或 "FOR SHARE"。
-func lockLiveProject(ctx context.Context, tx pgx.Tx, id uuid.UUID, lock string) error {
+// requireLiveProject 确认项目存在且未删除。写事务串行，不需要锁行。
+func requireLiveProject(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
 	var ok bool
-	err := tx.QueryRow(ctx, `SELECT true FROM projects WHERE id = $1 AND deleted_at IS NULL `+lock, id).Scan(&ok)
+	err := tx.QueryRow(ctx, `SELECT true FROM projects WHERE id = $1 AND deleted_at IS NULL`, id).Scan(&ok)
 	return notFoundIfNoRows(err, "项目")
 }
 

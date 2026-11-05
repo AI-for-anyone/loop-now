@@ -266,7 +266,7 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
             : step(entry, index, { label: t.timeline.step.abort_requested, field: t.timeline.field.abort, tone: 'hot' }),
         )
         break
-      // Agent 半边扩展经 ctx.ui 发来的请求：通知与状态是淡色的一步，警告、错误带颜色；对话类写明结局（已回答、已取消、已过期），
+      // Agent 侧扩展经 ctx.ui 发来的请求：通知与状态是淡色的一步，警告、错误带颜色；对话类写明结局（已回答、已取消、已过期），
       // 转成了问题的可以跳到对话里的那个问题。
       case 'extension_ui': {
         const ui = t.plugins.chat.ui

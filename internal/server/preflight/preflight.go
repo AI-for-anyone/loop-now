@@ -13,8 +13,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-
-	"github.com/redis/go-redis/v9"
 )
 
 // Resolved 是检查通过后得到的本机绝对路径与推导值。
@@ -45,22 +43,6 @@ type Options struct {
 	WorkRoot     string
 	// HomeDirs 是不允许包含工作根目录的 home 目录；为空时取当前用户的 home。
 	HomeDirs []string
-}
-
-// CheckRedis 确认 Redis 可连接。
-func CheckRedis(ctx context.Context, redisURL string) error {
-	opts, err := redis.ParseURL(redisURL)
-	if err != nil {
-		return errors.New("Redis 连接串无法解析")
-	}
-	client := redis.NewClient(opts)
-	defer client.Close()
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	if err := client.Ping(ctx).Err(); err != nil {
-		return fmt.Errorf("Redis 不可用：%w", err)
-	}
-	return nil
 }
 
 // Resolve 检查 Pi、node、git 与工作根目录，并推导执行 PATH 与 pi-ai 目录。
@@ -116,7 +98,9 @@ func lookPath(name string) (string, error) {
 	return filepath.Abs(p)
 }
 
-// DeriveExecBasePath 按“宿主常用目录 → node/git 真实所在目录 → 系统目录”拼接执行 PATH 的基础部分。
+// DeriveExecBasePath 按“node 真实所在目录 → 宿主常用目录 → git 真实所在目录 → 系统目录”拼接执行 PATH 的基础部分。
+// node 排在最前：Pi 以 `#!/usr/bin/env node` 启动，配置的（或随包的）node 不能被宿主上另装的 node 盖过。
+// node 在系统目录里时例外，仍排在宿主常用目录之后，免得系统目录里的旧工具盖过宿主上装的。
 func DeriveExecBasePath(nodeBin, gitBin string) string {
 	var dirs []string
 	add := func(d string) {
@@ -124,16 +108,23 @@ func DeriveExecBasePath(nodeBin, gitBin string) string {
 			dirs = append(dirs, d)
 		}
 	}
+	realDir := func(bin string) string {
+		if real, err := filepath.EvalSymlinks(bin); err == nil {
+			return filepath.Dir(real)
+		}
+		return ""
+	}
+	nodeDir := realDir(nodeBin)
+	if !slices.Contains(SystemDirs, nodeDir) {
+		add(nodeDir)
+	}
 	for _, d := range HostCommonDirs {
 		if fi, err := os.Stat(d); err == nil && fi.IsDir() {
 			add(d)
 		}
 	}
-	for _, bin := range []string{nodeBin, gitBin} {
-		if real, err := filepath.EvalSymlinks(bin); err == nil {
-			add(filepath.Dir(real))
-		}
-	}
+	add(nodeDir)
+	add(realDir(gitBin))
 	for _, d := range SystemDirs {
 		add(d)
 	}

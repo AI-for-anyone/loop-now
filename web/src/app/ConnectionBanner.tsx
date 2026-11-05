@@ -4,7 +4,7 @@ import { RotateCwIcon, WifiOffIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { api, reachability } from '@/api/client'
 import { useContextInfo } from '@/api/queries'
-import { config } from '@/config'
+import { absoluteApiBase } from '@/config'
 import { t } from '@/i18n'
 import { isUnreachable } from '@/lib/errors'
 
@@ -48,7 +48,7 @@ export function ConnectionBanner() {
       </span>
       <div className="flex min-w-0 flex-[1_1_520px] flex-col gap-1">
         <h2 className="font-display-cn text-[34px] leading-[1.15] font-normal text-red-text">{t.connection.unreachableTitle}</h2>
-        <p className="text-[14.5px] leading-[1.75] break-words">{t.connection.unreachableBody(config.apiBase, window.location.origin)}</p>
+        <p className="text-[14.5px] leading-[1.75] break-words">{t.connection.unreachableBody(absoluteApiBase(), window.location.origin)}</p>
       </div>
       <Button variant="ink" size="lg" className="flex-none shadow-[3px_3px_0_var(--riso-pink)]" onClick={() => void retry(client)}>
         <RotateCwIcon />

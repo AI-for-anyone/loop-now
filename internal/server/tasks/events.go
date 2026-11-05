@@ -8,7 +8,7 @@ import (
 	"loop-now/internal/server/coord"
 )
 
-// StreamEvent携带持久化序号，Redis stream自己的ID仅用于中继游标。
+// StreamEvent携带持久化序号，事件流自己的ID仅用于中继游标。
 type StreamEvent struct {
 	ID   int64           `json:"id"`
 	Data json.RawMessage `json:"data"`

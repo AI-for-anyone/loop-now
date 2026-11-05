@@ -18,7 +18,7 @@ import (
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/plugins"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 type env struct {
@@ -31,7 +31,7 @@ type env struct {
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	st := pgtest.NewStore(t)
+	st := sqlitetest.NewStore(t)
 	dc, err := st.EnsureDefaults(context.Background(), "org", "project")
 	if err != nil {
 		t.Fatal(err)
@@ -54,7 +54,7 @@ func nodeBin() string {
 	return ""
 }
 
-// plugin 写一个插件目录：平台半边、Agent 扩展、Skill、CLI 目录、MCP 服务器、配置与账号都有。
+// plugin 写一个插件目录：平台侧、Agent 扩展、Skill、CLI 目录、MCP 服务器、配置与账号都有。
 func plugin(t *testing.T, dir, id, version string) string {
 	t.Helper()
 	pkg := map[string]any{
@@ -267,7 +267,7 @@ func TestConfigAccountsAndGrants(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	e.install(plugins.Source{Kind: "local", Location: plugin(t, t.TempDir(), "cfg", "1.0.0")}, true)
-	if _, err := e.st.Pool.Exec(ctx, `UPDATE plugins SET manifest=jsonb_set(manifest::jsonb,'{events}','["plugin.config_changed","plugin.enabled"]')::json`); err != nil {
+	if _, err := e.st.Pool.Exec(ctx, `UPDATE plugins SET manifest=json_set(manifest,'$.events',json('["plugin.config_changed","plugin.enabled"]'))`); err != nil {
 		t.Fatal(err)
 	}
 	tok := "s3cret"
@@ -293,12 +293,12 @@ func TestConfigAccountsAndGrants(t *testing.T) {
 	}
 	key := "pk"
 	pp, err := e.svc.PutProject(ctx, e.project, "cfg", plugins.ProjectInput{Enabled: true, Values: map[string]any{"channel": "#ops"}, Secrets: map[string]*string{"key": &key}})
-	// 上面用 jsonb_set 改过清单，属性的先后已被 jsonb 重排；这里只核对有哪些字段（先后见 httpapi 的 TestPluginSchemaOrder）。
+	// 上面用 json_set 改过清单；这里只核对有哪些字段（先后见 httpapi 的 TestPluginSchemaOrder）。
 	if err != nil || !pp.Enabled || pp.Config.Revision != 1 || pp.Config.SecretsSet[0] != "key" || !slices.Equal(slices.Sorted(slices.Values(pp.ProjectFields)), []string{"channel", "key"}) {
 		t.Fatalf("项目配置：%+v %v", pp, err)
 	}
 	var events []string
-	rows, _ := e.st.Pool.Query(ctx, `SELECT type||':'||coalesce(project_id::text,'-') FROM plugin_events ORDER BY id`)
+	rows, _ := e.st.Pool.Query(ctx, `SELECT type||':'||coalesce(project_id,'-') FROM plugin_events ORDER BY id`)
 	for rows.Next() {
 		var s string
 		rows.Scan(&s)

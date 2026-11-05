@@ -3,18 +3,16 @@ package store
 import (
 	"context"
 	"errors"
-	"time"
-
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"loop-now/internal/server/apperr"
+	"loop-now/internal/server/db"
 )
 
 // InsertConsoleCompactRun 在 Agent 行锁内再次确认空闲和活动会话，插入不带对话消息的压缩运行。
 func (s *Store) InsertConsoleCompactRun(ctx context.Context, agentID, runID, instanceID uuid.UUID) (Run, error) {
 	var run Run
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		agent, err := lockAgent(ctx, tx, agentID)
 		if err != nil {
 			return err
@@ -33,10 +31,14 @@ func (s *Store) InsertConsoleCompactRun(ctx context.Context, agentID, runID, ins
 		if state != "active" || file == nil {
 			return apperr.Conflict(apperr.CodeSessionNone, "当前还没有会话，无需压缩")
 		}
-		now := time.Now()
-		run, err = scanRun(tx.QueryRow(ctx, `INSERT INTO runs (id, agent_id, user_message_id, config_version, instance_id, priority, status, started_at, origin)
-			VALUES ($1,$2,NULL,$3,$4,1,'starting',$5,'console_compact') RETURNING `+runColumns,
-			runID, agentID, agent.ConfigVersion, instanceID, now))
+		now := tx.Now()
+		queueSeq, err := tx.NextSeq(ctx, "runs.queue_seq")
+		if err != nil {
+			return err
+		}
+		run, err = scanRun(tx.QueryRow(ctx, `INSERT INTO runs (id, agent_id, user_message_id, config_version, instance_id, priority, status, started_at, origin, queue_seq, queued_at)
+			VALUES ($1,$2,NULL,$3,$4,1,'starting',$5,'console_compact',$6,$5) RETURNING `+runColumns,
+			runID, agentID, agent.ConfigVersion, instanceID, now, queueSeq))
 		if err != nil {
 			if isUniqueViolation(err, "runs_one_active_per_agent") {
 				return ErrActiveRunExists
@@ -51,7 +53,7 @@ func (s *Store) InsertConsoleCompactRun(ctx context.Context, agentID, runID, ins
 // IdleSession 在数据库内确认 Agent 没有进行中或排队工作，并返回当前会话。
 func (s *Store) IdleSession(ctx context.Context, agentID uuid.UUID) (AgentSession, error) {
 	var sess AgentSession
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, err := lockAgent(ctx, tx, agentID); err != nil {
 			return err
 		}
@@ -79,7 +81,7 @@ func (s *Store) LatestCompletedAssistant(ctx context.Context, agentID uuid.UUID)
 	m, err := scanMessage(s.Pool.QueryRow(ctx, `SELECT `+messageColumns+` FROM conversation_messages
 		WHERE agent_id=$1 AND role='assistant' AND run_id IN (SELECT id FROM runs WHERE agent_id=$1 AND status='completed')
 		ORDER BY seq DESC LIMIT 1`, agentID))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, db.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {

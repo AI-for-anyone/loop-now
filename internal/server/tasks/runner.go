@@ -19,8 +19,8 @@ func (s *Service) Start(ctx context.Context) error {
 	if s.Options.ReconcileInterval <= 0 {
 		return errors.New("任务对账间隔必须为正")
 	}
-	if s.Coord != nil && (s.Options.LockRenewInterval <= 0 || s.Options.RecordTimeout <= 0 || s.Options.InstanceID == uuid.Nil) {
-		return errors.New("任务Redis协调参数未完整配置")
+	if s.Coord != nil && (s.Options.RecordTimeout <= 0 || s.Options.InstanceID == uuid.Nil) {
+		return errors.New("任务协调参数未完整配置")
 	}
 	s.mu.Lock()
 	if s.started {
@@ -139,7 +139,7 @@ func (s *Service) Kick(id uuid.UUID) {
 					return
 				}
 				var pending bool
-				err := s.Store.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM task_turns q JOIN task_records t ON t.id=q.task_id WHERE t.id=$1 AND t.status IN ('running','waiting') AND q.status='queued' AND NOT EXISTS(SELECT 1 FROM task_lark_switch_fences f WHERE f.runtime_id=q.runtime_id) AND NOT EXISTS(SELECT 1 FROM task_turns a WHERE a.runtime_id=q.runtime_id AND a.status IN ('starting','running','aborting')) AND q.node_run_id=(t.document->'view'->'task'->>'currentNodeRunId')::uuid)`, id).Scan(&pending)
+				err := s.Store.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM task_turns q JOIN task_records t ON t.id=q.task_id WHERE t.id=$1 AND t.status IN ('running','waiting') AND q.status='queued' AND NOT EXISTS(SELECT 1 FROM task_lark_switch_fences f WHERE f.runtime_id=q.runtime_id) AND NOT EXISTS(SELECT 1 FROM task_turns a WHERE a.runtime_id=q.runtime_id AND a.status IN ('starting','running','aborting')) AND q.node_run_id=t.document->'view'->'task'->>'currentNodeRunId')`, id).Scan(&pending)
 				if err == nil && pending {
 					s.Kick(id)
 				}
@@ -165,9 +165,6 @@ func (s *Service) reconcile() {
 		instances, e := s.Store.TaskInstances(s.ctx, id)
 		if e == nil {
 			for _, inst := range instances {
-				if s.Coord != nil {
-					_ = s.mirrorQueue(s.ctx, inst.ID)
-				}
 				s.KickInbox(inst.ID)
 			}
 		}
@@ -230,9 +227,6 @@ func (s *Service) drive(ctx context.Context, id uuid.UUID) error {
 		n := r.Current()
 		if n == nil {
 			return errors.New("任务缺少当前节点")
-		}
-		if e := s.mirrorQueue(ctx, n.RuntimeID); e != nil {
-			return e
 		}
 		if n.Status == "queued" && s.Hooks != nil {
 			// node.before_start（plugins/SPEC.md §4）：节点第一次开始前询问插件，不在任务事务里等待；被阻止时任务进入阻塞并写明原因。

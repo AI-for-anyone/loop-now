@@ -1,5 +1,5 @@
 // Package conversation 协调控制台与常态 Agent 的对话：发送消息、忙闲锁、排队与打断、
-// 每个 Agent 的驱动循环、服务端重启后的处理，以及 Redis 数据丢失后的对账。
+// 每个 Agent 的驱动循环、服务端重启后的处理，以及定时对账。排队就是数据库里 status='queued' 的执行。
 package conversation
 
 import (
@@ -27,10 +27,18 @@ import (
 
 // Options 是对话服务的参数。
 type Options struct {
-	InstanceID        uuid.UUID
-	MaxMessage        int64
-	LockRenewInterval time.Duration
+	InstanceID uuid.UUID
+	MaxMessage int64
+	// AbortPollInterval 是回复期间检查数据库里打断标记的间隔（打断通知丢失时的兜底）；为 0 时取 10 秒。
+	AbortPollInterval time.Duration
 	ReconcileInterval time.Duration
+}
+
+func (o Options) abortPollInterval() time.Duration {
+	if o.AbortPollInterval > 0 {
+		return o.AbortPollInterval
+	}
+	return 10 * time.Second
 }
 
 type driverStart struct {
@@ -92,9 +100,27 @@ func (s *Service) Stop(ctx context.Context) error {
 	go func() { s.wg.Wait(); s.overviewWG.Wait(); close(done) }()
 	select {
 	case <-done:
-		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+	s.endInFlight(ctx)
+	return nil
+}
+
+// endInFlight 在驱动循环都退出之后，把本实例进行中的执行按服务端重启中断收尾，写入已产生的回复文字。
+// 回复文字只在内存里：留到下次启动再收尾（recoverAfterRestart）就丢了。进程崩溃时来不及做，那一段文字会丢失。
+func (s *Service) endInFlight(ctx context.Context) {
+	runs, err := s.st.ActiveRuns(ctx)
+	if err != nil {
+		s.log.Warn("停止：读取进行中的执行失败，留到下次启动收尾", "err", err)
+		return
+	}
+	for _, r := range runs {
+		if r.InstanceID == nil || *r.InstanceID != s.o.InstanceID {
+			continue
+		}
+		text, _ := s.co.RunText(ctx, r.ID.String())
+		s.endRun(ctx, r.AgentID, r.ID, store.RunEnd{Status: "interrupted", EndReason: "server_restart", Text: text})
 	}
 }
 
@@ -117,7 +143,7 @@ func (s *Service) Send(ctx context.Context, agentID uuid.UUID, text, whenBusy st
 
 	runID := uuid.Must(uuid.NewV7())
 	owner := coord.LockValue(runID.String(), s.o.InstanceID.String())
-	acquired, err := s.co.AcquireIfIdle(ctx, agentID.String(), owner)
+	acquired, err := s.co.Acquire(ctx, agentID.String(), owner)
 	if err != nil {
 		return apitypes.Message{}, err
 	}
@@ -130,8 +156,8 @@ func (s *Service) Send(ctx context.Context, agentID uuid.UUID, text, whenBusy st
 			s.emitRun(ctx, agentID, run.ID)
 			s.startDriver(agentID, run, owner)
 			return apitypes.FromMessage(msg, run), nil
-		case errors.Is(err, store.ErrActiveRunExists):
-			// Redis 丢了锁：按数据库中的进行中执行恢复锁，然后按“忙”处理。
+		case errors.Is(err, store.ErrActiveRunExists), errors.Is(err, store.ErrQueuedRunsExist):
+			// 锁是空的，但数据库里有进行中或排队的执行（例如刚重启、交接之间）：按数据库恢复锁，然后按“忙”处理。
 			_, _ = s.co.Release(ctx, agentID.String(), owner)
 			s.restoreLock(ctx, agentID)
 		default:
@@ -145,15 +171,6 @@ func (s *Service) Send(ctx context.Context, agentID uuid.UUID, text, whenBusy st
 	}
 	msg, run, err := s.st.InsertMessageAndRun(ctx, store.NewRun{
 		ImageIDs: imageIDs, MaxImages: s.st.ImageMaxCount, AgentID: agentID, RunID: runID, Text: text, WhenBusy: whenBusy, InstanceID: s.o.InstanceID, RequestID: reqid.From(ctx),
-		Enqueue: func(r store.Run) error {
-			if whenBusy == "interrupt" {
-				return s.co.PushInterrupt(ctx, agentID.String(), r.ID.String())
-			}
-			return s.co.PushNormal(ctx, agentID.String(), r.ID.String())
-		},
-		OnEnqueueError: func(err error) {
-			s.log.Warn("写入 Redis 队列失败，等待对账补回", "agentId", agentID, "runId", runID, "err", err)
-		},
 	})
 	if err != nil {
 		return apitypes.Message{}, err
@@ -206,7 +223,7 @@ func (s *Service) queueCounts(ctx context.Context, agentID uuid.UUID) (apitypes.
 	return c, queued, nil
 }
 
-// interruptActive 把进行中的执行转为打断中（byRunID 为引发打断的消息所属的执行），并经 Redis 通知持有它的驱动循环。
+// interruptActive 把进行中的执行转为打断中（byRunID 为引发打断的消息所属的执行），并通知持有它的驱动循环。
 func (s *Service) interruptActive(ctx context.Context, agentID, byRunID uuid.UUID) {
 	if h := testHookBeforeMarkAborting.Load(); h != nil {
 		(*h)(byRunID)
@@ -247,11 +264,31 @@ func (s *Service) kick(ctx context.Context, agentID uuid.UUID) {
 	if running {
 		return
 	}
-	next, ok, err := s.co.Handoff(ctx, agentID.String(), "", s.o.InstanceID.String())
+	next, ok, err := s.handoff(ctx, agentID, "")
 	if err != nil || !ok || next == "" {
 		return
 	}
 	s.startNext(ctx, agentID, next)
+}
+
+// handoff 交接 Agent 的忙闲锁：current 为空表示锁必须空闲。按数据库选出下一条可以开始的排队执行（先打断、后普通，
+// 各自按排入顺序），把锁换给它；没有下一条时 current 非空就释放锁。锁已不是 current 时返回 ok=false，不做改动。
+// 选出与换锁之间排队有变化也无妨：换给的那条若已不在排队，StartQueuedRun 不会开始它，调用方接着交接；
+// 新排进来的执行由发送方的 kick 或驱动循环退出时的 kick 接手。
+func (s *Service) handoff(ctx context.Context, agentID uuid.UUID, current string) (string, bool, error) {
+	id, found, err := s.st.NextQueuedRun(ctx, agentID)
+	if err != nil {
+		return "", false, err
+	}
+	next, owner := "", ""
+	if found {
+		next = id.String()
+		owner = coord.LockValue(next, s.o.InstanceID.String())
+	}
+	if ok, err := s.co.Swap(ctx, agentID.String(), current, owner); err != nil || !ok {
+		return "", false, err
+	}
+	return next, true, nil
 }
 
 // startNext 从刚取得锁的执行开始；它已不在排队状态时继续交接下一条。
@@ -274,7 +311,7 @@ func (s *Service) startNext(ctx context.Context, agentID uuid.UUID, next string)
 			}
 		}
 		var ok bool
-		next, ok, err = s.co.Handoff(ctx, agentID.String(), owner, s.o.InstanceID.String())
+		next, ok, err = s.handoff(ctx, agentID, owner)
 		if err != nil || !ok {
 			return
 		}
@@ -340,10 +377,10 @@ func (s *Service) drive(agentID uuid.UUID, run store.Run, owner string) {
 		}
 		s.finish(ctx, run, res)
 
-		next, ok, err := s.co.Handoff(ctx, agentID.String(), owner, s.o.InstanceID.String())
+		next, ok, err := s.handoff(ctx, agentID, owner)
 		if err == nil && !ok {
-			// 锁已不是本执行持有（例如 Redis 数据丢失）：锁空闲时直接交接。
-			next, ok, err = s.co.Handoff(ctx, agentID.String(), "", s.o.InstanceID.String())
+			// 锁已不是本执行持有（例如锁过了 TTL）：锁空闲时直接交接。
+			next, ok, err = s.handoff(ctx, agentID, "")
 		}
 		if err != nil || !ok || next == "" {
 			if err != nil {
@@ -369,7 +406,7 @@ func (s *Service) drive(agentID uuid.UUID, run store.Run, owner string) {
 				}
 			}
 			if !started {
-				if next, ok, err = s.co.Handoff(ctx, agentID.String(), owner, s.o.InstanceID.String()); err != nil || !ok {
+				if next, ok, err = s.handoff(ctx, agentID, owner); err != nil || !ok {
 					return
 				}
 			}
@@ -402,7 +439,7 @@ func beforeInterrupt(runID uuid.UUID) {
 	}
 }
 
-// execute 调用执行器处理一次执行，期间续期忙闲锁，并定时检查数据库中的打断标记（防止 Redis 通知丢失）。
+// execute 调用执行器处理一次执行，期间定时检查数据库中的打断标记（防止打断通知丢失）。
 func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run, owner string) executor.Result {
 	attrs := []any{"runId", run.ID, "agentId", agentID, "whenBusy", run.WhenBusy}
 	if run.StartedAt != nil {
@@ -439,22 +476,19 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 		}
 		msg.Text = text
 	}
-	renewCtx, stopRenew := context.WithCancel(ctx)
-	defer stopRenew()
+	pollCtx, stopPoll := context.WithCancel(ctx)
+	defer stopPoll()
 	go func() {
-		t := time.NewTicker(s.o.LockRenewInterval)
+		t := time.NewTicker(s.o.abortPollInterval())
 		defer t.Stop()
 		for {
 			select {
-			case <-renewCtx.Done():
+			case <-pollCtx.Done():
 				return
 			case <-t.C:
-				if ok, err := s.co.Renew(renewCtx, agentID.String(), owner); err != nil || !ok {
-					s.log.Warn("续期忙闲锁失败", "agentId", agentID, "ok", ok, "err", err)
-				}
-				if st, err := s.st.RunStatus(renewCtx, run.ID); err == nil && st == "aborting" {
+				if st, err := s.st.RunStatus(pollCtx, run.ID); err == nil && st == "aborting" {
 					beforeInterrupt(run.ID)
-					_ = s.ex.Interrupt(renewCtx, agentID, run.ID)
+					_ = s.ex.Interrupt(pollCtx, agentID, run.ID)
 				}
 			}
 		}
@@ -630,7 +664,7 @@ func (s *Service) reconcileLoop() {
 	}
 }
 
-// reconcile 按数据库重建缺失的 Redis 队列，为进行中的执行补设锁，并为无人处理的排队消息启动驱动循环。
+// reconcile 为进行中的执行补设锁，并为无人处理的排队消息启动驱动循环。
 func (s *Service) reconcile(ctx context.Context) {
 	active, err := s.st.ActiveRuns(ctx)
 	if err != nil {
@@ -648,41 +682,10 @@ func (s *Service) reconcile(ctx context.Context) {
 		return
 	}
 	for _, agentID := range agents {
-		queued, err := s.st.QueuedRuns(ctx, agentID)
-		if err != nil {
-			continue
-		}
-		var wantI, wantN []string
-		for _, r := range queued {
-			if r.Priority == 0 {
-				wantI = append(wantI, r.ID.String())
-			} else {
-				wantN = append(wantN, r.ID.String())
-			}
-		}
-		gotI, gotN, err := s.co.QueueContents(ctx, agentID.String())
-		if err != nil {
-			continue
-		}
-		if !containsAll(gotI, wantI) || !containsAll(gotN, wantN) {
-			s.log.Warn("对账：Redis 队列缺少排队执行，按数据库重建", "agentId", agentID)
-			if err := s.co.RebuildQueues(ctx, agentID.String(), wantI, wantN); err != nil {
-				continue
-			}
-		}
 		if !slices.ContainsFunc(active, func(r store.Run) bool { return r.AgentID == agentID }) {
 			s.kick(ctx, agentID)
 		}
 	}
-}
-
-func containsAll(have, want []string) bool {
-	for _, w := range want {
-		if !slices.Contains(have, w) {
-			return false
-		}
-	}
-	return true
 }
 
 // ---- 事件 ----

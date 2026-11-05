@@ -3,13 +3,16 @@ package store_test
 import (
 	"context"
 	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/clicredential"
 	"loop-now/internal/server/credentialmodel"
 	"loop-now/internal/server/store"
+
+	"github.com/google/uuid"
 )
 
 func larkSwitchTarget(t *testing.T, s *store.Store, project uuid.UUID, refreshExpiry time.Time) store.ProjectCredentialRecord {
@@ -129,50 +132,32 @@ func TestTaskLarkTargetLockWaitCannotCrossGrantExpiry(t *testing.T) {
 	r, _ := s.GetTask(ctx, reservation.TaskID)
 	expires := time.Now().Add(time.Second)
 	account := larkSwitchTarget(t, s, r.View.Task.ProjectID, expires)
-	holder, err := s.Pool.Begin(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer holder.Rollback(context.Background())
-	if _, err = holder.Exec(ctx, `SELECT id FROM project_cli_versions WHERE id=$1 FOR UPDATE`, *account.View.CurrentVersionID); err != nil {
-		t.Fatal(err)
-	}
-	pid := make(chan uint32, 1)
+	// 任务事务里读目标版本时停住，直到授权过期：校验必须用读到之后的时刻，而不是事务开始的时刻。
+	entered, resume := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	s.Pool.SetQueryHook(func(_ context.Context, q string) {
+		if strings.Contains(q, "a.current_cli_version_id,a.deleted_at,v.auth_method") {
+			once.Do(func() { close(entered); <-resume })
+		}
+	})
+	defer s.Pool.SetQueryHook(nil)
 	done := make(chan error, 1)
 	go func() {
 		_, err := s.MutateTask(ctx, reservation.TaskID, nil, func(m *store.TaskMutation) (any, error) {
 			m.Unchanged()
-			pid <- m.Tx.Conn().PgConn().PID()
 			_, err := s.CaptureTaskLarkTargetTx(ctx, m, account.View.ID, *account.View.CurrentVersionID, account.View.Revision)
 			return nil, err
 		})
 		done <- err
 	}()
-	var backend uint32
 	select {
-	case backend = <-pid:
+	case <-entered:
 	case <-ctx.Done():
-		t.Fatal("task lock not acquired")
+		t.Fatal("target read not reached")
 	}
-	for {
-		var waiting bool
-		if err = s.Pool.QueryRow(ctx, `SELECT coalesce(wait_event_type='Lock',false) FROM pg_stat_activity WHERE pid=$1`, backend).Scan(&waiting); err != nil {
-			t.Fatal(err)
-		}
-		if waiting {
-			break
-		}
-		if ctx.Err() != nil {
-			t.Fatal("did not observe actual target row lock wait")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	if until := time.Until(expires.Add(20 * time.Millisecond)); until > 0 {
-		time.Sleep(until)
-	}
-	if err = holder.Commit(ctx); err != nil {
-		t.Fatal(err)
-	}
+	sleepPastWall(expires)
+	close(resume)
+	var err error
 	select {
 	case err = <-done:
 		if err == nil {

@@ -31,6 +31,12 @@ export const consoleInbox = {
   pendingKind: { question: 'Question', unread: 'New message' },
   inTask: (title: string) => `Task "${title}"`,
   taskFallback: 'Task instance',
+  desktop: {
+    question: (name: string) => `Waiting for your reply: ${name}`,
+    task: (title: string) => `Task waiting: ${title}`,
+    inTask: (title: string, preview: string) => `Task "${title}": ${preview}`,
+    from: (name: string, preview: string) => `${name}: ${preview}`,
+  },
   answer: 'Answer',
   view: 'View',
   badge: (questions: number, unread: number) =>

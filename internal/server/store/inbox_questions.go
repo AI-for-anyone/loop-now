@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"time"
+
+	"loop-now/internal/server/db"
 )
 
 type QuestionOption struct {
@@ -43,19 +44,17 @@ type QuestionBinding struct{ TaskID, RuntimeID, NodeRunID uuid.UUID }
 func (s *Store) QuestionBinding(ctx context.Context, id uuid.UUID) (*QuestionBinding, error) {
 	var b QuestionBinding
 	err := s.Pool.QueryRow(ctx, `SELECT task_id,runtime_id,node_run_id FROM task_questions WHERE question_message_id=$1`, id).Scan(&b.TaskID, &b.RuntimeID, &b.NodeRunID)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, db.ErrNoRows) {
 		return nil, nil
 	}
 	return &b, err
 }
-func GetQuestionTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, lock bool, preview ...int) (*InboxQuestion, error) {
+
+// GetQuestionTx 读出提问。第四个参数原来决定是否锁行；写事务串行后不再需要，保留只为调用方不变。
+func GetQuestionTx(ctx context.Context, tx *db.Tx, id uuid.UUID, _ bool, preview ...int) (*InboxQuestion, error) {
 	size := 200
 	if len(preview) > 0 {
 		size = preview[0]
-	}
-	suffix := ""
-	if lock {
-		suffix = " FOR UPDATE OF q"
 	}
 	var q InboxQuestion
 	var opts, by []byte
@@ -63,8 +62,8 @@ func GetQuestionTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, lock bool, prev
 	var optionID *string
 	var at *time.Time
 	var textPreview *string
-	err := tx.QueryRow(ctx, `SELECT q.options,q.expires_at,q.state,q.answer_message_id,q.answer_option_id,q.answered_by,q.answered_at,left(a.text,$2) FROM inbox_questions q LEFT JOIN inbox_messages a ON a.id=q.answer_message_id WHERE q.message_id=$1`+suffix, id, size).Scan(&opts, &q.ExpiresAt, &q.State, &answerID, &optionID, &by, &at, &textPreview)
-	if errors.Is(err, pgx.ErrNoRows) {
+	err := tx.QueryRow(ctx, `SELECT q.options,q.expires_at,q.state,q.answer_message_id,q.answer_option_id,q.answered_by,q.answered_at,substr(a.text,1,$2) FROM inbox_questions q LEFT JOIN inbox_messages a ON a.id=q.answer_message_id WHERE q.message_id=$1`, id, size).Scan(&opts, &q.ExpiresAt, &q.State, &answerID, &optionID, &by, &at, &textPreview)
+	if errors.Is(err, db.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -89,11 +88,11 @@ func GetQuestionTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, lock bool, prev
 	}
 	return &q, nil
 }
-func QueueQuestionEventTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, state string) error {
+func QueueQuestionEventTx(ctx context.Context, tx *db.Tx, id uuid.UUID, state string) error {
 	_, err := tx.Exec(ctx, `INSERT INTO inbox_question_outbox(id,question_message_id,state,message_id)VALUES($1,$2,$3,$4) ON CONFLICT(question_message_id,state) DO NOTHING`, uuid.New(), id, state, uuid.New())
 	return err
 }
-func CloseInboxQuestion(ctx context.Context, tx pgx.Tx, id uuid.UUID, reason string) (string, error) {
+func CloseInboxQuestion(ctx context.Context, tx *db.Tx, id uuid.UUID, reason string) (string, error) {
 	if reason != "task_retry" && reason != "task_cancel" && reason != "node_completed" {
 		return "", apperr.Invalid("reason", "问题关闭原因无效")
 	}
@@ -113,12 +112,12 @@ func CloseInboxQuestion(ctx context.Context, tx pgx.Tx, id uuid.UUID, reason str
 	return "closed", QueueQuestionEventTx(ctx, tx, id, "closed")
 }
 func (s *Store) ExpireInboxQuestions(ctx context.Context) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `WITH due AS (SELECT message_id FROM inbox_questions WHERE state='open' AND expires_at<=now() ORDER BY message_id FOR UPDATE SKIP LOCKED LIMIT 100) UPDATE inbox_questions SET state='expired',expired_reason='deadline',notice_state=CASE WHEN EXISTS(SELECT 1 FROM inbox_messages m WHERE m.id=inbox_questions.message_id AND m.from_kind='agent') AND NOT EXISTS(SELECT 1 FROM extension_dialogs d WHERE d.question_message_id=inbox_questions.message_id) THEN 'pending' ELSE 'none' END WHERE message_id IN(SELECT message_id FROM due) RETURNING message_id`)
+	return s.inTx(ctx, func(tx *db.Tx) error {
+		rows, err := tx.Query(ctx, `WITH due AS (SELECT message_id FROM inbox_questions WHERE state='open' AND expires_at<=now() ORDER BY message_id LIMIT 100) UPDATE inbox_questions SET state='expired',expired_reason='deadline',notice_state=CASE WHEN EXISTS(SELECT 1 FROM inbox_messages m WHERE m.id=inbox_questions.message_id AND m.from_kind='agent') AND NOT EXISTS(SELECT 1 FROM extension_dialogs d WHERE d.question_message_id=inbox_questions.message_id) THEN 'pending' ELSE 'none' END WHERE message_id IN(SELECT message_id FROM due) RETURNING message_id`)
 		if err != nil {
 			return err
 		}
-		ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+		ids, err := db.CollectRows(rows, db.RowTo[uuid.UUID])
 		if err != nil {
 			return err
 		}

@@ -14,13 +14,16 @@ hero:
       text: 快速上手
       link: /zh/guide/getting-started
     - theme: alt
+      text: 下载 macOS 桌面版
+      link: https://github.com/AI-for-anyone/loop-now/releases/latest
+    - theme: alt
       text: GitHub
       link: https://github.com/AI-for-anyone/loop-now
     - theme: alt
       text: English
       link: /
     - theme: alt
-      text: v0.1.0
+      text: v0.2.0
       link: https://github.com/AI-for-anyone/loop-now/releases
 
 features:
@@ -62,12 +65,12 @@ features:
 
 ## 插件是核心扩展入口
 
-一个插件就是一个目录，`package.json` 是它唯一的清单。**Agent 半边**是标准的 [Pi 包](https://pi.dev/packages)，随授权加载进每个 Agent 的 Pi 进程；**平台半边**运行在服务端旁边一个常驻的 Node 插件宿主里，用按权限签发的插件令牌调用平台接口。
+一个插件就是一个目录，`package.json` 是它唯一的清单。**Agent 侧**是标准的 [Pi 包](https://pi.dev/packages)，随授权加载进每个 Agent 的 Pi 进程；**平台侧**运行在服务端旁边一个常驻的 Node 插件宿主里，用按权限签发的插件令牌调用平台接口。
 
-清单说了算：订阅未声明的事件、调用未声明的接口都会失败；安装前会向用户展示插件的两半内容、事件和权限。[阅读插件体系概览 →](/zh/plugins/)
+清单说了算：订阅未声明的事件、调用未声明的接口都会失败；安装前会向用户展示插件的两侧内容、事件和权限。[阅读插件体系概览 →](/zh/plugins/)
 
 ## 早期个人版
 
-本项目面向**本地单实例**：控制台没有登录功能，应通过本机回环地址访问；凭证以明文保存在你自己的 PostgreSQL 中，请保护好数据库访问与备份。使用模型或工具供应商时，相关数据仍会发送给对应服务。
+本项目面向**本地单实例**：控制台没有登录功能，应通过本机回环地址访问；凭证以明文保存在本地数据库中，请保护好数据目录与备份。使用模型或工具供应商时，相关数据仍会发送给对应服务。
 
 平台运行在你的电脑上，以 [Pi](https://github.com/earendil-works/pi) 为执行引擎。使用哪些模型、账号、代码仓库和工具，由你为各个 Agent 配置。

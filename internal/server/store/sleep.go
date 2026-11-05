@@ -7,11 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/sleepmodel"
 	"time"
+
+	"loop-now/internal/server/db"
 )
 
 type Sleep struct {
@@ -24,7 +25,7 @@ type Sleep struct {
 
 const sleepColumns = `id,scope_kind,agent_id,task_id,runtime_id,node_run_id,source_run_id,state,seconds,requested_at,entered_at,wake_at,ended_at,end_reason,wake_run_id,reason,revision,scope_key,mode,session_epoch,timer_run_id,receipt`
 
-func scanSleep(row pgx.Row) (Sleep, error) {
+func scanSleep(row db.Scanner) (Sleep, error) {
 	var s Sleep
 	e := row.Scan(&s.ID, &s.ScopeKind, &s.AgentID, &s.TaskID, &s.RuntimeID, &s.NodeRunID, &s.SourceRunID, &s.State, &s.Seconds, &s.RequestedAt, &s.EnteredAt, &s.WakeAt, &s.EndedAt, &s.EndReason, &s.WakeRunID, &s.Reason, &s.Revision, &s.ScopeKey, &s.Mode, &s.Epoch, &s.TimerRunID, &s.Receipt)
 	if e == nil {
@@ -78,7 +79,7 @@ func (s *Store) RequestSleep(ctx context.Context, p auth.Principal, in sleepmode
 			}
 			return json.Unmarshal(receipt, &out)
 		}
-		if !errors.Is(err, pgx.ErrNoRows) {
+		if !errors.Is(err, db.ErrNoRows) {
 			return err
 		}
 		var exists bool
@@ -160,7 +161,7 @@ func (s *Store) RequestSleep(ctx context.Context, p auth.Principal, in sleepmode
 		rec.RequestedAt = rec.RequestedAt.UTC()
 		out = sleepmodel.Receipt{Sleep: rec.Record, EndTurn: true}
 		b, _ := json.Marshal(out)
-		_, err = tx.Exec(ctx, `INSERT INTO agent_sleeps(id,scope_key,scope_kind,mode,agent_id,task_id,runtime_id,node_run_id,session_epoch,source_run_id,action_id,body_hash,receipt,state,seconds,reason,timer_run_id,revision,requested_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'requested',$14,$15,$16,$17,$18)`, rec.ID, key, rec.ScopeKind, rec.Mode, rec.AgentID, rec.TaskID, rec.RuntimeID, rec.NodeRunID, rec.Epoch, rec.SourceRunID, in.ActionID, hash[:], b, rec.Seconds, rec.Reason, rec.TimerRunID, rec.Revision, rec.RequestedAt)
+		_, err = tx.Exec(ctx, `INSERT INTO agent_sleeps(id,scope_key,scope_kind,mode,agent_id,task_id,runtime_id,node_run_id,session_epoch,source_run_id,action_id,body_hash,receipt,state,seconds,reason,timer_run_id,revision,requested_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'requested',$14,$15,$16,$17,$18)`, rec.ID, key, rec.ScopeKind, rec.Mode, rec.AgentID, rec.TaskID, rec.RuntimeID, rec.NodeRunID, rec.Epoch, rec.SourceRunID, in.ActionID, hash[:], json.RawMessage(b), rec.Seconds, rec.Reason, rec.TimerRunID, rec.Revision, rec.RequestedAt)
 		if err != nil {
 			return err
 		}
@@ -177,7 +178,7 @@ func (s *Store) SleepState(ctx context.Context, p auth.Principal) (sleepmodel.St
 	e = s.InboxTransaction(ctx, plan, func(scope *InboxTransaction) error {
 		if p.TaskID == uuid.Nil {
 			err := scope.Tx.QueryRow(ctx, `SELECT id FROM runs WHERE agent_id=$1 AND status IN ('starting','running','aborting')`, p.ID).Scan(&out.CurrentRunID)
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			if err != nil && !errors.Is(err, db.ErrNoRows) {
 				return err
 			}
 		} else {
@@ -189,12 +190,12 @@ func (s *Store) SleepState(ctx context.Context, p auth.Principal) (sleepmodel.St
 				return sleepConflict()
 			}
 			err := scope.Tx.QueryRow(ctx, `SELECT id FROM task_turns WHERE runtime_id=$1 AND status IN ('starting','running','aborting')`, p.RuntimeID).Scan(&out.CurrentRunID)
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			if err != nil && !errors.Is(err, db.ErrNoRows) {
 				return err
 			}
 		}
 		rec, err := scanSleep(scope.Tx.QueryRow(ctx, `SELECT `+sleepColumns+` FROM agent_sleeps WHERE scope_key=$1 AND state IN ('requested','sleeping')`, sleepKey(p.ID, p.TaskID)))
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, db.ErrNoRows) {
 			return nil
 		}
 		if err != nil {
@@ -205,13 +206,13 @@ func (s *Store) SleepState(ctx context.Context, p auth.Principal) (sleepmodel.St
 	})
 	return out, e
 }
-func (s *Store) bumpSleepRevisionTx(ctx context.Context, tx pgx.Tx, r *Sleep) error {
+func (s *Store) bumpSleepRevisionTx(ctx context.Context, tx *db.Tx, r *Sleep) error {
 	if r.ScopeKind == "normal" {
 		return tx.QueryRow(ctx, `UPDATE agent_sessions SET sleep_revision=sleep_revision+1 WHERE agent_id=$1 RETURNING sleep_revision`, r.AgentID).Scan(&r.Revision)
 	}
 	return tx.QueryRow(ctx, `UPDATE task_instances SET sleep_revision=sleep_revision+1 WHERE id=$1 RETURNING sleep_revision`, r.RuntimeID).Scan(&r.Revision)
 }
-func (s *Store) sleepEventTx(ctx context.Context, tx pgx.Tx, m *TaskMutation, r Sleep) error {
+func (s *Store) sleepEventTx(ctx context.Context, tx *db.Tx, m *TaskMutation, r Sleep) error {
 	u := sleepmodel.Updated{ScopeKind: r.ScopeKind, AgentID: r.AgentID, TaskID: r.TaskID, RuntimeID: r.RuntimeID, NodeRunID: r.NodeRunID, SleepRevision: r.Revision}
 	if r.State == "sleeping" {
 		u.Sleep = &r.Record
@@ -237,7 +238,7 @@ func (s *Store) sleepEventTx(ctx context.Context, tx pgx.Tx, m *TaskMutation, r 
 	}
 	return s.insertEvent(ctx, tx, LifecycleEvent{AgentID: r.AgentID, RunID: &r.SourceRunID, Type: "sleep." + r.State, Data: map[string]any{"sleep": u, "sleepRecord": r.Record}})
 }
-func (s *Store) saveSleepTx(ctx context.Context, tx pgx.Tx, m *TaskMutation, r *Sleep) error {
+func (s *Store) saveSleepTx(ctx context.Context, tx *db.Tx, m *TaskMutation, r *Sleep) error {
 	if err := s.bumpSleepRevisionTx(ctx, tx, r); err != nil {
 		return err
 	}

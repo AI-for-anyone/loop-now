@@ -26,7 +26,7 @@ func (s *Store) CompareAndSwapModelSettings(ctx context.Context, modelsJSON stri
 		return ModelSettings{}, apperr.Invalid("expectedRevision", "必须提供正整数版本")
 	}
 	var out ModelSettings
-	err := s.Pool.QueryRow(ctx, `UPDATE model_settings SET models_json=$1,revision=revision+1,updated_at=now() WHERE singleton=true AND revision=$2 RETURNING models_json,revision,updated_at`, modelsJSON, expected).Scan(&out.ModelsJSON, &out.Revision, &out.UpdatedAt)
+	err := s.Pool.QueryRow(ctx, `UPDATE model_settings SET models_json=$1,revision=revision+1,updated_at=$3 WHERE singleton AND revision=$2 RETURNING models_json,revision,updated_at`, modelsJSON, expected, s.Pool.Now()).Scan(&out.ModelsJSON, &out.Revision, &out.UpdatedAt)
 	if IsNotFound(err) {
 		return ModelSettings{}, apperr.PreconditionFailed("模型配置已被修改，请重新读取后再保存")
 	}

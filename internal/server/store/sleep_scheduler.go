@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"sync"
 	"time"
+
+	"loop-now/internal/server/db"
 )
 
 // The cursor is process-local enumeration progress, never persisted sleep state.
@@ -25,7 +26,7 @@ func (s *Store) sleepCandidates(ctx context.Context, batch int) ([]Sleep, error)
 	for pass := 0; pass < 2; pass++ {
 		if s.sleepScan.through == uuid.Nil {
 			e := s.Pool.QueryRow(ctx, `SELECT id FROM agent_sleeps WHERE `+sleepCandidatePredicate+` ORDER BY id DESC LIMIT 1`).Scan(&s.sleepScan.through)
-			if errors.Is(e, pgx.ErrNoRows) {
+			if errors.Is(e, db.ErrNoRows) {
 				return nil, nil
 			}
 			if e != nil {
@@ -36,7 +37,7 @@ func (s *Store) sleepCandidates(ctx context.Context, batch int) ([]Sleep, error)
 		if e != nil {
 			return nil, e
 		}
-		records, e := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Sleep, error) { return scanSleep(row) })
+		records, e := db.CollectRows(rows, func(row db.CollectableRow) (Sleep, error) { return scanSleep(row) })
 		if e != nil {
 			return nil, e
 		}
@@ -66,7 +67,7 @@ func (s *Store) ReconcileSleeps(ctx context.Context, batch int) error {
 			plan.Parties[0].RuntimeID = *candidate.RuntimeID
 		}
 		e = s.InboxTransaction(ctx, plan, func(scope *InboxTransaction) error {
-			r, err := scanSleep(scope.Tx.QueryRow(ctx, `SELECT `+sleepColumns+` FROM agent_sleeps WHERE id=$1 FOR UPDATE`, candidate.ID))
+			r, err := scanSleep(scope.Tx.QueryRow(ctx, `SELECT `+sleepColumns+` FROM agent_sleeps WHERE id=$1`, candidate.ID))
 			if err != nil {
 				return err
 			}
@@ -139,7 +140,7 @@ func (s *Store) ReconcileSleeps(ctx context.Context, batch int) error {
 			if err == nil {
 				return s.WakeSleepForWorkTx(ctx, scope.Tx, m, r.AgentID, valueUUID(r.RuntimeID), work)
 			}
-			if !errors.Is(err, pgx.ErrNoRows) {
+			if !errors.Is(err, db.ErrNoRows) {
 				return err
 			}
 			text := "平台通知：sleep已到期，请接着原会话处理。sleepId=" + r.ID.String()
@@ -155,7 +156,7 @@ func (s *Store) ReconcileSleeps(ctx context.Context, batch int) error {
 					node = nil
 				}
 				var turn TaskTurn
-				turn, err = scanTaskTurn(scope.Tx.QueryRow(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,wake_sleep_id,execution_mode) VALUES($1,$2,$3,$4,$5,$6,'queued','sleep_wake',1,$7,$8,$9) RETURNING `+taskTurnColumns, r.TimerRunID, r.TaskID, r.RuntimeID, node, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), text, r.ID, r.Mode))
+				turn, err = insertTaskTurn(ctx, scope.Tx, `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,wake_sleep_id,execution_mode`, `$1,$2,$3,$4,$5,$6,'queued','sleep_wake',1,$7,$8,$9`, r.TimerRunID, r.TaskID, r.RuntimeID, node, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), text, r.ID, r.Mode)
 				if err == nil {
 					err = s.taskLifecycle(ctx, scope.Tx, turn, EventRunQueued, map[string]any{"origin": "sleep_wake"})
 				}
@@ -179,7 +180,7 @@ func (s *Store) ReconcileSleeps(ctx context.Context, batch int) error {
 			return s.saveSleepTx(ctx, scope.Tx, m, &r)
 		})
 		// Advance after every attempted owner, including rollback/failure.
-		// Restart may repeat a bounded round; PG rechecks and stable timer IDs
+		// Restart may repeat a bounded round; database rechecks and stable timer IDs
 		// remain the authority, so resetting this cursor cannot duplicate work.
 		s.sleepScan.after = candidate.ID
 		if e != nil {

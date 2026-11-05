@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
-	"github.com/google/uuid"
 	"log/slog"
 	"loop-now/internal/server/cliauth"
 	"loop-now/internal/server/clicredential"
@@ -27,7 +26,19 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
+
+func ioWrite(w http.ResponseWriter, s string) { _, _ = w.Write([]byte(s)) }
+func safeCode(r cliverify.Result) string {
+	if r.ErrorCode == nil {
+		return "none"
+	}
+	return *r.ErrorCode
+}
+
+func serverRedirectTarget() string { return "https://forbidden.invalid/never-follow" }
 
 // This uses the actual pinned SDK and private Python, a real version-bound Go
 // broker and TEST PG. The only endpoint substitution is in the trusted Go
@@ -246,12 +257,3 @@ func TestGoogleNativeVerificationCRMGuard(t *testing.T) {
 		})
 	}
 }
-func ioWrite(w http.ResponseWriter, s string) { _, _ = w.Write([]byte(s)) }
-func safeCode(r cliverify.Result) string {
-	if r.ErrorCode == nil {
-		return "none"
-	}
-	return *r.ErrorCode
-}
-
-func serverRedirectTarget() string { return "https://forbidden.invalid/never-follow" }

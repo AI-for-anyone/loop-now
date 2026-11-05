@@ -121,7 +121,7 @@ describe('validatePlugin', () => {
     assert.match(validatePlugin(plugin('plain', { name: 'x', version: '1.0.0' })).findings[0]!.message, /不是插件/)
     assert.match(validatePlugin(plugin('broken', '{')).findings[0]!.message, /不是合法的 JSON/)
     assert.match(validatePlugin(path.join(tmp, 'absent')).findings[0]!.message, /不是目录/)
-    assert.match(validatePlugin(plugin('empty', { name: 'x', version: '1.0.0', loopNow: { id: 'x' } })).findings[0]!.message, /既没有 Agent 半边/)
+    assert.match(validatePlugin(plugin('empty', { name: 'x', version: '1.0.0', loopNow: { id: 'x' } })).findings[0]!.message, /既没有 Agent 侧/)
   })
 
   it('description 与 loopNow.displayName 可以是字符串或按语言的对象；对象须至少一项、键为语言标签、值非空', () => {
@@ -183,6 +183,30 @@ describe('validatePlugin', () => {
       r.findings.map((f) => f.path),
       ['dependencies.@earendil-works/pi-coding-agent', 'dependencies'],
     )
+  })
+
+  it('x-secret 在配置与账号字段的顶层生效，x-scope 只在配置的顶层生效；其余位置给提醒', () => {
+    const secret = { type: 'string', 'x-secret': true }
+    const r = validatePlugin(plugin('secret-places', {
+      name: 'secret-places', version: '1.0.0', description: 'x', keywords: ['loop-now-plugin'],
+      loopNow: {
+        id: 'secret-places', displayName: 'X', platform: './p.ts',
+        configSchema: { type: 'object', properties: { key: secret, team: { type: 'string', 'x-scope': 'project' } } },
+        accounts: [{ kind: 'cloud', fields: { type: 'object', properties: {
+          api_token: secret,
+          nested: { type: 'object', properties: { inner: secret } },
+          region: { type: 'string', 'x-scope': 'project' },
+          port: { type: 'number', 'x-secret': true },
+        } } }],
+        actions: [{ id: 'go', label: 'Go', where: ['agent'], fields: { type: 'object', properties: { pin: secret } } }],
+      },
+    }, { 'p.ts': '', 'README.md': '' }))
+    assert.deepEqual(r.findings.map((f) => [f.level, f.path]), [
+      ['warning', 'loopNow.accounts[0].fields.properties.nested.properties.inner.x-secret'],
+      ['warning', 'loopNow.accounts[0].fields.properties.region.x-scope'],
+      ['error', 'loopNow.accounts[0].fields.properties.port.x-secret'],
+      ['warning', 'loopNow.actions[0].fields.properties.pin.x-secret'],
+    ])
   })
 
   it('代管外部身份的渠道须有 identities.manage', () => {

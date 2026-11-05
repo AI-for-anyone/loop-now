@@ -26,17 +26,16 @@ describe('概览页的入口', () => {
     const { snapshot } = await renderOverview({
       handlers: [
         http.get(apiUrl('/health'), () =>
-          HttpResponse.json({ ok: false, postgres: { ok: true, error: null }, redis: { ok: false, error: 'connection refused' } }, { status: 503 }),
+          HttpResponse.json({ ok: false, database: { ok: false, error: 'unable to open database file' } }, { status: 503 }),
         ),
       ],
     })
     await snapshot([makeAgentOverview()])
     const status = screen.getByRole('status', { name: '连接状态' })
-    await waitFor(() => expect(status).toHaveTextContent('部分依赖不可用'))
+    await waitFor(() => expect(status).toHaveTextContent('数据库不可用'))
     const main = screen.getByRole('main')
-    expect(main).not.toHaveTextContent('Redis')
-    expect(main).not.toHaveTextContent('PostgreSQL')
-    expect(main).not.toHaveTextContent('部分依赖不可用')
+    expect(main).not.toHaveTextContent('unable to open database file')
+    expect(main).not.toHaveTextContent('数据库不可用')
   })
 
   it('没有 Agent 时显示空状态与新建 Agent 的入口，不显示三块内容', async () => {

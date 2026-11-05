@@ -24,7 +24,7 @@ const (
 	KindConsole  Kind = "console"
 	KindExternal Kind = "external"
 	KindAgent    Kind = "agent"
-	// KindPlugin 是插件平台半边经插件令牌调用控制台接口（只在回环监听器上）。
+	// KindPlugin 是插件的平台侧经插件令牌调用控制台接口（只在回环监听器上）。
 	KindPlugin Kind = "plugin"
 )
 

@@ -4,16 +4,17 @@ import (
 	"context"
 	"errors"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/sleepmodel"
 	"time"
+
+	"loop-now/internal/server/db"
 )
 
 var ErrSleepSessionNotSaved = errors.New("sleep_session_not_saved")
 
 // WakeSleepForWorkTx is called only after durable valid work exists, under the
 // owner lock. Requested intent waits for its source's successful finalization.
-func (s *Store) WakeSleepForWorkTx(ctx context.Context, tx pgx.Tx, m *TaskMutation, agent, runtime, work uuid.UUID) error {
+func (s *Store) WakeSleepForWorkTx(ctx context.Context, tx *db.Tx, m *TaskMutation, agent, runtime, work uuid.UUID) error {
 	if m != nil {
 		if fenced, err := s.TaskLarkRuntimeFencedTx(ctx, m, runtime); err != nil || fenced {
 			return err
@@ -23,8 +24,8 @@ func (s *Store) WakeSleepForWorkTx(ctx context.Context, tx pgx.Tx, m *TaskMutati
 	if m != nil {
 		key = sleepKey(agent, m.Record.View.Task.ID)
 	}
-	r, e := scanSleep(tx.QueryRow(ctx, `SELECT `+sleepColumns+` FROM agent_sleeps WHERE scope_key=$1 AND (state='sleeping' OR (state='woken' AND wake_run_id=timer_run_id)) ORDER BY requested_at DESC LIMIT 1 FOR UPDATE`, key))
-	if errors.Is(e, pgx.ErrNoRows) {
+	r, e := scanSleep(tx.QueryRow(ctx, `SELECT `+sleepColumns+` FROM agent_sleeps WHERE scope_key=$1 AND (state='sleeping' OR (state='woken' AND wake_run_id=timer_run_id)) ORDER BY requested_at DESC LIMIT 1`, key))
+	if errors.Is(e, db.ErrNoRows) {
 		return nil
 	}
 	if e != nil {
@@ -70,7 +71,7 @@ func (s *Store) WakeSleepForWorkTx(ctx context.Context, tx pgx.Tx, m *TaskMutati
 	}
 	return s.saveSleepTx(ctx, tx, m, &r)
 }
-func (s *Store) attachSleepCarrierTx(ctx context.Context, tx pgx.Tx, m *TaskMutation, r Sleep, work uuid.UUID) error {
+func (s *Store) attachSleepCarrierTx(ctx context.Context, tx *db.Tx, m *TaskMutation, r Sleep, work uuid.UUID) error {
 	table := "runs"
 	if m != nil {
 		table = "task_turns"
@@ -80,9 +81,9 @@ func (s *Store) attachSleepCarrierTx(ctx context.Context, tx pgx.Tx, m *TaskMuta
 }
 
 // FinishSleepTx must share the source Run/TaskTurn completion transaction.
-func (s *Store) FinishSleepTx(ctx context.Context, tx pgx.Tx, m *TaskMutation, run uuid.UUID, status string) (bool, error) {
-	r, e := scanSleep(tx.QueryRow(ctx, `SELECT `+sleepColumns+` FROM agent_sleeps WHERE source_run_id=$1 AND state='requested' FOR UPDATE`, run))
-	if errors.Is(e, pgx.ErrNoRows) {
+func (s *Store) FinishSleepTx(ctx context.Context, tx *db.Tx, m *TaskMutation, run uuid.UUID, status string) (bool, error) {
+	r, e := scanSleep(tx.QueryRow(ctx, `SELECT `+sleepColumns+` FROM agent_sleeps WHERE source_run_id=$1 AND state='requested'`, run))
+	if errors.Is(e, db.ErrNoRows) {
 		return false, nil
 	}
 	if e != nil {
@@ -141,7 +142,7 @@ func (s *Store) FinishSleepTx(ctx context.Context, tx pgx.Tx, m *TaskMutation, r
 	} else {
 		e = tx.QueryRow(ctx, `SELECT id FROM task_turns WHERE runtime_id=$1 AND status='queued' AND origin<>'sleep_wake' ORDER BY priority,queue_seq LIMIT 1`, r.RuntimeID).Scan(&work)
 	}
-	if e != nil && !errors.Is(e, pgx.ErrNoRows) {
+	if e != nil && !errors.Is(e, db.ErrNoRows) {
 		return false, e
 	}
 	if e == nil {
@@ -156,7 +157,7 @@ func (s *Store) FinishSleepTx(ctx context.Context, tx pgx.Tx, m *TaskMutation, r
 	}
 	return true, s.saveSleepTx(ctx, tx, m, &r)
 }
-func (s *Store) cancelSleepTx(ctx context.Context, tx pgx.Tx, m *TaskMutation, r *Sleep, why string) error {
+func (s *Store) cancelSleepTx(ctx context.Context, tx *db.Tx, m *TaskMutation, r *Sleep, why string) error {
 	table := "runs"
 	if m != nil {
 		table = "task_turns"
@@ -178,18 +179,18 @@ func (s *Store) cancelSleepTx(ctx context.Context, tx pgx.Tx, m *TaskMutation, r
 	r.WakeRunID = nil
 	return s.saveSleepTx(ctx, tx, m, r)
 }
-func (s *Store) CancelSleepsTx(ctx context.Context, tx pgx.Tx, m *TaskMutation, agent uuid.UUID, why string) error {
-	query := `SELECT ` + sleepColumns + ` FROM agent_sleeps WHERE agent_id=$1 AND task_id IS NULL AND (state IN ('requested','sleeping') OR (state='woken' AND wake_run_id=timer_run_id AND EXISTS(SELECT 1 FROM runs WHERE id=agent_sleeps.timer_run_id AND status='queued'))) ORDER BY id FOR UPDATE`
+func (s *Store) CancelSleepsTx(ctx context.Context, tx *db.Tx, m *TaskMutation, agent uuid.UUID, why string) error {
+	query := `SELECT ` + sleepColumns + ` FROM agent_sleeps WHERE agent_id=$1 AND task_id IS NULL AND (state IN ('requested','sleeping') OR (state='woken' AND wake_run_id=timer_run_id AND EXISTS(SELECT 1 FROM runs WHERE id=agent_sleeps.timer_run_id AND status='queued'))) ORDER BY id`
 	arg := agent
 	if m != nil {
-		query = `SELECT ` + sleepColumns + ` FROM agent_sleeps WHERE task_id=$1 AND (state IN ('requested','sleeping') OR (state='woken' AND wake_run_id=timer_run_id AND EXISTS(SELECT 1 FROM task_turns WHERE id=agent_sleeps.timer_run_id AND status='queued'))) ORDER BY id FOR UPDATE`
+		query = `SELECT ` + sleepColumns + ` FROM agent_sleeps WHERE task_id=$1 AND (state IN ('requested','sleeping') OR (state='woken' AND wake_run_id=timer_run_id AND EXISTS(SELECT 1 FROM task_turns WHERE id=agent_sleeps.timer_run_id AND status='queued'))) ORDER BY id`
 		arg = m.Record.View.Task.ID
 	}
 	rows, e := tx.Query(ctx, query, arg)
 	if e != nil {
 		return e
 	}
-	rs, e := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Sleep, error) { return scanSleep(row) })
+	rs, e := db.CollectRows(rows, func(row db.CollectableRow) (Sleep, error) { return scanSleep(row) })
 	if e != nil {
 		return e
 	}
@@ -224,7 +225,7 @@ func (s *Store) CancelSleepsTx(ctx context.Context, tx pgx.Tx, m *TaskMutation, 
 	return nil
 }
 func (s *Store) ActiveSleepProjection(ctx context.Context, agent, runtime uuid.UUID) (*sleepmodel.Record, int64, error) {
-	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	tx, err := s.Pool.BeginRead(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -241,7 +242,7 @@ func (s *Store) ActiveSleepProjection(ctx context.Context, agent, runtime uuid.U
 		}
 	}
 	r, e := scanSleep(tx.QueryRow(ctx, `SELECT `+sleepColumns+` FROM agent_sleeps WHERE scope_key=$1 AND state='sleeping'`, sleepKey(agent, task)))
-	if errors.Is(e, pgx.ErrNoRows) {
+	if errors.Is(e, db.ErrNoRows) {
 		return nil, revision, nil
 	}
 	if e != nil {

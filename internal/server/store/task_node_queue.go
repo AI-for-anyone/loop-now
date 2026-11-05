@@ -5,9 +5,9 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"loop-now/internal/server/apperr"
+	"loop-now/internal/server/db"
 )
 
 // TaskNodeQueueResult 是节点排队动作的结果。
@@ -33,7 +33,7 @@ func (s *Store) lockTaskNodeMessageTx(ctx context.Context, m *TaskMutation, targ
 	var out taskNodeMessage
 	var task, node, agent, runtime uuid.UUID
 	var carrier *uuid.UUID
-	e := m.Tx.QueryRow(ctx, `SELECT b.task_id,b.node_run_id,b.agent_id,b.runtime_id,b.execution_mode,b.reminder_run_id,b.not_executed_at IS NOT NULL FROM task_node_inbox_messages b WHERE b.message_id=$1 FOR UPDATE OF b`, message).
+	e := m.Tx.QueryRow(ctx, `SELECT b.task_id,b.node_run_id,b.agent_id,b.runtime_id,b.execution_mode,b.reminder_run_id,b.not_executed_at IS NOT NULL FROM task_node_inbox_messages b WHERE b.message_id=$1`, message).
 		Scan(&task, &node, &agent, &runtime, &out.mode, &carrier, &out.expired)
 	switch {
 	case e == nil:
@@ -44,10 +44,10 @@ func (s *Store) lockTaskNodeMessageTx(ctx context.Context, m *TaskMutation, targ
 			return out, TaskConsoleConflict(m, target, "target_mismatch")
 		}
 		out.strict = true
-	case !errors.Is(e, pgx.ErrNoRows):
+	case !errors.Is(e, db.ErrNoRows):
 		return out, e
 	}
-	if out.msg, e = scanInbox(m.Tx.QueryRow(ctx, inboxSelect(200)+` WHERE m.id=$1 FOR UPDATE OF m`, message)); e != nil {
+	if out.msg, e = scanInbox(m.Tx.QueryRow(ctx, inboxSelect(200)+` WHERE m.id=$1`, message)); e != nil {
 		return out, notFoundIfNoRows(e, "节点Inbox消息")
 	}
 	if !out.strict {
@@ -61,7 +61,7 @@ func (s *Store) lockTaskNodeMessageTx(ctx context.Context, m *TaskMutation, targ
 		carrier = out.msg.ReminderTurnID
 	}
 	if carrier != nil {
-		t, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1 FOR UPDATE`, *carrier))
+		t, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1`, *carrier))
 		if e != nil {
 			return out, e
 		}
@@ -237,7 +237,7 @@ func (s *Store) CancelTaskNodeMessageTx(ctx context.Context, m *TaskMutation, ta
 // 已在停止或打断中时 Changed=false；这一轮已结束时返回 task_conflict，reason=run_not_active。
 func (s *Store) StopTaskNodeRunTx(ctx context.Context, m *TaskMutation, target TaskConsoleLineage, run uuid.UUID) (TaskNodeQueueResult, error) {
 	var out TaskNodeQueueResult
-	t, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1 AND task_id=$2 AND node_run_id=$3 FOR UPDATE`, run, target.TaskID, target.NodeRunID))
+	t, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1 AND task_id=$2 AND node_run_id=$3`, run, target.TaskID, target.NodeRunID))
 	if e != nil {
 		return out, notFoundIfNoRows(e, "任务轮次")
 	}
@@ -267,9 +267,9 @@ func (s *Store) StopTaskNodeRunTx(ctx context.Context, m *TaskMutation, target T
 }
 
 // TaskTurnStoppedTx 报告这一轮是否被人停止（abort_requested 带 stop:true）。
-func TaskTurnStoppedTx(ctx context.Context, tx pgx.Tx, turn uuid.UUID) (bool, error) {
+func TaskTurnStoppedTx(ctx context.Context, tx *db.Tx, turn uuid.UUID) (bool, error) {
 	var stopped bool
-	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM lifecycle_events WHERE task_turn_id=$1 AND type='run.abort_requested' AND data->>'stop'='true')`, turn).Scan(&stopped)
+	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM lifecycle_events WHERE task_turn_id=$1 AND type='run.abort_requested' AND data->'stop'='true')`, turn).Scan(&stopped)
 	return stopped, err
 }
 
@@ -277,7 +277,7 @@ func TaskTurnStoppedTx(ctx context.Context, tx pgx.Tx, turn uuid.UUID) (bool, er
 func (s *Store) voidReadTaskTurnTx(ctx context.Context, m *TaskMutation, message uuid.UUID) error {
 	var turn *uuid.UUID
 	if e := m.Tx.QueryRow(ctx, `SELECT reminder_run_id FROM task_node_inbox_messages WHERE message_id=$1`, message).Scan(&turn); e != nil || turn == nil {
-		if errors.Is(e, pgx.ErrNoRows) {
+		if errors.Is(e, db.ErrNoRows) {
 			return nil
 		}
 		return e

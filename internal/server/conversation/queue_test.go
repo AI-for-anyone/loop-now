@@ -80,16 +80,12 @@ func (e *env) queueViews() (get, snap, event []string) {
 		e.t.Fatal(err)
 	}
 	snap = queueNames(s.QueueItems)
-	msgs, err := e.rdb.XRevRangeN(ctx, e.co.Keys().Events(e.agent.String()), "+", "-", 500).Result()
-	if err != nil {
-		e.t.Fatal(err)
-	}
-	for _, m := range msgs {
-		if m.Values["type"] != apitypes.EventQueueUpdated {
+	for _, m := range e.newestEvents() {
+		if m.Type != apitypes.EventQueueUpdated {
 			continue
 		}
 		var ev apitypes.SseQueueUpdated
-		if err := json.Unmarshal([]byte(m.Values["data"].(string)), &ev); err != nil {
+		if err := json.Unmarshal(m.Data, &ev); err != nil {
 			e.t.Fatal(err)
 		}
 		return get, snap, queueNames(ev.Items)
@@ -168,13 +164,14 @@ func (e *env) executed(substr string) int {
 	return n
 }
 
-func (e *env) redisHas(id uuid.UUID) bool {
+// queued 报告执行是否还在数据库的排队里。
+func (e *env) queued(id uuid.UUID) bool {
 	e.t.Helper()
-	qi, qn, err := e.co.QueueContents(context.Background(), e.agent.String())
+	queued, err := e.st.QueuedRuns(context.Background(), e.agent)
 	if err != nil {
 		e.t.Fatal(err)
 	}
-	return slices.Contains(qi, id.String()) || slices.Contains(qn, id.String())
+	return slices.ContainsFunc(queued, func(r store.Run) bool { return r.ID == id })
 }
 
 func drainStarted(ch chan string) {
@@ -259,7 +256,7 @@ func TestPromoteInboxMessageMovesItAndVoidsEmptiedReminder(t *testing.T) {
 	if r := e.mustAct(e.svc.PromoteInboxMessage, a); r.Run.ID != interrupt {
 		t.Fatalf("A 应并入已有的打断提醒：%+v", r)
 	}
-	if v := e.runOf(normal); v.Status != "interrupted" || v.EndReason != "merged_into_interrupt" || e.redisHas(normal) {
+	if v := e.runOf(normal); v.Status != "interrupted" || v.EndReason != "merged_into_interrupt" || e.queued(normal) {
 		t.Fatalf("拆空的提醒应作废并移出 Redis：%s %s", v.Status, v.EndReason)
 	}
 	e.expectQueue("inbox:收件A!", "inbox:收件B!")
@@ -290,7 +287,7 @@ func TestCancelQueuedRunAndInboxMessage(t *testing.T) {
 	if err != nil || r.Status != "accepted" || r.Item == nil || r.Item.Text != "撤回我" || r.Item.Kind != "run" || r.Run.Status != "interrupted" || r.Run.EndReason == nil || *r.Run.EndReason != "user_cancelled" {
 		t.Fatalf("撤回回执：%+v %v", r, err)
 	}
-	if e.redisHas(mine.Run.ID) {
+	if e.queued(mine.Run.ID) {
 		t.Fatal("撤回的执行应移出 Redis 队列")
 	}
 	if _, again, err := e.act(e.svc.CancelRun, mine.Run.ID, action); err != nil || !bytes.Equal(again, raw) {
@@ -316,7 +313,7 @@ func TestCancelQueuedRunAndInboxMessage(t *testing.T) {
 		t.Fatalf("已经取消：%+v", r)
 	}
 	e.expectQueue()
-	if e.redisHas(rem) || e.eventCount(store.EventMessageCancelled) != 2 {
+	if e.queued(rem) || e.eventCount(store.EventMessageCancelled) != 2 {
 		t.Fatal("作废的提醒应移出 Redis，每条取消记一条事件")
 	}
 	m, err := e.st.GetInboxMessage(ctx, a, 200)
@@ -357,7 +354,7 @@ func TestReadLeavesQueueAndVoidsReminder(t *testing.T) {
 	if eff := e.read(b); !eff.QueueChanged || !slices.Equal(eff.Voided, []uuid.UUID{rem}) {
 		t.Fatalf("读走最后一条应作废提醒：%+v", eff)
 	}
-	if r := e.runOf(rem); r.Status != "interrupted" || r.EndReason != "no_pending_messages" || e.redisHas(rem) {
+	if r := e.runOf(rem); r.Status != "interrupted" || r.EndReason != "no_pending_messages" || e.queued(rem) {
 		t.Fatalf("作废的提醒：%s %s", r.Status, r.EndReason)
 	}
 	e.expectQueue()
@@ -403,7 +400,7 @@ func TestStopOnlyStopsThisReplyAndQueueContinues(t *testing.T) {
 		t.Fatalf("已结束的回复应 run_not_active：%v", err)
 	}
 	var stop string
-	if err := e.st.Pool.QueryRow(context.Background(), `SELECT data->>'stop' FROM lifecycle_events WHERE run_id=$1 AND type=$2`, cur.Run.ID, store.EventRunAbortRequested).Scan(&stop); err != nil || stop != "true" {
+	if err := e.st.Pool.QueryRow(context.Background(), `SELECT data->'stop' FROM lifecycle_events WHERE run_id=$1 AND type=$2`, cur.Run.ID, store.EventRunAbortRequested).Scan(&stop); err != nil || stop != "true" {
 		t.Fatalf("abort_requested 应带 stop：%q %v", stop, err)
 	}
 }

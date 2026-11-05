@@ -26,7 +26,7 @@ import (
 // Service 管理已安装的插件。安装、更新与卸载串行执行。
 type Service struct {
 	Store *store.Store
-	// Host 是宿主监护；服务端没有宿主入口时为空，平台半边不运行。
+	// Host 是宿主监护；服务端没有宿主入口时为空，平台侧不运行。
 	Host *pluginhost.Supervisor
 	// Root 是 <work root>/platform/plugins：安装目录 <Root>/<id>/<version>/，数据目录 <Root>/<id>/data/。
 	Root string
@@ -986,7 +986,7 @@ type loadPayload struct {
 	APIURL   string        `json:"apiUrl"`
 }
 
-// Specs 返回有平台半边的插件，按安装时间排序（宿主加载与同步调用的顺序）。
+// Specs 返回有平台侧的插件，按安装时间排序（宿主加载与同步调用的顺序）。
 // 每个插件的 load 载荷在加载前才组装，这时签发新的插件令牌并吊销旧的。
 func (s *Service) Specs(ctx context.Context) ([]pluginhost.Spec, error) {
 	ps, err := s.Store.ListPlugins(ctx)
@@ -1052,40 +1052,14 @@ func (s *Service) Hook(ctx context.Context, kind pluginhost.Kind, event map[stri
 	return s.Host.Call(ctx, kind, event, include)
 }
 
-// Listen 等待数据库里新事件的通知，唤醒投递协程；ctx 结束时返回。
-func (s *Service) Listen(ctx context.Context) {
+// WakeOnCommit 让写了插件事件的事务一提交就唤醒投递协程（原来靠 PostgreSQL 的 LISTEN/NOTIFY），并先唤醒一次，
+// 投递启动前已经写入的事件。重投由投递协程自己按时轮询。
+func (s *Service) WakeOnCommit() {
 	if s.Host == nil {
 		return
 	}
-	for ctx.Err() == nil {
-		if err := s.listenOnce(ctx); err != nil && ctx.Err() == nil {
-			s.Log.Warn("监听插件事件通知失败，稍后重试", "err", err)
-			select {
-			case <-time.After(5 * time.Second):
-			case <-ctx.Done():
-			}
-		}
-	}
-}
-
-func (s *Service) listenOnce(ctx context.Context) error {
-	pc, err := s.Store.Pool.Acquire(ctx)
-	if err != nil {
-		return err
-	}
-	conn := pc.Hijack()
-	defer conn.Close(context.Background())
-	if _, err := conn.Exec(ctx, `LISTEN loop_now_plugin_events`); err != nil {
-		return err
-	}
-	// 连上之前可能已有事件写入：先唤醒一次。
+	s.Store.SetPluginEventsCommitted(s.Host.Notify)
 	s.Host.Notify()
-	for {
-		if _, err := conn.WaitForNotification(ctx); err != nil {
-			return err
-		}
-		s.Host.Notify()
-	}
 }
 
 func nonNilMap(m map[string]any) map[string]any {

@@ -1,0 +1,148 @@
+<!doctype html>
+<!-- 壳自带的状态页：服务端就绪前与启动失败时显示。文字由壳按语言选好放在查询参数里；按钮是带 action 的链接，由壳拦下处理。 -->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>Loop Now</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --paper: #fbf9f4;
+        --ink: #1f1d1a;
+        --muted: #6b6760;
+        --blue: #2443b5;
+        --panel: #f1ede4;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --paper: #1b1a18;
+          --ink: #f3f0e9;
+          --muted: #a8a399;
+          --blue: #8fa4ff;
+          --panel: #262421;
+        }
+      }
+      body {
+        margin: 0;
+        box-sizing: border-box;
+        min-height: 100vh;
+        /* 顶部 48px 是拖动窗口的那一条（窗口没有系统标题栏，红绿灯在这一条里），内容在它下面居中。 */
+        padding-top: 48px;
+        display: grid;
+        place-items: center;
+        background: var(--paper);
+        color: var(--ink);
+        font: 15px/1.7 -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+      }
+      main {
+        box-sizing: border-box;
+        width: min(720px, 100vw);
+        padding: 32px 24px;
+      }
+      .logo {
+        width: 48px;
+        height: 48px;
+        display: block;
+        margin-bottom: 20px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 22px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      p {
+        margin: 0;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+        white-space: pre-line;
+      }
+      .spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid var(--muted);
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      pre {
+        margin: 20px 0 0;
+        padding: 12px 14px;
+        max-height: 45vh;
+        overflow: auto;
+        background: var(--panel);
+        border-radius: 8px;
+        font: 12px/1.55 ui-monospace, 'SF Mono', Menlo, monospace;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      nav {
+        margin-top: 20px;
+        display: flex;
+        gap: 12px;
+      }
+      nav a {
+        padding: 6px 14px;
+        border-radius: 999px;
+        border: 1.5px solid var(--blue);
+        color: var(--blue);
+        font-weight: 600;
+        text-decoration: none;
+      }
+      nav a:first-child {
+        background: var(--blue);
+        color: var(--paper);
+      }
+      .titlebar {
+        position: fixed;
+        inset: 0 0 auto;
+        height: 48px;
+        -webkit-app-region: drag;
+      }
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="titlebar" aria-hidden="true"></div>
+    <main>
+      <svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
+        <rect width="64" height="64" rx="15" fill="#2443B5" />
+        <path d="M37 15H27C19 15 15 19 15 27V37C15 45 19 49 27 49H37C45 49 49 45 49 37V29H39V36C39 38 38 39 36 39H28C26 39 25 38 25 36V28C25 26 26 25 28 25H37Z" fill="#FBF9F4" />
+        <rect x="40" y="14" width="10" height="10" rx="3" fill="#FFE14D" />
+      </svg>
+      <h1><span id="spinner" class="spinner" hidden></span><span id="title"></span></h1>
+      <p id="body"></p>
+      <pre id="log" hidden></pre>
+      <nav id="actions" hidden>
+        <a id="retry" href="?action=retry"></a>
+        <a id="logs" href="?action=logs"></a>
+      </nav>
+    </main>
+    <script>
+      const query = new URLSearchParams(location.search)
+      const text = (id, value) => (document.getElementById(id).textContent = value ?? '')
+      text('title', query.get('title'))
+      text('body', query.get('body'))
+      document.title = query.get('title') || 'Loop Now'
+      document.getElementById('spinner').hidden = query.get('busy') !== '1'
+      if (query.get('log')) {
+        text('log', query.get('log'))
+        document.getElementById('log').hidden = false
+      }
+      if (query.get('retry')) {
+        text('retry', query.get('retry'))
+        text('logs', query.get('logs'))
+        document.getElementById('actions').hidden = false
+      }
+    </script>
+  </body>
+</html>

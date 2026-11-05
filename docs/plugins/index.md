@@ -1,9 +1,9 @@
 # Plugin system overview
 
-**New tools and project-specific behavior belong in plugins.** A plugin is one directory whose `package.json` is the manifest. It has up to two halves, and either one is optional:
+**New tools and project-specific behavior belong in plugins.** A plugin is one directory whose `package.json` is the manifest. It has up to two sides, and either one is optional:
 
-- The **agent half** is a standard [Pi package](https://pi.dev/packages): Pi extensions, Skills, MCP servers, and CLIs, loaded into the Pi process of each agent you grant. An existing Pi package installs unchanged.
-- The **platform half** runs in one long-lived Node plugin host next to the server. It subscribes to platform events and calls the platform API with a scoped plugin token.
+- The **agent side** is a standard [Pi package](https://pi.dev/packages): Pi extensions, Skills, MCP servers, and CLIs, loaded into the Pi process of each agent you grant. An existing Pi package installs unchanged.
+- The **platform side** runs in one long-lived Node plugin host next to the server. It subscribes to platform events and calls the platform API with a scoped plugin token.
 
 ## What the host provides
 
@@ -15,11 +15,11 @@
 | **Reliable outbound HTTP** | The SDK's delivery library keeps a persisted queue, retries with backoff, signs requests with HMAC-SHA256, and writes a delivery log that the plugin page displays. |
 | **Logs + isolation** | Each plugin's output lands in its own log. A plugin that throws, times out, or fails to load affects only itself. |
 
-The manifest is authoritative. Subscribing to an event, or calling an API scope, that the manifest does not declare fails, and install shows the user both halves, the events, and the permissions before anything runs.
+The manifest is authoritative. Subscribing to an event, or calling an API scope, that the manifest does not declare fails, and install shows the user both sides, the events, and the permissions before anything runs.
 
 ## Install once, enable per project, grant per agent
 
-Install from the official plugins, a Git repository, an npm package, or a local directory, in the console or with `loopctl plugin install`. Next, enable the plugin in a project and fill in its configuration. Then grant it to the agents that should load its agent half.
+Install from the official plugins, a Git repository, an npm package, or a local directory, in the console or with `loopctl plugin install`. Next, enable the plugin in a project and fill in its configuration. Then grant it to the agents that should load its agent side.
 
 Installing or enabling a plugin never authorizes an agent by itself. Versions are pinned: updating is an explicit action, and running tasks keep the files they started with.
 
@@ -27,9 +27,9 @@ Three official plugins ship with the platform:
 
 - [**webhook**](https://github.com/AI-for-anyone/loop-now/blob/main/plugins/official/webhook/README.md) POSTs `inbox.received` events to your URL with a signature, retries, and a delivery log. External identities use it instead of polling their Inbox.
 - [**playwright**](https://github.com/AI-for-anyone/loop-now/blob/main/plugins/official/playwright/README.md) gives agents a dedicated, visible Chromium through the official Playwright MCP: open pages, read them, click, type, and take screenshots, without touching your everyday Chrome.
-- [**hello**](https://github.com/AI-for-anyone/loop-now/blob/main/plugins/official/hello/README.md) is the smallest plugin with both halves, and the starting point for writing your own.
+- [**hello**](https://github.com/AI-for-anyone/loop-now/blob/main/plugins/official/hello/README.md) is the smallest plugin with both sides, and the starting point for writing your own.
 
-## A platform half in a few lines
+## A platform side in a few lines
 
 ```ts
 import { createDelivery, type PluginAPI } from '@loop-now/plugin-sdk'
@@ -63,7 +63,7 @@ The host loads TypeScript directly, as Pi does, and provides `@loop-now/plugin-s
 
 ## Trust model
 
-There is no sandbox: plugins execute code, so install sources you trust. Trust comes from source grading (official → market-reviewed → arbitrary git/npm/local), the pre-install preview of both halves and permissions, and a one-click global disable.
+There is no sandbox: plugins execute code, so install sources you trust. Trust comes from source grading (official → market-reviewed → arbitrary git/npm/local), the pre-install preview of both sides and permissions, and a one-click global disable.
 
 ## Going deeper
 

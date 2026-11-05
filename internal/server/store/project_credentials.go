@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/clicredential"
 	"loop-now/internal/server/clitemplate"
@@ -15,6 +14,8 @@ import (
 	"loop-now/internal/server/modelcredential"
 	"net/http"
 	"strings"
+
+	"loop-now/internal/server/db"
 )
 
 // ProjectCredentialRecord is an internal credential record, never an HTTP DTO.
@@ -34,16 +35,14 @@ type ProjectCredentialWrite struct {
 	Secret         []byte
 }
 
-func lockCredentialProject(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) (int64, error) {
-	mode := "FOR SHARE"
-	if write {
-		mode = "FOR UPDATE"
-	}
+// lockCredentialProject 返回项目的凭证版本；项目不存在或已删除时返回 not_found。
+// 最后一个参数原来决定行锁强度，写事务串行后不起作用（读事务里也不需要）。
+func lockCredentialProject(ctx context.Context, tx *db.Tx, id uuid.UUID, _ bool) (int64, error) {
 	var rev int64
-	err := tx.QueryRow(ctx, `SELECT credentials_revision FROM projects WHERE id=$1 AND deleted_at IS NULL `+mode, id).Scan(&rev)
+	err := tx.QueryRow(ctx, `SELECT credentials_revision FROM projects WHERE id=$1 AND deleted_at IS NULL`, id).Scan(&rev)
 	return rev, notFoundIfNoRows(err, "项目")
 }
-func bumpCredentialProject(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+func bumpCredentialProject(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
 	_, err := tx.Exec(ctx, `UPDATE projects SET credentials_revision=credentials_revision+1 WHERE id=$1`, id)
 	return err
 }
@@ -77,14 +76,10 @@ func projectCredentialRequired(a Agent) error {
 
 const projectAccountColumns = `id,project_id,purpose,provider,cli_name,name,revision,coalesce(current_model_version_id,current_cli_version_id),created_at,updated_at,deleted_at`
 
-func projectAccountTx(ctx context.Context, tx pgx.Tx, project, id uuid.UUID, lock bool) (ProjectCredentialRecord, error) {
+func projectAccountTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, _ bool) (ProjectCredentialRecord, error) {
 	var r ProjectCredentialRecord
 	a := &r.View
-	suffix := ""
-	if lock {
-		suffix = " FOR UPDATE"
-	}
-	err := tx.QueryRow(ctx, `SELECT `+projectAccountColumns+` FROM project_credential_accounts WHERE id=$1 AND project_id=$2`+suffix, id, project).Scan(&a.ID, &a.ProjectID, &a.Purpose, &a.Provider, &a.CLI, &a.Name, &a.Revision, &a.CurrentVersionID, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt)
+	err := tx.QueryRow(ctx, `SELECT `+projectAccountColumns+` FROM project_credential_accounts WHERE id=$1 AND project_id=$2`, id, project).Scan(&a.ID, &a.ProjectID, &a.Purpose, &a.Provider, &a.CLI, &a.Name, &a.Revision, &a.CurrentVersionID, &a.CreatedAt, &a.UpdatedAt, &a.DeletedAt)
 	if err != nil {
 		return r, notFoundIfNoRows(err, "项目账号")
 	}
@@ -176,12 +171,12 @@ func projectAccountTx(ctx context.Context, tx pgx.Tx, project, id uuid.UUID, loc
 	}
 	return r, nil
 }
-func projectAccountsTx(ctx context.Context, tx pgx.Tx, project uuid.UUID, purpose, slot string) ([]ProjectCredentialRecord, error) {
+func projectAccountsTx(ctx context.Context, tx *db.Tx, project uuid.UUID, purpose, slot string) ([]ProjectCredentialRecord, error) {
 	rows, err := tx.Query(ctx, `SELECT id FROM project_credential_accounts WHERE project_id=$1 AND deleted_at IS NULL AND ($2='' OR purpose=$2) AND ($3='' OR slot_key=$3) ORDER BY created_at,id`, project, purpose, slot)
 	if err != nil {
 		return nil, err
 	}
-	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	ids, err := db.CollectRows(rows, db.RowTo[uuid.UUID])
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +193,7 @@ func projectAccountsTx(ctx context.Context, tx pgx.Tx, project uuid.UUID, purpos
 func (s *Store) ListProjectCredentials(ctx context.Context, project uuid.UUID, purpose, slot string) ([]ProjectCredentialRecord, int64, error) {
 	var out []ProjectCredentialRecord
 	var rev int64
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var e error
 		rev, e = lockCredentialProject(ctx, tx, project, false)
 		if e != nil {
@@ -211,7 +206,7 @@ func (s *Store) ListProjectCredentials(ctx context.Context, project uuid.UUID, p
 }
 func (s *Store) GetProjectCredential(ctx context.Context, project, id uuid.UUID) (ProjectCredentialRecord, error) {
 	var out ProjectCredentialRecord
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, false); e != nil {
 			return e
 		}
@@ -221,7 +216,7 @@ func (s *Store) GetProjectCredential(ctx context.Context, project, id uuid.UUID)
 	})
 	return out, err
 }
-func insertProjectCredentialVersion(ctx context.Context, tx pgx.Tx, account cm.Account, w ProjectCredentialWrite) (uuid.UUID, error) {
+func insertProjectCredentialVersion(ctx context.Context, tx *db.Tx, account cm.Account, w ProjectCredentialWrite) (uuid.UUID, error) {
 	if w.Secret == nil {
 		return uuid.Nil, errors.New("缺少凭证内容")
 	}
@@ -271,7 +266,7 @@ func nonNilStrings(v []string) []string {
 	}
 	return v
 }
-func insertProjectAccountTx(ctx context.Context, tx pgx.Tx, project uuid.UUID, purpose, slot, name string, w ProjectCredentialWrite) (ProjectCredentialRecord, error) {
+func insertProjectAccountTx(ctx context.Context, tx *db.Tx, project uuid.UUID, purpose, slot, name string, w ProjectCredentialWrite) (ProjectCredentialRecord, error) {
 	id := uuid.Must(uuid.NewV7())
 	var provider, cli *string
 	if purpose == PurposeModel {
@@ -292,7 +287,7 @@ func insertProjectAccountTx(ctx context.Context, tx pgx.Tx, project uuid.UUID, p
 }
 func (s *Store) CreateProjectCredential(ctx context.Context, project uuid.UUID, purpose, slot, name string, w ProjectCredentialWrite) (ProjectCredentialRecord, error) {
 	var out ProjectCredentialRecord
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, true); e != nil {
 			return e
 		}
@@ -307,7 +302,7 @@ func (s *Store) CreateProjectCredential(ctx context.Context, project uuid.UUID, 
 }
 func (s *Store) MutateProjectCredential(ctx context.Context, project, id uuid.UUID, expected int64, name *string, w *ProjectCredentialWrite, remove bool) (ProjectCredentialRecord, error) {
 	var out ProjectCredentialRecord
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, true); e != nil {
 			return e
 		}
@@ -367,7 +362,7 @@ func (s *Store) MutateProjectCredential(ctx context.Context, project, id uuid.UU
 	}
 	return out, err
 }
-func lockProjectCredentialAgent(ctx context.Context, tx pgx.Tx, agent uuid.UUID, write bool) (Agent, int64, error) {
+func lockProjectCredentialAgent(ctx context.Context, tx *db.Tx, agent uuid.UUID, write bool) (Agent, int64, error) {
 	var project *uuid.UUID
 	if e := tx.QueryRow(ctx, `SELECT project_id FROM agents WHERE id=$1 AND deleted_at IS NULL`, agent).Scan(&project); e != nil {
 		return Agent{}, 0, notFoundIfNoRows(e, "Agent")
@@ -379,14 +374,10 @@ func lockProjectCredentialAgent(ctx context.Context, tx pgx.Tx, agent uuid.UUID,
 	if e != nil {
 		return Agent{}, 0, e
 	}
-	mode := "FOR SHARE"
-	if write {
-		mode = "FOR UPDATE"
-	}
-	a, e := scanAgent(tx.QueryRow(ctx, `SELECT `+agentColumns+` FROM agents WHERE id=$1 AND deleted_at IS NULL `+mode, agent))
+	a, e := scanAgent(tx.QueryRow(ctx, `SELECT `+agentColumns+` FROM agents WHERE id=$1 AND deleted_at IS NULL`, agent))
 	return a, rev, notFoundIfNoRows(e, "Agent")
 }
-func resolveProjectCredentialTx(ctx context.Context, tx pgx.Tx, a Agent, purpose, slot string) (cm.Selection, *ProjectCredentialRecord, error) {
+func resolveProjectCredentialTx(ctx context.Context, tx *db.Tx, a Agent, purpose, slot string) (cm.Selection, *ProjectCredentialRecord, error) {
 	out := cm.Selection{Purpose: purpose, Mode: "automatic", Status: "not_configured", Candidates: []cm.Account{}}
 	if purpose == PurposeModel {
 		out.Provider = &slot
@@ -397,7 +388,7 @@ func resolveProjectCredentialTx(ctx context.Context, tx pgx.Tx, a Agent, purpose
 	var mode string
 	err := tx.QueryRow(ctx, `SELECT account_id,mode FROM agent_credential_selections WHERE agent_id=$1 AND purpose=$2 AND slot_key=$3`, a.ID, purpose, slot).Scan(&selected, &mode)
 	present := err == nil
-	if err != nil && err != pgx.ErrNoRows {
+	if err != nil && err != db.ErrNoRows {
 		return out, nil, err
 	}
 	records, err := projectAccountsTx(ctx, tx, *a.ProjectID, purpose, slot)
@@ -478,14 +469,14 @@ func selectionResolutionError(a Agent, v cm.Selection) error {
 	}
 	return result
 }
-func selectionsTx(ctx context.Context, tx pgx.Tx, a Agent, rev int64) (cm.Selections, error) {
+func selectionsTx(ctx context.Context, tx *db.Tx, a Agent, rev int64) (cm.Selections, error) {
 	out := cm.Selections{AgentID: a.ID, ProjectID: *a.ProjectID, ConfigVersion: a.ConfigVersion, CredentialsRevision: rev, Selections: []cm.Selection{}}
-	rows, e := tx.Query(ctx, `SELECT purpose,slot_key FROM (SELECT 'model'::text purpose,$2::text slot_key UNION SELECT purpose,slot_key FROM agent_credential_selections WHERE agent_id=$1 AND purpose='model' UNION SELECT 'cli',cli_name FROM agent_clis WHERE agent_id=$1) slots ORDER BY purpose,slot_key`, a.ID, a.ModelProvider)
+	rows, e := tx.Query(ctx, `SELECT purpose,slot_key FROM (SELECT 'model' purpose,$2 slot_key UNION SELECT purpose,slot_key FROM agent_credential_selections WHERE agent_id=$1 AND purpose='model' UNION SELECT 'cli',cli_name FROM agent_clis WHERE agent_id=$1) slots ORDER BY purpose,slot_key`, a.ID, a.ModelProvider)
 	if e != nil {
 		return out, e
 	}
 	type slot struct{ purpose, key string }
-	slots, e := pgx.CollectRows(rows, func(r pgx.CollectableRow) (slot, error) { var s slot; e := r.Scan(&s.purpose, &s.key); return s, e })
+	slots, e := db.CollectRows(rows, func(r db.CollectableRow) (slot, error) { var s slot; e := r.Scan(&s.purpose, &s.key); return s, e })
 	if e != nil {
 		return out, e
 	}
@@ -500,7 +491,7 @@ func selectionsTx(ctx context.Context, tx pgx.Tx, a Agent, rev int64) (cm.Select
 }
 func (s *Store) GetCredentialSelections(ctx context.Context, agent uuid.UUID) (cm.Selections, error) {
 	var out cm.Selections
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		a, rev, e := lockProjectCredentialAgent(ctx, tx, agent, false)
 		if e != nil {
 			return e
@@ -512,7 +503,7 @@ func (s *Store) GetCredentialSelections(ctx context.Context, agent uuid.UUID) (c
 }
 func (s *Store) PutCredentialSelection(ctx context.Context, agent uuid.UUID, in cm.SelectionPut) (cm.Selections, error) {
 	var out cm.Selections
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		a, rev, e := lockProjectCredentialAgent(ctx, tx, agent, true)
 		if e != nil {
 			return e
@@ -586,7 +577,7 @@ func (s *Store) PutCredentialSelection(ctx context.Context, agent uuid.UUID, in 
 }
 func (s *Store) ProjectCredentialImpact(ctx context.Context, project uuid.UUID, purpose, slot string, account *uuid.UUID) (cm.Impact, error) {
 	out := cm.Impact{ProjectID: project, AccountID: account, Agents: []cm.ImpactAgent{}}
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		rev, e := lockCredentialProject(ctx, tx, project, false)
 		if e != nil {
 			return e
@@ -601,11 +592,11 @@ func (s *Store) ProjectCredentialImpact(ctx context.Context, project uuid.UUID, 
 				return apperr.Invalid("accountId", "账号用途定位不匹配")
 			}
 		}
-		rows, e := tx.Query(ctx, `SELECT `+agentColumns+` FROM agents WHERE project_id=$1 AND deleted_at IS NULL ORDER BY id FOR SHARE`, project)
+		rows, e := tx.Query(ctx, `SELECT `+agentColumns+` FROM agents WHERE project_id=$1 AND deleted_at IS NULL ORDER BY id`, project)
 		if e != nil {
 			return e
 		}
-		agents, e := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Agent, error) { return scanAgent(r) })
+		agents, e := db.CollectRows(rows, func(r db.CollectableRow) (Agent, error) { return scanAgent(r) })
 		if e != nil {
 			return e
 		}
@@ -656,7 +647,7 @@ func (s *Store) ProjectCredentialImpact(ctx context.Context, project uuid.UUID, 
 
 // captureProjectCredentialsTx is shared by normal and task capture, with the
 // caller already holding the project and Agent locks. Never opens a Store tx.
-func captureProjectCredentialsTx(ctx context.Context, tx pgx.Tx, a Agent, clis []string) (*modelcredential.Binding, []CredentialRow, []cm.Selection, error) {
+func captureProjectCredentialsTx(ctx context.Context, tx *db.Tx, a Agent, clis []string) (*modelcredential.Binding, []CredentialRow, []cm.Selection, error) {
 	all := []cm.Selection{}
 	out := []CredentialRow{}
 	v, r, e := resolveProjectCredentialTx(ctx, tx, a, PurposeModel, a.ModelProvider)
@@ -747,14 +738,14 @@ func projectCredentialIdentity(clis []string, selections []cm.Selection, rows []
 	sum := sha256.Sum256([]byte(b.String()))
 	return hex.EncodeToString(sum[:])
 }
-func (s *Store) ProjectCredentialRevisionTx(ctx context.Context, tx pgx.Tx, project uuid.UUID) (int64, error) {
+func (s *Store) ProjectCredentialRevisionTx(ctx context.Context, tx *db.Tx, project uuid.UUID) (int64, error) {
 	var rev int64
 	e := tx.QueryRow(ctx, `SELECT credentials_revision FROM projects WHERE id=$1 AND deleted_at IS NULL`, project).Scan(&rev)
 	return rev, notFoundIfNoRows(e, "项目")
 }
 
-func lockAgentProjectTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
-	_, e := tx.Exec(ctx, `SELECT 1 FROM projects WHERE id=(SELECT project_id FROM agents WHERE id=$1) FOR UPDATE`, id)
+func lockAgentProjectTx(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
+	_, e := tx.Exec(ctx, `SELECT 1 FROM projects WHERE id=(SELECT project_id FROM agents WHERE id=$1)`, id)
 	return e
 }
 

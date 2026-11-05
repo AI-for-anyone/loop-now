@@ -23,7 +23,7 @@ Go 服务与插件宿主（Node 常驻进程）之间的 stdio 协议，补充 `
 ## 启动与就绪
 
 1. 宿主启动后第一行写 `{"type":"ready","payload":{"protocol":1,"hostVersion":"<版本>"}}`。Go 在 `ready` 之前不发任何消息；30 秒内没有 `ready`、或 `protocol` 不是 1，按一次启动失败处理。
-2. Go 随后按顺序对每个有平台半边的插件发 `load`，等到它的 `result` 再发下一个。
+2. Go 随后按顺序对每个有平台侧的插件发 `load`，等到它的 `result` 再发下一个。
 
 ## Go → 宿主
 
@@ -44,7 +44,7 @@ Go 服务与插件宿主（Node 常驻进程）之间的 stdio 协议，补充 `
 ```json
 {
   "id": "webhook", "version": "1.2.0",
-  "root": "<安装目录>", "entry": "<平台半边入口的绝对路径>", "dataDir": "<数据目录，跨版本保留>",
+  "root": "<安装目录>", "entry": "<平台侧入口的绝对路径>", "dataDir": "<数据目录，跨版本保留>",
   "manifest": { "events": [], "permissions": [], "failClosed": false, "configSchema": {}, "accounts": [], "actions": [], "channels": [], "schedules": [], "http": false },
   "config": { "values": {}, "secrets": {}, "projects": { "<projectId>": { "values": {}, "secrets": {} } } },
   "token": "lnp_…", "apiUrl": "http://127.0.0.1:8780/api/v1"

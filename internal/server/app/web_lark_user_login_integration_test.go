@@ -14,9 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/app"
 	"loop-now/internal/server/config"
@@ -26,9 +23,9 @@ import (
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/workflow"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
 	"loop-now/internal/testutil/testenv"
+
+	"github.com/google/uuid"
 )
 
 // Web owns only this file. Production code/shared helpers are read-only.
@@ -41,7 +38,7 @@ func TestWebLarkUserLoginIntegration(t *testing.T) {
 	if e := os.MkdirAll(evidence, 0700); e != nil {
 		t.Fatal(e)
 	}
-	audit := map[string]any{"boundary": "actual React -> forwarded temporary App -> TEST PG; real Lark client protocol rewritten to loopback provider; no native/provider/model/QA"}
+	audit := map[string]any{"boundary": "actual React -> forwarded temporary App -> temporary SQLite; real Lark client protocol rewritten to loopback provider; no native/provider/model/QA"}
 	save := func(name string, v any) {
 		b, e := json.MarshalIndent(v, "", "  ")
 		if e != nil || os.WriteFile(filepath.Join(evidence, name), b, 0600) != nil {
@@ -54,34 +51,7 @@ func TestWebLarkUserLoginIntegration(t *testing.T) {
 		if w == nil {
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		conn, e := pgx.Connect(ctx, pgtest.URL(t))
-		if e != nil {
-			t.Error("cleanup PG unavailable")
-			return
-		}
-		defer conn.Close(ctx)
-		var exists bool
-		e = conn.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)", w.schema).Scan(&exists)
-		audit["schemaRemoved"] = e == nil && !exists
-		if e != nil || exists {
-			t.Error("schema remains")
-		}
-		ro, e := redis.ParseURL(redistest.URL(t))
-		if e != nil {
-			t.Error("TEST Redis unavailable")
-			return
-		}
-		rc := redis.NewClient(ro)
-		defer rc.Close()
-		it := rc.Scan(ctx, 0, w.cfg.RedisKeyPrefix+"*", 100).Iterator()
-		found := it.Next(ctx)
-		audit["redisPrefixEmpty"] = !found && it.Err() == nil
-		if found || it.Err() != nil {
-			t.Error("prefix remains")
-		}
-		_, e = os.Stat(w.cfg.WorkRoot)
+		_, e := os.Stat(w.cfg.WorkRoot)
 		audit["workRootRemoved"] = os.IsNotExist(e)
 		if !os.IsNotExist(e) {
 			t.Error("work root remains")
@@ -129,7 +99,7 @@ func TestWebLarkUserLoginIntegration(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	a, e := app.Build(ctx, &w.cfg, config.NewLogger(io.Discard, w.cfg.LogFormat, w.cfg.LogLevel), app.Options{SearchPath: w.schema, Listener: ln, HomeDirs: []string{"/nonexistent-home"}, LarkLoginHelper: p.Client})
+	a, e := app.Build(ctx, &w.cfg, config.NewLogger(io.Discard, w.cfg.LogFormat, w.cfg.LogLevel), app.Options{Listener: ln, HomeDirs: []string{"/nonexistent-home"}, LarkLoginHelper: p.Client})
 	if e != nil {
 		ln.Close()
 		t.Fatal(e)
@@ -162,7 +132,7 @@ func TestWebLarkUserLoginIntegration(t *testing.T) {
 	for name, q := range map[string]string{"accounts": "SELECT count(*) FROM project_credential_accounts WHERE deleted_at IS NULL", "grants": "SELECT count(*) FROM lark_cli_grants", "operations": "SELECT count(*) FROM project_cli_auth_operations WHERE cli_name='lark-cli'", "succeeded": "SELECT count(*) FROM project_cli_auth_operations WHERE cli_name='lark-cli' AND status='succeeded'", "cancelled": "SELECT count(*) FROM project_cli_auth_operations WHERE cli_name='lark-cli' AND status='cancelled'", "terminalURLs": "SELECT count(*) FROM project_cli_auth_operations WHERE cli_name='lark-cli' AND status NOT IN ('pending','awaiting_authorization') AND authorization_url IS NOT NULL", "runs": "SELECT count(*) FROM runs", "turns": "SELECT count(*) FROM task_turns"} {
 		var n int
 		if e := a.Store.Pool.QueryRow(ctx, q).Scan(&n); e != nil {
-			t.Fatalf("PG read failed: %s", name)
+			t.Fatalf("SQLite read failed: %s", name)
 		}
 		counts[name] = n
 	}
@@ -175,7 +145,7 @@ func TestWebLarkUserLoginIntegration(t *testing.T) {
 	}
 	for key, want := range map[string]int{"accounts": 3, "grants": 2, "operations": 3, "succeeded": 2, "cancelled": 1, "terminalURLs": 0, "runs": 0, "turns": 0} {
 		if counts[key] != want {
-			t.Errorf("PG %s=%d want %d", key, counts[key], want)
+			t.Errorf("SQLite %s=%d want %d", key, counts[key], want)
 		}
 	}
 	if p.DeviceCalls.Load() != 3 || p.DeniedDials.Load() != 0 {
@@ -198,23 +168,19 @@ func TestWebLarkSwitchPublicationIntegration(t *testing.T) {
 	if os.MkdirAll(evidence, 0700) != nil {
 		t.Fatal("evidence directory failed")
 	}
-	audit := map[string]any{"boundary": "actual desktop React -> temporary App/TEST PG/Redis; real empty-scope local/sidecar gates; synthetic original blocked history; stopped task driver so queued intent only; no native/Pi/model/QA execution"}
+	audit := map[string]any{"boundary": "actual desktop React -> temporary App/temporary SQLite; real empty-scope local/sidecar gates; synthetic original blocked history; stopped task driver so queued intent only; no native/Pi/model/QA execution"}
 	save := func(name string, value any) {
 		b, e := json.MarshalIndent(value, "", "  ")
 		if e != nil || os.WriteFile(filepath.Join(evidence, name), b, 0600) != nil {
 			t.Error("safe audit write failed")
 		}
 	}
-	var schema, prefix, workRoot, address string
+	var workRoot, address string
 	t.Run("isolated", func(t *testing.T) {
 		s, in, before, provider := taskLarkSwitchAppReady(t)
 		ctx := context.Background()
 		address = s.a.Addr()
-		prefix = s.a.Coord.Keys().Prefix
 		workRoot = s.a.Cfg.WorkRoot
-		if s.a.Store.Pool.QueryRow(ctx, "SELECT current_schema()").Scan(&schema) != nil {
-			t.Fatal("schema read failed")
-		}
 		// Only this self-owned, idle test server changes its allowed browser origin.
 		s.a.API.O.ConsoleOrigins = []string{"http://127.0.0.1:4336"}
 		// Delegate to the actual Manager/RuntimeGate, never a successful no-op.
@@ -306,7 +272,7 @@ func TestWebLarkSwitchPublicationIntegration(t *testing.T) {
 		for key, q := range map[string]string{"actions": "SELECT count(*) FROM task_lark_switch_actions", "bindings": "SELECT count(*) FROM task_lark_credential_bindings", "members": "SELECT count(*) FROM task_lark_binding_members", "fences": "SELECT count(*) FROM task_lark_switch_fences", "turns": "SELECT count(*) FROM task_turns", "runs": "SELECT count(*) FROM runs"} {
 			var n int
 			if s.a.Store.Pool.QueryRow(ctx, q).Scan(&n) != nil {
-				t.Fatalf("PG read failed: %s", key)
+				t.Fatalf("SQLite read failed: %s", key)
 			}
 			counts[key] = n
 		}
@@ -335,42 +301,13 @@ func TestWebLarkSwitchPublicationIntegration(t *testing.T) {
 		}
 		for key, want := range wantCounts {
 			if counts[key] != want {
-				t.Errorf("PG %s=%d want%d", key, counts[key], want)
+				t.Errorf("SQLite %s=%d want%d", key, counts[key], want)
 			}
 		}
 		if !unchanged || !followupUnprepared || provider.DeniedDials.Load() != 0 {
 			t.Error("original scope/provider boundary changed")
 		}
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if schema != "" {
-		conn, e := pgx.Connect(ctx, pgtest.URL(t))
-		if e != nil {
-			t.Fatal("cleanup PG unavailable")
-		}
-		defer conn.Close(ctx)
-		var exists bool
-		e = conn.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)", schema).Scan(&exists)
-		audit["schemaRemoved"] = e == nil && !exists
-		if e != nil || exists {
-			t.Error("schema remains")
-		}
-	}
-	if prefix != "" {
-		ro, e := redis.ParseURL(redistest.URL(t))
-		if e != nil {
-			t.Fatal("cleanup Redis unavailable")
-		}
-		rc := redis.NewClient(ro)
-		defer rc.Close()
-		it := rc.Scan(ctx, 0, prefix+"*", 100).Iterator()
-		found := it.Next(ctx)
-		audit["redisPrefixEmpty"] = !found && it.Err() == nil
-		if found || it.Err() != nil {
-			t.Error("prefix remains")
-		}
-	}
 	if workRoot != "" {
 		_, e := os.Stat(workRoot)
 		audit["workRootRemoved"] = os.IsNotExist(e)
@@ -404,7 +341,7 @@ func TestWebLarkUserLoginFailureDeleteIntegration(t *testing.T) {
 	if e := os.MkdirAll(evidence, 0700); e != nil {
 		t.Fatal(e)
 	}
-	audit := map[string]any{"boundary": "desktop React -> temporary App/TEST PG; new-login failure and account deletion only; not public re-login/native/task/OAuth"}
+	audit := map[string]any{"boundary": "desktop React -> temporary App/temporary SQLite; new-login failure and account deletion only; not public re-login/native/task/OAuth"}
 	save := func(name string, value any) {
 		b, e := json.MarshalIndent(value, "", "  ")
 		if e != nil || os.WriteFile(filepath.Join(evidence, name), b, 0600) != nil {
@@ -417,34 +354,7 @@ func TestWebLarkUserLoginFailureDeleteIntegration(t *testing.T) {
 		if w == nil {
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		conn, e := pgx.Connect(ctx, pgtest.URL(t))
-		if e != nil {
-			t.Error("cleanup PG unavailable")
-			return
-		}
-		defer conn.Close(ctx)
-		var exists bool
-		e = conn.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)", w.schema).Scan(&exists)
-		audit["schemaRemoved"] = e == nil && !exists
-		if e != nil || exists {
-			t.Error("schema remains")
-		}
-		ro, e := redis.ParseURL(redistest.URL(t))
-		if e != nil {
-			t.Error("cleanup Redis unavailable")
-			return
-		}
-		rc := redis.NewClient(ro)
-		defer rc.Close()
-		it := rc.Scan(ctx, 0, w.cfg.RedisKeyPrefix+"*", 100).Iterator()
-		found := it.Next(ctx)
-		audit["redisPrefixEmpty"] = !found && it.Err() == nil
-		if found || it.Err() != nil {
-			t.Error("prefix remains")
-		}
-		_, e = os.Stat(w.cfg.WorkRoot)
+		_, e := os.Stat(w.cfg.WorkRoot)
 		audit["workRootRemoved"] = os.IsNotExist(e)
 		if !os.IsNotExist(e) {
 			t.Error("work root remains")
@@ -531,7 +441,7 @@ func TestWebLarkUserLoginFailureDeleteIntegration(t *testing.T) {
 	for key, q := range map[string]string{"activeAccounts": "SELECT count(*) FROM project_credential_accounts WHERE deleted_at IS NULL", "deletedAccounts": "SELECT count(*) FROM project_credential_accounts WHERE deleted_at IS NOT NULL", "versions": "SELECT count(*) FROM project_cli_versions", "grants": "SELECT count(*) FROM lark_cli_grants", "operations": "SELECT count(*) FROM project_cli_auth_operations WHERE cli_name='lark-cli'", "failed": "SELECT count(*) FROM project_cli_auth_operations WHERE status='failed'", "succeeded": "SELECT count(*) FROM project_cli_auth_operations WHERE status='succeeded'", "terminalURLs": "SELECT count(*) FROM project_cli_auth_operations WHERE status NOT IN('pending','awaiting_authorization') AND authorization_url IS NOT NULL", "runs": "SELECT count(*) FROM runs", "turns": "SELECT count(*) FROM task_turns"} {
 		var n int
 		if s.a.Store.Pool.QueryRow(ctx, q).Scan(&n) != nil {
-			t.Fatalf("PG read failed: %s", key)
+			t.Fatalf("SQLite read failed: %s", key)
 		}
 		counts[key] = n
 	}
@@ -545,7 +455,7 @@ func TestWebLarkUserLoginFailureDeleteIntegration(t *testing.T) {
 	}
 	for key, want := range map[string]int{"activeAccounts": 0, "deletedAccounts": 2, "versions": 2, "grants": 1, "operations": 2, "failed": 1, "succeeded": 1, "terminalURLs": 0, "runs": 0, "turns": 0} {
 		if counts[key] != want {
-			t.Errorf("PG %s=%d want%d", key, counts[key], want)
+			t.Errorf("SQLite %s=%d want%d", key, counts[key], want)
 		}
 	}
 	if before != hashVersions() || p.DeviceCalls.Load() != 2 || p.DeniedDials.Load() != 0 {

@@ -3,25 +3,28 @@ package larkauth
 import (
 	"context"
 	"errors"
-	"github.com/google/uuid"
+	"loop-now/internal/server/clicredential"
+	"loop-now/internal/server/store"
+	"loop-now/internal/testutil/sqlitetest"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"loop-now/internal/server/clicredential"
-	"loop-now/internal/server/store"
+	"github.com/google/uuid"
 )
 
-// Hold the actual grant row only after Resolve has read its ready generation.
-// The observed blocked PID proves the admitted claim, not the initial read,
-// reached PostgreSQL while Close and another Resolve need the Go mutex.
+// Hold the writer only after Resolve has read its ready generation. The
+// observed write waiter proves the admitted claim, not the initial read,
+// reached the database while Close and another Resolve need the Go mutex.
 func TestLarkCloseDeadlineDuringActualPGClaimLock(t *testing.T) {
 	testLarkClaimClose(t, false)
 }
+
 func TestLarkCloseDeadlineDuringExpiredLeaseCleanup(t *testing.T) {
 	testLarkClaimClose(t, true)
 }
+
 func testLarkClaimClose(t *testing.T, expired bool) {
 	f := newLarkFixture(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
@@ -30,7 +33,7 @@ func testLarkClaimClose(t *testing.T, expired bool) {
 		if ok, err := f.st.ClaimLarkCLIRefresh(ctx, f.binding, 1, uuid.New(), time.Now().Add(time.Minute)); err != nil || !ok {
 			t.Fatal("seed lease failed")
 		}
-		if _, err := f.st.Pool.Exec(ctx, `UPDATE lark_cli_grants SET lease_until=clock_timestamp()-interval '1 second' WHERE version_id=$1`, f.binding.VersionID); err != nil {
+		if _, err := f.st.Pool.Exec(ctx, `UPDATE lark_cli_grants SET lease_until=clock_timestamp()-1000000 WHERE version_id=$1`, f.binding.VersionID); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -74,33 +77,10 @@ func testLarkClaimClose(t *testing.T, expired bool) {
 	case <-ctx.Done():
 		t.Fatal("ready claim not entered")
 	}
-	tx, e := f.st.Pool.Begin(ctx)
-	if e != nil {
-		t.Fatal(e)
-	}
-	defer tx.Rollback(context.Background())
-	if _, e = tx.Exec(ctx, `SELECT version_id FROM lark_cli_grants WHERE version_id=$1 FOR UPDATE`, f.binding.VersionID); e != nil {
-		t.Fatal(e)
-	}
-	var blocker uint32
-	if e = tx.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&blocker); e != nil {
-		t.Fatal(e)
-	}
+	// 测试占住写连接：放行后领取续期的写事务停在等写连接上。
+	release := sqlitetest.HoldWriter(t, f.st.Pool)
 	releaseClaim()
-	for {
-		var waiting bool
-		if e = f.st.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid)))`, blocker).Scan(&waiting); e != nil {
-			t.Fatal(e)
-		}
-		if waiting {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			t.Fatal("real PG claim never blocked")
-		case <-time.After(time.Millisecond):
-		}
-	}
+	sqlitetest.WaitWriteWaiters(t, ctx, f.st.Pool, 1)
 	// This second Resolve takes the same c.mu but has no need to read the held
 	// grant. A slow claim must not serialize unrelated resolution at Go level.
 	other := make(chan error, 1)
@@ -133,9 +113,7 @@ func testLarkClaimClose(t *testing.T, expired bool) {
 	if calls.Load() != 0 {
 		t.Fatal("refresh ran before PostgreSQL claim succeeded")
 	}
-	if e = tx.Commit(ctx); e != nil {
-		t.Fatal(e)
-	}
+	release()
 	if !expired {
 		select {
 		case <-refreshStarted:
@@ -147,7 +125,7 @@ func testLarkClaimClose(t *testing.T, expired bool) {
 		stopCaller()
 	} // supplier rotation must survive the original caller ending.
 	releaseRefresh()
-	if e = c.Close(ctx); e != nil {
+	if e := c.Close(ctx); e != nil {
 		t.Fatal("registered refresh did not drain")
 	}
 	select {

@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"loop-now/internal/server/apperr"
+	"loop-now/internal/server/db"
 )
 
 // ---------- 参与方 ----------
@@ -48,7 +48,7 @@ func (p Party) cond(alias, side string, arg int) string {
 	case "agent":
 		runtime := fmt.Sprintf("%s.%s_runtime_id IS NULL", alias, side)
 		if p.RuntimeID != uuid.Nil {
-			runtime = fmt.Sprintf("%s.%s_runtime_id = '%s'::uuid", alias, side, p.RuntimeID.String())
+			runtime = fmt.Sprintf("%s.%s_runtime_id = '%s'", alias, side, p.RuntimeID.String())
 		}
 		return fmt.Sprintf("(%s.%s_kind = 'agent' AND %s.%s_agent_id = $%d AND %s AND %s)", alias, side, alias, side, arg, runtime, taskNodeInboxVisibleSQL(alias, p))
 	case "external":
@@ -57,7 +57,7 @@ func (p Party) cond(alias, side string, arg int) string {
 		return fmt.Sprintf("(%s.%s_kind = 'plugin' AND %s.%s_plugin_party_id = $%d)", alias, side, alias, side, arg)
 	}
 	if p.Kind == "console" {
-		return fmt.Sprintf("(%s.%s_kind = 'console' AND $%d::uuid IS NOT NULL)", alias, side, arg)
+		return fmt.Sprintf("(%s.%s_kind = 'console' AND $%d IS NOT NULL)", alias, side, arg)
 	}
 	return "false"
 }
@@ -154,12 +154,12 @@ func inboxNodeSQL(a string) string {
 // partyJoin 生成某一方的 JOIN 与列；p 为别名前缀，side 为 from 或 to。
 func partyJoin(p, side string) (cols, joins string) {
 	r := strings.NewReplacer("$p", p, "$s", side)
-	cols = r.Replace(`m.$s_kind, coalesce(m.$s_agent_id, m.$s_identity_id, m.$s_plugin_party_id, '00000000-0000-0000-0000-000000000000'::uuid),
+	cols = r.Replace(`m.$s_kind, coalesce(m.$s_agent_id, m.$s_identity_id, m.$s_plugin_party_id, '00000000-0000-0000-0000-000000000000'),
 		coalesce($pa.name, $pi.name, CASE WHEN m.$s_kind = 'plugin' THEN coalesce(m.plugin_sender_name, $pq.display_name) END, ''), coalesce($pg.name, ''), coalesce($pp.name, ''),
 		($pa.id IS NOT NULL AND $pa.project_id IS NULL), $pa.project_id,
 		coalesce($pa.deleted_at IS NOT NULL, false) OR coalesce($pi.deleted_at IS NOT NULL, false)
 			OR ($pq.id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM plugins pl WHERE pl.id = $pq.plugin_id)),
- coalesce(m.$s_runtime_id,'00000000-0000-0000-0000-000000000000'::uuid), $pr.task_id,
+ coalesce(m.$s_runtime_id,'00000000-0000-0000-0000-000000000000'), $pr.task_id,
 		coalesce($pq.plugin_id, ''), CASE WHEN m.$s_kind = 'plugin' THEN coalesce(m.plugin_channel, '') ELSE '' END`)
 	joins = r.Replace(`
 		LEFT JOIN plugin_parties $pq ON $pq.id = m.$s_plugin_party_id
@@ -174,15 +174,23 @@ func partyJoin(p, side string) (cols, joins string) {
 func inboxSelect(previewChars int) string {
 	fc, fj := partyJoin("f", "from")
 	tc, tj := partyJoin("t", "to")
-	return `SELECT m.id, m.thread_id, m.in_reply_to, m.text, left(m.text, ` + strconv.Itoa(previewChars) + `), coalesce(m.when_busy, ''),
+	n := strconv.Itoa(previewChars)
+	// 提问与回答拼成 JSON：嵌套的 JSON 列要包 json()，时间用 iso_time() 转成 Go 能解析的字符串。
+	return `SELECT m.id, m.thread_id, m.in_reply_to, m.text, substr(m.text, 1, ` + n + `), coalesce(m.when_busy, ''),
 		m.created_at, m.read_at, ` + fc + `, ` + tc + `,
- (SELECT jsonb_build_object('options',q.options,'expiresAt',q.expires_at,'state',q.state,'answer',CASE WHEN q.answer_message_id IS NULL THEN NULL ELSE jsonb_build_object('messageId',q.answer_message_id,'optionId',q.answer_option_id,'optionLabel',(SELECT opt->>'label' FROM jsonb_array_elements(q.options)opt WHERE opt->>'id'=q.answer_option_id),'textPreview',left(a.text,` + strconv.Itoa(previewChars) + `),'by',q.answered_by,'at',q.answered_at) END) FROM inbox_questions q LEFT JOIN inbox_messages a ON a.id=q.answer_message_id WHERE q.message_id=m.id),
- CASE WHEN m.answers_message_id IS NULL THEN NULL ELSE jsonb_build_object('messageId',m.answers_message_id,'optionId',m.answer_option_id,'optionLabel',(SELECT opt->>'label' FROM inbox_questions q,jsonb_array_elements(q.options)opt WHERE q.message_id=m.answers_message_id AND opt->>'id'=m.answer_option_id))END,m.notice,m.images,
- m.cancelled_at,m.reminder_run_id,m.reminder_turn_id,` + inboxNodeSQL("m") + `
- FROM inbox_messages m` + fj + tj
+		(SELECT json_object('options', json(q.options), 'expiresAt', iso_time(q.expires_at), 'state', q.state, 'answer',
+			CASE WHEN q.answer_message_id IS NULL THEN NULL ELSE json_object('messageId', q.answer_message_id, 'optionId', q.answer_option_id,
+				'optionLabel', (SELECT opt.value ->> 'label' FROM json_each(q.options) opt WHERE opt.value ->> 'id' = q.answer_option_id),
+				'textPreview', substr(a.text, 1, ` + n + `), 'by', json(q.answered_by), 'at', iso_time(q.answered_at)) END)
+			FROM inbox_questions q LEFT JOIN inbox_messages a ON a.id = q.answer_message_id WHERE q.message_id = m.id),
+		CASE WHEN m.answers_message_id IS NULL THEN NULL ELSE json_object('messageId', m.answers_message_id, 'optionId', m.answer_option_id,
+			'optionLabel', (SELECT opt.value ->> 'label' FROM inbox_questions q, json_each(q.options) opt
+				WHERE q.message_id = m.answers_message_id AND opt.value ->> 'id' = m.answer_option_id)) END, m.notice, m.images,
+		m.cancelled_at, m.reminder_run_id, m.reminder_turn_id, ` + inboxNodeSQL("m") + `
+	FROM inbox_messages m` + fj + tj
 }
 
-func scanInbox(row pgx.Row) (InboxMessage, error) {
+func scanInbox(row db.Scanner) (InboxMessage, error) {
 	var m InboxMessage
 	var question, answer, notice, images []byte
 	var node *uuid.UUID
@@ -273,13 +281,13 @@ func (s *Store) pageInbox(ctx context.Context, where string, args []any, q Inbox
 	if q.Cursor != nil {
 		cAt, cID = &q.Cursor.At, &q.Cursor.ID
 	}
-	sql += fmt.Sprintf(` AND ($%d::timestamptz IS NULL OR (m.created_at, m.id) < ($%d, $%d::uuid)) ORDER BY m.created_at DESC, m.id DESC LIMIT $%d`,
+	sql += fmt.Sprintf(` AND ($%d IS NULL OR (m.created_at, m.id) < ($%d, $%d)) ORDER BY m.created_at DESC, m.id DESC LIMIT $%d`,
 		n+1, n+1, n+2, n+3)
 	rows, err := s.Pool.Query(ctx, sql, append(args, cAt, cID, q.Limit+1)...)
 	if err != nil {
 		return InboxPage{}, err
 	}
-	msgs, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
+	msgs, err := db.CollectRows(rows, func(r db.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
 	if err != nil {
 		return InboxPage{}, err
 	}
@@ -320,14 +328,14 @@ func (s *Store) ListConsoleConversation(ctx context.Context, agentID uuid.UUID, 
 // 与其他未读消息。两次查询在同一个可重复读事务中，快照与 now() 相同，两张列表恰好互不重复。
 func (s *Store) ConsolePending(ctx context.Context, preview int) (questions, unread []InboxMessage, err error) {
 	open := `EXISTS (SELECT 1 FROM inbox_questions q WHERE q.message_id = m.id AND q.state = 'open' AND q.expires_at > now())`
-	list := func(tx pgx.Tx, where string) ([]InboxMessage, error) {
+	list := func(tx *db.Tx, where string) ([]InboxMessage, error) {
 		rows, err := tx.Query(ctx, inboxSelect(preview)+` WHERE m.to_kind = 'console' AND `+where+` ORDER BY m.created_at DESC, m.id DESC`)
 		if err != nil {
 			return nil, err
 		}
-		return pgx.CollectRows(rows, func(r pgx.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
+		return db.CollectRows(rows, func(r db.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
 	}
-	err = pgx.BeginTxFunc(ctx, s.Pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+	err = s.Pool.ReadTx(ctx, func(tx *db.Tx) error {
 		if questions, err = list(tx, open); err != nil {
 			return err
 		}
@@ -360,7 +368,7 @@ type NewInboxMessage struct {
 
 // InsertInboxMessage 在事务中写入一条消息；收件人是 Agent 或外部身份时，先锁住它并确认未删除。
 // 调用方在同一事务中继续安排提醒，保证消息与提醒一起生效。
-func InsertInboxMessage(ctx context.Context, tx pgx.Tx, in NewInboxMessage) error {
+func InsertInboxMessage(ctx context.Context, tx *db.Tx, in NewInboxMessage) error {
 	switch in.To.Kind {
 	case "agent":
 		if in.To.RuntimeID != uuid.Nil {
@@ -377,7 +385,7 @@ func InsertInboxMessage(ctx context.Context, tx pgx.Tx, in NewInboxMessage) erro
 		}
 
 	case "external":
-		if err := lockLiveIdentity(ctx, tx, in.To.ID); err != nil {
+		if err := requireLiveIdentity(ctx, tx, in.To.ID); err != nil {
 			return notFoundAs(err, "收件人")
 		}
 	}
@@ -394,7 +402,7 @@ func InsertInboxMessage(ctx context.Context, tx pgx.Tx, in NewInboxMessage) erro
 			plugin_channel,plugin_sender_name)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, nullif($11, ''),$12,$13,$14,$15,$16,nullif($17,''),nullif($18,''))`,
 		in.ID, thread, in.InReplyTo, in.From.Kind, in.From.agentID(), in.From.identityID(),
-		in.To.Kind, in.To.agentID(), in.To.identityID(), in.Text, in.WhenBusy, runtimePtr(in.From.RuntimeID), runtimePtr(in.To.RuntimeID), images,
+		in.To.Kind, in.To.agentID(), in.To.identityID(), in.Text, in.WhenBusy, runtimePtr(in.From.RuntimeID), runtimePtr(in.To.RuntimeID), json.RawMessage(images),
 		in.From.pluginPartyID(), in.To.pluginPartyID(), in.PluginChannel, in.PluginSender)
 	return err
 }
@@ -414,13 +422,13 @@ func notFoundAs(err error, what string) error {
 }
 
 // InboxTx 在事务中执行 fn（供 Inbox 服务把写消息与安排提醒放在同一事务中）。
-func (s *Store) InboxTx(ctx context.Context, fn func(pgx.Tx) error) error { return s.inTx(ctx, fn) }
+func (s *Store) InboxTx(ctx context.Context, fn func(*db.Tx) error) error { return s.inTx(ctx, fn) }
 
 // ThreadParties 返回线索的两方（第一条消息的发件人与收件人）；线索不存在时返回 not_found。
 func (s *Store) ThreadParties(ctx context.Context, threadID uuid.UUID) (from, to Party, err error) {
 	var fa, fi, fp, ta, ti, tp *uuid.UUID
 	err = s.Pool.QueryRow(ctx, `SELECT from_kind, from_agent_id, from_identity_id, from_plugin_party_id, to_kind, to_agent_id, to_identity_id, to_plugin_party_id,
-			coalesce(from_runtime_id,'00000000-0000-0000-0000-000000000000'::uuid),coalesce(to_runtime_id,'00000000-0000-0000-0000-000000000000'::uuid)
+			coalesce(from_runtime_id,'00000000-0000-0000-0000-000000000000'),coalesce(to_runtime_id,'00000000-0000-0000-0000-000000000000')
 		FROM inbox_messages WHERE id = $1 AND thread_id = id`, threadID).Scan(&from.Kind, &fa, &fi, &fp, &to.Kind, &ta, &ti, &tp, &from.RuntimeID, &to.RuntimeID)
 	if err != nil {
 		return from, to, notFoundIfNoRows(err, "线索")
@@ -523,9 +531,9 @@ func (s *Store) markRead(ctx context.Context, p Party, column string, id uuid.UU
 		return out, eff, err
 	case p.Kind == "agent":
 		eff.AgentID = p.ID
-		err := s.inTx(ctx, func(tx pgx.Tx) error {
+		err := s.inTx(ctx, func(tx *db.Tx) error {
 			eff.QueueChanged, eff.Voided = false, nil
-			if err := lockAgentQueue(ctx, tx, p.ID); err != nil {
+			if err := requireLiveAgent(ctx, tx, p.ID); err != nil {
 				return notFoundAs(err, "消息")
 			}
 			var err error
@@ -564,13 +572,13 @@ func (s *Store) markRead(ctx context.Context, p Party, column string, id uuid.UU
 type readLink struct{ run, turn *uuid.UUID }
 
 func markReadTx(ctx context.Context, q queueQuerier, p Party, column string, id uuid.UUID) ([]ReadReceipt, []readLink, error) {
-	rows, err := q.Query(ctx, `UPDATE inbox_messages m SET read_at = now()
-		WHERE `+column+` = $2 AND `+unreadCond("m")+` AND `+p.cond("m", "to", 1)+` RETURNING m.id, m.thread_id, m.read_at, m.reminder_run_id, m.reminder_turn_id`, p.ID, id)
+	rows, err := q.Query(ctx, `UPDATE inbox_messages AS m SET read_at = now()
+		WHERE `+column+` = $2 AND `+unreadCond("m")+` AND `+p.cond("m", "to", 1)+` RETURNING id, thread_id, read_at, reminder_run_id, reminder_turn_id`, p.ID, id)
 	if err != nil {
 		return nil, nil, err
 	}
 	var links []readLink
-	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (ReadReceipt, error) {
+	out, err := db.CollectRows(rows, func(r db.CollectableRow) (ReadReceipt, error) {
 		var x ReadReceipt
 		var l readLink
 		err := r.Scan(&x.ID, &x.ThreadID, &x.ReadAt, &l.run, &l.turn)
@@ -584,7 +592,7 @@ func markReadTx(ctx context.Context, q queueQuerier, p Party, column string, id 
 func (s *Store) EarliestUnreadInbox(ctx context.Context, agentID uuid.UUID) (id uuid.UUID, ok bool, err error) {
 	err = s.Pool.QueryRow(ctx, `SELECT id FROM inbox_messages m WHERE `+unreadCond("m")+` AND `+AgentParty(agentID).cond("m", "to", 1)+`
 		ORDER BY m.created_at, m.id LIMIT 1`, agentID).Scan(&id)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, db.ErrNoRows) {
 		return uuid.Nil, false, nil
 	}
 	return id, err == nil, err
@@ -596,7 +604,7 @@ func (s *Store) CountInboxUnread(ctx context.Context, p Party) (int, error) {
 }
 
 type queryRower interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	QueryRow(ctx context.Context, sql string, args ...any) *db.Row
 }
 
 func countUnread(ctx context.Context, q queryRower, p Party) (int, error) {
@@ -611,10 +619,7 @@ const inboxEventLockKey = 0x6c6e5f696e626f78 // "ln_inbox"
 // WithInboxEventLock 在一个短事务中取 advisory lock，统计控制台操作者的未读总数后调用 fn（追加事件或读取快照位置）。
 // 追加事件因此是串行的：越靠后的事件，其未读总数越新。
 func (s *Store) WithInboxEventLock(ctx context.Context, fn func(consoleUnread int) error) error {
-	return s.inTx(ctx, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, int64(inboxEventLockKey)); err != nil {
-			return err
-		}
+	return s.inTx(ctx, func(tx *db.Tx) error {
 		n, err := countUnread(ctx, tx, ConsoleParty)
 		if err != nil {
 			return err
@@ -646,13 +651,15 @@ func (s *Store) ListInboxThreads(ctx context.Context, p Party, cursor *InboxCurs
 	if cursor != nil {
 		cAt, cID = &cursor.At, &cursor.ID
 	}
-	rows, err := s.Pool.Query(ctx, `SELECT root.id, last.id,
-			(SELECT count(*) FROM inbox_messages u WHERE u.thread_id = root.id AND `+unreadCond("u")+` AND `+p.cond("u", "to", 1)+`)
-		FROM inbox_messages root
-		CROSS JOIN LATERAL (SELECT l.id, l.created_at FROM inbox_messages l WHERE l.thread_id = root.id
-			ORDER BY l.created_at DESC, l.id DESC LIMIT 1) last
-		WHERE root.id = root.thread_id AND (`+p.cond("root", "from", 1)+` OR `+p.cond("root", "to", 1)+`)
-			AND ($2::timestamptz IS NULL OR (last.created_at, last.id) < ($2, $3::uuid))
+	// 先按参与方筛出线索的第一条，再用相关子查询取每条线索的最后一条（走 thread_id 索引）。
+	rows, err := s.Pool.Query(ctx, `SELECT t.root_id, last.id, t.unread FROM (
+			SELECT root.id AS root_id,
+				(SELECT l.id FROM inbox_messages l WHERE l.thread_id = root.id ORDER BY l.created_at DESC, l.id DESC LIMIT 1) AS last_id,
+				(SELECT count(*) FROM inbox_messages u WHERE u.thread_id = root.id AND `+unreadCond("u")+` AND `+p.cond("u", "to", 1)+`) AS unread
+			FROM inbox_messages root
+			WHERE root.id = root.thread_id AND (`+p.cond("root", "from", 1)+` OR `+p.cond("root", "to", 1)+`)) t
+		JOIN inbox_messages last ON last.id = t.last_id
+		WHERE ($2 IS NULL OR (last.created_at, last.id) < ($2, $3))
 		ORDER BY last.created_at DESC, last.id DESC LIMIT $4`, p.ID, cAt, cID, limit+1)
 	if err != nil {
 		return InboxThreadPage{}, err
@@ -661,7 +668,7 @@ func (s *Store) ListInboxThreads(ctx context.Context, p Party, cursor *InboxCurs
 		root, last uuid.UUID
 		unread     int
 	}
-	found, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (row, error) {
+	found, err := db.CollectRows(rows, func(r db.CollectableRow) (row, error) {
 		var x row
 		return x, r.Scan(&x.root, &x.last, &x.unread)
 	})
@@ -696,11 +703,11 @@ func (s *Store) inboxByIDs(ctx context.Context, ids []uuid.UUID, preview int) (m
 	if len(ids) == 0 {
 		return out, nil
 	}
-	rows, err := s.Pool.Query(ctx, inboxSelect(preview)+` WHERE m.id = ANY($1)`, ids)
+	rows, err := s.Pool.Query(ctx, inboxSelect(preview)+` WHERE m.id  IN (SELECT value FROM json_each($1))`, ids)
 	if err != nil {
 		return nil, err
 	}
-	msgs, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
+	msgs, err := db.CollectRows(rows, func(r db.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
 	if err != nil {
 		return nil, err
 	}
@@ -716,7 +723,7 @@ func (s *Store) ListThreadMessages(ctx context.Context, threadID uuid.UUID, prev
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
+	return db.CollectRows(rows, func(r db.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
 }
 
 // ---------- 地址解析 ----------
@@ -727,7 +734,7 @@ func (s *Store) FindAgentByPath(ctx context.Context, orgName string, orgID *uuid
 		JOIN projects p ON p.id = agents.project_id AND p.deleted_at IS NULL
 		JOIN organizations o ON o.id = p.organization_id
 		WHERE agents.deleted_at IS NULL AND agents.name = $1 AND p.name = $2
-			AND (($3::uuid IS NOT NULL AND o.id = $3) OR ($3::uuid IS NULL AND o.name = $4))`, name, project, orgID, orgName))
+			AND (($3 IS NOT NULL AND o.id = $3) OR ($3 IS NULL AND o.name = $4))`, name, project, orgID, orgName))
 	return a, notFoundIfNoRows(err, "Agent")
 }
 
@@ -760,10 +767,10 @@ func RedactCancelledFor(p Party, m *InboxMessage) {
 
 // IsNotFound 报告错误是否为 not_found。
 func IsNotFound(err error) bool {
-	return errors.Is(err, pgx.ErrNoRows) || apperr.Is(err, apperr.CodeNotFound)
+	return errors.Is(err, db.ErrNoRows) || apperr.Is(err, apperr.CodeNotFound)
 }
 
-func GetInboxMessageTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, preview int) (InboxMessage, error) {
+func GetInboxMessageTx(ctx context.Context, tx *db.Tx, id uuid.UUID, preview int) (InboxMessage, error) {
 	m, err := scanInbox(tx.QueryRow(ctx, inboxSelect(preview)+` WHERE m.id=$1`, id))
 	return m, notFoundIfNoRows(err, "消息")
 }

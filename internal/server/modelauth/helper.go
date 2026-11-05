@@ -51,8 +51,11 @@ func ValidAuthorizationURL(raw string) bool {
 
 type HelperOptions struct {
 	NodeBin, Entry, WorkRoot, BasePath, PiPackageRoot string
-	PiVersion                                         string
-	Timeout, StopGrace                                time.Duration
+	// PiAIDir is the pi-ai package preflight resolved; npm may install it
+	// inside pi-coding-agent or hoist it beside it, so the helper never guesses.
+	PiAIDir            string
+	PiVersion          string
+	Timeout, StopGrace time.Duration
 }
 type Helper struct{ Options HelperOptions }
 
@@ -255,7 +258,7 @@ func (h *Helper) run(ctx context.Context, id, kind string, c modelcredential.Cre
 				if sent || f.ProtocolVersion != 1 || f.ExpectedPiVersion != expectedPiVersion {
 					return modelcredential.Credential{}, failed("ready_protocol")
 				}
-				frame := map[string]any{"type": kind, "id": id, "provider": "openai-codex", "timeoutMs": max(int64(1), timeout.Milliseconds()), "piPackageRoot": h.Options.PiPackageRoot}
+				frame := map[string]any{"type": kind, "id": id, "provider": "openai-codex", "timeoutMs": max(int64(1), timeout.Milliseconds()), "piPackageRoot": h.Options.PiPackageRoot, "piAIDir": h.Options.PiAIDir}
 				var secret []byte
 				if kind == "refresh" {
 					secret, e = c.Encode()

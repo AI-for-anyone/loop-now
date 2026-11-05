@@ -2,12 +2,12 @@ package cliauth
 
 import (
 	"context"
+	"loop-now/internal/server/clicredential"
+	cm "loop-now/internal/server/credentialmodel"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"loop-now/internal/server/clicredential"
-	cm "loop-now/internal/server/credentialmodel"
 )
 
 func TestGoogleLoginTimeoutUsesIndependentTerminalContext(t *testing.T) {

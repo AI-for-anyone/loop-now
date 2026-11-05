@@ -3,11 +3,13 @@ package store
 import (
 	"cmp"
 	"context"
+	"math"
 	"slices"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
+
+	"loop-now/internal/server/db"
 )
 
 // StatsReport 是统计页报表（GET /stats）。秒数为小数；比例为 0 到 1，分母为 0 时为空。
@@ -191,16 +193,63 @@ type StatsProcess struct {
 }
 
 // statsScope 是范围内未删除 Agent 的条件，a 为 agents，$1、$2 为 ScopeFilter.args()。
-const statsScope = `a.deleted_at IS NULL AND ($1::uuid IS NULL OR a.project_id = $1) AND (NOT $2 OR a.project_id IS NULL)`
+const statsScope = `a.deleted_at IS NULL AND ($1 IS NULL OR a.project_id = $1) AND (NOT $2 OR a.project_id IS NULL)`
 
-// statsBucket 返回时间 x 所在桶的序号：$3 为 from，$5 为桶宽秒数。
+// statsBucket 返回时间 x 所在桶的序号：$3 为 from，$5 为桶宽微秒；x 不早于 from。
 func statsBucket(x string) string {
-	return `floor(extract(epoch FROM (` + x + ` - $3::timestamptz)) / $5::float8)::int`
+	return `((` + x + `) - $3) / $5`
+}
+
+// statsRuns 汇总一组执行：结果计数、等待与回复时长（秒）、唤醒次数与首末唤醒的排入时间。
+type statsRuns struct {
+	count               int64
+	outcome             StatsOutcomeCounts
+	waits, durations    []float64
+	wakes               int64
+	firstWake, lastWake time.Time
+}
+
+func (r *statsRuns) add(status, origin string, queued time.Time, wait, duration *float64) {
+	r.count++
+	switch status {
+	case "completed":
+		r.outcome.Completed++
+	case "interrupted":
+		r.outcome.Interrupted++
+	case "failed":
+		r.outcome.Failed++
+	}
+	if wait != nil {
+		r.waits = append(r.waits, *wait)
+	}
+	if duration != nil {
+		r.durations = append(r.durations, *duration)
+	}
+	if origin == "sleep_wake" {
+		if r.wakes == 0 || queued.Before(r.firstWake) {
+			r.firstWake = queued
+		}
+		if r.wakes == 0 || queued.After(r.lastWake) {
+			r.lastWake = queued
+		}
+		r.wakes++
+	}
+}
+
+// wakeSpan 是首末两次唤醒排入的间隔秒数；没有唤醒时为空。
+func (r *statsRuns) wakeSpan() *float64 {
+	if r.wakes == 0 {
+		return nil
+	}
+	v := r.lastWake.Sub(r.firstWake).Seconds()
+	return &v
 }
 
 // Stats 汇总范围内未删除 Agent 在 [from, to) 内的统计，按 step 分桶（第一桶从 from 开始，最后一桶截止于 to）。
 // 用量按记录时间、执行（常态执行与任务轮次，只算派发过的）按排入时间、提问按发出时间计入；
-// 并发按服务端本地时间的小时汇总，只观察到现在为止。所有语句在同一可重复读快照中执行。
+// 并发按服务端本地时间的小时汇总，只观察到现在为止。所有语句在同一只读事务中执行：每个库各是一个快照，
+// 运行记录事件与工具事件在 events.db，它的快照与 data.db 的可能相差几个事务，报表不受影响。
+// 各种分组与分位数在 Go 里汇总：SQL 只按最细的组合分组，或返回逐条执行。
 func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, step time.Duration) (StatsReport, error) {
 	now := time.Now()
 	pid, platform := f.args()
@@ -216,36 +265,29 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 	out.Wait.Series = make([]StatsWaitBucket, n)
 	out.Outcomes = StatsOutcomes{Series: make([]StatsOutcomeCounts, n), Reasons: []StatsOutcomeReason{}}
 	out.Tools.ByName = []StatsTool{}
-	inRange := func(b *int32) bool { return b != nil && *b >= 0 && int(*b) < n }
-	args := []any{pid, platform, from, to, step.Seconds()}
+	inRange := func(b int) bool { return b >= 0 && b < n }
+	args := []any{pid, platform, from, to, step.Microseconds()}
 
 	type agentUsage struct {
 		input, cacheRead, total, calls, ctx, compactions, wakeTokens int64
 	}
-	type agentRuns struct {
-		count             int64
-		outcome           StatsOutcomeCounts
-		waitP90, duration *float64
-		wakes             int64
-		wakeSpan          *float64
-	}
 	agents := map[uuid.UUID]StatsAgent{}
 	usage := map[uuid.UUID]*agentUsage{}
-	runs := map[uuid.UUID]*agentRuns{}
+	runs := map[uuid.UUID]*statsRuns{}
 	bucketCtx := make([][2]int64, n) // 每桶的调用数与上下文之和
 	var totalCalls, totalCtx int64
 
-	err := pgx.BeginTxFunc(ctx, s.Pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+	err := s.Pool.ReadTx(ctx, func(tx *db.Tx) error {
 		rows, err := tx.Query(ctx, `SELECT a.id, a.name, a.project_id FROM agents a WHERE `+statsScope, pid, platform)
 		if err != nil {
 			return err
 		}
 		var a StatsAgent
-		if _, err := pgx.ForEachRow(rows, []any{&a.AgentID, &a.Name, &a.ProjectID}, func() error { agents[a.AgentID] = a; return nil }); err != nil {
+		if _, err := db.ForEachRow(rows, []any{&a.AgentID, &a.Name, &a.ProjectID}, func() error { agents[a.AgentID] = a; return nil }); err != nil {
 			return err
 		}
 
-		// 用量：按（桶、来源）、（提供方、模型）、Agent 与全部四种分组。
+		// 用量：按（桶、来源、提供方、模型、Agent）分组，再在 Go 里汇总成按桶与来源、按模型、按 Agent 与全部。
 		rows, err = tx.Query(ctx, `WITH x AS (
 			SELECT u.agent_id, `+statsBucket("u.at")+` AS bucket,
 				CASE WHEN r.id IS NOT NULL THEN CASE r.origin WHEN 'console' THEN 'console' WHEN 'inbox_reminder' THEN 'inboxReminder' WHEN 'sleep_wake' THEN 'sleepWake' ELSE 'other' END
@@ -257,130 +299,176 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 				LEFT JOIN runs r ON r.id = u.run_id
 				LEFT JOIN task_turns t ON t.id = u.task_turn_id
 			WHERE `+statsScope+` AND u.at >= $3 AND u.at < $4)
-		SELECT grouping(bucket, origin, provider, model, agent_id), bucket, origin, provider, model, agent_id,
+		SELECT bucket, origin, provider, model, agent_id,
 			coalesce(sum(input), 0), coalesce(sum(output), 0), coalesce(sum(cache_read), 0), coalesce(sum(cache_write), 0), coalesce(sum(total), 0),
 			count(*) FILTER (WHERE kind = 'assistant'), coalesce(sum(input + cache_read) FILTER (WHERE kind = 'assistant'), 0),
 			count(*) FILTER (WHERE kind = 'compaction'), coalesce(sum(total) FILTER (WHERE wake), 0)
-		FROM x GROUP BY GROUPING SETS ((bucket, origin), (provider, model), (agent_id), ())`, args...)
+		FROM x GROUP BY bucket, origin, provider, model, agent_id`, args...)
 		if err != nil {
 			return err
 		}
-		var g int32
-		var bucket *int32
-		var origin, provider, model *string
-		var agent *uuid.UUID
+		type modelKey struct {
+			provider, model       string
+			hasProvider, hasModel bool
+		}
+		byModel := map[modelKey]int64{}
+		var bucket int
+		var origin string
+		var provider, model *string
+		var agent uuid.UUID
 		var c StatsTokenCounts
 		var calls, ctxSum, compactions, wakeTokens int64
-		_, err = pgx.ForEachRow(rows, []any{&g, &bucket, &origin, &provider, &model, &agent,
+		_, err = db.ForEachRow(rows, []any{&bucket, &origin, &provider, &model, &agent,
 			&c.Input, &c.Output, &c.CacheRead, &c.CacheWrite, &c.Total, &calls, &ctxSum, &compactions, &wakeTokens}, func() error {
-			switch g {
-			case 0b00111:
-				if inRange(bucket) && origin != nil {
-					out.Tokens.Series[*bucket] += c.Total
-					out.ByOrigin.Series[*bucket].add(*origin, c.Total)
-					out.ByOrigin.Totals.add(*origin, c.Total)
-					bucketCtx[*bucket][0] += calls
-					bucketCtx[*bucket][1] += ctxSum
-				}
-			case 0b11001:
-				out.Tokens.ByModel = append(out.Tokens.ByModel, StatsModelTokens{Provider: provider, Model: model, Total: c.Total})
-			case 0b11110:
-				if agent != nil {
-					usage[*agent] = &agentUsage{input: c.Input, cacheRead: c.CacheRead, total: c.Total, calls: calls, ctx: ctxSum, compactions: compactions, wakeTokens: wakeTokens}
-				}
-			case 0b11111:
-				out.Tokens.Totals = c
-				out.Context.Compactions = compactions
-				totalCalls, totalCtx = calls, ctxSum
+			if inRange(bucket) {
+				out.Tokens.Series[bucket] += c.Total
+				out.ByOrigin.Series[bucket].add(origin, c.Total)
+				out.ByOrigin.Totals.add(origin, c.Total)
+				bucketCtx[bucket][0] += calls
+				bucketCtx[bucket][1] += ctxSum
 			}
+			k := modelKey{hasProvider: provider != nil, hasModel: model != nil}
+			if provider != nil {
+				k.provider = *provider
+			}
+			if model != nil {
+				k.model = *model
+			}
+			byModel[k] += c.Total
+			u := usage[agent]
+			if u == nil {
+				u = &agentUsage{}
+				usage[agent] = u
+			}
+			u.input += c.Input
+			u.cacheRead += c.CacheRead
+			u.total += c.Total
+			u.calls += calls
+			u.ctx += ctxSum
+			u.compactions += compactions
+			u.wakeTokens += wakeTokens
+			t := &out.Tokens.Totals
+			t.Input, t.Output, t.CacheRead, t.CacheWrite, t.Total = t.Input+c.Input, t.Output+c.Output, t.CacheRead+c.CacheRead, t.CacheWrite+c.CacheWrite, t.Total+c.Total
+			out.Context.Compactions += compactions
+			totalCalls += calls
+			totalCtx += ctxSum
 			return nil
 		})
 		if err != nil {
 			return err
 		}
+		for k, total := range byModel {
+			m := StatsModelTokens{Total: total}
+			if k.hasProvider {
+				m.Provider = &k.provider
+			}
+			if k.hasModel {
+				m.Model = &k.model
+			}
+			out.Tokens.ByModel = append(out.Tokens.ByModel, m)
+		}
 
-		// 执行：常态执行与派发过的任务轮次，按排入时间计入；按桶、Agent、未完成原因与全部四种分组。
+		// 执行：常态执行与派发过的任务轮次，按排入时间计入；逐条读出，在 Go 里按桶、Agent、未完成原因与全部汇总。
 		// 被人停止的常态执行以 endReason user_stopped 结束，任务轮次以 errorCode user_stopped 结束。
-		rows, err = tx.Query(ctx, `WITH ex AS (
-			SELECT r.agent_id, r.origin, r.status, r.queued_at,
-				CASE WHEN r.origin = 'console' THEN extract(epoch FROM (r.running_at - r.queued_at))::float8 END AS wait,
-				extract(epoch FROM (r.ended_at - r.running_at))::float8 AS duration,
-				CASE r.status WHEN 'failed' THEN 'failed' WHEN 'interrupted' THEN CASE WHEN r.end_reason = 'user_stopped' THEN 'stopped' ELSE 'interrupted' END END AS kind,
-				CASE r.status WHEN 'failed' THEN r.error_code WHEN 'interrupted' THEN r.end_reason END AS code
+		rows, err = tx.Query(ctx, `SELECT r.agent_id, r.origin, r.status, r.queued_at,
+				CASE WHEN r.origin = 'console' THEN (r.running_at - r.queued_at) / 1e6 END,
+				(r.ended_at - r.running_at) / 1e6,
+				CASE r.status WHEN 'failed' THEN 'failed' WHEN 'interrupted' THEN CASE WHEN r.end_reason = 'user_stopped' THEN 'stopped' ELSE 'interrupted' END END,
+				CASE r.status WHEN 'failed' THEN r.error_code WHEN 'interrupted' THEN r.end_reason END
 			FROM runs r JOIN agents a ON a.id = r.agent_id
 			WHERE `+statsScope+` AND r.started_at IS NOT NULL AND r.queued_at >= $3 AND r.queued_at < $4
 			UNION ALL
 			SELECT i.agent_id, t.origin, t.status, t.queued_at, NULL,
-				extract(epoch FROM (t.ended_at - t.started_at))::float8,
+				(t.ended_at - t.started_at) / 1e6,
 				CASE t.status WHEN 'failed' THEN 'failed' WHEN 'interrupted' THEN CASE WHEN t.error_code = 'user_stopped' THEN 'stopped' ELSE 'interrupted' END END,
 				CASE WHEN t.status IN ('failed', 'interrupted') THEN t.error_code END
 			FROM task_turns t JOIN task_instances i ON i.id = t.runtime_id JOIN agents a ON a.id = i.agent_id
-			WHERE `+statsScope+` AND t.started_at IS NOT NULL AND t.queued_at >= $3 AND t.queued_at < $4),
-		x AS (SELECT ex.*, `+statsBucket("ex.queued_at")+` AS bucket FROM ex)
-		SELECT grouping(bucket, agent_id, kind, code), bucket, agent_id, kind, code, count(*),
-			count(*) FILTER (WHERE status = 'completed'), count(*) FILTER (WHERE status = 'interrupted'), count(*) FILTER (WHERE status = 'failed'),
-			percentile_cont(0.5) WITHIN GROUP (ORDER BY wait), percentile_cont(0.9) WITHIN GROUP (ORDER BY wait),
-			percentile_cont(0.5) WITHIN GROUP (ORDER BY duration),
-			count(*) FILTER (WHERE origin = 'sleep_wake'),
-			extract(epoch FROM (max(queued_at) FILTER (WHERE origin = 'sleep_wake') - min(queued_at) FILTER (WHERE origin = 'sleep_wake')))::float8
-		FROM x GROUP BY GROUPING SETS ((bucket), (agent_id), (kind, code), ())`, args...)
+			WHERE `+statsScope+` AND t.started_at IS NOT NULL AND t.queued_at >= $3 AND t.queued_at < $4`, args[:4]...)
 		if err != nil {
 			return err
 		}
+		type reasonKey struct {
+			kind, code string
+			hasCode    bool
+		}
+		var all statsRuns
+		perBucket := make([]statsRuns, n)
+		reasons := map[reasonKey]int64{}
+		var status string
+		var queued time.Time
+		var wait, duration *float64
 		var kind, code *string
-		var count, wakes int64
-		var o StatsOutcomeCounts
-		var p50, p90, dur, span *float64
-		_, err = pgx.ForEachRow(rows, []any{&g, &bucket, &agent, &kind, &code, &count, &o.Completed, &o.Interrupted, &o.Failed,
-			&p50, &p90, &dur, &wakes, &span}, func() error {
-			switch g {
-			case 0b0111:
-				if inRange(bucket) {
-					out.Outcomes.Series[*bucket] = o
-					out.Wait.Series[*bucket] = StatsWaitBucket{P50: p50, P90: p90}
+		_, err = db.ForEachRow(rows, []any{&agent, &origin, &status, &queued, &wait, &duration, &kind, &code}, func() error {
+			all.add(status, origin, queued, wait, duration)
+			if b := int(queued.Sub(from) / step); inRange(b) {
+				perBucket[b].add(status, origin, queued, wait, duration)
+			}
+			r := runs[agent]
+			if r == nil {
+				r = &statsRuns{}
+				runs[agent] = r
+			}
+			r.add(status, origin, queued, wait, duration)
+			if kind != nil {
+				k := reasonKey{kind: *kind, hasCode: code != nil}
+				if code != nil {
+					k.code = *code
 				}
-			case 0b1011:
-				if agent != nil {
-					runs[*agent] = &agentRuns{count: count, outcome: o, waitP90: p90, duration: dur, wakes: wakes, wakeSpan: span}
-				}
-			case 0b1100:
-				if kind != nil {
-					out.Outcomes.Reasons = append(out.Outcomes.Reasons, StatsOutcomeReason{Kind: *kind, Code: code, Count: count})
-				}
-			case 0b1111:
-				out.Outcomes.Totals = o
-				out.Wait = StatsWait{P50: p50, P90: p90, DurationP50: dur, Series: out.Wait.Series}
+				reasons[k]++
 			}
 			return nil
 		})
 		if err != nil {
 			return err
 		}
+		for i := range perBucket {
+			b := &perBucket[i]
+			out.Outcomes.Series[i] = b.outcome
+			out.Wait.Series[i] = StatsWaitBucket{P50: statsPercentile(b.waits, 0.5), P90: statsPercentile(b.waits, 0.9)}
+		}
+		for k, count := range reasons {
+			r := StatsOutcomeReason{Kind: k.kind, Count: count}
+			if k.hasCode {
+				r.Code = &k.code
+			}
+			out.Outcomes.Reasons = append(out.Outcomes.Reasons, r)
+		}
+		out.Outcomes.Totals = all.outcome
+		out.Wait = StatsWait{P50: statsPercentile(all.waits, 0.5), P90: statsPercentile(all.waits, 0.9), DurationP50: statsPercentile(all.durations, 0.5), Series: out.Wait.Series}
 
-		// 提问：Agent 发给控制台的问题，按发出时间计入。
-		rows, err = tx.Query(ctx, `SELECT grouping(bucket), bucket, count(*), count(answered), avg(answered), max(answered)
+		// 提问：Agent 发给控制台的问题，按发出时间计入；按桶分组，全部由各桶相加。
+		rows, err = tx.Query(ctx, `SELECT bucket, count(*), count(answered), sum(answered), max(answered)
 			FROM (SELECT `+statsBucket("m.created_at")+` AS bucket,
-					CASE WHEN q.state = 'answered' THEN extract(epoch FROM (q.answered_at - m.created_at))::float8 END AS answered
+					CASE WHEN q.state = 'answered' THEN (q.answered_at - m.created_at) / 1e6 END AS answered
 				FROM inbox_messages m JOIN inbox_questions q ON q.message_id = m.id JOIN agents a ON a.id = m.from_agent_id
 				WHERE m.from_kind = 'agent' AND m.to_kind = 'console' AND `+statsScope+` AND m.created_at >= $3 AND m.created_at < $4) x
-			GROUP BY GROUPING SETS ((bucket), ())`, args...)
+			GROUP BY bucket`, args...)
 		if err != nil {
 			return err
 		}
-		var answered int64
-		var avg, maxSecs *float64
-		_, err = pgx.ForEachRow(rows, []any{&g, &bucket, &count, &answered, &avg, &maxSecs}, func() error {
-			if g == 1 {
-				out.Questions.Asked, out.Questions.Answered, out.Questions.AvgAnswerSeconds, out.Questions.MaxAnswerSeconds = count, answered, avg, maxSecs
-			} else if inRange(bucket) {
-				out.Questions.Series[*bucket] = count
+		var count, answered int64
+		var sumSecs, maxSecs *float64
+		var answeredSecs float64
+		_, err = db.ForEachRow(rows, []any{&bucket, &count, &answered, &sumSecs, &maxSecs}, func() error {
+			if inRange(bucket) {
+				out.Questions.Series[bucket] = count
+			}
+			out.Questions.Asked += count
+			out.Questions.Answered += answered
+			if sumSecs != nil {
+				answeredSecs += *sumSecs
+			}
+			if maxSecs != nil && (out.Questions.MaxAnswerSeconds == nil || *maxSecs > *out.Questions.MaxAnswerSeconds) {
+				v := *maxSecs
+				out.Questions.MaxAnswerSeconds = &v
 			}
 			return nil
 		})
 		if err != nil {
 			return err
 		}
-		rows, err = tx.Query(ctx, `SELECT m.id, a.id, a.name, a.project_id, left(m.text, 80), m.created_at
+		out.Questions.AvgAnswerSeconds = statsRatio(answeredSecs, float64(out.Questions.Answered))
+		rows, err = tx.Query(ctx, `SELECT m.id, a.id, a.name, a.project_id, substr(m.text, 1, 80), m.created_at
 			FROM inbox_messages m JOIN inbox_questions q ON q.message_id = m.id JOIN agents a ON a.id = m.from_agent_id
 			WHERE m.from_kind = 'agent' AND m.to_kind = 'console' AND `+statsScope+` AND q.state = 'open' AND q.expires_at > $3
 			ORDER BY m.created_at, m.id`, pid, platform, now)
@@ -388,7 +476,7 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 			return err
 		}
 		var pq StatsPendingQuestion
-		_, err = pgx.ForEachRow(rows, []any{&pq.MessageID, &pq.AgentID, &pq.Name, &pq.ProjectID, &pq.Text, &pq.AskedAt}, func() error {
+		_, err = db.ForEachRow(rows, []any{&pq.MessageID, &pq.AgentID, &pq.Name, &pq.ProjectID, &pq.Text, &pq.AskedAt}, func() error {
 			out.Questions.Pending = append(out.Questions.Pending, pq)
 			return nil
 		})
@@ -401,11 +489,11 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 			SELECT r.id FROM runs r JOIN agents a ON a.id = r.agent_id
 			WHERE `+statsScope+` AND r.running_at IS NOT NULL AND r.queued_at >= $3 AND r.queued_at < $4),
 		c AS (
-			SELECT e.run_id, e.tool_call_id, min(e.tool_name) AS name, bool_or(e.state = 'failed') AS failed
+			SELECT e.run_id, e.tool_call_id, min(e.tool_name) AS name, max(e.state = 'failed') AS failed
 			FROM run_tool_events e JOIN r ON r.id = e.run_id GROUP BY e.run_id, e.tool_call_id)
-		SELECT name, count(*), count(*) FILTER (WHERE failed), NULL::bigint, NULL::float8, NULL::bigint FROM c GROUP BY name
+		SELECT name, count(*), count(*) FILTER (WHERE failed), CAST(NULL AS INTEGER), CAST(NULL AS REAL), CAST(NULL AS INTEGER) FROM c GROUP BY name
 		UNION ALL
-		SELECT NULL, NULL, NULL, count(*), avg(n)::float8, max(n)
+		SELECT NULL, NULL, NULL, count(*), CAST(avg(n) AS REAL), max(n)
 		FROM (SELECT r.id, count(c.run_id) AS n FROM r LEFT JOIN c ON c.run_id = r.id GROUP BY r.id) per
 		ORDER BY 2 DESC NULLS LAST, 1`, args[:4]...)
 		if err != nil {
@@ -414,7 +502,7 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 		var name *string
 		var toolCalls, failures, runCount, maxCalls *int64
 		var avgCalls *float64
-		_, err = pgx.ForEachRow(rows, []any{&name, &toolCalls, &failures, &runCount, &avgCalls, &maxCalls}, func() error {
+		_, err = db.ForEachRow(rows, []any{&name, &toolCalls, &failures, &runCount, &avgCalls, &maxCalls}, func() error {
 			if name != nil {
 				out.Tools.ByName = append(out.Tools.ByName, StatsTool{Name: *name, Calls: *toolCalls, Failures: *failures})
 			} else {
@@ -428,9 +516,9 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 
 		// 进程：时间窗内的运行记录事件。
 		err = tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE e.type = 'model.retry_started'),
-				count(*) FILTER (WHERE e.type = 'pi.exited' OR (e.type = 'pi.stopped' AND e.data->>'reason' = 'abort_timeout')),
+				count(*) FILTER (WHERE e.type = 'pi.exited' OR (e.type = 'pi.stopped' AND e.data ->> 'reason' = 'abort_timeout')),
 				count(*) FILTER (WHERE e.type = 'pi.started'),
-				avg(CASE WHEN jsonb_typeof(e.data->'startupMs') = 'number' THEN (e.data->>'startupMs')::float8 END) FILTER (WHERE e.type = 'pi.started')
+				avg(CASE WHEN json_type(e.data, '$.startupMs') IN ('integer', 'real') THEN CAST(e.data ->> 'startupMs' AS REAL) END) FILTER (WHERE e.type = 'pi.started')
 			FROM lifecycle_events e JOIN agents a ON a.id = e.agent_id
 			WHERE `+statsScope+` AND e.at >= $3 AND e.at < $4 AND e.type IN ('model.retry_started', 'pi.exited', 'pi.stopped', 'pi.started')`, args[:4]...).
 			Scan(&out.Process.ModelRetries, &out.Process.PiExits, &out.Process.PiColdStarts, &out.Process.PiColdStartAvgMs)
@@ -438,7 +526,7 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 			return err
 		}
 
-		// 并发：每段回复按服务端本地整点切成小时段，汇总每段内的回复秒数。
+		// 并发：每段回复按服务端本地整点切成小时段，汇总每段内的回复秒数。SQL 读出截在窗口内的回复区间（微秒），切段在 Go 里做。
 		end := to
 		if now.Before(end) {
 			end = now
@@ -450,23 +538,27 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 		}
 		busy := map[int64]float64{}
 		if end.After(from) {
-			rows, err = tx.Query(ctx, `WITH iv AS (
-				SELECT greatest(r.running_at, $3) AS lo, least(coalesce(r.ended_at, $4), $4) AS hi FROM runs r JOIN agents a ON a.id = r.agent_id
+			rows, err = tx.Query(ctx, `SELECT max(r.running_at, $3), min(coalesce(r.ended_at, $4), $4) FROM runs r JOIN agents a ON a.id = r.agent_id
 				WHERE `+statsScope+` AND r.running_at IS NOT NULL AND r.running_at < $4 AND coalesce(r.ended_at, $4) > $3
 				UNION ALL
-				SELECT greatest(t.started_at, $3), least(coalesce(t.ended_at, $4), $4)
+				SELECT max(t.started_at, $3), min(coalesce(t.ended_at, $4), $4)
 				FROM task_turns t JOIN task_instances i ON i.id = t.runtime_id JOIN agents a ON a.id = i.agent_id
-				WHERE `+statsScope+` AND t.started_at IS NOT NULL AND t.started_at < $4 AND coalesce(t.ended_at, $4) > $3)
-			SELECT floor(extract(epoch FROM (s - $5::timestamptz)) / 3600)::bigint,
-				sum(extract(epoch FROM (least(s + interval '1 hour', iv.hi) - greatest(s, iv.lo))))::float8
-			FROM iv, generate_series($5::timestamptz + floor(extract(epoch FROM (iv.lo - $5::timestamptz)) / 3600) * interval '1 hour', iv.hi - interval '1 microsecond', interval '1 hour') s
-			WHERE iv.hi > iv.lo GROUP BY 1`, pid, platform, from, end, align)
+				WHERE `+statsScope+` AND t.started_at IS NOT NULL AND t.started_at < $4 AND coalesce(t.ended_at, $4) > $3`, pid, platform, from, end)
 			if err != nil {
 				return err
 			}
-			var slot int64
-			var secs float64
-			if _, err := pgx.ForEachRow(rows, []any{&slot, &secs}, func() error { busy[slot] = secs; return nil }); err != nil {
+			const hour = int64(time.Hour / time.Microsecond)
+			base := align.UnixMicro()
+			var lo, hi int64
+			_, err = db.ForEachRow(rows, []any{&lo, &hi}, func() error {
+				// lo 不早于 from，因此不早于 align。
+				for slot := (lo - base) / hour; base+slot*hour < hi; slot++ {
+					s := base + slot*hour
+					busy[slot] += float64(min(s+hour, hi)-max(s, lo)) / 1e6
+				}
+				return nil
+			})
+			if err != nil {
 				return err
 			}
 		}
@@ -519,12 +611,12 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 			u = &agentUsage{}
 		}
 		if r == nil {
-			r = &agentRuns{}
+			r = &statsRuns{}
 		}
 		if r.wakes > 0 {
 			w := StatsAgentWakes{StatsAgent: a, Count: r.wakes, Tokens: u.wakeTokens, AvgTokens: float64(u.wakeTokens) / float64(r.wakes)}
-			if r.wakes > 1 && r.wakeSpan != nil {
-				w.AvgIntervalSeconds = statsRatio(*r.wakeSpan, float64(r.wakes-1))
+			if span := r.wakeSpan(); r.wakes > 1 && span != nil {
+				w.AvgIntervalSeconds = statsRatio(*span, float64(r.wakes-1))
 			}
 			out.Wakes = append(out.Wakes, w)
 		}
@@ -535,7 +627,7 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 		if r.count > 0 || u.total > 0 {
 			out.Agents = append(out.Agents, StatsAgentHealth{StatsAgent: a, Runs: r.outcome.ended(),
 				CompletionRate: statsRatio(float64(r.outcome.Completed), float64(r.outcome.ended())),
-				WaitP90:        r.waitP90, DurationP50: r.duration, Wakes: r.wakes, WakeTokens: u.wakeTokens, AvgContext: avgCtx,
+				WaitP90:        statsPercentile(r.waits, 0.9), DurationP50: statsPercentile(r.durations, 0.5), Wakes: r.wakes, WakeTokens: u.wakeTokens, AvgContext: avgCtx,
 				Compactions: u.compactions, Tokens: u.total, CacheHitRate: statsRatio(float64(u.cacheRead), float64(u.input+u.cacheRead))})
 		}
 	}
@@ -552,6 +644,18 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 		return cmp.Or(cmp.Compare(b.Tokens, a.Tokens), cmp.Compare(b.Runs, a.Runs), byName(a.StatsAgent, b.StatsAgent))
 	})
 	return out, nil
+}
+
+// statsPercentile 按 PostgreSQL percentile_cont 的线性插值返回 vals 的 p 分位（会排序 vals）；vals 为空时为空。
+func statsPercentile(vals []float64, p float64) *float64 {
+	if len(vals) == 0 {
+		return nil
+	}
+	slices.Sort(vals)
+	pos := p * float64(len(vals)-1)
+	lo, hi := int(math.Floor(pos)), int(math.Ceil(pos))
+	v := vals[lo] + (vals[hi]-vals[lo])*(pos-float64(lo))
+	return &v
 }
 
 // statsRatio 返回 n ÷ d；d 为 0 时为空。

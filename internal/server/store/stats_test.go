@@ -2,7 +2,9 @@ package store_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -11,7 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 type statsSeed struct {
@@ -34,16 +36,16 @@ func (e statsSeed) run(agent uuid.UUID, origin, status string, queued, running, 
 		v := e.at(queued + d)
 		return &v
 	}
-	mustExec(e.t, e.s, `INSERT INTO runs(id,agent_id,user_message_id,config_version,priority,status,origin,end_reason,error_code,queued_at,started_at,running_at,ended_at,trigger_inbox_message_id,wake_sleep_id)
-		VALUES($1,$2,$3,1,1,$4,$5,$6,$7,$8,$8,$9,$10,$11,$12)`, id, agent, uuid.New(), status, origin, endReason, errorCode, e.at(queued), opt(running), opt(ended), trigger, sleep)
+	mustExec(e.t, e.s, `INSERT INTO runs(id,agent_id,user_message_id,config_version,priority,queue_seq,status,origin,end_reason,error_code,queued_at,started_at,running_at,ended_at,trigger_inbox_message_id,wake_sleep_id)
+		VALUES($1,$2,$3,1,1,(SELECT coalesce(max(queue_seq),0)+1 FROM runs),$4,$5,$6,$7,$8,$8,$9,$10,$11,$12)`, id, agent, uuid.New(), status, origin, endReason, errorCode, e.at(queued), opt(running), opt(ended), trigger, sleep)
 	return id
 }
 
 func (e statsSeed) turn(task, runtime uuid.UUID, origin, status string, queued, ended time.Duration, errorCode *string, sleep *uuid.UUID) uuid.UUID {
 	e.t.Helper()
 	id := uuid.New()
-	mustExec(e.t, e.s, `INSERT INTO task_turns(id,task_id,runtime_id,user_message_id,assistant_message_id,status,origin,text,error_code,queued_at,started_at,ended_at,wake_sleep_id)
-		VALUES($1,$2,$3,$4,$5,$6,$7,'',$8,$9,$9,$10,$11)`, id, task, runtime, uuid.New(), uuid.New(), status, origin, errorCode, e.at(queued), e.at(queued+ended), sleep)
+	mustExec(e.t, e.s, `INSERT INTO task_turns(id,task_id,runtime_id,user_message_id,assistant_message_id,queue_seq,status,origin,text,error_code,queued_at,started_at,ended_at,wake_sleep_id)
+		VALUES($1,$2,$3,$4,$5,(SELECT coalesce(max(queue_seq),0)+1 FROM task_turns),$6,$7,'',$8,$9,$9,$10,$11)`, id, task, runtime, uuid.New(), uuid.New(), status, origin, errorCode, e.at(queued), e.at(queued+ended), sleep)
 	return id
 }
 
@@ -56,7 +58,7 @@ func (e statsSeed) usage(agent uuid.UUID, at time.Duration, kind string, run, ta
 func (e statsSeed) event(agent uuid.UUID, at time.Duration, typ string, data map[string]any) {
 	e.t.Helper()
 	raw, _ := json.Marshal(data)
-	mustExec(e.t, e.s, `INSERT INTO lifecycle_events(id,at,agent_id,type,data) VALUES($1,$2,$3,$4,$5)`, uuid.New(), e.at(at), agent, typ, raw)
+	mustExec(e.t, e.s, `INSERT INTO lifecycle_events(id,at,agent_id,type,data) VALUES($1,$2,$3,$4,$5)`, uuid.New(), e.at(at), agent, typ, json.RawMessage(raw))
 }
 
 func (e statsSeed) message(from uuid.UUID, to *uuid.UUID, at time.Duration, text string) uuid.UUID {
@@ -93,7 +95,7 @@ func near(got *float64, want float64) bool { return got != nil && math.Abs(*got-
 // percentiles over console runs (queue time included), and lists pending
 // questions regardless of the window; deleted agents never count.
 func TestStatsAttributionWaitAndPendingQuestions(t *testing.T) {
-	s := pgtest.NewStore(t)
+	s := sqlitetest.NewStore(t)
 	ctx := context.Background()
 	dc, err := s.EnsureDefaults(ctx, "org", "project")
 	if err != nil {
@@ -114,11 +116,12 @@ func TestStatsAttributionWaitAndPendingQuestions(t *testing.T) {
 	// One task with an instance of B.
 	task, runtime := uuid.New(), uuid.New()
 	doc, _ := json.Marshal(map[string]any{"view": map[string]any{"task": map[string]any{"status": "running", "version": 1}}})
-	mustExec(t, s, `INSERT INTO task_records(id,project_id,status,document,version) VALUES($1,$2,'running',$3,1)`, task, dc.Project.ID, doc)
-	mustExec(t, s, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha) VALUES($1,$2,$3,'beta',$4,encode(sha256($4),'hex'))`, runtime, task, B, []byte(`{}`))
+	mustExec(t, s, `INSERT INTO task_records(id,project_id,status,document,version) VALUES($1,$2,'running',$3,1)`, task, dc.Project.ID, json.RawMessage(doc))
+	snapshot := []byte(`{}`)
+	mustExec(t, s, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha) VALUES($1,$2,$3,'beta',$4,$5)`, runtime, task, B, snapshot, fmt.Sprintf("%x", sha256.Sum256(snapshot)))
 	sleep, timer := uuid.New(), uuid.New()
 	mustExec(t, s, `INSERT INTO agent_sleeps(id,scope_key,scope_kind,mode,agent_id,session_epoch,source_run_id,action_id,body_hash,receipt,state,seconds,entered_at,wake_at,ended_at,end_reason,timer_run_id,wake_run_id,revision)
-		VALUES($1,'normal/'||$2::uuid::text,'normal','normal',$2::uuid,1,$3,$4,$5,'{}','woken',60,$6,$6,$6,'deadline',$7,$7,1)`, sleep, A, uuid.New(), uuid.New(), make([]byte, 32), e.at(0), timer)
+		VALUES($1,'normal/'||$2,'normal','normal',$2,1,$3,$4,$5,'{}','woken',60,$6,$6,$6,'deadline',$7,$7,1)`, sleep, A, uuid.New(), uuid.New(), make([]byte, 32), e.at(0), timer)
 
 	// Bucket 0 (day 1) and bucket 1 (day 2). Console waits: 10, 30, 20 | 50.
 	r1 := e.run(A, "console", "completed", 1*h, 10*sec, 70*sec, nil, nil, nil, nil)
@@ -130,7 +133,7 @@ func TestStatsAttributionWaitAndPendingQuestions(t *testing.T) {
 	r7 := e.run(A, "sleep_wake", "completed", 9*h, 5*sec, 15*sec, nil, nil, nil, &sleep)
 	e.run(A, "console", "failed", 25*h, 50*sec, 110*sec, nil, strp("pi_exited"), nil, nil)
 	// Never dispatched: cancelled while queued.
-	mustExec(t, s, `INSERT INTO runs(id,agent_id,user_message_id,config_version,priority,status,origin,end_reason,queued_at,ended_at) VALUES($1,$2,$3,1,1,'interrupted','console','user_cancelled',$4,$4)`,
+	mustExec(t, s, `INSERT INTO runs(id,agent_id,user_message_id,config_version,priority,queue_seq,status,origin,end_reason,queued_at,ended_at) VALUES($1,$2,$3,1,1,(SELECT coalesce(max(queue_seq),0)+1 FROM runs),'interrupted','console','user_cancelled',$4,$4)`,
 		uuid.New(), A, uuid.New(), e.at(6*h))
 	t1 := e.turn(task, runtime, "task_node", "completed", 6*h, 100*sec, nil, nil)
 	t2 := e.turn(task, runtime, "console_node", "interrupted", 26*h, 10*sec, strp("user_stopped"), nil)

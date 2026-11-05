@@ -9,7 +9,7 @@ import (
 var ErrFile = errors.New("模型凭证缓存写入失败")
 
 // WriteAuthFile atomically seeds/rebuilds a runtime cache. Pi's native later
-// writes are not claimed to be atomic; PG remains the credential authority.
+// writes are not claimed to be atomic; the database remains the credential authority.
 func WriteAuthFile(dir string, data []byte) error {
 	if len(data) > MaxBytes+1024 {
 		return ErrFile

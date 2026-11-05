@@ -4,21 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"loop-now/internal/server/cliauth"
+	cm "loop-now/internal/server/credentialmodel"
+	"loop-now/internal/server/larkauth/larktest"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"loop-now/internal/server/cliauth"
-	cm "loop-now/internal/server/credentialmodel"
-	"loop-now/internal/server/larkauth/larktest"
 )
 
-// Actual router, validators, worker, cipher store and loopback provider. The
-// self-owned database/Redis sockets prevent any fallback to a developer store.
+// Actual router, validators, worker, cipher store and loopback provider.
 func TestLarkLoginHTTPPermissionsPresenceAndSafeProjection(t *testing.T) {
-	safetyResources(t)
 	e := newEnv(t)
 	p := larktest.New(t)
 	logs := &safetyLogs{}

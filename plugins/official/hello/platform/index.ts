@@ -1,4 +1,4 @@
-// 平台半边：在插件宿主里运行。register 只做注册；宿主在插件停用时自动取消这些注册。
+// 平台侧：在插件宿主里运行。register 只做注册；宿主在插件停用时自动取消这些注册。
 
 import type { PluginAPI } from '@loop-now/plugin-sdk'
 

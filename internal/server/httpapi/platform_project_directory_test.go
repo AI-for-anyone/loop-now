@@ -5,47 +5,22 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"loop-now/internal/server/auth"
+	"loop-now/internal/server/contracttest"
+	"loop-now/internal/server/httpapi"
+	"loop-now/internal/server/store"
+	"loop-now/internal/testutil/sqlitetest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"loop-now/internal/server/auth"
-	"loop-now/internal/server/contracttest"
-	"loop-now/internal/server/httpapi"
-	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
 )
 
 func platformDirectoryHTTPStore(t *testing.T) *store.Store {
 	t.Helper()
-	ctx := context.Background()
-	u := pgtest.URL(t)
-	c, err := pgx.Connect(ctx, u)
-	if err != nil {
-		t.Fatal("TEST connection unavailable")
-	}
-	schema := "platform_directory_http_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if _, err = c.Exec(ctx, "CREATE SCHEMA "+pgx.Identifier{schema}.Sanitize()); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		defer c.Close(ctx)
-		if _, err := c.Exec(ctx, "DROP SCHEMA "+pgx.Identifier{schema}.Sanitize()+" CASCADE"); err != nil {
-			t.Error(err)
-		}
-	})
-	st, err := store.Open(ctx, u, store.OpenOptions{SearchPath: schema})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(st.Close)
-	if err = st.Migrate(ctx, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
-		t.Fatal(err)
-	}
-	return st
+	return sqlitetest.NewStore(t)
 }
 
 func TestPlatformProjectDirectoryHTTP(t *testing.T) {

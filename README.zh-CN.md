@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a><br />
+  <a href="https://github.com/AI-for-anyone/loop-now/releases/latest">下载桌面版</a> ·
   <a href="#开始使用">开始使用</a> ·
   <a href="#你可以用它做什么">功能</a> ·
   <a href="#核心能力可扩展的插件体系">插件</a> ·
@@ -50,10 +51,10 @@ Loop Now 把多个 Agent 的工作放进一个浏览器工作台。每个 Agent 
 
 ## 核心能力：可扩展的插件体系
 
-**新工具与项目特有的行为都放进插件。**一个插件就是一个目录，`package.json` 是它唯一的清单。插件最多分两半，两半都可以没有：
+**新工具与项目特有的行为都放进插件。**一个插件就是一个目录，`package.json` 是它唯一的清单。插件最多有两侧，任一侧都可以没有：
 
-- **Agent 半边**是标准的 [Pi 包](https://pi.dev/packages)：Pi 扩展、Skills、MCP 服务器和 CLI。每个获得授权的 Agent 在自己的 Pi 进程里加载它。现成的 Pi 包不用改就能装。
-- **平台半边**运行在服务端旁边一个常驻的 Node 插件宿主里，订阅平台事件，并用按权限签发的插件令牌调用平台接口。
+- **Agent 侧**是标准的 [Pi 包](https://pi.dev/packages)：Pi 扩展、Skills、MCP 服务器和 CLI。每个获得授权的 Agent 在自己的 Pi 进程里加载它。现成的 Pi 包不用改就能装。
+- **平台侧**运行在服务端旁边一个常驻的 Node 插件宿主里，订阅平台事件，并用按权限签发的插件令牌调用平台接口。
 
 | 宿主提供 | 对插件意味着什么 |
 | --- | --- |
@@ -63,21 +64,21 @@ Loop Now 把多个 Agent 的工作放进一个浏览器工作台。每个 Agent 
 | **可靠的外发 HTTP** | SDK 的投递库带持久队列和退避重试，用 HMAC-SHA256 签名，并写下投递记录，插件页直接展示。 |
 | **日志与隔离** | 每个插件的输出进入它自己的日志。一个插件抛错、超时或加载失败，只影响它自己。 |
 
-清单说了算：订阅清单没有声明的事件、调用清单之外的接口范围都会失败。安装前，平台会把两半各有什么、订阅哪些事件、要哪些权限展示给人看。
+清单说了算：订阅清单没有声明的事件、调用清单之外的接口范围都会失败。安装前，平台会把两侧各有什么、订阅哪些事件、要哪些权限展示给人看。
 
 观察类事件、状态、密钥、配置和投递库已经可用。拦截与修改 Hook、控制台操作按钮、HTTP 入口、定时、渠道和插件账号已在 [`plugins/SPEC.md`](plugins/SPEC.md) 定稿，正在陆续上线。
 
 ### 平台安装，项目启用，Agent 授权
 
-可以从官方插件、Git 仓库、npm 包或本机目录安装，在控制台里操作，或用 `loopctl plugin install`。装好后，先在项目里启用插件并填写配置，再授权给需要加载 Agent 半边的 Agent。安装或启用本身不会给任何 Agent 授权。版本是固定的：更新是显式操作，进行中的任务继续用启动时的文件。
+可以从官方插件、Git 仓库、npm 包或本机目录安装，在控制台里操作，或用 `loopctl plugin install`。装好后，先在项目里启用插件并填写配置，再授权给需要加载 Agent 侧的 Agent。安装或启用本身不会给任何 Agent 授权。版本是固定的：更新是显式操作，进行中的任务继续用启动时的文件。
 
 随平台发布三个官方插件：
 
 - [**webhook**](plugins/official/webhook/README.md)：收件箱收到消息时，签名后 POST 到你的地址，失败重试，并记下投递记录。外部身份用它代替轮询收件箱。
 - [**playwright**](plugins/official/playwright/README.md)：给 Agent 一个专用的可见 Chromium，通过官方 Playwright MCP 打开网页、读取页面、点击、输入和截图，不连接你的日常 Chrome。
-- [**hello**](plugins/official/hello/README.md)：两半齐全的最小插件，可以从它开始写自己的插件。
+- [**hello**](plugins/official/hello/README.md)：两侧齐全的最小插件，可以从它开始写自己的插件。
 
-### 几行代码写一个平台半边
+### 几行代码写出平台侧
 
 ```ts
 import { createDelivery, type PluginAPI } from '@loop-now/plugin-sdk'
@@ -115,19 +116,64 @@ export default function register(api: PluginAPI) {
 
 ## 开始使用
 
-可以用 **Docker Compose** 一体化启动，也可以从源码安装。主要验证环境是 macOS Apple Silicon；部分组件支持 Linux，但尚未完成同等范围的整套验证。飞书用户 CLI 运行组件目前仅支持 macOS arm64。
+四种方式：**桌面版**（macOS，什么都不用装）、**服务端发行包**（Linux、macOS）、**Docker Compose** 一体化启动、从源码安装。主要验证环境是 macOS Apple Silicon；部分组件支持 Linux，但尚未完成同等范围的整套验证。飞书用户 CLI 运行组件目前仅支持 macOS arm64。
+
+### 桌面版（macOS Apple Silicon）
+
+一个 DMG 里带着服务端、控制台、Node 和 Pi，不需要另装任何东西。
+
+1. 从 [Releases](https://github.com/AI-for-anyone/loop-now/releases/latest) 下载 `loop-now-desktop-<版本>-mac-arm64.dmg`，打开后把 Loop Now 拖进"应用程序"。
+2. 第一次打开：安装包目前没有 Apple 公证，macOS 会提示无法验证开发者。到"系统设置 › 隐私与安全性"，在"安全性"一栏点"仍要打开"，之后不再提示。
+3. 启动后菜单栏出现 Loop Now 图标，窗口里就是控制台。关掉窗口，服务端和 Agent 仍在后台运行；要彻底停止，从菜单栏图标选"退出"。
+
+数据在哪：数据库和每日备份在 `~/Library/Application Support/Loop Now/default/data`，Agent 工作区在 `/Users/Shared/loop-now-desktop/default`，日志在 `~/Library/Logs/Loop Now/default`。桌面版默认不使用源码安装的 `~/.loop_now` 和 `/Users/Shared/loop-now`，两种安装可以并存。要用一套独立的数据试用，带参数启动：`open -a "Loop Now" --args --profile=trial`。从源码安装迁移过来、想沿用原来的工作根：先停掉源码安装的服务端并退出 Loop Now，在 `~/Library/Application Support/Loop Now/desktop.json` 里写上 `{"profiles": {"default": {"workRoot": "/Users/Shared/loop-now"}}}`（`dataDir`、`contextDir` 也可以这样指定，都写绝对路径），再打开；菜单栏图标里的配置一行会显示实际用的路径。基于 PostgreSQL 的安装还要先导入数据库，完整步骤见[快速上手](https://ai-for-anyone.github.io/loop-now/zh/guide/getting-started#moving-to-the-desktop-app)。
+
+更新：退出 Loop Now，用新的 DMG 替换"应用程序"里的 app，再打开，数据保留。菜单栏的"检查更新"会提示新版本并打开下载页；签名公证完成后才会改为自动安装。
+
+桌面版里的 Agent 用随包的 Pi 1.4.0 和 Node 24.21；模型账号、CLI 账号、插件都在控制台里配置，和源码安装相同。外部身份和 `loopctl` 需要对外 TLS 端口，桌面版目前还不能开启。
+
+### 服务端发行包（Linux / macOS）
+
+每个版本在 Releases 里还有各平台的服务端发行包 `loop-now-<版本>-<平台>.tar.gz`，平台有 `darwin-arm64`、`darwin-amd64`、`linux-amd64`、`linux-arm64`。包里有内嵌控制台的 `loop-server`、`loopctl`、插件宿主、官方插件，以及随包的 Node 24.21.0 和 Pi 1.4.0，机器上只需要有 Git。
+
+1. 从 [Releases](https://github.com/AI-for-anyone/loop-now/releases/latest) 下载对应平台的包和 `SHA256SUMS`，校验下载：
+
+   ```sh
+   sha256sum -c --ignore-missing SHA256SUMS        # Linux
+   shasum -a 256 -c --ignore-missing SHA256SUMS    # macOS
+   ```
+
+2. 在终端里用 `tar` 解开。macOS 上如果在访达里解开，文件会被标记为来自互联网，未签名的程序会被 Gatekeeper 拦下。
+
+   ```sh
+   tar -xzf loop-now-<版本>-<平台>.tar.gz
+   cd loop-now-<版本>-<平台>
+   ```
+
+3. 设置数据目录和工作根后启动服务端。工作根的要求和创建方法与源码安装相同（见[第 2 步](#2-配置服务端)）：
+
+   ```sh
+   export LOOP_NOW_DATA_DIR="$HOME/.loop_now"
+   export LOOP_NOW_WORK_ROOT='/var/lib/loop-now'   # macOS 用 /Users/Shared/loop-now
+   ./loop-server
+   ```
+
+4. 打开 **[http://127.0.0.1:8780/](http://127.0.0.1:8780/)**。控制台就在服务端口的根路径，不需要另起控制台。
+
+随包的 Node 和 Pi 会自动使用，不用另装；设置了 `LOOP_NOW_NODE_BIN` 等变量时仍以变量为准。凭证以明文保存在数据目录里，请保护好数据目录和备份。升级时停掉服务端，解开新版本的包，用同样的 `LOOP_NOW_DATA_DIR` 和 `LOOP_NOW_WORK_ROOT` 启动新目录里的 `loop-server`，然后删掉旧目录。
+
 
 ### Docker Compose（本地一体化）
 
-首次启动会在本机构建服务端和控制台镜像，并启动 PostgreSQL 18、Redis 8：
+首次启动会在本机构建服务端和控制台镜像，并启动这两者：
 
 ```sh
 docker compose up --build -d
 ```
 
-打开 **[http://localhost:5173](http://localhost:5173)**。控制台没有登录功能，因此 Compose 只把 Web 的 `5173` 和 API 的 `8780` 发布到 `127.0.0.1`；PostgreSQL 与 Redis 不发布到宿主机。数据库默认用户、密码和库名都是 `loopnow`，仅用于 Compose 内部网络，不要把这套默认配置暴露到外部。
+打开 **[http://localhost:5173](http://localhost:5173)**。控制台没有登录功能，因此 Compose 只把 Web 的 `5173` 和 API 的 `8780` 发布到 `127.0.0.1`，不要把这套配置暴露到外部。
 
-`pgdata` 命名卷保存数据库，`loopdata` 保存 Agent 工作区、会话和工具。`docker compose down` 会保留它们；`docker compose down -v` 会删除这些数据，执行前请先备份。
+`loopdata` 命名卷保存数据库（SQLite，含每日备份）、Agent 工作区、会话和工具。`docker compose down` 会保留它们；`docker compose down -v` 会删除这些数据，执行前请先备份。
 
 容器中的 Agent 有一些边界：
 
@@ -165,8 +211,6 @@ docker compose up --build -d
 | --- | --- |
 | Go | 1.27 或以上 |
 | Node.js / npm | **24.21.0 / 11.19.0**；Web 脚本会检查精确版本 |
-| PostgreSQL | 18 |
-| Redis | 8 |
 | Pi coding agent | **1.4.0** |
 | 其他工具 | Git |
 
@@ -180,26 +224,16 @@ git clone --depth 1 --branch main https://github.com/AI-for-anyone/loop-now.git
 cd loop-now
 ```
 
-通过你使用的本地安装方式启动 PostgreSQL 和 Redis。使用本机 PostgreSQL 管理员创建专用角色和数据库：
-
-```sh
-createuser --login --pwprompt loopnow
-createdb --owner=loopnow loopnow
-```
-
 ### 2. 配置服务端
 
-以下命令在仓库根目录运行。把数据库密码替换为刚设置的值，必要时做 URL 编码。Redis 使用专用 DB 和 key 前缀；如果启用了认证，请在连接地址中加入认证信息。
+以下命令在仓库根目录运行：
 
 ```sh
-export LOOP_NOW_DATABASE_URL='postgres://loopnow:YOUR_URL_ENCODED_PASSWORD@127.0.0.1:5432/loopnow?sslmode=disable'
-export LOOP_NOW_REDIS_URL='redis://127.0.0.1:6379/1'
-export LOOP_NOW_REDIS_KEY_PREFIX='loopnow:'
 export LOOP_NOW_NODE_BIN="$(command -v node)"
 export LOOP_NOW_PI_BIN="$(command -v pi)"
 ```
 
-凭证以明文存在 PostgreSQL，请保护好数据库访问权限和备份文件。服务端从进程环境变量读取配置，不会自动加载 `.env` 文件。
+服务端把数据库和每日备份放在数据目录里，默认是服务进程用户主目录下的 `~/.loop_now`（用 `LOOP_NOW_DATA_DIR` 修改），首次启动时自动建库。凭证以明文存在这个数据库里，请保护好数据目录和备份。服务端从进程环境变量读取配置，不会自动加载 `.env` 文件。
 
 执行工作根目录必须持久保存，并位于**用户主目录之外**，它和上级目录不能包含 `AGENTS.md` 或 `CLAUDE.md`，以免 Pi 继承宿主上无关的指令。新安装默认使用 macOS 的 `/Users/Shared/loop-now`，或 Linux 的 `/var/lib/loop-now`：
 
@@ -225,7 +259,7 @@ export LOOP_NOW_LOOPCTL_DIST_DIR="$PWD/.local-build/loopctl-dist"
 bin/loop-server
 ```
 
-启动时会检查依赖、执行待应用的数据库迁移，并创建默认组织和项目。API 监听 `127.0.0.1:8780`。同一套安装只运行一个服务端；更新时保留原数据库、Redis 配置和工作目录。
+启动时会检查依赖、执行待应用的数据库迁移，并创建默认组织和项目。API 监听 `127.0.0.1:8780`。一个数据目录同时只能由一个服务端使用；更新时保留数据目录和工作目录。从基于 PostgreSQL 的版本（到 v0.1.0 为止）迁移过来时，先检出 tag `pg-final`（PostgreSQL 版的最后一个提交），构建并启动一次，让旧库完成最后的迁移，停掉服务，然后把 `LOOP_NOW_DATABASE_URL` 指向旧库，运行一次 `loop-server import-postgres`，它会把全部数据复制到数据目录里的新库。
 
 插件需要 Node 插件宿主，从 `plugins/` 构建（Node 24.21.0）。设置了 `LOOP_NOW_PLUGIN_HOST_ENTRY` 时服务端才运行它；设置了 `LOOP_NOW_PLUGIN_OFFICIAL_DIR` 时，官方插件作为 `builtin` 安装来源提供：
 
@@ -265,8 +299,7 @@ export LOOP_NOW_WEB_NODE_BIN="$(dirname "$(command -v node)")"
 ```mermaid
 flowchart LR
     UI[Web 控制台] <-->|HTTP 与 SSE| Server[Go 服务端]
-    Server <--> PG[(PostgreSQL)]
-    Server <--> Redis[(Redis)]
+    Server <--> DB[(SQLite)]
     Server -->|RPC| Pi[Pi 进程]
     Server <-->|stdio| Host[Node 插件宿主]
     Host -->|HTTP，插件令牌| Server
@@ -274,7 +307,7 @@ flowchart LR
     Pi --> Ext[插件扩展与 MCP 服务]
 ```
 
-PostgreSQL 保存平台状态、凭证、消息与任务记录，Redis 负责协调、队列和实时流，本地文件系统保存 Agent 工作目录、会话与已安装工具。这些组件组成一套本地安装，图中拆分不代表已经支持独立扩缩容。
+数据目录里的 SQLite 保存平台状态、凭证、消息、任务记录和排队；忙闲锁和实时流在服务端进程内，本地文件系统保存 Agent 工作目录、会话与已安装工具。这些组件组成一套本地安装，图中拆分不代表已经支持独立扩缩容。
 
 | 目录 | 用途 |
 | --- | --- |
@@ -292,9 +325,10 @@ PostgreSQL 保存平台状态、凭证、消息与任务记录，Redis 负责协
 | 环境变量 | 用途／默认值 |
 | --- | --- |
 | `LOOP_NOW_LISTEN_ADDR` | 控制台 API；默认 `127.0.0.1:8780` |
+| `LOOP_NOW_DATA_DIR` | 数据库（`db/`）和每日备份（`backups/`）；服务进程用户的 `~/.loop_now` |
 | `LOOP_NOW_WORK_ROOT` | 持久化 Agent 工作目录与运行文件 |
 | `LOOP_NOW_CONTEXT_DIR` | 项目（`projects/<id>/`）与全局（`global/`）上下文文件夹；默认服务运行用户的 `~/.loop_now` |
-| `LOOP_NOW_PLUGIN_HOST_ENTRY` | 插件宿主入口的绝对路径（用 Node 运行）；不设时插件的平台半边不运行 |
+| `LOOP_NOW_PLUGIN_HOST_ENTRY` | 插件宿主入口的绝对路径（用 Node 运行）；不设时插件的平台侧不运行 |
 | `LOOP_NOW_PLUGIN_OFFICIAL_DIR` | 随平台发布的官方插件目录的绝对路径（每个插件一个子目录）；不设时没有 `builtin` 安装来源 |
 | `LOOP_NOW_PLUGIN_MARKET_URL` | 官方插件市场 `loop-now-market.json` 的 `https` 地址；默认是官方市场的索引地址，可改成别的地址 |
 | `LOOP_NOW_PI_MAX_PROCESSES` | `0` 表示不限；正数限制本机 Pi 进程数 |
@@ -328,7 +362,7 @@ go test ./cmd/... ./internal/... ./api/...
 ./bin/npm24 run build
 ```
 
-数据库集成测试需通过 `LOOP_NOW_TEST_DATABASE_URL` 指向隔离测试库；涉及 Redis 的测试还需 `LOOP_NOW_TEST_REDIS_URL`。原生和浏览器测试有各自的夹具要求，跳过不等于集成验证通过。请勿在贡献中提交凭证、本地运行数据或构建产物。
+后端测试不需要外部服务，每个测试使用自己的临时数据目录；只有一次性 PostgreSQL 导入器的测试需要通过 `LOOP_NOW_TEST_DATABASE_URL` 指向测试库。原生和浏览器测试有各自的夹具要求，跳过不等于集成验证通过。请勿在贡献中提交凭证、本地运行数据或构建产物。
 
 ## 许可证
 

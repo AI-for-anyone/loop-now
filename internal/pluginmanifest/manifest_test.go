@@ -57,7 +57,7 @@ func full() map[string]any {
 	}
 }
 
-// 两半齐全的清单读出全部字段与组成；只有 pi 段的标准 Pi 包用 npm 名得到 id。
+// 两侧齐全的清单读出全部字段与组成；只有 pi 段的标准 Pi 包用 npm 名得到 id。
 func TestReadManifest(t *testing.T) {
 	dir := writePlugin(t, full(), "agent/index.ts", "skills/", "platform/index.ts", "bin/")
 	m, err := pluginmanifest.ReadManifest(dir, "2026.11.3")
@@ -165,7 +165,7 @@ func TestReadManifestRejects(t *testing.T) {
 		{"权限", func(p map[string]any) { p["loopNow"].(map[string]any)["permissions"] = []any{"db.write"} }, nil, "不是可用的范围"},
 		{"越界路径", func(p map[string]any) { p["pi"].(map[string]any)["extensions"] = []any{"../evil.ts"} }, nil, "相对路径"},
 		{"不存在的文件", func(p map[string]any) { p["pi"].(map[string]any)["skills"] = []any{"./missing"} }, nil, "不存在"},
-		{"订阅却没有平台半边", func(p map[string]any) { delete(p["loopNow"].(map[string]any), "platform") }, nil, "loopNow.platform"},
+		{"订阅却没有平台侧", func(p map[string]any) { delete(p["loopNow"].(map[string]any), "platform") }, nil, "loopNow.platform"},
 		{"平台版本", func(p map[string]any) { p["loopNow"].(map[string]any)["minPlatformVersion"] = "2027.1" }, nil, "不低于 2027.1"},
 		{"配置 schema", func(p map[string]any) {
 			p["loopNow"].(map[string]any)["configSchema"] = map[string]any{"type": "object", "properties": 3}

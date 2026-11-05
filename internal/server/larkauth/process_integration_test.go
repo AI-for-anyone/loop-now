@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"loop-now/internal/server/clicredential"
+	"loop-now/internal/server/db"
 	"loop-now/internal/server/store"
 	"net/http"
 	"net/http/httptest"
@@ -32,9 +33,10 @@ func TestLarkCoordinatorChildProcess(t *testing.T) {
 	if e != nil || endpoint.Scheme != "http" || endpoint.Hostname() != "127.0.0.1" {
 		t.Fatal("child endpoint not owned loopback")
 	}
-	st, e := store.Open(ctx, os.Getenv("LOOP_NOW_TEST_DATABASE_URL"), store.OpenOptions{SearchPath: os.Getenv("LARK_TEST_SCHEMA")})
+	// 子进程打开父进程的数据目录：几个进程的写入由 SQLite 的文件锁排队。
+	st, e := store.Open(ctx, db.Options{Dir: os.Getenv("LARK_TEST_DB_DIR")})
 	if e != nil {
-		t.Fatal("TEST connection failed")
+		t.Fatal("TEST store open failed")
 	}
 	defer st.Close()
 	tr := http.DefaultTransport.(*http.Transport).Clone()
@@ -74,7 +76,8 @@ func TestLarkCoordinatorChildProcess(t *testing.T) {
 		t.Fatal("child did not resolve committed generation")
 	}
 }
-func TestLarkActualProcessesShareOnePGRefresh(t *testing.T) {
+
+func TestLarkActualProcessesShareOneRefresh(t *testing.T) {
 	f := newLarkFixture(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -114,11 +117,10 @@ func TestLarkActualProcessesShareOnePGRefresh(t *testing.T) {
 		t.Fatal(e)
 	}
 	encoded, _ := json.Marshal(f.binding)
-	schema := f.st.Pool.Config().ConnConfig.RuntimeParams["search_path"]
 	commands := make([]*exec.Cmd, 4)
 	for i := range commands {
 		cmd := exec.CommandContext(ctx, self, "-test.run=^TestLarkCoordinatorChildProcess$", "-test.count=1")
-		cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "LARK_TEST_CHILD=1", "LARK_TEST_BINDING=" + string(encoded), "LARK_TEST_SCHEMA=" + schema, "LARK_TEST_ENDPOINT=" + provider.URL, "LOOP_NOW_TEST_DATABASE_URL=" + f.st.Pool.Config().ConnString()}
+		cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "LARK_TEST_CHILD=1", "LARK_TEST_BINDING=" + string(encoded), "LARK_TEST_DB_DIR=" + f.st.Pool.Dir(), "LARK_TEST_ENDPOINT=" + provider.URL}
 		cmd.Stdout = io.Discard
 		cmd.Stderr = io.Discard
 		if e = cmd.Start(); e != nil {

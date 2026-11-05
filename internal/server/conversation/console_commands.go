@@ -22,12 +22,21 @@ type consoleCommandRun struct {
 func (s *Service) acquireConsoleCommand(ctx context.Context, agentID uuid.UUID) (uuid.UUID, string, error) {
 	runID := uuid.Must(uuid.NewV7())
 	owner := coord.LockValue(runID.String(), s.o.InstanceID.String())
-	acquired, err := s.co.AcquireIfIdle(ctx, agentID.String(), owner)
+	acquired, err := s.co.Acquire(ctx, agentID.String(), owner)
 	if err != nil {
 		return uuid.Nil, "", err
 	}
 	if !acquired {
 		return uuid.Nil, "", s.busyError(ctx, agentID)
+	}
+	// 锁只表示没有进行中的执行；排队由数据库判断，有可开始的排队执行时不做维护（交给对账启动它）。
+	_, queued, err := s.st.NextQueuedRun(ctx, agentID)
+	if err != nil || queued {
+		_, _ = s.co.Release(ctx, agentID.String(), owner)
+		if err != nil {
+			return uuid.Nil, "", err
+		}
+		return uuid.Nil, "", apperr.Conflict(apperr.CodeAgentNotIdle, "Agent 正在回复或还有排队消息，请等它空闲后再操作")
 	}
 	return runID, owner, nil
 }

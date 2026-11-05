@@ -14,13 +14,16 @@ hero:
       text: Get started
       link: /guide/getting-started
     - theme: alt
+      text: Download for macOS
+      link: https://github.com/AI-for-anyone/loop-now/releases/latest
+    - theme: alt
       text: GitHub
       link: https://github.com/AI-for-anyone/loop-now
     - theme: alt
       text: 简体中文
       link: /zh/
     - theme: alt
-      text: v0.1.0
+      text: v0.2.0
       link: https://github.com/AI-for-anyone/loop-now/releases
 
 features:
@@ -62,7 +65,7 @@ A workflow can move from development to review and back for a bounded number of 
 
 ## Plugins are the extension point
 
-A plugin is one directory whose `package.json` is the manifest. The **agent half** is a standard [Pi package](https://pi.dev/packages) loaded into each granted agent's Pi process; the **platform half** runs in a long-lived Node host next to the server, subscribing to platform events with a scoped token.
+A plugin is one directory whose `package.json` is the manifest. The **agent side** is a standard [Pi package](https://pi.dev/packages) loaded into each granted agent's Pi process; the **platform side** runs in a long-lived Node host next to the server, subscribing to platform events with a scoped token.
 
 ```ts twoslash
 import { createDelivery, type PluginAPI } from '@loop-now/plugin-sdk'
@@ -76,10 +79,10 @@ export default function register(api: PluginAPI) {
 }
 ```
 
-The manifest is authoritative: subscribing to an event, or calling an API scope, that the manifest does not declare fails — and install shows both halves, the events, and the permissions before anything runs. [Read the plugin overview →](/plugins/)
+The manifest is authoritative: subscribing to an event, or calling an API scope, that the manifest does not declare fails — and install shows both sides, the events, and the permissions before anything runs. [Read the plugin overview →](/plugins/)
 
 ## Early-stage personal edition
 
-This project targets a **single local server**. The console has no login and is intended for loopback access. Credentials are stored in plaintext in your own PostgreSQL — protect database access and backups. Model and tool providers may still receive data when you use their services.
+This project targets a **single local server**. The console has no login and is intended for loopback access. Credentials are stored in plaintext in the local database — protect the data directory and its backups. Model and tool providers may still receive data when you use their services.
 
 Loop Now runs on your machine with [Pi](https://github.com/earendil-works/pi) as its execution engine. You choose the models, credentials, repositories, and tools each agent may use.

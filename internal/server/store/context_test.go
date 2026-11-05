@@ -6,11 +6,11 @@ import (
 	"testing"
 
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 func TestEnsureDefaultsIdempotent(t *testing.T) {
-	s := pgtest.NewStore(t)
+	s := sqlitetest.NewStore(t)
 	ctx := context.Background()
 
 	first, err := s.EnsureDefaults(ctx, "默认组织", "默认项目")
@@ -45,7 +45,7 @@ func TestEnsureDefaultsIdempotent(t *testing.T) {
 }
 
 func TestPutBlobDeduplicates(t *testing.T) {
-	s := pgtest.NewStore(t)
+	s := sqlitetest.NewStore(t)
 	ctx := context.Background()
 	a, err := s.PutBlob(ctx, []byte("same content"))
 	if err != nil {

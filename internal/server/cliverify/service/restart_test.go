@@ -3,12 +3,12 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"github.com/google/uuid"
 	"io"
 	"log/slog"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/cliverify"
+	"loop-now/internal/server/db"
 	"loop-now/internal/server/store"
 	"net"
 	"os"
@@ -19,6 +19,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func TestVerificationCrashChild(t *testing.T) {
@@ -26,7 +28,7 @@ func TestVerificationCrashChild(t *testing.T) {
 		return
 	}
 	ctx := context.Background()
-	st, e := store.Open(ctx, os.Getenv("LOOP_VERIFY_TEST_URL"), store.OpenOptions{SearchPath: os.Getenv("LOOP_VERIFY_TEST_SCHEMA")})
+	st, e := store.Open(ctx, db.Options{Dir: os.Getenv("LOOP_VERIFY_TEST_DB_DIR")})
 	if e != nil {
 		os.Exit(31)
 	}
@@ -52,6 +54,7 @@ func TestVerificationCrashChild(t *testing.T) {
 	}
 	select {}
 }
+
 func TestWorkerActualParentSIGKILLThenRecoveryDoesNotReplay(t *testing.T) {
 	var probes atomic.Int32
 	factory := func(context.Context, CommandSpec) (*exec.Cmd, error) { probes.Add(1); return nil, io.EOF }
@@ -65,7 +68,7 @@ func TestWorkerActualParentSIGKILLThenRecoveryDoesNotReplay(t *testing.T) {
 	}
 	ready := filepath.Join(t.TempDir(), "ready.json")
 	cmd := exec.Command(os.Args[0], "-test.run=^TestVerificationCrashChild$")
-	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=/nonexistent", "LOOP_VERIFY_CRASH_FIXTURE=1", "LOOP_VERIFY_TEST_URL=" + f.st.Pool.Config().ConnString(), "LOOP_VERIFY_TEST_SCHEMA=" + f.st.Pool.Config().ConnConfig.RuntimeParams["search_path"], "LOOP_VERIFY_TEST_ROOT=" + f.s.Options.WorkRoot, "LOOP_VERIFY_TEST_READY=" + ready, "LOOP_VERIFY_TEST_NODE=" + f.s.Options.NodeBin, "LOOP_VERIFY_TEST_GUARD=" + f.s.Options.GuardEntry, "LOOP_VERIFY_TEST_PROJECT=" + f.project.String(), "LOOP_VERIFY_TEST_ACCOUNT=" + a.String(), "LOOP_VERIFY_TEST_VERSION=" + v.String(), "LOOP_VERIFY_TEST_OPERATION=" + op.String()}
+	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=/nonexistent", "LOOP_VERIFY_CRASH_FIXTURE=1", "LOOP_VERIFY_TEST_DB_DIR=" + f.st.Pool.Dir(), "LOOP_VERIFY_TEST_ROOT=" + f.s.Options.WorkRoot, "LOOP_VERIFY_TEST_READY=" + ready, "LOOP_VERIFY_TEST_NODE=" + f.s.Options.NodeBin, "LOOP_VERIFY_TEST_GUARD=" + f.s.Options.GuardEntry, "LOOP_VERIFY_TEST_PROJECT=" + f.project.String(), "LOOP_VERIFY_TEST_ACCOUNT=" + a.String(), "LOOP_VERIFY_TEST_VERSION=" + v.String(), "LOOP_VERIFY_TEST_OPERATION=" + op.String()}
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	if e := cmd.Start(); e != nil {

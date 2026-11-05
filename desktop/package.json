@@ -1,0 +1,28 @@
+{
+  "name": "loop-now-desktop",
+  "productName": "Loop Now",
+  "version": "0.1.0-desktop.4",
+  "private": true,
+  "description": "Loop Now 桌面壳：拉起并守护 loop-server，窗口加载它提供的控制台",
+  "license": "Apache-2.0",
+  "main": "dist/main.js",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc",
+    "test": "node --test \"dist/**/*.test.js\"",
+    "dev": "npm run build && electron .",
+    "dist:mac": "npm run build && electron-builder --config electron-builder.config.js --mac --arm64 --publish never"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.4",
+    "electron": "45.2.1",
+    "electron-builder": "26.17.0",
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.10"
+  }
+}

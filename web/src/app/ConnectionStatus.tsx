@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { reachability } from '@/api/client'
 import { useHealth } from '@/api/queries'
-import { config } from '@/config'
+import { absoluteApiBase } from '@/config'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 
@@ -25,7 +25,7 @@ function apiHost(apiBase: string): string {
 }
 
 // 左侧栏底部的连接状态：请求没有到达服务端，或健康接口不可用（503 以外的错误）时为无法连接；
-// 健康检查报告有依赖不可用（503）时为部分依赖不可用；首次查询还没有结果时为检查中。
+// 健康检查报告数据库不可用（503）时为数据库不可用；首次查询还没有结果时为检查中。
 export function ConnectionStatus({ className }: { className?: string }) {
   const reachable = useSyncExternalStore(reachability.subscribe, reachability.isReachable)
   const health = useHealth()
@@ -41,7 +41,7 @@ export function ConnectionStatus({ className }: { className?: string }) {
     >
       <span aria-hidden="true" className={cn('size-[9px] shrink-0 rounded-full', style.dot)} />
       <span>{style.label}</span>
-      <span className="font-mono text-[11.5px] font-bold">{apiHost(config.apiBase)}</span>
+      <span className="font-mono text-[11.5px] font-bold">{apiHost(absoluteApiBase())}</span>
     </div>
   )
 }

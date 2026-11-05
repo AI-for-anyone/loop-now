@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
@@ -30,15 +29,27 @@ import (
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/taskruntime"
 	"loop-now/internal/server/workflow"
+
+	"loop-now/internal/server/db"
 )
 
 type Options struct {
-	InstanceID                       uuid.UUID
-	LockRenewInterval, RecordTimeout time.Duration
-	MaxSteps, MaxEdges, MaxVisits    int
-	MaxRequest, MaxArtifact          int64
-	ReconcileInterval                time.Duration
+	InstanceID uuid.UUID
+	// AbortPollInterval 是一轮执行期间检查数据库里打断标记的间隔（打断通知丢失时的兜底）；为 0 时取 10 秒。
+	AbortPollInterval             time.Duration
+	RecordTimeout                 time.Duration
+	MaxSteps, MaxEdges, MaxVisits int
+	MaxRequest, MaxArtifact       int64
+	ReconcileInterval             time.Duration
 }
+
+func (o Options) abortPollInterval() time.Duration {
+	if o.AbortPollInterval > 0 {
+		return o.AbortPollInterval
+	}
+	return 10 * time.Second
+}
+
 type Service struct {
 	// Hooks 在任务节点第一次开始前调用插件的 node.before_start；为空时不调用。
 	Hooks pluginhost.Hooker
@@ -153,7 +164,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 		return nil, apperr.Forbidden("只有当前项目Manager可创建任务")
 	}
 	action := bodyAction(p, in.ActionID, "createTask", in)
-	out, err := s.Store.CreateTask(ctx, *a.ProjectID, p.ID, *action, func(tx pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) {
+	out, err := s.Store.CreateTask(ctx, *a.ProjectID, p.ID, *action, func(tx *db.Tx) (taskmodel.Record, []store.TaskInstance, error) {
 
 		id := uuid.Must(uuid.NewV7())
 		if in.SourceInboxMessageID != nil {
@@ -162,7 +173,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 				runtime = &p.RuntimeID
 			}
 			var received bool
-			if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM inbox_messages WHERE id=$1 AND to_kind='agent' AND to_agent_id=$2 AND to_runtime_id IS NOT DISTINCT FROM $3::uuid)`, *in.SourceInboxMessageID, p.ID, runtime).Scan(&received); e != nil {
+			if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM inbox_messages WHERE id=$1 AND to_kind='agent' AND to_agent_id=$2 AND to_runtime_id IS $3)`, *in.SourceInboxMessageID, p.ID, runtime).Scan(&received); e != nil {
 				return taskmodel.Record{}, nil, e
 			}
 			if !received {

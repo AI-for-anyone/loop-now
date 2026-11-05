@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/taskmodel"
+
+	"loop-now/internal/server/db"
 )
 
 func (s *Store) taskLifecycle(ctx context.Context, q execer, t TaskTurn, kind string, data map[string]any) error {
@@ -30,9 +31,9 @@ func (s *Store) taskLifecycle(ctx context.Context, q execer, t TaskTurn, kind st
 	if e != nil {
 		return e
 	}
-	tag, e := q.Exec(ctx, `INSERT INTO lifecycle_events(id,agent_id,type,data,instance_id,task_id,workflow_node,task_turn_id,inbox_message_id) SELECT $1,agent_id,$2,$3,$4,$5,$6,$7,$8 FROM task_instances WHERE id=$9 AND task_id=$5`, uuid.Must(uuid.NewV7()), kind, b, s.InstanceID, t.TaskID, node, t.ID, t.TriggerInboxID, t.RuntimeID)
+	tag, e := q.Exec(ctx, `INSERT INTO lifecycle_events(id,agent_id,type,data,instance_id,task_id,workflow_node,task_turn_id,inbox_message_id) SELECT $1,agent_id,$2,$3,$4,$5,$6,$7,$8 FROM task_instances WHERE id=$9 AND task_id=$5`, uuid.Must(uuid.NewV7()), kind, json.RawMessage(b), s.InstanceID, t.TaskID, node, t.ID, t.TriggerInboxID, t.RuntimeID)
 	if e == nil && tag.RowsAffected() != 1 {
-		return pgx.ErrNoRows
+		return db.ErrNoRows
 	}
 	return e
 }
@@ -45,7 +46,7 @@ func (s *Store) RecordTaskObservation(ctx context.Context, t TaskTurn, kind stri
 // MarkTaskRunning binds the state transition and its event to one transaction.
 func (s *Store) MarkTaskRunning(ctx context.Context, t TaskTurn, version int64) error {
 	_, e := s.MutateTask(ctx, t.TaskID, nil, func(m *TaskMutation) (any, error) {
-		old, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1 AND task_id=$2 FOR UPDATE`, t.ID, t.TaskID))
+		old, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1 AND task_id=$2`, t.ID, t.TaskID))
 		if e != nil {
 			return nil, e
 		}
@@ -74,11 +75,11 @@ func (s *Store) taskEndedEvent(ctx context.Context, m *TaskMutation, t TaskTurn)
 
 // InterruptTaskRuntime only changes rounds matching the caller's transaction.
 func (s *Store) InterruptTaskRuntime(ctx context.Context, m *TaskMutation, runtime *uuid.UUID, onlyUnbound bool) error {
-	rows, e := m.Tx.Query(ctx, `UPDATE task_turns SET error_code=CASE WHEN status='queued' AND EXISTS(SELECT 1 FROM task_console_message_lineage l WHERE l.run_id=task_turns.id) THEN 'task_conflict' ELSE error_code END,error_message=CASE WHEN status='queued' AND EXISTS(SELECT 1 FROM task_console_message_lineage l WHERE l.run_id=task_turns.id) THEN '原节点已结束或不再有效，该消息未执行' ELSE error_message END,status=CASE WHEN status='queued' THEN 'interrupted' ELSE 'aborting' END,ended_at=CASE WHEN status='queued' THEN now() ELSE ended_at END WHERE task_id=$1 AND ($2::uuid IS NULL OR runtime_id=$2) AND (NOT $3 OR node_run_id IS NULL) AND status IN ('queued','starting','running') RETURNING `+taskTurnColumns, m.Record.View.Task.ID, runtime, onlyUnbound)
+	rows, e := m.Tx.Query(ctx, `UPDATE task_turns SET error_code=CASE WHEN status='queued' AND EXISTS(SELECT 1 FROM task_console_message_lineage l WHERE l.run_id=task_turns.id) THEN 'task_conflict' ELSE error_code END,error_message=CASE WHEN status='queued' AND EXISTS(SELECT 1 FROM task_console_message_lineage l WHERE l.run_id=task_turns.id) THEN '原节点已结束或不再有效，该消息未执行' ELSE error_message END,status=CASE WHEN status='queued' THEN 'interrupted' ELSE 'aborting' END,ended_at=CASE WHEN status='queued' THEN now() ELSE ended_at END WHERE task_id=$1 AND ($2 IS NULL OR runtime_id=$2) AND (NOT $3 OR node_run_id IS NULL) AND status IN ('queued','starting','running') RETURNING `+taskTurnColumns, m.Record.View.Task.ID, runtime, onlyUnbound)
 	if e != nil {
 		return e
 	}
-	turns, e := pgx.CollectRows(rows, func(r pgx.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
+	turns, e := db.CollectRows(rows, func(r db.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
 	if e != nil {
 		return e
 	}
@@ -114,7 +115,7 @@ func (s *Store) RecoverTaskTurns(ctx context.Context, m *TaskMutation) (int, boo
 	if e != nil {
 		return 0, false, e
 	}
-	turns, e := pgx.CollectRows(rows, func(r pgx.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
+	turns, e := db.CollectRows(rows, func(r db.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
 	if e != nil {
 		return 0, false, e
 	}
@@ -143,7 +144,7 @@ func (s *Store) cancelUnboundInboxQueue(ctx context.Context, m *TaskMutation, ru
 	if e != nil {
 		return e
 	}
-	turns, e := pgx.CollectRows(rows, func(r pgx.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
+	turns, e := db.CollectRows(rows, func(r db.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
 	if e != nil {
 		return e
 	}

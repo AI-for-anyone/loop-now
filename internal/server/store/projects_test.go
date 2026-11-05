@@ -3,16 +3,16 @@ package store_test
 import (
 	"context"
 	"strconv"
-	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/content"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 type projEnv struct {
@@ -24,7 +24,7 @@ type projEnv struct {
 
 func newProjEnv(t *testing.T) *projEnv {
 	t.Helper()
-	s := pgtest.NewStore(t)
+	s := sqlitetest.NewStore(t)
 	ctx := context.Background()
 	dc, err := s.EnsureDefaults(ctx, "默认组织", "默认项目")
 	if err != nil {
@@ -57,69 +57,6 @@ func wantErrCode(t *testing.T, err error, code string) {
 		t.Fatalf("期望错误码 %s，实际 %v", code, err)
 	}
 }
-
-// ---- 迁移 00003 ----
-
-func TestMigration00003(t *testing.T) {
-	schema := pgtest.NewSchema(t)
-	ctx := context.Background()
-	s, err := store.Open(ctx, pgtest.URL(t), store.OpenOptions{SearchPath: schema})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(s.Close)
-	if err := s.MigrateUpTo(ctx, 2); err != nil {
-		t.Fatal(err)
-	}
-	// 第一版的数据：默认组织与项目、一个 Agent；另一个项目中有同名模板。
-	exec := func(sql string, args ...any) {
-		t.Helper()
-		if _, err := s.Pool.Exec(ctx, sql, args...); err != nil {
-			t.Fatalf("%s：%v", sql, err)
-		}
-	}
-	org, def, other, agent := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
-	exec(`INSERT INTO organizations (id, name, is_default) VALUES ($1, '默认组织', true)`, org)
-	exec(`INSERT INTO projects (id, organization_id, name, is_default) VALUES ($1, $2, '默认项目', true), ($3, $2, '其他', false)`, def, org, other)
-	exec(`INSERT INTO agents (id, project_id, name, model_provider, model_id) VALUES ($1, $2, '开发助手', 'anthropic', 'claude-x')`, agent, def)
-	exec(`INSERT INTO skill_templates (id, project_id, name, description) VALUES ($1, $2, 'pdf', 'd'), ($3, $4, 'pdf', 'd')`,
-		uuid.Must(uuid.NewV7()), def, uuid.Must(uuid.NewV7()), other)
-
-	// 跨项目同名模板：迁移失败并报出名称，数据库停在 00002。
-	err = s.MigrateUpTo(ctx, 3)
-	if err == nil || !strings.Contains(err.Error(), "pdf") {
-		t.Fatalf("跨项目同名模板应让迁移失败并报出名称：%v", err)
-	}
-	exec(`UPDATE skill_templates SET name = 'pdf-2' WHERE project_id = $1`, other)
-	if err := s.MigrateUpTo(ctx, 3); err != nil {
-		t.Fatalf("处理冲突后迁移应成功：%v", err)
-	}
-	var n int
-	if err := s.Pool.QueryRow(ctx, `SELECT count(*) FROM agents WHERE id = $1 AND project_id = $2`, agent, def).Scan(&n); err != nil || n != 1 {
-		t.Fatalf("已有 Agent 应保留：%d %v", n, err)
-	}
-	if err := s.Pool.QueryRow(ctx, `SELECT count(*) FROM skill_templates`).Scan(&n); err != nil || n != 2 {
-		t.Fatalf("已有模板应保留：%d %v", n, err)
-	}
-
-	// 没有平台 Agent 时可以回退到 00002；模板回填到默认项目。
-	if err := s.MigrateDownTo(ctx, 2); err != nil {
-		t.Fatalf("回退应成功：%v", err)
-	}
-	if err := s.Pool.QueryRow(ctx, `SELECT count(*) FROM skill_templates WHERE project_id = $1`, def).Scan(&n); err != nil || n != 2 {
-		t.Fatalf("回退后模板应归默认项目：%d %v", n, err)
-	}
-	// 有平台 Agent 时回退失败。
-	if err := s.MigrateUpTo(ctx, 3); err != nil {
-		t.Fatal(err)
-	}
-	exec(`INSERT INTO agents (id, project_id, name, model_provider, model_id) VALUES ($1, NULL, '巡检员', 'anthropic', 'claude-x')`, uuid.Must(uuid.NewV7()))
-	if err := s.MigrateDownTo(ctx, 2); err == nil || !strings.Contains(err.Error(), "平台持有") {
-		t.Fatalf("有平台 Agent 时回退应失败：%v", err)
-	}
-}
-
-// ---- 项目 ----
 
 func TestProjectsCRUDAndNameReuse(t *testing.T) {
 	e := newProjEnv(t)
@@ -157,7 +94,7 @@ func TestDefaultProjectCannotBeDeleted(t *testing.T) {
 	_, err := e.s.DeleteProject(e.ctx, e.dc.Project.ID)
 	wantErrCode(t, err, apperr.CodeValidationFailed)
 	// 数据库约束兜底。
-	if _, err := e.s.Pool.Exec(e.ctx, `UPDATE projects SET deleted_at = now() WHERE is_default`); err == nil {
+	if _, err := e.s.Pool.Exec(e.ctx, `UPDATE projects SET deleted_at = $1 WHERE is_default`, time.Now()); err == nil {
 		t.Fatal("数据库应拒绝删除默认项目")
 	}
 	// 默认项目可以改名。
@@ -283,7 +220,7 @@ func TestDeleteProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := e.s.Pool.Exec(e.ctx, `INSERT INTO agent_credentials (id, agent_id, purpose, cli_name, template_version, secret, field_names, env_names, file_paths, template_source)
-		VALUES ($1, $2, 'cli', 'gh', '1', '\x00', '{}', '{}', '{}', 'builtin')`, uuid.Must(uuid.NewV7()), idle.ID); err != nil {
+		VALUES ($1, $2, 'cli', 'gh', '1', x'00', '[]', '[]', '[]', 'builtin')`, uuid.Must(uuid.NewV7()), idle.ID); err != nil {
 		t.Fatal(err)
 	}
 	_, run, err := e.s.InsertMessageAndRun(e.ctx, store.NewRun{AgentID: busy.ID, RunID: uuid.Must(uuid.NewV7()), Text: "hi", Start: false,
@@ -304,7 +241,7 @@ func TestDeleteProject(t *testing.T) {
 	}
 
 	// 执行结束后删除：Agent 软删除、凭证密文删除、Manager 取消、名称可再用。
-	if _, err := e.s.Pool.Exec(e.ctx, `UPDATE runs SET status = 'completed', ended_at = now() WHERE id = $1`, run.ID); err != nil {
+	if _, err := e.s.Pool.Exec(e.ctx, `UPDATE runs SET status = 'completed', ended_at = $2 WHERE id = $1`, run.ID, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	ids, err := e.s.DeleteProject(e.ctx, p.ID)

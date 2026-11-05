@@ -2,15 +2,14 @@ package httpapi_test
 
 import (
 	"context"
+	"loop-now/internal/server/tasks"
 	"net/http"
 	"testing"
 
 	"github.com/google/uuid"
-	"loop-now/internal/server/tasks"
 )
 
 func TestTaskLarkSwitchRoutesFailClosedWithoutNativeManager(t *testing.T) {
-	safetyResources(t)
 	e := newEnv(t)
 	e.api.Tasks = &tasks.Service{Store: e.st, Options: tasks.Options{MaxRequest: 1 << 20}}
 	base := "/tasks/" + uuid.NewString() + "/lark-account-switches"

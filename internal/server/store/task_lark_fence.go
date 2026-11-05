@@ -9,8 +9,9 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
+
+	"loop-now/internal/server/db"
 )
 
 // TaskLarkFenceMember is an internal, already validated reservation member.
@@ -54,7 +55,7 @@ func (s *Store) ReserveTaskLarkFenceTx(ctx context.Context, m *TaskMutation, in 
 		}
 		return false, nil
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
+	if !errors.Is(err, db.ErrNoRows) {
 		return false, err
 	}
 	n := m.Record.Current()
@@ -86,7 +87,7 @@ func (s *Store) ReserveTaskLarkFenceTx(ctx context.Context, m *TaskMutation, in 
 		}
 		var task, agent uuid.UUID
 		var retired bool
-		if err := m.Tx.QueryRow(ctx, `SELECT task_id,agent_id,retired FROM task_instances WHERE id=$1 FOR UPDATE`, member.RuntimeID).Scan(&task, &agent, &retired); err != nil {
+		if err := m.Tx.QueryRow(ctx, `SELECT task_id,agent_id,retired FROM task_instances WHERE id=$1`, member.RuntimeID).Scan(&task, &agent, &retired); err != nil {
 			return false, notFoundIfNoRows(err, "任务实例")
 		}
 		if task != in.TaskID || agent != member.AgentID || retired {
@@ -113,7 +114,7 @@ func (s *Store) ReserveTaskLarkFenceTx(ctx context.Context, m *TaskMutation, in 
 	if err != nil {
 		return false, err
 	}
-	_, err = m.Tx.Exec(ctx, `INSERT INTO task_lark_switch_actions(actor_key,action_id,task_id,node_run_id,request_hash,status,reservation_task_version,captured_request) VALUES($1,$2,$3,$4,$5,'pending',$6,$7)`, in.ActorKey, in.ActionID, in.TaskID, in.NodeRunID, in.RequestHash[:], m.Record.View.Task.Version+1, encoded)
+	_, err = m.Tx.Exec(ctx, `INSERT INTO task_lark_switch_actions(actor_key,action_id,task_id,node_run_id,request_hash,status,reservation_task_version,captured_request) VALUES($1,$2,$3,$4,$5,'pending',$6,$7)`, in.ActorKey, in.ActionID, in.TaskID, in.NodeRunID, in.RequestHash[:], m.Record.View.Task.Version+1, json.RawMessage(encoded))
 	if err != nil {
 		return false, err
 	}
@@ -154,7 +155,7 @@ func (s *Store) DeferTaskLarkInboxTx(ctx context.Context, m *TaskMutation, messa
 	var actor string
 	var action uuid.UUID
 	err := m.Tx.QueryRow(ctx, `SELECT actor_key,action_id FROM task_lark_switch_fences WHERE task_id=$1 AND runtime_id=$2`, m.Record.View.Task.ID, runtime).Scan(&actor, &action)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, db.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {

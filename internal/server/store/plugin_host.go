@@ -9,7 +9,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
+
+	"loop-now/internal/server/db"
 )
 
 // 插件宿主读写的数据（plugins/SPEC.md §3、§8）：持久状态、宿主日志、插件状态与观察类事件的投递。
@@ -26,8 +27,8 @@ const PluginStateListLimit = 1000
 // PluginStateGet 读取一项状态；不存在时返回 nil。project 为空表示插件全局。
 func (s *Store) PluginStateGet(ctx context.Context, plugin string, project *uuid.UUID, key string) (json.RawMessage, error) {
 	var v json.RawMessage
-	err := s.Pool.QueryRow(ctx, `SELECT value FROM plugin_state WHERE plugin_id=$1 AND project_id IS NOT DISTINCT FROM $2 AND key=$3`, plugin, project, key).Scan(&v)
-	if errors.Is(err, pgx.ErrNoRows) {
+	err := s.Pool.QueryRow(ctx, `SELECT value FROM plugin_state WHERE plugin_id=$1 AND project_id IS $2 AND key=$3`, plugin, project, key).Scan(&v)
+	if errors.Is(err, db.ErrNoRows) {
 		return nil, nil
 	}
 	return v, err
@@ -36,24 +37,24 @@ func (s *Store) PluginStateGet(ctx context.Context, plugin string, project *uuid
 // PluginStateSet 写入一项状态，已有则覆盖。
 func (s *Store) PluginStateSet(ctx context.Context, plugin string, project *uuid.UUID, key string, value json.RawMessage) error {
 	_, err := s.Pool.Exec(ctx, `INSERT INTO plugin_state(plugin_id,project_id,key,value) VALUES($1,$2,$3,$4)
-		ON CONFLICT (plugin_id,project_id,key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()`, plugin, project, key, value)
+		ON CONFLICT (plugin_id, coalesce(project_id, ''), key) DO UPDATE SET value=excluded.value, updated_at=now()`, plugin, project, key, value)
 	return err
 }
 
 // PluginStateDelete 删除一项状态；不存在时也成功。
 func (s *Store) PluginStateDelete(ctx context.Context, plugin string, project *uuid.UUID, key string) error {
-	_, err := s.Pool.Exec(ctx, `DELETE FROM plugin_state WHERE plugin_id=$1 AND project_id IS NOT DISTINCT FROM $2 AND key=$3`, plugin, project, key)
+	_, err := s.Pool.Exec(ctx, `DELETE FROM plugin_state WHERE plugin_id=$1 AND project_id IS $2 AND key=$3`, plugin, project, key)
 	return err
 }
 
 // PluginStateList 按键排序列出以 prefix 开头的状态，最多 PluginStateListLimit 项。
 func (s *Store) PluginStateList(ctx context.Context, plugin string, project *uuid.UUID, prefix string) ([]PluginStateEntry, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT key,value FROM plugin_state WHERE plugin_id=$1 AND project_id IS NOT DISTINCT FROM $2 AND starts_with(key,$3)
+	rows, err := s.Pool.Query(ctx, `SELECT key,value FROM plugin_state WHERE plugin_id=$1 AND project_id IS $2 AND substr(key,1,length($3))=$3
 		ORDER BY key LIMIT $4`, plugin, project, prefix, PluginStateListLimit)
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (PluginStateEntry, error) {
+	return db.CollectRows(rows, func(r db.CollectableRow) (PluginStateEntry, error) {
 		var e PluginStateEntry
 		return e, r.Scan(&e.Key, &e.Value)
 	})
@@ -124,12 +125,12 @@ func (s *Store) AddPluginEvent(ctx context.Context, ev PluginEvent, plugins []st
 	if len(ev.Data) == 0 {
 		ev.Data = json.RawMessage(`{}`)
 	}
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, err := tx.Exec(ctx, `INSERT INTO plugin_events(id,type,at,project_id,agent_id,task_id,run_id,data) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
 			ev.ID, ev.Type, ev.At, ev.ProjectID, ev.AgentID, ev.TaskID, ev.RunID, ev.Data); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `INSERT INTO plugin_event_deliveries(plugin_id,event_id) SELECT unnest($1::text[]), $2`, plugins, ev.ID)
+		_, err := tx.Exec(ctx, `INSERT INTO plugin_event_deliveries(plugin_id,event_id,next_attempt_at) SELECT value, $2, now() FROM json_each($1)`, plugins, ev.ID)
 		return err
 	})
 	return ev.ID, err
@@ -138,22 +139,30 @@ func (s *Store) AddPluginEvent(ctx context.Context, ev PluginEvent, plugins []st
 // ClaimPluginDelivery 取出该插件最早（按事件时间）到期的一条待投递事件：次数加一，下次时间推到 lease 之后，
 // 这样服务端在等待确认期间退出时，租约到期后会重投。没有到期的事件时返回 nil。
 func (s *Store) ClaimPluginDelivery(ctx context.Context, plugin string, lease time.Duration) (*PluginDelivery, error) {
-	var d PluginDelivery
-	err := s.Pool.QueryRow(ctx, `WITH next AS (
-			SELECT d.event_id FROM plugin_event_deliveries d JOIN plugin_events e ON e.id=d.event_id
+	var d *PluginDelivery
+	err := s.inTx(ctx, func(tx *db.Tx) error {
+		var eventID string
+		err := tx.QueryRow(ctx, `SELECT d.event_id FROM plugin_event_deliveries d JOIN plugin_events e ON e.id=d.event_id
 			WHERE d.plugin_id=$1 AND d.status='pending' AND d.next_attempt_at<=now()
-			ORDER BY e.at, e.id LIMIT 1 FOR UPDATE OF d SKIP LOCKED)
-		UPDATE plugin_event_deliveries d SET attempts=d.attempts+1, next_attempt_at=now()+$2::interval
-		FROM next, plugin_events e WHERE d.plugin_id=$1 AND d.event_id=next.event_id AND e.id=next.event_id
-		RETURNING e.id,e.type,e.at,e.project_id,e.agent_id,e.task_id,e.run_id,e.data,d.attempts`, plugin, lease).
-		Scan(&d.ID, &d.Type, &d.At, &d.ProjectID, &d.AgentID, &d.TaskID, &d.RunID, &d.Data, &d.Attempts)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
+			ORDER BY e.at, e.id LIMIT 1`, plugin).Scan(&eventID)
+		if errors.Is(err, db.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		d = &PluginDelivery{}
+		if err := tx.QueryRow(ctx, `UPDATE plugin_event_deliveries SET attempts=attempts+1, next_attempt_at=now()+$3
+			WHERE plugin_id=$1 AND event_id=$2 RETURNING attempts`, plugin, eventID, lease.Microseconds()).Scan(&d.Attempts); err != nil {
+			return err
+		}
+		return tx.QueryRow(ctx, `SELECT id,type,at,project_id,agent_id,task_id,run_id,data FROM plugin_events WHERE id=$1`, eventID).
+			Scan(&d.ID, &d.Type, &d.At, &d.ProjectID, &d.AgentID, &d.TaskID, &d.RunID, &d.Data)
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &d, nil
+	return d, nil
 }
 
 // AckPluginDelivery 记录宿主已确认处理完成，duration 是从发出到收到 ack 的时长。
@@ -175,7 +184,7 @@ func (s *Store) PluginDeliveryCounts(ctx context.Context, since time.Time) (deli
 // FailPluginDelivery 记录一次投递失败：retryAt 不为空时到时重投，为空时标为 failed、不再重投。
 func (s *Store) FailPluginDelivery(ctx context.Context, plugin, eventID, reason string, retryAt *time.Time) error {
 	_, err := s.Pool.Exec(ctx, `UPDATE plugin_event_deliveries SET last_error=$3,
-			status=CASE WHEN $4::timestamptz IS NULL THEN 'failed' ELSE 'pending' END, next_attempt_at=coalesce($4,next_attempt_at)
+			status=CASE WHEN $4 IS NULL THEN 'failed' ELSE 'pending' END, next_attempt_at=coalesce($4,next_attempt_at)
 		WHERE plugin_id=$1 AND event_id=$2 AND status='pending'`, plugin, eventID, reason, retryAt)
 	return err
 }
@@ -202,4 +211,26 @@ func NewPluginEventID() string {
 		}
 	}
 	return string(out[:])
+}
+
+// eventLogTables 是 events.db 里按时间清理的日志表（plugin_host_log 由插件宿主自己按 7 天清理）。
+var eventLogTables = []string{"lifecycle_events", "run_tool_events", "audit_log"}
+
+// PruneEventLogs 删除三张日志表里 before 之前的行，每次最多删 batch 行一个事务，避免长时间占住写连接。
+// 返回删掉的行数。
+func (s *Store) PruneEventLogs(ctx context.Context, before time.Time, batch int) (int64, error) {
+	var total int64
+	for _, table := range eventLogTables {
+		for {
+			tag, err := s.Pool.Exec(ctx, `DELETE FROM `+table+` WHERE rowid IN (SELECT rowid FROM `+table+` WHERE at < $1 LIMIT $2)`, before, batch)
+			if err != nil {
+				return total, err
+			}
+			total += tag.RowsAffected()
+			if tag.RowsAffected() < int64(batch) {
+				break
+			}
+		}
+	}
+	return total, nil
 }

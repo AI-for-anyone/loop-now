@@ -1,8 +1,8 @@
 # @loop-now/plugin-sdk
 
-Loop Now 插件**平台半边**的类型与运行库。Agent 半边是标准的 Pi 扩展，用 Pi 自己的类型（`@earendil-works/pi-coding-agent`）。
+Loop Now 插件**平台侧**的类型与运行库。Agent 侧是标准的 Pi 扩展，用 Pi 自己的类型（`@earendil-works/pi-coding-agent`）。
 
-- `PluginAPI` 等类型：平台半边入口 `register(api)` 拿到的接口；
+- `PluginAPI` 等类型：平台侧入口 `register(api)` 拿到的接口；
 - 事件目录 `EVENTS` 与每个事件的字段类型；
 - `createDelivery`：可靠的外发 HTTP（持久队列、退避重试、投递记录）；
 - `signBody` / `verifySignature`：外发请求的 HMAC-SHA256 签名与接收方校验；
@@ -157,7 +157,7 @@ export default function register(api: PluginAPI) {
 npx loop-now-plugin validate ./my-plugin --platform-version 2026.11
 ```
 
-输出 JSON：`{ ok, dir, manifest, findings: [{ level: "error" | "warning", path, message }] }`，有错误时退出码为 1。错误项与平台拒绝安装的规则一致；提醒项不影响安装。插件宿主的 `node <宿主>/dist/main.js validate <目录> --load` 还会加载平台半边、调用 `register`，核对代码实际订阅的事件与清单是否一致（会执行插件代码）。
+输出 JSON：`{ ok, dir, manifest, findings: [{ level: "error" | "warning", path, message }] }`，有错误时退出码为 1。错误项与平台拒绝安装的规则一致；提醒项不影响安装。插件宿主的 `node <宿主>/dist/main.js validate <目录> --load` 还会加载平台侧、调用 `register`，核对代码实际订阅的事件与清单是否一致（会执行插件代码）。
 
 ## 输出与进程
 

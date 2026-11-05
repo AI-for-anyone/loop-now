@@ -4,35 +4,35 @@
 
 ## 0. 已确认的决定
 
-1. 插件分两半：**Agent 半边**跑在该 Agent 的 Pi 进程里，就是标准的 Pi 扩展，原样暴露 Pi 的扩展 API；**平台半边**跑在一个共享的常驻 Node 宿主进程里（VS Code 扩展宿主模式），不是每插件一进程。
+1. 插件分两侧：**Agent 侧**跑在该 Agent 的 Pi 进程里，就是标准的 Pi 扩展，原样暴露 Pi 的扩展 API；**平台侧**跑在一个共享的常驻 Node 宿主进程里（VS Code 扩展宿主模式），不是每插件一进程。
 2. Hook 分四种：拦截（可阻止）、修改（顺序合并）、认领（第一个处理者赢）、观察（并发、结果忽略、排队不丢）。每种有默认超时和超时策略。
-3. 宿主给平台半边四样公共设施：持久状态、密钥保管、事件带够上下文（正文按权限另取）、配置表单由平台按 JSON Schema 生成。外发 HTTP 的重试与投递记录放在 SDK 库里，不进宿主；投递记录按约定的状态键写入，插件页读出展示。
-4. 包格式：一个目录加清单；两半都可选；安装来源为市场索引仓库、git、本地目录；先在项目启用，再按 Agent 授权；SDK 是 npm 包。
+3. 宿主给平台侧四样公共设施：持久状态、密钥保管、事件带够上下文（正文按权限另取）、配置表单由平台按 JSON Schema 生成。外发 HTTP 的重试与投递记录放在 SDK 库里，不进宿主；投递记录按约定的状态键写入，插件页读出展示。
+4. 包格式：一个目录加清单；两侧都可选；安装来源为市场索引仓库、git、本地目录；先在项目启用，再按 Agent 授权；SDK 是 npm 包。
 5. 不做沙箱。信任靠：来源分级、安装前展示组件与权限、启用时逐项确认、全局一键停用、日志归到插件。签名以后再加。
 6. webhook 通知做成随平台发布的官方插件，既是示例也替代外部身份收件箱的轮询。
 7. 项目只能由人（外部身份或控制台）创建，与插件无关，已上线。
 8. 旧系统（`plugins/host|sdk|builtin|pi|playwright`、`internal/server/platformplugin`、`web/src/features/plugins`、迁移 022 的表、相关 API）全部拆除，Playwright 按新格式重写。
 
-两处对已确认内容的细化（见 §2）：清单放在 `package.json` 里而不是单独文件，这样 Agent 半边就是一个标准的 Pi 包，任何现成的 Pi 包不改一字就能装进 Loop Now；给 Agent 的 MCP 服务器用 Pi 自己的 `mcp.json` 格式声明，由平台写进该 Agent 的 Pi 目录，不再经平台代理。
+两处对已确认内容的细化（见 §2）：清单放在 `package.json` 里而不是单独文件，这样 Agent 侧就是一个标准的 Pi 包，任何现成的 Pi 包不改一字就能装进 Loop Now；给 Agent 的 MCP 服务器用 Pi 自己的 `mcp.json` 格式声明，由平台写进该 Agent 的 Pi 目录，不再经平台代理。
 
 ## 1. 总体结构
 
 ```
 ┌──────────────┐  stdio JSON 行（控制、事件、确认、日志）  ┌──────────────────────┐
 │  Go 服务      │ ───────────────────────────────────────▶ │  插件宿主（Node，常驻） │
-│  loop-server  │ ◀─────────────────────────────────────── │  加载所有平台半边       │
+│  loop-server  │ ◀─────────────────────────────────────── │  加载所有平台侧         │
 │              │  HTTP /api/v1（插件令牌，按权限范围）     └──────────────────────┘
 │              │
 │              │  启动 Pi 时：-e 扩展文件、--skill、mcp.json、PATH、环境变量
 │              │ ───────────────────────────────────────▶ ┌──────────────────────┐
 └──────────────┘                                           │  Agent 的 Pi 进程       │
-                                                           │  加载已授权插件的 Agent 半边 │
+                                                           │  加载已授权插件的 Agent 侧   │
                                                            └──────────────────────┘
 ```
 
 - Go 服务负责：安装与版本、启用与授权、事件产生与持久化、宿主进程监护、插件令牌与权限校验、给 Pi 组装参数。
-- 宿主负责：加载平台半边、分发事件、执行 Hook、提供状态与密钥、收集日志。宿主自身不含任何业务逻辑。
-- Agent 半边由 Pi 负责加载和生命周期，平台只负责把文件和配置放到位。
+- 宿主负责：加载平台侧、分发事件、执行 Hook、提供状态与密钥、收集日志。宿主自身不含任何业务逻辑。
+- Agent 侧由 Pi 负责加载和生命周期，平台只负责把文件和配置放到位。
 
 ## 2. 包格式与清单
 
@@ -77,17 +77,17 @@
   - 平台原样保存并原样返回，保留作者写的键顺序。
   - 控制台按当前语言取，没有时依次用 zh-CN、en-US、作者写的第一项；服务端没有语言的地方（插件表的显示名、插件发件人名的兜底）依次用 zh-CN、en-US、第一项。
   - 发布到 npm 的插件，npm 期望 `description` 是字符串；只从 git、本地目录或市场安装的插件不受影响。
-- `loopNow.platform` 缺省表示没有平台半边；`pi.extensions` 为空表示没有 Agent 半边。只带 skills 的也是合法插件。
-- **清单说了算**：平台半边在代码里订阅的事件、调用的平台接口范围，必须在 `events`、`permissions` 内，超出的订阅在加载时报错并让插件进入"错误"状态；超出范围的 API 调用返回 403 并记录到插件日志。
+- `loopNow.platform` 缺省表示没有平台侧；`pi.extensions` 为空表示没有 Agent 侧。只带 skills 的也是合法插件。
+- **清单说了算**：平台侧在代码里订阅的事件、调用的平台接口范围，必须在 `events`、`permissions` 内，超出的订阅在加载时报错并让插件进入"错误"状态；超出范围的 API 调用返回 403 并记录到插件日志。
 - `configSchema` 由平台渲染成表单；`x-secret` 字段只写不回显；`x-scope: project` 字段在项目启用时可覆盖，其余为全局值。
 - `mcpServers` 的条目格式与 Pi `mcp.json` 完全一致：带非空 `command` 的是 stdio 条目（`args`、`env`、`cwd`），带 `http`/`https` `url` 的是 streamable HTTP 条目（`headers`、`oauth`）；`type` 可省，只能是 `stdio`、`http` 或 `streamable-http`，`sse` 拒绝（Pi 不支持）。两者都有又没写 `type` 时按 `url`（与 Pi 相同）。平台只查这几项，其余字段原样交给 Pi。`env` 与 `headers` 的值可用 `${...}` 引用环境变量；平台在启动 Pi 前把所有已授权插件的条目合并写入该 Agent 的 Pi 目录 `mcp.json`，并给 Pi 加 `-e builtin:mcp`（因为 `--no-extensions` 会同时关掉内置 MCP）。`command` 与 `args` 里的相对路径以插件安装目录为基准；占位符替换见 §2.1。
 - `bin` 列出的目录在启动 Pi 前加入该 Agent 的 PATH。
-- `accounts` 声明账号种类；账号由人在项目里添加，按 Agent 授权；授权后以环境变量注入该 Agent 的 Pi 和 MCP 进程，变量名 `LOOP_NOW_ACCOUNT_<KIND>_<FIELD>`（多账号时为 JSON 数组 `LOOP_NOW_ACCOUNTS_<KIND>`），同时平台半边可用 `api.accounts.list(projectId, kind)` 读取。
+- `accounts` 声明账号种类，`fields` 是账号字段的 JSON Schema：顶层字段加 `"x-secret": true` 的与配置的 secret 字段一样只写不回显（控制台只显示是否已填），`x-scope` 只对 `configSchema` 有效；账号由人在项目里添加，按 Agent 授权；授权后以环境变量注入该 Agent 的 Pi 和 MCP 进程，变量名 `LOOP_NOW_ACCOUNT_<KIND>_<FIELD>`（多账号时为 JSON 数组 `LOOP_NOW_ACCOUNTS_<KIND>`），同时平台侧可用 `api.accounts.list(projectId, kind)` 读取。
 - `minPlatformVersion` 按平台的发布版本比较（形如 `2026.11`），不满足时拒绝安装。
 - 安装目录为 `<work root>/platform/plugins/<id>/<version>/`，数据目录为 `<work root>/platform/plugins/<id>/data/`（跨版本保留，卸载时询问是否删除）。两者分别以环境变量 `LOOP_NOW_PLUGIN_ROOT`、`LOOP_NOW_PLUGIN_DATA` 提供给宿主和 Pi。
-- 依赖安装：npm 与 git 来源在安装时执行 `npm ci --ignore-scripts --omit=dev`（无锁文件则 `npm install --ignore-scripts --omit=dev`）；本地目录来源不安装不修改，依赖由作者负责（与 Pi 一致）。
+- 依赖安装：npm 与 git 来源在安装时执行 `npm ci --ignore-scripts --omit=dev --omit=peer`（无锁文件则 `npm install`，参数相同）；本地目录来源不安装不修改，依赖由作者负责（与 Pi 一致）。不装 `peerDependencies`（Pi 包按约定把 Pi 自己的包声明为 peer），所以插件的运行依赖要用的 peer 依赖须直接列进插件自己的 `dependencies`。
 
-### 2.1 Agent 半边给 Pi 的东西
+### 2.1 Agent 侧给 Pi 的东西
 
 启动某个 Agent 的 Pi 时，平台按该 Agent 已授权的插件：
 
@@ -101,11 +101,11 @@
 | 账号与配置 | 环境变量：`LOOP_NOW_PLUGIN_<ID>_CONFIG`（JSON，不含 secret 字段）、账号变量见上 |
 | `${LOOP_NOW_PLUGIN_ROOT}`、`${LOOP_NOW_PLUGIN_DATA}`、`${LOOP_NOW_AGENT_ID}` | 一个 Pi 会装多个插件，所以这三个占位符在合并 mcp.json 时按各自插件替换（条目里所有字符串，`url` 条目的 `url` 与 `headers` 也一样）；`command` 与 `args` 里以 `./`、`../` 开头的相对安装目录解析；其余 `${…}` 留给 Pi |
 
-Agent 半边调用平台接口用现成的 loopctl 和该 Agent 的进程令牌，不另发令牌；Agent 半边的权限就是该 Agent 的权限。
+Agent 侧调用平台接口用现成的 loopctl 和该 Agent 的进程令牌，不另发令牌；Agent 侧的权限就是该 Agent 的权限。
 
 Pi 扩展的 `ctx.ui` 对话类调用（confirm、select、input）在 RPC 模式下会以 `extension_ui_request` 发到平台：第一阶段平台按请求自带的超时默认值回应，第三阶段把它变成对话里的一个提问。
 
-### 2.2 平台半边的 API
+### 2.2 平台侧的 API
 
 ```ts
 import type { PluginAPI } from '@loop-now/plugin-sdk';
@@ -147,7 +147,7 @@ export default function register(api: PluginAPI) {
 - 事件持久化：Go 在事务提交后把事件写入 `plugin_events`，按订阅生成 `plugin_event_deliveries(plugin_id, event_id, status, attempts, last_error)`。观察类事件至少送达一次，宿主处理完回 `ack` 才标完成；宿主重启后从未完成处继续，顺序按事件时间，同一插件串行、不同插件并行。
 - 同步类（拦截、修改、认领）不持久化；按注册顺序逐个调用；默认超时 15 秒；超时策略：拦截默认放行（清单可声明 `"failClosed": true` 改为阻止），修改默认跳过该插件，认领默认当作未处理。超时只是不再等待，宿主随后向插件发 `signal`。
 - 崩溃策略：宿主退出即重启，5 分钟内第 3 次退出后停止重启，所有插件标为"宿主已停止"，插件页显示崩溃前最后在处理的事件和插件。人可在页面上"重新启动宿主"。
-- 一键停用：全局设置里"停用全部插件"，Go 停止宿主并不再给 Pi 挂载任何 Agent 半边；重新启用时恢复。
+- 一键停用：全局设置里"停用全部插件"，Go 停止宿主并不再给 Pi 挂载任何 Agent 侧；重新启用时恢复。
 - 版本更新：安装新版本后旧版本进程内卸载、新版本加载（`unload` 再 `load`），任务里的 Agent 不受影响（它们已经启动的 Pi 继续用旧文件直到自然重启）。
 
 ## 4. 事件目录
@@ -175,11 +175,11 @@ export default function register(api: PluginAPI) {
 
 - 来源：`loopctl plugin install <market-name>[@version] | <git url>[@ref] | <local dir>`；`plugin update <id>`、`plugin remove <id>`、`plugin list`、`plugin validate <dir>`、`plugin pack <dir>`。页面上同样三种来源。
 - 市场：一个 git 仓库，根目录 `loop-now-market.json`：`{ "name", "plugins": [{ "id", "source": "git:...@ref" | "npm:...", "version", "displayName", "description", "verified": true }] }`；`version` 是该条目当前版本，检查更新按它和已装版本比较；`displayName`、`description` 可以按语言写，规则同 §2。官方市场地址来自服务设置 `LOOP_NOW_PLUGIN_MARKET_URL`（官方市场建立前为空），全局设置里可加别的市场。
-- 信任分级：官方市场和 `verified` 的直接装；其他来源在页面上要确认，CLI 要 `--force`。安装前展示：两半各有什么（扩展文件数、Skill、MCP 服务器、CLI、操作按钮、渠道）、订阅的事件、权限范围、配置项、账号种类。
+- 信任分级：官方市场和 `verified` 的直接装；其他来源在页面上要确认，CLI 要 `--force`。安装前展示：两侧各有什么（扩展文件数、Skill、MCP 服务器、CLI、操作按钮、渠道）、订阅的事件、权限范围、配置项、账号种类。
 - 项目启用：在项目插件页启用并填写项目级配置；未启用的项目不产生事件给该插件，该项目的 Agent 不能被授权。
 - Agent 授权：在 Agent 配置页按插件勾选，并选择账号；授权后下次 Pi 启动生效（与上下文入口一致，不打断当前回合）。
 - 版本固定：安装时记录精确版本（npm 版本、git 提交），更新是显式操作；任务进行中不换文件。
-- 官方插件随平台发布：`webhook`（第一阶段）、`playwright`（第二阶段）、`hello`（两半各一个最小示例，兼作文档）。官方插件源码放在 `plugins/official/<id>/`，平台启动时注册为"内置来源"，安装与第三方一样走流程。
+- 官方插件随平台发布：`webhook`（第一阶段）、`playwright`（第二阶段）、`hello`（两侧各一个最小示例，兼作文档）。官方插件源码放在 `plugins/official/<id>/`，平台启动时注册为"内置来源"，安装与第三方一样走流程。
 
 ## 7. 页面
 
@@ -224,7 +224,7 @@ export default function register(api: PluginAPI) {
 - 不做沙箱、不做签名（以后再说）。
 - 不迁移旧插件数据。
 - 不在宿主里放业务逻辑；平台能力只通过事件和 HTTP API 暴露。
-- 不让 Agent 令牌获得管理权限；Agent 半边的权限等于该 Agent 的权限。
+- 不让 Agent 令牌获得管理权限；Agent 侧的权限等于该 Agent 的权限。
 
 ## 11. 第三阶段合同细化（2026-10-27 补）
 

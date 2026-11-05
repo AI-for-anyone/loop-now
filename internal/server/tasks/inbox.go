@@ -5,9 +5,10 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/store"
+
+	"loop-now/internal/server/db"
 )
 
 func (s *Service) ResolveTaskRecipient(ctx context.Context, agentID, taskID uuid.UUID) (store.Party, bool, error) {
@@ -55,7 +56,6 @@ func (s *Service) DeliverInbox(ctx context.Context, msg store.NewInboxMessage) e
 		return nil, s.DeliverInboxTx(ctx, m.Tx, m, msg)
 	})
 	if err == nil {
-		_ = s.mirrorQueue(ctx, inst.ID)
 		s.interruptOldTurns(ctx, inst.TaskID)
 		s.Kick(inst.TaskID)
 		s.KickInbox(inst.ID)
@@ -64,7 +64,7 @@ func (s *Service) DeliverInbox(ctx context.Context, msg store.NewInboxMessage) e
 }
 
 // DeliverInboxTx reuses the already locked aggregate; it never opens a transaction.
-func (s *Service) DeliverInboxTx(ctx context.Context, tx pgx.Tx, m *store.TaskMutation, msg store.NewInboxMessage) error {
+func (s *Service) DeliverInboxTx(ctx context.Context, tx *db.Tx, m *store.TaskMutation, msg store.NewInboxMessage) error {
 	inst := store.TaskInstance{ID: msg.To.RuntimeID, AgentID: msg.To.ID, TaskID: m.Record.View.Task.ID}
 
 	if m.Record.Ended() {
@@ -135,7 +135,6 @@ func (s *Service) InboxCommitted(ctx context.Context, runtime uuid.UUID) {
 	if err != nil {
 		return
 	}
-	_ = s.mirrorQueue(ctx, runtime)
 	s.interruptOldTurns(ctx, inst.TaskID)
 	s.Kick(inst.TaskID)
 	s.KickInbox(runtime)

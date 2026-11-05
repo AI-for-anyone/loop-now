@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
+
+	"loop-now/internal/server/db"
 )
 
 type CLIImportItem struct {
@@ -85,24 +86,8 @@ func IsCLIImportCommitUnknown(err error) bool {
 	return errors.As(err, &e)
 }
 
-func (s *Store) cliImportTx(ctx context.Context, fn func(pgx.Tx) error) error {
-	tx, err := s.Pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = tx.Rollback(cleanup)
-	}()
-	if err = fn(tx); err != nil {
-		return err
-	}
-	if err = tx.Commit(ctx); err != nil {
-		if errors.Is(err, pgx.ErrTxCommitRollback) {
-			return err
-		}
-		return &CLIImportCommitUnknown{}
-	}
-	return nil
+// cliImportTx 在写事务中执行 fn。SQLite 的提交不可取消，提交返回的错误就是确定的失败，不再有“结果未知”；
+// CLIImportCommitUnknown 留给导入服务的既有分支，这里不再产生。
+func (s *Store) cliImportTx(ctx context.Context, fn func(*db.Tx) error) error {
+	return s.Pool.InTx(ctx, fn)
 }

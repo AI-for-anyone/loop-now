@@ -167,7 +167,7 @@ try {
   assert.equal(writes.length, 3); assert.deepEqual(writes.map(r => r.status).sort(), [202, 202, 412])
   assert.equal(issuer.length, 1)
   assert.ok(!forwarded.some(r => r.method !== 'GET' && /messages|tasks|model-auth|credential-selections/.test(r.path)))
-  write('browser-results.json', { passed: true, boundary: 'actual React/forwarded temporary App; TEST PG; injected helper and locally fulfilled issuer, not OAuth/runtime/QA', checks, starts, faults, issuer, forwarded, denied, errors })
+  write('browser-results.json', { passed: true, boundary: 'actual React/forwarded temporary App; temporary SQLite; injected helper and locally fulfilled issuer, not OAuth/runtime/QA', checks, starts, faults, issuer, forwarded, denied, errors })
   await context.close()
 } catch (error) {
   const sourceLine = error.stack?.match(/lark-login-app\.mjs:\d+:\d+/)?.[0] ?? null

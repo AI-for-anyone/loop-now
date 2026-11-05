@@ -12,7 +12,7 @@ assert.equal(api.hostname,'127.0.0.1');assert.equal(api.protocol,'http:');assert
 assert.ok(resolve(m.privateAuthPath).startsWith(resolve(m.privateRoot)+sep));assert.ok(resolve(m.cliHome).startsWith(resolve(m.privateRoot)+sep))
 const auth=JSON.parse(readFileSync(m.privateAuthPath,'utf8')),agentURL=new URL(auth.url);assert.equal(agentURL.origin,api.origin);assert.equal(agentURL.pathname,'/agent/v1');assert.ok(auth.token)
 const root=fileURLToPath(new URL('../',import.meta.url)),out=new URL('../test-results/add-task-node-inbox-chat/app/',import.meta.url);mkdirSync(out,{recursive:true})
-const report={boundary:'actual React -> actual forwarded ephemeral App/TEST PG+Redis/fakePi; actual runtime CLI controlled by test, not autonomous model',checks:[],posts:[],controls:[],cli:[],errors:[],console:[],expectedHTTPConsole:[],denied:[],forwarded:[],inputs:{}}
+const report={boundary:'actual React -> actual forwarded ephemeral App/temporary SQLite/fakePi; actual runtime CLI controlled by test, not autonomous model',checks:[],posts:[],controls:[],cli:[],errors:[],console:[],expectedHTTPConsole:[],denied:[],forwarded:[],inputs:{}}
 for(const path of ['../api/openapi.yaml','src/api/schema.gen.ts','src/features/tasks/NodeRecordPanel.tsx','src/features/tasks/NodeMessageComposer.tsx','src/api/task-inbox.ts','src/features/tasks/TaskRunRecord.tsx','scripts/task-inbox-app.mjs'])report.inputs[path]=createHash('sha256').update(readFileSync(root+path)).digest('hex')
 let browser,context,page,preview,closing=false
 const check=(name,value)=>{report.checks.push({name,passed:!!value});assert.ok(value,name)}

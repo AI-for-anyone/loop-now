@@ -24,7 +24,7 @@ func TestProjectCredentialCLIWithApp(t *testing.T) {
 	w := newWorld(t, true)
 	s := w.start(nil)
 	defer s.stop()
-	t.Logf("isolated resources: schema=%s redisPrefix=%s consoleAddr=%s tlsAddr=%s", w.schema, w.cfg.RedisKeyPrefix, w.addr, w.extAddr)
+	t.Logf("isolated resources: dataDir=%s consoleAddr=%s tlsAddr=%s", w.cfg.DataDir, w.addr, w.extAddr)
 	_, _, token := s.issueToken("", "project-credential-cli", nil)
 	ext := newLoopctl(t, map[string]string{"LOOPCTL_URL": s.ext, "LOOPCTL_TOKEN": token, "LOOPCTL_CA_FILE": w.caFile})
 	project := s.defaultProject()
@@ -91,9 +91,11 @@ func TestProjectCredentialCLIWithApp(t *testing.T) {
 	if v := modelSelection(); v["status"] != "account_deleted" || v["selectedAccountId"] != account || v["resolvedAccountId"] != nil {
 		t.Fatal("deleted explicit selection fell back")
 	}
-	for _, preserved := range []string{oldVersion, replaced["currentVersionId"].(string)} {
-		if _, err := s.a.Store.GetModelAuthVersion(context.Background(), uuid.MustParse(preserved)); err != nil {
-			t.Fatal("account deletion removed historical model version")
+	// 删除账号时清掉没有进行中任务在用的版本（迁移 030 起的清理规则）。
+	for _, v := range []string{oldVersion, replaced["currentVersionId"].(string)} {
+		var exists bool
+		if err := s.a.Store.Pool.QueryRow(context.Background(), "SELECT EXISTS(SELECT 1 FROM model_auth_versions WHERE id=$1)", v).Scan(&exists); err != nil || exists {
+			t.Fatal("account deletion kept a model version no running task uses", err)
 		}
 	}
 	tombstone := ext.run("project", "model-account", "get", project, account).ok(t)
@@ -144,10 +146,10 @@ func TestProjectCredentialCLIWithApp(t *testing.T) {
 		t.Fatal("CLI rename changed credential version")
 	}
 	deleted := ext.run("project", "cli-account", "delete", project, cliAccount, "--expected-revision", fmt.Sprintf("%.0f", cliRenamed["revision"]), "--yes").ok(t)
-	for _, preserved := range []string{cliBefore["currentVersionId"].(string), cliReplaced["currentVersionId"].(string)} {
+	for _, v := range []string{cliBefore["currentVersionId"].(string), cliReplaced["currentVersionId"].(string)} {
 		var exists bool
-		if err := s.a.Store.Pool.QueryRow(context.Background(), `SELECT EXISTS(SELECT 1 FROM project_cli_versions WHERE id=$1)`, uuid.MustParse(preserved)).Scan(&exists); err != nil || !exists {
-			t.Fatal("account deletion removed historical CLI version")
+		if err := s.a.Store.Pool.QueryRow(context.Background(), `SELECT EXISTS(SELECT 1 FROM project_cli_versions WHERE id=$1)`, uuid.MustParse(v)).Scan(&exists); err != nil || exists {
+			t.Fatal("account deletion kept a CLI version no running task uses", err)
 		}
 	}
 	if deleted["status"] != "deleted" || deleted["deletedAt"] == nil {
@@ -256,5 +258,5 @@ func TestProjectCredentialUnknownWriteWithApp(t *testing.T) {
 	if len(direct.run("project", "model-account", "list", project, "--provider", provider).ok(t)["accounts"].([]any)) != 1 {
 		t.Fatal("unknown response created duplicate account")
 	}
-	t.Logf("actual TLS App response loss: committed once, CLI unknown/exit4, no replay; schema=%s redisPrefix=%s", w.schema, w.cfg.RedisKeyPrefix)
+	t.Logf("actual TLS App response loss: committed once, CLI unknown/exit4, no replay; dataDir=%s", w.cfg.DataDir)
 }

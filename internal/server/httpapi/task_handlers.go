@@ -432,10 +432,10 @@ func (s *Server) streamTasks(w http.ResponseWriter, r *http.Request, project boo
 	} else {
 		streamKey = coord.TaskStream(taskID.String())
 	}
-	redisCursor := "0-0"
+	streamCursor := "0-0"
 	if s.Coord != nil {
 		if _, last, err := s.Coord.Snapshot(ctx, streamKey, ""); err == nil && last != "" {
-			redisCursor = last
+			streamCursor = last
 		}
 	}
 	cursor := position
@@ -485,11 +485,11 @@ func (s *Server) streamTasks(w http.ResponseWriter, r *http.Request, project boo
 				return
 			}
 		case <-poll.C:
-			// Redis中继游标只用于消费提醒。持久游标必须由PG有序补齐推进，
+			// 中继游标只用于消费提醒。持久游标必须由数据库有序补齐推进，
 			// 新中继不能越过重连积压或超过单批100条的历史。
 			if s.Coord != nil {
-				if relayed, err := s.Coord.ReadEvents(ctx, streamKey, redisCursor, 100, 0); err == nil && len(relayed) > 0 {
-					redisCursor = relayed[len(relayed)-1].ID
+				if relayed, err := s.Coord.ReadEvents(ctx, streamKey, streamCursor, 100, 0); err == nil && len(relayed) > 0 {
+					streamCursor = relayed[len(relayed)-1].ID
 				}
 			}
 

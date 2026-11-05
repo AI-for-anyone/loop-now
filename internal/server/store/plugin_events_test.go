@@ -10,7 +10,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/server/db"
 	"loop-now/internal/server/store"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 // pluginEvents 是写入的插件事件，按 id 排序；data 只取 keys 里的字段。
@@ -27,7 +29,7 @@ type pluginEvent struct {
 func readPluginEvents(t *testing.T, s *store.Store) []pluginEvent {
 	t.Helper()
 	rows, err := s.Pool.Query(context.Background(), `SELECT e.type,e.project_id,e.agent_id,e.task_id,e.run_id,e.data,
-		(SELECT array_agg(plugin_id ORDER BY plugin_id) FROM plugin_event_deliveries d WHERE d.event_id=e.id) FROM plugin_events e ORDER BY e.id`)
+		(SELECT json_group_array(plugin_id ORDER BY plugin_id) FROM plugin_event_deliveries d WHERE d.event_id=e.id) FROM plugin_events e ORDER BY e.id`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,21 +56,26 @@ func eventTypes(evs []pluginEvent) []string {
 func subscribe(t *testing.T, s *store.Store, id string, events []string) {
 	t.Helper()
 	m, _ := json.Marshal(map[string]any{"events": events})
-	if _, err := s.Pool.Exec(context.Background(), `INSERT INTO plugins(id,display_name,source,version,manifest,install_dir,status) VALUES($1,$1,'{}','1',$2,'/x','installed')`, id, m); err != nil {
+	if _, err := s.Pool.Exec(context.Background(), `INSERT INTO plugins(id,display_name,source,version,manifest,install_dir,status) VALUES($1,$1,'{}','1',$2,'/x','installed')`, id, json.RawMessage(m)); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// 触发器与任务事务按订阅与启用写观察类事件：项目内事件只给在该项目启用了插件的，平台（项目为空）的给全部订阅者；
+// 捕获触发器与任务事务按订阅与启用写观察类事件：项目内事件只给在该项目启用了插件的，平台（项目为空）的给全部订阅者；
 // 收件事件在提交时看得到同一事务里的提问；正文只给前 80 个字符；全局停用时不写。
 func TestPluginEventProduction(t *testing.T) {
 	ctx := context.Background()
-	s := taskConsoleStore(t)
-	task, node, agent, initial := taskConsoleRecord(t, s)
-	var project uuid.UUID
-	if err := s.Pool.QueryRow(ctx, `SELECT project_id FROM task_records WHERE id=$1`, task).Scan(&project); err != nil {
+	s := sqlitetest.NewStore(t)
+	dc, err := s.EnsureDefaults(ctx, "组织", "项目")
+	if err != nil {
 		t.Fatal(err)
 	}
+	project := dc.Project.ID
+	owner, err := s.CreateAgent(ctx, store.ProjectScope(project), "运行者", "anthropic", "m", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := owner.ID
 	all := []string{"agent.created", "agent.updated", "agent.deleted", "run.queued", "run.started", "run.ended", "pi.started", "pi.exited", "model.retry", "context.compacted",
 		"inbox.received", "inbox.read", "question.asked", "question.answered", "sleep.requested", "sleep.woken", "task.blocked", "node.blocked"}
 	subscribe(t, s, "obs", all)
@@ -108,8 +115,8 @@ func TestPluginEventProduction(t *testing.T) {
 	// 运行与进程：lifecycle_events 的类型名换成插件事件名，run.ended 带这一轮的 token。
 	run := uuid.New()
 	base := time.Date(2026, 10, 27, 9, 0, 0, 0, time.UTC)
-	must(`INSERT INTO runs(id,agent_id,user_message_id,config_version,priority,status,origin,queued_at,started_at,running_at,ended_at,end_reason)
-		VALUES($1,$2,$3,1,1,'interrupted','console',$4,$4,$4,$4,'user_interrupt')`, run, agent, uuid.New(), base)
+	must(`INSERT INTO runs(id,agent_id,user_message_id,config_version,priority,queue_seq,status,origin,queued_at,started_at,running_at,ended_at,end_reason)
+		VALUES($1,$2,$3,1,1,1,'interrupted','console',$4,$4,$4,$4,'user_interrupt')`, run, agent, uuid.New(), base)
 	life := func(typ string, data map[string]any) {
 		t.Helper()
 		if err := s.AddEvent(ctx, store.LifecycleEvent{AgentID: agent, RunID: &run, Type: typ, At: base, Data: data}); err != nil {
@@ -143,23 +150,13 @@ func TestPluginEventProduction(t *testing.T) {
 	// 收件与提问：提交时触发，同一事务里的提问已可见；正文只给前 80 个字符。
 	msg := uuid.New()
 	text := strings.Repeat("长", 100)
-	tx, err := s.Pool.Begin(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, q := range []string{
-		`INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,to_kind,text,created_at) VALUES($1,$1,'agent',$2,'console',$3,$4)`,
-		`INSERT INTO inbox_questions(message_id,options,expires_at) VALUES($1,'[]',now()+interval '1 hour')`,
-	} {
-		args := []any{msg}
-		if strings.Contains(q, "inbox_messages") {
-			args = append(args, agent, text, base)
+	if err := s.Pool.InTx(ctx, func(tx *db.Tx) error {
+		if _, err := tx.Exec(ctx, `INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,to_kind,text,created_at) VALUES($1,$1,'agent',$2,'console',$3,$4)`, msg, agent, text, base); err != nil {
+			return err
 		}
-		if _, err := tx.Exec(ctx, q, args...); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := tx.Commit(ctx); err != nil {
+		_, err := tx.Exec(ctx, `INSERT INTO inbox_questions(message_id,options,expires_at) VALUES($1,'[]',now()+3600000000)`, msg)
+		return err
+	}); err != nil {
 		t.Fatal(err)
 	}
 	must(`UPDATE inbox_messages SET read_at=now() WHERE id=$1`, msg)
@@ -177,6 +174,32 @@ func TestPluginEventProduction(t *testing.T) {
 	}
 	must(`DELETE FROM plugin_events`)
 
+	// sleep 与全局停用。
+	sleep := uuid.New()
+	must(`INSERT INTO agent_sleeps(id,scope_key,scope_kind,mode,agent_id,session_epoch,source_run_id,action_id,body_hash,receipt,state,seconds,timer_run_id,revision)
+		VALUES($1,'normal/'||$2,'normal','normal',$2,1,$3,$4,$5,'{}','requested',60,$6,1)`, sleep, agent, uuid.New(), uuid.New(), make([]byte, 32), uuid.New())
+	must(`UPDATE agent_sleeps SET state='sleeping', entered_at=now(), wake_at=now()+60000000 WHERE id=$1`, sleep)
+	must(`UPDATE plugin_settings SET disabled=true`)
+	must(`UPDATE agent_sleeps SET state='woken', ended_at=now(), end_reason='deadline', wake_run_id=$2 WHERE id=$1`, sleep, uuid.New())
+	evs = readPluginEvents(t, s)
+	if got := strings.Join(eventTypes(evs), ","); got != "sleep.requested" || evs[0].Data["sleepId"] != sleep.String() {
+		t.Fatalf("sleep 与停用：%s %+v", got, evs)
+	}
+}
+
+// 任务事务比较前后两份文档写 task.blocked 与 node.blocked。
+func TestPluginTaskEvents(t *testing.T) {
+	ctx := context.Background()
+	s := taskConsoleStore(t)
+	task, node, agent, _ := taskConsoleRecord(t, s)
+	var project uuid.UUID
+	if err := s.Pool.QueryRow(ctx, `SELECT project_id FROM task_records WHERE id=$1`, task).Scan(&project); err != nil {
+		t.Fatal(err)
+	}
+	subscribe(t, s, "obs", []string{"task.blocked", "node.blocked"})
+	if _, err := s.Pool.Exec(ctx, `INSERT INTO project_plugins(project_id,plugin_id,enabled) VALUES($1,'obs',true)`, project); err != nil {
+		t.Fatal(err)
+	}
 	// 任务与节点：任务事务比较前后两份文档。
 	if _, err := s.MutateTask(ctx, task, nil, func(m *store.TaskMutation) (any, error) {
 		reason := "缺少输入"
@@ -190,25 +213,11 @@ func TestPluginEventProduction(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	evs = readPluginEvents(t, s)
+	evs := readPluginEvents(t, s)
 	if got := strings.Join(eventTypes(evs), ","); got != "task.blocked,node.blocked" {
 		t.Fatalf("任务事件：%s", got)
 	}
 	if *evs[0].TaskID != task || evs[0].Data["reason"] != "缺少输入" || evs[1].Data["nodeRunId"] != node.String() || *evs[1].AgentID != agent {
 		t.Fatalf("任务事件内容：%+v", evs)
-	}
-	_ = initial
-	must(`DELETE FROM plugin_events`)
-
-	// sleep 与全局停用。
-	sleep := uuid.New()
-	must(`INSERT INTO agent_sleeps(id,scope_key,scope_kind,mode,agent_id,session_epoch,source_run_id,action_id,body_hash,receipt,state,seconds,timer_run_id,revision)
-		VALUES($1,'normal/'||$2::uuid::text,'normal','normal',$2::uuid,1,$3,$4,$5,'{}','requested',60,$6,1)`, sleep, agent, uuid.New(), uuid.New(), make([]byte, 32), uuid.New())
-	must(`UPDATE agent_sleeps SET state='sleeping', entered_at=now(), wake_at=now()+interval '1 minute' WHERE id=$1`, sleep)
-	must(`UPDATE plugin_settings SET disabled=true`)
-	must(`UPDATE agent_sleeps SET state='woken', ended_at=now(), end_reason='deadline', wake_run_id=$2 WHERE id=$1`, sleep, uuid.New())
-	evs = readPluginEvents(t, s)
-	if got := strings.Join(eventTypes(evs), ","); got != "sleep.requested" || evs[0].Data["sleepId"] != sleep.String() {
-		t.Fatalf("sleep 与停用：%s %+v", got, evs)
 	}
 }

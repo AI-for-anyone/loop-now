@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"loop-now/internal/server/clicredential"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -17,12 +18,12 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"loop-now/internal/server/clicredential"
 )
 
 func TestGoogleActualTwoProcessesPGTwoRefreshWaves(t *testing.T) { runGoogleNativeProcesses(t, false) }
-func TestGoogleActualBrokerDisconnectFailsClosed(t *testing.T)   { runGoogleNativeProcesses(t, true) }
+
+func TestGoogleActualBrokerDisconnectFailsClosed(t *testing.T) { runGoogleNativeProcesses(t, true) }
+
 func runGoogleNativeProcesses(t *testing.T, disconnect bool) {
 	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
 		t.Skip("reviewed private runtime is darwin-arm64 only")

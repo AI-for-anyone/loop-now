@@ -5,7 +5,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
+
+	"loop-now/internal/server/db"
 )
 
 // Organization 是组织。
@@ -37,9 +38,9 @@ type DefaultContext struct {
 // 重复或并发调用不会产生重复记录。名称只在首次创建时使用。
 func (s *Store) EnsureDefaults(ctx context.Context, orgName, projectName string) (DefaultContext, error) {
 	var dc DefaultContext
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, err := tx.Exec(ctx, `INSERT INTO organizations (id, name, is_default) VALUES ($1, $2, true)
-			ON CONFLICT ((true)) WHERE is_default DO NOTHING`, uuid.Must(uuid.NewV7()), orgName); err != nil {
+			ON CONFLICT (is_default) WHERE is_default DO NOTHING`, uuid.Must(uuid.NewV7()), orgName); err != nil {
 			return err
 		}
 		if err := tx.QueryRow(ctx, `SELECT id, name, created_at FROM organizations WHERE is_default`).

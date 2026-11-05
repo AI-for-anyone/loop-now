@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/url"
@@ -12,9 +13,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"loop-now/internal/server/apperr"
+	"loop-now/internal/server/db"
 	"loop-now/internal/server/taskmodel"
 )
 
@@ -47,7 +48,7 @@ type TaskEvent struct {
 	CreatedAt         time.Time
 }
 type TaskMutation struct {
-	Tx        pgx.Tx
+	Tx        *db.Tx
 	Record    *taskmodel.Record
 	ManagerID *uuid.UUID
 	events    []TaskEvent
@@ -67,17 +68,14 @@ func (m *TaskMutation) Emit(kind string, data any) error {
 	return nil
 }
 
-func actionLock(ctx context.Context, tx pgx.Tx, a TaskAction) (json.RawMessage, bool, error) {
+func actionLock(ctx context.Context, tx *db.Tx, a TaskAction) (json.RawMessage, bool, error) {
 	if a.ID == uuid.Nil || a.ActorKey == "" || a.Operation == "" {
 		return nil, false, apperr.Invalid("actionId", "必须提供有效动作ID")
-	}
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, a.ActorKey+":"+a.ID.String()); err != nil {
-		return nil, false, err
 	}
 	var op string
 	var hash, body []byte
 	err := tx.QueryRow(ctx, `SELECT operation,body_hash,response FROM task_actions WHERE actor_key=$1 AND action_id=$2`, a.ActorKey, a.ID).Scan(&op, &hash, &body)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, db.ErrNoRows) {
 		return nil, false, nil
 	}
 	if err != nil {
@@ -89,17 +87,17 @@ func actionLock(ctx context.Context, tx pgx.Tx, a TaskAction) (json.RawMessage, 
 	}
 	return body, true, nil
 }
-func recordAction(ctx context.Context, tx pgx.Tx, a TaskAction, taskID uuid.UUID, value any) (json.RawMessage, error) {
+func recordAction(ctx context.Context, tx *db.Tx, a TaskAction, taskID uuid.UUID, value any) (json.RawMessage, error) {
 	b, err := json.Marshal(value)
 	if err != nil {
 		return nil, err
 	}
 	hash := sha256.Sum256(a.Body)
 	var stored []byte
-	err = tx.QueryRow(ctx, `INSERT INTO task_actions(actor_key,action_id,operation,task_id,body_hash,response) VALUES($1,$2,$3,$4,$5,$6) RETURNING response`, a.ActorKey, a.ID, a.Operation, taskID, hash[:], b).Scan(&stored)
+	err = tx.QueryRow(ctx, `INSERT INTO task_actions(actor_key,action_id,operation,task_id,body_hash,response) VALUES($1,$2,$3,$4,$5,$6) RETURNING response`, a.ActorKey, a.ID, a.Operation, taskID, hash[:], json.RawMessage(b)).Scan(&stored)
 	return stored, err
 }
-func saveTask(ctx context.Context, tx pgx.Tx, r *taskmodel.Record) error {
+func saveTask(ctx context.Context, tx *db.Tx, r *taskmodel.Record) error {
 	r.View.Task.Version++
 	r.View.Task.UpdatedAt = time.Now().UTC()
 	b, err := json.Marshal(r)
@@ -107,18 +105,15 @@ func saveTask(ctx context.Context, tx pgx.Tx, r *taskmodel.Record) error {
 		return err
 	}
 	var project uuid.UUID
-	err = tx.QueryRow(ctx, `UPDATE task_records SET status=$2,document=$3,version=$4,updated_at=$5,ended_at=$6 WHERE id=$1 RETURNING project_id`, r.View.Task.ID, r.View.Task.Status, b, r.View.Task.Version, r.View.Task.UpdatedAt, r.View.Task.EndedAt).Scan(&project)
+	err = tx.QueryRow(ctx, `UPDATE task_records SET status=$2,document=$3,version=$4,updated_at=$5,ended_at=$6 WHERE id=$1 RETURNING project_id`, r.View.Task.ID, r.View.Task.Status, json.RawMessage(b), r.View.Task.Version, r.View.Task.UpdatedAt, r.View.Task.EndedAt).Scan(&project)
 	if err != nil || r.View.Task.EndedAt == nil {
 		return err
 	}
 	// Every terminal path saves here: wipe what deleted accounts kept for it.
 	return settleProjectWipesTx(ctx, tx, project)
 }
-func emitTaskEvents(ctx context.Context, tx pgx.Tx, m *TaskMutation) error {
+func emitTaskEvents(ctx context.Context, tx *db.Tx, m *TaskMutation) error {
 	// 项目事件跨任务续传：序号分配与事务提交必须串行，否则后提交的小序号会被游标跳过。
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, int64(0x6c6e5f7461736b65)); err != nil {
-		return err
-	}
 	if err := m.Emit("task.updated", map[string]any{"task": m.Record.View.Task}); err != nil {
 		return err
 	}
@@ -144,7 +139,7 @@ func emitTaskEvents(ctx context.Context, tx pgx.Tx, m *TaskMutation) error {
 
 // emitTaskPluginEventsTx 比较任务前后两份文档（新建时 before 为空），为任务与节点的状态变化写插件的观察类事件。
 // task.started 只在第一次从 preparing 进入 running 时写；node.started 在节点新出现或从 queued 进入 running 时写。
-func emitTaskPluginEventsTx(ctx context.Context, tx pgx.Tx, before, after *taskmodel.Record) error {
+func emitTaskPluginEventsTx(ctx context.Context, tx *db.Tx, before, after *taskmodel.Record) error {
 	t := after.View.Task
 	project, task := t.ProjectID, t.ID
 	old := ""
@@ -203,7 +198,7 @@ func (s *Store) TaskActionRecorded(ctx context.Context, actorKey string, id uuid
 func (s *Store) MutateTask(ctx context.Context, id uuid.UUID, action *TaskAction, fn func(*TaskMutation) (any, error)) (json.RawMessage, error) {
 	var out json.RawMessage
 	changed := false
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var cached json.RawMessage
 		var replay bool
 		if action != nil {
@@ -224,11 +219,11 @@ func (s *Store) MutateTask(ctx context.Context, id uuid.UUID, action *TaskAction
 		}
 		var manager *uuid.UUID
 		var projectName string
-		if err := tx.QueryRow(ctx, `SELECT manager_agent_id,name FROM projects WHERE id=$1 FOR SHARE`, pid).Scan(&manager, &projectName); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT manager_agent_id,name FROM projects WHERE id=$1`, pid).Scan(&manager, &projectName); err != nil {
 			return err
 		}
 		var raw []byte
-		if err := tx.QueryRow(ctx, `SELECT document FROM task_records WHERE id=$1 FOR UPDATE`, id).Scan(&raw); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT document FROM task_records WHERE id=$1`, id).Scan(&raw); err != nil {
 			return notFoundIfNoRows(err, "任务")
 		}
 		var record, before taskmodel.Record
@@ -300,18 +295,18 @@ func (s *Store) MutateTask(ctx context.Context, id uuid.UUID, action *TaskAction
 	return out, err
 }
 
-func (s *Store) CreateTask(ctx context.Context, projectID, managerID uuid.UUID, action TaskAction, build func(pgx.Tx) (taskmodel.Record, []TaskInstance, error)) (json.RawMessage, error) {
+func (s *Store) CreateTask(ctx context.Context, projectID, managerID uuid.UUID, action TaskAction, build func(*db.Tx) (taskmodel.Record, []TaskInstance, error)) (json.RawMessage, error) {
 	var out json.RawMessage
 	created := false
 	action.Body = append(append([]byte(nil), action.Body...), []byte(projectID.String())...)
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.inTx(ctx, func(tx *db.Tx) error {
 		b, found, err := actionLock(ctx, tx, action)
 		if err != nil {
 			return err
 		}
 		var current *uuid.UUID
 		var projectName string
-		if err = tx.QueryRow(ctx, `SELECT manager_agent_id,name FROM projects WHERE id=$1 AND deleted_at IS NULL FOR SHARE`, projectID).Scan(&current, &projectName); err != nil {
+		if err = tx.QueryRow(ctx, `SELECT manager_agent_id,name FROM projects WHERE id=$1 AND deleted_at IS NULL`, projectID).Scan(&current, &projectName); err != nil {
 			return notFoundIfNoRows(err, "项目")
 		}
 		if current == nil || *current != managerID {
@@ -334,7 +329,7 @@ func (s *Store) CreateTask(ctx context.Context, projectID, managerID uuid.UUID, 
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO task_records(id,project_id,status,document,version,created_at,updated_at) VALUES($1,$2,$3,$4,1,$5,$5)`, r.View.Task.ID, projectID, r.View.Task.Status, encoded, r.View.Task.CreatedAt)
+		_, err = tx.Exec(ctx, `INSERT INTO task_records(id,project_id,status,document,version,created_at,updated_at) VALUES($1,$2,$3,$4,1,$5,$5)`, r.View.Task.ID, projectID, r.View.Task.Status, json.RawMessage(encoded), r.View.Task.CreatedAt)
 		if err != nil {
 			return err
 		}
@@ -343,7 +338,8 @@ func (s *Store) CreateTask(ctx context.Context, projectID, managerID uuid.UUID, 
 			if err != nil {
 				return err
 			}
-			_, err = tx.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,sources,fork_source) VALUES($1,$2,$3,$4,$5,encode(sha256($5),'hex'),$6,$7)`, inst.ID, r.View.Task.ID, inst.AgentID, inst.AgentName, inst.Snapshot, sources, inst.ForkSource)
+			sum := sha256.Sum256(inst.Snapshot)
+			_, err = tx.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,sources,fork_source) VALUES($1,$2,$3,$4,$5,$8,$6,$7)`, inst.ID, r.View.Task.ID, inst.AgentID, inst.AgentName, inst.Snapshot, json.RawMessage(sources), inst.ForkSource, hex.EncodeToString(sum[:]))
 			if err != nil {
 				return err
 			}
@@ -371,7 +367,7 @@ func taskLink(project string, id uuid.UUID) string {
 
 func (s *Store) GetTask(ctx context.Context, id uuid.UUID) (taskmodel.Record, error) {
 	var r taskmodel.Record
-	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	tx, err := s.Pool.BeginRead(ctx)
 	if err != nil {
 		return r, err
 	}
@@ -430,7 +426,7 @@ func (s *Store) ListTasks(ctx context.Context, projectID uuid.UUID, cursor strin
 		}
 		at, after = &t, &id
 	}
-	rows, err := s.Pool.Query(ctx, `SELECT t.document,p.name FROM task_records t JOIN projects p ON p.id=t.project_id WHERE t.project_id=$1 AND ($2::timestamptz IS NULL OR (t.created_at,t.id)<($2,$3)) ORDER BY t.created_at DESC,t.id DESC LIMIT $4`, projectID, at, after, limit+1)
+	rows, err := s.Pool.Query(ctx, `SELECT t.document,p.name FROM task_records t JOIN projects p ON p.id=t.project_id WHERE t.project_id=$1 AND ($2 IS NULL OR (t.created_at,t.id)<($2,$3)) ORDER BY t.created_at DESC,t.id DESC LIMIT $4`, projectID, at, after, limit+1)
 	if err != nil {
 		return taskmodel.Page{}, err
 	}
@@ -476,7 +472,7 @@ func (s *Store) TaskInstances(ctx context.Context, taskID uuid.UUID) ([]TaskInst
 	if err != nil {
 		return nil, err
 	}
-	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	ids, err := db.CollectRows(rows, db.RowTo[uuid.UUID])
 	if err != nil {
 		return nil, err
 	}
@@ -491,19 +487,19 @@ func (s *Store) TaskInstances(ctx context.Context, taskID uuid.UUID) ([]TaskInst
 	return out, nil
 }
 func (s *Store) TaskIDs(ctx context.Context, statuses []string) ([]uuid.UUID, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT id FROM task_records WHERE status=ANY($1) ORDER BY created_at,id`, statuses)
+	rows, err := s.Pool.Query(ctx, `SELECT id FROM task_records WHERE status IN (SELECT value FROM json_each($1)) ORDER BY created_at,id`, statuses)
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	return db.CollectRows(rows, db.RowTo[uuid.UUID])
 }
 
 func (s *Store) TaskEvents(ctx context.Context, taskID, projectID *uuid.UUID, after int64, limit int) ([]TaskEvent, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT id,task_id,project_id,type,data,created_at FROM task_events WHERE ($1::uuid IS NULL OR task_id=$1) AND ($2::uuid IS NULL OR project_id=$2) AND id>$3 ORDER BY id LIMIT $4`, taskID, projectID, after, limit)
+	rows, err := s.Pool.Query(ctx, `SELECT id,task_id,project_id,type,data,created_at FROM task_events WHERE ($1 IS NULL OR task_id=$1) AND ($2 IS NULL OR project_id=$2) AND id>$3 ORDER BY id LIMIT $4`, taskID, projectID, after, limit)
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (TaskEvent, error) {
+	return db.CollectRows(rows, func(r db.CollectableRow) (TaskEvent, error) {
 		var e TaskEvent
 		err := r.Scan(&e.ID, &e.TaskID, &e.ProjectID, &e.Type, &e.Data, &e.CreatedAt)
 		return e, err
@@ -511,7 +507,7 @@ func (s *Store) TaskEvents(ctx context.Context, taskID, projectID *uuid.UUID, af
 }
 func (s *Store) TaskEventPosition(ctx context.Context, taskID, projectID *uuid.UUID) (int64, error) {
 	var pos int64
-	err := s.Pool.QueryRow(ctx, `SELECT coalesce(max(id),0) FROM task_events WHERE ($1::uuid IS NULL OR task_id=$1) AND ($2::uuid IS NULL OR project_id=$2)`, taskID, projectID).Scan(&pos)
+	err := s.Pool.QueryRow(ctx, `SELECT coalesce(max(id),0) FROM task_events WHERE ($1 IS NULL OR task_id=$1) AND ($2 IS NULL OR project_id=$2)`, taskID, projectID).Scan(&pos)
 	return pos, err
 }
 func TaskEventID(e TaskEvent) string { return strconv.FormatInt(e.ID, 10) }

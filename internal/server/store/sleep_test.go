@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/sleepmodel"
@@ -15,6 +14,8 @@ import (
 	"loop-now/internal/server/workflow"
 	"testing"
 	"time"
+
+	"loop-now/internal/server/db"
 )
 
 func TestSleepNormalTransactionsAndTimerReplacement(t *testing.T) {
@@ -61,7 +62,7 @@ func TestSleepNormalTransactionsAndTimerReplacement(t *testing.T) {
 		t.Fatal("changed replay accepted")
 	}
 	// Due time is persisted. Reconciliation commits one stable queued timer.
-	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, receipt.Sleep.ID); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, receipt.Sleep.ID); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
@@ -227,7 +228,7 @@ func TestSleepTaskModesAtomicFinishAndCommittedVersion(t *testing.T) {
 			if mode == "task_conversation" {
 				r.View.Nodes[0].Status = "blocked"
 			}
-			_, err := s.CreateTask(ctx, project.ID, manager.ID, store.TaskAction{ActorKey: "fixture", ID: uuid.New(), Operation: "create", Body: []byte("fixture")}, func(pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) { return r, instances, nil })
+			_, err := s.CreateTask(ctx, project.ID, manager.ID, store.TaskAction{ActorKey: "fixture", ID: uuid.New(), Operation: "create", Body: []byte("fixture")}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) { return r, instances, nil })
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -294,7 +295,7 @@ func TestSleepTaskModesAtomicFinishAndCommittedVersion(t *testing.T) {
 				})
 				return e
 			}
-			if _, err = s.Pool.Exec(ctx, `CREATE FUNCTION reject_sleep_save() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'offline injected'; END $$; CREATE TRIGGER reject_sleep_save BEFORE UPDATE ON task_records FOR EACH ROW EXECUTE FUNCTION reject_sleep_save()`); err != nil {
+			if _, err = s.Pool.Exec(ctx, `CREATE TRIGGER reject_sleep_save BEFORE UPDATE ON task_records BEGIN SELECT RAISE(ABORT, 'offline injected'); END`); err != nil {
 				t.Fatal(err)
 			}
 			if err = finish(); err == nil {
@@ -308,7 +309,7 @@ func TestSleepTaskModesAtomicFinishAndCommittedVersion(t *testing.T) {
 			if err != nil || state.Sleep.State != "requested" {
 				t.Fatal("sleep escaped atomic rollback", err)
 			}
-			if _, err = s.Pool.Exec(ctx, `DROP TRIGGER reject_sleep_save ON task_records;DROP FUNCTION reject_sleep_save()`); err != nil {
+			if _, err = s.Pool.Exec(ctx, `DROP TRIGGER reject_sleep_save`); err != nil {
 				t.Fatal(err)
 			}
 			if err = finish(); err != nil {
@@ -332,10 +333,10 @@ func TestSleepTaskModesAtomicFinishAndCommittedVersion(t *testing.T) {
 				t.Fatal("conversation altered workflow")
 			}
 			var eventVersion int64
-			if err = s.Pool.QueryRow(ctx, `SELECT (data->>'taskVersion')::bigint FROM task_events WHERE task_id=$1 AND type='sleep.updated' ORDER BY id DESC LIMIT 1`, r.View.Task.ID).Scan(&eventVersion); err != nil || eventVersion != record.View.Task.Version {
+			if err = s.Pool.QueryRow(ctx, `SELECT CAST((data->>'taskVersion') AS INTEGER) FROM task_events WHERE task_id=$1 AND type='sleep.updated' ORDER BY id DESC LIMIT 1`, r.View.Task.ID).Scan(&eventVersion); err != nil || eventVersion != record.View.Task.Version {
 				t.Fatal("event used pre-save version", eventVersion, record.View.Task.Version, err)
 			}
-			if _, err = s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, receipt.Sleep.ID); err != nil {
+			if _, err = s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, receipt.Sleep.ID); err != nil {
 				t.Fatal(err)
 			}
 			if err = s.ReconcileSleeps(ctx, 100); err != nil {
@@ -396,7 +397,7 @@ func TestSleepExpiryWorkCompetitionAndMonotonicRevision(t *testing.T) {
 		if _, _, _, err = e.s.FinishRun(ctx, run.ID, store.RunEnd{Status: "completed"}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, receipt.Sleep.ID); err != nil {
+		if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, receipt.Sleep.ID); err != nil {
 			t.Fatal(err)
 		}
 		done := make(chan error, 2)
@@ -457,10 +458,10 @@ func TestSleepBatchFailureContinuesAndLifecycleCancelsTimer(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second'`); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = e.s.Pool.Exec(ctx, `CREATE FUNCTION reject_one_sleep() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.agent_id='`+e.agent.String()+`'::uuid THEN RAISE EXCEPTION 'offline injected'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_one_sleep BEFORE UPDATE ON agent_sleeps FOR EACH ROW EXECUTE FUNCTION reject_one_sleep()`); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `CREATE TRIGGER reject_one_sleep BEFORE UPDATE ON agent_sleeps WHEN OLD.agent_id='`+e.agent.String()+`' BEGIN SELECT RAISE(ABORT, 'offline injected'); END`); err != nil {
 		t.Fatal(err)
 	}
 	if err = e.s.ReconcileSleeps(ctx, 100); err == nil {
@@ -470,7 +471,7 @@ func TestSleepBatchFailureContinuesAndLifecycleCancelsTimer(t *testing.T) {
 	if err = e.s.Pool.QueryRow(ctx, `SELECT state FROM agent_sleeps WHERE id=$1`, sleeps[1]).Scan(&state); err != nil || state != "woken" {
 		t.Fatal("first error starved other scope", state, err)
 	}
-	if _, err = e.s.Pool.Exec(ctx, `DROP TRIGGER reject_one_sleep ON agent_sleeps;DROP FUNCTION reject_one_sleep()`); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `DROP TRIGGER reject_one_sleep`); err != nil {
 		t.Fatal(err)
 	}
 	if err = e.s.ReconcileSleeps(ctx, 100); err != nil {
@@ -505,7 +506,7 @@ func TestSleepTaskSubmitCompetesWithRequest(t *testing.T) {
 		node := taskmodel.NodeRun{ID: uuid.New(), TaskID: r.View.Task.ID, RuntimeID: inst.ID, AgentID: agent.ID, StepID: "a", Status: "queued", RunIDs: []uuid.UUID{}, Inputs: map[string]any{}}
 		r.View.Nodes = []taskmodel.NodeRun{node}
 		r.View.Task.CurrentNodeRunID = &node.ID
-		if _, err := s.CreateTask(ctx, project.ID, manager.ID, store.TaskAction{ActorKey: "fixture", ID: uuid.New(), Operation: "create", Body: []byte("fixture")}, func(pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) { return r, instances, nil }); err != nil {
+		if _, err := s.CreateTask(ctx, project.ID, manager.ID, store.TaskAction{ActorKey: "fixture", ID: uuid.New(), Operation: "create", Body: []byte("fixture")}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) { return r, instances, nil }); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := s.Pool.Exec(ctx, `UPDATE task_instances SET prepared=true WHERE id=$1`, inst.ID); err != nil {
@@ -587,7 +588,7 @@ func TestSleepSameAgentNormalAndTwoTasksAreIndependent(t *testing.T) {
 		n := taskmodel.NodeRun{ID: nodeID, TaskID: id, RuntimeID: runtime, AgentID: e.agent, StepID: "work", Status: "queued", RunIDs: []uuid.UUID{}, Inputs: map[string]any{}}
 		r := taskmodel.Record{View: taskmodel.Detail{Task: taskmodel.Summary{ID: id, ProjectID: e.dc.Project.ID, Title: "scope", Status: "preparing", Version: 1, CreatedAt: now, UpdatedAt: now, CurrentNodeRunID: &nodeID}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "work", AgentID: e.agent}}, Edges: []workflow.Edge{}}, Nodes: []taskmodel.NodeRun{n}, Request: map[string]any{}, Artifacts: []taskmodel.Artifact{}, Cleanup: "none"}, EdgeCounts: map[string]int{}}
 		inst := store.TaskInstance{ID: runtime, TaskID: id, AgentID: e.agent, AgentName: "A", Snapshot: []byte("fixture"), Sources: []store.TaskFrozenSource{}}
-		if _, err := e.s.CreateTask(ctx, e.dc.Project.ID, e.agent, store.TaskAction{ActorKey: "scope", ID: uuid.New(), Operation: "create", Body: []byte("fixture")}, func(pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) {
+		if _, err := e.s.CreateTask(ctx, e.dc.Project.ID, e.agent, store.TaskAction{ActorKey: "scope", ID: uuid.New(), Operation: "create", Body: []byte("fixture")}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) {
 			return r, []store.TaskInstance{inst}, nil
 		}); err != nil {
 			t.Fatal(err)
@@ -634,7 +635,7 @@ func TestSleepSameAgentNormalAndTwoTasksAreIndependent(t *testing.T) {
 	}
 	wake := *before.Sleep.WakeAt
 	e.send(false, "queue")
-	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, sleepIDs[0]); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, sleepIDs[0]); err != nil {
 		t.Fatal(err)
 	}
 	if err = e.s.ReconcileSleeps(ctx, 100); err != nil {
@@ -688,17 +689,17 @@ func TestSleepBatchOnePersistentFailureIsFair(t *testing.T) {
 	}
 	bad := createSleep(e.agent)
 	healthy := createSleep(other.ID)
-	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '10 seconds' WHERE id=$1;`, bad.ID); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-10000000 WHERE id=$1;`, bad.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '5 seconds' WHERE id=$1;`, healthy.ID); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-5000000 WHERE id=$1;`, healthy.ID); err != nil {
 		t.Fatal(err)
 	}
 	var originalWake time.Time
 	if err = e.s.Pool.QueryRow(ctx, `SELECT wake_at FROM agent_sleeps WHERE id=$1`, bad.ID).Scan(&originalWake); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = e.s.Pool.Exec(ctx, `CREATE FUNCTION reject_earliest_sleep() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.id='`+bad.ID.String()+`'::uuid THEN RAISE EXCEPTION 'offline persistent first candidate failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_earliest_sleep BEFORE UPDATE ON agent_sleeps FOR EACH ROW EXECUTE FUNCTION reject_earliest_sleep()`); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `CREATE TRIGGER reject_earliest_sleep BEFORE UPDATE ON agent_sleeps WHEN OLD.id='`+bad.ID.String()+`' BEGIN SELECT RAISE(ABORT, 'offline persistent first candidate failure'); END`); err != nil {
 		t.Fatal(err)
 	}
 	failures := 0
@@ -713,7 +714,7 @@ func TestSleepBatchOnePersistentFailureIsFair(t *testing.T) {
 		t.Fatal(err)
 	}
 	late := createSleep(lateAgent.ID)
-	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-interval '1 second' WHERE id=$1`, late.ID); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=now()-1000000 WHERE id=$1`, late.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -750,7 +751,7 @@ func TestSleepBatchOnePersistentFailureIsFair(t *testing.T) {
 	if err = e.s.Pool.QueryRow(ctx, `SELECT state FROM agent_sleeps WHERE id=$1`, late.ID).Scan(&state); err != nil || state != "woken" {
 		t.Fatal("new due scope starved", state, err)
 	}
-	if _, err = e.s.Pool.Exec(ctx, `DROP TRIGGER reject_earliest_sleep ON agent_sleeps; DROP FUNCTION reject_earliest_sleep()`); err != nil {
+	if _, err = e.s.Pool.Exec(ctx, `DROP TRIGGER reject_earliest_sleep`); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 4; i++ {

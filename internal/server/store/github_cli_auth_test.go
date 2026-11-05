@@ -11,67 +11,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/clitemplate"
 	cm "loop-now/internal/server/credentialmodel"
+	"loop-now/internal/server/db"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/testutil/sqlitetest"
+
+	"github.com/google/uuid"
 )
-
-func githubStoreFixture(t *testing.T) projectMigrationEnv { return githubStoreFixtureAt(t, 0) }
-
-// githubStoreFixtureAt stops at ceiling (0: latest); 026 cannot be rolled back.
-func githubStoreFixtureAt(t *testing.T, ceiling int64) projectMigrationEnv {
-	t.Helper()
-	ctx := context.Background()
-	config, err := pgxpool.ParseConfig(pgtest.URL(t))
-	if err != nil || config.ConnConfig.Database != "loop_now_test" {
-		t.Fatal("GitHub fixture requires the dedicated TEST database")
-	}
-	conn, err := pgx.ConnectConfig(ctx, config.ConnConfig)
-	if err != nil {
-		t.Fatal("TEST connection unavailable")
-	}
-	schema := "github_login_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if _, err = conn.Exec(ctx, `CREATE SCHEMA `+pgx.Identifier{schema}.Sanitize()); err != nil {
-		conn.Close(ctx)
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		defer conn.Close(ctx)
-		if _, err := conn.Exec(ctx, `DROP SCHEMA `+pgx.Identifier{schema}.Sanitize()+` CASCADE`); err != nil {
-			t.Error("self-owned TEST schema cleanup failed")
-		}
-	})
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	config.ConnConfig.RuntimeParams["application_name"] = schema
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatal("TEST pool unavailable")
-	}
-	st := &store.Store{Pool: pool}
-	t.Cleanup(st.Close)
-	templates, err := clitemplate.Load("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = migrateFixture(ctx, st, ceiling); err != nil {
-		t.Fatal(err)
-	}
-	defaults, err := st.EnsureDefaults(ctx, "GitHub TEST组织", "默认项目")
-	if err != nil {
-		t.Fatal(err)
-	}
-	p, err := st.CreateProject(ctx, defaults.Organization.ID, "GitHub TEST项目")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return projectMigrationEnv{st, templates, p.ID}
-}
 
 func githubWrite(e projectMigrationEnv, user, login, value string, scopes []string) store.ProjectCredentialWrite {
 	identity := &cm.GitHubIdentity{Host: "github.com", UserID: user, Login: login, GrantedScopes: scopes, VerifiedAt: time.Now().UTC()}
@@ -90,6 +38,25 @@ func githubOperation(t *testing.T, e projectMigrationEnv, target *cm.Account, ex
 		t.Fatal("operation create failed", err)
 	}
 	return op
+}
+
+func githubStoreFixture(t *testing.T) projectMigrationEnv {
+	t.Helper()
+	ctx := context.Background()
+	st := sqlitetest.NewStore(t)
+	templates, err := clitemplate.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defaults, err := st.EnsureDefaults(ctx, "GitHub TEST组织", "默认项目")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := st.CreateProject(ctx, defaults.Organization.ID, "GitHub TEST项目")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return projectMigrationEnv{st, templates, p.ID}
 }
 
 func TestGitHubStoreVersionIdentityReLoginAndPAT(t *testing.T) {
@@ -201,14 +168,8 @@ func TestGitHubStoreLockWaitPastExpiryAndFinalFence(t *testing.T) {
 		e := githubStoreFixture(t)
 		ctx := context.Background()
 		op := githubOperation(t, e, nil, time.Now().Add(time.Second))
-		tx, err := e.s.Pool.Begin(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer tx.Rollback(ctx)
-		if _, err = tx.Exec(ctx, `SELECT id FROM projects WHERE id=$1 FOR UPDATE`, e.project); err != nil {
-			t.Fatal(err)
-		}
+		// 测试占住写连接：完成登录的写事务停在等写连接上，放开时操作已过期。
+		release := sqlitetest.HoldWriter(t, e.s.Pool)
 		w := githubWrite(e, "1", "alice", "fixture", nil)
 		done := make(chan error, 1)
 		go func() {
@@ -218,28 +179,10 @@ func TestGitHubStoreLockWaitPastExpiryAndFinalFence(t *testing.T) {
 			}
 			done <- err
 		}()
-		// 在持锁事务之外轮询：pg_stat_activity 在一个事务里只取第一次读到的快照，在 tx 里轮询看不到之后才开始等锁的会话。
-		application := e.s.Pool.Config().ConnConfig.RuntimeParams["application_name"]
-		deadline := time.Now().Add(3 * time.Second)
-		for {
-			var waiting int
-			if err = e.s.Pool.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'SELECT deleted_at FROM projects%'`, application).Scan(&waiting); err != nil {
-				t.Fatal(err)
-			}
-			if waiting > 0 {
-				break
-			}
-			if time.Now().After(deadline) {
-				t.Fatal("deterministic PG lock barrier not reached")
-			}
-			time.Sleep(time.Millisecond)
-		}
-		if pause := time.Until(op.ExpiresAt) + 20*time.Millisecond; pause > 0 {
-			time.Sleep(pause)
-		}
-		if err = tx.Commit(ctx); err != nil {
-			t.Fatal(err)
-		}
+		sqlitetest.WaitWriteWaiters(t, ctx, e.s.Pool, 1)
+		sleepPastWall(op.ExpiresAt)
+		release()
+		var err error
 		select {
 		case err = <-done:
 			if err != nil {
@@ -254,16 +197,15 @@ func TestGitHubStoreLockWaitPastExpiryAndFinalFence(t *testing.T) {
 		ctx := context.Background()
 		op := githubOperation(t, e, nil, time.Now().Add(time.Second))
 		w := githubWrite(e, "1", "alice", "fixture", nil)
-		// SHARE blocks only the identity INSERT (not earlier reads), so the write
-		// stalls after the first deadline check and before the final fence.
-		tx, err := e.s.Pool.Begin(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer tx.Rollback(ctx)
-		if _, err = tx.Exec(ctx, `LOCK TABLE github_cli_identities IN SHARE MODE`); err != nil {
-			t.Fatal(err)
-		}
+		// 停在写身份的语句前（已过第一次期限检查、还没到最后的期限检查），直到操作过期。
+		entered, unblock := make(chan struct{}), make(chan struct{})
+		var once sync.Once
+		e.s.Pool.SetQueryHook(func(_ context.Context, q string) {
+			if strings.Contains(q, "INSERT INTO github_cli_identities") {
+				once.Do(func() { close(entered); <-unblock })
+			}
+		})
+		defer e.s.Pool.SetQueryHook(nil)
 		done := make(chan error, 1)
 		go func() {
 			_, saved, err := e.s.CompleteProjectCLIAuthOperation(ctx, e.project, op.ID, w)
@@ -272,28 +214,14 @@ func TestGitHubStoreLockWaitPastExpiryAndFinalFence(t *testing.T) {
 			}
 			done <- err
 		}()
-		// 在持锁事务之外轮询：pg_stat_activity 在一个事务里只取第一次读到的快照，在 tx 里轮询看不到之后才开始等锁的会话。
-		application := e.s.Pool.Config().ConnConfig.RuntimeParams["application_name"]
-		deadline := time.Now().Add(3 * time.Second)
-		for {
-			var waiting int
-			if err = e.s.Pool.QueryRow(ctx, `SELECT count(*) FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid WHERE a.application_name=$1 AND l.locktype='relation' AND l.relation='github_cli_identities'::regclass AND l.mode='RowExclusiveLock' AND NOT l.granted`, application).Scan(&waiting); err != nil {
-				t.Fatal(err)
-			}
-			if waiting > 0 {
-				break
-			}
-			if time.Now().After(deadline) {
-				t.Fatal("deterministic PG lock barrier not reached")
-			}
-			time.Sleep(time.Millisecond)
+		select {
+		case <-entered:
+		case <-time.After(3 * time.Second):
+			t.Fatal("identity write not reached")
 		}
-		if pause := time.Until(op.ExpiresAt) + 20*time.Millisecond; pause > 0 {
-			time.Sleep(pause)
-		}
-		if err = tx.Commit(ctx); err != nil {
-			t.Fatal(err)
-		}
+		sleepPastWall(op.ExpiresAt)
+		close(unblock)
+		var err error
 		select {
 		case err = <-done:
 			if !errors.Is(err, store.ErrCLIAuthExpired) {
@@ -307,41 +235,6 @@ func TestGitHubStoreLockWaitPastExpiryAndFinalFence(t *testing.T) {
 			t.Fatal("final fence retained partial writes", err)
 		}
 	})
-}
-
-func TestGitHubMigrationUpDownAndAtomicDDL(t *testing.T) {
-	e := githubStoreFixtureAt(t, 25)
-	ctx := context.Background()
-	if err := e.s.MigrateDownTo(ctx, 17); err != nil {
-		t.Fatal("empty 018 Down failed", err)
-	}
-	mustExec(t, e.s, `CREATE TABLE github_cli_identities(fixture int)`)
-	if err := e.s.MigrateUpTo(ctx, 18); err == nil {
-		t.Fatal("DDL collision did not reject migration")
-	}
-	var ledger, columns int
-	if err := e.s.Pool.QueryRow(ctx, `SELECT max(version_id),(SELECT count(*) FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='project_cli_auth_operations' AND column_name='user_code') FROM goose_db_version WHERE is_applied`).Scan(&ledger, &columns); err != nil || ledger != 17 || columns != 0 {
-		t.Fatal("failed migration retained DDL/ledger", err)
-	}
-	var definition string
-	if err := e.s.Pool.QueryRow(ctx, `SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='cli_auth_kind' AND conrelid='project_cli_versions'::regclass`).Scan(&definition); err != nil || strings.Contains(definition, "'gh'") {
-		t.Fatal("preceding auth constraint alteration did not roll back", err)
-	}
-	mustExec(t, e.s, `DROP TABLE github_cli_identities`)
-	if err := e.s.MigrateUpTo(ctx, 18); err != nil {
-		t.Fatal(err)
-	}
-	op := githubOperation(t, e, nil, time.Now().Add(time.Minute))
-	if _, err := e.s.EndProjectCLIAuthOperation(ctx, e.project, op.ID, "failed", "oauth_failed"); err != nil {
-		t.Fatal(err)
-	}
-	if err := e.s.MigrateDownTo(ctx, 17); err == nil {
-		t.Fatal("Down erased GitHub failure history")
-	}
-	read, err := e.s.GetProjectCLIAuthOperation(ctx, e.project, op.ID)
-	if err != nil || read.Status != "failed" {
-		t.Fatal("rejected Down changed history", err)
-	}
 }
 
 func TestGitHubNativeOperationConstraints(t *testing.T) {
@@ -369,22 +262,15 @@ func TestGitHubNativeOperationConstraints(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := e.s.Pool.Exec(ctx, `INSERT INTO project_cli_auth_operations(id,project_id,cli_name,auth_type,request_hash,name,target_account_id,target_revision,status,authorization_url,user_code,completed_at,expires_at)VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, uuid.New(), e.project, tc.cli, tc.auth, strings.Repeat("a", 64), tc.nameValue, tc.target, tc.revision, tc.status, tc.url, tc.code, tc.completed, time.Now().Add(time.Minute))
-			var pg *pgconn.PgError
-			if !errors.As(err, &pg) || pg.Code != "23514" {
+			if db.Code(err) != db.CodeConstraintCheck {
 				t.Fatal("native operation CHECK not enforced")
 			}
 		})
-	}
-	if err = e.s.MigrateDownTo(ctx, 17); err == nil {
-		t.Fatal("Down accepted OAuth version/identity without operations")
 	}
 	// Deliberately alter only a synthetic fixture to isolate the composite FK.
 	mustExec(t, e.s, `DELETE FROM github_cli_identities WHERE version_id=$1`, *a.View.CurrentVersionID)
 	if _, err = e.s.Pool.Exec(ctx, `INSERT INTO github_cli_identities(version_id,account_id,host,user_id,login,verified_at)VALUES($1,$2,'github.com','1','alice',clock_timestamp())`, *a.View.CurrentVersionID, uuid.New()); err == nil {
 		t.Fatal("identity could be rebound to another account")
-	}
-	if err = e.s.MigrateDownTo(ctx, 17); err == nil {
-		t.Fatal("Down accepted OAuth version with no identity")
 	}
 }
 
@@ -404,8 +290,7 @@ func TestGitHubProjectDeletionRollbackPurgeAndLateResult(t *testing.T) {
 	if _, err = e.s.SetProjectGitHubAuthorization(ctx, e.project, op.ID, "https://github.com/login/device", "ABCD-1234", op.ExpiresAt); err != nil {
 		t.Fatal(err)
 	}
-	mustExec(t, e.s, `CREATE FUNCTION github_delete_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic rollback'; END $$`)
-	mustExec(t, e.s, `CREATE TRIGGER github_delete_fail BEFORE UPDATE OF deleted_at ON projects FOR EACH ROW EXECUTE FUNCTION github_delete_fail()`)
+	mustExec(t, e.s, `CREATE TRIGGER github_delete_fail BEFORE UPDATE OF deleted_at ON projects BEGIN SELECT RAISE(ABORT, 'synthetic rollback'); END`)
 	if _, err = e.s.DeleteProject(ctx, e.project); err == nil {
 		t.Fatal("injected project deletion did not roll back")
 	}
@@ -417,7 +302,7 @@ func TestGitHubProjectDeletionRollbackPurgeAndLateResult(t *testing.T) {
 	if err = e.s.Pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM project_cli_versions),(SELECT count(*) FROM github_cli_identities)`).Scan(&versions, &identities); err != nil || versions != 2 || identities != 2 {
 		t.Fatal("rollback lost current/history", err)
 	}
-	mustExec(t, e.s, `DROP TRIGGER github_delete_fail ON projects`)
+	mustExec(t, e.s, `DROP TRIGGER github_delete_fail`)
 	if _, err = e.s.DeleteProject(ctx, e.project); err != nil {
 		t.Fatal(err)
 	}

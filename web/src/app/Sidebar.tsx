@@ -7,10 +7,12 @@ import { NavIcon, type NavIconName } from '@/components/NavIcon'
 import { AgentNavGroup } from '@/features/agents/AgentList'
 import { CreateAgentDialog } from '@/features/agents/CreateAgentDialog'
 import { PendingBadge } from '@/features/console-inbox/PendingBadge'
+import { inDesktopWindow } from '@/features/desktop/desktop'
 import { ScopeSwitcher } from '@/features/projects/ScopeSwitcher'
 import { t } from '@/i18n'
 import { navGroupClass, navRowClass } from '@/lib/nav-row'
 import { lastScope, overviewPath, projectBase, type ResolvedShellScope, type Scope } from '@/lib/scope'
+import { cn } from '@/lib/utils'
 import { ConnectionStatus } from './ConnectionStatus'
 
 const text = t.shell
@@ -78,6 +80,7 @@ const sum = (rows: PendingCounts[]): PendingCounts => ({
 
 // 左侧栏：品牌蓝网点底、白字。顶部是标志、范围切换与搜索；中间是当前范围的入口与 Agent；
 // 底部（虚线以下）是任何范围都能到达的全局入口与连接状态。宽屏常驻，窄屏放在抽屉里（onClose 为抽屉的关闭按钮）。
+// 在桌面壳的窗口里，最上面多一条拖动窗口的区域，系统的红绿灯按钮在这一条里（位置见 desktop/src/window.ts）。
 export function Sidebar({
   scope,
   projects,
@@ -102,10 +105,12 @@ export function Sidebar({
   const overviewCounts = pending && { questions: pending.questions.filter(mine).length, unread: pending.unread.filter(mine).length }
   const taskCounts = pending && project && sum(pending.byTask.filter((row) => row.projectId === project.id))
   const searchLabel = scope.kind === 'project' ? text.search.project : text.search.global
+  const desktop = inDesktopWindow()
 
   return (
     <nav aria-label={text.nav} className="riso-halftone flex h-full w-full flex-col bg-riso-blue text-white">
-      <div className="flex shrink-0 flex-col gap-2.5 px-3 pt-4 pb-2">
+      {desktop && <div aria-hidden="true" className="window-drag h-12 shrink-0" />}
+      <div className={cn('flex shrink-0 flex-col gap-2.5 px-3 pb-2', desktop ? 'pt-1' : 'pt-4')}>
         <div className="flex items-center justify-between gap-2 px-1.5">
           <Link
             to="/"

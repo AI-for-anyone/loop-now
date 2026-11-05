@@ -6,14 +6,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/tasks"
 
+	"github.com/google/uuid"
+
+	"loop-now/internal/server/db"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 type recEnv struct {
@@ -26,7 +27,7 @@ type recEnv struct {
 
 func newRecEnv(t *testing.T) *recEnv {
 	t.Helper()
-	s := pgtest.NewStore(t)
+	s := sqlitetest.NewStore(t)
 	instance := uuid.Must(uuid.NewV7())
 	s.InstanceID = &instance
 	ctx := context.Background()
@@ -131,8 +132,7 @@ func TestEventFailureRollsBackState(t *testing.T) {
 	e := newRecEnv(t)
 	r := e.send(true, "")
 	// 让结束事件的插入失败（instance_id 外的列都受约束保护，这里用触发器模拟写入失败）。
-	if _, err := e.s.Pool.Exec(e.ctx, `CREATE FUNCTION fail_event() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'boom'; END $$;
-		CREATE TRIGGER fail_event BEFORE INSERT ON lifecycle_events FOR EACH ROW EXECUTE FUNCTION fail_event();`); err != nil {
+	if _, err := e.s.Pool.Exec(e.ctx, `CREATE TRIGGER ev.fail_event BEFORE INSERT ON lifecycle_events BEGIN SELECT RAISE(ABORT, 'boom'); END`); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, _, err := e.s.FinishRun(e.ctx, r.ID, store.RunEnd{Status: "completed"}); err == nil {
@@ -170,7 +170,7 @@ func TestMigrationConstraints(t *testing.T) {
 	if err := e.s.AddEvent(e.ctx, store.LifecycleEvent{AgentID: e.agent, Type: store.EventPiStopped, Data: map[string]any{"reason": "idle_timeout"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.s.Pool.QueryRow(e.ctx, `SELECT task_id::text, workflow_node, inbox_message_id::text, source FROM lifecycle_events WHERE agent_id = $1`, e.agent).
+	if err := e.s.Pool.QueryRow(e.ctx, `SELECT task_id, workflow_node, inbox_message_id, source FROM ev.lifecycle_events WHERE agent_id = $1`, e.agent).
 		Scan(&task, &node, &inbox, &source); err != nil {
 		t.Fatal(err)
 	}
@@ -292,14 +292,14 @@ func TestOverviewQueries(t *testing.T) {
 func TestTaskProcessExitsDoNotOverrideNormalOverview(t *testing.T) {
 	st, p, manager, agent, record, instances := taskFixture(t)
 	ctx := context.Background()
-	_, err := st.CreateTask(ctx, p.ID, manager.ID, store.TaskAction{ActorKey: "observe1", ID: uuid.New(), Operation: "create", Body: []byte(`{}`)}, func(pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) { return record, instances, nil })
+	_, err := st.CreateTask(ctx, p.ID, manager.ID, store.TaskAction{ActorKey: "observe1", ID: uuid.New(), Operation: "create", Body: []byte(`{}`)}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) { return record, instances, nil })
 	if err != nil {
 		t.Fatal(err)
 	}
 	second := record
 	second.View.Task.ID = uuid.New()
 	secondInstances := []store.TaskInstance{{ID: uuid.New(), TaskID: second.View.Task.ID, AgentID: agent.ID, AgentName: agent.Name, Snapshot: []byte("fixture"), Sources: []store.TaskFrozenSource{}}}
-	_, err = st.CreateTask(ctx, p.ID, manager.ID, store.TaskAction{ActorKey: "observe2", ID: uuid.New(), Operation: "create", Body: []byte(`{}`)}, func(pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) { return second, secondInstances, nil })
+	_, err = st.CreateTask(ctx, p.ID, manager.ID, store.TaskAction{ActorKey: "observe2", ID: uuid.New(), Operation: "create", Body: []byte(`{}`)}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) { return second, secondInstances, nil })
 	if err != nil {
 		t.Fatal(err)
 	}

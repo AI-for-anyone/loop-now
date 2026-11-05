@@ -12,10 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/modelcredential"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+
+	"github.com/google/uuid"
+
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 type refreshFunc func(context.Context, modelcredential.Credential) (modelcredential.Credential, error)
@@ -25,7 +27,7 @@ func (f refreshFunc) Refresh(ctx context.Context, c modelcredential.Credential) 
 }
 func authFixture(t *testing.T) (*store.Store, store.Agent) {
 	t.Helper()
-	st := pgtest.NewStore(t)
+	st := sqlitetest.NewStore(t)
 	ctx := context.Background()
 	_, e := st.EnsureDefaults(ctx, "组织", "项目")
 	if e != nil {
@@ -267,11 +269,8 @@ func TestProviderRotationCommitFailurePreservesEvidenceAndNeverRetries(t *testin
 	st, a := authFixture(t)
 	ctx := context.Background()
 	old := grant(t, st, a.ID, oauth(t, "account-A", "old", time.Now().Add(-time.Hour)))
-	_, err := st.Pool.Exec(ctx, `CREATE FUNCTION reject_rotated_token() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.generation>OLD.generation THEN RAISE EXCEPTION 'synthetic-write-failure'; END IF; RETURN NEW; END $$`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.Pool.Exec(ctx, `CREATE TRIGGER reject_rotated_token BEFORE UPDATE ON model_auth_versions FOR EACH ROW EXECUTE FUNCTION reject_rotated_token()`); err != nil {
+	if _, err := st.Pool.Exec(ctx, `CREATE TRIGGER reject_rotated_token BEFORE UPDATE ON model_auth_versions WHEN NEW.generation>OLD.generation
+		BEGIN SELECT RAISE(ABORT, 'synthetic-write-failure'); END`); err != nil {
 		t.Fatal(err)
 	}
 	var calls atomic.Int32

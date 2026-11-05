@@ -7,8 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,12 +14,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/cliimport/source"
 	"loop-now/internal/server/clitemplate"
+	"loop-now/internal/server/db"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/testutil/sqlitetest"
+
+	"github.com/google/uuid"
 )
 
 type testHasher struct{ key, id string }
@@ -93,51 +92,6 @@ type importEnv struct {
 	extracts, closes, prepared, failAt atomic.Int64
 }
 
-func newImportEnv(t *testing.T) *importEnv {
-	t.Helper()
-	ctx := context.Background()
-	url := pgtest.URL(t)
-	admin, err := pgx.Connect(ctx, url)
-	if err != nil {
-		t.Fatal("TEST PG unavailable")
-	}
-	schema := "cli_import_service_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if _, err = admin.Exec(ctx, "CREATE SCHEMA "+pgx.Identifier{schema}.Sanitize()); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		defer admin.Close(ctx)
-		if _, err := admin.Exec(ctx, "DROP SCHEMA "+pgx.Identifier{schema}.Sanitize()+" CASCADE"); err != nil {
-			t.Error(err)
-		}
-		var exists bool
-		if err := admin.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)`, schema).Scan(&exists); err != nil || exists {
-			t.Error("schema cleanup failed")
-		}
-	})
-	st, err := store.Open(ctx, url, store.OpenOptions{SearchPath: schema})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(st.Close)
-	catalog, err := clitemplate.Load("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = st.Migrate(ctx, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
-		t.Fatal(err)
-	}
-	dc, err := st.EnsureDefaults(ctx, "测试组织", "默认测试项目")
-	if err != nil {
-		t.Fatal(err)
-	}
-	p, err := st.CreateProject(ctx, dc.Organization.ID, "来源导入项目")
-	if err != nil {
-		t.Fatal(err)
-	}
-	home := t.TempDir()
-	return &importEnv{st: st, templates: catalog, home: home, project: p.ID}
-}
 func (e *importEnv) files(t *testing.T, two bool) {
 	t.Helper()
 	config := "[alpha]\nhost=127.0.0.1\nport=5432\nuser=userA\ndbname=dbA\nsslmode=disable\n"
@@ -235,6 +189,65 @@ func (e *importEnv) counts(t *testing.T) (int, int) {
 	return a, r
 }
 
+func TestCLIImportInputAndNaming(t *testing.T) {
+	id := uuid.NewString()
+	good := `{"operationId":"` + id + `","scanId":"` + uuid.NewString() + `","candidateIds":["` + uuid.NewString() + `"],"expectedCredentialsRevision":1}`
+	var in StartInput
+	if err := json.Unmarshal([]byte(good), &in); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{strings.Replace(good, id, uuid.Nil.String(), 1), strings.Replace(good, `"candidateIds":[`, `"candidateIds":null,"unused":[`, 1), strings.Replace(good, `"expectedCredentialsRevision":1`, `"expectedCredentialsRevision":1,"expectedCredentialsRevision":2`, 1), strings.Replace(good, `"expectedCredentialsRevision":1`, `"expectedCredentialsRevision":1,"password":"secret"`, 1)} {
+		if json.Unmarshal([]byte(bad), &in) == nil {
+			t.Fatal("unsafe JSON accepted")
+		}
+	}
+	for _, c := range []Candidate{{CLI: "psql", SourceKind: "pg_service", Label: strings.Repeat("界", 300)}, {CLI: "mysql", SourceKind: "mysql_login_path", Label: "bad\nlabel"}, {CLI: "gh", SourceKind: "gh_hosts_plaintext", Label: ""}} {
+		n := accountName(c)
+		if len([]rune(n)) > 200 || strings.TrimSpace(n) != n || strings.Contains(n, "\n") {
+			t.Fatal("invalid generated name")
+		}
+	}
+}
+
+type publicationGateReader struct {
+	Reader
+	ready, cancelled chan struct{}
+	release          <-chan struct{}
+}
+
+func (r *publicationGateReader) Discover(ctx context.Context) ([]source.Candidate, error) {
+	items, err := r.Reader.Discover(ctx)
+	if err != nil {
+		return nil, err
+	}
+	close(r.ready)
+	// Freeze after actual successful discovery, before parent Scan publication.
+	<-ctx.Done()
+	close(r.cancelled)
+	<-r.release
+	return items, nil
+}
+
+func newImportEnv(t *testing.T) *importEnv {
+	t.Helper()
+	ctx := context.Background()
+	st := sqlitetest.NewStore(t)
+	catalog, err := clitemplate.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dc, err := st.EnsureDefaults(ctx, "测试组织", "默认测试项目")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := st.CreateProject(ctx, dc.Organization.ID, "来源导入项目")
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := t.TempDir()
+	return &importEnv{st: st, templates: catalog, home: home, project: p.ID}
+}
+
 func TestCLIImportServiceReplayLeaseAndDeepCopy(t *testing.T) {
 	e := newImportEnv(t)
 	e.files(t, false)
@@ -312,6 +325,7 @@ func TestCLIImportServiceReplayLeaseAndDeepCopy(t *testing.T) {
 		t.Fatal("receipts not kept per provenance key", err)
 	}
 }
+
 func TestCLIImportServicePrepareFailureCancelAndSourceChange(t *testing.T) {
 	t.Run("second_prepare_rollback", func(t *testing.T) {
 		e := newImportEnv(t)
@@ -386,25 +400,6 @@ func TestCLIImportServicePrepareFailureCancelAndSourceChange(t *testing.T) {
 			t.Fatal("changed source saved")
 		}
 	})
-}
-func TestCLIImportInputAndNaming(t *testing.T) {
-	id := uuid.NewString()
-	good := `{"operationId":"` + id + `","scanId":"` + uuid.NewString() + `","candidateIds":["` + uuid.NewString() + `"],"expectedCredentialsRevision":1}`
-	var in StartInput
-	if err := json.Unmarshal([]byte(good), &in); err != nil {
-		t.Fatal(err)
-	}
-	for _, bad := range []string{strings.Replace(good, id, uuid.Nil.String(), 1), strings.Replace(good, `"candidateIds":[`, `"candidateIds":null,"unused":[`, 1), strings.Replace(good, `"expectedCredentialsRevision":1`, `"expectedCredentialsRevision":1,"expectedCredentialsRevision":2`, 1), strings.Replace(good, `"expectedCredentialsRevision":1`, `"expectedCredentialsRevision":1,"password":"secret"`, 1)} {
-		if json.Unmarshal([]byte(bad), &in) == nil {
-			t.Fatal("unsafe JSON accepted")
-		}
-	}
-	for _, c := range []Candidate{{CLI: "psql", SourceKind: "pg_service", Label: strings.Repeat("界", 300)}, {CLI: "mysql", SourceKind: "mysql_login_path", Label: "bad\nlabel"}, {CLI: "gh", SourceKind: "gh_hosts_plaintext", Label: ""}} {
-		n := accountName(c)
-		if len([]rune(n)) > 200 || strings.TrimSpace(n) != n || strings.Contains(n, "\n") {
-			t.Fatal("invalid generated name")
-		}
-	}
 }
 
 func TestCLIImportServiceScopeAndPreciseFailure(t *testing.T) {
@@ -605,27 +600,23 @@ func TestCLIImportProjectDeleteTxRollbackAndScopedCancel(t *testing.T) {
 	s.mu.Lock()
 	targetJob, otherJob := s.jobs[in.OperationID], s.jobs[otherIn.OperationID]
 	s.mu.Unlock()
+	errRollback := errors.New("rollback")
 	deleteTx := func(commit bool) {
 		t.Helper()
-		tx, err := e.st.Pool.Begin(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer tx.Rollback(ctx)
-		var locked uuid.UUID
-		if err = tx.QueryRow(ctx, `SELECT id FROM projects WHERE id=$1 FOR UPDATE`, e.project).Scan(&locked); err != nil {
-			t.Fatal(err)
-		}
-		if err = e.st.TerminateProjectCLIImportsTx(ctx, tx, e.project); err != nil {
-			t.Fatal(err)
-		}
-		if _, err = tx.Exec(ctx, `UPDATE projects SET deleted_at=clock_timestamp() WHERE id=$1`, e.project); err != nil {
-			t.Fatal(err)
-		}
-		if commit {
-			if err = tx.Commit(ctx); err != nil {
-				t.Fatal(err)
+		err := e.st.Pool.InTx(ctx, func(tx *db.Tx) error {
+			if err := e.st.TerminateProjectCLIImportsTx(ctx, tx, e.project); err != nil {
+				return err
 			}
+			if _, err := tx.Exec(ctx, `UPDATE projects SET deleted_at=clock_timestamp() WHERE id=$1`, e.project); err != nil {
+				return err
+			}
+			if !commit {
+				return errRollback
+			}
+			return nil
+		})
+		if err != nil && (commit || !errors.Is(err, errRollback)) {
+			t.Fatal(err)
 		}
 	}
 	deleteTx(false)
@@ -668,24 +659,6 @@ func TestCLIImportProjectDeleteTxRollbackAndScopedCancel(t *testing.T) {
 	}
 }
 
-type publicationGateReader struct {
-	Reader
-	ready, cancelled chan struct{}
-	release          <-chan struct{}
-}
-
-func (r *publicationGateReader) Discover(ctx context.Context) ([]source.Candidate, error) {
-	items, err := r.Reader.Discover(ctx)
-	if err != nil {
-		return nil, err
-	}
-	close(r.ready)
-	// Freeze after actual successful discovery, before parent Scan publication.
-	<-ctx.Done()
-	close(r.cancelled)
-	<-r.release
-	return items, nil
-}
 func TestCLIImportProjectCancelPreventsLateScanPublication(t *testing.T) {
 	e := newImportEnv(t)
 	ctx := context.Background()

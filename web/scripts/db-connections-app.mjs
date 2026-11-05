@@ -170,7 +170,7 @@ try {
   ok('actual platform psql remains private credential UI, no project collection editor')
   assert.deepEqual(errors, []); assert.deepEqual(denied, [])
   assert.ok(forwarded.some(item => item.status === 412 && item.path.endsWith('/db-connections/psql')))
-  writeFileSync(new URL('browser-results.json', out), JSON.stringify({ boundary: 'actual React -> forwarded temporary App -> isolated PG; no model/OAuth/native database execution', checks, ids, forwarded, errors, denied, screenshots }, null, 2))
+  writeFileSync(new URL('browser-results.json', out), JSON.stringify({ boundary: 'actual React -> forwarded temporary App -> temporary SQLite; no model/OAuth/native database execution', checks, ids, forwarded, errors, denied, screenshots }, null, 2))
 } catch (error) {
   writeFileSync(new URL('browser-failure.json', out), JSON.stringify({ errorType: error.name, message: error.message, checks, ids, forwarded, errors, denied }, null, 2))
   process.exitCode = 1

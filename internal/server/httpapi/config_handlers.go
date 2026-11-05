@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -15,6 +14,7 @@ import (
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
+	"loop-now/internal/server/db"
 	"loop-now/internal/server/modelauth"
 )
 
@@ -29,15 +29,16 @@ func (s *Server) getContext(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getHealth(w http.ResponseWriter, r *http.Request) {
-	check := func(fn func(context.Context) error) apitypes.DependencyHealth {
-		if err := fn(r.Context()); err != nil {
-			msg := err.Error()
-			return apitypes.DependencyHealth{OK: false, Error: &msg}
-		}
-		return apitypes.DependencyHealth{OK: true}
+	var h apitypes.Health
+	h.Database.OK = true
+	if err := s.Store.Ping(r.Context()); err != nil {
+		msg := err.Error()
+		h.Database = apitypes.DatabaseHealth{Error: &msg}
 	}
-	h := apitypes.Health{Postgres: check(s.Store.Ping), Redis: check(s.Coord.Ping)}
-	h.OK = h.Postgres.OK && h.Redis.OK
+	data, events := s.Store.Pool.WALSize()
+	h.Database.WALBytes = apitypes.WALBytes{Data: data, Events: events}
+	h.Database.WALWarning = data > db.WALWarnBytes || events > db.WALWarnBytes
+	h.OK = h.Database.OK
 	status := http.StatusOK
 	if !h.OK {
 		status = http.StatusServiceUnavailable

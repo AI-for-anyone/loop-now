@@ -3,9 +3,6 @@ package cliauth
 import (
 	"context"
 	"encoding/json"
-	"github.com/google/uuid"
-	"io"
-	"log/slog"
 	"loop-now/internal/server/clicredential"
 	"loop-now/internal/server/clitemplate"
 	cm "loop-now/internal/server/credentialmodel"
@@ -13,6 +10,8 @@ import (
 	"loop-now/internal/server/store"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type larkLoginFunc func(context.Context, larkauth.Application, func(larkauth.Authorization) error) (clicredential.Lark, error)
@@ -66,14 +65,12 @@ func waitLark(t *testing.T, s *Service, project, id uuid.UUID, status string) cm
 	t.Fatal("Lark terminal deadline")
 	return cm.CLIAuthState{}
 }
+
 func TestLarkSourceCASAndIndependentUserGrant(t *testing.T) {
 	for _, scenario := range []string{"success_source_deleted_after_commit", "source_renamed_before_commit", "source_deleted_before_commit", "cancel_late_result"} {
 		t.Run(scenario, func(t *testing.T) {
 			f := newGoogleFixture(t)
 			ctx := context.Background()
-			if e := f.st.MigrateThrough(ctx, slog.New(slog.NewTextHandler(io.Discard, nil)), 20); e != nil {
-				t.Fatal(e)
-			}
 			source := larkSource(t, f)
 			entered, release := make(chan struct{}), make(chan struct{})
 			s := NewService(f.st, nil, nil, ServiceOptions{RecordTimeout: time.Second}, nil)
@@ -171,12 +168,10 @@ func TestLarkSourceCASAndIndependentUserGrant(t *testing.T) {
 		})
 	}
 }
+
 func TestLarkWrongScopeIdentityNeverSeals(t *testing.T) {
 	f := newGoogleFixture(t)
 	ctx := context.Background()
-	if e := f.st.MigrateThrough(ctx, slog.New(slog.NewTextHandler(io.Discard, nil)), 20); e != nil {
-		t.Fatal(e)
-	}
 	source := larkSource(t, f)
 	in := larkStart(source)
 	op, _, e := f.st.NewProjectCLIAuthOperation(ctx, f.project, in, time.Now().Add(time.Minute))

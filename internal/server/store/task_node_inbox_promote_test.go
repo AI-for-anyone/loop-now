@@ -207,7 +207,7 @@ func TestTaskNodeInboxPromoteSplitMergeVoidAndClaimOrder(t *testing.T) {
 		t.Fatalf("已是打断应幂等：%+v %v", r, e)
 	}
 	var whenBusy []string
-	rows, e := f.s.Pool.Query(ctx, `SELECT when_busy FROM inbox_messages WHERE id=ANY($1) ORDER BY created_at`, []uuid.UUID{m1, m2, m3})
+	rows, e := f.s.Pool.Query(ctx, `SELECT when_busy FROM inbox_messages WHERE id IN (SELECT value FROM json_each($1)) ORDER BY created_at`, []uuid.UUID{m1, m2, m3})
 	if e != nil {
 		t.Fatal(e)
 	}

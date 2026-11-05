@@ -3,9 +3,6 @@ package httpapi_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/inbox"
@@ -13,11 +10,16 @@ import (
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/tasks"
 	"loop-now/internal/server/workflow"
+	"loop-now/internal/testutil/sqlitetest"
 	"net/url"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+
+	"loop-now/internal/server/db"
 )
 
 func TestInboxQuestionRealHTTPStatesAndContract(t *testing.T) {
@@ -51,7 +53,7 @@ func TestInboxQuestionRealHTTPStatesAndContract(t *testing.T) {
 	e.console().expectError(409, "already_answered", "POST", path, map[string]any{"optionId": "1"})
 	e.expect(201, "POST", path, map[string]any{"text": "已回答后的普通文字"})
 	expired := create("expires")
-	if _, err = e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-interval '1 second' WHERE message_id=$1`, expired.ID); err != nil {
+	if _, err = e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, expired.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err = e.api.Inbox.ReconcileQuestions(ctx); err != nil {
@@ -59,7 +61,7 @@ func TestInboxQuestionRealHTTPStatesAndContract(t *testing.T) {
 	}
 	e.console().expectError(409, "question_expired", "POST", "/inbox/messages/"+expired.ID.String()+"/reply", map[string]any{"optionId": "1"})
 	closed := create("closed")
-	if err = e.st.InboxTx(ctx, func(tx pgx.Tx) error {
+	if err = e.st.InboxTx(ctx, func(tx *db.Tx) error {
 		state, err := store.CloseInboxQuestion(ctx, tx, closed.ID, "task_cancel")
 		if err == nil && state != "closed" {
 			t.Fatal("wrong close state")
@@ -103,7 +105,7 @@ func TestTaskQuestionRealStorageCloseRollbackAndLateOptions(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	for _, sql := range []string{`CREATE FUNCTION fail_question_task_write() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic task save fault'; END $$`, `CREATE TRIGGER fail_question_task_write BEFORE UPDATE ON task_records FOR EACH ROW EXECUTE FUNCTION fail_question_task_write()`} {
+	for _, sql := range []string{`CREATE TRIGGER fail_question_task_write BEFORE UPDATE ON task_records BEGIN SELECT RAISE(ABORT, 'synthetic task save fault'); END`} {
 		if _, err := e.st.Pool.Exec(ctx, sql); err != nil {
 			t.Fatal(err)
 		}
@@ -119,7 +121,7 @@ func TestTaskQuestionRealStorageCloseRollbackAndLateOptions(t *testing.T) {
 	if err = e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM inbox_question_outbox WHERE question_message_id=$1`, q.ID).Scan(&pending); err != nil || pending != 0 {
 		t.Fatal("rollback left outbox", pending, err)
 	}
-	if _, err = e.st.Pool.Exec(ctx, `DROP TRIGGER fail_question_task_write ON task_records`); err != nil {
+	if _, err = e.st.Pool.Exec(ctx, `DROP TRIGGER fail_question_task_write`); err != nil {
 		t.Fatal(err)
 	}
 	retried := decode[taskmodel.Detail](t, e.expect(200, "POST", "/tasks/"+d.Task.ID.String()+"/retry", body))
@@ -168,7 +170,7 @@ func TestTaskQuestionAnswerAndExpiryOneRecoveryTurn(t *testing.T) {
 			if mode == "answer" {
 				e.expect(201, "POST", "/inbox/messages/"+q.ID.String()+"/reply", map[string]any{"text": "回答在原轮settled前"})
 			} else {
-				if _, err := e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-interval '1 second' WHERE message_id=$1`, q.ID); err != nil {
+				if _, err := e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, q.ID); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -232,7 +234,7 @@ func TestInboxQuestionConfiguredPreviewAndBlockedExpiry(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-interval '1 second' WHERE message_id=$1`, next.ID); err != nil {
+	if _, err = e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, next.ID); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 3; i++ {
@@ -290,7 +292,7 @@ func TestInboxQuestionOutboxAfterTaskProjectDeletion(t *testing.T) {
 	other := e.platformAgent("仍需收到到期")
 	sender := e.agentCaller(other.ID)
 	later := decode[apitypes.InboxMessage](t, sender.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "later", "options": []string{"yes"}}))
-	if _, err = e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-interval '1 second' WHERE message_id=$1`, later.ID); err != nil {
+	if _, err = e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, later.ID); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 3; i++ {
@@ -385,7 +387,7 @@ func TestInboxQuestionConcurrentFirstAnswerAndCrossTaskLocks(t *testing.T) {
 	var messages, questions int
 	e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM inbox_messages`).Scan(&messages)
 	e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM inbox_questions`).Scan(&questions)
-	for _, sql := range []string{`CREATE FUNCTION fail_question_reminder() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic reminder fault'; END $$`, `CREATE TRIGGER fail_question_reminder BEFORE INSERT ON lifecycle_events FOR EACH ROW EXECUTE FUNCTION fail_question_reminder()`} {
+	for _, sql := range []string{`CREATE TRIGGER ev.fail_question_reminder BEFORE INSERT ON lifecycle_events BEGIN SELECT RAISE(ABORT, 'synthetic reminder fault'); END`} {
 		if _, err = e.st.Pool.Exec(ctx, sql); err != nil {
 			t.Fatal(err)
 		}
@@ -398,125 +400,6 @@ func TestInboxQuestionConcurrentFirstAnswerAndCrossTaskLocks(t *testing.T) {
 	e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM inbox_questions`).Scan(&afterQuestions)
 	if messages != afterMessages || questions != afterQuestions {
 		t.Fatal("failed reminder left partial question/message")
-	}
-}
-
-type pauseInboxWrite struct {
-	once             sync.Once
-	entered, release chan struct{}
-}
-
-func (p *pauseInboxWrite) TraceQueryStart(ctx context.Context, _ *pgx.Conn, d pgx.TraceQueryStartData) context.Context {
-	if len(d.Args) > 0 {
-		if key, ok := d.Args[0].(string); ok && strings.HasPrefix(key, "inbox-write:") {
-			p.once.Do(func() {
-				close(p.entered)
-				select {
-				case <-p.release:
-				case <-ctx.Done():
-				}
-			})
-		}
-	}
-	return ctx
-}
-func (*pauseInboxWrite) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
-func TestInboxQuestionManagerCommitBoundaryAndNoticeIdempotency(t *testing.T) {
-	for _, mode := range []string{"ordinary-reply", "closed-question-reply", "notice"} {
-		t.Run(mode, func(t *testing.T) {
-			e, _, d := taskEnv(t)
-			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-			defer cancel()
-			e.api.Tasks.Source = &tasks.Source{CloseQuestion: store.CloseInboxQuestion, ViewQuestion: e.api.Inbox.ViewQuestion}
-			node := d.Nodes[0]
-			principal := auth.Principal{Kind: auth.KindAgent, ID: node.AgentID, TaskID: d.Task.ID, RuntimeID: node.RuntimeID}
-			input := inbox.QuestionInput{}
-			if mode == "closed-question-reply" {
-				input = inbox.QuestionInput{Options: []string{"yes"}, NodeRunID: node.ID}
-			}
-			q, err := e.api.Inbox.Send(ctx, principal, "@console", "old thread", "queue", input)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err = e.api.Tasks.Cancel(ctx, auth.Console(), d.Task.ID, taskmodel.CancelInput{ActionID: uuid.New()}); err != nil {
-				t.Fatal(err)
-			}
-			next, err := e.st.CreateAgent(ctx, store.ProjectScope(e.dc.Project.ID), "NewManager", "anthropic", "claude-x", "")
-			if err != nil {
-				t.Fatal(err)
-			}
-			// No background reader may race replacing the isolated test pool tracer.
-			if err = e.conv.Stop(ctx); err != nil {
-				t.Fatal(err)
-			}
-			original := e.st.Pool
-			config := original.Config()
-			trace := &pauseInboxWrite{entered: make(chan struct{}), release: make(chan struct{})}
-			config.ConnConfig.Tracer = trace
-			pool, err := pgxpool.NewWithConfig(ctx, config)
-			if err != nil {
-				t.Fatal(err)
-			}
-			e.st.Pool = pool
-			defer func() { e.st.Pool = original; pool.Close() }()
-			var once sync.Once
-			release := func() { once.Do(func() { close(trace.release) }) }
-			defer release()
-			var messageID uuid.UUID
-			if mode == "notice" {
-				if err = e.st.Pool.QueryRow(ctx, `SELECT message_id FROM task_notifications WHERE task_id=$1 LIMIT 1`, d.Task.ID).Scan(&messageID); err != nil {
-					t.Fatal(err)
-				}
-			}
-			done := make(chan error, 1)
-			saved := make(chan store.InboxMessage, 1)
-			go func() {
-				if mode == "notice" {
-					done <- e.api.Inbox.SystemNotice(ctx, node.AgentID, messageID, "")
-					return
-				}
-				msg, err := e.api.Inbox.Reply(ctx, auth.Console(), q.ID, "late ordinary", "queue")
-				saved <- msg
-				done <- err
-			}()
-			select {
-			case <-trace.entered:
-			case <-ctx.Done():
-				t.Fatal("routing barrier not reached")
-			}
-			if _, err = e.st.SetProjectManager(ctx, e.dc.Project.ID, next.ID); err != nil {
-				t.Fatal(err)
-			}
-			if _, err = e.st.RenameProject(ctx, e.dc.Project.ID, "改名后"); err != nil {
-				t.Fatal(err)
-			}
-			release()
-			if err = <-done; err != nil {
-				t.Fatal(err)
-			}
-			if mode == "notice" {
-				msg, err := e.st.GetInboxMessage(ctx, messageID, 200)
-				if err != nil || msg.To.ID != next.ID || msg.From.Kind != "platform" || !strings.Contains(msg.Text, "/p/"+url.PathEscape("改名后")+"/") {
-					t.Fatal("notice used stale Manager/link", err)
-				}
-				for i := 0; i < 3; i++ {
-					if err = e.api.Inbox.SystemNotice(ctx, node.AgentID, messageID, ""); err != nil {
-						t.Fatal(err)
-					}
-				}
-				var messages, turns int
-				e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM inbox_messages WHERE id=$1`, messageID).Scan(&messages)
-				e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM runs WHERE trigger_inbox_message_id=$1`, messageID).Scan(&turns)
-				if messages != 1 || turns != 1 {
-					t.Fatal("notice retry dispatched twice", messages, turns)
-				}
-			} else {
-				msg := <-saved
-				if msg.To.ID != next.ID || msg.AnswerTo != nil {
-					t.Fatal("late reply used stale Manager or became answer")
-				}
-			}
-		})
 	}
 }
 
@@ -536,10 +419,10 @@ func TestInboxQuestionCommitBeforeAcknowledgementDoesNotRedeliver(t *testing.T) 
 		t.Fatal(err)
 	}
 	q := decode[apitypes.InboxMessage](t, instance.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "ack lost", "options": []string{"yes"}, "nodeRunId": node.ID}))
-	if _, err := e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-interval '1 second' WHERE message_id=$1`, q.ID); err != nil {
+	if _, err := e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, q.ID); err != nil {
 		t.Fatal(err)
 	}
-	for _, sql := range []string{`CREATE FUNCTION fail_question_ack() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic acknowledgement failure'; END $$`, `CREATE TRIGGER fail_question_ack BEFORE UPDATE OF delivered_at ON inbox_question_outbox FOR EACH ROW EXECUTE FUNCTION fail_question_ack()`} {
+	for _, sql := range []string{`CREATE TRIGGER fail_question_ack BEFORE UPDATE OF delivered_at ON inbox_question_outbox BEGIN SELECT RAISE(ABORT, 'synthetic acknowledgement failure'); END`} {
 		if _, err := e.st.Pool.Exec(ctx, sql); err != nil {
 			t.Fatal(err)
 		}
@@ -551,7 +434,7 @@ func TestInboxQuestionCommitBeforeAcknowledgementDoesNotRedeliver(t *testing.T) 
 	if err := e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM inbox_question_outbox WHERE question_message_id=$1 AND delivered_at IS NULL`, q.ID).Scan(&pending); err != nil || pending != 1 {
 		t.Fatal("failed ack discarded durable event", err)
 	}
-	if _, err := e.st.Pool.Exec(ctx, `DROP TRIGGER fail_question_ack ON inbox_question_outbox`); err != nil {
+	if _, err := e.st.Pool.Exec(ctx, `DROP TRIGGER fail_question_ack`); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 3; i++ {
@@ -670,7 +553,7 @@ func TestTaskQuestionNextAfterPersistedExpiryBeforeCallback(t *testing.T) {
 		return decode[apitypes.InboxMessage](t, sender.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": text, "options": []string{"yes"}, "nodeRunId": node.ID}))
 	}
 	old := create("old question")
-	if _, err := e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-interval '1 second' WHERE message_id=$1`, old.ID); err != nil {
+	if _, err := e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-1000000 WHERE message_id=$1`, old.ID); err != nil {
 		t.Fatal(err)
 	}
 	// Real expiry transaction commits first; intentionally hold its reliable task
@@ -689,49 +572,105 @@ func TestTaskQuestionNextAfterPersistedExpiryBeforeCallback(t *testing.T) {
 	}
 }
 
-func TestInboxQuestionExpirySkipsLockedRowAndRetries(t *testing.T) {
-	e := newEnv(t)
-	ctx := context.Background()
-	a := e.platformAgent("到期锁测试")
-	sender := e.agentCaller(a.ID)
-	create := func(text string) uuid.UUID {
-		return decode[apitypes.InboxMessage](t, sender.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": text, "options": []string{"yes"}})).ID
+func TestInboxQuestionManagerCommitBoundaryAndNoticeIdempotency(t *testing.T) {
+	for _, mode := range []string{"ordinary-reply", "closed-question-reply", "notice"} {
+		t.Run(mode, func(t *testing.T) {
+			e, _, d := taskEnv(t)
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer cancel()
+			e.api.Tasks.Source = &tasks.Source{CloseQuestion: store.CloseInboxQuestion, ViewQuestion: e.api.Inbox.ViewQuestion}
+			node := d.Nodes[0]
+			principal := auth.Principal{Kind: auth.KindAgent, ID: node.AgentID, TaskID: d.Task.ID, RuntimeID: node.RuntimeID}
+			input := inbox.QuestionInput{}
+			if mode == "closed-question-reply" {
+				input = inbox.QuestionInput{Options: []string{"yes"}, NodeRunID: node.ID}
+			}
+			q, err := e.api.Inbox.Send(ctx, principal, "@console", "old thread", "queue", input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = e.api.Tasks.Cancel(ctx, auth.Console(), d.Task.ID, taskmodel.CancelInput{ActionID: uuid.New()}); err != nil {
+				t.Fatal(err)
+			}
+			next, err := e.st.CreateAgent(ctx, store.ProjectScope(e.dc.Project.ID), "NewManager", "anthropic", "claude-x", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			// 不能有后台写入来抢写连接，否则下面的等待计数不准。
+			if err = e.conv.Stop(ctx); err != nil {
+				t.Fatal(err)
+			}
+			// 回复/通知先在事务外读出路由线索，再等唯一的写连接。测试先占住写连接，等它停在等写连接上，
+			// 再在占着的事务里换 Manager、改项目名并提交：它进入写事务后必须按新的 Manager 与名字路由。
+			held, proceed := make(chan struct{}), make(chan struct{})
+			changed := make(chan error, 1)
+			go func() {
+				changed <- e.st.Pool.InTx(ctx, func(tx *db.Tx) error {
+					close(held)
+					select {
+					case <-proceed:
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+					_, err := tx.Exec(ctx, `UPDATE projects SET manager_agent_id=$2,name='改名后',updated_at=$3 WHERE id=$1`, e.dc.Project.ID, next.ID, tx.Now())
+					return err
+				})
+			}()
+			select {
+			case <-held:
+			case <-ctx.Done():
+				t.Fatal("writer not held")
+			}
+			var once sync.Once
+			release := func() { once.Do(func() { close(proceed) }) }
+			defer release()
+			var messageID uuid.UUID
+			if mode == "notice" {
+				if err = e.st.Pool.QueryRow(ctx, `SELECT message_id FROM task_notifications WHERE task_id=$1 LIMIT 1`, d.Task.ID).Scan(&messageID); err != nil {
+					t.Fatal(err)
+				}
+			}
+			done := make(chan error, 1)
+			saved := make(chan store.InboxMessage, 1)
+			go func() {
+				if mode == "notice" {
+					done <- e.api.Inbox.SystemNotice(ctx, node.AgentID, messageID, "")
+					return
+				}
+				msg, err := e.api.Inbox.Reply(ctx, auth.Console(), q.ID, "late ordinary", "queue")
+				saved <- msg
+				done <- err
+			}()
+			sqlitetest.WaitWriteWaiters(t, ctx, e.st.Pool, 1)
+			release()
+			if err = <-changed; err != nil {
+				t.Fatal(err)
+			}
+			if err = <-done; err != nil {
+				t.Fatal(err)
+			}
+			if mode == "notice" {
+				msg, err := e.st.GetInboxMessage(ctx, messageID, 200)
+				if err != nil || msg.To.ID != next.ID || msg.From.Kind != "platform" || !strings.Contains(msg.Text, "/p/"+url.PathEscape("改名后")+"/") {
+					t.Fatal("notice used stale Manager/link", err)
+				}
+				for i := 0; i < 3; i++ {
+					if err = e.api.Inbox.SystemNotice(ctx, node.AgentID, messageID, ""); err != nil {
+						t.Fatal(err)
+					}
+				}
+				var messages, turns int
+				e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM inbox_messages WHERE id=$1`, messageID).Scan(&messages)
+				e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM runs WHERE trigger_inbox_message_id=$1`, messageID).Scan(&turns)
+				if messages != 1 || turns != 1 {
+					t.Fatal("notice retry dispatched twice", messages, turns)
+				}
+			} else {
+				msg := <-saved
+				if msg.To.ID != next.ID || msg.AnswerTo != nil {
+					t.Fatal("late reply used stale Manager or became answer")
+				}
+			}
+		})
 	}
-	locked, other := create("locked"), create("other")
-	if _, err := e.st.Pool.Exec(ctx, `UPDATE inbox_questions SET expires_at=now()-interval '1 second' WHERE message_id=ANY($1)`, []uuid.UUID{locked, other}); err != nil {
-		t.Fatal(err)
-	}
-	tx, err := e.st.Pool.Begin(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, `SELECT message_id FROM inbox_questions WHERE message_id=$1 FOR UPDATE`, locked); err != nil {
-		t.Fatal(err)
-	}
-	bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	if err = e.st.ExpireInboxQuestions(bounded); err != nil {
-		t.Fatal("locked question blocked independent expiry", err)
-	}
-	assertState := func(id uuid.UUID, want string, events int) {
-		t.Helper()
-		var state string
-		var count int
-		if err := e.st.Pool.QueryRow(ctx, `SELECT state,(SELECT count(*) FROM inbox_question_outbox WHERE question_message_id=$1 AND state='expired') FROM inbox_questions WHERE message_id=$1`, id).Scan(&state, &count); err != nil || state != want || count != events {
-			t.Fatalf("state=%s events=%d want=%s/%d: %v", state, count, want, events, err)
-		}
-	}
-	assertState(locked, "open", 0)
-	assertState(other, "expired", 1)
-	if err = tx.Rollback(ctx); err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 2; i++ {
-		if err = e.st.ExpireInboxQuestions(ctx); err != nil {
-			t.Fatal(err)
-		}
-	}
-	assertState(locked, "expired", 1)
-	assertState(other, "expired", 1)
 }

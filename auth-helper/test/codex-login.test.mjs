@@ -10,6 +10,7 @@ import { createServer } from 'node:net';
 
 const node='/Users/ljl/.local/node-v24.21.0/bin/node';
 const piRoot='/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent';
+const piAI=piRoot+'/node_modules/@earendil-works/pi-ai';
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 async function until(fn){for(let n=0;n<600;n++){if(fn())return;await delay(5);}throw new Error('offline login fixture timed out');}
 test('actual cold lazy Pi login, synthetic exchange, private fd terminal flush and ABI boundaries',async t=>{
@@ -27,7 +28,7 @@ test('actual cold lazy Pi login, synthetic exchange, private fd terminal flush a
   createInterface({input:p.stdio[4]}).on('line',line=>frames.push(JSON.parse(line)));
   t.after(async()=>{if(p.exitCode===null){p.kill('SIGKILL');await closed;}await rm(home,{recursive:true,force:true});});
   await until(()=>frames.some(f=>f.type==='ready')||p.exitCode!==null);assert.equal(p.exitCode,null,'sandbox/ready preflight failed');
-  p.stdio[3].write(JSON.stringify({type:mode==='refresh'?'refresh':'login',id:'fixture',provider:'openai-codex',timeoutMs:2500,piPackageRoot:piRoot,...(mode==='refresh'?{credential:{type:'oauth',access:'synthetic-old-access',refresh:'synthetic-old-refresh',expires:1,accountId:'fixture-account'}}:{})})+'\n');
+  p.stdio[3].write(JSON.stringify({type:mode==='refresh'?'refresh':'login',id:'fixture',provider:'openai-codex',timeoutMs:2500,piPackageRoot:piRoot,piAIDir:piAI,...(mode==='refresh'?{credential:{type:'oauth',access:'synthetic-old-access',refresh:'synthetic-old-refresh',expires:1,accountId:'fixture-account'}}:{})})+'\n');
   if(mode!=='refresh'){
   await until(()=>frames.some(f=>f.type==='notify'&&f.event?.type==='auth_url')||frames.some(f=>f.type==='result'));
   const notify=frames.find(f=>f.type==='notify'&&f.event?.type==='auth_url');assert.ok(notify,'actual Pi did not reach callback wait');

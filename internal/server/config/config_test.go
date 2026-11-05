@@ -2,6 +2,8 @@ package config
 
 import (
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -13,8 +15,6 @@ func envOf(m map[string]string) func(string) string {
 
 func requiredEnv() map[string]string {
 	return map[string]string{
-		EnvDatabaseURL:    "postgres://loop_now:s3cret@127.0.0.1:5432/loop_now_dev?sslmode=disable",
-		EnvRedisURL:       "redis://127.0.0.1:6379/10",
 		EnvLoopctlDistDir: "/opt/loop-now/loopctl-dist",
 	}
 }
@@ -57,7 +57,7 @@ func TestLoadDefaults(t *testing.T) {
 	if len(c.Warnings) != 0 {
 		t.Errorf("默认配置不应有告警：%v", c.Warnings)
 	}
-	if c.PiMaxProcesses != 0 || c.PiIdleTimeout != 10*time.Minute || c.LockTTL != 30*time.Second {
+	if c.PiMaxProcesses != 0 || c.PiIdleTimeout != 10*time.Minute {
 		t.Errorf("执行器默认值不对：%+v", c)
 	}
 	if c.MaxUploadFile != 10<<20 || c.MaxMessage != 64<<10 || c.TextEditMax != 1<<20 || c.MaxInboxMessage != 64<<10 {
@@ -114,18 +114,20 @@ func TestLoadErrors(t *testing.T) {
 		mutate  func(map[string]string)
 		wantVar string
 	}{
-		{"缺少数据库连接", func(m map[string]string) { delete(m, EnvDatabaseURL) }, EnvDatabaseURL},
-		{"数据库连接协议不对", func(m map[string]string) { m[EnvDatabaseURL] = "mysql://x" }, EnvDatabaseURL},
-		{"缺少 Redis 连接", func(m map[string]string) { delete(m, EnvRedisURL) }, EnvRedisURL},
+		{"数据根不是绝对路径", func(m map[string]string) { m[EnvDataDir] = "relative/dir" }, EnvDataDir},
+		{"数据根不规范", func(m map[string]string) { m[EnvDataDir] = "/data/../loop" }, EnvDataDir},
+		{"备份目录不是绝对路径", func(m map[string]string) { m[EnvBackupDir] = "backups" }, EnvBackupDir},
+		{"备份份数为零", func(m map[string]string) { m[EnvBackupKeep] = "0" }, EnvBackupKeep},
 		{"时长格式错误", func(m map[string]string) { m[EnvPiIdleTimeout] = "ten minutes" }, EnvPiIdleTimeout},
 		{"时长为零", func(m map[string]string) { m[EnvAbortTimeout] = "0s" }, EnvAbortTimeout},
 		{"大小格式错误", func(m map[string]string) { m[EnvMaxUploadFile] = "10MB" }, EnvMaxUploadFile},
-		{"续期间隔不小于锁 TTL", func(m map[string]string) { m[EnvLockTTL] = "10s"; m[EnvLockRenewInterval] = "10s" }, EnvLockRenewInterval},
-		{"对账周期不小于锁 TTL", func(m map[string]string) { m[EnvReconcileInterval] = "40s" }, EnvReconcileInterval},
 		{"进程上限为负", func(m map[string]string) { m[EnvPiMaxProcesses] = "-1" }, EnvPiMaxProcesses},
 		{"在线编辑上限大于上传上限", func(m map[string]string) { m[EnvTextEditMax] = "20MiB" }, EnvTextEditMax},
 		{"监听地址格式错误", func(m map[string]string) { m[EnvListenAddr] = "localhost" }, EnvListenAddr},
 		{"控制台来源带路径", func(m map[string]string) { m[EnvConsoleOrigins] = "http://localhost:5173/app" }, EnvConsoleOrigins},
+		{"none 与来源混用", func(m map[string]string) { m[EnvConsoleOrigins] = "none,http://localhost:5173" }, EnvConsoleOrigins},
+		{"控制台目录不是绝对路径", func(m map[string]string) { m[EnvWebDir] = "web/dist" }, EnvWebDir},
+		{"就绪文件不规范", func(m map[string]string) { m[EnvReadyFile] = "/tmp/../ready.json" }, EnvReadyFile},
 		{"默认组织名含斜杠", func(m map[string]string) { m[EnvDefaultOrgName] = "a/b" }, EnvDefaultOrgName},
 		{"默认项目名是 UUID 格式", func(m map[string]string) { m[EnvDefaultProjectName] = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b" }, EnvDefaultProjectName},
 		{"概览事件流保留条数为零", func(m map[string]string) { m[EnvOverviewMaxLen] = "0" }, EnvOverviewMaxLen},
@@ -194,6 +196,21 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if c.MaxCredential != 1024 {
 		t.Errorf("MaxCredential = %d", c.MaxCredential)
+	}
+}
+
+// 控制台来源可以设为 none（不允许任何跨源访问）；控制台目录与就绪文件按原样取用。
+func TestConsoleSettings(t *testing.T) {
+	env := requiredEnv()
+	c, err := Load(envOf(env))
+	if err != nil || len(c.ConsoleOrigins) != 2 || c.WebDir != "" || c.ReadyFile != "" {
+		t.Fatalf("默认值不对：%v %+v", err, c.ConsoleOrigins)
+	}
+	env[EnvConsoleOrigins] = "NONE"
+	env[EnvWebDir] = "/opt/loop-now/web"
+	env[EnvReadyFile] = "/tmp/loop-now-ready.json"
+	if c, err = Load(envOf(env)); err != nil || c.ConsoleOrigins != nil || c.WebDir != "/opt/loop-now/web" || c.ReadyFile != "/tmp/loop-now-ready.json" {
+		t.Fatalf("覆盖值不对：%v %+v %q %q", err, c.ConsoleOrigins, c.WebDir, c.ReadyFile)
 	}
 }
 
@@ -327,5 +344,68 @@ func TestLegacyMasterKeyVariableIgnored(t *testing.T) {
 	slog.New(slog.NewTextHandler(&b, nil)).Info("config", "config", c)
 	if out := b.String(); strings.Contains(out, "legacy-master-key-marker") || strings.Contains(strings.ToLower(out), "masterkey") {
 		t.Errorf("日志仍包含主密钥配置：%s", out)
+	}
+}
+
+func TestDataDirDefaultAndDBDir(t *testing.T) {
+	env := requiredEnv()
+	env["HOME"] = "/home/fixture"
+	c, err := Load(envOf(env))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.DataDir != "/home/fixture/.loop_now" || DBDir(c.DataDir) != "/home/fixture/.loop_now/db" {
+		t.Fatalf("默认数据根应为 HOME 下的 .loop_now，库在其 db 子目录：%q", c.DataDir)
+	}
+	if c.BackupDir != "/home/fixture/.loop_now/backups" || c.BackupKeep != 7 {
+		t.Fatalf("默认备份在数据根的 backups 下、保留 7 份：%q %d", c.BackupDir, c.BackupKeep)
+	}
+	env[EnvDataDir] = "/srv/loop-now"
+	if c, err = Load(envOf(env)); err != nil || c.DataDir != "/srv/loop-now" || c.BackupDir != "/srv/loop-now/backups" {
+		t.Fatalf("LOOP_NOW_DATA_DIR 应覆盖默认值，备份目录随之：%q %q %v", c.DataDir, c.BackupDir, err)
+	}
+	env[EnvBackupDir], env[EnvBackupKeep] = "/mnt/backup", "3"
+	if c, err = Load(envOf(env)); err != nil || c.BackupDir != "/mnt/backup" || c.BackupKeep != 3 {
+		t.Fatalf("备份目录与份数可以覆盖：%q %d %v", c.BackupDir, c.BackupKeep, err)
+	}
+}
+
+// 发布包里与 loop-server 并列的 runtime、loopctl-dist 与插件目录在没有配置时自动取用；环境变量仍然优先；
+// 什么都没有时 loopctl-dist 是必需配置。
+func TestBundledDefaults(t *testing.T) {
+	dir := t.TempDir()
+	old := executableDir
+	executableDir = func() string { return dir }
+	t.Cleanup(func() { executableDir = old })
+	if _, err := Load(envOf(map[string]string{})); err == nil || !strings.Contains(err.Error(), EnvLoopctlDistDir) {
+		t.Fatalf("没有 loopctl-dist 时应要求配置：%v", err)
+	}
+	c, err := Load(envOf(requiredEnv()))
+	if err != nil || c.NodeBin != "node" || c.PiBin != "pi" || c.PluginHostEntry != "" || c.PluginOfficialDir != "" {
+		t.Fatalf("没有随包文件时应保持原默认值：%v %+v", err, c)
+	}
+	for _, rel := range []string{BundledNode, BundledPi, BundledPluginHost} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, rel)), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, rel), nil, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, rel := range []string{BundledLoopctlDist, BundledPluginOfficial} {
+		if err := os.MkdirAll(filepath.Join(dir, rel), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if c, err = Load(envOf(map[string]string{})); err != nil {
+		t.Fatal(err)
+	}
+	for got, want := range map[string]string{c.NodeBin: BundledNode, c.PiBin: BundledPi, c.LoopctlDistDir: BundledLoopctlDist, c.PluginHostEntry: BundledPluginHost, c.PluginOfficialDir: BundledPluginOfficial} {
+		if got != filepath.Join(dir, want) {
+			t.Errorf("应取随包的 %s：%q", want, got)
+		}
+	}
+	if c, err = Load(envOf(map[string]string{EnvNodeBin: "/opt/node/bin/node", EnvLoopctlDistDir: "/opt/loopctl-dist"})); err != nil || c.NodeBin != "/opt/node/bin/node" || c.LoopctlDistDir != "/opt/loopctl-dist" {
+		t.Fatalf("环境变量应优先：%v %q %q", err, c.NodeBin, c.LoopctlDistDir)
 	}
 }

@@ -13,10 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/config"
@@ -27,55 +23,30 @@ import (
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/testutil/fakepibin"
 	"loop-now/internal/testutil/loopctlfake"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
+
+	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/google/uuid"
 )
 
-// Own schema/prefix only: unlike generic test factories this never sweeps other
+// Own data directory only: unlike generic test factories this never sweeps other
 // sessions' old namespaces. No provider, real Pi execution or shared listeners.
 func taskNodeInboxWorld(t *testing.T) *world {
 	t.Helper()
 	requirePi(t)
 	ctx := context.Background()
-	real, e := preflight.Resolve(ctx, preflight.Options{PiBin: "pi", PiVersion: "1.1.0", NodeBin: "node", WorkRoot: filepath.Join(t.TempDir(), "probe"), HomeDirs: []string{"/nonexistent-home"}})
+	real, e := preflight.Resolve(ctx, preflight.Options{PiBin: "pi", PiVersion: "1.4.0", NodeBin: "node", WorkRoot: filepath.Join(t.TempDir(), "probe"), HomeDirs: []string{"/nonexistent-home"}})
 	if e != nil {
 		t.Fatal("offline catalog preflight unavailable", e)
 	}
-	c, e := pgx.Connect(ctx, pgtest.URL(t))
-	if e != nil {
-		t.Fatal("TEST connection unavailable")
-	}
-	schema := "task_node_inbox_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if _, e = c.Exec(ctx, `CREATE SCHEMA `+pgx.Identifier{schema}.Sanitize()); e != nil {
-		t.Fatal(e)
-	}
-	t.Cleanup(func() {
-		defer c.Close(ctx)
-		if _, e := c.Exec(ctx, `DROP SCHEMA `+pgx.Identifier{schema}.Sanitize()+` CASCADE`); e != nil {
-			t.Error(e)
-		}
-	})
-	opts, e := redis.ParseURL(redistest.URL(t))
-	if e != nil {
-		t.Fatal("TEST Redis URL invalid")
-	}
-	rc := redis.NewClient(opts)
-	prefix := "loopnow:test:task-node-inbox:" + uuid.NewString() + ":"
-	t.Cleanup(func() {
-		if e := redistest.DeletePrefix(ctx, rc, prefix); e != nil {
-			t.Error(e)
-		}
-		rc.Close()
-	})
-	w := &world{t: t, schema: schema, piAIDir: real.PiAIDir, cfg: config.Config{
-		DatabaseURL: pgtest.URL(t), RedisURL: redistest.URL(t), RedisKeyPrefix: prefix,
+	w := &world{t: t, piAIDir: real.PiAIDir, cfg: config.Config{
+		DataDir:    t.TempDir(),
 		ListenAddr: "127.0.0.1:0", AllowedHosts: []string{"localhost", "127.0.0.1", "::1"}, ConsoleOrigins: []string{"http://localhost:5173"}, DefaultOrgName: "默认组织", DefaultProjectName: "默认项目",
-		WorkRoot: filepath.Join(t.TempDir(), "work"), PiBin: fakepibin.Path(t), PiVersion: "1.1.0", PiMaxProcesses: 2, PiIdleTimeout: time.Minute, PiStartTimeout: 10 * time.Second, PiStopGrace: 2 * time.Second, AbortTimeout: 3 * time.Second, GitCloneTimeout: 30 * time.Second, CLIInstallTimeout: time.Minute,
-		NodeBin: "node", PiAIDir: real.PiAIDir, LockTTL: 5 * time.Second, LockRenewInterval: time.Second, ReconcileInterval: 100 * time.Millisecond, SSEKeepalive: time.Second, EventStreamMaxLen: 1000, RunTextTTL: time.Hour, ShutdownTimeout: 10 * time.Second,
+		WorkRoot: filepath.Join(t.TempDir(), "work"), PiBin: fakepibin.Path(t), PiVersion: "1.4.0", PiMaxProcesses: 2, PiIdleTimeout: time.Minute, PiStartTimeout: 10 * time.Second, PiStopGrace: 2 * time.Second, AbortTimeout: 3 * time.Second, GitCloneTimeout: 30 * time.Second, CLIInstallTimeout: time.Minute,
+		NodeBin: "node", PiAIDir: real.PiAIDir, ReconcileInterval: 100 * time.Millisecond, SSEKeepalive: time.Second, EventStreamMaxLen: 1000, ShutdownTimeout: 10 * time.Second,
 		TaskMaxSteps: 100, TaskMaxEdges: 300, TaskMaxVisits: 1000, TaskMaxRequest: 1 << 20, TaskMaxArtifact: 20 << 20, TaskMaxSession: 100 << 20, TaskReconcileInterval: 50 * time.Millisecond, TaskEventPoll: 10 * time.Millisecond, TaskRecordTimeout: time.Second, SleepScanInterval: 50 * time.Millisecond, SleepScanBatch: 100,
 		MaxUploadFile: 1 << 20, MaxSkillArchive: 1 << 20, MaxSkillEntries: 50, MaxCredential: 4096, MaxMessage: 1 << 16, MaxInboxMessage: 1 << 16, InboxPreviewChars: 200, InboxPageMax: 100, TextEditExtensions: []string{".md"}, TextEditMax: 1 << 16, LoopctlDistDir: loopctlfake.Dir(t),
 	}}
-	t.Logf("actual TEST schema=%s RedisPrefix=%s ephemeral loopback App/fakePi", schema, prefix)
+	t.Logf("actual TEST dataDir=%s ephemeral loopback App/fakePi", w.cfg.DataDir)
 	return w
 }
 
@@ -378,7 +349,7 @@ func TestTaskNodeInboxAppBlockedRecoveryAndSleep(t *testing.T) {
 		t.Fatal("restart changed original sleep state")
 	}
 	// Advance only the existing deadline in this test's private schema.
-	if _, e = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=clock_timestamp()-interval '1 second' WHERE id=$1`, first.Sleep.ID); e != nil {
+	if _, e = s.a.Store.Pool.Exec(ctx, `UPDATE agent_sleeps SET wake_at=clock_timestamp()-1000000 WHERE id=$1`, first.Sleep.ID); e != nil {
 		t.Fatal(e)
 	}
 	if e = s.a.Store.ReconcileSleeps(ctx, 100); e != nil {

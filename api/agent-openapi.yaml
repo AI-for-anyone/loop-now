@@ -1952,7 +1952,7 @@ components:
 
     TimelineExtensionUI:
       description: |
-        Agent 半边的扩展经 ctx.ui 发来的请求（Pi RPC 的 extension_ui_request）。notify 是通知（level 为 info、warning、error），
+        Agent 侧的扩展经 ctx.ui 发来的请求（Pi RPC 的 extension_ui_request）。notify 是通知（level 为 info、warning、error），
         setStatus 设置或清除一条状态（message 为空时清除）。select、confirm、input、editor 是对话，message 为对话标题：
         常态 Agent 一轮之中的 confirm、select、input 成为这个 Agent 发给控制台的提问（questionId，期限为请求的超时，没有时 30 分钟），
         回答后交还给扩展，这条记录在对话结束时写入，answered 为 answered（有人回答）、cancelled（回答为取消）或 expired（到期或这一轮结束，

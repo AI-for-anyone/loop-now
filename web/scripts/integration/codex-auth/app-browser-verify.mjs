@@ -42,22 +42,22 @@ try{
  await request(fixture.controlBase,'/resolve',{operationId:id,outcome:'success',account:'web-account-A'})
  await page.bringToFront();await area().getByText('本次登录成功',{exact:true}).waitFor();await area().getByText('已登录',{exact:true}).waitFor()
  const accountA=await checkpoint(fixture.codexAgentId,'web-account-A');assert.equal(accountA.accountMatches,true);assert.equal(accountA.stored,true)
- await area().screenshot({path:dir+'app-account-A-desktop.png'});ok('browser start/query reaches real App and PG persists stored account A metadata')
+ await area().screenshot({path:dir+'app-account-A-desktop.png'});ok('browser start/query reaches real App and SQLite persists stored account A metadata')
  phase='cancel preserves A'
  id=await start(false);await area().getByRole('button',{name:'取消登录'}).click();await area().getByText('本次登录已取消',{exact:true}).waitFor()
  let current=await state();assert.equal(current.operation.status,'cancelled');assert.equal(current.credential.versionId,accountA.versionId)
- assert.equal((await checkpoint(fixture.codexAgentId,'web-account-A')).versionId,accountA.versionId);ok('real cancel endpoint commits cancelled operation and retains PG account A')
+ assert.equal((await checkpoint(fixture.codexAgentId,'web-account-A')).versionId,accountA.versionId);ok('real cancel endpoint commits cancelled operation and retains account A in SQLite')
  phase='failure preserves A'
  id=await start(false);await request(fixture.controlBase,'/resolve',{operationId:id,outcome:'fail',account:''})
  await area().getByText('本次登录失败',{exact:true}).waitFor();await area().getByText('已登录',{exact:true}).waitFor()
  current=await state();assert.equal(current.operation.status,'failed');assert.equal(current.credential.versionId,accountA.versionId)
  assert.equal((await checkpoint(fixture.codexAgentId,'web-account-A')).versionId,accountA.versionId)
- await page.setViewportSize({width:390,height:844});await area().screenshot({path:dir+'app-failure-mobile.png'});ok('offline helper failure travels through actual service; UI and PG retain A')
+ await page.setViewportSize({width:390,height:844});await area().screenshot({path:dir+'app-failure-mobile.png'});ok('offline helper failure travels through actual service; UI and SQLite retain A')
  phase='success saves B'
  id=await start(false);await request(fixture.controlBase,'/resolve',{operationId:id,outcome:'success',account:'web-account-B'})
  await page.bringToFront();await area().getByText('本次登录成功',{exact:true}).waitFor();await area().getByText('已登录',{exact:true}).waitFor()
  const accountB=await checkpoint(fixture.codexAgentId,'web-account-B');assert.equal(accountB.accountMatches,true);assert.equal(accountB.stored,true);assert.notEqual(accountB.versionId,accountA.versionId);assert.equal((await state()).credential.versionId,accountB.versionId)
- await area().screenshot({path:dir+'app-account-B-mobile.png'});ok('successful re-login reads new actual App metadata and new stored PG version B')
+ await area().screenshot({path:dir+'app-account-B-mobile.png'});ok('successful re-login reads new actual App metadata and new stored SQLite version B')
  phase='API Key save and input clear'
  await page.goto(path(fixture.keyAgentId));await area().getByRole('button',{name:'录入 API Key'}).click();let dialog=page.getByRole('dialog')
  await dialog.getByLabel('API Key').fill('web-integration-key-sentinel');await dialog.getByRole('button',{name:'保存',exact:true}).click();await dialog.waitFor({state:'hidden'})
@@ -66,10 +66,10 @@ try{
  await area().getByRole('button',{name:'替换 API Key'}).click();dialog=page.getByRole('dialog');assert.equal(await dialog.getByLabel('API Key').inputValue(),'')
  await dialog.getByLabel('API Key').fill('web-integration-cancelled-key');await dialog.getByRole('button',{name:'取消',exact:true}).click();await dialog.waitFor({state:'hidden'})
  await area().getByRole('button',{name:'替换 API Key'}).click();dialog=page.getByRole('dialog');assert.equal(await dialog.getByLabel('API Key').inputValue(),'');await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'})
- assert.equal((await checkpoint(fixture.keyAgentId)).versionId,key.versionId);ok('API Key PUT reaches actual App/PG; save and cancel clear secret inputs without changing saved key on cancel')
+ assert.equal((await checkpoint(fixture.keyAgentId)).versionId,key.versionId);ok('API Key PUT reaches actual App/SQLite; save and cancel clear secret inputs without changing saved key on cancel')
  phase='API Key delete'
  await area().getByRole('button',{name:'删除',exact:true}).click();const confirm=page.getByRole('alertdialog');await confirm.getByRole('button',{name:'删除',exact:true}).click();await confirm.waitFor({state:'hidden'});await area().getByText('未设置',{exact:true}).waitFor()
- assert.equal((await checkpoint(fixture.keyAgentId)).cleared,true);await area().screenshot({path:dir+'app-key-cleared-mobile.png'});ok('confirmed API Key DELETE reaches actual App and PG explicit clear marker')
+ assert.equal((await checkpoint(fixture.keyAgentId)).cleared,true);await area().screenshot({path:dir+'app-key-cleared-mobile.png'});ok('confirmed API Key DELETE reaches actual App and SQLite explicit clear marker')
  phase='security and transport audit'
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
  const persisted=await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))
@@ -83,6 +83,6 @@ try{
  assert.equal(forwarded.some(r=>r.method==='DELETE'&&r.path.endsWith('/model-credential')&&r.status===204),true)
  for(const version of [accountA.versionId,accountB.versionId])assert.equal(forwarded.some(r=>r.path.endsWith('/model-auth')&&r.credentialVersionId===version&&r.operationStatus==='succeeded'),true)
  ok('route.fetch records actual HTTP responses; provider navigation blocked before network; no secret sentinels in UI/storage/console')
- writeFileSync(dir+'app-browser-results.json',JSON.stringify({mode:'actual React -> route.fetch forwarding -> actual temporary app.Build -> isolated PG; offline AuthLoginHelper DI only; no MSW/API response stubs',checks,forwarded,checkpoints,providerNavigationsBlocked,unexpectedRequests,errors,consoleSecretSentinelsAbsent:true},null,2))
+ writeFileSync(dir+'app-browser-results.json',JSON.stringify({mode:'actual React -> route.fetch forwarding -> actual temporary app.Build -> temporary SQLite; offline AuthLoginHelper DI only; no MSW/API response stubs',checks,forwarded,checkpoints,providerNavigationsBlocked,unexpectedRequests,errors,consoleSecretSentinelsAbsent:true},null,2))
 }catch(error){writeFileSync(dir+'app-browser-failure.json',JSON.stringify({phase,errorType:error.name,checks,forwarded,providerNavigationsBlocked,unexpectedRequests,errors},null,2));console.error('Integration failed at phase: '+phase);process.exitCode=1}
 finally{await browser.close()}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"loop-now/internal/server/clicredential"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -16,21 +17,24 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"loop-now/internal/server/clicredential"
 )
 
-func TestGoogleActualHelperPGCancelledRotation(t *testing.T)    { runGoogleNativeHelperPG(t, false) }
+func TestGoogleActualHelperPGCancelledRotation(t *testing.T) { runGoogleNativeHelperPG(t, false) }
+
 func TestGoogleActualHelperPGProviderResponseLost(t *testing.T) { runGoogleNativeHelperPG(t, true) }
+
 func runGoogleNativeHelperPG(t *testing.T, responseLost bool) {
 	runGoogleNativeHelperPrincipalPG(t, responseLost, false)
 }
+
 func TestGoogleManagementActualHelperCancelledRotation(t *testing.T) {
 	runGoogleNativeHelperPrincipalPG(t, false, true)
 }
+
 func TestGoogleManagementActualHelperResponseLost(t *testing.T) {
 	runGoogleNativeHelperPrincipalPG(t, true, true)
 }
+
 func runGoogleNativeHelperPrincipalPG(t *testing.T, responseLost, management bool) {
 	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
 		t.Skip("reviewed private Python/SDK is darwin-arm64 only")

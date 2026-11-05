@@ -11,10 +11,10 @@ const failed=()=>new Error('Anthropic 旧模型凭证不可用，请检查兼容
 export default async function install(pi){
  let provider;
  try {
-  const root=process.env.LOOP_NOW_PI_PACKAGE_ROOT;
-  if(typeof root!=='string'||!isAbsolute(root))throw failed();
+  // The server passes the pi-ai package it resolved (inside or beside pi-coding-agent).
+  const root=process.env.LOOP_NOW_PI_PACKAGE_ROOT,aiRoot=process.env.LOOP_NOW_PI_AI_DIR;
+  if(typeof root!=='string'||!isAbsolute(root)||typeof aiRoot!=='string'||!isAbsolute(aiRoot))throw failed();
   const coding=JSON.parse(await readFile(join(root,'package.json'),'utf8'));
-  const aiRoot=join(root,'node_modules','@earendil-works','pi-ai');
   const ai=JSON.parse(await readFile(join(aiRoot,'package.json'),'utf8'));
   if(coding.name!=='@earendil-works/pi-coding-agent'||!['1.1.0','1.4.0'].includes(coding.version)||ai.name!=='@earendil-works/pi-ai'||ai.version!==coding.version||ai.exports?.['./providers/*']?.import!=='./dist/providers/*.js')throw failed();
   const module=await import(pathToFileURL(join(aiRoot,'dist/providers/anthropic.js')).href);

@@ -1,5 +1,5 @@
 // Package plugins 是插件第二版的安装、配置、启用、授权与账号（plugins/SPEC.md §2、§5、§6），
-// 给宿主监护提供要加载的插件，给 Pi 组装 Agent 半边的参数。清单的读取与校验在 pluginmanifest。
+// 给宿主监护提供要加载的插件，给 Pi 组装 Agent 侧的参数。清单的读取与校验在 pluginmanifest。
 package plugins
 
 import "loop-now/internal/pluginmanifest"

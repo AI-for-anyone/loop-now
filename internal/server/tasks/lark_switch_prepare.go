@@ -3,6 +3,7 @@ package tasks
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 	"loop-now/internal/server/agentconfig"
@@ -16,7 +17,7 @@ func (s *Source) taskPreparationCheckTx(ctx context.Context, m *store.TaskMutati
 	var task, agent uuid.UUID
 	var raw []byte
 	var prepared, retired bool
-	if err := m.Tx.QueryRow(ctx, `SELECT task_id,agent_id,snapshot,prepared,retired FROM task_instances WHERE id=$1 FOR UPDATE`, inst.ID).Scan(&task, &agent, &raw, &prepared, &retired); err != nil {
+	if err := m.Tx.QueryRow(ctx, `SELECT task_id,agent_id,snapshot,prepared,retired FROM task_instances WHERE id=$1`, inst.ID).Scan(&task, &agent, &raw, &prepared, &retired); err != nil {
 		return false, 0, err
 	}
 	if task != inst.TaskID || agent != inst.AgentID || task != m.Record.View.Task.ID || retired || m.Record.Ended() || !bytes.Equal(raw, inst.Snapshot) {
@@ -58,7 +59,7 @@ func (s *Source) commitTaskPreparation(ctx context.Context, inst store.TaskInsta
 		if err != nil || prepared {
 			return nil, err
 		}
-		_, err = m.Tx.Exec(ctx, `UPDATE task_instances SET fork_source=$2,sources=$3,prepared=true WHERE id=$1 AND NOT retired`, inst.ID, base, sources)
+		_, err = m.Tx.Exec(ctx, `UPDATE task_instances SET fork_source=$2,sources=$3,prepared=true WHERE id=$1 AND NOT retired`, inst.ID, base, json.RawMessage(sources))
 		return nil, err
 	})
 	return err

@@ -2,16 +2,15 @@ package agentconfig_test
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"loop-now/internal/server/agentconfig"
-	cm "loop-now/internal/server/credentialmodel"
-	"loop-now/internal/server/modelauth"
-	"loop-now/internal/server/store"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"loop-now/internal/server/agentconfig"
+	cm "loop-now/internal/server/credentialmodel"
+	"loop-now/internal/server/modelauth"
+	"loop-now/internal/server/store"
 )
 
 type pausePromptCapture struct {
@@ -19,8 +18,9 @@ type pausePromptCapture struct {
 	entered, release chan struct{}
 }
 
-func (p *pausePromptCapture) TraceQueryStart(ctx context.Context, _ *pgx.Conn, d pgx.TraceQueryStartData) context.Context {
-	if strings.Contains(d.SQL, "FROM agents WHERE id=$1") && strings.Contains(d.SQL, "FOR SHARE") {
+// hook 在采集读 Agent 行之前停住：这时项目的提示词已经读过，采集所在的写事务还没结束。
+func (p *pausePromptCapture) hook(ctx context.Context, q string) {
+	if strings.Contains(q, "agents.prompt_version") && strings.Contains(q, "FROM agents WHERE id=$1") {
 		p.once.Do(func() {
 			close(p.entered)
 			select {
@@ -29,9 +29,7 @@ func (p *pausePromptCapture) TraceQueryStart(ctx context.Context, _ *pgx.Conn, d
 			}
 		})
 	}
-	return ctx
 }
-func (*pausePromptCapture) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
 
 func TestPromptCaptureProjectLockAndAccountCoherence(t *testing.T) {
 	e := newEnv(t)
@@ -53,15 +51,8 @@ func TestPromptCaptureProjectLockAndAccountCoherence(t *testing.T) {
 		t.Fatal(err)
 	}
 	trace := &pausePromptCapture{entered: make(chan struct{}), release: make(chan struct{})}
-	original := e.st.Pool
-	cfg := original.Config()
-	cfg.ConnConfig.Tracer = trace
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	e.st.Pool = pool
-	defer func() { e.st.Pool = original; pool.Close() }()
+	e.st.Pool.SetQueryHook(trace.hook)
+	defer e.st.Pool.SetQueryHook(nil)
 	var once sync.Once
 	release := func() { once.Do(func() { close(trace.release) }) }
 	defer release()
@@ -73,35 +64,16 @@ func TestPromptCaptureProjectLockAndAccountCoherence(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
 	}
-	// Project SHARE has completed; Agent SHARE has not started. A real SQL UPDATE
-	// must wait, while an Agent/account transaction can still commit coherently.
-	writer, err := original.Acquire(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer writer.Release()
-	pid := writer.Conn().PgConn().PID()
+	// 项目已读、Agent 未读，采集的写事务还开着：真实的项目 UPDATE 要等它结束。
 	written := make(chan error, 1)
 	go func() {
-		_, err := writer.Exec(ctx, `UPDATE projects SET prompt='project-B',prompt_version=prompt_version+1 WHERE id=$1`, project)
+		_, err := e.st.Pool.Exec(ctx, `UPDATE projects SET prompt='project-B',prompt_version=prompt_version+1 WHERE id=$1`, project)
 		written <- err
 	}()
-	for {
-		var blocked bool
-		err = original.QueryRow(ctx, `SELECT coalesce(wait_event_type='Lock',false) FROM pg_stat_activity WHERE pid=$1`, pid).Scan(&blocked)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if blocked {
-			break
-		}
-		select {
-		case err := <-written:
-			t.Fatal("project lock did not block write", err)
-		case <-ctx.Done():
-			t.Fatal(ctx.Err())
-		default:
-		}
+	select {
+	case err := <-written:
+		t.Fatal("project write did not wait for the capture", err)
+	case <-time.After(200 * time.Millisecond):
 	}
 	release()
 	snap := <-result

@@ -6,12 +6,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/dbcli"
@@ -21,7 +18,11 @@ import (
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/taskruntime"
 	"loop-now/internal/server/workflow"
-	"loop-now/internal/testutil/pgtest"
+
+	"github.com/google/uuid"
+
+	"loop-now/internal/server/db"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 type wipeFixture struct {
@@ -120,7 +121,7 @@ func (f wipeFixture) task(t *testing.T, agent store.Agent, clis []string, creds 
 	now := time.Now().UTC()
 	n := taskmodel.NodeRun{ID: node, TaskID: id, StepID: "work", AgentID: agent.ID, AgentName: agent.Name, RuntimeID: runtime, Visit: 1, Attempt: 1, Status: "queued", Inputs: map[string]any{}, InputVersions: []workflow.InputVersion{}, RunIDs: []uuid.UUID{}}
 	r := taskmodel.Record{View: taskmodel.Detail{Task: taskmodel.Summary{ID: id, ProjectID: f.project, Status: "preparing", Title: "fixture", Version: 1, CreatedAt: now, UpdatedAt: now, CurrentNodeRunID: &node}, Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "work", AgentID: agent.ID}}, Edges: []workflow.Edge{}}, Nodes: []taskmodel.NodeRun{n}, Artifacts: []taskmodel.Artifact{}, Cleanup: "none"}, EdgeCounts: map[string]int{}}
-	_, err = f.s.CreateTask(ctx, f.project, f.manager.ID, store.TaskAction{ActorKey: f.manager.ID.String(), ID: uuid.New(), Operation: "fixture", Body: []byte(`{}`)}, func(pgx.Tx) (taskmodel.Record, []store.TaskInstance, error) {
+	_, err = f.s.CreateTask(ctx, f.project, f.manager.ID, store.TaskAction{ActorKey: f.manager.ID.String(), ID: uuid.New(), Operation: "fixture", Body: []byte(`{}`)}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) {
 		return r, []store.TaskInstance{{ID: runtime, TaskID: id, AgentID: agent.ID, AgentName: agent.Name, Snapshot: encoded, Sources: []store.TaskFrozenSource{}}}, nil
 	})
 	if err != nil {
@@ -204,9 +205,9 @@ func scalar(t *testing.T, s *store.Store, q string, args ...any) int {
 // credential copy: version secrets, and task snapshots.
 func secretBytes(t *testing.T, s *store.Store, marker string) int {
 	t.Helper()
-	return scalar(t, s, `SELECT (SELECT count(*) FROM project_cli_versions WHERE position(convert_to($1,'UTF8') IN secret)>0)
-		+(SELECT count(*) FROM model_auth_versions WHERE position(convert_to($1,'UTF8') IN secret)>0)
-		+(SELECT count(*) FROM task_instances WHERE position(convert_to($1,'UTF8') IN snapshot)>0)`, marker)
+	return scalar(t, s, `SELECT (SELECT count(*) FROM project_cli_versions WHERE instr(secret, CAST($1 AS BLOB))>0)
+		+(SELECT count(*) FROM model_auth_versions WHERE instr(secret, CAST($1 AS BLOB))>0)
+		+(SELECT count(*) FROM task_instances WHERE instr(snapshot, CAST($1 AS BLOB))>0)`, marker)
 }
 
 func pending(t *testing.T, s *store.Store, account uuid.UUID) bool {
@@ -216,7 +217,7 @@ func pending(t *testing.T, s *store.Store, account uuid.UUID) bool {
 
 func versionRows(t *testing.T, s *store.Store, ids ...uuid.UUID) int {
 	t.Helper()
-	return scalar(t, s, `SELECT (SELECT count(*) FROM project_cli_versions WHERE id=ANY($1))+(SELECT count(*) FROM model_auth_versions WHERE id=ANY($1))`, ids)
+	return scalar(t, s, `SELECT (SELECT count(*) FROM project_cli_versions WHERE id IN (SELECT value FROM json_each($1)))+(SELECT count(*) FROM model_auth_versions WHERE id IN (SELECT value FROM json_each($1)))`, ids)
 }
 
 // Deleting single accounts: versions no unfinished task uses are deleted in the
@@ -321,15 +322,8 @@ func TestDeleteAccountWipesNowAndDefersVersionsOfUnfinishedTasks(t *testing.T) {
 	}
 	stillUsable(f.s)
 
-	// Restart: a new Store on the same schema, as after a server restart.
-	var schema string
-	if err := f.s.Pool.QueryRow(ctx, `SELECT current_schema()`).Scan(&schema); err != nil {
-		t.Fatal(err)
-	}
-	restarted, err := store.Open(ctx, pgtest.URL(t), store.OpenOptions{SearchPath: schema})
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Restart: a new Store on the same data directory, as after a server restart.
+	restarted := sqlitetest.NewStoreIn(t, f.s.Pool.Dir())
 	t.Cleanup(restarted.Close)
 	if err = restarted.SettleCredentialWipes(ctx); err != nil {
 		t.Fatal(err)
@@ -351,7 +345,7 @@ func TestDeleteAccountWipesNowAndDefersVersionsOfUnfinishedTasks(t *testing.T) {
 
 	// The second task ends without a settle (as a crash would leave it); the
 	// startup settle finishes the wipe.
-	mustExec(t, restarted, `UPDATE task_records SET status='cancelled',ended_at=clock_timestamp(),document=jsonb_set(document,'{view,task,status}','"cancelled"') WHERE id=$1`, second)
+	mustExec(t, restarted, `UPDATE task_records SET status='cancelled',ended_at=clock_timestamp(),document=json_set(document,'$.view.task.status','cancelled') WHERE id=$1`, second)
 	if err = restarted.SettleCredentialWipes(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -503,27 +497,5 @@ func TestDeleteAgentScrubsEndedTaskSnapshots(t *testing.T) {
 	}
 	if secretBytes(t, f.s, "synthetic-gh-agent") != 1 {
 		t.Fatal("the project account's own version is not the Agent's to wipe")
-	}
-}
-
-// 030 rolls back only while no deleted account waits for its wipe.
-func TestCredentialPendingWipesDownRefusesData(t *testing.T) {
-	f := newWipeFixture(t)
-	ctx := context.Background()
-	secret, _ := cliPayload(t, map[string]string{"GH_TOKEN": "synthetic-gh-down"})
-	account, _ := f.account(t, "cli", "gh", secret)
-	mustExec(t, f.s, `INSERT INTO credential_pending_wipes(account_id,project_id) VALUES($1,$2)`, account, f.project)
-	if err := f.s.MigrateDownTo(ctx, 29); err == nil || !strings.Contains(err.Error(), "credential_pending_wipes_down_refused") {
-		t.Fatal("Down must refuse while a wipe is pending", err)
-	}
-	if !pending(t, f.s, account) {
-		t.Fatal("the refused Down must keep the pending row")
-	}
-	mustExec(t, f.s, `DELETE FROM credential_pending_wipes`)
-	if err := f.s.MigrateDownTo(ctx, 29); err != nil {
-		t.Fatal(err)
-	}
-	if n := scalar(t, f.s, `SELECT count(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name='credential_pending_wipes'`); n != 0 {
-		t.Fatal("Down should drop the table", n)
 	}
 }

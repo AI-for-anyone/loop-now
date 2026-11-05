@@ -38,7 +38,7 @@ func questionConflict(t *testing.T, l *loopctl, id, code, state string) {
 }
 func expireCLIQuestion(t *testing.T, s *server, id string) {
 	t.Helper()
-	if _, err := s.a.Store.Pool.Exec(context.Background(), `UPDATE inbox_questions SET expires_at=clock_timestamp()-interval '1 second' WHERE message_id=$1`, uuid.MustParse(id)); err != nil {
+	if _, err := s.a.Store.Pool.Exec(context.Background(), `UPDATE inbox_questions SET expires_at=clock_timestamp()-1000000 WHERE message_id=$1`, uuid.MustParse(id)); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.a.API.Inbox.ReconcileQuestions(context.Background()); err != nil {

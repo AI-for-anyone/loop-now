@@ -137,10 +137,9 @@ func TestProjectAuthPurge(t *testing.T) {
 	t.Run("last-project-write-failure-rolls-back-every-purge", func(t *testing.T) {
 		base := newModelAuthEnv(t)
 		f := seedProjectAuth(t, base)
-		for _, q := range []string{`CREATE FUNCTION reject_auth_project_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.deleted_at IS NOT NULL THEN RAISE EXCEPTION 'synthetic project deletion failure'; END IF; RETURN NEW; END $$`, `CREATE TRIGGER reject_auth_project_delete BEFORE UPDATE ON projects FOR EACH ROW EXECUTE FUNCTION reject_auth_project_delete()`} {
-			if _, err := base.s.Pool.Exec(base.ctx, q); err != nil {
-				t.Fatal(err)
-			}
+		if _, err := base.s.Pool.Exec(base.ctx, `CREATE TRIGGER reject_auth_project_delete BEFORE UPDATE ON projects WHEN NEW.deleted_at IS NOT NULL
+			BEGIN SELECT RAISE(ABORT, 'synthetic project deletion failure'); END`); err != nil {
+			t.Fatal(err)
 		}
 		ids, err := base.s.DeleteProject(base.ctx, f.project.ID)
 		if err == nil || ids != nil {

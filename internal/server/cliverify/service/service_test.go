@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/google/uuid"
 	"io"
 	"log/slog"
 	"loop-now/internal/server/apperr"
@@ -14,7 +13,7 @@ import (
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/cliverify"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/testutil/sqlitetest"
 	"net/http"
 	"os"
 	"os/exec"
@@ -23,6 +22,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type fixture struct {
@@ -32,53 +33,6 @@ type fixture struct {
 	root    string
 }
 
-func newFixture(t *testing.T, factory CommandFactory, timeout time.Duration) fixture {
-	t.Helper()
-	ctx := context.Background()
-	st, e := store.Open(ctx, pgtest.URL(t), store.OpenOptions{SearchPath: pgtest.NewSchema(t)})
-	if e != nil {
-		t.Fatal(e)
-	}
-	t.Cleanup(st.Close)
-	catalog, e := clitemplate.Load("")
-	if e != nil {
-		t.Fatal(e)
-	}
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	if e = st.Migrate(ctx, log); e != nil {
-		t.Fatal(e)
-	}
-	defs, e := st.EnsureDefaults(ctx, "fixture", "default")
-	if e != nil {
-		t.Fatal(e)
-	}
-	project, e := st.CreateProject(ctx, defs.Organization.ID, "verification")
-	if e != nil {
-		t.Fatal(e)
-	}
-	root := t.TempDir()
-	dir := filepath.Join(root, "tools/gh/2.100.0/bin")
-	if e = os.MkdirAll(dir, 0700); e != nil {
-		t.Fatal(e)
-	}
-	// The explicit command fixture runs a real child in place of the native
-	// executable; native protocol acceptance is independently covered by harness.
-	if e = os.WriteFile(filepath.Join(dir, "gh"), []byte("fixture-not-executable"), 0600); e != nil {
-		t.Fatal(e)
-	}
-	s, e := New(ctx, st, catalog, clitemplate.NewInstaller(root, time.Second, nil), nil, Options{WorkRoot: root, NodeBin: testNode(t), GuardEntry: mustGuardPath(t), ProbeTimeout: timeout, RecordTimeout: time.Second, StopGrace: 50 * time.Millisecond, CommandFactory: factory}, log)
-	if e != nil {
-		t.Fatal(e)
-	}
-	t.Cleanup(func() {
-		c, cancel := context.WithTimeout(ctx, 3*time.Second)
-		defer cancel()
-		if e = s.Close(c); e != nil {
-			t.Error(e)
-		}
-	})
-	return fixture{s, st, project.ID, root}
-}
 func (f fixture) account(t *testing.T) (uuid.UUID, uuid.UUID) {
 	t.Helper()
 	plain, e := json.Marshal(clitemplate.Payload{Env: map[string]string{"GH_TOKEN": "synthetic-captured-token"}, Files: []clitemplate.PayloadFile{}})
@@ -111,104 +65,7 @@ func terminal(t *testing.T, f fixture, a, id uuid.UUID) cliverify.Operation {
 		}
 	}
 }
-func TestWorkerPersistsFixedProbeAndDoesNotReplay(t *testing.T) {
-	var calls atomic.Int32
-	factory := func(ctx context.Context, spec CommandSpec) (*exec.Cmd, error) {
-		if spec.Phase == "version" {
-			return exec.Command("/bin/sh", "-c", "printf 'gh version 2.100.0\\n'"), nil
-		}
-		calls.Add(1)
-		if strings.Join(spec.Args, " ") != "api --hostname github.com --method GET --include user" {
-			t.Error("nonfixed command")
-		}
-		found := false
-		for _, v := range spec.Environment {
-			if v == "GH_TOKEN=synthetic-captured-token" {
-				found = true
-			}
-		}
-		if !found {
-			t.Error("missing captured credential")
-		}
-		return exec.Command("/bin/sh", "-c", `printf 'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{"id":123,"login":"fixture"}\n'`), nil
-	}
-	f := newFixture(t, factory, time.Second)
-	a, v := f.account(t)
-	ctx := auth.With(context.Background(), auth.Console())
-	in := cliverify.Start{OperationID: uuid.New(), ExpectedVersionID: v}
-	if _, e := f.s.Start(ctx, f.project, a, in); e != nil {
-		t.Fatal(e)
-	}
-	op := terminal(t, f, a, in.OperationID)
-	if op.Status != "succeeded" || op.ToolVersion == nil || *op.ToolVersion != "2.100.0" || op.Result == nil || op.Result.VerifiedAt == nil {
-		t.Fatal("real worker did not persist fixed result", op.Status)
-	}
-	if _, e := f.s.Start(ctx, f.project, a, in); e != nil {
-		t.Fatal(e)
-	}
-	if calls.Load() != 1 {
-		t.Fatal("replay repeated probe")
-	}
-	if _, e := f.s.Start(auth.With(context.Background(), auth.Principal{Kind: auth.KindAgent, ID: uuid.New()}), f.project, a, in); e == nil {
-		t.Fatal("Agent management allowed")
-	}
-	if _, e := os.Stat(filepath.Join(f.s.Options.WorkRoot, ".cli-verification", f.s.InstanceID.String(), in.OperationID.String())); !os.IsNotExist(e) {
-		t.Fatal("secret HOME retained")
-	}
-	leases, e := os.ReadDir(filepath.Join(f.s.Options.WorkRoot, ".cli-verification-locks"))
-	if e != nil || len(leases) != 0 {
-		t.Fatal("operation lease retained", e)
-	}
-}
-func TestWorkerCancellationRollbackAndTargetChange(t *testing.T) {
-	entered := make(chan struct{}, 1)
-	factory := func(_ context.Context, spec CommandSpec) (*exec.Cmd, error) {
-		if spec.Phase == "version" {
-			return exec.Command("/bin/sh", "-c", "printf 'gh version 2.100.0\\n'"), nil
-		}
-		entered <- struct{}{}
-		return exec.Command("/bin/sh", "-c", "exec /bin/sleep 30"), nil
-	}
-	f := newFixture(t, factory, time.Second)
-	a, v := f.account(t)
-	ctx := auth.With(context.Background(), auth.Console())
-	id := uuid.New()
-	if _, e := f.s.Start(ctx, f.project, a, cliverify.Start{OperationID: id, ExpectedVersionID: v}); e != nil {
-		t.Fatal(e)
-	}
-	select {
-	case <-entered:
-	case <-time.After(2 * time.Second):
-		t.Fatal("probe not launched")
-	}
-	// A failed whole transaction cannot stop a running probe or end its operation.
-	// A nil credential is rejected inside the replacement transaction, which rolls back.
-	bad := store.ProjectCredentialWrite{AuthMethod: "static", TemplateSource: "builtin", Meta: store.CredentialMeta{TemplateVersion: "1"}}
-	if _, e := f.st.MutateProjectCredential(ctx, f.project, a, 1, nil, &bad, false); e == nil {
-		t.Fatal("rollback fixture committed")
-	}
-	op, e := f.st.GetCLIVerification(ctx, f.project, a, id)
-	if e != nil || op.Status != "running" {
-		t.Fatal("rollback cancelled original", e)
-	}
-	if _, e = f.st.MutateProjectCredential(ctx, f.project, a, 1, nil, nil, true); e != nil {
-		t.Fatal(e)
-	}
-	op = terminal(t, f, a, id)
-	if op.Status != "failed" || op.Result == nil || op.Result.ErrorCode == nil || *op.Result.ErrorCode != "target_changed" {
-		t.Fatal("committed delete did not terminate", op.Status)
-	}
-	f.s.mu.Lock()
-	j := f.s.jobs[id]
-	f.s.mu.Unlock()
-	if j != nil {
-		select {
-		case <-j.done:
-		case <-time.After(f.s.Options.StopGrace + 2*time.Second):
-			t.Fatal("committed delete failed to reap child")
-		}
-	}
-}
+
 func TestProcessBoundsOutputAndReapsGroup(t *testing.T) {
 	for _, kind := range []string{"overflow", "cancel"} {
 		t.Run(kind, func(t *testing.T) {
@@ -300,6 +157,178 @@ func TestProcessParentExitDoesNotLeaveTermResistantChild(t *testing.T) {
 	}
 }
 
+func mustGuardPath(t *testing.T) string {
+	t.Helper()
+	p, e := filepath.Abs("../../../../auth-helper/cli_verify_guard.mjs")
+	if e != nil {
+		t.Fatal(e)
+	}
+	return p
+}
+
+// testNode 优先用固定版本的 Node；没有时用 PATH 里的 node（CI 装的是 Node 24），都没有就跳过。
+func testNode(t *testing.T) string {
+	t.Helper()
+	const pinned = "/Users/ljl/.local/node-v24.21.0/bin/node"
+	if _, e := os.Stat(pinned); e == nil {
+		return pinned
+	}
+	p, e := exec.LookPath("node")
+	if e != nil {
+		t.Skip("本机没有 node")
+	}
+	abs, e := filepath.Abs(p)
+	if e != nil {
+		t.Fatal(e)
+	}
+	return abs
+}
+
+type verificationTransport func(*http.Request) (*http.Response, error)
+
+func (f verificationTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func newFixture(t *testing.T, factory CommandFactory, timeout time.Duration) fixture {
+	t.Helper()
+	ctx := context.Background()
+	st := sqlitetest.NewStore(t)
+	catalog, e := clitemplate.Load("")
+	if e != nil {
+		t.Fatal(e)
+	}
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	defs, e := st.EnsureDefaults(ctx, "fixture", "default")
+	if e != nil {
+		t.Fatal(e)
+	}
+	project, e := st.CreateProject(ctx, defs.Organization.ID, "verification")
+	if e != nil {
+		t.Fatal(e)
+	}
+	root := t.TempDir()
+	dir := filepath.Join(root, "tools/gh/2.100.0/bin")
+	if e = os.MkdirAll(dir, 0700); e != nil {
+		t.Fatal(e)
+	}
+	// The explicit command fixture runs a real child in place of the native
+	// executable; native protocol acceptance is independently covered by harness.
+	if e = os.WriteFile(filepath.Join(dir, "gh"), []byte("fixture-not-executable"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	s, e := New(ctx, st, catalog, clitemplate.NewInstaller(root, time.Second, nil), nil, Options{WorkRoot: root, NodeBin: testNode(t), GuardEntry: mustGuardPath(t), ProbeTimeout: timeout, RecordTimeout: time.Second, StopGrace: 50 * time.Millisecond, CommandFactory: factory}, log)
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Cleanup(func() {
+		c, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		if e = s.Close(c); e != nil {
+			t.Error(e)
+		}
+	})
+	return fixture{s, st, project.ID, root}
+}
+
+func TestWorkerPersistsFixedProbeAndDoesNotReplay(t *testing.T) {
+	var calls atomic.Int32
+	factory := func(ctx context.Context, spec CommandSpec) (*exec.Cmd, error) {
+		if spec.Phase == "version" {
+			return exec.Command("/bin/sh", "-c", "printf 'gh version 2.100.0\\n'"), nil
+		}
+		calls.Add(1)
+		if strings.Join(spec.Args, " ") != "api --hostname github.com --method GET --include user" {
+			t.Error("nonfixed command")
+		}
+		found := false
+		for _, v := range spec.Environment {
+			if v == "GH_TOKEN=synthetic-captured-token" {
+				found = true
+			}
+		}
+		if !found {
+			t.Error("missing captured credential")
+		}
+		return exec.Command("/bin/sh", "-c", `printf 'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{"id":123,"login":"fixture"}\n'`), nil
+	}
+	f := newFixture(t, factory, time.Second)
+	a, v := f.account(t)
+	ctx := auth.With(context.Background(), auth.Console())
+	in := cliverify.Start{OperationID: uuid.New(), ExpectedVersionID: v}
+	if _, e := f.s.Start(ctx, f.project, a, in); e != nil {
+		t.Fatal(e)
+	}
+	op := terminal(t, f, a, in.OperationID)
+	if op.Status != "succeeded" || op.ToolVersion == nil || *op.ToolVersion != "2.100.0" || op.Result == nil || op.Result.VerifiedAt == nil {
+		t.Fatal("real worker did not persist fixed result", op.Status)
+	}
+	if _, e := f.s.Start(ctx, f.project, a, in); e != nil {
+		t.Fatal(e)
+	}
+	if calls.Load() != 1 {
+		t.Fatal("replay repeated probe")
+	}
+	if _, e := f.s.Start(auth.With(context.Background(), auth.Principal{Kind: auth.KindAgent, ID: uuid.New()}), f.project, a, in); e == nil {
+		t.Fatal("Agent management allowed")
+	}
+	if _, e := os.Stat(filepath.Join(f.s.Options.WorkRoot, ".cli-verification", f.s.InstanceID.String(), in.OperationID.String())); !os.IsNotExist(e) {
+		t.Fatal("secret HOME retained")
+	}
+	leases, e := os.ReadDir(filepath.Join(f.s.Options.WorkRoot, ".cli-verification-locks"))
+	if e != nil || len(leases) != 0 {
+		t.Fatal("operation lease retained", e)
+	}
+}
+
+func TestWorkerCancellationRollbackAndTargetChange(t *testing.T) {
+	entered := make(chan struct{}, 1)
+	factory := func(_ context.Context, spec CommandSpec) (*exec.Cmd, error) {
+		if spec.Phase == "version" {
+			return exec.Command("/bin/sh", "-c", "printf 'gh version 2.100.0\\n'"), nil
+		}
+		entered <- struct{}{}
+		return exec.Command("/bin/sh", "-c", "exec /bin/sleep 30"), nil
+	}
+	f := newFixture(t, factory, time.Second)
+	a, v := f.account(t)
+	ctx := auth.With(context.Background(), auth.Console())
+	id := uuid.New()
+	if _, e := f.s.Start(ctx, f.project, a, cliverify.Start{OperationID: id, ExpectedVersionID: v}); e != nil {
+		t.Fatal(e)
+	}
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("probe not launched")
+	}
+	// A failed whole transaction cannot stop a running probe or end its operation.
+	// A nil credential is rejected inside the replacement transaction, which rolls back.
+	bad := store.ProjectCredentialWrite{AuthMethod: "static", TemplateSource: "builtin", Meta: store.CredentialMeta{TemplateVersion: "1"}}
+	if _, e := f.st.MutateProjectCredential(ctx, f.project, a, 1, nil, &bad, false); e == nil {
+		t.Fatal("rollback fixture committed")
+	}
+	op, e := f.st.GetCLIVerification(ctx, f.project, a, id)
+	if e != nil || op.Status != "running" {
+		t.Fatal("rollback cancelled original", e)
+	}
+	if _, e = f.st.MutateProjectCredential(ctx, f.project, a, 1, nil, nil, true); e != nil {
+		t.Fatal(e)
+	}
+	op = terminal(t, f, a, id)
+	if op.Status != "failed" || op.Result == nil || op.Result.ErrorCode == nil || *op.Result.ErrorCode != "target_changed" {
+		t.Fatal("committed delete did not terminate", op.Status)
+	}
+	f.s.mu.Lock()
+	j := f.s.jobs[id]
+	f.s.mu.Unlock()
+	if j != nil {
+		select {
+		case <-j.done:
+		case <-time.After(f.s.Options.StopGrace + 2*time.Second):
+			t.Fatal("committed delete failed to reap child")
+		}
+	}
+}
+
 func TestWorkerUnreadableCredentialCannotExecute(t *testing.T) {
 	var probes atomic.Int32
 	f := newFixture(t, func(_ context.Context, spec CommandSpec) (*exec.Cmd, error) {
@@ -309,7 +338,7 @@ func TestWorkerUnreadableCredentialCannotExecute(t *testing.T) {
 		return exec.Command("/bin/sh", "-c", "printf 'gh version 2.100.0\\n'"), nil
 	}, time.Second)
 	a, v := f.account(t)
-	if _, e := f.st.Pool.Exec(context.Background(), `UPDATE project_cli_versions SET secret=decode('00010203','hex') WHERE id=$1`, v); e != nil {
+	if _, e := f.st.Pool.Exec(context.Background(), `UPDATE project_cli_versions SET secret=X'00010203' WHERE id=$1`, v); e != nil {
 		t.Fatal(e)
 	}
 	id := uuid.New()
@@ -334,7 +363,7 @@ func TestWorkerRecordCommitFailureDoesNotClaimSuccessOrReplay(t *testing.T) {
 	a, v := f.account(t)
 	ctx := auth.With(context.Background(), auth.Console())
 	id := uuid.New()
-	if _, e := f.st.Pool.Exec(ctx, `CREATE FUNCTION reject_success_commit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.status='succeeded' THEN RAISE EXCEPTION 'synthetic record commit rejected'; END IF; RETURN NEW; END $$; CREATE CONSTRAINT TRIGGER fail_record_commit AFTER UPDATE ON cli_credential_verifications DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION reject_success_commit()`); e != nil {
+	if _, e := f.st.Pool.Exec(ctx, `CREATE TRIGGER fail_record_commit AFTER UPDATE ON cli_credential_verifications WHEN NEW.status='succeeded' BEGIN SELECT RAISE(ABORT, 'synthetic record commit rejected'); END`); e != nil {
 		t.Fatal(e)
 	}
 	if _, e := f.s.Start(ctx, f.project, a, cliverify.Start{OperationID: id, ExpectedVersionID: v}); e != nil {
@@ -407,33 +436,6 @@ func TestRecoveryRespectsHomeLeaseBetweenCommands(t *testing.T) {
 	}
 }
 
-func mustGuardPath(t *testing.T) string {
-	t.Helper()
-	p, e := filepath.Abs("../../../../auth-helper/cli_verify_guard.mjs")
-	if e != nil {
-		t.Fatal(e)
-	}
-	return p
-}
-
-// testNode 优先用固定版本的 Node；没有时用 PATH 里的 node（CI 装的是 Node 24），都没有就跳过。
-func testNode(t *testing.T) string {
-	t.Helper()
-	const pinned = "/Users/ljl/.local/node-v24.21.0/bin/node"
-	if _, e := os.Stat(pinned); e == nil {
-		return pinned
-	}
-	p, e := exec.LookPath("node")
-	if e != nil {
-		t.Skip("本机没有 node")
-	}
-	abs, e := filepath.Abs(p)
-	if e != nil {
-		t.Fatal(e)
-	}
-	return abs
-}
-
 func TestNon24NodeRejectsOnlyNewStartBeforeRegistrationOrTools(t *testing.T) {
 	var commands atomic.Int32
 	f := newFixture(t, func(_ context.Context, spec CommandSpec) (*exec.Cmd, error) {
@@ -500,6 +502,7 @@ func TestRegistryRejectsSameNameOverrideBeforeRegistration(t *testing.T) {
 		t.Fatal("untrusted template reached registration/tool")
 	}
 }
+
 func TestWorkerWrongActualVersionAndRawFailureStaySafe(t *testing.T) {
 	for _, kind := range []string{"version", "provider_error"} {
 		t.Run(kind, func(t *testing.T) {
@@ -548,6 +551,7 @@ func TestWorkerWrongActualVersionAndRawFailureStaySafe(t *testing.T) {
 		})
 	}
 }
+
 func TestWorkerProbeDeadlinePersistsTimeout(t *testing.T) {
 	f := newFixture(t, func(_ context.Context, spec CommandSpec) (*exec.Cmd, error) {
 		if spec.Phase == "version" {
@@ -566,9 +570,6 @@ func TestWorkerProbeDeadlinePersistsTimeout(t *testing.T) {
 	}
 }
 
-type verificationTransport func(*http.Request) (*http.Response, error)
-
-func (f verificationTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 func TestWorkerToolDigestFailureNeverFallsBackToHost(t *testing.T) {
 	var commands, downloads atomic.Int32
 	f := newFixture(t, func(context.Context, CommandSpec) (*exec.Cmd, error) { commands.Add(1); return nil, io.EOF }, time.Second)
@@ -603,6 +604,7 @@ func TestWorkerToolDigestFailureNeverFallsBackToHost(t *testing.T) {
 		t.Fatal("tampered archive published installed")
 	}
 }
+
 func TestWorkerDecryptedUnknownEnvironmentCannotExecute(t *testing.T) {
 	var probes atomic.Int32
 	f := newFixture(t, func(_ context.Context, spec CommandSpec) (*exec.Cmd, error) {

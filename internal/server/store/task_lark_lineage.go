@@ -5,8 +5,9 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
+
+	"loop-now/internal/server/db"
 )
 
 // BindTaskLarkTurnTx stamps an actual queued successor only from persisted
@@ -19,7 +20,7 @@ func (s *Store) BindTaskLarkTurnTx(ctx context.Context, m *TaskMutation, t TaskT
 	var action, initial uuid.UUID
 	var revision int64
 	err := m.Tx.QueryRow(ctx, `SELECT b.action_id,b.revision,b.continuation_turn_id FROM task_lark_credential_bindings b JOIN task_lark_switch_actions a ON a.task_id=b.task_id AND a.actor_key=b.actor_key AND a.action_id=b.action_id AND a.status='succeeded' JOIN task_lark_binding_members p ON p.task_id=b.task_id AND p.revision=b.revision AND p.member_role='publisher' WHERE b.task_id=$1 AND b.continuation_node_run_id=$2 AND p.runtime_id=$3`, t.TaskID, t.NodeRunID, t.RuntimeID).Scan(&action, &revision, &initial)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, db.ErrNoRows) {
 		return s.stampTaskLarkMemberTurnTx(ctx, m, t)
 	}
 	if err != nil {
@@ -50,7 +51,7 @@ func (s *Store) stampTaskLarkMemberTurnTx(ctx context.Context, m *TaskMutation, 
 	var action uuid.UUID
 	var revision int64
 	err := m.Tx.QueryRow(ctx, `SELECT b.action_id,b.revision FROM task_lark_binding_members p JOIN task_lark_credential_bindings b ON b.task_id=p.task_id AND b.revision=p.revision JOIN task_lark_switch_actions a ON a.task_id=b.task_id AND a.actor_key=b.actor_key AND a.action_id=b.action_id AND a.status='succeeded' WHERE p.task_id=$1 AND p.runtime_id=$2 ORDER BY b.revision DESC LIMIT 1`, m.Record.View.Task.ID, t.RuntimeID).Scan(&action, &revision)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, db.ErrNoRows) {
 		return nil
 	}
 	if err != nil {

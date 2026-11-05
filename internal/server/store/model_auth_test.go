@@ -12,7 +12,8 @@ import (
 	"github.com/google/uuid"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 type modelAuthEnv struct {
@@ -24,7 +25,7 @@ type modelAuthEnv struct {
 
 func newModelAuthEnv(t *testing.T) *modelAuthEnv {
 	t.Helper()
-	s := pgtest.NewStore(t)
+	s := sqlitetest.NewStore(t)
 	ctx := context.Background()
 	_, err := s.EnsureDefaults(ctx, "默认组织", "默认项目")
 	if err != nil {
@@ -216,7 +217,7 @@ func TestModelAuthRejectsExpiredChangedOrDeletedCallbacks(t *testing.T) {
 			o := e.operation()
 			switch kind {
 			case "expired":
-				if _, err := e.s.Pool.Exec(e.ctx, `UPDATE model_auth_operations SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1`, o.ID); err != nil {
+				if _, err := e.s.Pool.Exec(e.ctx, `UPDATE model_auth_operations SET expires_at=clock_timestamp()-1000000 WHERE id=$1`, o.ID); err != nil {
 					t.Fatal(err)
 				}
 			case "config":

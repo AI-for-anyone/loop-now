@@ -3,9 +3,6 @@ package httpapi_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/store"
@@ -13,35 +10,33 @@ import (
 	"loop-now/internal/server/taskruntime"
 	"loop-now/internal/server/tasks"
 	"loop-now/internal/server/workflow"
+	"loop-now/internal/testutil/sqlitetest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type pauseTaskPrompt struct {
-	mu               sync.Mutex
-	count            int
+	once             sync.Once
 	entered, release chan struct{}
 }
 
-func (p *pauseTaskPrompt) TraceQueryStart(ctx context.Context, _ *pgx.Conn, d pgx.TraceQueryStartData) context.Context {
-	if strings.Contains(d.SQL, "FROM agents WHERE id=$1") && strings.Contains(d.SQL, "FOR SHARE") {
-		p.mu.Lock()
-		p.count++
-		pause := p.count == 2
-		p.mu.Unlock()
-		if pause {
+// hook 在第一个 Agent 的采集读它的 CLI 时停住：这时项目规则和第一个 Agent 已读，第二个还没读，创建事务还开着。
+func (p *pauseTaskPrompt) hook(ctx context.Context, q string) {
+	if strings.Contains(q, "SELECT cli_name FROM agent_clis WHERE agent_id=$1") {
+		p.once.Do(func() {
 			close(p.entered)
 			select {
 			case <-p.release:
 			case <-ctx.Done():
 			}
-		}
+		})
 	}
-	return ctx
 }
-func (*pauseTaskPrompt) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
+
 func TestTaskPromptSingleProjectVersionAndFrozenRestore(t *testing.T) {
 	e := newEnv(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -61,15 +56,8 @@ func TestTaskPromptSingleProjectVersionAndFrozenRestore(t *testing.T) {
 	svc := tasks.New(e.st, e.api.Config, nil, tasks.Options{MaxSteps: 100, MaxEdges: 100, MaxVisits: 100, MaxRequest: 1 << 20}, e.api.Log)
 	input := taskmodel.CreateInput{ActionID: uuid.New(), Title: "frozen", Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "one", Steps: []workflow.Step{{ID: "one", Title: "one", AgentID: ids[0], InputFields: []workflow.Field{}, OutputFields: []workflow.Field{}, Inputs: map[string]workflow.Source{}}, {ID: "two", Title: "two", AgentID: ids[1], InputFields: []workflow.Field{}, OutputFields: []workflow.Field{}, Inputs: map[string]workflow.Source{}}}, Edges: []workflow.Edge{{ID: "next", From: "one", To: "two"}}}}
 	trace := &pauseTaskPrompt{entered: make(chan struct{}), release: make(chan struct{})}
-	original := e.st.Pool
-	cfg := original.Config()
-	cfg.ConnConfig.Tracer = trace
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	e.st.Pool = pool
-	defer func() { e.st.Pool = original; pool.Close() }()
+	e.st.Pool.SetQueryHook(trace.hook)
+	defer e.st.Pool.SetQueryHook(nil)
 	var once sync.Once
 	release := func() { once.Do(func() { close(trace.release) }) }
 	defer release()
@@ -85,40 +73,25 @@ func TestTaskPromptSingleProjectVersionAndFrozenRestore(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("second Agent capture not reached", ctx.Err())
 	}
-	writer, err := original.Acquire(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer writer.Release()
-	pid := writer.Conn().PgConn().PID()
+	// 创建事务占着唯一的写连接：项目 UPDATE 要等它提交。
 	updated := make(chan error, 1)
 	go func() {
-		_, err := writer.Exec(ctx, `UPDATE projects SET prompt='project-new',prompt_version=prompt_version+1 WHERE id=$1`, e.dc.Project.ID)
+		_, err := e.st.Pool.Exec(ctx, `UPDATE projects SET prompt='project-new',prompt_version=prompt_version+1 WHERE id=$1`, e.dc.Project.ID)
 		updated <- err
 	}()
-	for {
-		var blocked bool
-		if err := original.QueryRow(ctx, `SELECT coalesce(wait_event_type='Lock',false) FROM pg_stat_activity WHERE pid=$1`, pid).Scan(&blocked); err != nil {
-			t.Fatal(err)
-		}
-		if blocked {
-			break
-		}
-		select {
-		case err := <-updated:
-			t.Fatal("task project fence failed", err)
-		case <-ctx.Done():
-			t.Fatal(ctx.Err())
-		default:
-		}
+	sqlitetest.WaitWriteWaiters(t, ctx, e.st.Pool, 1)
+	select {
+	case err := <-updated:
+		t.Fatal("task project fence failed", err)
+	default:
 	}
 	release()
 	data := <-raw
-	if err = <-errors; err != nil {
+	if err := <-errors; err != nil {
 		t.Fatal(err)
 	}
 	detail := decode[taskmodel.Detail](t, data)
-	if err = <-updated; err != nil {
+	if err := <-updated; err != nil {
 		t.Fatal(err)
 	}
 	snapshots := map[uuid.UUID][]byte{}
@@ -197,7 +170,7 @@ func TestTaskPromptSingleProjectVersionAndFrozenRestore(t *testing.T) {
 	// Remove current Prompt content while retaining the live owner identity.
 	// Actual Agent deletion is forbidden for unfinished tasks; bypassing that
 	// guard would invalidate the new authorization binding, not test Prompt restore.
-	if _, err = e.st.Pool.Exec(ctx, `UPDATE agents SET prompt='',prompt_version=prompt_version+1,config_version=config_version+1 WHERE id=ANY($1::uuid[])`, ids); err != nil {
+	if _, err = e.st.Pool.Exec(ctx, `UPDATE agents SET prompt='',prompt_version=prompt_version+1,config_version=config_version+1 WHERE id IN ($1,$2)`, ids[0], ids[1]); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = e.st.Pool.Exec(ctx, `UPDATE task_instances SET prepared=true WHERE task_id=$1`, detail.Task.ID); err != nil {

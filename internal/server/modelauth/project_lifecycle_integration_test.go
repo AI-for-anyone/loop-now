@@ -3,20 +3,23 @@ package modelauth
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/clitemplate"
 	cm "loop-now/internal/server/credentialmodel"
 	"loop-now/internal/server/modelcredential"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+
+	"github.com/google/uuid"
+
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 // Only credential version writes are counted, by a nontransactional PG sequence.
@@ -32,24 +35,20 @@ type lifecycleEnv struct {
 	helper  *Helper
 	seeded  int64
 	logs    bytes.Buffer
+	// attempts 数尝试写入凭证版本的语句（回滚的也算），由语句钩子计数。
+	attempts atomic.Int64
 }
 
 func newLifecycleEnv(t *testing.T, options ServiceOptions) *lifecycleEnv {
 	t.Helper()
 	ctx := context.Background()
-	st := pgtest.NewStore(t)
+	st := sqlitetest.NewStore(t)
 	defaults, err := st.EnsureDefaults(ctx, "认证生命周期组织", "默认项目")
 	if err != nil {
 		t.Fatal(err)
 	}
 	project, err := st.CreateProject(ctx, defaults.Organization.ID, "认证生命周期项目")
 	if err != nil {
-		t.Fatal(err)
-	}
-	// Sequence increments survive rollback, so attempted writes stay observable.
-	if _, err = st.Pool.Exec(ctx, `CREATE SEQUENCE lifecycle_version_writes;
- CREATE FUNCTION lifecycle_count_write() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM nextval('lifecycle_version_writes'); RETURN NEW; END $$;
- CREATE TRIGGER lifecycle_count_write BEFORE INSERT ON model_auth_versions FOR EACH ROW EXECUTE FUNCTION lifecycle_count_write()`); err != nil {
 		t.Fatal(err)
 	}
 	templates, err := clitemplate.Load("")
@@ -61,6 +60,11 @@ func newLifecycleEnv(t *testing.T, options ServiceOptions) *lifecycleEnv {
 	helper := fakeGoHelper(t, `if(frame.type==='abort'){fs.appendFileSync(new URL('./events',import.meta.url),'abort\n');send({type:'result',id:operation.id,status:'succeeded',credential});}else{fs.appendFileSync(new URL('./events',import.meta.url),'login\n');const timer=setInterval(()=>{if(fs.existsSync(new URL('./release',import.meta.url))){clearInterval(timer);fs.appendFileSync(new URL('./events',import.meta.url),'result\n');send({type:'result',id:operation.id,status:'succeeded',credential});}},5);}`)
 	helper.Options.Timeout = 10 * time.Second
 	e := &lifecycleEnv{t: t, st: st, project: project.ID, helper: helper}
+	st.Pool.SetQueryHook(func(_ context.Context, q string) {
+		if strings.Contains(q, "INSERT INTO model_auth_versions") {
+			e.attempts.Add(1)
+		}
+	})
 	if options.LoginTimeout <= 0 {
 		options.LoginTimeout = 8 * time.Second
 	}
@@ -75,21 +79,10 @@ func newLifecycleEnv(t *testing.T, options ServiceOptions) *lifecycleEnv {
 			t.Error("lifecycle diagnostic leaked secret/URL")
 		}
 	})
-	var database, schema string
-	if err := st.Pool.QueryRow(ctx, `SELECT current_database(),current_schema()`).Scan(&database, &schema); err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("isolated PG database=%s schema=%s project=%s; actual Helper fd fixture, no provider/network", database, schema, project.ID)
+	t.Logf("isolated SQLite store project=%s; actual Helper fd fixture, no provider/network", project.ID)
 	return e
 }
-func (e *lifecycleEnv) totalWrites() int64 {
-	e.t.Helper()
-	var n int64
-	if err := e.st.Pool.QueryRow(context.Background(), `SELECT CASE WHEN is_called THEN last_value ELSE 0 END FROM lifecycle_version_writes`).Scan(&n); err != nil {
-		e.t.Fatal(err)
-	}
-	return n
-}
+func (e *lifecycleEnv) totalWrites() int64 { return e.attempts.Load() }
 
 // writes counts credential version writes attempted by logins after seeding.
 func (e *lifecycleEnv) writes() int64 { return e.totalWrites() - e.seeded }
@@ -290,41 +283,13 @@ func TestProjectLifecycleProjectDeletedLateResultSealZero(t *testing.T) {
 		t.Fatal("deleted project secret revived", err)
 	}
 }
-func TestProjectLifecycleRecordDeadlineFreshTerminalContext(t *testing.T) {
-	e := newLifecycleEnv(t, ServiceOptions{RecordTimeout: 200 * time.Millisecond})
-	old := e.seedAccount()
-	op := e.start(&old)
-	tx, err := e.st.Pool.Begin(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tx.Rollback(context.Background())
-	if _, err = tx.Exec(context.Background(), `SELECT id FROM projects WHERE id=$1 FOR UPDATE`, e.project); err != nil {
-		t.Fatal(err)
-	}
-	e.release()
-	e.waitDone(op.ID)
-	// Still holding the project lock: the commit record timed out, while a new
-	// context can independently lock the operation and persist its failed state.
-	status, url, code := e.rawOperation(op.ID)
-	if status != "failed" || url != nil || code == nil {
-		t.Fatal("expired commit context poisoned terminal write")
-	}
-	e.assertNoSeal()
-	if err = tx.Rollback(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	e.assertOld(old)
-	if !strings.Contains(e.logs.String(), `"stage":"credential_commit"`) {
-		t.Fatal("deadline did not occur at credential commit")
-	}
-}
+
 func TestProjectLifecycleDeferredCommitFailurePreservesOld(t *testing.T) {
 	e := newLifecycleEnv(t, ServiceOptions{})
 	old := e.seedAccount()
 	op := e.start(&old)
-	_, err := e.st.Pool.Exec(context.Background(), `CREATE FUNCTION lifecycle_fail_commit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic deferred commit failure'; END $$;
- CREATE CONSTRAINT TRIGGER lifecycle_fail_commit AFTER INSERT ON model_auth_versions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION lifecycle_fail_commit()`)
+	// SQLite 没有延迟到提交时的触发器：在写入版本时失败，整个事务同样回滚。
+	_, err := e.st.Pool.Exec(context.Background(), `CREATE TRIGGER lifecycle_fail_commit AFTER INSERT ON model_auth_versions BEGIN SELECT RAISE(ABORT, 'synthetic deferred commit failure'); END`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -361,8 +326,7 @@ func TestProjectLifecycleProjectDeleteRollbackKeepsLiveHelper(t *testing.T) {
 	e := newLifecycleEnv(t, ServiceOptions{})
 	old := e.seedAccount()
 	op := e.start(&old)
-	_, err := e.st.Pool.Exec(context.Background(), `CREATE FUNCTION lifecycle_fail_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.deleted_at IS NOT NULL THEN RAISE EXCEPTION 'synthetic project delete rollback'; END IF; RETURN NEW; END $$;
- CREATE TRIGGER lifecycle_fail_delete BEFORE UPDATE ON projects FOR EACH ROW EXECUTE FUNCTION lifecycle_fail_delete()`)
+	_, err := e.st.Pool.Exec(context.Background(), `CREATE TRIGGER lifecycle_fail_delete BEFORE UPDATE ON projects WHEN NEW.deleted_at IS NOT NULL BEGIN SELECT RAISE(ABORT, 'synthetic project delete rollback'); END`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -391,48 +355,63 @@ func TestProjectLifecycleProjectDeleteRollbackKeepsLiveHelper(t *testing.T) {
 	}
 }
 
+func TestProjectLifecycleRecordDeadlineFreshTerminalContext(t *testing.T) {
+	e := newLifecycleEnv(t, ServiceOptions{RecordTimeout: 200 * time.Millisecond})
+	old := e.seedAccount()
+	op := e.start(&old)
+	// 凭证提交写版本时停在语句钩子里，直到提交的期限到（写事务回滚）；终态回写用新的上下文，之后拿到写连接。
+	var blocked atomic.Bool
+	e.st.Pool.SetQueryHook(func(ctx context.Context, q string) {
+		// 停住的写入在上下文结束后不会执行，不计入尝试次数。
+		if strings.Contains(q, "INSERT INTO model_auth_versions") && blocked.CompareAndSwap(false, true) {
+			select {
+			case <-ctx.Done():
+			case <-time.After(10 * time.Second):
+			}
+		}
+	})
+	e.release()
+	e.waitDone(op.ID)
+	status, url, code := e.rawOperation(op.ID)
+	if status != "failed" || url != nil || code == nil || !blocked.Load() {
+		t.Fatal("expired commit context poisoned terminal write")
+	}
+	e.assertNoSeal()
+	e.assertOld(old)
+	if !strings.Contains(e.logs.String(), `"stage":"credential_commit"`) {
+		t.Fatal("deadline did not occur at credential commit")
+	}
+}
+
 func TestProjectLifecycleSuccessMetadataAfterActualCommit(t *testing.T) {
 	e := newLifecycleEnv(t, ServiceOptions{RecordTimeout: 3 * time.Second})
 	old := e.seedAccount()
 	op := e.start(&old)
 	ctx := context.Background()
-	lock, err := e.st.Pool.Acquire(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer lock.Release()
-	var key int64
-	if err = lock.QueryRow(ctx, `SELECT hashtextextended($1,0)`, old.ID.String()).Scan(&key); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = lock.Exec(ctx, `SELECT pg_advisory_lock($1)`, key); err != nil {
-		t.Fatal(err)
-	}
-	released := false
-	defer func() {
-		if !released {
-			_, _ = lock.Exec(ctx, `SELECT pg_advisory_unlock($1)`, key)
+	// 提交事务写完账号与操作之后、真正提交之前停住：每个写事务提交前最后一条语句是插件变更的收取，
+	// 写过凭证版本的那个事务停在那里，直到测试放开；结果因此不能在提交可见之前就显示为成功。
+	var sawVersion, blocking atomic.Bool
+	unblock := make(chan struct{})
+	var unblockOnce sync.Once
+	releaseCommit := func() { unblockOnce.Do(func() { close(unblock) }) }
+	defer releaseCommit()
+	e.st.Pool.SetQueryHook(func(_ context.Context, q string) {
+		switch {
+		case strings.Contains(q, "INSERT INTO model_auth_versions"):
+			e.attempts.Add(1)
+			sawVersion.Store(true)
+		case strings.Contains(q, "FROM plugin_changes") && sawVersion.Load() && blocking.CompareAndSwap(false, true):
+			<-unblock
 		}
-	}()
-	// The deferred trigger blocks the actual COMMIT after account and operation
-	// updates, so a green result cannot be manufactured before PG visibility.
-	query := fmt.Sprintf(`CREATE FUNCTION lifecycle_block_commit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(%d::bigint); RETURN NEW; END $$;
- CREATE CONSTRAINT TRIGGER lifecycle_block_commit AFTER INSERT ON model_auth_versions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION lifecycle_block_commit()`, key)
-	if _, err = e.st.Pool.Exec(ctx, query); err != nil {
-		t.Fatal(err)
-	}
-	e.release()
-	waitAuth(t, func() bool {
-		var waiting bool
-		err := e.st.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND NOT granted AND classid::bigint=$1 AND objid::bigint=$2)`, int64(uint64(key)>>32), int64(uint32(key))).Scan(&waiting)
-		return err == nil && waiting
 	})
+	e.release()
+	waitAuth(t, func() bool { return blocking.Load() })
 	status, _, _ := e.rawOperation(op.ID)
 	if status != "awaiting_authorization" {
 		t.Fatal("uncommitted success visible")
 	}
 	var current uuid.UUID
-	if err = e.st.Pool.QueryRow(ctx, `SELECT current_model_version_id FROM project_credential_accounts WHERE id=$1`, old.ID).Scan(&current); err != nil || current != *old.CurrentVersionID {
+	if err := e.st.Pool.QueryRow(ctx, `SELECT current_model_version_id FROM project_credential_accounts WHERE id=$1`, old.ID).Scan(&current); err != nil || current != *old.CurrentVersionID {
 		t.Fatal("uncommitted account pointer visible", err)
 	}
 	type readResult struct {
@@ -443,10 +422,7 @@ func TestProjectLifecycleSuccessMetadataAfterActualCommit(t *testing.T) {
 	for i := 0; i < 8; i++ {
 		go func() { state, err := e.p.GetLogin(ctx, e.project, op.ID); reads <- readResult{state, err} }()
 	}
-	if _, err = lock.Exec(ctx, `SELECT pg_advisory_unlock($1)`, key); err != nil {
-		t.Fatal(err)
-	}
-	released = true
+	releaseCommit()
 	e.waitDone(op.ID)
 	for i := 0; i < 8; i++ {
 		select {

@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 
 	authhelper "loop-now/auth-helper"
 	"loop-now/internal/buildinfo"
@@ -32,6 +31,7 @@ import (
 	"loop-now/internal/server/content"
 	"loop-now/internal/server/conversation"
 	"loop-now/internal/server/coord"
+	"loop-now/internal/server/db"
 	"loop-now/internal/server/executor/local"
 	"loop-now/internal/server/executor/local/pirpc"
 	"loop-now/internal/server/folders"
@@ -39,6 +39,7 @@ import (
 	"loop-now/internal/server/inbox"
 	"loop-now/internal/server/larkauth"
 	"loop-now/internal/server/loopctldist"
+	"loop-now/internal/server/maintenance"
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/modelconfig"
@@ -48,7 +49,11 @@ import (
 	"loop-now/internal/server/runrecord"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/tasks"
+	"loop-now/internal/server/webui"
 )
+
+// WorkRootLockFile 是工作根里的实例锁文件名。
+const WorkRootLockFile = ".loop-now-server.lock"
 
 // App 是装配好的服务端。
 type App struct {
@@ -62,23 +67,27 @@ type App struct {
 	InstanceID      uuid.UUID
 	Log             *slog.Logger
 
-	Store    *store.Store
-	Redis    *redis.Client
-	Coord    *coord.Coord
-	Executor *local.Executor
-	Conv     *conversation.Service
-	Tasks    *tasks.Service
-	Folders  *folders.Service
-	Config   *agentconfig.Service
-	API      *httpapi.Server
+	Store *store.Store
+	Coord *coord.Coord
+	// dirLock、workLock 是数据目录与工作根的实例锁，关闭时最后放开。
+	dirLock, workLock *db.DirLock
+	// Maintenance 定时做检查点、清理旧日志与备份。
+	Maintenance *maintenance.Service
+	Executor    *local.Executor
+	Conv        *conversation.Service
+	Tasks       *tasks.Service
+	Folders     *folders.Service
+	Config      *agentconfig.Service
+	API         *httpapi.Server
 	// Plugins 是插件第二版的安装与配置；PluginHost 在配置了宿主入口时监护插件宿主，否则为空。
-	Plugins      *plugins.Service
-	PluginHost   *pluginhost.Supervisor
-	pluginCancel context.CancelFunc
+	Plugins    *plugins.Service
+	PluginHost *pluginhost.Supervisor
 
-	listener   net.Listener
-	http       *http.Server
-	baseCancel context.CancelFunc
+	listener net.Listener
+	// readyWritten 表示本进程写过就绪文件，退出时要删掉它。
+	readyWritten bool
+	http         *http.Server
+	baseCancel   context.CancelFunc
 
 	// 对外端口（未配置时为空）：TLS，只认外部令牌。
 	extListener net.Listener
@@ -102,10 +111,6 @@ type Options struct {
 	LarkHTTPTransport http.RoundTripper
 	AuthLoginHelper   modelauth.LoginHelper
 	AuthRefresher     modelauth.Refresher
-	// SearchPath 非空时，数据库连接限定在该 schema（测试用）。
-	SearchPath string
-	// MigrationTarget is an explicit Go-only isolated fixture ceiling; production uses all migrations.
-	MigrationTarget int64
 	// Listener 非空时直接使用（测试用），否则按配置的监听地址监听。
 	Listener net.Listener
 	// ExternalListener 非空时作为对外端口的监听器（测试用，仍按配置的证书启用 TLS），否则按配置的对外监听地址监听。
@@ -138,11 +143,15 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	}
 
 	// 依赖检查。
-	if a.Store, err = store.Open(ctx, cfg.DatabaseURL, store.OpenOptions{SearchPath: o.SearchPath}); err != nil {
-		return a, err
+	dbDir := config.DBDir(cfg.DataDir)
+	if err = os.MkdirAll(dbDir, 0o700); err != nil {
+		return a, fmt.Errorf("创建数据目录失败：%w", err)
 	}
-	a.Store.InstanceID = &a.InstanceID
-	if err = preflight.CheckRedis(ctx, cfg.RedisURL); err != nil {
+	// 一个数据目录只给一个服务进程：后台维护、迁移与内存里的协调状态都假定只有本进程在写。
+	if a.dirLock, err = db.LockDir(dbDir); err != nil {
+		if errors.Is(err, db.ErrLocked) {
+			return a, fmt.Errorf("数据目录 %s 已被另一个服务进程使用（%s）：%w", dbDir, config.EnvDataDir, err)
+		}
 		return a, err
 	}
 	res, err := preflight.Resolve(ctx, preflight.Options{
@@ -152,7 +161,19 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	if err != nil {
 		return a, err
 	}
+	// 一个工作根也只给一个服务进程：Agent 目录、共享的工具与平台文件，以及启动时的各项清理都假定工作根里只有本实例。
+	// 在建库之前取锁，被拒绝的实例不在自己的数据目录里留下新库。
+	if a.workLock, err = db.LockPath(filepath.Join(res.WorkRoot, WorkRootLockFile)); err != nil {
+		if errors.Is(err, db.ErrLocked) {
+			return a, fmt.Errorf("工作根 %s 已被另一个服务进程使用（%s）：%w", res.WorkRoot, config.EnvWorkRoot, err)
+		}
+		return a, err
+	}
 	log.Info("启动检查通过", "piBin", res.PiBin, "piAIDir", res.PiAIDir, "workRoot", res.WorkRoot, "execBasePath", res.ExecBasePath)
+	if a.Store, err = store.Open(ctx, db.Options{Dir: dbDir, Logger: log}); err != nil {
+		return a, err
+	}
+	a.Store.InstanceID = &a.InstanceID
 
 	// 同版本的 loopctl：校验构建产物，安装本机平台的二进制，放进 Agent 的 PATH。
 	dist, err := loopctldist.Load(cfg.LoopctlDistDir, buildinfo.Version())
@@ -189,23 +210,16 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	if err != nil {
 		return a, err
 	}
-	if o.MigrationTarget > 0 {
-		err = a.Store.MigrateThrough(ctx, log, o.MigrationTarget)
-	} else {
-		err = a.Store.Migrate(ctx, log)
-	}
-	if err != nil {
+	if err = a.Store.Migrate(ctx, log); err != nil {
 		return a, err
 	}
-	if o.MigrationTarget == 0 || o.MigrationTarget >= 34 {
-		a.ModelSettings = &modelconfig.Service{Store: a.Store, Models: models, Options: modelOptions}
-		settings, reloadErr := a.ModelSettings.Reload(ctx)
-		if reloadErr != nil {
-			return a, fmt.Errorf("读取自定义模型配置失败：%w", reloadErr)
-		}
-		if settings.LoadError != "" {
-			log.Warn("自定义模型配置无效，已退回内置目录", "error", settings.LoadError)
-		}
+	a.ModelSettings = &modelconfig.Service{Store: a.Store, Models: models, Options: modelOptions}
+	settings, reloadErr := a.ModelSettings.Reload(ctx)
+	if reloadErr != nil {
+		return a, fmt.Errorf("读取自定义模型配置失败：%w", reloadErr)
+	}
+	if settings.LoadError != "" {
+		log.Warn("自定义模型配置无效，已退回内置目录", "error", settings.LoadError)
 	}
 	defaults, err := a.Store.EnsureDefaults(ctx, cfg.DefaultOrgName, cfg.DefaultProjectName)
 	if err != nil {
@@ -225,10 +239,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		}
 	}
 
-	redisOpts, _ := redis.ParseURL(cfg.RedisURL)
-	a.Redis = redis.NewClient(redisOpts)
-	a.Coord = coord.New(a.Redis, coord.Options{Prefix: cfg.RedisKeyPrefix, LockTTL: cfg.LockTTL, StreamMaxLen: cfg.EventStreamMaxLen,
-		RunTextTTL: cfg.RunTextTTL, OverviewMaxLen: cfg.OverviewMaxLen})
+	a.Coord = coord.New(coord.Options{StreamMaxLen: cfg.EventStreamMaxLen, OverviewMaxLen: cfg.OverviewMaxLen})
 
 	installer := clitemplate.NewInstaller(res.WorkRoot, cfg.CLIInstallTimeout, o.CLIHTTPClient)
 	a.Installer = installer
@@ -243,15 +254,17 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	}
 	a.Config.PluginAssets = a.pluginAssets
 
-	authRoot := filepath.Join(res.WorkRoot, "platform", "auth-helper-v"+cfg.PiVersion)
-	if err = os.MkdirAll(filepath.Dir(authRoot), 0700); err != nil {
+	// 登录 helper 与平台扩展按内容寻址装在 platform/auth-helper/<摘要>/ 下：不同构建的文件互不覆盖。
+	platformDir := filepath.Join(res.WorkRoot, "platform")
+	if err = os.MkdirAll(platformDir, 0700); err != nil {
 		return a, err
 	}
-	helperEntry, authExtension, err := authhelper.Install(authRoot)
+	helperEntry, authExtension, err := authhelper.Install(filepath.Join(platformDir, "auth-helper"))
 	if err != nil {
 		return a, err
 	}
-	helper := &modelauth.Helper{Options: modelauth.HelperOptions{NodeBin: res.NodeBin, Entry: helperEntry, WorkRoot: filepath.Dir(authRoot), BasePath: res.ExecBasePath, PiPackageRoot: packageRoot, PiVersion: cfg.PiVersion, Timeout: cfg.AuthLoginTimeout, StopGrace: cfg.PiStopGrace}}
+	authRoot := filepath.Dir(helperEntry)
+	helper := &modelauth.Helper{Options: modelauth.HelperOptions{NodeBin: res.NodeBin, Entry: helperEntry, WorkRoot: platformDir, BasePath: res.ExecBasePath, PiPackageRoot: packageRoot, PiAIDir: res.PiAIDir, PiVersion: cfg.PiVersion, Timeout: cfg.AuthLoginTimeout, StopGrace: cfg.PiStopGrace}}
 	var login modelauth.LoginHelper = helper
 	var refresher modelauth.Refresher = helper
 	if o.AuthLoginHelper != nil {
@@ -273,7 +286,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		return a, err
 	}
 	projectCredentials := modelauth.NewProjectService(a.ModelAuth, templates, cfg.MaxCredential)
-	googleHelper := &cliauth.ProcessHelper{Options: cliauth.HelperOptions{WorkRoot: filepath.Dir(authRoot), StopGrace: cfg.PiStopGrace, Runtime: func(ctx context.Context) (cliauth.HelperRuntime, error) {
+	googleHelper := &cliauth.ProcessHelper{Options: cliauth.HelperOptions{WorkRoot: platformDir, StopGrace: cfg.PiStopGrace, Runtime: func(ctx context.Context) (cliauth.HelperRuntime, error) {
 		template, ok := templates.Get("gcloud")
 		if !ok {
 			return cliauth.HelperRuntime{}, cliauth.ErrUnavailable
@@ -333,11 +346,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		username = u.Username
 	}
 	taskSource := &tasks.Source{ModelAuth: authCoordinator, Normal: a.Config, Store: a.Store, WorkRoot: res.WorkRoot, GitBin: res.GitBin, BasePath: res.ExecBasePath, MaxSessionBytes: cfg.TaskMaxSession, CloneTimeout: cfg.GitCloneTimeout, Templates: templates, Installer: installer}
-	// Production always enables the canonical task-switch resolver. Only an
-	// explicit pre-021 historical-schema fixture omits the module.
-	if o.MigrationTarget == 0 || o.MigrationTarget >= 21 {
-		taskSource.EnableLarkOverlay()
-	}
+	taskSource.EnableLarkOverlay()
 	taskSource.Log = log
 	taskSource.PluginAssets = a.pluginAssets
 	taskObserver := &tasks.Observer{Store: a.Store, Normal: recorder, Timeout: cfg.TaskRecordTimeout, Log: log}
@@ -351,7 +360,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		maxFolderUpload = 1 << 30
 	}
 	a.Executor = local.New(local.Options{Models: models, Hooks: appHooks{a}, Dialogs: a.askDialog, LarkFactory: larkFactory, GoogleResolver: googleCoordinator, GoogleRuntimeEntry: filepath.Join(authRoot, "google_runtime.py"),
-		AuthResolver: authCoordinator, AuthExtension: authExtension, LegacyAuthExtension: filepath.Join(filepath.Dir(authExtension), "legacy-anthropic.mjs"), CodexServiceTierExtension: filepath.Join(filepath.Dir(authExtension), "codex-service-tier.mjs"), PiPackageRoot: packageRoot, AuthIPCTimeout: cfg.AuthIPCTimeout,
+		AuthResolver: authCoordinator, AuthExtension: authExtension, LegacyAuthExtension: filepath.Join(filepath.Dir(authExtension), "legacy-anthropic.mjs"), CodexServiceTierExtension: filepath.Join(filepath.Dir(authExtension), "codex-service-tier.mjs"), PiPackageRoot: packageRoot, PiAIDir: res.PiAIDir, AuthIPCTimeout: cfg.AuthIPCTimeout,
 		WorkRoot: res.WorkRoot, PiBin: res.PiBin, GitBin: res.GitBin, ExecBasePath: res.ExecBasePath, Passthrough: cfg.ExecEnvPassthrough,
 		Username: username, MaxProcesses: cfg.PiMaxProcesses, IdleTimeout: cfg.PiIdleTimeout, StartTimeout: cfg.PiStartTimeout,
 		StopGrace: cfg.PiStopGrace, AbortTimeout: cfg.AbortTimeout, CloneTimeout: cfg.GitCloneTimeout, InstanceID: a.InstanceID, Hostname: host,
@@ -363,18 +372,14 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	// remove stale PID records. Missing/invalid provenance fails closed.
 	var protectedLark []local.PendingRuntimeHandoff
 	var pendingLark []store.TaskLarkRecoveryAction
-	// Explicit historical-schema fixtures have no switch tables. Production
-	// always migrates fully and must never swallow a recovery-query failure.
-	if o.MigrationTarget == 0 || o.MigrationTarget >= 21 {
-		var readErr error
-		pendingLark, readErr = a.Store.PendingTaskLarkRecovery(ctx)
-		if readErr != nil {
-			return a, readErr
-		}
-		protectedLark, err = larkPendingHandoffs(pendingLark)
-		if err != nil {
-			return a, err
-		}
+	var readErr error
+	pendingLark, readErr = a.Store.PendingTaskLarkRecovery(ctx)
+	if readErr != nil {
+		return a, readErr
+	}
+	protectedLark, err = larkPendingHandoffs(pendingLark)
+	if err != nil {
+		return a, err
 	}
 	if err = a.Executor.CleanupStaleExceptPending(ctx, protectedLark); err != nil {
 		return a, err
@@ -384,12 +389,11 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	}
 
 	a.Conv = conversation.New(a.Store, a.Coord, a.Executor, conversation.Options{
-		InstanceID: a.InstanceID, MaxMessage: cfg.MaxMessage, LockRenewInterval: cfg.LockRenewInterval,
-		ReconcileInterval: cfg.ReconcileInterval,
+		InstanceID: a.InstanceID, MaxMessage: cfg.MaxMessage, ReconcileInterval: cfg.ReconcileInterval,
 	}, log)
 	taskSource.PauseNormal = a.Conv.PauseDispatch
 	taskSource.FreezeNormal = a.Executor.FreezeForFork
-	a.Tasks = tasks.New(a.Store, a.Config, a.Executor, tasks.Options{InstanceID: a.InstanceID, MaxSteps: cfg.TaskMaxSteps, MaxEdges: cfg.TaskMaxEdges, MaxVisits: cfg.TaskMaxVisits, MaxRequest: cfg.TaskMaxRequest, MaxArtifact: cfg.TaskMaxArtifact, ReconcileInterval: cfg.TaskReconcileInterval, LockRenewInterval: cfg.LockRenewInterval, RecordTimeout: cfg.TaskRecordTimeout}, log)
+	a.Tasks = tasks.New(a.Store, a.Config, a.Executor, tasks.Options{InstanceID: a.InstanceID, MaxSteps: cfg.TaskMaxSteps, MaxEdges: cfg.TaskMaxEdges, MaxVisits: cfg.TaskMaxVisits, MaxRequest: cfg.TaskMaxRequest, MaxArtifact: cfg.TaskMaxArtifact, ReconcileInterval: cfg.TaskReconcileInterval, RecordTimeout: cfg.TaskRecordTimeout}, log)
 	a.Tasks.Source = taskSource
 	if larkRuntime != nil {
 		a.Tasks.LarkSwitchNative = larkRuntime
@@ -418,9 +422,18 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 
 	a.Store.ImageMaxCount = cfg.MaxMessageImages
 	a.Tasks.Hooks = appHooks{a}
+	console, consoleSource, err := consoleFiles(cfg.WebDir)
+	if err != nil {
+		return a, err
+	}
+	if console != nil {
+		log.Info("控制台由服务端提供", "source", consoleSource)
+	} else {
+		log.Info("服务端没有控制台文件，只提供 API（开发时用 vite，或设置 " + config.EnvWebDir + "）")
+	}
 	a.API = &httpapi.Server{Hooks: appHooks{a}, CLIImport: a.CLIImport, CLIVerification: a.CLIVerification, CLIAuth: a.CLIAuth, ModelAuth: a.ModelAuth, ModelSettings: a.ModelSettings, ProjectCredentials: projectCredentials,
 		O: httpapi.Options{
-			AllowedHosts: cfg.AllowedHosts, ConsoleOrigins: cfg.ConsoleOrigins, SSEKeepalive: cfg.SSEKeepalive, TaskEventPoll: cfg.TaskEventPoll, Defaults: defaults,
+			AllowedHosts: cfg.AllowedHosts, ConsoleOrigins: cfg.ConsoleOrigins, Console: webui.Handler(console), SSEKeepalive: cfg.SSEKeepalive, TaskEventPoll: cfg.TaskEventPoll, Defaults: defaults,
 			Limits: apitypes.Limits{MaxMessageImages: cfg.MaxMessageImages, MaxMessageImageBytes: cfg.MaxMessageImageBytes, MaxMessageImagePixels: cfg.MaxMessageImagePixels, MaxUploadFile: cfg.MaxUploadFile, MaxFolderUpload: maxFolderUpload, MaxMessage: cfg.MaxMessage, MaxInboxMessage: cfg.MaxInboxMessage, MaxSkillArchive: cfg.MaxSkillArchive,
 				MaxSkillEntries: cfg.MaxSkillEntries, MaxCredential: cfg.MaxCredential,
 				TextEdit: apitypes.TextEdit{MaxBytes: cfg.TextEditMax, Extensions: cfg.TextEditExtensions}},
@@ -428,26 +441,22 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		Config: a.Config, Conv: a.Conv, Models: models, Templates: templates, Installer: installer, Store: a.Store, Coord: a.Coord,
 		Tasks: a.Tasks, Records: &runrecord.Service{Store: a.Store}, Inbox: inboxSvc, Folders: a.Folders, Log: log,
 	}
-	if o.MigrationTarget == 0 || o.MigrationTarget >= 31 {
-		if err = a.assemblePlugins(cfg, res, log); err != nil {
-			return a, err
-		}
+	if err = a.assemblePlugins(cfg, res, log); err != nil {
+		return a, err
 	}
 	baseCtx, baseCancel := context.WithCancel(context.Background())
 	a.baseCancel = baseCancel
 	// 文件夹：中断的拉取标为失败、清空回收区；在任何 Pi 启动之前一次性回放退役文件夹来源中未落到磁盘的人工修改。
-	if o.MigrationTarget == 0 || o.MigrationTarget >= 29 {
-		if err = a.Folders.Start(ctx); err != nil {
-			return a, err
-		}
-		legacy, err := a.Folders.ApplyLegacyFolderSources(ctx)
-		if err != nil {
-			return a, fmt.Errorf("回放退役文件夹来源失败：%w", err)
-		}
-		if legacy.Sources > 0 || legacy.UnclonedGitDirs > 0 {
-			log.Info("已回放退役文件夹来源", "sources", legacy.Sources, "filesWritten", legacy.FilesWritten, "filesDeleted", legacy.FilesDeleted,
-				"filesSkipped", legacy.FilesSkipped, "unclonedGitSources", legacy.UnclonedGitDirs)
-		}
+	if err = a.Folders.Start(ctx); err != nil {
+		return a, err
+	}
+	legacy, err := a.Folders.ApplyLegacyFolderSources(ctx)
+	if err != nil {
+		return a, fmt.Errorf("回放退役文件夹来源失败：%w", err)
+	}
+	if legacy.Sources > 0 || legacy.UnclonedGitDirs > 0 {
+		log.Info("已回放退役文件夹来源", "sources", legacy.Sources, "filesWritten", legacy.FilesWritten, "filesDeleted", legacy.FilesDeleted,
+			"filesSkipped", legacy.FilesSkipped, "unclonedGitSources", legacy.UnclonedGitDirs)
 	}
 	for _, p := range local.AncestorEntryFiles(res.WorkRoot) {
 		log.Warn("工作根目录的上级目录中有上下文入口文件，Pi 会把它读进每个 Agent 的系统提示；请移走", "path", p)
@@ -458,6 +467,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	if err = a.Tasks.Start(ctx); err != nil {
 		return a, err
 	}
+	a.Maintenance = maintenance.Start(a.Store, maintenance.Options{BackupDir: cfg.BackupDir, BackupKeep: cfg.BackupKeep}, log)
 
 	a.Conv.StartSleepMaintenance(cfg.SleepScanInterval, cfg.SleepScanBatch, func(id uuid.UUID) {
 		a.Tasks.Kick(id)
@@ -509,12 +519,17 @@ func (a *App) Serve() error {
 		if err != nil {
 			return fmt.Errorf("读取插件设置失败：%w", err)
 		}
-		ctx, cancel := context.WithCancel(context.Background())
-		a.pluginCancel = cancel
 		a.PluginHost.Start(settings.Disabled)
-		go a.Plugins.Listen(ctx)
+		a.Plugins.WakeOnCommit()
 	}
 	a.Log.Info("开始提供服务", "addr", a.Addr())
+	if a.Cfg.ReadyFile != "" {
+		// 监听器早已打开，连接在 Serve 开始前排队，所以这时写出就绪文件不会让人连上一个还不回答的端口。
+		if err := writeReadyFile(a.Cfg.ReadyFile, Ready{URL: "http://" + a.Addr(), PID: os.Getpid(), Version: buildinfo.Version()}); err != nil {
+			return fmt.Errorf("写就绪文件 %s 失败：%w", a.Cfg.ReadyFile, err)
+		}
+		a.readyWritten = true
+	}
 	if err := a.http.Serve(a.listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
@@ -538,13 +553,13 @@ func (a *App) Shutdown(ctx context.Context) error {
 		}
 	}
 	if a.PluginHost != nil {
-		if a.pluginCancel != nil {
-			a.pluginCancel()
-		}
 		errs = append(errs, a.PluginHost.Stop(ctx))
 	}
 	if a.Tasks != nil {
 		errs = append(errs, a.Tasks.Stop(ctx))
+	}
+	if a.Maintenance != nil {
+		errs = append(errs, a.Maintenance.Stop(ctx))
 	}
 	if a.Folders != nil {
 		errs = append(errs, a.Folders.Stop(ctx))
@@ -557,6 +572,9 @@ func (a *App) Shutdown(ctx context.Context) error {
 	}
 	if a.ModelAuth != nil {
 		errs = append(errs, a.ModelAuth.Close(ctx))
+	}
+	if a.readyWritten {
+		_ = os.Remove(a.Cfg.ReadyFile)
 	}
 	a.closeResources()
 	a.Log.Info("服务端已停止")
@@ -646,7 +664,7 @@ func (a *App) assemblePlugins(cfg *config.Config, res *preflight.Resolved, log *
 	}
 	a.API.Plugins = a.Plugins
 	if cfg.PluginHostEntry == "" {
-		log.Info("没有配置插件宿主入口，插件的平台半边不运行", "env", config.EnvPluginHostEntry)
+		log.Info("没有配置插件宿主入口，插件的平台侧不运行", "env", config.EnvPluginHostEntry)
 		return nil
 	}
 	env := []string{"PATH=" + res.ExecBasePath, "HOME=" + root, "LANG=C.UTF-8", "LOOP_NOW_PLUGINS_ROOT=" + root, "LOOP_NOW_API_URL=" + a.Plugins.APIURL}
@@ -752,10 +770,9 @@ func (a *App) closeResources() {
 		}
 		cancel()
 	}
-	if a.Redis != nil {
-		_ = a.Redis.Close()
-	}
 	if a.Store != nil {
 		a.Store.Close()
 	}
+	_ = a.workLock.Release()
+	_ = a.dirLock.Release()
 }

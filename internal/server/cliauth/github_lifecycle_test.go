@@ -2,12 +2,14 @@ package cliauth
 
 import (
 	"context"
+	cm "loop-now/internal/server/credentialmodel"
+	"loop-now/internal/server/githubauth/githubtest"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	cm "loop-now/internal/server/credentialmodel"
-	"loop-now/internal/server/githubauth/githubtest"
 )
 
 func githubPendingFixture(t *testing.T) (googleFixture, *Service, *githubtest.Attempt, uuid.UUID) {
@@ -62,7 +64,7 @@ func TestGitHubShutdownPersistsBeforeCancellingHTTP(t *testing.T) {
 func TestGitHubCancelRollbackDoesNotCancelHelper(t *testing.T) {
 	f, s, attempt, id := githubPendingFixture(t)
 	ctx := context.Background()
-	if _, err := f.st.Pool.Exec(ctx, `CREATE FUNCTION github_cancel_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.status='cancelled' THEN RAISE EXCEPTION 'synthetic rollback'; END IF; RETURN NEW; END $$; CREATE TRIGGER github_cancel_fail BEFORE UPDATE OF status ON project_cli_auth_operations FOR EACH ROW EXECUTE FUNCTION github_cancel_fail()`); err != nil {
+	if _, err := f.st.Pool.Exec(ctx, `CREATE TRIGGER github_cancel_fail BEFORE UPDATE OF status ON project_cli_auth_operations WHEN NEW.status='cancelled' BEGIN SELECT RAISE(ABORT, 'synthetic rollback'); END`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Cancel(ctx, f.project, id); err == nil {
@@ -77,7 +79,7 @@ func TestGitHubCancelRollbackDoesNotCancelHelper(t *testing.T) {
 	if err != nil || op.Status != "awaiting_authorization" || op.UserCode == nil {
 		t.Fatal("rollback changed operation interaction state", err)
 	}
-	if _, err = f.st.Pool.Exec(ctx, `DROP TRIGGER github_cancel_fail ON project_cli_auth_operations`); err != nil {
+	if _, err = f.st.Pool.Exec(ctx, `DROP TRIGGER github_cancel_fail`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.Cancel(ctx, f.project, id); err != nil {
@@ -96,26 +98,24 @@ func TestGitHubCommitDeadlineUsesFreshTerminalContext(t *testing.T) {
 	attempt := provider.Add("101", "alice", nil, "")
 	attempt.Release()
 	ctx := context.Background()
-	// 提交写账号时挡在测试持有的行锁上，提交的期限必然先到；序列不随回滚撤销，记下提交确实走到了这里。
-	// 被取消的提交事务要等取消请求送达才放开项目行锁，终态回写用新的期限等它，期限不能小到在繁忙的 CI 上跟取消请求抢时间。
-	if _, err := f.st.Pool.Exec(ctx, `CREATE TABLE github_commit_gate(id int); INSERT INTO github_commit_gate VALUES (1); CREATE SEQUENCE github_commit_reached;
-		CREATE FUNCTION github_commit_wait() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM nextval('github_commit_reached'); PERFORM 1 FROM github_commit_gate FOR UPDATE; RETURN NEW; END $$;
-		CREATE TRIGGER github_commit_wait BEFORE INSERT ON project_credential_accounts FOR EACH ROW EXECUTE FUNCTION github_commit_wait()`); err != nil {
-		t.Fatal(err)
-	}
-	gate, err := f.st.Pool.Begin(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer gate.Rollback(ctx)
-	if _, err = gate.Exec(ctx, `SELECT 1 FROM github_commit_gate FOR UPDATE`); err != nil {
-		t.Fatal(err)
-	}
+	// 提交写账号时停在语句钩子里，直到提交的期限到（写事务因此回滚）；记下提交确实走到了这里。
+	// 终态回写要等这个写事务结束才拿得到写连接，它用新的期限。
+	var reached atomic.Bool
+	f.st.Pool.SetQueryHook(func(ctx context.Context, q string) {
+		if strings.Contains(q, "INSERT INTO project_credential_accounts") {
+			reached.Store(true)
+			select {
+			case <-ctx.Done():
+			case <-time.After(20 * time.Second):
+			}
+		}
+	})
+	defer f.st.Pool.SetQueryHook(nil)
 	s := NewService(f.st, nil, nil, ServiceOptions{LoginTimeout: time.Minute, RecordTimeout: 2 * time.Second}, nil)
 	s.GitHub = provider.Client
 	t.Cleanup(func() { _ = s.Close(context.Background()) })
 	id := uuid.New()
-	if _, err = s.Start(ctx, f.project, cm.CLIAuthStart{OperationID: id, CLI: "gh", AuthType: "github_user"}); err != nil {
+	if _, err := s.Start(ctx, f.project, cm.CLIAuthStart{OperationID: id, CLI: "gh", AuthType: "github_user"}); err != nil {
 		t.Fatal(err)
 	}
 	s.mu.Lock()
@@ -128,9 +128,8 @@ func TestGitHubCommitDeadlineUsesFreshTerminalContext(t *testing.T) {
 			t.Fatal("login worker did not finish")
 		}
 	}
-	var reached bool
-	if err = f.st.Pool.QueryRow(ctx, `SELECT is_called FROM github_commit_reached`).Scan(&reached); err != nil || !reached {
-		t.Fatal("login ended before the commit", err)
+	if !reached.Load() {
+		t.Fatal("login ended before the commit")
 	}
 	op, err := f.st.GetProjectCLIAuthOperation(ctx, f.project, id)
 	if err != nil || op.Status != "failed" {

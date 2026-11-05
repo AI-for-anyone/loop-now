@@ -5,40 +5,27 @@ import (
 	"context"
 	"encoding/json"
 	"net"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/inbox"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/workflow"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
 	"loop-now/internal/testutil/testenv"
+
+	"github.com/google/uuid"
 )
 
 // Web owns only this new file. Shared helpers and production code are read-only.
 func TestWebTaskConsoleMessagesIntegration(t *testing.T) {
 	if os.Getenv("LOOP_NOW_WEB_TASK_CONSOLE_INTEGRATION") != "1" {
 		t.Skip("explicit isolated TEST App/fakePi browser integration")
-	}
-	db, e := url.Parse(pgtest.URL(t))
-	if e != nil || !strings.HasSuffix(db.Path, "_test") {
-		t.Fatal("TEST PG required")
-	}
-	ro, e := redis.ParseURL(redistest.URL(t))
-	if e != nil || ro.DB != 10 {
-		t.Fatal("TEST Redis DB10 required")
 	}
 	root := testenv.RepoRoot()
 	evidence := filepath.Join(root, "web/test-results/improve-task-console-interaction/app")
@@ -47,36 +34,13 @@ func TestWebTaskConsoleMessagesIntegration(t *testing.T) {
 	}
 	var w *world
 	var address string
-	audit := map[string]any{"boundary": "actual React -> forwarded temporary app.Build/TEST PG/Redis/fakePi; no provider/model/current services", "webOrigin": "http://127.0.0.1:4320"}
+	audit := map[string]any{"boundary": "actual React -> forwarded temporary app.Build/temporary SQLite/fakePi; no provider/model/current services", "webOrigin": "http://127.0.0.1:4320"}
 	t.Cleanup(func() {
 		if w == nil {
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		audit["schema"] = w.schema
-		audit["redisPrefix"] = w.cfg.RedisKeyPrefix
-		c, err := pgx.Connect(ctx, pgtest.URL(t))
-		if err != nil {
-			t.Error("PG cleanup read failed")
-			return
-		}
-		defer c.Close(ctx)
-		var exists bool
-		err = c.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)`, w.schema).Scan(&exists)
-		audit["schemaRemoved"] = err == nil && !exists
-		if err != nil || exists {
-			t.Error("schema cleanup failed")
-		}
-		rc := redis.NewClient(ro)
-		defer rc.Close()
-		it := rc.Scan(ctx, 0, w.cfg.RedisKeyPrefix+"*", 100).Iterator()
-		found := it.Next(ctx)
-		audit["redisPrefixEmpty"] = !found && it.Err() == nil
-		if found || it.Err() != nil {
-			t.Error("Redis cleanup failed")
-		}
-		_, err = os.Stat(w.cfg.WorkRoot)
+		audit["dataDir"] = w.cfg.DataDir
+		_, err := os.Stat(w.cfg.WorkRoot)
 		audit["workRootRemoved"] = os.IsNotExist(err)
 		if !os.IsNotExist(err) {
 			t.Error("work root remains")
@@ -170,7 +134,7 @@ func TestWebTaskConsoleMessagesIntegration(t *testing.T) {
 			err = s.a.Store.Pool.QueryRow(ctx, query, created.Task.ID).Scan(&n)
 		}
 		if err != nil {
-			t.Fatal("PG proof read failed", name)
+			t.Fatal("SQLite proof read failed", name)
 		}
 		counts[name] = n
 	}
@@ -181,7 +145,7 @@ func TestWebTaskConsoleMessagesIntegration(t *testing.T) {
 	raw, _ = json.MarshalIndent(counts, "", "  ")
 	_ = os.WriteFile(filepath.Join(evidence, "pg-readback.json"), raw, 0600)
 	if browserErr != nil {
-		t.Fatal("browser assertion failed; sanitized failure/PG evidence retained")
+		t.Fatal("browser assertion failed; sanitized failure/SQLite evidence retained")
 	}
 	final := taskWait(t, s, created.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "cancelled" && d.Cleanup == "archived" })
 	if len(final.Nodes) != 1 || final.Nodes[0].ID != node.ID || final.Nodes[0].Attempt != node.Attempt {
@@ -193,7 +157,7 @@ func TestWebTaskConsoleMessagesIntegration(t *testing.T) {
 	}
 	audit["normalSessionUnchanged"] = true
 	if counts["consoleTurns"] != 2 || counts["consoleLineage"] != 2 || counts["foreignNodeConsoleTurns"] != 0 || counts["consoleCompleted"] != 1 || counts["consoleInterrupted"] != 1 {
-		t.Fatal("strict PG outcome mismatch")
+		t.Fatal("strict SQLite outcome mismatch")
 	}
 	audit["passed"] = true
 }

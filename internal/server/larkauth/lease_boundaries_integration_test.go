@@ -3,14 +3,14 @@ package larkauth
 import (
 	"bytes"
 	"context"
-	"fmt"
+	"loop-now/internal/server/clicredential"
+	"loop-now/internal/server/store"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"loop-now/internal/server/clicredential"
-	"loop-now/internal/server/store"
 )
 
 func TestLarkLeaseBoundaryNoLateOrForeignCommit(t *testing.T) {
@@ -30,28 +30,21 @@ func TestLarkLeaseBoundaryNoLateOrForeignCommit(t *testing.T) {
 			}
 			waitExpired := func() {
 				t.Helper()
-				for {
-					var expired bool
-					if e := f.st.Pool.QueryRow(ctx, `SELECT clock_timestamp()>$1::timestamptz`, until).Scan(&expired); e != nil {
-						t.Fatal(e)
-					}
-					if expired {
-						return
-					}
+				for !time.Now().After(until) {
 					time.Sleep(time.Millisecond)
 				}
 			}
-			// Count credential writes with a nontransactional sequence. During-write
-			// expiry is held inside the commit transaction after the lease check.
-			wait := ""
-			if scenario == "expired_during_write" {
-				wait = fmt.Sprintf("WHILE clock_timestamp()<='%s'::timestamptz LOOP PERFORM pg_sleep(0.005); END LOOP;", until.UTC().Format(time.RFC3339Nano))
-			}
-			if _, e = f.st.Pool.Exec(ctx, `CREATE SEQUENCE lark_version_writes;
- CREATE FUNCTION lark_count_write() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM nextval('lark_version_writes'); `+wait+` RETURN NEW; END $$;
- CREATE TRIGGER lark_count_write BEFORE UPDATE ON project_cli_versions FOR EACH ROW EXECUTE FUNCTION lark_count_write()`); e != nil {
-				t.Fatal(e)
-			}
+			// 用语句钩子数凭证写入（回滚的也算）。写入时过期：在提交事务里、通过租约检查之后，停在写入语句前直到租约过期。
+			var writes atomic.Int64
+			f.st.Pool.SetQueryHook(func(_ context.Context, q string) {
+				if strings.HasPrefix(strings.TrimSpace(q), "UPDATE project_cli_versions") {
+					writes.Add(1)
+					if scenario == "expired_during_write" {
+						waitExpired()
+					}
+				}
+			})
+			defer f.st.Pool.SetQueryHook(nil)
 			b := f.binding
 			generation := int64(1)
 			switch scenario {
@@ -74,9 +67,8 @@ func TestLarkLeaseBoundaryNoLateOrForeignCommit(t *testing.T) {
 			if scenario == "expired_during_write" {
 				want = 1
 			}
-			var writes int64
-			if e = f.st.Pool.QueryRow(ctx, `SELECT CASE WHEN is_called THEN last_value ELSE 0 END FROM lark_version_writes`).Scan(&writes); e != nil || writes != want {
-				t.Fatal("invalid result reached unexpected write stage", e)
+			if got := writes.Load(); got != want {
+				t.Fatal("invalid result reached unexpected write stage", got)
 			}
 			after, e := f.st.GetLarkCLIGrant(ctx, f.binding)
 			if e != nil || after.Generation != before.Generation || !bytes.Equal(after.Secret, before.Secret) {

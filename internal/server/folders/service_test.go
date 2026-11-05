@@ -17,7 +17,7 @@ import (
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/folders"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 type fixture struct {
@@ -31,7 +31,7 @@ type fixture struct {
 func newFixture(t *testing.T, gitBin string, timeout time.Duration) *fixture {
 	t.Helper()
 	ctx := context.Background()
-	st := pgtest.NewStore(t)
+	st := sqlitetest.NewStore(t)
 	dc, err := st.EnsureDefaults(ctx, "o", "p")
 	if err != nil {
 		t.Fatal(err)

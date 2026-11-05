@@ -20,11 +20,6 @@ import (
 // configureCLIImport never opens the source HOME during construction or recovery.
 // A factory is a trusted Go fixture dependency, never an HTTP/configurable path.
 func (a *App) configureCLIImport(ctx context.Context, cfg *config.Config, o Options, catalog *clitemplate.Catalog, workRoot string) error {
-	// A lower explicit TEST ceiling deliberately excludes the component entirely.
-	// Production always migrates all and never catches a missing-table error.
-	if o.MigrationTarget > 0 && o.MigrationTarget < 17 {
-		return nil
-	}
 	hasher := importHasher{}
 	var e error
 	factory := o.CLIImportReaderFactory

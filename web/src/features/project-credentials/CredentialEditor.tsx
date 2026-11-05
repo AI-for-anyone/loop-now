@@ -52,6 +52,6 @@ export function CredentialEditor({ id, name = '', mode, template, revision, summ
     {form.conflict && <CredentialConflict base={form.base.summary} latest={form.review} reading={form.reading} error={form.readError} onRefresh={() => void form.refresh()} onAdopt={form.adopt} />}
     {!form.conflict && <ErrorAlert error={unmatchedFieldError(form.error, inline)} />}
     {form.error instanceof ApiError && form.error.status === 0 && <p role="status" className="text-[13px] font-bold">{t.credentials.editor.saveUnknown}</p>}
-    <div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="secondary" disabled={form.pending} onClick={onClose}>{t.credentials.editor.cancel}</Button><Button type="submit" disabled={form.pending || form.conflict || missingTemplate}>{form.pending ? t.credentials.editor.saving : t.credentials.editor.save}</Button></div>
+    <div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="secondary" disabled={form.pending} onClick={onClose}>{t.credentials.editor.cancel}</Button><Button type="submit" disabled={form.pending || form.conflict || missingTemplate}>{form.pending ? t.credentials.editor.saving : mode === 'create-key' ? t.credentials.editor.saveKey : t.credentials.editor.save}</Button></div>
   </form>
 }

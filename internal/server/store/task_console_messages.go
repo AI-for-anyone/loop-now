@@ -5,11 +5,12 @@ import (
 	"os"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/modelcredential"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/taskruntime"
+
+	"loop-now/internal/server/db"
 )
 
 // TaskConsoleRecoverySourceTx captures the actual active node run BEFORE
@@ -21,7 +22,7 @@ func (s *Store) TaskConsoleRecoverySourceTx(ctx context.Context, m *TaskMutation
 	}
 	var source uuid.UUID
 	err := m.Tx.QueryRow(ctx, `SELECT id FROM task_turns WHERE task_id=$1 AND node_run_id=$2 AND runtime_id=$3 AND execution_mode='task_node' AND status IN ('starting','running','aborting') ORDER BY queue_seq LIMIT 1`, m.Record.View.Task.ID, n.ID, n.RuntimeID).Scan(&source)
-	if err == pgx.ErrNoRows {
+	if err == db.ErrNoRows {
 		return uuid.Nil, nil
 	}
 	return source, err
@@ -48,7 +49,7 @@ func (s *Store) TaskConsoleGuardTx(ctx context.Context, m *TaskMutation, target 
 	var inst TaskInstance
 	inst.ID = target.RuntimeID
 	err := m.Tx.QueryRow(ctx, `SELECT task_id,agent_id,prepared,retired,session_state,session_file,snapshot FROM task_instances WHERE id=$1`, inst.ID).Scan(&inst.TaskID, &inst.AgentID, &inst.Prepared, &inst.Retired, &inst.SessionState, &inst.SessionFile, &inst.Snapshot)
-	if err == pgx.ErrNoRows {
+	if err == db.ErrNoRows {
 		return "instance_unavailable", nil
 	}
 	if err != nil {
@@ -103,7 +104,7 @@ func (s *Store) TaskConsoleGuardTx(ctx context.Context, m *TaskMutation, target 
 			return "chat_unavailable", nil
 		}
 		v, e := scanModelAuthVersion(m.Tx.QueryRow(ctx, `SELECT `+modelAuthVersionColumns+` FROM model_auth_versions WHERE id=$1`, b.VersionID))
-		if e == pgx.ErrNoRows {
+		if e == db.ErrNoRows {
 			return "chat_unavailable", nil
 		}
 		if e != nil {
@@ -154,7 +155,7 @@ func (s *Store) RecordTaskConsoleEligibilityTx(ctx context.Context, m *TaskMutat
 	}
 	tag, err := m.Tx.Exec(ctx, `INSERT INTO task_console_chat_eligibility(task_id,node_run_id,source_run_id)
  SELECT task_id,node_run_id,id FROM task_turns t WHERE id=$1 AND task_id=$2 AND node_run_id=$3 AND runtime_id=$4 AND execution_mode='task_node' AND status IN ('failed','interrupted')
- AND (error_code='server_restarted' OR (error_code IS DISTINCT FROM 'task_conflict' AND EXISTS(SELECT 1 FROM lifecycle_events e WHERE e.task_turn_id=t.id AND e.type='run.running')))
+ AND (error_code='server_restarted' OR (error_code IS NOT 'task_conflict' AND EXISTS(SELECT 1 FROM lifecycle_events e WHERE e.task_turn_id=t.id AND e.type='run.running')))
  ON CONFLICT(task_id,node_run_id) DO UPDATE SET source_run_id=EXCLUDED.source_run_id WHERE task_console_chat_eligibility.source_run_id=EXCLUDED.source_run_id`, source, m.Record.View.Task.ID, n.ID, n.RuntimeID)
 	if err != nil {
 		return err
@@ -176,10 +177,10 @@ type TaskConsoleLineage struct {
 	ExecutionMode                                string
 }
 
-func (s *Store) TaskConsoleLineageTx(ctx context.Context, tx pgx.Tx, run uuid.UUID) (TaskConsoleLineage, bool, error) {
+func (s *Store) TaskConsoleLineageTx(ctx context.Context, tx *db.Tx, run uuid.UUID) (TaskConsoleLineage, bool, error) {
 	var l TaskConsoleLineage
 	err := tx.QueryRow(ctx, `SELECT run_id,task_id,node_run_id,agent_id,runtime_id,execution_mode FROM task_console_message_lineage WHERE run_id=$1`, run).Scan(&l.RunID, &l.TaskID, &l.NodeRunID, &l.AgentID, &l.RuntimeID, &l.ExecutionMode)
-	if err == pgx.ErrNoRows {
+	if err == db.ErrNoRows {
 		return l, false, nil
 	}
 	return l, err == nil, err
@@ -221,7 +222,7 @@ func (s *Store) EnqueueTaskConsoleMessageTx(ctx context.Context, m *TaskMutation
 	if whenBusy == "interrupt" {
 		priority = 0
 	}
-	turn, e := scanTaskTurn(m.Tx.QueryRow(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,request_id,execution_mode) VALUES($1,$2,$3,$4,$5,$6,'queued','console_node',$7,$8,$9,$10) RETURNING `+taskTurnColumns, uuid.Must(uuid.NewV7()), target.TaskID, target.RuntimeID, target.NodeRunID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), priority, text, taskRequestID(ctx, m, "console_node"), mode))
+	turn, e := insertTaskTurn(ctx, m.Tx, `id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,priority,text,request_id,execution_mode`, `$1,$2,$3,$4,$5,$6,'queued','console_node',$7,$8,$9,$10`, uuid.Must(uuid.NewV7()), target.TaskID, target.RuntimeID, target.NodeRunID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), priority, text, taskRequestID(ctx, m, "console_node"), mode)
 	if e != nil {
 		return receipt, nil, e
 	}
@@ -244,7 +245,7 @@ func (s *Store) EnqueueTaskConsoleMessageTx(ctx context.Context, m *TaskMutation
 		if e != nil {
 			return receipt, nil, e
 		}
-		old, e := pgx.CollectRows(rows, func(r pgx.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
+		old, e := db.CollectRows(rows, func(r db.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
 		if e != nil {
 			return receipt, nil, e
 		}
@@ -333,7 +334,7 @@ func (s *Store) ExpireTaskConsoleTurnsTx(ctx context.Context, m *TaskMutation, r
 	if e != nil {
 		return e
 	}
-	turns, e := pgx.CollectRows(rows, func(r pgx.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
+	turns, e := db.CollectRows(rows, func(r db.CollectableRow) (TaskTurn, error) { return scanTaskTurn(r) })
 	if e != nil {
 		return e
 	}
@@ -350,7 +351,7 @@ func (s *Store) HasTaskConsoleInterruptTx(ctx context.Context, m *TaskMutation, 
 	if e != nil {
 		return false, e
 	}
-	items, e := pgx.CollectRows(rows, func(r pgx.CollectableRow) (TaskConsoleLineage, error) {
+	items, e := db.CollectRows(rows, func(r db.CollectableRow) (TaskConsoleLineage, error) {
 		var l TaskConsoleLineage
 		e := r.Scan(&l.RunID, &l.TaskID, &l.NodeRunID, &l.AgentID, &l.RuntimeID, &l.ExecutionMode)
 		return l, e
@@ -387,7 +388,7 @@ func (s *Store) TaskConsoleSleepSourceTx(ctx context.Context, m *TaskMutation, t
 	return l, true, nil
 }
 
-func (s *Store) TaskConsoleSleepValidTx(ctx context.Context, tx pgx.Tx, m *TaskMutation, r Sleep) (bool, bool, error) {
+func (s *Store) TaskConsoleSleepValidTx(ctx context.Context, tx *db.Tx, m *TaskMutation, r Sleep) (bool, bool, error) {
 	if m == nil {
 		return false, true, nil
 	}

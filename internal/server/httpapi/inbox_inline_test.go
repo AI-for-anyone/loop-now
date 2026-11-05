@@ -27,8 +27,8 @@ func TestInboxInlineAttributionNodeChatConversationAndPending(t *testing.T) {
 	if early.Task == nil || early.Task.TaskID != d.Task.ID || early.Task.RuntimeID != node.RuntimeID || early.Task.NodeRunID != nil {
 		t.Fatalf("send before any turn: %+v", early.Task)
 	}
-	if _, err := e.st.Pool.Exec(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,text,started_at,ended_at)
-		VALUES($1,$2,$3,$4,$5,$6,'completed','task_node','',clock_timestamp(),clock_timestamp())`,
+	if _, err := e.st.Pool.Exec(ctx, `INSERT INTO task_turns(id,task_id,runtime_id,node_run_id,user_message_id,assistant_message_id,status,origin,text,started_at,ended_at,queue_seq)
+		VALUES($1,$2,$3,$4,$5,$6,'completed','task_node','',clock_timestamp(),clock_timestamp(),(SELECT coalesce(max(queue_seq),0)+1 FROM task_turns))`,
 		uuid.New(), d.Task.ID, node.RuntimeID, node.ID, uuid.New(), uuid.New()); err != nil {
 		t.Fatal(err)
 	}

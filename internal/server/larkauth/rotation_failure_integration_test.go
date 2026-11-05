@@ -3,7 +3,6 @@ package larkauth
 import (
 	"context"
 	"errors"
-	"github.com/google/uuid"
 	"io"
 	"loop-now/internal/server/clicredential"
 	"loop-now/internal/server/store"
@@ -11,11 +10,37 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type failCommitStore struct {
 	*store.Store
 	after bool
+}
+
+type blockedClaimStore struct {
+	*store.Store
+	entered, release chan struct{}
+}
+
+func (s blockedClaimStore) ClaimLarkCLIRefresh(ctx context.Context, b clicredential.LarkBinding, g int64, l uuid.UUID, until time.Time) (bool, error) {
+	close(s.entered)
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case <-s.release:
+	}
+	return s.Store.ClaimLarkCLIRefresh(ctx, b, g, l, until)
+}
+
+func (s failCommitStore) CommitLarkCLIRefresh(ctx context.Context, b clicredential.LarkBinding, g int64, l uuid.UUID, secret []byte) error {
+	if s.after {
+		if e := s.Store.CommitLarkCLIRefresh(ctx, b, g, l, secret); e != nil {
+			return e
+		}
+	}
+	return errors.New("synthetic commit acknowledgement loss")
 }
 
 func TestLarkFreshSourceRequiresLoginAndLostSupplierResponse(t *testing.T) {
@@ -74,20 +99,6 @@ func TestLarkFreshSourceRequiresLoginAndLostSupplierResponse(t *testing.T) {
 	}
 }
 
-type blockedClaimStore struct {
-	*store.Store
-	entered, release chan struct{}
-}
-
-func (s blockedClaimStore) ClaimLarkCLIRefresh(ctx context.Context, b clicredential.LarkBinding, g int64, l uuid.UUID, until time.Time) (bool, error) {
-	close(s.entered)
-	select {
-	case <-ctx.Done():
-		return false, ctx.Err()
-	case <-s.release:
-	}
-	return s.Store.ClaimLarkCLIRefresh(ctx, b, g, l, until)
-}
 func TestLarkCloseDeadlineWhileAdmittedClaimBlocked(t *testing.T) {
 	f := newLarkFixture(t)
 	ctx := context.Background()
@@ -128,14 +139,6 @@ func TestLarkCloseDeadlineWhileAdmittedClaimBlocked(t *testing.T) {
 	}
 }
 
-func (s failCommitStore) CommitLarkCLIRefresh(ctx context.Context, b clicredential.LarkBinding, g int64, l uuid.UUID, secret []byte) error {
-	if s.after {
-		if e := s.Store.CommitLarkCLIRefresh(ctx, b, g, l, secret); e != nil {
-			return e
-		}
-	}
-	return errors.New("synthetic commit acknowledgement loss")
-}
 func TestLarkRotationCommitFailureAndAcknowledgementLoss(t *testing.T) {
 	for _, after := range []bool{false, true} {
 		t.Run(map[bool]string{false: "not_committed", true: "committed_ack_lost"}[after], func(t *testing.T) {
@@ -172,6 +175,7 @@ func TestLarkRotationCommitFailureAndAcknowledgementLoss(t *testing.T) {
 		})
 	}
 }
+
 func TestLarkStartedLeaseAgentDeleteAndProjectPurge(t *testing.T) {
 	for _, scope := range []string{"agent", "account", "project", "wrong_lease"} {
 		t.Run(scope, func(t *testing.T) {

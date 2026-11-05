@@ -1,4 +1,4 @@
-// @loop-now/plugin-sdk：Loop Now 插件平台半边的类型与运行库（plugins/SPEC.md §2.2、§3、§7）。
+// @loop-now/plugin-sdk：Loop Now 插件平台侧的类型与运行库（plugins/SPEC.md §2.2、§3、§7）。
 // 在宿主里运行时，宿主提供这个包的实例；插件把它放在 peerDependencies，开发时装在 devDependencies 里取类型。
 
 export * from './events.ts'

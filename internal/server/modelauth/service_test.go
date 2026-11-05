@@ -9,11 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/modelcredential"
+
+	"github.com/google/uuid"
 )
 
 type loginFunc func(context.Context, uuid.UUID, func(string) error) (modelcredential.Credential, error)
@@ -34,20 +33,25 @@ func closeAuth(t *testing.T, s *Service) {
 }
 
 type metadataQueryKey struct{}
+
+// metadataTracer 让 State 读过版本元数据之后、发出下一条语句之前停住（只管带 metadataQueryKey 的上下文）。
+// 语句钩子在语句之前调用，所以停在“下一条”之前，等价于原来停在元数据查询结束之后。
 type metadataTracer struct {
-	version          uuid.UUID
 	entered, release chan struct{}
-	once             atomic.Bool
+	sawMeta, once    atomic.Bool
 }
 
-func (t *metadataTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, d pgx.TraceQueryStartData) context.Context {
-	if len(d.Args) > 0 && d.Args[0] == t.version && strings.Contains(d.SQL, "FROM model_auth_versions") {
-		return context.WithValue(ctx, metadataQueryKey{}, true)
+func (t *metadataTracer) hook(ctx context.Context, q string) {
+	if ctx.Value(metadataQueryKey{}) != true {
+		return
 	}
-	return ctx
-}
-func (t *metadataTracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryEndData) {
-	if ctx.Value(metadataQueryKey{}) == true && t.once.CompareAndSwap(false, true) {
+	if !t.sawMeta.Load() {
+		if strings.Contains(q, "FROM model_auth_versions") {
+			t.sawMeta.Store(true)
+		}
+		return
+	}
+	if t.once.CompareAndSwap(false, true) {
 		close(t.entered)
 		select {
 		case <-t.release:
@@ -55,113 +59,7 @@ func (t *metadataTracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, _ pgx.T
 		}
 	}
 }
-func TestStateNeverCombinesOldMetadataWithNewSuccessfulLogin(t *testing.T) {
-	st, a := authFixture(t)
-	ctx := context.Background()
-	old := grant(t, st, a.ID, oauth(t, "account-A", "A", time.Now().Add(time.Hour)))
-	originalPool := st.Pool
-	trace := &metadataTracer{version: old.ID, entered: make(chan struct{}), release: make(chan struct{})}
-	cfg := originalPool.Config()
-	cfg.ConnConfig.Tracer = trace
-	pool, e := pgxpool.NewWithConfig(ctx, cfg)
-	if e != nil {
-		t.Fatal(e)
-	}
-	st.Pool = pool
-	t.Cleanup(func() { st.Pool = originalPool; pool.Close() })
-	releaseLogin := make(chan struct{})
-	svc := NewService(st, loginFunc(func(ctx context.Context, _ uuid.UUID, notify func(string) error) (modelcredential.Credential, error) {
-		<-releaseLogin
-		return oauth(t, "account-B", "B", time.Now().Add(time.Hour)), nil
-	}), nil, catalog(), ServiceOptions{}, nil)
-	defer closeAuth(t, svc)
-	agent, e := st.GetAgent(ctx, a.ID)
-	if e != nil {
-		t.Fatal(e)
-	}
-	op, e := svc.Start(ctx, a.ID, LoginInput{Provider: "openai-codex", ExpectedConfigVersion: agent.ConfigVersion})
-	if e != nil {
-		t.Fatal(e)
-	}
-	result := make(chan State, 1)
-	errs := make(chan error, 1)
-	go func() { state, e := svc.State(ctx, a.ID); result <- state; errs <- e }()
-	select {
-	case <-trace.entered:
-	case <-time.After(3 * time.Second):
-		t.Fatal("metadata query not reached")
-	}
-	close(releaseLogin)
-	waitAuth(t, func() bool {
-		op, e := st.GetModelAuthOperation(ctx, a.ID, op.ID)
-		return e == nil && op.Status == "succeeded"
-	})
-	close(trace.release)
-	state := <-result
-	if e = <-errs; e != nil {
-		t.Fatal(e)
-	}
-	if state.Operation.Status == "succeeded" && state.Credential.VersionID != nil && *state.Credential.VersionID == old.ID {
-		t.Fatal("success paired with pre-commit account metadata")
-	}
-	fresh, e := svc.State(ctx, a.ID)
-	if e != nil || fresh.Operation.Status != "succeeded" || fresh.Credential.VersionID == nil || *fresh.Credential.VersionID == old.ID {
-		t.Fatal("UI cannot observe new account", e)
-	}
-}
 
-func TestLoginCommitDeadlineUsesFreshFailureContext(t *testing.T) {
-	st, a := authFixture(t)
-	ctx := context.Background()
-	old := grant(t, st, a.ID, oauth(t, "old", "old", time.Now().Add(time.Hour)))
-	// The helper result arrives while the Agent row is held, so the commit outlives
-	// its record deadline. The failure write locks only the operation and must
-	// use a fresh context.
-	locked := make(chan pgx.Tx, 1)
-	var failureLogs bytes.Buffer
-	svc := NewService(st, loginFunc(func(context.Context, uuid.UUID, func(string) error) (modelcredential.Credential, error) {
-		lock, e := st.Pool.Begin(ctx)
-		if e != nil {
-			return modelcredential.Credential{}, e
-		}
-		locked <- lock
-		if _, e = lock.Exec(ctx, `SELECT id FROM agents WHERE id=$1 FOR UPDATE`, a.ID); e != nil {
-			return modelcredential.Credential{}, e
-		}
-		return oauth(t, "new", "new", time.Now().Add(time.Hour)), nil
-	}), nil, catalog(), ServiceOptions{RecordTimeout: 100 * time.Millisecond}, slog.New(slog.NewJSONHandler(&failureLogs, nil)))
-	defer closeAuth(t, svc)
-	agent, e := st.GetAgent(ctx, a.ID)
-	if e != nil {
-		t.Fatal(e)
-	}
-	op, e := svc.Start(ctx, a.ID, LoginInput{Provider: "openai-codex", ExpectedConfigVersion: agent.ConfigVersion})
-	if e != nil {
-		t.Fatal(e)
-	}
-	var lock pgx.Tx
-	select {
-	case lock = <-locked:
-	case <-time.After(4 * time.Second):
-		t.Fatal("login helper did not run")
-	}
-	defer lock.Rollback(ctx)
-	waitAuth(t, func() bool {
-		row, e := st.GetModelAuthOperation(ctx, a.ID, op.ID)
-		return e == nil && row.Status == "failed"
-	})
-	if e = lock.Rollback(ctx); e != nil {
-		t.Fatal(e)
-	}
-	pointer, _, e := st.CurrentModelAuthVersion(ctx, a.ID)
-	if e != nil || pointer.ID != old.ID {
-		t.Fatal("deadline replaced original grant", e)
-	}
-	closeAuth(t, svc)
-	if !strings.Contains(failureLogs.String(), `"stage":"credential_commit"`) {
-		t.Fatal("commit failure stage missing")
-	}
-}
 func TestCancelledLoginRejectsLateSuccessAndKeepsOldAccount(t *testing.T) {
 	st, a := authFixture(t)
 	ctx := context.Background()
@@ -294,5 +192,113 @@ func TestRealHelperLoginEncryptedCommitAndSafeFailureDiagnostic(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestStateNeverCombinesOldMetadataWithNewSuccessfulLogin(t *testing.T) {
+	st, a := authFixture(t)
+	ctx := context.Background()
+	old := grant(t, st, a.ID, oauth(t, "account-A", "A", time.Now().Add(time.Hour)))
+	trace := &metadataTracer{entered: make(chan struct{}), release: make(chan struct{})}
+	st.Pool.SetQueryHook(trace.hook)
+	t.Cleanup(func() { st.Pool.SetQueryHook(nil) })
+	releaseLogin := make(chan struct{})
+	svc := NewService(st, loginFunc(func(ctx context.Context, _ uuid.UUID, notify func(string) error) (modelcredential.Credential, error) {
+		<-releaseLogin
+		return oauth(t, "account-B", "B", time.Now().Add(time.Hour)), nil
+	}), nil, catalog(), ServiceOptions{}, nil)
+	defer closeAuth(t, svc)
+	agent, e := st.GetAgent(ctx, a.ID)
+	if e != nil {
+		t.Fatal(e)
+	}
+	op, e := svc.Start(ctx, a.ID, LoginInput{Provider: "openai-codex", ExpectedConfigVersion: agent.ConfigVersion})
+	if e != nil {
+		t.Fatal(e)
+	}
+	result := make(chan State, 1)
+	errs := make(chan error, 1)
+	go func() {
+		state, e := svc.State(context.WithValue(ctx, metadataQueryKey{}, true), a.ID)
+		result <- state
+		errs <- e
+	}()
+	// State 读过版本元数据后若还有下一次读取，就停在它前面，让登录在这之间提交；
+	// 元数据若是最后一次读取（应有的顺序），State 读完就返回，没有可以与成功配对的旧元数据。
+	succeed := func() {
+		close(releaseLogin)
+		waitAuth(t, func() bool {
+			op, e := st.GetModelAuthOperation(ctx, a.ID, op.ID)
+			return e == nil && op.Status == "succeeded"
+		})
+	}
+	var state State
+	select {
+	case <-trace.entered:
+		succeed()
+		close(trace.release)
+		state = <-result
+	case state = <-result:
+		succeed()
+		close(trace.release)
+	case <-time.After(3 * time.Second):
+		t.Fatal("state read did not finish")
+	}
+	if e = <-errs; e != nil {
+		t.Fatal(e)
+	}
+	if state.Operation.Status == "succeeded" && state.Credential.VersionID != nil && *state.Credential.VersionID == old.ID {
+		t.Fatal("success paired with pre-commit account metadata")
+	}
+	fresh, e := svc.State(ctx, a.ID)
+	if e != nil || fresh.Operation.Status != "succeeded" || fresh.Credential.VersionID == nil || *fresh.Credential.VersionID == old.ID {
+		t.Fatal("UI cannot observe new account", e)
+	}
+}
+
+func TestLoginCommitDeadlineUsesFreshFailureContext(t *testing.T) {
+	st, a := authFixture(t)
+	ctx := context.Background()
+	old := grant(t, st, a.ID, oauth(t, "old", "old", time.Now().Add(time.Hour)))
+	// The commit stops at its version write until the record deadline passes, so
+	// it outlives that deadline and rolls back. The failure write runs in its own
+	// transaction and must use a fresh context.
+	var stalled atomic.Bool
+	st.Pool.SetQueryHook(func(ctx context.Context, q string) {
+		if strings.Contains(q, "INSERT INTO model_auth_versions") && stalled.CompareAndSwap(false, true) {
+			select {
+			case <-ctx.Done():
+			case <-time.After(10 * time.Second):
+			}
+		}
+	})
+	t.Cleanup(func() { st.Pool.SetQueryHook(nil) })
+	var failureLogs bytes.Buffer
+	svc := NewService(st, loginFunc(func(context.Context, uuid.UUID, func(string) error) (modelcredential.Credential, error) {
+		return oauth(t, "new", "new", time.Now().Add(time.Hour)), nil
+	}), nil, catalog(), ServiceOptions{RecordTimeout: 100 * time.Millisecond}, slog.New(slog.NewJSONHandler(&failureLogs, nil)))
+	defer closeAuth(t, svc)
+	agent, e := st.GetAgent(ctx, a.ID)
+	if e != nil {
+		t.Fatal(e)
+	}
+	op, e := svc.Start(ctx, a.ID, LoginInput{Provider: "openai-codex", ExpectedConfigVersion: agent.ConfigVersion})
+	if e != nil {
+		t.Fatal(e)
+	}
+	waitAuth(t, func() bool {
+		row, e := st.GetModelAuthOperation(ctx, a.ID, op.ID)
+		return e == nil && row.Status == "failed"
+	})
+	if !stalled.Load() {
+		t.Fatal("commit did not reach the version write")
+	}
+	pointer, _, e := st.CurrentModelAuthVersion(ctx, a.ID)
+	if e != nil || pointer.ID != old.ID {
+		t.Fatal("deadline replaced original grant", e)
+	}
+	closeAuth(t, svc)
+	if !strings.Contains(failureLogs.String(), `"stage":"credential_commit"`) {
+		t.Fatal("commit failure stage missing")
 	}
 }

@@ -4,11 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"log/slog"
-	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -19,8 +16,6 @@ import (
 	cm "loop-now/internal/server/credentialmodel"
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
 )
 
 const safetyAccess = "safety-private-access-sentinel"
@@ -44,83 +39,6 @@ func (l *safetyLogs) Snapshot() []byte {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return append([]byte(nil), l.b.Bytes()...)
-}
-
-// Only self-owned PG/Redis instances, no .env.local fallback or existing sockets.
-func safetyResources(t *testing.T) string {
-	t.Helper()
-	for _, path := range []string{"/opt/homebrew/opt/postgresql@18/bin/initdb", "/opt/homebrew/bin/redis-server"} {
-		if _, err := os.Stat(path); err != nil {
-			t.Skipf("required fixed offline dependency unavailable: %s", path)
-		}
-	}
-	root, err := os.MkdirTemp("/private/tmp", "ln-safety-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	command := func(name string, args ...string) error {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-		c := exec.CommandContext(ctx, "/opt/homebrew/opt/postgresql@18/bin/"+name, args...)
-		c.Env = []string{"HOME=" + root, "PATH=/usr/bin:/bin", "LC_ALL=C"}
-		c.Stdout = io.Discard
-		c.Stderr = io.Discard
-		return c.Run()
-	}
-	data, socket := filepath.Join(root, "pg"), filepath.Join(root, "socket")
-	if err = os.Mkdir(socket, 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err = command("initdb", "-D", data, "-U", "fixture", "-A", "trust", "--no-locale", "-E", "UTF8"); err != nil {
-		os.RemoveAll(root)
-		t.Fatal("own PG init failed")
-	}
-	if err = command("pg_ctl", "-D", data, "-l", filepath.Join(root, "pg.log"), "-o", "-F -h '' -k "+socket+" -p 55434", "-w", "-t", "10", "start"); err != nil {
-		os.RemoveAll(root)
-		t.Fatal("own PG start failed")
-	}
-	t.Cleanup(func() {
-		if err := command("pg_ctl", "-D", data, "-m", "immediate", "-w", "-t", "10", "stop"); err != nil {
-			t.Error("own PG stop failed")
-			return
-		}
-		os.RemoveAll(root)
-	})
-	if err = command("createdb", "-h", socket, "-p", "55434", "-U", "fixture", "loop_now_test"); err != nil {
-		t.Fatal("own test DB creation failed")
-	}
-	t.Setenv(pgtest.EnvTestDatabaseURL, "postgres://fixture@/loop_now_test?host="+url.QueryEscape(socket)+"&port=55434&sslmode=disable")
-	redisSocket := filepath.Join(root, "redis.sock")
-	redis := exec.Command("/opt/homebrew/bin/redis-server", "--port", "0", "--unixsocket", redisSocket, "--unixsocketperm", "700", "--save", "", "--appendonly", "no", "--dir", root)
-	redis.Env = []string{"HOME=" + root, "PATH=/usr/bin:/bin"}
-	redis.Stdout = io.Discard
-	redis.Stderr = io.Discard
-	if err = redis.Start(); err != nil {
-		t.Fatal("own Redis start failed")
-	}
-	done := make(chan error, 1)
-	go func() { done <- redis.Wait() }()
-	t.Cleanup(func() {
-		redis.Process.Signal(os.Interrupt)
-		select {
-		case <-done:
-		case <-time.After(3 * time.Second):
-			redis.Process.Kill()
-			<-done
-		}
-	})
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err = os.Stat(redisSocket); err == nil {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	if _, err = os.Stat(redisSocket); err != nil {
-		t.Fatal("own Redis socket unavailable")
-	}
-	t.Setenv(redistest.EnvTestRedisURL, "unix://"+redisSocket+"?db=10")
-	return root
 }
 
 func safetyNoSecrets(t *testing.T, data []byte, allowAuthorizationURL bool) {
@@ -199,7 +117,7 @@ func safetyHelper(t *testing.T, root string) *modelauth.Helper {
 }
 
 func TestProjectCredentialSecretChannels(t *testing.T) {
-	root := safetyResources(t)
+	root := t.TempDir()
 	e := newEnv(t)
 	ctx := context.Background()
 	logs := &safetyLogs{}

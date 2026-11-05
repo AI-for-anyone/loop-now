@@ -301,7 +301,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** PostgreSQL 与 Redis 的健康状态 */
+        /** 本地数据库的健康状态（含 WAL 大小） */
         get: operations["getHealth"];
         put?: never;
         post?: never;
@@ -1185,7 +1185,7 @@ export interface paths {
         };
         /**
          * Agent 事件流（SSE）
-         * @description `text/event-stream`，每条事件都带 `id`（Redis Stream 条目 ID），事件名与 data 结构的对应见 `x-sse-events`，保活为注释行。
+         * @description `text/event-stream`，每条事件都带 `id`（事件流条目 ID，形如 `<毫秒>-<序号>`，服务端重启后从头编号），事件名与 data 结构的对应见 `x-sse-events`，保活为注释行。
          *
          *     - 不带 `Last-Event-ID`，或它已超出保留范围：先发一条 `snapshot`，其 `id` 是快照时刻事件流的最新位置；
          *       `snapshot.currentText` 恰好包含到这个位置为止的全部文字增量。之后只发送这个位置之后的事件，不重放之前的事件。
@@ -1542,7 +1542,8 @@ export interface paths {
          * 按预览安装插件
          * @description 先用 `POST /plugin-previews` 取得预览并展示给人，再带 previewId 安装。非官方来源（本地目录、git、npm）须带 `confirm: true`，
          *     否则返回 409 `plugin_confirmation_required`。插件 id 已安装时返回 409 `name_conflict`（更新用 `POST /plugins/{pluginId}/update`）。
-         *     git 与 npm 来源在这一步执行 `npm ci --ignore-scripts --omit=dev`（没有锁文件时 `npm install`），失败返回 422 `plugin_source_failed`；
+         *     git 与 npm 来源在这一步执行 `npm ci --ignore-scripts --omit=dev --omit=peer`（没有锁文件时 `npm install`，参数相同），失败返回 422 `plugin_source_failed`；
+         *     不装 peer 依赖，插件的运行依赖要用的 peer 依赖须直接列进插件自己的 `dependencies`。
          *     本地目录来源原地使用，不安装依赖、不修改。预览过期或不存在返回 404。
          */
         post: operations["installPlugin"];
@@ -1613,8 +1614,8 @@ export interface paths {
         post?: never;
         /**
          * 卸载插件
-         * @description 宿主内卸载平台半边，删除插件的配置、启用、授权、账号、状态、事件投递与令牌，删除各版本的安装目录（本地目录来源不删）。
-         *     数据目录 `<work root>/platform/plugins/<id>/data/` 只在 `deleteData=true` 时删除。已经启动的 Pi 继续使用已加载的 Agent 半边，直到下次启动。
+         * @description 宿主内卸载平台侧，删除插件的配置、启用、授权、账号、状态、事件投递与令牌，删除各版本的安装目录（本地目录来源不删）。
+         *     数据目录 `<work root>/platform/plugins/<id>/data/` 只在 `deleteData=true` 时删除。已经启动的 Pi 继续使用已加载的 Agent 侧，直到下次启动。
          */
         delete: operations["uninstallPlugin"];
         options?: never;
@@ -1870,7 +1871,7 @@ export interface paths {
         get: operations["getPluginSettings"];
         /**
          * 保存全局插件设置
-         * @description disabled 为 true 时停止宿主、不再给新启动的 Pi 挂载任何 Agent 半边（已经启动的不受影响，下次启动生效）；改回 false 时恢复。
+         * @description disabled 为 true 时停止宿主、不再给新启动的 Pi 挂载任何 Agent 侧（已经启动的不受影响，下次启动生效）；改回 false 时恢复。
          *     markets 在第三阶段使用，现在只保存。
          */
         put: operations["putPluginSettings"];
@@ -3137,15 +3138,24 @@ export interface components {
             /** Format: int64 */
             maxMessageImagePixels?: number;
         };
-        /** @description 外部身份查询时，结构与状态码规则相同，但 `postgres`、`redis` 中没有 `error` 字段，只表明是否可用 */
+        /** @description 外部身份查询时，结构与状态码规则相同，但 `database` 只有 `ok`，没有错误原文与 WAL 信息 */
         Health: {
             ok: boolean;
-            postgres: components["schemas"]["DependencyHealth"];
-            redis: components["schemas"]["DependencyHealth"];
+            database: components["schemas"]["DatabaseHealth"];
         };
-        DependencyHealth: {
+        /** @description 本地 SQLite 库（data.db 与 events.db）是否可用。WAL 只影响告警，不影响 `ok` 与状态码。 */
+        DatabaseHealth: {
             ok: boolean;
             error?: string | null;
+            /** @description 两个库当前 -wal 文件的字节数 */
+            walBytes?: {
+                /** Format: int64 */
+                data: number;
+                /** Format: int64 */
+                events: number;
+            };
+            /** @description 任一 WAL 超过告警阈值（256 MiB）：通常是有长时间不结束的读事务挡住了检查点 */
+            walWarning?: boolean;
         };
         ModelSettings: {
             /** @description Pi 原生 models.json 文本；API Key 仍由项目或 Agent 账号管理。 */
@@ -4185,7 +4195,7 @@ export interface components {
         };
         TimelineEntry: components["schemas"]["TimelineSleepEntry"] | components["schemas"]["TimelineQueued"] | components["schemas"]["TimelinePromoted"] | components["schemas"]["TimelineMessageCancelled"] | components["schemas"]["TimelineMarker"] | components["schemas"]["TimelinePhase"] | components["schemas"]["TimelineCliInstall"] | components["schemas"]["TimelineWorkspaceSync"] | components["schemas"]["TimelinePiStarted"] | components["schemas"]["TimelinePiReused"] | components["schemas"]["TimelinePiStopped"] | components["schemas"]["TimelinePiExited"] | components["schemas"]["TimelineTool"] | components["schemas"]["TimelineModelCall"] | components["schemas"]["TimelineModelRetryStarted"] | components["schemas"]["TimelineModelRetryEnded"] | components["schemas"]["TimelineCompaction"] | components["schemas"]["TimelineAbortRequested"] | components["schemas"]["TimelineEnded"] | components["schemas"]["TimelineSessionMissing"] | components["schemas"]["TimelineExtensionUI"];
         /**
-         * @description Agent 半边的扩展经 ctx.ui 发来的请求（Pi RPC 的 extension_ui_request）。notify 是通知（level 为 info、warning、error），
+         * @description Agent 侧的扩展经 ctx.ui 发来的请求（Pi RPC 的 extension_ui_request）。notify 是通知（level 为 info、warning、error），
          *     setStatus 设置或清除一条状态（message 为空时清除）。select、confirm、input、editor 是对话，message 为对话标题：
          *     常态 Agent 一轮之中的 confirm、select、input 成为这个 Agent 发给控制台的提问（questionId，期限为请求的超时，没有时 30 分钟），
          *     回答后交还给扩展，这条记录在对话结束时写入，answered 为 answered（有人回答）、cancelled（回答为取消）或 expired（到期或这一轮结束，
@@ -6602,8 +6612,8 @@ export interface components {
             runId?: string;
         };
         /**
-         * @description - installed：已安装，平台半边没有在宿主里（没有平台半边、全局停用或宿主尚未启动）
-         *     - active：平台半边已在宿主里加载
+         * @description - installed：已安装，平台侧没有在宿主里（没有平台侧、全局停用或宿主尚未启动）
+         *     - active：平台侧已在宿主里加载
          *     - error：加载失败（清单与代码不符、register 抛错等），原因见 lastError
          *     - host_stopped：宿主崩溃次数达到上限，已停止
          * @enum {string}
@@ -6648,7 +6658,7 @@ export interface components {
             fields: Record<string, never>;
             where: ("agent" | "task" | "project" | "identity" | "global")[];
         };
-        /** @description 安装前展示的组成：两半各有什么。 */
+        /** @description 安装前展示的组成：两侧各有什么。 */
         PluginComponents: {
             /** @description pi.extensions 的文件数 */
             agentExtensions: number;
@@ -6658,7 +6668,7 @@ export interface components {
             mcpServers: string[];
             /** @description loopNow.bin 的目录 */
             bin: string[];
-            /** @description 是否有平台半边 */
+            /** @description 是否有平台侧 */
             platform: boolean;
             actions: components["schemas"]["PluginAction"][];
             channels: {
@@ -6864,7 +6874,7 @@ export interface components {
             stderr: string[];
         };
         PluginHostStatus: {
-            /** @description 服务端是否有宿主入口；为 false 时插件的平台半边不运行 */
+            /** @description 服务端是否有宿主入口；为 false 时插件的平台侧不运行 */
             configured: boolean;
             /** @enum {string} */
             state: "disabled" | "starting" | "running" | "restarting" | "stopped" | "idle";
@@ -7065,7 +7075,7 @@ export interface components {
             address: string | null;
         };
         /**
-         * @description 发给平台半边的事件（plugins/SPEC.md §4），给插件作者的合同：固定字段加该类型自己的字段；正文一律不带，用权限范围内的接口另取。
+         * @description 发给平台侧的事件（plugins/SPEC.md §4），给插件作者的合同：固定字段加该类型自己的字段；正文一律不带，用权限范围内的接口另取。
          *     观察类事件至少送达一次，按 `id` 去重。各类型的字段：
          *     - run.queued、run.started、run.ended：origin（console、inbox_reminder、sleep_wake、console_compact、task_node、console_node）；
          *       run.ended 另有 status（completed、failed、interrupted）、endReason、errorCode 与 tokens（这一轮的 input、output、cacheRead、cacheWrite、total）

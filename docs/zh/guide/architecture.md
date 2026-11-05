@@ -1,12 +1,11 @@
 # 架构
 
-Loop Now 是**一个本地安装**：一个 Go 服务端、一个 React 控制台、一个 PostgreSQL 数据库、Redis、按 Agent 划分的 Pi 进程，以及一个共享的 Node 插件宿主。下图的组件构成一个完整的工作系统，并不代表可独立扩展的服务。
+Loop Now 是**一个本地安装**：一个 Go 服务端、一个 React 控制台、本地数据目录里的 SQLite 数据库、按 Agent 划分的 Pi 进程，以及一个共享的 Node 插件宿主。下图的组件构成一个完整的工作系统，并不代表可独立扩展的服务。
 
 ```mermaid
 flowchart LR
     UI[Web 控制台] <-->|HTTP 与 SSE| Server[Go 服务端]
-    Server <--> PG[(PostgreSQL)]
-    Server <--> Redis[(Redis)]
+    Server <--> DB[(SQLite)]
     Server -->|RPC| Pi[Pi 进程]
     Server <-->|stdio| Host[Node 插件宿主]
     Host -->|HTTP, 插件令牌| Server
@@ -14,11 +13,11 @@ flowchart LR
     Pi --> Ext[插件扩展与 MCP 服务器]
 ```
 
-- **PostgreSQL** 保存平台状态、凭证、消息和任务记录。
-- **Redis** 负责协调、队列和实时事件流。
+- 数据目录里的 **SQLite** 保存平台状态、凭证、消息、任务记录和排队；运行与审计日志在旁边的另一个文件里。
+- **服务端进程**在内存里维护忙闲锁和实时事件流；重启后事件流重新开始。
 - **本地文件系统** 保存 Agent 工作区、会话和已安装的工具。
 - **Pi 进程** 执行 Agent 的每一轮工作。每个 Agent 在自己的工作目录中运行；服务端负责拉起、回收和限制它们。
-- **插件宿主** 在一个常驻 Node 进程中运行各插件的平台半边，通过 stdio JSON 行协议与服务端通信，并用按权限签发的插件令牌以 HTTP 回调平台接口。
+- **插件宿主** 在一个常驻 Node 进程中运行各插件的平台侧，通过 stdio JSON 行协议与服务端通信，并用按权限签发的插件令牌以 HTTP 回调平台接口。
 
 ## 仓库地图
 

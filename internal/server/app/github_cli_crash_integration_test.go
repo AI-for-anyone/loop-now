@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/app"
 	"loop-now/internal/server/cliauth"
@@ -23,11 +22,15 @@ import (
 	"loop-now/internal/server/githubauth"
 	"loop-now/internal/server/githubauth/githubtest"
 	"loop-now/internal/server/store"
+
+	"github.com/google/uuid"
+
+	"loop-now/internal/server/db"
 )
 
 type githubCrashInput struct {
-	Config                        config.Config
-	Schema, Ready, Barrier, Phase string
+	Config                config.Config
+	Ready, Barrier, Phase string
 }
 
 // githubCrashBeforeCommit holds the verified device/identity result before the
@@ -66,7 +69,7 @@ func TestGitHubCrashAppChild(t *testing.T) {
 	if err != nil {
 		os.Exit(52)
 	}
-	a, err := app.Build(context.Background(), &in.Config, config.NewLogger(io.Discard, "json", 0), app.Options{SearchPath: in.Schema, Listener: listener, HomeDirs: []string{"/nonexistent-home"}})
+	a, err := app.Build(context.Background(), &in.Config, config.NewLogger(io.Discard, "json", 0), app.Options{Listener: listener, HomeDirs: []string{"/nonexistent-home"}})
 	if err != nil {
 		os.Exit(53)
 	}
@@ -126,13 +129,13 @@ func TestGitHubActualAppSIGKILLCommitBoundary(t *testing.T) {
 			}
 			oldHash := sha256.Sum256(oldRow.Secret)
 			seed.stop()
-			observer, e := store.Open(context.Background(), w.cfg.DatabaseURL, store.OpenOptions{SearchPath: w.schema})
+			observer, e := store.Open(context.Background(), db.Options{Dir: config.DBDir(w.cfg.DataDir)})
 			if e != nil {
 				t.Fatal(e)
 			}
 			defer observer.Close()
 			dir := t.TempDir()
-			input := githubCrashInput{Config: w.cfg, Schema: w.schema, Ready: filepath.Join(dir, "api.json"), Barrier: filepath.Join(dir, "barrier.json"), Phase: phase}
+			input := githubCrashInput{Config: w.cfg, Ready: filepath.Join(dir, "api.json"), Barrier: filepath.Join(dir, "barrier.json"), Phase: phase}
 			read, write, e := os.Pipe()
 			if e != nil {
 				t.Fatal(e)

@@ -9,11 +9,11 @@ import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
 import { routes } from './routes'
 
-// 顶栏的连接状态区域；“部分依赖不可用”在全局设置页上也会出现，断言都限定在这个区域内。
+// 顶栏的连接状态区域；“数据库不可用”在全局设置页上也会出现，断言都限定在这个区域内。
 const topStatus = () => screen.getByRole('status', { name: '连接状态' })
 const banner = () => screen.queryByText(/控制台访问的服务端地址是/)
 
-const degraded = () => HttpResponse.json({ ok: false, postgres: { ok: true }, redis: { ok: false, error: '连接被拒绝' } }, { status: 503 })
+const degraded = () => HttpResponse.json({ ok: false, database: { ok: false, error: '无法打开数据库文件' } }, { status: 503 })
 
 describe('顶栏连接状态', () => {
   it('首次健康查询还没有结果时显示检查中，并显示服务端的主机和端口', async () => {
@@ -29,17 +29,38 @@ describe('顶栏连接状态', () => {
     expect(within(topStatus()).getByText('127.0.0.1:8780')).toBeInTheDocument()
   })
 
-  it('健康检查报告全部依赖正常时显示已连接', async () => {
+  it('接口地址是相对路径（服务端在同一端口提供控制台）时，按当前页面显示主机和端口', async () => {
+    server.use(...baseHandlers([]))
+    const original = config.apiBase
+    config.apiBase = '/api/v1'
+    try {
+      renderRoutes(routes, defaultAgentsPath)
+      expect(within(topStatus()).getByText(window.location.host)).toBeInTheDocument()
+    } finally {
+      config.apiBase = original
+    }
+  })
+
+  it('健康检查报告数据库正常时显示已连接', async () => {
     server.use(...baseHandlers([]))
     renderRoutes(routes, defaultAgentsPath)
     expect(await within(topStatus()).findByText('已连接')).toBeInTheDocument()
   })
 
-  it('健康检查报告有依赖不可用时显示部分依赖不可用，不显示无法连接的全局提示', async () => {
+  it('健康检查报告数据库不可用时显示数据库不可用，不显示无法连接的全局提示', async () => {
     server.use(http.get(apiUrl('/health'), degraded), ...baseHandlers([]))
     renderRoutes(routes, defaultAgentsPath)
-    expect(await within(topStatus()).findByText('部分依赖不可用')).toBeInTheDocument()
+    expect(await within(topStatus()).findByText('数据库不可用')).toBeInTheDocument()
     expect(banner()).toBeNull()
+  })
+
+  it('数据库日志过大只是提示，仍显示已连接', async () => {
+    server.use(
+      http.get(apiUrl('/health'), () => HttpResponse.json({ ok: true, database: { ok: true, error: null, walBytes: { data: 300 << 20, events: 0 }, walWarning: true } })),
+      ...baseHandlers([]),
+    )
+    renderRoutes(routes, defaultAgentsPath)
+    expect(await within(topStatus()).findByText('已连接')).toBeInTheDocument()
   })
 
   it('请求没有到达服务端时显示无法连接，全局提示照常显示', async () => {
@@ -67,7 +88,7 @@ describe('顶栏连接状态', () => {
         http.all(`${config.apiBase}/*`, () => (up ? undefined : HttpResponse.error())),
         http.get(apiUrl('/health'), () => {
           healthCalls += 1
-          return HttpResponse.json({ ok: true, postgres: { ok: true }, redis: { ok: true } })
+          return HttpResponse.json({ ok: true, database: { ok: true } })
         }),
         ...baseHandlers([]),
       )
@@ -90,7 +111,7 @@ describe('顶栏连接状态', () => {
   it('窗口重新获得焦点时也查询健康状态', async () => {
     let healthy = true
     server.use(
-      http.get(apiUrl('/health'), () => (healthy ? HttpResponse.json({ ok: true, postgres: { ok: true }, redis: { ok: true } }) : degraded())),
+      http.get(apiUrl('/health'), () => (healthy ? HttpResponse.json({ ok: true, database: { ok: true } }) : degraded())),
       ...baseHandlers([]),
     )
     renderRoutes(routes, defaultAgentsPath)
@@ -98,7 +119,7 @@ describe('顶栏连接状态', () => {
     healthy = false
     focusManager.setFocused(false)
     focusManager.setFocused(true)
-    await waitFor(() => expect(within(topStatus()).getByText('部分依赖不可用')).toBeInTheDocument())
+    await waitFor(() => expect(within(topStatus()).getByText('数据库不可用')).toBeInTheDocument())
     focusManager.setFocused(undefined)
   })
 })

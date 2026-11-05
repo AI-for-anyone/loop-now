@@ -162,8 +162,10 @@ func TestDeleteProjectKeepsLarkBoundVersionAsTombstone(t *testing.T) {
 // binding did), so every such reference must be one the purge handles.
 func TestCredentialVersionReferencesAreHandledByPurge(t *testing.T) {
 	s := taskConsoleStore(t)
-	rows, err := s.Pool.Query(context.Background(), `SELECT conrelid::regclass::text||' -> '||confrelid::regclass::text FROM pg_constraint
-		WHERE contype='f' AND confdeltype IN ('a','r') AND confrelid::regclass::text IN ('project_cli_versions','model_auth_versions','project_credential_legacy_rows','agent_credentials')
+	// 父表上 BEFORE DELETE 触发器置空的引用（PostgreSQL 的列级 ON DELETE SET NULL）也算已处理。
+	rows, err := s.Pool.Query(context.Background(), `SELECT DISTINCT m.name||' -> '||f."table" FROM sqlite_schema m JOIN pragma_foreign_key_list(m.name) f
+		WHERE m.type='table' AND f.on_delete IN ('NO ACTION','RESTRICT') AND f."table" IN ('project_cli_versions','model_auth_versions','project_credential_legacy_rows','agent_credentials')
+		AND NOT EXISTS(SELECT 1 FROM sqlite_schema tr WHERE tr.type='trigger' AND tr.tbl_name=f."table" AND tr.sql LIKE '%BEFORE DELETE%' AND tr.sql LIKE '%UPDATE '||m.name||' SET%')
 		ORDER BY 1`)
 	if err != nil {
 		t.Fatal(err)

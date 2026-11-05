@@ -3,28 +3,32 @@ package tasks
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/taskmodel"
+
+	"github.com/google/uuid"
 )
 
 func rejectEvent(t *testing.T, s *Service) func(string) {
 	t.Helper()
 	ctx := context.Background()
-	_, e := s.Store.Pool.Exec(ctx, `CREATE TABLE reject_task_event(kind text);
- CREATE FUNCTION reject_task_observation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
- IF EXISTS(SELECT 1 FROM reject_task_event WHERE kind=NEW.type) THEN RAISE EXCEPTION 'injected observation failure'; END IF; RETURN NEW; END $$;
- CREATE TRIGGER reject_task_observation BEFORE INSERT ON lifecycle_events FOR EACH ROW EXECUTE FUNCTION reject_task_observation()`)
-	if e != nil {
-		t.Fatal(e)
+	// lifecycle_events 在 events.db（ev）：触发器只能用同一个库里的表，所以拒绝表也建在 ev。
+	for _, q := range []string{`CREATE TABLE ev.reject_task_event(kind TEXT)`,
+		`CREATE TRIGGER ev.reject_task_observation BEFORE INSERT ON lifecycle_events WHEN EXISTS(SELECT 1 FROM reject_task_event WHERE kind=NEW.type)
+		BEGIN SELECT RAISE(ABORT, 'injected observation failure'); END`} {
+		if _, e := s.Store.Pool.Exec(ctx, q); e != nil {
+			t.Fatal(e)
+		}
 	}
 	return func(kind string) {
 		t.Helper()
@@ -150,7 +154,7 @@ func TestTaskUnboundInboxLifecycleKeepsNullNode(t *testing.T) {
 		t.Fatal(e)
 	}
 	runtime := uuid.New()
-	if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared) VALUES($1,$2,$3,$4,$5,encode(sha256($5),'hex'),true)`, runtime, id, agent.ID, agent.Name, []byte("fixture")); e != nil {
+	if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared) VALUES($1,$2,$3,$4,$5,$6,true)`, runtime, id, agent.ID, agent.Name, []byte("fixture"), sha256Hex([]byte("fixture"))); e != nil {
 		t.Fatal(e)
 	}
 	message := uuid.New()
@@ -267,7 +271,7 @@ func TestTaskNoncurrentInboxRunsWhileCurrentBusy(t *testing.T) {
 		t.Fatal(e)
 	}
 	runtime := uuid.New()
-	if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared) VALUES($1,$2,$3,$4,$5,encode(sha256($5),'hex'),true)`, runtime, id, agent.ID, agent.Name, []byte("fixture")); e != nil {
+	if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared) VALUES($1,$2,$3,$4,$5,$6,true)`, runtime, id, agent.ID, agent.Name, []byte("fixture"), sha256Hex([]byte("fixture"))); e != nil {
 		t.Fatal(e)
 	}
 	_, e = s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
@@ -338,7 +342,7 @@ func TestRestartOfUnboundInboxDoesNotBlockWaitingNode(t *testing.T) {
 		t.Fatal(e)
 	}
 	runtime := uuid.New()
-	if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared) VALUES($1,$2,$3,$4,$5,encode(sha256($5),'hex'),true)`, runtime, id, agent.ID, agent.Name, []byte("fixture")); e != nil {
+	if _, e = s.Store.Pool.Exec(ctx, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared) VALUES($1,$2,$3,$4,$5,$6,true)`, runtime, id, agent.ID, agent.Name, []byte("fixture"), sha256Hex([]byte("fixture"))); e != nil {
 		t.Fatal(e)
 	}
 	_, e = s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
@@ -368,4 +372,10 @@ func TestRestartOfUnboundInboxDoesNotBlockWaitingNode(t *testing.T) {
 	if e != nil || v.Status != "interrupted" || v.ErrorCode == nil || *v.ErrorCode != "server_restarted" {
 		t.Fatal("side round replayed or lost recovery record", e)
 	}
+}
+
+// sha256Hex 是快照内容的 SHA-256 十六进制串（task_instances.snapshot_sha）。
+func sha256Hex(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }

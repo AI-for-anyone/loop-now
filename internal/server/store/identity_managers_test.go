@@ -2,17 +2,17 @@ package store_test
 
 import (
 	"context"
+	"loop-now/internal/server/db"
+	"loop-now/internal/server/store"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
-
-	"loop-now/internal/server/store"
 )
 
 // 发给代管身份的消息在提交时以 identity.inbound 只投给代管的插件（不看订阅与项目启用），带发件方、项目、任务、节点、
 // 提问的选项与期限；代管的插件不再收到这条消息的 inbox.received，其他订阅者照常。发给没有代管的身份没有 identity.inbound。
-// 卸载插件时绑定一起删除；有绑定时 032 不回退，没有时可以回退再升级。
+// 卸载插件时绑定一起删除。
 func TestIdentityInboundEvents(t *testing.T) {
 	ctx := context.Background()
 	s := taskConsoleStore(t)
@@ -51,23 +51,21 @@ func TestIdentityInboundEvents(t *testing.T) {
 	must(`INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,to_kind,to_identity_id,text) VALUES($1,$1,'agent',$2,'external',$3,$4)`,
 		plain, agent, boss.ID, strings.Repeat("长", 100))
 	question := uuid.New()
-	tx, err := s.Pool.Begin(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, q := range []struct {
-		sql  string
-		args []any
-	}{
-		{`INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,from_runtime_id,to_kind,to_identity_id,text) VALUES($1,$1,'agent',$2,$3,'external',$4,'上线吗？')`, []any{question, agent, turn.RuntimeID, boss.ID}},
-		{`INSERT INTO inbox_questions(message_id,options,expires_at) VALUES($1,'[{"id":"1","label":"上线"},{"id":"2","label":"再等等"}]',now()+interval '1 hour')`, []any{question}},
-		{`INSERT INTO task_questions(question_message_id,task_id,runtime_id,node_run_id) VALUES($1,$2,$3,$4)`, []any{question, task, turn.RuntimeID, node}},
-	} {
-		if _, err := tx.Exec(ctx, q.sql, q.args...); err != nil {
-			t.Fatal(err)
+	if err := s.Pool.InTx(ctx, func(tx *db.Tx) error {
+		for _, q := range []struct {
+			sql  string
+			args []any
+		}{
+			{`INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,from_runtime_id,to_kind,to_identity_id,text) VALUES($1,$1,'agent',$2,$3,'external',$4,'上线吗？')`, []any{question, agent, turn.RuntimeID, boss.ID}},
+			{`INSERT INTO inbox_questions(message_id,options,expires_at) VALUES($1,'[{"id":"1","label":"上线"},{"id":"2","label":"再等等"}]',now()+3600000000)`, []any{question}},
+			{`INSERT INTO task_questions(question_message_id,task_id,runtime_id,node_run_id) VALUES($1,$2,$3,$4)`, []any{question, task, turn.RuntimeID, node}},
+		} {
+			if _, err := tx.Exec(ctx, q.sql, q.args...); err != nil {
+				return err
+			}
 		}
-	}
-	if err := tx.Commit(ctx); err != nil {
+		return nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 	must(`INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,to_kind,to_identity_id,text) VALUES($1,$1,'agent',$2,'external',$3,'没人代管')`, uuid.New(), agent, ops.ID)
@@ -94,17 +92,8 @@ func TestIdentityInboundEvents(t *testing.T) {
 		t.Fatalf("提问：%+v", second)
 	}
 
-	if err := s.MigrateDownTo(ctx, 31); err == nil || !strings.Contains(err.Error(), "identity_managers_down_refused") {
-		t.Fatalf("有绑定时不回退：%v", err)
-	}
 	must(`DELETE FROM plugins WHERE id='bridge'`)
 	if x, err := s.GetExternalIdentity(ctx, boss.ID); err != nil || x.ManagedBy != nil {
 		t.Fatalf("卸载插件后绑定清空：%+v %v", x, err)
-	}
-	if err := s.MigrateDownTo(ctx, 31); err != nil {
-		t.Fatalf("没有绑定时回退：%v", err)
-	}
-	if err := s.MigrateUpTo(ctx, 32); err != nil {
-		t.Fatalf("再升级：%v", err)
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"net"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,13 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/credentialmodel"
-	"loop-now/internal/testutil/pgtest"
 	"loop-now/internal/testutil/testenv"
+
+	"github.com/google/uuid"
 )
 
 // Main granted Web this one new test file. Existing helpers and production
@@ -41,19 +38,6 @@ func webProjectCredentialsIntegration(t *testing.T, slice string) {
 	if os.Getenv("LOOP_NOW_WEB_PROJECT_CREDENTIALS_INTEGRATION") != "1" {
 		t.Skip("explicit isolated project credential CRUD browser integration only")
 	}
-	for _, key := range []string{"LOOP_NOW_TEST_DATABASE_URL", "LOOP_NOW_TEST_REDIS_URL"} {
-		if os.Getenv(key) == "" {
-			t.Fatal("explicit TEST database and Redis endpoints required")
-		}
-	}
-	db, err := url.Parse(os.Getenv("LOOP_NOW_TEST_DATABASE_URL"))
-	if err != nil || !strings.HasSuffix(db.Path, "_test") {
-		t.Fatal("only explicit test database permitted")
-	}
-	rdb, err := redis.ParseURL(os.Getenv("LOOP_NOW_TEST_REDIS_URL"))
-	if err != nil || rdb.DB != 10 {
-		t.Fatal("explicit TEST Redis DB10 required")
-	}
 	root := testenv.RepoRoot()
 	deleteOnly := slice != "crud"
 	evidence := filepath.Join(root, "web/test-results/add-project-credentials/app-"+slice)
@@ -62,39 +46,16 @@ func webProjectCredentialsIntegration(t *testing.T, slice string) {
 	}
 	var w *world
 	var address string
-	audit := map[string]any{"mode": "actual React -> route.fetch -> temporary app.Build -> isolated TEST PostgreSQL/Redis; CRUD only; no OAuth/model requests"}
-	// Runs last: existing world cleanup removes schema, prefix and work root;
+	audit := map[string]any{"mode": "actual React -> route.fetch -> temporary app.Build -> temporary SQLite; CRUD only; no OAuth/model requests"}
+	// Runs last: existing world cleanup removes the data directory and work root;
 	// App shutdown and Node's self-owned frontend cleanup must already finish.
 	t.Cleanup(func() {
 		if w == nil {
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		audit["schema"] = w.schema
-		audit["redisPrefix"] = w.cfg.RedisKeyPrefix
+		audit["dataDir"] = w.cfg.DataDir
 		audit["appAddress"] = address
-		conn, err := pgx.Connect(ctx, pgtest.URL(t))
-		if err != nil {
-			t.Error("cannot verify isolated schema cleanup")
-			return
-		}
-		defer conn.Close(ctx)
-		var exists bool
-		err = conn.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1)`, w.schema).Scan(&exists)
-		audit["schemaRemoved"] = err == nil && !exists
-		if err != nil || exists {
-			t.Error("isolated schema cleanup not verified")
-		}
-		rc := redis.NewClient(rdb)
-		defer rc.Close()
-		iter := rc.Scan(ctx, 0, w.cfg.RedisKeyPrefix+"*", 100).Iterator()
-		found := iter.Next(ctx)
-		audit["redisPrefixEmpty"] = !found && iter.Err() == nil
-		if found || iter.Err() != nil {
-			t.Error("isolated Redis prefix cleanup not verified")
-		}
-		_, err = os.Stat(w.cfg.WorkRoot)
+		_, err := os.Stat(w.cfg.WorkRoot)
 		audit["workRootRemoved"] = os.IsNotExist(err)
 		if !os.IsNotExist(err) {
 			t.Error("isolated work root cleanup not verified")
@@ -165,7 +126,7 @@ func webProjectCredentialsIntegration(t *testing.T, slice string) {
 	var result struct {
 		IDs map[string]uuid.UUID `json:"ids"`
 	}
-	raw, err = os.ReadFile(filepath.Join(evidence, "browser-results.json"))
+	raw, err := os.ReadFile(filepath.Join(evidence, "browser-results.json"))
 	if err != nil || json.Unmarshal(raw, &result) != nil {
 		t.Fatal("cannot read sanitized browser identities")
 	}
@@ -175,7 +136,7 @@ func webProjectCredentialsIntegration(t *testing.T, slice string) {
 		t.Helper()
 		var count int
 		if err := s.a.Store.Pool.QueryRow(ctx, query, args...).Scan(&count); err != nil {
-			t.Fatalf("PG read-back %s failed", name)
+			t.Fatalf("SQLite read-back %s failed", name)
 		}
 		counts[name] = count
 	}
@@ -188,7 +149,7 @@ func webProjectCredentialsIntegration(t *testing.T, slice string) {
 		readCount("privateOAuthOperations", `SELECT count(*) FROM model_auth_operations`)
 		for name, expected := range map[string]int{"untouchedMainAccount": 1, "platformPrivateVersion": 1, "runs": 0, "usageRecords": 0, "projectOAuthOperations": 0, "privateOAuthOperations": 0} {
 			if counts[name] != expected {
-				t.Errorf("PG %s got %d want %d", name, counts[name], expected)
+				t.Errorf("SQLite %s got %d want %d", name, counts[name], expected)
 			}
 		}
 		audit["pgReadback"] = counts
@@ -209,7 +170,7 @@ func webProjectCredentialsIntegration(t *testing.T, slice string) {
 		readCount("privateOAuthOperations", `SELECT count(*) FROM model_auth_operations`)
 		for name, expected := range map[string]int{"accountDeletedTombstone": 1, "selectedDeletedPointerRetained": 1, "deletedAccountVersionsRetained": 1, "platformPrivateVersion": 1, "deletedProjectSecrets": 0, "deletedProjectVersionRows": 0, "deletedProjectTombstone": 1, "runs": 0, "usageRecords": 0, "projectOAuthOperations": 0, "privateOAuthOperations": 0} {
 			if counts[name] != expected {
-				t.Errorf("PG %s got %d want %d", name, counts[name], expected)
+				t.Errorf("SQLite %s got %d want %d", name, counts[name], expected)
 			}
 		}
 		audit["pgReadback"] = counts
@@ -232,7 +193,7 @@ func webProjectCredentialsIntegration(t *testing.T, slice string) {
 	readCount("privateOAuthOperations", `SELECT count(*) FROM model_auth_operations`)
 	for name, expected := range map[string]int{"liveProjectModelAccounts": 1, "deletedSelectedAccount": 1, "selectedDeletedPointerRetained": 1, "accountAVersions": 2, "deletedAccountVersionsRetained": 1, "projectCLIVersion": 1, "platformPrivateVersion": 1, "deletedProjectSecrets": 0, "deletedProjectVersionRows": 0, "deletedProjectTombstone": 1, "runs": 0, "usageRecords": 0, "projectOAuthOperations": 0, "privateOAuthOperations": 0} {
 		if counts[name] != expected {
-			t.Errorf("PG %s got %d want %d", name, counts[name], expected)
+			t.Errorf("SQLite %s got %d want %d", name, counts[name], expected)
 		}
 	}
 	audit["pgReadback"] = counts

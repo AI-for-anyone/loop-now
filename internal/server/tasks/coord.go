@@ -6,44 +6,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/store"
+
+	"github.com/google/uuid"
 )
 
-// mirrorQueue 可随时从PG重建；仅镜像该任务实例，不改常态队列。
-func (s *Service) mirrorQueue(ctx context.Context, runtime uuid.UUID) error {
-	if s.Coord == nil {
-		return nil
-	}
-	s.queueMu.Lock()
-	defer s.queueMu.Unlock()
-	rows, err := s.Store.Pool.Query(ctx, `SELECT id,priority FROM task_turns WHERE runtime_id=$1 AND status='queued' ORDER BY queue_seq`, runtime)
-	if err != nil {
-		return err
-	}
-	interrupt, normal := []string{}, []string{}
-	for rows.Next() {
-		var id uuid.UUID
-		var priority int
-		if err = rows.Scan(&id, &priority); err != nil {
-			rows.Close()
-			return err
-		}
-		if priority == 0 {
-			interrupt = append(interrupt, id.String())
-		} else {
-			normal = append(normal, id.String())
-		}
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return err
-	}
-	return s.Coord.RebuildQueues(ctx, runtime.String(), interrupt, normal)
-}
 func (s *Service) executeTurn(ctx context.Context, turn store.TaskTurn, sink executor.Sink) (result executor.Result, err error) {
 	valid, guardErr := s.Store.GuardTaskConsoleDispatch(ctx, turn)
 	if guardErr != nil {
@@ -126,10 +95,7 @@ func (s *Service) executeTurn(ctx context.Context, turn store.TaskTurn, sink exe
 	}
 	owner := coord.LockValue(turn.ID.String(), s.Options.InstanceID.String())
 	key := turn.RuntimeID.String()
-	if e := s.mirrorQueue(ctx, turn.RuntimeID); e != nil {
-		return executor.Result{}, e
-	}
-	ok, e := s.Coord.Renew(ctx, key, owner)
+	ok, e := s.Coord.Hold(ctx, key, owner)
 	if e != nil || !ok {
 		return executor.Result{}, errors.New("任务实例忙闲锁不可用")
 	}
@@ -149,7 +115,7 @@ func (s *Service) executeTurn(ctx context.Context, turn store.TaskTurn, sink exe
 	}()
 	go func() {
 		defer close(done)
-		ticker := time.NewTicker(s.Options.LockRenewInterval)
+		ticker := time.NewTicker(s.Options.abortPollInterval())
 		defer ticker.Stop()
 		for {
 			select {
@@ -164,13 +130,8 @@ func (s *Service) executeTurn(ctx context.Context, turn store.TaskTurn, sink exe
 					_ = s.Executor.Interrupt(child, turn.RuntimeID, turn.ID)
 				}
 			case <-ticker.C:
-				ok, e := s.Coord.Renew(child, key, owner)
-				if e != nil || !ok {
-					cancel()
-					return
-				}
 				var aborting bool
-				if e = s.Store.Pool.QueryRow(child, `SELECT status='aborting' FROM task_turns WHERE id=$1`, turn.ID).Scan(&aborting); e == nil && aborting {
+				if e := s.Store.Pool.QueryRow(child, `SELECT status='aborting' FROM task_turns WHERE id=$1`, turn.ID).Scan(&aborting); e == nil && aborting {
 					_ = s.Executor.Interrupt(child, turn.RuntimeID, turn.ID)
 				}
 			}

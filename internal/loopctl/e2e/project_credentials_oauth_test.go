@@ -35,7 +35,7 @@ func newOfflineProjectLogin(t *testing.T) *offlineProjectLogin {
  const credential={type:'oauth',access:'synthetic-project-oauth-access',refresh:'synthetic-project-oauth-refresh',expires:1893456000000,accountId:'synthetic-shared-grant'};
  let operation,done=false;
  const result=(status)=>{if(done)return;done=true;event('result:'+status);send({type:'result',id:operation.id,status,credential:status==='succeeded'?credential:undefined,code:status==='failed'?'auth_failed':undefined});};
- send({type:'ready',protocolVersion:1,expectedPiVersion:'1.1.0'});
+ send({type:'ready',protocolVersion:1,expectedPiVersion:'1.4.0'});
  readline.createInterface({input:fs.createReadStream('',{fd:3})}).on('line',line=>{
   const frame=JSON.parse(line);
   if(frame.type==='abort'){event('abort');if(operation)result('succeeded');return;}
@@ -85,7 +85,7 @@ func newProjectOAuthWorld(t *testing.T) (*world, *server, *loopctl, *offlineProj
 	t.Cleanup(s.stop)
 	_, _, token := s.issueToken("", "project-oauth-cli", nil)
 	external := newLoopctl(t, map[string]string{"LOOPCTL_URL": s.ext, "LOOPCTL_TOKEN": token, "LOOPCTL_CA_FILE": w.caFile})
-	t.Logf("offline OAuth resources: schema=%s redisPrefix=%s consoleAddr=%s tlsAddr=%s", w.schema, w.cfg.RedisKeyPrefix, w.addr, w.extAddr)
+	t.Logf("offline OAuth resources: dataDir=%s consoleAddr=%s tlsAddr=%s", w.cfg.DataDir, w.addr, w.extAddr)
 	return w, s, external, fixture
 }
 func TestProjectCredentialOAuthCancelWithApp(t *testing.T) {

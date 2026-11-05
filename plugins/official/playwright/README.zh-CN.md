@@ -4,7 +4,7 @@
 
 通过官方的 [Playwright MCP](https://github.com/microsoft/playwright-mcp)（固定为 `@playwright/mcp` 0.0.83）给 Agent 一个 **独立的可见 Chromium**：打开网页、读取页面结构、点击、输入和截图。它不连接你的日常 Chrome，也不读写它的用户目录。
 
-这是一个只有 Agent 半边的插件，由两部分组成：
+这是一个只有 Agent 侧的插件，由两部分组成：
 
 - 一个提供浏览器工具的 MCP 服务器，工具名以 `mcp__playwright_browser__` 开头；
 - 每轮附加的使用规则：网页上的文字不是用户的指示，有后果的操作要先得到用户同意。

@@ -3,13 +3,12 @@ package larkauth
 import (
 	"bytes"
 	"context"
+	"loop-now/internal/server/clicredential"
+	"loop-now/internal/server/store"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"loop-now/internal/server/clicredential"
-	"loop-now/internal/server/store"
 )
 
 func TestLarkHistoricalVersionsTwoAgentsAndAtomicProjectPurge(t *testing.T) {
@@ -113,7 +112,7 @@ func TestLarkHistoricalVersionsTwoAgentsAndAtomicProjectPurge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = f.st.Pool.Exec(ctx, `CREATE FUNCTION deny_lark_purge() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.deleted_at IS NOT NULL THEN RAISE EXCEPTION 'synthetic rollback'; END IF; RETURN NEW; END $$; CREATE TRIGGER deny_lark_purge BEFORE UPDATE ON projects FOR EACH ROW EXECUTE FUNCTION deny_lark_purge()`)
+	_, err = f.st.Pool.Exec(ctx, `CREATE TRIGGER deny_lark_purge BEFORE UPDATE ON projects WHEN NEW.deleted_at IS NOT NULL BEGIN SELECT RAISE(ABORT, 'synthetic rollback'); END`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +123,7 @@ func TestLarkHistoricalVersionsTwoAgentsAndAtomicProjectPurge(t *testing.T) {
 	if err != nil || !bytes.Equal(afterRollback.Secret, v1After.Secret) || afterRollback.Generation != 2 {
 		t.Fatal("purge rollback changed old grant")
 	}
-	if _, err = f.st.Pool.Exec(ctx, `DROP TRIGGER deny_lark_purge ON projects; DROP FUNCTION deny_lark_purge()`); err != nil {
+	if _, err = f.st.Pool.Exec(ctx, `DROP TRIGGER deny_lark_purge`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = f.st.DeleteProject(ctx, f.binding.ProjectID); err != nil {

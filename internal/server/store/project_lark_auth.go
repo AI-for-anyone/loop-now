@@ -6,10 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/apperr"
 	cm "loop-now/internal/server/credentialmodel"
 	"time"
+
+	"loop-now/internal/server/db"
 )
 
 func (s *Store) newProjectLarkAuthOperation(ctx context.Context, project uuid.UUID, in cm.CLIAuthStart, expires time.Time) (cm.CLIAuthOperation, bool, error) {
@@ -27,7 +28,7 @@ func (s *Store) newProjectLarkAuthOperation(ctx context.Context, project uuid.UU
 	}
 	sum := sha256.Sum256(b)
 	hash := hex.EncodeToString(sum[:])
-	e = s.inTx(ctx, func(tx pgx.Tx) error {
+	e = s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, true); e != nil {
 			return e
 		}
@@ -43,7 +44,7 @@ func (s *Store) newProjectLarkAuthOperation(ctx context.Context, project uuid.UU
 			out, e = cliOperationTx(ctx, tx, project, in.OperationID, false)
 			return e
 		}
-		if e != pgx.ErrNoRows {
+		if e != db.ErrNoRows {
 			return e
 		}
 		var sourceVersion *uuid.UUID
@@ -78,11 +79,11 @@ func (s *Store) newProjectLarkAuthOperation(ctx context.Context, project uuid.UU
 			}
 		}
 		var active uuid.UUID
-		e = tx.QueryRow(ctx, `SELECT id FROM project_cli_auth_operations WHERE project_id=$1 AND cli_name='lark-cli' AND target_account_id IS NOT DISTINCT FROM $2::uuid AND status IN('pending','awaiting_authorization')`, project, in.AccountID).Scan(&active)
+		e = tx.QueryRow(ctx, `SELECT id FROM project_cli_auth_operations WHERE project_id=$1 AND cli_name='lark-cli' AND target_account_id IS $2 AND status IN('pending','awaiting_authorization')`, project, in.AccountID).Scan(&active)
 		if e == nil {
 			return cliInProgress(project, active, "lark-cli")
 		}
-		if e != pgx.ErrNoRows {
+		if e != db.ErrNoRows {
 			return e
 		}
 		var exists bool
@@ -107,7 +108,7 @@ func (s *Store) newProjectLarkAuthOperation(ctx context.Context, project uuid.UU
 // operation. It never repairs a source with the source account's current value.
 func (s *Store) GetProjectLarkAuthSource(ctx context.Context, project, id uuid.UUID) (CredentialRow, error) {
 	var row CredentialRow
-	e := s.inTx(ctx, func(tx pgx.Tx) error {
+	e := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, false); e != nil {
 			return e
 		}
@@ -150,7 +151,7 @@ func (s *Store) SetProjectLarkAuthorization(ctx context.Context, project, id uui
 	if url == "" || expires.IsZero() || code != nil && (*code == "" || len(*code) > 200) {
 		return out, apperr.Invalid("authorization", "Lark授权交互无效")
 	}
-	e := s.inTx(ctx, func(tx pgx.Tx) error {
+	e := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, true); e != nil {
 			return e
 		}
@@ -165,7 +166,7 @@ func (s *Store) SetProjectLarkAuthorization(ctx context.Context, project, id uui
 		if out.CLI != "lark-cli" {
 			return apperr.Invalid("cli", "Lark授权操作类型不匹配")
 		}
-		if _, e = tx.Exec(ctx, `UPDATE project_cli_auth_operations SET status='awaiting_authorization',authorization_url=$2,user_code=$3,expires_at=LEAST(expires_at,$4) WHERE id=$1 AND $4::timestamptz>clock_timestamp()`, id, url, code, expires); e != nil {
+		if _, e = tx.Exec(ctx, `UPDATE project_cli_auth_operations SET status='awaiting_authorization',authorization_url=$2,user_code=$3,expires_at=min(expires_at,$4) WHERE id=$1 AND $4>clock_timestamp()`, id, url, code, expires); e != nil {
 			return e
 		}
 		out, e = cliOperationTx(ctx, tx, project, id, false)

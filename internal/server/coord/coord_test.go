@@ -9,26 +9,31 @@ import (
 	"testing"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-
 	"loop-now/internal/server/coord"
-	"loop-now/internal/testutil/redistest"
 )
 
-const (
-	testLockTTL    = 30 * time.Second
-	testRunTextTTL = time.Hour
-)
+const ()
 
-func newCoord(t *testing.T, maxLen int64) (*coord.Coord, *redis.Client) {
+// clock 是固定不走的时钟：同一毫秒里的事件 ID 靠序号递增。
+type clock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func (c *clock) now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.t
+}
+
+func newCoord(t *testing.T, maxLen int64) (*coord.Coord, *clock) {
 	t.Helper()
-	rdb, prefix := redistest.New(t)
-	return coord.New(rdb, coord.Options{
-		Prefix:       prefix,
-		LockTTL:      testLockTTL,
+	clk := &clock{t: time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)}
+	return coord.New(coord.Options{
+		Prefix:       "test:",
 		StreamMaxLen: maxLen,
-		RunTextTTL:   testRunTextTTL,
-	}), rdb
+		Now:          clk.now,
+	}), clk
 }
 
 func must[T any](t *testing.T) func(T, error) T {
@@ -57,24 +62,13 @@ func assertOwner(t *testing.T, c *coord.Coord, agent, want string) {
 	}
 }
 
-func assertPTTL(t *testing.T, rdb *redis.Client, key string, limit time.Duration) {
-	t.Helper()
-	d, err := rdb.PTTL(context.Background(), key).Result()
-	check(t, err)
-	if d <= 0 || d > limit {
-		t.Fatalf("%s 的 PTTL = %v，期望在 (0, %v]", key, d, limit)
-	}
-}
-
 func TestKeys(t *testing.T) {
 	k := coord.Keys{Prefix: "loopnow:"}
 	cases := map[string]string{
-		k.Lock("a1"):           "loopnow:agent:a1:lock",
-		k.QueueInterrupt("a1"): "loopnow:agent:a1:q:interrupt",
-		k.QueueNormal("a1"):    "loopnow:agent:a1:q:normal",
-		k.Cmd("a1"):            "loopnow:agent:a1:cmd",
-		k.Events("a1"):         "loopnow:agent:a1:events",
-		k.RunText("r1"):        "loopnow:run:r1:text",
+		k.Lock("a1"):    "loopnow:agent:a1:lock",
+		k.Cmd("a1"):     "loopnow:agent:a1:cmd",
+		k.Events("a1"):  "loopnow:agent:a1:events",
+		k.RunText("r1"): "loopnow:run:r1:text",
 	}
 	for got, want := range cases {
 		if got != want {
@@ -84,48 +78,32 @@ func TestKeys(t *testing.T) {
 	if v := coord.LockValue("r1", "i1"); v != "r1|i1" {
 		t.Errorf("LockValue = %q", v)
 	}
-	c := coord.New(nil, coord.Options{Prefix: "p:"})
+	c := coord.New(coord.Options{Prefix: "p:"})
 	if c.Keys().Prefix != "p:" {
 		t.Errorf("Keys().Prefix = %q", c.Keys().Prefix)
 	}
 }
 
-func TestAcquireIfIdle(t *testing.T) {
-	c, rdb := newCoord(t, 1000)
+func TestAcquire(t *testing.T) {
+	c, _ := newCoord(t, 1000)
 	ctx := context.Background()
 	const agent = "agent-1"
 	ownerA := coord.LockValue("run-a", "inst")
 
-	// 锁空闲但普通队列非空：拒绝。
-	check(t, c.PushNormal(ctx, agent, "queued-1"))
-	if must[bool](t)(c.AcquireIfIdle(ctx, agent, ownerA)) {
-		t.Fatal("普通队列非空时不应拿到锁")
-	}
-	assertOwner(t, c, agent, "")
-
-	// 锁空闲但打断队列非空：拒绝。
-	check(t, c.RebuildQueues(ctx, agent, []string{"queued-2"}, nil))
-	if must[bool](t)(c.AcquireIfIdle(ctx, agent, ownerA)) {
-		t.Fatal("打断队列非空时不应拿到锁")
-	}
-	assertOwner(t, c, agent, "")
-
-	// 完全空闲：成功并带 TTL。
-	check(t, c.RebuildQueues(ctx, agent, nil, nil))
-	if !must[bool](t)(c.AcquireIfIdle(ctx, agent, ownerA)) {
+	// 空闲：成功并带 TTL。
+	if !must[bool](t)(c.Acquire(ctx, agent, ownerA)) {
 		t.Fatal("空闲时应拿到锁")
 	}
 	assertOwner(t, c, agent, ownerA)
-	assertPTTL(t, rdb, c.Keys().Lock(agent), testLockTTL)
 
 	// 已被持有：拒绝且不改变持有者。
-	if must[bool](t)(c.AcquireIfIdle(ctx, agent, coord.LockValue("run-b", "inst"))) {
+	if must[bool](t)(c.Acquire(ctx, agent, coord.LockValue("run-b", "inst"))) {
 		t.Fatal("锁被持有时不应拿到锁")
 	}
 	assertOwner(t, c, agent, ownerA)
 }
 
-func TestAcquireIfIdleConcurrent(t *testing.T) {
+func TestAcquireConcurrent(t *testing.T) {
 	c, _ := newCoord(t, 1000)
 	ctx := context.Background()
 	const n = 20
@@ -134,7 +112,7 @@ func TestAcquireIfIdleConcurrent(t *testing.T) {
 	errs := make([]error, n)
 	for i := range n {
 		wg.Go(func() {
-			results[i], errs[i] = c.AcquireIfIdle(ctx, "agent-c", coord.LockValue(fmt.Sprint("run-", i), "inst"))
+			results[i], errs[i] = c.Acquire(ctx, "agent-c", coord.LockValue(fmt.Sprint("run-", i), "inst"))
 		})
 	}
 	wg.Wait()
@@ -150,33 +128,26 @@ func TestAcquireIfIdleConcurrent(t *testing.T) {
 	}
 }
 
-func TestRenewRestoreRelease(t *testing.T) {
-	c, rdb := newCoord(t, 1000)
+func TestHoldRestoreRelease(t *testing.T) {
+	c, _ := newCoord(t, 1000)
 	ctx := context.Background()
 	const agent = "agent-2"
-	lockKey := c.Keys().Lock(agent)
 	owner := coord.LockValue("run-a", "inst")
 	other := coord.LockValue("run-b", "inst")
 
-	// 锁不存在时 Renew 按 owner 补设。
-	if !must[bool](t)(c.Renew(ctx, agent, owner)) {
-		t.Fatal("锁丢失时 Renew 应补设")
+	// 锁空闲时 Hold 设为 owner；已是 owner 时不变。
+	if !must[bool](t)(c.Hold(ctx, agent, owner)) {
+		t.Fatal("锁空闲时 Hold 应拿到")
 	}
 	assertOwner(t, c, agent, owner)
-	assertPTTL(t, rdb, lockKey, testLockTTL)
-
-	// 持有者匹配时续期。
-	check(t, rdb.PExpire(ctx, lockKey, time.Second).Err())
-	if !must[bool](t)(c.Renew(ctx, agent, owner)) {
-		t.Fatal("持有者匹配时 Renew 应成功")
+	if !must[bool](t)(c.Hold(ctx, agent, owner)) {
+		t.Fatal("持有者匹配时 Hold 应成功")
 	}
-	if d := must[time.Duration](t)(rdb.PTTL(ctx, lockKey).Result()); d <= time.Second {
-		t.Fatalf("续期后 PTTL = %v，应已刷新", d)
-	}
+	assertOwner(t, c, agent, owner)
 
 	// 持有者不匹配时拒绝且不改动。
-	if must[bool](t)(c.Renew(ctx, agent, other)) {
-		t.Fatal("持有者不匹配时 Renew 应失败")
+	if must[bool](t)(c.Hold(ctx, agent, other)) {
+		t.Fatal("持有者不匹配时 Hold 应失败")
 	}
 	assertOwner(t, c, agent, owner)
 
@@ -203,124 +174,50 @@ func TestRenewRestoreRelease(t *testing.T) {
 		t.Fatal("锁不存在时 Restore 应设置")
 	}
 	assertOwner(t, c, agent, other)
-	assertPTTL(t, rdb, lockKey, testLockTTL)
 }
 
-func TestHandoff(t *testing.T) {
-	c, rdb := newCoord(t, 1000)
+func TestSwap(t *testing.T) {
+	c, _ := newCoord(t, 1000)
 	ctx := context.Background()
 	const agent = "agent-3"
-	const inst = "inst-x"
-	owner := coord.LockValue("run-0", inst)
-	if !must[bool](t)(c.AcquireIfIdle(ctx, agent, owner)) {
+	owner := coord.LockValue("run-0", "inst")
+	if !must[bool](t)(c.Acquire(ctx, agent, owner)) {
 		t.Fatal("应拿到锁")
 	}
-	check(t, c.PushNormal(ctx, agent, "n1"))
-	check(t, c.PushNormal(ctx, agent, "n2"))
-	check(t, c.PushInterrupt(ctx, agent, "i1"))
-	check(t, c.PushInterrupt(ctx, agent, "i2"))
-
-	// 持有者不匹配：前置条件失败，不弹出、不改锁。
-	next, ok, err := c.Handoff(ctx, agent, coord.LockValue("run-zz", inst), inst)
-	check(t, err)
-	if ok || next != "" {
-		t.Fatalf("错误持有者交接应失败，得到 (%q, %v)", next, ok)
-	}
-	// currentOwner 为空但锁存在：前置条件失败。
-	next, ok, err = c.Handoff(ctx, agent, "", inst)
-	check(t, err)
-	if ok || next != "" {
-		t.Fatalf("锁存在时空持有者交接应失败，得到 (%q, %v)", next, ok)
-	}
-	assertOwner(t, c, agent, owner)
-	qi, qn := must2(t, c, agent)
-	if !slices.Equal(qi, []string{"i1", "i2"}) || !slices.Equal(qn, []string{"n1", "n2"}) {
-		t.Fatalf("失败的交接不应改动队列：%v %v", qi, qn)
-	}
-
-	// 先打断队列、后普通队列，各自 FIFO。
-	cur := owner
-	for _, want := range []string{"i1", "i2", "n1", "n2"} {
-		next, ok, err = c.Handoff(ctx, agent, cur, inst)
-		check(t, err)
-		if !ok || next != want {
-			t.Fatalf("交接得到 (%q, %v)，期望 (%q, true)", next, ok, want)
+	// 持有者不匹配、或 current 为空但锁存在：不改动。
+	for _, current := range []string{coord.LockValue("run-zz", "inst"), ""} {
+		if must[bool](t)(c.Swap(ctx, agent, current, "x|inst")) {
+			t.Fatalf("current=%q 时不应换锁", current)
 		}
-		cur = coord.LockValue(next, inst)
-		assertOwner(t, c, agent, cur)
-		assertPTTL(t, rdb, c.Keys().Lock(agent), testLockTTL)
+		assertOwner(t, c, agent, owner)
 	}
-
-	// 队列为空：删除锁。
-	next, ok, err = c.Handoff(ctx, agent, cur, inst)
-	check(t, err)
-	if !ok || next != "" {
-		t.Fatalf("队列为空时交接应得到 (\"\", true)，得到 (%q, %v)", next, ok)
+	// 交给下一次执行：换锁并重新计 TTL。
+	next := coord.LockValue("run-1", "inst")
+	if !must[bool](t)(c.Swap(ctx, agent, owner, next)) {
+		t.Fatal("应换锁")
+	}
+	assertOwner(t, c, agent, next)
+	// 没有下一条：删除锁；锁不存在时非空 current 不匹配。
+	if !must[bool](t)(c.Swap(ctx, agent, next, "")) {
+		t.Fatal("应删除锁")
 	}
 	assertOwner(t, c, agent, "")
-
-	// 锁不存在时 currentOwner 非空：前置条件失败。
-	check(t, c.PushNormal(ctx, agent, "n3"))
-	next, ok, err = c.Handoff(ctx, agent, cur, inst)
-	check(t, err)
-	if ok || next != "" {
-		t.Fatalf("锁不存在时非空持有者交接应失败，得到 (%q, %v)", next, ok)
+	if must[bool](t)(c.Swap(ctx, agent, next, "y|inst")) {
+		t.Fatal("锁不存在时非空 current 不应匹配")
 	}
-
-	// 锁不存在时 currentOwner 为空：接手队首。
-	next, ok, err = c.Handoff(ctx, agent, "", "inst-y")
-	check(t, err)
-	if !ok || next != "n3" {
-		t.Fatalf("空闲交接得到 (%q, %v)，期望 (\"n3\", true)", next, ok)
+	// 锁不存在时 current 为空：可以直接接手，也可以什么都不做。
+	if !must[bool](t)(c.Swap(ctx, agent, "", "")) {
+		t.Fatal("空闲时空交接应成功")
+	}
+	assertOwner(t, c, agent, "")
+	if !must[bool](t)(c.Swap(ctx, agent, "", "n3|inst-y")) {
+		t.Fatal("空闲时应能接手")
 	}
 	assertOwner(t, c, agent, "n3|inst-y")
-
-	// 锁不存在、队列为空、currentOwner 为空：成功且不产生锁。
-	check(t, rdb.Del(ctx, c.Keys().Lock(agent)).Err())
-	next, ok, err = c.Handoff(ctx, agent, "", inst)
-	check(t, err)
-	if !ok || next != "" {
-		t.Fatalf("空闲且无排队时交接应得到 (\"\", true)，得到 (%q, %v)", next, ok)
-	}
-	assertOwner(t, c, agent, "")
-}
-
-func must2(t *testing.T, c *coord.Coord, agent string) (interrupt, normal []string) {
-	t.Helper()
-	qi, qn, err := c.QueueContents(context.Background(), agent)
-	check(t, err)
-	return qi, qn
-}
-
-func TestRebuildQueues(t *testing.T) {
-	c, rdb := newCoord(t, 1000)
-	ctx := context.Background()
-	const agent = "agent-4"
-	check(t, c.PushNormal(ctx, agent, "old-n"))
-	check(t, c.PushInterrupt(ctx, agent, "old-i"))
-
-	check(t, c.RebuildQueues(ctx, agent, []string{"i3", "i1", "i2"}, []string{"n2", "n1"}))
-	qi, qn := must2(t, c, agent)
-	if !slices.Equal(qi, []string{"i3", "i1", "i2"}) || !slices.Equal(qn, []string{"n2", "n1"}) {
-		t.Fatalf("重建后队列 = %v %v", qi, qn)
-	}
-
-	check(t, c.RebuildQueues(ctx, agent, nil, []string{"n9"}))
-	qi, qn = must2(t, c, agent)
-	if len(qi) != 0 || !slices.Equal(qn, []string{"n9"}) {
-		t.Fatalf("重建后队列 = %v %v", qi, qn)
-	}
-
-	check(t, c.RebuildQueues(ctx, agent, []string{}, nil))
-	n, err := rdb.Exists(ctx, c.Keys().QueueInterrupt(agent), c.Keys().QueueNormal(agent)).Result()
-	check(t, err)
-	if n != 0 {
-		t.Fatalf("空内容重建后应删除键，仍有 %d 个", n)
-	}
 }
 
 func TestEventsAndText(t *testing.T) {
-	c, rdb := newCoord(t, 1000)
+	c, _ := newCoord(t, 1000)
 	ctx := context.Background()
 	const agent = "agent-5"
 	const run = "run-5"
@@ -347,7 +244,6 @@ func TestEventsAndText(t *testing.T) {
 		}
 		ids = append(ids, id)
 	}
-	assertPTTL(t, rdb, c.Keys().RunText(run), testRunTextTTL)
 
 	text, last, err = c.Snapshot(ctx, agent, run)
 	check(t, err)
@@ -448,7 +344,10 @@ func TestStreamTrim(t *testing.T) {
 	}
 	retained := must[string](t)(c.FirstEventID(ctx, agent))
 	if coord.CompareIDs(retained, firstID) <= 0 {
-		t.Fatalf("MAXLEN ~ 应裁剪早期条目：最早保留 %s，首条 %s", retained, firstID)
+		t.Fatalf("应裁剪早期条目：最早保留 %s，首条 %s", retained, firstID)
+	}
+	if evs := must[[]coord.Event](t)(c.ReadEvents(ctx, agent, "0-0", 0, 0)); len(evs) != 10 || evs[9].ID != lastID {
+		t.Fatalf("应只保留最近 10 条：%d", len(evs))
 	}
 	if _, last, err := c.Snapshot(ctx, agent, "run-6"); err != nil || last != lastID {
 		t.Fatalf("裁剪后快照 lastID = %q（%v），期望 %q", last, err, lastID)
@@ -511,98 +410,5 @@ func TestInterruptPubSub(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("ctx 结束后通道应关闭")
-	}
-}
-
-func TestPing(t *testing.T) {
-	c, _ := newCoord(t, 1000)
-	check(t, c.Ping(context.Background()))
-}
-
-func TestPromote(t *testing.T) {
-	c, _ := newCoord(t, 1000)
-	ctx := context.Background()
-	const agent = "agent-promote"
-	for _, id := range []string{"n1", "n2", "n3"} {
-		check(t, c.PushNormal(ctx, agent, id))
-	}
-	check(t, c.PushInterrupt(ctx, agent, "i1"))
-	if got := must[int64](t)(c.Promote(ctx, agent, "n2")); got != 1 {
-		t.Fatalf("应从普通队列移到打断队列尾部：%d", got)
-	}
-	if got := must[int64](t)(c.Promote(ctx, agent, "n3")); got != 1 {
-		t.Fatalf("第二次转换：%d", got)
-	}
-	qi, qn := must2(t, c, agent)
-	if !slices.Equal(qi, []string{"i1", "n2", "n3"}) || !slices.Equal(qn, []string{"n1"}) {
-		t.Fatalf("转换后的队列不对：%v %v", qi, qn)
-	}
-	if got := must[int64](t)(c.Promote(ctx, agent, "n2")); got != 2 {
-		t.Fatalf("已在打断队列应返回 2：%d", got)
-	}
-	if got := must[int64](t)(c.Promote(ctx, agent, "gone")); got != 0 {
-		t.Fatalf("两个队列都没有应返回 0：%d", got)
-	}
-	qi, qn = must2(t, c, agent)
-	if !slices.Equal(qi, []string{"i1", "n2", "n3"}) || !slices.Equal(qn, []string{"n1"}) {
-		t.Fatalf("幂等与缺失不应改动队列：%v %v", qi, qn)
-	}
-}
-
-// 转换与交接并发：每个执行恰好被交接一次，不会同时出现在两个队列。
-func TestPromoteRacesHandoff(t *testing.T) {
-	c, _ := newCoord(t, 1000)
-	ctx := context.Background()
-	const inst = "inst-race"
-	for round := range 30 {
-		agent := fmt.Sprintf("agent-race-%d", round)
-		ids := []string{}
-		for i := range 40 {
-			id := fmt.Sprintf("r%d-%d", round, i)
-			ids = append(ids, id)
-			check(t, c.PushNormal(ctx, agent, id))
-		}
-		owner := coord.LockValue("head", inst)
-		if !must[bool](t)(c.AcquireIfIdle(ctx, agent, "")) && !must[bool](t)(c.Restore(ctx, agent, owner)) {
-			t.Fatal("锁")
-		}
-		popped := []string{}
-		var wg sync.WaitGroup
-		wg.Go(func() {
-			cur := owner
-			for {
-				next, ok, err := c.Handoff(ctx, agent, cur, inst)
-				if err != nil || !ok {
-					t.Errorf("交接失败：%v %v", ok, err)
-					return
-				}
-				if next == "" {
-					return
-				}
-				popped = append(popped, next)
-				cur = coord.LockValue(next, inst)
-			}
-		})
-		for _, id := range ids {
-			wg.Go(func() {
-				if _, err := c.Promote(ctx, agent, id); err != nil {
-					t.Error(err)
-				}
-			})
-		}
-		wg.Wait()
-		seen := map[string]int{}
-		for _, id := range popped {
-			seen[id]++
-		}
-		qi, qn := must2(t, c, agent)
-		for _, id := range append(qi, qn...) {
-			seen[id]++
-		}
-		for _, id := range ids {
-			if seen[id] != 1 {
-				t.Fatalf("第 %d 轮：%s 出现 %d 次（已交接 %v，剩余 %v / %v）", round, id, seen[id], popped, qi, qn)
-			}
-		}
 	}
 }

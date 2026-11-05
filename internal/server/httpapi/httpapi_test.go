@@ -16,10 +16,10 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/apitypes"
@@ -37,8 +37,8 @@ import (
 	"loop-now/internal/server/plugins"
 	"loop-now/internal/server/runrecord"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
+	"loop-now/internal/server/webui"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 // quickExec 立即完成回复；消息含 "block" 时阻塞，直到被打断或放行。
@@ -120,7 +120,6 @@ type env struct {
 	st     *store.Store
 	conv   *conversation.Service
 	dc     store.DefaultContext
-	rdb    *redis.Client
 
 	ext          *httptest.Server // 对外端口（按需启动）
 	extV, agentV *contracttest.Validator
@@ -132,9 +131,8 @@ func (e *env) agents() string { return "/projects/" + e.dc.Project.ID.String() +
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	ctx := context.Background()
-	st := pgtest.NewStore(t)
-	rdb, prefix := redistest.New(t)
-	co := coord.New(rdb, coord.Options{Prefix: prefix, LockTTL: 5 * time.Second, StreamMaxLen: 1000, RunTextTTL: time.Hour, OverviewMaxLen: 1000})
+	st := sqlitetest.NewStore(t)
+	co := coord.New(coord.Options{Prefix: "test:", StreamMaxLen: 1000, OverviewMaxLen: 1000})
 	dc, err := st.EnsureDefaults(ctx, "默认组织", "默认项目")
 	if err != nil {
 		t.Fatal(err)
@@ -162,7 +160,7 @@ func newEnv(t *testing.T) *env {
 		}
 	})
 	conv := conversation.New(st, co, ex, conversation.Options{InstanceID: uuid.Must(uuid.NewV7()), MaxMessage: limits.MaxMessage,
-		LockRenewInterval: time.Second, ReconcileInterval: time.Second}, log)
+		AbortPollInterval: time.Second, ReconcileInterval: time.Second}, log)
 	cfg.AgentChanged, cfg.AgentRemoved = conv.EmitAgentStatus, conv.EmitAgentStatus
 	if err := conv.Start(ctx); err != nil {
 		t.Fatal(err)
@@ -185,7 +183,7 @@ func newEnv(t *testing.T) *env {
 	t.Cleanup(srv.Close)
 	api.Plugins.APIURL = srv.URL + "/api/v1"
 	v := contracttest.New(t, srv.URL)
-	return &env{t: t, srv: srv, api: api, v: v, client: v.Client(), co: co, st: st, conv: conv, dc: dc, rdb: rdb, ex: ex}
+	return &env{t: t, srv: srv, api: api, v: v, client: v.Client(), co: co, st: st, conv: conv, dc: dc, ex: ex}
 }
 
 // do 发送请求（经契约校验），返回状态码与响应体。
@@ -367,6 +365,69 @@ func TestHostOriginAndCORS(t *testing.T) {
 	}
 	if r := send("GET", "/healthz", "", "", nil); r.StatusCode != http.StatusOK {
 		t.Errorf("/healthz 应可用：%d", r.StatusCode)
+	}
+	// 服务端自己提供的控制台是同源：写请求带的 Origin 等于本请求的 scheme://Host，不需要白名单，也不回 CORS 头。
+	if r := send("POST", "/api/v1/platform/agents", e.srv.URL, "", strings.NewReader(`{"name":"同源","model":{"provider":"anthropic","modelId":"claude-x"}}`)); r.StatusCode != http.StatusCreated || r.Header.Get("Access-Control-Allow-Origin") != "" {
+		t.Errorf("同源的写请求应放行且不回 CORS 头：%d %v", r.StatusCode, r.Header)
+	}
+	// 同端口的另一个允许的主机名不是同源。
+	other := strings.Replace(e.srv.URL, "127.0.0.1", "localhost", 1)
+	if r := send("POST", "/api/v1/platform/agents", other, "", strings.NewReader(`{"name":"跨源","model":{"provider":"anthropic","modelId":"claude-x"}}`)); r.StatusCode != http.StatusForbidden {
+		t.Errorf("Host 与 Origin 不一致时不是同源：%d", r.StatusCode)
+	}
+	// 没有白名单（LOOP_NOW_CONSOLE_ORIGINS=none）时，开发用的 5173 也被拒绝，同源照样放行。
+	e.api.O.ConsoleOrigins = nil
+	locked := httptest.NewServer(e.api.Handler())
+	defer locked.Close()
+	e.srv = locked
+	if r := send("GET", "/api/v1/context", "http://localhost:5173", "", nil); r.StatusCode != http.StatusForbidden {
+		t.Errorf("没有白名单时跨源应拒绝：%d", r.StatusCode)
+	}
+	if r := send("GET", "/api/v1/context", locked.URL, "", nil); r.StatusCode != http.StatusOK {
+		t.Errorf("没有白名单时同源应放行：%d", r.StatusCode)
+	}
+}
+
+// 控制台端口上 API 之外的路径交给控制台的静态文件；API、Agent 接口与 /healthz 不受影响，对外端口不提供控制台。
+func TestConsoleServedBesideAPI(t *testing.T) {
+	e := newEnv(t)
+	e.api.O.Console = webui.Handler(fstest.MapFS{"index.html": {Data: []byte("<title>console</title>")}})
+	srv := httptest.NewServer(e.api.Handler())
+	defer srv.Close()
+	get := func(path string) (int, string) {
+		t.Helper()
+		resp, err := http.Get(srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(b)
+	}
+	for _, p := range []string{"/", "/agents/x"} {
+		if code, body := get(p); code != 200 || !strings.Contains(body, "console") {
+			t.Errorf("%s：%d %q", p, code, body)
+		}
+	}
+	if code, body := get("/api/v1/context"); code != 200 || strings.Contains(body, "console") {
+		t.Errorf("API 不应被控制台接管：%d", code)
+	}
+	if code, body := get("/api/v1/no-such-route"); code != 404 || strings.Contains(body, "console") {
+		t.Errorf("API 下不存在的路径不回退到控制台：%d %q", code, body)
+	}
+	if code, _ := get("/healthz"); code != 200 {
+		t.Errorf("/healthz：%d", code)
+	}
+	ext := httptest.NewServer(e.api.ExternalHandler(nil))
+	defer ext.Close()
+	resp, err := http.Get(ext.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if strings.Contains(string(b), "console") {
+		t.Errorf("对外端口不应提供控制台：%d", resp.StatusCode)
 	}
 }
 
@@ -626,3 +687,14 @@ func TestSSE(t *testing.T) {
 }
 
 var _ = store.Agent{}
+
+// trimStream 追加比事件流保留条数（env 里是 1000）更多的填充事件，使之前的事件全部被裁掉：
+// 相当于原来 Redis 中的事件丢失，或服务端重启后事件流从空开始。
+func trimStream(t *testing.T, add func() (string, error)) {
+	t.Helper()
+	for range 1001 {
+		if _, err := add(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

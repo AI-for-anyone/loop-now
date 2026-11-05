@@ -17,7 +17,7 @@ import (
 	"loop-now/internal/pluginmanifest"
 	"loop-now/internal/server/pluginhost"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 type hostEnv struct {
@@ -31,7 +31,7 @@ type hostEnv struct {
 // newHostEnv 建一个迁移好的测试库，登记 specs 里的插件，并准备以假宿主运行的监护（尚未 Start）。
 func newHostEnv(t *testing.T, mode string, specs []pluginhost.Spec, tune func(*pluginhost.Options)) *hostEnv {
 	t.Helper()
-	e := &hostEnv{t: t, st: pgtest.NewStore(t), journal: filepath.Join(t.TempDir(), "journal.jsonl"), specs: specs}
+	e := &hostEnv{t: t, st: sqlitetest.NewStore(t), journal: filepath.Join(t.TempDir(), "journal.jsonl"), specs: specs}
 	for _, s := range specs {
 		e.exec(`INSERT INTO plugins(id,display_name,source,version,manifest,install_dir,status) VALUES($1,$1,'{}','1.0.0','{}','/x','installed')`, s.ID)
 	}
@@ -179,16 +179,16 @@ func TestHostLoadsDeliversEventsAndKeepsState(t *testing.T) {
 	if len(order) != 4 || order[0] != early || order[1] != failing || order[3] != failing || order[2] != late {
 		t.Fatalf("投递顺序（按事件时间，失败的稍后重投）：%v，期望 %s %s %s %s", order, early, failing, late, failing)
 	}
-	if got := e.scalar(`SELECT count(*)::text||'/'||count(duration_ms)::text FROM plugin_event_deliveries WHERE plugin_id='alpha' AND status='delivered'`); got != "2/2" {
+	if got := e.scalar(`SELECT count(*)||'/'||count(duration_ms) FROM plugin_event_deliveries WHERE plugin_id='alpha' AND status='delivered'`); got != "2/2" {
 		t.Fatalf("送达的投递应记下处理时长：%s", got)
 	}
-	if got := e.scalar(`SELECT coalesce(duration_ms::text,'null') FROM plugin_event_deliveries WHERE plugin_id='alpha' AND event_id=$1`, failing); got != "null" {
+	if got := e.scalar(`SELECT coalesce(duration_ms,'null') FROM plugin_event_deliveries WHERE plugin_id='alpha' AND event_id=$1`, failing); got != "null" {
 		t.Fatalf("失败的投递没有处理时长：%s", got)
 	}
 	if got := e.scalar(`SELECT last_error FROM plugin_event_deliveries WHERE plugin_id='alpha' AND event_id=$1`, failing); got != "boom" {
 		t.Fatalf("失败原因：%s", got)
 	}
-	if got := e.scalar(`SELECT value::text FROM plugin_state WHERE plugin_id='alpha' AND project_id IS NULL AND key='probe/a'`); got != `{"n": 1}` {
+	if got := e.scalar(`SELECT value FROM plugin_state WHERE plugin_id='alpha' AND project_id IS NULL AND key='probe/a'`); got != `{"n":1}` {
 		t.Fatalf("状态：%s", got)
 	}
 	e.eventually("宿主日志", func() (bool, string) {
@@ -405,13 +405,13 @@ func TestHostPrunesOldEventsAndLogs(t *testing.T) {
 	e := newHostEnv(t, "", []pluginhost.Spec{spec("alpha", nil, "inbox.received")}, nil)
 	old := e.addEvent("inbox.received", time.Now().Add(-31*24*time.Hour), "alpha")
 	recent := e.addEvent("inbox.received", time.Now().Add(-29*24*time.Hour), "alpha")
-	e.exec(`INSERT INTO plugin_host_log(at,plugin_id,level,line) VALUES(now()-interval '8 days','alpha','info','旧'),(now()-interval '6 days','alpha','info','新')`)
+	e.exec(`INSERT INTO plugin_host_log(at,plugin_id,level,line) VALUES(now()-691200000000,'alpha','info','旧'),(now()-518400000000,'alpha','info','新')`)
 	e.sup.Start(true) // 停用时也清理
 	e.eventually("清理", func() (bool, string) {
 		s := e.scalar(`SELECT string_agg(id, ',' ORDER BY id) FROM plugin_events`) + " " + e.scalar(`SELECT string_agg(line, ',') FROM plugin_host_log`)
 		return s == recent+" 新", s
 	})
-	if got := e.scalar(`SELECT count(*)::text FROM plugin_event_deliveries WHERE event_id=$1`, old); got != "0" {
+	if got := e.scalar(`SELECT count(*) FROM plugin_event_deliveries WHERE event_id=$1`, old); got != "0" {
 		t.Fatalf("投递记录随事件删除：%s", got)
 	}
 }

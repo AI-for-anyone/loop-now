@@ -183,7 +183,7 @@ export function connectEventStream<E extends { type: string; id: string; data: u
   }
 }
 
-// 比较两个 Redis Stream 条目 ID（形如 1700000000000-0）。格式不符时按字符串比较。
+// 比较两个事件流条目 ID（形如 1700000000000-0）。格式不符时按字符串比较。
 export function compareEventIds(a: string, b: string): number {
   const pa = /^(\d+)-(\d+)$/.exec(a)
   const pb = /^(\d+)-(\d+)$/.exec(b)

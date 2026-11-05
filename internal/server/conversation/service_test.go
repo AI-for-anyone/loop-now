@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
@@ -21,8 +20,7 @@ import (
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
+	"loop-now/internal/testutil/sqlitetest"
 )
 
 // fakeExec 是可控的执行器替身：消息中含 "block" 时阻塞，直到被放行或打断；
@@ -133,22 +131,19 @@ func (f *fakeExec) messages() []string {
 }
 
 type env struct {
-	t      *testing.T
-	st     *store.Store
-	co     *coord.Coord
-	prefix string
-	rdb    *redis.Client
-	ex     *fakeExec
-	svc    *conversation.Service
-	agent  uuid.UUID
-	inst   uuid.UUID
+	t     *testing.T
+	st    *store.Store
+	co    *coord.Coord
+	ex    *fakeExec
+	svc   *conversation.Service
+	agent uuid.UUID
+	inst  uuid.UUID
 }
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	st := pgtest.NewStore(t)
-	rdb, prefix := redistest.New(t)
-	co := coord.New(rdb, coord.Options{Prefix: prefix, LockTTL: 5 * time.Second, StreamMaxLen: 1000, RunTextTTL: time.Hour})
+	st := sqlitetest.NewStore(t)
+	co := coord.New(coord.Options{Prefix: "test:", StreamMaxLen: 1000})
 	ctx := context.Background()
 	dc, err := st.EnsureDefaults(ctx, "o", "p")
 	if err != nil {
@@ -158,7 +153,7 @@ func newEnv(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &env{t: t, st: st, co: co, prefix: prefix, rdb: rdb, ex: newFakeExec(), agent: a.ID, inst: uuid.Must(uuid.NewV7())}
+	e := &env{t: t, st: st, co: co, ex: newFakeExec(), agent: a.ID, inst: uuid.Must(uuid.NewV7())}
 	e.svc = e.newService()
 	if err := e.svc.Start(ctx); err != nil {
 		t.Fatal(err)
@@ -169,7 +164,7 @@ func newEnv(t *testing.T) *env {
 
 func (e *env) newService() *conversation.Service {
 	return conversation.New(e.st, e.co, e.ex, conversation.Options{
-		InstanceID: e.inst, MaxMessage: 1 << 16, LockRenewInterval: 100 * time.Millisecond, ReconcileInterval: 200 * time.Millisecond,
+		InstanceID: e.inst, MaxMessage: 1 << 16, AbortPollInterval: 100 * time.Millisecond, ReconcileInterval: 200 * time.Millisecond,
 	}, slog.New(slog.NewTextHandler(debugLogs, nil)))
 }
 
@@ -371,29 +366,31 @@ func TestConcurrentSendsExactlyOnce(t *testing.T) {
 	}
 }
 
-func TestRedisDataLoss(t *testing.T) {
+func TestLockLoss(t *testing.T) {
 	e := newEnv(t)
 	e.mustSend("block 当前", "")
 	e.waitStarted("block 当前")
 	e.mustSend("排队1", "queue")
 	e.mustSend("排队2", "queue")
-	if err := redistest.DeletePrefix(context.Background(), e.rdb, e.prefix); err != nil {
+	// 忙闲锁丢了（例如没有续期、过了 TTL）。
+	ctx := context.Background()
+	owner, _ := e.co.LockOwner(ctx, e.agent.String())
+	if _, err := e.co.Release(ctx, e.agent.String(), owner); err != nil {
 		t.Fatal(err)
 	}
-	// 数据丢失后仍判定为忙，不会开始第二次执行。
+	// 锁丢了仍判定为忙（数据库里有进行中与排队的执行），不会开始第二次执行。
 	if _, err := e.send("没选择", ""); !apperr.Is(err, apperr.CodeAgentBusy) {
-		t.Fatalf("Redis 数据丢失后仍应判定为忙：%v", err)
+		t.Fatalf("锁丢了仍应判定为忙：%v", err)
 	}
-	// 对账在默认配置下应在 30 秒内（这里是 200ms 周期）重建锁与队列。
+	// 按数据库补回锁（发送时或对账时）。
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		i, n, _ := e.co.QueueContents(context.Background(), e.agent.String())
 		owner, _ := e.co.LockOwner(context.Background(), e.agent.String())
-		if len(i)+len(n) == 2 && owner != "" {
+		if owner != "" {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("对账未能重建锁与队列")
+			t.Fatal("未能按数据库补回锁")
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -401,6 +398,41 @@ func TestRedisDataLoss(t *testing.T) {
 	e.waitIdle()
 	if got := e.ex.messages(); !slices.Equal(got, []string{"block 当前", "排队1", "排队2"}) {
 		t.Fatalf("排队消息应按原顺序各处理一次：%v", got)
+	}
+}
+
+// 停止服务时，本实例进行中的执行按服务端重启中断收尾，已产生的回复文字写入消息（回复文字只在内存里）。
+func TestStopEndsInFlightRunsWithTheirText(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	e.mustSend("block 当前", "")
+	e.waitStarted("block 当前")
+	active, err := e.st.ActiveRun(ctx, e.agent)
+	if err != nil || active == nil {
+		t.Fatal("应有进行中的执行", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for text, _ := e.co.RunText(ctx, active.ID.String()); text != "部分"; text, _ = e.co.RunText(ctx, active.ID.String()) {
+		if time.Now().After(deadline) {
+			t.Fatalf("回复文字没有到：%q", text)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := e.svc.Stop(ctx); err != nil {
+		t.Fatal(err)
+	}
+	r, _ := e.st.GetRun(ctx, active.ID)
+	if r.Status != "interrupted" || r.EndReason != "server_restart" {
+		t.Fatalf("停止时进行中的执行应按服务端重启中断收尾：%+v", r)
+	}
+	var reply *apitypes.Message
+	for _, m := range e.history() {
+		if m.Role == "assistant" && m.Run.ID == active.ID {
+			reply = &m
+		}
+	}
+	if reply == nil || reply.Text != "部分" {
+		t.Fatalf("应写入已产生的文字：%+v", reply)
 	}
 }
 
@@ -415,11 +447,10 @@ func TestRestartRecovery(t *testing.T) {
 	}
 	_, _ = e.co.AppendText(ctx, e.agent.String(), run.ID.String(), "已产生的文字", "run.text", []byte(`{}`))
 	_, _ = e.co.Restore(ctx, e.agent.String(), coord.LockValue(run.ID.String(), other.String()))
-	_, queued, err := e.st.InsertMessageAndRun(ctx, store.NewRun{AgentID: e.agent, RunID: uuid.Must(uuid.NewV7()), Text: "排队的", WhenBusy: "queue", InstanceID: other})
+	_, _, err = e.st.InsertMessageAndRun(ctx, store.NewRun{AgentID: e.agent, RunID: uuid.Must(uuid.NewV7()), Text: "排队的", WhenBusy: "queue", InstanceID: other})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = e.co.PushNormal(ctx, e.agent.String(), queued.ID.String())
 
 	svc2 := e.newService()
 	if err := svc2.Start(ctx); err != nil {
@@ -517,4 +548,15 @@ func TestStatusAndHistoryPaging(t *testing.T) {
 	}
 	e.ex.signal(e.agent, "release")
 	e.waitIdle()
+}
+
+// newestEvents 返回 Agent 事件流里保留的全部事件，最新的在前。
+func (e *env) newestEvents() []coord.Event {
+	e.t.Helper()
+	evs, err := e.co.ReadEvents(context.Background(), e.agent.String(), "0-0", 0, 0)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	slices.Reverse(evs)
+	return evs
 }

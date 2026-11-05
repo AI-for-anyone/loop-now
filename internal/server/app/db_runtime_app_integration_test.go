@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	cm "loop-now/internal/server/credentialmodel"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -18,23 +19,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
 	"loop-now/internal/server/admincli"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/app"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/config"
-	cm "loop-now/internal/server/credentialmodel"
 	"loop-now/internal/server/dbcli"
 	"loop-now/internal/server/preflight"
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/server/workflow"
 	"loop-now/internal/testutil/fakepibin"
 	"loop-now/internal/testutil/loopctlfake"
-	"loop-now/internal/testutil/pgtest"
-	"loop-now/internal/testutil/redistest"
+
+	"github.com/google/uuid"
 )
 
 // The production installer reexecs os.Executable. In this test executable only,
@@ -63,48 +60,21 @@ func (t dbLoopbackTransport) RoundTrip(r *http.Request) (*http.Response, error) 
 	clone.Host = parsed.URL.Host
 	return t.base.RoundTrip(clone)
 }
+
 func newToolsRuntimeApp(t *testing.T, options app.Options, customize func(*config.Config)) (*server, string, string) {
 	t.Helper()
 	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
 		t.Skip("reviewed bundle/native platform is darwin-arm64 only")
 	}
 	ctx := context.Background()
-	url := pgtest.URL(t)
-	conn, e := pgx.Connect(ctx, url)
-	if e != nil {
-		t.Fatal("TEST PG unavailable")
-	}
-	schema := "db_runtime_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if _, e = conn.Exec(ctx, `CREATE SCHEMA `+pgx.Identifier{schema}.Sanitize()); e != nil {
-		t.Fatal(e)
-	}
-	t.Cleanup(func() {
-		defer conn.Close(ctx)
-		if _, e := conn.Exec(ctx, `DROP SCHEMA `+pgx.Identifier{schema}.Sanitize()+` CASCADE`); e != nil {
-			t.Error("schema cleanup failed")
-		}
-	})
-	redisURL := redistest.URL(t)
-	opts, e := redis.ParseURL(redisURL)
-	if e != nil || opts.DB != 10 {
-		t.Fatal("requires TEST Redis DB10")
-	}
-	rc := redis.NewClient(opts)
-	prefix := "loopnow:db-runtime:" + uuid.NewString() + ":"
-	t.Cleanup(func() {
-		if e := redistest.DeletePrefix(ctx, rc, prefix); e != nil {
-			t.Error("Redis prefix cleanup failed")
-		}
-		rc.Close()
-	})
 	root := t.TempDir()
 	dump := filepath.Join(root, "private-dump.json")
 	t.Setenv("FAKEPI_DUMP", dump)
-	probe, e := preflight.Resolve(ctx, preflight.Options{PiBin: "pi", PiVersion: "1.1.0", NodeBin: "node", WorkRoot: filepath.Join(root, "probe"), HomeDirs: []string{"/nonexistent-home"}})
+	probe, e := preflight.Resolve(ctx, preflight.Options{PiBin: "pi", PiVersion: "1.4.0", NodeBin: "node", WorkRoot: filepath.Join(root, "probe"), HomeDirs: []string{"/nonexistent-home"}})
 	if e != nil {
 		t.Fatal("fixed local catalog prerequisite unavailable")
 	}
-	values := map[string]string{config.EnvDatabaseURL: url, config.EnvRedisURL: redisURL, config.EnvListenAddr: "127.0.0.1:0", config.EnvWorkRoot: filepath.Join(root, "work"), config.EnvRedisKeyPrefix: prefix, config.EnvPiBin: fakepibin.Path(t), config.EnvPiAIDir: probe.PiAIDir, config.EnvNodeBin: probe.NodeBin, config.EnvLoopctlDistDir: loopctlfake.Dir(t), config.EnvExecEnvPassthrough: "FAKEPI_DUMP", config.EnvPiStartTimeout: "10s", config.EnvPiStopGrace: "1s", config.EnvCLIInstallTimeout: "1m"}
+	values := map[string]string{config.EnvDataDir: filepath.Join(root, "data"), config.EnvListenAddr: "127.0.0.1:0", config.EnvWorkRoot: filepath.Join(root, "work"), config.EnvPiBin: fakepibin.Path(t), config.EnvPiAIDir: probe.PiAIDir, config.EnvNodeBin: probe.NodeBin, config.EnvLoopctlDistDir: loopctlfake.Dir(t), config.EnvExecEnvPassthrough: "FAKEPI_DUMP", config.EnvPiStartTimeout: "10s", config.EnvPiStopGrace: "1s", config.EnvCLIInstallTimeout: "1m"}
 	cfg, e := config.Load(func(k string) string { return values[k] })
 	if e != nil {
 		t.Fatal("isolated config invalid")
@@ -131,7 +101,6 @@ func newToolsRuntimeApp(t *testing.T, options app.Options, customize func(*confi
 	if e != nil {
 		t.Fatal(e)
 	}
-	options.SearchPath = schema
 	options.Listener = ln
 	options.HomeDirs = []string{"/nonexistent-home"}
 	options.CLIHTTPClient = client
@@ -144,6 +113,7 @@ func newToolsRuntimeApp(t *testing.T, options app.Options, customize func(*confi
 	t.Cleanup(s.stop)
 	return s, root, dump
 }
+
 func TestDatabaseActualAppCapturedScopeAndCacheRebuild(t *testing.T) {
 	s, root, dump := newToolsRuntimeApp(t, app.Options{}, nil)
 	a := s.a

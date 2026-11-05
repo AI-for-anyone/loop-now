@@ -5,19 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log/slog"
 	"net"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"loop-now/internal/server/clicredential"
 	cm "loop-now/internal/server/credentialmodel"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
+	"loop-now/internal/testutil/sqlitetest"
+
+	"github.com/google/uuid"
 )
 
 type googleFixture struct {
@@ -25,46 +23,6 @@ type googleFixture struct {
 	project, agent uuid.UUID
 }
 
-func newGoogleFixture(t *testing.T) googleFixture {
-	t.Helper()
-	ctx := context.Background()
-	url := pgtest.URL(t)
-	conn, e := pgx.Connect(ctx, url)
-	if e != nil {
-		t.Fatal("TEST PG unavailable")
-	}
-	schema := "google_cli_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	if _, e = conn.Exec(ctx, `CREATE SCHEMA `+pgx.Identifier{schema}.Sanitize()); e != nil {
-		t.Fatal(e)
-	}
-	t.Cleanup(func() {
-		defer conn.Close(ctx)
-		if _, e := conn.Exec(ctx, `DROP SCHEMA `+pgx.Identifier{schema}.Sanitize()+` CASCADE`); e != nil {
-			t.Error("TEST cleanup failed")
-		}
-	})
-	st, e := store.Open(ctx, url, store.OpenOptions{SearchPath: schema})
-	if e != nil {
-		t.Fatal(e)
-	}
-	t.Cleanup(st.Close)
-	if e = st.Migrate(ctx, slog.New(slog.NewTextHandler(io.Discard, nil))); e != nil {
-		t.Fatal(e)
-	}
-	defaults, e := st.EnsureDefaults(ctx, "Google TEST组织", "默认项目")
-	if e != nil {
-		t.Fatal(e)
-	}
-	p, e := st.CreateProject(ctx, defaults.Organization.ID, "Google隔离项目")
-	if e != nil {
-		t.Fatal(e)
-	}
-	a, e := st.CreateAgent(ctx, store.ProjectScope(p.ID), "Google测试", "openai", "fake-model", "")
-	if e != nil {
-		t.Fatal(e)
-	}
-	return googleFixture{st, p.ID, a.ID}
-}
 func syntheticGoogle() clicredential.Google {
 	return clicredential.Google{Type: "authorized_user", Account: "synthetic@example.invalid", ClientID: "fixture-client", ClientSecret: "fixture-secret", RefreshToken: "fixture-refresh", AccessToken: "fixture-access", ExpiresAt: time.Now().Add(-time.Hour).UnixMilli(), Scopes: []string{"https://www.googleapis.com/auth/cloud-platform"}}
 }
@@ -89,6 +47,42 @@ type googleLoginFunc func(context.Context, uuid.UUID, func(string) error) (clicr
 func (fn googleLoginFunc) Login(ctx context.Context, id uuid.UUID, url func(string) error) (clicredential.Google, error) {
 	return fn(ctx, id, url)
 }
+
+func ptrWrite(w store.ProjectCredentialWrite) *store.ProjectCredentialWrite { return &w }
+
+type commitFaultStore struct {
+	RefreshStore
+	after bool
+}
+
+func (s commitFaultStore) CommitGoogleCLIRefresh(ctx context.Context, b clicredential.Binding, g int64, lease uuid.UUID, secret []byte) error {
+	if s.after {
+		if e := s.RefreshStore.CommitGoogleCLIRefresh(ctx, b, g, lease, secret); e != nil {
+			return e
+		}
+	}
+	return errors.New("synthetic commit acknowledgement unavailable")
+}
+
+func newGoogleFixture(t *testing.T) googleFixture {
+	t.Helper()
+	ctx := context.Background()
+	st := sqlitetest.NewStore(t)
+	defaults, e := st.EnsureDefaults(ctx, "Google TEST组织", "默认项目")
+	if e != nil {
+		t.Fatal(e)
+	}
+	p, e := st.CreateProject(ctx, defaults.Organization.ID, "Google隔离项目")
+	if e != nil {
+		t.Fatal(e)
+	}
+	a, e := st.CreateAgent(ctx, store.ProjectScope(p.ID), "Google测试", "openai", "fake-model", "")
+	if e != nil {
+		t.Fatal(e)
+	}
+	return googleFixture{st, p.ID, a.ID}
+}
+
 func TestGooglePGConcurrentRotationAndCancelledWaiter(t *testing.T) {
 	f := newGoogleFixture(t)
 	ctx := context.Background()
@@ -160,7 +154,7 @@ func TestGooglePGConcurrentRotationAndCancelledWaiter(t *testing.T) {
 		t.Fatal("cross-project resolve allowed")
 	}
 }
-func ptrWrite(w store.ProjectCredentialWrite) *store.ProjectCredentialWrite { return &w }
+
 func TestGoogleLoginStableIDAndLateCancel(t *testing.T) {
 	f := newGoogleFixture(t)
 	ctx := context.Background()
@@ -222,19 +216,6 @@ func TestGoogleLoginStableIDAndLateCancel(t *testing.T) {
 	}
 }
 
-type commitFaultStore struct {
-	RefreshStore
-	after bool
-}
-
-func (s commitFaultStore) CommitGoogleCLIRefresh(ctx context.Context, b clicredential.Binding, g int64, lease uuid.UUID, secret []byte) error {
-	if s.after {
-		if e := s.RefreshStore.CommitGoogleCLIRefresh(ctx, b, g, lease, secret); e != nil {
-			return e
-		}
-	}
-	return errors.New("synthetic commit acknowledgement unavailable")
-}
 func TestGooglePGCommitUnknownAndLeaseFailClosed(t *testing.T) {
 	for _, after := range []bool{false, true} {
 		t.Run(map[bool]string{false: "write_failure", true: "acknowledgement_lost"}[after], func(t *testing.T) {
@@ -283,7 +264,7 @@ func TestGooglePGCommitUnknownAndLeaseFailClosed(t *testing.T) {
 			t.Fatal(e)
 		}
 		b := clicredential.Binding{VersionID: *r.View.CurrentVersionID, AccountID: r.View.ID, ProjectID: f.project, AgentID: f.agent, CLI: "gcloud"}
-		if _, e = f.st.Pool.Exec(ctx, `UPDATE google_cli_grants SET refresh_state='refreshing',lease_id=$2,lease_agent_id=$3,lease_until=clock_timestamp()-interval '1 second' WHERE version_id=$1`, b.VersionID, uuid.New(), b.AgentID); e != nil {
+		if _, e = f.st.Pool.Exec(ctx, `UPDATE google_cli_grants SET refresh_state='refreshing',lease_id=$2,lease_agent_id=$3,lease_until=clock_timestamp()-1000000 WHERE version_id=$1`, b.VersionID, uuid.New(), b.AgentID); e != nil {
 			t.Fatal(e)
 		}
 		var calls atomic.Int64
@@ -346,7 +327,7 @@ func TestGooglePGOwnerDeleteAndOverflowNeverRevive(t *testing.T) {
 		}
 		b := clicredential.Binding{VersionID: *r.View.CurrentVersionID, AccountID: r.View.ID, ProjectID: f.project, AgentID: f.agent, CLI: "gcloud"}
 		lease := uuid.New()
-		if _, e = f.st.Pool.Exec(ctx, `UPDATE google_cli_grants SET generation=9223372036854775807,refresh_state='refreshing',lease_id=$2,lease_agent_id=$3,lease_until=clock_timestamp()+interval '1 minute' WHERE version_id=$1`, b.VersionID, lease, b.AgentID); e != nil {
+		if _, e = f.st.Pool.Exec(ctx, `UPDATE google_cli_grants SET generation=9223372036854775807,refresh_state='refreshing',lease_id=$2,lease_agent_id=$3,lease_until=clock_timestamp()+60000000 WHERE version_id=$1`, b.VersionID, lease, b.AgentID); e != nil {
 			t.Fatal(e)
 		}
 		before, e := f.st.GetGoogleCLIGrant(ctx, b)

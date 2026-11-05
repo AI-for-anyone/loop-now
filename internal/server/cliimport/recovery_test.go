@@ -9,27 +9,78 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/binary"
 	"encoding/json"
 	"encoding/pem"
-	"errors"
-	"io"
 	"math/big"
-	"net"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
+
 	"loop-now/internal/server/cliimport/source"
 	"loop-now/internal/server/clitemplate"
+	"loop-now/internal/server/db"
 	"loop-now/internal/server/store"
 )
+
+// expireOnSignal reports context.DeadlineExceeded once due is closed, so a
+// test decides when the operation's deadline arrives; cancelling the parent
+// still ends it.
+type expireOnSignal struct {
+	context.Context
+	due, done chan struct{}
+}
+
+func newExpireOnSignal(parent context.Context, due chan struct{}) expireOnSignal {
+	c := expireOnSignal{Context: parent, due: due, done: make(chan struct{})}
+	go func() {
+		select {
+		case <-due:
+		case <-parent.Done():
+		}
+		close(c.done)
+	}()
+	return c
+}
+
+func (c expireOnSignal) Done() <-chan struct{} { return c.done }
+
+func (c expireOnSignal) Err() error {
+	select {
+	case <-c.done:
+	default:
+		return nil
+	}
+	select {
+	case <-c.due:
+		return context.DeadlineExceeded
+	default:
+		return c.Context.Err()
+	}
+}
+
+// signalDeadline makes operations started on s from now on reach their
+// deadline when the returned channel is closed. Their DB deadline_at keeps the
+// Start value; tests that rely on the DB deadline move it with expireInDB.
+func signalDeadline(s *Service) chan struct{} {
+	due := make(chan struct{})
+	s.withDeadline = func(parent context.Context, _ time.Time) (context.Context, context.CancelFunc) {
+		return context.WithCancel(newExpireOnSignal(parent, due))
+	}
+	return due
+}
+
+// expireInDB makes the operation's DB deadline due now.
+func expireInDB(t *testing.T, pool *db.DB, id uuid.UUID) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), `UPDATE cli_credential_import_operations SET deadline_at=clock_timestamp() WHERE id=$1`, id); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestCLIImportLarkCanonicalDedup(t *testing.T) {
 	if runtime.GOOS != "darwin" {
@@ -163,61 +214,6 @@ func TestCLIImportUnknownPendingDeadlineReconciliation(t *testing.T) {
 	}
 }
 
-// expireOnSignal reports context.DeadlineExceeded once due is closed, so a
-// test decides when the operation's deadline arrives; cancelling the parent
-// still ends it.
-type expireOnSignal struct {
-	context.Context
-	due, done chan struct{}
-}
-
-func newExpireOnSignal(parent context.Context, due chan struct{}) expireOnSignal {
-	c := expireOnSignal{Context: parent, due: due, done: make(chan struct{})}
-	go func() {
-		select {
-		case <-due:
-		case <-parent.Done():
-		}
-		close(c.done)
-	}()
-	return c
-}
-
-func (c expireOnSignal) Done() <-chan struct{} { return c.done }
-
-func (c expireOnSignal) Err() error {
-	select {
-	case <-c.done:
-	default:
-		return nil
-	}
-	select {
-	case <-c.due:
-		return context.DeadlineExceeded
-	default:
-		return c.Context.Err()
-	}
-}
-
-// signalDeadline makes operations started on s from now on reach their
-// deadline when the returned channel is closed. Their DB deadline_at keeps the
-// Start value; tests that rely on the DB deadline move it with expireInDB.
-func signalDeadline(s *Service) chan struct{} {
-	due := make(chan struct{})
-	s.withDeadline = func(parent context.Context, _ time.Time) (context.Context, context.CancelFunc) {
-		return context.WithCancel(newExpireOnSignal(parent, due))
-	}
-	return due
-}
-
-// expireInDB makes the operation's DB deadline due now.
-func expireInDB(t *testing.T, pool *pgxpool.Pool, id uuid.UUID) {
-	t.Helper()
-	if _, err := pool.Exec(context.Background(), `UPDATE cli_credential_import_operations SET deadline_at=clock_timestamp() WHERE id=$1`, id); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestCLIImportPublicCAOnlyBeforeExtraction(t *testing.T) {
 	e := newImportEnv(t)
 	e.files(t, false)
@@ -283,176 +279,46 @@ func TestCLIImportPublicCAOnlyBeforeExtraction(t *testing.T) {
 	}
 }
 
-type serviceAckConn struct {
-	net.Conn
-	arm      *atomic.Bool
-	drop     atomic.Bool
-	observed *atomic.Bool
-	deny     *atomic.Bool
-}
-
-func (c *serviceAckConn) Write(b []byte) (int, error) {
-	if c.deny != nil && c.deny.Load() {
-		c.Close()
-		return 0, errors.New("synthetic TEST connection outage")
-	}
-	if len(b) > 5 && b[0] == 'Q' && strings.EqualFold(strings.TrimSpace(string(bytes.TrimRight(b[5:], "\x00"))), "commit") && c.arm.CompareAndSwap(true, false) {
-		c.drop.Store(true)
-	}
-	return c.Conn.Write(b)
-}
-
-func TestCLIImportUnknownExpiryRetriesAfterDBOutage(t *testing.T) {
+// 到期的操作在写库失败时由只碰数据库的维护循环继续重试，恢复后过期；Close 停掉维护循环。
+// （SQLite 是进程内的库，没有“提交已生效但回执丢失”的情形，原来基于此构造的未决接收不再出现。）
+func TestCLIImportExpiryMaintenanceRetriesAfterWriteFailure(t *testing.T) {
 	e := newImportEnv(t)
-	e.files(t, false)
 	ctx := context.Background()
-	arm, observed, deny := &atomic.Bool{}, &atomic.Bool{}, &atomic.Bool{}
-	defer deny.Store(false)
-	original := e.st.Pool
-	config := original.Config().Copy()
-	if config.ConnConfig.TLSConfig != nil {
-		t.Skip("ack fixture requires local TEST non-TLS socket")
-	}
-	config.ConnConfig.Config.DialFunc = func(ctx context.Context, network, addr string) (net.Conn, error) {
-		c, err := (&net.Dialer{}).DialContext(ctx, network, addr)
-		if err != nil {
-			return nil, err
-		}
-		return &serviceAckConn{Conn: c, arm: arm, observed: observed, deny: deny}, nil
-	}
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	e.st.Pool = pool
-	t.Cleanup(original.Close)
 	s := e.service(t, Options{}, nil)
-	due := signalDeadline(s)
-	scan, err := s.Scan(ctx, e.project)
-	if err != nil {
+	h := sha256.Sum256([]byte("maintenance-retry"))
+	id := uuid.New()
+	in := store.CLIImportBegin{ID: id, ProjectID: e.project, ScanID: uuid.New(), InstanceID: s.o.InstanceID, RequestFingerprint: h[:], ExpectedRevision: 1, ProvenanceKeyID: s.o.Hasher.KeyID(), Deadline: time.Now().Add(time.Hour), Items: []store.CLIImportItem{{CandidateID: uuid.New(), CLI: "gh", Label: "合成到期"}}}
+	if _, _, err := e.st.BeginCLIImport(ctx, in); err != nil {
 		t.Fatal(err)
 	}
-	in := selected(scan)
-	arm.Store(true)
-	if op, err := s.Start(ctx, e.project, in); err != nil || op.Status != "pending" || !observed.Load() {
-		t.Fatal("unknown acceptance setup failed", err)
+	expireInDB(t, e.st.Pool, id)
+	// 写库失败：拒绝改动导入操作的任何 UPDATE。
+	if _, err := e.st.Pool.Exec(ctx, `CREATE TRIGGER deny_import_update BEFORE UPDATE ON cli_credential_import_operations BEGIN SELECT RAISE(ABORT, 'synthetic outage'); END`); err != nil {
+		t.Fatal(err)
 	}
 	s.mu.Lock()
-	j := s.jobs[in.OperationID]
+	s.startMaintenanceLocked()
+	done := s.maintenanceDone
 	s.mu.Unlock()
-	if j == nil {
-		t.Fatal("unknown acceptance has no deadline owner")
+	time.Sleep(600 * time.Millisecond) // 至少两轮维护
+	if op, err := s.Get(ctx, e.project, id); err != nil || op.Status != "pending" {
+		t.Fatal("expiry committed during the outage", err)
 	}
-	// Force the original deadline writeback to fail, then verify it has actually
-	// released its job. Only the independent DB expiry reconciler can close it.
-	deny.Store(true)
-	expireInDB(t, original, in.OperationID)
-	close(due)
-	select {
-	case <-j.done:
-	case <-time.After(settle):
-		t.Fatal("original deadline owner did not end boundedly")
+	if _, err := e.st.Pool.Exec(ctx, `DROP TRIGGER deny_import_update`); err != nil {
+		t.Fatal(err)
 	}
-	deny.Store(false)
-	op := awaitImport(t, s, e.project, in.OperationID)
+	op := awaitImport(t, s, e.project, id)
 	if op.Status != "expired" || *op.ErrorCode != "timeout" || e.extracts.Load() != 0 || e.prepared.Load() != 0 {
-		t.Fatal("DB recovery did not expire without secret replay")
+		t.Fatal("maintenance did not expire without secret replay")
 	}
 	closeCtx, cancel := context.WithTimeout(ctx, settle)
 	defer cancel()
-	if err = s.Close(closeCtx); err != nil {
+	if err := s.Close(closeCtx); err != nil {
 		t.Fatal(err)
 	}
-	s.mu.Lock()
-	done := s.maintenanceDone
-	s.mu.Unlock()
 	select {
 	case <-done:
 	default:
 		t.Fatal("expiry reconciliation survived Close")
 	}
-	t.Log("actual acceptance COMMIT ack dropped; first deadline DB write failed; DB-only maintenance retried after restore; Close stopped it")
-}
-func (c *serviceAckConn) Read(b []byte) (int, error) {
-	if !c.drop.Swap(false) {
-		return c.Conn.Read(b)
-	}
-	for {
-		head := make([]byte, 5)
-		if _, err := io.ReadFull(c.Conn, head); err != nil {
-			return 0, err
-		}
-		n := int(binary.BigEndian.Uint32(head[1:])) - 4
-		if n < 0 || n > 1<<20 {
-			return 0, io.ErrUnexpectedEOF
-		}
-		body := make([]byte, n)
-		if _, err := io.ReadFull(c.Conn, body); err != nil {
-			return 0, err
-		}
-		if head[0] == 'C' && string(body) == "COMMIT\x00" {
-			c.observed.Store(true)
-			c.Close()
-			return 0, io.EOF
-		}
-		if head[0] == 'E' {
-			return 0, io.ErrUnexpectedEOF
-		}
-	}
-}
-func TestCLIImportBeginUnknownExpiresWithoutExtraction(t *testing.T) {
-	e := newImportEnv(t)
-	e.files(t, false)
-	ctx := context.Background()
-	arm, observed := &atomic.Bool{}, &atomic.Bool{}
-	original := e.st.Pool
-	config := original.Config().Copy()
-	if config.ConnConfig.TLSConfig != nil {
-		t.Skip("ACK fault fixture requires exclusively local TEST non-TLS socket")
-	}
-	config.ConnConfig.Config.DialFunc = func(ctx context.Context, network, addr string) (net.Conn, error) {
-		c, err := (&net.Dialer{}).DialContext(ctx, network, addr)
-		if err != nil {
-			return nil, err
-		}
-		return &serviceAckConn{Conn: c, arm: arm, observed: observed}, nil
-	}
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	e.st.Pool = pool
-	t.Cleanup(original.Close)
-	s := e.service(t, Options{}, nil)
-	due := signalDeadline(s)
-	scan, err := s.Scan(ctx, e.project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	in := selected(scan)
-	arm.Store(true)
-	op, err := s.Start(ctx, e.project, in)
-	if err != nil || op.Status != "pending" || !observed.Load() {
-		t.Fatal("unknown acceptance was not read back", err)
-	}
-	for n := 0; n < 2; n++ {
-		if op, err = s.Get(ctx, e.project, in.OperationID); err != nil || op.Status != "pending" {
-			t.Fatal("GET changed pending outcome", err)
-		}
-	}
-	// GETs remain side-effect-free. The original background owner only expires
-	// under DB locks at deadline; it never launches secret extraction.
-	expireInDB(t, original, in.OperationID)
-	close(due)
-	expired := awaitImport(t, s, e.project, in.OperationID)
-	if expired.Status != "expired" || *expired.ErrorCode != "timeout" || e.extracts.Load() != 0 || e.prepared.Load() != 0 {
-		t.Fatal("unknown acceptance replayed or remained active")
-	}
-	if a, r := e.counts(t); a != 0 || r != 0 {
-		t.Fatal("unknown acceptance created credentials")
-	}
-	if again, err := s.Start(ctx, e.project, in); err != nil || again.Status != "expired" {
-		t.Fatal("expired unknown operation was replayed", err)
-	}
-	t.Log("actual Begin COMMIT acknowledgement lost; independent GET pending; no extraction; deadline CAS expired")
 }

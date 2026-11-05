@@ -42,8 +42,8 @@ The workflow and captured configuration are **frozen** when the task starts. Ord
 
 The project stores **model and CLI accounts** centrally; agents take them according to permission and selection rules. Connecting a provider account is an explicit action with a verification step, and tool integrations are granted per agent.
 
-The personal edition has **no master key**: credentials are stored in plaintext in PostgreSQL. Protect database access and backups, and treat the console's loopback-only, login-less design accordingly.
+The personal edition has **no master key**: credentials are stored in plaintext in the local database. Protect the data directory and its backups, and treat the console's loopback-only, login-less design accordingly.
 
 ## Plugins
 
-Plugins are the main extension point — see the [plugin overview](/plugins/) for the two-halves model, the host capabilities, and how installation and authorization work.
+Plugins are the main extension point — see the [plugin overview](/plugins/) for the platform and agent sides, the host capabilities, and how installation and authorization work.

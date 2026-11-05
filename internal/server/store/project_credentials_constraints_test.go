@@ -4,69 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"io"
-	"net/url"
-	"os"
-	"os/exec"
-	"path/filepath"
+	"strings"
 	"testing"
-	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 	"loop-now/internal/server/clitemplate"
+	"loop-now/internal/server/db"
 	"loop-now/internal/server/modelcredential"
 	"loop-now/internal/server/store"
-	"loop-now/internal/testutil/pgtest"
-)
+	"loop-now/internal/testutil/sqlitetest"
 
-// Self-owned PG18 only. Set the explicit pgtest URL before its first lookup so
-// testenv never falls back to .env.local or an existing database. No test DDL.
-func constraintsOwnPG(t *testing.T) {
-	t.Helper()
-	if _, err := os.Stat("/opt/homebrew/opt/postgresql@18/bin/initdb"); err != nil {
-		t.Skip("required fixed offline dependency unavailable: /opt/homebrew/opt/postgresql@18/bin/initdb")
-	}
-	root, err := os.MkdirTemp("/private/tmp", "ln-constraints-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, socket := filepath.Join(root, "data"), filepath.Join(root, "socket")
-	if err = os.Mkdir(socket, 0700); err != nil {
-		t.Fatal(err)
-	}
-	command := func(name string, args ...string) error {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-		cmd := exec.CommandContext(ctx, "/opt/homebrew/opt/postgresql@18/bin/"+name, args...)
-		cmd.Env = []string{"HOME=" + root, "PATH=/usr/bin:/bin", "LC_ALL=C"}
-		cmd.Stdout = io.Discard
-		cmd.Stderr = io.Discard
-		return cmd.Run()
-	}
-	if err = command("initdb", "-D", data, "-U", "fixture", "-A", "trust", "--no-locale", "-E", "UTF8"); err != nil {
-		os.RemoveAll(root)
-		t.Fatal("own PG init failed", err)
-	}
-	if err = command("pg_ctl", "-D", data, "-l", filepath.Join(root, "pg.log"), "-o", "-F -h '' -k "+socket+" -p 55433", "-w", "-t", "10", "start"); err != nil {
-		os.RemoveAll(root)
-		t.Fatal("own PG start failed", err)
-	}
-	t.Cleanup(func() {
-		if err := command("pg_ctl", "-D", data, "-m", "immediate", "-w", "-t", "10", "stop"); err != nil {
-			t.Errorf("own PG stop failed: %v", err)
-			return
-		}
-		if err := os.RemoveAll(root); err != nil {
-			t.Error("own PG cleanup failed")
-		}
-	})
-	if err = command("createdb", "-h", socket, "-p", "55433", "-U", "fixture", "loop_now_test"); err != nil {
-		t.Fatal("own test database creation failed", err)
-	}
-	t.Setenv(pgtest.EnvTestDatabaseURL, "postgres://fixture@/loop_now_test?host="+url.QueryEscape(socket)+"&port=55433&sslmode=disable")
-}
+	"github.com/google/uuid"
+)
 
 type credentialConstraintCase struct {
 	name, table, code, constraint, column, sql string
@@ -75,24 +23,8 @@ type credentialConstraintCase struct {
 }
 
 func TestProjectCredentialNativeConstraints(t *testing.T) {
-	constraintsOwnPG(t)
 	ctx := context.Background()
-	st := pgtest.NewStore(t) // Executes the current real chain, including registered 012, on an empty schema.
-	var applied bool
-	if err := st.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM goose_db_version WHERE version_id=12 AND is_applied)`).Scan(&applied); err != nil || !applied {
-		t.Fatal("fixture did not apply formal migration 012")
-	}
-	// Later append-only migrations do not erase 012 acceptance. All original
-	// native constraint negative/positive cases below remain unchanged.
-	var version int
-	if err := st.Pool.QueryRow(ctx, `SELECT max(version_id) FROM goose_db_version WHERE is_applied`).Scan(&version); err != nil || version < 12 {
-		t.Fatal("fixture migration ledger invalid")
-	}
-	t.Logf("actual current migration chain through %d includes formal012", version)
-	var pgVersion int
-	if err := st.Pool.QueryRow(ctx, `SELECT current_setting('server_version_num')::integer`).Scan(&pgVersion); err != nil || pgVersion < 180000 || pgVersion >= 190000 {
-		t.Fatal("fixture must use PostgreSQL18")
-	}
+	st := sqlitetest.NewStore(t) // 基线即全部结构（包括原来 PostgreSQL 的 012 凭证约束）。
 	templates, err := clitemplate.Load("")
 	if err != nil {
 		t.Fatal(err)
@@ -182,22 +114,30 @@ func TestProjectCredentialNativeConstraints(t *testing.T) {
 			t.Fatal("CLI credential control failed")
 		}
 	}
-	// Auto-generated names can be truncated by PostgreSQL. Identify the exact
-	// formal constraint by table/type/definition, then require that native name.
-	native := func(table, kind, definition string) string {
+	// 约束名沿用 PostgreSQL 的（包括自动生成的）；按表与定义开头在基线的建表语句里找到唯一的那个。
+	native := func(table, definition string) string {
 		t.Helper()
+		var ddl string
+		if err := st.Pool.QueryRow(ctx, `SELECT sql FROM sqlite_schema WHERE type='table' AND name=$1`, table).Scan(&ddl); err != nil {
+			t.Fatal(err)
+		}
 		var names []string
-		err := st.Pool.QueryRow(ctx, `SELECT array_agg(conname::text) FROM pg_constraint WHERE conrelid=$1::regclass AND contype=$2::"char" AND pg_get_constraintdef(oid) LIKE $3`, table, kind, definition+"%").Scan(&names)
-		if err != nil || len(names) != 1 {
+		for _, line := range strings.Split(ddl, "\n") {
+			fields := strings.Fields(line)
+			if len(fields) > 2 && fields[0] == "CONSTRAINT" && strings.HasPrefix(strings.Join(fields[2:], " "), definition) {
+				names = append(names, fields[1])
+			}
+		}
+		if len(names) != 1 {
 			t.Fatalf("formal native constraint missing/ambiguous: %s %s", table, definition)
 		}
 		return names[0]
 	}
-	accountCheck := native("project_credential_accounts", "c", "CHECK ((((purpose = 'model'::text)")
-	selectionCheck := native("agent_credential_selections", "c", "CHECK ((((mode = 'explicit'::text)")
-	selectionOwnerFK := native("agent_credential_selections", "f", "FOREIGN KEY (agent_id, project_id)")
-	selectionAccountFK := native("agent_credential_selections", "f", "FOREIGN KEY (account_id, project_id, purpose, slot_key)")
-	cliOwnerFK := native("project_cli_versions", "f", "FOREIGN KEY (account_id, purpose, cli_name)")
+	accountCheck := native("project_credential_accounts", "CHECK ((((purpose = 'model')")
+	selectionCheck := native("agent_credential_selections", "CHECK ((((mode = 'explicit')")
+	selectionOwnerFK := native("agent_credential_selections", "FOREIGN KEY (agent_id, project_id)")
+	selectionAccountFK := native("agent_credential_selections", "FOREIGN KEY (account_id, project_id, purpose, slot_key)")
+	cliOwnerFK := native("project_cli_versions", "FOREIGN KEY (account_id, purpose, cli_name)")
 	cases := []credentialConstraintCase{
 		{name: "owner_both", table: "model_auth_versions", code: "23514", constraint: "model_auth_owner", sql: `UPDATE model_auth_versions SET agent_id=$2 WHERE id=$1`, args: []any{model.Model.ID, platform.ID}},
 		{name: "owner_neither", table: "model_auth_versions", code: "23514", constraint: "model_auth_owner", sql: `UPDATE model_auth_versions SET project_account_id=NULL WHERE id=$1`, args: []any{model.Model.ID}},
@@ -244,28 +184,19 @@ func TestProjectCredentialNativeConstraints(t *testing.T) {
 	addSelection("selection_null_purpose", "23502", "", "purpose", agent.ID, p1, nil, "openai", model.View.ID, "explicit")
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			tx, err := st.Pool.Begin(ctx)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer tx.Rollback(ctx)
-			_, err = tx.Exec(ctx, c.sql, c.args...)
-			if c.deferred && err != nil {
+			statementOK := false
+			err := st.Pool.InTx(ctx, func(tx *db.Tx) error {
+				_, err := tx.Exec(ctx, c.sql, c.args...)
+				statementOK = err == nil
+				return err
+			})
+			if c.deferred && !statementOK {
 				t.Fatal("expected deferred FK must allow statement before commit")
 			}
-			if err == nil {
-				err = tx.Commit(ctx)
+			if !nativeRejection(err, c) {
+				t.Fatalf("native DB rejection mismatch: want %s/%s got code %d (raw error withheld)", c.code, c.constraint, db.Code(err))
 			}
-			var native *pgconn.PgError
-			if !errors.As(err, &native) || native.Code != c.code || native.TableName != c.table || native.ConstraintName != c.constraint || (c.column != "" && native.ColumnName != c.column) {
-				gotCode, gotConstraint := "none", "none"
-				if native != nil {
-					gotCode = native.Code
-					gotConstraint = native.ConstraintName
-				}
-				t.Fatalf("native DB rejection mismatch: want %s/%s got %s/%s (raw error withheld)", c.code, c.constraint, gotCode, gotConstraint)
-			}
-			t.Logf("native %s table=%s constraint=%s column=%s deferred=%t", native.Code, native.TableName, native.ConstraintName, native.ColumnName, c.deferred)
+			t.Logf("native %s table=%s constraint=%s column=%s deferred=%t", c.code, c.table, c.constraint, c.column, c.deferred)
 		})
 	}
 	t.Run("valid_selections_and_duplicate_native_rejection", func(t *testing.T) {
@@ -275,11 +206,10 @@ func TestProjectCredentialNativeConstraints(t *testing.T) {
 			}
 		}
 		_, err = st.Pool.Exec(ctx, selectSQL, agent.ID, p1, "model", "openai", modelOtherOwner.View.ID, "explicit")
-		var native *pgconn.PgError
-		if !errors.As(err, &native) || native.Code != "23505" || native.ConstraintName != "agent_credential_selections_pkey" {
+		if db.Code(err) != db.CodeConstraintPK || !db.IsUniqueViolation(err, "agent_credential_selections", "agent_id", "purpose", "slot_key") {
 			t.Fatal("duplicate selection was not rejected by native primary key")
 		}
-		t.Log("native 23505 agent_credential_selections_pkey; distinct slots and model automatic_override NULL accepted")
+		t.Log("native primary key agent_credential_selections_pkey; distinct slots and model automatic_override NULL accepted")
 	})
 	t.Run("valid_platform_private_and_original_credential_unchanged", func(t *testing.T) {
 		pointer, _, err := st.CurrentModelAuthVersion(ctx, platform.ID)
@@ -309,4 +239,22 @@ func TestProjectCredentialNativeConstraints(t *testing.T) {
 		}
 		t.Log("project model/CLI, private platform, original credentials/current identities preserved")
 	})
+}
+
+// nativeRejection 报告 err 是否为用例期望的那种约束失败。SQLite 的 CHECK 报约束名、NOT NULL 报表与列；
+// 外键失败不报约束名，只看结果码（约束名已由基线与 PostgreSQL 的对照测试核对）。
+func nativeRejection(err error, c credentialConstraintCase) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	switch c.code {
+	case "23514":
+		return db.Code(err) == db.CodeConstraintCheck && strings.Contains(msg, "CHECK constraint failed: "+c.constraint)
+	case "23503":
+		return db.Code(err) == db.CodeConstraintFK
+	case "23502":
+		return db.Code(err) == db.CodeConstraintNotNull && strings.Contains(msg, "NOT NULL constraint failed: "+c.table+"."+c.column)
+	}
+	return false
 }

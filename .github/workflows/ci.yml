@@ -13,27 +13,6 @@ jobs:
   server:
     name: server (go vet + go test)
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_USER: loop_now
-          POSTGRES_PASSWORD: loop_now
-          POSTGRES_DB: loop_now_test
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U loop_now -d loop_now_test"
-          --health-interval 5s --health-timeout 5s --health-retries 20
-      redis:
-        image: redis:8
-        ports: ["6379:6379"]
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s --health-timeout 5s --health-retries 20
-    env:
-      LOOP_NOW_TEST_DATABASE_URL: postgres://loop_now:loop_now@127.0.0.1:5432/loop_now_test?sslmode=disable
-      # Integration tests insist on a dedicated Redis DB 10.
-      LOOP_NOW_TEST_REDIS_URL: redis://127.0.0.1:6379/10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -45,8 +24,41 @@ jobs:
           node-version: 24.21.0
       - name: go vet
         run: go vet ./cmd/... ./internal/... ./api/...
+      # 数据层不能引入只有 unix 才有的代码（实例锁等有 Windows 实现）。
+      - name: go vet (windows, data layer)
+        run: GOOS=windows go vet ./internal/server/db/...
       - name: go test
-        run: go test -count=1 ./cmd/... ./internal/... ./api/...
+        run: go test -count=1 -skip '^TestStress' ./cmd/... ./internal/... ./api/...
+      # 并发写、读到自己的写、取消、进程被杀与检查点的压测，单独连跑三次。
+      - name: go test (data layer stress)
+        run: go test -count=3 -run '^TestStress' ./internal/server/db/...
+
+  # 一次性 PostgreSQL 导入器的测试需要一个 PostgreSQL；导入器删除时这个 job 一并删除。
+  # 不列入分支保护的必需检查。
+  importer:
+    name: importer (postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: loop_now
+          POSTGRES_PASSWORD: loop_now
+          POSTGRES_DB: loop_now_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U loop_now -d loop_now_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      LOOP_NOW_TEST_DATABASE_URL: postgres://loop_now:loop_now@127.0.0.1:5432/loop_now_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: go test
+        run: go test -count=1 ./internal/server/pgimport/...
 
   web:
     name: web (typecheck, api:check, lint, test, build)
@@ -89,3 +101,22 @@ jobs:
           for dir in official/*/; do
             node host/dist/main.js validate "$dir"
           done
+
+  desktop:
+    name: desktop (typecheck, build, test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      # electron 只在第一次运行时下载二进制，这里只做类型检查、编译和单测，不下载也不出安装包。
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
