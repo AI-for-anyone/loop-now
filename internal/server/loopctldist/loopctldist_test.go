@@ -43,17 +43,17 @@ func TestLoadAndInstall(t *testing.T) {
 	if hex.EncodeToString(h[:]) != local.SHA256 {
 		t.Fatal("安装的二进制摘要应与清单一致")
 	}
-	if st, _ := os.Stat(filepath.Join(bin, "loopctl")); st.Mode()&0o111 == 0 {
+	if st, _ := os.Stat(testenv.Exe(filepath.Join(bin, "loopctl"))); runtime.GOOS != "windows" && st.Mode()&0o111 == 0 {
 		t.Fatal("安装的二进制应可执行")
 	}
 	// 被改动后再次安装会恢复。
-	if err := os.WriteFile(filepath.Join(bin, "loopctl"), []byte("tampered"), 0o755); err != nil {
+	if err := os.WriteFile(testenv.Exe(filepath.Join(bin, "loopctl")), []byte("tampered"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := d.Install(work); err != nil {
 		t.Fatal(err)
 	}
-	if b2, _ := os.ReadFile(filepath.Join(bin, "loopctl")); string(b2) != string(b) {
+	if b2, _ := os.ReadFile(testenv.Exe(filepath.Join(bin, "loopctl"))); string(b2) != string(b) {
 		t.Fatal("再次安装应覆盖被改动的二进制")
 	}
 }

@@ -92,8 +92,14 @@ func (f *fakeExec) signal(agentID uuid.UUID, c string) bool {
 	if ctl == nil {
 		return false
 	}
-	ctl <- c
-	return true
+	// 执行已经返回、running 里还没来得及清掉时，没人再读 ctl：有限等待后放弃，不让一次迟到的打断把整个测试卡死
+	// （Windows runner 上调度慢，这种迟到更常见）。正在 block／hold 的执行会立刻收下。
+	select {
+	case ctl <- c:
+		return true
+	case <-time.After(2 * time.Second):
+		return false
+	}
 }
 
 // Interrupt 与本机执行器的语义相同：只打断 ID 一致的那一次执行。

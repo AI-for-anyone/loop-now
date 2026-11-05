@@ -85,9 +85,11 @@ func TestConfigCommands(t *testing.T) {
 	e.run("config", "delete", "staging", "--yes").ok(t)
 	e.run("config", "delete", "staging", "--yes").fails(t, output.CodeProfileNotFound, 3)
 
-	os.Chmod(path, 0o644)
-	e.run("config", "list").fails(t, output.CodeConfigInsecurePermissions, 3)
-	e.run("skill", "list").fails(t, output.CodeConfigInsecurePermissions, 3)
+	if runtime.GOOS != "windows" { // chmod 在 Windows 上改不了 ACL，无法制造过宽的权限
+		os.Chmod(path, 0o644)
+		e.run("config", "list").fails(t, output.CodeConfigInsecurePermissions, 3)
+		e.run("skill", "list").fails(t, output.CodeConfigInsecurePermissions, 3)
+	}
 
 	ag := newEnv(t).agent("http://127.0.0.1:1")
 	ag.run("config", "list").fails(t, output.CodeCommandNotAllowed, 2)
