@@ -64,7 +64,7 @@ describe('服务端进程', () => {
 
   test('拉起、就绪、健康、记下启动时刻，再停掉', async (t) => {
     if (!available) return t.skip('没有 go')
-    const { server, notes, states, stampFile } = make('a')
+    const { server, notes, states, stampFile, log } = make('a')
     const ready = untilReady(server)
     await server.start()
     const url = await ready
@@ -85,8 +85,26 @@ describe('服务端进程', () => {
     assert.equal(server.alive, false)
     assert.equal(await waitGone(stamp.pid, 5_000), true)
     assert.deepEqual(states, ['starting', 'running', 'stopping', 'stopped'])
-    if (process.platform === 'win32') assert.ok(notes.some((n) => n.includes('taskkill')))
-    else assert.ok(!notes.some((n) => n.includes('强制结束')), '应是 SIGTERM 后自己退出')
+    assert.ok(!notes.some((n) => n.includes('强制结束')), `应是自己退出（macOS SIGTERM，Windows 关 stdin）：${notes.join('\n')}`)
+    // Windows：服务端是读到 stdin EOF 后自己停的（假服务端会写一句到 stderr）。
+    if (process.platform === 'win32') assert.match(log.tail(5), /stdin closed, shutting down/)
+  })
+
+  test('关掉 stdin 时服务端自己优雅退出（LOOP_NOW_STOP_ON_STDIN_CLOSE=1，Windows 上壳靠它停服务端）', async (t) => {
+    if (!available) return t.skip('没有 go')
+    const readyFile = join(dir, 'e', 'server-ready.json')
+    const child = spawn(bin, [], {
+      env: { ...process.env, LOOP_NOW_LISTEN_ADDR: '127.0.0.1:0', LOOP_NOW_READY_FILE: readyFile, LOOP_NOW_STOP_ON_STDIN_CLOSE: '1' },
+      stdio: ['pipe', 'ignore', 'ignore'],
+      windowsHide: true,
+    })
+    const exit = new Promise<{ code: number | null; signal: string | null }>((resolve) => child.once('exit', (code, signal) => resolve({ code, signal })))
+    for (let i = 0; i < 100 && !existsSync(readyFile); i++) await sleep(100)
+    assert.ok(existsSync(readyFile))
+    child.stdin!.end()
+    const result = await Promise.race([exit, sleep(10_000).then(() => 'timeout' as const)])
+    assert.deepEqual(result, { code: 0, signal: null })
+    assert.equal(existsSync(readyFile), false, '优雅退出时删掉就绪文件')
   })
 
   test('启动时清理上次留下的孤儿：就绪文件里的 pid 正是这个可执行文件时停掉它', async (t) => {
