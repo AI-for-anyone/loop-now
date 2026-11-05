@@ -1,6 +1,7 @@
 import { app, BrowserWindow, screen, shell, type IpcMainEvent } from 'electron'
 import { join } from 'node:path'
 import { classifyNavigation, handOffOnce } from './links'
+import { current, windowChrome, type PlatformId } from './platform'
 
 // 壳自带的状态页（启动中、启动失败）显示的内容；文字已按语言选好。
 export type StatusView = {
@@ -24,6 +25,7 @@ type Options = {
   quitting: () => boolean
   onAction: (action: StatusAction) => void
   note: (text: string) => void
+  platform?: PlatformId
 }
 
 const statusPage = join(__dirname, '..', 'static', 'status.html')
@@ -107,10 +109,11 @@ export class MainWindow {
       minHeight: 600,
       show: false,
       title: this.o.profile ? `Loop Now · ${this.o.profile}` : 'Loop Now',
-      // 不要系统标题栏：页面铺到窗口顶部，四角由系统圆角裁切。红绿灯放在页面顶部 48px 那条拖动区的正中，
-      // 与控制台左侧栏的标志左对齐（web/src/app/Sidebar.tsx、static/status.html）。
-      titleBarStyle: 'hiddenInset',
-      trafficLightPosition: { x: 18, y: 16 },
+      // macOS 不要系统标题栏：页面铺到窗口顶部，四角由系统圆角裁切。红绿灯放在页面顶部 48px 那条拖动区的正中，
+      // 与控制台左侧栏的标志左对齐（web/src/app/Sidebar.tsx、static/status.html）。Windows 用系统标题栏（见 platform.ts）。
+      ...windowChrome(this.o.platform ?? current),
+      // 开发时 Windows 的窗口图标取自 exe（Electron 的）；打包后 exe 里是 app 的图标，这里再给一次，任务栏与标题栏都用它。
+      icon: join(__dirname, '..', 'assets', 'icon.png'),
       backgroundColor: '#FBF9F4',
       webPreferences: {
         contextIsolation: true,

@@ -1,4 +1,5 @@
-// 壳里不依赖 Electron 运行的纯逻辑：重启计数、端口选择、日志轮转、导航分类、隔离配置、设置文件、托盘菜单。
+// 壳里不依赖 Electron 运行的纯逻辑：重启计数、端口选择、日志轮转、导航分类、隔离配置、设置文件、托盘菜单，以及 Windows 的分支
+// （路径、git 检测、PATH 安装、进程核对、未读数）——平台通过参数注入，在哪个系统上都跑同一套。
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
@@ -8,12 +9,15 @@ import { after, describe, test } from 'node:test'
 import type { AppUpdater } from 'electron-updater'
 import { GitHubProvider } from 'electron-updater/out/providers/GitHubProvider'
 import type { ProviderRuntimeOptions } from 'electron-updater/out/providers/Provider'
+import { badgePlan, dotBitmap } from './badge'
 import { parseBadge, parseNotification } from './bridge'
-import { installScript, linkState } from './cli'
+import { addToUserPathScript, installScript, linkState, userPathHas } from './cli'
 import { classifyNavigation, handOffOnce } from './links'
 import { RotatingLog } from './log'
+import { badgeStyle, cliBinary, cliInstallMode, serverBinary, trayIcon, windowChrome, windowsWorkRootBase } from './platform'
 import { choosePort, portFree, portOf } from './port'
-import { gitUsable } from './git'
+import { isOurServer, parseWindowsProcess, taskkillArgs, windowsProcessQuery } from './process'
+import { findInPath, gitUsable } from './git'
 import { defaultProfile, overridesFromFile, profileArg, profileEnv, profileFromFile, profileSummary, resolveProfile } from './profile'
 import { RestartPolicy, restartWindowMs } from './restart'
 import { SettingsFile } from './settings'
@@ -200,6 +204,91 @@ describe('配置', () => {
     assert.throws(() => resolveProfile('../live'))
     assert.throws(() => resolveProfile('Try'))
   })
+
+  test('Windows：名字放在 %LOCALAPPDATA%\\Loop Now\\<名字>，日志也在其中，工作根在 platform.ts 定的位置', () => {
+    const env = { LOCALAPPDATA: 'C:\\Users\\someone\\AppData\\Local' }
+    const p = resolveProfile('try', 'C:\\Users\\someone', {}, 'win32', env)
+    assert.equal(p.label, 'try')
+    assert.equal(p.root, 'C:\\Users\\someone\\AppData\\Local\\Loop Now\\try')
+    assert.equal(p.shellDir, 'C:\\Users\\someone\\AppData\\Local\\Loop Now\\try\\shell')
+    assert.equal(p.logDir, 'C:\\Users\\someone\\AppData\\Local\\Loop Now\\try\\logs')
+    assert.deepEqual(profileEnv(p), {
+      LOOP_NOW_DATA_DIR: 'C:\\Users\\someone\\AppData\\Local\\Loop Now\\try\\data',
+      LOOP_NOW_CONTEXT_DIR: 'C:\\Users\\someone\\AppData\\Local\\Loop Now\\try\\context',
+      LOOP_NOW_WORK_ROOT: 'C:\\Users\\someone\\AppData\\Local\\loop-now-desktop\\try',
+    })
+    assert.equal(p.workRoot, `${windowsWorkRootBase(env.LOCALAPPDATA)}\\try`)
+    // 没有 LOCALAPPDATA 时按 HOME 推。
+    assert.equal(resolveProfile('try', 'C:\\Users\\someone', {}, 'win32', {}).dataDir, 'C:\\Users\\someone\\AppData\\Local\\Loop Now\\try\\data')
+  })
+
+  test('Windows：绝对路径时全部放在它下面，末尾的反斜杠去掉；desktop.json 的目录也按 Windows 判断绝对路径', () => {
+    const p = resolveProfile('D:\\loop\\x\\', undefined, {}, 'win32', {})
+    assert.deepEqual([p.label, p.root], ['x', 'D:\\loop\\x'])
+    assert.deepEqual([p.shellDir, p.logDir, p.dataDir, p.contextDir, p.workRoot], ['D:\\loop\\x\\shell', 'D:\\loop\\x\\logs', 'D:\\loop\\x\\data', 'D:\\loop\\x\\context', 'D:\\loop\\x\\work'])
+    assert.equal(resolveProfile('D:\\', undefined, {}, 'win32', {}).root, 'D:\\')
+    const file = join(dir, 'overrides-win.json')
+    writeFileSync(file, JSON.stringify({ profiles: { default: { workRoot: 'D:\\work\\' } } }))
+    assert.deepEqual(overridesFromFile(file, defaultProfile, 'win32'), { workRoot: 'D:\\work' })
+    writeFileSync(file, JSON.stringify({ profiles: { default: { workRoot: 'work' } } }))
+    assert.throws(() => overridesFromFile(file, defaultProfile, 'win32'), /应是绝对路径："work"/)
+    const migrated = resolveProfile(defaultProfile, 'C:\\Users\\someone', { workRoot: 'D:\\work' }, 'win32', {})
+    assert.equal(profileEnv(migrated).LOOP_NOW_WORK_ROOT, 'D:\\work')
+    assert.match(profileSummary(migrated), /工作根 D:\\work（desktop\.json 指定）$/)
+  })
+})
+
+describe('平台差异', () => {
+  test('Windows：系统标题栏、.ico 托盘图标、exe 文件名、任务栏 overlay、PATH 安装；macOS：hiddenInset、Template 图、Dock 角标、链接', () => {
+    assert.deepEqual(windowChrome('win32'), {})
+    assert.deepEqual(windowChrome('darwin'), { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 16 } })
+    assert.deepEqual([trayIcon('win32'), trayIcon('darwin')], ['tray.ico', 'trayTemplate.png'])
+    assert.deepEqual([serverBinary('win32'), serverBinary('darwin'), cliBinary('win32'), cliBinary('darwin')], ['loop-server.exe', 'loop-server', 'loopctl.exe', 'loopctl'])
+    assert.deepEqual([badgeStyle('win32'), badgeStyle('darwin')], ['overlay', 'dock'])
+    assert.deepEqual([cliInstallMode('win32'), cliInstallMode('darwin')], ['path', 'symlink'])
+    for (const name of ['tray.ico', 'trayTemplate.png', 'trayTemplate@2x.png', 'icon.png']) assert.ok(existsSync(join(__dirname, '..', 'assets', name)), name)
+    assert.ok(existsSync(join(__dirname, '..', 'build', 'icon.ico')))
+  })
+
+  test('未读数：macOS 设 Dock 角标；Windows 有未读就放 overlay，变多时闪任务栏', () => {
+    assert.deepEqual(badgePlan(0, 3, 'darwin'), { dock: 3 })
+    assert.deepEqual(badgePlan(3, 0, 'darwin'), { dock: 0 })
+    assert.deepEqual(badgePlan(0, 3, 'win32'), { overlay: true, flash: true })
+    assert.deepEqual(badgePlan(3, 2, 'win32'), { overlay: true, flash: false })
+    assert.deepEqual(badgePlan(2, 0, 'win32'), { overlay: false, flash: false })
+    const dot = dotBitmap(16)
+    assert.equal(dot.length, 16 * 16 * 4)
+    assert.equal(dot[0 * 4 + 3], 0) // 角上透明
+    assert.equal(dot[(8 * 16 + 8) * 4 + 3], 255) // 中心不透明
+  })
+})
+
+describe('服务端进程核对（孤儿清理）', () => {
+  const bin = 'C:\\Users\\someone\\AppData\\Local\\Programs\\Loop Now\\resources\\server\\loop-server.exe'
+  test('Windows：可执行文件路径不分大小写，启动时刻和壳记下的一致才算；pid 被复用时不认', () => {
+    const info = { command: bin.toUpperCase(), started: '133700000000000000' }
+    assert.equal(isOurServer(info, bin, 4321, undefined, 'win32'), true)
+    assert.equal(isOurServer(info, bin, 4321, { pid: 4321, started: '133700000000000000' }, 'win32'), true)
+    assert.equal(isOurServer(info, bin, 4321, { pid: 4321, started: '133799999999999999' }, 'win32'), false)
+    assert.equal(isOurServer(info, bin, 4321, { pid: 9999, started: 'x' }, 'win32'), true)
+    assert.equal(isOurServer({ command: 'C:\\Windows\\notepad.exe', started: '1' }, bin, 4321, undefined, 'win32'), false)
+    assert.equal(isOurServer(undefined, bin, 4321, undefined, 'win32'), false)
+  })
+
+  test('macOS：命令行必须正好是可执行文件路径', () => {
+    const mac = '/Applications/Loop Now.app/Contents/Resources/server/loop-server'
+    assert.equal(isOurServer({ command: mac, started: 'Wed Nov  5 10:00:00 2026' }, mac, 1, undefined, 'darwin'), true)
+    assert.equal(isOurServer({ command: mac.toUpperCase(), started: '' }, mac, 1, undefined, 'darwin'), false)
+    assert.equal(isOurServer({ command: `${mac} --x`, started: '' }, mac, 1, undefined, 'darwin'), false)
+  })
+
+  test('Windows：PowerShell 查进程的输出按 JSON 读；停进程用 taskkill 整棵树强制结束', () => {
+    assert.match(windowsProcessQuery(4321), /ProcessId=4321/)
+    assert.deepEqual(parseWindowsProcess('{"ExecutablePath":"C:\\\\x\\\\loop-server.exe","Started":133700000000000000}'), { command: 'C:\\x\\loop-server.exe', started: '133700000000000000' })
+    assert.equal(parseWindowsProcess('{"ExecutablePath":null,"Started":1}'), undefined)
+    assert.equal(parseWindowsProcess(''), undefined)
+    assert.deepEqual(taskkillArgs(4321), ['/PID', '4321', '/T', '/F'])
+  })
 })
 
 describe('设置文件', () => {
@@ -286,6 +375,23 @@ describe('git 检测', () => {
     assert.equal(await gitUsable(async () => true), true)
     assert.equal(await gitUsable(async (file) => file !== '/usr/bin/git'), false)
   })
+
+  test('Windows：PATH 里找 git.exe，找到再跑 git --version，找不到就是没装，不碰 xcode-select', async () => {
+    const env = { PATH: 'C:\\Windows\\system32;C:\\Program Files\\Git\\cmd;' }
+    const exists = (file: string) => file === 'C:\\Program Files\\Git\\cmd\\git.exe'
+    assert.equal(findInPath('git.exe', env.PATH, 'win32', exists), 'C:\\Program Files\\Git\\cmd\\git.exe')
+    assert.equal(findInPath('git.exe', env.PATH, 'win32', () => false), undefined)
+    const calls: string[] = []
+    const run = async (file: string) => {
+      calls.push(file)
+      return true
+    }
+    assert.equal(await gitUsable(run, 'win32', env, exists), true)
+    assert.deepEqual(calls, ['C:\\Program Files\\Git\\cmd\\git.exe'])
+    assert.equal(await gitUsable(run, 'win32', env, () => false), false)
+    assert.equal(await gitUsable(run, 'win32', { Path: env.PATH }, exists), true)
+    assert.equal(await gitUsable(async () => false, 'win32', env, exists), false)
+  })
 })
 
 describe('页面发来的通知与未读数', () => {
@@ -327,6 +433,19 @@ describe('安装命令行工具', () => {
     assert.deepEqual(await linkState(link, target), { state: 'other' })
   })
 
+  test('Windows：看用户 PATH 里有没有随包的 bin 目录（不分大小写、末尾反斜杠不算），没有才追加', () => {
+    const dir = 'C:\\Users\\someone\\AppData\\Local\\Programs\\Loop Now\\resources\\bin'
+    assert.equal(userPathHas(`C:\\Go\\bin;${dir}\\;D:\\x`, dir), true)
+    assert.equal(userPathHas(dir.toUpperCase(), dir), true)
+    assert.equal(userPathHas('C:\\Go\\bin;;', dir), false)
+    assert.equal(userPathHas('', dir), false)
+    const script = addToUserPathScript("C:\\Users\\o'neil\\bin")
+    assert.ok(script.startsWith(`$dir = 'C:\\Users\\o''neil\\bin'; `))
+    assert.match(script, /GetEnvironmentVariable\('Path', 'User'\)/)
+    assert.match(script, /SetEnvironmentVariable\('Path', \$path, 'User'\)/)
+    assert.doesNotMatch(script, /setx/i)
+  })
+
   test('AppleScript 里的路径转义后用 quoted form 交给 shell', () => {
     assert.equal(
       installScript('/Applications/Loop "Now".app/x\\y'),
@@ -366,9 +485,9 @@ describe('检查更新', () => {
     }
   }
 
-  // 用 electron-updater 真实的 GitHub 提供方读一份假的 releases.atom（tags 从新到旧）：每个 release 里只有 latest-mac.yml，
-  // 别的文件一律 404。updater 的设置来自 UpdateChecker，提供方的 options 来自打包配置。
-  const latestRelease = async (current: string, tags: string[]) => {
+  // 用 electron-updater 真实的 GitHub 提供方读一份假的 releases.atom（tags 从新到旧）：每个 release 里只有 latest-mac.yml
+  // 与 latest.yml，别的文件一律 404。updater 的设置来自 UpdateChecker，提供方的 options 来自打包配置。
+  const latestRelease = async (current: string, tags: string[], platform: 'darwin' | 'win32' = 'darwin') => {
     const updater = fake()
     new UpdateChecker(updater, () => undefined)
     const fetched: string[] = []
@@ -377,7 +496,7 @@ describe('检查更新', () => {
       request: async ({ path }: { path: string }) => {
         fetched.push(path.replace('/AI-for-anyone/loop-now/releases', ''))
         if (path.endsWith('.atom')) return `<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom">${tags.map(entry).join('')}</feed>`
-        const version = /\/download\/v([^/]+)\/latest-mac\.yml$/.exec(path)?.[1]
+        const version = /\/download\/v([^/]+)\/latest(-mac)?\.yml$/.exec(path)?.[1]
         if (version) return `version: ${version}\npath: update.zip\nsha512: x\nfiles: [{ url: update.zip, sha512: x }]\n`
         throw new Error(`404 ${path}`)
       },
@@ -385,7 +504,7 @@ describe('检查更新', () => {
     // 提供方只用到 updater 的 allowPrerelease、channel 与当前版本（semver 也认字符串）。
     const provider = new GitHubProvider(publish(), { ...updater, currentVersion: current, fullChangelog: false } as unknown as AppUpdater, {
       executor: executor as unknown as ProviderRuntimeOptions['executor'],
-      platform: 'darwin',
+      platform,
       isUseMultipleRangeRequest: true,
     })
     const { version } = await provider.getLatestVersion()
@@ -424,6 +543,23 @@ describe('检查更新', () => {
       version: '0.2.1',
       fetched: ['.atom', '/download/v0.2.1/latest-mac.yml'],
     })
+  })
+
+  test('Windows 读的是 latest.yml，同样只提示去下载页（打包配置里 win 不设 channel、不自动装）', async () => {
+    assert.deepEqual(await latestRelease('0.2.0', ['v0.2.1', 'v0.2.0'], 'win32'), { version: '0.2.1', fetched: ['.atom', '/download/v0.2.1/latest.yml'] })
+    const saved = process.env.LOOP_NOW_DESKTOP_BUNDLE
+    process.env.LOOP_NOW_DESKTOP_BUNDLE = dir
+    try {
+      const config = require('../electron-builder.config.js')
+      assert.deepEqual(config.win.target, [{ target: 'nsis', arch: 'x64' }])
+      assert.deepEqual([config.nsis.oneClick, config.nsis.perMachine, config.nsis.allowToChangeInstallationDirectory], [false, false, true])
+      assert.equal(config.nsis.artifactName, 'loop-now-desktop-${version}-${os}-${arch}.${ext}')
+      assert.equal(config.win.channel, undefined)
+      assert.equal(config.win.publisherName, undefined)
+    } finally {
+      if (saved === undefined) delete process.env.LOOP_NOW_DESKTOP_BUNDLE
+      else process.env.LOOP_NOW_DESKTOP_BUNDLE = saved
+    }
   })
 
   test('有新版本时菜单栏多一项去下载页', () => {
