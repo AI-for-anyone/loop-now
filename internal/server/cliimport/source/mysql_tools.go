@@ -9,11 +9,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
-	"syscall"
 	"time"
 
-	"golang.org/x/sys/unix"
+	"loop-now/internal/execenv"
+	"loop-now/internal/privatefs"
+	"loop-now/internal/procgroup"
 )
 
 // MySQLTools is trusted SERVER dependency configuration, never request input.
@@ -65,13 +67,13 @@ func toolDigest(root, name, want string) error {
 	if _, e := hex.DecodeString(want); e != nil {
 		return fail("tool_unavailable", "tool_fingerprint")
 	}
-	f, e := os.OpenFile(filepath.Join(root, "bin", name), os.O_RDONLY|unix.O_NOFOLLOW, 0)
+	f, e := privatefs.OpenNoFollow(filepath.Join(root, "bin", name), os.O_RDONLY, 0)
 	if e != nil {
 		return fail("tool_unavailable", "tool")
 	}
 	defer f.Close()
 	info, e := f.Stat()
-	if e != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0022 != 0 {
+	if e != nil || !info.Mode().IsRegular() || privatefs.WritableByOthersFile(f) {
 		return fail("tool_unavailable", "tool")
 	}
 	h := sha256.New()
@@ -105,7 +107,11 @@ func runTool(ctx context.Context, root, name string, args []string, source *os.F
 	defer os.RemoveAll(home)
 	cmd := exec.CommandContext(ctx, filepath.Join(root, "bin", name), args...)
 	cmd.Dir = home
-	cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin", "LC_ALL=C", "MYSQL_TEST_LOGIN_FILE=/dev/null"}
+	cmd.Env = append(execenv.Base(home, home), "HOME="+home, "PATH="+execenv.SystemPath(), "LC_ALL=C", "MYSQL_TEST_LOGIN_FILE="+os.DevNull)
+	if source != nil && runtime.GOOS == "windows" {
+		// 私有 fd 经 ExtraFiles 传给子进程在 Windows 上不可用（os/exec 不支持），没有 /dev/fd/3 可指。
+		return nil, fail("tool_unavailable", "private_ipc")
+	}
 	if source != nil {
 		// mysql_config_editor opens even its print source read/write. Never grant
 		// write access to the host file: materialize only an anonymous private FD.
@@ -138,18 +144,12 @@ func runTool(ctx context.Context, root, name string, args []string, source *os.F
 		cmd.ExtraFiles = []*os.File{snapshot}
 		cmd.Env = append(cmd.Env, "MYSQL_TEST_LOGIN_FILE=/dev/fd/3")
 	}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error {
-		if cmd.Process == nil {
-			return nil
-		}
-		return unix.Kill(-cmd.Process.Pid, unix.SIGKILL)
-	}
+	cmd.Cancel = procgroup.Cancel(cmd)
 	cmd.WaitDelay = 500 * time.Millisecond
 	var stdout, stderr privateBuffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	err := cmd.Run()
+	err := procgroup.Run(cmd)
 	defer clear(stderr.Bytes())
 	if err != nil {
 		clear(stdout.Bytes())
@@ -180,7 +180,7 @@ func (r *Reader) loginTool(ctx context.Context, name string, args []string, e *e
 	}
 	defer f.Close()
 	before, err := f.Stat()
-	if err != nil || before.Mode().Perm()&0077 != 0 {
+	if err != nil || !privatefs.IsPrivateFile(f) {
 		return nil, fail("source_unreadable", "permissions")
 	}
 	if e != nil && e.pins[".mylogin.cnf"] != (stamp{true, identity(before)}) {

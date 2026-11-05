@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -199,33 +198,21 @@ type Config struct {
 	Warnings []string
 }
 
-// DefaultDataDir 返回数据根的默认值：HOME 下的 .loop_now；取不到 HOME 时为空。
-func DefaultDataDir(getenv func(string) string) string {
-	home := getenv("HOME")
-	if home == "" {
-		home, _ = os.UserHomeDir()
-	}
-	if home == "" {
-		return ""
-	}
-	return filepath.Join(home, ".loop_now")
-}
+// DefaultDataDir 返回数据根的默认值：Unix 上是 HOME 下的 .loop_now，Windows 上是 %LOCALAPPDATA%\Loop Now\data；取不到时为空。
+func DefaultDataDir(getenv func(string) string) string { return defaultDataDir(getenv) }
 
 // DBDir 返回数据根下存放 data.db 与 events.db 的目录。
 func DBDir(dataDir string) string { return filepath.Join(dataDir, "db") }
 
-// DefaultWorkRoot 返回当前平台的工作根目录默认值。
-func DefaultWorkRoot() string {
-	if runtime.GOOS == "darwin" {
-		return "/Users/Shared/loop-now"
-	}
-	return "/var/lib/loop-now"
-}
+// DefaultWorkRoot 返回当前平台的工作根目录默认值：macOS /Users/Shared/loop-now，Linux /var/lib/loop-now，
+// Windows %ProgramData%\loop-now。都在用户 home 之外。
+func DefaultWorkRoot() string { return defaultWorkRoot() }
 
 // 发布包的布局：这些文件与 loop-server 放在同一目录下（见 scripts/release/build.sh）。对应的配置没有设置、
 // 而文件存在时，默认就用它们，所以解开发布包不必另外配置；环境变量仍然优先。
+// Windows 包里是 loop-server.exe、loopctl.exe、runtime/node/node.exe，其余相对路径相同；Pi 入口是 cli.js，由随包 node 运行。
 const (
-	BundledNode           = "runtime/node/bin/node"
+	BundledNode           = bundledNode
 	BundledPi             = "runtime/pi/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"
 	BundledLoopctlDist    = "loopctl-dist"
 	BundledPluginHost     = "plugins/host/main.js"
@@ -341,7 +328,7 @@ func Load(getenv func(string) string) (*Config, error) {
 		c.DataDir = DefaultDataDir(getenv)
 	}
 	if !filepath.IsAbs(c.DataDir) || filepath.Clean(c.DataDir) != c.DataDir || c.DataDir == string(filepath.Separator) {
-		p.fail(EnvDataDir, "须为规范的绝对路径（当前 %q；未设置时取 HOME 下的 .loop_now）", c.DataDir)
+		p.fail(EnvDataDir, "须为规范的绝对路径（当前 %q；未设置时按平台取默认目录）", c.DataDir)
 	}
 	c.BackupDir = p.str(EnvBackupDir, "")
 	if c.BackupDir == "" && c.DataDir != "" {
@@ -356,16 +343,10 @@ func Load(getenv func(string) string) (*Config, error) {
 	}
 	c.ContextDir = p.str(EnvContextDir, "")
 	if c.ContextDir == "" {
-		home := getenv("HOME")
-		if home == "" {
-			home, _ = os.UserHomeDir()
-		}
-		if home != "" {
-			c.ContextDir = filepath.Join(home, ".loop_now")
-		}
+		c.ContextDir = DefaultDataDir(getenv) // 与数据根相同的目录（Unix 上即 HOME 下的 .loop_now）
 	}
 	if !filepath.IsAbs(c.ContextDir) || filepath.Clean(c.ContextDir) != c.ContextDir || c.ContextDir == string(filepath.Separator) {
-		p.fail(EnvContextDir, "须为规范的绝对路径（当前 %q；未设置时取 HOME 下的 .loop_now）", c.ContextDir)
+		p.fail(EnvContextDir, "须为规范的绝对路径（当前 %q；未设置时与数据根的默认目录相同）", c.ContextDir)
 	}
 
 	if c.LoopctlDistDir == "" {

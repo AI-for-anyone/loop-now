@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/app"
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/cliverify"
@@ -19,7 +20,6 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
 
@@ -176,7 +176,7 @@ func TestCLIVerificationActualAppSIGKILLRecovery(t *testing.T) {
 		if conn != nil {
 			conn.Close()
 		}
-		if syscall.Kill(native.PID, 0) != nil && os.IsNotExist(homeError) && dialError != nil {
+		if !procgroup.ProcessAlive(native.PID) && os.IsNotExist(homeError) && dialError != nil {
 			break
 		}
 		if time.Now().After(deadline) {

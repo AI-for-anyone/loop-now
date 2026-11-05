@@ -23,6 +23,7 @@ import (
 	"loop-now/internal/server/taskmodel"
 	"loop-now/internal/testutil/fakepibin"
 	"loop-now/internal/testutil/loopctlfake"
+	"loop-now/internal/testutil/testenv"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/google/uuid"
@@ -52,7 +53,7 @@ func taskNodeInboxWorld(t *testing.T) *world {
 
 func inboxActualCLI(t *testing.T) string {
 	t.Helper()
-	bin := filepath.Join(t.TempDir(), "loopctl")
+	bin := testenv.Exe(filepath.Join(t.TempDir(), "loopctl"))
 	cmd := exec.Command("go", "build", "-buildvcs=false", "-o", bin, "./cmd/loopctl")
 	cmd.Dir = "../../.."
 	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=local", "GOPROXY=off", "GOSUMDB=off")

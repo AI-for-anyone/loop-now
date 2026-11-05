@@ -46,11 +46,11 @@ func TestPiVersionMismatch(t *testing.T) {
 	if err := os.WriteFile(fake, []byte("#!/bin/sh\necho 1.2.0\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	err := checkPiVersion(context.Background(), fake, "1.1.0", "/usr/bin:/bin")
+	err := checkPiVersion(context.Background(), "", fake, "1.1.0", "/usr/bin:/bin")
 	if err == nil || !strings.Contains(err.Error(), "1.1.0") || !strings.Contains(err.Error(), "1.2.0") {
 		t.Fatalf("应报告期望版本与实际版本：%v", err)
 	}
-	if err := checkPiVersion(context.Background(), fake, "1.2.0", "/usr/bin:/bin"); err != nil {
+	if err := checkPiVersion(context.Background(), "", fake, "1.2.0", "/usr/bin:/bin"); err != nil {
 		t.Fatalf("版本一致时应通过：%v", err)
 	}
 }

@@ -13,10 +13,12 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/ulikunitz/xz"
+
+	"loop-now/internal/execenv"
+	"loop-now/internal/privatefs"
 )
 
 const maxBundleSize int64 = 4 << 30
@@ -204,7 +206,7 @@ func verifyNative(ctx context.Context, t *Template, stage string, a Asset) error
 	probe, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(probe, filepath.Join(stage, "runtime", filepath.FromSlash(a.Path)), "--version")
-	cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin", "LANG=C"}
+	cmd.Env = append(execenv.Base(home, home), "HOME="+home, "PATH="+execenv.SystemPath(), "LANG=C")
 	b, e := cmd.CombinedOutput()
 	defer clear(b)
 	if e != nil || !strings.Contains(string(b), t.Version) {
@@ -295,7 +297,7 @@ func validateLinkWithinRoot(base, name string) error {
 		} else {
 			candidate := filepath.Join(current, part)
 			info, err := os.Lstat(candidate)
-			if err != nil && !os.IsNotExist(err) && !errors.Is(err, syscall.ENOTDIR) {
+			if err != nil && !os.IsNotExist(err) && !privatefs.IsNotDir(err) {
 				return errors.New("安装包链接目标无效")
 			}
 			if err == nil && info.Mode()&os.ModeSymlink != 0 {

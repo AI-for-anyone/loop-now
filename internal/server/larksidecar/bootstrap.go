@@ -15,9 +15,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
-
-	"golang.org/x/sys/unix"
 )
 
 const LauncherScopeEnv = "LOOP_NOW_LARK_SCOPE_FILE"
@@ -100,9 +97,8 @@ func readLauncherDescriptor(path string) (LauncherDescriptor, error) {
 	if e != nil {
 		return d, launcherRejected()
 	}
-	defer unix.Close(root)
-	var parent unix.Stat_t
-	if unix.Fstat(root, &parent) != nil || parent.Mode&0077 != 0 {
+	defer root.Close()
+	if !root.private() {
 		return d, launcherRejected()
 	}
 	f, e := openInputAt(root, filepath.Base(path))
@@ -110,8 +106,7 @@ func readLauncherDescriptor(path string) (LauncherDescriptor, error) {
 		return d, launcherRejected()
 	}
 	defer f.Close()
-	var st unix.Stat_t
-	if unix.Fstat(int(f.Fd()), &st) != nil || int(st.Uid) != os.Geteuid() || st.Mode&07777 != 0600 || st.Nlink != 1 || st.Size <= 0 || st.Size > launcherDescriptorLimit {
+	if !privateDescriptor(f, launcherDescriptorLimit) {
 		return d, launcherRejected()
 	}
 	raw, e := io.ReadAll(io.LimitReader(f, launcherDescriptorLimit+1))
@@ -217,10 +212,10 @@ func ExecLauncher(ctx context.Context, path string, args []string) error {
 	if e != nil || ctx.Err() != nil {
 		return launcherRejected()
 	}
-	if syscall.Chdir(cmd.Dir) != nil || ctx.Err() != nil {
+	if os.Chdir(cmd.Dir) != nil || ctx.Err() != nil {
 		return launcherRejected()
 	}
-	if syscall.Exec(cmd.Path, cmd.Args, cmd.Env) != nil {
+	if execLauncher(cmd) != nil {
 		return launcherRejected()
 	}
 	return nil // Successful exec does not return.

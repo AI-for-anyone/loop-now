@@ -6,19 +6,18 @@ import (
 	"errors"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
 	authhelper "loop-now/auth-helper"
 
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/cliauth"
 	"loop-now/internal/server/clicredential"
@@ -28,6 +27,7 @@ import (
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/pluginhost"
+	"loop-now/internal/server/preflight"
 	"loop-now/internal/server/prompts"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/toolcommand"
@@ -64,6 +64,7 @@ type Options struct {
 	AuthIPCTimeout            time.Duration
 	WorkRoot                  string
 	PiBin                     string
+	NodeBin                   string // PiBin 是 .js 文件（随包布局）时用它运行；为空时按 PATH 找 node
 	GitBin                    string
 	ExecBasePath              string
 	Passthrough               []string
@@ -608,13 +609,13 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 		env = append(env, "LOOP_NOW_GCLOUD_RUNTIME_ENTRY="+e.o.GoogleRuntimeEntry)
 	}
 	args = append(args, pluginArgs(snap.Plugins)...)
-	cmd := exec.Command(e.o.PiBin, args...)
+	cmd := preflight.PiCommand(e.o.NodeBin, e.o.PiBin, args...)
 	if bridge != nil {
 		cmd.ExtraFiles = bridge.ChildFiles()
 	}
 	cmd.Env = env
 	cmd.Dir = d.workspace
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	procgroup.Configure(cmd)
 	if err := ctx.Err(); err != nil {
 		if googleBridge != nil {
 			closeGoogleBroker(googleBridge)
@@ -636,6 +637,9 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 		}
 		e.revokeToken(tokenID, e.snapshotLog(snap))
 		return nil, fail(executor.ErrPiStartFailed, "启动 Pi 失败：%v", err)
+	}
+	if err := procgroup.Started(cmd); err != nil {
+		e.snapshotLog(snap).Warn("Pi 进程没有纳入整组管理，停止时只能结束它本身", "pid", client.Pid(), "err", err)
 	}
 	if bridge != nil {
 		bridge.ChildStarted()
@@ -833,9 +837,9 @@ func (e *Executor) stop(p *proc, why stopCause) {
 		e.recordSession(p)
 		_ = p.client.CloseStdin()
 		if !waitDone(p, e.o.StopGrace) {
-			_ = syscall.Kill(-p.client.Pid(), syscall.SIGTERM)
+			_ = procgroup.Terminate(p.client.Pid())
 			if !waitDone(p, e.o.StopGrace) {
-				_ = syscall.Kill(-p.client.Pid(), syscall.SIGKILL)
+				_ = procgroup.Kill(p.client.Pid())
 				if !waitDone(p, e.o.StopGrace) {
 					p.stopErr = ErrRuntimeStopUnconfirmed
 				}
@@ -1021,7 +1025,7 @@ func (e *Executor) abort(r *run, p *proc) {
 	// 先记下停止再强杀：强杀后执行可能先以进程退出结束并清理进程，停止事件不能依赖之后的 stop 调用。
 	e.recordStop(p, stopCause{reason: stopAbortTimeout, runID: &r.id}, time.Now())
 	p.stopping.Store(true)
-	_ = syscall.Kill(-p.client.Pid(), syscall.SIGKILL)
+	_ = procgroup.Kill(p.client.Pid())
 	e.stop(p, stopCause{})
 }
 
@@ -1215,12 +1219,12 @@ func (e *Executor) CleanupStaleExceptPending(ctx context.Context, pending []Pend
 		if json.Unmarshal(b, &rec) == nil && rec.PID > 0 && rec.Hostname == e.o.Hostname && rec.InstanceID != e.o.InstanceID.String() {
 			if isOurPi(rec) {
 				e.log.Warn("结束上一次运行遗留的 Pi 进程", "pid", rec.PID, "pidFile", f)
-				_ = syscall.Kill(-rec.PID, syscall.SIGTERM)
+				_ = procgroup.Terminate(rec.PID)
 				for i := 0; i < 20 && processAlive(rec.PID); i++ {
 					time.Sleep(100 * time.Millisecond)
 				}
 				if processAlive(rec.PID) {
-					_ = syscall.Kill(-rec.PID, syscall.SIGKILL)
+					_ = procgroup.Kill(rec.PID)
 				}
 			}
 		}
@@ -1239,7 +1243,7 @@ func (e *Executor) CleanupStaleExceptPending(ctx context.Context, pending []Pend
 	return nil
 }
 
-func processAlive(pid int) bool { return syscall.Kill(pid, 0) == nil }
+func processAlive(pid int) bool { return procgroup.ProcessAlive(pid) }
 
 // isOurPi 确认记录里的 PID 仍是当初启动的那个 Pi 进程，避免误杀复用了 PID 的其他进程：记录了启动时刻时比对它
 // （Pi 会改自己的进程标题，命令行里不再有 --mode rpc 与会话目录）；没有记录时（旧版本写的、或平台不支持）退回到比对命令行。
@@ -1251,11 +1255,10 @@ func isOurPi(rec pidRecord) bool {
 		start, err := processStart(rec.PID)
 		return err == nil && start == rec.ProcessStart
 	}
-	out, err := exec.Command("ps", "-o", "command=", "-p", strconv.Itoa(rec.PID)).Output()
+	cmd, err := processCommandLine(rec.PID)
 	if err != nil {
 		return false
 	}
-	cmd := string(out)
 	return strings.Contains(cmd, "--mode rpc") && rec.SessionDir != "" && strings.Contains(cmd, rec.SessionDir)
 }
 

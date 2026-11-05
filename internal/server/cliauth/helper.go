@@ -8,12 +8,13 @@ import (
 	"errors"
 	"github.com/google/uuid"
 	"io"
+	"loop-now/internal/execenv"
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/clicredential"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sync/atomic"
-	"syscall"
 	"time"
 )
 
@@ -105,16 +106,15 @@ func (h *ProcessHelper) invoke(ctx context.Context, id uuid.UUID, operation stri
 		}
 	}
 	cmd.Dir = dir
-	cmd.Env = []string{"HOME=" + dir, "CLOUDSDK_CONFIG=" + config, "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "PYTHONNOUSERSITE=1", "CLOUDSDK_CORE_DISABLE_USAGE_REPORTING=true", "CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK=true"}
+	cmd.Env = append(execenv.Base(dir, ""), "HOME="+dir, "CLOUDSDK_CONFIG="+config, "PATH="+execenv.SystemPath(), "PYTHONNOUSERSITE=1", "CLOUDSDK_CORE_DISABLE_USAGE_REPORTING=true", "CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK=true")
 	cmd.ExtraFiles = []*os.File{inputR, outputW}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	stdout, stderr := &countDiscard{}, &countDiscard{}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	if ctx.Err() != nil {
 		return fail("cancelled")
 	}
-	if e = cmd.Start(); e != nil {
+	if e = procgroup.Start(cmd); e != nil {
 		return fail("helper_unavailable")
 	}
 	inputR.Close()
@@ -133,7 +133,7 @@ func (h *ProcessHelper) invoke(ctx context.Context, id uuid.UUID, operation stri
 			return
 		default:
 		}
-		syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+		_ = procgroup.Terminate(cmd.Process.Pid)
 		grace := h.Options.StopGrace
 		if grace <= 0 {
 			grace = time.Second
@@ -143,7 +143,7 @@ func (h *ProcessHelper) invoke(ctx context.Context, id uuid.UUID, operation stri
 		select {
 		case <-wait:
 		case <-timer.C:
-			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			_ = procgroup.Kill(cmd.Process.Pid)
 			<-wait
 		}
 	}

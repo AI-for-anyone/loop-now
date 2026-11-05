@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 
 	"github.com/google/uuid"
+	"loop-now/internal/privatefs"
 	"loop-now/internal/server/clicredential"
 	"loop-now/internal/server/larksidecar"
 )
@@ -178,7 +178,7 @@ func prepareLarkAssets(ctx context.Context, bundle, workRoot, manifestSHA string
 
 func copyLarkAsset(ctx context.Context, root *os.Root, name, want string, dest *os.Root) error {
 	fi, e := root.Lstat(name)
-	if e != nil || !fi.Mode().IsRegular() || fi.Mode()&os.ModeSymlink != 0 || fi.Size() > 512<<20 || fi.Mode().Perm()&0111 == 0 {
+	if e != nil || !fi.Mode().IsRegular() || fi.Mode()&os.ModeSymlink != 0 || fi.Size() > 512<<20 || !privatefs.IsExecutable(name, fi) {
 		return errors.New("Lark用户CLI文件无效")
 	}
 	if strings.Contains(name, "/") {
@@ -240,7 +240,7 @@ func copyLarkAsset(ctx context.Context, root *os.Root, name, want string, dest *
 }
 
 func openLarkRegular(root *os.Root, name string) (*os.File, error) {
-	f, e := root.OpenFile(name, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	f, e := root.OpenFile(name, os.O_RDONLY|privatefs.NoFollow|privatefs.NonBlock, 0)
 	if e != nil {
 		return nil, e
 	}

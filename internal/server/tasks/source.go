@@ -13,10 +13,11 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
+	"loop-now/internal/execenv"
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/clicredential"
@@ -393,7 +394,7 @@ func (s *Source) resolveCommit(ctx context.Context, inst store.TaskInstance, src
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		return "", err
 	}
-	env := []string{"HOME=" + home, "PATH=" + s.BasePath, "GIT_TERMINAL_PROMPT=0"}
+	env := append(execenv.Base(home, ""), "HOME="+home, "PATH="+s.BasePath, "GIT_TERMINAL_PROMPT=0")
 	args := []string{"-c", "credential.helper="}
 	if p, ok := creds.CLI["gh"]; ok {
 		if s.Templates == nil || s.Installer == nil {
@@ -421,10 +422,9 @@ func (s *Source) resolveCommit(ctx context.Context, inst store.TaskInstance, src
 	defer cancel()
 	cmd := exec.CommandContext(ctx, s.GitBin, args...)
 	cmd.Env = env
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.Cancel = procgroup.Cancel(cmd)
 	cmd.WaitDelay = s.CloneTimeout
-	out, err := cmd.Output()
+	out, err := procgroup.Output(cmd)
 	if err != nil {
 		return "", errors.New("仓库分支无法解析")
 	}

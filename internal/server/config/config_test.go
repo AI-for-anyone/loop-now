@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -13,9 +14,17 @@ func envOf(m map[string]string) func(string) string {
 	return func(k string) string { return m[k] }
 }
 
+// fixturePath 把测试里写死的 Unix 绝对路径换成本平台的绝对路径（Windows 上加 C: 并换分隔符），只用于不真正访问的路径。
+func fixturePath(p string) string {
+	if runtime.GOOS == "windows" {
+		return "C:" + filepath.FromSlash(p)
+	}
+	return p
+}
+
 func requiredEnv() map[string]string {
 	return map[string]string{
-		EnvLoopctlDistDir: "/opt/loop-now/loopctl-dist",
+		EnvLoopctlDistDir: fixturePath("/opt/loop-now/loopctl-dist"),
 	}
 }
 
@@ -348,6 +357,9 @@ func TestLegacyMasterKeyVariableIgnored(t *testing.T) {
 }
 
 func TestDataDirDefaultAndDBDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 的默认数据目录是 %LOCALAPPDATA%\\Loop Now\\data，不按 HOME 推导")
+	}
 	env := requiredEnv()
 	env["HOME"] = "/home/fixture"
 	c, err := Load(envOf(env))

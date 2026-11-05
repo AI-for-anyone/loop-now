@@ -4,6 +4,8 @@ import (
 	"errors"
 	"github.com/google/uuid"
 	"os"
+
+	"loop-now/internal/privatefs"
 )
 
 var ErrFile = errors.New("模型凭证缓存写入失败")
@@ -23,7 +25,7 @@ func WriteAuthFile(dir string, data []byte) error {
 		return ErrFile
 	}
 	defer root.Close()
-	if e = root.Chmod(".", 0700); e != nil {
+	if e = privatefs.MakePrivate(dir); e != nil {
 		return ErrFile
 	}
 	name := ".auth-" + uuid.NewString() + ".tmp"

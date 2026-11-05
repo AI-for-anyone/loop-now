@@ -20,6 +20,7 @@ import (
 
 	authhelper "loop-now/auth-helper"
 	"loop-now/internal/buildinfo"
+	"loop-now/internal/execenv"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/auth"
@@ -361,7 +362,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	}
 	a.Executor = local.New(local.Options{Models: models, Hooks: appHooks{a}, Dialogs: a.askDialog, LarkFactory: larkFactory, GoogleResolver: googleCoordinator, GoogleRuntimeEntry: filepath.Join(authRoot, "google_runtime.py"),
 		AuthResolver: authCoordinator, AuthExtension: authExtension, LegacyAuthExtension: filepath.Join(filepath.Dir(authExtension), "legacy-anthropic.mjs"), CodexServiceTierExtension: filepath.Join(filepath.Dir(authExtension), "codex-service-tier.mjs"), PiPackageRoot: packageRoot, PiAIDir: res.PiAIDir, AuthIPCTimeout: cfg.AuthIPCTimeout,
-		WorkRoot: res.WorkRoot, PiBin: res.PiBin, GitBin: res.GitBin, ExecBasePath: res.ExecBasePath, Passthrough: cfg.ExecEnvPassthrough,
+		WorkRoot: res.WorkRoot, PiBin: res.PiBin, NodeBin: res.NodeBin, GitBin: res.GitBin, ExecBasePath: res.ExecBasePath, Passthrough: cfg.ExecEnvPassthrough,
 		Username: username, MaxProcesses: cfg.PiMaxProcesses, IdleTimeout: cfg.PiIdleTimeout, StartTimeout: cfg.PiStartTimeout,
 		StopGrace: cfg.PiStopGrace, AbortTimeout: cfg.AbortTimeout, CloneTimeout: cfg.GitCloneTimeout, InstanceID: a.InstanceID, Hostname: host,
 		StderrTailBytes: cfg.PiStderrTailBytes, Observer: taskObserver,
@@ -667,7 +668,7 @@ func (a *App) assemblePlugins(cfg *config.Config, res *preflight.Resolved, log *
 		log.Info("没有配置插件宿主入口，插件的平台侧不运行", "env", config.EnvPluginHostEntry)
 		return nil
 	}
-	env := []string{"PATH=" + res.ExecBasePath, "HOME=" + root, "LANG=C.UTF-8", "LOOP_NOW_PLUGINS_ROOT=" + root, "LOOP_NOW_API_URL=" + a.Plugins.APIURL}
+	env := append(execenv.Base(root, ""), "PATH="+res.ExecBasePath, "HOME="+root, "LANG=C.UTF-8", "LOOP_NOW_PLUGINS_ROOT="+root, "LOOP_NOW_API_URL="+a.Plugins.APIURL)
 	if tz := os.Getenv("TZ"); tz != "" {
 		env = append(env, "TZ="+tz)
 	}
