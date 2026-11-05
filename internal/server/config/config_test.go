@@ -216,9 +216,9 @@ func TestConsoleSettings(t *testing.T) {
 		t.Fatalf("默认值不对：%v %+v", err, c.ConsoleOrigins)
 	}
 	env[EnvConsoleOrigins] = "NONE"
-	env[EnvWebDir] = "/opt/loop-now/web"
-	env[EnvReadyFile] = "/tmp/loop-now-ready.json"
-	if c, err = Load(envOf(env)); err != nil || c.ConsoleOrigins != nil || c.WebDir != "/opt/loop-now/web" || c.ReadyFile != "/tmp/loop-now-ready.json" {
+	env[EnvWebDir] = fixturePath("/opt/loop-now/web")
+	env[EnvReadyFile] = fixturePath("/tmp/loop-now-ready.json")
+	if c, err = Load(envOf(env)); err != nil || c.ConsoleOrigins != nil || c.WebDir != fixturePath("/opt/loop-now/web") || c.ReadyFile != fixturePath("/tmp/loop-now-ready.json") {
 		t.Fatalf("覆盖值不对：%v %+v %q %q", err, c.ConsoleOrigins, c.WebDir, c.ReadyFile)
 	}
 }
@@ -417,7 +417,7 @@ func TestBundledDefaults(t *testing.T) {
 			t.Errorf("应取随包的 %s：%q", want, got)
 		}
 	}
-	if c, err = Load(envOf(map[string]string{EnvNodeBin: "/opt/node/bin/node", EnvLoopctlDistDir: "/opt/loopctl-dist"})); err != nil || c.NodeBin != "/opt/node/bin/node" || c.LoopctlDistDir != "/opt/loopctl-dist" {
+	if c, err = Load(envOf(map[string]string{EnvNodeBin: fixturePath("/opt/node/bin/node"), EnvLoopctlDistDir: fixturePath("/opt/loopctl-dist")})); err != nil || c.NodeBin != fixturePath("/opt/node/bin/node") || c.LoopctlDistDir != fixturePath("/opt/loopctl-dist") {
 		t.Fatalf("环境变量应优先：%v %q %q", err, c.NodeBin, c.LoopctlDistDir)
 	}
 }

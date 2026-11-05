@@ -94,8 +94,18 @@ func makePrivate(path string) error {
 
 // onlyCurrentUser 报告安全描述符的 DACL 是否只把访问授予当前用户：没有 DACL（人人可访问）、
 // 有授予别人的 ACE、或有本包不认识的 ACE 类型都算不是。拒绝类 ACE 只会减少访问，忽略。
+// SYSTEM 与 BUILTIN\Administrators 的 ACE 不算"别人"：Windows 用户目录（含 %TEMP%、%LOCALAPPDATA%）天然带着这两条继承 ACE，
+// 它们对应 Unix 上本来就绕过权限位的 root；OpenSSH for Windows 的"权限过宽"检查也是同样的口径。
 func onlyCurrentUser(sd *windows.SECURITY_DESCRIPTOR) bool {
 	me, err := currentUserSID()
+	if err != nil {
+		return false
+	}
+	systemSID, err := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
+	if err != nil {
+		return false
+	}
+	adminsSID, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
 	if err != nil {
 		return false
 	}
@@ -112,7 +122,8 @@ func onlyCurrentUser(sd *windows.SECURITY_DESCRIPTOR) bool {
 		case windows.ACCESS_DENIED_ACE_TYPE:
 			continue
 		case windows.ACCESS_ALLOWED_ACE_TYPE:
-			if !(*windows.SID)(unsafe.Pointer(&ace.SidStart)).Equals(me) {
+			sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
+			if !sid.Equals(me) && !sid.Equals(systemSID) && !sid.Equals(adminsSID) {
 				return false
 			}
 		default:

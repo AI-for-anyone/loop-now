@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -12,7 +13,11 @@ import (
 )
 
 func request(cli string) Request {
-	return Request{CLI: cli, Executable: "/fixture/bin/" + cli, ConnectionID: uuid.MustParse("0192f1a2-0000-7000-8000-000000000001"), ExpectedAppID: "synthetic-app", ExpectedBrand: "feishu"}
+	exe := "/fixture/bin/" + cli
+	if runtime.GOOS == "windows" {
+		exe = `C:\fixture\bin\` + cli + ".exe" // 计划只要求绝对路径
+	}
+	return Request{CLI: cli, Executable: exe, ConnectionID: uuid.MustParse("0192f1a2-0000-7000-8000-000000000001"), ExpectedAppID: "synthetic-app", ExpectedBrand: "feishu"}
 }
 
 func TestBuildFixedPlans(t *testing.T) {

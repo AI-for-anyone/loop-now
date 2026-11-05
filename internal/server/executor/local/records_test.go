@@ -347,6 +347,7 @@ func TestRecordsWorkspaceSyncFailure(t *testing.T) {
 }
 
 func TestRecordsCLIInstall(t *testing.T) {
+	skipWithoutCLITemplates(t)
 	// 只有其他平台安装包的模板：安装尝试以“没有当前平台的安装包”失败，并被记录。
 	dir := t.TempDir()
 	tmpl := `{"name":"zz","version":"1.0.0","injection":"env","fields":[],"credential":{"env":{}},"binary":"zz",

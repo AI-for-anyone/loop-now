@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -189,6 +190,9 @@ func TestInstallRejectsSymlinksAndPublicDirectories(t *testing.T) {
 	}
 }
 func TestInstallConcurrentIdenticalBinaryAssets(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 上目录被别的句柄打开时不能改名，并发发布的竞争语义不同")
+	}
 	root := assetRoot(t)
 	var wg sync.WaitGroup
 	for range 4 {

@@ -19,7 +19,8 @@ func TestDependencies(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, pkg := range strings.Fields(string(out)) {
-		if strings.HasPrefix(pkg, "github.com/santhosh-tekuri/jsonschema/v6") || strings.HasPrefix(pkg, "golang.org/x/text/") {
+		// golang.org/x/sys 由 internal/privatefs 带入（配置文件的"只有当前用户可访问"在 Windows 上要读写 ACL）。
+		if strings.HasPrefix(pkg, "github.com/santhosh-tekuri/jsonschema/v6") || strings.HasPrefix(pkg, "golang.org/x/text/") || strings.HasPrefix(pkg, "golang.org/x/sys") {
 			continue
 		}
 		if !strings.HasPrefix(pkg, "loop-now/") {

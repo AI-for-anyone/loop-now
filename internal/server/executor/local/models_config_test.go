@@ -3,6 +3,7 @@ package local
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"loop-now/internal/server/agentconfig"
@@ -37,7 +38,7 @@ func TestModelsJSONSyncAndIdentityRestart(t *testing.T) {
 	pid := h.pid(id)
 	modelsPath := filepath.Join(h.e.dirs(id).pi, "models.json")
 	info, err := os.Stat(modelsPath)
-	if err != nil || info.Mode().Perm() != 0o600 {
+	if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o600) {
 		t.Fatal("models.json mode", info, err)
 	}
 	data, err := os.ReadFile(modelsPath)
