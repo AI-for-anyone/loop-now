@@ -1,18 +1,20 @@
 # Getting started
 
-Run Loop Now as the **desktop app** (macOS Apple Silicon, nothing else to install), from a **server release bundle** (Linux and macOS), or from a **source installation**; the [README](https://github.com/AI-for-anyone/loop-now#getting-started) also covers Docker Compose. macOS Apple Silicon is the primary validated environment. Some components target Linux, but equivalent full-system coverage is not yet established; the Lark user CLI runtime is currently macOS arm64 only.
+Run Loop Now as the **desktop app** (macOS Apple Silicon or Windows x64, nothing else to install), from a **server release bundle** (Linux, macOS and Windows), or from a **source installation**; the [README](https://github.com/AI-for-anyone/loop-now#getting-started) also covers Docker Compose. macOS Apple Silicon is the primary validated environment. Some components target Linux, but equivalent full-system coverage is not yet established; Windows builds have so far been exercised only in CI; the Lark user CLI runtime is currently macOS arm64 only.
 
 ::: warning Early-stage personal edition
 Loop Now targets a single local server. The console has no login and is intended for loopback access. Model and tool providers may still receive data when you use their services.
 :::
 
-## Desktop app (macOS Apple Silicon)
+## Desktop app (macOS Apple Silicon, Windows x64) {#desktop-app-macos-apple-silicon}
 
-One DMG carries the server, the console, Node and Pi; nothing else is required.
+One installer carries the server, the console, Node and Pi; nothing else is required.
 
 1. Download `loop-now-desktop-<version>-mac-arm64.dmg` from [Releases](https://github.com/AI-for-anyone/loop-now/releases/latest), open it and drag Loop Now into Applications.
 2. First launch: the package is not yet notarized by Apple, so macOS says it cannot verify the developer. Open System Settings › Privacy & Security, find the Security section and click "Open Anyway"; the prompt does not return.
 3. A Loop Now icon appears in the menu bar and the window shows the console. Closing the window keeps the server and the agents running in the background; choose "Quit" from the menu bar icon to stop everything.
+
+On Windows, download `loop-now-desktop-<version>-win-x64.exe` instead. The installer is not signed, so SmartScreen says "Windows protected your PC": click "More info", then "Run anyway". It installs for the current user (no administrator rights) and the window and tray icon work as on macOS; closing the window keeps everything running, and "Quit" is in the tray menu. Data is in `%LOCALAPPDATA%\Loop Now\default` (`data`, `logs`) and agent workspaces in `%ProgramData%\loop-now-desktop\default`.
 
 Where the data lives: the database and daily backups are in `~/Library/Application Support/Loop Now/default/data`, agent workspaces in `/Users/Shared/loop-now-desktop/default`, logs in `~/Library/Logs/Loop Now/default`. By default the desktop app never touches the source installation's `~/.loop_now` or `/Users/Shared/loop-now`, so both can coexist; to take a source installation over, see [below](#moving-to-the-desktop-app). To try it with a separate data set, start it with a profile: `open -a "Loop Now" --args --profile=trial`.
 
@@ -55,18 +57,19 @@ The import leaves the old database unchanged. A source installation already on v
 
 Continue with [Give your first agent a job](#give-your-first-agent-a-job).
 
-## Server release bundle (Linux / macOS)
+## Server release bundle (Linux / macOS / Windows) {#server-release-bundle-linux-macos}
 
-Each release also carries a server bundle per platform, `loop-now-<version>-<platform>.tar.gz` for `darwin-arm64`, `darwin-amd64`, `linux-amd64` and `linux-arm64`. It holds `loop-server` with the console built in, `loopctl`, the plugin host, the official plugins, and its own Node 24.21.0 and Pi 1.4.0, so the machine needs only Git.
+Each release also carries a server bundle per platform, `loop-now-<version>-<platform>.tar.gz` for `darwin-arm64`, `darwin-amd64`, `linux-amd64` and `linux-arm64`, and `loop-now-<version>-windows-amd64.zip`. It holds `loop-server` with the console built in, `loopctl`, the plugin host, the official plugins, and its own Node 24.21.0 and Pi 1.4.0, so the machine needs only Git.
 
 1. Download your platform's bundle and `SHA256SUMS` from [Releases](https://github.com/AI-for-anyone/loop-now/releases/latest), then check the download:
 
    ```sh
    sha256sum -c --ignore-missing SHA256SUMS        # Linux
    shasum -a 256 -c --ignore-missing SHA256SUMS    # macOS
+   certutil -hashfile loop-now-<version>-windows-amd64.zip SHA256   # Windows: compare with the line in SHA256SUMS
    ```
 
-2. Unpack it with `tar` in a terminal. On macOS, unpacking it in Finder marks the files as downloaded from the internet, and Gatekeeper then blocks the unsigned binaries.
+2. Unpack it with `tar` in a terminal. On macOS, unpacking it in Finder marks the files as downloaded from the internet, and Gatekeeper then blocks the unsigned binaries. On Windows, extract the zip anywhere (Explorer or `Expand-Archive`).
 
    ```sh
    tar -xzf loop-now-<version>-<platform>.tar.gz
@@ -80,6 +83,8 @@ Each release also carries a server bundle per platform, `loop-now-<version>-<pla
    export LOOP_NOW_WORK_ROOT='/var/lib/loop-now'   # macOS: /Users/Shared/loop-now
    ./loop-server
    ```
+
+   On Windows, run `loop-server.exe` directly; without the variables it uses `%LOCALAPPDATA%\Loop Now\data` and `%ProgramData%\loop-now`. The server has no SIGTERM there: stop it with Ctrl+C in its console, or start it with `LOOP_NOW_STOP_ON_STDIN_CLOSE=1` and close its stdin.
 
 4. Open **[http://127.0.0.1:8780/](http://127.0.0.1:8780/)**. The console is served at the root of the server's port; there is no separate console process.
 

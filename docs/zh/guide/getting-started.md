@@ -1,18 +1,20 @@
 # 快速上手
 
-可以用**桌面版**（macOS Apple Silicon，什么都不用另装）、**服务端发行包**（Linux、macOS），也可以**从源码安装**；Docker Compose 一体化启动见 [README](https://github.com/AI-for-anyone/loop-now/blob/main/README.zh-CN.md#开始使用)。macOS Apple Silicon 是主要验证环境，部分组件支持 Linux，但尚未建立等效的整系统覆盖；飞书用户 CLI 运行时目前仅支持 macOS arm64。
+可以用**桌面版**（macOS Apple Silicon、Windows x64，什么都不用另装）、**服务端发行包**（Linux、macOS、Windows），也可以**从源码安装**；Docker Compose 一体化启动见 [README](https://github.com/AI-for-anyone/loop-now/blob/main/README.zh-CN.md#开始使用)。macOS Apple Silicon 是主要验证环境，部分组件支持 Linux，但尚未建立等效的整系统覆盖；Windows 版目前只在 CI 上验证过；飞书用户 CLI 运行时目前仅支持 macOS arm64。
 
 ::: warning 早期个人版
 Loop Now 面向本地单实例。控制台没有登录功能，应通过本机回环地址访问。使用模型或工具供应商时，相关数据仍会发送给对应服务。
 :::
 
-## 桌面版（macOS Apple Silicon） {#desktop-app-macos-apple-silicon}
+## 桌面版（macOS Apple Silicon、Windows x64） {#desktop-app-macos-apple-silicon}
 
-一个 DMG 里带着服务端、控制台、Node 和 Pi，不需要另装任何东西。
+一个安装包里带着服务端、控制台、Node 和 Pi，不需要另装任何东西。
 
 1. 从 [Releases](https://github.com/AI-for-anyone/loop-now/releases/latest) 下载 `loop-now-desktop-<版本>-mac-arm64.dmg`，打开后把 Loop Now 拖进"应用程序"。
 2. 第一次打开：安装包目前没有 Apple 公证，macOS 会提示无法验证开发者。到"系统设置 › 隐私与安全性"，在"安全性"一栏点"仍要打开"，之后不再提示。
 3. 启动后菜单栏出现 Loop Now 图标，窗口里就是控制台。关掉窗口，服务端和 Agent 仍在后台运行；要彻底停止，从菜单栏图标选"退出"。
+
+Windows 下载 `loop-now-desktop-<版本>-win-x64.exe`。安装包没有签名，SmartScreen 会提示"Windows 已保护你的电脑"：点"更多信息"，再点"仍要运行"。按当前用户安装（不需要管理员），窗口与托盘图标的用法和 macOS 相同：关窗口不停服务，"退出"在托盘菜单里。数据在 `%LOCALAPPDATA%\Loop Now\default`（`data`、`logs`），Agent 工作区在 `%ProgramData%\loop-now-desktop\default`。
 
 数据在哪：数据库和每日备份在 `~/Library/Application Support/Loop Now/default/data`，Agent 工作区在 `/Users/Shared/loop-now-desktop/default`，日志在 `~/Library/Logs/Loop Now/default`。桌面版默认不使用源码安装的 `~/.loop_now` 和 `/Users/Shared/loop-now`，两种安装可以并存；要接过源码安装，见[下文](#moving-to-the-desktop-app)。要用一套独立的数据试用，带参数启动：`open -a "Loop Now" --args --profile=trial`。
 
@@ -55,18 +57,19 @@ Loop Now 面向本地单实例。控制台没有登录功能，应通过本机�
 
 接下来看[给第一个 Agent 派活](#give-your-first-agent-a-job)。
 
-## 服务端发行包（Linux / macOS） {#server-release-bundle-linux-macos}
+## 服务端发行包（Linux / macOS / Windows） {#server-release-bundle-linux-macos}
 
-每个版本在 Releases 里还有各平台的服务端发行包 `loop-now-<版本>-<平台>.tar.gz`，平台有 `darwin-arm64`、`darwin-amd64`、`linux-amd64`、`linux-arm64`。包里有内嵌控制台的 `loop-server`、`loopctl`、插件宿主、官方插件，以及随包的 Node 24.21.0 和 Pi 1.4.0，机器上只需要有 Git。
+每个版本在 Releases 里还有各平台的服务端发行包 `loop-now-<版本>-<平台>.tar.gz`，平台有 `darwin-arm64`、`darwin-amd64`、`linux-amd64`、`linux-arm64`，另有 `loop-now-<版本>-windows-amd64.zip`。包里有内嵌控制台的 `loop-server`、`loopctl`、插件宿主、官方插件，以及随包的 Node 24.21.0 和 Pi 1.4.0，机器上只需要有 Git。
 
 1. 从 [Releases](https://github.com/AI-for-anyone/loop-now/releases/latest) 下载对应平台的包和 `SHA256SUMS`，校验下载：
 
    ```sh
    sha256sum -c --ignore-missing SHA256SUMS        # Linux
    shasum -a 256 -c --ignore-missing SHA256SUMS    # macOS
+   certutil -hashfile loop-now-<版本>-windows-amd64.zip SHA256   # Windows：与 SHA256SUMS 里的那一行比对
    ```
 
-2. 在终端里用 `tar` 解开。macOS 上如果在访达里解开，文件会被标记为来自互联网，未签名的程序会被 Gatekeeper 拦下。
+2. 在终端里用 `tar` 解开。macOS 上如果在访达里解开，文件会被标记为来自互联网，未签名的程序会被 Gatekeeper 拦下。Windows 的 zip 在资源管理器里或用 `Expand-Archive` 解开到任意目录即可。
 
    ```sh
    tar -xzf loop-now-<版本>-<平台>.tar.gz
@@ -80,6 +83,8 @@ Loop Now 面向本地单实例。控制台没有登录功能，应通过本机�
    export LOOP_NOW_WORK_ROOT='/var/lib/loop-now'   # macOS 用 /Users/Shared/loop-now
    ./loop-server
    ```
+
+   Windows 直接运行 `loop-server.exe`；不设这两个变量时用 `%LOCALAPPDATA%\Loop Now\data` 与 `%ProgramData%\loop-now`。Windows 没有 SIGTERM：在它的控制台按 Ctrl+C 停止，或以 `LOOP_NOW_STOP_ON_STDIN_CLOSE=1` 启动、要停时关掉它的 stdin。
 
 4. 打开 **[http://127.0.0.1:8780/](http://127.0.0.1:8780/)**。控制台就在服务端口的根路径，不需要另起控制台。
 

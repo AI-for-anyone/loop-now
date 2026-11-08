@@ -40,14 +40,14 @@
 
 ## 发行包与桌面壳
 
-发行包（`scripts/release/build.sh` 或 `release` 工作流产出）解开是一个目录：
+发行包（`scripts/release/build.sh` 或 `release` 工作流产出；darwin/linux 是 tar.gz，windows 是 zip）解开是一个目录：
 
 | 路径 | 内容 |
 | --- | --- |
-| `loop-server` | 内嵌控制台的服务端，在自己的端口上于 `/` 提供控制台 |
+| `loop-server` | 内嵌控制台的服务端，在自己的端口上于 `/` 提供控制台（Windows：`loop-server.exe`，顶层另有 `loopctl.exe`） |
 | `loopctl-dist/` | 各平台的 `loopctl` |
 | `plugins/host/main.js`、`plugins/official/` | 插件宿主与官方插件 |
-| `runtime/node/` | Node 24.21.0（带 npm） |
+| `runtime/node/` | Node 24.21.0（带 npm；Unix 在 `bin/node`，Windows 是顶层的 `node.exe`） |
 | `runtime/pi/` | 用这个 Node 安装的 Pi 编码 Agent 1.4.0 |
 
 `LOOP_NOW_NODE_BIN`、`LOOP_NOW_PI_BIN`、`LOOP_NOW_LOOPCTL_DIST_DIR`、`LOOP_NOW_PLUGIN_HOST_ENTRY`、`LOOP_NOW_PLUGIN_OFFICIAL_DIR` 没有设置、而 `loop-server` 旁边有对应文件时就用它们，机器上不必另装 Node 和 Pi。配置的 Node 所在目录排在 Agent 的 `PATH` 最前。
