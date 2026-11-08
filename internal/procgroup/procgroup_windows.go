@@ -95,32 +95,58 @@ func withJob(pid int, fn func(windows.Handle) error) (bool, error) {
 	return true, fn(job)
 }
 
-// jobBasicAccounting 是 JOBOBJECT_BASIC_ACCOUNTING_INFORMATION（x/sys 没有定义）。
-type jobBasicAccounting struct {
-	TotalUserTime             int64
-	TotalKernelTime           int64
-	ThisPeriodTotalUserTime   int64
-	ThisPeriodTotalKernelTime int64
-	TotalPageFaultCount       uint32
-	TotalProcesses            uint32
-	ActiveProcesses           uint32
-	TotalTerminatedProcesses  uint32
+// jobProcessIDs 返回 Job 里登记的全部进程 PID（JobObjectBasicProcessIdList）。已经退出但进程对象还没销毁的进程
+// （父进程或本包的 watch 协程还握着它的句柄）仍在列表里，也仍计入 ActiveProcesses，所以存活要另行判断。
+func jobProcessIDs(job windows.Handle) ([]uint32, error) {
+	const header = 8 // NumberOfAssignedProcesses、NumberOfProcessIdsInList 两个 DWORD
+	ptr := int(unsafe.Sizeof(uintptr(0)))
+	capacity := 64
+	for {
+		buf := make([]uint64, (header+capacity*ptr+7)/8)
+		base := unsafe.Pointer(&buf[0])
+		err := windows.QueryInformationJobObject(job, windows.JobObjectBasicProcessIdList, uintptr(base), uint32(len(buf)*8), nil)
+		assigned := int(*(*uint32)(base))
+		listed := int(*(*uint32)(unsafe.Add(base, 4)))
+		if err != nil && !errors.Is(err, windows.ERROR_MORE_DATA) {
+			return nil, err
+		}
+		if err != nil || listed < assigned {
+			// 列表装不下：按内核报的总数放大再查一次（数量在两次查询之间还可能变化，所以留余量）。
+			capacity = max(assigned, capacity*2) + 16
+			continue
+		}
+		pids := make([]uint32, listed)
+		for i := range pids {
+			pids[i] = uint32(*(*uintptr)(unsafe.Add(base, header+i*ptr)))
+		}
+		return pids, nil
+	}
 }
 
-// activeProcesses 返回 Job 里仍存活的进程数。
-func activeProcesses(job windows.Handle) (uint32, error) {
-	var acct jobBasicAccounting
-	if err := windows.QueryInformationJobObject(job, windows.JobObjectBasicAccountingInformation, uintptr(unsafe.Pointer(&acct)), uint32(unsafe.Sizeof(acct)), nil); err != nil {
-		return 0, err
+// jobAlive 报告 Job 里是否还有没退出的进程。
+//
+// 不能只看 ActiveProcesses：组长退出后内核先让它的进程句柄进入有信号状态（cmd.Wait 由此返回），
+// 直到进程对象销毁才把它从 Job 的计数里去掉；而 Go 的 os.Process 与本包的 watch 协程此时可能还握着句柄。
+// 在这个窗口里查 ActiveProcesses 会得到 1，让“进程已退出且组里没人”的确认偶发失败（CI 上的 Windows runner 就撞到过）。
+// 这里改为枚举组里的 PID，逐个看退出码是否仍是 STILL_ACTIVE。
+func jobAlive(job windows.Handle) (bool, error) {
+	pids, err := jobProcessIDs(job)
+	if err != nil {
+		return false, err
 	}
-	return acct.ActiveProcesses, nil
+	for _, pid := range pids {
+		if processAlive(int(pid)) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // kill 结束整组：本进程建的 Job 用 TerminateJobObject；上一个服务端实例留下的进程（只有 pid，没有 Job）退回到
 // 结束该进程本身——它的后代在上一个实例退出、Job 句柄关闭时已经随之结束。
 func kill(pid int) error {
 	if ok, err := withJob(pid, func(job windows.Handle) error {
-		if n, err := activeProcesses(job); err == nil && n == 0 {
+		if live, err := jobAlive(job); err == nil && !live {
 			return errNotFound
 		}
 		return windows.TerminateJobObject(job, 1)
@@ -146,11 +172,11 @@ func terminate(pid int) error { return kill(pid) }
 
 func probe(pid int) error {
 	if ok, err := withJob(pid, func(job windows.Handle) error {
-		n, err := activeProcesses(job)
+		live, err := jobAlive(job)
 		if err != nil {
 			return err
 		}
-		if n == 0 {
+		if !live {
 			return errNotFound
 		}
 		return nil

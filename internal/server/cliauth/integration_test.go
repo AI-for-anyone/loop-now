@@ -387,7 +387,7 @@ func TestGooglePGRequiresLoginIsStableSafeClassification(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer conn.Close()
-	conn.SetDeadline(time.Now().Add(time.Second))
+	conn.SetDeadline(time.Now().Add(brokerReplyDeadline))
 	json.NewEncoder(conn).Encode(map[string]any{"protocol": 1, "type": "resolve", "requestId": uuid.New(), "capability": broker.capability})
 	raw, e := io.ReadAll(conn)
 	if e != nil {
