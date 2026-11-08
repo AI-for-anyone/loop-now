@@ -45,7 +45,7 @@ jobs:
           - { runner: ubuntu-24.04, target: linux/amd64 }
           - { runner: ubuntu-24.04-arm, target: linux/arm64 }
           # 交叉构建：产物是 zip，不 smoke（Linux 上跑不了 loop-server.exe）；Windows 上的 Go 测试在 ci.yml 的 server-windows。
-          - { runner: ubuntu-24.04, target: windows/amd64, smoke: false }
+          - { runner: ubuntu-24.04, target: windows/amd64 }
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -66,7 +66,11 @@ jobs:
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "artifact=loop-now-$v-$(echo '${{ matrix.target }}' | tr / -)" >> "$GITHUB_OUTPUT"
       - name: build and smoke test
-        run: scripts/release/build.sh --only ${{ matrix.target }} ${{ matrix.smoke == false && '' || '--smoke' }} "${{ steps.version.outputs.version }}" out
+        # windows 是交叉构建，产物在 Linux 上跑不起来，不 --smoke。
+        run: |
+          smoke=--smoke
+          case '${{ matrix.target }}' in windows/*) smoke= ;; esac
+          scripts/release/build.sh --only '${{ matrix.target }}' $smoke "${{ steps.version.outputs.version }}" out
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.version.outputs.artifact }}
