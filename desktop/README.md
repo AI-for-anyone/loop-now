@@ -15,7 +15,7 @@ LOOP_NOW_DESKTOP_BUNDLE=<发行包的平台目录> ../web/bin/npm24 run dist:mac
 LOOP_NOW_DESKTOP_BUNDLE=<Windows 发行包的平台目录> ../web/bin/npm24 run dist:win   # 在 macOS 上也能交叉打出 NSIS 包
 ```
 
-服务端的 Windows 发行包还没有时，可以用 `npm run fake-bundle -- <目录> --os windows --arch amd64` 搭一个假的（`test/fakeserver`：只监听、写就绪文件、回答 `/healthz`），用来验证打包；单测也用它真的拉起、停掉和清理孤儿（没有 `go` 时跳过）。
+Windows 的服务端发行包用 `scripts/release/build.sh --only windows/amd64 <版本> <输出目录>` 在任何机器上交叉构建（产出 `loop-now-<版本>-windows-amd64.zip` 与解开的平台目录）；只验证打包时也可以用 `npm run fake-bundle -- <目录> --os windows --arch amd64` 搭一个假的（`test/fakeserver`：只监听、写就绪文件、回答 `/healthz`），单测也用它真的拉起、停掉和清理孤儿（没有 `go` 时跳过）。发布时 `release.yml` 的 `desktop-win` job 在 windows-latest 上取 build 矩阵里的 Windows 服务端 zip 打出 `loop-now-desktop-<版本>-win-x64.exe`（NSIS，不签名：SmartScreen 要点"更多信息 → 仍要运行"）与 `latest.yml`。
 
 配置依次取 `--profile=<名字或绝对路径>`、`LOOP_NOW_DESKTOP_PROFILE`、`~/Library/Application Support/Loop Now/desktop.json`（Windows：`%APPDATA%\Loop Now\desktop.json`）里的 `{"profile": "<名字>"}`（从 Finder 打开时带不了参数）；打包后的 app 都没选时用名为 `default` 的默认配置。是名字时，macOS 上壳的文件、服务端的数据目录与上下文目录分别在 `~/Library/Application Support/Loop Now/<名字>/` 下的 `shell`、`data`、`context`，日志在 `~/Library/Logs/Loop Now/<名字>`，工作根在 `/Users/Shared/loop-now-desktop/<名字>`；Windows 上都在 `%LOCALAPPDATA%\Loop Now\<名字>\` 下的 `shell`、`data`、`context`、`logs`，工作根在 `%ProgramData%\loop-now-desktop\<名字>`（服务端不接受 `%USERPROFILE%` 之内的工作根，`%LOCALAPPDATA%` 在其中；ProgramData 相当于 `/Users/Shared`）；是绝对路径时都放在它下面。
 

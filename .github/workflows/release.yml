@@ -1,8 +1,9 @@
 name: release
 
-# 发布构建：每个平台在对应架构的机器上运行 scripts/release/build.sh（Pi 的依赖要在目标架构上安装），
-# 用产物实际启动一次，再把压缩包与校验和作为 artifact 上传。macOS arm64 另把服务端发行包装进桌面壳，出 DMG 与更新用的 zip，
-# 只做 ad-hoc 签名，都不公证；Windows x64 的桌面版（NSIS，不签名）等服务端的 Windows 包，见 desktop-win。最后汇总全部产物写 SHA256SUMS；推 v* tag 时据此创建 GitHub Release，tag 带 - 的标为预发布
+# 发布构建：darwin/linux 每个平台在对应架构的机器上运行 scripts/release/build.sh（Pi 的依赖要在目标架构上安装）并用产物实际启动一次；
+# windows/amd64 在 ubuntu 上交叉构建（Go 交叉编译，Pi 的依赖不分平台），出 zip，不 smoke。压缩包与校验和作为 artifact 上传。
+# macOS arm64 把服务端发行包装进桌面壳，出 DMG 与更新用的 zip，只做 ad-hoc 签名，不公证；Windows x64 把服务端 zip 装进桌面壳，
+# 出 NSIS 安装包，不签名。最后汇总全部产物写 SHA256SUMS；推 v* tag 时据此创建 GitHub Release，tag 带 - 的标为预发布
 # （预发布一律用 -beta.N，如 v0.3.0-beta.1）。说明取自 CHANGELOG.md 里该版本的一节或 tag 注解（scripts/release/notes.sh）。
 # 手动运行只构建，不建 Release。
 on:
@@ -11,10 +12,6 @@ on:
       version:
         description: 版本号（不带 v），例如 0.9.0
         required: true
-      desktop_win:
-        description: 也构建 Windows 桌面版（需要服务端的 windows/amd64 包，目前还没有）
-        type: boolean
-        default: false
   push:
     tags: ["v*"]
 
@@ -47,6 +44,8 @@ jobs:
           - { runner: macos-15-intel, target: darwin/amd64 }
           - { runner: ubuntu-24.04, target: linux/amd64 }
           - { runner: ubuntu-24.04-arm, target: linux/arm64 }
+          # 交叉构建：产物是 zip，不 smoke（Linux 上跑不了 loop-server.exe）；Windows 上的 Go 测试在 ci.yml 的 server-windows。
+          - { runner: ubuntu-24.04, target: windows/amd64 }
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -67,13 +66,19 @@ jobs:
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "artifact=loop-now-$v-$(echo '${{ matrix.target }}' | tr / -)" >> "$GITHUB_OUTPUT"
       - name: build and smoke test
-        run: scripts/release/build.sh --only ${{ matrix.target }} --smoke "${{ steps.version.outputs.version }}" out
+        # windows 是交叉构建，产物在 Linux 上跑不起来，不 --smoke。
+        run: |
+          smoke=--smoke
+          case '${{ matrix.target }}' in windows/*) smoke= ;; esac
+          scripts/release/build.sh --only '${{ matrix.target }}' $smoke "${{ steps.version.outputs.version }}" out
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.version.outputs.artifact }}
           path: |
             out/*.tar.gz
             out/*.tar.gz.sha256
+            out/*.zip
+            out/*.zip.sha256
           if-no-files-found: error
 
   # 桌面版（macOS arm64）：把上面 darwin/arm64 的服务端发行包整个放进 app 的 Resources/server，
@@ -133,14 +138,11 @@ jobs:
             .local-build/desktop/latest-mac.yml
           if-no-files-found: error
 
-  # 桌面版（Windows x64）：把 windows/amd64 的服务端发行包（loop-server.exe 那一套）放进 resources\server，出 NSIS 安装包、
+  # 桌面版（Windows x64）：把 windows/amd64 的服务端发行包（loop-server.exe 那一套，zip）解开放进 resources\server，出 NSIS 安装包、
   # blockmap 与 latest.yml（electron-updater 在 Windows 上读的更新信息）。不签名：SmartScreen 会提示"仍要运行"。
-  # 服务端的 Windows 包还没有（build 矩阵里没有 windows/amd64），这个 job 先只在手动运行且勾了 desktop_win 时跑；
-  # 服务端包合入后：把 windows/amd64 加进 build 矩阵，去掉这里的条件。
   desktop-win:
     name: desktop (windows/amd64)
     needs: build
-    if: github.event_name == 'workflow_dispatch' && inputs.desktop_win
     runs-on: windows-latest
     defaults:
       run:
@@ -172,8 +174,10 @@ jobs:
           SERVER: ${{ steps.version.outputs.server }}
         run: |
           cd "$RUNNER_TEMP/server"
-          sha256sum -c "$SERVER.tar.gz.sha256"
-          tar -xzf "$SERVER.tar.gz"
+          sha256sum -c "$SERVER.zip.sha256"
+          # Git Bash 没有 unzip，runner 自带 7-Zip。
+          7z x -bso0 -bsp0 "$SERVER.zip"
+          test -f "$SERVER/loop-server.exe"
           echo "LOOP_NOW_DESKTOP_BUNDLE=$RUNNER_TEMP/server/$SERVER" >> "$GITHUB_ENV"
       - run: npm ci --no-audit --no-fund
       - run: npm run typecheck
@@ -194,13 +198,11 @@ jobs:
             .local-build/desktop/latest.yml
           if-no-files-found: error
 
-  # 汇总：全部 artifact（四个平台的服务端包、桌面版的 DMG、zip、blockmap、latest-mac.yml，启用后还有 Windows 的 exe 与 latest.yml）
+  # 汇总：全部 artifact（五个平台的服务端包、macOS 桌面版的 DMG、zip、blockmap、latest-mac.yml，Windows 桌面版的 exe、blockmap、latest.yml）
   # 平铺到一个目录，构建时写的单个校验和核对后并进 SHA256SUMS（不另外挂出）；推 tag 时把目录里的文件全部挂到 GitHub Release。
-  # desktop-win 被跳过时照常汇总（它的 result 是 skipped）。
   release:
     name: release
     needs: [notes, build, desktop-mac, desktop-win]
-    if: ${{ !cancelled() && needs.notes.result == 'success' && needs.build.result == 'success' && needs.desktop-mac.result == 'success' && (needs.desktop-win.result == 'success' || needs.desktop-win.result == 'skipped') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -213,8 +215,8 @@ jobs:
       - name: SHA256SUMS
         working-directory: dist
         run: |
-          sha256sum -c -- *.tar.gz.sha256
-          rm -- *.tar.gz.sha256
+          sha256sum -c -- *.sha256
+          rm -- *.sha256
           sha256sum -- * > "$RUNNER_TEMP/SHA256SUMS"
           mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
           sha256sum -c SHA256SUMS

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 发布构建：为本机平台产出 loop-now 发行目录与压缩包，并写出校验和。发行目录里有：
-#   loop-server            内嵌控制台的服务端
+# 发布构建：产出 loop-now 发行目录与压缩包，并写出校验和。发行目录里有：
+#   loop-server            内嵌控制台的服务端（Windows：loop-server.exe，另有 loopctl.exe）
 #   loopctl-dist/<版本>/    各平台的 loopctl 与它的 SHA256SUMS、manifest.json
 #   plugins/host/main.js   插件宿主；plugins/official/ 官方插件
 #   runtime/node/          官方 Node（带 npm）；runtime/pi/ 用它安装的 Pi
@@ -8,8 +8,10 @@
 #
 #   scripts/release/build.sh [--only <os>/<arch>] [--smoke] <版本> <输出目录>
 #
-# Pi 的依赖要在目标架构上安装，所以只构建本机平台；--only 用来确认目标就是本机。--smoke 用产物实际启动一次。
-# 需要：Go、Node 24.21.0（构建控制台与插件宿主）、git、curl，以及网络（下载 Node、安装依赖与 Pi）。
+# darwin 与 linux 只构建本机平台（--only 用来确认目标就是本机）；windows/amd64 在任何机器上交叉构建：Go 交叉编译，Pi 的依赖
+# 不分平台（各平台的预编译件都随包），用本机 npm 按 win32/x64 安装。--smoke 用产物实际启动一次，交叉构建不能 smoke。
+# 压缩包：darwin/linux 是 tar.gz，windows 是 zip。
+# 需要：Go、Node 24.21.0（构建控制台与插件宿主、安装 Pi）、git、curl、zip/unzip（windows），以及网络（下载 Node、安装依赖与 Pi）。
 set -euo pipefail
 
 NODE_VERSION=24.21.0
@@ -25,7 +27,7 @@ while [ $# -gt 0 ]; do
 	esac
 done
 if [ $# -ne 2 ]; then
-	sed -n '2,13p' "$0" >&2
+	sed -n '2,14p' "$0" >&2
 	exit 2
 fi
 version="$1"
@@ -39,15 +41,20 @@ sha256() { if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -
 
 host="$(go env GOHOSTOS)/$(go env GOHOSTARCH)"
 target="${only:-$host}"
-[ "$target" = "$host" ] || fail "只能构建本机平台 ${host}（Pi 的依赖要在目标架构上安装），收到 --only $target"
 goos="${target%/*}" goarch="${target#*/}"
 case "$goarch" in amd64) nodearch=x64 ;; arm64) nodearch=arm64 ;; *) fail "不支持的架构 $goarch" ;; esac
+case "$goos" in
+darwin | linux) [ "$target" = "$host" ] || fail "只能构建本机平台 ${host}（Pi 的依赖要在目标架构上安装），收到 --only $target"; exe="" archive=tar.gz ;;
+windows) [ "$goarch" = amd64 ] || fail "Windows 只支持 amd64"; exe=.exe archive=zip ;;
+*) fail "不支持的平台 $goos" ;;
+esac
+[ "$smoke" = 0 ] || [ "$target" = "$host" ] || fail "交叉构建 $target 不能 --smoke"
 [ "$(node --version)" = "v$NODE_VERSION" ] || fail "构建控制台需要 Node ${NODE_VERSION}，当前是 $(node --version)"
 
 name="loop-now-$version-$goos-$goarch"
 bundle="$out/$name"
 cache="$out/.cache"
-rm -rf "$bundle" "$out/$name.tar.gz" "$out/$name.tar.gz.sha256"
+rm -rf "$bundle" "$out/$name.$archive" "$out/$name.$archive.sha256"
 mkdir -p "$bundle" "$cache"
 
 step "构建控制台（同源访问 API：/api/v1）"
@@ -62,34 +69,61 @@ step "构建 loopctl 发行目录 $version"
 rm -rf "$cache/loopctl-dist"
 (cd "$root" && go run ./cmd/loopctl-dist -version "$version" -out "$cache/loopctl-dist")
 
-step "构建 loop-server ${version}（$goos/${goarch}，内嵌控制台）"
+step "构建 loop-server${exe} ${version}（$goos/${goarch}，内嵌控制台）"
 (cd "$root" && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -tags embedweb \
-	-ldflags "-s -w -X loop-now/internal/buildinfo.version=$version" -o "$bundle/loop-server" ./cmd/loop-server)
+	-ldflags "-s -w -X loop-now/internal/buildinfo.version=$version" -o "$bundle/loop-server$exe" ./cmd/loop-server)
 
 step "组装发行目录"
 cp -R "$cache/loopctl-dist" "$bundle/loopctl-dist"
+# Windows 包在顶层放一份本平台的 loopctl.exe，解开就能用（loopctl-dist 里的那份是服务端发给 Agent 的载荷）。
+[ "$goos" != windows ] || cp "$cache/loopctl-dist/$version/loopctl-$goos-$goarch$exe" "$bundle/loopctl$exe"
 mkdir -p "$bundle/plugins/host"
 cp "$root/plugins/host/dist/main.js" "$bundle/plugins/host/main.js"
 tar -C "$root/plugins" --exclude node_modules -cf - official | tar -C "$bundle/plugins" -xf -
 
 step "随包 Node $NODE_VERSION"
-node_tar="node-v$NODE_VERSION-$goos-$nodearch.tar.gz"
-if [ ! -f "$cache/$node_tar" ]; then
-	curl -fsSL -o "$cache/$node_tar.part" "https://nodejs.org/dist/v$NODE_VERSION/$node_tar"
-	mv "$cache/$node_tar.part" "$cache/$node_tar"
+# 官方包：darwin/linux 是 tar.gz（node 在 bin/ 下），windows 是 zip（node.exe 在顶层）；都去掉顶层目录放进 runtime/node。
+case "$goos" in windows) node_archive="node-v$NODE_VERSION-win-$nodearch.zip" ;; *) node_archive="node-v$NODE_VERSION-$goos-$nodearch.tar.gz" ;; esac
+if [ ! -f "$cache/$node_archive" ]; then
+	curl -fsSL -o "$cache/$node_archive.part" "https://nodejs.org/dist/v$NODE_VERSION/$node_archive"
+	mv "$cache/$node_archive.part" "$cache/$node_archive"
 fi
 curl -fsSL -o "$cache/SHASUMS256-$NODE_VERSION.txt" "https://nodejs.org/dist/v$NODE_VERSION/SHASUMS256.txt"
-want="$(awk -v f="$node_tar" '$2 == f {print $1}' "$cache/SHASUMS256-$NODE_VERSION.txt")"
-[ -n "$want" ] && [ "$(sha256 "$cache/$node_tar")" = "$want" ] || fail "$node_tar 的校验和与 nodejs.org 公布的不符"
+want="$(awk -v f="$node_archive" '$2 == f {print $1}' "$cache/SHASUMS256-$NODE_VERSION.txt")"
+[ -n "$want" ] && [ "$(sha256 "$cache/$node_archive")" = "$want" ] || fail "$node_archive 的校验和与 nodejs.org 公布的不符"
 mkdir -p "$bundle/runtime/node"
-tar -xzf "$cache/$node_tar" -C "$bundle/runtime/node" --strip-components=1
+if [ "$goos" = windows ]; then
+	rm -rf "$cache/node-unzip"
+	mkdir -p "$cache/node-unzip"
+	unzip -q "$cache/$node_archive" -d "$cache/node-unzip"
+	top="$(find "$cache/node-unzip" -mindepth 1 -maxdepth 1)"
+	[ "$(echo "$top" | wc -l)" -eq 1 ] && [ -f "$top/node.exe" ] || fail "$node_archive 里应只有一个含 node.exe 的顶层目录"
+	cp -R "$top"/. "$bundle/runtime/node"
+	rm -rf "$cache/node-unzip"
+else
+	tar -xzf "$cache/$node_archive" -C "$bundle/runtime/node" --strip-components=1
+fi
 
-step "随包 Pi ${PI_VERSION}（用随包的 Node 与 npm 安装）"
-PATH="$bundle/runtime/node/bin:$PATH" npm install --prefix "$bundle/runtime/pi" --omit=dev --no-audit --no-fund \
-	"@earendil-works/pi-coding-agent@$PI_VERSION" >&2
-pi="$bundle/runtime/pi/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"
-got="$(PATH="$bundle/runtime/node/bin:/usr/bin:/bin" PI_OFFLINE=1 PI_SKIP_VERSION_CHECK=1 HOME="$cache" "$pi" --version)"
-[ "$got" = "$PI_VERSION" ] || fail "随包 Pi 的版本是 ${got}，期望 $PI_VERSION"
+if [ "$goos" = windows ]; then
+	# 交叉构建跑不了随包的 node.exe，用本机的 Node ${NODE_VERSION} 与 npm 按目标平台安装；Pi 的依赖树各平台相同（预编译件全部随包）。
+	step "随包 Pi ${PI_VERSION}（用本机 npm 按 win32/$nodearch 安装）"
+	npm install --prefix "$bundle/runtime/pi" --os win32 --cpu "$nodearch" --omit=dev --no-audit --no-fund \
+		"@earendil-works/pi-coding-agent@$PI_VERSION" >&2
+	# npm 在 Unix 上生成的 .bin 是符号链接，Windows 用不了也不需要（服务端直接用 node.exe 运行 cli.js）。
+	rm -rf "$bundle/runtime/pi/node_modules/.bin"
+	pi="$bundle/runtime/pi/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"
+	got="$(PI_OFFLINE=1 PI_SKIP_VERSION_CHECK=1 HOME="$cache" node "$pi" --version)"
+	[ "$got" = "$PI_VERSION" ] || fail "随包 Pi 的版本是 ${got}，期望 $PI_VERSION"
+	links="$(find "$bundle" -type l)"
+	[ -z "$links" ] || fail "Windows 包里不能有符号链接：$links"
+else
+	step "随包 Pi ${PI_VERSION}（用随包的 Node 与 npm 安装）"
+	PATH="$bundle/runtime/node/bin:$PATH" npm install --prefix "$bundle/runtime/pi" --omit=dev --no-audit --no-fund \
+		"@earendil-works/pi-coding-agent@$PI_VERSION" >&2
+	pi="$bundle/runtime/pi/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"
+	got="$(PATH="$bundle/runtime/node/bin:/usr/bin:/bin" PI_OFFLINE=1 PI_SKIP_VERSION_CHECK=1 HOME="$cache" "$pi" --version)"
+	[ "$got" = "$PI_VERSION" ] || fail "随包 Pi 的版本是 ${got}，期望 $PI_VERSION"
+fi
 
 if [ "$smoke" = 1 ]; then
 	step "用发行目录实际启动一次"
@@ -139,7 +173,11 @@ if (registered?.id !== "anthropic") throw new Error("anthropic provider not regi
 fi
 
 step "打包"
-tar -czf "$out/$name.tar.gz" -C "$out" "$name"
-echo "$(sha256 "$out/$name.tar.gz")  $name.tar.gz" >"$out/$name.tar.gz.sha256"
-du -sh "$bundle" "$out/$name.tar.gz" >&2
-cat "$out/$name.tar.gz.sha256"
+if [ "$archive" = zip ]; then
+	(cd "$out" && zip -q -r -X "$out/$name.zip" "$name")
+else
+	tar -czf "$out/$name.tar.gz" -C "$out" "$name"
+fi
+echo "$(sha256 "$out/$name.$archive")  $name.$archive" >"$out/$name.$archive.sha256"
+du -sh "$bundle" "$out/$name.$archive" >&2
+cat "$out/$name.$archive.sha256"
