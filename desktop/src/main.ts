@@ -1,6 +1,6 @@
 // Loop Now 桌面壳：拉起并守护 loop-server，窗口加载它在同一端口提供的控制台，菜单栏图标显示状态。
 // 壳只做壳，不含业务逻辑。
-import { app, dialog, powerMonitor, session, shell, type BrowserWindow } from 'electron'
+import { app, clipboard, dialog, powerMonitor, session, shell, type BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -10,6 +10,7 @@ import { setAppMenu } from './menu'
 import { handleNotifications } from './notifications'
 import { choosePort, portOf } from './port'
 import { addToUserPath, cliLink, installLink, linkState, readUserPath, userPathHas } from './cli'
+import { externalCertPath, loopctlConfigCommand } from './external'
 import { gitUsable, installGit } from './git'
 import { cliBinary, cliInstallMode, current as platform, serverBinary } from './platform'
 import { defaultProfile, overridesFromFile, profileArg, profileEnv, profileFromFile, profileSummary, resolveProfile, type Profile } from './profile'
@@ -49,6 +50,7 @@ function run(): void {
   const shellLog = new RotatingLog(join(logDir, 'shell.log'))
   const serverLog = new RotatingLog(join(logDir, 'server.log'))
   const settings = new SettingsFile(join(userData, 'settings.json'))
+  const externalTLSDir = join(userData, 'tls')
   const note = (text: string) => shellLog.line(text)
   // 每次启动的第一行：用的哪个配置、交给服务端的三个目录。
   const which = profile ? profileSummary(profile) : profileError ? `配置不可用（${profileError}）` : '没有选配置'
@@ -78,6 +80,8 @@ function run(): void {
     note,
     // 第一次交给系统选，之后沿用记住的端口（见 port.ts）。
     choosePort: () => choosePort(settings.read().port ?? 0),
+    // 对外 TLS 端口（外部身份与 loopctl）：同样记住端口；自签证书放在壳的 userData/tls，由服务端维护。
+    external: { tlsDir: externalTLSDir, choosePort: () => choosePort(settings.read().externalPort ?? 0) },
   })
   const window = new MainWindow({
     // 默认配置的窗口标题不带名字。
@@ -93,7 +97,7 @@ function run(): void {
   const updates = new UpdateChecker(autoUpdater, note)
   updates.on('available', (version) => {
     note(`有新版本 ${version}`)
-    tray?.update(server.state, server.url)
+    tray?.update(server.state, server.url, server.externalUrl)
   })
 
   const startingView = (): StatusView => ({ title: strings().page.startingTitle, body: strings().page.startingBody, busy: true })
@@ -185,10 +189,23 @@ function run(): void {
     await info(s.pathDone, `${s.pathDoneDetail(dir)}\n\n${s.external}`)
   }
 
+  // 托盘"外部身份连接方式…"：对外 TLS 端口的地址、自签证书的位置和把令牌配进 loopctl 的命令，可以一键复制命令。
+  // 菜单项只在服务端就绪且开了对外端口时可点，这里仍防一手。
+  async function showExternal(): Promise<void> {
+    const url = server.externalUrl
+    if (!url) return
+    const s = strings().external
+    const caFile = externalCertPath(externalTLSDir)
+    const command = loopctlConfigCommand(url, caFile)
+    app.focus({ steal: true })
+    const { response } = await dialog.showMessageBox({ type: 'info', message: s.title, detail: s.detail(url, caFile, command), buttons: [s.copy, s.close], defaultId: 0, cancelId: 1 })
+    if (response === 0) clipboard.writeText(command)
+  }
+
   let previous: ServerState = server.state
   server.on('state', (state) => {
     note(`状态：${previous} → ${state}`)
-    tray?.update(state, server.url)
+    tray?.update(state, server.url, server.externalUrl)
     // 崩溃后的自动重启保留控制台页面（它会自己重连）；其余启动显示状态页。
     if (state === 'starting' && previous !== 'restarting') window.showStatus(startingView())
     if (state === 'failed') {
@@ -203,8 +220,14 @@ function run(): void {
   })
   server.on('ready', (url) => {
     const port = portOf(url)
-    if (port !== undefined && port !== settings.read().port) settings.update({ port })
-    tray?.update(server.state, url)
+    const externalPort = server.externalUrl ? portOf(server.externalUrl) : undefined
+    const remembered = settings.read()
+    const patch = {
+      ...(port !== undefined && port !== remembered.port ? { port } : {}),
+      ...(externalPort !== undefined && externalPort !== remembered.externalPort ? { externalPort } : {}),
+    }
+    if (Object.keys(patch).length > 0) settings.update(patch)
+    tray?.update(server.state, url, server.externalUrl)
     window.showConsole(url)
   })
 
@@ -271,13 +294,14 @@ function run(): void {
         browser: () => server.url && void shell.openExternal(server.url),
         logs: () => void shell.openPath(logDir),
         cli: () => void installCli(),
+        external: () => void showExternal(),
         restart: () => void server.restart(),
         quit: () => void quit(true),
       },
       profile,
       () => updates.available,
     )
-    tray.update(server.state, server.url)
+    tray.update(server.state, server.url, server.externalUrl)
     if (app.isPackaged) updates.start()
     const view = blocked()
     if (view) {

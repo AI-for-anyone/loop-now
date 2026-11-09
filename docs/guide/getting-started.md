@@ -18,7 +18,7 @@ Where the data lives: the database and daily backups are in `~/Library/Applicati
 
 Updating: quit Loop Now, replace the app in Applications with the new DMG's copy and open it again; data is kept. "Check for updates" in the menu bar announces new versions and opens the download page; automatic installation arrives once the app is signed and notarized.
 
-Agents in the desktop app run on the bundled Pi 1.4.0 and Node 24.21; model accounts, CLI accounts and plugins are configured in the console exactly as in a source installation. External identities and `loopctl` need the external TLS port, which the desktop app cannot open yet.
+Agents in the desktop app run on the bundled Pi 1.4.0 and Node 24.21; model accounts, CLI accounts and plugins are configured in the console exactly as in a source installation. The external TLS port used by external identities and `loopctl` is opened automatically on this computer only (127.0.0.1; the port is chosen by the system the first time and kept afterwards), with a self-signed certificate the server maintains itself. Menu bar icon › "External Identity Connection…" shows the address, the certificate location and the command that stores a token in `loopctl` (`loopctl config set default --server https://127.0.0.1:<port> --ca-file "<certificate>" --token-stdin`), with a copy button; tokens are issued under "External Identities" in the console. Connections from other machines are not accepted yet.
 
 ### Moving over from a source installation {#moving-to-the-desktop-app}
 

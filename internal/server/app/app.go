@@ -48,6 +48,7 @@ import (
 	"loop-now/internal/server/plugins"
 	"loop-now/internal/server/preflight"
 	"loop-now/internal/server/runrecord"
+	"loop-now/internal/server/selfsigned"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/tasks"
 	"loop-now/internal/server/webui"
@@ -188,9 +189,22 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	log.Info("已安装 loopctl", "version", dist.Manifest.Version, "binDir", loopctlBin)
 	var extTLS *tls.Config
 	if cfg.ExternalListenAddr != "" {
-		cert, err := tls.LoadX509KeyPair(cfg.ExternalTLSCert, cfg.ExternalTLSKey)
-		if err != nil {
-			return a, fmt.Errorf("读取对外端口的 TLS 证书失败：%w", err)
+		var cert tls.Certificate
+		if cfg.ExternalTLSSelfSigned != "" {
+			// 服务端自己维护的自签证书：覆盖回环地址与对外监听的主机；loopctl 把 cert.pem 当 --ca-file。
+			host, _, _ := net.SplitHostPort(cfg.ExternalListenAddr)
+			c, certPath, generated, err := selfsigned.Load(cfg.ExternalTLSSelfSigned, []string{host}, time.Now())
+			if err != nil {
+				return a, fmt.Errorf("准备对外端口的自签证书失败：%w", err)
+			}
+			log.Info("对外端口使用自签证书", "cert", certPath, "generated", generated)
+			cert = c
+		} else {
+			c, err := tls.LoadX509KeyPair(cfg.ExternalTLSCert, cfg.ExternalTLSKey)
+			if err != nil {
+				return a, fmt.Errorf("读取对外端口的 TLS 证书失败：%w", err)
+			}
+			cert = c
 		}
 		extTLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}
 	}
@@ -526,7 +540,11 @@ func (a *App) Serve() error {
 	a.Log.Info("开始提供服务", "addr", a.Addr())
 	if a.Cfg.ReadyFile != "" {
 		// 监听器早已打开，连接在 Serve 开始前排队，所以这时写出就绪文件不会让人连上一个还不回答的端口。
-		if err := writeReadyFile(a.Cfg.ReadyFile, Ready{URL: "http://" + a.Addr(), PID: os.Getpid(), Version: buildinfo.Version()}); err != nil {
+		ready := Ready{URL: "http://" + a.Addr(), PID: os.Getpid(), Version: buildinfo.Version()}
+		if a.external != nil {
+			ready.ExternalURL = "https://" + a.ExternalAddr()
+		}
+		if err := writeReadyFile(a.Cfg.ReadyFile, ready); err != nil {
 			return fmt.Errorf("写就绪文件 %s 失败：%w", a.Cfg.ReadyFile, err)
 		}
 		a.readyWritten = true

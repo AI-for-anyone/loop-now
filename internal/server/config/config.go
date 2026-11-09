@@ -98,10 +98,13 @@ const (
 	EnvExternalListenAddr = "LOOP_NOW_EXTERNAL_LISTEN_ADDR"
 	EnvExternalTLSCert    = "LOOP_NOW_EXTERNAL_TLS_CERT"
 	EnvExternalTLSKey     = "LOOP_NOW_EXTERNAL_TLS_KEY"
-	EnvTextEditExtensions = "LOOP_NOW_TEXT_EDIT_EXTENSIONS"
-	EnvTextEditMax        = "LOOP_NOW_TEXT_EDIT_MAX"
-	EnvLogFormat          = "LOOP_NOW_LOG_FORMAT"
-	EnvLogLevel           = "LOOP_NOW_LOG_LEVEL"
+	// EnvExternalTLSSelfSigned 是一个目录：对外端口改用服务端自己维护的自签证书（目录里的 cert.pem 与 key.pem，
+	// 没有或已过期时生成），与证书／私钥两项互斥。桌面壳用它开对外端口，loopctl 以 cert.pem 为 --ca-file。
+	EnvExternalTLSSelfSigned = "LOOP_NOW_EXTERNAL_TLS_SELF_SIGNED"
+	EnvTextEditExtensions    = "LOOP_NOW_TEXT_EDIT_EXTENSIONS"
+	EnvTextEditMax           = "LOOP_NOW_TEXT_EDIT_MAX"
+	EnvLogFormat             = "LOOP_NOW_LOG_FORMAT"
+	EnvLogLevel              = "LOOP_NOW_LOG_LEVEL"
 )
 
 // Config 是服务端的全部配置。
@@ -189,14 +192,15 @@ type Config struct {
 	// LoopctlDistDir 是 loopctl 构建产物的根目录，其中 <版本>/manifest.json 必须与服务端同版本。
 	// 没有设置时取 loop-server 旁边的 loopctl-dist（发布包），都没有则拒绝启动。
 	LoopctlDistDir string
-	// ExternalListenAddr 为空时不开启对外端口；开启时必须配置 TLS 证书与私钥。
-	ExternalListenAddr string
-	ExternalTLSCert    string
-	ExternalTLSKey     string
-	TextEditExtensions []string
-	TextEditMax        int64
-	LogFormat          string     // text 或 json
-	LogLevel           slog.Level // debug、info、warn、error
+	// ExternalListenAddr 为空时不开启对外端口；开启时必须配置 TLS 证书与私钥，或者让服务端用 ExternalTLSSelfSigned 目录里的自签证书。
+	ExternalListenAddr    string
+	ExternalTLSCert       string
+	ExternalTLSKey        string
+	ExternalTLSSelfSigned string
+	TextEditExtensions    []string
+	TextEditMax           int64
+	LogFormat             string     // text 或 json
+	LogLevel              slog.Level // debug、info、warn、error
 
 	// Warnings 是不阻止启动、但需要醒目提示的问题，例如监听非回环地址。
 	Warnings []string
@@ -311,17 +315,18 @@ func Load(getenv func(string) string) (*Config, error) {
 		MaxCredential:     p.size(EnvMaxCredential, "64KiB"),
 		MaxMessage:        p.size(EnvMaxMessage, "64KiB"),
 		MaxMessageImages:  p.integer(EnvMaxMessageImages, 4), MaxMessageImageBytes: p.size(EnvMaxMessageImageBytes, "5MiB"), MaxMessageImagePixels: int64(p.integer(EnvMaxMessageImagePixels, 20_000_000)),
-		MaxInboxMessage:    p.size(EnvMaxInboxMessage, "64KiB"),
-		InboxQuestionTTL:   p.duration(EnvInboxQuestionTTL, "168h"),
-		InboxPreviewChars:  p.integer(EnvInboxPreviewChars, 200),
-		InboxPageMax:       p.integer(EnvInboxPageMax, 100),
-		LoopctlDistDir:     p.str(EnvLoopctlDistDir, bundled(BundledLoopctlDist, "")),
-		ExternalListenAddr: p.str(EnvExternalListenAddr, ""),
-		ExternalTLSCert:    p.str(EnvExternalTLSCert, ""),
-		ExternalTLSKey:     p.str(EnvExternalTLSKey, ""),
-		TextEditExtensions: p.list(EnvTextEditExtensions, defaultTextEditExtensions),
-		TextEditMax:        p.size(EnvTextEditMax, "1MiB"),
-		LogFormat:          p.str(EnvLogFormat, "text"),
+		MaxInboxMessage:       p.size(EnvMaxInboxMessage, "64KiB"),
+		InboxQuestionTTL:      p.duration(EnvInboxQuestionTTL, "168h"),
+		InboxPreviewChars:     p.integer(EnvInboxPreviewChars, 200),
+		InboxPageMax:          p.integer(EnvInboxPageMax, 100),
+		LoopctlDistDir:        p.str(EnvLoopctlDistDir, bundled(BundledLoopctlDist, "")),
+		ExternalListenAddr:    p.str(EnvExternalListenAddr, ""),
+		ExternalTLSCert:       p.str(EnvExternalTLSCert, ""),
+		ExternalTLSKey:        p.str(EnvExternalTLSKey, ""),
+		ExternalTLSSelfSigned: p.str(EnvExternalTLSSelfSigned, ""),
+		TextEditExtensions:    p.list(EnvTextEditExtensions, defaultTextEditExtensions),
+		TextEditMax:           p.size(EnvTextEditMax, "1MiB"),
+		LogFormat:             p.str(EnvLogFormat, "text"),
 	}
 	c.LogLevel = p.logLevel(EnvLogLevel, "info")
 	if c.LogFormat != "text" && c.LogFormat != "json" {
@@ -466,6 +471,7 @@ func (c *Config) LogValue() slog.Value {
 		slog.String("externalListenAddr", c.ExternalListenAddr),
 		slog.String("externalTLSCert", c.ExternalTLSCert),
 		slog.String("externalTLSKey", c.ExternalTLSKey),
+		slog.String("externalTLSSelfSigned", c.ExternalTLSSelfSigned),
 		slog.Any("textEditExtensions", c.TextEditExtensions),
 		slog.Int64("textEditMax", c.TextEditMax),
 		slog.String("logFormat", c.LogFormat),
@@ -650,8 +656,16 @@ func (p *parser) checkListenAddr(addr string) []string {
 	return nil
 }
 
-// checkExternal 校验对外端口：配置了监听地址时必须同时配置证书与私钥。
+// checkExternal 校验对外端口：配置了监听地址时必须同时配置证书与私钥，或者只配置自签证书目录（规范的绝对路径）。
 func (p *parser) checkExternal(c *Config) {
+	if c.ExternalTLSSelfSigned != "" {
+		if !filepath.IsAbs(c.ExternalTLSSelfSigned) || filepath.Clean(c.ExternalTLSSelfSigned) != c.ExternalTLSSelfSigned {
+			p.fail(EnvExternalTLSSelfSigned, "须为规范的绝对路径（当前 %q）", c.ExternalTLSSelfSigned)
+		}
+		if c.ExternalTLSCert != "" || c.ExternalTLSKey != "" {
+			p.fail(EnvExternalTLSSelfSigned, "与 %s、%s 不能同时设置", EnvExternalTLSCert, EnvExternalTLSKey)
+		}
+	}
 	if c.ExternalListenAddr == "" {
 		return
 	}
@@ -660,11 +674,14 @@ func (p *parser) checkExternal(c *Config) {
 	} else if n, err := strconv.Atoi(port); err != nil || n < 0 || n > 65535 {
 		p.fail(EnvExternalListenAddr, "端口不合法：%q", port)
 	}
+	if c.ExternalTLSSelfSigned != "" {
+		return
+	}
 	if c.ExternalTLSCert == "" {
-		p.fail(EnvExternalTLSCert, "开启对外端口时必需（%s 已设置）", EnvExternalListenAddr)
+		p.fail(EnvExternalTLSCert, "开启对外端口时必需（%s 已设置；或改设 %s 用自签证书）", EnvExternalListenAddr, EnvExternalTLSSelfSigned)
 	}
 	if c.ExternalTLSKey == "" {
-		p.fail(EnvExternalTLSKey, "开启对外端口时必需（%s 已设置）", EnvExternalListenAddr)
+		p.fail(EnvExternalTLSKey, "开启对外端口时必需（%s 已设置；或改设 %s 用自签证书）", EnvExternalListenAddr, EnvExternalTLSSelfSigned)
 	}
 }
 

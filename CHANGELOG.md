@@ -2,6 +2,18 @@
 
 各版本面向使用者的变化。发布流水线取对应版本的一节作为 GitHub Release 的说明（见 `scripts/release/notes.sh`）。
 
+## v0.2.1
+
+修复桌面版里外部身份和 `loopctl` 用不了的问题。
+
+### 桌面版
+
+- 外部身份和 `loopctl` 可以用了：桌面版自动在本机（127.0.0.1）开对外 TLS 端口，端口第一次由系统选、之后沿用，证书是服务端自己维护的自签证书（`~/Library/Application Support/Loop Now/<配置>/shell/tls/cert.pem`）。菜单栏图标多了"外部身份连接方式…"，显示地址、证书位置和把令牌配进 `loopctl` 的命令，可以一键复制。之前创建的 `lne_` 令牌不用重发。目前只接受本机的连接。
+
+### 服务端
+
+- 新增 `LOOP_NOW_EXTERNAL_TLS_SELF_SIGNED=<目录>`：对外端口改用服务端在该目录里维护的自签证书（`cert.pem`、`key.pem`，没有或临近过期时生成，覆盖回环地址与对外监听的主机），与 `LOOP_NOW_EXTERNAL_TLS_CERT`／`LOOP_NOW_EXTERNAL_TLS_KEY` 互斥。开了对外端口时就绪文件多一项 `externalUrl`。
+
 ## v0.2.0
 
 这一版把存储换成了 SQLite，不再需要 PostgreSQL 和 Redis，并推出 macOS 桌面版。从 v0.1.0 升级要做一次数据导入，见下文"从 v0.1.0 升级"。
