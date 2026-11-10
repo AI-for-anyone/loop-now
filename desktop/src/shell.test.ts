@@ -378,10 +378,12 @@ describe('托盘菜单', () => {
 
 describe('外部身份连接方式', () => {
   test('证书在壳的 tls 目录下；loopctl 配置命令带 https 地址、加引号的 CA 路径，令牌从标准输入读', () => {
-    const caFile = externalCertPath('/Users/someone/Library/Application Support/Loop Now/default/shell/tls')
-    assert.equal(caFile, '/Users/someone/Library/Application Support/Loop Now/default/shell/tls/cert.pem')
+    // 路径分隔符跟着运行的平台走（Windows 上是反斜杠），所以期望值也用 join 拼。
+    const tlsDir = join('/Users/someone/Library/Application Support/Loop Now/default/shell', 'tls')
+    const caFile = externalCertPath(tlsDir)
+    assert.equal(caFile, join(tlsDir, 'cert.pem'))
     assert.equal(
-      loopctlConfigCommand('https://127.0.0.1:8781', caFile),
+      loopctlConfigCommand('https://127.0.0.1:8781', '/Users/someone/Library/Application Support/Loop Now/default/shell/tls/cert.pem'),
       'loopctl config set default --server https://127.0.0.1:8781 --ca-file "/Users/someone/Library/Application Support/Loop Now/default/shell/tls/cert.pem" --token-stdin',
     )
     const detail = stringsFor('zh-CN').external.detail('https://127.0.0.1:8781', caFile, 'CMD')
