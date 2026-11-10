@@ -8,6 +8,8 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"loop-now/internal/execenv"
 )
 
 // DefaultUserPathTimeout 是从登录 shell 读取 PATH 的时限。
@@ -67,15 +69,17 @@ func (u *UserPath) run() {
 	u.log.Info("已解析用户的 PATH", "source", source, "dirs", len(dirs))
 }
 
-// splitDirs 按平台的分隔符拆开 PATH，只保留绝对路径（去掉 . 与相对目录），规范化并去重。
+// splitDirs 按平台的分隔符拆开 PATH，只保留绝对路径（去掉 . 与相对目录），规范化并去重（Windows 上不分大小写，保留先出现的写法）。
 func splitDirs(raw string) []string {
 	var out []string
+	seen := map[string]bool{}
 	for _, d := range filepath.SplitList(raw) {
 		if d == "" || !filepath.IsAbs(d) {
 			continue
 		}
-		if d = filepath.Clean(d); !slices.Contains(out, d) {
-			out = append(out, d)
+		if k := execenv.PathKey(d); !seen[k] {
+			seen[k] = true
+			out = append(out, filepath.Clean(d))
 		}
 	}
 	return out

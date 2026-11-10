@@ -4,11 +4,13 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/execenv"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/executor"
 )
@@ -16,10 +18,18 @@ import (
 // 本机模式：生效且存在的本机目录写进“文件夹与上下文”一节，用户 PATH 接在执行 PATH 之后；
 // 清单或开关变化时下一次派发按新配置重启（保留会话），目录是否存在的变化不触发重启。
 func TestLocalModePromptPathAndRestart(t *testing.T) {
-	userBin := filepath.Join(t.TempDir(), "user-bin")
+	// 用本平台写法的执行 PATH（Windows 上以分号分隔）；用户 PATH 里重复了其中一个目录（Windows 上换了大小写），只应出现一次。
+	baseA, baseB, userBin := filepath.Join(t.TempDir(), "base-a"), filepath.Join(t.TempDir(), "base-b"), filepath.Join(t.TempDir(), "user-bin")
+	sep := string(os.PathListSeparator)
+	basePath := baseA + sep + baseB
+	dupA := baseA
+	if runtime.GOOS == "windows" {
+		dupA = strings.ToUpper(baseA)
+	}
 	h := newHarness(t, func(o *Options) {
 		o.ContextDir = t.TempDir()
-		o.UserPath = func(context.Context) []string { return []string{"/usr/bin", userBin} }
+		o.ExecBasePath = basePath
+		o.UserPath = func(context.Context) []string { return []string{dupA, userBin} }
 	}, "")
 	dumpPath := filepath.Join(t.TempDir(), "dump.json")
 	h.env["FAKEPI_DUMP"] = dumpPath
@@ -45,7 +55,7 @@ func TestLocalModePromptPathAndRestart(t *testing.T) {
 	if !strings.Contains(d.SystemPrompt, "完整的读写权限") || !strings.Contains(d.SystemPrompt, "不会被回收") {
 		t.Fatalf("应如实说明读写权限：\n%s", d.SystemPrompt)
 	}
-	if path := d.Env["PATH"]; !strings.HasSuffix(path, "/usr/bin:/bin:/usr/sbin:/sbin:"+userBin) || strings.Count(path, "/usr/bin:") != 1 {
+	if path := d.Env["PATH"]; !strings.HasSuffix(path, basePath+sep+userBin) || countDir(path, baseA) != 1 {
 		t.Fatalf("用户 PATH 应接在最后且不重复：%s", path)
 	}
 	pid := h.pid(id)
@@ -79,7 +89,7 @@ func TestLocalModePromptPathAndRestart(t *testing.T) {
 	if res, _ := h.exec(id, "fourth"); res.Outcome != executor.OutcomeCompleted || h.pid(id) == pid {
 		t.Fatal("PATH 开关变化应重启 Pi")
 	}
-	if d = readDump(t, dumpPath); strings.Contains(d.Env["PATH"], userBin) || !strings.HasSuffix(d.Env["PATH"], "/usr/bin:/bin:/usr/sbin:/sbin") {
+	if d = readDump(t, dumpPath); strings.Contains(d.Env["PATH"], userBin) || !strings.HasSuffix(d.Env["PATH"], basePath) {
 		t.Fatalf("关掉后 PATH 不应带用户目录：%s", d.Env["PATH"])
 	}
 }
@@ -113,4 +123,21 @@ func TestAppendUserPath(t *testing.T) {
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("appendUserPath = %v", got)
 	}
+	// Windows 的目录不分大小写：SYSTEMROOT 拼出的 System32 与用户 PATH 里的 system32 是同一个。
+	got = appendUserPath([]string{`C:\WINDOWS\System32` + sep + `C:\WINDOWS`}, []string{`C:\WINDOWS\system32`, `c:\windows`, `C:\Tools\bin`})
+	want = []string{`C:\WINDOWS\System32` + sep + `C:\WINDOWS`, `C:\Tools\bin`}
+	if runtime.GOOS == "windows" && strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("Windows 上应不分大小写去重：%v", got)
+	}
+}
+
+// countDir 数 PATH 里与 dir 相同的目录有几个（按 execenv.PathKey 比较）。
+func countDir(path, dir string) int {
+	n := 0
+	for _, d := range filepath.SplitList(path) {
+		if execenv.PathKey(d) == execenv.PathKey(dir) {
+			n++
+		}
+	}
+	return n
 }

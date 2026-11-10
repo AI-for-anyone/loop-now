@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -29,8 +28,13 @@ func GitIdentityEnv(ctx context.Context, gitBin, basePath string, userPath []str
 		return nil, fmt.Errorf("读取服务端进程用户的主目录失败：%w", err)
 	}
 	dirs := filepath.SplitList(basePath)
+	seen := map[string]bool{}
+	for _, d := range dirs {
+		seen[execenv.PathKey(d)] = true
+	}
 	for _, d := range userPath {
-		if !slices.Contains(dirs, d) {
+		if k := execenv.PathKey(d); !seen[k] {
+			seen[k] = true
 			dirs = append(dirs, d)
 		}
 	}
