@@ -15,7 +15,7 @@ import (
 func addLocal(r *cli.Registry) {
 	r.Add(&cli.Command{
 		Path:    []string{"version"},
-		Summary: "输出本地 loopctl 的版本、操作系统、架构与 Go 版本，不发出请求",
+		Summary: "Print the local loopctl version, operating system, architecture and Go version; sends no request",
 		Output:  "{version, os, arch, goVersion}",
 		Run: func(_ context.Context, inv *cli.Invocation) (any, error) {
 			s := inv.Sys
@@ -24,10 +24,10 @@ func addLocal(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:    []string{"schema"},
-		Summary: "输出机器可读的命令说明：全部命令、错误类别与退出码、身份与连接参数、全局选项；不需要连接配置，不发出请求",
-		Args:    []cli.Arg{{Name: "path", Description: "命令路径，例如 inbox list；路径是命令组时输出其直接子命令；不写时输出全部", Variadic: true}},
+		Summary: "Print a machine-readable description of the commands: all commands, error categories and exit codes, identities and connection parameters, and global options; needs no connection configuration and sends no request",
+		Args:    []cli.Arg{{Name: "path", Description: "Command path, for example inbox list; when the path is a command group, prints its direct subcommands; when omitted, prints everything", Variadic: true}},
 		Flags: []cli.Flag{
-			{Name: "identity", Type: cli.TypeEnum, Values: []string{"agent", "external"}, Description: "只输出该身份可用的命令"},
+			{Name: "identity", Type: cli.TypeEnum, Values: []string{"agent", "external"}, Description: "Print only the commands available to this identity"},
 		},
 		Output: "完整说明 {program, version, envelope, exitCodes, errorCodes, identities, environment, globalFlags, commands}；指定路径时为该命令或命令组的说明",
 		Run: func(_ context.Context, inv *cli.Invocation) (any, error) {
@@ -40,7 +40,7 @@ func addLocal(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"whoami"},
-		Summary:    "查询当前身份的类型、地址与名称",
+		Summary:    "Show the type, address and name of the current identity",
 		Identities: both,
 		Network:    true,
 		Retry:      true,
@@ -52,15 +52,15 @@ func addLocal(r *cli.Registry) {
 
 	r.Add(&cli.Command{
 		Path:       []string{"config", "set"},
-		Summary:    "新建或修改一个 profile，至少修改一项；令牌只能用 --token-stdin 从标准输入写入；不连接服务端",
+		Summary:    "Create or change a profile, changing at least one item; the token can only be written from standard input with --token-stdin; does not connect to the server",
 		Identities: externalOnly,
 		Stdin:      true,
-		Args:       []cli.Arg{{Name: "profile", Description: "profile 名称：字母或数字开头，可含 . _ -，最长 64 个字符"}},
+		Args:       []cli.Arg{{Name: "profile", Description: "Profile name: starts with a letter or digit, may contain . _ -, at most 64 characters"}},
 		Flags: []cli.Flag{
-			{Name: "server", Type: cli.TypeString, Description: "对外端口的根地址，必须是 https://"},
-			{Name: "ca-file", Type: cli.TypePath, Description: "PEM 格式的 CA 证书，至少含一张证书；保存为绝对路径"},
-			{Name: "clear-ca", Type: cli.TypeBool, Description: "清除已保存的 CA 文件，改用系统根证书"},
-			{Name: "token-stdin", Type: cli.TypeBool, Description: "从标准输入读取第一行作为外部令牌（lne_ 开头）"},
+			{Name: "server", Type: cli.TypeString, Description: "Root address of the external port; must be https://"},
+			{Name: "ca-file", Type: cli.TypePath, Description: "CA certificate in PEM format containing at least one certificate; saved as an absolute path"},
+			{Name: "clear-ca", Type: cli.TypeBool, Description: "Clear the saved CA file and use the system root certificates"},
+			{Name: "token-stdin", Type: cli.TypeBool, Description: "Read the first line of standard input as the external token (starting with lne_)"},
 		},
 		Constraints: []cli.Constraint{
 			{Kind: cli.AtLeastOne, Flags: []string{"server", "ca-file", "clear-ca", "token-stdin"}},
@@ -71,20 +71,20 @@ func addLocal(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"config", "list"},
-		Summary:    "列出全部 profile 的摘要，并标出按当前选项与环境变量会选中哪一个及其依据；不连接服务端",
+		Summary:    "List summaries of all profiles and mark which one the current options and environment variables would select, and why; does not connect to the server",
 		Identities: externalOnly,
 		Flags: []cli.Flag{
-			{Name: "profile", Type: cli.TypeString, Description: "按这个 profile 计算选中结果，与连接命令的 --profile 相同"},
+			{Name: "profile", Type: cli.TypeString, Description: "Compute the selection with this profile, the same as --profile of the connecting commands"},
 		},
 		Output: "{path, exists, profiles: [profile 摘要], selected: {name, by, exists}, envOverrides: [环境变量名]}",
 		Run:    configList,
 	})
 	r.Add(&cli.Command{
 		Path:        []string{"config", "delete"},
-		Summary:     "删除一个 profile；不连接服务端",
+		Summary:     "Delete a profile; does not connect to the server",
 		Identities:  externalOnly,
 		Destructive: true,
-		Args:        []cli.Arg{{Name: "profile", Description: "profile 名称"}},
+		Args:        []cli.Arg{{Name: "profile", Description: "Profile name"}},
 		Output:      "{name, deleted}",
 		Run:         configDelete,
 	})

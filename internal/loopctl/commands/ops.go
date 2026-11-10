@@ -14,13 +14,13 @@ import (
 func addOps(r *cli.Registry) {
 	r.Add(&cli.Command{
 		Path:       []string{"usage", "list"},
-		Summary:    "按 Agent 与模型统计时间段内的 token 用量，按总数降序；只统计 token，不含费用",
+		Summary:    "Total token usage in a time range by Agent and model, sorted by total descending; counts tokens only, no cost",
 		Identities: externalOnly,
 		Network:    true,
 		Retry:      true,
 		Flags: []cli.Flag{
-			{Name: "from", Type: cli.TypeTime, Description: "起始时间（含），RFC 3339；不指定时不限"},
-			{Name: "to", Type: cli.TypeTime, Description: "结束时间（不含），RFC 3339；不指定时到当前"},
+			{Name: "from", Type: cli.TypeTime, Description: "Start time (inclusive), RFC 3339; unbounded when not given"},
+			{Name: "to", Type: cli.TypeTime, Description: "End time (exclusive), RFC 3339; up to now when not given"},
 			scopeFlags[0], scopeFlags[1],
 		},
 		Constraints: []cli.Constraint{scopeOptional},
@@ -40,12 +40,12 @@ func addOps(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"anomaly", "list"},
-		Summary:    "分页列出失败或被打断的回复（含服务端重启中断），新的在前；用 agent timeline 查看其中一条的运行记录",
+		Summary:    "Page through replies that failed or were interrupted (including those interrupted by a server restart), newest first; use agent timeline to see the run record of one of them",
 		Identities: externalOnly,
 		Network:    true,
 		Retry:      true,
 		Flags: []cli.Flag{
-			{Name: "from", Type: cli.TypeTime, Description: "只列这个时间之后结束的回复，RFC 3339；不指定时不限"},
+			{Name: "from", Type: cli.TypeTime, Description: "Only list replies that ended after this time, RFC 3339; unbounded when not given"},
 			cursorFlag, limitFlag,
 			scopeFlags[0], scopeFlags[1],
 		},
@@ -64,7 +64,7 @@ func addOps(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"health"},
-		Summary:    "查看服务端的本地数据库是否正常；不正常时以 server_unhealthy 失败，details 为健康状态",
+		Summary:    "Check whether the server's local database is healthy; when it is not, fails with server_unhealthy and details holds the health status",
 		Identities: externalOnly,
 		Network:    true,
 		Retry:      true,

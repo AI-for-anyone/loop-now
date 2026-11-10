@@ -21,12 +21,12 @@ import (
 	"loop-now/internal/pluginmanifest"
 )
 
-var pluginArg = cli.Arg{Name: "plugin", Description: "插件 id，取自 plugin list"}
+var pluginArg = cli.Arg{Name: "plugin", Description: "Plugin id, from plugin list"}
 
 func addPlugins(r *cli.Registry) {
 	r.Add(&cli.Command{
 		Path:       []string{"plugin", "list"},
-		Summary:    "已安装的插件：状态、版本、启用项目数与授权 Agent 数",
+		Summary:    "Installed plugins: status, version, number of enabling projects and number of granted Agents",
 		Identities: externalOnly,
 		Network:    true,
 		Retry:      true,
@@ -37,12 +37,12 @@ func addPlugins(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path: []string{"plugin", "install"},
-		Summary: "安装插件：先取来并展示清单，再安装。来源写法：builtin:<id> 或官方插件 id；git 仓库地址（可带 @ref，或写 git:<地址>）；" +
-			"npm:<包名>[@版本]；本机目录（绝对路径或 ./ 开头，须在服务端所在机器上）。非官方来源要加 --force 确认",
+		Summary: "Install a plugin: fetch it and show its manifest first, then install. Source forms: builtin:<id> or an official plugin id; a git repository address (optionally with @ref, or written as git:<address>); " +
+			"npm:<package>[@version]; a local directory (an absolute path or starting with ./, on the machine where the server runs). Unofficial sources need --force to confirm",
 		Identities: externalOnly,
 		Network:    true,
-		Args:       []cli.Arg{{Name: "source", Description: "插件来源，写法见命令说明"}},
-		Flags:      []cli.Flag{{Name: "force", Type: cli.TypeBool, Description: "确认安装非官方来源（git、npm、本机目录）"}},
+		Args:       []cli.Arg{{Name: "source", Description: "Plugin source; see the command description for the forms"}},
+		Flags:      []cli.Flag{{Name: "force", Type: cli.TypeBool, Description: "Confirm installing from an unofficial source (git, npm, a local directory)"}},
 		Output:     "Plugin",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			force := inv.Bool("force")
@@ -59,11 +59,11 @@ func addPlugins(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"plugin", "update"},
-		Summary:    "从插件安装时记录的来源取来最新内容并装为新版本；宿主内先卸载旧版本再加载新版本，已经启动的 Pi 用旧文件直到重启。非官方来源要加 --force",
+		Summary:    "Fetch the latest content from the source recorded at install time and install it as a new version; the host unloads the old version before loading the new one, and a Pi that is already running keeps the old files until it restarts. Unofficial sources need --force",
 		Identities: externalOnly,
 		Network:    true,
 		Args:       []cli.Arg{pluginArg},
-		Flags:      []cli.Flag{{Name: "force", Type: cli.TypeBool, Description: "确认更新非官方来源的插件"}},
+		Flags:      []cli.Flag{{Name: "force", Type: cli.TypeBool, Description: "Confirm updating a plugin from an unofficial source"}},
 		Output:     "Plugin",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			force := inv.Bool("force")
@@ -76,12 +76,12 @@ func addPlugins(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:        []string{"plugin", "remove"},
-		Summary:     "卸载插件：删除配置、启用、授权、账号与安装目录（本机目录来源不删）；数据目录只在 --delete-data 时删除",
+		Summary:     "Uninstall a plugin: delete its configuration, enablement, grants, accounts and install directories (a local-directory source is not deleted); the data directory is deleted only with --delete-data",
 		Identities:  externalOnly,
 		Network:     true,
 		Destructive: true,
 		Args:        []cli.Arg{pluginArg},
-		Flags:       []cli.Flag{{Name: "delete-data", Type: cli.TypeBool, Description: "同时删除插件的数据目录"}},
+		Flags:       []cli.Flag{{Name: "delete-data", Type: cli.TypeBool, Description: "Also delete the plugin's data directory"}},
 		Output:      "null",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			q := url.Values{}
@@ -93,9 +93,9 @@ func addPlugins(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"plugin", "validate"},
-		Summary:    "在本机校验插件目录的清单（package.json 的 pi 与 loopNow 段），不发出请求",
+		Summary:    "Validate a plugin directory's manifest (the pi and loopNow sections of package.json) locally; sends no request",
 		Identities: externalOnly,
-		Args:       []cli.Arg{{Name: "dir", Description: "插件目录"}},
+		Args:       []cli.Arg{{Name: "dir", Description: "Plugin directory"}},
 		Output:     "PluginManifest",
 		Run: func(_ context.Context, inv *cli.Invocation) (any, error) {
 			m, err := readPluginDir(inv.Args[0], inv.Sys.Version)
@@ -107,10 +107,10 @@ func addPlugins(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"plugin", "pack"},
-		Summary:    "把插件目录校验后打成 npm 格式的包（.tgz，不含 node_modules 与 .git），不发出请求",
+		Summary:    "Validate a plugin directory and pack it as an npm-format package (.tgz, without node_modules and .git); sends no request",
 		Identities: externalOnly,
-		Args:       []cli.Arg{{Name: "dir", Description: "插件目录"}},
-		Flags:      []cli.Flag{{Name: "out", Type: cli.TypeString, Description: "输出文件；默认当前目录下的 <id>-<version>.tgz"}},
+		Args:       []cli.Arg{{Name: "dir", Description: "Plugin directory"}},
+		Flags:      []cli.Flag{{Name: "out", Type: cli.TypeString, Description: "Output file; defaults to <id>-<version>.tgz in the current directory"}},
 		Output:     "{file, id, version, sha256, size}",
 		Run: func(_ context.Context, inv *cli.Invocation) (any, error) {
 			dir, out := inv.Args[0], inv.String("out")

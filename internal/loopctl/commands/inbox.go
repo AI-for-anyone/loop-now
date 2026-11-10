@@ -13,18 +13,18 @@ import (
 )
 
 var (
-	cursorFlag = cli.Flag{Name: "cursor", Type: cli.TypeString, Description: "上一页结果中的 nextCursor，用于取下一页"}
-	limitFlag  = cli.Flag{Name: "limit", Type: cli.TypeInt, Min: intp(1), Description: "每页条数；默认值与上限由服务端确定"}
+	cursorFlag = cli.Flag{Name: "cursor", Type: cli.TypeString, Description: "nextCursor from the previous page's result, to get the next page"}
+	limitFlag  = cli.Flag{Name: "limit", Type: cli.TypeInt, Min: intp(1), Description: "Items per page; the default and maximum are set by the server"}
 	textFlags  = []cli.Flag{
-		{Name: "text", Type: cli.TypeString, Description: "正文；内容较敏感时改用 --text-file -，避免出现在进程列表中"},
-		{Name: "text-file", Type: cli.TypePathOrStdin, Description: "从文件读取正文，- 表示标准输入"},
-		{Name: "when-busy", Type: cli.TypeEnum, Values: []string{"queue", "interrupt"}, Description: "收件 Agent 正忙时：queue 排队，interrupt 立即终止它当前的执行；不指定时按排队处理；收件人是人时不起作用"},
+		{Name: "text", Type: cli.TypeString, Description: "Message text; for sensitive content use --text-file - instead, so it does not appear in the process list"},
+		{Name: "text-file", Type: cli.TypePathOrStdin, Description: "Read the text from a file; - means standard input"},
+		{Name: "when-busy", Type: cli.TypeEnum, Values: []string{"queue", "interrupt"}, Description: "When the receiving Agent is busy: queue queues the message, interrupt ends its current execution immediately; queues when not given; has no effect when the recipient is a person"},
 	}
 	questionFlags = []cli.Flag{
-		{Name: "option", Type: cli.TypeString, Repeatable: true, Description: "提问选项文字，可重复且按顺序传递；个数/长度/重复由服务端校验"},
-		{Name: "node-run", Type: cli.TypeString, Description: "任务实例提出新题时显式提供当前节点运行UUID（随 --option）；普通身份不传，不自动读取节点代填"},
+		{Name: "option", Type: cli.TypeString, Repeatable: true, Description: "Question option text, repeatable and passed in order; count/length/duplicates are checked by the server"},
+		{Name: "node-run", Type: cli.TypeString, Description: "When a task instance asks a new question, give the current node run UUID explicitly (with --option); ordinary identities do not pass it, and it is not read and filled in automatically"},
 	}
-	inboxRunFlag   = cli.Flag{Name: "run", Type: cli.TypeString, Description: "严格任务节点Inbox读/回复及专用恢复节点提问所需的本轮运行UUID，取平台本轮prompt；不自动GET或替换"}
+	inboxRunFlag   = cli.Flag{Name: "run", Type: cli.TypeString, Description: "The run UUID for this turn, needed to read/reply to strict task node Inbox messages and for questions from the dedicated recovery node; take it from the platform's prompt for this turn; it is not fetched or replaced automatically"}
 	textConstraint = []cli.Constraint{{Kind: cli.ExactlyOne, Flags: []string{"text", "text-file"}}}
 )
 
@@ -81,12 +81,12 @@ func messageBody(inv *cli.Invocation, to string) (map[string]any, error) {
 func addInbox(r *cli.Registry) {
 	r.Add(&cli.Command{
 		Path:       []string{"inbox", "list"},
-		Summary:    "列出自己收件箱中的消息摘要，新的在前，标出是否已读；不改变已读状态",
+		Summary:    "List summaries of the messages in your own Inbox, newest first, marking whether each is read; does not change the read state",
 		Identities: both,
 		Network:    true,
 		Retry:      true,
 		Flags: []cli.Flag{
-			{Name: "unread", Type: cli.TypeBool, Description: "只列未读消息"},
+			{Name: "unread", Type: cli.TypeBool, Description: "List only unread messages"},
 			cursorFlag, limitFlag,
 		},
 		Output: "{messages: InboxMessageSummary[], nextCursor}",
@@ -100,12 +100,12 @@ func addInbox(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"inbox", "read"},
-		Summary:    "读取一条消息并标已读；严格任务节点消息显式 --run，重复读取保持首次已读时间",
+		Summary:    "Read a message and mark it read; strict task node messages need an explicit --run; reading again keeps the first read time",
 		Flags:      []cli.Flag{inboxRunFlag},
 		Identities: both,
 		Network:    true,
 		Retry:      true,
-		Args:       []cli.Arg{{Name: "messageId", Description: "消息 ID，取自 inbox list 的结果"}},
+		Args:       []cli.Arg{{Name: "messageId", Description: "Message ID, from the result of inbox list"}},
 		Output:     "InboxMessage",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			// 已读动作幂等；严格消息始终保留调用者提供的原run。
@@ -124,11 +124,11 @@ func addInbox(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:        []string{"inbox", "send"},
-		Summary:     "向一个地址发送消息，每次发送都开启一条新线索；超时后消息可能已经送达，不会自动重发",
+		Summary:     "Send a message to an address; every send starts a new thread; after a timeout the message may already have been delivered, and it is not resent automatically",
 		Identities:  both,
 		Network:     true,
 		Stdin:       true,
-		Args:        []cli.Arg{{Name: "address", Description: "收件地址：Agent 写 组织名/项目名/Agent名（同组织可写 项目名/Agent名，任务内的 Agent 在后面加 #任务ID）；平台持有的 Agent 直接写名称；控制台操作者写 @console；外部身份写 @<身份名>"}},
+		Args:        []cli.Arg{{Name: "address", Description: "Recipient address: for an Agent, organization/project/Agent (project/Agent within the same organization; append #taskID for an Agent inside a task); for an Agent held by the platform, just its name; @console for the console operator; @<identity name> for an external identity"}},
 		Flags:       append(append(append([]cli.Flag(nil), textFlags...), questionFlags...), inboxRunFlag, taskRunIDFlag),
 		Constraints: textConstraint,
 		Output:      "InboxMessage",
@@ -142,12 +142,12 @@ func addInbox(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:        []string{"inbox", "reply"},
-		Summary:     "在一条消息所在的线索中回复，收件人是线索中的另一方；超时后回复可能已经送达，不会自动重发",
+		Summary:     "Reply in the thread of a message; the recipient is the other party of the thread; after a timeout the reply may already have been delivered, and it is not resent automatically",
 		Identities:  both,
 		Network:     true,
 		Stdin:       true,
-		Args:        []cli.Arg{{Name: "messageId", Description: "线索中任意一条消息的 ID"}},
-		Flags:       append(append(append([]cli.Flag(nil), textFlags...), questionFlags...), inboxRunFlag, cli.Flag{Name: "answer", Type: cli.TypeString, Description: "原题选项ID；带此选项可省正文，也可同时附正文或新提问选项"}),
+		Args:        []cli.Arg{{Name: "messageId", Description: "The ID of any message in the thread"}},
+		Flags:       append(append(append([]cli.Flag(nil), textFlags...), questionFlags...), inboxRunFlag, cli.Flag{Name: "answer", Type: cli.TypeString, Description: "Option ID of the original question; with it the text can be omitted, or you can also add text or options for a new question"}),
 		Constraints: []cli.Constraint{{Kind: cli.AtMostOne, Flags: []string{"text", "text-file"}}, {Kind: cli.AtLeastOne, Flags: []string{"text", "text-file", "answer"}, Hint: "没有 --answer 时需要 --text 或 --text-file"}},
 		Output:      "InboxMessage",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
@@ -160,7 +160,7 @@ func addInbox(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"inbox", "threads"},
-		Summary:    "列出自己参与的线索及未读数量；不改变已读状态",
+		Summary:    "List the threads you take part in and their unread counts; does not change the read state",
 		Identities: externalOnly,
 		Network:    true,
 		Retry:      true,
@@ -172,11 +172,11 @@ func addInbox(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"inbox", "thread"},
-		Summary:    "按顺序查看一条线索中的全部消息；不改变已读状态",
+		Summary:    "Show all messages of a thread in order; does not change the read state",
 		Identities: externalOnly,
 		Network:    true,
 		Retry:      true,
-		Args:       []cli.Arg{{Name: "threadId", Description: "线索 ID"}},
+		Args:       []cli.Arg{{Name: "threadId", Description: "Thread ID"}},
 		Output:     "{threadId, messages: InboxMessage[]}",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			return get(ctx, inv, nil, "inbox", "threads", inv.Args[0])
