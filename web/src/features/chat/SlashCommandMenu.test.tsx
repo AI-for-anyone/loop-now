@@ -7,7 +7,7 @@ import { apiUrl, errorBody, makeMessage, makeRun } from '@/test/api'
 import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
 import { Composer } from './Composer'
-import { applyCommand, matchCommands, slashToken } from './slash-commands'
+import { applyCommand, commandText, matchCommands, slashToken } from './slash-commands'
 
 const command = (name: string, overrides: Partial<Schemas['AgentCommand']> = {}): Schemas['AgentCommand'] => ({ name, source: 'pi', piSource: 'extension', description: null, pluginId: null, pluginDisplayName: null, ...overrides })
 const list: Schemas['AgentCommandList'] = {
@@ -157,8 +157,17 @@ describe('补全的规则', () => {
   })
 
   it('applyCommand：换掉第一个词，保留后面的空白与文字；后面没有空白时补一个空格', () => {
-    expect(applyCommand('/re', 'review')).toEqual({ text: '/pi:review ', caret: 11 })
-    expect(applyCommand('/re\n第二行', 'review')).toEqual({ text: '/pi:review\n第二行', caret: 11 })
+    expect(applyCommand('/re', command('review'))).toEqual({ text: '/pi:review ', caret: 11 })
+    expect(applyCommand('/re\n第二行', command('review'))).toEqual({ text: '/pi:review\n第二行', caret: 11 })
+  })
+
+  it('commandText：Pi 的命令写成 /pi:<name>；以后别的来源（如平台命令）写成 /<name>，补全与筛选随之', () => {
+    expect(commandText(command('skill:loopctl'))).toBe('/pi:skill:loopctl')
+    // 合同目前只有 source=pi；这里模拟以后可能加的来源。
+    const platform = { ...command('session'), source: 'platform' } as unknown as Schemas['AgentCommand']
+    expect(commandText(platform)).toBe('/session')
+    expect(applyCommand('/se', platform)).toEqual({ text: '/session ', caret: 9 })
+    expect(matchCommands([command('session'), platform], '/se')).toEqual([platform, command('session')])
   })
 
   it('matchCommands：大小写不敏感，同一档保持原顺序', () => {
