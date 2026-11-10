@@ -27,10 +27,11 @@ function buildFake(): boolean {
   }
 }
 
-const make = (name: string, extraEnv: NodeJS.ProcessEnv = {}) => {
+const make = (name: string, extraEnv: NodeJS.ProcessEnv = {}, external = false) => {
   const notes: string[] = []
   const states: ServerState[] = []
   const log = new RotatingLog(join(dir, name, 'server.log'))
+  const tlsDir = join(dir, name, 'tls')
   const server = new ServerProcess({
     bin,
     readyFile: join(dir, name, 'run', 'server-ready.json'),
@@ -39,9 +40,10 @@ const make = (name: string, extraEnv: NodeJS.ProcessEnv = {}) => {
     log,
     note: (text) => notes.push(text),
     choosePort: async () => 0,
+    external: external ? { tlsDir, choosePort: async () => 0 } : undefined,
   })
   server.on('state', (state) => states.push(state))
-  return { server, notes, states, log, readyFile: join(dir, name, 'run', 'server-ready.json'), stampFile: join(dir, name, 'run', 'server-stamp.json') }
+  return { server, notes, states, log, tlsDir, readyFile: join(dir, name, 'run', 'server-ready.json'), stampFile: join(dir, name, 'run', 'server-stamp.json') }
 }
 
 const untilReady = (server: ServerProcess) => new Promise<string>((resolve) => server.once('ready', resolve))
@@ -88,6 +90,36 @@ describe('服务端进程', () => {
     assert.ok(!notes.some((n) => n.includes('强制结束')), `应是自己退出（macOS SIGTERM，Windows 关 stdin）：${notes.join('\n')}`)
     // Windows：服务端是读到 stdin EOF 后自己停的（假服务端会写一句到 stderr）。
     if (process.platform === 'win32') assert.match(log.tail(5), /stdin closed, shutting down/)
+  })
+
+  test('开对外 TLS 端口：交给服务端监听地址与自签证书目录，从就绪文件读回 https 地址，停掉后清空', async (t) => {
+    if (!available) return t.skip('没有 go')
+    const { server, notes, tlsDir, readyFile } = make('f', {}, true)
+    const ready = untilReady(server)
+    await server.start()
+    const url = await ready
+    assert.match(url, /^http:\/\/127\.0\.0\.1:\d+$/)
+    assert.match(server.externalUrl ?? '', /^https:\/\/127\.0\.0\.1:\d+$/)
+    assert.notEqual(new URL(server.externalUrl!).port, new URL(url).port)
+    const written = JSON.parse(readFileSync(readyFile, 'utf8')) as { externalUrl?: string }
+    assert.equal(written.externalUrl, server.externalUrl)
+    // 假服务端照真服务端的样子在目录里放证书。
+    assert.ok(existsSync(join(tlsDir, 'cert.pem')), '证书目录应交给了服务端')
+    assert.ok(notes.some((n) => n.includes('对外 TLS 端口 由系统选择')), notes.join('\n'))
+    assert.ok(notes.some((n) => n.includes(`对外 TLS 端口 ${server.externalUrl}`)), notes.join('\n'))
+    await server.stop()
+    assert.equal(server.externalUrl, undefined)
+  })
+
+  test('不开对外端口时不交给服务端相关变量，就绪后也没有 https 地址', async (t) => {
+    if (!available) return t.skip('没有 go')
+    const { server, tlsDir } = make('g')
+    const ready = untilReady(server)
+    await server.start()
+    await ready
+    assert.equal(server.externalUrl, undefined)
+    assert.equal(existsSync(tlsDir), false)
+    await server.stop()
   })
 
   test('关掉 stdin 时服务端自己优雅退出（LOOP_NOW_STOP_ON_STDIN_CLOSE=1，Windows 上壳靠它停服务端）', async (t) => {

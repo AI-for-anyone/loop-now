@@ -12,6 +12,7 @@ import type { ProviderRuntimeOptions } from 'electron-updater/out/providers/Prov
 import { badgePlan, dotBitmap } from './badge'
 import { parseBadge, parseNotification } from './bridge'
 import { addToUserPathScript, installScript, linkState, userPathHas } from './cli'
+import { externalCertPath, loopctlConfigCommand } from './external'
 import { classifyNavigation, handOffOnce } from './links'
 import { RotatingLog } from './log'
 import { badgeStyle, cliBinary, cliInstallMode, serverBinary, trayIcon, windowChrome, windowsWorkRootBase } from './platform'
@@ -306,6 +307,8 @@ describe('设置文件', () => {
     assert.deepEqual(settings.read(), {})
     settings.update({ port: 8780 })
     assert.deepEqual(settings.read(), { port: 8780 })
+    settings.update({ externalPort: 8781 })
+    assert.deepEqual(settings.read(), { port: 8780, externalPort: 8781 })
     writeFileSync(file, 'not json')
     assert.deepEqual(settings.read(), {})
   })
@@ -316,8 +319,8 @@ describe('托盘菜单', () => {
   const labels = (items: ReturnType<typeof trayItems>) => items.map((i) => (i === 'separator' ? '—' : `${i.label}${i.enabled ? '' : '（不可点）'}`))
   const profile = (name: string) => resolveProfile(name, '/Users/someone', {}, 'darwin')
 
-  test('运行中：状态行带主机和端口，可在浏览器打开', () => {
-    assert.deepEqual(labels(trayItems('running', 'http://127.0.0.1:8780', profile(defaultProfile), s)), [
+  test('运行中：状态行带主机和端口，可在浏览器打开；开了对外 TLS 端口时可看外部身份连接方式', () => {
+    assert.deepEqual(labels(trayItems('running', 'http://127.0.0.1:8780', profile(defaultProfile), s, true, undefined, 'https://127.0.0.1:8781')), [
       '运行中 · 127.0.0.1:8780（不可点）',
       '配置：默认（不可点）',
       '—',
@@ -326,17 +329,21 @@ describe('托盘菜单', () => {
       '—',
       '查看日志',
       '安装命令行工具…',
+      '外部身份连接方式…',
       '重启服务',
       '—',
       '退出 Loop Now',
     ])
+    // 没开对外端口（旧服务端的就绪文件没有 externalUrl）时不可点。
+    assert.equal(labels(trayItems('running', 'http://127.0.0.1:8780', profile(defaultProfile), s))[8], '外部身份连接方式…（不可点）')
   })
 
-  test('启动中不能在浏览器打开、不能重启；第二行是当前配置', () => {
-    const items = labels(trayItems('starting', undefined, profile('try'), s))
+  test('启动中不能在浏览器打开、不能看连接方式、不能重启；第二行是当前配置', () => {
+    const items = labels(trayItems('starting', undefined, profile('try'), s, true, undefined, 'https://127.0.0.1:8781'))
     assert.deepEqual(items.slice(0, 2), ['正在启动…（不可点）', '配置：try（不可点）'])
     assert.equal(items[4], '在默认浏览器打开（不可点）')
-    assert.equal(items[8], '重启服务（不可点）')
+    assert.equal(items[8], '外部身份连接方式…（不可点）')
+    assert.equal(items[9], '重启服务（不可点）')
   })
 
   test('desktop.json 指定了目录时，配置行跟上实际用的路径', () => {
@@ -352,7 +359,7 @@ describe('托盘菜单', () => {
   test('多次崩溃停下后可以手动重启', () => {
     const items = labels(trayItems('crashed', undefined, undefined, s))
     assert.equal(items[0], '已停止：多次崩溃（不可点）')
-    assert.equal(items[8], '重启服务')
+    assert.equal(items[9], '重启服务')
   })
 
   test('开发时（没打包）不能安装命令行工具', () => {
@@ -365,6 +372,24 @@ describe('托盘菜单', () => {
     assert.deepEqual(Object.keys(en.tray), Object.keys(s.tray))
     assert.deepEqual(labels(trayItems('degraded', 'http://127.0.0.1:9000', profile(defaultProfile), en)).slice(0, 2), ['Database unavailable · 127.0.0.1:9000（不可点）', 'Profile: default（不可点）'])
     assert.deepEqual(Object.keys(en.tray.dirs), Object.keys(s.tray.dirs))
+    assert.deepEqual(Object.keys(en.external), Object.keys(s.external))
+  })
+})
+
+describe('外部身份连接方式', () => {
+  test('证书在壳的 tls 目录下；loopctl 配置命令带 https 地址、加引号的 CA 路径，令牌从标准输入读', () => {
+    // 路径分隔符跟着运行的平台走（Windows 上是反斜杠），所以期望值也用 join 拼。
+    const tlsDir = join('/Users/someone/Library/Application Support/Loop Now/default/shell', 'tls')
+    const caFile = externalCertPath(tlsDir)
+    assert.equal(caFile, join(tlsDir, 'cert.pem'))
+    assert.equal(
+      loopctlConfigCommand('https://127.0.0.1:8781', '/Users/someone/Library/Application Support/Loop Now/default/shell/tls/cert.pem'),
+      'loopctl config set default --server https://127.0.0.1:8781 --ca-file "/Users/someone/Library/Application Support/Loop Now/default/shell/tls/cert.pem" --token-stdin',
+    )
+    const detail = stringsFor('zh-CN').external.detail('https://127.0.0.1:8781', caFile, 'CMD')
+    assert.match(detail, /https:\/\/127\.0\.0\.1:8781/)
+    assert.match(detail, /cert\.pem/)
+    assert.match(detail, /\nCMD\n/)
   })
 })
 

@@ -5,7 +5,7 @@ import { defaultProfile, overridableDirs, type Profile } from './profile'
 import type { ServerState } from './server'
 import { strings, type Strings } from './strings'
 
-export type TrayAction = 'update' | 'open' | 'browser' | 'logs' | 'cli' | 'restart' | 'quit'
+export type TrayAction = 'update' | 'open' | 'browser' | 'logs' | 'cli' | 'external' | 'restart' | 'quit'
 export type TrayItem = { label: string; enabled: boolean; action?: TrayAction } | 'separator'
 
 const serving = (state: ServerState, url: string | undefined): url is string => (state === 'running' || state === 'degraded') && url !== undefined
@@ -23,8 +23,16 @@ const profileLine = (profile: Profile | undefined, s: Strings) =>
   [s.tray.profile(profileName(profile, s)), ...overridableDirs.flatMap((key) => (profile?.overrides[key] ? [s.tray.dirs[key](profile[key])] : []))].join(' · ')
 
 // 菜单栏图标的菜单：前两行是状态与当前配置（不可点），有新版本时下面多一项去下载页，再下面是打开窗口、在浏览器打开、日志、
-// 安装命令行工具（只在打包后的 app 里）、重启与退出。
-export function trayItems(state: ServerState, url: string | undefined, profile: Profile | undefined, s: Strings, packaged = true, update?: string): TrayItem[] {
+// 安装命令行工具（只在打包后的 app 里）、外部身份连接方式（服务端就绪且开了对外 TLS 端口时可点）、重启与退出。
+export function trayItems(
+  state: ServerState,
+  url: string | undefined,
+  profile: Profile | undefined,
+  s: Strings,
+  packaged = true,
+  update?: string,
+  externalUrl?: string,
+): TrayItem[] {
   return [
     { label: trayStatus(state, url, s), enabled: false },
     { label: profileLine(profile, s), enabled: false },
@@ -35,6 +43,7 @@ export function trayItems(state: ServerState, url: string | undefined, profile: 
     'separator',
     { label: s.tray.logs, enabled: true, action: 'logs' },
     { label: s.tray.cli, enabled: packaged, action: 'cli' },
+    { label: s.tray.external, enabled: serving(state, url) && externalUrl !== undefined, action: 'external' },
     { label: s.tray.restart, enabled: state !== 'starting' && state !== 'stopping', action: 'restart' },
     'separator',
     { label: s.tray.quit, enabled: true, action: 'quit' },
@@ -58,12 +67,12 @@ export class StatusTray {
     if (platform === 'win32') this.tray.on('click', () => this.actions.open())
   }
 
-  update(state: ServerState, url: string | undefined): void {
+  update(state: ServerState, url: string | undefined, externalUrl?: string): void {
     const s = strings()
     this.tray.setToolTip(`Loop Now · ${profileName(this.profile, s)} — ${trayStatus(state, url, s)}`)
     this.tray.setContextMenu(
       Menu.buildFromTemplate(
-        trayItems(state, url, this.profile, s, app.isPackaged, this.newVersion()).map((item) => {
+        trayItems(state, url, this.profile, s, app.isPackaged, this.newVersion(), externalUrl).map((item) => {
           if (item === 'separator') return { type: 'separator' }
           const action = item.action
           return { label: item.label, enabled: item.enabled, click: action ? this.actions[action] : undefined }

@@ -5,6 +5,8 @@ import { dirname } from 'node:path'
 export type Settings = {
   // 上次服务端实际监听的端口。
   port?: number
+  // 上次对外 TLS 端口（外部身份与 loopctl 用）实际监听的端口。
+  externalPort?: number
 }
 
 export class SettingsFile {

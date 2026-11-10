@@ -36,6 +36,9 @@ export type ServerOptions = {
   note: (text: string) => void
   // 这次监听的端口；0 表示交给系统选。
   choosePort: () => Promise<number>
+  // 对外 TLS 端口（外部身份与 loopctl 用）：给了目录就开，服务端在目录里维护自签证书（LOOP_NOW_EXTERNAL_TLS_SELF_SIGNED），
+  // 只监听 127.0.0.1；端口同样 0 表示交给系统选，实际地址从就绪文件的 externalUrl 读。不给就不开。
+  external?: { tlsDir: string; choosePort: () => Promise<number> }
   platform?: PlatformId
 }
 
@@ -44,14 +47,17 @@ export const readyTimeoutMs = 90_000
 const stopGraceMs = 20_000
 const healthIntervalMs = 10_000
 
-type Ready = { url: string; pid: number; version: string }
+type Ready = { url: string; pid: number; version: string; externalUrl?: string }
 type Exit = { code: number | null; signal: NodeJS.Signals | null }
-type Run = { child: ChildProcess; port: number; exited: Promise<Exit>; spawnError?: string }
+// externalPort 为 undefined 表示没开对外端口。
+type Run = { child: ChildProcess; port: number; externalPort: number | undefined; exited: Promise<Exit>; spawnError?: string }
 
 // 拉起并守护 loop-server：等就绪文件与健康接口，就绪后定时查健康，崩溃按 RestartPolicy 重启。
 export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [url: string] }> {
   state: ServerState = 'stopped'
   url: string | undefined
+  // 对外 TLS 端口的 https 地址；没开或还没就绪时为空。
+  externalUrl: string | undefined
   failure: StartFailure | undefined
   private run: Run | undefined
   private readonly stopRequested = new WeakSet<ChildProcess>()
@@ -78,14 +84,20 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
     this.setState('starting')
     await this.clearStale()
     const port = await this.o.choosePort()
+    const externalPort = this.o.external ? await this.o.external.choosePort() : undefined
     if ((this.state as ServerState) !== 'starting') return // 等待期间被停掉了
-    this.launch(port)
+    this.launch(port, externalPort)
   }
 
-  private launch(port: number): void {
+  private launch(port: number, externalPort: number | undefined): void {
     this.o.log.resetTail()
-    this.o.note(`启动服务端 ${this.o.bin}，端口 ${port === 0 ? '由系统选择' : port}`)
+    const chosen = (p: number) => (p === 0 ? '由系统选择' : String(p))
+    this.o.note(`启动服务端 ${this.o.bin}，端口 ${chosen(port)}${externalPort === undefined ? '' : `，对外 TLS 端口 ${chosen(externalPort)}`}`)
     rmSync(this.o.readyFile, { force: true })
+    const externalEnv: NodeJS.ProcessEnv =
+      externalPort === undefined || !this.o.external
+        ? {}
+        : { LOOP_NOW_EXTERNAL_LISTEN_ADDR: `127.0.0.1:${externalPort}`, LOOP_NOW_EXTERNAL_TLS_SELF_SIGNED: this.o.external.tlsDir }
     // Windows 握着 stdin、带 LOOP_NOW_STOP_ON_STDIN_CLOSE=1，退出时关掉 stdin 让服务端优雅停机（见 process.ts）。
     const plan = spawnPlan(this.platform)
     const child = spawn(this.o.bin, [], {
@@ -96,6 +108,7 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
         LOOP_NOW_LISTEN_ADDR: `127.0.0.1:${port}`,
         LOOP_NOW_READY_FILE: this.o.readyFile,
         LOOP_NOW_CONSOLE_ORIGINS: 'none',
+        ...externalEnv,
       },
       stdio: [plan.stdin, 'pipe', 'pipe'],
       // 自成进程组：终端里按 Ctrl+C 不会直接打到服务端，由壳按顺序停它。Windows 上 detached 会给控制台程序开一个窗口，不用；
@@ -103,7 +116,7 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
       detached: this.platform !== 'win32',
       windowsHide: true,
     })
-    const run: Run = { child, port, exited: undefined as unknown as Promise<Exit> }
+    const run: Run = { child, port, externalPort, exited: undefined as unknown as Promise<Exit> }
     run.exited = new Promise<Exit>((resolve) => {
       child.once('exit', (code, signal) => resolve({ code, signal }))
       child.on('error', (err) => {
@@ -129,6 +142,7 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
       this.run = undefined
     }
     this.url = undefined
+    this.externalUrl = undefined
     this.setState('stopped')
   }
 
@@ -151,10 +165,10 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
       if (this.stopRequested.has(run.child)) return
       if (ready === 'timeout') return this.fail({ kind: 'timeout' })
       if (run.spawnError !== undefined) return this.fail({ kind: 'spawn', message: run.spawnError })
-      // 试探之后、服务端监听之前端口被别人拿走：改由系统选一次。
-      if (exit.code === exitAddressInUse && run.port !== 0) {
-        this.o.note(`端口 ${run.port} 已被占用，改由系统选择`)
-        return this.launch(0)
+      // 试探之后、服务端监听之前端口被别人拿走（不知道是哪一个）：两个端口都改由系统选一次。
+      if (exit.code === exitAddressInUse && (run.port !== 0 || (run.externalPort !== undefined && run.externalPort !== 0))) {
+        this.o.note(`端口 ${run.port}${run.externalPort ? ` 或对外 TLS 端口 ${run.externalPort}` : ''} 已被占用，改由系统选择`)
+        return this.launch(0, run.externalPort === undefined ? undefined : 0)
       }
       if (exit.code === exitConfig) return this.fail({ kind: 'config' })
       if (exit.code === exitLocked) return this.fail({ kind: 'locked' })
@@ -162,7 +176,8 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
     }
 
     this.url = ready.url
-    this.o.note(`服务端已就绪：${ready.url}（${ready.version}，pid ${ready.pid}）`)
+    this.externalUrl = ready.externalUrl
+    this.o.note(`服务端已就绪：${ready.url}（${ready.version}，pid ${ready.pid}）${ready.externalUrl ? `，对外 TLS 端口 ${ready.externalUrl}` : ''}`)
     await this.writeStamp(ready.pid)
     this.setState(ready.healthy ? 'running' : 'degraded')
     this.emit('ready', ready.url)
@@ -253,7 +268,7 @@ function readReady(file: string): Ready | undefined {
   try {
     const value = JSON.parse(readFileSync(file, 'utf8')) as Partial<Ready>
     if (typeof value.url === 'string' && typeof value.pid === 'number' && typeof value.version === 'string') {
-      return { url: value.url, pid: value.pid, version: value.version }
+      return { url: value.url, pid: value.pid, version: value.version, externalUrl: typeof value.externalUrl === 'string' ? value.externalUrl : undefined }
     }
   } catch {
     // 还没写出来，或不是这个格式
