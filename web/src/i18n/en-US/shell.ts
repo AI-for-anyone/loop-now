@@ -1,4 +1,5 @@
 import type { Messages } from '..'
+import { plural } from '../format'
 
 export const shell = {
   nav: 'Main navigation',
@@ -28,6 +29,7 @@ export const shell = {
     identities: 'External identities',
     settings: 'Global settings',
   },
+  runningTasks: (count: number) => `${count} ${plural('en-US', count, { one: 'task', other: 'tasks' })} running`,
   groups: {
     agents: 'Agents',
     projects: 'Projects',
