@@ -22,6 +22,7 @@ export const keys = {
   agentStatus: (agentId: string) => ['agentStatus', agentId] as const,
   agentQueue: (agentId: string) => ['agentQueue', agentId] as const,
   agentSkills: (agentId: string) => ['agentSkills', agentId] as const,
+  agentCommands: (agentId: string) => ['agentCommands', agentId] as const,
   agentSkill: (agentId: string, agentSkillId: string) => ['agentSkill', agentId, agentSkillId] as const,
   // 对话历史：最新的一页起向前翻；定位到某条回复时另用一份以它为中心的缓存（前缀相同，失效与对账一并处理）。
   messages: (agentId: string) => ['messages', agentId] as const,
@@ -176,6 +177,11 @@ export function useAgentStatus(agentId: string, refetchInterval?: number) {
 
 export function useAgentSkills(agentId: string) {
   return useQuery({ queryKey: keys.agentSkills(agentId), queryFn: () => call(api.GET('/agents/{agentId}/skills', agentPath(agentId))) })
+}
+
+// 对话页 "/" 菜单用的 Pi 命令：Agent 上次启动 Pi 时读到的列表，Pi 再次启动才会变，第一次输入 "/" 时才读取。
+export function useAgentCommands(agentId: string, enabled: boolean) {
+  return useQuery({ queryKey: keys.agentCommands(agentId), queryFn: () => call(api.GET('/agents/{agentId}/commands', agentPath(agentId))), enabled, staleTime: 30_000 })
 }
 
 export function useAgentSkill(agentId: string, agentSkillId: string | null) {

@@ -10,6 +10,8 @@ export const server = setupServer(
   http.get(apiUrl('/plugins'), () => HttpResponse.json({ plugins: [] })),
   http.get(apiUrl('/projects/:projectId/plugins'), () => HttpResponse.json({ plugins: [] })),
   http.get(apiUrl('/agents/:agentId/plugins'), () => HttpResponse.json({ plugins: [] })),
+  // 对话页 "/" 菜单：默认 Agent 还没启动过 Pi，没有命令列表。
+  http.get(apiUrl('/agents/:agentId/commands'), () => HttpResponse.json({ capturedAt: null, commands: [] })),
   http.get(apiUrl('/projects/:projectId/cli-auth/operations'), () => HttpResponse.json({ operations: [] })),
   // Unrelated historical fixtures do not exercise node Inbox or task timeline.
   // New feature tests override these; no fake normal Run is manufactured.
