@@ -67,6 +67,9 @@ export function makeDetail(plugin: Schemas['Plugin'] = makePlugin(), manifest: S
     versions: [{ version: plugin.version, digest: 'sha256-abc', installedAt: at, current: true }],
     installDir: `/work/platform/plugins/${plugin.id}/${plugin.version}`,
     dataDir: `/work/platform/plugins/${plugin.id}/data`,
+    providers: [],
+    providerErrors: [],
+    providersError: null,
   }
 }
 

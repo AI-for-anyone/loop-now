@@ -162,6 +162,10 @@ export const plugins = {
     platformCodeHint: '在共享的插件宿主里运行',
     extensions: (count: number) => `Pi 扩展 ${count} 个文件`,
     extensionsHint: '授权的 Agent 启动时加载',
+    // 安装、更新前的预览：扩展注册的模型提供方要在确认之后才读取（会运行插件代码）。
+    extensionsPreviewHint: { install: '授权的 Agent 启动时加载，安装后读取它注册的模型提供方', update: '授权的 Agent 启动时加载，更新后重新读取它注册的模型提供方' },
+    // 409 name_conflict：插件 id 已装过，或它注册的模型提供方与另一个已安装插件的同 id。
+    nameConflict: { install: '没有安装：这个插件 id 已经装过，或者它注册的模型提供方与另一个已安装插件的同 id', update: '没有更新：它注册的模型提供方与另一个已安装插件的同 id' },
     skills: 'Skill',
     mcp: 'MCP 服务器',
     bin: 'CLI 目录',
@@ -259,6 +263,22 @@ export const plugins = {
   },
   // 来源是 git 仓库时链到它的网页。
   repository: '仓库',
+  // 插件详情里，Pi 扩展注册的模型提供方（安装或更新时读出）。名称与错误是扩展原文。
+  providers: {
+    title: '模型提供方',
+    hint: '安装或更新时从 Pi 扩展读出',
+    none: '没有读出模型提供方。',
+    failed: (reason: string) => `读取失败：${reason}`,
+    oauth: 'OAuth 登录',
+    inCatalog: '已进模型目录',
+    overridesBuiltin: '与 Pi 内置提供方同 id：只覆盖它的设置，不进模型目录',
+    noOAuth: '没有注册 OAuth 登录，不进模型目录',
+    notInCatalog: '没有进模型目录（例如与 models.json 里的提供方同 id）',
+    error: (reason: string) => `注册出错：${reason}`,
+    models: (count: number) => `${count} 个模型`,
+    extension: (path: string) => `来自 ${path}`,
+    loadErrors: '加载失败的扩展',
+  },
   // 插件详情。
   detail: {
     crumb: '插件市场',

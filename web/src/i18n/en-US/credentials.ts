@@ -205,7 +205,8 @@ export const credentials = {
     oauth: 'Login',
     apiKey: 'API key',
     login: (name: string) => `Log in to ${name}`,
-    groups: { vendor: 'Model makers', domestic: 'Chinese providers', gateway: 'Aggregators & gateways', cloud: 'Cloud platforms', inference: 'Inference platforms', other: 'Other' },
+    groups: { vendor: 'Model makers', domestic: 'Chinese providers', gateway: 'Aggregators & gateways', cloud: 'Cloud platforms', inference: 'Inference platforms', plugin: 'From plugins', other: 'Other' },
+    plugin: (name: string) => `Plugin · ${name}`,
     entries: {
       codex: { name: 'OpenAI Codex', alias: 'codex chatgpt' },
       anthropic: { name: 'Anthropic', alias: 'claude' },

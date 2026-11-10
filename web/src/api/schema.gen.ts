@@ -318,7 +318,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 固定版本 Pi 合并原生 models.json 后的提供方目录 */
+        /**
+         * 固定版本 Pi 合并原生 models.json 后的提供方目录，加已安装插件注册的提供方
+         * @description 目录在插件安装、更新、卸载与保存 models.json 后变化（没有版本号或推送事件，控制台在这些操作后重新读取）。
+         *     带 agentId 时，source 为 plugin 的提供方另给出这个 Agent 现在不能用的原因 `unavailableReason`（项目启用与授权变化后也要重新读取）。
+         */
         get: operations["listModelProviders"];
         put?: never;
         post?: never;
@@ -1200,6 +1204,9 @@ export interface paths {
          * 发送消息；Agent 忙时必须选择打断或排队
          * @description 发送前交给插件（plugins/SPEC.md §4）：以 `/` 开头且不带图片的消息先作为 `console.command` 交给认领类 Hook，被认领时消息不发给 Agent、
          *     不保存，返回 200 ConsoleCommandResult；其余消息经修改类 Hook `message.before_enqueue`，插件可以改写正文。
+         *     以 `/pi:<name>` 开头的消息是交给 Pi 的命令（plugins/SPEC.md §14）：不给插件认领，照原文保存与显示，执行时发给 Pi 的是 `/<name>` 加其余原文，
+         *     不加运行 ID 与平台通知；带图片时图片照常交给 Pi（Pi 执行扩展命令时不用图片，技能命令与提示模板展开后随提示交给模型）。
+         *     结果见执行的 `piCommand`。可用的命令见 `GET /agents/{agentId}/commands`。任务节点的消息不做这个改写。
          */
         post: operations["sendMessage"];
         delete?: never;
@@ -1617,6 +1624,10 @@ export interface paths {
          *     git 与 npm 来源在这一步执行 `npm ci --ignore-scripts --omit=dev --omit=peer`（没有锁文件时 `npm install`，参数相同），失败返回 422 `plugin_source_failed`；
          *     不装 peer 依赖，插件的运行依赖要用的 peer 依赖须直接列进插件自己的 `dependencies`。
          *     本地目录来源原地使用，不安装依赖、不修改。预览过期或不存在返回 404。
+         *     插件带 Pi 扩展（`pi.extensions`）时，依赖装好后用随包 Pi 加载这些扩展，读出它们注册的模型提供方（plugins/SPEC.md §13；
+         *     会运行插件代码，所以在这一步、而不是预览时做），结果见插件详情的 `providers`。读取失败不阻止安装，原因见 `providersError`。
+         *     注册了 OAuth 登录、与 Pi 目录（内置与 models.json）不同 id 的提供方并入模型目录（`listModelProviders` 里 source 为 plugin）；
+         *     与另一个已安装插件并入目录的提供方同 id 时返回 409 `name_conflict`，不安装。
          */
         post: operations["installPlugin"];
         delete?: never;
@@ -1736,7 +1747,7 @@ export interface paths {
         /**
          * 按预览安装插件的新版本
          * @description 预览须是同一插件 id。新版本装到自己的目录，宿主内先卸载旧版本再加载新版本；任务里已经启动的 Pi 继续用旧文件直到自然重启。
-         *     版本号与已装版本相同但内容不同时返回 409 `plugin_version_conflict`。其余规则同安装。
+         *     版本号与已装版本相同但内容不同时返回 409 `plugin_version_conflict`。其余规则同安装（包括重新读取模型提供方与同 id 的 409）。
          */
         post: operations["updatePlugin"];
         delete?: never;
@@ -2058,6 +2069,28 @@ export interface paths {
         };
         /** Agent 配置页插件段：每个已安装插件对这个 Agent 是否可授权、是否已授权及选用的账号 */
         get: operations["listAgentPlugins"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agentId}/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 对话页 "/" 菜单可用的 Pi 命令
+         * @description Agent 上次启动 Pi 时（Pi RPC get_commands）读到的扩展命令、提示模板与技能命令（plugins/SPEC.md §14）。平台不为列命令专门启动 Pi：
+         *     从没启动过时 capturedAt 为 null、列表为空；授权的插件变了之后，要等 Pi 下次启动才更新。控制台显示与补全时写成 `/pi:<name>`。
+         *     插件平台侧认领的 console.command 是认领型 Hook，没有可列举的命令名，不在这里列出；也没有平台内置命令。
+         */
+        get: operations["listAgentCommands"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3272,18 +3305,35 @@ export interface components {
         };
         ModelProvider: {
             id: string;
+            /** @description 提供方自己给的显示名；目前只有插件提供方有（扩展原文，按纯文本显示），其余为 null。 */
+            name: string | null;
             /**
-             * @description builtin 为纯内置目录；config 表示该 Provider 有原生 models.json 配置或覆盖。
+             * @description builtin 为纯内置目录；config 表示该 Provider 有原生 models.json 配置或覆盖；
+             *     plugin 为已安装插件的 Pi 扩展注册的提供方（plugins/SPEC.md §13），只用于项目 Agent：
+             *     选它须项目已启用该插件、Agent 已获授权（否则修改 Agent 返回 422，新建 Agent 时不能直接选），账号用项目里登录的订阅账号。
              * @enum {string}
              */
-            source: "builtin" | "config";
+            source: "builtin" | "config" | "plugin";
+            /** @description source 为 plugin 时是注册它的插件 id，其余为 null。 */
+            pluginId: string | null;
+            /** @description source 为 plugin 时是注册它的插件的显示名（清单原样），其余为 null。 */
+            pluginDisplayName: components["schemas"]["LocalizedText"] | null;
+            /**
+             * @description 只在带 agentId 查询、且 source 为 plugin 时可能非空：这个 Agent 现在不能用它的原因。
+             *     platform_agent：平台 Agent，插件提供方只给项目 Agent 用；plugin_not_enabled：Agent 所在项目没有启用该插件；
+             *     agent_not_granted：插件没有授权给这个 Agent；plugins_disabled：全局停用了全部插件（不挡保存，但 Pi 启动会失败）。
+             *     前三种情形下修改 Agent 选它返回 422（validation_failed，字段 model.provider，消息说明是哪一种）。
+             *     插件被卸载后它的提供方从目录里消失（已选它的 Agent 启动时明确失败）。
+             * @enum {string|null}
+             */
+            unavailableReason: "platform_agent" | "plugin_not_enabled" | "agent_not_granted" | "plugins_disabled" | null;
             /**
              * @deprecated
              * @description 旧环境凭证兼容诊断元数据，不能作为模型凭证录入字段。
              */
             apiKeyEnvVars: string[];
             modelCount: number;
-            /** @description 平台支持的显式认证方式；OAuth登录仅控制台，当前支持openai-codex。 */
+            /** @description 平台支持的显式认证方式；OAuth登录仅控制台，当前支持openai-codex与插件提供方（插件提供方只有oauth）。 */
             authMethods: components["schemas"]["ModelAuthMethod"][];
         };
         ModelList: {
@@ -3795,6 +3845,17 @@ export interface components {
              * @description 触发本轮平台提醒的原 Inbox 消息 ID；无触发消息的历史及普通来源省略
              */
             triggerInboxMessageId?: string;
+            /**
+             * @description 这一轮交给 Pi 的命令（plugins/SPEC.md §14）：对话页消息以 `/pi:<name>` 开头时，服务端发给 Pi 的是 `/<name>`（其余原样），
+             *     消息本身照原文保存与显示。handled 为 true 表示 Pi 直接处理了命令（扩展命令）、没有交给模型，这一轮以 completed 结束、没有助手回复
+             *     （助手消息正文为空，可显示“命令已执行，没有回复”；命令里的通知与状态照常记为运行事件）；false 表示命令展开成了普通提示（技能命令、提示模板）
+             *     或 Pi 不认识这个命令、当作普通文字交给了模型。不是命令的执行省略此字段。
+             */
+            piCommand?: {
+                /** @description 命令名，不带 "/"（技能命令为 skill:<名称>） */
+                name: string;
+                handled: boolean;
+            };
             /**
              * Format: uuid
              * @description 本轮有效承接的 sleep；普通历史可省略或为 null
@@ -6954,6 +7015,57 @@ export interface components {
             versions: components["schemas"]["PluginVersion"][];
             installDir: string;
             dataDir: string;
+            /** @description 当前版本的 Pi 扩展注册的模型提供方（安装或更新时读出）；没有 Pi 扩展或没有注册时为空 */
+            providers: components["schemas"]["PluginModelProvider"][];
+            /** @description 读取时加载失败的扩展文件与原因（扩展原文，已截断，按纯文本显示） */
+            providerErrors: components["schemas"]["PluginProviderCaptureError"][];
+            /** @description 整次读取失败的原因（如 Pi 不可用、超时）；为空表示读取成功或插件没有 Pi 扩展 */
+            providersError: string | null;
+        };
+        AgentCommandList: {
+            /**
+             * Format: date-time
+             * @description 读到这份列表的时间（Pi 启动时）；从没启动过为 null
+             */
+            capturedAt: string | null;
+            commands: components["schemas"]["AgentCommand"][];
+        };
+        AgentCommand: {
+            /** @description 命令名，不带 "/"；技能命令为 skill:<名称> */
+            name: string;
+            /**
+             * @description 目前只有 pi（交给 Pi 执行，发送时写成 /pi:<name>）
+             * @enum {string}
+             */
+            source: "pi";
+            /** @description Pi 给的来源（原样）：extension 扩展命令、prompt 提示模板、skill 技能命令 */
+            piSource: string;
+            /** @description 命令自己的说明（扩展原文，按纯文本显示） */
+            description: string | null;
+            /** @description 命令来自哪个已安装插件（按来源文件所在的安装目录）；平台自己的或判断不出时为 null */
+            pluginId: string | null;
+            pluginDisplayName: components["schemas"]["LocalizedText"] | null;
+        };
+        PluginModelProvider: {
+            id: string;
+            /** @description 扩展给的显示名（不可信文本，按纯文本显示） */
+            name: string;
+            /** @description 注册它的扩展文件，相对插件目录 */
+            extension: string;
+            /** @description 是否注册了 OAuth 订阅登录 */
+            oauth: boolean;
+            /** @description 与 Pi 内置提供方同 id（扩展覆盖内置提供方的设置），不进模型目录 */
+            overridesBuiltin: boolean;
+            /** @description 此刻在模型目录里、归这个插件；只有带 OAuth、与内置和 models.json 都不同 id、注册无误的才会进 */
+            inCatalog: boolean;
+            /** @description 注册时出错的原因（扩展原文，已截断） */
+            error: string | null;
+            modelCount: number;
+        };
+        PluginProviderCaptureError: {
+            /** @description 扩展文件，相对插件目录 */
+            path: string;
+            error: string;
         };
         PluginConfig: {
             /** @description 非 secret 字段 */
@@ -9005,7 +9117,10 @@ export interface operations {
     };
     listModelProviders: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 给插件提供方标出这个 Agent 能否用；Agent 不存在返回 404 */
+                agentId?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -9025,6 +9140,8 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     getModelSettings: {
@@ -12509,6 +12626,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentPluginList"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listAgentCommands: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 命令列表 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentCommandList"];
                 };
             };
             401: components["responses"]["Unauthenticated"];

@@ -1,13 +1,14 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { locale } from '@/i18n/locale'
 import { api, call, type ApiError, type Schemas } from './client'
+import { invalidateModelCatalog } from './queries'
 
 type Plugin = Schemas['Plugin']
 type ConfigUpdate = Schemas['PluginConfigUpdate']
 export type DeliveryFilter = { status?: Schemas['PluginDelivery']['status']; projectId?: string }
 
 // 插件（第二版）。['plugins'] 是全部插件查询的共同前缀：安装、更新、卸载、启用、授权之后整体失效，
-// 列表上的启用项目数与授权 Agent 数随之刷新。
+// 列表上的启用项目数与授权 Agent 数随之刷新。插件的 Pi 扩展会注册模型提供方，这些操作之后模型目录也一起失效。
 export const pluginKeys = {
   all: ['plugins'] as const,
   list: ['plugins', 'list'] as const,
@@ -164,7 +165,7 @@ export function usePluginInstall() {
         ? call(api.POST('/plugins', { body }))
         : call(api.POST('/plugins/{pluginId}/update', { ...pluginPath(preview.manifest.id), body }))
     },
-    onSuccess: () => invalidatePlugins(client),
+    onSuccess: () => Promise.all([invalidatePlugins(client), invalidateModelCatalog(client)]),
   })
 }
 
@@ -176,7 +177,7 @@ export function useUninstallPlugin(pluginId: string) {
     },
     onSuccess: async () => {
       client.removeQueries({ queryKey: pluginKeys.detail(pluginId) })
-      await invalidatePlugins(client)
+      await Promise.all([invalidatePlugins(client), invalidateModelCatalog(client)])
     },
   })
 }
@@ -206,7 +207,7 @@ export function useSavePluginSettings() {
     mutationFn: (body) => call(api.PUT('/plugin-settings', { body })),
     onSuccess: async (settings) => {
       client.setQueryData(pluginKeys.settings, settings)
-      await invalidatePlugins(client)
+      await Promise.all([invalidatePlugins(client), invalidateModelCatalog(client)])
     },
   })
 }
@@ -221,7 +222,7 @@ export function useSaveProjectPlugin(projectId: string, pluginId: string) {
       client.setQueryData<Schemas['ProjectPluginList']>(pluginKeys.project(projectId), (list) =>
         list && { plugins: list.plugins.map((item) => (item.pluginId === saved.pluginId ? saved : item)) },
       )
-      await invalidatePlugins(client)
+      await Promise.all([invalidatePlugins(client), invalidateModelCatalog(client)])
     },
   })
 }
@@ -276,7 +277,7 @@ export function useSaveAgentPlugin(agentId: string, pluginId: string) {
       client.setQueryData<Schemas['AgentPluginList']>(pluginKeys.agent(agentId), (list) =>
         list && { plugins: list.plugins.map((item) => (item.pluginId === saved.pluginId ? saved : item)) },
       )
-      await client.invalidateQueries({ queryKey: pluginKeys.list })
+      await Promise.all([client.invalidateQueries({ queryKey: pluginKeys.list }), invalidateModelCatalog(client)])
     },
   })
 }

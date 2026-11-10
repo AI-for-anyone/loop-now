@@ -210,7 +210,9 @@ export const credentials = {
     oauth: "登录",
     apiKey: "API 密钥",
     login: (name: string) => `登录 ${name}`,
-    groups: { vendor: "模型厂商", domestic: "国内厂商", gateway: "聚合与网关", cloud: "云平台", inference: "推理平台", other: "其他" },
+    groups: { vendor: "模型厂商", domestic: "国内厂商", gateway: "聚合与网关", cloud: "云平台", inference: "推理平台", plugin: "插件提供", other: "其他" },
+    // 插件的 Pi 扩展注册的提供方：标出是哪个插件。
+    plugin: (name: string) => `插件 · ${name}`,
     entries: {
       codex: { name: "OpenAI Codex", alias: "codex chatgpt" },
       anthropic: { name: "Anthropic", alias: "claude" },

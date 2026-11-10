@@ -7,7 +7,10 @@ import { sleepProjections } from '@/features/sleep/projection'
 export const keys = {
   context: ['context'] as const,
   health: ['health'] as const,
+  // 提供方目录没有版本号也没有推送：['modelProviders'] 是全局目录与各 Agent 视角目录的共同前缀，
+  // 插件安装、更新、卸载、项目启用、授权、全局停用和保存 models.json 后整体失效。
   modelProviders: ['modelProviders'] as const,
+  agentModelProviders: (agentId: string) => ['modelProviders', 'agent', agentId] as const,
   modelSettings: ['modelSettings'] as const,
   models: (providerId: string) => ['models', providerId] as const,
   cliTemplates: ['cliTemplates'] as const,
@@ -79,9 +82,19 @@ export function useHealth() {
   })
 }
 
-export function useModelProviders() {
-  return useQuery({ queryKey: keys.modelProviders, queryFn: () => call(api.GET('/model-providers')), staleTime: Infinity })
+// 带 agentId 时插件提供方另给出这个 Agent 现在不能用的原因（unavailableReason）；项目启用与授权可能在别处改，
+// 所以这份不长期缓存，打开页面和回到窗口时重新读取。
+export function useModelProviders(agentId?: string) {
+  return useQuery({
+    queryKey: agentId ? keys.agentModelProviders(agentId) : keys.modelProviders,
+    queryFn: () => call(api.GET('/model-providers', agentId ? { params: { query: { agentId } } } : {})),
+    staleTime: agentId ? 0 : Infinity,
+  })
 }
+
+// 插件改变了提供方目录或 Agent 能否用它：目录和各提供方的模型列表一起重新读取。
+export const invalidateModelCatalog = (client: QueryClient) =>
+  Promise.all([client.invalidateQueries({ queryKey: keys.modelProviders }), client.invalidateQueries({ queryKey: ['models'] })])
 
 export function useModels(providerId: string | null) {
   return useQuery({
@@ -104,10 +117,7 @@ export function useSaveModelSettings() {
     mutationFn: (body) => call(api.PUT('/model-settings', { body })),
     onSuccess: async (settings) => {
       client.setQueryData(keys.modelSettings, settings)
-      await Promise.all([
-        client.invalidateQueries({ queryKey: keys.modelProviders }),
-        client.invalidateQueries({ queryKey: ['models'] }),
-      ])
+      await invalidateModelCatalog(client)
     },
   })
   return {

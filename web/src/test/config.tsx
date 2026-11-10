@@ -13,12 +13,17 @@ export const providers: Schemas['ModelProviderList'] = {
   piVersion: '1.1.0',
   catalogGeneratedAt: null,
   providers: [
-    { id: 'anthropic', source: 'builtin', apiKeyEnvVars: ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'], modelCount: 2, authMethods: ['api_key'] },
-    { id: 'openai', source: 'builtin', apiKeyEnvVars: ['OPENAI_API_KEY'], modelCount: 1, authMethods: ['api_key'] },
+    { id: 'anthropic', name: null, pluginId: null, pluginDisplayName: null, unavailableReason: null, source: 'builtin', apiKeyEnvVars: ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'], modelCount: 2, authMethods: ['api_key'] },
+    { id: 'openai', name: null, pluginId: null, pluginDisplayName: null, unavailableReason: null, source: 'builtin', apiKeyEnvVars: ['OPENAI_API_KEY'], modelCount: 1, authMethods: ['api_key'] },
   ],
 }
 
 const model = (id: string, name: string): Schemas['Model'] => ({ id, name, reasoning: false, contextWindow: 1, maxTokens: 1, input: ['text'] })
+
+// 插件的 Pi 扩展注册的提供方：只有 OAuth；unavailableReason 只在带 agentId 读目录时可能非空。
+export function pluginProvider(id: string, overrides: Partial<Schemas['ModelProvider']> = {}): Schemas['ModelProvider'] {
+  return { id, name: 'Grok CLI', source: 'plugin', pluginId: 'grok', pluginDisplayName: { 'zh-CN': 'Grok 订阅', 'en-US': 'Grok subscription' }, unavailableReason: null, apiKeyEnvVars: [], modelCount: 2, authMethods: ['oauth'], ...overrides }
+}
 
 export const catalogHandlers = [
   http.get(apiUrl('/model-settings'), () => HttpResponse.json({ modelsJson: '{"providers":{}}', revision: 1 })),

@@ -1,8 +1,10 @@
 import { useId, useState, type FormEvent } from 'react'
-import { TriangleAlertIcon } from 'lucide-react'
+import { CircleAlertIcon, TriangleAlertIcon } from 'lucide-react'
 import { ApiError, type Schemas } from '@/api/client'
 import { useBuiltinPluginSources, usePluginInstall } from '@/api/plugins'
 import { ErrorAlert, FieldError } from '@/components/ErrorAlert'
+import { showServerText } from '@/i18n/locale'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -80,7 +82,7 @@ export function ConfirmInstallDialog({ preview, onClose, onInstalled }: { previe
           <p role="status" className="text-[14px] font-bold">{confirmText.sameVersion(manifest.version)}</p>
         ) : (
           <>
-            <ManifestSummary manifest={manifest} />
+            <ManifestSummary manifest={manifest} preview={update ? 'update' : 'install'} />
             <PreviewReadme previewId={preview.previewId} />
           </>
         )}
@@ -88,7 +90,7 @@ export function ConfirmInstallDialog({ preview, onClose, onInstalled }: { previe
           {!update && `${confirmText.notEnabled} · `}
           {confirmText.expires(t.chat.time(preview.expiresAt))}
         </p>
-        <ErrorAlert error={install.error} />
+        <InstallError error={install.error} update={update} />
         <DialogFooter>
           <Button variant="secondary" disabled={install.isPending} onClick={onClose}>
             {confirmText.cancel}
@@ -101,6 +103,19 @@ export function ConfirmInstallDialog({ preview, onClose, onInstalled }: { previe
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// 409 name_conflict 在安装时可能是插件 id 已装过，也可能是它注册的模型提供方与别的插件同 id（更新时只会是后者）；
+// 说明这两种情形，界面是中文时附上服务端的原话（它写明是哪一种）。其余错误照常显示。
+function InstallError({ error, update }: { error: ApiError | null; update: boolean }) {
+  if (error?.code !== 'name_conflict') return <ErrorAlert error={error} />
+  const known = confirmText.nameConflict[update ? 'update' : 'install']
+  return (
+    <Alert variant="error">
+      <CircleAlertIcon />
+      <AlertDescription className="text-[13.5px] leading-[1.7]">{showServerText && error.serverMessage ? t.errors.withDetail(known, error.serverMessage) : known}</AlertDescription>
+    </Alert>
   )
 }
 
