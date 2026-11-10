@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"loop-now/internal/pluginmanifest"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/modelcatalog"
 )
@@ -151,4 +152,24 @@ func (s *Service) Extensions(ctx context.Context, id string) ([]string, error) {
 		out = append(out, filepath.Join(p.InstallDir, filepath.Clean(e)))
 	}
 	return out, nil
+}
+
+// ProviderStatePaths 返回插件当前版本为模型提供方 provider 声明的随账号走的 HOME 相对路径（plugins/SPEC.md §13）；
+// 没有声明或插件不存在时为空。
+func (s *Service) ProviderStatePaths(ctx context.Context, plugin, provider string) ([]string, error) {
+	rows, err := s.Store.CurrentPluginProviders(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		if r.PluginID != plugin {
+			continue
+		}
+		var decl map[string]pluginmanifest.ProviderState
+		if err := json.Unmarshal(r.ProviderState, &decl); err != nil {
+			return nil, err
+		}
+		return decl[provider].Paths, nil
+	}
+	return nil, nil
 }

@@ -83,7 +83,7 @@ func newPluginEnv(t *testing.T, enabled bool) *pluginEnv {
 		t.Fatal(err)
 	}
 	if err := st.InstallPlugin(ctx, store.Plugin{ID: "grokish", DisplayName: "Grokish", Source: json.RawMessage(`{"kind":"local","location":"/plugins/grokish/0.1.0"}`), Version: "0.1.0",
-		Manifest: json.RawMessage(`{}`), InstallDir: "/plugins/grokish/0.1.0"}, "d", json.RawMessage(`{"providers":[],"errors":[]}`), nil); err != nil {
+		Manifest: json.RawMessage(`{}`), InstallDir: "/plugins/grokish/0.1.0"}, "d", store.PluginVersionExtras{Providers: json.RawMessage(`{"providers":[],"errors":[]}`)}); err != nil {
 		t.Fatal(err)
 	}
 	if enabled {
@@ -205,6 +205,29 @@ func TestPluginProviderLogin(t *testing.T) {
 	}
 	if _, err := os.Stat(e.states.Dir(*relogin.Account.CurrentVersionID)); err != nil {
 		t.Fatal(err)
+	}
+
+	// 清理：只保留账号的当前版本（运行中的 Pi 与未结束任务在用的由调用方加进来），旧版本的目录删掉。
+	keep, err := e.st.ProviderStateVersionsInUse(ctx)
+	if err != nil || !keep[*relogin.Account.CurrentVersionID] || keep[*account.CurrentVersionID] {
+		t.Fatalf("要保留的版本：%v %v", keep, err)
+	}
+	removed, err := e.states.Sweep(func() (map[uuid.UUID]bool, error) { return keep, nil }, true)
+	if err != nil || len(removed) != 1 || removed[0] != *account.CurrentVersionID {
+		t.Fatalf("清理：%v %v", removed, err)
+	}
+	if _, err := os.Stat(e.states.Dir(*account.CurrentVersionID)); !os.IsNotExist(err) {
+		t.Fatal("旧版本目录应已删除")
+	}
+	// 删除账号：当前版本也不再保留。
+	if _, err := e.p.Delete(ctx, e.project, account.ID, relogin.Account.Revision); err != nil {
+		t.Fatal(err)
+	}
+	if keep, _ = e.st.ProviderStateVersionsInUse(ctx); keep[*relogin.Account.CurrentVersionID] {
+		t.Fatal("删除账号后不再保留")
+	}
+	if removed, _ = e.states.Sweep(func() (map[uuid.UUID]bool, error) { return keep, nil }, false); len(removed) != 1 {
+		t.Fatalf("删除账号后清理：%v", removed)
 	}
 }
 

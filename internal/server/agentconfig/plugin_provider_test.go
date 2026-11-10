@@ -22,7 +22,7 @@ func TestPluginProviderNeedsGrant(t *testing.T) {
 	reg.SetPluginProviders([]modelcatalog.PluginProvider{{PluginID: "grokish", Provider: captured}})
 	e.svc.Models = reg
 	providers, _ := json.Marshal(modelcatalog.Capture{Providers: []modelcatalog.CapturedProvider{captured}})
-	if err := e.st.InstallPlugin(ctx, store.Plugin{ID: "grokish", DisplayName: "Grokish", Source: json.RawMessage(`{"kind":"local","location":"/x"}`), Version: "0.1.0", Manifest: json.RawMessage(`{}`), InstallDir: "/x"}, "d", providers, nil); err != nil {
+	if err := e.st.InstallPlugin(ctx, store.Plugin{ID: "grokish", DisplayName: "Grokish", Source: json.RawMessage(`{"kind":"local","location":"/x"}`), Version: "0.1.0", Manifest: json.RawMessage(`{}`), InstallDir: "/x"}, "d", store.PluginVersionExtras{Providers: providers}); err != nil {
 		t.Fatal(err)
 	}
 

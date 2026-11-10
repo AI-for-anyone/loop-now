@@ -50,6 +50,8 @@ type Service struct {
 	CaptureProviders func(ctx context.Context, dir string, extensions []string) (modelcatalog.Capture, error)
 	// Models 是模型目录：安装、更新、卸载后把插件提供方并入；为空时不并入。
 	Models *modelcatalog.Registry
+	// DeleteProviderAccounts 删除这些模型提供方的项目订阅账号（卸载并删除数据时）；为空时不删。
+	DeleteProviderAccounts func(ctx context.Context, providers []string) error
 
 	mu       sync.Mutex
 	previews map[uuid.UUID]*preview
@@ -61,6 +63,8 @@ type preview struct {
 	dir     string // 插件目录：暂存区里的副本，local 来源为原目录
 	staging string // 暂存目录，local 来源为空
 	m       Manifest
+	// providerState 是市场条目的声明（从市场安装时）；为空时用清单的 loopNow.providerState。
+	providerState map[string]pluginmanifest.ProviderState
 }
 
 // Init 清理上次运行留下的暂存目录。
@@ -110,6 +114,8 @@ type Detail struct {
 	Providers      []ProviderView              `json:"providers"`
 	ProviderErrors []modelcatalog.CaptureError `json:"providerErrors"`
 	ProvidersError *string                     `json:"providersError"`
+	// ProviderState 是当前版本生效的 providerState 声明（市场条目优先，其次包自己的 loopNow.providerState）。
+	ProviderState map[string]pluginmanifest.ProviderState `json:"providerState"`
 }
 
 // ProviderView 是接口里的 PluginModelProvider。
@@ -292,11 +298,15 @@ func (s *Service) Get(ctx context.Context, id string) (Detail, error) {
 		d.Versions = append(d.Versions, VersionView{Version: ver.Version, Digest: ver.Digest, InstalledAt: ver.InstalledAt, Current: ver.Version == p.Version})
 		if ver.Version == p.Version {
 			d.ProvidersError = ver.ProvidersError
+			_ = json.Unmarshal(ver.ProviderState, &d.ProviderState)
 			var c modelcatalog.Capture
 			if json.Unmarshal(ver.Providers, &c) == nil {
 				d.Providers, d.ProviderErrors = s.providerViews(id, c), append(d.ProviderErrors, c.Errors...)
 			}
 		}
+	}
+	if d.ProviderState == nil {
+		d.ProviderState = map[string]pluginmanifest.ProviderState{}
 	}
 	return d, nil
 }
@@ -331,10 +341,11 @@ func (s *Service) Preview(ctx context.Context, req PreviewRequest) (Preview, err
 		}
 	}
 	fetchSrc, trusted, market := *src, false, (*string)(nil)
+	var declared map[string]pluginmanifest.ProviderState
 	switch {
 	case src.Kind == SourceMarket:
 		var err error
-		if fetchSrc, trusted, err = s.resolveMarket(ctx, *src); err != nil {
+		if fetchSrc, trusted, declared, err = s.resolveMarket(ctx, *src); err != nil {
 			return Preview{}, err
 		}
 		market = &src.Market
@@ -357,7 +368,7 @@ func (s *Service) Preview(ctx context.Context, req PreviewRequest) (Preview, err
 			case market != nil && m.ID != src.ID:
 				err = apperr.Invalid("manifest", "市场条目 "+src.ID+" 的来源里是插件 "+m.ID)
 			default:
-				return s.keepPreview(ctx, id, staging, dir, resolved, m, trusted)
+				return s.keepPreview(ctx, id, staging, dir, resolved, m, trusted, declared)
 			}
 		}
 	}
@@ -365,7 +376,7 @@ func (s *Service) Preview(ctx context.Context, req PreviewRequest) (Preview, err
 	return Preview{}, err
 }
 
-func (s *Service) keepPreview(ctx context.Context, id uuid.UUID, staging, dir string, resolved ResolvedSource, m Manifest, trusted bool) (Preview, error) {
+func (s *Service) keepPreview(ctx context.Context, id uuid.UUID, staging, dir string, resolved ResolvedSource, m Manifest, trusted bool, declared map[string]pluginmanifest.ProviderState) (Preview, error) {
 	if resolved.Kind == SourceNPM {
 		v := m.Version
 		resolved.NpmVersion = &v
@@ -382,7 +393,7 @@ func (s *Service) keepPreview(ctx context.Context, id uuid.UUID, staging, dir st
 		return Preview{}, err
 	}
 	s.mu.Lock()
-	s.previews[id] = &preview{view: pv, dir: dir, staging: staging, m: m}
+	s.previews[id] = &preview{view: pv, dir: dir, staging: staging, m: m, providerState: declared}
 	s.mu.Unlock()
 	return pv, nil
 }
@@ -494,11 +505,20 @@ func (s *Service) install(ctx context.Context, pv *preview, update string) (View
 	manifest, _ := json.Marshal(m)
 	source, _ := json.Marshal(pv.view.Source)
 	captured, _ := json.Marshal(providers)
+	declared := pv.providerState
+	if len(declared) == 0 {
+		declared = m.ProviderState
+	}
+	if declared == nil {
+		declared = map[string]pluginmanifest.ProviderState{}
+	}
+	state, _ := json.Marshal(declared)
+	extra := store.PluginVersionExtras{Providers: captured, ProvidersError: providersError, ProviderState: state}
 	row := store.Plugin{ID: m.ID, DisplayName: m.DisplayName.String(), Source: source, Version: m.Version, Manifest: manifest, InstallDir: installDir}
 	if update == "" {
-		err = s.Store.InstallPlugin(ctx, row, sum, captured, providersError)
+		err = s.Store.InstallPlugin(ctx, row, sum, extra)
 	} else {
-		err = s.Store.UpdatePlugin(ctx, row, sum, captured, providersError)
+		err = s.Store.UpdatePlugin(ctx, row, sum, extra)
 		if err == nil {
 			// 新版本不再声明代管的渠道，它上面的外部身份绑定清空（plugins/SPEC.md §12）。
 			err = s.Store.PruneIdentityManagers(ctx, m.ID, m.ManagingChannels())
@@ -533,6 +553,20 @@ func (s *Service) Uninstall(ctx context.Context, id string, deleteData bool) err
 	}
 	var src ResolvedSource
 	_ = json.Unmarshal(p.Source, &src)
+	// 删除数据时连同它注册的模型提供方的项目订阅账号一起删除（plugins/SPEC.md §13）；默认保留，重新安装后恢复。
+	if deleteData && s.DeleteProviderAccounts != nil {
+		var providers []string
+		if registered, err := s.installedProviders(ctx); err == nil {
+			for _, r := range registered {
+				if r.PluginID == id {
+					providers = append(providers, r.Provider.ID)
+				}
+			}
+		}
+		if err := s.DeleteProviderAccounts(ctx, providers); err != nil {
+			return err
+		}
+	}
 	if s.Host != nil {
 		if err := s.Host.Unload(ctx, id); err != nil {
 			s.Log.Warn("宿主卸载插件失败", "plugin", id, "err", err)

@@ -109,3 +109,40 @@ func tighten(root string) error {
 		return privatefs.MakePrivate(p)
 	})
 }
+
+// Sweep 删除不再需要的状态目录：keep 在锁内给出要保留的版本（与 Publish 互斥，刚提交的版本不会被误删）。
+// pending 为 true 时也删除登录暂存目录（只在启动时，没有进行中的登录）。返回删除的版本。
+func (m *Manager) Sweep(keep func() (map[uuid.UUID]bool, error), pending bool) ([]uuid.UUID, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	entries, err := os.ReadDir(m.Root)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	keepSet, err := keep()
+	if err != nil {
+		return nil, err
+	}
+	var removed []uuid.UUID
+	for _, e := range entries {
+		name := e.Name()
+		if strings.HasPrefix(name, pendingPrefix) {
+			if pending {
+				_ = os.RemoveAll(filepath.Join(m.Root, name))
+			}
+			continue
+		}
+		id, err := uuid.Parse(name)
+		if err != nil || id.String() != name || keepSet[id] {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(m.Root, name)); err != nil {
+			return removed, err
+		}
+		removed = append(removed, id)
+	}
+	return removed, nil
+}

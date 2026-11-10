@@ -49,6 +49,7 @@ func (s *Service) AgentAssets(ctx context.Context, agentID uuid.UUID) (agentconf
 		if err != nil {
 			return out, err
 		}
+		out.IDs = append(out.IDs, p.ID)
 		abs := func(rel string) string { return filepath.Join(p.InstallDir, filepath.Clean(rel)) }
 		for _, e := range m.Extensions {
 			out.Extensions = append(out.Extensions, abs(e))

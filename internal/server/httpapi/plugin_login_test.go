@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"loop-now/internal/server/apitypes"
 	cm "loop-now/internal/server/credentialmodel"
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/modelcatalog"
@@ -45,7 +46,7 @@ func TestPluginProviderLoginAPI(t *testing.T) {
 	reg.SetPluginProviders([]modelcatalog.PluginProvider{{PluginID: plugin, Provider: modelcatalog.CapturedProvider{ID: "fake-oauth", Name: "Fake", OAuth: true,
 		Models: []modelcatalog.Model{{ID: "fake-1", ThinkingLevels: []string{"off"}, DefaultThinkingLevel: "off", Input: []string{"text"}}}}}})
 	e.api.Models, e.api.ProjectCredentials.Auth.Models = reg, reg
-	if err := e.st.InstallPlugin(ctx, store.Plugin{ID: plugin, DisplayName: "Grokish", Source: json.RawMessage(`{"kind":"local","location":"/x"}`), Version: "0.1.0", Manifest: json.RawMessage(`{}`), InstallDir: "/x"}, "d", json.RawMessage(`{"providers":[],"errors":[]}`), nil); err != nil {
+	if err := e.st.InstallPlugin(ctx, store.Plugin{ID: plugin, DisplayName: "Grokish", Source: json.RawMessage(`{"kind":"local","location":"/x"}`), Version: "0.1.0", Manifest: json.RawMessage(`{}`), InstallDir: "/x"}, "d", store.PluginVersionExtras{Providers: json.RawMessage(`{"providers":[],"errors":[]}`)}); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := e.st.SaveProjectPlugin(ctx, e.dc.Project.ID, plugin, true, store.PluginConfigUpdate{Apply: func(c store.PluginConfigRow) (store.PluginConfigRow, error) { return c, nil }}); err != nil {
@@ -88,4 +89,29 @@ func TestPluginProviderLoginAPI(t *testing.T) {
 	}
 	e.expect(422, "POST", op+"/input", map[string]any{"promptId": "2", "value": "late"})
 	e.expect(422, "POST", base, map[string]any{"provider": "nope", "name": "x"})
+
+	// Agent 选这个提供方并绑定账号；开着“用本机的登录状态”时选择里带 localLogin。
+	agent := decode[apitypes.Agent](t, e.expect(201, "POST", e.agents(), map[string]any{"name": "订阅助手", "model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}}))
+	if err := e.st.SaveAgentPluginGrant(ctx, agent.ID, plugin, true, nil); err != nil {
+		t.Fatal(err)
+	}
+	e.api.Config.Models = reg
+	e.expect(200, "PATCH", "/agents/"+agent.ID.String(), map[string]any{"model": map[string]string{"provider": "fake-oauth", "modelId": "fake-1"}})
+	missing := "missing"
+	e.api.ProjectCredentials.LocalLogin = func(_ context.Context, provider string) (*string, error) {
+		if provider == "fake-oauth" {
+			return &missing, nil
+		}
+		return nil, nil
+	}
+	sel := decode[cm.Selections](t, e.expect(200, "GET", "/agents/"+agent.ID.String()+"/credential-selections", nil))
+	found := false
+	for _, v := range sel.Selections {
+		if v.Purpose == "model" && v.Provider != nil && *v.Provider == "fake-oauth" {
+			found = v.LocalLogin != nil && *v.LocalLogin == "missing"
+		}
+	}
+	if !found {
+		t.Fatalf("选择里应带 localLogin：%+v", sel.Selections)
+	}
 }

@@ -132,8 +132,15 @@ func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d 
 	} else if err := os.Remove(d.prompt); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	// 3. 模型凭证为独立Pi缓存，CLI凭证保持模板规则。
-	if err := seedModelAuth(snap, d); err != nil {
+	// 3. 模型凭证为独立Pi缓存，CLI凭证保持模板规则。插件提供方的订阅账号改为链接到账号的状态目录（先清掉上次的链接）。
+	if err := clearProviderLinks(d); err != nil {
+		return fail(executor.ErrCredentialUnavailable, "清理订阅账号的旧链接失败：%v", err)
+	}
+	if snap.ProviderState != nil {
+		if err := e.linkProviderState(snap, d, loginHome); err != nil {
+			return err
+		}
+	} else if err := seedModelAuth(snap, d); err != nil {
 		return fail(executor.ErrCredentialUnavailable, "模型凭证缓存写入失败")
 	}
 	if err := syncModelsJSON(snap, d); err != nil {

@@ -60,6 +60,8 @@ type Source struct {
 	Log *slog.Logger
 	// LocalAccess 按基础 Agent 返回本机模式交给 Pi 的东西；为空时不启用本机模式。
 	LocalAccess func(context.Context, uuid.UUID) (agentconfig.LocalAccess, error)
+	// ProviderState 给出插件提供方订阅账号的状态（任务快照冻结的版本）；随账号走的路径按插件当前版本。
+	ProviderState agentconfig.ProviderStateFunc
 }
 
 func (s *Source) ExecutionSnapshot(ctx context.Context, id uuid.UUID) (agentconfig.Snapshot, error) {
@@ -171,6 +173,10 @@ func (s *Source) ExecutionSnapshot(ctx context.Context, id uuid.UUID) (agentconf
 		if out.Local, err = s.LocalAccess(ctx, inst.AgentID); err != nil {
 			return agentconfig.Snapshot{}, err
 		}
+	}
+	// 插件提供方的订阅账号：快照冻结的是版本（状态目录），实例启动时同样建链接；工作区复制不带令牌。
+	if out.ProviderState, err = agentconfig.ResolveProviderState(ctx, s.ProviderState, out); err != nil {
+		return agentconfig.Snapshot{}, err
 	}
 	return out, nil
 }

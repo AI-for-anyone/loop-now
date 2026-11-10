@@ -773,3 +773,49 @@ func (s *Store) RequirePrivateAgentCredentials(ctx context.Context, id uuid.UUID
 	}
 	return nil
 }
+
+// ProviderStateVersionsInUse 返回插件提供方状态目录要保留的版本（plugins/SPEC.md §13）：未删除账号的当前模型版本，
+// 与未结束任务快照绑定的模型版本。其余版本的状态目录可以由清理器删除（运行中的 Pi 在用的由执行器另行保留）。
+func (s *Store) ProviderStateVersionsInUse(ctx context.Context) (map[uuid.UUID]bool, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT current_model_version_id FROM project_credential_accounts WHERE deleted_at IS NULL AND current_model_version_id IS NOT NULL
+		UNION SELECT json_extract(CAST(i.snapshot AS TEXT), '$.credentials.modelAuth.versionId') FROM task_instances i JOIN task_records r ON r.id=i.task_id
+			WHERE r.ended_at IS NULL AND json_extract(CAST(i.snapshot AS TEXT), '$.credentials.modelAuth.versionId') IS NOT NULL`)
+	if err != nil {
+		return nil, err
+	}
+	out := map[uuid.UUID]bool{}
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if id, err := uuid.Parse(raw); err == nil {
+			out[id] = true
+		}
+	}
+	rows.Close()
+	return out, rows.Err()
+}
+
+// ProviderAccount 是一个项目模型账号的定位。
+type ProviderAccount struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+	Revision  int64
+}
+
+// ModelAccountsOf 返回这些模型提供方未删除的项目账号（卸载插件并删除数据时用）。
+func (s *Store) ModelAccountsOf(ctx context.Context, providers []string) ([]ProviderAccount, error) {
+	if len(providers) == 0 {
+		return nil, nil
+	}
+	rows, err := s.Pool.Query(ctx, `SELECT project_id,id,revision FROM project_credential_accounts WHERE purpose='model' AND deleted_at IS NULL AND provider IN (SELECT value FROM json_each($1)) ORDER BY project_id,id`, providers)
+	if err != nil {
+		return nil, err
+	}
+	return db.CollectRows(rows, func(r db.CollectableRow) (ProviderAccount, error) {
+		var a ProviderAccount
+		return a, r.Scan(&a.ProjectID, &a.ID, &a.Revision)
+	})
+}

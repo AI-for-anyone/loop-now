@@ -265,7 +265,8 @@ func TestPluginMarkets(t *testing.T) {
 	}
 	files := map[string]any{
 		"/official.json": map[string]any{"name": "官方", "plugins": []any{map[string]any{"id": "gitty", "source": "git:file://" + repo + "@main",
-			"displayName": "Gitty", "description": "示例", "verified": false, "version": "2.0.0"}}},
+			"displayName": "Gitty", "description": "示例", "verified": false, "version": "2.0.0",
+			"providerState": map[string]any{"gitty-oauth": map[string]any{"paths": []any{".pi/gitty"}}}}}},
 		"/other.json": map[string]any{"plugins": []any{map[string]any{"id": "bridge", "source": "npm:@test/bridge", "displayName": "Bridge",
 			"description": "", "verified": true, "version": "1.1.0"}}},
 	}
@@ -290,6 +291,12 @@ func TestPluginMarkets(t *testing.T) {
 	if bridge["installedVersion"] != "1.0.0" || bridge["updateAvailable"] != true || gitty["installedVersion"] != nil || gitty["updateAvailable"] != false {
 		t.Fatalf("已装与可更新：%v %v", bridge, gitty)
 	}
+	if state, _ := json.Marshal(gitty["providerState"]); string(state) != `{"gitty-oauth":{"paths":[".pi/gitty"]}}` {
+		t.Fatalf("市场条目的 providerState：%s", state)
+	}
+	if state, _ := json.Marshal(bridge["providerState"]); string(state) != `{}` {
+		t.Fatalf("没有声明时为空对象：%s", state)
+	}
 
 	pv := decode[map[string]any](t, e.expect(201, "POST", "/plugin-previews", map[string]any{"source": map[string]any{"kind": "market", "market": market.URL + "/official.json", "id": "gitty"}}))
 	src := pv["source"].(map[string]any)
@@ -299,6 +306,13 @@ func TestPluginMarkets(t *testing.T) {
 	installed := decode[map[string]any](t, e.expect(201, "POST", "/plugins", map[string]any{"previewId": pv["previewId"], "confirm": false}))
 	if installed["version"] != "2.0.0" {
 		t.Fatalf("从市场安装：%+v", installed)
+	}
+	detail := decode[map[string]any](t, e.expect(200, "GET", "/plugins/gitty", nil))
+	if state, _ := json.Marshal(detail["providerState"]); string(state) != `{"gitty-oauth":{"paths":[".pi/gitty"]}}` {
+		t.Fatalf("安装后按市场条目保存 providerState：%s", state)
+	}
+	if paths, err := e.api.Plugins.ProviderStatePaths(context.Background(), "gitty", "gitty-oauth"); err != nil || len(paths) != 1 || paths[0] != ".pi/gitty" {
+		t.Fatalf("ProviderStatePaths：%v %v", paths, err)
 	}
 	e.expectError(404, "not_found", "POST", "/plugin-previews", map[string]any{"source": map[string]any{"kind": "market", "market": market.URL + "/official.json", "id": "nope"}})
 	e.expectError(422, "validation_failed", "POST", "/plugin-previews", map[string]any{"source": map[string]any{"kind": "git"}})

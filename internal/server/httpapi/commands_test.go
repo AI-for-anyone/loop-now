@@ -39,7 +39,7 @@ func TestListAgentCommands(t *testing.T) {
 		t.Fatalf("从没启动过：%+v", l)
 	}
 	if err := e.st.InstallPlugin(ctx, store.Plugin{ID: "grokish", DisplayName: "Grokish", Source: json.RawMessage(`{"kind":"local","location":"/opt/grokish"}`), Version: "0.1.0",
-		Manifest: json.RawMessage(`{"id":"grokish","name":"pi-grokish","version":"0.1.0","displayName":"Grokish"}`), InstallDir: "/opt/grokish"}, "d", json.RawMessage(`{"providers":[],"errors":[]}`), nil); err != nil {
+		Manifest: json.RawMessage(`{"id":"grokish","name":"pi-grokish","version":"0.1.0","displayName":"Grokish"}`), InstallDir: "/opt/grokish"}, "d", store.PluginVersionExtras{Providers: json.RawMessage(`{"providers":[],"errors":[]}`)}); err != nil {
 		t.Fatal(err)
 	}
 	desc := "管理账号"

@@ -55,6 +55,8 @@ type Selection struct {
 	ResolvedVersionID *uuid.UUID `json:"resolvedVersionId"`
 	Status            string     `json:"status"`
 	Candidates        []Account  `json:"candidates"`
+	// LocalLogin 只对插件提供方（声明了随账号走的状态路径）在开着“用本机的登录状态”时给出：active 或 missing。
+	LocalLogin *string `json:"localLogin,omitempty"`
 }
 type Selections struct {
 	AgentID             uuid.UUID   `json:"agentId"`

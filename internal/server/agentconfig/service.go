@@ -52,6 +52,8 @@ type Service struct {
 	AgentRemoved func(id uuid.UUID)
 	// LocalAccess 返回本机模式交给该 Agent 的 Pi 的东西；为空时不启用本机模式。
 	LocalAccess func(context.Context, uuid.UUID) (LocalAccess, error)
+	// ProviderState 给出插件提供方订阅账号的状态目录与随账号走的路径（plugins/SPEC.md §13）。
+	ProviderState ProviderStateFunc
 }
 
 var (

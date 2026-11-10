@@ -24,7 +24,7 @@ func TestPluginProvidersInCatalogAPI(t *testing.T) {
 	e.api.Models, e.api.Config.Models = reg, reg
 	providers, _ := json.Marshal(modelcatalog.Capture{Providers: []modelcatalog.CapturedProvider{captured}})
 	if err := e.st.InstallPlugin(ctx, store.Plugin{ID: "grokish", DisplayName: "Grokish", Source: json.RawMessage(`{"kind":"local","location":"/x"}`), Version: "0.1.0",
-		Manifest: json.RawMessage(`{"id":"grokish","name":"grokish","version":"0.1.0","displayName":{"zh-CN":"格罗克","en-US":"Grokish"}}`), InstallDir: "/x"}, "d", providers, nil); err != nil {
+		Manifest: json.RawMessage(`{"id":"grokish","name":"grokish","version":"0.1.0","displayName":{"zh-CN":"格罗克","en-US":"Grokish"}}`), InstallDir: "/x"}, "d", store.PluginVersionExtras{Providers: providers}); err != nil {
 		t.Fatal(err)
 	}
 	agent := decode[apitypes.Agent](t, e.expect(201, "POST", e.agents(), map[string]any{"name": "助手", "model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}}))
