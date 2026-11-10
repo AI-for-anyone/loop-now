@@ -49,8 +49,9 @@ export async function putSelection(agentId: string, body: Schemas['CredentialSel
 export function useCredentialImpact(projectId: string, purpose: Schemas['ProjectCredentialPurpose'], slot: string, accountId?: string, enabled = true) {
   return useQuery({ queryKey: [...credentialKeys.project(projectId), 'impact', purpose, slot, accountId ?? null], queryFn: ({ signal }) => call(api.GET('/projects/{projectId}/credential-account-impact', { params: { path: { projectId }, query: purpose === 'model' ? { purpose, provider: slot, accountId } : { purpose, cli: slot, accountId } }, signal })), enabled: enabled && !!slot, staleTime: 0 })
 }
+// 项目里全部进行中的登录（Codex 与插件提供方），每条带 provider；匹配时同时比 provider 与 targetAccountId。
 export function useProjectLogins(projectId: string, enabled = true) {
-  return useQuery({ queryKey: credentialKeys.operations(projectId), queryFn: ({ signal }) => call(api.GET('/projects/{projectId}/model-auth/operations', { params: { path: { projectId }, query: { provider: 'openai-codex' } }, signal })), enabled, gcTime: 0, retry: false, refetchOnMount: 'always', refetchOnWindowFocus: 'always', refetchIntervalInBackground: true, refetchInterval: query => focusManager.isFocused() || query.state.data?.operations.some(projectLoginActive) ? 1500 : false })
+  return useQuery({ queryKey: credentialKeys.operations(projectId), queryFn: ({ signal }) => call(api.GET('/projects/{projectId}/model-auth/operations', { params: { path: { projectId } }, signal })), enabled, gcTime: 0, retry: false, refetchOnMount: 'always', refetchOnWindowFocus: 'always', refetchIntervalInBackground: true, refetchInterval: query => focusManager.isFocused() || query.state.data?.operations.some(projectLoginActive) ? 1500 : false })
 }
 export const projectLoginActive = (op: Schemas['ProjectModelAuthOperation']) => op.status === 'pending' || op.status === 'awaiting_authorization'
 export function startProjectLogin(projectId: string, body: Schemas['ProjectModelAuthStart']) {
@@ -58,6 +59,10 @@ export function startProjectLogin(projectId: string, body: Schemas['ProjectModel
 }
 export function readProjectLogin(projectId: string, operationId: string, signal?: AbortSignal) {
   return call(api.GET('/projects/{projectId}/model-auth/operations/{operationId}', { params: { path: { projectId, operationId } }, signal }))
+}
+// 回答登录中途的问题：回答按秘密处理，直接发出，不经 mutation 缓存、不记日志。
+export function answerProjectLogin(projectId: string, operationId: string, body: Schemas['ProjectModelLoginInput']) {
+  return call(api.POST('/projects/{projectId}/model-auth/operations/{operationId}/input', { params: { path: { projectId, operationId } }, body }))
 }
 export function cancelProjectLogin(projectId: string, operationId: string) {
   return call(api.POST('/projects/{projectId}/model-auth/operations/{operationId}/cancel', { params: { path: { projectId, operationId } } }))
