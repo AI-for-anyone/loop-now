@@ -27,6 +27,8 @@ export const chat = {
     keys: '↑↓ to choose · Enter or Tab to fill in · Esc to close',
   },
   piCommandHandled: 'Command ran; no reply',
+  piCommandTruncated: 'The output was too long and has been truncated',
+  noticeLevel: { warning: 'Warning', error: 'Error' },
   you: 'You',
   agent: 'Agent',
   queuedTag: 'Queued',

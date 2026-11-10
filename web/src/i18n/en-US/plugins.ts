@@ -21,6 +21,7 @@ export const plugins = {
     market: 'Market',
   },
   unverified: (kind: string) => `${kind} · unreviewed`,
+  verifiedSource: (kind: string) => `${kind} · verified`,
   from: {
     builtin: 'Ships with the platform',
     git: 'From git',
