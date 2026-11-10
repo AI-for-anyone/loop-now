@@ -9,7 +9,7 @@ type Listing = { revision: number; directories: Directory[] }
 // 路径里带 missing 的目录视为不存在。测试可以直接改 state 模拟“在别处”的修改，或用 failNextPut 让下一次保存失败。
 export function localModeBackend(init: { settings?: Partial<Schemas['LocalModeSettings']>; projects?: Record<string, Listing>; agents?: Record<string, Listing & { projectId: string | null }> } = {}) {
   const state = {
-    settings: { directories: true, git: true, cli: true, ...init.settings } as Schemas['LocalModeSettings'],
+    settings: { directories: true, git: true, cli: true, logins: false, ...init.settings } as Schemas['LocalModeSettings'],
     projects: new Map(Object.entries(init.projects ?? {})),
     agents: new Map(Object.entries(init.agents ?? {})),
     requests: [] as { method: string; path: string; body: unknown }[],

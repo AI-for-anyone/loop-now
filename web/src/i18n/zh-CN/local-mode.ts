@@ -2,12 +2,12 @@ import type { components } from '@/api/schema.gen'
 
 type S = components['schemas']
 
-// 个人版“本机模式”：全局设置里的三个开关，以及项目设置与 Agent 配置里的本机目录。
+// 个人版“本机模式”：全局设置里的四个开关，以及项目设置与 Agent 配置里的本机目录。
 export const localMode = {
   settings: {
     title: '本机模式',
-    intro: '让 Agent 直接用这台电脑上已有的东西。三项各自开关，新装时默认全部开启。',
-    effect: '“绑定本机目录”和“用本机的 CLI”在 Agent 处理下一条消息时生效，进行中的回复不受影响；“用本机的 git 身份”从下一次拉取起生效。',
+    intro: '让 Agent 直接用这台电脑上已有的东西。四项各自开关：前三项默认开启，“用本机的登录状态”默认关闭，要你自己打开。',
+    effect: '“绑定本机目录”“用本机的 CLI”和“用本机的登录状态”在 Agent 处理下一条消息时生效，进行中的回复不受影响；“用本机的 git 身份”从下一次拉取起生效。',
     items: {
       directories: {
         label: '绑定本机目录',
@@ -19,9 +19,24 @@ export const localMode = {
       },
       cli: {
         label: '用本机的 CLI',
-        description: 'Agent 能调用这台电脑上安装的命令，但这些命令的登录状态仍用 Loop Now 里配置的账号，不沿用你在本机终端里的登录。',
+        description: 'Agent 能调用这台电脑上安装的命令，但这些命令的登录状态仍用 Loop Now 里配置的账号，不沿用你在本机终端里的登录；要沿用，另外打开“用本机的登录状态”。',
+      },
+      logins: {
+        label: '用本机的登录状态',
+        description: 'Agent 直接用你在这台电脑上各个工具的登录，等同以你本人的身份操作，所有 Agent 共用这些登录；Loop Now 里已为 Agent 配了账号的 CLI 仍用配置的账号。与“用本机的 CLI”互相独立：只开这一项时，只有 Agent 原本就能调用的命令用得上这些登录。',
       },
     } satisfies Record<keyof S['LocalModeSettings'], { label: string; description: string }>,
+    // 打开“用本机的登录状态”前的确认（关闭不用确认）。
+    loginsConfirm: {
+      title: '打开“用本机的登录状态”？',
+      body: '打开后，从 Agent 处理下一条消息起：',
+      points: [
+        'Agent 直接用你在这台电脑上各个工具的登录，等同以你本人的身份操作。',
+        '所有 Agent 共用这些登录，任务里的 Agent 也一样。',
+        'Loop Now 里已为 Agent 配了账号的 CLI 仍用配置的账号。',
+      ],
+      confirm: '打开',
+    },
   },
   directories: {
     title: '本机目录',
