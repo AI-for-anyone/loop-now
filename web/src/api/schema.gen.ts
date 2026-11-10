@@ -3877,6 +3877,18 @@ export interface components {
                 /** @description 命令名，不带 "/"（技能命令为 skill:<名称>） */
                 name: string;
                 handled: boolean;
+                /**
+                 * @description handled 为 true 时，命令执行期间扩展用 ctx.ui.notify 给出的消息（扩展命令的输出多半在这里），按先后顺序，随执行记录保存，
+                 *     重新打开历史与执行结束的 SSE 里都带着；message 是扩展原文，按纯文本显示，保留换行与空格。setStatus 等状态不在这里。
+                 *     handled 为 false 时为空数组（照常有模型回复）。最多 50 条、message 合计 16 KiB，超出的截断，truncated 为 true。
+                 */
+                notices: {
+                    /** @enum {string} */
+                    level: "info" | "warning" | "error";
+                    message: string;
+                }[];
+                /** @description notices 是否因超过上限被截断 */
+                truncated: boolean;
             };
             /**
              * Format: uuid

@@ -30,6 +30,9 @@ export const chat = {
   },
   // 扩展命令由 Pi 直接处理、没有交给模型：这一轮没有助手回复。
   piCommandHandled: '命令已执行，没有回复',
+  // 扩展命令的输出（notify 消息）超过上限被截断；警告与错误的级别写在块上方。
+  piCommandTruncated: '输出过长，已截断',
+  noticeLevel: { warning: '警告', error: '错误' },
   you: '你',
   agent: 'Agent',
   queuedTag: '排队中',

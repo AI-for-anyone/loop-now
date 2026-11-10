@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MessagePages } from '@/api/queries'
 import { makeAgent, makeMessage, makeRun } from '@/test/api'
 import { createTestQueryClient } from '@/test/render'
-import { initialLiveState, type LiveState } from './live-state'
+import { initialLiveState, liveReducer, type LiveState } from './live-state'
 import { MessageList } from './MessageList'
 import { buildTurns } from './turns'
 
@@ -211,9 +211,9 @@ describe('回复的显示', () => {
     expect(container.querySelector('.riso-cursor')).toBeNull()
   })
 
-  it('/pi: 扩展命令由 Pi 直接处理（piCommand.handled）：用户消息照原文显示，回复处说明命令已执行、没有回复；展开成提示的命令照常显示回复', () => {
-    const handled = makeRun({ startedAt: '2026-10-12T08:00:00Z', piCommand: { name: 'review', handled: true } })
-    const expanded = makeRun({ startedAt: '2026-10-12T08:00:01Z', piCommand: { name: 'skill:triage', handled: false } })
+  it('/pi: 扩展命令由 Pi 直接处理（piCommand.handled）且没有输出：用户消息照原文显示，回复处说明命令已执行、没有回复；展开成提示的命令照常显示回复', () => {
+    const handled = makeRun({ startedAt: '2026-10-12T08:00:00Z', piCommand: { name: 'review', handled: true, notices: [], truncated: false } })
+    const expanded = makeRun({ startedAt: '2026-10-12T08:00:01Z', piCommand: { name: 'skill:triage', handled: false, notices: [], truncated: false } })
     const plain = makeRun({ startedAt: '2026-10-12T08:00:02Z' })
     render(
       <List
@@ -237,6 +237,45 @@ describe('回复的显示', () => {
     expect(screen.getByText('/pi:skill:triage 看看')).toBeInTheDocument()
     expect(screen.getByText('分好类了')).toBeInTheDocument()
     expect(screen.getAllByText('命令已执行，没有回复')).toHaveLength(1)
+  })
+
+  it('扩展命令的输出（notices）按顺序显示成等宽纯文本，保留换行与空格；警告与错误写明级别；截断时说明；有输出就不说"没有回复"', () => {
+    const usage = 'Weekly Limit (SuperGrok)\n   Used       1%\n   Reset      Nov 14, 04:41 EST'
+    const run = makeRun({
+      startedAt: '2026-10-12T08:00:00Z',
+      piCommand: { name: 'grok-cli-usage', handled: true, truncated: true, notices: [{ level: 'info', message: usage }, { level: 'warning', message: '额度快用完了 <b>注意</b>' }, { level: 'error', message: '读取月度额度失败' }] },
+    })
+    const { container } = render(
+      <List
+        {...props}
+        pages={{ pages: [{ messages: [makeMessage({ text: '/pi:grok-cli-usage', run }), makeMessage({ role: 'assistant', text: '', run })], hasMore: false, hasMoreAfter: false }], pageParams: [null] }}
+        onLoadOlder={() => {}}
+      />,
+    )
+    const blocks = [...container.querySelectorAll('[data-pi-command-notices] pre')]
+    expect(blocks.map((block) => block.textContent)).toEqual([usage, '额度快用完了 <b>注意</b>', '读取月度额度失败'])
+    expect(blocks[0].className).toContain('whitespace-pre-wrap')
+    expect(blocks[0].className).toContain('font-mono')
+    expect(blocks[1].parentElement).toHaveTextContent(/^警告/)
+    expect(blocks[2].parentElement).toHaveTextContent(/^错误/)
+    expect(blocks[0].parentElement).not.toHaveTextContent(/^(警告|错误)/)
+    expect(container.querySelector('[data-pi-command-notices] b')).toBeNull()
+    expect(screen.getByText('输出过长，已截断')).toBeInTheDocument()
+    expect(screen.queryByText('命令已执行，没有回复')).toBeNull()
+  })
+
+  it('执行进行中没有输出；结束事件带来 notices 后一次显示，不用另取时间线', () => {
+    const running = makeRun({ status: 'running', endedAt: null, piCommand: { name: 'grok-cli-usage', handled: true, notices: [], truncated: false } })
+    const user = makeMessage({ text: '/pi:grok-cli-usage', run: running })
+    const history: MessagePages = { pages: [{ messages: [user], hasMore: false, hasMoreAfter: false }], pageParams: [null] }
+    const live: LiveState = { ...initialLiveState, current: { run: running, text: '' } }
+    const { container, rerender } = render(<List {...props} live={live} pages={history} onLoadOlder={() => {}} />)
+    expect(container.querySelector('[data-pi-command-notices]')).toBeNull()
+    expect(screen.queryByText('命令已执行，没有回复')).toBeNull()
+    const ended = { ...running, status: 'completed' as const, endedAt: '2026-10-12T08:00:30Z', piCommand: { name: 'grok-cli-usage', handled: true, notices: [{ level: 'info' as const, message: 'Used 1%' }], truncated: false } }
+    const next = liveReducer(live, { type: 'event', event: { type: 'run.ended', id: '5-0', data: { run: ended, message: makeMessage({ role: 'assistant', text: '', run: ended }) } } })
+    rerender(<List {...props} live={next} pages={history} onLoadOlder={() => {}} />)
+    expect(container.querySelector('[data-pi-command-notices] pre')?.textContent).toBe('Used 1%')
   })
 
   it('打断消息在用户消息上方标明“打断”', () => {
