@@ -19,6 +19,7 @@ import (
 	"loop-now/internal/pluginmanifest"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
+	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/pluginhost"
 	"loop-now/internal/server/store"
 )
@@ -44,6 +45,11 @@ type Service struct {
 	// RequestTimeout 是 action 与 http 请求等待插件回应的时长，默认 30 秒。
 	RequestTimeout time.Duration
 	Log            *slog.Logger
+	// CaptureProviders 用随包 Pi 加载插件目录 dir 下的扩展（相对路径），读出它们注册的模型提供方；为空时不读取。
+	// 会运行插件代码，只在用户确认安装之后调用。
+	CaptureProviders func(ctx context.Context, dir string, extensions []string) (modelcatalog.Capture, error)
+	// Models 是模型目录：安装、更新、卸载后把插件提供方并入；为空时不并入。
+	Models *modelcatalog.Registry
 
 	mu       sync.Mutex
 	previews map[uuid.UUID]*preview
@@ -100,6 +106,22 @@ type Detail struct {
 	Versions   []VersionView  `json:"versions"`
 	InstallDir string         `json:"installDir"`
 	DataDir    string         `json:"dataDir"`
+	// Providers 是当前版本的 Pi 扩展注册的模型提供方（安装时读出）；ProvidersError 是整次读取失败的原因。
+	Providers      []ProviderView              `json:"providers"`
+	ProviderErrors []modelcatalog.CaptureError `json:"providerErrors"`
+	ProvidersError *string                     `json:"providersError"`
+}
+
+// ProviderView 是接口里的 PluginModelProvider。
+type ProviderView struct {
+	ID               string  `json:"id"`
+	Name             string  `json:"name"`
+	Extension        string  `json:"extension"`
+	OAuth            bool    `json:"oauth"`
+	OverridesBuiltin bool    `json:"overridesBuiltin"`
+	InCatalog        bool    `json:"inCatalog"`
+	Error            *string `json:"error"`
+	ModelCount       int     `json:"modelCount"`
 }
 
 // VersionView 是接口里的 PluginVersion。
@@ -265,9 +287,16 @@ func (s *Service) Get(ctx context.Context, id string) (Detail, error) {
 	if err != nil {
 		return Detail{}, err
 	}
-	d := Detail{Plugin: v, Manifest: m.Public(), Versions: []VersionView{}, InstallDir: p.InstallDir, DataDir: s.dataDir(id)}
+	d := Detail{Plugin: v, Manifest: m.Public(), Versions: []VersionView{}, InstallDir: p.InstallDir, DataDir: s.dataDir(id), Providers: []ProviderView{}, ProviderErrors: []modelcatalog.CaptureError{}}
 	for _, ver := range versions {
 		d.Versions = append(d.Versions, VersionView{Version: ver.Version, Digest: ver.Digest, InstalledAt: ver.InstalledAt, Current: ver.Version == p.Version})
+		if ver.Version == p.Version {
+			d.ProvidersError = ver.ProvidersError
+			var c modelcatalog.Capture
+			if json.Unmarshal(ver.Providers, &c) == nil {
+				d.Providers, d.ProviderErrors = s.providerViews(id, c), append(d.ProviderErrors, c.Errors...)
+			}
+		}
 	}
 	return d, nil
 }
@@ -417,10 +446,9 @@ func (s *Service) install(ctx context.Context, pv *preview, update string) (View
 	if err != nil {
 		return View{}, err
 	}
-	installDir := pv.dir
+	installDir, codeDir, target, reuse := pv.dir, pv.dir, "", false
 	if pv.view.Source.Kind != SourceLocal {
-		target := filepath.Join(s.Root, m.ID, m.Version)
-		reuse := false
+		target = filepath.Join(s.Root, m.ID, m.Version)
 		if update != "" {
 			versions, err := s.Store.PluginVersions(ctx, m.ID)
 			if err != nil {
@@ -433,12 +461,21 @@ func (s *Service) install(ctx context.Context, pv *preview, update string) (View
 				reuse = reuse || v.Version == m.Version
 			}
 		}
-		if !reuse {
-			if pv.view.Source.Kind == SourceGit || pv.view.Source.Kind == SourceNPM {
-				if err := s.installDeps(ctx, pv.dir); err != nil {
-					return View{}, err
-				}
+		if reuse {
+			codeDir = target
+		} else if pv.view.Source.Kind == SourceGit || pv.view.Source.Kind == SourceNPM {
+			if err := s.installDeps(ctx, pv.dir); err != nil {
+				return View{}, err
 			}
+		}
+	}
+	// 依赖装好之后、文件就位之前读出模型提供方：与别的插件注册的提供方同 id 时不安装。
+	providers, providersError := s.captureProviders(ctx, codeDir, m)
+	if err := s.checkProviderConflicts(ctx, m.ID, providers); err != nil {
+		return View{}, err
+	}
+	if target != "" {
+		if !reuse {
 			if err := os.RemoveAll(target); err != nil {
 				return View{}, err
 			}
@@ -456,11 +493,12 @@ func (s *Service) install(ctx context.Context, pv *preview, update string) (View
 	}
 	manifest, _ := json.Marshal(m)
 	source, _ := json.Marshal(pv.view.Source)
+	captured, _ := json.Marshal(providers)
 	row := store.Plugin{ID: m.ID, DisplayName: m.DisplayName.String(), Source: source, Version: m.Version, Manifest: manifest, InstallDir: installDir}
 	if update == "" {
-		err = s.Store.InstallPlugin(ctx, row, sum)
+		err = s.Store.InstallPlugin(ctx, row, sum, captured, providersError)
 	} else {
-		err = s.Store.UpdatePlugin(ctx, row, sum)
+		err = s.Store.UpdatePlugin(ctx, row, sum, captured, providersError)
 		if err == nil {
 			// 新版本不再声明代管的渠道，它上面的外部身份绑定清空（plugins/SPEC.md §12）。
 			err = s.Store.PruneIdentityManagers(ctx, m.ID, m.ManagingChannels())
@@ -470,6 +508,7 @@ func (s *Service) install(ctx context.Context, pv *preview, update string) (View
 		return View{}, err
 	}
 	s.reloadHost(ctx, m.ID, m.Platform != "" || (update != "" && existing.ID != ""))
+	s.publishProviders(ctx)
 	v, _, err := s.get(ctx, m.ID)
 	return v, err
 }
@@ -517,6 +556,7 @@ func (s *Service) Uninstall(ctx context.Context, id string, deleteData bool) err
 		}
 	}
 	_ = os.Remove(filepath.Join(s.Root, id)) // 只在已空时删除
+	s.publishProviders(ctx)
 	return nil
 }
 

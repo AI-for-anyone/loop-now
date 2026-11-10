@@ -122,7 +122,7 @@ func TestBaselineShape(t *testing.T) {
 }
 
 // latestVersion 是最后一条迁移的版本号；新增迁移时同步修改。
-const latestVersion = 3
+const latestVersion = 4
 
 // TestMigrateToBaseline：导入旧库时先只迁到基线（没有基线之后新增的表），再迁到最新。
 func TestMigrateToBaseline(t *testing.T) {

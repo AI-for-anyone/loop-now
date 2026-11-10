@@ -692,8 +692,19 @@ func (a *App) assemblePlugins(cfg *config.Config, res *preflight.Resolved, log *
 	}
 	a.Plugins = &plugins.Service{Store: a.Store, Root: root, OfficialDir: cfg.PluginOfficialDir, OfficialMarket: cfg.PluginMarketURL, NodeBin: res.NodeBin, GitBin: res.GitBin,
 		APIURL: strings.TrimSuffix(agentURL(a.listener.Addr()), "/agent/v1") + "/api/v1", PlatformVersion: buildinfo.Version(), Log: log}
+	if a.ModelSettings != nil {
+		modelOptions := a.ModelSettings.Options
+		a.Plugins.Models = a.ModelSettings.Models
+		a.Plugins.CaptureProviders = func(ctx context.Context, dir string, extensions []string) (modelcatalog.Capture, error) {
+			return modelcatalog.CaptureProviders(ctx, modelOptions, dir, extensions)
+		}
+	}
 	if err := a.Plugins.Init(); err != nil {
 		return err
+	}
+	// 插件注册的模型提供方并入模型目录；读不出时只记日志，Agent 用到时再明确报错。
+	if err := a.Plugins.PublishProviders(context.Background()); err != nil {
+		log.Warn("把插件注册的模型提供方并入模型目录失败", "err", err)
 	}
 	a.API.Plugins = a.Plugins
 	if cfg.PluginHostEntry == "" {
