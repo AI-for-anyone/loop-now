@@ -120,7 +120,8 @@ describe('概览按项目或平台筛选', () => {
     expect(within(sidebar()).queryByRole('list', { name: 'Agent' })).toBeNull()
     await user.click(screen.getByRole('button', { name: '回到全部' }))
     await waitFor(() => expect(router.state.location.search).toBe(''))
-    expect(screen.getByRole('combobox', { name: '范围' })).toHaveDisplayValue('全部')
+    // 新地址在 transition 里才渲染到页面，等页面跟上。
+    await waitFor(() => expect(screen.getByRole('combobox', { name: '范围' })).toHaveDisplayValue('全部'))
   })
 
   it('范围切换选了项目后，左侧栏的概览保留这个项目', async () => {
