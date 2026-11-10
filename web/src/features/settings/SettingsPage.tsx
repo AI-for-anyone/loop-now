@@ -13,6 +13,7 @@ import { selectClass } from '@/lib/field'
 import { cn } from '@/lib/utils'
 import { ContextFolderSection } from '@/features/folders/FolderSections'
 import { ModelSettingsCard } from '@/features/settings/ModelSettingsCard'
+import { LocalModeCard } from '@/features/local-mode/LocalModeCard'
 import { DraftNavigationGuard } from '@/features/prompts/DraftNavigationGuard'
 import { pageTitleClass } from '@/lib/page-title'
 
@@ -93,6 +94,8 @@ export function SettingsPage() {
         <LanguageCard />
 
         <ModelSettingsCard />
+
+        <LocalModeCard />
 
         <ContextFolderSection scope={{ kind: 'global' }} />
 

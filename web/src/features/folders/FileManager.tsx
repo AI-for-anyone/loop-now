@@ -11,6 +11,7 @@ import { ancestorsOf, encodeText, ENTRY_FILE, folderKeys, joinPath, nameOf, pare
 import { refreshDirs, useGitPulls, type FileText, type Selection } from './folder-queries'
 import { DirView, FileView, type EditState } from './FolderContent'
 import { GitPullDialog, MoveDialog } from './FolderDialogs'
+import { GitPullHint } from '@/features/local-mode/GitPullHint'
 import { FileTree, type Naming } from './FileTree'
 import { ToolButton, UploadMenu, type EntryActions } from './FolderParts'
 import { droppedItems, useFolderUploads, type UploadRow } from './use-folder-uploads'
@@ -249,6 +250,7 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className }:
         </section>
       </div>
 
+      {pull?.status === 'failed' && <GitPullHint errorCode={pull.errorCode} />}
       {pull?.status === 'failed' && pullDetails && pull.errorMessage && (
         <pre className="max-h-32 shrink-0 overflow-auto border-t border-ink/10 bg-tint-red/40 px-4 py-2 font-mono text-[11.5px] leading-[1.6] whitespace-pre-wrap text-red-text">{pull.errorMessage}</pre>
       )}
