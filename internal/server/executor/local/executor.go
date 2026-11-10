@@ -323,7 +323,7 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	case tr.Outcome == pirpc.OutcomeAborted, r.interrupted.Load() && tr.Outcome == pirpc.OutcomeFailed:
 		res.Outcome = executor.OutcomeInterrupted
 	case tr.Outcome == pirpc.OutcomeCompleted:
-		res.Outcome = executor.OutcomeCompleted
+		res.Outcome, res.CommandHandled = executor.OutcomeCompleted, tr.Handled
 	default:
 		res.Outcome = executor.OutcomeFailed
 		res.ErrorCode, res.ErrorMessage = tr.ErrorCode, tr.ErrorMessage
@@ -678,6 +678,7 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 		return nil, fail(executor.ErrPiStartFailed, "Pi 启动后未就绪：%v %s", err, tail(client.Stderr(), e.o.StderrTailBytes))
 	}
 	p.sessionFile = st.SessionFile
+	go e.cacheCommands(p)
 	startup := time.Since(begin)
 	e.event(snap.AgentID, &runID, store.EventPiStarted, map[string]any{
 		"pid": client.Pid(), "configVersion": snap.ConfigVersion, "startupMs": startup.Milliseconds(), "reason": startReason})

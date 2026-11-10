@@ -37,6 +37,10 @@ type Run struct {
 	Origin           string // console / inbox_reminder
 	WakeSleepID      *uuid.UUID
 	TriggerInboxID   *uuid.UUID // 平台提醒：创建这次排队提醒的 Inbox 消息
+	// PiCommand 是对话页 /pi:<name> 消息交给 Pi 的命令名（不带 "/"），不是命令时为空；
+	// PiCommandHandled 表示 Pi 直接处理了命令、没有交给模型。
+	PiCommand        *string
+	PiCommandHandled bool
 	Tools            []ToolEvent
 	Usage            UsageTotals
 	Model            *ModelRef // 最后一次 assistant 调用的提供方与模型；没有时为空
@@ -77,7 +81,7 @@ func runColumnsOf(prefix string) string {
 	return strings.NewReplacer("$.", prefix).Replace(`$.id, $.agent_id, $.user_message_id, $.config_version, $.instance_id, $.priority,
 	coalesce($.when_busy, ''), $.queue_seq, $.status, coalesce($.phase, ''), coalesce($.end_reason, ''), coalesce($.error_code, ''),
 	coalesce($.error_message, ''), $.queued_at, $.started_at, $.running_at, $.abort_requested_at, $.ended_at,
-	$.origin, $.trigger_inbox_message_id, $.wake_sleep_id`)
+	$.origin, $.trigger_inbox_message_id, $.wake_sleep_id, $.pi_command, $.pi_command_handled`)
 }
 
 var runColumns = runColumnsOf("")
@@ -85,7 +89,7 @@ var runColumns = runColumnsOf("")
 func runFields(r *Run) []any {
 	return []any{&r.ID, &r.AgentID, &r.UserMessageID, &r.ConfigVersion, &r.InstanceID, &r.Priority, &r.WhenBusy, &r.QueueSeq, &r.Status,
 		&r.Phase, &r.EndReason, &r.ErrorCode, &r.ErrorMessage, &r.QueuedAt, &r.StartedAt,
-		&r.RunningAt, &r.AbortRequestedAt, &r.EndedAt, &r.Origin, &r.TriggerInboxID, &r.WakeSleepID}
+		&r.RunningAt, &r.AbortRequestedAt, &r.EndedAt, &r.Origin, &r.TriggerInboxID, &r.WakeSleepID, &r.PiCommand, &r.PiCommandHandled}
 }
 
 func scanRun(row db.Scanner) (Run, error) {
@@ -504,6 +508,9 @@ type RunEnd struct {
 	ErrorMessage  string
 	Text          string
 	ConfigVersion int64 // 为 0 时不改
+	// PiCommand 不为空时记下这一轮交给 Pi 的命令名；PiCommandHandled 表示 Pi 直接处理了命令。
+	PiCommand        string
+	PiCommandHandled bool
 }
 
 // FinishRun 结束一次进行中的执行，写入回复与结束事件。执行已结束时返回 (run, nil, false, nil)，不重复写入。
@@ -522,9 +529,10 @@ func (s *Store) FinishRun(ctx context.Context, runID uuid.UUID, end RunEnd) (Run
 		var err error
 		// 被人停止的执行（stop_requested）以 user_stopped 结束，而不是被新消息打断的 user_interrupt。
 		run, err = scanRun(tx.QueryRow(ctx, `UPDATE runs SET status = $2, end_reason = CASE WHEN $3 = 'user_interrupt' AND stop_requested THEN 'user_stopped' ELSE $3 END,
-				error_code = $4, error_message = $5, phase = NULL, ended_at = $7, config_version = CASE WHEN $6 > 0 THEN $6 ELSE config_version END
+				error_code = $4, error_message = $5, phase = NULL, ended_at = $7, config_version = CASE WHEN $6 > 0 THEN $6 ELSE config_version END,
+				pi_command = coalesce($8, pi_command), pi_command_handled = $9
 			WHERE id = $1 AND status IN `+activeRunStatuses+` RETURNING `+runColumns,
-			runID, end.Status, nullIfEmpty(end.EndReason), nullIfEmpty(end.ErrorCode), nullIfEmpty(end.ErrorMessage), end.ConfigVersion, tx.Now()))
+			runID, end.Status, nullIfEmpty(end.EndReason), nullIfEmpty(end.ErrorCode), nullIfEmpty(end.ErrorMessage), end.ConfigVersion, tx.Now(), nullIfEmpty(end.PiCommand), end.PiCommandHandled))
 		if errors.Is(err, db.ErrNoRows) {
 			run, err = scanRun(tx.QueryRow(ctx, `SELECT `+runColumns+` FROM runs WHERE id = $1`, runID))
 			return notFoundIfNoRows(err, "执行")

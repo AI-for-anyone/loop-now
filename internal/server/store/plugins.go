@@ -81,6 +81,25 @@ func (s *Store) PluginVersions(ctx context.Context, id string) ([]PluginVersion,
 	})
 }
 
+// PluginInstallDirs 返回各已安装插件全部版本的安装目录（插件 id → 目录），用来判断某个文件属于哪个插件。
+func (s *Store) PluginInstallDirs(ctx context.Context) (map[string][]string, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT plugin_id,install_dir FROM plugin_versions ORDER BY plugin_id`)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string][]string{}
+	for rows.Next() {
+		var id, dir string
+		if err := rows.Scan(&id, &dir); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		out[id] = append(out[id], dir)
+	}
+	rows.Close()
+	return out, rows.Err()
+}
+
 // PluginProviders 是一个已安装插件当前版本读出的模型提供方。
 type PluginProviders struct {
 	PluginID       string

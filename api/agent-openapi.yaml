@@ -9506,6 +9506,18 @@ components:
           description: 触发本轮平台提醒的原 Inbox 消息 ID；无触发消息的历史及普通来源省略
           type: string
           format: uuid
+        piCommand:
+          description: |
+            这一轮交给 Pi 的命令（plugins/SPEC.md §14）：对话页消息以 `/pi:<name>` 开头时，服务端发给 Pi 的是 `/<name>`（其余原样），
+            消息本身照原文保存与显示。handled 为 true 表示 Pi 直接处理了命令（扩展命令）、没有交给模型，这一轮以 completed 结束、没有助手回复
+            （助手消息正文为空，可显示“命令已执行，没有回复”；命令里的通知与状态照常记为运行事件）；false 表示命令展开成了普通提示（技能命令、提示模板）
+            或 Pi 不认识这个命令、当作普通文字交给了模型。不是命令的执行省略此字段。
+          type: object
+          required: [name, handled]
+          additionalProperties: false
+          properties:
+            name: { description: 命令名，不带 "/"（技能命令为 skill:<名称>）, type: string }
+            handled: { type: boolean }
         wakeSleepId:
           description: 本轮有效承接的 sleep；普通历史可省略或为 null
           type: [string, "null"]

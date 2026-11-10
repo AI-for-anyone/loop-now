@@ -3034,6 +3034,9 @@ paths:
       description: |
         发送前交给插件（plugins/SPEC.md §4）：以 `/` 开头且不带图片的消息先作为 `console.command` 交给认领类 Hook，被认领时消息不发给 Agent、
         不保存，返回 200 ConsoleCommandResult；其余消息经修改类 Hook `message.before_enqueue`，插件可以改写正文。
+        以 `/pi:<name>` 开头的消息是交给 Pi 的命令（plugins/SPEC.md §14）：不给插件认领，照原文保存与显示，执行时发给 Pi 的是 `/<name>` 加其余原文，
+        不加运行 ID 与平台通知；带图片时图片照常交给 Pi（Pi 执行扩展命令时不用图片，技能命令与提示模板展开后随提示交给模型）。
+        结果见执行的 `piCommand`。可用的命令见 `GET /agents/{agentId}/commands`。任务节点的消息不做这个改写。
       requestBody:
         required: true
         content:
@@ -4210,6 +4213,28 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /agents/{agentId}/commands:
+    get:
+      tags: [conversation]
+      operationId: listAgentCommands
+      x-access: console
+      summary: 对话页 "/" 菜单可用的 Pi 命令
+      description: |
+        Agent 上次启动 Pi 时（Pi RPC get_commands）读到的扩展命令、提示模板与技能命令（plugins/SPEC.md §14）。平台不为列命令专门启动 Pi：
+        从没启动过时 capturedAt 为 null、列表为空；授权的插件变了之后，要等 Pi 下次启动才更新。控制台显示与补全时写成 `/pi:<name>`。
+        插件平台侧认领的 console.command 是认领型 Hook，没有可列举的命令名，不在这里列出；也没有平台内置命令。
+      parameters:
+        - { name: agentId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: 命令列表
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentCommandList" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /agents/{agentId}/plugins/{pluginId}:
     parameters:
       - $ref: "#/components/parameters/AgentId"
@@ -10659,6 +10684,18 @@ components:
           description: 触发本轮平台提醒的原 Inbox 消息 ID；无触发消息的历史及普通来源省略
           type: string
           format: uuid
+        piCommand:
+          description: |
+            这一轮交给 Pi 的命令（plugins/SPEC.md §14）：对话页消息以 `/pi:<name>` 开头时，服务端发给 Pi 的是 `/<name>`（其余原样），
+            消息本身照原文保存与显示。handled 为 true 表示 Pi 直接处理了命令（扩展命令）、没有交给模型，这一轮以 completed 结束、没有助手回复
+            （助手消息正文为空，可显示“命令已执行，没有回复”；命令里的通知与状态照常记为运行事件）；false 表示命令展开成了普通提示（技能命令、提示模板）
+            或 Pi 不认识这个命令、当作普通文字交给了模型。不是命令的执行省略此字段。
+          type: object
+          required: [name, handled]
+          additionalProperties: false
+          properties:
+            name: { description: 命令名，不带 "/"（技能命令为 skill:<名称>）, type: string }
+            handled: { type: boolean }
         wakeSleepId:
           description: 本轮有效承接的 sleep；普通历史可省略或为 null
           type: [string, "null"]
@@ -18814,6 +18851,29 @@ components:
         providersError:
           description: 整次读取失败的原因（如 Pi 不可用、超时）；为空表示读取成功或插件没有 Pi 扩展
           type: [string, "null"]
+
+    AgentCommandList:
+      type: object
+      required: [capturedAt, commands]
+      additionalProperties: false
+      properties:
+        capturedAt: { description: 读到这份列表的时间（Pi 启动时）；从没启动过为 null, type: [string, "null"], format: date-time }
+        commands: { type: array, items: { $ref: "#/components/schemas/AgentCommand" } }
+
+    AgentCommand:
+      type: object
+      required: [name, source, piSource, description, pluginId, pluginDisplayName]
+      additionalProperties: false
+      properties:
+        name: { description: 命令名，不带 "/"；技能命令为 skill:<名称>, type: string }
+        source: { description: 目前只有 pi（交给 Pi 执行，发送时写成 /pi:<name>）, type: string, enum: [pi] }
+        piSource: { description: Pi 给的来源（原样）：extension 扩展命令、prompt 提示模板、skill 技能命令, type: string }
+        description: { description: 命令自己的说明（扩展原文，按纯文本显示）, type: [string, "null"] }
+        pluginId: { description: 命令来自哪个已安装插件（按来源文件所在的安装目录）；平台自己的或判断不出时为 null, type: [string, "null"] }
+        pluginDisplayName:
+          oneOf:
+            - $ref: "#/components/schemas/LocalizedText"
+            - type: "null"
 
     PluginModelProvider:
       type: object

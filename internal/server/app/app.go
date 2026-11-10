@@ -469,6 +469,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		},
 		Config: a.Config, Conv: a.Conv, Models: models, Templates: templates, Installer: installer, Store: a.Store, Coord: a.Coord,
 		Tasks: a.Tasks, Records: &runrecord.Service{Store: a.Store}, Inbox: inboxSvc, Folders: a.Folders, LocalMode: a.LocalMode, Log: log,
+		PiCommands: a.Executor.Commands,
 	}
 	if err = a.assemblePlugins(cfg, res, log); err != nil {
 		return a, err

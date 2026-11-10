@@ -87,8 +87,8 @@ func TestFakeHandledDisposition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res != (TurnResult{Outcome: OutcomeCompleted}) {
-		t.Fatalf("handled 应直接完成且无文本：%+v", res)
+	if res != (TurnResult{Outcome: OutcomeCompleted, Handled: true}) {
+		t.Fatalf("handled 应直接完成、标明已处理且无文本：%+v", res)
 	}
 	res, err = p.Prompt(ctx, "next", nil)
 	if err != nil || res.Text != "echo: next" {

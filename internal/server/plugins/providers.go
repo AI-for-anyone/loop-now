@@ -3,6 +3,8 @@ package plugins
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
+	"strings"
 
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/modelcatalog"
@@ -113,4 +115,23 @@ func (s *Service) providerViews(id string, c modelcatalog.Capture) []ProviderVie
 		out = append(out, ProviderView{ID: p.ID, Name: p.Name, Extension: p.Extension, OAuth: p.OAuth, OverridesBuiltin: p.OverridesBuiltin, InCatalog: in, Error: p.Error, ModelCount: len(p.Models)})
 	}
 	return out
+}
+
+// PluginOfPath 返回判断文件属于哪个已安装插件的函数（按各版本安装目录）；不属于任何插件时 ok 为 false。
+func (s *Service) PluginOfPath(ctx context.Context) (func(string) (string, bool), error) {
+	dirs, err := s.Store.PluginInstallDirs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return func(path string) (string, bool) {
+		clean := filepath.Clean(path)
+		for id, list := range dirs {
+			for _, d := range list {
+				if strings.HasPrefix(clean, filepath.Clean(d)+string(filepath.Separator)) {
+					return id, true
+				}
+			}
+		}
+		return "", false
+	}, nil
 }

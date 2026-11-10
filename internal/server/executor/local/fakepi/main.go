@@ -46,6 +46,7 @@ type options struct {
 	model              string
 	skills             []string
 	appendSystemPrompt []string
+	extensions         []string
 }
 
 // parseArgs 解析参数；未知参数忽略（与 Pi 一样，未知的 --flag 会吞掉随后的非选项值）。
@@ -81,6 +82,10 @@ func parseArgs(args []string) options {
 		case "--skill":
 			if v, ok := next(&i); ok {
 				o.skills = append(o.skills, v)
+			}
+		case "-e":
+			if v, ok := next(&i); ok {
+				o.extensions = append(o.extensions, v)
 			}
 		case "--append-system-prompt":
 			if v, ok := next(&i); ok {
@@ -481,6 +486,8 @@ func (s *server) handle(line []byte) {
 		s.ok(cmd.ID, "set_thinking_level", nil)
 	case "get_state":
 		s.ok(cmd.ID, "get_state", s.state())
+	case "get_commands":
+		s.ok(cmd.ID, "get_commands", map[string]any{"commands": s.commands()})
 	case "prompt":
 		s.prompt(cmd.ID, cmd.Message, cmd.Images)
 	case "abort":
@@ -576,7 +583,7 @@ func (s *server) prompt(id json.RawMessage, msg string, images []json.RawMessage
 		s.fail(id, "prompt", "rejected")
 		return
 	}
-	if d.handled {
+	if d.handled || s.extensionCommand(msg) {
 		s.mu.Unlock()
 		s.ok(id, "prompt", map[string]any{"disposition": "handled"})
 		return
@@ -1055,4 +1062,37 @@ func shortID() string {
 	var b [4]byte
 	_, _ = rand.Read(b[:])
 	return hex.EncodeToString(b[:])
+}
+
+// commands 是 get_commands 的结果：每个 -e 扩展文件一条扩展命令（名字为文件名去掉扩展名），每个 --skill 目录一条 skill:<目录名>。
+func (s *server) commands() []map[string]any {
+	out := []map[string]any{}
+	for _, e := range s.opts.extensions {
+		if strings.HasPrefix(e, "builtin:") {
+			continue
+		}
+		base := filepath.Base(e)
+		out = append(out, map[string]any{"name": strings.TrimSuffix(base, filepath.Ext(base)), "description": "fakepi command from " + base,
+			"source": "extension", "sourceInfo": map[string]any{"path": e, "source": "cli", "scope": "temporary", "origin": "top-level"}})
+	}
+	for _, sk := range s.opts.skills {
+		out = append(out, map[string]any{"name": "skill:" + filepath.Base(sk), "source": "skill",
+			"sourceInfo": map[string]any{"path": sk, "source": "cli", "scope": "temporary", "origin": "top-level"}})
+	}
+	return out
+}
+
+// extensionCommand 与 Pi 一样：首字符为 / 且命令名是某个扩展命令时，由扩展处理，不交给模型。
+func (s *server) extensionCommand(msg string) bool {
+	name, ok := strings.CutPrefix(msg, "/")
+	if !ok {
+		return false
+	}
+	name, _, _ = strings.Cut(name, " ")
+	for _, c := range s.commands() {
+		if c["source"] == "extension" && c["name"] == name {
+			return true
+		}
+	}
+	return false
 }

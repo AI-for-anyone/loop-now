@@ -74,6 +74,8 @@ type Result struct {
 	ErrorMessage string
 	// ConfigVersion 是这次执行实际使用的配置版本。
 	ConfigVersion int64
+	// CommandHandled 表示 Pi 直接处理了这次的消息（扩展命令），没有交给模型、没有回复。
+	CommandHandled bool
 }
 
 // Sink 接收执行过程中的事件。回调可能来自执行器内部的协程，实现须尽快返回。
@@ -157,4 +159,19 @@ const reservedEnvPrefix = "LOOPCTL_"
 // IsReservedEnv 判断环境变量名是否由执行器保留。
 func IsReservedEnv(name string) bool {
 	return slices.Contains(reservedEnv, name) || strings.HasPrefix(name, reservedEnvPrefix)
+}
+
+// PiCommand 是 Pi 能执行的一条命令（Pi RPC get_commands）：扩展命令、提示模板或技能命令（name 为 skill:<名称>）。
+type PiCommand struct {
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+	Source      string  `json:"source"` // extension / prompt / skill
+	// Path 是命令来源的文件（扩展文件、模板或技能），用来判断它属于哪个插件。
+	Path string `json:"path"`
+}
+
+// PiCommands 是 Agent 上次启动 Pi 时读到的命令列表。
+type PiCommands struct {
+	CapturedAt time.Time   `json:"capturedAt"`
+	Commands   []PiCommand `json:"commands"`
 }
