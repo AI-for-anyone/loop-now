@@ -21,6 +21,7 @@ import (
 	"loop-now/internal/server/db"
 	"loop-now/internal/server/pgimport/pgschema"
 	"loop-now/internal/server/store"
+	"loop-now/internal/server/store/schema"
 )
 
 // EnvSourceURL 是源库连接串所在的环境变量：沿用 PostgreSQL 时期服务端读的那个。
@@ -105,7 +106,9 @@ func Import(ctx context.Context, o Options) (_ Report, err error) {
 			removeDB(o.DBDir)
 		}
 	}()
-	if err = st.Migrate(ctx, o.Log); err != nil {
+	// 先只迁到 SQLite 基线（与源库 PG 的最终结构对应），导入并核对之后再执行基线之后的迁移：
+	// 之后的迁移新增的表与列在源库里没有，迁到最新再比对结构会拒绝导入。
+	if err = st.MigrateTo(ctx, o.Log, schema.Baseline); err != nil {
 		return Report{}, err
 	}
 	targets, err := targetTables(ctx, st.Pool)
@@ -154,6 +157,9 @@ func Import(ctx context.Context, o Options) (_ Report, err error) {
 		return Report{}, err
 	}
 	if err = verify(ctx, st.Pool, plans, report); err != nil {
+		return Report{}, err
+	}
+	if err = st.Migrate(ctx, o.Log); err != nil {
 		return Report{}, err
 	}
 	if _, err = st.Pool.Checkpoint(ctx, db.CheckpointTruncate); err != nil {

@@ -15,7 +15,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"loop-now/internal/server/db"
+	"loop-now/internal/server/store"
 	"loop-now/internal/server/store/schema"
 	"loop-now/internal/testutil/sqlitetest"
 
@@ -76,8 +79,9 @@ func TestBaselineShape(t *testing.T) {
 	if !slices.Equal(inEvents, eventsTables) {
 		t.Errorf("events.db 的表 = %v，应为 %v", inEvents, eventsTables)
 	}
-	if len(ts) != 90 {
-		t.Errorf("业务表共 %d 张，应为 90（PG 的 87 张加 sequences 与两张插件事件捕获表）", len(ts))
+	// 基线 90 张（PG 的 87 张加 sequences 与两张插件事件捕获表），迁移 2 加本机模式的 3 张。
+	if len(ts) != 93 {
+		t.Errorf("业务表共 %d 张，应为 93", len(ts))
 	}
 	for _, name := range eventsTables {
 		var n int
@@ -99,6 +103,10 @@ func TestBaselineShape(t *testing.T) {
 		}
 		rows.Close()
 	}
+	var dirs, git, cli bool
+	if err := d.QueryRow(ctx, `SELECT directories, git, cli FROM local_mode_settings`).Scan(&dirs, &git, &cli); err != nil || !dirs || !git || !cli {
+		t.Errorf("本机模式开关应默认全开：%v %v %v %v", dirs, git, cli, err)
+	}
 	var seqs string
 	if err := d.QueryRow(ctx, `SELECT group_concat(name || '=' || value, ',') FROM (SELECT * FROM sequences ORDER BY name)`).Scan(&seqs); err != nil ||
 		seqs != "conversation_messages.seq=0,runs.queue_seq=0,task_turns.queue_seq=0" {
@@ -108,8 +116,84 @@ func TestBaselineShape(t *testing.T) {
 	if err := schema.Migrate(ctx, d, slog.New(slog.DiscardHandler)); err != nil {
 		t.Fatal(err)
 	}
+	if v, err := schema.Version(ctx, d); err != nil || v != latestVersion {
+		t.Fatalf("版本 = %d %v，应为 %d", v, err, latestVersion)
+	}
+}
+
+// latestVersion 是最后一条迁移的版本号；新增迁移时同步修改。
+const latestVersion = 2
+
+// TestMigrateToBaseline：导入旧库时先只迁到基线（没有基线之后新增的表），再迁到最新。
+func TestMigrateToBaseline(t *testing.T) {
+	ctx := context.Background()
+	d, err := db.Open(ctx, db.Options{Dir: t.TempDir(), Logger: slog.New(slog.DiscardHandler)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { d.Close() })
+	log := slog.New(slog.DiscardHandler)
+	if err := schema.MigrateTo(ctx, d, log, schema.Baseline); err != nil {
+		t.Fatal(err)
+	}
 	if v, err := schema.Version(ctx, d); err != nil || v != schema.Baseline {
 		t.Fatalf("版本 = %d %v，应为 %d", v, err, schema.Baseline)
+	}
+	if ts := tables(t, d); len(ts) != 90 {
+		t.Fatalf("基线业务表 %d 张，应为 90", len(ts))
+	}
+	// 迁移 2 重建 agent_folder_git_pulls（失败码新增两个）：已有记录原样保留。
+	st := store.New(d)
+	dc, err := st.EnsureDefaults(ctx, "o", "p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := st.CreateAgent(ctx, store.ProjectScope(dc.Project.ID), "a", "anthropic", "m", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pull := func(path string) uuid.UUID {
+		t.Helper()
+		p, created, err := st.CreateFolderGitPull(ctx, store.FolderGitPull{ID: uuid.Must(uuid.NewV7()), AgentID: a.ID, ActionID: uuid.New(), URL: "https://example.com/r.git", Branch: "main", Path: path})
+		if err != nil || !created {
+			t.Fatal(err)
+		}
+		if ok, err := st.StartFolderGitPull(ctx, p.ID); err != nil || !ok {
+			t.Fatal(err)
+		}
+		return p.ID
+	}
+	old, queued := pull("old"), pull("queued")
+	if err := st.FinishFolderGitPull(ctx, old, "clone_failed", "原来的失败"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.FinishFolderGitPull(ctx, queued, "auth_failed", "x"); err == nil {
+		t.Fatal("基线不应接受 auth_failed")
+	}
+	if err := schema.Migrate(ctx, d, log); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := schema.Version(ctx, d); err != nil || v != latestVersion {
+		t.Fatalf("版本 = %d %v，应为 %d", v, err, latestVersion)
+	}
+	if got, err := st.GetFolderGitPull(ctx, a.ID, old); err != nil || got.Status != "failed" || *got.ErrorCode != "clone_failed" || *got.ErrorMessage != "原来的失败" {
+		t.Fatalf("重建后旧记录：%+v %v", got, err)
+	}
+	if got, err := st.GetFolderGitPull(ctx, a.ID, queued); err != nil || got.Status != "running" {
+		t.Fatalf("重建后进行中的记录：%+v %v", got, err)
+	}
+	for _, code := range []string{"auth_failed", "host_key_unverified"} {
+		if err := st.FinishFolderGitPull(ctx, pull(code), code, "x"); err != nil {
+			t.Fatalf("迁移后应接受 %s：%v", code, err)
+		}
+	}
+	// 进行中的唯一索引仍在：同一路径不能有两个进行中的拉取。
+	if _, _, err := st.CreateFolderGitPull(ctx, store.FolderGitPull{ID: uuid.Must(uuid.NewV7()), AgentID: a.ID, ActionID: uuid.New(), URL: "https://example.com/r.git", Branch: "main", Path: "queued"}); err == nil {
+		t.Fatal("同一路径的第二个进行中拉取应被唯一索引拒绝")
+	}
+	var fk string
+	if err := d.QueryRow(ctx, `SELECT count(*) FROM pragma_foreign_key_list('agent_folder_git_pulls')`).Scan(&fk); err != nil || fk != "1" {
+		t.Fatalf("外键应保留：%q %v", fk, err)
 	}
 }
 
