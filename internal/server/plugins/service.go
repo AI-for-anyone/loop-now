@@ -344,12 +344,14 @@ func (s *Service) Preview(ctx context.Context, req PreviewRequest) (Preview, err
 	}
 	fetchSrc, trusted, market := *src, false, (*string)(nil)
 	var declared map[string]pluginmanifest.ProviderState
+	var entry *marketEntry
 	switch {
 	case src.Kind == SourceMarket:
 		var err error
-		if fetchSrc, trusted, declared, err = s.resolveMarket(ctx, *src); err != nil {
+		if fetchSrc, trusted, entry, err = s.resolveMarket(ctx, *src); err != nil {
 			return Preview{}, err
 		}
+		declared = entry.ProviderState
 		market = &src.Market
 	case src.Location == "":
 		return Preview{}, apperr.Invalid("source.location", "须给出来源位置")
@@ -364,6 +366,10 @@ func (s *Service) Preview(ctx context.Context, req PreviewRequest) (Preview, err
 		resolved.Market = market
 		var m Manifest
 		if m, err = ReadManifest(dir, s.PlatformVersion); err == nil {
+			// 从市场安装、包自己没写 loopNow.displayName 时，用市场条目的显示名（而不是 npm 包名），随版本保存；更新时按新条目重取。
+			if entry != nil && !m.OwnDisplayName && entry.DisplayName.String() != "" {
+				m.DisplayName = entry.DisplayName
+			}
 			switch {
 			case req.PluginID != "" && m.ID != req.PluginID:
 				err = apperr.Invalid("manifest", "来源里的插件 id 已变为 "+m.ID+"，不能作为 "+req.PluginID+" 的更新")

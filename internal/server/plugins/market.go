@@ -207,7 +207,7 @@ func marketSource(e marketEntry, version string) (Source, error) {
 }
 
 // resolveMarket 在市场里找到条目，返回实际来源与是否免确认（官方市场或已验证的条目）。
-func (s *Service) resolveMarket(ctx context.Context, src Source) (Source, bool, map[string]pluginmanifest.ProviderState, error) {
+func (s *Service) resolveMarket(ctx context.Context, src Source) (Source, bool, *marketEntry, error) {
 	if src.Market == "" || src.ID == "" {
 		return Source{}, false, nil, apperr.Invalid("source", "市场来源须给出 market 与 id")
 	}
@@ -221,7 +221,7 @@ func (s *Service) resolveMarket(ctx context.Context, src Source) (Source, bool, 
 	}
 	e := file.Plugins[i]
 	out, err := marketSource(e, src.Version)
-	return out, src.Market == s.OfficialMarket || e.Verified, e.ProviderState, err
+	return out, src.Market == s.OfficialMarket || e.Verified, &e, err
 }
 
 func apperrMessage(err error) string {

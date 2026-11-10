@@ -40,6 +40,8 @@ type Manifest struct {
 	MCPServers map[string]json.RawMessage `json:"mcpServers"`
 	// ProviderState 是 loopNow.providerState：插件注册的模型提供方有哪些状态随项目账号走（plugins/SPEC.md §13）。
 	ProviderState map[string]ProviderState `json:"providerState,omitempty"`
+	// OwnDisplayName 表示 DisplayName 是包自己写的 loopNow.displayName（不是退到 npm 名或 id）；只在读清单时有，不保存。
+	OwnDisplayName bool `json:"-"`
 }
 
 // AccountKind 是清单声明的账号种类。
@@ -256,7 +258,8 @@ func ReadManifest(dir, platformVersion string) (Manifest, error) {
 	if err := m.DisplayName.Check("loopNow.displayName"); err != nil {
 		return Manifest{}, err
 	}
-	if m.DisplayName.String() == "" {
+	m.OwnDisplayName = m.DisplayName.String() != ""
+	if !m.OwnDisplayName {
 		m.DisplayName = PlainText(m.Name)
 		if m.Name == "" {
 			m.DisplayName = PlainText(m.ID)
