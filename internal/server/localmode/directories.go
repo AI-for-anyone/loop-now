@@ -14,6 +14,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"loop-now/internal/execenv"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/store"
 )
@@ -111,12 +112,7 @@ func checkNote(note string) string {
 }
 
 // pathKey 是判断两项是否重复的键：Windows 的路径不分大小写。
-func pathKey(p string) string {
-	if runtime.GOOS == "windows" {
-		return strings.ToLower(p)
-	}
-	return p
-}
+func pathKey(p string) string { return execenv.PathKey(p) }
 
 // Status 返回路径此刻的状态（跟随符号链接）。
 func Status(p string) string {

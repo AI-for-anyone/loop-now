@@ -19,6 +19,11 @@ func TestSplitDirsKeepsAbsoluteUniqueInOrder(t *testing.T) {
 	if got := splitDirs(raw); !slices.Equal(got, []string{a, b}) {
 		t.Fatalf("splitDirs = %v", got)
 	}
+	if runtime.GOOS == "windows" {
+		if got := splitDirs(strings.Join([]string{`C:\WINDOWS\system32`, `/usr/bin`, `C:\Windows\System32\`, `C:\Tools`}, sep)); !slices.Equal(got, []string{`C:\WINDOWS\system32`, `C:\Tools`}) {
+			t.Fatalf("Windows 上应去掉 /usr/bin 这类无盘符路径并不分大小写去重：%v", got)
+		}
+	}
 }
 
 func TestUserPathFallsBackToProcessPath(t *testing.T) {

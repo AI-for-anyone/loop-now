@@ -128,7 +128,8 @@ func (e *Executor) buildEnv(d agentDirs, snap agentconfig.Snapshot, cliBinDirs, 
 	return out
 }
 
-// appendUserPath 把 user 中尚未出现在 path（各项可能是以分隔符连接的多个目录）里的目录依次接到末尾。
+// appendUserPath 把 user 中尚未出现在 path（各项可能是以分隔符连接的多个目录）里的目录依次接到末尾；
+// 是否已出现按 execenv.PathKey 比较（Windows 上不分大小写）。
 func appendUserPath(path, user []string) []string {
 	if len(user) == 0 {
 		return path
@@ -136,12 +137,14 @@ func appendUserPath(path, user []string) []string {
 	seen := map[string]bool{}
 	for _, p := range path {
 		for _, d := range filepath.SplitList(p) {
-			seen[d] = true
+			if d != "" {
+				seen[execenv.PathKey(d)] = true
+			}
 		}
 	}
 	for _, d := range user {
-		if d != "" && !seen[d] {
-			seen[d] = true
+		if k := execenv.PathKey(d); d != "" && !seen[k] {
+			seen[k] = true
 			path = append(path, d)
 		}
 	}
