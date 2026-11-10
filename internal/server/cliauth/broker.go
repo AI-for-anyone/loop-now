@@ -130,7 +130,15 @@ func (b *Broker) handle(conn net.Conn) {
 		case <-finished:
 		}
 	}()
-	defer conn.Close() // Runtime waits for EOF after exactly one JSONL response.
+	// Runtime waits for EOF after exactly one JSONL response. Half-close first: a reply written
+	// and closed at once (the requires_login path answers without any wait) has been seen to
+	// leave a Windows AF_UNIX peer blocked until its read deadline, with neither data nor EOF.
+	defer func() {
+		if u, ok := conn.(*net.UnixConn); ok {
+			_ = u.CloseWrite()
+		}
+		_ = conn.Close()
+	}()
 	_ = conn.SetDeadline(time.Now().Add(35 * time.Second))
 	scanner := bufio.NewScanner(conn)
 	scanner.Buffer(make([]byte, 4096), 1<<20)
