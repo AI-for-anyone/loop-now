@@ -12,7 +12,7 @@ export const localMode = {
       },
       git: {
         label: 'Use local git identity',
-        description: '"Pull from Git" uses the SSH keys and saved git credentials on this computer, so private repositories outside GitHub can be pulled. Only the pull itself is affected.',
+        description: 'For "Pull from Git", HTTPS addresses can use the git credentials saved on this computer (such as in the keychain), and SSH addresses can use the keys in ssh-agent; SSH keys under ~/.ssh work either way. Only the pull itself is affected.',
       },
       cli: {
         label: 'Use local CLIs',

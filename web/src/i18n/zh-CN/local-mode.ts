@@ -15,7 +15,7 @@ export const localMode = {
       },
       git: {
         label: '用本机的 git 身份',
-        description: '“从 Git 拉取”时使用这台电脑上的 SSH 密钥和已保存的 git 凭证，能拉取 GitHub 以外的私有仓库；只影响拉取这一步。',
+        description: '“从 Git 拉取”时，HTTPS 地址可以用这台电脑上已保存的 git 凭证（如钥匙串），SSH 地址可以用 ssh-agent 里的密钥；SSH 地址用 ~/.ssh 下的密钥不受这个开关影响。只影响拉取这一步。',
       },
       cli: {
         label: '用本机的 CLI',

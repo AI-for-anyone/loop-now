@@ -115,9 +115,9 @@ export const folders = {
       clone_failed: '无法克隆仓库',
       server_restart: '服务重启，已中止',
     } satisfies Record<NonNullable<S['FolderGitPull']['errorCode']>, string>,
-    // 认证失败或 SSH 主机未确认时，状态栏上方的提示。
+    // HTTPS 地址认证失败、或 SSH 主机未确认时，状态栏上方的提示。
     hints: {
-      enableGit: '“用本机的 git 身份”没有打开，拉取用不到这台电脑上的 SSH 密钥、known_hosts 和已保存的 git 凭证。打开后重试。',
+      enableGit: '“用本机的 git 身份”没有打开，HTTPS 地址的拉取用不到这台电脑上已保存的 git 凭证。打开后重试。',
       openSettings: '去全局设置打开',
       hostKey: '拉取不会替你确认 SSH 主机的指纹。请先在本机终端里连一次这台主机（例如 ssh -T git@主机名）核对指纹，再重试。',
     },
