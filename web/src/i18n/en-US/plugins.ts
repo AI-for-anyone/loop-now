@@ -269,6 +269,8 @@ export const plugins = {
     models: (n: number) => count(n, 'model', 'models'),
     extension: (path: string) => `From ${path}`,
     loadErrors: 'Extensions that failed to load',
+    statePaths: 'Login state saved with the project account: ',
+    noStatePaths: "No login state paths declared, so the login may not be saved with the account",
   },
   detail: {
     crumb: 'Plugin market',
@@ -297,6 +299,7 @@ export const plugins = {
     uninstallBody:
       'Deletes its config, project enablement, Agent grants, accounts, state, event deliveries, and tokens. Agents already started keep using what they loaded until they next start.',
     deleteData: (dir: string) => `Also delete the data folder ${dir}`,
+    deleteDataProviders: "The project subscription accounts for the model providers it registers are kept by default and come back if you reinstall it. With this checked they're deleted too (any in use by an unfinished task stay until the task ends).",
     uninstalling: 'Uninstalling…',
     checking: 'Checking…',
   },

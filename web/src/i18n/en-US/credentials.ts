@@ -24,6 +24,11 @@ export const credentials = {
     effectNote: 'Changes apply from the next dispatched message and new tasks; the current reply and running tasks keep the account versions and grants they started with.',
   },
   agentSelection: {
+    localLogin: {
+      active: '"Use local logins" is on: this uses the extension\'s own login on this computer, not the project account chosen here.',
+      missing: '"Use local logins" is on, but this computer has no login for the extension, so the Agent will fail to start. Turn the switch off, or log in on this computer, and try again.',
+      settings: 'Open local mode settings',
+    },
     title: 'Model account credential',
     intro: "Model accounts are managed by the project; here you choose where this Agent takes one from. Switching models within the same provider doesn't need a new login.",
     modelOutOfSync: "The basic config and the account source are out of sync; checking the latest config. Your draft is kept but can't be saved yet.",
