@@ -69,8 +69,9 @@ export type ProviderEntry = {
 
 const copyOf = (key: EntryKey) => t.credentials.providerPicker.entries[key] as { name: string; alias: string; variants?: readonly string[] }
 
-// 账号列表等只有 id 时的显示名：表里有的用显示名，没有的直接用 id。
-export function providerName(id: string): string {
+// 账号列表等只有 id 时的显示名：表里有的用显示名，没有的直接用 id。插件提供方用扩展给的名称（给了目录里的这一项时）。
+export function providerName(id: string, provider?: Schemas['ModelProvider']): string {
+  if (provider?.source === 'plugin') return provider.name || id
   const known = byId.get(id)
   return known ? copyOf(known.key).name : id
 }

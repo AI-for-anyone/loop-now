@@ -36,7 +36,7 @@ export function ProjectCredentialSettings({ projectId }: { projectId: string }) 
       {projectCredentialsUnsupported(accounts.error)
         ? <p role="alert" className="text-[13.5px] font-bold">{t.credentials.accounts.unsupported}</p>
         : accounts.error ? <ErrorAlert error={accounts.error} /> : <p role="status">{t.credentials.accounts.loading}</p>}
-      <div className="flex flex-wrap gap-2"><Button disabled>{t.credentials.accounts.codexLogin}</Button><Button disabled>{t.credentials.accounts.addAccount}</Button>{accounts.error && <Button variant="secondary" disabled={accounts.isFetching} onClick={() => void accounts.refetch()}>{t.credentials.accounts.reload}</Button>}</div>
+      <div className="flex flex-wrap gap-2"><Button disabled>{t.credentials.accounts.browserLogin}</Button><Button disabled>{t.credentials.accounts.addAccount}</Button>{accounts.error && <Button variant="secondary" disabled={accounts.isFetching} onClick={() => void accounts.refetch()}>{t.credentials.accounts.reload}</Button>}</div>
     </AccountCard>}
     {accounts.data && <fieldset disabled={!available} hidden={!available} style={{ display: available ? 'contents' : 'none' }}>
       <ProjectAccounts projectId={projectId} purpose="model" />
@@ -92,7 +92,7 @@ function Accounts({ projectId, purpose, cli, initialSlot = cli ?? '' }: Accounts
     <ErrorAlert error={accounts.error} />
     {!accounts.data && !accounts.isError && <p role="status">{t.credentials.accounts.loadingList}</p>}
     {accounts.data && list.length === 0 && <p className="text-[13.5px] text-ink-500">{t.credentials.accounts.empty}</p>}
-    <ul className="grid min-w-0 gap-3">{list.map(account => <AccountRow key={account.id} account={account} missing={!live.some(item => item.id === account.id)} onEditing={editing => setRetained(previous => { const next = { ...previous }; if (editing) next[account.id] = account; else delete next[account.id]; return next })} template={templates.data?.templates.find(item => item.name === account.cli)} methods={providers.data?.providers.find(item => item.id === account.provider)?.authMethods ?? []} />)}</ul>
+    <ul className="grid min-w-0 gap-3">{list.map(account => <AccountRow key={account.id} account={account} missing={!live.some(item => item.id === account.id)} onEditing={editing => setRetained(previous => { const next = { ...previous }; if (editing) next[account.id] = account; else delete next[account.id]; return next })} template={templates.data?.templates.find(item => item.name === account.cli)} provider={providers.data?.providers.find(item => item.id === account.provider)} />)}</ul>
     {purpose === 'cli' && !cli && <LocalCLIImport projectId={projectId} />}
     <div className="grid min-w-0 gap-3 border-t border-ink/10 pt-4">
       {purpose === 'model'
@@ -104,7 +104,7 @@ function Accounts({ projectId, purpose, cli, initialSlot = cli ?? '' }: Accounts
       <div className="contents" hidden={picking}>
       {purpose === 'cli' && template && <CliToolStatus template={template} />}
       {slot && <AccountImpact projectId={projectId} purpose={purpose} slot={slot} />}
-      {purpose === 'model' && provider?.authMethods.includes('oauth') && slot === 'openai-codex' && <ProjectLogin key={slot} projectId={projectId} label={entry && t.credentials.providerPicker.login(entry.name)} />}
+      {purpose === 'model' && provider?.authMethods.includes('oauth') && <ProjectLogin key={slot} projectId={projectId} provider={provider} />}
       {purpose === 'cli' && slot === 'gcloud' && template && <GoogleLogin key={`${projectId}:gcloud:new`} projectId={projectId} />}
       {purpose === 'cli' && slot === 'lark-cli' && template && <ProjectLarkUserLogin projectId={projectId} applicationSetup={<Button type="button" variant="secondary" disabled={creating} onClick={() => setCreating(true)}>{t.credentials.lark.prepareApplication}</Button>} />}
       {purpose === 'cli' && slot === 'gh' && template && <><p className="text-[13px]">{t.credentials.github.purpose}</p><GitHubLogin projectId={projectId} /><p className="text-[13px]">{t.credentials.github.patDescription}</p><a className="text-[13px] font-bold text-riso-blue underline" href="https://cli.github.com/manual/gh_auth_login" target="_blank" rel="noopener noreferrer">{t.credentials.github.patHelp}</a></>}
@@ -127,7 +127,9 @@ export function AccountImpact({ projectId, purpose, slot, accountId }: { project
   </div>
 }
 
-function AccountRow({ account, template, methods, missing, onEditing }: { account: Schemas['ProjectCredentialAccount']; template?: Schemas['CliTemplate']; methods: Schemas['ModelProvider']['authMethods']; missing: boolean; onEditing: (editing: boolean) => void }) {
+// provider：模型账号在提供方目录里的这一项（目录没加载或已没有这个提供方时为空）。
+function AccountRow({ account, template, provider, missing, onEditing }: { account: Schemas['ProjectCredentialAccount']; template?: Schemas['CliTemplate']; provider?: Schemas['ModelProvider']; missing: boolean; onEditing: (editing: boolean) => void }) {
+  const methods = provider?.authMethods ?? []
   const client = useQueryClient()
   const available = useProjectCredentialsAvailable()
   const [editing, setEditing] = useState<'rename' | 'replace' | null>(null), [deleteRevision, setDeleteRevision] = useState<number | null>(null)
@@ -141,7 +143,7 @@ function AccountRow({ account, template, methods, missing, onEditing }: { accoun
     {missing && <p role="status" className="text-[13px] font-bold text-red-text">{t.credentials.accounts.missingFromList}</p>}
     <div className="flex min-w-0 flex-wrap items-center gap-2"><h3 className="min-w-0 flex-[1_1_160px] font-black [overflow-wrap:anywhere]">{account.name}</h3><Badge tone={account.status === 'saved' || account.status === 'logged_in' ? 'success' : 'danger'}>{accountStatus[account.status]}</Badge></div>
     {account.purpose === 'model'
-      ? <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] [overflow-wrap:anywhere]"><span className="font-bold">{providerName(slot)}</span>{providerName(slot) !== slot && <span className="font-mono text-[12px] text-ink-500">{slot}</span>}<AuthBadges methods={[account.authMethod]} />{account.accountLabel && <span>{account.accountLabel}</span>}<span>{t.credentials.accounts.updated}<time dateTime={account.updatedAt}>{t.chat.time(account.updatedAt)}</time></span></p>
+      ? <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] [overflow-wrap:anywhere]"><span className="font-bold">{providerName(slot, provider)}</span>{providerName(slot, provider) !== slot && <span className="font-mono text-[12px] text-ink-500">{slot}</span>}<AuthBadges methods={[account.authMethod]} />{account.accountLabel && <span>{account.accountLabel}</span>}<span>{t.credentials.accounts.updated}<time dateTime={account.updatedAt}>{t.chat.time(account.updatedAt)}</time></span></p>
       : <p className="text-[13px] [overflow-wrap:anywhere]">{slot} · {account.authMethod === 'oauth' ? account.cli === 'gcloud' ? t.credentials.accounts.methodGoogleBrowser : t.credentials.accounts.methodBrowser : account.cli === 'gcloud' ? t.credentials.accounts.methodServiceAccount : t.credentials.accounts.methodTemplate}{account.accountLabel ? ` · ${account.accountLabel}` : ''}{t.credentials.accounts.updatedPrefix}<time dateTime={account.updatedAt}>{t.chat.time(account.updatedAt)}</time></p>}
     {account.cli === 'gh' && <GitHubIdentity account={account} />}
     {account.cli === 'lark-cli' && <LarkAccountDetails account={account} showName={false} />}
@@ -149,7 +151,7 @@ function AccountRow({ account, template, methods, missing, onEditing }: { accoun
     {account.template && <><p className="text-[13px] [overflow-wrap:anywhere]">{template ? t.credentials.accounts.templateVersion(template.version) : t.credentials.accounts.templateUnavailable}{t.credentials.accounts.sourcePrefix}{account.template.source}{t.credentials.accounts.formatPrefix}{account.template.credentialFormat}{t.credentials.accounts.templateStatusPrefix}{account.template.status}{t.credentials.accounts.fieldsPrefix}{account.template.fieldNames.join(t.credentials.accounts.fieldSeparator)}</p><WarningList warnings={account.template.warnings} /></>}
     <div className="flex flex-wrap gap-2"><Button type="button" size="sm" variant="ghost" disabled={!!editing || missing} onClick={() => { onEditing(true); setEditing('rename') }}>{t.credentials.accounts.rename}</Button>{(account.purpose === 'cli' ? !!template : methods.includes('api_key')) && <Button type="button" size="sm" variant="secondary" disabled={!!editing || missing} onClick={() => { onEditing(true); setEditing('replace') }}>{t.credentials.accounts.replace}</Button>}<Button type="button" size="sm" variant="ghost" disabled={missing} onClick={() => setDeleteRevision(account.revision)}>{t.credentials.accounts.delete}</Button></div>
     {!missing && <CLIConnectionVerification account={account} />}
-    {account.purpose === 'model' && account.provider === 'openai-codex' && methods.includes('oauth') && <ProjectLogin projectId={account.projectId} account={account} />}
+    {account.purpose === 'model' && provider && methods.includes('oauth') && <ProjectLogin projectId={account.projectId} provider={provider} account={account} />}
     {account.purpose === 'cli' && account.cli === 'gcloud' && !missing && <GoogleLogin key={`${account.projectId}:${account.id}`} projectId={account.projectId} account={account} />}
     {account.purpose === 'cli' && account.cli === 'gh' && !missing && <GitHubLogin projectId={account.projectId} account={account} />}
     {account.cli === 'lark-cli' && account.authMethod === 'oauth' && !missing && <ProjectLarkUserLogin projectId={account.projectId} account={account} />}

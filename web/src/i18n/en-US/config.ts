@@ -80,6 +80,8 @@ export const config = {
       server_restarted: 'A server restart interrupted this login. Start it again.',
       invalid_authorization_url: 'The authorization URL was invalid, so this login did not complete.',
       helper_unavailable: 'The auth helper is unavailable right now. Try again later.',
+      extension_load_failed: "The plugin's extension failed to load or doesn't register a login for this provider, so this login did not complete.",
+      plugin_unavailable: 'The plugin was uninstalled or turned off, so this login did not complete.',
     },
     login: 'Log in to Codex',
     relogin: 'Log in again',

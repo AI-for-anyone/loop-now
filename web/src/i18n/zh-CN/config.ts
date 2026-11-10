@@ -78,6 +78,8 @@ export const config = {
       server_restarted: '服务重启中断了本次登录，请重新发起。',
       invalid_authorization_url: '授权地址无效，本次登录未完成。',
       helper_unavailable: '认证组件暂时不可用，请稍后重试。',
+      extension_load_failed: '插件的扩展加载失败，或者没有注册这个提供方的登录，本次登录未完成。',
+      plugin_unavailable: '插件已卸载或停用，本次登录未完成。',
     },
     login: '登录 Codex',
     relogin: '重新登录',

@@ -147,7 +147,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 仅活动操作。无accountId包括新建与重登，可用于无账号ID时页面/未知start响应恢复。授权URL只在活动操作视图，禁止日志/普通元数据/持久化。 */
+        /** @description 仅活动操作。无accountId包括新建与重登，可用于无账号ID时页面/未知start响应恢复。授权URL只在活动操作视图，禁止日志/普通元数据/持久化。provider省略时列出全部（Codex与插件提供方），每条带provider。 */
         get: operations["listProjectModelAuthOperations"];
         put?: never;
         /** @description 新建(name)或重登(accountId+expectedRevision)互斥。相同活动输入返回原operation；输入不同409。当前仅本机浏览器/server localhost1455回调，无远程转发或人工code入口；旧platform OAuth仍console-only。 */
@@ -186,6 +186,26 @@ export interface paths {
         put?: never;
         /** @description 无请求体。终态幂等返回原状态；迟到helper结果不得seal或复活。 */
         post: operations["cancelProjectModelAuthLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/model-auth/operations/{operationId}/input": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description 回答插件提供方登录中正在等的问题（操作的 prompt）。只能回答当前那一个问题；select 的 value 须是某个选项的 id。
+         *     没有在等回答、promptId 不对或回答不合规返回 422（字段 promptId 或 value）。回答只在内存里转交，不保存、不记日志。
+         */
+        post: operations["answerProjectModelAuthLogin"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5843,24 +5863,54 @@ export interface components {
             agents: components["schemas"]["CredentialImpactAgent"][];
         };
         ProjectModelAuthStart: {
-            /** @enum {string} */
-            provider: "openai-codex";
+            provider: components["schemas"]["ProjectModelLoginProvider"];
             name: string;
         } | {
-            /** @enum {string} */
-            provider: "openai-codex";
+            provider: components["schemas"]["ProjectModelLoginProvider"];
             /** Format: uuid */
             accountId: string;
             /** Format: int64 */
             expectedRevision: number;
+        };
+        /**
+         * @description openai-codex，或模型目录里 source 为 plugin、authMethods 含 oauth 的插件提供方（plugins/SPEC.md §13）。
+         *     插件提供方须在这个项目里启用了插件，否则开始登录返回 409 plugin_not_enabled；不在目录里返回 422。
+         *     插件提供方登录成功后账号的 authMethod 为 oauth；令牌与扩展的状态在服务端的状态目录里，不进数据库。
+         *     插件提供方登录的 errorCode：auth_failed（未完成）、auth_port_busy（扩展的本机回调端口被占用）、auth_timeout（超时，status=expired）、
+         *     extension_load_failed（插件扩展加载失败或没有注册这个提供方的登录）、plugin_unavailable（插件已卸载或停用）、
+         *     invalid_authorization_url（扩展给出的地址不合规）、helper_unavailable、server_restarted；用户取消为 status=cancelled、errorCode 为 null。
+         */
+        ProjectModelLoginProvider: string;
+        ProjectModelLoginDeviceCode: {
+            userCode: string;
+            verificationUri: string;
+            /** Format: date-time */
+            expiresAt: string | null;
+        };
+        ProjectModelLoginPrompt: {
+            id: string;
+            /**
+             * @description select 从 options 里选一个 id；text 填文字；manual_code 是浏览器回调到不了时手工粘贴的回调地址或授权码（message 可能为空）。
+             * @enum {string}
+             */
+            kind: "select" | "text" | "manual_code";
+            message: string;
+            options: {
+                id: string;
+                label: string;
+            }[];
+        };
+        ProjectModelLoginInput: {
+            promptId: string;
+            /** @description 回答；只在内存里转给登录辅助进程，不保存、不记日志 */
+            value: string;
         };
         ProjectModelAuthOperation: {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
             projectId: string;
-            /** @enum {string} */
-            provider: "openai-codex";
+            provider: components["schemas"]["ProjectModelLoginProvider"];
             targetAccountId: string | null;
             targetRevision: number | null;
             name: string | null;
@@ -5872,9 +5922,14 @@ export interface components {
             /** Format: date-time */
             expiresAt: string;
             completedAt: string | null;
+            /** @description Codex 只会是 https://auth.openai.com/oauth/authorize?…；插件提供方是扩展给的 https 地址，服务端已校验（无用户名密码与 fragment、不含授权码或令牌），控制台显示目标主机名。 */
             authorizationUrl: string | null;
             errorCode: string | null;
             errorMessage: string | null;
+            /** @description 设备码登录（只有插件提供方）：打开 verificationUri 输入 userCode；地址已由服务端校验（https、无用户名密码与 fragment、不含秘密）。终态为 null。 */
+            deviceCode: components["schemas"]["ProjectModelLoginDeviceCode"] | null;
+            /** @description 登录中等人回答的问题（只有插件提供方）；用 answerProjectModelAuthLogin 回答。message 与 options 是扩展原文，服务端已限长，按纯文本显示。终态为 null。 */
+            prompt: components["schemas"]["ProjectModelLoginPrompt"] | null;
         };
         ProjectModelAuthState: {
             operation: components["schemas"]["ProjectModelAuthOperation"];
@@ -8388,7 +8443,7 @@ export interface operations {
     listProjectModelAuthOperations: {
         parameters: {
             query?: {
-                provider?: "openai-codex";
+                provider?: string;
                 accountId?: string;
             };
             header?: never;
@@ -8593,6 +8648,51 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            503: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    answerProjectModelAuthLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectModelLoginInput"];
+            };
+        };
+        responses: {
+            /** @description 回答已交给登录；prompt 清空，扩展的下一步可能带来新的 prompt 或地址 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectModelAuthState"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["ValidationFailed"];
             /** @description 服务端错误或组件暂不可用；固定安全消息 */
             503: {
                 headers: {
