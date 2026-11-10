@@ -38,6 +38,31 @@ describe('项目账号正式HTTP fixture', () => {
     expect(JSON.stringify(client.getMutationCache().getAll().map(item => item.state))).not.toContain('fixture-secret')
   })
 
+  it.each([
+    ['active', 'note', '已开启“用本机的登录状态”：这里用的是本机该扩展自己的登录，不是所选的项目账号。'],
+    ['missing', 'alert', '已开启“用本机的登录状态”，但本机没有该扩展的登录，Agent 启动会失败。关闭这个开关，或在本机登录后再试。'],
+  ] as const)('插件提供方开着用本机的登录状态（localLogin=%s）：在账号选择处说明', async (localLogin, role, message) => {
+    const agent = makeAgent({ model: { provider: 'grok-cli', modelId: 'grok-4' } })
+    const data = emptySelections(agent)
+    const account = projectAccount({ provider: 'grok-cli', authMethod: 'oauth', status: 'logged_in' })
+    data.selections[0] = { purpose: 'model', provider: 'grok-cli', cli: null, mode: 'automatic', selectedAccountId: null, resolvedAccountId: account.id, resolvedVersionId: account.currentVersionId, status: 'resolved', candidates: [account], localLogin }
+    await renderConfig({ agent, handlers: [http.get(apiUrl(`/agents/${agent.id}/credential-selections`), () => HttpResponse.json(data))] })
+    const area = screen.getByRole('region', { name: '模型账号凭证' })
+    const hint = await within(area).findByText(message)
+    expect(hint.closest(`[role="${role}"]`)).not.toBeNull()
+    const link = within(area).queryByRole('link', { name: '去本机模式设置' })
+    if (localLogin === 'missing') expect(link).toHaveAttribute('href', '/settings#local-mode')
+    else expect(link).toBeNull()
+  })
+
+  it('没开用本机的登录状态（没有 localLogin）时不说明', async () => {
+    const agent = makeAgent()
+    await renderConfig({ agent })
+    const area = screen.getByRole('region', { name: '模型账号凭证' })
+    await within(area).findByText(/项目账号|自动/)
+    expect(within(area).queryByText(/用本机的登录状态/)).toBeNull()
+  })
+
   it('迁移屏障以服务端mode显示，null只写当前provider，切B不误报automatic', async () => {
     const agent = makeAgent(), writes: unknown[] = []
     let latestAgent = agent

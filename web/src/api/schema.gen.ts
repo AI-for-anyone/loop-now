@@ -1719,6 +1719,8 @@ export interface paths {
          * 卸载插件
          * @description 宿主内卸载平台侧，删除插件的配置、启用、授权、账号、状态、事件投递与令牌，删除各版本的安装目录（本地目录来源不删）。
          *     数据目录 `<work root>/platform/plugins/<id>/data/` 只在 `deleteData=true` 时删除。已经启动的 Pi 继续使用已加载的 Agent 侧，直到下次启动。
+         *     插件注册的模型提供方从模型目录里消失；它们在各项目里的订阅账号默认保留（重新安装后恢复），`deleteData=true` 时一并删除
+         *     （与删除账号相同：未结束任务绑定的版本保留到任务结束，之后状态目录由清理器删除）。
          */
         delete: operations["uninstallPlugin"];
         options?: never;
@@ -5793,6 +5795,14 @@ export interface components {
             resolvedVersionId: string | null;
             status: components["schemas"]["CredentialSelectionStatus"];
             candidates: components["schemas"]["ProjectCredentialAccount"][];
+            /**
+             * @description 只对 purpose=model、提供方来自插件且声明了随账号走的状态路径时给出（plugins/SPEC.md §13），其余省略。
+             *     开着“用本机的登录状态”时，这个提供方用的是本机主目录里该扩展自己的登录，不是项目账号：
+             *     active 表示本机有这份登录；missing 表示本机没有，Pi 启动前会以 credential_unavailable 失败（关闭开关或在本机登录后再试）。
+             *     开关关着时省略。
+             * @enum {string}
+             */
+            localLogin?: "active" | "missing";
         } | {
             purpose: components["schemas"]["ProjectCredentialPurpose"];
             provider: string | null;
@@ -5805,6 +5815,14 @@ export interface components {
             resolvedVersionId: string | null;
             status: components["schemas"]["CredentialSelectionStatus"];
             candidates: components["schemas"]["ProjectCredentialAccount"][];
+            /**
+             * @description 只对 purpose=model、提供方来自插件且声明了随账号走的状态路径时给出（plugins/SPEC.md §13），其余省略。
+             *     开着“用本机的登录状态”时，这个提供方用的是本机主目录里该扩展自己的登录，不是项目账号：
+             *     active 表示本机有这份登录；missing 表示本机没有，Pi 启动前会以 credential_unavailable 失败（关闭开关或在本机登录后再试）。
+             *     开关关着时省略。
+             * @enum {string}
+             */
+            localLogin?: "active" | "missing";
         } | {
             purpose: components["schemas"]["ProjectCredentialPurpose"];
             provider: string | null;
@@ -5817,6 +5835,14 @@ export interface components {
             /** @enum {string} */
             status: "not_configured";
             candidates: components["schemas"]["ProjectCredentialAccount"][];
+            /**
+             * @description 只对 purpose=model、提供方来自插件且声明了随账号走的状态路径时给出（plugins/SPEC.md §13），其余省略。
+             *     开着“用本机的登录状态”时，这个提供方用的是本机主目录里该扩展自己的登录，不是项目账号：
+             *     active 表示本机有这份登录；missing 表示本机没有，Pi 启动前会以 credential_unavailable 失败（关闭开关或在本机登录后再试）。
+             *     开关关着时省略。
+             * @enum {string}
+             */
+            localLogin?: "active" | "missing";
         };
         CredentialSelections: {
             /** Format: uuid */
@@ -7076,6 +7102,18 @@ export interface components {
             providerErrors: components["schemas"]["PluginProviderCaptureError"][];
             /** @description 整次读取失败的原因（如 Pi 不可用、超时）；为空表示读取成功或插件没有 Pi 扩展 */
             providersError: string | null;
+            providerState: components["schemas"]["PluginProviderState"];
+        };
+        /**
+         * @description 插件注册的模型提供方有哪些状态随项目账号走（plugins/SPEC.md §13）：键是提供方 id，paths 是扩展在 HOME 下保存登录与状态的相对路径
+         *     （/ 分隔，1 到 8 个，不含 ..，不在 .loop-now 下）。启动 Pi 前这些路径链接到账号的状态目录，同项目多个 Agent 共用一份。
+         *     插件详情里是当前版本生效的声明：从市场安装时取市场条目的 providerState，否则取包自己的 loopNow.providerState；都没有时为空对象，
+         *     这时只有 Pi 的认证条目随账号走。只读展示。
+         */
+        PluginProviderState: {
+            [key: string]: {
+                paths: string[];
+            };
         };
         AgentCommandList: {
             /**
@@ -7256,6 +7294,7 @@ export interface components {
             url: string | null;
         };
         PluginMarketEntry: {
+            providerState: components["schemas"]["PluginProviderState"];
             id: string;
             displayName: components["schemas"]["LocalizedText"];
             description: components["schemas"]["LocalizedText"];

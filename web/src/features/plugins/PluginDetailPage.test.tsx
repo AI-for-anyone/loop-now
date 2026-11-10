@@ -251,8 +251,10 @@ describe('插件详情的模型提供方', () => {
             provider('grok-key', { oauth: false }),
             provider('grok-bad', { name: '<b>坏</b>', error: 'TypeError: <script>x</script>' }),
             provider('grok-dup'),
+            provider('grok-bare', { name: 'Grok Bare', inCatalog: true }),
           ],
           providerErrors: [{ path: 'extensions/broken.ts', error: 'SyntaxError: Unexpected token' }],
+          providerState: { 'grok-cli': { paths: ['.grok/auth.json', '.config/grok'] }, 'grok-key': { paths: ['.grok-key'] } },
         }),
       ],
     })
@@ -260,11 +262,13 @@ describe('插件详情的模型提供方', () => {
     expect(panel).toHaveTextContent('安装或更新时从 Pi 扩展读出')
     const items = within(within(panel).getAllByRole('list')[0]).getAllByRole('listitem')
     expect(items.map((item) => item.textContent)).toEqual([
-      'Grok CLIgrok-cliOAuth 登录已进模型目录3 个模型 · 来自 extensions/grok.ts',
+      'Grok CLIgrok-cliOAuth 登录已进模型目录登录状态随项目账号保存：.grok/auth.json、.config/grok3 个模型 · 来自 extensions/grok.ts',
       'anthropicOAuth 登录与 Pi 内置提供方同 id：只覆盖它的设置，不进模型目录2 个模型 · 来自 extensions/grok.ts',
-      'grok-key没有注册 OAuth 登录，不进模型目录2 个模型 · 来自 extensions/grok.ts',
+      'grok-key没有注册 OAuth 登录，不进模型目录登录状态随项目账号保存：.grok-key2 个模型 · 来自 extensions/grok.ts',
       '<b>坏</b>grok-badOAuth 登录注册出错：TypeError: <script>x</script>2 个模型 · 来自 extensions/grok.ts',
       'grok-dupOAuth 登录没有进模型目录（例如与 models.json 里的提供方同 id）2 个模型 · 来自 extensions/grok.ts',
+      // 进了目录却没声明状态路径：提醒登录可能不随账号保存。
+      'Grok Baregrok-bareOAuth 登录已进模型目录没有声明登录状态路径，登录可能不随账号保存2 个模型 · 来自 extensions/grok.ts',
     ])
     expect(panel.querySelector('b, script')).toBeNull()
     const failed = within(panel).getByRole('heading', { name: '加载失败的扩展' }).parentElement!
@@ -277,6 +281,18 @@ describe('插件详情的模型提供方', () => {
     const panel = await screen.findByRole('region', { name: '模型提供方' })
     expect(within(panel).getByRole('alert')).toHaveTextContent('读取失败：Pi 不可用：超时')
     expect(within(panel).queryByText('没有读出模型提供方。')).toBeNull()
+  })
+
+  it('卸载注册了模型提供方的插件：说明订阅账号默认保留、删除数据时一并删除；没有提供方的插件不说', async () => {
+    const user = userEvent.setup()
+    const { unmount } = renderDetail('/plugins/grok', { details: [withProviders({ providers: [provider('grok-cli', { inCatalog: true })] })] })
+    await user.click(await screen.findByRole('button', { name: '卸载' }))
+    const dialog = await screen.findByRole('alertdialog', { name: '卸载 Grok 订阅？' })
+    expect(dialog).toHaveTextContent('它注册的模型提供方在各项目里的订阅账号默认保留，重新安装后恢复；勾选后这些账号一并删除（被未结束任务用着的保留到任务结束）。')
+    unmount()
+    renderDetail()
+    await user.click(await screen.findByRole('button', { name: '卸载' }))
+    expect(await screen.findByRole('alertdialog', { name: '卸载 Webhook 通知？' })).not.toHaveTextContent('订阅账号')
   })
 
   it('有 Pi 扩展但没有注册提供方：说明没有读出；没有扩展也没读出东西的插件不显示这一块', async () => {

@@ -332,6 +332,7 @@ export function PluginDetailPage() {
           <input type="checkbox" checked={deleteData} onChange={(event) => setDeleteData(event.target.checked)} className="mt-1 size-4 accent-red" />
           {copy.deleteData(detail.dataDir)}
         </label>
+        {detail.providers.length > 0 && <p className="text-[13px] leading-snug text-ink-700">{copy.deleteDataProviders}</p>}
       </ConfirmDialog>
     </DraftNavigationGuard>
   )
