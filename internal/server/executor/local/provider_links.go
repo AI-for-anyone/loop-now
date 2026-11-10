@@ -68,15 +68,15 @@ func (e *Executor) linkProviderState(snap agentconfig.Snapshot, d agentDirs, log
 	if err := pluginmanifest.CheckProviderState("providerState", map[string]pluginmanifest.ProviderState{snap.Provider: {Paths: st.Paths}}); len(st.Paths) > 0 && err != nil {
 		return fail(executor.ErrCredentialUnavailable, "插件 %s 声明的状态路径不合规：%v", st.PluginID, err)
 	}
-	for _, p := range st.Paths {
-		for _, payload := range snap.CLIPayloads {
-			for _, f := range payload.Files {
-				managed := filepath.ToSlash(filepath.Clean(f.Path))
-				if managed == p || strings.HasPrefix(managed, p+"/") || strings.HasPrefix(p, managed+"/") {
-					return fail(executor.ErrCredentialUnavailable, "插件 %s 声明的状态路径 %s 与 CLI 的配置文件 %s 重叠", st.PluginID, p, managed)
-				}
-			}
+	// 平台每次启动与复用时都会在 HOME 里删写 CLI 模板的凭证文件（全部模板，不只是这个 Agent 配了的），状态路径不能与它们重叠。
+	managed := slices.Clone(e.tmpl.AllCredentialFilePaths())
+	for _, payload := range snap.CLIPayloads {
+		for _, f := range payload.Files {
+			managed = append(managed, filepath.ToSlash(filepath.Clean(f.Path)))
 		}
+	}
+	if p, m, ok := pluginmanifest.OverlappingStatePath(st.Paths, managed); ok {
+		return fail(executor.ErrCredentialUnavailable, "插件 %s 声明的状态路径 %s 与 CLI 的配置文件 %s 重叠", st.PluginID, p, m)
 	}
 	info, err := os.Lstat(st.Dir)
 	auth := filepath.Join(st.Dir, "auth.json")

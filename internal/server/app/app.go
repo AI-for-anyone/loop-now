@@ -804,6 +804,9 @@ func (a *App) assemblePlugins(cfg *config.Config, res *preflight.Resolved, log *
 	}
 	a.Plugins = &plugins.Service{Store: a.Store, Root: root, OfficialDir: cfg.PluginOfficialDir, OfficialMarket: cfg.PluginMarketURL, NodeBin: res.NodeBin, GitBin: res.GitBin,
 		APIURL: strings.TrimSuffix(agentURL(a.listener.Addr()), "/agent/v1") + "/api/v1", PlatformVersion: buildinfo.Version(), Log: log}
+	if a.Config != nil && a.Config.Templates != nil {
+		a.Plugins.ManagedHomePaths = a.Config.Templates.AllCredentialFilePaths
+	}
 	a.Plugins.DeleteProviderAccounts = func(ctx context.Context, providers []string) error {
 		accounts, err := a.Store.ModelAccountsOf(ctx, providers)
 		if err != nil || a.API == nil || a.API.ProjectCredentials == nil {
