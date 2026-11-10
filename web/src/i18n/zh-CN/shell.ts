@@ -27,6 +27,8 @@ export const shell = {
     identities: '外部身份',
     settings: '全局设置',
   },
+  // “任务”一项旁的运行数：状态为 running 的任务个数，读屏与悬停提示用这句。
+  runningTasks: (count: number) => `${count} 个任务正在运行`,
   groups: {
     agents: 'Agent',
     projects: '项目',
