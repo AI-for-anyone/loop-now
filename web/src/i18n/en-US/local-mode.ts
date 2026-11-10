@@ -3,8 +3,8 @@ import type { Messages } from '..'
 export const localMode = {
   settings: {
     title: 'Local mode',
-    intro: 'Lets Agents use what is already on this computer. Each of the three has its own switch; all are on by default for new installs.',
-    effect: '"Bind local directories" and "Use local CLIs" take effect when an Agent handles its next message; a reply in progress is not affected. "Use local git identity" takes effect from the next pull.',
+    intro: 'Lets Agents use what is already on this computer. Each of the four has its own switch: the first three are on by default, and "Use local logins" stays off until you turn it on.',
+    effect: '"Bind local directories", "Use local CLIs" and "Use local logins" take effect when an Agent handles its next message; a reply in progress is not affected. "Use local git identity" takes effect from the next pull.',
     items: {
       directories: {
         label: 'Bind local directories',
@@ -16,8 +16,22 @@ export const localMode = {
       },
       cli: {
         label: 'Use local CLIs',
-        description: 'Agents can run commands installed on this computer, but those commands still sign in with the accounts configured in Loop Now, not with your logins in your own terminal.',
+        description: 'Agents can run commands installed on this computer, but those commands still sign in with the accounts configured in Loop Now, not with your logins in your own terminal. To use those, also turn on "Use local logins".',
       },
+      logins: {
+        label: 'Use local logins',
+        description: 'Agents use your logins for the tools on this computer, which is the same as acting as you, and all Agents share them. CLIs with an account configured for the Agent in Loop Now still use that account. Independent of "Use local CLIs": with only this one on, only commands Agents could already run can use these logins.',
+      },
+    },
+    loginsConfirm: {
+      title: 'Turn on "Use local logins"?',
+      body: 'From the next message an Agent handles:',
+      points: [
+        'Agents use your logins for the tools on this computer, which is the same as acting as you.',
+        'All Agents share these logins, including Agents in tasks.',
+        'CLIs with an account configured for the Agent in Loop Now still use that account.',
+      ],
+      confirm: 'Turn on',
     },
   },
   directories: {

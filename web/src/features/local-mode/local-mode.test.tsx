@@ -20,7 +20,7 @@ const region = (name: string) => screen.findByRole('region', { name })
 const cautions = ['改动直接落在真实文件上：Agent 在这些目录里做的修改直接写进你的文件，任务里也一样，不走任务副本。', '这份清单是告诉 Agent 去哪里干活，不是访问隔离：不在清单里的目录，Agent 同样能读写。']
 
 describe('全局设置：本机模式', () => {
-  it('三个开关各有说明，按下即保存那一项；失败时开关保持原状并说明原因', async () => {
+  it('四个开关各有说明，按下即保存那一项；失败时开关保持原状并说明原因', async () => {
     const local = localModeBackend({ settings: { git: false } })
     server.use(...local.handlers, ...baseHandlers([]))
     const user = userEvent.setup()
@@ -29,11 +29,17 @@ describe('全局设置：本机模式', () => {
     const directories = await within(card).findByRole('switch', { name: '绑定本机目录' })
     const git = within(card).getByRole('switch', { name: '用本机的 git 身份' })
     const cli = within(card).getByRole('switch', { name: '用本机的 CLI' })
+    const logins = within(card).getByRole('switch', { name: '用本机的登录状态' })
+    expect(within(card).getAllByRole('switch')).toEqual([directories, git, cli, logins])
+    expect(within(card).getByText('让 Agent 直接用这台电脑上已有的东西。四项各自开关：前三项默认开启，“用本机的登录状态”默认关闭，要你自己打开。')).toBeInTheDocument()
+    expect(within(card).getByText(/“绑定本机目录”“用本机的 CLI”和“用本机的登录状态”在 Agent 处理下一条消息时生效/)).toBeInTheDocument()
     expect(directories).toBeChecked()
     expect(git).not.toBeChecked()
     expect(cli).toBeChecked()
     expect(git).toHaveAccessibleDescription(/HTTPS 地址可以用这台电脑上已保存的 git 凭证.*SSH 地址用 ~\/\.ssh 下的密钥不受这个开关影响/)
-    expect(cli).toHaveAccessibleDescription(/登录状态仍用 Loop Now 里配置的账号/)
+    expect(cli).toHaveAccessibleDescription(/登录状态仍用 Loop Now 里配置的账号.*要沿用，另外打开“用本机的登录状态”/)
+    expect(logins).not.toBeChecked()
+    expect(logins).toHaveAccessibleDescription(/等同以你本人的身份操作，所有 Agent 共用这些登录；Loop Now 里已为 Agent 配了账号的 CLI 仍用配置的账号/)
     expect(directories).toHaveAccessibleDescription(/关闭后清单保留，但不再告诉任何 Agent/)
 
     await user.click(git)
@@ -45,6 +51,57 @@ describe('全局设置：本机模式', () => {
     expect(await within(card).findByRole('alert')).toBeInTheDocument()
     expect(cli).toBeChecked()
     expect(local.state.requests.at(-1)).toEqual({ method: 'PATCH', path: '/api/v1/local-mode-settings', body: { cli: false } })
+  })
+
+  it('打开“用本机的登录状态”先确认，写明以你本人的身份操作、所有 Agent 共用、已配账号的 CLI 不变；取消则不保存', async () => {
+    const local = localModeBackend()
+    server.use(...local.handlers, ...baseHandlers([]))
+    const user = userEvent.setup()
+    renderRoutes(routes, '/settings')
+    const logins = await within(await region('本机模式')).findByRole('switch', { name: '用本机的登录状态' })
+
+    await user.click(logins)
+    let dialog = await screen.findByRole('alertdialog', { name: '打开“用本机的登录状态”？' })
+    expect(dialog).toHaveTextContent('Agent 直接用你在这台电脑上各个工具的登录，等同以你本人的身份操作。')
+    expect(dialog).toHaveTextContent('所有 Agent 共用这些登录，任务里的 Agent 也一样。')
+    expect(dialog).toHaveTextContent('Loop Now 里已为 Agent 配了账号的 CLI 仍用配置的账号。')
+    await user.click(within(dialog).getByRole('button', { name: '取消' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(logins).not.toBeChecked()
+    expect(local.state.requests).toEqual([])
+
+    await user.click(logins)
+    dialog = await screen.findByRole('alertdialog', { name: '打开“用本机的登录状态”？' })
+    await user.click(within(dialog).getByRole('button', { name: '打开' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    await waitFor(() => expect(logins).toBeChecked())
+    expect(local.state.requests).toEqual([{ method: 'PATCH', path: '/api/v1/local-mode-settings', body: { logins: true } }])
+
+    // 关闭不用确认。
+    await user.click(logins)
+    await waitFor(() => expect(logins).not.toBeChecked())
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(local.state.requests.at(-1)).toEqual({ method: 'PATCH', path: '/api/v1/local-mode-settings', body: { logins: false } })
+  })
+
+  it('确认后保存失败：错误留在确认框里，开关保持关闭', async () => {
+    const local = localModeBackend()
+    server.use(...local.handlers, ...baseHandlers([]))
+    const user = userEvent.setup()
+    renderRoutes(routes, '/settings')
+    const card = await region('本机模式')
+    const logins = await within(card).findByRole('switch', { name: '用本机的登录状态' })
+    local.state.failNextPut = () => HttpResponse.json(errorBody('internal_error', '写入失败'), { status: 500 })
+    await user.click(logins)
+    const dialog = await screen.findByRole('alertdialog', { name: '打开“用本机的登录状态”？' })
+    await user.click(within(dialog).getByRole('button', { name: '打开' }))
+    expect(await within(dialog).findByRole('alert')).toBeInTheDocument()
+    expect(logins).not.toBeChecked()
+    // 卡片上不再重复显示同一个错误；关掉确认框后也不留。
+    expect(within(card).queryByRole('alert', { hidden: true })).toBeNull()
+    await user.click(within(dialog).getByRole('button', { name: '取消' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(within(card).queryByRole('alert')).toBeNull()
   })
 })
 
@@ -205,7 +262,7 @@ describe('从 Git 拉取失败：本机 git 身份的提示', () => {
     const reads = { count: 0 }
     server.use(http.get(apiUrl('/local-mode-settings'), () => {
       reads.count++
-      return HttpResponse.json({ directories: true, git, cli: true } satisfies Schemas['LocalModeSettings'])
+      return HttpResponse.json({ directories: true, git, cli: true, logins: false } satisfies Schemas['LocalModeSettings'])
     }))
     const base = createMockFolder({ key: 'w', preset: 'workspace', latency: 0, git: true })
     const source: FolderSource = { ...base, git: { ...base.git!, list: async () => [failedPull(errorCode, url)] } }
