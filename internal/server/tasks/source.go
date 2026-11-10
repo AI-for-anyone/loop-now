@@ -58,6 +58,8 @@ type Source struct {
 	ViewQuestion  func(context.Context, auth.Principal, taskmodel.Question) (taskmodel.Question, error)
 	// Log 记录任务工作区复制的方式与耗时；为空时不记录。
 	Log *slog.Logger
+	// LocalAccess 按基础 Agent 返回本机模式交给 Pi 的东西；为空时不启用本机模式。
+	LocalAccess func(context.Context, uuid.UUID) (agentconfig.LocalAccess, error)
 }
 
 func (s *Source) ExecutionSnapshot(ctx context.Context, id uuid.UUID) (agentconfig.Snapshot, error) {
@@ -161,6 +163,12 @@ func (s *Source) ExecutionSnapshot(ctx context.Context, id uuid.UUID) (agentconf
 	// 插件按基础 Agent 当前的授权在启动 Pi 时挂载；已经启动的 Pi 继续用它启动时的文件。
 	if s.PluginAssets != nil {
 		if out.Plugins, err = s.PluginAssets(ctx, inst.AgentID); err != nil {
+			return agentconfig.Snapshot{}, err
+		}
+	}
+	// 本机目录与 PATH 同样按基础 Agent 与项目的当前设置，不进任务快照；任务里对本机目录的改动直接落在真实文件上。
+	if s.LocalAccess != nil {
+		if out.Local, err = s.LocalAccess(ctx, inst.AgentID); err != nil {
 			return agentconfig.Snapshot{}, err
 		}
 	}

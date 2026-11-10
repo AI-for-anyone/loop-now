@@ -90,6 +90,8 @@ type Options struct {
 	LoopctlBinDir string
 	// ContextDir 是项目与全局上下文文件夹的根；为空时不注入上下文入口与路径说明（测试用）。
 	ContextDir string
+	// UserPath 返回用户的 PATH 目录（“用本机的 CLI”开启时接在执行 PATH 之后）；为空时不接。
+	UserPath func(context.Context) []string
 }
 
 // TokenIssuer 签发与作废 Agent 令牌。令牌在启动 Pi 前签发，进程停止、退出或被丢弃时作废。
@@ -130,6 +132,7 @@ type proc struct {
 	client              *pirpc.Client
 	version             int64
 	promptIdentity      string
+	localIdentity       string // 本机模式（目录与 PATH 开关）的指纹，变化即按新配置重启
 	credentialIdentity  string
 	modelConfigIdentity string
 	provider            string // 启动时的提供方与模型，用于压缩用量
@@ -365,7 +368,7 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 	for {
 		e.mu.Lock()
 		if p := e.procs[snap.AgentID]; p != nil {
-			if p.version == snap.ConfigVersion && p.credentialIdentity == snap.CredentialIdentity && p.modelConfigIdentity == snap.ModelConfigIdentity && p.promptIdentity == prompts.Identity(snap.PromptLayers) && sameLarkBinding(p.larkBinding, snap.LarkBinding) && alive(p) {
+			if p.version == snap.ConfigVersion && p.credentialIdentity == snap.CredentialIdentity && p.modelConfigIdentity == snap.ModelConfigIdentity && p.promptIdentity == prompts.Identity(snap.PromptLayers) && p.localIdentity == snap.Local.Identity() && sameLarkBinding(p.larkBinding, snap.LarkBinding) && alive(p) {
 				p.busy = true
 				if p.idleTimer != nil {
 					p.idleTimer.Stop()
@@ -644,7 +647,7 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 	if bridge != nil {
 		bridge.ChildStarted()
 	}
-	p := &proc{larkRuntime: lark, googleBridge: googleBridge, authBridge: bridge, log: e.snapshotLog(snap), agentID: snap.AgentID, client: client, version: snap.ConfigVersion, promptIdentity: prompts.Identity(snap.PromptLayers), credentialIdentity: snap.CredentialIdentity, modelConfigIdentity: snap.ModelConfigIdentity, provider: snap.Provider, model: snap.ModelID,
+	p := &proc{larkRuntime: lark, googleBridge: googleBridge, authBridge: bridge, log: e.snapshotLog(snap), agentID: snap.AgentID, client: client, version: snap.ConfigVersion, promptIdentity: prompts.Identity(snap.PromptLayers), localIdentity: snap.Local.Identity(), credentialIdentity: snap.CredentialIdentity, modelConfigIdentity: snap.ModelConfigIdentity, provider: snap.Provider, model: snap.ModelID,
 		startedAt: begin, dirs: d, lastUsed: time.Now(), recorded: snap.Session.SessionFile, tokenID: tokenID, stopDone: make(chan struct{})}
 	if identity, identityErr := readRecoveryProcess(client.Pid()); identityErr == nil && validRecoveryProcess(&identity) {
 		p.recoveryIdentity = &identity

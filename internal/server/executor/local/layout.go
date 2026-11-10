@@ -58,7 +58,7 @@ func (d agentDirs) ensure() error {
 
 // buildEnv 从空环境构造 Pi 进程的环境：目录变量、执行 PATH、允许透传的通用变量、
 // 被允许 CLI 的凭证；模型秘密仅通过独立auth.json/私有fd。不继承服务端的任何其他变量。
-func (e *Executor) buildEnv(d agentDirs, snap agentconfig.Snapshot, cliBinDirs []string, log *slog.Logger) []string {
+func (e *Executor) buildEnv(d agentDirs, snap agentconfig.Snapshot, cliBinDirs, userPath []string, log *slog.Logger) []string {
 	vars := map[string]string{}
 	var order []string
 	set := func(k, v string) {
@@ -112,6 +112,8 @@ func (e *Executor) buildEnv(d agentDirs, snap agentconfig.Snapshot, cliBinDirs [
 		path = append(path, e.o.LoopctlBinDir) // 同版本 loopctl 放在最前面，不会被 CLI 目录中的同名程序覆盖
 	}
 	path = append(append(append(path, cliBinDirs...), snap.Plugins.Bin...), e.o.ExecBasePath)
+	// “用本机的 CLI”：用户的 PATH 接在最后，已在前面出现的目录不重复，随包 Node、loopctl 与模板 CLI 仍然优先。
+	path = appendUserPath(path, userPath)
 	set("PATH", strings.Join(path, string(os.PathListSeparator)))
 	// 已授权插件的配置与账号；不覆盖上面的目录、PATH 与保留变量。
 	for _, k := range slices.Sorted(maps.Keys(snap.Plugins.Env)) {
@@ -124,6 +126,26 @@ func (e *Executor) buildEnv(d agentDirs, snap agentconfig.Snapshot, cliBinDirs [
 		out = append(out, k+"="+vars[k])
 	}
 	return out
+}
+
+// appendUserPath 把 user 中尚未出现在 path（各项可能是以分隔符连接的多个目录）里的目录依次接到末尾。
+func appendUserPath(path, user []string) []string {
+	if len(user) == 0 {
+		return path
+	}
+	seen := map[string]bool{}
+	for _, p := range path {
+		for _, d := range filepath.SplitList(p) {
+			seen[d] = true
+		}
+	}
+	for _, d := range user {
+		if d != "" && !seen[d] {
+			seen[d] = true
+			path = append(path, d)
+		}
+	}
+	return path
 }
 
 // pluginArgs 返回已授权插件的 Pi 参数（plugins/SPEC.md §2.1），排在平台自己的 -e 之后：
