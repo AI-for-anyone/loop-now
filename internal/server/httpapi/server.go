@@ -177,6 +177,7 @@ func (s *Server) Routes() []Route {
 		{"POST", "/projects/{projectId}/model-auth/operations", "startProjectModelAuthLogin", ConsoleAndExternal, s.startProjectModelAuthLogin},
 		{"GET", "/projects/{projectId}/model-auth/operations/{operationId}", "getProjectModelAuthLogin", ConsoleAndExternal, s.getProjectModelAuthLogin},
 		{"POST", "/projects/{projectId}/model-auth/operations/{operationId}/cancel", "cancelProjectModelAuthLogin", ConsoleAndExternal, s.cancelProjectModelAuthLogin},
+		{"POST", "/projects/{projectId}/model-auth/operations/{operationId}/input", "answerProjectModelAuthLogin", ConsoleAndExternal, s.answerProjectModelAuthLogin},
 		{"GET", "/projects/{projectId}/prompt", "getProjectPrompt", ConsoleOnly, s.getProjectPrompt},
 		{"PUT", "/projects/{projectId}/prompt", "putProjectPrompt", ConsoleOnly, s.putProjectPrompt},
 		{"GET", "/agents/{agentId}/model-auth", "getModelAuthState", ConsoleOnly, s.getModelAuthState},

@@ -26,6 +26,8 @@ type ProjectCredentialRecord struct {
 	TemplateSource string
 }
 type ProjectCredentialWrite struct {
+	// VersionID 不为空时用作新版本的 ID（插件提供方的状态目录以它命名，登录前就要定下来）。
+	VersionID      uuid.UUID
 	AuthMethod     string
 	AccountLabel   *string
 	GitHubIdentity *cm.GitHubIdentity
@@ -228,7 +230,10 @@ func insertProjectCredentialVersion(ctx context.Context, tx *db.Tx, account cm.A
 	if larkOAuth && (w.LarkIdentity == nil || !w.LarkIdentity.Valid() || w.AccountLabel == nil || *w.AccountLabel != w.LarkIdentity.OpenID) || !larkOAuth && w.LarkIdentity != nil {
 		return uuid.Nil, apperr.Invalid("identity", "Lark身份与凭证用途不匹配")
 	}
-	id := uuid.Must(uuid.NewV7())
+	id := w.VersionID
+	if id == uuid.Nil {
+		id = uuid.Must(uuid.NewV7())
+	}
 	var err error
 	if account.Purpose == PurposeModel {
 		_, err = tx.Exec(ctx, `INSERT INTO model_auth_versions(id,project_account_id,provider,auth_method,account_label,secret)VALUES($1,$2,$3,$4,$5,$6)`, id, account.ID, *account.Provider, w.AuthMethod, w.AccountLabel, w.Secret)
@@ -336,7 +341,7 @@ func (s *Store) MutateProjectCredential(ctx context.Context, project, id uuid.UU
 			if _, e = tx.Exec(ctx, `UPDATE project_credential_accounts SET deleted_at=clock_timestamp() WHERE id=$1`, id); e != nil {
 				return e
 			}
-			if _, e = tx.Exec(ctx, `UPDATE project_model_auth_operations SET status='cancelled',authorization_url=NULL,error_code=NULL,completed_at=clock_timestamp() WHERE target_account_id=$1 AND status IN('pending','awaiting_authorization')`, id); e != nil {
+			if _, e = tx.Exec(ctx, `UPDATE project_model_auth_operations SET status='cancelled',authorization_url=NULL,user_code=NULL,verification_uri=NULL,device_expires_at=NULL,error_code=NULL,completed_at=clock_timestamp() WHERE target_account_id=$1 AND status IN('pending','awaiting_authorization')`, id); e != nil {
 				return e
 			}
 		}

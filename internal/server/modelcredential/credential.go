@@ -65,6 +65,8 @@ type wire struct {
 	Refresh   string            `json:"refresh,omitempty"`
 	Expires   int64             `json:"expires,omitempty"`
 	AccountID string            `json:"accountId,omitempty"`
+	// Plugin 只用于 plugin_state：注册这个模型提供方的插件。
+	Plugin string `json:"plugin,omitempty"`
 }
 
 // Credential never serializes or prints implicitly. Encode is the only secret
@@ -72,6 +74,26 @@ type wire struct {
 type Credential struct{ value wire }
 
 func APIKey(key string) (Credential, error) { return validated(wire{Type: "api_key", Key: key}) }
+
+// PluginState 是插件提供方订阅登录的凭证种类：版本只记下插件，令牌与扩展的状态在以版本 ID 命名的状态目录里。
+// 数据库里它的 auth_method 为 oauth。
+const PluginState = "plugin_state"
+
+// PluginStateOf 返回插件 plugin 的订阅登录凭证。
+func PluginStateOf(plugin string) (Credential, error) {
+	return validated(wire{Type: PluginState, Plugin: plugin})
+}
+
+// Plugin 返回 plugin_state 凭证所属的插件；其他种类为空。
+func (c Credential) Plugin() string { return c.value.Plugin }
+
+// AuthMethod 是这个凭证在数据库里的认证方式：plugin_state 记为 oauth。
+func (c Credential) AuthMethod() string {
+	if c.value.Type == PluginState {
+		return "oauth"
+	}
+	return c.value.Type
+}
 func Decode(data []byte) (Credential, error) {
 	if len(data) > MaxBytes {
 		return Credential{}, ErrInvalid
@@ -91,7 +113,12 @@ func validated(w wire) (Credential, error) {
 			return Credential{}, ErrInvalid
 		}
 	case "oauth":
-		if len(w.Env) != 0 || w.Key != "" || w.Access == "" || w.Refresh == "" || w.AccountID == "" || w.Expires <= 0 {
+		if len(w.Env) != 0 || w.Key != "" || w.Access == "" || w.Refresh == "" || w.AccountID == "" || w.Expires <= 0 || w.Plugin != "" {
+			return Credential{}, ErrInvalid
+		}
+	case PluginState:
+		// 插件提供方的订阅登录（plugins/SPEC.md §13）：令牌在以版本 ID 命名的状态目录里，由扩展自己刷新；这里不含任何秘密。
+		if len(w.Env) != 0 || w.Key != "" || w.Access != "" || w.Refresh != "" || w.AccountID != "" || w.Expires != 0 || w.Plugin == "" || len(w.Plugin) > 64 {
 			return Credential{}, ErrInvalid
 		}
 	default:
@@ -118,6 +145,9 @@ func (c Credential) Encode() ([]byte, error) {
 	return json.Marshal(c.value)
 }
 func (c Credential) AuthFile(provider string) ([]byte, error) {
+	if c.value.Type == PluginState {
+		return nil, ErrInvalid // 插件提供方的 auth.json 在状态目录里，不从数据库写
+	}
 	if (len(c.value.Env) != 0 && provider != "anthropic") || provider == "" || strings.ContainsAny(provider, "/\\\x00\r\n\t ") {
 		return nil, ErrInvalid
 	}

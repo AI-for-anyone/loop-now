@@ -714,7 +714,7 @@ paths:
       - credentials
       operationId: listProjectModelAuthOperations
       x-access: console-and-external
-      description: 仅活动操作。无accountId包括新建与重登，可用于无账号ID时页面/未知start响应恢复。授权URL只在活动操作视图，禁止日志/普通元数据/持久化。
+      description: 仅活动操作。无accountId包括新建与重登，可用于无账号ID时页面/未知start响应恢复。授权URL只在活动操作视图，禁止日志/普通元数据/持久化。provider省略时列出全部（Codex与插件提供方），每条带provider。
       parameters:
       - name: projectId
         in: path
@@ -727,8 +727,7 @@ paths:
         required: false
         schema:
           type: string
-          enum:
-          - openai-codex
+          minLength: 1
       - name: accountId
         in: query
         required: false
@@ -976,6 +975,67 @@ paths:
               "$ref": "#/components/headers/RequestId"
             Loop-Now-Version:
               "$ref": "#/components/headers/Version"
+        '503':
+          description: 服务端错误或组件暂不可用；固定安全消息
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+          headers:
+            Loop-Now-Request-Id:
+              "$ref": "#/components/headers/RequestId"
+            Loop-Now-Version:
+              "$ref": "#/components/headers/Version"
+  "/projects/{projectId}/model-auth/operations/{operationId}/input":
+    post:
+      tags:
+      - credentials
+      operationId: answerProjectModelAuthLogin
+      x-access: console-and-external
+      description: |
+        回答插件提供方登录中正在等的问题（操作的 prompt）。只能回答当前那一个问题；select 的 value 须是某个选项的 id。
+        没有在等回答、promptId 不对或回答不合规返回 422（字段 promptId 或 value）。回答只在内存里转交，不保存、不记日志。
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: operationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/ProjectModelLoginInput"
+      responses:
+        '200':
+          description: 回答已交给登录；prompt 清空，扩展的下一步可能带来新的 prompt 或地址
+          headers:
+            Loop-Now-Request-Id:
+              "$ref": "#/components/headers/RequestId"
+            Loop-Now-Version:
+              "$ref": "#/components/headers/Version"
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ProjectModelAuthState"
+        '401':
+          "$ref": "#/components/responses/Unauthenticated"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '413':
+          "$ref": "#/components/responses/PayloadTooLarge"
+        '422':
+          "$ref": "#/components/responses/ValidationFailed"
         '503':
           description: 服务端错误或组件暂不可用；固定安全消息
           content:
@@ -14587,9 +14647,7 @@ components:
         - name
         properties:
           provider:
-            type: string
-            enum:
-            - openai-codex
+            "$ref": "#/components/schemas/ProjectModelLoginProvider"
           name:
             type: string
             minLength: 1
@@ -14602,9 +14660,7 @@ components:
         - expectedRevision
         properties:
           provider:
-            type: string
-            enum:
-            - openai-codex
+            "$ref": "#/components/schemas/ProjectModelLoginProvider"
           accountId:
             type: string
             format: uuid
@@ -14612,6 +14668,53 @@ components:
             type: integer
             format: int64
             minimum: 1
+    ProjectModelLoginProvider:
+      description: |
+        openai-codex，或模型目录里 source 为 plugin、authMethods 含 oauth 的插件提供方（plugins/SPEC.md §13）。
+        插件提供方须在这个项目里启用了插件，否则开始登录返回 409 plugin_not_enabled；不在目录里返回 422。
+        插件提供方登录成功后账号的 authMethod 为 oauth；令牌与扩展的状态在服务端的状态目录里，不进数据库。
+        插件提供方登录的 errorCode：auth_failed（未完成）、auth_port_busy（扩展的本机回调端口被占用）、auth_timeout（超时，status=expired）、
+        extension_load_failed（插件扩展加载失败或没有注册这个提供方的登录）、plugin_unavailable（插件已卸载或停用）、
+        invalid_authorization_url（扩展给出的地址不合规）、helper_unavailable、server_restarted；用户取消为 status=cancelled、errorCode 为 null。
+      type: string
+      minLength: 1
+      maxLength: 64
+    ProjectModelLoginDeviceCode:
+      type: object
+      additionalProperties: false
+      required: [userCode, verificationUri, expiresAt]
+      properties:
+        userCode: { type: string, minLength: 1 }
+        verificationUri: { type: string }
+        expiresAt: { type: [string, "null"], format: date-time }
+    ProjectModelLoginPrompt:
+      type: object
+      additionalProperties: false
+      required: [id, kind, message, options]
+      properties:
+        id: { type: string }
+        kind:
+          description: select 从 options 里选一个 id；text 填文字；manual_code 是浏览器回调到不了时手工粘贴的回调地址或授权码（message 可能为空）。
+          type: string
+          enum: [select, text, manual_code]
+        message: { type: string, maxLength: 501 }
+        options:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, label]
+            properties:
+              id: { type: string }
+              label: { type: string }
+    ProjectModelLoginInput:
+      type: object
+      additionalProperties: false
+      required: [promptId, value]
+      properties:
+        promptId: { type: string, minLength: 1 }
+        value: { description: 回答；只在内存里转给登录辅助进程，不保存、不记日志, type: string, maxLength: 4096 }
     ProjectModelAuthOperation:
       type: object
       additionalProperties: false
@@ -14630,6 +14733,8 @@ components:
       - authorizationUrl
       - errorCode
       - errorMessage
+      - deviceCode
+      - prompt
       properties:
         id:
           type: string
@@ -14638,9 +14743,7 @@ components:
           type: string
           format: uuid
         provider:
-          type: string
-          enum:
-          - openai-codex
+          "$ref": "#/components/schemas/ProjectModelLoginProvider"
         targetAccountId:
           anyOf:
           - type: string
@@ -14682,10 +14785,11 @@ components:
             format: date-time
           - type: 'null'
         authorizationUrl:
+          description: Codex 只会是 https://auth.openai.com/oauth/authorize?…；插件提供方是扩展给的 https 地址，服务端已校验（无用户名密码与 fragment、不含授权码或令牌），控制台显示目标主机名。
           anyOf:
           - type: string
             format: uri
-            pattern: "^https://auth\\.openai\\.com/oauth/authorize\\?"
+            pattern: "^https://"
           - type: 'null'
         errorCode:
           anyOf:
@@ -14694,6 +14798,16 @@ components:
         errorMessage:
           anyOf:
           - type: string
+          - type: 'null'
+        deviceCode:
+          description: 设备码登录（只有插件提供方）：打开 verificationUri 输入 userCode；地址已由服务端校验（https、无用户名密码与 fragment、不含秘密）。终态为 null。
+          anyOf:
+          - "$ref": "#/components/schemas/ProjectModelLoginDeviceCode"
+          - type: 'null'
+        prompt:
+          description: 登录中等人回答的问题（只有插件提供方）；用 answerProjectModelAuthLogin 回答。message 与 options 是扩展原文，服务端已限长，按纯文本显示。终态为 null。
+          anyOf:
+          - "$ref": "#/components/schemas/ProjectModelLoginPrompt"
           - type: 'null'
     ProjectModelAuthState:
       type: object
@@ -14708,6 +14822,7 @@ components:
           anyOf:
           - "$ref": "#/components/schemas/ProjectCredentialAccount"
           - type: 'null'
+
     ProjectModelAuthOperationList:
       type: object
       additionalProperties: false

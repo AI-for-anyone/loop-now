@@ -204,7 +204,42 @@ type Operation struct {
 	AuthorizationURL *string    `json:"authorizationUrl"`
 	ErrorCode        *string    `json:"errorCode"`
 	ErrorMessage     *string    `json:"errorMessage"`
+	// DeviceCode 与 Prompt 只有插件提供方的登录会有（plugins/SPEC.md §13）；终态时都为空。
+	DeviceCode *DeviceCode  `json:"deviceCode"`
+	Prompt     *LoginPrompt `json:"prompt"`
 }
+
+// DeviceCode 是设备码登录给人看的验证码与验证地址。
+type DeviceCode struct {
+	UserCode        string     `json:"userCode"`
+	VerificationURI string     `json:"verificationUri"`
+	ExpiresAt       *time.Time `json:"expiresAt"`
+}
+
+// LoginPrompt 是登录过程中等人回答的一个问题：select 从 options 里选一个 id，text 与 manual_code 填文字
+// （manual_code 是浏览器回调到不了时手工粘贴的回调地址或授权码）。message 与 options 是扩展原文，按纯文本显示。
+type LoginPrompt struct {
+	ID      string              `json:"id"`
+	Kind    string              `json:"kind"`
+	Message string              `json:"message"`
+	Options []LoginPromptOption `json:"options"`
+}
+
+// LoginPromptOption 是 select 的一个选项。
+type LoginPromptOption struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+// LoginInput 是回答登录中的问题。
+type LoginInput struct {
+	PromptID string `json:"promptId"`
+	Value    string `json:"value"`
+}
+
+func (LoginInput) String() string   { return "[login input]" }
+func (LoginInput) GoString() string { return "[login input]" }
+
 type LoginState struct {
 	Operation Operation `json:"operation"`
 	Account   *Account  `json:"account"`

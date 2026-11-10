@@ -135,3 +135,20 @@ func (s *Service) PluginOfPath(ctx context.Context) (func(string) (string, bool)
 		return "", false
 	}, nil
 }
+
+// Extensions 返回插件当前版本 Pi 扩展的绝对路径（插件提供方登录时加载）；插件不存在时返回 not_found，没有扩展时为空。
+func (s *Service) Extensions(ctx context.Context, id string) ([]string, error) {
+	p, err := s.Store.GetPlugin(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	_, m, err := view(p)
+	if err != nil {
+		return nil, err
+	}
+	out := []string{}
+	for _, e := range m.Extensions {
+		out = append(out, filepath.Join(p.InstallDir, filepath.Clean(e)))
+	}
+	return out, nil
+}

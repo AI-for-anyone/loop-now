@@ -23,6 +23,8 @@ type ProjectService struct {
 	Templates       *clitemplate.Catalog
 	MaxCredential   int64
 	CancelCLILogins func(context.Context, uuid.UUID, *uuid.UUID) error
+	// Plugins 支持插件提供方的订阅登录（plugins/SPEC.md §13）；为空时只支持 Codex。
+	Plugins *PluginLogins
 }
 
 func NewProjectService(auth *Service, templates *clitemplate.Catalog, max int64) *ProjectService {
@@ -120,7 +122,7 @@ func (p *ProjectService) accountView(ctx context.Context, r store.ProjectCredent
 		plain = r.Model.Secret
 		var c modelcredential.Credential
 		c, err = modelcredential.Decode(plain)
-		if err == nil && c.Kind() != r.Model.AuthMethod {
+		if err == nil && c.AuthMethod() != r.Model.AuthMethod {
 			err = ErrCredentialUnavailable
 		}
 	} else if r.CLI != nil {

@@ -23,6 +23,7 @@ import (
 	"loop-now/internal/execenv"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/apitypes"
+	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/cliauth"
 	"loop-now/internal/server/cliimport"
@@ -48,6 +49,7 @@ import (
 	"loop-now/internal/server/pluginhost"
 	"loop-now/internal/server/plugins"
 	"loop-now/internal/server/preflight"
+	"loop-now/internal/server/providerstate"
 	"loop-now/internal/server/runrecord"
 	"loop-now/internal/server/selfsigned"
 	"loop-now/internal/server/store"
@@ -66,9 +68,11 @@ type App struct {
 	CLIAuth         *cliauth.Service
 	ModelAuth       *modelauth.Service
 	ModelSettings   *modelconfig.Service
-	Cfg             *config.Config
-	InstanceID      uuid.UUID
-	Log             *slog.Logger
+	// ProviderStates 是插件提供方订阅账号的状态目录。
+	ProviderStates *providerstate.Manager
+	Cfg            *config.Config
+	InstanceID     uuid.UUID
+	Log            *slog.Logger
 
 	Store *store.Store
 	Coord *coord.Coord
@@ -116,6 +120,8 @@ type Options struct {
 	// Nil preserves the production fixed HTTPS transport; never configured via env/API.
 	LarkHTTPTransport http.RoundTripper
 	AuthLoginHelper   modelauth.LoginHelper
+	// PluginLoginHelper 替换插件提供方的登录辅助进程（测试用）。
+	PluginLoginHelper modelauth.PluginLoginHelper
 	AuthRefresher     modelauth.Refresher
 	// Listener 非空时直接使用（测试用），否则按配置的监听地址监听。
 	Listener net.Listener
@@ -314,6 +320,19 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		return a, err
 	}
 	projectCredentials := modelauth.NewProjectService(a.ModelAuth, templates, cfg.MaxCredential)
+	// 插件提供方的订阅登录（plugins/SPEC.md §13）：状态目录在 platform/provider-states/ 下，辅助进程与 Codex 登录同一组内嵌资产。
+	a.ProviderStates = &providerstate.Manager{Root: filepath.Join(platformDir, "provider-states")}
+	var pluginLogin modelauth.PluginLoginHelper = &modelauth.PluginHelper{Options: modelauth.PluginHelperOptions{NodeBin: res.NodeBin, Entry: filepath.Join(authRoot, "provider-main.mjs"),
+		WorkRoot: platformDir, BasePath: res.ExecBasePath, PiPackageRoot: packageRoot, PiVersion: cfg.PiVersion, Timeout: cfg.AuthLoginTimeout, StopGrace: cfg.PiStopGrace}}
+	if o.PluginLoginHelper != nil {
+		pluginLogin = o.PluginLoginHelper
+	}
+	projectCredentials.Plugins = &modelauth.PluginLogins{Helper: pluginLogin, States: a.ProviderStates, Extensions: func(ctx context.Context, plugin string) ([]string, error) {
+		if a.Plugins == nil {
+			return nil, apperr.NotFound("插件")
+		}
+		return a.Plugins.Extensions(ctx, plugin)
+	}}
 	googleHelper := &cliauth.ProcessHelper{Options: cliauth.HelperOptions{WorkRoot: platformDir, StopGrace: cfg.PiStopGrace, Runtime: func(ctx context.Context) (cliauth.HelperRuntime, error) {
 		template, ok := templates.Get("gcloud")
 		if !ok {
