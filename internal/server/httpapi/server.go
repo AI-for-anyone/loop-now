@@ -199,6 +199,7 @@ func (s *Server) Routes() []Route {
 		{"GET", "/tasks/{taskId}/artifacts/{artifactId}", "downloadTaskArtifact", ConsoleOnly, s.downloadTaskArtifact},
 
 		{"GET", "/projects/{projectId}/tasks", "listProjectTasks", ConsoleOnly, s.listProjectTasks},
+		{"GET", "/projects/{projectId}/tasks/counts", "countProjectTasks", ConsoleOnly, s.countProjectTasks},
 		{"GET", "/projects/{projectId}/tasks/events", "streamProjectTaskEvents", ConsoleOnly, s.streamProjectTaskEvents},
 		{"GET", "/tasks/{taskId}/events", "streamTaskEvents", ConsoleOnly, s.streamTaskEvents},
 

@@ -188,6 +188,22 @@ func (s *Server) listProjectTasks(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, page)
 }
+func (s *Server) countProjectTasks(w http.ResponseWriter, r *http.Request) {
+	if !s.taskReady(w, r) {
+		return
+	}
+	id, e := pathUUID(r, "projectId")
+	if e != nil {
+		s.fail(w, r, e)
+		return
+	}
+	counts, e := s.Store.CountTasks(r.Context(), id)
+	if e != nil {
+		s.fail(w, r, e)
+		return
+	}
+	writeJSON(w, 200, counts)
+}
 func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	if !s.taskReady(w, r) {
 		return
