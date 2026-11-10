@@ -104,7 +104,8 @@ func TestLoginsEnvShimsAndPrompt(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	base := strings.Join([]string{"/usr/bin", "/bin"}, string(os.PathListSeparator))
+	// 执行基础 PATH 用空的临时目录：命令的解析结果不受宿主机上装没装 gh、tea 影响。
+	base := strings.Join([]string{t.TempDir(), t.TempDir()}, string(os.PathListSeparator))
 	h := newHarness(t, func(o *Options) {
 		o.ContextDir = t.TempDir()
 		o.ExecBasePath = base
@@ -197,7 +198,9 @@ func TestLoginsDoNotShimUnconfiguredCLI(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(userBin, "gh"), []byte("#!/bin/sh\necho user-gh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	base := t.TempDir() // 空的执行基础 PATH：宿主机上装的 gh（例如 CI runner 的 /usr/bin/gh）不会先命中
 	h := newHarness(t, func(o *Options) {
+		o.ExecBasePath = base
 		o.RealHome = func() (string, error) { return realHome, nil }
 		o.UserPath = func(context.Context) []string { return []string{userBin} }
 	}, "")
@@ -209,6 +212,9 @@ func TestLoginsDoNotShimUnconfiguredCLI(t *testing.T) {
 		t.Fatal(res)
 	}
 	d := readDump(t, dumpPath)
+	if path := d.Env["PATH"]; path != base+string(os.PathListSeparator)+userBin {
+		t.Fatalf("没有受管 CLI 时 PATH 只有执行 PATH 与用户 PATH，不含小脚本或模板目录：%s", path)
+	}
 	if gh := lookPath(d.Env["PATH"], "gh"); gh != filepath.Join(userBin, "gh") || d.Env["HOME"] != realHome {
 		t.Fatalf("没配的 gh 应落到用户本机并用真实 HOME：%s HOME=%s", gh, d.Env["HOME"])
 	}
