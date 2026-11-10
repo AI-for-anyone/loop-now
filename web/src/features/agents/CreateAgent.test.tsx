@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { routes } from '@/app/routes'
 import type { Schemas } from '@/api/client'
 import { agentsUrl, apiUrl, context, defaultAgentsPath, errorBody, makeAgent, makeStatus, toListItem } from '@/test/api'
-import { providers, catalogHandlers } from '@/test/config'
+import { pluginProvider, providers, catalogHandlers } from '@/test/config'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { sidebar } from '@/test/shell'
@@ -96,6 +96,27 @@ describe('创建 Agent', () => {
     await waitFor(() => expect(router.state.location.pathname).toMatch(new RegExp(`^${defaultAgentsPath}/.+/config$`)))
     const list = await screen.findByRole('list', { name: 'Agent' })
     await waitFor(() => expect(within(list).getByRole('link', { name: /开发助手/ })).toHaveAttribute('aria-current', 'page'))
+  })
+
+  it('插件提供方不能在创建时直接选：选项禁用并说明创建后授权插件再选择，目录不带 agentId', async () => {
+    let query: string | null = null
+    const { user } = setup((body) => HttpResponse.json(makeAgent({ name: body.name, model: body.model }), { status: 201 }))
+    server.use(
+      http.get(apiUrl('/model-providers'), ({ request }) => {
+        query = new URL(request.url).search
+        return HttpResponse.json({ ...providers, providers: [...providers.providers, pluginProvider('grok-cli')] })
+      }),
+    )
+    const dialog = await fill(user, 'Grok 助手', false)
+    const select = await within(dialog).findByLabelText('模型提供方')
+    const grok = await waitFor(() => {
+      const found = within(select).getAllByRole('option').find((item) => (item as HTMLOptionElement).value === 'grok-cli')
+      if (!found) throw new Error('目录里还没有 grok-cli')
+      return found
+    })
+    expect(grok).toBeDisabled()
+    expect(grok).toHaveTextContent('Grok CLI · grok-cli（插件「Grok 订阅」，2 个模型） — 创建后授权插件再选择')
+    expect(query).toBe('')
   })
 
   it('未选择模型时不提交', async () => {

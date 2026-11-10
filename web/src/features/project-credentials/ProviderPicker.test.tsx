@@ -12,19 +12,20 @@ import { enUS } from '@/i18n/en-US'
 import { zhCN } from '@/i18n/zh-CN'
 import { ProjectAccounts } from './ProjectAccounts'
 import { providerCatalog } from './provider-catalog'
+import { pluginProvider } from '@/test/config'
 
 // 项目设置 › 模型账号：添加账号时用搜索面板选提供方，账号列表的每一行显示同样的提供方名称。
-const provider = (id: string, modelCount: number, authMethods: Schemas['ModelAuthMethod'][] = ['api_key']): Schemas['ModelProvider'] => ({ id, source: 'builtin', apiKeyEnvVars: [], modelCount, authMethods })
+const provider = (id: string, modelCount: number, authMethods: Schemas['ModelAuthMethod'][] = ['api_key']): Schemas['ModelProvider'] => ({ id, name: null, pluginId: null, pluginDisplayName: null, unavailableReason: null, source: 'builtin', apiKeyEnvVars: [], modelCount, authMethods })
 const catalog = [
   provider('anthropic', 17), provider('deepseek', 2), provider('moonshotai', 4), provider('moonshotai-cn', 4), provider('no-login', 5, []),
   provider('openai-codex', 7, ['oauth']), provider('openrouter', 401), provider('typesafe', 0), provider('zai', 7), provider('zai-coding-cn', 4), provider('zz-new', 3),
 ]
 const codexAccount = projectAccount({ id: '10000000-0000-7000-8000-000000000002', provider: 'openai-codex', authMethod: 'oauth', status: 'logged_in', name: 'Codex 账号' })
 
-function start(accounts: Schemas['ProjectCredentialAccount'][] = [codexAccount]) {
+function start(accounts: Schemas['ProjectCredentialAccount'][] = [codexAccount], providers: Schemas['ModelProvider'][] = catalog) {
   const bodies: unknown[] = []
   server.use(
-    http.get(apiUrl('/model-providers'), () => HttpResponse.json({ piVersion: '1.4.0', catalogGeneratedAt: null, providers: catalog })),
+    http.get(apiUrl('/model-providers'), () => HttpResponse.json({ piVersion: '1.4.0', catalogGeneratedAt: null, providers })),
     http.get(apiUrl('/cli-templates'), () => HttpResponse.json({ templates: [] })),
     http.get(apiUrl('/projects/:projectId/credential-accounts'), () => HttpResponse.json({ projectId: defaultProject.id, credentialsRevision: 1, accounts })),
     http.get(apiUrl('/projects/:projectId/credential-account-impact'), () => HttpResponse.json({ projectId: defaultProject.id, credentialsRevision: 1, accountId: null, agents: [] })),
@@ -38,6 +39,23 @@ const names = (scope: HTMLElement, role: 'option' | 'button') => within(scope).g
 const option = (name: string) => screen.getByRole('option', { name: new RegExp(`^${name}`) })
 
 describe('模型提供方选择器', () => {
+  it('插件注册的提供方单独成"插件提供"一组：显示扩展给的名称、id 和插件，可按插件名搜索，选中后同样标出插件', async () => {
+    const { user } = start([], [...catalog, pluginProvider('grok-cli'), pluginProvider('plain-plugin', { name: null, pluginDisplayName: null, pluginId: 'plain' })])
+    await user.click(screen.getByRole('button', { name: '添加模型账号 · 提供方' }))
+    const group = await screen.findByRole('group', { name: '插件提供' })
+    expect(names(group, 'option')).toEqual(['Grok CLI', 'plain-plugin'])
+    expect(option('Grok CLI')).toHaveTextContent(/Grok CLIgrok-cli插件 · Grok 订阅登录2 个模型$/)
+    expect(option('plain-plugin')).toHaveTextContent(/插件 · plain/)
+    expect(within(screen.getByRole('group', { name: '其他' })).queryByRole('option', { name: /grok/ })).toBeNull()
+    await user.type(screen.getByRole('searchbox', { name: '搜索提供方' }), '订阅')
+    expect(screen.getAllByRole('option').map(item => item.querySelector('.font-bold')?.textContent)).toEqual(['Grok CLI'])
+    await user.click(option('Grok CLI'))
+    const chosen = screen.getByRole('group', { name: '添加模型账号 · 提供方' })
+    expect(chosen).toHaveTextContent('Grok CLI')
+    expect(chosen).toHaveTextContent('grok-cli')
+    expect(chosen).toHaveTextContent('插件 · Grok 订阅')
+  })
+
   it('打开面板时搜索框聚焦；常用提供方在顶部，已有账号的排最前；列表按用途分组，没有模型的、不能录入的不显示', async () => {
     const { user } = start()
     await user.click(screen.getByRole('button', { name: '添加模型账号 · 提供方' }))

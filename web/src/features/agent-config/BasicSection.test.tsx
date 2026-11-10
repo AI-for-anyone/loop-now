@@ -7,7 +7,7 @@ import { routes } from '@/app/routes'
 import type { Schemas } from '@/api/client'
 import { keys } from '@/api/queries'
 import { agentsUrl, apiUrl, defaultAgentPath, defaultAgentsPath, errorBody, makeAgent, toListItem } from '@/test/api'
-import { renderConfig } from '@/test/config'
+import { pluginProvider, providers, renderConfig } from '@/test/config'
 import { createTestQueryClient } from '@/test/render'
 import { chooseModel } from '@/test/model-picker'
 
@@ -218,5 +218,98 @@ describe('模型选择', () => {
     expect(alert).toHaveTextContent('prompt：Prompt 太长')
     expect(alert).toHaveTextContent('other：其他问题')
     expect(alert).not.toHaveTextContent('model.modelId')
+  })
+})
+
+describe('插件提供方', () => {
+  const grokModels = http.get(apiUrl('/model-providers/:providerId/models'), ({ params }) =>
+    HttpResponse.json({ providerId: params.providerId, models: [{ id: 'grok-4', name: 'Grok 4', reasoning: false, contextWindow: 1, maxTokens: 1, input: ['text'] }] }),
+  )
+  const catalog = (plugins: Schemas['ModelProvider'][]) => ({ ...providers, providers: [...providers.providers, ...plugins] })
+  const option = (select: HTMLElement, value: string) => within(select).getAllByRole('option').find((item) => (item as HTMLOptionElement).value === value) as HTMLOptionElement
+
+  it('带 agentId 读目录：不能用的插件提供方带原因并禁用，全局停用全部插件的仍可选但提示启动会失败', async () => {
+    const agent = makeAgent()
+    let asked: string | null = null
+    const { user } = await renderConfig({
+      agent,
+      handlers: [
+        http.get(apiUrl('/model-providers'), ({ request }) => {
+          asked = new URL(request.url).searchParams.get('agentId')
+          return HttpResponse.json(
+            catalog([
+              pluginProvider('grok-cli', { unavailableReason: 'agent_not_granted' }),
+              pluginProvider('grok-off', { name: null, unavailableReason: 'plugins_disabled' }),
+              pluginProvider('grok-ok', { name: 'Grok OK' }),
+            ]),
+          )
+        }),
+        grokModels,
+      ],
+    })
+    const basic = region('基本信息')
+    const select = within(basic).getByLabelText('模型提供方')
+    await waitFor(() => expect(option(select, 'grok-cli')).toBeDefined())
+    expect(asked).toBe(agent.id)
+    expect(option(select, 'anthropic')).toHaveTextContent(/^anthropic（2 个模型）$/)
+    expect(option(select, 'grok-cli')).toHaveTextContent('Grok CLI · grok-cli（插件「Grok 订阅」，2 个模型） — 插件未授权给这个 Agent')
+    expect(option(select, 'grok-cli')).toBeDisabled()
+    expect(option(select, 'grok-ok')).toHaveTextContent(/^Grok OK · grok-ok（插件「Grok 订阅」，2 个模型）$/)
+    expect(option(select, 'grok-ok')).toBeEnabled()
+    expect(option(select, 'grok-off')).toHaveTextContent('grok-off（插件「Grok 订阅」，2 个模型） — 插件已全部停用')
+    expect(option(select, 'grok-off')).toBeEnabled()
+    const disabledNote = '全局设置里已停用全部插件：可以保存，但 Agent 启动时会失败。'
+    expect(within(basic).queryByText(disabledNote)).toBeNull()
+    await user.selectOptions(select, 'grok-off')
+    expect(within(basic).getByText(disabledNote)).toHaveAttribute('role', 'note')
+    await user.selectOptions(select, 'grok-ok')
+    expect(within(basic).queryByText(disabledNote)).toBeNull()
+  })
+
+  it('Agent 正在用的插件提供方现在不能用：选择器下方说明原因和去哪里处理', async () => {
+    const agent = makeAgent({ model: { provider: 'grok-cli', modelId: 'grok-4' } })
+    await renderConfig({ agent, handlers: [http.get(apiUrl('/model-providers'), () => HttpResponse.json(catalog([pluginProvider('grok-cli', { unavailableReason: 'plugin_not_enabled' })]))), grokModels] })
+    const basic = region('基本信息')
+    expect(await within(basic).findByText('项目还没有启用插件「Grok 订阅」。在项目的插件页启用它、再在本页的“插件”一节授权给这个 Agent 后才能选。')).toHaveAttribute('role', 'note')
+    expect(within(basic).getByLabelText('模型提供方')).toHaveValue('grok-cli')
+  })
+
+  it('平台 Agent：插件提供方只给项目 Agent 用', async () => {
+    const agent = makeAgent({ scope: 'platform', projectId: null })
+    await renderConfig({ agent, handlers: [http.get(apiUrl('/model-providers'), () => HttpResponse.json(catalog([pluginProvider('grok-cli', { unavailableReason: 'platform_agent' })]))), grokModels] })
+    const select = within(region('基本信息')).getByLabelText('模型提供方')
+    await waitFor(() => expect(option(select, 'grok-cli')).toBeDisabled())
+    expect(option(select, 'grok-cli')).toHaveTextContent('— 只给项目 Agent 用')
+  })
+
+  it('保存时 422（model.provider）：说明显示在模型旁，目录重新读取后标出原因', async () => {
+    const agent = makeAgent()
+    let granted = true
+    let reads = 0
+    const { user } = await renderConfig({
+      agent,
+      handlers: [
+        http.get(apiUrl('/model-providers'), () => {
+          reads += 1
+          return HttpResponse.json(catalog([pluginProvider('grok-cli', { unavailableReason: granted ? null : 'agent_not_granted' })]))
+        }),
+        grokModels,
+        http.patch(apiUrl(`/agents/${agent.id}`), () => {
+          granted = false
+          return HttpResponse.json(errorBody('validation_failed', '插件 grok 没有授权给这个 Agent', { fields: [{ field: 'model.provider', message: '插件 grok 没有授权给这个 Agent' }] }), { status: 422 })
+        }),
+      ],
+    })
+    const basic = region('基本信息')
+    const select = within(basic).getByLabelText('模型提供方')
+    await waitFor(() => expect(option(select, 'grok-cli')).toBeEnabled())
+    await user.selectOptions(select, 'grok-cli')
+    await chooseModel(user, basic, 'grok-4')
+    const before = reads
+    await user.click(saveButton())
+    expect(await within(basic).findByText('插件 grok 没有授权给这个 Agent')).toBeInTheDocument()
+    await waitFor(() => expect(option(select, 'grok-cli')).toBeDisabled())
+    expect(reads).toBeGreaterThan(before)
+    expect(within(basic).getByText('插件「Grok 订阅」还没有授权给这个 Agent。在本页的“插件”一节授权后才能选。')).toHaveAttribute('role', 'note')
   })
 })

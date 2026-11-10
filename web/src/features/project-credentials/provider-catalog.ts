@@ -1,10 +1,12 @@
 import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
+import { localizedText } from '@/lib/localized-text'
 
 // 模型提供方的前端小表：每一条按用途分组，收进一个提供方 id，或者同一家的几个地区变体（选中后再切，写入账号的仍是具体 id）。
 // 显示名、搜索别名、变体名在文案表的 credentials.providerPicker.entries 里。接口目录里不在这张表上的 id 落到"其他"，
-// 直接显示 id，所以 Pi 目录新增提供方不会丢；这张表上有、目录里没有的 id 不显示。
-export const providerGroups = ['vendor', 'domestic', 'gateway', 'cloud', 'inference', 'other'] as const
+// 直接显示 id，所以 Pi 目录新增提供方不会丢；这张表上有、目录里没有的 id 不显示。插件注册的提供方（source 为 plugin）
+// 不查这张表，单独成"插件提供"一组，显示扩展给的名称（不可信文本，原样显示）和注册它的插件。
+export const providerGroups = ['vendor', 'domestic', 'gateway', 'cloud', 'inference', 'plugin', 'other'] as const
 export type ProviderGroup = (typeof providerGroups)[number]
 type EntryKey = keyof typeof t.credentials.providerPicker.entries
 
@@ -58,6 +60,8 @@ export type ProviderEntry = {
   // 目录里实际有的 id，按表里的顺序；有几个时 label 是变体名，用来在选中条里切换。
   options: { id: string; label: string; provider: Schemas['ModelProvider'] }[]
   authMethods: Schemas['ModelAuthMethod'][]
+  // 插件提供方：注册它的插件的显示名；其余为 null。
+  plugin: string | null
   // 各变体是同一批模型的不同区域或套餐，取最大的一个，不相加。
   modelCount: number
   search: string
@@ -73,7 +77,8 @@ export function providerName(id: string): string {
 
 // 把接口给的提供方目录收成选择器的条目：分组按 providerGroups 的顺序，组内按表里的顺序，未知 id 排在"其他"的最后。
 export function providerEntries(providers: Schemas['ModelProvider'][]): ProviderEntry[] {
-  const present = new Map(providers.map(provider => [provider.id, provider]))
+  const builtin = providers.filter(provider => provider.source !== 'plugin')
+  const present = new Map(builtin.map(provider => [provider.id, provider]))
   const entries: ProviderEntry[] = []
   for (const item of providerCatalog) {
     const copy = copyOf(item.key)
@@ -83,16 +88,21 @@ export function providerEntries(providers: Schemas['ModelProvider'][]): Provider
     })
     if (options.length) entries.push(entry(item.key, item.group, copy.name, item.color, !!item.recommended, options, copy.alias))
   }
-  for (const provider of providers) {
+  for (const provider of builtin) {
     if (!byId.has(provider.id)) entries.push(entry(provider.id, 'other', provider.id, unknownColor, false, [{ id: provider.id, label: provider.id, provider }], ''))
+  }
+  for (const provider of providers) {
+    if (provider.source !== 'plugin') continue
+    const plugin = provider.pluginDisplayName === null ? provider.pluginId ?? '' : localizedText(provider.pluginDisplayName) || provider.pluginId || ''
+    entries.push(entry(`plugin:${provider.id}`, 'plugin', provider.name || provider.id, unknownColor, false, [{ id: provider.id, label: provider.id, provider }], `${plugin} ${provider.pluginId ?? ''}`, plugin))
   }
   return providerGroups.flatMap(group => entries.filter(item => item.group === group))
 }
 
-function entry(key: string, group: ProviderGroup, name: string, color: string, recommended: boolean, options: ProviderEntry['options'], alias: string): ProviderEntry {
+function entry(key: string, group: ProviderGroup, name: string, color: string, recommended: boolean, options: ProviderEntry['options'], alias: string, plugin: string | null = null): ProviderEntry {
   const authMethods = [...new Set(options.flatMap(option => option.provider.authMethods))]
   const modelCount = Math.max(...options.map(option => option.provider.modelCount))
-  return { key, group, name, color, recommended, options, authMethods, modelCount, search: [name, ...options.map(option => option.id), alias].join(' ').toLowerCase() }
+  return { key, group, name, color, recommended, options, authMethods, plugin, modelCount, search: [name, ...options.map(option => option.id), alias].join(' ').toLowerCase() }
 }
 
 // 输入即筛：每个词都要出现在显示名、id 或别名里。不搜索时隐藏没有可用模型的条目。
