@@ -5988,6 +5988,29 @@ paths:
         }
       }
     }
+  /projects/{projectId}/tasks/counts:
+    get:
+      tags: [tasks]
+      operationId: countProjectTasks
+      x-access: console
+      summary: 项目里未结束的任务按状态计数
+      description: |
+        统计该项目未结束（ended_at 为空）的任务，按 status 分组；没有该状态的任务时为 0。已结束的 completed、cancelled 不计入。
+        只读；供左侧栏“任务”旁的徽标使用，可在收到 `GET /projects/{projectId}/tasks/events` 的失效通知后重新读取。
+        项目不存在或已删除时返回 404 `not_found`（与 `listProjectTasks` 相同）。
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: 计数
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaskCounts" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /projects/{projectId}/tasks/events:
     get:
       tags:
@@ -13278,6 +13301,15 @@ components:
             - pending
             - archived
             - failed
+    TaskCounts:
+      type: object
+      additionalProperties: false
+      required: [preparing, running, waiting, blocked]
+      properties:
+        preparing: { type: integer, minimum: 0, description: 准备中 }
+        running: { type: integer, minimum: 0, description: 运行中 }
+        waiting: { type: integer, minimum: 0, description: 等待中（sleep、提问等） }
+        blocked: { type: integer, minimum: 0, description: 已阻塞 }
     TaskPage:
       type: object
       additionalProperties: false

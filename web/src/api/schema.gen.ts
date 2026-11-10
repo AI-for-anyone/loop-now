@@ -2554,6 +2554,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/tasks/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 项目里未结束的任务按状态计数
+         * @description 统计该项目未结束（ended_at 为空）的任务，按 status 分组；没有该状态的任务时为 0。已结束的 completed、cancelled 不计入。
+         *     只读；供左侧栏“任务”旁的徽标使用，可在收到 `GET /projects/{projectId}/tasks/events` 的失效通知后重新读取。
+         *     项目不存在或已删除时返回 404 `not_found`（与 `listProjectTasks` 相同）。
+         */
+        get: operations["countProjectTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/tasks/events": {
         parameters: {
             query?: never;
@@ -5376,6 +5398,16 @@ export interface components {
             artifacts: components["schemas"]["TaskArtifact"][];
             /** @enum {string} */
             cleanup: "none" | "pending" | "archived" | "failed";
+        };
+        TaskCounts: {
+            /** @description 准备中 */
+            preparing: number;
+            /** @description 运行中 */
+            running: number;
+            /** @description 等待中（sleep、提问等） */
+            waiting: number;
+            /** @description 已阻塞 */
+            blocked: number;
         };
         TaskPage: {
             tasks: components["schemas"]["TaskSummary"][];
@@ -14038,6 +14070,33 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    countProjectTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 计数 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskCounts"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     streamProjectTaskEvents: {
