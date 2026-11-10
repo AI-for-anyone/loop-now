@@ -4187,11 +4187,27 @@ components:
             - 'null'
           description: 允许展示的非秘密账号标识，不包含token或授权码。
 
+    LocalizedText:
+      description: >-
+        插件清单与市场条目里可以按语言给出的文字（displayName、description）：字符串，或以语言标签（如 `zh-CN`、`en-US`）为键、
+        去掉首尾空白后非空的字符串为值的对象，至少一项。服务端原样返回（对象保留作者写的键顺序），不按语言翻译；
+        控制台按当前语言 → zh-CN → en-US → 第一项取字。缺省时为空字符串。
+      oneOf:
+        - type: string
+        - type: object
+          minProperties: 1
+          propertyNames: { pattern: "^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$" }
+          additionalProperties: { type: string, pattern: "\\S" }
+
     ModelProvider:
       type: object
       required:
         - id
+        - name
         - source
+        - pluginId
+        - pluginDisplayName
+        - unavailableReason
         - apiKeyEnvVars
         - modelCount
         - authMethods
@@ -4199,10 +4215,33 @@ components:
       properties:
         id:
           type: string
+        name:
+          type: [string, "null"]
+          description: 提供方自己给的显示名；目前只有插件提供方有（扩展原文，按纯文本显示），其余为 null。
         source:
           type: string
-          enum: [builtin, config]
-          description: builtin 为纯内置目录；config 表示该 Provider 有原生 models.json 配置或覆盖。
+          enum: [builtin, config, plugin]
+          description: |
+            builtin 为纯内置目录；config 表示该 Provider 有原生 models.json 配置或覆盖；
+            plugin 为已安装插件的 Pi 扩展注册的提供方（plugins/SPEC.md §13），只用于项目 Agent：
+            选它须项目已启用该插件、Agent 已获授权（否则修改 Agent 返回 422，新建 Agent 时不能直接选），账号用项目里登录的订阅账号。
+        pluginId:
+          type: [string, "null"]
+          description: source 为 plugin 时是注册它的插件 id，其余为 null。
+        pluginDisplayName:
+          description: source 为 plugin 时是注册它的插件的显示名（清单原样），其余为 null。
+          oneOf:
+            - $ref: "#/components/schemas/LocalizedText"
+            - type: "null"
+        unavailableReason:
+          type: [string, "null"]
+          enum: [platform_agent, plugin_not_enabled, agent_not_granted, plugins_disabled, null]
+          description: |
+            只在带 agentId 查询、且 source 为 plugin 时可能非空：这个 Agent 现在不能用它的原因。
+            platform_agent：平台 Agent，插件提供方只给项目 Agent 用；plugin_not_enabled：Agent 所在项目没有启用该插件；
+            agent_not_granted：插件没有授权给这个 Agent；plugins_disabled：全局停用了全部插件（不挡保存，但 Pi 启动会失败）。
+            前三种情形下修改 Agent 选它返回 422（validation_failed，字段 model.provider，消息说明是哪一种）。
+            插件被卸载后它的提供方从目录里消失（已选它的 Agent 启动时明确失败）。
         apiKeyEnvVars:
           description: 旧环境凭证兼容诊断元数据，不能作为模型凭证录入字段。
           type: array
@@ -4217,7 +4256,7 @@ components:
           items:
             $ref: '#/components/schemas/ModelAuthMethod'
           uniqueItems: true
-          description: 平台支持的显式认证方式；OAuth登录仅控制台，当前支持openai-codex。
+          description: 平台支持的显式认证方式；OAuth登录仅控制台，当前支持openai-codex与插件提供方（插件提供方只有oauth）。
 
     Warning:
       type: object
@@ -9467,6 +9506,18 @@ components:
           description: 触发本轮平台提醒的原 Inbox 消息 ID；无触发消息的历史及普通来源省略
           type: string
           format: uuid
+        piCommand:
+          description: |
+            这一轮交给 Pi 的命令（plugins/SPEC.md §14）：对话页消息以 `/pi:<name>` 开头时，服务端发给 Pi 的是 `/<name>`（其余原样），
+            消息本身照原文保存与显示。handled 为 true 表示 Pi 直接处理了命令（扩展命令）、没有交给模型，这一轮以 completed 结束、没有助手回复
+            （助手消息正文为空，可显示“命令已执行，没有回复”；命令里的通知与状态照常记为运行事件）；false 表示命令展开成了普通提示（技能命令、提示模板）
+            或 Pi 不认识这个命令、当作普通文字交给了模型。不是命令的执行省略此字段。
+          type: object
+          required: [name, handled]
+          additionalProperties: false
+          properties:
+            name: { description: 命令名，不带 "/"（技能命令为 skill:<名称>）, type: string }
+            handled: { type: boolean }
         wakeSleepId:
           description: 本轮有效承接的 sleep；普通历史可省略或为 null
           type: [string, "null"]

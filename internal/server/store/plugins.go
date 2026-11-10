@@ -39,6 +39,11 @@ type PluginVersion struct {
 	InstallDir  string
 	Digest      string
 	InstalledAt time.Time
+	// Providers 是安装时读出的模型提供方（modelcatalog.Capture 的 JSON）；ProvidersError 是整次读取失败的原因。
+	Providers      json.RawMessage
+	ProvidersError *string
+	// ProviderState 是生效的 providerState 声明（JSON 对象）。
+	ProviderState json.RawMessage
 }
 
 const pluginColumns = `p.id,p.display_name,p.source,p.version,p.manifest,p.install_dir,p.status,p.last_error,p.installed_at,p.updated_at,
@@ -68,24 +73,83 @@ func (s *Store) GetPlugin(ctx context.Context, id string) (Plugin, error) {
 
 // PluginVersions 返回插件装过的版本，新的在前。
 func (s *Store) PluginVersions(ctx context.Context, id string) ([]PluginVersion, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT version,manifest,install_dir,digest,installed_at FROM plugin_versions WHERE plugin_id=$1 ORDER BY installed_at DESC, version DESC`, id)
+	rows, err := s.Pool.Query(ctx, `SELECT version,manifest,install_dir,digest,installed_at,providers,providers_error,provider_state FROM plugin_versions WHERE plugin_id=$1 ORDER BY installed_at DESC, version DESC`, id)
 	if err != nil {
 		return nil, err
 	}
 	return db.CollectRows(rows, func(r db.CollectableRow) (PluginVersion, error) {
 		var v PluginVersion
-		return v, r.Scan(&v.Version, &v.Manifest, &v.InstallDir, &v.Digest, &v.InstalledAt)
+		return v, r.Scan(&v.Version, &v.Manifest, &v.InstallDir, &v.Digest, &v.InstalledAt, &v.Providers, &v.ProvidersError, &v.ProviderState)
+	})
+}
+
+// PluginInstallDirs 返回各已安装插件全部版本的安装目录（插件 id → 目录），用来判断某个文件属于哪个插件。
+func (s *Store) PluginInstallDirs(ctx context.Context) (map[string][]string, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT plugin_id,install_dir FROM plugin_versions ORDER BY plugin_id`)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string][]string{}
+	for rows.Next() {
+		var id, dir string
+		if err := rows.Scan(&id, &dir); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		out[id] = append(out[id], dir)
+	}
+	rows.Close()
+	return out, rows.Err()
+}
+
+// PluginProviders 是一个已安装插件当前版本读出的模型提供方。
+type PluginProviders struct {
+	PluginID       string
+	Providers      json.RawMessage
+	ProvidersError *string
+	ProviderState  json.RawMessage
+}
+
+// CurrentPluginProviders 返回各已安装插件当前版本读出的模型提供方，按插件 id 排序。
+func (s *Store) CurrentPluginProviders(ctx context.Context) ([]PluginProviders, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT p.id,v.providers,v.providers_error,v.provider_state FROM plugins p JOIN plugin_versions v ON v.plugin_id=p.id AND v.version=p.version ORDER BY p.id`)
+	if err != nil {
+		return nil, err
+	}
+	return db.CollectRows(rows, func(r db.CollectableRow) (PluginProviders, error) {
+		var v PluginProviders
+		return v, r.Scan(&v.PluginID, &v.Providers, &v.ProvidersError, &v.ProviderState)
 	})
 }
 
 // InstallPlugin 登记新安装的插件与它的第一个版本；id 已存在时返回 name_conflict。
-func (s *Store) InstallPlugin(ctx context.Context, p Plugin, digest string) error {
+// PluginVersionExtras 是随版本保存的、安装时才得到的东西（plugins/SPEC.md §13）：读出的模型提供方
+// （modelcatalog.Capture 的 JSON）、整次读取失败的原因，与生效的 providerState 声明（JSON 对象）。
+type PluginVersionExtras struct {
+	Providers      json.RawMessage
+	ProvidersError *string
+	ProviderState  json.RawMessage
+}
+
+func (x PluginVersionExtras) values() (json.RawMessage, *string, json.RawMessage) {
+	providers, state := x.Providers, x.ProviderState
+	if len(providers) == 0 {
+		providers = json.RawMessage(`{"providers":[],"errors":[]}`)
+	}
+	if len(state) == 0 {
+		state = json.RawMessage(`{}`)
+	}
+	return providers, x.ProvidersError, state
+}
+
+func (s *Store) InstallPlugin(ctx context.Context, p Plugin, digest string, extra PluginVersionExtras) error {
+	providers, providersError, state := extra.values()
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, err := tx.Exec(ctx, `INSERT INTO plugins(id,display_name,source,version,manifest,install_dir,status) VALUES($1,$2,$3,$4,$5,$6,'installed')`,
 			p.ID, p.DisplayName, p.Source, p.Version, p.Manifest, p.InstallDir); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `INSERT INTO plugin_versions(plugin_id,version,manifest,install_dir,digest) VALUES($1,$2,$3,$4,$5)`, p.ID, p.Version, p.Manifest, p.InstallDir, digest)
+		_, err := tx.Exec(ctx, `INSERT INTO plugin_versions(plugin_id,version,manifest,install_dir,digest,providers,providers_error,provider_state) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, p.ID, p.Version, p.Manifest, p.InstallDir, digest, providers, providersError, state)
 		return err
 	})
 	if isUniqueViolation(err, "plugins_pkey") {
@@ -95,13 +159,14 @@ func (s *Store) InstallPlugin(ctx context.Context, p Plugin, digest string) erro
 }
 
 // UpdatePlugin 切换到新版本：同一版本号已装且内容不同时返回 plugin_version_conflict，内容相同时直接切回。
-func (s *Store) UpdatePlugin(ctx context.Context, p Plugin, digest string) error {
+func (s *Store) UpdatePlugin(ctx context.Context, p Plugin, digest string, extra PluginVersionExtras) error {
+	providers, providersError, state := extra.values()
 	return s.inTx(ctx, func(tx *db.Tx) error {
 		var existing string
 		err := tx.QueryRow(ctx, `SELECT digest FROM plugin_versions WHERE plugin_id=$1 AND version=$2`, p.ID, p.Version).Scan(&existing)
 		switch {
 		case errors.Is(err, db.ErrNoRows):
-			if _, err = tx.Exec(ctx, `INSERT INTO plugin_versions(plugin_id,version,manifest,install_dir,digest) VALUES($1,$2,$3,$4,$5)`, p.ID, p.Version, p.Manifest, p.InstallDir, digest); err != nil {
+			if _, err = tx.Exec(ctx, `INSERT INTO plugin_versions(plugin_id,version,manifest,install_dir,digest,providers,providers_error,provider_state) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, p.ID, p.Version, p.Manifest, p.InstallDir, digest, providers, providersError, state); err != nil {
 				return err
 			}
 		case err != nil:
@@ -109,7 +174,7 @@ func (s *Store) UpdatePlugin(ctx context.Context, p Plugin, digest string) error
 		case existing != digest:
 			return apperr.Conflict(apperr.CodePluginVersionConflict, "插件 "+p.ID+" 已装过版本 "+p.Version+"，内容不同；请改版本号")
 		default:
-			if _, err = tx.Exec(ctx, `UPDATE plugin_versions SET manifest=$3, install_dir=$4 WHERE plugin_id=$1 AND version=$2`, p.ID, p.Version, p.Manifest, p.InstallDir); err != nil {
+			if _, err = tx.Exec(ctx, `UPDATE plugin_versions SET manifest=$3, install_dir=$4, providers=$5, providers_error=$6, provider_state=$7 WHERE plugin_id=$1 AND version=$2`, p.ID, p.Version, p.Manifest, p.InstallDir, providers, providersError, state); err != nil {
 				return err
 			}
 		}
@@ -341,6 +406,35 @@ func (s *Store) PluginEnabledIn(ctx context.Context, plugin string, project uuid
 	var on bool
 	err := s.Pool.QueryRow(ctx, `SELECT coalesce((SELECT enabled FROM project_plugins WHERE project_id=$1 AND plugin_id=$2),false)`, project, plugin).Scan(&on)
 	return on, err
+}
+
+// 项目 Agent 不能用某个插件的 Agent 侧的原因（AgentPluginUsability 的结果）。
+const (
+	PluginUnusablePlatformAgent = "platform_agent"     // 平台 Agent：插件提供方要用项目账号
+	PluginUnusableNotEnabled    = "plugin_not_enabled" // Agent 所在项目没有启用该插件
+	PluginUnusableNotGranted    = "agent_not_granted"  // 没有授权给这个 Agent
+)
+
+// AgentPluginUsability 报告 Agent 能否用这个插件的 Agent 侧：为空表示能用（项目已启用、Agent 已授权），
+// 否则是 PluginUnusable* 之一。插件是否安装、全局是否停用不在这里看。
+func (s *Store) AgentPluginUsability(ctx context.Context, agent uuid.UUID, plugin string) (string, error) {
+	var project *uuid.UUID
+	var enabled, granted bool
+	err := s.Pool.QueryRow(ctx, `SELECT a.project_id,
+		coalesce((SELECT enabled FROM project_plugins WHERE project_id=a.project_id AND plugin_id=$2),false),
+		EXISTS(SELECT 1 FROM agent_plugin_grants WHERE agent_id=a.id AND plugin_id=$2)
+		FROM agents a WHERE a.id=$1 AND a.deleted_at IS NULL`, agent, plugin).Scan(&project, &enabled, &granted)
+	switch {
+	case err != nil:
+		return "", notFoundIfNoRows(err, "Agent")
+	case project == nil:
+		return PluginUnusablePlatformAgent, nil
+	case !enabled:
+		return PluginUnusableNotEnabled, nil
+	case !granted:
+		return PluginUnusableNotGranted, nil
+	}
+	return "", nil
 }
 
 // AgentPluginGrant 是 Agent 对一个插件的授权。

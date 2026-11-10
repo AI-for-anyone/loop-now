@@ -25,6 +25,7 @@ import (
 	"loop-now/internal/server/cliverify"
 	"loop-now/internal/server/conversation"
 	"loop-now/internal/server/coord"
+	"loop-now/internal/server/executor"
 	"loop-now/internal/server/folders"
 	"loop-now/internal/server/inbox"
 	"loop-now/internal/server/localmode"
@@ -76,6 +77,8 @@ type Server struct {
 	LocalMode          *localmode.Service
 	Tasks              *tasks.Service
 	Log                *slog.Logger
+	// PiCommands 返回 Agent 上次启动 Pi 时读到的命令列表（从没启动过时为 nil）；为空时命令列表恒为空。
+	PiCommands func(uuid.UUID) (*executor.PiCommands, error)
 }
 
 // Access 是路由允许的身份范围；零值为只限控制台，新增的路由默认不对外开放。
@@ -142,6 +145,7 @@ func (s *Server) Routes() []Route {
 		{"PUT", "/projects/{projectId}/plugins/{pluginId}/accounts/{accountId}", "updatePluginAccount", ConsoleAndExternal, s.updatePluginAccount},
 		{"DELETE", "/projects/{projectId}/plugins/{pluginId}/accounts/{accountId}", "deletePluginAccount", ConsoleAndExternal, s.deletePluginAccount},
 		{"GET", "/agents/{agentId}/plugins", "listAgentPlugins", ConsoleAndExternal, s.listAgentPlugins},
+		{"GET", "/agents/{agentId}/commands", "listAgentCommands", ConsoleOnly, s.listAgentCommands},
 		{"PUT", "/agents/{agentId}/plugins/{pluginId}", "putAgentPlugin", ConsoleAndExternal, s.putAgentPlugin},
 
 		{"POST", "/projects/{projectId}/cli-credential-import/scans", "scanProjectCLICredentialImports", ConsoleOnly, s.scanProjectCLICredentialImports},
@@ -173,6 +177,7 @@ func (s *Server) Routes() []Route {
 		{"POST", "/projects/{projectId}/model-auth/operations", "startProjectModelAuthLogin", ConsoleAndExternal, s.startProjectModelAuthLogin},
 		{"GET", "/projects/{projectId}/model-auth/operations/{operationId}", "getProjectModelAuthLogin", ConsoleAndExternal, s.getProjectModelAuthLogin},
 		{"POST", "/projects/{projectId}/model-auth/operations/{operationId}/cancel", "cancelProjectModelAuthLogin", ConsoleAndExternal, s.cancelProjectModelAuthLogin},
+		{"POST", "/projects/{projectId}/model-auth/operations/{operationId}/input", "answerProjectModelAuthLogin", ConsoleAndExternal, s.answerProjectModelAuthLogin},
 		{"GET", "/projects/{projectId}/prompt", "getProjectPrompt", ConsoleOnly, s.getProjectPrompt},
 		{"PUT", "/projects/{projectId}/prompt", "putProjectPrompt", ConsoleOnly, s.putProjectPrompt},
 		{"GET", "/agents/{agentId}/model-auth", "getModelAuthState", ConsoleOnly, s.getModelAuthState},

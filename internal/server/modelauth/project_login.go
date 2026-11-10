@@ -11,17 +11,40 @@ import (
 )
 
 func projectOperationView(o cm.Operation) cm.Operation {
-	if terminal(o.Status) || o.AuthorizationURL != nil && !ValidAuthorizationURL(*o.AuthorizationURL) {
+	codex := o.Provider == "openai-codex"
+	valid := ValidAuthorizationURL
+	if !codex {
+		valid = ValidPluginURL
+	}
+	if terminal(o.Status) || o.AuthorizationURL != nil && !valid(*o.AuthorizationURL) {
 		o.AuthorizationURL = nil
+	}
+	if terminal(o.Status) {
+		o.DeviceCode, o.Prompt = nil, nil
 	}
 	if o.ErrorCode != nil {
 		safe := operationView(store.ModelAuthOperation{Status: o.Status, ErrorCode: o.ErrorCode})
 		o.ErrorMessage = safe.ErrorMessage
+		if !codex {
+			if m, ok := pluginErrorMessages[*o.ErrorCode]; ok {
+				o.ErrorMessage = &m
+			}
+		}
 	}
 	return o
 }
+
+// pluginErrorMessages 是插件提供方登录的错误说明（不含扩展原文）。
+var pluginErrorMessages = map[string]string{
+	"auth_failed":               "订阅授权未完成",
+	"auth_port_busy":            "登录回调需要的本机端口已被占用，请结束其他登录后重试",
+	"extension_load_failed":     "插件扩展加载失败，或没有注册这个提供方的登录",
+	"plugin_unavailable":        "插件已卸载或停用",
+	"invalid_authorization_url": "插件给出的授权地址不合规",
+}
+
 func (p *ProjectService) loginView(ctx context.Context, o cm.Operation) (cm.LoginState, error) {
-	out := cm.LoginState{Operation: projectOperationView(o)}
+	out := cm.LoginState{Operation: projectOperationView(p.withPrompt(o))}
 	id := o.AccountID
 	if id == nil {
 		id = o.TargetAccountID
@@ -36,8 +59,12 @@ func (p *ProjectService) loginView(ctx context.Context, o cm.Operation) (cm.Logi
 	return out, nil
 }
 func (p *ProjectService) Start(ctx context.Context, project uuid.UUID, in cm.LoginStart) (cm.LoginState, error) {
+	plugin := ""
 	if in.Provider != "openai-codex" {
-		return cm.LoginState{}, apperr.Invalid("provider", "仅支持Codex浏览器登录")
+		var ok bool
+		if plugin, ok = p.pluginProvider(in.Provider); !ok {
+			return cm.LoginState{}, apperr.Invalid("provider", "只支持Codex与插件提供方的订阅登录")
+		}
 	}
 	if in.AccountID == nil {
 		if in.Name == nil || in.ExpectedRevision != nil {
@@ -50,7 +77,11 @@ func (p *ProjectService) Start(ctx context.Context, project uuid.UUID, in cm.Log
 		return cm.LoginState{}, apperr.Invalid("accountId", "重登需要账号ID与预期版本")
 	}
 	s := p.Auth
-	if s.Helper == nil {
+	if plugin != "" {
+		if e := p.checkPluginLogin(ctx, project, plugin); e != nil {
+			return cm.LoginState{}, e
+		}
+	} else if s.Helper == nil {
 		return cm.LoginState{}, ErrHelperUnavailable
 	}
 	s.mu.Lock()
@@ -68,7 +99,11 @@ func (p *ProjectService) Start(ctx context.Context, project uuid.UUID, in cm.Log
 		work := &loginWorker{projectID: project, accountID: op.TargetAccountID, cancel: cancel, done: make(chan struct{})}
 		s.operations[op.ID] = work
 		s.workers.Add(1)
-		go p.login(loginCtx, op, work)
+		if plugin != "" {
+			go p.pluginLogin(loginCtx, op, work, plugin)
+		} else {
+			go p.login(loginCtx, op, work)
+		}
 	}
 	s.mu.Unlock()
 	return p.loginView(ctx, op)
@@ -166,7 +201,7 @@ func (p *ProjectService) ListLogins(ctx context.Context, project uuid.UUID, prov
 		return out, e
 	}
 	for _, row := range rows {
-		out.Operations = append(out.Operations, projectOperationView(row))
+		out.Operations = append(out.Operations, projectOperationView(p.withPrompt(row)))
 	}
 	return out, nil
 }

@@ -24,6 +24,7 @@ type ToolEvent struct {
 type Run struct {
 	TriggerInboxMessageID *uuid.UUID  `json:"triggerInboxMessageId,omitempty"`
 	WakeSleepID           *uuid.UUID  `json:"wakeSleepId,omitempty"`
+	PiCommand             *RunCommand `json:"piCommand,omitempty"`
 	ID                    uuid.UUID   `json:"id"`
 	Status                string      `json:"status"`
 	Phase                 *string     `json:"phase"`
@@ -232,6 +233,12 @@ func strPtr(s string) *string {
 	return &s
 }
 
+// RunCommand 对应 RunPiCommand：这一轮交给 Pi 的命令（对话页 /pi:<name> 消息）。
+type RunCommand struct {
+	Name    string `json:"name"`
+	Handled bool   `json:"handled"`
+}
+
 // FromRun 把执行记录转为接口结构。
 func FromRun(r store.Run) Run {
 	out := Run{
@@ -243,6 +250,9 @@ func FromRun(r store.Run) Run {
 	}
 	if r.Model != nil {
 		out.Model = &ModelRef{Provider: r.Model.Provider, ModelID: r.Model.Model}
+	}
+	if r.PiCommand != nil {
+		out.PiCommand = &RunCommand{Name: *r.PiCommand, Handled: r.PiCommandHandled}
 	}
 	if r.Status != "starting" {
 		out.Phase = nil

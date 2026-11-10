@@ -40,3 +40,12 @@ Go `Install(parent)` 嵌入根目录*.mjs，不依赖repo cwd或测试目录。s
 `legacy-anthropic.mjs` 仅由平台对旧snapshot credential.env显式-e加载；`LOOP_NOW_PI_PACKAGE_ROOT`与`LOOP_NOW_PI_AI_DIR`（预检解析出的 pi-ai 目录）为非秘密固定安装路径，coding-agent/pi-ai都核1.1.0。它包装原apiKey.resolve，在每调用内存AuthContext映射已知AUTH_TOKEN/OAUTH_TOKEN/API_KEY，保留原resolver及原生API行为，不写process.env。未知env项拒绝，proxy不据此兼容，新标准credential.key无需加载该扩展。
 
 重构后的native SDK探针已在CLI初始化前的process sandbox、固定本机endpoint和最终URL前置断言下验证6种合成场景；仅本机SDK路径通过，真实供应商/迁移/任务回放另记。旧HTTPS/preload测试体已替换，沙盒不可用时fail停止，不退回旧保护方式。
+
+## 插件提供方登录（provider-main.mjs，plugins/SPEC.md §13）
+
+独立入口 `provider-main.mjs`，一进程一操作，帧与管道规则同上（fd3 入、fd4 出、每条 1MiB、ready 帧相同）。Go 用 `ProviderCommand` 启动：HOME 是这次登录的新状态目录（扩展把自己的状态写在这里），TMPDIR 与 `PI_CODING_AGENT_DIR` 是操作自己的临时目录，不进状态目录；空环境，只有平台基础变量与 PATH。
+
+- 输入 `{type:"login",id,provider,extensions:[绝对路径],piPackageRoot,timeoutMs}`：用随包 Pi 的 `loadExtensions` 加载这些扩展，找 `registerProvider(provider)` 带的 `oauth.login` 并调用；找不到时 result 为 failed、code `extension_load_failed`。
+- 回调：`onAuth` → `notify {type:"auth_url",url}`；`onDeviceCode` → `notify {type:"device_code",userCode,verificationUri,expiresInSeconds?}`；地址须 https、无用户名密码与 fragment、查询不含 code/token 类参数，否则立即以 `invalid_authorization_url` 结束（instructions 不转发）。`onProgress` → `notify {type:"progress"}`，不带扩展原文。
+- `onSelect`/`onPrompt`/`onManualCodeInput` → `prompt {promptId,kind:"select"|"text"|"manual_code",message,options?}`，message 与选项去掉控制字符并限长（500/200 字符，最多 20 项）；输入 `{type:"prompt_reply",id,promptId,value}`（≤4096 字节，select 须是选项 id，否则忽略）。结束时未回答的问题发 `prompt_closed`。
+- 输入 `abort` 取消；超时为 expired。结果恰好一次：`{type:"result",id,status,code?,authEntry?}`，成功时 `authEntry` 是 login 的返回值加 `type:"oauth"`（≤64KiB），只经这个私有管道交给服务端，服务端写进状态目录的 auth.json，不进数据库与日志。失败码：`auth_failed`、`auth_port_busy`（登录期间扩展的本地监听遇到端口被占用、随后失败）、`extension_load_failed`、`invalid_authorization_url`、`invalid_credential`；扩展的异常原文不转发。

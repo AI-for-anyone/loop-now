@@ -60,6 +60,8 @@ type TurnResult struct {
 	Text         string // 最终回复文本
 	ErrorCode    string // "pi_error" | "pi_exited" | ""
 	ErrorMessage string
+	// Handled 表示 Pi 直接处理了这条 prompt（扩展命令），没有交给模型、没有回复。
+	Handled bool
 }
 
 // State 是 get_state 中平台关心的字段。
@@ -289,7 +291,7 @@ func (c *Client) Prompt(ctx context.Context, text string, sink TurnSink, images 
 		return TurnResult{Outcome: OutcomeFailed, ErrorCode: ErrorCodePi, ErrorMessage: msg}, nil
 	}
 	if disposition(resp.Data) == "handled" {
-		return TurnResult{Outcome: OutcomeCompleted}, nil
+		return TurnResult{Outcome: OutcomeCompleted, Handled: true}, nil
 	}
 	return awaitResult(ctx, t)
 }

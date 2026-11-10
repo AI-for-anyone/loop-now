@@ -135,6 +135,8 @@ type proc struct {
 	version             int64
 	promptIdentity      string
 	localIdentity       string // 本机模式（目录与 PATH 开关）的指纹，变化即按新配置重启
+	stateIdentity       string // 插件提供方订阅账号状态的指纹（版本、目录、路径），变化即重启
+	stateVersion        uuid.UUID
 	credentialIdentity  string
 	modelConfigIdentity string
 	provider            string // 启动时的提供方与模型，用于压缩用量
@@ -323,7 +325,7 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	case tr.Outcome == pirpc.OutcomeAborted, r.interrupted.Load() && tr.Outcome == pirpc.OutcomeFailed:
 		res.Outcome = executor.OutcomeInterrupted
 	case tr.Outcome == pirpc.OutcomeCompleted:
-		res.Outcome = executor.OutcomeCompleted
+		res.Outcome, res.CommandHandled = executor.OutcomeCompleted, tr.Handled
 	default:
 		res.Outcome = executor.OutcomeFailed
 		res.ErrorCode, res.ErrorMessage = tr.ErrorCode, tr.ErrorMessage
@@ -373,7 +375,7 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 	for {
 		e.mu.Lock()
 		if p := e.procs[snap.AgentID]; p != nil {
-			if p.version == snap.ConfigVersion && p.credentialIdentity == snap.CredentialIdentity && p.modelConfigIdentity == snap.ModelConfigIdentity && p.promptIdentity == prompts.Identity(snap.PromptLayers) && p.localIdentity == snap.Local.Identity() && sameLarkBinding(p.larkBinding, snap.LarkBinding) && alive(p) {
+			if p.version == snap.ConfigVersion && p.credentialIdentity == snap.CredentialIdentity && p.modelConfigIdentity == snap.ModelConfigIdentity && p.promptIdentity == prompts.Identity(snap.PromptLayers) && p.localIdentity == snap.Local.Identity() && p.stateIdentity == snap.ProviderState.Identity() && sameLarkBinding(p.larkBinding, snap.LarkBinding) && alive(p) {
 				p.busy = true
 				if p.idleTimer != nil {
 					p.idleTimer.Stop()
@@ -652,7 +654,7 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 	if bridge != nil {
 		bridge.ChildStarted()
 	}
-	p := &proc{larkRuntime: lark, googleBridge: googleBridge, authBridge: bridge, log: e.snapshotLog(snap), agentID: snap.AgentID, client: client, version: snap.ConfigVersion, promptIdentity: prompts.Identity(snap.PromptLayers), localIdentity: snap.Local.Identity(), credentialIdentity: snap.CredentialIdentity, modelConfigIdentity: snap.ModelConfigIdentity, provider: snap.Provider, model: snap.ModelID,
+	p := &proc{larkRuntime: lark, googleBridge: googleBridge, authBridge: bridge, log: e.snapshotLog(snap), agentID: snap.AgentID, client: client, version: snap.ConfigVersion, promptIdentity: prompts.Identity(snap.PromptLayers), localIdentity: snap.Local.Identity(), stateIdentity: snap.ProviderState.Identity(), credentialIdentity: snap.CredentialIdentity, modelConfigIdentity: snap.ModelConfigIdentity, provider: snap.Provider, model: snap.ModelID,
 		startedAt: begin, dirs: d, lastUsed: time.Now(), recorded: snap.Session.SessionFile, tokenID: tokenID, stopDone: make(chan struct{})}
 	if identity, identityErr := readRecoveryProcess(client.Pid()); identityErr == nil && validRecoveryProcess(&identity) {
 		p.recoveryIdentity = &identity
@@ -660,6 +662,9 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 	if snap.LarkBinding != nil {
 		binding := *snap.LarkBinding
 		p.larkBinding = &binding
+	}
+	if snap.ProviderState != nil {
+		p.stateVersion = snap.ProviderState.VersionID
 	}
 	attached = true
 	e.mu.Lock()
@@ -678,6 +683,7 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 		return nil, fail(executor.ErrPiStartFailed, "Pi 启动后未就绪：%v %s", err, tail(client.Stderr(), e.o.StderrTailBytes))
 	}
 	p.sessionFile = st.SessionFile
+	go e.cacheCommands(p)
 	startup := time.Since(begin)
 	e.event(snap.AgentID, &runID, store.EventPiStarted, map[string]any{
 		"pid": client.Pid(), "configVersion": snap.ConfigVersion, "startupMs": startup.Milliseconds(), "reason": startReason})
@@ -1051,7 +1057,24 @@ func (e *Executor) Release(ctx context.Context, agentID uuid.UUID) error {
 	if p != nil {
 		e.stop(p, stopCause{reason: stopReleased})
 	}
+	// 先删订阅账号的链接，之后删除目录时不会经链接动到账号的状态目录。
+	if err := clearProviderLinks(e.dirs(agentID)); err != nil {
+		return err
+	}
 	return releaseHome(e.o.WorkRoot, agentID)
+}
+
+// ProviderStatesInUse 返回运行中的 Pi 正在用的插件提供方状态版本（清理器不删它们的目录）。
+func (e *Executor) ProviderStatesInUse() map[uuid.UUID]bool {
+	out := map[uuid.UUID]bool{}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for p := range e.live {
+		if p.stateVersion != uuid.Nil {
+			out[p.stateVersion] = true
+		}
+	}
+	return out
 }
 
 // beforeRun 调用拦截类 Hook run.before_start（plugins/SPEC.md §4）：被阻止时这一轮以 plugin_blocked 失败，不启动 Pi。
@@ -1246,6 +1269,7 @@ func (e *Executor) CleanupStaleExceptPending(ctx context.Context, pending []Pend
 		if protected[id] {
 			continue
 		}
+		_ = clearProviderLinks(e.dirs(id))
 		_ = os.RemoveAll(e.dirs(id).home)
 	}
 	return nil

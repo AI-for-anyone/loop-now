@@ -34,8 +34,12 @@ type Model struct {
 
 // Provider 是目录中的一个提供方。
 type Provider struct {
-	ID            string   `json:"id"`
-	Source        string   `json:"source"`
+	ID string `json:"id"`
+	// Name 是提供方自己给的显示名；Pi 内置与 models.json 的提供方没有。
+	Name   string `json:"name,omitempty"`
+	Source string `json:"source"`
+	// PluginID 是注册它的插件（Source 为 plugin 时）。
+	PluginID      *string  `json:"pluginId,omitempty"`
 	APIKeyEnvVars []string `json:"apiKeyEnvVars"`
 	AuthMethods   []string `json:"authMethods"`
 	Models        []Model  `json:"models"`

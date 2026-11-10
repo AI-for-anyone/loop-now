@@ -714,7 +714,7 @@ paths:
       - credentials
       operationId: listProjectModelAuthOperations
       x-access: console-and-external
-      description: 仅活动操作。无accountId包括新建与重登，可用于无账号ID时页面/未知start响应恢复。授权URL只在活动操作视图，禁止日志/普通元数据/持久化。
+      description: 仅活动操作。无accountId包括新建与重登，可用于无账号ID时页面/未知start响应恢复。授权URL只在活动操作视图，禁止日志/普通元数据/持久化。provider省略时列出全部（Codex与插件提供方），每条带provider。
       parameters:
       - name: projectId
         in: path
@@ -727,8 +727,7 @@ paths:
         required: false
         schema:
           type: string
-          enum:
-          - openai-codex
+          minLength: 1
       - name: accountId
         in: query
         required: false
@@ -976,6 +975,67 @@ paths:
               "$ref": "#/components/headers/RequestId"
             Loop-Now-Version:
               "$ref": "#/components/headers/Version"
+        '503':
+          description: 服务端错误或组件暂不可用；固定安全消息
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+          headers:
+            Loop-Now-Request-Id:
+              "$ref": "#/components/headers/RequestId"
+            Loop-Now-Version:
+              "$ref": "#/components/headers/Version"
+  "/projects/{projectId}/model-auth/operations/{operationId}/input":
+    post:
+      tags:
+      - credentials
+      operationId: answerProjectModelAuthLogin
+      x-access: console-and-external
+      description: |
+        回答插件提供方登录中正在等的问题（操作的 prompt）。只能回答当前那一个问题；select 的 value 须是某个选项的 id。
+        没有在等回答、promptId 不对或回答不合规返回 422（字段 promptId 或 value）。回答只在内存里转交，不保存、不记日志。
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: operationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/ProjectModelLoginInput"
+      responses:
+        '200':
+          description: 回答已交给登录；prompt 清空，扩展的下一步可能带来新的 prompt 或地址
+          headers:
+            Loop-Now-Request-Id:
+              "$ref": "#/components/headers/RequestId"
+            Loop-Now-Version:
+              "$ref": "#/components/headers/Version"
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ProjectModelAuthState"
+        '401':
+          "$ref": "#/components/responses/Unauthenticated"
+        '403':
+          "$ref": "#/components/responses/Forbidden"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '413':
+          "$ref": "#/components/responses/PayloadTooLarge"
+        '422':
+          "$ref": "#/components/responses/ValidationFailed"
         '503':
           description: 服务端错误或组件暂不可用；固定安全消息
           content:
@@ -1377,7 +1437,16 @@ paths:
       tags: [models]
       operationId: listModelProviders
       x-access: console-and-external
-      summary: 固定版本 Pi 合并原生 models.json 后的提供方目录
+      summary: 固定版本 Pi 合并原生 models.json 后的提供方目录，加已安装插件注册的提供方
+      description: |
+        目录在插件安装、更新、卸载与保存 models.json 后变化（没有版本号或推送事件，控制台在这些操作后重新读取）。
+        带 agentId 时，source 为 plugin 的提供方另给出这个 Agent 现在不能用的原因 `unavailableReason`（项目启用与授权变化后也要重新读取）。
+      parameters:
+        - name: agentId
+          in: query
+          required: false
+          description: 给插件提供方标出这个 Agent 能否用；Agent 不存在返回 404
+          schema: { type: string, format: uuid }
       responses:
         "200":
           headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
@@ -1387,6 +1456,8 @@ paths:
               schema: { $ref: "#/components/schemas/ModelProviderList" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
 
   /model-settings:
     get:
@@ -3023,6 +3094,9 @@ paths:
       description: |
         发送前交给插件（plugins/SPEC.md §4）：以 `/` 开头且不带图片的消息先作为 `console.command` 交给认领类 Hook，被认领时消息不发给 Agent、
         不保存，返回 200 ConsoleCommandResult；其余消息经修改类 Hook `message.before_enqueue`，插件可以改写正文。
+        以 `/pi:<name>` 开头的消息是交给 Pi 的命令（plugins/SPEC.md §14）：不给插件认领，照原文保存与显示，执行时发给 Pi 的是 `/<name>` 加其余原文，
+        不加运行 ID 与平台通知；带图片时图片照常交给 Pi（Pi 执行扩展命令时不用图片，技能命令与提示模板展开后随提示交给模型）。
+        结果见执行的 `piCommand`。可用的命令见 `GET /agents/{agentId}/commands`。任务节点的消息不做这个改写。
       requestBody:
         required: true
         content:
@@ -3582,6 +3656,10 @@ paths:
         git 与 npm 来源在这一步执行 `npm ci --ignore-scripts --omit=dev --omit=peer`（没有锁文件时 `npm install`，参数相同），失败返回 422 `plugin_source_failed`；
         不装 peer 依赖，插件的运行依赖要用的 peer 依赖须直接列进插件自己的 `dependencies`。
         本地目录来源原地使用，不安装依赖、不修改。预览过期或不存在返回 404。
+        插件带 Pi 扩展（`pi.extensions`）时，依赖装好后用随包 Pi 加载这些扩展，读出它们注册的模型提供方（plugins/SPEC.md §13；
+        会运行插件代码，所以在这一步、而不是预览时做），结果见插件详情的 `providers`。读取失败不阻止安装，原因见 `providersError`。
+        注册了 OAuth 登录、与 Pi 目录（内置与 models.json）不同 id 的提供方并入模型目录（`listModelProviders` 里 source 为 plugin）；
+        与另一个已安装插件并入目录的提供方同 id 时返回 409 `name_conflict`，不安装。
       requestBody:
         required: true
         content:
@@ -3676,6 +3754,8 @@ paths:
       description: |
         宿主内卸载平台侧，删除插件的配置、启用、授权、账号、状态、事件投递与令牌，删除各版本的安装目录（本地目录来源不删）。
         数据目录 `<work root>/platform/plugins/<id>/data/` 只在 `deleteData=true` 时删除。已经启动的 Pi 继续使用已加载的 Agent 侧，直到下次启动。
+        插件注册的模型提供方从模型目录里消失；它们在各项目里的订阅账号默认保留（重新安装后恢复），`deleteData=true` 时一并删除
+        （与删除账号相同：未结束任务绑定的版本保留到任务结束，之后状态目录由清理器删除）。
       parameters:
         - name: deleteData
           in: query
@@ -3727,7 +3807,7 @@ paths:
       summary: 按预览安装插件的新版本
       description: |
         预览须是同一插件 id。新版本装到自己的目录，宿主内先卸载旧版本再加载新版本；任务里已经启动的 Pi 继续用旧文件直到自然重启。
-        版本号与已装版本相同但内容不同时返回 409 `plugin_version_conflict`。其余规则同安装。
+        版本号与已装版本相同但内容不同时返回 409 `plugin_version_conflict`。其余规则同安装（包括重新读取模型提供方与同 id 的 409）。
       requestBody:
         required: true
         content:
@@ -4195,6 +4275,28 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /agents/{agentId}/commands:
+    get:
+      tags: [conversation]
+      operationId: listAgentCommands
+      x-access: console
+      summary: 对话页 "/" 菜单可用的 Pi 命令
+      description: |
+        Agent 上次启动 Pi 时（Pi RPC get_commands）读到的扩展命令、提示模板与技能命令（plugins/SPEC.md §14）。平台不为列命令专门启动 Pi：
+        从没启动过时 capturedAt 为 null、列表为空；授权的插件变了之后，要等 Pi 下次启动才更新。控制台显示与补全时写成 `/pi:<name>`。
+        插件平台侧认领的 console.command 是认领型 Hook，没有可列举的命令名，不在这里列出；也没有平台内置命令。
+      parameters:
+        - { name: agentId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: 命令列表
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgentCommandList" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /agents/{agentId}/plugins/{pluginId}:
     parameters:
       - $ref: "#/components/parameters/AgentId"
@@ -9798,7 +9900,11 @@ components:
       type: object
       required:
         - id
+        - name
         - source
+        - pluginId
+        - pluginDisplayName
+        - unavailableReason
         - apiKeyEnvVars
         - modelCount
         - authMethods
@@ -9806,10 +9912,33 @@ components:
       properties:
         id:
           type: string
+        name:
+          type: [string, "null"]
+          description: 提供方自己给的显示名；目前只有插件提供方有（扩展原文，按纯文本显示），其余为 null。
         source:
           type: string
-          enum: [builtin, config]
-          description: builtin 为纯内置目录；config 表示该 Provider 有原生 models.json 配置或覆盖。
+          enum: [builtin, config, plugin]
+          description: |
+            builtin 为纯内置目录；config 表示该 Provider 有原生 models.json 配置或覆盖；
+            plugin 为已安装插件的 Pi 扩展注册的提供方（plugins/SPEC.md §13），只用于项目 Agent：
+            选它须项目已启用该插件、Agent 已获授权（否则修改 Agent 返回 422，新建 Agent 时不能直接选），账号用项目里登录的订阅账号。
+        pluginId:
+          type: [string, "null"]
+          description: source 为 plugin 时是注册它的插件 id，其余为 null。
+        pluginDisplayName:
+          description: source 为 plugin 时是注册它的插件的显示名（清单原样），其余为 null。
+          oneOf:
+            - $ref: "#/components/schemas/LocalizedText"
+            - type: "null"
+        unavailableReason:
+          type: [string, "null"]
+          enum: [platform_agent, plugin_not_enabled, agent_not_granted, plugins_disabled, null]
+          description: |
+            只在带 agentId 查询、且 source 为 plugin 时可能非空：这个 Agent 现在不能用它的原因。
+            platform_agent：平台 Agent，插件提供方只给项目 Agent 用；plugin_not_enabled：Agent 所在项目没有启用该插件；
+            agent_not_granted：插件没有授权给这个 Agent；plugins_disabled：全局停用了全部插件（不挡保存，但 Pi 启动会失败）。
+            前三种情形下修改 Agent 选它返回 422（validation_failed，字段 model.provider，消息说明是哪一种）。
+            插件被卸载后它的提供方从目录里消失（已选它的 Agent 启动时明确失败）。
         apiKeyEnvVars:
           description: 旧环境凭证兼容诊断元数据，不能作为模型凭证录入字段。
           type: array
@@ -9824,7 +9953,7 @@ components:
           items:
             $ref: '#/components/schemas/ModelAuthMethod'
           uniqueItems: true
-          description: 平台支持的显式认证方式；OAuth登录仅控制台，当前支持openai-codex。
+          description: 平台支持的显式认证方式；OAuth登录仅控制台，当前支持openai-codex与插件提供方（插件提供方只有oauth）。
 
     ModelList:
       type: object
@@ -10617,6 +10746,18 @@ components:
           description: 触发本轮平台提醒的原 Inbox 消息 ID；无触发消息的历史及普通来源省略
           type: string
           format: uuid
+        piCommand:
+          description: |
+            这一轮交给 Pi 的命令（plugins/SPEC.md §14）：对话页消息以 `/pi:<name>` 开头时，服务端发给 Pi 的是 `/<name>`（其余原样），
+            消息本身照原文保存与显示。handled 为 true 表示 Pi 直接处理了命令（扩展命令）、没有交给模型，这一轮以 completed 结束、没有助手回复
+            （助手消息正文为空，可显示“命令已执行，没有回复”；命令里的通知与状态照常记为运行事件）；false 表示命令展开成了普通提示（技能命令、提示模板）
+            或 Pi 不认识这个命令、当作普通文字交给了模型。不是命令的执行省略此字段。
+          type: object
+          required: [name, handled]
+          additionalProperties: false
+          properties:
+            name: { description: 命令名，不带 "/"（技能命令为 skill:<名称>）, type: string }
+            handled: { type: boolean }
         wakeSleepId:
           description: 本轮有效承接的 sleep；普通历史可省略或为 null
           type: [string, "null"]
@@ -14275,6 +14416,14 @@ components:
             type: array
             items:
               "$ref": "#/components/schemas/ProjectCredentialAccount"
+          localLogin:
+            description: |
+              只对 purpose=model、提供方来自插件且声明了随账号走的状态路径时给出（plugins/SPEC.md §13），其余省略。
+              开着“用本机的登录状态”时，这个提供方用的是本机主目录里该扩展自己的登录，不是项目账号：
+              active 表示本机有这份登录；missing 表示本机没有，Pi 启动前会以 credential_unavailable 失败（关闭开关或在本机登录后再试）。
+              开关关着时省略。
+            type: string
+            enum: [active, missing]
       - type: object
         additionalProperties: false
         required:
@@ -14321,6 +14470,14 @@ components:
             type: array
             items:
               "$ref": "#/components/schemas/ProjectCredentialAccount"
+          localLogin:
+            description: |
+              只对 purpose=model、提供方来自插件且声明了随账号走的状态路径时给出（plugins/SPEC.md §13），其余省略。
+              开着“用本机的登录状态”时，这个提供方用的是本机主目录里该扩展自己的登录，不是项目账号：
+              active 表示本机有这份登录；missing 表示本机没有，Pi 启动前会以 credential_unavailable 失败（关闭开关或在本机登录后再试）。
+              开关关着时省略。
+            type: string
+            enum: [active, missing]
       - type: object
         additionalProperties: false
         required:
@@ -14362,6 +14519,14 @@ components:
             type: array
             items:
               "$ref": "#/components/schemas/ProjectCredentialAccount"
+          localLogin:
+            description: |
+              只对 purpose=model、提供方来自插件且声明了随账号走的状态路径时给出（plugins/SPEC.md §13），其余省略。
+              开着“用本机的登录状态”时，这个提供方用的是本机主目录里该扩展自己的登录，不是项目账号：
+              active 表示本机有这份登录；missing 表示本机没有，Pi 启动前会以 credential_unavailable 失败（关闭开关或在本机登录后再试）。
+              开关关着时省略。
+            type: string
+            enum: [active, missing]
     CredentialSelections:
       type: object
       additionalProperties: false
@@ -14508,9 +14673,7 @@ components:
         - name
         properties:
           provider:
-            type: string
-            enum:
-            - openai-codex
+            "$ref": "#/components/schemas/ProjectModelLoginProvider"
           name:
             type: string
             minLength: 1
@@ -14523,9 +14686,7 @@ components:
         - expectedRevision
         properties:
           provider:
-            type: string
-            enum:
-            - openai-codex
+            "$ref": "#/components/schemas/ProjectModelLoginProvider"
           accountId:
             type: string
             format: uuid
@@ -14533,6 +14694,53 @@ components:
             type: integer
             format: int64
             minimum: 1
+    ProjectModelLoginProvider:
+      description: |
+        openai-codex，或模型目录里 source 为 plugin、authMethods 含 oauth 的插件提供方（plugins/SPEC.md §13）。
+        插件提供方须在这个项目里启用了插件，否则开始登录返回 409 plugin_not_enabled；不在目录里返回 422。
+        插件提供方登录成功后账号的 authMethod 为 oauth；令牌与扩展的状态在服务端的状态目录里，不进数据库。
+        插件提供方登录的 errorCode：auth_failed（未完成）、auth_port_busy（扩展的本机回调端口被占用）、auth_timeout（超时，status=expired）、
+        extension_load_failed（插件扩展加载失败或没有注册这个提供方的登录）、plugin_unavailable（插件已卸载或停用）、
+        invalid_authorization_url（扩展给出的地址不合规）、helper_unavailable、server_restarted；用户取消为 status=cancelled、errorCode 为 null。
+      type: string
+      minLength: 1
+      maxLength: 64
+    ProjectModelLoginDeviceCode:
+      type: object
+      additionalProperties: false
+      required: [userCode, verificationUri, expiresAt]
+      properties:
+        userCode: { type: string, minLength: 1 }
+        verificationUri: { type: string }
+        expiresAt: { type: [string, "null"], format: date-time }
+    ProjectModelLoginPrompt:
+      type: object
+      additionalProperties: false
+      required: [id, kind, message, options]
+      properties:
+        id: { type: string }
+        kind:
+          description: select 从 options 里选一个 id；text 填文字；manual_code 是浏览器回调到不了时手工粘贴的回调地址或授权码（message 可能为空）。
+          type: string
+          enum: [select, text, manual_code]
+        message: { type: string, maxLength: 501 }
+        options:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, label]
+            properties:
+              id: { type: string }
+              label: { type: string }
+    ProjectModelLoginInput:
+      type: object
+      additionalProperties: false
+      required: [promptId, value]
+      properties:
+        promptId: { type: string, minLength: 1 }
+        value: { description: 回答；只在内存里转给登录辅助进程，不保存、不记日志, type: string, maxLength: 4096 }
     ProjectModelAuthOperation:
       type: object
       additionalProperties: false
@@ -14551,6 +14759,8 @@ components:
       - authorizationUrl
       - errorCode
       - errorMessage
+      - deviceCode
+      - prompt
       properties:
         id:
           type: string
@@ -14559,9 +14769,7 @@ components:
           type: string
           format: uuid
         provider:
-          type: string
-          enum:
-          - openai-codex
+          "$ref": "#/components/schemas/ProjectModelLoginProvider"
         targetAccountId:
           anyOf:
           - type: string
@@ -14603,10 +14811,11 @@ components:
             format: date-time
           - type: 'null'
         authorizationUrl:
+          description: Codex 只会是 https://auth.openai.com/oauth/authorize?…；插件提供方是扩展给的 https 地址，服务端已校验（无用户名密码与 fragment、不含授权码或令牌），控制台显示目标主机名。
           anyOf:
           - type: string
             format: uri
-            pattern: "^https://auth\\.openai\\.com/oauth/authorize\\?"
+            pattern: "^https://"
           - type: 'null'
         errorCode:
           anyOf:
@@ -14615,6 +14824,16 @@ components:
         errorMessage:
           anyOf:
           - type: string
+          - type: 'null'
+        deviceCode:
+          description: 设备码登录（只有插件提供方）：打开 verificationUri 输入 userCode；地址已由服务端校验（https、无用户名密码与 fragment、不含秘密）。终态为 null。
+          anyOf:
+          - "$ref": "#/components/schemas/ProjectModelLoginDeviceCode"
+          - type: 'null'
+        prompt:
+          description: 登录中等人回答的问题（只有插件提供方）；用 answerProjectModelAuthLogin 回答。message 与 options 是扩展原文，服务端已限长，按纯文本显示。终态为 null。
+          anyOf:
+          - "$ref": "#/components/schemas/ProjectModelLoginPrompt"
           - type: 'null'
     ProjectModelAuthState:
       type: object
@@ -14629,6 +14848,7 @@ components:
           anyOf:
           - "$ref": "#/components/schemas/ProjectCredentialAccount"
           - type: 'null'
+
     ProjectModelAuthOperationList:
       type: object
       additionalProperties: false
@@ -18753,7 +18973,7 @@ components:
 
     PluginDetail:
       type: object
-      required: [plugin, manifest, versions, installDir, dataDir]
+      required: [plugin, manifest, versions, installDir, dataDir, providers, providerErrors, providersError, providerState]
       additionalProperties: false
       properties:
         plugin: { $ref: "#/components/schemas/Plugin" }
@@ -18761,6 +18981,81 @@ components:
         versions: { description: "新的在前", type: array, items: { $ref: "#/components/schemas/PluginVersion" } }
         installDir: { type: string }
         dataDir: { type: string }
+        providers:
+          description: 当前版本的 Pi 扩展注册的模型提供方（安装或更新时读出）；没有 Pi 扩展或没有注册时为空
+          type: array
+          items: { $ref: "#/components/schemas/PluginModelProvider" }
+        providerErrors:
+          description: 读取时加载失败的扩展文件与原因（扩展原文，已截断，按纯文本显示）
+          type: array
+          items: { $ref: "#/components/schemas/PluginProviderCaptureError" }
+        providersError:
+          description: 整次读取失败的原因（如 Pi 不可用、超时）；为空表示读取成功或插件没有 Pi 扩展
+          type: [string, "null"]
+        providerState: { $ref: "#/components/schemas/PluginProviderState" }
+
+    PluginProviderState:
+      description: |
+        插件注册的模型提供方有哪些状态随项目账号走（plugins/SPEC.md §13）：键是提供方 id，paths 是扩展在 HOME 下保存登录与状态的相对路径
+        （/ 分隔，1 到 8 个，不含 ..，不在 .loop-now 下）。启动 Pi 前这些路径链接到账号的状态目录，同项目多个 Agent 共用一份。
+        插件详情里是当前版本生效的声明：从市场安装时取市场条目的 providerState，否则取包自己的 loopNow.providerState；都没有时为空对象，
+        这时只有 Pi 的认证条目随账号走。只读展示。
+      type: object
+      additionalProperties:
+        type: object
+        required: [paths]
+        additionalProperties: false
+        properties:
+          paths:
+            type: array
+            minItems: 1
+            maxItems: 8
+            items: { type: string, minLength: 1, maxLength: 200 }
+
+    AgentCommandList:
+      type: object
+      required: [capturedAt, commands]
+      additionalProperties: false
+      properties:
+        capturedAt: { description: 读到这份列表的时间（Pi 启动时）；从没启动过为 null, type: [string, "null"], format: date-time }
+        commands: { type: array, items: { $ref: "#/components/schemas/AgentCommand" } }
+
+    AgentCommand:
+      type: object
+      required: [name, source, piSource, description, pluginId, pluginDisplayName]
+      additionalProperties: false
+      properties:
+        name: { description: 命令名，不带 "/"；技能命令为 skill:<名称>, type: string }
+        source: { description: 目前只有 pi（交给 Pi 执行，发送时写成 /pi:<name>）, type: string, enum: [pi] }
+        piSource: { description: Pi 给的来源（原样）：extension 扩展命令、prompt 提示模板、skill 技能命令, type: string }
+        description: { description: 命令自己的说明（扩展原文，按纯文本显示）, type: [string, "null"] }
+        pluginId: { description: 命令来自哪个已安装插件（按来源文件所在的安装目录）；平台自己的或判断不出时为 null, type: [string, "null"] }
+        pluginDisplayName:
+          oneOf:
+            - $ref: "#/components/schemas/LocalizedText"
+            - type: "null"
+
+    PluginModelProvider:
+      type: object
+      required: [id, name, extension, oauth, overridesBuiltin, inCatalog, error, modelCount]
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        name: { description: 扩展给的显示名（不可信文本，按纯文本显示）, type: string }
+        extension: { description: 注册它的扩展文件，相对插件目录, type: string }
+        oauth: { description: 是否注册了 OAuth 订阅登录, type: boolean }
+        overridesBuiltin: { description: 与 Pi 内置提供方同 id（扩展覆盖内置提供方的设置），不进模型目录, type: boolean }
+        inCatalog: { description: 此刻在模型目录里、归这个插件；只有带 OAuth、与内置和 models.json 都不同 id、注册无误的才会进, type: boolean }
+        error: { description: 注册时出错的原因（扩展原文，已截断）, type: [string, "null"] }
+        modelCount: { type: integer, minimum: 0 }
+
+    PluginProviderCaptureError:
+      type: object
+      required: [path, error]
+      additionalProperties: false
+      properties:
+        path: { description: 扩展文件，相对插件目录, type: string }
+        error: { type: string }
 
     PluginConfig:
       type: object
@@ -18919,9 +19214,10 @@ components:
 
     PluginMarketEntry:
       type: object
-      required: [id, displayName, description, source, version, verified, installedVersion, updateAvailable]
+      required: [id, displayName, description, source, version, verified, installedVersion, updateAvailable, providerState]
       additionalProperties: false
       properties:
+        providerState: { $ref: "#/components/schemas/PluginProviderState" }
         id: { type: string }
         displayName: { $ref: "#/components/schemas/LocalizedText" }
         description: { $ref: "#/components/schemas/LocalizedText" }

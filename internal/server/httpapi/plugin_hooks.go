@@ -96,7 +96,8 @@ func (s *Server) principalScope(r *http.Request, p auth.Principal) (project, age
 // consoleCommand 把以 / 开头的控制台消息交给认领类 Hook console.command；被认领时消息不发给 Agent，返回插件的回复。
 func (s *Server) consoleCommand(w http.ResponseWriter, r *http.Request, agent uuid.UUID, project *uuid.UUID, text string) bool {
 	trimmed := strings.TrimSpace(text)
-	if !strings.HasPrefix(trimmed, "/") || s.Hooks == nil {
+	// /pi:<name> 是交给 Pi 的命令（plugins/SPEC.md §14），不给插件认领。
+	if !strings.HasPrefix(trimmed, "/") || strings.HasPrefix(trimmed, "/pi:") || s.Hooks == nil {
 		return false
 	}
 	command, _, _ := strings.Cut(strings.TrimPrefix(trimmed, "/"), " ")
