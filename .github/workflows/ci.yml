@@ -128,8 +128,12 @@ jobs:
           done
 
   desktop:
-    name: desktop (typecheck, build, test)
-    runs-on: ubuntu-latest
+    name: desktop (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: desktop
@@ -140,8 +144,33 @@ jobs:
           node-version: 24.21.0
           cache: npm
           cache-dependency-path: desktop/package-lock.json
+      # 单测用 test/fakeserver（Go 写的假服务端）真的拉起、停掉、清理孤儿：Windows 走 taskkill 与 PowerShell 查进程，Linux 走信号。
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
       # electron 只在第一次运行时下载二进制，这里只做类型检查、编译和单测，不下载也不出安装包。
       - run: npm ci --no-audit --no-fund
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
+      # Windows：用假服务端充当 loop-server.exe 打一次 NSIS 安装包，确认 electron-builder 的 win 配置与 after-pack 在 windows-latest 上能跑通。
+      # 真的服务端 Windows 包合入后，release.yml 的 desktop-win 用同样的命令。
+      - name: fake server bundle
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          node scripts/fake-bundle.js "$RUNNER_TEMP/fake-bundle" --os windows --arch amd64
+          echo "LOOP_NOW_DESKTOP_BUNDLE=$RUNNER_TEMP/fake-bundle" >> "$GITHUB_ENV"
+      - name: dist:win (fake server)
+        if: runner.os == 'Windows'
+        run: npm run dist:win
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: loop-now-desktop-fake-win-x64
+          path: |
+            .local-build/desktop/*.exe
+            .local-build/desktop/latest.yml
+          retention-days: 3
+          if-no-files-found: error

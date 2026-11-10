@@ -10,6 +10,7 @@ import { errors } from './errors'
 import { folders } from './folders'
 import { identities } from './identities'
 import { images } from './images'
+import { localMode } from './local-mode'
 import { agentInbox, inbox } from './inbox'
 import { overview } from './overview'
 import { plugins } from './plugins'
@@ -53,4 +54,5 @@ export const enUS: Messages = {
   images,
   shell,
   stats,
+  localMode,
 }

@@ -46,6 +46,23 @@ func TestExternalPortConfig(t *testing.T) {
 	if _, err := Load(envOf(env)); err == nil {
 		t.Fatal("对外监听地址格式不对时应拒绝启动")
 	}
+	// 自签证书目录：代替证书与私钥，与它们互斥，须为规范的绝对路径。
+	env[EnvExternalListenAddr] = "127.0.0.1:0"
+	env[EnvExternalTLSSelfSigned] = fixturePath("/var/loop-now/tls")
+	if _, err := Load(envOf(env)); err == nil || !strings.Contains(err.Error(), EnvExternalTLSSelfSigned) {
+		t.Fatalf("自签证书目录与证书、私钥同时设置时应拒绝启动：%v", err)
+	}
+	delete(env, EnvExternalTLSCert)
+	delete(env, EnvExternalTLSKey)
+	if c, err := Load(envOf(env)); err != nil || c.ExternalTLSSelfSigned != fixturePath("/var/loop-now/tls") {
+		t.Fatalf("只设自签证书目录时应通过：%v", err)
+	}
+	env[EnvExternalTLSSelfSigned] = "relative/tls"
+	if _, err := Load(envOf(env)); err == nil || !strings.Contains(err.Error(), EnvExternalTLSSelfSigned) {
+		t.Fatalf("自签证书目录不是绝对路径时应拒绝启动：%v", err)
+	}
+	delete(env, EnvExternalTLSSelfSigned)
+	env[EnvExternalTLSCert], env[EnvExternalTLSKey] = "/etc/loop-now/cert.pem", "/etc/loop-now/key.pem"
 	delete(env, EnvLoopctlDistDir)
 	if _, err := Load(envOf(env)); err == nil || !strings.Contains(err.Error(), EnvLoopctlDistDir) {
 		t.Fatalf("缺少 loopctl 构建产物目录时应拒绝启动：%v", err)

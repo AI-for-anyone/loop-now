@@ -50,6 +50,8 @@ type Service struct {
 	// AgentChanged 在 Agent 新建或修改后调用，AgentRemoved 在删除后调用，用于推送概览；都可为空。
 	AgentChanged func(id uuid.UUID)
 	AgentRemoved func(id uuid.UUID)
+	// LocalAccess 返回本机模式交给该 Agent 的 Pi 的东西；为空时不启用本机模式。
+	LocalAccess func(context.Context, uuid.UUID) (LocalAccess, error)
 }
 
 var (

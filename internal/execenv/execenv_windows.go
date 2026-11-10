@@ -66,3 +66,6 @@ func base(home, tmp string) []string {
 	}
 	return out
 }
+
+// pathKey：Windows 的路径不分大小写。
+func pathKey(dir string) string { return strings.ToLower(dir) }

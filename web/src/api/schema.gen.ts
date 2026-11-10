@@ -346,6 +346,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/local-mode-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 读取本机模式的三个开关
+         * @description 个人版“本机模式”：让 Agent 直接使用用户本机已有的东西，三项各有一个开关，全新安装默认全部开启。
+         *     - directories：绑定本机目录。项目与 Agent 登记的本机目录写进 Pi 系统提示的“文件夹与上下文”一节；关闭时清单照常保存，但不交给任何 Agent。
+         *     - git：用本机的 git 身份。“从 Git 拉取”沿用服务端进程用户真实的 HOME、SSH_AUTH_SOCK 与本机的 credential helper；Agent 的 gh 凭证仍专用于 github.com。
+         *     - cli：用本机的 CLI。把用户的 PATH 接在执行 PATH 之后（随包 Node、loopctl、CLI 模板目录仍排在前面）；HOME 与登录态仍是 Loop Now 里配置的账号。
+         *     directories 与 cli 的改动在 Pi 下次启动时生效（下一次派发发现变化即重启，不打断进行中的回复）；git 从下一次拉取生效。
+         */
+        get: operations["getLocalModeSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 修改本机模式开关（只改请求里带的字段） */
+        patch: operations["updateLocalModeSettings"];
+        trace?: never;
+    };
     "/model-providers/{providerId}/models": {
         parameters: {
             query?: never;
@@ -664,7 +689,11 @@ export interface paths {
         /**
          * 从 Git 一次性拉取一个分支到 Agent 文件夹的子目录
          * @description 只拉取这一个分支，保留它的完整历史（`clone --single-branch --branch`，不截断），之后就是普通文件，不再同步。
-         *     使用该 Agent 当前配置里的 gh CLI 凭证（项目 GitHub 账号）；没有配置 gh 时匿名克隆，只能拉公开仓库。
+         *     本机模式的 git 开关关闭时：只使用该 Agent 当前配置里的 gh CLI 凭证（项目 GitHub 账号），没有配置 gh 时匿名克隆，只能拉公开仓库；
+         *     HOME 是 Agent 的独立目录，SSH 地址读不到用户的密钥与 known_hosts。
+         *     开关开启时（默认）：沿用服务端进程用户真实的 HOME、SSH_AUTH_SOCK、git 配置与 credential helper，SSH 地址和本机已存的 HTTPS 凭证可用；
+         *     Agent 配置了 gh 时，github.com 的 HTTPS 只用它的凭证（不读也不写本机为 github.com 存的凭证），其他主机走本机的 helper。
+         *     两种情况都不做任何交互式询问：git 不弹终端提示与 askpass，SSH 以 BatchMode 运行，未知主机直接失败（`host_key_unverified`）。
          *     `path` 必须不存在或是空目录，否则返回 409 `path_conflict`；同一目标已有进行中的拉取时同样返回 409。
          *     异步执行，返回 202 与操作；用 GET 查询状态。actionId 幂等：同一 actionId 返回同一操作，换了内容返回 409 `action_conflict`。
          */
@@ -785,6 +814,65 @@ export interface paths {
          * @description 只在同一文件夹内移动；目标已存在返回 409 `path_conflict`，不覆盖。不能移动文件夹根，也不能移到自身之下。
          */
         post: operations["moveProjectContextFolderEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/local-directories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 项目的本机目录清单（对项目内所有 Agent 生效，含任务内的实例）
+         * @description 每项带服务端读取时的 status。从未保存过的项目返回 revision 0 与空清单。
+         *     本机目录是“额外挂载”：Agent 自己的文件夹、任务复制与回收站都不变；Pi 不在沙箱里，清单是告知与管理，不是权限隔离，
+         *     Agent（含任务内的实例）对这些目录有完整读写权限，改动直接落在用户的真实文件上。
+         */
+        get: operations["getProjectLocalDirectories"];
+        /**
+         * 整体替换项目的本机目录清单
+         * @description `expectedRevision` 必须等于当前 revision（从未保存过为 0），否则 412 `precondition_failed`；成功后 revision 加一。
+         *     校验规则见 `LocalDirectoryInput`；校验失败返回 422 `validation_failed`，字段错误的 field 形如 `directories[2].path`、
+         *     `directories[2].note`，条目过多时为 `directories`。目录不存在或不是目录不拒绝保存，响应里的 status 标出。
+         *     清单变化后，相关 Agent 的 Pi 在下一次派发时按新清单重启（不打断进行中的回复）。
+         */
+        put: operations["putProjectLocalDirectories"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agentId}/local-directories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Agent 自己的本机目录清单，以及继承自项目的条目
+         * @description `directories` 是 Agent 自己的（可编辑），`inherited` 是所属项目的（只读，与项目接口返回的相同）；平台 Agent 没有项目，
+         *     `projectId` 为 null、`inherited` 为空，自己的清单照常可用。生效时项目的在前、Agent 自己的在后，同一路径只算一次。
+         *     常态 Agent 的清单同样用于它在任务中的实例。从未保存过时 revision 为 0。
+         */
+        get: operations["getAgentLocalDirectories"];
+        /**
+         * 整体替换 Agent 自己的本机目录清单
+         * @description 规则与 `putProjectLocalDirectories` 相同，只替换 `directories`；响应同 GET（含 inherited）。
+         */
+        put: operations["putAgentLocalDirectories"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2466,6 +2554,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/tasks/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 项目里未结束的任务按状态计数
+         * @description 统计该项目未结束（ended_at 为空）的任务，按 status 分组；没有该状态的任务时为 0。已结束的 completed、cancelled 不计入。
+         *     只读；供左侧栏“任务”旁的徽标使用，可在收到 `GET /projects/{projectId}/tasks/events` 的失效通知后重新读取。
+         *     项目不存在或已删除时返回 404 `not_found`（与 `listProjectTasks` 相同）。
+         */
+        get: operations["countProjectTasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/tasks/events": {
         parameters: {
             query?: never;
@@ -3434,6 +3544,71 @@ export interface components {
             /** @description Agent 文件夹内的目标子目录，必须不存在或是空目录 */
             path: string;
         };
+        LocalModeSettings: {
+            /** @description 绑定本机目录 */
+            directories: boolean;
+            /** @description “从 Git 拉取”用本机的 git 身份 */
+            git: boolean;
+            /** @description 执行 PATH 之后接上用户的 PATH */
+            cli: boolean;
+        };
+        LocalModeSettingsPatch: {
+            directories?: boolean;
+            git?: boolean;
+            cli?: boolean;
+        };
+        LocalDirectoryInput: {
+            /**
+             * @description 本机目录的绝对路径，必须是规范形式（Go 的 filepath.Clean 不改变它）：不含 `.`、`..` 段、重复分隔符或结尾分隔符。
+             *     macOS/Linux 以 `/` 开头；Windows 带盘符（`C:\Users\me\code`）或 UNC（`\\server\share\dir`），分隔符用 `\`（`C:/x` 视为不规范）。
+             *     不得含控制字符（含换行、制表符），最长 4096 字节；同一清单内不得重复（Windows 上不分大小写）。
+             */
+            path: string;
+            /** @description 可选备注，会随路径写进系统提示；去掉首尾空白后为空视同 null。最长 200 字符，不得含控制字符。 */
+            note?: string | null;
+        };
+        LocalDirectoriesPut: {
+            /**
+             * Format: int64
+             * @description 读到的 revision；从未保存过为 0
+             */
+            expectedRevision: number;
+            directories: components["schemas"]["LocalDirectoryInput"][];
+        };
+        LocalDirectory: {
+            path: string;
+            note: string | null;
+            /**
+             * @description 服务端读取时（读与保存的响应里）对该路径 stat 的结果，跟随符号链接：
+             *     - ok：是目录；只有 ok 的条目会写进 Agent 的系统提示
+             *     - missing：不存在
+             *     - not_directory：存在但不是目录
+             *     - inaccessible：无法读取其状态（如没有权限）
+             * @enum {string}
+             */
+            status: "ok" | "missing" | "not_directory" | "inaccessible";
+        };
+        ProjectLocalDirectories: {
+            /** Format: int64 */
+            revision: number;
+            directories: components["schemas"]["LocalDirectory"][];
+        };
+        AgentLocalDirectories: {
+            /**
+             * Format: int64
+             * @description Agent 自己清单的修订号
+             */
+            revision: number;
+            /** @description Agent 自己的条目 */
+            directories: components["schemas"]["LocalDirectory"][];
+            /**
+             * Format: uuid
+             * @description 所属项目；平台 Agent 为 null
+             */
+            projectId: string | null;
+            /** @description 继承自所属项目的条目（只读）；平台 Agent 为空 */
+            inherited: components["schemas"]["LocalDirectory"][];
+        };
         FolderGitPullList: {
             /** @description 新的在前 */
             pulls: components["schemas"]["FolderGitPull"][];
@@ -3452,11 +3627,14 @@ export interface components {
              * @description - target_exists：开始时目标已不是空目录
              *     - branch_not_found：分支不存在
              *     - timeout：超过克隆时限
-             *     - clone_failed：其他失败（地址无效、无权限、网络等），详见 errorMessage
+             *     - auth_failed：认证失败（HTTPS 没有可用凭证或凭证被拒、SSH 公钥被拒等），errorMessage 带 git 输出
+             *     - host_key_unverified：SSH 主机密钥未经确认（known_hosts 里没有这台主机或指纹已变）；拉取不会替用户确认，
+             *       须在本机终端先连一次该主机核对指纹（例如 `ssh -T git@主机`）
+             *     - clone_failed：其他失败（地址无效、仓库不存在、网络等），详见 errorMessage
              *     - server_restart：服务重启时仍在进行，已中止
              * @enum {string|null}
              */
-            errorCode: "target_exists" | "branch_not_found" | "timeout" | "clone_failed" | "server_restart" | null;
+            errorCode: "target_exists" | "branch_not_found" | "timeout" | "auth_failed" | "host_key_unverified" | "clone_failed" | "server_restart" | null;
             /** @description git 输出的末尾（最多 2000 字符）或失败原因；成功时为 null */
             errorMessage: string | null;
             /** Format: date-time */
@@ -5220,6 +5398,16 @@ export interface components {
             artifacts: components["schemas"]["TaskArtifact"][];
             /** @enum {string} */
             cleanup: "none" | "pending" | "archived" | "failed";
+        };
+        TaskCounts: {
+            /** @description 准备中 */
+            preparing: number;
+            /** @description 运行中 */
+            running: number;
+            /** @description 等待中（sleep、提问等） */
+            waiting: number;
+            /** @description 已阻塞 */
+            blocked: number;
         };
         TaskPage: {
             tasks: components["schemas"]["TaskSummary"][];
@@ -8887,6 +9075,59 @@ export interface operations {
             422: components["responses"]["ValidationFailed"];
         };
     };
+    getLocalModeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前开关 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalModeSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateLocalModeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalModeSettingsPatch"];
+            };
+        };
+        responses: {
+            /** @description 修改后的全部开关 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalModeSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
     listModels: {
         parameters: {
             query?: never;
@@ -9936,6 +10177,126 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getProjectLocalDirectories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 清单 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectLocalDirectories"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putProjectLocalDirectories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalDirectoriesPut"];
+            };
+        };
+        responses: {
+            /** @description 保存后的清单（含 status） */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectLocalDirectories"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            412: components["responses"]["PreconditionFailed"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getAgentLocalDirectories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 清单 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentLocalDirectories"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putAgentLocalDirectories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalDirectoriesPut"];
+            };
+        };
+        responses: {
+            /** @description 保存后的清单（含 status） */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentLocalDirectories"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            412: components["responses"]["PreconditionFailed"];
             422: components["responses"]["ValidationFailed"];
         };
     };
@@ -13709,6 +14070,33 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    countProjectTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 计数 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskCounts"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     streamProjectTaskEvents: {

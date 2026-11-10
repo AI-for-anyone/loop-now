@@ -26,6 +26,7 @@ const zhCN = {
     browser: '在默认浏览器打开',
     logs: '查看日志',
     cli: '安装命令行工具…',
+    external: '外部身份连接方式…',
     update: (version: string) => `有新版本 ${version}，去下载…`,
     restart: '重启服务',
     quit: '退出 Loop Now',
@@ -43,7 +44,23 @@ const zhCN = {
     done: '已安装 loopctl',
     already: 'loopctl 已经安装',
     failed: '没能安装 loopctl',
-    external: 'loopctl 以外部身份连接服务端的对外 TLS 端口；桌面版目前还不能开启这个端口。',
+    external: 'loopctl 以外部身份连接服务端的对外 TLS 端口；地址、证书与配置命令见菜单栏的"外部身份连接方式…"。',
+    // Windows：把随包的 bin 目录加进用户 PATH。
+    pathConfirm: '把 loopctl 加进 PATH？',
+    pathConfirmDetail: (dir: string) => `会把 ${dir} 加进你的用户 PATH（不需要管理员）。新开的终端里就能用 loopctl；已经开着的终端要重开。`,
+    pathAlready: 'loopctl 已经在 PATH 里',
+    pathAlreadyDetail: (dir: string) => `${dir} 已在你的用户 PATH 里。`,
+    pathDone: '已把 loopctl 加进 PATH',
+    pathDoneDetail: (dir: string) => `已加入 ${dir}。新开的终端里可以直接用 loopctl；已经开着的终端要重开。`,
+    add: '加入',
+  },
+  // 托盘"外部身份连接方式…"：对外 TLS 端口的地址、自签证书与把令牌配进 loopctl 的命令。
+  external: {
+    title: '外部身份与 loopctl 的连接方式',
+    detail: (url: string, caFile: string, command: string) =>
+      `对外 TLS 端口（只在本机）：${url}\n证书（自签，loopctl 用 --ca-file 指定）：${caFile}\n\n在控制台的"外部身份"里创建身份并签发令牌（lne_ 开头），然后在终端运行下面的命令，把令牌粘贴进去并回车：\n\n${command}\n\n端口已记住，重启后地址不变。`,
+    copy: '复制命令',
+    close: '关闭',
   },
   quit: {
     message: '退出 Loop Now？',
@@ -55,6 +72,9 @@ const zhCN = {
     message: '需要 Git',
     detail: 'Loop Now 用 Git 拉取和提交代码，但这台 Mac 还没有安装命令行工具（/usr/bin/git 只是占位）。装好后重新打开 Loop Now。',
     install: '安装命令行工具',
+    // Windows：PATH 里没有 git.exe。
+    detailWindows: 'Loop Now 用 Git 拉取和提交代码，但这台电脑的 PATH 里没有 git.exe。从 git-scm.com 安装 Git for Windows（保留"加入 PATH"的默认选项），装好后重新打开 Loop Now。',
+    installWindows: '打开 git-scm.com',
     later: '以后再说',
   },
   page: {
@@ -104,6 +124,7 @@ const enUS: typeof zhCN = {
     browser: 'Open in Browser',
     logs: 'Show Logs',
     cli: 'Install Command Line Tool…',
+    external: 'External Identity Connection…',
     update: (version) => `Version ${version} is available — Download…`,
     restart: 'Restart Server',
     quit: 'Quit Loop Now',
@@ -121,7 +142,21 @@ const enUS: typeof zhCN = {
     done: 'loopctl is installed',
     already: 'loopctl is already installed',
     failed: 'Could not install loopctl',
-    external: 'loopctl connects to the server’s external TLS port as an external identity; the desktop app cannot turn that port on yet.',
+    external: 'loopctl connects to the server’s external TLS port as an external identity; the address, certificate and setup command are under “External Identity Connection…” in the menu bar.',
+    pathConfirm: 'Add loopctl to PATH?',
+    pathConfirmDetail: (dir) => `This adds ${dir} to your user PATH (no administrator needed). New terminals can run loopctl; terminals already open need to be reopened.`,
+    pathAlready: 'loopctl is already on PATH',
+    pathAlreadyDetail: (dir) => `${dir} is already on your user PATH.`,
+    pathDone: 'loopctl was added to PATH',
+    pathDoneDetail: (dir) => `${dir} was added. New terminals can run loopctl; terminals already open need to be reopened.`,
+    add: 'Add',
+  },
+  external: {
+    title: 'Connecting external identities and loopctl',
+    detail: (url, caFile, command) =>
+      `External TLS port (this computer only): ${url}\nCertificate (self-signed; pass it to loopctl with --ca-file): ${caFile}\n\nCreate an identity under “External Identities” in the console and issue a token (it starts with lne_), then run this in a terminal and paste the token followed by Enter:\n\n${command}\n\nThe port is remembered, so the address stays the same after a restart.`,
+    copy: 'Copy Command',
+    close: 'Close',
   },
   quit: {
     message: 'Quit Loop Now?',
@@ -133,6 +168,8 @@ const enUS: typeof zhCN = {
     message: 'Git is required',
     detail: 'Loop Now uses Git to fetch and commit code, but the command line tools are not installed on this Mac (/usr/bin/git is only a placeholder). Reopen Loop Now once they are installed.',
     install: 'Install Command Line Tools',
+    detailWindows: 'Loop Now uses Git to fetch and commit code, but there is no git.exe on this PC’s PATH. Install Git for Windows from git-scm.com (keep the default “add to PATH” option), then reopen Loop Now.',
+    installWindows: 'Open git-scm.com',
     later: 'Not Now',
   },
   page: {

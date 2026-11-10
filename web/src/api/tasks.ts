@@ -3,9 +3,11 @@ import { taskMessageProjection, taskMessageRows } from '@/features/tasks/message
 import { type InfiniteData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, call, type Schemas } from './client'
 import { sleepProjections } from '@/features/sleep/projection'
+import { config } from '@/config'
 
 export const taskKeys = {
   project: (id: string) => ['projectTasks', id] as const,
+  counts: (projectId: string) => ['projectTaskCounts', projectId] as const,
   detail: (id: string) => ['task', id] as const,
   messages: (taskId: string, nodeRunId?: string) => nodeRunId ? ['taskMessages', taskId, nodeRunId] as const : ['taskMessages', taskId] as const,
 }
@@ -16,6 +18,17 @@ export function useProjectTasks(projectId: string) {
     queryFn: ({ pageParam, signal }) => call(api.GET('/projects/{projectId}/tasks', { signal, params: { path: { projectId }, query: { limit: 20, ...(pageParam ? { cursor: pageParam } : {}) } } })),
     initialPageParam: null as string | null,
     getNextPageParam: (page: Schemas['TaskPage']) => page.nextCursor ?? undefined,
+  })
+}
+// 项目里未结束任务按状态的计数，供左侧栏“任务”旁的运行数使用。没有单独的推送：按 Agent 列表的间隔重新读，
+// 窗口重新获得焦点时也读；打开着的任务列表或任务详情收到任务变化时立即重读（见 useTaskLive）。
+export function useProjectTaskCounts(projectId: string | undefined) {
+  return useQuery({
+    queryKey: taskKeys.counts(projectId ?? ''),
+    queryFn: ({ signal }) => call(api.GET('/projects/{projectId}/tasks/counts', { signal, params: { path: { projectId: projectId! } } })),
+    enabled: projectId !== undefined,
+    refetchInterval: config.agentListPollMs,
+    refetchOnWindowFocus: true,
   })
 }
 export function useTask(taskId: string) {
@@ -70,6 +83,7 @@ export function useTaskAction(taskId: string, projectId: string) {
     },
     onSettled: () => {
       void client.invalidateQueries({ queryKey: taskKeys.project(projectId) })
+      void client.invalidateQueries({ queryKey: taskKeys.counts(projectId) })
       void client.invalidateQueries({ queryKey: taskKeys.detail(taskId) })
       void client.invalidateQueries({ queryKey: ['inboxThread'] })
     },

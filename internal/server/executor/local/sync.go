@@ -134,7 +134,11 @@ func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d 
 	if err := e.syncCredentialFiles(snap, d); err != nil {
 		return err
 	}
-	p.env = e.buildEnv(d, snap, p.cliBinDirs, e.snapshotLog(snap).With("runId", runID))
+	var userPath []string
+	if snap.Local.UserPath && e.o.UserPath != nil {
+		userPath = e.o.UserPath(ctx)
+	}
+	p.env = e.buildEnv(d, snap, p.cliBinDirs, userPath, e.snapshotLog(snap).With("runId", runID))
 	// 4. 工作区来源。
 	return e.syncSources(ctx, snap, d, p.env, ghBin, outcomes)
 }

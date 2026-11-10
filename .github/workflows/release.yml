@@ -2,7 +2,7 @@ name: release
 
 # 发布构建：每个平台在对应架构的机器上运行 scripts/release/build.sh（Pi 的依赖要在目标架构上安装），
 # 用产物实际启动一次，再把压缩包与校验和作为 artifact 上传。macOS arm64 另把服务端发行包装进桌面壳，出 DMG 与更新用的 zip，
-# 只做 ad-hoc 签名，都不公证。最后汇总全部产物写 SHA256SUMS；推 v* tag 时据此创建 GitHub Release，tag 带 - 的标为预发布
+# 只做 ad-hoc 签名，都不公证；Windows x64 的桌面版（NSIS，不签名）等服务端的 Windows 包，见 desktop-win。最后汇总全部产物写 SHA256SUMS；推 v* tag 时据此创建 GitHub Release，tag 带 - 的标为预发布
 # （预发布一律用 -beta.N，如 v0.3.0-beta.1）。说明取自 CHANGELOG.md 里该版本的一节或 tag 注解（scripts/release/notes.sh）。
 # 手动运行只构建，不建 Release。
 on:
@@ -11,6 +11,10 @@ on:
       version:
         description: 版本号（不带 v），例如 0.9.0
         required: true
+      desktop_win:
+        description: 也构建 Windows 桌面版（需要服务端的 windows/amd64 包，目前还没有）
+        type: boolean
+        default: false
   push:
     tags: ["v*"]
 
@@ -129,11 +133,74 @@ jobs:
             .local-build/desktop/latest-mac.yml
           if-no-files-found: error
 
-  # 汇总：全部 artifact（四个平台的服务端包、桌面版的 DMG、zip、blockmap、latest-mac.yml）平铺到一个目录，
-  # 构建时写的单个校验和核对后并进 SHA256SUMS（不另外挂出）；推 tag 时把目录里的文件全部挂到 GitHub Release。
+  # 桌面版（Windows x64）：把 windows/amd64 的服务端发行包（loop-server.exe 那一套）放进 resources\server，出 NSIS 安装包、
+  # blockmap 与 latest.yml（electron-updater 在 Windows 上读的更新信息）。不签名：SmartScreen 会提示"仍要运行"。
+  # 服务端的 Windows 包还没有（build 矩阵里没有 windows/amd64），这个 job 先只在手动运行且勾了 desktop_win 时跑；
+  # 服务端包合入后：把 windows/amd64 加进 build 矩阵，去掉这里的条件。
+  desktop-win:
+    name: desktop (windows/amd64)
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.desktop_win
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: version
+        id: version
+        shell: bash
+        env:
+          INPUT: ${{ inputs.version }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          v="${INPUT:-${TAG#v}}"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "server=loop-now-$v-windows-amd64" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.version.outputs.server }}
+          path: ${{ runner.temp }}/server
+      - name: unpack the server bundle
+        shell: bash
+        env:
+          SERVER: ${{ steps.version.outputs.server }}
+        run: |
+          cd "$RUNNER_TEMP/server"
+          sha256sum -c "$SERVER.tar.gz.sha256"
+          tar -xzf "$SERVER.tar.gz"
+          echo "LOOP_NOW_DESKTOP_BUNDLE=$RUNNER_TEMP/server/$SERVER" >> "$GITHUB_ENV"
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+      - name: set version
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+      - run: npm run dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: loop-now-desktop-${{ steps.version.outputs.version }}-win-x64
+          path: |
+            .local-build/desktop/*.exe
+            .local-build/desktop/*.blockmap
+            .local-build/desktop/latest.yml
+          if-no-files-found: error
+
+  # 汇总：全部 artifact（四个平台的服务端包、桌面版的 DMG、zip、blockmap、latest-mac.yml，启用后还有 Windows 的 exe 与 latest.yml）
+  # 平铺到一个目录，构建时写的单个校验和核对后并进 SHA256SUMS（不另外挂出）；推 tag 时把目录里的文件全部挂到 GitHub Release。
+  # desktop-win 被跳过时照常汇总（它的 result 是 skipped）。
   release:
     name: release
-    needs: [notes, build, desktop-mac]
+    needs: [notes, build, desktop-mac, desktop-win]
+    if: ${{ !cancelled() && needs.notes.result == 'success' && needs.build.result == 'success' && needs.desktop-mac.result == 'success' && (needs.desktop-win.result == 'success' || needs.desktop-win.result == 'skipped') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write

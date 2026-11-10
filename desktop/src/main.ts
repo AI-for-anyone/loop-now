@@ -1,15 +1,18 @@
 // Loop Now 桌面壳：拉起并守护 loop-server，窗口加载它在同一端口提供的控制台，菜单栏图标显示状态。
 // 壳只做壳，不含业务逻辑。
-import { app, dialog, powerMonitor, session, shell, type BrowserWindow } from 'electron'
+import { app, clipboard, dialog, powerMonitor, session, shell, type BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { Badge } from './badge'
 import { RotatingLog } from './log'
 import { setAppMenu } from './menu'
 import { handleNotifications } from './notifications'
 import { choosePort, portOf } from './port'
-import { cliLink, installLink, linkState } from './cli'
-import { gitUsable, installCommandLineTools } from './git'
+import { addToUserPath, cliLink, installLink, linkState, readUserPath, userPathHas } from './cli'
+import { externalCertPath, loopctlConfigCommand } from './external'
+import { gitUsable, installGit } from './git'
+import { cliBinary, cliInstallMode, current as platform, serverBinary } from './platform'
 import { defaultProfile, overridesFromFile, profileArg, profileEnv, profileFromFile, profileSummary, resolveProfile, type Profile } from './profile'
 import { readyTimeoutMs, ServerProcess, type ServerState, type StartFailure } from './server'
 import { SettingsFile } from './settings'
@@ -47,6 +50,7 @@ function run(): void {
   const shellLog = new RotatingLog(join(logDir, 'shell.log'))
   const serverLog = new RotatingLog(join(logDir, 'server.log'))
   const settings = new SettingsFile(join(userData, 'settings.json'))
+  const externalTLSDir = join(userData, 'tls')
   const note = (text: string) => shellLog.line(text)
   // 每次启动的第一行：用的哪个配置、交给服务端的三个目录。
   const which = profile ? profileSummary(profile) : profileError ? `配置不可用（${profileError}）` : '没有选配置'
@@ -57,7 +61,7 @@ function run(): void {
 
   // 打包后服务端在 app 资源的 server/ 下；开发时用 LOOP_NOW_DESKTOP_SERVER 指定（服务端以自己所在目录为 cwd 启动，所以转成绝对路径）。
   const devBin = process.env.LOOP_NOW_DESKTOP_SERVER
-  const bin = app.isPackaged ? join(process.resourcesPath, 'server', 'loop-server') : devBin ? resolve(devBin) : undefined
+  const bin = app.isPackaged ? join(process.resourcesPath, 'server', serverBinary(platform)) : devBin ? resolve(devBin) : undefined
   // 起不了服务端的情形（在 app 就绪后调用，语言要到那时才确定）。没有配置只会发生在开发时没选的情况下。
   const blocked = (): StatusView | undefined => {
     const s = strings().page
@@ -70,11 +74,14 @@ function run(): void {
   const server = new ServerProcess({
     bin: bin ?? '',
     readyFile: join(userData, 'run', 'server-ready.json'),
+    stampFile: join(userData, 'run', 'server-stamp.json'),
     env: profile ? { ...process.env, ...profileEnv(profile) } : process.env,
     log: serverLog,
     note,
     // 第一次交给系统选，之后沿用记住的端口（见 port.ts）。
     choosePort: () => choosePort(settings.read().port ?? 0),
+    // 对外 TLS 端口（外部身份与 loopctl）：同样记住端口；自签证书放在壳的 userData/tls，由服务端维护。
+    external: { tlsDir: externalTLSDir, choosePort: () => choosePort(settings.read().externalPort ?? 0) },
   })
   const window = new MainWindow({
     // 默认配置的窗口标题不带名字。
@@ -86,10 +93,11 @@ function run(): void {
     onAction: (action) => (action === 'retry' ? void server.restart() : void shell.openPath(logDir)),
   })
   let tray: StatusTray | undefined
+  const badge = new Badge(() => window.browserWindow)
   const updates = new UpdateChecker(autoUpdater, note)
   updates.on('available', (version) => {
     note(`有新版本 ${version}`)
-    tray?.update(server.state, server.url)
+    tray?.update(server.state, server.url, server.externalUrl)
   })
 
   const startingView = (): StatusView => ({ title: strings().page.startingTitle, body: strings().page.startingBody, busy: true })
@@ -116,29 +124,31 @@ function run(): void {
     }
   }
 
-  // 第一次显示窗口时查一次 git（服务端用它拉取仓库）；不可用就提示一句，可以直接打开系统的安装框。不打包 git。
+  // 第一次显示窗口时查一次 git（服务端用它拉取仓库）；不可用就提示一句，可以直接打开系统的安装框（Windows 打开 git-scm.com）。不打包 git。
   async function checkGit(win: BrowserWindow): Promise<void> {
     if (await gitUsable()) return
-    note('git 不可用：没有安装命令行工具')
+    note(platform === 'win32' ? 'git 不可用：PATH 里没有 git.exe' : 'git 不可用：没有安装命令行工具')
     const s = strings().git
     const { response } = await dialog.showMessageBox(win, {
       type: 'warning',
       message: s.message,
-      detail: s.detail,
-      buttons: [s.install, s.later],
+      detail: platform === 'win32' ? s.detailWindows : s.detail,
+      buttons: [platform === 'win32' ? s.installWindows : s.install, s.later],
       defaultId: 0,
       cancelId: 1,
     })
-    if (response === 0) installCommandLineTools()
+    if (response === 0) installGit()
   }
 
-  // 托盘"安装命令行工具"：/usr/local/bin/loopctl 链到包内固定的 Resources/bin/loopctl（打包时链到当前版本的二进制）。
+  // 托盘"安装命令行工具"。macOS：/usr/local/bin/loopctl 链到包内固定的 Resources/bin/loopctl（打包时链到当前版本的二进制）。
+  // Windows：把 resources\bin（里面是复制出来的 loopctl.exe）加进用户 PATH（取舍见 platform.ts 的 cliInstallMode）。
   // 由人从菜单里触发，确认框和系统的管理员密码框都在这时出现。
   async function installCli(): Promise<void> {
     const s = strings().cli
     const info = (message: string, detail: string, type: 'info' | 'warning' = 'info') => dialog.showMessageBox({ type, message, detail })
+    if (cliInstallMode(platform) === 'path') return installCliOnPath(info)
     if (!app.isInApplicationsFolder()) return void (await info(s.moveFirst, s.moveFirstDetail, 'warning'))
-    const target = join(process.resourcesPath, 'bin', 'loopctl')
+    const target = join(process.resourcesPath, 'bin', cliBinary(platform))
     const current = await linkState(cliLink, target)
     if (current.state === 'ours') return void (await info(s.already, `${cliLink} → ${target}\n\n${s.external}`))
     const ask =
@@ -158,10 +168,44 @@ function run(): void {
     await info(s.done, `${cliLink} → ${target}\n\n${s.external}`)
   }
 
+  async function installCliOnPath(info: (message: string, detail: string, type?: 'info' | 'warning') => Promise<unknown>): Promise<void> {
+    const s = strings().cli
+    const dir = join(process.resourcesPath, 'bin')
+    const current = await readUserPath()
+    if (current instanceof Error) {
+      note(`读不到用户 PATH：${current.message}`)
+      return void (await info(s.failed, current.message, 'warning'))
+    }
+    if (userPathHas(current, dir)) return void (await info(s.pathAlready, `${s.pathAlreadyDetail(dir)}\n\n${s.external}`))
+    app.focus({ steal: true })
+    const { response } = await dialog.showMessageBox({ type: 'question', message: s.pathConfirm, detail: `${s.pathConfirmDetail(dir)}\n\n${s.external}`, buttons: [s.add, s.cancel], defaultId: 0, cancelId: 1 })
+    if (response !== 0) return
+    const result = await addToUserPath(dir)
+    if (result instanceof Error) {
+      note(`把 loopctl 加进 PATH 失败：${result.message}`)
+      return void (await info(s.failed, result.message, 'warning'))
+    }
+    note(`已把 ${dir} 加进用户 PATH`)
+    await info(s.pathDone, `${s.pathDoneDetail(dir)}\n\n${s.external}`)
+  }
+
+  // 托盘"外部身份连接方式…"：对外 TLS 端口的地址、自签证书的位置和把令牌配进 loopctl 的命令，可以一键复制命令。
+  // 菜单项只在服务端就绪且开了对外端口时可点，这里仍防一手。
+  async function showExternal(): Promise<void> {
+    const url = server.externalUrl
+    if (!url) return
+    const s = strings().external
+    const caFile = externalCertPath(externalTLSDir)
+    const command = loopctlConfigCommand(url, caFile)
+    app.focus({ steal: true })
+    const { response } = await dialog.showMessageBox({ type: 'info', message: s.title, detail: s.detail(url, caFile, command), buttons: [s.copy, s.close], defaultId: 0, cancelId: 1 })
+    if (response === 0) clipboard.writeText(command)
+  }
+
   let previous: ServerState = server.state
   server.on('state', (state) => {
     note(`状态：${previous} → ${state}`)
-    tray?.update(state, server.url)
+    tray?.update(state, server.url, server.externalUrl)
     // 崩溃后的自动重启保留控制台页面（它会自己重连）；其余启动显示状态页。
     if (state === 'starting' && previous !== 'restarting') window.showStatus(startingView())
     if (state === 'failed') {
@@ -176,12 +220,18 @@ function run(): void {
   })
   server.on('ready', (url) => {
     const port = portOf(url)
-    if (port !== undefined && port !== settings.read().port) settings.update({ port })
-    tray?.update(server.state, url)
+    const externalPort = server.externalUrl ? portOf(server.externalUrl) : undefined
+    const remembered = settings.read()
+    const patch = {
+      ...(port !== undefined && port !== remembered.port ? { port } : {}),
+      ...(externalPort !== undefined && externalPort !== remembered.externalPort ? { externalPort } : {}),
+    }
+    if (Object.keys(patch).length > 0) settings.update(patch)
+    tray?.update(server.state, url, server.externalUrl)
     window.showConsole(url)
   })
 
-  // 退出：停掉服务端（它会停掉所有 Agent）再退出。只有人从托盘或 Cmd+Q 选"退出"时 confirm 为 true，先问一句；
+  // 退出：停掉服务端（它会停掉所有 Agent）再退出。只有人从托盘或 Cmd+Q（Windows 只有托盘：关窗口只是收进托盘）选"退出"时 confirm 为 true，先问一句；
   // 信号、关机注销、Dock 菜单等其他途径都经 before-quit 直接退出，不弹框（Electron 自己处理 SIGTERM 时也走 before-quit，
   // 和我们的信号处理谁先到不固定，所以 before-quit 一律不问）。macOS 上没有父窗口的确认框会阻塞主线程，期间到的信号等人答完再处理。
   async function quit(confirm: boolean): Promise<void> {
@@ -228,7 +278,7 @@ function run(): void {
     // 开发时 Electron.app 自带的是 Electron 的图标；打包后用 app 自己的图标。
     if (!app.isPackaged) app.dock?.setIcon(join(__dirname, '..', 'assets', 'icon.png'))
     setAppMenu(() => void quit(true))
-    handleNotifications({ trusted: (event) => window.trusts(event), open: (path) => window.navigate(path) })
+    handleNotifications({ trusted: (event) => window.trusts(event), open: (path) => window.navigate(path), badge: (count) => badge.set(count) })
     session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
       callback(permission === 'clipboard-sanitized-write' || permission === 'fullscreen'),
     )
@@ -244,13 +294,14 @@ function run(): void {
         browser: () => server.url && void shell.openExternal(server.url),
         logs: () => void shell.openPath(logDir),
         cli: () => void installCli(),
+        external: () => void showExternal(),
         restart: () => void server.restart(),
         quit: () => void quit(true),
       },
       profile,
       () => updates.available,
     )
-    tray.update(server.state, server.url)
+    tray.update(server.state, server.url, server.externalUrl)
     if (app.isPackaged) updates.start()
     const view = blocked()
     if (view) {

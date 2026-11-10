@@ -27,6 +27,7 @@ import (
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/folders"
 	"loop-now/internal/server/inbox"
+	"loop-now/internal/server/localmode"
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/modelconfig"
@@ -72,6 +73,7 @@ type Server struct {
 	Records            *runrecord.Service
 	Inbox              *inbox.Service
 	Folders            *folders.Service
+	LocalMode          *localmode.Service
 	Tasks              *tasks.Service
 	Log                *slog.Logger
 }
@@ -125,6 +127,12 @@ func (s *Server) Routes() []Route {
 		{"GET", "/plugin-sources/builtin", "listBuiltinPluginSources", ConsoleAndExternal, s.listBuiltinPluginSources},
 		{"GET", "/plugin-host", "getPluginHost", ConsoleAndExternal, s.getPluginHost},
 		{"POST", "/plugin-host/restart", "restartPluginHost", ConsoleAndExternal, s.restartPluginHost},
+		{"GET", "/local-mode-settings", "getLocalModeSettings", ConsoleOnly, s.getLocalModeSettings},
+		{"PATCH", "/local-mode-settings", "updateLocalModeSettings", ConsoleOnly, s.updateLocalModeSettings},
+		{"GET", "/projects/{projectId}/local-directories", "getProjectLocalDirectories", ConsoleOnly, s.getProjectLocalDirectories},
+		{"PUT", "/projects/{projectId}/local-directories", "putProjectLocalDirectories", ConsoleOnly, s.putProjectLocalDirectories},
+		{"GET", "/agents/{agentId}/local-directories", "getAgentLocalDirectories", ConsoleOnly, s.getAgentLocalDirectories},
+		{"PUT", "/agents/{agentId}/local-directories", "putAgentLocalDirectories", ConsoleOnly, s.putAgentLocalDirectories},
 		{"GET", "/plugin-settings", "getPluginSettings", ConsoleAndExternal, s.getPluginSettings},
 		{"PUT", "/plugin-settings", "putPluginSettings", ConsoleAndExternal, s.putPluginSettings},
 		{"GET", "/projects/{projectId}/plugins", "listProjectPlugins", ConsoleAndExternal, s.listProjectPlugins},
@@ -191,6 +199,7 @@ func (s *Server) Routes() []Route {
 		{"GET", "/tasks/{taskId}/artifacts/{artifactId}", "downloadTaskArtifact", ConsoleOnly, s.downloadTaskArtifact},
 
 		{"GET", "/projects/{projectId}/tasks", "listProjectTasks", ConsoleOnly, s.listProjectTasks},
+		{"GET", "/projects/{projectId}/tasks/counts", "countProjectTasks", ConsoleOnly, s.countProjectTasks},
 		{"GET", "/projects/{projectId}/tasks/events", "streamProjectTaskEvents", ConsoleOnly, s.streamProjectTaskEvents},
 		{"GET", "/tasks/{taskId}/events", "streamTaskEvents", ConsoleOnly, s.streamTaskEvents},
 

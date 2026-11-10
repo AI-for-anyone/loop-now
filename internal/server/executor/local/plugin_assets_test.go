@@ -52,7 +52,7 @@ func TestPluginAssetsReachPi(t *testing.T) {
 		design["headers"].(map[string]any)["Authorization"] != "Bearer ${FIGMA_TOKEN}" {
 		t.Fatalf("url 条目应原样写入：%s", b)
 	}
-	env := e.buildEnv(d, agentconfig.Snapshot{Plugins: p}, []string{"/cli/gh"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	env := e.buildEnv(d, agentconfig.Snapshot{Plugins: p}, []string{"/cli/gh"}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if !slices.Contains(env, "PATH="+strings.Join([]string{"/cli/gh", "/p/a/bin", "/usr/bin"}, string(os.PathListSeparator))) || !slices.Contains(env, `LOOP_NOW_PLUGIN_A_CONFIG={"x":1}`) || !slices.Contains(env, "HOME="+d.home) {
 		t.Fatalf("环境：%v", env)
 	}
