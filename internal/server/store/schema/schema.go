@@ -54,6 +54,22 @@ func Migrate(ctx context.Context, d *db.DB, logger *slog.Logger) error {
 	return nil
 }
 
+// MigrateTo 只执行到 version（含）为止的迁移；导入旧库时先停在基线，导入完再用 Migrate 执行其余迁移。
+func MigrateTo(ctx context.Context, d *db.DB, logger *slog.Logger, version int64) error {
+	p, err := provider(d, logger)
+	if err != nil {
+		return fmt.Errorf("准备数据库迁移失败：%w", err)
+	}
+	results, err := p.UpTo(ctx, version)
+	if err != nil {
+		return fmt.Errorf("执行数据库迁移失败：%w", err)
+	}
+	for _, r := range results {
+		logger.Info("已执行数据库迁移", "version", r.Source.Version, "file", r.Source.Path, "duration", r.Duration)
+	}
+	return nil
+}
+
 // Version 返回已执行到的版本号；还没迁移时为 0。
 func Version(ctx context.Context, d *db.DB) (int64, error) {
 	p, err := provider(d, slog.New(slog.DiscardHandler))

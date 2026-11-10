@@ -3,7 +3,7 @@ import type { Messages } from '..'
 export const settings = {
   title: 'Global settings',
   language: { title: 'Language', hint: 'Applies to this browser only. The page reloads when you switch.' },
-  readonlyHint: 'Model settings and folders can be edited here; server environment configuration remains read-only.',
+  readonlyHint: 'Model settings, local mode and folders can be edited here; server environment configuration remains read-only.',
   models: {
     title: 'Model settings',
     description: 'Edit the native models.json for the pinned Pi version. Custom providers, overrides of built-in provider baseUrl or model parameters, and Thinking and image capabilities all follow the merged Pi catalog.',

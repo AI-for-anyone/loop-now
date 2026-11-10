@@ -3,6 +3,8 @@
 // PowerShell 还需要 SYSTEMROOT、COMSPEC、PATHEXT 这类变量以及与 HOME 对应的 USERPROFILE／APPDATA／TEMP。
 package execenv
 
+import "path/filepath"
+
 // SystemDirs 返回执行 PATH 末尾的系统目录。
 func SystemDirs() []string { return systemDirs() }
 
@@ -11,6 +13,10 @@ func HostCommonDirs() []string { return hostCommonDirs() }
 
 // SystemPath 返回只含系统目录的最小 PATH，供只跑系统工具的子进程使用。
 func SystemPath() string { return systemPath() }
+
+// PathKey 返回比较两个 PATH 目录是否相同时用的键：先规范化，Windows 上再不分大小写
+// （SYSTEMROOT 给出的 C:\WINDOWS\System32 与用户 PATH 里常见的 C:\WINDOWS\system32 是同一个目录）。
+func PathKey(dir string) string { return pathKey(filepath.Clean(dir)) }
 
 // Base 返回子进程必需的平台基础变量（形如 K=V）：Unix 上没有；Windows 上是 SYSTEMROOT 等系统变量，
 // 以及按 home、tmp 设置的 USERPROFILE、HOMEDRIVE/HOMEPATH、APPDATA、LOCALAPPDATA、TEMP、TMP。

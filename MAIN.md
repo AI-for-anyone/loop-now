@@ -66,6 +66,12 @@
 
 - 当前优先继续完善个人本地版 `loop-now/main`。高并发版已隔离到独立私有仓库 `hust2018/loop-now-scalable`，暂不直接推进其改造；用户计划随后通过个人版中的 Agent、任务和插件开发高并发版。个人版维持本地单实例定位。
 
+- 个人版"本机模式"（2026-11-10 用户提出并决定，已实现：loop-now-server 做服务端，loop-now-web 做页面，主会话集成）：让个人版直接用用户本机已有的东西，三项一组、各有全局开关（`/local-mode-settings`），用户定为默认开启，存量用户升级后同样全开。起因是桌面版里从自建 Git 服务（code.powerformer.net）拉取失败：HTTPS 只带 Agent 的 gh 凭证（只对 github.com 有效，`internal/server/app/folders.go`）。集成实测更正了最初的判断：SSH 地址一直能用——ssh 按系统账户的主目录找 `~/.ssh`，不看被替换的 HOME，开关关着时 `git@github.com:` 照样拉取成功；开关只影响 HTTPS 的本机 credential helper 与 ssh-agent。
+  - 绑定本机目录（用户定为"额外挂载"而不是替换工作目录）：Agent 自己的文件夹不变（仍是 Pi 的工作目录和它的上下文，任务照旧复制、回收站照旧），另给项目和 Agent 各一份"可访问的本机目录"清单，项目的对项目内所有 Agent 可见，Agent 可再加自己的；路径写进 `--append-system-prompt` 的"文件夹与上下文"一节（`executor/local/sync.go` 的 `appendedPrompt`）。Pi 进程本身不在沙箱里（只有飞书 sidecar 用 sandbox-exec），所以这是告知与管理，不是放开权限。不选"替换工作目录"的原因：Pi 向上加载所有上级目录的 AGENTS.md/CLAUDE.md、任务要克隆整个文件夹、页面的删除会落到用户的真实文件上。任务内的 Agent 对绑定目录同样可写（改动直接落盘，不走任务副本）；清单是告知不是隔离，页面上如实写明。
+  - 用本机的 git 身份：开启后"从 Git 拉取"沿用用户真实的 HOME 与 `SSH_AUTH_SOCK`，SSH 与本机 credential helper 可用；只动拉取这一步。给任意 Git 主机配项目账号（HTTPS 令牌或 SSH 私钥）是更规范但更大的另一条路，暂不做。
+  - 实现要点：迁移 00002（SQLite 基线之后的第一个迁移，三张新表并重建 `agent_folder_git_pulls` 以容纳新失败码 `auth_failed`、`host_key_unverified`）；`import-postgres` 因此改为先迁到基线、导入核对后再跑后续迁移；清单整份 PUT 带 `expectedRevision`（412 防覆盖），每项读回带 status；Pi 复用条件加"本机模式指纹"，下一次派发时重启、不打断进行中的回复；任务内实例启动时现场读取，不进任务快照；github.com 在 Agent 配了 gh 时只走 gh，不读写用户钥匙串；全部接口 console-only。未验证：真实 Pi 下的提示词、HTTPS 加钥匙串的真实拉取、Windows 实机、从访达启动时登录 shell 的 PATH 解析、macOS 隐私保护目录（桌面、文稿、下载）是否被 TCC 拦。后续：桌面版的系统目录选择框、docs 与内置 Skill 提及本机目录、`ValidateGitURL` 的提示语。
+  - 用本机的 CLI：开关把用户的 PATH 接到执行 PATH 之后，Agent 能调用本机装的命令，登录态仍用 Loop Now 里配置的账号；不直接沿用用户 HOME 下各工具的登录态（会绕过账号分配、权限与凭证清理）。
+
 - 内部 Agent 只读查询同项目 Agent 状态已在本地部署。命令为 `loopctl agent status <名称、地址或UUID>`，返回目标常态实例的忙闲、当前执行、队列、sleep、进程与会话状态；任务内调用按基础 Agent 的实际项目授权。服务端拒绝跨项目、平台及任务地址，不开放配置、历史或管理操作；外部身份保持原命令行为。内置 Skill 已同步用法。
 
 - 全局顶栏入口为“收件箱、Skills 库、外部身份、插件、全局设置”；选中项目或平台范围时隐藏，点击 LOGO 返回全局后恢复。项目中的插件启用／配置入口、Agent 自身 Skills 与收件箱保留。五个入口的范围调整均已在本地部署；21 项导航定向、类型、局部 lint 与桌面 HTTP 夹具验证通过，证据在 `.local-build/global-tools-nav-ui/`。

@@ -2,6 +2,8 @@ package agentconfig
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 
@@ -52,6 +54,35 @@ type Snapshot struct {
 	ForkSessionFile string
 	// Plugins 是已授权插件交给 Pi 的东西，启动 Pi 时读取。
 	Plugins PluginAssets
+	// Local 是个人版“本机模式”交给 Pi 的东西：按基础 Agent 与其项目的当前设置在启动 Pi 时读取（任务内实例也一样，
+	// 不进任务快照）；它的 Identity 变化时 Pi 在下一次派发重启。
+	Local LocalAccess
+}
+
+// LocalAccess 是本机模式在启动 Pi 时生效的部分。
+type LocalAccess struct {
+	// Directories 是生效的本机目录（“绑定本机目录”关闭时为空）：项目的在前、Agent 自己的在后，同一路径只出现一次。
+	// 目录是否存在在写系统提示时判断，只列出存在的。
+	Directories []LocalDirectory
+	// UserPath 为真时把用户的 PATH 接在执行 PATH 之后（“用本机的 CLI”）。
+	UserPath bool
+}
+
+// LocalDirectory 是一个生效的本机目录。
+type LocalDirectory struct {
+	Path      string `json:"path"`
+	Note      string `json:"note,omitempty"`
+	Inherited bool   `json:"inherited,omitempty"` // 来自项目的清单
+}
+
+// Identity 是决定 Pi 是否需要重启的指纹：目录（含备注与来源）与 PATH 开关，不含目录此刻是否存在。
+func (l LocalAccess) Identity() string {
+	if len(l.Directories) == 0 && !l.UserPath {
+		return ""
+	}
+	b, _ := json.Marshal(l)
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }
 
 // PluginAssets 是 Agent 已授权插件的 Agent 侧（plugins/SPEC.md §2.1），路径都是绝对路径；没有授权插件或全局停用时为空。
@@ -198,6 +229,11 @@ func (s *Service) ExecutionSnapshot(ctx context.Context, agentID uuid.UUID) (Sna
 	}
 	if s.PluginAssets != nil {
 		if snap.Plugins, err = s.PluginAssets(ctx, agentID); err != nil {
+			return Snapshot{}, err
+		}
+	}
+	if s.LocalAccess != nil {
+		if snap.Local, err = s.LocalAccess(ctx, agentID); err != nil {
 			return Snapshot{}, err
 		}
 	}

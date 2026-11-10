@@ -39,6 +39,7 @@ import (
 	"loop-now/internal/server/httpapi"
 	"loop-now/internal/server/inbox"
 	"loop-now/internal/server/larkauth"
+	"loop-now/internal/server/localmode"
 	"loop-now/internal/server/loopctldist"
 	"loop-now/internal/server/maintenance"
 	"loop-now/internal/server/modelauth"
@@ -81,6 +82,9 @@ type App struct {
 	Folders     *folders.Service
 	Config      *agentconfig.Service
 	API         *httpapi.Server
+	// LocalMode 是个人版“本机模式”的开关与本机目录清单；UserPath 解析并缓存用户的 PATH。
+	LocalMode *localmode.Service
+	UserPath  *localmode.UserPath
 	// Plugins 是插件第二版的安装与配置；PluginHost 在配置了宿主入口时监护插件宿主，否则为空。
 	Plugins    *plugins.Service
 	PluginHost *pluginhost.Supervisor
@@ -268,6 +272,15 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		Limits: agentconfig.Limits{MaxUploadFile: cfg.MaxUploadFile, MaxSkillArchive: cfg.MaxSkillArchive, MaxSkillEntries: cfg.MaxSkillEntries, MaxCredential: cfg.MaxCredential, Text: text},
 	}
 	a.Config.PluginAssets = a.pluginAssets
+	a.LocalMode = &localmode.Service{Store: a.Store}
+	a.Config.LocalAccess = a.LocalMode.Access
+	a.UserPath = localmode.NewUserPath(log, localmode.DefaultUserPathTimeout)
+	// 用到用户 PATH 的开关（cli、git）开着时提前在后台解析，免得第一次启动 Pi 或拉取时等登录 shell。
+	if settings, err := a.Store.GetLocalModeSettings(ctx); err != nil {
+		return a, err
+	} else if settings.CLI || settings.Git {
+		a.UserPath.Start()
+	}
 
 	// 登录 helper 与平台扩展按内容寻址装在 platform/auth-helper/<摘要>/ 下：不同构建的文件互不覆盖。
 	platformDir := filepath.Join(res.WorkRoot, "platform")
@@ -364,6 +377,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	taskSource.EnableLarkOverlay()
 	taskSource.Log = log
 	taskSource.PluginAssets = a.pluginAssets
+	taskSource.LocalAccess = a.LocalMode.Access
 	taskObserver := &tasks.Observer{Store: a.Store, Normal: recorder, Timeout: cfg.TaskRecordTimeout, Log: log}
 	// config.Load 总会给出上下文文件夹的根与文件夹上传上限；直接构造配置（测试）时为空：根放在工作根目录下
 	// （不写到进程的当前目录），上限取默认值。
@@ -380,7 +394,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		Username: username, MaxProcesses: cfg.PiMaxProcesses, IdleTimeout: cfg.PiIdleTimeout, StartTimeout: cfg.PiStartTimeout,
 		StopGrace: cfg.PiStopGrace, AbortTimeout: cfg.AbortTimeout, CloneTimeout: cfg.GitCloneTimeout, InstanceID: a.InstanceID, Hostname: host,
 		StderrTailBytes: cfg.PiStderrTailBytes, Observer: taskObserver,
-		Tokens: agentTokens{st: a.Store, instance: a.InstanceID}, AgentURL: agentURL(a.listener.Addr()), LoopctlBinDir: loopctlBin, ContextDir: contextDir,
+		Tokens: agentTokens{st: a.Store, instance: a.InstanceID}, AgentURL: agentURL(a.listener.Addr()), LoopctlBinDir: loopctlBin, ContextDir: contextDir, UserPath: a.UserPath.Dirs,
 	}, taskSource, templates, installer, log)
 	a.Config.Releaser = a.Executor
 	// Preserve unresolved handoff process evidence before generic cleanup can
@@ -432,7 +446,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	a.Conv.InboxCancelled = inboxSvc.EmitCancelled
 	a.Tasks.QuestionMaintenance = inboxSvc.ReconcileQuestions
 
-	a.Folders = folders.New(a.Store, folderGitAccess(a.Config, templates, installer, res.WorkRoot, res.ExecBasePath),
+	a.Folders = folders.New(a.Store, folderGitAccess(a.Config, templates, installer, res.WorkRoot, res.ExecBasePath, &gitLocalIdentity{modes: a.LocalMode, userPath: a.UserPath, gitBin: res.GitBin}),
 		folders.Options{WorkRoot: res.WorkRoot, ContextDir: contextDir, MaxUpload: maxFolderUpload, GitBin: res.GitBin, CloneTimeout: cfg.GitCloneTimeout}, log)
 
 	a.Store.ImageMaxCount = cfg.MaxMessageImages
@@ -454,7 +468,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 				TextEdit: apitypes.TextEdit{MaxBytes: cfg.TextEditMax, Extensions: cfg.TextEditExtensions}},
 		},
 		Config: a.Config, Conv: a.Conv, Models: models, Templates: templates, Installer: installer, Store: a.Store, Coord: a.Coord,
-		Tasks: a.Tasks, Records: &runrecord.Service{Store: a.Store}, Inbox: inboxSvc, Folders: a.Folders, Log: log,
+		Tasks: a.Tasks, Records: &runrecord.Service{Store: a.Store}, Inbox: inboxSvc, Folders: a.Folders, LocalMode: a.LocalMode, Log: log,
 	}
 	if err = a.assemblePlugins(cfg, res, log); err != nil {
 		return a, err

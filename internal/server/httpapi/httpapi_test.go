@@ -32,6 +32,7 @@ import (
 	"loop-now/internal/server/folders"
 	"loop-now/internal/server/httpapi"
 	"loop-now/internal/server/inbox"
+	"loop-now/internal/server/localmode"
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/plugins"
@@ -152,7 +153,8 @@ func newEnv(t *testing.T) *env {
 		Store: st, Coord: co, Records: &runrecord.Service{Store: st}, Log: log,
 		Inbox: &inbox.Service{St: st, Co: co, Conv: conv, Log: log, O: inbox.Options{MaxMessage: limits.MaxInboxMessage, PreviewChars: 200,
 			PageDefault: 20, PageMax: 100, DefaultOrgID: dc.Organization.ID}},
-		Folders: folders.New(st, nil, folders.Options{WorkRoot: t.TempDir(), ContextDir: t.TempDir(), MaxUpload: limits.MaxFolderUpload, GitBin: "git", CloneTimeout: time.Minute}, log),
+		Folders:   folders.New(st, nil, folders.Options{WorkRoot: t.TempDir(), ContextDir: t.TempDir(), MaxUpload: limits.MaxFolderUpload, GitBin: "git", CloneTimeout: time.Minute}, log),
+		LocalMode: &localmode.Service{Store: st},
 	}
 	api.Plugins = &plugins.Service{Store: st, Root: filepath.Join(t.TempDir(), "plugins"), GitBin: "git", PlatformVersion: "dev", Log: log}
 	if err := api.Plugins.Init(); err != nil {

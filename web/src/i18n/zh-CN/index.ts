@@ -19,6 +19,7 @@ import { tasks } from './tasks'
 import { timeline } from './timeline'
 import { consoleInbox } from './console-inbox'
 import { images } from './images'
+import { localMode } from './local-mode'
 import { shell } from './shell'
 import { stats } from './stats'
 import { taskInbox } from './task-inbox'
@@ -52,4 +53,5 @@ export const zhCN = {
   images,
   shell,
   stats,
+  localMode,
 } as const

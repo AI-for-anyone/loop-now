@@ -19,11 +19,15 @@ import (
 var entryCandidates = []string{"AGENTS.override.md", "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD"}
 
 // contextPrompt 返回在 Pi 启动时追加到系统提示的“文件夹与上下文”一节：自己的文件夹与可见的上下文文件夹的绝对路径，
-// 以及项目（平台 Agent 为全局）上下文入口 AGENTS.md 的原文（不截断）。自己的入口由 Pi 从工作目录读取，不在这里重复。
-// 只在启动时读取，入口的修改要等 Pi 下次重启才生效；也不参与是否重启的判断。
+// 生效的本机目录，以及项目（平台 Agent 为全局）上下文入口 AGENTS.md 的原文（不截断）。自己的入口由 Pi 从工作目录读取，不在这里重复。
+// 只在启动时读取，入口的修改要等 Pi 下次重启才生效；也不参与是否重启的判断（本机目录清单的变化由 snap.Local.Identity 决定重启）。
 func (e *Executor) contextPrompt(snap agentconfig.Snapshot, d agentDirs) (string, error) {
+	local := localDirectoriesPrompt(snap)
 	if e.o.ContextDir == "" {
-		return "", nil
+		if local == "" {
+			return "", nil
+		}
+		return "## 文件夹与上下文\n\n" + local, nil
 	}
 	layer := folders.ContextFolder(e.o.ContextDir, snap.ContextProjectID)
 	if err := os.MkdirAll(layer, 0o700); err != nil {
@@ -43,6 +47,7 @@ func (e *Executor) contextPrompt(snap agentconfig.Snapshot, d agentDirs) (string
 	fmt.Fprintf(&b, "- %s：%s，入口是根目录的 AGENTS.md（存在时已由 Pi 读入）。\n", own, d.workspace)
 	fmt.Fprintf(&b, "- %s：%s，%s，入口是 %s。\n", name, layer, shared, entry)
 	b.WriteString("- 两个入口只在 Pi 启动时读入，修改后要等下次重启才会出现在系统提示中。什么时候写、写到哪一层、怎样组织，见 Skill loopctl 的“上下文文件夹”一节。\n")
+	b.WriteString(local)
 	content, err := readEntry(layer)
 	if err != nil {
 		return "", err
@@ -51,6 +56,35 @@ func (e *Executor) contextPrompt(snap agentconfig.Snapshot, d agentDirs) (string
 		fmt.Fprintf(&b, "\n<context_entry path=%q>\n%s\n</context_entry>\n", entry, content)
 	}
 	return b.String(), nil
+}
+
+// localDirectoriesPrompt 返回“本机目录”一条（含末尾换行）：只列此刻存在且是目录的条目，没有时为空。
+// Pi 不在沙箱里，这是告知而不是授权：如实说明 Agent 对这些目录有完整读写权限、改动直接落在真实文件上。
+func localDirectoriesPrompt(snap agentconfig.Snapshot) string {
+	var items strings.Builder
+	for _, dir := range snap.Local.Directories {
+		if info, err := os.Stat(dir.Path); err != nil || !info.IsDir() {
+			continue
+		}
+		if dir.Note != "" {
+			fmt.Fprintf(&items, "  - %s：%s\n", dir.Path, dir.Note)
+		} else {
+			fmt.Fprintf(&items, "  - %s\n", dir.Path)
+		}
+	}
+	if items.Len() == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("- 本机目录：用户登记给你直接使用的本机文件夹，不是副本。你对它们有完整的读写权限，改动直接落在用户的真实文件上，")
+	if snap.TaskID != uuid.Nil {
+		b.WriteString("不在任务副本里、不随任务回收，常态 Agent 和其他任务可能同时在用；")
+	} else {
+		b.WriteString("不会被回收；")
+	}
+	b.WriteString("平台没有它们的回收站，删改前确认是该动的地方，拿不准先问人。这些目录里的 AGENTS.md 等入口不会自动读入，需要时自己读。\n")
+	b.WriteString(items.String())
+	return b.String()
 }
 
 // readEntry 读取上下文文件夹根目录的 AGENTS.md（经 os.Root，不跟随指向文件夹之外的软链接）；不存在或不是普通文件时为空。
