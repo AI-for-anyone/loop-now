@@ -92,6 +92,8 @@ type Options struct {
 	ContextDir string
 	// UserPath 返回用户的 PATH 目录（“用本机的 CLI”开启时接在执行 PATH 之后）；为空时不接。
 	UserPath func(context.Context) []string
+	// RealHome 返回服务端进程用户真实的主目录（“用本机的登录状态”开启时作 Pi 的 HOME）；为空时取 os.UserHomeDir。
+	RealHome func() (string, error)
 }
 
 // TokenIssuer 签发与作废 Agent 令牌。令牌在启动 Pi 前签发，进程停止、退出或被丢弃时作废。
@@ -188,6 +190,9 @@ var _ executor.Executor = (*Executor)(nil)
 
 // New 创建本机执行器。
 func New(o Options, src Source, tmpl *clitemplate.Catalog, inst *clitemplate.Installer, log *slog.Logger) *Executor {
+	if o.RealHome == nil {
+		o.RealHome = os.UserHomeDir
+	}
 	if o.Getenv == nil {
 		o.Getenv = os.Getenv
 	}

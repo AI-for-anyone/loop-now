@@ -47,6 +47,7 @@ type SettingsPatch struct {
 	Directories *bool `json:"directories"`
 	Git         *bool `json:"git"`
 	CLI         *bool `json:"cli"`
+	Logins      *bool `json:"logins"`
 }
 
 // Settings 读取开关。
@@ -56,10 +57,10 @@ func (s *Service) Settings(ctx context.Context) (store.LocalModeSettings, error)
 
 // UpdateSettings 只改请求里带的开关，至少要带一个。
 func (s *Service) UpdateSettings(ctx context.Context, p SettingsPatch) (store.LocalModeSettings, error) {
-	if p.Directories == nil && p.Git == nil && p.CLI == nil {
-		return store.LocalModeSettings{}, apperr.Invalid("body", "至少修改 directories、git、cli 中的一项")
+	if p.Directories == nil && p.Git == nil && p.CLI == nil && p.Logins == nil {
+		return store.LocalModeSettings{}, apperr.Invalid("body", "至少修改 directories、git、cli、logins 中的一项")
 	}
-	return s.Store.UpdateLocalModeSettings(ctx, store.LocalModeSettingsPatch{Directories: p.Directories, Git: p.Git, CLI: p.CLI})
+	return s.Store.UpdateLocalModeSettings(ctx, store.LocalModeSettingsPatch{Directories: p.Directories, Git: p.Git, CLI: p.CLI, Logins: p.Logins})
 }
 
 // ProjectDirectories 返回未删除项目的清单。
@@ -167,14 +168,15 @@ func views(list []store.LocalDirectoryEntry) []DirectoryView {
 }
 
 // Access 返回 agentID（常态或平台 Agent；任务内实例传它的基础 Agent）启动 Pi 时本机模式生效的部分：
-// “绑定本机目录”开启时为项目的清单加 Agent 自己的清单（同一路径只算一次，项目的在前），“用本机的 CLI”开启时接上用户的 PATH。
+// “绑定本机目录”开启时为项目的清单加 Agent 自己的清单（同一路径只算一次，项目的在前），“用本机的 CLI”开启时接上用户的 PATH，
+// “用本机的登录状态”开启时 Pi 沿用用户真实的 HOME。
 // 已删除的基础 Agent（任务仍在进行）照样按它的记录取清单。
 func (s *Service) Access(ctx context.Context, agentID uuid.UUID) (agentconfig.LocalAccess, error) {
 	settings, err := s.Store.GetLocalModeSettings(ctx)
 	if err != nil {
 		return agentconfig.LocalAccess{}, err
 	}
-	out := agentconfig.LocalAccess{UserPath: settings.CLI}
+	out := agentconfig.LocalAccess{UserPath: settings.CLI, Logins: settings.Logins}
 	if !settings.Directories {
 		return out, nil
 	}

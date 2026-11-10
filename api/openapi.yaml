@@ -1431,13 +1431,17 @@ paths:
       tags: [local-mode]
       operationId: getLocalModeSettings
       x-access: console
-      summary: 读取本机模式的三个开关
+      summary: 读取本机模式的四个开关
       description: |
-        个人版“本机模式”：让 Agent 直接使用用户本机已有的东西，三项各有一个开关，全新安装默认全部开启。
+        个人版“本机模式”：让 Agent 直接使用用户本机已有的东西，四项各有一个开关。directories、git、cli 在新装与升级后默认开启；
+        logins 等于让 Agent 以用户本人的身份使用本机工具，新装与升级后都默认关闭，须用户主动打开。
         - directories：绑定本机目录。项目与 Agent 登记的本机目录写进 Pi 系统提示的“文件夹与上下文”一节；关闭时清单照常保存，但不交给任何 Agent。
         - git：用本机的 git 身份。“从 Git 拉取”沿用服务端进程用户真实的 HOME、SSH_AUTH_SOCK 与本机的 credential helper；Agent 的 gh 凭证仍专用于 github.com。
-        - cli：用本机的 CLI。把用户的 PATH 接在执行 PATH 之后（随包 Node、loopctl、CLI 模板目录仍排在前面）；HOME 与登录态仍是 Loop Now 里配置的账号。
-        directories 与 cli 的改动在 Pi 下次启动时生效（下一次派发发现变化即重启，不打断进行中的回复）；git 从下一次拉取生效。
+        - cli：用本机的 CLI。把用户的 PATH 接在执行 PATH 之后（随包 Node、loopctl、CLI 模板目录仍排在前面）；不改变 HOME 与登录态。
+        - logins：用本机的登录状态。Pi 及其子进程的 HOME（Windows 上另有 USERPROFILE、APPDATA、LOCALAPPDATA）改为服务端进程用户真实的，
+          本机各工具已有的登录可以直接使用；在 Loop Now 里给 Agent 配了账号的 CLI 仍用配置的账号（经各工具自己的配置目录变量指回 Agent 目录），
+          Pi 的会话与配置、Loop Now 的凭证文件和插件数据都不落到用户目录。与 cli 相互独立：只开 logins 时，只有执行 PATH 里已有的命令能用上本机登录。
+        directories、cli 与 logins 的改动在 Pi 下次启动时生效（下一次派发发现变化即重启，不打断进行中的回复，任务内的实例同样）；git 从下一次拉取生效。
       responses:
         "200":
           headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
@@ -10240,12 +10244,13 @@ components:
 
     LocalModeSettings:
       type: object
-      required: [directories, git, cli]
+      required: [directories, git, cli, logins]
       additionalProperties: false
       properties:
         directories: { type: boolean, description: 绑定本机目录 }
         git: { type: boolean, description: “从 Git 拉取”用本机的 git 身份 }
         cli: { type: boolean, description: 执行 PATH 之后接上用户的 PATH }
+        logins: { type: boolean, description: Pi 的执行环境沿用用户真实的 HOME，本机工具的登录可用（默认关闭） }
 
     LocalModeSettingsPatch:
       type: object
@@ -10255,6 +10260,7 @@ components:
         directories: { type: boolean }
         git: { type: boolean }
         cli: { type: boolean }
+        logins: { type: boolean }
 
     LocalDirectoryInput:
       type: object

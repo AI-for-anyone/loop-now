@@ -103,9 +103,9 @@ func TestBaselineShape(t *testing.T) {
 		}
 		rows.Close()
 	}
-	var dirs, git, cli bool
-	if err := d.QueryRow(ctx, `SELECT directories, git, cli FROM local_mode_settings`).Scan(&dirs, &git, &cli); err != nil || !dirs || !git || !cli {
-		t.Errorf("本机模式开关应默认全开：%v %v %v %v", dirs, git, cli, err)
+	var dirs, git, cli, logins bool
+	if err := d.QueryRow(ctx, `SELECT directories, git, cli, logins FROM local_mode_settings`).Scan(&dirs, &git, &cli, &logins); err != nil || !dirs || !git || !cli || logins {
+		t.Errorf("本机模式开关：目录、git、CLI 应默认开启，登录状态默认关闭：%v %v %v %v %v", dirs, git, cli, logins, err)
 	}
 	var seqs string
 	if err := d.QueryRow(ctx, `SELECT group_concat(name || '=' || value, ',') FROM (SELECT * FROM sequences ORDER BY name)`).Scan(&seqs); err != nil ||
@@ -122,7 +122,7 @@ func TestBaselineShape(t *testing.T) {
 }
 
 // latestVersion 是最后一条迁移的版本号；新增迁移时同步修改。
-const latestVersion = 2
+const latestVersion = 3
 
 // TestMigrateToBaseline：导入旧库时先只迁到基线（没有基线之后新增的表），再迁到最新。
 func TestMigrateToBaseline(t *testing.T) {

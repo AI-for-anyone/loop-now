@@ -13,6 +13,7 @@ type LocalModeSettings struct {
 	Directories bool `json:"directories"` // 绑定本机目录
 	Git         bool `json:"git"`         // “从 Git 拉取”用本机的 git 身份
 	CLI         bool `json:"cli"`         // 执行 PATH 之后接上用户的 PATH
+	Logins      bool `json:"logins"`      // Pi 的执行环境沿用用户真实的 HOME（默认关闭）
 }
 
 // LocalModeSettingsPatch 只改非空的字段。
@@ -20,6 +21,7 @@ type LocalModeSettingsPatch struct {
 	Directories *bool
 	Git         *bool
 	CLI         *bool
+	Logins      *bool
 }
 
 // LocalDirectoryEntry 是本机目录清单的一项；备注为空表示没有备注。
@@ -37,15 +39,15 @@ type LocalDirectoryList struct {
 // GetLocalModeSettings 读取本机模式开关。
 func (s *Store) GetLocalModeSettings(ctx context.Context) (LocalModeSettings, error) {
 	var out LocalModeSettings
-	err := s.Pool.QueryRow(ctx, `SELECT directories, git, cli FROM local_mode_settings WHERE singleton`).Scan(&out.Directories, &out.Git, &out.CLI)
+	err := s.Pool.QueryRow(ctx, `SELECT directories, git, cli, logins FROM local_mode_settings WHERE singleton`).Scan(&out.Directories, &out.Git, &out.CLI, &out.Logins)
 	return out, err
 }
 
 // UpdateLocalModeSettings 修改 p 中给出的开关，返回修改后的全部开关。
 func (s *Store) UpdateLocalModeSettings(ctx context.Context, p LocalModeSettingsPatch) (LocalModeSettings, error) {
 	var out LocalModeSettings
-	err := s.Pool.QueryRow(ctx, `UPDATE local_mode_settings SET directories = coalesce($1, directories), git = coalesce($2, git), cli = coalesce($3, cli), updated_at = now()
-		WHERE singleton RETURNING directories, git, cli`, p.Directories, p.Git, p.CLI).Scan(&out.Directories, &out.Git, &out.CLI)
+	err := s.Pool.QueryRow(ctx, `UPDATE local_mode_settings SET directories = coalesce($1, directories), git = coalesce($2, git), cli = coalesce($3, cli), logins = coalesce($4, logins), updated_at = now()
+		WHERE singleton RETURNING directories, git, cli, logins`, p.Directories, p.Git, p.CLI, p.Logins).Scan(&out.Directories, &out.Git, &out.CLI, &out.Logins)
 	return out, err
 }
 

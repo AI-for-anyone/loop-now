@@ -66,6 +66,9 @@ type LocalAccess struct {
 	Directories []LocalDirectory
 	// UserPath 为真时把用户的 PATH 接在执行 PATH 之后（“用本机的 CLI”）。
 	UserPath bool
+	// Logins 为真时 Pi 及其子进程的 HOME（Windows 上另有 USERPROFILE、APPDATA、LOCALAPPDATA）是服务端用户真实的
+	// （“用本机的登录状态”）；Loop Now 给 Agent 配了账号的 CLI 仍以 Agent 的独立 HOME 运行。
+	Logins bool `json:"logins,omitempty"`
 }
 
 // LocalDirectory 是一个生效的本机目录。
@@ -75,9 +78,9 @@ type LocalDirectory struct {
 	Inherited bool   `json:"inherited,omitempty"` // 来自项目的清单
 }
 
-// Identity 是决定 Pi 是否需要重启的指纹：目录（含备注与来源）与 PATH 开关，不含目录此刻是否存在。
+// Identity 是决定 Pi 是否需要重启的指纹：目录（含备注与来源）、PATH 与登录状态两个开关，不含目录此刻是否存在。
 func (l LocalAccess) Identity() string {
-	if len(l.Directories) == 0 && !l.UserPath {
+	if len(l.Directories) == 0 && !l.UserPath && !l.Logins {
 		return ""
 	}
 	b, _ := json.Marshal(l)
