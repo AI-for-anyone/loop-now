@@ -211,6 +211,34 @@ describe('回复的显示', () => {
     expect(container.querySelector('.riso-cursor')).toBeNull()
   })
 
+  it('/pi: 扩展命令由 Pi 直接处理（piCommand.handled）：用户消息照原文显示，回复处说明命令已执行、没有回复；展开成提示的命令照常显示回复', () => {
+    const handled = makeRun({ startedAt: '2026-10-12T08:00:00Z', piCommand: { name: 'review', handled: true } })
+    const expanded = makeRun({ startedAt: '2026-10-12T08:00:01Z', piCommand: { name: 'skill:triage', handled: false } })
+    const plain = makeRun({ startedAt: '2026-10-12T08:00:02Z' })
+    render(
+      <List
+        {...props}
+        pages={{
+          pages: [{
+            messages: [
+              makeMessage({ text: '/pi:review src/', run: handled }), makeMessage({ role: 'assistant', text: '', run: handled }),
+              makeMessage({ text: '/pi:skill:triage 看看', run: expanded }), makeMessage({ role: 'assistant', text: '分好类了', run: expanded }),
+              makeMessage({ text: '普通问题', run: plain }), makeMessage({ role: 'assistant', text: '', run: plain }),
+            ],
+            hasMore: false,
+            hasMoreAfter: false,
+          }],
+          pageParams: [null],
+        }}
+        onLoadOlder={() => {}}
+      />,
+    )
+    expect(screen.getByText('/pi:review src/')).toBeInTheDocument()
+    expect(screen.getByText('/pi:skill:triage 看看')).toBeInTheDocument()
+    expect(screen.getByText('分好类了')).toBeInTheDocument()
+    expect(screen.getAllByText('命令已执行，没有回复')).toHaveLength(1)
+  })
+
   it('打断消息在用户消息上方标明“打断”', () => {
     const run = makeRun({ whenBusy: 'interrupt' })
     render(

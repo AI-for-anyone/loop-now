@@ -36,6 +36,8 @@ function ReplyBubble({ turn, agent, located }: { turn: Turn; agent: Pick<Schemas
   const { run, reply } = turn
   const ended = run.status === 'completed' || run.status === 'failed' || run.status === 'interrupted'
   const streaming = reply?.live === true && run.status === 'running'
+  // /pi: 扩展命令由 Pi 直接处理、没有交给模型：这一轮正常结束、没有助手回复，说明一句而不是留空。
+  const commandOnly = run.piCommand?.handled === true && run.status === 'completed' && (!reply || reply.text === '')
   return (
     <AgentChatReply agent={agent} metadata={<>{ended && <span>{t.chat.time(run.endedAt ?? runStartedAt(run))}</span>}<RunStatusBadge run={run} /></>}>
       <FailureNote run={run} />
@@ -43,6 +45,8 @@ function ReplyBubble({ turn, agent, located }: { turn: Turn; agent: Pick<Schemas
         <div className={cn(ended && run.status !== 'completed' && 'text-ink-500')}>
           <Markdown text={reply.text} cursor={streaming} />
         </div>
+      ) : commandOnly ? (
+        <p data-pi-command-handled className="text-[14.5px] text-ink-500">{t.chat.piCommandHandled}</p>
       ) : (
         streaming && (
           <p>
