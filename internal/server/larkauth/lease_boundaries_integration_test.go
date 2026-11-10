@@ -30,7 +30,9 @@ func TestLarkLeaseBoundaryNoLateOrForeignCommit(t *testing.T) {
 			}
 			waitExpired := func() {
 				t.Helper()
-				for !time.Now().After(until) {
+				// 按墙上时钟比较（Round(0) 去掉单调读数）：库里的 clock_timestamp() 用的是墙上时钟，
+				// Windows 上它比单调时钟粗，按单调时钟判断"已过期"时库里可能还没过。
+				for !time.Now().Round(0).After(until.Round(0)) {
 					time.Sleep(time.Millisecond)
 				}
 			}
