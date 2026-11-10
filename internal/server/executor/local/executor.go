@@ -385,9 +385,13 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 					e.turnFinished(p)
 					return nil, fail(executor.ErrCredentialUnavailable, "CLI凭证缓存重建失败")
 				}
-				if err := seedModelAuth(snap, p.dirs); err != nil {
-					e.turnFinished(p)
-					return nil, fail(executor.ErrCredentialUnavailable, "模型凭证缓存重建失败")
+				// 插件提供方的订阅账号：auth.json 是指向账号状态目录的链接（prepare 建的，进程身份含 stateIdentity，
+				// 复用时必然还是同一份），不能当普通凭证重写，否则会把链接换成文件或直接失败。
+				if snap.ProviderState == nil {
+					if err := seedModelAuth(snap, p.dirs); err != nil {
+						e.turnFinished(p)
+						return nil, fail(executor.ErrCredentialUnavailable, "模型凭证缓存重建失败")
+					}
 				}
 				if err := syncModelsJSON(snap, p.dirs); err != nil {
 					e.turnFinished(p)

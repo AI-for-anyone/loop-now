@@ -65,6 +65,13 @@ func TestProviderStateLinks(t *testing.T) {
 		if got := readLink(t, filepath.Join(d.home, ".pi", "fake-oauth")); got != filepath.Join(dir, ".pi", "fake-oauth") {
 			t.Fatalf("状态路径链接：%s", got)
 		}
+		// 第二条消息复用同一个 Pi 进程：不能把 auth.json 当普通凭证重写（真实登录后第二条消息曾因此失败）。
+		if res, _ := h.exec(id, "again"); res.Outcome != executor.OutcomeCompleted {
+			t.Fatalf("复用进程的第二条消息：%+v", res)
+		}
+		if got := readLink(t, filepath.Join(d.pi, "auth.json")); got != filepath.Join(dir, "auth.json") {
+			t.Fatalf("复用后 auth.json 链接：%s", got)
+		}
 	}
 	// 经一个 Agent 的 HOME 写入，另一个 Agent 与状态目录都看得到（扩展自己刷新的令牌由同项目的 Agent 共用）。
 	if err := os.WriteFile(filepath.Join(h.e.dirs(a).home, ".pi", "fake-oauth", "refreshed.json"), []byte("new"), 0o600); err != nil {
