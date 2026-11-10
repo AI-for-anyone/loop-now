@@ -44,6 +44,12 @@ func TestPiCommandRuns(t *testing.T) {
 	if h[0].Text != "/pi:handled-cmd gui" || h[1].Text != "" || h[1].Run.Status != "completed" || h[1].Run.PiCommand == nil || h[1].Run.PiCommand.Name != "handled-cmd" || !h[1].Run.PiCommand.Handled {
 		t.Fatalf("扩展命令：%+v %+v", h[0], h[1].Run)
 	}
+	if n := h[1].Run.PiCommand.Notices; len(n) != 2 || n[1].Level != "warning" || n[1].Message != "Weekly Limit\n   Used       1%" || !h[1].Run.PiCommand.Truncated {
+		t.Fatalf("命令输出随执行记录保存：%+v", h[1].Run.PiCommand)
+	}
+	if h[3].Run.PiCommand != nil && (len(h[3].Run.PiCommand.Notices) != 0 || h[3].Run.PiCommand.Truncated) {
+		t.Fatalf("没被直接处理的命令不收通知：%+v", h[3].Run.PiCommand)
+	}
 	if h[2].Text != "/pi:skill:review 看看" || h[3].Run.PiCommand == nil || h[3].Run.PiCommand.Name != "skill:review" || h[3].Run.PiCommand.Handled || h[3].Text != "回复：/skill:review 看看" {
 		t.Fatalf("技能命令：%+v %+v", h[2], h[3].Run)
 	}

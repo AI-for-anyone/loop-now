@@ -76,6 +76,16 @@ type Result struct {
 	ConfigVersion int64
 	// CommandHandled 表示 Pi 直接处理了这次的消息（扩展命令），没有交给模型、没有回复。
 	CommandHandled bool
+	// CommandNotices 是 CommandHandled 时命令执行期间扩展用 ctx.ui.notify 给出的消息（命令的输出），按顺序；
+	// CommandNoticesTruncated 表示超过上限（50 条、合计 16 KiB）被截断。
+	CommandNotices          []CommandNotice
+	CommandNoticesTruncated bool
+}
+
+// CommandNotice 是 Pi 命令执行期间扩展给出的一条通知（扩展原文，纯文本，保留换行与空格）。
+type CommandNotice struct {
+	Level   string `json:"level"` // info / warning / error
+	Message string `json:"message"`
 }
 
 // Sink 接收执行过程中的事件。回调可能来自执行器内部的协程，实现须尽快返回。

@@ -498,6 +498,13 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 
 func (s *Service) finish(ctx context.Context, run store.Run, res executor.Result, command string) {
 	end := store.RunEnd{Text: res.Text, ConfigVersion: res.ConfigVersion, PiCommand: command, PiCommandHandled: command != "" && res.CommandHandled}
+	if end.PiCommandHandled {
+		notices := res.CommandNotices
+		if notices == nil {
+			notices = []executor.CommandNotice{}
+		}
+		end.PiCommandNotices, _ = json.Marshal(map[string]any{"notices": notices, "truncated": res.CommandNoticesTruncated})
+	}
 	switch res.Outcome {
 	case executor.OutcomeCompleted:
 		end.Status = "completed"

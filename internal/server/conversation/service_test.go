@@ -48,7 +48,8 @@ func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink execu
 		f.mu.Unlock()
 		f.started <- req.Message
 		if strings.HasPrefix(req.Message, "/handled") {
-			return executor.Result{Outcome: executor.OutcomeCompleted, ConfigVersion: 1, CommandHandled: true}, nil
+			return executor.Result{Outcome: executor.OutcomeCompleted, ConfigVersion: 1, CommandHandled: true,
+				CommandNotices: []executor.CommandNotice{{Level: "info", Message: "Fetching…"}, {Level: "warning", Message: "Weekly Limit\n   Used       1%"}}, CommandNoticesTruncated: true}, nil
 		}
 		return executor.Result{Outcome: executor.OutcomeCompleted, Text: "回复：" + req.Message, ConfigVersion: 1}, nil
 	}
