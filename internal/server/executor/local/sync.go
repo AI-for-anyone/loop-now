@@ -41,6 +41,7 @@ type prepared struct {
 	env        []string
 	skillDirs  []string
 	cliBinDirs []string
+	cliBins    []string // 放进执行 PATH 的模板 CLI 可执行文件（与 cliBinDirs 一一对应）
 }
 
 // prepare 按规则同步配置：安装缺失的模板 CLI、重建 Skills 与 Prompt、先删后写凭证文件、同步工作区来源。
@@ -76,6 +77,7 @@ func (e *Executor) prepare(ctx context.Context, snap agentconfig.Snapshot, d age
 			return p, fail(executor.ErrCLIInstallFailed, "%s：%v", cli, err)
 		}
 		p.cliBinDirs = append(p.cliBinDirs, dir)
+		p.cliBins = append(p.cliBins, filepath.Join(dir, t.Binary))
 		if cli == "gh" {
 			ghBin = filepath.Join(dir, t.Binary)
 		}
@@ -112,7 +114,14 @@ func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d 
 	if err := writePluginMCP(d, snap.Plugins); err != nil {
 		return err
 	}
-	prompt, err := e.appendedPrompt(snap, d)
+	// “用本机的登录状态”：Pi 的 HOME 是用户真实的主目录；d.home 不变，凭证文件、清理与回收都只认 d.home。
+	loginHome := ""
+	if snap.Local.Logins {
+		if loginHome, err = e.o.RealHome(); err != nil || !filepath.IsAbs(loginHome) {
+			return fail(executor.ErrInternal, "读取服务端用户的主目录失败（“用本机的登录状态”需要它）")
+		}
+	}
+	prompt, err := e.appendedPrompt(snap, d, loginHome)
 	if err != nil {
 		return err
 	}
@@ -138,14 +147,28 @@ func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d 
 	if snap.Local.UserPath && e.o.UserPath != nil {
 		userPath = e.o.UserPath(ctx)
 	}
-	p.env = e.buildEnv(d, snap, p.cliBinDirs, userPath, e.snapshotLog(snap).With("runId", runID))
-	// 4. 工作区来源。
-	return e.syncSources(ctx, snap, d, p.env, ghBin, outcomes)
+	log := e.snapshotLog(snap).With("runId", runID)
+	// 开着登录状态时，受管 CLI 经恢复独立 HOME 的小脚本运行；关着时清掉旧脚本。
+	shimDir, err := syncCLIShims(d, loginHome, p.cliBins, e.loginOnlyEnv())
+	if err != nil {
+		return err
+	}
+	pathDirs := p.cliBinDirs
+	if shimDir != "" {
+		pathDirs = []string{shimDir}
+	}
+	p.env = e.buildEnv(d, snap, pathDirs, userPath, loginHome, log)
+	// 4. 工作区来源：平台替 Agent 做的克隆不随登录状态开关，用开关关着时的环境。
+	sourceEnv := p.env
+	if loginHome != "" {
+		sourceEnv = e.buildEnv(d, snap, p.cliBinDirs, userPath, "", log)
+	}
+	return e.syncSources(ctx, snap, d, sourceEnv, ghBin, outcomes)
 }
 
 // appendedPrompt 是 --append-system-prompt 文件的内容：Agent 的 Prompt 加上“文件夹与上下文”一节。
-func (e *Executor) appendedPrompt(snap agentconfig.Snapshot, d agentDirs) (string, error) {
-	section, err := e.contextPrompt(snap, d)
+func (e *Executor) appendedPrompt(snap agentconfig.Snapshot, d agentDirs, loginHome string) (string, error) {
+	section, err := e.contextPrompt(snap, d, loginHome)
 	if err != nil {
 		return "", err
 	}

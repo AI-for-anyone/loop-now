@@ -60,8 +60,19 @@ func (f fixture) dir(t *testing.T, name string) string {
 func TestSettingsDefaultOnAndPartialUpdate(t *testing.T) {
 	f := newFixture(t)
 	s, err := f.svc.Settings(f.ctx)
-	if err != nil || !s.Directories || !s.Git || !s.CLI {
-		t.Fatalf("默认应全开：%+v %v", s, err)
+	if err != nil || !s.Directories || !s.Git || !s.CLI || s.Logins {
+		t.Fatalf("目录、git、CLI 应默认开启，登录状态默认关闭：%+v %v", s, err)
+	}
+	s, err = f.svc.UpdateSettings(f.ctx, localmode.SettingsPatch{Logins: bp(true)})
+	if err != nil || !s.Logins || !s.Directories || !s.Git || !s.CLI {
+		t.Fatalf("只打开登录状态：%+v %v", s, err)
+	}
+	if got, _ := f.svc.Access(f.ctx, f.agent); !got.Logins {
+		t.Fatalf("Access 应带上登录状态：%+v", got)
+	}
+	s, err = f.svc.UpdateSettings(f.ctx, localmode.SettingsPatch{Logins: bp(false)})
+	if err != nil || s.Logins {
+		t.Fatalf("关掉登录状态：%+v %v", s, err)
 	}
 	s, err = f.svc.UpdateSettings(f.ctx, localmode.SettingsPatch{Git: bp(false)})
 	if err != nil || !s.Directories || s.Git || !s.CLI {
@@ -197,6 +208,13 @@ func TestAccessMergesListsAndFollowsSwitches(t *testing.T) {
 	}
 	if off, _ = f.svc.Access(f.ctx, f.agent); off.UserPath || off.Identity() != "" {
 		t.Fatalf("全关后应为空：%+v", off)
+	}
+	// 只开登录状态也有指纹（开关变化要重启 Pi）。
+	if _, err := f.svc.UpdateSettings(f.ctx, localmode.SettingsPatch{Logins: bp(true)}); err != nil {
+		t.Fatal(err)
+	}
+	if on, _ := f.svc.Access(f.ctx, f.agent); !on.Logins || on.Identity() == "" {
+		t.Fatalf("只开登录状态：%+v", on)
 	}
 }
 

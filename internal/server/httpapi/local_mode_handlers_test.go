@@ -16,8 +16,11 @@ import (
 func TestLocalModeEndpoints(t *testing.T) {
 	e := newEnv(t)
 	settings := decode[store.LocalModeSettings](t, e.expect(200, "GET", "/local-mode-settings", nil))
-	if !settings.Directories || !settings.Git || !settings.CLI {
-		t.Fatalf("默认应全开：%+v", settings)
+	if !settings.Directories || !settings.Git || !settings.CLI || settings.Logins {
+		t.Fatalf("目录、git、CLI 默认开启，登录状态默认关闭：%+v", settings)
+	}
+	if settings = decode[store.LocalModeSettings](t, e.expect(200, "PATCH", "/local-mode-settings", map[string]any{"logins": true})); !settings.Logins || !settings.Git {
+		t.Fatalf("只打开登录状态：%+v", settings)
 	}
 	settings = decode[store.LocalModeSettings](t, e.expect(200, "PATCH", "/local-mode-settings", map[string]any{"git": false}))
 	if !settings.Directories || settings.Git || !settings.CLI {

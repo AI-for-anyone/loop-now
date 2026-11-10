@@ -110,7 +110,7 @@ func TestLocalDirectoriesPromptWording(t *testing.T) {
 	}
 	// 没有上下文文件夹（测试装配）时仍写出本机目录这一节。
 	e := &Executor{}
-	section, err := e.contextPrompt(agentconfig.Snapshot{Local: agentconfig.LocalAccess{Directories: []agentconfig.LocalDirectory{{Path: dir}}}}, agentDirs{})
+	section, err := e.contextPrompt(agentconfig.Snapshot{Local: agentconfig.LocalAccess{Directories: []agentconfig.LocalDirectory{{Path: dir}}}}, agentDirs{}, "")
 	if err != nil || !strings.HasPrefix(section, "## 文件夹与上下文\n\n- 本机目录") {
 		t.Fatalf("没有上下文文件夹时：%q %v", section, err)
 	}

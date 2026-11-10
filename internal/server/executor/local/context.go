@@ -21,8 +21,8 @@ var entryCandidates = []string{"AGENTS.override.md", "AGENTS.md", "AGENTS.MD", "
 // contextPrompt 返回在 Pi 启动时追加到系统提示的“文件夹与上下文”一节：自己的文件夹与可见的上下文文件夹的绝对路径，
 // 生效的本机目录，以及项目（平台 Agent 为全局）上下文入口 AGENTS.md 的原文（不截断）。自己的入口由 Pi 从工作目录读取，不在这里重复。
 // 只在启动时读取，入口的修改要等 Pi 下次重启才生效；也不参与是否重启的判断（本机目录清单的变化由 snap.Local.Identity 决定重启）。
-func (e *Executor) contextPrompt(snap agentconfig.Snapshot, d agentDirs) (string, error) {
-	local := localDirectoriesPrompt(snap)
+func (e *Executor) contextPrompt(snap agentconfig.Snapshot, d agentDirs, loginHome string) (string, error) {
+	local := localDirectoriesPrompt(snap) + loginsPrompt(loginHome)
 	if e.o.ContextDir == "" {
 		if local == "" {
 			return "", nil
@@ -85,6 +85,17 @@ func localDirectoriesPrompt(snap agentconfig.Snapshot) string {
 	b.WriteString("平台没有它们的回收站，删改前确认是该动的地方，拿不准先问人。这些目录里的 AGENTS.md 等入口不会自动读入，需要时自己读。\n")
 	b.WriteString(items.String())
 	return b.String()
+}
+
+// loginsPrompt 返回“本机登录”一条（含末尾换行）：开着“用本机的登录状态”时告诉 Agent 它以用户本人的身份使用本机工具，
+// 以及遇到需要交互授权的工具时不要反复重试（Pi 没有终端，弹窗或口令提示只会一直等到超时）；关着时为空。
+func loginsPrompt(home string) string {
+	if home == "" {
+		return ""
+	}
+	return "- 本机登录：你的 HOME 是用户本人的主目录 " + home + "，本机工具已有的登录可以直接使用，等于以用户本人的身份操作，" +
+		"改动会影响用户自己的配置与状态；Loop Now 里给你配置了账号的 CLI 仍用配置的账号。遇到需要交互授权的本机工具" +
+		"（弹窗、浏览器登录、输入口令或确认）不要反复重试，告诉用户需要先在本机完成一次授权。\n"
 }
 
 // readEntry 读取上下文文件夹根目录的 AGENTS.md（经 os.Root，不跟随指向文件夹之外的软链接）；不存在或不是普通文件时为空。
