@@ -326,6 +326,12 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 		res.Outcome = executor.OutcomeInterrupted
 	case tr.Outcome == pirpc.OutcomeCompleted:
 		res.Outcome, res.CommandHandled = executor.OutcomeCompleted, tr.Handled
+		if tr.Handled && tr.Notices != nil {
+			res.CommandNoticesTruncated = tr.Notices.Truncated
+			for _, n := range tr.Notices.Items {
+				res.CommandNotices = append(res.CommandNotices, executor.CommandNotice{Level: n.Level, Message: n.Message})
+			}
+		}
 	default:
 		res.Outcome = executor.OutcomeFailed
 		res.ErrorCode, res.ErrorMessage = tr.ErrorCode, tr.ErrorMessage

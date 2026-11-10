@@ -3,6 +3,8 @@
 package apitypes
 
 import (
+	"encoding/json"
+	"loop-now/internal/server/executor"
 	"loop-now/internal/server/messageimage"
 	"time"
 
@@ -237,6 +239,9 @@ func strPtr(s string) *string {
 type RunCommand struct {
 	Name    string `json:"name"`
 	Handled bool   `json:"handled"`
+	// Notices 是 handled 时命令执行期间扩展用 ctx.ui.notify 给出的消息（命令的输出），按顺序；Truncated 表示超过上限被截断。
+	Notices   []executor.CommandNotice `json:"notices"`
+	Truncated bool                     `json:"truncated"`
 }
 
 // FromRun 把执行记录转为接口结构。
@@ -252,7 +257,14 @@ func FromRun(r store.Run) Run {
 		out.Model = &ModelRef{Provider: r.Model.Provider, ModelID: r.Model.Model}
 	}
 	if r.PiCommand != nil {
-		out.PiCommand = &RunCommand{Name: *r.PiCommand, Handled: r.PiCommandHandled}
+		out.PiCommand = &RunCommand{Name: *r.PiCommand, Handled: r.PiCommandHandled, Notices: []executor.CommandNotice{}}
+		var saved struct {
+			Notices   []executor.CommandNotice `json:"notices"`
+			Truncated bool                     `json:"truncated"`
+		}
+		if len(r.PiCommandNotices) > 0 && json.Unmarshal(r.PiCommandNotices, &saved) == nil && saved.Notices != nil {
+			out.PiCommand.Notices, out.PiCommand.Truncated = saved.Notices, saved.Truncated
+		}
 	}
 	if r.Status != "starting" {
 		out.Phase = nil

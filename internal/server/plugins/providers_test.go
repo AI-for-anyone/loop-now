@@ -2,8 +2,11 @@ package plugins_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"loop-now/internal/server/apperr"
@@ -124,5 +127,37 @@ func TestPluginProviderCaptureFailureKeepsInstall(t *testing.T) {
 	d, err := e.svc.Get(ctx, "flaky")
 	if err != nil || d.ProvidersError == nil || len(d.Providers) != 0 {
 		t.Fatalf("读取失败应记原因：%+v %v", d, err)
+	}
+}
+
+// 安装时：声明的状态路径与 CLI 模板的凭证文件重叠，在详情的 providerErrors 里提前提示（仍然安装）。
+func TestProviderStateOverlapWarning(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	e.svc.ManagedHomePaths = func() []string { return []string{".config/gh/hosts.yml"} }
+	dir := plugin(t, t.TempDir(), "overlapper", "0.1.0")
+	b, err := os.ReadFile(filepath.Join(dir, "package.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pkg map[string]any
+	if err := json.Unmarshal(b, &pkg); err != nil {
+		t.Fatal(err)
+	}
+	pkg["loopNow"].(map[string]any)["providerState"] = map[string]any{"fake-oauth": map[string]any{"paths": []any{".config/gh"}}, "fine": map[string]any{"paths": []any{".pi/fine"}}}
+	b, _ = json.Marshal(pkg)
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e.install(plugins.Source{Kind: "local", Location: dir}, true)
+	d, err := e.svc.Get(ctx, "overlapper")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.ProviderErrors) != 1 || d.ProviderErrors[0].Path != "providerState.fake-oauth" || !strings.Contains(d.ProviderErrors[0].Error, ".config/gh/hosts.yml") {
+		t.Fatalf("重叠提示：%+v", d.ProviderErrors)
+	}
+	if len(d.ProviderState) != 2 {
+		t.Fatalf("声明照样保存：%+v", d.ProviderState)
 	}
 }

@@ -124,6 +124,20 @@ func TestProviderStateLinks(t *testing.T) {
 	if res, _ := h.exec(e, "hi"); res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, "重新登录") {
 		t.Fatalf("状态目录不在：%+v", res)
 	}
+	// 声明路径盖住了任何一个 CLI 模板的凭证文件（不只是这个 Agent 配了的）：明确失败，不让每轮删写凭证文件时出错。
+	managed := h.e.tmpl.AllCredentialFilePaths()
+	if len(managed) == 0 {
+		t.Fatal("内置模板应有凭证文件路径")
+	}
+	cover := strings.SplitN(managed[0], "/", 2)[0]
+	g := h.agent(func(s *agentconfig.Snapshot) {
+		st := *state
+		st.Paths = []string{cover}
+		s.ProviderState, s.Plugins = &st, agentconfig.PluginAssets{IDs: []string{"grokish"}}
+	})
+	if res, _ := h.exec(g, "hi"); res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, managed[0]) {
+		t.Fatalf("与模板凭证文件重叠：%+v", res)
+	}
 	// 声明的路径登录时还没写：在状态目录里建空目录再链接。
 	f := h.agent(func(s *agentconfig.Snapshot) {
 		st := *state

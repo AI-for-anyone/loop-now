@@ -63,3 +63,20 @@ func checkStatePath(p string) error {
 	}
 	return nil
 }
+
+// OverlappingStatePath 找出声明的状态路径与平台管理的 HOME 路径（如 CLI 模板的凭证文件）之间的重叠：
+// 相同，或一方是另一方的上级目录，都算。路径都用 / 分隔；没有重叠时 ok 为 false。
+func OverlappingStatePath(declared, managed []string) (decl, path string, ok bool) {
+	for _, d := range declared {
+		for _, m := range managed {
+			m = strings.Trim(strings.ReplaceAll(m, "\\", "/"), "/")
+			if m == "" {
+				continue
+			}
+			if d == m || strings.HasPrefix(m, d+"/") || strings.HasPrefix(d, m+"/") {
+				return d, m, true
+			}
+		}
+	}
+	return "", "", false
+}

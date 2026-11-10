@@ -45,10 +45,16 @@ func TestPiCommandsCachedAndHandled(t *testing.T) {
 	if skill.Name != "skill:review" || skill.Source != "skill" {
 		t.Fatalf("技能命令：%+v", skill)
 	}
-	if res, _ := h.exec(id, "/grok-accounts gui"); res.Outcome != executor.OutcomeCompleted || !res.CommandHandled || res.Text != "" {
+	res, _ := h.exec(id, "/grok-accounts gui")
+	if res.Outcome != executor.OutcomeCompleted || !res.CommandHandled || res.Text != "" {
 		t.Fatalf("扩展命令应由 Pi 直接处理：%+v", res)
 	}
-	if res, _ := h.exec(id, "/unknown x"); res.Outcome != executor.OutcomeCompleted || res.CommandHandled || res.Text == "" {
+	// 命令的输出（notify）按顺序随结果交出，setStatus 不算；多行原文保留。
+	want := []executor.CommandNotice{{Level: "info", Message: "Fetching grok-accounts…"}, {Level: "warning", Message: "Result of grok-accounts\n   Used       1%\n   Args       gui"}}
+	if len(res.CommandNotices) != 2 || res.CommandNotices[0] != want[0] || res.CommandNotices[1] != want[1] || res.CommandNoticesTruncated {
+		t.Fatalf("命令输出：%+v", res.CommandNotices)
+	}
+	if res, _ := h.exec(id, "/unknown x"); res.Outcome != executor.OutcomeCompleted || res.CommandHandled || res.Text == "" || len(res.CommandNotices) != 0 {
 		t.Fatalf("不认识的命令交给模型：%+v", res)
 	}
 }

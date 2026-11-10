@@ -585,6 +585,14 @@ func (s *server) prompt(id json.RawMessage, msg string, images []json.RawMessage
 	}
 	if d.handled || s.extensionCommand(msg) {
 		s.mu.Unlock()
+		if !d.handled {
+			// 与真实扩展命令一样，输出用 ctx.ui.notify 给出（在 prompt 响应之前），一条普通进度、一条多行结果。
+			name, args, _ := strings.Cut(strings.TrimPrefix(msg, "/"), " ")
+			s.emit(map[string]any{"type": "extension_ui_request", "id": "notify-" + shortID(), "method": "notify", "message": "Fetching " + name + "…"})
+			s.emit(map[string]any{"type": "extension_ui_request", "id": "notify-" + shortID(), "method": "notify", "notifyType": "warning",
+				"message": "Result of " + name + "\n   Used       1%\n   Args       " + args})
+			s.emit(map[string]any{"type": "extension_ui_request", "id": "status-" + shortID(), "method": "setStatus", "statusKey": name, "statusText": "done"})
+		}
 		s.ok(id, "prompt", map[string]any{"disposition": "handled"})
 		return
 	}

@@ -52,6 +52,8 @@ type Service struct {
 	Models *modelcatalog.Registry
 	// DeleteProviderAccounts 删除这些模型提供方的项目订阅账号（卸载并删除数据时）；为空时不删。
 	DeleteProviderAccounts func(ctx context.Context, providers []string) error
+	// ManagedHomePaths 返回平台在 Agent HOME 里管理的路径（CLI 模板的凭证文件）；安装时据此提示与之重叠的状态路径。
+	ManagedHomePaths func() []string
 
 	mu       sync.Mutex
 	previews map[uuid.UUID]*preview
@@ -513,6 +515,17 @@ func (s *Service) install(ctx context.Context, pv *preview, update string) (View
 		declared = map[string]pluginmanifest.ProviderState{}
 	}
 	state, _ := json.Marshal(declared)
+	// 与平台管理的 HOME 路径重叠的状态路径：Agent 启动时会失败，安装时先在详情里提示。
+	if s.ManagedHomePaths != nil {
+		managed := s.ManagedHomePaths()
+		for _, provider := range slices.Sorted(maps.Keys(declared)) {
+			if p, m, ok := pluginmanifest.OverlappingStatePath(declared[provider].Paths, managed); ok {
+				providers.Errors = append(providers.Errors, modelcatalog.CaptureError{Path: "providerState." + provider,
+					Error: "状态路径 " + p + " 与 CLI 模板的凭证文件 " + m + " 重叠，用这个提供方的 Agent 启动时会失败"})
+			}
+		}
+		captured, _ = json.Marshal(providers)
+	}
 	extra := store.PluginVersionExtras{Providers: captured, ProvidersError: providersError, ProviderState: state}
 	row := store.Plugin{ID: m.ID, DisplayName: m.DisplayName.String(), Source: source, Version: m.Version, Manifest: manifest, InstallDir: installDir}
 	if update == "" {

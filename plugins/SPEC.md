@@ -271,6 +271,6 @@ export default function register(api: PluginAPI) {
 Pi 的 RPC 模式下，首字符为 `/` 的提示会被 Pi 当作命令：扩展注册的命令直接执行（不交给模型），技能命令 `/skill:<名称>` 与提示模板展开成普通提示。平台约定在前端把这类命令写成 `/pi:<name>`：
 
 - **发送**：对话页消息以 `/pi:<name>` 开头（name 非空、不含空白）时，消息照原文保存与显示，执行时发给 Pi 的是 `/<name>` 加其余原文，不加运行 ID 与平台通知；带图片时图片照常交给 Pi（扩展命令不用图片，技能命令与提示模板展开后随提示交给模型）。这类消息不给插件的 `console.command` 认领。不带 `pi:` 的 `/xxx` 维持原样：先给插件认领，没人认领时作为普通消息（带运行 ID）交给 Agent，所以不会触发 Pi 命令。任务节点的消息不做改写。
-- **结果**：执行记录带 `piCommand: { name, handled }`。handled 为 true 表示 Pi 直接处理了命令、没有交给模型，这一轮以 completed 结束，没有助手回复；命令里的 `ctx.ui.notify`、`setStatus` 照常记为运行事件，弹出的对话照常转成提问。命令事后用 `sendUserMessage` 等触发的新一轮模型回复不算进这次执行（已知限制）。
+- **结果**：执行记录带 `piCommand: { name, handled, notices, truncated }`。handled 为 true 表示 Pi 直接处理了命令、没有交给模型，这一轮以 completed 结束，没有助手回复；扩展命令的输出多半用 `ctx.ui.notify` 给出，所以命令执行期间的 notify 按顺序收进 `notices`（`{level, message}`，扩展原文、纯文本），随执行记录保存（不依赖按时间清理的运行事件），对话里直接显示；最多 50 条、合计 16 KiB，超出截断并标 `truncated`。`setStatus` 等状态不收，照常记为运行事件；弹出的对话照常转成提问。handled 为 false 时 notices 为空。命令事后用 `sendUserMessage` 等触发的新一轮模型回复不算进这次执行（已知限制）。
 - **列表**：`GET /agents/{agentId}/commands` 返回 Agent 上次启动 Pi 时（RPC `get_commands`）读到的扩展命令、提示模板与技能命令，按来源文件所在的安装目录标出所属插件；平台不为列命令专门启动 Pi，从没启动过时为空。插件平台侧的 `console.command` 是认领型 Hook，没有可列举的命令名，不在列表里。
 - 会起本地页面的命令（如 `/grok-cli-accounts gui`）不特殊处理，用户知情。
