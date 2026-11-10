@@ -32,7 +32,7 @@ describe('全局设置：本机模式', () => {
     expect(directories).toBeChecked()
     expect(git).not.toBeChecked()
     expect(cli).toBeChecked()
-    expect(git).toHaveAccessibleDescription(/SSH 密钥和已保存的 git 凭证/)
+    expect(git).toHaveAccessibleDescription(/HTTPS 地址可以用这台电脑上已保存的 git 凭证.*SSH 地址用 ~\/\.ssh 下的密钥不受这个开关影响/)
     expect(cli).toHaveAccessibleDescription(/登录状态仍用 Loop Now 里配置的账号/)
     expect(directories).toHaveAccessibleDescription(/关闭后清单保留，但不再告诉任何 Agent/)
 
@@ -194,52 +194,67 @@ describe('Agent 配置：本机目录', () => {
 })
 
 describe('从 Git 拉取失败：本机 git 身份的提示', () => {
-  const failedPull = (errorCode: GitPull['errorCode']): GitPull => ({
-    id: crypto.randomUUID(), agentId: 'a', url: 'git@code.example.net:team/app.git', branch: 'main', path: 'app', status: 'failed', errorCode,
-    errorMessage: 'git@code.example.net: Permission denied (publickey).', createdAt: '2026-11-10T08:00:00Z', finishedAt: '2026-11-10T08:00:05Z',
+  const HTTPS = 'https://code.example.net/team/app.git'
+  const SSH = 'git@code.example.net:team/app.git'
+  const failedPull = (errorCode: GitPull['errorCode'], url: string): GitPull => ({
+    id: crypto.randomUUID(), agentId: 'a', url, branch: 'main', path: 'app', status: 'failed', errorCode,
+    errorMessage: 'fatal: Authentication failed', createdAt: '2026-11-10T08:00:00Z', finishedAt: '2026-11-10T08:00:05Z',
   })
-  function setup(errorCode: GitPull['errorCode'], git: boolean) {
-    const local = localModeBackend({ settings: { git } })
-    server.use(...local.handlers)
+  // 开关的读取次数：只有 HTTPS 地址认证失败时才需要读。
+  function setup(errorCode: GitPull['errorCode'], url: string, git: boolean) {
+    const reads = { count: 0 }
+    server.use(http.get(apiUrl('/local-mode-settings'), () => {
+      reads.count++
+      return HttpResponse.json({ directories: true, git, cli: true } satisfies Schemas['LocalModeSettings'])
+    }))
     const base = createMockFolder({ key: 'w', preset: 'workspace', latency: 0, git: true })
-    const source: FolderSource = { ...base, git: { ...base.git!, list: async () => [failedPull(errorCode)] } }
-    return renderRoutes([
+    const source: FolderSource = { ...base, git: { ...base.git!, list: async () => [failedPull(errorCode, url)] } }
+    const view = renderRoutes([
       { path: '/', element: <FileManager source={source} rootLabel="开发助手 的文件夹" limits={limits} className="h-[600px]" /> },
       { path: '/settings', element: <p>全局设置</p> },
     ], '/')
+    return { reads, ...view }
   }
 
-  it('认证失败且开关关着：提示去打开，链到全局设置的本机模式', async () => {
-    const { router } = setup('auth_failed', false)
+  it('HTTPS 地址认证失败且开关关着：提示去打开，链到全局设置的本机模式', async () => {
+    const { router } = setup('auth_failed', HTTPS, false)
     expect(await screen.findByText('拉取失败：认证失败')).toBeInTheDocument()
     const hint = await screen.findByRole('note')
-    expect(hint).toHaveTextContent('“用本机的 git 身份”没有打开')
+    expect(hint).toHaveTextContent('“用本机的 git 身份”没有打开，HTTPS 地址的拉取用不到这台电脑上已保存的 git 凭证。')
     await userEvent.setup().click(within(hint).getByRole('link', { name: '去全局设置打开' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/settings'))
     expect(router.state.location.hash).toBe('#local-mode')
   })
 
-  it('认证失败但开关开着：不额外提示，照常可以看 git 输出', async () => {
-    setup('auth_failed', true)
+  it('HTTPS 地址认证失败但开关开着：不额外提示，照常可以看 git 输出', async () => {
+    const { reads } = setup('auth_failed', HTTPS, true)
     expect(await screen.findByText('拉取失败：认证失败')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '查看 git 输出' })).toBeInTheDocument()
-    await waitFor(() => expect(screen.queryByRole('note')).toBeNull())
+    await waitFor(() => expect(reads.count).toBe(1))
+    expect(screen.queryByRole('note')).toBeNull()
   })
 
-  it('SSH 主机未确认且开关开着：说明要先在本机终端核对指纹', async () => {
-    setup('host_key_unverified', true)
+  it('SSH 地址认证失败：开关关着也不提示去打开（~/.ssh 的密钥不受开关影响），照常看 git 输出', async () => {
+    const { reads } = setup('auth_failed', SSH, false)
+    expect(await screen.findByText('拉取失败：认证失败')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看 git 输出' })).toBeInTheDocument()
+    expect(screen.queryByRole('note')).toBeNull()
+    expect(reads.count).toBe(0)
+  })
+
+  it('SSH 主机未确认：不论开关，都提示先在本机终端核对指纹', async () => {
+    const { reads } = setup('host_key_unverified', SSH, false)
     expect(await screen.findByText('拉取失败：SSH 主机密钥未确认')).toBeInTheDocument()
-    expect(await screen.findByRole('note')).toHaveTextContent('ssh -T git@主机名')
+    const hint = await screen.findByRole('note')
+    expect(hint).toHaveTextContent('ssh -T git@主机名')
+    expect(within(hint).queryByRole('link')).toBeNull()
+    expect(reads.count).toBe(0)
   })
 
   it('其他失败不读取开关、不提示', async () => {
-    let reads = 0
-    server.use(http.get(apiUrl('/local-mode-settings'), () => { reads++; return HttpResponse.json({ directories: true, git: false, cli: true } satisfies Schemas['LocalModeSettings']) }))
-    const base = createMockFolder({ key: 'w', preset: 'workspace', latency: 0, git: true })
-    const source: FolderSource = { ...base, git: { ...base.git!, list: async () => [failedPull('clone_failed')] } }
-    renderRoutes([{ path: '/', element: <FileManager source={source} rootLabel="开发助手 的文件夹" limits={limits} className="h-[600px]" /> }], '/')
+    const { reads } = setup('clone_failed', HTTPS, false)
     expect(await screen.findByText('拉取失败：无法克隆仓库')).toBeInTheDocument()
     expect(screen.queryByRole('note')).toBeNull()
-    expect(reads).toBe(0)
+    expect(reads.count).toBe(0)
   })
 })

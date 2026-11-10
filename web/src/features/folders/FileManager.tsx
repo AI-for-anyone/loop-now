@@ -250,7 +250,7 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className }:
         </section>
       </div>
 
-      {pull?.status === 'failed' && <GitPullHint errorCode={pull.errorCode} />}
+      {pull?.status === 'failed' && <GitPullHint pull={pull} />}
       {pull?.status === 'failed' && pullDetails && pull.errorMessage && (
         <pre className="max-h-32 shrink-0 overflow-auto border-t border-ink/10 bg-tint-red/40 px-4 py-2 font-mono text-[11.5px] leading-[1.6] whitespace-pre-wrap text-red-text">{pull.errorMessage}</pre>
       )}

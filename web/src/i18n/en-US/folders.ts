@@ -116,7 +116,7 @@ export const folders = {
       server_restart: 'Server restarted; aborted',
     },
     hints: {
-      enableGit: '"Use local git identity" is off, so the pull can\'t use the SSH keys, known_hosts or saved git credentials on this computer. Turn it on, then retry.',
+      enableGit: '"Use local git identity" is off, so pulls from HTTPS addresses can\'t use the git credentials saved on this computer. Turn it on, then retry.',
       openSettings: 'Turn it on in global settings',
       hostKey: "The pull won't confirm an SSH host's fingerprint for you. Connect to the host once in a terminal on this computer (for example ssh -T git@hostname) to check the fingerprint, then retry.",
     },
