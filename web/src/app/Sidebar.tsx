@@ -2,7 +2,8 @@ import { useId, useState, type ReactNode, type Ref } from 'react'
 import { Link, useLocation } from 'react-router'
 import type { Schemas } from '@/api/client'
 import { useInboxPending, type PendingCounts } from '@/api/console-inbox'
-import { tasksPath } from '@/api/tasks'
+import { tasksPath, useProjectTaskCounts } from '@/api/tasks'
+import { RunningTaskBadge } from '@/features/tasks/RunningTaskBadge'
 import { NavIcon, type NavIconName } from '@/components/NavIcon'
 import { AgentNavGroup } from '@/features/agents/AgentList'
 import { CreateAgentDialog } from '@/features/agents/CreateAgentDialog'
@@ -104,6 +105,8 @@ export function Sidebar({
   const mine = (item: Schemas['InboxPendingItem']) => scope.kind === 'global' || (project !== undefined && item.projectId === project.id)
   const overviewCounts = pending && { questions: pending.questions.filter(mine).length, unread: pending.unread.filter(mine).length }
   const taskCounts = pending && project && sum(pending.byTask.filter((row) => row.projectId === project.id))
+  // 正在运行的任务数只算 running；只在项目范围读取。
+  const running = useProjectTaskCounts(project?.id).data?.running
   const searchLabel = scope.kind === 'project' ? text.search.project : text.search.global
   const desktop = inDesktopWindow()
 
@@ -163,7 +166,13 @@ export function Sidebar({
               icon="tasks"
               label={text.items.tasks}
               current={here.section === 'tasks'}
-              badge={<PendingBadge sticker counts={taskCounts} />}
+              badge={
+                // 运行数在前、“待你回复”贴纸在后；两者都没有时整个容器不占位。
+                <span className="flex shrink-0 items-center gap-1.5 empty:hidden">
+                  <RunningTaskBadge count={running} />
+                  <PendingBadge sticker counts={taskCounts} />
+                </span>
+              }
             />
             <NavItem to={`${projectBase(scope.name)}/folder`} icon="folder" label={text.items.folder} current={here.section === 'folder'} />
             <NavItem
