@@ -25,7 +25,9 @@ func TestPluginEventIDsAreSortableULIDs(t *testing.T) {
 	for _, c := range prev[:10] {
 		ms = ms<<5 | int64(strings.IndexRune("0123456789ABCDEFGHJKMNPQRSTVWXYZ", c))
 	}
-	if after := time.Now().UnixMilli(); ms < before || ms > after {
+	// 上界多留 1 毫秒：时钟没前进时 UUIDv7 靠毫秒内 12 位序号保持递增，序号用完会借下一毫秒
+	//（2000 个不到 4096，最多借 1）；Windows 的墙上时钟粒度粗，会走到这里。
+	if after := time.Now().UnixMilli() + 1; ms < before || ms > after {
 		t.Fatalf("时间前缀 %d 不在 [%d, %d]", ms, before, after)
 	}
 }

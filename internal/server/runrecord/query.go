@@ -166,12 +166,23 @@ func (s *Service) Timeline(ctx context.Context, agentID, runID uuid.UUID) (apity
 			ResponseModel: strPtr(u.ResponseModel), StopReason: strPtr(u.StopReason), Input: u.Input, Output: u.Output,
 			CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, Reasoning: u.Reasoning, Total: u.Total, DurationMs: u.DurationMs}})
 	}
-	sort.SliceStable(entries, func(i, j int) bool { return entries[i].at.Before(entries[j].at) })
+	// 时间相同时"结束"排最后：时钟粒度粗（Windows）时，最后一次工具调用可能与结束同一时刻。
+	sort.SliceStable(entries, func(i, j int) bool {
+		if !entries[i].at.Equal(entries[j].at) {
+			return entries[i].at.Before(entries[j].at)
+		}
+		return !isEnded(entries[i].v) && isEnded(entries[j].v)
+	})
 	out := apitypes.RunTimeline{Run: apitypes.FromRun(run), Entries: make([]any, 0, len(entries)), Usage: apitypes.FromUsageTotals(run.Usage)}
 	for _, e := range entries {
 		out.Entries = append(out.Entries, e.v)
 	}
 	return out, nil
+}
+
+func isEnded(v any) bool {
+	_, ok := v.(apitypes.TimelineEndedEntry)
+	return ok
 }
 
 type timed struct {
