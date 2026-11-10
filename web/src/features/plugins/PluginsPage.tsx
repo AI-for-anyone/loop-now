@@ -14,7 +14,7 @@ import { InstallSourceDialog } from './InstallFlow'
 import { MarketPlugins } from './Markets'
 import { Chips } from './ManifestSummary'
 import { componentChips, hasAgentHalf } from './manifest'
-import { cardClass, IdVersion, Quiet, SourceBadge, StatusLabel } from './parts'
+import { cardClass, IdVersion, InstalledSourceBadge, Quiet, SourceBadge, StatusLabel } from './parts'
 import { pluginPath } from './paths'
 import { usePluginInstaller } from './usePluginInstaller'
 
@@ -94,7 +94,7 @@ function InstalledCard({ plugin, installer }: { plugin: Schemas['Plugin']; insta
             </Link>
           </h3>
           <IdVersion id={plugin.id} version={plugin.version} />
-          <SourceBadge source={plugin.source} />
+          <InstalledSourceBadge plugin={plugin} />
         </div>
         {manifest && <Chips items={componentChips(manifest)} />}
         {plugin.status === 'error' && plugin.lastError && <p className="text-[12.5px] leading-snug font-bold text-red-text [overflow-wrap:anywhere]">{plugin.lastError}</p>}

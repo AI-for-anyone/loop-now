@@ -19,6 +19,7 @@ export const plugins = {
     market: '市场',
   } satisfies Record<Schemas['PluginSource']['kind'], string>,
   unverified: (kind: string) => `${kind} · 未审核`,
+  verifiedSource: (kind: string) => `${kind} · 已验证`,
   // 来源的一句话说法：详情页头与安装前的警告里用。
   from: {
     builtin: '随平台发布',

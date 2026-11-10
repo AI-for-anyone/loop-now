@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { routes } from '@/app/routes'
 import { apiUrl, defaultProject, makeProject } from '@/test/api'
-import { fakePlugins, makeComponents, makeConfig, makeDelivery, makeDetail, makeManifest, makePlugin, makeProjectPlugin, makeResolvedSource } from '@/test/plugins'
+import { fakePlugins, makeComponents, makeConfig, makeDelivery, makeDetail, makeManifest, makeMarket, makeMarketEntry, makePlugin, makeProjectPlugin, makeResolvedSource } from '@/test/plugins'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
@@ -303,5 +303,32 @@ describe('插件详情的模型提供方', () => {
     renderDetail()
     await screen.findByRole('region', { name: '这个插件包含' })
     expect(screen.queryByRole('region', { name: '模型提供方' })).toBeNull()
+  })
+})
+
+describe('插件详情的来源标签', () => {
+  const official = makeMarket({ plugins: [makeMarketEntry({ id: 'grok', displayName: 'Grok CLI', installedVersion: '1.0.0' })] })
+  const other = makeMarket({ url: 'https://example.com/market.json', name: '社区市场', official: false, plugins: [makeMarketEntry({ id: 'grok', verified: true, installedVersion: '1.0.0' }), makeMarketEntry({ id: 'raw', verified: false, installedVersion: '1.0.0' })] })
+  const fromMarket = (id: string, market: string | null, kind: 'npm' | 'git' = 'npm') =>
+    makeDetail(makePlugin({ id, displayName: id, source: makeResolvedSource({ kind, location: `pi-${id}`, npmVersion: '1.0.0', market }) }))
+  const badge = async (id: string, detail: ReturnType<typeof makeDetail>) => {
+    const { unmount } = renderDetail(`/plugins/${id}`, { details: [detail], markets: [official, other] })
+    const heading = await screen.findByRole('heading', { level: 1, name: id })
+    const text = await waitFor(() => {
+      const found = heading.parentElement!.querySelector('h1 + span')?.textContent
+      if (!found) throw new Error('来源标签还没显示')
+      return found
+    })
+    unmount()
+    return text
+  }
+
+  it('按安装时的规则：官方市场装的算官方；其他市场标为已验证的写已验证；未验证的和不是从市场装的写未审核', async () => {
+    expect(await badge('grok', fromMarket('grok', official.url))).toBe('官方')
+    expect(await badge('grok', fromMarket('grok', other.url))).toBe('npm · 已验证')
+    expect(await badge('raw', fromMarket('raw', other.url))).toBe('npm · 未审核')
+    expect(await badge('direct', fromMarket('direct', null, 'git'))).toBe('git · 未审核')
+    // 市场已不在列表里：无从判断，按未审核。
+    expect(await badge('gone', fromMarket('gone', 'https://removed.example/market.json'))).toBe('npm · 未审核')
   })
 })

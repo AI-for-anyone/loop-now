@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils'
 import { AccountsManager } from './Accounts'
 import { DeliveriesList, LogsView, RecordsTable } from './Activity'
 import { ManifestSummary } from './ManifestSummary'
-import { cardClass, IdVersion, PanelTitle, Quiet, RepositoryLink, SourceBadge, StatusLabel } from './parts'
+import { cardClass, IdVersion, InstalledSourceBadge, PanelTitle, Quiet, RepositoryLink, StatusLabel } from './parts'
 import { pluginPath } from './paths'
 import { ProjectEnableList } from './ProjectEnable'
 import { ReadmeMarkdown, TruncatedNote } from './Readme'
@@ -259,7 +259,7 @@ export function PluginDetailPage() {
               </nav>
               <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
                 <h1 className={pageTitleClass}>{localizedText(plugin.displayName)}</h1>
-                <SourceBadge source={plugin.source} />
+                <InstalledSourceBadge plugin={plugin} />
                 <IdVersion id={plugin.id} version={plugin.version} />
                 <StatusLabel status={plugin.status} />
                 {repository &&

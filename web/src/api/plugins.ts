@@ -100,14 +100,25 @@ export function useBuiltinPluginSources() {
 }
 
 // 各市场的插件（官方市场与全局设置里加的市场），标出已安装的版本与可更新；某个市场读取失败时它的 error 不为空。
-export function usePluginMarkets() {
-  return useQuery({ queryKey: pluginKeys.markets, queryFn: () => call(api.GET('/plugin-markets')) })
+export function usePluginMarkets(enabled = true) {
+  return useQuery({ queryKey: pluginKeys.markets, queryFn: () => call(api.GET('/plugin-markets')), enabled })
 }
 
 // 已安装的插件在它来源市场里的条目；不是从市场装的、或市场里已没有它时为 undefined。
 export function marketEntryOf(markets: Schemas['PluginMarket'][] | undefined, plugin: Pick<Schemas['Plugin'], 'id' | 'source'>) {
   if (!plugin.source.market) return undefined
   return markets?.find((market) => market.url === plugin.source.market)?.plugins.find((entry) => entry.id === plugin.id)
+}
+
+// 已安装插件的来源算不算审阅过，与服务端安装时的判断一致：随平台发布的、从官方市场装的为 official，市场标为已验证的为 verified，
+// 其余为 null。装的时候只记下了市场地址，所以从市场装的要看市场列表：还没读到时为 undefined；市场或条目已不在列表里时按未审阅。
+export function pluginTrust(markets: Schemas['PluginMarket'][] | undefined, plugin: Pick<Schemas['Plugin'], 'id' | 'source'>): 'official' | 'verified' | null | undefined {
+  if (plugin.source.kind === 'builtin') return 'official'
+  if (!plugin.source.market) return null
+  if (!markets) return undefined
+  const market = markets.find((item) => item.url === plugin.source.market)
+  if (market?.official) return 'official'
+  return market?.plugins.find((entry) => entry.id === plugin.id)?.verified ? 'verified' : null
 }
 
 // 市场里的来源：按市场地址与条目 id 安装；version 给出时装这个版本（更新时用市场里的新版本）。
