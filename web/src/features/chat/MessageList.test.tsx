@@ -351,14 +351,14 @@ it('sleep_wake 是一行淡色唤醒信息：时间、睡了多久与说明；�
   const pages: MessagePages = { pages: [{ messages: [
     makeMessage({ text: '每 5 分钟看一次 CI', run: source, createdAt: '2026-10-26T07:59:50Z' }),
     makeMessage({ role: 'assistant', text: '还没跑完，先 sleep', run: source, createdAt: '2026-10-26T07:59:55Z' }),
-    makeMessage({ origin: 'sleep_wake', text: `平台通知：sleep已到期，请接着原会话处理。sleepId=${timer}；说明：check CI status for the budget fixture\nthen report`, run: wake, createdAt: '2026-10-26T08:05:03Z' }),
+    makeMessage({ origin: 'sleep_wake', text: `Platform notice: your sleep is due; continue in the original conversation. sleepId=${timer}; note: check CI status for the budget fixture\nthen report`, run: wake, createdAt: '2026-10-26T08:05:03Z' }),
     makeMessage({ role: 'assistant', text: '已继续', run: wake, createdAt: '2026-10-26T08:05:04Z' }),
     makeMessage({ origin: 'console', text: '真实控制台留言', run: consoleRun, createdAt: '2026-10-26T08:06:00Z' }),
   ], hasMore: false, hasMoreAfter: false }], pageParams: [null] }
   render(<List {...props} pages={pages} onLoadOlder={() => {}} />)
   const line = screen.getByRole('note')
   expect(line).toHaveTextContent(/^sleep 到期唤醒·.+·睡了 5 分钟·check CI status for the budget fixture then report$/u)
-  expect(line).not.toHaveTextContent(/平台通知|sleepId|5001/u)
+  expect(line).not.toHaveTextContent(/Platform notice|sleepId|5001/u)
   expect(line).toHaveAttribute('title', `check CI status for the budget fixture then report\nsleep ${timer}`)
   expect(line.className).not.toMatch(/riso-tilt|riso-yellow/)
   expect(screen.getByText('真实控制台留言')).toBeVisible()

@@ -219,15 +219,16 @@ it('排队中的节点消息只在托盘里，开始处理后才进入对话；�
 it('排队中的节点轮次（平台提醒与空回复）不在对话里，开始后才出现', async () => {
   const turn = (id: string, role: 'user' | 'assistant', text: string, status: Schemas['TaskMessage']['status']): Schemas['TaskMessage'] => ({ id, nodeRunId: nodeId, runId: runQ, role, origin: 'inbox_reminder', text, status, createdAt: taskTime })
   const work: Schemas['TaskMessage'] = { id: '55000000-0000-7000-8000-000000000020', nodeRunId: nodeId, runId: runI, role: 'assistant', origin: 'task_node', text: '正在调整账本', status: 'running', createdAt: taskTime }
-  const prompt = turn('55000000-0000-7000-8000-000000000021', 'user', '排队中的平台提醒', 'queued'), reply = turn('55000000-0000-7000-8000-000000000022', 'assistant', '', 'queued')
+  // 排队中的平台提醒轮次，正文是服务端的占位文字（开始执行时才换成提醒正文）。
+  const prompt = turn('55000000-0000-7000-8000-000000000021', 'user', 'Platform reminder', 'queued'), reply = turn('55000000-0000-7000-8000-000000000022', 'assistant', '', 'queued')
   setup({ queue: () => queueOf(m1), messages: [work, prompt, reply] })
   await screen.findByText('正在调整账本')
   const row = (id: string) => document.querySelector(`[data-conversation-scroll] [data-message-id="task:${id}"]`)
-  expect(screen.queryByText('排队中的平台提醒')).toBeNull()
+  expect(screen.queryByText('Platform reminder')).toBeNull()
   expect(row(reply.id)).toBeNull()
   // 轮次开始：按 ID 更新为进行中，进入对话流。
   act(() => stream().emit('message.created', { ...prompt, status: 'running' }, '41'))
-  expect(await screen.findByText('排队中的平台提醒')).toBeInTheDocument()
+  expect(await screen.findByText('Platform reminder')).toBeInTheDocument()
 })
 
 it('收到 snapshot（首次或重连）后重新读取一次排队列表；读取开始后收到的事件不被旧读取覆盖', async () => {
