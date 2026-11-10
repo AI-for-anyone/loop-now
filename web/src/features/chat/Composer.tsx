@@ -108,8 +108,8 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
   const listId = useId()
   const optionId = (index: number) => `${listId}-${index}`
   const pendingCaret = useRef<number | null>(null)
-  const choose = (name: string) => {
-    const next = applyCommand(text, name)
+  const choose = (command: Schemas['AgentCommand']) => {
+    const next = applyCommand(text, command)
     pendingCaret.current = next.caret
     setText(next.text)
     setCaret(next.caret)
@@ -234,7 +234,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
         if ((event.key === 'Enter' && !event.shiftKey && !event.metaKey && !event.ctrlKey) || (event.key === 'Tab' && !event.shiftKey)) {
           event.preventDefault()
           const command = menuItems[active] ?? menuItems[0]
-          if (command) choose(command.name)
+          if (command) choose(command)
           return
         }
       }
@@ -252,7 +252,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
     onChange={event => { setText(event.target.value); setCaret(event.target.selectionStart) }} onSelect={event => setCaret(event.currentTarget.selectionStart)} onKeyDown={onKeyDown} rows={1} className={inputClass}
     aria-autocomplete="list" aria-controls={menuItems.length > 0 ? listId : undefined} aria-activedescendant={menuItems.length > 0 ? optionId(active) : undefined} />
   // 待发送图片排在同一边框里、文字行之上；有图片时边框圆角收小。
-  const input = (addButton?: ReactNode, strip?: ReactNode) => <SlashCommandMenu open={menuOpen} listId={listId} optionId={optionId} items={menuItems} active={active} status={menuStatus} onActive={setActive} onChoose={(command) => choose(command.name)} onDismiss={() => setDismissed(token)}><div data-chat-composer className={cn('flex min-h-[60px] min-w-0 flex-col border-2 border-ink/60 bg-white p-2 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/15', strip || reply ? 'rounded-[24px]' : 'rounded-[32px]')}>
+  const input = (addButton?: ReactNode, strip?: ReactNode) => <SlashCommandMenu open={menuOpen} listId={listId} optionId={optionId} items={menuItems} active={active} status={menuStatus} onActive={setActive} onChoose={choose} onDismiss={() => setDismissed(token)}><div data-chat-composer className={cn('flex min-h-[60px] min-w-0 flex-col border-2 border-ink/60 bg-white p-2 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/15', strip || reply ? 'rounded-[24px]' : 'rounded-[32px]')}>
     {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}
     {strip}
     <div className="flex min-w-0 items-end gap-2">
