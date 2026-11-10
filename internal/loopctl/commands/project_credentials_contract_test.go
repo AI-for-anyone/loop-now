@@ -29,7 +29,7 @@ func projectSelections() map[string]any {
 	}}
 }
 func projectAuthState(status string) map[string]any {
-	op := map[string]any{"id": actionUUID, "projectId": credentialProjectID, "provider": "openai-codex", "targetAccountId": nil, "targetRevision": nil, "name": "Codex fixture", "status": status, "accountId": nil, "startedAt": "2026-10-15T00:00:00Z", "expiresAt": "2026-10-15T00:10:00Z", "completedAt": nil, "authorizationUrl": nil, "errorCode": nil, "errorMessage": nil}
+	op := map[string]any{"id": actionUUID, "projectId": credentialProjectID, "provider": "openai-codex", "targetAccountId": nil, "targetRevision": nil, "name": "Codex fixture", "status": status, "accountId": nil, "startedAt": "2026-10-15T00:00:00Z", "expiresAt": "2026-10-15T00:10:00Z", "completedAt": nil, "authorizationUrl": nil, "errorCode": nil, "errorMessage": nil, "deviceCode": nil, "prompt": nil}
 	if status == "awaiting_authorization" {
 		op["authorizationUrl"] = "https://auth.openai.com/oauth/authorize?client_id=offline-fixture&state=fixture"
 	}
