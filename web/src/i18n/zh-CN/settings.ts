@@ -6,7 +6,7 @@ export const settings = {
   title: '全局设置',
   // 界面语言只保存在这个浏览器里，不是服务端配置。
   language: { title: '界面语言', hint: '只影响这个浏览器；切换后页面会重新加载。' },
-  readonlyHint: '模型配置与文件夹可在这里修改；服务端的环境配置保持只读。',
+  readonlyHint: '模型配置、本机模式与文件夹可在这里修改；服务端的环境配置保持只读。',
   models: {
     title: '模型配置',
     description: '编辑固定版本 Pi 的原生 models.json。自定义 Provider、覆盖内置 Provider 的 baseUrl 或模型参数，以及 Thinking 和图片能力都以 Pi 合并后的目录为准。',

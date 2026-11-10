@@ -39,18 +39,19 @@ describe('分区目录', () => {
   const tocLink = (name: string) => within(toc()).getByRole('link', { name })
   const highlighted = () => within(toc()).getAllByRole('link').filter((link) => link.getAttribute('aria-current') === 'location')
 
-  it('按顺序列出七个区块；点击目录项跳转到对应区块，焦点落在区块标题', async () => {
+  it('按顺序列出八个区块；点击目录项跳转到对应区块，焦点落在区块标题', async () => {
     const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
     try {
       const { user, router } = await renderConfig()
       expect(within(toc()).getAllByRole('link').map((link) => link.textContent)).toEqual([
         '01基本信息',
         '02Prompt',
-        '03模型账号凭证',
-        '04Skills',
-        '05可用 CLI',
-        '06插件权限',
-        '07删除 Agent',
+        '03本机目录',
+        '04模型账号凭证',
+        '05Skills',
+        '06可用 CLI',
+        '07插件权限',
+        '08删除 Agent',
       ])
       await user.click(tocLink('可用 CLI'))
       const clis = region('可用 CLI')

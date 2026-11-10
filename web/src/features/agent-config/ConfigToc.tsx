@@ -7,6 +7,7 @@ import { SECTION_KEYS, sectionId, sectionTitleId, type SectionKey } from './sect
 const titles: Record<SectionKey, string> = {
   basic: t.config.basic.title,
   prompt: t.prompts.sectionTitle,
+  'local-dirs': t.localMode.directories.title,
   'model-credential': t.config.modelCredential.title,
   skills: t.config.skills.title,
   clis: t.config.clis.title,
