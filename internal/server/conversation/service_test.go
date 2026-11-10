@@ -40,7 +40,7 @@ func newFakeExec() *fakeExec {
 }
 
 func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink executor.Sink) (executor.Result, error) {
-	prefix := fmt.Sprintf("本轮运行ID：%s。\n", req.RunID)
+	prefix := executor.RunIDLine(req.RunID)
 	// 对话页的 Pi 命令原样交给 Pi（不加运行 ID）：名字带 handled 的当作扩展命令直接处理、没有回复。
 	if strings.HasPrefix(req.Message, "/") {
 		f.mu.Lock()

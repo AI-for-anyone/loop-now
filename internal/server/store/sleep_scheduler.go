@@ -143,9 +143,9 @@ func (s *Store) ReconcileSleeps(ctx context.Context, batch int) error {
 			if !errors.Is(err, db.ErrNoRows) {
 				return err
 			}
-			text := "平台通知：sleep已到期，请接着原会话处理。sleepId=" + r.ID.String()
+			text := "Platform notice: your sleep is due; continue in the original conversation. sleepId=" + r.ID.String()
 			if r.Reason != nil {
-				text += "；说明：" + *r.Reason
+				text += "; note: " + *r.Reason
 			}
 			if m == nil {
 				_, _, err = s.insertMessageAndRunTx(ctx, scope.Tx, NewRun{AgentID: r.AgentID, RunID: r.TimerRunID, Text: text, Origin: "sleep_wake", WakeSleepID: &r.ID})

@@ -160,7 +160,7 @@ func (s *Service) questionDeliverOnce(ctx context.Context, p auth.Principal, msg
 							if opt.ID == *input.OptionID {
 								found = true
 								if strings.TrimSpace(msg.Text) == "" {
-									msg.Text = "选择：" + opt.Label
+									msg.Text = "Selected: " + opt.Label
 								}
 							}
 						}

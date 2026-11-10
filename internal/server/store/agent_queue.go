@@ -220,7 +220,7 @@ func (s *Store) PromoteInboxMessageTx(ctx context.Context, tx *db.Tx, agentID, m
 	out.Target, err = scanRun(tx.QueryRow(ctx, `SELECT `+runColumns+` FROM runs WHERE agent_id = $1 AND status = 'queued' AND origin = 'inbox_reminder' AND priority = 0
 		ORDER BY queue_seq LIMIT 1`, agentID))
 	if errors.Is(err, db.ErrNoRows) {
-		_, out.Target, err = s.insertMessageAndRunTx(ctx, tx, NewRun{AgentID: agentID, RunID: uuid.Must(uuid.NewV7()), Text: "平台提醒", WhenBusy: "interrupt",
+		_, out.Target, err = s.insertMessageAndRunTx(ctx, tx, NewRun{AgentID: agentID, RunID: uuid.Must(uuid.NewV7()), Text: "Platform reminder", WhenBusy: "interrupt",
 			InstanceID: instanceID, TriggerInboxID: &messageID})
 		out.Created = true
 	}

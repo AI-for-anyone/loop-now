@@ -66,6 +66,10 @@ type Request struct {
 	MessageID uuid.UUID
 }
 
+// RunIDLine 是平台加在每条交给 Pi 的消息最前面的一行：这一轮的运行 ID（Agent 调 loopctl 时要带上）。
+// 旧会话里这一行是中文的“本轮运行ID：<ID>。”，不迁移；平台的生产代码不解析这一行。
+func RunIDLine(id uuid.UUID) string { return "Run ID for this turn: " + id.String() + ".\n" }
+
 // Result 是一次执行的结果。
 type Result struct {
 	Outcome      string

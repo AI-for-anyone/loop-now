@@ -27,26 +27,26 @@ func (e *Executor) contextPrompt(snap agentconfig.Snapshot, d agentDirs, loginHo
 		if local == "" {
 			return "", nil
 		}
-		return "## 文件夹与上下文\n\n" + local, nil
+		return "## Folders and context\n\n" + local, nil
 	}
 	layer := folders.ContextFolder(e.o.ContextDir, snap.ContextProjectID)
 	if err := os.MkdirAll(layer, 0o700); err != nil {
 		return "", err
 	}
-	name, shared := "项目上下文文件夹", "本项目的 Agent（含任务内的实例）与人共同读写"
+	name, shared := "Project context folder", "read and written by this project's Agents (including their instances in tasks) and by people"
 	if snap.ContextProjectID == nil {
-		name, shared = "全局上下文文件夹", "平台 Agent 与人共同读写"
+		name, shared = "Global context folder", "read and written by platform Agents and by people"
 	}
-	own := "你自己的文件夹（也是你的工作目录与你自己的上下文）"
+	own := "Your own folder (also your working directory and your own context)"
 	if snap.TaskID != uuid.Nil {
-		own = "你在这个任务中的文件夹（工作目录，任务开始时复制自你的常态文件夹，任务结束后回收）"
+		own = "Your folder in this task (your working directory; copied from your regular folder when the task started and reclaimed when the task ends)"
 	}
 	entry := filepath.Join(layer, "AGENTS.md")
 	var b strings.Builder
-	b.WriteString("## 文件夹与上下文\n\n")
-	fmt.Fprintf(&b, "- %s：%s，入口是根目录的 AGENTS.md（存在时已由 Pi 读入）。\n", own, d.workspace)
-	fmt.Fprintf(&b, "- %s：%s，%s，入口是 %s。\n", name, layer, shared, entry)
-	b.WriteString("- 两个入口只在 Pi 启动时读入，修改后要等下次重启才会出现在系统提示中。什么时候写、写到哪一层、怎样组织，见 Skill loopctl 的“上下文文件夹”一节。\n")
+	b.WriteString("## Folders and context\n\n")
+	fmt.Fprintf(&b, "- %s: %s. Its entry file is AGENTS.md at the root (already loaded by Pi if it exists).\n", own, d.workspace)
+	fmt.Fprintf(&b, "- %s: %s, %s. Its entry file is %s.\n", name, layer, shared, entry)
+	b.WriteString("- Both entry files are loaded only when Pi starts; after you change them, the change appears in the system prompt only after the next restart. For when to write, which layer to write to, and how to organize it, see the \"Context folders\" section of Skill loopctl.\n")
 	b.WriteString(local)
 	content, err := readEntry(layer)
 	if err != nil {
@@ -67,7 +67,7 @@ func localDirectoriesPrompt(snap agentconfig.Snapshot) string {
 			continue
 		}
 		if dir.Note != "" {
-			fmt.Fprintf(&items, "  - %s：%s\n", dir.Path, dir.Note)
+			fmt.Fprintf(&items, "  - %s: %s\n", dir.Path, dir.Note)
 		} else {
 			fmt.Fprintf(&items, "  - %s\n", dir.Path)
 		}
@@ -76,13 +76,13 @@ func localDirectoriesPrompt(snap agentconfig.Snapshot) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("- 本机目录：用户登记给你直接使用的本机文件夹，不是副本。你对它们有完整的读写权限，改动直接落在用户的真实文件上，")
+	b.WriteString("- Local directories: folders on this machine that the user registered for you to use directly. They are not copies. You have full read and write access, and your changes land directly on the user's real files; ")
 	if snap.TaskID != uuid.Nil {
-		b.WriteString("不在任务副本里、不随任务回收，常态 Agent 和其他任务可能同时在用；")
+		b.WriteString("they are not part of the task copy and are not reclaimed with the task, and the regular Agent and other tasks may be using them at the same time. ")
 	} else {
-		b.WriteString("不会被回收；")
+		b.WriteString("they are never reclaimed. ")
 	}
-	b.WriteString("平台没有它们的回收站，删改前确认是该动的地方，拿不准先问人。这些目录里的 AGENTS.md 等入口不会自动读入，需要时自己读。\n")
+	b.WriteString("The platform keeps no trash for them, so before deleting or changing anything, make sure it is the right place, and ask a person when unsure. Entry files such as AGENTS.md in these directories are not loaded automatically; read them yourself when needed.\n")
 	b.WriteString(items.String())
 	return b.String()
 }
@@ -94,16 +94,16 @@ func providerLoginPrompt(snap agentconfig.Snapshot, home string) string {
 	if home == "" || snap.ProviderState == nil || len(snap.ProviderState.Paths) == 0 {
 		return ""
 	}
-	return "- 模型订阅：你的模型提供方 " + snap.Provider + " 用的是用户本机主目录里该扩展自己的登录，不是项目里配置的订阅账号。\n"
+	return "- Model subscription: your model provider " + snap.Provider + " uses the extension's own login in the user's home directory on this machine, not the subscription account configured in the project.\n"
 }
 
 func loginsPrompt(home string) string {
 	if home == "" {
 		return ""
 	}
-	return "- 本机登录：你的 HOME 是用户本人的主目录 " + home + "，本机工具已有的登录可以直接使用，等于以用户本人的身份操作，" +
-		"改动会影响用户自己的配置与状态；Loop Now 里给你配置了账号的 CLI 仍用配置的账号。遇到需要交互授权的本机工具" +
-		"（弹窗、浏览器登录、输入口令或确认）不要反复重试，告诉用户需要先在本机完成一次授权。\n"
+	return "- Local logins: your HOME is the user's own home directory " + home + ". Logins that tools on this machine already have can be used directly, " +
+		"which means you act as the user, and your changes affect the user's own configuration and state; CLIs that have accounts configured for you in Loop Now still use those accounts. " +
+		"When a local tool needs interactive authorization (a popup, a browser login, a password or a confirmation), do not keep retrying; tell the user to complete the authorization once on this machine first.\n"
 }
 
 // readEntry 读取上下文文件夹根目录的 AGENTS.md（经 os.Root，不跟随指向文件夹之外的软链接）；不存在或不是普通文件时为空。

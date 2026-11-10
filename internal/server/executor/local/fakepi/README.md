@@ -15,7 +15,7 @@ go build -o /tmp/fakepi ./internal/server/executor/local/fakepi
 `--session <file>`、`--no-session`；其他参数忽略。
 
 - `FAKEPI_DUMP=<path>`：启动时把 `{"args":[...],"env":{...},"cwd":"..."}` 写入该文件（args 不含程序名）。
-- `FAKEPI_NEUTRAL=1`：中性回复（给英文截图用）。默认回复改为 `Got it: <消息>`：去掉平台加的 `本轮运行ID：…` 一行与指令词，
+- `FAKEPI_NEUTRAL=1`：中性回复（给英文截图用）。默认回复改为 `Got it: <消息>`：去掉平台加的运行 ID 一行（`Run ID for this turn: …`，旧会话里的 `本轮运行ID：…` 也认）与指令词，
   保留换行，什么都不剩时为 `Got it.`；`!text` 照旧优先。扩展对话标题、压缩摘要、可重试错误与崩溃时的 stderr 也改用英文。
   不设时行为不变。服务端只把白名单里的变量传给 Pi，所以经服务端启动时还要把它加进
   `LOOP_NOW_EXEC_ENV_PASSTHROUGH`（例如 `LANG,LC_ALL,TZ,FAKEPI_NEUTRAL`）。
