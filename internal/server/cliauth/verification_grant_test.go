@@ -191,7 +191,7 @@ func TestGoogleManagementBrokerCannotChooseAnotherPrincipal(t *testing.T) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		conn.SetDeadline(time.Now().Add(time.Second))
+		conn.SetDeadline(time.Now().Add(brokerReplyDeadline))
 		frame := map[string]any{"protocol": 1, "type": "resolve", "requestId": uuid.New(), "capability": broker.capability}
 		if spoof {
 			frame["operationId"] = uuid.New()
@@ -331,12 +331,16 @@ func TestGoogleManagementRequiresLoginPersistsToNewBroker(t *testing.T) {
 		calls.Add(1)
 		return clicredential.Google{}, &SafeError{Code: "reauth_required"}
 	})
-	one := NewCoordinator(f.st, refresh, CoordinatorOptions{WaitTimeout: time.Second, PollInterval: time.Millisecond}, nil)
+	// Neither coordinator's WaitTimeout is under test here (both return on the recorded
+	// requires_login state); it only has to outlast a slow SQLite round-trip on the Windows CI
+	// runner, where one second was not enough and the broker answered "timeout" instead.
+	wait := CoordinatorOptions{WaitTimeout: 5 * time.Second, PollInterval: time.Millisecond}
+	one := NewCoordinator(f.st, refresh, wait, nil)
 	if _, e = one.ResolveVerification(ctx, b); e == nil {
 		t.Fatal("reauth accepted")
 	}
 	one.Close(ctx)
-	two := NewCoordinator(f.st, refresh, CoordinatorOptions{WaitTimeout: time.Second, PollInterval: time.Millisecond}, nil)
+	two := NewCoordinator(f.st, refresh, wait, nil)
 	defer two.Close(ctx)
 	broker, e := NewVerificationBroker(b, two)
 	if e != nil {
@@ -348,7 +352,7 @@ func TestGoogleManagementRequiresLoginPersistsToNewBroker(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer conn.Close()
-	conn.SetDeadline(time.Now().Add(time.Second))
+	conn.SetDeadline(time.Now().Add(brokerReplyDeadline))
 	if e = json.NewEncoder(conn).Encode(map[string]any{"protocol": 1, "type": "resolve", "requestId": uuid.NewString(), "capability": broker.capability}); e != nil {
 		t.Fatal(e)
 	}
