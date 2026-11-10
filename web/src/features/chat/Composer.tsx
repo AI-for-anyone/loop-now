@@ -1,11 +1,11 @@
-import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from 'react'
+import { useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ArrowUpIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { ApiError, type Schemas } from '@/api/client'
-import { isCommandResult, upsertMessage, useSendMessage } from '@/api/queries'
+import { isCommandResult, upsertMessage, useAgentCommands, useSendMessage } from '@/api/queries'
 import { t } from '@/i18n'
 import { ImagePicker } from '@/features/images/ImagePicker'
 import { imageProblem, type ImageDraft, type ImageLimits, type ImageUploads } from '@/features/images/image-drafts'
@@ -13,6 +13,9 @@ import { uploadMessageImages } from '@/api/message-images'
 import { cn } from '@/lib/utils'
 import { ReplyChip } from '@/features/console-inbox/ConsoleMessage'
 import { useAnswerQuestion } from '@/features/console-inbox/useAnswerQuestion'
+import { describeError } from '@/lib/errors'
+import { applyCommand, matchCommands, slashToken } from './slash-commands'
+import { SlashCommandMenu } from './SlashCommandMenu'
 
 // 编辑撤回的排队消息时，把原文与图片放回输入框；输入框里已有的内容保留在前面。
 export interface ComposerHandle {
@@ -77,6 +80,44 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
   const [localError, setLocalError] = useState<string | null>(null)
   const answer = useAnswerQuestion()
   const replyId = reply?.message.id
+
+  // "/" 菜单：输入以 "/" 开头、光标还在第一个词里时打开，按这个词筛选 Pi 命令；Esc 关掉后，这个词变了再打开。
+  // 回复问题时发出的是回答，不是对话消息，不给菜单。
+  const [caret, setCaret] = useState(0)
+  const [dismissed, setDismissed] = useState<string | null>(null)
+  const [active, setActive] = useState(0)
+  const token = reply || disabled ? null : slashToken(text, caret)
+  const menuOpen = token !== null && dismissed !== token
+  if (token === null && dismissed !== null) setDismissed(null)
+  const commands = useAgentCommands(agentId, menuOpen)
+  const matched = commands.data ? matchCommands(commands.data.commands, token ?? '/') : []
+  const menuStatus = commands.error
+    ? t.chat.commands.failed(describeError(commands.error))
+    : !commands.data
+      ? t.chat.commands.loading
+      : commands.data.capturedAt === null
+        ? t.chat.commands.notCaptured
+        : commands.data.commands.length === 0
+          ? t.chat.commands.none
+          : matched.length === 0
+            ? t.chat.commands.noMatch
+            : null
+  const menuItems = menuOpen && menuStatus === null ? matched : []
+  const [activeFor, setActiveFor] = useState<string | null>(null)
+  if (token !== activeFor) { setActiveFor(token); setActive(0) }
+  const listId = useId()
+  const optionId = (index: number) => `${listId}-${index}`
+  const pendingCaret = useRef<number | null>(null)
+  const choose = (command: Schemas['AgentCommand']) => {
+    const next = applyCommand(text, command)
+    pendingCaret.current = next.caret
+    setText(next.text)
+    setCaret(next.caret)
+  }
+  const moveActive = (next: number) => {
+    setActive(next)
+    document.getElementById(optionId(next))?.scrollIntoView?.({ block: 'nearest' })
+  }
   // 进入回复问题的模式时把光标放进输入框。
   useEffect(() => {
     if (replyId) editorRef.current?.focus()
@@ -85,10 +126,20 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
   useImperativeHandle(ref, () => ({
     refill: (value, drafts) => {
       setText((current) => (current.trim() === '' ? value : `${current}\n${value}`))
+      // 放回的文字光标在末尾，不当作正在输入命令。
+      setCaret(Number.MAX_SAFE_INTEGER)
       setImages((current) => [...current, ...drafts])
       editorRef.current?.focus()
     },
   }), [])
+
+  // 补全命令后把光标放到命令后面的空白之后。
+  useLayoutEffect(() => {
+    const at = pendingCaret.current
+    if (at === null || !editorRef.current) return
+    pendingCaret.current = null
+    editorRef.current.setSelectionRange(at, at)
+  }, [text])
 
   useLayoutEffect(() => {
     const editor = editorRef.current
@@ -165,9 +216,30 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== 'Enter' || event.shiftKey) return
-    // 输入法组字时的回车用于上屏，不发送。
+    // 输入法组字时的按键用于上屏，不补全、不发送。
     if (event.nativeEvent.isComposing || event.keyCode === 229) return
+    if (menuOpen) {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setDismissed(token)
+        return
+      }
+      // 菜单里有命令时，上下键在命令间移动，Enter 或 Tab 补全选中的命令（不发送）；没有命令时照常发送。
+      if (menuItems.length > 0) {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault()
+          moveActive(event.key === 'ArrowDown' ? Math.min(active + 1, menuItems.length - 1) : Math.max(active - 1, 0))
+          return
+        }
+        if ((event.key === 'Enter' && !event.shiftKey && !event.metaKey && !event.ctrlKey) || (event.key === 'Tab' && !event.shiftKey)) {
+          event.preventDefault()
+          const command = menuItems[active] ?? menuItems[0]
+          if (command) choose(command)
+          return
+        }
+      }
+    }
+    if (event.key !== 'Enter' || event.shiftKey) return
     event.preventDefault()
     if (disabled || pending) return
     void submit(event.metaKey || event.ctrlKey ? 'interrupt' : 'queue')
@@ -176,9 +248,11 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
   const sendLabel = busy ? t.chat.queueSend : t.chat.send
   const showStop = busy && stop !== undefined && !reply && text.trim() === '' && images.length === 0
   const stopLabel = stop?.pending ? t.chat.stopping : stop?.retry ? t.chat.retryStop : t.chat.stop
-  const editor = <Textarea ref={editorRef} aria-label={t.chat.inputLabel} placeholder={reply ? t.consoleInbox.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder} value={text} disabled={disabled} onChange={event => setText(event.target.value)} onKeyDown={onKeyDown} rows={1} className={inputClass} />
+  const editor = <Textarea ref={editorRef} aria-label={t.chat.inputLabel} placeholder={reply ? t.consoleInbox.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder} value={text} disabled={disabled}
+    onChange={event => { setText(event.target.value); setCaret(event.target.selectionStart) }} onSelect={event => setCaret(event.currentTarget.selectionStart)} onKeyDown={onKeyDown} rows={1} className={inputClass}
+    aria-autocomplete="list" aria-controls={menuItems.length > 0 ? listId : undefined} aria-activedescendant={menuItems.length > 0 ? optionId(active) : undefined} />
   // 待发送图片排在同一边框里、文字行之上；有图片时边框圆角收小。
-  const input = (addButton?: ReactNode, strip?: ReactNode) => <div data-chat-composer className={cn('flex min-h-[60px] min-w-0 flex-col border-2 border-ink/60 bg-white p-2 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/15', strip || reply ? 'rounded-[24px]' : 'rounded-[32px]')}>
+  const input = (addButton?: ReactNode, strip?: ReactNode) => <SlashCommandMenu open={menuOpen} listId={listId} optionId={optionId} items={menuItems} active={active} status={menuStatus} onActive={setActive} onChoose={choose} onDismiss={() => setDismissed(token)}><div data-chat-composer className={cn('flex min-h-[60px] min-w-0 flex-col border-2 border-ink/60 bg-white p-2 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/15', strip || reply ? 'rounded-[24px]' : 'rounded-[32px]')}>
     {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}
     {strip}
     <div className="flex min-w-0 items-end gap-2">
@@ -190,7 +264,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
         <Button type="button" size="icon" className="size-10 shadow-none" aria-label={sendLabel} title={busy ? t.chat.queueSendTitle : sendLabel} disabled={disabled || pending} onClick={() => void submit()}><ArrowUpIcon aria-hidden="true" className="size-5" strokeWidth={2.4} /></Button>
       )}
     </div>
-  </div>
+  </div></SlashCommandMenu>
   return (
     <div className="shrink-0 pt-4 pb-6">
       <div className="mx-auto flex min-w-0 w-full max-w-[960px] flex-col gap-3">

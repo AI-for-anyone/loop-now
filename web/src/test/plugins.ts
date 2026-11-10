@@ -67,6 +67,10 @@ export function makeDetail(plugin: Schemas['Plugin'] = makePlugin(), manifest: S
     versions: [{ version: plugin.version, digest: 'sha256-abc', installedAt: at, current: true }],
     installDir: `/work/platform/plugins/${plugin.id}/${plugin.version}`,
     dataDir: `/work/platform/plugins/${plugin.id}/data`,
+    providers: [],
+    providerErrors: [],
+    providersError: null,
+    providerState: {},
   }
 }
 
@@ -341,7 +345,7 @@ export function fakePlugins(initial: Partial<FakePluginState> = {}) {
 
 // 市场与市场里的条目。
 export function makeMarketEntry(overrides: Partial<Schemas['PluginMarketEntry']> = {}): Schemas['PluginMarketEntry'] {
-  return { id: 'usage-report', displayName: '用量周报', description: '每周一把上周的 token 和花费发到你的收件箱。', source: 'git:https://github.com/loop-now/usage-report@v0.9.0', version: '0.9.0', verified: true, installedVersion: null, updateAvailable: false, ...overrides }
+  return { id: 'usage-report', displayName: '用量周报', description: '每周一把上周的 token 和花费发到你的收件箱。', source: 'git:https://github.com/loop-now/usage-report@v0.9.0', version: '0.9.0', verified: true, installedVersion: null, updateAvailable: false, providerState: {}, ...overrides }
 }
 
 export function makeMarket(overrides: Partial<Schemas['PluginMarket']> = {}): Schemas['PluginMarket'] {

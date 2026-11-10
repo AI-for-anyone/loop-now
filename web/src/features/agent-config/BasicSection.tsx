@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +10,7 @@ import { ModelPicker } from '@/components/ModelPicker'
 import { CodexServiceTierPicker } from '@/components/CodexServiceTierPicker'
 import { ThinkingLevelPicker } from '@/components/ThinkingLevelPicker'
 import type { Schemas } from '@/api/client'
-import { useUpdateAgent } from '@/api/queries'
+import { invalidateModelCatalog, useUpdateAgent } from '@/api/queries'
 import { t } from '@/i18n'
 import { agentNameError, fieldMessages, isAgentNameConflict, isModelField, unmatchedFieldError } from '@/lib/errors'
 import { nameRuleError } from '@/lib/names'
@@ -22,6 +23,7 @@ const sameModel = (a: ModelRef | null, b: ModelRef | null) => a?.provider === b?
 
 export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: boolean }) {
   const update = useUpdateAgent(agent.id)
+  const client = useQueryClient()
   const serverTier = agent.serviceTier === 'default' ? null : agent.serviceTier ?? null
   const [name, setName] = useState(agent.name)
   const [model, setModel] = useState<ModelRef | null>(agent.model)
@@ -69,7 +71,11 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
     if (thinkingChanged) body.thinkingLevel = thinkingLevel
     if (tierChanged) body.serviceTier = serviceTier
     if (Object.keys(body).length === 0) return
-    const saved = await update.mutateAsync(body).catch(() => null)
+    const saved = await update.mutateAsync(body).catch((error: unknown) => {
+      // 插件提供方不能选（项目没启用、没授权等）：目录里的标记可能过时了，重新读取以显示原因。
+      if (fieldMessages(error, (field) => field === 'model.provider')) void invalidateModelCatalog(client)
+      return null
+    })
     if (saved) {
       setServerUpdated(false)
       setNotice(busy ? t.config.savedWhileBusy : t.common.saved)
@@ -91,7 +97,7 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
         </div>
       </div>
       <div className="[&>div]:grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] [&>div]:gap-4 [&>div>p]:col-span-full">
-        <ModelPicker value={model} onChange={next => { if (!sameModel(next, model)) setThinkingLevel(null); if (next?.provider !== 'openai-codex') setServiceTier(null); setModel(next) }} error={fieldMessages(update.error, isModelField)}>
+        <ModelPicker agentId={agent.id} value={model} onChange={next => { if (!sameModel(next, model)) setThinkingLevel(null); if (next?.provider !== 'openai-codex') setServiceTier(null); setModel(next) }} error={fieldMessages(update.error, isModelField)}>
           {selected => <>
             <ThinkingLevelPicker value={thinkingLevel} onChange={setThinkingLevel} levels={selected?.thinkingLevels ?? []} defaultLevel={selected?.defaultThinkingLevel} disabled={!selected?.thinkingLevels?.length} error={fieldMessages(update.error, field => field === 'thinkingLevel')} />
             {model?.provider === 'openai-codex' && <CodexServiceTierPicker value={serviceTier} onChange={setServiceTier} error={fieldMessages(update.error, field => field === 'serviceTier')} />}

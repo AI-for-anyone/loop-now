@@ -41,7 +41,8 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 const list = text.list
 
 // 安装前确认与插件详情共用：两侧各有什么、订阅的事件、要的权限，每项一行说明。
-export function ManifestSummary({ manifest, columns = true }: { manifest: Manifest; columns?: boolean }) {
+// preview：安装或更新前的预览，Pi 扩展一行另说明注册的模型提供方在确认后才读取。
+export function ManifestSummary({ manifest, columns = true, preview }: { manifest: Manifest; columns?: boolean; preview?: 'install' | 'update' }) {
   const c = manifest.components
   const configFields = fieldsOf(manifest.configSchema)
   const secretCount = configFields.filter((field) => field.secret).length
@@ -58,7 +59,7 @@ export function ManifestSummary({ manifest, columns = true }: { manifest: Manife
     c.actions.length > 0 && <Row key="actions" name={text.actions} hint={list(c.actions.map((action) => action.label))} />,
   ].filter(Boolean)
   const agentRows = [
-    c.agentExtensions > 0 && <Row key="ext" name={text.extensions(c.agentExtensions)} hint={text.extensionsHint} />,
+    c.agentExtensions > 0 && <Row key="ext" name={text.extensions(c.agentExtensions)} hint={preview ? text.extensionsPreviewHint[preview] : text.extensionsHint} />,
     c.skills.length > 0 && <Row key="skills" name={text.skills} hint={list(c.skills)} />,
     c.mcpServers.length > 0 && <Row key="mcp" name={text.mcp} hint={list(c.mcpServers)} />,
     c.bin.length > 0 && <Row key="bin" name={text.bin} hint={`${list(c.bin)} · ${text.binHint}`} />,

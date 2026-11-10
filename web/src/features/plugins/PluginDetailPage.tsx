@@ -25,6 +25,7 @@ import { ConfigForm } from './SchemaForm'
 import { describeValue, fieldsOf } from './schema-form'
 import { usePluginInstaller } from './usePluginInstaller'
 import { PluginActionButtons } from './PluginActions'
+import { PluginProviders } from './PluginProviders'
 
 const text = t.plugins
 
@@ -67,6 +68,10 @@ function ReadmePanel({ pluginId }: { pluginId: string }) {
   )
 }
 
+// 有没有模型提供方可说：带 Pi 扩展，或者读出了提供方、出了错。
+const hasProviderInfo = (detail: Detail) =>
+  detail.manifest.components.agentExtensions > 0 || detail.providers.length > 0 || detail.providerErrors.length > 0 || detail.providersError !== null
+
 function Overview({ detail }: { detail: Detail }) {
   const id = detail.plugin.id
   return (
@@ -75,6 +80,11 @@ function Overview({ detail }: { detail: Detail }) {
         <Panel title={copy.contains}>
           <ManifestSummary manifest={detail.manifest} columns={false} />
         </Panel>
+        {hasProviderInfo(detail) && (
+          <Panel title={text.providers.title} hint={text.providers.hint}>
+            <PluginProviders detail={detail} />
+          </Panel>
+        )}
         <Panel title={copy.enabledIn} hint={copy.enabledInHint}>
           <ProjectEnableList pluginId={id} schema={detail.manifest.configSchema} />
         </Panel>
@@ -322,6 +332,7 @@ export function PluginDetailPage() {
           <input type="checkbox" checked={deleteData} onChange={(event) => setDeleteData(event.target.checked)} className="mt-1 size-4 accent-red" />
           {copy.deleteData(detail.dataDir)}
         </label>
+        {detail.providers.length > 0 && <p className="text-[13px] leading-snug text-ink-700">{copy.deleteDataProviders}</p>}
       </ConfirmDialog>
     </DraftNavigationGuard>
   )
