@@ -91,6 +91,82 @@ func (e *Executor) ClaudeProjectsDir(ctx context.Context) string {
 	return e.claude.ProjectsDir(ctx, bin, e.claudeHelperEnv(ctx, home), home)
 }
 
+// purgeClaude 在删除 Agent、任务实例退役（都经 Release）时清理 Claude Code 为这个工作区留下的数据：只在 claude 为它建过会话记录目录时做；
+// 先把那个目录里的会话记录复制进 Agent 自己的 sessions/claude（平台的归档，同 Pi 的会话文件一样保留），再运行 claude purge <工作区> -y。
+// 目标只能是平台工作根之下、属于这个 Agent 的工作区；任何一步失败只记日志。
+func (e *Executor) purgeClaude(ctx context.Context, agentID uuid.UUID) {
+	if e.o.RealHome == nil || e.claude == nil || e.log == nil {
+		return // 不经 New 构造的执行器（测试用）：没有 Claude Code
+	}
+	d := e.dirs(agentID)
+	log := e.log.With("agentId", agentID)
+	if !within(e.o.WorkRoot, d.workspace) {
+		log.Error("工作区不在平台的工作根之下，不清理 Claude Code 的数据", "workspace", d.workspace)
+		return
+	}
+	home, err := e.o.RealHome()
+	if err != nil || !filepath.IsAbs(home) {
+		return
+	}
+	bin, err := e.claudeBinary(ctx)
+	if err != nil {
+		log.Info("找不到 claude，跳过清理 Claude Code 的数据")
+		return
+	}
+	env := e.claudeHelperEnv(ctx, home)
+	projectDir := filepath.Join(e.claude.ProjectsDir(ctx, bin, env, home), claudecli.ProjectDirName(d.workspace))
+	if info, err := os.Lstat(projectDir); err != nil || !info.IsDir() {
+		return // 这个工作区没用过 Claude Code
+	}
+	if err := archiveClaudeTranscripts(projectDir, filepath.Join(d.sessions, "claude")); err != nil {
+		log.Warn("归档 Claude Code 的会话记录失败，不清理它的数据", "err", err)
+		return
+	}
+	if err := e.purgeClaudeWorkspace(ctx, bin, env, agentID, d.workspace); err != nil {
+		log.Warn("claude purge 失败", "err", err)
+	}
+}
+
+// purgeClaudeWorkspace 运行 claude purge <path> -y。path 必须正是这个 Agent（或任务实例）在平台工作根之下的工作区：
+// 别的路径（包括绑定给它的本机目录）一律不运行，记日志并返回错误。
+func (e *Executor) purgeClaudeWorkspace(ctx context.Context, bin string, env []string, agentID uuid.UUID, path string) error {
+	if !filepath.IsAbs(path) || !within(e.o.WorkRoot, path) || filepath.Clean(path) != e.dirs(agentID).workspace {
+		e.log.Error("拒绝清理不是该 Agent 工作区的路径", "agentId", agentID, "path", path)
+		return fmt.Errorf("路径 %s 不是该 Agent 在平台工作根之下的工作区", path)
+	}
+	return claudecli.Purge(ctx, bin, env, path)
+}
+
+// archiveClaudeTranscripts 把 claude 为这个工作区留下的会话记录（目录里第一层的 <会话 ID>.jsonl，普通文件）复制到 dst。
+func archiveClaudeTranscripts(projectDir, dst string) error {
+	root, err := os.OpenRoot(projectDir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	entries, err := os.ReadDir(projectDir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.Type().IsRegular() || !claudecli.ValidSessionID(strings.TrimSuffix(name, ".jsonl")) || !strings.HasSuffix(name, ".jsonl") {
+			continue
+		}
+		data, err := root.ReadFile(name)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(dst, 0o700); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(dst, name), data, 0o600); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // claudeHelperEnv 是运行 claude 自己的短命令（--version、auth status、purge）时的环境。
 func (e *Executor) claudeHelperEnv(ctx context.Context, home string) []string {
 	var dirs []string

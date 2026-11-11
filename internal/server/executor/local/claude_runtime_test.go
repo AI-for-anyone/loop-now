@@ -230,8 +230,8 @@ func TestClaudeNeverTouchesRealHomeBesidesItsOwnTranscript(t *testing.T) {
 	}
 	after := snapshotTree(t, h.realHome)
 	prefix := filepath.ToSlash(filepath.Join(".claude", "projects", claudecli.ProjectDirName(d.workspace))) + "/"
-	claudeOwn := func(k string) bool { // claude 自己的会话记录，以及它为此建的上级目录
-		return strings.HasPrefix(k, prefix) || k == ".claude/" || k == ".claude/projects/"
+	claudeOwn := func(k string) bool { // claude 自己的会话记录、它为此建的上级目录，以及 fakeclaude 记下 purge 调用的文件
+		return strings.HasPrefix(k, prefix) || k == ".claude/" || k == ".claude/projects/" || k == ".fakeclaude-purge.log"
 	}
 	for k := range after {
 		if _, ok := h.before[k]; !ok && !claudeOwn(k) {
@@ -445,5 +445,101 @@ func TestClaudeRuntimeSwitchDoesNotRecordOldSession(t *testing.T) {
 	defer h.src.mu.Unlock()
 	if slices.Contains(h.src.recordLog[id], piSession) || !strings.HasSuffix(h.src.recorded[id], ".jsonl") || h.src.recorded[id] == piSession {
 		t.Fatalf("记下的会话：%v（Pi 的是 %s）", h.src.recordLog[id], piSession)
+	}
+}
+
+// purgeLog 返回 fakeclaude 记下的 purge 调用。
+func (h *claudeHarness) purgeLog() []string {
+	b, _ := os.ReadFile(filepath.Join(h.realHome, ".fakeclaude-purge.log"))
+	var out []string
+	for _, l := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+		if l != "" {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// 释放（删除 Agent、任务实例退役）时清理 Claude Code 为工作区留下的数据：先把会话记录归档进 Agent 的 sessions/claude，
+// 再 claude purge <工作区> -y。目标只能正是这个 Agent 的工作区：绑定的本机目录、别的 Agent 的工作区、工作根之外的路径一律不运行；
+// 没用过 Claude Code 的 Agent 不起 claude；找不到 claude 时跳过并记日志；归档失败就不 purge。
+func TestClaudePurgeOnRelease(t *testing.T) {
+	h := newClaudeHarness(t, nil)
+	localDir := t.TempDir()
+	id := h.claudeAgent(func(s *agentconfig.Snapshot) {
+		s.Local = agentconfig.LocalAccess{Directories: []agentconfig.LocalDirectory{{Path: localDir, Note: "user files"}}}
+	})
+	if res, _ := h.exec(id, "hi"); res.Outcome != executor.OutcomeCompleted {
+		t.Fatalf("执行：%+v", res)
+	}
+	d := h.e.dirs(id)
+	h.src.mu.Lock()
+	transcript := h.src.recorded[id]
+	h.src.mu.Unlock()
+	pi := h.agent(nil)
+	if res, _ := h.exec(pi, "pi"); res.Outcome != executor.OutcomeCompleted {
+		t.Fatalf("Pi：%+v", res)
+	}
+	if err := h.e.Release(context.Background(), pi); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.purgeLog(); len(got) != 0 {
+		t.Fatalf("没用过 Claude Code 的 Agent 不清理：%v", got)
+	}
+	if err := h.e.Release(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.purgeLog(); len(got) != 1 || got[0] != "purge "+d.workspace+" -y" {
+		t.Fatalf("purge 调用：%v（工作区 %s）", got, d.workspace)
+	}
+	want, _ := os.ReadFile(transcript)
+	if got, err := os.ReadFile(filepath.Join(d.sessions, "claude", filepath.Base(transcript))); err != nil || !bytes.Equal(got, want) || len(want) == 0 {
+		t.Fatalf("purge 之前应归档会话记录：%v", err)
+	}
+	bin := fakeclaudebin.Path(t)
+	env := h.e.claudeHelperEnv(context.Background(), h.realHome)
+	for name, path := range map[string]string{"绑定的本机目录": localDir, "别的 Agent 的工作区": h.e.dirs(pi).workspace, "工作根之外": filepath.Join(t.TempDir(), "agents", id.String(), "workspace"), "相对路径": "workspace"} {
+		if err := h.e.purgeClaudeWorkspace(context.Background(), bin, env, id, path); err == nil {
+			t.Errorf("%s 不能成为 purge 的目标", name)
+		}
+	}
+	if got := h.purgeLog(); len(got) != 1 {
+		t.Fatalf("被拒绝的路径不应调用 claude：%v", got)
+	}
+
+	// 找不到 claude：跳过并记日志。
+	missing := newClaudeHarness(t, nil)
+	other := missing.claudeAgent(nil)
+	missing.e.o.ClaudeBin = filepath.Join(t.TempDir(), "no-claude")
+	if err := missing.e.Release(context.Background(), other); err != nil || !strings.Contains(missing.logs.String(), "找不到 claude") {
+		t.Fatalf("找不到 claude 时跳过并记日志：%v %s", err, missing.logs.String())
+	}
+}
+
+// 归档失败（会话记录读不出来）就不 purge：宁可留着也不丢记录。
+func TestClaudePurgeSkippedWhenArchiveFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root 读得出无权限的文件")
+	}
+	h := newClaudeHarness(t, nil)
+	id := h.claudeAgent(nil)
+	if res, _ := h.exec(id, "hi"); res.Outcome != executor.OutcomeCompleted {
+		t.Fatalf("执行：%+v", res)
+	}
+	h.src.mu.Lock()
+	transcript := h.src.recorded[id]
+	h.src.mu.Unlock()
+	if err := os.Chmod(transcript, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(transcript, 0o600) })
+	if err := h.e.Release(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.purgeLog(); len(got) != 0 {
+		t.Fatalf("归档失败时不应 purge：%v", got)
+	}
+	if !strings.Contains(h.logs.String(), "归档 Claude Code 的会话记录失败") {
+		t.Fatalf("应记日志：%s", h.logs.String())
 	}
 }
