@@ -73,6 +73,7 @@ type Init struct {
 	Model      string
 	Version    string
 	Tools      []string
+	Skills     []string
 	MCPServers []MCPServer
 }
 
