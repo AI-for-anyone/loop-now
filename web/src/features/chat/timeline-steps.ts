@@ -3,6 +3,7 @@ import { t } from '@/i18n'
 
 type Entry = Schemas['TimelineEntry']
 type Run = Schemas['Run']
+type Runtime = Schemas['AgentRuntime']
 
 // 节点颜色：中性浅蓝、开始回复孔版蓝、成功绿、失败朱红、进行中黄、打断荧光粉。
 export type StepTone = 'neutral' | 'run' | 'ok' | 'fail' | 'warn' | 'hot'
@@ -36,6 +37,35 @@ function modelLabel(provider: string | null, model: string | null): string {
 
 // 启动阶段的用时：到下一个阶段、进入回复或结束为止。
 const PHASE_BOUNDARY: ReadonlySet<Entry['type']> = new Set(['phase', 'running', 'ended'])
+
+// 进程条目上的运行时；旧记录没有，即 Pi。
+const runtimeName = (runtime: Runtime | undefined) => t.runtime.names[runtime ?? 'pi']
+
+// 启动阶段属于哪个运行时：取这一轮之后启动或复用的进程条目上的；没有进程条目（启动前就失败）时，
+// Claude Code 特有的 runtime_* 失败也说明是它；都拿不到时按 Pi。
+function launchRuntime(entries: Entry[], from: number): Runtime | undefined {
+  for (const entry of entries.slice(from + 1)) {
+    if (entry.type === 'pi_started' || entry.type === 'pi_reused') return entry.runtime
+  }
+  return entries.some((entry) => entry.type === 'ended' && entry.errorCode?.startsWith('runtime_')) ? 'claude-code' : undefined
+}
+
+// Claude Code 报告的订阅额度：info 是 claude 原样给的对象，字段可能缺或不是预期的类型，缺的不写。
+// 额度种类与状态不认识时原样显示；重置时间是秒级时间戳（也容忍毫秒与日期字符串）。
+function rateLimitStep(info: Record<string, unknown>): { field: string | null; detail: string; tone: StepTone } {
+  const copy = t.timeline.detail.rateLimit
+  const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : null)
+  const type = text(info.rateLimitType), status = text(info.status)
+  const resets = resetTime(info.resetsAt)
+  const detail = [type && (copy.type[type] ?? type), status && (copy.status[status] ?? status), resets && copy.resetsAt(resets)].filter(Boolean).join(' · ')
+  const field = [type && `rateLimitType=${type}`, status && `status=${status}`].filter(Boolean).join(' · ')
+  return { field: field || null, detail: detail || copy.empty, tone: status === 'rejected' ? 'fail' : status === 'allowed_warning' ? 'warn' : 'neutral' }
+}
+
+function resetTime(value: unknown): string | null {
+  const ms = typeof value === 'number' && Number.isFinite(value) ? (value < 1e11 ? value * 1000 : value) : typeof value === 'string' ? Date.parse(value) : NaN
+  return Number.isFinite(ms) && ms > 0 ? new Date(ms).toISOString() : null
+}
 
 function endedLabel(entry: Extract<Entry, { type: 'ended' }>): { label: string; tone: StepTone } {
   if (entry.status === 'completed') return { label: t.timeline.step.ended.completed, tone: 'ok' }
@@ -106,7 +136,7 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
       case 'phase': {
         const next = entries.slice(index + 1).find((other) => PHASE_BOUNDARY.has(other.type))
         const created = step(entry, index, {
-          label: t.timeline.step[entry.phase] ?? t.common.unknown(entry.phase),
+          label: entry.phase === 'launching' ? t.timeline.step.launching(runtimeName(launchRuntime(entries, index))) : (t.timeline.step[entry.phase] ?? t.common.unknown(entry.phase)),
           field: t.timeline.field.phase(entry.phase),
           duration: next ? t.timeline.duration(ms(entry.at, next.at)) : null,
         })
@@ -154,14 +184,14 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
       case 'pi_reused': {
         const detail =
           entry.type === 'pi_started'
-            ? t.timeline.detail.piStarted(entry.pid, t.timeline.detail.piStartReason[entry.reason] ?? entry.reason)
-            : t.timeline.detail.piReused(entry.pid)
+            ? t.timeline.detail.processStarted(runtimeName(entry.runtime), entry.pid, t.timeline.detail.piStartReason[entry.reason] ?? entry.reason)
+            : t.timeline.detail.processReused(runtimeName(entry.runtime), entry.pid)
         if (launching && launching.detail === null) {
           launching.detail = detail
         } else {
           steps.push(
             step(entry, index, {
-              label: t.timeline.step[entry.type],
+              label: t.timeline.step.process_started(runtimeName(entry.runtime)),
               detail,
               duration: entry.type === 'pi_started' ? t.timeline.duration(entry.startupMs) : null,
             }),
@@ -172,8 +202,8 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
       case 'pi_stopped':
         steps.push(
           step(entry, index, {
-            label: t.timeline.step.pi_stopped,
-            detail: t.timeline.detail.piStopped(entry.pid, t.overview.run.exit[entry.reason] ?? entry.reason, t.overview.elapsed(entry.uptimeMs)),
+            label: t.timeline.step.process_stopped(runtimeName(entry.runtime)),
+            detail: t.timeline.detail.processStopped(entry.pid, t.overview.run.exit[entry.reason] ?? entry.reason, t.overview.elapsed(entry.uptimeMs)),
             tone: 'warn',
           }),
         )
@@ -181,8 +211,8 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
       case 'pi_exited':
         steps.push(
           step(entry, index, {
-            label: t.timeline.step.pi_exited,
-            detail: t.timeline.detail.piExited(entry.pid, entry.exit, t.overview.elapsed(entry.uptimeMs)),
+            label: t.timeline.step.process_exited(runtimeName(entry.runtime)),
+            detail: t.timeline.detail.processExited(entry.pid, entry.exit, t.overview.elapsed(entry.uptimeMs)),
             output: entry.stderrTail || null,
             tone: 'fail',
           }),
@@ -291,6 +321,9 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
             tone: 'fail',
           }),
         )
+        break
+      case 'model_rate_limit':
+        steps.push(step(entry, index, { label: t.timeline.step.model_rate_limit, ...rateLimitStep(entry.info) }))
         break
       case 'ended': {
         const { label, tone } = endedLabel(entry)

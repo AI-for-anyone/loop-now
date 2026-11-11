@@ -1,5 +1,5 @@
 import type { components } from '@/api/schema.gen'
-import { formatPreciseClock, formatStepDuration } from './format'
+import { formatMonthDayClock, formatPreciseClock, formatStepDuration } from './format'
 
 type S = components['schemas']
 
@@ -24,13 +24,13 @@ export const timeline = {
     dispatched: '派发',
     waiting_slot: '等待执行名额',
     preparing: '准备运行环境',
-    launching: 'Pi 启动',
+    // 进程的几步写出运行时（Pi 或 Claude Code，取条目上的；旧记录没有，即 Pi）。
+    launching: (runtime: string) => `${runtime} 启动`,
     cli_install: (cli: string) => `安装 ${cli}`,
     workspace_sync: '同步配置与文件夹',
-    pi_started: 'Pi 启动',
-    pi_reused: 'Pi 启动',
-    pi_stopped: 'Pi 进程停止',
-    pi_exited: 'Pi 进程意外退出',
+    process_started: (runtime: string) => `${runtime} 启动`,
+    process_stopped: (runtime: string) => `${runtime} 进程停止`,
+    process_exited: (runtime: string) => `${runtime} 进程意外退出`,
     running: '开始回复',
     tool: (name: string) => `工具 ${name}`,
     model_call: {
@@ -48,6 +48,7 @@ export const timeline = {
     promoted: { interrupt: '已转为打断', queue: '已转为排队' } satisfies Record<S['WhenBusy'], string>,
     message_cancelled: '一条 Inbox 消息被取消',
     session_missing: '会话文件丢失',
+    model_rate_limit: '订阅额度',
     ended: {
       completed: '完成',
       failed: '失败',
@@ -68,11 +69,18 @@ export const timeline = {
       files_synced: (path: string, written: number, deleted: number) => `${path}：资料已同步（写入 ${written} 个，删除 ${deleted} 个）`,
       failed: (path: string, error: string | null) => (error ? `${path}：失败（${error}）` : `${path}：失败`),
     },
-    piStarted: (pid: number, reason: string) => `启动新的 Pi 进程，PID ${pid}（${reason}）。`,
+    processStarted: (runtime: string, pid: number, reason: string) => `启动新的 ${runtime} 进程，PID ${pid}（${reason}）。`,
     piStartReason: { no_process: '没有存活的进程', config_changed: '配置修改后重启' } as Record<string, string>,
-    piReused: (pid: number) => `复用常驻的 Pi 进程，PID ${pid}。`,
-    piStopped: (pid: number, reason: string, uptime: string) => `PID ${pid}，${reason}，运行了 ${uptime}。`,
-    piExited: (pid: number, exit: string, uptime: string) => `PID ${pid}，${exit}，运行了 ${uptime}。`,
+    processReused: (runtime: string, pid: number) => `复用常驻的 ${runtime} 进程，PID ${pid}。`,
+    processStopped: (pid: number, reason: string, uptime: string) => `PID ${pid}，${reason}，运行了 ${uptime}。`,
+    processExited: (pid: number, exit: string, uptime: string) => `PID ${pid}，${exit}，运行了 ${uptime}。`,
+    // Claude Code 报告的订阅额度（info 是 claude 原样给的，字段可能缺）：额度种类、状态、重置时间；不认识的值原样显示。
+    rateLimit: {
+      type: { five_hour: '5 小时额度', seven_day: '7 天额度', seven_day_opus: '7 天 Opus 额度', seven_day_sonnet: '7 天 Sonnet 额度', overage: '超额用量' } as Record<string, string>,
+      status: { allowed: '可用', allowed_warning: '快用完了', rejected: '已用完' } as Record<string, string>,
+      resetsAt: (time: string) => `${formatMonthDayClock(time)} 重置`,
+      empty: '没有给出额度详情',
+    },
     modelCall: (model: string, input: string, output: string, cacheRead: string, cacheWrite: string) =>
       `${model} · 输入 ${input} · 输出 ${output} · 缓存读取 ${cacheRead} · 缓存写入 ${cacheWrite}`,
     retryStarted: (attempt: number, max: number, delay: string, error: string) => `第 ${attempt}/${max} 次，${delay} 后重试：${error}`,

@@ -11,6 +11,7 @@ export const keys = {
   // 插件安装、更新、卸载、项目启用、授权、全局停用和保存 models.json 后整体失效。
   modelProviders: ['modelProviders'] as const,
   agentModelProviders: (agentId: string) => ['modelProviders', 'agent', agentId] as const,
+  runtimes: ['runtimes'] as const,
   modelSettings: ['modelSettings'] as const,
   models: (providerId: string) => ['models', providerId] as const,
   cliTemplates: ['cliTemplates'] as const,
@@ -90,6 +91,21 @@ export function useModelProviders(agentId?: string) {
     queryKey: agentId ? keys.agentModelProviders(agentId) : keys.modelProviders,
     queryFn: () => call(api.GET('/model-providers', agentId ? { params: { query: { agentId } } } : {})),
     staleTime: agentId ? 0 : Infinity,
+  })
+}
+
+// 各运行时在本机是否可用（Claude Code 有没有装、登没登录）。服务端缓存 30 秒，这里同样 30 秒内不重读；
+// enabled 为 false 时不读（模型选择只在选了 Claude Code 时才需要）。
+export function useRuntimes(enabled = true) {
+  return useQuery({ queryKey: keys.runtimes, queryFn: () => call(api.GET('/runtimes')), staleTime: 30_000, enabled })
+}
+
+// 不用服务端的缓存重新检查（refresh=true），结果直接换进 useRuntimes 的缓存。
+export function useRefreshRuntimes() {
+  const client = useQueryClient()
+  return useMutation<Schemas['RuntimeList'], ApiError, void>({
+    mutationFn: () => call(api.GET('/runtimes', { params: { query: { refresh: true } } })),
+    onSuccess: (data) => client.setQueryData(keys.runtimes, data),
   })
 }
 

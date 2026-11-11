@@ -399,6 +399,28 @@ export interface paths {
         patch: operations["updateLocalModeSettings"];
         trace?: never;
     };
+    "/runtimes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Agent 运行时在本机是否可用
+         * @description pi 为随包的 Pi，总是可用。claude-code 为用户本机安装的 Claude Code：在服务端用户登录 shell 的 PATH 里找 claude、运行 claude --version；
+         *     登录状态由 claude auth status 自己回答（平台不读、不保存它的凭证），只给出是否登录、登录方式与订阅类型，邮箱与组织不返回。
+         *     判断不了登录状态时 state 为 unknown，此时只在运行失败时如实报错（runtime_login_required 等）。结果缓存 30 秒，refresh=true 时重新检查。
+         */
+        get: operations["listRuntimes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/model-providers/{providerId}/models": {
         parameters: {
             query?: never;
@@ -3375,6 +3397,38 @@ export interface components {
          * @enum {string}
          */
         AgentRuntime: "pi" | "claude-code";
+        RuntimeList: {
+            runtimes: components["schemas"]["RuntimeStatus"][];
+        };
+        RuntimeStatus: {
+            id: components["schemas"]["AgentRuntime"];
+            /** @description claude-code 为找到了 claude 且读得出版本（是否登录另见 login） */
+            available: boolean;
+            /** @description pi 为随包 Pi 的版本；claude-code 为 claude --version 的版本号 */
+            version: string | null;
+            /** @description claude 解析符号链接后的真实路径；pi 与没找到时为 null */
+            binaryPath: string | null;
+            /**
+             * @description not_found：登录 shell 的 PATH 里找不到 claude；version_failed：运行 claude --version 失败
+             * @enum {string|null}
+             */
+            unavailableReason: "not_found" | "version_failed" | null;
+            /** @description 只有 claude-code 且找到了 claude 时有；pi 与没找到时为 null */
+            login: components["schemas"]["RuntimeLogin"] | null;
+            /** Format: date-time */
+            checkedAt: string;
+        };
+        RuntimeLogin: {
+            /**
+             * @description 来自 claude auth status；运行不了或输出无法识别时为 unknown
+             * @enum {string}
+             */
+            state: "logged_in" | "logged_out" | "unknown";
+            /** @description 登录方式，如 claude.ai */
+            authMethod: string | null;
+            /** @description 订阅类型，如 max */
+            subscriptionType: string | null;
+        };
         ModelList: {
             providerId: string;
             models: components["schemas"]["Model"][];
@@ -4478,7 +4532,7 @@ export interface components {
             entries: components["schemas"]["TimelineEntry"][];
             usage: components["schemas"]["UsageTotals"];
         };
-        TimelineEntry: components["schemas"]["TimelineSleepEntry"] | components["schemas"]["TimelineQueued"] | components["schemas"]["TimelinePromoted"] | components["schemas"]["TimelineMessageCancelled"] | components["schemas"]["TimelineMarker"] | components["schemas"]["TimelinePhase"] | components["schemas"]["TimelineCliInstall"] | components["schemas"]["TimelineWorkspaceSync"] | components["schemas"]["TimelinePiStarted"] | components["schemas"]["TimelinePiReused"] | components["schemas"]["TimelinePiStopped"] | components["schemas"]["TimelinePiExited"] | components["schemas"]["TimelineTool"] | components["schemas"]["TimelineModelCall"] | components["schemas"]["TimelineModelRetryStarted"] | components["schemas"]["TimelineModelRetryEnded"] | components["schemas"]["TimelineCompaction"] | components["schemas"]["TimelineAbortRequested"] | components["schemas"]["TimelineEnded"] | components["schemas"]["TimelineSessionMissing"] | components["schemas"]["TimelineExtensionUI"];
+        TimelineEntry: components["schemas"]["TimelineSleepEntry"] | components["schemas"]["TimelineQueued"] | components["schemas"]["TimelinePromoted"] | components["schemas"]["TimelineMessageCancelled"] | components["schemas"]["TimelineMarker"] | components["schemas"]["TimelinePhase"] | components["schemas"]["TimelineCliInstall"] | components["schemas"]["TimelineWorkspaceSync"] | components["schemas"]["TimelinePiStarted"] | components["schemas"]["TimelinePiReused"] | components["schemas"]["TimelinePiStopped"] | components["schemas"]["TimelinePiExited"] | components["schemas"]["TimelineTool"] | components["schemas"]["TimelineModelCall"] | components["schemas"]["TimelineModelRetryStarted"] | components["schemas"]["TimelineModelRetryEnded"] | components["schemas"]["TimelineCompaction"] | components["schemas"]["TimelineAbortRequested"] | components["schemas"]["TimelineEnded"] | components["schemas"]["TimelineSessionMissing"] | components["schemas"]["TimelineExtensionUI"] | components["schemas"]["TimelineModelRateLimit"];
         /**
          * @description Agent 侧的扩展经 ctx.ui 发来的请求（Pi RPC 的 extension_ui_request）。notify 是通知（level 为 info、warning、error），
          *     setStatus 设置或清除一条状态（message 为空时清除）。select、confirm、input、editor 是对话，message 为对话标题：
@@ -4644,6 +4698,8 @@ export interface components {
              */
             reason: "no_process" | "config_changed";
             configVersion: number;
+            /** @description 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。 */
+            runtime?: components["schemas"]["AgentRuntime"];
         };
         /** @description 复用了已运行的 Pi 进程 */
         TimelinePiReused: {
@@ -4657,6 +4713,8 @@ export interface components {
             pid: number;
             /** Format: date-time */
             processStartedAt: string | null;
+            /** @description 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。 */
+            runtime?: components["schemas"]["AgentRuntime"];
         };
         /** @description 平台停止了 Pi 进程 */
         TimelinePiStopped: {
@@ -4671,6 +4729,8 @@ export interface components {
             /** @enum {string} */
             reason: "idle_timeout" | "config_changed" | "evicted" | "released" | "fork_snapshot" | "shutdown" | "abort_timeout";
             uptimeMs: number;
+            /** @description 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。 */
+            runtime?: components["schemas"]["AgentRuntime"];
         };
         /** @description Pi 进程意外退出 */
         TimelinePiExited: {
@@ -4686,6 +4746,19 @@ export interface components {
             exit: string;
             /** @description Pi 错误输出的末尾片段（有长度上限） */
             stderrTail: string;
+            /** @description 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。 */
+            runtime?: components["schemas"]["AgentRuntime"];
+        };
+        /** @description Claude Code 报告的订阅额度状态（rate_limit_event），info 原样（如 status、rateLimitType、resetsAt）；只记录，不影响执行。 */
+        TimelineModelRateLimit: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "model_rate_limit";
+            /** Format: date-time */
+            at: string;
+            info: Record<string, never>;
         };
         /** @description 一次工具调用，at 为开始时间；仅 bash 可含有界、脱敏后的 command；不含其他参数与输出 */
         TimelineTool: {
@@ -9421,6 +9494,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LocalModeSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    listRuntimes: {
+        parameters: {
+            query?: {
+                /** @description 为 true 时不用缓存，重新检查 */
+                refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 各运行时的状态，pi 在前 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeList"];
                 };
             };
             401: components["responses"]["Unauthenticated"];

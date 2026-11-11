@@ -5,6 +5,7 @@ import type { Schemas } from '@/api/client'
 import { apiUrl, errorBody, makeAgent } from '@/test/api'
 import { renderConfig, withClaudeCode } from '@/test/config'
 import { chooseModel } from '@/test/model-picker'
+import { runtimeList } from '@/test/runtimes'
 
 // 运行时由模型提供方决定：选本机的 Claude Code 就是 Claude Code 运行时，其余是 Pi。
 const region = (name: string) => screen.getByRole('region', { name })
@@ -153,5 +154,49 @@ describe('Claude Code 不需要账号', () => {
     await waitFor(() => expect(within(section).queryByRole('status')).toBeNull())
     expect(within(section).queryByRole('combobox')).toBeNull()
     expect(within(section).queryByRole('link')).toBeNull()
+  })
+})
+
+describe('本机的 Claude Code 不可用或没登录', () => {
+  const runtimes = (list: Schemas['RuntimeList']) => {
+    let reads = 0
+    return { handler: http.get(apiUrl('/runtimes'), () => { reads += 1; return HttpResponse.json(list) }), reads: () => reads }
+  }
+
+  it('选中时提醒，说明怎么处理、处理好之前运行会失败；仍然可以选并保存', async () => {
+    const agent = makeAgent()
+    const status = runtimes(runtimeList({ available: false, version: null, binaryPath: null, unavailableReason: 'not_found', login: null }))
+    const bodies: unknown[] = []
+    const { user } = await renderConfig({
+      agent,
+      handlers: [catalog, status.handler, http.patch(apiUrl(`/agents/${agent.id}`), async ({ request }) => { bodies.push(await request.json()); return HttpResponse.json(claudeAgent({ id: agent.id })) })],
+    })
+    const basic = region('基本信息')
+    const select = within(basic).getByLabelText('模型提供方')
+    await waitFor(() => expect(option(select, 'claude-code')).toBeDefined())
+    // 没选 Claude Code 时不读运行时状态。
+    expect(status.reads()).toBe(0)
+    await user.selectOptions(select, 'claude-code')
+    expect(await within(basic).findByText('本机没找到 claude：装好 Claude Code，并确认在终端里能运行 claude。处理好之前，用它的 Agent 运行会失败。')).toHaveAttribute('role', 'note')
+    await chooseModel(user, basic, 'sonnet')
+    await user.click(saveButton())
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '切换并保存' }))
+    await waitFor(() => expect(bodies).toEqual([{ model: { provider: 'claude-code', modelId: 'sonnet' } }]))
+  })
+
+  it('没登录时提醒在本机终端登录；已登录或登录状态判断不了时不提醒', async () => {
+    const loggedOut = runtimes(runtimeList({ login: { state: 'logged_out', authMethod: null, subscriptionType: null } }))
+    const first = await renderConfig({ agent: claudeAgent(), handlers: [catalog, loggedOut.handler] })
+    expect(await within(region('基本信息')).findByText('本机的 Claude Code 没有登录：在本机终端运行 claude 并登录。处理好之前，用它的 Agent 运行会失败。')).toBeInTheDocument()
+    first.unmount()
+
+    for (const login of [{ state: 'logged_in', authMethod: 'claude.ai', subscriptionType: 'max' }, { state: 'unknown', authMethod: null, subscriptionType: null }] as const) {
+      const status = runtimes(runtimeList({ login }))
+      const view = await renderConfig({ agent: claudeAgent(), handlers: [catalog, status.handler] })
+      await waitFor(() => expect(status.reads()).toBe(1))
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(within(region('基本信息')).queryByText(/处理好之前，用它的 Agent 运行会失败/)).toBeNull()
+      view.unmount()
+    }
   })
 })
