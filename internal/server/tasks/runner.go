@@ -462,7 +462,7 @@ func (s *Service) settleTx(ctx context.Context, m *store.TaskMutation, t store.T
 		}
 		if e == nil {
 			old := store.TaskInstance{ID: n.RuntimeID, TaskID: t.TaskID, AgentID: n.AgentID, AgentName: n.AgentName}
-			if _, e = s.Store.EnqueueTaskInboxTurn(ctx, m, old, "你有尚未处理的任务Inbox消息，请列摘要后逐条读取并回复；当前只处理对话，不推进其他workflow节点。", 1, &trigger); e != nil {
+			if _, e = s.Store.EnqueueTaskInboxTurn(ctx, m, old, "You have unhandled task Inbox messages. List the summaries, then read and reply to them one by one; for now only handle the conversation and do not advance any other workflow node.", 1, &trigger); e != nil {
 				return nil, e
 			}
 		}

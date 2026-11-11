@@ -36,9 +36,9 @@ func newTaskLarkContinuation(record *taskmodel.Record, action, run uuid.UUID, re
 	next.StartedAt, next.EndedAt = nil, nil
 	next.RunIDs = []uuid.UUID{run}
 	var prompt strings.Builder
-	fmt.Fprintf(&prompt, "平台恢复通知：控制台于%s明确确认剩余QA恢复。\n来源actionId：%s；原taskId：%s；原nodeRunId：%s；新nodeRunId：%s；bindingRevision：%d。\n", confirmedAt.UTC().Format(time.RFC3339Nano), action, record.View.Task.ID, old.ID, next.ID, revision)
-	prompt.WriteString("保留原任务、步骤、visit、runtime、目录及会话，保留已经完成的部署与产物。禁止重新运行build/deploy或重新发送已确认发送的提测；只继续用户已确认的剩余QA提测及同任务结果跟进。外部结果未知时先核原记录，不自动重发。\n本次是独立的新attempt/run/turn；原失败轮次、旧Output和旧提交不作为本轮完成依据，必须由本轮真实提交才能推进。后续失败沿既有任务规则处理，不返回前序部署。\n")
-	prompt.WriteString("以下为原任务持久产物引用，不代表本轮已重新执行或验证：\n")
+	fmt.Fprintf(&prompt, "Platform resume notice: at %s the console explicitly confirmed resuming the remaining QA.\nSource actionId: %s; original taskId: %s; original nodeRunId: %s; new nodeRunId: %s; bindingRevision: %d.\n", confirmedAt.UTC().Format(time.RFC3339Nano), action, record.View.Task.ID, old.ID, next.ID, revision)
+	prompt.WriteString("Keep the original task, step, visit, runtime, directories and session, and keep the deployments and artifacts already completed. Do not rerun build/deploy and do not resend QA submissions already confirmed as sent; only continue the remaining QA submissions the user confirmed and the follow-up of their results in the same task. When an external result is unknown, check the original records first and do not resend automatically.\nThis is a separate new attempt/run/turn; the original failed turn, the old Output and the old submissions are not evidence that this turn is complete, and only a real submission in this turn can advance it. Later failures follow the existing task rules; do not go back to the earlier deployment.\n")
+	prompt.WriteString("Below are references to the original task's persisted artifacts; they do not mean this turn has re-executed or verified anything:\n")
 	for _, artifact := range record.View.Artifacts {
 		if artifact.TaskID != record.View.Task.ID {
 			return taskmodel.NodeRun{}, "", errors.New("原产物作用域不匹配")

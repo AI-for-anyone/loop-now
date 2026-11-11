@@ -163,7 +163,7 @@ func TestLoginsEnvShimsAndPrompt(t *testing.T) {
 	if tea := lookPath(d.Env["PATH"], "tea"); tea != filepath.Join(userBin, "tea") {
 		t.Fatalf("没配的 CLI 应落到用户本机：%s", tea)
 	}
-	if !strings.Contains(d.SystemPrompt, "本机登录：你的 HOME 是用户本人的主目录 "+realHome) || !strings.Contains(d.SystemPrompt, "不要反复重试") {
+	if !strings.Contains(d.SystemPrompt, "Local logins: your HOME is the user's own home directory "+realHome) || !strings.Contains(d.SystemPrompt, "do not keep retrying") {
 		t.Fatalf("提示词应提醒本机登录与交互授权：\n%s", d.SystemPrompt)
 	}
 	pid := h.pid(id)
@@ -176,7 +176,7 @@ func TestLoginsEnvShimsAndPrompt(t *testing.T) {
 		t.Fatal("登录状态开关变化应在下一次派发重启 Pi")
 	}
 	d = readDump(t, dumpPath)
-	if d.Env["HOME"] != dirs.home || d.Env["SSH_AUTH_SOCK"] != "" || d.Env["XDG_CONFIG_HOME"] != "" || strings.Contains(d.SystemPrompt, "本机登录") {
+	if d.Env["HOME"] != dirs.home || d.Env["SSH_AUTH_SOCK"] != "" || d.Env["XDG_CONFIG_HOME"] != "" || strings.Contains(d.SystemPrompt, "Local logins") {
 		t.Fatalf("关掉后应复原：HOME=%s SSH=%s XDG=%s", d.Env["HOME"], d.Env["SSH_AUTH_SOCK"], d.Env["XDG_CONFIG_HOME"])
 	}
 	if path := d.Env["PATH"]; path != strings.Join([]string{ghDir, base, userBin}, string(os.PathListSeparator)) {

@@ -12,11 +12,11 @@ import (
 )
 
 var (
-	projectArg     = cli.Arg{Name: "project", Description: "项目名或项目 ID，取自 project list"}
-	projectNameArg = cli.Arg{Name: "name", Description: "项目名，1 到 100 个字符；不能含 / 或 #，不能以 @ 开头，不能是 UUID 格式"}
+	projectArg     = cli.Arg{Name: "project", Description: "Project name or project ID, from project list"}
+	projectNameArg = cli.Arg{Name: "name", Description: "Project name, 1 to 100 characters; cannot contain / or #, cannot start with @, and cannot be in UUID format"}
 	scopeFlags     = []cli.Flag{
-		{Name: "project", Type: cli.TypeString, Description: "项目名或项目 ID，取自 project list"},
-		{Name: "platform", Type: cli.TypeBool, Description: "平台持有的 Agent（不属于任何项目，地址就是名称）"},
+		{Name: "project", Type: cli.TypeString, Description: "Project name or project ID, from project list"},
+		{Name: "platform", Type: cli.TypeBool, Description: "Agents held by the platform (belonging to no project; the address is the name)"},
 	}
 	// 列出与创建 Agent 必须指定范围：Agent 的归属不能更改，不把默认项目当作隐含的范围。
 	scopeRequired = cli.Constraint{Kind: cli.ExactlyOne, Flags: []string{"project", "platform"}, Hint: "用 loopctl project list 查看项目"}
@@ -27,7 +27,7 @@ var (
 func addProject(r *cli.Registry) {
 	r.Add(&cli.Command{
 		Path:       []string{"project", "list"},
-		Summary:    "平台 Agent 发现项目与当前 Manager；外部身份沿用项目列表（默认项目在前）",
+		Summary:    "For platform Agents, discover projects and their current Manager; for external identities, the project list (default project first)",
 		Identities: both,
 		Network:    true,
 		Retry:      true,
@@ -38,7 +38,7 @@ func addProject(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"project", "get"},
-		Summary:    "查看一个项目：是否为默认项目、Manager 与 Agent 数量",
+		Summary:    "Show a project: whether it is the default project, its Manager and its number of Agents",
 		Identities: externalOnly,
 		Network:    true,
 		Retry:      true,
@@ -54,7 +54,7 @@ func addProject(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"project", "create"},
-		Summary:    "在默认组织下新建项目；项目名在未删除的项目中唯一，重名返回 name_conflict",
+		Summary:    "Create a project in the default organization; the name is unique among undeleted projects, and a duplicate returns name_conflict",
 		Identities: externalOnly,
 		Network:    true,
 		Args:       []cli.Arg{projectNameArg},
@@ -65,7 +65,7 @@ func addProject(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"project", "rename"},
-		Summary:    "给项目改名；项目内 Agent 的地址随之改变，Agent 忙时也可以改名",
+		Summary:    "Rename a project; the addresses of its Agents change with it, and it can be renamed even while Agents are busy",
 		Identities: externalOnly,
 		Network:    true,
 		Args:       []cli.Arg{projectArg, projectNameArg},
@@ -80,7 +80,7 @@ func addProject(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:        []string{"project", "delete"},
-		Summary:     "软删除项目：项目内 Agent 都须空闲，否则 agent_not_idle；默认项目不能删除。项目内 Agent 按删除 Agent 处理，Manager 取消，名称可以再用",
+		Summary:     "Soft-delete a project: all its Agents must be idle, otherwise agent_not_idle; the default project cannot be deleted. Its Agents are handled as deleted Agents, the Manager is removed, and the name can be reused",
 		Identities:  externalOnly,
 		Network:     true,
 		Destructive: true,
@@ -96,7 +96,7 @@ func addProject(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"project", "manager", "set"},
-		Summary:    "指定或更换项目 Manager；必须是本项目内未删除的 Agent",
+		Summary:    "Assign or change the project Manager; it must be an undeleted Agent in this project",
 		Identities: externalOnly,
 		Network:    true,
 		Args:       []cli.Arg{projectArg, agentArg},
@@ -115,7 +115,7 @@ func addProject(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"project", "manager", "clear"},
-		Summary:    "取消项目 Manager；原本没有 Manager 时也成功",
+		Summary:    "Remove the project Manager; succeeds even when there was none",
 		Identities: externalOnly,
 		Network:    true,
 		Args:       []cli.Arg{projectArg},

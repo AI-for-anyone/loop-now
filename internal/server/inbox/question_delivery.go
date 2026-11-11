@@ -210,7 +210,7 @@ func (s *Service) deliverQuestionEvent(ctx context.Context, id, qid, messageID u
 		to := original.From.Party
 		recipient = &to
 		thread := original.ThreadID
-		msg := store.NewInboxMessage{ID: messageID, ThreadID: &thread, InReplyTo: &qid, From: store.Party{Kind: "platform"}, To: to, Text: "平台通知：提问已到期：" + original.Preview, WhenBusy: "queue"}
+		msg := store.NewInboxMessage{ID: messageID, ThreadID: &thread, InReplyTo: &qid, From: store.Party{Kind: "platform"}, To: to, Text: "Platform notice: the question has expired: " + original.Preview, WhenBusy: "queue"}
 		if err = store.InsertInboxMessage(ctx, scope.Tx, msg); err != nil {
 			return err
 		}

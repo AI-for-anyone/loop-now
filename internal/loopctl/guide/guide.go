@@ -90,7 +90,7 @@ func Render(version string) ([]byte, error) {
 
 func exitCodes() string {
 	var b strings.Builder
-	b.WriteString("| 退出码 | 类别 | 含义 |\n|---|---|---|\n")
+	b.WriteString("| Exit code | Category | Meaning |\n|---|---|---|\n")
 	for _, e := range output.ExitTable() {
 		cat := "—"
 		if e.Category != "" {
@@ -110,26 +110,26 @@ func reference(r *cli.Registry) string {
 		}
 		var items []string
 		for _, a := range c.Args {
-			items = append(items, fmt.Sprintf("- `<%s>`：%s", a.Name, a.Description))
+			items = append(items, fmt.Sprintf("- `<%s>`: %s", a.Name, a.Description))
 		}
 		for _, f := range c.Flags {
 			name := "--" + f.Name
 			if f.Type != cli.TypeBool {
 				name += " <" + string(f.Type) + ">"
 			}
-			item := fmt.Sprintf("- `%s`：%s", name, f.Description)
+			item := fmt.Sprintf("- `%s`: %s", name, f.Description)
 			if f.Repeatable {
-				item += "（可重复，按出现顺序）"
+				item += " (repeatable, in the order given)"
 			}
 			if len(f.Values) > 0 {
-				item += fmt.Sprintf("（可选值：%s）", strings.Join(f.Values, "、"))
+				item += fmt.Sprintf(" (values: %s)", strings.Join(f.Values, ", "))
 			}
 			items = append(items, item)
 		}
 		for _, k := range c.Constraints {
-			items = append(items, fmt.Sprintf("- %s：--%s", constraintText(k.Kind), strings.Join(k.Flags, "、--")))
+			items = append(items, fmt.Sprintf("- %s: --%s", constraintText(k.Kind), strings.Join(k.Flags, ", --")))
 		}
-		s := fmt.Sprintf("### loopctl %s\n\n%s\n\n用法：`%s`", c.Name(), c.Summary, usage(c))
+		s := fmt.Sprintf("### loopctl %s\n\n%s\n\nUsage: `%s`", c.Name(), c.Summary, usage(c))
 		if len(items) > 0 {
 			s += "\n\n" + strings.Join(items, "\n")
 		}
@@ -141,13 +141,13 @@ func reference(r *cli.Registry) string {
 func constraintText(k cli.ConstraintKind) string {
 	switch k {
 	case cli.ExactlyOne:
-		return "必须且只能提供其中一个"
+		return "Exactly one of these is required"
 	case cli.AtMostOne:
-		return "最多提供其中一个"
+		return "At most one of these"
 	case cli.AtLeastOne:
-		return "至少提供其中一个"
+		return "At least one of these is required"
 	default:
-		return "必须同时提供"
+		return "These must be given together"
 	}
 }
 

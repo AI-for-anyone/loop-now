@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
@@ -466,7 +465,7 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	}
 	prompt := msg.Text
 	if run.WakeSleepID != nil && run.Origin != "sleep_wake" {
-		prompt = "平台通知：sleep已因新工作结束（sleepId=" + run.WakeSleepID.String() + "）。\n" + prompt
+		prompt = "Platform notice: your sleep was ended by new work (sleepId=" + run.WakeSleepID.String() + ").\n" + prompt
 	}
 	// 对话页的 Pi 命令：/pi:<name> 原样改写为 /<name> 发给 Pi，不加运行 ID 与平台通知（Pi 只认首字符为 / 的命令）。
 	command, piMessage := "", ""
@@ -481,7 +480,7 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	if run.TriggerInboxID != nil {
 		trigger = *run.TriggerInboxID
 	}
-	message := fmt.Sprintf("本轮运行ID：%s。\n%s", run.ID, prompt)
+	message := executor.RunIDLine(run.ID) + prompt
 	if command != "" {
 		message = piMessage
 	}

@@ -124,10 +124,10 @@ func (s *Service) DeliverInboxTx(ctx context.Context, tx *db.Tx, m *store.TaskMu
 func (s *Service) enqueueTaskInboxReminder(ctx context.Context, m *store.TaskMutation, inst store.TaskInstance, priority int, trigger uuid.UUID) (store.TaskTurn, error) {
 	n := m.Record.Current()
 	if n == nil || n.RuntimeID != inst.ID || n.Status == "blocked" {
-		text := fmt.Sprintf("你有任务 %s 的新Inbox消息。请用loopctl先列摘要再逐条读取、通过Inbox回复。当前没有可由你推进的workflow节点；只处理对话，不执行或提交其他节点。打断后不自动恢复旧执行。", inst.TaskID)
+		text := fmt.Sprintf("You have new Inbox messages for task %s. Use loopctl to list the summaries first, then read them one by one and reply through the Inbox. There is no workflow node for you to advance right now; only handle the conversation, and do not run or submit any other node. After an interruption, the old execution is not resumed automatically.", inst.TaskID)
 		return s.Store.EnqueueTaskInboxTurn(ctx, m, inst, text, priority, &trigger)
 	}
-	text := fmt.Sprintf("你有新的Inbox消息，请用loopctl先列摘要再逐条读取。任务：%s，当前节点运行：%s。打断后按新消息继续，不自动恢复被打断的执行。", inst.TaskID, n.ID)
+	text := fmt.Sprintf("You have new Inbox messages. Use loopctl to list the summaries first, then read them one by one. Task: %s; current node run: %s. After an interruption, continue with the new messages; the interrupted execution is not resumed automatically.", inst.TaskID, n.ID)
 	return s.Store.EnqueueTaskTurn(ctx, m, text, "inbox_reminder", priority, &trigger)
 }
 func (s *Service) InboxCommitted(ctx context.Context, runtime uuid.UUID) {

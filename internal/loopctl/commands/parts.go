@@ -14,15 +14,15 @@ import (
 )
 
 var (
-	cliArg        = cli.Arg{Name: "cli", Description: "CLI 名称，例如 gh、lark-cli"}
-	agentSkillArg = cli.Arg{Name: "agentSkillId", Description: "Skill 副本 ID，取自 agent skill list"}
+	cliArg        = cli.Arg{Name: "cli", Description: "CLI name, for example gh, lark-cli"}
+	agentSkillArg = cli.Arg{Name: "agentSkillId", Description: "Skill copy ID, from agent skill list"}
 )
 
 func addAgentParts(r *cli.Registry) {
 	// 可用 CLI 与凭证
 	r.Add(&cli.Command{
 		Path:       []string{"agent", "cli", "add"},
-		Summary:    "把 CLI 加入 Agent 的可用列表（已存在时不变）",
+		Summary:    "Add a CLI to the Agent's available list (unchanged if already there)",
 		Identities: externalOnly,
 		Network:    true,
 		Args:       []cli.Arg{agentArg, cliArg},
@@ -33,7 +33,7 @@ func addAgentParts(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:        []string{"agent", "cli", "remove"},
-		Summary:     "移除 CLI 权限与选择；项目共享账号保留，平台私有凭证删除，已有任务保持启动权限",
+		Summary:     "Remove the CLI permission and selection; shared project accounts are kept, private platform credentials are deleted, and existing tasks keep the permissions they started with",
 		Identities:  externalOnly,
 		Network:     true,
 		Destructive: true,
@@ -43,10 +43,10 @@ func addAgentParts(r *cli.Registry) {
 			return send(ctx, inv, http.MethodDelete, nil, "agents", id, "clis", inv.Args[1])
 		}),
 	})
-	credFlag := cli.Flag{Name: "from-file", Type: cli.TypePathOrStdin, Required: true, Description: "凭证文件，内容为 JSON 对象 {\"名称\":\"值\"}；- 表示标准输入。凭证不接受命令行参数"}
+	credFlag := cli.Flag{Name: "from-file", Type: cli.TypePathOrStdin, Required: true, Description: "Credential file containing a JSON object {\"name\":\"value\"}; - means standard input. Credentials are not accepted as command-line arguments"}
 	r.Add(&cli.Command{
 		Path:       []string{"agent", "credential", "set-cli"},
-		Summary:    "仅平台 Agent：按 CLI 模板录入或覆盖私有凭证；项目 Agent 请用 project cli-account。文件中的键为模板字段名（见 cli-template list）。输出只有元数据",
+		Summary:    "Platform Agents only: enter or overwrite private credentials according to the CLI template; for project Agents use project cli-account. Keys in the file are the template field names (see cli-template list). The output is metadata only",
 		Identities: externalOnly,
 		Network:    true,
 		Stdin:      true,
@@ -63,7 +63,7 @@ func addAgentParts(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:        []string{"agent", "credential", "clear-cli"},
-		Summary:     "仅平台 Agent：删除私有 CLI 凭证（权限保留）；项目 Agent 请用 agent credential-selection clear",
+		Summary:     "Platform Agents only: delete private CLI credentials (the permission stays); for project Agents use agent credential-selection clear",
 		Identities:  externalOnly,
 		Network:     true,
 		Destructive: true,
@@ -75,12 +75,12 @@ func addAgentParts(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"agent", "credential", "set-model"},
-		Summary:    "仅平台 Agent：按提供方录入模型 API Key；项目 Agent 请用 project model-account。文件为 {\"provider\":\"anthropic\",\"key\":\"...\",\"expectedConfigVersion\":1}，版本可省略。认证方式见 model providers 的 authMethods；平台私有 OAuth 仅控制台，项目 OAuth 用 project model-account login。输出只有元数据",
+		Summary:    "Platform Agents only: enter a model API key for a provider; for project Agents use project model-account. The file is {\"provider\":\"anthropic\",\"key\":\"...\",\"expectedConfigVersion\":1}; the version can be omitted. For authentication methods see authMethods in model providers; private platform OAuth is console only, and project OAuth uses project model-account login. The output is metadata only",
 		Identities: externalOnly,
 		Network:    true,
 		Stdin:      true,
 		Args:       []cli.Arg{agentArg},
-		Flags:      []cli.Flag{{Name: "from-file", Type: cli.TypePathOrStdin, Required: true, Description: "模型 API Key 请求 JSON 文件；- 表示标准输入。仅 provider/key/可选 expectedConfigVersion，不接受环境变量或 OAuth 凭证"}},
+		Flags:      []cli.Flag{{Name: "from-file", Type: cli.TypePathOrStdin, Required: true, Description: "Model API key request JSON file; - means standard input. Only provider/key/optional expectedConfigVersion; environment variables and OAuth credentials are not accepted"}},
 		Output:     "CredentialMeta",
 		Run: withAgent(func(ctx context.Context, inv *cli.Invocation, id string) (any, error) {
 			m, err := modelCredentialFile(inv)
@@ -92,7 +92,7 @@ func addAgentParts(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:        []string{"agent", "credential", "clear-model"},
-		Summary:     "仅平台 Agent：清除私有模型账号；项目 Agent 请用 agent credential-selection clear；已有任务保持启动版本",
+		Summary:     "Platform Agents only: clear the private model account; for project Agents use agent credential-selection clear; existing tasks keep the version they started with",
 		Identities:  externalOnly,
 		Network:     true,
 		Destructive: true,
@@ -106,7 +106,7 @@ func addAgentParts(r *cli.Registry) {
 	// Skill 副本
 	r.Add(&cli.Command{
 		Path:       []string{"agent", "skill", "list"},
-		Summary:    "列出 Agent 的 Skill 副本",
+		Summary:    "List the Agent's Skill copies",
 		Identities: externalOnly,
 		Network:    true,
 		Retry:      true,
@@ -118,7 +118,7 @@ func addAgentParts(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"agent", "skill", "get"},
-		Summary:    "查看 Skill 副本的文件列表与 SKILL.md 内容",
+		Summary:    "Show a Skill copy's file list and SKILL.md content",
 		Identities: externalOnly,
 		Network:    true,
 		Retry:      true,
@@ -130,11 +130,11 @@ func addAgentParts(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"agent", "skill", "add"},
-		Summary:    "把 Skills 库中的模板复制给 Agent",
+		Summary:    "Copy a template from the Skills library to the Agent",
 		Identities: externalOnly,
 		Network:    true,
 		Args:       []cli.Arg{agentArg},
-		Flags:      []cli.Flag{{Name: "template", Type: cli.TypeString, Required: true, Description: "Skills 库中的模板 ID，取自 skill list"}},
+		Flags:      []cli.Flag{{Name: "template", Type: cli.TypeString, Required: true, Description: "Template ID in the Skills library, from skill list"}},
 		Output:     "AgentSkill",
 		Run: withAgent(func(ctx context.Context, inv *cli.Invocation, id string) (any, error) {
 			return send(ctx, inv, http.MethodPost, map[string]string{"templateId": inv.String("template")}, "agents", id, "skills")
@@ -142,7 +142,7 @@ func addAgentParts(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"agent", "skill", "edit"},
-		Summary:    "编辑 Skill 副本的 SKILL.md（只改这个文件）",
+		Summary:    "Edit a Skill copy's SKILL.md (only this file)",
 		Identities: externalOnly,
 		Network:    true,
 		Stdin:      true,
@@ -159,7 +159,7 @@ func addAgentParts(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:        []string{"agent", "skill", "recopy"},
-		Summary:     "用来源模板的当前内容整体覆盖 Skill 副本",
+		Summary:     "Overwrite the Skill copy entirely with the current content of its source template",
 		Identities:  externalOnly,
 		Network:     true,
 		Destructive: true,
@@ -171,7 +171,7 @@ func addAgentParts(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:        []string{"agent", "skill", "remove"},
-		Summary:     "从 Agent 上移除 Skill 副本",
+		Summary:     "Remove a Skill copy from the Agent",
 		Identities:  externalOnly,
 		Network:     true,
 		Destructive: true,
@@ -227,7 +227,7 @@ func credentialFile(inv *cli.Invocation) (map[string]string, error) {
 }
 
 func skillMdFlag(required bool) cli.Flag {
-	return cli.Flag{Name: "skill-md", Type: cli.TypePathOrStdin, Required: required, Description: "SKILL.md 文件，- 表示标准输入"}
+	return cli.Flag{Name: "skill-md", Type: cli.TypePathOrStdin, Required: required, Description: "SKILL.md file; - means standard input"}
 }
 
 func skillMarkdown(inv *cli.Invocation) (string, error) {

@@ -12,12 +12,12 @@ import (
 func addSleep(r *cli.Registry) {
 	r.Add(&cli.Command{
 		Path: []string{"sleep"}, Identities: []cli.Identity{cli.IdentityAgent}, Network: true,
-		Summary: "登记自身 sleep；成功后正常结束当前轮才生效，网络失败可能已登记，先查询状态",
+		Summary: "Register a sleep for yourself; it takes effect only after the current turn then ends normally; on a network failure it may already be registered, so check the status first",
 		Flags: []cli.Flag{
-			{Name: "run", Type: cli.TypeString, Required: true, Description: "平台本轮说明中的运行 UUID；不查询或替换为其他运行"},
-			{Name: "seconds", Type: cli.TypeInt, Required: true, Min: intp(1), Max: intp(2147483647), Description: "等待秒数，1..2147483647；从当前轮成功收尾后开始计算"},
+			{Name: "run", Type: cli.TypeString, Required: true, Description: "The run UUID from the platform's prompt for this turn; it is not queried or replaced with another run"},
+			{Name: "seconds", Type: cli.TypeInt, Required: true, Min: intp(1), Max: intp(2147483647), Description: "Seconds to wait, 1..2147483647; counted from when the current turn finishes successfully"},
 			taskActionFlag,
-			{Name: "reason", Type: cli.TypeString, Description: "可选说明，沿用服务端消息文本长度上限"},
+			{Name: "reason", Type: cli.TypeString, Description: "Optional note, subject to the server's message text length limit"},
 		}, Output: "SleepReceipt",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			for _, name := range []string{"run", "action-id"} {
@@ -41,7 +41,7 @@ func addSleep(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path: []string{"sleep", "status"}, Identities: []cli.Identity{cli.IdentityAgent}, Network: true,
-		Summary: "只读查询自身当前运行与有效 sleep；没有时为 null，不创建或重置 sleep",
+		Summary: "Read-only query of your current run and active sleep; null when there is none; does not create or reset a sleep",
 		Retry:   true, Output: "SleepState",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			return get(ctx, inv, nil, "sleep")

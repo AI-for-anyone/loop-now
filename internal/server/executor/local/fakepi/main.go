@@ -979,7 +979,7 @@ func parseDirectives(msg string) directives {
 }
 
 // reply 返回本轮回复文本：!text 优先；否则回显消息（有指令时去掉指令词）。
-// 中性模式回显时去掉平台加的“本轮运行ID”一行与指令词、保留换行，前缀为 "Got it: "；什么都不剩时回复 "Got it."。
+// 中性模式回显时去掉平台加的运行 ID 一行（“Run ID for this turn: …”，旧会话为“本轮运行ID：…”）与指令词、保留换行，前缀为 "Got it: "；什么都不剩时回复 "Got it."。
 func (d directives) reply(msg string) string {
 	if d.hasText {
 		return d.text
@@ -987,7 +987,8 @@ func (d directives) reply(msg string) string {
 	if neutral {
 		var lines []string
 		for _, line := range strings.Split(msg, "\n") {
-			if strings.HasPrefix(line, "本轮运行ID：") {
+			// 平台加的运行 ID 一行：现在是英文，旧会话里是中文，两种都去掉。
+			if strings.HasPrefix(line, "Run ID for this turn: ") || strings.HasPrefix(line, "本轮运行ID：") {
 				continue
 			}
 			var words []string

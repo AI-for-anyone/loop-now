@@ -260,7 +260,7 @@ func (s *Service) Send(ctx context.Context, p auth.Principal, to, text, whenBusy
 		return store.InboxMessage{}, err
 	}
 	if rcpt.forwarded {
-		text = "[原收件人：" + to + "]\n" + text
+		text = "[Original recipient: " + to + "]\n" + text
 	}
 	msg := store.NewInboxMessage{ID: uuid.Must(uuid.NewV7()), From: Party(p), To: rcpt.party, Text: text, WhenBusy: whenBusy}
 	if p.Kind == auth.KindPlugin {
@@ -393,7 +393,7 @@ func (s *Service) Reply(ctx context.Context, p auth.Principal, messageID uuid.UU
 			return store.InboxMessage{}, e
 		}
 		if forwarded {
-			msg := store.NewInboxMessage{ID: uuid.New(), From: me, To: target, Text: "[原收件人：" + other.ID.String() + "#" + inst.TaskID.String() + "]\n" + text, WhenBusy: whenBusy,
+			msg := store.NewInboxMessage{ID: uuid.New(), From: me, To: target, Text: "[Original recipient: " + other.ID.String() + "#" + inst.TaskID.String() + "]\n" + text, WhenBusy: whenBusy,
 				PluginChannel: channel, PluginSender: sender}
 			msg.ForwardTaskID = inst.TaskID
 			if msg.WhenBusy == "" {
@@ -459,7 +459,7 @@ func (s *Service) deliver(ctx context.Context, msg store.NewInboxMessage) (store
 			msg.ForwardTaskID = inst.TaskID
 			msg.ThreadID = nil
 			msg.InReplyTo = nil
-			msg.Text = "[原收件人：" + original + "]\n" + msg.Text
+			msg.Text = "[Original recipient: " + original + "]\n" + msg.Text
 			return s.deliver(ctx, msg)
 		}
 	}

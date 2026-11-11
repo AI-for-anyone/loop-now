@@ -163,7 +163,7 @@ func (s *Store) TaskTurnImageInput(ctx context.Context, t TaskTurn) ([]messageim
 			return nil, "", e
 		}
 		if len(images) > 0 {
-			notes = append(notes, fmt.Sprintf("图片%d-%d来自Inbox消息%s；提供图片不代表消息已读，仍需按原规则inbox read。", len(refs)+1, len(refs)+len(images), id))
+			notes = append(notes, fmt.Sprintf("Images %d-%d are from Inbox message %s; providing the images does not mean the message has been read, so still use inbox read as the existing rules require.", len(refs)+1, len(refs)+len(images), id))
 			refs = append(refs, images...)
 		}
 	}

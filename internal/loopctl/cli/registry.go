@@ -117,17 +117,17 @@ func (c *Command) flag(name string) (Flag, bool) {
 }
 
 // YesFlag 是删除类与覆盖类命令自动带上的确认选项。
-var YesFlag = Flag{Name: "yes", Type: TypeBool, Description: "确认执行删除或覆盖；缺少时不发出请求"}
+var YesFlag = Flag{Name: "yes", Type: TypeBool, Description: "Confirm a deletion or overwrite; without it no request is sent"}
 
 // HelpFlag 对所有命令都可用。
-var HelpFlag = Flag{Name: "help", Type: TypeBool, Description: "输出该命令的说明（与 schema <命令路径> 相同），不执行命令"}
+var HelpFlag = Flag{Name: "help", Type: TypeBool, Description: "Print this command's description (same as schema <command path>) without running it"}
 
 // ConnectionFlags 是连接服务端的命令接受的全局选项。
 var ConnectionFlags = []Flag{
-	{Name: "profile", Type: TypeString, Description: "外部身份：选择配置文件中的 profile；默认依次取 LOOPCTL_PROFILE、default"},
-	{Name: "server", Type: TypeString, Description: "外部身份：对外端口的根地址（https://），优先于 LOOPCTL_URL 与 profile"},
-	{Name: "ca-file", Type: TypePath, Description: "外部身份：PEM 格式的 CA 证书，指定后只信任其中的 CA；优先于 LOOPCTL_CA_FILE 与 profile"},
-	{Name: "timeout", Type: TypeDuration, Description: "单次请求的超时，例如 30s；优先于 LOOPCTL_TIMEOUT，默认 60s"},
+	{Name: "profile", Type: TypeString, Description: "External identity: choose a profile from the config file; defaults to LOOPCTL_PROFILE, then default"},
+	{Name: "server", Type: TypeString, Description: "External identity: root address of the external port (https://); takes precedence over LOOPCTL_URL and the profile"},
+	{Name: "ca-file", Type: TypePath, Description: "External identity: CA certificate in PEM format; when given, only the CAs in it are trusted; takes precedence over LOOPCTL_CA_FILE and the profile"},
+	{Name: "timeout", Type: TypeDuration, Description: "Timeout for a single request, for example 30s; takes precedence over LOOPCTL_TIMEOUT; default 60s"},
 }
 
 // Registry 是命令树。
