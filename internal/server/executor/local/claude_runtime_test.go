@@ -198,6 +198,19 @@ func TestClaudeEnvStripsAnthropicAndClaude(t *testing.T) {
 	if len(env.Forbidden) != 0 {
 		t.Fatalf("不能把 Anthropic／Claude 的变量交给 claude：%v", env.Forbidden)
 	}
+	// claude 自己的短命令（auth status 等）与主进程同一套基础变量：USER／LOGNAME（claude 按它找登录）、透传的 LANG。
+	h.env["LANG"] = "zh_CN.UTF-8"
+	helper := strings.Join(h.e.ClaudeHelperEnv(context.Background(), h.realHome), "\n")
+	for _, want := range []string{"USER=tester", "LOGNAME=tester", "LANG=zh_CN.UTF-8", "HOME=" + h.realHome} {
+		if !strings.Contains(helper, want) {
+			t.Errorf("辅助命令的环境缺少 %s：%s", want, helper)
+		}
+	}
+	for _, kv := range strings.Split(helper, "\n") {
+		if strings.HasPrefix(kv, "ANTHROPIC_") || strings.HasPrefix(kv, "CLAUDE") {
+			t.Errorf("辅助命令的环境不带 Anthropic／Claude 的变量：%s", kv)
+		}
+	}
 	all := claudeEnv([]string{"A=1", "ANTHROPIC_API_KEY=x", "CLAUDE_CONFIG_DIR=y", "CLAUDECODE=1", "CLAUDE_CODE_OAUTH_TOKEN=z", "PI_OFFLINE=1", "MYCLI_TOKEN=kept"})
 	if strings.Join(all, ",") != "A=1,MYCLI_TOKEN=kept" {
 		t.Fatalf("claudeEnv：%v", all)

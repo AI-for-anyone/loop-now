@@ -167,13 +167,24 @@ func archiveClaudeTranscripts(projectDir, dst string) error {
 	return nil
 }
 
-// claudeHelperEnv 是运行 claude 自己的短命令（--version、auth status、purge）时的环境。
-func (e *Executor) claudeHelperEnv(ctx context.Context, home string) []string {
+// ClaudeHelperEnv 是运行 claude 自己的短命令（--version、auth status、purge）时的环境：与 Agent 的 Claude Code 进程同一套基础变量
+// （真实 HOME、USER／LOGNAME、透传的 LANG 等），PATH 为执行 PATH 的基础部分加用户登录 shell 的 PATH。GET /runtimes 也用它。
+func (e *Executor) ClaudeHelperEnv(ctx context.Context, home string) []string {
 	var dirs []string
 	if e.o.UserPath != nil {
 		dirs = e.o.UserPath(ctx)
 	}
-	return claudecli.Env(home, "", append(filepath.SplitList(e.o.ExecBasePath), dirs...))
+	var extra []string
+	for _, name := range e.o.Passthrough {
+		if v := e.o.Getenv(name); v != "" && !executor.IsReservedEnv(name) && !e.modelSecretEnv(name) {
+			extra = append(extra, name+"="+v)
+		}
+	}
+	return claudecli.Env(claudecli.EnvOptions{Home: home, User: e.o.Username, Path: append(filepath.SplitList(e.o.ExecBasePath), dirs...), Extra: extra})
+}
+
+func (e *Executor) claudeHelperEnv(ctx context.Context, home string) []string {
+	return e.ClaudeHelperEnv(ctx, home)
 }
 
 // start 找到 claude、读出版本，按会话状态组装参数后启动。
