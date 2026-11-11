@@ -167,7 +167,8 @@ export function fakeInbox(options: FakeInboxOptions = {}) {
         to,
         threadId: target.threadId,
         inReplyTo: target.id,
-        text: body.text ?? (body.optionId ? `选择：${target.question?.options.find(option => option.id === body.optionId)?.label ?? body.optionId}` : ''),
+        // 按选项作答、没写文字时服务端自动填的正文（只是显示，前端不解析；改成英文之前是"选择：<label>"）。
+        text: body.text ?? (body.optionId ? `Selected: ${target.question?.options.find(option => option.id === body.optionId)?.label ?? body.optionId}` : ''),
         whenBusy: to.kind === 'agent' ? (body.whenBusy ?? 'queue') : null,
       })
       if (target.question?.state === 'open') {
