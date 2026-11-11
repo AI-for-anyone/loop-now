@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"loop-now/internal/server/agentconfig"
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/sleepmodel"
 	"loop-now/internal/server/store"
@@ -114,6 +115,7 @@ type ModelProvider struct {
 	ID       string  `json:"id"`
 	Name     *string `json:"name"`
 	Source   string  `json:"source"`
+	Runtime  string  `json:"runtime"`
 	PluginID *string `json:"pluginId"`
 	// PluginDisplayName 是注册它的插件的显示名（清单原样，可按语言）；UnavailableReason 只在带 agentId 查询时给出。
 	PluginDisplayName json.RawMessage `json:"pluginDisplayName"`
@@ -176,6 +178,7 @@ type AgentListItem struct {
 	Name          string             `json:"name"`
 	Address       *string            `json:"address"`
 	Model         ModelRef           `json:"model"`
+	Runtime       string             `json:"runtime"`
 	ConfigVersion int64              `json:"configVersion"`
 	Busy          bool               `json:"busy"`
 	SessionState  string             `json:"sessionState"`
@@ -194,6 +197,7 @@ type Agent struct {
 	Name            string          `json:"name"`
 	Address         *string         `json:"address"`
 	Model           ModelRef        `json:"model"`
+	Runtime         string          `json:"runtime"`
 	Prompt          string          `json:"prompt"`
 	PromptVersion   int64           `json:"promptVersion"`
 	ConfigVersion   int64           `json:"configVersion"`
@@ -305,13 +309,13 @@ func AgentAddress(a store.Agent) *string {
 // FromAgentListItem 转换列表项。
 func FromAgentListItem(a store.AgentListItem) AgentListItem {
 	return AgentListItem{Sleep: a.Sleep, SleepRevision: a.SleepRevision, ID: a.ID, Scope: ScopeOf(a.ProjectID), ProjectID: a.ProjectID, IsManager: a.IsManager,
-		Name: a.Name, Address: AgentAddress(a.Agent), Model: ModelRef{a.ModelProvider, a.ModelID}, ConfigVersion: a.ConfigVersion, ThinkingLevel: a.ThinkingLevel, ServiceTier: a.ServiceTier,
+		Name: a.Name, Address: AgentAddress(a.Agent), Model: ModelRef{a.ModelProvider, a.ModelID}, Runtime: agentruntime.ForProvider(a.ModelProvider), ConfigVersion: a.ConfigVersion, ThinkingLevel: a.ThinkingLevel, ServiceTier: a.ServiceTier,
 		Busy: a.Busy, SessionState: a.SessionState, CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt}
 }
 
 // FromAgentDetail 转换 Agent 详情。
 func FromAgentDetail(d agentconfig.AgentDetail) Agent {
-	out := Agent{ID: d.Agent.ID, Scope: ScopeOf(d.Agent.ProjectID), ProjectID: d.Agent.ProjectID, IsManager: d.Agent.IsManager, Name: d.Agent.Name, Address: AgentAddress(d.Agent), Model: ModelRef{d.Agent.ModelProvider, d.Agent.ModelID},
+	out := Agent{ID: d.Agent.ID, Scope: ScopeOf(d.Agent.ProjectID), ProjectID: d.Agent.ProjectID, IsManager: d.Agent.IsManager, Name: d.Agent.Name, Address: AgentAddress(d.Agent), Model: ModelRef{d.Agent.ModelProvider, d.Agent.ModelID}, Runtime: agentruntime.ForProvider(d.Agent.ModelProvider),
 		Prompt: d.Agent.Prompt, PromptVersion: d.Agent.PromptVersion, ConfigVersion: d.Agent.ConfigVersion, Busy: d.Busy, ThinkingLevel: d.Agent.ThinkingLevel, ServiceTier: d.Agent.ServiceTier,
 		Session: SessionInfo{State: d.Session.State, Epoch: d.Session.Epoch}, Clis: []AgentCli{},
 		ModelCredential: FromCredential(d.ModelCredential), CreatedAt: d.Agent.CreatedAt, UpdatedAt: d.Agent.UpdatedAt}
