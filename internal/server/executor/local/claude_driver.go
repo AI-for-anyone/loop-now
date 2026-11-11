@@ -45,6 +45,8 @@ func isClaude(snap agentconfig.Snapshot) bool {
 
 func (claudeDriver) name() string { return "Claude Code" }
 
+func (claudeDriver) runtime() string { return agentruntime.ClaudeCode }
+
 // identity 是模型与 effort：两者都只能在启动时给出，变了就重启（--resume 接续会话）。
 func (claudeDriver) identity(snap agentconfig.Snapshot) string {
 	return snap.ModelID + "|" + claudeEffort(snap)

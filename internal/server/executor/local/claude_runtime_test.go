@@ -143,6 +143,17 @@ func TestClaudeRuntimeTurnSessionAndResume(t *testing.T) {
 	if len(usage) != 1 || usage[0].Provider != "claude-code" || usage[0].Model != "claude-sonnet-fake" || usage[0].Input != 10 || usage[0].Kind != "assistant" {
 		t.Fatalf("用量：%+v", usage)
 	}
+	h.obs.mu.Lock()
+	startedRuntime := ""
+	for _, ev := range h.obs.events {
+		if ev.ev.Type == store.EventPiStarted {
+			startedRuntime, _ = ev.ev.Data["runtime"].(string)
+		}
+	}
+	h.obs.mu.Unlock()
+	if startedRuntime != "claude-code" {
+		t.Fatalf("进程启动事件应记下运行时：%q", startedRuntime)
+	}
 	pid := h.claudePid(id)
 	if res, _ = h.exec(id, "fake:history"); res.Text != "history=1" || h.claudePid(id) != pid {
 		t.Fatalf("复用同一进程：%+v", res)

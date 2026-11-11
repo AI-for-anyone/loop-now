@@ -28,8 +28,9 @@ type runtimeProcess interface {
 // 进程表、名额与淘汰、空闲超时、Agent 令牌、pid 文件、打断、任务冻结与交接，以及 prepare（CLI、Skills、凭证文件、
 // 工作区来源、本机模式、追加提示）都由执行器统一负责。
 type driver interface {
-	// name 是日志里的运行时名称。
+	// name 是日志里的运行时名称；runtime 是它的 AgentRuntime 取值（记在进程事件里）。
 	name() string
+	runtime() string
 	// identity 是运行时自己的进程指纹：与存活进程的不同即按新配置重启。
 	identity(snap agentconfig.Snapshot) string
 	// refresh 在复用存活进程前重写运行时自己的缓存文件；可预期的失败为 *failure。

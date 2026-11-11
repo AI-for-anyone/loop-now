@@ -11,6 +11,7 @@ import (
 
 	"loop-now/internal/procgroup"
 	"loop-now/internal/server/agentconfig"
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/executor/local/pirpc"
 	"loop-now/internal/server/executor/local/runturn"
@@ -22,6 +23,8 @@ import (
 type piDriver struct{ e *Executor }
 
 func (piDriver) name() string { return "Pi" }
+
+func (piDriver) runtime() string { return agentruntime.Pi }
 
 func (piDriver) identity(agentconfig.Snapshot) string { return "" }
 

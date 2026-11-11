@@ -411,7 +411,7 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 					e.turnFinished(p)
 					return nil, err
 				}
-				e.event(snap.AgentID, &r.id, store.EventPiReused, map[string]any{"pid": p.rt.Pid(), "startedAt": p.startedAt})
+				e.event(snap.AgentID, &r.id, store.EventPiReused, map[string]any{"pid": p.rt.Pid(), "startedAt": p.startedAt, "runtime": p.drv.runtime()})
 				e.obs.ProcessChanged(snap.AgentID)
 				return p, nil
 			}
@@ -635,7 +635,7 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 	}
 	startup := time.Since(begin)
 	e.event(snap.AgentID, &runID, store.EventPiStarted, map[string]any{
-		"pid": client.Pid(), "configVersion": snap.ConfigVersion, "startupMs": startup.Milliseconds(), "reason": startReason})
+		"pid": client.Pid(), "configVersion": snap.ConfigVersion, "startupMs": startup.Milliseconds(), "reason": startReason, "runtime": drv.runtime()})
 	e.snapshotLog(snap).Info(drv.name()+" 进程启动", "runId", runID, "pid", client.Pid(), "startup", startup, "reason", startReason)
 	return p, nil
 }
@@ -694,7 +694,7 @@ func (e *Executor) recordExit(p *proc, runID *uuid.UUID) {
 		}
 		stderr := tail(p.rt.Stderr(), e.o.StderrTailBytes)
 		e.event(p.agentID, runID, store.EventPiExited, map[string]any{
-			"pid": p.rt.Pid(), "uptimeMs": time.Since(p.startedAt).Milliseconds(), "exit": exit, "stderrTail": stderr})
+			"pid": p.rt.Pid(), "uptimeMs": time.Since(p.startedAt).Milliseconds(), "exit": exit, "stderrTail": stderr, "runtime": p.drv.runtime()})
 		p.log.Warn(p.drv.name()+" 进程意外退出", "runId", runID, "pid", p.rt.Pid(), "exit", exit)
 		e.obs.ProcessChanged(p.agentID)
 	})
@@ -862,7 +862,7 @@ func (e *Executor) revokeToken(tokenID uuid.UUID, log *slog.Logger) error {
 
 // recordStop 记录一次平台主动停止进程，时间为开始停止的时刻。
 func (e *Executor) recordStop(p *proc, why stopCause, at time.Time) {
-	data := map[string]any{"pid": p.rt.Pid(), "reason": why.reason, "uptimeMs": at.Sub(p.startedAt).Milliseconds()}
+	data := map[string]any{"pid": p.rt.Pid(), "reason": why.reason, "uptimeMs": at.Sub(p.startedAt).Milliseconds(), "runtime": p.drv.runtime()}
 	if why.forAgent != nil {
 		data["forAgentId"] = why.forAgent.String()
 	}
