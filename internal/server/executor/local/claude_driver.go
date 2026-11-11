@@ -130,13 +130,21 @@ func (e *Executor) purgeClaude(ctx context.Context, agentID uuid.UUID) {
 		return
 	}
 	env := e.claudeHelperEnv(ctx, home)
-	projectDir := filepath.Join(e.claude.ProjectsDir(ctx, bin, env, home), claudecli.ProjectDirName(d.workspace))
-	if info, err := os.Lstat(projectDir); err != nil || !info.IsDir() {
-		return // 这个工作区没用过 Claude Code
+	projects := e.claude.ProjectsDir(ctx, bin, env, home)
+	found := false
+	for _, name := range claudecli.ProjectDirNames(d.workspace) {
+		projectDir := filepath.Join(projects, name)
+		if info, err := os.Lstat(projectDir); err != nil || !info.IsDir() {
+			continue
+		}
+		found = true
+		if err := archiveClaudeTranscripts(projectDir, filepath.Join(d.sessions, "claude")); err != nil {
+			log.Warn("归档 Claude Code 的会话记录失败，不清理它的数据", "err", err)
+			return
+		}
 	}
-	if err := archiveClaudeTranscripts(projectDir, filepath.Join(d.sessions, "claude")); err != nil {
-		log.Warn("归档 Claude Code 的会话记录失败，不清理它的数据", "err", err)
-		return
+	if !found {
+		return // 这个工作区没用过 Claude Code
 	}
 	if err := e.purgeClaudeWorkspace(ctx, bin, env, agentID, d.workspace); err != nil {
 		log.Warn("claude purge 失败", "err", err)
@@ -304,6 +312,10 @@ func (cd claudeDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 		p.sessMu.Lock()
 		p.sessionFile = path
 		p.sessMu.Unlock()
+	} else if !p.sessionUntracked.Swap(true) {
+		// 找不到 claude 写的会话记录（例如 Windows 上它对工作目录的编码与这里不同）：这一轮照常结束，不当作保存失败；
+		// 这个进程里对话照常接续，下次启动开新会话。
+		p.log.Warn("找不到 Claude Code 的会话记录，下次启动将开新会话", "sessionId", p.sessionID, "workspace", p.dirs.workspace, "version", p.runtimeVersion)
 	}
 	cc, _ := p.rt.(*ccstream.Client)
 	if cc != nil {

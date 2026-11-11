@@ -192,7 +192,14 @@ func (s *Source) claudeInstanceSession(ctx context.Context, inst store.TaskInsta
 	}
 	projects := s.ClaudeProjects(ctx)
 	workspace := filepath.Join(s.WorkRoot, "agents", inst.ID.String(), "workspace")
-	if projects == "" || !claudecli.InProjects(projects, file) || filepath.Dir(file) != filepath.Join(projects, claudecli.ProjectDirName(workspace)) {
+	if projects == "" || !claudecli.InProjects(projects, file) {
+		return "", ""
+	}
+	owned := false
+	for _, name := range claudecli.ProjectDirNames(workspace) {
+		owned = owned || filepath.Dir(file) == filepath.Join(projects, name)
+	}
+	if !owned {
 		return "", ""
 	}
 	rel, err := filepath.Rel(projects, file)
