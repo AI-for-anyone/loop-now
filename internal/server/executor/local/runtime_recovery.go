@@ -89,7 +89,7 @@ func (h *RuntimeHandoff) CaptureRecovery(ctx context.Context, actionID uuid.UUID
 			if e.procs[id] != p || !alive(p) || p.busy || p.recoveryIdentity == nil {
 				return RuntimeRecoveryRecord{}, ErrRuntimeStopUnconfirmed
 			}
-			current, err := readRecoveryProcess(p.client.Pid())
+			current, err := readRecoveryProcess(p.rt.Pid())
 			if err != nil || current != *p.recoveryIdentity {
 				return RuntimeRecoveryRecord{}, ErrRuntimeStopUnconfirmed
 			}

@@ -8,14 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
-	authhelper "loop-now/auth-helper"
 
 	"loop-now/internal/procgroup"
 	"loop-now/internal/server/agentconfig"
@@ -24,10 +22,10 @@ import (
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/executor/local/pirpc"
+	"loop-now/internal/server/executor/local/runturn"
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/pluginhost"
-	"loop-now/internal/server/preflight"
 	"loop-now/internal/server/prompts"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/toolcommand"
@@ -131,7 +129,10 @@ type proc struct {
 	authBridge          *modelauth.RuntimeBridge
 	log                 *slog.Logger
 	agentID             uuid.UUID
-	client              *pirpc.Client
+	rt                  runtimeProcess // 运行时进程；进程表、停止、打断与一轮的执行只用它
+	client              *pirpc.Client  // Pi 的 RPC 客户端，只供 Pi 专有的操作；其他运行时为空
+	drv                 driver
+	runtimeIdentity     string // 运行时名称与它自己的指纹，变化即重启
 	version             int64
 	promptIdentity      string
 	localIdentity       string // 本机模式（目录与 PATH 开关）的指纹，变化即按新配置重启
@@ -280,17 +281,16 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 
 	runID := req.RunID
 	p.curRun.Store(&runID)
-	if snap.ThinkingLevel != nil {
-		thinkingCtx, cancel := context.WithTimeout(runCtx, e.o.StartTimeout)
-		err := p.client.SetThinkingLevel(thinkingCtx, *snap.ThinkingLevel)
-		cancel()
-		if err != nil {
-			e.turnFinished(p)
-			if r.interrupted.Load() || runCtx.Err() != nil {
-				return executor.Result{Outcome: executor.OutcomeInterrupted, ConfigVersion: snap.ConfigVersion}, nil
-			}
-			return failed(executor.ErrPiError, "无法应用本轮思考等级", snap.ConfigVersion), nil
+	if err := p.drv.beforeTurn(runCtx, p, snap); err != nil {
+		e.turnFinished(p)
+		if r.interrupted.Load() || runCtx.Err() != nil {
+			return executor.Result{Outcome: executor.OutcomeInterrupted, ConfigVersion: snap.ConfigVersion}, nil
 		}
+		var f *failure
+		if errors.As(err, &f) {
+			return failed(f.code, f.msg, snap.ConfigVersion), nil
+		}
+		return executor.Result{}, err
 	}
 	r.mu.Lock()
 	if r.interrupted.Load() || runCtx.Err() != nil {
@@ -301,20 +301,21 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	r.prompting = true
 	r.mu.Unlock()
 	sink.Running(snap.ConfigVersion)
-	tr, err := p.client.Prompt(ctx, req.Message, sinkAdapter{s: sink, command: func(id, name, command string) {
+	tr, err := p.rt.Prompt(ctx, req.Message, sinkAdapter{s: sink, command: func(id, name, command string) {
 		if command = toolcommand.Display(name, command); command != "" {
 			e.event(snap.AgentID, &runID, "tool.command", map[string]any{"toolCallId": id, "toolName": name, "command": command})
 		}
 	}}, req.Images...)
-	if errors.Is(err, pirpc.ErrExited) {
-		tr, err = pirpc.TurnResult{Outcome: pirpc.OutcomeFailed, ErrorCode: executor.ErrPiExited, ErrorMessage: "Pi 进程已退出"}, nil
+	exitCode, exitMsg := p.drv.exited()
+	if errors.Is(err, runturn.ErrExited) {
+		tr, err = runturn.Result{Outcome: runturn.OutcomeFailed, ErrorCode: exitCode, ErrorMessage: exitMsg}, nil
 	}
-	if tr.ErrorCode == executor.ErrPiExited {
+	if tr.ErrorCode == exitCode {
 		// 进程已退出：立刻移出进程表，下一条消息启动新进程（不等读协程确认 EOF）。
 		e.discard(p, &runID)
 	}
 	sessionErr := e.turnFinished(p)
-	if err == nil && sessionErr != nil && tr.Outcome == pirpc.OutcomeCompleted {
+	if err == nil && sessionErr != nil && tr.Outcome == runturn.OutcomeCompleted {
 		return failed(executor.ErrInternal, "会话记录保存失败", snap.ConfigVersion), nil
 	}
 	if err != nil {
@@ -322,9 +323,9 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	}
 	res := executor.Result{Text: tr.Text, ConfigVersion: snap.ConfigVersion}
 	switch {
-	case tr.Outcome == pirpc.OutcomeAborted, r.interrupted.Load() && tr.Outcome == pirpc.OutcomeFailed:
+	case tr.Outcome == runturn.OutcomeAborted, r.interrupted.Load() && tr.Outcome == runturn.OutcomeFailed:
 		res.Outcome = executor.OutcomeInterrupted
-	case tr.Outcome == pirpc.OutcomeCompleted:
+	case tr.Outcome == runturn.OutcomeCompleted:
 		res.Outcome, res.CommandHandled = executor.OutcomeCompleted, tr.Handled
 		if tr.Handled && tr.Notices != nil {
 			res.CommandNoticesTruncated = tr.Notices.Truncated
@@ -335,13 +336,13 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	default:
 		res.Outcome = executor.OutcomeFailed
 		res.ErrorCode, res.ErrorMessage = tr.ErrorCode, tr.ErrorMessage
-		if res.ErrorCode == executor.ErrPiExited {
+		if res.ErrorCode == exitCode {
 			// stdout 读到结束时，stderr 可能还在由 os/exec 的协程拷进缓冲：等进程结束（有上限，同 recordExit）再取尾部。
 			select {
-			case <-p.client.Done():
+			case <-p.rt.Done():
 			case <-time.After(e.o.StopGrace):
 			}
-			res.ErrorMessage = strings.TrimSpace("Pi 进程异常退出 " + tail(p.client.Stderr(), e.o.StderrTailBytes))
+			res.ErrorMessage = strings.TrimSpace(p.drv.crashMessage(tail(p.rt.Stderr(), e.o.StderrTailBytes)))
 		}
 	}
 	return res, nil
@@ -381,7 +382,7 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 	for {
 		e.mu.Lock()
 		if p := e.procs[snap.AgentID]; p != nil {
-			if p.version == snap.ConfigVersion && p.credentialIdentity == snap.CredentialIdentity && p.modelConfigIdentity == snap.ModelConfigIdentity && p.promptIdentity == prompts.Identity(snap.PromptLayers) && p.localIdentity == snap.Local.Identity() && p.stateIdentity == snap.ProviderState.Identity() && sameLarkBinding(p.larkBinding, snap.LarkBinding) && alive(p) {
+			if p.runtimeIdentity == runtimeIdentity(e.driverFor(snap), snap) && p.version == snap.ConfigVersion && p.credentialIdentity == snap.CredentialIdentity && p.modelConfigIdentity == snap.ModelConfigIdentity && p.promptIdentity == prompts.Identity(snap.PromptLayers) && p.localIdentity == snap.Local.Identity() && p.stateIdentity == snap.ProviderState.Identity() && sameLarkBinding(p.larkBinding, snap.LarkBinding) && alive(p) {
 				p.busy = true
 				if p.idleTimer != nil {
 					p.idleTimer.Stop()
@@ -391,19 +392,11 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 					e.turnFinished(p)
 					return nil, fail(executor.ErrCredentialUnavailable, "CLI凭证缓存重建失败")
 				}
-				// 插件提供方的订阅账号：auth.json 是指向账号状态目录的链接（prepare 建的，进程身份含 stateIdentity，
-				// 复用时必然还是同一份），不能当普通凭证重写，否则会把链接换成文件或直接失败。
-				if snap.ProviderState == nil {
-					if err := seedModelAuth(snap, p.dirs); err != nil {
-						e.turnFinished(p)
-						return nil, fail(executor.ErrCredentialUnavailable, "模型凭证缓存重建失败")
-					}
-				}
-				if err := syncModelsJSON(snap, p.dirs); err != nil {
+				if err := p.drv.refresh(snap, p.dirs); err != nil {
 					e.turnFinished(p)
-					return nil, fail(executor.ErrCredentialUnavailable, "模型配置缓存重建失败")
+					return nil, err
 				}
-				e.event(snap.AgentID, &r.id, store.EventPiReused, map[string]any{"pid": p.client.Pid(), "startedAt": p.startedAt})
+				e.event(snap.AgentID, &r.id, store.EventPiReused, map[string]any{"pid": p.rt.Pid(), "startedAt": p.startedAt})
 				e.obs.ProcessChanged(snap.AgentID)
 				return p, nil
 			}
@@ -428,7 +421,7 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 		if victim := e.lruIdleLocked(); victim != nil {
 			delete(e.procs, victim.agentID)
 			e.mu.Unlock()
-			victim.log.Info("进程数已到上限，关闭最久未用的空闲 Pi 进程")
+			victim.log.Info("进程数已到上限，关闭最久未用的空闲 " + victim.drv.name() + " 进程")
 			e.stop(victim, stopCause{reason: stopEvicted, forAgent: &snap.AgentID})
 			continue
 		}
@@ -475,7 +468,7 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 
 func alive(p *proc) bool {
 	select {
-	case <-p.client.Done():
+	case <-p.rt.Done():
 		return false
 	default:
 		return true
@@ -570,56 +563,14 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 		tokenID = id
 		env = append(slices.Clone(env), "LOOPCTL_AGENT_URL="+e.o.AgentURL, "LOOPCTL_AGENT_TOKEN="+tok)
 	}
-	args := piArgs(d, snap, prep.skillDirs, sessionFile)
-	if snap.ServiceTier != nil {
-		resolved, tierErr := agentconfig.ResolveServiceTier(snap.Provider, snap.ServiceTier)
-		if tierErr != nil || resolved == nil || !authhelper.ValidateServiceTierEntry(e.o.CodexServiceTierExtension) {
-			e.revokeToken(tokenID, e.snapshotLog(snap))
-			return nil, fail(executor.ErrPiStartFailed, "Codex速度配置或内置扩展不可用")
-		}
-		args = append(args, "-e", e.o.CodexServiceTierExtension)
-		env = append(env, "LOOP_NOW_CODEX_SERVICE_TIER="+*resolved)
-	}
-	var bridge *modelauth.RuntimeBridge
-	if snap.ModelCredential.Kind() == "oauth" {
-		if snap.ModelBinding == nil || !modelauth.ValidateEntry(e.o.AuthExtension) {
-			e.revokeToken(tokenID, e.snapshotLog(snap))
-			return nil, fail(executor.ErrCredentialUnavailable, "任务授权刷新通道未配置")
-		}
-		bridge, err = modelauth.NewRuntimeBridge(*snap.ModelBinding, e.o.AuthResolver, e.o.AuthIPCTimeout)
-		if err != nil {
-			e.revokeToken(tokenID, e.snapshotLog(snap))
-			return nil, fail(executor.ErrCredentialUnavailable, "任务授权刷新通道不可用")
-		}
-		args = append(args, "-e", e.o.AuthExtension)
-		ipcTimeout := e.o.AuthIPCTimeout
-		if ipcTimeout <= 0 {
-			ipcTimeout = 30 * time.Second
-		}
-		env = append(slices.Clone(env), "LOOP_NOW_AUTH_REFRESH_TIMEOUT_MS="+strconv.FormatInt(max(int64(1), ipcTimeout.Milliseconds()), 10))
-	}
-	if snap.ModelCredential.NeedsLegacyAnthropic() {
-		if snap.Provider != "anthropic" || !modelauth.ValidateEntry(e.o.LegacyAuthExtension) || !filepath.IsAbs(e.o.PiPackageRoot) || !filepath.IsAbs(e.o.PiAIDir) {
-			e.revokeToken(tokenID, e.snapshotLog(snap))
-			return nil, fail(executor.ErrCredentialUnavailable, "旧认证适配未配置")
-		}
-		args = append(args, "-e", e.o.LegacyAuthExtension)
-		env = append(slices.Clone(env), "LOOP_NOW_PI_PACKAGE_ROOT="+e.o.PiPackageRoot, "LOOP_NOW_PI_AI_DIR="+e.o.PiAIDir)
-	}
 	var googleBridge *cliauth.Broker
 	if snap.GoogleBinding != nil {
 		if !filepath.IsAbs(e.o.GoogleRuntimeEntry) {
-			if bridge != nil {
-				bridge.Close()
-			}
 			e.revokeToken(tokenID, e.snapshotLog(snap))
 			return nil, fail(executor.ErrCredentialUnavailable, "Google刷新通道未配置")
 		}
 		googleBridge, err = cliauth.NewBroker(*snap.GoogleBinding, e.o.GoogleResolver)
 		if err != nil {
-			if bridge != nil {
-				bridge.Close()
-			}
 			e.revokeToken(tokenID, e.snapshotLog(snap))
 			return nil, fail(executor.ErrCredentialUnavailable, "Google刷新通道不可用")
 		}
@@ -628,43 +579,19 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 		}
 		env = append(env, "LOOP_NOW_GCLOUD_RUNTIME_ENTRY="+e.o.GoogleRuntimeEntry)
 	}
-	args = append(args, pluginArgs(snap.Plugins)...)
-	cmd := preflight.PiCommand(e.o.NodeBin, e.o.PiBin, args...)
-	if bridge != nil {
-		cmd.ExtraFiles = bridge.ChildFiles()
-	}
-	cmd.Env = env
-	cmd.Dir = d.workspace
-	procgroup.Configure(cmd)
-	if err := ctx.Err(); err != nil {
-		if googleBridge != nil {
-			closeGoogleBroker(googleBridge)
-		}
-		if bridge != nil {
-			bridge.Close()
-		}
-		e.revokeToken(tokenID, e.snapshotLog(snap))
-		return nil, err
-	}
+	drv := e.driverFor(snap)
+	spec := startSpec{snap: snap, d: d, prep: prep, env: env, sessionFile: sessionFile}
 	begin := time.Now()
-	client, err := pirpc.Start(cmd)
+	st, err := drv.start(ctx, spec)
 	if err != nil {
 		if googleBridge != nil {
 			closeGoogleBroker(googleBridge)
 		}
-		if bridge != nil {
-			bridge.Close()
-		}
 		e.revokeToken(tokenID, e.snapshotLog(snap))
-		return nil, fail(executor.ErrPiStartFailed, "启动 Pi 失败：%v", err)
+		return nil, err
 	}
-	if err := procgroup.Started(cmd); err != nil {
-		e.snapshotLog(snap).Warn("Pi 进程没有纳入整组管理，停止时只能结束它本身", "pid", client.Pid(), "err", err)
-	}
-	if bridge != nil {
-		bridge.ChildStarted()
-	}
-	p := &proc{larkRuntime: lark, googleBridge: googleBridge, authBridge: bridge, log: e.snapshotLog(snap), agentID: snap.AgentID, client: client, version: snap.ConfigVersion, promptIdentity: prompts.Identity(snap.PromptLayers), localIdentity: snap.Local.Identity(), stateIdentity: snap.ProviderState.Identity(), credentialIdentity: snap.CredentialIdentity, modelConfigIdentity: snap.ModelConfigIdentity, provider: snap.Provider, model: snap.ModelID,
+	client := st.rt
+	p := &proc{larkRuntime: lark, googleBridge: googleBridge, authBridge: st.authBridge, log: e.snapshotLog(snap), agentID: snap.AgentID, rt: client, client: st.client, drv: drv, runtimeIdentity: runtimeIdentity(drv, snap), version: snap.ConfigVersion, promptIdentity: prompts.Identity(snap.PromptLayers), localIdentity: snap.Local.Identity(), stateIdentity: snap.ProviderState.Identity(), credentialIdentity: snap.CredentialIdentity, modelConfigIdentity: snap.ModelConfigIdentity, provider: snap.Provider, model: snap.ModelID,
 		startedAt: begin, dirs: d, lastUsed: time.Now(), recorded: snap.Session.SessionFile, tokenID: tokenID, stopDone: make(chan struct{})}
 	if identity, identityErr := readRecoveryProcess(client.Pid()); identityErr == nil && validRecoveryProcess(&identity) {
 		p.recoveryIdentity = &identity
@@ -680,25 +607,22 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 	e.mu.Lock()
 	e.live[p] = struct{}{}
 	e.mu.Unlock()
-	client.SetObserver(procObserver{e: e, p: p})
-	if e.o.Dialogs != nil {
-		client.SetDialogs(func(ctx context.Context, req pirpc.DialogRequest) pirpc.DialogResponse { return e.dialog(ctx, p, req) })
-	}
+	drv.attach(p)
 	e.writePidFile(p)
-	stateCtx, cancel := context.WithTimeout(ctx, e.o.StartTimeout)
-	st, err := client.GetState(stateCtx)
-	cancel()
-	if err != nil {
+	if err := drv.ready(ctx, p, spec); err != nil {
 		e.stop(p, stopCause{})
-		return nil, fail(executor.ErrPiStartFailed, "Pi 启动后未就绪：%v %s", err, tail(client.Stderr(), e.o.StderrTailBytes))
+		return nil, err
 	}
-	p.sessionFile = st.SessionFile
-	go e.cacheCommands(p)
 	startup := time.Since(begin)
 	e.event(snap.AgentID, &runID, store.EventPiStarted, map[string]any{
 		"pid": client.Pid(), "configVersion": snap.ConfigVersion, "startupMs": startup.Milliseconds(), "reason": startReason})
-	e.snapshotLog(snap).Info("Pi 进程启动", "runId", runID, "pid", client.Pid(), "startup", startup, "reason", startReason)
+	e.snapshotLog(snap).Info(drv.name()+" 进程启动", "runId", runID, "pid", client.Pid(), "startup", startup, "reason", startReason)
 	return p, nil
+}
+
+// runtimeIdentity 是进程复用时比较的运行时指纹：运行时名称加它自己的指纹。
+func runtimeIdentity(drv driver, snap agentconfig.Snapshot) string {
+	return drv.name() + "\x00" + drv.identity(snap)
 }
 
 // discard 把已退出的进程移出进程表，记下意外退出，并确保其进程组结束。
@@ -721,20 +645,20 @@ func (e *Executor) discard(p *proc, runID *uuid.UUID) {
 func (e *Executor) recordExit(p *proc, runID *uuid.UUID) {
 	p.exitOnce.Do(func() {
 		select {
-		case <-p.client.Done():
+		case <-p.rt.Done():
 		case <-time.After(e.o.StopGrace):
 		}
 		exit := "进程仍未结束"
 		if !alive(p) {
 			exit = "exit status 0"
-			if err := p.client.ExitErr(); err != nil {
+			if err := p.rt.ExitErr(); err != nil {
 				exit = err.Error()
 			}
 		}
-		stderr := tail(p.client.Stderr(), e.o.StderrTailBytes)
+		stderr := tail(p.rt.Stderr(), e.o.StderrTailBytes)
 		e.event(p.agentID, runID, store.EventPiExited, map[string]any{
-			"pid": p.client.Pid(), "uptimeMs": time.Since(p.startedAt).Milliseconds(), "exit": exit, "stderrTail": stderr})
-		p.log.Warn("Pi 进程意外退出", "runId", runID, "pid", p.client.Pid(), "exit", exit)
+			"pid": p.rt.Pid(), "uptimeMs": time.Since(p.startedAt).Milliseconds(), "exit": exit, "stderrTail": stderr})
+		p.log.Warn(p.drv.name()+" 进程意外退出", "runId", runID, "pid", p.rt.Pid(), "exit", exit)
 		e.obs.ProcessChanged(p.agentID)
 	})
 }
@@ -795,7 +719,7 @@ func (e *Executor) idleExpired(p *proc) {
 
 // watch 在进程意外退出时把它移出表，记下退出，并让出名额。
 func (e *Executor) watch(p *proc) {
-	<-p.client.Done()
+	<-p.rt.Done()
 	e.revokeProcToken(p)
 	e.mu.Lock()
 	removed := e.procs[p.agentID] == p
@@ -859,11 +783,11 @@ func (e *Executor) stop(p *proc, why stopCause) {
 			p.idleTimer.Stop()
 		}
 		e.recordSession(p)
-		_ = p.client.CloseStdin()
+		_ = p.rt.CloseStdin()
 		if !waitDone(p, e.o.StopGrace) {
-			_ = procgroup.Terminate(p.client.Pid())
+			_ = procgroup.Terminate(p.rt.Pid())
 			if !waitDone(p, e.o.StopGrace) {
-				_ = procgroup.Kill(p.client.Pid())
+				_ = procgroup.Kill(p.rt.Pid())
 				if !waitDone(p, e.o.StopGrace) {
 					p.stopErr = ErrRuntimeStopUnconfirmed
 				}
@@ -898,17 +822,17 @@ func (e *Executor) revokeToken(tokenID uuid.UUID, log *slog.Logger) error {
 
 // recordStop 记录一次平台主动停止进程，时间为开始停止的时刻。
 func (e *Executor) recordStop(p *proc, why stopCause, at time.Time) {
-	data := map[string]any{"pid": p.client.Pid(), "reason": why.reason, "uptimeMs": at.Sub(p.startedAt).Milliseconds()}
+	data := map[string]any{"pid": p.rt.Pid(), "reason": why.reason, "uptimeMs": at.Sub(p.startedAt).Milliseconds()}
 	if why.forAgent != nil {
 		data["forAgentId"] = why.forAgent.String()
 	}
 	e.obs.Event(p.agentID, why.runID, executor.Event{Type: store.EventPiStopped, At: at, Data: data})
-	p.log.Info("Pi 进程停止", "runId", why.runID, "pid", p.client.Pid(), "reason", why.reason)
+	p.log.Info(p.drv.name()+" 进程停止", "runId", why.runID, "pid", p.rt.Pid(), "reason", why.reason)
 }
 
 func waitDone(p *proc, d time.Duration) bool {
 	select {
-	case <-p.client.Done():
+	case <-p.rt.Done():
 		return true
 	case <-time.After(d):
 		return false
@@ -1015,7 +939,7 @@ func (e *Executor) abort(r *run, p *proc) {
 	deadline := time.Now().Add(e.o.AbortTimeout)
 	for time.Now().Before(deadline) {
 		ctx, cancel := context.WithDeadline(context.Background(), deadline)
-		err := p.client.Abort(ctx)
+		err := p.rt.Abort(ctx)
 		cancel()
 		if err == nil {
 			select {
@@ -1031,7 +955,7 @@ func (e *Executor) abort(r *run, p *proc) {
 			return
 		default:
 		}
-		if errors.Is(err, pirpc.ErrExited) {
+		if errors.Is(err, runturn.ErrExited) {
 			return
 		}
 	}
@@ -1040,7 +964,7 @@ func (e *Executor) abort(r *run, p *proc) {
 		return
 	default:
 	}
-	p.log.Warn("打断超时，强制结束 Pi 进程", "runId", r.id)
+	p.log.Warn("打断超时，强制结束 "+p.drv.name()+" 进程", "runId", r.id)
 	e.mu.Lock()
 	if e.procs[p.agentID] == p {
 		delete(e.procs, p.agentID)
@@ -1049,7 +973,7 @@ func (e *Executor) abort(r *run, p *proc) {
 	// 先记下停止再强杀：强杀后执行可能先以进程退出结束并清理进程，停止事件不能依赖之后的 stop 调用。
 	e.recordStop(p, stopCause{reason: stopAbortTimeout, runID: &r.id}, time.Now())
 	p.stopping.Store(true)
-	_ = procgroup.Kill(p.client.Pid())
+	_ = procgroup.Kill(p.rt.Pid())
 	e.stop(p, stopCause{})
 }
 
@@ -1136,7 +1060,7 @@ func (e *Executor) FreezeForFork(ctx context.Context, agentID uuid.UUID) error {
 	if p != nil {
 		e.stop(p, stopCause{reason: "fork_snapshot"})
 		select {
-		case <-p.client.Done():
+		case <-p.rt.Done():
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -1149,7 +1073,7 @@ func (e *Executor) Process(agentID uuid.UUID) executor.ProcessInfo {
 	defer e.mu.Unlock()
 	if p := e.procs[agentID]; p != nil {
 		started := p.startedAt
-		info := executor.ProcessInfo{State: executor.ProcessIdle, PID: p.client.Pid(), StartedAt: &started}
+		info := executor.ProcessInfo{State: executor.ProcessIdle, PID: p.rt.Pid(), StartedAt: &started}
 		if p.busy {
 			info.State = executor.ProcessBusy
 		}
@@ -1204,10 +1128,10 @@ type pidRecord struct {
 }
 
 func (e *Executor) writePidFile(p *proc) {
-	start, _ := processStart(p.client.Pid())
+	start, _ := processStart(p.rt.Pid())
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	b, _ := json.Marshal(pidRecord{PID: p.client.Pid(), StartedAt: p.startedAt, InstanceID: e.o.InstanceID.String(), Hostname: e.o.Hostname, SessionDir: p.dirs.sessions, ProcessStart: start})
+	b, _ := json.Marshal(pidRecord{PID: p.rt.Pid(), StartedAt: p.startedAt, InstanceID: e.o.InstanceID.String(), Hostname: e.o.Hostname, SessionDir: p.dirs.sessions, ProcessStart: start})
 	if err := os.WriteFile(p.dirs.pidFile, b, 0o600); err != nil {
 		p.log.Warn("写入 pi.pid 失败", "err", err)
 	}
@@ -1223,7 +1147,7 @@ func (e *Executor) removeProcPidFile(p *proc) {
 		return
 	}
 	var record pidRecord
-	if json.Unmarshal(raw, &record) != nil || record.PID != p.client.Pid() || !record.StartedAt.Equal(p.startedAt) || record.InstanceID != e.o.InstanceID.String() {
+	if json.Unmarshal(raw, &record) != nil || record.PID != p.rt.Pid() || !record.StartedAt.Equal(p.startedAt) || record.InstanceID != e.o.InstanceID.String() {
 		return
 	}
 	_ = os.Remove(p.dirs.pidFile)

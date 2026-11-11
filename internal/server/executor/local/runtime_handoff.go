@@ -192,7 +192,7 @@ func (h *RuntimeHandoff) stopCaptured(id uuid.UUID, p *proc, job *handoffStop) {
 	e.mu.Unlock()
 	e.stop(p, stopCause{reason: stopConfigChanged})
 	<-p.stopDone
-	groupErr := procgroup.Probe(p.client.Pid())
+	groupErr := procgroup.Probe(p.rt.Pid())
 	if p.stopErr != nil || alive(p) || !errors.Is(groupErr, procgroup.ErrNotFound) {
 		err, unsafe = ErrRuntimeStopUnconfirmed, true
 	}
