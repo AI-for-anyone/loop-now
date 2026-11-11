@@ -21,13 +21,26 @@ var entryCandidates = []string{"AGENTS.override.md", "AGENTS.md", "AGENTS.MD", "
 // contextPrompt 返回在 Pi 启动时追加到系统提示的“文件夹与上下文”一节：自己的文件夹与可见的上下文文件夹的绝对路径，
 // 生效的本机目录，以及项目（平台 Agent 为全局）上下文入口 AGENTS.md 的原文（不截断）。自己的入口由 Pi 从工作目录读取，不在这里重复。
 // 只在启动时读取，入口的修改要等 Pi 下次重启才生效；也不参与是否重启的判断（本机目录清单的变化由 snap.Local.Identity 决定重启）。
+//
+// Claude Code 不读 AGENTS.md（平台也让它不读工作目录里的 CLAUDE.md），所以 Claude Code 运行时把自己的入口原文也放进这一节，
+// 候选名与 Pi 相同，取第一个存在的。
 func (e *Executor) contextPrompt(snap agentconfig.Snapshot, d agentDirs, loginHome string) (string, error) {
 	local := localDirectoriesPrompt(snap) + loginsPrompt(loginHome) + providerLoginPrompt(snap, loginHome)
+	ownEntry, ownContent := "", ""
+	if isClaude(snap) {
+		var err error
+		if ownEntry, ownContent, err = readOwnEntry(d.workspace); err != nil {
+			return "", err
+		}
+	}
 	if e.o.ContextDir == "" {
-		if local == "" {
+		if local == "" && strings.TrimSpace(ownContent) == "" {
 			return "", nil
 		}
-		return "## Folders and context\n\n" + local, nil
+		var b strings.Builder
+		b.WriteString("## Folders and context\n\n" + local)
+		writeEntry(&b, ownEntry, ownContent)
+		return b.String(), nil
 	}
 	layer := folders.ContextFolder(e.o.ContextDir, snap.ContextProjectID)
 	if err := os.MkdirAll(layer, 0o700); err != nil {
@@ -42,20 +55,61 @@ func (e *Executor) contextPrompt(snap agentconfig.Snapshot, d agentDirs, loginHo
 		own = "Your folder in this task (your working directory; copied from your regular folder when the task started and reclaimed when the task ends)"
 	}
 	entry := filepath.Join(layer, "AGENTS.md")
+	runtimeName, loaded := "Pi", "already loaded by Pi if it exists"
+	if isClaude(snap) {
+		runtimeName, loaded = "Claude Code", "its content is included below if it exists"
+	}
 	var b strings.Builder
 	b.WriteString("## Folders and context\n\n")
-	fmt.Fprintf(&b, "- %s: %s. Its entry file is AGENTS.md at the root (already loaded by Pi if it exists).\n", own, d.workspace)
+	fmt.Fprintf(&b, "- %s: %s. Its entry file is AGENTS.md at the root (%s).\n", own, d.workspace, loaded)
 	fmt.Fprintf(&b, "- %s: %s, %s. Its entry file is %s.\n", name, layer, shared, entry)
-	b.WriteString("- Both entry files are loaded only when Pi starts; after you change them, the change appears in the system prompt only after the next restart. For when to write, which layer to write to, and how to organize it, see the \"Context folders\" section of Skill loopctl.\n")
+	fmt.Fprintf(&b, "- Both entry files are loaded only when %s starts; after you change them, the change appears in the system prompt only after the next restart. For when to write, which layer to write to, and how to organize it, see the \"Context folders\" section of Skill loopctl.\n", runtimeName)
 	b.WriteString(local)
+	writeEntry(&b, ownEntry, ownContent)
 	content, err := readEntry(layer)
 	if err != nil {
 		return "", err
 	}
-	if strings.TrimSpace(content) != "" {
-		fmt.Fprintf(&b, "\n<context_entry path=%q>\n%s\n</context_entry>\n", entry, content)
-	}
+	writeEntry(&b, entry, content)
 	return b.String(), nil
+}
+
+// writeEntry 把一个上下文入口的原文放进这一节；内容为空时不写。
+func writeEntry(b *strings.Builder, path, content string) {
+	if strings.TrimSpace(content) != "" {
+		fmt.Fprintf(b, "\n<context_entry path=%q>\n%s\n</context_entry>\n", path, content)
+	}
+}
+
+// readOwnEntry 读取自己文件夹根目录的上下文入口：按 entryCandidates 的顺序取第一个存在的普通文件（经 os.Root，不跟随越界的软链接），
+// 返回它的路径与原文；没有时都为空。
+func readOwnEntry(workspace string) (string, string, error) {
+	root, err := os.OpenRoot(workspace)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", "", nil
+		}
+		return "", "", err
+	}
+	defer root.Close()
+	for _, name := range entryCandidates {
+		f, err := root.Open(name)
+		if err != nil {
+			continue
+		}
+		info, err := f.Stat()
+		if err != nil || !info.Mode().IsRegular() {
+			f.Close()
+			continue
+		}
+		data, err := io.ReadAll(f)
+		f.Close()
+		if err != nil {
+			return "", "", err
+		}
+		return filepath.Join(workspace, name), strings.TrimPrefix(string(data), "\ufeff"), nil
+	}
+	return "", "", nil
 }
 
 // localDirectoriesPrompt 返回“本机目录”一条（含末尾换行）：只列此刻存在且是目录的条目，没有时为空。

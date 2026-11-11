@@ -51,6 +51,7 @@ import (
 	"loop-now/internal/server/preflight"
 	"loop-now/internal/server/providerstate"
 	"loop-now/internal/server/runrecord"
+	"loop-now/internal/server/runtimes"
 	"loop-now/internal/server/selfsigned"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/tasks"
@@ -419,6 +420,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		Tokens: agentTokens{st: a.Store, instance: a.InstanceID}, AgentURL: agentURL(a.listener.Addr()), LoopctlBinDir: loopctlBin, ContextDir: contextDir, UserPath: a.UserPath.Dirs,
 	}, taskSource, templates, installer, log)
 	a.Config.Releaser = a.Executor
+	taskSource.ClaudeProjects = a.Executor.ClaudeProjectsDir
 	// Preserve unresolved handoff process evidence before generic cleanup can
 	// remove stale PID records. Missing/invalid provenance fails closed.
 	var protectedLark []local.PendingRuntimeHandoff
@@ -493,6 +495,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		},
 		Config: a.Config, Conv: a.Conv, Models: models, Templates: templates, Installer: installer, Store: a.Store, Coord: a.Coord,
 		Tasks: a.Tasks, Records: &runrecord.Service{Store: a.Store}, Inbox: inboxSvc, Folders: a.Folders, LocalMode: a.LocalMode, Log: log,
+		Runtimes:   &runtimes.Checker{PiVersion: func() string { return models.Snapshot().PiVersion }, UserPath: a.UserPath.Dirs, RealHome: os.UserHomeDir, ExecBasePath: res.ExecBasePath},
 		PiCommands: a.Executor.Commands,
 	}
 	if err = a.assemblePlugins(cfg, res, log); err != nil {

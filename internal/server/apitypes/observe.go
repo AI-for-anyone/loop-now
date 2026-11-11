@@ -139,6 +139,7 @@ const (
 	TimelinePromoted          = "promoted"
 	TimelineMessageCancelled  = "message_cancelled"
 	TimelineExtensionUI       = "extension_ui"
+	TimelineModelRateLimit    = "model_rate_limit"
 )
 
 // TimelineBase 是每个条目共有的字段。
@@ -205,10 +206,11 @@ type TimelineWorkspaceSyncEntry struct {
 // TimelinePiStartedEntry 对应 TimelinePiStarted。
 type TimelinePiStartedEntry struct {
 	TimelineBase
-	PID           int64  `json:"pid"`
-	StartupMs     int64  `json:"startupMs"`
-	Reason        string `json:"reason"`
-	ConfigVersion int64  `json:"configVersion"`
+	PID           int64   `json:"pid"`
+	StartupMs     int64   `json:"startupMs"`
+	Reason        string  `json:"reason"`
+	ConfigVersion int64   `json:"configVersion"`
+	Runtime       *string `json:"runtime,omitempty"`
 }
 
 // TimelinePiReusedEntry 对应 TimelinePiReused。
@@ -216,23 +218,32 @@ type TimelinePiReusedEntry struct {
 	TimelineBase
 	PID              int64      `json:"pid"`
 	ProcessStartedAt *time.Time `json:"processStartedAt"`
+	Runtime          *string    `json:"runtime,omitempty"`
 }
 
 // TimelinePiStoppedEntry 对应 TimelinePiStopped。
 type TimelinePiStoppedEntry struct {
 	TimelineBase
-	PID      int64  `json:"pid"`
-	Reason   string `json:"reason"`
-	UptimeMs int64  `json:"uptimeMs"`
+	PID      int64   `json:"pid"`
+	Reason   string  `json:"reason"`
+	UptimeMs int64   `json:"uptimeMs"`
+	Runtime  *string `json:"runtime,omitempty"`
 }
 
 // TimelinePiExitedEntry 对应 TimelinePiExited。
 type TimelinePiExitedEntry struct {
 	TimelineBase
-	PID        int64  `json:"pid"`
-	UptimeMs   int64  `json:"uptimeMs"`
-	Exit       string `json:"exit"`
-	StderrTail string `json:"stderrTail"`
+	PID        int64   `json:"pid"`
+	UptimeMs   int64   `json:"uptimeMs"`
+	Exit       string  `json:"exit"`
+	StderrTail string  `json:"stderrTail"`
+	Runtime    *string `json:"runtime,omitempty"`
+}
+
+// TimelineModelRateLimitEntry 对应 TimelineModelRateLimit：Claude Code 报告的订阅额度状态，原样。
+type TimelineModelRateLimitEntry struct {
+	TimelineBase
+	Info map[string]any `json:"info"`
 }
 
 // TimelineToolEntry 对应 TimelineTool：At 为开始时间。

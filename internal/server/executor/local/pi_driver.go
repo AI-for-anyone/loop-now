@@ -11,8 +11,10 @@ import (
 
 	"loop-now/internal/procgroup"
 	"loop-now/internal/server/agentconfig"
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/executor/local/pirpc"
+	"loop-now/internal/server/executor/local/runturn"
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/preflight"
 )
@@ -21,6 +23,8 @@ import (
 type piDriver struct{ e *Executor }
 
 func (piDriver) name() string { return "Pi" }
+
+func (piDriver) runtime() string { return agentruntime.Pi }
 
 func (piDriver) identity(agentconfig.Snapshot) string { return "" }
 
@@ -144,6 +148,10 @@ func (pd piDriver) beforeTurn(ctx context.Context, p *proc, snap agentconfig.Sna
 	return nil
 }
 
+func (piDriver) afterTurn(_ *proc, tr runturn.Result) runturn.Result { return tr }
+
 func (piDriver) exited() (string, string) { return executor.ErrPiExited, "Pi 进程已退出" }
 
-func (piDriver) crashMessage(stderrTail string) string { return "Pi 进程异常退出 " + stderrTail }
+func (piDriver) crashMessage(_ *proc, stderrTail string) string {
+	return "Pi 进程异常退出 " + stderrTail
+}

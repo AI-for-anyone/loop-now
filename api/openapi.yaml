@@ -1543,6 +1543,33 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
 
+  /runtimes:
+    get:
+      tags: [models]
+      operationId: listRuntimes
+      x-access: console
+      summary: Agent 运行时在本机是否可用
+      description: |
+        pi 为随包的 Pi，总是可用。claude-code 为用户本机安装的 Claude Code：在服务端用户登录 shell 的 PATH 里找 claude、运行 claude --version；
+        登录状态由 claude auth status 自己回答（平台不读、不保存它的凭证），只给出是否登录、登录方式与订阅类型，邮箱与组织不返回。
+        判断不了登录状态时 state 为 unknown，此时只在运行失败时如实报错（runtime_login_required 等）。结果缓存 30 秒，refresh=true 时重新检查。
+      parameters:
+        - name: refresh
+          in: query
+          required: false
+          schema: { type: boolean }
+          description: 为 true 时不用缓存，重新检查
+      responses:
+        "200":
+          headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
+          description: 各运行时的状态，pi 在前
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RuntimeList" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
   /model-providers/{providerId}/models:
     parameters:
       - $ref: "#/components/parameters/ProviderId"
@@ -9970,6 +9997,57 @@ components:
         用它在本机自己的登录，平台不读取、不保存它的凭证。运行时由模型提供方决定，不单独设置：model.provider 为 claude-code 时是
         claude-code，其余为 pi。Claude Code 下没有 Pi 扩展（/pi: 命令、扩展对话、插件提供方），插件的 Skill 与 MCP 服务器照常。
 
+    RuntimeList:
+      type: object
+      required: [runtimes]
+      additionalProperties: false
+      properties:
+        runtimes:
+          type: array
+          items: { $ref: "#/components/schemas/RuntimeStatus" }
+
+    RuntimeStatus:
+      type: object
+      required: [id, available, version, binaryPath, unavailableReason, login, checkedAt]
+      additionalProperties: false
+      properties:
+        id: { $ref: "#/components/schemas/AgentRuntime" }
+        available:
+          type: boolean
+          description: claude-code 为找到了 claude 且读得出版本（是否登录另见 login）
+        version:
+          type: [string, "null"]
+          description: pi 为随包 Pi 的版本；claude-code 为 claude --version 的版本号
+        binaryPath:
+          type: [string, "null"]
+          description: claude 解析符号链接后的真实路径；pi 与没找到时为 null
+        unavailableReason:
+          type: [string, "null"]
+          enum: [not_found, version_failed, null]
+          description: not_found：登录 shell 的 PATH 里找不到 claude；version_failed：运行 claude --version 失败
+        login:
+          description: 只有 claude-code 且找到了 claude 时有；pi 与没找到时为 null
+          oneOf:
+            - $ref: "#/components/schemas/RuntimeLogin"
+            - type: "null"
+        checkedAt: { type: string, format: date-time }
+
+    RuntimeLogin:
+      type: object
+      required: [state, authMethod, subscriptionType]
+      additionalProperties: false
+      properties:
+        state:
+          type: string
+          enum: [logged_in, logged_out, unknown]
+          description: 来自 claude auth status；运行不了或输出无法识别时为 unknown
+        authMethod:
+          type: [string, "null"]
+          description: 登录方式，如 claude.ai
+        subscriptionType:
+          type: [string, "null"]
+          description: 订阅类型，如 max
+
     ModelList:
       type: object
       required: [providerId, models]
@@ -11632,6 +11710,7 @@ components:
         - $ref: "#/components/schemas/TimelineEnded"
         - $ref: "#/components/schemas/TimelineSessionMissing"
         - $ref: "#/components/schemas/TimelineExtensionUI"
+        - $ref: "#/components/schemas/TimelineModelRateLimit"
       discriminator:
         propertyName: type
         mapping:
@@ -11657,6 +11736,7 @@ components:
           session_missing: "#/components/schemas/TimelineSessionMissing"
           sleep: "#/components/schemas/TimelineSleepEntry"
           extension_ui: "#/components/schemas/TimelineExtensionUI"
+          model_rate_limit: "#/components/schemas/TimelineModelRateLimit"
 
     TimelineExtensionUI:
       description: |
@@ -11807,6 +11887,9 @@ components:
           type: string
           enum: [no_process, config_changed]
         configVersion: { type: integer }
+        runtime:
+          $ref: "#/components/schemas/AgentRuntime"
+          description: 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。
 
     TimelinePiReused:
       description: 复用了已运行的 Pi 进程
@@ -11818,6 +11901,9 @@ components:
         at: { type: string, format: date-time }
         pid: { type: integer }
         processStartedAt: { type: [string, "null"], format: date-time }
+        runtime:
+          $ref: "#/components/schemas/AgentRuntime"
+          description: 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。
 
     TimelinePiStopped:
       description: 平台停止了 Pi 进程
@@ -11830,6 +11916,9 @@ components:
         pid: { type: integer }
         reason: { type: string, enum: [idle_timeout, config_changed, evicted, released, fork_snapshot, shutdown, abort_timeout] }
         uptimeMs: { type: integer, minimum: 0 }
+        runtime:
+          $ref: "#/components/schemas/AgentRuntime"
+          description: 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。
 
     TimelinePiExited:
       description: Pi 进程意外退出
@@ -11845,6 +11934,19 @@ components:
         stderrTail:
           description: Pi 错误输出的末尾片段（有长度上限）
           type: string
+        runtime:
+          $ref: "#/components/schemas/AgentRuntime"
+          description: 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。
+
+    TimelineModelRateLimit:
+      description: Claude Code 报告的订阅额度状态（rate_limit_event），info 原样（如 status、rateLimitType、resetsAt）；只记录，不影响执行。
+      type: object
+      required: [type, at, info]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [model_rate_limit] }
+        at: { type: string, format: date-time }
+        info: { type: object }
 
     TimelineTool:
       description: 一次工具调用，at 为开始时间；仅 bash 可含有界、脱敏后的 command；不含其他参数与输出

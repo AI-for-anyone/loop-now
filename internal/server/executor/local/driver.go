@@ -28,8 +28,9 @@ type runtimeProcess interface {
 // 进程表、名额与淘汰、空闲超时、Agent 令牌、pid 文件、打断、任务冻结与交接，以及 prepare（CLI、Skills、凭证文件、
 // 工作区来源、本机模式、追加提示）都由执行器统一负责。
 type driver interface {
-	// name 是日志里的运行时名称。
+	// name 是日志里的运行时名称；runtime 是它的 AgentRuntime 取值（记在进程事件里）。
 	name() string
+	runtime() string
 	// identity 是运行时自己的进程指纹：与存活进程的不同即按新配置重启。
 	identity(snap agentconfig.Snapshot) string
 	// refresh 在复用存活进程前重写运行时自己的缓存文件；可预期的失败为 *failure。
@@ -43,9 +44,11 @@ type driver interface {
 	ready(ctx context.Context, p *proc, spec startSpec) error
 	// beforeTurn 在这一轮发出消息前调用；可预期的失败为 *failure。
 	beforeTurn(ctx context.Context, p *proc, snap agentconfig.Snapshot) error
+	// afterTurn 在这一轮结束、进程转为空闲之前调用：记下会话文件、细化失败原因。
+	afterTurn(p *proc, tr runturn.Result) runturn.Result
 	// exited 是这一轮中进程退出时的失败码与消息；crashMessage 是带上 stderr 尾部的最终消息。
 	exited() (code, msg string)
-	crashMessage(stderrTail string) string
+	crashMessage(p *proc, stderrTail string) string
 }
 
 // startSpec 是执行器为启动运行时进程准备好的东西。
@@ -65,7 +68,14 @@ type started struct {
 	// client 是 Pi 的 RPC 客户端，只供 Pi 专有的操作使用；其他运行时为空。
 	client     *pirpc.Client
 	authBridge *modelauth.RuntimeBridge
+	// binary、version 是运行时可执行文件的真实路径与版本（Claude Code）；sessionID 是平台给它的会话 ID。
+	binary, version, sessionID string
 }
 
-// driverFor 返回执行这个配置的运行时。
-func (e *Executor) driverFor(agentconfig.Snapshot) driver { return piDriver{e: e} }
+// driverFor 返回执行这个配置的运行时：模型提供方为 claude-code 时是本机的 Claude Code，其余为随包的 Pi。
+func (e *Executor) driverFor(snap agentconfig.Snapshot) driver {
+	if isClaude(snap) {
+		return claudeDriver{e: e}
+	}
+	return piDriver{e: e}
+}

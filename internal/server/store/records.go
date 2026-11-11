@@ -32,6 +32,8 @@ const (
 	EventSessionMissing    = "session.missing"
 	EventSessionReset      = "session.reset"
 	EventExtensionUI       = "extension.ui"
+	// EventModelRateLimit 是 Claude Code 报告的订阅额度状态（rate_limit_event 原样放在 info 里）。
+	EventModelRateLimit = "model.rate_limit"
 )
 
 // 用量的类别（usage_records.kind）。

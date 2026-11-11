@@ -8573,6 +8573,7 @@ components:
         - $ref: "#/components/schemas/TimelineEnded"
         - $ref: "#/components/schemas/TimelineSessionMissing"
         - $ref: "#/components/schemas/TimelineExtensionUI"
+        - $ref: "#/components/schemas/TimelineModelRateLimit"
       discriminator:
         propertyName: type
         mapping:
@@ -8598,6 +8599,7 @@ components:
           session_missing: "#/components/schemas/TimelineSessionMissing"
           sleep: "#/components/schemas/TimelineSleepEntry"
           extension_ui: "#/components/schemas/TimelineExtensionUI"
+          model_rate_limit: "#/components/schemas/TimelineModelRateLimit"
 
     UsageTotals:
       {
@@ -9041,168 +9043,84 @@ components:
         "type": "object"
       }
     TimelinePiExited:
-      {
-        "additionalProperties": false,
-        "description": "Pi 进程意外退出",
-        "properties": {
-          "at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "exit": {
-            "type": "string"
-          },
-          "pid": {
-            "type": "integer"
-          },
-          "stderrTail": {
-            "description": "Pi 错误输出的末尾片段（有长度上限）",
-            "type": "string"
-          },
-          "type": {
-            "enum": [
-              "pi_exited"
-            ],
-            "type": "string"
-          },
-          "uptimeMs": {
-            "minimum": 0,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "type",
-          "at",
-          "pid",
-          "uptimeMs",
-          "exit",
-          "stderrTail"
-        ],
-        "type": "object"
-      }
+      description: Pi 进程意外退出
+      type: object
+      required: [type, at, pid, uptimeMs, exit, stderrTail]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [pi_exited] }
+        at: { type: string, format: date-time }
+        pid: { type: integer }
+        uptimeMs: { type: integer, minimum: 0 }
+        exit: { type: string }
+        stderrTail:
+          description: Pi 错误输出的末尾片段（有长度上限）
+          type: string
+        runtime:
+          $ref: "#/components/schemas/AgentRuntime"
+          description: 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。
+
+    TimelineModelRateLimit:
+      description: Claude Code 报告的订阅额度状态（rate_limit_event），info 原样（如 status、rateLimitType、resetsAt）；只记录，不影响执行。
+      type: object
+      required: [type, at, info]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [model_rate_limit] }
+        at: { type: string, format: date-time }
+        info: { type: object }
+
     TimelinePiReused:
-      {
-        "additionalProperties": false,
-        "description": "复用了已运行的 Pi 进程",
-        "properties": {
-          "at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "pid": {
-            "type": "integer"
-          },
-          "processStartedAt": {
-            "format": "date-time",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "type": {
-            "enum": [
-              "pi_reused"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "at",
-          "pid",
-          "processStartedAt"
-        ],
-        "type": "object"
-      }
+      description: 复用了已运行的 Pi 进程
+      type: object
+      required: [type, at, pid, processStartedAt]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [pi_reused] }
+        at: { type: string, format: date-time }
+        pid: { type: integer }
+        processStartedAt: { type: [string, "null"], format: date-time }
+        runtime:
+          $ref: "#/components/schemas/AgentRuntime"
+          description: 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。
+
     TimelinePiStarted:
-      {
-        "additionalProperties": false,
-        "description": "新启动了 Pi 进程",
-        "properties": {
-          "at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "configVersion": {
-            "type": "integer"
-          },
-          "pid": {
-            "type": "integer"
-          },
-          "reason": {
-            "description": "no_process 为没有存活的进程，config_changed 为配置变化后重启",
-            "enum": [
-              "no_process",
-              "config_changed"
-            ],
-            "type": "string"
-          },
-          "startupMs": {
-            "description": "从启动进程到 Pi 就绪的用时",
-            "minimum": 0,
-            "type": "integer"
-          },
-          "type": {
-            "enum": [
-              "pi_started"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "at",
-          "pid",
-          "startupMs",
-          "reason",
-          "configVersion"
-        ],
-        "type": "object"
-      }
+      description: 新启动了 Pi 进程
+      type: object
+      required: [type, at, pid, startupMs, reason, configVersion]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [pi_started] }
+        at: { type: string, format: date-time }
+        pid: { type: integer }
+        startupMs:
+          description: 从启动进程到 Pi 就绪的用时
+          type: integer
+          minimum: 0
+        reason:
+          description: no_process 为没有存活的进程，config_changed 为配置变化后重启
+          type: string
+          enum: [no_process, config_changed]
+        configVersion: { type: integer }
+        runtime:
+          $ref: "#/components/schemas/AgentRuntime"
+          description: 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。
+
     TimelinePiStopped:
-      {
-        "additionalProperties": false,
-        "description": "平台停止了 Pi 进程",
-        "properties": {
-          "at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "pid": {
-            "type": "integer"
-          },
-          "reason": {
-            "enum": [
-              "idle_timeout",
-              "config_changed",
-              "evicted",
-              "released",
-              "fork_snapshot",
-              "shutdown",
-              "abort_timeout"
-            ],
-            "type": "string"
-          },
-          "type": {
-            "enum": [
-              "pi_stopped"
-            ],
-            "type": "string"
-          },
-          "uptimeMs": {
-            "minimum": 0,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "type",
-          "at",
-          "pid",
-          "reason",
-          "uptimeMs"
-        ],
-        "type": "object"
-      }
+      description: 平台停止了 Pi 进程
+      type: object
+      required: [type, at, pid, reason, uptimeMs]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [pi_stopped] }
+        at: { type: string, format: date-time }
+        pid: { type: integer }
+        reason: { type: string, enum: [idle_timeout, config_changed, evicted, released, fork_snapshot, shutdown, abort_timeout] }
+        uptimeMs: { type: integer, minimum: 0 }
+        runtime:
+          $ref: "#/components/schemas/AgentRuntime"
+          description: 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。
+
     TimelineQueued:
       {
         "additionalProperties": false,
