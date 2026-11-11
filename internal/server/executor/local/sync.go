@@ -103,20 +103,31 @@ func (e *Executor) prepare(ctx context.Context, snap agentconfig.Snapshot, d age
 
 // syncConfig 依次重建 Skills 与 Prompt、写凭证文件、同步工作区来源。
 func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d agentDirs, runID uuid.UUID, p *prepared, ghBin string, outcomes *[]sourceOutcome) error {
-	// 2. Skills 与 Prompt 按配置整体覆盖。
+	// 2. Skills 与 Prompt 按配置整体覆盖。Claude Code 的 Skills 放在平台给它的插件目录里。
+	claude := isClaude(snap)
 	var err error
-	if p.skillDirs, err = e.syncSkills(ctx, snap, d); err != nil {
-		return err
+	if claude {
+		if err := e.syncClaudePlugin(ctx, snap, d); err != nil {
+			return err
+		}
+	} else {
+		if p.skillDirs, err = e.syncSkills(ctx, snap, d.skills); err != nil {
+			return err
+		}
+		if err := os.RemoveAll(d.claudePlugin); err != nil {
+			return err
+		}
 	}
 	if err := removeStrayEntries(d); err != nil {
 		return err
 	}
-	if err := writePluginMCP(d, snap.Plugins); err != nil {
+	if err := writePluginMCP(d, snap.Plugins, claude); err != nil {
 		return err
 	}
-	// “用本机的登录状态”：Pi 的 HOME 是用户真实的主目录；d.home 不变，凭证文件、清理与回收都只认 d.home。
+	// “用本机的登录状态”：运行时的 HOME 是用户真实的主目录；d.home 不变，凭证文件、清理与回收都只认 d.home。
+	// Claude Code 运行时总是这样（它只能用用户本人在本机的登录），与全局开关无关。
 	loginHome := ""
-	if snap.Local.Logins {
+	if snap.Local.Logins || claude {
 		if loginHome, err = e.o.RealHome(); err != nil || !filepath.IsAbs(loginHome) {
 			return fail(executor.ErrInternal, "读取服务端用户的主目录失败（“用本机的登录状态”需要它）")
 		}
@@ -136,15 +147,22 @@ func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d 
 	if err := clearProviderLinks(d); err != nil {
 		return fail(executor.ErrCredentialUnavailable, "清理订阅账号的旧链接失败：%v", err)
 	}
-	if snap.ProviderState != nil {
+	switch {
+	case claude:
+		// Claude Code 用它自己在本机的登录，平台不写模型凭证与 models.json。
+	case snap.ProviderState != nil:
 		if err := e.linkProviderState(snap, d, loginHome); err != nil {
 			return err
 		}
-	} else if err := seedModelAuth(snap, d); err != nil {
-		return fail(executor.ErrCredentialUnavailable, "模型凭证缓存写入失败")
+	default:
+		if err := seedModelAuth(snap, d); err != nil {
+			return fail(executor.ErrCredentialUnavailable, "模型凭证缓存写入失败")
+		}
 	}
-	if err := syncModelsJSON(snap, d); err != nil {
-		return fail(executor.ErrCredentialUnavailable, "模型配置缓存写入失败")
+	if !claude {
+		if err := syncModelsJSON(snap, d); err != nil {
+			return fail(executor.ErrCredentialUnavailable, "模型配置缓存写入失败")
+		}
 	}
 	// CLI凭证文件先删后写。
 	if err := e.syncCredentialFiles(snap, d); err != nil {
@@ -221,14 +239,15 @@ func failureMessage(err error) string {
 	return err.Error()
 }
 
-func (e *Executor) syncSkills(ctx context.Context, snap agentconfig.Snapshot, d agentDirs) ([]string, error) {
-	if err := os.RemoveAll(d.skills); err != nil {
+// syncSkills 把 Agent 的 Skill 副本与内置 Skill loopctl 整体重建到 dir 下，返回各 Skill 的目录。
+func (e *Executor) syncSkills(ctx context.Context, snap agentconfig.Snapshot, dir string) ([]string, error) {
+	if err := os.RemoveAll(dir); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(d.skills, 0o700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	root, err := os.OpenRoot(d.skills)
+	root, err := os.OpenRoot(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +271,7 @@ func (e *Executor) syncSkills(ctx context.Context, snap agentconfig.Snapshot, d 
 				return nil, err
 			}
 		}
-		dirs = append(dirs, filepath.Join(d.skills, k.Name))
+		dirs = append(dirs, filepath.Join(dir, k.Name))
 	}
 	// 内置 Skill loopctl：内容由同版本 loopctl 生成，不存数据库，每次同步时写入。
 	for name, data := range guide.Files() {
@@ -264,7 +283,7 @@ func (e *Executor) syncSkills(ctx context.Context, snap agentconfig.Snapshot, d 
 			return nil, err
 		}
 	}
-	dirs = append(dirs, filepath.Join(d.skills, guide.SkillName))
+	dirs = append(dirs, filepath.Join(dir, guide.SkillName))
 	return dirs, nil
 }
 

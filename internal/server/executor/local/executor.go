@@ -17,6 +17,7 @@ import (
 
 	"loop-now/internal/procgroup"
 	"loop-now/internal/server/agentconfig"
+	"loop-now/internal/server/claudecli"
 	"loop-now/internal/server/cliauth"
 	"loop-now/internal/server/clicredential"
 	"loop-now/internal/server/clitemplate"
@@ -90,8 +91,10 @@ type Options struct {
 	ContextDir string
 	// UserPath 返回用户的 PATH 目录（“用本机的 CLI”开启时接在执行 PATH 之后）；为空时不接。
 	UserPath func(context.Context) []string
-	// RealHome 返回服务端进程用户真实的主目录（“用本机的登录状态”开启时作 Pi 的 HOME）；为空时取 os.UserHomeDir。
+	// RealHome 返回服务端进程用户真实的主目录（“用本机的登录状态”开启时作 Pi 的 HOME，Claude Code 运行时总是用它）；为空时取 os.UserHomeDir。
 	RealHome func() (string, error)
+	// ClaudeBin 是 claude 可执行文件；为空时在用户登录 shell 的 PATH（UserPath）里找。
+	ClaudeBin string
 }
 
 // TokenIssuer 签发与作废 Agent 令牌。令牌在启动 Pi 前签发，进程停止、退出或被丢弃时作废。
@@ -119,6 +122,7 @@ type Executor struct {
 	live     map[*proc]struct{} // includes detached processes until stop/bridge cleanup is confirmed
 	pending  map[uuid.UUID]int
 	closedCh chan struct{}
+	claude   *claudecli.Probe // claude 的版本与会话记录目录的缓存
 }
 
 type proc struct {
@@ -132,7 +136,11 @@ type proc struct {
 	rt                  runtimeProcess // 运行时进程；进程表、停止、打断与一轮的执行只用它
 	client              *pirpc.Client  // Pi 的 RPC 客户端，只供 Pi 专有的操作；其他运行时为空
 	drv                 driver
-	runtimeIdentity     string // 运行时名称与它自己的指纹，变化即重启
+	runtimeIdentity     string      // 运行时名称与它自己的指纹，变化即重启
+	runtimeBinary       string      // 运行时可执行文件的真实路径（Claude Code）
+	runtimeVersion      string      // 运行时版本（Claude Code）
+	sessionID           string      // 平台给运行时的会话 ID（Claude Code）
+	sessionStale        atomic.Bool // 运行时已换（Pi 与 Claude Code 之间）：不再把它的会话文件记回去
 	version             int64
 	promptIdentity      string
 	localIdentity       string // 本机模式（目录与 PATH 开关）的指纹，变化即按新配置重启
@@ -208,7 +216,7 @@ func New(o Options, src Source, tmpl *clitemplate.Catalog, inst *clitemplate.Ins
 	}
 	return &Executor{o: o, src: src, tmpl: tmpl, inst: inst, log: log, obs: obs,
 		procs: map[uuid.UUID]*proc{}, runs: map[uuid.UUID]*run{}, handoffs: map[uuid.UUID]*RuntimeHandoff{},
-		live: map[*proc]struct{}{}, pending: map[uuid.UUID]int{}, closedCh: make(chan struct{})}
+		live: map[*proc]struct{}{}, pending: map[uuid.UUID]int{}, closedCh: make(chan struct{}), claude: &claudecli.Probe{}}
 }
 
 func (e *Executor) event(agentID uuid.UUID, runID *uuid.UUID, typ string, data map[string]any) {
@@ -310,7 +318,14 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	if errors.Is(err, runturn.ErrExited) {
 		tr, err = runturn.Result{Outcome: runturn.OutcomeFailed, ErrorCode: exitCode, ErrorMessage: exitMsg}, nil
 	}
-	if tr.ErrorCode == exitCode {
+	if err == nil {
+		tr = p.drv.afterTurn(p, tr)
+	}
+	switch {
+	case exiting(p) && tr.ErrorCode != exitCode:
+		// 打断时发过 SIGINT 的进程（Claude Code）随后一定退出：移出进程表，下一条消息用新进程接续会话，而不是写进这个进程后失败。
+		e.retire(p)
+	case tr.ErrorCode == exitCode, !alive(p):
 		// 进程已退出：立刻移出进程表，下一条消息启动新进程（不等读协程确认 EOF）。
 		e.discard(p, &runID)
 	}
@@ -342,7 +357,7 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 			case <-p.rt.Done():
 			case <-time.After(e.o.StopGrace):
 			}
-			res.ErrorMessage = strings.TrimSpace(p.drv.crashMessage(tail(p.rt.Stderr(), e.o.StderrTailBytes)))
+			res.ErrorMessage = strings.TrimSpace(p.drv.crashMessage(p, tail(p.rt.Stderr(), e.o.StderrTailBytes)))
 		}
 	}
 	return res, nil
@@ -401,6 +416,10 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 				return p, nil
 			}
 			delete(e.procs, snap.AgentID)
+			if p.drv.name() != e.driverFor(snap).name() {
+				// 换了运行时：会话已在数据库里重置，旧进程停止时不能把它的会话文件记回去。
+				p.sessionStale.Store(true)
+			}
 			e.mu.Unlock()
 			if !alive(p) {
 				// 进程已退出但还没被 watch 移出：记下意外退出后清理。
@@ -591,7 +610,8 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 		return nil, err
 	}
 	client := st.rt
-	p := &proc{larkRuntime: lark, googleBridge: googleBridge, authBridge: st.authBridge, log: e.snapshotLog(snap), agentID: snap.AgentID, rt: client, client: st.client, drv: drv, runtimeIdentity: runtimeIdentity(drv, snap), version: snap.ConfigVersion, promptIdentity: prompts.Identity(snap.PromptLayers), localIdentity: snap.Local.Identity(), stateIdentity: snap.ProviderState.Identity(), credentialIdentity: snap.CredentialIdentity, modelConfigIdentity: snap.ModelConfigIdentity, provider: snap.Provider, model: snap.ModelID,
+	p := &proc{larkRuntime: lark, googleBridge: googleBridge, authBridge: st.authBridge, log: e.snapshotLog(snap), agentID: snap.AgentID, rt: client, client: st.client, drv: drv, runtimeIdentity: runtimeIdentity(drv, snap),
+		runtimeBinary: st.binary, runtimeVersion: st.version, sessionID: st.sessionID, version: snap.ConfigVersion, promptIdentity: prompts.Identity(snap.PromptLayers), localIdentity: snap.Local.Identity(), stateIdentity: snap.ProviderState.Identity(), credentialIdentity: snap.CredentialIdentity, modelConfigIdentity: snap.ModelConfigIdentity, provider: snap.Provider, model: snap.ModelID,
 		startedAt: begin, dirs: d, lastUsed: time.Now(), recorded: snap.Session.SessionFile, tokenID: tokenID, stopDone: make(chan struct{})}
 	if identity, identityErr := readRecoveryProcess(client.Pid()); identityErr == nil && validRecoveryProcess(&identity) {
 		p.recoveryIdentity = &identity
@@ -623,6 +643,23 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 // runtimeIdentity 是进程复用时比较的运行时指纹：运行时名称加它自己的指纹。
 func runtimeIdentity(drv driver, snap agentconfig.Snapshot) string {
 	return drv.name() + "\x00" + drv.identity(snap)
+}
+
+// exiting 报告进程是否已在退出（Claude Code 打断时发过 SIGINT）：这样的进程不能再交给它新消息。
+func exiting(p *proc) bool {
+	x, ok := p.rt.(interface{ Exiting() bool })
+	return ok && x.Exiting()
+}
+
+// retire 把正在按平台的意思退出的进程移出进程表并收尾；它的退出不算意外，不记退出事件。
+func (e *Executor) retire(p *proc) {
+	p.stopping.Store(true)
+	e.mu.Lock()
+	if e.procs[p.agentID] == p {
+		delete(e.procs, p.agentID)
+	}
+	e.mu.Unlock()
+	go e.stop(p, stopCause{})
 }
 
 // discard 把已退出的进程移出进程表，记下意外退出，并确保其进程组结束。
@@ -685,6 +722,9 @@ func (e *Executor) turnFinished(p *proc) error {
 
 // recordSession 只在会话文件已写入磁盘时记录路径。
 func (e *Executor) recordSession(p *proc) error {
+	if p.sessionStale.Load() {
+		return nil
+	}
 	p.sessMu.Lock()
 	defer p.sessMu.Unlock()
 	if p.sessionFile == "" {

@@ -21,8 +21,8 @@
 //	其他             回复 echo: <文字>
 //
 // 环境变量：FAKECLAUDE_VERSION 改版本号；FAKECLAUDE_EXIT_AT_START=1 启动即报不认识的选项并退出；FAKECLAUDE_NO_INIT=1 收到消息也不输出；
-// FAKECLAUDE_LOGGED_IN=0 让 auth status 报未登录；FAKECLAUDE_AUTH_FAIL=1 让 auth status 失败；
-// FAKECLAUDE_ARGS_FILE 每次启动追加一行参数（JSON）；FAKECLAUDE_LOG 记下 purge 调用（每次一行：purge <路径>）。
+// FAKECLAUDE_LOGGED_IN=0 或 HOME 下有 .fakeclaude-logged-out 让 auth status 报未登录；FAKECLAUDE_AUTH_FAIL=1 让 auth status 失败；
+// FAKECLAUDE_ARGS_FILE 每次启动追加一行参数（JSON）；purge 调用记在 FAKECLAUDE_LOG 与 HOME 下的 .fakeclaude-purge.log（每次一行：purge <路径> -y）。
 package main
 
 import (
@@ -91,12 +91,14 @@ func authStatus() {
 		fmt.Fprintln(os.Stderr, "auth status failed for private@example.com")
 		os.Exit(2)
 	}
-	loggedIn := os.Getenv("FAKECLAUDE_LOGGED_IN") != "0"
+	home, _ := os.UserHomeDir()
+	// auth status 由平台以最小的环境运行，测试改用 HOME 下的标记文件控制。
+	_, loggedOut := os.Stat(filepath.Join(home, ".fakeclaude-logged-out"))
+	loggedIn := os.Getenv("FAKECLAUDE_LOGGED_IN") != "0" && loggedOut != nil
 	method := "claude.ai"
 	if !loggedIn {
 		method = "none"
 	}
-	home, _ := os.UserHomeDir()
 	b, _ := json.Marshal(map[string]any{"loggedIn": loggedIn, "authMethod": method, "apiProvider": "firstParty", "subscriptionType": "max",
 		"planTier": "max_20x", "loginExpiresAt": "2099-01-01T00:00:00Z", "email": "private@example.com", "orgId": "org-private-id", "orgName": "Private Org",
 		"configDirectory": filepath.Join(home, ".claude"), "projectsDirectory": filepath.Join(home, ".claude", "projects"), "analyticsDisabled": false, "storedClaudeAiLogin": true})
@@ -104,7 +106,12 @@ func authStatus() {
 }
 
 func purge(args []string) {
-	if f := os.Getenv("FAKECLAUDE_LOG"); f != "" {
+	home, _ := os.UserHomeDir()
+	// purge 也由平台以最小的环境运行：除 FAKECLAUDE_LOG 外，也记在 HOME 下。
+	for _, f := range []string{os.Getenv("FAKECLAUDE_LOG"), filepath.Join(home, ".fakeclaude-purge.log")} {
+		if f == "" {
+			continue
+		}
 		if fh, err := os.OpenFile(f, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
 			fmt.Fprintln(fh, "purge "+strings.Join(args, " "))
 			fh.Close()

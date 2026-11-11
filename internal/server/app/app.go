@@ -419,6 +419,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		Tokens: agentTokens{st: a.Store, instance: a.InstanceID}, AgentURL: agentURL(a.listener.Addr()), LoopctlBinDir: loopctlBin, ContextDir: contextDir, UserPath: a.UserPath.Dirs,
 	}, taskSource, templates, installer, log)
 	a.Config.Releaser = a.Executor
+	taskSource.ClaudeProjects = a.Executor.ClaudeProjectsDir
 	// Preserve unresolved handoff process evidence before generic cleanup can
 	// remove stale PID records. Missing/invalid provenance fails closed.
 	var protectedLark []local.PendingRuntimeHandoff
