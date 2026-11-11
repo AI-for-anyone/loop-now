@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"loop-now/internal/pluginmanifest"
+	"loop-now/internal/privatefs"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/executor"
 )
@@ -51,6 +52,41 @@ func clearProviderLinks(d agentDirs) error {
 		}
 	}
 	return os.Remove(record)
+}
+
+// mkdirPrivate 在状态目录 root 里建出 dir 与缺少的上级目录。状态目录里放的是订阅令牌：新建的每一级都显式设为
+// 只有当前用户能访问（Windows 上是受保护的 DACL，不只靠继承上级的 ACL）；已有的一级必须是真正的目录，
+// 不经软链接或联接走到状态目录外面。
+func mkdirPrivate(root, dir string) error {
+	if !within(root, dir) {
+		return errors.New("路径不在状态目录里")
+	}
+	rel, err := filepath.Rel(root, dir)
+	if err != nil {
+		return err
+	}
+	p := root
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		p = filepath.Join(p, part)
+		err := os.Mkdir(p, 0o700)
+		if errors.Is(err, fs.ErrExist) {
+			info, err := os.Lstat(p)
+			if err != nil {
+				return err
+			}
+			if isLink(p, info) || !info.IsDir() {
+				return errors.New("状态目录里的 " + p + " 不是目录")
+			}
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if err := privatefs.MakePrivate(p); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func within(dir, path string) bool {
@@ -123,7 +159,7 @@ func (e *Executor) linkProviderState(snap agentconfig.Snapshot, d agentDirs, log
 			info, err := os.Lstat(target)
 			if errors.Is(err, fs.ErrNotExist) {
 				// 登录时扩展还没写这条路径：在状态目录里建一个空目录，扩展之后写进去的东西都随账号走。
-				err = os.MkdirAll(target, 0o700)
+				err = mkdirPrivate(st.Dir, target)
 				if err == nil {
 					info, err = os.Lstat(target)
 				}
