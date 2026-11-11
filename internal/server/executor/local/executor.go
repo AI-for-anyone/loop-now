@@ -653,6 +653,16 @@ func exiting(p *proc) bool {
 	return ok && x.Exiting()
 }
 
+// intendedExit 报告进程的退出是不是平台的意思：平台在停止它，或者运行时因打断而由平台让它退出
+// （Claude Code 的 SIGINT；Windows 上没有 SIGINT，是直接结束进程，进程可能先于这一轮的结果退出）。这样的退出不记意外退出。
+func intendedExit(p *proc) bool {
+	if p.stopping.Load() {
+		return true
+	}
+	x, ok := p.rt.(interface{ StoppedByInterrupt() bool })
+	return ok && x.StoppedByInterrupt()
+}
+
 // retire 把正在按平台的意思退出的进程移出进程表并收尾；它的退出不算意外，不记退出事件。
 func (e *Executor) retire(p *proc) {
 	p.stopping.Store(true)
@@ -673,7 +683,7 @@ func (e *Executor) discard(p *proc, runID *uuid.UUID) {
 	}
 	e.mu.Unlock()
 	go func() {
-		if !p.stopping.Load() { // 打断超时等平台主动结束的，不算意外退出
+		if !intendedExit(p) { // 打断超时等平台主动结束的，不算意外退出
 			e.recordExit(p, runID)
 		}
 		e.stop(p, stopCause{})
@@ -772,7 +782,7 @@ func (e *Executor) watch(p *proc) {
 		delete(e.procs, p.agentID)
 	}
 	e.mu.Unlock()
-	if !p.stopping.Load() {
+	if !intendedExit(p) {
 		// 先读 curRun：discard 在清空 curRun 之前设置 exitRun，两者至少有一个能对上。
 		run := p.curRun.Load()
 		if run == nil {

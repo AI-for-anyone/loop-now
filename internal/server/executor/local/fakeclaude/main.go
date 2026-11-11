@@ -22,6 +22,7 @@
 //
 // 环境变量：FAKECLAUDE_VERSION 改版本号；FAKECLAUDE_EXIT_AT_START=1 启动即报不认识的选项并退出；FAKECLAUDE_NO_INIT=1 收到消息也不输出；
 // FAKECLAUDE_LOGGED_IN=0 或 HOME 下有 .fakeclaude-logged-out 让 auth status 报未登录；FAKECLAUDE_AUTH_FAIL=1 让 auth status 失败；
+// FAKECLAUDE_SIGINT_EXIT_NOW=1 收到 SIGINT 时不给结果、立即以 1 退出（模拟 Windows 上打断时直接结束进程）；
 // FAKECLAUDE_NO_TRANSCRIPT=1 不写会话记录（模拟平台找不到它）；FAKECLAUDE_EXTRA_SKILLS（逗号分隔）加进 init 的技能列表，模拟 claude 新增的自带技能；
 // FAKECLAUDE_ARGS_FILE 每次启动追加一行参数（JSON）；purge 调用记在 FAKECLAUDE_LOG 与 HOME 下的 .fakeclaude-purge.log（每次一行：purge <路径> -y）。
 package main
@@ -422,6 +423,9 @@ func turn(f flags, sess *session, model, text string, images, prior int, lines c
 					return
 				}
 			case <-sigint:
+				if os.Getenv("FAKECLAUDE_SIGINT_EXIT_NOW") == "1" {
+					os.Exit(1) // 像 Windows 上被直接结束那样：不给结果，立即退出
+				}
 				result(map[string]any{"subtype": "error_during_execution", "is_error": true, "result": nil, "terminal_reason": "aborted_streaming"}, map[string]any{})
 				time.Sleep(100 * time.Millisecond)
 				os.Exit(0)

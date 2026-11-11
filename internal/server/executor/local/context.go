@@ -77,8 +77,14 @@ func (e *Executor) contextPrompt(snap agentconfig.Snapshot, d agentDirs, loginHo
 // writeEntry 把一个上下文入口的原文放进这一节；内容为空时不写。
 func writeEntry(b *strings.Builder, path, content string) {
 	if strings.TrimSpace(content) != "" {
-		fmt.Fprintf(b, "\n<context_entry path=%q>\n%s\n</context_entry>\n", path, content)
+		fmt.Fprintf(b, "\n<context_entry path=\"%s\">\n%s\n</context_entry>\n", entryPathAttr(path), content)
 	}
+}
+
+// entryPathAttr 是 context_entry 的 path 属性值：路径原样写（不能用 Go 的 %q：它把 Windows 路径的每个反斜杠转义成两个，
+// 模型拿到的就是错的路径），只把会破坏属性的双引号与换行写成实体。
+func entryPathAttr(p string) string {
+	return strings.NewReplacer(`"`, "&quot;", "\n", "&#10;", "\r", "&#13;").Replace(p)
 }
 
 // readOwnEntry 读取自己文件夹根目录的上下文入口：按 entryCandidates 的顺序取第一个存在的普通文件（经 os.Root，不跟随越界的软链接），
