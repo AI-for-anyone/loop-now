@@ -1,19 +1,23 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { CircleAlertIcon } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ErrorAlert, FieldError } from '@/components/ErrorAlert'
 import { IdField } from '@/components/IdField'
 import { ModelPicker } from '@/components/ModelPicker'
 import { CodexServiceTierPicker } from '@/components/CodexServiceTierPicker'
 import { ThinkingLevelPicker } from '@/components/ThinkingLevelPicker'
-import type { Schemas } from '@/api/client'
-import { invalidateModelCatalog, useUpdateAgent } from '@/api/queries'
+import { ApiError, type Schemas } from '@/api/client'
+import { invalidateModelCatalog, useModelProviders, useUpdateAgent } from '@/api/queries'
 import { t } from '@/i18n'
 import { agentNameError, fieldMessages, isAgentNameConflict, isModelField, unmatchedFieldError } from '@/lib/errors'
 import { nameRuleError } from '@/lib/names'
+import { runtimeOfProvider } from '@/lib/runtime'
+import { ClaudeCodeDifferences } from './RuntimeNotes'
 import { Section } from './Section'
 import { useDirtyForm } from '@/features/prompts/draft-navigation'
 
@@ -24,6 +28,7 @@ const sameModel = (a: ModelRef | null, b: ModelRef | null) => a?.provider === b?
 export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: boolean }) {
   const update = useUpdateAgent(agent.id)
   const client = useQueryClient()
+  const providers = useModelProviders(agent.id)
   const serverTier = agent.serviceTier === 'default' ? null : agent.serviceTier ?? null
   const [name, setName] = useState(agent.name)
   const [model, setModel] = useState<ModelRef | null>(agent.model)
@@ -31,6 +36,7 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
   const [serviceTier, setServiceTier] = useState<Schemas['CodexServiceTier'] | null>(serverTier)
   const [notice, setNotice] = useState<string | null>(null)
   const [nameRule, setNameRule] = useState<string | undefined>(undefined)
+  const [confirmingSwitch, setConfirmingSwitch] = useState(false)
 
   // 表单所依据的服务端值。服务端刷新出新值时：人没改过的项跟随最新值，改过的项保留人的输入。
   const [base, setBase] = useState({ name: agent.name, model: agent.model, thinkingLevel: agent.thinkingLevel ?? null, serviceTier: serverTier })
@@ -59,12 +65,21 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
   const tierChanged = serviceTier !== serverTier
   const dirty = name !== agent.name || modelChanged || thinkingChanged || tierChanged
   useDirtyForm('basic', dirty)
+  // 运行时由模型提供方决定：选中的提供方换了运行时，保存即切换（新会话开始），先确认。
+  const nextRuntime = model ? runtimeOfProvider(model.provider, providers.data?.providers) : agent.runtime
+  const switchesRuntime = modelChanged && nextRuntime !== agent.runtime
 
-  const save = async () => {
+  const save = () => {
     setNotice(null)
     const ruleError = name !== agent.name ? nameRuleError(name) : undefined
     setNameRule(ruleError)
     if (ruleError) return
+    if (switchesRuntime) setConfirmingSwitch(true)
+    else void submit()
+  }
+
+  // 失败不抛出：确认框照常关上，错误显示在本节（字段错误在对应输入旁）。
+  const submit = async () => {
     const body: Schemas['AgentUpdate'] = {}
     if (name !== agent.name) body.name = name
     if (modelChanged && model) body.model = model
@@ -84,6 +99,8 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
 
   const shownInline = (field: string) => field === 'name' || field === 'thinkingLevel' || field === 'serviceTier' || isModelField(field)
   const nameError = nameRule ?? agentNameError(update.error, agent.scope)
+  // 契约里改 Agent 只在切换运行时才因 Agent 正在回复返回 409 agent_not_idle。
+  const notIdle = update.error instanceof ApiError && update.error.code === 'agent_not_idle'
 
   return (
     <Section id="basic" title={t.config.basic.title}>
@@ -98,14 +115,23 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
       </div>
       <div className="[&>div]:grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] [&>div]:gap-4 [&>div>p]:col-span-full">
         <ModelPicker agentId={agent.id} value={model} onChange={next => { if (!sameModel(next, model)) setThinkingLevel(null); if (next?.provider !== 'openai-codex') setServiceTier(null); setModel(next) }} error={fieldMessages(update.error, isModelField)}>
-          {selected => <>
+          {(selected, provider) => <>
             <ThinkingLevelPicker value={thinkingLevel} onChange={setThinkingLevel} levels={selected?.thinkingLevels ?? []} defaultLevel={selected?.defaultThinkingLevel} disabled={!selected?.thinkingLevels?.length} error={fieldMessages(update.error, field => field === 'thinkingLevel')} />
             {model?.provider === 'openai-codex' && <CodexServiceTierPicker value={serviceTier} onChange={setServiceTier} error={fieldMessages(update.error, field => field === 'serviceTier')} />}
+            {/* 选中提供方就显示（模型还没选时也是）；目录不可用时按表单里的模型或 Agent 现在的运行时。 */}
+            {(provider?.runtime ?? nextRuntime) === 'claude-code' && <ClaudeCodeDifferences className="col-span-full" />}
           </>}
         </ModelPicker>
       </div>
       <p className="text-xs text-ink-500">{t.config.basic.thinking.nextRun}</p>
-      {!isAgentNameConflict(update.error) && <ErrorAlert error={unmatchedFieldError(update.error, shownInline)} />}
+      {notIdle ? (
+        <Alert variant="error">
+          <CircleAlertIcon />
+          <AlertDescription className="text-[13.5px] leading-[1.7]">{t.runtime.switch.notIdle}</AlertDescription>
+        </Alert>
+      ) : (
+        !isAgentNameConflict(update.error) && <ErrorAlert error={unmatchedFieldError(update.error, shownInline)} />
+      )}
       {serverUpdated && dirty && (
         <Alert variant="warning" role="status">
           <AlertDescription className="text-[13.5px] font-bold text-ink">{t.config.basic.serverUpdated}</AlertDescription>
@@ -118,10 +144,18 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
             {notice}
           </p>
         )}
-        <Button size="lg" disabled={!dirty || !model || name.trim() === '' || update.isPending} onClick={() => void save()}>
+        <Button size="lg" disabled={!dirty || !model || name.trim() === '' || update.isPending} onClick={save}>
           {update.isPending ? t.common.saving : t.common.save}
         </Button>
       </div>
+      <ConfirmDialog
+        open={confirmingSwitch}
+        onOpenChange={setConfirmingSwitch}
+        title={t.runtime.switch.title}
+        body={t.runtime.switch.body(t.runtime.names[agent.runtime], t.runtime.names[nextRuntime])}
+        confirmLabel={t.runtime.switch.confirm}
+        onConfirm={submit}
+      />
     </Section>
   )
 }

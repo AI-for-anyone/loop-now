@@ -66,6 +66,12 @@ export const chat = {
     plugin_blocked: '插件阻止了本轮执行',
     image_unsupported: '当前模型不支持图片输入',
     internal_error: '服务端内部错误',
+    // Claude Code 运行时的失败：前两种告诉人在本机怎么处理，其余如实说明，后面接服务端的 errorMessage。
+    runtime_unavailable: '本机没找到 claude：装好 Claude Code，并确认在终端里能运行 claude',
+    runtime_login_required: '本机的 Claude Code 没有登录：在本机终端运行 claude 并登录',
+    runtime_start_failed: 'Claude Code 没能启动',
+    runtime_exited: 'Claude Code 进程在这一轮中意外退出',
+    runtime_error: 'Claude Code 报告这一轮出错',
   } satisfies Record<S['RunErrorCode'], string>,
   tool: {
     started: '进行中',

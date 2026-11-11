@@ -149,6 +149,7 @@ export function ChatPage() {
           agentName={agent.name}
           busy={busy}
           disabled={sessionMissing}
+          piCommands={agent.runtime !== 'claude-code'}
           maxMessageBytes={context.data?.limits.maxMessage}
           imageLimits={messageImageLimits(context.data?.limits)}
           onSent={recordSent}

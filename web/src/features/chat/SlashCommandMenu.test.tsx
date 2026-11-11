@@ -20,7 +20,7 @@ const list: Schemas['AgentCommandList'] = {
 }
 
 // 对话页的输入框：记下读命令列表的次数与发出的消息。
-function setup(commands: () => Response = () => HttpResponse.json(list)) {
+function setup(commands: () => Response = () => HttpResponse.json(list), piCommands?: boolean) {
   let reads = 0
   const sent: Schemas['SendMessageInput'][] = []
   server.use(
@@ -32,7 +32,7 @@ function setup(commands: () => Response = () => HttpResponse.json(list)) {
       return HttpResponse.json({ run, message: makeMessage({ text: body.text, run }) }, { status: 202 })
     }),
   )
-  renderWithQuery(<Composer agentId="agent-1" agentName="开发助手" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
+  renderWithQuery(<Composer agentId="agent-1" agentName="开发助手" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} piCommands={piCommands} />)
   return { user: userEvent.setup(), input: screen.getByRole('textbox', { name: '消息' }), sent, reads: () => reads }
 }
 
@@ -131,6 +131,17 @@ describe('输入框的 "/" 命令菜单', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(/^读不到命令列表：服务端内部错误/)
     await user.keyboard('{Enter}')
     await waitFor(() => expect(sent).toEqual([{ text: '/pi:review' }]))
+  })
+
+  it('没有 /pi: 命令的 Agent（Claude Code 运行时）：输入 "/" 不弹菜单、不读命令列表，回车照常发出', async () => {
+    const { user, input, sent, reads } = setup(undefined, false)
+    await user.type(input, '/review')
+    expect(screen.queryByRole('listbox')).toBeNull()
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(input).not.toHaveAttribute('aria-controls')
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(sent).toEqual([{ text: '/review' }]))
+    expect(reads()).toBe(0)
   })
 
   it('只认开头的 "/"：前面有空格、不在开头、光标离开第一个词时都不弹菜单', async () => {

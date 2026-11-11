@@ -3223,9 +3223,14 @@ export interface components {
          *     - internal_error：服务端内部错误（如数据库暂时不可用），这次回复未能执行
          *     - plugin_blocked：插件拒绝本轮操作或运行条件已变化
          *     - image_unsupported：本轮实际模型不支持图片，未发送图片或切换模型
+         *     - runtime_unavailable：Claude Code 运行时在本机不可用（登录 shell 的 PATH 里找不到 claude，或读不出它的版本）
+         *     - runtime_login_required：本机的 Claude Code 没有登录，需要用户在本机登录后再试
+         *     - runtime_start_failed：Claude Code 在第一轮开始前退出或启动超时（消息带版本号与错误输出末尾）
+         *     - runtime_exited：Claude Code 进程在这一轮中意外退出
+         *     - runtime_error：Claude Code 报告这一轮以错误结束（如用量额度用尽）
          * @enum {string}
          */
-        RunErrorCode: "credential_unavailable" | "cli_install_failed" | "workspace_sync_failed" | "session_missing" | "pi_start_failed" | "pi_exited" | "pi_error" | "internal_error" | "plugin_blocked" | "image_unsupported";
+        RunErrorCode: "credential_unavailable" | "cli_install_failed" | "workspace_sync_failed" | "session_missing" | "pi_start_failed" | "pi_exited" | "pi_error" | "internal_error" | "plugin_blocked" | "image_unsupported" | "runtime_unavailable" | "runtime_login_required" | "runtime_start_failed" | "runtime_exited" | "runtime_error";
         FieldError: {
             field: string;
             message: string;
@@ -3333,9 +3338,14 @@ export interface components {
              * @description builtin 为纯内置目录；config 表示该 Provider 有原生 models.json 配置或覆盖；
              *     plugin 为已安装插件的 Pi 扩展注册的提供方（plugins/SPEC.md §13），只用于项目 Agent：
              *     选它须项目已启用该插件、Agent 已获授权（否则修改 Agent 返回 422，新建 Agent 时不能直接选），账号用项目里登录的订阅账号。
+             *     local_cli 为用户本机安装的 CLI 提供的模型（目前只有 claude-code：本机的 Claude Code），用 CLI 自己在本机的登录，
+             *     不需要账号，平台不保存令牌；项目 Agent 与平台 Agent 都能选。模型 id 是 Claude Code 的别名（fable、opus、sonnet、haiku），
+             *     思考等级即 Claude Code 的 effort（low 到 max）。本机是否装了、是否登录见 GET /runtimes，没装时照常可选，运行时以 runtime_* 失败。
              * @enum {string}
              */
-            source: "builtin" | "config" | "plugin";
+            source: "builtin" | "config" | "plugin" | "local_cli";
+            /** @description 选这个提供方的 Agent 由哪个运行时执行。 */
+            runtime: components["schemas"]["AgentRuntime"];
             /** @description source 为 plugin 时是注册它的插件 id，其余为 null。 */
             pluginId: string | null;
             /** @description source 为 plugin 时是注册它的插件的显示名（清单原样），其余为 null。 */
@@ -3358,6 +3368,13 @@ export interface components {
             /** @description 平台支持的显式认证方式；OAuth登录仅控制台，当前支持openai-codex与插件提供方（插件提供方只有oauth）。 */
             authMethods: components["schemas"]["ModelAuthMethod"][];
         };
+        /**
+         * @description 执行 Agent 的运行时：pi 为随包的 Pi；claude-code 为用户本机安装、未经修改的 Claude Code（从登录 shell 的 PATH 找 claude），
+         *     用它在本机自己的登录，平台不读取、不保存它的凭证。运行时由模型提供方决定，不单独设置：model.provider 为 claude-code 时是
+         *     claude-code，其余为 pi。Claude Code 下没有 Pi 扩展（/pi: 命令、扩展对话、插件提供方），插件的 Skill 与 MCP 服务器照常。
+         * @enum {string}
+         */
+        AgentRuntime: "pi" | "claude-code";
         ModelList: {
             providerId: string;
             models: components["schemas"]["Model"][];
@@ -3435,6 +3452,8 @@ export interface components {
              */
             address: string | null;
             model: components["schemas"]["ModelRef"];
+            /** @description 由 model.provider 派生，只读。 */
+            runtime: components["schemas"]["AgentRuntime"];
             /** @description 仅openai-codex可设非null值；null为标准。创建缺省同null，更新缺省保留、null重置。常态下一轮生效，新任务冻结具体值；旧快照缺省保持原行为。 */
             serviceTier?: components["schemas"]["CodexServiceTier"] | null;
             /** @description null为当前模型官方clamp(medium)默认；创建缺省同null，更新缺省保留原值，显式等级须由该模型支持。常态下一轮生效，新任务冻结实际解析值，旧任务不重写。 */
@@ -3525,6 +3544,10 @@ export interface components {
             /** Format: int64 */
             expectedPromptVersion: number;
         };
+        /**
+         * @description model.provider 在 claude-code 与其他提供方之间改动即切换运行时（见 AgentRuntime）：新运行时从新会话开始，会话序号加一
+         *     （会话重置事件的 reason 为 runtime_changed），这个会话里的 sleep 取消，旧会话不迁移也不删除；Agent 有进行中的回复时返回 409 agent_not_idle。
+         */
         AgentUpdate: {
             name?: components["schemas"]["EntityName"];
             model?: components["schemas"]["ModelRef"];
@@ -3557,6 +3580,8 @@ export interface components {
              */
             address: string | null;
             model: components["schemas"]["ModelRef"];
+            /** @description 由 model.provider 派生，只读。 */
+            runtime: components["schemas"]["AgentRuntime"];
             /** @description 仅openai-codex可设非null值；null为标准。创建缺省同null，更新缺省保留、null重置。常态下一轮生效，新任务冻结具体值；旧快照缺省保持原行为。 */
             serviceTier?: components["schemas"]["CodexServiceTier"] | null;
             /** @description null为当前模型官方clamp(medium)默认；创建缺省同null，更新缺省保留原值，显式等级须由该模型支持。常态下一轮生效，新任务冻结实际解析值，旧任务不重写。 */

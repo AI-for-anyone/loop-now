@@ -12,6 +12,7 @@ import { overview } from './overview'
 import { plugins } from './plugins'
 import { projects } from './projects'
 import { prompts } from './prompts'
+import { runtime } from './runtime'
 import { settings } from './settings'
 import { skills } from './skills'
 import { sleep } from './sleep'
@@ -54,4 +55,5 @@ export const zhCN = {
   shell,
   stats,
   localMode,
+  runtime,
 } as const

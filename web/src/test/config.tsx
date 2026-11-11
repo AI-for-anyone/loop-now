@@ -13,8 +13,8 @@ export const providers: Schemas['ModelProviderList'] = {
   piVersion: '1.1.0',
   catalogGeneratedAt: null,
   providers: [
-    { id: 'anthropic', name: null, pluginId: null, pluginDisplayName: null, unavailableReason: null, source: 'builtin', apiKeyEnvVars: ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'], modelCount: 2, authMethods: ['api_key'] },
-    { id: 'openai', name: null, pluginId: null, pluginDisplayName: null, unavailableReason: null, source: 'builtin', apiKeyEnvVars: ['OPENAI_API_KEY'], modelCount: 1, authMethods: ['api_key'] },
+    { id: 'anthropic', name: null, pluginId: null, pluginDisplayName: null, unavailableReason: null, source: 'builtin', runtime: 'pi', apiKeyEnvVars: ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'], modelCount: 2, authMethods: ['api_key'] },
+    { id: 'openai', name: null, pluginId: null, pluginDisplayName: null, unavailableReason: null, source: 'builtin', runtime: 'pi', apiKeyEnvVars: ['OPENAI_API_KEY'], modelCount: 1, authMethods: ['api_key'] },
   ],
 }
 
@@ -22,10 +22,18 @@ const model = (id: string, name: string): Schemas['Model'] => ({ id, name, reaso
 
 // 插件的 Pi 扩展注册的提供方：只有 OAuth；unavailableReason 只在带 agentId 读目录时可能非空。
 export function pluginProvider(id: string, overrides: Partial<Schemas['ModelProvider']> = {}): Schemas['ModelProvider'] {
-  return { id, name: 'Grok CLI', source: 'plugin', pluginId: 'grok', pluginDisplayName: { 'zh-CN': 'Grok 订阅', 'en-US': 'Grok subscription' }, unavailableReason: null, apiKeyEnvVars: [], modelCount: 2, authMethods: ['oauth'], ...overrides }
+  return { id, name: 'Grok CLI', source: 'plugin', runtime: 'pi', pluginId: 'grok', pluginDisplayName: { 'zh-CN': 'Grok 订阅', 'en-US': 'Grok subscription' }, unavailableReason: null, apiKeyEnvVars: [], modelCount: 2, authMethods: ['oauth'], ...overrides }
 }
 
+// 本机的 Claude Code（契约 ModelProvider source=local_cli）：用它自己在本机的登录，没有账号；模型是别名，思考等级 low 到 max，没有 off。
+export const claudeCodeProvider: Schemas['ModelProvider'] = { id: 'claude-code', name: 'Claude Code', source: 'local_cli', runtime: 'claude-code', pluginId: null, pluginDisplayName: null, unavailableReason: null, apiKeyEnvVars: [], modelCount: 2, authMethods: [] }
+const claudeCodeModel = (id: string, name: string): Schemas['Model'] => ({ ...model(id, name), reasoning: true, thinkingLevels: ['low', 'medium', 'high', 'xhigh', 'max'], defaultThinkingLevel: 'medium' })
+export const withClaudeCode: Schemas['ModelProviderList'] = { ...providers, providers: [...providers.providers, claudeCodeProvider] }
+
 export const catalogHandlers = [
+  http.get(apiUrl('/model-providers/claude-code/models'), () =>
+    HttpResponse.json({ providerId: 'claude-code', models: [claudeCodeModel('sonnet', 'Claude Sonnet (latest)'), claudeCodeModel('opus', 'Claude Opus (latest)')] }),
+  ),
   http.get(apiUrl('/model-settings'), () => HttpResponse.json({ modelsJson: '{"providers":{}}', revision: 1 })),
   http.get(apiUrl('/model-providers'), () => HttpResponse.json(providers)),
   http.get(apiUrl('/model-providers/anthropic/models'), () =>

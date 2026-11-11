@@ -61,6 +61,8 @@ interface ComposerProps {
   // 有进行中的回复时由对话页给出。
   stop?: StopControl
   reply?: QuestionReply
+  // 有没有 /pi: 命令：Claude Code 运行时的 Agent 没有（命令列表接口返回空列表），不给菜单。
+  piCommands?: boolean
 }
 
 const encoder = new TextEncoder()
@@ -69,7 +71,7 @@ const encoder = new TextEncoder()
 const inputClass =
   'field-sizing-fixed min-h-10 max-h-60 flex-1 resize-none overflow-y-auto rounded-none bg-transparent px-1 py-2 text-base leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent'
 
-export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBytes, imageLimits, onSent, onCommand, queue, status, connection, stop, reply }: ComposerProps) {
+export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBytes, imageLimits, onSent, onCommand, queue, status, connection, stop, reply, piCommands = true }: ComposerProps) {
   const client = useQueryClient()
   const send = useSendMessage(agentId)
   const [text, setText] = useState('')
@@ -82,11 +84,11 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
   const replyId = reply?.message.id
 
   // "/" 菜单：输入以 "/" 开头、光标还在第一个词里时打开，按这个词筛选 Pi 命令；Esc 关掉后，这个词变了再打开。
-  // 回复问题时发出的是回答，不是对话消息，不给菜单。
+  // 回复问题时发出的是回答，不是对话消息，不给菜单；没有 /pi: 命令的 Agent 也不给。
   const [caret, setCaret] = useState(0)
   const [dismissed, setDismissed] = useState<string | null>(null)
   const [active, setActive] = useState(0)
-  const token = reply || disabled ? null : slashToken(text, caret)
+  const token = reply || disabled || !piCommands ? null : slashToken(text, caret)
   const menuOpen = token !== null && dismissed !== token
   if (token === null && dismissed !== null) setDismissed(null)
   const commands = useAgentCommands(agentId, menuOpen)

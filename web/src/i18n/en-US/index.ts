@@ -16,6 +16,7 @@ import { overview } from './overview'
 import { plugins } from './plugins'
 import { projects } from './projects'
 import { prompts } from './prompts'
+import { runtime } from './runtime'
 import { settings } from './settings'
 import { shell } from './shell'
 import { skills } from './skills'
@@ -55,4 +56,5 @@ export const enUS: Messages = {
   shell,
   stats,
   localMode,
+  runtime,
 }

@@ -54,6 +54,7 @@ export function makeAgent(overrides: Partial<Schemas['Agent']> = {}): Schemas['A
     // 地址由服务端按名称拼出；样例默认为 null（契约允许，名称不满足命名规则时就是 null），需要地址的测试自己给出。
     address: null,
     model: { provider: 'anthropic', modelId: 'claude-sonnet-5-5' },
+    runtime: 'pi',
     prompt: '',
     promptVersion: 1,
     configVersion: 1,
@@ -76,6 +77,7 @@ export function toListItem(agent: Schemas['Agent'], sessionState: Schemas['Sessi
     name: agent.name,
     address: agent.address,
     model: agent.model,
+    runtime: agent.runtime,
     configVersion: agent.configVersion,
     busy: agent.busy,
     sessionState,

@@ -62,6 +62,11 @@ export const chat = {
     plugin_blocked: 'A plugin blocked this turn',
     image_unsupported: "The current model doesn't accept images",
     internal_error: 'Internal server error',
+    runtime_unavailable: "claude wasn't found on this computer: install Claude Code and make sure claude runs in a terminal",
+    runtime_login_required: "Claude Code isn't logged in on this computer: run claude in a terminal there and log in",
+    runtime_start_failed: "Claude Code couldn't start",
+    runtime_exited: 'The Claude Code process exited unexpectedly during this turn',
+    runtime_error: 'Claude Code reported an error for this turn',
   },
   tool: {
     started: 'Running',

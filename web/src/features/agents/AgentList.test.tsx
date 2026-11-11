@@ -117,6 +117,15 @@ describe('左侧栏 Agent 行的外观与状态', () => {
     expect(create).toBeEnabled()
   })
 
+  it('Claude Code 的 Agent 在名称后有一个小图标标出运行时；Pi 的不标', async () => {
+    setup([makeAgent({ name: 'Pi 助手' }), makeAgent({ name: '本机助手', model: { provider: 'claude-code', modelId: 'sonnet' }, runtime: 'claude-code', busy: true })])
+    const list = await screen.findByRole('list', { name: 'Agent' })
+    const claude = await within(list).findByRole('link', { name: /^本机助手/ })
+    expect(claude).toHaveTextContent(/^本机助手运行时：本机的 Claude Code回复中$/)
+    expect(within(claude).getByTitle('运行时：本机的 Claude Code')).toBeInTheDocument()
+    expect(within(list).getByRole('link', { name: /^Pi 助手/ })).toHaveTextContent(/^Pi 助手$/)
+  })
+
   it('sleep 中显示“zZ sleep”，唤醒时间与原因在悬停提示里', async () => {
     const agent = makeAgent({ name: '等待中的助手' })
     const reason = '等待外部确认并保留当前成果。'
