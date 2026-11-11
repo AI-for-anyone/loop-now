@@ -40,7 +40,7 @@ func newClaudeHarness(t *testing.T, mutate func(o *Options)) *claudeHarness {
 	h := newHarness(t, func(o *Options) {
 		o.ClaudeBin = fakeclaudebin.Path(t)
 		o.RealHome = func() (string, error) { return realHome, nil }
-		o.Passthrough = append(o.Passthrough, "FAKECLAUDE_ARGS_FILE", "FAKECLAUDE_EXIT_AT_START", "FAKECLAUDE_EXTRA_SKILLS", "ANTHROPIC_API_KEY", "CLAUDE_CODE_USE_BEDROCK", "CLAUDECODE")
+		o.Passthrough = append(o.Passthrough, "FAKECLAUDE_ARGS_FILE", "FAKECLAUDE_EXIT_AT_START", "FAKECLAUDE_EXTRA_SKILLS", "FAKECLAUDE_NO_TRANSCRIPT", "ANTHROPIC_API_KEY", "CLAUDE_CODE_USE_BEDROCK", "CLAUDECODE")
 		if mutate != nil {
 			mutate(o)
 		}
@@ -592,5 +592,34 @@ func TestClaudeSkillsVisibleToAgent(t *testing.T) {
 	logs := h.logs.String()
 	if strings.Count(logs, "平台以外的技能") != 1 || !strings.Contains(logs, "update-config") || !strings.Contains(logs, "dataviz") || strings.Contains(logs, "loop-now:loopctl") {
 		t.Fatalf("多出的技能应记一次警告（只列多出的）：%s", logs)
+	}
+}
+
+// 找不到 claude 写的会话记录（例如 Windows 上它对工作目录的编码与平台不同）：这一轮照常完成，不报“会话记录保存失败”；
+// 记一次警告；这个进程里对话照常接续，重启后开新会话（--session-id，不 --resume）。
+func TestClaudeTranscriptNotFoundDegrades(t *testing.T) {
+	h := newClaudeHarness(t, nil)
+	h.env["FAKECLAUDE_NO_TRANSCRIPT"] = "1"
+	id := h.claudeAgent(nil)
+	for _, msg := range []string{"hi", "fake:history"} {
+		if res, _ := h.exec(id, msg); res.Outcome != executor.OutcomeCompleted {
+			t.Fatalf("%s：%+v", msg, res)
+		}
+	}
+	if n := strings.Count(h.logs.String(), "找不到 Claude Code 的会话记录"); n != 1 {
+		t.Fatalf("应记一次警告，记了 %d 次：%s", n, h.logs.String())
+	}
+	h.src.mu.Lock()
+	recorded := h.src.recorded[id]
+	h.src.mu.Unlock()
+	if recorded != "" {
+		t.Fatalf("没有会话记录可记：%q", recorded)
+	}
+	h.src.update(id, func(s *agentconfig.Snapshot) { s.Prompt = "changed" })
+	if res, _ := h.exec(id, "after restart"); res.Outcome != executor.OutcomeCompleted {
+		t.Fatalf("重启后：%+v", res)
+	}
+	if args := h.launches()[1]; hasFlag(args, "--resume") || !claudecli.ValidSessionID(argValue(args, "--session-id")) {
+		t.Fatalf("重启后应开新会话：%v", args)
 	}
 }

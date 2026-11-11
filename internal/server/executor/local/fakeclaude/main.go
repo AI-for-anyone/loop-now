@@ -22,7 +22,7 @@
 //
 // 环境变量：FAKECLAUDE_VERSION 改版本号；FAKECLAUDE_EXIT_AT_START=1 启动即报不认识的选项并退出；FAKECLAUDE_NO_INIT=1 收到消息也不输出；
 // FAKECLAUDE_LOGGED_IN=0 或 HOME 下有 .fakeclaude-logged-out 让 auth status 报未登录；FAKECLAUDE_AUTH_FAIL=1 让 auth status 失败；
-// FAKECLAUDE_EXTRA_SKILLS（逗号分隔）加进 init 的技能列表，模拟 claude 新增的自带技能；
+// FAKECLAUDE_NO_TRANSCRIPT=1 不写会话记录（模拟平台找不到它）；FAKECLAUDE_EXTRA_SKILLS（逗号分隔）加进 init 的技能列表，模拟 claude 新增的自带技能；
 // FAKECLAUDE_ARGS_FILE 每次启动追加一行参数（JSON）；purge 调用记在 FAKECLAUDE_LOG 与 HOME 下的 .fakeclaude-purge.log（每次一行：purge <路径> -y）。
 package main
 
@@ -33,11 +33,12 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"loop-now/internal/server/claudecli"
 )
 
 var (
@@ -197,17 +198,15 @@ func parse(args []string) flags {
 	return f
 }
 
-var nonAlnum = regexp.MustCompile(`[^A-Za-z0-9]`)
-
 func projectsDir() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".claude", "projects")
 }
 
-// transcript 是会话记录：与真的 claude 一样放在 ~/.claude/projects/<cwd 中非字母数字换成 -> 下。
+// transcript 是会话记录：放在 ~/.claude/projects/<工作目录编码> 下，编码与平台用同一个函数（解析之后的那个）。
 func transcript(id string) string {
 	cwd, _ := os.Getwd()
-	return filepath.Join(projectsDir(), nonAlnum.ReplaceAllString(cwd, "-"), id+".jsonl")
+	return filepath.Join(projectsDir(), claudecli.ProjectDirName(cwd), id+".jsonl")
 }
 
 // history 读出要接续的会话里已有的 user 消息数：resume 是 .jsonl 路径时读它，否则按会话 ID 在 projects 下找。
@@ -240,6 +239,10 @@ type session struct {
 }
 
 func (s *session) record(text string) {
+	if os.Getenv("FAKECLAUDE_NO_TRANSCRIPT") == "1" {
+		s.count++
+		return
+	}
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
 		return
 	}

@@ -136,6 +136,14 @@ func TestArchiveClaudeSession(t *testing.T) {
 	if err != nil || json.Unmarshal(data, &archived) != nil || string(archived.Session) != "{\"type\":\"user\"}\n" {
 		t.Fatalf("归档：%s %v", data, err)
 	}
+	// claude 用原样的工作目录路径编码时（Windows 上未核实）也认。
+	if names := claudecli.ProjectDirNames(workspace); len(names) > 1 {
+		raw := write(names[1])
+		inst.SessionFile = &raw
+		if _, err := src.archiveSession(context.Background(), inst); err != nil {
+			t.Fatalf("原样编码的会话记录：%v", err)
+		}
+	}
 	other := write("-some-other-workspace")
 	inst.SessionFile = &other
 	if _, err := src.archiveSession(context.Background(), inst); err == nil {

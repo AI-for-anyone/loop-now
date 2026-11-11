@@ -200,24 +200,41 @@ func DefaultProjectsDir(home string) string { return filepath.Join(home, ".claud
 
 var nonAlnum = regexp.MustCompile(`[^A-Za-z0-9]`)
 
-// ProjectDirName 是 claude 为工作目录 cwd 存放会话记录的子目录名：解析符号链接后，非字母数字都换成 -。
-func ProjectDirName(cwd string) string {
-	if real, err := filepath.EvalSymlinks(cwd); err == nil {
-		cwd = real
+// EncodeProjectDir 是 claude 把工作目录的路径编成会话记录子目录名的规则：非字母数字都换成 -（/a/b.c → -a-b-c，
+// C:\Users\x → C--Users-x）。路径要不要先解析由调用方决定，见 ProjectDirNames。
+func EncodeProjectDir(path string) string { return nonAlnum.ReplaceAllString(path, "-") }
+
+// ProjectDirNames 返回工作目录 cwd 可能对应的会话记录子目录名：先是解析之后的（符号链接；Windows 上还会把 8.3 短名展开为长名），
+// 再是原样的；两者相同时只有一个。macOS 上实测 claude 用解析之后的（/tmp 记成 /private/tmp）；Windows 上它用哪一种没有核实，
+// 所以两种都认。调用方只看这一两个确定的路径，不扫描。
+func ProjectDirNames(cwd string) []string { return projectDirNames(cwd, filepath.EvalSymlinks) }
+
+func projectDirNames(cwd string, resolve func(string) (string, error)) []string {
+	raw := EncodeProjectDir(filepath.Clean(cwd))
+	if real, err := resolve(cwd); err == nil {
+		if resolved := EncodeProjectDir(filepath.Clean(real)); resolved != raw {
+			return []string{resolved, raw}
+		}
 	}
-	return nonAlnum.ReplaceAllString(cwd, "-")
+	return []string{raw}
 }
 
-// TranscriptPath 返回 projects 目录里会话 id 在工作目录 cwd 下的会话记录；不存在时为空。只看这一个文件，不扫描别的目录。
+// ProjectDirName 是 ProjectDirNames 的第一个（解析之后的）。
+func ProjectDirName(cwd string) string { return ProjectDirNames(cwd)[0] }
+
+// TranscriptPath 返回 projects 目录里会话 id 在工作目录 cwd 下的会话记录：按 ProjectDirNames 的顺序取第一个存在的普通文件，
+// 都不存在时为空。只看这一两个文件，不扫描别的目录。
 func TranscriptPath(projects, cwd, id string) string {
 	if !ValidSessionID(id) {
 		return ""
 	}
-	p := filepath.Join(projects, ProjectDirName(cwd), id+".jsonl")
-	if info, err := os.Lstat(p); err != nil || !info.Mode().IsRegular() {
-		return ""
+	for _, name := range ProjectDirNames(cwd) {
+		p := filepath.Join(projects, name, id+".jsonl")
+		if info, err := os.Lstat(p); err == nil && info.Mode().IsRegular() {
+			return p
+		}
 	}
-	return p
+	return ""
 }
 
 var sessionIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)

@@ -142,6 +142,7 @@ type proc struct {
 	sessionID           string      // 平台给运行时的会话 ID（Claude Code）
 	sessionStale        atomic.Bool // 运行时已换（Pi 与 Claude Code 之间）：不再把它的会话文件记回去
 	initChecked         atomic.Bool // 已核对过进程报告的初始信息（Claude Code 的技能列表）
+	sessionUntracked    atomic.Bool // 找不到运行时写的会话记录（Claude Code）：不当作保存失败，下次启动开新会话
 	version             int64
 	promptIdentity      string
 	localIdentity       string // 本机模式（目录与 PATH 开关）的指纹，变化即按新配置重启
@@ -728,6 +729,9 @@ func (e *Executor) recordSession(p *proc) error {
 	}
 	p.sessMu.Lock()
 	defer p.sessMu.Unlock()
+	if p.sessionFile == "" && p.sessionUntracked.Load() {
+		return nil
+	}
 	if p.sessionFile == "" {
 		return errors.New("session_file_unconfirmed")
 	}
