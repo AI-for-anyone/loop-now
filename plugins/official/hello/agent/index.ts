@@ -16,9 +16,9 @@ function greeting(): string {
 const helloTool = defineTool({
   name: 'hello',
   label: 'Hello',
-  description: '向某人问好。用于演示 Loop Now 插件的 Agent 侧。',
+  description: 'Say hello to someone. Demonstrates the Agent side of a Loop Now plugin.',
   parameters: Type.Object({
-    name: Type.String({ description: '要问候的人' }),
+    name: Type.String({ description: 'The person to greet' }),
   }),
   async execute(_toolCallId, params) {
     const text = `${greeting()}, ${params.name}!`
