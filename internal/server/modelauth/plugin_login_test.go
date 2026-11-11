@@ -8,11 +8,13 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/privatefs"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/clitemplate"
 	cm "loop-now/internal/server/credentialmodel"
@@ -172,8 +174,13 @@ func TestPluginProviderLogin(t *testing.T) {
 		t.Fatalf("auth.json：%s %v", auth, err)
 	}
 	for path, mode := range map[string]os.FileMode{dir: 0o700, filepath.Join(dir, ".pi", "fake-oauth"): 0o700, filepath.Join(dir, ".pi", "fake-oauth", "accounts.json"): 0o600, filepath.Join(dir, providerstate.AuthFile): 0o600} {
-		if info, err := os.Stat(path); err != nil || info.Mode().Perm() != mode {
-			t.Fatalf("%s 权限：%v %v", path, info.Mode(), err)
+		// 状态目录里是订阅令牌：各平台都要只有当前用户能访问（Windows 看 DACL），Unix 上再核对确切的权限位。
+		info, err := os.Lstat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !privatefs.IsPrivate(path, info) || (runtime.GOOS != "windows" && info.Mode().Perm() != mode) {
+			t.Fatalf("%s 不是只有当前用户能访问：%v", path, info.Mode())
 		}
 	}
 	if pending, _ := filepath.Glob(filepath.Join(e.states.Root, ".pending-*")); len(pending) != 0 {

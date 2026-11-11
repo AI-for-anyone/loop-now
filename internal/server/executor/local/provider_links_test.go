@@ -10,8 +10,10 @@ import (
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/privatefs"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/executor"
+	"loop-now/internal/testutil/fsperm"
 )
 
 // makeState 建一个订阅账号的状态版本目录：auth.json 与扩展自己的状态。
@@ -142,6 +144,48 @@ func TestProviderStateLinks(t *testing.T) {
 	}
 	if info, err := os.Stat(filepath.Join(dir, ".config", "fake-later")); err != nil || !info.IsDir() {
 		t.Fatalf("应在状态目录里建空目录：%v", err)
+	}
+}
+
+// 声明的路径登录时还没写、要在状态目录里建空目录时：新建的每一级都只有当前用户能访问，不靠继承上级
+// （上级对所有人开放也一样）；已有的一级是链接时拒绝，不经链接建到状态目录外面。各平台都跑。
+func TestMkdirPrivate(t *testing.T) {
+	root := t.TempDir()
+	fsperm.Open(t, root)
+	if runtime.GOOS == "windows" {
+		plain := filepath.Join(root, "plain")
+		if err := os.Mkdir(plain, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if info, err := os.Lstat(plain); err != nil || privatefs.IsPrivate(plain, info) {
+			t.Fatalf("放开的目录里直接新建的目录应继承开放的 ACL，否则核对不出收紧：%v", err)
+		}
+	}
+	dir := filepath.Join(root, ".config", "fake-later")
+	if err := mkdirPrivate(root, dir); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{filepath.Join(root, ".config"), dir} {
+		info, err := os.Lstat(p)
+		if err != nil || !info.IsDir() || !privatefs.IsPrivate(p, info) || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o700) {
+			t.Fatalf("%s 应是只有当前用户能访问的目录：%v", p, err)
+		}
+	}
+	if err := mkdirPrivate(root, dir); err != nil {
+		t.Fatalf("已存在时照常成功：%v", err)
+	}
+	if err := mkdirPrivate(root, filepath.Join(t.TempDir(), "x")); err == nil {
+		t.Fatal("状态目录外的路径应拒绝")
+	}
+	outside := t.TempDir()
+	if err := linkDir(outside, filepath.Join(root, "linked")); err != nil {
+		t.Fatal(err)
+	}
+	if err := mkdirPrivate(root, filepath.Join(root, "linked", "x")); err == nil {
+		t.Fatal("经链接的路径应拒绝")
+	}
+	if _, err := os.Lstat(filepath.Join(outside, "x")); !os.IsNotExist(err) {
+		t.Fatal("不能经链接建到状态目录外面")
 	}
 }
 
