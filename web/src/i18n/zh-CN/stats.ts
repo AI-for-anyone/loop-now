@@ -197,9 +197,9 @@ export const stats = {
   process: {
     title: '模型与进程',
     retries: '模型重试',
-    piExits: 'Pi 异常退出',
+    piExits: '进程异常退出',
     piExitsNote: '含打断超时被强制停止',
-    coldStarts: 'Pi 冷启动',
+    coldStarts: '冷启动',
     coldStartAvg: (seconds: string) => `平均 ${seconds}`,
     coldStartSeconds: (ms: number) => `${oneDecimal(ms / 1000)} 秒`,
     byModel: 'token 按模型',

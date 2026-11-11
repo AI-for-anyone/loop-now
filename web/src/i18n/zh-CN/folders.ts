@@ -30,9 +30,9 @@ export const folders = {
   remove: '删除',
   entry: {
     badge: '入口',
-    hint: 'Agent 每次启动 Pi 时先读这个文件',
+    hint: 'Agent 每次启动时先读这个文件',
     missingTitle: '还没有 AGENTS.md',
-    missingBody: 'Agent 每次启动 Pi 时会先读根目录的 AGENTS.md，适合写它的职责、约定和注意事项。',
+    missingBody: 'Agent 每次启动时会先读根目录的 AGENTS.md，适合写它的职责、约定和注意事项。',
     create: '创建 AGENTS.md',
     template: '# 工作说明\n\n写给 Agent 的职责、约定和注意事项。Agent 每次启动时先读这个文件。\n',
   },

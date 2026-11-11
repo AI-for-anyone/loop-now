@@ -129,8 +129,19 @@ describe('创建 Agent', () => {
     expect(option).toBeEnabled()
     await user.selectOptions(select, 'claude-code')
     expect(within(dialog).getByText('用本机安装的 Claude Code 和你在本机的登录，平台不保存登录信息。')).toHaveAttribute('role', 'note')
+    // 选的那一刻就该知道的两条；插件与 /pi: 命令只在配置页说明。
+    const differences = within(dialog).getByRole('region', { name: '用 Claude Code 运行时' })
+    expect(within(differences).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      '用你本机的家目录和登录运行：它执行 gh、git 等命令时用的是你本人的登录。',
+      '不经确认直接执行命令，与 Pi 的 Agent 相同。',
+    ])
     await chooseModel(user, dialog, 'sonnet')
     expect(within(dialog).queryByLabelText('Codex 速度')).toBeNull()
+    await user.selectOptions(within(dialog).getByLabelText('思考等级'), 'max')
+    await user.selectOptions(select, 'anthropic')
+    expect(within(dialog).queryByRole('region', { name: '用 Claude Code 运行时' })).toBeNull()
+    await user.selectOptions(select, 'claude-code')
+    await chooseModel(user, dialog, 'sonnet')
     await user.selectOptions(within(dialog).getByLabelText('思考等级'), 'max')
     await user.click(within(dialog).getByRole('button', { name: '创建' }))
     await waitFor(() => expect(created).toEqual({ name: '本机助手', model: { provider: 'claude-code', modelId: 'sonnet' }, thinkingLevel: 'max' }))

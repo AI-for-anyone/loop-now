@@ -27,7 +27,7 @@ export const overview = {
     queuedNote: (interrupt: number, normal: number) => `打断 ${interrupt} 条 · 普通 ${normal} 条`,
     names: (names: string[], total: number) => (total > names.length ? `${names.join('、')} 等 ${total} 个` : names.join('、')),
     tableLabel: 'Agent 运行状态',
-    columns: { agent: 'Agent', state: '状态', run: '当前回复', queue: '排队', process: 'Pi 进程' },
+    columns: { agent: 'Agent', state: '状态', run: '当前回复', queue: '排队', process: '进程' },
     runMeta: (status: string, elapsed: string, version: number) => `status=${status} · 已用 ${elapsed} · 配置 v${version}`,
     last: {
       completed: '上一条已完成',

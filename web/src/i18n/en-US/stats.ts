@@ -192,9 +192,9 @@ export const stats = {
   process: {
     title: 'Models and processes',
     retries: 'Model retries',
-    piExits: 'Pi crashes',
+    piExits: 'Process crashes',
     piExitsNote: 'Includes forced stops after an interrupt timed out',
-    coldStarts: 'Pi cold starts',
+    coldStarts: 'Cold starts',
     coldStartAvg: (seconds: string) => `avg ${seconds}`,
     coldStartSeconds: (ms: number) => `${oneDecimal(ms / 1000)} s`,
     byModel: 'Tokens by model',
