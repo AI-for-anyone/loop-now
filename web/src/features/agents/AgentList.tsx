@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { AgentAvatar } from '@/components/AgentAvatar'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { NavIcon } from '@/components/NavIcon'
+import { RuntimeMark } from '@/components/RuntimeBadge'
 import { reachability, type Schemas } from '@/api/client'
 import { useInboxPending } from '@/api/console-inbox'
 import { useAgents } from '@/api/queries'
@@ -63,7 +64,7 @@ function Skeleton() {
 }
 
 // 左侧栏的 Agent 分组：标题（项目里是 AGENT，全局是平台 AGENT）与新建按钮，下面是这个范围的 Agent。
-// 每行是叠印头像、名称、状态标签与“待你回复”的贴纸；搜索只影响显示，不影响定期刷新与已打开的 Agent。
+// 每行是叠印头像、名称、运行时标记（只有 Claude Code）、状态标签与“待你回复”的贴纸；搜索只影响显示，不影响定期刷新与已打开的 Agent。
 // 项目列表还没加载出来时 scope 为 null：只显示加载中，或项目列表因无法连接而失败时的骨架（listError）。
 export function AgentNavGroup({
   scope,
@@ -123,6 +124,7 @@ export function AgentNavGroup({
                   <Link to={agentPath(scope, agent.id)} aria-current={current ? 'page' : undefined} className={navRowClass(current, true)}>
                     <AgentAvatar size="sm" id={agent.id} />
                     <span className="min-w-0 flex-1 truncate">{agent.name}</span>
+                    <RuntimeMark runtime={agent.runtime} />
                     <StatusTag agent={agent} />
                     <PendingBadge sticker counts={pendingByAgent.get(agent.id)} />
                   </Link>

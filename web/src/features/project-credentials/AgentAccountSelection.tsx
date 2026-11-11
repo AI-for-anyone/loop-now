@@ -11,6 +11,7 @@ import { WarningList } from '@/features/agent-config/CredentialStatus'
 import { Section } from '@/features/agent-config/Section'
 import { useScope } from '@/features/projects/scope-context'
 import { localModeSettingsPath } from '@/features/local-mode/LocalModeCard'
+import { CLAUDE_CODE_PROVIDER } from '@/lib/runtime'
 import { projectSettingsPath } from '@/lib/scope'
 import { AccountSelectionField } from './AccountSelectionField'
 import { CredentialConflict } from './CredentialConflict'
@@ -26,12 +27,14 @@ export function ProjectModelSelection({ agent }: { agent: Schemas['Agent'] }) {
   const [known, setKnown] = useState<{ source: typeof result.data; values: Map<string, Schemas['CredentialSelection']> }>({ source: undefined, values: new Map() })
   if (result.data !== known.source) { const values = new Map(known.values); for (const item of result.data?.selections ?? []) if (item.purpose === 'model' && item.provider) values.set(item.provider, item); setKnown({ source: result.data, values }) }
   if (!providers.includes(agent.model.provider)) setProviders([...providers, agent.model.provider])
+  // Claude Code 用本机自己的登录，没有项目账号可选：不显示它的取用来源，只说明。之前打开过的其他提供方照常保留。
   return <Section id="model-credential" title={t.credentials.agentSelection.title}>
-    <p className="text-[13.5px]">{t.credentials.agentSelection.intro}</p>
+    <p className="text-[13.5px]">{agent.runtime === 'claude-code' ? t.runtime.account : t.credentials.agentSelection.intro}</p>
     <ErrorAlert error={result.error} />
     {!synchronized && result.data && <p role="status" className="text-[13px] font-bold">{t.credentials.agentSelection.modelOutOfSync}</p>}
     {!result.data && !result.isError && <p role="status">{t.credentials.agentSelection.loading}</p>}
     {result.data && providers.map(provider => {
+      if (provider === CLAUDE_CODE_PROVIDER) return null
       const selection = known.values.get(provider)
       return selection ? <SelectionEditor key={provider} agentId={agent.id} data={result.data} selection={selection} current={provider === agent.model.provider} synchronized={synchronized} /> : null
     })}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/store"
@@ -240,6 +241,14 @@ func toolEntries(tools []store.ToolEvent) []timed {
 	return out
 }
 
+// runtimeOf 是进程事件记下的运行时（pi 或 claude-code）；旧记录没有，为空（即 pi）。
+func runtimeOf(d map[string]any) *string {
+	if v := str(d, "runtime"); v == agentruntime.Pi || v == agentruntime.ClaudeCode {
+		return &v
+	}
+	return nil
+}
+
 // eventEntry 把一条生命周期事件转为时间线条目。
 func eventEntry(ev store.LifecycleEvent) (any, bool) {
 	d := ev.Data
@@ -289,15 +298,18 @@ func eventEntry(ev store.LifecycleEvent) (any, bool) {
 		return e, true
 	case store.EventPiStarted:
 		return apitypes.TimelinePiStartedEntry{TimelineBase: b(apitypes.TimelinePiStarted), PID: num(d, "pid"), StartupMs: num(d, "startupMs"),
-			Reason: str(d, "reason"), ConfigVersion: num(d, "configVersion")}, true
+			Reason: str(d, "reason"), ConfigVersion: num(d, "configVersion"), Runtime: runtimeOf(d)}, true
 	case store.EventPiReused:
-		return apitypes.TimelinePiReusedEntry{TimelineBase: b(apitypes.TimelinePiReused), PID: num(d, "pid"), ProcessStartedAt: optTime(d, "startedAt")}, true
+		return apitypes.TimelinePiReusedEntry{TimelineBase: b(apitypes.TimelinePiReused), PID: num(d, "pid"), ProcessStartedAt: optTime(d, "startedAt"), Runtime: runtimeOf(d)}, true
 	case store.EventPiStopped:
 		return apitypes.TimelinePiStoppedEntry{TimelineBase: b(apitypes.TimelinePiStopped), PID: num(d, "pid"), Reason: str(d, "reason"),
-			UptimeMs: num(d, "uptimeMs")}, true
+			UptimeMs: num(d, "uptimeMs"), Runtime: runtimeOf(d)}, true
 	case store.EventPiExited:
 		return apitypes.TimelinePiExitedEntry{TimelineBase: b(apitypes.TimelinePiExited), PID: num(d, "pid"), UptimeMs: num(d, "uptimeMs"),
-			Exit: str(d, "exit"), StderrTail: str(d, "stderrTail")}, true
+			Exit: str(d, "exit"), StderrTail: str(d, "stderrTail"), Runtime: runtimeOf(d)}, true
+	case store.EventModelRateLimit:
+		info, ok := d["info"].(map[string]any)
+		return apitypes.TimelineModelRateLimitEntry{TimelineBase: b(apitypes.TimelineModelRateLimit), Info: info}, ok
 	case store.EventRunRunning:
 		return b(apitypes.TimelineRunning), true
 	case store.EventModelRetryStarted:

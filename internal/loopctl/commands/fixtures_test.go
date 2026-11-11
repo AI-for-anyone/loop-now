@@ -20,12 +20,12 @@ func project() map[string]any {
 }
 
 func agentListItem() map[string]any {
-	return map[string]any{"id": agentUUID, "scope": "project", "projectId": projectUUID, "isManager": false, "address": agentAddress, "name": "dev", "model": modelRef, "configVersion": 1, "busy": false,
+	return map[string]any{"id": agentUUID, "scope": "project", "projectId": projectUUID, "isManager": false, "address": agentAddress, "name": "dev", "model": modelRef, "runtime": "pi", "configVersion": 1, "busy": false,
 		"sessionState": "active", "sleep": nil, "sleepRevision": 0, "createdAt": now, "updatedAt": now}
 }
 
 func agentDetail() map[string]any {
-	return map[string]any{"id": agentUUID, "scope": "project", "projectId": projectUUID, "isManager": false, "address": agentAddress, "name": "dev", "model": modelRef,
+	return map[string]any{"id": agentUUID, "scope": "project", "projectId": projectUUID, "isManager": false, "address": agentAddress, "name": "dev", "model": modelRef, "runtime": "pi",
 		"prompt": "p", "promptVersion": 1, "configVersion": 1, "busy": false, "session": sessionInfo, "clis": []any{},
 		"modelCredential": nil, "createdAt": now, "updatedAt": now}
 }
@@ -113,7 +113,7 @@ func agentStatus() map[string]any {
 
 func modelProviderList() map[string]any {
 	return map[string]any{"piVersion": "1.1.0", "catalogGeneratedAt": nil,
-		"providers": []any{map[string]any{"id": "anthropic", "name": nil, "source": "builtin", "pluginId": nil, "pluginDisplayName": nil, "unavailableReason": nil, "apiKeyEnvVars": []any{"ANTHROPIC_API_KEY"}, "authMethods": []any{"api_key"}, "modelCount": 1}}}
+		"providers": []any{map[string]any{"id": "anthropic", "name": nil, "source": "builtin", "runtime": "pi", "pluginId": nil, "pluginDisplayName": nil, "unavailableReason": nil, "apiKeyEnvVars": []any{"ANTHROPIC_API_KEY"}, "authMethods": []any{"api_key"}, "modelCount": 1}}}
 }
 
 func modelList() map[string]any {

@@ -393,7 +393,8 @@ describe('全局设置页', () => {
     // 左侧栏有范围切换与搜索，“没有修改操作”指页面主体里文件夹以外的部分。
     expect(within(page).getByRole('region', { name: '全局文件夹' })).toBeInTheDocument()
     const outsideFolder = (el: HTMLElement) => !el.closest('[data-file-manager]')
-    expect(within(page).queryAllByRole('button').filter(outsideFolder)).toEqual([])
+    // 运行时状态的“重新检查”只是重新读取，不修改服务端。
+    expect(within(page).queryAllByRole('button').filter(outsideFolder).map((button) => button.textContent)).toEqual(['重新检查'])
     expect(within(page).queryAllByRole('textbox').filter(outsideFolder)).toEqual([])
   })
   it('服务端一栏显示版本：取自服务端响应的 Loop-Now-Version 头', async () => {

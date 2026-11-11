@@ -4199,12 +4199,21 @@ components:
           propertyNames: { pattern: "^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$" }
           additionalProperties: { type: string, pattern: "\\S" }
 
+    AgentRuntime:
+      type: string
+      enum: [pi, claude-code]
+      description: |
+        执行 Agent 的运行时：pi 为随包的 Pi；claude-code 为用户本机安装、未经修改的 Claude Code（从登录 shell 的 PATH 找 claude），
+        用它在本机自己的登录，平台不读取、不保存它的凭证。运行时由模型提供方决定，不单独设置：model.provider 为 claude-code 时是
+        claude-code，其余为 pi。Claude Code 下没有 Pi 扩展（/pi: 命令、扩展对话、插件提供方），插件的 Skill 与 MCP 服务器照常。
+
     ModelProvider:
       type: object
       required:
         - id
         - name
         - source
+        - runtime
         - pluginId
         - pluginDisplayName
         - unavailableReason
@@ -4220,11 +4229,17 @@ components:
           description: 提供方自己给的显示名；目前只有插件提供方有（扩展原文，按纯文本显示），其余为 null。
         source:
           type: string
-          enum: [builtin, config, plugin]
+          enum: [builtin, config, plugin, local_cli]
           description: |
             builtin 为纯内置目录；config 表示该 Provider 有原生 models.json 配置或覆盖；
             plugin 为已安装插件的 Pi 扩展注册的提供方（plugins/SPEC.md §13），只用于项目 Agent：
             选它须项目已启用该插件、Agent 已获授权（否则修改 Agent 返回 422，新建 Agent 时不能直接选），账号用项目里登录的订阅账号。
+            local_cli 为用户本机安装的 CLI 提供的模型（目前只有 claude-code：本机的 Claude Code），用 CLI 自己在本机的登录，
+            不需要账号，平台不保存令牌；项目 Agent 与平台 Agent 都能选。模型 id 是 Claude Code 的别名（fable、opus、sonnet、haiku），
+            思考等级即 Claude Code 的 effort（low 到 max）。本机是否装了、是否登录见 GET /runtimes，没装时照常可选，运行时以 runtime_* 失败。
+        runtime:
+          $ref: "#/components/schemas/AgentRuntime"
+          description: 选这个提供方的 Agent 由哪个运行时执行。
         pluginId:
           type: [string, "null"]
           description: source 为 plugin 时是注册它的插件 id，其余为 null。
@@ -8558,6 +8573,7 @@ components:
         - $ref: "#/components/schemas/TimelineEnded"
         - $ref: "#/components/schemas/TimelineSessionMissing"
         - $ref: "#/components/schemas/TimelineExtensionUI"
+        - $ref: "#/components/schemas/TimelineModelRateLimit"
       discriminator:
         propertyName: type
         mapping:
@@ -8583,6 +8599,7 @@ components:
           session_missing: "#/components/schemas/TimelineSessionMissing"
           sleep: "#/components/schemas/TimelineSleepEntry"
           extension_ui: "#/components/schemas/TimelineExtensionUI"
+          model_rate_limit: "#/components/schemas/TimelineModelRateLimit"
 
     UsageTotals:
       {
@@ -9026,168 +9043,84 @@ components:
         "type": "object"
       }
     TimelinePiExited:
-      {
-        "additionalProperties": false,
-        "description": "Pi 进程意外退出",
-        "properties": {
-          "at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "exit": {
-            "type": "string"
-          },
-          "pid": {
-            "type": "integer"
-          },
-          "stderrTail": {
-            "description": "Pi 错误输出的末尾片段（有长度上限）",
-            "type": "string"
-          },
-          "type": {
-            "enum": [
-              "pi_exited"
-            ],
-            "type": "string"
-          },
-          "uptimeMs": {
-            "minimum": 0,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "type",
-          "at",
-          "pid",
-          "uptimeMs",
-          "exit",
-          "stderrTail"
-        ],
-        "type": "object"
-      }
+      description: Pi 进程意外退出
+      type: object
+      required: [type, at, pid, uptimeMs, exit, stderrTail]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [pi_exited] }
+        at: { type: string, format: date-time }
+        pid: { type: integer }
+        uptimeMs: { type: integer, minimum: 0 }
+        exit: { type: string }
+        stderrTail:
+          description: Pi 错误输出的末尾片段（有长度上限）
+          type: string
+        runtime:
+          $ref: "#/components/schemas/AgentRuntime"
+          description: 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。
+
+    TimelineModelRateLimit:
+      description: Claude Code 报告的订阅额度状态（rate_limit_event），info 原样（如 status、rateLimitType、resetsAt）；只记录，不影响执行。
+      type: object
+      required: [type, at, info]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [model_rate_limit] }
+        at: { type: string, format: date-time }
+        info: { type: object }
+
     TimelinePiReused:
-      {
-        "additionalProperties": false,
-        "description": "复用了已运行的 Pi 进程",
-        "properties": {
-          "at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "pid": {
-            "type": "integer"
-          },
-          "processStartedAt": {
-            "format": "date-time",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "type": {
-            "enum": [
-              "pi_reused"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "at",
-          "pid",
-          "processStartedAt"
-        ],
-        "type": "object"
-      }
+      description: 复用了已运行的 Pi 进程
+      type: object
+      required: [type, at, pid, processStartedAt]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [pi_reused] }
+        at: { type: string, format: date-time }
+        pid: { type: integer }
+        processStartedAt: { type: [string, "null"], format: date-time }
+        runtime:
+          $ref: "#/components/schemas/AgentRuntime"
+          description: 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。
+
     TimelinePiStarted:
-      {
-        "additionalProperties": false,
-        "description": "新启动了 Pi 进程",
-        "properties": {
-          "at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "configVersion": {
-            "type": "integer"
-          },
-          "pid": {
-            "type": "integer"
-          },
-          "reason": {
-            "description": "no_process 为没有存活的进程，config_changed 为配置变化后重启",
-            "enum": [
-              "no_process",
-              "config_changed"
-            ],
-            "type": "string"
-          },
-          "startupMs": {
-            "description": "从启动进程到 Pi 就绪的用时",
-            "minimum": 0,
-            "type": "integer"
-          },
-          "type": {
-            "enum": [
-              "pi_started"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "at",
-          "pid",
-          "startupMs",
-          "reason",
-          "configVersion"
-        ],
-        "type": "object"
-      }
+      description: 新启动了 Pi 进程
+      type: object
+      required: [type, at, pid, startupMs, reason, configVersion]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [pi_started] }
+        at: { type: string, format: date-time }
+        pid: { type: integer }
+        startupMs:
+          description: 从启动进程到 Pi 就绪的用时
+          type: integer
+          minimum: 0
+        reason:
+          description: no_process 为没有存活的进程，config_changed 为配置变化后重启
+          type: string
+          enum: [no_process, config_changed]
+        configVersion: { type: integer }
+        runtime:
+          $ref: "#/components/schemas/AgentRuntime"
+          description: 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。
+
     TimelinePiStopped:
-      {
-        "additionalProperties": false,
-        "description": "平台停止了 Pi 进程",
-        "properties": {
-          "at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "pid": {
-            "type": "integer"
-          },
-          "reason": {
-            "enum": [
-              "idle_timeout",
-              "config_changed",
-              "evicted",
-              "released",
-              "fork_snapshot",
-              "shutdown",
-              "abort_timeout"
-            ],
-            "type": "string"
-          },
-          "type": {
-            "enum": [
-              "pi_stopped"
-            ],
-            "type": "string"
-          },
-          "uptimeMs": {
-            "minimum": 0,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "type",
-          "at",
-          "pid",
-          "reason",
-          "uptimeMs"
-        ],
-        "type": "object"
-      }
+      description: 平台停止了 Pi 进程
+      type: object
+      required: [type, at, pid, reason, uptimeMs]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [pi_stopped] }
+        at: { type: string, format: date-time }
+        pid: { type: integer }
+        reason: { type: string, enum: [idle_timeout, config_changed, evicted, released, fork_snapshot, shutdown, abort_timeout] }
+        uptimeMs: { type: integer, minimum: 0 }
+        runtime:
+          $ref: "#/components/schemas/AgentRuntime"
+          description: 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。
+
     TimelineQueued:
       {
         "additionalProperties": false,
@@ -9442,7 +9375,7 @@ components:
         后五种都没有执行工具或模型，对话流中应隐藏 user_cancelled、merged_into_interrupt、no_pending_messages 三种。
       type: [string, "null"]
       enum: [user_interrupt, user_stopped, server_restart, sleep_superseded, sleep_invalidated, user_cancelled, merged_into_interrupt, no_pending_messages, null]
-    RunErrorCode: {"description":"- credential_unavailable：凭证不可用（需要重新录入或已失效）\n- cli_install_failed：CLI 安装失败\n- workspace_sync_failed：工作区同步失败（如克隆失败）\n- session_missing：会话文件丢失\n- pi_start_failed：Pi 启动失败或启动超时\n- pi_exited：Pi 进程异常退出\n- pi_error：Pi 报告这一轮以错误结束\n- internal_error：服务端内部错误（如数据库暂时不可用），这次回复未能执行\n- plugin_blocked：插件拒绝本轮操作或运行条件已变化\n- image_unsupported：本轮实际模型不支持图片，未发送图片或切换模型\n","type":"string","enum":["credential_unavailable","cli_install_failed","workspace_sync_failed","session_missing","pi_start_failed","pi_exited","pi_error","internal_error","plugin_blocked","image_unsupported"]}
+    RunErrorCode: {"description":"- credential_unavailable：凭证不可用（需要重新录入或已失效）\n- cli_install_failed：CLI 安装失败\n- workspace_sync_failed：工作区同步失败（如克隆失败）\n- session_missing：会话文件丢失\n- pi_start_failed：Pi 启动失败或启动超时\n- pi_exited：Pi 进程异常退出\n- pi_error：Pi 报告这一轮以错误结束\n- internal_error：服务端内部错误（如数据库暂时不可用），这次回复未能执行\n- plugin_blocked：插件拒绝本轮操作或运行条件已变化\n- image_unsupported：本轮实际模型不支持图片，未发送图片或切换模型\n- runtime_unavailable：Claude Code 运行时在本机不可用（登录 shell 的 PATH 里找不到 claude，或读不出它的版本）\n- runtime_login_required：本机的 Claude Code 没有登录，需要用户在本机登录后再试\n- runtime_start_failed：Claude Code 在第一轮开始前退出或启动超时（消息带版本号与错误输出末尾）\n- runtime_exited：Claude Code 进程在这一轮中意外退出\n- runtime_error：Claude Code 报告这一轮以错误结束（如用量额度用尽）\n","type":"string","enum":["credential_unavailable","cli_install_failed","workspace_sync_failed","session_missing","pi_start_failed","pi_exited","pi_error","internal_error","plugin_blocked","image_unsupported","runtime_unavailable","runtime_login_required","runtime_start_failed","runtime_exited","runtime_error"]}
     RunStatus:
       {
         "enum": [

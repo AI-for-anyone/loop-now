@@ -36,6 +36,9 @@ jobs:
   # Windows 上的服务端：编译、vet 与全部 Go 测试（依赖本机 Pi、Unix 信号、权限位或 macOS 专有能力的测试在 Windows 上跳过或按 build tag 排除）。
   server-windows:
     name: server (windows, go vet + go test)
+    # 暂时停用（2026-11-11 用户决定）：Claude Code 运行时的 4 个执行器测试在 Windows 上还不过，见 MAIN.md。
+    # Windows 的交叉编译检查仍在上面的 server 任务里（go vet windows cross），桌面版的 Windows 打包检查不受影响。恢复时删掉下面这一行。
+    if: false
     runs-on: windows-latest
     defaults:
       run:

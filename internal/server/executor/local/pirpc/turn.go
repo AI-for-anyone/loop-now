@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"sync"
+
+	"loop-now/internal/server/executor/local/runturn"
 )
 
 // responseFrame 是 Pi 的命令响应。
@@ -161,10 +163,7 @@ type turn struct {
 }
 
 // CommandNotice 是扩展在这一轮里用 ctx.ui.notify 给出的一条消息（扩展原文，纯文本）。
-type CommandNotice struct {
-	Level   string `json:"level"` // info / warning / error
-	Message string `json:"message"`
-}
+type CommandNotice = runturn.CommandNotice
 
 // 一轮最多收集的通知：条数与合计字节数，超出的截断并标记。
 const (

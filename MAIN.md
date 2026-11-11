@@ -1,6 +1,6 @@
 # Loop Now
 
-更新：2026-10-30。本文是仓库的唯一项目主文档，只保留当前概况、关键约定和需要继续确认的事项。
+更新：2026-11-11。本文是仓库的唯一项目主文档，只保留当前概况、关键约定和需要继续确认的事项。
 
 ## 项目是什么
 
@@ -14,7 +14,7 @@
 |---|---|---|
 | 控制台 | 项目／Agent 配置、聊天、Inbox、任务画布、节点流式对话与产物、运行记录 | `web/src/` |
 | 服务端 | Go HTTP 服务、身份权限、配置、任务调度、SSE、持久化 | `internal/server/`、`cmd/loop-server/` |
-| 执行器 | 本机 Pi RPC、独立工作区／会话、固定版本 CLI 安装、浅克隆 | `internal/server/executor/local/` |
+| 执行器 | 一个本机进程管理器加两种运行时驱动：随包 Pi（RPC）与用户本机的 Claude Code（stream-json）；独立工作区／会话、固定版本 CLI 安装、浅克隆 | `internal/server/executor/local/`（`pirpc/`、`ccstream/`）、`internal/server/claudecli/` |
 | 任务与 Inbox | 固定 workflow、分支／回路、重试／取消、提问、排队／打断、sleep | `internal/server/tasks/`、`workflow/`、`inbox/` |
 | 账号与工具 | 项目共享模型／CLI 账号；Codex、GitHub、Google、飞书用户认证；连接验证、本机配置扫描导入；gh、lark-cli、gcloud、psql、mysql | `internal/server/cliauth/`、`modelauth/`、`clitemplate/`、`cliimport/`、`cliverify/` |
 | 插件系统 | 第二版：Pi 扩展 + 共享 Node 宿主，四种 Hook，清单优先，官方 webhook／hello／playwright | `plugins/`（SPEC、host、sdk、official）、`internal/server/plugins/`、`internal/server/pluginhost/`、`internal/pluginmanifest/`、`web/src/features/plugins/` |
@@ -103,6 +103,15 @@
   - 验证（2026-11-10）：临时实例里从市场测试分支（`AI-for-anyone/loop-now-market` 的 `pi-grok-cli` 分支，未合 main，用户同意推的）安装真实的 pi-grok-cli@0.9.4，用户本人完成浏览器登录，Agent 用 grok-cli/grok-4.7 正常回复；链接、权限、命令缓存已核对。未验证：`/pi:` 命令的真实执行、令牌过期后的刷新、多 Agent 共用、重登、删除账号、卸载重装、Windows 真机。市场条目要等带这个功能的版本发布后再合进市场 main，否则旧版本装上用不了。
   - 遗留：从官方市场装的 npm 插件详情页显示"npm · unreviewed"；显示名取包名而不是市场条目的 displayName。
 - 固定提示词改英文（2026-11-10 用户决定："所有固定提示词都需要是英文"，随后收窄为"不翻译，就只改提示词成英文"；起因是对 Grok 说 hi 得到中文回复；分支 `english-prompts-all`）：改的是模型会读到的平台固定文字——`--append-system-prompt` 的各段（"Folders and context"、Local directories、Local logins、插件订阅那句、Prompt 组合的小标题）、每条消息开头的运行 ID 行（`Run ID for this turn: <ID>.`，`executor.RunIDLine`）、sleep 与任务与 Inbox 的各种通知和提醒、loopctl 的 SKILL.md 与命令的 Summary／Description（含退出码含义表和全局选项帮助，因为渲染进技能）、官方插件 playwright 的三条浏览器规则与 hello 的工具描述。不改的：一切错误消息（服务端 apperr 约 800–900 条、运行与任务失败原因约 100 条、loopctl 客户端报错约 136 条、playwright 启动失败消息）、输出标签与连接提示、`loopctl schema` 的说明文字、API 字段值（发件方显示名"已删除 Agent"等，只在给模型的文字里换成英文）、界面文案。兼容：生产代码不解析运行 ID 行，旧会话不迁移；web 的 sleep 唤醒消息解析同时认新旧两种句式；升级前已入队的任务轮次保留中文。已知副作用（用户知情）：既给模型读又显示在控制台的平台文字在中文界面也显示英文，要避免需界面按 origin 做本地化。验证：临时实例里全新会话对 grok-cli/grok-4.7 说 hi 得到英文回复；带中文历史的旧会话仍回中文。
+- Claude Code 运行时（2026-11-11 用户决定："除了pi，我agent还想支持claude cli"；认证定为"用订阅登录，我自己登陆了，loop now直接调用，loop now不保存令牌"；分支 `claude-runtime-all`，server 与 web 两个会话实现、主会话集成并真机验证）：
+  - 条款边界（Anthropic 的 legal-and-compliance 与 Agent SDK 文档）：第三方产品不得提供 claude.ai 登录、不得代用户保管或转交订阅凭证。所以只做"启动用户本机未修改的 `claude`、用用户本人的登录"：不打包不安装 claude，不读不存凭证，不设 `CLAUDE_CONFIG_DIR`，不做按项目管账号；子进程环境删掉 `ANTHROPIC_*`、`CLAUDE*`。API key 方式未做。这是主会话对条款的解读，不是法律意见。
+  - 运行时由模型提供方派生，不单独存：provider 为 `claude-code`（`source=local_cli`，别名 fable／opus／sonnet／haiku，等级直接对应 `--effort`）即 Claude Code，其余是 Pi；没有迁移。跨运行时切换会话重置（epoch+1，`session.reset` reason=runtime_changed），回复进行中返回 409。
+  - 启动参数：`-p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --setting-sources "" --strict-mcp-config --permission-mode bypassPermissions --permission-prompts none --system-prompt-snapshot off --append-system-prompt-file --plugin-dir --tools <白名单>`，`--settings` 关自动记忆与自带技能。必须用真实 HOME（独立 HOME 或独立配置目录都会变成未登录），等于对这类 Agent 强制"用本机的登录状态"；辅助命令（`--version`、`auth status`、`purge`）必须带 `USER`，否则 claude 读不到登录。
+  - 打断：先在 stdin 发 `control_request`（interrupt，非公开接口，进程存活），2 秒没确认退回 SIGINT；SIGINT 后进程约 2 秒内退出且期间的输入会丢，所以发过信号的进程立即退出进程表，下一条消息用 `--resume` 起新进程。
+  - 上下文与技能：Claude Code 不读 AGENTS.md，自己文件夹的入口原文放进追加提示；技能经平台生成的插件目录（`<Agent 根>/claude-plugin`，名字带 `loop-now:` 前缀）；已授权插件的 MCP 经 `--mcp-config`。工具白名单在 `ClaudeCodeTools`（用户定：去掉会作用到 Agent 之外的那一组），隐藏的自带技能在 `ClaudeCodeHiddenSkills`，init 里出现非 `loop-now:` 的技能时记警告日志。
+  - 会话记录在用户的 `~/.claude/projects/<cwd>/<会话ID>.jsonl`；任务分叉复制那一个文件后 `--resume <副本> --fork-session`；删除 Agent、任务实例退役时先归档再 `claude purge <工作区> -y`（用户定），目标必须正是该 Agent 在工作根下的工作区。
+  - CI 的 Windows 服务端测试任务（`server-windows`）暂时停用（2026-11-11 用户决定，`ci.yml` 里 `if: false`）；它本来就不在 main 的必需检查里（必需的是 Linux 服务端、web、plugins）。停用后 Windows 上只剩交叉编译的 vet 与桌面版打包检查，Go 测试不再在 Windows 上运行，Pi 相关的 Windows 回归也会漏掉，应尽快恢复。恢复前要处理 `executor/local` 在 Windows 上剩下的 4 个失败（运行 42993700691）：`TestClaudeNeverTouchesRealHomeBesidesItsOwnTranscript`（测试里比较路径前缀时分隔符混用）、`TestClaudeSkillsMCPAndPrompt`（期望的 `context_entry` 路径与实际写入的反斜杠转义不一致）、`TestClaudePurgeSkippedWhenArchiveFails`（让归档失败的手段在 Windows 上不生效，结果照常 purge）、`TestClaudeInterruptThenNextMessage`（Windows 没有 SIGINT，打断兜底是结束进程，这次退出被记成了意外退出——这一条是产品行为，不只是测试）。以上归因是主会话读日志的判断，未逐条验证。
+  - 真机验证过（macOS、claude 2.1.322、订阅登录）：对话与进程复用、bypass 下执行命令、loopctl 与技能、打断后下一条、四个别名、换模型后 resume、入口文件、服务端重启后续接、运行时来回切换、删除时归档与 purge、`/runtimes`、控制台各处显示。未验证：任务里的 Claude Agent、真实 MCP 工具调用、Windows（依赖 Git Bash，没有 SIGINT；真实 claude 在 Windows 上把工作目录编成 projects 子目录名时用解析后的还是原样的路径没有核实，所以两种都认，都找不到时这一轮照常完成、记警告"找不到 Claude Code 的会话记录"、下次启动开新会话——真机上见到这条警告就要补编码规则）、压缩与重试事件的映射。已知差异：该版本 Bash 工具拒绝前台长 sleep；被打断的一轮不计用量；回复正文取这一轮最后一条消息。Playwright 经扩展注入的三条规则 Claude 下拿不到，留待把插件的 Agent 侧规则做成清单里的纯文本。
 - 官方插件市场：索引仓库 `AI-for-anyone/loop-now-market`，服务端读取 `https://raw.githubusercontent.com/AI-for-anyone/loop-now-market/main/loop-now-market.json`（每次打开市场页和安装时现场拉取，不缓存）。收录即免确认安装，所以每条经 PR 审阅合并；git 条目一律指向 tag，仓库 CI 用本仓库的宿主校验每个条目。索引目前两条：Slack 0.1.3、Figma 0.1.1（2026-10-31 两个 README-only 版本，已在线上经市场升级）；服务端 `LOOP_NOW_PLUGIN_MARKET_URL` 的默认值就是这个地址（`config.DefaultPluginMarketURL`），设成别的地址即换市场，没有停用开关（用户决定，需要时再加）。每次打开市场页都现场拉取 GitHub，本机已出现过一次 TLS 握手超时，页面只在该市场条目上显示错误。
 - 2026-10-30 插件系统两处放宽（PR #5、#3、#18）：清单的 `mcpServers` 条目接受 Pi 支持的两种形式，带 `command` 的 stdio 和带 `http(s)` url 的 streamable HTTP（type 可选，sse 拒绝），Go 与 SDK 校验规则逐字一致；清单与市场条目的 `displayName`、`description` 可写成按语言的对象 `{"zh-CN": …, "en-US": …}`，控制台按当前语言取字（当前语言 → zh-CN → en-US → 第一项），三个官方插件已双语。遗留：校验在 Go 和 SDK 各一份靠人工对齐，建议只保留 SDK 一份由安装时调用宿主校验。Figma 插件（`AI-for-anyone/loop-now-plugin-figma`，0.1.0）只有一条指向本机 Figma 桌面版 MCP（`http://127.0.0.1:3845/mcp`）的条目加一份 Skill；Figma 官方远程 MCP 只放行其目录内的客户端，不冒充 client_name，等目录申请获批后再加远程条目。2026-10-31 仓库公开、市场收录（tag v0.1.0）、本机线上已从市场安装，尚未在任何项目启用，真实验证要等本机装好 Figma 桌面版并开启 desktop MCP server。Pi 启动时连不上的 MCP 服务器不会重连，要等 Pi 重启，平台尚未提供"重连 MCP"动作。
 - 插件 README（PR #24，2026-10-31 用户决定）：`GET /plugins/{id}/readme` 与 `GET /plugin-previews/{id}/readme` 按 `locale` 选文件（`README.<locale>.md` → `README.<语言>.md` → `README.md`，基名不分大小写，软链接不得出目录，超过 1 MiB 截断），控制台详情页"说明"卡片与安装预览渲染 Markdown（外链新窗口、相对链接与图片只显示文字、不加载远程图片、不渲染原始 HTML），git 来源显示仓库链接；规范 §2.3 规定 README 面向使用者、官方插件须有 zh-CN 与 en-US 两份，三个内置插件已改写。后续项：插件配置表单的字段标题仍只有中文，可沿用 displayName 的按语言对象机制。

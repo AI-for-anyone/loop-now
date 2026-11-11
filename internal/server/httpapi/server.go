@@ -36,6 +36,7 @@ import (
 	"loop-now/internal/server/plugins"
 	"loop-now/internal/server/reqid"
 	"loop-now/internal/server/runrecord"
+	"loop-now/internal/server/runtimes"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/tasks"
 )
@@ -54,7 +55,9 @@ type Options struct {
 
 // Server 持有各业务服务。
 type Server struct {
-	Plugins *plugins.Service
+	// Runtimes 报告 Agent 运行时在本机是否可用；为空时列表为空。
+	Runtimes *runtimes.Checker
+	Plugins  *plugins.Service
 	// Hooks 是同步 Hook 的入口（plugins.Service）；为空时不调用插件。
 	Hooks              pluginhost.Hooker
 	CLIImport          CLIImportController
@@ -131,6 +134,7 @@ func (s *Server) Routes() []Route {
 		{"GET", "/plugin-host", "getPluginHost", ConsoleAndExternal, s.getPluginHost},
 		{"POST", "/plugin-host/restart", "restartPluginHost", ConsoleAndExternal, s.restartPluginHost},
 		{"GET", "/local-mode-settings", "getLocalModeSettings", ConsoleOnly, s.getLocalModeSettings},
+		{"GET", "/runtimes", "listRuntimes", ConsoleOnly, s.listRuntimes},
 		{"PATCH", "/local-mode-settings", "updateLocalModeSettings", ConsoleOnly, s.updateLocalModeSettings},
 		{"GET", "/projects/{projectId}/local-directories", "getProjectLocalDirectories", ConsoleOnly, s.getProjectLocalDirectories},
 		{"PUT", "/projects/{projectId}/local-directories", "putProjectLocalDirectories", ConsoleOnly, s.putProjectLocalDirectories},

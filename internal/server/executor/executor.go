@@ -38,6 +38,12 @@ const (
 	ErrInternal              = "internal_error"
 	ErrImageUnsupported      = "image_unsupported"
 	ErrPluginBlocked         = "plugin_blocked"
+	// 以下是 Pi 以外的运行时（Claude Code）的失败；Pi 仍用 pi_*。
+	ErrRuntimeUnavailable   = "runtime_unavailable"
+	ErrRuntimeLoginRequired = "runtime_login_required"
+	ErrRuntimeStartFailed   = "runtime_start_failed"
+	ErrRuntimeExited        = "runtime_exited"
+	ErrRuntimeError         = "runtime_error"
 )
 
 // 进程状态，与 OpenAPI 的 ProcessState 一致。

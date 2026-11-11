@@ -27,7 +27,7 @@ export const overview = {
     queuedNote: (interrupt: number, normal: number) => `${interrupt} interrupt · ${normal} normal`,
     names: (names: string[], total: number) => (total > names.length ? `${names.join(', ')} and ${total - names.length} more` : names.join(', ')),
     tableLabel: 'Agent run status',
-    columns: { agent: 'Agent', state: 'State', run: 'Current reply', queue: 'Queue', process: 'Pi process' },
+    columns: { agent: 'Agent', state: 'State', run: 'Current reply', queue: 'Queue', process: 'Process' },
     runMeta: (status: string, elapsed: string, version: number) => `status=${status} · ${elapsed} elapsed · config v${version}`,
     last: {
       completed: 'Last reply completed',

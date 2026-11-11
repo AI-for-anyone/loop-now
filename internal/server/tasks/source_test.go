@@ -2,11 +2,15 @@ package tasks
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
+	"loop-now/internal/server/claudecli"
 	"loop-now/internal/server/store"
 )
 
@@ -64,5 +68,85 @@ func TestBaselineCopiesCompleteSessionAndRejectsInvalidPaths(t *testing.T) {
 	}
 	if _, e = src.copyBaseline(inst, session); e == nil {
 		t.Fatal("oversize baseline accepted")
+	}
+}
+
+// Claude Code 运行时的分叉基线：只读 claude 会话记录目录下一层的那个 <会话 ID>.jsonl，复制到平台自己的目录；
+// 不在那里、名字不是会话 ID、有不完整的行或超限时拒绝；没有配置会话记录目录时拒绝。
+func TestCopyClaudeBaseline(t *testing.T) {
+	work, projects := t.TempDir(), t.TempDir()
+	src := &Source{WorkRoot: work, MaxSessionBytes: 1 << 10, ClaudeProjects: func(context.Context) string { return projects }}
+	inst := store.TaskInstance{ID: uuid.New(), TaskID: uuid.New(), AgentID: uuid.New()}
+	id := uuid.NewString()
+	dir := filepath.Join(projects, "-work-agents-x-workspace")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	session := filepath.Join(dir, id+".jsonl")
+	if err := os.WriteFile(session, []byte("{\"type\":\"user\"}\n{\"type\":\"assistant\"}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	target, err := src.copyClaudeBaseline(context.Background(), inst, session)
+	if err != nil || filepath.Dir(target) != filepath.Join(work, "task-baselines", inst.TaskID.String()) {
+		t.Fatalf("基线：%q %v", target, err)
+	}
+	if b, _ := os.ReadFile(target); string(b) != "{\"type\":\"user\"}\n{\"type\":\"assistant\"}\n" {
+		t.Fatalf("基线内容：%q", b)
+	}
+	outside := filepath.Join(t.TempDir(), id+".jsonl")
+	_ = os.WriteFile(outside, []byte("{}\n"), 0o600)
+	notID := filepath.Join(dir, "notes.jsonl")
+	_ = os.WriteFile(notID, []byte("{}\n"), 0o600)
+	broken := filepath.Join(dir, uuid.NewString()+".jsonl")
+	_ = os.WriteFile(broken, []byte("{\"type\":\"user\"}\n{\"type\":"), 0o600)
+	big := filepath.Join(dir, uuid.NewString()+".jsonl")
+	_ = os.WriteFile(big, []byte(strings.Repeat("{}\n", 1000)), 0o600)
+	for name, path := range map[string]string{"不在会话记录目录": outside, "名字不是会话 ID": notID, "不完整的行": broken, "超限": big, "嵌套太深": filepath.Join(dir, "x", id+".jsonl")} {
+		if _, err := src.copyClaudeBaseline(context.Background(), inst, path); err == nil {
+			t.Errorf("%s 应拒绝", name)
+		}
+	}
+	src.ClaudeProjects = nil
+	if _, err := src.copyClaudeBaseline(context.Background(), inst, session); err == nil {
+		t.Fatal("没有配置会话记录目录时应拒绝")
+	}
+}
+
+// 任务实例的会话归档：Claude Code 的会话记录在 claude 的会话记录目录里，只认与这个实例工作区对应的子目录里的那个文件。
+func TestArchiveClaudeSession(t *testing.T) {
+	work, projects := t.TempDir(), t.TempDir()
+	src := &Source{WorkRoot: work, MaxSessionBytes: 1 << 10, ClaudeProjects: func(context.Context) string { return projects }}
+	inst := store.TaskInstance{ID: uuid.New(), TaskID: uuid.New(), AgentID: uuid.New(), SessionState: "active"}
+	workspace := filepath.Join(work, "agents", inst.ID.String(), "workspace")
+	if err := os.MkdirAll(workspace, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	write := func(dir string) string {
+		p := filepath.Join(projects, dir, uuid.NewString()+".jsonl")
+		_ = os.MkdirAll(filepath.Dir(p), 0o700)
+		_ = os.WriteFile(p, []byte("{\"type\":\"user\"}\n"), 0o600)
+		return p
+	}
+	own := write(claudecli.ProjectDirName(workspace))
+	inst.SessionFile = &own
+	data, err := src.archiveSession(context.Background(), inst)
+	var archived struct {
+		Session []byte `json:"session"`
+	}
+	if err != nil || json.Unmarshal(data, &archived) != nil || string(archived.Session) != "{\"type\":\"user\"}\n" {
+		t.Fatalf("归档：%s %v", data, err)
+	}
+	// claude 用原样的工作目录路径编码时（Windows 上未核实）也认。
+	if names := claudecli.ProjectDirNames(workspace); len(names) > 1 {
+		raw := write(names[1])
+		inst.SessionFile = &raw
+		if _, err := src.archiveSession(context.Background(), inst); err != nil {
+			t.Fatalf("原样编码的会话记录：%v", err)
+		}
+	}
+	other := write("-some-other-workspace")
+	inst.SessionFile = &other
+	if _, err := src.archiveSession(context.Background(), inst); err == nil {
+		t.Fatal("别的工作区的会话记录不能归档到这个实例")
 	}
 }

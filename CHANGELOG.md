@@ -4,6 +4,18 @@
 
 ## 未发布
 
+### Agent 可以用本机的 Claude Code 运行
+
+- Agent 除了随包的 Pi，还可以由这台电脑上安装的 Claude Code 执行。在 Agent 的模型提供方里选"Claude Code"即可，模型是 fable、opus、sonnet、haiku（随 Claude Code 指向各系列最新的模型），思考等级 low 到 max。项目里的 Agent 和不属于项目的 Agent 都支持。
+- 用的是你本人在这台电脑上的 Claude Code 登录：Loop Now 只启动本机未经修改的 `claude`，不读取、不保存它的登录信息，也不提供"在 Loop Now 里登录 Claude"。环境里的 `ANTHROPIC_API_KEY` 等变量不会传给它。需要先在本机装好 Claude Code 并在终端里登录；"全局设置 › Agent 运行时"显示是否找到、版本和登录状态。
+- 这类 Agent 以你真实的家目录运行：它执行 gh、git 等命令时用的是你本人的登录，相当于对它单独开启了"用本机的登录状态"（与那个全局开关无关）。和 Pi 的 Agent 一样不经确认直接执行命令。Agent 自己的文件夹、任务副本和回收不变。
+- 不加载你个人的 Claude Code 设置（CLAUDE.md、hooks、MCP、插件、自带技能、自动记忆），Agent 看到的技能只有平台给的。只保留作用在 Agent 自身的工具（执行命令、读写文件、技能、子任务、联网搜索）；给本机其他 Claude 会话发消息、手机推送、云端例行任务、定时唤醒等不提供，定时和通知用 Loop Now 自己的 sleep 与收件箱。
+- 插件：技能与 MCP 工具可用；Pi 扩展不适用，所以没有 `/pi:` 命令和插件带来的模型提供方，经扩展注入的规则也拿不到。只含 Pi 扩展的插件在 Agent 的插件授权里会标出。
+- 在 Pi 与 Claude Code 之间切换模型提供方会开始新会话：原会话保留但不带过去，等待中的 sleep 取消。保存前会确认；Agent 正在回复时不能切换。
+- Claude Code 的会话记录由它自己写在 `~/.claude/projects/` 下，按 Agent 的工作目录分开。删除 Agent 或任务回收时，Loop Now 先把这份记录归档到自己的数据目录，再用 `claude purge` 清掉对应的那一份，不动你平时使用 Claude Code 的记录。
+- 运行记录里显示订阅额度的状态（如 5 小时额度与重置时间）。用量按每轮每个模型记一条，被打断的那一轮不计用量。
+- 已知限制：只在 macOS 上用 Claude Code 2.1.322 验证过，Windows 未验证；任务里的 Claude Code Agent 和插件的 MCP 工具只通过了自动测试，没有用真实的 Claude Code 验证；Claude Code 升级后参数或输出若有变化，可能需要更新 Loop Now。
+
 ### 本机模式
 
 - 新增第四个开关"用本机的登录状态"，默认关闭（升级后也是关闭），打开时要确认一次。开启后，Agent 直接用你在这台电脑上各个工具的登录，等同以你本人的身份操作，所有 Agent 共用（任务里的 Agent 也一样）；Loop Now 里已为 Agent 配了账号的 CLI 仍用配置的账号。它与"用本机的 CLI"互相独立：只开这一项时，只有 Agent 原本就能调用的命令用得上这些登录。
@@ -28,6 +40,7 @@
 
 - 对话输入框输入 "/" 时弹出 Pi 的命令列表（扩展命令、技能、提示模板），显示为 `/pi:<名称>`；用 ↑↓ 选择，Enter 或 Tab 补全。发送 `/pi:<名称> 参数` 会让 Pi 执行这条命令；命令自己处理完、没有模型回复时，这一轮显示"命令已执行，没有回复"。列表在 Agent 运行过一次后才有。不带 `pi:` 的 `/xxx` 和以前一样：先交给插件认领，没人认领就作为普通文字发给模型。
 - 项目里左侧栏的"任务"旁显示正在运行的任务数（准备中、等待和阻塞的不算），为 0 时不显示。任务开始或结束后几秒内自动更新，打开任务页时即时更新，不用刷新页面。
+- 总览的"Pi 进程"一列改名为"进程"，统计页的"Pi 冷启动／Pi 异常退出"改为"冷启动／进程异常退出"：这些数字包含两种运行时的进程。
 
 ### 修复
 
@@ -39,6 +52,8 @@
 - 新增 `GET /agents/{agentId}/commands`（Pi 上次启动时的命令列表）、`POST /projects/{projectId}/model-auth/operations/{operationId}/input`（回答登录中途的问题）；`GET /model-providers` 可带 `agentId`，返回插件提供方对该 Agent 是否可用及原因。
 - 插件清单与市场条目新增可选的 `providerState`：声明提供方有哪些 HOME 下的路径随项目账号保存。
 - 新增 `GET /projects/{projectId}/tasks/counts`（仅控制台）：按状态返回项目里未结束的任务数。
+- 新增 `GET /runtimes`（仅控制台）：各运行时是否可用、版本，以及本机 Claude Code 的路径与登录状态（不含邮箱和组织）。Agent 新增只读的 `runtime`（`pi`／`claude-code`，由模型提供方决定）；模型提供方新增 `runtime`，`source` 新增 `local_cli`。
+- 失败原因新增 `runtime_unavailable`、`runtime_login_required`、`runtime_start_failed`、`runtime_exited`、`runtime_error`（Claude Code 运行时用，Pi 的 `pi_*` 不变）；时间线的进程条目新增可选的 `runtime`，新增 `model_rate_limit` 条目。
 
 ## v0.2.2
 

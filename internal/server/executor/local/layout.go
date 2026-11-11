@@ -29,8 +29,11 @@ type agentDirs struct {
 	sessions  string // --session-dir
 	skills    string // 每次启动按配置重建
 	prompt    string // --append-system-prompt 文件
-	workspace string // Pi 的工作目录
+	workspace string // 运行时的工作目录
 	pidFile   string
+	// claudePlugin 是平台给 Claude Code 的插件目录（--plugin-dir，里面是 Skills），claudeMCP 是它的 --mcp-config 文件。
+	claudePlugin string
+	claudeMCP    string
 }
 
 func (e *Executor) dirs(agentID uuid.UUID) agentDirs {
@@ -45,6 +48,9 @@ func (e *Executor) dirs(agentID uuid.UUID) agentDirs {
 		prompt:    filepath.Join(root, "prompt.md"),
 		workspace: filepath.Join(root, "workspace"),
 		pidFile:   filepath.Join(root, "pi.pid"),
+
+		claudePlugin: filepath.Join(root, "claude-plugin"),
+		claudeMCP:    filepath.Join(root, "claude-mcp.json"),
 	}
 }
 
@@ -240,9 +246,16 @@ func pluginArgs(p agentconfig.PluginAssets) []string {
 	return args
 }
 
-// writePluginMCP 把已授权插件的 MCP 服务器写进 Agent 的 Pi 目录 mcp.json；没有时删除旧文件。
-func writePluginMCP(d agentDirs, p agentconfig.PluginAssets) error {
-	path := filepath.Join(d.pi, "mcp.json")
+// writePluginMCP 把已授权插件的 MCP 服务器写进运行时读的文件：Pi 为 Agent 的 Pi 目录 mcp.json，Claude Code 为 claude-mcp.json
+// （经 --mcp-config 传入，格式相同）；没有时、以及另一个运行时的那份，都删除。
+func writePluginMCP(d agentDirs, p agentconfig.PluginAssets, claude bool) error {
+	path, other := filepath.Join(d.pi, "mcp.json"), d.claudeMCP
+	if claude {
+		path, other = other, path
+	}
+	if err := os.Remove(other); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
 	if len(p.MCPServers) == 0 {
 		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err

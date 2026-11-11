@@ -399,6 +399,28 @@ export interface paths {
         patch: operations["updateLocalModeSettings"];
         trace?: never;
     };
+    "/runtimes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Agent 运行时在本机是否可用
+         * @description pi 为随包的 Pi，总是可用。claude-code 为用户本机安装的 Claude Code：在服务端用户登录 shell 的 PATH 里找 claude、运行 claude --version；
+         *     登录状态由 claude auth status 自己回答（平台不读、不保存它的凭证），只给出是否登录、登录方式与订阅类型，邮箱与组织不返回。
+         *     判断不了登录状态时 state 为 unknown，此时只在运行失败时如实报错（runtime_login_required 等）。结果缓存 30 秒，refresh=true 时重新检查。
+         */
+        get: operations["listRuntimes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/model-providers/{providerId}/models": {
         parameters: {
             query?: never;
@@ -3223,9 +3245,14 @@ export interface components {
          *     - internal_error：服务端内部错误（如数据库暂时不可用），这次回复未能执行
          *     - plugin_blocked：插件拒绝本轮操作或运行条件已变化
          *     - image_unsupported：本轮实际模型不支持图片，未发送图片或切换模型
+         *     - runtime_unavailable：Claude Code 运行时在本机不可用（登录 shell 的 PATH 里找不到 claude，或读不出它的版本）
+         *     - runtime_login_required：本机的 Claude Code 没有登录，需要用户在本机登录后再试
+         *     - runtime_start_failed：Claude Code 在第一轮开始前退出或启动超时（消息带版本号与错误输出末尾）
+         *     - runtime_exited：Claude Code 进程在这一轮中意外退出
+         *     - runtime_error：Claude Code 报告这一轮以错误结束（如用量额度用尽）
          * @enum {string}
          */
-        RunErrorCode: "credential_unavailable" | "cli_install_failed" | "workspace_sync_failed" | "session_missing" | "pi_start_failed" | "pi_exited" | "pi_error" | "internal_error" | "plugin_blocked" | "image_unsupported";
+        RunErrorCode: "credential_unavailable" | "cli_install_failed" | "workspace_sync_failed" | "session_missing" | "pi_start_failed" | "pi_exited" | "pi_error" | "internal_error" | "plugin_blocked" | "image_unsupported" | "runtime_unavailable" | "runtime_login_required" | "runtime_start_failed" | "runtime_exited" | "runtime_error";
         FieldError: {
             field: string;
             message: string;
@@ -3333,9 +3360,14 @@ export interface components {
              * @description builtin 为纯内置目录；config 表示该 Provider 有原生 models.json 配置或覆盖；
              *     plugin 为已安装插件的 Pi 扩展注册的提供方（plugins/SPEC.md §13），只用于项目 Agent：
              *     选它须项目已启用该插件、Agent 已获授权（否则修改 Agent 返回 422，新建 Agent 时不能直接选），账号用项目里登录的订阅账号。
+             *     local_cli 为用户本机安装的 CLI 提供的模型（目前只有 claude-code：本机的 Claude Code），用 CLI 自己在本机的登录，
+             *     不需要账号，平台不保存令牌；项目 Agent 与平台 Agent 都能选。模型 id 是 Claude Code 的别名（fable、opus、sonnet、haiku），
+             *     思考等级即 Claude Code 的 effort（low 到 max）。本机是否装了、是否登录见 GET /runtimes，没装时照常可选，运行时以 runtime_* 失败。
              * @enum {string}
              */
-            source: "builtin" | "config" | "plugin";
+            source: "builtin" | "config" | "plugin" | "local_cli";
+            /** @description 选这个提供方的 Agent 由哪个运行时执行。 */
+            runtime: components["schemas"]["AgentRuntime"];
             /** @description source 为 plugin 时是注册它的插件 id，其余为 null。 */
             pluginId: string | null;
             /** @description source 为 plugin 时是注册它的插件的显示名（清单原样），其余为 null。 */
@@ -3357,6 +3389,45 @@ export interface components {
             modelCount: number;
             /** @description 平台支持的显式认证方式；OAuth登录仅控制台，当前支持openai-codex与插件提供方（插件提供方只有oauth）。 */
             authMethods: components["schemas"]["ModelAuthMethod"][];
+        };
+        /**
+         * @description 执行 Agent 的运行时：pi 为随包的 Pi；claude-code 为用户本机安装、未经修改的 Claude Code（从登录 shell 的 PATH 找 claude），
+         *     用它在本机自己的登录，平台不读取、不保存它的凭证。运行时由模型提供方决定，不单独设置：model.provider 为 claude-code 时是
+         *     claude-code，其余为 pi。Claude Code 下没有 Pi 扩展（/pi: 命令、扩展对话、插件提供方），插件的 Skill 与 MCP 服务器照常。
+         * @enum {string}
+         */
+        AgentRuntime: "pi" | "claude-code";
+        RuntimeList: {
+            runtimes: components["schemas"]["RuntimeStatus"][];
+        };
+        RuntimeStatus: {
+            id: components["schemas"]["AgentRuntime"];
+            /** @description claude-code 为找到了 claude 且读得出版本（是否登录另见 login） */
+            available: boolean;
+            /** @description pi 为随包 Pi 的版本；claude-code 为 claude --version 的版本号 */
+            version: string | null;
+            /** @description claude 解析符号链接后的真实路径；pi 与没找到时为 null */
+            binaryPath: string | null;
+            /**
+             * @description not_found：登录 shell 的 PATH 里找不到 claude；version_failed：运行 claude --version 失败
+             * @enum {string|null}
+             */
+            unavailableReason: "not_found" | "version_failed" | null;
+            /** @description 只有 claude-code 且找到了 claude 时有；pi 与没找到时为 null */
+            login: components["schemas"]["RuntimeLogin"] | null;
+            /** Format: date-time */
+            checkedAt: string;
+        };
+        RuntimeLogin: {
+            /**
+             * @description 来自 claude auth status；运行不了或输出无法识别时为 unknown
+             * @enum {string}
+             */
+            state: "logged_in" | "logged_out" | "unknown";
+            /** @description 登录方式，如 claude.ai */
+            authMethod: string | null;
+            /** @description 订阅类型，如 max */
+            subscriptionType: string | null;
         };
         ModelList: {
             providerId: string;
@@ -3435,6 +3506,8 @@ export interface components {
              */
             address: string | null;
             model: components["schemas"]["ModelRef"];
+            /** @description 由 model.provider 派生，只读。 */
+            runtime: components["schemas"]["AgentRuntime"];
             /** @description 仅openai-codex可设非null值；null为标准。创建缺省同null，更新缺省保留、null重置。常态下一轮生效，新任务冻结具体值；旧快照缺省保持原行为。 */
             serviceTier?: components["schemas"]["CodexServiceTier"] | null;
             /** @description null为当前模型官方clamp(medium)默认；创建缺省同null，更新缺省保留原值，显式等级须由该模型支持。常态下一轮生效，新任务冻结实际解析值，旧任务不重写。 */
@@ -3525,6 +3598,10 @@ export interface components {
             /** Format: int64 */
             expectedPromptVersion: number;
         };
+        /**
+         * @description model.provider 在 claude-code 与其他提供方之间改动即切换运行时（见 AgentRuntime）：新运行时从新会话开始，会话序号加一
+         *     （会话重置事件的 reason 为 runtime_changed），这个会话里的 sleep 取消，旧会话不迁移也不删除；Agent 有进行中的回复时返回 409 agent_not_idle。
+         */
         AgentUpdate: {
             name?: components["schemas"]["EntityName"];
             model?: components["schemas"]["ModelRef"];
@@ -3557,6 +3634,8 @@ export interface components {
              */
             address: string | null;
             model: components["schemas"]["ModelRef"];
+            /** @description 由 model.provider 派生，只读。 */
+            runtime: components["schemas"]["AgentRuntime"];
             /** @description 仅openai-codex可设非null值；null为标准。创建缺省同null，更新缺省保留、null重置。常态下一轮生效，新任务冻结具体值；旧快照缺省保持原行为。 */
             serviceTier?: components["schemas"]["CodexServiceTier"] | null;
             /** @description null为当前模型官方clamp(medium)默认；创建缺省同null，更新缺省保留原值，显式等级须由该模型支持。常态下一轮生效，新任务冻结实际解析值，旧任务不重写。 */
@@ -4453,7 +4532,7 @@ export interface components {
             entries: components["schemas"]["TimelineEntry"][];
             usage: components["schemas"]["UsageTotals"];
         };
-        TimelineEntry: components["schemas"]["TimelineSleepEntry"] | components["schemas"]["TimelineQueued"] | components["schemas"]["TimelinePromoted"] | components["schemas"]["TimelineMessageCancelled"] | components["schemas"]["TimelineMarker"] | components["schemas"]["TimelinePhase"] | components["schemas"]["TimelineCliInstall"] | components["schemas"]["TimelineWorkspaceSync"] | components["schemas"]["TimelinePiStarted"] | components["schemas"]["TimelinePiReused"] | components["schemas"]["TimelinePiStopped"] | components["schemas"]["TimelinePiExited"] | components["schemas"]["TimelineTool"] | components["schemas"]["TimelineModelCall"] | components["schemas"]["TimelineModelRetryStarted"] | components["schemas"]["TimelineModelRetryEnded"] | components["schemas"]["TimelineCompaction"] | components["schemas"]["TimelineAbortRequested"] | components["schemas"]["TimelineEnded"] | components["schemas"]["TimelineSessionMissing"] | components["schemas"]["TimelineExtensionUI"];
+        TimelineEntry: components["schemas"]["TimelineSleepEntry"] | components["schemas"]["TimelineQueued"] | components["schemas"]["TimelinePromoted"] | components["schemas"]["TimelineMessageCancelled"] | components["schemas"]["TimelineMarker"] | components["schemas"]["TimelinePhase"] | components["schemas"]["TimelineCliInstall"] | components["schemas"]["TimelineWorkspaceSync"] | components["schemas"]["TimelinePiStarted"] | components["schemas"]["TimelinePiReused"] | components["schemas"]["TimelinePiStopped"] | components["schemas"]["TimelinePiExited"] | components["schemas"]["TimelineTool"] | components["schemas"]["TimelineModelCall"] | components["schemas"]["TimelineModelRetryStarted"] | components["schemas"]["TimelineModelRetryEnded"] | components["schemas"]["TimelineCompaction"] | components["schemas"]["TimelineAbortRequested"] | components["schemas"]["TimelineEnded"] | components["schemas"]["TimelineSessionMissing"] | components["schemas"]["TimelineExtensionUI"] | components["schemas"]["TimelineModelRateLimit"];
         /**
          * @description Agent 侧的扩展经 ctx.ui 发来的请求（Pi RPC 的 extension_ui_request）。notify 是通知（level 为 info、warning、error），
          *     setStatus 设置或清除一条状态（message 为空时清除）。select、confirm、input、editor 是对话，message 为对话标题：
@@ -4619,6 +4698,8 @@ export interface components {
              */
             reason: "no_process" | "config_changed";
             configVersion: number;
+            /** @description 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。 */
+            runtime?: components["schemas"]["AgentRuntime"];
         };
         /** @description 复用了已运行的 Pi 进程 */
         TimelinePiReused: {
@@ -4632,6 +4713,8 @@ export interface components {
             pid: number;
             /** Format: date-time */
             processStartedAt: string | null;
+            /** @description 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。 */
+            runtime?: components["schemas"]["AgentRuntime"];
         };
         /** @description 平台停止了 Pi 进程 */
         TimelinePiStopped: {
@@ -4646,6 +4729,8 @@ export interface components {
             /** @enum {string} */
             reason: "idle_timeout" | "config_changed" | "evicted" | "released" | "fork_snapshot" | "shutdown" | "abort_timeout";
             uptimeMs: number;
+            /** @description 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。 */
+            runtime?: components["schemas"]["AgentRuntime"];
         };
         /** @description Pi 进程意外退出 */
         TimelinePiExited: {
@@ -4661,6 +4746,19 @@ export interface components {
             exit: string;
             /** @description Pi 错误输出的末尾片段（有长度上限） */
             stderrTail: string;
+            /** @description 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。 */
+            runtime?: components["schemas"]["AgentRuntime"];
+        };
+        /** @description Claude Code 报告的订阅额度状态（rate_limit_event），info 原样（如 status、rateLimitType、resetsAt）；只记录，不影响执行。 */
+        TimelineModelRateLimit: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "model_rate_limit";
+            /** Format: date-time */
+            at: string;
+            info: Record<string, never>;
         };
         /** @description 一次工具调用，at 为开始时间；仅 bash 可含有界、脱敏后的 command；不含其他参数与输出 */
         TimelineTool: {
@@ -9396,6 +9494,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LocalModeSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    listRuntimes: {
+        parameters: {
+            query?: {
+                /** @description 为 true 时不用缓存，重新检查 */
+                refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 各运行时的状态，pi 在前 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeList"];
                 };
             };
             401: components["responses"]["Unauthenticated"];

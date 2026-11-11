@@ -389,6 +389,8 @@ export const plugins = {
   },
   agent: {
     intro: "Grants take effect the next time Pi starts; the current turn isn't interrupted.",
+    introClaudeCode: "Grants take effect the next time the Agent starts; the current turn isn't interrupted.",
+    piOnly: 'Its Agent side is only Pi extensions, which have no effect on Claude Code',
     empty: 'No plugins installed yet.',
     granted: 'Granted',
     notGranted: 'Not granted',

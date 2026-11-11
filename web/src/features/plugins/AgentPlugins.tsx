@@ -29,6 +29,15 @@ const rowTrail = 'col-start-2 row-start-1 flex items-center gap-2 @min-[36rem]:c
 
 const usesAccounts = (agent: Schemas['Agent'], plugin: AgentPlugin) => agent.scope === 'project' && agent.projectId !== null && plugin.accountKinds.length > 0
 
+// Claude Code 的 Agent：插件 Agent 侧只有 Pi 扩展（没有技能、MCP 服务器和命令目录）时，标出它对 Claude Code 不起作用。
+// 组成取插件详情里的清单；读不到时不标。
+function PiOnlyHint({ pluginId }: { pluginId: string }) {
+  const detail = usePlugin(pluginId)
+  const parts = detail.data?.manifest.components
+  if (!parts || parts.agentExtensions === 0 || parts.skills.length > 0 || parts.mcpServers.length > 0 || parts.bin.length > 0) return null
+  return <span className="min-w-0 truncate font-bold text-pink-text">· {text.piOnly}</span>
+}
+
 // 一行摘要：是否授权，以及选用的账号名称（读到账号列表时）。
 function Summary({ agent, plugin }: { agent: Schemas['Agent']; plugin: AgentPlugin }) {
   const accounts = usePluginAccounts(agent.projectId ?? '', plugin.pluginId, usesAccounts(agent, plugin) && plugin.accountIds.length > 0)
@@ -37,6 +46,7 @@ function Summary({ agent, plugin }: { agent: Schemas['Agent']; plugin: AgentPlug
     <span className={cn(rowSummary, 'gap-1.5 text-ink-700')}>
       {plugin.granted ? <span className="shrink-0 font-bold text-ink">{text.granted}</span> : <span className="shrink-0 text-ink-500">{text.notGranted}</span>}
       {plugin.granted && names.length > 0 && <span className="min-w-0 truncate">· {text.accountNames(t.plugins.confirm.list(names))}</span>}
+      {agent.runtime === 'claude-code' && <PiOnlyHint pluginId={plugin.pluginId} />}
     </span>
   )
 }
@@ -247,7 +257,7 @@ function NotEnabled({ plugins, link }: { plugins: AgentPlugin[]; link: string | 
   )
 }
 
-// Agent 配置页的插件段：按插件授权，项目 Agent 再选账号；授权在下次启动 Pi 时生效。
+// Agent 配置页的插件段：按插件授权，项目 Agent 再选账号；授权在下次启动（Pi 或 Claude Code）时生效。
 export function AgentPlugins({ agent }: { agent: Schemas['Agent'] }) {
   const scope = useScope()
   const query = useAgentPlugins(agent.id)
@@ -257,7 +267,7 @@ export function AgentPlugins({ agent }: { agent: Schemas['Agent'] }) {
   const link = scope.kind === 'project' && scope.project.id === agent.projectId ? `${projectBase(scope.project.name)}/plugins` : null
   return (
     <Section id="plugins" title={t.plugins.agentTitle}>
-      <p className="text-[13.5px] text-ink-700">{text.intro}</p>
+      <p className="text-[13.5px] text-ink-700">{agent.runtime === 'claude-code' ? text.introClaudeCode : text.intro}</p>
       <ErrorAlert error={query.error} />
       {query.isPending && <Quiet>{t.plugins.loading}</Quiet>}
       {query.isSuccess && plugins.length === 0 && <Quiet>{text.empty}</Quiet>}

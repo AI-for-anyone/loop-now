@@ -38,7 +38,7 @@ func TestPluginAssetsReachPi(t *testing.T) {
 	if strings.Join(args, " ") != "-e /p/a/agent.ts -e /p/b/agent.ts --skill /p/a/skills -e builtin:mcp" {
 		t.Fatalf("参数：%v", args)
 	}
-	if err := writePluginMCP(d, p); err != nil {
+	if err := writePluginMCP(d, p, false); err != nil {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile(filepath.Join(d.pi, "mcp.json"))
@@ -56,7 +56,7 @@ func TestPluginAssetsReachPi(t *testing.T) {
 	if !slices.Contains(env, "PATH="+strings.Join([]string{"/cli/gh", "/p/a/bin", "/usr/bin"}, string(os.PathListSeparator))) || !slices.Contains(env, `LOOP_NOW_PLUGIN_A_CONFIG={"x":1}`) || !slices.Contains(env, "HOME="+d.home) {
 		t.Fatalf("环境：%v", env)
 	}
-	if err := writePluginMCP(d, agentconfig.PluginAssets{}); err != nil {
+	if err := writePluginMCP(d, agentconfig.PluginAssets{}, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(d.pi, "mcp.json")); !os.IsNotExist(err) {

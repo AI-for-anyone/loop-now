@@ -104,7 +104,8 @@ func TestCaptureProvidersWithPiLoader(t *testing.T) {
 	if a, _ := reg.Provider("anthropic"); a.Source != "builtin" {
 		t.Fatalf("内置提供方不被插件替换：%+v", a)
 	}
-	if len(reg.Snapshot().Providers) != len(base.Providers)+1 {
-		t.Fatal("只多一个提供方")
+	// 发布的目录 = Pi 目录 + 本机 CLI 的 claude-code + 这一个插件提供方（与内置同 id 的 anthropic 不并入）。
+	if len(reg.Snapshot().Providers) != len(base.Providers)+2 {
+		t.Fatal("只多本机 CLI 与一个插件提供方")
 	}
 }

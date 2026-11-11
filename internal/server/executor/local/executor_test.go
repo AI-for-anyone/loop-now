@@ -42,6 +42,8 @@ type fakeSource struct {
 	missing     map[uuid.UUID]bool
 	deleted     []uuid.UUID
 	unavailable bool
+	// recordLog 依次记下每次 RecordSessionFile 的路径（核对没有把旧运行时的会话记回去）。
+	recordLog map[uuid.UUID][]string
 }
 
 func newFakeSource() *fakeSource {
@@ -117,6 +119,10 @@ func (f *fakeSource) RecordSessionFile(_ context.Context, id uuid.UUID, p string
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.recorded[id] = p
+	if f.recordLog == nil {
+		f.recordLog = map[uuid.UUID][]string{}
+	}
+	f.recordLog[id] = append(f.recordLog[id], p)
 	return nil
 }
 

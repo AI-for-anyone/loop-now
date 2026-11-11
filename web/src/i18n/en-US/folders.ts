@@ -30,9 +30,9 @@ export const folders = {
   remove: 'Delete',
   entry: {
     badge: 'Entry',
-    hint: 'The Agent reads this file first every time it starts Pi',
+    hint: 'The Agent reads this file first every time it starts',
     missingTitle: 'No AGENTS.md yet',
-    missingBody: "Every time the Agent starts Pi it reads AGENTS.md at the root first. It's a good place for its duties, conventions, and things to watch for.",
+    missingBody: "Every time the Agent starts, it reads AGENTS.md at the root first. It's a good place for its duties, conventions, and things to watch for.",
     create: 'Create AGENTS.md',
     template: '# Working notes\n\nDuties, conventions, and things to watch for, written for the Agent. The Agent reads this file first every time it starts.\n',
   },

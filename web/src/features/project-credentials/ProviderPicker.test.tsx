@@ -15,10 +15,12 @@ import { providerCatalog } from './provider-catalog'
 import { pluginProvider } from '@/test/config'
 
 // 项目设置 › 模型账号：添加账号时用搜索面板选提供方，账号列表的每一行显示同样的提供方名称。
-const provider = (id: string, modelCount: number, authMethods: Schemas['ModelAuthMethod'][] = ['api_key']): Schemas['ModelProvider'] => ({ id, name: null, pluginId: null, pluginDisplayName: null, unavailableReason: null, source: 'builtin', apiKeyEnvVars: [], modelCount, authMethods })
-const catalog = [
+const provider = (id: string, modelCount: number, authMethods: Schemas['ModelAuthMethod'][] = ['api_key']): Schemas['ModelProvider'] => ({ id, name: null, pluginId: null, pluginDisplayName: null, unavailableReason: null, source: 'builtin', runtime: 'pi', apiKeyEnvVars: [], modelCount, authMethods })
+const catalog: Schemas['ModelProvider'][] = [
   provider('anthropic', 17), provider('deepseek', 2), provider('moonshotai', 4), provider('moonshotai-cn', 4), provider('no-login', 5, []),
   provider('openai-codex', 7, ['oauth']), provider('openrouter', 401), provider('typesafe', 0), provider('zai', 7), provider('zai-coding-cn', 4), provider('zz-new', 3),
+  // 本机的 Claude Code：用它自己在本机的登录，没有项目账号。
+  { ...provider('claude-code', 4, []), name: 'Claude Code', source: 'local_cli', runtime: 'claude-code' },
 ]
 const codexAccount = projectAccount({ id: '10000000-0000-7000-8000-000000000002', provider: 'openai-codex', authMethod: 'oauth', status: 'logged_in', name: 'Codex 账号' })
 
@@ -70,6 +72,7 @@ describe('模型提供方选择器', () => {
     expect(names(screen.getByRole('group', { name: '其他' }), 'option')).toEqual(['zz-new'])
     expect(screen.queryByRole('option', { name: /typesafe/ })).toBeNull()
     expect(screen.queryByRole('option', { name: /no-login/ })).toBeNull()
+    expect(screen.queryByRole('option', { name: /Claude Code|claude-code/ })).toBeNull()
 
     expect(option('OpenAI Codex')).toHaveTextContent(/openai-codex.*已有 1 个.*登录.*7 个模型/)
     expect(option('Anthropic')).toHaveTextContent(/anthropic.*API 密钥.*17 个模型/)

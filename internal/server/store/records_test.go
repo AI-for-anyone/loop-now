@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/db"
 	"loop-now/internal/server/store"
 	"loop-now/internal/testutil/sqlitetest"
@@ -321,5 +322,81 @@ func TestTaskProcessExitsDoNotOverrideNormalOverview(t *testing.T) {
 	}
 	if exits[agent.ID].Reason != "idle_timeout" || !exits[agent.ID].At.Equal(normalAt.Truncate(time.Microsecond)) {
 		t.Fatal("task exits polluted normal overview", exits[agent.ID])
+	}
+}
+
+// 改模型提供方换了运行时（Pi 与 Claude Code 之间）：有进行中的回复时拒绝；否则会话重置（序号加一、记重置事件，原因 runtime_changed），
+// 同一运行时内换模型不动会话。
+func TestRuntimeSwitchResetsSession(t *testing.T) {
+	e := newRecEnv(t)
+	provider, model := func(p string) *string { return &p }, func(m string) *string { return &m }
+	r := e.send(true, "")
+	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("claude-code"), ModelID: model("sonnet")}); !apperr.Is(err, apperr.CodeAgentNotIdle) {
+		t.Fatalf("有进行中的回复时应拒绝切换运行时：%v", err)
+	}
+	if _, _, _, err := e.s.FinishRun(e.ctx, r.ID, store.RunEnd{Status: "completed"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.RecordSessionFile(e.ctx, e.agent, "/tmp/pi-session.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("openai"), ModelID: model("gpt-x")}); err != nil {
+		t.Fatal(err)
+	}
+	if sess, _ := e.s.GetAgentSession(e.ctx, e.agent); sess.State != "active" || sess.Epoch != 1 || sess.SessionFile != "/tmp/pi-session.jsonl" {
+		t.Fatalf("同一运行时内换模型不动会话：%+v", sess)
+	}
+	a, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("claude-code"), ModelID: model("sonnet")})
+	if err != nil || a.ModelProvider != "claude-code" {
+		t.Fatalf("切换到 Claude Code：%+v %v", a, err)
+	}
+	if sess, _ := e.s.GetAgentSession(e.ctx, e.agent); sess.State != "none" || sess.Epoch != 2 || sess.SessionFile != "" {
+		t.Fatalf("切换运行时应重置会话：%+v", sess)
+	}
+	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("claude-code"), ModelID: model("opus")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("anthropic"), ModelID: model("claude-x")}); err != nil {
+		t.Fatal(err)
+	}
+	evs, _ := e.s.AgentEvents(e.ctx, e.agent)
+	var resets []store.LifecycleEvent
+	for _, ev := range evs {
+		if ev.Type == store.EventSessionReset {
+			resets = append(resets, ev)
+		}
+	}
+	if len(resets) != 2 || resets[0].Data["reason"] != "runtime_changed" || resets[0].Data["fromRuntime"] != "pi" || resets[0].Data["toRuntime"] != "claude-code" ||
+		resets[0].Data["toEpoch"] != float64(2) || resets[1].Data["fromRuntime"] != "claude-code" || resets[1].Data["toEpoch"] != float64(3) {
+		t.Fatalf("重置事件：%+v", resets)
+	}
+}
+
+// 有排队（还没开始）的消息时也能切换运行时：它们之后由新运行时处理；会话照常重置。没有会话行时切换照常保存。
+func TestRuntimeSwitchWithQueuedMessages(t *testing.T) {
+	e := newRecEnv(t)
+	provider, model := func(p string) *string { return &p }, func(m string) *string { return &m }
+	r := e.send(true, "")
+	queued := e.send(false, "")
+	if queued.Status != "queued" {
+		t.Fatalf("第二条应排队：%+v", queued.Status)
+	}
+	if _, _, _, err := e.s.FinishRun(e.ctx, r.ID, store.RunEnd{Status: "completed"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.RecordSessionFile(e.ctx, e.agent, "/tmp/pi-session.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("claude-code"), ModelID: model("sonnet")}); err != nil {
+		t.Fatalf("有排队消息时切换：%v", err)
+	}
+	if sess, _ := e.s.GetAgentSession(e.ctx, e.agent); sess.State != "none" || sess.Epoch != 2 {
+		t.Fatalf("会话应重置：%+v", sess)
+	}
+	if _, err := e.s.Pool.Exec(e.ctx, `DELETE FROM agent_sessions WHERE agent_id = $1`, e.agent); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("anthropic"), ModelID: model("claude-x")}); err != nil {
+		t.Fatalf("没有会话行时切换照常保存：%v", err)
 	}
 }

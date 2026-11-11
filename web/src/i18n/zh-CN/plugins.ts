@@ -401,6 +401,10 @@ export const plugins = {
   // Agent 配置页的插件段。
   agent: {
     intro: '授权后下次启动 Pi 生效，不打断当前回合。',
+    // Claude Code 运行时的 Agent：没有 Pi，启动的是 Claude Code。
+    introClaudeCode: '授权后下次启动生效，不打断当前回合。',
+    // Claude Code 运行时的 Agent：插件 Agent 侧只有 Pi 扩展（没有技能、MCP 服务器和命令目录）。
+    piOnly: 'Agent 侧只有 Pi 扩展，对 Claude Code 不起作用',
     empty: '还没有安装插件。',
     granted: '已授权',
     notGranted: '未授权',
