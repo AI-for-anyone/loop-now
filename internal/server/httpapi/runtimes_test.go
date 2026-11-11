@@ -1,7 +1,10 @@
 package httpapi_test
 
 import (
+	"context"
 	"testing"
+
+	"loop-now/internal/server/claudecli"
 
 	"loop-now/internal/server/runtimes"
 	"loop-now/internal/testutil/fakeclaudebin"
@@ -11,7 +14,10 @@ import (
 func TestListRuntimes(t *testing.T) {
 	e := newEnv(t)
 	home := t.TempDir()
-	e.api.Runtimes = &runtimes.Checker{PiVersion: func() string { return "1.4.0" }, ClaudeBin: fakeclaudebin.Path(t), RealHome: func() (string, error) { return home, nil }}
+	e.api.Runtimes = &runtimes.Checker{PiVersion: func() string { return "1.4.0" }, ClaudeBin: fakeclaudebin.Path(t), RealHome: func() (string, error) { return home, nil },
+		HelperEnv: func(_ context.Context, home string) []string {
+			return claudecli.Env(claudecli.EnvOptions{Home: home, User: "tester", Path: []string{"/usr/bin", "/bin"}})
+		}}
 	got := decode[struct {
 		Runtimes []runtimes.Status `json:"runtimes"`
 	}](t, e.expect(200, "GET", "/runtimes?refresh=true", nil))

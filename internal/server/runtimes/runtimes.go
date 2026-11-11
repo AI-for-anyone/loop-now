@@ -52,6 +52,9 @@ type Checker struct {
 	UserPath     func(context.Context) []string
 	RealHome     func() (string, error)
 	ExecBasePath string
+	// HelperEnv 是运行 claude 自己的短命令时的环境（与执行器给 Agent 的 Claude Code 进程同一套基础变量，含 USER）；
+	// 为空时只有 HOME 与 PATH。
+	HelperEnv func(ctx context.Context, home string) []string
 	// ClaudeBin 是 claude 可执行文件（测试用）；为空时在 UserPath 里找。
 	ClaudeBin string
 	Now       func() time.Time
@@ -120,7 +123,12 @@ func (c *Checker) claude(ctx context.Context, at time.Time) Status {
 		return reason(ReasonNotFound)
 	}
 	s.BinaryPath = &bin
-	env := claudecli.Env(home, "", append(filepath.SplitList(c.ExecBasePath), dirs...))
+	var env []string
+	if c.HelperEnv != nil {
+		env = c.HelperEnv(ctx, home)
+	} else {
+		env = claudecli.Env(claudecli.EnvOptions{Home: home, Path: append(filepath.SplitList(c.ExecBasePath), dirs...)})
+	}
 	version, err := c.probe.Version(ctx, bin, env)
 	if err != nil {
 		return reason(ReasonVersionFailed)

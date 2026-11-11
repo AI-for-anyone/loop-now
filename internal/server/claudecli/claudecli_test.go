@@ -42,9 +42,15 @@ func TestStripEnvAndEnv(t *testing.T) {
 	if strings.Join(got, ",") != "HOME=/h,PATH=/bin" {
 		t.Fatalf("StripEnv：%v", got)
 	}
-	env := strings.Join(claudecli.Env("/home/u", "", []string{"/a", "/b"}), "\n")
-	if !strings.Contains(env, "HOME=/home/u") || !strings.Contains(env, "PATH=/a"+string(os.PathListSeparator)+"/b") {
-		t.Fatalf("Env：%s", env)
+	env := strings.Join(claudecli.Env(claudecli.EnvOptions{Home: "/home/u", User: "u", Path: []string{"/a", "/b"},
+		Extra: []string{"LANG=C.UTF-8", "HOME=/evil", "USER=evil", "ANTHROPIC_API_KEY=x"}}), "\n")
+	for _, want := range []string{"HOME=/home/u", "PATH=/a" + string(os.PathListSeparator) + "/b", "USER=u", "LOGNAME=u", "LANG=C.UTF-8"} {
+		if !strings.Contains(env, want) {
+			t.Fatalf("Env 缺少 %s：%s", want, env)
+		}
+	}
+	if strings.Contains(env, "evil") || strings.Contains(env, "ANTHROPIC") {
+		t.Fatalf("Extra 不能覆盖基础变量，也不带 Anthropic 变量：%s", env)
 	}
 }
 
@@ -53,7 +59,7 @@ func TestStripEnvAndEnv(t *testing.T) {
 func TestVersionAndAuthStatus(t *testing.T) {
 	bin := fakeclaudebin.Path(t)
 	home := t.TempDir()
-	env := claudecli.Env(home, "", []string{"/usr/bin", "/bin"})
+	env := claudecli.Env(claudecli.EnvOptions{Home: home, User: "tester", Path: []string{"/usr/bin", "/bin"}})
 	if v, err := claudecli.Version(context.Background(), bin, env); err != nil || v != "9.9.9" {
 		t.Fatalf("版本：%q %v", v, err)
 	}
@@ -67,10 +73,16 @@ func TestVersionAndAuthStatus(t *testing.T) {
 			t.Fatalf("不应保留 %q：%s", secret, b)
 		}
 	}
+	// 与真的 claude 一样：没有 USER 时找不到登录，以 1 退出但照常输出 JSON；按输出判断为未登录，而不是出错。
+	noUser := claudecli.Env(claudecli.EnvOptions{Home: home, Path: []string{"/usr/bin", "/bin"}})
+	if a, err = claudecli.AuthStatus(context.Background(), bin, noUser); err != nil || a.LoggedIn || a.AuthMethod != "none" {
+		t.Fatalf("没有 USER：%+v %v", a, err)
+	}
 	_ = os.WriteFile(filepath.Join(home, ".fakeclaude-logged-out"), nil, 0o600)
 	if a, err = claudecli.AuthStatus(context.Background(), bin, env); err != nil || a.LoggedIn {
 		t.Fatalf("未登录：%+v %v", a, err)
 	}
+	_ = os.Remove(filepath.Join(home, ".fakeclaude-logged-out"))
 	failing := append(env, "FAKECLAUDE_AUTH_FAIL=1")
 	if _, err = claudecli.AuthStatus(context.Background(), bin, failing); err == nil || strings.Contains(err.Error(), "private@example.com") {
 		t.Fatalf("失败时不带输出：%v", err)

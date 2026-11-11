@@ -78,16 +78,40 @@ func StripEnv(env []string) []string {
 	return out
 }
 
-// Env 是运行 claude 自己的短命令时的环境：真实的 HOME、给定的 PATH 与 Windows 上的系统变量，别的都不带。
-func Env(home, tmp string, path []string) []string {
-	env := execenv.Base(home, tmp)
-	env = append(env, "HOME="+home, "PATH="+strings.Join(path, string(os.PathListSeparator)))
-	if tmp != "" {
-		env = append(env, "TMPDIR="+tmp)
+// EnvOptions 是运行 claude 自己的短命令（--version、auth status、purge）时的环境，与 Agent 的 Claude Code 进程同一套基础变量。
+type EnvOptions struct {
+	Home string
+	Tmp  string
+	// User 是 USER 与 LOGNAME：claude 按它找本机的登录，缺了 auth status 会报未登录。
+	User string
+	Path []string
+	// Extra 是其他基础变量（K=V），如透传的 LANG、LC_ALL、TZ；不覆盖上面几项。
+	Extra []string
+}
+
+// Env 是运行 claude 自己的短命令时的环境：Windows 上的系统变量、透传的基础变量、真实的 HOME、USER／LOGNAME 与给定的 PATH，
+// 不带任何 Anthropic／Claude 的变量。
+func Env(o EnvOptions) []string {
+	env := execenv.Base(o.Home, o.Tmp)
+	for _, kv := range o.Extra {
+		switch k, _, _ := strings.Cut(kv, "="); k {
+		case "HOME", "PATH", "TMPDIR", "USER", "LOGNAME":
+		default:
+			env = append(env, kv)
+		}
+	}
+	env = append(env, "HOME="+o.Home, "PATH="+strings.Join(o.Path, string(os.PathListSeparator)))
+	if o.User != "" {
+		env = append(env, "USER="+o.User, "LOGNAME="+o.User)
+	}
+	if o.Tmp != "" {
+		env = append(env, "TMPDIR="+o.Tmp)
 	}
 	return StripEnv(env)
 }
 
+// run 运行 claude 的一条短命令，返回标准输出；退出状态不为 0 时同时返回错误（输出照样返回：auth status 未登录时以 1 退出）。
+// 错误里只有退出状态，不带输出：auth status 的输出里有邮箱与组织，不能进日志、事件或错误消息。
 func run(ctx context.Context, bin string, env []string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
@@ -99,10 +123,9 @@ func run(ctx context.Context, bin string, env []string, args ...string) ([]byte,
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil {
-		// 只返回退出状态，不返回输出：auth status 的输出里有邮箱与组织，不能进日志、事件或错误消息。
 		var exit *exec.ExitError
-		if errors.As(err, &exit) {
-			return nil, fmt.Errorf("claude %s 失败：%s", args[0], exit.ProcessState.String())
+		if errors.As(err, &exit) && ctx.Err() == nil {
+			return stdout.Bytes(), fmt.Errorf("claude %s 失败：%s", args[0], exit.ProcessState.String())
 		}
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("claude %s 超时", args[0])
@@ -137,11 +160,12 @@ type Auth struct {
 	ProjectsDirectory string `json:"projectsDirectory"`
 }
 
-// AuthStatus 运行 claude auth status --json：由 claude 自己判断是否登录，平台拿不到令牌。
+// AuthStatus 运行 claude auth status --json：由 claude 自己判断是否登录，平台拿不到令牌。未登录时它以 1 退出但照常输出 JSON，
+// 所以只要输出可以识别就按输出判断；运行不了或输出无法识别时返回错误（调用方当作“不知道”）。
 func AuthStatus(ctx context.Context, bin string, env []string) (Auth, error) {
-	out, err := run(ctx, bin, env, "auth", "status", "--json")
-	if err != nil {
-		return Auth{}, err
+	out, runErr := run(ctx, bin, env, "auth", "status", "--json")
+	if len(bytes.TrimSpace(out)) == 0 && runErr != nil {
+		return Auth{}, runErr
 	}
 	var raw struct {
 		LoggedIn          *bool  `json:"loggedIn"`
@@ -151,6 +175,10 @@ func AuthStatus(ctx context.Context, bin string, env []string) (Auth, error) {
 		ProjectsDirectory string `json:"projectsDirectory"`
 	}
 	if json.Unmarshal(out, &raw) != nil || raw.LoggedIn == nil {
+		clear(out)
+		if runErr != nil {
+			return Auth{}, runErr
+		}
 		return Auth{}, errors.New("claude auth status 的输出不是预期的 JSON")
 	}
 	clear(out)

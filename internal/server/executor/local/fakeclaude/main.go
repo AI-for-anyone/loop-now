@@ -94,7 +94,8 @@ func authStatus() {
 	home, _ := os.UserHomeDir()
 	// auth status 由平台以最小的环境运行，测试改用 HOME 下的标记文件控制。
 	_, loggedOut := os.Stat(filepath.Join(home, ".fakeclaude-logged-out"))
-	loggedIn := os.Getenv("FAKECLAUDE_LOGGED_IN") != "0" && loggedOut != nil
+	// 与真的 claude 一样：没有 USER 时找不到本机的登录。
+	loggedIn := os.Getenv("FAKECLAUDE_LOGGED_IN") != "0" && loggedOut != nil && os.Getenv("USER") != ""
 	method := "claude.ai"
 	if !loggedIn {
 		method = "none"
@@ -103,6 +104,9 @@ func authStatus() {
 		"planTier": "max_20x", "loginExpiresAt": "2099-01-01T00:00:00Z", "email": "private@example.com", "orgId": "org-private-id", "orgName": "Private Org",
 		"configDirectory": filepath.Join(home, ".claude"), "projectsDirectory": filepath.Join(home, ".claude", "projects"), "analyticsDisabled": false, "storedClaudeAiLogin": true})
 	fmt.Println(string(b))
+	if !loggedIn {
+		os.Exit(1) // 真的 claude 未登录时以 1 退出，但照常输出 JSON
+	}
 }
 
 func purge(args []string) {

@@ -3,12 +3,14 @@ package tasks
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
+	"loop-now/internal/server/claudecli"
 	"loop-now/internal/server/store"
 )
 
@@ -107,5 +109,36 @@ func TestCopyClaudeBaseline(t *testing.T) {
 	src.ClaudeProjects = nil
 	if _, err := src.copyClaudeBaseline(context.Background(), inst, session); err == nil {
 		t.Fatal("没有配置会话记录目录时应拒绝")
+	}
+}
+
+// 任务实例的会话归档：Claude Code 的会话记录在 claude 的会话记录目录里，只认与这个实例工作区对应的子目录里的那个文件。
+func TestArchiveClaudeSession(t *testing.T) {
+	work, projects := t.TempDir(), t.TempDir()
+	src := &Source{WorkRoot: work, MaxSessionBytes: 1 << 10, ClaudeProjects: func(context.Context) string { return projects }}
+	inst := store.TaskInstance{ID: uuid.New(), TaskID: uuid.New(), AgentID: uuid.New(), SessionState: "active"}
+	workspace := filepath.Join(work, "agents", inst.ID.String(), "workspace")
+	if err := os.MkdirAll(workspace, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	write := func(dir string) string {
+		p := filepath.Join(projects, dir, uuid.NewString()+".jsonl")
+		_ = os.MkdirAll(filepath.Dir(p), 0o700)
+		_ = os.WriteFile(p, []byte("{\"type\":\"user\"}\n"), 0o600)
+		return p
+	}
+	own := write(claudecli.ProjectDirName(workspace))
+	inst.SessionFile = &own
+	data, err := src.archiveSession(context.Background(), inst)
+	var archived struct {
+		Session []byte `json:"session"`
+	}
+	if err != nil || json.Unmarshal(data, &archived) != nil || string(archived.Session) != "{\"type\":\"user\"}\n" {
+		t.Fatalf("归档：%s %v", data, err)
+	}
+	other := write("-some-other-workspace")
+	inst.SessionFile = &other
+	if _, err := src.archiveSession(context.Background(), inst); err == nil {
+		t.Fatal("别的工作区的会话记录不能归档到这个实例")
 	}
 }

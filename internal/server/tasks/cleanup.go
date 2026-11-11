@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"loop-now/internal/server/claudecli"
 	"loop-now/internal/server/store"
 )
 
@@ -76,7 +77,7 @@ func (s *Service) cleanup(ctx context.Context, id uuid.UUID) (err error) {
 		if exists {
 			continue
 		}
-		data, e := s.Source.archiveSession(inst)
+		data, e := s.Source.archiveSession(ctx, inst)
 		if e != nil {
 			return e
 		}
@@ -133,7 +134,10 @@ func (s *Service) cleanup(ctx context.Context, id uuid.UUID) (err error) {
 	})
 	return err
 }
-func (s *Source) archiveSession(inst store.TaskInstance) ([]byte, error) {
+
+// archiveSession 读出任务实例的会话做归档：Pi 的在实例自己的 sessions 目录里；Claude Code 的是 claude 为这个实例工作区留下的
+// 那一个 <会话 ID>.jsonl（只认 claude 会话记录目录下、与实例工作区对应的子目录里的文件）。
+func (s *Source) archiveSession(ctx context.Context, inst store.TaskInstance) ([]byte, error) {
 	if inst.SessionState == "missing" {
 		return nil, errors.New("任务会话丢失，保留目录等待修复")
 	}
@@ -142,7 +146,10 @@ func (s *Source) archiveSession(inst store.TaskInstance) ([]byte, error) {
 		base := filepath.Join(s.WorkRoot, "agents", inst.ID.String(), "sessions")
 		rel, err := filepath.Rel(base, *inst.SessionFile)
 		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
-			return nil, errors.New("任务会话不在该实例目录")
+			base, rel = s.claudeInstanceSession(ctx, inst, *inst.SessionFile)
+			if base == "" {
+				return nil, errors.New("任务会话不在该实例目录")
+			}
 		}
 		root, err := os.OpenRoot(base)
 		if err != nil {
@@ -176,4 +183,21 @@ func (s *Source) archiveSession(inst store.TaskInstance) ([]byte, error) {
 		State     string    `json:"state"`
 		Session   []byte    `json:"session"`
 	}{inst.ID, inst.SessionState, data})
+}
+
+// claudeInstanceSession 判断 file 是不是 claude 为这个任务实例的工作区留下的会话记录：是时返回会话记录目录与相对路径，否则都为空。
+func (s *Source) claudeInstanceSession(ctx context.Context, inst store.TaskInstance, file string) (string, string) {
+	if s.ClaudeProjects == nil {
+		return "", ""
+	}
+	projects := s.ClaudeProjects(ctx)
+	workspace := filepath.Join(s.WorkRoot, "agents", inst.ID.String(), "workspace")
+	if projects == "" || !claudecli.InProjects(projects, file) || filepath.Dir(file) != filepath.Join(projects, claudecli.ProjectDirName(workspace)) {
+		return "", ""
+	}
+	rel, err := filepath.Rel(projects, file)
+	if err != nil {
+		return "", ""
+	}
+	return projects, rel
 }

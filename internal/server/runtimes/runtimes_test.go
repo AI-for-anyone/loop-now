@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"loop-now/internal/server/claudecli"
 	"loop-now/internal/server/runtimes"
 	"loop-now/internal/testutil/fakeclaudebin"
 )
@@ -18,8 +19,11 @@ import (
 func TestChecker(t *testing.T) {
 	home := t.TempDir()
 	now := time.Now()
+	helperEnv := func(_ context.Context, home string) []string {
+		return claudecli.Env(claudecli.EnvOptions{Home: home, User: "tester", Path: []string{"/usr/bin", "/bin"}})
+	}
 	c := &runtimes.Checker{PiVersion: func() string { return "1.4.0" }, ClaudeBin: fakeclaudebin.Path(t), RealHome: func() (string, error) { return home, nil },
-		ExecBasePath: "/usr/bin:/bin", Now: func() time.Time { return now }}
+		ExecBasePath: "/usr/bin:/bin", HelperEnv: helperEnv, Now: func() time.Time { return now }}
 	list := c.List(context.Background(), false)
 	if len(list) != 2 || list[0].ID != "pi" || !list[0].Available || *list[0].Version != "1.4.0" || list[0].Login != nil {
 		t.Fatalf("pi：%+v", list)
@@ -41,6 +45,11 @@ func TestChecker(t *testing.T) {
 	}
 	if got := c.List(context.Background(), true)[1].Login.State; got != "logged_out" {
 		t.Fatalf("refresh 重查：%s", got)
+	}
+	// 辅助环境没有 USER 时 claude 答未登录（以 1 退出）：是 logged_out，不是 unknown。
+	noUser := &runtimes.Checker{PiVersion: func() string { return "1.4.0" }, ClaudeBin: c.ClaudeBin, RealHome: func() (string, error) { return t.TempDir(), nil }, ExecBasePath: "/usr/bin:/bin"}
+	if got := noUser.List(context.Background(), true)[1].Login; got == nil || got.State != "logged_out" {
+		t.Fatalf("未登录应为 logged_out：%+v", got)
 	}
 	missing := &runtimes.Checker{PiVersion: func() string { return "1.4.0" }, UserPath: func(context.Context) []string { return []string{t.TempDir()} },
 		RealHome: func() (string, error) { return home, nil }}

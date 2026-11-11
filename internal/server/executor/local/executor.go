@@ -1035,6 +1035,9 @@ func (e *Executor) Release(ctx context.Context, agentID uuid.UUID) error {
 	if err := clearProviderLinks(e.dirs(agentID)); err != nil {
 		return err
 	}
+	// Claude Code 为这个工作区留在 ~/.claude 下的会话记录：先归档进 Agent 自己的 sessions 目录，再用 claude purge 删掉。
+	// 失败只记日志，不影响删除与回收。
+	e.purgeClaude(ctx, agentID)
 	return releaseHome(e.o.WorkRoot, agentID)
 }
 
