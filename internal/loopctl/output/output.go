@@ -37,17 +37,17 @@ type ExitInfo struct {
 
 // exitTable 是退出码表，按退出码排列。
 var exitTable = []ExitInfo{
-	{0, "", "成功，可能带警告"},
-	{1, CategoryInternal, "loopctl 自身出错；服务端的成功响应无法解析；服务端返回重定向"},
-	{2, CategoryUsage, "命令或参数有误；当前身份不能使用这个命令；缺少确认；本地输入文件读不了，或输出文件写不了"},
-	{3, CategoryConfig, "连接配置缺失、冲突或无效；令牌格式与身份不符；证书校验失败"},
-	{4, CategoryUnavailable, "连接失败、超时，或 HTTP 502、503、504"},
+	{0, "", "Success, possibly with warnings"},
+	{1, CategoryInternal, "loopctl itself failed; a successful server response could not be parsed; the server returned a redirect"},
+	{2, CategoryUsage, "Wrong command or arguments; the current identity cannot use this command; confirmation missing; a local input file cannot be read or an output file cannot be written"},
+	{3, CategoryConfig, "Connection configuration missing, conflicting or invalid; token format does not match the identity; certificate verification failed"},
+	{4, CategoryUnavailable, "Connection failed or timed out, or HTTP 502, 503, 504"},
 	{5, CategoryUnauthenticated, "HTTP 401"},
 	{6, CategoryForbidden, "HTTP 403"},
 	{7, CategoryNotFound, "HTTP 404"},
-	{8, CategoryConflict, "HTTP 409、412"},
-	{9, CategoryInvalid, "HTTP 400、413、422"},
-	{10, CategoryServer, "HTTP 500，以及其他未列出的状态码"},
+	{8, CategoryConflict, "HTTP 409, 412"},
+	{9, CategoryInvalid, "HTTP 400, 413, 422"},
+	{10, CategoryServer, "HTTP 500 and any other status code not listed"},
 }
 
 // ExitTable 返回退出码表的副本。

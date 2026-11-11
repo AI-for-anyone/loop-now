@@ -300,7 +300,7 @@ func TestInboxReminder(t *testing.T) {
 			user = m
 		}
 	}
-	if user.Origin != "inbox_reminder" || !strings.Contains(user.Text, "以下 1 条 Inbox 消息") || !strings.Contains(user.Text, "loopctl inbox read") || !strings.Contains(user.Text, m1.ID.String()) {
+	if user.Origin != "inbox_reminder" || !strings.Contains(user.Text, "the following 1 Inbox messages") || !strings.Contains(user.Text, "loopctl inbox read") || !strings.Contains(user.Text, m1.ID.String()) {
 		t.Fatalf("提醒那一轮的用户消息：%+v", user)
 	}
 	if reply := e.lastReply(a); reply.Origin != "inbox_reminder" || reply.Run.Status != "completed" {
@@ -799,7 +799,7 @@ func TestInboxSessionMissing(t *testing.T) {
 			user = m
 		}
 	}
-	if user.Origin != "inbox_reminder" || !strings.Contains(user.Text, "以下 2 条 Inbox 消息") || user.Run.Status != "completed" {
+	if user.Origin != "inbox_reminder" || !strings.Contains(user.Text, "the following 2 Inbox messages") || user.Run.Status != "completed" {
 		t.Fatalf("重开会话后的提醒：%+v", user)
 	}
 	// 没有未读消息时重开会话，不安排提醒。

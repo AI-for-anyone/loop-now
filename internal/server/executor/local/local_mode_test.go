@@ -48,11 +48,11 @@ func TestLocalModePromptPathAndRestart(t *testing.T) {
 		t.Fatal(res)
 	}
 	d := readDump(t, dumpPath)
-	if !strings.Contains(d.SystemPrompt, "## 文件夹与上下文") || !strings.Contains(d.SystemPrompt, "本机目录") ||
-		!strings.Contains(d.SystemPrompt, "  - "+code+"：前端仓库\n") || strings.Contains(d.SystemPrompt, later) {
+	if !strings.Contains(d.SystemPrompt, "## Folders and context") || !strings.Contains(d.SystemPrompt, "Local directories") ||
+		!strings.Contains(d.SystemPrompt, "  - "+code+": 前端仓库\n") || strings.Contains(d.SystemPrompt, later) {
 		t.Fatalf("系统提示里的本机目录不对：\n%s", d.SystemPrompt)
 	}
-	if !strings.Contains(d.SystemPrompt, "完整的读写权限") || !strings.Contains(d.SystemPrompt, "不会被回收") {
+	if !strings.Contains(d.SystemPrompt, "full read and write access") || !strings.Contains(d.SystemPrompt, "never reclaimed") {
 		t.Fatalf("应如实说明读写权限：\n%s", d.SystemPrompt)
 	}
 	if path := d.Env["PATH"]; !strings.HasSuffix(path, basePath+sep+userBin) || countDir(path, baseA) != 1 {
@@ -77,7 +77,7 @@ func TestLocalModePromptPathAndRestart(t *testing.T) {
 		t.Fatal("清单变化应在下一次派发重启 Pi")
 	}
 	d = readDump(t, dumpPath)
-	if !strings.Contains(d.SystemPrompt, "  - "+later+"\n") || !strings.Contains(d.SystemPrompt, "  - "+root+"：整个目录\n") || argValue(d.Args, "--session") != session {
+	if !strings.Contains(d.SystemPrompt, "  - "+later+"\n") || !strings.Contains(d.SystemPrompt, "  - "+root+": 整个目录\n") || argValue(d.Args, "--session") != session {
 		t.Fatalf("重启后的系统提示或会话不对：%v\n%s", d.Args, d.SystemPrompt)
 	}
 	pid = h.pid(id)
@@ -98,11 +98,11 @@ func TestLocalDirectoriesPromptWording(t *testing.T) {
 	dir := t.TempDir()
 	snap := agentconfig.Snapshot{Local: agentconfig.LocalAccess{Directories: []agentconfig.LocalDirectory{{Path: dir}, {Path: filepath.Join(dir, "missing")}}}}
 	normal := localDirectoriesPrompt(snap)
-	if !strings.Contains(normal, "  - "+dir+"\n") || strings.Contains(normal, "missing") || strings.Contains(normal, "任务副本") {
+	if !strings.Contains(normal, "  - "+dir+"\n") || strings.Contains(normal, "missing") || strings.Contains(normal, "task copy") {
 		t.Fatalf("常态 Agent：%s", normal)
 	}
 	snap.TaskID = uuid.New()
-	if task := localDirectoriesPrompt(snap); !strings.Contains(task, "不在任务副本里") || !strings.Contains(task, "其他任务可能同时在用") {
+	if task := localDirectoriesPrompt(snap); !strings.Contains(task, "not part of the task copy") || !strings.Contains(task, "other tasks may be using them") {
 		t.Fatalf("任务内实例应说明不是副本：%s", task)
 	}
 	if got := localDirectoriesPrompt(agentconfig.Snapshot{Local: agentconfig.LocalAccess{Directories: []agentconfig.LocalDirectory{{Path: filepath.Join(dir, "missing")}}}}); got != "" {
@@ -111,7 +111,7 @@ func TestLocalDirectoriesPromptWording(t *testing.T) {
 	// 没有上下文文件夹（测试装配）时仍写出本机目录这一节。
 	e := &Executor{}
 	section, err := e.contextPrompt(agentconfig.Snapshot{Local: agentconfig.LocalAccess{Directories: []agentconfig.LocalDirectory{{Path: dir}}}}, agentDirs{}, "")
-	if err != nil || !strings.HasPrefix(section, "## 文件夹与上下文\n\n- 本机目录") {
+	if err != nil || !strings.HasPrefix(section, "## Folders and context\n\n- Local directories") {
 		t.Fatalf("没有上下文文件夹时：%q %v", section, err)
 	}
 }

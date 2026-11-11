@@ -16,20 +16,20 @@ func addCLIAuth(r *cli.Registry) {
 		c := &cli.Command{Path: []string{"project", "cli-account", action}, Identities: externalOnly, Network: true, Args: []cli.Arg{projectArg}, Output: "CLIAuthState", Run: cliAuthCommand(action)}
 		switch action {
 		case "login":
-			c.Summary = "发起 Google 个人登录；显式 operation UUID，不自动重发/轮询；由人本机浏览器完成 server 回调，不转发或手贴 code"
-			c.Flags = []cli.Flag{{Name: "cli", Type: cli.TypeEnum, Values: []string{"gcloud"}, Required: true, Description: "Google CLI；此命令仅 google_user，SA 使用 create/replace 文件录入"}, {Name: "operation-id", Type: cli.TypeString, Required: true, Description: "调用者生成并保留的稳定非零操作 UUID；响应未知用该 ID 查状态"}, {Name: "name", Type: cli.TypeString, Description: "新账号显示标签，不能用于身份定位"}, {Name: "account-id", Type: cli.TypeString, Description: "重登既有项目 gcloud 账号 UUID，需预期版本与 --yes"}, credentialRevisionFlag("expected-revision", false), cli.YesFlag}
+			c.Summary = "Start a personal Google login; explicit operation UUID, no automatic resend/polling; a person completes the server callback in a browser on the machine; the code is not forwarded or pasted by hand"
+			c.Flags = []cli.Flag{{Name: "cli", Type: cli.TypeEnum, Values: []string{"gcloud"}, Required: true, Description: "Google CLI; this command is google_user only; a service account is entered from a file with create/replace"}, {Name: "operation-id", Type: cli.TypeString, Required: true, Description: "A stable non-zero operation UUID generated and kept by the caller; when the response is unknown, check the status with this ID"}, {Name: "name", Type: cli.TypeString, Description: "Display label for the new account; cannot be used to locate the identity"}, {Name: "account-id", Type: cli.TypeString, Description: "UUID of the existing project gcloud account to log in again; requires the expected revision and --yes"}, credentialRevisionFlag("expected-revision", false), cli.YesFlag}
 			c.Constraints = []cli.Constraint{{Kind: cli.ExactlyOne, Flags: []string{"name", "account-id"}}, {Kind: cli.Together, Flags: []string{"account-id", "expected-revision"}}}
 		case "login-list":
-			c.Summary = "发现活动 Google CLI 登录；无 account-id 包含新建与重登，未知发起结果不凭名称猜成功"
-			c.Flags = []cli.Flag{{Name: "account-id", Type: cli.TypeString, Description: "可选既有账号 UUID 过滤；不传 cli/provider 查询参数"}}
+			c.Summary = "Discover active Google CLI logins; without account-id includes both new logins and re-logins; an unknown start result is not assumed successful by name"
+			c.Flags = []cli.Flag{{Name: "account-id", Type: cli.TypeString, Description: "Optional filter by existing account UUID; no cli/provider query parameters are sent"}}
 			c.Retry = true
 			c.Output = "CLIAuthOperations"
 		case "login-status":
-			c.Summary = "按操作 UUID 读取 Google CLI 登录；只有活动态可含短期 URL，终态 null，不持久化或自动打开"
+			c.Summary = "Read a Google CLI login by operation UUID; only an active one may contain a short-lived URL, null in a final state; it is not persisted or opened automatically"
 			c.Args = append(c.Args, operationArg)
 			c.Retry = true
 		case "login-cancel":
-			c.Summary = "取消 Google CLI 登录操作，不删除旧账号或重发 POST；终态保留原结果"
+			c.Summary = "Cancel a Google CLI login operation without deleting the old account or resending the POST; a final state keeps its original result"
 			c.Args = append(c.Args, operationArg)
 			c.Destructive = true
 		}

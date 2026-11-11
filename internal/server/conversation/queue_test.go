@@ -211,7 +211,7 @@ func TestQueueListsEachMessageInProcessingOrder(t *testing.T) {
 	e.ex.signal(e.agent, "release")
 	e.waitIdleOrDump(names{})
 	got := e.ex.messages()
-	if len(got) != 4 || !strings.Contains(got[1], c.String()) || strings.Contains(got[1], a.String()) || !strings.Contains(got[1], "另有 2 条未读消息") ||
+	if len(got) != 4 || !strings.Contains(got[1], c.String()) || strings.Contains(got[1], a.String()) || !strings.Contains(got[1], "2 more unread messages") ||
 		got[2] != "普通1" || !strings.Contains(got[3], a.String()) || !strings.Contains(got[3], b.String()) || !strings.Contains(got[3], "sender") {
 		t.Fatalf("执行顺序或提醒点名不对：%q", got)
 	}

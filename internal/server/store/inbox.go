@@ -754,7 +754,7 @@ func (s *Store) GetAddressableAgent(ctx context.Context, id uuid.UUID) (Agent, e
 }
 
 // CancelledNotice 是收件 Agent 读到被人取消的消息时得到的正文。
-const CancelledNotice = "这条消息已被人取消：不要处理，也不必等待或回复。"
+const CancelledNotice = "This message was cancelled by a person: do not handle it, and there is no need to wait or reply."
 
 // RedactCancelledFor 在收件 Agent 自己读取或列出时隐去被人取消的消息的正文与图片，只留取消说明：
 // 模型看到原文仍可能照做。发件方与控制台看到的保持原样。

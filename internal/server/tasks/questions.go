@@ -66,8 +66,7 @@ func (s *Service) QuestionChanged(ctx context.Context, taskID, questionID uuid.U
 		node.Question.Status = status
 		node.Question.CanAnswer = false
 		if !m.Record.Ended() && m.Record.Current() != nil && m.Record.Current().ID == node.ID && node.Status != "blocked" {
-			state := map[string]string{"answered": "已回答", "expired": "已到期", "closed": "已关闭"}[status]
-			text := fmt.Sprintf("你发起的问题 %s %s。请从Inbox读取原题及回复后继续当前节点，不把普通留言当作选项答案。", questionID, state)
+			text := fmt.Sprintf("The question %s you asked is now %s. Read the original question and its replies from the Inbox, then continue the current node; do not treat ordinary messages as answers to the options.", questionID, status)
 			turn, e := s.Store.EnqueueTaskTurn(ctx, m, text, "inbox_reminder", 1, &node.Question.MessageID)
 			if e != nil {
 				return nil, e

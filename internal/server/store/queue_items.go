@@ -283,18 +283,18 @@ func ReminderList(msgs []InboxMessage) string {
 			summary = string(r[:60]) + "…"
 		}
 		if summary == "" && len(m.Images) > 0 {
-			summary = fmt.Sprintf("[%d 张图片]", len(m.Images))
+			summary = fmt.Sprintf("[%d images]", len(m.Images))
 		}
-		fmt.Fprintf(&b, "- %s（来自 %s）：%s\n", m.ID, PartyLabel(m.From), summary)
+		fmt.Fprintf(&b, "- %s (from %s): %s\n", m.ID, PartyLabel(m.From), summary)
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
 
 // taskReminderText 在轮次开始时给出点名的内容；base 为轮次原有的提示。
 func taskReminderText(base string, carried []InboxMessage, others int) string {
-	text := base + "\n本轮请先处理以下 " + fmt.Sprint(len(carried)) + " 条 Inbox 消息：\n" + ReminderList(carried)
+	text := base + "\nFirst handle the following " + fmt.Sprint(len(carried)) + " Inbox messages this turn:\n" + ReminderList(carried)
 	if others > 0 {
-		text += fmt.Sprintf("\n另有 %d 条未读消息已在排队，稍后会另行提醒，本轮不必处理。", others)
+		text += fmt.Sprintf("\n%d more unread messages are already queued; you will be reminded of them later, so you need not handle them this turn.", others)
 	}
 	return text
 }

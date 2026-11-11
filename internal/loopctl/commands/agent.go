@@ -12,7 +12,7 @@ import (
 func addCatalog(r *cli.Registry) {
 	r.Add(&cli.Command{
 		Path:       []string{"model", "providers"},
-		Summary:    "列出固定版本 Pi 自带模型目录中的提供方",
+		Summary:    "List the providers in the model catalog bundled with the pinned Pi version",
 		Identities: externalOnly,
 		Network:    true,
 		Retry:      true,
@@ -23,11 +23,11 @@ func addCatalog(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"model", "list"},
-		Summary:    "列出某个提供方下的模型",
+		Summary:    "List the models of a provider",
 		Identities: externalOnly,
 		Network:    true,
 		Retry:      true,
-		Args:       []cli.Arg{{Name: "provider", Description: "提供方 ID，取自 model providers"}},
+		Args:       []cli.Arg{{Name: "provider", Description: "Provider ID, from model providers"}},
 		Output:     "ModelList",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			return get(ctx, inv, nil, "model-providers", inv.Args[0], "models")
@@ -35,7 +35,7 @@ func addCatalog(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"cli-template", "list"},
-		Summary:    "列出内置 CLI 模板：凭证字段、注入方式与安装状态",
+		Summary:    "List the built-in CLI templates: credential fields, injection method and install status",
 		Identities: externalOnly,
 		Network:    true,
 		Retry:      true,
@@ -79,7 +79,7 @@ func agentFields(inv *cli.Invocation) (map[string]any, error) {
 func addAgent(r *cli.Registry) {
 	r.Add(&cli.Command{
 		Path:        []string{"agent", "list"},
-		Summary:     "列出一个项目或平台中未删除的 Agent；必须指定 --project 或 --platform",
+		Summary:     "List the undeleted Agents of a project or of the platform; --project or --platform is required",
 		Identities:  externalOnly,
 		Network:     true,
 		Retry:       true,
@@ -96,7 +96,7 @@ func addAgent(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"agent", "get"},
-		Summary:    "查看 Agent 的配置详情（凭证只有元数据）",
+		Summary:    "Show an Agent's configuration details (credentials as metadata only)",
 		Identities: externalOnly,
 		Network:    true,
 		Retry:      true,
@@ -108,16 +108,16 @@ func addAgent(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"agent", "create"},
-		Summary:    "在一个项目或平台中创建常态 Agent；必须指定 --project 或 --platform，建好后不能移动",
+		Summary:    "Create a regular Agent in a project or on the platform; --project or --platform is required, and it cannot be moved after creation",
 		Identities: externalOnly,
 		Network:    true,
 		Stdin:      true,
 		Flags: []cli.Flag{
 			scopeFlags[0], scopeFlags[1],
-			{Name: "name", Type: cli.TypeString, Required: true, Description: "Agent 名称，在项目内（平台 Agent 在平台内）唯一；不能含 / 或 #，不能以 @ 开头，不能是 UUID 格式"},
-			{Name: "provider", Type: cli.TypeString, Required: true, Description: "模型提供方 ID，取自 model providers"},
-			{Name: "model", Type: cli.TypeString, Required: true, Description: "模型 ID，取自 model list <provider>"},
-			{Name: "prompt-file", Type: cli.TypePathOrStdin, Description: "从文件读取 Prompt，- 表示标准输入"},
+			{Name: "name", Type: cli.TypeString, Required: true, Description: "Agent name, unique within the project (within the platform for platform Agents); cannot contain / or #, cannot start with @, and cannot be in UUID format"},
+			{Name: "provider", Type: cli.TypeString, Required: true, Description: "Model provider ID, from model providers"},
+			{Name: "model", Type: cli.TypeString, Required: true, Description: "Model ID, from model list <provider>"},
+			{Name: "prompt-file", Type: cli.TypePathOrStdin, Description: "Read the Prompt from a file; - means standard input"},
 		},
 		Constraints: []cli.Constraint{scopeRequired},
 		Output:      "Agent",
@@ -135,17 +135,17 @@ func addAgent(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"agent", "update"},
-		Summary:    "修改 Agent 的名称、模型或 Prompt；含 Prompt（包括清空/同文本）须显式提供 agent get 的 promptVersion，版本冲突退出 8，不自动读取新版本重试；创建及仅改名称/模型不受此条件影响。下一派发生效",
+		Summary:    "Change an Agent's name, model or Prompt; a change that includes the Prompt (including clearing it or the same text) must explicitly give the promptVersion from agent get, a version conflict exits with 8, and it does not read the new version and retry automatically; creating, or changing only the name/model, is not subject to this. Takes effect at the next dispatch",
 		Identities: externalOnly,
 		Network:    true,
 		Stdin:      true,
 		Args:       []cli.Arg{agentArg},
 		Flags: []cli.Flag{
-			{Name: "name", Type: cli.TypeString, Description: "新名称"},
-			{Name: "provider", Type: cli.TypeString, Description: "模型提供方 ID，与 --model 一起提供"},
-			{Name: "model", Type: cli.TypeString, Description: "模型 ID，与 --provider 一起提供"},
-			{Name: "prompt-file", Type: cli.TypePathOrStdin, Description: "从文件读取新的 Prompt，- 表示标准输入；空文件清空，也须提供 --expected-prompt-version"},
-			{Name: "expected-prompt-version", Type: cli.TypeInt, Min: intp(1), Description: "编辑所依据的 agent get.promptVersion 正整数；与 --prompt-file 同时提供，不使用 configVersion"},
+			{Name: "name", Type: cli.TypeString, Description: "New name"},
+			{Name: "provider", Type: cli.TypeString, Description: "Model provider ID; give it together with --model"},
+			{Name: "model", Type: cli.TypeString, Description: "Model ID; give it together with --provider"},
+			{Name: "prompt-file", Type: cli.TypePathOrStdin, Description: "Read the new Prompt from a file; - means standard input; an empty file clears it, and --expected-prompt-version is still required"},
+			{Name: "expected-prompt-version", Type: cli.TypeInt, Min: intp(1), Description: "The positive integer agent get.promptVersion the edit is based on; give it together with --prompt-file; configVersion is not used"},
 		},
 		Constraints: []cli.Constraint{
 			{Kind: cli.AtLeastOne, Flags: []string{"name", "provider", "prompt-file"}},
@@ -166,7 +166,7 @@ func addAgent(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:        []string{"agent", "delete"},
-		Summary:     "软删除空闲 Agent；项目共享账号保留，平台私有凭证删除；忙闲与任务约束由服务端验证",
+		Summary:     "Soft-delete an idle Agent; shared project accounts are kept and private platform credentials are deleted; busy and task constraints are verified by the server",
 		Identities:  externalOnly,
 		Network:     true,
 		Destructive: true,
@@ -178,7 +178,7 @@ func addAgent(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"agent", "status"},
-		Summary:    "查看常态 Agent 状态；Agent 仅可只读查看同项目，支持 UUID、短名或完整地址，不接受 #任务地址",
+		Summary:    "Show a regular Agent's status; an Agent can only view, read-only, Agents in the same project; accepts a UUID, a short name or a full address, but not a #task address",
 		Identities: both,
 		Network:    true,
 		Retry:      true,
@@ -195,16 +195,16 @@ func addAgent(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"agent", "history"},
-		Summary:    "分页查看 Agent 的对话历史，每页按时间正序，包括各条回复的执行状态；不指定位置时返回最新一页",
+		Summary:    "Page through an Agent's conversation history, each page in chronological order, including the execution status of each reply; without a position, returns the latest page",
 		Identities: externalOnly,
 		Network:    true,
 		Retry:      true,
 		Args:       []cli.Arg{agentArg},
 		Flags: []cli.Flag{
-			{Name: "before", Type: cli.TypeString, Description: "返回这条消息之前的消息（向前翻页）"},
-			{Name: "after", Type: cli.TypeString, Description: "返回这条消息之后的消息（向后翻页）"},
-			{Name: "around-run", Type: cli.TypeString, Description: "返回以这次执行（回复）的用户消息为中心的一页，执行 ID 取自 anomaly list 或历史中的 run.id"},
-			{Name: "limit", Type: cli.TypeInt, Min: intp(1), Description: "每页条数；默认值与上限由服务端确定"},
+			{Name: "before", Type: cli.TypeString, Description: "Return the messages before this message (page backward)"},
+			{Name: "after", Type: cli.TypeString, Description: "Return the messages after this message (page forward)"},
+			{Name: "around-run", Type: cli.TypeString, Description: "Return a page centered on the user message of this execution (reply); the execution ID comes from anomaly list or run.id in the history"},
+			{Name: "limit", Type: cli.TypeInt, Min: intp(1), Description: "Items per page; the default and maximum are set by the server"},
 		},
 		Constraints: []cli.Constraint{{Kind: cli.AtMostOne, Flags: []string{"before", "after", "around-run"}}},
 		Output:      "MessagePage（hasMore 表示之前还有更早的消息，hasMoreAfter 表示之后还有更新的消息）",
@@ -223,11 +223,11 @@ func addAgent(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"agent", "timeline"},
-		Summary:    "查看一条回复的运行记录时间线：入队、派发、启动各阶段、工具调用、每次模型调用的用量、结束状态与原因",
+		Summary:    "Show the run record timeline of a reply: queuing, dispatch, each startup phase, tool calls, usage of each model call, and the final status and reason",
 		Identities: externalOnly,
 		Network:    true,
 		Retry:      true,
-		Args:       []cli.Arg{agentArg, {Name: "runId", Description: "执行（回复）ID，取自 agent history 中的 run.id，或 anomaly list 中的 runId"}},
+		Args:       []cli.Arg{agentArg, {Name: "runId", Description: "Execution (reply) ID, from run.id in agent history or runId in anomaly list"}},
 		Output:     "RunTimeline",
 		Run: withAgent(func(ctx context.Context, inv *cli.Invocation, id string) (any, error) {
 			return get(ctx, inv, nil, "agents", id, "runs", inv.Args[1], "timeline")
@@ -235,7 +235,7 @@ func addAgent(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:        []string{"agent", "session", "reset"},
-		Summary:     "确认重开 Agent 的会话（用于会话丢失之后）；Agent 正忙时服务端拒绝",
+		Summary:     "Confirm reopening an Agent's session (after the session was lost); the server refuses while the Agent is busy",
 		Identities:  externalOnly,
 		Network:     true,
 		Destructive: true,

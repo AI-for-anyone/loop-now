@@ -164,7 +164,7 @@ func (s *Store) QueueInboxReminderTx(ctx context.Context, tx *db.Tx, msg NewInbo
 	if s.InstanceID != nil {
 		instance = *s.InstanceID
 	}
-	_, r, err := s.insertMessageAndRunTx(ctx, tx, NewRun{AgentID: msg.To.ID, RunID: uuid.New(), InstanceID: instance, Text: "平台提醒", WhenBusy: msg.WhenBusy, TriggerInboxID: &msg.ID})
+	_, r, err := s.insertMessageAndRunTx(ctx, tx, NewRun{AgentID: msg.To.ID, RunID: uuid.New(), InstanceID: instance, Text: "Platform reminder", WhenBusy: msg.WhenBusy, TriggerInboxID: &msg.ID})
 	if err != nil {
 		return err
 	}

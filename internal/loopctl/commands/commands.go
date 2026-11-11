@@ -26,25 +26,25 @@ var (
 // Registry 返回 loopctl 的完整命令表。
 func Registry() *cli.Registry {
 	r := cli.NewRegistry()
-	r.Group("config", "外部身份的本地连接配置（~/.config/loopctl/config.json）")
-	r.Group("inbox", "Inbox 消息：列出摘要、逐条读取、发送、回复")
-	r.Group("model", "Pi 模型目录")
-	r.Group("cli-template", "内置 CLI 模板目录")
-	r.Group("project", "项目的新建、改名、删除、Manager 与共享账号")
-	r.Group("project manager", "项目 Manager 的指定与取消")
-	r.Group("agent", "管理项目中与平台持有的 Agent")
-	r.Group("agent session", "Agent 会话")
-	r.Group("agent source", "Agent 工作文件夹的来源（代码仓库或上传资料）")
-	r.Group("agent file", "上传资料来源中的文件")
-	r.Group("agent cli", "Agent 可用的 CLI")
-	r.Group("agent credential", "Agent 的 CLI 凭证与模型账号凭证（只写不读）")
-	r.Group("agent skill", "Agent 的 Skill 副本")
-	r.Group("skill", "Skills 模板库")
-	r.Group("usage", "token 用量统计")
-	r.Group("anomaly", "失败与被打断的回复")
-	r.Group("task", "平台内 Agent 的任务查询、创建与节点动作；权限由服务端验证")
-	r.Group("task artifact", "显式保存与下载任务文件成果")
-	r.Group("plugin", "插件：安装、更新、卸载与列出（外部身份）；在本机校验与打包插件目录")
+	r.Group("config", "Local connection configuration of an external identity (~/.config/loopctl/config.json)")
+	r.Group("inbox", "Inbox messages: list summaries, read one by one, send, reply")
+	r.Group("model", "Pi model catalog")
+	r.Group("cli-template", "Built-in CLI template catalog")
+	r.Group("project", "Create, rename and delete projects; their Manager and shared accounts")
+	r.Group("project manager", "Assign and remove the project Manager")
+	r.Group("agent", "Manage Agents in projects and Agents held by the platform")
+	r.Group("agent session", "Agent sessions")
+	r.Group("agent source", "Sources of an Agent's working folder (code repositories or uploaded material)")
+	r.Group("agent file", "Files in an uploaded-material source")
+	r.Group("agent cli", "CLIs available to an Agent")
+	r.Group("agent credential", "An Agent's CLI credentials and model account credentials (write-only)")
+	r.Group("agent skill", "An Agent's Skill copies")
+	r.Group("skill", "Skills template library")
+	r.Group("usage", "Token usage statistics")
+	r.Group("anomaly", "Failed and interrupted replies")
+	r.Group("task", "Task queries, creation and node actions for in-platform Agents; permissions are verified by the server")
+	r.Group("task artifact", "Explicitly save and download task file artifacts")
+	r.Group("plugin", "Plugins: install, update, uninstall and list (external identities); validate and pack plugin directories locally")
 	addLocal(r)
 	addInbox(r)
 	addCatalog(r)
@@ -63,7 +63,7 @@ func Registry() *cli.Registry {
 }
 
 // agentArg 是引用 Agent 的位置参数。
-var agentArg = cli.Arg{Name: "agent", Description: "Agent 的 ID，或地址：组织名/项目名/Agent名，同组织时可写 项目名/Agent名；平台持有的 Agent 直接写名称"}
+var agentArg = cli.Arg{Name: "agent", Description: "The Agent's ID, or its address: organization/project/Agent, or project/Agent within the same organization; for an Agent held by the platform, just its name"}
 
 func intp(n int) *int { return &n }
 

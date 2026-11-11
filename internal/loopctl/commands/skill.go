@@ -17,16 +17,16 @@ import (
 	"loop-now/internal/loopctl/output"
 )
 
-var skillArg = cli.Arg{Name: "skillId", Description: "Skills 库中的模板 ID，取自 skill list"}
+var skillArg = cli.Arg{Name: "skillId", Description: "Template ID in the Skills library, from skill list"}
 
 func addSkill(r *cli.Registry) {
 	archiveFlags := []cli.Flag{
-		{Name: "dir", Type: cli.TypePath, Description: "Skill 目录，由 loopctl 打包为 zip；目录中不能有符号链接或特殊文件"},
-		{Name: "zip", Type: cli.TypePath, Description: "Skill 目录的 zip 压缩包"},
+		{Name: "dir", Type: cli.TypePath, Description: "Skill directory, packed into a zip by loopctl; it cannot contain symbolic links or special files"},
+		{Name: "zip", Type: cli.TypePath, Description: "Zip archive of a Skill directory"},
 	}
 	r.Add(&cli.Command{
 		Path:       []string{"skill", "list"},
-		Summary:    "列出 Skills 模板库",
+		Summary:    "List the Skills template library",
 		Identities: externalOnly,
 		Network:    true,
 		Retry:      true,
@@ -37,7 +37,7 @@ func addSkill(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"skill", "get"},
-		Summary:    "查看模板的文件列表与 SKILL.md 内容",
+		Summary:    "Show a template's file list and SKILL.md content",
 		Identities: externalOnly,
 		Network:    true,
 		Retry:      true,
@@ -49,7 +49,7 @@ func addSkill(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:        []string{"skill", "create"},
-		Summary:     "新建模板：从本地目录、zip 文件，或只从一个 SKILL.md 创建；名称取自 SKILL.md 的 frontmatter",
+		Summary:     "Create a template from a local directory, a zip file, or a single SKILL.md; the name comes from the SKILL.md frontmatter",
 		Identities:  externalOnly,
 		Network:     true,
 		Stdin:       true,
@@ -69,7 +69,7 @@ func addSkill(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:        []string{"skill", "replace"},
-		Summary:     "用目录或 zip 整体替换模板内容（已复制给 Agent 的副本不受影响）",
+		Summary:     "Replace a template's content entirely with a directory or zip (copies already given to Agents are not affected)",
 		Identities:  externalOnly,
 		Network:     true,
 		Destructive: true,
@@ -83,7 +83,7 @@ func addSkill(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:       []string{"skill", "edit"},
-		Summary:    "编辑模板的 SKILL.md（只改这个文件）",
+		Summary:    "Edit a template's SKILL.md (only this file)",
 		Identities: externalOnly,
 		Network:    true,
 		Stdin:      true,
@@ -100,7 +100,7 @@ func addSkill(r *cli.Registry) {
 	})
 	r.Add(&cli.Command{
 		Path:        []string{"skill", "delete"},
-		Summary:     "删除模板（已复制给 Agent 的副本不受影响）",
+		Summary:     "Delete a template (copies already given to Agents are not affected)",
 		Identities:  externalOnly,
 		Network:     true,
 		Destructive: true,
