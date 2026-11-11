@@ -29,8 +29,24 @@ import (
 // 切换 worktree、设计同步与审查报告。MCP 工具不受这个白名单限制。
 var ClaudeCodeTools = []string{"Task", "TaskStop", "Bash", "Read", "Edit", "Write", "NotebookEdit", "Skill", "WebSearch", "ToolSearch"}
 
-// claudeSettings 经 --settings 传给 Claude Code：关掉它自己的自动记忆，Agent 的记忆以平台的上下文文件夹为准。
-const claudeSettings = `{"autoMemoryEnabled":false}`
+// ClaudeCodeHiddenSkills 是 disableBundledSkills 之后仍会出现的 Claude Code 自带技能（2.1.322 实测），经 skillOverrides 设为 off，
+// 对模型隐藏。它们不归平台管，有的会引导模型去改用户 ~/.claude 下的设置。Agent 自己的同名 Skill 带插件命名空间（loop-now:<名>），不受影响。
+// claude 升级后多出的自带技能会在启动时记警告日志（见 checkClaudeSkills），再补进这里。
+var ClaudeCodeHiddenSkills = []string{"design", "doctor", "plugin-authoring"}
+
+// claudePluginName 是平台给 Claude Code 的插件名：其中的技能以 loop-now:<名> 出现。
+const claudePluginName = "loop-now"
+
+// claudeSettings 经 --settings 传给 Claude Code：关掉它自己的自动记忆（Agent 的记忆以平台的上下文文件夹为准）；关掉自带的技能
+// （disableBundledSkills，插件的技能不受影响），并隐藏关掉之后仍会出现的那几个。Agent 看到的技能只有平台给的。
+var claudeSettings = func() string {
+	overrides := map[string]string{}
+	for _, name := range ClaudeCodeHiddenSkills {
+		overrides[name] = "off"
+	}
+	b, _ := json.Marshal(map[string]any{"autoMemoryEnabled": false, "disableBundledSkills": true, "skillOverrides": overrides})
+	return string(b)
+}()
 
 // claudeEfforts 是能作为 --effort 传的思考等级。
 var claudeEfforts = map[string]bool{"low": true, "medium": true, "high": true, "xhigh": true, "max": true}
@@ -290,6 +306,11 @@ func (cd claudeDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 		p.sessMu.Unlock()
 	}
 	cc, _ := p.rt.(*ccstream.Client)
+	if cc != nil {
+		if init := cc.Init(); init != nil && !p.initChecked.Swap(true) {
+			checkClaudeSkills(p, init)
+		}
+	}
 	switch tr.ErrorCode {
 	case executor.ErrRuntimeError:
 		if cc == nil {
@@ -309,6 +330,20 @@ func (cd claudeDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 		tr.ErrorMessage = strings.TrimSpace(fmt.Sprintf("Claude Code %s：%s %s", p.runtimeVersion, tr.ErrorMessage, tail(p.rt.Stderr(), e.o.StderrTailBytes)))
 	}
 	return tr
+}
+
+// checkClaudeSkills 核对进程报告的技能（每个进程一次）：Agent 应该只看到平台给的（loop-now:<名>）。多出来的多半是 claude 升级后
+// 新增的自带技能，记一条警告日志（带版本号与技能名），不阻断执行；据此补进 ClaudeCodeHiddenSkills。
+func checkClaudeSkills(p *proc, init *ccstream.Init) {
+	var extra []string
+	for _, s := range init.Skills {
+		if !strings.HasPrefix(s, claudePluginName+":") {
+			extra = append(extra, s)
+		}
+	}
+	if len(extra) > 0 {
+		p.log.Warn("Claude Code 报告了平台以外的技能，Agent 能看到它们；请把它们补进 ClaudeCodeHiddenSkills", "version", init.Version, "skills", extra)
+	}
 }
 
 func (claudeDriver) exited() (string, string) {
@@ -350,7 +385,7 @@ func (e *Executor) syncClaudePlugin(ctx context.Context, snap agentconfig.Snapsh
 	if err := os.MkdirAll(filepath.Join(d.claudePlugin, ".claude-plugin"), 0o700); err != nil {
 		return err
 	}
-	manifest, _ := json.Marshal(map[string]string{"name": "loop-now", "description": "Loop Now platform Skills"})
+	manifest, _ := json.Marshal(map[string]string{"name": claudePluginName, "description": "Loop Now platform Skills"})
 	if err := os.WriteFile(filepath.Join(d.claudePlugin, ".claude-plugin", "plugin.json"), manifest, 0o600); err != nil {
 		return err
 	}

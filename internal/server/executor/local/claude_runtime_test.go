@@ -40,7 +40,7 @@ func newClaudeHarness(t *testing.T, mutate func(o *Options)) *claudeHarness {
 	h := newHarness(t, func(o *Options) {
 		o.ClaudeBin = fakeclaudebin.Path(t)
 		o.RealHome = func() (string, error) { return realHome, nil }
-		o.Passthrough = append(o.Passthrough, "FAKECLAUDE_ARGS_FILE", "FAKECLAUDE_EXIT_AT_START", "ANTHROPIC_API_KEY", "CLAUDE_CODE_USE_BEDROCK", "CLAUDECODE")
+		o.Passthrough = append(o.Passthrough, "FAKECLAUDE_ARGS_FILE", "FAKECLAUDE_EXIT_AT_START", "FAKECLAUDE_EXTRA_SKILLS", "ANTHROPIC_API_KEY", "CLAUDE_CODE_USE_BEDROCK", "CLAUDECODE")
 		if mutate != nil {
 			mutate(o)
 		}
@@ -554,5 +554,43 @@ func TestClaudePurgeSkippedWhenArchiveFails(t *testing.T) {
 	}
 	if !strings.Contains(h.logs.String(), "归档 Claude Code 的会话记录失败") {
 		t.Fatalf("应记日志：%s", h.logs.String())
+	}
+}
+
+// Agent 看到的技能只有平台给的：--settings 关掉自带技能（disableBundledSkills）并把关不掉的几个设为 off；
+// 启动后核对进程报告的技能，有不以 loop-now: 开头的就记一条警告日志（每个进程一次），不阻断执行。
+func TestClaudeSkillsVisibleToAgent(t *testing.T) {
+	h := newClaudeHarness(t, nil)
+	clean := h.claudeAgent(nil)
+	if res, _ := h.exec(clean, "hi"); res.Outcome != executor.OutcomeCompleted {
+		t.Fatalf("执行：%+v", res)
+	}
+	var settings struct {
+		AutoMemoryEnabled    *bool             `json:"autoMemoryEnabled"`
+		DisableBundledSkills bool              `json:"disableBundledSkills"`
+		SkillOverrides       map[string]string `json:"skillOverrides"`
+	}
+	if err := json.Unmarshal([]byte(argValue(h.launches()[0], "--settings")), &settings); err != nil || settings.AutoMemoryEnabled == nil || *settings.AutoMemoryEnabled ||
+		!settings.DisableBundledSkills || len(settings.SkillOverrides) != len(ClaudeCodeHiddenSkills) {
+		t.Fatalf("--settings：%+v %v", settings, err)
+	}
+	for _, name := range ClaudeCodeHiddenSkills {
+		if settings.SkillOverrides[name] != "off" {
+			t.Errorf("自带技能 %s 应设为 off", name)
+		}
+	}
+	if strings.Contains(h.logs.String(), "平台以外的技能") {
+		t.Fatalf("只有平台的技能时不记警告：%s", h.logs.String())
+	}
+	h.env["FAKECLAUDE_EXTRA_SKILLS"] = "update-config,dataviz"
+	drifted := h.claudeAgent(nil)
+	for range 2 {
+		if res, _ := h.exec(drifted, "hi"); res.Outcome != executor.OutcomeCompleted {
+			t.Fatalf("多出技能也不阻断：%+v", res)
+		}
+	}
+	logs := h.logs.String()
+	if strings.Count(logs, "平台以外的技能") != 1 || !strings.Contains(logs, "update-config") || !strings.Contains(logs, "dataviz") || strings.Contains(logs, "loop-now:loopctl") {
+		t.Fatalf("多出的技能应记一次警告（只列多出的）：%s", logs)
 	}
 }

@@ -25,6 +25,7 @@ type wireLine struct {
 	Model      string      `json:"model"`
 	Version    string      `json:"claude_code_version"`
 	Tools      []string    `json:"tools"`
+	Skills     []string    `json:"skills"`
 	MCPServers []MCPServer `json:"mcp_servers"`
 
 	// result
@@ -149,7 +150,7 @@ func (c *Client) handleLine(line []byte) {
 	case "system":
 		if m.Subtype == "init" {
 			c.mu.Lock()
-			c.init = &Init{SessionID: m.SessionID, Model: m.Model, Version: m.Version, Tools: m.Tools, MCPServers: m.MCPServers}
+			c.init = &Init{SessionID: m.SessionID, Model: m.Model, Version: m.Version, Tools: m.Tools, Skills: m.Skills, MCPServers: m.MCPServers}
 			c.mu.Unlock()
 		}
 	case "stream_event":

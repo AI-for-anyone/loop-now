@@ -22,6 +22,7 @@
 //
 // 环境变量：FAKECLAUDE_VERSION 改版本号；FAKECLAUDE_EXIT_AT_START=1 启动即报不认识的选项并退出；FAKECLAUDE_NO_INIT=1 收到消息也不输出；
 // FAKECLAUDE_LOGGED_IN=0 或 HOME 下有 .fakeclaude-logged-out 让 auth status 报未登录；FAKECLAUDE_AUTH_FAIL=1 让 auth status 失败；
+// FAKECLAUDE_EXTRA_SKILLS（逗号分隔）加进 init 的技能列表，模拟 claude 新增的自带技能；
 // FAKECLAUDE_ARGS_FILE 每次启动追加一行参数（JSON）；purge 调用记在 FAKECLAUDE_LOG 与 HOME 下的 .fakeclaude-purge.log（每次一行：purge <路径> -y）。
 package main
 
@@ -130,6 +131,7 @@ type flags struct {
 	fork                     bool
 	tools                    []string
 	mcp                      []string
+	skills                   []string // 来自 --plugin-dir 的技能（<插件名>:<技能名>）与 FAKECLAUDE_EXTRA_SKILLS
 }
 
 func parse(args []string) flags {
@@ -151,6 +153,19 @@ func parse(args []string) flags {
 			f.resume = next()
 		case "--fork-session":
 			f.fork = true
+		case "--plugin-dir":
+			dir := next()
+			var manifest struct {
+				Name string `json:"name"`
+			}
+			if b, err := os.ReadFile(filepath.Join(dir, ".claude-plugin", "plugin.json")); err == nil && json.Unmarshal(b, &manifest) == nil {
+				entries, _ := os.ReadDir(filepath.Join(dir, "skills"))
+				for _, e := range entries {
+					if e.IsDir() {
+						f.skills = append(f.skills, manifest.Name+":"+e.Name())
+					}
+				}
+			}
 		case "--tools":
 			for _, t := range strings.Split(next(), ",") {
 				if t = strings.TrimSpace(t); t != "" {
@@ -172,6 +187,11 @@ func parse(args []string) flags {
 				}
 				sort.Strings(f.mcp)
 			}
+		}
+	}
+	for _, s := range strings.Split(os.Getenv("FAKECLAUDE_EXTRA_SKILLS"), ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			f.skills = append(f.skills, s)
 		}
 	}
 	return f
@@ -338,7 +358,7 @@ func turn(f flags, sess *session, model, text string, images, prior int, lines c
 		servers = append(servers, map[string]string{"name": name, "status": "connected"})
 	}
 	emit(map[string]any{"type": "system", "subtype": "init", "session_id": sess.id, "model": model, "claude_code_version": version(),
-		"tools": f.tools, "mcp_servers": servers, "permissionMode": "bypassPermissions", "apiKeySource": "none"})
+		"tools": f.tools, "skills": f.skills, "mcp_servers": servers, "permissionMode": "bypassPermissions", "apiKeySource": "none"})
 	emit(map[string]any{"type": "system", "subtype": "status", "status": "requesting", "session_id": sess.id})
 	emit(map[string]any{"type": "some_future_type", "payload": "ignored"})
 	cmd, arg, _ := strings.Cut(text, " ")
