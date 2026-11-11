@@ -8,6 +8,8 @@
 //	fake:args        回复启动参数（JSON）
 //	fake:images      回复 images=<图片数>
 //	fake:tool <命令> 调用一次 Bash 工具再回复 ran
+//	fake:tool2 <命令> 同上，但工具调用只出现在完整的 assistant 消息里，结果为错误，回复 ran2
+//	fake:bigline     输出很长的一行后不再输出
 //	fake:subagent    先输出一段子 Agent 的文字（parent_tool_use_id 非空），再回复 main
 //	fake:error <msg> 这一轮以错误结束
 //	fake:notloggedin 像未登录时那样以 api_error 结束
@@ -347,6 +349,17 @@ func turn(f flags, sess *session, model, text string, images, prior int, lines c
 		emit(map[string]any{"type": "assistant", "parent_tool_use_id": nil, "message": map[string]any{"id": "msg_tool", "model": model, "content": []any{map[string]any{"type": "tool_use", "id": id, "name": "Bash", "input": map[string]any{"command": arg}}}}})
 		emit(map[string]any{"type": "user", "parent_tool_use_id": nil, "message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "tool_result", "tool_use_id": id, "content": "ok", "is_error": false}}}})
 		reply(model, "ran")
+	case "fake:tool2":
+		// 工具调用只出现在完整的 assistant 消息里（没有 content_block_start）。
+		id := "toolu_fake_2"
+		emit(map[string]any{"type": "assistant", "parent_tool_use_id": nil, "message": map[string]any{"id": "msg_tool2", "model": model, "content": []any{map[string]any{"type": "tool_use", "id": id, "name": "Bash", "input": map[string]any{"command": arg}}}}})
+		emit(map[string]any{"type": "user", "parent_tool_use_id": nil, "message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "tool_result", "tool_use_id": id, "content": "ok", "is_error": true}}}})
+		reply(model, "ran2")
+	case "fake:bigline":
+		// 一行很长的输出，之后不再输出（读方若停读，这里会卡住）。
+		stream(nil, map[string]any{"type": "content_block_delta", "index": 0, "delta": map[string]any{"type": "text_delta", "text": strings.Repeat("x", 8192)}})
+		time.Sleep(30 * time.Second)
+		return
 	case "fake:subagent":
 		parent := "toolu_task"
 		stream(&parent, map[string]any{"type": "content_block_delta", "index": 0, "delta": map[string]any{"type": "text_delta", "text": "SUBAGENT"}})

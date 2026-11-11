@@ -175,11 +175,21 @@ func (c *Client) handleLine(line []byte) {
 			}
 		}
 	case "assistant":
-		if t == nil || m.ParentToolUseID != nil || !active {
+		if t == nil || m.ParentToolUseID != nil {
 			return
 		}
 		for _, b := range blocks(m.Message) {
-			if b.Type != "tool_use" || b.Name != "Bash" {
+			if b.Type != "tool_use" || b.ID == "" {
+				continue
+			}
+			if _, seen := t.tools[b.ID]; !seen {
+				// 流式事件里没登记到的工具调用（输出格式变了时）在完整消息里补登记，工具结束才对得上。
+				t.tools[b.ID] = b.Name
+				if active {
+					t.sink.ToolStarted(b.ID, b.Name)
+				}
+			}
+			if b.Name != "Bash" || !active {
 				continue
 			}
 			var in struct {

@@ -32,6 +32,8 @@ const (
 	defaultInterruptGrace = 2 * time.Second
 	// maxLine 是一行输出的上限（图片、长工具结果都在一行里）。
 	maxLine = 64 << 20
+	// exitWait 是进程正在退出（已发 SIGINT 或已结束）时，新消息等它退出的上限；超时就结束进程。
+	exitWait = 5 * time.Second
 )
 
 // Options 是客户端的参数。
@@ -42,6 +44,8 @@ type Options struct {
 	InitTimeout time.Duration
 	// Kill 结束进程（连同进程组）；为空时只结束进程本身。
 	Kill func(pid int) error
+	// MaxLine 是一行输出的上限；为 0 时取 64 MiB（图片、长工具结果都在一行里）。
+	MaxLine int
 }
 
 // Observer 接收用量与事件，不论当时有没有进行中的一轮；inTurn 表示是否发生在某一轮之中。
@@ -104,6 +108,7 @@ type Client struct {
 	last     ResultInfo
 	controls map[string]chan bool // 打断控制消息的 request_id → 是否成功
 	closed   bool                 // stdout 已结束
+	exiting  bool                 // 已发 SIGINT 或已结束进程：它一定会退出，不再写入新消息
 
 	done    chan struct{}
 	exitErr error
@@ -117,6 +122,9 @@ func Start(cmd *exec.Cmd, o Options) (*Client, error) {
 	}
 	if o.InterruptGrace <= 0 {
 		o.InterruptGrace = defaultInterruptGrace
+	}
+	if o.MaxLine <= 0 {
+		o.MaxLine = maxLine
 	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -150,11 +158,10 @@ func Start(cmd *exec.Cmd, o Options) (*Client, error) {
 		case <-readerDone:
 		case <-time.After(exitGrace):
 		}
-		c.mu.Lock()
-		c.exitErr = err
-		c.mu.Unlock()
-		c.shutdown()
+		// 先公布进程已退出（Done），再结束进行中的一轮：调用方拿到这一轮的结果时，进程已经确定不在了。
+		finish := c.shutdown(err)
 		close(c.done)
+		finish()
 	}()
 	return c, nil
 }
@@ -217,6 +224,12 @@ func (c *Client) Prompt(ctx context.Context, text string, sink runturn.Sink, ima
 	if c.closed {
 		c.mu.Unlock()
 		return c.exitedBeforeTurn()
+	}
+	if c.exiting {
+		// 打断时发过 SIGINT 的进程随后一定退出，写进去的消息会丢：不写，等它退出，让调用方用 --resume 重新起进程。
+		c.mu.Unlock()
+		c.awaitExit()
+		return runturn.Result{}, runturn.ErrExited
 	}
 	if c.turn != nil {
 		c.mu.Unlock()
@@ -355,15 +368,44 @@ func (c *Client) interruptSignal() {
 		c.kill()
 		return
 	}
+	c.markExiting()
 	_ = c.process.Signal(os.Interrupt)
 }
 
 func (c *Client) kill() {
+	c.markExiting()
 	if c.o.Kill != nil {
 		_ = c.o.Kill(c.pid)
 		return
 	}
 	_ = c.process.Kill()
+}
+
+func (c *Client) markExiting() {
+	c.mu.Lock()
+	c.exiting = true
+	c.mu.Unlock()
+}
+
+// Exiting 报告进程是否已在退出（发过 SIGINT 或已结束）：这样的进程不能再交给它新消息。
+func (c *Client) Exiting() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.exiting || c.closed
+}
+
+// awaitExit 等正在退出的进程退出；超过上限就结束它，再等一会儿收尾。
+func (c *Client) awaitExit() {
+	select {
+	case <-c.done:
+		return
+	case <-time.After(exitWait):
+	}
+	c.kill()
+	select {
+	case <-c.done:
+	case <-time.After(exitGrace + time.Second):
+	}
 }
 
 func (c *Client) write(line []byte) error {
@@ -373,28 +415,41 @@ func (c *Client) write(line []byte) error {
 	return err
 }
 
+// readLoop 逐行读输出。读到错误（例如一行超过上限）而不是 EOF 时结束进程：否则它会卡在写 stdout 上，这一轮永远等不到结果；
+// 进程退出后这一轮以 runtime_exited 结束。
 func (c *Client) readLoop(r io.Reader) {
 	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, 64<<10), maxLine)
+	sc.Buffer(make([]byte, 0, min(64<<10, c.o.MaxLine)), c.o.MaxLine)
 	for sc.Scan() {
 		c.handleLine(sc.Bytes())
 	}
+	if sc.Err() != nil {
+		c.kill()
+		_, _ = io.Copy(io.Discard, r)
+	}
 }
 
-// shutdown 在 stdout 结束后收尾：进行中的一轮以进程退出结束，等待确认的打断全部放弃。
-func (c *Client) shutdown() {
+// shutdown 在进程退出后收尾：记下退出错误、标记已结束，返回结束进行中的一轮与放弃等待确认的打断的函数（在公布 Done 之后调用）。
+func (c *Client) shutdown(exitErr error) func() {
 	c.mu.Lock()
+	c.exitErr = exitErr
 	c.closed = true
 	t := c.turn
 	c.turn = nil
 	started := c.init != nil
+	var pending []chan bool
 	for id, ch := range c.controls {
 		delete(c.controls, id)
-		close(ch)
+		pending = append(pending, ch)
 	}
 	c.mu.Unlock()
-	if t != nil {
-		t.exited(started)
+	return func() {
+		for _, ch := range pending {
+			close(ch)
+		}
+		if t != nil {
+			t.exited(started)
+		}
 	}
 }
 

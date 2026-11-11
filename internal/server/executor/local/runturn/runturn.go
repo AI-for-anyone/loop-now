@@ -5,7 +5,7 @@ package runturn
 import "errors"
 
 // ErrExited 表示运行时进程已退出或其 stdout 已关闭。
-var ErrExited = errors.New("pirpc: Pi 进程已退出")
+var ErrExited = errors.New("运行时进程已退出")
 
 // Sink 接收一轮执行的实时事件。调用发生在客户端的读协程上，实现必须迅速返回，
 // 且不得在回调中同步调用客户端的方法。

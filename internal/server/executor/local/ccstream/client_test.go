@@ -259,3 +259,67 @@ func TestStartFailures(t *testing.T) {
 		t.Fatal("启动超时后进程应被结束")
 	}
 }
+
+// 发过 SIGINT 的进程随后一定退出，写进去的消息会丢：打断那一轮结束后立刻发下一条，不写入，等它退出后返回 ErrExited，
+// 让调用方用 --resume 重新起进程。
+func TestPromptAfterSignalWaitsForExit(t *testing.T) {
+	c := start(t, ccstream.Options{InterruptGrace: 200 * time.Millisecond})
+	s := newSink()
+	done := make(chan runturn.Result, 1)
+	go func() {
+		res, _ := c.Prompt(ctx(t), "fake:noack", s)
+		done <- res
+	}()
+	<-s.firstOut
+	if err := c.Abort(ctx(t)); err != nil {
+		t.Fatal(err)
+	}
+	if res := <-done; res.Outcome != runturn.OutcomeAborted {
+		t.Fatalf("打断：%+v", res)
+	}
+	if !c.Exiting() {
+		t.Fatal("发过 SIGINT 后应标记为正在退出")
+	}
+	begin := time.Now()
+	res, err := c.Prompt(ctx(t), "right after", nil)
+	if !errors.Is(err, runturn.ErrExited) || res.Text != "" {
+		t.Fatalf("紧跟的下一条不应写进正在退出的进程：%+v %v", res, err)
+	}
+	if time.Since(begin) > 4*time.Second {
+		t.Fatalf("应等到进程退出就返回，用了 %v", time.Since(begin))
+	}
+	select {
+	case <-c.Done():
+	default:
+		t.Fatal("返回时进程应已退出")
+	}
+}
+
+// 工具调用只出现在完整的 assistant 消息里时补登记：开始、命令与结束都对得上。
+func TestToolUseOnlyInAssistantMessage(t *testing.T) {
+	c := start(t, ccstream.Options{})
+	s := newSink()
+	res, err := c.Prompt(ctx(t), "fake:tool2 ls -la", s)
+	if err != nil || res.Text != "ran2" {
+		t.Fatalf("结果：%+v %v", res, err)
+	}
+	if got := s.String(); got != "ran2 | start toolu_fake_2 Bash; command toolu_fake_2 bash ls -la; end-error toolu_fake_2 Bash" {
+		t.Fatalf("sink：%s", got)
+	}
+}
+
+// 一行超过上限时停读并结束进程：这一轮以 runtime_exited 结束，不会挂住。
+func TestOverlongLineEndsTurn(t *testing.T) {
+	c := start(t, ccstream.Options{MaxLine: 1024})
+	if _, err := c.Prompt(ctx(t), "warm up", nil); err != nil {
+		t.Fatal(err)
+	}
+	begin := time.Now()
+	res, err := c.Prompt(ctx(t), "fake:bigline", nil)
+	if err != nil || res.ErrorCode != executor.ErrRuntimeExited {
+		t.Fatalf("超长行：%+v %v", res, err)
+	}
+	if time.Since(begin) > 10*time.Second {
+		t.Fatalf("不应等到外层超时：%v", time.Since(begin))
+	}
+}

@@ -267,8 +267,12 @@ func (s *Store) switchRuntimeTx(ctx context.Context, tx *db.Tx, agentID uuid.UUI
 		return err
 	}
 	var epoch int
-	if err := tx.QueryRow(ctx, `UPDATE agent_sessions SET session_file = NULL, state = 'none', epoch = epoch + 1, updated_at = $2
-		WHERE agent_id = $1 RETURNING epoch`, agentID, tx.Now()).Scan(&epoch); err != nil {
+	err := tx.QueryRow(ctx, `UPDATE agent_sessions SET session_file = NULL, state = 'none', epoch = epoch + 1, updated_at = $2
+		WHERE agent_id = $1 RETURNING epoch`, agentID, tx.Now()).Scan(&epoch)
+	if errors.Is(err, db.ErrNoRows) {
+		return nil // 没有会话行（不应出现，新建 Agent 时就有）：没有可重置的会话
+	}
+	if err != nil {
 		return err
 	}
 	return s.insertEvent(ctx, tx, LifecycleEvent{AgentID: agentID, Type: EventSessionReset,

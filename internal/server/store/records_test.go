@@ -371,3 +371,32 @@ func TestRuntimeSwitchResetsSession(t *testing.T) {
 		t.Fatalf("重置事件：%+v", resets)
 	}
 }
+
+// 有排队（还没开始）的消息时也能切换运行时：它们之后由新运行时处理；会话照常重置。没有会话行时切换照常保存。
+func TestRuntimeSwitchWithQueuedMessages(t *testing.T) {
+	e := newRecEnv(t)
+	provider, model := func(p string) *string { return &p }, func(m string) *string { return &m }
+	r := e.send(true, "")
+	queued := e.send(false, "")
+	if queued.Status != "queued" {
+		t.Fatalf("第二条应排队：%+v", queued.Status)
+	}
+	if _, _, _, err := e.s.FinishRun(e.ctx, r.ID, store.RunEnd{Status: "completed"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.RecordSessionFile(e.ctx, e.agent, "/tmp/pi-session.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("claude-code"), ModelID: model("sonnet")}); err != nil {
+		t.Fatalf("有排队消息时切换：%v", err)
+	}
+	if sess, _ := e.s.GetAgentSession(e.ctx, e.agent); sess.State != "none" || sess.Epoch != 2 {
+		t.Fatalf("会话应重置：%+v", sess)
+	}
+	if _, err := e.s.Pool.Exec(e.ctx, `DELETE FROM agent_sessions WHERE agent_id = $1`, e.agent); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("anthropic"), ModelID: model("claude-x")}); err != nil {
+		t.Fatalf("没有会话行时切换照常保存：%v", err)
+	}
+}
