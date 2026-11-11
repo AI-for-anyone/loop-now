@@ -86,8 +86,11 @@ describe('带项目的地址', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe(`${base('模型适配')}/agents/${a.id}/chat`))
     expect(router.state.historyAction).toBe('REPLACE')
     const note = await screen.findByText('项目「模型接入」已在别处改名为「模型适配」，地址已随之更新。')
+    // 路由的新地址在 transition 里才渲染到页面：router.state 已变而页面还是旧地址时点"知道了"，旧地址下仍按 ID 跟随，
+    // 便签会被重新贴上。等页面也换到新地址（"对话"标为当前页）再点。
+    await waitFor(() => expect(screen.getByRole('link', { name: '对话' })).toHaveAttribute('aria-current', 'page'))
     await userEvent.setup().click(within(note.parentElement!).getByRole('button', { name: '知道了' }))
-    expect(screen.queryByText(/已在别处改名/)).toBeNull()
+    await waitFor(() => expect(screen.queryByText(/已在别处改名/)).toBeNull())
     expect(scopeSwitcher('模型适配')).toBeInTheDocument()
   })
 

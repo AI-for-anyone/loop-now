@@ -24,7 +24,7 @@ export function runIPC(options = {}) {
   if(record.type==='result'||forcedTerminal)terminal=true;
   output.write(line,()=>{queued--;if(queued===0){clearTimeout(drainTimer);drainTimer=undefined;}if(terminal&&queued===0){input.destroy();output.end(()=>process.exit(0));}});
  };
- const helper=createHelper({...options,send});
+ const helper=(options.create??createHelper)({...options,send});
  process.on('uncaughtException',()=>{helper.protocolError();});
  process.on('unhandledRejection',()=>{helper.protocolError();});
  output.on('error',()=>process.exit(2));

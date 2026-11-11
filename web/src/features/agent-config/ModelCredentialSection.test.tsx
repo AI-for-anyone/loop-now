@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '@/api/client'
 import { modelAuthKey } from '@/api/model-auth'
 import { apiUrl, errorBody, makeAgent } from '@/test/api'
-import { providers, renderConfig } from '@/test/config'
+import { pluginProvider, providers, renderConfig } from '@/test/config'
 import { codexProvider, makeModelAccount, makeModelLogin } from '@/test/model-auth'
 import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
@@ -127,5 +127,12 @@ describe('按正式提供方接口认证', () => {
     expect(document.body.innerHTML).not.toContain('fixture-secret-key')
     await user.click(within(area()).getByRole('button', { name: '替换 API Key' })); await user.type(screen.getByLabelText('API Key'), 'cancelled-key'); await user.click(screen.getByRole('button', { name: '取消' }))
     await user.click(within(area()).getByRole('button', { name: '替换 API Key' })); expect(screen.getByLabelText('API Key')).toHaveValue('')
+  })
+
+  it('不属于项目的 Agent 用着插件提供方：说明插件提供方只给项目 Agent 用，不能在这里登录，也不给登录按钮', async () => {
+    const agent = makeAgent({ scope: 'platform', projectId: null, model: { provider: 'grok-cli', modelId: 'grok-4' }, modelCredential: null })
+    await renderConfig({ agent, handlers: [http.get(apiUrl('/model-providers'), () => HttpResponse.json({ ...providers, providers: [...providers.providers, pluginProvider('grok-cli', { unavailableReason: 'platform_agent' })] }))] })
+    expect(await within(area()).findByText('插件提供方只给项目 Agent 用，不能在这里登录。')).toBeInTheDocument()
+    expect(within(area()).queryByRole('button', { name: /登录/ })).toBeNull()
   })
 })

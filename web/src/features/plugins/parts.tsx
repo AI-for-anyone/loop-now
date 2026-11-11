@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { ExternalLinkIcon } from 'lucide-react'
 import type { Schemas } from '@/api/client'
+import { pluginTrust, usePluginMarkets } from '@/api/plugins'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 
@@ -14,15 +15,25 @@ export function IdVersion({ id, version }: { id: string; version: string }) {
   return <code className="rounded-[6px] bg-ink/[0.06] px-2 py-0.5 font-mono text-[12px] leading-[18px] font-bold text-ink">{text.idVersion(id, version)}</code>
 }
 
-// 官方（随平台发布）用粉色贴纸；其余来源没有经过审核，用黄底写明来源。
-export function SourceBadge({ source }: { source: Pick<Schemas['PluginResolvedSource'], 'kind'> }) {
-  if (source.kind === 'builtin')
+// 官方（随平台发布，或从官方市场装的）用粉色贴纸；市场标为已验证的用绿底；其余来源没有经过审核，用黄底写明来源。
+// trust 缺省时只按来源判断（随平台发布的为官方）；为 undefined 时还不知道（市场列表没读到），先不显示。
+export function SourceBadge({ source, trust = source.kind === 'builtin' ? 'official' : null }: { source: Pick<Schemas['PluginResolvedSource'], 'kind'>; trust?: 'official' | 'verified' | null }) {
+  if (trust === 'official')
     return (
       <span className="riso-tilt rounded-[6px] px-1.5 py-px text-[11.5px] leading-4 font-black text-white [--tilt-bg:var(--riso-pink)] [--tilt-shadow:2px_2px_0_var(--ink)] [--tilt:-4deg]">
         {text.sources.builtin}
       </span>
     )
+  if (trust === 'verified') return <span className="rounded-[6px] bg-tint-green px-1.5 py-px text-[11.5px] leading-4 font-black text-green-text">{text.verifiedSource(text.sources[source.kind])}</span>
   return <span className="rounded-[6px] bg-tint-yellow px-1.5 py-px text-[11.5px] leading-4 font-black text-ink">{text.unverified(text.sources[source.kind])}</span>
+}
+
+// 已安装插件的来源标签：从市场装的按市场判断（官方市场、已验证的条目算审阅过），市场列表读到前不显示；读取失败时按未审阅。
+export function InstalledSourceBadge({ plugin }: { plugin: Pick<Schemas['Plugin'], 'id' | 'source'> }) {
+  const markets = usePluginMarkets(plugin.source.market !== null)
+  const trust = pluginTrust(markets.isError ? [] : markets.data?.markets, plugin)
+  if (trust === undefined) return null
+  return <SourceBadge source={plugin.source} trust={trust} />
 }
 
 const statusTone: Record<Schemas['PluginStatus'], { dot: string; text: string }> = {

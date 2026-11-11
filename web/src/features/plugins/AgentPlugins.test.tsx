@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
 import { routes } from '@/app/routes'
 import { http, HttpResponse } from 'msw'
-import { defaultAgentPath, defaultProject, makeAgent, platformAgentsUrl, toListItem } from '@/test/api'
+import { apiUrl, defaultAgentPath, defaultProject, makeAgent, platformAgentsUrl, toListItem } from '@/test/api'
 import { fakePlugins, larkAccountKind, makeAccount } from '@/test/plugins'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
@@ -50,6 +50,24 @@ describe('Agent 配置页的插件段', () => {
     await user.click(within(form).getByRole('button', { name: '保存' }))
     await waitFor(() => expect(fake.writes()).toEqual([{ method: 'PUT', path: `/agents/${agent.id}/plugins/lark-notify`, query: {}, body: { granted: true, accountIds: [personal.id] } }]))
     expect(await within(plugins).findByText('已保存', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
+  })
+
+  it('授权保存后，模型选择用的目录（带 agentId）重新读取，插件提供方能不能选随之更新', async () => {
+    const user = userEvent.setup()
+    const { agent } = renderAgent([agentPlugin({ pluginId: 'lark-notify', displayName: '飞书通知', accountKinds: [larkAccountKind] })])
+    const reads: string[] = []
+    server.use(http.get(apiUrl('/model-providers'), ({ request }) => {
+      reads.push(new URL(request.url).searchParams.get('agentId') ?? '')
+      return HttpResponse.json({ piVersion: '1.1.0', catalogGeneratedAt: null, providers: [] })
+    }))
+    const plugins = await section()
+    await user.click(await within(plugins).findByRole('button', { name: /飞书通知/ }))
+    const form = within(plugins).getByRole('region', { name: '飞书通知' })
+    await user.click(within(form).getByRole('checkbox', { name: '授权 飞书通知' }))
+    const before = reads.length
+    await user.click(within(form).getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(reads.length).toBeGreaterThan(before))
+    expect(reads.at(-1)).toBe(agent.id)
   })
 
   it('有未保存的修改时切到别的插件先确认', async () => {

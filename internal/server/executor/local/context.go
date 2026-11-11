@@ -22,7 +22,7 @@ var entryCandidates = []string{"AGENTS.override.md", "AGENTS.md", "AGENTS.MD", "
 // 生效的本机目录，以及项目（平台 Agent 为全局）上下文入口 AGENTS.md 的原文（不截断）。自己的入口由 Pi 从工作目录读取，不在这里重复。
 // 只在启动时读取，入口的修改要等 Pi 下次重启才生效；也不参与是否重启的判断（本机目录清单的变化由 snap.Local.Identity 决定重启）。
 func (e *Executor) contextPrompt(snap agentconfig.Snapshot, d agentDirs, loginHome string) (string, error) {
-	local := localDirectoriesPrompt(snap) + loginsPrompt(loginHome)
+	local := localDirectoriesPrompt(snap) + loginsPrompt(loginHome) + providerLoginPrompt(snap, loginHome)
 	if e.o.ContextDir == "" {
 		if local == "" {
 			return "", nil
@@ -89,6 +89,14 @@ func localDirectoriesPrompt(snap agentconfig.Snapshot) string {
 
 // loginsPrompt 返回“本机登录”一条（含末尾换行）：开着“用本机的登录状态”时告诉 Agent 它以用户本人的身份使用本机工具，
 // 以及遇到需要交互授权的工具时不要反复重试（Pi 没有终端，弹窗或口令提示只会一直等到超时）；关着时为空。
+// providerLoginPrompt 在开着“用本机的登录状态”、模型提供方来自插件且状态随账号走时说明：用的是本机该扩展自己的登录。
+func providerLoginPrompt(snap agentconfig.Snapshot, home string) string {
+	if home == "" || snap.ProviderState == nil || len(snap.ProviderState.Paths) == 0 {
+		return ""
+	}
+	return "- 模型订阅：你的模型提供方 " + snap.Provider + " 用的是用户本机主目录里该扩展自己的登录，不是项目里配置的订阅账号。\n"
+}
+
 func loginsPrompt(home string) string {
 	if home == "" {
 		return ""

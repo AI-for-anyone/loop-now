@@ -102,10 +102,11 @@ func (c *Coordinator) Resolve(ctx context.Context, b modelcredential.Binding) (m
 		}
 		if v.RefreshState == "ready" {
 			value, e := modelcredential.Decode(v.Secret)
-			if e != nil || value.Kind() != v.AuthMethod {
+			if e != nil || value.AuthMethod() != v.AuthMethod {
 				return modelcredential.Credential{}, ErrCredentialUnavailable
 			}
-			if value.Kind() == "api_key" || value.ExpiresAt().After(c.Options.Now().Add(c.Options.RefreshSkew)) {
+			// 插件提供方的订阅登录由扩展自己在状态目录里刷新，平台不刷新。
+			if value.Kind() == "api_key" || value.Kind() == modelcredential.PluginState || value.ExpiresAt().After(c.Options.Now().Add(c.Options.RefreshSkew)) {
 				return value, nil
 			}
 			if c.Refresher == nil {

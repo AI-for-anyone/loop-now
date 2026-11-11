@@ -155,6 +155,50 @@ type turn struct {
 	respondedShut bool
 	ended         []endedMessage
 	partial       strings.Builder // 当前尚未结束的助手消息的增量文本
+	notices       []CommandNotice // 这一轮里扩展的 ctx.ui.notify（Pi 直接处理命令时随结果交出）
+	noticeBytes   int
+	noticesCut    bool
+}
+
+// CommandNotice 是扩展在这一轮里用 ctx.ui.notify 给出的一条消息（扩展原文，纯文本）。
+type CommandNotice struct {
+	Level   string `json:"level"` // info / warning / error
+	Message string `json:"message"`
+}
+
+// 一轮最多收集的通知：条数与合计字节数，超出的截断并标记。
+const (
+	MaxCommandNotices     = 50
+	MaxCommandNoticeBytes = 16 << 10
+)
+
+// addNotice 收集一条通知；超过上限时截断（最后一条按剩余字节截到 UTF-8 边界）并标记。
+func (t *turn) addNotice(level, message string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.inactive() || t.noticesCut {
+		return
+	}
+	if len(t.notices) >= MaxCommandNotices {
+		t.noticesCut = true
+		return
+	}
+	if left := MaxCommandNoticeBytes - t.noticeBytes; len(message) > left {
+		message = strings.ToValidUTF8(message[:max(left, 0)], "")
+		t.noticesCut = true
+		if message == "" {
+			return
+		}
+	}
+	t.noticeBytes += len(message)
+	t.notices = append(t.notices, CommandNotice{Level: level, Message: message})
+}
+
+// commandNotices 返回收集到的通知与是否截断。
+func (t *turn) commandNotices() ([]CommandNotice, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return append([]CommandNotice(nil), t.notices...), t.noticesCut
 }
 
 func newTurn(promptID string, sink TurnSink) *turn {

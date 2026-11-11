@@ -58,8 +58,20 @@ func TestProjectCredentialFormalContract(t *testing.T) {
 	for _, bad := range []map[string]any{{"type": "api_key", "key": "fixture", "expectedRevision": float64(2)}, {"type": "api_key", "key": "fixture", "metadata": map[string]any{}}, {"type": "api_key", "key": nil}, {"credential": map[string]any{"type": "api_key", "key": "fixture"}}} {
 		invalid("ProjectCredentialInput", bad)
 	}
-	operation := map[string]any{"id": uuid.NewString(), "projectId": project, "provider": "openai-codex", "targetAccountId": nil, "targetRevision": nil, "name": "new", "status": "awaiting_authorization", "accountId": nil, "startedAt": "2026-10-15T12:00:00Z", "expiresAt": "2026-10-15T12:15:00Z", "completedAt": nil, "authorizationUrl": "https://auth.openai.com/oauth/authorize?state=fixture", "errorCode": nil, "errorMessage": nil}
+	operation := map[string]any{"id": uuid.NewString(), "projectId": project, "provider": "openai-codex", "targetAccountId": nil, "targetRevision": nil, "name": "new", "status": "awaiting_authorization", "accountId": nil, "startedAt": "2026-10-15T12:00:00Z", "expiresAt": "2026-10-15T12:15:00Z", "completedAt": nil, "authorizationUrl": "https://auth.openai.com/oauth/authorize?state=fixture", "errorCode": nil, "errorMessage": nil, "deviceCode": nil, "prompt": nil}
 	check("ProjectModelAuthState", map[string]any{"operation": operation, "account": nil})
+	plugin := map[string]any{}
+	for k, v := range operation {
+		plugin[k] = v
+	}
+	plugin["provider"], plugin["authorizationUrl"] = "grok-cli", "https://accounts.example.test/authorize?state=fixture"
+	plugin["deviceCode"] = map[string]any{"userCode": "ABCD-EFGH", "verificationUri": "https://accounts.example.test/device", "expiresAt": nil}
+	plugin["prompt"] = map[string]any{"id": "1", "kind": "select", "message": "Pick", "options": []any{map[string]any{"id": "browser", "label": "Browser"}}}
+	check("ProjectModelAuthState", map[string]any{"operation": plugin, "account": nil})
+	check("ProjectModelLoginInput", map[string]any{"promptId": "1", "value": "browser"})
+	invalid("ProjectModelLoginInput", map[string]any{"promptId": "1"})
+	plugin["prompt"] = map[string]any{"id": "1", "kind": "confirm", "message": "x", "options": []any{}}
+	invalid("ProjectModelAuthOperation", plugin)
 	operation["status"] = "succeeded"
 	operation["completedAt"] = "2026-10-15T12:01:00Z"
 	operation["authorizationUrl"] = nil

@@ -38,6 +38,10 @@ type Manifest struct {
 	Platform   string                     `json:"platform"`
 	Bin        []string                   `json:"bin"`
 	MCPServers map[string]json.RawMessage `json:"mcpServers"`
+	// ProviderState 是 loopNow.providerState：插件注册的模型提供方有哪些状态随项目账号走（plugins/SPEC.md §13）。
+	ProviderState map[string]ProviderState `json:"providerState,omitempty"`
+	// OwnDisplayName 表示 DisplayName 是包自己写的 loopNow.displayName（不是退到 npm 名或 id）；只在读清单时有，不保存。
+	OwnDisplayName bool `json:"-"`
 }
 
 // AccountKind 是清单声明的账号种类。
@@ -185,6 +189,7 @@ type packageJSON struct {
 		HTTP               bool                       `json:"http"`
 		Schedule           []Schedule                 `json:"schedule"`
 		Channels           []Channel                  `json:"channels"`
+		ProviderState      map[string]ProviderState   `json:"providerState"`
 	} `json:"loopNow"`
 }
 
@@ -228,6 +233,10 @@ func ReadManifest(dir, platformVersion string) (Manifest, error) {
 			m.MCPServers = ln.MCPServers
 		}
 		m.Components.Actions, m.Components.Channels, m.Components.Schedules, m.Components.HTTP = ln.Actions, ln.Channels, ln.Schedule, ln.HTTP
+		if err := CheckProviderState("loopNow.providerState", ln.ProviderState); err != nil {
+			return Manifest{}, err
+		}
+		m.ProviderState = ln.ProviderState
 	}
 	if m.ID == "" {
 		// 只有 pi 段的标准 Pi 包：用 npm 名去掉作用域作为 id。
@@ -249,7 +258,8 @@ func ReadManifest(dir, platformVersion string) (Manifest, error) {
 	if err := m.DisplayName.Check("loopNow.displayName"); err != nil {
 		return Manifest{}, err
 	}
-	if m.DisplayName.String() == "" {
+	m.OwnDisplayName = m.DisplayName.String() != ""
+	if !m.OwnDisplayName {
 		m.DisplayName = PlainText(m.Name)
 		if m.Name == "" {
 			m.DisplayName = PlainText(m.ID)

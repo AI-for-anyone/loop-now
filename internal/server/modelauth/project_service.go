@@ -23,6 +23,10 @@ type ProjectService struct {
 	Templates       *clitemplate.Catalog
 	MaxCredential   int64
 	CancelCLILogins func(context.Context, uuid.UUID, *uuid.UUID) error
+	// Plugins 支持插件提供方的订阅登录（plugins/SPEC.md §13）；为空时只支持 Codex。
+	Plugins *PluginLogins
+	// LocalLogin 报告开着“用本机的登录状态”时插件提供方用的本机登录：nil 表示不适用，否则 active 或 missing。
+	LocalLogin func(ctx context.Context, provider string) (*string, error)
 }
 
 func NewProjectService(auth *Service, templates *clitemplate.Catalog, max int64) *ProjectService {
@@ -120,7 +124,7 @@ func (p *ProjectService) accountView(ctx context.Context, r store.ProjectCredent
 		plain = r.Model.Secret
 		var c modelcredential.Credential
 		c, err = modelcredential.Decode(plain)
-		if err == nil && c.Kind() != r.Model.AuthMethod {
+		if err == nil && c.AuthMethod() != r.Model.AuthMethod {
 			err = ErrCredentialUnavailable
 		}
 	} else if r.CLI != nil {
@@ -315,6 +319,11 @@ func (p *ProjectService) Selections(ctx context.Context, agent uuid.UUID) (cm.Se
 			v.Candidates[i] = p.viewCaptured(ctx, v.Candidates[i])
 			if v.ResolvedAccountID != nil && v.Candidates[i].ID == *v.ResolvedAccountID && (v.Candidates[i].Status == "unavailable" || v.Candidates[i].Status == "requires_login") {
 				v.Status = v.Candidates[i].Status
+			}
+		}
+		if v.Purpose == store.PurposeModel && v.Provider != nil && p.LocalLogin != nil {
+			if v.LocalLogin, e = p.LocalLogin(ctx, *v.Provider); e != nil {
+				return cm.Selections{}, e
 			}
 		}
 		filtered = append(filtered, v)

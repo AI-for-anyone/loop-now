@@ -1,6 +1,7 @@
 package apitypes
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -110,11 +111,16 @@ type ModelProviderList struct {
 
 // ModelProvider 对应 ModelProvider。
 type ModelProvider struct {
-	ID            string   `json:"id"`
-	Source        string   `json:"source"`
-	APIKeyEnvVars []string `json:"apiKeyEnvVars"`
-	AuthMethods   []string `json:"authMethods"`
-	ModelCount    int      `json:"modelCount"`
+	ID       string  `json:"id"`
+	Name     *string `json:"name"`
+	Source   string  `json:"source"`
+	PluginID *string `json:"pluginId"`
+	// PluginDisplayName 是注册它的插件的显示名（清单原样，可按语言）；UnavailableReason 只在带 agentId 查询时给出。
+	PluginDisplayName json.RawMessage `json:"pluginDisplayName"`
+	UnavailableReason *string         `json:"unavailableReason"`
+	APIKeyEnvVars     []string        `json:"apiKeyEnvVars"`
+	AuthMethods       []string        `json:"authMethods"`
+	ModelCount        int             `json:"modelCount"`
 }
 
 // ModelList 对应 ModelList。

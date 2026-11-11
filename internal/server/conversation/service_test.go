@@ -41,6 +41,18 @@ func newFakeExec() *fakeExec {
 
 func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink executor.Sink) (executor.Result, error) {
 	prefix := fmt.Sprintf("本轮运行ID：%s。\n", req.RunID)
+	// 对话页的 Pi 命令原样交给 Pi（不加运行 ID）：名字带 handled 的当作扩展命令直接处理、没有回复。
+	if strings.HasPrefix(req.Message, "/") {
+		f.mu.Lock()
+		f.order = append(f.order, req.Message)
+		f.mu.Unlock()
+		f.started <- req.Message
+		if strings.HasPrefix(req.Message, "/handled") {
+			return executor.Result{Outcome: executor.OutcomeCompleted, ConfigVersion: 1, CommandHandled: true,
+				CommandNotices: []executor.CommandNotice{{Level: "info", Message: "Fetching…"}, {Level: "warning", Message: "Weekly Limit\n   Used       1%"}}, CommandNoticesTruncated: true}, nil
+		}
+		return executor.Result{Outcome: executor.OutcomeCompleted, Text: "回复：" + req.Message, ConfigVersion: 1}, nil
+	}
 	if !strings.HasPrefix(req.Message, prefix) {
 		return executor.Result{}, fmt.Errorf("缺少正确本轮runId说明")
 	}

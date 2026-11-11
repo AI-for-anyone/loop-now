@@ -3,12 +3,14 @@ import { larkAccountOptionLabel } from './lark-account-copy'
 import { LarkAccountDetails } from './LarkAccountDetails'
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router'
 import type { Schemas } from '@/api/client'
 import { credentialKeys, invalidateProjectCredentials, putSelection, readSelections, useCredentialSelections } from '@/api/project-credentials'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { WarningList } from '@/features/agent-config/CredentialStatus'
 import { Section } from '@/features/agent-config/Section'
 import { useScope } from '@/features/projects/scope-context'
+import { localModeSettingsPath } from '@/features/local-mode/LocalModeCard'
 import { projectSettingsPath } from '@/lib/scope'
 import { AccountSelectionField } from './AccountSelectionField'
 import { CredentialConflict } from './CredentialConflict'
@@ -96,9 +98,20 @@ function SelectionForm({ id, agentId, projectId, configVersion, selection, setti
     {slot === 'lark-cli' && currentAccount && <LarkAccountDetails account={currentAccount} showName={false} />}
     {currentId && <p className="min-w-0 rounded-input bg-white px-3 py-2 text-[13.5px] [overflow-wrap:anywhere]">{selection.mode === 'explicit' ? t.credentials.agentSelection.explicitLabel : t.credentials.agentSelection.automaticLabel}{t.credentials.agentSelection.labelSeparator}<span className="font-black">{currentAccount?.name ?? currentId}</span>{currentAccount && <span> · {accountStatus[currentAccount.status]}</span>}</p>}
     {selection.candidates.filter(account => account.id === selection.resolvedAccountId || account.id === selection.selectedAccountId).map(account => <WarningList key={account.id} warnings={account.template?.warnings ?? []} />)}
+    {selection.purpose === 'model' && selection.localLogin && <LocalLoginNote state={selection.localLogin} />}
     {form.conflict && <CredentialConflict base={form.base.summary} latest={form.review} reading={form.reading} error={form.readError} onRefresh={() => void form.refresh()} onAdopt={form.adopt} />}
     {!form.conflict && <ErrorAlert error={form.error} />}
     {/* projectId只作来源标识，不从其他项目候选推导账号。 */}
     <span className="sr-only">{t.credentials.agentSelection.projectSourcePrefix}{projectId}</span>
+  </div>
+}
+
+// 开着"用本机的登录状态"时，插件提供方用的是本机该扩展自己的登录：有就说明不是所选的项目账号；没有就醒目提示启动会失败，并给本机模式设置的入口。
+function LocalLoginNote({ state }: { state: NonNullable<Schemas['CredentialSelection']['localLogin']> }) {
+  const copy = t.credentials.agentSelection.localLogin
+  if (state === 'active') return <p role="note" className="min-w-0 rounded-input bg-tint-blue px-3 py-2 text-[13.5px] [overflow-wrap:anywhere]">{copy.active}</p>
+  return <div role="alert" className="grid min-w-0 gap-1.5 rounded-input bg-tint-red px-3 py-2 text-[13.5px] font-bold text-red-text [overflow-wrap:anywhere]">
+    <p>{copy.missing}</p>
+    <Link to={localModeSettingsPath} className="justify-self-start text-riso-blue underline outline-none focus-visible:shadow-focus">{copy.settings}</Link>
   </div>
 }

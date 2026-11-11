@@ -16,6 +16,23 @@ export const chat = {
   tooLong: (limit: number) => `消息超过上限（${formatBytes(limit)}）`,
   busyBar: (phase: string) => `Agent 正忙（${phase}）`,
   inputLabel: '消息',
+  // 输入框以 "/" 开头时弹出的 Pi 命令菜单；只有 /pi:<name> 才会交给 Pi 执行，其余 "/" 消息照常发出。
+  commands: {
+    label: 'Pi 命令',
+    loading: '正在读取命令…',
+    failed: (reason: string) => `读不到命令列表：${reason}`,
+    notCaptured: 'Agent 运行一次后才有命令列表。',
+    none: 'Pi 没有可用的命令。',
+    noMatch: '没有匹配的命令。',
+    source: { extension: '扩展命令', prompt: '提示模板', skill: '技能' } as Record<string, string>,
+    plugin: (name: string) => `插件 · ${name}`,
+    keys: '↑↓ 选择 · Enter 或 Tab 补全 · Esc 关闭',
+  },
+  // 扩展命令由 Pi 直接处理、没有交给模型：这一轮没有助手回复。
+  piCommandHandled: '命令已执行，没有回复',
+  // 扩展命令的输出（notify 消息）超过上限被截断；警告与错误的级别写在块上方。
+  piCommandTruncated: '输出过长，已截断',
+  noticeLevel: { warning: '警告', error: '错误' },
   you: '你',
   agent: 'Agent',
   queuedTag: '排队中',

@@ -1,13 +1,14 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { locale } from '@/i18n/locale'
 import { api, call, type ApiError, type Schemas } from './client'
+import { invalidateModelCatalog } from './queries'
 
 type Plugin = Schemas['Plugin']
 type ConfigUpdate = Schemas['PluginConfigUpdate']
 export type DeliveryFilter = { status?: Schemas['PluginDelivery']['status']; projectId?: string }
 
 // 插件（第二版）。['plugins'] 是全部插件查询的共同前缀：安装、更新、卸载、启用、授权之后整体失效，
-// 列表上的启用项目数与授权 Agent 数随之刷新。
+// 列表上的启用项目数与授权 Agent 数随之刷新。插件的 Pi 扩展会注册模型提供方，这些操作之后模型目录也一起失效。
 export const pluginKeys = {
   all: ['plugins'] as const,
   list: ['plugins', 'list'] as const,
@@ -99,14 +100,25 @@ export function useBuiltinPluginSources() {
 }
 
 // 各市场的插件（官方市场与全局设置里加的市场），标出已安装的版本与可更新；某个市场读取失败时它的 error 不为空。
-export function usePluginMarkets() {
-  return useQuery({ queryKey: pluginKeys.markets, queryFn: () => call(api.GET('/plugin-markets')) })
+export function usePluginMarkets(enabled = true) {
+  return useQuery({ queryKey: pluginKeys.markets, queryFn: () => call(api.GET('/plugin-markets')), enabled })
 }
 
 // 已安装的插件在它来源市场里的条目；不是从市场装的、或市场里已没有它时为 undefined。
 export function marketEntryOf(markets: Schemas['PluginMarket'][] | undefined, plugin: Pick<Schemas['Plugin'], 'id' | 'source'>) {
   if (!plugin.source.market) return undefined
   return markets?.find((market) => market.url === plugin.source.market)?.plugins.find((entry) => entry.id === plugin.id)
+}
+
+// 已安装插件的来源算不算审阅过，与服务端安装时的判断一致：随平台发布的、从官方市场装的为 official，市场标为已验证的为 verified，
+// 其余为 null。装的时候只记下了市场地址，所以从市场装的要看市场列表：还没读到时为 undefined；市场或条目已不在列表里时按未审阅。
+export function pluginTrust(markets: Schemas['PluginMarket'][] | undefined, plugin: Pick<Schemas['Plugin'], 'id' | 'source'>): 'official' | 'verified' | null | undefined {
+  if (plugin.source.kind === 'builtin') return 'official'
+  if (!plugin.source.market) return null
+  if (!markets) return undefined
+  const market = markets.find((item) => item.url === plugin.source.market)
+  if (market?.official) return 'official'
+  return market?.plugins.find((entry) => entry.id === plugin.id)?.verified ? 'verified' : null
 }
 
 // 市场里的来源：按市场地址与条目 id 安装；version 给出时装这个版本（更新时用市场里的新版本）。
@@ -164,7 +176,7 @@ export function usePluginInstall() {
         ? call(api.POST('/plugins', { body }))
         : call(api.POST('/plugins/{pluginId}/update', { ...pluginPath(preview.manifest.id), body }))
     },
-    onSuccess: () => invalidatePlugins(client),
+    onSuccess: () => Promise.all([invalidatePlugins(client), invalidateModelCatalog(client)]),
   })
 }
 
@@ -176,7 +188,7 @@ export function useUninstallPlugin(pluginId: string) {
     },
     onSuccess: async () => {
       client.removeQueries({ queryKey: pluginKeys.detail(pluginId) })
-      await invalidatePlugins(client)
+      await Promise.all([invalidatePlugins(client), invalidateModelCatalog(client)])
     },
   })
 }
@@ -206,7 +218,7 @@ export function useSavePluginSettings() {
     mutationFn: (body) => call(api.PUT('/plugin-settings', { body })),
     onSuccess: async (settings) => {
       client.setQueryData(pluginKeys.settings, settings)
-      await invalidatePlugins(client)
+      await Promise.all([invalidatePlugins(client), invalidateModelCatalog(client)])
     },
   })
 }
@@ -221,7 +233,7 @@ export function useSaveProjectPlugin(projectId: string, pluginId: string) {
       client.setQueryData<Schemas['ProjectPluginList']>(pluginKeys.project(projectId), (list) =>
         list && { plugins: list.plugins.map((item) => (item.pluginId === saved.pluginId ? saved : item)) },
       )
-      await invalidatePlugins(client)
+      await Promise.all([invalidatePlugins(client), invalidateModelCatalog(client)])
     },
   })
 }
@@ -276,7 +288,7 @@ export function useSaveAgentPlugin(agentId: string, pluginId: string) {
       client.setQueryData<Schemas['AgentPluginList']>(pluginKeys.agent(agentId), (list) =>
         list && { plugins: list.plugins.map((item) => (item.pluginId === saved.pluginId ? saved : item)) },
       )
-      await client.invalidateQueries({ queryKey: pluginKeys.list })
+      await Promise.all([client.invalidateQueries({ queryKey: pluginKeys.list }), invalidateModelCatalog(client)])
     },
   })
 }

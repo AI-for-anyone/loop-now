@@ -26,6 +26,12 @@ export const credentials = {
   },
   // Agent 配置页：模型与 CLI 的账号来源。
   agentSelection: {
+    // 插件提供方、声明了状态路径、开着"用本机的登录状态"时，服务端说明这一项实际用的是本机该扩展自己的登录。
+    localLogin: {
+      active: "已开启“用本机的登录状态”：这里用的是本机该扩展自己的登录，不是所选的项目账号。",
+      missing: "已开启“用本机的登录状态”，但本机没有该扩展的登录，Agent 启动会失败。关闭这个开关，或在本机登录后再试。",
+      settings: "去本机模式设置",
+    },
     title: "模型账号凭证",
     intro: "模型账号由项目维护。这里选择取用来源；同一提供方更换模型不需要重新登录。",
     modelOutOfSync: "基本配置与账号来源版本尚未同步，正在核对最新配置；草稿保留，暂不能保存。",
@@ -143,7 +149,7 @@ export const credentials = {
     title: "项目账号",
     unsupported: "当前后台尚未支持项目凭证，更新后台后重试。模型账号和 CLI 账号暂不可登录或录入。",
     loading: "正在读取项目账号…",
-    codexLogin: "登录 Codex",
+    browserLogin: "浏览器登录",
     addAccount: "录入账号",
     reload: "重新读取项目账号",
     modelTitle: "模型账号",
@@ -210,7 +216,9 @@ export const credentials = {
     oauth: "登录",
     apiKey: "API 密钥",
     login: (name: string) => `登录 ${name}`,
-    groups: { vendor: "模型厂商", domestic: "国内厂商", gateway: "聚合与网关", cloud: "云平台", inference: "推理平台", other: "其他" },
+    groups: { vendor: "模型厂商", domestic: "国内厂商", gateway: "聚合与网关", cloud: "云平台", inference: "推理平台", plugin: "插件提供", other: "其他" },
+    // 插件的 Pi 扩展注册的提供方：标出是哪个插件。
+    plugin: (name: string) => `插件 · ${name}`,
     entries: {
       codex: { name: "OpenAI Codex", alias: "codex chatgpt" },
       anthropic: { name: "Anthropic", alias: "claude" },
@@ -248,18 +256,39 @@ export const credentials = {
     },
   },
   // 项目模型账号的浏览器登录（Codex）。
+  // 项目模型账号的登录：Codex，或插件注册的带 OAuth 的提供方。插件提供方还可能用设备码，或在登录中途问你问题。
   projectLogin: {
-    nameLabel: "新 Codex 账号名称",
+    nameLabel: (provider: string) => `新 ${provider} 账号名称`,
     nameLocked: "已有一项新建登录正在进行，本次账号名称已锁定。",
     openOrCancel: "请使用下方「打开授权页」继续本次授权，或「取消登录」。",
     urlRejected: "授权地址未通过安全校验，请重新读取登录状态。",
     preparing: "正在准备授权页，请等待，或使用下方「取消登录」。",
     restartNote: "本次登录结束或过期后，可编辑名称重新发起。",
     relogin: "重新登录",
-    login: "登录 Codex",
     newAccountLabel: "本次新建账号：",
     urlRejectedNoOpen: "授权地址未通过安全校验，未打开未知地址，也不会自动重新发起登录。",
     reread: "重新读取登录状态",
+    continueOrCancel: "请按下方的提示继续本次登录，或「取消登录」。",
+    // 插件提供方的授权页：标出要打开的主机。
+    openHost: (host: string) => `打开授权页（${host}）`,
+    device: {
+      intro: (host: string) => `打开 ${host}，输入下面的代码完成登录。`,
+      code: "代码",
+      open: (host: string) => `打开 ${host}`,
+      expires: (time: string) => `代码有效期至 ${time}`,
+      urlRejected: "输入代码的地址未通过安全校验，没有给出链接。",
+    },
+    prompt: {
+      title: "登录需要你回答",
+      detail: "回答下面的问题后，登录继续。",
+      // manual_code：浏览器回调到不了时手工粘贴；扩展没给说明时用这句。
+      manualDefault: "浏览器回调到不了时，把浏览器地址栏里的回调地址，或页面上显示的授权码粘贴到这里。",
+      textDefault: "回答",
+      required: "请填写回答",
+      choose: "请选择一项",
+      submit: "提交",
+      submitting: "正在提交…",
+    },
   },
   // 账号状态与取用结果的说明。
   accountCopy: {

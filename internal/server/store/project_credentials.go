@@ -26,6 +26,8 @@ type ProjectCredentialRecord struct {
 	TemplateSource string
 }
 type ProjectCredentialWrite struct {
+	// VersionID 不为空时用作新版本的 ID（插件提供方的状态目录以它命名，登录前就要定下来）。
+	VersionID      uuid.UUID
 	AuthMethod     string
 	AccountLabel   *string
 	GitHubIdentity *cm.GitHubIdentity
@@ -228,7 +230,10 @@ func insertProjectCredentialVersion(ctx context.Context, tx *db.Tx, account cm.A
 	if larkOAuth && (w.LarkIdentity == nil || !w.LarkIdentity.Valid() || w.AccountLabel == nil || *w.AccountLabel != w.LarkIdentity.OpenID) || !larkOAuth && w.LarkIdentity != nil {
 		return uuid.Nil, apperr.Invalid("identity", "Lark身份与凭证用途不匹配")
 	}
-	id := uuid.Must(uuid.NewV7())
+	id := w.VersionID
+	if id == uuid.Nil {
+		id = uuid.Must(uuid.NewV7())
+	}
 	var err error
 	if account.Purpose == PurposeModel {
 		_, err = tx.Exec(ctx, `INSERT INTO model_auth_versions(id,project_account_id,provider,auth_method,account_label,secret)VALUES($1,$2,$3,$4,$5,$6)`, id, account.ID, *account.Provider, w.AuthMethod, w.AccountLabel, w.Secret)
@@ -336,7 +341,7 @@ func (s *Store) MutateProjectCredential(ctx context.Context, project, id uuid.UU
 			if _, e = tx.Exec(ctx, `UPDATE project_credential_accounts SET deleted_at=clock_timestamp() WHERE id=$1`, id); e != nil {
 				return e
 			}
-			if _, e = tx.Exec(ctx, `UPDATE project_model_auth_operations SET status='cancelled',authorization_url=NULL,error_code=NULL,completed_at=clock_timestamp() WHERE target_account_id=$1 AND status IN('pending','awaiting_authorization')`, id); e != nil {
+			if _, e = tx.Exec(ctx, `UPDATE project_model_auth_operations SET status='cancelled',authorization_url=NULL,user_code=NULL,verification_uri=NULL,device_expires_at=NULL,error_code=NULL,completed_at=clock_timestamp() WHERE target_account_id=$1 AND status IN('pending','awaiting_authorization')`, id); e != nil {
 				return e
 			}
 		}
@@ -767,4 +772,50 @@ func (s *Store) RequirePrivateAgentCredentials(ctx context.Context, id uuid.UUID
 		return projectCredentialRequired(a)
 	}
 	return nil
+}
+
+// ProviderStateVersionsInUse 返回插件提供方状态目录要保留的版本（plugins/SPEC.md §13）：未删除账号的当前模型版本，
+// 与未结束任务快照绑定的模型版本。其余版本的状态目录可以由清理器删除（运行中的 Pi 在用的由执行器另行保留）。
+func (s *Store) ProviderStateVersionsInUse(ctx context.Context) (map[uuid.UUID]bool, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT current_model_version_id FROM project_credential_accounts WHERE deleted_at IS NULL AND current_model_version_id IS NOT NULL
+		UNION SELECT json_extract(CAST(i.snapshot AS TEXT), '$.credentials.modelAuth.versionId') FROM task_instances i JOIN task_records r ON r.id=i.task_id
+			WHERE r.ended_at IS NULL AND json_extract(CAST(i.snapshot AS TEXT), '$.credentials.modelAuth.versionId') IS NOT NULL`)
+	if err != nil {
+		return nil, err
+	}
+	out := map[uuid.UUID]bool{}
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if id, err := uuid.Parse(raw); err == nil {
+			out[id] = true
+		}
+	}
+	rows.Close()
+	return out, rows.Err()
+}
+
+// ProviderAccount 是一个项目模型账号的定位。
+type ProviderAccount struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+	Revision  int64
+}
+
+// ModelAccountsOf 返回这些模型提供方未删除的项目账号（卸载插件并删除数据时用）。
+func (s *Store) ModelAccountsOf(ctx context.Context, providers []string) ([]ProviderAccount, error) {
+	if len(providers) == 0 {
+		return nil, nil
+	}
+	rows, err := s.Pool.Query(ctx, `SELECT project_id,id,revision FROM project_credential_accounts WHERE purpose='model' AND deleted_at IS NULL AND provider IN (SELECT value FROM json_each($1)) ORDER BY project_id,id`, providers)
+	if err != nil {
+		return nil, err
+	}
+	return db.CollectRows(rows, func(r db.CollectableRow) (ProviderAccount, error) {
+		var a ProviderAccount
+		return a, r.Scan(&a.ProjectID, &a.ID, &a.Revision)
+	})
 }

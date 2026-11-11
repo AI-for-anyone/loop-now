@@ -10,11 +10,16 @@ import (
 	"loop-now/internal/server/db"
 )
 
-const projectOperationColumns = `id,project_id,provider,target_account_id,target_revision,name,status,account_id,started_at,expires_at,completed_at,authorization_url,error_code`
+const projectOperationColumns = `id,project_id,provider,target_account_id,target_revision,name,status,account_id,started_at,expires_at,completed_at,authorization_url,error_code,user_code,verification_uri,device_expires_at`
 
 func scanProjectOperation(r db.Scanner) (cm.Operation, error) {
 	var o cm.Operation
-	err := r.Scan(&o.ID, &o.ProjectID, &o.Provider, &o.TargetAccountID, &o.TargetRevision, &o.Name, &o.Status, &o.AccountID, &o.StartedAt, &o.ExpiresAt, &o.CompletedAt, &o.AuthorizationURL, &o.ErrorCode)
+	var code, uri *string
+	var deviceExpires *time.Time
+	err := r.Scan(&o.ID, &o.ProjectID, &o.Provider, &o.TargetAccountID, &o.TargetRevision, &o.Name, &o.Status, &o.AccountID, &o.StartedAt, &o.ExpiresAt, &o.CompletedAt, &o.AuthorizationURL, &o.ErrorCode, &code, &uri, &deviceExpires)
+	if err == nil && code != nil && uri != nil {
+		o.DeviceCode = &cm.DeviceCode{UserCode: *code, VerificationURI: *uri, ExpiresAt: deviceExpires}
+	}
 	return o, err
 }
 func projectOperationTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, _ bool) (cm.Operation, error) {
@@ -46,7 +51,7 @@ func (s *Store) NewProjectModelAuthOperation(ctx context.Context, project uuid.U
 				return apperr.Invalid("accountId", "仅可重登相同提供方模型账号")
 			}
 		}
-		if _, e := tx.Exec(ctx, `UPDATE project_model_auth_operations SET status='expired',authorization_url=NULL,error_code='auth_timeout',completed_at=clock_timestamp() WHERE project_id=$1 AND status IN('pending','awaiting_authorization') AND expires_at<=clock_timestamp()`, project); e != nil {
+		if _, e := tx.Exec(ctx, `UPDATE project_model_auth_operations SET status='expired',authorization_url=NULL,user_code=NULL,verification_uri=NULL,device_expires_at=NULL,error_code='auth_timeout',completed_at=clock_timestamp() WHERE project_id=$1 AND status IN('pending','awaiting_authorization') AND expires_at<=clock_timestamp()`, project); e != nil {
 			return e
 		}
 		old, e := scanProjectOperation(tx.QueryRow(ctx, `SELECT `+projectOperationColumns+` FROM project_model_auth_operations WHERE project_id=$1 AND provider=$2 AND target_account_id IS $3 AND status IN('pending','awaiting_authorization')`, project, in.Provider, in.AccountID))
@@ -97,7 +102,7 @@ func (s *Store) ListProjectModelAuthOperations(ctx context.Context, project uuid
 				return e
 			}
 		}
-		if _, e := tx.Exec(ctx, `UPDATE project_model_auth_operations SET status='expired',authorization_url=NULL,error_code='auth_timeout',completed_at=clock_timestamp() WHERE project_id=$1 AND status IN('pending','awaiting_authorization') AND expires_at<=clock_timestamp()`, project); e != nil {
+		if _, e := tx.Exec(ctx, `UPDATE project_model_auth_operations SET status='expired',authorization_url=NULL,user_code=NULL,verification_uri=NULL,device_expires_at=NULL,error_code='auth_timeout',completed_at=clock_timestamp() WHERE project_id=$1 AND status IN('pending','awaiting_authorization') AND expires_at<=clock_timestamp()`, project); e != nil {
 			return e
 		}
 		rows, e := tx.Query(ctx, `SELECT `+projectOperationColumns+` FROM project_model_auth_operations WHERE project_id=$1 AND ($2='' OR provider=$2) AND ($3 IS NULL OR target_account_id=$3) AND status IN('pending','awaiting_authorization') ORDER BY started_at,id`, project, provider, account)
@@ -132,8 +137,33 @@ func (s *Store) SetProjectModelAuthURL(ctx context.Context, project, id uuid.UUI
 	})
 	return out, err
 }
+
+// SetProjectModelAuthDeviceCode 记下设备码登录给人看的验证码与验证地址（插件提供方，plugins/SPEC.md §13）。
+func (s *Store) SetProjectModelAuthDeviceCode(ctx context.Context, project, id uuid.UUID, code, uri string, expires *time.Time) (cm.Operation, error) {
+	var out cm.Operation
+	err := s.inTx(ctx, func(tx *db.Tx) error {
+		if _, e := lockCredentialProject(ctx, tx, project, true); e != nil {
+			return e
+		}
+		o, e := projectOperationTx(ctx, tx, project, id, true)
+		if e != nil {
+			return e
+		}
+		if modelAuthTerminal(o.Status) {
+			out = o
+			return nil
+		}
+		if !o.ExpiresAt.After(time.Now()) {
+			out, e = endProjectOperationTx(ctx, tx, id, "expired", "auth_timeout")
+			return e
+		}
+		out, e = scanProjectOperation(tx.QueryRow(ctx, `UPDATE project_model_auth_operations SET status='awaiting_authorization',user_code=$2,verification_uri=$3,device_expires_at=$4 WHERE id=$1 RETURNING `+projectOperationColumns, id, code, uri, expires))
+		return e
+	})
+	return out, err
+}
 func endProjectOperationTx(ctx context.Context, tx *db.Tx, id uuid.UUID, status, code string) (cm.Operation, error) {
-	return scanProjectOperation(tx.QueryRow(ctx, `UPDATE project_model_auth_operations SET status=$2,error_code=$3,authorization_url=NULL,completed_at=clock_timestamp() WHERE id=$1 RETURNING `+projectOperationColumns, id, status, nullIfEmpty(code)))
+	return scanProjectOperation(tx.QueryRow(ctx, `UPDATE project_model_auth_operations SET status=$2,error_code=$3,authorization_url=NULL,user_code=NULL,verification_uri=NULL,device_expires_at=NULL,completed_at=clock_timestamp() WHERE id=$1 RETURNING `+projectOperationColumns, id, status, nullIfEmpty(code)))
 }
 func (s *Store) EndProjectModelAuthOperation(ctx context.Context, project, id uuid.UUID, status, code string) (cm.Operation, error) {
 	if status != "failed" && status != "cancelled" && status != "expired" {
@@ -214,7 +244,7 @@ func (s *Store) CompleteProjectModelAuthOperation(ctx context.Context, project, 
 		if e = bumpCredentialProject(ctx, tx, project); e != nil {
 			return e
 		}
-		out, e = scanProjectOperation(tx.QueryRow(ctx, `UPDATE project_model_auth_operations SET account_id=$2,status='succeeded',authorization_url=NULL,error_code=NULL,completed_at=clock_timestamp() WHERE id=$1 RETURNING `+projectOperationColumns, id, record.View.ID))
+		out, e = scanProjectOperation(tx.QueryRow(ctx, `UPDATE project_model_auth_operations SET account_id=$2,status='succeeded',authorization_url=NULL,user_code=NULL,verification_uri=NULL,device_expires_at=NULL,error_code=NULL,completed_at=clock_timestamp() WHERE id=$1 RETURNING `+projectOperationColumns, id, record.View.ID))
 		if e == nil {
 			saved = &record
 		}

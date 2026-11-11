@@ -60,6 +60,16 @@ type TurnResult struct {
 	Text         string // 最终回复文本
 	ErrorCode    string // "pi_error" | "pi_exited" | ""
 	ErrorMessage string
+	// Handled 表示 Pi 直接处理了这条 prompt（扩展命令），没有交给模型、没有回复。
+	Handled bool
+	// Notices 是 Handled 时这一轮里扩展用 ctx.ui.notify 给出的消息（命令的输出）；指针让 TurnResult 仍可比较。
+	Notices *CommandNotices
+}
+
+// CommandNotices 是一轮里收集到的通知，按顺序；Truncated 表示超过上限被截断。
+type CommandNotices struct {
+	Items     []CommandNotice
+	Truncated bool
 }
 
 // State 是 get_state 中平台关心的字段。
@@ -289,7 +299,11 @@ func (c *Client) Prompt(ctx context.Context, text string, sink TurnSink, images 
 		return TurnResult{Outcome: OutcomeFailed, ErrorCode: ErrorCodePi, ErrorMessage: msg}, nil
 	}
 	if disposition(resp.Data) == "handled" {
-		return TurnResult{Outcome: OutcomeCompleted}, nil
+		res := TurnResult{Outcome: OutcomeCompleted, Handled: true}
+		if notices, cut := t.commandNotices(); len(notices) > 0 || cut {
+			res.Notices = &CommandNotices{Items: notices, Truncated: cut}
+		}
+		return res, nil
 	}
 	return awaitResult(ctx, t)
 }

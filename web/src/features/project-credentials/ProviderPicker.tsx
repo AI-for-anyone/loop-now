@@ -66,8 +66,9 @@ export function ProviderPicker({ label, entries, accounts, value, open, disabled
     {selected && !open
       ? <div role="group" aria-labelledby={labelId} className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-2.5 rounded-input bg-riso-yellow px-3.5 py-3 text-ink shadow-[inset_0_0_0_2px_var(--ink)]">
         <ProviderAvatar entry={selected} />
-        <span className="font-bold">{selected.name}</span>
+        <span className="font-bold [overflow-wrap:anywhere]">{selected.name}</span>
         {selected.name !== value && <span className="font-mono text-[12px] [overflow-wrap:anywhere]">{value}</span>}
+        {selected.plugin !== null && <PluginBadge name={selected.plugin} />}
         {selected.options.length > 1 && <ToggleGroup aria-label={text.region} value={value} onValueChange={onChange} className="bg-paper-raised shadow-[inset_0_0_0_1.5px_var(--ink)]">
           {selected.options.map(option => <ToggleGroupItem key={option.id} value={option.id} className="min-h-[30px] px-3 text-[13px] data-[state=on]:bg-ink data-[state=on]:text-white data-[state=on]:shadow-none">{option.label}</ToggleGroupItem>)}
         </ToggleGroup>}
@@ -97,7 +98,7 @@ export function ProviderPicker({ label, entries, accounts, value, open, disabled
               const index = visible.indexOf(entry), count = existing(entry), first = entry.options[0].id
               return <div key={entry.key} id={optionId(entry)} role="option" aria-selected={index === active} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActive(index)} onClick={() => pick(entry)} className="grid cursor-pointer grid-cols-[30px_minmax(0,1fr)] items-center gap-x-2.5 gap-y-1 rounded-ticket px-2 py-2 aria-selected:bg-tint-blue sm:grid-cols-[30px_minmax(0,1fr)_auto]">
                 <ProviderAvatar entry={entry} />
-                <span className="flex min-w-0 flex-wrap items-baseline gap-x-2"><span className="font-bold">{entry.name}</span>{entry.name !== first && <span className="font-mono text-[12px] text-ink-500 [overflow-wrap:anywhere]">{entry.options.length > 1 ? `${first} +${entry.options.length - 1}` : first}</span>}</span>
+                <span className="flex min-w-0 flex-wrap items-baseline gap-x-2"><span className="font-bold [overflow-wrap:anywhere]">{entry.name}</span>{entry.name !== first && <span className="font-mono text-[12px] text-ink-500 [overflow-wrap:anywhere]">{entry.options.length > 1 ? `${first} +${entry.options.length - 1}` : first}</span>}{entry.plugin !== null && <PluginBadge name={entry.plugin} />}</span>
                 <span className="col-start-2 flex flex-wrap items-center gap-2 sm:col-start-3 sm:justify-end">
                   {count > 0 && <Badge className="bg-tint-pink text-pink-text">{text.existing(count)}</Badge>}
                   <AuthBadges methods={entry.authMethods} />
@@ -119,6 +120,11 @@ export function AuthBadges({ methods }: { methods: readonly (string | null)[] })
     {methods.includes('oauth') && <Badge tone="success">{text.oauth}</Badge>}
     {methods.includes('api_key') && <Badge tone="info">{text.apiKey}</Badge>}
   </>
+}
+
+// 插件提供方：注册它的插件。
+function PluginBadge({ name }: { name: string }) {
+  return <Badge tone="neutral" title={text.plugin(name)} className="max-w-full self-center"><span className="truncate">{text.plugin(name)}</span></Badge>
 }
 
 function ProviderAvatar({ entry }: { entry: ProviderEntry }) {

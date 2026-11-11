@@ -36,6 +36,9 @@ function ReplyBubble({ turn, agent, located }: { turn: Turn; agent: Pick<Schemas
   const { run, reply } = turn
   const ended = run.status === 'completed' || run.status === 'failed' || run.status === 'interrupted'
   const streaming = reply?.live === true && run.status === 'running'
+  // /pi: 扩展命令由 Pi 直接处理、没有交给模型：这一轮正常结束、没有助手回复。命令的输出是扩展 notify 的消息，
+  // 在回复的位置按顺序显示；没有消息（含升级前跑完的旧执行）才说明一句"命令已执行，没有回复"。
+  const command = run.piCommand?.handled === true && run.status === 'completed' && (!reply || reply.text === '') ? run.piCommand : null
   return (
     <AgentChatReply agent={agent} metadata={<>{ended && <span>{t.chat.time(run.endedAt ?? runStartedAt(run))}</span>}<RunStatusBadge run={run} /></>}>
       <FailureNote run={run} />
@@ -43,6 +46,12 @@ function ReplyBubble({ turn, agent, located }: { turn: Turn; agent: Pick<Schemas
         <div className={cn(ended && run.status !== 'completed' && 'text-ink-500')}>
           <Markdown text={reply.text} cursor={streaming} />
         </div>
+      ) : command ? (
+        (command.notices ?? []).length > 0 ? (
+          <PiCommandNotices notices={command.notices} truncated={command.truncated} />
+        ) : (
+          <p data-pi-command-handled className="text-[14.5px] text-ink-500">{t.chat.piCommandHandled}</p>
+        )
       ) : (
         streaming && (
           <p>
@@ -53,6 +62,28 @@ function ReplyBubble({ turn, agent, located }: { turn: Turn; agent: Pick<Schemas
       <ToolList tools={run.tools} interrupted={run.status === 'interrupted' && run.endReason === 'user_interrupt'} />
       <RunRecord agentId={agent.id} run={run} defaultOpen={located || config.runRecordExpanded} />
     </AgentChatReply>
+  )
+}
+
+type Notice = NonNullable<Schemas['Run']['piCommand']>['notices'][number]
+const noticeTone: Record<Notice['level'], string> = {
+  info: 'bg-ink/[0.04] text-ink',
+  warning: 'bg-tint-yellow text-ink',
+  error: 'bg-tint-red text-red-text',
+}
+
+// 扩展命令的输出：每条 notify 一块纯文本，等宽、保留换行与空格（输出里常有缩进对齐）；警告与错误另用底色，并写明级别，不只靠颜色。
+function PiCommandNotices({ notices, truncated }: { notices: Notice[]; truncated: boolean }) {
+  return (
+    <div data-pi-command-notices className="grid min-w-0 gap-1.5">
+      {notices.map((notice, index) => (
+        <div key={index} className={cn('grid min-w-0 gap-0.5 rounded-input px-3 py-2', noticeTone[notice.level])}>
+          {notice.level !== 'info' && <span className="text-[11.5px] font-black">{t.chat.noticeLevel[notice.level]}</span>}
+          <pre className="m-0 min-w-0 font-mono text-[13px] leading-[1.6] whitespace-pre-wrap [overflow-wrap:anywhere]">{notice.message}</pre>
+        </div>
+      ))}
+      {truncated && <p className="text-[12.5px] text-ink-500">{t.chat.piCommandTruncated}</p>}
+    </div>
   )
 }
 

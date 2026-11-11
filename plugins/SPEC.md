@@ -249,3 +249,28 @@ export default function register(api: PluginAPI) {
 - **页面**：外部身份页加"代管"选择（列出可代管的插件与渠道、当前状态）；插件详情"包含"里列出可代管的渠道；代管插件未运行时身份页提示。
 - 存储：迁移 032（`identity_managers`、审计的 `on_behalf_of`）。代管插件对被代管身份的消息只收到 `identity.inbound`，不再同时收到 `inbox.received`。
 - **分工**：server 做清单字段、绑定接口、`identity.inbound`、`asIdentityId`、`identities.manage` 范围与审计；plugin 做 SDK 与 webhook 扩展；web 做身份页与插件页展示。做完一起部署。
+
+## 13. 插件注册的模型提供方与订阅登录（2026-11-10 补，用户决定）
+
+目的：从插件市场装的纯 Pi 包（没有 `loopNow` 段，例如 npm 包 `pi-grok-cli`，用 SuperGrok / X Premium 订阅 OAuth）带来的模型提供方，能在 Agent 的模型配置里选用；订阅账号像 Codex 那样在项目里登录、管理并绑定到 Agent。直接用 Pi 包本身，不建包装插件。通用于任何注册了 OAuth 提供方的 Pi 扩展，不写死某一家。
+
+- **读取**：插件带 `pi.extensions` 时，安装或更新**确认之后**（会运行插件代码，所以不在预览时做）、依赖装好、文件就位之前，用随包 Pi 自己的扩展加载器（与 Pi 启动时同一套模块别名，只把 Pi 包声明为 peer 的扩展也能加载）加载这些扩展，读出 `registerProvider` 注册的提供方、模型与是否带 `oauth`，思考等级按 Pi 同一函数计算。空环境、临时 HOME 与 `PI_CODING_AGENT_DIR`、`PI_OFFLINE=1`、60 秒超时，扩展加载时的副作用只落在临时目录。结果随版本保存，插件详情只读展示（`providers`、`providerErrors`、`providersError`）；读取失败不阻止安装。
+- **目录**：带 OAuth、注册无误、与 Pi 目录（内置与 models.json）不同 id 的提供方并入模型目录，`source` 为 `plugin`，带 `pluginId`；与内置同 id 的（扩展覆盖内置提供方的设置）只记录不并入；两个插件注册同一 id 时后装的返回 409。安装、更新、卸载与保存 models.json 后重新合并；卸载后提供方从目录里消失。
+- **选用**：只给项目 Agent 用（平台 Agent 第一版不支持）。修改 Agent 选它须项目已启用该插件、Agent 已获授权，否则 422（字段 `model.provider`）；新建 Agent 时不能直接选。`GET /model-providers?agentId=` 给出不能用的原因（`platform_agent`、`plugin_not_enabled`、`agent_not_granted`、`plugins_disabled`）。之后撤销授权、停用、全局停用或卸载，Pi 启动前明确失败（`credential_unavailable`，说明是哪个插件），不让 Pi 带着未知提供方起来。`-e` 沿用插件授权，不另加。
+- **登录**：复用项目模型账号登录（`/projects/{id}/model-auth/operations`）。一次登录一个辅助进程，HOME 是一个全新的状态目录：用随包 Pi 加载插件扩展，调用捕获到的 `oauth.login`；授权地址、设备码、选择与手工输入经操作视图与回答接口交给控制台，回答只在内存里转给辅助进程。授权地址与设备码地址由服务端校验（https、无用户名密码、无 fragment、不含 code/token 类查询项）。扩展给的提示文字按不可信纯文本处理（限长），进度不转扩展原文。重登一律用全新状态目录。
+- **账号与状态**：账号就是项目模型账号（purpose=model，provider=插件提供方 id，authMethod=oauth）。一次成功登录在模型认证版本里加一个版本，它的“凭证”只记下插件（`{type:"plugin_state",plugin}`，不含秘密）；以版本 ID 命名的状态目录 `<work root>/platform/provider-states/<versionId>/`（0700，文件 0600）里是扩展自己写下的东西与平台写的 `auth.json`（login 的返回值，Pi 认证条目）。令牌不进数据库；账号选择、任务冻结（快照记版本 ID）、删除账号时的保留与清除、账号状态都沿用模型账号的规则。日志与诊断不读状态目录的内容；数据库备份、任务会话归档、任务工作区复制都不带它。
+- **哪些路径随账号走**：市场条目可选 `providerState: { "<providerId>": { "paths": [".pi/grok-cli"] } }`，包自己的 `loopNow.providerState` 同形，从市场安装时市场条目优先；按版本保存，插件详情与市场条目只读展示。路径为 HOME 下的相对路径（/ 分隔，1 到 8 个，不含 `..`，不在 `.loop-now` 下，彼此不包含），启动时与 CLI 模板的配置文件重叠则失败。没有声明时只有 `auth.json` 随账号走。
+- **启动 Pi**：Agent 的 `pi/auth.json` 链接到账号状态里的 `auth.json`，每个声明路径 `<Agent HOME>/<path>` 链接到状态目录里的同名路径（登录时还没写的路径先在状态目录里建空目录）；同项目多个 Agent 共用一份，由扩展自己刷新。本次建的链接记在 Agent 目录里，下次启动、释放与清理前先删掉（只删链接本身）。插件没挂载（未授权、项目未启用、全局停用、已卸载）或状态目录不在时以 `credential_unavailable` 失败。进程身份含版本、目录与路径，重登或换账号后下一次派发重启 Pi。Unix 上是软链接；Windows 上目录用联接（junction）、文件用硬链接，失败时启动失败并说明原因，不退回复制。
+- **用本机的登录状态**：开着时 Pi 的 HOME 是真实家目录，平台不在里面建链接、不创建、不删除；扩展用用户本人目录下自己的状态（等于用用户自己在本机的登录，不是项目账号），`auth.json` 仍链接到所绑账号。启动前若声明的路径在真实家目录下不存在，以 `credential_unavailable` 失败并说明“已开启用本机的登录状态，此时用的是本机自己的登录而不是项目账号；本机没有该扩展的登录，关闭开关或在本机登录后再试”。Agent 的账号选择里模型那一项给出 `localLogin`（active / missing）。
+- **任务**：任务快照冻结版本（状态目录），随账号走的路径按插件当前版本；任务实例有自己的 HOME 与 Pi 目录，启动时同样建链接，复制的只是工作区，令牌不被复制。
+- **清理**：状态目录保留的条件是：版本是未删除账号的当前版本、或被未结束任务绑定、或运行中的 Pi 正在用；其余由清理器删除（启动时，并每 10 分钟一次；启动时也删掉没登录完的暂存目录）。重登后旧版本、删除账号后全部版本都按这条规则在用完后删除。
+- **卸载**：插件的提供方从模型目录里消失；它在各项目里的订阅账号默认保留（重新安装后恢复），选“删除数据”时一并删除账号（与删除账号相同：未结束任务绑定的版本保留到任务结束）。
+
+## 14. 对话页的 Pi 命令（2026-11-10 补，用户决定）
+
+Pi 的 RPC 模式下，首字符为 `/` 的提示会被 Pi 当作命令：扩展注册的命令直接执行（不交给模型），技能命令 `/skill:<名称>` 与提示模板展开成普通提示。平台约定在前端把这类命令写成 `/pi:<name>`：
+
+- **发送**：对话页消息以 `/pi:<name>` 开头（name 非空、不含空白）时，消息照原文保存与显示，执行时发给 Pi 的是 `/<name>` 加其余原文，不加运行 ID 与平台通知；带图片时图片照常交给 Pi（扩展命令不用图片，技能命令与提示模板展开后随提示交给模型）。这类消息不给插件的 `console.command` 认领。不带 `pi:` 的 `/xxx` 维持原样：先给插件认领，没人认领时作为普通消息（带运行 ID）交给 Agent，所以不会触发 Pi 命令。任务节点的消息不做改写。
+- **结果**：执行记录带 `piCommand: { name, handled, notices, truncated }`。handled 为 true 表示 Pi 直接处理了命令、没有交给模型，这一轮以 completed 结束，没有助手回复；扩展命令的输出多半用 `ctx.ui.notify` 给出，所以命令执行期间的 notify 按顺序收进 `notices`（`{level, message}`，扩展原文、纯文本），随执行记录保存（不依赖按时间清理的运行事件），对话里直接显示；最多 50 条、合计 16 KiB，超出截断并标 `truncated`。`setStatus` 等状态不收，照常记为运行事件；弹出的对话照常转成提问。handled 为 false 时 notices 为空。命令事后用 `sendUserMessage` 等触发的新一轮模型回复不算进这次执行（已知限制）。
+- **列表**：`GET /agents/{agentId}/commands` 返回 Agent 上次启动 Pi 时（RPC `get_commands`）读到的扩展命令、提示模板与技能命令，按来源文件所在的安装目录标出所属插件；平台不为列命令专门启动 Pi，从没启动过时为空。插件平台侧的 `console.command` 是认领型 Hook，没有可列举的命令名，不在列表里。
+- 会起本地页面的命令（如 `/grok-cli-accounts gui`）不特殊处理，用户知情。
