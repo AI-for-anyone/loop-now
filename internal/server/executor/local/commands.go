@@ -74,6 +74,11 @@ func (e *Executor) StopIdle(ctx context.Context, agentID uuid.UUID, reason strin
 	if !slices.Contains(idleStopReasons, reason) {
 		return false, fmt.Errorf("未知的停止原因 %q", reason)
 	}
+	return e.stopIdle(ctx, agentID, reason)
+}
+
+// stopIdle 在维护预留下停止 Agent 的空闲进程并等它退出（平台命令与任务分叉共用）。
+func (e *Executor) stopIdle(ctx context.Context, agentID uuid.UUID, reason string) (bool, error) {
 	free, err := e.reserveMaintenance(ctx, agentID)
 	if err != nil {
 		return false, maintenanceErr(err)
@@ -83,7 +88,7 @@ func (e *Executor) StopIdle(ctx context.Context, agentID uuid.UUID, reason strin
 	p := e.procs[agentID]
 	if e.runs[agentID] != nil || p != nil && p.busy {
 		e.mu.Unlock()
-		return false, maintenanceErr(ErrRuntimeBusy)
+		return false, fmt.Errorf("%w：常态轮次尚未完全结束", executor.ErrMaintenanceBusy)
 	}
 	delete(e.procs, agentID)
 	e.mu.Unlock()

@@ -1114,30 +1114,11 @@ func (e *Executor) beforeRun(ctx context.Context, snap agentconfig.Snapshot, req
 
 // Process 实现 executor.Executor。
 // FreezeForFork 由持有常态派发门禁的任务准备器调用：当前轮结束后停止空闲Pi，稳定源会话。
-// 保留HOME/工作区/会话，下条常态消息照常重启接续。
+// 与平台命令的 StopIdle 是同一件事，只是停止原因为 fork_snapshot。正在做别的维护时错误带 ErrRuntimeBusy；
+// 当前轮还没结束时是“常态轮次尚未完全结束”。
 func (e *Executor) FreezeForFork(ctx context.Context, agentID uuid.UUID) error {
-	free, err := e.reserveMaintenance(ctx, agentID)
-	if err != nil {
-		return err
-	}
-	defer free()
-	e.mu.Lock()
-	p := e.procs[agentID]
-	if e.runs[agentID] != nil || p != nil && p.busy {
-		e.mu.Unlock()
-		return errors.New("常态轮次尚未完全结束")
-	}
-	delete(e.procs, agentID)
-	e.mu.Unlock()
-	if p != nil {
-		e.stop(p, stopCause{reason: stopForkSnapshot})
-		select {
-		case <-p.rt.Done():
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-	return nil
+	_, err := e.stopIdle(ctx, agentID, stopForkSnapshot)
+	return err
 }
 
 func (e *Executor) Process(agentID uuid.UUID) executor.ProcessInfo {

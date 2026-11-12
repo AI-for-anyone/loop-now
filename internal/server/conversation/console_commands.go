@@ -100,13 +100,10 @@ func (s *Service) Compact(ctx context.Context, agentID uuid.UUID, instructions s
 	command := &consoleCommandRun{done: make(chan executor.Result, 1)}
 	s.commands.Store(runID, command)
 	defer s.commands.Delete(runID)
+	// 插入时在同一写事务里确认空闲（ensureIdle），不会撞上另一次进行中的执行。
 	run, err := s.st.InsertConsoleCompactRun(ctx, agentID, runID, s.o.InstanceID, instructions)
 	if err != nil {
 		s.releaseConsoleCommand(agentID, owner)
-		if errors.Is(err, store.ErrActiveRunExists) {
-			s.restoreLock(ctx, agentID)
-			return store.Run{}, s.busyError(ctx, agentID)
-		}
 		return store.Run{}, err
 	}
 	s.emitRun(ctx, agentID, run.ID)

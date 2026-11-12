@@ -599,11 +599,10 @@ func (s *Service) endRun(ctx context.Context, agentID, runID uuid.UUID, end stor
 	}
 	s.log.Info("回复结束", attrs...)
 	if msg == nil {
-		// compact 没有对话消息；终态仍通知所有 SSE 订阅者，但保持 run.ended.message 非空的旧契约。
+		// 手动压缩没有对话消息：终态以 run.updated 通知，run.ended 总带消息。
 		s.emit(ctx, agentID, apitypes.EventRunUpdated, apitypes.SseRunUpdated{Run: apitypes.FromRun(r)})
 	} else {
-		converted := apitypes.FromMessage(*msg, r)
-		s.emit(ctx, agentID, apitypes.EventRunEnded, apitypes.SseRunEnded{Run: apitypes.FromRun(r), Message: &converted})
+		s.emit(ctx, agentID, apitypes.EventRunEnded, apitypes.SseRunEnded{Run: apitypes.FromRun(r), Message: apitypes.FromMessage(*msg, r)})
 	}
 	_ = s.co.DeleteRunText(ctx, runID.String())
 	s.EmitAgentStatus(agentID)

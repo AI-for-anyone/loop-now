@@ -37,6 +37,7 @@ func ParseCompaction(raw []byte) Compaction {
 }
 
 // InsertConsoleCompactRun 在 Agent 行锁内再次确认空闲和活动会话，插入不带对话消息的压缩运行，记下压缩指令（可为空）。
+// 写事务串行，确认空闲与插入在同一事务里，不会违反“每个 Agent 至多一次进行中的执行”。
 func (s *Store) InsertConsoleCompactRun(ctx context.Context, agentID, runID, instanceID uuid.UUID, instructions string) (Run, error) {
 	raw, err := json.Marshal(Compaction{Instructions: instructions})
 	if err != nil {
@@ -71,9 +72,6 @@ func (s *Store) InsertConsoleCompactRun(ctx context.Context, agentID, runID, ins
 			VALUES ($1,$2,NULL,$3,$4,1,'starting',$5,'console_compact',$6,$5,$7) RETURNING `+runColumns,
 			runID, agentID, agent.ConfigVersion, instanceID, now, queueSeq, string(raw)))
 		if err != nil {
-			if isUniqueViolation(err, "runs_one_active_per_agent") {
-				return ErrActiveRunExists
-			}
 			return err
 		}
 		return s.insertEvent(ctx, tx, LifecycleEvent{AgentID: agentID, RunID: &run.ID, Type: EventRunDispatched, At: now})

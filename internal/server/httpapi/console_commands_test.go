@@ -106,7 +106,7 @@ func TestPlatformConsoleCompactCopyExportAndEndEventContract(t *testing.T) {
 		if err := json.Unmarshal([]byte(event.data), &ended); err != nil {
 			t.Fatal(err)
 		}
-		if ended.Message == nil {
+		if ended.Message.ID == uuid.Nil || ended.Message.Run.ID != ended.Run.ID {
 			t.Fatalf("普通 run.ended 必须带非空消息：%+v", ended)
 		}
 		if ended.Run.Status == "completed" {
