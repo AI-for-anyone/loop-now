@@ -1,6 +1,10 @@
 package conversation
 
-import "github.com/google/uuid"
+import (
+	"context"
+
+	"github.com/google/uuid"
+)
 
 // SetTestHookBeforeInterrupt 设置打断前的测试钩子；传 nil 清除。
 func SetTestHookBeforeInterrupt(h func(runID uuid.UUID)) {
@@ -37,3 +41,15 @@ func SetTestHookAfterDriverPending(h func(runID uuid.UUID)) {
 	}
 	testHookAfterDriverPending.Store(&h)
 }
+
+// SetTestHookBeforeRestoreLock 设置补设忙闲锁之前的测试钩子；传 nil 清除。
+func SetTestHookBeforeRestoreLock(h func(runID uuid.UUID)) {
+	if h == nil {
+		testHookBeforeRestoreLock.Store(nil)
+		return
+	}
+	testHookBeforeRestoreLock.Store(&h)
+}
+
+// ReconcileForTest 立即做一次对账。
+func (s *Service) ReconcileForTest(ctx context.Context) { s.reconcile(ctx) }

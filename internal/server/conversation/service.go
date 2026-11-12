@@ -244,10 +244,41 @@ func (s *Service) interruptActive(ctx context.Context, agentID, byRunID uuid.UUI
 // restoreLock 按数据库中的进行中执行补设忙闲锁。
 func (s *Service) restoreLock(ctx context.Context, agentID uuid.UUID) {
 	active, err := s.st.ActiveRun(ctx, agentID)
-	if err != nil || active == nil || active.InstanceID == nil {
+	if err != nil || active == nil {
 		return
 	}
-	_, _ = s.co.Restore(ctx, agentID.String(), coord.LockValue(active.ID.String(), active.InstanceID.String()))
+	s.restoreRunLock(ctx, agentID, *active)
+}
+
+// restoreRunLock 按数据库里读到的一次进行中执行补设忙闲锁（锁空着时才设）。
+//
+// 读到“进行中”与补锁之间，这次执行可能已经结束、它的驱动已经放开了锁（锁空着才补得上，所以补上就说明驱动已不再持有它）。
+// 这时补上的锁属于已结束的执行，没有人会放开它：对账只为进行中的执行补锁、只为有排队的 Agent 交接，Agent 会一直显示忙。
+// 所以补上之后再看一眼执行的状态，已经结束就放开刚补的锁（只放开仍是它的锁），并接着处理排队。
+func (s *Service) restoreRunLock(ctx context.Context, agentID uuid.UUID, run store.Run) {
+	if run.InstanceID == nil {
+		return
+	}
+	owner := coord.LockValue(run.ID.String(), run.InstanceID.String())
+	if h := testHookBeforeRestoreLock.Load(); h != nil {
+		(*h)(run.ID)
+	}
+	set, err := s.co.Restore(ctx, agentID.String(), owner)
+	if err != nil || !set {
+		return
+	}
+	status, err := s.st.RunStatus(ctx, run.ID)
+	if err != nil {
+		s.log.Warn("补设忙闲锁后确认执行状态失败，保留锁", "agentId", agentID, "runId", run.ID, "err", err)
+		return
+	}
+	switch status {
+	case "starting", "running", "aborting":
+		return
+	}
+	if released, _ := s.co.Release(ctx, agentID.String(), owner); released {
+		s.kick(ctx, agentID)
+	}
 }
 
 // ---- 驱动循环 ----
@@ -425,6 +456,9 @@ var testHookBeforeInterrupt atomic.Pointer[func(runID uuid.UUID)]
 // testHookBeforeMarkAborting 只供测试使用：引发打断的执行确定之后、标记进行中执行为打断中之前调用，
 // 用来让引发打断的那条执行先被出队并开始。生产环境为空。
 var testHookBeforeMarkAborting atomic.Pointer[func(byRunID uuid.UUID)]
+
+// testHookBeforeRestoreLock 只供测试使用：按读到的进行中执行补设忙闲锁之前调用（对账与 restoreLock）。
+var testHookBeforeRestoreLock atomic.Pointer[func(runID uuid.UUID)]
 
 // testHookAfterDriveHandoff 只供测试使用：空队列 Handoff 已释放锁、驱动尚未删除标记时调用。
 var testHookAfterDriveHandoff atomic.Pointer[func(agentID uuid.UUID)]
@@ -689,9 +723,7 @@ func (s *Service) reconcile(ctx context.Context) {
 		return
 	}
 	for _, r := range active {
-		if r.InstanceID != nil {
-			_, _ = s.co.Restore(ctx, r.AgentID.String(), coord.LockValue(r.ID.String(), r.InstanceID.String()))
-		}
+		s.restoreRunLock(ctx, r.AgentID, r)
 	}
 	agents, err := s.st.AgentsWithQueuedRuns(ctx)
 	if err != nil {
