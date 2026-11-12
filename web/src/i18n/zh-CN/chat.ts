@@ -101,6 +101,12 @@ export const chat = {
     processState: { stopped: '已停止', starting: '启动中', idle: '空闲', busy: '忙碌' } satisfies Record<S['ProcessState'], string>,
     session: (session: S['ConsoleSessionStatus']) => `会话 ${{ none: '无会话', active: '活动', missing: '丢失' }[session.status.session.state]} · epoch ${session.status.session.epoch} · 模型 ${session.model.provider}/${session.model.modelId} · 思考 ${session.thinkingLevel} · 进程 ${{ stopped: '已停止', starting: '启动中', idle: '空闲', busy: '忙碌' }[session.status.processState]} · 排队 ${session.status.queued.normal + session.status.queued.interrupt}`,
     compact: (before: number, after: number) => `上下文已压缩：${before} → 约 ${after} tokens`,
+    // Pi 没有压缩但正常完成的几种情况。
+    compactSkipped: {
+      too_small: '会话内容太少，不用压缩',
+      already_compacted: '上次压缩之后还没有新内容，不用再压缩',
+      cancelled_by_extension: '这次压缩被扩展取消了',
+    } satisfies Record<NonNullable<S['RunCompaction']['skipReason']>, string>,
     reloaded: '已停止旧进程，下一条消息将重新加载',
     reloadNotNeeded: '没有运行中的进程，无需重载',
     newSession: (epoch: number) => `已重开会话（epoch ${epoch}），页面历史仍保留`,

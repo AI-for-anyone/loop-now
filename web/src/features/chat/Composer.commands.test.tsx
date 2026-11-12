@@ -94,6 +94,21 @@ it('平台命令遇到 agent_busy 不自动排队重试', async () => {
   expect(screen.getByLabelText('消息')).toHaveValue('/reload')
 })
 
+it('Agent 不空闲时 /resume（列表）返回 agent_not_idle：说明原因，不重试、不转成排队，命令留在输入框里', async () => {
+  const sent: Schemas['SendMessageInput'][] = []
+  server.use(http.post(apiUrl('/agents/sleep-agent/messages'), async ({ request }) => {
+    sent.push(await request.json() as Schemas['SendMessageInput'])
+    return HttpResponse.json({ error: { code: 'agent_not_idle', message: 'agent is not idle' } }, { status: 409 })
+  }))
+  const onCommand = renderComposer()
+  await userEvent.type(screen.getByRole('textbox', { name: '消息' }), '/resume')
+  await userEvent.keyboard('{Escape}{Enter}')
+  expect(await screen.findByRole('alert')).toHaveTextContent('Agent 不空闲：还有进行中的回复或排队消息')
+  expect(sent).toEqual([{ text: '/resume' }])
+  expect(onCommand).not.toHaveBeenCalled()
+  expect(screen.getByLabelText('消息')).toHaveValue('/resume')
+})
+
 it('/copy 先写剪贴板再显示结果；没有回复时不写剪贴板', async () => {
   const writeText = vi.fn(() => Promise.resolve())
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })

@@ -52,15 +52,18 @@ export function buildTurns(
     if (message.role === 'user') turn.user = message
     else turn.reply = { text: message.text, live: false }
   }
-  if (live.current && !byRun.has(live.current.run.id) && (atLatest || historyRuns.has(live.current.run.id))) {
-    const run = effectiveRun(live.current.run)
+  // 手动压缩（/compact）进行中时，当前执行是这次压缩（run.compaction 不为 null）。它没有对话消息，不是一轮：
+  // 不进对话流、不占编号和刻度，定位时也不算新消息；忙碌状态由对话页照常显示。
+  const current = live.current && live.current.run.compaction == null ? live.current : null
+  if (current && !byRun.has(current.run.id) && (atLatest || historyRuns.has(current.run.id))) {
+    const run = effectiveRun(current.run)
     const turn: Turn = { key: run.id, user: null, run, reply: null, sessionEpoch: live.session?.epoch ?? 0 }
     byRun.set(turn.key, turn)
     order.push(turn)
   }
-  if (live.current) {
-    const turn = byRun.get(live.current.run.id)
-    if (turn && !turn.reply) turn.reply = { text: live.current.text, live: true }
+  if (current) {
+    const turn = byRun.get(current.run.id)
+    if (turn && !turn.reply) turn.reply = { text: current.text, live: true }
   }
 
   const queuedOrder = live.queued.map((r) => r.id)
@@ -74,7 +77,7 @@ export function buildTurns(
   // 排队中即作废、没有执行的轮次不进入对话流。
   const started = order.filter((turn) => turn.run.status !== 'queued' && !isVoidedRun(turn.run))
   const hiddenRuns = new Set(atLatest ? [] : started.filter((turn) => !historyRuns.has(turn.run.id)).map((turn) => turn.run.id))
-  if (!atLatest && live.current && !historyRuns.has(live.current.run.id)) hiddenRuns.add(live.current.run.id)
+  if (!atLatest && current && !historyRuns.has(current.run.id)) hiddenRuns.add(current.run.id)
   const turns = started
     .filter((turn) => !hiddenRuns.has(turn.run.id))
     .map((turn, index) => ({ turn, index }))

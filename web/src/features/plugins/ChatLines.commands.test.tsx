@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { expect, it } from 'vitest'
 import { CommandLine } from './ChatLines'
 import type { Schemas } from '@/api/client'
+import { makeRun } from '@/test/api'
 
 const base: Schemas['ConsoleCommandResult'] = { handled: true, source: 'platform', plugin: '', reply: null, command: 'compact' }
 
@@ -69,4 +70,30 @@ it('/resume 的会话列表：上面一道实线，行与行之间虚线；当�
   expect(screen.getByTitle('12345678-1234-1234-1234-123456789abc')).toHaveClass('font-mono')
   expect(rows[0].querySelector('time')).toHaveClass('font-mono')
   expect(screen.getByRole('button', { name: '恢复' })).toHaveClass('border-2', 'border-ink', 'bg-paper-raised')
+})
+
+// /compact 的结果读返回里的 compactRun.compaction：压缩了写前后的 token；Pi 没有压缩时按原因说明（这时 token 为 null）。
+const compaction = (overrides: Partial<Schemas['RunCompaction']>): Schemas['ConsoleCommandResult'] => ({
+  ...base,
+  command: 'compact',
+  tokensBefore: null,
+  estimatedTokensAfter: null,
+  compactRun: { ...makeRun(), compaction: { instructions: '', outcome: null, skipReason: null, tokensBefore: null, estimatedTokensAfter: null, ...overrides } },
+})
+
+it('/compact 压缩了：显示压缩前后的 token（读 compactRun.compaction）', () => {
+  render(<CommandLine command="/compact" at="2026-10-31T01:00:00Z" result={compaction({ outcome: 'compacted', tokensBefore: 52000, estimatedTokensAfter: 4100 })} />)
+  expect(screen.getByRole('note')).toHaveTextContent('上下文已压缩：52000 → 约 4100 tokens')
+})
+
+it.each([
+  ['too_small', '会话内容太少，不用压缩'],
+  ['already_compacted', '上次压缩之后还没有新内容，不用再压缩'],
+  ['cancelled_by_extension', '这次压缩被扩展取消了'],
+] as const)('/compact 没有压缩（%s）：说明“%s”，不写 token', (skipReason, wording) => {
+  render(<CommandLine command="/compact" at="2026-10-31T01:00:00Z" result={compaction({ outcome: 'skipped', skipReason })} />)
+  const line = screen.getByRole('note')
+  expect(line).toHaveTextContent(wording)
+  expect(line).not.toHaveTextContent('上下文已压缩')
+  expect(line).not.toHaveTextContent('null')
 })

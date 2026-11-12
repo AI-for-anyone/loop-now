@@ -12,8 +12,14 @@ function platformReply(result: Schemas['ConsoleCommandResult']): string {
   switch (result.command) {
     case 'session':
       return result.session ? text.session(result.session) : text.noReply
-    case 'compact':
-      return result.tokensBefore != null && result.estimatedTokensAfter != null ? text.compact(result.tokensBefore, result.estimatedTokensAfter) : text.noReply
+    case 'compact': {
+      // 结果在这次压缩的执行上（compactRun.compaction）：压缩了写前后的 token；Pi 没有压缩时按原因说明，这时 token 为 null。
+      const compaction = result.compactRun?.compaction
+      if (compaction?.outcome === 'skipped' && compaction.skipReason) return text.compactSkipped[compaction.skipReason]
+      const before = compaction?.tokensBefore ?? result.tokensBefore
+      const after = compaction?.estimatedTokensAfter ?? result.estimatedTokensAfter
+      return before != null && after != null ? text.compact(before, after) : text.noReply
+    }
     case 'reload':
       return result.processStopped ? text.reloaded : text.reloadNotNeeded
     case 'new':
