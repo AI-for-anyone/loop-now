@@ -315,7 +315,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
   const sendLabel = busy ? t.chat.queueSend : t.chat.send
   const showStop = busy && stop !== undefined && !reply && text.trim() === '' && images.length === 0
   const stopLabel = stop?.pending ? t.chat.stopping : stop?.retry ? t.chat.retryStop : t.chat.stop
-  const editor = <Textarea ref={editorRef} aria-label={t.chat.inputLabel} placeholder={reply ? t.consoleInbox.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder} value={text} disabled={inputDisabled}
+  const editor = <Textarea ref={editorRef} aria-label={t.chat.inputLabel} placeholder={reply ? t.consoleInbox.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder(agentName)} value={text} disabled={inputDisabled}
     onChange={event => { setText(event.target.value); setCaret(event.target.selectionStart) }} onSelect={event => setCaret(event.currentTarget.selectionStart)} onKeyDown={onKeyDown} rows={1} className={inputClass}
     aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={menuItems.length > 0} aria-controls={menuItems.length > 0 ? listId : undefined} aria-activedescendant={menuItems.length > 0 ? optionId(active) : undefined} />
   // 一行三样：左边加图片的圆按钮，中间输入框，右边发送的荧光粉圆章（忙且输入框为空时换成藏青的停止按钮）。
@@ -352,7 +352,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
       <div className={cn('flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 pr-1 text-[12px]', imageLimits && 'nav:pl-[52px]')}>
         <div className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-1.5">
           {status}
-          {busy ? <KeyHint stop={stop !== undefined} className="justify-start text-ink-700" kbdClassName={barKbdClass} /> : <IdleHint />}
+          {busy ? <KeyHint stop={stop !== undefined} className="justify-start text-ink-700" kbdClassName={barKbdClass} keys={{ enter: t.chat.barKeys.enter, modEnter: t.chat.barKeys.modEnter(mac) }} /> : <IdleHint />}
         </div>
         {connection}
       </div>
@@ -392,23 +392,34 @@ const barKbdClass = 'rounded-stamp border-[1.5px] border-ink bg-paper-raised px-
 function IdleHint() {
   return (
     <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-ink-700">
-      <kbd className={barKbdClass}>{t.chat.idleHint.enter}</kbd>
+      <kbd className={barKbdClass}>{t.chat.barKeys.enter}</kbd>
       <span>{t.chat.idleHint.send}</span>
       <span aria-hidden="true">·</span>
-      <kbd className={barKbdClass}>{t.chat.idleHint.shiftEnter}</kbd>
+      <kbd className={barKbdClass}>{t.chat.barKeys.shiftEnter}</kbd>
       <span>{t.chat.idleHint.newline}</span>
     </p>
   )
 }
 
-// 输入框下方的按键说明：Enter 排队，⌘／Ctrl+Enter 立即打断；有进行中的回复时说明停止按钮。任务节点的输入框也用它。
-export function KeyHint({ stop = false, className, kbdClassName = kbdClass }: { stop?: boolean; className?: string; kbdClassName?: string }) {
+// 输入框下方的按键说明：Enter 排队，⌘／Ctrl+Enter 立即打断；有进行中的回复时说明停止按钮。任务节点的输入框也用它（样式与按键写法是默认值）；
+// 对话页的输入区另给样式，并把按键写成这个界面语言的写法（中文是“回车”）。
+export function KeyHint({
+  stop = false,
+  className,
+  kbdClassName = kbdClass,
+  keys = { enter: t.chat.keyHint.enter, modEnter: t.chat.keyHint.modEnter(mac) },
+}: {
+  stop?: boolean
+  className?: string
+  kbdClassName?: string
+  keys?: { enter: string; modEnter: string }
+}) {
   return (
     <p className={cn('flex flex-wrap items-center justify-center gap-x-1.5 text-xs text-ink-500', className)}>
-      <kbd className={kbdClassName}>{t.chat.keyHint.enter}</kbd>
+      <kbd className={kbdClassName}>{keys.enter}</kbd>
       <span>{t.chat.keyHint.queue}</span>
       <span aria-hidden="true">·</span>
-      <kbd className={kbdClassName}>{t.chat.keyHint.modEnter(mac)}</kbd>
+      <kbd className={kbdClassName}>{keys.modEnter}</kbd>
       <span>{t.chat.keyHint.interrupt}</span>
       {stop && (
         <>

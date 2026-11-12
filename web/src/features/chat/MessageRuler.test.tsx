@@ -351,6 +351,19 @@ describe('每一轮的空心编号', () => {
     render(<List pages={pagesOf(texts(2))} hasOlder turnsBefore={24} />)
     expect(turnNumbers()).toEqual(['25', '26'])
   })
+
+  it('编号到四位数、五位数时缩小字号，不挤到右边的正文', () => {
+    const sizeOf = (text: string) => [...turnBlock(text).querySelector('[data-turn-number]')!.classList].filter((name) => name.startsWith('text-['))
+    const thousands = render(<List pages={pagesOf(texts(3))} hasOlder turnsBefore={998} />)
+    expect(turnNumbers()).toEqual(['999', '1000', '1001'])
+    expect(sizeOf('问题1')).toEqual(['text-[34px]'])
+    expect(sizeOf('问题2')).toEqual(['text-[24px]'])
+    thousands.unmount()
+    render(<List pages={pagesOf(texts(2))} hasOlder turnsBefore={9998} />)
+    expect(turnNumbers()).toEqual(['9999', '10000'])
+    expect(sizeOf('问题1')).toEqual(['text-[24px]'])
+    expect(sizeOf('问题2')).toEqual(['text-[19px]'])
+  })
 })
 
 describe('刻度的名称', () => {

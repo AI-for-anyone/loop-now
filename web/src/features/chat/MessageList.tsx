@@ -138,6 +138,9 @@ interface MessageListProps {
   turnsBefore?: number
 }
 
+// 编号那一栏宽 46px，离正文还有 18px：三位数以内用 34px 的字；四位数、五位数以上缩小字号，不挤到右边的正文。
+const numberSize = (number: number) => (number >= 10000 ? 'text-[19px]' : number >= 1000 ? 'text-[24px]' : undefined)
+
 // 插进对话流的内容与各轮的正文左对齐：宽屏时让出编号那一栏。
 function Insert({ children }: { children: ReactNode }) {
   return <div className="flex min-w-0 flex-col nav:pl-16">{children}</div>
@@ -317,7 +320,7 @@ export function MessageList({
                 {/* 一轮对话：左侧空白处是这一轮的空心编号（与刻度尺上的数字一致，不知道编号时留空），右侧是用户消息与回复。
                     定位到的那一轮用浅黄底突出显示。 */}
                 <div data-run-id={turn.run.id} data-located={isTarget || undefined} className={cn('flex gap-[18px]', isTarget && 'rounded-panel bg-tint-yellow p-4')}>
-                  <HollowNumber data-turn-number className="pt-5">
+                  <HollowNumber data-turn-number className={cn('pt-5', numberSize(firstNumber === null ? 0 : firstNumber + index))}>
                     {firstNumber === null ? '' : firstNumber + index}
                   </HollowNumber>
                   <div className="flex min-w-0 flex-1 flex-col gap-[22px]">

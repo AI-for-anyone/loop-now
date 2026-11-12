@@ -6,7 +6,7 @@ type S = components['schemas']
 export const chat = {
   loadingOlder: '正在加载更早的消息…',
   noMessages: '还没有对话，发一条消息开始吧。',
-  inputPlaceholder: '输入消息，回车发送，Shift+回车换行',
+  inputPlaceholder: (name: string) => `给 ${name} 发消息`,
   busyPlaceholder: (name: string) => `${name} 正在回复，新消息会排队`,
   send: '发送',
   queueSend: '排队发送',
@@ -160,8 +160,10 @@ export const chat = {
   interruptDivider: '已打断，先处理这条',
   // 输入框下方的按键说明：Enter 排队，⌘／Ctrl+Enter 作为打断发送。
   keyHint: { enter: 'Enter', modEnter: (mac: boolean) => (mac ? '⌘ Enter' : 'Ctrl Enter'), queue: '排队', interrupt: '立即打断', stopMark: '■', stop: '只停止当前回复' },
-  // 空闲时输入框下方的按键说明。
-  idleHint: { enter: '回车', send: '发送', shiftEnter: 'Shift + 回车', newline: '换行' },
+  // 对话页输入区里按键的写法：中文界面统一写“回车”，修饰键写法不变。任务节点输入框的按键说明仍用上面 keyHint 里的写法。
+  barKeys: { enter: '回车', shiftEnter: 'Shift + 回车', modEnter: (mac: boolean) => (mac ? '⌘ 回车' : 'Ctrl 回车') },
+  // 空闲时输入框下方的按键说明：回车 发送 · Shift + 回车 换行。
+  idleHint: { send: '发送', newline: '换行' },
   // 忙时输入框为空时，发送按钮换成停止：只停止这一次回复，不发送新消息，之后排队的消息照常处理。
   stop: '停止当前回复',
   stopping: '正在停止当前回复…',

@@ -100,6 +100,11 @@ it('输入框是浅纸底、藏青描边；发送按钮是荧光粉圆章（藏�
   expect(screen.getByRole('button', { name: '发送' })).toHaveClass('size-11', 'rounded-full', 'border-2', 'border-ink', 'bg-riso-pink', 'shadow-[3px_3px_0_var(--ink)]')
 })
 
+it('空闲时占位文字是“给 Agent 发消息”，不再写按键说明', () => {
+  mountBar()
+  expect(screen.getByRole('textbox', { name: '消息' })).toHaveAttribute('placeholder', '给 开发助手 发消息')
+})
+
 it('空闲时输入框下面写着回车发送、Shift + 回车换行', () => {
   mountBar()
   const hint = screen.getByText('发送', { selector: 'span' }).closest('p')!
@@ -111,7 +116,9 @@ it('空闲时输入框下面写着回车发送、Shift + 回车换行', () => {
 it('忙时按键说明换成排队与打断，输入框为空时发送按钮换成藏青色的停止按钮', () => {
   mountBar(true)
   const hint = screen.getByText('排队', { selector: 'span' }).closest('p')!
-  expect(hint).toHaveTextContent('Enter排队·')
+  // 中文界面里按键统一写“回车”，修饰键写法不变。
+  expect(hint).toHaveTextContent('回车排队·Ctrl 回车立即打断')
+  expect(hint).not.toHaveTextContent('Enter')
   // 在输入区里靠左，用输入区的按键样式。
   expect(hint).toHaveClass('justify-start', 'text-ink-700')
   expect(hint.querySelector('kbd')).toHaveClass('border-ink', 'bg-paper-raised')
@@ -135,6 +142,9 @@ it('别处（任务节点的输入框）用的按键说明保持原样：居中�
   const hint = screen.getByText('排队', { selector: 'span' }).closest('p')!
   expect(hint).toHaveClass('justify-center', 'text-ink-500')
   expect(hint.querySelector('kbd')).toHaveClass('bg-white', 'border-ink/25', 'font-mono')
+  // 按键的写法也保持原样。
+  expect(hint).toHaveTextContent('Enter排队·Ctrl Enter立即打断')
+  expect(hint).not.toHaveTextContent('回车')
 })
 
 it('输入框的文字在窄屏上是 16px（更小的字号会让 iOS 在聚焦时放大页面）', () => {

@@ -5,7 +5,7 @@ import { formatBytes, formatDayClock, formatMonthDayClock } from './format'
 export const chat = {
   loadingOlder: 'Loading earlier messages…',
   noMessages: 'No conversation yet. Send a message to start.',
-  inputPlaceholder: 'Type a message. Enter to send, Shift+Enter for a new line',
+  inputPlaceholder: (name: string) => `Message ${name}`,
   busyPlaceholder: (name: string) => `${name} is replying; new messages will queue`,
   send: 'Send',
   queueSend: 'Queue',
@@ -147,7 +147,8 @@ export const chat = {
   toolInterrupted: 'Interrupted',
   interruptDivider: 'Interrupted; handling this first',
   keyHint: { enter: 'Enter', modEnter: (mac: boolean) => (mac ? '⌘ Enter' : 'Ctrl Enter'), queue: 'to queue', interrupt: 'to interrupt', stopMark: '■', stop: 'Stop the current reply only' },
-  idleHint: { enter: 'Enter', send: 'send', shiftEnter: 'Shift + Enter', newline: 'new line' },
+  barKeys: { enter: 'Enter', shiftEnter: 'Shift + Enter', modEnter: (mac: boolean) => (mac ? '⌘ Enter' : 'Ctrl Enter') },
+  idleHint: { send: 'send', newline: 'new line' },
   stop: 'Stop the current reply',
   stopping: 'Stopping the current reply…',
   retryStop: 'Retry stopping the current reply',
