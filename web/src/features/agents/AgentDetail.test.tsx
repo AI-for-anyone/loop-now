@@ -224,11 +224,15 @@ describe('头部与页签的版式', () => {
     expect(within(header).queryByRole('button', { name: '复制地址' })).toBeNull()
   })
 
-  it('右上角的叠印装饰读屏不读，窄屏不显示', async () => {
-    const { header } = await open(makeAgent({ name: 'A 助手' }))
+  it('右上角的叠印装饰读屏不读；页头够宽才显示，显示时文字让出它的位置，不压在它上面', async () => {
+    const { header, title } = await open(makeAgent({ name: 'A 助手' }))
     const deco = header.querySelector<HTMLElement>('[data-overprint-deco]')!
     expect(deco).toHaveAttribute('aria-hidden', 'true')
-    expect(deco).toHaveClass('max-nav:hidden', 'pointer-events-none')
+    expect(deco).toHaveClass('pointer-events-none', 'hidden', '@[820px]:block')
+    // 页头是容器：按它自己的宽度决定，而不是按窗口宽度。
+    expect(header).toHaveClass('@container')
+    expect(title.parentElement).toHaveClass('@[820px]:pr-[316px]')
+    expect(within(header).getByText('anthropic · claude-sonnet-5-5').parentElement).toHaveClass('@[820px]:pr-[316px]')
   })
 
   it('四个页签是贴在纸张上沿的索引标签：当前页黄色，其余米灰色', async () => {

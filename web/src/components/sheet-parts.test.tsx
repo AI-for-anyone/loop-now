@@ -53,6 +53,13 @@ describe('索引标签', () => {
     expect(other).toHaveClass('h-[34px]', 'bg-paper-tab', 'text-ink-700', 'border-2', 'border-b-0', 'border-ink')
   })
 
+  it('窄屏时标签收窄，放不下还可以横向滚动，不把整页撑宽', () => {
+    tabs('/chat')
+    expect(screen.getByRole('navigation', { name: '开发助手' })).toHaveClass('max-nav:overflow-x-auto', 'max-nav:no-scrollbar')
+    expect(screen.getByRole('link', { name: '对话' })).toHaveClass('max-sm:px-2.5')
+    expect(screen.getByRole('link', { name: '配置' })).toHaveClass('max-sm:px-2.5')
+  })
+
   it('按钮式的分页（状态筛选、分类）用同一套样式', () => {
     expect(indexTabClass(true)).toContain('bg-riso-yellow')
     expect(indexTabClass(false)).toContain('bg-paper-tab')

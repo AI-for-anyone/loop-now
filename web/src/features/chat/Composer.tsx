@@ -90,7 +90,7 @@ function isPlatformCommand(text: string): boolean {
 
 // 边框归外面的输入框容器所有，文字区按内容增高，上限后独立滚动。
 const inputClass =
-  'field-sizing-fixed min-h-10 max-h-60 w-full flex-none resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-2 text-[15.5px] leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent'
+  'field-sizing-fixed min-h-10 max-h-60 w-full flex-none resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-2 text-[15.5px] leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent max-nav:text-base'
 
 export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeWhenDisabled = false, maxMessageBytes, imageLimits, onSent, onCommand, queue, status, connection, stop, reply, piCommands = true }: ComposerProps) {
   const client = useQueryClient()
@@ -343,16 +343,16 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
       )}
       <ErrorAlert error={imageError ?? (send.error?.code === 'agent_busy' ? null : send.error)} />
       {answer.outcome === 'ordinary' && <p role="status" className="text-[13px] font-bold">{t.inbox.question.ordinary}</p>}
-      {/* 排队托盘与输入框之间没有间距，连成一体：托盘贴在输入框上沿，左右让出加号与发送按钮的位置。 */}
+      {/* 排队托盘与输入框之间没有间距，连成一体：托盘贴在输入框上沿，左右让出加号与发送按钮的位置（手机宽度下占满一行）。 */}
       <div className="flex min-w-0 flex-col">
-        {queue && <div className={cn('flex min-w-0 flex-col pr-[57px]', imageLimits && 'pl-[50px]')}>{queue}</div>}
+        {queue && <div className={cn('flex min-w-0 flex-col sm:pr-[57px]', imageLimits && 'sm:pl-[50px]')}>{queue}</div>}
         {imageLimits ? <ImagePicker images={images} onChange={setImages} limits={imageLimits} disabled={disabled || reply !== undefined} uploads={uploads} addClassName="size-10 rounded-full border-2 border-ink bg-paper-raised text-ink hover:bg-white">{input}</ImagePicker> : input()}
       </div>
       {/* 下面一行：左边是忙碌提示与按键说明（空闲时是发送与换行，忙时是排队与打断），右边是实时连接状态。宽屏时与输入框左缘对齐。 */}
       <div className={cn('flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 pr-1 text-[12px]', imageLimits && 'nav:pl-[52px]')}>
         <div className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-1.5">
           {status}
-          {busy ? <KeyHint stop={stop !== undefined} /> : <IdleHint />}
+          {busy ? <KeyHint stop={stop !== undefined} className="justify-start text-ink-700" kbdClassName={barKbdClass} /> : <IdleHint />}
         </div>
         {connection}
       </div>
@@ -384,29 +384,31 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
 }
 
 const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
-const kbdClass = 'rounded-stamp border-[1.5px] border-ink bg-paper-raised px-1.5 font-sans text-[11px] leading-[17px] font-black text-ink'
+const kbdClass = 'rounded-stamp border border-ink/25 bg-white px-[5px] font-mono text-[11px] leading-4 font-medium text-ink-700'
+// 纸张底部输入区里的按键：浅纸底、藏青描边。
+const barKbdClass = 'rounded-stamp border-[1.5px] border-ink bg-paper-raised px-1.5 font-sans text-[11px] leading-[17px] font-black text-ink'
 
 // 空闲时输入框下方的按键说明：回车发送，Shift + 回车换行。
 function IdleHint() {
   return (
     <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-ink-700">
-      <kbd className={kbdClass}>{t.chat.idleHint.enter}</kbd>
+      <kbd className={barKbdClass}>{t.chat.idleHint.enter}</kbd>
       <span>{t.chat.idleHint.send}</span>
       <span aria-hidden="true">·</span>
-      <kbd className={kbdClass}>{t.chat.idleHint.shiftEnter}</kbd>
+      <kbd className={barKbdClass}>{t.chat.idleHint.shiftEnter}</kbd>
       <span>{t.chat.idleHint.newline}</span>
     </p>
   )
 }
 
 // 输入框下方的按键说明：Enter 排队，⌘／Ctrl+Enter 立即打断；有进行中的回复时说明停止按钮。任务节点的输入框也用它。
-export function KeyHint({ stop = false, className }: { stop?: boolean; className?: string }) {
+export function KeyHint({ stop = false, className, kbdClassName = kbdClass }: { stop?: boolean; className?: string; kbdClassName?: string }) {
   return (
-    <p className={cn('flex flex-wrap items-center gap-x-1.5 text-xs text-ink-700', className)}>
-      <kbd className={kbdClass}>{t.chat.keyHint.enter}</kbd>
+    <p className={cn('flex flex-wrap items-center justify-center gap-x-1.5 text-xs text-ink-500', className)}>
+      <kbd className={kbdClassName}>{t.chat.keyHint.enter}</kbd>
       <span>{t.chat.keyHint.queue}</span>
       <span aria-hidden="true">·</span>
-      <kbd className={kbdClass}>{t.chat.keyHint.modEnter(mac)}</kbd>
+      <kbd className={kbdClassName}>{t.chat.keyHint.modEnter(mac)}</kbd>
       <span>{t.chat.keyHint.interrupt}</span>
       {stop && (
         <>

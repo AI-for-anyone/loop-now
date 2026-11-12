@@ -100,7 +100,7 @@ export function RunRecord({ agentId, run, defaultOpen = false }: RunRecordProps)
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         onClick={() => setOpen((value) => !value)}
-        className="mt-0.5 inline-flex max-w-full items-stretch self-start rounded-[6px] bg-tint-blue text-[12px] leading-7 text-ink outline-none hover:bg-[#d6ddf4] focus-visible:shadow-focus"
+        className="mt-0.5 inline-flex max-w-full flex-wrap items-stretch self-start rounded-[6px] bg-tint-blue text-[12px] leading-7 text-ink outline-none hover:bg-[#d6ddf4] focus-visible:shadow-focus"
       >
         <span className="sr-only">{label}</span>
         <span aria-hidden="true" data-receipt-part className="px-[11px] font-black whitespace-nowrap">

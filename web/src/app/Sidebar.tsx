@@ -80,11 +80,11 @@ const sum = (rows: PendingCounts[]): PendingCounts => ({
 })
 
 // 列表下方空白处的装饰：一片伸出左缘的网点圆，旁边一粉一黄两个小色点。它占列表下面剩余的高度，
-// 剩余高度放不下整片装饰时不显示（见 index.css 的 .sidebar-deco），所以不会压到文字；读屏不读，也不挡点击。
+// 剩余高度放不下整片装饰时不显示（见 index.css 的 .sidebar-deco），所以不会压到文字；读屏不读，也不挡点击。窄屏的抽屉里不显示。
 function SidebarDeco() {
   return (
     <div className="sidebar-deco-slot">
-      <div aria-hidden="true" data-sidebar-deco className="sidebar-deco pointer-events-none absolute bottom-3 left-0 h-[178px] w-full">
+      <div aria-hidden="true" data-sidebar-deco className="sidebar-deco pointer-events-none absolute bottom-3 left-0 h-[178px] w-full max-nav:hidden">
         <span className="absolute bottom-0 -left-[72px] size-[178px] rounded-full bg-[radial-gradient(rgb(255_255_255/.36)_2.2px,transparent_2.6px)] bg-size-[11px_11px]" />
         <span className="absolute bottom-[126px] left-[108px] size-[34px] rounded-full border-2 border-ink bg-riso-pink" />
         <span className="absolute bottom-[108px] left-[132px] size-5 rounded-full border-2 border-ink bg-riso-yellow" />

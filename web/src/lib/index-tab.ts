@@ -4,6 +4,6 @@ import { cn } from './utils'
 // 链接（页签）与按钮（状态筛选、分类）都用它。
 export const indexTabClass = (current: boolean) =>
   cn(
-    'inline-flex shrink-0 items-center gap-2 rounded-t-[12px] border-2 border-b-0 border-ink text-[14px] font-black no-underline outline-none focus-visible:shadow-focus',
+    'inline-flex shrink-0 items-center gap-2 rounded-t-input border-2 border-b-0 border-ink text-[14px] font-black whitespace-nowrap no-underline outline-none focus-visible:shadow-focus max-sm:px-2.5',
     current ? 'h-10 bg-riso-yellow px-[22px] text-ink' : 'h-[34px] bg-paper-tab px-[18px] text-ink-700 hover:text-ink',
   )

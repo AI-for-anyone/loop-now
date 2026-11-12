@@ -283,14 +283,18 @@ export function MessageList({
 
   return (
     // 对话区右侧是票根里的刻度尺，不随消息滚动，取代原生滚动条（滚轮、触控板、键盘滚动不变）；
-    // 只有一轮或没有对话时票根里没有刻度。左侧栏收进抽屉的窄屏不显示票根，那时保留原生滚动条。
+    // 只有一轮或没有对话时票根里没有刻度，左侧栏收进抽屉的窄屏不显示票根：这两种情况都保留原生滚动条。
     <div className="flex h-full min-h-0">
       {/* 滚动区本身是定位容器：里面绝对定位的元素（未读圆点、脚注标题的 sr-only 说明等）随内容滚动并被裁剪，
           否则它们按未滚动时的位置排在整页里，把页面撑高，输入框下面能拖出一大片空白。 */}
       <div
         ref={container}
         onScroll={onScroll}
-        className="relative h-full min-w-0 flex-1 overflow-y-auto pt-[26px] pr-[clamp(14px,3vw,44px)] pb-[22px] pl-[clamp(12px,2vw,28px)] nav:no-scrollbar"
+        className={cn(
+          'relative h-full min-w-0 flex-1 overflow-y-auto pt-[26px] pr-[clamp(14px,3vw,44px)] pb-[22px] pl-[clamp(12px,2vw,28px)]',
+          // 有刻度尺时（至少两轮、宽屏）隐藏原生滚动条；没有刻度时保留，一条很长的回复也看得出滚到哪了。
+          turns.length > 1 && 'nav:no-scrollbar',
+        )}
         role="log"
         aria-label={t.chat.messagesLabel}
       >

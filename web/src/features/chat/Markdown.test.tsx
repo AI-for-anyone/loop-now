@@ -176,6 +176,7 @@ describe('列表项开头的加粗词', () => {
   it('无序列表里开头的加粗词是标签，后面的文字排在标签右边；标签后面紧跟的冒号不再显示', () => {
     const { container } = render(<Markdown text={'归好了：\n\n- **导出** 大文件导出到一半会停。\n- **搜索**：中文分词不准，见 `search.go`。\n- **通知**: 同一件事提醒两次。'} />)
     const [first, second, third] = items(container)
+    expect(container.querySelector('ul')).toHaveClass('md-lead-list')
     for (const item of [first, second, third]) {
       expect(item).toHaveClass('md-lead-item')
       expect(item.firstElementChild).toHaveClass('md-lead')
@@ -188,6 +189,47 @@ describe('列表项开头的加粗词', () => {
     expect(second.lastElementChild!.textContent).toBe('中文分词不准，见 search.go。')
     expect(second.lastElementChild!.querySelector('code')).toHaveTextContent('search.go')
     expect(third.lastElementChild!.textContent).toBe('同一件事提醒两次。')
+  })
+
+  it('整张列表每一项都是“加粗词 + 行内文字”时才改成横排；有一项不是，整张列表保留圆点，加粗词仍是标签', () => {
+    const all = render(<Markdown text={'- **导出** 会停\n- **搜索** 不准'} />)
+    expect(all.container.querySelector('ul')).toHaveClass('md-lead-list')
+    all.unmount()
+    const mixed = render(<Markdown text={'- **导出**：会停\n- 普通的一项\n- **搜索**：不准'} />)
+    expect(mixed.container.querySelector('ul')).not.toHaveClass('md-lead-list')
+    expect(mixed.container.querySelector('.md-lead-item')).toBeNull()
+    expect(mixed.container.querySelector('.md-lead-text')).toBeNull()
+    expect(mixed.container.querySelectorAll('strong.md-lead')).toHaveLength(2)
+    expect(items(mixed.container)[0].textContent).toBe('导出会停')
+    mixed.unmount()
+    // 一项带子列表、另一项不带：两项排法要一致，都不横排。
+    const nested = render(<Markdown text={'- **导出**：两个问题\n  - 大文件会停\n- **搜索**：不准'} />)
+    expect(nested.container.querySelector('.md-lead-item')).toBeNull()
+    expect(nested.container.querySelectorAll('strong.md-lead')).toHaveLength(2)
+  })
+
+  it('普通列表项里的子列表整张都是标签项时，子列表自己横排（缩进不变）', () => {
+    const { container } = render(<Markdown text={'- 这周的问题\n  - **导出** 会停\n  - **搜索** 不准'} />)
+    const [outer, inner] = container.querySelectorAll('ul')
+    expect(outer).not.toHaveClass('md-lead-list')
+    expect(inner).toHaveClass('md-lead-list')
+    expect(inner.querySelectorAll('li.md-lead-item')).toHaveLength(2)
+  })
+
+  it('只去掉当分隔用的冒号：全角冒号，或后面是空白、行尾的半角冒号；端口、时间、盘符、:: 里的冒号保留', () => {
+    const rest = (text: string) => {
+      const view = render(<Markdown text={text} />)
+      const value = view.container.querySelector('li')!.textContent
+      view.unmount()
+      return value
+    }
+    expect(rest('- **地址**：见下')).toBe('地址见下')
+    expect(rest('- **地址**: 见下')).toBe('地址见下')
+    expect(rest('- **地址**:')).toBe('地址')
+    expect(rest('- **localhost**:3000 已启动')).toBe('localhost:3000 已启动')
+    expect(rest('- **12**:30 午饭')).toBe('12:30 午饭')
+    expect(rest('- **C**:\\Users')).toBe('C:\\Users')
+    expect(rest('- **std**::vector')).toBe('std::vector')
   })
 
   it('加粗词不在开头、或者开头是别的内容（任务列表的勾选框）时不做成标签', () => {

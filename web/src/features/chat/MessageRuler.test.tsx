@@ -298,7 +298,8 @@ describe('票根里的刻度尺', () => {
   it('刻度间距上限 23px、下限 8px，放不下时刻度尺自己滚动', () => {
     render(<List pages={pagesOf(['一', '二'])} />)
     const list = nav().querySelector('ol')!
-    expect(list).toHaveClass('overflow-y-auto', 'no-scrollbar')
+    // 记号笔略微伸出右缘：刻度尺只上下滚动，左右裁掉。
+    expect(list).toHaveClass('overflow-y-auto', 'overflow-x-hidden', 'no-scrollbar')
     for (const item of list.querySelectorAll('li')) expect(item).toHaveClass('flex-[0_1_23px]', 'min-h-2')
   })
 
@@ -318,6 +319,14 @@ describe('票根里的刻度尺', () => {
     const log = screen.getByRole('log')
     expect(log).toHaveClass('nav:no-scrollbar', 'overflow-y-auto')
     expect(log).not.toHaveClass('no-scrollbar')
+  })
+
+  it('只有一轮或没有对话时票根里没有刻度，原生滚动条保留（一条很长的回复也看得出滚到哪了）', () => {
+    const { rerender } = render(<List pages={pagesOf(['唯一的问题'])} />)
+    expect(screen.getByRole('log')).not.toHaveClass('nav:no-scrollbar')
+    rerender(<List pages={pagesOf([])} />)
+    expect(screen.getByRole('log')).not.toHaveClass('nav:no-scrollbar')
+    expect(screen.getByRole('log')).toHaveClass('overflow-y-auto')
   })
 })
 

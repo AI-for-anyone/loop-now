@@ -93,7 +93,7 @@ export function AgentDetail() {
   return (
     // 页头与索引标签在上，页签内容在下面那张纸里。左右与底部的留白随窗口宽度变化，底部给纸张的投影留出位置。
     <div className="flex h-full min-h-0 flex-col px-[clamp(14px,2.4vw,34px)] pb-[26px] max-nav:pb-4">
-      <header className="relative flex shrink-0 flex-col gap-3 pt-[22px] pb-[18px]" data-agent-header>
+      <header className="@container relative flex shrink-0 flex-col gap-3 pt-[22px] pb-[18px]" data-agent-header>
         <OverprintDeco />
         <nav aria-label={t.shell.breadcrumb} className="relative">
           <ol className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] font-bold text-ink-500">
@@ -110,14 +110,14 @@ export function AgentDetail() {
             </li>
           </ol>
         </nav>
-        <div className="relative flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-2.5">
+        <div className="relative flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-2.5 @[820px]:pr-[316px]">
           <h1 className={cn(sheetTitleClass, 'mr-1.5')}>{agent.data.name}</h1>
           {agent.data.isManager && <ManagerBadge size="md" className="px-3 text-[12.5px] leading-6" />}
           <RuntimeBadge runtime={agent.data.runtime} />
           <StatusChip agent={agent.data} live={live?.agentId === agentId ? live.state : null} />
         </div>
         {/* 模型与地址一行：模型是浅蓝底的等宽标签，地址在虚线框里。 */}
-        <div className="relative flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-2 text-[12px]">
+        <div className="relative flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-2 text-[12px] @[820px]:pr-[316px]">
           <span className="min-w-0 rounded-stamp bg-tint-blue px-[9px] font-mono leading-[22px] [overflow-wrap:anywhere]">{`${agent.data.model.provider} · ${agent.data.model.modelId}`}</span>
           <AgentAddress address={agent.data.address} />
         </div>

@@ -79,7 +79,7 @@ export function MessageRuler({ turns, visible, onJump, firstNumber, total, class
   const hintLabel = hint && turns.find((turn) => turn.key === hint.key)?.label
   return (
     <Stub as="nav" ref={nav} data-turn-stub aria-label={t.chat.ruler.label} label={t.chat.ruler.title} className={cn('relative w-[74px]', className)}>
-      <ol ref={list} onScroll={replace} className="no-scrollbar relative flex min-h-0 flex-1 flex-col overflow-y-auto py-2 font-mono text-[10.5px] leading-none font-bold text-ink-700">
+      <ol ref={list} onScroll={replace} className="no-scrollbar relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto py-2 font-mono text-[10.5px] leading-none font-bold text-ink-700">
         {turns.map((turn, index) => {
           const current = visible.has(turn.key)
           const number = firstNumber === null ? null : firstNumber + index

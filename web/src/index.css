@@ -335,13 +335,19 @@
   .markdown :not(pre) > code {
     @apply rounded-stamp bg-tint-blue px-[7px] py-px font-mono text-[0.85em];
   }
-  /* 列表项开头的加粗词：黄色小标签（由 rehype-lead-label 标出）。无序列表里只有行内内容的一项改成横排，
-     标签在左、文字在右，不画圆点；相邻两项之间留 6px。 */
+  /* 列表项开头的加粗词：黄色小标签（由 rehype-lead-label 标出）。整张无序列表每一项都是“标签 + 行内文字”时
+     （.md-lead-list）改成横排：标签在左、文字在右，不画圆点，相邻两项之间留 6px；最外层的这种列表不缩进，子列表保留缩进。 */
   .markdown .md-lead {
     @apply mr-3 inline-block rounded-stamp bg-riso-yellow px-[9px] text-[13.5px] leading-6 font-black;
   }
+  .markdown ul.md-lead-list {
+    @apply list-none;
+  }
+  .markdown > ul.md-lead-list {
+    @apply pl-0;
+  }
   .markdown li.md-lead-item {
-    @apply -ml-6 flex list-none items-baseline;
+    @apply flex items-baseline;
   }
   .markdown li.md-lead-item > .md-lead {
     @apply shrink-0;

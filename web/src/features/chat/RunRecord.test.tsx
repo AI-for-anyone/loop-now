@@ -235,6 +235,8 @@ describe('运行记录的触发条', () => {
     expect(name).not.toHaveClass('font-mono')
     expect(duration).toHaveClass('font-mono', 'border-l-[1.5px]', 'border-dashed')
     expect(tokens).toHaveClass('font-mono', 'border-l-[1.5px]', 'border-dashed')
+    // 窄屏放不下时各段换行，不伸到底色外面。
+    expect(toggle).toHaveClass('flex-wrap', 'max-w-full')
   })
 
   it('进行中只有两段：名称｜已用时间', async () => {

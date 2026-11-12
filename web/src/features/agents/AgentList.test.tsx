@@ -201,7 +201,8 @@ describe('左侧栏的样式', () => {
     await within(sidebar()).findByRole('link', { name: /manager/ })
     const deco = sidebar().querySelector<HTMLElement>('[data-sidebar-deco]')!
     expect(deco).toHaveAttribute('aria-hidden', 'true')
-    expect(deco).toHaveClass('pointer-events-none', 'sidebar-deco')
+    // 窄屏的抽屉里不显示。
+    expect(deco).toHaveClass('pointer-events-none', 'sidebar-deco', 'max-nav:hidden')
     expect(deco.parentElement).toHaveClass('sidebar-deco-slot')
     expect(deco.querySelectorAll('span')).toHaveLength(3)
   })
