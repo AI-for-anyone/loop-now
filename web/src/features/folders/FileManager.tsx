@@ -26,8 +26,9 @@ interface FileManagerProps {
   // Context.limits.maxFolderUpload：单个上传文件的上限。
   maxUpload?: number
   className?: string
-  // card：设置页里的一块，带边框；sheet：Agent 的文件夹页签与项目文件夹页，直接排在纸上，右侧是票根里的概况。
-  variant?: 'card' | 'sheet'
+  // card：带浅边框的白底卡片（全局设置）；sheet：Agent 的文件夹页签与项目文件夹页，直接排在纸上，右侧是票根里的概况；
+  // panel：纸上一个分区里的一块（项目设置），与 sheet 同样的工具条与列表，外面一圈 2px 藏青描边，没有票根。
+  variant?: 'card' | 'sheet' | 'panel'
   // sheet 版底部说明里的第一句（例如“这是它的工作目录”）。
   note?: ReactNode
 }
@@ -44,7 +45,8 @@ const INTERNAL = 'application/x-loop-now-path'
 
 // 文件管理器：左边是逐级展开的文件树，右边是文件夹列表或文件内容；窄时只有右边，文件树从左侧滑出。
 export function FileManager({ source, rootLabel, limits, maxUpload, className, variant = 'card', note }: FileManagerProps) {
-  const sheet = variant === 'sheet'
+  // sheet 与 panel 用改版的工具条（带字的胶囊）、底部虚线与说明；只有 sheet 有票根。
+  const sheet = variant !== 'card'
   const client = useQueryClient()
   const [selection, setSelection] = useState<Selection>(ROOT)
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
@@ -195,7 +197,11 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
       data-file-manager
       className={cn(
         '@container relative flex min-h-0 flex-col overflow-hidden text-ink',
-        sheet ? 'min-w-0 flex-1 gap-5 pt-6 pr-[clamp(14px,3vw,40px)] pb-[22px] pl-[clamp(12px,2vw,34px)]' : cn('rounded-card border-[1.5px] border-ink/15 bg-white', className),
+        variant === 'sheet'
+          ? 'min-w-0 flex-1 gap-5 pt-6 pr-[clamp(14px,3vw,40px)] pb-[22px] pl-[clamp(12px,2vw,34px)]'
+          : variant === 'panel'
+            ? cn('gap-4 rounded-card border-2 border-ink bg-paper-raised px-4 pt-4 pb-3', className)
+            : cn('rounded-card border-[1.5px] border-ink/15 bg-white', className),
       )}
       onDragOver={(event) => { if (event.dataTransfer.types.includes('Files') || event.dataTransfer.types.includes(INTERNAL)) { event.preventDefault(); if (event.dataTransfer.types.includes('Files')) setDraggingFiles(true) } }}
       onDragLeave={(event) => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) { setDraggingFiles(false); setDropTarget(null) } }}
@@ -326,7 +332,7 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
       )}
     </div>
   )
-  if (!sheet) return manager
+  if (variant !== 'sheet') return manager
   // 纸张版：右侧是票根里的概况，窄屏不显示。
   return (
     <div className={cn('flex min-h-0', className)}>

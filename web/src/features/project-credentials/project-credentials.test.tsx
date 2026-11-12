@@ -11,7 +11,7 @@ import { renderConfig, providers, larkTemplate } from '@/test/config'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { DraftNavigationGuard } from '@/features/prompts/DraftNavigationGuard'
-import { ProjectAccounts } from './ProjectAccounts'
+import { ProjectAccounts, ProjectCredentialSettings } from './ProjectAccounts'
 import { ProjectLogin } from './ProjectLogin'
 
 afterEach(() => vi.restoreAllMocks())
@@ -333,5 +333,26 @@ describe('项目OAuth正式HTTP fixture，供应商不导航', () => {
     expect(await screen.findByText('本次登录失败')).toBeInTheDocument()
     expect(screen.getByText('原有账号保持不变。')).toBeInTheDocument()
     expect(starts).toEqual([{ provider: 'openai-codex', accountId: account.id, expectedRevision: 7 }])
+  })
+})
+
+// 改版“一张印出来的纸”第 3 步：项目设置里账号排在“项目账号”这个编号分区里。
+describe('嵌在项目设置的编号分区里', () => {
+  it('模型账号与 CLI 账号是分区里的两块：标题小一号（h3），不是卡片，两块之间一道虚线', async () => {
+    server.use(directory, http.get(apiUrl('/projects/:projectId/credential-accounts'), () => HttpResponse.json({ projectId: defaultProject.id, credentialsRevision: 1, accounts: [] })))
+    renderRoutes([{ path: '/', element: <DraftNavigationGuard><ProjectCredentialSettings projectId={defaultProject.id} embedded /></DraftNavigationGuard> }], '/')
+    const model = await screen.findByRole('region', { name: '模型账号' })
+    const cli = screen.getByRole('region', { name: 'CLI 账号' })
+    expect(within(model).getByRole('heading', { level: 3, name: '模型账号' })).toBeInTheDocument()
+    for (const block of [model, cli]) expect(block).not.toHaveClass('shadow-print-rest', 'bg-paper-raised')
+    expect(cli).toHaveClass('not-first:border-t-[1.5px]', 'not-first:border-dashed')
+  })
+
+  it('不可用时说明直接放进分区，没有自己的标题', async () => {
+    server.use(http.get(apiUrl('/projects/:projectId/credential-accounts'), () => HttpResponse.json(errorBody('not_found', 'not found'), { status: 404 })))
+    renderRoutes([{ path: '/', element: <DraftNavigationGuard><ProjectCredentialSettings projectId={defaultProject.id} embedded /></DraftNavigationGuard> }], '/')
+    await screen.findByRole('button', { name: '录入账号' })
+    expect(screen.queryByRole('heading', { name: '项目账号' })).toBeNull()
+    expect(screen.queryByRole('region')).toBeNull()
   })
 })

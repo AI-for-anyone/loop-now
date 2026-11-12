@@ -6,7 +6,7 @@ import { ProjectLarkUserLogin } from './ProjectLarkUserLogin'
 import { LarkAccountDetails } from './LarkAccountDetails'
 import { LocalCLIImport } from './LocalCLIImport'
 import { CLIConnectionVerification } from './CLIConnectionVerification'
-import { useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useContext, createContext, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { Schemas } from '@/api/client'
 import { createProjectAccount, deleteProjectAccount, invalidateProjectCredentials, projectCredentialsUnsupported, readProjectAccount, renameProjectAccount, replaceProjectAccount, useCredentialImpact, useProjectAccounts } from '@/api/project-credentials'
@@ -28,11 +28,12 @@ import { providerEntries, providerName } from './provider-catalog'
 import { AuthBadges, ProviderPicker } from './ProviderPicker'
 
 // 单次能力读取统一模型/CLI错误；已有表单在暂时不可用时保留，不转为其他凭证身份。
-export function ProjectCredentialSettings({ projectId }: { projectId: string }) {
+// embedded：项目设置里排在“项目账号”这个编号分区里——不可用时的说明直接放进分区，模型账号与 CLI 账号是分区里的两块。
+export function ProjectCredentialSettings({ projectId, embedded = false }: { projectId: string; embedded?: boolean }) {
   const accounts = useProjectAccounts(projectId)
   const available = !!accounts.data && !accounts.error
-  return <ProjectCredentialsAvailable value={available}>
-    {!available && <AccountCard title={t.credentials.accounts.title}>
+  return <ProjectCredentialsAvailable value={available}><AccountsLayout.Provider value={embedded}>
+    {!available && <AccountCard title={t.credentials.accounts.title} merged={embedded}>
       {projectCredentialsUnsupported(accounts.error)
         ? <p role="alert" className="text-[13.5px] font-bold">{t.credentials.accounts.unsupported}</p>
         : accounts.error ? <ErrorAlert error={accounts.error} /> : <p role="status">{t.credentials.accounts.loading}</p>}
@@ -42,7 +43,7 @@ export function ProjectCredentialSettings({ projectId }: { projectId: string }) 
       <ProjectAccounts projectId={projectId} purpose="model" />
       <ProjectAccounts projectId={projectId} purpose="cli" />
     </fieldset>}
-  </ProjectCredentialsAvailable>
+  </AccountsLayout.Provider></ProjectCredentialsAvailable>
 }
 
 type AccountsProps = { projectId: string; purpose: Schemas['ProjectCredentialPurpose']; cli?: string }
@@ -177,7 +178,13 @@ function GitHubIdentity({ account }: { account: Schemas['ProjectCredentialAccoun
   </dl>
 }
 
-function AccountCard({ title, children }: { title: string; children: ReactNode }) {
+// 嵌在编号分区里时（项目设置）：不是卡片，是分区里的一块，标题小一号（h3），两块之间一道虚线；
+// merged：内容直接并进分区（分区标题就是这一块的标题）。
+const AccountsLayout = createContext(false)
+function AccountCard({ title, children, merged = false }: { title: string; children: ReactNode; merged?: boolean }) {
   const id = useId()
+  const embedded = useContext(AccountsLayout)
+  if (merged) return <div className="grid min-w-0 gap-4">{children}</div>
+  if (embedded) return <section aria-labelledby={id} className="grid min-w-0 gap-3.5 text-ink not-first:border-t-[1.5px] not-first:border-dashed not-first:border-ink/25 not-first:pt-4"><h3 id={id} className="text-[17px] leading-[1.3] font-black">{title}</h3>{children}</section>
   return <section aria-labelledby={id} className="grid min-w-0 gap-4 rounded-panel bg-paper-raised px-6 py-[22px] text-ink shadow-print-rest"><h2 id={id} className="font-display-cn text-[30px] leading-[1.15]">{title}</h2>{children}</section>
 }

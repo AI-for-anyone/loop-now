@@ -4,7 +4,8 @@ import { useContextInfo } from '@/api/queries'
 import { useAgentContext } from '@/features/agents/agent-context'
 import { useScope } from '@/features/projects/scope-context'
 import { Sheet } from '@/components/Sheet'
-import { sheetTitleClass } from '@/lib/page-title'
+import { PageFrame, PageHeader } from '@/components/PageHeader'
+import { overviewPath } from '@/lib/scope'
 import { t } from '@/i18n'
 import { FileManager } from './FileManager'
 
@@ -28,6 +29,25 @@ export function AgentFolderTab() {
 }
 
 // 项目设置与全局设置里的共享文件夹：占满主栏宽度，高度随视口；没有“从 Git 拉取”。
+// 项目设置里“项目文件夹”一区的内容：一句说明加一个文件管理器（改版：纸上分区里 2px 藏青描边的一块）。
+export function ContextFolderBody({ projectId }: { projectId: string }) {
+  const context = useContextInfo()
+  const source = useMemo(() => folderSource({ kind: 'project', projectId }), [projectId])
+  return (
+    <>
+      <p className="text-[13.5px] text-ink-700">{t.folders.project.intro}</p>
+      <FileManager
+        variant="panel"
+        source={source}
+        rootLabel={t.folders.rootLabel.project}
+        limits={context.data?.limits.textEdit}
+        maxUpload={context.data?.limits.maxFolderUpload}
+        className="h-[clamp(30rem,70dvh,50rem)]"
+      />
+    </>
+  )
+}
+
 export function ContextFolderSection({ scope }: { scope: { kind: 'project'; projectId: string } | { kind: 'global' } }) {
   const context = useContextInfo()
   const titleId = useId()
@@ -42,21 +62,21 @@ export function ContextFolderSection({ scope }: { scope: { kind: 'project'; proj
   )
 }
 
-// 左侧栏“项目文件夹”打开的页面：项目里的 Agent 共用的文件夹。页头（标题与说明）在纸外面，文件夹在一张纸上，
-// 与 Agent 的文件夹页签同一种版式（右侧票根里是概况）。
+// 左侧栏“项目文件夹”打开的页面：项目里的 Agent 共用的文件夹。页头是共用的页面标题（面包屑、标题与说明），
+// 文件夹在一张纸上，与 Agent 的文件夹页签同一种版式（右侧票根里是概况）。
 export function ProjectFolderPage() {
   const scope = useScope()
   const context = useContextInfo()
-  const projectId = scope.kind === 'project' ? scope.project.id : null
+  const project = scope.kind === 'project' ? scope.project : null
+  const projectId = project?.id ?? null
   const source = useMemo(() => (projectId ? folderSource({ kind: 'project', projectId }) : null), [projectId])
-  if (!source) return null
+  if (!source || !project) return null
   return (
-    <div className="flex h-full min-h-0 flex-col px-[clamp(14px,2.4vw,34px)] pb-[26px] max-nav:pb-4 lg:overflow-hidden">
-      <header className="flex shrink-0 flex-col gap-3 pt-[22px] pb-[18px]">
-        <h1 className={sheetTitleClass}>{t.folders.project.title}</h1>
-        <p className="text-[13.5px] text-ink-700">{t.folders.project.intro}</p>
-      </header>
-      <Sheet className="h-[clamp(28rem,80dvh,56rem)] shrink-0 lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink">
+    <PageFrame className="lg:overflow-hidden">
+      <PageHeader crumbs={[{ label: project.name, to: overviewPath({ kind: 'project', name: project.name }) }]} title={t.folders.project.title}>
+        <span>{t.folders.project.intro}</span>
+      </PageHeader>
+      <Sheet className="mt-2 h-[clamp(28rem,80dvh,56rem)] shrink-0 lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink">
         <FileManager
           key={projectId}
           variant="sheet"
@@ -67,6 +87,6 @@ export function ProjectFolderPage() {
           className="h-full"
         />
       </Sheet>
-    </div>
+    </PageFrame>
   )
 }

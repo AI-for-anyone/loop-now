@@ -172,3 +172,69 @@ describe('按作用域新建与删除 Agent', () => {
     expect(state.projects.find((p) => p.id === other.id)?.managerAgentId).toBeNull()
   })
 })
+
+// 改版“一张印出来的纸”第 3 步：项目设置排在一张纸上，编号分区与票根里的目录尺，和 Agent 配置页同一套。
+describe('纸张上的项目设置', () => {
+  const titles = ['项目名称', '项目 Prompt', '项目文件夹', '本机目录', '插件', 'Manager', '项目账号', '删除项目']
+  const region = (name: string) => screen.getByRole('region', { name })
+
+  it('页头是页面标题：面包屑是项目名称，标题“项目设置”，旁边是默认项目标记与等宽的项目 ID', async () => {
+    setup()
+    renderRoutes(routes, `${base(defaultProject.name)}/settings`)
+    const title = await screen.findByRole('heading', { level: 1, name: '项目设置' })
+    const header = title.closest('header')!
+    expect(within(header).getByRole('navigation', { name: '页面位置' })).toHaveTextContent(`${defaultProject.name}›项目设置`)
+    const meta = header.querySelector<HTMLElement>('[data-page-meta]')!
+    expect(within(meta).getByText('默认项目')).toHaveClass('bg-ink', 'text-white', 'rounded-full')
+    expect(within(meta).getByText(defaultProject.id)).toHaveClass('font-mono')
+  })
+
+  it('八个分区按顺序编号 01–08，直接排在纸上，分区之间虚线；删除项目一区沿用红色', async () => {
+    setup()
+    renderRoutes(routes, `${base('模型接入')}/settings`)
+    await screen.findByRole('region', { name: '项目名称' })
+    const sheet = region('项目名称').closest('[data-sheet]')!
+    titles.forEach((name, index) => {
+      const section = region(name)
+      expect(sheet).toContainElement(section)
+      expect(section.querySelector('[data-section-number]')).toHaveTextContent(String(index + 1).padStart(2, '0'))
+      expect(within(section).getAllByRole('heading', { level: 2 })[0]).toHaveClass('riso-marker', 'font-display-cn')
+      expect(section).not.toHaveClass('shadow-print-rest')
+      if (index > 0) expect(section).toHaveClass('border-t-2', 'border-dashed')
+    })
+    const danger = region('删除项目')
+    expect(within(danger).getByRole('heading', { level: 2, name: '删除项目' })).toHaveClass('text-red-text')
+    expect(danger.querySelector('[data-section-body]')).toHaveClass('riso-stripes-red', 'bg-error-field')
+  })
+
+  it('目录在纸张右侧的票根里：右缘一排刻度，每项是“名称 编号”，删除项目一项红色；点击目录项跳到分区，焦点落在标题', async () => {
+    setup()
+    const user = userEvent.setup()
+    renderRoutes(routes, `${base('模型接入')}/settings`)
+    await screen.findByRole('region', { name: '项目名称' })
+    const toc = screen.getByRole('navigation', { name: '目录' })
+    expect(toc).toHaveClass('border-l-2', 'border-dashed', 'max-nav:hidden')
+    expect(within(toc).getAllByRole('link').map((link) => link.textContent)).toEqual(titles.map((name, index) => `${String(index + 1).padStart(2, '0')}${name}`))
+    expect(within(toc).getByRole('link', { name: '删除项目' })).toHaveClass('text-red-text')
+    await user.click(within(toc).getByRole('link', { name: '本机目录' }))
+    expect(within(region('本机目录')).getByRole('heading', { level: 2, name: '本机目录' })).toHaveFocus()
+  })
+
+  it('项目文件夹一区：说明加一个 2px 藏青描边的文件管理器，按钮是带字的胶囊；没有概况票根', async () => {
+    setup()
+    renderRoutes(routes, `${base('模型接入')}/settings`)
+    const folder = await screen.findByRole('region', { name: '项目文件夹' })
+    const manager = folder.querySelector('[data-file-manager]')!
+    expect(manager).toHaveClass('border-2', 'border-ink', 'rounded-card')
+    expect(within(folder).getByRole('button', { name: '新建文件' })).toHaveClass('rounded-full', 'border-2')
+    expect(within(folder).queryByRole('complementary', { name: '概况' })).toBeNull()
+  })
+
+  it('默认项目的删除一区是一句说明，不是红色', async () => {
+    setup()
+    renderRoutes(routes, `${base(defaultProject.name)}/settings`)
+    const danger = await screen.findByRole('region', { name: '删除项目' })
+    expect(within(danger).getByRole('heading', { level: 2, name: '删除项目' })).not.toHaveClass('text-red-text')
+    expect(danger.querySelector('[data-section-body]')).not.toHaveClass('riso-stripes-red')
+  })
+})
