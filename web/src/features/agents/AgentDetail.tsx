@@ -93,10 +93,12 @@ export function AgentDetail() {
   return (
     // 页头与索引标签在上，页签内容在下面那张纸里。左右与底部的留白随窗口宽度变化，底部给纸张的投影留出位置。
     <div className="flex h-full min-h-0 flex-col px-[clamp(14px,2.4vw,34px)] pb-[26px] max-nav:pb-4">
-      <header className="@container relative flex shrink-0 flex-col gap-3 pt-[22px] pb-[18px]" data-agent-header>
-        <OverprintDeco />
+      {/* 宽屏时页头紧凑（四个页签都用）：面包屑更紧，标题 40px，身份、状态、运行时、模型与地址并在标题右边一行，放不下时换行；
+          装饰缩到和页头同高。窄屏照旧。 */}
+      <header className="@container relative flex shrink-0 flex-col gap-3 pt-[22px] pb-[18px] nav:gap-1.5 nav:pt-3 nav:pb-2.5" data-agent-header>
+        <OverprintDeco compact />
         <nav aria-label={t.shell.breadcrumb} className="relative">
-          <ol className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] font-bold text-ink-500">
+          <ol className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] font-bold text-ink-500 nav:leading-4">
             <li className="min-w-0">
               <Link to={overviewPath(scope.kind === 'project' ? { kind: 'project', name: scope.project.name } : GLOBAL)} className="[overflow-wrap:anywhere] hover:text-ink hover:underline">
                 {scope.kind === 'project' ? scope.project.name : t.shell.global}
@@ -110,16 +112,21 @@ export function AgentDetail() {
             </li>
           </ol>
         </nav>
-        <div className="relative flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-2.5 @[820px]:pr-[316px]">
-          <h1 className={cn(sheetTitleClass, 'mr-1.5')}>{agent.data.name}</h1>
-          {agent.data.isManager && <ManagerBadge size="md" className="px-3 text-[12.5px] leading-6" />}
-          <RuntimeBadge runtime={agent.data.runtime} />
-          <StatusChip agent={agent.data} live={live?.agentId === agentId ? live.state : null} />
-        </div>
-        {/* 模型与地址一行：模型是浅蓝底的等宽标签，地址在虚线框里。 */}
-        <div className="relative flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-2 text-[12px] @[820px]:pr-[316px]">
-          <span className="min-w-0 rounded-stamp bg-tint-blue px-[9px] font-mono leading-[22px] [overflow-wrap:anywhere]">{`${agent.data.model.provider} · ${agent.data.model.modelId}`}</span>
-          <AgentAddress address={agent.data.address} />
+        <div
+          data-agent-title-row
+          className="relative flex min-w-0 flex-col gap-3 @[820px]:pr-[316px] nav:flex-row nav:flex-wrap nav:items-center nav:gap-x-3 nav:gap-y-1.5 nav:@[820px]:pr-[196px]"
+        >
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-2.5 nav:contents">
+            <h1 className={cn(sheetTitleClass, 'mr-1.5 nav:text-[40px] nav:leading-none nav:[text-shadow:3px_3px_0_var(--riso-pink)]')}>{agent.data.name}</h1>
+            {agent.data.isManager && <ManagerBadge size="md" className="px-3 text-[12.5px] leading-6" />}
+            <RuntimeBadge runtime={agent.data.runtime} />
+            <StatusChip agent={agent.data} live={live?.agentId === agentId ? live.state : null} />
+          </div>
+          {/* 模型与地址：模型是浅蓝底的等宽标签，地址在虚线框里。窄屏单独一行。 */}
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-2 text-[12px] nav:contents">
+            <span className="min-w-0 rounded-stamp bg-tint-blue px-[9px] font-mono text-[12px] leading-[22px] [overflow-wrap:anywhere]">{`${agent.data.model.provider} · ${agent.data.model.modelId}`}</span>
+            <AgentAddress address={agent.data.address} />
+          </div>
         </div>
       </header>
       <IndexTabs aria-label={agent.data.name}>

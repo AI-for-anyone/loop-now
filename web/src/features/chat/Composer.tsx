@@ -344,8 +344,8 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
     )}
   </div></SlashCommandMenu>
   return (
-    // 输入区是纸张底部的一条浅黄色栏，上缘一道藏青线。
-    <div data-chat-bar className="flex shrink-0 flex-col gap-2.5 border-t-2 border-ink bg-tint-yellow px-[clamp(12px,2vw,22px)] pt-3.5 pb-3">
+    // 输入区是纸张底部的一条浅黄色栏，上缘一道藏青线。宽屏时上下留白收紧，给对话多留几行。
+    <div data-chat-bar className="flex shrink-0 flex-col gap-2.5 border-t-2 border-ink bg-tint-yellow px-[clamp(12px,2vw,22px)] pt-3.5 pb-3 nav:gap-1.5 nav:pt-2.5 nav:pb-2">
       {localError && (
         <p role="alert" className="text-[13px] font-black text-red-text">
           {localError}
