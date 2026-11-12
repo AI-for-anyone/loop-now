@@ -3122,7 +3122,10 @@ paths:
       summary: 发送消息；Agent 忙时必须选择打断或排队
       description: |
         以 `/` 开头且不带图片的消息先匹配平台内置命令 `/session`、`/new`、`/compact [instructions]`、`/reload`、`/copy`、`/export [html|jsonl]`、`/resume [完整ID]`；
-        未匹配时交给插件 `console.command`。`/compact`、`/export`、`/resume` 只适用于 Pi 会话：Claude Code 的 Agent 发这几个命令返回 409 `console_command_failed`，不产生执行。命令被认领时不作为普通消息保存，返回 200 ConsoleCommandResult；
+        未匹配时交给插件 `console.command`。`/compact`、`/export`、`/resume` 只适用于 Pi 会话：Claude Code 的 Agent 发这几个命令返回 409 `console_command_failed`，不产生执行。
+        平台命令在 Agent 不空闲（有进行中的回复、有排队消息，或运行时正在做别的维护，例如任务分叉）时一律返回 409 `agent_not_idle`，不带 details，
+        不会返回 `agent_busy`（那是普通消息“选择打断或排队”用的）：`/new`、`/reload`、`/compact`、`/resume`（列出与恢复都是）。
+        `/session`、`/copy` 只读，忙时照常可用；`/export` 本身只返回格式，忙闲在下载（GET /agents/{agentId}/session/export）时检查，同样是 `agent_not_idle`。命令被认领时不作为普通消息保存，返回 200 ConsoleCommandResult；
         其余消息经修改类 Hook `message.before_enqueue`，插件可以改写正文。
         以 `/pi:<name>` 开头的消息是交给 Pi 的命令（plugins/SPEC.md §14）：不给插件认领，照原文保存与显示，执行时发给 Pi 的是 `/<name>` 加其余原文，
         不加运行 ID 与平台通知；带图片时图片照常交给 Pi（Pi 执行扩展命令时不用图片，技能命令与提示模板展开后随提示交给模型）。
@@ -3202,6 +3205,7 @@ paths:
       summary: 导出当前受管 Pi 会话
       description: |
         jsonl 是会话文件原样；html 由 Pi 的 `--export` 从会话文件生成（不启动 Pi 运行时，也不动存活的空闲进程），页面里没有系统提示词与工具定义。
+        Agent 不空闲时返回 409 `agent_not_idle`（不带 details）。
         Claude Code 的 Agent 没有 Pi 会话，返回 409 `console_command_failed`；会话文件不在了返回 409 `session_none`。
       parameters:
         - name: format
@@ -9512,7 +9516,7 @@ components:
       headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
       description: |
         与当前状态冲突。`error.code` 取值：
-        `agent_busy`（details 为 AgentBusyDetails）、`agent_not_idle`（删除项目时 details 为 ProjectNotIdleDetails）、`session_missing`、`template_deleted`、`name_conflict`、`path_conflict`。
+        `agent_busy`（details 为 AgentBusyDetails）、`agent_not_idle`（删除项目时 details 为 ProjectNotIdleDetails，其余不带 details）、`session_missing`、`template_deleted`、`name_conflict`、`path_conflict`。
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -9735,7 +9739,7 @@ components:
             code: { $ref: "#/components/schemas/ErrorCode" }
             message: { type: string }
             details:
-              description: 按 code 定义：agent_busy 带 AgentBusyDetails；删除项目时的 agent_not_idle 带 ProjectNotIdleDetails
+              description: 按 code 定义：agent_busy 带 AgentBusyDetails；删除项目时的 agent_not_idle 带 ProjectNotIdleDetails，其余 agent_not_idle（包括平台命令）不带
               oneOf:
                 - $ref: "#/components/schemas/VerificationVersionConflictDetails"
                 - $ref: "#/components/schemas/VerificationConflictDetails"
@@ -9765,7 +9769,7 @@ components:
 - precondition_failed：请求前置版本条件不一致（If-Match 或 Prompt 编辑版本，412）
 - payload_too_large：超过大小上限（413）
 - agent_busy：Agent 正忙且未选择打断或排队（409）
-- agent_not_idle：需要 Agent 空闲的操作（删除 Agent、删除项目、重开会话）在忙时被拒绝（409）
+- agent_not_idle：需要 Agent 空闲的操作（删除 Agent、删除项目、重开会话、平台命令 /new /reload /compact /resume、导出会话）在忙时被拒绝（409）
 - session_missing：Agent 处于会话丢失状态，需要先确认重开会话（409）
 - session_none：当前还没有可压缩或导出的 Pi 会话（409）
 - console_command_failed：平台命令已执行但未能完成（409）

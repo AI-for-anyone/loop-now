@@ -30,7 +30,7 @@ func (s *Service) acquireConsoleCommand(ctx context.Context, agentID uuid.UUID) 
 		return uuid.Nil, "", err
 	}
 	if !acquired {
-		return uuid.Nil, "", s.busyError(ctx, agentID)
+		return uuid.Nil, "", errNotIdle()
 	}
 	// 锁只表示没有进行中的执行；排队由数据库判断，有可开始的排队执行时不做维护，放开锁后接着处理它们。
 	_, queued, err := s.st.NextQueuedRun(ctx, agentID)
@@ -39,16 +39,22 @@ func (s *Service) acquireConsoleCommand(ctx context.Context, agentID uuid.UUID) 
 		if err != nil {
 			return uuid.Nil, "", err
 		}
-		return uuid.Nil, "", apperr.Conflict(apperr.CodeAgentNotIdle, "Agent 正在回复或还有排队消息，请等它空闲后再操作")
+		return uuid.Nil, "", errNotIdle()
 	}
 	return runID, owner, nil
+}
+
+// errNotIdle 是平台命令因 Agent 不空闲而拒绝时的错误：不论是忙闲锁被占、数据库里有进行中或排队的执行，
+// 还是运行时在做别的维护，都是 409 agent_not_idle，不带 details（agent_busy 是普通消息“选择打断或排队”用的）。
+func errNotIdle() error {
+	return apperr.Conflict(apperr.CodeAgentNotIdle, "Agent 正在回复或还有排队消息，请等它空闲后再操作")
 }
 
 // consoleCommandError 把执行器维护操作里可以预期的失败转成 409；其余错误照旧（服务端内部错误）。
 func consoleCommandError(err error) error {
 	switch {
 	case errors.Is(err, executor.ErrMaintenanceBusy):
-		return apperr.Conflict(apperr.CodeAgentNotIdle, "Agent 正在回复或在进行其他维护，请稍后再试")
+		return errNotIdle()
 	case errors.Is(err, executor.ErrNoSession):
 		return apperr.Conflict(apperr.CodeSessionNone, "当前还没有可操作的会话")
 	case errors.Is(err, executor.ErrUnsupportedRuntime):
