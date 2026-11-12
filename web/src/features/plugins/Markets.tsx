@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { t } from '@/i18n'
 import { localizedText } from '@/lib/localized-text'
 import { cn } from '@/lib/utils'
-import { cardClass, Quiet, RepositoryLink, SourceBadge } from './parts'
+import { bandCardClass, CardBand, cardButtonClass, Quiet, RepositoryLink, SourceBadge } from './parts'
 import { pluginPath } from './paths'
 import { marketGitSource, repositoryUrl } from './repository'
 import { usePluginInstaller } from './usePluginInstaller'
@@ -20,15 +20,18 @@ const text = t.plugins.markets
 
 // 市场里的一个插件：名称、官方或已验证、说明、来源（git 仓库有网页时链过去）、版本；
 // 没装的可安装，装了的写已装版本，有新版本时可更新。
-function EntryCard({ market, entry, installer }: { market: Market; entry: Entry; installer: ReturnType<typeof usePluginInstaller> }) {
+// 改版：卡片顶上一条带网点的色带（index：第几张卡，蓝、粉、黄轮换），名称是展示字。
+function EntryCard({ market, entry, installer, index }: { market: Market; entry: Entry; installer: ReturnType<typeof usePluginInstaller>; index: number }) {
   const key = `${market.url}#${entry.id}`
   const busy = installer.pending !== null
   const git = marketGitSource(entry.source)
   const repository = git && repositoryUrl(git.location, git.ref)
   return (
-    <li className={cn(cardClass, 'flex min-w-0 flex-col gap-2 px-4 py-3.5')}>
+    <li className={bandCardClass}>
+      <CardBand index={index} />
+      <div className="flex min-w-0 flex-1 flex-col gap-2 px-[18px] pt-3.5 pb-4">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <h3 className="font-display-cn text-[19px] leading-tight font-normal [overflow-wrap:anywhere]">
+        <h3 className="font-display-cn text-[24px] leading-tight font-normal [overflow-wrap:anywhere]">
           {entry.installedVersion ? (
             <Link to={pluginPath(entry.id)} className="outline-none hover:underline focus-visible:shadow-focus">
               {localizedText(entry.displayName)}
@@ -45,7 +48,7 @@ function EntryCard({ market, entry, installer }: { market: Market; entry: Entry;
           </span>
         )}
       </div>
-      <p className="text-[13px] leading-snug text-ink-700 [overflow-wrap:anywhere]">{localizedText(entry.description)}</p>
+      <p className="text-[13px] leading-[1.7] text-ink-700 [overflow-wrap:anywhere]">{localizedText(entry.description)}</p>
       <div className="flex min-w-0 items-center gap-3">
         <p className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-ink-500" title={entry.source}>
           {entry.source}
@@ -53,9 +56,9 @@ function EntryCard({ market, entry, installer }: { market: Market; entry: Entry;
         {repository && <RepositoryLink href={repository} />}
       </div>
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-1">
-        <span className="font-mono text-[12px] text-ink-500">{entry.installedVersion ? text.installed(entry.installedVersion) : entry.version ? `v${entry.version}` : null}</span>
+        <span className="font-mono text-[12px] text-ink-700">{entry.installedVersion ? text.installed(entry.installedVersion) : entry.version ? `v${entry.version}` : null}</span>
         {!entry.installedVersion ? (
-          <Button size="xs" variant="secondary" disabled={busy} onClick={() => void installer.begin(key, { source: marketSource(market.url, entry) })}>
+          <Button size="xs" variant="secondary" className={cardButtonClass} disabled={busy} onClick={() => void installer.begin(key, { source: marketSource(market.url, entry) })}>
             {installer.pending === key ? t.plugins.installEntry.reading : t.plugins.install}
           </Button>
         ) : entry.updateAvailable ? (
@@ -67,6 +70,7 @@ function EntryCard({ market, entry, installer }: { market: Market; entry: Entry;
         )}
       </div>
       <ErrorAlert error={installer.errorFor(key)} />
+      </div>
     </li>
   )
 }
@@ -74,11 +78,11 @@ function EntryCard({ market, entry, installer }: { market: Market; entry: Entry;
 function MarketSection({ market, installer, titled }: { market: Market; installer: ReturnType<typeof usePluginInstaller>; titled: boolean }) {
   const name = market.name ?? text.unnamed
   return (
-    <section aria-label={name} className="flex min-w-0 flex-col gap-2.5">
+    <section aria-label={name} className="flex min-w-0 flex-col gap-3.5">
       {titled && (
-        <h2 className="flex min-w-0 flex-wrap items-baseline gap-x-2 font-display-cn text-[19px] font-normal">
-          {name}
-          <span className="min-w-0 truncate font-sans text-[12px] font-bold text-ink-500">{market.url}</span>
+        <h2 className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 font-display-cn text-[24px] font-normal">
+          <span className="riso-marker px-1.5">{name}</span>
+          <span className="min-w-0 truncate font-mono text-[11.5px] text-ink-500">{market.url}</span>
         </h2>
       )}
       {market.error ? (
@@ -88,9 +92,9 @@ function MarketSection({ market, installer, titled }: { market: Market; installe
       ) : market.plugins.length === 0 ? (
         <Quiet>{text.empty}</Quiet>
       ) : (
-        <ul className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-3">
-          {market.plugins.map((entry) => (
-            <EntryCard key={entry.id} market={market} entry={entry} installer={installer} />
+        <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {market.plugins.map((entry, index) => (
+            <EntryCard key={entry.id} market={market} entry={entry} installer={installer} index={index} />
           ))}
         </ul>
       )}
@@ -145,8 +149,9 @@ function MarketSettings() {
     save.mutate({ ...settings.data, markets: [...markets, next] }, { onSuccess: () => setUrl('') })
   }
   return (
-    <section aria-label={text.manage} className={cn(cardClass, 'flex min-w-0 flex-col gap-3 px-4 py-3.5')}>
-      <h2 className="font-display-cn text-[19px] font-normal">{text.manage}</h2>
+    // 改版：市场地址的管理是纸上一块虚线框，不是卡片。
+    <section aria-label={text.manage} className="flex min-w-0 flex-col gap-3 rounded-card border-2 border-dashed border-ink/40 px-4 py-3.5">
+      <h2 className="text-[15px] font-black">{text.manage}</h2>
       <p className="text-[12.5px] text-ink-700">{text.manageHint}</p>
       {markets.length > 0 && (
         <ul className="grid min-w-0 gap-1.5">

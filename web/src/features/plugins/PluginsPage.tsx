@@ -8,13 +8,16 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { t } from '@/i18n'
 import { localizedText } from '@/lib/localized-text'
-import { pageTitleClass } from '@/lib/page-title'
+import { IndexTabs } from '@/components/IndexTabs'
+import { PageFrame, PageHeader } from '@/components/PageHeader'
+import { Sheet } from '@/components/Sheet'
+import { indexTabClass } from '@/lib/index-tab'
 import { cn } from '@/lib/utils'
 import { InstallSourceDialog } from './InstallFlow'
 import { MarketPlugins } from './Markets'
 import { Chips } from './ManifestSummary'
 import { componentChips, hasAgentHalf } from './manifest'
-import { cardClass, IdVersion, InstalledSourceBadge, Quiet, SourceBadge, StatusLabel } from './parts'
+import { bandCardClass, CardBand, cardButtonClass, IdVersion, InstalledSourceBadge, Quiet, SourceBadge, StatusLabel } from './parts'
 import { pluginPath } from './paths'
 import { usePluginInstaller } from './usePluginInstaller'
 
@@ -40,12 +43,13 @@ function HostStrip() {
   const disabled = settings.data?.disabled ?? false
   const crash = data?.lastCrash
   return (
-    <section aria-label={text.host.label} className="flex flex-col gap-2 rounded-panel border-2 border-dashed border-ink bg-paper-raised px-4 py-3">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px]">
+    // 改版：放在页头的元信息里，是一个 1.5px 虚线框，字小一号；停了时崩溃前在处理什么写在框里第二行。
+    <section aria-label={text.host.label} className="flex min-w-0 flex-col gap-1.5 rounded-[4px] border-[1.5px] border-dashed border-ink/45 px-2.5 py-1">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12.5px]">
         {data ? (
           <>
-            <span role="status" className="inline-flex items-center gap-1.5 font-black">
-              <span aria-hidden="true" className={cn('size-2 rounded-full', hostDot[data.state])} />
+            <span role="status" className="inline-flex items-center gap-1.5 font-black text-ink">
+              <span aria-hidden="true" className={cn('size-[7px] rounded-full', hostDot[data.state])} />
               {data.configured ? text.host.state[data.state] : text.host.notConfigured}
             </span>
             {data.configured && data.state !== 'disabled' && (
@@ -62,7 +66,7 @@ function HostStrip() {
         ) : (
           <span className="text-ink-500">{host.isError ? null : t.common.loading}</span>
         )}
-        <label className="ml-auto inline-flex items-center gap-2 font-black" title={text.host.killSwitchHint}>
+        <label className="inline-flex items-center gap-2 font-black text-ink" title={text.host.killSwitchHint}>
           <Switch checked={disabled} disabled={!settings.data || save.isPending} onCheckedChange={(next) => settings.data && save.mutate({ ...settings.data, disabled: next })} />
           {text.host.killSwitch}
         </label>
@@ -85,10 +89,14 @@ function InstalledCard({ plugin, installer }: { plugin: Schemas['Plugin']; insta
   const manifest = detail.data?.manifest
   const agentHalf = manifest ? hasAgentHalf(manifest) : plugin.grantedAgents > 0
   return (
-    <li className={cn(cardClass, 'grid min-w-0 gap-x-6 gap-y-3 px-4 py-3.5 md:grid-cols-[minmax(0,1fr)_200px_auto] md:items-center')}>
+    // 改版：白底、2px 藏青描边、荧光粉实色投影的卡片；左边一块黄底的首字母（装饰），名称是展示字。
+    <li className="mr-1 mb-1 grid min-w-0 gap-x-5 gap-y-3 rounded-card border-2 border-ink bg-white px-[18px] py-3.5 shadow-print-pink md:grid-cols-[auto_minmax(0,1fr)_200px_auto] md:items-center">
+      <span aria-hidden="true" className="hidden size-12 items-center justify-center rounded-[10px] border-2 border-ink bg-riso-yellow font-display-latin text-[20px] font-extrabold md:flex">
+        {localizedText(plugin.displayName).slice(0, 1).toUpperCase()}
+      </span>
       <div className="grid min-w-0 gap-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h3 className="font-display-cn text-[21px] leading-tight font-normal [overflow-wrap:anywhere]">
+          <h3 className="font-display-cn text-[26px] leading-tight font-normal [overflow-wrap:anywhere]">
             <Link to={pluginPath(plugin.id)} className="outline-none hover:underline focus-visible:shadow-focus">
               {localizedText(plugin.displayName)}
             </Link>
@@ -110,7 +118,7 @@ function InstalledCard({ plugin, installer }: { plugin: Schemas['Plugin']; insta
             {installer.pending === plugin.id ? text.installEntry.reading : text.markets.updateTo(entry.version)}
           </Button>
         )}
-        <Button asChild size="xs" variant="secondary" className="ml-auto md:ml-0">
+        <Button asChild size="xs" variant="secondary" className={cn('ml-auto md:ml-0', cardButtonClass)}>
           <Link to={plugin.status === 'error' ? pluginPath(plugin.id, 'logs') : pluginPath(plugin.id)}>{plugin.status === 'error' ? text.viewLogs : text.details}</Link>
         </Button>
       </div>
@@ -126,29 +134,30 @@ function BuiltinSection({ installed }: { installed: string[] }) {
   const rest = (sources.data?.sources ?? []).filter((source) => !installed.includes(source.id))
   if (sources.isPending || (sources.isSuccess && rest.length === 0)) return null
   return (
-    <section aria-labelledby="builtin-title" className="flex flex-col gap-3">
-      <div className="flex items-center gap-3">
-        <h2 id="builtin-title" className="font-display-cn text-[18px] whitespace-nowrap text-ink-500">
-          {text.builtinTitle}
-        </h2>
-        <span aria-hidden="true" className="flex-1 border-t-2 border-dashed border-ink/25" />
-      </div>
+    // 改版：上方一道虚线，标题是 ZCOOL 加黄色记号笔；卡片顶上一条带网点的色带（蓝、粉、黄轮换）。
+    <section aria-labelledby="builtin-title" className="flex flex-col gap-[18px] border-t-2 border-dashed border-ink/[0.22] pt-6">
+      <h2 id="builtin-title" className="riso-marker self-start px-1.5 font-display-cn text-[30px] leading-[1.25] font-normal">
+        {text.builtinTitle}
+      </h2>
       <ErrorAlert error={sources.error} />
-      <ul className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-3">
-        {rest.map((source) => (
-          <li key={source.id} className={cn(cardClass, 'flex min-w-0 flex-col gap-2 px-4 py-3.5')}>
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="font-display-cn text-[19px] leading-tight font-normal">{localizedText(source.displayName)}</h3>
-              <SourceBadge source={{ kind: 'builtin' }} />
+      <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {rest.map((source, index) => (
+          <li key={source.id} className={bandCardClass}>
+            <CardBand index={index} />
+            <div className="flex flex-1 flex-col gap-2 px-[18px] pt-3.5 pb-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-display-cn text-[24px] leading-tight font-normal">{localizedText(source.displayName)}</h3>
+                <SourceBadge source={{ kind: 'builtin' }} />
+              </div>
+              <p className="text-[13px] leading-[1.7] text-ink-700">{localizedText(source.description)}</p>
+              <div className="mt-auto flex items-center justify-between gap-3 pt-1">
+                <span className="font-mono text-[12px] text-ink-700">v{source.version}</span>
+                <Button size="xs" variant="secondary" className={cardButtonClass} disabled={installer.pending !== null} onClick={() => void installer.begin(source.id, { source: { kind: 'builtin', location: source.id } })}>
+                  {installer.pending === source.id ? text.installEntry.reading : text.install}
+                </Button>
+              </div>
+              <ErrorAlert error={installer.errorFor(source.id)} />
             </div>
-            <p className="text-[13px] leading-snug text-ink-700">{localizedText(source.description)}</p>
-            <div className="mt-auto flex items-center justify-between gap-3 pt-1">
-              <span className="font-mono text-[12px] text-ink-500">v{source.version}</span>
-              <Button size="xs" variant="secondary" disabled={installer.pending !== null} onClick={() => void installer.begin(source.id, { source: { kind: 'builtin', location: source.id } })}>
-                {installer.pending === source.id ? text.installEntry.reading : text.install}
-              </Button>
-            </div>
-            <ErrorAlert error={installer.errorFor(source.id)} />
           </li>
         ))}
       </ul>
@@ -160,13 +169,8 @@ function BuiltinSection({ installed }: { installed: string[] }) {
 type MarketTab = 'installed' | 'official' | 'other'
 const MARKET_TABS: MarketTab[] = ['installed', 'official', 'other']
 
-const tabClass = (active: boolean) =>
-  cn(
-    'inline-flex h-9 items-center rounded-full border-2 px-4 text-[13.5px] font-black whitespace-nowrap outline-none focus-visible:shadow-focus',
-    active ? 'border-ink bg-riso-yellow text-ink shadow-print-ink' : 'border-transparent text-ink-700 hover:bg-tint-blue hover:text-ink',
-  )
-
-// 插件市场（全局）：宿主状态与一键停用；三个页签（写在地址里的 ?tab=）：已安装、官方市场、其他市场。安装入口另有官方、git、本地目录三种来源。
+// 插件市场（全局，改版“一张印出来的纸”第 4 步）：页头是共用的页面标题，旁边是宿主状态（含一键停用）与“安装插件”；
+// 三个分类（写在地址里的 ?tab=）是纸张上沿的索引标签：已安装、官方市场、其他市场。安装入口另有官方、git、本地目录三种来源。
 export function PluginsPage() {
   const navigate = useNavigate()
   const [search] = useSearchParams()
@@ -177,50 +181,50 @@ export function PluginsPage() {
   const list = plugins.data?.plugins ?? []
   const installed = list.map((plugin) => plugin.id)
   const tab: MarketTab = MARKET_TABS.includes(search.get('tab') as MarketTab) ? (search.get('tab') as MarketTab) : 'installed'
-  // 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。
   return (
-    <div className="relative h-full overflow-y-auto">
-      <div className="mx-auto flex max-w-[1180px] flex-col gap-4 px-4 pt-[22px] pb-16 sm:px-8">
-        <header className="flex flex-wrap items-end gap-x-3.5 gap-y-3">
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[12px] font-bold text-ink-500">{`${text.eyebrow} · ${text.title}`}</span>
-            <h1 className={pageTitleClass}>{text.title}</h1>
-          </div>
-          <Button className="sm:ml-auto" onClick={() => setInstalling(true)}>
-            {text.installEntry.open}
-          </Button>
-        </header>
+    <PageFrame>
+      <PageHeader crumbs={[{ label: t.shell.global }]} title={text.title}>
         <HostStrip />
-        <nav aria-label={text.title} className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
-          {MARKET_TABS.map((value) => (
-            <Link key={value} to={value === 'installed' ? '/plugins' : `/plugins?tab=${value}`} aria-current={value === tab ? 'page' : undefined} className={tabClass(value === tab)}>
-              {value === 'installed' ? text.tabs.installed(plugins.data ? list.length : null) : text.tabs[value]}
-            </Link>
-          ))}
-        </nav>
-        {tab === 'installed' && (
-          <section aria-label={text.installedBadge} className="flex flex-col gap-3">
-            {plugins.isError ? (
-              <SectionError title={text.title} error={plugins.error} onRetry={() => void plugins.refetch()} />
-            ) : plugins.isPending ? (
-              <Quiet>{text.loading}</Quiet>
-            ) : list.length === 0 ? (
-              <Quiet>{text.empty}</Quiet>
-            ) : (
-              <ul className="flex flex-col gap-3">
-                {list.map((plugin) => (
-                  <InstalledCard key={plugin.id} plugin={plugin} installer={installer} />
-                ))}
-              </ul>
+        <Button variant="interrupt" size="xs" className="border-2 border-ink" onClick={() => setInstalling(true)}>
+          {text.installEntry.open}
+        </Button>
+      </PageHeader>
+      <IndexTabs aria-label={text.title}>
+        {MARKET_TABS.map((value) => (
+          <Link key={value} to={value === 'installed' ? '/plugins' : `/plugins?tab=${value}`} aria-current={value === tab ? 'page' : undefined} className={indexTabClass(value === tab)}>
+            {value === 'installed' ? text.tabs.installed(plugins.data ? list.length : null) : text.tabs[value]}
+          </Link>
+        ))}
+      </IndexTabs>
+      <Sheet className="flex-1">
+        {/* 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。 */}
+        <div className="relative min-h-0 flex-1 overflow-y-auto">
+          <div className="flex max-w-[1180px] flex-col gap-6 pt-6 pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,30px)]">
+            {tab === 'installed' && (
+              <section aria-label={text.installedBadge} className="flex flex-col gap-3">
+                {plugins.isError ? (
+                  <SectionError title={text.title} error={plugins.error} onRetry={() => void plugins.refetch()} />
+                ) : plugins.isPending ? (
+                  <Quiet>{text.loading}</Quiet>
+                ) : list.length === 0 ? (
+                  <Quiet>{text.empty}</Quiet>
+                ) : (
+                  <ul className="flex flex-col gap-3.5">
+                    {list.map((plugin) => (
+                      <InstalledCard key={plugin.id} plugin={plugin} installer={installer} />
+                    ))}
+                  </ul>
+                )}
+              </section>
             )}
-          </section>
-        )}
-        {tab === 'installed' && plugins.isSuccess && <BuiltinSection installed={installed} />}
-        {tab === 'official' && <MarketPlugins official />}
-        {tab === 'other' && <MarketPlugins official={false} />}
-      </div>
+            {tab === 'installed' && plugins.isSuccess && <BuiltinSection installed={installed} />}
+            {tab === 'official' && <MarketPlugins official />}
+            {tab === 'other' && <MarketPlugins official={false} />}
+          </div>
+        </div>
+      </Sheet>
       {installer.dialog}
       <InstallSourceDialog open={installing} onOpenChange={setInstalling} installed={installed} onInstalled={onInstalled} />
-    </div>
+    </PageFrame>
   )
 }

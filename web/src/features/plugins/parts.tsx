@@ -11,6 +11,21 @@ const text = t.plugins
 
 export const cardClass = 'rounded-panel border-2 border-ink bg-white'
 
+// 插件卡（改版）：白底、2px 藏青描边、藏青实色投影的卡片，顶上一条带网点的色带，按蓝、粉、黄轮换（第几张卡取第几种）。
+const BANDS = ['blue', 'pink', 'yellow'] as const
+const bandFill: Record<(typeof BANDS)[number], string> = {
+  blue: 'bg-riso-blue bg-[radial-gradient(rgb(255_255_255/.32)_1.2px,transparent_1.5px)]',
+  pink: 'bg-riso-pink bg-[radial-gradient(rgb(255_255_255/.32)_1.2px,transparent_1.5px)]',
+  yellow: 'bg-riso-yellow bg-[radial-gradient(rgb(24_38_94/.28)_1.2px,transparent_1.5px)]',
+}
+export const bandCardClass = 'mr-[5px] mb-[5px] flex min-w-0 flex-col overflow-hidden rounded-card border-2 border-ink bg-white shadow-[5px_5px_0_var(--ink)]'
+export function CardBand({ index }: { index: number }) {
+  const band = BANDS[index % BANDS.length]
+  return <span aria-hidden="true" data-band={band} className={cn('block h-11 shrink-0 border-b-2 border-ink bg-size-[8px_8px]', bandFill[band])} />
+}
+// 卡片上的安装、更新按钮：白底、藏青描边加藏青投影的胶囊。
+export const cardButtonClass = 'border-2 border-ink bg-white shadow-[3px_3px_0_var(--ink)] hover:bg-paper-raised'
+
 export function IdVersion({ id, version }: { id: string; version: string }) {
   return <code className="rounded-[6px] bg-ink/[0.06] px-2 py-0.5 font-mono text-[12px] leading-[18px] font-bold text-ink">{text.idVersion(id, version)}</code>
 }
@@ -18,12 +33,9 @@ export function IdVersion({ id, version }: { id: string; version: string }) {
 // 官方（随平台发布，或从官方市场装的）用粉色贴纸；市场标为已验证的用绿底；其余来源没有经过审核，用黄底写明来源。
 // trust 缺省时只按来源判断（随平台发布的为官方）；为 undefined 时还不知道（市场列表没读到），先不显示。
 export function SourceBadge({ source, trust = source.kind === 'builtin' ? 'official' : null }: { source: Pick<Schemas['PluginResolvedSource'], 'kind'>; trust?: 'official' | 'verified' | null }) {
+  // 改版：“官方”是藏青底白字的胶囊（身份标记一律藏青底白字）。
   if (trust === 'official')
-    return (
-      <span className="riso-tilt rounded-[6px] px-1.5 py-px text-[11.5px] leading-4 font-black text-white [--tilt-bg:var(--riso-pink)] [--tilt-shadow:2px_2px_0_var(--ink)] [--tilt:-4deg]">
-        {text.sources.builtin}
-      </span>
-    )
+    return <span className="rounded-full bg-ink px-2 text-[11.5px] leading-5 font-black text-white">{text.sources.builtin}</span>
   if (trust === 'verified') return <span className="rounded-[6px] bg-tint-green px-1.5 py-px text-[11.5px] leading-4 font-black text-green-text">{text.verifiedSource(text.sources[source.kind])}</span>
   return <span className="rounded-[6px] bg-tint-yellow px-1.5 py-px text-[11.5px] leading-4 font-black text-ink">{text.unverified(text.sources[source.kind])}</span>
 }

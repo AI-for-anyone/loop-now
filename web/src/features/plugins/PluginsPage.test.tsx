@@ -87,3 +87,37 @@ describe('插件市场', () => {
     expect(await screen.findByText('还没有安装插件。从右上角的“安装插件”开始。')).toBeInTheDocument()
   })
 })
+
+// 改版“一张印出来的纸”第 4 步：插件市场的页头、索引标签、粉色投影的已安装卡片、带色带的插件卡。
+describe('纸张上的插件市场', () => {
+  const builtin = (id: string, name: string): import('@/api/client').Schemas['BuiltinPluginSource'] => ({ id, displayName: name, description: `${name}的说明`, version: '1.0.0' })
+
+  it('页头是页面标题：面包屑“全局›插件市场”，旁边是虚线框里的宿主状态与荧光粉的“安装插件”', async () => {
+    renderMarket()
+    const title = await screen.findByRole('heading', { level: 1, name: '插件市场' })
+    const header = title.closest('header')!
+    expect(within(header).getByRole('navigation', { name: '页面位置' })).toHaveTextContent('全局›插件市场')
+    expect(within(header).getByRole('region', { name: '插件宿主' })).toHaveClass('border-dashed')
+    expect(within(header).getByRole('button', { name: '安装插件' })).toHaveClass('bg-riso-pink', 'border-2', 'border-ink')
+  })
+
+  it('三个分类是纸张上沿的索引标签：当前一个黄色、高一截；已安装的插件在纸上，是粉色投影的卡片', async () => {
+    renderMarket()
+    const tabs = await screen.findByRole('navigation', { name: '插件市场' })
+    expect(within(tabs).getByRole('link', { name: /已安装/ })).toHaveClass('h-10', 'bg-riso-yellow')
+    expect(within(tabs).getByRole('link', { name: '官方市场' })).toHaveClass('h-[34px]', 'bg-paper-tab')
+    const card = (await screen.findByRole('link', { name: 'Webhook 通知' })).closest('li')!
+    expect(card.closest('[data-sheet]')).not.toBeNull()
+    expect(card).toHaveClass('border-2', 'border-ink', 'shadow-print-pink')
+  })
+
+  it('随平台发布的插件：卡片顶上一条带网点的色带，按蓝、粉、黄轮换；名称是展示字，“官方”是藏青标签', async () => {
+    renderMarket({ builtin: [builtin('hello', 'Hello 示例'), builtin('browser', '浏览器'), builtin('hook', 'Webhook 收件'), builtin('extra', '第四个')] })
+    const heading = await screen.findByRole('heading', { name: '随平台发布的官方插件' })
+    expect(heading).toHaveClass('riso-marker', 'font-display-cn')
+    const cards = ['Hello 示例', '浏览器', 'Webhook 收件', '第四个'].map((name) => screen.getByRole('heading', { name }).closest('li')!)
+    expect(cards.map((card) => card.querySelector('[data-band]')!.getAttribute('data-band'))).toEqual(['blue', 'pink', 'yellow', 'blue'])
+    expect(within(cards[0]).getByRole('heading', { name: 'Hello 示例' })).toHaveClass('font-display-cn')
+    expect(within(cards[0]).getByText('官方')).toHaveClass('bg-ink', 'text-white')
+  })
+})
