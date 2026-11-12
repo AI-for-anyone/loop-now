@@ -3200,7 +3200,9 @@ paths:
       operationId: exportAgentSession
       x-access: console
       summary: 导出当前受管 Pi 会话
-      description: Claude Code 的 Agent 没有 Pi 会话，返回 409 `console_command_failed`。
+      description: |
+        jsonl 是会话文件原样；html 由 Pi 的 `--export` 从会话文件生成（不启动 Pi 运行时，也不动存活的空闲进程），页面里没有系统提示词与工具定义。
+        Claude Code 的 Agent 没有 Pi 会话，返回 409 `console_command_failed`；会话文件不在了返回 409 `session_none`。
       parameters:
         - name: format
           in: query
@@ -11273,7 +11275,7 @@ components:
         reason:
           description: |
             停止原因；意外退出为 unexpected_exit。session_reset、console_reload、session_resumed 是平台命令 /new、/reload、/resume 停止空闲进程；
-            console_export 是 /export html 为导出临时启动的进程用完后停止。
+            console_export 是早先的 /export html 为导出临时启动的进程用完后停止（现在导出不启动进程，只出现在旧记录里）。
           type: string
           enum: [idle_timeout, config_changed, evicted, released, fork_snapshot, shutdown, abort_timeout, session_reset, console_reload, session_resumed, console_export, unexpected_exit]
 

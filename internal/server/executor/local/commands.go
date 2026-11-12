@@ -1,11 +1,14 @@
 package local
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,9 +18,12 @@ import (
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/execenv"
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/executor/local/pirpc"
+	"loop-now/internal/server/preflight"
 )
 
 // maintenanceErr 把维护操作里可以预期的失败标上 executor 的哨兵错误（原错误仍在链上）。
@@ -92,8 +98,10 @@ func (e *Executor) StopIdle(ctx context.Context, agentID uuid.UUID, reason strin
 	}
 }
 
-// ExportSession 导出当前 Agent 的受管 Pi 会话。JSONL 直接读取受管文件；HTML 由 Pi 生成到平台指定的临时路径。
-func (e *Executor) ExportSession(ctx context.Context, agentID uuid.UUID, format string) (executor.SessionExport, error) {
+// ExportSession 导出 Agent 的受管 Pi 会话。sessionFile 是数据库记下的当前会话文件，只接受 sessions 目录里的文件。
+// JSONL 直接读会话文件；HTML 用 `pi --export <会话文件> <输出>` 生成（exportHTML）。两者都不需要执行快照与运行准备，
+// 不启动运行时，也不碰存活的空闲进程。
+func (e *Executor) ExportSession(ctx context.Context, agentID uuid.UUID, sessionFile, format string) (executor.SessionExport, error) {
 	if format != "jsonl" && format != "html" {
 		return executor.SessionExport{}, fmt.Errorf("不支持的导出格式 %q", format)
 	}
@@ -109,62 +117,105 @@ func (e *Executor) ExportSession(ctx context.Context, agentID uuid.UUID, format 
 	if busy {
 		return executor.SessionExport{}, maintenanceErr(ErrRuntimeBusy)
 	}
-
-	snap, err := e.src.ExecutionSnapshot(ctx, agentID)
-	if err != nil {
-		return executor.SessionExport{}, err
-	}
-	if isClaude(snap) {
-		return executor.SessionExport{}, fmt.Errorf("%w：Claude Code 没有可导出的 Pi 会话", executor.ErrUnsupportedRuntime)
-	}
-	if snap.Session.State != "active" || snap.Session.SessionFile == "" {
+	if sessionFile == "" {
 		return executor.SessionExport{}, executor.ErrNoSession
 	}
 	d := e.dirs(agentID)
-	sessionFile, err := managedSessionFile(d, snap.Session.SessionFile)
+	file, err := managedSessionFile(d, sessionFile)
+	if errors.Is(err, fs.ErrNotExist) {
+		return executor.SessionExport{}, fmt.Errorf("%w：会话文件不存在", executor.ErrNoSession)
+	}
 	if err != nil {
 		return executor.SessionExport{}, err
 	}
 	if format == "jsonl" {
-		data, err := os.ReadFile(sessionFile)
+		data, err := os.ReadFile(file)
 		if err != nil {
 			return executor.SessionExport{}, err
 		}
-		return executor.SessionExport{Filename: filepath.Base(sessionFile), ContentType: "application/x-ndjson", Data: data}, nil
+		return executor.SessionExport{Filename: filepath.Base(file), ContentType: "application/x-ndjson", Data: data}, nil
 	}
-
-	launched := false
-	if p == nil {
-		p, err = e.launch(ctx, snap, quietSink{}, uuid.Nil, "console_export")
-		if err != nil {
-			return executor.SessionExport{}, err
-		}
-		launched = true
-		go e.watch(p)
-	}
-	if launched {
-		defer e.stop(p, stopCause{reason: stopConsoleExport})
-	}
-	output := filepath.Join(d.sessions, ".loop-now-export-"+uuid.Must(uuid.NewV7()).String()+".html")
-	defer os.Remove(output)
-	returned, err := p.client.ExportHTML(ctx, output)
+	data, err := e.exportHTML(ctx, d, file)
 	if err != nil {
 		return executor.SessionExport{}, err
 	}
-	output, err = managedSessionFile(d, output)
-	if err != nil {
-		return executor.SessionExport{}, err
-	}
-	returned, err = managedSessionFile(d, returned)
-	if err != nil || returned != output {
-		return executor.SessionExport{}, errors.New("Pi 返回了不受管的导出路径")
-	}
-	data, err := os.ReadFile(output)
-	if err != nil {
-		return executor.SessionExport{}, err
-	}
-	name := strings.TrimSuffix(filepath.Base(sessionFile), ".jsonl") + ".html"
+	name := strings.TrimSuffix(filepath.Base(file), ".jsonl") + ".html"
 	return executor.SessionExport{Filename: name, ContentType: "text/html; charset=utf-8", Data: data}, nil
+}
+
+// exportTimeout 是 `pi --export` 的最长用时。
+const exportTimeout = time.Minute
+
+// exportHTML 运行 `pi --offline --export <会话文件> <输出>` 生成 HTML：Pi 只读会话文件、写出页面就退出，不调用模型。
+// 它用 Agent 自己的 HOME、临时目录与 Pi 目录（与运行时相同），只带基础环境，不带凭证、插件与 CLI 的环境变量。
+// 与 RPC 的 export_html 不同，页面里没有当前进程的系统提示词与工具定义（Pi 的 --export 本来如此）。
+func (e *Executor) exportHTML(ctx context.Context, d agentDirs, sessionFile string) ([]byte, error) {
+	if err := os.MkdirAll(d.tmp, 0o700); err != nil {
+		return nil, err
+	}
+	output := filepath.Join(d.tmp, "loop-now-export-"+uuid.Must(uuid.NewV7()).String()+".html")
+	defer os.Remove(output)
+	ctx, cancel := context.WithTimeout(ctx, exportTimeout)
+	defer cancel()
+	cmd := preflight.PiCommand(e.o.NodeBin, e.o.PiBin, "--offline", "--export", sessionFile, output)
+	cmd.Env = e.exportEnv(d)
+	cmd.Dir = d.tmp
+	var stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = io.Discard, &limitedBuffer{b: &stderr, max: 4 << 10}
+	procgroup.Configure(cmd)
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("启动 pi --export 失败：%w", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			return nil, fmt.Errorf("pi --export 失败：%v %s", err, strings.TrimSpace(stderr.String()))
+		}
+	case <-ctx.Done():
+		_ = procgroup.Kill(cmd.Process.Pid)
+		<-done
+		return nil, fmt.Errorf("pi --export 没有完成：%w", ctx.Err())
+	}
+	return os.ReadFile(output)
+}
+
+// exportEnv 是 `pi --export` 的环境：透传变量、基础环境与 Agent 的目录。
+func (e *Executor) exportEnv(d agentDirs) []string {
+	vars := map[string]string{}
+	for _, name := range e.o.Passthrough {
+		if v := e.o.Getenv(name); v != "" && !executor.IsReservedEnv(name) && !e.modelSecretEnv(name) {
+			vars[name] = v
+		}
+	}
+	for _, kv := range execenv.Base(d.home, d.tmp) {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			vars[k] = v
+		}
+	}
+	for k, v := range map[string]string{"HOME": d.home, "TMPDIR": d.tmp, "PI_CODING_AGENT_DIR": d.pi, "PI_OFFLINE": "1",
+		"USER": e.o.Username, "LOGNAME": e.o.Username, "PATH": e.o.ExecBasePath} {
+		vars[k] = v
+	}
+	out := make([]string, 0, len(vars))
+	for _, k := range slices.Sorted(maps.Keys(vars)) {
+		out = append(out, k+"="+vars[k])
+	}
+	return out
+}
+
+// limitedBuffer 只留前 max 个字节。
+type limitedBuffer struct {
+	b   *bytes.Buffer
+	max int
+}
+
+func (l *limitedBuffer) Write(p []byte) (int, error) {
+	if room := l.max - l.b.Len(); room > 0 {
+		l.b.Write(p[:min(len(p), room)])
+	}
+	return len(p), nil
 }
 
 // ListSessions 流式读取受管 JSONL 的会话头和用户文字，不获取执行快照或启动 Pi。
@@ -345,13 +396,6 @@ func managedSessionFile(d agentDirs, path string) (string, error) {
 	}
 	return resolved, nil
 }
-
-type quietSink struct{}
-
-func (quietSink) Phase(string)                {}
-func (quietSink) Running(int64)               {}
-func (quietSink) TextDelta(string)            {}
-func (quietSink) Tool(string, string, string) {}
 
 // commandsFile 是 Agent 目录里上次启动 Pi 时读到的命令列表（Pi RPC get_commands），供对话页的 "/" 菜单用；
 // 平台不会为了列命令专门拉起 Pi。

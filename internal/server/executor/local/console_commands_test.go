@@ -46,17 +46,46 @@ func TestConsoleCompactUsesRealRunAndPiResult(t *testing.T) {
 	}
 }
 
+// sessionFile 是 Agent 当前记下的会话文件（执行器写给数据库的那份）。
+func (h *harness) sessionFile(id uuid.UUID) string {
+	h.src.mu.Lock()
+	defer h.src.mu.Unlock()
+	return h.src.recorded[id]
+}
+
 func TestConsoleStopIdleAndExportLifecycle(t *testing.T) {
-	h := newHarness(t, func(o *Options) { o.Passthrough = append(o.Passthrough, "FAKEPI_EXPORT_CONTENT") }, "")
+	envFile := filepath.Join(t.TempDir(), "export-env")
+	h := newHarness(t, func(o *Options) { o.Passthrough = append(o.Passthrough, "FAKEPI_EXPORT_CONTENT", "FAKEPI_EXPORT_ENV") }, "")
 	h.env["FAKEPI_EXPORT_CONTENT"] = "<html>exported session</html>"
+	h.env["FAKEPI_EXPORT_ENV"] = envFile
 	id := h.agent(nil)
 	res, _ := h.exec(id, "hello")
 	if res.Outcome != executor.OutcomeCompleted {
 		t.Fatalf("准备会话失败：%+v", res)
 	}
-	jsonl, err := h.e.ExportSession(context.Background(), id, "jsonl")
+	session := h.sessionFile(id)
+	jsonl, err := h.e.ExportSession(context.Background(), id, session, "jsonl")
 	if err != nil || jsonl.ContentType != "application/x-ndjson" || !strings.Contains(string(jsonl.Data), "echo: hello") {
 		t.Fatalf("JSONL 导出不符：%+v %v", jsonl, err)
+	}
+	pid := h.pid(id)
+	// 有空闲进程时也用 pi --export，不动那个进程。
+	html, err := h.e.ExportSession(context.Background(), id, session, "html")
+	if err != nil || html.ContentType != "text/html; charset=utf-8" || string(html.Data) != "<html>exported session</html>" || filepath.Ext(html.Filename) != ".html" {
+		t.Fatalf("HTML 导出不符：%+v %v", html, err)
+	}
+	if h.pid(id) != pid || pid == 0 {
+		t.Fatalf("导出不应停止或替换空闲进程：%d → %d", pid, h.pid(id))
+	}
+	env, err := os.ReadFile(envFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := h.e.dirs(id)
+	for _, want := range []string{"HOME=" + d.home, "PI_CODING_AGENT_DIR=" + d.pi, "PI_OFFLINE=1"} {
+		if !strings.Contains(string(env), want) {
+			t.Fatalf("pi --export 的环境缺少 %s：%s", want, env)
+		}
 	}
 	stopped, err := h.e.StopIdle(context.Background(), id, "console_reload")
 	if err != nil || !stopped {
@@ -67,41 +96,42 @@ func TestConsoleStopIdleAndExportLifecycle(t *testing.T) {
 	if err != nil || stopped {
 		t.Fatalf("没有进程时应返回 false：%v %v", stopped, err)
 	}
-
-	html, err := h.e.ExportSession(context.Background(), id, "html")
-	if err != nil || html.ContentType != "text/html; charset=utf-8" || string(html.Data) != "<html>exported session</html>" || filepath.Ext(html.Filename) != ".html" {
-		t.Fatalf("HTML 导出不符：%+v %v", html, err)
+	// 没有进程时导出也不启动运行时。
+	if _, err := h.e.ExportSession(context.Background(), id, session, "html"); err != nil || h.pid(id) != 0 {
+		t.Fatalf("没有进程时导出：%v pid=%d", err, h.pid(id))
 	}
-	waitFor(t, "导出启动的进程回收", func() bool { return h.pid(id) == 0 })
-	leftovers, err := filepath.Glob(filepath.Join(h.e.dirs(id).sessions, ".loop-now-export-*.html"))
+	leftovers, err := filepath.Glob(filepath.Join(d.tmp, "loop-now-export-*.html"))
 	if err != nil || len(leftovers) != 0 {
 		t.Fatalf("临时 HTML 应清理：%v %v", leftovers, err)
 	}
 }
 
-func TestConsoleExportRejectsReturnedPathOutsideSessionDir(t *testing.T) {
-	outside := filepath.Join(t.TempDir(), "outside.html")
-	if err := os.WriteFile(outside, []byte("outside"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	h := newHarness(t, func(o *Options) { o.Passthrough = append(o.Passthrough, "FAKEPI_EXPORT_RETURN_PATH") }, "")
-	h.env["FAKEPI_EXPORT_RETURN_PATH"] = outside
+// 导出只认 sessions 目录里的会话文件；会话文件不在了是 ErrNoSession；pi --export 失败如实报错并清理临时文件。
+func TestConsoleExportChecksSessionFile(t *testing.T) {
+	h := newHarness(t, func(o *Options) { o.Passthrough = append(o.Passthrough, "FAKEPI_EXPORT_FAIL") }, "")
 	id := h.agent(nil)
-	res, _ := h.exec(id, "hello")
-	if res.Outcome != executor.OutcomeCompleted {
+	if res, _ := h.exec(id, "hello"); res.Outcome != executor.OutcomeCompleted {
 		t.Fatalf("准备会话失败：%+v", res)
 	}
-	stopped, err := h.e.StopIdle(context.Background(), id, "console_reload")
-	if err != nil || !stopped {
-		t.Fatalf("停止进程：%v %v", stopped, err)
+	outside := filepath.Join(t.TempDir(), "outside.jsonl")
+	if err := os.WriteFile(outside, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	waitFor(t, "进程退出", func() bool { return h.pid(id) == 0 })
-	if _, err := h.e.ExportSession(context.Background(), id, "html"); err == nil || !strings.Contains(err.Error(), "不受管") {
-		t.Fatalf("Pi 返回外部路径必须拒绝：%v", err)
+	ctx := context.Background()
+	if _, err := h.e.ExportSession(ctx, id, outside, "jsonl"); err == nil || !strings.Contains(err.Error(), "sessions") {
+		t.Fatalf("sessions 目录外的文件必须拒绝：%v", err)
 	}
-	leftovers, err := filepath.Glob(filepath.Join(h.e.dirs(id).sessions, ".loop-now-export-*.html"))
-	if err != nil || len(leftovers) != 0 {
-		t.Fatalf("拒绝路径后临时文件仍应清理：%v %v", leftovers, err)
+	gone := filepath.Join(h.e.dirs(id).sessions, "gone.jsonl")
+	if _, err := h.e.ExportSession(ctx, id, gone, "html"); !errors.Is(err, executor.ErrNoSession) {
+		t.Fatalf("会话文件不在了应是 ErrNoSession：%v", err)
+	}
+	h.env["FAKEPI_EXPORT_FAIL"] = "1"
+	if _, err := h.e.ExportSession(ctx, id, h.sessionFile(id), "html"); err == nil || !strings.Contains(err.Error(), "pi --export") {
+		t.Fatalf("pi --export 失败应报错：%v", err)
+	}
+	leftovers, _ := filepath.Glob(filepath.Join(h.e.dirs(id).tmp, "loop-now-export-*.html"))
+	if len(leftovers) != 0 {
+		t.Fatalf("失败后临时文件仍应清理：%v", leftovers)
 	}
 }
 
@@ -266,11 +296,6 @@ func TestConsoleCommandsRespectClaudeRuntime(t *testing.T) {
 	if err != nil || res.Outcome != executor.OutcomeFailed || !strings.Contains(res.ErrorMessage, "不支持 Pi") {
 		t.Fatalf("应拒绝 Pi compact：%+v %v", res, err)
 	}
-	for _, format := range []string{"html", "jsonl"} {
-		if _, err := h.e.ExportSession(ctx, id, format); !errors.Is(err, executor.ErrUnsupportedRuntime) {
-			t.Fatalf("应拒绝 Pi export %s：%v", format, err)
-		}
-	}
 	stopped, err := h.e.StopIdle(ctx, id, "console_reload")
 	if err != nil || !stopped {
 		t.Fatalf("应能停止 Claude 空闲进程：%v %v", stopped, err)
@@ -290,7 +315,7 @@ func TestMaintenanceErrorsCarrySentinels(t *testing.T) {
 	h := newHarness(t, nil, "")
 	id := h.agent(nil)
 	ctx := context.Background()
-	if _, err := h.e.ExportSession(ctx, id, "jsonl"); !errors.Is(err, executor.ErrNoSession) {
+	if _, err := h.e.ExportSession(ctx, id, "", "jsonl"); !errors.Is(err, executor.ErrNoSession) {
 		t.Fatalf("没有会话时应是 ErrNoSession：%v", err)
 	}
 	free, err := h.e.reserveMaintenance(ctx, id)
@@ -301,7 +326,7 @@ func TestMaintenanceErrorsCarrySentinels(t *testing.T) {
 	if _, err := h.e.StopIdle(ctx, id, "console_reload"); !errors.Is(err, executor.ErrMaintenanceBusy) || !errors.Is(err, ErrRuntimeBusy) {
 		t.Fatalf("维护进行中 StopIdle 应是 ErrMaintenanceBusy：%v", err)
 	}
-	if _, err := h.e.ExportSession(ctx, id, "jsonl"); !errors.Is(err, executor.ErrMaintenanceBusy) {
+	if _, err := h.e.ExportSession(ctx, id, "/x.jsonl", "jsonl"); !errors.Is(err, executor.ErrMaintenanceBusy) {
 		t.Fatalf("维护进行中导出应是 ErrMaintenanceBusy：%v", err)
 	}
 	if _, err := h.e.ListSessions(ctx, id, ""); !errors.Is(err, executor.ErrMaintenanceBusy) {

@@ -2,10 +2,12 @@ package pirpc
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -14,9 +16,10 @@ import (
 	"loop-now/internal/server/preflight"
 )
 
-// Real installed Pi 1.4 export_html RPC with a synthetic session. No Prompt,
-// compact/model request, credentials, user HOME or network is used.
-func TestInstalledPi14ExportHTML(t *testing.T) {
+// Real installed Pi 1.4 `pi --offline --export <session> <out>` (what the platform's /export html runs) on a synthetic
+// session. Pi embeds the session as base64 JSON in <script id="session-data">. No model request, credentials,
+// user HOME or network is used.
+func TestInstalledPi14ExportFile(t *testing.T) {
 	if _, err := exec.LookPath("pi"); err != nil {
 		t.Skip("本机没有 pi")
 	}
@@ -46,49 +49,27 @@ func TestInstalledPi14ExportHTML(t *testing.T) {
 	if err = os.WriteFile(session, raw, 0600); err != nil {
 		t.Fatal(err)
 	}
-	network := filepath.Join(root, "network.json")
-	args := []string{"--import", preload, filepath.Join(r.PiPackageDir, "dist/bundle/cli.js"), "--mode", "rpc", "--offline", "--session", session, "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-themes", "--provider", "openai-codex", "--model", "gpt-6.1-sol"}
-	cmd := exec.CommandContext(ctx, r.NodeBin, args...)
+	network, output := filepath.Join(root, "network.json"), filepath.Join(root, "export.html")
+	cmd := exec.CommandContext(ctx, r.NodeBin, "--import", preload, filepath.Join(r.PiPackageDir, "dist/bundle/cli.js"), "--offline", "--export", session, output)
 	cmd.Dir = root
 	cmd.Env = []string{"HOME=" + root, "PATH=/usr/bin:/bin", "PI_CODING_AGENT_DIR=" + filepath.Join(root, "agent"), "PI_OFFLINE=1", "PI_TELEMETRY=0", "EXPORT_NETWORK_REPORT=" + network}
-	client, err := Start(cmd)
-	if err != nil {
-		t.Fatal(err)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("pi --export: %v %s", err, out)
 	}
-	defer func() {
-		_ = client.CloseStdin()
-		select {
-		case <-client.Done():
-		case <-time.After(3 * time.Second):
-			_ = cmd.Process.Kill()
-			<-client.Done()
-		}
-		b, readErr := os.ReadFile(network)
-		if readErr != nil || string(b) != `{"denied":0}` {
-			t.Error("network control", string(b), readErr)
-		}
-	}()
-	state, err := client.GetState(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if state.SessionID == "" || filepath.Clean(state.SessionFile) != filepath.Clean(session) {
-		t.Fatalf("synthetic session was not loaded: %+v", state)
-	}
-	output := filepath.Join(root, "export.html")
-	got, err := client.ExportHTML(ctx, output)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if filepath.Clean(got) != filepath.Clean(output) {
-		t.Fatalf("export path = %q, want %q", got, output)
+	if b, err := os.ReadFile(network); err != nil || string(b) != `{"denied":0}` {
+		t.Error("network control", string(b), err)
 	}
 	content, err := os.ReadFile(output)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(content), "LOOP_NOW_EXPORT_SENTINEL") {
-		t.Fatalf("exported HTML does not contain the synthetic message (%d bytes)", len(content))
+	m := regexp.MustCompile(`<script id="session-data" type="application/json">([A-Za-z0-9+/=]+)</script>`).FindSubmatch(content)
+	if m == nil {
+		t.Fatalf("exported HTML has no session data (%d bytes)", len(content))
+	}
+	data, err := base64.StdEncoding.DecodeString(string(m[1]))
+	if err != nil || !strings.Contains(string(data), "LOOP_NOW_EXPORT_SENTINEL") {
+		t.Fatalf("exported session data does not contain the synthetic message: %v", err)
 	}
 }
 

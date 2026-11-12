@@ -106,7 +106,7 @@ func (q *quickExec) StopIdle(context.Context, uuid.UUID, string) (bool, error) {
 	}
 	return true, nil
 }
-func (q *quickExec) ExportSession(_ context.Context, _ uuid.UUID, format string) (executor.SessionExport, error) {
+func (q *quickExec) ExportSession(_ context.Context, _ uuid.UUID, _, format string) (executor.SessionExport, error) {
 	if q.exportErr != nil {
 		return executor.SessionExport{}, q.exportErr
 	}

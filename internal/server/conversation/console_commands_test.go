@@ -34,7 +34,7 @@ func (m *maintExec) StopIdle(ctx context.Context, _ uuid.UUID, reason string) (b
 	return true, nil
 }
 
-func (m *maintExec) ExportSession(context.Context, uuid.UUID, string) (executor.SessionExport, error) {
+func (m *maintExec) ExportSession(context.Context, uuid.UUID, string, string) (executor.SessionExport, error) {
 	return executor.SessionExport{Filename: "s.jsonl", ContentType: "application/x-ndjson", Data: []byte("{}\n")}, nil
 }
 

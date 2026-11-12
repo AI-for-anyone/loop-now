@@ -205,7 +205,7 @@ func (s *Service) Export(ctx context.Context, agentID uuid.UUID, format string) 
 	if !ok {
 		return executor.SessionExport{}, unsupportedExecutor("会话导出")
 	}
-	out, err := exporter.ExportSession(ctx, agentID, format)
+	out, err := exporter.ExportSession(ctx, agentID, sess.SessionFile, format)
 	if err != nil {
 		if mapped := consoleCommandError(err); mapped != err {
 			return executor.SessionExport{}, mapped

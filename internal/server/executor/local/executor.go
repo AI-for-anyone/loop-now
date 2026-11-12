@@ -198,7 +198,8 @@ const (
 	stopShutdown      = "shutdown"
 	stopAbortTimeout  = "abort_timeout"
 	stopForkSnapshot  = "fork_snapshot"
-	// 平台命令停止空闲进程：/new、/reload、/resume；console_export 是 /export html 为导出临时启动的进程。
+	// 平台命令停止空闲进程：/new、/reload、/resume。console_export 是早先 /export html 为导出临时启动的进程，
+	// 现在导出改用 pi --export、不再启动进程，保留它是为了旧记录。
 	stopSessionReset   = "session_reset"
 	stopConsoleReload  = "console_reload"
 	stopSessionResumed = "session_resumed"

@@ -319,24 +319,6 @@ func (c *Client) Compact(ctx context.Context, customInstructions string) (Compac
 	return CompactResult{TokensBefore: data.TokensBefore, EstimatedTokensAfter: data.EstimatedTokensAfter}, nil
 }
 
-// ExportHTML 让 Pi 把当前会话导出到平台指定的文件，并返回 Pi 确认的路径。
-func (c *Client) ExportHTML(ctx context.Context, outputPath string) (string, error) {
-	data, err := c.Call(ctx, "export_html", map[string]any{"outputPath": outputPath})
-	if err != nil {
-		return "", err
-	}
-	var out struct {
-		Path string `json:"path"`
-	}
-	if err := json.Unmarshal(data, &out); err != nil {
-		return "", fmt.Errorf("pirpc: 解析 export_html 响应失败：%w", err)
-	}
-	if out.Path == "" {
-		return "", errors.New("pirpc: export_html 未返回文件路径")
-	}
-	return out.Path, nil
-}
-
 // Prompt 发送 prompt 并消费事件直到本轮结束（agent_settled），期间回调 sink。
 // 同一时刻只允许一个 Prompt 或 Compact。prompt 未能发出时返回 ErrExited；发出后进程退出则返回
 // Outcome failed / pi_exited 的结果且 error 为 nil。ctx 取消只停止等待，不会中止 Pi。

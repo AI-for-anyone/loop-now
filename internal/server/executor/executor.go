@@ -95,9 +95,10 @@ type IdleProcessStopper interface {
 	StopIdle(ctx context.Context, agentID uuid.UUID, reason string) (bool, error)
 }
 
-// SessionExporter 由能从受管 Pi 会话导出的执行器实现。
+// SessionExporter 由能从受管 Pi 会话导出的执行器实现。sessionFile 是数据库记下的当前会话文件；
+// 调用方已确认这是 Pi 的 Agent、会话可用。
 type SessionExporter interface {
-	ExportSession(ctx context.Context, agentID uuid.UUID, format string) (SessionExport, error)
+	ExportSession(ctx context.Context, agentID uuid.UUID, sessionFile, format string) (SessionExport, error)
 }
 
 // ManagedSession 是受管 sessions 目录里的一个有效 Pi 会话；Path 只在服务端内部使用。

@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func TestPipeCompactAndExportHTMLProtocol(t *testing.T) {
+func TestPipeCompactProtocol(t *testing.T) {
 	f := newPipeFake(t)
 	obs := &obsRec{}
 	f.c.SetObserver(obs)
@@ -45,26 +45,6 @@ func TestPipeCompactAndExportHTMLProtocol(t *testing.T) {
 		t.Fatalf("压缩用量应归属当前维护运行：%+v %v", usage, inTurn)
 	}
 
-	exportDone := make(chan struct {
-		path string
-		err  error
-	}, 1)
-	go func() {
-		path, err := f.c.ExportHTML(ctx, "/tmp/session.html")
-		exportDone <- struct {
-			path string
-			err  error
-		}{path, err}
-	}()
-	cmd = f.next()
-	if cmd["type"] != "export_html" || cmd["outputPath"] != "/tmp/session.html" {
-		t.Fatalf("export_html 参数不符：%v", cmd)
-	}
-	f.send(okResp(cmd["id"].(string), "export_html", map[string]any{"path": "/tmp/session.html"}))
-	exported := <-exportDone
-	if exported.err != nil || exported.path != "/tmp/session.html" {
-		t.Fatalf("导出路径不符：%q %v", exported.path, exported.err)
-	}
 }
 
 func TestPipeCompactOmitsEmptyInstructions(t *testing.T) {
@@ -122,19 +102,6 @@ func TestFakeCompactAbortAndContinue(t *testing.T) {
 	res, err := p.Prompt(ctx, "after", nil)
 	if err != nil || res.Outcome != OutcomeCompleted || res.Text != "echo: after" {
 		t.Fatalf("取消压缩后进程应可继续使用：%+v %v", res, err)
-	}
-}
-
-func TestFakeExportHTMLWritesReturnedFile(t *testing.T) {
-	p := startFake(t, []string{"FAKEPI_EXPORT_CONTENT=<html>session</html>"})
-	output := filepath.Join(t.TempDir(), "session.html")
-	returned, err := p.ExportHTML(testCtx(t), output)
-	if err != nil || returned != output {
-		t.Fatalf("导出返回不符：%q %v", returned, err)
-	}
-	data, err := os.ReadFile(output)
-	if err != nil || string(data) != "<html>session</html>" {
-		t.Fatalf("导出文件不符：%q %v", data, err)
 	}
 }
 
