@@ -5,9 +5,13 @@ import type { Turn } from './turns'
 
 // 刻度的名称最多取这么多字；显示时再按宽度单行截断。
 const PREVIEW_CHARS = 80
+// 只处理开头的一段：每次渲染都要给每一轮算一遍名称，粘贴进来的长消息不必整条处理。
+const PREVIEW_SOURCE = 2000
 function clip(text: string) {
-  const chars = Array.from(text.replace(/\s+/gu, ' ').trim())
-  return chars.length > PREVIEW_CHARS ? `${chars.slice(0, PREVIEW_CHARS).join('')}…` : chars.join('')
+  const head = text.trimStart().slice(0, PREVIEW_SOURCE)
+  const chars = Array.from(head.replace(/\s+/gu, ' ').trim())
+  if (chars.length > PREVIEW_CHARS) return `${chars.slice(0, PREVIEW_CHARS).join('')}…`
+  return chars.join('')
 }
 
 // 一轮对话的预览：用户消息的开头；平台提醒与 sleep 唤醒写明是哪种提醒；只有图片时写图片张数；

@@ -14,7 +14,7 @@ type Hint = { key: string; top: number }
 
 // 对话区右侧的刻度尺：一条刻度一轮，从上到下与对话流同序；可视范围内的轮次刻度加深。
 // 悬停或聚焦刻度时加深、变长，并在左侧单行显示这一轮的开头；点击跳到那一轮。
-// 刻度先按 20px 的间距排，放不下时压缩到 8px，再放不下就让刻度尺自己滚动，并跟着可见轮滚动。
+// 刻度宽 6px、高 2px、直角，按 10px 的间距排（照参考图的实际尺寸）；放不下时压缩到 6px，再放不下就让刻度尺自己滚动，并跟着可见轮滚动。
 // 不加过渡与平滑滚动：控制台只保留三个动效，减少动态效果时也就不用另做处理。
 export function MessageRuler({ turns, visible, onJump, className }: { turns: RulerTurn[]; visible: ReadonlySet<string>; onJump: (key: string) => void; className?: string }) {
   const nav = useRef<HTMLElement>(null)
@@ -57,12 +57,12 @@ export function MessageRuler({ turns, visible, onJump, className }: { turns: Rul
   const hint = hovered ?? focused
   const hintLabel = hint && turns.find((turn) => turn.key === hint.key)?.label
   return (
-    <nav ref={nav} aria-label={t.chat.ruler.label} className={cn('relative flex w-8 shrink-0 flex-col border-l border-border', className)}>
+    <nav ref={nav} aria-label={t.chat.ruler.label} className={cn('relative flex w-9.5 shrink-0 flex-col border-l border-border', className)}>
       <ol ref={list} onScroll={replace} className="no-scrollbar relative flex min-h-0 flex-1 flex-col overflow-y-auto py-6">
         {turns.map((turn) => {
           const current = visible.has(turn.key)
           return (
-            <li key={turn.key} className="flex min-h-2 flex-[0_1_20px]">
+            <li key={turn.key} className="flex min-h-1.5 flex-[0_1_10px]">
               <button
                 type="button"
                 aria-label={turn.label}
@@ -82,7 +82,7 @@ export function MessageRuler({ turns, visible, onJump, className }: { turns: Rul
                 <span
                   aria-hidden="true"
                   className={cn(
-                    'h-[3px] w-3 rounded-full group-hover:w-4 group-hover:bg-ink group-focus-visible:w-4 group-focus-visible:bg-ink group-focus-visible:shadow-focus',
+                    'h-0.5 w-1.5 group-hover:w-2.5 group-hover:bg-ink group-focus-visible:w-2.5 group-focus-visible:bg-ink group-focus-visible:shadow-focus',
                     current ? 'bg-ink-500' : 'bg-border',
                   )}
                 />
