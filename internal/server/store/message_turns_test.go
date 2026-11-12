@@ -95,6 +95,7 @@ func (e *recEnv) finish(r store.Run, status, reason string) {
 //	——   会话重开（epoch 2），编号继续
 //	w    排队中被 sleep 的新工作承接（sleep_superseded），没有开始时间，按入队时间排
 //	c    完成
+//	——   一次手动压缩（console_compact，没有对话消息，不算）
 //	d    进行中；e 仍在排队（不算）
 func newTurnFixture(t *testing.T) *turnFixture {
 	e := newRecEnv(t)
@@ -128,6 +129,9 @@ func newTurnFixture(t *testing.T) *turnFixture {
 	mustExec(t, e.s, `UPDATE runs SET status = 'interrupted', end_reason = 'sleep_superseded', ended_at = now() WHERE id = $1 AND status = 'queued'`, w.ID)
 	c := e.send(true, "")
 	e.finish(c, "completed", "")
+	// 手动压缩（/compact）的执行没有用户消息也没有回复，不进对话流，不算一轮。
+	mustExec(t, e.s, `INSERT INTO runs (id, agent_id, user_message_id, config_version, priority, queue_seq, status, origin, queued_at, started_at, running_at, ended_at)
+		VALUES ($1, $2, NULL, 1, 1, (SELECT coalesce(max(queue_seq), 0) + 1 FROM runs), 'completed', 'console_compact', now(), now(), now(), now())`, uuid.Must(uuid.NewV7()), e.agent)
 	d := e.send(true, "")
 	e.send(false, "queue")
 
