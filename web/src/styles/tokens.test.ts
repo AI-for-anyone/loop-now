@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -84,6 +84,13 @@ const pairs: [string, string, string][] = [
   ['运行记录：结局（服务端重启中断）', 'ink-700', 'tint-blue'],
   ['定位：突出显示的回复', 'ink', 'tint-yellow'],
   ['定位：突出显示的回复中的元信息', 'ink-500', 'tint-yellow'],
+  // 改版“一张印出来的纸”。
+  ['索引标签：未选中', 'ink-700', 'paper-tab'],
+  ['索引标签：当前页', 'ink', 'riso-yellow'],
+  ['票根：小标题', 'ink-500', 'paper-raised'],
+  ['输入区：按键说明', 'ink-700', 'tint-yellow'],
+  ['输入区：实时连接正常', 'green-text', 'tint-yellow'],
+  ['输入区：正在重连', 'red-text', 'tint-yellow'],
 ]
 
 // 代码块是孔版蓝底；高亮颜色取自 index.css 中 .hljs* 的 color。
@@ -97,6 +104,16 @@ describe('设计令牌的对比度', () => {
   it('代码块中的文字与各高亮颜色在孔版蓝上都不低于 4.5:1', () => {
     expect(hljsColors.length).toBeGreaterThan(5)
     for (const color of hljsColors) expect(contrast(color, 'riso-blue'), color).toBeGreaterThanOrEqual(4.5)
+  })
+
+  // 主区米色底上的纸张颗粒：一张小的平铺图，不用整页的 SVG 滤镜（滚动时不必重算）。
+  it('纸张颗粒是一张不到 12 KB 的平铺图', () => {
+    const rule = css.slice(css.indexOf('.riso-grain {'), css.indexOf('}', css.indexOf('.riso-grain {')))
+    const file = /url\(['"]?([^'")]+)['"]?\)/.exec(rule)?.[1]
+    expect(file).toMatch(/\.png$/)
+    expect(rule).toMatch(/background-size:\s*128px 128px/)
+    expect(statSync(resolve(process.cwd(), 'src', file!)).size).toBeLessThan(12 * 1024)
+    expect(css).not.toContain('feTurbulence')
   })
 
   it('荧光粉、荧光黄在纸上达不到正文对比度，所以不能作文字色', () => {

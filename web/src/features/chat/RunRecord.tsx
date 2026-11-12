@@ -6,6 +6,7 @@ import { RequestId } from '@/components/RequestError'
 import { Badge } from '@/components/ui/badge'
 import { t } from '@/i18n'
 import { describeError, requestIdOf } from '@/lib/errors'
+import { receiptClass, receiptPartClass } from '@/lib/receipt'
 import { useNow } from '@/lib/use-now'
 import { cn } from '@/lib/utils'
 import { isVoidedRun, runStatusText } from './run-status-text'
@@ -78,7 +79,7 @@ interface RunRecordProps {
   defaultOpen?: boolean
 }
 
-// 回复下方的运行记录：收起时是一行按钮，显示总用时与 token 数（进行中只显示已用时间）；展开时请求时间线。
+// 回复下方的运行记录：收起时是一张小票式的按钮，写着总用时与 token 数（进行中只写已用时间）；展开时请求时间线。
 export function RunRecord({ agentId, run, defaultOpen = false }: RunRecordProps) {
   const [open, setOpen] = useState(defaultOpen)
   const panelId = useId()
@@ -86,27 +87,39 @@ export function RunRecord({ agentId, run, defaultOpen = false }: RunRecordProps)
   const now = useNow(1000, !ended)
   const timeline = useRunTimeline(agentId, run.id, open, ended)
   const duration = runDurationMs(run)
-  const label =
-    ended && duration !== null
-      ? t.timeline.toggle(t.timeline.duration(duration), t.overview.tokens(run.usage.total))
-      : t.timeline.toggleRunning(t.overview.elapsed(now - Date.parse(run.queuedAt)))
+  const done = ended && duration !== null
+  const elapsed = t.overview.elapsed(now - Date.parse(run.queuedAt))
+  const label = done ? t.timeline.toggle(t.timeline.duration(duration), t.overview.tokens(run.usage.total)) : t.timeline.toggleRunning(elapsed)
+  // 小票上名称之后的各段：结束后是耗时与 token 数，进行中只有已用时间。
+  const parts = done ? [t.timeline.duration(duration), t.timeline.toggleParts.tokens(t.overview.tokens(run.usage.total))] : [t.timeline.toggleParts.running(elapsed)]
 
   return (
     <div className="flex flex-col gap-2">
+      {/* 触发条是一张分段的小票：名称｜耗时｜token，段与段之间一道虚线。读屏读的仍是连在一起的一句（sr-only），各段只给眼睛看。 */}
       <button
         type="button"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         onClick={() => setOpen((value) => !value)}
-        className="inline-flex min-h-9 items-center gap-2 self-start rounded-full bg-tint-blue px-3.5 text-[13px] font-black text-ink outline-none hover:bg-[#d6ddf4] focus-visible:shadow-focus"
+        className={cn(receiptClass, 'mt-0.5 self-start outline-none hover:bg-[#d6ddf4] focus-visible:shadow-focus')}
       >
-        {label}
+        <span className="sr-only">{label}</span>
+        <span aria-hidden="true" data-receipt-part className="px-[11px] font-black whitespace-nowrap">
+          {t.timeline.title}
+        </span>
+        {parts.map((part, index) => (
+          <span key={index} aria-hidden="true" data-receipt-part className={cn(receiptPartClass, 'font-mono font-medium')}>
+            {part}
+          </span>
+        ))}
         {/* 换图标而不旋转：按钮内的元素也不做变换。 */}
-        {open ? (
-          <ChevronUpIcon aria-hidden="true" strokeWidth={2.8} className="size-[13px]" />
-        ) : (
-          <ChevronDownIcon aria-hidden="true" strokeWidth={2.8} className="size-[13px]" />
-        )}
+        <span className="inline-flex items-center pr-[9px]">
+          {open ? (
+            <ChevronUpIcon aria-hidden="true" strokeWidth={2.8} className="size-3" />
+          ) : (
+            <ChevronDownIcon aria-hidden="true" strokeWidth={2.8} className="size-3" />
+          )}
+        </span>
       </button>
       {open && (
         <div id={panelId} className="flex flex-col overflow-hidden rounded-[16px] bg-white shadow-[3px_3px_0_rgb(24_38_94/.12)]">

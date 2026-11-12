@@ -3,6 +3,7 @@ import ReactMarkdown, { type ExtraProps } from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
 import remarkGfm from 'remark-gfm'
 import { MermaidBlock } from './MermaidBlock'
+import { rehypeLeadLabel } from './rehype-lead-label'
 import { remarkHttpLinks } from './remark-http-links'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { t } from '@/i18n'
@@ -148,7 +149,8 @@ function rehypeCursor() {
 // 链接经 react-markdown 默认的 urlTransform 过滤危险协议。
 // 每条回复各自渲染，脚注 id 加上本实例的前缀，多条回复同用 [^1] 时 id 不重复。
 // cursor 为真时（回复进行中）在文字末尾显示输出光标；readme 为真时按插件 README 处理相对链接与图片。
-export const Markdown = memo(function Markdown({ text, cursor = false, readme = false }: { text: string; cursor?: boolean; readme?: boolean }) {
+// leadLabels：列表项开头的加粗词做成黄色小标签，用于回复与消息；文档（插件 README、文件夹里的 Markdown 文件）不做。
+export const Markdown = memo(function Markdown({ text, cursor = false, readme = false, leadLabels = !readme }: { text: string; cursor?: boolean; readme?: boolean; leadLabels?: boolean }) {
   const prefix = `md-${useId().replace(/[^\w-]/g, '')}-`
   return (
     <MarkdownSource.Provider value={{ text, streaming: cursor }}>
@@ -160,7 +162,8 @@ export const Markdown = memo(function Markdown({ text, cursor = false, readme = 
           footnoteLabel: t.chat.footnoteLabel,
           footnoteBackLabel: (referenceIndex, rereferenceIndex) => t.chat.footnoteBackLabel(referenceIndex + 1, rereferenceIndex),
         }}
-        rehypePlugins={[[rehypeHighlight, { detect: false, ignore: ['mermaid'] }], [rehypePrefixFootnoteLabel, prefix], ...(cursor ? [rehypeCursor] : [])]}
+        // 标签放在光标之后处理：光标跟着标签后面的文字一起包起来，仍在文字末尾。
+        rehypePlugins={[[rehypeHighlight, { detect: false, ignore: ['mermaid'] }], [rehypePrefixFootnoteLabel, prefix], ...(cursor ? [rehypeCursor] : []), ...(leadLabels ? [rehypeLeadLabel] : [])]}
         components={{ pre: CodeBlock, a: readme ? ReadmeLink : Link, img: readme ? AltText : Image, ...tableComponents }}
       >
         {text}

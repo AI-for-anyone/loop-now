@@ -6,7 +6,7 @@ type S = components['schemas']
 export const chat = {
   loadingOlder: '正在加载更早的消息…',
   noMessages: '还没有对话，发一条消息开始吧。',
-  inputPlaceholder: '输入消息，回车发送，Shift+回车换行',
+  inputPlaceholder: (name: string) => `给 ${name} 发消息`,
   busyPlaceholder: (name: string) => `${name} 正在回复，新消息会排队`,
   send: '发送',
   queueSend: '排队发送',
@@ -140,9 +140,12 @@ export const chat = {
   toolsLabel: '工具调用',
   messagesLabel: '对话',
   loadOlder: '加载更早的消息',
-  // 对话区右侧的刻度尺：一条刻度一轮对话，名称用这一轮开头的文字。
+  // 纸张右侧票根里的刻度尺：一条刻度一轮对话，名称用这一轮开头的文字。
   ruler: {
     label: '对话轮次',
+    // 票根顶上的小标题与底部的总轮数。
+    title: '轮次',
+    total: (count: number) => `共 ${count} 轮`,
     // 平台提醒、sleep 唤醒那一轮：写明是哪种提醒，再接说明。
     labeled: (kind: string, text: string) => `${kind}：${text}`,
     noText: '没有文字的一轮',
@@ -150,7 +153,6 @@ export const chat = {
   // 消息与回复上方的时间，以及名称与时间之间的分隔。
   time: (time: string) => formatMonthDayClock(time),
   metaSeparator: '·',
-  sessionDividerMark: '～～',
   // 减少动态效果时，工具进行中的旋转图标换成这个静态标记。
   toolStaticMark: '…',
   // 被打断的那一轮里没有结束的工具。
@@ -158,6 +160,10 @@ export const chat = {
   interruptDivider: '已打断，先处理这条',
   // 输入框下方的按键说明：Enter 排队，⌘／Ctrl+Enter 作为打断发送。
   keyHint: { enter: 'Enter', modEnter: (mac: boolean) => (mac ? '⌘ Enter' : 'Ctrl Enter'), queue: '排队', interrupt: '立即打断', stopMark: '■', stop: '只停止当前回复' },
+  // 对话页输入区里按键的写法：中文界面统一写“回车”，修饰键写法不变。任务节点输入框的按键说明仍用上面 keyHint 里的写法。
+  barKeys: { enter: '回车', shiftEnter: 'Shift + 回车', modEnter: (mac: boolean) => (mac ? '⌘ 回车' : 'Ctrl 回车') },
+  // 空闲时输入框下方的按键说明：回车 发送 · Shift + 回车 换行。
+  idleHint: { send: '发送', newline: '换行' },
   // 忙时输入框为空时，发送按钮换成停止：只停止这一次回复，不发送新消息，之后排队的消息照常处理。
   stop: '停止当前回复',
   stopping: '正在停止当前回复…',

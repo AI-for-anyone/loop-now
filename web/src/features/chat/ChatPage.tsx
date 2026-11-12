@@ -100,29 +100,33 @@ export function ChatPage() {
 
   const connection = live.connection === 'closed' ? 'reconnecting' : live.connection
   return (
+    // 整页都在纸张里：上面是消息滚动区（右侧票根里是刻度尺），下面是并入纸张底部的输入区。
     // 窄屏时对话部分给定高度，随整页一起滚动；对话流仍在自己的区域内滚动（加载更早的消息、贴底都依赖它）。
-    <div className="flex h-full min-h-0 flex-col px-6 lg:overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col lg:overflow-hidden">
       <div className="flex h-[clamp(28rem,80dvh,48rem)] min-w-0 shrink-0 flex-col lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink">
-        {sessionMissing && <SessionMissingBanner agentId={agent.id} hasRunInProgress={hasRunInProgress} />}
-        {notFound && (
-          <Alert variant="warning" className="mt-4">
-            <AlertDescription>{t.timeline.locate.notFound}</AlertDescription>
-          </Alert>
-        )}
-        {aroundRun !== null && (
-          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-ticket bg-tint-blue px-4 py-2 text-[13.5px] font-bold">
-            <span>{t.timeline.locate.viewing}</span>
-            <span role="status" aria-live="polite">
-              {hiddenNew > 0 && <Badge tone="busy">{t.timeline.locate.newMessages}</Badge>}
-            </span>
-            <Button size="xs" variant="ink" className="ml-auto" onClick={backToLatest}>
-              {t.timeline.locate.backToLatest}
-            </Button>
-          </div>
-        )}
+        {/* 提示条排在消息区上方，左右留白与消息区一致。 */}
+        <div className="flex shrink-0 flex-col px-[clamp(12px,2vw,28px)]">
+          {sessionMissing && <SessionMissingBanner agentId={agent.id} hasRunInProgress={hasRunInProgress} />}
+          {notFound && (
+            <Alert variant="warning" className="mt-4">
+              <AlertDescription>{t.timeline.locate.notFound}</AlertDescription>
+            </Alert>
+          )}
+          {aroundRun !== null && (
+            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-ticket bg-tint-blue px-4 py-2 text-[13.5px] font-bold">
+              <span>{t.timeline.locate.viewing}</span>
+              <span role="status" aria-live="polite">
+                {hiddenNew > 0 && <Badge tone="busy">{t.timeline.locate.newMessages}</Badge>}
+              </span>
+              <Button size="xs" variant="ink" className="ml-auto" onClick={backToLatest}>
+                {t.timeline.locate.backToLatest}
+              </Button>
+            </div>
+          )}
+        </div>
         <div className="min-h-0 flex-1">
           {messages.isError && !(aroundRun !== null && isNotFound(messages.error)) ? (
-            <ErrorAlert error={messages.error} className="mt-6 w-auto" />
+            <ErrorAlert error={messages.error} className="mx-[clamp(12px,2vw,28px)] mt-6 w-auto" />
           ) : (
             <MessageList
               // 定位与常规模式各用一份滚动状态，切换时重新开始。
@@ -173,7 +177,7 @@ export function ChatPage() {
           status={
             // 忙碌提示：荧光粉圆点加藏青描边，没有底色。
             busy && (
-              <span role="status" className="inline-flex items-center gap-2 text-[13.5px] font-bold">
+              <span role="status" className="inline-flex items-center gap-2 text-[12.5px] font-bold text-ink">
                 <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full bg-riso-pink shadow-[0_0_0_2px_var(--ink)]" />
                 {t.chat.busyBar(phase ?? t.chat.status.running)}
               </span>
@@ -184,13 +188,13 @@ export function ChatPage() {
               role="status"
               aria-live="polite"
               className={cn(
-                'inline-flex items-center gap-1.5 text-[12.5px] font-bold',
+                'inline-flex items-center gap-1.5 text-[12px] font-black',
                 connection === 'open' ? 'text-green-text' : connection === 'reconnecting' ? 'text-red-text' : 'text-ink-500',
               )}
             >
               <span
                 aria-hidden="true"
-                className={cn('size-2 shrink-0 rounded-full', connection === 'open' ? 'bg-green' : connection === 'reconnecting' ? 'bg-red' : 'bg-ink-500')}
+                className={cn('size-[7px] shrink-0 rounded-full', connection === 'open' ? 'bg-green' : connection === 'reconnecting' ? 'bg-red' : 'bg-ink-500')}
               />
               {t.chat.connection[connection]}
             </span>

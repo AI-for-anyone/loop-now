@@ -1,8 +1,10 @@
-import { ZapIcon } from 'lucide-react'
+import { ScissorsIcon, ZapIcon, type LucideIcon } from 'lucide-react'
 import { MessageImages } from '@/features/images/MessageImages'
 import { UserChatBubble, AgentChatReply, SleepWakeLine } from './ChatBubble'
 import { Fragment, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import type { Schemas } from '@/api/client'
+import { HollowNumber } from '@/components/NumberedSection'
+import { Stub } from '@/components/Sheet'
 import { Button } from '@/components/ui/button'
 import { config } from '@/config'
 import { t } from '@/i18n'
@@ -89,20 +91,19 @@ function PiCommandNotices({ notices, truncated }: { notices: Notice[]; truncated
   )
 }
 
-// 上一轮被打断、这一轮是打断发出的消息时，两轮之间画一道粉色虚线。
+// 上一轮被打断、这一轮是打断发出的消息时，两轮之间画一道裁切线。
 function interruptedBy(previous: Turn, turn: Turn) {
   return turn.run.whenBusy === 'interrupt' && previous.run.status === 'interrupted' && previous.run.endReason === 'user_interrupt'
 }
 
-function InterruptDivider() {
+// 裁切线：对话流里的分隔线。左端一个图标，两段 2px 的粉色虚线夹着一句说明；“会话已重开”左端是剪刀，“已打断”是闪电。
+function CutLine({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
   return (
-    <div role="separator" aria-label={t.chat.interruptDivider} className="flex items-center gap-2.5">
-      <span aria-hidden="true" className="h-0 flex-1 border-t-[1.5px] border-dashed border-riso-pink" />
-      <span aria-hidden="true" className="inline-flex items-center gap-[5px] text-xs font-black text-pink-text">
-        <ZapIcon className="size-[13px]" strokeWidth={2.4} />
-        {t.chat.interruptDivider}
-      </span>
-      <span aria-hidden="true" className="h-0 flex-1 border-t-[1.5px] border-dashed border-riso-pink" />
+    <div role="separator" aria-label={label} className="flex items-center gap-2.5">
+      <Icon aria-hidden="true" className="size-4 shrink-0 text-pink-text" strokeWidth={2.2} />
+      <span aria-hidden="true" data-cut-line className="h-0 flex-1 border-t-2 border-dashed border-riso-pink" />
+      <span className="text-[12px] font-black text-pink-text">{label}</span>
+      <span aria-hidden="true" data-cut-line className="h-0 flex-1 border-t-2 border-dashed border-riso-pink" />
     </div>
   )
 }
@@ -132,6 +133,17 @@ interface MessageListProps {
   onLoadNewer?: () => void
   // 不属于对话轮次、按时间插进对话流的内容（Agent 发给你的消息与问题）。
   inserts?: TimelineInsert[]
+  // 已加载的第一轮之前还有多少轮（等服务端在消息页上给出后接上）。给了就按它接着编号；
+  // 没给时，历史已全部加载（没有更早的消息）就从 1 编号，否则不显示编号和刻度尺上的数字。
+  turnsBefore?: number
+}
+
+// 编号那一栏宽 46px，离正文还有 18px：三位数以内用 34px 的字；四位数、五位数以上缩小字号，不挤到右边的正文。
+const numberSize = (number: number) => (number >= 10000 ? 'text-[19px]' : number >= 1000 ? 'text-[24px]' : undefined)
+
+// 插进对话流的内容与各轮的正文左对齐：宽屏时让出编号那一栏。
+function Insert({ children }: { children: ReactNode }) {
+  return <div className="flex min-w-0 flex-col nav:pl-16">{children}</div>
 }
 
 export interface TimelineInsert {
@@ -170,6 +182,7 @@ export function MessageList({
   loadingNewer = false,
   onLoadNewer,
   inserts = [],
+  turnsBefore,
 }: MessageListProps) {
   const container = useRef<HTMLDivElement>(null)
   const content = useRef<HTMLDivElement>(null)
@@ -228,6 +241,9 @@ export function MessageList({
   }, [])
 
   const placed = placeInserts(turns, inserts, hasOlder, hasNewer)
+  // 轮次编号：第一轮是第几轮；不知道时为 null。后面还有更新的消息没加载时（定位模式）总轮数也还不知道。
+  const firstNumber = turnsBefore !== undefined ? turnsBefore + 1 : hasOlder ? null : 1
+  const totalTurns = firstNumber !== null && !hasNewer ? firstNumber + turns.length - 1 : null
 
   const loadOlder = () => {
     const el = container.current
@@ -269,13 +285,24 @@ export function MessageList({
   }
 
   return (
-    // 对话区右侧是刻度尺，不随消息滚动；只有一轮或没有对话时不显示，左侧栏收进抽屉的窄屏也不显示。
+    // 对话区右侧是票根里的刻度尺，不随消息滚动，取代原生滚动条（滚轮、触控板、键盘滚动不变）；
+    // 只有一轮或没有对话时票根里没有刻度，左侧栏收进抽屉的窄屏不显示票根：这两种情况都保留原生滚动条。
     <div className="flex h-full min-h-0">
       {/* 滚动区本身是定位容器：里面绝对定位的元素（未读圆点、脚注标题的 sr-only 说明等）随内容滚动并被裁剪，
           否则它们按未滚动时的位置排在整页里，把页面撑高，输入框下面能拖出一大片空白。 */}
-      <div ref={container} onScroll={onScroll} className="relative h-full min-w-0 flex-1 overflow-y-auto py-6" role="log" aria-label={t.chat.messagesLabel}>
-        {/* 右侧留出气泡、代码块印刷投影的位置，免得被滚动区域裁掉。 */}
-        <div ref={content} className="flex min-w-0 w-full flex-col gap-7 pr-2">
+      <div
+        ref={container}
+        onScroll={onScroll}
+        className={cn(
+          'relative h-full min-w-0 flex-1 overflow-y-auto pt-[26px] pr-[clamp(14px,3vw,44px)] pb-[22px] pl-[clamp(12px,2vw,28px)]',
+          // 有刻度尺时（至少两轮、宽屏）隐藏原生滚动条；没有刻度时保留，一条很长的回复也看得出滚到哪了。
+          turns.length > 1 && 'nav:no-scrollbar',
+        )}
+        role="log"
+        aria-label={t.chat.messagesLabel}
+      >
+        {/* 右侧的留白也给气泡、代码块的印刷投影留出位置，免得被滚动区域裁掉。 */}
+        <div ref={content} className="flex min-w-0 w-full flex-col gap-7">
           {loadingOlder && <p className="text-center text-[12.5px] font-bold text-ink-500">{t.chat.loadingOlder}</p>}
           {hasOlder && !loadingOlder && (
             <Button variant="ghost" size="sm" className="self-center" disabled={refreshing} onClick={loadOlder}>
@@ -283,34 +310,34 @@ export function MessageList({
             </Button>
           )}
           {turns.length === 0 && !hasQueued && placed.size === 0 && <p className="text-center text-[15px] text-ink-500">{t.chat.noMessages}</p>}
-          {placed.get(-1)?.map((item) => <Fragment key={item.key}>{item.node}</Fragment>)}
+          {placed.get(-1)?.map((item) => <Insert key={item.key}>{item.node}</Insert>)}
           {turns.map((turn, index) => {
             const isTarget = turn.run.id === targetRunId
             return (
               <Fragment key={turn.key}>
-                {index > 0 && turns[index - 1].sessionEpoch !== turn.sessionEpoch && (
-                  <p className="text-center text-[13px] font-bold text-pink-text" role="separator">
-                    <span aria-hidden="true">{t.chat.sessionDividerMark}</span> {t.chat.sessionDivider}{' '}
-                    <span aria-hidden="true">{t.chat.sessionDividerMark}</span>
-                  </p>
-                )}
-                {index > 0 && interruptedBy(turns[index - 1], turn) && <InterruptDivider />}
-                {/* 一轮对话：用户消息与回复。定位到的那一轮用浅黄底突出显示。 */}
-                <div
-                  data-run-id={turn.run.id}
-                  data-located={isTarget || undefined}
-                  className={cn('flex flex-col gap-7', isTarget && 'rounded-panel bg-tint-yellow p-4')}
-                >
-                  {isTarget && <span className="sr-only">{t.timeline.locate.target}</span>}
-                  {turn.user &&
-                    ((turn.user.origin === 'inbox_reminder' || turn.user.origin === 'sleep_wake') ? (
-                      <PlatformReminder agentId={agent.id} message={turn.user} run={turn.run} slept={sleptBefore(turns[index - 1], turn)} />
-                    ) : (
-                      <UserBubble message={turn.user} run={turn.run} />
-                    ))}
-                  <ReplyBubble turn={turn} agent={agent} located={isTarget} />
+                {index > 0 && turns[index - 1].sessionEpoch !== turn.sessionEpoch && <CutLine icon={ScissorsIcon} label={t.chat.sessionDivider} />}
+                {index > 0 && interruptedBy(turns[index - 1], turn) && <CutLine icon={ZapIcon} label={t.chat.interruptDivider} />}
+                {/* 一轮对话：左侧空白处是这一轮的空心编号（与刻度尺上的数字一致，不知道编号时留空），右侧是用户消息与回复。
+                    定位到的那一轮用浅黄底突出显示。 */}
+                <div data-run-id={turn.run.id} data-located={isTarget || undefined} className={cn('flex gap-[18px]', isTarget && 'rounded-panel bg-tint-yellow p-4')}>
+                  <HollowNumber data-turn-number className={cn('pt-5', numberSize(firstNumber === null ? 0 : firstNumber + index))}>
+                    {firstNumber === null ? '' : firstNumber + index}
+                  </HollowNumber>
+                  <div className="flex min-w-0 flex-1 flex-col gap-[22px]">
+                    {isTarget && <span className="sr-only">{t.timeline.locate.target}</span>}
+                    {turn.user &&
+                      ((turn.user.origin === 'inbox_reminder' || turn.user.origin === 'sleep_wake') ? (
+                        <PlatformReminder agentId={agent.id} message={turn.user} run={turn.run} slept={sleptBefore(turns[index - 1], turn)} />
+                      ) : (
+                        <UserBubble message={turn.user} run={turn.run} />
+                      ))}
+                    {/* 回复的正文最宽 760px，长行好读。 */}
+                    <div className="max-w-[760px] min-w-0">
+                      <ReplyBubble turn={turn} agent={agent} located={isTarget} />
+                    </div>
+                  </div>
                 </div>
-                {placed.get(index)?.map((item) => <Fragment key={item.key}>{item.node}</Fragment>)}
+                {placed.get(index)?.map((item) => <Insert key={item.key}>{item.node}</Insert>)}
               </Fragment>
             )
           })}
@@ -322,13 +349,16 @@ export function MessageList({
           )}
         </div>
       </div>
-      {turns.length > 1 && (
+      {turns.length > 1 ? (
         <MessageRuler
-          className="max-nav:hidden"
           turns={turns.map((turn) => ({ key: turn.run.id, label: turnPreview(turn) }))}
           visible={visibleTurns}
           onJump={jumpTo}
+          firstNumber={firstNumber}
+          total={totalTurns}
         />
+      ) : (
+        <Stub data-turn-stub aria-hidden="true" label={t.chat.ruler.title} className="w-[74px]" />
       )}
     </div>
   )

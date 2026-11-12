@@ -53,7 +53,10 @@ describe('English console', () => {
   it('chat composer', async () => {
     await renderChat()
     const box = screen.getByRole('textbox', { name: 'Message' })
-    expect(box).toHaveAttribute('placeholder', 'Type a message. Enter to send, Shift+Enter for a new line')
+    expect(box).toHaveAttribute('placeholder', 'Message 开发助手')
+    // 英文界面的按键说明写 Enter。
+    expect(screen.getByText('Shift + Enter')).toBeInTheDocument()
+    expect(screen.getByText('new line')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
   })
 

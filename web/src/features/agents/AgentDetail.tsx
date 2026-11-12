@@ -1,8 +1,11 @@
 import { useCallback, useState } from 'react'
-import { Link, Navigate, NavLink, Outlet, useLocation, useParams } from 'react-router'
+import { Link, Navigate, Outlet, useLocation, useParams } from 'react-router'
 import { ErrorAlert } from '@/components/ErrorAlert'
+import { IndexTabLink, IndexTabs } from '@/components/IndexTabs'
 import { ManagerBadge } from '@/components/ManagerBadge'
+import { OverprintDeco } from '@/components/OverprintDeco'
 import { RuntimeBadge } from '@/components/RuntimeBadge'
+import { Sheet } from '@/components/Sheet'
 import type { Schemas } from '@/api/client'
 import { useAgent, useAgentStatus, useProjects } from '@/api/queries'
 import { config } from '@/config'
@@ -11,7 +14,7 @@ import { t } from '@/i18n'
 import { useScope } from '@/features/projects/scope-context'
 import { isNotFound } from '@/lib/errors'
 import { agentPath, agentScope, GLOBAL, overviewPath, sameScope } from '@/lib/scope'
-import { pageTitleClass } from '@/lib/page-title'
+import { sheetTitleClass } from '@/lib/page-title'
 import { cn } from '@/lib/utils'
 import type { AgentOutletContext, AgentStickerState } from './agent-context'
 import { AgentAddress } from './AgentAddress'
@@ -43,7 +46,7 @@ function StatusChip({ agent, live }: { agent: Schemas['Agent']; live: AgentStick
         data-agent-status
         data-tone={tone}
         className={cn(
-          'riso-tilt inline-flex min-h-6 max-w-full flex-wrap items-center gap-x-[5px] rounded-full px-2.5 text-[12px] leading-6 font-black [--tilt-shadow:inset_0_0_0_1.5px_var(--ink)] [--tilt:-3deg]',
+          'riso-tilt inline-flex min-h-[26px] max-w-full flex-wrap items-center gap-x-1.5 rounded-full px-3 text-[12.5px] leading-[26px] font-black [--tilt-shadow:inset_0_0_0_2px_var(--ink)] [--tilt:-3deg]',
           chipTone[tone],
         )}
       >
@@ -59,13 +62,6 @@ function StatusChip({ agent, live }: { agent: Schemas['Agent']; live: AgentStick
 
 const chipTone = { success: 'text-green-text [--tilt-bg:var(--tint-green)]', busy: 'text-ink [--tilt-bg:var(--tint-pink)]', danger: 'text-red-text [--tilt-bg:var(--tint-red)]' }
 const chipDot = { success: 'bg-green', busy: 'bg-riso-pink', danger: 'bg-red' }
-
-// 页签是一排胶囊：选中项黄底、藏青描边加偏移投影。
-const tab = ({ isActive }: { isActive: boolean }) =>
-  cn(
-    'inline-flex h-8 items-center rounded-full border-2 px-4 text-[13.5px] font-black outline-none focus-visible:shadow-focus',
-    isActive ? 'border-ink bg-riso-yellow text-ink shadow-print-ink' : 'border-transparent text-ink-700 hover:bg-tint-blue hover:text-ink',
-  )
 
 export function AgentDetail() {
   const { agentId = '' } = useParams()
@@ -95,9 +91,11 @@ export function AgentDetail() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="flex shrink-0 flex-col gap-2.5 px-4 pt-[18px] pb-3.5 sm:px-8" data-agent-header>
-        <nav aria-label={t.shell.breadcrumb}>
+    // 页头与索引标签在上，页签内容在下面那张纸里。左右与底部的留白随窗口宽度变化，底部给纸张的投影留出位置。
+    <div className="flex h-full min-h-0 flex-col px-[clamp(14px,2.4vw,34px)] pb-[26px] max-nav:pb-4">
+      <header className="@container relative flex shrink-0 flex-col gap-3 pt-[22px] pb-[18px]" data-agent-header>
+        <OverprintDeco />
+        <nav aria-label={t.shell.breadcrumb} className="relative">
           <ol className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] font-bold text-ink-500">
             <li className="min-w-0">
               <Link to={overviewPath(scope.kind === 'project' ? { kind: 'project', name: scope.project.name } : GLOBAL)} className="[overflow-wrap:anywhere] hover:text-ink hover:underline">
@@ -112,34 +110,31 @@ export function AgentDetail() {
             </li>
           </ol>
         </nav>
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-          <h1 className={pageTitleClass}>{agent.data.name}</h1>
-          {agent.data.isManager && <ManagerBadge />}
+        <div className="relative flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-2.5 @[820px]:pr-[316px]">
+          <h1 className={cn(sheetTitleClass, 'mr-1.5')}>{agent.data.name}</h1>
+          {agent.data.isManager && <ManagerBadge size="md" className="px-3 text-[12.5px] leading-6" />}
           <RuntimeBadge runtime={agent.data.runtime} />
           <StatusChip agent={agent.data} live={live?.agentId === agentId ? live.state : null} />
-          <span className="min-w-0 text-[12px] [overflow-wrap:anywhere] text-ink-500">{`${agent.data.model.provider} · ${agent.data.model.modelId}`}</span>
         </div>
-        <AgentAddress address={agent.data.address} />
-        <nav className="flex flex-wrap gap-2" aria-label={agent.data.name}>
-          <NavLink to={agentPath(scope, agentId, 'chat')} className={tab}>
-            {t.agents.tabs.chat}
-          </NavLink>
-          <NavLink to={agentPath(scope, agentId, 'config')} className={tab}>
-            {t.agents.tabs.config}
-          </NavLink>
-          <NavLink to={agentPath(scope, agentId, 'folder')} className={tab}>
-            {t.agents.tabs.folder}
-          </NavLink>
-          <NavLink to={agentPath(scope, agentId, 'inbox')} className={tab}>
-            {t.agents.tabs.inbox}
-          </NavLink>
-        </nav>
+        {/* 模型与地址一行：模型是浅蓝底的等宽标签，地址在虚线框里。 */}
+        <div className="relative flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-2 text-[12px] @[820px]:pr-[316px]">
+          <span className="min-w-0 rounded-stamp bg-tint-blue px-[9px] font-mono leading-[22px] [overflow-wrap:anywhere]">{`${agent.data.model.provider} · ${agent.data.model.modelId}`}</span>
+          <AgentAddress address={agent.data.address} />
+        </div>
       </header>
-      {agent.isError && <ErrorAlert error={agent.error} className="mx-6 mt-3 w-auto" />}
-      <div className="min-h-0 flex-1">
-        {/* 按 Agent 重新挂载页签：草稿、对话框、实时状态与滚动位置都不能带到另一个 Agent。 */}
-        <Outlet key={agentId} context={{ agent: agent.data, reportLiveStatus } satisfies AgentOutletContext} />
-      </div>
+      <IndexTabs aria-label={agent.data.name}>
+        <IndexTabLink to={agentPath(scope, agentId, 'chat')}>{t.agents.tabs.chat}</IndexTabLink>
+        <IndexTabLink to={agentPath(scope, agentId, 'config')}>{t.agents.tabs.config}</IndexTabLink>
+        <IndexTabLink to={agentPath(scope, agentId, 'folder')}>{t.agents.tabs.folder}</IndexTabLink>
+        <IndexTabLink to={agentPath(scope, agentId, 'inbox')}>{t.agents.tabs.inbox}</IndexTabLink>
+      </IndexTabs>
+      <Sheet className="flex-1">
+        {agent.isError && <ErrorAlert error={agent.error} className="mx-6 mt-3 w-auto" />}
+        <div className="min-h-0 flex-1">
+          {/* 按 Agent 重新挂载页签：草稿、对话框、实时状态与滚动位置都不能带到另一个 Agent。 */}
+          <Outlet key={agentId} context={{ agent: agent.data, reportLiveStatus } satisfies AgentOutletContext} />
+        </div>
+      </Sheet>
     </div>
   )
 }

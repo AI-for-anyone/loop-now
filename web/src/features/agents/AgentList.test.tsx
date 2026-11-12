@@ -161,3 +161,49 @@ describe('左侧栏 Agent 行的外观与状态', () => {
     expect(within(sidebar()).queryByRole('list', { name: 'Agent' })).toBeNull()
   })
 })
+
+// 改版“一张印出来的纸”第 10 条：项目卡片与选中行统一描边和投影，选中行里的 Manager 标记，搜索框与装饰。
+describe('左侧栏的样式', () => {
+  const manager = makeAgent({ name: 'manager', isManager: true })
+  const other = makeAgent({ name: '研究员', isManager: true })
+
+  it('项目卡片与选中的 Agent 行都是 2px 藏青描边加 4px 藏青实色投影', async () => {
+    setup([manager, other], defaultAgentPath(manager.id, 'config'))
+    const row = await within(sidebar()).findByRole('link', { name: /manager/ })
+    await waitFor(() => expect(row).toHaveAttribute('aria-current', 'page'))
+    expect(row).toHaveClass('border-2', 'border-ink', 'bg-riso-yellow', 'shadow-[4px_4px_0_var(--ink)]')
+    const card = within(sidebar()).getByRole('button', { name: /^切换范围/ })
+    expect(card).toHaveClass('border-2', 'border-ink', 'bg-paper-raised', 'shadow-[4px_4px_0_var(--ink)]')
+    const unselected = within(sidebar()).getByRole('link', { name: /研究员/ })
+    expect(unselected).not.toHaveClass('bg-riso-yellow')
+    expect(unselected).not.toHaveClass('shadow-[4px_4px_0_var(--ink)]')
+  })
+
+  it('选中行里的 Manager 标记是藏青底白字；没选中的行仍是半透明藏青底', async () => {
+    setup([manager, other], defaultAgentPath(manager.id, 'config'))
+    const row = await within(sidebar()).findByRole('link', { name: /manager/ })
+    await waitFor(() => expect(row).toHaveAttribute('aria-current', 'page'))
+    expect(within(row).getByText('Manager')).toHaveClass('bg-ink', 'text-white', 'rounded-full')
+    const tag = within(within(sidebar()).getByRole('link', { name: /研究员/ })).getByText('Manager')
+    expect(tag).toHaveClass('bg-ink/45', 'text-white')
+    expect(tag).not.toHaveClass('bg-ink')
+  })
+
+  it('搜索框高 34px；快捷键提示有细描边', async () => {
+    setup([manager])
+    const search = await within(sidebar()).findByRole('searchbox', { name: '搜索 Agent' })
+    expect(search.closest('label')).toHaveClass('h-[34px]', 'bg-ink/[0.42]')
+    expect(search.closest('label')!.querySelector('kbd')).toHaveClass('border', 'border-white/45')
+  })
+
+  it('中下部的网点圆和两个色点是装饰：读屏不读、不挡点击，放在按高度决定显示的空位里', async () => {
+    setup([manager])
+    await within(sidebar()).findByRole('link', { name: /manager/ })
+    const deco = sidebar().querySelector<HTMLElement>('[data-sidebar-deco]')!
+    expect(deco).toHaveAttribute('aria-hidden', 'true')
+    // 窄屏的抽屉里不显示。
+    expect(deco).toHaveClass('pointer-events-none', 'sidebar-deco', 'max-nav:hidden')
+    expect(deco.parentElement).toHaveClass('sidebar-deco-slot')
+    expect(deco.querySelectorAll('span')).toHaveLength(3)
+  })
+})

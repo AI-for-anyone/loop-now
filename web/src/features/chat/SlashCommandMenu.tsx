@@ -2,12 +2,15 @@ import type { ReactElement } from 'react'
 import { Popover as PopoverPrimitive } from 'radix-ui'
 import { t } from '@/i18n'
 import { localizedText } from '@/lib/localized-text'
+import { cn } from '@/lib/utils'
 import { commandText, type Command } from './slash-commands'
 
 const text = t.chat.commands
 
 // 输入框上方的平台与 Pi 命令菜单：锚在输入框外框上、向上弹出，焦点一直留在输入框里（上下键、Enter、Tab、Esc 由输入框处理）。
-// 每行是补全后的写法（/pi:<name>）、来源（扩展命令、提示模板、技能，来自插件的另写插件名）和命令自己的说明（扩展原文，按纯文本显示）。
+// 菜单是一小张纸（浅纸底、藏青描边、孔版蓝投影），选中的一项是黄色。
+// 每行是补全后的写法（/pi:<name>）、来源标签（平台命令藏青底白字；扩展命令、提示模板、技能浅蓝底，来自插件的另写插件名）
+// 和命令自己的说明（扩展原文，按纯文本显示）。
 // status：读取中、读取失败、还没有列表、没有匹配时的一行说明，有它时不列命令。
 export function SlashCommandMenu({ open, listId, optionId, items, active, status, onActive, onChoose, onDismiss, children }: {
   open: boolean
@@ -58,11 +61,11 @@ export function SlashCommandMenu({ open, listId, optionId, items, active, status
                       onMouseDown={(event) => event.preventDefault()}
                       onMouseEnter={() => onActive(index)}
                       onClick={() => onChoose(command)}
-                      className="grid min-w-0 cursor-pointer gap-0.5 rounded-ticket px-2.5 py-2 aria-selected:bg-tint-blue"
+                      className="grid min-w-0 cursor-pointer gap-0.5 rounded-ticket px-2.5 py-2 aria-selected:bg-riso-yellow"
                     >
-                      <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                         <code className="min-w-0 font-mono text-[13px] font-bold [overflow-wrap:anywhere]">{command.source === 'platform' ? command.usage : commandText(command)}</code>
-                        <span className="text-[12px] text-ink-500">
+                        <span className={cn('px-2 text-[11px] leading-[18px]', command.source === 'platform' ? 'rounded-full bg-ink font-black text-white' : 'rounded-stamp bg-tint-blue font-bold text-ink')}>
                           {[source, plugin && text.plugin(plugin)].filter(Boolean).join(' · ')}
                         </span>
                       </span>
@@ -71,7 +74,7 @@ export function SlashCommandMenu({ open, listId, optionId, items, active, status
                   )
                 })}
               </div>
-              <p className="border-t border-ink/10 px-3 py-1.5 text-[11.5px] text-ink-500">{text.keys}</p>
+              <p className="border-t-[1.5px] border-dashed border-ink/25 px-3 py-1.5 text-[11.5px] text-ink-500">{text.keys}</p>
             </>
           )}
         </PopoverPrimitive.Content>

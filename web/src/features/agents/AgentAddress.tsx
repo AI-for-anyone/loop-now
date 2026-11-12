@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { CheckIcon, CopyIcon } from 'lucide-react'
 import { t } from '@/i18n'
 
-// Agent 的 Inbox 地址：项目中的 Agent 为完整地址（组织名/项目名/Agent名），平台 Agent 为名称本身，旁边可以复制。
+// Agent 的 Inbox 地址：项目中的 Agent 为完整地址（组织名/项目名/Agent名），平台 Agent 为名称本身。地址写在虚线框里，
+// 框内右侧一个小按钮复制它；复制后图标换成对勾并读出“已复制”。
 // 名称不满足命名规则时服务端不给地址，这里说明原因：先改名才有地址，发 Inbox 消息时改用内部 ID。
 export function AgentAddress({ address }: { address: string | null }) {
   const [copied, setCopied] = useState(false)
@@ -18,18 +19,21 @@ export function AgentAddress({ address }: { address: string | null }) {
     setTimeout(() => setCopied(false), 1500)
   }
   return (
-    <div className="flex flex-wrap items-center gap-2.5">
+    <span className="inline-flex max-w-full min-w-0 items-center gap-2 rounded-stamp border-[1.5px] border-dashed border-ink/45 pr-[3px] pl-[9px] text-[12px] leading-[22px]">
       <span className="sr-only">{t.agents.address.label}</span>
-      <span className="font-mono text-[12px] [overflow-wrap:anywhere] text-ink-700 select-all">{address}</span>
-      <Button
-        size="xs"
-        variant="secondary"
+      <span className="min-w-0 font-mono [overflow-wrap:anywhere] text-ink-700 select-all">{address}</span>
+      <button
+        type="button"
         aria-label={`${t.common.copy}${t.agents.address.label}`}
-        className="h-6 bg-riso-yellow px-3 text-[12px] hover:bg-riso-yellow"
+        title={copied ? t.common.copied : t.common.copy}
         onClick={() => void copy()}
+        className="inline-flex size-[18px] shrink-0 cursor-pointer items-center justify-center rounded-stamp text-ink outline-none hover:bg-tint-blue focus-visible:shadow-focus"
       >
-        {copied ? t.common.copied : t.common.copy}
-      </Button>
-    </div>
+        {copied ? <CheckIcon aria-hidden="true" className="size-3" strokeWidth={3} /> : <CopyIcon aria-hidden="true" className="size-3" strokeWidth={2.4} />}
+        <span role="status" className="sr-only">
+          {copied ? t.common.copied : ''}
+        </span>
+      </button>
+    </span>
   )
 }

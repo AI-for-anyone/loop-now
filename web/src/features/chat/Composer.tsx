@@ -60,7 +60,7 @@ interface ComposerProps {
   onCommand?: (result: Schemas['ConsoleCommandResult'], command: string) => void
   // 贴在输入框顶上的排队消息，由对话页给出。
   queue?: ReactNode
-  // 输入区下方的一行：左边是忙碌提示，右边是实时连接状态，都由对话页给出；忙时中间是按键说明。
+  // 输入区下方的一行：左边是忙碌提示（接着是按键说明），右边是实时连接状态，都由对话页给出。
   status?: ReactNode
   connection?: ReactNode
   // 有进行中的回复时由对话页给出。
@@ -88,9 +88,9 @@ function isPlatformCommand(text: string): boolean {
   return platformCommandNames.has(trimmed.slice(1).split(/\s/, 1)[0])
 }
 
-// 边框归共同容器所有，文字区按内容增高，上限后独立滚动。
+// 边框归外面的输入框容器所有，文字区按内容增高，上限后独立滚动。
 const inputClass =
-  'field-sizing-fixed min-h-10 max-h-60 flex-1 resize-none overflow-y-auto rounded-none bg-transparent px-1 py-2 text-base leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent'
+  'field-sizing-fixed min-h-10 max-h-60 w-full flex-none resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-2 text-[15.5px] leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent max-nav:text-base'
 
 export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeWhenDisabled = false, maxMessageBytes, imageLimits, onSent, onCommand, queue, status, connection, stop, reply, piCommands = true }: ComposerProps) {
   const client = useQueryClient()
@@ -315,45 +315,46 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
   const sendLabel = busy ? t.chat.queueSend : t.chat.send
   const showStop = busy && stop !== undefined && !reply && text.trim() === '' && images.length === 0
   const stopLabel = stop?.pending ? t.chat.stopping : stop?.retry ? t.chat.retryStop : t.chat.stop
-  const editor = <Textarea ref={editorRef} aria-label={t.chat.inputLabel} placeholder={reply ? t.consoleInbox.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder} value={text} disabled={inputDisabled}
+  const editor = <Textarea ref={editorRef} aria-label={t.chat.inputLabel} placeholder={reply ? t.consoleInbox.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder(agentName)} value={text} disabled={inputDisabled}
     onChange={event => { setText(event.target.value); setCaret(event.target.selectionStart) }} onSelect={event => setCaret(event.currentTarget.selectionStart)} onKeyDown={onKeyDown} rows={1} className={inputClass}
     aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={menuItems.length > 0} aria-controls={menuItems.length > 0 ? listId : undefined} aria-activedescendant={menuItems.length > 0 ? optionId(active) : undefined} />
-  // 待发送图片排在同一边框里、文字行之上；有图片时边框圆角收小。
-  const input = (addButton?: ReactNode, strip?: ReactNode) => <SlashCommandMenu open={menuOpen} listId={listId} optionId={optionId} items={menuItems} active={active} status={menuStatus} onActive={setActive} onChoose={choose} onDismiss={() => setDismissed(token)}><div data-chat-composer className={cn('flex min-h-[60px] min-w-0 flex-col border-2 border-ink/60 bg-white p-2 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/15', strip || reply ? 'rounded-[24px]' : 'rounded-[32px]')}>
-    {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}
-    {strip}
-    <div className="flex min-w-0 items-end gap-2">
-      {addButton && <span className="flex h-10 shrink-0 items-center">{addButton}</span>}
+  // 一行三样：左边加图片的圆按钮，中间输入框，右边发送的荧光粉圆章（忙且输入框为空时换成藏青的停止按钮）。
+  // 输入框是浅纸底、藏青描边，单行时是一颗胶囊；回复条与待发送图片排在同一描边里、文字行之上。
+  const input = (addButton?: ReactNode, strip?: ReactNode) => <SlashCommandMenu open={menuOpen} listId={listId} optionId={optionId} items={menuItems} active={active} status={menuStatus} onActive={setActive} onChoose={choose} onDismiss={() => setDismissed(token)}><div data-chat-composer className="flex min-w-0 items-end gap-2.5">
+    {addButton && <span className="flex h-11 shrink-0 items-center">{addButton}</span>}
+    <div data-chat-input className="flex min-h-11 min-w-0 flex-1 flex-col rounded-[22px] border-2 border-ink bg-paper-raised px-4 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/25">
+      {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}
+      {strip}
       {editor}
-      {showStop ? (
-        <Button type="button" size="icon" className="size-10 bg-ink text-white shadow-none hover:bg-ink-700" aria-label={stopLabel} title={stopLabel} disabled={stop.pending} onClick={stop.onStop}><StopMark /></Button>
-      ) : (
-        <Button type="button" size="icon" className="size-10 shadow-none" aria-label={sendLabel} title={busy ? t.chat.queueSendTitle : sendLabel} disabled={submitDisabled || pending} onClick={() => void submit()}><ArrowUpIcon aria-hidden="true" className="size-5" strokeWidth={2.4} /></Button>
-      )}
     </div>
+    {showStop ? (
+      <Button type="button" size="icon" className="mr-[3px] size-11 border-2 border-ink bg-ink text-white shadow-none hover:bg-ink-700" aria-label={stopLabel} title={stopLabel} disabled={stop.pending} onClick={stop.onStop}><StopMark /></Button>
+    ) : (
+      <Button type="button" variant="interrupt" size="icon" className="mr-[3px] size-11 border-2 border-ink" aria-label={sendLabel} title={busy ? t.chat.queueSendTitle : sendLabel} disabled={submitDisabled || pending} onClick={() => void submit()}><ArrowUpIcon aria-hidden="true" className="size-5" strokeWidth={2.8} /></Button>
+    )}
   </div></SlashCommandMenu>
   return (
-    <div className="shrink-0 pt-4 pb-6">
-      <div className="mx-auto flex min-w-0 w-full max-w-[960px] flex-col gap-3">
-        {localError && (
-          <p role="alert" className="text-[13px] font-black text-red-text">
-            {localError}
-          </p>
-        )}
-        <ErrorAlert error={imageError ?? (send.error?.code === 'agent_busy' ? null : send.error)} />
-        {answer.outcome === 'ordinary' && <p role="status" className="text-[13px] font-bold">{t.inbox.question.ordinary}</p>}
-        {/* 排队托盘与输入框之间没有间距，连成一体。 */}
-        <div className="flex min-w-0 flex-col">
-          {queue}
-          {imageLimits ? <ImagePicker images={images} onChange={setImages} limits={imageLimits} disabled={disabled || reply !== undefined} uploads={uploads} addClassName="size-10">{input}</ImagePicker> : input()}
+    // 输入区是纸张底部的一条浅黄色栏，上缘一道藏青线。
+    <div data-chat-bar className="flex shrink-0 flex-col gap-2.5 border-t-2 border-ink bg-tint-yellow px-[clamp(12px,2vw,22px)] pt-3.5 pb-3">
+      {localError && (
+        <p role="alert" className="text-[13px] font-black text-red-text">
+          {localError}
+        </p>
+      )}
+      <ErrorAlert error={imageError ?? (send.error?.code === 'agent_busy' ? null : send.error)} />
+      {answer.outcome === 'ordinary' && <p role="status" className="text-[13px] font-bold">{t.inbox.question.ordinary}</p>}
+      {/* 排队托盘与输入框之间没有间距，连成一体：托盘贴在输入框上沿，左右让出加号与发送按钮的位置（手机宽度下占满一行）。 */}
+      <div className="flex min-w-0 flex-col">
+        {queue && <div className={cn('flex min-w-0 flex-col sm:pr-[57px]', imageLimits && 'sm:pl-[50px]')}>{queue}</div>}
+        {imageLimits ? <ImagePicker images={images} onChange={setImages} limits={imageLimits} disabled={disabled || reply !== undefined} uploads={uploads} addClassName="size-10 rounded-full border-2 border-ink bg-paper-raised text-ink hover:bg-white">{input}</ImagePicker> : input()}
+      </div>
+      {/* 下面一行：左边是忙碌提示与按键说明（空闲时是发送与换行，忙时是排队与打断），右边是实时连接状态。宽屏时与输入框左缘对齐。 */}
+      <div className={cn('flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 pr-1 text-[12px]', imageLimits && 'nav:pl-[52px]')}>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-1.5">
+          {status}
+          {busy ? <KeyHint stop={stop !== undefined} className="justify-start text-ink-700" kbdClassName={barKbdClass} keys={{ enter: t.chat.barKeys.enter, modEnter: t.chat.barKeys.modEnter(mac) }} /> : <IdleHint />}
         </div>
-        {(status || connection || busy) && (
-          <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 sm:grid sm:grid-cols-[1fr_auto_1fr]">
-            <div className="flex min-w-0 items-center">{status}</div>
-            {busy && <KeyHint stop={stop !== undefined} className="sm:col-start-2" />}
-            <div className="ml-auto flex items-center justify-end sm:col-start-3 sm:ml-0">{connection}</div>
-          </div>
-        )}
+        {connection}
       </div>
       <ConfirmDialog
         open={confirmNew}
@@ -384,15 +385,41 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
 
 const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 const kbdClass = 'rounded-stamp border border-ink/25 bg-white px-[5px] font-mono text-[11px] leading-4 font-medium text-ink-700'
+// 纸张底部输入区里的按键：浅纸底、藏青描边。
+const barKbdClass = 'rounded-stamp border-[1.5px] border-ink bg-paper-raised px-1.5 font-sans text-[11px] leading-[17px] font-black text-ink'
 
-// 输入框下方的按键说明：Enter 排队，⌘／Ctrl+Enter 立即打断；有进行中的回复时说明停止按钮。任务节点的输入框也用它。
-export function KeyHint({ stop = false, className }: { stop?: boolean; className?: string }) {
+// 空闲时输入框下方的按键说明：回车发送，Shift + 回车换行。
+function IdleHint() {
+  return (
+    <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-ink-700">
+      <kbd className={barKbdClass}>{t.chat.barKeys.enter}</kbd>
+      <span>{t.chat.idleHint.send}</span>
+      <span aria-hidden="true">·</span>
+      <kbd className={barKbdClass}>{t.chat.barKeys.shiftEnter}</kbd>
+      <span>{t.chat.idleHint.newline}</span>
+    </p>
+  )
+}
+
+// 输入框下方的按键说明：Enter 排队，⌘／Ctrl+Enter 立即打断；有进行中的回复时说明停止按钮。任务节点的输入框也用它（样式与按键写法是默认值）；
+// 对话页的输入区另给样式，并把按键写成这个界面语言的写法（中文是“回车”）。
+export function KeyHint({
+  stop = false,
+  className,
+  kbdClassName = kbdClass,
+  keys = { enter: t.chat.keyHint.enter, modEnter: t.chat.keyHint.modEnter(mac) },
+}: {
+  stop?: boolean
+  className?: string
+  kbdClassName?: string
+  keys?: { enter: string; modEnter: string }
+}) {
   return (
     <p className={cn('flex flex-wrap items-center justify-center gap-x-1.5 text-xs text-ink-500', className)}>
-      <kbd className={kbdClass}>{t.chat.keyHint.enter}</kbd>
+      <kbd className={kbdClassName}>{keys.enter}</kbd>
       <span>{t.chat.keyHint.queue}</span>
       <span aria-hidden="true">·</span>
-      <kbd className={kbdClass}>{t.chat.keyHint.modEnter(mac)}</kbd>
+      <kbd className={kbdClassName}>{keys.modEnter}</kbd>
       <span>{t.chat.keyHint.interrupt}</span>
       {stop && (
         <>

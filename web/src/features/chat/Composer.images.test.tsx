@@ -24,31 +24,35 @@ function accepted(body: Schemas['SendMessageInput']) {
   const run = makeRun({ status: 'starting', endedAt: null })
   return HttpResponse.json({ run, message: { ...makeMessage({ text: body.text, run }), images: (body.imageIds ?? []).map(id => refs.get(id)!) } }, { status: 202 })
 }
-it('keeps the image plus, one-line editor and send arrow in the same composer border', async () => {
+// 改版后：加号、输入框、发送按钮排成一行（data-chat-composer），描边只围着输入框（data-chat-input）。
+it('keeps the image plus, one-line editor and send arrow in the same composer row', async () => {
   mount()
-  const editor = screen.getByRole('textbox'), border = editor.closest('[data-chat-composer]')!
+  const editor = screen.getByRole('textbox'), row = editor.closest('[data-chat-composer]')!, border = editor.closest('[data-chat-input]')!
   expect(editor).toHaveAttribute('rows', '1')
-  expect(within(border as HTMLElement).getByRole('button', { name: '添加图片' })).toBeInTheDocument()
-  const send = within(border as HTMLElement).getByRole('button', { name: '发送' })
+  expect(within(row as HTMLElement).getByRole('button', { name: '添加图片' })).toBeInTheDocument()
+  const send = within(row as HTMLElement).getByRole('button', { name: '发送' })
   expect(send.textContent).toBe('')
   expect(send.querySelector('svg')).toBeInTheDocument()
   expect(screen.getAllByRole('button', { name: '添加图片' })).toHaveLength(1)
+  // 加号和发送按钮在输入框的描边外面，分列左右。
+  expect(within(border as HTMLElement).queryByRole('button')).toBeNull()
+  expect([...row.children].map((child) => child.contains(editor))).toEqual([false, true, false])
   await userEvent.type(editor, '第一行{Shift>}{Enter}{/Shift}第二行')
   expect(editor).toHaveValue('第一行\n第二行')
-  expect(border).toHaveClass('rounded-[32px]')
+  expect(border).toHaveClass('rounded-[22px]')
 })
-it('puts attached thumbnails inside the composer border, above the text row', async () => {
+it('puts attached thumbnails inside the input border, above the text row', async () => {
   mount(); await userEvent.upload(screen.getByLabelText('选择图片文件'), [file('一.png'), file('二.png')])
-  const border = screen.getByRole('textbox').closest('[data-chat-composer]') as HTMLElement, list = within(border).getByRole('list', { name: '待发送图片' })
+  const border = screen.getByRole('textbox').closest('[data-chat-input]') as HTMLElement, list = within(border).getByRole('list', { name: '待发送图片' })
   expect(border.firstElementChild).toContainElement(list)
-  expect(border.lastElementChild).toContainElement(screen.getByRole('textbox'))
-  expect(border).toHaveClass('rounded-[24px]')
+  expect(border.lastElementChild).toBe(screen.getByRole('textbox'))
+  expect(border).toHaveClass('rounded-[22px]')
   expect(await within(list).findByAltText('二.png')).toBeInTheDocument()
   await userEvent.click(within(list).getByRole('button', { name: '移除图片 1' }))
   expect(within(list).queryByAltText('一.png')).not.toBeInTheDocument()
   await userEvent.click(within(border).getByRole('button', { name: '移除图片 1' }))
   expect(screen.queryByRole('list', { name: '待发送图片' })).not.toBeInTheDocument()
-  expect(border).toHaveClass('rounded-[32px]')
+  expect(border).toHaveClass('rounded-[22px]')
 })
 it('shows upload progress and the failed image on its own thumbnail', async () => {
   let release!: () => void, uploads = 0; const gate = new Promise<void>(resolve => { release = resolve })

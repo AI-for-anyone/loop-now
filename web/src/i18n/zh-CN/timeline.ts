@@ -6,6 +6,8 @@ type S = components['schemas']
 export const timeline = {
   toggle: (duration: string, tokens: string) => `运行记录 · ${duration} · ${tokens} token`,
   toggleRunning: (elapsed: string) => `运行记录 · 已用 ${elapsed}`,
+  // 触发条做成分段的小票：名称之后的各段。
+  toggleParts: { tokens: (tokens: string) => `${tokens} token`, running: (elapsed: string) => `已用 ${elapsed}` },
   title: '运行记录',
   total: (duration: string) => `合计 ${duration}`,
   loading: '正在加载运行记录…',

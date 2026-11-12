@@ -113,7 +113,7 @@ function EntryPreview({ source, entry, onEdit }: { source: FolderSource; entry: 
         <ToolButton className="ml-auto" icon={<PencilIcon />} label={t.folders.file.edit} onClick={onEdit} />
       </header>
       <div className="px-6 py-4 text-[14.5px]">
-        {file.data?.kind === 'text' ? <Markdown text={file.data.text} /> : file.isPending ? <Pending /> : <ErrorAlert error={file.error} />}
+        {file.data?.kind === 'text' ? <Markdown text={file.data.text} leadLabels={false} /> : file.isPending ? <Pending /> : <ErrorAlert error={file.error} />}
       </div>
     </section>
   )
@@ -167,7 +167,7 @@ export function FileView({ source, entry, limits, actions, edit, mode, onMode, o
   else if (file.error instanceof ApiError && file.error.status === 422 && entry.symlinkTarget && linksOutside(path, entry.symlinkTarget)) body = <Notice>{t.folders.file.symlinkOutside}</Notice>
   else if (file.isError) body = <div className="p-4"><ErrorAlert error={file.error} /></div>
   else if (file.data?.kind === 'binary') body = <Notice download={() => actions.download(entry)}>{t.folders.file.binary}</Notice>
-  else if (text !== null && markdown && mode === 'preview') body = <div className="min-h-0 flex-1 overflow-y-auto px-7 py-5 text-[14.5px]"><Markdown text={text} /></div>
+  else if (text !== null && markdown && mode === 'preview') body = <div className="min-h-0 flex-1 overflow-y-auto px-7 py-5 text-[14.5px]"><Markdown text={text} leadLabels={false} /></div>
   else if (text !== null) body = <CodeView path={path} text={text} />
 
   return (

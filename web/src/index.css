@@ -13,6 +13,7 @@
 
     --color-paper: var(--paper);
     --color-paper-raised: var(--paper-raised);
+    --color-paper-tab: var(--paper-tab);
     --color-ink: var(--ink);
     --color-ink-700: var(--ink-700);
     --color-ink-500: var(--ink-500);
@@ -91,6 +92,8 @@
     /* 纸与油墨 */
     --paper: #F3EFE6;
     --paper-raised: #FBF9F4;
+    /* 索引标签未选中时的米灰：比纸色深一档。 */
+    --paper-tab: #E8E2D4;
     --ink: #18265E;
     --ink-700: #3B4778;
     --ink-500: #5A628A;
@@ -174,6 +177,11 @@
   .riso-paper {
     background-color: var(--paper);
   }
+  /* 主区米色底上的纸张颗粒：128px 的平铺图（藏青色、最多约 6% 的不透明度），不用滤镜，滚动时不重算。 */
+  .riso-grain {
+    background-image: url('./assets/paper-grain.png');
+    background-size: 128px 128px;
+  }
   /* 桌面壳窗口里拖动窗口的区域（系统标题栏藏起来了）；区域里的按钮、链接、输入框照常点击。 */
   .window-drag {
     -webkit-app-region: drag;
@@ -215,6 +223,10 @@
     transform: rotate(-1deg);
     z-index: -1;
   }
+  /* 分区标题上的一笔黄色记号笔：文字下半部的黄色条。 */
+  .riso-marker {
+    background: linear-gradient(transparent 0, transparent 62%, var(--riso-yellow) 62%, var(--riso-yellow) 94%, transparent 94%);
+  }
   .riso-tilt {
     position: relative;
     isolation: isolate;
@@ -228,6 +240,21 @@
     background: var(--tilt-bg, #fff);
     box-shadow: var(--tilt-shadow, var(--print-rest));
     transform: rotate(var(--tilt, -1deg));
+  }
+  /* 左侧栏列表下面的装饰位：占剩余高度；放得下整片装饰（约 200px）时才显示，放不下就不显示，不压文字。 */
+  .sidebar-deco-slot {
+    position: relative;
+    flex: 1 1 0;
+    min-height: 0;
+    container-type: size;
+  }
+  .sidebar-deco {
+    display: none;
+  }
+  @container (min-height: 204px) {
+    .sidebar-deco {
+      display: block;
+    }
   }
   .riso-skeleton {
     background-color: var(--tint-blue);
@@ -304,8 +331,32 @@
   .markdown blockquote {
     @apply border-l-4 border-riso-pink pl-3 text-ink-700;
   }
+  /* 行内代码：浅蓝底的等宽小标签。 */
   .markdown :not(pre) > code {
-    @apply rounded-stamp bg-tint-blue px-1.5 py-0.5 font-mono text-[0.85em];
+    @apply rounded-stamp bg-tint-blue px-[7px] py-px font-mono text-[0.85em];
+  }
+  /* 列表项开头的加粗词：黄色小标签（由 rehype-lead-label 标出）。整张无序列表每一项都是“标签 + 行内文字”时
+     （.md-lead-list）改成横排：标签在左、文字在右，不画圆点，相邻两项之间留 6px；最外层的这种列表不缩进，子列表保留缩进。 */
+  .markdown .md-lead {
+    @apply mr-3 inline-block rounded-stamp bg-riso-yellow px-[9px] text-[13.5px] leading-6 font-black;
+  }
+  .markdown ul.md-lead-list {
+    @apply list-none;
+  }
+  .markdown > ul.md-lead-list {
+    @apply pl-0;
+  }
+  .markdown li.md-lead-item {
+    @apply flex items-baseline;
+  }
+  .markdown li.md-lead-item > .md-lead {
+    @apply shrink-0;
+  }
+  .markdown li.md-lead-item > .md-lead-text {
+    @apply min-w-0;
+  }
+  .markdown li.md-lead-item + li.md-lead-item {
+    @apply mt-1.5;
   }
   .markdown pre {
     @apply overflow-x-auto px-4 pt-1.5 pb-4 font-mono text-[13px] leading-[1.75];

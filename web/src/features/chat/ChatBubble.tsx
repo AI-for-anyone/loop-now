@@ -40,7 +40,7 @@ export function EarlyWake({ sleepId }: { sleepId: string }) {
 }
 export function AgentChatReply({ agent, metadata, children }: { agent: { id: string; name: string }; metadata: ReactNode; children: ReactNode }) {
   const [back, front] = avatarPair(agent.id)
-  return <article className="flex flex-col gap-2" aria-label={t.chat.agent}>
-    <div className="flex flex-wrap items-center gap-2 text-[12.5px] font-bold text-ink-500"><span aria-hidden="true" className="relative inline-block h-[18px] w-6 shrink-0"><span className="absolute top-0 left-0 size-4 rounded-full" style={{ background: back }} /><span className="absolute top-0.5 left-2 size-4 rounded-full mix-blend-multiply" style={{ background: front }} /></span><span className="text-ink">{agent.name}</span><span aria-hidden="true">{t.chat.metaSeparator}</span>{metadata}</div>{children}
+  return <article className="flex flex-col gap-2.5" aria-label={t.chat.agent}>
+    <div className="flex flex-wrap items-center gap-2 text-[12.5px] font-bold text-ink-500"><span aria-hidden="true" className="relative inline-block h-[18px] w-[26px] shrink-0"><span className="absolute top-0 left-0 size-[17px] rounded-full" style={{ background: back }} /><span className="absolute top-px left-[9px] size-[17px] rounded-full mix-blend-multiply" style={{ background: front }} /></span><span className="text-[13.5px] font-black text-ink">{agent.name}</span><span aria-hidden="true">{t.chat.metaSeparator}</span>{metadata}</div>{children}
   </article>
 }

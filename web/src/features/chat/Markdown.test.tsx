@@ -168,3 +168,128 @@ describe('Markdown 渲染与安全', () => {
     expect(container.querySelector('.riso-cursor')).toBeNull()
   })
 })
+
+// 改版“一张印出来的纸”：列表项开头的加粗词做成黄色小标签。
+describe('列表项开头的加粗词', () => {
+  const items = (container: HTMLElement) => [...container.querySelectorAll('li')]
+
+  it('无序列表里开头的加粗词是标签，后面的文字排在标签右边；标签后面紧跟的冒号不再显示', () => {
+    const { container } = render(<Markdown text={'归好了：\n\n- **导出** 大文件导出到一半会停。\n- **搜索**：中文分词不准，见 `search.go`。\n- **通知**: 同一件事提醒两次。'} />)
+    const [first, second, third] = items(container)
+    expect(container.querySelector('ul')).toHaveClass('md-lead-list')
+    for (const item of [first, second, third]) {
+      expect(item).toHaveClass('md-lead-item')
+      expect(item.firstElementChild).toHaveClass('md-lead')
+      expect(item.firstElementChild!.tagName).toBe('STRONG')
+      expect(item.children).toHaveLength(2)
+      expect(item.lastElementChild).toHaveClass('md-lead-text')
+    }
+    expect(first.firstElementChild).toHaveTextContent('导出')
+    expect(first.lastElementChild!.textContent).toBe(' 大文件导出到一半会停。')
+    expect(second.lastElementChild!.textContent).toBe('中文分词不准，见 search.go。')
+    expect(second.lastElementChild!.querySelector('code')).toHaveTextContent('search.go')
+    expect(third.lastElementChild!.textContent).toBe('同一件事提醒两次。')
+  })
+
+  it('整张列表每一项都是“加粗词 + 行内文字”时才改成横排；有一项不是，整张列表保留圆点，加粗词仍是标签', () => {
+    const all = render(<Markdown text={'- **导出** 会停\n- **搜索** 不准'} />)
+    expect(all.container.querySelector('ul')).toHaveClass('md-lead-list')
+    all.unmount()
+    const mixed = render(<Markdown text={'- **导出**：会停\n- 普通的一项\n- **搜索**：不准'} />)
+    expect(mixed.container.querySelector('ul')).not.toHaveClass('md-lead-list')
+    expect(mixed.container.querySelector('.md-lead-item')).toBeNull()
+    expect(mixed.container.querySelector('.md-lead-text')).toBeNull()
+    expect(mixed.container.querySelectorAll('strong.md-lead')).toHaveLength(2)
+    expect(items(mixed.container)[0].textContent).toBe('导出会停')
+    mixed.unmount()
+    // 一项带子列表、另一项不带：两项排法要一致，都不横排。
+    const nested = render(<Markdown text={'- **导出**：两个问题\n  - 大文件会停\n- **搜索**：不准'} />)
+    expect(nested.container.querySelector('.md-lead-item')).toBeNull()
+    expect(nested.container.querySelectorAll('strong.md-lead')).toHaveLength(2)
+  })
+
+  it('普通列表项里的子列表整张都是标签项时，子列表自己横排（缩进不变）', () => {
+    const { container } = render(<Markdown text={'- 这周的问题\n  - **导出** 会停\n  - **搜索** 不准'} />)
+    const [outer, inner] = container.querySelectorAll('ul')
+    expect(outer).not.toHaveClass('md-lead-list')
+    expect(inner).toHaveClass('md-lead-list')
+    expect(inner.querySelectorAll('li.md-lead-item')).toHaveLength(2)
+  })
+
+  it('只去掉当分隔用的冒号：全角冒号，或后面是空白、行尾的半角冒号；端口、时间、盘符、:: 里的冒号保留', () => {
+    const rest = (text: string) => {
+      const view = render(<Markdown text={text} />)
+      const value = view.container.querySelector('li')!.textContent
+      view.unmount()
+      return value
+    }
+    expect(rest('- **地址**：见下')).toBe('地址见下')
+    expect(rest('- **地址**: 见下')).toBe('地址见下')
+    expect(rest('- **地址**:')).toBe('地址')
+    expect(rest('- **localhost**:3000 已启动')).toBe('localhost:3000 已启动')
+    expect(rest('- **12**:30 午饭')).toBe('12:30 午饭')
+    expect(rest('- **C**:\\Users')).toBe('C:\\Users')
+    expect(rest('- **std**::vector')).toBe('std::vector')
+  })
+
+  it('加粗词不在开头、或者开头是别的内容（任务列表的勾选框）时不做成标签', () => {
+    const { container } = render(<Markdown text={'- 先看 **导出** 的问题\n- [ ] **搜索** 还没做\n- 普通的一项'} />)
+    expect(container.querySelector('.md-lead')).toBeNull()
+    expect(container.querySelector('.md-lead-item')).toBeNull()
+    expect(container.querySelector('strong')).toHaveTextContent('导出')
+  })
+
+  it('开头加粗的是一整句话时照常加粗，不做成标签', () => {
+    const { container } = render(<Markdown text={'- **这一整句话都加粗了，它不是一个词而是一句完整的说明** 后面还有\n- **Short label** ok'} />)
+    const [long, short] = items(container)
+    expect(long.querySelector('.md-lead')).toBeNull()
+    expect(long).not.toHaveClass('md-lead-item')
+    expect(short.firstElementChild).toHaveClass('md-lead')
+  })
+
+  it('有序列表保留序号：加粗词是标签，但这一项不改成横排', () => {
+    const { container } = render(<Markdown text={'1. **导出** 先修这个\n2. **搜索** 再修这个'} />)
+    const [first] = items(container)
+    expect(first.querySelector('strong')).toHaveClass('md-lead')
+    expect(first).not.toHaveClass('md-lead-item')
+    expect(first.querySelector('.md-lead-text')).toBeNull()
+  })
+
+  it('列表项里还有子列表或分段时，加粗词是标签，其余内容照原样排', () => {
+    const { container } = render(<Markdown text={'- **导出** 两个问题\n  - 大文件会停\n  - 重试才成功\n\n另一个列表：\n\n- **搜索** 第一段\n\n  第二段\n- **通知** 也是分段的'} />)
+    const [nested, , , loose] = items(container)
+    expect(nested.firstElementChild).toHaveClass('md-lead')
+    expect(nested).not.toHaveClass('md-lead-item')
+    expect(nested.querySelectorAll('li')).toHaveLength(2)
+    expect(loose.querySelector('p > strong')).toHaveClass('md-lead')
+    expect(loose).not.toHaveClass('md-lead-item')
+    expect(loose.querySelectorAll('p')).toHaveLength(2)
+  })
+
+  it('只有一个加粗词、后面没有文字时只显示标签', () => {
+    const { container } = render(<Markdown text={'- **导出**\n- **搜索**'} />)
+    const [first] = items(container)
+    expect(first).toHaveClass('md-lead-item')
+    expect(first.children).toHaveLength(1)
+    expect(first.firstElementChild).toHaveClass('md-lead')
+  })
+
+  it('回复进行中时输出光标跟在标签后面的文字末尾', () => {
+    const { container } = render(<Markdown cursor text={'- **导出** 大文件\n- **搜索** 中文分'} />)
+    const last = items(container)[1]
+    const cursor = container.querySelector('.riso-cursor')!
+    expect(last.lastElementChild).toHaveClass('md-lead-text')
+    expect(last.lastElementChild).toContainElement(cursor as HTMLElement)
+    expect(last.lastElementChild!.lastElementChild).toBe(cursor)
+  })
+})
+
+it('文档（插件 README、文件夹里的 Markdown 文件）里开头的加粗词不做成标签', () => {
+  const text = '- **导出** 大文件导出到一半会停。'
+  const readme = render(<Markdown readme text={text} />)
+  expect(readme.container.querySelector('.md-lead')).toBeNull()
+  readme.unmount()
+  const file = render(<Markdown leadLabels={false} text={text} />)
+  expect(file.container.querySelector('.md-lead')).toBeNull()
+  expect(file.container.querySelector('strong')).toHaveTextContent('导出')
+})

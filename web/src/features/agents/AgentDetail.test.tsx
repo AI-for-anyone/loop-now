@@ -187,3 +187,73 @@ describe('头部的状态标签', () => {
     await waitFor(() => expect(sticker()?.textContent).toBe('空闲'))
   })
 })
+
+// 改版“一张印出来的纸”：页头、索引标签与纸张。
+describe('头部与页签的版式', () => {
+  async function open(agent: Schemas['Agent'], tab: 'chat' | 'config' = 'config') {
+    server.use(...baseHandlers([agent]))
+    const user = userEvent.setup()
+    renderRoutes(routes, defaultAgentPath(agent.id, tab))
+    const title = await heading(agent.name)
+    return { user, title, header: title.closest('header')! }
+  }
+
+  it('标题是 60px 的展示字，Manager 标记与状态标签在它旁边', async () => {
+    const { title, header } = await open(makeAgent({ name: 'manager', isManager: true }))
+    expect(title).toHaveClass('font-display-cn', 'text-[clamp(38px,6vw,60px)]', 'text-riso-blue', '[text-shadow:4px_4px_0_var(--riso-pink)]')
+    expect(within(header).getByTitle('项目 Manager')).toHaveTextContent('Manager')
+    await waitFor(() => expect(header.querySelector('[data-agent-status]')).toHaveTextContent('空闲'))
+  })
+
+  it('模型写在等宽的浅蓝标签里；地址在虚线框里，旁边的按钮复制地址并提示已复制', async () => {
+    const { user, header } = await open(makeAgent({ name: 'A 助手', address: '测试组织/测试项目/A 助手' }))
+    expect(within(header).getByText('anthropic · claude-sonnet-5-5')).toHaveClass('font-mono', 'bg-tint-blue')
+    const address = within(header).getByText('测试组织/测试项目/A 助手')
+    expect(address).toHaveClass('font-mono')
+    expect(address.parentElement).toHaveClass('border-dashed')
+    const copy = within(header).getByRole('button', { name: '复制地址' })
+    await user.click(copy)
+    expect(await navigator.clipboard.readText()).toBe('测试组织/测试项目/A 助手')
+    expect(await within(header).findByText('已复制')).toBeInTheDocument()
+    expect(copy).toHaveAccessibleName('复制地址')
+  })
+
+  it('没有地址时说明原因，不显示复制按钮', async () => {
+    const { header } = await open(makeAgent({ name: 'old/bot', address: null }))
+    expect(within(header).getByText(/这个 Agent 暂时没有地址/)).toBeInTheDocument()
+    expect(within(header).queryByRole('button', { name: '复制地址' })).toBeNull()
+  })
+
+  it('右上角的叠印装饰读屏不读；页头够宽才显示，显示时文字让出它的位置，不压在它上面', async () => {
+    const { header, title } = await open(makeAgent({ name: 'A 助手' }))
+    const deco = header.querySelector<HTMLElement>('[data-overprint-deco]')!
+    expect(deco).toHaveAttribute('aria-hidden', 'true')
+    expect(deco).toHaveClass('pointer-events-none', 'hidden', '@[820px]:block')
+    // 页头是容器：按它自己的宽度决定，而不是按窗口宽度。
+    expect(header).toHaveClass('@container')
+    expect(title.parentElement).toHaveClass('@[820px]:pr-[316px]')
+    expect(within(header).getByText('anthropic · claude-sonnet-5-5').parentElement).toHaveClass('@[820px]:pr-[316px]')
+  })
+
+  it('四个页签是贴在纸张上沿的索引标签：当前页黄色，其余米灰色', async () => {
+    const agent = makeAgent({ name: 'A 助手' })
+    await open(agent)
+    const tabs = screen.getByRole('navigation', { name: 'A 助手' })
+    expect(within(tabs).getAllByRole('link').map((link) => link.textContent)).toEqual(['对话', '配置', '文件夹', '收件箱'])
+    const current = within(tabs).getByRole('link', { name: '配置' })
+    expect(current).toHaveAttribute('aria-current', 'page')
+    expect(current).toHaveClass('h-10', 'bg-riso-yellow', 'border-b-0')
+    expect(within(tabs).getByRole('link', { name: '对话' })).toHaveClass('h-[34px]', 'bg-paper-tab')
+    expect(within(tabs).getByRole('link', { name: '对话' })).toHaveAttribute('href', defaultAgentPath(agent.id, 'chat'))
+  })
+
+  it('页签内容在一张纸里，页头和页签在纸的外面', async () => {
+    const { header } = await open(makeAgent({ name: 'A 助手' }))
+    const tabs = screen.getByRole('navigation', { name: 'A 助手' })
+    const sheet = tabs.nextElementSibling as HTMLElement
+    expect(sheet).toHaveAttribute('data-sheet')
+    expect(sheet).toContainElement(await screen.findByRole('heading', { name: '基本信息' }))
+    expect(sheet).not.toContainElement(header)
+    expect(header.closest('[data-sheet]')).toBeNull()
+  })
+})

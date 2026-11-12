@@ -29,7 +29,9 @@ function matchesAgent(agent: Schemas['AgentListItem'], search: string): boolean 
 }
 
 // 每行右侧最多一个状态标签，按会话丢失、回复中、sleep、Manager 的优先级；空闲时不显示。
-function StatusTag({ agent }: { agent: Schemas['AgentListItem'] }) {
+// sleep 与 Manager 在蓝底上是半透明藏青底；所在的行被选中（黄底）时改为藏青底白字的胶囊，半透明的在黄底上看不清。
+function StatusTag({ agent, current }: { agent: Schemas['AgentListItem']; current: boolean }) {
+  const quiet = current ? 'rounded-full bg-ink px-2 text-white' : 'bg-ink/45 text-white'
   const sleeping = !agent.busy && agent.sleep?.state === 'sleeping' && agent.sleep.wakeAt ? agent.sleep : null
   const [label, tone, title] =
     agent.sessionState === 'missing'
@@ -37,13 +39,13 @@ function StatusTag({ agent }: { agent: Schemas['AgentListItem'] }) {
       : agent.busy
         ? [text.chips.busy, 'bg-riso-pink text-ink', undefined]
         : sleeping
-          ? [text.chips.sleep, 'bg-ink/45 text-white', [t.sleep.until(sleeping.wakeAt!), sleeping.reason].filter(Boolean).join(' · ')]
+          ? [text.chips.sleep, quiet, [t.sleep.until(sleeping.wakeAt!), sleeping.reason].filter(Boolean).join(' · ')]
           : agent.isManager
-            ? [t.agents.manager, 'bg-ink/45 text-white', t.agents.managerTitle]
+            ? [t.agents.manager, quiet, t.agents.managerTitle]
             : [null, '', undefined]
   if (!label) return null
   return (
-    <span title={title} className={cn('shrink-0 rounded-[6px] px-1.5 py-px text-[10.5px] leading-4 font-bold whitespace-nowrap', tone)}>
+    <span title={title} className={cn('shrink-0 rounded-[6px] px-1.5 py-px text-[11px] leading-[18px] font-black whitespace-nowrap', tone)}>
       {label}
     </span>
   )
@@ -95,13 +97,13 @@ export function AgentNavGroup({
   const loading = scope ? agents.isPending : !offline
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-[3px]">
+    <section aria-labelledby={headingId} className="flex flex-col gap-1">
       <div className={navGroupClass}>
         <h2 id={headingId} className="font-normal">
           {title}
         </h2>
         <button type="button" aria-label={t.agents.create} disabled={!reachable || !scope} onClick={onCreate} className={navAddClass}>
-          <NavIcon name="plus" className="size-3.5 [stroke-width:3]" />
+          <NavIcon name="plus" className="size-3 [stroke-width:3]" />
         </button>
       </div>
       {offline ? (
@@ -116,16 +118,16 @@ export function AgentNavGroup({
               {t.agents.search.noMatch}
             </p>
           )}
-          {scope && <ul aria-labelledby={headingId} className="flex flex-col gap-[3px]">
+          {scope && <ul aria-labelledby={headingId} className="flex flex-col gap-1">
             {shown.map((agent) => {
               const current = agent.id === currentAgentId
               return (
                 <li key={agent.id} className="min-w-0">
-                  <Link to={agentPath(scope, agent.id)} aria-current={current ? 'page' : undefined} className={navRowClass(current, true)}>
+                  <Link to={agentPath(scope, agent.id)} aria-current={current ? 'page' : undefined} className={navRowClass(current, 'agent')}>
                     <AgentAvatar size="sm" id={agent.id} />
                     <span className="min-w-0 flex-1 truncate">{agent.name}</span>
                     <RuntimeMark runtime={agent.runtime} />
-                    <StatusTag agent={agent} />
+                    <StatusTag agent={agent} current={current} />
                     <PendingBadge sticker counts={pendingByAgent.get(agent.id)} />
                   </Link>
                 </li>
