@@ -78,6 +78,9 @@ func (s *Server) platformConsoleCommand(r *http.Request, agentID uuid.UUID, text
 			out.CopyText = &message.Text
 		}
 	case "export":
+		if err := s.Conv.RequireCommand(r.Context(), agentID, "export"); err != nil {
+			return out, true, err
+		}
 		format := args
 		if format == "" {
 			format = "html"

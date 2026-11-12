@@ -3120,7 +3120,7 @@ paths:
       summary: 发送消息；Agent 忙时必须选择打断或排队
       description: |
         以 `/` 开头且不带图片的消息先匹配平台内置命令 `/session`、`/new`、`/compact [instructions]`、`/reload`、`/copy`、`/export [html|jsonl]`、`/resume [完整ID]`；
-        未匹配时交给插件 `console.command`。命令被认领时不作为普通消息保存，返回 200 ConsoleCommandResult；
+        未匹配时交给插件 `console.command`。`/compact`、`/export`、`/resume` 只适用于 Pi 会话：Claude Code 的 Agent 发这几个命令返回 409 `console_command_failed`，不产生执行。命令被认领时不作为普通消息保存，返回 200 ConsoleCommandResult；
         其余消息经修改类 Hook `message.before_enqueue`，插件可以改写正文。
         以 `/pi:<name>` 开头的消息是交给 Pi 的命令（plugins/SPEC.md §14）：不给插件认领，照原文保存与显示，执行时发给 Pi 的是 `/<name>` 加其余原文，
         不加运行 ID 与平台通知；带图片时图片照常交给 Pi（Pi 执行扩展命令时不用图片，技能命令与提示模板展开后随提示交给模型）。
@@ -3198,6 +3198,7 @@ paths:
       operationId: exportAgentSession
       x-access: console
       summary: 导出当前受管 Pi 会话
+      description: Claude Code 的 Agent 没有 Pi 会话，返回 409 `console_command_failed`。
       parameters:
         - name: format
           in: query

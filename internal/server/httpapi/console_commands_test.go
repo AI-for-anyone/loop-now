@@ -322,3 +322,39 @@ func TestPlatformConsoleMaintenanceErrorsAreConflicts(t *testing.T) {
 		e.expectError(409, code, "GET", path+"/session/export?format=html", nil)
 	}
 }
+
+// Claude Code 的 Agent 支持 /session、/new、/reload、/copy；/compact、/export、/resume 只适用于 Pi 会话，
+// 直接以 409 console_command_failed 拒绝，不产生执行。
+func TestClaudeCodeConsoleCommandSupport(t *testing.T) {
+	e := newEnv(t)
+	reg := modelcatalog.NewRegistry(e.api.Models.Snapshot())
+	e.api.Models, e.api.Config.Models = reg, reg
+	agent, path := e.newAgent("Claude 命令")
+	e.expect(200, "PATCH", path, map[string]any{"model": map[string]string{"provider": "claude-code", "modelId": "sonnet"}})
+	if err := e.st.RecordSessionFile(context.Background(), agent.ID, "/managed/claude-session"); err != nil {
+		t.Fatal(err)
+	}
+	for _, command := range []string{"/compact", "/compact 保留决定", "/export", "/export jsonl", "/resume", "/resume some-id"} {
+		body := decode[apitypes.ErrorBody](t, e.expect(409, "POST", path+"/messages", map[string]any{"text": command}))
+		if body.Error.Code != "console_command_failed" || !strings.Contains(body.Error.Message, "Claude Code") {
+			t.Fatalf("%s 应以 console_command_failed 拒绝并写明运行时：%+v", command, body.Error)
+		}
+	}
+	e.expectError(409, "console_command_failed", "GET", path+"/session/export?format=html", nil)
+	var runs int
+	if err := e.st.Pool.QueryRow(context.Background(), `SELECT count(*) FROM runs WHERE agent_id = $1`, agent.ID).Scan(&runs); err != nil || runs != 0 {
+		t.Fatalf("不支持的命令不应产生执行：%d %v", runs, err)
+	}
+	if got := consoleCommand(t, e, path, "/session"); got.Session == nil {
+		t.Fatalf("/session：%+v", got)
+	}
+	if got := consoleCommand(t, e, path, "/copy"); got.Command != "copy" {
+		t.Fatalf("/copy：%+v", got)
+	}
+	if got := consoleCommand(t, e, path, "/reload"); got.ProcessStopped == nil {
+		t.Fatalf("/reload：%+v", got)
+	}
+	if got := consoleCommand(t, e, path, "/new"); got.ResetSession == nil {
+		t.Fatalf("/new：%+v", got)
+	}
+}

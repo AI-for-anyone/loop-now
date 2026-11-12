@@ -87,6 +87,9 @@ func (s *Service) sessionChanged(ctx context.Context, agentID uuid.UUID, sess st
 
 // Compact 创建真实压缩运行并等待 Pi 返回 Token 结果，不创建用户或助手消息。
 func (s *Service) Compact(ctx context.Context, agentID uuid.UUID, instructions string) (executor.CompactionResult, error) {
+	if err := s.RequireCommand(ctx, agentID, "compact"); err != nil {
+		return executor.CompactionResult{}, err
+	}
 	runID, owner, err := s.acquireConsoleCommand(ctx, agentID)
 	if err != nil {
 		return executor.CompactionResult{}, err
@@ -166,6 +169,9 @@ func (s *Service) Export(ctx context.Context, agentID uuid.UUID, format string) 
 	if format != "html" && format != "jsonl" {
 		return executor.SessionExport{}, apperr.Invalid("format", "只能是 html 或 jsonl")
 	}
+	if err := s.RequireCommand(ctx, agentID, "export"); err != nil {
+		return executor.SessionExport{}, err
+	}
 	_, owner, err := s.acquireConsoleCommand(ctx, agentID)
 	if err != nil {
 		return executor.SessionExport{}, err
@@ -197,7 +203,7 @@ func (s *Service) Export(ctx context.Context, agentID uuid.UUID, format string) 
 
 // ListResumeSessions 列出可恢复的受管 Pi 会话，不启动进程或调用模型。
 func (s *Service) ListResumeSessions(ctx context.Context, agentID uuid.UUID) ([]executor.ManagedSession, error) {
-	if err := s.requirePiSession(ctx, agentID); err != nil {
+	if err := s.RequireCommand(ctx, agentID, "resume"); err != nil {
 		return nil, err
 	}
 	_, owner, err := s.acquireConsoleCommand(ctx, agentID)
@@ -219,7 +225,7 @@ func (s *Service) ListResumeSessions(ctx context.Context, agentID uuid.UUID) ([]
 
 // ResumeSession 停止旧空闲 Pi 后恢复已验证的受管会话，只切换模型上下文。
 func (s *Service) ResumeSession(ctx context.Context, agentID uuid.UUID, sessionID string) (apitypes.SessionInfo, error) {
-	if err := s.requirePiSession(ctx, agentID); err != nil {
+	if err := s.RequireCommand(ctx, agentID, "resume"); err != nil {
 		return apitypes.SessionInfo{}, err
 	}
 	_, owner, err := s.acquireConsoleCommand(ctx, agentID)
@@ -273,14 +279,21 @@ func (s *Service) LatestReply(ctx context.Context, agentID uuid.UUID) (*store.Me
 	return s.st.LatestCompletedAssistant(ctx, agentID)
 }
 
-// Pi 的受管会话格式不能交给 Claude Code 恢复。
-func (s *Service) requirePiSession(ctx context.Context, agentID uuid.UUID) error {
+// piOnlyCommands 是只适用于 Pi 会话的平台命令：Claude Code 的会话由它自己管理，平台不能压缩、导出或恢复。
+var piOnlyCommands = map[string]bool{"compact": true, "export": true, "resume": true}
+
+// RequireCommand 确认 Agent 的运行时支持这个平台命令（名字不带 "/"）；不支持时返回 409 console_command_failed，
+// 调用方在取得忙闲锁、创建执行之前检查。
+func (s *Service) RequireCommand(ctx context.Context, agentID uuid.UUID, name string) error {
+	if !piOnlyCommands[name] {
+		return nil
+	}
 	agent, err := s.st.GetAgent(ctx, agentID)
 	if err != nil {
 		return err
 	}
 	if agentruntime.ForProvider(agent.ModelProvider) == agentruntime.ClaudeCode {
-		return apperr.Conflict(apperr.CodeConsoleCommandFailed, "当前运行时不支持 Pi 会话恢复")
+		return apperr.Conflict(apperr.CodeConsoleCommandFailed, "Claude Code 的 Agent 不支持 /"+name+"：这个命令只适用于 Pi 会话")
 	}
 	return nil
 }
