@@ -57,6 +57,11 @@ export const overview = {
       released: 'Agent 删除时停止',
       shutdown: '服务端停止时退出',
       abort_timeout: '打断超时后强制结束',
+      // 平台命令停掉空闲的进程；console_export 只在旧记录里有（早先 /export html 为导出临时启动的进程）。
+      session_reset: '重开会话（/new）后停止',
+      console_reload: '重新加载（/reload）时停止',
+      session_resumed: '恢复会话（/resume）后停止',
+      console_export: '导出会话用完后停止',
       unexpected_exit: '意外退出',
     } satisfies Record<S['ProcessExit']['reason'], string>,
   },
