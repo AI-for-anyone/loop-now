@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -22,7 +23,7 @@ type commandList struct {
 		Name              string          `json:"name"`
 		Source            string          `json:"source"`
 		PiSource          string          `json:"piSource"`
-		Description       *string         `json:"description"`
+		Description       json.RawMessage `json:"description"`
 		PluginID          *string         `json:"pluginId"`
 		PluginDisplayName json.RawMessage `json:"pluginDisplayName"`
 		Usage             *string         `json:"usage"`
@@ -60,8 +61,28 @@ func TestListAgentCommandsPlatform(t *testing.T) {
 	if got := strings.Join(platformAvailability(l), " "); got != "session new compact:session_none reload copy export:session_none resume" {
 		t.Fatalf("还没有会话：%s", got)
 	}
-	if c := l.Commands[2]; c.Usage == nil || *c.Usage != "/compact [instructions]" || c.PiSource != "" || c.Description != nil {
+	if c := l.Commands[2]; c.Usage == nil || *c.Usage != "/compact [instructions]" || c.PiSource != "" {
 		t.Fatalf("平台命令的字段：%+v", c)
+	}
+	// 每个平台命令都有中英两种说明，用法里方括号中的占位词在两种说明里都出现。
+	for _, c := range l.Commands {
+		var desc struct {
+			Zh string `json:"zh-CN"`
+			En string `json:"en-US"`
+		}
+		if err := json.Unmarshal(c.Description, &desc); err != nil || desc.Zh == "" || desc.En == "" {
+			t.Fatalf("%s 应有中英说明：%s %v", c.Name, c.Description, err)
+		}
+		for _, m := range regexp.MustCompile(`\[([^\]]+)\]`).FindAllStringSubmatch(*c.Usage, -1) {
+			for _, word := range strings.Split(m[1], "|") {
+				if !strings.Contains(desc.Zh, word) || !strings.Contains(desc.En, word) {
+					t.Fatalf("%s 的说明没有提到用法里的 %s：%+v", c.Name, word, desc)
+				}
+			}
+		}
+	}
+	if c := l.Commands[6]; *c.Usage != "/resume [session-id]" {
+		t.Fatalf("/resume 的用法：%s", *c.Usage)
 	}
 	if err := e.st.RecordSessionFile(ctx, agent.ID, "/managed/s.jsonl"); err != nil {
 		t.Fatal(err)
@@ -123,7 +144,7 @@ func TestListAgentCommands(t *testing.T) {
 	l := all
 	l.Commands = all.Commands[platform:]
 	c := l.Commands[0]
-	if c.Name != "grok-cli-accounts" || c.Source != "pi" || c.PiSource != "extension" || c.Description == nil || c.PluginID == nil || *c.PluginID != "grokish" || string(c.PluginDisplayName) != `"Grokish"` ||
+	if c.Name != "grok-cli-accounts" || c.Source != "pi" || c.PiSource != "extension" || string(c.Description) != `"管理账号"` || c.PluginID == nil || *c.PluginID != "grokish" || string(c.PluginDisplayName) != `"Grokish"` ||
 		!c.Available || c.Usage != nil || c.UnavailableReason != nil {
 		t.Fatalf("插件命令：%+v %s", c, c.PluginDisplayName)
 	}

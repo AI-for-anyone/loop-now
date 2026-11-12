@@ -7314,9 +7314,12 @@ export interface components {
             source: "platform" | "pi";
             /** @description Pi 给的来源（原样）：extension 扩展命令、prompt 提示模板、skill 技能命令；平台命令为空字符串 */
             piSource: string;
-            /** @description 命令自己的说明（扩展原文，按纯文本显示）；平台命令为 null，由控制台按命令名显示说明 */
-            description: string | null;
-            /** @description 平台命令的用法，例如 `/compact [instructions]`；Pi 命令为 null */
+            /**
+             * @description 命令的说明，按纯文本显示。Pi 命令是扩展给的原文（字符串）；平台命令是中英两种说明（LocalizedText 对象，键为 zh-CN 与 en-US），
+             *     控制台按当前语言取字，用法里的占位词（instructions、html|jsonl、session-id）在说明里写法相同。没有说明时为 null
+             */
+            description: components["schemas"]["LocalizedText"] | null;
+            /** @description 平台命令的用法，方括号里是可省略的参数：`/compact [instructions]`、`/export [html|jsonl]`、`/resume [session-id]`（完整的会话 ID）；Pi 命令为 null */
             usage: string | null;
             /**
              * @description 此刻能不能用。平台命令只取决于 Agent 的运行时（AgentCommandList.runtime）与会话状态（SessionState），规则见 unavailableReason；

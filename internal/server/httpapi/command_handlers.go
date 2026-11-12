@@ -13,7 +13,7 @@ type agentCommand struct {
 	Name              string          `json:"name"`
 	Source            string          `json:"source"`
 	PiSource          string          `json:"piSource"`
-	Description       *string         `json:"description"`
+	Description       json.RawMessage `json:"description"` // LocalizedText 或 null：Pi 命令是字符串，平台命令是中英对象
 	PluginID          *string         `json:"pluginId"`
 	PluginDisplayName json.RawMessage `json:"pluginDisplayName"`
 	Usage             *string         `json:"usage"`
@@ -47,7 +47,12 @@ func (s *Server) listAgentCommands(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, c := range platform {
 		usage := c.Usage
-		item := agentCommand{Name: c.Name, Source: "platform", PluginDisplayName: json.RawMessage("null"), Usage: &usage, Available: c.Available}
+		desc, err := json.Marshal(c.Description)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		item := agentCommand{Name: c.Name, Source: "platform", Description: desc, PluginDisplayName: json.RawMessage("null"), Usage: &usage, Available: c.Available}
 		if c.UnavailableReason != "" {
 			reason := c.UnavailableReason
 			item.UnavailableReason = &reason
@@ -80,7 +85,14 @@ func (s *Server) listAgentCommands(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			for _, c := range cached.Commands {
-				item := agentCommand{Name: c.Name, Source: "pi", PiSource: c.Source, Description: c.Description, PluginDisplayName: json.RawMessage("null"), Available: true}
+				desc := json.RawMessage("null")
+				if c.Description != nil {
+					if desc, err = json.Marshal(*c.Description); err != nil {
+						s.fail(w, r, err)
+						return
+					}
+				}
+				item := agentCommand{Name: c.Name, Source: "pi", PiSource: c.Source, Description: desc, PluginDisplayName: json.RawMessage("null"), Available: true}
 				if plugin, ok := owner(c.Path); ok {
 					item.PluginID = &plugin
 					if n, ok := names[plugin]; ok {

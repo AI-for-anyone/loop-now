@@ -292,16 +292,24 @@ func (s *Service) LatestReply(ctx context.Context, agentID uuid.UUID) (*store.Me
 type platformCommandSpec struct {
 	name, usage          string
 	piOnly, needsSession bool
+	zh, en               string // 中英两种说明；用法里的占位词（instructions、html|jsonl、session-id）在说明里用同样的写法
 }
 
 var platformCommands = []platformCommandSpec{
-	{name: "session", usage: "/session"},
-	{name: "new", usage: "/new"},
-	{name: "compact", usage: "/compact [instructions]", piOnly: true, needsSession: true},
-	{name: "reload", usage: "/reload"},
-	{name: "copy", usage: "/copy"},
-	{name: "export", usage: "/export [html|jsonl]", piOnly: true, needsSession: true},
-	{name: "resume", usage: "/resume [sessionId]", piOnly: true},
+	{name: "session", usage: "/session",
+		zh: "查看当前会话、模型和进程状态", en: "Show the current session, model, and process"},
+	{name: "new", usage: "/new",
+		zh: "重开会话，保留页面里的对话历史", en: "Start a new session and keep the page's history"},
+	{name: "compact", usage: "/compact [instructions]", piOnly: true, needsSession: true,
+		zh: "压缩当前会话的上下文；instructions 是给这次压缩的附加说明，可省略", en: "Compact the current context; instructions are optional guidance for this compaction"},
+	{name: "reload", usage: "/reload",
+		zh: "停止当前进程，下一条消息时重新加载", en: "Stop the process; it reloads on the next message"},
+	{name: "copy", usage: "/copy",
+		zh: "复制最近一条有文字的成功回复", en: "Copy the latest successful reply that has text"},
+	{name: "export", usage: "/export [html|jsonl]", piOnly: true, needsSession: true,
+		zh: "导出当前会话，格式为 html（默认）或 jsonl", en: "Export the current session as html (default) or jsonl"},
+	{name: "resume", usage: "/resume [session-id]", piOnly: true,
+		zh: "不带 session-id 时列出可恢复的会话；带上完整的 session-id 时恢复那个会话", en: "Without session-id, list resumable sessions; with a full session-id, resume that session"},
 }
 
 // IsPlatformCommand 报告 name（不带 "/"）是不是平台内置命令。
@@ -323,8 +331,15 @@ var piOnlyCommands = func() map[string]bool {
 // session_none（还没有会话）、session_missing（会话文件丢失）；能用时为空。Agent 正忙这类随时变化的情况不在这里判断。
 type PlatformCommand struct {
 	Name, Usage       string
+	Description       LocalizedDescription
 	Available         bool
 	UnavailableReason string
+}
+
+// LocalizedDescription 是平台命令的中英两种说明（接口里的 LocalizedText 对象，zh-CN 在前）。
+type LocalizedDescription struct {
+	ZhCN string `json:"zh-CN"`
+	EnUS string `json:"en-US"`
 }
 
 // PlatformCommands 按 Agent 的运行时与会话状态列出平台内置命令。
@@ -349,7 +364,8 @@ func (s *Service) PlatformCommands(ctx context.Context, agentID uuid.UUID) ([]Pl
 		case c.needsSession && (sess.State != "active" || sess.SessionFile == ""):
 			reason = "session_none"
 		}
-		out = append(out, PlatformCommand{Name: c.name, Usage: c.usage, Available: reason == "", UnavailableReason: reason})
+		out = append(out, PlatformCommand{Name: c.name, Usage: c.usage, Description: LocalizedDescription{ZhCN: c.zh, EnUS: c.en},
+			Available: reason == "", UnavailableReason: reason})
 	}
 	return out, nil
 }

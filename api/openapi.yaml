@@ -19259,9 +19259,15 @@ components:
         name: { description: 命令名，不带 "/"；技能命令为 skill:<名称>, type: string }
         source: { description: platform 平台内置命令（发送时写成 /<name>）；pi 交给 Pi 执行（发送时写成 /pi:<name>）, type: string, enum: [platform, pi] }
         piSource: { description: Pi 给的来源（原样）：extension 扩展命令、prompt 提示模板、skill 技能命令；平台命令为空字符串, type: string }
-        description: { description: 命令自己的说明（扩展原文，按纯文本显示）；平台命令为 null，由控制台按命令名显示说明, type: [string, "null"] }
+        description:
+          description: |
+            命令的说明，按纯文本显示。Pi 命令是扩展给的原文（字符串）；平台命令是中英两种说明（LocalizedText 对象，键为 zh-CN 与 en-US），
+            控制台按当前语言取字，用法里的占位词（instructions、html|jsonl、session-id）在说明里写法相同。没有说明时为 null
+          oneOf:
+            - $ref: "#/components/schemas/LocalizedText"
+            - type: "null"
         usage:
-          description: 平台命令的用法，例如 `/compact [instructions]`；Pi 命令为 null
+          description: 平台命令的用法，方括号里是可省略的参数：`/compact [instructions]`、`/export [html|jsonl]`、`/resume [session-id]`（完整的会话 ID）；Pi 命令为 null
           type: [string, "null"]
         available:
           description: |
