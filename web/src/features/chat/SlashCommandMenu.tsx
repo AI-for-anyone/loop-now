@@ -1,14 +1,12 @@
 import type { ReactElement } from 'react'
 import { Popover as PopoverPrimitive } from 'radix-ui'
-import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
 import { localizedText } from '@/lib/localized-text'
-import { commandText } from './slash-commands'
+import { commandText, type Command } from './slash-commands'
 
-type Command = Schemas['AgentCommand']
 const text = t.chat.commands
 
-// 输入框上方的 Pi 命令菜单：锚在输入框外框上、向上弹出，焦点一直留在输入框里（上下键、Enter、Tab、Esc 由输入框处理）。
+// 输入框上方的平台与 Pi 命令菜单：锚在输入框外框上、向上弹出，焦点一直留在输入框里（上下键、Enter、Tab、Esc 由输入框处理）。
 // 每行是补全后的写法（/pi:<name>）、来源（扩展命令、提示模板、技能，来自插件的另写插件名）和命令自己的说明（扩展原文，按纯文本显示）。
 // status：读取中、读取失败、还没有列表、没有匹配时的一行说明，有它时不列命令。
 export function SlashCommandMenu({ open, listId, optionId, items, active, status, onActive, onChoose, onDismiss, children }: {
@@ -47,9 +45,9 @@ export function SlashCommandMenu({ open, listId, optionId, items, active, status
             </p>
           ) : (
             <>
-              <div id={listId} role="listbox" aria-label={text.label} className="min-h-0 overflow-y-auto p-1.5">
+              <div id={listId} role="listbox" aria-label={text.menuLabel} className="min-h-0 overflow-y-auto p-1.5">
                 {items.map((command, index) => {
-                  const source = command.source === 'pi' ? text.source[command.piSource] ?? command.piSource : null
+                  const source = command.source === 'pi' ? text.source[command.piSource] ?? command.piSource : text.platform
                   const plugin = command.pluginDisplayName !== null ? localizedText(command.pluginDisplayName) || command.pluginId : command.pluginId
                   return (
                     <div
@@ -63,7 +61,7 @@ export function SlashCommandMenu({ open, listId, optionId, items, active, status
                       className="grid min-w-0 cursor-pointer gap-0.5 rounded-ticket px-2.5 py-2 aria-selected:bg-tint-blue"
                     >
                       <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-                        <code className="min-w-0 font-mono text-[13px] font-bold [overflow-wrap:anywhere]">{commandText(command)}</code>
+                        <code className="min-w-0 font-mono text-[13px] font-bold [overflow-wrap:anywhere]">{command.source === 'platform' ? command.usage : commandText(command)}</code>
                         <span className="text-[12px] text-ink-500">
                           {[source, plugin && text.plugin(plugin)].filter(Boolean).join(' · ')}
                         </span>

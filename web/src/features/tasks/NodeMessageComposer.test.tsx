@@ -99,6 +99,16 @@ it('未知结果按原action GET恢复，404不重POST/换ID；历史仍可读�
   env.rerender(<Harness current={false} />); found = true
   await user.click(screen.getByRole('button', { name: '读取原发送结果' })); await screen.findByText(copy.accepted); expect(bodies).toHaveLength(1); expect(screen.getByRole('textbox')).toHaveValue('')
 })
+it('任务节点把 /resume 当普通节点消息，不弹平台命令确认', async () => {
+  const bodies: Schemas['TaskNodeInboxInput'][] = []
+  server.use(http.post(endpoint, async ({ request }) => { const body = await request.json() as Schemas['TaskNodeInboxInput']; bodies.push(body); return HttpResponse.json(receipt(body), { status: 201 }) }))
+  renderWithQuery(<Harness />)
+  await userEvent.type(screen.getByRole('textbox'), '/resume full-session-id')
+  await userEvent.click(screen.getByRole('button', { name: '发送' }))
+  await waitFor(() => expect(bodies).toHaveLength(1))
+  expect(bodies[0].text).toBe('/resume full-session-id')
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+})
 it('⌘／Ctrl+Enter 作为打断发到原节点；输入框下方说明按键', async () => {
   const bodies: Schemas['TaskNodeInboxInput'][] = []
   server.use(http.post(endpoint, async ({ request }) => { const body = await request.json() as Schemas['TaskNodeInboxInput']; bodies.push(body); return HttpResponse.json(receipt(body), { status: 201 }) }))

@@ -222,6 +222,9 @@ func New(o Options, src Source, tmpl *clitemplate.Catalog, inst *clitemplate.Ins
 }
 
 func (e *Executor) event(agentID uuid.UUID, runID *uuid.UUID, typ string, data map[string]any) {
+	if runID != nil && *runID == uuid.Nil {
+		runID = nil // 导出等维护操作没有对话运行，不能写入不存在的 run 外键
+	}
 	e.obs.Event(agentID, runID, executor.Event{Type: typ, At: time.Now(), Data: data})
 }
 
@@ -249,6 +252,9 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	}
 	if err != nil {
 		return executor.Result{}, err
+	}
+	if req.Origin == executor.OriginConsoleCompact && isClaude(snap) {
+		return failed(executor.ErrRuntimeError, "当前运行时不支持 Pi 手动压缩", snap.ConfigVersion), nil
 	}
 	if blocked, reason, err := e.beforeRun(runCtx, snap, req); err != nil {
 		return executor.Result{}, err
@@ -311,6 +317,9 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	r.prompting = true
 	r.mu.Unlock()
 	sink.Running(snap.ConfigVersion)
+	if req.Origin == executor.OriginConsoleCompact {
+		return e.compact(ctx, p, r, req, snap), nil
+	}
 	tr, err := p.rt.Prompt(ctx, req.Message, sinkAdapter{s: sink, command: func(id, name, command string) {
 		if command = toolcommand.Display(name, command); command != "" {
 			e.event(snap.AgentID, &runID, "tool.command", map[string]any{"toolCallId": id, "toolName": name, "command": command})

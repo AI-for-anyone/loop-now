@@ -4,7 +4,9 @@ import { ArrowUpIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ErrorAlert } from '@/components/ErrorAlert'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ApiError, type Schemas } from '@/api/client'
+import { downloadAgentSession } from '@/api/session-export'
 import { isCommandResult, upsertMessage, useAgentCommands, useSendMessage } from '@/api/queries'
 import { t } from '@/i18n'
 import { ImagePicker } from '@/features/images/ImagePicker'
@@ -14,12 +16,13 @@ import { cn } from '@/lib/utils'
 import { ReplyChip } from '@/features/console-inbox/ConsoleMessage'
 import { useAnswerQuestion } from '@/features/console-inbox/useAnswerQuestion'
 import { describeError } from '@/lib/errors'
-import { applyCommand, matchCommands, slashToken } from './slash-commands'
+import { applyCommand, matchCommands, slashToken, type Command } from './slash-commands'
 import { SlashCommandMenu } from './SlashCommandMenu'
 
 // 编辑撤回的排队消息时，把原文与图片放回输入框；输入框里已有的内容保留在前面。
 export interface ComposerHandle {
   refill: (text: string, images: ImageDraft[]) => void
+  resume: (sessionId: string) => void
 }
 
 // 停止当前回复：忙时输入框为空，发送按钮换成停止。
@@ -47,6 +50,8 @@ interface ComposerProps {
   agentName: string
   busy: boolean
   disabled: boolean
+  // 会话文件丢失时仍允许无图片的 /resume，其余输入继续受 disabled 门禁约束。
+  allowResumeWhenDisabled?: boolean
   imageLimits?: ImageLimits | null
   maxMessageBytes: number | undefined
   // 发送成功后把结果交给对话页，历史请求进行中时也能显示这条消息。
@@ -61,17 +66,33 @@ interface ComposerProps {
   // 有进行中的回复时由对话页给出。
   stop?: StopControl
   reply?: QuestionReply
-  // 有没有 /pi: 命令：Claude Code 运行时的 Agent 没有（命令列表接口返回空列表），不给菜单。
+  // 是否支持 Pi 专属命令；Claude Code 只展示通用平台命令。
   piCommands?: boolean
 }
 
 const encoder = new TextEncoder()
+const platformCommands = [
+  { name: 'session', usage: '/session' },
+  { name: 'new', usage: '/new' },
+  { name: 'compact', usage: '/compact [instructions]' },
+  { name: 'reload', usage: '/reload' },
+  { name: 'copy', usage: '/copy' },
+  { name: 'export', usage: '/export [html|jsonl]' },
+  { name: 'resume', usage: '/resume [sessionId]' },
+] as const
+const platformCommandNames: Set<string> = new Set(platformCommands.map(command => command.name))
+
+function isPlatformCommand(text: string): boolean {
+  const trimmed = text.trim()
+  if (!trimmed.startsWith('/')) return false
+  return platformCommandNames.has(trimmed.slice(1).split(/\s/, 1)[0])
+}
 
 // 边框归共同容器所有，文字区按内容增高，上限后独立滚动。
 const inputClass =
   'field-sizing-fixed min-h-10 max-h-60 flex-1 resize-none overflow-y-auto rounded-none bg-transparent px-1 py-2 text-base leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent'
 
-export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBytes, imageLimits, onSent, onCommand, queue, status, connection, stop, reply, piCommands = true }: ComposerProps) {
+export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeWhenDisabled = false, maxMessageBytes, imageLimits, onSent, onCommand, queue, status, connection, stop, reply, piCommands = true }: ComposerProps) {
   const client = useQueryClient()
   const send = useSendMessage(agentId)
   const [text, setText] = useState('')
@@ -80,20 +101,33 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const pending = send.isPending || submitting
   const [localError, setLocalError] = useState<string | null>(null)
+  const [confirmNew, setConfirmNew] = useState(false)
+  const [confirmResume, setConfirmResume] = useState(false)
+  // 只有从列表发起的恢复保存原草稿；手动输入命令仍保持原确认行为。
+  const [resumeDraft, setResumeDraft] = useState<string | null>(null)
   const answer = useAnswerQuestion()
   const replyId = reply?.message.id
+  const resumeAllowed = disabled && allowResumeWhenDisabled && !reply && (images.length === 0 || confirmResume) && /^\/resume(?:\s+\S+)?$/.test(text.trim())
+  const inputDisabled = disabled && !allowResumeWhenDisabled
+  const submitDisabled = disabled && !resumeAllowed
 
-  // "/" 菜单：输入以 "/" 开头、光标还在第一个词里时打开，按这个词筛选 Pi 命令；Esc 关掉后，这个词变了再打开。
-  // 回复问题时发出的是回答，不是对话消息，不给菜单；没有 /pi: 命令的 Agent 也不给。
+  // "/" 菜单：输入以 "/" 开头、光标还在第一个词里时打开，按这个词筛选命令；Esc 关掉后，这个词变了再打开。
+  // 回复问题时不显示菜单；Pi 列表按运行时加载，平台命令始终可用。
   const [caret, setCaret] = useState(0)
   const [dismissed, setDismissed] = useState<string | null>(null)
   const [active, setActive] = useState(0)
-  const token = reply || disabled || !piCommands ? null : slashToken(text, caret)
-  const menuOpen = token !== null && dismissed !== token
+  const token = reply || inputDisabled ? null : slashToken(text, caret)
+  const menuRequested = token !== null && dismissed !== token
   if (token === null && dismissed !== null) setDismissed(null)
-  const commands = useAgentCommands(agentId, menuOpen)
-  const matched = commands.data ? matchCommands(commands.data.commands, token ?? '/') : []
-  const menuStatus = commands.error
+  const commands = useAgentCommands(agentId, menuRequested && !disabled && piCommands)
+  const builtins: Command[] = images.length === 0
+    ? platformCommands.filter(command => (!disabled || command.name === 'resume') && (piCommands || !['compact', 'export', 'resume'].includes(command.name))).map(command => ({
+      ...command, source: 'platform', piSource: '', description: t.chat.commands.hints[command.name], pluginId: null, pluginDisplayName: null,
+    }))
+    : []
+  const matched = matchCommands([...builtins, ...(!disabled && piCommands ? commands.data?.commands ?? [] : [])], token ?? '/')
+  const menuOpen = menuRequested && (matched.length > 0 || !disabled && piCommands && images.length === 0)
+  const menuStatus = matched.length > 0 ? null : !piCommands || disabled ? t.chat.commands.noMatch : commands.error
     ? t.chat.commands.failed(describeError(commands.error))
     : !commands.data
       ? t.chat.commands.loading
@@ -110,8 +144,11 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
   const listId = useId()
   const optionId = (index: number) => `${listId}-${index}`
   const pendingCaret = useRef<number | null>(null)
-  const choose = (command: Schemas['AgentCommand']) => {
-    const next = applyCommand(text, command)
+  const choose = (command: Command) => {
+    const next = command.source === 'platform'
+      ? { text: `/${command.name}${text.match(/\s[\s\S]*$/)?.[0] ?? ''}`, caret: command.name.length + 1 }
+      : applyCommand(text, command)
+    if (command.source === 'platform') setDismissed(`/${command.name}`)
     pendingCaret.current = next.caret
     setText(next.text)
     setCaret(next.caret)
@@ -133,7 +170,14 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
       setImages((current) => [...current, ...drafts])
       editorRef.current?.focus()
     },
-  }), [])
+    resume: (sessionId) => {
+      if (replyId || busyRequest.current) return
+      setResumeDraft(text)
+      setText(`/resume ${sessionId}`)
+      setDismissed(`/resume ${sessionId}`)
+      setConfirmResume(true)
+    },
+  }), [replyId, text])
 
   // 补全命令后把光标放到命令后面的空白之后。
   useLayoutEffect(() => {
@@ -161,9 +205,9 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
     return () => observer.disconnect()
   }, [text])
 
-  // 忙时 Enter 排队，⌘／Ctrl+Enter 作为打断发送；点发送按钮为排队。
-  const submit = async (whenBusy: Schemas['WhenBusy'] = 'queue') => {
-    if (disabled || busyRequest.current) return
+  // 忙时 Enter 排队，⌘／Ctrl+Enter 作为打断发送；点发送按钮为排队。平台命令不自动排队重试。
+  const submit = async (whenBusy: Schemas['WhenBusy'] = 'queue', confirmed = false) => {
+    if (submitDisabled || busyRequest.current) return
     setLocalError(null); setImageError(null); setUploads({})
     send.reset()
     if (text.trim() === '' && images.length === 0) {
@@ -174,28 +218,49 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
       await answerQuestion(reply, whenBusy)
       return
     }
+    // 从列表确认的恢复始终是平台命令；已有图片留在输入框，不上传也不随命令发送。
+    const confirmedResume = confirmed && confirmResume && /^\/resume\s+\S/.test(text.trim())
+    const platform = confirmedResume || (images.length === 0 && isPlatformCommand(text))
+    if (!confirmed && platform && /^\/new(?:\s|$)/.test(text.trim())) {
+      setConfirmNew(true)
+      return
+    }
+    if (!confirmed && platform && /^\/resume\s+\S/.test(text.trim())) {
+      setConfirmResume(true)
+      return
+    }
     if (maxMessageBytes !== undefined && encoder.encode(text).length > maxMessageBytes) {
       setLocalError(t.chat.tooLong(maxMessageBytes))
       return
     }
-    if (images.length && imageLimits) { const problem = imageProblem([], images.map(image => image.file), imageLimits); if (problem) { setLocalError(problem); return } }
-    const sent = text, sentImages = [...images]
+    if (!confirmedResume && images.length && imageLimits) { const problem = imageProblem([], images.map(image => image.file), imageLimits); if (problem) { setLocalError(problem); return } }
+    const sent = text, sentImages = confirmedResume ? [] : [...images]
     busyRequest.current = true; setSubmitting(true)
     try {
       const refs = await uploadMessageImages({ kind: 'agent', agentId }, sentImages, setUploads)
       const input = { text: sent, ...(refs.length ? { imageIds: refs.map(ref => ref.id) } : {}) }
-      // Agent 正忙时按所选方式发送；以为空闲、发送时才发现正忙的，同样按所选方式再发一次。
-      const result = await send.mutateAsync(busy ? { ...input, whenBusy } : input).catch((error: unknown) => {
-        if (busy || !(error instanceof ApiError && error.code === 'agent_busy')) throw error
-        return send.mutateAsync({ ...input, whenBusy })
-      })
-      if (isCommandResult(result)) onCommand?.(result, sent)
-      else {
+      // 普通消息在空闲判断过期后按所选方式重发；平台命令直接报告忙碌，不转成排队消息。
+      const result = platform
+        ? await send.mutateAsync(input)
+        : await send.mutateAsync(busy ? { ...input, whenBusy } : input).catch((error: unknown) => {
+          if (busy || !(error instanceof ApiError && error.code === 'agent_busy')) throw error
+          return send.mutateAsync({ ...input, whenBusy })
+        })
+      if (isCommandResult(result)) {
+        if (result.source === 'platform' && result.copyText != null) await navigator.clipboard.writeText(result.copyText)
+        if (result.source === 'platform' && result.exportFormat) await downloadAgentSession(agentId, result.exportFormat)
+        onCommand?.(result, sent)
+      } else {
         upsertMessage(client, agentId, result.message)
         onSent(result)
       }
-      // 去掉已发出的部分，只留下发送期间新输入的文字；已发出的部分在发送期间被改动过时全部保留。
-      setText((current) => (current.startsWith(sent) ? current.slice(sent.length) : current))
+      if (confirmedResume && resumeDraft !== null) {
+        setText(resumeDraft)
+        setResumeDraft(null)
+      } else {
+        // 去掉已发出的部分，只留下发送期间新输入的文字；已发出的部分在发送期间被改动过时全部保留。
+        setText((current) => (current.startsWith(sent) ? current.slice(sent.length) : current))
+      }
       setImages(current => current.filter(image => !sentImages.some(sent => sent.id === image.id)))
     } catch (error) {
       setImageError(error)
@@ -243,16 +308,16 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
     }
     if (event.key !== 'Enter' || event.shiftKey) return
     event.preventDefault()
-    if (disabled || pending) return
+    if (submitDisabled || pending) return
     void submit(event.metaKey || event.ctrlKey ? 'interrupt' : 'queue')
   }
 
   const sendLabel = busy ? t.chat.queueSend : t.chat.send
   const showStop = busy && stop !== undefined && !reply && text.trim() === '' && images.length === 0
   const stopLabel = stop?.pending ? t.chat.stopping : stop?.retry ? t.chat.retryStop : t.chat.stop
-  const editor = <Textarea ref={editorRef} aria-label={t.chat.inputLabel} placeholder={reply ? t.consoleInbox.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder} value={text} disabled={disabled}
+  const editor = <Textarea ref={editorRef} aria-label={t.chat.inputLabel} placeholder={reply ? t.consoleInbox.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder} value={text} disabled={inputDisabled}
     onChange={event => { setText(event.target.value); setCaret(event.target.selectionStart) }} onSelect={event => setCaret(event.currentTarget.selectionStart)} onKeyDown={onKeyDown} rows={1} className={inputClass}
-    aria-autocomplete="list" aria-controls={menuItems.length > 0 ? listId : undefined} aria-activedescendant={menuItems.length > 0 ? optionId(active) : undefined} />
+    aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={menuItems.length > 0} aria-controls={menuItems.length > 0 ? listId : undefined} aria-activedescendant={menuItems.length > 0 ? optionId(active) : undefined} />
   // 待发送图片排在同一边框里、文字行之上；有图片时边框圆角收小。
   const input = (addButton?: ReactNode, strip?: ReactNode) => <SlashCommandMenu open={menuOpen} listId={listId} optionId={optionId} items={menuItems} active={active} status={menuStatus} onActive={setActive} onChoose={choose} onDismiss={() => setDismissed(token)}><div data-chat-composer className={cn('flex min-h-[60px] min-w-0 flex-col border-2 border-ink/60 bg-white p-2 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/15', strip || reply ? 'rounded-[24px]' : 'rounded-[32px]')}>
     {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}
@@ -263,7 +328,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
       {showStop ? (
         <Button type="button" size="icon" className="size-10 bg-ink text-white shadow-none hover:bg-ink-700" aria-label={stopLabel} title={stopLabel} disabled={stop.pending} onClick={stop.onStop}><StopMark /></Button>
       ) : (
-        <Button type="button" size="icon" className="size-10 shadow-none" aria-label={sendLabel} title={busy ? t.chat.queueSendTitle : sendLabel} disabled={disabled || pending} onClick={() => void submit()}><ArrowUpIcon aria-hidden="true" className="size-5" strokeWidth={2.4} /></Button>
+        <Button type="button" size="icon" className="size-10 shadow-none" aria-label={sendLabel} title={busy ? t.chat.queueSendTitle : sendLabel} disabled={submitDisabled || pending} onClick={() => void submit()}><ArrowUpIcon aria-hidden="true" className="size-5" strokeWidth={2.4} /></Button>
       )}
     </div>
   </div></SlashCommandMenu>
@@ -290,6 +355,29 @@ export function Composer({ ref, agentId, agentName, busy, disabled, maxMessageBy
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={confirmNew}
+        onOpenChange={setConfirmNew}
+        title={t.chat.commands.newConfirmTitle}
+        body={t.chat.commands.newConfirmBody}
+        confirmLabel={t.chat.commands.newConfirmAction}
+        destructive
+        onConfirm={() => submit('queue', true)}
+      />
+      <ConfirmDialog
+        open={confirmResume}
+        onOpenChange={(open) => {
+          setConfirmResume(open)
+          if (!open && resumeDraft !== null) {
+            setText(resumeDraft)
+            setResumeDraft(null)
+          }
+        }}
+        title={t.chat.commands.resumeConfirmTitle}
+        body={t.chat.commands.resumeConfirmBody}
+        confirmLabel={t.chat.commands.resumeConfirmAction}
+        onConfirm={() => submit('queue', true)}
+      />
     </div>
   )
 }

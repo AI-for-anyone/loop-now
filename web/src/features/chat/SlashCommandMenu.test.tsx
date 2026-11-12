@@ -36,7 +36,7 @@ function setup(commands: () => Response = () => HttpResponse.json(list), piComma
   return { user: userEvent.setup(), input: screen.getByRole('textbox', { name: '消息' }), sent, reads: () => reads }
 }
 
-const options = () => within(screen.getByRole('listbox', { name: 'Pi 命令' })).getAllByRole('option')
+const options = () => within(screen.getByRole('listbox', { name: '命令' })).getAllByRole('option')
 const labels = () => options().map((option) => option.querySelector('code')?.textContent)
 
 describe('输入框的 "/" 命令菜单', () => {
@@ -47,11 +47,11 @@ describe('输入框的 "/" 命令菜单', () => {
     expect(reads()).toBe(0)
     await user.clear(input)
     await user.type(input, '/')
-    await waitFor(() => expect(labels()).toEqual(['/pi:review', '/pi:skill:loopctl', '/pi:summarize']))
+    await waitFor(() => expect(labels()).toEqual(['/session', '/new', '/compact [instructions]', '/reload', '/copy', '/export [html|jsonl]', '/resume [sessionId]', '/pi:review', '/pi:skill:loopctl', '/pi:summarize']))
     expect(reads()).toBe(1)
-    expect(options()[0]).toHaveTextContent('/pi:review扩展命令 · 插件 · 代码审查审查当前改动')
-    expect(options()[1]).toHaveTextContent('/pi:skill:loopctl技能用 loopctl 管理 Agent <b>与任务</b>')
-    expect(options()[2]).toHaveTextContent('/pi:summarize提示模板把对话写成摘要')
+    expect(options()[7]).toHaveTextContent('/pi:review扩展命令 · 插件 · 代码审查审查当前改动')
+    expect(options()[8]).toHaveTextContent('/pi:skill:loopctl技能用 loopctl 管理 Agent <b>与任务</b>')
+    expect(options()[9]).toHaveTextContent('/pi:summarize提示模板把对话写成摘要')
     expect(options()[0]).toHaveAttribute('aria-selected', 'true')
     expect(input).toHaveAttribute('aria-activedescendant', options()[0].id)
     expect(input).toHaveAttribute('aria-controls', screen.getByRole('listbox').id)
@@ -75,7 +75,7 @@ describe('输入框的 "/" 命令菜单', () => {
 
   it('上下键移动，Enter 补全成 "/pi:<name> " 不发送；接着写参数，回车照常发出原文', async () => {
     const { user, input, sent } = setup()
-    await user.type(input, '/')
+    await user.type(input, '/pi:')
     await waitFor(() => expect(options()).toHaveLength(3))
     await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowUp}')
     expect(options()[1]).toHaveAttribute('aria-selected', 'true')
@@ -90,15 +90,15 @@ describe('输入框的 "/" 命令菜单', () => {
 
   it('Tab 与点击同样补全；已经写了参数时只换掉第一个词', async () => {
     const { user, input } = setup()
-    await user.type(input, '/sum')
+    await user.type(input, '/pi:sum')
     await waitFor(() => expect(options()).toHaveLength(1))
     await user.keyboard('{Tab}')
     expect(input).toHaveValue('/pi:summarize ')
     await user.clear(input)
-    await user.type(input, '/r 第二段')
+    await user.type(input, '/rev 第二段')
     expect(screen.queryByRole('listbox')).toBeNull()
     await user.keyboard('{Home}{ArrowRight}{ArrowRight}')
-    await waitFor(() => expect(labels()).toEqual(['/pi:review', '/pi:summarize']))
+    await waitFor(() => expect(labels()).toEqual(['/pi:review']))
     await user.click(options()[0])
     expect(input).toHaveValue('/pi:review 第二段')
     expect(input).toHaveFocus()
@@ -174,8 +174,8 @@ describe('补全的规则', () => {
 
   it('commandText：Pi 的命令写成 /pi:<name>；以后别的来源（如平台命令）写成 /<name>，补全与筛选随之', () => {
     expect(commandText(command('skill:loopctl'))).toBe('/pi:skill:loopctl')
-    // 合同目前只有 source=pi；这里模拟以后可能加的来源。
-    const platform = { ...command('session'), source: 'platform' } as unknown as Schemas['AgentCommand']
+    // 平台命令在前端与服务端返回的 Pi 命令合并。
+    const platform = { ...command('session'), source: 'platform' as const, usage: '/session' }
     expect(commandText(platform)).toBe('/session')
     expect(applyCommand('/se', platform)).toEqual({ text: '/session ', caret: 9 })
     expect(matchCommands([command('session'), platform], '/se')).toEqual([platform, command('session')])

@@ -40,9 +40,10 @@ func newFakeExec() *fakeExec {
 }
 
 func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink executor.Sink) (executor.Result, error) {
+	compact := req.Origin == executor.OriginConsoleCompact
 	prefix := executor.RunIDLine(req.RunID)
 	// 对话页的 Pi 命令原样交给 Pi（不加运行 ID）：名字带 handled 的当作扩展命令直接处理、没有回复。
-	if strings.HasPrefix(req.Message, "/") {
+	if !compact && strings.HasPrefix(req.Message, "/") {
 		f.mu.Lock()
 		f.order = append(f.order, req.Message)
 		f.mu.Unlock()
@@ -53,10 +54,12 @@ func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink execu
 		}
 		return executor.Result{Outcome: executor.OutcomeCompleted, Text: "回复：" + req.Message, ConfigVersion: 1}, nil
 	}
-	if !strings.HasPrefix(req.Message, prefix) {
+	if !compact && !strings.HasPrefix(req.Message, prefix) {
 		return executor.Result{}, fmt.Errorf("缺少正确本轮runId说明")
 	}
-	req.Message = strings.TrimPrefix(req.Message, prefix)
+	if !compact {
+		req.Message = strings.TrimPrefix(req.Message, prefix)
+	}
 	ctl := make(chan string, 4)
 	f.mu.Lock()
 	if f.running[req.AgentID] != nil {
@@ -94,6 +97,9 @@ func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink execu
 	}
 	sink.Tool("call-1", "bash", executor.ToolSucceeded)
 	sink.TextDelta("回复")
+	if compact {
+		return executor.Result{Outcome: executor.OutcomeCompleted, ConfigVersion: 1, Compaction: &executor.CompactionResult{TokensBefore: 100, EstimatedTokensAfter: 40}}, nil
+	}
 	return executor.Result{Outcome: executor.OutcomeCompleted, Text: "回复：" + req.Message, ConfigVersion: 1}, nil
 }
 

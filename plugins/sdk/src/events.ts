@@ -77,7 +77,7 @@ export interface Party {
   address: string | null
 }
 
-export type RunOrigin = 'console' | 'inbox_reminder' | 'sleep_wake' | 'task_node' | 'console_node'
+export type RunOrigin = 'console' | 'inbox_reminder' | 'sleep_wake' | 'console_compact' | 'task_node' | 'console_node'
 
 export interface RunTokens {
   input: number

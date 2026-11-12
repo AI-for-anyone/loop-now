@@ -113,6 +113,10 @@ func TestBaselineShape(t *testing.T) {
 		t.Errorf("sequences: %q %v", seqs, err)
 	}
 	// 再迁移一次什么都不做。
+	before, err := schema.Version(ctx, d)
+	if err != nil || before < schema.Baseline {
+		t.Fatalf("版本 = %d %v，应不低于 %d", before, err, schema.Baseline)
+	}
 	if err := schema.Migrate(ctx, d, slog.New(slog.DiscardHandler)); err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +126,7 @@ func TestBaselineShape(t *testing.T) {
 }
 
 // latestVersion 是最后一条迁移的版本号；新增迁移时同步修改。
-const latestVersion = 8
+const latestVersion = 9
 
 // TestMigrateToBaseline：导入旧库时先只迁到基线（没有基线之后新增的表），再迁到最新。
 func TestMigrateToBaseline(t *testing.T) {
@@ -412,5 +416,68 @@ func TestGuardTriggersAndEmulations(t *testing.T) {
 		if err := raw.QueryRow(`SELECT dflt_value FROM pragma_table_info(?) WHERE name = 'stop_requested'`, table).Scan(&dflt); err != nil || dflt != "0" {
 			t.Errorf("%s.stop_requested 默认值：%q %v", table, dflt, err)
 		}
+	}
+}
+
+// v9 重建 runs 时必须保留 main 的 Pi 命令列以及引用它的对话消息。
+func TestConsoleCompactMigrationPreservesPiCommands(t *testing.T) {
+	ctx := context.Background()
+	log := slog.New(slog.DiscardHandler)
+	d, err := db.Open(ctx, db.Options{Dir: t.TempDir(), Logger: log})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { d.Close() })
+	if err := schema.MigrateTo(ctx, d, log, 8); err != nil {
+		t.Fatal(err)
+	}
+	st := store.New(d)
+	defaults, err := st.EnsureDefaults(ctx, "o", "p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent, err := st.CreateAgent(ctx, store.ProjectScope(defaults.Project.ID), "a", "anthropic", "m", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, run, err := st.InsertMessageAndRun(ctx, store.NewRun{AgentID: agent.ID, RunID: uuid.New(), InstanceID: uuid.New(), Text: "/pi:review", Start: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	notices := []byte(`{"notices":[{"message":"kept","level":"info"}],"truncated":false}`)
+	_, reply, finished, err := st.FinishRun(ctx, run.ID, store.RunEnd{Status: "completed", Text: "reply", PiCommand: "review", PiCommandHandled: true, PiCommandNotices: notices})
+	if err != nil || !finished || reply == nil {
+		t.Fatalf("结束旧运行：%+v %v %v", reply, finished, err)
+	}
+	if err := schema.Migrate(ctx, d, log); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.GetRun(ctx, run.ID)
+	if err != nil || got.PiCommand == nil || *got.PiCommand != "review" || !got.PiCommandHandled || string(got.PiCommandNotices) != string(notices) || got.UserMessageID != user.ID {
+		t.Fatalf("Pi 命令信息应保留：%+v %v", got, err)
+	}
+	for _, id := range []uuid.UUID{user.ID, reply.ID} {
+		msg, err := st.GetMessage(ctx, id)
+		if err != nil || msg.RunID != run.ID {
+			t.Fatalf("对话消息应保留：%+v %v", msg, err)
+		}
+	}
+	if err := st.RecordSessionFile(ctx, agent.ID, "/tmp/session.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	compact, err := st.InsertConsoleCompactRun(ctx, agent.ID, uuid.New(), uuid.New())
+	if err != nil || compact.UserMessageID != uuid.Nil || compact.Origin != "console_compact" {
+		t.Fatalf("压缩运行：%+v %v", compact, err)
+	}
+	rows, err := d.Query(ctx, "PRAGMA foreign_key_check")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		t.Fatal("迁移后不应有外键错误")
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
 	}
 }

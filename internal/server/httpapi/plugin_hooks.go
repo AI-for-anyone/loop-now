@@ -93,11 +93,21 @@ func (s *Server) principalScope(r *http.Request, p auth.Principal) (project, age
 	return s.agentProject(r, id), agent, task
 }
 
-// consoleCommand 把以 / 开头的控制台消息交给认领类 Hook console.command；被认领时消息不发给 Agent，返回插件的回复。
+// consoleCommand 先处理平台内置命令，再把其余斜杠消息交给认领类 Hook console.command。
 func (s *Server) consoleCommand(w http.ResponseWriter, r *http.Request, agent uuid.UUID, project *uuid.UUID, text string) bool {
 	trimmed := strings.TrimSpace(text)
-	// /pi:<name> 是交给 Pi 的命令（plugins/SPEC.md §14），不给插件认领。
-	if !strings.HasPrefix(trimmed, "/") || strings.HasPrefix(trimmed, "/pi:") || s.Hooks == nil {
+	if !strings.HasPrefix(trimmed, "/") || strings.HasPrefix(trimmed, "/pi:") {
+		return false
+	}
+	if result, handled, err := s.platformConsoleCommand(r, agent, text); handled {
+		if err != nil {
+			s.fail(w, r, err)
+		} else {
+			writeJSON(w, http.StatusOK, result)
+		}
+		return true
+	}
+	if s.Hooks == nil {
 		return false
 	}
 	command, _, _ := strings.Cut(strings.TrimPrefix(trimmed, "/"), " ")
@@ -113,7 +123,7 @@ func (s *Server) consoleCommand(w http.ResponseWriter, r *http.Request, agent uu
 		Reply *string `json:"reply"`
 	}
 	_ = json.Unmarshal(o.Value, &v)
-	writeJSON(w, http.StatusOK, map[string]any{"handled": true, "plugin": o.Plugin, "reply": v.Reply})
+	writeJSON(w, http.StatusOK, map[string]any{"handled": true, "source": "plugin", "plugin": o.Plugin, "reply": v.Reply, "command": ""})
 	return true
 }
 

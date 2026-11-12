@@ -1,6 +1,6 @@
 import type { Schemas } from '@/api/client'
 
-type Command = Schemas['AgentCommand']
+export type Command = Schemas['AgentCommand'] | (Omit<Schemas['AgentCommand'], 'source'> & { source: 'platform'; usage: string })
 
 // 只有消息开头严格是 "/pi:<name>" 才交给 Pi 执行（服务端改写成 "/<name>"）；其余 "/" 开头的消息照常发出。
 export const PI_PREFIX = '/pi:'

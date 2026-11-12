@@ -164,8 +164,10 @@ function applyEvent(state: LiveState, event: AgentEvent): LiveState {
         : [...current.run.tools, tool]
       return { ...state, current: { ...current, run: { ...current.run, tools } } }
     }
-    case 'run.ended':
-      return recordMessage(applyRun(state, event.data.run), event.data.message)
+    case 'run.ended': {
+      const next = applyRun(state, event.data.run)
+      return event.data.message ? recordMessage(next, event.data.message) : next
+    }
     case 'session.updated':
       return { ...state, session: { state: event.data.state, epoch: event.data.epoch } }
     case 'sleep.updated': {
