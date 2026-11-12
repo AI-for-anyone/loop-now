@@ -628,34 +628,62 @@ type MessagePage struct {
 	Items        []MessageWithRun
 	HasMore      bool // 这一页之前还有更早的消息
 	HasMoreAfter bool // 这一页之后还有更新的消息
+	// TurnsBefore 是排在这一页的轮次之前的轮次数，TurnsTotal 是对话的全部轮次数，口径见 turnCountsTx。
+	TurnsBefore int64
+	TurnsTotal  int64
 }
 
 var historySelect = `SELECT m.id, m.agent_id, m.seq, m.role, m.text, m.run_id, m.session_epoch, m.created_at, m.images,
 		` + runColumnsOf("r.") + `
 	FROM conversation_messages m JOIN runs r ON r.id = m.run_id`
 
-// ListMessages 按查询方式返回一页消息，按时间正序。
+// ListMessages 按查询方式返回一页消息，按时间正序，并给出轮次计数。消息与计数取自同一个快照。
 func (s *Store) ListMessages(ctx context.Context, agentID uuid.UUID, q MessageQuery) (MessagePage, error) {
 	var page MessagePage
 	if _, err := s.GetAgent(ctx, agentID); err != nil {
 		return page, err
 	}
+	err := s.Pool.ReadTx(ctx, func(tx *db.Tx) error {
+		var err error
+		page, err = listMessagesTx(ctx, tx, agentID, q)
+		return err
+	})
+	if err != nil {
+		return page, err
+	}
+	runs := make([]*Run, len(page.Items))
+	for i := range page.Items {
+		runs[i] = &page.Items[i].Run
+	}
+	if err := s.fillRuns(ctx, runs...); err != nil {
+		return page, err
+	}
+	if page.Items == nil {
+		page.Items = []MessageWithRun{}
+	}
+	return page, nil
+}
+
+func listMessagesTx(ctx context.Context, tx *db.Tx, agentID uuid.UUID, q MessageQuery) (MessagePage, error) {
+	var page MessagePage
 	seqOf := func(id uuid.UUID) (int64, error) {
 		var seq int64
-		err := s.Pool.QueryRow(ctx, `SELECT seq FROM conversation_messages WHERE id = $1 AND agent_id = $2`, id, agentID).Scan(&seq)
+		err := tx.QueryRow(ctx, `SELECT seq FROM conversation_messages WHERE id = $1 AND agent_id = $2`, id, agentID).Scan(&seq)
 		return seq, notFoundIfNoRows(err, "消息")
 	}
 	var items []MessageWithRun
+	// from 是这一页起点的消息序号：这一页有消息时为第一条的序号；没有时为它本该开始的位置。
+	var from int64
 	switch {
 	case q.AroundRun != nil:
 		var anchor int64
-		err := s.Pool.QueryRow(ctx, `SELECT m.seq FROM runs r JOIN conversation_messages m ON m.id = r.user_message_id
+		err := tx.QueryRow(ctx, `SELECT m.seq FROM runs r JOIN conversation_messages m ON m.id = r.user_message_id
 			WHERE r.id = $1 AND r.agent_id = $2`, *q.AroundRun, agentID).Scan(&anchor)
 		if err != nil {
 			return page, notFoundIfNoRows(err, "执行")
 		}
 		nBefore := (q.Limit - 1) / 2
-		after, err := s.historyPage(ctx, agentID, `m.seq >= $2 ORDER BY m.seq ASC`, anchor, q.Limit-nBefore+1)
+		after, err := historyPage(ctx, tx, agentID, `m.seq >= $2 ORDER BY m.seq ASC`, anchor, q.Limit-nBefore+1)
 		if err != nil {
 			return page, err
 		}
@@ -663,7 +691,7 @@ func (s *Store) ListMessages(ctx context.Context, agentID uuid.UUID, q MessageQu
 			after, page.HasMoreAfter = after[:q.Limit-nBefore], true
 		}
 		nBefore = q.Limit - len(after)
-		before, err := s.historyPage(ctx, agentID, `m.seq < $2 ORDER BY m.seq DESC`, anchor, nBefore+1)
+		before, err := historyPage(ctx, tx, agentID, `m.seq < $2 ORDER BY m.seq DESC`, anchor, nBefore+1)
 		if err != nil {
 			return page, err
 		}
@@ -671,19 +699,20 @@ func (s *Store) ListMessages(ctx context.Context, agentID uuid.UUID, q MessageQu
 			before, page.HasMore = before[:nBefore], true
 		}
 		reverse(before)
-		items = append(before, after...)
+		items, from = append(before, after...), anchor
 	case q.After != nil:
 		seq, err := seqOf(*q.After)
 		if err != nil {
 			return page, err
 		}
-		if items, err = s.historyPage(ctx, agentID, `m.seq > $2 ORDER BY m.seq ASC`, seq, q.Limit+1); err != nil {
+		if items, err = historyPage(ctx, tx, agentID, `m.seq > $2 ORDER BY m.seq ASC`, seq, q.Limit+1); err != nil {
 			return page, err
 		}
 		if len(items) > q.Limit {
 			items, page.HasMoreAfter = items[:q.Limit], true
 		}
 		page.HasMore = true // 锚点消息本身更早
+		from = seq + 1
 	default:
 		seq := int64(1<<62 - 1)
 		if q.Before != nil {
@@ -694,30 +723,53 @@ func (s *Store) ListMessages(ctx context.Context, agentID uuid.UUID, q MessageQu
 			page.HasMoreAfter = true // 锚点消息本身更新
 		}
 		var err error
-		if items, err = s.historyPage(ctx, agentID, `m.seq < $2 ORDER BY m.seq DESC`, seq, q.Limit+1); err != nil {
+		if items, err = historyPage(ctx, tx, agentID, `m.seq < $2 ORDER BY m.seq DESC`, seq, q.Limit+1); err != nil {
 			return page, err
 		}
 		if len(items) > q.Limit {
 			items, page.HasMore = items[:q.Limit], true
 		}
 		reverse(items)
+		from = seq
 	}
-	runs := make([]*Run, len(items))
-	for i := range items {
-		runs[i] = &items[i].Run
-	}
-	if err := s.fillRuns(ctx, runs...); err != nil {
-		return page, err
+	if len(items) > 0 {
+		from = items[0].Seq
 	}
 	page.Items = items
-	if page.Items == nil {
-		page.Items = []MessageWithRun{}
-	}
-	return page, nil
+	var err error
+	page.TurnsBefore, page.TurnsTotal, err = turnCountsTx(ctx, tx, agentID, from)
+	return page, err
 }
 
-func (s *Store) historyPage(ctx context.Context, agentID uuid.UUID, cond string, seq int64, limit int) ([]MessageWithRun, error) {
-	rows, err := s.Pool.Query(ctx, historySelect+` WHERE m.agent_id = $1 AND `+cond+` LIMIT $3`, agentID, seq, limit)
+// voidedRunCond 是“排队中即作废、没有真正执行”的执行（撤回、消息全部转为打断、消息已被读取或取消），
+// 与控制台对话流的 isVoidedRun 一致：这些执行不算轮次。
+const voidedRunCond = `r.end_reason IN ('user_cancelled', 'merged_into_interrupt', 'no_pending_messages')`
+
+// turnCountsTx 返回对话的轮次计数，口径与控制台对话流（web/src/features/chat/turns.ts 的 buildTurns）一致：
+// 一次执行算一轮，排队中的与作废的不算，会话重开不重新计数；轮次按实际开始执行的时间排列，没有开始时间的按入队时间。
+//
+// total 是全部轮次数。before 是排在“序号 from 及之后的消息所属的轮次”之前的轮次数：已经结束、
+// 所有消息（用户消息与回复）的序号都小于 from 的轮次。进行中的那一轮没有回复，用户消息再早也不计入：
+// 它总是最后一轮，由控制台的实时状态补在末尾。
+//
+// 同一 Agent 同时只有一次执行在进行；sleep 唤醒只在空闲时排入。所以一轮排在另一轮之后时，它总有一条消息
+// 比前一轮的全部消息都晚（回复在开始之后写入，或入队晚于前一轮结束）；from 及之后的消息所属的轮次（加上进行中的那一轮）
+// 正好是全部轮次按上述顺序的一段后缀，before 就是这段后缀中第一轮的下标。
+//
+// 计数按这个 Agent 的用户消息（每次执行恰好一条）逐条连接执行，开销与对话的轮次数成正比。
+func turnCountsTx(ctx context.Context, tx *db.Tx, agentID uuid.UUID, from int64) (before, total int64, err error) {
+	err = tx.QueryRow(ctx, `SELECT count(*),
+			coalesce(sum(CASE WHEN m.seq < $2 AND r.status IN ('completed', 'failed', 'interrupted')
+				AND NOT EXISTS (SELECT 1 FROM conversation_messages a WHERE a.run_id = r.id AND a.role = 'assistant' AND a.seq >= $2)
+				THEN 1 ELSE 0 END), 0)
+		FROM conversation_messages m JOIN runs r ON r.id = m.run_id
+		WHERE m.agent_id = $1 AND m.role = 'user' AND r.status <> 'queued' AND NOT coalesce(`+voidedRunCond+`, false)`,
+		agentID, from).Scan(&total, &before)
+	return before, total, err
+}
+
+func historyPage(ctx context.Context, q queueQuerier, agentID uuid.UUID, cond string, seq int64, limit int) ([]MessageWithRun, error) {
+	rows, err := q.Query(ctx, historySelect+` WHERE m.agent_id = $1 AND `+cond+` LIMIT $3`, agentID, seq, limit)
 	if err != nil {
 		return nil, err
 	}
