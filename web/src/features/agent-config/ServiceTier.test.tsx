@@ -6,6 +6,7 @@ import { keys } from '@/api/queries'
 import { apiUrl, errorBody, makeAgent } from '@/test/api'
 import { providers, renderConfig } from '@/test/config'
 import { chooseModel } from '@/test/model-picker'
+import { thinkingChoice, thinkingPicker } from '@/test/thinking'
 
 const catalog: Schemas['Model'][] = ['gpt-a', 'gpt-b'].map(id => ({ id, name: id, reasoning: true, contextWindow: 100, maxTokens: 100, input: ['text'], thinkingLevels: ['low', 'medium', 'high'], defaultThinkingLevel: 'medium' }))
 const basic = () => screen.getByRole('region', { name: '基本信息' })
@@ -24,7 +25,7 @@ async function setup(tier?: Schemas['CodexServiceTier'] | null, fail = false) {
       current = { ...current, ...body }; return HttpResponse.json(current)
     }),
   ] })
-  await waitFor(() => expect(within(basic()).getByLabelText('思考等级')).toBeEnabled())
+  await waitFor(() => expect(within(thinkingPicker(basic())).getAllByRole('radio')[0]).toBeEnabled())
   return { ...view, writes, changeServer: (tier: Schemas['CodexServiceTier']) => { current = { ...current, serviceTier: tier } } }
 }
 it('旧响应缺省为标准，仅列三档；速度和思考等级独立，单独保存速度', async () => {
@@ -32,7 +33,7 @@ it('旧响应缺省为标准，仅列三档；速度和思考等级独立，单�
   expect(picker()).toHaveDisplayValue('标准')
   expect(within(picker()).getAllByRole('option').map(option => option.textContent)).toEqual(['标准', 'Fast', 'Ultrafast'])
   await user.selectOptions(picker(), 'priority')
-  expect(within(basic()).getByLabelText('思考等级')).toHaveValue('high')
+  expect(thinkingChoice(basic())).toBe('高')
   await user.click(save()); await waitFor(() => expect(writes).toEqual([{ serviceTier: 'priority' }]))
   await waitFor(() => expect(save()).toBeDisabled())
 })

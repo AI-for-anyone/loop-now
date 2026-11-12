@@ -6,6 +6,7 @@ import { apiUrl, errorBody, makeAgent } from '@/test/api'
 import { renderConfig, withClaudeCode } from '@/test/config'
 import { chooseModel } from '@/test/model-picker'
 import { runtimeList } from '@/test/runtimes'
+import { thinkingOptions } from '@/test/thinking'
 
 // 运行时由模型提供方决定：选本机的 Claude Code 就是 Claude Code 运行时，其余是 Pi。
 const region = (name: string) => screen.getByRole('region', { name })
@@ -38,8 +39,7 @@ describe('选择 Claude Code', () => {
       '没有 /pi: 命令。',
     ])
     await chooseModel(user, basic, 'opus')
-    const thinking = within(basic).getByLabelText('思考等级')
-    expect(within(thinking).getAllByRole('option').map((item) => item.textContent)).toEqual(['默认（中）', '低', '中', '高', '更高', '最高'])
+    expect(thinkingOptions(basic)).toEqual(['默认（中）', '低', '中', '高', '更高', '最高'])
     expect(within(basic).queryByLabelText('Codex 速度')).toBeNull()
 
     // 换回 Pi 的提供方，说明随之收起。

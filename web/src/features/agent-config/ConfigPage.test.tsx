@@ -34,6 +34,65 @@ describe('版面', () => {
   })
 })
 
+// 改版“一张印出来的纸”第 2 步：编号分区、黄色便签、票根里的目录尺。
+describe('改版的版式', () => {
+  const sections = ['基本信息', 'Prompt', '本机目录', '模型账号凭证', 'Skills', '可用 CLI', '插件权限', '删除 Agent']
+
+  it('八个区块按顺序编号 01–08：编号是空心的装饰，标题加一笔黄色记号笔；区块之间是虚线，第一个上面没有', async () => {
+    await renderConfig()
+    sections.forEach((name, index) => {
+      const section = region(name)
+      const number = section.querySelector('[data-section-number]')!
+      expect(number).toHaveTextContent(String(index + 1).padStart(2, '0'))
+      expect(number).toHaveAttribute('aria-hidden', 'true')
+      expect(number).toHaveClass('max-nav:hidden', 'text-transparent')
+      expect(within(section).getByRole('heading', { level: 2, name })).toHaveClass('riso-marker', 'font-display-cn')
+      if (index === 0) expect(section).not.toHaveClass('border-t-2')
+      else expect(section).toHaveClass('border-t-2', 'border-dashed')
+    })
+  })
+
+  it('区块不再是一张张卡片，直接排在纸上；删除 Agent 一区沿用红色', async () => {
+    await renderConfig()
+    expect(region('基本信息')).not.toHaveClass('shadow-print-rest')
+    expect(region('基本信息')).not.toHaveClass('bg-paper-raised')
+    const danger = region('删除 Agent')
+    expect(within(danger).getByRole('heading', { level: 2, name: '删除 Agent' })).toHaveClass('text-red-text')
+    expect(danger.querySelector('[data-section-number]')).toHaveClass('[-webkit-text-stroke:1.6px_var(--red-text)]')
+    expect(danger.querySelector('[data-section-body]')).toHaveClass('riso-stripes-red', 'bg-error-field')
+  })
+
+  it('内部 ID 写在虚线框里，复制按钮是带藏青描边的黄色小方块', async () => {
+    const { agent } = await renderConfig()
+    const id = within(region('基本信息')).getByText(agent.id)
+    expect(id.parentElement).toHaveClass('border-dashed', 'rounded-input')
+    expect(within(region('基本信息')).getByRole('button', { name: '复制' })).toHaveClass('border-2', 'border-ink', 'bg-riso-yellow')
+  })
+
+  it('“下一条消息生效”的提示是一张黄色便签', async () => {
+    await renderConfig()
+    const note = screen.getByText('修改从下一条派发的消息开始生效，进行中的回复不受影响。').closest('[role="note"]')!
+    expect(note).toHaveClass('riso-tilt', '[--tilt-bg:var(--riso-yellow)]')
+    expect(note.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('目录在纸张右侧的票根里：右缘一排刻度，每项是“名称 编号 短刻度”，当前一项用黄色记号笔加粉色箭头标出', async () => {
+    await renderConfig()
+    const toc = screen.getByRole('navigation', { name: '目录' })
+    expect(toc).toHaveClass('border-l-2', 'border-dashed', 'max-nav:hidden')
+    expect(within(toc).getByText('目录')).toHaveAttribute('aria-hidden', 'true')
+    // 右缘一排刻度（装饰）。
+    expect(toc.querySelector('ol > div[aria-hidden="true"]')).toHaveClass('absolute', 'right-0', 'w-3')
+    expect(toc.querySelector('[data-ruler-mark]')).toBeNull()
+    act(() => FakeIntersectionObserver.trigger(region('Skills'), true))
+    const current = within(toc).getByRole('link', { name: 'Skills' })
+    expect(current.closest('li')!.querySelector('[data-ruler-mark]')).not.toBeNull()
+    expect(toc.querySelectorAll('[data-ruler-mark]')).toHaveLength(1)
+    // 删除 Agent 一项是红色。
+    expect(within(toc).getByRole('link', { name: '删除 Agent' })).toHaveClass('text-red-text')
+  })
+})
+
 describe('分区目录', () => {
   const toc = () => screen.getByRole('navigation', { name: '目录' })
   const tocLink = (name: string) => within(toc()).getByRole('link', { name })

@@ -1,3 +1,5 @@
+import { fieldClass, selectClass } from '@/lib/field'
+import { Textarea } from './textarea'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
@@ -253,4 +255,11 @@ describe('表格', () => {
     )
     expect(screen.getByRole('table').parentElement?.className).toContain('overflow-x-auto')
   })
+})
+
+// 改版：输入框、多行输入、下拉都是白底、2px 藏青描边、12px 圆角（设计稿里所有表单控件都是这样）。
+it('表单控件是 2px 藏青描边、12px 圆角', () => {
+  render(<><input aria-label="x" className={fieldClass} /><Input aria-label="名称" /><Textarea aria-label="说明" /></>)
+  for (const name of ['名称', '说明']) expect(screen.getByLabelText(name)).toHaveClass('rounded-input', 'bg-white', 'shadow-[inset_0_0_0_2px_var(--ink)]')
+  expect(selectClass).toContain('shadow-[inset_0_0_0_2px_var(--ink)]')
 })
