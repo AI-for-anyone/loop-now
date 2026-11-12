@@ -11,6 +11,7 @@ import (
 
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
+	"loop-now/internal/server/conversation"
 )
 
 func platformResult(command string) apitypes.ConsoleCommandResult {
@@ -28,7 +29,7 @@ func (s *Server) platformConsoleCommand(r *http.Request, agentID uuid.UUID, text
 	if i := strings.IndexFunc(body, unicode.IsSpace); i >= 0 {
 		name, args = body[:i], strings.TrimSpace(body[i:])
 	}
-	if name != "session" && name != "new" && name != "compact" && name != "reload" && name != "copy" && name != "export" && name != "resume" {
+	if !conversation.IsPlatformCommand(name) {
 		return apitypes.ConsoleCommandResult{}, false, nil
 	}
 	out := platformResult(name)

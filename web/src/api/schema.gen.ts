@@ -2156,10 +2156,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 对话页 "/" 菜单可用的 Pi 命令
-         * @description Agent 上次启动 Pi 时（Pi RPC get_commands）读到的扩展命令、提示模板与技能命令（plugins/SPEC.md §14）。平台不为列命令专门启动 Pi：
-         *     从没启动过时 capturedAt 为 null、列表为空；授权的插件变了之后，要等 Pi 下次启动才更新。控制台显示与补全时写成 `/pi:<name>`。
-         *     插件平台侧认领的 console.command 是认领型 Hook，没有可列举的命令名，不在这里列出；也没有平台内置命令。
+         * 对话页 "/" 菜单的命令：平台内置命令与 Pi 命令
+         * @description 先是平台内置命令（source 为 platform，固定顺序 session、new、compact、reload、copy、export、resume），按 Agent 的运行时与会话状态标出此刻能不能用
+         *     （available、unavailableReason）；Agent 正忙这类随时变化的情况不在这里判断，发送时照常返回 409。控制台显示与补全时写成 `/<name>`，用法见 usage。
+         *     然后是 Agent 上次启动 Pi 时（Pi RPC get_commands）读到的扩展命令、提示模板与技能命令（plugins/SPEC.md §14）。平台不为列命令专门启动 Pi：
+         *     从没启动过时 capturedAt 为 null、没有 Pi 命令；授权的插件变了之后，要等 Pi 下次启动才更新。控制台显示与补全时写成 `/pi:<name>`。
+         *     插件平台侧认领的 console.command 是认领型 Hook，没有可列举的命令名，不在这里列出。
          */
         get: operations["listAgentCommands"];
         put?: never;
@@ -7281,7 +7283,7 @@ export interface components {
         AgentCommandList: {
             /**
              * Format: date-time
-             * @description 读到这份列表的时间（Pi 启动时）；从没启动过为 null
+             * @description 读到 Pi 命令的时间（Pi 启动时）；从没启动过为 null
              */
             capturedAt: string | null;
             commands: components["schemas"]["AgentCommand"][];
@@ -7290,14 +7292,24 @@ export interface components {
             /** @description 命令名，不带 "/"；技能命令为 skill:<名称> */
             name: string;
             /**
-             * @description 目前只有 pi（交给 Pi 执行，发送时写成 /pi:<name>）
+             * @description platform 平台内置命令（发送时写成 /<name>）；pi 交给 Pi 执行（发送时写成 /pi:<name>）
              * @enum {string}
              */
-            source: "pi";
-            /** @description Pi 给的来源（原样）：extension 扩展命令、prompt 提示模板、skill 技能命令 */
+            source: "platform" | "pi";
+            /** @description Pi 给的来源（原样）：extension 扩展命令、prompt 提示模板、skill 技能命令；平台命令为空字符串 */
             piSource: string;
-            /** @description 命令自己的说明（扩展原文，按纯文本显示） */
+            /** @description 命令自己的说明（扩展原文，按纯文本显示）；平台命令为 null，由控制台按命令名显示说明 */
             description: string | null;
+            /** @description 平台命令的用法，例如 `/compact [instructions]`；Pi 命令为 null */
+            usage: string | null;
+            /** @description 此刻能不能用（只看运行时与会话状态）；Pi 命令恒为 true */
+            available: boolean;
+            /**
+             * @description 不能用的原因：runtime_unsupported 运行时不支持（Claude Code 的 Agent 没有 Pi 会话，不能 /compact、/export、/resume）；
+             *     session_none 还没有会话（/compact、/export）；session_missing 会话文件丢失（/compact、/export，先 /new 或 /resume）。能用时为 null
+             * @enum {string|null}
+             */
+            unavailableReason: "runtime_unsupported" | "session_none" | "session_missing" | null;
             /** @description 命令来自哪个已安装插件（按来源文件所在的安装目录）；平台自己的或判断不出时为 null */
             pluginId: string | null;
             pluginDisplayName: components["schemas"]["LocalizedText"] | null;

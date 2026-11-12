@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/google/uuid"
@@ -282,8 +283,72 @@ func (s *Service) LatestReply(ctx context.Context, agentID uuid.UUID) (*store.Me
 	return s.st.LatestCompletedAssistant(ctx, agentID)
 }
 
-// piOnlyCommands 是只适用于 Pi 会话的平台命令：Claude Code 的会话由它自己管理，平台不能压缩、导出或恢复。
-var piOnlyCommands = map[string]bool{"compact": true, "export": true, "resume": true}
+// platformCommands 是平台内置命令（对话页 "/" 菜单与 POST /messages 共用这一份）。piOnly：只适用于 Pi 会话
+// （Claude Code 的会话由它自己管理，平台不能压缩、导出或恢复）；needsSession：要有可用的会话。
+type platformCommandSpec struct {
+	name, usage          string
+	piOnly, needsSession bool
+}
+
+var platformCommands = []platformCommandSpec{
+	{name: "session", usage: "/session"},
+	{name: "new", usage: "/new"},
+	{name: "compact", usage: "/compact [instructions]", piOnly: true, needsSession: true},
+	{name: "reload", usage: "/reload"},
+	{name: "copy", usage: "/copy"},
+	{name: "export", usage: "/export [html|jsonl]", piOnly: true, needsSession: true},
+	{name: "resume", usage: "/resume [sessionId]", piOnly: true},
+}
+
+// IsPlatformCommand 报告 name（不带 "/"）是不是平台内置命令。
+func IsPlatformCommand(name string) bool {
+	return slices.ContainsFunc(platformCommands, func(c platformCommandSpec) bool { return c.name == name })
+}
+
+var piOnlyCommands = func() map[string]bool {
+	out := map[string]bool{}
+	for _, c := range platformCommands {
+		if c.piOnly {
+			out[c.name] = true
+		}
+	}
+	return out
+}()
+
+// PlatformCommand 是一条平台内置命令及它此刻能不能用。UnavailableReason：runtime_unsupported（运行时不支持）、
+// session_none（还没有会话）、session_missing（会话文件丢失）；能用时为空。Agent 正忙这类随时变化的情况不在这里判断。
+type PlatformCommand struct {
+	Name, Usage       string
+	Available         bool
+	UnavailableReason string
+}
+
+// PlatformCommands 按 Agent 的运行时与会话状态列出平台内置命令。
+func (s *Service) PlatformCommands(ctx context.Context, agentID uuid.UUID) ([]PlatformCommand, error) {
+	agent, err := s.st.GetAgent(ctx, agentID)
+	if err != nil {
+		return nil, err
+	}
+	sess, err := s.st.GetAgentSession(ctx, agentID)
+	if err != nil {
+		return nil, err
+	}
+	claude := agentruntime.ForProvider(agent.ModelProvider) == agentruntime.ClaudeCode
+	out := make([]PlatformCommand, 0, len(platformCommands))
+	for _, c := range platformCommands {
+		reason := ""
+		switch {
+		case c.piOnly && claude:
+			reason = "runtime_unsupported"
+		case c.needsSession && sess.State == "missing":
+			reason = "session_missing"
+		case c.needsSession && (sess.State != "active" || sess.SessionFile == ""):
+			reason = "session_none"
+		}
+		out = append(out, PlatformCommand{Name: c.name, Usage: c.usage, Available: reason == "", UnavailableReason: reason})
+	}
+	return out, nil
+}
 
 // RequireCommand 确认 Agent 的运行时支持这个平台命令（名字不带 "/"）；不支持时返回 409 console_command_failed，
 // 调用方在取得忙闲锁、创建执行之前检查。
