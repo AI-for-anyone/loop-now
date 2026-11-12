@@ -70,8 +70,11 @@ export const chat = {
     loading: 'Loading commands…',
     failed: (reason: string) => `Couldn't load the command list: ${reason}`,
     notCaptured: 'The command list appears after the Agent has run once.',
-    none: 'Pi has no commands available.',
     noMatch: 'No matching commands.',
+    unavailable: {
+      title: 'Not available now',
+      reasons: { runtime_unsupported: 'This Agent runs on Claude Code and has no Pi session', session_none: 'No session yet. Send a message first', session_missing: 'The session file is missing. Run /new or /resume first' },
+    },
     source: { extension: 'Extension command', prompt: 'Prompt template', skill: 'Skill' } as Record<string, string>,
     plugin: (name: string) => `Plugin · ${name}`,
     keys: '↑↓ to choose · Enter or Tab to fill in · Esc to close',

@@ -75,8 +75,12 @@ export const chat = {
     loading: '正在读取命令…',
     failed: (reason: string) => `读不到命令列表：${reason}`,
     notCaptured: 'Agent 运行一次后才有命令列表。',
-    none: 'Pi 没有可用的命令。',
     noMatch: '没有匹配的命令。',
+    // 菜单下方置灰的命令：此刻不能用，各写明原因。
+    unavailable: {
+      title: '现在不能用',
+      reasons: { runtime_unsupported: '这个 Agent 用 Claude Code 运行，没有 Pi 会话', session_none: '还没有会话，先发一条消息', session_missing: '会话文件丢失，先 /new 或 /resume' },
+    },
     source: { extension: '扩展命令', prompt: '提示模板', skill: '技能' } as Record<string, string>,
     plugin: (name: string) => `插件 · ${name}`,
     keys: '↑↓ 选择 · Enter 或 Tab 补全 · Esc 关闭',

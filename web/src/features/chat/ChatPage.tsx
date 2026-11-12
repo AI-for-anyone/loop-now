@@ -163,7 +163,6 @@ export function ChatPage() {
           busy={busy}
           disabled={sessionMissing}
           allowResumeWhenDisabled={sessionMissing}
-          piCommands={agent.runtime !== 'claude-code'}
           maxMessageBytes={context.data?.limits.maxMessage}
           imageLimits={messageImageLimits(context.data?.limits)}
           onSent={recordSent}

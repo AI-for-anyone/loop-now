@@ -3,7 +3,8 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { Composer } from './Composer'
-import { apiUrl } from '@/test/api'
+import { apiUrl, makeMessage, makeRun } from '@/test/api'
+import { claudeCodeCommands } from '@/test/commands'
 import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
 import type { Schemas } from '@/api/client'
@@ -194,10 +195,58 @@ it('Esc 关闭提示后保留命令，回车仍可直接发送', async () => {
 
 it('会话丢失时命令提示只开放 /resume', async () => {
   renderWithQuery(<Composer agentId="sleep-agent" agentName="开发助手" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
-  await userEvent.type(screen.getByRole('textbox', { name: '消息' }), '/')
+  // 命令列表取到、确认 /resume 此刻可用之后，输入框才放开。
+  const box = screen.getByRole('textbox', { name: '消息' })
+  expect(box).toBeDisabled()
+  await waitFor(() => expect(box).toBeEnabled())
+  await userEvent.type(box, '/')
   expect(screen.getAllByRole('option')).toHaveLength(1)
   expect(screen.getByRole('option', { name: /\/resume/ })).toBeInTheDocument()
   expect(screen.queryByRole('option', { name: /\/new/ })).not.toBeInTheDocument()
+})
+
+it('会话丢失而 /resume 不可用（Claude Code 的 Agent）时输入框保持禁用，不留只能输入一条必被拒绝的命令的死路', async () => {
+  let reads = 0
+  server.use(http.get(apiUrl('/agents/sleep-agent/commands'), () => { reads += 1; return HttpResponse.json({ capturedAt: null, commands: claudeCodeCommands() }) }))
+  renderWithQuery(<Composer agentId="sleep-agent" agentName="开发助手" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
+  await waitFor(() => expect(reads).toBe(1))
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  expect(screen.getByRole('textbox', { name: '消息' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+})
+
+it('命令列表取不到时，/new 仍然先确认再发', async () => {
+  const sent: Schemas['SendMessageInput'][] = []
+  server.use(
+    http.get(apiUrl('/agents/sleep-agent/commands'), () => HttpResponse.json({ error: { code: 'internal_error', message: 'boom' } }, { status: 500 })),
+    http.post(apiUrl('/agents/sleep-agent/messages'), async ({ request }) => {
+      sent.push(await request.json() as Schemas['SendMessageInput'])
+      return HttpResponse.json(commandResult({ command: 'new', resetSession: { state: 'active', epoch: 2 } }))
+    }),
+  )
+  const onCommand = renderComposer()
+  await userEvent.type(screen.getByRole('textbox', { name: '消息' }), '/new')
+  await userEvent.keyboard('{Escape}{Enter}')
+  expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
+  expect(sent).toEqual([])
+  await userEvent.click(screen.getByRole('button', { name: '重开会话' }))
+  await waitFor(() => expect(onCommand).toHaveBeenCalledTimes(1))
+  expect(sent).toEqual([{ text: '/new' }])
+})
+
+it('没在服务端列表里的 "/" 开头文字是普通消息：正忙时照常排队重发', async () => {
+  const sent: Schemas['SendMessageInput'][] = []
+  server.use(http.post(apiUrl('/agents/sleep-agent/messages'), async ({ request }) => {
+    const body = await request.json() as Schemas['SendMessageInput']; sent.push(body)
+    if (!body.whenBusy) return HttpResponse.json({ error: { code: 'agent_busy', message: 'Agent正忙', details: { currentRunId: crypto.randomUUID(), queued: { interrupt: 0, normal: 0 } } } }, { status: 409 })
+    const run = makeRun({ status: 'queued', whenBusy: body.whenBusy })
+    return HttpResponse.json({ run, message: makeMessage({ text: body.text, run }) }, { status: 202 })
+  }))
+  renderComposer()
+  await userEvent.type(screen.getByRole('textbox', { name: '消息' }), '/usr/bin 是什么')
+  await userEvent.keyboard('{Enter}')
+  await waitFor(() => expect(sent).toEqual([{ text: '/usr/bin 是什么' }, { text: '/usr/bin 是什么', whenBusy: 'queue' }]))
 })
 
 it('补全平台命令时保留已经写好的参数', async () => {

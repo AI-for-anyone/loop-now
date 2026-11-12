@@ -196,8 +196,15 @@ export function useAgentSkills(agentId: string) {
 }
 
 // 对话页 "/" 菜单用的 Pi 命令：Agent 上次启动 Pi 时读到的列表，Pi 再次启动才会变，第一次输入 "/" 时才读取。
+// 对话页 "/" 菜单的命令：平台内置命令（带此刻能不能用）与 Pi 命令。发送前要确认某条文字是不是平台命令时，用同一份查询现取。
+export const agentCommandsQuery = (agentId: string) => ({
+  queryKey: keys.agentCommands(agentId),
+  queryFn: () => call(api.GET('/agents/{agentId}/commands', agentPath(agentId))),
+  staleTime: 30_000,
+})
+
 export function useAgentCommands(agentId: string, enabled: boolean) {
-  return useQuery({ queryKey: keys.agentCommands(agentId), queryFn: () => call(api.GET('/agents/{agentId}/commands', agentPath(agentId))), enabled, staleTime: 30_000 })
+  return useQuery({ ...agentCommandsQuery(agentId), enabled })
 }
 
 export function useAgentSkill(agentId: string, agentSkillId: string | null) {

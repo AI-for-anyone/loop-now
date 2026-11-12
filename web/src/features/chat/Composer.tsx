@@ -7,7 +7,7 @@ import { ErrorAlert } from '@/components/ErrorAlert'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ApiError, type Schemas } from '@/api/client'
 import { downloadAgentSession } from '@/api/session-export'
-import { isCommandResult, upsertMessage, useAgentCommands, useSendMessage } from '@/api/queries'
+import { agentCommandsQuery, isCommandResult, keys, upsertMessage, useAgentCommands, useSendMessage } from '@/api/queries'
 import { t } from '@/i18n'
 import { ImagePicker } from '@/features/images/ImagePicker'
 import { imageProblem, type ImageDraft, type ImageLimits, type ImageUploads } from '@/features/images/image-drafts'
@@ -50,7 +50,8 @@ interface ComposerProps {
   agentName: string
   busy: boolean
   disabled: boolean
-  // 会话文件丢失时仍允许无图片的 /resume，其余输入继续受 disabled 门禁约束。
+  // 会话文件丢失时，如果 /resume 此刻可用（以服务端的命令列表为准），仍允许无图片的 /resume，其余输入继续受 disabled 门禁约束。
+  // /resume 不可用（Claude Code 的 Agent）时不放行：不留只能输入一条必被拒绝的命令的死路。
   allowResumeWhenDisabled?: boolean
   imageLimits?: ImageLimits | null
   maxMessageBytes: number | undefined
@@ -66,33 +67,22 @@ interface ComposerProps {
   // 有进行中的回复时由对话页给出。
   stop?: StopControl
   reply?: QuestionReply
-  // 是否支持 Pi 专属命令；Claude Code 只展示通用平台命令。
-  piCommands?: boolean
 }
 
 const encoder = new TextEncoder()
-const platformCommands = [
-  { name: 'session', usage: '/session' },
-  { name: 'new', usage: '/new' },
-  { name: 'compact', usage: '/compact [instructions]' },
-  { name: 'reload', usage: '/reload' },
-  { name: 'copy', usage: '/copy' },
-  { name: 'export', usage: '/export [html|jsonl]' },
-  { name: 'resume', usage: '/resume [sessionId]' },
-] as const
-const platformCommandNames: Set<string> = new Set(platformCommands.map(command => command.name))
+type CommandList = Schemas['AgentCommandList']
 
-function isPlatformCommand(text: string): boolean {
-  const trimmed = text.trim()
-  if (!trimmed.startsWith('/')) return false
-  return platformCommandNames.has(trimmed.slice(1).split(/\s/, 1)[0])
-}
+// 服务端列出的平台内置命令名；列表还没取到时为 null。
+const platformNames = (list: CommandList | undefined) => (list ? new Set(list.commands.filter((command) => command.source === 'platform').map((command) => command.name)) : null)
+
+// 平台命令自己不带说明，按命令名显示控制台的说明；服务端新加、这里还不认识的命令没有说明。
+const hints: Record<string, string | undefined> = t.chat.commands.hints
 
 // 边框归外面的输入框容器所有，文字区按内容增高，上限后独立滚动。
 const inputClass =
   'field-sizing-fixed min-h-10 max-h-60 w-full flex-none resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-2 text-[15.5px] leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent max-nav:text-base'
 
-export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeWhenDisabled = false, maxMessageBytes, imageLimits, onSent, onCommand, queue, status, connection, stop, reply, piCommands = true }: ComposerProps) {
+export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeWhenDisabled = false, maxMessageBytes, imageLimits, onSent, onCommand, queue, status, connection, stop, reply }: ComposerProps) {
   const client = useQueryClient()
   const send = useSendMessage(agentId)
   const [text, setText] = useState('')
@@ -107,38 +97,42 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
   const [resumeDraft, setResumeDraft] = useState<string | null>(null)
   const answer = useAnswerQuestion()
   const replyId = reply?.message.id
-  const resumeAllowed = disabled && allowResumeWhenDisabled && !reply && (images.length === 0 || confirmResume) && /^\/resume(?:\s+\S+)?$/.test(text.trim())
-  const inputDisabled = disabled && !allowResumeWhenDisabled
-  const submitDisabled = disabled && !resumeAllowed
-
-  // "/" 菜单：输入以 "/" 开头、光标还在第一个词里时打开，按这个词筛选命令；Esc 关掉后，这个词变了再打开。
-  // 回复问题时不显示菜单；Pi 列表按运行时加载，平台命令始终可用。
+  // "/" 菜单：输入以 "/" 开头、光标还在第一个词里时打开，按这个词筛选命令；Esc 关掉后，这个词变了再打开。回复问题时不显示菜单。
+  // 命令只认服务端的列表（GET /agents/{id}/commands）：先是平台内置命令，带此刻能不能用；然后是 Pi 命令。
   const [caret, setCaret] = useState(0)
   const [dismissed, setDismissed] = useState<string | null>(null)
   const [active, setActive] = useState(0)
-  const token = reply || inputDisabled ? null : slashToken(text, caret)
+  // 会话丢失、又允许 /resume 时也要读列表：/resume 此刻可用才放开输入框。
+  const gate = disabled && allowResumeWhenDisabled
+  const token = reply || (disabled && !gate) ? null : slashToken(text, caret)
   const menuRequested = token !== null && dismissed !== token
   if (token === null && dismissed !== null) setDismissed(null)
-  const commands = useAgentCommands(agentId, menuRequested && !disabled && piCommands)
-  const builtins: Command[] = images.length === 0
-    ? platformCommands.filter(command => (!disabled || command.name === 'resume') && (piCommands || !['compact', 'export', 'resume'].includes(command.name))).map(command => ({
-      ...command, source: 'platform', piSource: '', description: t.chat.commands.hints[command.name], pluginId: null, pluginDisplayName: null,
-    }))
-    : []
-  const matched = matchCommands([...builtins, ...(!disabled && piCommands ? commands.data?.commands ?? [] : [])], token ?? '/')
-  const menuOpen = menuRequested && (matched.length > 0 || !disabled && piCommands && images.length === 0)
-  const menuStatus = matched.length > 0 ? null : !piCommands || disabled ? t.chat.commands.noMatch : commands.error
-    ? t.chat.commands.failed(describeError(commands.error))
-    : !commands.data
-      ? t.chat.commands.loading
-      : commands.data.capturedAt === null
-        ? t.chat.commands.notCaptured
-        : commands.data.commands.length === 0
-          ? t.chat.commands.none
-          : matched.length === 0
-            ? t.chat.commands.noMatch
-            : null
-  const menuItems = menuOpen && menuStatus === null ? matched : []
+  const commands = useAgentCommands(agentId, menuRequested || gate)
+  const listed = (commands.data?.commands ?? []).map((command) => (command.source === 'platform' && command.description === null ? { ...command, description: hints[command.name] ?? null } : command))
+  const resumeOpen = gate && listed.some((command) => command.source === 'platform' && command.name === 'resume' && command.available)
+  const resumeAllowed = resumeOpen && !reply && (images.length === 0 || confirmResume) && /^\/resume(?:\s+\S+)?$/.test(text.trim())
+  const inputDisabled = disabled && !resumeOpen
+  const submitDisabled = disabled && !resumeAllowed
+  // 带图片的 "/" 文字是普通消息，不提示平台命令；会话丢失时只提示 /resume。
+  const pool = (images.length > 0 ? listed.filter((command) => command.source !== 'platform') : listed).filter((command) => !disabled || (command.source === 'platform' && command.name === 'resume'))
+  const matched = matchCommands(pool, token ?? '/')
+  // 此刻不能用的命令不能选，置灰列在菜单下方并写明原因。
+  const selectable = matched.filter((command) => command.available)
+  const blocked = matched.filter((command) => !command.available)
+  // 有命令标着“运行时不支持”，说明这个 Agent 没有 Pi（Claude Code）：它运行多少次也不会有 Pi 命令。
+  const withoutPi = listed.some((command) => command.unavailableReason === 'runtime_unsupported')
+  const menuOpen = menuRequested && !inputDisabled && (matched.length > 0 || (!disabled && images.length === 0))
+  const menuStatus = matched.length > 0
+    ? null
+    : commands.error
+      ? t.chat.commands.failed(describeError(commands.error))
+      : !commands.data
+        ? t.chat.commands.loading
+        : commands.data.capturedAt === null && !withoutPi
+          ? t.chat.commands.notCaptured
+          : t.chat.commands.noMatch
+  const menuItems = menuOpen && menuStatus === null ? selectable : []
+  const menuBlocked = menuOpen && menuStatus === null ? blocked : []
   const [activeFor, setActiveFor] = useState<string | null>(null)
   if (token !== activeFor) { setActiveFor(token); setActive(0) }
   const listId = useId()
@@ -220,12 +214,21 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
     }
     // 从列表确认的恢复始终是平台命令；已有图片留在输入框，不上传也不随命令发送。
     const confirmedResume = confirmed && confirmResume && /^\/resume\s+\S/.test(text.trim())
-    const platform = confirmedResume || (images.length === 0 && isPlatformCommand(text))
-    if (!confirmed && platform && /^\/new(?:\s|$)/.test(text.trim())) {
+    // 这条文字是不是平台内置命令，只认服务端列的命令名；列表还没取到时现取。
+    const word = images.length === 0 ? /^\/(\S+)/.exec(text.trim())?.[1] : undefined
+    let names = platformNames(commands.data)
+    if (word !== undefined && names === null) {
+      busyRequest.current = true
+      try { names = platformNames(await client.ensureQueryData(agentCommandsQuery(agentId))) } catch { /* 取不到列表：见下 */ } finally { busyRequest.current = false }
+    }
+    const platform = confirmedResume || (word !== undefined && names?.has(word) === true)
+    // 列表取不到时不知道哪些是平台命令，但 /new 与 /resume <id> 仍先确认：多问一句没有坏处，漏掉确认会直接重开或切换会话。
+    const guarded = platform || (word !== undefined && names === null)
+    if (!confirmed && guarded && /^\/new(?:\s|$)/.test(text.trim())) {
       setConfirmNew(true)
       return
     }
-    if (!confirmed && platform && /^\/resume\s+\S/.test(text.trim())) {
+    if (!confirmed && guarded && /^\/resume\s+\S/.test(text.trim())) {
       setConfirmResume(true)
       return
     }
@@ -250,6 +253,8 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
         if (result.source === 'platform' && result.copyText != null) await navigator.clipboard.writeText(result.copyText)
         if (result.source === 'platform' && result.exportFormat) await downloadAgentSession(agentId, result.exportFormat)
         onCommand?.(result, sent)
+        // 平台命令可能改变会话状态（/new、/resume、/reload），命令此刻能不能用要重新读。
+        void client.invalidateQueries({ queryKey: keys.agentCommands(agentId) })
       } else {
         upsertMessage(client, agentId, result.message)
         onSent(result)
@@ -320,7 +325,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
     aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={menuItems.length > 0} aria-controls={menuItems.length > 0 ? listId : undefined} aria-activedescendant={menuItems.length > 0 ? optionId(active) : undefined} />
   // 一行三样：左边加图片的圆按钮，中间输入框，右边发送的荧光粉圆章（忙且输入框为空时换成藏青的停止按钮）。
   // 输入框是浅纸底、藏青描边，单行时是一颗胶囊；回复条与待发送图片排在同一描边里、文字行之上。
-  const input = (addButton?: ReactNode, strip?: ReactNode) => <SlashCommandMenu open={menuOpen} listId={listId} optionId={optionId} items={menuItems} active={active} status={menuStatus} onActive={setActive} onChoose={choose} onDismiss={() => setDismissed(token)}><div data-chat-composer className="flex min-w-0 items-end gap-2.5">
+  const input = (addButton?: ReactNode, strip?: ReactNode) => <SlashCommandMenu open={menuOpen} listId={listId} optionId={optionId} items={menuItems} blocked={menuBlocked} active={active} status={menuStatus} onActive={setActive} onChoose={choose} onDismiss={() => setDismissed(token)}><div data-chat-composer className="flex min-w-0 items-end gap-2.5">
     {addButton && <span className="flex h-11 shrink-0 items-center">{addButton}</span>}
     <div data-chat-input className="flex min-h-11 min-w-0 flex-1 flex-col rounded-[22px] border-2 border-ink bg-paper-raised px-4 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/25">
       {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}
