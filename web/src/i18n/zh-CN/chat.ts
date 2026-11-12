@@ -79,6 +79,7 @@ export const chat = {
     // 菜单下方置灰的命令：此刻不能用，各写明原因。
     unavailable: {
       title: '现在不能用',
+      onlyBlocked: '匹配的命令现在都不能用，回车会照原文发出',
       reasons: { runtime_unsupported: '这个 Agent 用 Claude Code 运行，没有 Pi 会话', session_none: '还没有会话，先发一条消息', session_missing: '会话文件丢失，先 /new 或 /resume' },
     },
     source: { extension: '扩展命令', prompt: '提示模板', skill: '技能' } as Record<string, string>,

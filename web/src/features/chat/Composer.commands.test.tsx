@@ -310,3 +310,44 @@ it('补全平台命令时保留已经写好的参数', async () => {
   expect(box).toHaveValue('/compact 保留关键决定')
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
 })
+
+it('会话丢失时读不到命令列表：不把输入框锁死，仍放行 /resume（由服务端判断），并在菜单里说明读不到', async () => {
+  server.use(http.get(apiUrl('/agents/sleep-agent/commands'), () => HttpResponse.json({ error: { code: 'internal_error', message: 'boom' } }, { status: 500 })))
+  renderWithQuery(<Composer agentId="sleep-agent" agentName="开发助手" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
+  const box = screen.getByRole('textbox', { name: '消息' })
+  await waitFor(() => expect(box).toBeEnabled())
+  await userEvent.type(box, '/res')
+  expect(await screen.findByRole('status')).toHaveTextContent(/^读不到命令列表：/)
+  await userEvent.clear(box)
+  await userEvent.type(box, '/resume')
+  await userEvent.keyboard('{Escape}')
+  expect(screen.getByRole('button', { name: '发送' })).toBeEnabled()
+  await userEvent.clear(box)
+  await userEvent.type(box, '你好')
+  expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
+})
+
+it('发送前还要现取命令列表时，发送按钮先变成不可点，表示正在处理', async () => {
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => { release = resolve })
+  const sent: Schemas['SendMessageInput'][] = []
+  server.use(
+    http.get(apiUrl('/agents/sleep-agent/commands'), async () => { await gate; return HttpResponse.json({ capturedAt: null, commands: platformCommands() }) }),
+    http.post(apiUrl('/agents/sleep-agent/messages'), async ({ request }) => {
+      sent.push(await request.json() as Schemas['SendMessageInput'])
+      return HttpResponse.json(commandResult({ command: 'reload', processStopped: true }))
+    }),
+  )
+  const onCommand = renderComposer()
+  const box = screen.getByRole('textbox', { name: '消息' })
+  // 粘贴进来的命令没有经过“/”菜单，列表还没取过。
+  await userEvent.click(box)
+  await userEvent.paste('/reload')
+  await userEvent.keyboard('{Escape}')
+  await userEvent.click(screen.getByRole('button', { name: '发送' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: '发送' })).toBeDisabled())
+  expect(sent).toEqual([])
+  release()
+  await waitFor(() => expect(onCommand).toHaveBeenCalledTimes(1))
+  expect(sent).toEqual([{ text: '/reload' }])
+})

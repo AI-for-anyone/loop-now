@@ -31,6 +31,6 @@ function legacyCopy(text: string): boolean {
     return false
   } finally {
     area.remove()
-    focused?.focus()
+    focused?.focus({ preventScroll: true })
   }
 }

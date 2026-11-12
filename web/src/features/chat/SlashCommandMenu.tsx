@@ -98,7 +98,12 @@ export function SlashCommandMenu({ open, listId, optionId, items, blocked = [], 
                 </div>
               )}
               </div>
-              <p className="border-t-[1.5px] border-dashed border-ink/25 px-3 py-1.5 text-[11.5px] text-ink-500">{text.keys}</p>
+              {/* 没有可选的命令（匹配到的都不能用）时，底部改说回车会照原文发出；这一句也读给读屏。 */}
+              {items.length > 0 ? (
+                <p className="border-t-[1.5px] border-dashed border-ink/25 px-3 py-1.5 text-[11.5px] text-ink-500">{text.keys}</p>
+              ) : (
+                <p role="status" className="border-t-[1.5px] border-dashed border-ink/25 px-3 py-1.5 text-[11.5px] text-ink-500">{text.unavailable.onlyBlocked}</p>
+              )}
             </>
           )}
         </PopoverPrimitive.Content>

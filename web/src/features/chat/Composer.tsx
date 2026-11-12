@@ -111,7 +111,8 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
   if (token === null && dismissed !== null) setDismissed(null)
   const commands = useAgentCommands(agentId, menuRequested || gate)
   const listed = (commands.data?.commands ?? []).map((command) => (command.source === 'platform' && command.description === null ? { ...command, description: hints[command.name] ?? null } : command))
-  const resumeOpen = gate && listed.some((command) => command.source === 'platform' && command.name === 'resume' && command.available)
+  // 读不到列表时不把输入框锁死：照旧放行 /resume，由服务端判断（/resume 是会话丢失后唯一不丢上下文的出路）。
+  const resumeOpen = gate && (commands.isError || listed.some((command) => command.source === 'platform' && command.name === 'resume' && command.available))
   const resumeAllowed = resumeOpen && !reply && (images.length === 0 || confirmResume) && /^\/resume(?:\s+\S+)?$/.test(text.trim())
   const inputDisabled = disabled && !resumeOpen
   const submitDisabled = disabled && !resumeAllowed
@@ -123,7 +124,8 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
   const blocked = matched.filter((command) => !command.available)
   // 有命令标着“运行时不支持”，说明这个 Agent 没有 Pi（Claude Code）：它运行多少次也不会有 Pi 命令。
   const withoutPi = listed.some((command) => command.unavailableReason === 'runtime_unsupported')
-  const menuOpen = menuRequested && !inputDisabled && (matched.length > 0 || (!disabled && images.length === 0))
+  // 会话丢失时只在有 /resume 可提示、或读不到列表（要说明原因）时打开菜单。
+  const menuOpen = menuRequested && !inputDisabled && (matched.length > 0 || ((!disabled || commands.isError) && images.length === 0))
   const menuStatus = matched.length > 0
     ? null
     : commands.error
@@ -221,8 +223,9 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
     const word = images.length === 0 ? /^\/(\S+)/.exec(text.trim())?.[1] : undefined
     let names = platformNames(commands.data)
     if (word !== undefined && names === null) {
-      busyRequest.current = true
-      try { names = platformNames(await client.ensureQueryData(agentCommandsQuery(agentId))) } catch { /* 取不到列表：见下 */ } finally { busyRequest.current = false }
+      // 现取列表期间发送按钮不可点，表示正在处理；不重试，取不到就按下面的退路走。
+      busyRequest.current = true; setSubmitting(true)
+      try { names = platformNames(await client.ensureQueryData({ ...agentCommandsQuery(agentId), retry: false })) } catch { /* 取不到列表：见下 */ } finally { busyRequest.current = false; setSubmitting(false) }
     }
     const platform = confirmedResume || (word !== undefined && names?.has(word) === true)
     // 列表取不到时不知道哪些是平台命令，但 /new 与 /resume <id> 仍先确认：多问一句没有坏处，漏掉确认会直接重开或切换会话。

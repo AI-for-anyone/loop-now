@@ -83,8 +83,9 @@ function ManualCopy({ text: content }: { text: string }) {
       setCopied(true)
       return
     }
-    box.current?.focus()
-    box.current?.select()
+    // 选中全部（iOS 上 select() 对只读框不一定生效），方便直接按复制键。
+    box.current?.focus({ preventScroll: true })
+    box.current?.setSelectionRange(0, content.length)
   }
   return (
     <div className="ml-1 flex w-full max-w-[640px] flex-col gap-2 border-l-2 border-dashed border-ink/40 py-0.5 pl-3">
@@ -96,7 +97,7 @@ function ManualCopy({ text: content }: { text: string }) {
           aria-label={t.chat.commands.copyManualLabel}
           value={content}
           rows={Math.min(6, content.split('\n').length + 1)}
-          onFocus={(event) => event.currentTarget.select()}
+          onFocus={(event) => event.currentTarget.setSelectionRange(0, content.length)}
           className="min-w-0 flex-1 resize-y rounded-ticket border-2 border-ink bg-paper-raised px-3 py-2 font-mono text-[12.5px] leading-[1.6] text-ink outline-none focus-visible:shadow-focus"
         />
         <Button type="button" size="xs" variant="secondary" className="border-2 border-ink bg-paper-raised hover:bg-white" onClick={() => void copy()}>

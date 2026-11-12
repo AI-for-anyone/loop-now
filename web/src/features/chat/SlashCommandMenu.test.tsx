@@ -199,7 +199,9 @@ describe('输入框的 "/" 命令菜单', () => {
     await user.type(input, '/comp')
     await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
     expect(screen.getByRole('group', { name: '现在不能用' })).toHaveTextContent('/compact [instructions]')
-    expect(input).not.toHaveAttribute('aria-activedescendant')
+    expect(input).not.toHaveAttribute('aria-activedescendant')    // 没有可选的命令：底部不再写“↑↓ 选择 · Enter 或 Tab 补全”，改成告诉人回车会照原文发出；读屏也会读到。
+    expect(screen.queryByText('↑↓ 选择 · Enter 或 Tab 补全 · Esc 关闭')).toBeNull()
+    expect(screen.getByRole('status')).toHaveTextContent('匹配的命令现在都不能用，回车会照原文发出')
   })
 
   it('只认开头的 "/"：前面有空格、不在开头、光标离开第一个词时都不弹菜单', async () => {

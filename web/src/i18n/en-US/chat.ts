@@ -73,6 +73,7 @@ export const chat = {
     noMatch: 'No matching commands.',
     unavailable: {
       title: 'Not available now',
+      onlyBlocked: 'None of the matching commands can be used now; Enter sends the text as typed',
       reasons: { runtime_unsupported: 'This Agent runs on Claude Code and has no Pi session', session_none: 'No session yet. Send a message first', session_missing: 'The session file is missing. Run /new or /resume first' },
     },
     source: { extension: 'Extension command', prompt: 'Prompt template', skill: 'Skill' } as Record<string, string>,
