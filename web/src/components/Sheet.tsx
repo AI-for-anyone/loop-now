@@ -54,10 +54,12 @@ export function RulerMark({ className, ...props }: ComponentProps<'span'>) {
 }
 
 // 票根里的一个大数字（文件夹页的文件数、收件箱的未读数……）：上面是 Bricolage 34px 的数，下面是一行小字说明，靠右排。
-export function StubFigure({ value, label, tone = 'blue' }: { value: string; label: string; tone?: 'blue' | 'ink' | 'pink' }) {
+const FIGURE_TONE = { blue: 'text-riso-blue', ink: 'text-ink', pink: 'text-pink-text', red: 'text-red-text', green: 'text-green-text' } as const
+
+export function StubFigure({ value, label, tone = 'blue' }: { value: string; label: string; tone?: keyof typeof FIGURE_TONE }) {
   return (
     <div className="flex flex-col items-end gap-0.5">
-      <span className={cn('font-display-latin text-[34px] leading-none font-extrabold', tone === 'blue' ? 'text-riso-blue' : tone === 'pink' ? 'text-pink-text' : 'text-ink')}>{value}</span>
+      <span className={cn('font-display-latin text-[34px] leading-none font-extrabold', FIGURE_TONE[tone])}>{value}</span>
       <span className="text-[12.5px] font-black text-ink-700">{label}</span>
     </div>
   )

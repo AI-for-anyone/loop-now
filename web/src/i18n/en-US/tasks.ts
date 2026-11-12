@@ -1,3 +1,4 @@
+import { formatDayClock } from './format'
 import type { Messages } from '..'
 
 export const tasks = {
@@ -98,6 +99,9 @@ export const tasks = {
   targetQuestion: 'Replying to the original question',
   targetUnavailable: "Can't confirm the original question can still be answered. Go back to the task and check its latest state.",
   targetTerminal: (state: string) => `The original question is ${state.toLowerCase()} and can no longer be answered.`,
+  updated: 'Updated', updatedAt: (time: string) => formatDayClock(time),
+  filters: { label: 'Status filter', all: 'All', active: 'In progress', blocked: 'Blocked', completed: 'Completed' },
+  progress: { title: 'Progress', active: 'in progress', blocked: 'blocked', completed: 'completed' },
   loading: 'Loading task…',
   updating: 'Live',
   reconnecting: 'Connection lost, reconnecting…',

@@ -6,7 +6,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { routes } from '@/app/routes'
 import { renderRoutes, renderHookWithQuery } from '@/test/render'
-import { apiUrl, defaultProject, errorBody, projectsUrl } from '@/test/api'
+import { agentsUrl, apiUrl, defaultProject, errorBody, makeAgent, projectsUrl, toListItem } from '@/test/api'
 import { baseHandlers } from '@/test/shell'
 import { server } from '@/test/server'
 import { FakeEventSource } from '@/test/fake-event-source'
@@ -53,7 +53,8 @@ describe('项目任务', () => {
     expect(await screen.findByRole('link', { name: '通用任务验收' })).toHaveAttribute('href', detailPath())
     const nav = screen.getByRole('navigation', { name: '主导航' })
     expect(within(nav).getAllByRole('link').filter((l) => l.getAttribute('aria-current') === 'page').map((l) => l.textContent)).toEqual(['任务'])
-    expect(screen.getByText('阻塞')).toBeVisible()
+    // 改版后“阻塞”还出现在状态标签与票根里，这里只看列表中的这一行。
+    expect(within(screen.getByRole('list', { name: '任务' })).getByText('阻塞')).toBeVisible()
   })
   it('平台先选择项目，不默选默认项目', async () => {
     setup(); lastScope.set('platform'); const { router } = renderRoutes(routes, '/tasks')
@@ -425,4 +426,90 @@ it('console_node普通消息显示你，平台初始化与提醒来源保持，�
   expect(within(consoleRow).getByText('你')).toBeVisible(); expect(within(consoleRow).queryByText('平台')).not.toBeInTheDocument()
   expect(within(screen.getByText('平台初始化消息').closest('li')!).getByText('平台')).toBeVisible()
   expect(within(screen.getByText('Inbox提醒消息').closest('li')!).getByText(/平台提醒/)).toBeVisible()
+})
+
+// 改版“一张印出来的纸”第 3 步：任务列表排在纸上，状态筛选是纸张上沿的索引标签，票根里是进度。
+describe('纸张上的任务列表', () => {
+  const summaryOf = (detail: Schemas['TaskDetail'], overrides: Partial<Schemas['TaskSummary']>): Schemas['TaskSummary'] => ({ ...detail.task, ...overrides })
+  async function renderList(counts = { preparing: 0, running: 1, waiting: 1, blocked: 1 }, nextCursor: string | null = null) {
+    const env = setup()
+    const base = env.detail
+    const tasks = [
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a001', title: '整理本周用户反馈', status: 'running', reason: null, currentStepId: 'triage' }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a002', title: '导出超时修复方案', status: 'blocked', reason: '等你确认超时上限后继续', currentStepId: 'review' }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a003', title: '周报初稿', status: 'completed', reason: null, currentStepId: 'publish' }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a004', title: '等用户回答的任务', status: 'waiting', reason: '等待回答', currentStepId: null }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a005', title: '取消了的任务', status: 'cancelled', reason: null, currentStepId: null }),
+    ]
+    server.use(
+      http.get(apiUrl(`/projects/${defaultProject.id}/tasks`), () => HttpResponse.json({ tasks, nextCursor })),
+      http.get(apiUrl(`/projects/${defaultProject.id}/tasks/counts`), () => HttpResponse.json(counts)),
+      http.get(agentsUrl, () => HttpResponse.json({ agents: [toListItem(makeAgent({ id: base.task.currentAgentId!, name: '任务检查员' }))] })),
+    )
+    renderRoutes(routes, tasksPath(defaultProject.name))
+    const list = await screen.findByRole('list', { name: '任务' })
+    env.open()
+    return { list, user: userEvent.setup() }
+  }
+  const rowOf = (title: string) => screen.getByRole('link', { name: title }).closest('li')!
+  const tabs = () => screen.getByRole('group', { name: '状态筛选' })
+
+  it('页头是页面标题：面包屑是项目名称，标题“任务”，旁边是说明与实时状态', async () => {
+    await renderList()
+    const header = screen.getByRole('heading', { level: 1, name: '任务' }).closest('header')!
+    expect(within(header).getByRole('navigation', { name: '页面位置' })).toHaveTextContent(`${defaultProject.name}›任务`)
+    expect(within(header).getByRole('link', { name: defaultProject.name })).toHaveAttribute('href', `/?project=${encodeURIComponent(defaultProject.name)}`)
+    expect(within(header).getByText('本项目的任务，由项目 Manager 创建')).toBeInTheDocument()
+    expect(await within(header).findByText('实时更新中')).toBeInTheDocument()
+  })
+
+  it('状态筛选是纸张上沿的索引标签，带数量；选中的是黄色；只筛选已经读到的任务', async () => {
+    const { list, user } = await renderList()
+    const buttons = within(tabs()).getAllByRole('button')
+    // 进行中、阻塞按服务端的计数（未结束的任务）；已完成与全部按已经读到的任务。
+    expect(buttons.map((button) => button.textContent)).toEqual(['全部5', '进行中2', '阻塞1', '已完成1'])
+    expect(buttons[0]).toHaveAttribute('aria-pressed', 'true')
+    expect(buttons[0]).toHaveClass('bg-riso-yellow', 'h-10')
+    expect(buttons[1]).toHaveClass('bg-paper-tab')
+    expect(within(list).getAllByRole('listitem')).toHaveLength(5)
+    await user.click(buttons[1])
+    expect(buttons[1]).toHaveAttribute('aria-pressed', 'true')
+    expect(within(list).getAllByRole('link').map((link) => link.textContent)).toEqual(['整理本周用户反馈', '等用户回答的任务'])
+    await user.click(buttons[2])
+    expect(within(list).getAllByRole('link').map((link) => link.textContent)).toEqual(['导出超时修复方案'])
+    await user.click(buttons[3])
+    expect(within(list).getAllByRole('link').map((link) => link.textContent)).toEqual(['周报初稿'])
+  })
+
+  it('还有更多页没读到时，按已读到的任务算的数字后面加“+”', async () => {
+    await renderList(undefined, 'next')
+    await waitFor(() => expect(within(tabs()).getAllByRole('button').map((button) => button.textContent)).toEqual(['全部5+', '进行中2', '阻塞1', '已完成1+']))
+  })
+
+  it('每个任务一行：标题加副标题（原因），状态（执行中荧光粉胶囊、阻塞倾斜的红色印章、已完成浅绿胶囊），等宽的当前节点，责任 Agent，等宽的更新时间', async () => {
+    await renderList()
+    const running = rowOf('整理本周用户反馈')
+    expect(running).toHaveClass('border-b-[1.5px]', 'border-dashed')
+    expect(within(running).getByText('执行中')).toHaveClass('bg-riso-pink', 'rounded-full')
+    expect(within(running).getByText('triage')).toHaveClass('font-mono', 'bg-tint-blue')
+    expect(running.querySelector('time')).toHaveClass('font-mono')
+    const blocked = rowOf('导出超时修复方案')
+    expect(within(blocked).getByText('等你确认超时上限后继续')).toBeInTheDocument()
+    const stamp = within(blocked).getByText('阻塞').closest('[data-task-state]')!
+    expect(stamp).toHaveAttribute('data-task-state', 'blocked')
+    expect(stamp).toHaveClass('riso-tilt', 'text-red-text')
+    expect(within(rowOf('周报初稿')).getByText('已完成')).toHaveClass('bg-tint-green', 'text-green-text')
+    // 责任 Agent 带头像（叠印的两个小圆）。
+    expect(within(running).getByText('任务检查员').previousElementSibling).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('票根“进度”里是进行中、阻塞、已完成三个大数字；窄屏不显示', async () => {
+    await renderList()
+    const stub = screen.getByRole('complementary', { name: '进度' })
+    expect(stub).toHaveClass('max-nav:hidden')
+    await waitFor(() => expect(within(stub).getByText('进行中').previousElementSibling).toHaveTextContent(/^2$/))
+    expect(within(stub).getByText('阻塞').previousElementSibling).toHaveTextContent(/^1$/)
+    expect(within(stub).getByText('已完成').previousElementSibling).toHaveTextContent(/^1$/)
+    expect(within(stub).getByText('阻塞').previousElementSibling).toHaveClass('text-red-text')
+  })
 })

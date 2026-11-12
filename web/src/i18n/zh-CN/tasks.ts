@@ -1,4 +1,5 @@
 import type { components } from '@/api/schema.gen'
+import { formatDayClock } from './format'
 
 type S = components['schemas']
 
@@ -23,6 +24,10 @@ export const tasks = {
   question: '待回答问题', questionState: { open: '待回答', answered: '已回答', expired: '已到期', closed: '已关闭', cancelled: '已取消' }, answer: '前往回答', cannotAnswer: '当前身份不能回答这个问题。',
   targetQuestion: '正在回复指定原问题', targetUnavailable: '指定原问题无法确认可答，请返回任务检查最新状态。',
   targetTerminal: (state: string) => `原问题${state}，不能继续回答。`,
+  // 任务列表纸张上沿的状态筛选（只筛选已经读到的任务）与票根里的进度。进行中包括准备中、执行中、等待回复。
+  updated: '更新', updatedAt: (time: string) => formatDayClock(time),
+  filters: { label: '状态筛选', all: '全部', active: '进行中', blocked: '阻塞', completed: '已完成' },
+  progress: { title: '进度', active: '进行中', blocked: '阻塞', completed: '已完成' },
   loading: '加载任务中…', updating: '实时更新中', reconnecting: '连接中断，正在重连…',
   messageError: '执行错误', user: '平台', assistant: 'Agent', messageStatuses: { queued: '排队中', starting: '启动中', running: '回复中', aborting: '正在打断', completed: '已完成', failed: '失败', interrupted: '已打断' } satisfies Record<S['TaskMessage']['status'], string>,
 } as const
