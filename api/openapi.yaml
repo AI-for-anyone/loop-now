@@ -11480,7 +11480,7 @@ components:
 
     StatsOriginTokens:
       description: |
-        按触发执行的来源分的 token。常态执行按 runs.origin：console（你发的消息）、inbox_reminder（Inbox 提醒）、sleep_wake（定时唤醒）；
+        按触发执行的来源分的 token。常态执行按 runs.origin：console（你发的消息，以及控制台 /compact 的手动压缩）、inbox_reminder（Inbox 提醒）、sleep_wake（定时唤醒）；
         任务轮次按其 origin：console_node 计入 console，inbox_reminder 计入 inboxReminder，sleep_wake 计入 sleepWake，task_node 计入 task；
         不属于任何执行的用量（例如两轮之间的缓存预热）计入 other。五项之和等于 tokens.totals.total。
       type: object
