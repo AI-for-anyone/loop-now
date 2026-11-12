@@ -80,10 +80,11 @@ func (s *Service) holdConsoleCommand(agentID uuid.UUID, owner string) func() {
 // sessionChanged 在会话重开或切换之后通知控制台，并为会话不可用期间收到的 Inbox 消息补上提醒。
 // 调用时不能持有忙闲锁：提醒要取得锁才能立即开始。
 func (s *Service) sessionChanged(ctx context.Context, agentID uuid.UUID, sess store.AgentSession) apitypes.SessionInfo {
-	s.emit(ctx, agentID, apitypes.EventSessionUpdated, apitypes.SseSessionUpdated{State: sess.State, Epoch: sess.Epoch})
+	info := apitypes.SessionInfo{State: sess.State, Epoch: sess.Epoch}
+	s.publishSession(ctx, agentID, info, true)
 	s.EmitAgentStatus(agentID)
 	s.remindUnread(ctx, agentID)
-	return apitypes.SessionInfo{State: sess.State, Epoch: sess.Epoch}
+	return info
 }
 
 // Compact 创建真实压缩执行并等到它结束，不创建用户或助手消息。指令与结果记在执行上（runs.compaction）：

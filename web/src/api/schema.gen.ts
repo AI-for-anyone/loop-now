@@ -4261,6 +4261,10 @@ export interface components {
             /** @description 这次执行的回复；以其中的文字为最终回复 */
             message: components["schemas"]["Message"];
         };
+        /**
+         * @description 会话状态或会话序号变化时推送：重开会话、/new、/resume、会话文件丢失、第一轮回复后由 none 变 active、改模型换了运行时（会话随之重开）。
+         *     服务端重启后第一次推送状态时可能重复推送当前值。
+         */
         SseSessionUpdated: {
             state: components["schemas"]["SessionState"];
             epoch: number;
@@ -7310,7 +7314,12 @@ export interface components {
             description: string | null;
             /** @description 平台命令的用法，例如 `/compact [instructions]`；Pi 命令为 null */
             usage: string | null;
-            /** @description 此刻能不能用（只看运行时与会话状态）；Pi 命令恒为 true */
+            /**
+             * @description 此刻能不能用。平台命令只取决于 Agent 的运行时（AgentCommandList.runtime）与会话状态（SessionState），规则见 unavailableReason；
+             *     Agent 正忙不在这里判断，发送时返回 409。两者的每次变化都会在 Agent 的事件流（GET /agents/{agentId}/events）里推送 session.updated：
+             *     重开、恢复、会话文件丢失、第一轮回复后会话由 none 变 active、改模型换了运行时（会话随之重开）。收到 session.updated 后重读本接口即可。
+             *     Pi 命令恒为 true。
+             */
             available: boolean;
             /**
              * @description 不能用的原因：runtime_unsupported 运行时不支持（Claude Code 的 Agent 没有 Pi 会话，不能 /compact、/export、/resume）；

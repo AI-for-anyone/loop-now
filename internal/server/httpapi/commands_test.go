@@ -132,3 +132,29 @@ func TestListAgentCommands(t *testing.T) {
 	}
 	e.expect(404, "GET", "/agents/"+uuid.NewString()+"/commands", nil)
 }
+
+// 改模型换了运行时，会话随之重开：Agent 的事件流里有 session.updated，控制台据此重读命令清单。
+func TestRuntimeSwitchPushesSessionUpdated(t *testing.T) {
+	e := newEnv(t)
+	reg := modelcatalog.NewRegistry(e.api.Models.Snapshot())
+	e.api.Models, e.api.Config.Models = reg, reg
+	_, path := e.newAgent("换运行时")
+	events, closeEvents := readSSE(t, e, path, "")
+	defer closeEvents()
+	_ = next(t, events) // snapshot
+	e.expect(200, "PATCH", path, map[string]any{"model": map[string]string{"provider": "claude-code", "modelId": "sonnet"}})
+	for range 20 {
+		ev := next(t, events)
+		if ev.event != "session.updated" {
+			continue
+		}
+		var u apitypes.SseSessionUpdated
+		if err := json.Unmarshal([]byte(ev.data), &u); err != nil {
+			t.Fatal(err)
+		}
+		if u.Epoch == 2 && u.State == "none" {
+			return
+		}
+	}
+	t.Fatal("换运行时后应收到会话序号为 2 的 session.updated")
+}
