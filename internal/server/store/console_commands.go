@@ -73,13 +73,15 @@ func (s *Store) IdleSession(ctx context.Context, agentID uuid.UUID) (AgentSessio
 	return sess, err
 }
 
-// LatestCompletedAssistant 返回最近一条属于成功运行的助手回复；没有时返回 nil。
+// LatestCompletedAssistant 返回最近一条属于成功运行、有文字的助手回复；没有时返回 nil。
+// 没有文字的回复（Pi 直接处理的 /pi: 命令、只调用了工具的一轮）跳过，复制它们没有意义。
 func (s *Store) LatestCompletedAssistant(ctx context.Context, agentID uuid.UUID) (*Message, error) {
 	if _, err := s.GetAgent(ctx, agentID); err != nil {
 		return nil, err
 	}
 	m, err := scanMessage(s.Pool.QueryRow(ctx, `SELECT `+messageColumns+` FROM conversation_messages
-		WHERE agent_id=$1 AND role='assistant' AND run_id IN (SELECT id FROM runs WHERE agent_id=$1 AND status='completed')
+		WHERE agent_id=$1 AND role='assistant' AND trim(text, ' '||char(9, 10, 13)) <> ''
+			AND run_id IN (SELECT id FROM runs WHERE agent_id=$1 AND status='completed')
 		ORDER BY seq DESC LIMIT 1`, agentID))
 	if errors.Is(err, db.ErrNoRows) {
 		return nil, nil

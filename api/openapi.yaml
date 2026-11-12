@@ -19608,7 +19608,7 @@ components:
           oneOf:
             - $ref: "#/components/schemas/ConsoleSessionStatus"
             - type: "null"
-        copyText: { type: [string, "null"], description: /copy 待复制的最近成功回复；没有时为 null }
+        copyText: { type: [string, "null"], description: /copy 待复制的最近一条有文字的成功回复（没有文字的回复，例如 Pi 直接处理的 /pi 命令，跳过）；没有时为 null }
         exportFormat: { type: [string, "null"], enum: [html, jsonl, null] }
         processStopped: { type: [boolean, "null"], description: /reload 是否停止了旧进程 }
         resetSession:

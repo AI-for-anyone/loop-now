@@ -7589,7 +7589,7 @@ export interface components {
             /** @description 平台命令名；插件命令为空字符串 */
             command: string;
             session?: components["schemas"]["ConsoleSessionStatus"] | null;
-            /** @description /copy 待复制的最近成功回复；没有时为 null */
+            /** @description /copy 待复制的最近一条有文字的成功回复（没有文字的回复，例如 Pi 直接处理的 /pi 命令，跳过）；没有时为 null */
             copyText?: string | null;
             /** @enum {string|null} */
             exportFormat?: "html" | "jsonl" | null;
