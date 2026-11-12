@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"loop-now/internal/server/apitypes"
+	"loop-now/internal/server/coord"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/pluginhost"
@@ -141,6 +142,39 @@ func TestPlatformConsoleCompactCopyExportAndEndEventContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.expectError(409, "session_missing", "GET", path+"/session/export?format=html", nil)
+}
+
+// 平台命令（/new、/reload、/resume、导出）占着忙闲锁时没有执行可报：agent_busy 的 currentRunId 是 null，不是全零的 ID。
+// 按 whenBusy 排队的消息在锁放开后开始。
+func TestAgentBusyWithoutRunReportsNullCurrentRun(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	agent, path := e.newAgent("忙碌助手")
+	owner := coord.LockValue(uuid.NewString(), uuid.NewString()) // 代替一条不产生执行的平台命令持锁
+	if ok, err := e.co.Acquire(ctx, agent.ID.String(), owner); err != nil || !ok {
+		t.Fatalf("取锁失败：%v %v", ok, err)
+	}
+	var busy struct {
+		Error struct {
+			Code    string                     `json:"code"`
+			Details map[string]json.RawMessage `json:"details"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(e.expect(409, "POST", path+"/messages", map[string]any{"text": "第一条"}), &busy); err != nil {
+		t.Fatal(err)
+	}
+	if busy.Error.Code != "agent_busy" || string(busy.Error.Details["currentRunId"]) != "null" || string(busy.Error.Details["queued"]) != `{"interrupt":0,"normal":0}` {
+		t.Fatalf("没有执行时 currentRunId 应为 null：%+v", busy.Error)
+	}
+	e.expect(202, "POST", path+"/messages", map[string]any{"text": "排队", "whenBusy": "queue"})
+	if ok, err := e.co.Release(ctx, agent.ID.String(), owner); err != nil || !ok {
+		t.Fatalf("放锁失败：%v %v", ok, err)
+	}
+	e.waitAgentIdle(path)
+	page := decode[apitypes.MessagePage](t, e.expect(200, "GET", path+"/messages", nil))
+	if len(page.Messages) != 2 || page.Messages[0].Text != "排队" || page.Messages[1].Run.Status != "completed" {
+		t.Fatalf("排队的消息应在锁放开后得到回复：%+v", page.Messages)
+	}
 }
 
 func TestPlatformConsoleNewReloadAndDatabaseIdleGate(t *testing.T) {

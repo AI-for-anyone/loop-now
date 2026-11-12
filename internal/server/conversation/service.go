@@ -197,9 +197,9 @@ func (s *Service) busyError(ctx context.Context, agentID uuid.UUID) error {
 	if active, err := s.st.ActiveRun(ctx, agentID); err != nil {
 		return err
 	} else if active != nil {
-		details.CurrentRunID = active.ID
+		details.CurrentRunID = &active.ID
 	} else if len(queued) > 0 {
-		details.CurrentRunID = queued[0].ID
+		details.CurrentRunID = &queued[0].ID
 		s.kick(ctx, agentID)
 	}
 	e := apperr.Conflict(apperr.CodeAgentBusy, "Agent 正在回复，请选择打断或排队")
