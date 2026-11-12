@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -30,16 +31,40 @@ func (s *Service) acquireConsoleCommand(ctx context.Context, agentID uuid.UUID) 
 	if !acquired {
 		return uuid.Nil, "", s.busyError(ctx, agentID)
 	}
-	// 锁只表示没有进行中的执行；排队由数据库判断，有可开始的排队执行时不做维护（交给对账启动它）。
+	// 锁只表示没有进行中的执行；排队由数据库判断，有可开始的排队执行时不做维护，放开锁后接着处理它们。
 	_, queued, err := s.st.NextQueuedRun(ctx, agentID)
 	if err != nil || queued {
-		_, _ = s.co.Release(ctx, agentID.String(), owner)
+		s.releaseConsoleCommand(agentID, owner)
 		if err != nil {
 			return uuid.Nil, "", err
 		}
 		return uuid.Nil, "", apperr.Conflict(apperr.CodeAgentNotIdle, "Agent 正在回复或还有排队消息，请等它空闲后再操作")
 	}
 	return runID, owner, nil
+}
+
+// releaseConsoleCommand 放开平台命令持有的忙闲锁，并接着处理命令期间排进来的消息与提醒：
+// 那期间的发送拿不到锁只能排队，它们的 kick 也因锁被占而落空，不在这里接着处理就要等下一次对账。
+func (s *Service) releaseConsoleCommand(agentID uuid.UUID, owner string) {
+	ctx := context.Background()
+	if _, err := s.co.Release(ctx, agentID.String(), owner); err != nil {
+		s.log.Warn("放开平台命令的忙闲锁失败，等待对账", "agentId", agentID, "err", err)
+	}
+	s.kick(ctx, agentID)
+}
+
+// holdConsoleCommand 返回放开锁的函数，可以多次调用、只放开一次：命令先放开锁，再做需要锁空闲的收尾（安排提醒）。
+func (s *Service) holdConsoleCommand(agentID uuid.UUID, owner string) func() {
+	return sync.OnceFunc(func() { s.releaseConsoleCommand(agentID, owner) })
+}
+
+// sessionChanged 在会话重开或切换之后通知控制台，并为会话不可用期间收到的 Inbox 消息补上提醒。
+// 调用时不能持有忙闲锁：提醒要取得锁才能立即开始。
+func (s *Service) sessionChanged(ctx context.Context, agentID uuid.UUID, sess store.AgentSession) apitypes.SessionInfo {
+	s.emit(ctx, agentID, apitypes.EventSessionUpdated, apitypes.SseSessionUpdated{State: sess.State, Epoch: sess.Epoch})
+	s.EmitAgentStatus(agentID)
+	s.remindUnread(ctx, agentID)
+	return apitypes.SessionInfo{State: sess.State, Epoch: sess.Epoch}
 }
 
 // Compact 创建真实压缩运行并等待 Pi 返回 Token 结果，不创建用户或助手消息。
@@ -53,7 +78,7 @@ func (s *Service) Compact(ctx context.Context, agentID uuid.UUID, instructions s
 	defer s.commands.Delete(runID)
 	run, err := s.st.InsertConsoleCompactRun(ctx, agentID, runID, s.o.InstanceID)
 	if err != nil {
-		_, _ = s.co.Release(ctx, agentID.String(), owner)
+		s.releaseConsoleCommand(agentID, owner)
 		if errors.Is(err, store.ErrActiveRunExists) {
 			s.restoreLock(ctx, agentID)
 			return executor.CompactionResult{}, s.busyError(ctx, agentID)
@@ -83,7 +108,8 @@ func (s *Service) NewSession(ctx context.Context, agentID uuid.UUID) (apitypes.S
 	if err != nil {
 		return apitypes.SessionInfo{}, err
 	}
-	defer s.co.Release(context.Background(), agentID.String(), owner)
+	release := s.holdConsoleCommand(agentID, owner)
+	defer release()
 	stopper, ok := s.ex.(executor.IdleProcessStopper)
 	if !ok {
 		return apitypes.SessionInfo{}, errors.New("当前执行器不支持停止空闲进程")
@@ -95,10 +121,8 @@ func (s *Service) NewSession(ctx context.Context, agentID uuid.UUID) (apitypes.S
 	if err != nil {
 		return apitypes.SessionInfo{}, err
 	}
-	s.emit(ctx, agentID, apitypes.EventSessionUpdated, apitypes.SseSessionUpdated{State: sess.State, Epoch: sess.Epoch})
-	s.EmitAgentStatus(agentID)
-	s.remindUnread(ctx, agentID)
-	return apitypes.SessionInfo{State: sess.State, Epoch: sess.Epoch}, nil
+	release()
+	return s.sessionChanged(ctx, agentID, sess), nil
 }
 
 // Reload 停止旧空闲 Pi；没有运行时无需重载。
@@ -107,7 +131,7 @@ func (s *Service) Reload(ctx context.Context, agentID uuid.UUID) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer s.co.Release(context.Background(), agentID.String(), owner)
+	defer s.releaseConsoleCommand(agentID, owner)
 	if _, err := s.st.IdleSession(ctx, agentID); err != nil {
 		return false, err
 	}
@@ -127,7 +151,7 @@ func (s *Service) Export(ctx context.Context, agentID uuid.UUID, format string) 
 	if err != nil {
 		return executor.SessionExport{}, err
 	}
-	defer s.co.Release(context.Background(), agentID.String(), owner)
+	defer s.releaseConsoleCommand(agentID, owner)
 	sess, err := s.st.IdleSession(ctx, agentID)
 	if err != nil {
 		return executor.SessionExport{}, err
@@ -158,7 +182,7 @@ func (s *Service) ListResumeSessions(ctx context.Context, agentID uuid.UUID) ([]
 	if err != nil {
 		return nil, err
 	}
-	defer s.co.Release(context.Background(), agentID.String(), owner)
+	defer s.releaseConsoleCommand(agentID, owner)
 	sess, err := s.st.IdleSession(ctx, agentID)
 	if err != nil {
 		return nil, err
@@ -179,7 +203,8 @@ func (s *Service) ResumeSession(ctx context.Context, agentID uuid.UUID, sessionI
 	if err != nil {
 		return apitypes.SessionInfo{}, err
 	}
-	defer s.co.Release(context.Background(), agentID.String(), owner)
+	release := s.holdConsoleCommand(agentID, owner)
+	defer release()
 	sess, err := s.st.IdleSession(ctx, agentID)
 	if err != nil {
 		return apitypes.SessionInfo{}, err
@@ -216,10 +241,8 @@ func (s *Service) ResumeSession(ctx context.Context, agentID uuid.UUID, sessionI
 	if err != nil {
 		return apitypes.SessionInfo{}, err
 	}
-	s.emit(ctx, agentID, apitypes.EventSessionUpdated, apitypes.SseSessionUpdated{State: sess.State, Epoch: sess.Epoch})
-	s.EmitAgentStatus(agentID)
-	s.remindUnread(ctx, agentID)
-	return apitypes.SessionInfo{State: sess.State, Epoch: sess.Epoch}, nil
+	release()
+	return s.sessionChanged(ctx, agentID, sess), nil
 }
 
 // LatestReply 返回最近一条成功回复；没有时返回 nil，不调用模型。

@@ -988,10 +988,7 @@ func (s *Service) ResetSession(ctx context.Context, agentID uuid.UUID) (apitypes
 	if err != nil {
 		return apitypes.SessionInfo{}, err
 	}
-	s.emit(ctx, agentID, apitypes.EventSessionUpdated, apitypes.SseSessionUpdated{State: sess.State, Epoch: sess.Epoch})
-	s.EmitAgentStatus(agentID)
-	s.remindUnread(ctx, agentID) // 会话丢失期间收到的 Inbox 消息没有安排提醒，重开后补上
-	return apitypes.SessionInfo{State: sess.State, Epoch: sess.Epoch}, nil
+	return s.sessionChanged(ctx, agentID, sess), nil // 会话丢失期间收到的 Inbox 消息没有安排提醒，重开后补上
 }
 
 // PiCommand 识别对话页的 Pi 命令：文字以 /pi:<name> 开头（name 非空、不含空白）时返回命令名与发给 Pi 的 /<name><其余原文>；

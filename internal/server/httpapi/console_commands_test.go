@@ -263,17 +263,23 @@ func TestPlatformConsoleNewThenResume(t *testing.T) {
 	}
 }
 
+// 有可以开始的排队消息时平台命令不做维护（agent_not_idle），并且立即开始那条消息，而不是等下一次对账；
+// 它开始之后，命令拿不到忙闲锁（agent_busy）。
 func TestPlatformConsoleQueuedWorkAlsoBlocksMaintenance(t *testing.T) {
 	e := newEnv(t)
 	agent, path := e.newAgent("排队门禁")
-	_, _, err := e.st.InsertMessageAndRun(context.Background(), store.NewRun{AgentID: agent.ID, RunID: uuid.Must(uuid.NewV7()), Text: "queued", Start: false, InstanceID: uuid.Must(uuid.NewV7())})
+	_, _, err := e.st.InsertMessageAndRun(context.Background(), store.NewRun{AgentID: agent.ID, RunID: uuid.Must(uuid.NewV7()), Text: "block queued", Start: false, InstanceID: uuid.Must(uuid.NewV7())})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, command := range []string{"/new", "/resume", "/resume target-full-session-id"} {
-		e.expectError(409, "agent_not_idle", "POST", path+"/messages", map[string]any{"text": command})
+	e.expectError(409, "agent_not_idle", "POST", path+"/messages", map[string]any{"text": "/new"})
+	if st := decode[apitypes.AgentStatus](t, e.expect(200, "GET", path+"/status", nil)); st.CurrentRun == nil || st.CurrentRun.Status == "queued" {
+		t.Fatalf("排队消息应已开始：%+v", st)
 	}
-	e.expectError(409, "agent_not_idle", "GET", path+"/session/export?format=jsonl", nil)
+	for _, command := range []string{"/new", "/resume", "/resume target-full-session-id"} {
+		e.expectError(409, "agent_busy", "POST", path+"/messages", map[string]any{"text": command})
+	}
+	e.expectError(409, "agent_busy", "GET", path+"/session/export?format=jsonl", nil)
 }
 
 func TestClaudeCannotResumePiSession(t *testing.T) {
