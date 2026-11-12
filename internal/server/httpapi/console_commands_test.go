@@ -265,7 +265,7 @@ func TestPlatformConsoleNewThenResume(t *testing.T) {
 }
 
 // 有可以开始的排队消息时平台命令不做维护（agent_not_idle），并且立即开始那条消息，而不是等下一次对账；
-// 它开始之后，命令拿不到忙闲锁（agent_busy）。
+// 它开始之后，命令拿不到忙闲锁，同样是 agent_not_idle（平台命令不用 agent_busy）。
 func TestPlatformConsoleQueuedWorkAlsoBlocksMaintenance(t *testing.T) {
 	e := newEnv(t)
 	agent, path := e.newAgent("排队门禁")
@@ -277,12 +277,16 @@ func TestPlatformConsoleQueuedWorkAlsoBlocksMaintenance(t *testing.T) {
 	if st := decode[apitypes.AgentStatus](t, e.expect(200, "GET", path+"/status", nil)); st.CurrentRun == nil || st.CurrentRun.Status == "queued" {
 		t.Fatalf("排队消息应已开始：%+v", st)
 	}
-	for _, command := range []string{"/new", "/resume target-full-session-id"} {
-		e.expectError(409, "agent_busy", "POST", path+"/messages", map[string]any{"text": command})
+	for _, command := range []string{"/new", "/reload", "/compact", "/resume", "/resume target-full-session-id"} {
+		body := decode[apitypes.ErrorBody](t, e.expect(409, "POST", path+"/messages", map[string]any{"text": command}))
+		if body.Error.Code != "agent_not_idle" || body.Error.Details != nil {
+			t.Fatalf("%s 忙时应是不带 details 的 agent_not_idle：%+v", command, body.Error)
+		}
 	}
-	// 列出会话不取忙闲锁，按数据库判断空闲。
-	e.expectError(409, "agent_not_idle", "POST", path+"/messages", map[string]any{"text": "/resume"})
-	e.expectError(409, "agent_busy", "GET", path+"/session/export?format=jsonl", nil)
+	e.expectError(409, "agent_not_idle", "GET", path+"/session/export?format=jsonl", nil)
+	for _, command := range []string{"/session", "/copy"} {
+		consoleCommand(t, e, path, command) // 只读命令忙时照常可用
+	}
 }
 
 func TestClaudeCannotResumePiSession(t *testing.T) {
@@ -389,5 +393,48 @@ func TestPlatformConsoleCompactResultOnRun(t *testing.T) {
 	}
 	if page := decode[apitypes.MessagePage](t, e.expect(200, "GET", path+"/messages?aroundRun="+skipped.CompactRun.ID.String(), nil)); page.Messages == nil {
 		t.Fatal("定位压缩执行应返回一页（没有消息时为空列表）")
+	}
+}
+
+// 异常列表里失败的手动压缩带 compaction（指令；失败时 outcome 为 null），普通执行的为 null。
+func TestAnomalyMarksFailedCompaction(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	agent, _ := e.newAgent("压缩异常")
+	if err := e.st.RecordSessionFile(ctx, agent.ID, "/managed/s.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	compact, err := e.st.InsertConsoleCompactRun(ctx, agent.ID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), "保留决定")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := e.st.FinishRun(ctx, compact.ID, store.RunEnd{Status: "failed", ErrorCode: "pi_error", ErrorMessage: "模型出错"}); err != nil {
+		t.Fatal(err)
+	}
+	_, normal, err := e.st.InsertMessageAndRun(ctx, store.NewRun{AgentID: agent.ID, RunID: uuid.Must(uuid.NewV7()), Text: "x", Start: true, InstanceID: uuid.Must(uuid.NewV7())})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := e.st.FinishRun(ctx, normal.ID, store.RunEnd{Status: "failed", ErrorCode: "pi_error"}); err != nil {
+		t.Fatal(err)
+	}
+	page := decode[apitypes.AnomalyPage](t, e.expect(200, "GET", "/anomalies", nil))
+	seen := 0
+	for _, it := range page.Items {
+		switch it.RunID {
+		case compact.ID:
+			seen++
+			if it.Compaction == nil || it.Compaction.Instructions != "保留决定" || it.Compaction.Outcome != nil {
+				t.Fatalf("失败的压缩应带 compaction：%+v", it.Compaction)
+			}
+		case normal.ID:
+			seen++
+			if it.Compaction != nil {
+				t.Fatalf("普通执行的 compaction 应为 null：%+v", it.Compaction)
+			}
+		}
+	}
+	if seen != 2 {
+		t.Fatalf("两条异常都应列出：%+v", page.Items)
 	}
 }

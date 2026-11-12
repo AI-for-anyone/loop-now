@@ -1902,7 +1902,7 @@ components:
       headers: { Loop-Now-Request-Id: { $ref: "#/components/headers/RequestId" }, Loop-Now-Version: { $ref: "#/components/headers/Version" } }
       description: |
         与当前状态冲突。`error.code` 取值：
-        `agent_busy`（details 为 AgentBusyDetails）、`agent_not_idle`（删除项目时 details 为 ProjectNotIdleDetails）、`session_missing`、`template_deleted`、`name_conflict`、`path_conflict`。
+        `agent_busy`（details 为 AgentBusyDetails）、`agent_not_idle`（删除项目时 details 为 ProjectNotIdleDetails，其余不带 details）、`session_missing`、`template_deleted`、`name_conflict`、`path_conflict`。
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -2248,7 +2248,7 @@ components:
             code: { $ref: "#/components/schemas/ErrorCode" }
             message: { type: string }
             details:
-              description: 按 code 定义：agent_busy 带 AgentBusyDetails；删除项目时的 agent_not_idle 带 ProjectNotIdleDetails
+              description: 按 code 定义：agent_busy 带 AgentBusyDetails；删除项目时的 agent_not_idle 带 ProjectNotIdleDetails，其余 agent_not_idle（包括平台命令）不带
               oneOf:
                 - $ref: "#/components/schemas/VerificationVersionConflictDetails"
                 - $ref: "#/components/schemas/VerificationConflictDetails"
@@ -2563,7 +2563,7 @@ components:
 - precondition_failed：请求前置版本条件不一致（If-Match 或 Prompt 编辑版本，412）
 - payload_too_large：超过大小上限（413）
 - agent_busy：Agent 正忙且未选择打断或排队（409）
-- agent_not_idle：需要 Agent 空闲的操作（删除 Agent、删除项目、重开会话）在忙时被拒绝（409）
+- agent_not_idle：需要 Agent 空闲的操作（删除 Agent、删除项目、重开会话、平台命令 /new /reload /compact /resume、导出会话）在忙时被拒绝（409）
 - session_missing：Agent 处于会话丢失状态，需要先确认重开会话（409）
 - session_none：当前还没有可压缩或导出的 Pi 会话（409）
 - console_command_failed：平台命令已执行但未能完成（409）

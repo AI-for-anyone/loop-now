@@ -95,6 +95,8 @@ export const overview = {
     restartReason: 'The server restarted mid-reply, so the reply never finished.',
     view: 'View reply',
     handle: 'Fix it',
+    compactionFailed: 'Compaction failed',
+    viewCompaction: 'View compaction',
     loadMore: 'Load more',
     empty: 'No issues in the last 24 hours.',
     today: 'Today',

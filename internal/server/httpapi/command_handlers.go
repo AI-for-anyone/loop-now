@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
+
+	"loop-now/internal/server/agentruntime"
 )
 
 // agentCommand 是接口里的 AgentCommand：对话页 "/" 菜单里的一条命令。
@@ -11,7 +13,7 @@ type agentCommand struct {
 	Name              string          `json:"name"`
 	Source            string          `json:"source"`
 	PiSource          string          `json:"piSource"`
-	Description       *string         `json:"description"`
+	Description       json.RawMessage `json:"description"` // LocalizedText 或 null：Pi 命令是字符串，平台命令是中英对象
 	PluginID          *string         `json:"pluginId"`
 	PluginDisplayName json.RawMessage `json:"pluginDisplayName"`
 	Usage             *string         `json:"usage"`
@@ -28,14 +30,16 @@ func (s *Server) listAgentCommands(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	if _, err := s.Store.GetAgent(r.Context(), id); err != nil {
+	agent, err := s.Store.GetAgent(r.Context(), id)
+	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
 	out := struct {
+		Runtime    string         `json:"runtime"`
 		CapturedAt *time.Time     `json:"capturedAt"`
 		Commands   []agentCommand `json:"commands"`
-	}{Commands: []agentCommand{}}
+	}{Runtime: agentruntime.ForProvider(agent.ModelProvider), Commands: []agentCommand{}}
 	platform, err := s.Conv.PlatformCommands(r.Context(), id)
 	if err != nil {
 		s.fail(w, r, err)
@@ -43,14 +47,20 @@ func (s *Server) listAgentCommands(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, c := range platform {
 		usage := c.Usage
-		item := agentCommand{Name: c.Name, Source: "platform", PluginDisplayName: json.RawMessage("null"), Usage: &usage, Available: c.Available}
+		desc, err := json.Marshal(c.Description)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		item := agentCommand{Name: c.Name, Source: "platform", Description: desc, PluginDisplayName: json.RawMessage("null"), Usage: &usage, Available: c.Available}
 		if c.UnavailableReason != "" {
 			reason := c.UnavailableReason
 			item.UnavailableReason = &reason
 		}
 		out.Commands = append(out.Commands, item)
 	}
-	if s.PiCommands != nil {
+	// 只有 Pi 的 Agent 有 Pi 命令；换成别的运行时后，之前启动 Pi 时缓存的命令也不再列出。
+	if s.PiCommands != nil && out.Runtime == agentruntime.Pi {
 		cached, err := s.PiCommands(id)
 		if err != nil {
 			s.fail(w, r, err)
@@ -75,7 +85,14 @@ func (s *Server) listAgentCommands(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			for _, c := range cached.Commands {
-				item := agentCommand{Name: c.Name, Source: "pi", PiSource: c.Source, Description: c.Description, PluginDisplayName: json.RawMessage("null"), Available: true}
+				desc := json.RawMessage("null")
+				if c.Description != nil {
+					if desc, err = json.Marshal(*c.Description); err != nil {
+						s.fail(w, r, err)
+						return
+					}
+				}
+				item := agentCommand{Name: c.Name, Source: "pi", PiSource: c.Source, Description: desc, PluginDisplayName: json.RawMessage("null"), Available: true}
 				if plugin, ok := owner(c.Path); ok {
 					item.PluginID = &plugin
 					if n, ok := names[plugin]; ok {

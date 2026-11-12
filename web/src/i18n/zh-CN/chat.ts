@@ -71,11 +71,11 @@ export const chat = {
   sessionDivider: '会话已切换，页面历史保留',
   commands: {
     menuLabel: '命令',
-    label: 'Pi 命令',
     loading: '正在读取命令…',
     failed: (reason: string) => `读不到命令列表：${reason}`,
     notCaptured: 'Agent 运行一次后才有命令列表。',
     noMatch: '没有匹配的命令。',
+    noPi: (runtime: string) => `没有匹配的命令。这个 Agent 用 ${runtime} 运行，没有 Pi 命令。`,
     // 菜单下方置灰的命令：此刻不能用，各写明原因。
     unavailable: {
       title: '现在不能用',
@@ -86,20 +86,7 @@ export const chat = {
     plugin: (name: string) => `插件 · ${name}`,
     keys: '↑↓ 选择 · Enter 或 Tab 补全 · Esc 关闭',
     platform: '平台命令',
-    hintTitle: '内置命令',
-    hintKeyboard: '↑↓ 选择 · Enter 填入 · Esc 关闭',
-    hints: {
-      session: '查看当前会话、模型和进程状态',
-      new: '重开会话，保留页面历史',
-      compact: '压缩当前会话上下文，可附加说明',
-      reload: '停止当前进程，下一条消息重新加载',
-      copy: '复制最近一条成功回复',
-      export: '导出会话，可选 html 或 jsonl',
-      resume: '列出会话，或按完整 ID 恢复',
-    },
     noReply: '命令已执行',
-    sessionState: { none: '无会话', active: '活动', missing: '丢失' } satisfies Record<S['SessionState'], string>,
-    processState: { stopped: '已停止', starting: '启动中', idle: '空闲', busy: '忙碌' } satisfies Record<S['ProcessState'], string>,
     session: (session: S['ConsoleSessionStatus']) => `会话 ${{ none: '无会话', active: '活动', missing: '丢失' }[session.status.session.state]} · epoch ${session.status.session.epoch} · 模型 ${session.model.provider}/${session.model.modelId} · 思考 ${session.thinkingLevel} · 进程 ${{ stopped: '已停止', starting: '启动中', idle: '空闲', busy: '忙碌' }[session.status.processState]} · 排队 ${session.status.queued.normal + session.status.queued.interrupt}`,
     compact: (before: number, after: number) => `上下文已压缩：${before} → 约 ${after} tokens`,
     // Pi 没有压缩但正常完成的几种情况。
@@ -129,7 +116,16 @@ export const chat = {
     resumeConfirmTitle: '确认恢复这个会话？',
     resumeConfirmBody: '只恢复模型对话上下文，页面历史保留；不会回滚工作区、模型配置、Prompt、Skills 或权限。',
     resumeConfirmAction: '恢复会话',
+  },  // 定位到一次手动压缩（/compact）：它不是一轮，在它发生的位置显示一张说明。
+  compactionNote: {
+    title: '手动压缩',
+    target: '定位到的手动压缩',
+    notATurn: '手动压缩不是对话里的一轮，没有消息；它发生在这两轮之间。',
+    failed: '压缩失败',
+    interrupted: '压缩被取消或中断，没有完成',
+    running: '正在压缩…',
   },
+
   // 被 Inbox 唤醒的那一轮，发送者显示为平台提醒。
   platformReminderAt: (time: string) => `平台提醒 · ${formatDayClock(time)}`,
   inboxReminder: { title: '平台提醒', from: (name: string) => `来自 ${name}`, deleted: (label: string) => `（${label}）`, received: '收到 Inbox 消息' },

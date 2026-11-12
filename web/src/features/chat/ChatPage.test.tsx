@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
 import { apiUrl, context, defaultAgentPath, errorBody, makeAgent, makeMessage, makeMessagePage, makeQueueItem, makeRun, makeStatus } from '@/test/api'
 import { renderChat } from '@/test/chat'
-import { claudeCodeCommands } from '@/test/commands'
+import { claudeCodeList } from '@/test/commands'
 import { FakeEventSource } from '@/test/fake-event-source'
 
 function turn(text: string, reply: string, overrides: Partial<Schemas['Run']> = {}, epoch = 1) {
@@ -113,7 +113,7 @@ describe('发送消息', () => {
   it('Claude Code 只显示通用平台命令，Pi 的 Agent 同时支持 /pi: 菜单', async () => {
     // 哪些命令能用由服务端的命令列表说了算：Claude Code 的 Agent 上 /compact、/export、/resume 标为不可用。
     const agent = makeAgent({ model: { provider: 'claude-code', modelId: 'sonnet' }, runtime: 'claude-code' })
-    const claude = await renderChat({ agent, handlers: [http.get(apiUrl(`/agents/${agent.id}/commands`), () => HttpResponse.json({ capturedAt: null, commands: claudeCodeCommands() }))] })
+    const claude = await renderChat({ agent, handlers: [http.get(apiUrl(`/agents/${agent.id}/commands`), () => HttpResponse.json(claudeCodeList()))] })
     await claude.user.type(screen.getByLabelText('消息'), '/')
     await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(4))
     expect(screen.queryByText('Agent 运行一次后才有命令列表。')).toBeNull()

@@ -31,19 +31,21 @@ type RunCompaction struct {
 
 // ConsoleCommandResult 是平台或插件认领的控制台命令结果。
 type ConsoleCommandResult struct {
-	Session              *ConsoleSessionStatus  `json:"session"`
-	CopyText             *string                `json:"copyText"`
-	ExportFormat         *string                `json:"exportFormat"`
-	ProcessStopped       *bool                  `json:"processStopped"`
-	ResetSession         *SessionInfo           `json:"resetSession"`
-	ResumeSessions       []ConsoleResumeSession `json:"resumeSessions"`
-	ResumedSession       *SessionInfo           `json:"resumedSession"`
-	CompactRun           *Run                   `json:"compactRun,omitempty"`
-	TokensBefore         *int64                 `json:"tokensBefore"`
-	EstimatedTokensAfter *int64                 `json:"estimatedTokensAfter"`
-	Reply                *string                `json:"reply"`
-	Handled              bool                   `json:"handled"`
-	Source               string                 `json:"source"`
-	Plugin               string                 `json:"plugin"`
-	Command              string                 `json:"command"`
+	Session        *ConsoleSessionStatus  `json:"session"`
+	CopyText       *string                `json:"copyText"`
+	ExportFormat   *string                `json:"exportFormat"`
+	ProcessStopped *bool                  `json:"processStopped"`
+	ResetSession   *SessionInfo           `json:"resetSession"`
+	ResumeSessions []ConsoleResumeSession `json:"resumeSessions"`
+	ResumedSession *SessionInfo           `json:"resumedSession"`
+	CompactRun     *Run                   `json:"compactRun,omitempty"`
+	// Deprecated: 与 CompactRun.Compaction.TokensBefore 相同，契约里已标为弃用，保留给旧客户端。
+	TokensBefore *int64 `json:"tokensBefore"`
+	// Deprecated: 与 CompactRun.Compaction.EstimatedTokensAfter 相同，契约里已标为弃用，保留给旧客户端。
+	EstimatedTokensAfter *int64  `json:"estimatedTokensAfter"`
+	Reply                *string `json:"reply"`
+	Handled              bool    `json:"handled"`
+	Source               string  `json:"source"`
+	Plugin               string  `json:"plugin"`
+	Command              string  `json:"command"`
 }

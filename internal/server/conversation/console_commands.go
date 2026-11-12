@@ -30,7 +30,7 @@ func (s *Service) acquireConsoleCommand(ctx context.Context, agentID uuid.UUID) 
 		return uuid.Nil, "", err
 	}
 	if !acquired {
-		return uuid.Nil, "", s.busyError(ctx, agentID)
+		return uuid.Nil, "", errNotIdle()
 	}
 	// 锁只表示没有进行中的执行；排队由数据库判断，有可开始的排队执行时不做维护，放开锁后接着处理它们。
 	_, queued, err := s.st.NextQueuedRun(ctx, agentID)
@@ -39,16 +39,22 @@ func (s *Service) acquireConsoleCommand(ctx context.Context, agentID uuid.UUID) 
 		if err != nil {
 			return uuid.Nil, "", err
 		}
-		return uuid.Nil, "", apperr.Conflict(apperr.CodeAgentNotIdle, "Agent 正在回复或还有排队消息，请等它空闲后再操作")
+		return uuid.Nil, "", errNotIdle()
 	}
 	return runID, owner, nil
+}
+
+// errNotIdle 是平台命令因 Agent 不空闲而拒绝时的错误：不论是忙闲锁被占、数据库里有进行中或排队的执行，
+// 还是运行时在做别的维护，都是 409 agent_not_idle，不带 details（agent_busy 是普通消息“选择打断或排队”用的）。
+func errNotIdle() error {
+	return apperr.Conflict(apperr.CodeAgentNotIdle, "Agent 正在回复或还有排队消息，请等它空闲后再操作")
 }
 
 // consoleCommandError 把执行器维护操作里可以预期的失败转成 409；其余错误照旧（服务端内部错误）。
 func consoleCommandError(err error) error {
 	switch {
 	case errors.Is(err, executor.ErrMaintenanceBusy):
-		return apperr.Conflict(apperr.CodeAgentNotIdle, "Agent 正在回复或在进行其他维护，请稍后再试")
+		return errNotIdle()
 	case errors.Is(err, executor.ErrNoSession):
 		return apperr.Conflict(apperr.CodeSessionNone, "当前还没有可操作的会话")
 	case errors.Is(err, executor.ErrUnsupportedRuntime):
@@ -80,10 +86,11 @@ func (s *Service) holdConsoleCommand(agentID uuid.UUID, owner string) func() {
 // sessionChanged 在会话重开或切换之后通知控制台，并为会话不可用期间收到的 Inbox 消息补上提醒。
 // 调用时不能持有忙闲锁：提醒要取得锁才能立即开始。
 func (s *Service) sessionChanged(ctx context.Context, agentID uuid.UUID, sess store.AgentSession) apitypes.SessionInfo {
-	s.emit(ctx, agentID, apitypes.EventSessionUpdated, apitypes.SseSessionUpdated{State: sess.State, Epoch: sess.Epoch})
+	info := apitypes.SessionInfo{State: sess.State, Epoch: sess.Epoch}
+	s.publishSession(ctx, agentID, info, true)
 	s.EmitAgentStatus(agentID)
 	s.remindUnread(ctx, agentID)
-	return apitypes.SessionInfo{State: sess.State, Epoch: sess.Epoch}
+	return info
 }
 
 // Compact 创建真实压缩执行并等到它结束，不创建用户或助手消息。指令与结果记在执行上（runs.compaction）：
@@ -285,16 +292,24 @@ func (s *Service) LatestReply(ctx context.Context, agentID uuid.UUID) (*store.Me
 type platformCommandSpec struct {
 	name, usage          string
 	piOnly, needsSession bool
+	zh, en               string // 中英两种说明；用法里的占位词（instructions、html|jsonl、session-id）在说明里用同样的写法
 }
 
 var platformCommands = []platformCommandSpec{
-	{name: "session", usage: "/session"},
-	{name: "new", usage: "/new"},
-	{name: "compact", usage: "/compact [instructions]", piOnly: true, needsSession: true},
-	{name: "reload", usage: "/reload"},
-	{name: "copy", usage: "/copy"},
-	{name: "export", usage: "/export [html|jsonl]", piOnly: true, needsSession: true},
-	{name: "resume", usage: "/resume [sessionId]", piOnly: true},
+	{name: "session", usage: "/session",
+		zh: "查看当前会话、模型和进程状态", en: "Show the current session, model, and process"},
+	{name: "new", usage: "/new",
+		zh: "重开会话，保留页面里的对话历史", en: "Start a new session and keep the page's history"},
+	{name: "compact", usage: "/compact [instructions]", piOnly: true, needsSession: true,
+		zh: "压缩当前会话的上下文；instructions 是给这次压缩的附加说明，可省略", en: "Compact the current context; instructions are optional guidance for this compaction"},
+	{name: "reload", usage: "/reload",
+		zh: "停止当前进程，下一条消息时重新加载", en: "Stop the process; it reloads on the next message"},
+	{name: "copy", usage: "/copy",
+		zh: "复制最近一条有文字的成功回复", en: "Copy the latest successful reply that has text"},
+	{name: "export", usage: "/export [html|jsonl]", piOnly: true, needsSession: true,
+		zh: "导出当前会话，格式为 html（默认）或 jsonl", en: "Export the current session as html (default) or jsonl"},
+	{name: "resume", usage: "/resume [session-id]", piOnly: true,
+		zh: "不带 session-id 时列出可恢复的会话；带上完整的 session-id 时恢复那个会话", en: "Without session-id, list resumable sessions; with a full session-id, resume that session"},
 }
 
 // IsPlatformCommand 报告 name（不带 "/"）是不是平台内置命令。
@@ -316,8 +331,15 @@ var piOnlyCommands = func() map[string]bool {
 // session_none（还没有会话）、session_missing（会话文件丢失）；能用时为空。Agent 正忙这类随时变化的情况不在这里判断。
 type PlatformCommand struct {
 	Name, Usage       string
+	Description       LocalizedDescription
 	Available         bool
 	UnavailableReason string
+}
+
+// LocalizedDescription 是平台命令的中英两种说明（接口里的 LocalizedText 对象，zh-CN 在前）。
+type LocalizedDescription struct {
+	ZhCN string `json:"zh-CN"`
+	EnUS string `json:"en-US"`
 }
 
 // PlatformCommands 按 Agent 的运行时与会话状态列出平台内置命令。
@@ -342,7 +364,8 @@ func (s *Service) PlatformCommands(ctx context.Context, agentID uuid.UUID) ([]Pl
 		case c.needsSession && (sess.State != "active" || sess.SessionFile == ""):
 			reason = "session_none"
 		}
-		out = append(out, PlatformCommand{Name: c.name, Usage: c.usage, Available: reason == "", UnavailableReason: reason})
+		out = append(out, PlatformCommand{Name: c.name, Usage: c.usage, Description: LocalizedDescription{ZhCN: c.zh, EnUS: c.en},
+			Available: reason == "", UnavailableReason: reason})
 	}
 	return out, nil
 }

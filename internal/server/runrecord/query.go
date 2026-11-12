@@ -92,7 +92,7 @@ func (s *Service) Anomalies(ctx context.Context, f store.ScopeFilter, from *time
 		}
 		out.Items = append(out.Items, apitypes.Anomaly{RunID: r.Run.ID, Kind: kind, At: *r.Run.EndedAt, AgentID: r.Run.AgentID, AgentName: r.AgentName,
 			Scope: apitypes.ScopeOf(r.ProjectID), ProjectID: r.ProjectID,
-			ErrorCode: strPtr(r.Run.ErrorCode), ErrorMessage: strPtr(r.Run.ErrorMessage), EndReason: strPtr(r.Run.EndReason)})
+			ErrorCode: strPtr(r.Run.ErrorCode), ErrorMessage: strPtr(r.Run.ErrorMessage), EndReason: strPtr(r.Run.EndReason), Compaction: apitypes.CompactionOf(r.Run)})
 	}
 	if next != nil {
 		enc := encodeCursor(*next)

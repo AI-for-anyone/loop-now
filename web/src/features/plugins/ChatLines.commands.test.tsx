@@ -7,8 +7,17 @@ import { makeRun } from '@/test/api'
 
 const base: Schemas['ConsoleCommandResult'] = { handled: true, source: 'platform', plugin: '', reply: null, command: 'compact' }
 
+// /compact 的结果在这次压缩的执行上（compactRun.compaction）。
+const compaction = (overrides: Partial<Schemas['RunCompaction']>): Schemas['ConsoleCommandResult'] => ({
+  ...base,
+  command: 'compact',
+  tokensBefore: null,
+  estimatedTokensAfter: null,
+  compactRun: { ...makeRun(), compaction: { instructions: '', outcome: null, skipReason: null, tokensBefore: null, estimatedTokensAfter: null, ...overrides } },
+})
+
 it('平台命令显示结构化结果而不是插件回复', () => {
-  render(<CommandLine command="/compact 保留决定" at="2026-10-31T01:00:00Z" result={{ ...base, tokensBefore: 4200, estimatedTokensAfter: 350 }} />)
+  render(<CommandLine command="/compact 保留决定" at="2026-10-31T01:00:00Z" result={compaction({ outcome: 'compacted', tokensBefore: 4200, estimatedTokensAfter: 350 })} />)
   const line = screen.getByRole('note')
   expect(line).toHaveTextContent('平台命令')
   expect(line).toHaveTextContent('上下文已压缩：4200 → 约 350 tokens')
@@ -45,7 +54,7 @@ it('/resume 显示可读标题、摘要、短 ID 和当前标记，点击恢复�
 
 // 改版“一张印出来的纸”：命令结果的抬头是一张分段的小票，/resume 的会话列表按表格规则排。
 it('命令结果的抬头是分段的小票：命令｜来源｜时间，命令与时间用等宽字；结果排在下面，左侧一道虚线', () => {
-  render(<CommandLine command="/compact 保留决定" at="2026-10-31T01:00:00Z" result={{ ...base, tokensBefore: 4200, estimatedTokensAfter: 350 }} />)
+  render(<CommandLine command="/compact 保留决定" at="2026-10-31T01:00:00Z" result={compaction({ outcome: 'compacted', tokensBefore: 4200, estimatedTokensAfter: 350 })} />)
   const line = screen.getByRole('note')
   const parts = [...line.querySelectorAll('[data-receipt-part]')]
   expect(parts.map(part => part.textContent)).toEqual(['/compact 保留决定', '平台命令', expect.stringMatching(/\d{2}:\d{2}$/)])
@@ -74,13 +83,6 @@ it('/resume 的会话列表：上面一道实线，行与行之间虚线；当�
 })
 
 // /compact 的结果读返回里的 compactRun.compaction：压缩了写前后的 token；Pi 没有压缩时按原因说明（这时 token 为 null）。
-const compaction = (overrides: Partial<Schemas['RunCompaction']>): Schemas['ConsoleCommandResult'] => ({
-  ...base,
-  command: 'compact',
-  tokensBefore: null,
-  estimatedTokensAfter: null,
-  compactRun: { ...makeRun(), compaction: { instructions: '', outcome: null, skipReason: null, tokensBefore: null, estimatedTokensAfter: null, ...overrides } },
-})
 
 it('/compact 压缩了：显示压缩前后的 token（读 compactRun.compaction）', () => {
   render(<CommandLine command="/compact" at="2026-10-31T01:00:00Z" result={compaction({ outcome: 'compacted', tokensBefore: 52000, estimatedTokensAfter: 4100 })} />)
@@ -131,4 +133,11 @@ it('/copy 写成功时照常只写“已复制”，不出现手动复制的框'
   render(<CommandLine command="/copy" at="2026-10-31T01:00:00Z" result={{ ...base, command: 'copy', copyText: '回复' }} />)
   expect(screen.getByRole('note')).toHaveTextContent('已复制最近一条成功回复')
   expect(screen.queryByRole('textbox')).toBeNull()
+})
+
+it('/compact 只读 compactRun.compaction：两个已弃用的字段（tokensBefore、estimatedTokensAfter）不再用', () => {
+  render(<CommandLine command="/compact" at="2026-10-31T01:00:00Z" result={{ ...base, command: 'compact', tokensBefore: 4200, estimatedTokensAfter: 350 }} />)
+  const line = screen.getByRole('note')
+  expect(line).not.toHaveTextContent('4200')
+  expect(line).toHaveTextContent('命令已执行')
 })

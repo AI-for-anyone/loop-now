@@ -96,6 +96,9 @@ export const overview = {
     restartReason: '服务端在回复过程中重启，回复未完成。',
     view: '查看回复',
     handle: '去处理',
+    // 失败的手动压缩（Anomaly.compaction 不为 null）：印章与操作换成压缩的说法，原因后面写上这次压缩的命令。
+    compactionFailed: '压缩失败',
+    viewCompaction: '查看压缩',
     loadMore: '加载更多',
     empty: '最近 24 小时没有异常。',
     today: '今天',

@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { apiUrl, makeStatus } from '@/test/api'
 import { renderChat } from '@/test/chat'
-import { platformCommands } from '@/test/commands'
+import { commandList, platformCommands } from '@/test/commands'
 
 // 命令此刻能不能用取决于会话状态：会话一变就要重新读，不能等缓存过期。
 describe('命令列表跟着会话状态更新', () => {
@@ -15,7 +15,7 @@ describe('命令列表跟着会话状态更新', () => {
       handlers: [
         http.get(apiUrl('/agents/:agentId/commands'), () => {
           reads += 1
-          return HttpResponse.json({ capturedAt: null, commands: platformCommands(session === 'none' ? { compact: { available: false, unavailableReason: 'session_none' } } : {}) })
+          return HttpResponse.json(commandList(platformCommands(session === 'none' ? { compact: { available: false, unavailableReason: 'session_none' } } : {})))
         }),
       ],
     })
@@ -32,5 +32,24 @@ describe('命令列表跟着会话状态更新', () => {
     await waitFor(() => expect(screen.getByRole('option', { name: /\/compact/ })).toBeInTheDocument())
     expect(reads).toBe(2)
     expect(screen.queryByRole('group', { name: '现在不能用' })).toBeNull()
+  })
+
+  it('只在 session.updated 时重读：平台命令执行完、没有会话变化时不额外读', async () => {
+    let reads = 0
+    const { agent, emit, user } = await renderChat({
+      handlers: [
+        http.get(apiUrl('/agents/:agentId/commands'), () => { reads += 1; return HttpResponse.json(commandList()) }),
+        http.post(apiUrl('/agents/:agentId/messages'), () => HttpResponse.json({ handled: true, source: 'platform', plugin: '', reply: null, command: 'reload', processStopped: true })),
+      ],
+    })
+    await emit('snapshot', { status: makeStatus(agent.id), currentText: null, queuedRuns: [], queueItems: [] })
+    const input = screen.getByLabelText('消息')
+    await user.type(input, '/reload')
+    await waitFor(() => expect(reads).toBe(1))
+    await user.keyboard('{Escape}{Enter}')
+    await screen.findByText('已停止旧进程，下一条消息将重新加载')
+    await user.type(input, '/rel')
+    await waitFor(() => expect(screen.getByRole('option', { name: /\/reload/ })).toBeInTheDocument())
+    expect(reads).toBe(1)
   })
 })

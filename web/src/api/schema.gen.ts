@@ -1245,7 +1245,10 @@ export interface paths {
         /**
          * 发送消息；Agent 忙时必须选择打断或排队
          * @description 以 `/` 开头且不带图片的消息先匹配平台内置命令 `/session`、`/new`、`/compact [instructions]`、`/reload`、`/copy`、`/export [html|jsonl]`、`/resume [完整ID]`；
-         *     未匹配时交给插件 `console.command`。`/compact`、`/export`、`/resume` 只适用于 Pi 会话：Claude Code 的 Agent 发这几个命令返回 409 `console_command_failed`，不产生执行。命令被认领时不作为普通消息保存，返回 200 ConsoleCommandResult；
+         *     未匹配时交给插件 `console.command`。`/compact`、`/export`、`/resume` 只适用于 Pi 会话：Claude Code 的 Agent 发这几个命令返回 409 `console_command_failed`，不产生执行。
+         *     平台命令在 Agent 不空闲（有进行中的回复、有排队消息，或运行时正在做别的维护，例如任务分叉）时一律返回 409 `agent_not_idle`，不带 details，
+         *     不会返回 `agent_busy`（那是普通消息“选择打断或排队”用的）：`/new`、`/reload`、`/compact`、`/resume`（列出与恢复都是）。
+         *     `/session`、`/copy` 只读，忙时照常可用；`/export` 本身只返回格式，忙闲在下载（GET /agents/{agentId}/session/export）时检查，同样是 `agent_not_idle`。命令被认领时不作为普通消息保存，返回 200 ConsoleCommandResult；
          *     其余消息经修改类 Hook `message.before_enqueue`，插件可以改写正文。
          *     以 `/pi:<name>` 开头的消息是交给 Pi 的命令（plugins/SPEC.md §14）：不给插件认领，照原文保存与显示，执行时发给 Pi 的是 `/<name>` 加其余原文，
          *     不加运行 ID 与平台通知；带图片时图片照常交给 Pi（Pi 执行扩展命令时不用图片，技能命令与提示模板展开后随提示交给模型）。
@@ -1308,6 +1311,7 @@ export interface paths {
         /**
          * 导出当前受管 Pi 会话
          * @description jsonl 是会话文件原样；html 由 Pi 的 `--export` 从会话文件生成（不启动 Pi 运行时，也不动存活的空闲进程），页面里没有系统提示词与工具定义。
+         *     Agent 不空闲时返回 409 `agent_not_idle`（不带 details）。
          *     Claude Code 的 Agent 没有 Pi 会话，返回 409 `console_command_failed`；会话文件不在了返回 409 `session_none`。
          */
         get: operations["exportAgentSession"];
@@ -3253,13 +3257,13 @@ export interface components {
             error: {
                 code: components["schemas"]["ErrorCode"];
                 message: string;
-                /** @description 按 code 定义：agent_busy 带 AgentBusyDetails；删除项目时的 agent_not_idle 带 ProjectNotIdleDetails */
+                /** @description 按 code 定义：agent_busy 带 AgentBusyDetails；删除项目时的 agent_not_idle 带 ProjectNotIdleDetails，其余 agent_not_idle（包括平台命令）不带 */
                 details?: components["schemas"]["VerificationVersionConflictDetails"] | components["schemas"]["VerificationConflictDetails"] | components["schemas"]["VerificationUnsupportedDetails"] | components["schemas"]["TaskNodeMessageConflictDetails"] | components["schemas"]["CredentialPreconditionDetails"] | components["schemas"]["CLIAuthInProgressDetails"] | components["schemas"]["CredentialSelectionModeConflictDetails"] | components["schemas"]["CredentialResolutionDetails"] | components["schemas"]["CredentialAccountDeletedDetails"] | components["schemas"]["ProjectCredentialRequiredDetails"] | components["schemas"]["ProjectModelAuthInProgressDetails"] | components["schemas"]["ProjectActiveTasksDetails"] | components["schemas"]["QuestionClosedDetails"] | components["schemas"]["AgentBusyDetails"] | components["schemas"]["RunNotQueuedDetails"] | components["schemas"]["RunNotActiveDetails"] | components["schemas"]["ProjectNotIdleDetails"];
                 fields?: components["schemas"]["FieldError"][];
             };
         };
         /**
-         * @description - not_found：资源不存在（404） - validation_failed：校验失败（422） - precondition_failed：请求前置版本条件不一致（If-Match 或 Prompt 编辑版本，412） - payload_too_large：超过大小上限（413） - agent_busy：Agent 正忙且未选择打断或排队（409） - agent_not_idle：需要 Agent 空闲的操作（删除 Agent、删除项目、重开会话）在忙时被拒绝（409） - session_missing：Agent 处于会话丢失状态，需要先确认重开会话（409） - session_none：当前还没有可压缩或导出的 Pi 会话（409） - console_command_failed：平台命令已执行但未能完成（409） - template_deleted：来源模板已删除，不能重新复制（409） - name_conflict：名称重复（409）：项目内或平台内 Agent 重名、项目重名、Skill 名称重复或使用了内置 Skill 的名称 `loopctl`、外部身份重名 - path_conflict：文件夹来源子目录重复或互相包含（409） - forbidden_origin：Origin 不在白名单（403） - invalid_host：Host 不在允许名单（403） - unauthenticated：令牌缺失、无效、过期或已吊销，或所属身份已删除（401） - forbidden：身份有效，但不允许这个操作（403） - sleep_conflict：运行过期、动作内容冲突、已提交节点或已有不同有效 sleep（409） - run_not_queued：转为打断、撤回或取消的排队项已不在队列：执行已被领取、开始或结束，或消息已读、已取消（409） - run_not_active：停止回复时，这一次执行已经结束（409） - action_conflict：同一 actionId 被用于不同内容的动作（409） - plugin_source_failed：插件来源无法获取，或依赖安装失败（422） - plugin_confirmation_required：非官方来源的插件安装或更新须确认（409） - plugin_version_conflict：同一插件已装同版本号但内容不同（409） - plugin_not_enabled：插件没有在项目里启用，或全局停用（409） - plugin_blocked：插件的拦截类 Hook 阻止了这个操作，message 带插件 id 与原因（409） - plugin_failed：插件处理请求时报错，message 带插件给出的原因（502） - plugin_timeout：插件没有在时限内回应（504） - internal_error：服务端内部错误（500）
+         * @description - not_found：资源不存在（404） - validation_failed：校验失败（422） - precondition_failed：请求前置版本条件不一致（If-Match 或 Prompt 编辑版本，412） - payload_too_large：超过大小上限（413） - agent_busy：Agent 正忙且未选择打断或排队（409） - agent_not_idle：需要 Agent 空闲的操作（删除 Agent、删除项目、重开会话、平台命令 /new /reload /compact /resume、导出会话）在忙时被拒绝（409） - session_missing：Agent 处于会话丢失状态，需要先确认重开会话（409） - session_none：当前还没有可压缩或导出的 Pi 会话（409） - console_command_failed：平台命令已执行但未能完成（409） - template_deleted：来源模板已删除，不能重新复制（409） - name_conflict：名称重复（409）：项目内或平台内 Agent 重名、项目重名、Skill 名称重复或使用了内置 Skill 的名称 `loopctl`、外部身份重名 - path_conflict：文件夹来源子目录重复或互相包含（409） - forbidden_origin：Origin 不在白名单（403） - invalid_host：Host 不在允许名单（403） - unauthenticated：令牌缺失、无效、过期或已吊销，或所属身份已删除（401） - forbidden：身份有效，但不允许这个操作（403） - sleep_conflict：运行过期、动作内容冲突、已提交节点或已有不同有效 sleep（409） - run_not_queued：转为打断、撤回或取消的排队项已不在队列：执行已被领取、开始或结束，或消息已读、已取消（409） - run_not_active：停止回复时，这一次执行已经结束（409） - action_conflict：同一 actionId 被用于不同内容的动作（409） - plugin_source_failed：插件来源无法获取，或依赖安装失败（422） - plugin_confirmation_required：非官方来源的插件安装或更新须确认（409） - plugin_version_conflict：同一插件已装同版本号但内容不同（409） - plugin_not_enabled：插件没有在项目里启用，或全局停用（409） - plugin_blocked：插件的拦截类 Hook 阻止了这个操作，message 带插件 id 与原因（409） - plugin_failed：插件处理请求时报错，message 带插件给出的原因（502） - plugin_timeout：插件没有在时限内回应（504） - internal_error：服务端内部错误（500）
          * @enum {string}
          */
         ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout";
@@ -4261,6 +4265,10 @@ export interface components {
             /** @description 这次执行的回复；以其中的文字为最终回复 */
             message: components["schemas"]["Message"];
         };
+        /**
+         * @description 会话状态或会话序号变化时推送：重开会话、/new、/resume、会话文件丢失、第一轮回复后由 none 变 active、改模型换了运行时（会话随之重开）。
+         *     服务端重启后第一次推送状态时可能重复推送当前值。
+         */
         SseSessionUpdated: {
             state: components["schemas"]["SessionState"];
             epoch: number;
@@ -4355,6 +4363,12 @@ export interface components {
             errorCode: components["schemas"]["RunErrorCode"] | null;
             errorMessage: string | null;
             endReason: components["schemas"]["RunEndReason"];
+            /**
+             * @description 这条异常是一次失败的手动压缩（/compact）时为它的指令与结果（与 Run.compaction 相同，失败时 outcome 为 null），其余为 null。
+             *     手动压缩没有对话消息，不是对话流里的一轮：定位到它时（GET /agents/{agentId}/messages?aroundRun=runId）返回它开始时所在位置的一页，
+             *     页里没有它；要显示这次压缩本身，用 GET /agents/{agentId}/runs/{runId}/timeline 取执行与时间线。
+             */
+            compaction: components["schemas"]["RunCompaction"] | null;
         };
         AnomalyPage: {
             items: components["schemas"]["Anomaly"][];
@@ -7281,9 +7295,11 @@ export interface components {
             };
         };
         AgentCommandList: {
+            /** @description Agent 当前的运行时。只有 pi 有 Pi 命令；其余运行时（claude-code）不列 Pi 命令，capturedAt 恒为 null */
+            runtime: components["schemas"]["AgentRuntime"];
             /**
              * Format: date-time
-             * @description 读到 Pi 命令的时间（Pi 启动时）；从没启动过为 null
+             * @description 读到 Pi 命令的时间（Pi 启动时）。runtime 为 pi 而它为 null 表示 Pi 还没启动过；runtime 不是 pi 时恒为 null
              */
             capturedAt: string | null;
             commands: components["schemas"]["AgentCommand"][];
@@ -7298,11 +7314,19 @@ export interface components {
             source: "platform" | "pi";
             /** @description Pi 给的来源（原样）：extension 扩展命令、prompt 提示模板、skill 技能命令；平台命令为空字符串 */
             piSource: string;
-            /** @description 命令自己的说明（扩展原文，按纯文本显示）；平台命令为 null，由控制台按命令名显示说明 */
-            description: string | null;
-            /** @description 平台命令的用法，例如 `/compact [instructions]`；Pi 命令为 null */
+            /**
+             * @description 命令的说明，按纯文本显示。Pi 命令是扩展给的原文（字符串）；平台命令是中英两种说明（LocalizedText 对象，键为 zh-CN 与 en-US），
+             *     控制台按当前语言取字，用法里的占位词（instructions、html|jsonl、session-id）在说明里写法相同。没有说明时为 null
+             */
+            description: components["schemas"]["LocalizedText"] | null;
+            /** @description 平台命令的用法，方括号里是可省略的参数：`/compact [instructions]`、`/export [html|jsonl]`、`/resume [session-id]`（完整的会话 ID）；Pi 命令为 null */
             usage: string | null;
-            /** @description 此刻能不能用（只看运行时与会话状态）；Pi 命令恒为 true */
+            /**
+             * @description 此刻能不能用。平台命令只取决于 Agent 的运行时（AgentCommandList.runtime）与会话状态（SessionState），规则见 unavailableReason；
+             *     Agent 正忙不在这里判断，发送时返回 409。两者的每次变化都会在 Agent 的事件流（GET /agents/{agentId}/events）里推送 session.updated：
+             *     重开、恢复、会话文件丢失、第一轮回复后会话由 none 变 active、改模型换了运行时（会话随之重开）。收到 session.updated 后重读本接口即可。
+             *     Pi 命令恒为 true。
+             */
             available: boolean;
             /**
              * @description 不能用的原因：runtime_unsupported 运行时不支持（Claude Code 的 Agent 没有 Pi 会话，不能 /compact、/export、/resume）；
@@ -7655,12 +7679,14 @@ export interface components {
             compactRun?: components["schemas"]["Run"];
             /**
              * Format: int64
-             * @description /compact 实际压缩时压缩前的上下文 token，同 compactRun.compaction.tokensBefore；其余为 null
+             * @deprecated
+             * @description 已弃用，改读 compactRun.compaction.tokensBefore（值相同）。/compact 实际压缩时为压缩前的上下文 token，其余为 null
              */
             tokensBefore?: number | null;
             /**
              * Format: int64
-             * @description 同 compactRun.compaction.estimatedTokensAfter；其余为 null
+             * @deprecated
+             * @description 已弃用，改读 compactRun.compaction.estimatedTokensAfter（值相同）
              */
             estimatedTokensAfter?: number | null;
         };
@@ -7773,7 +7799,7 @@ export interface components {
         };
         /**
          * @description 与当前状态冲突。`error.code` 取值：
-         *     `agent_busy`（details 为 AgentBusyDetails）、`agent_not_idle`（删除项目时 details 为 ProjectNotIdleDetails）、`session_missing`、`template_deleted`、`name_conflict`、`path_conflict`。
+         *     `agent_busy`（details 为 AgentBusyDetails）、`agent_not_idle`（删除项目时 details 为 ProjectNotIdleDetails，其余不带 details）、`session_missing`、`template_deleted`、`name_conflict`、`path_conflict`。
          */
         Conflict: {
             headers: {

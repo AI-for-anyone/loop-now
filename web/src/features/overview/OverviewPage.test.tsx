@@ -295,6 +295,31 @@ describe('异常与失败', () => {
     expect(b).toHaveTextContent('查看回复')
   })
 
+  it('失败的手动压缩写成“压缩失败”，带上压缩的指令；“查看压缩”定位到这次压缩', async () => {
+    const failed = makeAnomaly({
+      errorCode: 'pi_error',
+      errorMessage: 'compaction failed',
+      compaction: { instructions: '保留关键决定', outcome: null, skipReason: null, tokensBefore: null, estimatedTokensAfter: null },
+    })
+    const { snapshot } = await renderOverview({ anomalies: anomalyPage([failed]) })
+    await snapshot([makeAgentOverview()])
+    const item = await within(section('异常与失败')).findByRole('link')
+    expect(within(item).getByText('压缩失败')).toBeInTheDocument()
+    expect(within(item).queryByText('失败', { exact: true })).toBeNull()
+    expect(item).toHaveTextContent('/compact 保留关键决定')
+    expect(item).toHaveTextContent('Agent 报告错误：compaction failed')
+    expect(item).toHaveTextContent('查看压缩')
+    expect(item).toHaveAttribute('href', `/agents/${failed.agentId}/chat#run-${failed.runId}`)
+  })
+
+  it('没有指令的手动压缩只写 /compact', async () => {
+    const failed = makeAnomaly({ errorCode: 'pi_exited', errorMessage: null, compaction: { instructions: '', outcome: null, skipReason: null, tokensBefore: null, estimatedTokensAfter: null } })
+    const { snapshot } = await renderOverview({ anomalies: anomalyPage([failed]) })
+    await snapshot([makeAgentOverview()])
+    const item = await within(section('异常与失败')).findByRole('link')
+    expect(item.querySelector('code')).toHaveTextContent(/^\/compact$/)
+  })
+
   it('最近 24 小时没有异常时显示空状态', async () => {
     const { snapshot } = await renderOverview()
     await snapshot([makeAgentOverview()])

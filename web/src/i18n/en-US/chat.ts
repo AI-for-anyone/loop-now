@@ -66,11 +66,11 @@ export const chat = {
   sessionDivider: 'Session switched; page history is kept',
   commands: {
     menuLabel: 'Commands',
-    label: 'Pi commands',
     loading: 'Loading commands…',
     failed: (reason: string) => `Couldn't load the command list: ${reason}`,
     notCaptured: 'The command list appears after the Agent has run once.',
     noMatch: 'No matching commands.',
+    noPi: (runtime: string) => `No matching commands. This Agent runs on ${runtime} and has no Pi commands.`,
     unavailable: {
       title: 'Not available now',
       onlyBlocked: 'None of the matching commands can be used now; Enter sends the text as typed',
@@ -80,20 +80,7 @@ export const chat = {
     plugin: (name: string) => `Plugin · ${name}`,
     keys: '↑↓ to choose · Enter or Tab to fill in · Esc to close',
     platform: 'Platform command',
-    hintTitle: 'Built-in commands',
-    hintKeyboard: '↑↓ to choose · Enter to insert · Esc to close',
-    hints: {
-      session: 'Show the current session, model, and process',
-      new: 'Start a new session and keep page history',
-      compact: 'Compact the current context, with optional instructions',
-      reload: 'Stop the process; reload on the next message',
-      copy: 'Copy the latest successful reply',
-      export: 'Export the session as html or jsonl',
-      resume: 'List sessions or resume one by its full ID',
-    },
     noReply: 'Command completed',
-    sessionState: { none: 'none', active: 'active', missing: 'missing' },
-    processState: { stopped: 'stopped', starting: 'starting', idle: 'idle', busy: 'busy' },
     session: (session) => `Session ${session.status.session.state} · epoch ${session.status.session.epoch} · model ${session.model.provider}/${session.model.modelId} · thinking ${session.thinkingLevel} · process ${session.status.processState} · queued ${session.status.queued.normal + session.status.queued.interrupt}`,
     compact: (before, after) => `Context compacted: ${before} → about ${after} tokens`,
     compactSkipped: {
@@ -121,7 +108,15 @@ export const chat = {
     resumeConfirmTitle: 'Resume this session?',
     resumeConfirmBody: 'Only the model conversation context is restored, and page history is kept. The workspace, model configuration, Prompt, Skills, and permissions are not rolled back.',
     resumeConfirmAction: 'Resume session',
+  },  compactionNote: {
+    title: 'Manual compaction',
+    target: 'The located manual compaction',
+    notATurn: "A manual compaction isn't a turn of the conversation and has no messages; this is where it happened.",
+    failed: 'Compaction failed',
+    interrupted: "The compaction was cancelled or interrupted and didn't finish",
+    running: 'Compacting…',
   },
+
   platformReminderAt: (time: string) => `Platform reminder · ${formatDayClock(time)}`,
   inboxReminder: { title: 'Platform reminder', from: (name: string) => `From ${name}`, deleted: (label: string) => ` (${label})`, received: 'Received an Inbox message' },
   connection: {

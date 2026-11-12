@@ -5,13 +5,14 @@ import { describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
 import { apiUrl, errorBody, makeMessage, makeRun } from '@/test/api'
 import { renderWithQuery } from '@/test/render'
-import { claudeCodeCommands, piCommand, platformCommands } from '@/test/commands'
+import { claudeCodeList, commandList, piCommand, platformCommands } from '@/test/commands'
 import { server } from '@/test/server'
 import { Composer } from './Composer'
 import { applyCommand, commandText, matchCommands, slashToken } from './slash-commands'
 
 const command = piCommand
 const list: Schemas['AgentCommandList'] = {
+  runtime: 'pi',
   capturedAt: '2026-11-10T08:00:00Z',
   commands: [
     ...platformCommands(),
@@ -49,7 +50,7 @@ describe('输入框的 "/" 命令菜单', () => {
     expect(reads()).toBe(0)
     await user.clear(input)
     await user.type(input, '/')
-    await waitFor(() => expect(labels()).toEqual(['/session', '/new', '/compact [instructions]', '/reload', '/copy', '/export [html|jsonl]', '/resume [sessionId]', '/pi:review', '/pi:skill:loopctl', '/pi:summarize']))
+    await waitFor(() => expect(labels()).toEqual(['/session', '/new', '/compact [instructions]', '/reload', '/copy', '/export [html|jsonl]', '/resume [session-id]', '/pi:review', '/pi:skill:loopctl', '/pi:summarize']))
     expect(reads()).toBe(1)
     expect(options()[7]).toHaveTextContent('/pi:review扩展命令 · 插件 · 代码审查审查当前改动')
     expect(options()[8]).toHaveTextContent('/pi:skill:loopctl技能用 loopctl 管理 Agent <b>与任务</b>')
@@ -134,12 +135,25 @@ describe('输入框的 "/" 命令菜单', () => {
   })
 
   it('Agent 还没运行过（capturedAt 为 null）：说明运行一次后才有列表，回车照常发出', async () => {
-    const { user, input, sent } = setup(() => HttpResponse.json({ capturedAt: null, commands: platformCommands() }))
+    const { user, input, sent } = setup(() => HttpResponse.json(commandList()))
     await user.type(input, '/foo')
     expect(await screen.findByRole('status')).toHaveTextContent('Agent 运行一次后才有命令列表。')
     expect(screen.queryByRole('listbox')).toBeNull()
     await user.keyboard('{Enter}')
     await waitFor(() => expect(sent).toEqual([{ text: '/foo' }]))
+  })
+
+  it('没有 Pi 的 Agent（runtime 不是 pi）：没有匹配时说明它没有 Pi 命令，而不是“运行一次后才有”', async () => {
+    const { user, input } = setup(() => HttpResponse.json(commandList(platformCommands(), { runtime: 'claude-code' })))
+    await user.type(input, '/review')
+    expect(await screen.findByRole('status')).toHaveTextContent('没有匹配的命令。这个 Agent 用 Claude Code 运行，没有 Pi 命令。')
+    expect(screen.getByRole('status')).not.toHaveTextContent('运行一次后')
+  })
+
+  it('Pi 的 Agent 读到过命令、只是没有匹配：只说没有匹配', async () => {
+    const { user, input } = setup()
+    await user.type(input, '/zzz')
+    expect(await screen.findByRole('status')).toHaveTextContent(/^没有匹配的命令。$/)
   })
 
   it('读不到命令列表时说明原因，不挡发送', async () => {
@@ -151,11 +165,11 @@ describe('输入框的 "/" 命令菜单', () => {
   })
 
   it('Claude Code 的 Agent：没有 /pi: 命令；能用的平台命令照常提示，/compact、/export、/resume 列在“现在不能用”里并写明原因', async () => {
-    const { user, input, sent } = setup(() => HttpResponse.json({ capturedAt: null, commands: claudeCodeCommands() }))
+    const { user, input, sent } = setup(() => HttpResponse.json(claudeCodeList()))
     await user.type(input, '/')
     await waitFor(() => expect(labels()).toEqual(['/session', '/new', '/reload', '/copy']))
     const blocked = screen.getByRole('group', { name: '现在不能用' })
-    expect([...blocked.querySelectorAll('code')].map((code) => code.textContent)).toEqual(['/compact [instructions]', '/export [html|jsonl]', '/resume [sessionId]'])
+    expect([...blocked.querySelectorAll('code')].map((code) => code.textContent)).toEqual(['/compact [instructions]', '/export [html|jsonl]', '/resume [session-id]'])
     expect(within(blocked).getAllByText('这个 Agent 用 Claude Code 运行，没有 Pi 会话')).toHaveLength(3)
     expect(within(blocked).queryByRole('option')).toBeNull()
     // 没有匹配的命令时只说没有匹配，不说“运行一次后才有命令列表”（它没有 Pi，运行了也不会有）。
@@ -167,13 +181,24 @@ describe('输入框的 "/" 命令菜单', () => {
     await waitFor(() => expect(sent).toEqual([{ text: '/review' }]))
   })
 
+  it('平台命令的说明用服务端给的中英说明，按界面语言取字；筛选也按这段说明', async () => {
+    const [session] = platformCommands()
+    const ping = { ...session, name: 'ping', usage: '/ping [host]', description: { 'zh-CN': '测一下网络', 'en-US': 'Check the network' } }
+    const { user, input } = setup(() => HttpResponse.json(commandList([session, ping])))
+    await user.type(input, '/网络')
+    await waitFor(() => expect(labels()).toEqual(['/ping [host]']))
+    expect(options()[0]).toHaveTextContent('/ping [host]平台命令测一下网络')
+    expect(options()[0]).not.toHaveTextContent('Check the network')
+  })
+
   it('内置命令只认服务端给的列表：没列的不显示，多列的照样显示（没有说明就不写说明）', async () => {
     const [session] = platformCommands()
-    const ping = { ...session, name: 'ping', usage: '/ping [host]' }
-    const { user, input } = setup(() => HttpResponse.json({ capturedAt: null, commands: [session, ping] }))
+    const ping = { ...session, name: 'ping', usage: '/ping [host]', description: null }
+    const { user, input } = setup(() => HttpResponse.json(commandList([session, ping])))
     await user.type(input, '/')
     await waitFor(() => expect(labels()).toEqual(['/session', '/ping [host]']))
     expect(options()[0]).toHaveTextContent('/session平台命令查看当前会话、模型和进程状态')
+    // 服务端没给说明（null）时不写说明，也不用控制台自己的文字补上。
     expect(options()[1]).toHaveTextContent(/^\/ping \[host\]平台命令$/)
     await user.keyboard('{ArrowDown}{Enter}')
     expect(input).toHaveValue('/ping')
@@ -181,9 +206,9 @@ describe('输入框的 "/" 命令菜单', () => {
 
   it('不可用的命令置灰列在下面、写明原因、不能选；上下键和回车只在可用的命令之间走', async () => {
     const commands = platformCommands({ compact: { available: false, unavailableReason: 'session_none' }, export: { available: false, unavailableReason: 'session_missing' } })
-    const { user, input } = setup(() => HttpResponse.json({ capturedAt: null, commands }))
+    const { user, input } = setup(() => HttpResponse.json(commandList(commands)))
     await user.type(input, '/')
-    await waitFor(() => expect(labels()).toEqual(['/session', '/new', '/reload', '/copy', '/resume [sessionId]']))
+    await waitFor(() => expect(labels()).toEqual(['/session', '/new', '/reload', '/copy', '/resume [session-id]']))
     const blocked = screen.getByRole('group', { name: '现在不能用' })
     expect(blocked).toHaveTextContent('/compact [instructions]平台命令还没有会话，先发一条消息')
     expect(blocked).toHaveTextContent('/export [html|jsonl]平台命令会话文件丢失，先 /new 或 /resume')

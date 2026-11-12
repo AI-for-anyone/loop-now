@@ -268,11 +268,7 @@ func FromRun(r store.Run) Run {
 			out.PiCommand.Notices, out.PiCommand.Truncated = saved.Notices, saved.Truncated
 		}
 	}
-	if r.Origin == executor.OriginConsoleCompact {
-		c := store.ParseCompaction(r.Compaction)
-		out.Compaction = &RunCompaction{Instructions: c.Instructions, Outcome: strPtr(c.Outcome), SkipReason: strPtr(c.SkipReason),
-			TokensBefore: c.TokensBefore, EstimatedTokensAfter: c.EstimatedTokensAfter}
-	}
+	out.Compaction = CompactionOf(r)
 	if r.Status != "starting" {
 		out.Phase = nil
 	}
@@ -280,6 +276,16 @@ func FromRun(r store.Run) Run {
 		out.Tools = append(out.Tools, ToolEvent{ToolCallID: t.ToolCallID, ToolName: t.ToolName, State: t.State, At: t.At})
 	}
 	return out
+}
+
+// CompactionOf 返回手动压缩（/compact）执行的指令与结果；不是手动压缩时为 nil。
+func CompactionOf(r store.Run) *RunCompaction {
+	if r.Origin != executor.OriginConsoleCompact {
+		return nil
+	}
+	c := store.ParseCompaction(r.Compaction)
+	return &RunCompaction{Instructions: c.Instructions, Outcome: strPtr(c.Outcome), SkipReason: strPtr(c.SkipReason),
+		TokensBefore: c.TokensBefore, EstimatedTokensAfter: c.EstimatedTokensAfter}
 }
 
 // FromMessage 把消息与其所属执行转为接口结构。

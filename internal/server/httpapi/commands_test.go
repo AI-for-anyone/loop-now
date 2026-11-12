@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -16,12 +17,13 @@ import (
 )
 
 type commandList struct {
+	Runtime    string     `json:"runtime"`
 	CapturedAt *time.Time `json:"capturedAt"`
 	Commands   []struct {
 		Name              string          `json:"name"`
 		Source            string          `json:"source"`
 		PiSource          string          `json:"piSource"`
-		Description       *string         `json:"description"`
+		Description       json.RawMessage `json:"description"`
 		PluginID          *string         `json:"pluginId"`
 		PluginDisplayName json.RawMessage `json:"pluginDisplayName"`
 		Usage             *string         `json:"usage"`
@@ -53,11 +55,34 @@ func TestListAgentCommandsPlatform(t *testing.T) {
 	agent, path := e.newAgent("命令清单")
 	get := func() commandList { return decode[commandList](t, e.expect(200, "GET", path+"/commands", nil)) }
 	l := get()
+	if l.Runtime != "pi" {
+		t.Fatalf("Pi 的 Agent：%s", l.Runtime)
+	}
 	if got := strings.Join(platformAvailability(l), " "); got != "session new compact:session_none reload copy export:session_none resume" {
 		t.Fatalf("还没有会话：%s", got)
 	}
-	if c := l.Commands[2]; c.Usage == nil || *c.Usage != "/compact [instructions]" || c.PiSource != "" || c.Description != nil {
+	if c := l.Commands[2]; c.Usage == nil || *c.Usage != "/compact [instructions]" || c.PiSource != "" {
 		t.Fatalf("平台命令的字段：%+v", c)
+	}
+	// 每个平台命令都有中英两种说明，用法里方括号中的占位词在两种说明里都出现。
+	for _, c := range l.Commands {
+		var desc struct {
+			Zh string `json:"zh-CN"`
+			En string `json:"en-US"`
+		}
+		if err := json.Unmarshal(c.Description, &desc); err != nil || desc.Zh == "" || desc.En == "" {
+			t.Fatalf("%s 应有中英说明：%s %v", c.Name, c.Description, err)
+		}
+		for _, m := range regexp.MustCompile(`\[([^\]]+)\]`).FindAllStringSubmatch(*c.Usage, -1) {
+			for _, word := range strings.Split(m[1], "|") {
+				if !strings.Contains(desc.Zh, word) || !strings.Contains(desc.En, word) {
+					t.Fatalf("%s 的说明没有提到用法里的 %s：%+v", c.Name, word, desc)
+				}
+			}
+		}
+	}
+	if c := l.Commands[6]; *c.Usage != "/resume [session-id]" {
+		t.Fatalf("/resume 的用法：%s", *c.Usage)
 	}
 	if err := e.st.RecordSessionFile(ctx, agent.ID, "/managed/s.jsonl"); err != nil {
 		t.Fatal(err)
@@ -76,6 +101,13 @@ func TestListAgentCommandsPlatform(t *testing.T) {
 	e.expect(200, "PATCH", path, map[string]any{"model": map[string]string{"provider": "claude-code", "modelId": "sonnet"}})
 	if got := strings.Join(platformAvailability(get()), " "); got != "session new compact:runtime_unsupported reload copy export:runtime_unsupported resume:runtime_unsupported" {
 		t.Fatalf("Claude Code：%s", got)
+	}
+	// 换成 Claude Code 之前启动 Pi 时缓存的命令不再列出，capturedAt 为 null，runtime 写明不是 Pi。
+	e.api.PiCommands = func(uuid.UUID) (*executor.PiCommands, error) {
+		return &executor.PiCommands{CapturedAt: time.Now().UTC(), Commands: []executor.PiCommand{{Name: "stale", Source: "extension"}}}, nil
+	}
+	if l := get(); l.Runtime != "claude-code" || l.CapturedAt != nil || len(l.Commands) != 7 {
+		t.Fatalf("Claude Code 不列 Pi 命令：%+v", l)
 	}
 }
 
@@ -112,7 +144,7 @@ func TestListAgentCommands(t *testing.T) {
 	l := all
 	l.Commands = all.Commands[platform:]
 	c := l.Commands[0]
-	if c.Name != "grok-cli-accounts" || c.Source != "pi" || c.PiSource != "extension" || c.Description == nil || c.PluginID == nil || *c.PluginID != "grokish" || string(c.PluginDisplayName) != `"Grokish"` ||
+	if c.Name != "grok-cli-accounts" || c.Source != "pi" || c.PiSource != "extension" || string(c.Description) != `"管理账号"` || c.PluginID == nil || *c.PluginID != "grokish" || string(c.PluginDisplayName) != `"Grokish"` ||
 		!c.Available || c.Usage != nil || c.UnavailableReason != nil {
 		t.Fatalf("插件命令：%+v %s", c, c.PluginDisplayName)
 	}
@@ -120,4 +152,30 @@ func TestListAgentCommands(t *testing.T) {
 		t.Fatalf("不在插件目录里的命令：%+v", l.Commands[1:])
 	}
 	e.expect(404, "GET", "/agents/"+uuid.NewString()+"/commands", nil)
+}
+
+// 改模型换了运行时，会话随之重开：Agent 的事件流里有 session.updated，控制台据此重读命令清单。
+func TestRuntimeSwitchPushesSessionUpdated(t *testing.T) {
+	e := newEnv(t)
+	reg := modelcatalog.NewRegistry(e.api.Models.Snapshot())
+	e.api.Models, e.api.Config.Models = reg, reg
+	_, path := e.newAgent("换运行时")
+	events, closeEvents := readSSE(t, e, path, "")
+	defer closeEvents()
+	_ = next(t, events) // snapshot
+	e.expect(200, "PATCH", path, map[string]any{"model": map[string]string{"provider": "claude-code", "modelId": "sonnet"}})
+	for range 20 {
+		ev := next(t, events)
+		if ev.event != "session.updated" {
+			continue
+		}
+		var u apitypes.SseSessionUpdated
+		if err := json.Unmarshal([]byte(ev.data), &u); err != nil {
+			t.Fatal(err)
+		}
+		if u.Epoch == 2 && u.State == "none" {
+			return
+		}
+	}
+	t.Fatal("换运行时后应收到会话序号为 2 的 session.updated")
 }

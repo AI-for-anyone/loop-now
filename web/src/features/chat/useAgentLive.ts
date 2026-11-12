@@ -51,7 +51,7 @@ function syncCache(client: QueryClient, agentId: string, event: AgentEvent) {
     case 'session.updated':
       void client.invalidateQueries({ queryKey: keys.agent(agentId) })
       void client.invalidateQueries({ queryKey: keys.agents })
-      // 平台命令此刻能不能用取决于会话状态（还没有会话、会话文件丢失）。
+      // 平台命令此刻能不能用只取决于运行时与会话状态，两者每次变化都会推这个事件（契约 AgentCommand.available）。
       void client.invalidateQueries({ queryKey: keys.agentCommands(agentId) })
       break
   }

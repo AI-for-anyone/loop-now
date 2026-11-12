@@ -1,4 +1,5 @@
 import type { Schemas } from '@/api/client'
+import { localizedText } from '@/lib/localized-text'
 
 export type Command = Schemas['AgentCommand']
 
@@ -18,6 +19,9 @@ export function slashToken(text: string, caret: number): string | null {
   return caret <= end ? text.slice(0, end) : null
 }
 
+// 命令的说明（契约 AgentCommand.description）：Pi 命令是扩展给的原文，平台命令是中英两种说明，按界面语言取字；没有说明时为空串。
+export const commandDescription = (command: Command): string => (command.description === null ? '' : localizedText(command.description))
+
 // 按输入的词筛选并排序：补全后的写法（如 pi:<name>）以它开头的最前，其次是命令名以它开头的（没写 pi:），
 // 再次是名称或说明里包含它的。同一档里保持服务端给的顺序。
 export function matchCommands(commands: Command[], token: string): Command[] {
@@ -26,7 +30,7 @@ export function matchCommands(commands: Command[], token: string): Command[] {
     const name = command.name.toLowerCase()
     if (commandText(command).slice(1).toLowerCase().startsWith(query)) return 0
     if (name.startsWith(query)) return 1
-    if (name.includes(query) || (command.description ?? '').toLowerCase().includes(query)) return 2
+    if (name.includes(query) || commandDescription(command).toLowerCase().includes(query)) return 2
     return null
   }
   return commands

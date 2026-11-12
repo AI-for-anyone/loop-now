@@ -2,12 +2,15 @@ package conversation_test
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/conversation"
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/executor"
@@ -164,4 +167,55 @@ func TestResumeListingDoesNotHoldBusyLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.waitIdle()
+}
+
+// sessionUpdates 是 Agent 事件流里 session.updated 的内容，按时间顺序。
+func (e *env) sessionUpdates() []apitypes.SseSessionUpdated {
+	e.t.Helper()
+	var out []apitypes.SseSessionUpdated
+	evs := e.newestEvents()
+	slices.Reverse(evs)
+	for _, ev := range evs {
+		if ev.Type != apitypes.EventSessionUpdated {
+			continue
+		}
+		var u apitypes.SseSessionUpdated
+		if err := json.Unmarshal(ev.Data, &u); err != nil {
+			e.t.Fatal(err)
+		}
+		out = append(out, u)
+	}
+	return out
+}
+
+// 会话状态的每次变化都有 session.updated，包括第一轮回复后由 none 变 active（这一步不走会话命令，
+// 由执行器记下会话文件）；状态没变时不重复推送。
+func TestSessionUpdatedWhenFirstTurnStartsSession(t *testing.T) {
+	e := newEnv(t)
+	e.mustSend("block 第一轮", "")
+	e.waitStarted("block 第一轮")
+	if err := e.st.RecordSessionFile(context.Background(), e.agent, "/managed/s.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	e.ex.signal(e.agent, "release")
+	e.waitIdle()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		updates := e.sessionUpdates()
+		if n := len(updates); n > 0 && updates[n-1].State == "active" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("会话变 active 后应推送 session.updated：%+v", updates)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	before := len(e.sessionUpdates())
+	e.mustSend("第二轮", "")
+	e.waitStarted("第二轮")
+	e.waitIdle()
+	time.Sleep(200 * time.Millisecond) // 等概览状态重算
+	if after := e.sessionUpdates(); len(after) != before {
+		t.Fatalf("会话没变时不应重复推送：%+v", after[before:])
+	}
 }

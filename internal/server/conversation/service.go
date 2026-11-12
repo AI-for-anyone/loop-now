@@ -67,6 +67,7 @@ type Service struct {
 	sleepRevisions  sync.Map
 	dispatchGates   sync.Map // AgentID -> chan struct{}；任务分叉只阻止新轮派发，不打断当前轮
 	commands        sync.Map // RunID -> *consoleCommandRun；发起手动压缩的请求等待这次执行结束
+	sessions        sync.Map // AgentID -> apitypes.SessionInfo；最近一次推送的 session.updated
 
 	// InboxCancelled 在一条 Inbox 消息被人取消、事务提交后调用（追加收件箱事件）；为空时不推送。
 	InboxCancelled func(ctx context.Context, m store.InboxMessage)
@@ -799,8 +800,20 @@ func (s *Service) emitSession(ctx context.Context, agentID uuid.UUID) {
 	if err != nil {
 		return
 	}
-	s.emit(ctx, agentID, apitypes.EventSessionUpdated, apitypes.SseSessionUpdated{State: sess.State, Epoch: sess.Epoch})
+	s.publishSession(ctx, agentID, apitypes.SessionInfo{State: sess.State, Epoch: sess.Epoch}, true)
 	s.EmitAgentStatus(agentID)
+}
+
+// publishSession 在 Agent 的事件流里推送 session.updated。force 为 false 时只在会话状态或序号与上次推送的不同时才推：
+// 概览状态每次重算都会调用它，这样会话的每次变化都有 session.updated，包括第一轮回复后由 none 变 active、
+// 改模型换运行时导致的重开（这两处没有走会话命令）。
+func (s *Service) publishSession(ctx context.Context, agentID uuid.UUID, info apitypes.SessionInfo, force bool) {
+	if last, ok := s.sessions.Load(agentID); ok && !force && last.(apitypes.SessionInfo) == info {
+		return
+	}
+	if s.emit(ctx, agentID, apitypes.EventSessionUpdated, apitypes.SseSessionUpdated{State: info.State, Epoch: info.Epoch}) {
+		s.sessions.Store(agentID, info)
+	}
 }
 
 // ---- 概览事件流 ----
@@ -853,6 +866,7 @@ func (s *Service) pushAgentStatus(agentID uuid.UUID) {
 			s.log.Warn("读取已删除 Agent 的归属失败", "agentId", agentID, "err", perr)
 		}
 		s.appendOverview(ctx, apitypes.EventAgentRemoved, apitypes.SseAgentRemoved{AgentID: agentID, Scope: apitypes.ScopeOf(pid), ProjectID: pid})
+		s.sessions.Delete(agentID)
 		return
 	}
 	if err != nil {
@@ -860,6 +874,7 @@ func (s *Service) pushAgentStatus(agentID uuid.UUID) {
 		return
 	}
 	s.appendOverview(ctx, apitypes.EventAgentStatus, apitypes.SseAgentStatus{Agent: item})
+	s.publishSession(ctx, agentID, item.Status.Session, false)
 }
 
 func (s *Service) appendOverview(ctx context.Context, typ string, payload any) {

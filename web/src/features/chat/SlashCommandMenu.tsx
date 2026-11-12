@@ -3,7 +3,7 @@ import { Popover as PopoverPrimitive } from 'radix-ui'
 import { t } from '@/i18n'
 import { localizedText } from '@/lib/localized-text'
 import { cn } from '@/lib/utils'
-import { commandText, type Command } from './slash-commands'
+import { commandDescription, commandText, type Command } from './slash-commands'
 
 const text = t.chat.commands
 
@@ -75,7 +75,7 @@ export function SlashCommandMenu({ open, listId, optionId, items, blocked = [], 
                           {[source, plugin && text.plugin(plugin)].filter(Boolean).join(' · ')}
                         </span>
                       </span>
-                      {command.description && <span className="line-clamp-2 text-[12.5px] leading-snug text-ink-700 [overflow-wrap:anywhere]">{command.description}</span>}
+                      {commandDescription(command) && <span className="line-clamp-2 text-[12.5px] leading-snug text-ink-700 [overflow-wrap:anywhere]">{commandDescription(command)}</span>}
                     </div>
                   )
                 })}
