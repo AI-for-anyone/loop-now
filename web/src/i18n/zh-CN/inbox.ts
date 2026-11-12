@@ -57,6 +57,8 @@ export const agentInbox = {
   all: '全部',
   unreadOnly: '只看未读',
   readonly: '只读查看：打开全文不会改变已读状态',
+  // 纸张右侧票根里的计数：未读数与总数（只算已经读到的几页，没读完时数字后面加 +）。
+  stub: { title: '信件', unread: '未读', all: '全部' },
   list: (name: string) => `${name}收到的消息`,
   unread: '未读',
   readAt: (time: string) => `已读 ${formatDayClock(time)}`,
