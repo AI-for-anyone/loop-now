@@ -286,3 +286,36 @@ describe('外部身份的收件箱只读', () => {
     expect(within(inboxList().getByRole('button', { name: /代码审查助手/ })).getByText('未读')).toBeInTheDocument()
   })
 })
+
+// 改版“一张印出来的纸”第 4 步：外部身份排在一张纸上，左边是列表，右边是所选身份。
+describe('纸张上的外部身份', () => {
+  it('页头是页面标题：面包屑“全局›外部身份”，旁边是身份个数；荧光粉的“新建”在列表顶上', async () => {
+    const ciBot = makeIdentity({ name: 'ci-bot' })
+    await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}`)
+    const header = screen.getByRole('heading', { level: 1, name: '外部身份' }).closest('header')!
+    expect(within(header).getByRole('navigation', { name: '页面位置' })).toHaveTextContent('全局›外部身份')
+    expect(await within(header).findByText('1 个')).toBeInTheDocument()
+    expect(list().getByRole('button', { name: '新建' })).toHaveClass('bg-riso-pink', 'border-2', 'border-ink')
+  })
+
+  it('列表与详情在一张纸上；选中的身份是黄底、藏青描边加投影的一块', async () => {
+    const ciBot = makeIdentity({ name: 'ci-bot' })
+    const release = makeIdentity({ name: 'release-bot' })
+    await renderIdentities({ identities: [ciBot, release], tokens: { [ciBot.id]: [], [release.id]: [] } }, `/identities/${ciBot.id}`)
+    await screen.findByRole('heading', { level: 2, name: 'ci-bot' })
+    const aside = screen.getByRole('complementary', { name: '外部身份列表' })
+    expect(aside.closest('[data-sheet]')).toContainElement(screen.getByRole('heading', { level: 2, name: 'ci-bot' }))
+    expect(list().getByRole('link', { name: /ci-bot/ })).toHaveClass('bg-riso-yellow', 'border-ink', 'shadow-[4px_4px_0_var(--ink)]')
+    expect(list().getByRole('link', { name: /release-bot/ })).not.toHaveClass('bg-riso-yellow')
+  })
+
+  it('身份名是展示字加黄色记号笔，地址等宽；“删除外部身份”是红色描边按钮；令牌的风险说明是黄色便签', async () => {
+    const ciBot = makeIdentity({ name: 'ci-bot' })
+    await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}`)
+    const name = await screen.findByRole('heading', { level: 2, name: 'ci-bot' })
+    expect(name).toHaveClass('riso-marker', 'font-display-cn')
+    expect(screen.getByText(ciBot.address)).toHaveClass('font-mono')
+    expect(screen.getByRole('button', { name: '删除外部身份' })).toHaveClass('border-2', 'border-red-text', 'text-red-text', 'rounded-full')
+    expect(await screen.findByRole('note')).toHaveClass('riso-tilt')
+  })
+})

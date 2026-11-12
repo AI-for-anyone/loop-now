@@ -8,6 +8,7 @@ export const identities = {
   create: 'New',
   empty: 'No external identities yet.',
   notFound: "Can't find this external identity.",
+  count: (count: number) => (count === 1 ? '1 identity' : `${count} identities`),
   activeTokens: (count: number) => `${count} active ${plural('en-US', count, { one: 'token', other: 'tokens' })}`,
   createdAt: (time: string) => `Created ${formatTime(time)}`,
   deletedAt: (time: string) => `Deleted ${formatTime(time)}`,
