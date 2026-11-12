@@ -406,13 +406,16 @@ func (s *Service) drive(agentID uuid.UUID, run store.Run, owner string) {
 		if ctx.Err() != nil {
 			return // 服务端停止：执行保持原状态，下次启动时标为重启中断
 		}
-		s.finish(ctx, run, res, command)
-
+		// 先把结束写进数据库、交接忙闲锁，再通知结束：收到终态事件（或手动压缩的请求返回）就发送的控制台，
+		// 不会撞上这次执行还没放开的锁、被当成“正在回复”。数据库须先记为结束：交接选下一条、新的发送开始执行，
+		// 都要求数据库里没有进行中的执行。
+		publish := s.finish(ctx, run, res, command)
 		next, ok, err := s.handoff(ctx, agentID, owner)
 		if err == nil && !ok {
 			// 锁已不是本执行持有（例如锁过了 TTL）：锁空闲时直接交接。
 			next, ok, err = s.handoff(ctx, agentID, "")
 		}
+		publish()
 		if err != nil || !ok || next == "" {
 			if err != nil {
 				s.log.Warn("交接忙闲锁失败，等待对账", "agentId", agentID, "err", err)
@@ -466,6 +469,10 @@ var testHookAfterDriveHandoff atomic.Pointer[func(agentID uuid.UUID)]
 
 // testHookAfterDriverPending 只供测试使用：新运行已登记 pendingDrivers 后调用。
 var testHookAfterDriverPending atomic.Pointer[func(runID uuid.UUID)]
+
+// testHookAfterRunEndPublished 只供测试使用：驱动循环把一次执行的结束通知出去（终态事件、等待中的手动压缩请求）之后、
+// 接着处理下一条之前调用。
+var testHookAfterRunEndPublished atomic.Pointer[func(runID uuid.UUID)]
 
 func beforeInterrupt(runID uuid.UUID) {
 	if h := testHookBeforeInterrupt.Load(); h != nil {
@@ -568,7 +575,9 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	return res, command
 }
 
-func (s *Service) finish(ctx context.Context, run store.Run, res executor.Result, command string) {
+// finish 把执行的结束写进数据库，返回通知结束的函数（终态事件、会话缺失、等待中的手动压缩请求）。
+// 驱动循环在交接忙闲锁之后才调用它。
+func (s *Service) finish(ctx context.Context, run store.Run, res executor.Result, command string) (publish func()) {
 	end := store.RunEnd{Text: res.Text, ConfigVersion: res.ConfigVersion, PiCommand: command, PiCommandHandled: command != "" && res.CommandHandled}
 	if end.PiCommandHandled {
 		notices := res.CommandNotices
@@ -600,16 +609,32 @@ func (s *Service) finish(ctx context.Context, run store.Run, res executor.Result
 			end.Text = t
 		}
 	}
-	s.endRun(ctx, run.AgentID, run.ID, end)
-	if res.ErrorCode == executor.ErrSessionMissing {
-		s.emitSession(ctx, run.AgentID)
-	}
-	if value, ok := s.commands.Load(run.ID); ok {
-		value.(*consoleCommandRun).done <- res
+	ended, msg, finished := s.recordRunEnd(ctx, run.AgentID, run.ID, end)
+	return func() {
+		if finished {
+			s.publishRunEnd(ctx, run.AgentID, ended, msg)
+		}
+		if res.ErrorCode == executor.ErrSessionMissing {
+			s.emitSession(ctx, run.AgentID)
+		}
+		if value, ok := s.commands.Load(run.ID); ok {
+			value.(*consoleCommandRun).done <- res
+		}
+		if h := testHookAfterRunEndPublished.Load(); h != nil {
+			(*h)(run.ID)
+		}
 	}
 }
 
+// endRun 结束一次不由驱动循环持锁的执行（服务端停止、重启后收尾）：记下结束并立即通知。
 func (s *Service) endRun(ctx context.Context, agentID, runID uuid.UUID, end store.RunEnd) {
+	if r, msg, finished := s.recordRunEnd(ctx, agentID, runID, end); finished {
+		s.publishRunEnd(ctx, agentID, r, msg)
+	}
+}
+
+// recordRunEnd 把执行的结束写进数据库；finished 为 false 表示这次没有结束它（已经结束过，或写入失败）。
+func (s *Service) recordRunEnd(ctx context.Context, agentID, runID uuid.UUID, end store.RunEnd) (store.Run, *store.Message, bool) {
 	r, msg, finished, err := s.st.FinishRun(ctx, runID, end)
 	if errors.Is(err, store.ErrSleepSessionNotSaved) {
 		end.Status = "failed"
@@ -619,10 +644,10 @@ func (s *Service) endRun(ctx context.Context, agentID, runID uuid.UUID, end stor
 	}
 	if err != nil {
 		s.log.Error("结束执行失败", "agentId", agentID, "runId", runID, "err", err)
-		return
+		return store.Run{}, nil, false
 	}
 	if !finished {
-		return
+		return store.Run{}, nil, false
 	}
 	attrs := []any{"runId", r.ID, "agentId", agentID, "status", r.Status, "endReason", r.EndReason, "errorCode", r.ErrorCode, "tokens", r.Usage.Total}
 	if r.EndedAt != nil {
@@ -633,13 +658,18 @@ func (s *Service) endRun(ctx context.Context, agentID, runID uuid.UUID, end stor
 		attrs = append(attrs, "durationMs", r.EndedAt.Sub(begin).Milliseconds())
 	}
 	s.log.Info("回复结束", attrs...)
+	return r, msg, true
+}
+
+// publishRunEnd 发出执行的终态事件并刷新概览状态。
+func (s *Service) publishRunEnd(ctx context.Context, agentID uuid.UUID, r store.Run, msg *store.Message) {
 	if msg == nil {
 		// 手动压缩没有对话消息：终态以 run.updated 通知，run.ended 总带消息。
 		s.emit(ctx, agentID, apitypes.EventRunUpdated, apitypes.SseRunUpdated{Run: apitypes.FromRun(r)})
 	} else {
 		s.emit(ctx, agentID, apitypes.EventRunEnded, apitypes.SseRunEnded{Run: apitypes.FromRun(r), Message: apitypes.FromMessage(*msg, r)})
 	}
-	_ = s.co.DeleteRunText(ctx, runID.String())
+	_ = s.co.DeleteRunText(ctx, r.ID.String())
 	s.EmitAgentStatus(agentID)
 }
 
