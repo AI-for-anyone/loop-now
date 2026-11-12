@@ -141,3 +141,55 @@ describe('统计页', () => {
     expect(screen.getByRole('main').querySelector('svg[width]')).toBeNull()
   })
 })
+
+// 改版“一张印出来的纸”第 4 步：统计排在一张纸上，按 01、02…编号；关键指标是白底卡片，投影颜色区分含义。
+describe('纸张上的统计', () => {
+  it('页头是页面标题：面包屑“全局›统计”，旁边是分段的时间范围与虚线框里的范围选择', async () => {
+    renderStats()
+    const header = (await screen.findByRole('heading', { level: 1, name: '统计' })).closest('header')!
+    expect(within(header).getByRole('navigation', { name: '页面位置' })).toHaveTextContent('全局›统计')
+    expect(within(header).getByRole('radiogroup', { name: '时间范围' })).toHaveClass('border-2', 'border-ink', 'rounded-full')
+    expect(within(header).getByRole('combobox', { name: '范围' }).parentElement).toHaveClass('border-dashed')
+  })
+
+  it('关键指标是 01，下面每张图是一个编号分区，直接排在纸上，不再是白底卡片', async () => {
+    renderStats()
+    const kpis = await screen.findByRole('region', { name: '关键指标' })
+    const sheet = kpis.closest('[data-sheet]')!
+    expect(kpis.parentElement!.querySelector('[data-section-number]')).toHaveTextContent('01')
+    const origins = region('每天用量，按谁触发')
+    expect(sheet).toContainElement(origins)
+    expect(origins.querySelector('[data-section-number]')).toHaveTextContent('02')
+    expect(origins).not.toHaveClass('bg-white')
+    expect(origins).toHaveClass('border-t-2', 'border-dashed')
+    expect(within(origins).getByRole('heading', { name: '每天用量，按谁触发' })).toHaveClass('riso-marker', 'font-display-cn')
+    const numbers = [...sheet.querySelectorAll('[data-section-number]')].map((node) => node.textContent)
+    expect(numbers).toEqual(numbers.map((_, index) => String(index + 1).padStart(2, '0')))
+  })
+
+  it('关键指标的卡片：白底、藏青描边；投影颜色区分含义（中性藏青、失败与中断粉、等你回答黄、合计蓝）；数字是 Bricolage 大字', async () => {
+    renderStats()
+    const kpis = await screen.findByRole('region', { name: '关键指标' })
+    const tile = (label: string) => within(kpis).getByText(label).parentElement!
+    for (const label of ['无人要求的消耗', '每次回复平均上下文', '发出去多久开始回 p50']) expect(tile(label)).toHaveClass('bg-white', 'border-2', 'border-ink', 'shadow-[4px_4px_0_var(--ink)]')
+    expect(tile('失败 + 中断')).toHaveClass('shadow-[4px_4px_0_var(--riso-pink)]')
+    expect(tile('等你回答')).toHaveClass('shadow-[4px_4px_0_var(--riso-yellow)]')
+    expect(tile('token 合计')).toHaveClass('shadow-[4px_4px_0_var(--riso-blue)]')
+    expect(tile('token 合计').children[1]).toHaveClass('font-display-latin')
+  })
+
+  it('柱状图的每根柱子带 2px 藏青描边，底下一道藏青基线；系列颜色沿用图表变量', async () => {
+    renderStats()
+    const origins = await screen.findByRole('region', { name: '每天用量，按谁触发' })
+    const svg = origins.querySelector('svg[width]')!
+    const outlines = svg.querySelectorAll('rect[data-column-outline]')
+    expect(outlines.length).toBeGreaterThan(0)
+    for (const outline of outlines) {
+      expect(outline).toHaveAttribute('stroke', 'var(--ink)')
+      expect(outline).toHaveAttribute('stroke-width', '2')
+      expect(outline).toHaveAttribute('fill', 'none')
+    }
+    expect(svg.querySelector('line[data-baseline]')).toHaveAttribute('stroke', 'var(--ink)')
+    expect([...svg.querySelectorAll('rect:not([data-column-outline])')].every((rect) => rect.getAttribute('fill')?.startsWith('var(--chart-'))).toBe(true)
+  })
+})

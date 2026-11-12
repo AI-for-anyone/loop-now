@@ -1,10 +1,12 @@
-import { useId, type ReactNode } from 'react'
+import { useContext, useId, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
 import { useNow } from '@/lib/use-now'
 import { agentPath, type Scope } from '@/lib/scope'
 import { cn } from '@/lib/utils'
+import { HollowNumber } from '@/components/NumberedSection'
+import { CardNumber } from './card-number'
 import { sectionId } from '@/features/agent-config/sections'
 import { Bar, Legend, LineChart, StackedColumns } from './charts'
 import { durationTicks, niceTicks } from './ticks'
@@ -32,8 +34,27 @@ const COLOR = {
 
 const wanOf = (tokens: number) => tokens / 10_000
 
+// 统计页里（有编号时）是纸上的一个编号分区（改版）：上方一道虚线，左侧空心编号，标题是 ZCOOL 加黄色记号笔，
+// 单位与右侧的图例跟在标题后面；不在统计页里时照旧是一张白底卡片。
 export function Card({ title, unit, aside, children, className }: { title: string; unit?: ReactNode; aside?: ReactNode; children: ReactNode; className?: string }) {
   const titleId = useId()
+  const number = useContext(CardNumber)
+  if (number !== null)
+    return (
+      <section aria-labelledby={titleId} className={cn('flex min-w-0 flex-col gap-3.5 border-t-2 border-dashed border-ink/[0.22] pt-5', className)}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <HollowNumber data-section-number className="w-auto text-[28px]">
+            {String(number).padStart(2, '0')}
+          </HollowNumber>
+          <h2 id={titleId} className="riso-marker px-1.5 font-display-cn text-[24px] leading-[1.25] font-normal">
+            {title}
+          </h2>
+          {unit && <span className="text-[12px] text-ink-500">{unit}</span>}
+          {aside && <div className="sm:ml-auto">{aside}</div>}
+        </div>
+        {children}
+      </section>
+    )
   return (
     <section aria-labelledby={titleId} className={cn('flex min-w-0 flex-col gap-2.5 rounded-panel border-2 border-ink bg-white px-4 py-3.5', className)}>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">

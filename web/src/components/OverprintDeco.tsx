@@ -15,7 +15,8 @@ export function OverprintDeco({ className, compact = false }: { className?: stri
       <span className="absolute top-2 left-[70px] size-24 rounded-full bg-riso-blue mix-blend-multiply" />
       <span className="absolute top-[26px] left-[132px] size-24 rounded-full bg-riso-pink mix-blend-multiply" />
       <span className="absolute top-2 left-[194px] size-24 rounded-full bg-riso-yellow mix-blend-multiply" />
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="var(--ink)" strokeWidth="1.2" className="absolute top-1 left-5">
+      {/* 尺寸写在类名里（不用 width 属性），免得被当成页面上的图表。 */}
+      <svg viewBox="0 0 18 18" fill="none" stroke="var(--ink)" strokeWidth="1.2" className="absolute top-1 left-5 size-[18px]">
         <circle cx="9" cy="9" r="5" />
         <path d="M9 0v18M0 9h18" />
       </svg>
