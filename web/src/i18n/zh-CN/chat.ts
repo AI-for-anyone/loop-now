@@ -71,11 +71,11 @@ export const chat = {
   sessionDivider: '会话已切换，页面历史保留',
   commands: {
     menuLabel: '命令',
-    label: 'Pi 命令',
     loading: '正在读取命令…',
     failed: (reason: string) => `读不到命令列表：${reason}`,
     notCaptured: 'Agent 运行一次后才有命令列表。',
     noMatch: '没有匹配的命令。',
+    noPi: (runtime: string) => `没有匹配的命令。这个 Agent 用 ${runtime} 运行，没有 Pi 命令。`,
     // 菜单下方置灰的命令：此刻不能用，各写明原因。
     unavailable: {
       title: '现在不能用',
@@ -86,20 +86,7 @@ export const chat = {
     plugin: (name: string) => `插件 · ${name}`,
     keys: '↑↓ 选择 · Enter 或 Tab 补全 · Esc 关闭',
     platform: '平台命令',
-    hintTitle: '内置命令',
-    hintKeyboard: '↑↓ 选择 · Enter 填入 · Esc 关闭',
-    hints: {
-      session: '查看当前会话、模型和进程状态',
-      new: '重开会话，保留页面历史',
-      compact: '压缩当前会话上下文，可附加说明',
-      reload: '停止当前进程，下一条消息重新加载',
-      copy: '复制最近一条成功回复',
-      export: '导出会话，可选 html 或 jsonl',
-      resume: '列出会话，或按完整 ID 恢复',
-    },
     noReply: '命令已执行',
-    sessionState: { none: '无会话', active: '活动', missing: '丢失' } satisfies Record<S['SessionState'], string>,
-    processState: { stopped: '已停止', starting: '启动中', idle: '空闲', busy: '忙碌' } satisfies Record<S['ProcessState'], string>,
     session: (session: S['ConsoleSessionStatus']) => `会话 ${{ none: '无会话', active: '活动', missing: '丢失' }[session.status.session.state]} · epoch ${session.status.session.epoch} · 模型 ${session.model.provider}/${session.model.modelId} · 思考 ${session.thinkingLevel} · 进程 ${{ stopped: '已停止', starting: '启动中', idle: '空闲', busy: '忙碌' }[session.status.processState]} · 排队 ${session.status.queued.normal + session.status.queued.interrupt}`,
     compact: (before: number, after: number) => `上下文已压缩：${before} → 约 ${after} tokens`,
     // Pi 没有压缩但正常完成的几种情况。

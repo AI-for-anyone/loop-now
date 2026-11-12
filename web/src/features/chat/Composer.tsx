@@ -77,9 +77,6 @@ type CommandList = Schemas['AgentCommandList']
 // 服务端列出的平台内置命令名；列表还没取到时为 null。
 const platformNames = (list: CommandList | undefined) => (list ? new Set(list.commands.filter((command) => command.source === 'platform').map((command) => command.name)) : null)
 
-// 平台命令自己不带说明，按命令名显示控制台的说明；服务端新加、这里还不认识的命令没有说明。
-const hints: Record<string, string | undefined> = t.chat.commands.hints
-
 // 边框归外面的输入框容器所有，文字区按内容增高，上限后独立滚动。
 const inputClass =
   'field-sizing-fixed min-h-10 max-h-60 w-full flex-none resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-2 text-[15.5px] leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent max-nav:text-base'
@@ -110,7 +107,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
   const menuRequested = token !== null && dismissed !== token
   if (token === null && dismissed !== null) setDismissed(null)
   const commands = useAgentCommands(agentId, menuRequested || gate)
-  const listed = (commands.data?.commands ?? []).map((command) => (command.source === 'platform' && command.description === null ? { ...command, description: hints[command.name] ?? null } : command))
+  const listed = commands.data?.commands ?? []
   // 读不到列表时不把输入框锁死：照旧放行 /resume，由服务端判断（/resume 是会话丢失后唯一不丢上下文的出路）。
   const resumeOpen = gate && (commands.isError || listed.some((command) => command.source === 'platform' && command.name === 'resume' && command.available))
   const resumeAllowed = resumeOpen && !reply && (images.length === 0 || confirmResume) && /^\/resume(?:\s+\S+)?$/.test(text.trim())
@@ -122,8 +119,6 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
   // 此刻不能用的命令不能选，置灰列在菜单下方并写明原因。
   const selectable = matched.filter((command) => command.available)
   const blocked = matched.filter((command) => !command.available)
-  // 有命令标着“运行时不支持”，说明这个 Agent 没有 Pi（Claude Code）：它运行多少次也不会有 Pi 命令。
-  const withoutPi = listed.some((command) => command.unavailableReason === 'runtime_unsupported')
   // 会话丢失时只在有 /resume 可提示、或读不到列表（要说明原因）时打开菜单。
   const menuOpen = menuRequested && !inputDisabled && (matched.length > 0 || ((!disabled || commands.isError) && images.length === 0))
   const menuStatus = matched.length > 0
@@ -132,9 +127,12 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
       ? t.chat.commands.failed(describeError(commands.error))
       : !commands.data
         ? t.chat.commands.loading
-        : commands.data.capturedAt === null && !withoutPi
-          ? t.chat.commands.notCaptured
-          : t.chat.commands.noMatch
+        // 列表写明了运行时：不是 Pi 的 Agent 没有 Pi 命令（运行多少次也不会有）；Pi 的 Agent 还没启动过时才说“运行一次后才有”。
+        : commands.data.runtime !== 'pi'
+          ? t.chat.commands.noPi(t.runtime.names[commands.data.runtime])
+          : commands.data.capturedAt === null
+            ? t.chat.commands.notCaptured
+            : t.chat.commands.noMatch
   const menuItems = menuOpen && menuStatus === null ? selectable : []
   const menuBlocked = menuOpen && menuStatus === null ? blocked : []
   const [activeFor, setActiveFor] = useState<string | null>(null)

@@ -60,6 +60,8 @@ export function makeAnomaly(overrides: Partial<Schemas['Anomaly']> = {}): Schema
     errorCode: 'pi_exited',
     errorMessage: 'exit status 137',
     endReason: null,
+    // 不是失败的手动压缩时为 null（契约 Anomaly.compaction）。
+    compaction: null,
     ...overrides,
   }
 }

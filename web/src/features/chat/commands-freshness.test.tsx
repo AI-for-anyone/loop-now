@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { apiUrl, makeStatus } from '@/test/api'
 import { renderChat } from '@/test/chat'
-import { platformCommands } from '@/test/commands'
+import { commandList, platformCommands } from '@/test/commands'
 
 // 命令此刻能不能用取决于会话状态：会话一变就要重新读，不能等缓存过期。
 describe('命令列表跟着会话状态更新', () => {
@@ -15,7 +15,7 @@ describe('命令列表跟着会话状态更新', () => {
       handlers: [
         http.get(apiUrl('/agents/:agentId/commands'), () => {
           reads += 1
-          return HttpResponse.json({ capturedAt: null, commands: platformCommands(session === 'none' ? { compact: { available: false, unavailableReason: 'session_none' } } : {}) })
+          return HttpResponse.json(commandList(platformCommands(session === 'none' ? { compact: { available: false, unavailableReason: 'session_none' } } : {})))
         }),
       ],
     })
