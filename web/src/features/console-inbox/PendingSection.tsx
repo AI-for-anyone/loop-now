@@ -18,6 +18,7 @@ type Item = Schemas['InboxPendingItem'] & { kind: 'question' | 'unread' }
 
 // 待你处理：发给你的 open 问题在前，其他未读消息在后，各自从新到旧；每条链接到消息所在的对话或任务节点。
 // 按概览的范围筛选：项目只看这个项目的，平台只看平台 Agent 的。没有待处理的内容时整块不显示。
+// 改版：排在概览纸张的最上面，不编号；浅粉底、2px 藏青描边、荧光粉实色投影的卡片，条目之间虚线。
 export function PendingSection({ scope = {} }: { scope?: ScopeQuery }) {
   const titleId = useId()
   const pending = useInboxPending()
@@ -30,12 +31,12 @@ export function PendingSection({ scope = {} }: { scope?: ScopeQuery }) {
   ]
   if (items.length === 0) return null
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-[18px]">
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2.5">
-        <h2 id={titleId} className="riso-misreg-sm font-display-cn text-[40px] leading-[1.1] font-normal">{text.pendingTitle}</h2>
-        <span className="text-[13px] font-bold text-ink-500">{text.pendingCount(items.length)}</span>
+    <section aria-labelledby={titleId} data-pending className="mr-1 mb-1 flex flex-col gap-2 rounded-card border-2 border-ink bg-tint-pink-2 px-[18px] pt-3.5 pb-2 shadow-print-pink">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
+        <h2 id={titleId} className="font-display-cn text-[24px] leading-[1.2] font-normal">{text.pendingTitle}</h2>
+        <span className="text-[12px] font-bold text-ink-500">{text.pendingCount(items.length)}</span>
       </div>
-      <ul className="flex flex-col gap-2.5">
+      <ul className="flex flex-col">
         {items.map((item) => <PendingRow key={item.message.id} item={item} />)}
       </ul>
     </section>
@@ -43,7 +44,7 @@ export function PendingSection({ scope = {} }: { scope?: ScopeQuery }) {
 }
 
 const rowClass =
-  'grid min-h-16 grid-cols-[minmax(64px,96px)_minmax(0,1fr)] items-center gap-x-4 gap-y-1.5 rounded-[16px] bg-white px-[18px] py-3 text-ink shadow-print-rest sm:grid-cols-[96px_minmax(0,1fr)_max-content]'
+  'grid min-h-14 grid-cols-[minmax(64px,96px)_minmax(0,1fr)] items-center gap-x-4 gap-y-1.5 border-t-[1.5px] border-dashed border-ink/25 px-1 py-2.5 text-ink hover:bg-white/60 sm:grid-cols-[96px_minmax(0,1fr)_max-content]'
 
 function PendingRow({ item }: { item: Item }) {
   const { message } = item

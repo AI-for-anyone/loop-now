@@ -1,4 +1,3 @@
-import { useId } from 'react'
 import { Link } from 'react-router'
 import { ArrowRightIcon } from 'lucide-react'
 import type { Schemas } from '@/api/client'
@@ -11,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { config } from '@/config'
 import { t } from '@/i18n'
+import { NumberedSection } from '@/components/NumberedSection'
 
 type Anomaly = Schemas['Anomaly']
 
@@ -50,7 +50,7 @@ function AnomalyItem({ item }: { item: Anomaly }) {
     <li>
       <Link
         to={to}
-        className="grid min-h-16 grid-cols-[minmax(64px,96px)_minmax(0,1fr)] items-center gap-x-4 gap-y-1.5 rounded-[16px] bg-white px-[18px] py-3 text-ink shadow-print-rest hover:bg-tint-pink-2 sm:grid-cols-[96px_minmax(0,1fr)_max-content]"
+        className="grid min-h-16 grid-cols-[minmax(64px,96px)_minmax(0,1fr)] items-center gap-x-4 gap-y-1.5 border-b-[1.5px] border-dashed border-ink/25 px-1 py-3 text-ink hover:bg-tint-pink-2/60 sm:grid-cols-[96px_minmax(0,1fr)_max-content]"
       >
         <span className="flex flex-col">
           <span className="font-mono text-[13px] font-bold">{t.overview.anomalies.time(item.at)}</span>
@@ -80,21 +80,19 @@ function AnomalyItem({ item }: { item: Anomaly }) {
   )
 }
 
-// 异常与失败：最近 24 小时内未正常完成的回复，从新到旧，可以加载更多。
-export function AnomaliesSection({ scope = {} }: { scope?: ScopeQuery }) {
-  const titleId = useId()
+// 异常与失败：最近 24 小时内未正常完成的回复，从新到旧，可以加载更多。纸张上的第 number 个编号分区；
+// 列表上缘一道 2px 实线，条目之间虚线（改版通用规则第 9 条）。
+export function AnomaliesSection({ scope = {}, number = 3 }: { scope?: ScopeQuery; number?: number }) {
   const anomalies = useAnomalies(() => new Date(Date.now() - config.overviewDefaults.anomalyWindowHours * 60 * 60 * 1000).toISOString(), scope)
   const pages = anomalies.data?.pages
   const items = pages?.flatMap((page) => page.items) ?? []
 
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-[18px]">
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2.5">
-        <h2 id={titleId} className="riso-misreg-sm font-display-cn text-[40px] leading-[1.1] font-normal">
-          {t.overview.anomalies.title}
-        </h2>
-        {pages && <span className="text-[13px] font-bold text-ink-500">{t.overview.anomalies.count(pages[0].total)}</span>}
-      </div>
+    <NumberedSection
+      number={number}
+      title={t.overview.anomalies.title}
+      meta={pages && <span className="text-[12px] text-ink-500">{t.overview.anomalies.count(pages[0].total)}</span>}
+    >
       {anomalies.isError && !anomalies.isFetchNextPageError && (
         <SectionError title={t.overview.anomalies.title} error={anomalies.error} onRetry={() => void anomalies.refetch()} />
       )}
@@ -109,9 +107,9 @@ export function AnomaliesSection({ scope = {} }: { scope?: ScopeQuery }) {
       ) : (
         pages &&
         (items.length === 0 ? (
-          <p className="rounded-[16px] bg-tint-green p-6 text-center text-[14.5px] font-bold text-green-text">{t.overview.anomalies.empty}</p>
+          <p className="rounded-card bg-tint-green px-6 py-4 text-center text-[14px] font-bold text-green-text">{t.overview.anomalies.empty}</p>
         ) : (
-          <ul className="flex flex-col gap-2.5">
+          <ul className="flex flex-col border-t-2 border-ink">
             {items.map((item) => (
               <AnomalyItem key={item.runId} item={item} />
             ))}
@@ -126,6 +124,6 @@ export function AnomaliesSection({ scope = {} }: { scope?: ScopeQuery }) {
           {anomalies.isFetchingNextPage ? t.common.loading : t.overview.anomalies.loadMore}
         </Button>
       )}
-    </section>
+    </NumberedSection>
   )
 }

@@ -1,15 +1,14 @@
-import { useId } from 'react'
 import { ScopeTag } from '@/features/projects/OverviewScope'
 import { Link } from 'react-router'
 import type { Schemas } from '@/api/client'
 import { AgentAvatar } from '@/components/AgentAvatar'
-import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { runPhaseText, runStatusText } from '@/features/chat/run-status-text'
 import { t } from '@/i18n'
 import { SleepUntil } from '@/features/sleep/SleepUntil'
 import { useNow } from '@/lib/use-now'
 import { cn } from '@/lib/utils'
+import { NumberedSection } from '@/components/NumberedSection'
 import { rowState, summarize, type AgentRowState, type OverviewState } from './overview-state'
 
 type AgentOverview = Schemas['AgentOverview']
@@ -23,12 +22,12 @@ function names(agents: AgentOverview[]): string {
   return agents.length === 0 ? '' : t.overview.run.names(agents.slice(0, NAMES_SHOWN).map((agent) => agent.name), agents.length)
 }
 
-// 四张汇总卡的底色、倾斜和大号数字的颜色，取自 ROverview 画板。
+// 四张汇总卡的底色（改版：带色底、2px 藏青描边、4px 藏青实色投影的卡片，不再倾斜）。
 const TILES = [
-  { key: 'busy', bg: 'var(--tint-pink-2)', tilt: '-0.8deg', number: 'text-riso-pink [text-shadow:4px_3px_0_var(--riso-blue)]' },
-  { key: 'idle', bg: 'var(--tint-green)', tilt: '0.6deg', number: 'text-green-text [text-shadow:4px_3px_0_rgb(255_79_163/.6)]' },
-  { key: 'sessionMissing', bg: 'var(--tint-red)', tilt: '-0.5deg', number: 'text-red-text [text-shadow:4px_3px_0_rgb(36_67_181/.5)]' },
-  { key: 'queued', bg: 'var(--tint-blue)', tilt: '0.9deg', number: 'text-riso-blue [text-shadow:4px_3px_0_var(--riso-pink)]' },
+  { key: 'busy', bg: 'bg-tint-pink-2' },
+  { key: 'idle', bg: 'bg-tint-green' },
+  { key: 'sessionMissing', bg: 'bg-tint-red' },
+  { key: 'queued', bg: 'bg-tint-blue' },
 ] as const
 
 function SummaryTiles({ agents }: { agents: AgentOverview[] }) {
@@ -41,19 +40,18 @@ function SummaryTiles({ agents }: { agents: AgentOverview[] }) {
     queued: { label: t.overview.run.queued, value: queuedTotal, note: t.overview.run.queuedNote(summary.queued.interrupt, summary.queued.normal) },
   }
   return (
-    <ul aria-label={t.overview.run.summaryLabel} className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4">
+    <ul aria-label={t.overview.run.summaryLabel} className="grid grid-cols-[repeat(auto-fit,minmax(min(190px,100%),1fr))] gap-x-3.5 gap-y-3">
       {TILES.map((tile) => {
         const { label, value, note } = values[tile.key]
         return (
           <li
             key={tile.key}
             data-tile={tile.key}
-            className="riso-tilt flex flex-col gap-1.5 rounded-panel px-5 py-[18px] [--tilt-shadow:3px_3px_0_rgb(24_38_94/.14)]"
-            style={{ '--tilt-bg': tile.bg, '--tilt': tile.tilt } as React.CSSProperties}
+            className={cn('mr-1 mb-1 flex flex-col gap-1 rounded-card border-2 border-ink px-4 pt-3.5 pb-3 shadow-[4px_4px_0_var(--ink)]', tile.bg)}
           >
-            <span className="text-[14px] font-black">{label}</span>
-            <span className={cn('font-display-latin text-[64px] leading-[0.95] font-extrabold', tile.number)}>{value}</span>
-            <span className="min-h-[1.6em] text-[12.5px] font-bold text-ink-700 [overflow-wrap:anywhere]">{note}</span>
+            <span className="text-[13px] font-black">{label}</span>
+            <span className="font-display-latin text-[46px] leading-none font-extrabold">{value}</span>
+            <span className="min-h-[18px] text-[12px] leading-[18px] text-ink-700 [overflow-wrap:anywhere]">{note}</span>
           </li>
         )
       })}
@@ -61,10 +59,24 @@ function SummaryTiles({ agents }: { agents: AgentOverview[] }) {
   )
 }
 
-const STATE_CHIP: Record<AgentRowState, { tone: 'busy' | 'success' | 'danger'; label: string }> = {
-  busy: { tone: 'busy', label: t.overview.run.busy },
-  idle: { tone: 'success', label: t.overview.run.idle },
-  sessionMissing: { tone: 'danger', label: t.overview.run.sessionMissing },
+// 状态胶囊（改版通用规则第 6 条）：略微倾斜的底子，藏青描边；回复中荧光粉、空闲浅绿带绿点；会话丢失是红色描边的印章。
+const STATE_PILL: Record<AgentRowState, { label: string; back: string; text: string; dot?: string }> = {
+  busy: { label: t.overview.run.busy, back: 'bg-riso-pink shadow-[inset_0_0_0_2px_var(--ink)]', text: 'text-ink', dot: 'bg-ink' },
+  idle: { label: t.overview.run.idle, back: 'bg-tint-green shadow-[inset_0_0_0_2px_var(--ink)]', text: 'text-green-text', dot: 'bg-green' },
+  sessionMissing: { label: t.overview.run.sessionMissing, back: 'rounded-[4px] shadow-[inset_0_0_0_2px_var(--red-text)]', text: 'text-red-text tracking-[0.06em]' },
+}
+
+function StatePill({ state }: { state: AgentRowState }) {
+  const pill = STATE_PILL[state]
+  return (
+    <span data-state-pill={state} className={cn('relative inline-flex min-h-6 items-center px-[11px] text-[12px] font-black whitespace-nowrap', pill.text)}>
+      <span aria-hidden="true" className={cn('absolute inset-0 rotate-[-3deg] rounded-full', pill.back)} />
+      <span className="relative inline-flex items-center gap-1.5">
+        {pill.dot && <span aria-hidden="true" className={cn('size-[7px] shrink-0 rounded-full', pill.dot)} />}
+        {pill.label}
+      </span>
+    </span>
+  )
 }
 
 // 当前回复：阶段、本轮已用时间（从派发起）与配置版本；没有进行中的回复时显示上一条的结果与结束时间。
@@ -97,9 +109,9 @@ function RunCell({ agent, now }: { agent: AgentOverview; now: number }) {
     main = t.overview.run.noRun
   }
   return (
-    <span className="flex flex-col">
-      <span className="font-bold">{main}</span>
-      {meta && <span className="font-mono text-[11.5px] text-ink-500">{meta}</span>}
+    <span className="flex flex-col text-[13px] text-ink-700">
+      <span>{main}</span>
+      {meta && <span className="font-mono text-[11px] text-ink-500">{meta}</span>}
     </span>
   )
 }
@@ -113,7 +125,7 @@ function QueueCell({ queued }: { queued: Schemas['QueueCounts'] }) {
       <span
         aria-hidden="true"
         className={cn(
-          'font-display-latin text-[26px] font-extrabold',
+          'font-display-latin text-[20px] font-extrabold',
           // 错版投影只用于 ≥ 28px 的展示字，这里 26px 不加。
           total > 0 ? 'text-riso-pink' : 'text-ink-500',
         )}
@@ -147,53 +159,54 @@ function ProcessCell({ agent, now }: { agent: AgentOverview; now: number }) {
   else if (exit) meta = t.overview.run.exitMeta(exit.at, t.overview.run.exit[exit.reason] ?? t.common.unknown(exit.reason))
   else if (processState === 'stopped') meta = t.overview.run.neverStarted
   return (
-    <span className="flex flex-col">
-      <span className="inline-flex items-center gap-1.5 font-black">
+    <span className="flex flex-col text-[13px] text-ink-700">
+      <span className="inline-flex items-center gap-1.5 font-bold">
         <span aria-hidden="true" className={cn('size-[9px] shrink-0 rounded-full shadow-[0_0_0_2px_var(--ink)]', PROCESS_DOT[processState])} />
         {processPid !== null && processState !== 'stopped' ? `${label} ${t.chat.metaSeparator} ${t.overview.run.pid(processPid)}` : label}
       </span>
-      {meta && <span className="font-mono text-[11.5px] text-ink-500">{meta}</span>}
+      {meta && <span className="font-mono text-[11px] text-ink-500">{meta}</span>}
     </span>
   )
 }
+
+// 表头下一道 2px 实线，行与行之间 1.5px 虚线（改版通用规则第 9 条）；表格直接排在纸上，不套卡片。
+const headClass = 'py-2 pl-1 text-[12px] font-black text-ink-500'
 
 function AgentTable({ agents }: { agents: AgentOverview[] }) {
   // 运行时长与本轮已用时间每秒走动，由页面自己计算，不向服务端请求。
   const now = useNow(1000)
   return (
-    <Table aria-label={t.overview.run.tableLabel} className="min-w-[960px]">
-      <TableHeader>
-        <TableRow>
-          <TableHead scope="col" className="py-3 pl-[18px]">
+    <Table aria-label={t.overview.run.tableLabel} className="min-w-[860px]" card={false}>
+      <TableHeader className="bg-transparent">
+        <TableRow className="border-b-2 border-solid border-ink last:border-b-2">
+          <TableHead scope="col" className={headClass}>
             {t.overview.run.columns.agent}
           </TableHead>
-          <TableHead scope="col" className="py-3">
+          <TableHead scope="col" className={headClass}>
             {t.overview.run.columns.state}
           </TableHead>
-          <TableHead scope="col" className="py-3">
+          <TableHead scope="col" className={headClass}>
             {t.overview.run.columns.run}
           </TableHead>
-          <TableHead scope="col" className="py-3">
+          <TableHead scope="col" className={cn(headClass, 'text-center')}>
             {t.overview.run.columns.queue}
           </TableHead>
-          <TableHead scope="col" className="py-3 pr-[18px]">
+          <TableHead scope="col" className={headClass}>
             {t.overview.run.columns.process}
           </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {agents.map((agent) => {
-          const chip = STATE_CHIP[rowState(agent)]
+          const state = rowState(agent)
           return (
-            <TableRow key={agent.agentId} data-agent-id={agent.agentId}>
-              <TableCell className="py-3.5 pl-[18px] align-middle">
-                <Link to={`/agents/${agent.agentId}/chat`} className="flex items-center gap-3 rounded-ticket text-ink">
-                  <AgentAvatar id={agent.agentId} className="h-[30px] w-9" />
-                  <span className="flex min-w-0 flex-col">
+            <TableRow key={agent.agentId} data-agent-id={agent.agentId} className="border-b-[1.5px] border-ink/25 last:border-b-[1.5px]">
+              <TableCell className="py-[11px] pl-1 align-middle">
+                <Link to={`/agents/${agent.agentId}/chat`} className="group flex items-center gap-2.5 rounded-ticket text-ink">
+                  <AgentAvatar size="sm" id={agent.agentId} />
+                  <span className="flex min-w-0 flex-col leading-[1.35]">
                     <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="text-[15px] font-black underline decoration-riso-pink decoration-2 underline-offset-4 [overflow-wrap:anywhere]">
-                        {agent.name}
-                      </span>
+                      <span className="text-[14.5px] font-black [overflow-wrap:anywhere] group-hover:text-riso-blue group-hover:underline">{agent.name}</span>
                       <ScopeTag scope={agent.scope} projectId={agent.projectId} />
                     </span>
                     <span className="font-mono text-[11px] text-ink-500">
@@ -202,17 +215,17 @@ function AgentTable({ agents }: { agents: AgentOverview[] }) {
                   </span>
                 </Link>
               </TableCell>
-              <TableCell className="py-3.5 align-middle">
-                <Badge tone={chip.tone}>{chip.label}</Badge>
+              <TableCell className="py-[11px] align-middle">
+                <StatePill state={state} />
                 {!agent.status.busy && agent.status.sleep?.state === 'sleeping' && agent.status.sleep.wakeAt && <SleepUntil at={agent.status.sleep.wakeAt} reason={agent.status.sleep.reason} />}
               </TableCell>
-              <TableCell className="py-3.5 align-middle">
+              <TableCell className="py-[11px] align-middle">
                 <RunCell agent={agent} now={now} />
               </TableCell>
-              <TableCell className="py-3.5 align-middle">
+              <TableCell className="py-[11px] text-center align-middle">
                 <QueueCell queued={agent.status.queued} />
               </TableCell>
-              <TableCell className="py-3.5 pr-[18px] align-middle">
+              <TableCell className="py-[11px] pr-1 align-middle">
                 <ProcessCell agent={agent} now={now} />
               </TableCell>
             </TableRow>
@@ -240,19 +253,14 @@ function Skeleton() {
   )
 }
 
-// 运行状态：四个汇总数与 Agent 表，随概览事件流实时更新。
-export function RunStatusSection({ live }: { live: OverviewState }) {
-  const titleId = useId()
+// 运行状态：四个汇总数与 Agent 表，随概览事件流实时更新。纸张上的第 number 个编号分区。
+export function RunStatusSection({ live, number = 1 }: { live: OverviewState; number?: number }) {
   return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-[18px]">
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2.5">
-        <h2 id={titleId} className="riso-misreg-sm font-display-cn text-[40px] leading-[1.1] font-normal">
-          {t.overview.run.title}
-        </h2>
-        {live.synced && live.lastChangeAt && (
-          <span className="text-[13px] font-bold text-ink-500">{t.overview.run.lastChange(live.lastChangeAt)}</span>
-        )}
-      </div>
+    <NumberedSection
+      number={number}
+      title={t.overview.run.title}
+      meta={live.synced && live.lastChangeAt && <span className="font-mono text-[11.5px] text-ink-500">{t.overview.run.lastChange(live.lastChangeAt)}</span>}
+    >
       {live.synced ? (
         <>
           <SummaryTiles agents={live.agents} />
@@ -261,6 +269,6 @@ export function RunStatusSection({ live }: { live: OverviewState }) {
       ) : (
         <Skeleton />
       )}
-    </section>
+    </NumberedSection>
   )
 }
