@@ -59,6 +59,13 @@ export function ChatPage() {
     hiddenNew,
   } = useMemo(() => buildTurns(messages.data, live, atLatest), [messages.data, live, atLatest])
   const backToLatest = () => void navigate(location.pathname, { replace: true })
+  // 轮次编号（契约 MessagePage）：已加载的最早一页（pages 的最后一页）之前有多少轮，各轮按它接着编号；历史还没取到时不知道。
+  const turnsBefore = messages.data?.pages.at(-1)?.turnsBefore
+  // 刻度尺底部的总轮数。已加载到最新时按已加载的轮次数：新发的消息、新来的回复在本地接着数，不等重新拉取。
+  // 定位时还没加载到最新，后面的轮次不在对话流里，用接口给的总数（各页取到的时间不同，取最大的）；
+  // 这期间新开始的轮次只提示有新消息，不往总数上加——它们有的已经算在接口的总数里，分不清，加了会多算。
+  const turnsTotal =
+    turnsBefore === undefined ? undefined : atLatest ? turnsBefore + turns.length : Math.max(...messages.data!.pages.map((page) => page.turnsTotal))
 
   // Agent 发给你的消息与问题按时间排进对话；你发给它的由它的平台提醒一行显示，不重复。
   // 回复问题时记下原题，原题不再待回答（答过、到期或关闭）时输入框退出回复模式。
@@ -141,6 +148,8 @@ export function ChatPage() {
               onLoadOlder={() => void messages.fetchNextPage({ cancelRefetch: false })}
               targetRunId={aroundRun}
               inserts={inserts}
+              turnsBefore={turnsBefore}
+              turnsTotal={turnsTotal}
               hasNewer={messages.hasPreviousPage}
               loadingNewer={messages.isFetchingPreviousPage}
               onLoadNewer={() => void messages.fetchPreviousPage({ cancelRefetch: false })}

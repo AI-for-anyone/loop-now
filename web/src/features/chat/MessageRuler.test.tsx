@@ -243,8 +243,8 @@ describe('票根里的刻度尺', () => {
     expect(within(nav()).getByText('轮次')).toHaveAttribute('aria-hidden', 'true')
   })
 
-  it('历史已全部加载时从 1 编号：每 5 轮一条长刻度带数字，底部是总轮数', () => {
-    render(<List pages={pagesOf(texts(12))} hasOlder={false} />)
+  it('前面没有轮次时从 1 编号：每 5 轮一条长刻度带数字，底部是总轮数', () => {
+    render(<List pages={pagesOf(texts(12))} turnsBefore={0} turnsTotal={12} />)
     expect(ticks()).toHaveLength(12)
     expect(longTicks().map((tick) => tick.getAttribute('aria-label'))).toEqual(['问题5', '问题10'])
     expect(numbers()).toEqual(['', '', '', '', '5', '', '', '', '', '10', '', ''])
@@ -254,30 +254,31 @@ describe('票根里的刻度尺', () => {
     expect(total()).toHaveTextContent('共 12 轮')
   })
 
-  it('还有更早的历史没加载、又不知道前面有多少轮时：只有刻度，没有数字、长刻度和总数', () => {
-    render(<List pages={pagesOf(texts(12))} hasOlder />)
+  it('还不知道轮次计数时（历史还没取到）：只有刻度，没有数字、长刻度和总数；不再因为“没有更早的消息”就从 1 编号', () => {
+    render(<List pages={pagesOf(texts(12))} hasOlder={false} />)
     expect(ticks()).toHaveLength(12)
     expect(longTicks()).toHaveLength(0)
     expect(numbers().join('')).toBe('')
     expect(total()).toBeNull()
   })
 
-  it('给出“这一页之前有多少轮”时接着编号', () => {
-    render(<List pages={pagesOf(texts(4))} hasOlder turnsBefore={22} />)
+  it('前面还有轮次时接着编号（更早的消息没加载也一样）', () => {
+    render(<List pages={pagesOf(texts(4))} hasOlder turnsBefore={22} turnsTotal={26} />)
     expect(numbers()).toEqual(['', '', '25', ''])
     expect(longTicks().map((tick) => tick.getAttribute('aria-label'))).toEqual(['问题3'])
     expect(total()).toHaveTextContent('26')
   })
 
-  it('定位模式下后面还有更新的消息没加载：总数还不知道，不显示', () => {
+  it('底部写的是给它的总轮数，不按已加载的轮数算（定位时后面还有没加载的轮次）', () => {
     const pages = pagesOf(texts(6))
-    render(<List pages={pages} hasOlder={false} targetRunId={pages.pages[0].messages[0].run.id} hasNewer onLoadNewer={() => {}} />)
+    render(<List pages={pages} hasOlder={false} targetRunId={pages.pages[0].messages[0].run.id} hasNewer onLoadNewer={() => {}} turnsBefore={0} turnsTotal={150} />)
     expect(numbers()).toEqual(['', '', '', '', '5', ''])
-    expect(total()).toBeNull()
+    expect(total()).toHaveTextContent('150')
+    expect(total()).toHaveTextContent('共 150 轮')
   })
 
   it('黄色记号笔从第一条可见刻度罩到最后一条，左侧一个粉色箭头；没有可见轮时不画', () => {
-    render(<List pages={pagesOf(texts(8))} hasOlder={false} />)
+    render(<List pages={pagesOf(texts(8))} turnsBefore={0} turnsTotal={8} />)
     expect(mark()).toBeNull()
     act(() => {
       for (const text of ['问题6', '问题7', '问题8']) FakeIntersectionObserver.trigger(turnBlock(text), true)
@@ -333,8 +334,8 @@ describe('票根里的刻度尺', () => {
 describe('每一轮的空心编号', () => {
   const turnNumbers = () => [...document.querySelectorAll('[data-turn-number]')].map((node) => node.textContent)
 
-  it('历史已全部加载时，每一轮左侧有空心编号，与尺子上的数字一致', () => {
-    render(<List pages={pagesOf(texts(6))} hasOlder={false} />)
+  it('每一轮左侧有空心编号，与尺子上的数字一致', () => {
+    render(<List pages={pagesOf(texts(6))} turnsBefore={0} turnsTotal={6} />)
     expect(turnNumbers()).toEqual(['1', '2', '3', '4', '5', '6'])
     const number = turnBlock('问题5').querySelector('[data-turn-number]')!
     expect(number).toHaveAttribute('aria-hidden', 'true')
@@ -342,13 +343,13 @@ describe('每一轮的空心编号', () => {
     expect(numbers()[4]).toBe('5')
   })
 
-  it('还有更早的历史没加载、又不知道前面有多少轮时不显示编号', () => {
-    render(<List pages={pagesOf(texts(3))} hasOlder />)
+  it('还不知道轮次计数时不显示编号', () => {
+    render(<List pages={pagesOf(texts(3))} hasOlder={false} />)
     expect(turnNumbers()).toEqual(['', '', ''])
   })
 
-  it('给出“这一页之前有多少轮”时接着编号', () => {
-    render(<List pages={pagesOf(texts(2))} hasOlder turnsBefore={24} />)
+  it('前面还有轮次时接着编号', () => {
+    render(<List pages={pagesOf(texts(2))} hasOlder turnsBefore={24} turnsTotal={26} />)
     expect(turnNumbers()).toEqual(['25', '26'])
   })
 
