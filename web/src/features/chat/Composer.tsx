@@ -7,7 +7,7 @@ import { ErrorAlert } from '@/components/ErrorAlert'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ApiError, type Schemas } from '@/api/client'
 import { downloadAgentSession } from '@/api/session-export'
-import { agentCommandsQuery, isCommandResult, keys, upsertMessage, useAgentCommands, useSendMessage } from '@/api/queries'
+import { agentCommandsQuery, isCommandResult, upsertMessage, useAgentCommands, useSendMessage } from '@/api/queries'
 import { t } from '@/i18n'
 import { ImagePicker } from '@/features/images/ImagePicker'
 import { imageProblem, type ImageDraft, type ImageLimits, type ImageUploads } from '@/features/images/image-drafts'
@@ -259,8 +259,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
         const copyFailed = result.source === 'platform' && result.copyText != null && !(await copyText(result.copyText))
         if (result.source === 'platform' && result.exportFormat) await downloadAgentSession(agentId, result.exportFormat)
         onCommand?.(result, sent, copyFailed ? { copyFailed } : undefined)
-        // 平台命令可能改变会话状态（/new、/resume、/reload），命令此刻能不能用要重新读。
-        void client.invalidateQueries({ queryKey: keys.agentCommands(agentId) })
+        // 命令改变了会话（/new、/resume）时服务端会推 session.updated，命令列表在那时重读，这里不另读。
       } else {
         upsertMessage(client, agentId, result.message)
         onSent(result)

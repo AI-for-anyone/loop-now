@@ -80,35 +80,24 @@ it('/resume 列表不需要确认', async () => {
   expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
 })
 
-it('平台命令遇到 agent_busy 不自动排队重试', async () => {
-  const sent: Schemas['SendMessageInput'][] = []
-  server.use(http.post(apiUrl('/agents/sleep-agent/messages'), async ({ request }) => {
-    sent.push(await request.json() as Schemas['SendMessageInput'])
-    return HttpResponse.json({ error: { code: 'agent_busy', message: 'Agent正忙', details: { currentRunId: crypto.randomUUID(), queued: { interrupt: 0, normal: 0 } } } }, { status: 409 })
-  }))
-  const onCommand = renderComposer()
-  await userEvent.type(screen.getByRole('textbox', { name: '消息' }), '/reload')
-  await userEvent.click(screen.getByRole('button', { name: '发送' }))
-  expect(await screen.findByText(/Agent 正忙/)).toBeInTheDocument()
-  expect(sent).toEqual([{ text: '/reload' }])
-  expect(onCommand).not.toHaveBeenCalled()
-  expect(screen.getByLabelText('消息')).toHaveValue('/reload')
-})
-
-it('Agent 不空闲时 /resume（列表）返回 agent_not_idle：说明原因，不重试、不转成排队，命令留在输入框里', async () => {
+// 平台命令因忙被拒一律是 409 agent_not_idle（不带 details）：说明原因，不重试、不转成排队，命令留在输入框里。
+it.each(['/reload', '/resume', '/new'])('%s 遇到 agent_not_idle：说明 Agent 不空闲，不重试也不排队', async (command) => {
   const sent: Schemas['SendMessageInput'][] = []
   server.use(http.post(apiUrl('/agents/sleep-agent/messages'), async ({ request }) => {
     sent.push(await request.json() as Schemas['SendMessageInput'])
     return HttpResponse.json({ error: { code: 'agent_not_idle', message: 'agent is not idle' } }, { status: 409 })
   }))
   const onCommand = renderComposer()
-  await userEvent.type(screen.getByRole('textbox', { name: '消息' }), '/resume')
+  await userEvent.type(screen.getByRole('textbox', { name: '消息' }), command)
   await userEvent.keyboard('{Escape}{Enter}')
+  // /new 先确认。
+  if (command === '/new') await userEvent.click(await screen.findByRole('button', { name: '重开会话' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('Agent 不空闲：还有进行中的回复或排队消息')
-  expect(sent).toEqual([{ text: '/resume' }])
+  expect(sent).toEqual([{ text: command }])
   expect(onCommand).not.toHaveBeenCalled()
-  expect(screen.getByLabelText('消息')).toHaveValue('/resume')
+  expect(screen.getByLabelText('消息')).toHaveValue(command)
 })
+
 
 it('/copy 先写剪贴板再显示结果；没有回复时不写剪贴板', async () => {
   const writeText = vi.fn(() => Promise.resolve())

@@ -196,7 +196,8 @@ export function useAgentSkills(agentId: string) {
 }
 
 // 对话页 "/" 菜单的命令：平台内置命令（带此刻能不能用）与 Pi 命令。第一次输入 "/" 时才读取；发送前要确认某条文字是不是平台命令时，
-// 用同一份查询现取（不重试，免得发送前白等）。平台命令能不能用随会话与运行时变化：会话事件、改配置、重开会话后重新读。
+// 用同一份查询现取（不重试，免得发送前白等）。平台命令能不能用只取决于运行时与会话状态，两者每次变化服务端都推 session.updated，
+// 对话页收到它时重读（见 useAgentLive）；重开会话、改配置之后不另读。
 export const agentCommandsQuery = (agentId: string) => ({
   queryKey: keys.agentCommands(agentId),
   queryFn: () => call(api.GET('/agents/{agentId}/commands', agentPath(agentId))),
@@ -385,8 +386,7 @@ export function useCreateAgent(scope: ScopeKey) {
 }
 
 export function useUpdateAgent(agentId: string) {
-  // 换了模型可能换了运行时：命令能不能用要重新读。
-  return useAgentMutation(agentId, (body: Schemas['AgentUpdate']) => call(api.PATCH('/agents/{agentId}', { ...agentPath(agentId), body })), [keys.agentCommands(agentId)])
+  return useAgentMutation(agentId, (body: Schemas['AgentUpdate']) => call(api.PATCH('/agents/{agentId}', { ...agentPath(agentId), body })))
 }
 
 export function useDeleteAgent(agentId: string) {
@@ -539,7 +539,7 @@ export function useSendMessage(agentId: string) {
 }
 
 export function useResetSession(agentId: string) {
-  return useAgentMutation(agentId, () => call(api.POST('/agents/{agentId}/session/reset', agentPath(agentId))), [keys.agentStatus(agentId), keys.agentCommands(agentId)])
+  return useAgentMutation(agentId, () => call(api.POST('/agents/{agentId}/session/reset', agentPath(agentId))), [keys.agentStatus(agentId)])
 }
 
 export function useCreateSkillFromArchive() {

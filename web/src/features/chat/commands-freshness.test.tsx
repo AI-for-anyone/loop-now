@@ -33,4 +33,23 @@ describe('命令列表跟着会话状态更新', () => {
     expect(reads).toBe(2)
     expect(screen.queryByRole('group', { name: '现在不能用' })).toBeNull()
   })
+
+  it('只在 session.updated 时重读：平台命令执行完、没有会话变化时不额外读', async () => {
+    let reads = 0
+    const { agent, emit, user } = await renderChat({
+      handlers: [
+        http.get(apiUrl('/agents/:agentId/commands'), () => { reads += 1; return HttpResponse.json(commandList()) }),
+        http.post(apiUrl('/agents/:agentId/messages'), () => HttpResponse.json({ handled: true, source: 'platform', plugin: '', reply: null, command: 'reload', processStopped: true })),
+      ],
+    })
+    await emit('snapshot', { status: makeStatus(agent.id), currentText: null, queuedRuns: [], queueItems: [] })
+    const input = screen.getByLabelText('消息')
+    await user.type(input, '/reload')
+    await waitFor(() => expect(reads).toBe(1))
+    await user.keyboard('{Escape}{Enter}')
+    await screen.findByText('已停止旧进程，下一条消息将重新加载')
+    await user.type(input, '/rel')
+    await waitFor(() => expect(screen.getByRole('option', { name: /\/reload/ })).toBeInTheDocument())
+    expect(reads).toBe(1)
+  })
 })
