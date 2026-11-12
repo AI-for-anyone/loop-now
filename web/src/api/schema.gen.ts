@@ -7287,9 +7287,11 @@ export interface components {
             };
         };
         AgentCommandList: {
+            /** @description Agent 当前的运行时。只有 pi 有 Pi 命令；其余运行时（claude-code）不列 Pi 命令，capturedAt 恒为 null */
+            runtime: components["schemas"]["AgentRuntime"];
             /**
              * Format: date-time
-             * @description 读到 Pi 命令的时间（Pi 启动时）；从没启动过为 null
+             * @description 读到 Pi 命令的时间（Pi 启动时）。runtime 为 pi 而它为 null 表示 Pi 还没启动过；runtime 不是 pi 时恒为 null
              */
             capturedAt: string | null;
             commands: components["schemas"]["AgentCommand"][];

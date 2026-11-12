@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
+
+	"loop-now/internal/server/agentruntime"
 )
 
 // agentCommand 是接口里的 AgentCommand：对话页 "/" 菜单里的一条命令。
@@ -28,14 +30,16 @@ func (s *Server) listAgentCommands(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	if _, err := s.Store.GetAgent(r.Context(), id); err != nil {
+	agent, err := s.Store.GetAgent(r.Context(), id)
+	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
 	out := struct {
+		Runtime    string         `json:"runtime"`
 		CapturedAt *time.Time     `json:"capturedAt"`
 		Commands   []agentCommand `json:"commands"`
-	}{Commands: []agentCommand{}}
+	}{Runtime: agentruntime.ForProvider(agent.ModelProvider), Commands: []agentCommand{}}
 	platform, err := s.Conv.PlatformCommands(r.Context(), id)
 	if err != nil {
 		s.fail(w, r, err)
@@ -50,7 +54,8 @@ func (s *Server) listAgentCommands(w http.ResponseWriter, r *http.Request) {
 		}
 		out.Commands = append(out.Commands, item)
 	}
-	if s.PiCommands != nil {
+	// 只有 Pi 的 Agent 有 Pi 命令；换成别的运行时后，之前启动 Pi 时缓存的命令也不再列出。
+	if s.PiCommands != nil && out.Runtime == agentruntime.Pi {
 		cached, err := s.PiCommands(id)
 		if err != nil {
 			s.fail(w, r, err)

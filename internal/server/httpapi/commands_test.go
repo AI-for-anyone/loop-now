@@ -16,6 +16,7 @@ import (
 )
 
 type commandList struct {
+	Runtime    string     `json:"runtime"`
 	CapturedAt *time.Time `json:"capturedAt"`
 	Commands   []struct {
 		Name              string          `json:"name"`
@@ -53,6 +54,9 @@ func TestListAgentCommandsPlatform(t *testing.T) {
 	agent, path := e.newAgent("命令清单")
 	get := func() commandList { return decode[commandList](t, e.expect(200, "GET", path+"/commands", nil)) }
 	l := get()
+	if l.Runtime != "pi" {
+		t.Fatalf("Pi 的 Agent：%s", l.Runtime)
+	}
 	if got := strings.Join(platformAvailability(l), " "); got != "session new compact:session_none reload copy export:session_none resume" {
 		t.Fatalf("还没有会话：%s", got)
 	}
@@ -76,6 +80,13 @@ func TestListAgentCommandsPlatform(t *testing.T) {
 	e.expect(200, "PATCH", path, map[string]any{"model": map[string]string{"provider": "claude-code", "modelId": "sonnet"}})
 	if got := strings.Join(platformAvailability(get()), " "); got != "session new compact:runtime_unsupported reload copy export:runtime_unsupported resume:runtime_unsupported" {
 		t.Fatalf("Claude Code：%s", got)
+	}
+	// 换成 Claude Code 之前启动 Pi 时缓存的命令不再列出，capturedAt 为 null，runtime 写明不是 Pi。
+	e.api.PiCommands = func(uuid.UUID) (*executor.PiCommands, error) {
+		return &executor.PiCommands{CapturedAt: time.Now().UTC(), Commands: []executor.PiCommand{{Name: "stale", Source: "extension"}}}, nil
+	}
+	if l := get(); l.Runtime != "claude-code" || l.CapturedAt != nil || len(l.Commands) != 7 {
+		t.Fatalf("Claude Code 不列 Pi 命令：%+v", l)
 	}
 }
 
