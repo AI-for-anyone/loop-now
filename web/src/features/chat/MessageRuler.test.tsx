@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '@/api/client'
 import type { MessagePages } from '@/api/queries'
-import { makeAgent, makeMessage, makeRun } from '@/test/api'
+import { makeAgent, makeMessage, makeMessagePage, makeRun } from '@/test/api'
 import { FakeIntersectionObserver } from '@/test/intersection-observer'
 import { createTestQueryClient } from '@/test/render'
 import { initialLiveState } from './live-state'
@@ -68,7 +68,7 @@ function pagesOf(texts: string[], hasMore = true): MessagePages {
     const run = makeRun({ startedAt: new Date(Date.parse('2026-11-12T08:00:00Z') + i * 1000).toISOString() })
     return [makeMessage({ text, run }), makeMessage({ role: 'assistant', text: `${text}的回答`, run })]
   })
-  return { pages: [{ messages, hasMore, hasMoreAfter: false }], pageParams: [null] }
+  return { pages: [makeMessagePage(messages, { hasMore })], pageParams: [null] }
 }
 
 const agent = makeAgent()

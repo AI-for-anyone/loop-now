@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { makeMessage, makeRun } from '@/test/api'
+import { makeMessage, makeMessagePage, makeRun } from '@/test/api'
 import type { MessagePages } from '@/api/queries'
 import { initialLiveState, liveReducer, type LiveState } from './live-state'
 import { buildTurns } from './turns'
 
-const page = (messages: ReturnType<typeof makeMessage>[]): MessagePages => ({ pages: [{ messages, hasMore: false, hasMoreAfter: false }], pageParams: [null] })
+const page = (messages: ReturnType<typeof makeMessage>[]): MessagePages => ({ pages: [makeMessagePage(messages)], pageParams: [null] })
 
 describe('buildTurns', () => {
   it('已处理的轮次按开始执行的时间排列，打断消息排在比它早发出的普通排队消息之前', () => {

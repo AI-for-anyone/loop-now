@@ -2,7 +2,7 @@ import { act, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '@/api/client'
-import { apiUrl, errorBody, makeMessage, makeQueueItem, makeRun, makeStatus } from '@/test/api'
+import { apiUrl, errorBody, makeMessage, makeMessagePage, makeQueueItem, makeRun, makeStatus } from '@/test/api'
 import { renderChat } from '@/test/chat'
 import { FakeEventSource } from '@/test/fake-event-source'
 import { server } from '@/test/server'
@@ -53,7 +53,7 @@ describe('服务端重启与竞态', () => {
     const item = makeQueueItem({ runId: queued.id, text: '排队的' })
     const { agent, emit } = await renderChat({
       handlers: [
-        http.get(apiUrl('/agents/:agentId/messages'), () => HttpResponse.json({ messages: history, hasMore: false })),
+        http.get(apiUrl('/agents/:agentId/messages'), () => HttpResponse.json(makeMessagePage(history))),
         http.get(apiUrl('/agents/:agentId/queue'), ({ params }) => HttpResponse.json({ agentId: String(params.agentId), items: [item] })),
       ],
     })

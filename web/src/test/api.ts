@@ -43,6 +43,14 @@ export function makeMessage(overrides: Partial<Schemas['Message']> = {}): Schema
   return { id: id(), role: 'user', origin: 'console', text: '你好', createdAt: now, sessionEpoch: 1, run: makeRun(), ...overrides }
 }
 
+// 一页对话历史（符合契约）。轮次计数默认按“这一页就是全部历史”算：前面没有轮次，总数是这一页里的轮次数
+// （一次执行一轮；排队中的、排队中即作废没有真正执行的不算）。分页的样例自己给 hasMore、turnsBefore、turnsTotal。
+const VOIDED: ReadonlySet<string | null> = new Set(['user_cancelled', 'merged_into_interrupt', 'no_pending_messages'])
+export function makeMessagePage(messages: Schemas['Message'][] = [], overrides: Partial<Schemas['MessagePage']> = {}): Schemas['MessagePage'] {
+  const turns = new Set(messages.filter((message) => message.run.status !== 'queued' && !VOIDED.has(message.run.endReason)).map((message) => message.run.id))
+  return { messages, hasMore: false, hasMoreAfter: false, turnsBefore: 0, turnsTotal: turns.size, ...overrides }
+}
+
 // 默认属于测试上下文中的默认项目。
 export function makeAgent(overrides: Partial<Schemas['Agent']> = {}): Schemas['Agent'] {
   return {

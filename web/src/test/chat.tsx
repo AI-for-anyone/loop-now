@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse, type HttpHandler } from 'msw'
 import { routes } from '@/app/routes'
 import type { Schemas } from '@/api/client'
-import { agentsUrl, apiUrl, context, defaultAgentPath, makeAgent, makeStatus, toListItem } from './api'
+import { agentsUrl, apiUrl, context, defaultAgentPath, makeAgent, makeMessagePage, makeStatus, toListItem } from './api'
 import { FakeEventSource } from './fake-event-source'
 import { renderRoutes } from './render'
 import { server } from './server'
@@ -12,6 +12,8 @@ interface ChatSetup {
   agent?: Schemas['Agent']
   messages?: Schemas['Message'][]
   hasMore?: boolean
+  // 这一页的轮次计数等字段；不给时按“这一页就是全部历史”算（见 makeMessagePage）。
+  page?: Partial<Schemas['MessagePage']>
   status?: Partial<Schemas['AgentStatus']>
   handlers?: HttpHandler[]
   // 默认打开对话页地址；需要带定位锚点等时另行指定。
@@ -28,7 +30,7 @@ export async function renderChat(setup: ChatSetup = {}) {
     http.get(agentsUrl, () => HttpResponse.json({ agents: [toListItem(agent)] })),
     http.get(apiUrl(`/agents/${agent.id}`), () => HttpResponse.json(agent)),
     http.get(apiUrl(`/agents/${agent.id}/status`), () => HttpResponse.json(makeStatus(agent.id, setup.status))),
-    http.get(apiUrl(`/agents/${agent.id}/messages`), () => HttpResponse.json({ messages: setup.messages ?? [], hasMore: setup.hasMore ?? false })),
+    http.get(apiUrl(`/agents/${agent.id}/messages`), () => HttpResponse.json(makeMessagePage(setup.messages ?? [], { hasMore: setup.hasMore ?? false, ...setup.page }))),
   )
   const user = userEvent.setup()
   const result = renderRoutes(routes, setup.path ?? defaultAgentPath(agent.id, 'chat'))

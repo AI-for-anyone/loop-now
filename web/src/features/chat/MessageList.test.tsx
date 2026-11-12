@@ -3,7 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render as rtlRender, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MessagePages } from '@/api/queries'
-import { makeAgent, makeMessage, makeRun } from '@/test/api'
+import { makeAgent, makeMessage, makeMessagePage, makeRun } from '@/test/api'
 import { createTestQueryClient } from '@/test/render'
 import { initialLiveState, liveReducer, type LiveState } from './live-state'
 import { MessageList } from './MessageList'
@@ -88,7 +88,7 @@ function pagesOf(...texts: string[]): MessagePages {
     const run = makeRun({ startedAt: `2026-10-12T08:00:0${i}Z` })
     return [makeMessage({ text, run }), makeMessage({ role: 'assistant', text: `${text}的回答`, run })]
   })
-  return { pages: [{ messages, hasMore: true, hasMoreAfter: false }], pageParams: [null] }
+  return { pages: [makeMessagePage(messages, { hasMore: true })], pageParams: [null] }
 }
 
 const agent = makeAgent()
@@ -191,7 +191,7 @@ describe('回复的显示', () => {
   it('回复进行中显示输出光标与静态的状态文字，结束后不再显示光标', () => {
     const run = makeRun({ status: 'running', endedAt: null })
     const live: LiveState = { ...initialLiveState, current: { run, text: '写到一半' } }
-    const history = (messages: ReturnType<typeof makeMessage>[]): MessagePages => ({ pages: [{ messages, hasMore: false, hasMoreAfter: false }], pageParams: [null] })
+    const history = (messages: ReturnType<typeof makeMessage>[]): MessagePages => ({ pages: [makeMessagePage(messages)], pageParams: [null] })
     const { container, rerender } = render(<List {...props} live={live} pages={history([makeMessage({ text: '问题', run })])} onLoadOlder={() => {}} />)
     expect(screen.getByText('写到一半')).toBeInTheDocument()
     expect(screen.getByText('回复中')).toBeInTheDocument()
@@ -219,15 +219,11 @@ describe('回复的显示', () => {
       <List
         {...props}
         pages={{
-          pages: [{
-            messages: [
-              makeMessage({ text: '/pi:review src/', run: handled }), makeMessage({ role: 'assistant', text: '', run: handled }),
-              makeMessage({ text: '/pi:skill:triage 看看', run: expanded }), makeMessage({ role: 'assistant', text: '分好类了', run: expanded }),
-              makeMessage({ text: '普通问题', run: plain }), makeMessage({ role: 'assistant', text: '', run: plain }),
-            ],
-            hasMore: false,
-            hasMoreAfter: false,
-          }],
+          pages: [makeMessagePage([
+            makeMessage({ text: '/pi:review src/', run: handled }), makeMessage({ role: 'assistant', text: '', run: handled }),
+            makeMessage({ text: '/pi:skill:triage 看看', run: expanded }), makeMessage({ role: 'assistant', text: '分好类了', run: expanded }),
+            makeMessage({ text: '普通问题', run: plain }), makeMessage({ role: 'assistant', text: '', run: plain }),
+          ])],
           pageParams: [null],
         }}
         onLoadOlder={() => {}}
@@ -248,7 +244,7 @@ describe('回复的显示', () => {
     const { container } = render(
       <List
         {...props}
-        pages={{ pages: [{ messages: [makeMessage({ text: '/pi:grok-cli-usage', run }), makeMessage({ role: 'assistant', text: '', run })], hasMore: false, hasMoreAfter: false }], pageParams: [null] }}
+        pages={{ pages: [makeMessagePage([makeMessage({ text: '/pi:grok-cli-usage', run }), makeMessage({ role: 'assistant', text: '', run })])], pageParams: [null] }}
         onLoadOlder={() => {}}
       />,
     )
@@ -267,7 +263,7 @@ describe('回复的显示', () => {
   it('执行进行中没有输出；结束事件带来 notices 后一次显示，不用另取时间线', () => {
     const running = makeRun({ status: 'running', endedAt: null, piCommand: { name: 'grok-cli-usage', handled: true, notices: [], truncated: false } })
     const user = makeMessage({ text: '/pi:grok-cli-usage', run: running })
-    const history: MessagePages = { pages: [{ messages: [user], hasMore: false, hasMoreAfter: false }], pageParams: [null] }
+    const history: MessagePages = { pages: [makeMessagePage([user])], pageParams: [null] }
     const live: LiveState = { ...initialLiveState, current: { run: running, text: '' } }
     const { container, rerender } = render(<List {...props} live={live} pages={history} onLoadOlder={() => {}} />)
     expect(container.querySelector('[data-pi-command-notices]')).toBeNull()
@@ -283,7 +279,7 @@ describe('回复的显示', () => {
     render(
       <List
         {...props}
-        pages={{ pages: [{ messages: [makeMessage({ text: '先停下', run }), makeMessage({ role: 'assistant', text: '好的', run })], hasMore: false, hasMoreAfter: false }], pageParams: [null] }}
+        pages={{ pages: [makeMessagePage([makeMessage({ text: '先停下', run }), makeMessage({ role: 'assistant', text: '好的', run })])], pageParams: [null] }}
         onLoadOlder={() => {}}
       />,
     )
@@ -311,7 +307,7 @@ describe('回复的显示', () => {
       makeMessage({ role: 'assistant', text: '好', run: interrupt }),
       makeMessage({ text: '上一轮正常结束', run: later }),
     ]
-    const { container } = render(<List {...props} pages={{ pages: [{ messages, hasMore: false, hasMoreAfter: false }], pageParams: [null] }} onLoadOlder={() => {}} />)
+    const { container } = render(<List {...props} pages={{ pages: [makeMessagePage(messages)], pageParams: [null] }} onLoadOlder={() => {}} />)
     const tools = within(screen.getAllByRole('list', { name: '工具调用' })[0]).getAllByRole('listitem')
     expect(tools[0]).toHaveTextContent('read成功')
     expect(tools[1]).toHaveTextContent('bash已打断')
@@ -335,7 +331,7 @@ describe('回复的显示', () => {
       makeMessage({ text: '先做这个', run: interrupt }),
       makeMessage({ text: '重开后的问题', run: reopened, sessionEpoch: 2 }),
     ]
-    render(<List {...props} pages={{ pages: [{ messages, hasMore: false, hasMoreAfter: false }], pageParams: [null] }} onLoadOlder={() => {}} />)
+    render(<List {...props} pages={{ pages: [makeMessagePage(messages)], pageParams: [null] }} onLoadOlder={() => {}} />)
     const session = screen.getByRole('separator', { name: '会话已切换，页面历史保留' })
     const interrupted = screen.getByRole('separator', { name: '已打断，先处理这条' })
     expect(session).toHaveTextContent(/^会话已切换，页面历史保留$/)
@@ -357,7 +353,7 @@ describe('回复的显示', () => {
     render(
       <List
         {...props}
-        pages={{ pages: [{ messages: [reminder, makeMessage({ role: 'assistant', text: '我去看看', run })], hasMore: false, hasMoreAfter: false }], pageParams: [null] }}
+        pages={{ pages: [makeMessagePage([reminder, makeMessage({ role: 'assistant', text: '我去看看', run })])], pageParams: [null] }}
         onLoadOlder={() => {}}
       />,
     )
@@ -373,13 +369,13 @@ describe('回复的显示', () => {
 it('sleep_wake 是一行淡色唤醒信息：时间、睡了多久与说明；平台指令和 sleep ID 不在正文里；提前唤醒的消息只带一个小标记', () => {
   const timer = '00000000-0000-7000-8000-000000005001', early = '00000000-0000-7000-8000-000000005002'
   const source = makeRun({ endedAt: '2026-10-26T08:00:00Z' }), wake = makeRun({ wakeSleepId: timer, endedAt: '2026-10-26T08:05:20Z' }), consoleRun = makeRun({ wakeSleepId: early })
-  const pages: MessagePages = { pages: [{ messages: [
+  const pages: MessagePages = { pages: [makeMessagePage([
     makeMessage({ text: '每 5 分钟看一次 CI', run: source, createdAt: '2026-10-26T07:59:50Z' }),
     makeMessage({ role: 'assistant', text: '还没跑完，先 sleep', run: source, createdAt: '2026-10-26T07:59:55Z' }),
     makeMessage({ origin: 'sleep_wake', text: `Platform notice: your sleep is due; continue in the original conversation. sleepId=${timer}; note: check CI status for the budget fixture\nthen report`, run: wake, createdAt: '2026-10-26T08:05:03Z' }),
     makeMessage({ role: 'assistant', text: '已继续', run: wake, createdAt: '2026-10-26T08:05:04Z' }),
     makeMessage({ origin: 'console', text: '真实控制台留言', run: consoleRun, createdAt: '2026-10-26T08:06:00Z' }),
-  ], hasMore: false, hasMoreAfter: false }], pageParams: [null] }
+  ])], pageParams: [null] }
   render(<List {...props} pages={pages} onLoadOlder={() => {}} />)
   const line = screen.getByRole('note')
   expect(line).toHaveTextContent(/^sleep 到期唤醒·.+·睡了 5 分钟·check CI status for the budget fixture then report$/u)
@@ -393,10 +389,10 @@ it('sleep_wake 是一行淡色唤醒信息：时间、睡了多久与说明；�
 
 it('前一轮不是刚结束的那一轮时不写睡了多久；对不上格式的唤醒原文只放在悬停提示里', () => {
   const wake = makeRun({ wakeSleepId: 'sleep-timer' })
-  const pages: MessagePages = { pages: [{ messages: [
+  const pages: MessagePages = { pages: [makeMessagePage([
     makeMessage({ origin: 'sleep_wake', text: '计时器提醒原文', run: wake }),
     makeMessage({ role: 'assistant', text: '已继续', run: wake }),
-  ], hasMore: false, hasMoreAfter: false }], pageParams: [null] }
+  ])], pageParams: [null] }
   render(<List {...props} pages={pages} onLoadOlder={() => {}} />)
   const line = screen.getByRole('note')
   expect(line).toHaveTextContent(/^sleep 到期唤醒·[^·]+$/u)

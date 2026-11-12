@@ -15,10 +15,13 @@ function history(agentId: string) {
     const run = makeRun({ queuedAt: time, startedAt: time, runningAt: time, endedAt: time })
     messages.push(makeMessage({ text: `问题 ${i}`, createdAt: time, run }), makeMessage({ role: 'assistant', text: `回答 ${i}`, createdAt: time, run }))
   }
+  // 每轮两条消息：这一页之前的轮次数是完整排在它前面的轮次（一轮被页边界切开时，这一轮算在这一页）。
   const page = (start: number, end: number): Schemas['MessagePage'] => ({
     messages: messages.slice(start, end),
     hasMore: start > 0,
     hasMoreAfter: end < messages.length,
+    turnsBefore: Math.floor(start / 2),
+    turnsTotal: messages.length / 2,
   })
   const handler = http.get(apiUrl(`/agents/${agentId}/messages`), ({ request }) => {
     const params = new URL(request.url).searchParams

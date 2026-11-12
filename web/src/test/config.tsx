@@ -4,7 +4,7 @@ import { http, HttpResponse, type HttpHandler } from 'msw'
 import { t } from '@/i18n'
 import { routes } from '@/app/routes'
 import type { Schemas } from '@/api/client'
-import { agentsUrl, apiUrl, context, defaultAgentPath, makeAgent, makeStatus, platformAgentsUrl, toListItem } from './api'
+import { agentsUrl, apiUrl, context, defaultAgentPath, makeAgent, makeMessagePage, makeStatus, platformAgentsUrl, toListItem } from './api'
 import { emptySelections } from './project-credentials'
 import { renderRoutes } from './render'
 import { server } from './server'
@@ -90,7 +90,7 @@ export async function renderConfig(setup: ConfigSetup = {}) {
     http.get(apiUrl(`/agents/${agent.id}/model-auth`), () => HttpResponse.json({ credential: agent.modelCredential, operation: null })),
     http.get(apiUrl(`/agents/${agent.id}/status`), () => HttpResponse.json(makeStatus(agent.id, setup.status))),
     http.get(apiUrl(`/agents/${agent.id}/skills`), () => HttpResponse.json({ skills: setup.agentSkills ?? [] })),
-    http.get(apiUrl(`/agents/${agent.id}/messages`), () => HttpResponse.json({ messages: [], hasMore: false })),
+    http.get(apiUrl(`/agents/${agent.id}/messages`), () => HttpResponse.json(makeMessagePage([]))),
     http.get(apiUrl('/skills'), () => HttpResponse.json({ skills: setup.library ?? [] })),
     http.get(apiUrl('/cli-templates'), () => HttpResponse.json({ templates: setup.templates ?? [ghTemplate, larkTemplate] })),
     ...catalogHandlers,

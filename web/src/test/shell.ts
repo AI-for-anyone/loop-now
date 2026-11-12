@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
-import { agentsUrl, apiUrl, context, makeAgent, makeStatus, toListItem } from './api'
+import { agentsUrl, apiUrl, context, makeAgent, makeMessagePage, makeStatus, toListItem } from './api'
 import { emptySelections } from './project-credentials'
 
 // 整个控制台的默认接口处理器。MSW 在一次 server.use 中按顺序匹配，测试中的覆盖要写在它们前面。
@@ -16,7 +16,7 @@ export function baseHandlers(agents: Schemas['Agent'][] = [makeAgent()]) {
     ...agents.map((a) => http.get(apiUrl(`/agents/${a.id}/model-auth`), () => HttpResponse.json({ credential: a.modelCredential, operation: null }))),
     ...agents.map((a) => http.get(apiUrl(`/agents/${a.id}/credential-selections`), () => HttpResponse.json(emptySelections(a)))),
     ...agents.map((a) => http.get(apiUrl(`/agents/${a.id}/skills`), () => HttpResponse.json({ skills: [] }))),
-    ...agents.map((a) => http.get(apiUrl(`/agents/${a.id}/messages`), () => HttpResponse.json({ messages: [], hasMore: false }))),
+    ...agents.map((a) => http.get(apiUrl(`/agents/${a.id}/messages`), () => HttpResponse.json(makeMessagePage([])))),
     http.get(apiUrl('/model-providers'), () => HttpResponse.json({ piVersion: '1.1.0', catalogGeneratedAt: null, providers: [] })),
     http.get(apiUrl('/model-providers/:providerId/models'), ({ params }) => HttpResponse.json({ providerId: String(params.providerId), models: [] })),
     http.get(apiUrl('/cli-templates'), () => HttpResponse.json({ templates: [] })),

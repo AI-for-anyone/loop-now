@@ -1,7 +1,7 @@
 import { act, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
-import { agentsUrl, apiUrl, context, makeAgent, makeMessage, makeRun, platformAgentsUrl, toListItem } from '@/test/api'
+import { agentsUrl, apiUrl, context, makeAgent, makeMessage, makeMessagePage, makeRun, platformAgentsUrl, toListItem } from '@/test/api'
 import { PLATFORM } from '@/lib/scope'
 import { renderHookWithQuery } from '@/test/render'
 import { server } from '@/test/server'
@@ -105,7 +105,7 @@ describe('历史缓存的更新', () => {
     const agentId = 'a1'
     const run = makeRun({ status: 'running' })
     const user = makeMessage({ run })
-    server.use(http.get(apiUrl(`/agents/${agentId}/messages`), () => HttpResponse.json({ messages: [user], hasMore: false })))
+    server.use(http.get(apiUrl(`/agents/${agentId}/messages`), () => HttpResponse.json(makeMessagePage([user]))))
     const { result, client } = renderHookWithQuery(() => useMessages(agentId))
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
@@ -128,7 +128,7 @@ describe('执行状态不倒退', () => {
     const agentId = 'a2'
     const run = makeRun({ status: 'completed' })
     const user = makeMessage({ run })
-    server.use(http.get(apiUrl(`/agents/${agentId}/messages`), () => HttpResponse.json({ messages: [user], hasMore: false })))
+    server.use(http.get(apiUrl(`/agents/${agentId}/messages`), () => HttpResponse.json(makeMessagePage([user]))))
     const { result, client } = renderHookWithQuery(() => useMessages(agentId))
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     act(() => {
