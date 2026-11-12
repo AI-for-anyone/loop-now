@@ -58,6 +58,21 @@ describe('输入框的 "/" 命令菜单', () => {
     expect(input).toHaveFocus()
   })
 
+  // 改版“一张印出来的纸”：菜单是一小张纸，选中的一项是黄色，来源写在小标签里。
+  it('菜单是一张小纸；选中的一项是黄色；来源写在标签里：平台命令藏青底白字，Pi 的命令浅蓝底', async () => {
+    const { user, input } = setup()
+    await user.type(input, '/')
+    await waitFor(() => expect(options()).toHaveLength(10))
+    const panel = screen.getByRole('listbox', { name: '命令' }).parentElement!
+    expect(panel).toHaveClass('bg-paper-raised', 'rounded-card', 'shadow-[0_0_0_2px_var(--ink),4px_4px_0_2px_var(--riso-blue)]')
+    for (const option of options()) expect(option).toHaveClass('aria-selected:bg-riso-yellow')
+    expect(options()[0]).not.toHaveClass('aria-selected:bg-tint-blue')
+    expect(within(options()[0]).getByText('平台命令')).toHaveClass('rounded-full', 'bg-ink', 'text-white')
+    expect(within(options()[7]).getByText('扩展命令 · 插件 · 代码审查')).toHaveClass('rounded-stamp', 'bg-tint-blue', 'text-ink')
+    // 底部的按键说明与列表之间是一道虚线。
+    expect(panel.lastElementChild).toHaveClass('border-t-[1.5px]', 'border-dashed')
+  })
+
   it('按第一个词筛选：/pi: 写法开头的最前，其次是没写 pi: 的命令名开头，再次是名称或说明包含', async () => {
     const { user, input } = setup()
     await user.type(input, '/pi:s')

@@ -6,6 +6,7 @@ import { RequestId } from '@/components/RequestError'
 import { Badge } from '@/components/ui/badge'
 import { t } from '@/i18n'
 import { describeError, requestIdOf } from '@/lib/errors'
+import { receiptClass, receiptPartClass } from '@/lib/receipt'
 import { useNow } from '@/lib/use-now'
 import { cn } from '@/lib/utils'
 import { isVoidedRun, runStatusText } from './run-status-text'
@@ -100,14 +101,14 @@ export function RunRecord({ agentId, run, defaultOpen = false }: RunRecordProps)
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         onClick={() => setOpen((value) => !value)}
-        className="mt-0.5 inline-flex max-w-full flex-wrap items-stretch self-start rounded-[6px] bg-tint-blue text-[12px] leading-7 text-ink outline-none hover:bg-[#d6ddf4] focus-visible:shadow-focus"
+        className={cn(receiptClass, 'mt-0.5 self-start outline-none hover:bg-[#d6ddf4] focus-visible:shadow-focus')}
       >
         <span className="sr-only">{label}</span>
         <span aria-hidden="true" data-receipt-part className="px-[11px] font-black whitespace-nowrap">
           {t.timeline.title}
         </span>
         {parts.map((part, index) => (
-          <span key={index} aria-hidden="true" data-receipt-part className="border-l-[1.5px] border-dashed border-ink/40 px-[11px] font-mono font-medium whitespace-nowrap">
+          <span key={index} aria-hidden="true" data-receipt-part className={cn(receiptPartClass, 'font-mono font-medium')}>
             {part}
           </span>
         ))}
