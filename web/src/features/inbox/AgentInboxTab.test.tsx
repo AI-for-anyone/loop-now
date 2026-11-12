@@ -185,6 +185,13 @@ describe('纸张上的收件箱', () => {
     expect(within(stub).getByText('未读').previousElementSibling).toHaveClass('text-pink-text')
   })
 
+  it('信件列表在纸张里自己滚动，用纸张的细滚动条，不隐藏', async () => {
+    const { list } = await renderAgentInbox(received())
+    const area = list.getAllByRole('listitem')[0].closest('.overflow-y-auto')!
+    expect(area.closest('[data-sheet]')).toHaveClass('riso-scrollbar')
+    expect(area.className).not.toMatch(/no-scrollbar/)
+  })
+
   it('只看未读时，票根仍按全部信件计数', async () => {
     const [first, second] = received()
     const { user } = await renderAgentInbox([second, first])

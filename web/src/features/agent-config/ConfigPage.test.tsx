@@ -69,6 +69,28 @@ describe('改版的版式', () => {
     expect(within(region('基本信息')).getByRole('button', { name: '复制' })).toHaveClass('border-2', 'border-ink', 'bg-riso-yellow')
   })
 
+  // jsdom 不排版：位置由浏览器检查确认（左栏“模型提供方”下面的说明不再把右栏“模型”往下推）。
+  it('同一行的两栏字段按顶部对齐：一栏下面的说明往下长，不把旁边那栏往下推', async () => {
+    await renderConfig()
+    const basic = region('基本信息')
+    // 内部 ID 与显示名称一行。
+    expect(within(basic).getByLabelText('显示名称').closest('.grid')!.parentElement).toHaveClass('items-start')
+    // 模型提供方与模型一行（模型选择器里的网格）。
+    expect(within(basic).getByLabelText('模型提供方').closest('.grid')!.parentElement).toHaveClass('items-start')
+  })
+
+  it('正文一栏与目录都在纸张里，用纸张的细滚动条，不隐藏滚动条（目录尺不是滚动位置）', async () => {
+    await renderConfig()
+    const sheet = region('基本信息').closest('[data-sheet]')!
+    expect(sheet).toHaveClass('riso-scrollbar')
+    const body = region('基本信息').closest('.overflow-y-auto')!
+    const toc = screen.getByRole('navigation', { name: '目录' })
+    for (const area of [body, toc]) {
+      expect(sheet).toContainElement(area as HTMLElement)
+      expect(area.className).not.toMatch(/no-scrollbar/)
+    }
+  })
+
   it('“下一条消息生效”的提示是一张黄色便签', async () => {
     await renderConfig()
     const note = screen.getByText('修改从下一条派发的消息开始生效，进行中的回复不受影响。').closest('[role="note"]')!

@@ -87,8 +87,9 @@ export function ModelPicker({ value, onChange, error, children, agentId }: Model
   const current = providers.data?.providers.find((p) => p.id === provider)
   const note = current ? unavailableNote(current, agentId) : null
 
+  // 排成两栏时（Agent 配置页）同一行的字段按顶部对齐，提供方下面的说明不会把旁边的模型往下推。
   return (
-    <div className="grid gap-3">
+    <div className="grid items-start gap-3">
       <div className="grid gap-1.5">
         <Label htmlFor={providerId}>{t.config.basic.provider}</Label>
         <select

@@ -104,8 +104,9 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
 
   return (
     <Section id="basic" title={t.config.basic.title}>
-      {/* 内部 ID 与显示名称一行两列，窄时换行；模型提供方与模型同样按两列排（ModelPicker 内部的网格）。 */}
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] gap-4">
+      {/* 内部 ID 与显示名称一行两列，窄时换行；模型提供方与模型同样按两列排（ModelPicker 内部的网格）。
+          同一行的字段按顶部对齐：一栏下面的说明往下长，不把旁边那栏往下推。 */}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] items-start gap-4">
         <IdField label={t.config.basic.id} id={agent.id} />
         <div className="grid content-start gap-1.5">
           <Label htmlFor="agent-name">{t.config.basic.name}</Label>

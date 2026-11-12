@@ -178,6 +178,12 @@
     background-color: var(--paper);
   }
   /* 主区米色底上的纸张颗粒：128px 的平铺图（藏青色、最多约 6% 的不透明度），不用滤镜，滚动时不重算。 */
+  /* 纸张里的滚动条（改版）：细、藏青半透明，轨道透明，不用系统的灰色滚动条。scrollbar-width 不继承，
+     所以连同所有后代一起设上；用 :where 不加优先级，需要隐藏滚动条的地方（no-scrollbar 及其断点写法）照旧隐藏。 */
+  :where(.riso-scrollbar, .riso-scrollbar *) {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--ink) 38%, transparent) transparent;
+  }
   .riso-grain {
     background-image: url('./assets/paper-grain.png');
     background-size: 128px 128px;
