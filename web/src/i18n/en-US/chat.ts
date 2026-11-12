@@ -97,6 +97,11 @@ export const chat = {
   toolsLabel: 'Tool calls',
   messagesLabel: 'Conversation',
   loadOlder: 'Load earlier messages',
+  ruler: {
+    label: 'Conversation turns',
+    labeled: (kind: string, text: string) => `${kind}: ${text}`,
+    noText: 'Turn without text',
+  },
   time: (time: string) => formatMonthDayClock(time),
   metaSeparator: '·',
   sessionDividerMark: '~~',

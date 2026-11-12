@@ -103,6 +103,13 @@ export const chat = {
   toolsLabel: '工具调用',
   messagesLabel: '对话',
   loadOlder: '加载更早的消息',
+  // 对话区右侧的刻度尺：一条刻度一轮对话，名称用这一轮开头的文字。
+  ruler: {
+    label: '对话轮次',
+    // 平台提醒、sleep 唤醒那一轮：写明是哪种提醒，再接说明。
+    labeled: (kind: string, text: string) => `${kind}：${text}`,
+    noText: '没有文字的一轮',
+  },
   // 消息与回复上方的时间，以及名称与时间之间的分隔。
   time: (time: string) => formatMonthDayClock(time),
   metaSeparator: '·',
