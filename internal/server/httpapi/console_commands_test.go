@@ -391,3 +391,46 @@ func TestPlatformConsoleCompactResultOnRun(t *testing.T) {
 		t.Fatal("定位压缩执行应返回一页（没有消息时为空列表）")
 	}
 }
+
+// 异常列表里失败的手动压缩带 compaction（指令；失败时 outcome 为 null），普通执行的为 null。
+func TestAnomalyMarksFailedCompaction(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	agent, _ := e.newAgent("压缩异常")
+	if err := e.st.RecordSessionFile(ctx, agent.ID, "/managed/s.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	compact, err := e.st.InsertConsoleCompactRun(ctx, agent.ID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), "保留决定")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := e.st.FinishRun(ctx, compact.ID, store.RunEnd{Status: "failed", ErrorCode: "pi_error", ErrorMessage: "模型出错"}); err != nil {
+		t.Fatal(err)
+	}
+	_, normal, err := e.st.InsertMessageAndRun(ctx, store.NewRun{AgentID: agent.ID, RunID: uuid.Must(uuid.NewV7()), Text: "x", Start: true, InstanceID: uuid.Must(uuid.NewV7())})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := e.st.FinishRun(ctx, normal.ID, store.RunEnd{Status: "failed", ErrorCode: "pi_error"}); err != nil {
+		t.Fatal(err)
+	}
+	page := decode[apitypes.AnomalyPage](t, e.expect(200, "GET", "/anomalies", nil))
+	seen := 0
+	for _, it := range page.Items {
+		switch it.RunID {
+		case compact.ID:
+			seen++
+			if it.Compaction == nil || it.Compaction.Instructions != "保留决定" || it.Compaction.Outcome != nil {
+				t.Fatalf("失败的压缩应带 compaction：%+v", it.Compaction)
+			}
+		case normal.ID:
+			seen++
+			if it.Compaction != nil {
+				t.Fatalf("普通执行的 compaction 应为 null：%+v", it.Compaction)
+			}
+		}
+	}
+	if seen != 2 {
+		t.Fatalf("两条异常都应列出：%+v", page.Items)
+	}
+}

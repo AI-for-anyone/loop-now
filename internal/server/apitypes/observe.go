@@ -98,6 +98,8 @@ type Anomaly struct {
 	ErrorCode    *string    `json:"errorCode"`
 	ErrorMessage *string    `json:"errorMessage"`
 	EndReason    *string    `json:"endReason"`
+	// Compaction 只在手动压缩（/compact）的执行上有，其余为 null。
+	Compaction *RunCompaction `json:"compaction"`
 }
 
 // AnomalyPage 对应 AnomalyPage。

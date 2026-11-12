@@ -4355,6 +4355,12 @@ export interface components {
             errorCode: components["schemas"]["RunErrorCode"] | null;
             errorMessage: string | null;
             endReason: components["schemas"]["RunEndReason"];
+            /**
+             * @description 这条异常是一次失败的手动压缩（/compact）时为它的指令与结果（与 Run.compaction 相同，失败时 outcome 为 null），其余为 null。
+             *     手动压缩没有对话消息，不是对话流里的一轮：定位到它时（GET /agents/{agentId}/messages?aroundRun=runId）返回它开始时所在位置的一页，
+             *     页里没有它；要显示这次压缩本身，用 GET /agents/{agentId}/runs/{runId}/timeline 取执行与时间线。
+             */
+            compaction: components["schemas"]["RunCompaction"] | null;
         };
         AnomalyPage: {
             items: components["schemas"]["Anomaly"][];
