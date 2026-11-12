@@ -19701,8 +19701,18 @@ components:
             /compact 正常完成后的执行（compaction 里是指令与结果，Pi 没有压缩时 outcome 为 skipped）；其他命令省略。
             压缩被取消或失败时命令返回 409 console_command_failed，没有这个字段
           $ref: "#/components/schemas/Run"
-        tokensBefore: { type: [integer, "null"], format: int64, minimum: 0, description: /compact 实际压缩时压缩前的上下文 token，同 compactRun.compaction.tokensBefore；其余为 null }
-        estimatedTokensAfter: { type: [integer, "null"], format: int64, minimum: 0, description: 同 compactRun.compaction.estimatedTokensAfter；其余为 null }
+        tokensBefore:
+          description: 已弃用，改读 compactRun.compaction.tokensBefore（值相同）。/compact 实际压缩时为压缩前的上下文 token，其余为 null
+          deprecated: true
+          type: [integer, "null"]
+          format: int64
+          minimum: 0
+        estimatedTokensAfter:
+          description: 已弃用，改读 compactRun.compaction.estimatedTokensAfter（值相同）
+          deprecated: true
+          type: [integer, "null"]
+          format: int64
+          minimum: 0
 
     PluginEventParty:
       description: 参与方；agent 带 id 与地址，external 带 id 与 @名称，plugin（插件令牌，只出现在 folder.changed 的 by）带 plugin:<id> 地址，console 与 platform 只有 kind 与控制台地址。

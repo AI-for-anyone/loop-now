@@ -7676,12 +7676,14 @@ export interface components {
             compactRun?: components["schemas"]["Run"];
             /**
              * Format: int64
-             * @description /compact 实际压缩时压缩前的上下文 token，同 compactRun.compaction.tokensBefore；其余为 null
+             * @deprecated
+             * @description 已弃用，改读 compactRun.compaction.tokensBefore（值相同）。/compact 实际压缩时为压缩前的上下文 token，其余为 null
              */
             tokensBefore?: number | null;
             /**
              * Format: int64
-             * @description 同 compactRun.compaction.estimatedTokensAfter；其余为 null
+             * @deprecated
+             * @description 已弃用，改读 compactRun.compaction.estimatedTokensAfter（值相同）
              */
             estimatedTokensAfter?: number | null;
         };
