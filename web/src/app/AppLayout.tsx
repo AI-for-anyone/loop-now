@@ -114,7 +114,7 @@ export function AppLayout() {
           </DialogPrimitive.Content>
         </DialogPrimitive.Portal>
       </DialogPrimitive.Root>
-      <div className="flex min-w-0 flex-1 flex-col lg:min-h-0">
+      <div className="riso-grain flex min-w-0 flex-1 flex-col lg:min-h-0">
         <header
           className={cn(
             'riso-halftone sticky top-0 z-30 flex h-12 shrink-0 items-center gap-3 bg-riso-blue px-4 text-white nav:hidden',

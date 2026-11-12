@@ -13,6 +13,7 @@
 
     --color-paper: var(--paper);
     --color-paper-raised: var(--paper-raised);
+    --color-paper-tab: var(--paper-tab);
     --color-ink: var(--ink);
     --color-ink-700: var(--ink-700);
     --color-ink-500: var(--ink-500);
@@ -91,6 +92,8 @@
     /* 纸与油墨 */
     --paper: #F3EFE6;
     --paper-raised: #FBF9F4;
+    /* 索引标签未选中时的米灰：比纸色深一档。 */
+    --paper-tab: #E8E2D4;
     --ink: #18265E;
     --ink-700: #3B4778;
     --ink-500: #5A628A;
@@ -174,6 +177,11 @@
   .riso-paper {
     background-color: var(--paper);
   }
+  /* 主区米色底上的纸张颗粒：128px 的平铺图（藏青色、最多约 6% 的不透明度），不用滤镜，滚动时不重算。 */
+  .riso-grain {
+    background-image: url('./assets/paper-grain.png');
+    background-size: 128px 128px;
+  }
   /* 桌面壳窗口里拖动窗口的区域（系统标题栏藏起来了）；区域里的按钮、链接、输入框照常点击。 */
   .window-drag {
     -webkit-app-region: drag;
@@ -214,6 +222,10 @@
     background: var(--riso-yellow);
     transform: rotate(-1deg);
     z-index: -1;
+  }
+  /* 分区标题上的一笔黄色记号笔：文字下半部的黄色条。 */
+  .riso-marker {
+    background: linear-gradient(transparent 0, transparent 62%, var(--riso-yellow) 62%, var(--riso-yellow) 94%, transparent 94%);
   }
   .riso-tilt {
     position: relative;

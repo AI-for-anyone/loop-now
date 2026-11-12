@@ -45,6 +45,14 @@ describe('左侧栏与页面结构', () => {
     expect(within(sidebar()).getByRole('list', { name: '平台 Agent' })).toBeInTheDocument()
   })
 
+  it('主区的米色底上有一层纸张颗粒，左侧栏没有', async () => {
+    server.use(...overviewHandlers(), http.get(platformAgentsUrl, () => HttpResponse.json({ agents: [] })), ...baseHandlers([makeAgent()]))
+    renderRoutes(routes, '/')
+    await screen.findByRole('heading', { name: '概览', level: 1 })
+    expect(screen.getByRole('main').closest('.riso-grain')).not.toBeNull()
+    expect(sidebar().closest('.riso-grain')).toBeNull()
+  })
+
   it('打开不存在的地址时回到概览页', async () => {
     server.use(...overviewHandlers(), ...baseHandlers([makeAgent()]))
     const { router } = renderRoutes(routes, '/no/such/page')
