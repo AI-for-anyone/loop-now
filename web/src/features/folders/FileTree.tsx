@@ -33,7 +33,8 @@ function Guides({ depth }: { depth: number }) {
 }
 
 const rowClass = 'group relative flex h-7 cursor-pointer items-center gap-1.5 rounded-[6px] pr-1 text-ink outline-none select-none hover:bg-ink/[0.045] focus-visible:shadow-[inset_0_0_0_2px_var(--riso-blue)]'
-const selectedClass = 'bg-tint-blue font-bold hover:bg-tint-blue'
+// 选中的一项是黄色（选中态一律黄色）。
+const selectedClass = 'bg-riso-yellow font-black hover:bg-riso-yellow'
 const dropClass = 'bg-tint-yellow shadow-[inset_0_0_0_1.5px_var(--ink)] hover:bg-tint-yellow'
 
 // 文件树：根目录一行，其下逐级展开，只读取展开了的文件夹。行按 DOM 顺序平铺，上下键按显示顺序移动。

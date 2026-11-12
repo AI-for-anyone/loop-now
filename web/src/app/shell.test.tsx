@@ -149,6 +149,9 @@ describe('左侧栏与页面结构', () => {
     expect(await within(screen.getByRole('region', { name: 'AGENTS.md' })).findByText('工作说明')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '从 Git 拉取' })).toBeInTheDocument()
     expect(reads).toContain('')
+    // 改版：文件夹直接排在页签的纸上，右侧票根里是概况；原来页签顶上的说明挪到底部说明里。
+    expect(screen.getByRole('complementary', { name: '概况' }).closest('[data-sheet]')).not.toBeNull()
+    expect(document.querySelector('[data-folder-footer]')).toHaveTextContent('开发助手 的文件夹：它在这里工作')
   })
 
   it('左侧栏的“项目文件夹”打开项目共用的文件夹，并成为当前项', async () => {
@@ -164,6 +167,10 @@ describe('左侧栏与页面结构', () => {
     expect(await screen.findByRole('heading', { name: '项目文件夹', level: 1 })).toBeInTheDocument()
     expect(await screen.findByRole('tree', { name: '文件树' })).toHaveTextContent('项目文件夹')
     expect(currentSidebarLinks().map((link) => link.textContent)).toEqual(['项目文件夹'])
+    // 改版：标题在纸外面，文件夹在一张纸上，右侧票根里是概况。
+    const sheet = screen.getByRole('complementary', { name: '概况' }).closest('[data-sheet]')!
+    expect(sheet).not.toBeNull()
+    expect(sheet).not.toContainElement(screen.getByRole('heading', { name: '项目文件夹', level: 1 }))
     expect(reads).toContain('')
   })
 

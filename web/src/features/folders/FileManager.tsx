@@ -1,19 +1,20 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { CircleAlertIcon, CircleCheckIcon, FilePlusIcon, FolderGit2Icon, FolderPlusIcon, HardDriveIcon, InfoIcon, LoaderCircleIcon, PanelLeftIcon, RefreshCwIcon, XIcon } from 'lucide-react'
+import { CircleAlertIcon, CircleCheckIcon, FilePlusIcon, FolderGit2Icon, FolderPlusIcon, InfoIcon, LoaderCircleIcon, PanelLeftIcon, RefreshCwIcon, XIcon } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ErrorAlert } from '@/components/ErrorAlert'
+import { RulerTicks, Stub, StubFigure } from '@/components/Sheet'
 import { t } from '@/i18n'
 import { config } from '@/config'
 import { pickedFiles } from '@/lib/upload'
 import { cn } from '@/lib/utils'
 import { ancestorsOf, encodeText, ENTRY_FILE, folderKeys, joinPath, nameOf, parentOf, PLAIN_TEXT, segmentsOf, within, type FolderEntry, type FolderSource, type GitPull, type TextEditLimits, type TextFormat, type UploadItem } from './folder-source'
-import { refreshDirs, useGitPulls, type FileText, type Selection } from './folder-queries'
+import { refreshDirs, useFolderList, useGitPulls, type FileText, type Selection } from './folder-queries'
 import { DirView, FileView, type EditState } from './FolderContent'
 import { GitPullDialog, MoveDialog } from './FolderDialogs'
 import { GitPullHint } from '@/features/local-mode/GitPullHint'
 import { FileTree, type Naming } from './FileTree'
-import { ToolButton, UploadMenu, type EntryActions } from './FolderParts'
+import { FolderBlock, ToolButton, UploadMenu, type EntryActions } from './FolderParts'
 import { droppedItems, useFolderUploads, type UploadRow } from './use-folder-uploads'
 
 interface FileManagerProps {
@@ -25,6 +26,10 @@ interface FileManagerProps {
   // Context.limits.maxFolderUpload：单个上传文件的上限。
   maxUpload?: number
   className?: string
+  // card：设置页里的一块，带边框；sheet：Agent 的文件夹页签与项目文件夹页，直接排在纸上，右侧是票根里的概况。
+  variant?: 'card' | 'sheet'
+  // sheet 版底部说明里的第一句（例如“这是它的工作目录”）。
+  note?: ReactNode
 }
 
 type Dialog =
@@ -38,7 +43,8 @@ const ROOT: Selection = { path: '', type: 'dir', entry: null }
 const INTERNAL = 'application/x-loop-now-path'
 
 // 文件管理器：左边是逐级展开的文件树，右边是文件夹列表或文件内容；窄时只有右边，文件树从左侧滑出。
-export function FileManager({ source, rootLabel, limits, maxUpload, className }: FileManagerProps) {
+export function FileManager({ source, rootLabel, limits, maxUpload, className, variant = 'card', note }: FileManagerProps) {
+  const sheet = variant === 'sheet'
   const client = useQueryClient()
   const [selection, setSelection] = useState<Selection>(ROOT)
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
@@ -184,10 +190,13 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className }:
     />
   )
 
-  return (
+  const manager = (
     <div
       data-file-manager
-      className={cn('@container relative flex min-h-0 flex-col overflow-hidden rounded-card border-[1.5px] border-ink/15 bg-white text-ink', className)}
+      className={cn(
+        '@container relative flex min-h-0 flex-col overflow-hidden text-ink',
+        sheet ? 'min-w-0 flex-1 gap-5 pt-6 pr-[clamp(14px,3vw,40px)] pb-[22px] pl-[clamp(12px,2vw,34px)]' : cn('rounded-card border-[1.5px] border-ink/15 bg-white', className),
+      )}
       onDragOver={(event) => { if (event.dataTransfer.types.includes('Files') || event.dataTransfer.types.includes(INTERNAL)) { event.preventDefault(); if (event.dataTransfer.types.includes('Files')) setDraggingFiles(true) } }}
       onDragLeave={(event) => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) { setDraggingFiles(false); setDropTarget(null) } }}
       onDrop={(event) => onDropOn(dropTarget ?? currentDir, event)}
@@ -195,22 +204,22 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className }:
       <input ref={fileInput} type="file" multiple className="sr-only" tabIndex={-1} aria-hidden="true" onChange={onPick} />
       <input ref={folderInput} type="file" multiple className="sr-only" tabIndex={-1} aria-hidden="true" onChange={onPick} {...{ webkitdirectory: '' }} />
 
-      {/* 窄时路径栏独占一行，操作按钮换到第二行。 */}
-      <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1 border-b border-ink/10 bg-paper-raised px-2.5 py-1.5">
+      {/* 窄时路径栏独占一行，操作按钮换到第二行。纸张版是纸张顶部的工具条：没有底色与分隔线，按钮是带字的胶囊。 */}
+      <div className={cn('flex shrink-0 flex-wrap items-center', sheet ? 'gap-x-4 gap-y-2.5' : 'min-h-11 gap-x-1.5 gap-y-1 border-b border-ink/10 bg-paper-raised px-2.5 py-1.5')}>
         <ToolButton className="@min-[40rem]:hidden" icon={<PanelLeftIcon />} label={treeOpen ? t.folders.hideTree : t.folders.showTree} showLabel={false} aria-expanded={treeOpen} onClick={() => setTreeOpen((value) => !value)} />
         <Breadcrumbs className="@max-[34rem]:basis-[calc(100%-2.25rem)]" rootLabel={rootLabel} path={selection.path} onNavigate={(path) => go(path ? { path, type: 'dir', entry: null } : ROOT)} />
-        <div className="ml-auto flex shrink-0 items-center gap-0.5">
-          <ToolButton icon={<FilePlusIcon />} label={t.folders.newFile} showLabel={false} onClick={() => actions.create(currentDir, 'file')} />
-          <ToolButton icon={<FolderPlusIcon />} label={t.folders.newFolder} showLabel={false} onClick={() => actions.create(currentDir, 'dir')} />
-          <ToolButton icon={<RefreshCwIcon />} label={t.folders.refresh} showLabel={false} onClick={() => void client.invalidateQueries({ queryKey: folderKeys.all(source.key) })} />
-          <span aria-hidden="true" className="mx-1 h-4 w-px bg-ink/15" />
-          <UploadMenu className="@max-[34rem]:[&>span]:hidden" onFiles={() => actions.upload(currentDir)} onFolder={() => { uploadTarget.current = currentDir; folderInput.current?.click() }} />
-          {source.git && <ToolButton className="@max-[34rem]:[&>span]:hidden" icon={<FolderGit2Icon />} label={t.folders.gitPull} onClick={() => setDialog({ type: 'git' })} />}
+        <div className={cn('ml-auto flex shrink-0 flex-wrap items-center', sheet ? 'gap-2' : 'gap-0.5')}>
+          <ToolButton pill={sheet} className={cn(sheet && '@max-[40rem]:[&>span]:hidden')} icon={<FilePlusIcon />} label={t.folders.newFile} showLabel={sheet} onClick={() => actions.create(currentDir, 'file')} />
+          <ToolButton pill={sheet} className={cn(sheet && '@max-[40rem]:[&>span]:hidden')} icon={<FolderPlusIcon />} label={t.folders.newFolder} showLabel={sheet} onClick={() => actions.create(currentDir, 'dir')} />
+          <ToolButton pill={sheet} icon={<RefreshCwIcon />} label={t.folders.refresh} showLabel={false} onClick={() => void client.invalidateQueries({ queryKey: folderKeys.all(source.key) })} />
+          {!sheet && <span aria-hidden="true" className="mx-1 h-4 w-px bg-ink/15" />}
+          <UploadMenu pill={sheet} className="@max-[34rem]:[&>span]:hidden" onFiles={() => actions.upload(currentDir)} onFolder={() => { uploadTarget.current = currentDir; folderInput.current?.click() }} />
+          {source.git && <ToolButton pill={sheet} className="@max-[34rem]:[&>span]:hidden" icon={<FolderGit2Icon />} label={t.folders.gitPull} onClick={() => setDialog({ type: 'git' })} />}
         </div>
       </div>
 
       <div className="relative flex min-h-0 flex-1">
-        <aside aria-label={t.folders.tree} className="hidden w-64 shrink-0 overflow-y-auto border-r border-ink/10 bg-paper-raised/60 @min-[40rem]:block">{tree}</aside>
+        <aside aria-label={t.folders.tree} className={cn('hidden w-64 shrink-0 overflow-y-auto @min-[40rem]:block', sheet ? 'mr-4 border-r-2 border-dashed border-ink/25 pr-2' : 'border-r border-ink/10 bg-paper-raised/60')}>{tree}</aside>
         {treeOpen && (
           <div className="absolute inset-0 z-20 flex @min-[40rem]:hidden">
             <aside aria-label={t.folders.tree} className="w-[min(18rem,85%)] overflow-y-auto border-r border-ink/15 bg-paper-raised shadow-[4px_0_0_rgb(24_38_94/.08)]">{tree}</aside>
@@ -254,11 +263,20 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className }:
       {pull?.status === 'failed' && pullDetails && pull.errorMessage && (
         <pre className="max-h-32 shrink-0 overflow-auto border-t border-ink/10 bg-tint-red/40 px-4 py-2 font-mono text-[11.5px] leading-[1.6] whitespace-pre-wrap text-red-text">{pull.errorMessage}</pre>
       )}
-      <div className="flex min-h-8 shrink-0 items-center gap-3 border-t border-ink/10 bg-paper-raised px-3 text-[11.5px] text-ink-500">
+      <div
+        data-folder-footer
+        className={cn(
+          'flex shrink-0 items-center gap-3 text-ink-500',
+          sheet ? 'min-h-9 flex-wrap border-t-2 border-dashed border-ink/[0.22] pt-3.5 text-[12px]' : 'min-h-8 border-t border-ink/10 bg-paper-raised px-3 text-[11.5px]',
+        )}
+      >
         {/* 窄屏放不下两段：有拉取状态时只显示状态。 */}
         <span className={cn('flex min-w-0 items-center gap-1.5', pull && '@max-[40rem]:hidden')}>
-          <InfoIcon aria-hidden="true" className="size-3.5 shrink-0" />
-          <span className="truncate">{t.folders.concurrent}</span>
+          {!sheet && <InfoIcon aria-hidden="true" className="size-3.5 shrink-0" />}
+          <span className={cn(!sheet && 'truncate')}>
+            {sheet && note && <>{note} </>}
+            {t.folders.concurrent}
+          </span>
         </span>
         {pull && <PullStatus pull={pull} details={pullDetails} onDetails={() => setPullDetails((value) => !value)} onShow={() => go({ path: pull.path, type: 'dir', entry: null })} onRetry={() => setDialog({ type: 'git' })} onDismiss={() => { setDismissed((old) => new Set([...old, pull.id])); setPullDetails(false) }} />}
       </div>
@@ -308,6 +326,36 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className }:
       )}
     </div>
   )
+  if (!sheet) return manager
+  // 纸张版：右侧是票根里的概况，窄屏不显示。
+  return (
+    <div className={cn('flex min-h-0', className)}>
+      {manager}
+      <FolderStub source={source} dir={currentDir} />
+    </div>
+  )
+}
+
+// 票根里的概况：当前文件夹里的文件夹数、文件数与文件总大小。只算已经读到的那几页，还没读完时数字后面加“+”。
+function FolderStub({ source, dir }: { source: FolderSource; dir: string }) {
+  const list = useFolderList(source, dir)
+  const entries = list.data?.pages.flatMap((page) => page.entries) ?? []
+  const more = list.hasNextPage ? '+' : ''
+  const files = entries.filter((entry) => entry.type === 'file')
+  const size = t.folders.size(files.reduce((sum, entry) => sum + (entry.size ?? 0), 0))
+  const split = size.lastIndexOf(' ')
+  return (
+    <Stub as="aside" aria-label={t.folders.stub.title} label={t.folders.stub.title} className="w-[150px]">
+      {list.isSuccess && (
+        <div className="relative flex flex-1 flex-col gap-[22px] pt-1.5 pr-[30px] pl-[18px]">
+          <RulerTicks />
+          <StubFigure value={`${entries.filter((entry) => entry.type === 'dir').length}${more}`} label={t.folders.stub.dirs} />
+          <StubFigure value={`${files.length}${more}`} label={t.folders.stub.files} />
+          <StubFigure tone="ink" value={`${size.slice(0, split)}${more}`} label={size.slice(split + 1)} />
+        </div>
+      )}
+    </Stub>
+  )
 }
 
 // 状态栏里的一次 Git 拉取：进行中、成功（可以去看）、失败（可以看 git 输出、重试）。
@@ -333,7 +381,7 @@ function Breadcrumbs({ rootLabel, path, onNavigate, className }: { rootLabel: st
   return (
     <nav aria-label={t.folders.path} className={cn('flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden text-[13px]', className)}>
       <button type="button" onClick={() => onNavigate('')} className={cn('inline-flex min-w-0 shrink cursor-pointer items-center gap-1.5 rounded-[6px] px-1.5 py-0.5 hover:bg-tint-blue', parts.length === 0 ? 'font-black' : 'font-bold text-ink-700')} aria-current={parts.length === 0 ? 'page' : undefined}>
-        <HardDriveIcon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={2.2} />
+        <FolderBlock className="mr-1" />
         <span className="truncate">{rootLabel}</span>
       </button>
       {parts.map((part, index) => {
