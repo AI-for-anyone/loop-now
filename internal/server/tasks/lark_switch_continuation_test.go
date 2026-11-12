@@ -24,7 +24,7 @@ func TestLarkSwitchContinuationPreservesHistoryAndDoesNotPrepare(t *testing.T) {
 	if next.ID == node || next.TaskID != task || next.StepID != old.StepID || next.Visit != old.Visit || next.Attempt != old.Attempt+1 || next.RuntimeID != runtime || next.AgentID != agent || len(next.RunIDs) != 1 || next.RunIDs[0] != run || next.Output != nil || next.Question != nil || next.Sleep != nil {
 		t.Fatal("continuation reused old execution result or changed scope")
 	}
-	for _, ref := range []string{action.String(), node.String(), next.ID.String(), artifact.ID.String(), artifact.SHA256, "禁止重新运行build/deploy", "必须由本轮真实提交"} {
+	for _, ref := range []string{action.String(), node.String(), next.ID.String(), artifact.ID.String(), artifact.SHA256, "Do not rerun build/deploy", "only a real submission in this turn can advance it"} {
 		if !strings.Contains(prompt, ref) {
 			t.Fatal("continuation lacks original provenance or recovery boundary")
 		}

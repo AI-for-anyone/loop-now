@@ -3,6 +3,7 @@ package conn
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -158,6 +159,9 @@ func TestResolvePrecedence(t *testing.T) {
 		}
 	})
 	t.Run("配置文件权限过宽", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("chmod 在 Windows 上改不了 ACL，无法制造过宽的权限")
+		}
 		p := writeConfig(t, map[string]config.Profile{"default": {Server: "https://o.example", Token: extToken}})
 		os.Chmod(p, 0o644)
 		_, e := Resolve(Options{ConfigPath: p, Getenv: envOf(nil)})

@@ -147,7 +147,7 @@ it('输入 / 显示全部内置命令，过滤后用键盘填入，再次回车�
   renderComposer()
   const box = screen.getByRole('textbox', { name: '消息' })
   await userEvent.type(box, '/')
-  expect(screen.getByRole('listbox', { name: '内置命令' })).toBeInTheDocument()
+  expect(screen.getByRole('listbox', { name: '命令' })).toBeInTheDocument()
   expect(screen.getAllByRole('option')).toHaveLength(7)
   for (const usage of ['/session', '/new', '/compact [instructions]', '/reload', '/copy', '/export [html|jsonl]', '/resume [sessionId]']) {
     expect(screen.getByText(usage)).toBeInTheDocument()
@@ -198,4 +198,14 @@ it('会话丢失时命令提示只开放 /resume', async () => {
   expect(screen.getAllByRole('option')).toHaveLength(1)
   expect(screen.getByRole('option', { name: /\/resume/ })).toBeInTheDocument()
   expect(screen.queryByRole('option', { name: /\/new/ })).not.toBeInTheDocument()
+})
+
+it('补全平台命令时保留已经写好的参数', async () => {
+  renderComposer()
+  const box = screen.getByRole('textbox', { name: '消息' })
+  await userEvent.type(box, '/comp 保留关键决定')
+  await userEvent.keyboard('{Home}{ArrowRight}')
+  await userEvent.click(screen.getByRole('option', { name: /\/compact/ }))
+  expect(box).toHaveValue('/compact 保留关键决定')
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
 })

@@ -7,7 +7,11 @@ import { sleepProjections } from '@/features/sleep/projection'
 export const keys = {
   context: ['context'] as const,
   health: ['health'] as const,
+  // 提供方目录没有版本号也没有推送：['modelProviders'] 是全局目录与各 Agent 视角目录的共同前缀，
+  // 插件安装、更新、卸载、项目启用、授权、全局停用和保存 models.json 后整体失效。
   modelProviders: ['modelProviders'] as const,
+  agentModelProviders: (agentId: string) => ['modelProviders', 'agent', agentId] as const,
+  runtimes: ['runtimes'] as const,
   modelSettings: ['modelSettings'] as const,
   models: (providerId: string) => ['models', providerId] as const,
   cliTemplates: ['cliTemplates'] as const,
@@ -19,6 +23,7 @@ export const keys = {
   agentStatus: (agentId: string) => ['agentStatus', agentId] as const,
   agentQueue: (agentId: string) => ['agentQueue', agentId] as const,
   agentSkills: (agentId: string) => ['agentSkills', agentId] as const,
+  agentCommands: (agentId: string) => ['agentCommands', agentId] as const,
   agentSkill: (agentId: string, agentSkillId: string) => ['agentSkill', agentId, agentSkillId] as const,
   // 对话历史：最新的一页起向前翻；定位到某条回复时另用一份以它为中心的缓存（前缀相同，失效与对账一并处理）。
   messages: (agentId: string) => ['messages', agentId] as const,
@@ -79,9 +84,34 @@ export function useHealth() {
   })
 }
 
-export function useModelProviders() {
-  return useQuery({ queryKey: keys.modelProviders, queryFn: () => call(api.GET('/model-providers')), staleTime: Infinity })
+// 带 agentId 时插件提供方另给出这个 Agent 现在不能用的原因（unavailableReason）；项目启用与授权可能在别处改，
+// 所以这份不长期缓存，打开页面和回到窗口时重新读取。
+export function useModelProviders(agentId?: string) {
+  return useQuery({
+    queryKey: agentId ? keys.agentModelProviders(agentId) : keys.modelProviders,
+    queryFn: () => call(api.GET('/model-providers', agentId ? { params: { query: { agentId } } } : {})),
+    staleTime: agentId ? 0 : Infinity,
+  })
 }
+
+// 各运行时在本机是否可用（Claude Code 有没有装、登没登录）。服务端缓存 30 秒，这里同样 30 秒内不重读；
+// enabled 为 false 时不读（模型选择只在选了 Claude Code 时才需要）。
+export function useRuntimes(enabled = true) {
+  return useQuery({ queryKey: keys.runtimes, queryFn: () => call(api.GET('/runtimes')), staleTime: 30_000, enabled })
+}
+
+// 不用服务端的缓存重新检查（refresh=true），结果直接换进 useRuntimes 的缓存。
+export function useRefreshRuntimes() {
+  const client = useQueryClient()
+  return useMutation<Schemas['RuntimeList'], ApiError, void>({
+    mutationFn: () => call(api.GET('/runtimes', { params: { query: { refresh: true } } })),
+    onSuccess: (data) => client.setQueryData(keys.runtimes, data),
+  })
+}
+
+// 插件改变了提供方目录或 Agent 能否用它：目录和各提供方的模型列表一起重新读取。
+export const invalidateModelCatalog = (client: QueryClient) =>
+  Promise.all([client.invalidateQueries({ queryKey: keys.modelProviders }), client.invalidateQueries({ queryKey: ['models'] })])
 
 export function useModels(providerId: string | null) {
   return useQuery({
@@ -104,10 +134,7 @@ export function useSaveModelSettings() {
     mutationFn: (body) => call(api.PUT('/model-settings', { body })),
     onSuccess: async (settings) => {
       client.setQueryData(keys.modelSettings, settings)
-      await Promise.all([
-        client.invalidateQueries({ queryKey: keys.modelProviders }),
-        client.invalidateQueries({ queryKey: ['models'] }),
-      ])
+      await invalidateModelCatalog(client)
     },
   })
   return {
@@ -166,6 +193,11 @@ export function useAgentStatus(agentId: string, refetchInterval?: number) {
 
 export function useAgentSkills(agentId: string) {
   return useQuery({ queryKey: keys.agentSkills(agentId), queryFn: () => call(api.GET('/agents/{agentId}/skills', agentPath(agentId))) })
+}
+
+// 对话页 "/" 菜单用的 Pi 命令：Agent 上次启动 Pi 时读到的列表，Pi 再次启动才会变，第一次输入 "/" 时才读取。
+export function useAgentCommands(agentId: string, enabled: boolean) {
+  return useQuery({ queryKey: keys.agentCommands(agentId), queryFn: () => call(api.GET('/agents/{agentId}/commands', agentPath(agentId))), enabled, staleTime: 30_000 })
 }
 
 export function useAgentSkill(agentId: string, agentSkillId: string | null) {

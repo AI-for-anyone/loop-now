@@ -24,6 +24,7 @@ import { ProjectPromptForm } from '@/features/prompts/ProjectPromptForm'
 import { ProjectCredentialSettings } from '@/features/project-credentials/ProjectAccounts'
 import { tasksPath } from '@/api/tasks'
 import { ContextFolderSection } from '@/features/folders/FolderSections'
+import { ProjectLocalDirectories } from '@/features/local-mode/LocalDirectories'
 import { pageTitleClass } from '@/lib/page-title'
 
 // 区块卡片，与配置页的区块相同：纸白底、18 圆角、轻投影，标题为 ZCOOL 30。
@@ -80,6 +81,7 @@ export function ProjectSettingsPage() {
         <NameCard key={`name-${project.id}`} project={project} />
         <Card title={t.prompts.projectTitle}><ProjectPromptForm projectId={project.id} /></Card>
         <ContextFolderSection key={`folder-${project.id}`} scope={{ kind: 'project', projectId: project.id }} />
+        <Card title={t.localMode.directories.title}><ProjectLocalDirectories key={`local-dirs-${project.id}`} projectId={project.id} /></Card>
         <Card title={t.plugins.project.settingsCard}><p>{t.plugins.project.settingsCardBody}</p><Link className="font-bold text-riso-blue underline" to={`/p/${encodeURIComponent(project.name)}/plugins`}>{t.plugins.project.settingsLink}</Link></Card>
         <ManagerCard key={`manager-${project.id}`} project={project} scope={scope} />
         <ProjectCredentialSettings key={`accounts-${project.id}`} projectId={project.id} />

@@ -14,18 +14,18 @@ import (
 )
 
 // ReminderPlaceholder 是平台提醒那一轮排队时用户消息的正文；开始执行时改写为提醒文字。
-const ReminderPlaceholder = "平台提醒"
+const ReminderPlaceholder = "Platform reminder"
 
 // ReminderText 生成提醒文字：点名本轮承载的待处理消息（ID、发件人与摘要），其余未读消息说明稍后另行提醒。
 // 命令取自同版本 loopctl。
 func ReminderText(c store.ReminderCarried) string {
 	if len(c.Messages) == 0 {
-		return "平台提醒：本轮没有需要处理的 Inbox 消息。"
+		return "Platform reminder: there are no Inbox messages to handle this turn."
 	}
-	text := fmt.Sprintf("平台提醒：本轮请处理以下 %d 条 Inbox 消息，用 `%s <消息ID>` 逐条读取并处理，用法见 Skill %s：\n%s",
+	text := fmt.Sprintf("Platform reminder: handle the following %d Inbox messages this turn. Read and handle them one by one with `%s <message ID>`; for usage see Skill %s:\n%s",
 		len(c.Messages), guide.InboxReadCommand(), guide.SkillName, store.ReminderList(c.Messages))
 	if c.Others > 0 {
-		text += fmt.Sprintf("\n另有 %d 条未读消息已在排队，稍后会另行提醒，本轮不必处理。", c.Others)
+		text += fmt.Sprintf("\n%d more unread messages are already queued; you will be reminded of them later, so you need not handle them this turn.", c.Others)
 	}
 	return text
 }

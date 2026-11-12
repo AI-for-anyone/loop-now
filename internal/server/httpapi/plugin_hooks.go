@@ -96,7 +96,7 @@ func (s *Server) principalScope(r *http.Request, p auth.Principal) (project, age
 // consoleCommand 先处理平台内置命令，再把其余斜杠消息交给认领类 Hook console.command。
 func (s *Server) consoleCommand(w http.ResponseWriter, r *http.Request, agent uuid.UUID, project *uuid.UUID, text string) bool {
 	trimmed := strings.TrimSpace(text)
-	if !strings.HasPrefix(trimmed, "/") {
+	if !strings.HasPrefix(trimmed, "/") || strings.HasPrefix(trimmed, "/pi:") {
 		return false
 	}
 	if result, handled, err := s.platformConsoleCommand(r, agent, text); handled {

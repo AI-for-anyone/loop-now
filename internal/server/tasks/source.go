@@ -13,12 +13,15 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
+	"loop-now/internal/execenv"
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/agentconfig"
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/auth"
+	"loop-now/internal/server/claudecli"
 	"loop-now/internal/server/clicredential"
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/content"
@@ -57,6 +60,12 @@ type Source struct {
 	ViewQuestion  func(context.Context, auth.Principal, taskmodel.Question) (taskmodel.Question, error)
 	// Log 记录任务工作区复制的方式与耗时；为空时不记录。
 	Log *slog.Logger
+	// LocalAccess 按基础 Agent 返回本机模式交给 Pi 的东西；为空时不启用本机模式。
+	LocalAccess func(context.Context, uuid.UUID) (agentconfig.LocalAccess, error)
+	// ProviderState 给出插件提供方订阅账号的状态（任务快照冻结的版本）；随账号走的路径按插件当前版本。
+	ProviderState agentconfig.ProviderStateFunc
+	// ClaudeProjects 返回本机 Claude Code 存放会话记录的目录（Claude Code 运行时的任务分叉从那里复制基线）；为空时不支持。
+	ClaudeProjects func(context.Context) string
 }
 
 func (s *Source) ExecutionSnapshot(ctx context.Context, id uuid.UUID) (agentconfig.Snapshot, error) {
@@ -163,6 +172,16 @@ func (s *Source) ExecutionSnapshot(ctx context.Context, id uuid.UUID) (agentconf
 			return agentconfig.Snapshot{}, err
 		}
 	}
+	// 本机目录与 PATH 同样按基础 Agent 与项目的当前设置，不进任务快照；任务里对本机目录的改动直接落在真实文件上。
+	if s.LocalAccess != nil {
+		if out.Local, err = s.LocalAccess(ctx, inst.AgentID); err != nil {
+			return agentconfig.Snapshot{}, err
+		}
+	}
+	// 插件提供方的订阅账号：快照冻结的是版本（状态目录），实例启动时同样建链接；工作区复制不带令牌。
+	if out.ProviderState, err = agentconfig.ResolveProviderState(ctx, s.ProviderState, out); err != nil {
+		return agentconfig.Snapshot{}, err
+	}
 	return out, nil
 }
 func (s *Source) ReadBlob(ctx context.Context, sha string) ([]byte, error) {
@@ -258,7 +277,13 @@ func (s *Source) Prepare(ctx context.Context, inst store.TaskInstance) error {
 			return errors.New("常态会话文件丢失，不能建立任务分叉")
 		}
 		if session.State == "active" && session.SessionFile != "" {
-			path, err := s.copyBaseline(inst, session.SessionFile)
+			copyFn := s.copyBaseline
+			if agentruntime.ForProvider(snapshot.Configuration().Provider) == agentruntime.ClaudeCode {
+				copyFn = func(inst store.TaskInstance, source string) (string, error) {
+					return s.copyClaudeBaseline(ctx, inst, source)
+				}
+			}
+			path, err := copyFn(inst, session.SessionFile)
 			if err != nil {
 				return err
 			}
@@ -355,8 +380,56 @@ func (s *Source) copyBaseline(inst store.TaskInstance, source string) (string, e
 			return "", errors.New("常态会话头无效")
 		}
 	}
+	return s.writeBaseline(inst, data)
+}
+
+// copyClaudeBaseline 是 Claude Code 运行时的任务分叉基线：只读常态会话那一个 <会话 ID>.jsonl（必须正好在 claude 的会话记录目录下一层），
+// 不扫描、不读 ~/.claude 下别的东西；每行须是完整的 JSON。复制到平台自己的目录，任务实例首次启动时从它分叉。
+func (s *Source) copyClaudeBaseline(ctx context.Context, inst store.TaskInstance, source string) (string, error) {
+	if s.ClaudeProjects == nil {
+		return "", errors.New("Claude Code 的会话记录目录未配置")
+	}
+	projects := s.ClaudeProjects(ctx)
+	if !claudecli.InProjects(projects, source) {
+		return "", errors.New("常态会话不在 Claude Code 的会话记录目录")
+	}
+	rel, _ := filepath.Rel(projects, source)
+	root, err := os.OpenRoot(projects)
+	if err != nil {
+		return "", errors.New("Claude Code 的会话记录目录不可读")
+	}
+	defer root.Close()
+	info, err := root.Lstat(rel)
+	if err != nil || !info.Mode().IsRegular() {
+		return "", errors.New("常态会话必须是普通文件")
+	}
+	f, err := root.Open(rel)
+	if err != nil {
+		return "", errors.New("常态会话不可读")
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, s.MaxSessionBytes+1))
+	if err != nil || int64(len(data)) > s.MaxSessionBytes {
+		return "", errors.New("常态会话超限或读取失败")
+	}
+	if len(bytes.TrimSpace(data)) == 0 {
+		return "", errors.New("常态会话无有效记录")
+	}
+	for _, line := range bytes.Split(bytes.TrimSpace(data), []byte{'\n'}) {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		if !json.Valid(line) {
+			return "", errors.New("常态会话包含不完整记录")
+		}
+	}
+	return s.writeBaseline(inst, data)
+}
+
+// writeBaseline 把基线写到平台的 task-baselines/<任务>/<Agent>.jsonl（先写临时文件再改名）。
+func (s *Source) writeBaseline(inst store.TaskInstance, data []byte) (string, error) {
 	dir := filepath.Join(s.WorkRoot, "task-baselines", inst.TaskID.String())
-	if err = os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
 	target := filepath.Join(dir, inst.AgentID.String()+".jsonl")
@@ -393,7 +466,7 @@ func (s *Source) resolveCommit(ctx context.Context, inst store.TaskInstance, src
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		return "", err
 	}
-	env := []string{"HOME=" + home, "PATH=" + s.BasePath, "GIT_TERMINAL_PROMPT=0"}
+	env := append(execenv.Base(home, ""), "HOME="+home, "PATH="+s.BasePath, "GIT_TERMINAL_PROMPT=0")
 	args := []string{"-c", "credential.helper="}
 	if p, ok := creds.CLI["gh"]; ok {
 		if s.Templates == nil || s.Installer == nil {
@@ -421,10 +494,9 @@ func (s *Source) resolveCommit(ctx context.Context, inst store.TaskInstance, src
 	defer cancel()
 	cmd := exec.CommandContext(ctx, s.GitBin, args...)
 	cmd.Env = env
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.Cancel = procgroup.Cancel(cmd)
 	cmd.WaitDelay = s.CloneTimeout
-	out, err := cmd.Output()
+	out, err := procgroup.Output(cmd)
 	if err != nil {
 		return "", errors.New("仓库分支无法解析")
 	}

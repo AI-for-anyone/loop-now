@@ -19,6 +19,7 @@ export const plugins = {
     market: '市场',
   } satisfies Record<Schemas['PluginSource']['kind'], string>,
   unverified: (kind: string) => `${kind} · 未审核`,
+  verifiedSource: (kind: string) => `${kind} · 已验证`,
   // 来源的一句话说法：详情页头与安装前的警告里用。
   from: {
     builtin: '随平台发布',
@@ -162,6 +163,10 @@ export const plugins = {
     platformCodeHint: '在共享的插件宿主里运行',
     extensions: (count: number) => `Pi 扩展 ${count} 个文件`,
     extensionsHint: '授权的 Agent 启动时加载',
+    // 安装、更新前的预览：扩展注册的模型提供方要在确认之后才读取（会运行插件代码）。
+    extensionsPreviewHint: { install: '授权的 Agent 启动时加载，安装后读取它注册的模型提供方', update: '授权的 Agent 启动时加载，更新后重新读取它注册的模型提供方' },
+    // 409 name_conflict：插件 id 已装过，或它注册的模型提供方与另一个已安装插件的同 id。
+    nameConflict: { install: '没有安装：这个插件 id 已经装过，或者它注册的模型提供方与另一个已安装插件的同 id', update: '没有更新：它注册的模型提供方与另一个已安装插件的同 id' },
     skills: 'Skill',
     mcp: 'MCP 服务器',
     bin: 'CLI 目录',
@@ -259,6 +264,25 @@ export const plugins = {
   },
   // 来源是 git 仓库时链到它的网页。
   repository: '仓库',
+  // 插件详情里，Pi 扩展注册的模型提供方（安装或更新时读出）。名称与错误是扩展原文。
+  providers: {
+    title: '模型提供方',
+    hint: '安装或更新时从 Pi 扩展读出',
+    none: '没有读出模型提供方。',
+    failed: (reason: string) => `读取失败：${reason}`,
+    oauth: 'OAuth 登录',
+    inCatalog: '已进模型目录',
+    overridesBuiltin: '与 Pi 内置提供方同 id：只覆盖它的设置，不进模型目录',
+    noOAuth: '没有注册 OAuth 登录，不进模型目录',
+    notInCatalog: '没有进模型目录（例如与 models.json 里的提供方同 id）',
+    error: (reason: string) => `注册出错：${reason}`,
+    models: (count: number) => `${count} 个模型`,
+    extension: (path: string) => `来自 ${path}`,
+    loadErrors: '加载失败的扩展',
+    // 插件声明了哪些 HOME 下的路径随项目账号保存（扩展的登录与状态）；进了目录却没声明的，登录可能不随账号保存。
+    statePaths: '登录状态随项目账号保存：',
+    noStatePaths: '没有声明登录状态路径，登录可能不随账号保存',
+  },
   // 插件详情。
   detail: {
     crumb: '插件市场',
@@ -285,6 +309,8 @@ export const plugins = {
     uninstallTitle: (name: string) => `卸载 ${name}？`,
     uninstallBody: '会删除它的配置、项目启用、Agent 授权、账号、状态、事件投递与令牌。已经启动的 Agent 继续用已加载的部分，直到下次启动。',
     deleteData: (dir: string) => `同时删除数据目录 ${dir}`,
+    // 插件注册了模型提供方时补充：订阅账号默认保留，删除数据时一起删。
+    deleteDataProviders: '它注册的模型提供方在各项目里的订阅账号默认保留，重新安装后恢复；勾选后这些账号一并删除（被未结束任务用着的保留到任务结束）。',
     uninstalling: '正在卸载…',
     checking: '正在检查…',
   },
@@ -375,6 +401,10 @@ export const plugins = {
   // Agent 配置页的插件段。
   agent: {
     intro: '授权后下次启动 Pi 生效，不打断当前回合。',
+    // Claude Code 运行时的 Agent：没有 Pi，启动的是 Claude Code。
+    introClaudeCode: '授权后下次启动生效，不打断当前回合。',
+    // Claude Code 运行时的 Agent：插件 Agent 侧只有 Pi 扩展（没有技能、MCP 服务器和命令目录）。
+    piOnly: 'Agent 侧只有 Pi 扩展，对 Claude Code 不起作用',
     empty: '还没有安装插件。',
     granted: '已授权',
     notGranted: '未授权',

@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -126,6 +127,9 @@ func TestPGSelectedExtractionAndSupplements(t *testing.T) {
 	}
 }
 func TestSourceBindingPermissionsAndNoFollow(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("用 chmod 制造过宽权限在 Windows 上不生效（私有性由 ACL 决定）")
+	}
 	home, r := fixture(t)
 	put(t, home, ".pg_service.conf", "[alpha]\nhost=offline.invalid\nport=5432\nuser=worker\ndbname=db\nsslmode=disable\n")
 	put(t, home, ".pgpass", "*:*:*:*:SYNTHETIC_PASSWORD\n")
@@ -381,6 +385,9 @@ func TestBadSAAndEncryptedClientKeyRejected(t *testing.T) {
 	expectCode(t, e, "invalid_credential")
 }
 func TestPostExtractionRecheckAndCtimeBinding(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 的来源身份没有 ctime／inode，改写内容而不改大小与 mtime 时无法区分")
+	}
 	home, r := fixture(t)
 	body := "[x]\nhost=h\nport=5432\nuser=u\ndbname=db\nsslmode=disable\npassword=synthetic\n"
 	put(t, home, ".pg_service.conf", body)

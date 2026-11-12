@@ -12,6 +12,7 @@ import { overview } from './overview'
 import { plugins } from './plugins'
 import { projects } from './projects'
 import { prompts } from './prompts'
+import { runtime } from './runtime'
 import { settings } from './settings'
 import { skills } from './skills'
 import { sleep } from './sleep'
@@ -19,6 +20,7 @@ import { tasks } from './tasks'
 import { timeline } from './timeline'
 import { consoleInbox } from './console-inbox'
 import { images } from './images'
+import { localMode } from './local-mode'
 import { shell } from './shell'
 import { stats } from './stats'
 import { taskInbox } from './task-inbox'
@@ -52,4 +54,6 @@ export const zhCN = {
   images,
   shell,
   stats,
+  localMode,
+  runtime,
 } as const

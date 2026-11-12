@@ -6,12 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/store"
@@ -275,7 +275,7 @@ func TestRecordsIdleCrash(t *testing.T) {
 	if pid == 0 {
 		t.Fatal("应有存活进程")
 	}
-	_ = syscall.Kill(-pid, syscall.SIGKILL)
+	_ = procgroup.Kill(pid)
 	waitFor(t, "空闲时意外退出事件", func() bool { return len(h.obs.eventsOf(id, store.EventPiExited)) == 1 })
 	ex := h.obs.eventsOf(id, store.EventPiExited)[0]
 	if ex.run != nil {
@@ -347,6 +347,7 @@ func TestRecordsWorkspaceSyncFailure(t *testing.T) {
 }
 
 func TestRecordsCLIInstall(t *testing.T) {
+	skipWithoutCLITemplates(t)
 	// 只有其他平台安装包的模板：安装尝试以“没有当前平台的安装包”失败，并被记录。
 	dir := t.TempDir()
 	tmpl := `{"name":"zz","version":"1.0.0","injection":"env","fields":[],"credential":{"env":{}},"binary":"zz",

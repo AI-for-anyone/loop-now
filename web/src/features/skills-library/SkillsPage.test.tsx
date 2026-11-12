@@ -218,7 +218,8 @@ describe('抽屉由地址控制开合', () => {
 
     await user.click(within(sheet).getByRole('button', { name: '关闭' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/skills'))
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    // 抽屉随地址开合，新地址在 transition 里才渲染到页面，等抽屉真正关上。
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(screen.getByRole('list', { name: 'Skills 库' })).toBeInTheDocument()
   })
 
@@ -230,7 +231,8 @@ describe('抽屉由地址控制开合', () => {
 
     await user.keyboard('{Escape}')
     await waitFor(() => expect(router.state.location.pathname).toBe('/skills'))
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    // 抽屉随地址开合，新地址在 transition 里才渲染到页面，等抽屉真正关上。
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
   it('在线新建抽屉的取消按钮关闭抽屉，不创建模板', async () => {
@@ -238,7 +240,8 @@ describe('抽屉由地址控制开合', () => {
     const sheet = await screen.findByRole('dialog', { name: '新建 Skill' })
     await user.click(within(sheet).getByRole('button', { name: '取消' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/skills'))
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    // 抽屉随地址开合，新地址在 transition 里才渲染到页面，等抽屉真正关上。
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
   it('点击模板卡片打开详情抽屉', async () => {

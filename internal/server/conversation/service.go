@@ -6,13 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 
@@ -20,7 +20,6 @@ import (
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/coord"
 	"loop-now/internal/server/executor"
-	"loop-now/internal/server/messageimage"
 	"loop-now/internal/server/reqid"
 	"loop-now/internal/server/store"
 )
@@ -371,11 +370,11 @@ func (s *Service) drive(agentID uuid.UUID, run store.Run, owner string) {
 
 	for {
 		cur.Store("run", run.ID)
-		res := s.execute(ctx, agentID, run, owner)
+		res, command := s.execute(ctx, agentID, run, owner)
 		if ctx.Err() != nil {
 			return // 服务端停止：执行保持原状态，下次启动时标为重启中断
 		}
-		s.finish(ctx, run, res)
+		s.finish(ctx, run, res, command)
 
 		next, ok, err := s.handoff(ctx, agentID, owner)
 		if err == nil && !ok {
@@ -440,27 +439,28 @@ func beforeInterrupt(runID uuid.UUID) {
 }
 
 // execute 调用执行器处理一次执行，期间定时检查数据库中的打断标记（防止打断通知丢失）。
-func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run, owner string) executor.Result {
+// execute 返回这次执行的结果，以及交给 Pi 的命令名（对话页 /pi:<name> 消息，不是命令时为空）。
+func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run, owner string) (executor.Result, string) {
 	attrs := []any{"runId", run.ID, "agentId", agentID, "whenBusy", run.WhenBusy}
 	if run.StartedAt != nil {
 		attrs = append(attrs, "queuedMs", run.StartedAt.Sub(run.QueuedAt).Milliseconds())
 	}
 	s.log.Info("回复开始", attrs...)
 	if st, err := s.st.RunStatus(ctx, run.ID); err == nil && st == "aborting" {
-		return executor.Result{Outcome: executor.OutcomeInterrupted}
+		return executor.Result{Outcome: executor.OutcomeInterrupted}, ""
 	}
 	msg := store.Message{}
 	if run.Origin == executor.OriginConsoleCompact {
 		value, ok := s.commands.Load(run.ID)
 		if !ok {
-			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "读取压缩指令失败"}
+			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "读取压缩指令失败"}, ""
 		}
 		msg.Text = value.(*consoleCommandRun).instructions
 	} else {
 		var err error
 		msg, err = s.st.GetMessage(ctx, run.UserMessageID)
 		if err != nil {
-			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "读取消息失败：" + err.Error()}
+			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "读取消息失败：" + err.Error()}, ""
 		}
 	}
 	if run.Origin == "sleep_wake" {
@@ -469,10 +469,10 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	if run.Origin == "inbox_reminder" {
 		text, void, err := s.prepareReminder(ctx, agentID, run)
 		if err != nil {
-			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "准备平台提醒失败：" + err.Error()}
+			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "准备平台提醒失败：" + err.Error()}, ""
 		}
 		if void {
-			return executor.Result{Outcome: outcomeVoided}
+			return executor.Result{Outcome: outcomeVoided}, ""
 		}
 		msg.Text = text
 	}
@@ -496,42 +496,56 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	sink := &runSink{s: s, agentID: agentID, runID: run.ID}
 	release, gateErr := s.PauseDispatch(ctx, agentID)
 	if gateErr != nil {
-		return executor.Result{Outcome: executor.OutcomeInterrupted}
+		return executor.Result{Outcome: executor.OutcomeInterrupted}, ""
 	}
 	defer release()
 	if st, err := s.st.RunStatus(ctx, run.ID); err == nil && st == "aborting" {
-		return executor.Result{Outcome: executor.OutcomeInterrupted}
+		return executor.Result{Outcome: executor.OutcomeInterrupted}, ""
 	}
 	prompt := msg.Text
-	var images []messageimage.Content
-	if run.Origin != executor.OriginConsoleCompact {
-		if run.WakeSleepID != nil && run.Origin != "sleep_wake" {
-			prompt = "平台通知：sleep已因新工作结束（sleepId=" + run.WakeSleepID.String() + "）。\n" + prompt
-		}
-		var imageErr error
-		images, imageErr = s.st.ImageContents(ctx, msg.Images)
-		if imageErr != nil {
-			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "图片内容不可用"}
-		}
-		prompt = fmt.Sprintf("本轮运行ID：%s。\n%s", run.ID, prompt)
+	if run.WakeSleepID != nil && run.Origin != "sleep_wake" {
+		prompt = "Platform notice: your sleep was ended by new work (sleepId=" + run.WakeSleepID.String() + ").\n" + prompt
+	}
+	// 对话页的 Pi 命令：/pi:<name> 原样改写为 /<name> 发给 Pi，不加运行 ID 与平台通知（Pi 只认首字符为 / 的命令）。
+	command, piMessage := "", ""
+	if run.Origin == "console" {
+		command, piMessage = PiCommand(msg.Text)
+	}
+	images, imageErr := s.st.ImageContents(ctx, msg.Images)
+	if imageErr != nil {
+		return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "图片内容不可用"}, ""
 	}
 	trigger := run.UserMessageID
 	if run.TriggerInboxID != nil {
 		trigger = *run.TriggerInboxID
 	}
-	res, err := s.ex.Execute(ctx, executor.Request{Images: images, AgentID: agentID, RunID: run.ID, Message: prompt,
+	message := prompt
+	if run.Origin != executor.OriginConsoleCompact {
+		message = executor.RunIDLine(run.ID) + prompt
+	}
+	if command != "" {
+		message = piMessage
+	}
+	res, err := s.ex.Execute(ctx, executor.Request{Images: images, AgentID: agentID, RunID: run.ID, Message: message,
 		Origin: run.Origin, MessageID: trigger}, sink)
 	if err != nil {
 		if ctx.Err() != nil {
-			return res
+			return res, command
 		}
-		return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: err.Error()}
+		return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: err.Error()}, command
 	}
-	return res
+	return res, command
 }
 
-func (s *Service) finish(ctx context.Context, run store.Run, res executor.Result) {
-	end := store.RunEnd{Text: res.Text, ConfigVersion: res.ConfigVersion}
+func (s *Service) finish(ctx context.Context, run store.Run, res executor.Result, command string) {
+	end := store.RunEnd{Text: res.Text, ConfigVersion: res.ConfigVersion, PiCommand: command, PiCommandHandled: command != "" && res.CommandHandled}
+	if end.PiCommandHandled {
+		notices := res.CommandNotices
+		if notices == nil {
+			notices = []executor.CommandNotice{}
+		}
+		end.PiCommandNotices, _ = json.Marshal(map[string]any{"notices": notices, "truncated": res.CommandNoticesTruncated})
+	}
 	switch res.Outcome {
 	case executor.OutcomeCompleted:
 		end.Status = "completed"
@@ -977,4 +991,21 @@ func (s *Service) ResetSession(ctx context.Context, agentID uuid.UUID) (apitypes
 	s.EmitAgentStatus(agentID)
 	s.remindUnread(ctx, agentID) // 会话丢失期间收到的 Inbox 消息没有安排提醒，重开后补上
 	return apitypes.SessionInfo{State: sess.State, Epoch: sess.Epoch}, nil
+}
+
+// PiCommand 识别对话页的 Pi 命令：文字以 /pi:<name> 开头（name 非空、不含空白）时返回命令名与发给 Pi 的 /<name><其余原文>；
+// 否则都为空。只改写开头的前缀，参数原样保留。
+func PiCommand(text string) (name, message string) {
+	rest, ok := strings.CutPrefix(text, "/pi:")
+	if !ok {
+		return "", ""
+	}
+	end := strings.IndexFunc(rest, unicode.IsSpace)
+	if end < 0 {
+		end = len(rest)
+	}
+	if end == 0 {
+		return "", ""
+	}
+	return rest[:end], "/" + rest
 }

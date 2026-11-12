@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"loop-now/internal/server/agentconfig"
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
@@ -50,11 +51,66 @@ func (s *Server) getHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, h)
 }
 
+// listModelProviders 列出模型目录。带 agentId 时给插件提供方标出这个 Agent 现在不能用的原因，供模型选择器提前提示。
 func (s *Server) listModelProviders(w http.ResponseWriter, r *http.Request) {
+	var agent *uuid.UUID
+	if raw := r.URL.Query().Get("agentId"); raw != "" {
+		id, err := uuid.Parse(raw)
+		if err != nil || id == uuid.Nil {
+			s.fail(w, r, apperr.Invalid("agentId", "须为有效UUID"))
+			return
+		}
+		if _, err := s.Store.GetAgent(r.Context(), id); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		agent = &id
+	}
 	models := s.Models.Snapshot()
+	names := map[string]json.RawMessage{}
+	disabled := false
+	if s.Plugins != nil {
+		views, err := s.Plugins.List(r.Context())
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		for _, v := range views {
+			names[v.ID], _ = json.Marshal(v.DisplayName)
+		}
+		settings, err := s.Plugins.Settings(r.Context())
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		disabled = settings.Disabled
+	}
 	out := apitypes.ModelProviderList{PiVersion: models.PiVersion, CatalogGeneratedAt: models.GeneratedAt, Providers: []apitypes.ModelProvider{}}
 	for _, p := range models.Providers {
-		out.Providers = append(out.Providers, apitypes.ModelProvider{ID: p.ID, Source: p.Source, APIKeyEnvVars: p.APIKeyEnvVars, AuthMethods: p.AuthMethods, ModelCount: len(p.Models)})
+		var name *string
+		if p.Name != "" {
+			name = &p.Name
+		}
+		v := apitypes.ModelProvider{ID: p.ID, Name: name, Source: p.Source, Runtime: agentruntime.ForProvider(p.ID), PluginID: p.PluginID, PluginDisplayName: json.RawMessage("null"), APIKeyEnvVars: p.APIKeyEnvVars, AuthMethods: p.AuthMethods, ModelCount: len(p.Models)}
+		if p.PluginID != nil {
+			if n, ok := names[*p.PluginID]; ok {
+				v.PluginDisplayName = n
+			}
+			if agent != nil {
+				_, reason, err := s.Config.PluginProviderUnusable(r.Context(), *agent, p.ID)
+				if err != nil {
+					s.fail(w, r, err)
+					return
+				}
+				if reason == "" && disabled {
+					reason = "plugins_disabled"
+				}
+				if reason != "" {
+					v.UnavailableReason = &reason
+				}
+			}
+		}
+		out.Providers = append(out.Providers, v)
 	}
 	writeJSON(w, http.StatusOK, out)
 }

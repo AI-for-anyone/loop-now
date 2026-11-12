@@ -24,14 +24,42 @@ jobs:
           node-version: 24.21.0
       - name: go vet
         run: go vet ./cmd/... ./internal/... ./api/...
-      # 数据层不能引入只有 unix 才有的代码（实例锁等有 Windows 实现）。
-      - name: go vet (windows, data layer)
-        run: GOOS=windows go vet ./internal/server/db/...
+      # 整个服务端都要能交叉编译到 Windows（进程组、锁、权限与不跟随符号链接的打开各有 Windows 实现）；真实运行见 server-windows。
+      - name: go vet (windows cross)
+        run: GOOS=windows GOARCH=amd64 go vet ./cmd/... ./internal/... ./api/... ./auth-helper/...
       - name: go test
         run: go test -count=1 -skip '^TestStress' ./cmd/... ./internal/... ./api/...
       # 并发写、读到自己的写、取消、进程被杀与检查点的压测，单独连跑三次。
       - name: go test (data layer stress)
         run: go test -count=3 -run '^TestStress' ./internal/server/db/...
+
+  # Windows 上的服务端：编译、vet 与全部 Go 测试（依赖本机 Pi、Unix 信号、权限位或 macOS 专有能力的测试在 Windows 上跳过或按 build tag 排除）。
+  server-windows:
+    name: server (windows, go vet + go test)
+    # 暂时停用（2026-11-11 用户决定）：Claude Code 运行时的 4 个执行器测试在 Windows 上还不过，见 MAIN.md。
+    # Windows 的交叉编译检查仍在上面的 server 任务里（go vet windows cross），桌面版的 Windows 打包检查不受影响。恢复时删掉下面这一行。
+    if: false
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # 黄金文件与 testdata 按 LF 比对；Windows runner 的 git 默认会把它们转成 CRLF。
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+      - name: go vet
+        run: go vet ./cmd/... ./internal/... ./api/... ./auth-helper/...
+      - name: go build
+        run: go build ./...
+      - name: go test
+        run: go test -count=1 -skip '^TestStress' ./cmd/... ./internal/... ./api/... ./auth-helper/...
 
   # 一次性 PostgreSQL 导入器的测试需要一个 PostgreSQL；导入器删除时这个 job 一并删除。
   # 不列入分支保护的必需检查。
@@ -103,8 +131,12 @@ jobs:
           done
 
   desktop:
-    name: desktop (typecheck, build, test)
-    runs-on: ubuntu-latest
+    name: desktop (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: desktop
@@ -115,8 +147,33 @@ jobs:
           node-version: 24.21.0
           cache: npm
           cache-dependency-path: desktop/package-lock.json
+      # 单测用 test/fakeserver（Go 写的假服务端）真的拉起、停掉、清理孤儿：Windows 走 taskkill 与 PowerShell 查进程，Linux 走信号。
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
       # electron 只在第一次运行时下载二进制，这里只做类型检查、编译和单测，不下载也不出安装包。
       - run: npm ci --no-audit --no-fund
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
+      # Windows：用假服务端充当 loop-server.exe 打一次 NSIS 安装包，确认 electron-builder 的 win 配置与 after-pack 在 windows-latest 上能跑通。
+      # 真的服务端 Windows 包合入后，release.yml 的 desktop-win 用同样的命令。
+      - name: fake server bundle
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          node scripts/fake-bundle.js "$RUNNER_TEMP/fake-bundle" --os windows --arch amd64
+          echo "LOOP_NOW_DESKTOP_BUNDLE=$RUNNER_TEMP/fake-bundle" >> "$GITHUB_ENV"
+      - name: dist:win (fake server)
+        if: runner.os == 'Windows'
+        run: npm run dist:win
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: loop-now-desktop-fake-win-x64
+          path: |
+            .local-build/desktop/*.exe
+            .local-build/desktop/latest.yml
+          retention-days: 3
+          if-no-files-found: error

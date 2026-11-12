@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"loop-now/internal/execenv"
 	"loop-now/internal/server/cliverify"
 	"os"
 	"os/exec"
@@ -90,7 +91,7 @@ func (s *Service) execute(ctx context.Context, spec CommandSpec, op cliverify.Op
 	defer resultR.Close()
 	defer resultW.Close()
 	guard := exec.Command(s.Options.NodeBin, s.Options.GuardEntry)
-	guard.Env = []string{"HOME=" + spec.Home, "TMPDIR=" + spec.Home, "PATH=/usr/bin:/bin", "LANG=C", "LC_ALL=C"}
+	guard.Env = append(execenv.Base(spec.Home, spec.Home), "HOME="+spec.Home, "TMPDIR="+spec.Home, "PATH="+execenv.SystemPath(), "LANG=C", "LC_ALL=C")
 	guard.ExtraFiles = []*os.File{controlR, resultW, lease}
 	sent := make(chan struct{})
 	go func() { defer close(sent); _, _ = controlW.Write(raw) }()

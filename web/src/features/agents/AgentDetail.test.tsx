@@ -107,6 +107,20 @@ describe('后台刷新失败', () => {
   })
 })
 
+describe('头部的运行时标记', () => {
+  it('Claude Code 的 Agent 在名称旁标出运行时；Pi 的不标', async () => {
+    const claude = makeAgent({ name: '本机助手', model: { provider: 'claude-code', modelId: 'sonnet' }, runtime: 'claude-code' })
+    const pi = makeAgent({ name: 'Pi 助手' })
+    server.use(...baseHandlers([claude, pi]))
+    const { router } = renderRoutes(routes, defaultAgentPath(claude.id, 'config'))
+    const header = (await heading('本机助手')).closest('header')!
+    expect(within(header).getByTitle('运行时：本机的 Claude Code')).toHaveTextContent(/^Claude Code$/)
+    await act(() => router.navigate(defaultAgentPath(pi.id, 'config')))
+    const piHeader = (await heading('Pi 助手')).closest('header')!
+    expect(within(piHeader).queryByTitle('运行时：本机的 Claude Code')).toBeNull()
+  })
+})
+
 describe('头部的状态标签', () => {
   const sticker = () => document.querySelector<HTMLElement>('[data-agent-status]')
 

@@ -41,11 +41,23 @@ func newFakeExec() *fakeExec {
 
 func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink executor.Sink) (executor.Result, error) {
 	compact := req.Origin == executor.OriginConsoleCompact
-	if !compact {
-		prefix := fmt.Sprintf("本轮运行ID：%s。\n", req.RunID)
-		if !strings.HasPrefix(req.Message, prefix) {
-			return executor.Result{}, fmt.Errorf("缺少正确本轮runId说明")
+	prefix := executor.RunIDLine(req.RunID)
+	// 对话页的 Pi 命令原样交给 Pi（不加运行 ID）：名字带 handled 的当作扩展命令直接处理、没有回复。
+	if !compact && strings.HasPrefix(req.Message, "/") {
+		f.mu.Lock()
+		f.order = append(f.order, req.Message)
+		f.mu.Unlock()
+		f.started <- req.Message
+		if strings.HasPrefix(req.Message, "/handled") {
+			return executor.Result{Outcome: executor.OutcomeCompleted, ConfigVersion: 1, CommandHandled: true,
+				CommandNotices: []executor.CommandNotice{{Level: "info", Message: "Fetching…"}, {Level: "warning", Message: "Weekly Limit\n   Used       1%"}}, CommandNoticesTruncated: true}, nil
 		}
+		return executor.Result{Outcome: executor.OutcomeCompleted, Text: "回复：" + req.Message, ConfigVersion: 1}, nil
+	}
+	if !compact && !strings.HasPrefix(req.Message, prefix) {
+		return executor.Result{}, fmt.Errorf("缺少正确本轮runId说明")
+	}
+	if !compact {
 		req.Message = strings.TrimPrefix(req.Message, prefix)
 	}
 	ctl := make(chan string, 4)
@@ -98,8 +110,14 @@ func (f *fakeExec) signal(agentID uuid.UUID, c string) bool {
 	if ctl == nil {
 		return false
 	}
-	ctl <- c
-	return true
+	// 执行已经返回、running 里还没来得及清掉时，没人再读 ctl：有限等待后放弃，不让一次迟到的打断把整个测试卡死
+	// （Windows runner 上调度慢，这种迟到更常见）。正在 block／hold 的执行会立刻收下。
+	select {
+	case ctl <- c:
+		return true
+	case <-time.After(2 * time.Second):
+		return false
+	}
 }
 
 // Interrupt 与本机执行器的语义相同：只打断 ID 一致的那一次执行。

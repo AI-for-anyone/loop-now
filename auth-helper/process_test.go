@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +30,9 @@ func options(t *testing.T) (ProcessOptions, *os.File, *os.File) {
 	return ProcessOptions{NodeBin: "/Users/ljl/.local/node-v24.21.0/bin/node", Entry: filepath.Join(t.TempDir(), "probe.cjs"), Home: home, BasePath: "/usr/bin:/bin", Input: a, Output: d}, b, c
 }
 func TestIsolatedProcessEnvironmentAndPrivatePipes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("helper 经 ExtraFiles 收私有管道，Windows 的 os/exec 不支持")
+	}
 	o, write, read := options(t)
 	t.Setenv("LOOP_NOW_MASTER_KEY", "master-private-marker")
 	t.Setenv("OPENAI_API_KEY", "model-private-marker")
@@ -81,6 +85,9 @@ func TestIsolatedProcessEnvironmentAndPrivatePipes(t *testing.T) {
 	}
 }
 func TestProcessRejectsUnsafeDirectoriesAndOptions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("helper 经 ExtraFiles 收私有管道，Windows 的 os/exec 不支持")
+	}
 	o, _, _ := options(t)
 	positive := o
 	positive.DrainTimeout = 80 * time.Millisecond

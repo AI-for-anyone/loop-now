@@ -109,6 +109,20 @@ describe('发送消息', () => {
     await waitFor(() => expect(sent).toEqual([{ text: 'nihao' }]))
   })
 
+  it('Claude Code 只显示通用平台命令，Pi 的 Agent 同时支持 /pi: 菜单', async () => {
+    const claude = await renderChat({ agent: makeAgent({ model: { provider: 'claude-code', modelId: 'sonnet' }, runtime: 'claude-code' }) })
+    await claude.user.type(screen.getByLabelText('消息'), '/')
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByText('Agent 运行一次后才有命令列表。')).toBeNull()
+    expect(screen.getByLabelText('消息')).toHaveAttribute('aria-controls')
+    expect(screen.getAllByRole('option')).toHaveLength(4)
+    expect(screen.queryByRole('option', { name: /\/compact/ })).toBeNull()
+    claude.unmount()
+    const pi = await renderChat()
+    await pi.user.type(screen.getByLabelText('消息'), '/pi:')
+    expect(await screen.findByText('Agent 运行一次后才有命令列表。')).toBeInTheDocument()
+  })
+
   it('不发送空消息', async () => {
     const sent: Schemas['SendMessageInput'][] = []
     const { user } = await renderChat({ handlers: [acceptSend(sent)] })

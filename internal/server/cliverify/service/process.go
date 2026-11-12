@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/cliverify/probe"
 	"os/exec"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -74,14 +74,13 @@ func runProcess(ctx context.Context, spec CommandSpec, grace time.Duration, fact
 		cmd.Env = append([]string{}, spec.Environment...)
 	}
 	cmd.Stdin = nil
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.WaitDelay = grace + time.Second
 	overflow := make(chan struct{})
 	once := &sync.Once{}
 	stdout, stderr := &limitedCapture{overflow: overflow, once: once}, &limitedCapture{overflow: overflow, once: once}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	if e := cmd.Start(); e != nil {
+	if e := procgroup.Start(cmd); e != nil {
 		return out
 	}
 	done := make(chan error, 1)
@@ -102,7 +101,7 @@ func runProcess(ctx context.Context, spec CommandSpec, grace time.Duration, fact
 	default:
 	}
 	// The parent may exit while a detached-from-stdio child remains in its PG.
-	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	_ = procgroup.Kill(cmd.Process.Pid)
 	out.Stdout = stdout.b.Bytes()
 	out.Stderr = stderr.b.Bytes()
 	if err == nil {
@@ -116,7 +115,7 @@ func runProcess(ctx context.Context, spec CommandSpec, grace time.Duration, fact
 	return out
 }
 func stopProcessGroup(cmd *exec.Cmd, done <-chan error, grace time.Duration) error {
-	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+	_ = procgroup.Terminate(cmd.Process.Pid)
 	timer := time.NewTimer(grace)
 	defer timer.Stop()
 	var err error
@@ -129,7 +128,7 @@ func stopProcessGroup(cmd *exec.Cmd, done <-chan error, grace time.Duration) err
 		case <-timer.C:
 			// Even an already reaped parent does not prove that its process group is
 			// empty. Kill TERM-resistant children before releasing private HOME.
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			_ = procgroup.Kill(cmd.Process.Pid)
 			if reaped {
 				return err
 			}

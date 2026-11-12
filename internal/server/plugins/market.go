@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"loop-now/internal/pluginmanifest"
 	"loop-now/internal/server/apperr"
 )
 
@@ -31,18 +32,22 @@ type marketEntry struct {
 	Description Text    `json:"description"`
 	Verified    bool    `json:"verified"`
 	Version     *string `json:"version"`
+	// ProviderState 声明这个插件注册的模型提供方有哪些状态随项目账号走（plugins/SPEC.md §13）；
+	// 第三方 Pi 包没有 loopNow 段时在这里声明，优先于包自己的 loopNow.providerState。
+	ProviderState map[string]pluginmanifest.ProviderState `json:"providerState,omitempty"`
 }
 
 // MarketEntry 是接口里的 PluginMarketEntry。
 type MarketEntry struct {
-	ID               string  `json:"id"`
-	DisplayName      Text    `json:"displayName"`
-	Description      Text    `json:"description"`
-	Source           string  `json:"source"`
-	Version          *string `json:"version"`
-	Verified         bool    `json:"verified"`
-	InstalledVersion *string `json:"installedVersion"`
-	UpdateAvailable  bool    `json:"updateAvailable"`
+	ID               string                                  `json:"id"`
+	DisplayName      Text                                    `json:"displayName"`
+	Description      Text                                    `json:"description"`
+	Source           string                                  `json:"source"`
+	Version          *string                                 `json:"version"`
+	Verified         bool                                    `json:"verified"`
+	InstalledVersion *string                                 `json:"installedVersion"`
+	UpdateAvailable  bool                                    `json:"updateAvailable"`
+	ProviderState    map[string]pluginmanifest.ProviderState `json:"providerState"`
 }
 
 // Market 是接口里的 PluginMarket。
@@ -101,7 +106,10 @@ func (s *Service) Markets(ctx context.Context) ([]Market, error) {
 		}
 		m.Name = file.Name
 		for _, e := range file.Plugins {
-			entry := MarketEntry{ID: e.ID, DisplayName: e.DisplayName, Description: e.Description, Source: e.Source, Version: e.Version, Verified: e.Verified}
+			entry := MarketEntry{ID: e.ID, DisplayName: e.DisplayName, Description: e.Description, Source: e.Source, Version: e.Version, Verified: e.Verified, ProviderState: e.ProviderState}
+			if entry.ProviderState == nil {
+				entry.ProviderState = map[string]pluginmanifest.ProviderState{}
+			}
 			if v, ok := versions[e.ID]; ok {
 				entry.InstalledVersion = &v
 				entry.UpdateAvailable = e.Version != nil && compareVersions(*e.Version, v) > 0
@@ -158,7 +166,7 @@ func (s *Service) fetchMarket(ctx context.Context, raw string) (marketFile, erro
 		if _, err := marketSource(e, ""); err != nil {
 			return file, fmt.Errorf("市场条目 %s：%s", e.ID, apperrMessage(err))
 		}
-		for _, err := range []error{e.DisplayName.Check("displayName"), e.Description.Check("description")} {
+		for _, err := range []error{e.DisplayName.Check("displayName"), e.Description.Check("description"), pluginmanifest.CheckProviderState("providerState", e.ProviderState)} {
 			if err != nil {
 				return file, fmt.Errorf("市场条目 %s：%s", e.ID, err.Error())
 			}
@@ -199,21 +207,21 @@ func marketSource(e marketEntry, version string) (Source, error) {
 }
 
 // resolveMarket 在市场里找到条目，返回实际来源与是否免确认（官方市场或已验证的条目）。
-func (s *Service) resolveMarket(ctx context.Context, src Source) (Source, bool, error) {
+func (s *Service) resolveMarket(ctx context.Context, src Source) (Source, bool, *marketEntry, error) {
 	if src.Market == "" || src.ID == "" {
-		return Source{}, false, apperr.Invalid("source", "市场来源须给出 market 与 id")
+		return Source{}, false, nil, apperr.Invalid("source", "市场来源须给出 market 与 id")
 	}
 	file, err := s.fetchMarket(ctx, src.Market)
 	if err != nil {
-		return Source{}, false, sourceFailed("%s", err.Error())
+		return Source{}, false, nil, sourceFailed("%s", err.Error())
 	}
 	i := slices.IndexFunc(file.Plugins, func(e marketEntry) bool { return e.ID == src.ID })
 	if i < 0 {
-		return Source{}, false, apperr.NotFound("市场里的插件 " + src.ID)
+		return Source{}, false, nil, apperr.NotFound("市场里的插件 " + src.ID)
 	}
 	e := file.Plugins[i]
 	out, err := marketSource(e, src.Version)
-	return out, src.Market == s.OfficialMarket || e.Verified, err
+	return out, src.Market == s.OfficialMarket || e.Verified, &e, err
 }
 
 func apperrMessage(err error) string {

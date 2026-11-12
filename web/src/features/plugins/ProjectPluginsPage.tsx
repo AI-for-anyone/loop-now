@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils'
 import { AccountsManager } from './Accounts'
 import { DeliveriesList } from './Activity'
 import { hasAgentHalf } from './manifest'
-import { cardClass, IdVersion, Quiet, SourceBadge } from './parts'
+import { cardClass, IdVersion, InstalledSourceBadge, Quiet } from './parts'
 import { pluginPath } from './paths'
 import { ConfigForm } from './SchemaForm'
 import { PluginActionButtons } from './PluginActions'
@@ -44,7 +44,7 @@ function ProjectPluginCard({ project, item }: { project: Schemas['Project']; ite
             {localizedText(item.displayName)}
           </Link>
         </h2>
-        {detail.data && <SourceBadge source={detail.data.plugin.source} />}
+        {detail.data && <InstalledSourceBadge plugin={detail.data.plugin} />}
         <IdVersion id={item.pluginId} version={item.version} />
         {manifest && <span className="text-[12.5px] text-ink-700">{agentHalf && !platformHalf ? text.agentOnly : agentHalf ? null : t.plugins.noAgentHalf}</span>}
         <label className="ml-auto inline-flex items-center gap-2 text-[13px] font-black">

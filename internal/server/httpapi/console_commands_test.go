@@ -11,6 +11,7 @@ import (
 
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/executor"
+	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/pluginhost"
 	"loop-now/internal/server/store"
 )
@@ -273,4 +274,20 @@ func TestPlatformConsoleQueuedWorkAlsoBlocksMaintenance(t *testing.T) {
 		e.expectError(409, "agent_not_idle", "POST", path+"/messages", map[string]any{"text": command})
 	}
 	e.expectError(409, "agent_not_idle", "GET", path+"/session/export?format=jsonl", nil)
+}
+
+func TestClaudeCannotResumePiSession(t *testing.T) {
+	e := newEnv(t)
+	reg := modelcatalog.NewRegistry(e.api.Models.Snapshot())
+	e.api.Models, e.api.Config.Models = reg, reg
+	agent, path := e.newAgent("会话助手")
+	e.expect(200, "PATCH", path, map[string]any{"model": map[string]string{"provider": "claude-code", "modelId": "sonnet"}})
+	e.ex.sessions = []executor.ManagedSession{{ID: "old-pi", Path: "/tmp/old-pi.jsonl"}}
+	for _, command := range []string{"/resume", "/resume old-pi"} {
+		e.expectError(409, "console_command_failed", "POST", path+"/messages", map[string]any{"text": command})
+	}
+	sess, err := e.st.IdleSession(context.Background(), agent.ID)
+	if err != nil || sess.State != "none" {
+		t.Fatalf("不得切换成 Pi 会话：%+v %v", sess, err)
+	}
 }

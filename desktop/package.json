@@ -14,7 +14,9 @@
     "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc",
     "test": "node --test \"dist/**/*.test.js\"",
     "dev": "npm run build && electron .",
-    "dist:mac": "npm run build && electron-builder --config electron-builder.config.js --mac --arm64 --publish never"
+    "dist:mac": "npm run build && electron-builder --config electron-builder.config.js --mac --arm64 --publish never",
+    "dist:win": "npm run build && electron-builder --config electron-builder.config.js --win --x64 --publish never",
+    "fake-bundle": "node scripts/fake-bundle.js"
   },
   "devDependencies": {
     "@types/node": "24.13.4",

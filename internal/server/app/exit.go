@@ -2,7 +2,6 @@ package app
 
 import (
 	"errors"
-	"syscall"
 
 	"loop-now/internal/server/db"
 )
@@ -18,7 +17,7 @@ func ExitCode(err error) int {
 	switch {
 	case errors.Is(err, db.ErrLocked):
 		return ExitInstanceLocked
-	case errors.Is(err, syscall.EADDRINUSE):
+	case addrInUse(err):
 		return ExitAddrInUse
 	}
 	return 1

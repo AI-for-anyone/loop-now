@@ -43,9 +43,9 @@ func (l Layers) Compose() (string, error) {
 	if l.ProjectID == nil || l.ProjectPrompt == "" {
 		return l.AgentPrompt, nil
 	}
-	out := "项目规则优先；Agent规则在项目规则范围内补充。\n\n## 项目公共规则\n" + l.ProjectPrompt
+	out := "Project rules take precedence; Agent rules add to them within the scope of the project rules.\n\n## Project rules\n" + l.ProjectPrompt
 	if l.AgentPrompt != "" {
-		out += "\n\n## Agent职责与规则\n" + l.AgentPrompt
+		out += "\n\n## Agent role and rules\n" + l.AgentPrompt
 	}
 	return out, nil
 }

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -130,7 +131,7 @@ func TestWriteCreateOverwriteAndLimits(t *testing.T) {
 	}
 	mustWrite(t, f, "a/b/c.txt", "v22")
 	info, _ := os.Stat(filepath.Join(f.Dir, "a/b/c.txt"))
-	if b, _ := os.ReadFile(filepath.Join(f.Dir, "a/b/c.txt")); string(b) != "v22" || info.Mode().Perm() != 0o755 {
+	if b, _ := os.ReadFile(filepath.Join(f.Dir, "a/b/c.txt")); string(b) != "v22" || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o755) {
 		t.Fatalf("覆盖：%q %v", b, info.Mode())
 	}
 	if _, err := f.Write("big.bin", bytes.NewReader(make([]byte, 11)), 10, false); code(err) != apperr.CodePayloadTooLarge {
@@ -304,10 +305,10 @@ func TestCopyTreeCloneAndFallback(t *testing.T) {
 			if b, _ := os.ReadFile(filepath.Join(dst, "node_modules/pkg/index.js")); string(b) != "module.exports = 1" {
 				t.Fatal("内容应一致")
 			}
-			if l, _ := os.Readlink(filepath.Join(dst, "link")); l != "node_modules/pkg" {
+			if l, _ := os.Readlink(filepath.Join(dst, "link")); filepath.ToSlash(l) != "node_modules/pkg" {
 				t.Fatalf("软链接应原样保留：%q", l)
 			}
-			if info, _ := os.Stat(filepath.Join(dst, "AGENTS.md")); info.Mode().Perm() != 0o640 {
+			if info, _ := os.Stat(filepath.Join(dst, "AGENTS.md")); runtime.GOOS != "windows" && info.Mode().Perm() != 0o640 {
 				t.Fatalf("权限应保留：%v", info.Mode())
 			}
 			if err := os.WriteFile(filepath.Join(dst, "AGENTS.md"), []byte("任务改了"), 0o640); err != nil {

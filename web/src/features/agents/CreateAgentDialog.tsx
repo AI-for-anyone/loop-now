@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { ErrorAlert, FieldError } from '@/components/ErrorAlert'
 import { ModelPicker } from '@/components/ModelPicker'
+import { ClaudeCodeDifferences } from '@/features/agent-config/RuntimeNotes'
 import { CodexServiceTierPicker } from '@/components/CodexServiceTierPicker'
 import { ThinkingLevelPicker } from '@/components/ThinkingLevelPicker'
 import type { Schemas } from '@/api/client'
@@ -54,9 +55,10 @@ export function CreateAgentDialog({ scope, onClose }: { scope: Scope; onClose: (
             <FieldError message={nameError} />
           </div>
           <ModelPicker value={model} onChange={next => { if (next?.provider !== model?.provider || next?.modelId !== model?.modelId) setThinkingLevel(null); if (next?.provider !== 'openai-codex') setServiceTier(null); setModel(next) }} error={missing.model ?? fieldMessages(create.error, isModelField)}>
-            {selected => <>
+            {(selected, provider) => <>
               <ThinkingLevelPicker value={thinkingLevel} onChange={setThinkingLevel} levels={selected?.thinkingLevels ?? []} defaultLevel={selected?.defaultThinkingLevel} disabled={!selected?.thinkingLevels?.length} error={fieldMessages(create.error, field => field === 'thinkingLevel')} />
               {model?.provider === 'openai-codex' && <CodexServiceTierPicker value={serviceTier} onChange={setServiceTier} error={fieldMessages(create.error, field => field === 'serviceTier')} />}
+              {provider?.runtime === 'claude-code' && <ClaudeCodeDifferences brief />}
             </>}
           </ModelPicker>
           <div className="grid gap-1.5">

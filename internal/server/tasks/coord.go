@@ -3,7 +3,6 @@ package tasks
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"loop-now/internal/server/coord"
@@ -91,7 +90,7 @@ func (s *Service) executeTurn(ctx context.Context, turn store.TaskTurn, sink exe
 		turn.Text += "\n" + imageNote
 	}
 	if s.Coord == nil {
-		return s.Executor.Execute(ctx, executor.Request{Images: images, AgentID: turn.RuntimeID, RunID: turn.ID, Message: fmt.Sprintf("本轮运行ID：%s。\n%s", turn.ID, taskWakeText(turn)), Origin: turn.Origin, MessageID: turnTrigger(turn)}, sink)
+		return s.Executor.Execute(ctx, executor.Request{Images: images, AgentID: turn.RuntimeID, RunID: turn.ID, Message: executor.RunIDLine(turn.ID) + taskWakeText(turn), Origin: turn.Origin, MessageID: turnTrigger(turn)}, sink)
 	}
 	owner := coord.LockValue(turn.ID.String(), s.Options.InstanceID.String())
 	key := turn.RuntimeID.String()
@@ -137,12 +136,12 @@ func (s *Service) executeTurn(ctx context.Context, turn store.TaskTurn, sink exe
 			}
 		}
 	}()
-	return s.Executor.Execute(child, executor.Request{Images: images, AgentID: turn.RuntimeID, RunID: turn.ID, Message: fmt.Sprintf("本轮运行ID：%s。\n%s", turn.ID, taskWakeText(turn)), Origin: turn.Origin, MessageID: turnTrigger(turn)}, sink)
+	return s.Executor.Execute(child, executor.Request{Images: images, AgentID: turn.RuntimeID, RunID: turn.ID, Message: executor.RunIDLine(turn.ID) + taskWakeText(turn), Origin: turn.Origin, MessageID: turnTrigger(turn)}, sink)
 }
 
 func taskWakeText(turn store.TaskTurn) string {
 	if turn.WakeSleepID != nil && turn.Origin != "sleep_wake" {
-		return "平台通知：sleep已因新工作结束。\n" + turn.Text
+		return "Platform notice: your sleep was ended by new work.\n" + turn.Text
 	}
 	return turn.Text
 }

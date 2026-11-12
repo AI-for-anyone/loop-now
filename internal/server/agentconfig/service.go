@@ -50,6 +50,10 @@ type Service struct {
 	// AgentChanged 在 Agent 新建或修改后调用，AgentRemoved 在删除后调用，用于推送概览；都可为空。
 	AgentChanged func(id uuid.UUID)
 	AgentRemoved func(id uuid.UUID)
+	// LocalAccess 返回本机模式交给该 Agent 的 Pi 的东西；为空时不启用本机模式。
+	LocalAccess func(context.Context, uuid.UUID) (LocalAccess, error)
+	// ProviderState 给出插件提供方订阅账号的状态目录与随账号走的路径（plugins/SPEC.md §13）。
+	ProviderState ProviderStateFunc
 }
 
 var (
@@ -79,6 +83,54 @@ func (s *Service) validateModel(provider, modelID string) *apperr.FieldError {
 	return nil
 }
 
+// pluginProvider 返回注册了模型提供方 provider 的插件；不是插件提供方时 ok 为 false。
+func (s *Service) pluginProvider(provider string) (string, bool) {
+	if s.Models == nil {
+		return "", false
+	}
+	p, ok := s.Models.Provider(provider)
+	if !ok || p.Source != "plugin" || p.PluginID == nil {
+		return "", false
+	}
+	return *p.PluginID, true
+}
+
+// PluginProviderUnusable 报告 Agent 现在能否选用插件注册的模型提供方 provider：不是插件提供方或能用时 reason 为空，
+// 否则 reason 是 store.PluginUnusable* 之一，plugin 是注册它的插件。
+func (s *Service) PluginProviderUnusable(ctx context.Context, agent uuid.UUID, provider string) (plugin, reason string, err error) {
+	plugin, ok := s.pluginProvider(provider)
+	if !ok {
+		return "", "", nil
+	}
+	reason, err = s.Store.AgentPluginUsability(ctx, agent, plugin)
+	return plugin, reason, err
+}
+
+// validatePluginProvider 要求选用插件注册的模型提供方的 Agent 能用这个插件（项目已启用、Agent 已获授权）。
+// agent 为空表示新建的 Agent：还没有授权，不能直接选插件提供方。
+func (s *Service) validatePluginProvider(ctx context.Context, agent *uuid.UUID, provider string) error {
+	plugin, ok := s.pluginProvider(provider)
+	if !ok {
+		return nil
+	}
+	if agent == nil {
+		return apperr.Invalid("model.provider", "模型提供方 "+provider+" 来自插件 "+plugin+"：先建好 Agent、在项目里启用该插件并授权给 Agent，再选这个提供方")
+	}
+	_, reason, err := s.PluginProviderUnusable(ctx, *agent, provider)
+	if err != nil {
+		return err
+	}
+	switch reason {
+	case store.PluginUnusablePlatformAgent:
+		return apperr.Invalid("model.provider", "模型提供方 "+provider+" 来自插件 "+plugin+"，只能给项目 Agent 用")
+	case store.PluginUnusableNotEnabled:
+		return apperr.Invalid("model.provider", "模型提供方 "+provider+" 来自插件 "+plugin+"：先在项目里启用该插件")
+	case store.PluginUnusableNotGranted:
+		return apperr.Invalid("model.provider", "模型提供方 "+provider+" 来自插件 "+plugin+"：先把该插件授权给这个 Agent")
+	}
+	return nil
+}
+
 func collect(errs ...*apperr.FieldError) error {
 	var out []apperr.FieldError
 	for _, e := range errs {
@@ -95,6 +147,9 @@ func collect(errs ...*apperr.FieldError) error {
 // CreateAgent 在项目或平台中创建 Agent；归属之后不能改变。
 func (s *Service) CreateAgent(ctx context.Context, scope store.Scope, name, provider, modelID, prompt string, modelOptions ...*string) (store.Agent, error) {
 	if err := collect(s.validateName(name), s.validateModel(provider, modelID)); err != nil {
+		return store.Agent{}, err
+	}
+	if err := s.validatePluginProvider(ctx, nil, provider); err != nil {
 		return store.Agent{}, err
 	}
 	var level *string
@@ -147,6 +202,11 @@ func (s *Service) UpdateAgent(ctx context.Context, id uuid.UUID, p AgentPatch) (
 	}
 	if err := collect(errs...); err != nil {
 		return store.Agent{}, err
+	}
+	if p.Provider != nil {
+		if err := s.validatePluginProvider(ctx, &id, *p.Provider); err != nil {
+			return store.Agent{}, err
+		}
 	}
 	patch := store.AgentPatch{Name: p.Name, ModelProvider: p.Provider, ModelID: p.ModelID, Prompt: p.Prompt, ExpectedPromptVersion: p.ExpectedPromptVersion, ThinkingLevel: p.ThinkingLevel, ThinkingLevelSet: p.ThinkingLevelSet, ServiceTier: p.ServiceTier, ServiceTierSet: p.ServiceTierSet}
 	if p.Provider != nil || p.ThinkingLevelSet || p.ServiceTierSet {

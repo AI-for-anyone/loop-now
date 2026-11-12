@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { routes } from '@/app/routes'
 import { apiUrl, defaultProject, makeProject } from '@/test/api'
-import { fakePlugins, makeConfig, makeDelivery, makeDetail, makePlugin, makeProjectPlugin, makeResolvedSource } from '@/test/plugins'
+import { fakePlugins, makeComponents, makeConfig, makeDelivery, makeDetail, makeManifest, makeMarket, makeMarketEntry, makePlugin, makeProjectPlugin, makeResolvedSource } from '@/test/plugins'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
@@ -228,5 +228,107 @@ describe('插件详情的说明与仓库', () => {
     renderDetail()
     await screen.findByRole('heading', { level: 1, name: 'Webhook 通知' })
     expect(screen.queryByRole('link', { name: '仓库' })).toBeNull()
+  })
+})
+
+describe('插件详情的模型提供方', () => {
+  const grok = makePlugin({ id: 'grok', displayName: 'Grok 订阅' })
+  const withProviders = (overrides: Partial<ReturnType<typeof makeDetail>>, agentExtensions = 1) => ({
+    ...makeDetail(grok, makeManifest({ id: 'grok', displayName: 'Grok 订阅', components: makeComponents({ agentExtensions }) })),
+    ...overrides,
+  })
+  const provider = (id: string, overrides: Partial<ReturnType<typeof makeDetail>['providers'][number]> = {}) => ({
+    id, name: id, extension: 'extensions/grok.ts', oauth: true, overridesBuiltin: false, inCatalog: false, error: null, modelCount: 2, ...overrides,
+  })
+
+  it('列出 Pi 扩展注册的提供方：进了目录的标出，没进的说明原因；名称与错误是扩展原文，按纯文本显示；另列加载失败的扩展', async () => {
+    renderDetail('/plugins/grok', {
+      details: [
+        withProviders({
+          providers: [
+            provider('grok-cli', { name: 'Grok CLI', inCatalog: true, modelCount: 3 }),
+            provider('anthropic', { overridesBuiltin: true }),
+            provider('grok-key', { oauth: false }),
+            provider('grok-bad', { name: '<b>坏</b>', error: 'TypeError: <script>x</script>' }),
+            provider('grok-dup'),
+            provider('grok-bare', { name: 'Grok Bare', inCatalog: true }),
+          ],
+          providerErrors: [{ path: 'extensions/broken.ts', error: 'SyntaxError: Unexpected token' }],
+          providerState: { 'grok-cli': { paths: ['.grok/auth.json', '.config/grok'] }, 'grok-key': { paths: ['.grok-key'] } },
+        }),
+      ],
+    })
+    const panel = await screen.findByRole('region', { name: '模型提供方' })
+    expect(panel).toHaveTextContent('安装或更新时从 Pi 扩展读出')
+    const items = within(within(panel).getAllByRole('list')[0]).getAllByRole('listitem')
+    expect(items.map((item) => item.textContent)).toEqual([
+      'Grok CLIgrok-cliOAuth 登录已进模型目录登录状态随项目账号保存：.grok/auth.json、.config/grok3 个模型 · 来自 extensions/grok.ts',
+      'anthropicOAuth 登录与 Pi 内置提供方同 id：只覆盖它的设置，不进模型目录2 个模型 · 来自 extensions/grok.ts',
+      'grok-key没有注册 OAuth 登录，不进模型目录登录状态随项目账号保存：.grok-key2 个模型 · 来自 extensions/grok.ts',
+      '<b>坏</b>grok-badOAuth 登录注册出错：TypeError: <script>x</script>2 个模型 · 来自 extensions/grok.ts',
+      'grok-dupOAuth 登录没有进模型目录（例如与 models.json 里的提供方同 id）2 个模型 · 来自 extensions/grok.ts',
+      // 进了目录却没声明状态路径：提醒登录可能不随账号保存。
+      'Grok Baregrok-bareOAuth 登录已进模型目录没有声明登录状态路径，登录可能不随账号保存2 个模型 · 来自 extensions/grok.ts',
+    ])
+    expect(panel.querySelector('b, script')).toBeNull()
+    const failed = within(panel).getByRole('heading', { name: '加载失败的扩展' }).parentElement!
+    expect(failed).toHaveTextContent('extensions/broken.tsSyntaxError: Unexpected token')
+    expect(within(panel).queryByText('没有读出模型提供方。')).toBeNull()
+  })
+
+  it('整次读取失败时说明原因，不再说"没有读出"', async () => {
+    renderDetail('/plugins/grok', { details: [withProviders({ providersError: 'Pi 不可用：超时' })] })
+    const panel = await screen.findByRole('region', { name: '模型提供方' })
+    expect(within(panel).getByRole('alert')).toHaveTextContent('读取失败：Pi 不可用：超时')
+    expect(within(panel).queryByText('没有读出模型提供方。')).toBeNull()
+  })
+
+  it('卸载注册了模型提供方的插件：说明订阅账号默认保留、删除数据时一并删除；没有提供方的插件不说', async () => {
+    const user = userEvent.setup()
+    const { unmount } = renderDetail('/plugins/grok', { details: [withProviders({ providers: [provider('grok-cli', { inCatalog: true })] })] })
+    await user.click(await screen.findByRole('button', { name: '卸载' }))
+    const dialog = await screen.findByRole('alertdialog', { name: '卸载 Grok 订阅？' })
+    expect(dialog).toHaveTextContent('它注册的模型提供方在各项目里的订阅账号默认保留，重新安装后恢复；勾选后这些账号一并删除（被未结束任务用着的保留到任务结束）。')
+    unmount()
+    renderDetail()
+    await user.click(await screen.findByRole('button', { name: '卸载' }))
+    expect(await screen.findByRole('alertdialog', { name: '卸载 Webhook 通知？' })).not.toHaveTextContent('订阅账号')
+  })
+
+  it('有 Pi 扩展但没有注册提供方：说明没有读出；没有扩展也没读出东西的插件不显示这一块', async () => {
+    const { unmount } = renderDetail('/plugins/grok', { details: [withProviders({})] })
+    const panel = await screen.findByRole('region', { name: '模型提供方' })
+    expect(panel).toHaveTextContent('没有读出模型提供方。')
+    unmount()
+    renderDetail()
+    await screen.findByRole('region', { name: '这个插件包含' })
+    expect(screen.queryByRole('region', { name: '模型提供方' })).toBeNull()
+  })
+})
+
+describe('插件详情的来源标签', () => {
+  const official = makeMarket({ plugins: [makeMarketEntry({ id: 'grok', displayName: 'Grok CLI', installedVersion: '1.0.0' })] })
+  const other = makeMarket({ url: 'https://example.com/market.json', name: '社区市场', official: false, plugins: [makeMarketEntry({ id: 'grok', verified: true, installedVersion: '1.0.0' }), makeMarketEntry({ id: 'raw', verified: false, installedVersion: '1.0.0' })] })
+  const fromMarket = (id: string, market: string | null, kind: 'npm' | 'git' = 'npm') =>
+    makeDetail(makePlugin({ id, displayName: id, source: makeResolvedSource({ kind, location: `pi-${id}`, npmVersion: '1.0.0', market }) }))
+  const badge = async (id: string, detail: ReturnType<typeof makeDetail>) => {
+    const { unmount } = renderDetail(`/plugins/${id}`, { details: [detail], markets: [official, other] })
+    const heading = await screen.findByRole('heading', { level: 1, name: id })
+    const text = await waitFor(() => {
+      const found = heading.parentElement!.querySelector('h1 + span')?.textContent
+      if (!found) throw new Error('来源标签还没显示')
+      return found
+    })
+    unmount()
+    return text
+  }
+
+  it('按安装时的规则：官方市场装的算官方；其他市场标为已验证的写已验证；未验证的和不是从市场装的写未审核', async () => {
+    expect(await badge('grok', fromMarket('grok', official.url))).toBe('官方')
+    expect(await badge('grok', fromMarket('grok', other.url))).toBe('npm · 已验证')
+    expect(await badge('raw', fromMarket('raw', other.url))).toBe('npm · 未审核')
+    expect(await badge('direct', fromMarket('direct', null, 'git'))).toBe('git · 未审核')
+    // 市场已不在列表里：无从判断，按未审核。
+    expect(await badge('gone', fromMarket('gone', 'https://removed.example/market.json'))).toBe('npm · 未审核')
   })
 })

@@ -407,6 +407,39 @@ func parseTaskCursor(cursor string) (time.Time, uuid.UUID, error) {
 	}
 	return time.Time{}, uuid.Nil, apperr.Invalid("cursor", "游标无效")
 }
+
+// CountTasks 按状态统计未删除项目里未结束的任务。ended_at 为空恰好是这四种状态（task_records_check），
+// 条件写成 ended_at IS NULL 才能用部分索引 task_records_unfinished，只读未结束的行。
+func (s *Store) CountTasks(ctx context.Context, projectID uuid.UUID) (taskmodel.Counts, error) {
+	if _, err := s.GetProject(ctx, projectID); err != nil {
+		return taskmodel.Counts{}, err
+	}
+	rows, err := s.Pool.Query(ctx, `SELECT status, count(*) FROM task_records WHERE project_id=$1 AND ended_at IS NULL GROUP BY status`, projectID)
+	if err != nil {
+		return taskmodel.Counts{}, err
+	}
+	defer rows.Close()
+	var out taskmodel.Counts
+	for rows.Next() {
+		var status string
+		var n int64
+		if err := rows.Scan(&status, &n); err != nil {
+			return taskmodel.Counts{}, err
+		}
+		switch status {
+		case "preparing":
+			out.Preparing = n
+		case "running":
+			out.Running = n
+		case "waiting":
+			out.Waiting = n
+		case "blocked":
+			out.Blocked = n
+		}
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) ListTasks(ctx context.Context, projectID uuid.UUID, cursor string, limit int) (taskmodel.Page, error) {
 	if limit <= 0 {
 		limit = 20

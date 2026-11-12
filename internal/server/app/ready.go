@@ -26,11 +26,12 @@ func consoleFiles(dir string) (fs.FS, string, error) {
 	return nil, "", nil
 }
 
-// Ready 是就绪文件的内容：桌面壳据此找到控制台地址（监听端口为 0 时只能从这里知道）。
+// Ready 是就绪文件的内容：桌面壳据此找到控制台地址（监听端口为 0 时只能从这里知道），以及开了对外端口时它的 https 地址。
 type Ready struct {
-	URL     string `json:"url"`
-	PID     int    `json:"pid"`
-	Version string `json:"version"`
+	URL         string `json:"url"`
+	PID         int    `json:"pid"`
+	Version     string `json:"version"`
+	ExternalURL string `json:"externalUrl,omitempty"`
 }
 
 // writeReadyFile 原子地写出就绪文件：先写同目录下的临时文件再改名，读的一方不会读到半个文件。

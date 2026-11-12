@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
 import { routes } from '@/app/routes'
 import { http, HttpResponse } from 'msw'
-import { defaultAgentPath, defaultProject, makeAgent, platformAgentsUrl, toListItem } from '@/test/api'
-import { fakePlugins, larkAccountKind, makeAccount } from '@/test/plugins'
+import { apiUrl, defaultAgentPath, defaultProject, makeAgent, platformAgentsUrl, toListItem } from '@/test/api'
+import { fakePlugins, larkAccountKind, makeAccount, makeComponents, makeDetail, makeManifest, makePlugin } from '@/test/plugins'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
@@ -52,6 +52,24 @@ describe('Agent 配置页的插件段', () => {
     expect(await within(plugins).findByText('已保存', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
   })
 
+  it('授权保存后，模型选择用的目录（带 agentId）重新读取，插件提供方能不能选随之更新', async () => {
+    const user = userEvent.setup()
+    const { agent } = renderAgent([agentPlugin({ pluginId: 'lark-notify', displayName: '飞书通知', accountKinds: [larkAccountKind] })])
+    const reads: string[] = []
+    server.use(http.get(apiUrl('/model-providers'), ({ request }) => {
+      reads.push(new URL(request.url).searchParams.get('agentId') ?? '')
+      return HttpResponse.json({ piVersion: '1.1.0', catalogGeneratedAt: null, providers: [] })
+    }))
+    const plugins = await section()
+    await user.click(await within(plugins).findByRole('button', { name: /飞书通知/ }))
+    const form = within(plugins).getByRole('region', { name: '飞书通知' })
+    await user.click(within(form).getByRole('checkbox', { name: '授权 飞书通知' }))
+    const before = reads.length
+    await user.click(within(form).getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(reads.length).toBeGreaterThan(before))
+    expect(reads.at(-1)).toBe(agent.id)
+  })
+
   it('有未保存的修改时切到别的插件先确认', async () => {
     const user = userEvent.setup()
     renderAgent([agentPlugin({}), agentPlugin({ pluginId: 'playwright', displayName: '专用浏览器' })])
@@ -73,6 +91,45 @@ describe('Agent 配置页的插件段', () => {
     await user.click(within(plugins).getByRole('checkbox', { name: '授权 Webhook 通知' }))
     await user.click(within(plugins).getByRole('button', { name: '保存' }))
     expect(await within(plugins).findByText('这个插件还没在项目里启用，启用后才能授权。')).toBeInTheDocument()
+  })
+
+  it('Claude Code 的 Agent：说明下次启动生效（不提 Pi）；Agent 侧只有 Pi 扩展的插件标出对 Claude Code 不起作用', async () => {
+    const withParts = (id: string, components: Partial<Schemas['PluginComponents']>) => {
+      const plugin = makePlugin({ id, displayName: id })
+      return makeDetail(plugin, makeManifest({ id, displayName: id, components: makeComponents(components) }))
+    }
+    const plugins = [
+      agentPlugin({ pluginId: 'pi-only', displayName: '只有扩展' }),
+      agentPlugin({ pluginId: 'with-skills', displayName: '带技能' }),
+      agentPlugin({ pluginId: 'with-mcp', displayName: '带 MCP' }),
+      agentPlugin({ pluginId: 'with-bin', displayName: '带命令' }),
+      agentPlugin({ pluginId: 'platform-only', displayName: '只有平台侧' }),
+    ]
+    const details = [
+      withParts('pi-only', { agentExtensions: 2 }),
+      withParts('with-skills', { agentExtensions: 1, skills: ['skills/review'] }),
+      withParts('with-mcp', { agentExtensions: 1, mcpServers: ['browser'] }),
+      withParts('with-bin', { agentExtensions: 1, bin: ['bin'] }),
+      withParts('platform-only', { agentExtensions: 0 }),
+    ]
+    const render = (agent: Schemas['Agent']) => {
+      const fake = fakePlugins({ agents: { [agent.id]: plugins }, details })
+      server.use(...fake.handlers, ...baseHandlers([agent]))
+      return renderRoutes(routes, defaultAgentPath(agent.id, 'config'))
+    }
+    const hint = 'Agent 侧只有 Pi 扩展，对 Claude Code 不起作用'
+
+    const claude = render(makeAgent({ model: { provider: 'claude-code', modelId: 'sonnet' }, runtime: 'claude-code' }))
+    let region = await section()
+    expect(region).toHaveTextContent('授权后下次启动生效，不打断当前回合。')
+    await waitFor(() => expect(within(region).getByRole('button', { name: /只有扩展/ })).toHaveTextContent(`只有扩展未授权· ${hint}`))
+    for (const name of [/带技能/, /带 MCP/, /带命令/, /只有平台侧/]) expect(within(region).getByRole('button', { name })).not.toHaveTextContent(hint)
+    claude.unmount()
+
+    render(makeAgent())
+    region = await section()
+    expect(region).toHaveTextContent('授权后下次启动 Pi 生效，不打断当前回合。')
+    expect(await within(region).findByRole('button', { name: /只有扩展/ })).toHaveTextContent(/^只有扩展未授权$/)
   })
 
   it('平台 Agent 没有账号可选，只勾选授权', async () => {

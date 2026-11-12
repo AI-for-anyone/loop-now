@@ -16,6 +16,13 @@ export const chat = {
   tooLong: (limit: number) => `消息超过上限（${formatBytes(limit)}）`,
   busyBar: (phase: string) => `Agent 正忙（${phase}）`,
   inputLabel: '消息',
+  // 输入框以 "/" 开头时弹出的 Pi 命令菜单；只有 /pi:<name> 才会交给 Pi 执行，其余 "/" 消息照常发出。
+
+  // 扩展命令由 Pi 直接处理、没有交给模型：这一轮没有助手回复。
+  piCommandHandled: '命令已执行，没有回复',
+  // 扩展命令的输出（notify 消息）超过上限被截断；警告与错误的级别写在块上方。
+  piCommandTruncated: '输出过长，已截断',
+  noticeLevel: { warning: '警告', error: '错误' },
   you: '你',
   agent: 'Agent',
   queuedTag: '排队中',
@@ -49,6 +56,12 @@ export const chat = {
     plugin_blocked: '插件阻止了本轮执行',
     image_unsupported: '当前模型不支持图片输入',
     internal_error: '服务端内部错误',
+    // Claude Code 运行时的失败：前两种告诉人在本机怎么处理，其余如实说明，后面接服务端的 errorMessage。
+    runtime_unavailable: '本机没找到 claude：装好 Claude Code，并确认在终端里能运行 claude',
+    runtime_login_required: '本机的 Claude Code 没有登录：在本机终端运行 claude 并登录',
+    runtime_start_failed: 'Claude Code 没能启动',
+    runtime_exited: 'Claude Code 进程在这一轮中意外退出',
+    runtime_error: 'Claude Code 报告这一轮出错',
   } satisfies Record<S['RunErrorCode'], string>,
   tool: {
     started: '进行中',
@@ -57,6 +70,16 @@ export const chat = {
   } satisfies Record<S['ToolState'], string>,
   sessionDivider: '会话已切换，页面历史保留',
   commands: {
+    menuLabel: '命令',
+    label: 'Pi 命令',
+    loading: '正在读取命令…',
+    failed: (reason: string) => `读不到命令列表：${reason}`,
+    notCaptured: 'Agent 运行一次后才有命令列表。',
+    none: 'Pi 没有可用的命令。',
+    noMatch: '没有匹配的命令。',
+    source: { extension: '扩展命令', prompt: '提示模板', skill: '技能' } as Record<string, string>,
+    plugin: (name: string) => `插件 · ${name}`,
+    keys: '↑↓ 选择 · Enter 或 Tab 补全 · Esc 关闭',
     platform: '平台命令',
     hintTitle: '内置命令',
     hintKeyboard: '↑↓ 选择 · Enter 填入 · Esc 关闭',
@@ -117,6 +140,13 @@ export const chat = {
   toolsLabel: '工具调用',
   messagesLabel: '对话',
   loadOlder: '加载更早的消息',
+  // 对话区右侧的刻度尺：一条刻度一轮对话，名称用这一轮开头的文字。
+  ruler: {
+    label: '对话轮次',
+    // 平台提醒、sleep 唤醒那一轮：写明是哪种提醒，再接说明。
+    labeled: (kind: string, text: string) => `${kind}：${text}`,
+    noText: '没有文字的一轮',
+  },
   // 消息与回复上方的时间，以及名称与时间之间的分隔。
   time: (time: string) => formatMonthDayClock(time),
   metaSeparator: '·',

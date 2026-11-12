@@ -27,11 +27,17 @@ func Path(t testing.TB) string {
 		if err != nil {
 			return
 		}
-		path = filepath.Join(dir, "fakepi")
+		path = testenv.Exe(filepath.Join(dir, "fakepi"))
 		cmd := exec.Command("go", "build", "-o", path, "./internal/server/executor/local/fakepi")
 		cmd.Dir = testenv.RepoRoot()
 		if out, e := cmd.CombinedOutput(); e != nil {
 			err = fmt.Errorf("构建 fakepi 失败：%v\n%s", e, out)
+			return
+		}
+		// 新构建的二进制第一次执行时，系统会先检查它（macOS 上空闲时比之后慢 10～25 倍，并行跑全部测试时可达数秒）。
+		// 构建后先执行一次，让这笔一次性开销落在这里，而不是算进第一个启动 Pi 的测试的就绪时限。
+		if out, e := exec.Command(path, "--version").CombinedOutput(); e != nil {
+			err = fmt.Errorf("预先执行 fakepi 失败：%v\n%s", e, out)
 		}
 	})
 	if err != nil {

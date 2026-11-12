@@ -612,9 +612,9 @@ func (s *Service) prepareNode(ctx context.Context, m *store.TaskMutation, note s
 	}
 	n.Inputs, n.InputVersions = inputs, versions
 	data, _ := json.Marshal(inputs)
-	text := fmt.Sprintf("你正在执行任务 %s 的节点 %s（运行 %s）。\n节点说明：%s\n输入：%s\n当前工作目录是按任务启动配置生成的干净副本，不包含常态目录积累的文件。先检查未读Inbox。完成后通过 loopctl 显式提交 output/edgeId；失败须说明原因，提问用 Inbox。\n", m.Record.View.Task.ID, n.StepID, n.ID, step.Description, string(data))
+	text := fmt.Sprintf("You are executing task %s, node %s (run %s).\nNode description: %s\nInputs: %s\nThe current working directory is a clean copy generated from the task's start configuration; it does not contain the files accumulated in your regular folder. Check unread Inbox messages first. When you are done, explicitly submit output/edgeId with loopctl; if it fails, you must state the reason; ask questions through the Inbox.\n", m.Record.View.Task.ID, n.StepID, n.ID, step.Description, string(data))
 	if note != "" {
-		text += "重试说明：" + note
+		text += "Retry note: " + note
 	}
 	if _, err = s.Store.EnqueueTaskTurn(ctx, m, text, "task_node", 1, nil); err != nil {
 		return err
@@ -648,10 +648,9 @@ func (s *Service) queueNotice(ctx context.Context, m *store.TaskMutation, kind s
 	if n := m.Record.Current(); n != nil {
 		nodeID = &n.ID
 	}
-	status := map[string]string{"blocked": "已阻塞", "completed": "已完成", "cancelled": "已取消"}[kind]
-	text := fmt.Sprintf("任务 %s：%s。", m.Record.View.Task.Title, status)
+	text := fmt.Sprintf("Task %s: %s.", m.Record.View.Task.Title, kind)
 	if m.Record.View.Task.Reason != nil {
-		text += "；原因：" + *m.Record.View.Task.Reason
+		text += " Reason: " + *m.Record.View.Task.Reason
 	}
 	_, err := m.Tx.Exec(ctx, `INSERT INTO task_notifications(id,task_id,node_run_id,kind,message_id,text) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`, uuid.Must(uuid.NewV7()), m.Record.View.Task.ID, nodeID, kind, uuid.Must(uuid.NewV7()), text)
 	return err

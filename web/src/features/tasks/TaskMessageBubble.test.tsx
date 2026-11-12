@@ -5,12 +5,15 @@ import { TaskMessageBubble } from './TaskMessageBubble'
 
 const agent = { id: 'agent', name: '任务检查员' }
 const sleepId = '00000000-0000-7000-8000-000000005101'
-it('task node sleep_wake is the same one-line wake note: no sticky card, instruction text or sleep ID inline', () => {
-  const message = { ...makeTaskMessage(), role: 'user' as const, origin: 'sleep_wake' as const, wakeSleepId: sleepId, text: `平台通知：sleep已到期，请接着原会话处理。sleepId=${sleepId}；说明：wait for the review bot` }
+it.each([
+  ['English (current)', `Platform notice: your sleep is due; continue in the original conversation. sleepId=${sleepId}; note: wait for the review bot`],
+  ['Chinese (sessions from before the switch)', `平台通知：sleep已到期，请接着原会话处理。sleepId=${sleepId}；说明：wait for the review bot`],
+])('task node sleep_wake is the same one-line wake note: no sticky card, instruction text or sleep ID inline — %s', (_, text) => {
+  const message = { ...makeTaskMessage(), role: 'user' as const, origin: 'sleep_wake' as const, wakeSleepId: sleepId, text }
   render(<TaskMessageBubble message={message} agent={agent} />)
   const line = screen.getByRole('note')
   expect(line).toHaveTextContent(/^sleep 到期唤醒·.+·wait for the review bot$/u)
-  expect(line).not.toHaveTextContent(/平台通知|5101/u)
+  expect(line).not.toHaveTextContent(/Platform notice|平台通知|5101/u)
   expect(line).toHaveAttribute('title', `wait for the review bot\nsleep ${sleepId}`)
   expect(line.className).not.toMatch(/riso-tilt|riso-yellow/)
 })

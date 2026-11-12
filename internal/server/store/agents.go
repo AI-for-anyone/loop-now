@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/db"
 	"loop-now/internal/server/naming"
@@ -232,6 +233,11 @@ func (s *Store) UpdateAgent(ctx context.Context, id uuid.UUID, p AgentPatch) (Ag
 				return err
 			}
 		}
+		if agentruntime.ForProvider(next.ModelProvider) != agentruntime.ForProvider(cur.ModelProvider) {
+			if err := s.switchRuntimeTx(ctx, tx, id, cur.ModelProvider, next.ModelProvider); err != nil {
+				return err
+			}
+		}
 		inc := 0
 		if bump {
 			inc = 1
@@ -245,6 +251,34 @@ func (s *Store) UpdateAgent(ctx context.Context, id uuid.UUID, p AgentPatch) (Ag
 }
 
 func sameThinking(a, b *string) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
+
+// switchRuntimeTx 在模型提供方的改动换了运行时（Pi 与 Claude Code 之间）时调用：新运行时从新会话开始，
+// 旧会话不迁移也不删除。会话重置（会话序号加一）并取消这个会话里的 sleep，与确认重开会话相同；
+// 有进行中的执行时返回 agent_not_idle，否则它结束时会把旧运行时的会话记回来。
+func (s *Store) switchRuntimeTx(ctx context.Context, tx *db.Tx, agentID uuid.UUID, from, to string) error {
+	var active bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM runs WHERE agent_id = $1 AND status IN `+activeRunStatuses+`)`, agentID).Scan(&active); err != nil {
+		return err
+	}
+	if active {
+		return apperr.Conflict(apperr.CodeAgentNotIdle, "Agent 正在回复，请等这次回复结束后再切换运行时")
+	}
+	if err := s.CancelSleepsTx(ctx, tx, nil, agentID, "session_reopened"); err != nil {
+		return err
+	}
+	var epoch int
+	err := tx.QueryRow(ctx, `UPDATE agent_sessions SET session_file = NULL, state = 'none', epoch = epoch + 1, updated_at = $2
+		WHERE agent_id = $1 RETURNING epoch`, agentID, tx.Now()).Scan(&epoch)
+	if errors.Is(err, db.ErrNoRows) {
+		return nil // 没有会话行（不应出现，新建 Agent 时就有）：没有可重置的会话
+	}
+	if err != nil {
+		return err
+	}
+	return s.insertEvent(ctx, tx, LifecycleEvent{AgentID: agentID, Type: EventSessionReset,
+		Data: map[string]any{"fromEpoch": epoch - 1, "toEpoch": epoch, "reason": "runtime_changed",
+			"fromRuntime": agentruntime.ForProvider(from), "toRuntime": agentruntime.ForProvider(to)}})
+}
 
 // AgentBusy 判断 Agent 是否有进行中的执行。
 func (s *Store) AgentBusy(ctx context.Context, id uuid.UUID) (bool, error) {

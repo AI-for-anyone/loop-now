@@ -10,12 +10,12 @@ go build -o /tmp/fakepi ./internal/server/executor/local/fakepi
 
 ## 参数
 
-接受 `--mode rpc`、`--no-approve`、`--offline`、`--no-skills`、`--skill <p>`（可重复）、
+接受 `--mode rpc`、`--no-approve`、`--offline`、`--no-skills`、`--skill <p>`（可重复）、`-e <p>`（可重复）、
 `--append-system-prompt <p>`、`--provider <p>`、`--model <m>`、`--session-dir <d>`、
 `--session <file>`、`--no-session`；其他参数忽略。
 
 - `FAKEPI_DUMP=<path>`：启动时把 `{"args":[...],"env":{...},"cwd":"..."}` 写入该文件（args 不含程序名）。
-- `FAKEPI_NEUTRAL=1`：中性回复（给英文截图用）。默认回复改为 `Got it: <消息>`：去掉平台加的 `本轮运行ID：…` 一行与指令词，
+- `FAKEPI_NEUTRAL=1`：中性回复（给英文截图用）。默认回复改为 `Got it: <消息>`：去掉平台加的运行 ID 一行（`Run ID for this turn: …`，旧会话里的 `本轮运行ID：…` 也认）与指令词，
   保留换行，什么都不剩时为 `Got it.`；`!text` 照旧优先。扩展对话标题、压缩摘要、可重试错误与崩溃时的 stderr 也改用英文。
   不设时行为不变。服务端只把白名单里的变量传给 Pi，所以经服务端启动时还要把它加进
   `LOOP_NOW_EXEC_ENV_PASSTHROUGH`（例如 `LANG,LC_ALL,TZ,FAKEPI_NEUTRAL`）。
@@ -26,7 +26,9 @@ go build -o /tmp/fakepi ./internal/server/executor/local/fakepi
 
 ## 命令
 
-`get_state`、`prompt`、`abort`、`clear_queue`、`get_session_stats`；其他命令返回 `success:false`。
+`get_state`、`get_commands`、`prompt`、`abort`、`clear_queue`、`get_session_stats`；其他命令返回 `success:false`。
+`get_commands` 按启动参数列出命令：每个 `-e <文件>`（`builtin:` 除外）一条扩展命令，名字为文件名去掉扩展名；每个 `--skill <目录>` 一条 `skill:<目录名>`。
+与 Pi 一样，首字符为 `/` 且命令名是其中某条扩展命令的 prompt 由扩展直接处理：响应 `disposition: "handled"`，没有本轮事件。
 `get_session_stats` 按 Pi 1.1.0 的 `SessionStats` 结构返回本进程报告过的全部用量之和（含工具结果、压缩与缓存预热），`cost` 恒为 0。
 运行中再收到 `prompt` 返回 `success:false`（与 Pi 相同）。`abort` 在运行中先发出
 `message_end`（stopReason `aborted`，含已输出文本）与 `agent_settled{aborted:true}`，再返回响应；

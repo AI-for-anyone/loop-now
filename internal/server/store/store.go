@@ -60,6 +60,11 @@ func (s *Store) Migrate(ctx context.Context, logger *slog.Logger) error {
 	return schema.Migrate(ctx, s.Pool, logger)
 }
 
+// MigrateTo 只执行到 version（含）为止的迁移。
+func (s *Store) MigrateTo(ctx context.Context, logger *slog.Logger, version int64) error {
+	return schema.MigrateTo(ctx, s.Pool, logger, version)
+}
+
 // uniqueTargets 把代码里沿用的 PostgreSQL 约束名对应到 SQLite 报唯一冲突时给出的表与列：
 // SQLite 对普通唯一约束和部分唯一索引只报列，不报约束名。新增按名判断时在这里登记。
 var uniqueTargets = map[string]struct {

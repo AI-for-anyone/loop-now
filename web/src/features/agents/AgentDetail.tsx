@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, useLocation, useParams } from 'react-router'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { ManagerBadge } from '@/components/ManagerBadge'
+import { RuntimeBadge } from '@/components/RuntimeBadge'
 import type { Schemas } from '@/api/client'
 import { useAgent, useAgentStatus, useProjects } from '@/api/queries'
 import { config } from '@/config'
@@ -114,6 +115,7 @@ export function AgentDetail() {
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
           <h1 className={pageTitleClass}>{agent.data.name}</h1>
           {agent.data.isManager && <ManagerBadge />}
+          <RuntimeBadge runtime={agent.data.runtime} />
           <StatusChip agent={agent.data} live={live?.agentId === agentId ? live.state : null} />
           <span className="min-w-0 text-[12px] [overflow-wrap:anywhere] text-ink-500">{`${agent.data.model.provider} · ${agent.data.model.modelId}`}</span>
         </div>

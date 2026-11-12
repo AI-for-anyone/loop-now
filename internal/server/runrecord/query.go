@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/store"
@@ -166,12 +167,23 @@ func (s *Service) Timeline(ctx context.Context, agentID, runID uuid.UUID) (apity
 			ResponseModel: strPtr(u.ResponseModel), StopReason: strPtr(u.StopReason), Input: u.Input, Output: u.Output,
 			CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, Reasoning: u.Reasoning, Total: u.Total, DurationMs: u.DurationMs}})
 	}
-	sort.SliceStable(entries, func(i, j int) bool { return entries[i].at.Before(entries[j].at) })
+	// 时间相同时"结束"排最后：时钟粒度粗（Windows）时，最后一次工具调用可能与结束同一时刻。
+	sort.SliceStable(entries, func(i, j int) bool {
+		if !entries[i].at.Equal(entries[j].at) {
+			return entries[i].at.Before(entries[j].at)
+		}
+		return !isEnded(entries[i].v) && isEnded(entries[j].v)
+	})
 	out := apitypes.RunTimeline{Run: apitypes.FromRun(run), Entries: make([]any, 0, len(entries)), Usage: apitypes.FromUsageTotals(run.Usage)}
 	for _, e := range entries {
 		out.Entries = append(out.Entries, e.v)
 	}
 	return out, nil
+}
+
+func isEnded(v any) bool {
+	_, ok := v.(apitypes.TimelineEndedEntry)
+	return ok
 }
 
 type timed struct {
@@ -229,6 +241,14 @@ func toolEntries(tools []store.ToolEvent) []timed {
 	return out
 }
 
+// runtimeOf 是进程事件记下的运行时（pi 或 claude-code）；旧记录没有，为空（即 pi）。
+func runtimeOf(d map[string]any) *string {
+	if v := str(d, "runtime"); v == agentruntime.Pi || v == agentruntime.ClaudeCode {
+		return &v
+	}
+	return nil
+}
+
 // eventEntry 把一条生命周期事件转为时间线条目。
 func eventEntry(ev store.LifecycleEvent) (any, bool) {
 	d := ev.Data
@@ -278,15 +298,18 @@ func eventEntry(ev store.LifecycleEvent) (any, bool) {
 		return e, true
 	case store.EventPiStarted:
 		return apitypes.TimelinePiStartedEntry{TimelineBase: b(apitypes.TimelinePiStarted), PID: num(d, "pid"), StartupMs: num(d, "startupMs"),
-			Reason: str(d, "reason"), ConfigVersion: num(d, "configVersion")}, true
+			Reason: str(d, "reason"), ConfigVersion: num(d, "configVersion"), Runtime: runtimeOf(d)}, true
 	case store.EventPiReused:
-		return apitypes.TimelinePiReusedEntry{TimelineBase: b(apitypes.TimelinePiReused), PID: num(d, "pid"), ProcessStartedAt: optTime(d, "startedAt")}, true
+		return apitypes.TimelinePiReusedEntry{TimelineBase: b(apitypes.TimelinePiReused), PID: num(d, "pid"), ProcessStartedAt: optTime(d, "startedAt"), Runtime: runtimeOf(d)}, true
 	case store.EventPiStopped:
 		return apitypes.TimelinePiStoppedEntry{TimelineBase: b(apitypes.TimelinePiStopped), PID: num(d, "pid"), Reason: str(d, "reason"),
-			UptimeMs: num(d, "uptimeMs")}, true
+			UptimeMs: num(d, "uptimeMs"), Runtime: runtimeOf(d)}, true
 	case store.EventPiExited:
 		return apitypes.TimelinePiExitedEntry{TimelineBase: b(apitypes.TimelinePiExited), PID: num(d, "pid"), UptimeMs: num(d, "uptimeMs"),
-			Exit: str(d, "exit"), StderrTail: str(d, "stderrTail")}, true
+			Exit: str(d, "exit"), StderrTail: str(d, "stderrTail"), Runtime: runtimeOf(d)}, true
+	case store.EventModelRateLimit:
+		info, ok := d["info"].(map[string]any)
+		return apitypes.TimelineModelRateLimitEntry{TimelineBase: b(apitypes.TimelineModelRateLimit), Info: info}, ok
 	case store.EventRunRunning:
 		return b(apitypes.TimelineRunning), true
 	case store.EventModelRetryStarted:

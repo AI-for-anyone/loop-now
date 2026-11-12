@@ -3,12 +3,15 @@ import { larkAccountOptionLabel } from './lark-account-copy'
 import { LarkAccountDetails } from './LarkAccountDetails'
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router'
 import type { Schemas } from '@/api/client'
 import { credentialKeys, invalidateProjectCredentials, putSelection, readSelections, useCredentialSelections } from '@/api/project-credentials'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { WarningList } from '@/features/agent-config/CredentialStatus'
 import { Section } from '@/features/agent-config/Section'
 import { useScope } from '@/features/projects/scope-context'
+import { localModeSettingsPath } from '@/features/local-mode/LocalModeCard'
+import { CLAUDE_CODE_PROVIDER } from '@/lib/runtime'
 import { projectSettingsPath } from '@/lib/scope'
 import { AccountSelectionField } from './AccountSelectionField'
 import { CredentialConflict } from './CredentialConflict'
@@ -24,12 +27,14 @@ export function ProjectModelSelection({ agent }: { agent: Schemas['Agent'] }) {
   const [known, setKnown] = useState<{ source: typeof result.data; values: Map<string, Schemas['CredentialSelection']> }>({ source: undefined, values: new Map() })
   if (result.data !== known.source) { const values = new Map(known.values); for (const item of result.data?.selections ?? []) if (item.purpose === 'model' && item.provider) values.set(item.provider, item); setKnown({ source: result.data, values }) }
   if (!providers.includes(agent.model.provider)) setProviders([...providers, agent.model.provider])
+  // Claude Code 用本机自己的登录，没有项目账号可选：不显示它的取用来源，只说明。之前打开过的其他提供方照常保留。
   return <Section id="model-credential" title={t.credentials.agentSelection.title}>
-    <p className="text-[13.5px]">{t.credentials.agentSelection.intro}</p>
+    <p className="text-[13.5px]">{agent.runtime === 'claude-code' ? t.runtime.account : t.credentials.agentSelection.intro}</p>
     <ErrorAlert error={result.error} />
     {!synchronized && result.data && <p role="status" className="text-[13px] font-bold">{t.credentials.agentSelection.modelOutOfSync}</p>}
     {!result.data && !result.isError && <p role="status">{t.credentials.agentSelection.loading}</p>}
     {result.data && providers.map(provider => {
+      if (provider === CLAUDE_CODE_PROVIDER) return null
       const selection = known.values.get(provider)
       return selection ? <SelectionEditor key={provider} agentId={agent.id} data={result.data} selection={selection} current={provider === agent.model.provider} synchronized={synchronized} /> : null
     })}
@@ -96,9 +101,20 @@ function SelectionForm({ id, agentId, projectId, configVersion, selection, setti
     {slot === 'lark-cli' && currentAccount && <LarkAccountDetails account={currentAccount} showName={false} />}
     {currentId && <p className="min-w-0 rounded-input bg-white px-3 py-2 text-[13.5px] [overflow-wrap:anywhere]">{selection.mode === 'explicit' ? t.credentials.agentSelection.explicitLabel : t.credentials.agentSelection.automaticLabel}{t.credentials.agentSelection.labelSeparator}<span className="font-black">{currentAccount?.name ?? currentId}</span>{currentAccount && <span> · {accountStatus[currentAccount.status]}</span>}</p>}
     {selection.candidates.filter(account => account.id === selection.resolvedAccountId || account.id === selection.selectedAccountId).map(account => <WarningList key={account.id} warnings={account.template?.warnings ?? []} />)}
+    {selection.purpose === 'model' && selection.localLogin && <LocalLoginNote state={selection.localLogin} />}
     {form.conflict && <CredentialConflict base={form.base.summary} latest={form.review} reading={form.reading} error={form.readError} onRefresh={() => void form.refresh()} onAdopt={form.adopt} />}
     {!form.conflict && <ErrorAlert error={form.error} />}
     {/* projectId只作来源标识，不从其他项目候选推导账号。 */}
     <span className="sr-only">{t.credentials.agentSelection.projectSourcePrefix}{projectId}</span>
+  </div>
+}
+
+// 开着"用本机的登录状态"时，插件提供方用的是本机该扩展自己的登录：有就说明不是所选的项目账号；没有就醒目提示启动会失败，并给本机模式设置的入口。
+function LocalLoginNote({ state }: { state: NonNullable<Schemas['CredentialSelection']['localLogin']> }) {
+  const copy = t.credentials.agentSelection.localLogin
+  if (state === 'active') return <p role="note" className="min-w-0 rounded-input bg-tint-blue px-3 py-2 text-[13.5px] [overflow-wrap:anywhere]">{copy.active}</p>
+  return <div role="alert" className="grid min-w-0 gap-1.5 rounded-input bg-tint-red px-3 py-2 text-[13.5px] font-bold text-red-text [overflow-wrap:anywhere]">
+    <p>{copy.missing}</p>
+    <Link to={localModeSettingsPath} className="justify-self-start text-riso-blue underline outline-none focus-visible:shadow-focus">{copy.settings}</Link>
   </div>
 }

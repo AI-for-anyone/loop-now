@@ -25,8 +25,10 @@ import (
 	"loop-now/internal/server/cliverify"
 	"loop-now/internal/server/conversation"
 	"loop-now/internal/server/coord"
+	"loop-now/internal/server/executor"
 	"loop-now/internal/server/folders"
 	"loop-now/internal/server/inbox"
+	"loop-now/internal/server/localmode"
 	"loop-now/internal/server/modelauth"
 	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/modelconfig"
@@ -34,6 +36,7 @@ import (
 	"loop-now/internal/server/plugins"
 	"loop-now/internal/server/reqid"
 	"loop-now/internal/server/runrecord"
+	"loop-now/internal/server/runtimes"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/tasks"
 )
@@ -52,7 +55,9 @@ type Options struct {
 
 // Server 持有各业务服务。
 type Server struct {
-	Plugins *plugins.Service
+	// Runtimes 报告 Agent 运行时在本机是否可用；为空时列表为空。
+	Runtimes *runtimes.Checker
+	Plugins  *plugins.Service
 	// Hooks 是同步 Hook 的入口（plugins.Service）；为空时不调用插件。
 	Hooks              pluginhost.Hooker
 	CLIImport          CLIImportController
@@ -72,8 +77,11 @@ type Server struct {
 	Records            *runrecord.Service
 	Inbox              *inbox.Service
 	Folders            *folders.Service
+	LocalMode          *localmode.Service
 	Tasks              *tasks.Service
 	Log                *slog.Logger
+	// PiCommands 返回 Agent 上次启动 Pi 时读到的命令列表（从没启动过时为 nil）；为空时命令列表恒为空。
+	PiCommands func(uuid.UUID) (*executor.PiCommands, error)
 }
 
 // Access 是路由允许的身份范围；零值为只限控制台，新增的路由默认不对外开放。
@@ -125,6 +133,13 @@ func (s *Server) Routes() []Route {
 		{"GET", "/plugin-sources/builtin", "listBuiltinPluginSources", ConsoleAndExternal, s.listBuiltinPluginSources},
 		{"GET", "/plugin-host", "getPluginHost", ConsoleAndExternal, s.getPluginHost},
 		{"POST", "/plugin-host/restart", "restartPluginHost", ConsoleAndExternal, s.restartPluginHost},
+		{"GET", "/local-mode-settings", "getLocalModeSettings", ConsoleOnly, s.getLocalModeSettings},
+		{"GET", "/runtimes", "listRuntimes", ConsoleOnly, s.listRuntimes},
+		{"PATCH", "/local-mode-settings", "updateLocalModeSettings", ConsoleOnly, s.updateLocalModeSettings},
+		{"GET", "/projects/{projectId}/local-directories", "getProjectLocalDirectories", ConsoleOnly, s.getProjectLocalDirectories},
+		{"PUT", "/projects/{projectId}/local-directories", "putProjectLocalDirectories", ConsoleOnly, s.putProjectLocalDirectories},
+		{"GET", "/agents/{agentId}/local-directories", "getAgentLocalDirectories", ConsoleOnly, s.getAgentLocalDirectories},
+		{"PUT", "/agents/{agentId}/local-directories", "putAgentLocalDirectories", ConsoleOnly, s.putAgentLocalDirectories},
 		{"GET", "/plugin-settings", "getPluginSettings", ConsoleAndExternal, s.getPluginSettings},
 		{"PUT", "/plugin-settings", "putPluginSettings", ConsoleAndExternal, s.putPluginSettings},
 		{"GET", "/projects/{projectId}/plugins", "listProjectPlugins", ConsoleAndExternal, s.listProjectPlugins},
@@ -134,6 +149,7 @@ func (s *Server) Routes() []Route {
 		{"PUT", "/projects/{projectId}/plugins/{pluginId}/accounts/{accountId}", "updatePluginAccount", ConsoleAndExternal, s.updatePluginAccount},
 		{"DELETE", "/projects/{projectId}/plugins/{pluginId}/accounts/{accountId}", "deletePluginAccount", ConsoleAndExternal, s.deletePluginAccount},
 		{"GET", "/agents/{agentId}/plugins", "listAgentPlugins", ConsoleAndExternal, s.listAgentPlugins},
+		{"GET", "/agents/{agentId}/commands", "listAgentCommands", ConsoleOnly, s.listAgentCommands},
 		{"PUT", "/agents/{agentId}/plugins/{pluginId}", "putAgentPlugin", ConsoleAndExternal, s.putAgentPlugin},
 
 		{"POST", "/projects/{projectId}/cli-credential-import/scans", "scanProjectCLICredentialImports", ConsoleOnly, s.scanProjectCLICredentialImports},
@@ -165,6 +181,7 @@ func (s *Server) Routes() []Route {
 		{"POST", "/projects/{projectId}/model-auth/operations", "startProjectModelAuthLogin", ConsoleAndExternal, s.startProjectModelAuthLogin},
 		{"GET", "/projects/{projectId}/model-auth/operations/{operationId}", "getProjectModelAuthLogin", ConsoleAndExternal, s.getProjectModelAuthLogin},
 		{"POST", "/projects/{projectId}/model-auth/operations/{operationId}/cancel", "cancelProjectModelAuthLogin", ConsoleAndExternal, s.cancelProjectModelAuthLogin},
+		{"POST", "/projects/{projectId}/model-auth/operations/{operationId}/input", "answerProjectModelAuthLogin", ConsoleAndExternal, s.answerProjectModelAuthLogin},
 		{"GET", "/projects/{projectId}/prompt", "getProjectPrompt", ConsoleOnly, s.getProjectPrompt},
 		{"PUT", "/projects/{projectId}/prompt", "putProjectPrompt", ConsoleOnly, s.putProjectPrompt},
 		{"GET", "/agents/{agentId}/model-auth", "getModelAuthState", ConsoleOnly, s.getModelAuthState},
@@ -191,6 +208,7 @@ func (s *Server) Routes() []Route {
 		{"GET", "/tasks/{taskId}/artifacts/{artifactId}", "downloadTaskArtifact", ConsoleOnly, s.downloadTaskArtifact},
 
 		{"GET", "/projects/{projectId}/tasks", "listProjectTasks", ConsoleOnly, s.listProjectTasks},
+		{"GET", "/projects/{projectId}/tasks/counts", "countProjectTasks", ConsoleOnly, s.countProjectTasks},
 		{"GET", "/projects/{projectId}/tasks/events", "streamProjectTaskEvents", ConsoleOnly, s.streamProjectTaskEvents},
 		{"GET", "/tasks/{taskId}/events", "streamTaskEvents", ConsoleOnly, s.streamTaskEvents},
 

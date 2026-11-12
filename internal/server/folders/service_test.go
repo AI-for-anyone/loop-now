@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -80,7 +81,11 @@ func repo(t *testing.T) string {
 	git(t, dir, "add", ".")
 	git(t, dir, "commit", "-q", "-m", "feature")
 	git(t, dir, "checkout", "-q", "main")
-	return "file://" + dir
+	url := "file://" + filepath.ToSlash(dir)
+	if !strings.HasPrefix(dir, "/") { // Windows：file:///C:/...
+		url = "file:///" + filepath.ToSlash(dir)
+	}
+	return url
 }
 
 func (f *fixture) wait(id uuid.UUID) store.FolderGitPull {
@@ -180,6 +185,9 @@ func TestGitPullSingleBranchFullHistory(t *testing.T) {
 
 // 失败：分支不存在、超时；参数校验；服务重启时进行中的拉取标为 server_restart。
 func TestGitPullFailures(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("慢 git 夹具是 sh 脚本")
+	}
 	ctx := context.Background()
 	f := newFixture(t, "git", time.Minute)
 	url := repo(t)

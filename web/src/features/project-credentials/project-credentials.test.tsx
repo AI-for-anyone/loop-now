@@ -38,6 +38,31 @@ describe('项目账号正式HTTP fixture', () => {
     expect(JSON.stringify(client.getMutationCache().getAll().map(item => item.state))).not.toContain('fixture-secret')
   })
 
+  it.each([
+    ['active', 'note', '已开启“用本机的登录状态”：这里用的是本机该扩展自己的登录，不是所选的项目账号。'],
+    ['missing', 'alert', '已开启“用本机的登录状态”，但本机没有该扩展的登录，Agent 启动会失败。关闭这个开关，或在本机登录后再试。'],
+  ] as const)('插件提供方开着用本机的登录状态（localLogin=%s）：在账号选择处说明', async (localLogin, role, message) => {
+    const agent = makeAgent({ model: { provider: 'grok-cli', modelId: 'grok-4' } })
+    const data = emptySelections(agent)
+    const account = projectAccount({ provider: 'grok-cli', authMethod: 'oauth', status: 'logged_in' })
+    data.selections[0] = { purpose: 'model', provider: 'grok-cli', cli: null, mode: 'automatic', selectedAccountId: null, resolvedAccountId: account.id, resolvedVersionId: account.currentVersionId, status: 'resolved', candidates: [account], localLogin }
+    await renderConfig({ agent, handlers: [http.get(apiUrl(`/agents/${agent.id}/credential-selections`), () => HttpResponse.json(data))] })
+    const area = screen.getByRole('region', { name: '模型账号凭证' })
+    const hint = await within(area).findByText(message)
+    expect(hint.closest(`[role="${role}"]`)).not.toBeNull()
+    const link = within(area).queryByRole('link', { name: '去本机模式设置' })
+    if (localLogin === 'missing') expect(link).toHaveAttribute('href', '/settings#local-mode')
+    else expect(link).toBeNull()
+  })
+
+  it('没开用本机的登录状态（没有 localLogin）时不说明', async () => {
+    const agent = makeAgent()
+    await renderConfig({ agent })
+    const area = screen.getByRole('region', { name: '模型账号凭证' })
+    await within(area).findByText(/项目账号|自动/)
+    expect(within(area).queryByText(/用本机的登录状态/)).toBeNull()
+  })
+
   it('迁移屏障以服务端mode显示，null只写当前provider，切B不误报automatic', async () => {
     const agent = makeAgent(), writes: unknown[] = []
     let latestAgent = agent
@@ -196,12 +221,12 @@ describe('项目OAuth正式HTTP fixture，供应商不导航', () => {
     vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
     server.use(http.post(apiUrl('/projects/:projectId/model-auth/operations'), async ({ request }) => { starts.push(await request.json()); return new Promise<Response>(resolve => { finish = resolve }) }))
     const { router } = renderRoutes([
-      { path: '/', element: <DraftNavigationGuard><ProjectLogin projectId={defaultProject.id} /></DraftNavigationGuard> },
+      { path: '/', element: <DraftNavigationGuard><ProjectLogin projectId={defaultProject.id} provider={codexProvider} /></DraftNavigationGuard> },
       { path: '/other', element: <p>另一个项目</p> },
     ], '/')
-    await user.type(screen.getByLabelText('新 Codex 账号名称'), '新账号')
-    await waitFor(() => expect(screen.getByRole('button', { name: '登录 Codex' })).toBeEnabled())
-    await user.click(screen.getByRole('button', { name: '登录 Codex' }))
+    await user.type(screen.getByLabelText('新 OpenAI Codex 账号名称'), '新账号')
+    await waitFor(() => expect(screen.getByRole('button', { name: '登录 OpenAI Codex' })).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: '登录 OpenAI Codex' }))
     await waitFor(() => expect(finish).toBeDefined())
     await act(async () => { void router.navigate('/other') })
     // 名称草稿只有一个离开守卫；确认后卸载旧拥有者。
@@ -220,17 +245,17 @@ describe('项目OAuth正式HTTP fixture，供应商不导航', () => {
       http.get(apiUrl('/projects/:projectId/model-auth/operations/:operationId'), () => HttpResponse.json(state)),
       http.post(apiUrl('/projects/:projectId/model-auth/operations/:operationId/cancel'), async ({ request }) => { calls.push(request.url); state = { operation: { ...op, status: 'cancelled', authorizationUrl: null }, account: null }; return HttpResponse.json(state) }),
     )
-    renderRoutes([{ path: '/', element: <DraftNavigationGuard><ProjectLogin projectId={defaultProject.id} /></DraftNavigationGuard> }], '/')
+    renderRoutes([{ path: '/', element: <DraftNavigationGuard><ProjectLogin projectId={defaultProject.id} provider={codexProvider} /></DraftNavigationGuard> }], '/')
     await screen.findByText('等待浏览器授权')
-    expect(screen.getByLabelText('新 Codex 账号名称')).toHaveValue(op.name)
-    expect(screen.getByLabelText('新 Codex 账号名称')).toBeDisabled()
-    expect(screen.getByLabelText('新 Codex 账号名称')).toHaveAccessibleDescription(/已有一项新建登录正在进行.*打开授权页.*取消登录.*结束或过期后/ )
-    expect(screen.getByRole('button', { name: '登录 Codex' })).toBeDisabled()
+    expect(screen.getByLabelText('新 OpenAI Codex 账号名称')).toHaveValue(op.name)
+    expect(screen.getByLabelText('新 OpenAI Codex 账号名称')).toBeDisabled()
+    expect(screen.getByLabelText('新 OpenAI Codex 账号名称')).toHaveAccessibleDescription(/已有一项新建登录正在进行.*打开授权页.*取消登录.*结束或过期后/ )
+    expect(screen.getByRole('button', { name: '登录 OpenAI Codex' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: '取消登录' }))
     expect(await screen.findByText('本次登录已取消')).toBeInTheDocument()
-    expect(screen.getByLabelText('新 Codex 账号名称')).toBeEnabled()
-    await user.type(screen.getByLabelText('新 Codex 账号名称'), '取消后另起名称')
-    expect(screen.getByRole('button', { name: '登录 Codex' })).toBeEnabled()
+    expect(screen.getByLabelText('新 OpenAI Codex 账号名称')).toBeEnabled()
+    await user.type(screen.getByLabelText('新 OpenAI Codex 账号名称'), '取消后另起名称')
+    expect(screen.getByRole('button', { name: '登录 OpenAI Codex' })).toBeEnabled()
     expect(calls).toHaveLength(1)
     expect(document.body.innerHTML).not.toContain('client_id=fixture-only')
     expect(JSON.stringify({ ...localStorage, ...sessionStorage })).not.toContain('client_id=fixture-only')
@@ -245,22 +270,22 @@ describe('项目OAuth正式HTTP fixture，供应商不导航', () => {
       http.get(apiUrl('/projects/:projectId/model-auth/operations/:operationId'), () => HttpResponse.json(state)),
       http.post(apiUrl('/projects/:projectId/model-auth/operations'), () => { posts(); return HttpResponse.json({}, { status: 500 }) }),
     )
-    const { client } = renderRoutes([{ path: '/', element: <DraftNavigationGuard><ProjectLogin projectId={defaultProject.id} /></DraftNavigationGuard> }], '/')
-    await user.type(screen.getByLabelText('新 Codex 账号名称'), '用户未提交草稿')
+    const { client } = renderRoutes([{ path: '/', element: <DraftNavigationGuard><ProjectLogin projectId={defaultProject.id} provider={codexProvider} /></DraftNavigationGuard> }], '/')
+    await user.type(screen.getByLabelText('新 OpenAI Codex 账号名称'), '用户未提交草稿')
     state = { operation: op, account: null }
     await act(() => client.invalidateQueries({ queryKey: credentialKeys.operations(defaultProject.id) }))
     await screen.findByText('等待浏览器授权')
-    expect(screen.getByLabelText('新 Codex 账号名称')).toHaveValue(op.name)
-    expect(screen.getByLabelText('新 Codex 账号名称')).toBeDisabled()
-    expect(screen.getByLabelText('新 Codex 账号名称')).toHaveAccessibleDescription(/名称已锁定/)
+    expect(screen.getByLabelText('新 OpenAI Codex 账号名称')).toHaveValue(op.name)
+    expect(screen.getByLabelText('新 OpenAI Codex 账号名称')).toBeDisabled()
+    expect(screen.getByLabelText('新 OpenAI Codex 账号名称')).toHaveAccessibleDescription(/名称已锁定/)
     state = { operation: { ...op, status: terminal, authorizationUrl: null }, account: null }
     await act(() => client.invalidateQueries({ queryKey: credentialKeys.operations(defaultProject.id) }))
-    await waitFor(() => expect(screen.getByLabelText('新 Codex 账号名称')).toBeEnabled())
-    expect(screen.getByLabelText('新 Codex 账号名称')).toHaveValue('用户未提交草稿')
-    expect(screen.getByLabelText('新 Codex 账号名称')).not.toHaveAttribute('aria-describedby')
-    await user.clear(screen.getByLabelText('新 Codex 账号名称'))
-    await user.type(screen.getByLabelText('新 Codex 账号名称'), '终态后新名称')
-    expect(screen.getByRole('button', { name: '登录 Codex' })).toBeEnabled()
+    await waitFor(() => expect(screen.getByLabelText('新 OpenAI Codex 账号名称')).toBeEnabled())
+    expect(screen.getByLabelText('新 OpenAI Codex 账号名称')).toHaveValue('用户未提交草稿')
+    expect(screen.getByLabelText('新 OpenAI Codex 账号名称')).not.toHaveAttribute('aria-describedby')
+    await user.clear(screen.getByLabelText('新 OpenAI Codex 账号名称'))
+    await user.type(screen.getByLabelText('新 OpenAI Codex 账号名称'), '终态后新名称')
+    expect(screen.getByRole('button', { name: '登录 OpenAI Codex' })).toBeEnabled()
     expect(posts).not.toHaveBeenCalled()
   })
 
@@ -274,10 +299,10 @@ describe('项目OAuth正式HTTP fixture，供应商不导航', () => {
       http.post(apiUrl('/projects/:projectId/model-auth/operations'), () => { starts(); return HttpResponse.json({ operation: op, account: null }, { status: 202 }) }),
       http.get(apiUrl('/projects/:projectId/model-auth/operations/:operationId'), () => HttpResponse.json({ operation: op, account: null })),
     )
-    const { client } = renderRoutes([{ path: '/', element: <DraftNavigationGuard><ProjectLogin projectId={defaultProject.id} /></DraftNavigationGuard> }], '/')
-    await user.type(screen.getByLabelText('新 Codex 账号名称'), '离线窗口测试')
-    await waitFor(() => expect(screen.getByRole('button', { name: '登录 Codex' })).toBeEnabled())
-    await user.click(screen.getByRole('button', { name: '登录 Codex' }))
+    const { client } = renderRoutes([{ path: '/', element: <DraftNavigationGuard><ProjectLogin projectId={defaultProject.id} provider={codexProvider} /></DraftNavigationGuard> }], '/')
+    await user.type(screen.getByLabelText('新 OpenAI Codex 账号名称'), '离线窗口测试')
+    await waitFor(() => expect(screen.getByRole('button', { name: '登录 OpenAI Codex' })).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: '登录 OpenAI Codex' }))
     if (failure === 'url-rejected') await screen.findByText(/未打开未知地址，也不会自动重新发起登录/ )
     else await screen.findByText(/授权页未打开，可能被浏览器拦截/)
     await waitFor(() => expect(child.close).toHaveBeenCalledOnce())
@@ -302,7 +327,7 @@ describe('项目OAuth正式HTTP fixture，供应商不导航', () => {
     vi.spyOn(window, 'open').mockReturnValue(null)
     const failed = projectOperation({ targetAccountId: account.id, targetRevision: 7, status: 'failed', authorizationUrl: null })
     server.use(http.post(apiUrl('/projects/:projectId/model-auth/operations'), async ({ request }) => { starts.push(await request.json()); return HttpResponse.json({ operation: failed, account }, { status: 202 }) }))
-    renderRoutes([{ path: '/', element: <DraftNavigationGuard><ProjectLogin projectId={defaultProject.id} account={account} /></DraftNavigationGuard> }], '/')
+    renderRoutes([{ path: '/', element: <DraftNavigationGuard><ProjectLogin projectId={defaultProject.id} provider={codexProvider} account={account} /></DraftNavigationGuard> }], '/')
     await waitFor(() => expect(screen.getByRole('button', { name: '重新登录' })).toBeEnabled())
     await user.click(screen.getByRole('button', { name: '重新登录' }))
     expect(await screen.findByText('本次登录失败')).toBeInTheDocument()

@@ -19,12 +19,12 @@ import (
 )
 
 var (
-	taskArg        = cli.Arg{Name: "taskId", Description: "任务 ID，取自 task create/get/current 的结果"}
-	taskNodeArg    = cli.Arg{Name: "nodeRunId", Description: "节点运行 ID，取自当前任务；重试或回路后须使用新的 ID"}
-	taskActionFlag = cli.Flag{Name: "action-id", Type: cli.TypeString, Required: true, Description: "本次动作的 UUID；人工重发同一动作时保持相同 ID 和内容，不得复用于其他动作"}
-	taskInputFlag  = cli.Flag{Name: "from-file", Type: cli.TypePathOrStdin, Required: true, Description: "正式 TaskCreateInput/TaskSubmitInput JSON 文件；- 从标准输入读取，含调用者生成的 actionId"}
-	taskRunFlag    = cli.Flag{Name: "run", Type: cli.TypeString, Description: "本轮平台prompt给出的准确运行UUID；专用恢复节点必传，不读最新run或自动重试"}
-	taskRunIDFlag  = cli.Flag{Name: "run-id", Type: cli.TypeString, Description: "本轮准确运行UUID；与 --run 同义，二者不能同时提供；专用恢复节点必传"}
+	taskArg        = cli.Arg{Name: "taskId", Description: "Task ID, from the result of task create/get/current"}
+	taskNodeArg    = cli.Arg{Name: "nodeRunId", Description: "Node run ID, from the current task; after a retry or loop, the new ID must be used"}
+	taskActionFlag = cli.Flag{Name: "action-id", Type: cli.TypeString, Required: true, Description: "UUID of this action; when resending the same action by hand keep the same ID and content, and never reuse it for another action"}
+	taskInputFlag  = cli.Flag{Name: "from-file", Type: cli.TypePathOrStdin, Required: true, Description: "Formal TaskCreateInput/TaskSubmitInput JSON file; - reads standard input; contains the caller-generated actionId"}
+	taskRunFlag    = cli.Flag{Name: "run", Type: cli.TypeString, Description: "The exact run UUID given in the platform's prompt for this turn; required for the dedicated recovery node; it does not read the latest run or retry automatically"}
+	taskRunIDFlag  = cli.Flag{Name: "run-id", Type: cli.TypeString, Description: "The exact run UUID for this turn; synonym of --run, and the two cannot be given together; required for the dedicated recovery node"}
 )
 
 func addTasks(r *cli.Registry) {
@@ -36,7 +36,7 @@ func addTasks(r *cli.Registry) {
 	}
 	add(&cli.Command{
 		Path:    []string{"task", "list"},
-		Summary: "当前项目 Manager 分页列出本项目任务",
+		Summary: "For the current project Manager: page through the project's tasks",
 		Retry:   true,
 		Flags:   []cli.Flag{cursorFlag, limitFlag},
 		Output:  "TaskPage",
@@ -46,7 +46,7 @@ func addTasks(r *cli.Registry) {
 	})
 	add(&cli.Command{
 		Path:    []string{"task", "agents"},
-		Summary: "当前项目 Manager 查看本项目可选 Agent 的安全目录",
+		Summary: "For the current project Manager: show the safe directory of Agents available in the project",
 		Retry:   true,
 		Output:  "TaskAgentList",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
@@ -54,7 +54,7 @@ func addTasks(r *cli.Registry) {
 		}})
 	add(&cli.Command{
 		Path:    []string{"task", "create"},
-		Summary: "Manager 创建固定 workflow 的任务；超时可能已创建，先查询再决定是否重发",
+		Summary: "For the Manager: create a task with a fixed workflow; after a timeout it may already be created, so check before deciding whether to resend",
 		Stdin:   true,
 		Flags:   []cli.Flag{taskInputFlag},
 		Output:  "TaskDetail",
@@ -63,7 +63,7 @@ func addTasks(r *cli.Registry) {
 		}})
 	add(&cli.Command{
 		Path:    []string{"task", "get"},
-		Summary: "查看有权访问的任务、节点记录、输出及已保存成果",
+		Summary: "Show a task you may access, with its node records, outputs and saved artifacts",
 		Retry:   true,
 		Args:    []cli.Arg{taskArg},
 		Output:  "TaskDetail",
@@ -72,7 +72,7 @@ func addTasks(r *cli.Registry) {
 		}})
 	add(&cli.Command{
 		Path:    []string{"task", "history"},
-		Summary: "分页查看指定节点运行的会话，原样保留执行状态与具体错误",
+		Summary: "Page through the conversation of a node run, keeping execution states and specific errors as is",
 		Retry:   true,
 		Args:    []cli.Arg{taskArg, taskNodeArg},
 		Flags:   []cli.Flag{cursorFlag, limitFlag},
@@ -83,7 +83,7 @@ func addTasks(r *cli.Registry) {
 	})
 	add(&cli.Command{
 		Path:    []string{"task", "current"},
-		Summary: "任务实例查看当前任务；常态身份没有当前任务",
+		Summary: "For a task instance: show its current task; regular identities have no current task",
 		Retry:   true,
 		Output:  "TaskDetail",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
@@ -91,7 +91,7 @@ func addTasks(r *cli.Registry) {
 		}})
 	add(&cli.Command{
 		Path:    []string{"task", "submit"},
-		Summary: "提交当前节点输出与出口；保存成功后仍须正常结束当前轮，平台才推进",
+		Summary: "Submit the current node's output and exit; after it is saved, the current turn must still end normally before the platform advances",
 		Stdin:   true,
 		Args:    []cli.Arg{taskArg, taskNodeArg},
 		Flags:   []cli.Flag{taskInputFlag, taskRunFlag, taskRunIDFlag},
@@ -101,10 +101,10 @@ func addTasks(r *cli.Registry) {
 		}})
 	add(&cli.Command{
 		Path:    []string{"task", "fail"},
-		Summary: "声明当前节点失败并保留原因，任务阻塞等待人或 Manager 处理",
+		Summary: "Declare that the current node failed, keeping the reason; the task blocks until a person or the Manager handles it",
 		Stdin:   true,
 		Args:    []cli.Arg{taskArg, taskNodeArg},
-		Flags:   []cli.Flag{taskActionFlag, taskRunFlag, taskRunIDFlag, {Name: "reason-file", Type: cli.TypePathOrStdin, Required: true, Description: "失败原因 UTF-8 文件；- 从标准输入读取，不能为空"}},
+		Flags:   []cli.Flag{taskActionFlag, taskRunFlag, taskRunIDFlag, {Name: "reason-file", Type: cli.TypePathOrStdin, Required: true, Description: "UTF-8 file with the failure reason; - reads standard input; cannot be empty"}},
 		Output:  "TaskNodeRun",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			if err := taskRun(inv); err != nil {
@@ -126,11 +126,11 @@ func addTasks(r *cli.Registry) {
 		}})
 	add(&cli.Command{
 		Path:        []string{"task", "retry"},
-		Summary:     "当前项目 Manager 重试阻塞节点；沿用任务副本/会话/快照，关闭上次未答问题",
+		Summary:     "For the current project Manager: retry the blocked node; reuses the task copy/session/snapshot and closes the last unanswered question",
 		Stdin:       true,
 		Destructive: true,
 		Args:        []cli.Arg{taskArg},
-		Flags:       []cli.Flag{taskActionFlag, {Name: "expected-node-run", Type: cli.TypeString, Required: true, Description: "预期阻塞节点运行的 UUID；节点已变化时服务端拒绝"}, {Name: "note-file", Type: cli.TypePathOrStdin, Description: "可选重试说明；- 从标准输入读取"}},
+		Flags:       []cli.Flag{taskActionFlag, {Name: "expected-node-run", Type: cli.TypeString, Required: true, Description: "UUID of the expected blocked node run; the server refuses if the node has changed"}, {Name: "note-file", Type: cli.TypePathOrStdin, Description: "Optional retry note; - reads standard input"}},
 		Output:      "TaskDetail",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			action, err := taskAction(inv)
@@ -153,7 +153,7 @@ func addTasks(r *cli.Registry) {
 		}})
 	add(&cli.Command{
 		Path:        []string{"task", "cancel"},
-		Summary:     "当前项目 Manager 取消任务；终止执行、关闭未答问题并保留历史",
+		Summary:     "For the current project Manager: cancel the task; ends the execution, closes unanswered questions and keeps the history",
 		Destructive: true,
 		Args:        []cli.Arg{taskArg},
 		Flags:       []cli.Flag{taskActionFlag},
@@ -167,9 +167,9 @@ func addTasks(r *cli.Registry) {
 		}})
 	add(&cli.Command{
 		Path:    []string{"task", "artifact", "put"},
-		Summary: "当前节点显式保存文件成果，返回平台持有的引用；不会自动提交节点",
+		Summary: "For the current node: explicitly save a file artifact and return a platform-held reference; does not submit the node automatically",
 		Args:    []cli.Arg{taskArg, taskNodeArg},
-		Flags:   []cli.Flag{taskActionFlag, {Name: "file", Type: cli.TypePath, Required: true, Description: "本地成果文件"}, {Name: "name", Type: cli.TypeString, Description: "成果名称，默认取本地文件名"}, {Name: "content-type", Type: cli.TypeString, Default: "application/octet-stream", Description: "成果 MIME 类型"}},
+		Flags:   []cli.Flag{taskActionFlag, {Name: "file", Type: cli.TypePath, Required: true, Description: "Local artifact file"}, {Name: "name", Type: cli.TypeString, Description: "Artifact name; defaults to the local file name"}, {Name: "content-type", Type: cli.TypeString, Default: "application/octet-stream", Description: "Artifact MIME type"}},
 		Output:  "TaskArtifact",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			action, err := taskAction(inv)
@@ -190,7 +190,7 @@ func addTasks(r *cli.Registry) {
 		}})
 	add(&cli.Command{
 		Path:    []string{"task", "artifact", "list"},
-		Summary: "从授权任务详情列出平台保存的成果元数据",
+		Summary: "List the metadata of the artifacts the platform saved, from the authorized task details",
 		Retry:   true,
 		Args:    []cli.Arg{taskArg},
 		Output:  "{artifacts: TaskArtifact[]}",
@@ -208,10 +208,10 @@ func addTasks(r *cli.Registry) {
 		}})
 	add(&cli.Command{
 		Path:    []string{"task", "artifact", "get"},
-		Summary: "下载任务成果到指定文件，SHA-256 校验通过后原子保存",
+		Summary: "Download a task artifact to the given file and save it atomically after the SHA-256 check passes",
 		Retry:   true,
-		Args:    []cli.Arg{taskArg, {Name: "artifactId", Description: "平台产物 ID，取自 task artifact list/put"}},
-		Flags:   []cli.Flag{{Name: "out", Type: cli.TypePath, Required: true, Description: "本地输出文件路径；成功后替换同名文件"}},
+		Args:    []cli.Arg{taskArg, {Name: "artifactId", Description: "Platform artifact ID, from task artifact list/put"}},
+		Flags:   []cli.Flag{{Name: "out", Type: cli.TypePath, Required: true, Description: "Local output file path; replaces the file of the same name on success"}},
 		Output:  "{taskId, artifactId, size, sha256, savedTo}",
 		Run:     taskArtifactGet})
 }

@@ -5,10 +5,11 @@ import (
 	"errors"
 	"os"
 	"slices"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
+
+	"loop-now/internal/procgroup"
 )
 
 var ErrNativeRecoveryUnknown = errors.New("lark native recovery unconfirmed")
@@ -152,7 +153,7 @@ func validNativeGroup(p *NativeProcessIdentity) bool {
 	return p != nil && validNativeIdentity(*p) && p.PID == p.PGID
 }
 func nativeGroupAbsent(p NativeProcessIdentity) bool {
-	return errors.Is(syscall.Kill(-p.PGID, 0), syscall.ESRCH)
+	return errors.Is(procgroup.Probe(p.PGID), procgroup.ErrNotFound)
 }
 
 // RecoverPendingHandoff is strictly pre-C. consumePreCommit is a trusted Go
@@ -238,7 +239,7 @@ func (m *Manager) RecoverPendingHandoff(ctx context.Context, pending PendingNati
 		}
 	}
 	// ESRCH only: PID reuse/mismatched birth cannot authorize signals or success.
-	if _, err := readNativeProcess(record.Owner.PID); !errors.Is(err, syscall.ESRCH) {
+	if _, err := readNativeProcess(record.Owner.PID); !errors.Is(err, procgroup.ErrNotFound) {
 		return unknown()
 	}
 	if ctx.Err() != nil {

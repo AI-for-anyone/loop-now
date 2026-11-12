@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"loop-now/internal/execenv"
 	"loop-now/internal/server/clitemplate"
 	"loop-now/internal/server/cliverify"
 	"loop-now/internal/server/cliverify/probe"
@@ -19,7 +20,7 @@ import (
 )
 
 func baseEnvironment(home string, t *clitemplate.Template) []string {
-	env := []string{"HOME=" + home, "XDG_CONFIG_HOME=" + filepath.Join(home, ".config"), "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "LANG=C", "LC_ALL=C", "TMPDIR=" + home}
+	env := append(execenv.Base(home, home), "HOME="+home, "XDG_CONFIG_HOME="+filepath.Join(home, ".config"), "PATH="+execenv.SystemPath(), "LANG=C", "LC_ALL=C", "TMPDIR="+home)
 	keys := make([]string, 0, len(t.Env))
 	for k := range t.Env {
 		keys = append(keys, k)

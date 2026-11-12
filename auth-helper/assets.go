@@ -12,7 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
+
+	"loop-now/internal/privatefs"
 )
 
 //go:embed *.mjs google_auth.py google_runtime.py google_verify.py
@@ -141,7 +142,7 @@ func verifyAssets(parent *os.Root, name string) error {
 		if err != nil {
 			return errors.New("cannot read embedded auth helper asset")
 		}
-		f, err := directory.OpenFile(file.Name(), os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+		f, err := directory.OpenFile(file.Name(), os.O_RDONLY|privatefs.NoFollow, 0)
 		if err != nil {
 			return fmt.Errorf("auth helper asset %s is missing or not a regular file; remove %s to reinstall", file.Name(), name)
 		}
@@ -159,11 +160,13 @@ func verifyAssets(parent *os.Root, name string) error {
 }
 
 func openAssetDirectory(path string) (*os.Root, error) {
-	directory, err := os.OpenRoot(string(filepath.Separator))
+	// Windows 上从卷根（如 C:\）开始逐级打开；Unix 上卷名为空，就是 /。
+	top := filepath.VolumeName(path) + string(filepath.Separator)
+	directory, err := os.OpenRoot(top)
 	if err != nil {
 		return nil, errors.New("cannot open auth helper installation filesystem")
 	}
-	parts := strings.Split(strings.TrimPrefix(path, string(filepath.Separator)), string(filepath.Separator))
+	parts := strings.Split(strings.TrimPrefix(path, top), string(filepath.Separator))
 	for index, name := range parts {
 		if err := directory.Mkdir(name, 0700); err != nil && !os.IsExist(err) {
 			directory.Close()
@@ -188,7 +191,7 @@ func openChild(directory *os.Root, name string, private bool) (*os.Root, error) 
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return nil, errors.New("auth helper installation path must contain only directories")
 	}
-	if private && info.Mode().Perm() != 0700 {
+	if private && !privatefs.IsPrivate(filepath.Join(directory.Name(), name), info) {
 		return nil, errors.New("auth helper installation directories must be private")
 	}
 	next, err := directory.OpenRoot(name)

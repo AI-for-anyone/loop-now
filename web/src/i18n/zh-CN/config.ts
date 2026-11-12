@@ -19,6 +19,24 @@ export const config = {
     modelEmpty: '没有匹配的模型',
     modelCount: (count: number) => `${count} 个模型`,
     providerOption: (id: string, count: number) => `${id}（${count} 个模型）`,
+    // 插件的 Pi 扩展注册的提供方：显示名是扩展给的（不可信文本，原样显示），后面是 id 和注册它的插件。
+    pluginProviderOption: (name: string | null, id: string, plugin: string, count: number) => `${name && name !== id ? `${name} · ${id}` : id}（插件「${plugin}」，${count} 个模型）`,
+    unavailableOption: (option: string, reason: string) => `${option} — ${reason}`,
+    // 选项后面的短说明；plugins_disabled 不挡保存，只提示。
+    pluginUnavailable: {
+      create: '创建后授权插件再选择',
+      platform_agent: '只给项目 Agent 用',
+      plugin_not_enabled: '项目未启用该插件',
+      agent_not_granted: '插件未授权给这个 Agent',
+      plugins_disabled: '插件已全部停用',
+    },
+    // 选中的是现在不能用的插件提供方时，选择器下方的说明。
+    pluginUnavailableNote: {
+      platform_agent: '插件提供方只给项目 Agent 用，平台 Agent 不能选它。',
+      plugin_not_enabled: (plugin: string) => `项目还没有启用插件「${plugin}」。在项目的插件页启用它、再在本页的“插件”一节授权给这个 Agent 后才能选。`,
+      agent_not_granted: (plugin: string) => `插件「${plugin}」还没有授权给这个 Agent。在本页的“插件”一节授权后才能选。`,
+      plugins_disabled: '全局设置里已停用全部插件：可以保存，但 Agent 启动时会失败。',
+    },
     modelOption: (name: string, id: string) => (name === id ? id : `${name}（${id}）`),
     notInCatalog: '当前模型不在服务端的模型目录中',
     catalogUnavailable: '无法获取模型目录，暂时不能修改模型。',
@@ -45,6 +63,7 @@ export const config = {
   modelLogin: {
     loading: '正在查询模型账号与登录状态…',
     unsupported: '当前提供方暂未开放控制台认证。',
+    pluginUnsupported: '插件提供方只给项目 Agent 用，不能在这里登录。',
     setKey: '录入 API Key',
     replaceKey: '替换 API Key',
     keyRequired: '请填写 API Key',
@@ -59,6 +78,8 @@ export const config = {
       server_restarted: '服务重启中断了本次登录，请重新发起。',
       invalid_authorization_url: '授权地址无效，本次登录未完成。',
       helper_unavailable: '认证组件暂时不可用，请稍后重试。',
+      extension_load_failed: '插件的扩展加载失败，或者没有注册这个提供方的登录，本次登录未完成。',
+      plugin_unavailable: '插件已卸载或停用，本次登录未完成。',
     },
     login: '登录 Codex',
     relogin: '重新登录',

@@ -25,7 +25,7 @@ import (
 
 // Platforms 是构建的平台。
 var Platforms = []struct{ OS, Arch string }{
-	{"darwin", "arm64"}, {"darwin", "amd64"}, {"linux", "amd64"}, {"linux", "arm64"},
+	{"darwin", "arm64"}, {"darwin", "amd64"}, {"linux", "amd64"}, {"linux", "arm64"}, {"windows", "amd64"},
 }
 
 // Manifest 是 manifest.json 的内容。
@@ -111,6 +111,9 @@ func Build(ctx context.Context, root, version, out string) (*Manifest, string, e
 	m := &Manifest{SchemaVersion: 1, Program: "loopctl", Version: version, GoVersion: strings.TrimSpace(string(goVersion))}
 	for _, p := range Platforms {
 		file := "loopctl-" + p.OS + "-" + p.Arch
+		if p.OS == "windows" {
+			file += ".exe"
+		}
 		cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-buildvcs=false",
 			"-ldflags", "-s -w -X loop-now/internal/buildinfo.version="+version,
 			"-o", filepath.Join(dir, file), "./cmd/loopctl")

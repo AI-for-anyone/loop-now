@@ -20,8 +20,10 @@ import (
 
 	authhelper "loop-now/auth-helper"
 	"loop-now/internal/buildinfo"
+	"loop-now/internal/execenv"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/apitypes"
+	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/cliauth"
 	"loop-now/internal/server/cliimport"
@@ -38,6 +40,7 @@ import (
 	"loop-now/internal/server/httpapi"
 	"loop-now/internal/server/inbox"
 	"loop-now/internal/server/larkauth"
+	"loop-now/internal/server/localmode"
 	"loop-now/internal/server/loopctldist"
 	"loop-now/internal/server/maintenance"
 	"loop-now/internal/server/modelauth"
@@ -46,7 +49,10 @@ import (
 	"loop-now/internal/server/pluginhost"
 	"loop-now/internal/server/plugins"
 	"loop-now/internal/server/preflight"
+	"loop-now/internal/server/providerstate"
 	"loop-now/internal/server/runrecord"
+	"loop-now/internal/server/runtimes"
+	"loop-now/internal/server/selfsigned"
 	"loop-now/internal/server/store"
 	"loop-now/internal/server/tasks"
 	"loop-now/internal/server/webui"
@@ -63,9 +69,11 @@ type App struct {
 	CLIAuth         *cliauth.Service
 	ModelAuth       *modelauth.Service
 	ModelSettings   *modelconfig.Service
-	Cfg             *config.Config
-	InstanceID      uuid.UUID
-	Log             *slog.Logger
+	// ProviderStates 是插件提供方订阅账号的状态目录。
+	ProviderStates *providerstate.Manager
+	Cfg            *config.Config
+	InstanceID     uuid.UUID
+	Log            *slog.Logger
 
 	Store *store.Store
 	Coord *coord.Coord
@@ -79,6 +87,9 @@ type App struct {
 	Folders     *folders.Service
 	Config      *agentconfig.Service
 	API         *httpapi.Server
+	// LocalMode 是个人版“本机模式”的开关与本机目录清单；UserPath 解析并缓存用户的 PATH。
+	LocalMode *localmode.Service
+	UserPath  *localmode.UserPath
 	// Plugins 是插件第二版的安装与配置；PluginHost 在配置了宿主入口时监护插件宿主，否则为空。
 	Plugins    *plugins.Service
 	PluginHost *pluginhost.Supervisor
@@ -110,6 +121,8 @@ type Options struct {
 	// Nil preserves the production fixed HTTPS transport; never configured via env/API.
 	LarkHTTPTransport http.RoundTripper
 	AuthLoginHelper   modelauth.LoginHelper
+	// PluginLoginHelper 替换插件提供方的登录辅助进程（测试用）。
+	PluginLoginHelper modelauth.PluginLoginHelper
 	AuthRefresher     modelauth.Refresher
 	// Listener 非空时直接使用（测试用），否则按配置的监听地址监听。
 	Listener net.Listener
@@ -187,9 +200,22 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	log.Info("已安装 loopctl", "version", dist.Manifest.Version, "binDir", loopctlBin)
 	var extTLS *tls.Config
 	if cfg.ExternalListenAddr != "" {
-		cert, err := tls.LoadX509KeyPair(cfg.ExternalTLSCert, cfg.ExternalTLSKey)
-		if err != nil {
-			return a, fmt.Errorf("读取对外端口的 TLS 证书失败：%w", err)
+		var cert tls.Certificate
+		if cfg.ExternalTLSSelfSigned != "" {
+			// 服务端自己维护的自签证书：覆盖回环地址与对外监听的主机；loopctl 把 cert.pem 当 --ca-file。
+			host, _, _ := net.SplitHostPort(cfg.ExternalListenAddr)
+			c, certPath, generated, err := selfsigned.Load(cfg.ExternalTLSSelfSigned, []string{host}, time.Now())
+			if err != nil {
+				return a, fmt.Errorf("准备对外端口的自签证书失败：%w", err)
+			}
+			log.Info("对外端口使用自签证书", "cert", certPath, "generated", generated)
+			cert = c
+		} else {
+			c, err := tls.LoadX509KeyPair(cfg.ExternalTLSCert, cfg.ExternalTLSKey)
+			if err != nil {
+				return a, fmt.Errorf("读取对外端口的 TLS 证书失败：%w", err)
+			}
+			cert = c
 		}
 		extTLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}
 	}
@@ -253,6 +279,16 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		Limits: agentconfig.Limits{MaxUploadFile: cfg.MaxUploadFile, MaxSkillArchive: cfg.MaxSkillArchive, MaxSkillEntries: cfg.MaxSkillEntries, MaxCredential: cfg.MaxCredential, Text: text},
 	}
 	a.Config.PluginAssets = a.pluginAssets
+	a.LocalMode = &localmode.Service{Store: a.Store}
+	a.Config.LocalAccess = a.LocalMode.Access
+	a.Config.ProviderState = a.providerState
+	a.UserPath = localmode.NewUserPath(log, localmode.DefaultUserPathTimeout)
+	// 用到用户 PATH 的开关（cli、git）开着时提前在后台解析，免得第一次启动 Pi 或拉取时等登录 shell。
+	if settings, err := a.Store.GetLocalModeSettings(ctx); err != nil {
+		return a, err
+	} else if settings.CLI || settings.Git {
+		a.UserPath.Start()
+	}
 
 	// 登录 helper 与平台扩展按内容寻址装在 platform/auth-helper/<摘要>/ 下：不同构建的文件互不覆盖。
 	platformDir := filepath.Join(res.WorkRoot, "platform")
@@ -286,6 +322,20 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		return a, err
 	}
 	projectCredentials := modelauth.NewProjectService(a.ModelAuth, templates, cfg.MaxCredential)
+	// 插件提供方的订阅登录（plugins/SPEC.md §13）：状态目录在 platform/provider-states/ 下，辅助进程与 Codex 登录同一组内嵌资产。
+	a.ProviderStates = &providerstate.Manager{Root: filepath.Join(platformDir, "provider-states")}
+	var pluginLogin modelauth.PluginLoginHelper = &modelauth.PluginHelper{Options: modelauth.PluginHelperOptions{NodeBin: res.NodeBin, Entry: filepath.Join(authRoot, "provider-main.mjs"),
+		WorkRoot: platformDir, BasePath: res.ExecBasePath, PiPackageRoot: packageRoot, PiVersion: cfg.PiVersion, Timeout: cfg.AuthLoginTimeout, StopGrace: cfg.PiStopGrace}}
+	if o.PluginLoginHelper != nil {
+		pluginLogin = o.PluginLoginHelper
+	}
+	projectCredentials.LocalLogin = a.providerLocalLogin
+	projectCredentials.Plugins = &modelauth.PluginLogins{Helper: pluginLogin, States: a.ProviderStates, Extensions: func(ctx context.Context, plugin string) ([]string, error) {
+		if a.Plugins == nil {
+			return nil, apperr.NotFound("插件")
+		}
+		return a.Plugins.Extensions(ctx, plugin)
+	}}
 	googleHelper := &cliauth.ProcessHelper{Options: cliauth.HelperOptions{WorkRoot: platformDir, StopGrace: cfg.PiStopGrace, Runtime: func(ctx context.Context) (cliauth.HelperRuntime, error) {
 		template, ok := templates.Get("gcloud")
 		if !ok {
@@ -349,6 +399,8 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	taskSource.EnableLarkOverlay()
 	taskSource.Log = log
 	taskSource.PluginAssets = a.pluginAssets
+	taskSource.LocalAccess = a.LocalMode.Access
+	taskSource.ProviderState = a.providerState
 	taskObserver := &tasks.Observer{Store: a.Store, Normal: recorder, Timeout: cfg.TaskRecordTimeout, Log: log}
 	// config.Load 总会给出上下文文件夹的根与文件夹上传上限；直接构造配置（测试）时为空：根放在工作根目录下
 	// （不写到进程的当前目录），上限取默认值。
@@ -361,13 +413,14 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	}
 	a.Executor = local.New(local.Options{Models: models, Hooks: appHooks{a}, Dialogs: a.askDialog, LarkFactory: larkFactory, GoogleResolver: googleCoordinator, GoogleRuntimeEntry: filepath.Join(authRoot, "google_runtime.py"),
 		AuthResolver: authCoordinator, AuthExtension: authExtension, LegacyAuthExtension: filepath.Join(filepath.Dir(authExtension), "legacy-anthropic.mjs"), CodexServiceTierExtension: filepath.Join(filepath.Dir(authExtension), "codex-service-tier.mjs"), PiPackageRoot: packageRoot, PiAIDir: res.PiAIDir, AuthIPCTimeout: cfg.AuthIPCTimeout,
-		WorkRoot: res.WorkRoot, PiBin: res.PiBin, GitBin: res.GitBin, ExecBasePath: res.ExecBasePath, Passthrough: cfg.ExecEnvPassthrough,
+		WorkRoot: res.WorkRoot, PiBin: res.PiBin, NodeBin: res.NodeBin, GitBin: res.GitBin, ExecBasePath: res.ExecBasePath, Passthrough: cfg.ExecEnvPassthrough,
 		Username: username, MaxProcesses: cfg.PiMaxProcesses, IdleTimeout: cfg.PiIdleTimeout, StartTimeout: cfg.PiStartTimeout,
 		StopGrace: cfg.PiStopGrace, AbortTimeout: cfg.AbortTimeout, CloneTimeout: cfg.GitCloneTimeout, InstanceID: a.InstanceID, Hostname: host,
 		StderrTailBytes: cfg.PiStderrTailBytes, Observer: taskObserver,
-		Tokens: agentTokens{st: a.Store, instance: a.InstanceID}, AgentURL: agentURL(a.listener.Addr()), LoopctlBinDir: loopctlBin, ContextDir: contextDir,
+		Tokens: agentTokens{st: a.Store, instance: a.InstanceID}, AgentURL: agentURL(a.listener.Addr()), LoopctlBinDir: loopctlBin, ContextDir: contextDir, UserPath: a.UserPath.Dirs,
 	}, taskSource, templates, installer, log)
 	a.Config.Releaser = a.Executor
+	taskSource.ClaudeProjects = a.Executor.ClaudeProjectsDir
 	// Preserve unresolved handoff process evidence before generic cleanup can
 	// remove stale PID records. Missing/invalid provenance fails closed.
 	var protectedLark []local.PendingRuntimeHandoff
@@ -384,6 +437,8 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	if err = a.Executor.CleanupStaleExceptPending(ctx, protectedLark); err != nil {
 		return a, err
 	}
+	// 插件提供方订阅账号的状态目录：启动时删掉不再需要的版本与上次没登录完的暂存目录。
+	a.sweepProviderStates(ctx, true)
 	if err = a.recoverPendingLarkSwitches(ctx, pendingLark, larkRuntime, cfg.TaskRecordTimeout); err != nil {
 		return a, err
 	}
@@ -417,7 +472,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	a.Conv.InboxCancelled = inboxSvc.EmitCancelled
 	a.Tasks.QuestionMaintenance = inboxSvc.ReconcileQuestions
 
-	a.Folders = folders.New(a.Store, folderGitAccess(a.Config, templates, installer, res.WorkRoot, res.ExecBasePath),
+	a.Folders = folders.New(a.Store, folderGitAccess(a.Config, templates, installer, res.WorkRoot, res.ExecBasePath, &gitLocalIdentity{modes: a.LocalMode, userPath: a.UserPath, gitBin: res.GitBin}),
 		folders.Options{WorkRoot: res.WorkRoot, ContextDir: contextDir, MaxUpload: maxFolderUpload, GitBin: res.GitBin, CloneTimeout: cfg.GitCloneTimeout}, log)
 
 	a.Store.ImageMaxCount = cfg.MaxMessageImages
@@ -439,13 +494,16 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 				TextEdit: apitypes.TextEdit{MaxBytes: cfg.TextEditMax, Extensions: cfg.TextEditExtensions}},
 		},
 		Config: a.Config, Conv: a.Conv, Models: models, Templates: templates, Installer: installer, Store: a.Store, Coord: a.Coord,
-		Tasks: a.Tasks, Records: &runrecord.Service{Store: a.Store}, Inbox: inboxSvc, Folders: a.Folders, Log: log,
+		Tasks: a.Tasks, Records: &runrecord.Service{Store: a.Store}, Inbox: inboxSvc, Folders: a.Folders, LocalMode: a.LocalMode, Log: log,
+		Runtimes:   &runtimes.Checker{PiVersion: func() string { return models.Snapshot().PiVersion }, UserPath: a.UserPath.Dirs, RealHome: os.UserHomeDir, ExecBasePath: res.ExecBasePath, HelperEnv: a.Executor.ClaudeHelperEnv},
+		PiCommands: a.Executor.Commands,
 	}
 	if err = a.assemblePlugins(cfg, res, log); err != nil {
 		return a, err
 	}
 	baseCtx, baseCancel := context.WithCancel(context.Background())
 	a.baseCancel = baseCancel
+	go a.providerStateSweeper(baseCtx, 10*time.Minute)
 	// 文件夹：中断的拉取标为失败、清空回收区；在任何 Pi 启动之前一次性回放退役文件夹来源中未落到磁盘的人工修改。
 	if err = a.Folders.Start(ctx); err != nil {
 		return a, err
@@ -525,7 +583,11 @@ func (a *App) Serve() error {
 	a.Log.Info("开始提供服务", "addr", a.Addr())
 	if a.Cfg.ReadyFile != "" {
 		// 监听器早已打开，连接在 Serve 开始前排队，所以这时写出就绪文件不会让人连上一个还不回答的端口。
-		if err := writeReadyFile(a.Cfg.ReadyFile, Ready{URL: "http://" + a.Addr(), PID: os.Getpid(), Version: buildinfo.Version()}); err != nil {
+		ready := Ready{URL: "http://" + a.Addr(), PID: os.Getpid(), Version: buildinfo.Version()}
+		if a.external != nil {
+			ready.ExternalURL = "https://" + a.ExternalAddr()
+		}
+		if err := writeReadyFile(a.Cfg.ReadyFile, ready); err != nil {
 			return fmt.Errorf("写就绪文件 %s 失败：%w", a.Cfg.ReadyFile, err)
 		}
 		a.readyWritten = true
@@ -642,6 +704,92 @@ func (a *App) askDialog(ctx context.Context, agentID, runID uuid.UUID, req pirpc
 	return pirpc.DialogResponse{Cancelled: ans.Cancelled, Confirmed: ans.Confirmed, Value: ans.Value, Outcome: ans.Outcome, QuestionID: ans.QuestionID}
 }
 
+// providerState 给出插件提供方订阅账号的状态目录（按版本）与插件当前版本声明的随账号走的路径（plugins/SPEC.md §13）。
+func (a *App) providerState(ctx context.Context, plugin, provider string, version uuid.UUID) (*agentconfig.ProviderState, error) {
+	if a.ProviderStates == nil {
+		return nil, agentconfig.ErrCredentialUnavailable
+	}
+	var paths []string
+	if a.Plugins != nil {
+		var err error
+		if paths, err = a.Plugins.ProviderStatePaths(ctx, plugin, provider); err != nil {
+			return nil, err
+		}
+	}
+	return &agentconfig.ProviderState{PluginID: plugin, VersionID: version, Dir: a.ProviderStates.Dir(version), Paths: paths}, nil
+}
+
+// providerLocalLogin 报告开着“用本机的登录状态”时插件提供方用的本机登录（plugins/SPEC.md §13）：提供方来自插件、
+// 声明了随账号走的状态路径、开关开着时，按真实家目录下这些路径是否都在给出 active 或 missing；其余为 nil。只看是否存在，不读内容。
+func (a *App) providerLocalLogin(ctx context.Context, provider string) (*string, error) {
+	if a.Plugins == nil || a.LocalMode == nil || a.ModelSettings == nil {
+		return nil, nil
+	}
+	plugin, ok := plugins.ProviderPlugin(a.ModelSettings.Models, provider)
+	if !ok {
+		return nil, nil
+	}
+	settings, err := a.LocalMode.Settings(ctx)
+	if err != nil || !settings.Logins {
+		return nil, err
+	}
+	paths, err := a.Plugins.ProviderStatePaths(ctx, plugin, provider)
+	if err != nil || len(paths) == 0 {
+		return nil, err
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	state := "active"
+	for _, p := range paths {
+		if _, err := os.Lstat(filepath.Join(home, filepath.FromSlash(p))); err != nil {
+			state = "missing"
+		}
+	}
+	return &state, nil
+}
+
+// sweepProviderStates 删除不再需要的插件提供方状态目录（plugins/SPEC.md §13）：保留未删除账号的当前版本、
+// 未结束任务绑定的版本，以及运行中的 Pi 正在用的版本。pending 为 true（启动时）也删除登录暂存目录。
+func (a *App) sweepProviderStates(ctx context.Context, pending bool) {
+	if a.ProviderStates == nil {
+		return
+	}
+	removed, err := a.ProviderStates.Sweep(func() (map[uuid.UUID]bool, error) {
+		keep, err := a.Store.ProviderStateVersionsInUse(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if a.Executor != nil {
+			for id := range a.Executor.ProviderStatesInUse() {
+				keep[id] = true
+			}
+		}
+		return keep, nil
+	}, pending)
+	if err != nil {
+		a.Log.Warn("清理插件提供方状态目录失败", "err", err)
+	}
+	if len(removed) > 0 {
+		a.Log.Info("已删除不再需要的插件提供方状态目录", "count", len(removed))
+	}
+}
+
+// providerStateSweeper 定期清理（重登、删除账号、任务结束之后留下的旧版本），直到 ctx 结束。
+func (a *App) providerStateSweeper(ctx context.Context, every time.Duration) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			a.sweepProviderStates(ctx, false)
+		}
+	}
+}
+
 // pluginAssets 返回 Agent 已授权插件交给 Pi 的东西；插件服务没有装配时（历史 schema 的测试）为空。
 func (a *App) pluginAssets(ctx context.Context, agentID uuid.UUID) (agentconfig.PluginAssets, error) {
 	if a.Plugins == nil {
@@ -659,15 +807,41 @@ func (a *App) assemblePlugins(cfg *config.Config, res *preflight.Resolved, log *
 	}
 	a.Plugins = &plugins.Service{Store: a.Store, Root: root, OfficialDir: cfg.PluginOfficialDir, OfficialMarket: cfg.PluginMarketURL, NodeBin: res.NodeBin, GitBin: res.GitBin,
 		APIURL: strings.TrimSuffix(agentURL(a.listener.Addr()), "/agent/v1") + "/api/v1", PlatformVersion: buildinfo.Version(), Log: log}
+	if a.Config != nil && a.Config.Templates != nil {
+		a.Plugins.ManagedHomePaths = a.Config.Templates.AllCredentialFilePaths
+	}
+	a.Plugins.DeleteProviderAccounts = func(ctx context.Context, providers []string) error {
+		accounts, err := a.Store.ModelAccountsOf(ctx, providers)
+		if err != nil || a.API == nil || a.API.ProjectCredentials == nil {
+			return err
+		}
+		for _, acc := range accounts {
+			if _, err := a.API.ProjectCredentials.Delete(ctx, acc.ProjectID, acc.ID, acc.Revision); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if a.ModelSettings != nil {
+		modelOptions := a.ModelSettings.Options
+		a.Plugins.Models = a.ModelSettings.Models
+		a.Plugins.CaptureProviders = func(ctx context.Context, dir string, extensions []string) (modelcatalog.Capture, error) {
+			return modelcatalog.CaptureProviders(ctx, modelOptions, dir, extensions)
+		}
+	}
 	if err := a.Plugins.Init(); err != nil {
 		return err
+	}
+	// 插件注册的模型提供方并入模型目录；读不出时只记日志，Agent 用到时再明确报错。
+	if err := a.Plugins.PublishProviders(context.Background()); err != nil {
+		log.Warn("把插件注册的模型提供方并入模型目录失败", "err", err)
 	}
 	a.API.Plugins = a.Plugins
 	if cfg.PluginHostEntry == "" {
 		log.Info("没有配置插件宿主入口，插件的平台侧不运行", "env", config.EnvPluginHostEntry)
 		return nil
 	}
-	env := []string{"PATH=" + res.ExecBasePath, "HOME=" + root, "LANG=C.UTF-8", "LOOP_NOW_PLUGINS_ROOT=" + root, "LOOP_NOW_API_URL=" + a.Plugins.APIURL}
+	env := append(execenv.Base(root, ""), "PATH="+res.ExecBasePath, "HOME="+root, "LANG=C.UTF-8", "LOOP_NOW_PLUGINS_ROOT="+root, "LOOP_NOW_API_URL="+a.Plugins.APIURL)
 	if tz := os.Getenv("TZ"); tz != "" {
 		env = append(env, "TZ="+tz)
 	}

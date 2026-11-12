@@ -147,7 +147,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 仅活动操作。无accountId包括新建与重登，可用于无账号ID时页面/未知start响应恢复。授权URL只在活动操作视图，禁止日志/普通元数据/持久化。 */
+        /** @description 仅活动操作。无accountId包括新建与重登，可用于无账号ID时页面/未知start响应恢复。授权URL只在活动操作视图，禁止日志/普通元数据/持久化。provider省略时列出全部（Codex与插件提供方），每条带provider。 */
         get: operations["listProjectModelAuthOperations"];
         put?: never;
         /** @description 新建(name)或重登(accountId+expectedRevision)互斥。相同活动输入返回原operation；输入不同409。当前仅本机浏览器/server localhost1455回调，无远程转发或人工code入口；旧platform OAuth仍console-only。 */
@@ -186,6 +186,26 @@ export interface paths {
         put?: never;
         /** @description 无请求体。终态幂等返回原状态；迟到helper结果不得seal或复活。 */
         post: operations["cancelProjectModelAuthLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/model-auth/operations/{operationId}/input": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description 回答插件提供方登录中正在等的问题（操作的 prompt）。只能回答当前那一个问题；select 的 value 须是某个选项的 id。
+         *     没有在等回答、promptId 不对或回答不合规返回 422（字段 promptId 或 value）。回答只在内存里转交，不保存、不记日志。
+         */
+        post: operations["answerProjectModelAuthLogin"];
         delete?: never;
         options?: never;
         head?: never;
@@ -318,7 +338,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 固定版本 Pi 合并原生 models.json 后的提供方目录 */
+        /**
+         * 固定版本 Pi 合并原生 models.json 后的提供方目录，加已安装插件注册的提供方
+         * @description 目录在插件安装、更新、卸载与保存 models.json 后变化（没有版本号或推送事件，控制台在这些操作后重新读取）。
+         *     带 agentId 时，source 为 plugin 的提供方另给出这个 Agent 现在不能用的原因 `unavailableReason`（项目启用与授权变化后也要重新读取）。
+         */
         get: operations["listModelProviders"];
         put?: never;
         post?: never;
@@ -339,6 +363,57 @@ export interface paths {
         get: operations["getModelSettings"];
         /** 由固定版本 Pi 校验并保存原生 models.json */
         put: operations["putModelSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/local-mode-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 读取本机模式的四个开关
+         * @description 个人版“本机模式”：让 Agent 直接使用用户本机已有的东西，四项各有一个开关。directories、git、cli 在新装与升级后默认开启；
+         *     logins 等于让 Agent 以用户本人的身份使用本机工具，新装与升级后都默认关闭，须用户主动打开。
+         *     - directories：绑定本机目录。项目与 Agent 登记的本机目录写进 Pi 系统提示的“文件夹与上下文”一节；关闭时清单照常保存，但不交给任何 Agent。
+         *     - git：用本机的 git 身份。“从 Git 拉取”沿用服务端进程用户真实的 HOME、SSH_AUTH_SOCK 与本机的 credential helper；Agent 的 gh 凭证仍专用于 github.com。
+         *     - cli：用本机的 CLI。把用户的 PATH 接在执行 PATH 之后（随包 Node、loopctl、CLI 模板目录仍排在前面）；不改变 HOME 与登录态。
+         *     - logins：用本机的登录状态。Pi 及其子进程的 HOME（Windows 上另有 USERPROFILE、APPDATA、LOCALAPPDATA）改为服务端进程用户真实的，
+         *       本机各工具已有的登录可以直接使用；在 Loop Now 里给 Agent 配了账号的 CLI 仍用配置的账号（经各工具自己的配置目录变量指回 Agent 目录），
+         *       Pi 的会话与配置、Loop Now 的凭证文件和插件数据都不落到用户目录。与 cli 相互独立：只开 logins 时，只有执行 PATH 里已有的命令能用上本机登录。
+         *     directories、cli 与 logins 的改动在 Pi 下次启动时生效（下一次派发发现变化即重启，不打断进行中的回复，任务内的实例同样）；git 从下一次拉取生效。
+         */
+        get: operations["getLocalModeSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 修改本机模式开关（只改请求里带的字段） */
+        patch: operations["updateLocalModeSettings"];
+        trace?: never;
+    };
+    "/runtimes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Agent 运行时在本机是否可用
+         * @description pi 为随包的 Pi，总是可用。claude-code 为用户本机安装的 Claude Code：在服务端用户登录 shell 的 PATH 里找 claude、运行 claude --version；
+         *     登录状态由 claude auth status 自己回答（平台不读、不保存它的凭证），只给出是否登录、登录方式与订阅类型，邮箱与组织不返回。
+         *     判断不了登录状态时 state 为 unknown，此时只在运行失败时如实报错（runtime_login_required 等）。结果缓存 30 秒，refresh=true 时重新检查。
+         */
+        get: operations["listRuntimes"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -664,7 +739,11 @@ export interface paths {
         /**
          * 从 Git 一次性拉取一个分支到 Agent 文件夹的子目录
          * @description 只拉取这一个分支，保留它的完整历史（`clone --single-branch --branch`，不截断），之后就是普通文件，不再同步。
-         *     使用该 Agent 当前配置里的 gh CLI 凭证（项目 GitHub 账号）；没有配置 gh 时匿名克隆，只能拉公开仓库。
+         *     本机模式的 git 开关关闭时：只使用该 Agent 当前配置里的 gh CLI 凭证（项目 GitHub 账号），没有配置 gh 时匿名克隆，只能拉公开仓库；
+         *     HOME 是 Agent 的独立目录，SSH 地址读不到用户的密钥与 known_hosts。
+         *     开关开启时（默认）：沿用服务端进程用户真实的 HOME、SSH_AUTH_SOCK、git 配置与 credential helper，SSH 地址和本机已存的 HTTPS 凭证可用；
+         *     Agent 配置了 gh 时，github.com 的 HTTPS 只用它的凭证（不读也不写本机为 github.com 存的凭证），其他主机走本机的 helper。
+         *     两种情况都不做任何交互式询问：git 不弹终端提示与 askpass，SSH 以 BatchMode 运行，未知主机直接失败（`host_key_unverified`）。
          *     `path` 必须不存在或是空目录，否则返回 409 `path_conflict`；同一目标已有进行中的拉取时同样返回 409。
          *     异步执行，返回 202 与操作；用 GET 查询状态。actionId 幂等：同一 actionId 返回同一操作，换了内容返回 409 `action_conflict`。
          */
@@ -785,6 +864,65 @@ export interface paths {
          * @description 只在同一文件夹内移动；目标已存在返回 409 `path_conflict`，不覆盖。不能移动文件夹根，也不能移到自身之下。
          */
         post: operations["moveProjectContextFolderEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/local-directories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 项目的本机目录清单（对项目内所有 Agent 生效，含任务内的实例）
+         * @description 每项带服务端读取时的 status。从未保存过的项目返回 revision 0 与空清单。
+         *     本机目录是“额外挂载”：Agent 自己的文件夹、任务复制与回收站都不变；Pi 不在沙箱里，清单是告知与管理，不是权限隔离，
+         *     Agent（含任务内的实例）对这些目录有完整读写权限，改动直接落在用户的真实文件上。
+         */
+        get: operations["getProjectLocalDirectories"];
+        /**
+         * 整体替换项目的本机目录清单
+         * @description `expectedRevision` 必须等于当前 revision（从未保存过为 0），否则 412 `precondition_failed`；成功后 revision 加一。
+         *     校验规则见 `LocalDirectoryInput`；校验失败返回 422 `validation_failed`，字段错误的 field 形如 `directories[2].path`、
+         *     `directories[2].note`，条目过多时为 `directories`。目录不存在或不是目录不拒绝保存，响应里的 status 标出。
+         *     清单变化后，相关 Agent 的 Pi 在下一次派发时按新清单重启（不打断进行中的回复）。
+         */
+        put: operations["putProjectLocalDirectories"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agentId}/local-directories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Agent 自己的本机目录清单，以及继承自项目的条目
+         * @description `directories` 是 Agent 自己的（可编辑），`inherited` 是所属项目的（只读，与项目接口返回的相同）；平台 Agent 没有项目，
+         *     `projectId` 为 null、`inherited` 为空，自己的清单照常可用。生效时项目的在前、Agent 自己的在后，同一路径只算一次。
+         *     常态 Agent 的清单同样用于它在任务中的实例。从未保存过时 revision 为 0。
+         */
+        get: operations["getAgentLocalDirectories"];
+        /**
+         * 整体替换 Agent 自己的本机目录清单
+         * @description 规则与 `putProjectLocalDirectories` 相同，只替换 `directories`；响应同 GET（含 inherited）。
+         */
+        put: operations["putAgentLocalDirectories"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1109,6 +1247,9 @@ export interface paths {
          * @description 以 `/` 开头且不带图片的消息先匹配平台内置命令 `/session`、`/new`、`/compact [instructions]`、`/reload`、`/copy`、`/export [html|jsonl]`、`/resume [完整ID]`；
          *     未匹配时交给插件 `console.command`。命令被认领时不作为普通消息保存，返回 200 ConsoleCommandResult；
          *     其余消息经修改类 Hook `message.before_enqueue`，插件可以改写正文。
+         *     以 `/pi:<name>` 开头的消息是交给 Pi 的命令（plugins/SPEC.md §14）：不给插件认领，照原文保存与显示，执行时发给 Pi 的是 `/<name>` 加其余原文，
+         *     不加运行 ID 与平台通知；带图片时图片照常交给 Pi（Pi 执行扩展命令时不用图片，技能命令与提示模板展开后随提示交给模型）。
+         *     结果见执行的 `piCommand`。可用的命令见 `GET /agents/{agentId}/commands`。任务节点的消息不做这个改写。
          */
         post: operations["sendMessage"];
         delete?: never;
@@ -1545,6 +1686,10 @@ export interface paths {
          *     git 与 npm 来源在这一步执行 `npm ci --ignore-scripts --omit=dev --omit=peer`（没有锁文件时 `npm install`，参数相同），失败返回 422 `plugin_source_failed`；
          *     不装 peer 依赖，插件的运行依赖要用的 peer 依赖须直接列进插件自己的 `dependencies`。
          *     本地目录来源原地使用，不安装依赖、不修改。预览过期或不存在返回 404。
+         *     插件带 Pi 扩展（`pi.extensions`）时，依赖装好后用随包 Pi 加载这些扩展，读出它们注册的模型提供方（plugins/SPEC.md §13；
+         *     会运行插件代码，所以在这一步、而不是预览时做），结果见插件详情的 `providers`。读取失败不阻止安装，原因见 `providersError`。
+         *     注册了 OAuth 登录、与 Pi 目录（内置与 models.json）不同 id 的提供方并入模型目录（`listModelProviders` 里 source 为 plugin）；
+         *     与另一个已安装插件并入目录的提供方同 id 时返回 409 `name_conflict`，不安装。
          */
         post: operations["installPlugin"];
         delete?: never;
@@ -1616,6 +1761,8 @@ export interface paths {
          * 卸载插件
          * @description 宿主内卸载平台侧，删除插件的配置、启用、授权、账号、状态、事件投递与令牌，删除各版本的安装目录（本地目录来源不删）。
          *     数据目录 `<work root>/platform/plugins/<id>/data/` 只在 `deleteData=true` 时删除。已经启动的 Pi 继续使用已加载的 Agent 侧，直到下次启动。
+         *     插件注册的模型提供方从模型目录里消失；它们在各项目里的订阅账号默认保留（重新安装后恢复），`deleteData=true` 时一并删除
+         *     （与删除账号相同：未结束任务绑定的版本保留到任务结束，之后状态目录由清理器删除）。
          */
         delete: operations["uninstallPlugin"];
         options?: never;
@@ -1664,7 +1811,7 @@ export interface paths {
         /**
          * 按预览安装插件的新版本
          * @description 预览须是同一插件 id。新版本装到自己的目录，宿主内先卸载旧版本再加载新版本；任务里已经启动的 Pi 继续用旧文件直到自然重启。
-         *     版本号与已装版本相同但内容不同时返回 409 `plugin_version_conflict`。其余规则同安装。
+         *     版本号与已装版本相同但内容不同时返回 409 `plugin_version_conflict`。其余规则同安装（包括重新读取模型提供方与同 id 的 409）。
          */
         post: operations["updatePlugin"];
         delete?: never;
@@ -1986,6 +2133,28 @@ export interface paths {
         };
         /** Agent 配置页插件段：每个已安装插件对这个 Agent 是否可授权、是否已授权及选用的账号 */
         get: operations["listAgentPlugins"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agentId}/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 对话页 "/" 菜单可用的 Pi 命令
+         * @description Agent 上次启动 Pi 时（Pi RPC get_commands）读到的扩展命令、提示模板与技能命令（plugins/SPEC.md §14）。平台不为列命令专门启动 Pi：
+         *     从没启动过时 capturedAt 为 null、列表为空；授权的插件变了之后，要等 Pi 下次启动才更新。控制台显示与补全时写成 `/pi:<name>`。
+         *     插件平台侧认领的 console.command 是认领型 Hook，没有可列举的命令名，不在这里列出；也没有平台内置命令。
+         */
+        get: operations["listAgentCommands"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2478,6 +2647,28 @@ export interface paths {
          * @description 初次连接或无效位置发snapshot，原子快照对应事件ID后仅发之后事件。有效Last-Event-ID从其后续传，ID为十进制持久化事件序号。节点question变化发node.updated；任何任务/cleanup变化发task.updated，客户端据此重新取详情；message.created按ID全文upsert，清理失败也发task.updated。 task.inbox.updated 为按 Inbox message.id 全文 upsert 的持久关联记录，PG 事件 ID 续传；部分分页不作删除清单。 task.node.queue.updated 为某节点排队列表（逐条消息）的全文替换（结构同 GET …/nodes/{nodeRunId}/queue），仅在列表变化时推送。
          */
         get: operations["streamTaskEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/tasks/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 项目里未结束的任务按状态计数
+         * @description 统计该项目未结束（ended_at 为空）的任务，按 status 分组；没有该状态的任务时为 0。已结束的 completed、cancelled 不计入。
+         *     只读；供左侧栏“任务”旁的徽标使用，可在收到 `GET /projects/{projectId}/tasks/events` 的失效通知后重新读取。
+         *     项目不存在或已删除时返回 404 `not_found`（与 `listProjectTasks` 相同）。
+         */
+        get: operations["countProjectTasks"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3074,9 +3265,14 @@ export interface components {
          *     - internal_error：服务端内部错误（如数据库暂时不可用），这次回复未能执行
          *     - plugin_blocked：插件拒绝本轮操作或运行条件已变化
          *     - image_unsupported：本轮实际模型不支持图片，未发送图片或切换模型
+         *     - runtime_unavailable：Claude Code 运行时在本机不可用（登录 shell 的 PATH 里找不到 claude，或读不出它的版本）
+         *     - runtime_login_required：本机的 Claude Code 没有登录，需要用户在本机登录后再试
+         *     - runtime_start_failed：Claude Code 在第一轮开始前退出或启动超时（消息带版本号与错误输出末尾）
+         *     - runtime_exited：Claude Code 进程在这一轮中意外退出
+         *     - runtime_error：Claude Code 报告这一轮以错误结束（如用量额度用尽）
          * @enum {string}
          */
-        RunErrorCode: "credential_unavailable" | "cli_install_failed" | "workspace_sync_failed" | "session_missing" | "pi_start_failed" | "pi_exited" | "pi_error" | "internal_error" | "plugin_blocked" | "image_unsupported";
+        RunErrorCode: "credential_unavailable" | "cli_install_failed" | "workspace_sync_failed" | "session_missing" | "pi_start_failed" | "pi_exited" | "pi_error" | "internal_error" | "plugin_blocked" | "image_unsupported" | "runtime_unavailable" | "runtime_login_required" | "runtime_start_failed" | "runtime_exited" | "runtime_error";
         FieldError: {
             field: string;
             message: string;
@@ -3178,19 +3374,80 @@ export interface components {
         };
         ModelProvider: {
             id: string;
+            /** @description 提供方自己给的显示名；目前只有插件提供方有（扩展原文，按纯文本显示），其余为 null。 */
+            name: string | null;
             /**
-             * @description builtin 为纯内置目录；config 表示该 Provider 有原生 models.json 配置或覆盖。
+             * @description builtin 为纯内置目录；config 表示该 Provider 有原生 models.json 配置或覆盖；
+             *     plugin 为已安装插件的 Pi 扩展注册的提供方（plugins/SPEC.md §13），只用于项目 Agent：
+             *     选它须项目已启用该插件、Agent 已获授权（否则修改 Agent 返回 422，新建 Agent 时不能直接选），账号用项目里登录的订阅账号。
+             *     local_cli 为用户本机安装的 CLI 提供的模型（目前只有 claude-code：本机的 Claude Code），用 CLI 自己在本机的登录，
+             *     不需要账号，平台不保存令牌；项目 Agent 与平台 Agent 都能选。模型 id 是 Claude Code 的别名（fable、opus、sonnet、haiku），
+             *     思考等级即 Claude Code 的 effort（low 到 max）。本机是否装了、是否登录见 GET /runtimes，没装时照常可选，运行时以 runtime_* 失败。
              * @enum {string}
              */
-            source: "builtin" | "config";
+            source: "builtin" | "config" | "plugin" | "local_cli";
+            /** @description 选这个提供方的 Agent 由哪个运行时执行。 */
+            runtime: components["schemas"]["AgentRuntime"];
+            /** @description source 为 plugin 时是注册它的插件 id，其余为 null。 */
+            pluginId: string | null;
+            /** @description source 为 plugin 时是注册它的插件的显示名（清单原样），其余为 null。 */
+            pluginDisplayName: components["schemas"]["LocalizedText"] | null;
+            /**
+             * @description 只在带 agentId 查询、且 source 为 plugin 时可能非空：这个 Agent 现在不能用它的原因。
+             *     platform_agent：平台 Agent，插件提供方只给项目 Agent 用；plugin_not_enabled：Agent 所在项目没有启用该插件；
+             *     agent_not_granted：插件没有授权给这个 Agent；plugins_disabled：全局停用了全部插件（不挡保存，但 Pi 启动会失败）。
+             *     前三种情形下修改 Agent 选它返回 422（validation_failed，字段 model.provider，消息说明是哪一种）。
+             *     插件被卸载后它的提供方从目录里消失（已选它的 Agent 启动时明确失败）。
+             * @enum {string|null}
+             */
+            unavailableReason: "platform_agent" | "plugin_not_enabled" | "agent_not_granted" | "plugins_disabled" | null;
             /**
              * @deprecated
              * @description 旧环境凭证兼容诊断元数据，不能作为模型凭证录入字段。
              */
             apiKeyEnvVars: string[];
             modelCount: number;
-            /** @description 平台支持的显式认证方式；OAuth登录仅控制台，当前支持openai-codex。 */
+            /** @description 平台支持的显式认证方式；OAuth登录仅控制台，当前支持openai-codex与插件提供方（插件提供方只有oauth）。 */
             authMethods: components["schemas"]["ModelAuthMethod"][];
+        };
+        /**
+         * @description 执行 Agent 的运行时：pi 为随包的 Pi；claude-code 为用户本机安装、未经修改的 Claude Code（从登录 shell 的 PATH 找 claude），
+         *     用它在本机自己的登录，平台不读取、不保存它的凭证。运行时由模型提供方决定，不单独设置：model.provider 为 claude-code 时是
+         *     claude-code，其余为 pi。Claude Code 下没有 Pi 扩展（/pi: 命令、扩展对话、插件提供方），插件的 Skill 与 MCP 服务器照常。
+         * @enum {string}
+         */
+        AgentRuntime: "pi" | "claude-code";
+        RuntimeList: {
+            runtimes: components["schemas"]["RuntimeStatus"][];
+        };
+        RuntimeStatus: {
+            id: components["schemas"]["AgentRuntime"];
+            /** @description claude-code 为找到了 claude 且读得出版本（是否登录另见 login） */
+            available: boolean;
+            /** @description pi 为随包 Pi 的版本；claude-code 为 claude --version 的版本号 */
+            version: string | null;
+            /** @description claude 解析符号链接后的真实路径；pi 与没找到时为 null */
+            binaryPath: string | null;
+            /**
+             * @description not_found：登录 shell 的 PATH 里找不到 claude；version_failed：运行 claude --version 失败
+             * @enum {string|null}
+             */
+            unavailableReason: "not_found" | "version_failed" | null;
+            /** @description 只有 claude-code 且找到了 claude 时有；pi 与没找到时为 null */
+            login: components["schemas"]["RuntimeLogin"] | null;
+            /** Format: date-time */
+            checkedAt: string;
+        };
+        RuntimeLogin: {
+            /**
+             * @description 来自 claude auth status；运行不了或输出无法识别时为 unknown
+             * @enum {string}
+             */
+            state: "logged_in" | "logged_out" | "unknown";
+            /** @description 登录方式，如 claude.ai */
+            authMethod: string | null;
+            /** @description 订阅类型，如 max */
+            subscriptionType: string | null;
         };
         ModelList: {
             providerId: string;
@@ -3269,6 +3526,8 @@ export interface components {
              */
             address: string | null;
             model: components["schemas"]["ModelRef"];
+            /** @description 由 model.provider 派生，只读。 */
+            runtime: components["schemas"]["AgentRuntime"];
             /** @description 仅openai-codex可设非null值；null为标准。创建缺省同null，更新缺省保留、null重置。常态下一轮生效，新任务冻结具体值；旧快照缺省保持原行为。 */
             serviceTier?: components["schemas"]["CodexServiceTier"] | null;
             /** @description null为当前模型官方clamp(medium)默认；创建缺省同null，更新缺省保留原值，显式等级须由该模型支持。常态下一轮生效，新任务冻结实际解析值，旧任务不重写。 */
@@ -3359,6 +3618,10 @@ export interface components {
             /** Format: int64 */
             expectedPromptVersion: number;
         };
+        /**
+         * @description model.provider 在 claude-code 与其他提供方之间改动即切换运行时（见 AgentRuntime）：新运行时从新会话开始，会话序号加一
+         *     （会话重置事件的 reason 为 runtime_changed），这个会话里的 sleep 取消，旧会话不迁移也不删除；Agent 有进行中的回复时返回 409 agent_not_idle。
+         */
         AgentUpdate: {
             name?: components["schemas"]["EntityName"];
             model?: components["schemas"]["ModelRef"];
@@ -3391,6 +3654,8 @@ export interface components {
              */
             address: string | null;
             model: components["schemas"]["ModelRef"];
+            /** @description 由 model.provider 派生，只读。 */
+            runtime: components["schemas"]["AgentRuntime"];
             /** @description 仅openai-codex可设非null值；null为标准。创建缺省同null，更新缺省保留、null重置。常态下一轮生效，新任务冻结具体值；旧快照缺省保持原行为。 */
             serviceTier?: components["schemas"]["CodexServiceTier"] | null;
             /** @description null为当前模型官方clamp(medium)默认；创建缺省同null，更新缺省保留原值，显式等级须由该模型支持。常态下一轮生效，新任务冻结实际解析值，旧任务不重写。 */
@@ -3454,6 +3719,74 @@ export interface components {
             /** @description Agent 文件夹内的目标子目录，必须不存在或是空目录 */
             path: string;
         };
+        LocalModeSettings: {
+            /** @description 绑定本机目录 */
+            directories: boolean;
+            /** @description “从 Git 拉取”用本机的 git 身份 */
+            git: boolean;
+            /** @description 执行 PATH 之后接上用户的 PATH */
+            cli: boolean;
+            /** @description Pi 的执行环境沿用用户真实的 HOME，本机工具的登录可用（默认关闭） */
+            logins: boolean;
+        };
+        LocalModeSettingsPatch: {
+            directories?: boolean;
+            git?: boolean;
+            cli?: boolean;
+            logins?: boolean;
+        };
+        LocalDirectoryInput: {
+            /**
+             * @description 本机目录的绝对路径，必须是规范形式（Go 的 filepath.Clean 不改变它）：不含 `.`、`..` 段、重复分隔符或结尾分隔符。
+             *     macOS/Linux 以 `/` 开头；Windows 带盘符（`C:\Users\me\code`）或 UNC（`\\server\share\dir`），分隔符用 `\`（`C:/x` 视为不规范）。
+             *     不得含控制字符（含换行、制表符），最长 4096 字节；同一清单内不得重复（Windows 上不分大小写）。
+             */
+            path: string;
+            /** @description 可选备注，会随路径写进系统提示；去掉首尾空白后为空视同 null。最长 200 字符，不得含控制字符。 */
+            note?: string | null;
+        };
+        LocalDirectoriesPut: {
+            /**
+             * Format: int64
+             * @description 读到的 revision；从未保存过为 0
+             */
+            expectedRevision: number;
+            directories: components["schemas"]["LocalDirectoryInput"][];
+        };
+        LocalDirectory: {
+            path: string;
+            note: string | null;
+            /**
+             * @description 服务端读取时（读与保存的响应里）对该路径 stat 的结果，跟随符号链接：
+             *     - ok：是目录；只有 ok 的条目会写进 Agent 的系统提示
+             *     - missing：不存在
+             *     - not_directory：存在但不是目录
+             *     - inaccessible：无法读取其状态（如没有权限）
+             * @enum {string}
+             */
+            status: "ok" | "missing" | "not_directory" | "inaccessible";
+        };
+        ProjectLocalDirectories: {
+            /** Format: int64 */
+            revision: number;
+            directories: components["schemas"]["LocalDirectory"][];
+        };
+        AgentLocalDirectories: {
+            /**
+             * Format: int64
+             * @description Agent 自己清单的修订号
+             */
+            revision: number;
+            /** @description Agent 自己的条目 */
+            directories: components["schemas"]["LocalDirectory"][];
+            /**
+             * Format: uuid
+             * @description 所属项目；平台 Agent 为 null
+             */
+            projectId: string | null;
+            /** @description 继承自所属项目的条目（只读）；平台 Agent 为空 */
+            inherited: components["schemas"]["LocalDirectory"][];
+        };
         FolderGitPullList: {
             /** @description 新的在前 */
             pulls: components["schemas"]["FolderGitPull"][];
@@ -3472,11 +3805,14 @@ export interface components {
              * @description - target_exists：开始时目标已不是空目录
              *     - branch_not_found：分支不存在
              *     - timeout：超过克隆时限
-             *     - clone_failed：其他失败（地址无效、无权限、网络等），详见 errorMessage
+             *     - auth_failed：认证失败（HTTPS 没有可用凭证或凭证被拒、SSH 公钥被拒等），errorMessage 带 git 输出
+             *     - host_key_unverified：SSH 主机密钥未经确认（known_hosts 里没有这台主机或指纹已变）；拉取不会替用户确认，
+             *       须在本机终端先连一次该主机核对指纹（例如 `ssh -T git@主机`）
+             *     - clone_failed：其他失败（地址无效、仓库不存在、网络等），详见 errorMessage
              *     - server_restart：服务重启时仍在进行，已中止
              * @enum {string|null}
              */
-            errorCode: "target_exists" | "branch_not_found" | "timeout" | "clone_failed" | "server_restart" | null;
+            errorCode: "target_exists" | "branch_not_found" | "timeout" | "auth_failed" | "host_key_unverified" | "clone_failed" | "server_restart" | null;
             /** @description git 输出的末尾（最多 2000 字符）或失败原因；成功时为 null */
             errorMessage: string | null;
             /** Format: date-time */
@@ -3630,6 +3966,29 @@ export interface components {
              * @description 触发本轮平台提醒的原 Inbox 消息 ID；无触发消息的历史及普通来源省略
              */
             triggerInboxMessageId?: string;
+            /**
+             * @description 这一轮交给 Pi 的命令（plugins/SPEC.md §14）：对话页消息以 `/pi:<name>` 开头时，服务端发给 Pi 的是 `/<name>`（其余原样），
+             *     消息本身照原文保存与显示。handled 为 true 表示 Pi 直接处理了命令（扩展命令）、没有交给模型，这一轮以 completed 结束、没有助手回复
+             *     （助手消息正文为空，可显示“命令已执行，没有回复”；命令里的通知与状态照常记为运行事件）；false 表示命令展开成了普通提示（技能命令、提示模板）
+             *     或 Pi 不认识这个命令、当作普通文字交给了模型。不是命令的执行省略此字段。
+             */
+            piCommand?: {
+                /** @description 命令名，不带 "/"（技能命令为 skill:<名称>） */
+                name: string;
+                handled: boolean;
+                /**
+                 * @description handled 为 true 时，命令执行期间扩展用 ctx.ui.notify 给出的消息（扩展命令的输出多半在这里），按先后顺序，随执行记录保存，
+                 *     重新打开历史与执行结束的 SSE 里都带着；message 是扩展原文，按纯文本显示，保留换行与空格。setStatus 等状态不在这里。
+                 *     handled 为 false 时为空数组（照常有模型回复）。最多 50 条、message 合计 16 KiB，超出的截断，truncated 为 true。
+                 */
+                notices: {
+                    /** @enum {string} */
+                    level: "info" | "warning" | "error";
+                    message: string;
+                }[];
+                /** @description notices 是否因超过上限被截断 */
+                truncated: boolean;
+            };
             /**
              * Format: uuid
              * @description 本轮有效承接的 sleep；普通历史可省略或为 null
@@ -4193,7 +4552,7 @@ export interface components {
             entries: components["schemas"]["TimelineEntry"][];
             usage: components["schemas"]["UsageTotals"];
         };
-        TimelineEntry: components["schemas"]["TimelineSleepEntry"] | components["schemas"]["TimelineQueued"] | components["schemas"]["TimelinePromoted"] | components["schemas"]["TimelineMessageCancelled"] | components["schemas"]["TimelineMarker"] | components["schemas"]["TimelinePhase"] | components["schemas"]["TimelineCliInstall"] | components["schemas"]["TimelineWorkspaceSync"] | components["schemas"]["TimelinePiStarted"] | components["schemas"]["TimelinePiReused"] | components["schemas"]["TimelinePiStopped"] | components["schemas"]["TimelinePiExited"] | components["schemas"]["TimelineTool"] | components["schemas"]["TimelineModelCall"] | components["schemas"]["TimelineModelRetryStarted"] | components["schemas"]["TimelineModelRetryEnded"] | components["schemas"]["TimelineCompaction"] | components["schemas"]["TimelineAbortRequested"] | components["schemas"]["TimelineEnded"] | components["schemas"]["TimelineSessionMissing"] | components["schemas"]["TimelineExtensionUI"];
+        TimelineEntry: components["schemas"]["TimelineSleepEntry"] | components["schemas"]["TimelineQueued"] | components["schemas"]["TimelinePromoted"] | components["schemas"]["TimelineMessageCancelled"] | components["schemas"]["TimelineMarker"] | components["schemas"]["TimelinePhase"] | components["schemas"]["TimelineCliInstall"] | components["schemas"]["TimelineWorkspaceSync"] | components["schemas"]["TimelinePiStarted"] | components["schemas"]["TimelinePiReused"] | components["schemas"]["TimelinePiStopped"] | components["schemas"]["TimelinePiExited"] | components["schemas"]["TimelineTool"] | components["schemas"]["TimelineModelCall"] | components["schemas"]["TimelineModelRetryStarted"] | components["schemas"]["TimelineModelRetryEnded"] | components["schemas"]["TimelineCompaction"] | components["schemas"]["TimelineAbortRequested"] | components["schemas"]["TimelineEnded"] | components["schemas"]["TimelineSessionMissing"] | components["schemas"]["TimelineExtensionUI"] | components["schemas"]["TimelineModelRateLimit"];
         /**
          * @description Agent 侧的扩展经 ctx.ui 发来的请求（Pi RPC 的 extension_ui_request）。notify 是通知（level 为 info、warning、error），
          *     setStatus 设置或清除一条状态（message 为空时清除）。select、confirm、input、editor 是对话，message 为对话标题：
@@ -4359,6 +4718,8 @@ export interface components {
              */
             reason: "no_process" | "config_changed";
             configVersion: number;
+            /** @description 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。 */
+            runtime?: components["schemas"]["AgentRuntime"];
         };
         /** @description 复用了已运行的 Pi 进程 */
         TimelinePiReused: {
@@ -4372,6 +4733,8 @@ export interface components {
             pid: number;
             /** Format: date-time */
             processStartedAt: string | null;
+            /** @description 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。 */
+            runtime?: components["schemas"]["AgentRuntime"];
         };
         /** @description 平台停止了 Pi 进程 */
         TimelinePiStopped: {
@@ -4386,6 +4749,8 @@ export interface components {
             /** @enum {string} */
             reason: "idle_timeout" | "config_changed" | "evicted" | "released" | "fork_snapshot" | "shutdown" | "abort_timeout";
             uptimeMs: number;
+            /** @description 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。 */
+            runtime?: components["schemas"]["AgentRuntime"];
         };
         /** @description Pi 进程意外退出 */
         TimelinePiExited: {
@@ -4401,6 +4766,19 @@ export interface components {
             exit: string;
             /** @description Pi 错误输出的末尾片段（有长度上限） */
             stderrTail: string;
+            /** @description 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。 */
+            runtime?: components["schemas"]["AgentRuntime"];
+        };
+        /** @description Claude Code 报告的订阅额度状态（rate_limit_event），info 原样（如 status、rateLimitType、resetsAt）；只记录，不影响执行。 */
+        TimelineModelRateLimit: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "model_rate_limit";
+            /** Format: date-time */
+            at: string;
+            info: Record<string, never>;
         };
         /** @description 一次工具调用，at 为开始时间；仅 bash 可含有界、脱敏后的 command；不含其他参数与输出 */
         TimelineTool: {
@@ -5241,6 +5619,16 @@ export interface components {
             /** @enum {string} */
             cleanup: "none" | "pending" | "archived" | "failed";
         };
+        TaskCounts: {
+            /** @description 准备中 */
+            preparing: number;
+            /** @description 运行中 */
+            running: number;
+            /** @description 等待中（sleep、提问等） */
+            waiting: number;
+            /** @description 已阻塞 */
+            blocked: number;
+        };
         TaskPage: {
             tasks: components["schemas"]["TaskSummary"][];
             nextCursor: string | null;
@@ -5537,6 +5925,14 @@ export interface components {
             resolvedVersionId: string | null;
             status: components["schemas"]["CredentialSelectionStatus"];
             candidates: components["schemas"]["ProjectCredentialAccount"][];
+            /**
+             * @description 只对 purpose=model、提供方来自插件且声明了随账号走的状态路径时给出（plugins/SPEC.md §13），其余省略。
+             *     开着“用本机的登录状态”时，这个提供方用的是本机主目录里该扩展自己的登录，不是项目账号：
+             *     active 表示本机有这份登录；missing 表示本机没有，Pi 启动前会以 credential_unavailable 失败（关闭开关或在本机登录后再试）。
+             *     开关关着时省略。
+             * @enum {string}
+             */
+            localLogin?: "active" | "missing";
         } | {
             purpose: components["schemas"]["ProjectCredentialPurpose"];
             provider: string | null;
@@ -5549,6 +5945,14 @@ export interface components {
             resolvedVersionId: string | null;
             status: components["schemas"]["CredentialSelectionStatus"];
             candidates: components["schemas"]["ProjectCredentialAccount"][];
+            /**
+             * @description 只对 purpose=model、提供方来自插件且声明了随账号走的状态路径时给出（plugins/SPEC.md §13），其余省略。
+             *     开着“用本机的登录状态”时，这个提供方用的是本机主目录里该扩展自己的登录，不是项目账号：
+             *     active 表示本机有这份登录；missing 表示本机没有，Pi 启动前会以 credential_unavailable 失败（关闭开关或在本机登录后再试）。
+             *     开关关着时省略。
+             * @enum {string}
+             */
+            localLogin?: "active" | "missing";
         } | {
             purpose: components["schemas"]["ProjectCredentialPurpose"];
             provider: string | null;
@@ -5561,6 +5965,14 @@ export interface components {
             /** @enum {string} */
             status: "not_configured";
             candidates: components["schemas"]["ProjectCredentialAccount"][];
+            /**
+             * @description 只对 purpose=model、提供方来自插件且声明了随账号走的状态路径时给出（plugins/SPEC.md §13），其余省略。
+             *     开着“用本机的登录状态”时，这个提供方用的是本机主目录里该扩展自己的登录，不是项目账号：
+             *     active 表示本机有这份登录；missing 表示本机没有，Pi 启动前会以 credential_unavailable 失败（关闭开关或在本机登录后再试）。
+             *     开关关着时省略。
+             * @enum {string}
+             */
+            localLogin?: "active" | "missing";
         };
         CredentialSelections: {
             /** Format: uuid */
@@ -5607,24 +6019,54 @@ export interface components {
             agents: components["schemas"]["CredentialImpactAgent"][];
         };
         ProjectModelAuthStart: {
-            /** @enum {string} */
-            provider: "openai-codex";
+            provider: components["schemas"]["ProjectModelLoginProvider"];
             name: string;
         } | {
-            /** @enum {string} */
-            provider: "openai-codex";
+            provider: components["schemas"]["ProjectModelLoginProvider"];
             /** Format: uuid */
             accountId: string;
             /** Format: int64 */
             expectedRevision: number;
+        };
+        /**
+         * @description openai-codex，或模型目录里 source 为 plugin、authMethods 含 oauth 的插件提供方（plugins/SPEC.md §13）。
+         *     插件提供方须在这个项目里启用了插件，否则开始登录返回 409 plugin_not_enabled；不在目录里返回 422。
+         *     插件提供方登录成功后账号的 authMethod 为 oauth；令牌与扩展的状态在服务端的状态目录里，不进数据库。
+         *     插件提供方登录的 errorCode：auth_failed（未完成）、auth_port_busy（扩展的本机回调端口被占用）、auth_timeout（超时，status=expired）、
+         *     extension_load_failed（插件扩展加载失败或没有注册这个提供方的登录）、plugin_unavailable（插件已卸载或停用）、
+         *     invalid_authorization_url（扩展给出的地址不合规）、helper_unavailable、server_restarted；用户取消为 status=cancelled、errorCode 为 null。
+         */
+        ProjectModelLoginProvider: string;
+        ProjectModelLoginDeviceCode: {
+            userCode: string;
+            verificationUri: string;
+            /** Format: date-time */
+            expiresAt: string | null;
+        };
+        ProjectModelLoginPrompt: {
+            id: string;
+            /**
+             * @description select 从 options 里选一个 id；text 填文字；manual_code 是浏览器回调到不了时手工粘贴的回调地址或授权码（message 可能为空）。
+             * @enum {string}
+             */
+            kind: "select" | "text" | "manual_code";
+            message: string;
+            options: {
+                id: string;
+                label: string;
+            }[];
+        };
+        ProjectModelLoginInput: {
+            promptId: string;
+            /** @description 回答；只在内存里转给登录辅助进程，不保存、不记日志 */
+            value: string;
         };
         ProjectModelAuthOperation: {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
             projectId: string;
-            /** @enum {string} */
-            provider: "openai-codex";
+            provider: components["schemas"]["ProjectModelLoginProvider"];
             targetAccountId: string | null;
             targetRevision: number | null;
             name: string | null;
@@ -5636,9 +6078,14 @@ export interface components {
             /** Format: date-time */
             expiresAt: string;
             completedAt: string | null;
+            /** @description Codex 只会是 https://auth.openai.com/oauth/authorize?…；插件提供方是扩展给的 https 地址，服务端已校验（无用户名密码与 fragment、不含授权码或令牌），控制台显示目标主机名。 */
             authorizationUrl: string | null;
             errorCode: string | null;
             errorMessage: string | null;
+            /** @description 设备码登录（只有插件提供方）：打开 verificationUri 输入 userCode；地址已由服务端校验（https、无用户名密码与 fragment、不含秘密）。终态为 null。 */
+            deviceCode: components["schemas"]["ProjectModelLoginDeviceCode"] | null;
+            /** @description 登录中等人回答的问题（只有插件提供方）；用 answerProjectModelAuthLogin 回答。message 与 options 是扩展原文，服务端已限长，按纯文本显示。终态为 null。 */
+            prompt: components["schemas"]["ProjectModelLoginPrompt"] | null;
         };
         ProjectModelAuthState: {
             operation: components["schemas"]["ProjectModelAuthOperation"];
@@ -6779,6 +7226,69 @@ export interface components {
             versions: components["schemas"]["PluginVersion"][];
             installDir: string;
             dataDir: string;
+            /** @description 当前版本的 Pi 扩展注册的模型提供方（安装或更新时读出）；没有 Pi 扩展或没有注册时为空 */
+            providers: components["schemas"]["PluginModelProvider"][];
+            /** @description 读取时加载失败的扩展文件与原因（扩展原文，已截断，按纯文本显示） */
+            providerErrors: components["schemas"]["PluginProviderCaptureError"][];
+            /** @description 整次读取失败的原因（如 Pi 不可用、超时）；为空表示读取成功或插件没有 Pi 扩展 */
+            providersError: string | null;
+            providerState: components["schemas"]["PluginProviderState"];
+        };
+        /**
+         * @description 插件注册的模型提供方有哪些状态随项目账号走（plugins/SPEC.md §13）：键是提供方 id，paths 是扩展在 HOME 下保存登录与状态的相对路径
+         *     （/ 分隔，1 到 8 个，不含 ..，不在 .loop-now 下）。启动 Pi 前这些路径链接到账号的状态目录，同项目多个 Agent 共用一份。
+         *     插件详情里是当前版本生效的声明：从市场安装时取市场条目的 providerState，否则取包自己的 loopNow.providerState；都没有时为空对象，
+         *     这时只有 Pi 的认证条目随账号走。只读展示。
+         */
+        PluginProviderState: {
+            [key: string]: {
+                paths: string[];
+            };
+        };
+        AgentCommandList: {
+            /**
+             * Format: date-time
+             * @description 读到这份列表的时间（Pi 启动时）；从没启动过为 null
+             */
+            capturedAt: string | null;
+            commands: components["schemas"]["AgentCommand"][];
+        };
+        AgentCommand: {
+            /** @description 命令名，不带 "/"；技能命令为 skill:<名称> */
+            name: string;
+            /**
+             * @description 目前只有 pi（交给 Pi 执行，发送时写成 /pi:<name>）
+             * @enum {string}
+             */
+            source: "pi";
+            /** @description Pi 给的来源（原样）：extension 扩展命令、prompt 提示模板、skill 技能命令 */
+            piSource: string;
+            /** @description 命令自己的说明（扩展原文，按纯文本显示） */
+            description: string | null;
+            /** @description 命令来自哪个已安装插件（按来源文件所在的安装目录）；平台自己的或判断不出时为 null */
+            pluginId: string | null;
+            pluginDisplayName: components["schemas"]["LocalizedText"] | null;
+        };
+        PluginModelProvider: {
+            id: string;
+            /** @description 扩展给的显示名（不可信文本，按纯文本显示） */
+            name: string;
+            /** @description 注册它的扩展文件，相对插件目录 */
+            extension: string;
+            /** @description 是否注册了 OAuth 订阅登录 */
+            oauth: boolean;
+            /** @description 与 Pi 内置提供方同 id（扩展覆盖内置提供方的设置），不进模型目录 */
+            overridesBuiltin: boolean;
+            /** @description 此刻在模型目录里、归这个插件；只有带 OAuth、与内置和 models.json 都不同 id、注册无误的才会进 */
+            inCatalog: boolean;
+            /** @description 注册时出错的原因（扩展原文，已截断） */
+            error: string | null;
+            modelCount: number;
+        };
+        PluginProviderCaptureError: {
+            /** @description 扩展文件，相对插件目录 */
+            path: string;
+            error: string;
         };
         PluginConfig: {
             /** @description 非 secret 字段 */
@@ -6914,6 +7424,7 @@ export interface components {
             url: string | null;
         };
         PluginMarketEntry: {
+            providerState: components["schemas"]["PluginProviderState"];
             id: string;
             displayName: components["schemas"]["LocalizedText"];
             description: components["schemas"]["LocalizedText"];
@@ -8136,7 +8647,7 @@ export interface operations {
     listProjectModelAuthOperations: {
         parameters: {
             query?: {
-                provider?: "openai-codex";
+                provider?: string;
                 accountId?: string;
             };
             header?: never;
@@ -8341,6 +8852,51 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            503: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    answerProjectModelAuthLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectModelLoginInput"];
+            };
+        };
+        responses: {
+            /** @description 回答已交给登录；prompt 清空，扩展的下一步可能带来新的 prompt 或地址 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectModelAuthState"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["ValidationFailed"];
             /** @description 服务端错误或组件暂不可用；固定安全消息 */
             503: {
                 headers: {
@@ -8865,7 +9421,10 @@ export interface operations {
     };
     listModelProviders: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 给插件提供方标出这个 Agent 能否用；Agent 不存在返回 404 */
+                agentId?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8885,6 +9444,8 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
         };
     };
     getModelSettings: {
@@ -8939,6 +9500,87 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getLocalModeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前开关 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalModeSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateLocalModeSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalModeSettingsPatch"];
+            };
+        };
+        responses: {
+            /** @description 修改后的全部开关 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalModeSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    listRuntimes: {
+        parameters: {
+            query?: {
+                /** @description 为 true 时不用缓存，重新检查 */
+                refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 各运行时的状态，pi 在前 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuntimeList"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             422: components["responses"]["ValidationFailed"];
         };
     };
@@ -9991,6 +10633,126 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getProjectLocalDirectories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 清单 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectLocalDirectories"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putProjectLocalDirectories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalDirectoriesPut"];
+            };
+        };
+        responses: {
+            /** @description 保存后的清单（含 status） */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectLocalDirectories"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            412: components["responses"]["PreconditionFailed"];
+            422: components["responses"]["ValidationFailed"];
+        };
+    };
+    getAgentLocalDirectories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 清单 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentLocalDirectories"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putAgentLocalDirectories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentId: components["parameters"]["AgentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalDirectoriesPut"];
+            };
+        };
+        responses: {
+            /** @description 保存后的清单（含 status） */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentLocalDirectories"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            412: components["responses"]["PreconditionFailed"];
             422: components["responses"]["ValidationFailed"];
         };
     };
@@ -12235,6 +12997,33 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    listAgentCommands: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 命令列表 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentCommandList"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     putAgentPlugin: {
         parameters: {
             query?: never;
@@ -13796,6 +14585,33 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    countProjectTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 计数 */
+            200: {
+                headers: {
+                    "Loop-Now-Request-Id": components["headers"]["RequestId"];
+                    "Loop-Now-Version": components["headers"]["Version"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskCounts"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     streamProjectTaskEvents: {

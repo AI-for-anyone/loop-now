@@ -13,6 +13,8 @@ import { RunRecord } from './RunRecord'
 import { FailureNote, RunStatusBadge, ToolList } from './RunStatus'
 import { runStartedAt } from './time'
 import { InboxReminder } from './InboxReminder'
+import { MessageRuler } from './MessageRuler'
+import { turnPreview, useVisibleTurns } from './ruler'
 
 function UserBubble({ message, run }: { message: Schemas['Message']; run: Schemas['Run'] }) {
   return <UserChatBubble images={<MessageImages images={message.images} />} text={message.text} time={t.chat.time(message.createdAt)} interrupted={run.whenBusy === 'interrupt'} wakeSleepId={run.wakeSleepId} />
@@ -36,6 +38,9 @@ function ReplyBubble({ turn, agent, located }: { turn: Turn; agent: Pick<Schemas
   const { run, reply } = turn
   const ended = run.status === 'completed' || run.status === 'failed' || run.status === 'interrupted'
   const streaming = reply?.live === true && run.status === 'running'
+  // /pi: 扩展命令由 Pi 直接处理、没有交给模型：这一轮正常结束、没有助手回复。命令的输出是扩展 notify 的消息，
+  // 在回复的位置按顺序显示；没有消息（含升级前跑完的旧执行）才说明一句"命令已执行，没有回复"。
+  const command = run.piCommand?.handled === true && run.status === 'completed' && (!reply || reply.text === '') ? run.piCommand : null
   return (
     <AgentChatReply agent={agent} metadata={<>{ended && <span>{t.chat.time(run.endedAt ?? runStartedAt(run))}</span>}<RunStatusBadge run={run} /></>}>
       <FailureNote run={run} />
@@ -43,6 +48,12 @@ function ReplyBubble({ turn, agent, located }: { turn: Turn; agent: Pick<Schemas
         <div className={cn(ended && run.status !== 'completed' && 'text-ink-500')}>
           <Markdown text={reply.text} cursor={streaming} />
         </div>
+      ) : command ? (
+        (command.notices ?? []).length > 0 ? (
+          <PiCommandNotices notices={command.notices} truncated={command.truncated} />
+        ) : (
+          <p data-pi-command-handled className="text-[14.5px] text-ink-500">{t.chat.piCommandHandled}</p>
+        )
       ) : (
         streaming && (
           <p>
@@ -53,6 +64,28 @@ function ReplyBubble({ turn, agent, located }: { turn: Turn; agent: Pick<Schemas
       <ToolList tools={run.tools} interrupted={run.status === 'interrupted' && run.endReason === 'user_interrupt'} />
       <RunRecord agentId={agent.id} run={run} defaultOpen={located || config.runRecordExpanded} />
     </AgentChatReply>
+  )
+}
+
+type Notice = NonNullable<Schemas['Run']['piCommand']>['notices'][number]
+const noticeTone: Record<Notice['level'], string> = {
+  info: 'bg-ink/[0.04] text-ink',
+  warning: 'bg-tint-yellow text-ink',
+  error: 'bg-tint-red text-red-text',
+}
+
+// 扩展命令的输出：每条 notify 一块纯文本，等宽、保留换行与空格（输出里常有缩进对齐）；警告与错误另用底色，并写明级别，不只靠颜色。
+function PiCommandNotices({ notices, truncated }: { notices: Notice[]; truncated: boolean }) {
+  return (
+    <div data-pi-command-notices className="grid min-w-0 gap-1.5">
+      {notices.map((notice, index) => (
+        <div key={index} className={cn('grid min-w-0 gap-0.5 rounded-input px-3 py-2', noticeTone[notice.level])}>
+          {notice.level !== 'info' && <span className="text-[11.5px] font-black">{t.chat.noticeLevel[notice.level]}</span>}
+          <pre className="m-0 min-w-0 font-mono text-[13px] leading-[1.6] whitespace-pre-wrap [overflow-wrap:anywhere]">{notice.message}</pre>
+        </div>
+      ))}
+      {truncated && <p className="text-[12.5px] text-ink-500">{t.chat.piCommandTruncated}</p>}
+    </div>
   )
 }
 
@@ -152,6 +185,9 @@ export function MessageList({
   const located = useRef(false)
   // 最近一次滚动后的位置。程序设置的位置也记下，用来区分人往上滚和程序滚动后迟到的滚动事件。
   const lastScrollTop = useRef(0)
+  // 从刻度尺跳转到的位置：这次跳转带来的滚动事件不加载更早或更新的消息（刻度尺本身不触发加载）。
+  const rulerJump = useRef<number | null>(null)
+  const visibleTurns = useVisibleTurns(container, content, turns.map((turn) => turn.run.id).join(','))
 
   // 加载更早的消息后保持当前位置；在底部时跟随新内容滚动。
   useLayoutEffect(() => {
@@ -208,67 +244,92 @@ export function MessageList({
   const onScroll = () => {
     const el = container.current
     if (!el) return
+    const jumped = rulerJump.current !== null && el.scrollTop === rulerJump.current
+    rulerJump.current = null
     // 回到底部附近就贴底；只有人往上滚才离开底部。程序贴底后内容又一下子变高时，
     // 迟到的滚动事件里位置没有变小，不能据此取消贴底。下方还有更新的消息时不贴底，而是继续向下加载。
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
-    if (nearBottom && hasNewer) loadNewer()
-    else if (nearBottom) stickToBottom.current = true
+    if (nearBottom && hasNewer) {
+      if (!jumped) loadNewer()
+    } else if (nearBottom) stickToBottom.current = true
     else if (el.scrollTop < lastScrollTop.current) stickToBottom.current = false
     lastScrollTop.current = el.scrollTop
-    if (el.scrollTop < 80) loadOlder()
+    if (el.scrollTop < 80 && !jumped) loadOlder()
+  }
+
+  // 刻度尺跳到某一轮：让这一轮的开头出现在对话区上部（与定位相同的位置），并离开贴底，免得新内容把位置拉回底部。
+  // 立即跳转，不平滑滚动。
+  const jumpTo = (runId: string) => {
+    const el = container.current
+    const target = Array.from(content.current?.children ?? []).find((child) => child instanceof HTMLElement && child.dataset.runId === runId)
+    if (!el || !target) return
+    stickToBottom.current = false
+    scrollTo(el, el.scrollTop + target.getBoundingClientRect().top - el.getBoundingClientRect().top - 24, lastScrollTop)
+    rulerJump.current = lastScrollTop.current
   }
 
   return (
-    // 滚动区本身是定位容器：里面绝对定位的元素（未读圆点、脚注标题的 sr-only 说明等）随内容滚动并被裁剪，
-    // 否则它们按未滚动时的位置排在整页里，把页面撑高，输入框下面能拖出一大片空白。
-    <div ref={container} onScroll={onScroll} className="relative h-full overflow-y-auto py-6" role="log" aria-label={t.chat.messagesLabel}>
-      {/* 右侧留出气泡、代码块印刷投影的位置，免得被滚动区域裁掉。 */}
-      <div ref={content} className="flex min-w-0 w-full flex-col gap-7 pr-2">
-        {loadingOlder && <p className="text-center text-[12.5px] font-bold text-ink-500">{t.chat.loadingOlder}</p>}
-        {hasOlder && !loadingOlder && (
-          <Button variant="ghost" size="sm" className="self-center" disabled={refreshing} onClick={loadOlder}>
-            {t.chat.loadOlder}
-          </Button>
-        )}
-        {turns.length === 0 && !hasQueued && placed.size === 0 && <p className="text-center text-[15px] text-ink-500">{t.chat.noMessages}</p>}
-        {placed.get(-1)?.map((item) => <Fragment key={item.key}>{item.node}</Fragment>)}
-        {turns.map((turn, index) => {
-          const isTarget = turn.run.id === targetRunId
-          return (
-            <Fragment key={turn.key}>
-              {index > 0 && turns[index - 1].sessionEpoch !== turn.sessionEpoch && (
-                <p className="text-center text-[13px] font-bold text-pink-text" role="separator">
-                  <span aria-hidden="true">{t.chat.sessionDividerMark}</span> {t.chat.sessionDivider}{' '}
-                  <span aria-hidden="true">{t.chat.sessionDividerMark}</span>
-                </p>
-              )}
-              {index > 0 && interruptedBy(turns[index - 1], turn) && <InterruptDivider />}
-              {/* 一轮对话：用户消息与回复。定位到的那一轮用浅黄底突出显示。 */}
-              <div
-                data-run-id={turn.run.id}
-                data-located={isTarget || undefined}
-                className={cn('flex flex-col gap-7', isTarget && 'rounded-panel bg-tint-yellow p-4')}
-              >
-                {isTarget && <span className="sr-only">{t.timeline.locate.target}</span>}
-                {turn.user &&
-                  ((turn.user.origin === 'inbox_reminder' || turn.user.origin === 'sleep_wake') ? (
-                    <PlatformReminder agentId={agent.id} message={turn.user} run={turn.run} slept={sleptBefore(turns[index - 1], turn)} />
-                  ) : (
-                    <UserBubble message={turn.user} run={turn.run} />
-                  ))}
-                <ReplyBubble turn={turn} agent={agent} located={isTarget} />
-              </div>
-              {placed.get(index)?.map((item) => <Fragment key={item.key}>{item.node}</Fragment>)}
-            </Fragment>
-          )
-        })}
-        {loadingNewer && <p className="text-center text-[12.5px] font-bold text-ink-500">{t.timeline.locate.loadingNewer}</p>}
-        {hasNewer && !loadingNewer && (
-          <Button variant="ghost" size="sm" className="self-center" disabled={refreshing} onClick={loadNewer}>
-            {t.timeline.locate.loadNewer}
-          </Button>
-        )}
+    // 对话区右侧是刻度尺，不随消息滚动；只有一轮或没有对话时不显示，左侧栏收进抽屉的窄屏也不显示。
+    <div className="flex h-full min-h-0">
+      {/* 滚动区本身是定位容器：里面绝对定位的元素（未读圆点、脚注标题的 sr-only 说明等）随内容滚动并被裁剪，
+          否则它们按未滚动时的位置排在整页里，把页面撑高，输入框下面能拖出一大片空白。 */}
+      <div ref={container} onScroll={onScroll} className="relative h-full min-w-0 flex-1 overflow-y-auto py-6" role="log" aria-label={t.chat.messagesLabel}>
+        {/* 右侧留出气泡、代码块印刷投影的位置，免得被滚动区域裁掉。 */}
+        <div ref={content} className="flex min-w-0 w-full flex-col gap-7 pr-2">
+          {loadingOlder && <p className="text-center text-[12.5px] font-bold text-ink-500">{t.chat.loadingOlder}</p>}
+          {hasOlder && !loadingOlder && (
+            <Button variant="ghost" size="sm" className="self-center" disabled={refreshing} onClick={loadOlder}>
+              {t.chat.loadOlder}
+            </Button>
+          )}
+          {turns.length === 0 && !hasQueued && placed.size === 0 && <p className="text-center text-[15px] text-ink-500">{t.chat.noMessages}</p>}
+          {placed.get(-1)?.map((item) => <Fragment key={item.key}>{item.node}</Fragment>)}
+          {turns.map((turn, index) => {
+            const isTarget = turn.run.id === targetRunId
+            return (
+              <Fragment key={turn.key}>
+                {index > 0 && turns[index - 1].sessionEpoch !== turn.sessionEpoch && (
+                  <p className="text-center text-[13px] font-bold text-pink-text" role="separator">
+                    <span aria-hidden="true">{t.chat.sessionDividerMark}</span> {t.chat.sessionDivider}{' '}
+                    <span aria-hidden="true">{t.chat.sessionDividerMark}</span>
+                  </p>
+                )}
+                {index > 0 && interruptedBy(turns[index - 1], turn) && <InterruptDivider />}
+                {/* 一轮对话：用户消息与回复。定位到的那一轮用浅黄底突出显示。 */}
+                <div
+                  data-run-id={turn.run.id}
+                  data-located={isTarget || undefined}
+                  className={cn('flex flex-col gap-7', isTarget && 'rounded-panel bg-tint-yellow p-4')}
+                >
+                  {isTarget && <span className="sr-only">{t.timeline.locate.target}</span>}
+                  {turn.user &&
+                    ((turn.user.origin === 'inbox_reminder' || turn.user.origin === 'sleep_wake') ? (
+                      <PlatformReminder agentId={agent.id} message={turn.user} run={turn.run} slept={sleptBefore(turns[index - 1], turn)} />
+                    ) : (
+                      <UserBubble message={turn.user} run={turn.run} />
+                    ))}
+                  <ReplyBubble turn={turn} agent={agent} located={isTarget} />
+                </div>
+                {placed.get(index)?.map((item) => <Fragment key={item.key}>{item.node}</Fragment>)}
+              </Fragment>
+            )
+          })}
+          {loadingNewer && <p className="text-center text-[12.5px] font-bold text-ink-500">{t.timeline.locate.loadingNewer}</p>}
+          {hasNewer && !loadingNewer && (
+            <Button variant="ghost" size="sm" className="self-center" disabled={refreshing} onClick={loadNewer}>
+              {t.timeline.locate.loadNewer}
+            </Button>
+          )}
+        </div>
       </div>
+      {turns.length > 1 && (
+        <MessageRuler
+          className="max-nav:hidden"
+          turns={turns.map((turn) => ({ key: turn.run.id, label: turnPreview(turn) }))}
+          visible={visibleTurns}
+          onJump={jumpTo}
+        />
+      )}
     </div>
   )
 }

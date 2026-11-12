@@ -7,11 +7,15 @@ import (
 	"github.com/google/uuid"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
 func TestCapturedDiscoverySelectionAndHostTrap(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("假的原生命令是 sh 脚本")
+	}
 	home := t.TempDir()
 	native := filepath.Join(t.TempDir(), "native")
 	// This fake executable is intentionally local; native format tests are separate.

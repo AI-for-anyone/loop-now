@@ -1,6 +1,6 @@
 import type { Messages } from '..'
 import { plural } from '../format'
-import { formatPreciseClock, formatStepDuration } from './format'
+import { formatMonthDayClock, formatPreciseClock, formatStepDuration } from './format'
 
 const count = (n: number, one: string, other: string) => `${n} ${plural('en-US', n, { one, other })}`
 
@@ -25,13 +25,12 @@ export const timeline = {
     dispatched: 'Dispatched',
     waiting_slot: 'Waiting for a run slot',
     preparing: 'Preparing the environment',
-    launching: 'Pi start',
+    launching: (runtime: string) => `${runtime} start`,
     cli_install: (cli: string) => `Install ${cli}`,
     workspace_sync: 'Sync config and folders',
-    pi_started: 'Pi start',
-    pi_reused: 'Pi start',
-    pi_stopped: 'Pi process stopped',
-    pi_exited: 'Pi process exited unexpectedly',
+    process_started: (runtime: string) => `${runtime} start`,
+    process_stopped: (runtime: string) => `${runtime} process stopped`,
+    process_exited: (runtime: string) => `${runtime} process exited unexpectedly`,
     running: 'Started replying',
     tool: (name: string) => `Tool ${name}`,
     model_call: {
@@ -49,6 +48,7 @@ export const timeline = {
     promoted: { interrupt: 'Promoted to interrupt', queue: 'Switched to queue' },
     message_cancelled: 'An Inbox message was cancelled',
     session_missing: 'Session file missing',
+    model_rate_limit: 'Subscription limit',
     ended: {
       completed: 'Completed',
       failed: 'Failed',
@@ -72,11 +72,17 @@ export const timeline = {
       files_synced: (path: string, written: number, deleted: number) => `${path}: files synced (${written} written, ${deleted} deleted)`,
       failed: (path: string, error: string | null) => (error ? `${path}: failed (${error})` : `${path}: failed`),
     },
-    piStarted: (pid: number, reason: string) => `Started a new Pi process, PID ${pid} (${reason}).`,
+    processStarted: (runtime: string, pid: number, reason: string) => `Started a new ${runtime} process, PID ${pid} (${reason}).`,
     piStartReason: { no_process: 'no live process', config_changed: 'restart after a config change' } as Record<string, string>,
-    piReused: (pid: number) => `Reused the resident Pi process, PID ${pid}.`,
-    piStopped: (pid: number, reason: string, uptime: string) => `PID ${pid}, ${reason}, ran for ${uptime}.`,
-    piExited: (pid: number, exit: string, uptime: string) => `PID ${pid}, ${exit}, ran for ${uptime}.`,
+    processReused: (runtime: string, pid: number) => `Reused the resident ${runtime} process, PID ${pid}.`,
+    processStopped: (pid: number, reason: string, uptime: string) => `PID ${pid}, ${reason}, ran for ${uptime}.`,
+    processExited: (pid: number, exit: string, uptime: string) => `PID ${pid}, ${exit}, ran for ${uptime}.`,
+    rateLimit: {
+      type: { five_hour: '5-hour limit', seven_day: '7-day limit', seven_day_opus: '7-day Opus limit', seven_day_sonnet: '7-day Sonnet limit', overage: 'Overage usage' } as Record<string, string>,
+      status: { allowed: 'available', allowed_warning: 'running low', rejected: 'used up' } as Record<string, string>,
+      resetsAt: (time: string) => `resets ${formatMonthDayClock(time)}`,
+      empty: 'No limit details given',
+    },
     modelCall: (model: string, input: string, output: string, cacheRead: string, cacheWrite: string) =>
       `${model} · Input ${input} · Output ${output} · Cache read ${cacheRead} · Cache write ${cacheWrite}`,
     retryStarted: (attempt: number, max: number, delay: string, error: string) => `Attempt ${attempt}/${max}, retrying in ${delay}: ${error}`,

@@ -278,7 +278,7 @@ func (s *Store) RecoverModelAuth(ctx context.Context) error {
 		if _, err := tx.Exec(ctx, `UPDATE model_auth_operations SET status='failed',error_code='server_restarted',authorization_url=NULL,completed_at=clock_timestamp() WHERE status IN `+modelAuthActive); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE project_model_auth_operations SET status='failed',error_code='server_restarted',authorization_url=NULL,completed_at=clock_timestamp() WHERE status IN ('pending','awaiting_authorization')`); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE project_model_auth_operations SET status='failed',error_code='server_restarted',authorization_url=NULL,user_code=NULL,verification_uri=NULL,device_expires_at=NULL,completed_at=clock_timestamp() WHERE status IN ('pending','awaiting_authorization')`); err != nil {
 			return err
 		}
 		_, err := tx.Exec(ctx, `UPDATE model_auth_versions SET refresh_state='unavailable',refresh_attempt_id=NULL,refresh_started_at=NULL,error_code='refresh_uncertain',updated_at=clock_timestamp() WHERE refresh_state='refreshing'`)

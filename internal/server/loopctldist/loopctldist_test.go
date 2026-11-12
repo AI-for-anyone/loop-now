@@ -14,6 +14,7 @@ import (
 	"loop-now/internal/buildinfo"
 	"loop-now/internal/server/loopctldist"
 	"loop-now/internal/testutil/loopctlfake"
+	"loop-now/internal/testutil/testenv"
 )
 
 func TestLoadAndInstall(t *testing.T) {
@@ -34,7 +35,7 @@ func TestLoadAndInstall(t *testing.T) {
 	if bin != filepath.Join(work, "tools", "loopctl", buildinfo.Version(), "bin") {
 		t.Fatalf("安装目录：%s", bin)
 	}
-	b, err := os.ReadFile(filepath.Join(bin, "loopctl"))
+	b, err := os.ReadFile(testenv.Exe(filepath.Join(bin, "loopctl")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,17 +43,17 @@ func TestLoadAndInstall(t *testing.T) {
 	if hex.EncodeToString(h[:]) != local.SHA256 {
 		t.Fatal("安装的二进制摘要应与清单一致")
 	}
-	if st, _ := os.Stat(filepath.Join(bin, "loopctl")); st.Mode()&0o111 == 0 {
+	if st, _ := os.Stat(testenv.Exe(filepath.Join(bin, "loopctl"))); runtime.GOOS != "windows" && st.Mode()&0o111 == 0 {
 		t.Fatal("安装的二进制应可执行")
 	}
 	// 被改动后再次安装会恢复。
-	if err := os.WriteFile(filepath.Join(bin, "loopctl"), []byte("tampered"), 0o755); err != nil {
+	if err := os.WriteFile(testenv.Exe(filepath.Join(bin, "loopctl")), []byte("tampered"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := d.Install(work); err != nil {
 		t.Fatal(err)
 	}
-	if b2, _ := os.ReadFile(filepath.Join(bin, "loopctl")); string(b2) != string(b) {
+	if b2, _ := os.ReadFile(testenv.Exe(filepath.Join(bin, "loopctl"))); string(b2) != string(b) {
 		t.Fatal("再次安装应覆盖被改动的二进制")
 	}
 }
@@ -67,7 +68,7 @@ func TestLoadRejects(t *testing.T) {
 			rewrite(t, filepath.Join(dir, "manifest.json"), `"program": "loopctl"`, `"program": "pi"`)
 		},
 		"文件被改动": func(dir string) {
-			f := filepath.Join(dir, "loopctl-"+runtime.GOOS+"-"+runtime.GOARCH)
+			f := testenv.Exe(filepath.Join(dir, "loopctl-"+runtime.GOOS+"-"+runtime.GOARCH))
 			b, _ := os.ReadFile(f)
 			_ = os.WriteFile(f, append(b, '#'), 0o755)
 		},

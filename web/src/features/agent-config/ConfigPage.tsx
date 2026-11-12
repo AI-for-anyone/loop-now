@@ -9,8 +9,10 @@ import { ClisSection } from './ClisSection'
 import { ConfigToc } from './ConfigToc'
 import { DangerZone } from './DangerZone'
 import { ModelCredentialSection } from './ModelCredentialSection'
+import { ClaudeCodeAccountSection } from './RuntimeNotes'
 import { SkillsSection } from './SkillsSection'
 import { AgentPromptSection } from '@/features/prompts/AgentPromptSection'
+import { AgentLocalDirectoriesSection } from '@/features/local-mode/LocalDirectories'
 import { DraftNavigationGuard } from '@/features/prompts/DraftNavigationGuard'
 import { useScope } from '@/features/projects/scope-context'
 import { ProjectModelSelection } from '@/features/project-credentials/AgentAccountSelection'
@@ -42,7 +44,10 @@ export function ConfigPage() {
           </Alert>
           <BasicSection key={agent.id} agent={agent} busy={busy} />
           <AgentPromptSection agent={agent} />
-          {agent.scope === 'project' ? <ProjectModelSelection key={`model-selection:${agent.id}`} agent={agent} /> : <ModelCredentialSection key={`${agent.id}:${agent.model.provider}`} agent={agent} />}
+          <AgentLocalDirectoriesSection key={`local-dirs:${agent.id}`} agent={agent} />
+          {agent.scope === 'project' ? <ProjectModelSelection key={`model-selection:${agent.id}`} agent={agent} />
+            : agent.runtime === 'claude-code' ? <ClaudeCodeAccountSection />
+              : <ModelCredentialSection key={`${agent.id}:${agent.model.provider}`} agent={agent} />}
           <SkillsSection agentId={agent.id} />
           <ClisSection agent={agent} />
           <AgentPlugins agent={agent} />

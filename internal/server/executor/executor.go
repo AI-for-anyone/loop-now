@@ -38,6 +38,12 @@ const (
 	ErrInternal              = "internal_error"
 	ErrImageUnsupported      = "image_unsupported"
 	ErrPluginBlocked         = "plugin_blocked"
+	// 以下是 Pi 以外的运行时（Claude Code）的失败；Pi 仍用 pi_*。
+	ErrRuntimeUnavailable   = "runtime_unavailable"
+	ErrRuntimeLoginRequired = "runtime_login_required"
+	ErrRuntimeStartFailed   = "runtime_start_failed"
+	ErrRuntimeExited        = "runtime_exited"
+	ErrRuntimeError         = "runtime_error"
 )
 
 // 进程状态，与 OpenAPI 的 ProcessState 一致。
@@ -107,6 +113,10 @@ type Request struct {
 	MessageID uuid.UUID
 }
 
+// RunIDLine 是平台加在每条交给 Pi 的消息最前面的一行：这一轮的运行 ID（Agent 调 loopctl 时要带上）。
+// 旧会话里这一行是中文的“本轮运行ID：<ID>。”，不迁移；平台的生产代码不解析这一行。
+func RunIDLine(id uuid.UUID) string { return "Run ID for this turn: " + id.String() + ".\n" }
+
 // Result 是一次执行的结果。
 type Result struct {
 	Outcome      string
@@ -116,6 +126,18 @@ type Result struct {
 	Compaction   *CompactionResult // 仅 console_compact 成功时有值
 	// ConfigVersion 是这次执行实际使用的配置版本。
 	ConfigVersion int64
+	// CommandHandled 表示 Pi 直接处理了这次的消息（扩展命令），没有交给模型、没有回复。
+	CommandHandled bool
+	// CommandNotices 是 CommandHandled 时命令执行期间扩展用 ctx.ui.notify 给出的消息（命令的输出），按顺序；
+	// CommandNoticesTruncated 表示超过上限（50 条、合计 16 KiB）被截断。
+	CommandNotices          []CommandNotice
+	CommandNoticesTruncated bool
+}
+
+// CommandNotice 是 Pi 命令执行期间扩展给出的一条通知（扩展原文，纯文本，保留换行与空格）。
+type CommandNotice struct {
+	Level   string `json:"level"` // info / warning / error
+	Message string `json:"message"`
 }
 
 // Sink 接收执行过程中的事件。回调可能来自执行器内部的协程，实现须尽快返回。
@@ -199,4 +221,19 @@ const reservedEnvPrefix = "LOOPCTL_"
 // IsReservedEnv 判断环境变量名是否由执行器保留。
 func IsReservedEnv(name string) bool {
 	return slices.Contains(reservedEnv, name) || strings.HasPrefix(name, reservedEnvPrefix)
+}
+
+// PiCommand 是 Pi 能执行的一条命令（Pi RPC get_commands）：扩展命令、提示模板或技能命令（name 为 skill:<名称>）。
+type PiCommand struct {
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+	Source      string  `json:"source"` // extension / prompt / skill
+	// Path 是命令来源的文件（扩展文件、模板或技能），用来判断它属于哪个插件。
+	Path string `json:"path"`
+}
+
+// PiCommands 是 Agent 上次启动 Pi 时读到的命令列表。
+type PiCommands struct {
+	CapturedAt time.Time   `json:"capturedAt"`
+	Commands   []PiCommand `json:"commands"`
 }

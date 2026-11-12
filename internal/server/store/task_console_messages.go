@@ -128,7 +128,7 @@ func (s *Store) TaskConsoleGuardTx(ctx context.Context, m *TaskMutation, target 
 			return "chat_unavailable", nil
 		}
 		credential, e := modelcredential.Decode(v.Secret)
-		if e != nil || credential.Kind() != v.AuthMethod {
+		if e != nil || credential.AuthMethod() != v.AuthMethod {
 			return "chat_unavailable", nil
 		}
 	} else {

@@ -130,6 +130,14 @@ type Page struct {
 	NextCursor *string   `json:"nextCursor"`
 }
 
+// Counts 是项目里未结束的任务按状态的计数（api/openapi.yaml 的 TaskCounts）。
+type Counts struct {
+	Preparing int64 `json:"preparing"`
+	Running   int64 `json:"running"`
+	Waiting   int64 `json:"waiting"`
+	Blocked   int64 `json:"blocked"`
+}
+
 type CreateInput struct {
 	ActionID             uuid.UUID           `json:"actionId"`
 	Title                string              `json:"title"`

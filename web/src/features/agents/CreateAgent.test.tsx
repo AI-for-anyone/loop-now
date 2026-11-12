@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { routes } from '@/app/routes'
 import type { Schemas } from '@/api/client'
 import { agentsUrl, apiUrl, context, defaultAgentsPath, errorBody, makeAgent, makeStatus, toListItem } from '@/test/api'
-import { providers, catalogHandlers } from '@/test/config'
+import { pluginProvider, providers, catalogHandlers, withClaudeCode } from '@/test/config'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { sidebar } from '@/test/shell'
@@ -96,6 +96,55 @@ describe('创建 Agent', () => {
     await waitFor(() => expect(router.state.location.pathname).toMatch(new RegExp(`^${defaultAgentsPath}/.+/config$`)))
     const list = await screen.findByRole('list', { name: 'Agent' })
     await waitFor(() => expect(within(list).getByRole('link', { name: /开发助手/ })).toHaveAttribute('aria-current', 'page'))
+  })
+
+  it('插件提供方不能在创建时直接选：选项禁用并说明创建后授权插件再选择，目录不带 agentId', async () => {
+    let query: string | null = null
+    const { user } = setup((body) => HttpResponse.json(makeAgent({ name: body.name, model: body.model }), { status: 201 }))
+    server.use(
+      http.get(apiUrl('/model-providers'), ({ request }) => {
+        query = new URL(request.url).search
+        return HttpResponse.json({ ...providers, providers: [...providers.providers, pluginProvider('grok-cli')] })
+      }),
+    )
+    const dialog = await fill(user, 'Grok 助手', false)
+    const select = await within(dialog).findByLabelText('模型提供方')
+    const grok = await waitFor(() => {
+      const found = within(select).getAllByRole('option').find((item) => (item as HTMLOptionElement).value === 'grok-cli')
+      if (!found) throw new Error('目录里还没有 grok-cli')
+      return found
+    })
+    expect(grok).toBeDisabled()
+    expect(grok).toHaveTextContent('Grok CLI · grok-cli（插件「Grok 订阅」，2 个模型） — 创建后授权插件再选择')
+    expect(query).toBe('')
+  })
+
+  it('本机的 Claude Code 可以直接选：注明用本机的登录，不显示速度档，按所选创建', async () => {
+    let created: Schemas['AgentCreate'] | null = null
+    const { user } = setup(body => { created = body; return HttpResponse.json(makeAgent({ name: body.name, model: body.model, runtime: 'claude-code' }), { status: 201 }) })
+    server.use(http.get(apiUrl('/model-providers'), () => HttpResponse.json(withClaudeCode)))
+    const dialog = await fill(user, '本机助手', false)
+    const select = await within(dialog).findByLabelText('模型提供方')
+    const option = await within(select).findByRole('option', { name: 'Claude Code（本机，2 个模型）' })
+    expect(option).toBeEnabled()
+    await user.selectOptions(select, 'claude-code')
+    expect(within(dialog).getByText('用本机安装的 Claude Code 和你在本机的登录，平台不保存登录信息。')).toHaveAttribute('role', 'note')
+    // 选的那一刻就该知道的两条；插件与 /pi: 命令只在配置页说明。
+    const differences = within(dialog).getByRole('region', { name: '用 Claude Code 运行时' })
+    expect(within(differences).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      '用你本机的家目录和登录运行：它执行 gh、git 等命令时用的是你本人的登录。',
+      '不经确认直接执行命令，与 Pi 的 Agent 相同。',
+    ])
+    await chooseModel(user, dialog, 'sonnet')
+    expect(within(dialog).queryByLabelText('Codex 速度')).toBeNull()
+    await user.selectOptions(within(dialog).getByLabelText('思考等级'), 'max')
+    await user.selectOptions(select, 'anthropic')
+    expect(within(dialog).queryByRole('region', { name: '用 Claude Code 运行时' })).toBeNull()
+    await user.selectOptions(select, 'claude-code')
+    await chooseModel(user, dialog, 'sonnet')
+    await user.selectOptions(within(dialog).getByLabelText('思考等级'), 'max')
+    await user.click(within(dialog).getByRole('button', { name: '创建' }))
+    await waitFor(() => expect(created).toEqual({ name: '本机助手', model: { provider: 'claude-code', modelId: 'sonnet' }, thinkingLevel: 'max' }))
   })
 
   it('未选择模型时不提交', async () => {

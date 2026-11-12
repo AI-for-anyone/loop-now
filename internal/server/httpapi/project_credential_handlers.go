@@ -272,11 +272,8 @@ func (s *Server) listProjectModelAuthOperations(w http.ResponseWriter, r *http.R
 		s.fail(w, r, e)
 		return
 	}
+	// provider 可省，省略时列出全部进行中的登录（Codex 与插件提供方），每条带 provider。
 	provider := r.URL.Query().Get("provider")
-	if provider != "" && provider != "openai-codex" {
-		s.fail(w, r, apperr.Invalid("provider", "仅支持openai-codex"))
-		return
-	}
 	var account *uuid.UUID
 	if raw := r.URL.Query().Get("accountId"); raw != "" {
 		id, e := uuid.Parse(raw)
@@ -319,6 +316,34 @@ func (s *Server) startProjectModelAuthLogin(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, 202, out)
+}
+
+// answerProjectModelAuthLogin 回答插件提供方登录中正在等的问题（plugins/SPEC.md §13）。回答只在内存里转给登录辅助进程。
+func (s *Server) answerProjectModelAuthLogin(w http.ResponseWriter, r *http.Request) {
+	project, id, e := projectOperationIDs(r)
+	if e != nil {
+		s.fail(w, r, e)
+		return
+	}
+	var in cm.LoginInput
+	if e = s.readProjectCredentialJSON(w, r, &in); e != nil {
+		s.fail(w, r, e)
+		return
+	}
+	defer func() { in.Value = "" }()
+	if in.PromptID == "" {
+		s.fail(w, r, apperr.Invalid("promptId", "须给出问题 ID"))
+		return
+	}
+	if !s.projectCredentialReady(w, r) {
+		return
+	}
+	out, e := s.ProjectCredentials.Input(r.Context(), project, id, in)
+	if e != nil {
+		s.fail(w, r, e)
+		return
+	}
+	writeJSON(w, 200, out)
 }
 func projectOperationIDs(r *http.Request) (uuid.UUID, uuid.UUID, error) {
 	project, e := pathUUID(r, "projectId")

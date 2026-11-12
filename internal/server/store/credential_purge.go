@@ -58,7 +58,7 @@ func purgeProjectCredentials(ctx context.Context, tx *db.Tx, project uuid.UUID) 
 	}
 	for _, q := range []string{
 		`UPDATE project_cli_auth_operations SET status='cancelled',authorization_url=NULL,user_code=NULL,error_code='auth_cancelled',completed_at=clock_timestamp() WHERE project_id=$1 AND status IN('pending','awaiting_authorization')`,
-		`UPDATE project_model_auth_operations SET status='cancelled',authorization_url=NULL,error_code=NULL,completed_at=clock_timestamp() WHERE project_id=$1 AND status IN('pending','awaiting_authorization')`,
+		`UPDATE project_model_auth_operations SET status='cancelled',authorization_url=NULL,user_code=NULL,verification_uri=NULL,device_expires_at=NULL,error_code=NULL,completed_at=clock_timestamp() WHERE project_id=$1 AND status IN('pending','awaiting_authorization')`,
 		`UPDATE project_credential_accounts SET deleted_at=coalesce(deleted_at,clock_timestamp()),updated_at=clock_timestamp(),revision=revision+1 WHERE project_id=$1`,
 		`DELETE FROM project_credential_legacy_rows WHERE project_id=$1`,
 		`DELETE FROM credential_pending_wipes WHERE project_id=$1`,

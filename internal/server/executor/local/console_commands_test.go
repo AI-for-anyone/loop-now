@@ -253,3 +253,33 @@ func TestManagedSessionFileRejectsEscapeAndSymlink(t *testing.T) {
 		t.Fatal("指向 sessions 外的软链接应拒绝")
 	}
 }
+
+func TestConsoleCommandsRespectClaudeRuntime(t *testing.T) {
+	h := newClaudeHarness(t, nil)
+	id := h.claudeAgent(nil)
+	if res, _ := h.exec(id, "hello"); res.Outcome != executor.OutcomeCompleted {
+		t.Fatalf("准备会话：%+v", res)
+	}
+	ctx := context.Background()
+	res, err := h.e.Execute(ctx, executor.Request{AgentID: id, RunID: uuid.New(), Origin: executor.OriginConsoleCompact}, newSink())
+	if err != nil || res.Outcome != executor.OutcomeFailed || !strings.Contains(res.ErrorMessage, "不支持 Pi") {
+		t.Fatalf("应拒绝 Pi compact：%+v %v", res, err)
+	}
+	for _, format := range []string{"html", "jsonl"} {
+		if _, err := h.e.ExportSession(ctx, id, format); err == nil || !strings.Contains(err.Error(), "不支持 Pi") {
+			t.Fatalf("应拒绝 Pi export %s：%v", format, err)
+		}
+	}
+	stopped, err := h.e.StopIdle(ctx, id, "console_reload")
+	if err != nil || !stopped {
+		t.Fatalf("应能停止 Claude 空闲进程：%v %v", stopped, err)
+	}
+}
+
+func TestSessionUserTextStripsCurrentAndLegacyRunID(t *testing.T) {
+	for _, prefix := range []string{executor.RunIDLine(uuid.New()), "本轮运行ID：old。\n"} {
+		if got := normalizeSessionUserText(prefix + "真正的消息"); got != "真正的消息" {
+			t.Fatalf("运行 ID 不应进入会话标题：%q", got)
+		}
+	}
+}

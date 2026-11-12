@@ -220,7 +220,8 @@ it('横向画布节点可键盘选择，适应与定位控件在缩放层外', a
   const button = within(list).getByRole('button', { name: /返工处理/ })
   button.focus(); await userEvent.keyboard('{Enter}')
   await waitFor(() => expect(router.state.location.search).toContain('step=revise'))
-  expect(screen.getByText('这个节点尚未被访问。')).toBeVisible()
+  // 新地址在 transition 里才渲染到页面，等页面跟上。
+  expect(await screen.findByText('这个节点尚未被访问。')).toBeVisible()
   await userEvent.click(screen.getByRole('button', { name: '适应视图' }))
   expect(screen.getByRole('button', { name: '适应视图' }).closest('[data-task-camera]')).toBeNull(); expect(button.closest('[data-task-camera]')).not.toBeNull()
   expect(within(list).getAllByRole('button')).toHaveLength(3)

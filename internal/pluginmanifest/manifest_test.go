@@ -261,3 +261,26 @@ func TestValidate(t *testing.T) {
 		t.Fatalf("类型不对：%v", err)
 	}
 }
+
+func TestOwnDisplayName(t *testing.T) {
+	for _, c := range []struct {
+		pkg string
+		own bool
+	}{
+		{`{"name":"pi-x","version":"1.0.0","pi":{"extensions":["./a.ts"]}}`, false},
+		{`{"name":"pi-x","version":"1.0.0","pi":{"extensions":["./a.ts"]},"loopNow":{"id":"x"}}`, false},
+		{`{"name":"pi-x","version":"1.0.0","pi":{"extensions":["./a.ts"]},"loopNow":{"id":"x","displayName":"X"}}`, true},
+	} {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(c.pkg), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "a.ts"), []byte(""), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		m, err := pluginmanifest.ReadManifest(dir, "dev")
+		if err != nil || m.OwnDisplayName != c.own {
+			t.Fatalf("%s：%v %v", c.pkg, m.OwnDisplayName, err)
+		}
+	}
+}

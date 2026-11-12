@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"loop-now/internal/server/executor/local/runturn"
 	"loop-now/internal/server/messageimage"
 	"os"
 	"os/exec"
@@ -20,8 +21,8 @@ import (
 	"time"
 )
 
-// ErrExited 表示 Pi 进程已退出或其 stdout 已关闭。
-var ErrExited = errors.New("pirpc: Pi 进程已退出")
+// ErrExited 表示 Pi 进程已退出或其 stdout 已关闭（与其他运行时共用，见 runturn）。
+var ErrExited = runturn.ErrExited
 
 const (
 	// exitGrace 是进程退出后等待 stdout/stderr 读到 EOF 的最长时间，
@@ -33,19 +34,15 @@ const (
 
 // TurnSink 接收一轮执行的实时事件。调用发生在读协程上，实现必须迅速返回，
 // 且不得在回调中同步调用 Client 的方法。
-type TurnSink interface {
-	TextDelta(delta string)
-	ToolStarted(toolCallID, toolName string)
-	ToolEnded(toolCallID, toolName string, isError bool)
-}
+type TurnSink = runturn.Sink
 
 // Outcome 是一轮执行的结局。
-type Outcome string
+type Outcome = runturn.Outcome
 
 const (
-	OutcomeCompleted Outcome = "completed"
-	OutcomeFailed    Outcome = "failed"
-	OutcomeAborted   Outcome = "aborted"
+	OutcomeCompleted = runturn.OutcomeCompleted
+	OutcomeFailed    = runturn.OutcomeFailed
+	OutcomeAborted   = runturn.OutcomeAborted
 )
 
 // 错误码。
@@ -54,13 +51,11 @@ const (
 	ErrorCodePiExited = "pi_exited"
 )
 
-// TurnResult 是一轮执行的结果。
-type TurnResult struct {
-	Outcome      Outcome
-	Text         string // 最终回复文本
-	ErrorCode    string // "pi_error" | "pi_exited" | ""
-	ErrorMessage string
-}
+// TurnResult 是一轮执行的结果；Pi 的 ErrorCode 为 "pi_error"、"pi_exited" 或空。
+type TurnResult = runturn.Result
+
+// CommandNotices 是一轮里收集到的通知，按顺序；Truncated 表示超过上限被截断。
+type CommandNotices = runturn.CommandNotices
 
 // State 是 get_state 中平台关心的字段。
 type State struct {
@@ -354,7 +349,11 @@ func (c *Client) Prompt(ctx context.Context, text string, sink TurnSink, images 
 		return TurnResult{Outcome: OutcomeFailed, ErrorCode: ErrorCodePi, ErrorMessage: msg}, nil
 	}
 	if disposition(resp.Data) == "handled" {
-		return TurnResult{Outcome: OutcomeCompleted}, nil
+		res := TurnResult{Outcome: OutcomeCompleted, Handled: true}
+		if notices, cut := t.commandNotices(); len(notices) > 0 || cut {
+			res.Notices = &CommandNotices{Items: notices, Truncated: cut}
+		}
+		return res, nil
 	}
 	return awaitResult(ctx, t)
 }

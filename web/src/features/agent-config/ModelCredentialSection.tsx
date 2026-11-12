@@ -34,8 +34,11 @@ export function ModelCredentialSection({ agent }: { agent: Schemas['Agent'] }) {
   const candidate = auth.data?.operation
   const operation = candidate?.agentId === agent.id && candidate.provider === agent.model.provider ? candidate : null
   const active = loginActive(operation)
-  const methods = providers.data?.providers.find(p => p.id === agent.model.provider)?.authMethods ?? []
-  const oauth = agent.model.provider === 'openai-codex' && methods.includes('oauth')
+  const current = providers.data?.providers.find(p => p.id === agent.model.provider)
+  const methods = current?.authMethods ?? []
+  // 这里是不属于项目的 Agent 自己的凭证：插件提供方只给项目 Agent 用（账号在项目里登录），不能在这里登录。
+  const plugin = current?.source === 'plugin'
+  const oauth = !plugin && methods.includes('oauth')
   const apiKey = methods.includes('api_key')
   const unavailable = !auth.data || !!auth.error || !!providers.error || starting || active || cancelling
   const copy = t.config.modelLogin
@@ -123,7 +126,7 @@ export function ModelCredentialSection({ agent }: { agent: Schemas['Agent'] }) {
         {credential && <WarningList warnings={credential.warnings} />}
       </div>
       {auth.isPending && <p className="text-[13px]">{copy.loading}</p>}
-      {!providers.isPending && !providers.error && !oauth && !apiKey && <p className="text-[13px]">{copy.unsupported}</p>}
+      {!providers.isPending && !providers.error && !oauth && !apiKey && <p className="text-[13px]">{plugin ? copy.pluginUnsupported : copy.unsupported}</p>}
       <ErrorAlert error={auth.error ?? providers.error ?? error} />
       {(auth.error || providers.error) && <Button size="sm" variant="secondary" className="self-start" onClick={() => { void auth.refetch(); void providers.refetch() }}>{t.common.retry}</Button>}
       {view && <div className="grid min-w-0 gap-2"><h3 className="text-[14px] font-black">{copy.operation}</h3>

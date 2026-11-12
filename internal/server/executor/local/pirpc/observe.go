@@ -307,6 +307,13 @@ func (c *Client) extensionUI(line []byte) {
 			level = "info"
 		}
 		data = map[string]any{"method": req.Method, "message": req.Message, "level": level}
+		// 扩展命令的结果多半用 notify 给出：随这一轮收集，Pi 直接处理命令时交给调用方（运行事件会按时间清理）。
+		c.mu.Lock()
+		t := c.turn
+		c.mu.Unlock()
+		if t != nil {
+			t.addNotice(level, req.Message)
+		}
 	case req.Method == "setStatus":
 		data = map[string]any{"method": req.Method, "statusKey": req.StatusKey, "message": req.StatusText}
 	default:

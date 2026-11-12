@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
 import { apiUrl, defaultProject, projectsUrl } from './api'
 import { emptyProjectCredentialHandlers } from './project-credentials'
+import { runtimeList } from './runtimes'
 
 // 各测试用 server.use(...) 注册自己的接口处理器。左侧栏常驻并定时查询健康状态，范围切换与 Agent 页都要读项目列表，
 // 所以默认给出正常的健康检查与只有默认项目的项目列表；需要其他结果的测试再用 server.use 覆盖。
@@ -10,6 +11,10 @@ export const server = setupServer(
   http.get(apiUrl('/plugins'), () => HttpResponse.json({ plugins: [] })),
   http.get(apiUrl('/projects/:projectId/plugins'), () => HttpResponse.json({ plugins: [] })),
   http.get(apiUrl('/agents/:agentId/plugins'), () => HttpResponse.json({ plugins: [] })),
+  // 对话页 "/" 菜单：默认 Agent 还没启动过 Pi，没有命令列表。
+  http.get(apiUrl('/agents/:agentId/commands'), () => HttpResponse.json({ capturedAt: null, commands: [] })),
+  // 运行时：默认本机的 Claude Code 装好且已登录。
+  http.get(apiUrl('/runtimes'), () => HttpResponse.json(runtimeList())),
   http.get(apiUrl('/projects/:projectId/cli-auth/operations'), () => HttpResponse.json({ operations: [] })),
   // Unrelated historical fixtures do not exercise node Inbox or task timeline.
   // New feature tests override these; no fake normal Run is manufactured.
@@ -19,6 +24,12 @@ export const server = setupServer(
   http.get(apiUrl('/projects/:projectId/context-folder/entries'), ({ request }) => HttpResponse.json({ path: new URL(request.url).searchParams.get('path') ?? '', entries: [], nextCursor: null })),
   http.get(apiUrl('/context-folder/entries'), ({ request }) => HttpResponse.json({ path: new URL(request.url).searchParams.get('path') ?? '', entries: [], nextCursor: null })),
   http.get(apiUrl('/agents/:agentId/folder/git-pulls'), () => HttpResponse.json({ pulls: [] })),
+  // 左侧栏“任务”旁的运行数：默认没有未结束的任务。
+  http.get(apiUrl('/projects/:projectId/tasks/counts'), () => HttpResponse.json({ preparing: 0, running: 0, waiting: 0, blocked: 0 })),
+  // 本机模式：默认三个开关都开着，项目与 Agent 都还没有登记本机目录（需要的测试用 localModeBackend 覆盖）。
+  http.get(apiUrl('/local-mode-settings'), () => HttpResponse.json({ directories: true, git: true, cli: true, logins: false })),
+  http.get(apiUrl('/projects/:projectId/local-directories'), () => HttpResponse.json({ revision: 0, directories: [] })),
+  http.get(apiUrl('/agents/:agentId/local-directories'), () => HttpResponse.json({ revision: 0, directories: [], projectId: null, inherited: [] })),
   http.get(apiUrl('/agents/:agentId/queue'), ({ params }) => HttpResponse.json({ agentId: params.agentId, items: [] })),
   // 发给你的消息：默认没有往来，也没有待你处理的内容（需要的测试用 fakeInbox 覆盖）。
   http.get(apiUrl('/agents/:agentId/console-messages'), () => HttpResponse.json({ messages: [], nextCursor: null })),

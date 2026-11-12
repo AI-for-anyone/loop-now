@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -37,13 +38,13 @@ func checkAssets(t *testing.T, root string) {
 			t.Fatalf("asset mismatch: %s", f.Name())
 		}
 		info, err := os.Stat(filepath.Join(root, f.Name()))
-		if err != nil || info.Mode().Perm() != 0600 {
+		if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0600) { // Windows 上由继承的 ACL 决定
 			t.Fatal("asset is not private")
 		}
 	}
 	for _, dir := range []string{root, filepath.Dir(root)} {
 		info, err := os.Stat(dir)
-		if err != nil || info.Mode().Perm() != 0700 {
+		if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0700) { // Windows 上由继承的 ACL 决定
 			t.Fatal("install directory is not private")
 		}
 	}
@@ -158,6 +159,9 @@ func TestInstallRejectsSymlinksAndPublicDirectories(t *testing.T) {
 					t.Fatal(err)
 				}
 			case "public-parent":
+				if runtime.GOOS == "windows" {
+					t.Skip("chmod 在 Windows 上改不了 ACL，无法制造公开目录")
+				}
 				if err := os.Chmod(parent, 0755); err != nil {
 					t.Fatal(err)
 				}
@@ -189,6 +193,9 @@ func TestInstallRejectsSymlinksAndPublicDirectories(t *testing.T) {
 	}
 }
 func TestInstallConcurrentIdenticalBinaryAssets(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 上目录被别的句柄打开时不能改名，并发发布的竞争语义不同")
+	}
 	root := assetRoot(t)
 	var wg sync.WaitGroup
 	for range 4 {

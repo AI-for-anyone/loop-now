@@ -6,10 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
+
+	"loop-now/internal/procgroup"
 )
 
 // PendingRuntimeHandoff comes only from the persisted pending switch action,
@@ -88,7 +89,7 @@ func (h *RuntimeHandoff) CaptureRecovery(ctx context.Context, actionID uuid.UUID
 			if e.procs[id] != p || !alive(p) || p.busy || p.recoveryIdentity == nil {
 				return RuntimeRecoveryRecord{}, ErrRuntimeStopUnconfirmed
 			}
-			current, err := readRecoveryProcess(p.client.Pid())
+			current, err := readRecoveryProcess(p.rt.Pid())
 			if err != nil || current != *p.recoveryIdentity {
 				return RuntimeRecoveryRecord{}, ErrRuntimeStopUnconfirmed
 			}
@@ -208,10 +209,10 @@ func verifyRecoveryProcess(p RuntimeProcessIdentity) error {
 		}
 		return nil
 	}
-	if !errors.Is(err, syscall.ESRCH) {
+	if !errors.Is(err, procgroup.ErrNotFound) {
 		return ErrRuntimeStopUnconfirmed
 	}
-	if err = syscall.Kill(-p.PGID, 0); !errors.Is(err, syscall.ESRCH) {
+	if err = procgroup.Probe(p.PGID); !errors.Is(err, procgroup.ErrNotFound) {
 		return ErrRuntimeStopUnconfirmed
 	}
 	return nil
@@ -224,13 +225,13 @@ func stopRecoveryGroup(ctx context.Context, p RuntimeProcessIdentity, grace time
 	if err := verifyRecoveryProcess(p); err != nil {
 		return err
 	}
-	if err := syscall.Kill(-p.PGID, 0); errors.Is(err, syscall.ESRCH) {
+	if err := procgroup.Probe(p.PGID); errors.Is(err, procgroup.ErrNotFound) {
 		return nil
 	} else if err != nil {
 		return ErrRuntimeStopUnconfirmed
 	}
 	// Revalidate kernel birth immediately before every signal, never just PID.
-	if err := signalRecoveryGroup(ctx, p, syscall.SIGTERM); err != nil {
+	if err := signalRecoveryGroup(ctx, p, procgroup.Terminate); err != nil {
 		return err
 	}
 	if grace <= 0 {
@@ -241,8 +242,8 @@ func stopRecoveryGroup(ctx context.Context, p RuntimeProcessIdentity, grace time
 	poll := time.NewTicker(10 * time.Millisecond)
 	defer poll.Stop()
 	for {
-		err := syscall.Kill(-p.PGID, 0)
-		if errors.Is(err, syscall.ESRCH) {
+		err := procgroup.Probe(p.PGID)
+		if errors.Is(err, procgroup.ErrNotFound) {
 			return nil
 		}
 		if err != nil {
@@ -253,12 +254,12 @@ func stopRecoveryGroup(ctx context.Context, p RuntimeProcessIdentity, grace time
 			return ctx.Err()
 		case <-poll.C:
 		case <-timer.C:
-			if err := signalRecoveryGroup(ctx, p, syscall.SIGKILL); err != nil {
+			if err := signalRecoveryGroup(ctx, p, procgroup.Kill); err != nil {
 				return err
 			}
 			for {
-				err := syscall.Kill(-p.PGID, 0)
-				if errors.Is(err, syscall.ESRCH) {
+				err := procgroup.Probe(p.PGID)
+				if errors.Is(err, procgroup.ErrNotFound) {
 					return nil
 				}
 				if err != nil {
@@ -274,7 +275,7 @@ func stopRecoveryGroup(ctx context.Context, p RuntimeProcessIdentity, grace time
 	}
 }
 
-func signalRecoveryGroup(ctx context.Context, p RuntimeProcessIdentity, signal syscall.Signal) error {
+func signalRecoveryGroup(ctx context.Context, p RuntimeProcessIdentity, signal func(int) error) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -282,7 +283,7 @@ func signalRecoveryGroup(ctx context.Context, p RuntimeProcessIdentity, signal s
 	if err != nil || current != p {
 		return ErrRuntimeStopUnconfirmed
 	}
-	if err = syscall.Kill(-p.PGID, signal); err != nil && !errors.Is(err, syscall.ESRCH) {
+	if err = signal(p.PGID); err != nil && !errors.Is(err, procgroup.ErrNotFound) {
 		return ErrRuntimeStopUnconfirmed
 	}
 	return nil

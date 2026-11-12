@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -23,7 +24,10 @@ import (
 func TestConfigCommands(t *testing.T) {
 	e := newEnv(t)
 	ca := writeCAFile(t)
-	rel, _ := filepath.Rel(mustGetwd(t), ca)
+	rel, err := filepath.Rel(mustGetwd(t), ca)
+	if err != nil { // Windows 上临时目录与工作目录可能不在同一个盘
+		rel = ca
+	}
 	e.stdin = "  " + extToken + "  \nignored second line\n"
 	d := e.run("config", "set", "default", "--server", "https://loop.example.com:8781/", "--ca-file", rel, "--token-stdin").ok(t)
 	want := map[string]any{"name": "default", "server": "https://loop.example.com:8781", "caFile": ca, "tokenSet": true,
@@ -32,7 +36,7 @@ func TestConfigCommands(t *testing.T) {
 		t.Fatalf("摘要 %v", d)
 	}
 	path := config.Path(e.home)
-	if info, _ := os.Stat(path); info.Mode().Perm() != 0o600 {
+	if info, _ := os.Stat(path); runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 { // Windows 上是 ACL
 		t.Fatalf("权限 %o", info.Mode().Perm())
 	}
 	f, _, _ := config.Load(path)
@@ -81,9 +85,11 @@ func TestConfigCommands(t *testing.T) {
 	e.run("config", "delete", "staging", "--yes").ok(t)
 	e.run("config", "delete", "staging", "--yes").fails(t, output.CodeProfileNotFound, 3)
 
-	os.Chmod(path, 0o644)
-	e.run("config", "list").fails(t, output.CodeConfigInsecurePermissions, 3)
-	e.run("skill", "list").fails(t, output.CodeConfigInsecurePermissions, 3)
+	if runtime.GOOS != "windows" { // chmod 在 Windows 上改不了 ACL，无法制造过宽的权限
+		os.Chmod(path, 0o644)
+		e.run("config", "list").fails(t, output.CodeConfigInsecurePermissions, 3)
+		e.run("skill", "list").fails(t, output.CodeConfigInsecurePermissions, 3)
+	}
 
 	ag := newEnv(t).agent("http://127.0.0.1:1")
 	ag.run("config", "list").fails(t, output.CodeCommandNotAllowed, 2)

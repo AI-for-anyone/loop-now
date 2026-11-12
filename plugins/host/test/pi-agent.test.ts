@@ -94,8 +94,8 @@ describe('官方插件的 Agent 侧', { skip: noPi }, () => {
 
   it('playwright：扩展补上浏览器规则；MCP 启动器在没有准备浏览器时说明怎么准备', { timeout: 60_000 }, async () => {
     const { seen } = await runPi({ extensions: [path.join(official, 'playwright/agent/index.ts')], calls: [] })
-    assert.match(seen, /专用浏览器（mcp__playwright_browser__ 开头的工具）/)
-    assert.match(seen, /必须先得到用户明确同意/)
+    assert.match(seen, /The dedicated browser \(tools starting with mcp__playwright_browser__\)/)
+    assert.match(seen, /require the user's explicit consent first/)
     const launch = path.join(official, 'playwright/mcp/launch.mjs')
     const empty = mkdtempSync(path.join(tmpdir(), 'loop-now-pw-empty-'))
     try {

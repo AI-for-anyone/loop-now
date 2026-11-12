@@ -12,12 +12,12 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
 
 	"loop-now/internal/loopctl/guide"
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/modelcredential"
@@ -41,6 +41,7 @@ type prepared struct {
 	env        []string
 	skillDirs  []string
 	cliBinDirs []string
+	cliBins    []string // 放进执行 PATH 的模板 CLI 可执行文件（与 cliBinDirs 一一对应）
 }
 
 // prepare 按规则同步配置：安装缺失的模板 CLI、重建 Skills 与 Prompt、先删后写凭证文件、同步工作区来源。
@@ -76,6 +77,7 @@ func (e *Executor) prepare(ctx context.Context, snap agentconfig.Snapshot, d age
 			return p, fail(executor.ErrCLIInstallFailed, "%s：%v", cli, err)
 		}
 		p.cliBinDirs = append(p.cliBinDirs, dir)
+		p.cliBins = append(p.cliBins, filepath.Join(dir, t.Binary))
 		if cli == "gh" {
 			ghBin = filepath.Join(dir, t.Binary)
 		}
@@ -101,18 +103,36 @@ func (e *Executor) prepare(ctx context.Context, snap agentconfig.Snapshot, d age
 
 // syncConfig 依次重建 Skills 与 Prompt、写凭证文件、同步工作区来源。
 func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d agentDirs, runID uuid.UUID, p *prepared, ghBin string, outcomes *[]sourceOutcome) error {
-	// 2. Skills 与 Prompt 按配置整体覆盖。
+	// 2. Skills 与 Prompt 按配置整体覆盖。Claude Code 的 Skills 放在平台给它的插件目录里。
+	claude := isClaude(snap)
 	var err error
-	if p.skillDirs, err = e.syncSkills(ctx, snap, d); err != nil {
-		return err
+	if claude {
+		if err := e.syncClaudePlugin(ctx, snap, d); err != nil {
+			return err
+		}
+	} else {
+		if p.skillDirs, err = e.syncSkills(ctx, snap, d.skills); err != nil {
+			return err
+		}
+		if err := os.RemoveAll(d.claudePlugin); err != nil {
+			return err
+		}
 	}
 	if err := removeStrayEntries(d); err != nil {
 		return err
 	}
-	if err := writePluginMCP(d, snap.Plugins); err != nil {
+	if err := writePluginMCP(d, snap.Plugins, claude); err != nil {
 		return err
 	}
-	prompt, err := e.appendedPrompt(snap, d)
+	// “用本机的登录状态”：运行时的 HOME 是用户真实的主目录；d.home 不变，凭证文件、清理与回收都只认 d.home。
+	// Claude Code 运行时总是这样（它只能用用户本人在本机的登录），与全局开关无关。
+	loginHome := ""
+	if snap.Local.Logins || claude {
+		if loginHome, err = e.o.RealHome(); err != nil || !filepath.IsAbs(loginHome) {
+			return fail(executor.ErrInternal, "读取服务端用户的主目录失败（“用本机的登录状态”需要它）")
+		}
+	}
+	prompt, err := e.appendedPrompt(snap, d, loginHome)
 	if err != nil {
 		return err
 	}
@@ -123,25 +143,57 @@ func (e *Executor) syncConfig(ctx context.Context, snap agentconfig.Snapshot, d 
 	} else if err := os.Remove(d.prompt); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	// 3. 模型凭证为独立Pi缓存，CLI凭证保持模板规则。
-	if err := seedModelAuth(snap, d); err != nil {
-		return fail(executor.ErrCredentialUnavailable, "模型凭证缓存写入失败")
+	// 3. 模型凭证为独立Pi缓存，CLI凭证保持模板规则。插件提供方的订阅账号改为链接到账号的状态目录（先清掉上次的链接）。
+	if err := clearProviderLinks(d); err != nil {
+		return fail(executor.ErrCredentialUnavailable, "清理订阅账号的旧链接失败：%v", err)
 	}
-	if err := syncModelsJSON(snap, d); err != nil {
-		return fail(executor.ErrCredentialUnavailable, "模型配置缓存写入失败")
+	switch {
+	case claude:
+		// Claude Code 用它自己在本机的登录，平台不写模型凭证与 models.json。
+	case snap.ProviderState != nil:
+		if err := e.linkProviderState(snap, d, loginHome); err != nil {
+			return err
+		}
+	default:
+		if err := seedModelAuth(snap, d); err != nil {
+			return fail(executor.ErrCredentialUnavailable, "模型凭证缓存写入失败")
+		}
+	}
+	if !claude {
+		if err := syncModelsJSON(snap, d); err != nil {
+			return fail(executor.ErrCredentialUnavailable, "模型配置缓存写入失败")
+		}
 	}
 	// CLI凭证文件先删后写。
 	if err := e.syncCredentialFiles(snap, d); err != nil {
 		return err
 	}
-	p.env = e.buildEnv(d, snap, p.cliBinDirs, e.snapshotLog(snap).With("runId", runID))
-	// 4. 工作区来源。
-	return e.syncSources(ctx, snap, d, p.env, ghBin, outcomes)
+	var userPath []string
+	if snap.Local.UserPath && e.o.UserPath != nil {
+		userPath = e.o.UserPath(ctx)
+	}
+	log := e.snapshotLog(snap).With("runId", runID)
+	// 开着登录状态时，受管 CLI 经恢复独立 HOME 的小脚本运行；关着时清掉旧脚本。
+	shimDir, err := syncCLIShims(d, loginHome, p.cliBins, e.loginOnlyEnv())
+	if err != nil {
+		return err
+	}
+	pathDirs := p.cliBinDirs
+	if shimDir != "" {
+		pathDirs = []string{shimDir}
+	}
+	p.env = e.buildEnv(d, snap, pathDirs, userPath, loginHome, log)
+	// 4. 工作区来源：平台替 Agent 做的克隆不随登录状态开关，用开关关着时的环境。
+	sourceEnv := p.env
+	if loginHome != "" {
+		sourceEnv = e.buildEnv(d, snap, p.cliBinDirs, userPath, "", log)
+	}
+	return e.syncSources(ctx, snap, d, sourceEnv, ghBin, outcomes)
 }
 
 // appendedPrompt 是 --append-system-prompt 文件的内容：Agent 的 Prompt 加上“文件夹与上下文”一节。
-func (e *Executor) appendedPrompt(snap agentconfig.Snapshot, d agentDirs) (string, error) {
-	section, err := e.contextPrompt(snap, d)
+func (e *Executor) appendedPrompt(snap agentconfig.Snapshot, d agentDirs, loginHome string) (string, error) {
+	section, err := e.contextPrompt(snap, d, loginHome)
 	if err != nil {
 		return "", err
 	}
@@ -187,14 +239,15 @@ func failureMessage(err error) string {
 	return err.Error()
 }
 
-func (e *Executor) syncSkills(ctx context.Context, snap agentconfig.Snapshot, d agentDirs) ([]string, error) {
-	if err := os.RemoveAll(d.skills); err != nil {
+// syncSkills 把 Agent 的 Skill 副本与内置 Skill loopctl 整体重建到 dir 下，返回各 Skill 的目录。
+func (e *Executor) syncSkills(ctx context.Context, snap agentconfig.Snapshot, dir string) ([]string, error) {
+	if err := os.RemoveAll(dir); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(d.skills, 0o700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	root, err := os.OpenRoot(d.skills)
+	root, err := os.OpenRoot(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +271,7 @@ func (e *Executor) syncSkills(ctx context.Context, snap agentconfig.Snapshot, d 
 				return nil, err
 			}
 		}
-		dirs = append(dirs, filepath.Join(d.skills, k.Name))
+		dirs = append(dirs, filepath.Join(dir, k.Name))
 	}
 	// 内置 Skill loopctl：内容由同版本 loopctl 生成，不存数据库，每次同步时写入。
 	for name, data := range guide.Files() {
@@ -230,7 +283,7 @@ func (e *Executor) syncSkills(ctx context.Context, snap agentconfig.Snapshot, d 
 			return nil, err
 		}
 	}
-	dirs = append(dirs, filepath.Join(d.skills, guide.SkillName))
+	dirs = append(dirs, filepath.Join(dir, guide.SkillName))
 	return dirs, nil
 }
 
@@ -393,10 +446,9 @@ func (e *Executor) cloneRepo(ctx context.Context, root *os.Root, d agentDirs, sr
 		cmd := exec.CommandContext(ctx, e.o.GitBin, append(append([]string{}, baseArgs...), args...)...)
 		cmd.Env = env
 		cmd.Dir = d.workspace
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-		cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+		cmd.Cancel = procgroup.Cancel(cmd)
 		cmd.WaitDelay = 5 * time.Second
-		return cmd.CombinedOutput()
+		return procgroup.CombinedOutput(cmd)
 	}
 	failed := func(reason string) error {
 		if ctx.Err() != nil {

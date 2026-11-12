@@ -1,7 +1,8 @@
+//go:build unix
+
 package larksidecar
 
 import (
-	"golang.org/x/sys/unix"
 	"io"
 	"os"
 	"path/filepath"
@@ -180,7 +181,7 @@ func TestInputDirectorySwapCannotRedirectPinnedFD(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	defer unix.Close(rootfd)
+	defer rootfd.Close()
 	// Deterministic TOCTOU barrier: acquire/validate the real production root fd,
 	// replace the parent component, then perform the production relative open.
 	swap := make(chan struct{})

@@ -13,6 +13,7 @@ import (
 	"sort"
 
 	"loop-now/internal/loopctl/output"
+	"loop-now/internal/privatefs"
 )
 
 // SchemaVersion 是配置文件格式的版本。
@@ -65,9 +66,9 @@ func Load(path string) (f *File, exists bool, e *output.Error) {
 	if !info.Mode().IsRegular() {
 		return nil, true, output.Errorf(output.CodeConfigInvalid, "配置文件 %s 不是普通文件", path)
 	}
-	if info.Mode().Perm()&0o077 != 0 {
+	if !privatefs.IsPrivate(path, info) {
 		return nil, true, output.Errorf(output.CodeConfigInsecurePermissions,
-			"配置文件 %s 的权限为 %04o，组或其他用户可以访问；请执行 chmod 600 %s 后重试", path, info.Mode().Perm(), path)
+			"配置文件 %s 的权限为 %04o，组或其他用户可以访问；请把它改为只有当前用户可访问（Unix 上 chmod 600 %s）后重试", path, info.Mode().Perm(), path)
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -100,7 +101,7 @@ func Save(path string, f *File) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	if err := os.Chmod(dir, 0o700); err != nil {
+	if err := privatefs.MakePrivate(dir); err != nil {
 		return err
 	}
 	b, err := json.MarshalIndent(f, "", "  ")

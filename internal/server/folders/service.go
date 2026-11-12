@@ -1,32 +1,39 @@
 package folders
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/sys/unix"
 
+	"loop-now/internal/privatefs"
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/content"
 	"loop-now/internal/server/store"
 )
 
-// GitAccess 返回从 Git 拉取时使用的环境与凭证助手：该 Agent 当前配置里的 gh CLI 凭证（项目 GitHub 账号）。
-// helper 为空表示匿名克隆。
-type GitAccess func(ctx context.Context, agentID uuid.UUID) (env []string, helper string, err error)
+// GitEnv 是一次拉取所用的 git 环境与放在 clone 之前的参数（-c 配置，例如凭证助手）。
+type GitEnv struct {
+	Env  []string
+	Args []string
+}
+
+// GitAccess 返回从 Git 拉取时使用的环境：该 Agent 当前配置里的 gh CLI 凭证（项目 GitHub 账号），
+// 本机模式的 git 开关开启时另沿用本机的 git 身份（见 app 的 folderGitAccess）。
+type GitAccess func(ctx context.Context, agentID uuid.UUID) (GitEnv, error)
 
 // Options 是文件夹服务的参数。
 type Options struct {
@@ -222,37 +229,30 @@ func (s *Service) clone(ctx context.Context, p store.FolderGitPull, f Folder) (c
 	if err := os.MkdirAll(filepath.Dir(tmp), 0o700); err != nil {
 		return "clone_failed", err.Error()
 	}
-	env, helper := []string{"GIT_TERMINAL_PROMPT=0"}, ""
+	access := GitEnv{Env: []string{"GIT_TERMINAL_PROMPT=0"}, Args: []string{"-c", "credential.helper="}}
 	if s.Git != nil {
 		var err error
-		if env, helper, err = s.Git(ctx, p.AgentID); err != nil {
-			return "clone_failed", "读取 Agent 的 gh 凭证失败：" + err.Error()
+		if access, err = s.Git(ctx, p.AgentID); err != nil {
+			return "clone_failed", "准备拉取环境失败：" + err.Error()
 		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.O.CloneTimeout)
 	defer cancel()
-	args := []string{"-c", "credential.helper="}
-	if helper != "" {
-		args = append(args, "-c", "credential.helper="+helper)
-	}
-	args = append(args, "clone", "--single-branch", "--no-local", "--branch", p.Branch, "--", p.URL, tmp)
+	args := append(slices.Clone(access.Args), "clone", "--single-branch", "--no-local", "--branch", p.Branch, "--", p.URL, tmp)
 	cmd := exec.CommandContext(ctx, s.O.GitBin, args...)
-	cmd.Env = env
+	cmd.Env = access.Env
 	cmd.Dir = filepath.Dir(tmp)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.Cancel = procgroup.Cancel(cmd)
 	cmd.WaitDelay = 5 * time.Second
-	out, err := cmd.CombinedOutput()
+	out, err := procgroup.CombinedOutput(cmd)
 	if err != nil {
 		switch {
 		case s.ctx.Err() != nil:
 			return "server_restart", "服务停止时仍在进行，已中止"
 		case ctx.Err() != nil:
 			return "timeout", fmt.Sprintf("超过克隆时限（%s）", s.O.CloneTimeout)
-		case bytes.Contains(out, []byte("Remote branch")) && bytes.Contains(out, []byte("not found")):
-			return "branch_not_found", tail(string(out), 2000)
 		}
-		return "clone_failed", tail(string(out), 2000)
+		return classifyCloneFailure(p.URL, string(out))
 	}
 	if err := f.place(tmp, p.Path); err != nil {
 		var ae *apperr.Error
@@ -262,6 +262,63 @@ func (s *Service) clone(ctx context.Context, p store.FolderGitPull, f Folder) (c
 		return "clone_failed", err.Error()
 	}
 	return "", ""
+}
+
+// classifyCloneFailure 按 git（与 ssh）的输出给出失败码；输出按 C 区域设置（不传 LANG），都是英文。
+func classifyCloneFailure(url, out string) (code, message string) {
+	lower := strings.ToLower(out)
+	switch {
+	case strings.Contains(lower, "host key verification failed") || strings.Contains(lower, "host identification has changed") ||
+		strings.Contains(lower, "host key is known for"):
+		target := sshTarget(url)
+		if target == "" {
+			target = "git@<主机>"
+		}
+		return "host_key_unverified", tail(fmt.Sprintf("SSH 无法确认这台主机的身份：known_hosts 里没有它，或它的指纹已经变了。"+
+			"从 Git 拉取不会替你确认主机指纹，请先在本机终端运行 ssh -T %s，核对指纹无误后确认，再重新拉取。\n\n%s", target, strings.TrimSpace(out)), 2000)
+	case containsAny(lower, "could not read username", "could not read password", "terminal prompts disabled", "authentication failed",
+		"permission denied (publickey", "invalid username or password", "http basic: access denied", "bad credentials",
+		"the requested url returned error: 401", "the requested url returned error: 403"):
+		return "auth_failed", tail(out, 2000)
+	case strings.Contains(out, "Remote branch") && strings.Contains(out, "not found"):
+		return "branch_not_found", tail(out, 2000)
+	}
+	return "clone_failed", tail(out, 2000)
+}
+
+func containsAny(s string, subs ...string) bool {
+	for _, sub := range subs {
+		if strings.Contains(s, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+// sshTarget 从 SSH 地址取出 ssh -T 的目标（user@host，带端口时加 -p）；不是 SSH 地址时为空。
+func sshTarget(raw string) string {
+	if strings.HasPrefix(raw, "ssh://") || strings.HasPrefix(raw, "git+ssh://") || strings.HasPrefix(raw, "ssh+git://") {
+		u, err := neturl.Parse(raw)
+		if err != nil || u.Hostname() == "" {
+			return ""
+		}
+		target := u.Hostname()
+		if u.User != nil && u.User.Username() != "" {
+			target = u.User.Username() + "@" + target
+		}
+		if port := u.Port(); port != "" {
+			target = "-p " + port + " " + target
+		}
+		return target
+	}
+	if strings.Contains(raw, "://") {
+		return ""
+	}
+	// scp 式地址 user@host:path
+	if i := strings.Index(raw, ":"); i > 0 && !strings.Contains(raw[:i], "/") {
+		return raw[:i]
+	}
+	return ""
 }
 
 // place 把文件夹之外的目录 src 移入文件夹内的 rel：目标必须不存在或是空目录（空目录先删除）。
@@ -288,12 +345,12 @@ func (f Folder) place(src, rel string) error {
 		return mapErr("path", err)
 	}
 	defer parent.Close()
-	srcDir, err := unix.Open(filepath.Dir(src), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	srcDir, err := privatefs.OpenNoFollow(filepath.Dir(src), os.O_RDONLY, 0)
 	if err != nil {
 		return err
 	}
-	defer unix.Close(srcDir)
-	return unix.Renameat(srcDir, filepath.Base(src), int(parent.Fd()), path.Base(rel))
+	defer srcDir.Close()
+	return renameAt(srcDir, filepath.Base(src), parent, path.Base(rel))
 }
 
 func tail(s string, n int) string {

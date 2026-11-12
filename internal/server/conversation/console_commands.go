@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/server/agentruntime"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/coord"
@@ -150,6 +151,9 @@ func (s *Service) Export(ctx context.Context, agentID uuid.UUID, format string) 
 
 // ListResumeSessions 列出可恢复的受管 Pi 会话，不启动进程或调用模型。
 func (s *Service) ListResumeSessions(ctx context.Context, agentID uuid.UUID) ([]executor.ManagedSession, error) {
+	if err := s.requirePiSession(ctx, agentID); err != nil {
+		return nil, err
+	}
 	_, owner, err := s.acquireConsoleCommand(ctx, agentID)
 	if err != nil {
 		return nil, err
@@ -168,6 +172,9 @@ func (s *Service) ListResumeSessions(ctx context.Context, agentID uuid.UUID) ([]
 
 // ResumeSession 停止旧空闲 Pi 后恢复已验证的受管会话，只切换模型上下文。
 func (s *Service) ResumeSession(ctx context.Context, agentID uuid.UUID, sessionID string) (apitypes.SessionInfo, error) {
+	if err := s.requirePiSession(ctx, agentID); err != nil {
+		return apitypes.SessionInfo{}, err
+	}
 	_, owner, err := s.acquireConsoleCommand(ctx, agentID)
 	if err != nil {
 		return apitypes.SessionInfo{}, err
@@ -218,4 +225,16 @@ func (s *Service) ResumeSession(ctx context.Context, agentID uuid.UUID, sessionI
 // LatestReply 返回最近一条成功回复；没有时返回 nil，不调用模型。
 func (s *Service) LatestReply(ctx context.Context, agentID uuid.UUID) (*store.Message, error) {
 	return s.st.LatestCompletedAssistant(ctx, agentID)
+}
+
+// Pi 的受管会话格式不能交给 Claude Code 恢复。
+func (s *Service) requirePiSession(ctx context.Context, agentID uuid.UUID) error {
+	agent, err := s.st.GetAgent(ctx, agentID)
+	if err != nil {
+		return err
+	}
+	if agentruntime.ForProvider(agent.ModelProvider) == agentruntime.ClaudeCode {
+		return apperr.Conflict(apperr.CodeConsoleCommandFailed, "当前运行时不支持 Pi 会话恢复")
+	}
+	return nil
 }

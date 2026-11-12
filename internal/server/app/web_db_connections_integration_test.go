@@ -13,10 +13,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
 
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/app"
 	"loop-now/internal/server/cliauth"
@@ -148,11 +148,11 @@ func webDBConnectionsIntegration(t *testing.T, slice string) {
 	}
 	cmd := exec.CommandContext(runCtx, "/Users/ljl/.local/node-v24.21.0/bin/node", filepath.Join(root, "web/scripts/"+script))
 	cmd.Dir = root
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	procgroup.Configure(cmd)
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "LOOP_NOW_WEB_DB_MANIFEST=" + manifestPath}
 	t.Cleanup(func() {
 		if cmd.Process != nil {
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+			_ = procgroup.Terminate(cmd.Process.Pid)
 		}
 	})
 	browserErr := cmd.Run()

@@ -74,6 +74,9 @@ func TestOfficialGoogleBundleOffline(t *testing.T) {
 // TestGoogleBundleSelfContainedOffline 验证 Linux 式自包含安装：无 python_framework 依赖的
 // google_sdk 资产直接解包整树并用 bin/gcloud --version 验证，不下载私有 Python。
 func TestGoogleBundleSelfContainedOffline(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("自包含 Google SDK 夹具是 sh 脚本加 tar 布局")
+	}
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)

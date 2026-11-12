@@ -19,6 +19,7 @@ import (
 	"loop-now/internal/pluginmanifest"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
+	"loop-now/internal/server/modelcatalog"
 	"loop-now/internal/server/pluginhost"
 	"loop-now/internal/server/store"
 )
@@ -44,6 +45,15 @@ type Service struct {
 	// RequestTimeout 是 action 与 http 请求等待插件回应的时长，默认 30 秒。
 	RequestTimeout time.Duration
 	Log            *slog.Logger
+	// CaptureProviders 用随包 Pi 加载插件目录 dir 下的扩展（相对路径），读出它们注册的模型提供方；为空时不读取。
+	// 会运行插件代码，只在用户确认安装之后调用。
+	CaptureProviders func(ctx context.Context, dir string, extensions []string) (modelcatalog.Capture, error)
+	// Models 是模型目录：安装、更新、卸载后把插件提供方并入；为空时不并入。
+	Models *modelcatalog.Registry
+	// DeleteProviderAccounts 删除这些模型提供方的项目订阅账号（卸载并删除数据时）；为空时不删。
+	DeleteProviderAccounts func(ctx context.Context, providers []string) error
+	// ManagedHomePaths 返回平台在 Agent HOME 里管理的路径（CLI 模板的凭证文件）；安装时据此提示与之重叠的状态路径。
+	ManagedHomePaths func() []string
 
 	mu       sync.Mutex
 	previews map[uuid.UUID]*preview
@@ -55,6 +65,8 @@ type preview struct {
 	dir     string // 插件目录：暂存区里的副本，local 来源为原目录
 	staging string // 暂存目录，local 来源为空
 	m       Manifest
+	// providerState 是市场条目的声明（从市场安装时）；为空时用清单的 loopNow.providerState。
+	providerState map[string]pluginmanifest.ProviderState
 }
 
 // Init 清理上次运行留下的暂存目录。
@@ -100,6 +112,24 @@ type Detail struct {
 	Versions   []VersionView  `json:"versions"`
 	InstallDir string         `json:"installDir"`
 	DataDir    string         `json:"dataDir"`
+	// Providers 是当前版本的 Pi 扩展注册的模型提供方（安装时读出）；ProvidersError 是整次读取失败的原因。
+	Providers      []ProviderView              `json:"providers"`
+	ProviderErrors []modelcatalog.CaptureError `json:"providerErrors"`
+	ProvidersError *string                     `json:"providersError"`
+	// ProviderState 是当前版本生效的 providerState 声明（市场条目优先，其次包自己的 loopNow.providerState）。
+	ProviderState map[string]pluginmanifest.ProviderState `json:"providerState"`
+}
+
+// ProviderView 是接口里的 PluginModelProvider。
+type ProviderView struct {
+	ID               string  `json:"id"`
+	Name             string  `json:"name"`
+	Extension        string  `json:"extension"`
+	OAuth            bool    `json:"oauth"`
+	OverridesBuiltin bool    `json:"overridesBuiltin"`
+	InCatalog        bool    `json:"inCatalog"`
+	Error            *string `json:"error"`
+	ModelCount       int     `json:"modelCount"`
 }
 
 // VersionView 是接口里的 PluginVersion。
@@ -265,9 +295,20 @@ func (s *Service) Get(ctx context.Context, id string) (Detail, error) {
 	if err != nil {
 		return Detail{}, err
 	}
-	d := Detail{Plugin: v, Manifest: m.Public(), Versions: []VersionView{}, InstallDir: p.InstallDir, DataDir: s.dataDir(id)}
+	d := Detail{Plugin: v, Manifest: m.Public(), Versions: []VersionView{}, InstallDir: p.InstallDir, DataDir: s.dataDir(id), Providers: []ProviderView{}, ProviderErrors: []modelcatalog.CaptureError{}}
 	for _, ver := range versions {
 		d.Versions = append(d.Versions, VersionView{Version: ver.Version, Digest: ver.Digest, InstalledAt: ver.InstalledAt, Current: ver.Version == p.Version})
+		if ver.Version == p.Version {
+			d.ProvidersError = ver.ProvidersError
+			_ = json.Unmarshal(ver.ProviderState, &d.ProviderState)
+			var c modelcatalog.Capture
+			if json.Unmarshal(ver.Providers, &c) == nil {
+				d.Providers, d.ProviderErrors = s.providerViews(id, c), append(d.ProviderErrors, c.Errors...)
+			}
+		}
+	}
+	if d.ProviderState == nil {
+		d.ProviderState = map[string]pluginmanifest.ProviderState{}
 	}
 	return d, nil
 }
@@ -302,12 +343,15 @@ func (s *Service) Preview(ctx context.Context, req PreviewRequest) (Preview, err
 		}
 	}
 	fetchSrc, trusted, market := *src, false, (*string)(nil)
+	var declared map[string]pluginmanifest.ProviderState
+	var entry *marketEntry
 	switch {
 	case src.Kind == SourceMarket:
 		var err error
-		if fetchSrc, trusted, err = s.resolveMarket(ctx, *src); err != nil {
+		if fetchSrc, trusted, entry, err = s.resolveMarket(ctx, *src); err != nil {
 			return Preview{}, err
 		}
+		declared = entry.ProviderState
 		market = &src.Market
 	case src.Location == "":
 		return Preview{}, apperr.Invalid("source.location", "须给出来源位置")
@@ -322,13 +366,17 @@ func (s *Service) Preview(ctx context.Context, req PreviewRequest) (Preview, err
 		resolved.Market = market
 		var m Manifest
 		if m, err = ReadManifest(dir, s.PlatformVersion); err == nil {
+			// 从市场安装、包自己没写 loopNow.displayName 时，用市场条目的显示名（而不是 npm 包名），随版本保存；更新时按新条目重取。
+			if entry != nil && !m.OwnDisplayName && entry.DisplayName.String() != "" {
+				m.DisplayName = entry.DisplayName
+			}
 			switch {
 			case req.PluginID != "" && m.ID != req.PluginID:
 				err = apperr.Invalid("manifest", "来源里的插件 id 已变为 "+m.ID+"，不能作为 "+req.PluginID+" 的更新")
 			case market != nil && m.ID != src.ID:
 				err = apperr.Invalid("manifest", "市场条目 "+src.ID+" 的来源里是插件 "+m.ID)
 			default:
-				return s.keepPreview(ctx, id, staging, dir, resolved, m, trusted)
+				return s.keepPreview(ctx, id, staging, dir, resolved, m, trusted, declared)
 			}
 		}
 	}
@@ -336,7 +384,7 @@ func (s *Service) Preview(ctx context.Context, req PreviewRequest) (Preview, err
 	return Preview{}, err
 }
 
-func (s *Service) keepPreview(ctx context.Context, id uuid.UUID, staging, dir string, resolved ResolvedSource, m Manifest, trusted bool) (Preview, error) {
+func (s *Service) keepPreview(ctx context.Context, id uuid.UUID, staging, dir string, resolved ResolvedSource, m Manifest, trusted bool, declared map[string]pluginmanifest.ProviderState) (Preview, error) {
 	if resolved.Kind == SourceNPM {
 		v := m.Version
 		resolved.NpmVersion = &v
@@ -353,7 +401,7 @@ func (s *Service) keepPreview(ctx context.Context, id uuid.UUID, staging, dir st
 		return Preview{}, err
 	}
 	s.mu.Lock()
-	s.previews[id] = &preview{view: pv, dir: dir, staging: staging, m: m}
+	s.previews[id] = &preview{view: pv, dir: dir, staging: staging, m: m, providerState: declared}
 	s.mu.Unlock()
 	return pv, nil
 }
@@ -417,10 +465,9 @@ func (s *Service) install(ctx context.Context, pv *preview, update string) (View
 	if err != nil {
 		return View{}, err
 	}
-	installDir := pv.dir
+	installDir, codeDir, target, reuse := pv.dir, pv.dir, "", false
 	if pv.view.Source.Kind != SourceLocal {
-		target := filepath.Join(s.Root, m.ID, m.Version)
-		reuse := false
+		target = filepath.Join(s.Root, m.ID, m.Version)
 		if update != "" {
 			versions, err := s.Store.PluginVersions(ctx, m.ID)
 			if err != nil {
@@ -433,12 +480,21 @@ func (s *Service) install(ctx context.Context, pv *preview, update string) (View
 				reuse = reuse || v.Version == m.Version
 			}
 		}
-		if !reuse {
-			if pv.view.Source.Kind == SourceGit || pv.view.Source.Kind == SourceNPM {
-				if err := s.installDeps(ctx, pv.dir); err != nil {
-					return View{}, err
-				}
+		if reuse {
+			codeDir = target
+		} else if pv.view.Source.Kind == SourceGit || pv.view.Source.Kind == SourceNPM {
+			if err := s.installDeps(ctx, pv.dir); err != nil {
+				return View{}, err
 			}
+		}
+	}
+	// 依赖装好之后、文件就位之前读出模型提供方：与别的插件注册的提供方同 id 时不安装。
+	providers, providersError := s.captureProviders(ctx, codeDir, m)
+	if err := s.checkProviderConflicts(ctx, m.ID, providers); err != nil {
+		return View{}, err
+	}
+	if target != "" {
+		if !reuse {
 			if err := os.RemoveAll(target); err != nil {
 				return View{}, err
 			}
@@ -456,11 +512,32 @@ func (s *Service) install(ctx context.Context, pv *preview, update string) (View
 	}
 	manifest, _ := json.Marshal(m)
 	source, _ := json.Marshal(pv.view.Source)
+	captured, _ := json.Marshal(providers)
+	declared := pv.providerState
+	if len(declared) == 0 {
+		declared = m.ProviderState
+	}
+	if declared == nil {
+		declared = map[string]pluginmanifest.ProviderState{}
+	}
+	state, _ := json.Marshal(declared)
+	// 与平台管理的 HOME 路径重叠的状态路径：Agent 启动时会失败，安装时先在详情里提示。
+	if s.ManagedHomePaths != nil {
+		managed := s.ManagedHomePaths()
+		for _, provider := range slices.Sorted(maps.Keys(declared)) {
+			if p, m, ok := pluginmanifest.OverlappingStatePath(declared[provider].Paths, managed); ok {
+				providers.Errors = append(providers.Errors, modelcatalog.CaptureError{Path: "providerState." + provider,
+					Error: "状态路径 " + p + " 与 CLI 模板的凭证文件 " + m + " 重叠，用这个提供方的 Agent 启动时会失败"})
+			}
+		}
+		captured, _ = json.Marshal(providers)
+	}
+	extra := store.PluginVersionExtras{Providers: captured, ProvidersError: providersError, ProviderState: state}
 	row := store.Plugin{ID: m.ID, DisplayName: m.DisplayName.String(), Source: source, Version: m.Version, Manifest: manifest, InstallDir: installDir}
 	if update == "" {
-		err = s.Store.InstallPlugin(ctx, row, sum)
+		err = s.Store.InstallPlugin(ctx, row, sum, extra)
 	} else {
-		err = s.Store.UpdatePlugin(ctx, row, sum)
+		err = s.Store.UpdatePlugin(ctx, row, sum, extra)
 		if err == nil {
 			// 新版本不再声明代管的渠道，它上面的外部身份绑定清空（plugins/SPEC.md §12）。
 			err = s.Store.PruneIdentityManagers(ctx, m.ID, m.ManagingChannels())
@@ -470,6 +547,7 @@ func (s *Service) install(ctx context.Context, pv *preview, update string) (View
 		return View{}, err
 	}
 	s.reloadHost(ctx, m.ID, m.Platform != "" || (update != "" && existing.ID != ""))
+	s.publishProviders(ctx)
 	v, _, err := s.get(ctx, m.ID)
 	return v, err
 }
@@ -494,6 +572,20 @@ func (s *Service) Uninstall(ctx context.Context, id string, deleteData bool) err
 	}
 	var src ResolvedSource
 	_ = json.Unmarshal(p.Source, &src)
+	// 删除数据时连同它注册的模型提供方的项目订阅账号一起删除（plugins/SPEC.md §13）；默认保留，重新安装后恢复。
+	if deleteData && s.DeleteProviderAccounts != nil {
+		var providers []string
+		if registered, err := s.installedProviders(ctx); err == nil {
+			for _, r := range registered {
+				if r.PluginID == id {
+					providers = append(providers, r.Provider.ID)
+				}
+			}
+		}
+		if err := s.DeleteProviderAccounts(ctx, providers); err != nil {
+			return err
+		}
+	}
 	if s.Host != nil {
 		if err := s.Host.Unload(ctx, id); err != nil {
 			s.Log.Warn("宿主卸载插件失败", "plugin", id, "err", err)
@@ -517,6 +609,7 @@ func (s *Service) Uninstall(ctx context.Context, id string, deleteData bool) err
 		}
 	}
 	_ = os.Remove(filepath.Join(s.Root, id)) // 只在已空时删除
+	s.publishProviders(ctx)
 	return nil
 }
 

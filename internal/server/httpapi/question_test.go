@@ -44,7 +44,7 @@ func TestInboxQuestionRealHTTPStatesAndContract(t *testing.T) {
 		t.Fatal("ordinary reply answered or read original", err)
 	}
 	answer := decode[apitypes.InboxMessage](t, e.expect(201, "POST", path, map[string]any{"optionId": "2"}))
-	if answer.Text != "选择：停止" || answer.AnswerTo == nil || answer.AnswerTo.MessageID != q.ID {
+	if answer.Text != "Selected: 停止" || answer.AnswerTo == nil || answer.AnswerTo.MessageID != q.ID {
 		t.Fatal("answer projection")
 	}
 	if original, err = e.st.GetInboxMessage(ctx, q.ID, 200); err != nil || original.ReadAt == nil {

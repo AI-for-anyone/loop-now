@@ -32,7 +32,7 @@ describe('旧后台项目凭证兼容', () => {
     renderSettings()
     await screen.findByText(/当前后台尚未支持项目凭证/)
     expect(screen.getAllByRole('alert')).toHaveLength(1)
-    expect(screen.getByRole('button', { name: '登录 Codex' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '浏览器登录' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '录入账号' })).toBeDisabled()
     expect(screen.queryByText('尚未配置账号')).toBeNull()
     expect(screen.queryByLabelText('添加模型账号 · 提供方')).toBeNull()
@@ -67,7 +67,7 @@ describe('旧后台项目凭证兼容', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('资源不存在或已删除'))
     expect(screen.queryByText(/当前后台尚未支持项目凭证/)).toBeNull()
     expect(screen.queryByRole('combobox')).toBeNull()
-    expect(screen.getByRole('button', { name: '登录 Codex' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '浏览器登录' })).toBeDisabled()
     gone = false
     await act(() => client.invalidateQueries({ queryKey: credentialKeys.project(defaultProject.id) }))
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())

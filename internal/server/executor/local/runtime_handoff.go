@@ -5,10 +5,11 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
+
+	"loop-now/internal/procgroup"
 )
 
 var (
@@ -191,8 +192,8 @@ func (h *RuntimeHandoff) stopCaptured(id uuid.UUID, p *proc, job *handoffStop) {
 	e.mu.Unlock()
 	e.stop(p, stopCause{reason: stopConfigChanged})
 	<-p.stopDone
-	groupErr := syscall.Kill(-p.client.Pid(), 0)
-	if p.stopErr != nil || alive(p) || !errors.Is(groupErr, syscall.ESRCH) {
+	groupErr := procgroup.Probe(p.rt.Pid())
+	if p.stopErr != nil || alive(p) || !errors.Is(groupErr, procgroup.ErrNotFound) {
 		err, unsafe = ErrRuntimeStopUnconfirmed, true
 	}
 }

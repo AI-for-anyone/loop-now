@@ -3,6 +3,8 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 
 contextBridge.exposeInMainWorld('loopNowDesktop', {
+  // 壳所在的平台：页面据此决定要不要留顶部的拖动区（只有 macOS 藏了系统标题栏）。
+  platform: process.platform,
   notify: (notification: unknown) => ipcRenderer.send('loop-now:notify', notification),
   setBadge: (count: unknown) => ipcRenderer.send('loop-now:badge', count),
   onNavigate: (listener: (path: string) => void) => {

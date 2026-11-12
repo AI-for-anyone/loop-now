@@ -126,7 +126,7 @@ func TestTaskNodeQueueListsAgentMessagesAndPromotesThem(t *testing.T) {
 	if e != nil || !ok || turn.ID != r2.RunID {
 		t.Fatalf("应先领取打断提醒：%v %v", turn.ID, e)
 	}
-	if !strings.Contains(turn.Text, d1.String()) || !strings.Contains(turn.Text, d2.String()) || strings.Contains(turn.Text, s1.String()) || !strings.Contains(turn.Text, "另有 1 条未读消息") {
+	if !strings.Contains(turn.Text, d1.String()) || !strings.Contains(turn.Text, d2.String()) || strings.Contains(turn.Text, s1.String()) || !strings.Contains(turn.Text, "1 more unread messages") {
 		t.Fatalf("提醒应只点名本轮承载的消息：%s", turn.Text)
 	}
 }

@@ -415,7 +415,7 @@ func (s *Store) enqueueTaskNodeInboxTx(ctx context.Context, m *TaskMutation, tar
 	return out, interrupted, e
 }
 
-const taskNodeReminderPrompt = "你有原任务节点的严格Inbox消息。使用 loopctl inbox list，再用 inbox read <id> --run 本轮运行ID 逐条读取，并用 inbox reply <id> --run 本轮运行ID 回复；普通消息不是原问题答案。只处理原节点，不改投其他节点。"
+const taskNodeReminderPrompt = "You have strict Inbox messages for the original task node. Use loopctl inbox list, then read them one by one with inbox read <id> --run <run ID for this turn>, and reply with inbox reply <id> --run <run ID for this turn>; ordinary messages are not answers to the original question. Only handle the original node; do not reroute anything to other nodes."
 
 // findTaskNodeReminderTx returns the earliest queued node notification turn of
 // this priority and mode that can still take images more message images.

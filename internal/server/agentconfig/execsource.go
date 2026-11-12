@@ -2,6 +2,8 @@ package agentconfig
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 
@@ -52,16 +54,73 @@ type Snapshot struct {
 	ForkSessionFile string
 	// Plugins 是已授权插件交给 Pi 的东西，启动 Pi 时读取。
 	Plugins PluginAssets
+	// ProviderState 是插件提供方订阅账号的状态（plugins/SPEC.md §13）：模型凭证为 plugin_state 时才有。
+	ProviderState *ProviderState
+	// Local 是个人版“本机模式”交给 Pi 的东西：按基础 Agent 与其项目的当前设置在启动 Pi 时读取（任务内实例也一样，
+	// 不进任务快照）；它的 Identity 变化时 Pi 在下一次派发重启。
+	Local LocalAccess
+}
+
+// LocalAccess 是本机模式在启动 Pi 时生效的部分。
+type LocalAccess struct {
+	// Directories 是生效的本机目录（“绑定本机目录”关闭时为空）：项目的在前、Agent 自己的在后，同一路径只出现一次。
+	// 目录是否存在在写系统提示时判断，只列出存在的。
+	Directories []LocalDirectory
+	// UserPath 为真时把用户的 PATH 接在执行 PATH 之后（“用本机的 CLI”）。
+	UserPath bool
+	// Logins 为真时 Pi 及其子进程的 HOME（Windows 上另有 USERPROFILE、APPDATA、LOCALAPPDATA）是服务端用户真实的
+	// （“用本机的登录状态”）；Loop Now 给 Agent 配了账号的 CLI 仍以 Agent 的独立 HOME 运行。
+	Logins bool `json:"logins,omitempty"`
+}
+
+// LocalDirectory 是一个生效的本机目录。
+type LocalDirectory struct {
+	Path      string `json:"path"`
+	Note      string `json:"note,omitempty"`
+	Inherited bool   `json:"inherited,omitempty"` // 来自项目的清单
+}
+
+// Identity 是决定 Pi 是否需要重启的指纹：目录（含备注与来源）、PATH 与登录状态两个开关，不含目录此刻是否存在。
+func (l LocalAccess) Identity() string {
+	if len(l.Directories) == 0 && !l.UserPath && !l.Logins {
+		return ""
+	}
+	b, _ := json.Marshal(l)
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }
 
 // PluginAssets 是 Agent 已授权插件的 Agent 侧（plugins/SPEC.md §2.1），路径都是绝对路径；没有授权插件或全局停用时为空。
 type PluginAssets struct {
+	IDs        []string                   // 挂载的插件
 	Extensions []string                   // 每个一条 -e，在平台自己的 -e 之后
 	Skills     []string                   // 每个一条 --skill
 	MCPServers map[string]json.RawMessage // 合并写入 Pi 目录的 mcp.json，并加 -e builtin:mcp
 	Bin        []string                   // 加入 PATH
 	Env        map[string]string          // 插件配置与账号
 }
+
+// ProviderState 是插件提供方订阅账号的一个状态版本：启动 Pi 前 Agent 的 auth.json 链接到 Dir 里的 auth.json，
+// Paths（HOME 下的相对路径，/ 分隔）链接到 Dir 里的同名路径；开着“用本机的登录状态”时不建 HOME 下的链接。
+type ProviderState struct {
+	PluginID  string
+	VersionID uuid.UUID
+	Dir       string
+	Paths     []string
+}
+
+// Identity 是状态的进程身份：换版本、换路径都要重启 Pi。
+func (p *ProviderState) Identity() string {
+	if p == nil {
+		return ""
+	}
+	b, _ := json.Marshal(p)
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
+
+// ProviderStateFunc 返回模型凭证为 plugin_state 时的状态：plugin 是凭证所属插件，version 是绑定的版本。
+type ProviderStateFunc func(ctx context.Context, plugin, provider string, version uuid.UUID) (*ProviderState, error)
 
 // SkillSnapshot 是一个 Skill 副本的文件清单。
 type SkillSnapshot struct {
@@ -201,7 +260,26 @@ func (s *Service) ExecutionSnapshot(ctx context.Context, agentID uuid.UUID) (Sna
 			return Snapshot{}, err
 		}
 	}
+	if s.LocalAccess != nil {
+		if snap.Local, err = s.LocalAccess(ctx, agentID); err != nil {
+			return Snapshot{}, err
+		}
+	}
+	if snap.ProviderState, err = ResolveProviderState(ctx, s.ProviderState, snap); err != nil {
+		return Snapshot{}, err
+	}
 	return snap, nil
+}
+
+// ResolveProviderState 在模型凭证为 plugin_state 时给出状态目录与随账号走的路径；其余凭证返回 nil。
+func ResolveProviderState(ctx context.Context, fn ProviderStateFunc, snap Snapshot) (*ProviderState, error) {
+	if snap.ModelCredential.Kind() != modelcredential.PluginState {
+		return nil, nil
+	}
+	if fn == nil || snap.ModelBinding == nil {
+		return nil, ErrCredentialUnavailable
+	}
+	return fn(ctx, snap.ModelCredential.Plugin(), snap.Provider, snap.ModelBinding.VersionID)
 }
 
 // ReadBlob 读取内容。

@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"github.com/google/uuid"
 	"io"
+	"loop-now/internal/privatefs"
 	"loop-now/internal/server/clicredential"
 	"net"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -17,6 +19,12 @@ type grantResolveFunc func(context.Context, clicredential.Binding) (clicredentia
 func (f grantResolveFunc) Resolve(ctx context.Context, b clicredential.Binding) (clicredential.Google, error) {
 	return f(ctx, b)
 }
+
+// brokerReplyDeadline bounds a test client's wait for one broker reply. It is a hang guard, not a
+// latency assertion: on the Windows CI runner, where go test runs several packages' SQLite-heavy
+// suites at once, a single broker round-trip has been observed to take over a second.
+const brokerReplyDeadline = 10 * time.Second
+
 func TestGoogleBrokerScopeCloseAndNoRefreshSecret(t *testing.T) {
 	binding := clicredential.Binding{VersionID: uuid.New(), AgentID: uuid.New(), ProjectID: uuid.New(), AccountID: uuid.New(), CLI: "gcloud"}
 	calls := 0
@@ -35,7 +43,7 @@ func TestGoogleBrokerScopeCloseAndNoRefreshSecret(t *testing.T) {
 	t.Cleanup(func() { b.Close(context.Background()) })
 	for p, mode := range map[string]os.FileMode{b.path: 0600, b.dir: 0700} {
 		fi, e := os.Stat(p)
-		if e != nil || fi.Mode().Perm() != mode {
+		if e != nil || !privatefs.IsPrivate(p, fi) || (runtime.GOOS != "windows" && fi.Mode().Perm() != mode) {
 			t.Fatal("private socket permissions")
 		}
 	}
@@ -44,7 +52,7 @@ func TestGoogleBrokerScopeCloseAndNoRefreshSecret(t *testing.T) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		conn.SetDeadline(time.Now().Add(time.Second))
+		conn.SetDeadline(time.Now().Add(brokerReplyDeadline))
 		id := uuid.New()
 		json.NewEncoder(conn).Encode(map[string]any{"protocol": 1, "type": "resolve", "requestId": id, "capability": capability})
 		raw, e := io.ReadAll(conn)

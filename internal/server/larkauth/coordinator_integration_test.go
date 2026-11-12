@@ -145,7 +145,8 @@ func TestLarkClaimWaitingAcrossLeaseDeadlineDoesNotClaim(t *testing.T) {
 		errs <- e
 	}()
 	sqlitetest.WaitWriteWaiters(t, ctx, f.st.Pool, 1)
-	for !time.Now().After(until) {
+	// 按墙上时钟比较，理由见 lease_boundaries_integration_test.go 的 waitExpired。
+	for !time.Now().Round(0).After(until.Round(0)) {
 		time.Sleep(time.Millisecond)
 	}
 	release()
