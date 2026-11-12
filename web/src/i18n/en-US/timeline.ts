@@ -7,6 +7,7 @@ const count = (n: number, one: string, other: string) => `${n} ${plural('en-US',
 export const timeline = {
   toggle: (duration: string, tokens: string) => `Run log · ${duration} · ${tokens} tokens`,
   toggleRunning: (elapsed: string) => `Run log · ${elapsed} so far`,
+  toggleParts: { tokens: (tokens: string) => `${tokens} tokens`, running: (elapsed: string) => `${elapsed} so far` },
   title: 'Run log',
   total: (duration: string) => `Total ${duration}`,
   loading: 'Loading the run log…',

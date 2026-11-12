@@ -326,6 +326,31 @@ describe('回复的显示', () => {
     expect(screen.getByText('跑测试')).toHaveClass('bg-tint-pink')
   })
 
+  it('会话分隔线是带剪刀的粉色虚线裁切线，与“打断”分隔线同一种样式', () => {
+    const before = makeRun({ status: 'interrupted', endReason: 'user_interrupt', startedAt: '2026-10-12T08:00:00Z', endedAt: '2026-10-12T08:01:00Z' })
+    const interrupt = makeRun({ whenBusy: 'interrupt', startedAt: '2026-10-12T08:01:01Z' })
+    const reopened = makeRun({ startedAt: '2026-10-12T09:00:00Z' })
+    const messages = [
+      makeMessage({ text: '第一问', run: before }),
+      makeMessage({ text: '先做这个', run: interrupt }),
+      makeMessage({ text: '重开后的问题', run: reopened, sessionEpoch: 2 }),
+    ]
+    render(<List {...props} pages={{ pages: [{ messages, hasMore: false, hasMoreAfter: false }], pageParams: [null] }} onLoadOlder={() => {}} />)
+    const session = screen.getByRole('separator', { name: '会话已切换，页面历史保留' })
+    const interrupted = screen.getByRole('separator', { name: '已打断，先处理这条' })
+    expect(session).toHaveTextContent(/^会话已切换，页面历史保留$/)
+    for (const divider of [session, interrupted]) {
+      const lines = divider.querySelectorAll('[data-cut-line]')
+      expect(lines).toHaveLength(2)
+      for (const line of lines) expect(line).toHaveClass('border-t-2', 'border-dashed', 'border-riso-pink')
+      expect(divider.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+    }
+    // 裁切线左端是一把剪刀；打断分隔线的图标仍是闪电。
+    expect(session.querySelector('svg')).toHaveClass('lucide-scissors')
+    expect(interrupted.querySelector('svg')).toHaveClass('lucide-zap')
+    expect(session.compareDocumentPosition(screen.getByText('重开后的问题')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('被 Inbox 唤醒的那一轮：发送者标明为平台提醒，与操作者发的消息区分开，随后是回复', () => {
     const run = makeRun()
     const reminder = makeMessage({ origin: 'inbox_reminder', text: '你有 2 条未读 Inbox 消息，运行 loopctl inbox list --unread 查看。', run })

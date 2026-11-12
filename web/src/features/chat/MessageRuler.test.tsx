@@ -82,6 +82,11 @@ function List({ pages, ...rest }: Omit<ComponentProps<typeof MessageList>, 'agen
 const nav = () => screen.getByRole('navigation', { name: '对话轮次' })
 const ticks = () => within(nav()).getAllByRole('button')
 const turnBlock = (text: string) => screen.getByText(text).closest<HTMLElement>('[data-run-id]')!
+const mark = () => nav().querySelector<HTMLElement>('[data-ruler-mark]')
+const longTicks = () => ticks().filter((tick) => tick.querySelector('[data-ruler-long]'))
+const numbers = () => ticks().map((tick) => tick.querySelector('[data-ruler-number]')?.textContent ?? '')
+const total = () => nav().querySelector<HTMLElement>('[data-ruler-total]')
+const texts = (count: number) => Array.from({ length: count }, (_, i) => `问题${i + 1}`)
 
 describe('对话区右侧的刻度尺', () => {
   it('一条刻度一轮（已开始的轮次），名称是用户消息的开头；排队中的消息不算；加载更早的消息后刻度增加', () => {
@@ -119,13 +124,16 @@ describe('对话区右侧的刻度尺', () => {
     })
     const current = () => ticks().filter((tick) => tick.getAttribute('aria-current') === 'true').map((tick) => tick.getAttribute('aria-label'))
     expect(current()).toEqual(['三', '四'])
-    expect(within(nav()).getByRole('button', { name: '四' }).firstElementChild).toHaveClass('bg-ink-500')
-    expect(within(nav()).getByRole('button', { name: '一' }).firstElementChild).toHaveClass('bg-border')
+    // 可见的轮次用一笔黄色记号笔罩住：从第一条可见刻度画到最后一条。
+    expect(mark()!.closest('li')).toContainElement(within(nav()).getByRole('button', { name: '三' }))
+    expect(mark()).toHaveAttribute('data-count', '2')
     act(() => {
       FakeIntersectionObserver.trigger(turnBlock('四'), false)
       FakeIntersectionObserver.trigger(turnBlock('二'), true)
     })
     expect(current()).toEqual(['二', '三'])
+    expect(mark()!.closest('li')).toContainElement(within(nav()).getByRole('button', { name: '二' }))
+    expect(mark()).toHaveAttribute('data-count', '2')
   })
 
   it('点击刻度跳到那一轮的开头；之后内容变高不被贴底拉回，跳转带来的滚动也不加载更早的消息', async () => {
@@ -224,6 +232,113 @@ describe('对话区右侧的刻度尺', () => {
     })
     // 第 2 轮的刻度在 32，上方留 16px。
     expect(list.scrollTop).toBe(16)
+  })
+})
+
+// 改版“一张印出来的纸”：刻度尺放在纸张右侧的票根里，取代灰色刻度条和原生滚动条。
+describe('票根里的刻度尺', () => {
+  it('是纸张右侧的票根：导航区的名称不变，顶上的小标题“轮次”读屏不重复读', () => {
+    render(<List pages={pagesOf(['一', '二'])} />)
+    expect(nav()).toHaveClass('border-l-2', 'border-dashed')
+    expect(within(nav()).getByText('轮次')).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('历史已全部加载时从 1 编号：每 5 轮一条长刻度带数字，底部是总轮数', () => {
+    render(<List pages={pagesOf(texts(12))} hasOlder={false} />)
+    expect(ticks()).toHaveLength(12)
+    expect(longTicks().map((tick) => tick.getAttribute('aria-label'))).toEqual(['问题5', '问题10'])
+    expect(numbers()).toEqual(['', '', '', '', '5', '', '', '', '', '10', '', ''])
+    // 数字只是刻度上的标注，按钮的名称仍是这一轮的开头。
+    expect(within(nav()).getByRole('button', { name: '问题5' }).querySelector('[data-ruler-number]')).toHaveAttribute('aria-hidden', 'true')
+    expect(total()).toHaveTextContent('12')
+    expect(total()).toHaveTextContent('共 12 轮')
+  })
+
+  it('还有更早的历史没加载、又不知道前面有多少轮时：只有刻度，没有数字、长刻度和总数', () => {
+    render(<List pages={pagesOf(texts(12))} hasOlder />)
+    expect(ticks()).toHaveLength(12)
+    expect(longTicks()).toHaveLength(0)
+    expect(numbers().join('')).toBe('')
+    expect(total()).toBeNull()
+  })
+
+  it('给出“这一页之前有多少轮”时接着编号', () => {
+    render(<List pages={pagesOf(texts(4))} hasOlder turnsBefore={22} />)
+    expect(numbers()).toEqual(['', '', '25', ''])
+    expect(longTicks().map((tick) => tick.getAttribute('aria-label'))).toEqual(['问题3'])
+    expect(total()).toHaveTextContent('26')
+  })
+
+  it('定位模式下后面还有更新的消息没加载：总数还不知道，不显示', () => {
+    const pages = pagesOf(texts(6))
+    render(<List pages={pages} hasOlder={false} targetRunId={pages.pages[0].messages[0].run.id} hasNewer onLoadNewer={() => {}} />)
+    expect(numbers()).toEqual(['', '', '', '', '5', ''])
+    expect(total()).toBeNull()
+  })
+
+  it('黄色记号笔从第一条可见刻度罩到最后一条，左侧一个粉色箭头；没有可见轮时不画', () => {
+    render(<List pages={pagesOf(texts(8))} hasOlder={false} />)
+    expect(mark()).toBeNull()
+    act(() => {
+      for (const text of ['问题6', '问题7', '问题8']) FakeIntersectionObserver.trigger(turnBlock(text), true)
+    })
+    expect(mark()!.closest('li')).toContainElement(within(nav()).getByRole('button', { name: '问题6' }))
+    expect(mark()).toHaveAttribute('data-count', '3')
+    expect(mark()).toHaveAttribute('aria-hidden', 'true')
+    // 高度按刻度间距算：罩住 3 条刻度，上下各多出一点。
+    expect(mark()!.style.height).toBe('calc(200% + 19px)')
+    expect(mark()!.querySelector('[data-ruler-band]')).toHaveClass('bg-riso-yellow')
+    expect(mark()!.querySelector('[data-ruler-arrow]')).toHaveClass('border-l-riso-pink')
+    act(() => {
+      for (const text of ['问题6', '问题7', '问题8']) FakeIntersectionObserver.trigger(turnBlock(text), false)
+    })
+    expect(mark()).toBeNull()
+  })
+
+  it('刻度间距上限 23px、下限 8px，放不下时刻度尺自己滚动', () => {
+    render(<List pages={pagesOf(['一', '二'])} />)
+    const list = nav().querySelector('ol')!
+    expect(list).toHaveClass('overflow-y-auto', 'no-scrollbar')
+    for (const item of list.querySelectorAll('li')) expect(item).toHaveClass('flex-[0_1_23px]', 'min-h-2')
+  })
+
+  it('只有一轮或没有对话时票根还在（纸张的版式不变），但里面没有刻度，也不是导航区', () => {
+    const { rerender } = render(<List pages={pagesOf(['唯一的问题'])} hasOlder={false} />)
+    const stub = document.querySelector<HTMLElement>('[data-turn-stub]')!
+    expect(stub).toHaveTextContent('轮次')
+    expect(stub).toHaveAttribute('aria-hidden', 'true')
+    expect(stub).toHaveClass('max-nav:hidden')
+    expect(within(stub).queryByRole('button')).toBeNull()
+    rerender(<List pages={pagesOf(['一', '二'])} hasOlder={false} />)
+    expect(document.querySelector('[data-turn-stub]')).toBe(nav())
+  })
+
+  it('对话区的原生滚动条隐藏，由刻度尺代替；滚动区仍然可以滚动', () => {
+    render(<List pages={pagesOf(['一', '二'])} />)
+    expect(screen.getByRole('log')).toHaveClass('no-scrollbar', 'overflow-y-auto')
+  })
+})
+
+describe('每一轮的空心编号', () => {
+  const turnNumbers = () => [...document.querySelectorAll('[data-turn-number]')].map((node) => node.textContent)
+
+  it('历史已全部加载时，每一轮左侧有空心编号，与尺子上的数字一致', () => {
+    render(<List pages={pagesOf(texts(6))} hasOlder={false} />)
+    expect(turnNumbers()).toEqual(['1', '2', '3', '4', '5', '6'])
+    const number = turnBlock('问题5').querySelector('[data-turn-number]')!
+    expect(number).toHaveAttribute('aria-hidden', 'true')
+    expect(number).toHaveClass('max-nav:hidden')
+    expect(numbers()[4]).toBe('5')
+  })
+
+  it('还有更早的历史没加载、又不知道前面有多少轮时不显示编号', () => {
+    render(<List pages={pagesOf(texts(3))} hasOlder />)
+    expect(turnNumbers()).toEqual(['', '', ''])
+  })
+
+  it('给出“这一页之前有多少轮”时接着编号', () => {
+    render(<List pages={pagesOf(texts(2))} hasOlder turnsBefore={24} />)
+    expect(turnNumbers()).toEqual(['25', '26'])
   })
 })
 

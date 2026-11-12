@@ -168,3 +168,86 @@ describe('Markdown 渲染与安全', () => {
     expect(container.querySelector('.riso-cursor')).toBeNull()
   })
 })
+
+// 改版“一张印出来的纸”：列表项开头的加粗词做成黄色小标签。
+describe('列表项开头的加粗词', () => {
+  const items = (container: HTMLElement) => [...container.querySelectorAll('li')]
+
+  it('无序列表里开头的加粗词是标签，后面的文字排在标签右边；标签后面紧跟的冒号不再显示', () => {
+    const { container } = render(<Markdown text={'归好了：\n\n- **导出** 大文件导出到一半会停。\n- **搜索**：中文分词不准，见 `search.go`。\n- **通知**: 同一件事提醒两次。'} />)
+    const [first, second, third] = items(container)
+    for (const item of [first, second, third]) {
+      expect(item).toHaveClass('md-lead-item')
+      expect(item.firstElementChild).toHaveClass('md-lead')
+      expect(item.firstElementChild!.tagName).toBe('STRONG')
+      expect(item.children).toHaveLength(2)
+      expect(item.lastElementChild).toHaveClass('md-lead-text')
+    }
+    expect(first.firstElementChild).toHaveTextContent('导出')
+    expect(first.lastElementChild!.textContent).toBe(' 大文件导出到一半会停。')
+    expect(second.lastElementChild!.textContent).toBe('中文分词不准，见 search.go。')
+    expect(second.lastElementChild!.querySelector('code')).toHaveTextContent('search.go')
+    expect(third.lastElementChild!.textContent).toBe('同一件事提醒两次。')
+  })
+
+  it('加粗词不在开头、或者开头是别的内容（任务列表的勾选框）时不做成标签', () => {
+    const { container } = render(<Markdown text={'- 先看 **导出** 的问题\n- [ ] **搜索** 还没做\n- 普通的一项'} />)
+    expect(container.querySelector('.md-lead')).toBeNull()
+    expect(container.querySelector('.md-lead-item')).toBeNull()
+    expect(container.querySelector('strong')).toHaveTextContent('导出')
+  })
+
+  it('开头加粗的是一整句话时照常加粗，不做成标签', () => {
+    const { container } = render(<Markdown text={'- **这一整句话都加粗了，它不是一个词而是一句完整的说明** 后面还有\n- **Short label** ok'} />)
+    const [long, short] = items(container)
+    expect(long.querySelector('.md-lead')).toBeNull()
+    expect(long).not.toHaveClass('md-lead-item')
+    expect(short.firstElementChild).toHaveClass('md-lead')
+  })
+
+  it('有序列表保留序号：加粗词是标签，但这一项不改成横排', () => {
+    const { container } = render(<Markdown text={'1. **导出** 先修这个\n2. **搜索** 再修这个'} />)
+    const [first] = items(container)
+    expect(first.querySelector('strong')).toHaveClass('md-lead')
+    expect(first).not.toHaveClass('md-lead-item')
+    expect(first.querySelector('.md-lead-text')).toBeNull()
+  })
+
+  it('列表项里还有子列表或分段时，加粗词是标签，其余内容照原样排', () => {
+    const { container } = render(<Markdown text={'- **导出** 两个问题\n  - 大文件会停\n  - 重试才成功\n\n另一个列表：\n\n- **搜索** 第一段\n\n  第二段\n- **通知** 也是分段的'} />)
+    const [nested, , , loose] = items(container)
+    expect(nested.firstElementChild).toHaveClass('md-lead')
+    expect(nested).not.toHaveClass('md-lead-item')
+    expect(nested.querySelectorAll('li')).toHaveLength(2)
+    expect(loose.querySelector('p > strong')).toHaveClass('md-lead')
+    expect(loose).not.toHaveClass('md-lead-item')
+    expect(loose.querySelectorAll('p')).toHaveLength(2)
+  })
+
+  it('只有一个加粗词、后面没有文字时只显示标签', () => {
+    const { container } = render(<Markdown text={'- **导出**\n- **搜索**'} />)
+    const [first] = items(container)
+    expect(first).toHaveClass('md-lead-item')
+    expect(first.children).toHaveLength(1)
+    expect(first.firstElementChild).toHaveClass('md-lead')
+  })
+
+  it('回复进行中时输出光标跟在标签后面的文字末尾', () => {
+    const { container } = render(<Markdown cursor text={'- **导出** 大文件\n- **搜索** 中文分'} />)
+    const last = items(container)[1]
+    const cursor = container.querySelector('.riso-cursor')!
+    expect(last.lastElementChild).toHaveClass('md-lead-text')
+    expect(last.lastElementChild).toContainElement(cursor as HTMLElement)
+    expect(last.lastElementChild!.lastElementChild).toBe(cursor)
+  })
+})
+
+it('文档（插件 README、文件夹里的 Markdown 文件）里开头的加粗词不做成标签', () => {
+  const text = '- **导出** 大文件导出到一半会停。'
+  const readme = render(<Markdown readme text={text} />)
+  expect(readme.container.querySelector('.md-lead')).toBeNull()
+  readme.unmount()
+  const file = render(<Markdown leadLabels={false} text={text} />)
+  expect(file.container.querySelector('.md-lead')).toBeNull()
+  expect(file.container.querySelector('strong')).toHaveTextContent('导出')
+})

@@ -331,8 +331,26 @@
   .markdown blockquote {
     @apply border-l-4 border-riso-pink pl-3 text-ink-700;
   }
+  /* 行内代码：浅蓝底的等宽小标签。 */
   .markdown :not(pre) > code {
-    @apply rounded-stamp bg-tint-blue px-1.5 py-0.5 font-mono text-[0.85em];
+    @apply rounded-stamp bg-tint-blue px-[7px] py-px font-mono text-[0.85em];
+  }
+  /* 列表项开头的加粗词：黄色小标签（由 rehype-lead-label 标出）。无序列表里只有行内内容的一项改成横排，
+     标签在左、文字在右，不画圆点；相邻两项之间留 6px。 */
+  .markdown .md-lead {
+    @apply mr-3 inline-block rounded-stamp bg-riso-yellow px-[9px] text-[13.5px] leading-6 font-black;
+  }
+  .markdown li.md-lead-item {
+    @apply -ml-6 flex list-none items-baseline;
+  }
+  .markdown li.md-lead-item > .md-lead {
+    @apply shrink-0;
+  }
+  .markdown li.md-lead-item > .md-lead-text {
+    @apply min-w-0;
+  }
+  .markdown li.md-lead-item + li.md-lead-item {
+    @apply mt-1.5;
   }
   .markdown pre {
     @apply overflow-x-auto px-4 pt-1.5 pb-4 font-mono text-[13px] leading-[1.75];

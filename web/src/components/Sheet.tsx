@@ -1,4 +1,4 @@
-import type { ComponentProps, ElementType } from 'react'
+import type { ComponentProps, ElementType, Ref } from 'react'
 import { cn } from '@/lib/utils'
 
 // 纸张：页面主体放在一张纸上。浅纸底、2px 藏青描边、18px 圆角、6px 孔版蓝实色投影；右侧留 6px 给投影。
@@ -15,7 +15,13 @@ export function Sheet({ className, ...props }: ComponentProps<'div'>) {
 
 // 票根：纸张右侧用 2px 虚线隔出的一条，里面是一把尺子（对话页是轮次，配置页是目录，文件夹与收件箱是几个大数字）。
 // 顶部一个小标题。窄屏（左侧栏收进抽屉时）不显示。作为导航区（as="nav"）并用 aria-label 命名时，小标题不再读一遍。
-export function Stub({ as: Tag = 'div', label, className, children, ...props }: { as?: ElementType; label: string } & ComponentProps<'div'>) {
+export function Stub({
+  as: Tag = 'div',
+  label,
+  className,
+  children,
+  ...props
+}: { as?: ElementType; label: string; ref?: Ref<HTMLElement> } & Omit<ComponentProps<'div'>, 'ref'>) {
   return (
     <Tag className={cn('flex shrink-0 flex-col gap-2.5 border-l-2 border-dashed border-ink/40 pt-4 pb-3.5 max-nav:hidden', className)} {...props}>
       <div aria-hidden={props['aria-label'] ? true : undefined} className="shrink-0 text-center indent-[0.3em] text-[11px] leading-[1.75] font-black tracking-[0.3em] text-ink-500">

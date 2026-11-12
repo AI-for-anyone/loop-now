@@ -218,3 +218,33 @@ describe('运行记录时间线', () => {
     expect(within(panel).queryByRole('alert')).toBeNull()
   })
 })
+
+// 改版“一张印出来的纸”：触发条做成分段的小票。
+describe('运行记录的触发条', () => {
+  const parts = (toggle: HTMLElement) => [...toggle.querySelectorAll('[data-receipt-part]')].map((part) => part.textContent)
+
+  it('结束后分成三段：名称｜耗时｜token，数值用等宽字；按钮的名称不变', async () => {
+    const agent = makeAgent()
+    const run = makeRun({ queuedAt: at(0), startedAt: at(0), runningAt: at(1), endedAt: at(9.4), usage: usage(1200, 34) })
+    await renderChat({ agent, messages: [makeMessage({ text: '跑一下测试', run }), makeMessage({ role: 'assistant', text: '测试跑完了', run })] })
+    const toggle = await waitFor(recordToggle)
+    expect(toggle).toHaveAccessibleName('运行记录 · 9.4 s · 1,234 token')
+    expect(parts(toggle)).toEqual(['运行记录', '9.4 s', '1,234 token'])
+    const [name, duration, tokens] = toggle.querySelectorAll('[data-receipt-part]')
+    for (const part of [name, duration, tokens]) expect(part).toHaveAttribute('aria-hidden', 'true')
+    expect(name).not.toHaveClass('font-mono')
+    expect(duration).toHaveClass('font-mono', 'border-l-[1.5px]', 'border-dashed')
+    expect(tokens).toHaveClass('font-mono', 'border-l-[1.5px]', 'border-dashed')
+  })
+
+  it('进行中只有两段：名称｜已用时间', async () => {
+    const agent = makeAgent()
+    const run = makeRun({ status: 'running', queuedAt: new Date(Date.now() - 5000).toISOString(), endedAt: null })
+    const { emit } = await renderChat({ agent, messages: [makeMessage({ text: '你好', run })], status: { busy: true, currentRun: run } })
+    await emit('snapshot', { status: makeStatus(agent.id, { busy: true, currentRun: run, processState: 'busy' }), currentText: '', queuedRuns: [], queueItems: [] })
+    const toggle = await waitFor(recordToggle)
+    expect(parts(toggle)).toHaveLength(2)
+    expect(parts(toggle)[0]).toBe('运行记录')
+    expect(parts(toggle)[1]).toMatch(/^已用 /)
+  })
+})

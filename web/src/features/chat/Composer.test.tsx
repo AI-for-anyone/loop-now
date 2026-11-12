@@ -83,3 +83,36 @@ it('忙时 Enter 排队，⌘／Ctrl+Enter 作为打断发送；空闲时才发�
   await userEvent.type(box, '以为空闲{Meta>}{Enter}{/Meta}')
   await waitFor(() => expect(sent.slice(-2)).toEqual([{ text: '以为空闲' }, { text: '以为空闲', whenBusy: 'interrupt' }]))
 })
+
+// 改版“一张印出来的纸”：输入区并入纸张底部。
+const mountBar = (busy = false) => renderWithQuery(<Composer agentId="bar-agent" agentName="开发助手" busy={busy} disabled={false} maxMessageBytes={4096} onSent={() => {}} stop={busy ? { onStop: () => {}, pending: false, retry: false } : undefined} />)
+
+it('输入区是纸张底部的一条浅黄色栏，上缘一道 2px 的藏青线', () => {
+  mountBar()
+  const bar = screen.getByRole('textbox', { name: '消息' }).closest('[data-chat-bar]')
+  expect(bar).toHaveClass('bg-tint-yellow', 'border-t-2', 'border-ink')
+})
+
+it('输入框是浅纸底、藏青描边；发送按钮是荧光粉圆章（藏青描边加藏青实色投影）', () => {
+  mountBar()
+  const editor = screen.getByRole('textbox', { name: '消息' })
+  expect(editor.closest('[data-chat-input]')).toHaveClass('bg-paper-raised', 'border-2', 'border-ink')
+  expect(screen.getByRole('button', { name: '发送' })).toHaveClass('size-11', 'rounded-full', 'border-2', 'border-ink', 'bg-riso-pink', 'shadow-[3px_3px_0_var(--ink)]')
+})
+
+it('空闲时输入框下面写着回车发送、Shift + 回车换行', () => {
+  mountBar()
+  const hint = screen.getByText('发送', { selector: 'span' }).closest('p')!
+  expect(hint).toHaveTextContent('回车发送·Shift + 回车换行')
+  expect(hint.querySelectorAll('kbd')).toHaveLength(2)
+  expect(screen.queryByText('排队', { selector: 'span' })).toBeNull()
+})
+
+it('忙时按键说明换成排队与打断，输入框为空时发送按钮换成藏青色的停止按钮', () => {
+  mountBar(true)
+  expect(screen.getByText('排队', { selector: 'span' }).closest('p')).toHaveTextContent('Enter排队·')
+  expect(screen.queryByText('换行')).toBeNull()
+  const stop = screen.getByRole('button', { name: '停止当前回复' })
+  expect(stop).toHaveClass('size-11', 'rounded-full', 'border-2', 'border-ink', 'bg-ink', 'text-white')
+  expect(screen.queryByRole('button', { name: '排队发送' })).toBeNull()
+})
