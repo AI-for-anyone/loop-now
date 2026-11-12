@@ -1,13 +1,13 @@
 import type { ComponentProps, ElementType, Ref } from 'react'
 import { cn } from '@/lib/utils'
 
-// 纸张：页面主体放在一张纸上。浅纸底、2px 藏青描边、18px 圆角、6px 孔版蓝实色投影；右侧留 6px 给投影。
+// 纸张：页面主体放在一张纸上。浅纸底（带主区那层很淡的颗粒）、2px 藏青描边、18px 圆角、6px 孔版蓝实色投影；右侧留 6px 给投影。
 // 内容超出时由里面的区域自己滚动，纸张本身裁掉溢出的部分。
 export function Sheet({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
       data-sheet
-      className={cn('mr-1.5 flex min-h-0 flex-col overflow-hidden rounded-panel border-2 border-ink bg-paper-raised shadow-print-dialog', className)}
+      className={cn('riso-grain mr-1.5 flex min-h-0 flex-col overflow-hidden rounded-panel border-2 border-ink bg-paper-raised shadow-print-dialog', className)}
       {...props}
     />
   )

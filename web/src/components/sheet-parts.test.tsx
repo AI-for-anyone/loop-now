@@ -15,6 +15,8 @@ describe('纸张', () => {
     expect(sheet).toHaveTextContent('正文')
     expect(sheet).toHaveAttribute('data-sheet')
     expect(sheet).toHaveClass('bg-paper-raised', 'border-2', 'border-ink', 'rounded-panel', 'shadow-print-dialog', 'overflow-hidden', 'mr-1.5')
+    // 纸面上也有主区那层很淡的颗粒。
+    expect(sheet).toHaveClass('riso-grain')
   })
 
   it('调用方可以追加类名与属性', () => {

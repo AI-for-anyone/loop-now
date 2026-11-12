@@ -313,9 +313,11 @@ describe('票根里的刻度尺', () => {
     expect(document.querySelector('[data-turn-stub]')).toBe(nav())
   })
 
-  it('对话区的原生滚动条隐藏，由刻度尺代替；滚动区仍然可以滚动', () => {
+  it('宽屏时对话区的原生滚动条隐藏，由刻度尺代替；窄屏没有票根，保留原生滚动条；滚动区仍然可以滚动', () => {
     render(<List pages={pagesOf(['一', '二'])} />)
-    expect(screen.getByRole('log')).toHaveClass('no-scrollbar', 'overflow-y-auto')
+    const log = screen.getByRole('log')
+    expect(log).toHaveClass('nav:no-scrollbar', 'overflow-y-auto')
+    expect(log).not.toHaveClass('no-scrollbar')
   })
 })
 

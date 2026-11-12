@@ -116,3 +116,10 @@ it('忙时按键说明换成排队与打断，输入框为空时发送按钮换�
   expect(stop).toHaveClass('size-11', 'rounded-full', 'border-2', 'border-ink', 'bg-ink', 'text-white')
   expect(screen.queryByRole('button', { name: '排队发送' })).toBeNull()
 })
+
+it('排队托盘贴在输入框上沿：左右让出加号与发送按钮的位置', () => {
+  renderWithQuery(<Composer agentId="bar-agent" agentName="开发助手" busy disabled={false} maxMessageBytes={4096} imageLimits={{ maxCount: 4, maxImageBytes: 1024, maxTotalBytes: 4096 }} onSent={() => {}} queue={<section aria-label="排队的消息">排队 1</section>} />)
+  const slot = screen.getByRole('region', { name: '排队的消息' }).parentElement!
+  expect(slot).toHaveClass('pl-[50px]', 'pr-[57px]')
+  expect(slot.nextElementSibling).toContainElement(screen.getByRole('textbox', { name: '消息' }))
+})

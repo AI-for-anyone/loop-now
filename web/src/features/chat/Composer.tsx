@@ -343,9 +343,9 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
       )}
       <ErrorAlert error={imageError ?? (send.error?.code === 'agent_busy' ? null : send.error)} />
       {answer.outcome === 'ordinary' && <p role="status" className="text-[13px] font-bold">{t.inbox.question.ordinary}</p>}
-      {/* 排队托盘与输入框之间没有间距，连成一体。 */}
+      {/* 排队托盘与输入框之间没有间距，连成一体：托盘贴在输入框上沿，左右让出加号与发送按钮的位置。 */}
       <div className="flex min-w-0 flex-col">
-        {queue}
+        {queue && <div className={cn('flex min-w-0 flex-col pr-[57px]', imageLimits && 'pl-[50px]')}>{queue}</div>}
         {imageLimits ? <ImagePicker images={images} onChange={setImages} limits={imageLimits} disabled={disabled || reply !== undefined} uploads={uploads} addClassName="size-10 rounded-full border-2 border-ink bg-paper-raised text-ink hover:bg-white">{input}</ImagePicker> : input()}
       </div>
       {/* 下面一行：左边是忙碌提示与按键说明（空闲时是发送与换行，忙时是排队与打断），右边是实时连接状态。宽屏时与输入框左缘对齐。 */}
