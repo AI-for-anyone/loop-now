@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 
 	"loop-now/internal/server/conversation"
-	"loop-now/internal/server/executor"
 	"loop-now/internal/server/store"
 )
 
@@ -51,7 +50,7 @@ func TestNewRunStartsWhenHandoffPrecedesDriverRemoval(t *testing.T) {
 			text := "交接后的普通消息"
 			origin := "console"
 			type compactOutcome struct {
-				result executor.CompactionResult
+				result store.Run
 				err    error
 			}
 			var compactDone chan compactOutcome
@@ -119,8 +118,9 @@ func TestNewRunStartsWhenHandoffPrecedesDriverRemoval(t *testing.T) {
 			if compactDone != nil {
 				select {
 				case out := <-compactDone:
-					if out.err != nil || out.result.TokensBefore != 100 || out.result.EstimatedTokensAfter != 40 {
-						t.Fatalf("compact 结果不符：%+v", out)
+					c := store.ParseCompaction(out.result.Compaction)
+					if out.err != nil || c.Outcome != store.CompactionCompacted || c.TokensBefore == nil || *c.TokensBefore != 100 || *c.EstimatedTokensAfter != 40 || c.Instructions != text {
+						t.Fatalf("compact 结果不符：%+v %+v", out, c)
 					}
 				case <-time.After(5 * time.Second):
 					t.Fatal("等待 compact 完成超时")
@@ -128,5 +128,58 @@ func TestNewRunStartsWhenHandoffPrecedesDriverRemoval(t *testing.T) {
 			}
 			e.waitIdle()
 		})
+	}
+}
+
+// 发起压缩的请求在驱动读到指令之前断开（刷新页面、代理超时）：指令记在执行上，压缩照常进行，结果事后从执行读取。
+func TestCompactSurvivesCancelledRequest(t *testing.T) {
+	e := newEnv(t)
+	e.mustSend("block 首条", "")
+	e.waitStarted("block 首条")
+	reached, release := make(chan struct{}), make(chan struct{})
+	var armed atomic.Bool
+	armed.Store(true)
+	conversation.SetTestHookAfterDriveHandoff(func(agentID uuid.UUID) {
+		if agentID == e.agent && armed.CompareAndSwap(true, false) {
+			close(reached)
+			<-release
+		}
+	})
+	t.Cleanup(func() { conversation.SetTestHookAfterDriveHandoff(nil) })
+	if !e.ex.signal(e.agent, "release") {
+		t.Fatal("放行首条执行失败")
+	}
+	<-reached
+	if _, err := e.st.Pool.Exec(context.Background(), `UPDATE agent_sessions SET state='active', session_file=$2 WHERE agent_id=$1`, e.agent, "/tmp/fake-session.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	pending := make(chan uuid.UUID, 1)
+	conversation.SetTestHookAfterDriverPending(func(runID uuid.UUID) { pending <- runID })
+	t.Cleanup(func() { conversation.SetTestHookAfterDriverPending(nil) })
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := e.svc.Compact(ctx, e.agent, "只保留决定")
+		done <- err
+	}()
+	var runID uuid.UUID
+	select {
+	case runID = <-pending: // 压缩执行已经创建，驱动还没有开始它
+	case <-time.After(5 * time.Second):
+		t.Fatal("等待压缩执行登记超时")
+	}
+	cancel()
+	if err := <-done; err == nil {
+		t.Fatal("请求断开时 Compact 应返回错误")
+	}
+	close(release)
+	e.waitStarted("只保留决定")
+	e.waitIdle()
+	last, err := e.svc.LastCompaction(context.Background(), e.agent)
+	if err != nil || last == nil || last.ID != runID || last.Status != "completed" {
+		t.Fatalf("事后应能读到压缩执行：%+v %v", last, err)
+	}
+	if c := store.ParseCompaction(last.Compaction); c.Instructions != "只保留决定" || c.Outcome != store.CompactionCompacted || c.TokensBefore == nil || *c.TokensBefore != 100 {
+		t.Fatalf("压缩结果：%+v", c)
 	}
 }

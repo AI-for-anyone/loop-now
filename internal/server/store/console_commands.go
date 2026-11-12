@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"github.com/google/uuid"
 
@@ -9,10 +10,40 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// InsertConsoleCompactRun 在 Agent 行锁内再次确认空闲和活动会话，插入不带对话消息的压缩运行。
-func (s *Store) InsertConsoleCompactRun(ctx context.Context, agentID, runID, instanceID uuid.UUID) (Run, error) {
+// Compaction 是手动压缩的指令与结果，存在 runs.compaction（JSON）。Outcome 在执行结束前、失败或被打断时为空。
+type Compaction struct {
+	Instructions string `json:"instructions"`
+	// Outcome：compacted 已压缩；skipped 没有压缩（SkipReason：too_small 会话太短、already_compacted 已经压缩过、
+	// cancelled_by_extension 扩展取消了这次压缩），执行仍算正常完成。
+	Outcome              string `json:"outcome,omitempty"`
+	SkipReason           string `json:"skipReason,omitempty"`
+	TokensBefore         *int64 `json:"tokensBefore,omitempty"`
+	EstimatedTokensAfter *int64 `json:"estimatedTokensAfter,omitempty"`
+}
+
+// 手动压缩的结果。
+const (
+	CompactionCompacted = "compacted"
+	CompactionSkipped   = "skipped"
+)
+
+// ParseCompaction 解析 runs.compaction；为空或无法解析时返回零值。
+func ParseCompaction(raw []byte) Compaction {
+	var c Compaction
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &c)
+	}
+	return c
+}
+
+// InsertConsoleCompactRun 在 Agent 行锁内再次确认空闲和活动会话，插入不带对话消息的压缩运行，记下压缩指令（可为空）。
+func (s *Store) InsertConsoleCompactRun(ctx context.Context, agentID, runID, instanceID uuid.UUID, instructions string) (Run, error) {
+	raw, err := json.Marshal(Compaction{Instructions: instructions})
+	if err != nil {
+		return Run{}, err
+	}
 	var run Run
-	err := s.inTx(ctx, func(tx *db.Tx) error {
+	err = s.inTx(ctx, func(tx *db.Tx) error {
 		agent, err := lockAgent(ctx, tx, agentID)
 		if err != nil {
 			return err
@@ -36,9 +67,9 @@ func (s *Store) InsertConsoleCompactRun(ctx context.Context, agentID, runID, ins
 		if err != nil {
 			return err
 		}
-		run, err = scanRun(tx.QueryRow(ctx, `INSERT INTO runs (id, agent_id, user_message_id, config_version, instance_id, priority, status, started_at, origin, queue_seq, queued_at)
-			VALUES ($1,$2,NULL,$3,$4,1,'starting',$5,'console_compact',$6,$5) RETURNING `+runColumns,
-			runID, agentID, agent.ConfigVersion, instanceID, now, queueSeq))
+		run, err = scanRun(tx.QueryRow(ctx, `INSERT INTO runs (id, agent_id, user_message_id, config_version, instance_id, priority, status, started_at, origin, queue_seq, queued_at, compaction)
+			VALUES ($1,$2,NULL,$3,$4,1,'starting',$5,'console_compact',$6,$5,$7) RETURNING `+runColumns,
+			runID, agentID, agent.ConfigVersion, instanceID, now, queueSeq, string(raw)))
 		if err != nil {
 			if isUniqueViolation(err, "runs_one_active_per_agent") {
 				return ErrActiveRunExists
@@ -90,4 +121,17 @@ func (s *Store) LatestCompletedAssistant(ctx context.Context, agentID uuid.UUID)
 		return nil, err
 	}
 	return &m, nil
+}
+
+// LatestCompactRun 返回 Agent 最近一次手动压缩的执行（任何状态）；没有时为 nil。
+func (s *Store) LatestCompactRun(ctx context.Context, agentID uuid.UUID) (*Run, error) {
+	r, err := scanRun(s.Pool.QueryRow(ctx, `SELECT `+runColumns+` FROM runs WHERE agent_id = $1 AND origin = 'console_compact'
+		ORDER BY queued_at DESC, id DESC LIMIT 1`, agentID))
+	if errors.Is(err, db.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &r, s.fillRuns(ctx, &r)
 }

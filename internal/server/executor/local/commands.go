@@ -58,7 +58,7 @@ func (e *Executor) compact(ctx context.Context, p *proc, r *run, req executor.Re
 		return failed(executor.ErrInternal, "会话记录保存失败", snap.ConfigVersion)
 	}
 	res.Outcome = executor.OutcomeCompleted
-	res.Compaction = &executor.CompactionResult{TokensBefore: result.TokensBefore, EstimatedTokensAfter: result.EstimatedTokensAfter}
+	res.Compaction = &executor.CompactionResult{TokensBefore: result.TokensBefore, EstimatedTokensAfter: result.EstimatedTokensAfter, Skipped: result.Skipped}
 	return res
 }
 

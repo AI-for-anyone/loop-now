@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"loop-now/internal/server/executor/local/runturn"
 )
@@ -160,6 +161,8 @@ type turn struct {
 	notices       []CommandNotice // 这一轮里扩展的 ctx.ui.notify（Pi 直接处理命令时随结果交出）
 	noticeBytes   int
 	noticesCut    bool
+	// abortRequested：平台在这一轮里发过 abort（Abort）。手动压缩据此区分平台的取消与扩展的取消。
+	abortRequested atomic.Bool
 }
 
 // CommandNotice 是扩展在这一轮里用 ctx.ui.notify 给出的一条消息（扩展原文，纯文本）。

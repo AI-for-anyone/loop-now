@@ -317,3 +317,35 @@ func TestStopIdleRejectsUnknownReason(t *testing.T) {
 		t.Fatal("未知的停止原因应被拒绝")
 	}
 }
+
+// Pi 没有压缩（会话太短、已经压缩过）时这次执行正常完成，结果里写明原因；其余失败仍是失败。
+func TestConsoleCompactSkippedIsCompleted(t *testing.T) {
+	h := newHarness(t, func(o *Options) { o.Passthrough = append(o.Passthrough, "FAKEPI_COMPACT_ERROR") }, "")
+	id := h.agent(nil)
+	if prepared, _ := h.exec(id, "先建立会话"); prepared.Outcome != executor.OutcomeCompleted {
+		t.Fatalf("准备会话失败：%+v", prepared)
+	}
+	compact := func(piError string) executor.Result {
+		t.Helper()
+		h.env["FAKEPI_COMPACT_ERROR"] = piError
+		// 环境变量只在 Pi 启动时读：每种情况先停掉空闲进程。
+		if _, err := h.e.StopIdle(context.Background(), id, "console_reload"); err != nil {
+			t.Fatal(err)
+		}
+		waitFor(t, "空闲进程退出", func() bool { return h.pid(id) == 0 })
+		res, err := h.e.Execute(context.Background(), executor.Request{AgentID: id, RunID: uuid.Must(uuid.NewV7()), Origin: executor.OriginConsoleCompact}, newSink())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	if res := compact("Nothing to compact (session too small)"); res.Outcome != executor.OutcomeCompleted || res.Compaction == nil || res.Compaction.Skipped != pirpc.CompactTooSmall {
+		t.Fatalf("会话太短：%+v", res)
+	}
+	if res := compact("Already compacted"); res.Outcome != executor.OutcomeCompleted || res.Compaction == nil || res.Compaction.Skipped != pirpc.CompactAlreadyDone {
+		t.Fatalf("已经压缩过：%+v", res)
+	}
+	if res := compact("Compaction failed: model unavailable"); res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrPiError {
+		t.Fatalf("其他失败：%+v", res)
+	}
+}

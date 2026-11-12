@@ -65,10 +65,12 @@ const (
 // OriginConsoleCompact 是控制台手动压缩；它使用真实运行，但不产生对话消息。
 const OriginConsoleCompact = "console_compact"
 
-// CompactionResult 是一次手动压缩的 Token 变化。
+// CompactionResult 是一次手动压缩的结果。Skipped 不为空表示 Pi 没有压缩（会话太短、已经压缩过、扩展取消），
+// 这仍是正常完成，Token 都为 0；否则是压缩前后的 Token。
 type CompactionResult struct {
 	TokensBefore         int64
 	EstimatedTokensAfter int64
+	Skipped              string
 }
 
 // SessionExport 是已读取并验证来源的会话下载内容。

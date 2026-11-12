@@ -358,3 +358,34 @@ func TestClaudeCodeConsoleCommandSupport(t *testing.T) {
 		t.Fatalf("/new：%+v", got)
 	}
 }
+
+// /compact 的结果记在执行上：命令返回结束后的执行；Pi 没有压缩时也是 200，写明原因；/session 能读到最近一次压缩。
+func TestPlatformConsoleCompactResultOnRun(t *testing.T) {
+	e := newEnv(t)
+	agent, path := e.newAgent("压缩结果")
+	if err := e.st.RecordSessionFile(context.Background(), agent.ID, "/managed/s.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	if got := consoleCommand(t, e, path, "/session"); got.Session == nil || got.Session.LastCompaction != nil {
+		t.Fatalf("还没有压缩过：%+v", got.Session)
+	}
+	done := consoleCommand(t, e, path, "/compact 保留决定")
+	c := done.CompactRun.Compaction
+	if done.CompactRun == nil || done.CompactRun.Status != "completed" || c == nil || c.Instructions != "保留决定" || c.Outcome == nil || *c.Outcome != "compacted" ||
+		c.TokensBefore == nil || *c.TokensBefore != 4200 || done.TokensBefore == nil || *done.TokensBefore != 4200 {
+		t.Fatalf("压缩结果：%+v %+v", done, c)
+	}
+	e.ex.compactSkip = "already_compacted"
+	skipped := consoleCommand(t, e, path, "/compact")
+	sc := skipped.CompactRun.Compaction
+	if sc == nil || sc.Outcome == nil || *sc.Outcome != "skipped" || sc.SkipReason == nil || *sc.SkipReason != "already_compacted" || skipped.TokensBefore != nil {
+		t.Fatalf("没有压缩也应正常完成并写明原因：%+v %+v", skipped, sc)
+	}
+	session := consoleCommand(t, e, path, "/session")
+	if last := session.Session.LastCompaction; last == nil || last.ID != skipped.CompactRun.ID || last.Compaction == nil || *last.Compaction.Outcome != "skipped" {
+		t.Fatalf("/session 应给出最近一次压缩：%+v", session.Session.LastCompaction)
+	}
+	if page := decode[apitypes.MessagePage](t, e.expect(200, "GET", path+"/messages?aroundRun="+skipped.CompactRun.ID.String(), nil)); page.Messages == nil {
+		t.Fatal("定位压缩执行应返回一页（没有消息时为空列表）")
+	}
+}

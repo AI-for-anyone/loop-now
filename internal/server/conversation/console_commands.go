@@ -16,9 +16,9 @@ import (
 	"loop-now/internal/server/store"
 )
 
+// consoleCommandRun 让发起手动压缩的请求等到这次执行结束。指令与结果记在执行上（runs.compaction），不在这里。
 type consoleCommandRun struct {
-	instructions string
-	done         chan executor.Result
+	done chan executor.Result
 }
 
 func (s *Service) acquireConsoleCommand(ctx context.Context, agentID uuid.UUID) (uuid.UUID, string, error) {
@@ -85,42 +85,56 @@ func (s *Service) sessionChanged(ctx context.Context, agentID uuid.UUID, sess st
 	return apitypes.SessionInfo{State: sess.State, Epoch: sess.Epoch}
 }
 
-// Compact 创建真实压缩运行并等待 Pi 返回 Token 结果，不创建用户或助手消息。
-func (s *Service) Compact(ctx context.Context, agentID uuid.UUID, instructions string) (executor.CompactionResult, error) {
+// Compact 创建真实压缩执行并等到它结束，不创建用户或助手消息。指令与结果记在执行上（runs.compaction）：
+// 请求在压缩结束前断开（刷新页面、代理超时）时压缩照常进行，结果事后从执行读取（run 事件、时间线、/session 的 lastCompaction）。
+// 正常完成（包括 Pi 没有压缩：会话太短、已经压缩过、扩展取消了压缩）返回结束后的执行；被取消或失败时返回 409 console_command_failed。
+func (s *Service) Compact(ctx context.Context, agentID uuid.UUID, instructions string) (store.Run, error) {
 	if err := s.RequireCommand(ctx, agentID, "compact"); err != nil {
-		return executor.CompactionResult{}, err
+		return store.Run{}, err
 	}
 	runID, owner, err := s.acquireConsoleCommand(ctx, agentID)
 	if err != nil {
-		return executor.CompactionResult{}, err
+		return store.Run{}, err
 	}
-	command := &consoleCommandRun{instructions: instructions, done: make(chan executor.Result, 1)}
+	command := &consoleCommandRun{done: make(chan executor.Result, 1)}
 	s.commands.Store(runID, command)
 	defer s.commands.Delete(runID)
-	run, err := s.st.InsertConsoleCompactRun(ctx, agentID, runID, s.o.InstanceID)
+	run, err := s.st.InsertConsoleCompactRun(ctx, agentID, runID, s.o.InstanceID, instructions)
 	if err != nil {
 		s.releaseConsoleCommand(agentID, owner)
 		if errors.Is(err, store.ErrActiveRunExists) {
 			s.restoreLock(ctx, agentID)
-			return executor.CompactionResult{}, s.busyError(ctx, agentID)
+			return store.Run{}, s.busyError(ctx, agentID)
 		}
-		return executor.CompactionResult{}, err
+		return store.Run{}, err
 	}
 	s.emitRun(ctx, agentID, run.ID)
 	s.startDriver(agentID, run, owner)
 	select {
-	case res := <-command.done:
-		if res.Outcome != executor.OutcomeCompleted || res.Compaction == nil {
-			message := res.ErrorMessage
-			if message == "" {
-				message = "压缩已取消或未能完成"
-			}
-			return executor.CompactionResult{}, apperr.Conflict(apperr.CodeConsoleCommandFailed, message)
-		}
-		return *res.Compaction, nil
+	case <-command.done:
 	case <-ctx.Done():
-		return executor.CompactionResult{}, ctx.Err()
+		return store.Run{}, ctx.Err()
 	}
+	ended, err := s.st.GetRun(ctx, runID)
+	if err != nil {
+		return store.Run{}, err
+	}
+	switch ended.Status {
+	case "completed":
+		return ended, nil
+	case "interrupted":
+		return store.Run{}, apperr.Conflict(apperr.CodeConsoleCommandFailed, "压缩已取消")
+	}
+	message := ended.ErrorMessage
+	if message == "" {
+		message = "压缩未能完成"
+	}
+	return store.Run{}, apperr.Conflict(apperr.CodeConsoleCommandFailed, message)
+}
+
+// LastCompaction 返回 Agent 最近一次手动压缩的执行（任何状态）；没有时为 nil。
+func (s *Service) LastCompaction(ctx context.Context, agentID uuid.UUID) (*store.Run, error) {
+	return s.st.LatestCompactRun(ctx, agentID)
 }
 
 // NewSession 停止旧空闲进程并重开会话，保留工作区和 Web 对话历史。

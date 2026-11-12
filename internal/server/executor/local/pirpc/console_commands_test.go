@@ -2,8 +2,10 @@ package pirpc
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -111,8 +113,8 @@ func TestFakeCompactAbortAndContinue(t *testing.T) {
 	}
 	select {
 	case err := <-done:
-		if err == nil {
-			t.Fatal("被取消的 compact 不应成功")
+		if !errors.Is(err, ErrCompactAborted) {
+			t.Fatalf("平台取消的 compact 应返回 ErrCompactAborted：%v", err)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("compact 未在 Abort 后返回")
@@ -133,5 +135,29 @@ func TestFakeExportHTMLWritesReturnedFile(t *testing.T) {
 	data, err := os.ReadFile(output)
 	if err != nil || string(data) != "<html>session</html>" {
 		t.Fatalf("导出文件不符：%q %v", data, err)
+	}
+}
+
+// Pi 以 compact 失败报告的“没有压缩”是正常结果：会话太短、已经压缩过、扩展取消（平台没有发 abort）；其余失败照旧是错误。
+func TestCompactSkippedOutcomes(t *testing.T) {
+	for message, want := range map[string]string{
+		"Nothing to compact (session too small)": CompactTooSmall,
+		"Already compacted":                      CompactAlreadyDone,
+		"Compaction cancelled":                   CompactCancelled,
+		"Compaction failed: model unavailable":   "",
+	} {
+		t.Run(message, func(t *testing.T) {
+			p := startFake(t, []string{"FAKEPI_COMPACT_ERROR=" + message})
+			res, err := p.Compact(testCtx(t), "")
+			if want == "" {
+				if err == nil || !strings.Contains(err.Error(), "model unavailable") {
+					t.Fatalf("其他失败应是错误：%+v %v", res, err)
+				}
+				return
+			}
+			if err != nil || res.Skipped != want || res.TokensBefore != 0 {
+				t.Fatalf("应是没有压缩（%s）：%+v %v", want, res, err)
+			}
+		})
 	}
 }

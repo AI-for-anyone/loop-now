@@ -49,10 +49,15 @@ type quickExec struct {
 	sessions []executor.ManagedSession
 	// 不为空时平台命令的维护操作返回这些错误。
 	stopErr, exportErr, listErr error
+	// compactSkip 不为空时手动压缩以“没有压缩”正常完成（原因即它的值）。
+	compactSkip string
 }
 
 func (q *quickExec) Execute(ctx context.Context, req executor.Request, sink executor.Sink) (executor.Result, error) {
 	if req.Origin == executor.OriginConsoleCompact {
+		if q.compactSkip != "" {
+			return executor.Result{Outcome: executor.OutcomeCompleted, Compaction: &executor.CompactionResult{Skipped: q.compactSkip}, ConfigVersion: 1}, nil
+		}
 		return executor.Result{Outcome: executor.OutcomeCompleted, Compaction: &executor.CompactionResult{TokensBefore: 4200, EstimatedTokensAfter: 350}, ConfigVersion: 1}, nil
 	}
 	ch := make(chan struct{})

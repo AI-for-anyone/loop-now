@@ -605,9 +605,14 @@ func (s *server) compact(id json.RawMessage, instructions string) {
 		if value := os.Getenv("FAKEPI_COMPACT_USAGE"); value != "" {
 			usage = parseUsage(value)
 		}
-		if aborted {
+		// FAKEPI_COMPACT_ERROR 让 compact 以这段文字失败（与 Pi 相同：例如 "Nothing to compact (session too small)"、"Already compacted"）。
+		if fail := os.Getenv("FAKEPI_COMPACT_ERROR"); fail != "" && !aborted {
+			s.emit(map[string]any{"type": "compaction_end", "reason": "manual", "aborted": false, "willRetry": false, "errorMessage": "Compaction failed: " + fail})
+			s.fail(id, "compact", fail)
+		} else if aborted {
+			// 与 Pi 相同：被取消的压缩以 "Compaction cancelled" 失败。
 			s.emit(map[string]any{"type": "compaction_end", "reason": "manual", "aborted": true, "willRetry": false})
-			s.fail(id, "compact", "aborted")
+			s.fail(id, "compact", "Compaction cancelled")
 		} else {
 			s.addUsage(*usage)
 			s.emit(map[string]any{"type": "compaction_end", "reason": "manual", "aborted": false, "willRetry": false,

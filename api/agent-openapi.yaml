@@ -9437,6 +9437,27 @@ components:
 
     MessageImage: {"type":"object","additionalProperties":false,"required":["id","mimeType","size","width","height"],"properties":{"id":{"type":"string","format":"uuid"},"mimeType":{"type":"string","enum":["image/png","image/jpeg","image/webp"]},"size":{"type":"integer","format":"int64","minimum":1},"width":{"type":"integer","minimum":1},"height":{"type":"integer","minimum":1}}}
 
+    RunCompaction:
+      description: |
+        手动压缩（/compact）的指令与结果，随执行保存。执行的状态：completed 是正常完成（outcome 为 compacted 或 skipped）；
+        interrupted 是被人取消（停止或打断）或服务重启中断；failed 是压缩出错（Pi 报错、进程退出等），errorMessage 是原因。
+        这种执行没有对话消息，不算对话轮次，不进概览的“上一条回复”。
+      type: object
+      required: [instructions, outcome, skipReason, tokensBefore, estimatedTokensAfter]
+      additionalProperties: false
+      properties:
+        instructions: { type: string, description: 压缩时附带的指令（/compact 之后的文字）；没有时为空字符串 }
+        outcome:
+          description: compacted 已压缩；skipped 没有压缩但正常完成（原因见 skipReason）；执行结束前、被取消或失败时为 null
+          type: [string, "null"]
+          enum: [compacted, skipped, null]
+        skipReason:
+          description: too_small 会话内容太少、不需要压缩；already_compacted 上次压缩之后还没有新内容；cancelled_by_extension 扩展取消了这次压缩。outcome 不是 skipped 时为 null
+          type: [string, "null"]
+          enum: [too_small, already_compacted, cancelled_by_extension, null]
+        tokensBefore: { type: [integer, "null"], format: int64, minimum: 0, description: 压缩前的上下文 token；只在 compacted 时有值 }
+        estimatedTokensAfter: { type: [integer, "null"], format: int64, minimum: 0, description: Pi 估算的压缩后上下文 token；只在 compacted 时有值 }
+
     Run:
       type: object
       required: [id, status, phase, endReason, errorCode, errorMessage, configVersion, whenBusy, queuedAt, startedAt, runningAt, abortRequestedAt, endedAt, tools, usage, model]
@@ -9477,6 +9498,9 @@ components:
           description: 本轮有效承接的 sleep；普通历史可省略或为 null
           type: [string, "null"]
           format: uuid
+        compaction:
+          description: 只在手动压缩（/compact）的执行上有，其余执行省略
+          $ref: "#/components/schemas/RunCompaction"
         id: { type: string, format: uuid }
         status: { $ref: "#/components/schemas/RunStatus" }
         phase: { $ref: "#/components/schemas/RunPhase" }

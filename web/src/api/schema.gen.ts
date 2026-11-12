@@ -1639,7 +1639,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 异常与失败列表：未正常完成的执行，按结束时间倒序分页，不含已删除的 Agent（含已删除项目中的 Agent）；可按项目或平台筛选 */
+        /**
+         * 异常与失败列表：未正常完成的执行，按结束时间倒序分页，不含已删除的 Agent（含已删除项目中的 Agent）；可按项目或平台筛选
+         * @description 手动压缩（/compact）被人取消或因服务重启中断不算异常，只列出失败的手动压缩；Pi 没有压缩（会话太短、已经压缩过）是正常完成。
+         */
         get: operations["listAnomalies"];
         put?: never;
         post?: never;
@@ -3997,6 +4000,8 @@ export interface components {
              * @description 本轮有效承接的 sleep；普通历史可省略或为 null
              */
             wakeSleepId?: string | null;
+            /** @description 只在手动压缩（/compact）的执行上有，其余执行省略 */
+            compaction?: components["schemas"]["RunCompaction"];
             /** Format: uuid */
             id: string;
             status: components["schemas"]["RunStatus"];
@@ -4277,7 +4282,7 @@ export interface components {
             name: string;
             model: components["schemas"]["ModelRef"];
             status: components["schemas"]["AgentStatus"];
-            /** @description 最近一次已结束的执行；没有时为 null */
+            /** @description 最近一次已结束的执行；没有时为 null。手动压缩（/compact）不是回复，不算 */
             lastRun: components["schemas"]["Run"] | null;
             /** @description Pi 进程未运行时，上次停止或意外退出；进程存活或从未退出时为 null */
             lastProcessExit: components["schemas"]["ProcessExit"] | null;
@@ -7565,6 +7570,37 @@ export interface components {
             status: components["schemas"]["AgentStatus"];
             model: components["schemas"]["ModelRef"];
             thinkingLevel: string;
+            /** @description 最近一次手动压缩（/compact）的执行，任何状态；没有时为 null。发起压缩的请求断开（刷新页面、代理超时）后从这里读结果 */
+            lastCompaction: components["schemas"]["Run"] | null;
+        };
+        /**
+         * @description 手动压缩（/compact）的指令与结果，随执行保存。执行的状态：completed 是正常完成（outcome 为 compacted 或 skipped）；
+         *     interrupted 是被人取消（停止或打断）或服务重启中断；failed 是压缩出错（Pi 报错、进程退出等），errorMessage 是原因。
+         *     这种执行没有对话消息，不算对话轮次，不进概览的“上一条回复”。
+         */
+        RunCompaction: {
+            /** @description 压缩时附带的指令（/compact 之后的文字）；没有时为空字符串 */
+            instructions: string;
+            /**
+             * @description compacted 已压缩；skipped 没有压缩但正常完成（原因见 skipReason）；执行结束前、被取消或失败时为 null
+             * @enum {string|null}
+             */
+            outcome: "compacted" | "skipped" | null;
+            /**
+             * @description too_small 会话内容太少、不需要压缩；already_compacted 上次压缩之后还没有新内容；cancelled_by_extension 扩展取消了这次压缩。outcome 不是 skipped 时为 null
+             * @enum {string|null}
+             */
+            skipReason: "too_small" | "already_compacted" | "cancelled_by_extension" | null;
+            /**
+             * Format: int64
+             * @description 压缩前的上下文 token；只在 compacted 时有值
+             */
+            tokensBefore: number | null;
+            /**
+             * Format: int64
+             * @description Pi 估算的压缩后上下文 token；只在 compacted 时有值
+             */
+            estimatedTokensAfter: number | null;
         };
         ConsoleResumeSession: {
             /** @description Pi 会话头中的完整会话 ID */
@@ -7599,9 +7635,20 @@ export interface components {
             /** @description /resume 的可恢复会话；按文件修改时间倒序，不含本机路径 */
             resumeSessions?: components["schemas"]["ConsoleResumeSession"][] | null;
             resumedSession?: components["schemas"]["SessionInfo"] | null;
-            /** Format: int64 */
+            /**
+             * @description /compact 正常完成后的执行（compaction 里是指令与结果，Pi 没有压缩时 outcome 为 skipped）；其他命令省略。
+             *     压缩被取消或失败时命令返回 409 console_command_failed，没有这个字段
+             */
+            compactRun?: components["schemas"]["Run"];
+            /**
+             * Format: int64
+             * @description /compact 实际压缩时压缩前的上下文 token，同 compactRun.compaction.tokensBefore；其余为 null
+             */
             tokensBefore?: number | null;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 同 compactRun.compaction.estimatedTokensAfter；其余为 null
+             */
             estimatedTokensAfter?: number | null;
         };
         /** @description 参与方；agent 带 id 与地址，external 带 id 与 @名称，plugin（插件令牌，只出现在 folder.changed 的 by）带 plugin:<id> 地址，console 与 platform 只有 kind 与控制台地址。 */
@@ -11547,7 +11594,10 @@ export interface operations {
                 before?: string;
                 /** @description 返回这条消息之后更新的消息 */
                 after?: string;
-                /** @description 返回包含该执行的一页：以它的用户消息为中心，前后各取一部分；执行不属于该 Agent 时返回 404 */
+                /**
+                 * @description 返回包含该执行的一页：以它的用户消息为中心，前后各取一部分；执行不属于该 Agent 时返回 404。
+                 *     手动压缩（/compact）的执行没有对话消息，以它开始时的位置为中心：之前的最后一条消息之后。
+                 */
                 aroundRun?: string;
                 limit?: number;
             };

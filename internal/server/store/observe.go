@@ -56,11 +56,11 @@ type AnomalyCursor struct {
 }
 
 // Anomalies 按结束时间倒序返回范围内未删除 Agent 的失败与被打断的执行，以及 from 之后的总条数。
-// 已删除项目中的 Agent 都已软删除，因此不出现。
+// 已删除项目中的 Agent 都已软删除，因此不出现。手动压缩（/compact）被人取消或因服务重启中断不算异常，只列出失败的。
 func (s *Store) Anomalies(ctx context.Context, f ScopeFilter, from *time.Time, cursor *AnomalyCursor, limit int) ([]AnomalyRow, int, *AnomalyCursor, error) {
 	pid, platform := f.args()
 	const scope = `FROM runs r JOIN agents a ON a.id = r.agent_id
-		WHERE a.deleted_at IS NULL AND r.status IN ('failed', 'interrupted')
+		WHERE a.deleted_at IS NULL AND r.status IN ('failed', 'interrupted') AND NOT (r.origin = 'console_compact' AND r.status = 'interrupted')
 			AND ($1 IS NULL OR a.project_id = $1) AND (NOT $2 OR a.project_id IS NULL)
 			AND ($3 IS NULL OR r.ended_at >= $3)`
 	var total int
@@ -96,7 +96,7 @@ func (s *Store) Anomalies(ctx context.Context, f ScopeFilter, from *time.Time, c
 	return items, total, next, nil
 }
 
-// LastEndedRuns 返回每个 Agent 最近一次已结束的执行。
+// LastEndedRuns 返回每个 Agent 最近一次已结束的执行（概览的“上一条回复”）。手动压缩（/compact）不是回复，不算。
 func (s *Store) LastEndedRuns(ctx context.Context, agentIDs []uuid.UUID) (map[uuid.UUID]Run, error) {
 	out := map[uuid.UUID]Run{}
 	if len(agentIDs) == 0 {
@@ -104,7 +104,7 @@ func (s *Store) LastEndedRuns(ctx context.Context, agentIDs []uuid.UUID) (map[uu
 	}
 	rows, err := s.Pool.Query(ctx, `SELECT `+runColumns+` FROM (
 			SELECT *, row_number() OVER (PARTITION BY agent_id ORDER BY ended_at DESC, id DESC) AS n FROM runs
-			WHERE agent_id IN (SELECT value FROM json_each($1)) AND status IN ('completed', 'failed', 'interrupted'))
+			WHERE agent_id IN (SELECT value FROM json_each($1)) AND status IN ('completed', 'failed', 'interrupted') AND origin <> 'console_compact')
 		WHERE n = 1`, agentIDs)
 	if err != nil {
 		return nil, err

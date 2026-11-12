@@ -91,3 +91,73 @@ func TestInstalledPi14ExportHTML(t *testing.T) {
 		t.Fatalf("exported HTML does not contain the synthetic message (%d bytes)", len(content))
 	}
 }
+
+// Real installed Pi 1.4 compact on synthetic sessions it refuses before any model call: a one-message session
+// ("Nothing to compact") and one whose last entry is a compaction ("Already compacted"). Both are normal skipped
+// outcomes, not errors. No model request, credentials, user HOME or network is used.
+func TestInstalledPi14CompactSkips(t *testing.T) {
+	if _, err := exec.LookPath("pi"); err != nil {
+		t.Skip("本机没有 pi")
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	user := map[string]any{"type": "message", "id": "user-entry", "parentId": nil, "timestamp": now,
+		"message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "text", "text": "hello"}}, "timestamp": time.Now().UnixMilli()}}
+	// Pi 打开已有会话时，缺少思考级别记录就补一条：先写上，压缩才是最后一条记录。
+	model := map[string]any{"type": "model_change", "id": "model-entry", "parentId": "user-entry", "timestamp": now, "provider": "openai-codex", "modelId": "gpt-6.1-sol"}
+	thinking := map[string]any{"type": "thinking_level_change", "id": "thinking-entry", "parentId": "model-entry", "timestamp": now, "thinkingLevel": "medium"}
+	compaction := map[string]any{"type": "compaction", "id": "compaction-entry", "parentId": "thinking-entry", "timestamp": now,
+		"summary": "earlier work", "firstKeptEntryId": "user-entry", "tokensBefore": 1000}
+	for name, c := range map[string]struct {
+		entries []any
+		want    string
+	}{
+		"too small":         {[]any{user}, CompactTooSmall},
+		"already compacted": {[]any{user, model, thinking, compaction}, CompactAlreadyDone},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+			defer cancel()
+			root := t.TempDir()
+			r, err := preflight.Resolve(ctx, preflight.Options{PiBin: "pi", PiVersion: "1.4.0", NodeBin: "node", WorkRoot: filepath.Join(root, "work"), HomeDirs: []string{"/nonexistent"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			preload := filepath.Join(root, "deny.mjs")
+			const networkGuard = `import net from 'node:net';import tls from 'node:tls';import dgram from 'node:dgram';const reject=()=>{throw Error('network denied by compact fixture')};net.Socket.prototype.connect=reject;tls.connect=reject;dgram.createSocket=reject;globalThis.fetch=reject;`
+			if err = os.WriteFile(preload, []byte(networkGuard), 0600); err != nil {
+				t.Fatal(err)
+			}
+			session := filepath.Join(root, "session.jsonl")
+			raw, _ := json.Marshal(map[string]any{"type": "session", "version": 3, "id": uuid.NewString(), "timestamp": now, "cwd": root})
+			raw = append(raw, '\n')
+			for _, entry := range c.entries {
+				line, _ := json.Marshal(entry)
+				raw = append(append(raw, line...), '\n')
+			}
+			if err = os.WriteFile(session, raw, 0600); err != nil {
+				t.Fatal(err)
+			}
+			args := []string{"--import", preload, filepath.Join(r.PiPackageDir, "dist/bundle/cli.js"), "--mode", "rpc", "--offline", "--session", session, "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-themes", "--provider", "openai-codex", "--model", "gpt-6.1-sol"}
+			cmd := exec.CommandContext(ctx, r.NodeBin, args...)
+			cmd.Dir = root
+			cmd.Env = []string{"HOME=" + root, "PATH=/usr/bin:/bin", "PI_CODING_AGENT_DIR=" + filepath.Join(root, "agent"), "PI_OFFLINE=1", "PI_TELEMETRY=0"}
+			client, err := Start(cmd)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				_ = client.CloseStdin()
+				select {
+				case <-client.Done():
+				case <-time.After(3 * time.Second):
+					_ = cmd.Process.Kill()
+					<-client.Done()
+				}
+			}()
+			res, err := client.Compact(ctx, "")
+			if err != nil || res.Skipped != c.want {
+				t.Fatalf("应是没有压缩（%s）：%+v %v", c.want, res, err)
+			}
+		})
+	}
+}

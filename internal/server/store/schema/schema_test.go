@@ -126,7 +126,7 @@ func TestBaselineShape(t *testing.T) {
 }
 
 // latestVersion 是最后一条迁移的版本号；新增迁移时同步修改。
-const latestVersion = 9
+const latestVersion = 10
 
 // TestMigrateToBaseline：导入旧库时先只迁到基线（没有基线之后新增的表），再迁到最新。
 func TestMigrateToBaseline(t *testing.T) {
@@ -440,15 +440,23 @@ func TestConsoleCompactMigrationPreservesPiCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	user, run, err := st.InsertMessageAndRun(ctx, store.NewRun{AgentID: agent.ID, RunID: uuid.New(), InstanceID: uuid.New(), Text: "/pi:review", Start: true})
-	if err != nil {
-		t.Fatal(err)
-	}
+	// 版本 8 的数据用 SQL 直接写：现在的 store 读写的是最新的列（例如 runs.compaction），不能用在旧库上。
+	runID, userID, replyID := uuid.New(), uuid.New(), uuid.New()
 	notices := []byte(`{"notices":[{"message":"kept","level":"info"}],"truncated":false}`)
-	_, reply, finished, err := st.FinishRun(ctx, run.ID, store.RunEnd{Status: "completed", Text: "reply", PiCommand: "review", PiCommandHandled: true, PiCommandNotices: notices})
-	if err != nil || !finished || reply == nil {
-		t.Fatalf("结束旧运行：%+v %v %v", reply, finished, err)
+	for _, q := range []struct {
+		sql  string
+		args []any
+	}{
+		{`INSERT INTO runs (id, agent_id, user_message_id, config_version, priority, queue_seq, status, origin, queued_at, started_at, ended_at, pi_command, pi_command_handled, pi_command_notices)
+			VALUES ($1, $2, $3, 1, 1, 1, 'completed', 'console', now(), now(), now(), 'review', 1, $4)`, []any{runID, agent.ID, userID, string(notices)}},
+		{`INSERT INTO conversation_messages (id, agent_id, seq, role, text, run_id, session_epoch) VALUES ($1, $2, 1, 'user', '/pi:review', $3, 1)`, []any{userID, agent.ID, runID}},
+		{`INSERT INTO conversation_messages (id, agent_id, seq, role, text, run_id, session_epoch) VALUES ($1, $2, 2, 'assistant', 'reply', $3, 1)`, []any{replyID, agent.ID, runID}},
+	} {
+		if _, err := d.Exec(ctx, q.sql, q.args...); err != nil {
+			t.Fatal(err)
+		}
 	}
+	user, reply, run := store.Message{ID: userID}, store.Message{ID: replyID}, store.Run{ID: runID}
 	if err := schema.Migrate(ctx, d, log); err != nil {
 		t.Fatal(err)
 	}
@@ -465,9 +473,12 @@ func TestConsoleCompactMigrationPreservesPiCommands(t *testing.T) {
 	if err := st.RecordSessionFile(ctx, agent.ID, "/tmp/session.jsonl"); err != nil {
 		t.Fatal(err)
 	}
-	compact, err := st.InsertConsoleCompactRun(ctx, agent.ID, uuid.New(), uuid.New())
-	if err != nil || compact.UserMessageID != uuid.Nil || compact.Origin != "console_compact" {
+	compact, err := st.InsertConsoleCompactRun(ctx, agent.ID, uuid.New(), uuid.New(), "保留决定")
+	if err != nil || compact.UserMessageID != uuid.Nil || compact.Origin != "console_compact" || store.ParseCompaction(compact.Compaction).Instructions != "保留决定" {
 		t.Fatalf("压缩运行：%+v %v", compact, err)
+	}
+	if _, err := d.Exec(ctx, `UPDATE runs SET compaction = '{}' WHERE id = $1`, runID); err == nil {
+		t.Fatal("不是手动压缩的执行不能有 compaction")
 	}
 	rows, err := d.Query(ctx, "PRAGMA foreign_key_check")
 	if err != nil {
