@@ -78,7 +78,7 @@ export function ProjectSettingsPage() {
                   <ProjectPromptForm projectId={project.id} />
                 </Part>
                 <Part id="folder">
-                  <ContextFolderBody key={`folder-${project.id}`} projectId={project.id} />
+                  <ContextFolderBody key={`folder-${project.id}`} scope={{ kind: 'project', projectId: project.id }} />
                 </Part>
                 <Part id="local-dirs">
                   <ProjectLocalDirectories key={`local-dirs-${project.id}`} projectId={project.id} />

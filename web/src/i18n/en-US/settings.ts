@@ -3,6 +3,8 @@ import type { Messages } from '..'
 export const settings = {
   title: 'Global settings',
   language: { title: 'Language', hint: 'Applies to this browser only. The page reloads when you switch.' },
+  product: (version: string) => `Loop Now ${version}`,
+  serverStatus: { ok: 'Server connected', degraded: 'Server database unavailable' },
   readonlyHint: 'Model settings, local mode and folders can be edited here; server environment configuration remains read-only.',
   models: {
     title: 'Model settings',
