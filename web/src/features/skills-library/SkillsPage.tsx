@@ -14,15 +14,15 @@ import { isNotFound } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 import { SkillUpload } from './SkillUpload'
 import { useSkillMdEditor } from './use-skill-md-editor'
-import { pageTitleClass } from '@/lib/page-title'
+import { PageFrame, PageHeader } from '@/components/PageHeader'
+import { Sheet as PaperSheet } from '@/components/Sheet'
 
-// 模板卡片的倾斜：只转 ::before 背景层，卡片本体（链接）保持水平。每屏倾斜元素不超过 6 个，
-// 网格最多三列、一屏约四行，所以每四张卡片只倾斜一张（落在对角线上），角度在 ±0.6°～1.2° 之间交替。
-const TILTS = ['[--tilt:-1deg]', '[--tilt:0.8deg]', '[--tilt:-0.6deg]', '[--tilt:1.1deg]']
-const tiltClass = (index: number) => (index % 4 === 0 ? TILTS[(index / 4) % TILTS.length] : '[--tilt:0deg]')
+// 上传目录、上传 zip：白底、藏青描边加藏青投影的胶囊；在线新建是本页唯一的荧光粉主按钮（改版通用规则第 7 条）。
+const uploadButtonClass = 'border-2 border-ink bg-white shadow-[3px_3px_0_var(--ink)] hover:bg-paper-raised'
 
 // 抽屉的开合由地址决定：/skills/:skillId 打开详情抽屉，/skills/new 打开在线新建抽屉，关闭后回到 /skills。
 // 抽屉作为子路由渲染在网格之上，所以刷新或直接打开这两个地址时网格照常显示。
+// 改版：页头是共用的页面标题（旁边写着共几个模板，有模板时还有上传与新建入口）；模板与空状态排在一张纸上。
 export function SkillsPage() {
   const skills = useSkills()
   const navigate = useNavigate()
@@ -31,73 +31,71 @@ export function SkillsPage() {
   const list = skills.data?.skills ?? []
   const empty = skills.isSuccess && list.length === 0
   const newLink = (
-    <Button size="lg" asChild>
+    <Button size={empty ? 'lg' : 'xs'} variant="interrupt" className="border-2 border-ink" asChild>
       <Link to="/skills/new">
         <PlusIcon aria-hidden="true" />
         {t.skills.create}
       </Link>
     </Button>
   )
-  // 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。
   return (
-    <div className="relative h-full overflow-y-auto">
-      <div className="mx-auto flex max-w-[1240px] flex-col gap-6 px-4 pt-[34px] pb-16 sm:px-[30px]">
-        <SkillUpload size="lg" onArchive={async (archive) => navigate(`/skills/${(await create.mutateAsync(archive)).id}`)}>
-          {({ actions, feedback }) => (
-            <>
-              <div className="flex flex-wrap items-end gap-x-5 gap-y-3.5">
-                <h1 className={pageTitleClass}>{t.skills.title}</h1>
-                {skills.isSuccess && (
-                  <span className="pb-2 font-display-latin text-[34px] leading-none font-extrabold text-pink-text [text-shadow:3px_2px_0_var(--riso-blue)]">
-                    <span aria-hidden="true">{list.length}</span>
-                    <span className="sr-only">{t.skills.count(list.length)}</span>
-                  </span>
-                )}
-                {/* 空库时上传与新建入口只放在空状态里，不重复出现在工具栏。 */}
-                {!empty && (
-                  <div className="ml-auto flex flex-wrap gap-2.5 pb-1.5">
+    <SkillUpload
+      size={empty ? 'lg' : 'sm'}
+      buttonClassName={uploadButtonClass}
+      onArchive={async (archive) => navigate(`/skills/${(await create.mutateAsync(archive)).id}`)}
+    >
+      {({ actions, feedback }) => (
+        <PageFrame>
+          <PageHeader crumbs={[{ label: t.shell.global }]} title={t.skills.title}>
+            {skills.isSuccess && <span>{t.skills.count(list.length)}</span>}
+            {/* 空库时上传与新建入口只放在空状态里，不重复出现在页头。 */}
+            {!empty && skills.isSuccess && (
+              <>
+                {actions}
+                {newLink}
+              </>
+            )}
+          </PageHeader>
+          <PaperSheet className="mt-2 flex-1">
+            {/* 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。 */}
+            <div className="relative min-h-0 flex-1 overflow-y-auto">
+              <div className={cn('flex min-h-full flex-col gap-6 pt-6 pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,30px)]', empty && 'justify-center')}>
+                {feedback}
+                {empty && (
+                  <EmptyLibrary>
                     {actions}
                     {newLink}
-                  </div>
+                  </EmptyLibrary>
+                )}
+                {skills.isError && <ErrorAlert error={skills.error} />}
+                {skills.isPending && <p className="text-[14px] text-ink-500">{t.common.loading}</p>}
+                {list.length > 0 && (
+                  <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(300px,100%),1fr))] gap-[18px]" aria-label={t.skills.title}>
+                    {list.map((skill) => (
+                      <li key={skill.id} className="flex">
+                        <TemplateCard skill={skill} selected={skill.id === skillId} />
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
-              {feedback}
-              {empty && (
-                <EmptyLibrary>
-                  {actions}
-                  {newLink}
-                </EmptyLibrary>
-              )}
-            </>
-          )}
-        </SkillUpload>
-        {skills.isError && <ErrorAlert error={skills.error} />}
-        {skills.isPending && <p className="text-[14px] text-ink-500">{t.common.loading}</p>}
-        {list.length > 0 && (
-          <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(320px,100%),1fr))] gap-[22px]" aria-label={t.skills.title}>
-            {list.map((skill, index) => (
-              <li key={skill.id} className="flex">
-                <TemplateCard skill={skill} selected={skill.id === skillId} className={tiltClass(index)} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      <Outlet />
-    </div>
+            </div>
+          </PaperSheet>
+          <Outlet />
+        </PageFrame>
+      )}
+    </SkillUpload>
   )
 }
 
-// 模板卡片：名称（等宽）、文件数、描述与更新时间。整张卡片是打开详情抽屉的链接；当前打开的卡片为黄底粉投影。
-function TemplateCard({ skill, selected, className }: { skill: Schemas['SkillTemplateSummary']; selected: boolean; className: string }) {
+// 模板卡片：名称（等宽）、文件数、描述与更新时间。整张卡片是打开详情抽屉的链接。
+// 改版：白底、2px 藏青描边、藏青实色投影的卡片；悬停浅黄，当前打开的一张黄底加荧光粉投影（选中态一律黄色）。
+function TemplateCard({ skill, selected }: { skill: Schemas['SkillTemplateSummary']; selected: boolean }) {
   return (
     <Link
       to={`/skills/${skill.id}`}
       aria-current={selected ? 'true' : undefined}
-      className={cn(
-        'riso-tilt flex w-full flex-col gap-3 rounded-panel p-5 text-ink no-underline [--tilt-bg:#fff] hover:[--tilt-bg:var(--tint-yellow)] aria-[current=true]:[--tilt-bg:var(--riso-yellow)] aria-[current=true]:[--tilt-shadow:5px_5px_0_var(--riso-pink)]',
-        className,
-      )}
+      className="mr-1 mb-1 flex w-full flex-col gap-3 rounded-card border-2 border-ink bg-white p-5 text-ink no-underline shadow-[4px_4px_0_var(--ink)] outline-none hover:bg-tint-yellow focus-visible:shadow-focus aria-[current=true]:bg-riso-yellow aria-[current=true]:shadow-print-pink"
     >
       <span className="flex w-full items-center gap-3">
         <span className="min-w-0 flex-1 truncate font-mono text-[15.5px] font-bold">{skill.name}</span>
@@ -111,16 +109,18 @@ function TemplateCard({ skill, selected, className }: { skill: Schemas['SkillTem
   )
 }
 
+// 空状态（改版）：一片网点、两张叠印的卡片（孔版蓝、荧光粉）和一个黄色的圆，下面是黄色记号笔标题与三个入口。
 function EmptyLibrary({ children }: { children: ReactNode }) {
   return (
-    <div className="flex flex-col items-center gap-[18px] rounded-dialog bg-paper-raised px-6 py-16 text-center shadow-print-rest">
-      {/* 空书架：两本叠印的书，倾斜画在 ::before 上。 */}
-      <span aria-hidden="true" className="flex h-[100px] w-[140px] items-start pl-2.5">
-        <span className="riso-tilt mt-3.5 h-20 w-[60px] shrink-0 rounded-lg [--tilt-bg:var(--riso-blue)] [--tilt-shadow:none] [--tilt:-8deg]" />
-        <span className="riso-tilt mt-1.5 -ml-5 h-[84px] w-[60px] shrink-0 rounded-lg mix-blend-multiply [--tilt-bg:var(--riso-pink)] [--tilt-shadow:none] [--tilt:6deg]" />
+    <div data-empty-library className="flex flex-col items-center gap-[22px] px-6 py-10 text-center">
+      <span aria-hidden="true" data-empty-art className="relative block h-[190px] w-[290px] max-w-full">
+        <span className="absolute top-[52px] left-0 h-[112px] w-[96px] bg-[radial-gradient(var(--ink)_1.5px,transparent_1.9px)] bg-size-[9px_9px] opacity-55" />
+        <span className="absolute top-[36px] left-[66px] h-[140px] w-[106px] rotate-[-8deg] rounded-[12px] bg-riso-blue bg-[radial-gradient(rgb(24_38_94/.45)_1.3px,transparent_1.7px)] bg-size-[8px_8px]" />
+        <span className="absolute top-[18px] left-[124px] h-[140px] w-[106px] rotate-[6deg] rounded-[12px] bg-riso-pink mix-blend-multiply" />
+        <span className="absolute top-0 left-[194px] size-[84px] rounded-full bg-riso-yellow mix-blend-multiply" />
       </span>
-      <p className="font-display-cn text-[34px] leading-[1.2]">{t.skills.empty}</p>
-      <div className="flex flex-wrap justify-center gap-2.5">{children}</div>
+      <p className="riso-marker px-1.5 font-display-cn text-[34px] leading-[1.2]">{t.skills.empty}</p>
+      <div className="flex flex-wrap justify-center gap-3">{children}</div>
     </div>
   )
 }
