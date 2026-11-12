@@ -165,7 +165,8 @@ export function Sidebar({
       </div>
 
       {/* 滚动区本身是定位容器：待你处理角标里的 sr-only 说明随列表滚动并被裁剪，不会按未滚动时的位置撑高整页。 */}
-      <div className="relative flex min-h-0 flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto px-3.5 pt-1 pb-3 [scrollbar-width:thin]">
+      {/* 窗口矮时出现的滚动条：蓝底上一条细的半透明白色滚动条，看得清又不扎眼。 */}
+      <div className="relative flex min-h-0 flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto px-3.5 pt-1 pb-3 [scrollbar-color:rgb(255_255_255/.45)_transparent] [scrollbar-width:thin]">
         <NavItem
           to={overviewPath(scope)}
           icon="overview"

@@ -189,6 +189,34 @@ describe('左侧栏的样式', () => {
     expect(tag).not.toHaveClass('bg-ink')
   })
 
+  // 改版第 3 步：选中的 Manager 行原来只给名字留 66px（侧栏出现滚动条时 55px），“manager”被截成“man…”。
+  it('名字放得下时完整显示：名字先占满一行，右边的运行时、状态与 Manager 标记放不下时换到下一行；过长的才截断，悬停看到全名', async () => {
+    setup([manager, other], defaultAgentPath(manager.id, 'config'))
+    const row = await within(sidebar()).findByRole('link', { name: /manager/ })
+    await waitFor(() => expect(row).toHaveAttribute('aria-current', 'page'))
+    // 选中行不再固定高度，换行时随内容长高。
+    expect(row).toHaveClass('min-h-10')
+    expect(row).not.toHaveClass('h-10')
+    const name = within(row).getByText('manager')
+    expect(name).toHaveAttribute('title', 'manager')
+    expect(name).toHaveClass('max-w-full', 'truncate')
+    expect(name.parentElement).toHaveClass('flex-wrap', 'min-w-0', 'flex-1')
+    const tags = within(row).getByText('Manager').parentElement!
+    expect(tags).toHaveClass('ml-auto', 'shrink-0')
+    expect(tags).not.toContainElement(name)
+    // 没选中的行同样排法。
+    const unselected = within(sidebar()).getByRole('link', { name: /研究员/ })
+    expect(unselected).toHaveClass('min-h-9')
+    expect(within(unselected).getByText('研究员')).toHaveAttribute('title', '研究员')
+  })
+
+  it('侧栏的滚动区在蓝底上用一条细的半透明白色滚动条', async () => {
+    setup([manager])
+    const list = await within(sidebar()).findByRole('list', { name: 'Agent' })
+    const scroller = list.closest('.overflow-y-auto')!
+    expect(scroller).toHaveClass('[scrollbar-width:thin]', '[scrollbar-color:rgb(255_255_255/.45)_transparent]')
+  })
+
   it('搜索框高 34px；快捷键提示有细描边', async () => {
     setup([manager])
     const search = await within(sidebar()).findByRole('searchbox', { name: '搜索 Agent' })
