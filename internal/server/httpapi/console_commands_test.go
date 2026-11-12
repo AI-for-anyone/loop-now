@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -295,5 +296,29 @@ func TestClaudeCannotResumePiSession(t *testing.T) {
 	sess, err := e.st.IdleSession(context.Background(), agent.ID)
 	if err != nil || sess.State != "none" {
 		t.Fatalf("不得切换成 Pi 会话：%+v %v", sess, err)
+	}
+}
+
+// 执行器维护操作里用户可以碰到的失败（运行时正忙、没有会话、运行时不支持）是 409，不是 500 internal_error。
+func TestPlatformConsoleMaintenanceErrorsAreConflicts(t *testing.T) {
+	e := newEnv(t)
+	agent, path := e.newAgent("维护失败")
+	if err := e.st.RecordSessionFile(context.Background(), agent.ID, "/managed/s.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	busy := fmt.Errorf("%w：runtime_busy", executor.ErrMaintenanceBusy)
+	e.ex.stopErr = busy
+	for _, command := range []string{"/reload", "/new"} {
+		e.expectError(409, "agent_not_idle", "POST", path+"/messages", map[string]any{"text": command})
+	}
+	e.ex.stopErr = nil
+	e.ex.listErr = busy
+	e.expectError(409, "agent_not_idle", "POST", path+"/messages", map[string]any{"text": "/resume"})
+	e.expectError(409, "agent_not_idle", "POST", path+"/messages", map[string]any{"text": "/resume some-session"})
+	e.ex.listErr = nil
+	for err, code := range map[error]string{busy: "agent_not_idle", executor.ErrNoSession: "session_none",
+		fmt.Errorf("%w：Claude Code", executor.ErrUnsupportedRuntime): "console_command_failed"} {
+		e.ex.exportErr = err
+		e.expectError(409, code, "GET", path+"/session/export?format=html", nil)
 	}
 }

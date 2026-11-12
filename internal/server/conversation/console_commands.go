@@ -43,6 +43,24 @@ func (s *Service) acquireConsoleCommand(ctx context.Context, agentID uuid.UUID) 
 	return runID, owner, nil
 }
 
+// consoleCommandError 把执行器维护操作里可以预期的失败转成 409；其余错误照旧（服务端内部错误）。
+func consoleCommandError(err error) error {
+	switch {
+	case errors.Is(err, executor.ErrMaintenanceBusy):
+		return apperr.Conflict(apperr.CodeAgentNotIdle, "Agent 正在回复或在进行其他维护，请稍后再试")
+	case errors.Is(err, executor.ErrNoSession):
+		return apperr.Conflict(apperr.CodeSessionNone, "当前还没有可操作的会话")
+	case errors.Is(err, executor.ErrUnsupportedRuntime):
+		return apperr.Conflict(apperr.CodeConsoleCommandFailed, "当前运行时不支持这个命令")
+	}
+	return err
+}
+
+// unsupportedExecutor 是执行器没有实现某项维护操作时的错误（只有测试替身会这样）。
+func unsupportedExecutor(what string) error {
+	return apperr.Conflict(apperr.CodeConsoleCommandFailed, "当前执行器不支持"+what)
+}
+
 // releaseConsoleCommand 放开平台命令持有的忙闲锁，并接着处理命令期间排进来的消息与提醒：
 // 那期间的发送拿不到锁只能排队，它们的 kick 也因锁被占而落空，不在这里接着处理就要等下一次对账。
 func (s *Service) releaseConsoleCommand(agentID uuid.UUID, owner string) {
@@ -112,10 +130,10 @@ func (s *Service) NewSession(ctx context.Context, agentID uuid.UUID) (apitypes.S
 	defer release()
 	stopper, ok := s.ex.(executor.IdleProcessStopper)
 	if !ok {
-		return apitypes.SessionInfo{}, errors.New("当前执行器不支持停止空闲进程")
+		return apitypes.SessionInfo{}, unsupportedExecutor("停止空闲进程")
 	}
 	if _, err := stopper.StopIdle(ctx, agentID, "session_reset"); err != nil {
-		return apitypes.SessionInfo{}, err
+		return apitypes.SessionInfo{}, consoleCommandError(err)
 	}
 	sess, err := s.st.ResetSession(ctx, agentID)
 	if err != nil {
@@ -137,9 +155,10 @@ func (s *Service) Reload(ctx context.Context, agentID uuid.UUID) (bool, error) {
 	}
 	stopper, ok := s.ex.(executor.IdleProcessStopper)
 	if !ok {
-		return false, errors.New("当前执行器不支持重载")
+		return false, unsupportedExecutor("重载")
 	}
-	return stopper.StopIdle(ctx, agentID, "console_reload")
+	stopped, err := stopper.StopIdle(ctx, agentID, "console_reload")
+	return stopped, consoleCommandError(err)
 }
 
 // Export 下载当前受管 Pi 会话，格式只接受 html 或 jsonl。
@@ -164,10 +183,13 @@ func (s *Service) Export(ctx context.Context, agentID uuid.UUID, format string) 
 	}
 	exporter, ok := s.ex.(executor.SessionExporter)
 	if !ok {
-		return executor.SessionExport{}, errors.New("当前执行器不支持会话导出")
+		return executor.SessionExport{}, unsupportedExecutor("会话导出")
 	}
 	out, err := exporter.ExportSession(ctx, agentID, format)
 	if err != nil {
+		if mapped := consoleCommandError(err); mapped != err {
+			return executor.SessionExport{}, mapped
+		}
 		return executor.SessionExport{}, fmt.Errorf("导出会话失败：%w", err)
 	}
 	return out, nil
@@ -189,9 +211,10 @@ func (s *Service) ListResumeSessions(ctx context.Context, agentID uuid.UUID) ([]
 	}
 	lister, ok := s.ex.(executor.SessionLister)
 	if !ok {
-		return nil, errors.New("当前执行器不支持列出会话")
+		return nil, unsupportedExecutor("列出会话")
 	}
-	return lister.ListSessions(ctx, agentID, sess.SessionFile)
+	sessions, err := lister.ListSessions(ctx, agentID, sess.SessionFile)
+	return sessions, consoleCommandError(err)
 }
 
 // ResumeSession 停止旧空闲 Pi 后恢复已验证的受管会话，只切换模型上下文。
@@ -211,11 +234,11 @@ func (s *Service) ResumeSession(ctx context.Context, agentID uuid.UUID, sessionI
 	}
 	lister, ok := s.ex.(executor.SessionLister)
 	if !ok {
-		return apitypes.SessionInfo{}, errors.New("当前执行器不支持恢复会话")
+		return apitypes.SessionInfo{}, unsupportedExecutor("恢复会话")
 	}
 	sessions, err := lister.ListSessions(ctx, agentID, sess.SessionFile)
 	if err != nil {
-		return apitypes.SessionInfo{}, err
+		return apitypes.SessionInfo{}, consoleCommandError(err)
 	}
 	var target *executor.ManagedSession
 	for i := range sessions {
@@ -232,10 +255,10 @@ func (s *Service) ResumeSession(ctx context.Context, agentID uuid.UUID, sessionI
 	}
 	stopper, ok := s.ex.(executor.IdleProcessStopper)
 	if !ok {
-		return apitypes.SessionInfo{}, errors.New("当前执行器不支持停止空闲进程")
+		return apitypes.SessionInfo{}, unsupportedExecutor("停止空闲进程")
 	}
 	if _, err := stopper.StopIdle(ctx, agentID, "session_resumed"); err != nil {
-		return apitypes.SessionInfo{}, err
+		return apitypes.SessionInfo{}, consoleCommandError(err)
 	}
 	sess, err = s.st.ResumeSession(ctx, agentID, sess.SessionFile, target.Path)
 	if err != nil {

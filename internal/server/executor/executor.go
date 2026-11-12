@@ -4,6 +4,7 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"loop-now/internal/server/messageimage"
 	"slices"
 	"strings"
@@ -76,6 +77,16 @@ type SessionExport struct {
 	ContentType string
 	Data        []byte
 }
+
+// 平台命令（维护操作）可以预期的失败。执行器把它们包在返回的错误里，对话服务据此转成 409。
+var (
+	// ErrMaintenanceBusy：运行时还有进行中的执行，或正在做别的维护（例如任务分叉、运行时交接）。
+	ErrMaintenanceBusy = errors.New("运行时正忙")
+	// ErrNoSession：没有可以操作的会话。
+	ErrNoSession = errors.New("当前没有可操作的会话")
+	// ErrUnsupportedRuntime：这个 Agent 的运行时不支持该命令（例如 Claude Code 没有 Pi 会话）。
+	ErrUnsupportedRuntime = errors.New("当前运行时不支持这个命令")
+)
 
 // IdleProcessStopper 由支持维护操作的本机执行器实现。
 type IdleProcessStopper interface {

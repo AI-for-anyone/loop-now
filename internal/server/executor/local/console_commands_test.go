@@ -2,6 +2,7 @@ package local
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -266,7 +267,7 @@ func TestConsoleCommandsRespectClaudeRuntime(t *testing.T) {
 		t.Fatalf("应拒绝 Pi compact：%+v %v", res, err)
 	}
 	for _, format := range []string{"html", "jsonl"} {
-		if _, err := h.e.ExportSession(ctx, id, format); err == nil || !strings.Contains(err.Error(), "不支持 Pi") {
+		if _, err := h.e.ExportSession(ctx, id, format); !errors.Is(err, executor.ErrUnsupportedRuntime) {
 			t.Fatalf("应拒绝 Pi export %s：%v", format, err)
 		}
 	}
@@ -281,5 +282,29 @@ func TestSessionUserTextStripsCurrentAndLegacyRunID(t *testing.T) {
 		if got := normalizeSessionUserText(prefix + "真正的消息"); got != "真正的消息" {
 			t.Fatalf("运行 ID 不应进入会话标题：%q", got)
 		}
+	}
+}
+
+// 维护操作里可以预期的失败带 executor 的哨兵错误，对话服务据此返回 409。
+func TestMaintenanceErrorsCarrySentinels(t *testing.T) {
+	h := newHarness(t, nil, "")
+	id := h.agent(nil)
+	ctx := context.Background()
+	if _, err := h.e.ExportSession(ctx, id, "jsonl"); !errors.Is(err, executor.ErrNoSession) {
+		t.Fatalf("没有会话时应是 ErrNoSession：%v", err)
+	}
+	free, err := h.e.reserveMaintenance(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer free()
+	if _, err := h.e.StopIdle(ctx, id, "console_reload"); !errors.Is(err, executor.ErrMaintenanceBusy) || !errors.Is(err, ErrRuntimeBusy) {
+		t.Fatalf("维护进行中 StopIdle 应是 ErrMaintenanceBusy：%v", err)
+	}
+	if _, err := h.e.ExportSession(ctx, id, "jsonl"); !errors.Is(err, executor.ErrMaintenanceBusy) {
+		t.Fatalf("维护进行中导出应是 ErrMaintenanceBusy：%v", err)
+	}
+	if _, err := h.e.ListSessions(ctx, id, ""); !errors.Is(err, executor.ErrMaintenanceBusy) {
+		t.Fatalf("维护进行中列出会话应是 ErrMaintenanceBusy：%v", err)
 	}
 }

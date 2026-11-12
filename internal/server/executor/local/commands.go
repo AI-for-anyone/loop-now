@@ -19,7 +19,13 @@ import (
 	"loop-now/internal/server/executor/local/pirpc"
 )
 
-var errSessionUnavailable = errors.New("当前没有可操作的 Pi 会话")
+// maintenanceErr 把维护操作里可以预期的失败标上 executor 的哨兵错误（原错误仍在链上）。
+func maintenanceErr(err error) error {
+	if errors.Is(err, ErrRuntimeBusy) {
+		return fmt.Errorf("%w：%w", executor.ErrMaintenanceBusy, err)
+	}
+	return err
+}
 
 // compact 在当前真实运行里执行手动压缩，复用中断、事件、用量和会话记录链。
 func (e *Executor) compact(ctx context.Context, p *proc, r *run, req executor.Request, snap agentconfig.Snapshot) executor.Result {
@@ -59,14 +65,14 @@ func (e *Executor) compact(ctx context.Context, p *proc, r *run, req executor.Re
 func (e *Executor) StopIdle(ctx context.Context, agentID uuid.UUID, reason string) (bool, error) {
 	free, err := e.reserveMaintenance(ctx, agentID)
 	if err != nil {
-		return false, err
+		return false, maintenanceErr(err)
 	}
 	defer free()
 	e.mu.Lock()
 	p := e.procs[agentID]
 	if e.runs[agentID] != nil || p != nil && p.busy {
 		e.mu.Unlock()
-		return false, ErrRuntimeBusy
+		return false, maintenanceErr(ErrRuntimeBusy)
 	}
 	delete(e.procs, agentID)
 	e.mu.Unlock()
@@ -92,7 +98,7 @@ func (e *Executor) ExportSession(ctx context.Context, agentID uuid.UUID, format 
 	}
 	free, err := e.reserveMaintenance(ctx, agentID)
 	if err != nil {
-		return executor.SessionExport{}, err
+		return executor.SessionExport{}, maintenanceErr(err)
 	}
 	defer free()
 	e.mu.Lock()
@@ -100,7 +106,7 @@ func (e *Executor) ExportSession(ctx context.Context, agentID uuid.UUID, format 
 	busy := e.runs[agentID] != nil || p != nil && p.busy
 	e.mu.Unlock()
 	if busy {
-		return executor.SessionExport{}, ErrRuntimeBusy
+		return executor.SessionExport{}, maintenanceErr(ErrRuntimeBusy)
 	}
 
 	snap, err := e.src.ExecutionSnapshot(ctx, agentID)
@@ -108,10 +114,10 @@ func (e *Executor) ExportSession(ctx context.Context, agentID uuid.UUID, format 
 		return executor.SessionExport{}, err
 	}
 	if isClaude(snap) {
-		return executor.SessionExport{}, errors.New("当前运行时不支持 Pi 会话导出")
+		return executor.SessionExport{}, fmt.Errorf("%w：Claude Code 没有可导出的 Pi 会话", executor.ErrUnsupportedRuntime)
 	}
 	if snap.Session.State != "active" || snap.Session.SessionFile == "" {
-		return executor.SessionExport{}, errSessionUnavailable
+		return executor.SessionExport{}, executor.ErrNoSession
 	}
 	d := e.dirs(agentID)
 	sessionFile, err := managedSessionFile(d, snap.Session.SessionFile)
@@ -164,14 +170,14 @@ func (e *Executor) ExportSession(ctx context.Context, agentID uuid.UUID, format 
 func (e *Executor) ListSessions(ctx context.Context, agentID uuid.UUID, currentFile string) ([]executor.ManagedSession, error) {
 	free, err := e.reserveMaintenance(ctx, agentID)
 	if err != nil {
-		return nil, err
+		return nil, maintenanceErr(err)
 	}
 	defer free()
 	e.mu.Lock()
 	busy := e.runs[agentID] != nil || e.procs[agentID] != nil && e.procs[agentID].busy
 	e.mu.Unlock()
 	if busy {
-		return nil, ErrRuntimeBusy
+		return nil, maintenanceErr(ErrRuntimeBusy)
 	}
 	d := e.dirs(agentID)
 	entries, err := os.ReadDir(d.sessions)

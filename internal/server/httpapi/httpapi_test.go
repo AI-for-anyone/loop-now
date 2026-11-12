@@ -47,6 +47,8 @@ type quickExec struct {
 	mu       sync.Mutex
 	running  map[uuid.UUID]chan struct{}
 	sessions []executor.ManagedSession
+	// 不为空时平台命令的维护操作返回这些错误。
+	stopErr, exportErr, listErr error
 }
 
 func (q *quickExec) Execute(ctx context.Context, req executor.Request, sink executor.Sink) (executor.Result, error) {
@@ -94,15 +96,24 @@ func (q *quickExec) Process(uuid.UUID) executor.ProcessInfo {
 }
 func (q *quickExec) Shutdown(context.Context) error { return nil }
 func (q *quickExec) StopIdle(context.Context, uuid.UUID, string) (bool, error) {
+	if q.stopErr != nil {
+		return false, q.stopErr
+	}
 	return true, nil
 }
 func (q *quickExec) ExportSession(_ context.Context, _ uuid.UUID, format string) (executor.SessionExport, error) {
+	if q.exportErr != nil {
+		return executor.SessionExport{}, q.exportErr
+	}
 	if format == "jsonl" {
 		return executor.SessionExport{Filename: "session.jsonl", ContentType: "application/x-ndjson", Data: []byte("{}\n")}, nil
 	}
 	return executor.SessionExport{Filename: "session.html", ContentType: "text/html; charset=utf-8", Data: []byte("<html>exported</html>")}, nil
 }
 func (q *quickExec) ListSessions(_ context.Context, _ uuid.UUID, currentFile string) ([]executor.ManagedSession, error) {
+	if q.listErr != nil {
+		return nil, q.listErr
+	}
 	out := append([]executor.ManagedSession(nil), q.sessions...)
 	for i := range out {
 		out[i].Current = out[i].Path == currentFile
