@@ -11265,9 +11265,11 @@ components:
       properties:
         at: { type: string, format: date-time }
         reason:
-          description: 停止原因；意外退出为 unexpected_exit
+          description: |
+            停止原因；意外退出为 unexpected_exit。session_reset、console_reload、session_resumed 是平台命令 /new、/reload、/resume 停止空闲进程；
+            console_export 是 /export html 为导出临时启动的进程用完后停止。
           type: string
-          enum: [idle_timeout, config_changed, evicted, released, fork_snapshot, shutdown, abort_timeout, unexpected_exit]
+          enum: [idle_timeout, config_changed, evicted, released, fork_snapshot, shutdown, abort_timeout, session_reset, console_reload, session_resumed, console_export, unexpected_exit]
 
     AgentOverview:
       type: object
@@ -11968,7 +11970,10 @@ components:
         type: { type: string, enum: [pi_stopped] }
         at: { type: string, format: date-time }
         pid: { type: integer }
-        reason: { type: string, enum: [idle_timeout, config_changed, evicted, released, fork_snapshot, shutdown, abort_timeout] }
+        reason:
+          description: 含义同 ProcessExit.reason
+          type: string
+          enum: [idle_timeout, config_changed, evicted, released, fork_snapshot, shutdown, abort_timeout, session_reset, console_reload, session_resumed, console_export]
         uptimeMs: { type: integer, minimum: 0 }
         runtime:
           $ref: "#/components/schemas/AgentRuntime"

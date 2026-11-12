@@ -4262,10 +4262,11 @@ export interface components {
             /** Format: date-time */
             at: string;
             /**
-             * @description 停止原因；意外退出为 unexpected_exit
+             * @description 停止原因；意外退出为 unexpected_exit。session_reset、console_reload、session_resumed 是平台命令 /new、/reload、/resume 停止空闲进程；
+             *     console_export 是 /export html 为导出临时启动的进程用完后停止。
              * @enum {string}
              */
-            reason: "idle_timeout" | "config_changed" | "evicted" | "released" | "fork_snapshot" | "shutdown" | "abort_timeout" | "unexpected_exit";
+            reason: "idle_timeout" | "config_changed" | "evicted" | "released" | "fork_snapshot" | "shutdown" | "abort_timeout" | "session_reset" | "console_reload" | "session_resumed" | "console_export" | "unexpected_exit";
         };
         AgentOverview: {
             /** Format: uuid */
@@ -4769,8 +4770,11 @@ export interface components {
             /** Format: date-time */
             at: string;
             pid: number;
-            /** @enum {string} */
-            reason: "idle_timeout" | "config_changed" | "evicted" | "released" | "fork_snapshot" | "shutdown" | "abort_timeout";
+            /**
+             * @description 含义同 ProcessExit.reason
+             * @enum {string}
+             */
+            reason: "idle_timeout" | "config_changed" | "evicted" | "released" | "fork_snapshot" | "shutdown" | "abort_timeout" | "session_reset" | "console_reload" | "session_resumed" | "console_export";
             uptimeMs: number;
             /** @description 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。 */
             runtime?: components["schemas"]["AgentRuntime"];

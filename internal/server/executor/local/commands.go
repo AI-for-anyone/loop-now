@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -61,8 +62,11 @@ func (e *Executor) compact(ctx context.Context, p *proc, r *run, req executor.Re
 	return res
 }
 
-// StopIdle 停止没有执行的空闲运行时；没有进程时成功返回 false。
+// StopIdle 停止没有执行的空闲运行时；没有进程时成功返回 false。reason 是平台命令的停止原因（idleStopReasons）。
 func (e *Executor) StopIdle(ctx context.Context, agentID uuid.UUID, reason string) (bool, error) {
+	if !slices.Contains(idleStopReasons, reason) {
+		return false, fmt.Errorf("未知的停止原因 %q", reason)
+	}
 	free, err := e.reserveMaintenance(ctx, agentID)
 	if err != nil {
 		return false, maintenanceErr(err)
@@ -78,9 +82,6 @@ func (e *Executor) StopIdle(ctx context.Context, agentID uuid.UUID, reason strin
 	e.mu.Unlock()
 	if p == nil {
 		return false, nil
-	}
-	if reason == "" {
-		reason = "console_command"
 	}
 	e.stop(p, stopCause{reason: reason})
 	select {
@@ -142,7 +143,7 @@ func (e *Executor) ExportSession(ctx context.Context, agentID uuid.UUID, format 
 		go e.watch(p)
 	}
 	if launched {
-		defer e.stop(p, stopCause{reason: "console_export"})
+		defer e.stop(p, stopCause{reason: stopConsoleExport})
 	}
 	output := filepath.Join(d.sessions, ".loop-now-export-"+uuid.Must(uuid.NewV7()).String()+".html")
 	defer os.Remove(output)

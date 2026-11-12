@@ -91,7 +91,7 @@ func TestConsoleExportRejectsReturnedPathOutsideSessionDir(t *testing.T) {
 	if res.Outcome != executor.OutcomeCompleted {
 		t.Fatalf("准备会话失败：%+v", res)
 	}
-	stopped, err := h.e.StopIdle(context.Background(), id, "test")
+	stopped, err := h.e.StopIdle(context.Background(), id, "console_reload")
 	if err != nil || !stopped {
 		t.Fatalf("停止进程：%v %v", stopped, err)
 	}
@@ -306,5 +306,14 @@ func TestMaintenanceErrorsCarrySentinels(t *testing.T) {
 	}
 	if _, err := h.e.ListSessions(ctx, id, ""); !errors.Is(err, executor.ErrMaintenanceBusy) {
 		t.Fatalf("维护进行中列出会话应是 ErrMaintenanceBusy：%v", err)
+	}
+}
+
+// StopIdle 只接受平台命令的停止原因，记下的 pi.stopped 原因都在契约的枚举里。
+func TestStopIdleRejectsUnknownReason(t *testing.T) {
+	h := newHarness(t, nil, "")
+	id := h.agent(nil)
+	if _, err := h.e.StopIdle(context.Background(), id, "console_command"); err == nil {
+		t.Fatal("未知的停止原因应被拒绝")
 	}
 }

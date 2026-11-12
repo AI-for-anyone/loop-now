@@ -197,7 +197,20 @@ const (
 	stopReleased      = "released"
 	stopShutdown      = "shutdown"
 	stopAbortTimeout  = "abort_timeout"
+	stopForkSnapshot  = "fork_snapshot"
+	// 平台命令停止空闲进程：/new、/reload、/resume；console_export 是 /export html 为导出临时启动的进程。
+	stopSessionReset   = "session_reset"
+	stopConsoleReload  = "console_reload"
+	stopSessionResumed = "session_resumed"
+	stopConsoleExport  = "console_export"
 )
+
+// StopReasons 是 pi.stopped 可能带的全部原因，openapi 的 ProcessExit.reason 与 TimelinePiStopped.reason 要列全（api 的契约测试核对）。
+var StopReasons = []string{stopIdleTimeout, stopConfigChanged, stopEvicted, stopReleased, stopShutdown, stopAbortTimeout, stopForkSnapshot,
+	stopSessionReset, stopConsoleReload, stopSessionResumed, stopConsoleExport}
+
+// idleStopReasons 是 StopIdle 接受的原因。
+var idleStopReasons = []string{stopSessionReset, stopConsoleReload, stopSessionResumed}
 
 var _ executor.Executor = (*Executor)(nil)
 
@@ -1115,7 +1128,7 @@ func (e *Executor) FreezeForFork(ctx context.Context, agentID uuid.UUID) error {
 	delete(e.procs, agentID)
 	e.mu.Unlock()
 	if p != nil {
-		e.stop(p, stopCause{reason: "fork_snapshot"})
+		e.stop(p, stopCause{reason: stopForkSnapshot})
 		select {
 		case <-p.rt.Done():
 		case <-ctx.Done():
