@@ -219,7 +219,7 @@ export function MessageList({
     wasLoadingOlder.current = loadingOlder
   }, [firstKey, lastKey, lastText, loadingOlder])
 
-  // 定位：目标回复第一次出现时滚动到它，让它出现在对话区上部。
+  // 定位：目标回复第一次出现时滚动到它，让它出现在对话区上部。目标也可能是插进对话流的内容（定位到的手动压缩），它出现得晚一些。
   useLayoutEffect(() => {
     const el = container.current
     if (!el || targetRunId === null || located.current) return
@@ -227,7 +227,7 @@ export function MessageList({
     if (!target) return
     located.current = true
     scrollTo(el, el.scrollTop + target.getBoundingClientRect().top - el.getBoundingClientRect().top - 24, lastScrollTop)
-  }, [targetRunId, turns])
+  }, [targetRunId, turns, inserts.length])
 
   // 对话区或内容的尺寸变化不一定伴随上面的更新：顶部出现或去掉会话丢失的说明、图片加载完成、
   // 工具标记换行、状态文字变化。原本停在底部时继续贴底。

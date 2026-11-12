@@ -116,7 +116,16 @@ export const chat = {
     resumeConfirmTitle: '确认恢复这个会话？',
     resumeConfirmBody: '只恢复模型对话上下文，页面历史保留；不会回滚工作区、模型配置、Prompt、Skills 或权限。',
     resumeConfirmAction: '恢复会话',
+  },  // 定位到一次手动压缩（/compact）：它不是一轮，在它发生的位置显示一张说明。
+  compactionNote: {
+    title: '手动压缩',
+    target: '定位到的手动压缩',
+    notATurn: '手动压缩不是对话里的一轮，没有消息；它发生在这两轮之间。',
+    failed: '压缩失败',
+    interrupted: '压缩被取消或中断，没有完成',
+    running: '正在压缩…',
   },
+
   // 被 Inbox 唤醒的那一轮，发送者显示为平台提醒。
   platformReminderAt: (time: string) => `平台提醒 · ${formatDayClock(time)}`,
   inboxReminder: { title: '平台提醒', from: (name: string) => `来自 ${name}`, deleted: (label: string) => `（${label}）`, received: '收到 Inbox 消息' },

@@ -27,6 +27,9 @@ function fieldOf(item: Anomaly): string {
   return t.timeline.result.endReasonField(item.endReason ?? (item.kind === 'server_restart' ? 'server_restart' : 'user_interrupt'))
 }
 
+// 失败的手动压缩（compaction 不为 null）后面写上这次压缩的命令。
+const compactCommand = (compaction: Schemas['RunCompaction']) => (compaction.instructions ? `/compact ${compaction.instructions}` : '/compact')
+
 function reasonOf(item: Anomaly): string {
   if (item.kind === 'run_failed') {
     const reason = item.errorCode ? (t.chat.runError[item.errorCode] ?? t.common.unknown(item.errorCode)) : t.errors.unknown
@@ -35,10 +38,10 @@ function reasonOf(item: Anomaly): string {
   return item.kind === 'server_restart' ? t.overview.anomalies.restartReason : t.overview.anomalies.interruptedReason
 }
 
-// 会话文件丢失进入对话页，由那里的横幅处理重开会话；其他条目定位到这条回复并展开它的运行记录。
+// 会话文件丢失进入对话页，由那里的横幅处理重开会话；其他条目定位到这条回复（或这次手动压缩）并展开它的运行记录。
 function targetOf(item: Anomaly): { to: string; action: string } {
   if (item.errorCode === 'session_missing') return { to: `/agents/${item.agentId}/chat`, action: t.overview.anomalies.handle }
-  return { to: `/agents/${item.agentId}/chat#run-${item.runId}`, action: t.overview.anomalies.view }
+  return { to: `/agents/${item.agentId}/chat#run-${item.runId}`, action: item.compaction ? t.overview.anomalies.viewCompaction : t.overview.anomalies.view }
 }
 
 function AnomalyItem({ item }: { item: Anomaly }) {
@@ -57,13 +60,16 @@ function AnomalyItem({ item }: { item: Anomaly }) {
           <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
             {/* 列表中的印章不倾斜，免得一屏中倾斜的元素过多。 */}
             <Badge variant="stamp" tone={STAMP_TONE[item.kind]} className="[--stamp-tilt:0deg]">
-              {t.overview.anomalies.kind[item.kind]}
+              {item.compaction ? t.overview.anomalies.compactionFailed : t.overview.anomalies.kind[item.kind]}
             </Badge>
             <span className="text-[14.5px] font-black [overflow-wrap:anywhere]">{item.agentName}</span>
             <ScopeTag scope={item.scope} projectId={item.projectId} />
             <span className="font-mono text-[11.5px] [overflow-wrap:anywhere] text-ink-500">{fieldOf(item)}</span>
           </span>
-          <span className="text-[13.5px] [overflow-wrap:anywhere] text-ink-700">{reasonOf(item)}</span>
+          <span className="text-[13.5px] [overflow-wrap:anywhere] text-ink-700">
+            {item.compaction && <code className="mr-2 font-mono text-[12.5px] font-bold text-ink">{compactCommand(item.compaction)}</code>}
+            {reasonOf(item)}
+          </span>
         </span>
         <span className="col-start-2 inline-flex items-center gap-1.5 text-[13.5px] font-black whitespace-nowrap sm:col-start-auto">
           {action}

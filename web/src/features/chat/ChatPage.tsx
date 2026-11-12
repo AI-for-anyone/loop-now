@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { stopAgentRun, useAgentQueue } from '@/api/agent-queue'
-import { useAgentStatus, useContextInfo, useMessages } from '@/api/queries'
+import { useAgentStatus, useContextInfo, useMessages, useRunTimeline } from '@/api/queries'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -10,12 +10,14 @@ import { t } from '@/i18n'
 import { isNotFound } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 import { useAgentContext } from '@/features/agents/agent-context'
+import { CompactionNote } from './CompactionNote'
 import { Composer, type ComposerHandle } from './Composer'
 import { isBusy } from './live-state'
 import { MessageList } from './MessageList'
 import { conflictNotice, useStopReply } from './queue-actions'
 import { QueueList, QueueMessages } from './QueueList'
 import { runPhaseText } from './run-status-text'
+import { runStartedAt } from './time'
 import { SessionMissingBanner } from './SessionMissingBanner'
 import { buildTurns } from './turns'
 import { useAgentLive } from './useAgentLive'
@@ -67,6 +69,12 @@ export function ChatPage() {
   const turnsTotal =
     turnsBefore === undefined ? undefined : atLatest ? turnsBefore + turns.length : Math.max(...messages.data!.pages.map((page) => page.turnsTotal))
 
+  // 定位到的执行不在取回的那一页里：可能是一次手动压缩（/compact），它没有消息、不是一轮（契约 Anomaly.compaction）。
+  // 这时用运行记录接口取这次执行；是手动压缩就在它开始的位置显示一张说明。
+  const locatedMissing = aroundRun !== null && messages.isSuccess && !turns.some((turn) => turn.run.id === aroundRun)
+  const locatedRun = useRunTimeline(agent.id, aroundRun ?? '', locatedMissing, true)
+  const compactionRun = locatedMissing && locatedRun.data?.run.compaction ? locatedRun.data.run : null
+
   // Agent 发给你的消息与问题按时间排进对话；你发给它的由它的平台提醒一行显示，不重复。
   // 回复问题时记下原题，原题不再待回答（答过、到期或关闭）时输入框退出回复模式。
   const consoleMessages = useAgentConsoleMessages(agent.id)
@@ -76,6 +84,7 @@ export function ChatPage() {
   // 被平台或插件认领的 / 命令只在这次打开的对话里按时间排进去（服务端不留命令消息），换 Agent 时清空。
   const [commands, setCommands] = useState<{ agentId: string; id: number; at: string; command: string; result: Schemas['ConsoleCommandResult']; copyFailed: boolean }[]>([])
   const inserts = [
+    ...(compactionRun ? [{ key: `compaction:${compactionRun.id}`, at: runStartedAt(compactionRun), node: <CompactionNote agentId={agent.id} run={compactionRun} /> }] : []),
     ...toYou.map((message) => ({
       key: `console:${message.id}`,
       at: message.createdAt,

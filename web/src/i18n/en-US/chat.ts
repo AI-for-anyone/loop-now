@@ -108,7 +108,15 @@ export const chat = {
     resumeConfirmTitle: 'Resume this session?',
     resumeConfirmBody: 'Only the model conversation context is restored, and page history is kept. The workspace, model configuration, Prompt, Skills, and permissions are not rolled back.',
     resumeConfirmAction: 'Resume session',
+  },  compactionNote: {
+    title: 'Manual compaction',
+    target: 'The located manual compaction',
+    notATurn: "A manual compaction isn't a turn of the conversation and has no messages; this is where it happened.",
+    failed: 'Compaction failed',
+    interrupted: "The compaction was cancelled or interrupted and didn't finish",
+    running: 'Compacting…',
   },
+
   platformReminderAt: (time: string) => `Platform reminder · ${formatDayClock(time)}`,
   inboxReminder: { title: 'Platform reminder', from: (name: string) => `From ${name}`, deleted: (label: string) => ` (${label})`, received: 'Received an Inbox message' },
   connection: {
