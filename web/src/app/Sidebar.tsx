@@ -18,9 +18,9 @@ import { ConnectionStatus } from './ConnectionStatus'
 
 const text = t.shell
 
-function NavItem({ to, icon, label, current, badge, onClick }: { to: string; icon: NavIconName; label: string; current: boolean; badge?: ReactNode; onClick?: () => void }) {
+function NavItem({ to, icon, label, current, badge, onClick, compact = false }: { to: string; icon: NavIconName; label: string; current: boolean; badge?: ReactNode; onClick?: () => void; compact?: boolean }) {
   return (
-    <Link to={to} onClick={onClick} aria-current={current ? 'page' : undefined} className={navRowClass(current)}>
+    <Link to={to} onClick={onClick} aria-current={current ? 'page' : undefined} className={navRowClass(current, compact ? 'compact' : 'nav')}>
       <NavIcon name={icon} />
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {badge}
@@ -46,7 +46,7 @@ function ProjectGroup({ projects, search }: { projects: Schemas['Project'][] | u
   const keyword = search.trim().toLowerCase()
   const shown = (projects ?? []).filter((p) => p.name.toLowerCase().includes(keyword))
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-[3px]">
+    <section aria-labelledby={headingId} className="flex flex-col gap-1">
       <h2 id={headingId} className={navGroupClass}>
         {text.groups.projects}
       </h2>
@@ -57,7 +57,7 @@ function ProjectGroup({ projects, search }: { projects: Schemas['Project'][] | u
           {text.scope.noMatch}
         </p>
       )}
-      <ul aria-labelledby={headingId} className="flex flex-col gap-[3px]">
+      <ul aria-labelledby={headingId} className="flex flex-col gap-0.5">
         {shown.map((project) => (
           <li key={project.id} className="min-w-0">
             <NavItem
@@ -78,6 +78,20 @@ const sum = (rows: PendingCounts[]): PendingCounts => ({
   questions: rows.reduce((total, row) => total + row.questions, 0),
   unread: rows.reduce((total, row) => total + row.unread, 0),
 })
+
+// 列表下方空白处的装饰：一片伸出左缘的网点圆，旁边一粉一黄两个小色点。它占列表下面剩余的高度，
+// 剩余高度放不下整片装饰时不显示（见 index.css 的 .sidebar-deco），所以不会压到文字；读屏不读，也不挡点击。
+function SidebarDeco() {
+  return (
+    <div className="sidebar-deco-slot">
+      <div aria-hidden="true" data-sidebar-deco className="sidebar-deco pointer-events-none absolute bottom-3 left-0 h-[178px] w-full">
+        <span className="absolute bottom-0 -left-[72px] size-[178px] rounded-full bg-[radial-gradient(rgb(255_255_255/.36)_2.2px,transparent_2.6px)] bg-size-[11px_11px]" />
+        <span className="absolute bottom-[126px] left-[108px] size-[34px] rounded-full border-2 border-ink bg-riso-pink" />
+        <span className="absolute bottom-[108px] left-[132px] size-5 rounded-full border-2 border-ink bg-riso-yellow" />
+      </div>
+    </div>
+  )
+}
 
 // 左侧栏：品牌蓝网点底、白字。顶部是标志、范围切换与搜索；中间是当前范围的入口与 Agent；
 // 底部（虚线以下）是任何范围都能到达的全局入口与连接状态。宽屏常驻，窄屏放在抽屉里（onClose 为抽屉的关闭按钮）。
@@ -113,11 +127,11 @@ export function Sidebar({
   return (
     <nav aria-label={text.nav} className="riso-halftone flex h-full w-full flex-col bg-riso-blue text-white">
       {desktop && <div aria-hidden="true" className="window-drag h-12 shrink-0" />}
-      <div className={cn('flex shrink-0 flex-col gap-2.5 px-3 pb-2', desktop ? 'pt-1' : 'pt-4')}>
+      <div className={cn('flex shrink-0 flex-col gap-4 px-3.5 pb-3', desktop ? 'pt-1' : 'pt-5')}>
         <div className="flex items-center justify-between gap-2 px-1.5">
           <Link
             to="/"
-            className="rounded-sm font-display-latin text-[23px] leading-none font-extrabold tracking-[-0.5px] text-white outline-none [text-shadow:2px_2px_0_var(--riso-pink)] focus-visible:shadow-focus"
+            className="rounded-sm font-display-latin text-[26px] leading-none font-extrabold tracking-[-0.5px] text-white outline-none [text-shadow:2.5px_2.5px_0_var(--riso-pink)] focus-visible:shadow-focus"
           >
             {t.app.brand}
           </Link>
@@ -133,7 +147,7 @@ export function Sidebar({
           )}
         </div>
         <ScopeSwitcher scope={scope} projects={projects} />
-        <label className="flex h-8 items-center gap-2 rounded-ticket bg-ink/35 px-2.5 text-white/80 focus-within:shadow-focus">
+        <label className="flex h-[34px] items-center gap-2 rounded-ticket bg-ink/[0.42] px-2.5 text-white focus-within:shadow-focus">
           <NavIcon name="search" className="size-3.5" />
           <input
             ref={searchRef}
@@ -144,14 +158,14 @@ export function Sidebar({
             onChange={(event) => setSearch(event.target.value)}
             className="min-w-0 flex-1 bg-transparent text-[13px] text-white outline-none placeholder:text-white/80"
           />
-          <kbd aria-hidden="true" className="font-sans text-[11px]">
+          <kbd aria-hidden="true" className="rounded-stamp border border-white/45 px-[5px] font-sans text-[11px] leading-4">
             {text.search.shortcut}
           </kbd>
         </label>
       </div>
 
       {/* 滚动区本身是定位容器：待你处理角标里的 sr-only 说明随列表滚动并被裁剪，不会按未滚动时的位置撑高整页。 */}
-      <div className="relative flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto px-3 pt-1 pb-3 [scrollbar-width:thin]">
+      <div className="relative flex min-h-0 flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto px-3.5 pt-1 pb-3 [scrollbar-width:thin]">
         <NavItem
           to={overviewPath(scope)}
           icon="overview"
@@ -205,14 +219,15 @@ export function Sidebar({
             />
           </>
         )}
+        <SidebarDeco />
       </div>
 
-      <div className="flex shrink-0 flex-col gap-0.5 border-t-2 border-dashed border-white/30 px-3 pt-2.5 pb-3">
-        <NavItem to="/plugins" icon="plugins" label={text.items.plugins} current={here.global === 'plugins'} />
-        <NavItem to="/skills" icon="skills" label={text.items.skills} current={here.global === 'skills'} />
-        <NavItem to="/stats" icon="stats" label={text.items.stats} current={here.global === 'stats'} />
-        <NavItem to="/identities" icon="identities" label={text.items.identities} current={here.global === 'identities'} />
-        <NavItem to="/settings" icon="settings" label={text.items.settings} current={here.global === 'settings'} />
+      <div className="flex shrink-0 flex-col gap-0.5 border-t-2 border-dashed border-white/35 px-3.5 pt-2.5 pb-3.5">
+        <NavItem compact to="/plugins" icon="plugins" label={text.items.plugins} current={here.global === 'plugins'} />
+        <NavItem compact to="/skills" icon="skills" label={text.items.skills} current={here.global === 'skills'} />
+        <NavItem compact to="/stats" icon="stats" label={text.items.stats} current={here.global === 'stats'} />
+        <NavItem compact to="/identities" icon="identities" label={text.items.identities} current={here.global === 'identities'} />
+        <NavItem compact to="/settings" icon="settings" label={text.items.settings} current={here.global === 'settings'} />
         <ConnectionStatus className="mt-1.5 ml-2.5 self-start text-[11.5px]" />
       </div>
       {creating && <CreateAgentDialog scope={creating} onClose={() => setCreating(null)} />}

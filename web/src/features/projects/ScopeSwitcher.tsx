@@ -24,7 +24,7 @@ const rowClass = (current: boolean, active: boolean) =>
 // 触发按钮左侧的黄色小方块：项目取名称的第一个字，全局是地球图标。
 function ScopeMark({ scope }: { scope: ResolvedShellScope }) {
   return (
-    <span aria-hidden="true" className="inline-flex size-[22px] shrink-0 items-center justify-center rounded-[7px] bg-riso-yellow font-display-latin text-[12px] font-extrabold uppercase shadow-[inset_0_0_0_1.5px_var(--ink)]">
+    <span aria-hidden="true" className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-[8px] border-2 border-ink bg-riso-yellow font-display-latin text-[13px] leading-none font-extrabold uppercase">
       {scope.kind === 'project' ? Array.from(scope.name)[0] : <NavIcon name="settings" className="size-3.5" />}
     </span>
   )
@@ -125,13 +125,14 @@ export function ScopeSwitcher({ scope, projects }: { scope: ResolvedShellScope; 
           aria-label={text.scope.label(name)}
           title={name}
           className={cn(
-            'flex h-10 w-full items-center gap-2 rounded-input border-2 border-ink bg-white px-2.5 text-[13.5px] text-ink shadow-print-ink outline-none focus-visible:shadow-focus',
-            open && 'shadow-[3px_3px_0_var(--ink),0_0_0_3px_var(--riso-yellow)]',
+            // 项目卡片：与选中的行同一种描边和投影，右侧给投影留 3px。
+            'mr-[3px] flex min-h-12 items-center gap-2.5 rounded-card border-2 border-ink bg-paper-raised px-2.5 text-[14.5px] text-ink shadow-[4px_4px_0_var(--ink)] outline-none focus-visible:shadow-focus',
+            open && 'shadow-[4px_4px_0_var(--ink),0_0_0_3px_var(--riso-yellow)]',
           )}
         >
           <ScopeMark scope={scope} />
           <span className="min-w-0 truncate font-black">{name}</span>
-          <NavIcon name="updown" className="ml-auto size-3.5 [stroke-width:2.4]" />
+          <NavIcon name="updown" className="ml-auto size-3.5 shrink-0 [stroke-width:2.8]" />
         </PopoverPrimitive.Trigger>
         <PopoverPrimitive.Portal>
           <PopoverPrimitive.Content

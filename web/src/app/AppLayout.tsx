@@ -93,7 +93,7 @@ export function AppLayout() {
   useDesktopNavigation()
   return (
     <div className="riso-paper flex min-h-screen text-ink lg:h-screen">
-      <div className="sticky top-0 h-screen w-[244px] shrink-0 self-start max-nav:hidden">
+      <div className="sticky top-0 h-screen w-[248px] shrink-0 self-start max-nav:hidden">
         <Sidebar scope={scope} projects={list} projectsError={projects.error} searchRef={searchRef} />
       </div>
       <DialogPrimitive.Root open={drawerOpen} onOpenChange={(open) => setDrawerAt(open ? location.key : null)}>
@@ -101,7 +101,7 @@ export function AppLayout() {
           <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-ink/30 nav:hidden" />
           <DialogPrimitive.Content
             aria-describedby={undefined}
-            className="fixed inset-y-0 left-0 z-50 w-[min(244px,86vw)] shadow-[6px_0_0_var(--riso-pink)] outline-none nav:hidden"
+            className="fixed inset-y-0 left-0 z-50 w-[min(248px,86vw)] shadow-[6px_0_0_var(--riso-pink)] outline-none nav:hidden"
             onOpenAutoFocus={(event) => {
               if (!searchOnOpen.current) return
               searchOnOpen.current = false

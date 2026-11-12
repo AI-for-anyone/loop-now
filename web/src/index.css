@@ -241,6 +241,21 @@
     box-shadow: var(--tilt-shadow, var(--print-rest));
     transform: rotate(var(--tilt, -1deg));
   }
+  /* 左侧栏列表下面的装饰位：占剩余高度；放得下整片装饰（约 200px）时才显示，放不下就不显示，不压文字。 */
+  .sidebar-deco-slot {
+    position: relative;
+    flex: 1 1 0;
+    min-height: 0;
+    container-type: size;
+  }
+  .sidebar-deco {
+    display: none;
+  }
+  @container (min-height: 204px) {
+    .sidebar-deco {
+      display: block;
+    }
+  }
   .riso-skeleton {
     background-color: var(--tint-blue);
     background-image: radial-gradient(rgb(36 67 181 / .18) 1.2px, transparent 1.5px);
