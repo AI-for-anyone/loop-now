@@ -20,6 +20,9 @@ function filenameFromDisposition(header: string | null, fallback: string): strin
   return filename && !unsafe ? filename : fallback
 }
 
+// 浏览器在点击之后才异步开始读取 blob：立刻撤销地址，Firefox 和 Safari 可能还没读到内容，下载失败却照样提示成功。留足时间再撤销。
+const REVOKE_AFTER_MS = 60_000
+
 // 下载当前会话。只有文件已取得并交给浏览器后才算成功，调用方才显示命令结果。
 export async function downloadAgentSession(agentId: string, format: SessionExportFormat): Promise<void> {
   let response: Response
@@ -44,6 +47,6 @@ export async function downloadAgentSession(agentId: string, format: SessionExpor
   document.body.appendChild(anchor)
   try { anchor.click() } finally {
     anchor.remove()
-    URL.revokeObjectURL(url)
+    window.setTimeout(() => URL.revokeObjectURL(url), REVOKE_AFTER_MS)
   }
 }

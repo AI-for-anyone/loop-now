@@ -1,7 +1,9 @@
+import { useRef, useState } from 'react'
 import { PlugIcon, TerminalIcon } from 'lucide-react'
 import type { Schemas } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { t } from '@/i18n'
+import { copyText } from '@/lib/clipboard'
 import { receiptClass, receiptPartClass } from '@/lib/receipt'
 import { cn } from '@/lib/utils'
 
@@ -71,9 +73,45 @@ function ResumeSessionList({ sessions, onResume }: { sessions: Schemas['ConsoleR
   )
 }
 
+// /copy 的内容没能自动写进剪贴板（Safari 里已不在按键手势内，或用 http 的局域网地址打开时没有剪贴板接口）：
+// 内容放在只读的框里，旁边的“复制”是一次新的点击，这时浏览器会放行；仍然不行就选中框里的内容，直接按复制键。
+function ManualCopy({ text: content }: { text: string }) {
+  const box = useRef<HTMLTextAreaElement>(null)
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    if (await copyText(content)) {
+      setCopied(true)
+      return
+    }
+    box.current?.focus()
+    box.current?.select()
+  }
+  return (
+    <div className="ml-1 flex w-full max-w-[640px] flex-col gap-2 border-l-2 border-dashed border-ink/40 py-0.5 pl-3">
+      <p className="text-[13.5px] leading-[1.6] text-ink-700">{t.chat.commands.copyManual}</p>
+      <div className="flex min-w-0 items-start gap-2.5">
+        <textarea
+          ref={box}
+          readOnly
+          aria-label={t.chat.commands.copyManualLabel}
+          value={content}
+          rows={Math.min(6, content.split('\n').length + 1)}
+          onFocus={(event) => event.currentTarget.select()}
+          className="min-w-0 flex-1 resize-y rounded-ticket border-2 border-ink bg-paper-raised px-3 py-2 font-mono text-[12.5px] leading-[1.6] text-ink outline-none focus-visible:shadow-focus"
+        />
+        <Button type="button" size="xs" variant="secondary" className="border-2 border-ink bg-paper-raised hover:bg-white" onClick={() => void copy()}>
+          {copied ? t.common.copied : t.common.copy}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 // 平台或插件认领的 / 命令：不作为普通对话消息。抬头是一张分段的小票（命令｜来源｜时间），结果排在下面，左侧一道虚线。
-export function CommandLine({ command, result, at, onResume }: { command: string; result: Schemas['ConsoleCommandResult']; at: string; onResume?: (sessionId: string) => void }) {
+// copyFailed：/copy 的内容没能写进剪贴板，改成说明原因并给出手动复制的办法。
+export function CommandLine({ command, result, at, onResume, copyFailed = false }: { command: string; result: Schemas['ConsoleCommandResult']; at: string; onResume?: (sessionId: string) => void; copyFailed?: boolean }) {
   const platform = result.source === 'platform'
+  const manualCopy = platform && result.command === 'copy' && copyFailed && result.copyText != null ? result.copyText : null
   const showResumeSessions = platform && result.command === 'resume' && !result.resumedSession && Boolean(result.resumeSessions?.length)
   return (
     <div role="note" data-console-command className="flex min-w-0 flex-col items-start gap-2 text-xs leading-5 text-ink-500">
@@ -91,6 +129,8 @@ export function CommandLine({ command, result, at, onResume }: { command: string
       </div>
       {showResumeSessions ? (
         <ResumeSessionList sessions={result.resumeSessions!} onResume={onResume} />
+      ) : manualCopy !== null ? (
+        <ManualCopy text={manualCopy} />
       ) : (
         <p className="ml-1 border-l-2 border-dashed border-ink/40 py-0.5 pl-3 text-[13.5px] leading-[1.6] whitespace-pre-wrap text-ink-700 [overflow-wrap:anywhere]">{platform ? platformReply(result) : result.reply ?? text.noReply}</p>
       )}

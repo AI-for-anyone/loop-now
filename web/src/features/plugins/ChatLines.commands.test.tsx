@@ -1,5 +1,6 @@
-import { render, screen } from '@testing-library/react'
-import { expect, it } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { expect, it, vi } from 'vitest'
 import { CommandLine } from './ChatLines'
 import type { Schemas } from '@/api/client'
 import { makeRun } from '@/test/api'
@@ -96,4 +97,38 @@ it.each([
   expect(line).toHaveTextContent(wording)
   expect(line).not.toHaveTextContent('上下文已压缩')
   expect(line).not.toHaveTextContent('null')
+})
+
+// /copy 写剪贴板失败（Safari 里已不在按键手势内、http 地址没有 navigator.clipboard）：内容不丢，给一个能手动复制的办法。
+it('/copy 没能写进剪贴板：说明原因，内容放在只读的框里可以选中，旁边的按钮再复制一次', async () => {
+  const writeText = vi.fn(() => Promise.resolve())
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+  render(<CommandLine command="/copy" at="2026-10-31T01:00:00Z" copyFailed result={{ ...base, command: 'copy', copyText: '第一行\n第二行' }} />)
+  const line = screen.getByRole('note')
+  expect(line).toHaveTextContent('浏览器没有允许控制台写入剪贴板')
+  expect(line).not.toHaveTextContent('已复制最近一条成功回复')
+  const box = screen.getByRole('textbox', { name: '要复制的内容' })
+  expect(box).toHaveValue('第一行\n第二行')
+  expect(box).toHaveAttribute('readonly')
+  const button = screen.getByRole('button', { name: '复制' })
+  await userEvent.click(button)
+  expect(writeText).toHaveBeenCalledWith('第一行\n第二行')
+  expect(await screen.findByRole('button', { name: '已复制' })).toBeInTheDocument()
+})
+
+it('/copy 手动再复制仍然不行：选中框里的内容，方便直接按复制键', async () => {
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined })
+  render(<CommandLine command="/copy" at="2026-10-31T01:00:00Z" copyFailed result={{ ...base, command: 'copy', copyText: '要复制的回复' }} />)
+  const box = screen.getByRole<HTMLTextAreaElement>('textbox', { name: '要复制的内容' })
+  await userEvent.click(screen.getByRole('button', { name: '复制' }))
+  await waitFor(() => expect(box).toHaveFocus())
+  expect(box.selectionStart).toBe(0)
+  expect(box.selectionEnd).toBe('要复制的回复'.length)
+  expect(screen.queryByRole('button', { name: '已复制' })).toBeNull()
+})
+
+it('/copy 写成功时照常只写“已复制”，不出现手动复制的框', () => {
+  render(<CommandLine command="/copy" at="2026-10-31T01:00:00Z" result={{ ...base, command: 'copy', copyText: '回复' }} />)
+  expect(screen.getByRole('note')).toHaveTextContent('已复制最近一条成功回复')
+  expect(screen.queryByRole('textbox')).toBeNull()
 })

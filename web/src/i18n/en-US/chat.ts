@@ -105,6 +105,8 @@ export const chat = {
     newSession: (epoch) => `New session started (epoch ${epoch}); page history is kept`,
     copied: 'Copied the latest successful reply',
     nothingToCopy: 'No reply to copy',
+    copyManual: "The browser didn't let the console write to the clipboard. The text is below: press Copy to try again, or select it and copy it yourself.",
+    copyManualLabel: 'Text to copy',
     exported: (format) => `Downloaded the ${format} session export`,
     newConfirmTitle: 'Start a new session?',
     newConfirmBody: "The Agent won't remember the earlier conversation. This can't be undone. The history on this page is kept.",

@@ -15,6 +15,7 @@ import { uploadMessageImages } from '@/api/message-images'
 import { cn } from '@/lib/utils'
 import { ReplyChip } from '@/features/console-inbox/ConsoleMessage'
 import { useAnswerQuestion } from '@/features/console-inbox/useAnswerQuestion'
+import { copyText } from '@/lib/clipboard'
 import { describeError } from '@/lib/errors'
 import { applyCommand, matchCommands, slashToken, type Command } from './slash-commands'
 import { SlashCommandMenu } from './SlashCommandMenu'
@@ -57,8 +58,9 @@ interface ComposerProps {
   maxMessageBytes: number | undefined
   // 发送成功后把结果交给对话页，历史请求进行中时也能显示这条消息。
   onSent: (result: Schemas['SendMessageResult']) => void
-  // 以 / 开头的消息被插件认领时：插件的回复与原来的命令，由对话页显示成一行，不算发出的消息。
-  onCommand?: (result: Schemas['ConsoleCommandResult'], command: string) => void
+  // 以 / 开头的消息被平台或插件认领时：结果与原来的命令，由对话页显示成一行，不算发出的消息。
+  // /copy 的内容没能写进剪贴板时带上 copyFailed，对话页在那一行给出手动复制的办法。
+  onCommand?: (result: Schemas['ConsoleCommandResult'], command: string, outcome?: { copyFailed: boolean }) => void
   // 贴在输入框顶上的排队消息，由对话页给出。
   queue?: ReactNode
   // 输入区下方的一行：左边是忙碌提示（接着是按键说明），右边是实时连接状态，都由对话页给出。
@@ -168,7 +170,8 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
       if (replyId || busyRequest.current) return
       setResumeDraft(text)
       setText(`/resume ${sessionId}`)
-      setDismissed(`/resume ${sessionId}`)
+      // 这不是在输入命令：光标算在末尾，命令菜单不打开（菜单只看第一个词，拿整句去关它是关不掉的）。
+      setCaret(Number.MAX_SAFE_INTEGER)
       setConfirmResume(true)
     },
   }), [replyId, text])
@@ -250,9 +253,11 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
           return send.mutateAsync({ ...input, whenBusy })
         })
       if (isCommandResult(result)) {
-        if (result.source === 'platform' && result.copyText != null) await navigator.clipboard.writeText(result.copyText)
+        // /copy：这时已经过了一次网络往返，Safari 里不再算在按键手势内，写剪贴板可能被拒绝；用 http 的局域网地址打开时
+        // 根本没有 navigator.clipboard。写不进去不算命令失败：内容照常交给对话页，由那一行给出手动复制的办法。
+        const copyFailed = result.source === 'platform' && result.copyText != null && !(await copyText(result.copyText))
         if (result.source === 'platform' && result.exportFormat) await downloadAgentSession(agentId, result.exportFormat)
-        onCommand?.(result, sent)
+        onCommand?.(result, sent, copyFailed ? { copyFailed } : undefined)
         // 平台命令可能改变会话状态（/new、/resume、/reload），命令此刻能不能用要重新读。
         void client.invalidateQueries({ queryKey: keys.agentCommands(agentId) })
       } else {

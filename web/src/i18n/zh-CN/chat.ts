@@ -112,6 +112,9 @@ export const chat = {
     newSession: (epoch: number) => `已重开会话（epoch ${epoch}），页面历史仍保留`,
     copied: '已复制最近一条成功回复',
     nothingToCopy: '没有可复制的回复',
+    // /copy 的内容没能写进剪贴板时，在结果那一行给出手动复制的办法。
+    copyManual: '浏览器没有允许控制台写入剪贴板。内容在下面：点“复制”再试一次，或者选中后自己复制。',
+    copyManualLabel: '要复制的内容',
     exported: (format: string) => `已下载 ${format} 会话导出文件`,
     newConfirmTitle: '确认重开会话？',
     newConfirmBody: '重开后 Agent 不再记得之前的对话内容，这个操作不能撤销；页面上的历史记录仍然保留。',

@@ -1,10 +1,11 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { Composer } from './Composer'
+import { createRef } from 'react'
+import { Composer, type ComposerHandle } from './Composer'
 import { apiUrl, makeMessage, makeRun } from '@/test/api'
-import { claudeCodeCommands } from '@/test/commands'
+import { claudeCodeCommands, platformCommands } from '@/test/commands'
 import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
 import type { Schemas } from '@/api/client'
@@ -129,6 +130,41 @@ it('/copy 先写剪贴板再显示结果；没有回复时不写剪贴板', asyn
   expect(onCommand.mock.calls[1][0].copyText).toBeNull()
 })
 
+it.each([
+  ['浏览器拒绝写入（已不在按键手势内）', { writeText: () => Promise.reject(new DOMException('denied', 'NotAllowedError')) }],
+  ['用 http 的局域网地址打开，没有 navigator.clipboard', undefined],
+])('/copy 写剪贴板失败（%s）：不报错、不丢内容，结果交给对话页并标明要手动复制，输入框里的命令照常清掉', async (_name, clipboard) => {
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: clipboard })
+  server.use(http.post(apiUrl('/agents/sleep-agent/messages'), () => HttpResponse.json(commandResult({ command: 'copy', copyText: '最近一条成功回复' }))))
+  const onCommand = renderComposer()
+  const box = screen.getByRole('textbox', { name: '消息' })
+  await userEvent.type(box, '/copy')
+  await userEvent.keyboard('{Escape}{Enter}')
+  await waitFor(() => expect(onCommand).toHaveBeenCalledTimes(1))
+  expect(onCommand.mock.calls[0][0].copyText).toBe('最近一条成功回复')
+  expect(onCommand.mock.calls[0][1]).toBe('/copy')
+  expect(onCommand.mock.calls[0][2]).toEqual({ copyFailed: true })
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(box).toHaveValue('')
+})
+
+// 从列表恢复时输入框里被填上“/resume <id>”。这不是在输入命令：不该打开命令菜单，也就不该为它去读命令列表。
+// （菜单即使打开，确认框拿走焦点时也会被关掉，所以看不到它；这里用“有没有去读命令列表”来确认菜单根本没有被要求打开。）
+it('从会话列表点“恢复”：弹出确认框，不打开命令菜单', async () => {
+  let reads = 0
+  server.use(http.get(apiUrl('/agents/sleep-agent/commands'), () => { reads += 1; return HttpResponse.json({ capturedAt: null, commands: platformCommands() }) }))
+  const handle = createRef<ComposerHandle>()
+  renderWithQuery(<Composer ref={handle} agentId="sleep-agent" agentName="开发助手" busy={false} disabled={false} maxMessageBytes={4096} onSent={vi.fn()} />)
+  const box = screen.getByRole('textbox', { name: '消息' })
+  act(() => handle.current!.resume('12345678-1234-1234-1234-123456789abc'))
+  expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
+  expect(box).toHaveValue('/resume 12345678-1234-1234-1234-123456789abc')
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  expect(reads).toBe(0)
+  expect(document.querySelector('[role="listbox"]')).toBeNull()
+  expect(box).toHaveAttribute('aria-expanded', 'false')
+})
+
 it('/export 取得文件并触发下载后才显示命令结果', async () => {
   const createObjectURL = vi.fn(() => 'blob:session')
   const revokeObjectURL = vi.fn()
@@ -150,7 +186,8 @@ it('/export 取得文件并触发下载后才显示命令结果', async () => {
   await waitFor(() => expect(onCommand).toHaveBeenCalledTimes(1))
   expect(createObjectURL).toHaveBeenCalledTimes(1)
   expect(click).toHaveBeenCalledTimes(1)
-  expect(revokeObjectURL).toHaveBeenCalledWith('blob:session')
+  // blob 地址要等浏览器读完再撤销（见 session-export.test.ts），不在点击后立刻撤销。
+  expect(revokeObjectURL).not.toHaveBeenCalled()
   expect(click.mock.invocationCallOrder[0]).toBeLessThan(onCommand.mock.invocationCallOrder[0])
 })
 
