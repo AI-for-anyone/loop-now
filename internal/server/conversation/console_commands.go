@@ -215,16 +215,12 @@ func (s *Service) Export(ctx context.Context, agentID uuid.UUID, format string) 
 	return out, nil
 }
 
-// ListResumeSessions 列出可恢复的受管 Pi 会话，不启动进程或调用模型。
+// ListResumeSessions 列出可恢复的受管 Pi 会话，不启动进程或调用模型。只在 Agent 空闲时列出（与恢复的条件一致），
+// 但读文件期间不占忙闲锁：列表只读，期间开始的执行不受影响。
 func (s *Service) ListResumeSessions(ctx context.Context, agentID uuid.UUID) ([]executor.ManagedSession, error) {
 	if err := s.RequireCommand(ctx, agentID, "resume"); err != nil {
 		return nil, err
 	}
-	_, owner, err := s.acquireConsoleCommand(ctx, agentID)
-	if err != nil {
-		return nil, err
-	}
-	defer s.releaseConsoleCommand(agentID, owner)
 	sess, err := s.st.IdleSession(ctx, agentID)
 	if err != nil {
 		return nil, err
@@ -256,16 +252,9 @@ func (s *Service) ResumeSession(ctx context.Context, agentID uuid.UUID, sessionI
 	if !ok {
 		return apitypes.SessionInfo{}, unsupportedExecutor("恢复会话")
 	}
-	sessions, err := lister.ListSessions(ctx, agentID, sess.SessionFile)
+	target, err := lister.ResolveSession(ctx, agentID, sessionID, sess.SessionFile)
 	if err != nil {
 		return apitypes.SessionInfo{}, consoleCommandError(err)
-	}
-	var target *executor.ManagedSession
-	for i := range sessions {
-		if sessions[i].ID == sessionID {
-			target = &sessions[i]
-			break
-		}
 	}
 	if target == nil {
 		return apitypes.SessionInfo{}, apperr.Invalid("text", "未知或无效的会话 ID")

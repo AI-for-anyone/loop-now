@@ -111,9 +111,11 @@ type ManagedSession struct {
 	Current   bool
 }
 
-// SessionLister 枚举可恢复的 Pi 会话，不得因此启动进程。
+// SessionLister 枚举可恢复的 Pi 会话，不得因此启动进程。ResolveSession 按完整 ID 找一个会话（只读文件头），
+// 找不到或 ID 重复时返回 nil。
 type SessionLister interface {
 	ListSessions(ctx context.Context, agentID uuid.UUID, currentFile string) ([]ManagedSession, error)
+	ResolveSession(ctx context.Context, agentID uuid.UUID, sessionID, currentFile string) (*ManagedSession, error)
 }
 
 // Request 是一次执行的输入。

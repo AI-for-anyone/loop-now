@@ -18,8 +18,9 @@ import (
 // maintExec 在 fakeExec 上加平台命令用到的维护接口；gate 不为空时 StopIdle 停在那里，直到 gate 关闭。
 type maintExec struct {
 	*fakeExec
-	entered chan string
-	gate    chan struct{}
+	entered  chan string
+	gate     chan struct{}
+	listGate chan struct{} // 不为空时 ListSessions 停在那里，直到它关闭
 }
 
 func (m *maintExec) StopIdle(ctx context.Context, _ uuid.UUID, reason string) (bool, error) {
@@ -38,8 +39,20 @@ func (m *maintExec) ExportSession(context.Context, uuid.UUID, string, string) (e
 	return executor.SessionExport{Filename: "s.jsonl", ContentType: "application/x-ndjson", Data: []byte("{}\n")}, nil
 }
 
-func (m *maintExec) ListSessions(context.Context, uuid.UUID, string) ([]executor.ManagedSession, error) {
+func (m *maintExec) ListSessions(ctx context.Context, _ uuid.UUID, _ string) ([]executor.ManagedSession, error) {
+	if m.listGate != nil {
+		m.entered <- "list"
+		select {
+		case <-m.listGate:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	return []executor.ManagedSession{}, nil
+}
+
+func (m *maintExec) ResolveSession(context.Context, uuid.UUID, string, string) (*executor.ManagedSession, error) {
+	return nil, nil
 }
 
 // newMaintEnv 与 newEnv 相同，但对账一小时一次：平台命令之后的排队消息与提醒只能靠命令自己接着处理。
@@ -126,5 +139,29 @@ func TestNewSessionStartsUnreadReminderRightAway(t *testing.T) {
 		t.Fatalf("停止原因：%s", reason)
 	}
 	e.waitAnyStarted()
+	e.waitIdle()
+}
+
+// /resume 列出会话只读文件，期间不占忙闲锁：这时发来的消息照常立即开始。
+func TestResumeListingDoesNotHoldBusyLock(t *testing.T) {
+	e, m := newMaintEnv(t)
+	m.listGate = make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		_, err := e.svc.ListResumeSessions(context.Background(), e.agent)
+		done <- err
+	}()
+	if got := <-m.entered; got != "list" {
+		t.Fatalf("应在列出会话：%s", got)
+	}
+	msg, err := e.send("列表期间的消息", "")
+	if err != nil || msg.Run.Status == "queued" {
+		t.Fatalf("列出会话时消息应立即开始：%+v %v", msg.Run.Status, err)
+	}
+	e.waitStarted("列表期间的消息")
+	close(m.listGate)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
 	e.waitIdle()
 }

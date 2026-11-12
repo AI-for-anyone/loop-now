@@ -105,12 +105,13 @@ type TokenIssuer interface {
 
 // Executor 是本机执行器。
 type Executor struct {
-	o    Options
-	src  Source
-	tmpl *clitemplate.Catalog
-	inst *clitemplate.Installer
-	log  *slog.Logger
-	obs  executor.Observer
+	sessionCache sync.Map // 会话文件路径 -> sessionMeta（/resume 列表用）
+	o            Options
+	src          Source
+	tmpl         *clitemplate.Catalog
+	inst         *clitemplate.Installer
+	log          *slog.Logger
+	obs          executor.Observer
 
 	mu       sync.Mutex
 	procs    map[uuid.UUID]*proc

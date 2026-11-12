@@ -2,6 +2,7 @@ package local
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -329,8 +330,9 @@ func TestMaintenanceErrorsCarrySentinels(t *testing.T) {
 	if _, err := h.e.ExportSession(ctx, id, "/x.jsonl", "jsonl"); !errors.Is(err, executor.ErrMaintenanceBusy) {
 		t.Fatalf("维护进行中导出应是 ErrMaintenanceBusy：%v", err)
 	}
-	if _, err := h.e.ListSessions(ctx, id, ""); !errors.Is(err, executor.ErrMaintenanceBusy) {
-		t.Fatalf("维护进行中列出会话应是 ErrMaintenanceBusy：%v", err)
+	// 列出会话只读文件，维护进行中也可以。
+	if _, err := h.e.ListSessions(ctx, id, ""); err != nil {
+		t.Fatalf("列出会话不受维护影响：%v", err)
 	}
 }
 
@@ -372,5 +374,94 @@ func TestConsoleCompactSkippedIsCompleted(t *testing.T) {
 	}
 	if res := compact("Compaction failed: model unavailable"); res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrPiError {
 		t.Fatalf("其他失败：%+v", res)
+	}
+}
+
+func userLine(text string) string {
+	b, _ := json.Marshal(map[string]any{"type": "message", "message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "text", "text": text}}}})
+	return string(b) + "\n"
+}
+
+// 长会话：标题只向前读、预览只从末尾往回读，中间的内容（包括损坏的行）不读；文件没变时用缓存，变了重新读。
+func TestListSessionsReadsOnlyHeadAndTail(t *testing.T) {
+	h := newHarness(t, nil, "")
+	id := h.agent(nil)
+	d := h.e.dirs(id)
+	if err := os.MkdirAll(d.sessions, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	filler := `{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"` + strings.Repeat("x", 1000) + `"}]}}` + "\n"
+	var b strings.Builder
+	b.WriteString(`{"type":"session","id":"long-session"}` + "\n")
+	b.WriteString(userLine("第一条问题"))
+	for range 1500 {
+		b.WriteString(filler)
+	}
+	b.WriteString("{损坏的行\n")
+	for range 1500 {
+		b.WriteString(filler)
+	}
+	b.WriteString(userLine("最后一条问题"))
+	b.WriteString(filler)
+	path := filepath.Join(d.sessions, "long.jsonl")
+	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	list := func() executor.ManagedSession {
+		t.Helper()
+		sessions, err := h.e.ListSessions(context.Background(), id, "")
+		if err != nil || len(sessions) != 1 {
+			t.Fatalf("列出会话：%+v %v", sessions, err)
+		}
+		return sessions[0]
+	}
+	if got := list(); got.Title != "第一条问题" || got.Preview != "最后一条问题" {
+		t.Fatalf("标题与预览：%q %q", got.Title, got.Preview)
+	}
+	// 内容换了但大小与修改时间不变：仍用缓存。
+	info, _ := os.Stat(path)
+	same := strings.Replace(b.String(), "最后一条问题", "改过的问题题", 1)
+	if err := os.WriteFile(path, []byte(same), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, info.ModTime(), info.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	if got := list(); got.Preview != "最后一条问题" {
+		t.Fatalf("文件没变时应用缓存：%q", got.Preview)
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = f.WriteString(userLine("新追加的问题"))
+	_ = f.Close()
+	if got := list(); got.Preview != "新追加的问题" || got.Title != "第一条问题" {
+		t.Fatalf("文件变了应重新读：%q %q", got.Title, got.Preview)
+	}
+}
+
+// 按 ID 恢复只读各文件的头一行；ID 重复或找不到时没有结果。
+func TestResolveSessionByHeader(t *testing.T) {
+	h := newHarness(t, nil, "")
+	id := h.agent(nil)
+	d := h.e.dirs(id)
+	if err := os.MkdirAll(d.sessions, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for name, header := range map[string]string{"a.jsonl": "target", "b.jsonl": "dup", "c.jsonl": "dup"} {
+		if err := os.WriteFile(filepath.Join(d.sessions, name), []byte(`{"type":"session","id":"`+header+`"}`+"\n{损坏"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx := context.Background()
+	got, err := h.e.ResolveSession(ctx, id, "target", "")
+	if err != nil || got == nil || filepath.Base(got.Path) != "a.jsonl" {
+		t.Fatalf("按 ID 找会话：%+v %v", got, err)
+	}
+	for _, missing := range []string{"dup", "unknown"} {
+		if got, err := h.e.ResolveSession(ctx, id, missing, ""); err != nil || got != nil {
+			t.Fatalf("%s 不应找到：%+v %v", missing, got, err)
+		}
 	}
 }

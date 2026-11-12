@@ -1,6 +1,7 @@
 package local
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -218,81 +219,13 @@ func (l *limitedBuffer) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// ListSessions 流式读取受管 JSONL 的会话头和用户文字，不获取执行快照或启动 Pi。
+// ListSessions 列出 sessions 目录里的有效 Pi 会话（头一行是 {"type":"session","id":…}），带第一条与最后一条普通用户文字。
+// 只读文件，不获取执行快照、不启动 Pi，也不需要 Agent 空闲。标题只向前读、预览只从末尾往回读，各读一段（sessionTextWindow），
+// 按文件的大小与修改时间缓存，长会话不会每次整份解码。ID 重复的会话都不列出（无法确定恢复哪一个）。
 func (e *Executor) ListSessions(ctx context.Context, agentID uuid.UUID, currentFile string) ([]executor.ManagedSession, error) {
-	free, err := e.reserveMaintenance(ctx, agentID)
-	if err != nil {
-		return nil, maintenanceErr(err)
-	}
-	defer free()
-	e.mu.Lock()
-	busy := e.runs[agentID] != nil || e.procs[agentID] != nil && e.procs[agentID].busy
-	e.mu.Unlock()
-	if busy {
-		return nil, maintenanceErr(ErrRuntimeBusy)
-	}
-	d := e.dirs(agentID)
-	entries, err := os.ReadDir(d.sessions)
-	if errors.Is(err, os.ErrNotExist) {
-		return []executor.ManagedSession{}, nil
-	}
+	out, err := e.scanSessions(ctx, agentID, currentFile, true)
 	if err != nil {
 		return nil, err
-	}
-	current := ""
-	if currentFile != "" {
-		current, _ = managedSessionFile(d, currentFile)
-	}
-	out := make([]executor.ManagedSession, 0, len(entries))
-	seen := make(map[string]int)
-	duplicates := make(map[string]bool)
-	for _, entry := range entries {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		if filepath.Ext(entry.Name()) != ".jsonl" {
-			continue
-		}
-		path, err := managedSessionFile(d, filepath.Join(d.sessions, entry.Name()))
-		if err != nil {
-			continue
-		}
-		file, err := os.Open(path)
-		if err != nil {
-			continue
-		}
-		var header struct {
-			Type string `json:"type"`
-			ID   string `json:"id"`
-		}
-		decoder := json.NewDecoder(file)
-		err = decoder.Decode(&header)
-		title, preview := "", ""
-		if err == nil && header.Type == "session" && header.ID != "" {
-			title, preview = readSessionUserText(decoder)
-		}
-		_ = file.Close()
-		if err != nil || header.Type != "session" || header.ID == "" {
-			continue
-		}
-		info, err := os.Stat(path)
-		if err != nil {
-			continue
-		}
-		if _, exists := seen[header.ID]; exists {
-			duplicates[header.ID] = true
-		}
-		seen[header.ID] = len(out)
-		out = append(out, executor.ManagedSession{ID: header.ID, Path: path, Title: title, Preview: preview, UpdatedAt: info.ModTime(), Current: path == current})
-	}
-	if len(duplicates) > 0 {
-		valid := out[:0]
-		for _, sess := range out {
-			if !duplicates[sess.ID] {
-				valid = append(valid, sess)
-			}
-		}
-		out = valid
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if !out[i].UpdatedAt.Equal(out[j].UpdatedAt) {
@@ -306,31 +239,165 @@ func (e *Executor) ListSessions(ctx context.Context, agentID uuid.UUID, currentF
 	return out, nil
 }
 
-// readSessionUserText 保留第一条和最后一条普通用户文字；尾部损坏不丢弃已读到的元数据。
-func readSessionUserText(decoder *json.Decoder) (title, preview string) {
-	for {
-		var record struct {
-			Type    string `json:"type"`
-			Message struct {
-				Role    string          `json:"role"`
-				Content json.RawMessage `json:"content"`
-			} `json:"message"`
-		}
-		if err := decoder.Decode(&record); err != nil {
-			return title, preview
-		}
-		if record.Type != "message" || record.Message.Role != "user" {
-			continue
-		}
-		text := sessionMessageText(record.Message.Content)
-		if text == "" || strings.HasPrefix(text, "/") {
-			continue
-		}
-		if title == "" {
-			title = truncateSessionText(text, 80)
-		}
-		preview = truncateSessionText(text, 160)
+// ResolveSession 按完整会话 ID 找到 sessions 目录里的会话，只读各文件的头一行；找不到或 ID 重复时返回 nil。
+func (e *Executor) ResolveSession(ctx context.Context, agentID uuid.UUID, sessionID, currentFile string) (*executor.ManagedSession, error) {
+	all, err := e.scanSessions(ctx, agentID, currentFile, false)
+	if err != nil {
+		return nil, err
 	}
+	for i := range all {
+		if all[i].ID == sessionID {
+			return &all[i], nil
+		}
+	}
+	return nil, nil
+}
+
+// sessionMeta 是一个会话文件的 ID 与用户文字摘要；size 与 mod 变了就重新读。
+type sessionMeta struct {
+	size           int64
+	mod            time.Time
+	id             string
+	withText       bool
+	title, preview string
+}
+
+// sessionTextWindow 是找标题（向前）与预览（从末尾往回）时各读的最多字节数。
+const sessionTextWindow = 1 << 20
+
+// scanSessions 读 sessions 目录里每个 .jsonl 的头一行（withText 时再读标题与预览），去掉无效与 ID 重复的会话。
+func (e *Executor) scanSessions(ctx context.Context, agentID uuid.UUID, currentFile string, withText bool) ([]executor.ManagedSession, error) {
+	d := e.dirs(agentID)
+	entries, err := os.ReadDir(d.sessions)
+	if errors.Is(err, os.ErrNotExist) {
+		return []executor.ManagedSession{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	current := ""
+	if currentFile != "" {
+		current, _ = managedSessionFile(d, currentFile)
+	}
+	out := make([]executor.ManagedSession, 0, len(entries))
+	seen := make(map[string]bool)
+	duplicates := make(map[string]bool)
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if filepath.Ext(entry.Name()) != ".jsonl" {
+			continue
+		}
+		path, err := managedSessionFile(d, filepath.Join(d.sessions, entry.Name()))
+		if err != nil {
+			continue
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		meta, ok := e.sessionMeta(path, info, withText)
+		if !ok {
+			continue
+		}
+		if seen[meta.id] {
+			duplicates[meta.id] = true
+		}
+		seen[meta.id] = true
+		out = append(out, executor.ManagedSession{ID: meta.id, Path: path, Title: meta.title, Preview: meta.preview, UpdatedAt: info.ModTime(), Current: path == current})
+	}
+	return slices.DeleteFunc(out, func(m executor.ManagedSession) bool { return duplicates[m.ID] }), nil
+}
+
+// sessionMeta 返回会话文件的 ID 与（withText 时）标题与预览，文件没变时用缓存；不是有效会话时 ok 为 false。
+func (e *Executor) sessionMeta(path string, info os.FileInfo, withText bool) (sessionMeta, bool) {
+	if v, ok := e.sessionCache.Load(path); ok {
+		m := v.(sessionMeta)
+		if m.size == info.Size() && m.mod.Equal(info.ModTime()) && (m.withText || !withText) {
+			return m, m.id != ""
+		}
+	}
+	m := sessionMeta{size: info.Size(), mod: info.ModTime(), withText: withText}
+	file, err := os.Open(path)
+	if err != nil {
+		return m, false
+	}
+	defer file.Close()
+	reader := bufio.NewReaderSize(io.LimitReader(file, sessionTextWindow), 64<<10)
+	head, err := reader.ReadBytes('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return m, false
+	}
+	var header struct {
+		Type string `json:"type"`
+		ID   string `json:"id"`
+	}
+	if json.Unmarshal(head, &header) != nil || header.Type != "session" || header.ID == "" {
+		e.sessionCache.Store(path, m) // 无效的也缓存，文件没变就不再读
+		return m, false
+	}
+	m.id = header.ID
+	if withText {
+		m.title = firstUserText(reader)
+		m.preview = lastUserText(file, info.Size())
+	}
+	e.sessionCache.Store(path, m)
+	return m, true
+}
+
+// firstUserText 顺序读记录，返回第一条普通用户文字（截到 80 字）；读完窗口或遇到损坏的行就停。
+func firstUserText(r *bufio.Reader) string {
+	for {
+		line, err := r.ReadBytes('\n')
+		if text := sessionLineUserText(line); text != "" {
+			return truncateSessionText(text, 80)
+		}
+		if err != nil {
+			return ""
+		}
+	}
+}
+
+// lastUserText 从文件末尾往回读一段，返回其中最后一条普通用户文字（截到 160 字）。窗口开头的半行丢掉。
+func lastUserText(f *os.File, size int64) string {
+	start := max(0, size-sessionTextWindow)
+	buf := make([]byte, size-start)
+	if _, err := f.ReadAt(buf, start); err != nil && !errors.Is(err, io.EOF) {
+		return ""
+	}
+	lines := bytes.Split(buf, []byte{'\n'})
+	if start > 0 && len(lines) > 0 {
+		lines = lines[1:]
+	}
+	for i := len(lines) - 1; i >= 0; i-- {
+		if text := sessionLineUserText(lines[i]); text != "" {
+			return truncateSessionText(text, 160)
+		}
+	}
+	return ""
+}
+
+// sessionLineUserText 返回一行记录里的普通用户文字（不是用户消息、以 "/" 开头的命令或无法解析时为空）。
+func sessionLineUserText(line []byte) string {
+	if !bytes.Contains(line, []byte(`"user"`)) {
+		return "" // 大多数行是助手消息与工具结果，不必解码
+	}
+	var record struct {
+		Type    string `json:"type"`
+		Message struct {
+			Role    string          `json:"role"`
+			Content json.RawMessage `json:"content"`
+		} `json:"message"`
+	}
+	if json.Unmarshal(line, &record) != nil || record.Type != "message" || record.Message.Role != "user" {
+		return ""
+	}
+	text := sessionMessageText(record.Message.Content)
+	if strings.HasPrefix(text, "/") {
+		return ""
+	}
+	return text
 }
 
 func sessionMessageText(content json.RawMessage) string {

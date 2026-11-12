@@ -277,9 +277,11 @@ func TestPlatformConsoleQueuedWorkAlsoBlocksMaintenance(t *testing.T) {
 	if st := decode[apitypes.AgentStatus](t, e.expect(200, "GET", path+"/status", nil)); st.CurrentRun == nil || st.CurrentRun.Status == "queued" {
 		t.Fatalf("排队消息应已开始：%+v", st)
 	}
-	for _, command := range []string{"/new", "/resume", "/resume target-full-session-id"} {
+	for _, command := range []string{"/new", "/resume target-full-session-id"} {
 		e.expectError(409, "agent_busy", "POST", path+"/messages", map[string]any{"text": command})
 	}
+	// 列出会话不取忙闲锁，按数据库判断空闲。
+	e.expectError(409, "agent_not_idle", "POST", path+"/messages", map[string]any{"text": "/resume"})
 	e.expectError(409, "agent_busy", "GET", path+"/session/export?format=jsonl", nil)
 }
 

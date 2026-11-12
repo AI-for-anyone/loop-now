@@ -115,6 +115,18 @@ func (q *quickExec) ExportSession(_ context.Context, _ uuid.UUID, _, format stri
 	}
 	return executor.SessionExport{Filename: "session.html", ContentType: "text/html; charset=utf-8", Data: []byte("<html>exported</html>")}, nil
 }
+func (q *quickExec) ResolveSession(ctx context.Context, agentID uuid.UUID, sessionID, currentFile string) (*executor.ManagedSession, error) {
+	all, err := q.ListSessions(ctx, agentID, currentFile)
+	if err != nil {
+		return nil, err
+	}
+	for i := range all {
+		if all[i].ID == sessionID {
+			return &all[i], nil
+		}
+	}
+	return nil, nil
+}
 func (q *quickExec) ListSessions(_ context.Context, _ uuid.UUID, currentFile string) ([]executor.ManagedSession, error) {
 	if q.listErr != nil {
 		return nil, q.listErr
