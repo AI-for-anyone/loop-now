@@ -47,6 +47,8 @@ type options struct {
 	skills             []string
 	appendSystemPrompt []string
 	extensions         []string
+	export             string   // --export <会话文件>
+	positional         []string // 选项之外的参数（--export 的输出路径）
 }
 
 // parseArgs 解析参数；未知参数忽略（与 Pi 一样，未知的 --flag 会吞掉随后的非选项值）。
@@ -91,12 +93,16 @@ func parseArgs(args []string) options {
 			if v, ok := next(&i); ok {
 				o.appendSystemPrompt = append(o.appendSystemPrompt, v)
 			}
+		case "--export":
+			o.export, _ = next(&i)
 		case "--no-approve", "--offline", "--no-skills":
 			// 接受但不处理
 		default:
 			if strings.HasPrefix(a, "--") && !strings.Contains(a, "=") &&
 				i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
 				i++
+			} else if !strings.HasPrefix(a, "-") {
+				o.positional = append(o.positional, a)
 			}
 		}
 	}
@@ -113,6 +119,9 @@ func run(args []string) int {
 		}
 		fmt.Println(v)
 		return 0
+	}
+	if o.export != "" {
+		return exportFile(o)
 	}
 	if o.mode != "rpc" {
 		fmt.Fprintln(os.Stderr, "fakepi: 只支持 --mode rpc")
@@ -464,7 +473,6 @@ func (s *server) handle(line []byte) {
 		Images             []json.RawMessage `json:"images"`
 		Level              string            `json:"level"`
 		CustomInstructions string            `json:"customInstructions"`
-		OutputPath         string            `json:"outputPath"`
 	}
 	if err := json.Unmarshal(line, &cmd); err != nil {
 		s.fail(nil, "parse", "Failed to parse command: "+err.Error())
@@ -494,8 +502,6 @@ func (s *server) handle(line []byte) {
 		s.prompt(cmd.ID, cmd.Message, cmd.Images)
 	case "compact":
 		s.compact(cmd.ID, cmd.CustomInstructions)
-	case "export_html":
-		s.exportHTML(cmd.ID, cmd.OutputPath)
 	case "abort":
 		s.abort(cmd.ID)
 	case "clear_queue":
@@ -605,9 +611,14 @@ func (s *server) compact(id json.RawMessage, instructions string) {
 		if value := os.Getenv("FAKEPI_COMPACT_USAGE"); value != "" {
 			usage = parseUsage(value)
 		}
-		if aborted {
+		// FAKEPI_COMPACT_ERROR 让 compact 以这段文字失败（与 Pi 相同：例如 "Nothing to compact (session too small)"、"Already compacted"）。
+		if fail := os.Getenv("FAKEPI_COMPACT_ERROR"); fail != "" && !aborted {
+			s.emit(map[string]any{"type": "compaction_end", "reason": "manual", "aborted": false, "willRetry": false, "errorMessage": "Compaction failed: " + fail})
+			s.fail(id, "compact", fail)
+		} else if aborted {
+			// 与 Pi 相同：被取消的压缩以 "Compaction cancelled" 失败。
 			s.emit(map[string]any{"type": "compaction_end", "reason": "manual", "aborted": true, "willRetry": false})
-			s.fail(id, "compact", "aborted")
+			s.fail(id, "compact", "Compaction cancelled")
 		} else {
 			s.addUsage(*usage)
 			s.emit(map[string]any{"type": "compaction_end", "reason": "manual", "aborted": false, "willRetry": false,
@@ -623,24 +634,33 @@ func (s *server) compact(id json.RawMessage, instructions string) {
 	}()
 }
 
-func (s *server) exportHTML(id json.RawMessage, outputPath string) {
-	if outputPath == "" {
-		s.fail(id, "export_html", "outputPath is required")
-		return
+// exportFile 模拟 `pi --export <会话文件> [输出]`：读会话文件，写出 HTML（FAKEPI_EXPORT_CONTENT，或含会话原文的默认内容）。
+// FAKEPI_EXPORT_FAIL 让它像 Pi 一样报错退出；FAKEPI_EXPORT_ENV 把环境变量写进这个文件，供测试检查导出用的环境。
+func exportFile(o options) int {
+	data, err := os.ReadFile(o.export)
+	if err != nil || os.Getenv("FAKEPI_EXPORT_FAIL") != "" {
+		fmt.Fprintf(os.Stderr, "Error: File not found: %s\n", o.export)
+		return 1
+	}
+	if p := os.Getenv("FAKEPI_EXPORT_ENV"); p != "" {
+		if err := os.WriteFile(p, []byte(strings.Join(os.Environ(), "\n")), 0o600); err != nil {
+			return 1
+		}
+	}
+	if len(o.positional) == 0 {
+		fmt.Fprintln(os.Stderr, "fakepi: --export 需要输出路径")
+		return 2
 	}
 	content := os.Getenv("FAKEPI_EXPORT_CONTENT")
 	if content == "" {
-		content = "<!doctype html><title>fakepi session</title>"
+		content = "<!doctype html><title>fakepi session</title><pre>" + string(data) + "</pre>"
 	}
-	if err := os.WriteFile(outputPath, []byte(content), 0o600); err != nil {
-		s.fail(id, "export_html", err.Error())
-		return
+	if err := os.WriteFile(o.positional[0], []byte(content), 0o600); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
 	}
-	returned := outputPath
-	if override := os.Getenv("FAKEPI_EXPORT_RETURN_PATH"); override != "" {
-		returned = override
-	}
-	s.ok(id, "export_html", map[string]any{"path": returned})
+	fmt.Println("Exported to: " + o.positional[0])
+	return 0
 }
 
 func (s *server) prompt(id json.RawMessage, msg string, images []json.RawMessage) {

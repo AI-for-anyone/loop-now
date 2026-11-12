@@ -4,6 +4,7 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"loop-now/internal/server/messageimage"
 	"slices"
 	"strings"
@@ -64,10 +65,12 @@ const (
 // OriginConsoleCompact 是控制台手动压缩；它使用真实运行，但不产生对话消息。
 const OriginConsoleCompact = "console_compact"
 
-// CompactionResult 是一次手动压缩的 Token 变化。
+// CompactionResult 是一次手动压缩的结果。Skipped 不为空表示 Pi 没有压缩（会话太短、已经压缩过、扩展取消），
+// 这仍是正常完成，Token 都为 0；否则是压缩前后的 Token。
 type CompactionResult struct {
 	TokensBefore         int64
 	EstimatedTokensAfter int64
+	Skipped              string
 }
 
 // SessionExport 是已读取并验证来源的会话下载内容。
@@ -77,14 +80,25 @@ type SessionExport struct {
 	Data        []byte
 }
 
+// 平台命令（维护操作）可以预期的失败。执行器把它们包在返回的错误里，对话服务据此转成 409。
+var (
+	// ErrMaintenanceBusy：运行时还有进行中的执行，或正在做别的维护（例如任务分叉、运行时交接）。
+	ErrMaintenanceBusy = errors.New("运行时正忙")
+	// ErrNoSession：没有可以操作的会话。
+	ErrNoSession = errors.New("当前没有可操作的会话")
+	// ErrUnsupportedRuntime：这个 Agent 的运行时不支持该命令（例如 Claude Code 没有 Pi 会话）。
+	ErrUnsupportedRuntime = errors.New("当前运行时不支持这个命令")
+)
+
 // IdleProcessStopper 由支持维护操作的本机执行器实现。
 type IdleProcessStopper interface {
 	StopIdle(ctx context.Context, agentID uuid.UUID, reason string) (bool, error)
 }
 
-// SessionExporter 由能从受管 Pi 会话导出的执行器实现。
+// SessionExporter 由能从受管 Pi 会话导出的执行器实现。sessionFile 是数据库记下的当前会话文件；
+// 调用方已确认这是 Pi 的 Agent、会话可用。
 type SessionExporter interface {
-	ExportSession(ctx context.Context, agentID uuid.UUID, format string) (SessionExport, error)
+	ExportSession(ctx context.Context, agentID uuid.UUID, sessionFile, format string) (SessionExport, error)
 }
 
 // ManagedSession 是受管 sessions 目录里的一个有效 Pi 会话；Path 只在服务端内部使用。
@@ -97,9 +111,11 @@ type ManagedSession struct {
 	Current   bool
 }
 
-// SessionLister 枚举可恢复的 Pi 会话，不得因此启动进程。
+// SessionLister 枚举可恢复的 Pi 会话，不得因此启动进程。ResolveSession 按完整 ID 找一个会话（只读文件头），
+// 找不到或 ID 重复时返回 nil。
 type SessionLister interface {
 	ListSessions(ctx context.Context, agentID uuid.UUID, currentFile string) ([]ManagedSession, error)
+	ResolveSession(ctx context.Context, agentID uuid.UUID, sessionID, currentFile string) (*ManagedSession, error)
 }
 
 // Request 是一次执行的输入。

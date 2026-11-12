@@ -11,6 +11,7 @@ import (
 
 	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
+	"loop-now/internal/server/conversation"
 )
 
 func platformResult(command string) apitypes.ConsoleCommandResult {
@@ -28,7 +29,7 @@ func (s *Server) platformConsoleCommand(r *http.Request, agentID uuid.UUID, text
 	if i := strings.IndexFunc(body, unicode.IsSpace); i >= 0 {
 		name, args = body[:i], strings.TrimSpace(body[i:])
 	}
-	if name != "session" && name != "new" && name != "compact" && name != "reload" && name != "copy" && name != "export" && name != "resume" {
+	if !conversation.IsPlatformCommand(name) {
 		return apitypes.ConsoleCommandResult{}, false, nil
 	}
 	out := platformResult(name)
@@ -50,6 +51,14 @@ func (s *Server) platformConsoleCommand(r *http.Request, agentID uuid.UUID, text
 			return out, true, err
 		}
 		out.Session = &apitypes.ConsoleSessionStatus{Status: status, Model: apitypes.ModelRef{Provider: agent.ModelProvider, ModelID: agent.ModelID}, ThinkingLevel: thinking}
+		last, err := s.Conv.LastCompaction(r.Context(), agentID)
+		if err != nil {
+			return out, true, err
+		}
+		if last != nil {
+			run := apitypes.FromRun(*last)
+			out.Session.LastCompaction = &run
+		}
 	case "new":
 		sess, err := s.Conv.NewSession(r.Context(), agentID)
 		if err != nil {
@@ -63,12 +72,15 @@ func (s *Server) platformConsoleCommand(r *http.Request, agentID uuid.UUID, text
 		}
 		out.ProcessStopped = &stopped
 	case "compact":
-		result, err := s.Conv.Compact(r.Context(), agentID, args)
+		ended, err := s.Conv.Compact(r.Context(), agentID, args)
 		if err != nil {
 			return out, true, err
 		}
-		out.TokensBefore = &result.TokensBefore
-		out.EstimatedTokensAfter = &result.EstimatedTokensAfter
+		run := apitypes.FromRun(ended)
+		out.CompactRun = &run
+		if c := run.Compaction; c != nil {
+			out.TokensBefore, out.EstimatedTokensAfter = c.TokensBefore, c.EstimatedTokensAfter
+		}
 	case "copy":
 		message, err := s.Conv.LatestReply(r.Context(), agentID)
 		if err != nil {
@@ -78,6 +90,9 @@ func (s *Server) platformConsoleCommand(r *http.Request, agentID uuid.UUID, text
 			out.CopyText = &message.Text
 		}
 	case "export":
+		if err := s.Conv.RequireCommand(r.Context(), agentID, "export"); err != nil {
+			return out, true, err
+		}
 		format := args
 		if format == "" {
 			format = "html"

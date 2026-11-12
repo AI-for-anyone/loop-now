@@ -304,3 +304,30 @@ func TestStatsAttributionWaitAndPendingQuestions(t *testing.T) {
 		t.Fatalf("platform scope: %+v", p)
 	}
 }
+
+// 控制台 /compact 的手动压缩是人发起的，用量计入 console；other 只留给不属于任何执行的用量。
+func TestStatsCountsManualCompactionAsConsole(t *testing.T) {
+	s := sqlitetest.NewStore(t)
+	ctx := context.Background()
+	dc, err := s.EnsureDefaults(ctx, "org", "project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := s.CreateAgent(ctx, store.ProjectScope(dc.Project.ID), "alpha", "anthropic", "claude-x", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := statsSeed{t: t, s: s, base: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC)}
+	compact := uuid.New()
+	mustExec(t, s, `INSERT INTO runs(id,agent_id,user_message_id,config_version,priority,queue_seq,status,origin,queued_at,started_at,running_at,ended_at)
+		VALUES($1,$2,NULL,1,1,1,'completed','console_compact',$3,$3,$3,$4)`, compact, a.ID, e.at(time.Hour), e.at(time.Hour+time.Minute))
+	e.usage(a.ID, time.Hour+30*time.Second, "compaction", &compact, nil, nil, 700, 50, 0, 0)
+	e.usage(a.ID, 2*time.Hour, "cache_warm", nil, nil, nil, 0, 0, 0, 30)
+	r, err := s.Stats(ctx, store.ScopeFilter{}, e.at(0), e.at(24*time.Hour), 24*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.ByOrigin.Totals; got.Console != 750 || got.Other != 30 {
+		t.Fatalf("手动压缩应计入 console：%+v", got)
+	}
+}

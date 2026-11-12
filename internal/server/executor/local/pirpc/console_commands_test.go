@@ -2,13 +2,15 @@ package pirpc
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
 
-func TestPipeCompactAndExportHTMLProtocol(t *testing.T) {
+func TestPipeCompactProtocol(t *testing.T) {
 	f := newPipeFake(t)
 	obs := &obsRec{}
 	f.c.SetObserver(obs)
@@ -43,26 +45,6 @@ func TestPipeCompactAndExportHTMLProtocol(t *testing.T) {
 		t.Fatalf("压缩用量应归属当前维护运行：%+v %v", usage, inTurn)
 	}
 
-	exportDone := make(chan struct {
-		path string
-		err  error
-	}, 1)
-	go func() {
-		path, err := f.c.ExportHTML(ctx, "/tmp/session.html")
-		exportDone <- struct {
-			path string
-			err  error
-		}{path, err}
-	}()
-	cmd = f.next()
-	if cmd["type"] != "export_html" || cmd["outputPath"] != "/tmp/session.html" {
-		t.Fatalf("export_html 参数不符：%v", cmd)
-	}
-	f.send(okResp(cmd["id"].(string), "export_html", map[string]any{"path": "/tmp/session.html"}))
-	exported := <-exportDone
-	if exported.err != nil || exported.path != "/tmp/session.html" {
-		t.Fatalf("导出路径不符：%q %v", exported.path, exported.err)
-	}
 }
 
 func TestPipeCompactOmitsEmptyInstructions(t *testing.T) {
@@ -111,8 +93,8 @@ func TestFakeCompactAbortAndContinue(t *testing.T) {
 	}
 	select {
 	case err := <-done:
-		if err == nil {
-			t.Fatal("被取消的 compact 不应成功")
+		if !errors.Is(err, ErrCompactAborted) {
+			t.Fatalf("平台取消的 compact 应返回 ErrCompactAborted：%v", err)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("compact 未在 Abort 后返回")
@@ -123,15 +105,26 @@ func TestFakeCompactAbortAndContinue(t *testing.T) {
 	}
 }
 
-func TestFakeExportHTMLWritesReturnedFile(t *testing.T) {
-	p := startFake(t, []string{"FAKEPI_EXPORT_CONTENT=<html>session</html>"})
-	output := filepath.Join(t.TempDir(), "session.html")
-	returned, err := p.ExportHTML(testCtx(t), output)
-	if err != nil || returned != output {
-		t.Fatalf("导出返回不符：%q %v", returned, err)
-	}
-	data, err := os.ReadFile(output)
-	if err != nil || string(data) != "<html>session</html>" {
-		t.Fatalf("导出文件不符：%q %v", data, err)
+// Pi 以 compact 失败报告的“没有压缩”是正常结果：会话太短、已经压缩过、扩展取消（平台没有发 abort）；其余失败照旧是错误。
+func TestCompactSkippedOutcomes(t *testing.T) {
+	for message, want := range map[string]string{
+		"Nothing to compact (session too small)": CompactTooSmall,
+		"Already compacted":                      CompactAlreadyDone,
+		"Compaction cancelled":                   CompactCancelled,
+		"Compaction failed: model unavailable":   "",
+	} {
+		t.Run(message, func(t *testing.T) {
+			p := startFake(t, []string{"FAKEPI_COMPACT_ERROR=" + message})
+			res, err := p.Compact(testCtx(t), "")
+			if want == "" {
+				if err == nil || !strings.Contains(err.Error(), "model unavailable") {
+					t.Fatalf("其他失败应是错误：%+v %v", res, err)
+				}
+				return
+			}
+			if err != nil || res.Skipped != want || res.TokensBefore != 0 {
+				t.Fatalf("应是没有压缩（%s）：%+v %v", want, res, err)
+			}
+		})
 	}
 }

@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
 import { apiUrl, defaultProject, projectsUrl } from './api'
 import { emptyProjectCredentialHandlers } from './project-credentials'
+import { platformCommands } from './commands'
 import { runtimeList } from './runtimes'
 
 // 各测试用 server.use(...) 注册自己的接口处理器。左侧栏常驻并定时查询健康状态，范围切换与 Agent 页都要读项目列表，
@@ -11,8 +12,8 @@ export const server = setupServer(
   http.get(apiUrl('/plugins'), () => HttpResponse.json({ plugins: [] })),
   http.get(apiUrl('/projects/:projectId/plugins'), () => HttpResponse.json({ plugins: [] })),
   http.get(apiUrl('/agents/:agentId/plugins'), () => HttpResponse.json({ plugins: [] })),
-  // 对话页 "/" 菜单：默认 Agent 还没启动过 Pi，没有命令列表。
-  http.get(apiUrl('/agents/:agentId/commands'), () => HttpResponse.json({ capturedAt: null, commands: [] })),
+  // 对话页 "/" 菜单：默认只有 7 个平台内置命令（都可用）；Agent 还没启动过 Pi，没有 Pi 命令。
+  http.get(apiUrl('/agents/:agentId/commands'), () => HttpResponse.json({ capturedAt: null, commands: platformCommands() })),
   // 运行时：默认本机的 Claude Code 装好且已登录。
   http.get(apiUrl('/runtimes'), () => HttpResponse.json(runtimeList())),
   http.get(apiUrl('/projects/:projectId/cli-auth/operations'), () => HttpResponse.json({ operations: [] })),

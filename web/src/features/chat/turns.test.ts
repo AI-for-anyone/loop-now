@@ -77,4 +77,24 @@ describe('buildTurns', () => {
     expect(turns).toHaveLength(1)
     expect(turns[0].reply?.text).toBe('回复')
   })
+
+  // 手动压缩（/compact）进行中时，状态里的当前执行是这次压缩（run.compaction 不为 null）。它没有对话消息，不是一轮。
+  it('进行中的手动压缩不是一轮：不进对话流，定位时也不算“有新消息”', () => {
+    const asked = makeRun({ startedAt: '2026-10-12T10:00:00Z' })
+    const compacting = makeRun({ status: 'running', startedAt: '2026-10-12T10:05:00Z', endedAt: null, compaction: { instructions: '', outcome: null, skipReason: null, tokensBefore: null, estimatedTokensAfter: null } })
+    const live: LiveState = { ...initialLiveState, current: { run: compacting, text: '' } }
+    const history = page([makeMessage({ text: '问题', run: asked }), makeMessage({ role: 'assistant', text: '回答', run: asked })])
+    const latest = buildTurns(history, live)
+    expect(latest.turns.map((turn) => turn.run.id)).toEqual([asked.id])
+    expect(latest.queued).toEqual([])
+    const located = buildTurns(history, live, false)
+    expect(located.turns.map((turn) => turn.run.id)).toEqual([asked.id])
+    expect(located.hiddenNew).toBe(0)
+  })
+
+  it('普通的进行中执行（没有 compaction）照常是末尾的一轮', () => {
+    const replying = makeRun({ status: 'running', startedAt: '2026-10-12T10:05:00Z', endedAt: null })
+    const { turns } = buildTurns(page([]), { ...initialLiveState, current: { run: replying, text: '正在写' } })
+    expect(turns.map((turn) => turn.run.id)).toEqual([replying.id])
+  })
 })

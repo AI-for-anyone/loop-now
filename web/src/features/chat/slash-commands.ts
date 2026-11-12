@@ -1,11 +1,11 @@
 import type { Schemas } from '@/api/client'
 
-export type Command = Schemas['AgentCommand'] | (Omit<Schemas['AgentCommand'], 'source'> & { source: 'platform'; usage: string })
+export type Command = Schemas['AgentCommand']
 
 // 只有消息开头严格是 "/pi:<name>" 才交给 Pi 执行（服务端改写成 "/<name>"）；其余 "/" 开头的消息照常发出。
 export const PI_PREFIX = '/pi:'
 
-// 菜单里显示、补全时写进输入框的写法：Pi 的命令是 /pi:<name>。以后若有别的来源（例如平台自己的命令），写成 /<name>。
+// 补全时写进输入框的写法：Pi 的命令是 /pi:<name>，平台内置命令是 /<name>（菜单里平台命令显示的是它的用法 usage）。
 export function commandText(command: Command): string {
   return command.source === 'pi' ? `${PI_PREFIX}${command.name}` : `/${command.name}`
 }

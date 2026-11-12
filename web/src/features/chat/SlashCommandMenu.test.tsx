@@ -5,14 +5,16 @@ import { describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
 import { apiUrl, errorBody, makeMessage, makeRun } from '@/test/api'
 import { renderWithQuery } from '@/test/render'
+import { claudeCodeCommands, piCommand, platformCommands } from '@/test/commands'
 import { server } from '@/test/server'
 import { Composer } from './Composer'
 import { applyCommand, commandText, matchCommands, slashToken } from './slash-commands'
 
-const command = (name: string, overrides: Partial<Schemas['AgentCommand']> = {}): Schemas['AgentCommand'] => ({ name, source: 'pi', piSource: 'extension', description: null, pluginId: null, pluginDisplayName: null, ...overrides })
+const command = piCommand
 const list: Schemas['AgentCommandList'] = {
   capturedAt: '2026-11-10T08:00:00Z',
   commands: [
+    ...platformCommands(),
     command('review', { description: '审查当前改动', pluginId: 'reviewer', pluginDisplayName: { 'zh-CN': '代码审查', 'en-US': 'Code review' } }),
     command('skill:loopctl', { piSource: 'skill', description: '用 loopctl 管理 Agent <b>与任务</b>' }),
     command('summarize', { piSource: 'prompt', description: '把对话写成摘要' }),
@@ -20,7 +22,7 @@ const list: Schemas['AgentCommandList'] = {
 }
 
 // 对话页的输入框：记下读命令列表的次数与发出的消息。
-function setup(commands: () => Response = () => HttpResponse.json(list), piCommands?: boolean) {
+function setup(commands: () => Response = () => HttpResponse.json(list)) {
   let reads = 0
   const sent: Schemas['SendMessageInput'][] = []
   server.use(
@@ -32,7 +34,7 @@ function setup(commands: () => Response = () => HttpResponse.json(list), piComma
       return HttpResponse.json({ run, message: makeMessage({ text: body.text, run }) }, { status: 202 })
     }),
   )
-  renderWithQuery(<Composer agentId="agent-1" agentName="开发助手" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} piCommands={piCommands} />)
+  renderWithQuery(<Composer agentId="agent-1" agentName="开发助手" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
   return { user: userEvent.setup(), input: screen.getByRole('textbox', { name: '消息' }), sent, reads: () => reads }
 }
 
@@ -63,7 +65,7 @@ describe('输入框的 "/" 命令菜单', () => {
     const { user, input } = setup()
     await user.type(input, '/')
     await waitFor(() => expect(options()).toHaveLength(10))
-    const panel = screen.getByRole('listbox', { name: '命令' }).parentElement!
+    const panel = screen.getByRole('listbox', { name: '命令' }).closest<HTMLElement>('[data-radix-popper-content-wrapper] > *')!
     expect(panel).toHaveClass('bg-paper-raised', 'rounded-card', 'shadow-[0_0_0_2px_var(--ink),4px_4px_0_2px_var(--riso-blue)]')
     for (const option of options()) expect(option).toHaveClass('aria-selected:bg-riso-yellow')
     expect(options()[0]).not.toHaveClass('aria-selected:bg-tint-blue')
@@ -132,7 +134,7 @@ describe('输入框的 "/" 命令菜单', () => {
   })
 
   it('Agent 还没运行过（capturedAt 为 null）：说明运行一次后才有列表，回车照常发出', async () => {
-    const { user, input, sent } = setup(() => HttpResponse.json({ capturedAt: null, commands: [] }))
+    const { user, input, sent } = setup(() => HttpResponse.json({ capturedAt: null, commands: platformCommands() }))
     await user.type(input, '/foo')
     expect(await screen.findByRole('status')).toHaveTextContent('Agent 运行一次后才有命令列表。')
     expect(screen.queryByRole('listbox')).toBeNull()
@@ -148,15 +150,58 @@ describe('输入框的 "/" 命令菜单', () => {
     await waitFor(() => expect(sent).toEqual([{ text: '/pi:review' }]))
   })
 
-  it('没有 /pi: 命令的 Agent（Claude Code 运行时）：输入 "/" 不弹菜单、不读命令列表，回车照常发出', async () => {
-    const { user, input, sent, reads } = setup(undefined, false)
+  it('Claude Code 的 Agent：没有 /pi: 命令；能用的平台命令照常提示，/compact、/export、/resume 列在“现在不能用”里并写明原因', async () => {
+    const { user, input, sent } = setup(() => HttpResponse.json({ capturedAt: null, commands: claudeCodeCommands() }))
+    await user.type(input, '/')
+    await waitFor(() => expect(labels()).toEqual(['/session', '/new', '/reload', '/copy']))
+    const blocked = screen.getByRole('group', { name: '现在不能用' })
+    expect([...blocked.querySelectorAll('code')].map((code) => code.textContent)).toEqual(['/compact [instructions]', '/export [html|jsonl]', '/resume [sessionId]'])
+    expect(within(blocked).getAllByText('这个 Agent 用 Claude Code 运行，没有 Pi 会话')).toHaveLength(3)
+    expect(within(blocked).queryByRole('option')).toBeNull()
+    // 没有匹配的命令时只说没有匹配，不说“运行一次后才有命令列表”（它没有 Pi，运行了也不会有）。
+    await user.clear(input)
     await user.type(input, '/review')
+    expect(await screen.findByRole('status')).toHaveTextContent('没有匹配的命令。')
     expect(screen.queryByRole('listbox')).toBeNull()
-    expect(screen.queryByRole('status')).toBeNull()
-    expect(input).not.toHaveAttribute('aria-controls')
     await user.keyboard('{Enter}')
     await waitFor(() => expect(sent).toEqual([{ text: '/review' }]))
-    expect(reads()).toBe(0)
+  })
+
+  it('内置命令只认服务端给的列表：没列的不显示，多列的照样显示（没有说明就不写说明）', async () => {
+    const [session] = platformCommands()
+    const ping = { ...session, name: 'ping', usage: '/ping [host]' }
+    const { user, input } = setup(() => HttpResponse.json({ capturedAt: null, commands: [session, ping] }))
+    await user.type(input, '/')
+    await waitFor(() => expect(labels()).toEqual(['/session', '/ping [host]']))
+    expect(options()[0]).toHaveTextContent('/session平台命令查看当前会话、模型和进程状态')
+    expect(options()[1]).toHaveTextContent(/^\/ping \[host\]平台命令$/)
+    await user.keyboard('{ArrowDown}{Enter}')
+    expect(input).toHaveValue('/ping')
+  })
+
+  it('不可用的命令置灰列在下面、写明原因、不能选；上下键和回车只在可用的命令之间走', async () => {
+    const commands = platformCommands({ compact: { available: false, unavailableReason: 'session_none' }, export: { available: false, unavailableReason: 'session_missing' } })
+    const { user, input } = setup(() => HttpResponse.json({ capturedAt: null, commands }))
+    await user.type(input, '/')
+    await waitFor(() => expect(labels()).toEqual(['/session', '/new', '/reload', '/copy', '/resume [sessionId]']))
+    const blocked = screen.getByRole('group', { name: '现在不能用' })
+    expect(blocked).toHaveTextContent('/compact [instructions]平台命令还没有会话，先发一条消息')
+    expect(blocked).toHaveTextContent('/export [html|jsonl]平台命令会话文件丢失，先 /new 或 /resume')
+    for (const item of blocked.querySelectorAll('li')) expect(item).toHaveClass('text-ink-500')
+    // 点不可用的命令不填入输入框。
+    await user.click(within(blocked).getByText('/compact [instructions]'))
+    expect(input).toHaveValue('/')
+    await user.keyboard('{ArrowDown}{ArrowDown}')
+    expect(options()[2]).toHaveAttribute('aria-selected', 'true')
+    expect(labels()[2]).toBe('/reload')
+    // 只匹配到不可用的命令时没有可选项，回车照常发出，由服务端说明为什么不行。
+    await user.clear(input)
+    await user.type(input, '/comp')
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
+    expect(screen.getByRole('group', { name: '现在不能用' })).toHaveTextContent('/compact [instructions]')
+    expect(input).not.toHaveAttribute('aria-activedescendant')    // 没有可选的命令：底部不再写“↑↓ 选择 · Enter 或 Tab 补全”，改成告诉人回车会照原文发出；读屏也会读到。
+    expect(screen.queryByText('↑↓ 选择 · Enter 或 Tab 补全 · Esc 关闭')).toBeNull()
+    expect(screen.getByRole('status')).toHaveTextContent('匹配的命令现在都不能用，回车会照原文发出')
   })
 
   it('只认开头的 "/"：前面有空格、不在开头、光标离开第一个词时都不弹菜单', async () => {

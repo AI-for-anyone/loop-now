@@ -27,22 +27,24 @@ type Run struct {
 	TriggerInboxMessageID *uuid.UUID  `json:"triggerInboxMessageId,omitempty"`
 	WakeSleepID           *uuid.UUID  `json:"wakeSleepId,omitempty"`
 	PiCommand             *RunCommand `json:"piCommand,omitempty"`
-	ID                    uuid.UUID   `json:"id"`
-	Status                string      `json:"status"`
-	Phase                 *string     `json:"phase"`
-	EndReason             *string     `json:"endReason"`
-	ErrorCode             *string     `json:"errorCode"`
-	ErrorMessage          *string     `json:"errorMessage"`
-	ConfigVersion         int64       `json:"configVersion"`
-	WhenBusy              *string     `json:"whenBusy"`
-	QueuedAt              time.Time   `json:"queuedAt"`
-	StartedAt             *time.Time  `json:"startedAt"`
-	RunningAt             *time.Time  `json:"runningAt"`
-	AbortRequestedAt      *time.Time  `json:"abortRequestedAt"`
-	EndedAt               *time.Time  `json:"endedAt"`
-	Tools                 []ToolEvent `json:"tools"`
-	Usage                 UsageTotals `json:"usage"`
-	Model                 *ModelRef   `json:"model"`
+	// Compaction 只在手动压缩（/compact）的执行上有：指令与结果。
+	Compaction       *RunCompaction `json:"compaction,omitempty"`
+	ID               uuid.UUID      `json:"id"`
+	Status           string         `json:"status"`
+	Phase            *string        `json:"phase"`
+	EndReason        *string        `json:"endReason"`
+	ErrorCode        *string        `json:"errorCode"`
+	ErrorMessage     *string        `json:"errorMessage"`
+	ConfigVersion    int64          `json:"configVersion"`
+	WhenBusy         *string        `json:"whenBusy"`
+	QueuedAt         time.Time      `json:"queuedAt"`
+	StartedAt        *time.Time     `json:"startedAt"`
+	RunningAt        *time.Time     `json:"runningAt"`
+	AbortRequestedAt *time.Time     `json:"abortRequestedAt"`
+	EndedAt          *time.Time     `json:"endedAt"`
+	Tools            []ToolEvent    `json:"tools"`
+	Usage            UsageTotals    `json:"usage"`
+	Model            *ModelRef      `json:"model"`
 }
 
 // UsageTotals 对应 UsageTotals。
@@ -218,8 +220,8 @@ type SseRunTool struct {
 
 // SseRunEnded 对应 SseRunEnded。
 type SseRunEnded struct {
-	Run     Run      `json:"run"`
-	Message *Message `json:"message"`
+	Run     Run     `json:"run"`
+	Message Message `json:"message"`
 }
 
 // SseSessionUpdated 对应 SseSessionUpdated。
@@ -265,6 +267,11 @@ func FromRun(r store.Run) Run {
 		if len(r.PiCommandNotices) > 0 && json.Unmarshal(r.PiCommandNotices, &saved) == nil && saved.Notices != nil {
 			out.PiCommand.Notices, out.PiCommand.Truncated = saved.Notices, saved.Truncated
 		}
+	}
+	if r.Origin == executor.OriginConsoleCompact {
+		c := store.ParseCompaction(r.Compaction)
+		out.Compaction = &RunCompaction{Instructions: c.Instructions, Outcome: strPtr(c.Outcome), SkipReason: strPtr(c.SkipReason),
+			TokensBefore: c.TokensBefore, EstimatedTokensAfter: c.EstimatedTokensAfter}
 	}
 	if r.Status != "starting" {
 		out.Phase = nil

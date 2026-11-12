@@ -66,7 +66,7 @@ type Service struct {
 	overviewWG      sync.WaitGroup
 	sleepRevisions  sync.Map
 	dispatchGates   sync.Map // AgentID -> chan struct{}；任务分叉只阻止新轮派发，不打断当前轮
-	commands        sync.Map // RunID -> *consoleCommandRun；仅手动压缩等待真实执行结果
+	commands        sync.Map // RunID -> *consoleCommandRun；发起手动压缩的请求等待这次执行结束
 
 	// InboxCancelled 在一条 Inbox 消息被人取消、事务提交后调用（追加收件箱事件）；为空时不推送。
 	InboxCancelled func(ctx context.Context, m store.InboxMessage)
@@ -451,11 +451,7 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	}
 	msg := store.Message{}
 	if run.Origin == executor.OriginConsoleCompact {
-		value, ok := s.commands.Load(run.ID)
-		if !ok {
-			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "读取压缩指令失败"}, ""
-		}
-		msg.Text = value.(*consoleCommandRun).instructions
+		msg.Text = store.ParseCompaction(run.Compaction).Instructions // 执行开始时记下的指令；请求已断开也照样执行
 	} else {
 		var err error
 		msg, err = s.st.GetMessage(ctx, run.UserMessageID)
@@ -546,6 +542,14 @@ func (s *Service) finish(ctx context.Context, run store.Run, res executor.Result
 		}
 		end.PiCommandNotices, _ = json.Marshal(map[string]any{"notices": notices, "truncated": res.CommandNoticesTruncated})
 	}
+	if c := res.Compaction; c != nil && res.Outcome == executor.OutcomeCompleted {
+		if c.Skipped != "" {
+			end.Compaction = &store.Compaction{Outcome: store.CompactionSkipped, SkipReason: c.Skipped}
+		} else {
+			before, after := c.TokensBefore, c.EstimatedTokensAfter
+			end.Compaction = &store.Compaction{Outcome: store.CompactionCompacted, TokensBefore: &before, EstimatedTokensAfter: &after}
+		}
+	}
 	switch res.Outcome {
 	case executor.OutcomeCompleted:
 		end.Status = "completed"
@@ -595,11 +599,10 @@ func (s *Service) endRun(ctx context.Context, agentID, runID uuid.UUID, end stor
 	}
 	s.log.Info("回复结束", attrs...)
 	if msg == nil {
-		// compact 没有对话消息；终态仍通知所有 SSE 订阅者，但保持 run.ended.message 非空的旧契约。
+		// 手动压缩没有对话消息：终态以 run.updated 通知，run.ended 总带消息。
 		s.emit(ctx, agentID, apitypes.EventRunUpdated, apitypes.SseRunUpdated{Run: apitypes.FromRun(r)})
 	} else {
-		converted := apitypes.FromMessage(*msg, r)
-		s.emit(ctx, agentID, apitypes.EventRunEnded, apitypes.SseRunEnded{Run: apitypes.FromRun(r), Message: &converted})
+		s.emit(ctx, agentID, apitypes.EventRunEnded, apitypes.SseRunEnded{Run: apitypes.FromRun(r), Message: apitypes.FromMessage(*msg, r)})
 	}
 	_ = s.co.DeleteRunText(ctx, runID.String())
 	s.EmitAgentStatus(agentID)
@@ -988,10 +991,7 @@ func (s *Service) ResetSession(ctx context.Context, agentID uuid.UUID) (apitypes
 	if err != nil {
 		return apitypes.SessionInfo{}, err
 	}
-	s.emit(ctx, agentID, apitypes.EventSessionUpdated, apitypes.SseSessionUpdated{State: sess.State, Epoch: sess.Epoch})
-	s.EmitAgentStatus(agentID)
-	s.remindUnread(ctx, agentID) // 会话丢失期间收到的 Inbox 消息没有安排提醒，重开后补上
-	return apitypes.SessionInfo{State: sess.State, Epoch: sess.Epoch}, nil
+	return s.sessionChanged(ctx, agentID, sess), nil // 会话丢失期间收到的 Inbox 消息没有安排提醒，重开后补上
 }
 
 // PiCommand 识别对话页的 Pi 命令：文字以 /pi:<name> 开头（name 非空、不含空白）时返回命令名与发给 Pi 的 /<name><其余原文>；

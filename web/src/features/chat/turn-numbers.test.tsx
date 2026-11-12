@@ -70,3 +70,18 @@ describe('对话页的轮次编号', () => {
     await waitFor(() => expect(numbers()).toEqual(['1']))
   })
 })
+
+// 手动压缩（/compact）进行中：Agent 的当前执行是这次压缩，它不是一轮。
+describe('手动压缩进行中', () => {
+  it('不多出一轮：没有新的轮次块、编号和刻度，总数不变；忙碌状态照常显示', async () => {
+    const { agent, emit } = await renderChat({ messages: [...turn('第一问', 1), ...turn('第二问', 2)], page: { turnsBefore: 24, turnsTotal: 26 }, hasMore: true })
+    const compacting = makeRun({ status: 'running', queuedAt: '2026-11-12T09:00:00Z', startedAt: '2026-11-12T09:00:00Z', runningAt: '2026-11-12T09:00:01Z', endedAt: null, compaction: { instructions: '', outcome: null, skipReason: null, tokensBefore: null, estimatedTokensAfter: null } })
+    await emit('snapshot', { status: makeStatus(agent.id, { busy: true, currentRun: compacting, processState: 'busy' }), currentText: '', queuedRuns: [], queueItems: [] })
+    await screen.findByText(/Agent 正忙/)
+    expect(numbers()).toEqual(['25', '26'])
+    expect(document.querySelectorAll('[data-run-id]')).toHaveLength(2)
+    expect(within(screen.getByRole('navigation', { name: '对话轮次' })).getAllByRole('button')).toHaveLength(2)
+    expect(total()).toHaveTextContent('26')
+    expect(screen.getByRole('button', { name: '停止当前回复' })).toBeInTheDocument()
+  })
+})

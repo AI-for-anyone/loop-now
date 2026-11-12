@@ -74,7 +74,7 @@ export function ChatPage() {
   const [replying, setReplying] = useState<{ agentId: string; messageId: string } | null>(null)
   const replyTarget = replying?.agentId === agent.id ? toYou.find((m) => m.id === replying.messageId && m.question?.state === 'open') : undefined
   // 被平台或插件认领的 / 命令只在这次打开的对话里按时间排进去（服务端不留命令消息），换 Agent 时清空。
-  const [commands, setCommands] = useState<{ agentId: string; id: number; at: string; command: string; result: Schemas['ConsoleCommandResult'] }[]>([])
+  const [commands, setCommands] = useState<{ agentId: string; id: number; at: string; command: string; result: Schemas['ConsoleCommandResult']; copyFailed: boolean }[]>([])
   const inserts = [
     ...toYou.map((message) => ({
       key: `console:${message.id}`,
@@ -83,7 +83,7 @@ export function ChatPage() {
     })),
     ...commands
       .filter((item) => item.agentId === agent.id)
-      .map((item) => ({ key: `command:${item.id}`, at: item.at, node: <CommandLine command={item.command} result={item.result} at={item.at} onResume={(sessionId) => composer.current?.resume(sessionId)} /> })),
+      .map((item) => ({ key: `command:${item.id}`, at: item.at, node: <CommandLine command={item.command} result={item.result} at={item.at} copyFailed={item.copyFailed} onResume={(sessionId) => composer.current?.resume(sessionId)} /> })),
   ]
 
   // 收到快照之前，忙闲与会话状态取自状态接口与 Agent 详情。
@@ -163,11 +163,10 @@ export function ChatPage() {
           busy={busy}
           disabled={sessionMissing}
           allowResumeWhenDisabled={sessionMissing}
-          piCommands={agent.runtime !== 'claude-code'}
           maxMessageBytes={context.data?.limits.maxMessage}
           imageLimits={messageImageLimits(context.data?.limits)}
           onSent={recordSent}
-          onCommand={(result, command) => setCommands((current) => [...current, { agentId: agent.id, id: current.length + 1, at: new Date().toISOString(), command, result }])}
+          onCommand={(result, command, outcome) => setCommands((current) => [...current, { agentId: agent.id, id: current.length + 1, at: new Date().toISOString(), command, result, copyFailed: outcome?.copyFailed ?? false }])}
           reply={replyTarget && { message: replyTarget, name: agent.name, maxBytes: context.data?.limits.maxInboxMessage, onCancel: () => setReplying(null), onDone: () => setReplying(null) }}
           queue={
             <>

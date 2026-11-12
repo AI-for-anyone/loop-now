@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -239,9 +240,36 @@ func (c *Client) SetThinkingLevel(ctx context.Context, level string) error {
 }
 
 // CompactResult 是手动压缩的上下文 Token 变化。EstimatedTokensAfter 是 Pi 的估算值。
+// Skipped 不为空表示 Pi 没有压缩（CompactTooSmall、CompactAlreadyDone、CompactCancelled），这时 Token 都为 0。
 type CompactResult struct {
 	TokensBefore         int64
 	EstimatedTokensAfter int64
+	Skipped              string
+}
+
+// Pi 没有压缩的原因。Pi 以 compact 命令失败报告这几种情况（agent-session.js 的 compact），平台当作正常结果。
+// CompactCancelled 是 Pi 说“Compaction cancelled”而平台没有发 abort：扩展在 session_before_compact 取消了这次压缩。
+// 平台自己 Abort 的压缩返回 ErrCompactAborted。
+const (
+	CompactTooSmall    = "too_small"
+	CompactAlreadyDone = "already_compacted"
+	CompactCancelled   = "cancelled_by_extension"
+)
+
+// ErrCompactAborted 是平台 Abort 取消了进行中的手动压缩。
+var ErrCompactAborted = errors.New("pirpc: 手动压缩已被取消")
+
+// compactSkipped 按 Pi 的错误文字判断它是不是“没有压缩”的正常结果。
+func compactSkipped(message string) string {
+	switch {
+	case strings.HasPrefix(message, "Nothing to compact"):
+		return CompactTooSmall
+	case message == "Already compacted":
+		return CompactAlreadyDone
+	case message == "Compaction cancelled":
+		return CompactCancelled
+	}
+	return ""
 }
 
 // Compact 压缩当前会话。与 Prompt 共用互斥和事件归属，Abort 可以取消这次压缩。
@@ -273,6 +301,12 @@ func (c *Client) Compact(ctx context.Context, customInstructions string) (Compac
 		return CompactResult{}, err
 	}
 	if !resp.Success {
+		if reason := compactSkipped(resp.Error); reason != "" {
+			if reason == CompactCancelled && t.abortRequested.Load() {
+				return CompactResult{}, ErrCompactAborted
+			}
+			return CompactResult{Skipped: reason}, nil
+		}
 		return CompactResult{}, fmt.Errorf("pirpc: 命令 compact 失败：%s", resp.Error)
 	}
 	var data struct {
@@ -283,24 +317,6 @@ func (c *Client) Compact(ctx context.Context, customInstructions string) (Compac
 		return CompactResult{}, fmt.Errorf("pirpc: 解析 compact 响应失败：%w", err)
 	}
 	return CompactResult{TokensBefore: data.TokensBefore, EstimatedTokensAfter: data.EstimatedTokensAfter}, nil
-}
-
-// ExportHTML 让 Pi 把当前会话导出到平台指定的文件，并返回 Pi 确认的路径。
-func (c *Client) ExportHTML(ctx context.Context, outputPath string) (string, error) {
-	data, err := c.Call(ctx, "export_html", map[string]any{"outputPath": outputPath})
-	if err != nil {
-		return "", err
-	}
-	var out struct {
-		Path string `json:"path"`
-	}
-	if err := json.Unmarshal(data, &out); err != nil {
-		return "", fmt.Errorf("pirpc: 解析 export_html 响应失败：%w", err)
-	}
-	if out.Path == "" {
-		return "", errors.New("pirpc: export_html 未返回文件路径")
-	}
-	return out.Path, nil
 }
 
 // Prompt 发送 prompt 并消费事件直到本轮结束（agent_settled），期间回调 sink。
@@ -366,6 +382,7 @@ func (c *Client) Abort(ctx context.Context) error {
 	t := c.turn
 	c.mu.Unlock()
 	if t != nil {
+		t.abortRequested.Store(true)
 		select {
 		case <-t.responded:
 		case <-ctx.Done():

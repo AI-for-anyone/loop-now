@@ -47,10 +47,17 @@ type quickExec struct {
 	mu       sync.Mutex
 	running  map[uuid.UUID]chan struct{}
 	sessions []executor.ManagedSession
+	// 不为空时平台命令的维护操作返回这些错误。
+	stopErr, exportErr, listErr error
+	// compactSkip 不为空时手动压缩以“没有压缩”正常完成（原因即它的值）。
+	compactSkip string
 }
 
 func (q *quickExec) Execute(ctx context.Context, req executor.Request, sink executor.Sink) (executor.Result, error) {
 	if req.Origin == executor.OriginConsoleCompact {
+		if q.compactSkip != "" {
+			return executor.Result{Outcome: executor.OutcomeCompleted, Compaction: &executor.CompactionResult{Skipped: q.compactSkip}, ConfigVersion: 1}, nil
+		}
 		return executor.Result{Outcome: executor.OutcomeCompleted, Compaction: &executor.CompactionResult{TokensBefore: 4200, EstimatedTokensAfter: 350}, ConfigVersion: 1}, nil
 	}
 	ch := make(chan struct{})
@@ -94,15 +101,36 @@ func (q *quickExec) Process(uuid.UUID) executor.ProcessInfo {
 }
 func (q *quickExec) Shutdown(context.Context) error { return nil }
 func (q *quickExec) StopIdle(context.Context, uuid.UUID, string) (bool, error) {
+	if q.stopErr != nil {
+		return false, q.stopErr
+	}
 	return true, nil
 }
-func (q *quickExec) ExportSession(_ context.Context, _ uuid.UUID, format string) (executor.SessionExport, error) {
+func (q *quickExec) ExportSession(_ context.Context, _ uuid.UUID, _, format string) (executor.SessionExport, error) {
+	if q.exportErr != nil {
+		return executor.SessionExport{}, q.exportErr
+	}
 	if format == "jsonl" {
 		return executor.SessionExport{Filename: "session.jsonl", ContentType: "application/x-ndjson", Data: []byte("{}\n")}, nil
 	}
 	return executor.SessionExport{Filename: "session.html", ContentType: "text/html; charset=utf-8", Data: []byte("<html>exported</html>")}, nil
 }
+func (q *quickExec) ResolveSession(ctx context.Context, agentID uuid.UUID, sessionID, currentFile string) (*executor.ManagedSession, error) {
+	all, err := q.ListSessions(ctx, agentID, currentFile)
+	if err != nil {
+		return nil, err
+	}
+	for i := range all {
+		if all[i].ID == sessionID {
+			return &all[i], nil
+		}
+	}
+	return nil, nil
+}
 func (q *quickExec) ListSessions(_ context.Context, _ uuid.UUID, currentFile string) ([]executor.ManagedSession, error) {
+	if q.listErr != nil {
+		return nil, q.listErr
+	}
 	out := append([]executor.ManagedSession(nil), q.sessions...)
 	for i := range out {
 		out[i].Current = out[i].Path == currentFile

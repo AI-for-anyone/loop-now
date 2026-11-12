@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -105,7 +106,7 @@ func TestPlatformConsoleCompactCopyExportAndEndEventContract(t *testing.T) {
 		if err := json.Unmarshal([]byte(event.data), &ended); err != nil {
 			t.Fatal(err)
 		}
-		if ended.Message == nil {
+		if ended.Message.ID == uuid.Nil || ended.Message.Run.ID != ended.Run.ID {
 			t.Fatalf("普通 run.ended 必须带非空消息：%+v", ended)
 		}
 		if ended.Run.Status == "completed" {
@@ -263,17 +264,25 @@ func TestPlatformConsoleNewThenResume(t *testing.T) {
 	}
 }
 
+// 有可以开始的排队消息时平台命令不做维护（agent_not_idle），并且立即开始那条消息，而不是等下一次对账；
+// 它开始之后，命令拿不到忙闲锁（agent_busy）。
 func TestPlatformConsoleQueuedWorkAlsoBlocksMaintenance(t *testing.T) {
 	e := newEnv(t)
 	agent, path := e.newAgent("排队门禁")
-	_, _, err := e.st.InsertMessageAndRun(context.Background(), store.NewRun{AgentID: agent.ID, RunID: uuid.Must(uuid.NewV7()), Text: "queued", Start: false, InstanceID: uuid.Must(uuid.NewV7())})
+	_, _, err := e.st.InsertMessageAndRun(context.Background(), store.NewRun{AgentID: agent.ID, RunID: uuid.Must(uuid.NewV7()), Text: "block queued", Start: false, InstanceID: uuid.Must(uuid.NewV7())})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, command := range []string{"/new", "/resume", "/resume target-full-session-id"} {
-		e.expectError(409, "agent_not_idle", "POST", path+"/messages", map[string]any{"text": command})
+	e.expectError(409, "agent_not_idle", "POST", path+"/messages", map[string]any{"text": "/new"})
+	if st := decode[apitypes.AgentStatus](t, e.expect(200, "GET", path+"/status", nil)); st.CurrentRun == nil || st.CurrentRun.Status == "queued" {
+		t.Fatalf("排队消息应已开始：%+v", st)
 	}
-	e.expectError(409, "agent_not_idle", "GET", path+"/session/export?format=jsonl", nil)
+	for _, command := range []string{"/new", "/resume target-full-session-id"} {
+		e.expectError(409, "agent_busy", "POST", path+"/messages", map[string]any{"text": command})
+	}
+	// 列出会话不取忙闲锁，按数据库判断空闲。
+	e.expectError(409, "agent_not_idle", "POST", path+"/messages", map[string]any{"text": "/resume"})
+	e.expectError(409, "agent_busy", "GET", path+"/session/export?format=jsonl", nil)
 }
 
 func TestClaudeCannotResumePiSession(t *testing.T) {
@@ -289,5 +298,96 @@ func TestClaudeCannotResumePiSession(t *testing.T) {
 	sess, err := e.st.IdleSession(context.Background(), agent.ID)
 	if err != nil || sess.State != "none" {
 		t.Fatalf("不得切换成 Pi 会话：%+v %v", sess, err)
+	}
+}
+
+// 执行器维护操作里用户可以碰到的失败（运行时正忙、没有会话、运行时不支持）是 409，不是 500 internal_error。
+func TestPlatformConsoleMaintenanceErrorsAreConflicts(t *testing.T) {
+	e := newEnv(t)
+	agent, path := e.newAgent("维护失败")
+	if err := e.st.RecordSessionFile(context.Background(), agent.ID, "/managed/s.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	busy := fmt.Errorf("%w：runtime_busy", executor.ErrMaintenanceBusy)
+	e.ex.stopErr = busy
+	for _, command := range []string{"/reload", "/new"} {
+		e.expectError(409, "agent_not_idle", "POST", path+"/messages", map[string]any{"text": command})
+	}
+	e.ex.stopErr = nil
+	e.ex.listErr = busy
+	e.expectError(409, "agent_not_idle", "POST", path+"/messages", map[string]any{"text": "/resume"})
+	e.expectError(409, "agent_not_idle", "POST", path+"/messages", map[string]any{"text": "/resume some-session"})
+	e.ex.listErr = nil
+	for err, code := range map[error]string{busy: "agent_not_idle", executor.ErrNoSession: "session_none",
+		fmt.Errorf("%w：Claude Code", executor.ErrUnsupportedRuntime): "console_command_failed"} {
+		e.ex.exportErr = err
+		e.expectError(409, code, "GET", path+"/session/export?format=html", nil)
+	}
+}
+
+// Claude Code 的 Agent 支持 /session、/new、/reload、/copy；/compact、/export、/resume 只适用于 Pi 会话，
+// 直接以 409 console_command_failed 拒绝，不产生执行。
+func TestClaudeCodeConsoleCommandSupport(t *testing.T) {
+	e := newEnv(t)
+	reg := modelcatalog.NewRegistry(e.api.Models.Snapshot())
+	e.api.Models, e.api.Config.Models = reg, reg
+	agent, path := e.newAgent("Claude 命令")
+	e.expect(200, "PATCH", path, map[string]any{"model": map[string]string{"provider": "claude-code", "modelId": "sonnet"}})
+	if err := e.st.RecordSessionFile(context.Background(), agent.ID, "/managed/claude-session"); err != nil {
+		t.Fatal(err)
+	}
+	for _, command := range []string{"/compact", "/compact 保留决定", "/export", "/export jsonl", "/resume", "/resume some-id"} {
+		body := decode[apitypes.ErrorBody](t, e.expect(409, "POST", path+"/messages", map[string]any{"text": command}))
+		if body.Error.Code != "console_command_failed" || !strings.Contains(body.Error.Message, "Claude Code") {
+			t.Fatalf("%s 应以 console_command_failed 拒绝并写明运行时：%+v", command, body.Error)
+		}
+	}
+	e.expectError(409, "console_command_failed", "GET", path+"/session/export?format=html", nil)
+	var runs int
+	if err := e.st.Pool.QueryRow(context.Background(), `SELECT count(*) FROM runs WHERE agent_id = $1`, agent.ID).Scan(&runs); err != nil || runs != 0 {
+		t.Fatalf("不支持的命令不应产生执行：%d %v", runs, err)
+	}
+	if got := consoleCommand(t, e, path, "/session"); got.Session == nil {
+		t.Fatalf("/session：%+v", got)
+	}
+	if got := consoleCommand(t, e, path, "/copy"); got.Command != "copy" {
+		t.Fatalf("/copy：%+v", got)
+	}
+	if got := consoleCommand(t, e, path, "/reload"); got.ProcessStopped == nil {
+		t.Fatalf("/reload：%+v", got)
+	}
+	if got := consoleCommand(t, e, path, "/new"); got.ResetSession == nil {
+		t.Fatalf("/new：%+v", got)
+	}
+}
+
+// /compact 的结果记在执行上：命令返回结束后的执行；Pi 没有压缩时也是 200，写明原因；/session 能读到最近一次压缩。
+func TestPlatformConsoleCompactResultOnRun(t *testing.T) {
+	e := newEnv(t)
+	agent, path := e.newAgent("压缩结果")
+	if err := e.st.RecordSessionFile(context.Background(), agent.ID, "/managed/s.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	if got := consoleCommand(t, e, path, "/session"); got.Session == nil || got.Session.LastCompaction != nil {
+		t.Fatalf("还没有压缩过：%+v", got.Session)
+	}
+	done := consoleCommand(t, e, path, "/compact 保留决定")
+	c := done.CompactRun.Compaction
+	if done.CompactRun == nil || done.CompactRun.Status != "completed" || c == nil || c.Instructions != "保留决定" || c.Outcome == nil || *c.Outcome != "compacted" ||
+		c.TokensBefore == nil || *c.TokensBefore != 4200 || done.TokensBefore == nil || *done.TokensBefore != 4200 {
+		t.Fatalf("压缩结果：%+v %+v", done, c)
+	}
+	e.ex.compactSkip = "already_compacted"
+	skipped := consoleCommand(t, e, path, "/compact")
+	sc := skipped.CompactRun.Compaction
+	if sc == nil || sc.Outcome == nil || *sc.Outcome != "skipped" || sc.SkipReason == nil || *sc.SkipReason != "already_compacted" || skipped.TokensBefore != nil {
+		t.Fatalf("没有压缩也应正常完成并写明原因：%+v %+v", skipped, sc)
+	}
+	session := consoleCommand(t, e, path, "/session")
+	if last := session.Session.LastCompaction; last == nil || last.ID != skipped.CompactRun.ID || last.Compaction == nil || *last.Compaction.Outcome != "skipped" {
+		t.Fatalf("/session 应给出最近一次压缩：%+v", session.Session.LastCompaction)
+	}
+	if page := decode[apitypes.MessagePage](t, e.expect(200, "GET", path+"/messages?aroundRun="+skipped.CompactRun.ID.String(), nil)); page.Messages == nil {
+		t.Fatal("定位压缩执行应返回一页（没有消息时为空列表）")
 	}
 }

@@ -105,12 +105,13 @@ type TokenIssuer interface {
 
 // Executor 是本机执行器。
 type Executor struct {
-	o    Options
-	src  Source
-	tmpl *clitemplate.Catalog
-	inst *clitemplate.Installer
-	log  *slog.Logger
-	obs  executor.Observer
+	sessionCache sync.Map // 会话文件路径 -> sessionMeta（/resume 列表用）
+	o            Options
+	src          Source
+	tmpl         *clitemplate.Catalog
+	inst         *clitemplate.Installer
+	log          *slog.Logger
+	obs          executor.Observer
 
 	mu       sync.Mutex
 	procs    map[uuid.UUID]*proc
@@ -197,7 +198,21 @@ const (
 	stopReleased      = "released"
 	stopShutdown      = "shutdown"
 	stopAbortTimeout  = "abort_timeout"
+	stopForkSnapshot  = "fork_snapshot"
+	// 平台命令停止空闲进程：/new、/reload、/resume。console_export 是早先 /export html 为导出临时启动的进程，
+	// 现在导出改用 pi --export、不再启动进程，保留它是为了旧记录。
+	stopSessionReset   = "session_reset"
+	stopConsoleReload  = "console_reload"
+	stopSessionResumed = "session_resumed"
+	stopConsoleExport  = "console_export"
 )
+
+// StopReasons 是 pi.stopped 可能带的全部原因，openapi 的 ProcessExit.reason 与 TimelinePiStopped.reason 要列全（api 的契约测试核对）。
+var StopReasons = []string{stopIdleTimeout, stopConfigChanged, stopEvicted, stopReleased, stopShutdown, stopAbortTimeout, stopForkSnapshot,
+	stopSessionReset, stopConsoleReload, stopSessionResumed, stopConsoleExport}
+
+// idleStopReasons 是 StopIdle 接受的原因。
+var idleStopReasons = []string{stopSessionReset, stopConsoleReload, stopSessionResumed}
 
 var _ executor.Executor = (*Executor)(nil)
 
@@ -1099,30 +1114,11 @@ func (e *Executor) beforeRun(ctx context.Context, snap agentconfig.Snapshot, req
 
 // Process 实现 executor.Executor。
 // FreezeForFork 由持有常态派发门禁的任务准备器调用：当前轮结束后停止空闲Pi，稳定源会话。
-// 保留HOME/工作区/会话，下条常态消息照常重启接续。
+// 与平台命令的 StopIdle 是同一件事，只是停止原因为 fork_snapshot。正在做别的维护时错误带 ErrRuntimeBusy；
+// 当前轮还没结束时是“常态轮次尚未完全结束”。
 func (e *Executor) FreezeForFork(ctx context.Context, agentID uuid.UUID) error {
-	free, err := e.reserveMaintenance(ctx, agentID)
-	if err != nil {
-		return err
-	}
-	defer free()
-	e.mu.Lock()
-	p := e.procs[agentID]
-	if e.runs[agentID] != nil || p != nil && p.busy {
-		e.mu.Unlock()
-		return errors.New("常态轮次尚未完全结束")
-	}
-	delete(e.procs, agentID)
-	e.mu.Unlock()
-	if p != nil {
-		e.stop(p, stopCause{reason: "fork_snapshot"})
-		select {
-		case <-p.rt.Done():
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-	return nil
+	_, err := e.stopIdle(ctx, agentID, stopForkSnapshot)
+	return err
 }
 
 func (e *Executor) Process(agentID uuid.UUID) executor.ProcessInfo {

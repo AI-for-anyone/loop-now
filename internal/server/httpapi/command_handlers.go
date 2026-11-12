@@ -14,10 +14,14 @@ type agentCommand struct {
 	Description       *string         `json:"description"`
 	PluginID          *string         `json:"pluginId"`
 	PluginDisplayName json.RawMessage `json:"pluginDisplayName"`
+	Usage             *string         `json:"usage"`
+	Available         bool            `json:"available"`
+	UnavailableReason *string         `json:"unavailableReason"`
 }
 
-// listAgentCommands 列出对话页可用的 Pi 命令（plugins/SPEC.md §14）：Agent 上次启动 Pi 时读到的扩展命令、提示模板与技能命令，
-// 按命令来源文件所在的安装目录标出所属插件。不为列命令专门启动 Pi，从没启动过时列表为空。
+// listAgentCommands 列出对话页 "/" 菜单的命令：先是平台内置命令（按运行时与会话状态标出此刻能不能用），
+// 再是 Pi 命令（plugins/SPEC.md §14）：Agent 上次启动 Pi 时读到的扩展命令、提示模板与技能命令，
+// 按命令来源文件所在的安装目录标出所属插件。不为列命令专门启动 Pi，从没启动过时没有 Pi 命令。
 func (s *Server) listAgentCommands(w http.ResponseWriter, r *http.Request) {
 	id, err := pathUUID(r, "agentId")
 	if err != nil {
@@ -32,6 +36,20 @@ func (s *Server) listAgentCommands(w http.ResponseWriter, r *http.Request) {
 		CapturedAt *time.Time     `json:"capturedAt"`
 		Commands   []agentCommand `json:"commands"`
 	}{Commands: []agentCommand{}}
+	platform, err := s.Conv.PlatformCommands(r.Context(), id)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	for _, c := range platform {
+		usage := c.Usage
+		item := agentCommand{Name: c.Name, Source: "platform", PluginDisplayName: json.RawMessage("null"), Usage: &usage, Available: c.Available}
+		if c.UnavailableReason != "" {
+			reason := c.UnavailableReason
+			item.UnavailableReason = &reason
+		}
+		out.Commands = append(out.Commands, item)
+	}
 	if s.PiCommands != nil {
 		cached, err := s.PiCommands(id)
 		if err != nil {
@@ -57,7 +75,7 @@ func (s *Server) listAgentCommands(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			for _, c := range cached.Commands {
-				item := agentCommand{Name: c.Name, Source: "pi", PiSource: c.Source, Description: c.Description, PluginDisplayName: json.RawMessage("null")}
+				item := agentCommand{Name: c.Name, Source: "pi", PiSource: c.Source, Description: c.Description, PluginDisplayName: json.RawMessage("null"), Available: true}
 				if plugin, ok := owner(c.Path); ok {
 					item.PluginID = &plugin
 					if n, ok := names[plugin]; ok {

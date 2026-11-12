@@ -80,3 +80,18 @@ describe('订阅额度（model_rate_limit）', () => {
     expect(buildSteps(null, [entry({ resetsAt: 1794382800000 })])[0].detail).toBe(t.timeline.detail.rateLimit.resetsAt(new Date(1794382800000).toISOString()))
   })
 })
+
+// 平台命令（/new、/reload、/resume）会停掉空闲的进程，旧记录里还有 /export html 用完即停的临时进程。
+describe('平台命令停止进程的原因', () => {
+  it.each([
+    ['session_reset', '重开会话（/new）后停止'],
+    ['console_reload', '重新加载（/reload）时停止'],
+    ['session_resumed', '恢复会话（/resume）后停止'],
+    ['console_export', '导出会话用完后停止'],
+  ] as const)('%s 写成“%s”', (reason, wording) => {
+    const [step] = buildSteps(null, [{ type: 'pi_stopped', at: at(0), pid: 100, reason, uptimeMs: 60_000, runtime: 'pi' }])
+    expect(step.label).toBe('Pi 进程停止')
+    expect(step.detail).toContain(wording)
+    expect(step.detail).not.toContain(reason)
+  })
+})

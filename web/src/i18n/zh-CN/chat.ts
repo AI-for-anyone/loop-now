@@ -75,8 +75,13 @@ export const chat = {
     loading: '正在读取命令…',
     failed: (reason: string) => `读不到命令列表：${reason}`,
     notCaptured: 'Agent 运行一次后才有命令列表。',
-    none: 'Pi 没有可用的命令。',
     noMatch: '没有匹配的命令。',
+    // 菜单下方置灰的命令：此刻不能用，各写明原因。
+    unavailable: {
+      title: '现在不能用',
+      onlyBlocked: '匹配的命令现在都不能用，回车会照原文发出',
+      reasons: { runtime_unsupported: '这个 Agent 用 Claude Code 运行，没有 Pi 会话', session_none: '还没有会话，先发一条消息', session_missing: '会话文件丢失，先 /new 或 /resume' },
+    },
     source: { extension: '扩展命令', prompt: '提示模板', skill: '技能' } as Record<string, string>,
     plugin: (name: string) => `插件 · ${name}`,
     keys: '↑↓ 选择 · Enter 或 Tab 补全 · Esc 关闭',
@@ -97,11 +102,20 @@ export const chat = {
     processState: { stopped: '已停止', starting: '启动中', idle: '空闲', busy: '忙碌' } satisfies Record<S['ProcessState'], string>,
     session: (session: S['ConsoleSessionStatus']) => `会话 ${{ none: '无会话', active: '活动', missing: '丢失' }[session.status.session.state]} · epoch ${session.status.session.epoch} · 模型 ${session.model.provider}/${session.model.modelId} · 思考 ${session.thinkingLevel} · 进程 ${{ stopped: '已停止', starting: '启动中', idle: '空闲', busy: '忙碌' }[session.status.processState]} · 排队 ${session.status.queued.normal + session.status.queued.interrupt}`,
     compact: (before: number, after: number) => `上下文已压缩：${before} → 约 ${after} tokens`,
+    // Pi 没有压缩但正常完成的几种情况。
+    compactSkipped: {
+      too_small: '会话内容太少，不用压缩',
+      already_compacted: '上次压缩之后还没有新内容，不用再压缩',
+      cancelled_by_extension: '这次压缩被扩展取消了',
+    } satisfies Record<NonNullable<S['RunCompaction']['skipReason']>, string>,
     reloaded: '已停止旧进程，下一条消息将重新加载',
     reloadNotNeeded: '没有运行中的进程，无需重载',
     newSession: (epoch: number) => `已重开会话（epoch ${epoch}），页面历史仍保留`,
     copied: '已复制最近一条成功回复',
     nothingToCopy: '没有可复制的回复',
+    // /copy 的内容没能写进剪贴板时，在结果那一行给出手动复制的办法。
+    copyManual: '浏览器没有允许控制台写入剪贴板。内容在下面：点“复制”再试一次，或者选中后自己复制。',
+    copyManualLabel: '要复制的内容',
     exported: (format: string) => `已下载 ${format} 会话导出文件`,
     newConfirmTitle: '确认重开会话？',
     newConfirmBody: '重开后 Agent 不再记得之前的对话内容，这个操作不能撤销；页面上的历史记录仍然保留。',

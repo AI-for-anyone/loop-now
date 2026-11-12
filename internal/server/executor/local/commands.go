@@ -1,25 +1,39 @@
 package local
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/execenv"
+	"loop-now/internal/procgroup"
 	"loop-now/internal/server/agentconfig"
 	"loop-now/internal/server/executor"
 	"loop-now/internal/server/executor/local/pirpc"
+	"loop-now/internal/server/preflight"
 )
 
-var errSessionUnavailable = errors.New("当前没有可操作的 Pi 会话")
+// maintenanceErr 把维护操作里可以预期的失败标上 executor 的哨兵错误（原错误仍在链上）。
+func maintenanceErr(err error) error {
+	if errors.Is(err, ErrRuntimeBusy) {
+		return fmt.Errorf("%w：%w", executor.ErrMaintenanceBusy, err)
+	}
+	return err
+}
 
 // compact 在当前真实运行里执行手动压缩，复用中断、事件、用量和会话记录链。
 func (e *Executor) compact(ctx context.Context, p *proc, r *run, req executor.Request, snap agentconfig.Snapshot) executor.Result {
@@ -51,30 +65,35 @@ func (e *Executor) compact(ctx context.Context, p *proc, r *run, req executor.Re
 		return failed(executor.ErrInternal, "会话记录保存失败", snap.ConfigVersion)
 	}
 	res.Outcome = executor.OutcomeCompleted
-	res.Compaction = &executor.CompactionResult{TokensBefore: result.TokensBefore, EstimatedTokensAfter: result.EstimatedTokensAfter}
+	res.Compaction = &executor.CompactionResult{TokensBefore: result.TokensBefore, EstimatedTokensAfter: result.EstimatedTokensAfter, Skipped: result.Skipped}
 	return res
 }
 
-// StopIdle 停止没有执行的空闲运行时；没有进程时成功返回 false。
+// StopIdle 停止没有执行的空闲运行时；没有进程时成功返回 false。reason 是平台命令的停止原因（idleStopReasons）。
 func (e *Executor) StopIdle(ctx context.Context, agentID uuid.UUID, reason string) (bool, error) {
+	if !slices.Contains(idleStopReasons, reason) {
+		return false, fmt.Errorf("未知的停止原因 %q", reason)
+	}
+	return e.stopIdle(ctx, agentID, reason)
+}
+
+// stopIdle 在维护预留下停止 Agent 的空闲进程并等它退出（平台命令与任务分叉共用）。
+func (e *Executor) stopIdle(ctx context.Context, agentID uuid.UUID, reason string) (bool, error) {
 	free, err := e.reserveMaintenance(ctx, agentID)
 	if err != nil {
-		return false, err
+		return false, maintenanceErr(err)
 	}
 	defer free()
 	e.mu.Lock()
 	p := e.procs[agentID]
 	if e.runs[agentID] != nil || p != nil && p.busy {
 		e.mu.Unlock()
-		return false, ErrRuntimeBusy
+		return false, fmt.Errorf("%w：常态轮次尚未完全结束", executor.ErrMaintenanceBusy)
 	}
 	delete(e.procs, agentID)
 	e.mu.Unlock()
 	if p == nil {
 		return false, nil
-	}
-	if reason == "" {
-		reason = "console_command"
 	}
 	e.stop(p, stopCause{reason: reason})
 	select {
@@ -85,14 +104,16 @@ func (e *Executor) StopIdle(ctx context.Context, agentID uuid.UUID, reason strin
 	}
 }
 
-// ExportSession 导出当前 Agent 的受管 Pi 会话。JSONL 直接读取受管文件；HTML 由 Pi 生成到平台指定的临时路径。
-func (e *Executor) ExportSession(ctx context.Context, agentID uuid.UUID, format string) (executor.SessionExport, error) {
+// ExportSession 导出 Agent 的受管 Pi 会话。sessionFile 是数据库记下的当前会话文件，只接受 sessions 目录里的文件。
+// JSONL 直接读会话文件；HTML 用 `pi --export <会话文件> <输出>` 生成（exportHTML）。两者都不需要执行快照与运行准备，
+// 不启动运行时，也不碰存活的空闲进程。
+func (e *Executor) ExportSession(ctx context.Context, agentID uuid.UUID, sessionFile, format string) (executor.SessionExport, error) {
 	if format != "jsonl" && format != "html" {
 		return executor.SessionExport{}, fmt.Errorf("不支持的导出格式 %q", format)
 	}
 	free, err := e.reserveMaintenance(ctx, agentID)
 	if err != nil {
-		return executor.SessionExport{}, err
+		return executor.SessionExport{}, maintenanceErr(err)
 	}
 	defer free()
 	e.mu.Lock()
@@ -100,141 +121,116 @@ func (e *Executor) ExportSession(ctx context.Context, agentID uuid.UUID, format 
 	busy := e.runs[agentID] != nil || p != nil && p.busy
 	e.mu.Unlock()
 	if busy {
-		return executor.SessionExport{}, ErrRuntimeBusy
+		return executor.SessionExport{}, maintenanceErr(ErrRuntimeBusy)
 	}
-
-	snap, err := e.src.ExecutionSnapshot(ctx, agentID)
-	if err != nil {
-		return executor.SessionExport{}, err
-	}
-	if isClaude(snap) {
-		return executor.SessionExport{}, errors.New("当前运行时不支持 Pi 会话导出")
-	}
-	if snap.Session.State != "active" || snap.Session.SessionFile == "" {
-		return executor.SessionExport{}, errSessionUnavailable
+	if sessionFile == "" {
+		return executor.SessionExport{}, executor.ErrNoSession
 	}
 	d := e.dirs(agentID)
-	sessionFile, err := managedSessionFile(d, snap.Session.SessionFile)
+	file, err := managedSessionFile(d, sessionFile)
+	if errors.Is(err, fs.ErrNotExist) {
+		return executor.SessionExport{}, fmt.Errorf("%w：会话文件不存在", executor.ErrNoSession)
+	}
 	if err != nil {
 		return executor.SessionExport{}, err
 	}
 	if format == "jsonl" {
-		data, err := os.ReadFile(sessionFile)
+		data, err := os.ReadFile(file)
 		if err != nil {
 			return executor.SessionExport{}, err
 		}
-		return executor.SessionExport{Filename: filepath.Base(sessionFile), ContentType: "application/x-ndjson", Data: data}, nil
+		return executor.SessionExport{Filename: filepath.Base(file), ContentType: "application/x-ndjson", Data: data}, nil
 	}
-
-	launched := false
-	if p == nil {
-		p, err = e.launch(ctx, snap, quietSink{}, uuid.Nil, "console_export")
-		if err != nil {
-			return executor.SessionExport{}, err
-		}
-		launched = true
-		go e.watch(p)
-	}
-	if launched {
-		defer e.stop(p, stopCause{reason: "console_export"})
-	}
-	output := filepath.Join(d.sessions, ".loop-now-export-"+uuid.Must(uuid.NewV7()).String()+".html")
-	defer os.Remove(output)
-	returned, err := p.client.ExportHTML(ctx, output)
+	data, err := e.exportHTML(ctx, d, file)
 	if err != nil {
 		return executor.SessionExport{}, err
 	}
-	output, err = managedSessionFile(d, output)
-	if err != nil {
-		return executor.SessionExport{}, err
-	}
-	returned, err = managedSessionFile(d, returned)
-	if err != nil || returned != output {
-		return executor.SessionExport{}, errors.New("Pi 返回了不受管的导出路径")
-	}
-	data, err := os.ReadFile(output)
-	if err != nil {
-		return executor.SessionExport{}, err
-	}
-	name := strings.TrimSuffix(filepath.Base(sessionFile), ".jsonl") + ".html"
+	name := strings.TrimSuffix(filepath.Base(file), ".jsonl") + ".html"
 	return executor.SessionExport{Filename: name, ContentType: "text/html; charset=utf-8", Data: data}, nil
 }
 
-// ListSessions 流式读取受管 JSONL 的会话头和用户文字，不获取执行快照或启动 Pi。
+// exportTimeout 是 `pi --export` 的最长用时。
+const exportTimeout = time.Minute
+
+// exportHTML 运行 `pi --offline --export <会话文件> <输出>` 生成 HTML：Pi 只读会话文件、写出页面就退出，不调用模型。
+// 它用 Agent 自己的 HOME、临时目录与 Pi 目录（与运行时相同），只带基础环境，不带凭证、插件与 CLI 的环境变量。
+// 与 RPC 的 export_html 不同，页面里没有当前进程的系统提示词与工具定义（Pi 的 --export 本来如此）。
+func (e *Executor) exportHTML(ctx context.Context, d agentDirs, sessionFile string) ([]byte, error) {
+	if err := os.MkdirAll(d.tmp, 0o700); err != nil {
+		return nil, err
+	}
+	output := filepath.Join(d.tmp, "loop-now-export-"+uuid.Must(uuid.NewV7()).String()+".html")
+	defer os.Remove(output)
+	ctx, cancel := context.WithTimeout(ctx, exportTimeout)
+	defer cancel()
+	cmd := preflight.PiCommand(e.o.NodeBin, e.o.PiBin, "--offline", "--export", sessionFile, output)
+	cmd.Env = e.exportEnv(d)
+	cmd.Dir = d.tmp
+	var stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = io.Discard, &limitedBuffer{b: &stderr, max: 4 << 10}
+	procgroup.Configure(cmd)
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("启动 pi --export 失败：%w", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			return nil, fmt.Errorf("pi --export 失败：%v %s", err, strings.TrimSpace(stderr.String()))
+		}
+	case <-ctx.Done():
+		_ = procgroup.Kill(cmd.Process.Pid)
+		<-done
+		return nil, fmt.Errorf("pi --export 没有完成：%w", ctx.Err())
+	}
+	return os.ReadFile(output)
+}
+
+// exportEnv 是 `pi --export` 的环境：透传变量、基础环境与 Agent 的目录。
+func (e *Executor) exportEnv(d agentDirs) []string {
+	vars := map[string]string{}
+	for _, name := range e.o.Passthrough {
+		if v := e.o.Getenv(name); v != "" && !executor.IsReservedEnv(name) && !e.modelSecretEnv(name) {
+			vars[name] = v
+		}
+	}
+	for _, kv := range execenv.Base(d.home, d.tmp) {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			vars[k] = v
+		}
+	}
+	for k, v := range map[string]string{"HOME": d.home, "TMPDIR": d.tmp, "PI_CODING_AGENT_DIR": d.pi, "PI_OFFLINE": "1",
+		"USER": e.o.Username, "LOGNAME": e.o.Username, "PATH": e.o.ExecBasePath} {
+		vars[k] = v
+	}
+	out := make([]string, 0, len(vars))
+	for _, k := range slices.Sorted(maps.Keys(vars)) {
+		out = append(out, k+"="+vars[k])
+	}
+	return out
+}
+
+// limitedBuffer 只留前 max 个字节。
+type limitedBuffer struct {
+	b   *bytes.Buffer
+	max int
+}
+
+func (l *limitedBuffer) Write(p []byte) (int, error) {
+	if room := l.max - l.b.Len(); room > 0 {
+		l.b.Write(p[:min(len(p), room)])
+	}
+	return len(p), nil
+}
+
+// ListSessions 列出 sessions 目录里的有效 Pi 会话（头一行是 {"type":"session","id":…}），带第一条与最后一条普通用户文字。
+// 只读文件，不获取执行快照、不启动 Pi，也不需要 Agent 空闲。标题只向前读、预览只从末尾往回读，各读一段（sessionTextWindow），
+// 按文件的大小与修改时间缓存，长会话不会每次整份解码。ID 重复的会话都不列出（无法确定恢复哪一个）。
 func (e *Executor) ListSessions(ctx context.Context, agentID uuid.UUID, currentFile string) ([]executor.ManagedSession, error) {
-	free, err := e.reserveMaintenance(ctx, agentID)
+	out, err := e.scanSessions(ctx, agentID, currentFile, true)
 	if err != nil {
 		return nil, err
-	}
-	defer free()
-	e.mu.Lock()
-	busy := e.runs[agentID] != nil || e.procs[agentID] != nil && e.procs[agentID].busy
-	e.mu.Unlock()
-	if busy {
-		return nil, ErrRuntimeBusy
-	}
-	d := e.dirs(agentID)
-	entries, err := os.ReadDir(d.sessions)
-	if errors.Is(err, os.ErrNotExist) {
-		return []executor.ManagedSession{}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	current := ""
-	if currentFile != "" {
-		current, _ = managedSessionFile(d, currentFile)
-	}
-	out := make([]executor.ManagedSession, 0, len(entries))
-	seen := make(map[string]int)
-	duplicates := make(map[string]bool)
-	for _, entry := range entries {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		if filepath.Ext(entry.Name()) != ".jsonl" {
-			continue
-		}
-		path, err := managedSessionFile(d, filepath.Join(d.sessions, entry.Name()))
-		if err != nil {
-			continue
-		}
-		file, err := os.Open(path)
-		if err != nil {
-			continue
-		}
-		var header struct {
-			Type string `json:"type"`
-			ID   string `json:"id"`
-		}
-		decoder := json.NewDecoder(file)
-		err = decoder.Decode(&header)
-		title, preview := "", ""
-		if err == nil && header.Type == "session" && header.ID != "" {
-			title, preview = readSessionUserText(decoder)
-		}
-		_ = file.Close()
-		if err != nil || header.Type != "session" || header.ID == "" {
-			continue
-		}
-		info, err := os.Stat(path)
-		if err != nil {
-			continue
-		}
-		if _, exists := seen[header.ID]; exists {
-			duplicates[header.ID] = true
-		}
-		seen[header.ID] = len(out)
-		out = append(out, executor.ManagedSession{ID: header.ID, Path: path, Title: title, Preview: preview, UpdatedAt: info.ModTime(), Current: path == current})
-	}
-	if len(duplicates) > 0 {
-		valid := out[:0]
-		for _, sess := range out {
-			if !duplicates[sess.ID] {
-				valid = append(valid, sess)
-			}
-		}
-		out = valid
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if !out[i].UpdatedAt.Equal(out[j].UpdatedAt) {
@@ -248,31 +244,165 @@ func (e *Executor) ListSessions(ctx context.Context, agentID uuid.UUID, currentF
 	return out, nil
 }
 
-// readSessionUserText 保留第一条和最后一条普通用户文字；尾部损坏不丢弃已读到的元数据。
-func readSessionUserText(decoder *json.Decoder) (title, preview string) {
-	for {
-		var record struct {
-			Type    string `json:"type"`
-			Message struct {
-				Role    string          `json:"role"`
-				Content json.RawMessage `json:"content"`
-			} `json:"message"`
-		}
-		if err := decoder.Decode(&record); err != nil {
-			return title, preview
-		}
-		if record.Type != "message" || record.Message.Role != "user" {
-			continue
-		}
-		text := sessionMessageText(record.Message.Content)
-		if text == "" || strings.HasPrefix(text, "/") {
-			continue
-		}
-		if title == "" {
-			title = truncateSessionText(text, 80)
-		}
-		preview = truncateSessionText(text, 160)
+// ResolveSession 按完整会话 ID 找到 sessions 目录里的会话，只读各文件的头一行；找不到或 ID 重复时返回 nil。
+func (e *Executor) ResolveSession(ctx context.Context, agentID uuid.UUID, sessionID, currentFile string) (*executor.ManagedSession, error) {
+	all, err := e.scanSessions(ctx, agentID, currentFile, false)
+	if err != nil {
+		return nil, err
 	}
+	for i := range all {
+		if all[i].ID == sessionID {
+			return &all[i], nil
+		}
+	}
+	return nil, nil
+}
+
+// sessionMeta 是一个会话文件的 ID 与用户文字摘要；size 与 mod 变了就重新读。
+type sessionMeta struct {
+	size           int64
+	mod            time.Time
+	id             string
+	withText       bool
+	title, preview string
+}
+
+// sessionTextWindow 是找标题（向前）与预览（从末尾往回）时各读的最多字节数。
+const sessionTextWindow = 1 << 20
+
+// scanSessions 读 sessions 目录里每个 .jsonl 的头一行（withText 时再读标题与预览），去掉无效与 ID 重复的会话。
+func (e *Executor) scanSessions(ctx context.Context, agentID uuid.UUID, currentFile string, withText bool) ([]executor.ManagedSession, error) {
+	d := e.dirs(agentID)
+	entries, err := os.ReadDir(d.sessions)
+	if errors.Is(err, os.ErrNotExist) {
+		return []executor.ManagedSession{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	current := ""
+	if currentFile != "" {
+		current, _ = managedSessionFile(d, currentFile)
+	}
+	out := make([]executor.ManagedSession, 0, len(entries))
+	seen := make(map[string]bool)
+	duplicates := make(map[string]bool)
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if filepath.Ext(entry.Name()) != ".jsonl" {
+			continue
+		}
+		path, err := managedSessionFile(d, filepath.Join(d.sessions, entry.Name()))
+		if err != nil {
+			continue
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		meta, ok := e.sessionMeta(path, info, withText)
+		if !ok {
+			continue
+		}
+		if seen[meta.id] {
+			duplicates[meta.id] = true
+		}
+		seen[meta.id] = true
+		out = append(out, executor.ManagedSession{ID: meta.id, Path: path, Title: meta.title, Preview: meta.preview, UpdatedAt: info.ModTime(), Current: path == current})
+	}
+	return slices.DeleteFunc(out, func(m executor.ManagedSession) bool { return duplicates[m.ID] }), nil
+}
+
+// sessionMeta 返回会话文件的 ID 与（withText 时）标题与预览，文件没变时用缓存；不是有效会话时 ok 为 false。
+func (e *Executor) sessionMeta(path string, info os.FileInfo, withText bool) (sessionMeta, bool) {
+	if v, ok := e.sessionCache.Load(path); ok {
+		m := v.(sessionMeta)
+		if m.size == info.Size() && m.mod.Equal(info.ModTime()) && (m.withText || !withText) {
+			return m, m.id != ""
+		}
+	}
+	m := sessionMeta{size: info.Size(), mod: info.ModTime(), withText: withText}
+	file, err := os.Open(path)
+	if err != nil {
+		return m, false
+	}
+	defer file.Close()
+	reader := bufio.NewReaderSize(io.LimitReader(file, sessionTextWindow), 64<<10)
+	head, err := reader.ReadBytes('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return m, false
+	}
+	var header struct {
+		Type string `json:"type"`
+		ID   string `json:"id"`
+	}
+	if json.Unmarshal(head, &header) != nil || header.Type != "session" || header.ID == "" {
+		e.sessionCache.Store(path, m) // 无效的也缓存，文件没变就不再读
+		return m, false
+	}
+	m.id = header.ID
+	if withText {
+		m.title = firstUserText(reader)
+		m.preview = lastUserText(file, info.Size())
+	}
+	e.sessionCache.Store(path, m)
+	return m, true
+}
+
+// firstUserText 顺序读记录，返回第一条普通用户文字（截到 80 字）；读完窗口或遇到损坏的行就停。
+func firstUserText(r *bufio.Reader) string {
+	for {
+		line, err := r.ReadBytes('\n')
+		if text := sessionLineUserText(line); text != "" {
+			return truncateSessionText(text, 80)
+		}
+		if err != nil {
+			return ""
+		}
+	}
+}
+
+// lastUserText 从文件末尾往回读一段，返回其中最后一条普通用户文字（截到 160 字）。窗口开头的半行丢掉。
+func lastUserText(f *os.File, size int64) string {
+	start := max(0, size-sessionTextWindow)
+	buf := make([]byte, size-start)
+	if _, err := f.ReadAt(buf, start); err != nil && !errors.Is(err, io.EOF) {
+		return ""
+	}
+	lines := bytes.Split(buf, []byte{'\n'})
+	if start > 0 && len(lines) > 0 {
+		lines = lines[1:]
+	}
+	for i := len(lines) - 1; i >= 0; i-- {
+		if text := sessionLineUserText(lines[i]); text != "" {
+			return truncateSessionText(text, 160)
+		}
+	}
+	return ""
+}
+
+// sessionLineUserText 返回一行记录里的普通用户文字（不是用户消息、以 "/" 开头的命令或无法解析时为空）。
+func sessionLineUserText(line []byte) string {
+	if !bytes.Contains(line, []byte(`"user"`)) {
+		return "" // 大多数行是助手消息与工具结果，不必解码
+	}
+	var record struct {
+		Type    string `json:"type"`
+		Message struct {
+			Role    string          `json:"role"`
+			Content json.RawMessage `json:"content"`
+		} `json:"message"`
+	}
+	if json.Unmarshal(line, &record) != nil || record.Type != "message" || record.Message.Role != "user" {
+		return ""
+	}
+	text := sessionMessageText(record.Message.Content)
+	if strings.HasPrefix(text, "/") {
+		return ""
+	}
+	return text
 }
 
 func sessionMessageText(content json.RawMessage) string {
@@ -338,13 +468,6 @@ func managedSessionFile(d agentDirs, path string) (string, error) {
 	}
 	return resolved, nil
 }
-
-type quietSink struct{}
-
-func (quietSink) Phase(string)                {}
-func (quietSink) Running(int64)               {}
-func (quietSink) TextDelta(string)            {}
-func (quietSink) Tool(string, string, string) {}
 
 // commandsFile 是 Agent 目录里上次启动 Pi 时读到的命令列表（Pi RPC get_commands），供对话页的 "/" 菜单用；
 // 平台不会为了列命令专门拉起 Pi。

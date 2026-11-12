@@ -43,9 +43,11 @@ type Run struct {
 	PiCommandHandled bool
 	// PiCommandNotices 是 Pi 直接处理命令时扩展给出的通知（{"notices":[...],"truncated":bool}），否则为空。
 	PiCommandNotices []byte
-	Tools            []ToolEvent
-	Usage            UsageTotals
-	Model            *ModelRef // 最后一次 assistant 调用的提供方与模型；没有时为空
+	// Compaction 是手动压缩（origin console_compact）的指令与结果（JSON，见 Compaction），否则为空。
+	Compaction []byte
+	Tools      []ToolEvent
+	Usage      UsageTotals
+	Model      *ModelRef // 最后一次 assistant 调用的提供方与模型；没有时为空
 }
 
 // ToolEvent 是一次工具调用的状态记录（不含参数与输出）。
@@ -83,7 +85,7 @@ func runColumnsOf(prefix string) string {
 	return strings.NewReplacer("$.", prefix).Replace(`$.id, $.agent_id, coalesce($.user_message_id, '00000000-0000-0000-0000-000000000000'), $.config_version, $.instance_id, $.priority,
 	coalesce($.when_busy, ''), $.queue_seq, $.status, coalesce($.phase, ''), coalesce($.end_reason, ''), coalesce($.error_code, ''),
 	coalesce($.error_message, ''), $.queued_at, $.started_at, $.running_at, $.abort_requested_at, $.ended_at,
-	$.origin, $.trigger_inbox_message_id, $.wake_sleep_id, $.pi_command, $.pi_command_handled, $.pi_command_notices`)
+	$.origin, $.trigger_inbox_message_id, $.wake_sleep_id, $.pi_command, $.pi_command_handled, $.pi_command_notices, $.compaction`)
 }
 
 var runColumns = runColumnsOf("")
@@ -91,7 +93,7 @@ var runColumns = runColumnsOf("")
 func runFields(r *Run) []any {
 	return []any{&r.ID, &r.AgentID, &r.UserMessageID, &r.ConfigVersion, &r.InstanceID, &r.Priority, &r.WhenBusy, &r.QueueSeq, &r.Status,
 		&r.Phase, &r.EndReason, &r.ErrorCode, &r.ErrorMessage, &r.QueuedAt, &r.StartedAt,
-		&r.RunningAt, &r.AbortRequestedAt, &r.EndedAt, &r.Origin, &r.TriggerInboxID, &r.WakeSleepID, &r.PiCommand, &r.PiCommandHandled, &r.PiCommandNotices}
+		&r.RunningAt, &r.AbortRequestedAt, &r.EndedAt, &r.Origin, &r.TriggerInboxID, &r.WakeSleepID, &r.PiCommand, &r.PiCommandHandled, &r.PiCommandNotices, &r.Compaction}
 }
 
 func scanRun(row db.Scanner) (Run, error) {
@@ -515,6 +517,8 @@ type RunEnd struct {
 	PiCommandHandled bool
 	// PiCommandNotices 是 Pi 直接处理命令时扩展给出的通知（JSON 对象），为空时不记。
 	PiCommandNotices []byte
+	// Compaction 是手动压缩的结果（Outcome 等），并入执行开始时记下的指令；不是手动压缩或没有结果时为空。
+	Compaction *Compaction
 }
 
 // FinishRun 结束一次进行中的执行，写入回复与结束事件。执行已结束时返回 (run, nil, false, nil)，不重复写入。
@@ -545,6 +549,18 @@ func (s *Store) FinishRun(ctx context.Context, runID uuid.UUID, end RunEnd) (Run
 			return err
 		}
 		finished = true
+		if run.Origin == "console_compact" && end.Compaction != nil {
+			merged := ParseCompaction(run.Compaction)
+			merged.Outcome, merged.SkipReason = end.Compaction.Outcome, end.Compaction.SkipReason
+			merged.TokensBefore, merged.EstimatedTokensAfter = end.Compaction.TokensBefore, end.Compaction.EstimatedTokensAfter
+			raw, err := json.Marshal(merged)
+			if err != nil {
+				return err
+			}
+			if err := tx.QueryRow(ctx, `UPDATE runs SET compaction = $2 WHERE id = $1 RETURNING compaction`, run.ID, string(raw)).Scan(&run.Compaction); err != nil {
+				return err
+			}
+		}
 		if run.Origin != "console_compact" {
 			var epoch int
 			if err := tx.QueryRow(ctx, `SELECT epoch FROM agent_sessions WHERE agent_id = $1`, run.AgentID).Scan(&epoch); err != nil {
@@ -676,11 +692,9 @@ func listMessagesTx(ctx context.Context, tx *db.Tx, agentID uuid.UUID, q Message
 	var from int64
 	switch {
 	case q.AroundRun != nil:
-		var anchor int64
-		err := tx.QueryRow(ctx, `SELECT m.seq FROM runs r JOIN conversation_messages m ON m.id = r.user_message_id
-			WHERE r.id = $1 AND r.agent_id = $2`, *q.AroundRun, agentID).Scan(&anchor)
+		anchor, err := aroundRunAnchor(ctx, tx, agentID, *q.AroundRun)
 		if err != nil {
-			return page, notFoundIfNoRows(err, "执行")
+			return page, err
 		}
 		nBefore := (q.Limit - 1) / 2
 		after, err := historyPage(ctx, tx, agentID, `m.seq >= $2 ORDER BY m.seq ASC`, anchor, q.Limit-nBefore+1)
@@ -739,6 +753,29 @@ func listMessagesTx(ctx context.Context, tx *db.Tx, agentID uuid.UUID, q Message
 	var err error
 	page.TurnsBefore, page.TurnsTotal, err = turnCountsTx(ctx, tx, agentID, from)
 	return page, err
+}
+
+// aroundRunAnchor 返回定位取法的分界序号：分界及之后的消息排在定位页的后半，之前的排在前半。
+// 普通执行以它的用户消息为分界。手动压缩（console_compact）没有对话消息，以它开始时的位置为分界：
+// 之前的最后一条消息之后。执行不属于该 Agent 时返回 not_found。
+func aroundRunAnchor(ctx context.Context, q queueQuerier, agentID, runID uuid.UUID) (int64, error) {
+	var origin string
+	var queuedAt time.Time
+	var userSeq *int64
+	err := q.QueryRow(ctx, `SELECT r.origin, r.queued_at, m.seq FROM runs r LEFT JOIN conversation_messages m ON m.id = r.user_message_id
+		WHERE r.id = $1 AND r.agent_id = $2`, runID, agentID).Scan(&origin, &queuedAt, &userSeq)
+	if err != nil {
+		return 0, notFoundIfNoRows(err, "执行")
+	}
+	if userSeq != nil {
+		return *userSeq, nil
+	}
+	if origin != "console_compact" {
+		return 0, apperr.NotFound("执行")
+	}
+	var last int64
+	err = q.QueryRow(ctx, `SELECT coalesce(max(seq), 0) FROM conversation_messages WHERE agent_id = $1 AND created_at <= $2`, agentID, queuedAt).Scan(&last)
+	return last + 1, err
 }
 
 // voidedRunCond 是“排队中即作废、没有真正执行”的执行（撤回、消息全部转为打断、消息已被读取或取消），

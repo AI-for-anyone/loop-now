@@ -1245,7 +1245,7 @@ export interface paths {
         /**
          * 发送消息；Agent 忙时必须选择打断或排队
          * @description 以 `/` 开头且不带图片的消息先匹配平台内置命令 `/session`、`/new`、`/compact [instructions]`、`/reload`、`/copy`、`/export [html|jsonl]`、`/resume [完整ID]`；
-         *     未匹配时交给插件 `console.command`。命令被认领时不作为普通消息保存，返回 200 ConsoleCommandResult；
+         *     未匹配时交给插件 `console.command`。`/compact`、`/export`、`/resume` 只适用于 Pi 会话：Claude Code 的 Agent 发这几个命令返回 409 `console_command_failed`，不产生执行。命令被认领时不作为普通消息保存，返回 200 ConsoleCommandResult；
          *     其余消息经修改类 Hook `message.before_enqueue`，插件可以改写正文。
          *     以 `/pi:<name>` 开头的消息是交给 Pi 的命令（plugins/SPEC.md §14）：不给插件认领，照原文保存与显示，执行时发给 Pi 的是 `/<name>` 加其余原文，
          *     不加运行 ID 与平台通知；带图片时图片照常交给 Pi（Pi 执行扩展命令时不用图片，技能命令与提示模板展开后随提示交给模型）。
@@ -1305,7 +1305,11 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 导出当前受管 Pi 会话 */
+        /**
+         * 导出当前受管 Pi 会话
+         * @description jsonl 是会话文件原样；html 由 Pi 的 `--export` 从会话文件生成（不启动 Pi 运行时，也不动存活的空闲进程），页面里没有系统提示词与工具定义。
+         *     Claude Code 的 Agent 没有 Pi 会话，返回 409 `console_command_failed`；会话文件不在了返回 409 `session_none`。
+         */
         get: operations["exportAgentSession"];
         put?: never;
         post?: never;
@@ -1636,7 +1640,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 异常与失败列表：未正常完成的执行，按结束时间倒序分页，不含已删除的 Agent（含已删除项目中的 Agent）；可按项目或平台筛选 */
+        /**
+         * 异常与失败列表：未正常完成的执行，按结束时间倒序分页，不含已删除的 Agent（含已删除项目中的 Agent）；可按项目或平台筛选
+         * @description 手动压缩（/compact）被人取消或因服务重启中断不算异常，只列出失败的手动压缩；Pi 没有压缩（会话太短、已经压缩过）是正常完成。
+         */
         get: operations["listAnomalies"];
         put?: never;
         post?: never;
@@ -2149,10 +2156,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 对话页 "/" 菜单可用的 Pi 命令
-         * @description Agent 上次启动 Pi 时（Pi RPC get_commands）读到的扩展命令、提示模板与技能命令（plugins/SPEC.md §14）。平台不为列命令专门启动 Pi：
-         *     从没启动过时 capturedAt 为 null、列表为空；授权的插件变了之后，要等 Pi 下次启动才更新。控制台显示与补全时写成 `/pi:<name>`。
-         *     插件平台侧认领的 console.command 是认领型 Hook，没有可列举的命令名，不在这里列出；也没有平台内置命令。
+         * 对话页 "/" 菜单的命令：平台内置命令与 Pi 命令
+         * @description 先是平台内置命令（source 为 platform，固定顺序 session、new、compact、reload、copy、export、resume），按 Agent 的运行时与会话状态标出此刻能不能用
+         *     （available、unavailableReason）；Agent 正忙这类随时变化的情况不在这里判断，发送时照常返回 409。控制台显示与补全时写成 `/<name>`，用法见 usage。
+         *     然后是 Agent 上次启动 Pi 时（Pi RPC get_commands）读到的扩展命令、提示模板与技能命令（plugins/SPEC.md §14）。平台不为列命令专门启动 Pi：
+         *     从没启动过时 capturedAt 为 null、没有 Pi 命令；授权的插件变了之后，要等 Pi 下次启动才更新。控制台显示与补全时写成 `/pi:<name>`。
+         *     插件平台侧认领的 console.command 是认领型 Hook，没有可列举的命令名，不在这里列出。
          */
         get: operations["listAgentCommands"];
         put?: never;
@@ -3994,6 +4003,8 @@ export interface components {
              * @description 本轮有效承接的 sleep；普通历史可省略或为 null
              */
             wakeSleepId?: string | null;
+            /** @description 只在手动压缩（/compact）的执行上有，其余执行省略 */
+            compaction?: components["schemas"]["RunCompaction"];
             /** Format: uuid */
             id: string;
             status: components["schemas"]["RunStatus"];
@@ -4259,10 +4270,11 @@ export interface components {
             /** Format: date-time */
             at: string;
             /**
-             * @description 停止原因；意外退出为 unexpected_exit
+             * @description 停止原因；意外退出为 unexpected_exit。session_reset、console_reload、session_resumed 是平台命令 /new、/reload、/resume 停止空闲进程；
+             *     console_export 是早先的 /export html 为导出临时启动的进程用完后停止（现在导出不启动进程，只出现在旧记录里）。
              * @enum {string}
              */
-            reason: "idle_timeout" | "config_changed" | "evicted" | "released" | "fork_snapshot" | "shutdown" | "abort_timeout" | "unexpected_exit";
+            reason: "idle_timeout" | "config_changed" | "evicted" | "released" | "fork_snapshot" | "shutdown" | "abort_timeout" | "session_reset" | "console_reload" | "session_resumed" | "console_export" | "unexpected_exit";
         };
         AgentOverview: {
             /** Format: uuid */
@@ -4273,7 +4285,7 @@ export interface components {
             name: string;
             model: components["schemas"]["ModelRef"];
             status: components["schemas"]["AgentStatus"];
-            /** @description 最近一次已结束的执行；没有时为 null */
+            /** @description 最近一次已结束的执行；没有时为 null。手动压缩（/compact）不是回复，不算 */
             lastRun: components["schemas"]["Run"] | null;
             /** @description Pi 进程未运行时，上次停止或意外退出；进程存活或从未退出时为 null */
             lastProcessExit: components["schemas"]["ProcessExit"] | null;
@@ -4406,7 +4418,7 @@ export interface components {
             total: number;
         };
         /**
-         * @description 按触发执行的来源分的 token。常态执行按 runs.origin：console（你发的消息）、inbox_reminder（Inbox 提醒）、sleep_wake（定时唤醒）；
+         * @description 按触发执行的来源分的 token。常态执行按 runs.origin：console（你发的消息，以及控制台 /compact 的手动压缩）、inbox_reminder（Inbox 提醒）、sleep_wake（定时唤醒）；
          *     任务轮次按其 origin：console_node 计入 console，inbox_reminder 计入 inboxReminder，sleep_wake 计入 sleepWake，task_node 计入 task；
          *     不属于任何执行的用量（例如两轮之间的缓存预热）计入 other。五项之和等于 tokens.totals.total。
          */
@@ -4766,8 +4778,11 @@ export interface components {
             /** Format: date-time */
             at: string;
             pid: number;
-            /** @enum {string} */
-            reason: "idle_timeout" | "config_changed" | "evicted" | "released" | "fork_snapshot" | "shutdown" | "abort_timeout";
+            /**
+             * @description 含义同 ProcessExit.reason
+             * @enum {string}
+             */
+            reason: "idle_timeout" | "config_changed" | "evicted" | "released" | "fork_snapshot" | "shutdown" | "abort_timeout" | "session_reset" | "console_reload" | "session_resumed" | "console_export";
             uptimeMs: number;
             /** @description 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。 */
             runtime?: components["schemas"]["AgentRuntime"];
@@ -7268,7 +7283,7 @@ export interface components {
         AgentCommandList: {
             /**
              * Format: date-time
-             * @description 读到这份列表的时间（Pi 启动时）；从没启动过为 null
+             * @description 读到 Pi 命令的时间（Pi 启动时）；从没启动过为 null
              */
             capturedAt: string | null;
             commands: components["schemas"]["AgentCommand"][];
@@ -7277,14 +7292,24 @@ export interface components {
             /** @description 命令名，不带 "/"；技能命令为 skill:<名称> */
             name: string;
             /**
-             * @description 目前只有 pi（交给 Pi 执行，发送时写成 /pi:<name>）
+             * @description platform 平台内置命令（发送时写成 /<name>）；pi 交给 Pi 执行（发送时写成 /pi:<name>）
              * @enum {string}
              */
-            source: "pi";
-            /** @description Pi 给的来源（原样）：extension 扩展命令、prompt 提示模板、skill 技能命令 */
+            source: "platform" | "pi";
+            /** @description Pi 给的来源（原样）：extension 扩展命令、prompt 提示模板、skill 技能命令；平台命令为空字符串 */
             piSource: string;
-            /** @description 命令自己的说明（扩展原文，按纯文本显示） */
+            /** @description 命令自己的说明（扩展原文，按纯文本显示）；平台命令为 null，由控制台按命令名显示说明 */
             description: string | null;
+            /** @description 平台命令的用法，例如 `/compact [instructions]`；Pi 命令为 null */
+            usage: string | null;
+            /** @description 此刻能不能用（只看运行时与会话状态）；Pi 命令恒为 true */
+            available: boolean;
+            /**
+             * @description 不能用的原因：runtime_unsupported 运行时不支持（Claude Code 的 Agent 没有 Pi 会话，不能 /compact、/export、/resume）；
+             *     session_none 还没有会话（/compact、/export）；session_missing 会话文件丢失（/compact、/export，先 /new 或 /resume）。能用时为 null
+             * @enum {string|null}
+             */
+            unavailableReason: "runtime_unsupported" | "session_none" | "session_missing" | null;
             /** @description 命令来自哪个已安装插件（按来源文件所在的安装目录）；平台自己的或判断不出时为 null */
             pluginId: string | null;
             pluginDisplayName: components["schemas"]["LocalizedText"] | null;
@@ -7558,6 +7583,37 @@ export interface components {
             status: components["schemas"]["AgentStatus"];
             model: components["schemas"]["ModelRef"];
             thinkingLevel: string;
+            /** @description 最近一次手动压缩（/compact）的执行，任何状态；没有时为 null。发起压缩的请求断开（刷新页面、代理超时）后从这里读结果 */
+            lastCompaction: components["schemas"]["Run"] | null;
+        };
+        /**
+         * @description 手动压缩（/compact）的指令与结果，随执行保存。执行的状态：completed 是正常完成（outcome 为 compacted 或 skipped）；
+         *     interrupted 是被人取消（停止或打断）或服务重启中断；failed 是压缩出错（Pi 报错、进程退出等），errorMessage 是原因。
+         *     这种执行没有对话消息，不算对话轮次，不进概览的“上一条回复”。
+         */
+        RunCompaction: {
+            /** @description 压缩时附带的指令（/compact 之后的文字）；没有时为空字符串 */
+            instructions: string;
+            /**
+             * @description compacted 已压缩；skipped 没有压缩但正常完成（原因见 skipReason）；执行结束前、被取消或失败时为 null
+             * @enum {string|null}
+             */
+            outcome: "compacted" | "skipped" | null;
+            /**
+             * @description too_small 会话内容太少、不需要压缩；already_compacted 上次压缩之后还没有新内容；cancelled_by_extension 扩展取消了这次压缩。outcome 不是 skipped 时为 null
+             * @enum {string|null}
+             */
+            skipReason: "too_small" | "already_compacted" | "cancelled_by_extension" | null;
+            /**
+             * Format: int64
+             * @description 压缩前的上下文 token；只在 compacted 时有值
+             */
+            tokensBefore: number | null;
+            /**
+             * Format: int64
+             * @description Pi 估算的压缩后上下文 token；只在 compacted 时有值
+             */
+            estimatedTokensAfter: number | null;
         };
         ConsoleResumeSession: {
             /** @description Pi 会话头中的完整会话 ID */
@@ -7582,7 +7638,7 @@ export interface components {
             /** @description 平台命令名；插件命令为空字符串 */
             command: string;
             session?: components["schemas"]["ConsoleSessionStatus"] | null;
-            /** @description /copy 待复制的最近成功回复；没有时为 null */
+            /** @description /copy 待复制的最近一条有文字的成功回复（没有文字的回复，例如 Pi 直接处理的 /pi 命令，跳过）；没有时为 null */
             copyText?: string | null;
             /** @enum {string|null} */
             exportFormat?: "html" | "jsonl" | null;
@@ -7592,9 +7648,20 @@ export interface components {
             /** @description /resume 的可恢复会话；按文件修改时间倒序，不含本机路径 */
             resumeSessions?: components["schemas"]["ConsoleResumeSession"][] | null;
             resumedSession?: components["schemas"]["SessionInfo"] | null;
-            /** Format: int64 */
+            /**
+             * @description /compact 正常完成后的执行（compaction 里是指令与结果，Pi 没有压缩时 outcome 为 skipped）；其他命令省略。
+             *     压缩被取消或失败时命令返回 409 console_command_failed，没有这个字段
+             */
+            compactRun?: components["schemas"]["Run"];
+            /**
+             * Format: int64
+             * @description /compact 实际压缩时压缩前的上下文 token，同 compactRun.compaction.tokensBefore；其余为 null
+             */
             tokensBefore?: number | null;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 同 compactRun.compaction.estimatedTokensAfter；其余为 null
+             */
             estimatedTokensAfter?: number | null;
         };
         /** @description 参与方；agent 带 id 与地址，external 带 id 与 @名称，plugin（插件令牌，只出现在 folder.changed 的 by）带 plugin:<id> 地址，console 与 platform 只有 kind 与控制台地址。 */
@@ -11540,7 +11607,10 @@ export interface operations {
                 before?: string;
                 /** @description 返回这条消息之后更新的消息 */
                 after?: string;
-                /** @description 返回包含该执行的一页：以它的用户消息为中心，前后各取一部分；执行不属于该 Agent 时返回 404 */
+                /**
+                 * @description 返回包含该执行的一页：以它的用户消息为中心，前后各取一部分；执行不属于该 Agent 时返回 404。
+                 *     手动压缩（/compact）的执行没有对话消息，以它开始时的位置为中心：之前的最后一条消息之后。
+                 */
                 aroundRun?: string;
                 limit?: number;
             };

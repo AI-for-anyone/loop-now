@@ -16,6 +16,17 @@ type ConsoleSessionStatus struct {
 	Status        AgentStatus `json:"status"`
 	Model         ModelRef    `json:"model"`
 	ThinkingLevel string      `json:"thinkingLevel"`
+	// LastCompaction 是最近一次手动压缩的执行（任何状态），没有时为 null；发起压缩的请求断开后从这里读结果。
+	LastCompaction *Run `json:"lastCompaction"`
+}
+
+// RunCompaction 是手动压缩（/compact）的指令与结果。Outcome 在执行结束前、失败或被取消时为 null。
+type RunCompaction struct {
+	Instructions         string  `json:"instructions"`
+	Outcome              *string `json:"outcome"`
+	SkipReason           *string `json:"skipReason"`
+	TokensBefore         *int64  `json:"tokensBefore"`
+	EstimatedTokensAfter *int64  `json:"estimatedTokensAfter"`
 }
 
 // ConsoleCommandResult 是平台或插件认领的控制台命令结果。
@@ -27,6 +38,7 @@ type ConsoleCommandResult struct {
 	ResetSession         *SessionInfo           `json:"resetSession"`
 	ResumeSessions       []ConsoleResumeSession `json:"resumeSessions"`
 	ResumedSession       *SessionInfo           `json:"resumedSession"`
+	CompactRun           *Run                   `json:"compactRun,omitempty"`
 	TokensBefore         *int64                 `json:"tokensBefore"`
 	EstimatedTokensAfter *int64                 `json:"estimatedTokensAfter"`
 	Reply                *string                `json:"reply"`
