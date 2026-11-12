@@ -15,10 +15,13 @@ function history(agentId: string) {
     const run = makeRun({ queuedAt: time, startedAt: time, runningAt: time, endedAt: time })
     messages.push(makeMessage({ text: `问题 ${i}`, createdAt: time, run }), makeMessage({ role: 'assistant', text: `回答 ${i}`, createdAt: time, run }))
   }
+  // 每轮两条消息：这一页之前的轮次数是完整排在它前面的轮次（一轮被页边界切开时，这一轮算在这一页）。
   const page = (start: number, end: number): Schemas['MessagePage'] => ({
     messages: messages.slice(start, end),
     hasMore: start > 0,
     hasMoreAfter: end < messages.length,
+    turnsBefore: Math.floor(start / 2),
+    turnsTotal: messages.length / 2,
   })
   const handler = http.get(apiUrl(`/agents/${agentId}/messages`), ({ request }) => {
     const params = new URL(request.url).searchParams
@@ -63,6 +66,18 @@ async function openLocated(index: number) {
 }
 
 describe('从概览定位到回复', () => {
+  it('定位时照常编号（用这一页之前的轮次数）；还没加载到最新时，尺子底部的总数用接口给的总轮数', async () => {
+    await openLocated(40)
+    // 第 n 轮写的是“问题 n-1”“回答 n-1”。这一页从一轮的中间开始（第一块只有回复）、到一轮的中间结束，编号照样对得上。
+    const blocks = [...document.querySelectorAll<HTMLElement>('[data-run-id]')]
+    expect(blocks.length).toBeLessThan(150)
+    for (const block of [blocks[0], blocks[blocks.length - 1]]) {
+      const index = Number(/(?:问题|回答) (\d+)/.exec(block.textContent ?? '')![1])
+      expect(block.querySelector('[data-turn-number]')).toHaveTextContent(String(index + 1))
+    }
+    expect(screen.getByRole('navigation', { name: '对话轮次' }).querySelector('[data-ruler-total]')).toHaveTextContent('150')
+  })
+
   it('定位到很早的回复：显示它并展开运行记录；向下能连续加载到最新消息，没有重复或缺失', async () => {
     const { data, target } = await openLocated(20)
     const turn = located()!

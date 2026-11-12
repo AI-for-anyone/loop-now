@@ -2,7 +2,7 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
-import { apiUrl, makeMessage, makeRun, makeStatus } from '@/test/api'
+import { apiUrl, makeMessage, makeMessagePage, makeRun, makeStatus } from '@/test/api'
 import { renderChat } from '@/test/chat'
 
 // 历史请求进行中（首次加载、加载更早的消息、快照触发的重新获取）时到达的事件与发送结果不能丢。
@@ -43,9 +43,9 @@ describe('历史请求进行中到达的事件', () => {
     const { emit } = await renderChat({
       handlers: [
         http.get(apiUrl('/agents/:agentId/messages'), async ({ request }) => {
-          if (!new URL(request.url).searchParams.get('before')) return HttpResponse.json({ messages: [question], hasMore: true })
+          if (!new URL(request.url).searchParams.get('before')) return HttpResponse.json(makeMessagePage([question], { hasMore: true, turnsBefore: 1, turnsTotal: 2 }))
           await gate.promise
-          return HttpResponse.json({ messages: turn('旧问题', '旧回答'), hasMore: false })
+          return HttpResponse.json(makeMessagePage(turn('旧问题', '旧回答'), { turnsTotal: 2 }))
         }),
       ],
     })
@@ -69,7 +69,7 @@ describe('历史请求进行中到达的事件', () => {
           calls += 1
           // 重新获取在执行结束之前读取了历史，到达时却晚于结束事件。
           if (calls > 1) await gate.promise
-          return HttpResponse.json({ messages: [question], hasMore: false })
+          return HttpResponse.json(makeMessagePage([question]))
         }),
       ],
     })
@@ -90,7 +90,7 @@ describe('历史请求进行中到达的事件', () => {
       handlers: [
         http.get(apiUrl('/agents/:agentId/messages'), async () => {
           await gate.promise
-          return HttpResponse.json({ messages: [question], hasMore: false })
+          return HttpResponse.json(makeMessagePage([question]))
         }),
       ],
     })
@@ -116,9 +116,9 @@ describe('历史请求进行中到达的事件', () => {
           if (calls === 1) {
             // 首次加载在执行结束之前读取；执行在快照之前结束，事件流不会再发结束事件。
             await gate.promise
-            return HttpResponse.json({ messages: [question], hasMore: false })
+            return HttpResponse.json(makeMessagePage([question]))
           }
-          return HttpResponse.json({ messages: [{ ...question, run: ended }, reply], hasMore: false })
+          return HttpResponse.json(makeMessagePage([{ ...question, run: ended }, reply]))
         }),
       ],
     })
@@ -139,7 +139,7 @@ describe('历史请求进行中到达的事件', () => {
         http.get(apiUrl('/agents/:agentId/messages'), async () => {
           calls += 1
           if (calls > 1) await gate.promise
-          return HttpResponse.json({ messages: turn('之前的问题', '之前的回答'), hasMore: false })
+          return HttpResponse.json(makeMessagePage(turn('之前的问题', '之前的回答')))
         }),
         http.post(apiUrl('/agents/:agentId/messages'), async ({ request }) => {
           const body = (await request.json()) as Schemas['SendMessageInput']
@@ -173,12 +173,12 @@ describe('加载更早的消息与重新获取', () => {
         http.get(apiUrl('/agents/:agentId/messages'), async ({ request }) => {
           if (new URL(request.url).searchParams.get('before')) {
             olderCalls += 1
-            return HttpResponse.json({ messages: turn('更早的问题', '更早的回答'), hasMore: false })
+            return HttpResponse.json(makeMessagePage(turn('更早的问题', '更早的回答'), { turnsTotal: 3 }))
           }
           calls += 1
-          if (calls === 1) return HttpResponse.json({ messages: first, hasMore: true })
+          if (calls === 1) return HttpResponse.json(makeMessagePage(first, { hasMore: true, turnsBefore: 1, turnsTotal: 2 }))
           await gate.promise
-          return HttpResponse.json({ messages: [...first, ...missed], hasMore: true })
+          return HttpResponse.json(makeMessagePage([...first, ...missed], { hasMore: true, turnsBefore: 1, turnsTotal: 3 }))
         }),
       ],
     })

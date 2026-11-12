@@ -10981,8 +10981,12 @@ components:
     Message: {"type":"object","required":["id","role","origin","text","createdAt","sessionEpoch","run"],"additionalProperties":false,"properties":{"id":{"type":"string","format":"uuid"},"role":{"$ref":"#/components/schemas/MessageRole"},"origin":{"description":"取自所属执行，用户消息与对应的回复相同。平台提醒那一轮的用户消息正文是开始执行时生成的提醒文字","$ref":"#/components/schemas/MessageOrigin"},"text":{"type":"string"},"createdAt":{"type":"string","format":"date-time"},"sessionEpoch":{"type":"integer","minimum":1},"run":{"description":"该消息所属的执行；用户消息与对应回复带同一个执行","$ref":"#/components/schemas/Run"},"images":{"type":"array","items":{"$ref":"#/components/schemas/MessageImage"}}}}
     MessagePage:
       type: object
-      required: [messages, hasMore, hasMoreAfter]
+      required: [messages, hasMore, hasMoreAfter, turnsBefore, turnsTotal]
       additionalProperties: false
+      description: |
+        一页对话历史与轮次计数。轮次的口径与控制台对话流一致：一次执行算一轮；排队中的、排队中即作废没有真正执行的
+        （endReason 为 user_cancelled、merged_into_interrupt、no_pending_messages）不算；会话重开不重新计数，编号在整个对话里连续；
+        轮次按实际开始执行的时间排列，没有开始时间的按入队时间。消息与计数取自同一时刻的数据。
       properties:
         messages:
           type: array
@@ -10993,6 +10997,22 @@ components:
         hasMoreAfter:
           description: 这一页之后还有更新的消息；取最新一页时恒为 false
           type: boolean
+        turnsBefore:
+          description: |
+            排在这一页的轮次之前的轮次数，即从这一页起向后的消息（这一页及之后各页）所属的轮次中排在最前的一轮在整个对话里的下标（从 0 起）。
+            等于已经结束、全部消息（用户消息与回复）都早于这一页第一条消息的轮次数；进行中的一轮不计入。
+            从最新一页起向更早翻页时，用已加载的最早一页的 turnsBefore 加上轮次在已加载历史中的位置，就是它在整个对话里的下标。
+            定位取法（aroundRun）向后加载到最新之后同样成立；还没有加载到最新时，若有一轮在已加载范围里没有消息、却排在其中某一轮之前
+            （打断消息发在已加载范围之后却先于其中排队的消息执行，或一轮在整个已加载范围期间都在进行、回复在之后），其后的编号会偏小，加载到那一轮的消息后恢复。
+            这一页没有消息时按它本该开始的位置计算：before 之前没有消息时为 0。
+          type: integer
+          format: int64
+          minimum: 0
+        turnsTotal:
+          description: 查询时这个 Agent 的对话一共有多少轮（含进行中的一轮）
+          type: integer
+          format: int64
+          minimum: 0
 
     SendMessageInput: {"type":"object","required":["text"],"additionalProperties":false,"properties":{"text":{"type":"string"},"whenBusy":{"$ref":"#/components/schemas/WhenBusy"},"imageIds":{"type":"array","uniqueItems":true,"items":{"type":"string","format":"uuid"},"description":"先在当前会话上传的图片ID；不得跨Agent/任务/节点复用。纯图片text传空字符串，数量上限取context.limits。"}},"allOf":[{"anyOf":[{"properties":{"text":{"pattern":"\\S"}}},{"required":["imageIds"],"properties":{"imageIds":{"minItems":1}}}]}]}
     SendMessageResult:

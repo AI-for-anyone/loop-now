@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -330,13 +331,17 @@ func TestMessagesPaging(t *testing.T) {
 		waitIdle(t, e, a)
 	}
 	all := decode[apitypes.MessagePage](t, e.expect(200, "GET", a+"/messages?limit=200", nil))
-	if len(all.Messages) != 30 || all.HasMore || all.HasMoreAfter {
-		t.Fatalf("全部消息不对：%d %v %v", len(all.Messages), all.HasMore, all.HasMoreAfter)
+	if len(all.Messages) != 30 || all.HasMore || all.HasMoreAfter || all.TurnsBefore != 0 || all.TurnsTotal != 15 {
+		t.Fatalf("全部消息不对：%d %v %v %d %d", len(all.Messages), all.HasMore, all.HasMoreAfter, all.TurnsBefore, all.TurnsTotal)
+	}
+	// 轮次计数：每页的 turnsBefore 是它第一条消息所属的轮次之前的轮次数（这里每轮一问一答，按顺序执行）。
+	if raw := e.expect(200, "GET", a+"/messages?limit=4", nil); !strings.Contains(string(raw), `"turnsBefore":13`) || !strings.Contains(string(raw), `"turnsTotal":15`) {
+		t.Fatalf("最新一页的轮次计数不对：%s", raw)
 	}
 	target := all.Messages[6] // 第 4 条用户消息
 	around := decode[apitypes.MessagePage](t, e.expect(200, "GET", a+"/messages?limit=6&aroundRun="+target.Run.ID.String(), nil))
-	if len(around.Messages) != 6 || !around.HasMore || !around.HasMoreAfter || around.Messages[2].ID != target.ID {
-		t.Fatalf("定位页不对：%d %v %v", len(around.Messages), around.HasMore, around.HasMoreAfter)
+	if len(around.Messages) != 6 || !around.HasMore || !around.HasMoreAfter || around.Messages[2].ID != target.ID || around.TurnsBefore != 2 || around.TurnsTotal != 15 {
+		t.Fatalf("定位页不对：%d %v %v %d %d", len(around.Messages), around.HasMore, around.HasMoreAfter, around.TurnsBefore, around.TurnsTotal)
 	}
 	// 从定位页向后连续翻到最新：不重不漏。
 	got := append([]apitypes.Message(nil), around.Messages...)
@@ -346,6 +351,9 @@ func TestMessagesPaging(t *testing.T) {
 		page = decode[apitypes.MessagePage](t, e.expect(200, "GET", a+"/messages?limit=7&after="+last.String(), nil))
 		if !page.HasMore {
 			t.Fatal("向后翻页时之前一定还有消息")
+		}
+		if first := slices.IndexFunc(all.Messages, func(m apitypes.Message) bool { return m.ID == page.Messages[0].ID }); page.TurnsBefore != int64(first/2) {
+			t.Fatalf("向后翻页 turnsBefore=%d，第一条是第 %d 条消息", page.TurnsBefore, first)
 		}
 		got = append(got, page.Messages...)
 	}

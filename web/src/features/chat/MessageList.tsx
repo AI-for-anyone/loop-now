@@ -133,9 +133,11 @@ interface MessageListProps {
   onLoadNewer?: () => void
   // 不属于对话轮次、按时间插进对话流的内容（Agent 发给你的消息与问题）。
   inserts?: TimelineInsert[]
-  // 已加载的第一轮之前还有多少轮（等服务端在消息页上给出后接上）。给了就按它接着编号；
-  // 没给时，历史已全部加载（没有更早的消息）就从 1 编号，否则不显示编号和刻度尺上的数字。
+  // 轮次编号（契约 MessagePage）：已加载的第一轮之前还有多少轮，取已加载的最早一页的 turnsBefore，这里按它接着编号。
+  // 历史还没取到时不知道，不给：不显示编号和刻度尺上的数字，只显示刻度。
   turnsBefore?: number
+  // 刻度尺底部的总轮数，由对话页算好；不知道时不给。
+  turnsTotal?: number
 }
 
 // 编号那一栏宽 46px，离正文还有 18px：三位数以内用 34px 的字；四位数、五位数以上缩小字号，不挤到右边的正文。
@@ -183,6 +185,7 @@ export function MessageList({
   onLoadNewer,
   inserts = [],
   turnsBefore,
+  turnsTotal,
 }: MessageListProps) {
   const container = useRef<HTMLDivElement>(null)
   const content = useRef<HTMLDivElement>(null)
@@ -241,9 +244,8 @@ export function MessageList({
   }, [])
 
   const placed = placeInserts(turns, inserts, hasOlder, hasNewer)
-  // 轮次编号：第一轮是第几轮；不知道时为 null。后面还有更新的消息没加载时（定位模式）总轮数也还不知道。
-  const firstNumber = turnsBefore !== undefined ? turnsBefore + 1 : hasOlder ? null : 1
-  const totalTurns = firstNumber !== null && !hasNewer ? firstNumber + turns.length - 1 : null
+  // 轮次编号：第一轮是第几轮；不知道时为 null。
+  const firstNumber = turnsBefore === undefined ? null : turnsBefore + 1
 
   const loadOlder = () => {
     const el = container.current
@@ -355,7 +357,7 @@ export function MessageList({
           visible={visibleTurns}
           onJump={jumpTo}
           firstNumber={firstNumber}
-          total={totalTurns}
+          total={firstNumber === null ? null : (turnsTotal ?? null)}
         />
       ) : (
         <Stub data-turn-stub aria-hidden="true" label={t.chat.ruler.title} className="w-[74px]" />

@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import type { Schemas } from '@/api/client'
-import { apiUrl, context, defaultProject, errorBody, makeAgent, makeStatus, toListItem } from './api'
+import { apiUrl, context, defaultProject, errorBody, makeAgent, makeMessagePage, makeStatus, toListItem } from './api'
 import { catalogHandlers } from './config'
 
 // 项目层的假服务端：在内存中保存项目与 Agent，按契约响应项目、按作用域列出与新建 Agent、Manager 与删除。
@@ -111,7 +111,7 @@ export function projectBackend(init: { projects?: Schemas['Project'][]; agents?:
     }),
     http.get(apiUrl('/agents/:agentId/status'), ({ params }) => HttpResponse.json(makeStatus(String(params.agentId)))),
     http.get(apiUrl('/agents/:agentId/skills'), () => HttpResponse.json({ skills: [] })),
-    http.get(apiUrl('/agents/:agentId/messages'), () => HttpResponse.json({ messages: [], hasMore: false, hasMoreAfter: false })),
+    http.get(apiUrl('/agents/:agentId/messages'), () => HttpResponse.json(makeMessagePage([]))),
     http.get(apiUrl('/cli-templates'), () => HttpResponse.json({ templates: [] })),
     http.get(apiUrl('/skills'), () => HttpResponse.json({ skills: [] })),
     ...catalogHandlers,

@@ -974,7 +974,8 @@ func (s *Service) History(ctx context.Context, agentID uuid.UUID, q store.Messag
 	if err != nil {
 		return apitypes.MessagePage{}, err
 	}
-	out := apitypes.MessagePage{Messages: make([]apitypes.Message, 0, len(page.Items)), HasMore: page.HasMore, HasMoreAfter: page.HasMoreAfter}
+	out := apitypes.MessagePage{Messages: make([]apitypes.Message, 0, len(page.Items)), HasMore: page.HasMore, HasMoreAfter: page.HasMoreAfter,
+		TurnsBefore: page.TurnsBefore, TurnsTotal: page.TurnsTotal}
 	for _, it := range page.Items {
 		out.Messages = append(out.Messages, apitypes.FromMessage(it.Message, it.Run))
 	}

@@ -103,7 +103,7 @@ func health(pg bool) map[string]any {
 func messagePage() map[string]any {
 	msg := map[string]any{"id": "0192f1a2-0000-7000-8000-0000000000f1", "role": "user", "origin": "console", "text": "hi", "createdAt": now,
 		"sessionEpoch": 1, "run": run()}
-	return map[string]any{"messages": []any{msg}, "hasMore": false, "hasMoreAfter": false}
+	return map[string]any{"messages": []any{msg}, "hasMore": false, "hasMoreAfter": false, "turnsBefore": 0, "turnsTotal": 1}
 }
 
 func agentStatus() map[string]any {

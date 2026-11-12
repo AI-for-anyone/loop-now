@@ -288,6 +288,8 @@ type MessagePage struct {
 	Messages     []Message `json:"messages"`
 	HasMore      bool      `json:"hasMore"`
 	HasMoreAfter bool      `json:"hasMoreAfter"`
+	TurnsBefore  int64     `json:"turnsBefore"`
+	TurnsTotal   int64     `json:"turnsTotal"`
 }
 
 // SendMessageResult 对应 SendMessageResult。

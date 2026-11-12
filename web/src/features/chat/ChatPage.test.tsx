@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
-import { apiUrl, context, defaultAgentPath, errorBody, makeAgent, makeMessage, makeQueueItem, makeRun, makeStatus } from '@/test/api'
+import { apiUrl, context, defaultAgentPath, errorBody, makeAgent, makeMessage, makeMessagePage, makeQueueItem, makeRun, makeStatus } from '@/test/api'
 import { renderChat } from '@/test/chat'
 import { FakeEventSource } from '@/test/fake-event-source'
 
@@ -60,8 +60,8 @@ describe('对话历史与连续对话', () => {
           calls += 1
           const before = new URL(request.url).searchParams.get('before')
           return before === newer[0].id
-            ? HttpResponse.json({ messages: older, hasMore: false })
-            : HttpResponse.json({ messages: newer, hasMore: true })
+            ? HttpResponse.json(makeMessagePage(older, { turnsTotal: 2 }))
+            : HttpResponse.json(makeMessagePage(newer, { hasMore: true, turnsBefore: 1, turnsTotal: 2 }))
         }),
       ],
     })
@@ -242,7 +242,7 @@ describe('流式显示、工具状态与切换', () => {
       handlers: [
         http.get(apiUrl(`/agents/${other.id}`), () => HttpResponse.json(other)),
         http.get(apiUrl(`/agents/${other.id}/status`), () => HttpResponse.json(makeStatus(other.id))),
-        http.get(apiUrl(`/agents/${other.id}/messages`), () => HttpResponse.json({ messages: turn('B 的问题', 'B 的回答'), hasMore: false })),
+        http.get(apiUrl(`/agents/${other.id}/messages`), () => HttpResponse.json(makeMessagePage(turn('B 的问题', 'B 的回答')))),
       ],
     })
     await router.navigate(defaultAgentPath(other.id, 'chat'))
@@ -515,7 +515,7 @@ it('sleep 终态只重读原历史，不合成消息；缺 message.created 时 t
   let messages: Schemas['Message'][] = [], calls = 0
   const { emit } = await renderChat({ agent, handlers: [http.get(apiUrl('/agents/:agentId/messages'), () => {
     calls++
-    return HttpResponse.json({ messages, hasMore: false, hasMoreAfter: false })
+    return HttpResponse.json(makeMessagePage(messages))
   })] })
   await emit('snapshot', snapshot(agent.id, {}))
   const before = calls
