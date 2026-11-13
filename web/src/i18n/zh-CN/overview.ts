@@ -68,6 +68,8 @@ export const overview = {
   usage: {
     title: '用量',
     unit: '单位：token',
+    // 用量横条里用得最多的一行后面的黄色小标签。
+    most: '最多',
     rangeLabel: '时间段',
     dimensionLabel: '统计维度',
     ranges: { today: '今天', week: '本周', month: '近 30 天' },

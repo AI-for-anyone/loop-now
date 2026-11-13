@@ -52,6 +52,8 @@ export const projects = {
   },
   toDefault: '进入默认项目',
   settings: {
+    // 项目设置页头里的默认项目标记（藏青底白字）。
+    defaultBadge: '默认项目',
     title: '项目设置',
     name: {
       title: '项目名称',

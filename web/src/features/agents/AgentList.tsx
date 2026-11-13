@@ -125,10 +125,18 @@ export function AgentNavGroup({
                 <li key={agent.id} className="min-w-0">
                   <Link to={agentPath(scope, agent.id)} aria-current={current ? 'page' : undefined} className={navRowClass(current, 'agent')}>
                     <AgentAvatar size="sm" id={agent.id} />
-                    <span className="min-w-0 flex-1 truncate">{agent.name}</span>
-                    <RuntimeMark runtime={agent.runtime} />
-                    <StatusTag agent={agent} current={current} />
-                    <PendingBadge sticker counts={pendingByAgent.get(agent.id)} />
+                    {/* 名字先占满：常见长度的名字（选中时也）完整显示，右边的运行时、状态与 Manager 标记放不下时换到下一行，
+                        靠右；比整行还长的名字才截断，悬停看到全名。 */}
+                    <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span title={agent.name} className="max-w-full truncate">
+                        {agent.name}
+                      </span>
+                      <span className="ml-auto flex shrink-0 items-center gap-2 empty:hidden">
+                        <RuntimeMark runtime={agent.runtime} />
+                        <StatusTag agent={agent} current={current} />
+                        <PendingBadge sticker counts={pendingByAgent.get(agent.id)} />
+                      </span>
+                    </span>
                   </Link>
                 </li>
               )

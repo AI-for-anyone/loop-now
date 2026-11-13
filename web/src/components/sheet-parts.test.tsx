@@ -133,6 +133,26 @@ describe('编号分区', () => {
     expect(within(region).getByText('03')).toHaveAttribute('aria-hidden', 'true')
     expect(region).toHaveTextContent('分区内容')
   })
+
+  it('标题后面可以跟一段说明和靠右的操作；从第二个分区起上方一道虚线', () => {
+    const { rerender } = render(
+      <NumberedSection number={1} title="用量" meta={<span>单位：token</span>} actions={<button type="button">今天</button>}>
+        <p>分区内容</p>
+      </NumberedSection>,
+    )
+    const region = screen.getByRole('region', { name: '用量' })
+    const heading = within(region).getByRole('heading', { level: 2, name: '用量' })
+    expect(heading.parentElement).toContainElement(within(region).getByText('单位：token'))
+    expect(within(region).getByRole('button', { name: '今天' }).parentElement).toHaveClass('sm:ml-auto')
+    expect(region.querySelector('[data-section-number]')).toHaveTextContent('01')
+    expect(region).not.toHaveClass('border-t-2')
+    rerender(
+      <NumberedSection number={2} title="用量">
+        <p>分区内容</p>
+      </NumberedSection>,
+    )
+    expect(screen.getByRole('region', { name: '用量' })).toHaveClass('border-t-2', 'border-dashed')
+  })
 })
 
 describe('黄色便签', () => {

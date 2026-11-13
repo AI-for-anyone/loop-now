@@ -67,6 +67,7 @@ export const overview = {
   usage: {
     title: 'Usage',
     unit: 'Unit: tokens',
+    most: 'Most',
     rangeLabel: 'Period',
     dimensionLabel: 'Group by',
     ranges: { today: 'Today', week: 'This week', month: 'Last 30 days' },

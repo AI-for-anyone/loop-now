@@ -1,7 +1,7 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
-import { apiUrl, errorBody, makeAgent, makeRun, makeStatus } from '@/test/api'
+import { apiUrl, defaultProject, errorBody, makeAgent, makeRun, makeStatus } from '@/test/api'
 import { FakeEventSource } from '@/test/fake-event-source'
 import { anomalyPage, makeAgentOverview, makeAnomaly, makeUsageRow, renderOverview, usagePage } from '@/test/overview'
 import { baseHandlers } from '@/test/shell'
@@ -324,5 +324,87 @@ describe('异常与失败', () => {
     const { snapshot } = await renderOverview()
     await snapshot([makeAgentOverview()])
     expect(await within(section('异常与失败')).findByText('最近 24 小时没有异常。')).toBeInTheDocument()
+  })
+})
+
+// 改版“一张印出来的纸”第 3 步：概览的页头是页面标题，内容排在一张纸上，按 01、02、03 编号。
+describe('纸张上的概览', () => {
+  const sectionNumber = (name: string) => section(name).querySelector('[data-section-number]')
+
+  it('页头是页面标题：面包屑写着当前范围，标题“概览”，下面一行是范围选择与实时状态', async () => {
+    const { snapshot } = await renderOverview()
+    await snapshot([makeAgentOverview()])
+    const header = screen.getByRole('heading', { level: 1, name: '概览' }).closest('header')!
+    expect(within(header).getByRole('navigation', { name: '页面位置' })).toHaveTextContent('全局›概览')
+    const meta = header.querySelector('[data-page-meta]')!
+    expect(within(meta as HTMLElement).getByRole('combobox', { name: '范围' })).toBeInTheDocument()
+    expect(within(meta as HTMLElement).getByText('运行状态实时更新中')).toBeInTheDocument()
+  })
+
+  it('选定项目时面包屑写项目名称；范围选择是虚线框里的“范围 名称”', async () => {
+    await renderOverview({ path: `/?project=${encodeURIComponent(defaultProject.name)}` })
+    await waitFor(() => expect(screen.getByRole('navigation', { name: '页面位置' })).toHaveTextContent(`${defaultProject.name}›概览`))
+    const select = screen.getByRole('combobox', { name: '范围' })
+    expect(select.parentElement).toHaveClass('border-dashed', 'border-[1.5px]', 'h-[26px]')
+  })
+
+  it('运行状态、用量、异常与失败排在一张纸上，按 01、02、03 编号；区块之间一道虚线', async () => {
+    const { snapshot } = await renderOverview()
+    await snapshot([makeAgentOverview()])
+    const sheet = section('运行状态').closest('[data-sheet]')!
+    expect(sheet).toContainElement(section('用量'))
+    expect(sheet).toContainElement(section('异常与失败'))
+    expect(sectionNumber('运行状态')).toHaveTextContent('01')
+    expect(sectionNumber('用量')).toHaveTextContent('02')
+    expect(sectionNumber('异常与失败')).toHaveTextContent('03')
+    expect(within(section('运行状态')).getByRole('heading', { level: 2, name: '运行状态' })).toHaveClass('riso-marker', 'font-display-cn')
+    expect(section('运行状态')).not.toHaveClass('border-t-2')
+    expect(section('用量')).toHaveClass('border-t-2', 'border-dashed')
+  })
+
+  it('状态卡片：带色底、2px 藏青描边、藏青实色投影，数字是 Bricolage 大字，不再倾斜', async () => {
+    const { snapshot } = await renderOverview()
+    await snapshot([makeAgentOverview()])
+    const tiles = within(screen.getByRole('list', { name: '运行状态汇总' })).getAllByRole('listitem')
+    expect(tiles).toHaveLength(4)
+    for (const tile of tiles) {
+      expect(tile).toHaveClass('border-2', 'border-ink', 'rounded-card', 'shadow-[4px_4px_0_var(--ink)]')
+      expect(tile).not.toHaveClass('riso-tilt')
+    }
+    expect(tiles.map((tile) => tile.className.match(/bg-tint-[a-z0-9-]+/)?.[0])).toEqual(['bg-tint-pink-2', 'bg-tint-green', 'bg-tint-red', 'bg-tint-blue'])
+    expect(within(tiles[1]).getByText('1')).toHaveClass('font-display-latin', 'text-[46px]')
+  })
+
+  it('Agent 表：表头下一道实线，行与行之间虚线；模型名等宽；空闲是浅绿胶囊', async () => {
+    const { snapshot } = await renderOverview()
+    await snapshot([makeAgentOverview({ name: '开发助手' })])
+    const table = screen.getByRole('table')
+    // 直接排在纸上，不套白底卡片。
+    expect(table.parentElement).not.toHaveClass('bg-white', 'shadow-print-rest')
+    expect(table.querySelector('thead tr')).toHaveClass('border-b-2', 'border-ink')
+    const row = within(table).getByText('开发助手').closest('tr')!
+    expect(row).toHaveClass('border-b-[1.5px]', 'border-dashed')
+    expect(within(row).getByText(/ \/ /)).toHaveClass('font-mono')
+    const pill = within(row).getByText('空闲').closest('[data-state-pill]')!
+    expect(pill).toHaveAttribute('data-state-pill', 'idle')
+    expect(pill.querySelector('[aria-hidden="true"]')).toHaveClass('bg-tint-green', 'rotate-[-3deg]')
+  })
+
+  it('用量：横条是网点填充的，最多的一行有黄色“最多”小标签；范围和分组是分段按钮，选中的是黄色', async () => {
+    const { snapshot } = await renderOverview({
+      usage: usagePage([makeUsageRow({ agentName: '开发助手', input: 9000, output: 1000 }), makeUsageRow({ agentName: '测试助手', input: 2000, output: 500 })]),
+    })
+    await snapshot([makeAgentOverview()])
+    const usage = section('用量')
+    const lines = await within(usage).findAllByRole('listitem')
+    expect(lines[0]).toHaveTextContent('开发助手')
+    expect(within(lines[0]).getByText('最多')).toHaveClass('bg-riso-yellow')
+    expect(within(lines[1]).queryByText('最多')).toBeNull()
+    const track = lines[0].querySelector('[data-usage-track]')!
+    expect(track).toHaveClass('border-2', 'border-ink')
+    expect(track.querySelector('[data-usage-part="input"]')).toHaveClass('bg-riso-blue', 'bg-size-[5px_5px]')
+    const range = within(usage).getByRole('radiogroup', { name: '时间段' })
+    expect(range).toHaveClass('border-2', 'border-ink', 'rounded-full')
+    expect(within(range).getByRole('radio', { name: '今天' })).toHaveClass('data-[state=on]:bg-riso-yellow')
   })
 })

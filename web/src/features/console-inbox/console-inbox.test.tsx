@@ -178,6 +178,19 @@ describe('待你处理', () => {
     expect(rows[0]).toHaveAttribute('href', `/agents/${agent.id}/chat`)
   })
 
+  it('改版：“待你处理”排在概览纸张的最上面，是一张粉色投影的卡片，不编号；运行状态仍是 01', async () => {
+    const { agent, note, question } = chatSetup()
+    const { snapshot } = await renderOverview({ handlers: [http.get(apiUrl('/inbox/pending'), () => HttpResponse.json(pendingOf([note, question])))] })
+    await snapshot([makeAgentOverview({ agentId: agent.id, name: agent.name })])
+    const pending = await screen.findByRole('region', { name: '待你处理' })
+    const run = screen.getByRole('region', { name: '运行状态' })
+    expect(pending.closest('[data-sheet]')).toBe(run.closest('[data-sheet]'))
+    expect(pending.compareDocumentPosition(run) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(pending).toHaveClass('border-2', 'border-ink', 'bg-tint-pink-2', 'shadow-print-pink')
+    expect(pending.querySelector('[data-section-number]')).toBeNull()
+    expect(run.querySelector('[data-section-number]')).toHaveTextContent('01')
+  })
+
   it('没有待你处理的内容时概览上没有这一块', async () => {
     const { snapshot } = await renderOverview()
     await snapshot([makeAgentOverview()])

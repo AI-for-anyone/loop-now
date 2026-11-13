@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { ArrowRightIcon, PlusIcon, SettingsIcon } from 'lucide-react'
+import { ArrowRightIcon, PlusIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Combobox } from '@/components/ui/combobox'
@@ -16,84 +16,97 @@ import { useAgents, useClearManager, useDeleteProject, useProjects, useRenamePro
 import { t } from '@/i18n'
 import { isAgentNameConflict, projectNameError, unmatchedFieldError } from '@/lib/errors'
 import { nameRuleError } from '@/lib/names'
-import { agentPath, agentsPath, projectSettingsPath, type Scope } from '@/lib/scope'
-import { cn } from '@/lib/utils'
+import { agentPath, agentsPath, overviewPath, projectSettingsPath, type Scope } from '@/lib/scope'
 import { useScope } from './scope-context'
 import { DraftNavigationGuard } from '@/features/prompts/DraftNavigationGuard'
 import { ProjectPromptForm } from '@/features/prompts/ProjectPromptForm'
 import { ProjectCredentialSettings } from '@/features/project-credentials/ProjectAccounts'
 import { tasksPath } from '@/api/tasks'
-import { ContextFolderSection } from '@/features/folders/FolderSections'
+import { ContextFolderBody } from '@/features/folders/FolderSections'
 import { ProjectLocalDirectories } from '@/features/local-mode/LocalDirectories'
-import { pageTitleClass } from '@/lib/page-title'
+import { PageFrame, PageHeader } from '@/components/PageHeader'
+import { Sheet } from '@/components/Sheet'
+import { SectionToc, SheetSection } from '@/components/SheetSections'
 
-// 区块卡片，与配置页的区块相同：纸白底、18 圆角、轻投影，标题为 ZCOOL 30。
-// danger 为红色斜纹的危险卡片；neutral 为浅描边的中性卡片（默认项目的删除区）。
-function Card({ title, tone = 'default', children }: { title: string; tone?: 'default' | 'danger' | 'neutral'; children: ReactNode }) {
-  const titleId = useId()
+// 项目设置的编号分区，顺序即目录尺的顺序（改版：与 Agent 配置页同一套，排在一张纸上，右侧票根里是目录尺）。
+const KEYS = ['name', 'prompt', 'folder', 'local-dirs', 'plugins', 'manager', 'accounts', 'danger'] as const
+type Key = (typeof KEYS)[number]
+const partId = (key: Key) => `settings-${key}`
+const partTitleId = (key: Key) => `settings-${key}-title`
+const titles: Record<Key, string> = {
+  name: t.projects.settings.name.title,
+  prompt: t.prompts.projectTitle,
+  folder: t.folders.project.title,
+  'local-dirs': t.localMode.directories.title,
+  plugins: t.plugins.project.settingsCard,
+  manager: t.projects.settings.manager.title,
+  accounts: t.credentials.accounts.title,
+  danger: t.projects.settings.danger.title,
+}
+
+// 一个编号分区。danger：删除项目一区，编号、标题与目录项红色，内容在红色斜纹的底上（默认项目不能删除，不用红色）。
+function Part({ id, tone = 'default', children }: { id: Key; tone?: 'default' | 'danger'; children: ReactNode }) {
   return (
-    <section
-      aria-labelledby={titleId}
-      className={cn(
-        'flex flex-col gap-3.5 rounded-panel px-6 py-[22px] text-ink',
-        tone === 'danger' && 'riso-stripes-red bg-error-field shadow-print-rest',
-        tone === 'neutral' && 'bg-paper-raised shadow-[inset_0_0_0_2px_rgb(24_38_94/.12)]',
-        tone === 'default' && 'bg-paper-raised shadow-print-rest',
-      )}
-    >
-      <h2
-        id={titleId}
-        className={cn('font-display-cn text-[30px] leading-[1.15] font-normal', tone === 'danger' && 'text-red-text', tone === 'neutral' && 'text-ink-700')}
-      >
-        {title}
-      </h2>
+    <SheetSection id={partId(id)} titleId={partTitleId(id)} index={KEYS.indexOf(id)} title={titles[id]} tone={tone}>
       {children}
-    </section>
+    </SheetSection>
   )
 }
 
-const DefaultTag = () => (
-  <span className="rounded-stamp bg-white px-[7px] text-[12px] leading-5 font-black text-ink shadow-[inset_0_0_0_1.5px_var(--ink)]">
-    {t.projects.switcher.isDefault}
-  </span>
-)
-
-// 项目设置（交接说明第 11.3 节）：单栏，三个区块，没有分区目录。只在项目中有，平台没有设置页。
+// 项目设置（交接说明第 11.3 节）：只在项目中有，平台没有设置页。页头是共用的页面标题（面包屑是项目名称，
+// 旁边是默认项目标记与项目 ID）；八个分区排在一张纸上，右侧票根里是目录尺，窄屏不显示目录。
 export function ProjectSettingsPage() {
   const scope = useScope()
   if (scope.kind !== 'project') return null
   const project = scope.project
-  // 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。
+  const toc = KEYS.map((key) => ({ id: partId(key), titleId: partTitleId(key), title: titles[key], danger: key === 'danger' && !project.isDefault }))
   return (
-    <DraftNavigationGuard key={project.id} projectName={project.name}><div className="relative h-full overflow-y-auto">
-      <div className="mx-auto flex max-w-[860px] flex-col gap-6 px-4 pt-[30px] pb-[72px] sm:px-[30px]">
-        <div className="flex flex-col gap-1.5">
-          <span className="inline-flex items-center gap-2 text-[13.5px] font-black text-ink-700">
-            <SettingsIcon className="size-[15px]" strokeWidth={2.4} />
-            {t.projects.settings.title}
-            {project.isDefault && <DefaultTag />}
-          </span>
-          <h1 className={cn(pageTitleClass, 'mt-1 self-start')}>
-            {project.name}
-          </h1>
-        </div>
-        {/* 按项目 ID 重新挂载：输入框与提示不会带到另一个项目；改名后仍是同一个 ID，“已保存”保留。 */}
-        <NameCard key={`name-${project.id}`} project={project} />
-        <Card title={t.prompts.projectTitle}><ProjectPromptForm projectId={project.id} /></Card>
-        <ContextFolderSection key={`folder-${project.id}`} scope={{ kind: 'project', projectId: project.id }} />
-        <Card title={t.localMode.directories.title}><ProjectLocalDirectories key={`local-dirs-${project.id}`} projectId={project.id} /></Card>
-        <Card title={t.plugins.project.settingsCard}><p>{t.plugins.project.settingsCardBody}</p><Link className="font-bold text-riso-blue underline" to={`/p/${encodeURIComponent(project.name)}/plugins`}>{t.plugins.project.settingsLink}</Link></Card>
-        <ManagerCard key={`manager-${project.id}`} project={project} scope={scope} />
-        <ProjectCredentialSettings key={`accounts-${project.id}`} projectId={project.id} />
-        {project.isDefault ? (
-          <Card title={t.projects.settings.danger.title} tone="neutral">
-            <p className="text-[14.5px]">{t.projects.settings.danger.defaultNote}</p>
-          </Card>
-        ) : (
-          <DangerCard key={`danger-${project.id}`} project={project} />
-        )}
-      </div>
-    </div></DraftNavigationGuard>
+    <DraftNavigationGuard key={project.id} projectName={project.name}>
+      <PageFrame>
+        <PageHeader crumbs={[{ label: project.name, to: overviewPath({ kind: 'project', name: project.name }) }]} title={t.projects.settings.title}>
+          {project.isDefault && <span className="shrink-0 rounded-full bg-ink px-2.5 text-[12px] leading-[22px] font-black text-white">{t.projects.settings.defaultBadge}</span>}
+          <span className="min-w-0 font-mono text-[12px] [overflow-wrap:anywhere] text-ink-700">{project.id}</span>
+        </PageHeader>
+        <Sheet className="mt-2 flex-1">
+          <div className="flex min-h-0 flex-1">
+            {/* 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。 */}
+            <div className="relative h-full min-w-0 flex-1 overflow-y-auto">
+              <div className="flex max-w-[960px] flex-col gap-6 pt-[26px] pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,30px)]">
+                {/* 按项目 ID 重新挂载：输入框与提示不会带到另一个项目；改名后仍是同一个 ID，“已保存”保留。 */}
+                <NameCard key={`name-${project.id}`} project={project} />
+                <Part id="prompt">
+                  <ProjectPromptForm projectId={project.id} />
+                </Part>
+                <Part id="folder">
+                  <ContextFolderBody key={`folder-${project.id}`} projectId={project.id} />
+                </Part>
+                <Part id="local-dirs">
+                  <ProjectLocalDirectories key={`local-dirs-${project.id}`} projectId={project.id} />
+                </Part>
+                <Part id="plugins">
+                  <p>{t.plugins.project.settingsCardBody}</p>
+                  <Link className="self-start font-bold text-riso-blue underline" to={`/p/${encodeURIComponent(project.name)}/plugins`}>
+                    {t.plugins.project.settingsLink}
+                  </Link>
+                </Part>
+                <ManagerCard key={`manager-${project.id}`} project={project} scope={scope} />
+                <Part id="accounts">
+                  <ProjectCredentialSettings key={`accounts-${project.id}`} projectId={project.id} embedded />
+                </Part>
+                {project.isDefault ? (
+                  <Part id="danger">
+                    <p className="text-[14.5px]">{t.projects.settings.danger.defaultNote}</p>
+                  </Part>
+                ) : (
+                  <DangerCard key={`danger-${project.id}`} project={project} />
+                )}
+              </div>
+            </div>
+            <SectionToc label={t.config.toc.title} items={toc} />
+          </div>
+        </Sheet>
+      </PageFrame>
+    </DraftNavigationGuard>
   )
 }
 
@@ -113,7 +126,7 @@ function NameCard({ project }: { project: Schemas['Project'] }) {
   const nameError = localError ?? projectNameError(rename.error)
   const saved = rename.isSuccess && rename.data.name === project.name && name === project.name
   return (
-    <Card title={t.projects.settings.name.title}>
+    <Part id="name">
       <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(min(300px,100%),1fr))] items-start gap-4">
           <IdField label={t.projects.settings.name.id} id={project.id} />
@@ -151,7 +164,7 @@ function NameCard({ project }: { project: Schemas['Project'] }) {
           </Button>
         </div>
       </form>
-    </Card>
+    </Part>
   )
 }
 
@@ -188,7 +201,7 @@ function ManagerCard({ project, scope }: { project: Schemas['Project']; scope: S
   }
 
   return (
-    <Card title={t.projects.settings.manager.title}>
+    <Part id="manager">
       <p className="text-[14px] text-ink-700">{t.projects.settings.manager.intro}</p>
       {manager ? (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-card bg-white px-4 py-3.5 shadow-print-rest">
@@ -249,7 +262,7 @@ function ManagerCard({ project, scope }: { project: Schemas['Project']; scope: S
         </span>
       )}
       <ErrorAlert error={setManager.error ?? clearManager.error ?? agents.error} />
-    </Card>
+    </Part>
   )
 }
 
@@ -269,7 +282,7 @@ function DangerCard({ project }: { project: Schemas['Project'] }) {
   const scope: Scope = { kind: 'project', project }
 
   return (
-    <Card title={t.projects.settings.danger.title} tone="danger">
+    <Part id="danger" tone="danger">
       <ul className="list-disc pl-5 text-[14.5px] leading-[1.8]">
         {t.projects.settings.danger.notes.map((note) => (
           <li key={note}>{note}</li>
@@ -339,6 +352,6 @@ function DangerCard({ project }: { project: Schemas['Project'] }) {
           if (defaultProject) void navigate(agentsPath({ kind: 'project', project: defaultProject }))
         }}
       />
-    </Card>
+    </Part>
   )
 }

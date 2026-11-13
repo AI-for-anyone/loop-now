@@ -3,9 +3,10 @@ import { cn } from "@/lib/utils"
 
 // 表格：外层容器可以单独横向滚动，窄屏时整页不出现横向滚动；表头浅蓝加粗，行之间是 2px 虚线。
 // 容器带 relative：表格里绝对定位的读屏文字（sr-only）以它为包含块，随表格一起滚动，不会把整页撑宽。
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+// card：外面那层横向滚动区是白底卡片（默认）；直接排在纸张上的表格传 false，不要卡片。
+function Table({ className, card = true, ...props }: React.ComponentProps<"table"> & { card?: boolean }) {
   return (
-    <div data-slot="table-container" className="relative w-full max-w-full overflow-x-auto rounded-card bg-white shadow-print-rest">
+    <div data-slot="table-container" className={cn("relative w-full max-w-full overflow-x-auto", card && "rounded-card bg-white shadow-print-rest")}>
       <table data-slot="table" className={cn("w-full border-collapse text-left text-[14px]", className)} {...props} />
     </div>
   )

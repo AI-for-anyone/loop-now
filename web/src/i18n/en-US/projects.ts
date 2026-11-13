@@ -56,6 +56,7 @@ export const projects = {
   },
   toDefault: 'Go to the default project',
   settings: {
+    defaultBadge: 'Default project',
     title: 'Project settings',
     name: {
       title: 'Project name',

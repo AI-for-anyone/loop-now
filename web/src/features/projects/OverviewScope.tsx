@@ -1,16 +1,16 @@
 import { useId } from 'react'
 import { Link } from 'react-router'
+import { ChevronDownIcon } from 'lucide-react'
 import type { Schemas } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { t } from '@/i18n'
-import { selectClass } from '@/lib/field'
 import { agentsPath, PLATFORM } from '@/lib/scope'
 import { cn } from '@/lib/utils'
 import { useScopeLabel, type OverviewFilter } from './overview-filter'
 import { ScopeIcon } from './ScopeIcon'
 
-// 概览标题行右侧的范围筛选：“范围”标签加原生下拉，选项为全部、各项目（分组）、平台（交接说明第 11.6 节）。
-// 地址中的项目找不到时，多一个不可选的“{名称}（找不到）”作为当前值。
+// 概览页头元信息里的范围筛选：虚线框里写着“范围 当前范围”，右边一个小箭头；仍是原生下拉（键盘与读屏照旧），
+// 选项为全部、各项目（分组）、平台（交接说明第 11.6 节）。地址中的项目找不到时，多一个不可选的“{名称}（找不到）”作为当前值。
 export function OverviewScopeSelect({
   filter,
   projects,
@@ -24,11 +24,16 @@ export function OverviewScopeSelect({
   const value = filter.kind === 'all' ? '' : filter.kind === 'platform' ? PLATFORM : `project:${filter.name}`
   const missing = filter.kind === 'project' && !filter.project
   return (
-    <span className="flex w-full items-center gap-2.5 sm:w-auto">
-      <label htmlFor={id} className="shrink-0 text-[13.5px] font-black">
+    <span className="relative inline-flex h-[26px] max-w-full min-w-0 items-center gap-2 rounded-[4px] border-[1.5px] border-dashed border-ink/45 pr-1.5 pl-2.5 text-[12.5px] font-bold text-ink focus-within:shadow-focus">
+      <label htmlFor={id} className="shrink-0 text-ink-500">
         {t.projects.overview.range}
       </label>
-      <select id={id} value={value} onChange={(event) => onSelect(event.target.value)} className={cn(selectClass, 'w-full sm:w-auto sm:min-w-[220px]')}>
+      <select
+        id={id}
+        value={value}
+        onChange={(event) => onSelect(event.target.value)}
+        className="min-w-0 cursor-pointer appearance-none truncate bg-transparent pr-[18px] font-bold text-ink outline-none"
+      >
         <option value="">{t.projects.overview.all}</option>
         {missing && (
           <option value={value} disabled>
@@ -44,6 +49,7 @@ export function OverviewScopeSelect({
         </optgroup>
         <option value={PLATFORM}>{t.projects.overview.platform}</option>
       </select>
+      <ChevronDownIcon aria-hidden="true" className="pointer-events-none absolute right-1.5 size-3" strokeWidth={2.8} />
     </span>
   )
 }
@@ -69,7 +75,8 @@ export function ScopeTag({ scope, projectId }: { scope: Schemas['AgentScope']; p
   )
 }
 
-const panel = 'flex flex-col items-center gap-[18px] rounded-dialog bg-paper-raised px-6 py-14 text-center shadow-print-rest'
+// 找不到与空范围的说明排在概览的纸上，不再套一层卡片。
+const panel = 'flex flex-col items-center gap-[18px] px-6 py-14 text-center'
 
 // 地址中的项目找不到：三块内容换成说明和“回到全部”。
 export function OverviewScopeNotFound({ name, onBack }: { name: string; onBack: () => void }) {
