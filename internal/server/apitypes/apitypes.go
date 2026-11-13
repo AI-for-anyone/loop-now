@@ -100,9 +100,10 @@ type AgentStatus struct {
 	Session          SessionInfo        `json:"session"`
 }
 
-// AgentBusyDetails 对应 AgentBusyDetails。
+// AgentBusyDetails 对应 AgentBusyDetails。CurrentRunID 是进行中的执行，没有时是最早的排队执行；
+// 两样都没有时为 nil：忙闲锁被不产生执行的平台命令（/new、/reload、/resume、导出）占着，或一次执行正要开始、刚刚结束。
 type AgentBusyDetails struct {
-	CurrentRunID uuid.UUID   `json:"currentRunId"`
+	CurrentRunID *uuid.UUID  `json:"currentRunId"`
 	Queued       QueueCounts `json:"queued"`
 }
 
