@@ -68,6 +68,13 @@ describe('项目任务', () => {
     await screen.findByRole('link', { name: '通用任务验收' })
     expect(router.state.location.pathname).toBe(tasksPath(defaultProject.name))
   })
+  it('任务详情的标题前是编号：等宽粗体的浅墨色“#12”，不算进标题', async () => {
+    setup(); renderRoutes(routes, detailPath())
+    const heading = await screen.findByRole('heading', { level: 1, name: '通用任务验收' })
+    const number = screen.getByText('#12')
+    expect(number).toHaveClass('font-mono', 'text-[12px]', 'font-bold', 'text-ink-500')
+    expect(number.nextElementSibling).toBe(heading)
+  })
   it('错误项目不显示任务详情', async () => {
     const d = makeTaskDetail('other-project'); setup(d); renderRoutes(routes, detailPath())
     expect(await screen.findByRole('alert')).toHaveTextContent('这个任务不属于当前项目')
@@ -435,11 +442,11 @@ describe('纸张上的任务列表', () => {
     const env = setup()
     const base = env.detail
     const tasks = [
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a001', title: '整理本周用户反馈', status: 'running', reason: null, currentStepId: 'triage' }),
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a002', title: '导出超时修复方案', status: 'blocked', reason: '等你确认超时上限后继续', currentStepId: 'review' }),
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a003', title: '周报初稿', status: 'completed', reason: null, currentStepId: 'publish' }),
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a004', title: '等用户回答的任务', status: 'waiting', reason: '等待回答', currentStepId: null }),
-      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a005', title: '取消了的任务', status: 'cancelled', reason: null, currentStepId: null }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a001', number: 12, title: '整理本周用户反馈', status: 'running', reason: null, currentStepId: 'triage' }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a002', number: 11, title: '导出超时修复方案', status: 'blocked', reason: '等你确认超时上限后继续', currentStepId: 'review' }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a003', number: 10, title: '周报初稿', status: 'completed', reason: null, currentStepId: 'publish' }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a004', number: 9, title: '等用户回答的任务', status: 'waiting', reason: '等待回答', currentStepId: null }),
+      summaryOf(base, { id: '00000000-0000-7000-8000-00000000a005', number: 8, title: '取消了的任务', status: 'cancelled', reason: null, currentStepId: null }),
     ]
     server.use(
       http.get(apiUrl(`/projects/${defaultProject.id}/tasks`), () => HttpResponse.json({ tasks, nextCursor })),
@@ -501,6 +508,24 @@ describe('纸张上的任务列表', () => {
     expect(within(rowOf('周报初稿')).getByText('已完成')).toHaveClass('bg-tint-green', 'text-green-text')
     // 责任 Agent 带头像（叠印的两个小圆）。
     expect(within(running).getByText('任务检查员').previousElementSibling).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('编号是第一列：表头“编号”，每行是等宽粗体的浅墨色“#12”，和标题在同一组里，窄屏不会和标题分开', async () => {
+    const { list } = await renderList()
+    const header = list.previousElementSibling!
+    expect(header).toHaveAttribute('aria-hidden', 'true')
+    expect(header.firstElementChild).toHaveTextContent(/^编号$/)
+    expect(header.firstElementChild).toHaveClass('flex-[0_0_34px]')
+    const running = rowOf('整理本周用户反馈')
+    // 第一列，读屏先读列名；编号与标题放在同一个不换行的组里。
+    const group = running.firstElementChild!
+    expect(group).toHaveClass('flex-nowrap')
+    expect(group).toContainElement(within(running).getByRole('link', { name: '整理本周用户反馈' }))
+    const number = group.firstElementChild!
+    expect(number).toHaveTextContent(/^编号#12$/)
+    expect(number).toHaveClass('flex-[0_0_34px]', 'font-mono', 'text-[12px]', 'font-bold', 'text-ink-500')
+    expect(within(number as HTMLElement).getByText('编号')).toHaveClass('sr-only')
+    expect(within(list).getAllByRole('listitem').map((row) => row.firstElementChild!.firstElementChild!.textContent)).toEqual(['编号#12', '编号#11', '编号#10', '编号#9', '编号#8'])
   })
 
   it('票根“进度”里是进行中、阻塞、已完成三个大数字；窄屏不显示', async () => {

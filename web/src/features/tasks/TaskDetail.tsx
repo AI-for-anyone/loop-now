@@ -52,7 +52,7 @@ export function TaskDetail() {
   return <div className="flex h-full min-h-0 flex-col overflow-y-auto p-4 sm:p-5 lg:overflow-hidden">
     <Link className="font-bold text-riso-blue underline" to={tasksPath(scope.project.name)}>{t.tasks.back}</Link>
     <header className="my-3 flex shrink-0 flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0 flex-[1_1_28rem]"><p className="text-sm font-bold">{scope.project.name}</p><h1 className="font-display-cn text-[30px] break-words text-riso-blue sm:text-[36px]">{detail.task.title}</h1></div>
+      <div className="min-w-0 flex-[1_1_28rem]"><p className="text-sm font-bold">{scope.project.name}</p><div className="flex items-baseline gap-3"><span className="shrink-0 font-mono text-[12px] font-bold text-ink-500">{t.tasks.numberLabel(detail.task.number)}</span><h1 className="min-w-0 font-display-cn text-[30px] break-words text-riso-blue sm:text-[36px]">{detail.task.title}</h1></div></div>
       <div className="flex max-w-full flex-wrap items-center justify-end gap-x-4 gap-y-2">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1"><TaskBadge status={detail.task.status} /><p className="text-sm">{t.tasks.cleanup[detail.cleanup]}</p><LiveState state={connection} /></div>
         <TaskActions task={detail.task} disabled={connection !== 'open' || task.isError} showRetry={false} />
