@@ -267,7 +267,7 @@ func TestBusyWithoutChoice(t *testing.T) {
 		t.Fatalf("忙时未选择应返回 agent_busy：%v", err)
 	}
 	d := ae.Details.(apitypes.AgentBusyDetails)
-	if d.CurrentRunID != first.Run.ID {
+	if d.CurrentRunID == nil || *d.CurrentRunID != first.Run.ID {
 		t.Fatalf("详情应给出当前执行：%+v", d)
 	}
 	if n := len(e.history()); n != 1 {

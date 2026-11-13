@@ -51,5 +51,14 @@ func SetTestHookBeforeRestoreLock(h func(runID uuid.UUID)) {
 	testHookBeforeRestoreLock.Store(&h)
 }
 
+// SetTestHookAfterRunEndPublished 设置执行结束已通知出去之后的测试钩子；传 nil 清除。
+func SetTestHookAfterRunEndPublished(h func(runID uuid.UUID)) {
+	if h == nil {
+		testHookAfterRunEndPublished.Store(nil)
+		return
+	}
+	testHookAfterRunEndPublished.Store(&h)
+}
+
 // ReconcileForTest 立即做一次对账。
 func (s *Service) ReconcileForTest(ctx context.Context) { s.reconcile(ctx) }
