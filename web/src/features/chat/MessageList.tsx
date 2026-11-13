@@ -19,7 +19,7 @@ import { MessageRuler } from './MessageRuler'
 import { turnPreview, useVisibleTurns } from './ruler'
 
 function UserBubble({ message, run }: { message: Schemas['Message']; run: Schemas['Run'] }) {
-  return <UserChatBubble images={<MessageImages images={message.images} />} text={message.text} time={t.chat.time(message.createdAt)} interrupted={run.whenBusy === 'interrupt'} wakeSleepId={run.wakeSleepId} />
+  return <UserChatBubble wide images={<MessageImages images={message.images} />} text={message.text} time={t.chat.time(message.createdAt)} interrupted={run.whenBusy === 'interrupt'} wakeSleepId={run.wakeSleepId} />
 }
 // slept: how long the sleep lasted, when the turn before it is the one that went to sleep.
 function PlatformReminder({ agentId, message, run, slept }: { agentId: string; message: Schemas['Message']; run: Schemas['Run']; slept?: number }) {
@@ -141,11 +141,15 @@ interface MessageListProps {
 }
 
 // 编号那一栏宽 46px，离正文还有 18px：三位数以内用 34px 的字；四位数、五位数以上缩小字号，不挤到右边的正文。
-const numberSize = (number: number) => (number >= 10000 ? 'text-[19px]' : number >= 1000 ? 'text-[24px]' : undefined)
+// 编号栏 36px 宽：两位数 26px，三位数起逐级缩小，到五位数也放得进这一栏，不挤到右边的正文。
+const numberSize = (number: number) => (number >= 10000 ? 'text-[12px]' : number >= 1000 ? 'text-[15px]' : number >= 100 ? 'text-[20px]' : 'text-[26px]')
+
+// 每一轮左侧的空心编号：比分区编号小一号（26px、描边 1.3px），栏宽 36px，离正文 12px。
+const turnNumberClass = 'w-9 pt-[22px] tracking-[-0.03em] [-webkit-text-stroke:1.3px_var(--riso-blue)]'
 
 // 插进对话流的内容与各轮的正文左对齐：宽屏时让出编号那一栏。
 function Insert({ children }: { children: ReactNode }) {
-  return <div className="flex min-w-0 flex-col nav:pl-16">{children}</div>
+  return <div className="flex min-w-0 flex-col nav:pl-12">{children}</div>
 }
 
 export interface TimelineInsert {
@@ -296,7 +300,8 @@ export function MessageList({
         ref={container}
         onScroll={onScroll}
         className={cn(
-          'relative h-full min-w-0 flex-1 overflow-y-auto pt-[26px] pr-[clamp(14px,3vw,44px)] pb-[22px] pl-[clamp(12px,2vw,28px)]',
+          // 左侧留白宽屏时收窄一些（编号栏也收窄了），正文左移；窄屏照旧。
+          'relative h-full min-w-0 flex-1 overflow-y-auto pt-[26px] pr-[clamp(14px,3vw,44px)] pb-[22px] pl-[clamp(12px,2vw,28px)] nav:pl-[clamp(12px,1.4vw,20px)]',
           // 有刻度尺时（至少两轮、宽屏）隐藏原生滚动条；没有刻度时保留，一条很长的回复也看得出滚到哪了。
           turns.length > 1 && 'nav:no-scrollbar',
         )}
@@ -321,8 +326,8 @@ export function MessageList({
                 {index > 0 && interruptedBy(turns[index - 1], turn) && <CutLine icon={ZapIcon} label={t.chat.interruptDivider} />}
                 {/* 一轮对话：左侧空白处是这一轮的空心编号（与刻度尺上的数字一致，不知道编号时留空），右侧是用户消息与回复。
                     定位到的那一轮用浅黄底突出显示。 */}
-                <div data-run-id={turn.run.id} data-located={isTarget || undefined} className={cn('flex gap-[18px]', isTarget && 'rounded-panel bg-tint-yellow p-4')}>
-                  <HollowNumber data-turn-number className={cn('pt-5', numberSize(firstNumber === null ? 0 : firstNumber + index))}>
+                <div data-run-id={turn.run.id} data-located={isTarget || undefined} className={cn('flex gap-3', isTarget && 'rounded-panel bg-tint-yellow p-4')}>
+                  <HollowNumber data-turn-number className={cn(turnNumberClass, numberSize(firstNumber === null ? 0 : firstNumber + index))}>
                     {firstNumber === null ? '' : firstNumber + index}
                   </HollowNumber>
                   <div className="flex min-w-0 flex-1 flex-col gap-[22px]">
@@ -333,8 +338,8 @@ export function MessageList({
                       ) : (
                         <UserBubble message={turn.user} run={turn.run} />
                       ))}
-                    {/* 回复的正文最宽 760px，长行好读。 */}
-                    <div className="max-w-[760px] min-w-0">
+                    {/* 回复的正文跟着对话列走，宽屏时最宽 1100px：宽窗口里不浪费，代码块、表格、图片随之变宽。窄屏照旧 760px。 */}
+                    <div className="max-w-[760px] min-w-0 nav:max-w-[1100px]">
                       <ReplyBubble turn={turn} agent={agent} located={isTarget} />
                     </div>
                   </div>

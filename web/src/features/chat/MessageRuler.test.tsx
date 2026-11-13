@@ -353,17 +353,27 @@ describe('每一轮的空心编号', () => {
     expect(turnNumbers()).toEqual(['25', '26'])
   })
 
-  it('编号到四位数、五位数时缩小字号，不挤到右边的正文', () => {
+  // 编号栏 36px 宽（改版后收窄）：两位数 26px，三位数起逐级缩小，四位数、五位数也放得进这一栏。
+  // jsdom 不排版，实际宽度由浏览器检查确认。
+  it('编号栏收窄到 36px，离正文 12px；编号到三位数、四位数、五位数时缩小字号，不挤到右边的正文', () => {
     const sizeOf = (text: string) => [...turnBlock(text).querySelector('[data-turn-number]')!.classList].filter((name) => name.startsWith('text-['))
+    const tens = render(<List pages={pagesOf(texts(2))} hasOlder turnsBefore={98} />)
+    expect(turnNumbers()).toEqual(['99', '100'])
+    expect(sizeOf('问题1')).toEqual(['text-[26px]'])
+    expect(sizeOf('问题2')).toEqual(['text-[20px]'])
+    const number = turnBlock('问题1').querySelector('[data-turn-number]')!
+    expect(number).toHaveClass('w-9')
+    expect(number.parentElement).toHaveClass('gap-3')
+    tens.unmount()
     const thousands = render(<List pages={pagesOf(texts(3))} hasOlder turnsBefore={998} />)
     expect(turnNumbers()).toEqual(['999', '1000', '1001'])
-    expect(sizeOf('问题1')).toEqual(['text-[34px]'])
-    expect(sizeOf('问题2')).toEqual(['text-[24px]'])
+    expect(sizeOf('问题1')).toEqual(['text-[20px]'])
+    expect(sizeOf('问题2')).toEqual(['text-[15px]'])
     thousands.unmount()
     render(<List pages={pagesOf(texts(2))} hasOlder turnsBefore={9998} />)
     expect(turnNumbers()).toEqual(['9999', '10000'])
-    expect(sizeOf('问题1')).toEqual(['text-[24px]'])
-    expect(sizeOf('问题2')).toEqual(['text-[19px]'])
+    expect(sizeOf('问题1')).toEqual(['text-[15px]'])
+    expect(sizeOf('问题2')).toEqual(['text-[12px]'])
   })
 })
 
@@ -394,5 +404,25 @@ describe('刻度的名称', () => {
     expect(turnPreview(turn(null, '构建已经修好了'))).toBe('构建已经修好了')
     expect(turnPreview(turn(null, ''))).toBe('没有文字的一轮')
     expect(turnPreview(turn({ text: '' }, null))).toBe('没有文字的一轮')
+  })
+})
+
+// 对话占比更大（v0.2.5 之后用户的意见）：回复正文跟着对话列走，上限放宽到 1100px；用户气泡放宽到对话列的 88%。
+describe('对话占比', () => {
+  it('宽屏时回复正文最宽 1100px（原来是 760px），代码块、表格、图片随之变宽；窄屏照旧 760px', () => {
+    render(<List pages={pagesOf(texts(2))} turnsBefore={0} turnsTotal={2} />)
+    const body = turnBlock('问题1').querySelector('article')!.parentElement!
+    expect(body).toHaveClass('nav:max-w-[1100px]', 'max-w-[760px]', 'min-w-0')
+  })
+
+  it('宽屏时用户气泡最宽是对话列的 88%，也不超过回复正文的上限；窄屏照旧 80%', () => {
+    render(<List pages={pagesOf(texts(2))} turnsBefore={0} turnsTotal={2} />)
+    expect(screen.getByText('问题1')).toHaveClass('nav:max-w-[min(88%,1100px)]', 'max-w-[80%]')
+  })
+
+  it('插进对话流的内容（发给你的消息、问题）仍与各轮的正文左对齐', () => {
+    const inserts = [{ key: 'note', at: '2026-10-25T09:00:30Z', node: <p>一条插进来的消息</p> }]
+    render(<List pages={pagesOf(texts(2))} turnsBefore={0} turnsTotal={2} inserts={inserts} />)
+    expect(screen.getByText('一条插进来的消息').parentElement).toHaveClass('nav:pl-12')
   })
 })

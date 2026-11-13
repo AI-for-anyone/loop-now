@@ -9,10 +9,11 @@ import { cn } from '@/lib/utils'
 // the normal Agent's runtime to share these visual components.
 // 打断发出的消息：浅粉底加荧光粉描边，名称一行带一个小小的“打断”。
 // wakeSleepId：这条消息提前唤醒了 sleep，名称一行标“提前唤醒 sleep”。
-export function UserChatBubble({ text, time, interrupted = false, wakeSleepId, images }: { images?: ReactNode; text: string; time: string; interrupted?: boolean; wakeSleepId?: string | null }) {
+// wide：Agent 对话页宽屏时气泡最宽是对话列的 88%（不超过回复正文的 1100px）；窄屏与任务节点对话仍是 80%。
+export function UserChatBubble({ text, time, interrupted = false, wakeSleepId, images, wide = false }: { images?: ReactNode; text: string; time: string; interrupted?: boolean; wakeSleepId?: string | null; wide?: boolean }) {
   return <div className="flex flex-col items-end gap-1.5">
     <span className="inline-flex items-center gap-2 text-[12.5px] font-bold text-ink-500"><span>{t.chat.you}</span> {t.chat.metaSeparator} {time}{interrupted && <span className="text-[11.5px] font-black text-pink-text">{t.chat.interruptTag}</span>}{wakeSleepId && <EarlyWake sleepId={wakeSleepId} />}</span>
-    <div className={cn('max-w-[80%] rounded-[20px_20px_4px_20px] px-5 py-3.5 text-base leading-[1.8] font-medium whitespace-pre-wrap [overflow-wrap:anywhere]', interrupted ? 'border-[1.5px] border-riso-pink bg-tint-pink-2' : 'bg-tint-pink shadow-print-blue')}>{text}{images}</div>
+    <div className={cn('max-w-[80%]', wide && 'nav:max-w-[min(88%,1100px)]', 'rounded-[20px_20px_4px_20px] px-5 py-3.5 text-base leading-[1.8] font-medium whitespace-pre-wrap [overflow-wrap:anywhere]', interrupted ? 'border-[1.5px] border-riso-pink bg-tint-pink-2' : 'bg-tint-pink shadow-print-blue')}>{text}{images}</div>
   </div>
 }
 export function PlatformChatReminder({ text, at, wakeSleepId, label }: { text: string; at: string; wakeSleepId?: string | null; label?: ReactNode }) {

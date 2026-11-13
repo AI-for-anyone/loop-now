@@ -91,6 +91,8 @@ it('输入区是纸张底部的一条浅黄色栏，上缘一道 2px 的藏青�
   mountBar()
   const bar = screen.getByRole('textbox', { name: '消息' }).closest('[data-chat-bar]')
   expect(bar).toHaveClass('bg-tint-yellow', 'border-t-2', 'border-ink')
+  // 宽屏时上下留白收紧（窄屏不变）；按键说明那一行保留。
+  expect(bar).toHaveClass('pt-3.5', 'pb-3', 'gap-2.5', 'nav:pt-2.5', 'nav:pb-2', 'nav:gap-1.5')
 })
 
 it('输入框是浅纸底、藏青描边；发送按钮是荧光粉圆章（藏青描边加藏青实色投影）', () => {

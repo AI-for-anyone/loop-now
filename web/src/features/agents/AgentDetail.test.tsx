@@ -198,9 +198,10 @@ describe('头部与页签的版式', () => {
     return { user, title, header: title.closest('header')! }
   }
 
-  it('标题是 60px 的展示字，Manager 标记与状态标签在它旁边', async () => {
+  it('标题是展示字（窄屏照旧最大 60px，宽屏收到 40px，错版投影保留），Manager 标记与状态标签在它旁边', async () => {
     const { title, header } = await open(makeAgent({ name: 'manager', isManager: true }))
     expect(title).toHaveClass('font-display-cn', 'text-[clamp(38px,6vw,60px)]', 'text-riso-blue', '[text-shadow:4px_4px_0_var(--riso-pink)]')
+    expect(title).toHaveClass('nav:text-[40px]', 'nav:leading-none', 'nav:[text-shadow:3px_3px_0_var(--riso-pink)]')
     expect(within(header).getByTitle('项目 Manager')).toHaveTextContent('Manager')
     await waitFor(() => expect(header.querySelector('[data-agent-status]')).toHaveTextContent('空闲'))
   })
@@ -229,10 +230,28 @@ describe('头部与页签的版式', () => {
     const deco = header.querySelector<HTMLElement>('[data-overprint-deco]')!
     expect(deco).toHaveAttribute('aria-hidden', 'true')
     expect(deco).toHaveClass('pointer-events-none', 'hidden', '@[820px]:block')
+    // 宽屏的紧凑页头里装饰缩小到和页头同高（整体缩到 0.6 倍，贴着右上角）。
+    expect(deco).toHaveClass('nav:top-2', 'nav:scale-[0.6]', 'origin-top-right')
     // 页头是容器：按它自己的宽度决定，而不是按窗口宽度。
     expect(header).toHaveClass('@container')
-    expect(title.parentElement).toHaveClass('@[820px]:pr-[316px]')
-    expect(within(header).getByText('anthropic · claude-sonnet-5-5').parentElement).toHaveClass('@[820px]:pr-[316px]')
+    // 标题、标记、模型与地址所在的那一块给装饰让出位置：窄屏照旧 316px，宽屏装饰缩小后让出 196px。
+    const row = title.closest('[data-agent-title-row]')!
+    expect(row).toHaveClass('@[820px]:pr-[316px]', 'nav:@[820px]:pr-[196px]')
+    expect(row).toContainElement(within(header).getByText('anthropic · claude-sonnet-5-5'))
+  })
+
+  it('宽屏时页头紧凑：标题右边一行是身份、状态、运行时、模型和地址，放不下时换行；面包屑更紧；纸张上沿离窗口顶部更近', async () => {
+    const { title, header } = await open(makeAgent({ name: 'manager', isManager: true, address: '测试组织/测试项目/manager' }))
+    expect(header).toHaveClass('nav:gap-1.5', 'nav:pt-3', 'nav:pb-2.5')
+    const row = title.closest('[data-agent-title-row]')!
+    // 窄屏照旧两行（标题与标记一行，模型与地址一行）；宽屏两行的内容排进同一行，放不下时换行。
+    expect(row).toHaveClass('flex-col', 'nav:flex-row', 'nav:flex-wrap', 'nav:items-center')
+    const rows = [...row.children]
+    expect(rows).toHaveLength(2)
+    for (const inner of rows) expect(inner).toHaveClass('nav:contents')
+    expect(rows[0]).toContainElement(title)
+    expect(rows[1]).toContainElement(within(header).getByText('测试组织/测试项目/manager'))
+    expect(within(header).getByRole('navigation', { name: '页面位置' }).querySelector('ol')).toHaveClass('nav:leading-4')
   })
 
   it('四个页签是贴在纸张上沿的索引标签：当前页黄色，其余米灰色', async () => {
