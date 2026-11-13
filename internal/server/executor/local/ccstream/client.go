@@ -110,6 +110,8 @@ type Client struct {
 	controls map[string]chan bool // 打断控制消息的 request_id → 是否成功
 	closed   bool                 // stdout 已结束
 	exiting  bool                 // 已发 SIGINT 或已结束进程：它一定会退出，不再写入新消息
+	// interruptStop 表示进程是因打断而由平台让它退出的（SIGINT，Windows 上为结束进程）：它的退出不算意外。
+	interruptStop bool
 
 	done    chan struct{}
 	exitErr error
@@ -365,12 +367,23 @@ func (c *Client) Abort(ctx context.Context) error {
 
 // interruptSignal 发 SIGINT：当前一轮以 error_during_execution 结束，随后进程退出，下一条消息由调用方用 --resume 重新起进程。
 func (c *Client) interruptSignal() {
+	c.mu.Lock()
+	c.interruptStop = true
+	c.mu.Unlock()
 	if runtime.GOOS == "windows" {
 		c.kill()
 		return
 	}
 	c.markExiting()
 	_ = c.process.Signal(os.Interrupt)
+}
+
+// StoppedByInterrupt 报告进程是否因打断而由平台让它退出（发过 SIGINT，Windows 上为结束了进程）：这样的退出是平台的意思，
+// 不记成意外退出。启动超时、读输出出错时结束的进程不算。
+func (c *Client) StoppedByInterrupt() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.interruptStop
 }
 
 func (c *Client) kill() {

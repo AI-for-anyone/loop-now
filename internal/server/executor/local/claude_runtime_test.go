@@ -40,7 +40,7 @@ func newClaudeHarness(t *testing.T, mutate func(o *Options)) *claudeHarness {
 	h := newHarness(t, func(o *Options) {
 		o.ClaudeBin = fakeclaudebin.Path(t)
 		o.RealHome = func() (string, error) { return realHome, nil }
-		o.Passthrough = append(o.Passthrough, "FAKECLAUDE_ARGS_FILE", "FAKECLAUDE_EXIT_AT_START", "FAKECLAUDE_EXTRA_SKILLS", "FAKECLAUDE_NO_TRANSCRIPT", "ANTHROPIC_API_KEY", "CLAUDE_CODE_USE_BEDROCK", "CLAUDECODE")
+		o.Passthrough = append(o.Passthrough, "FAKECLAUDE_ARGS_FILE", "FAKECLAUDE_EXIT_AT_START", "FAKECLAUDE_EXTRA_SKILLS", "FAKECLAUDE_NO_TRANSCRIPT", "FAKECLAUDE_SIGINT_EXIT_NOW", "ANTHROPIC_API_KEY", "CLAUDE_CODE_USE_BEDROCK", "CLAUDECODE")
 		if mutate != nil {
 			mutate(o)
 		}
@@ -244,6 +244,7 @@ func TestClaudeNeverTouchesRealHomeBesidesItsOwnTranscript(t *testing.T) {
 	after := snapshotTree(t, h.realHome)
 	prefix := filepath.ToSlash(filepath.Join(".claude", "projects", claudecli.ProjectDirName(d.workspace))) + "/"
 	claudeOwn := func(k string) bool { // claude 自己的会话记录、它为此建的上级目录，以及 fakeclaude 记下 purge 调用的文件
+		k = filepath.ToSlash(k) // 快照的键在 Windows 上用反斜杠
 		return strings.HasPrefix(k, prefix) || k == ".claude/" || k == ".claude/projects/" || k == ".fakeclaude-purge.log"
 	}
 	for k := range after {
@@ -529,23 +530,16 @@ func TestClaudePurgeOnRelease(t *testing.T) {
 	}
 }
 
-// 归档失败（会话记录读不出来）就不 purge：宁可留着也不丢记录。
+// 归档失败就不 purge：宁可留着也不丢记录。归档的目标位置被一个普通文件占着，在三个平台上都写不进去。
 func TestClaudePurgeSkippedWhenArchiveFails(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root 读得出无权限的文件")
-	}
 	h := newClaudeHarness(t, nil)
 	id := h.claudeAgent(nil)
 	if res, _ := h.exec(id, "hi"); res.Outcome != executor.OutcomeCompleted {
 		t.Fatalf("执行：%+v", res)
 	}
-	h.src.mu.Lock()
-	transcript := h.src.recorded[id]
-	h.src.mu.Unlock()
-	if err := os.Chmod(transcript, 0); err != nil {
+	if err := os.WriteFile(filepath.Join(h.e.dirs(id).sessions, "claude"), []byte("not a directory"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(transcript, 0o600) })
 	if err := h.e.Release(context.Background(), id); err != nil {
 		t.Fatal(err)
 	}
@@ -621,5 +615,67 @@ func TestClaudeTranscriptNotFoundDegrades(t *testing.T) {
 	}
 	if args := h.launches()[1]; hasFlag(args, "--resume") || !claudecli.ValidSessionID(argValue(args, "--session-id")) {
 		t.Fatalf("重启后应开新会话：%v", args)
+	}
+}
+
+// Windows 上没有 SIGINT，打断的兜底是直接结束进程，进程可能先于这一轮的结果退出：这次退出同样是平台的意思，不记意外退出；
+// 紧跟的下一条消息照常在新进程里接续。（FAKECLAUDE_SIGINT_EXIT_NOW 让 fakeclaude 收到 SIGINT 时不给结果、立即退出，在所有平台上重现这种时序。）
+func TestClaudeInterruptExitBeforeResultIsNotUnexpected(t *testing.T) {
+	h := newClaudeHarness(t, nil)
+	h.env["FAKECLAUDE_SIGINT_EXIT_NOW"] = "1"
+	id := h.claudeAgent(nil)
+	if res, _ := h.exec(id, "first"); res.Outcome != executor.OutcomeCompleted {
+		t.Fatalf("第一轮：%+v", res)
+	}
+	run := uuid.Must(uuid.NewV7())
+	sink := newSink()
+	done := make(chan executor.Result, 1)
+	go func() {
+		res, err := h.e.Execute(context.Background(), executor.Request{AgentID: id, RunID: run, Message: "fake:noack"}, sink)
+		if err != nil {
+			t.Error(err)
+		}
+		done <- res
+	}()
+	select {
+	case <-sink.gotText:
+	case <-time.After(15 * time.Second):
+		t.Fatal("没有输出")
+	}
+	if err := h.e.Interrupt(context.Background(), id, run); err != nil {
+		t.Fatal(err)
+	}
+	if res := <-done; res.Outcome != executor.OutcomeInterrupted {
+		t.Fatalf("打断：%+v", res)
+	}
+	if res, _ := h.exec(id, "fake:history"); res.Outcome != executor.OutcomeCompleted || res.Text != "history=2" {
+		t.Fatalf("打断后的下一条：%+v", res)
+	}
+	time.Sleep(200 * time.Millisecond) // 让监视退出的协程跑完
+	h.obs.mu.Lock()
+	defer h.obs.mu.Unlock()
+	for _, ev := range h.obs.events {
+		if ev.ev.Type == store.EventPiExited {
+			t.Fatalf("打断让它退出的不记意外退出：%+v", ev.ev.Data)
+		}
+	}
+}
+
+// context_entry 的 path 属性原样写路径：Windows 的反斜杠不能被转义成两个（否则模型拿到错的路径）；只有双引号与换行写成实体。
+func TestContextEntryPathIsVerbatim(t *testing.T) {
+	var b strings.Builder
+	writeEntry(&b, `C:\Users\RUNNER~1\agents\x\workspace\AGENTS.md`, "body")
+	if !strings.Contains(b.String(), `<context_entry path="C:\Users\RUNNER~1\agents\x\workspace\AGENTS.md">`) {
+		t.Fatalf("Windows 路径：%s", b.String())
+	}
+	b.Reset()
+	writeEntry(&b, "/home/u/项目/a\"b\nc/AGENTS.md", "body")
+	if !strings.Contains(b.String(), `<context_entry path="/home/u/项目/a&quot;b&#10;c/AGENTS.md">`) {
+		t.Fatalf("双引号与换行：%s", b.String())
+	}
+	b.Reset()
+	writeEntry(&b, "/x/AGENTS.md", "  \n")
+	if b.Len() != 0 {
+		t.Fatal("内容为空时不写")
 	}
 }

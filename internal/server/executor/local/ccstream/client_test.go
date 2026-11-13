@@ -216,6 +216,9 @@ func TestInterruptFallsBackToSignal(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("SIGINT 之后进程应退出")
 	}
+	if !c.StoppedByInterrupt() {
+		t.Fatal("因打断而退出的进程应标为 StoppedByInterrupt")
+	}
 	if _, err := c.Prompt(ctx(t), "x", nil); !errors.Is(err, runturn.ErrExited) {
 		t.Fatalf("退出后再发消息：%v", err)
 	}
@@ -234,6 +237,9 @@ func TestExitMidTurn(t *testing.T) {
 	<-c.Done()
 	if c.ExitErr() == nil || !strings.Contains(c.Stderr(), "crashing on purpose") {
 		t.Fatalf("退出码与错误输出：%v %q", c.ExitErr(), c.Stderr())
+	}
+	if c.StoppedByInterrupt() {
+		t.Fatal("崩溃不是平台让它退出的")
 	}
 	if _, err := c.Prompt(ctx(t), "x", nil); !errors.Is(err, runturn.ErrExited) {
 		t.Fatalf("退出后再发消息：%v", err)
@@ -257,6 +263,9 @@ func TestStartFailures(t *testing.T) {
 	case <-slow.Done():
 	case <-time.After(5 * time.Second):
 		t.Fatal("启动超时后进程应被结束")
+	}
+	if slow.StoppedByInterrupt() {
+		t.Fatal("启动超时结束的进程不算因打断而退出")
 	}
 }
 
