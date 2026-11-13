@@ -14,7 +14,7 @@ export function makeTaskDetail(projectId: string, projectName = '测试项目'):
   }
   return {
     sleepingInstances: [],
-    task: { id: taskId, projectId, title: '通用任务验收', status: 'blocked', currentNodeRunId: nodeId, currentStepId: 'check', currentAgentId: node.agentId, reason: node.reason, createdAt: taskTime, updatedAt: taskTime, endedAt: null, link: `/p/${encodeURIComponent(projectName)}/tasks/${taskId}`, version: 2 },
+    task: { id: taskId, projectId, number: 12, title: '通用任务验收', status: 'blocked', currentNodeRunId: nodeId, currentStepId: 'check', currentAgentId: node.agentId, reason: node.reason, createdAt: taskTime, updatedAt: taskTime, endedAt: null, link: `/p/${encodeURIComponent(projectName)}/tasks/${taskId}`, version: 2 },
     request: { text: '原始要求' }, cleanup: 'none',
     workflow: { startStepId: 'check', steps: [{ id: 'check', title: '质量检查', description: '检查输入', agentId: node.agentId, inputFields: [{ name: 'text', type: 'string', required: true }], outputFields: [{ name: 'result', type: 'string', required: true }], inputs: { text: { kind: 'request', field: 'text' } } }, { id: 'finish', title: '提交报告', description: '提交成果', agentId: node.agentId, inputFields: [], outputFields: [], inputs: {} }], edges: [{ id: 'finish', from: 'check', to: 'finish', label: '通过' }, { id: 'again', from: 'finish', to: 'check', label: '返工', maxTraversals: 3 }] },
     nodes: [{ ...node, id: oldNodeId, visit: 1, status: 'completed', inputs: { text: '历史输入' }, inputVersions: [], output: { result: '历史成功结果' }, runIds: ['00000000-0000-7000-8000-000000000106'] }, node],
