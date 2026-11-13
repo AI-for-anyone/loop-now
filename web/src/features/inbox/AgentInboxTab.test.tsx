@@ -141,3 +141,62 @@ describe('显示 Agent 地址', () => {
     expect(screen.queryByRole('button', { name: '复制地址' })).toBeNull()
   })
 })
+
+// 改版“一张印出来的纸”第 2 步：收件箱页签直接排在纸上，右侧票根里是未读数与总数。
+describe('纸张上的收件箱', () => {
+  it('筛选是两颗胶囊：选中的一颗黄底、藏青描边加藏青投影；顶上一行与列表之间一道实线，只读说明是一行小字', async () => {
+    await renderAgentInbox(received())
+    const all = screen.getByRole('radio', { name: '全部' })
+    const unread = screen.getByRole('radio', { name: '只看未读' })
+    for (const pill of [all, unread]) expect(pill).toHaveClass('h-[34px]', 'rounded-full', 'border-2')
+    expect(all).toHaveAttribute('aria-checked', 'true')
+    expect(all).toHaveClass('data-[state=on]:bg-riso-yellow', 'data-[state=on]:border-ink', 'data-[state=on]:shadow-[3px_3px_0_var(--ink)]')
+    const bar = all.closest('[data-inbox-bar]')!
+    expect(bar).toHaveClass('border-b-2', 'border-ink')
+    const note = within(bar as HTMLElement).getByText('只读查看：打开全文不会改变已读状态')
+    expect(note).not.toHaveClass('bg-tint-yellow')
+  })
+
+  it('每封一行：发件方与等宽的地址、单行的正文、等宽的时间；未读是倾斜的粉色描边印章，已读是浅蓝胶囊；行与行之间虚线', async () => {
+    const [first, second] = received()
+    const { list } = await renderAgentInbox([second, first])
+    const [read, fresh] = list.getAllByRole('listitem')
+    for (const item of [read, fresh]) expect(item).toHaveClass('border-b-[1.5px]', 'border-dashed')
+    expect(within(fresh).getByText('测试组织/测试项目/测试助手')).toHaveClass('font-mono', 'truncate')
+    expect(within(fresh).getByText('naming 包的测试我补了两条，跑一下看看。')).toHaveClass('truncate', 'font-bold')
+    expect(fresh.querySelector('time')).toHaveClass('font-mono')
+    const stamp = within(fresh).getByText('未读').closest('[data-read-state]')!
+    expect(stamp).toHaveAttribute('data-read-state', 'unread')
+    expect(stamp).toHaveClass('riso-tilt', 'text-pink-text')
+    const pill = within(read).getByText(/^已读 /).closest('[data-read-state]')!
+    expect(pill).toHaveAttribute('data-read-state', 'read')
+    expect(pill).toHaveClass('rounded-full', 'bg-tint-blue')
+    // 已读的正文是次要文字色、不加粗。
+    expect(within(read).getByText('帮我审一下 naming 包')).not.toHaveClass('font-bold')
+  })
+
+  it('票根“信件”写着未读数与总数；窄屏不显示', async () => {
+    const [first, second] = received()
+    await renderAgentInbox([second, first])
+    const stub = await screen.findByRole('complementary', { name: '信件' })
+    expect(stub).toHaveClass('max-nav:hidden')
+    await waitFor(() => expect(within(stub).getByText('未读').previousElementSibling).toHaveTextContent(/^1$/))
+    expect(within(stub).getByText('全部').previousElementSibling).toHaveTextContent(/^2$/)
+    expect(within(stub).getByText('未读').previousElementSibling).toHaveClass('text-pink-text')
+  })
+
+  it('信件列表在纸张里自己滚动，用纸张的细滚动条，不隐藏', async () => {
+    const { list } = await renderAgentInbox(received())
+    const area = list.getAllByRole('listitem')[0].closest('.overflow-y-auto')!
+    expect(area.closest('[data-sheet]')).toHaveClass('riso-scrollbar')
+    expect(area.className).not.toMatch(/no-scrollbar/)
+  })
+
+  it('只看未读时，票根仍按全部信件计数', async () => {
+    const [first, second] = received()
+    const { user } = await renderAgentInbox([second, first])
+    await user.click(screen.getByRole('radio', { name: '只看未读' }))
+    const stub = screen.getByRole('complementary', { name: '信件' })
+    await waitFor(() => expect(within(stub).getByText('全部').previousElementSibling).toHaveTextContent(/^2$/))
+  })
+})

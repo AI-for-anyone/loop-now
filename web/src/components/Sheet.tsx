@@ -2,12 +2,12 @@ import type { ComponentProps, ElementType, Ref } from 'react'
 import { cn } from '@/lib/utils'
 
 // 纸张：页面主体放在一张纸上。浅纸底（带主区那层很淡的颗粒）、2px 藏青描边、18px 圆角、6px 孔版蓝实色投影；右侧留 6px 给投影。
-// 内容超出时由里面的区域自己滚动，纸张本身裁掉溢出的部分。
+// 内容超出时由里面的区域自己滚动，纸张本身裁掉溢出的部分。纸张里的滚动条一律是细的藏青半透明滚动条（riso-scrollbar）。
 export function Sheet({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
       data-sheet
-      className={cn('riso-grain mr-1.5 flex min-h-0 flex-col overflow-hidden rounded-panel border-2 border-ink bg-paper-raised shadow-print-dialog', className)}
+      className={cn('riso-grain riso-scrollbar mr-1.5 flex min-h-0 flex-col overflow-hidden rounded-panel border-2 border-ink bg-paper-raised shadow-print-dialog', className)}
       {...props}
     />
   )
@@ -50,5 +50,15 @@ export function RulerMark({ className, ...props }: ComponentProps<'span'>) {
       <span data-ruler-band className="absolute inset-y-0 -right-0.5 left-2 -rotate-[1.5deg] bg-riso-yellow mix-blend-multiply" />
       <span data-ruler-arrow className="absolute top-1/2 left-0.5 size-0 -translate-y-1/2 border-y-[6px] border-l-8 border-y-transparent border-l-riso-pink" />
     </span>
+  )
+}
+
+// 票根里的一个大数字（文件夹页的文件数、收件箱的未读数……）：上面是 Bricolage 34px 的数，下面是一行小字说明，靠右排。
+export function StubFigure({ value, label, tone = 'blue' }: { value: string; label: string; tone?: 'blue' | 'ink' | 'pink' }) {
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <span className={cn('font-display-latin text-[34px] leading-none font-extrabold', tone === 'blue' ? 'text-riso-blue' : tone === 'pink' ? 'text-pink-text' : 'text-ink')}>{value}</span>
+      <span className="text-[12.5px] font-black text-ink-700">{label}</span>
+    </div>
   )
 }

@@ -3,27 +3,27 @@ import { folderSource } from '@/api/folders'
 import { useContextInfo } from '@/api/queries'
 import { useAgentContext } from '@/features/agents/agent-context'
 import { useScope } from '@/features/projects/scope-context'
-import { pageTitleClass } from '@/lib/page-title'
+import { Sheet } from '@/components/Sheet'
+import { sheetTitleClass } from '@/lib/page-title'
 import { t } from '@/i18n'
 import { FileManager } from './FileManager'
 
-// Agent 的“文件夹”页签：它唯一的文件夹，既是工作目录，也是它自己的上下文。占满页签的宽度与高度。
+// Agent 的“文件夹”页签：它唯一的文件夹，既是工作目录，也是它自己的上下文。直接排在页签的纸上（右侧票根里是概况），
+// 说明放在底部。窄屏时给定高度、随整页滚动；宽屏时占满页签剩下的高度（与对话页签相同）。
 export function AgentFolderTab() {
   const { agent } = useAgentContext()
   const context = useContextInfo()
   const source = useMemo(() => folderSource({ kind: 'agent', agentId: agent.id }), [agent.id])
   return (
-    // 窄屏时给定高度、随整页滚动；宽屏时占满页签剩下的高度（与对话页签相同）。
-    <div className="flex h-full min-h-0 flex-col gap-3 px-6 pt-4 pb-6 lg:overflow-hidden">
-      <p className="shrink-0 text-[13.5px] text-ink-700">{t.folders.agent.intro(agent.name)}</p>
-      <FileManager
-        source={source}
-        rootLabel={t.folders.rootLabel.agent(agent.name)}
-        limits={context.data?.limits.textEdit}
-        maxUpload={context.data?.limits.maxFolderUpload}
-        className="h-[clamp(28rem,80dvh,56rem)] shrink-0 lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink"
-      />
-    </div>
+    <FileManager
+      variant="sheet"
+      source={source}
+      rootLabel={t.folders.rootLabel.agent(agent.name)}
+      note={t.folders.agent.intro(agent.name)}
+      limits={context.data?.limits.textEdit}
+      maxUpload={context.data?.limits.maxFolderUpload}
+      className="h-[clamp(28rem,80dvh,56rem)] lg:h-full"
+    />
   )
 }
 
@@ -42,7 +42,8 @@ export function ContextFolderSection({ scope }: { scope: { kind: 'project'; proj
   )
 }
 
-// 左侧栏“项目文件夹”打开的页面：项目里的 Agent 共用的文件夹，占满主区（与 Agent 的文件夹页签相同）。
+// 左侧栏“项目文件夹”打开的页面：项目里的 Agent 共用的文件夹。页头（标题与说明）在纸外面，文件夹在一张纸上，
+// 与 Agent 的文件夹页签同一种版式（右侧票根里是概况）。
 export function ProjectFolderPage() {
   const scope = useScope()
   const context = useContextInfo()
@@ -50,17 +51,22 @@ export function ProjectFolderPage() {
   const source = useMemo(() => (projectId ? folderSource({ kind: 'project', projectId }) : null), [projectId])
   if (!source) return null
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 px-4 pt-[30px] pb-6 sm:px-8 lg:overflow-hidden">
-      <h1 className={pageTitleClass}>{t.folders.project.title}</h1>
-      <p className="shrink-0 text-[13.5px] text-ink-700">{t.folders.project.intro}</p>
-      <FileManager
-        key={projectId}
-        source={source}
-        rootLabel={t.folders.rootLabel.project}
-        limits={context.data?.limits.textEdit}
-        maxUpload={context.data?.limits.maxFolderUpload}
-        className="h-[clamp(28rem,80dvh,56rem)] shrink-0 lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink"
-      />
+    <div className="flex h-full min-h-0 flex-col px-[clamp(14px,2.4vw,34px)] pb-[26px] max-nav:pb-4 lg:overflow-hidden">
+      <header className="flex shrink-0 flex-col gap-3 pt-[22px] pb-[18px]">
+        <h1 className={sheetTitleClass}>{t.folders.project.title}</h1>
+        <p className="text-[13.5px] text-ink-700">{t.folders.project.intro}</p>
+      </header>
+      <Sheet className="h-[clamp(28rem,80dvh,56rem)] shrink-0 lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink">
+        <FileManager
+          key={projectId}
+          variant="sheet"
+          source={source}
+          rootLabel={t.folders.rootLabel.project}
+          limits={context.data?.limits.textEdit}
+          maxUpload={context.data?.limits.maxFolderUpload}
+          className="h-full"
+        />
+      </Sheet>
     </div>
   )
 }
