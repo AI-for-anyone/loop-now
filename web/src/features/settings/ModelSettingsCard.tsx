@@ -5,7 +5,6 @@ import { useModelSettings, useSaveModelSettings } from '@/api/queries'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { useDirtyForm } from '@/features/prompts/draft-navigation'
 import { createPromptDraft, promptDirty, reducePromptDraft, type PromptText } from '@/features/prompts/prompt-draft'
@@ -112,17 +111,13 @@ export function ModelSettingsCard() {
   const settings = useModelSettings()
   const copy = t.settings.models
   const initial = useMemo(() => settings.data ? asDraft(settings.data) : null, [settings.data])
-  return <Card className="gap-4">
-    <CardHeader>
-      <CardTitle>{copy.title}</CardTitle>
-      <CardDescription>{copy.description}</CardDescription>
-    </CardHeader>
-    <CardContent className="gap-4">
+  // 改版后是全局设置纸上一个编号分区的内容（标题由分区给出）。
+  return <div className="grid min-w-0 gap-4">
+    <p className="text-[13.5px] text-ink-700">{copy.description}</p>
       <p className="text-[13px] leading-relaxed text-ink-500">{copy.effect}</p>
       {settings.isError && <ErrorAlert error={settings.error} />}
       {settings.isPending && <p role="status" className="text-[13px] text-ink-500">{t.common.loading}</p>}
       {settings.data?.loadError && <Alert variant="warning" role="alert"><AlertDescription>{settings.data.loadError}</AlertDescription></Alert>}
       {initial && <ModelSettingsEditor initial={initial} />}
-    </CardContent>
-  </Card>
+    </div>
 }

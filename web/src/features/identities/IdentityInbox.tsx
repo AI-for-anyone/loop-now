@@ -1,6 +1,7 @@
 import { useId, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { segmentedClass, segmentedItemClass } from '@/lib/segmented'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { useIdentityInbox } from '@/api/inbox'
 import type { InboxDirection } from '@/api/queries'
@@ -20,17 +21,17 @@ export function IdentityInbox({ identityId }: { identityId: string }) {
   const unreadId = useId()
 
   return (
-    <section aria-labelledby="identity-inbox" className="flex flex-col gap-3.5 rounded-panel bg-paper-raised px-6 py-[22px] shadow-print-rest">
+    <section aria-labelledby="identity-inbox" className="flex min-w-0 flex-col gap-3.5 border-t-2 border-dashed border-ink/[0.22] pt-5">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
-        <h3 id="identity-inbox" className="font-display-cn text-[30px] leading-[1.15] font-normal">
+        <h3 id="identity-inbox" className="text-[17px] leading-[1.3] font-black">
           {t.identities.inbox}
         </h3>
         <span className="rounded-full bg-tint-yellow px-3 py-0.5 text-[12.5px] font-bold">{t.identities.inboxReadonly}</span>
         <InboxLiveStatus />
         <div className="ml-auto flex flex-wrap items-center gap-x-3.5 gap-y-2.5">
-          <ToggleGroup aria-label={t.identities.direction} value={direction} onValueChange={(value) => setDirection(value as InboxDirection)}>
+          <ToggleGroup aria-label={t.identities.direction} className={segmentedClass} value={direction} onValueChange={(value) => setDirection(value as InboxDirection)}>
             {directions.map((value) => (
-              <ToggleGroupItem key={value} value={value}>
+              <ToggleGroupItem key={value} value={value} className={segmentedItemClass}>
                 {t.identities.directions[value]}
               </ToggleGroupItem>
             ))}

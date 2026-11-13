@@ -1,6 +1,6 @@
 import { useId } from 'react'
 import { Link } from 'react-router'
-import { ChevronDownIcon } from 'lucide-react'
+import { SelectChevron } from '@/components/SelectChevron'
 import type { Schemas } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { t } from '@/i18n'
@@ -49,7 +49,7 @@ export function OverviewScopeSelect({
         </optgroup>
         <option value={PLATFORM}>{t.projects.overview.platform}</option>
       </select>
-      <ChevronDownIcon aria-hidden="true" className="pointer-events-none absolute right-1.5 size-3" strokeWidth={2.8} />
+      <SelectChevron />
     </span>
   )
 }

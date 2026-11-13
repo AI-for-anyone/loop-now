@@ -6,6 +6,8 @@ export const identities = {
   create: '新建',
   empty: '还没有外部身份。',
   notFound: '找不到这个外部身份。',
+  // 页头元信息里的身份个数。
+  count: (count: number) => `${count} 个`,
   activeTokens: (count: number) => `${count} 个有效令牌`,
   createdAt: (time: string) => `创建于 ${formatTime(time)}`,
   deletedAt: (time: string) => `删除于 ${formatTime(time)}`,

@@ -258,3 +258,39 @@ describe('抽屉由地址控制开合', () => {
     expect(await within(sheet).findByText('这个模板不存在或已删除。')).toBeInTheDocument()
   })
 })
+
+// 改版“一张印出来的纸”第 4 步：Skills 库的页头、空状态与模板卡片。
+describe('纸张上的 Skills 库', () => {
+  it('页头是页面标题：面包屑“全局›Skills 库”，旁边写着共几个模板', async () => {
+    setup('/skills')
+    const header = (await screen.findByRole('heading', { level: 1, name: 'Skills 库' })).closest('header')!
+    expect(within(header).getByRole('navigation', { name: '页面位置' })).toHaveTextContent('全局›Skills 库')
+    expect(await within(header).findByText('共 0 个模板')).toBeInTheDocument()
+  })
+
+  it('空状态在纸上：叠印的卡片插画、黄色记号笔标题；三个按钮里只有“在线新建”是荧光粉', async () => {
+    setup('/skills')
+    const title = await screen.findByText('Skills 库中还没有模板。')
+    expect(title).toHaveClass('riso-marker', 'font-display-cn')
+    const empty = title.closest('[data-empty-library]')!
+    expect(empty.closest('[data-sheet]')).not.toBeNull()
+    expect(empty.querySelector('[data-empty-art]')).toHaveAttribute('aria-hidden', 'true')
+    for (const name of ['上传目录', '上传 zip']) {
+      const button = within(empty as HTMLElement).getByRole('button', { name })
+      expect(button).toHaveClass('border-2', 'border-ink', 'bg-white')
+      expect(button).not.toHaveClass('bg-riso-pink')
+    }
+    expect(within(empty as HTMLElement).getByRole('link', { name: '在线新建' })).toHaveClass('bg-riso-pink', 'border-2', 'border-ink')
+  })
+
+  it('有模板时：入口在页头的元信息里；模板是白底、藏青描边加投影的卡片，打开的那张是黄色', async () => {
+    setup('/skills/sk-1', [], [summary('sk-1', 'pdf-tools', '处理 PDF'), summary('sk-2', 'csv-tools', '处理 CSV')])
+    const list = await screen.findByRole('list', { name: 'Skills 库', hidden: true })
+    const header = screen.getByRole('heading', { level: 1, name: 'Skills 库', hidden: true }).closest('header')!
+    expect(within(header).getByRole('link', { name: '在线新建', hidden: true })).toHaveClass('bg-riso-pink')
+    const [open, other] = within(list).getAllByRole('link', { hidden: true })
+    expect(open).toHaveAttribute('aria-current', 'true')
+    expect(open).toHaveClass('aria-[current=true]:bg-riso-yellow', 'border-2', 'border-ink', 'shadow-[4px_4px_0_var(--ink)]')
+    expect(other.closest('[data-sheet]')).not.toBeNull()
+  })
+})

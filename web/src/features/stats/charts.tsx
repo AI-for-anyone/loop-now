@@ -26,10 +26,6 @@ function useWidth(fallback: number) {
 // 横轴标签之间至少留 gap 像素：从最后一个（今天、现在）往前每隔几个显示一个。
 const labelEvery = (n: number, room: number, gap: number) => Math.max(1, Math.ceil(n / Math.max(1, Math.floor(room / gap))))
 
-const topRounded = (x: number, y: number, w: number, h: number) => {
-  const r = Math.min(4, w / 2, h)
-  return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`
-}
 
 // 折线遇到 null 断开。
 function linePath(points: ({ x: number; y: number } | null)[]) {
@@ -182,7 +178,7 @@ export function StackedColumns({
   const top = showTops ? 20 : 10
   const plotH = height - top - 24
   const scale = plotH / max
-  const barW = Math.max(2, Math.min(30, slot * 0.56))
+  const barW = Math.max(2, Math.min(48, slot * 0.56))
   const every = labelEvery(n, plotW, 46)
   const cx = (i: number) => left + slot * i + slot / 2
 
@@ -225,23 +221,24 @@ export function StackedColumns({
             </g>
           )
         })}
+        <line data-baseline x1={left} x2={left + plotW} y1={top + plotH} y2={top + plotH} stroke="var(--ink)" strokeWidth={2} />
         {labels.map((text, i) => {
           const x = left + slot * i + (slot - barW) / 2
           const parts = series.map((s) => ({ key: s.key, color: s.color, value: s.values[i] ?? 0 })).filter((part) => part.value > 0)
           let base = 0
+          const stackH = parts.reduce((sum, part) => sum + Math.max(part.value * scale, 1), 0)
           return (
             <g key={i} opacity={active !== null && active !== i ? 0.45 : 1}>
-              {parts.map((part, j) => {
+              {/* 改版：各段紧挨着叠起来，整根柱子外面一圈 2px 藏青描边。 */}
+              {parts.map((part) => {
                 const h = Math.max(part.value * scale, 1)
                 const y = top + plotH - base * scale - h
                 base += part.value
-                // 最上面一段画圆角；下面的段让出 2px，留出与上一段之间的空隙。
-                return j === parts.length - 1 ? (
-                  <path key={part.key} d={topRounded(x, y, barW, h)} fill={part.color} />
-                ) : (
-                  <rect key={part.key} x={x} y={y + 2} width={barW} height={Math.max(h - 2, 1)} fill={part.color} />
-                )
+                return <rect key={part.key} x={x} y={y} width={barW} height={h} fill={part.color} />
               })}
+              {parts.length > 0 && (
+                <rect data-column-outline x={x} y={top + plotH - stackH} width={barW} height={stackH} fill="none" stroke="var(--ink)" strokeWidth={2} />
+              )}
               {showTops && totals[i] > 0 && (
                 <text x={cx(i)} y={top + plotH - totals[i] * scale - 5} textAnchor="middle" fontSize={11} fontWeight={700} fill="var(--ink)">
                   {tops(totals[i])}

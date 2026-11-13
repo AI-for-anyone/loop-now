@@ -126,6 +126,7 @@
   - 第 2 步（分支 `riso-sheet-2`）：配置、文件夹（含项目文件夹页）、收件箱三个页签。与设计稿的出入由主会话认可：输入框描边改在公共 `fieldClass` 上，全站生效；思考等级分段按钮保留“默认（中）”；文件夹保留左侧文件树（选中态在树上），不写“实时更新中”（文件夹不推送）；票根计数只按已读到的页算，没读完带“+”；已读胶囊保留读取时间；纸张内滚动区统一用 `.riso-scrollbar` 细滚动条（对话页仍隐藏）。已知待修：窗口较矮时侧栏出现原生灰滚动条、选中的 Agent 名称被截断。PR #53，2026-11-12 合并。
   - 对话页加宽（分支 `chat-roomier`，用户：“能不能让对话的占比再大一点呢？感觉很多浪费了”，看过前后对比图后“可以”）：只改宽屏。回复正文最宽 1100px（原 760px），Agent 对话里用户消息最宽 88%（任务节点对话仍 80%）；Agent 页头紧凑（40px 标题，信息并成标题右侧一行，叠印装饰缩到页头高度）；轮次编号栏 36px；输入区间距收紧。第 3 步起项目页和全局页的页头沿用这种紧凑样式。
   - 第 3 步（分支 `riso-sheet-3`，叠在 `chat-roomier` 上）：项目概览、任务列表、项目设置，并修了第 2 步留下的两处侧栏问题。新增公共部件 `PageHeader`／`PageFrame`／`LiveDot`、`SheetSection`／`SectionToc`（Agent 配置页也改用）、`lib/segmented.ts`、`Table card={false}`、`FileManager variant="panel"`。主会话定的出入：宽屏页头紧凑；无页签的页面纸张上沿直接贴页头，不留空；任务列表的状态筛选只作用于已加载的任务（列表接口不能按状态筛）。任务列表暂无任务编号，等服务端加字段（用户 2026-11-12 决定要加）。
+  - 第 4 步（分支 `riso-sheet-4`，叠在 `riso-sheet-3` 上）：全局设置、外部身份、插件市场、Skills 库、统计。全站变化：公共 `Switch` 打开时为黄底深色圆钮；“官方” `SourceBadge` 是深色胶囊；语言选择是分段按钮；`OverprintDeco`、`SelectChevron` 的 SVG 用 class 定尺寸（统计测试把带 `width` 属性的 svg 当图表）。新部件：插件卡片色带 `CardBand`／`bandCardClass`、统计卡片 `CardNumber`、`ContextFolderBody({ scope })`（取代 `ContextFolderSection`）。Skills 库的新建和详情抽屉没改，留给第 5 步。
 
 ## 已交付与未完成
 

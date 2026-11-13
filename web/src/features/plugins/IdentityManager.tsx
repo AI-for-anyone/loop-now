@@ -58,8 +58,8 @@ export function IdentityManager({ identity }: { identity: Schemas['ExternalIdent
     save.mutate(next ? { pluginId: next.pluginId, channelId: next.channelId } : null)
   }
   return (
-    <section aria-labelledby={`${id}-title`} className="flex flex-col gap-3 rounded-panel bg-paper-raised px-6 py-[22px] shadow-print-rest">
-      <h2 id={`${id}-title`} className="font-display-cn text-[26px] leading-tight font-normal">
+    <section aria-labelledby={`${id}-title`} className="flex min-w-0 flex-col gap-3.5 border-t-2 border-dashed border-ink/[0.22] pt-5">
+      <h2 id={`${id}-title`} className="text-[17px] leading-[1.3] font-black">
         {text.title}
       </h2>
       <p className="text-[13.5px] text-ink-700">{text.intro}</p>

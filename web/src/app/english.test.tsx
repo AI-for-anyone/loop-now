@@ -77,9 +77,10 @@ describe('English console', () => {
   it('global settings shows English as the chosen language', async () => {
     server.use(...baseHandlers([]))
     renderRoutes(routes, '/settings')
-    const select = await screen.findByRole('combobox', { name: 'Language' })
-    expect(select).toHaveDisplayValue('English')
-    expect(select).toHaveAccessibleDescription('Applies to this browser only. The page reloads when you switch.')
+    // The language picker is a segmented control since the redesign (it was a select).
+    const group = await screen.findByRole('radiogroup', { name: 'Language' })
+    expect(within(group).getByRole('radio', { name: 'English' })).toHaveAttribute('aria-checked', 'true')
+    expect(group).toHaveAccessibleDescription('Applies to this browser only. The page reloads when you switch.')
   })
 
   it("known error codes drop the server's Chinese detail; unknown ones show it as is", () => {

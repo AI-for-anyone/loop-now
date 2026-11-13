@@ -1,4 +1,4 @@
-import { useId, useMemo } from 'react'
+import { useMemo } from 'react'
 import { folderSource } from '@/api/folders'
 import { useContextInfo } from '@/api/queries'
 import { useAgentContext } from '@/features/agents/agent-context'
@@ -29,36 +29,24 @@ export function AgentFolderTab() {
 }
 
 // 项目设置与全局设置里的共享文件夹：占满主栏宽度，高度随视口；没有“从 Git 拉取”。
-// 项目设置里“项目文件夹”一区的内容：一句说明加一个文件管理器（改版：纸上分区里 2px 藏青描边的一块）。
-export function ContextFolderBody({ projectId }: { projectId: string }) {
+// 项目设置里“项目文件夹”、全局设置里“全局文件夹”一区的内容：一句说明加一个文件管理器
+// （改版：纸上分区里 2px 藏青描边的一块，与文件夹页同样的工具条与列表，没有票根）。
+export function ContextFolderBody({ scope }: { scope: { kind: 'project'; projectId: string } | { kind: 'global' } }) {
   const context = useContextInfo()
-  const source = useMemo(() => folderSource({ kind: 'project', projectId }), [projectId])
+  const source = useMemo(() => folderSource(scope), [scope.kind === 'project' ? scope.projectId : 'global']) // eslint-disable-line react-hooks/exhaustive-deps
+  const copy = t.folders[scope.kind]
   return (
     <>
-      <p className="text-[13.5px] text-ink-700">{t.folders.project.intro}</p>
+      <p className="text-[13.5px] text-ink-700">{copy.intro}</p>
       <FileManager
         variant="panel"
         source={source}
-        rootLabel={t.folders.rootLabel.project}
+        rootLabel={t.folders.rootLabel[scope.kind]}
         limits={context.data?.limits.textEdit}
         maxUpload={context.data?.limits.maxFolderUpload}
         className="h-[clamp(30rem,70dvh,50rem)]"
       />
     </>
-  )
-}
-
-export function ContextFolderSection({ scope }: { scope: { kind: 'project'; projectId: string } | { kind: 'global' } }) {
-  const context = useContextInfo()
-  const titleId = useId()
-  const source = useMemo(() => folderSource(scope), [scope.kind === 'project' ? scope.projectId : 'global']) // eslint-disable-line react-hooks/exhaustive-deps
-  const copy = t.folders[scope.kind]
-  return (
-    <section aria-labelledby={titleId} className="flex flex-col gap-3.5 rounded-panel bg-paper-raised px-6 py-[22px] text-ink shadow-print-rest">
-      <h2 id={titleId} className="font-display-cn text-[30px] leading-[1.15] font-normal">{copy.title}</h2>
-      <p className="-mt-1 text-[14px] text-ink-700">{copy.intro}</p>
-      <FileManager source={source} rootLabel={t.folders.rootLabel[scope.kind]} limits={context.data?.limits.textEdit} maxUpload={context.data?.limits.maxFolderUpload} className="h-[clamp(30rem,75dvh,54rem)]" />
-    </section>
   )
 }
 

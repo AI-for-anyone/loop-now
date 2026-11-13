@@ -2,6 +2,8 @@ import type { Messages } from '..'
 
 export const localMode = {
   settings: {
+    on: 'On',
+    off: 'Off',
     title: 'Local mode',
     intro: 'Lets Agents use what is already on this computer. Each of the four has its own switch: the first three are on by default, and "Use local logins" stays off until you turn it on.',
     effect: '"Bind local directories", "Use local CLIs" and "Use local logins" take effect when an Agent handles its next message; a reply in progress is not affected. "Use local git identity" takes effect from the next pull.',

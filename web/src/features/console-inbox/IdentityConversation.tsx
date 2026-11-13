@@ -31,9 +31,9 @@ export function IdentityConversation({ identity }: { identity: Schemas['External
   const deleted = identity.deletedAt !== null
   const last = conversation.messages.at(-1)
   return (
-    <section aria-labelledby={titleId} className="flex min-w-0 flex-col gap-4 rounded-panel bg-paper-raised p-5 shadow-print-rest">
+    <section aria-labelledby={titleId} className="flex min-w-0 flex-col gap-3.5 border-t-2 border-dashed border-ink/[0.22] pt-5">
       <div className="flex flex-col gap-1">
-        <h3 id={titleId} className="font-display-cn text-[28px] leading-tight text-riso-blue">{text.conversation}</h3>
+        <h3 id={titleId} className="text-[17px] leading-[1.3] font-black">{text.conversation}</h3>
         <p className="text-[13px] text-ink-500">{text.conversationIntro}</p>
       </div>
       <ErrorAlert error={conversation.error} />
