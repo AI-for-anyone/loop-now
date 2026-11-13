@@ -552,7 +552,7 @@ func rawTaskAt25(t *testing.T, s *store.Store) (uuid.UUID, uuid.UUID) {
 		t.Fatal(err)
 	}
 	task, runtime := uuid.New(), uuid.New()
-	mustExec(t, s, `INSERT INTO task_records(id,project_id,status,document,version)VALUES($1,$2,'running','{"view":{"task":{"status":"running","version":1}}}',1)`, task, d.Project.ID)
+	mustExec(t, s, `INSERT INTO task_records(id,project_id,status,document,version)VALUES($1,$2,'running',json_set('{"view":{"task":{"status":"running","version":1}}}','$.view.task.number',(SELECT coalesce(max(number),0)+1 FROM task_records WHERE project_id=$2)),1)`, task, d.Project.ID)
 	mustExec(t, s, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot)VALUES($1,$2,$3,$4,$5)`, runtime, task, a.ID, a.Name, []byte(`{"schemaVersion":4,"opaque":"pre-026 sealed snapshot"}`))
 	return task, runtime
 }

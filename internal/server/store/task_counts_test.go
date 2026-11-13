@@ -34,7 +34,7 @@ func TestCountTasks(t *testing.T) {
 			now := time.Now()
 			ended = &now
 		}
-		mustExec(t, s, `INSERT INTO task_records(id,project_id,status,document,version,ended_at) VALUES($1,$2,$3,$4,1,$5)`, uuid.New(), project, status, json.RawMessage(doc), ended)
+		mustExec(t, s, `INSERT INTO task_records(id,project_id,status,document,version,ended_at) VALUES($1,$2,$3,json_set($4,'$.view.task.number',(SELECT coalesce(max(number),0)+1 FROM task_records WHERE project_id=$2)),1,$5)`, uuid.New(), project, status, json.RawMessage(doc), ended)
 	}
 
 	if got, err := s.CountTasks(ctx, dc.Project.ID); err != nil || got != (taskmodel.Counts{}) {

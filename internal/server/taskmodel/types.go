@@ -9,9 +9,12 @@ import (
 	"loop-now/internal/server/workflow"
 )
 
+// Summary 是任务对象（api/openapi.yaml 的 TaskSummary）。Number 是任务在项目里的编号（控制台显示为 #12）：
+// 从 1 开始，创建时由存储层分配，之后不变、不重用。
 type Summary struct {
 	ID               uuid.UUID  `json:"id"`
 	ProjectID        uuid.UUID  `json:"projectId"`
+	Number           int64      `json:"number"`
 	Title            string     `json:"title"`
 	Status           string     `json:"status"`
 	CurrentNodeRunID *uuid.UUID `json:"currentNodeRunId"`

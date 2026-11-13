@@ -116,7 +116,7 @@ func TestStatsAttributionWaitAndPendingQuestions(t *testing.T) {
 	// One task with an instance of B.
 	task, runtime := uuid.New(), uuid.New()
 	doc, _ := json.Marshal(map[string]any{"view": map[string]any{"task": map[string]any{"status": "running", "version": 1}}})
-	mustExec(t, s, `INSERT INTO task_records(id,project_id,status,document,version) VALUES($1,$2,'running',$3,1)`, task, dc.Project.ID, json.RawMessage(doc))
+	mustExec(t, s, `INSERT INTO task_records(id,project_id,status,document,version) VALUES($1,$2,'running',json_set($3,'$.view.task.number',(SELECT coalesce(max(number),0)+1 FROM task_records WHERE project_id=$2)),1)`, task, dc.Project.ID, json.RawMessage(doc))
 	snapshot := []byte(`{}`)
 	mustExec(t, s, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha) VALUES($1,$2,$3,'beta',$4,$5)`, runtime, task, B, snapshot, fmt.Sprintf("%x", sha256.Sum256(snapshot)))
 	sleep, timer := uuid.New(), uuid.New()

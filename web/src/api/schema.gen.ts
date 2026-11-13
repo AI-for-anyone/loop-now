@@ -5430,6 +5430,8 @@ export interface components {
             id: string;
             /** Format: uuid */
             projectId: string;
+            /** @description 任务在项目里的编号（控制台显示为 #12）：每个项目从 1 开始，创建时分配，之后不变、不重用（任务被删除也不重用）。 */
+            number: number;
             title: string;
             status: components["schemas"]["TaskStatus"];
             /** Format: uuid */

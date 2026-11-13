@@ -325,6 +325,10 @@ func (s *Store) CreateTask(ctx context.Context, projectID, managerID uuid.UUID, 
 		if r.View.Task.Status != "preparing" || r.View.Task.Version != 1 {
 			return apperr.Invalid("task", "任务初始状态无效")
 		}
+		// 编号取项目计数器的下一个：写事务串行，同一项目并发创建也不会拿到同一个号；失败回滚时计数器一起回滚。
+		if err = tx.QueryRow(ctx, `UPDATE projects SET last_task_number=last_task_number+1 WHERE id=$1 RETURNING last_task_number`, projectID).Scan(&r.View.Task.Number); err != nil {
+			return err
+		}
 		encoded, err := json.Marshal(r)
 		if err != nil {
 			return err
