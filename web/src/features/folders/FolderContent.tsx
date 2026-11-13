@@ -8,7 +8,7 @@ import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { canEdit, ENTRY_FILE, isEntryFile, isImage, isMarkdown, languageOf, linksOutside, nameOf, type FolderEntry, type FolderSource, type TextEditLimits, type TextFormat } from './folder-source'
 import { useFolderFile, useFolderList } from './folder-queries'
-import { EntryBadge, EntryIcon, EntryMenu, ToolButton, type EntryActions } from './FolderParts'
+import { EntryBadge, EntryIcon, EntryMenu, ToolButton, type EntryActions, ListIcon } from './FolderParts'
 import { highlightCode } from './highlight'
 
 // ---------- 文件夹 ----------
@@ -40,27 +40,28 @@ export function DirView({ source, path, title, actions, onCreateEntry, onEditEnt
       {list.isSuccess && entries.length === 0 && <p className="px-4 py-8 text-center text-[13px] text-ink-500">{t.folders.empty}<br />{t.folders.emptyHint}</p>}
       {entries.length > 0 && (
         <table className="w-full table-fixed border-collapse text-[13px]">
-          <thead className="sticky top-0 z-10 bg-white/95 text-[11.5px] font-black text-ink-500 backdrop-blur-sm">
-            <tr className="border-y border-ink/10">
-              <th className="py-1.5 pl-4 text-left font-black">{t.folders.columns.name}</th>
+          {/* 表头下一道 2px 实线，行与行之间 1.5px 虚线；大小与时间用等宽字（改版通用规则第 9 条）。 */}
+          <thead className="sticky top-0 z-10 bg-paper-raised/95 text-[12px] font-black text-ink-500 backdrop-blur-sm">
+            <tr className="border-b-2 border-ink">
+              <th className="py-2 pl-2.5 text-left font-black">{t.folders.columns.name}</th>
               <th className="w-24 pr-3 text-right font-black @max-[34rem]:hidden">{t.folders.columns.size}</th>
-              <th className="w-28 pr-2 text-left font-black @max-[34rem]:hidden">{t.folders.columns.modified}</th>
+              <th className="w-28 pr-2 text-right font-black @max-[34rem]:hidden">{t.folders.columns.modified}</th>
               <th className="w-9"><span className="sr-only">{t.folders.actions('')}</span></th>
             </tr>
           </thead>
           <tbody>
             {[...entries].sort((a, b) => Number(isEntryFile(b.path)) - Number(isEntryFile(a.path))).map((item) => (
-              <tr key={item.path} className="group h-8 border-b border-ink/[0.06] hover:bg-ink/[0.03]">
-                <td className="py-0 pl-4">
-                  <button type="button" onClick={() => actions.open(item)} className={cn('flex w-full min-w-0 cursor-pointer items-center gap-2 text-left outline-none focus-visible:underline', item.type === 'other' && 'text-ink-500')}>
-                    <EntryIcon path={item.path} type={item.type} />
-                    <span className={cn('min-w-0 truncate group-hover:text-riso-blue group-hover:underline', item.symlinkTarget && 'max-w-[60%] shrink-0', isEntryFile(item.path) && 'font-bold')}>{item.name}</span>
+              <tr key={item.path} className="group h-[52px] border-b-[1.5px] border-dashed border-ink/25 hover:bg-tint-yellow/60">
+                <td className="py-0 pl-2.5">
+                  <button type="button" onClick={() => actions.open(item)} className={cn('flex w-full min-w-0 cursor-pointer items-center gap-3.5 text-left text-[14.5px] font-bold outline-none focus-visible:underline', item.type === 'other' && 'text-ink-500')}>
+                    <ListIcon path={item.path} type={item.type} />
+                    <span className={cn('min-w-0 truncate group-hover:text-riso-blue group-hover:underline', item.symlinkTarget && 'max-w-[60%] shrink-0', isEntryFile(item.path) && 'font-black')}>{item.name}</span>
                     {item.symlinkTarget && <span className="min-w-0 truncate text-[12px] text-ink-500">→ {item.symlinkTarget}</span>}
                     {isEntryFile(item.path) && <EntryBadge />}
                   </button>
                 </td>
-                <td className="pr-3 text-right text-[12px] text-ink-500 tabular-nums @max-[34rem]:hidden">{item.size === null ? '—' : t.folders.size(item.size)}</td>
-                <td className="truncate pr-2 text-[12px] text-ink-500 tabular-nums @max-[34rem]:hidden">{t.folders.time(item.modifiedAt)}</td>
+                <td className="pr-3 text-right font-mono text-[12px] text-ink-700 @max-[34rem]:hidden">{item.size === null ? '—' : t.folders.size(item.size)}</td>
+                <td className="truncate pr-2 text-right font-mono text-[12px] text-ink-700 @max-[34rem]:hidden">{t.folders.time(item.modifiedAt)}</td>
                 <td className="pr-2"><EntryMenu entry={item} actions={actions} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100" /></td>
               </tr>
             ))}
@@ -89,13 +90,13 @@ function Pending() {
 // 根目录还没有 AGENTS.md：说明它的作用，一键创建。
 function EntryMissing({ onCreate }: { onCreate: () => void }) {
   return (
-    <div role="note" className="mx-4 mt-4 flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-card border-[1.5px] border-dashed border-riso-pink/60 bg-tint-pink-2/60 px-4 py-3">
-      <BookOpenTextIcon aria-hidden="true" className="size-5 shrink-0 text-pink-text" strokeWidth={2} />
+    // 改版：浅粉底、2px 藏青描边、荧光粉实色投影的卡片，右边是创建按钮。
+    <div role="note" className="mx-1 mt-4 mr-2 flex flex-wrap items-center justify-between gap-x-[18px] gap-y-2.5 rounded-card border-2 border-ink bg-tint-pink-2 px-[18px] py-3.5 shadow-print-pink">
       <div className="min-w-0 flex-[1_1_240px]">
-        <p className="text-[14px] font-black">{t.folders.entry.missingTitle}</p>
-        <p className="text-[12.5px] leading-snug text-ink-700">{t.folders.entry.missingBody}</p>
+        <p className="text-[15px] font-black">{t.folders.entry.missingTitle}</p>
+        <p className="text-[13px] leading-snug text-ink-700">{t.folders.entry.missingBody}</p>
       </div>
-      <Button size="xs" onClick={onCreate}>{t.folders.entry.create}</Button>
+      <Button size="sm" className="mr-[3px]" onClick={onCreate}>{t.folders.entry.create}</Button>
     </div>
   )
 }

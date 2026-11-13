@@ -1,5 +1,6 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router'
+import { RulerMark, RulerTicks, Stub } from '@/components/Sheet'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { SECTION_KEYS, sectionId, sectionTitleId, type SectionKey } from './sections'
@@ -44,10 +45,11 @@ function useActiveSection() {
   return [active, setActive] as const
 }
 
-// 分区目录：宽屏时在右侧吸顶，窄屏时移到页面上方，改为可以换行的一排链接。
+// 分区目录：纸张右侧票根里的一把目录尺（改版通用规则第 5 条）。右缘一排刻度，每项是“名称 编号 短刻度”，
+// 当前区块那一项用略微倾斜的黄色记号笔加粉色小箭头标出；删除 Agent 一项是红色。窄屏（左侧栏收进抽屉时）不显示。
 // 点击目录项滚动到对应区块，并把焦点移到区块标题；不用平滑滚动，控制台只保留三个动效。
+// 编号在 DOM 里排在名称前面（读屏读成“01 基本信息”），显示时用 order 排到名称后面。
 export function ConfigToc({ className }: { className?: string }) {
-  const titleId = useId()
   const [active, setActive] = useActiveSection()
   const { hash } = useLocation()
 
@@ -67,15 +69,15 @@ export function ConfigToc({ className }: { className?: string }) {
   }
 
   return (
-    <nav aria-labelledby={titleId} className={cn('flex flex-col gap-3', className)}>
-      <span id={titleId} className="font-display-cn text-[26px] leading-none">
-        {t.config.toc.title}
-      </span>
-      <ol className="flex flex-wrap gap-1.5 lg:flex-col">
+    <Stub as="nav" aria-label={t.config.toc.title} label={t.config.toc.title} className={cn('w-[196px] overflow-x-hidden overflow-y-auto', className)}>
+      <ol className="relative flex flex-col text-[13.5px] font-bold">
+        <RulerTicks className="bg-[repeating-linear-gradient(to_bottom,transparent_0,transparent_10px,var(--ink)_10px,var(--ink)_12px,transparent_12px,transparent_23px)]" />
         {SECTION_KEYS.map((key, index) => {
           const current = key === active
+          const danger = key === 'danger'
           return (
-            <li key={key}>
+            <li key={key} className="relative">
+              {current && <RulerMark data-ruler-mark className="top-[5px] h-9" />}
               <a
                 href={`#${sectionId(key)}`}
                 aria-current={current ? 'location' : undefined}
@@ -84,19 +86,21 @@ export function ConfigToc({ className }: { className?: string }) {
                   jump(key)
                 }}
                 className={cn(
-                  'flex min-h-10 items-center gap-2.5 rounded-input px-3 text-[14px] text-ink no-underline focus-visible:shadow-focus',
-                  current ? 'bg-riso-yellow font-black shadow-[3px_3px_0_var(--riso-pink)]' : 'font-bold hover:bg-tint-blue',
+                  'relative flex h-[46px] items-center justify-end gap-2.5 pl-[18px] no-underline outline-none focus-visible:shadow-focus',
+                  current ? 'font-black text-ink' : 'text-ink-700 hover:text-ink',
+                  danger && 'text-red-text hover:text-red-text',
                 )}
               >
-                <span aria-hidden="true" className="font-display-latin text-[15px] font-extrabold text-pink-text">
+                <span aria-hidden="true" className="order-2 font-mono text-[10.5px]">
                   {String(index + 1).padStart(2, '0')}
                 </span>
-                <span className={cn(key === 'danger' && 'text-red-text')}>{titles[key]}</span>
+                <span className="order-1 min-w-0 truncate">{titles[key]}</span>
+                <span aria-hidden="true" className={cn('order-3 h-0.5 w-6 shrink-0', danger ? 'bg-red-text' : 'bg-ink')} />
               </a>
             </li>
           )
         })}
       </ol>
-    </nav>
+    </Stub>
   )
 }

@@ -37,6 +37,8 @@ export const folders = {
     template: '# 工作说明\n\n写给 Agent 的职责、约定和注意事项。Agent 每次启动时先读这个文件。\n',
   },
   concurrent: 'Agent 可能正在同时修改这些文件；同一个文件以最后一次保存为准。',
+  // 纸张右侧票根里的概况：当前文件夹里的文件夹数、文件数与文件总大小（只算已经读到的，没读完时数字后面加 +）。
+  stub: { title: '概况', dirs: '文件夹', files: '文件' },
   columns: { name: '名称', size: '大小', modified: '修改时间' },
   summary: (dirs: number, files: number) => `${dirs} 个文件夹 · ${files} 个文件`,
   showMore: '显示更多',

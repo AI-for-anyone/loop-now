@@ -19,6 +19,11 @@ describe('纸张', () => {
     expect(sheet).toHaveClass('riso-grain')
   })
 
+  it('纸张里的滚动条是细的藏青半透明滚动条（纸张自己和里面所有会滚动的区域），不用系统的灰色滚动条', () => {
+    render(<Sheet data-testid="sheet"><div className="overflow-y-auto">正文</div></Sheet>)
+    expect(screen.getByTestId('sheet')).toHaveClass('riso-scrollbar')
+  })
+
   it('调用方可以追加类名与属性', () => {
     render(<Sheet data-testid="sheet" className="flex-1" aria-busy="true" />)
     expect(screen.getByTestId('sheet')).toHaveClass('flex-1', 'bg-paper-raised')

@@ -10,6 +10,7 @@ import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { sidebar } from '@/test/shell'
 import { chooseModel } from '@/test/model-picker'
+import { chooseThinking, thinkingChoice, thinkingOptions } from '@/test/thinking'
 
 function setup(onCreate: (body: Schemas['AgentCreate']) => Response) {
   const agents: Schemas['Agent'][] = []
@@ -52,10 +53,9 @@ describe('创建 Agent', () => {
     const model: Schemas['Model'] = { id: 'claude-sonnet-5-5', name: 'Sonnet', reasoning: true, contextWindow: 100, maxTokens: 100, input: ['text'], thinkingLevels: ['low', 'high'], defaultThinkingLevel: 'low' }
     server.use(http.get(apiUrl('/model-providers/anthropic/models'), () => HttpResponse.json({ providerId: 'anthropic', models: [model] })))
     const dialog = await fill(user, '思考助手')
-    const picker = within(dialog).getByLabelText('思考等级')
-    expect(picker).toHaveDisplayValue('默认（低）')
-    expect(within(picker).getAllByRole('option').map(option => option.getAttribute('value'))).toEqual(['', 'low', 'high'])
-    await user.selectOptions(picker, 'high')
+    expect(thinkingChoice(dialog)).toBe('默认（低）')
+    expect(thinkingOptions(dialog)).toEqual(['默认（低）', '低', '高'])
+    await chooseThinking(user, dialog, '高')
     await user.click(within(dialog).getByRole('button', { name: '创建' }))
     await waitFor(() => expect(created).toEqual({ name: '思考助手', model: { provider: 'anthropic', modelId: 'claude-sonnet-5-5' }, thinkingLevel: 'high' }))
   })
@@ -79,7 +79,7 @@ describe('创建 Agent', () => {
     expect(within(dialog).getByLabelText('Codex 速度')).toHaveDisplayValue('标准')
     expect(within(dialog).getByLabelText('Prompt')).toHaveValue('保留这份草稿')
     await user.selectOptions(within(dialog).getByLabelText('Codex 速度'), 'ultrafast')
-    await user.selectOptions(within(dialog).getByLabelText('思考等级'), 'high')
+    await chooseThinking(user, dialog, '高')
     await user.click(within(dialog).getByRole('button', { name: '创建' }))
     await waitFor(() => expect(created).toEqual({ name: '速度助手', model: { provider: 'openai-codex', modelId: 'gpt-a' }, thinkingLevel: 'high', serviceTier: 'ultrafast', prompt: '保留这份草稿' }))
   })
@@ -137,12 +137,12 @@ describe('创建 Agent', () => {
     ])
     await chooseModel(user, dialog, 'sonnet')
     expect(within(dialog).queryByLabelText('Codex 速度')).toBeNull()
-    await user.selectOptions(within(dialog).getByLabelText('思考等级'), 'max')
+    await chooseThinking(user, dialog, '最高')
     await user.selectOptions(select, 'anthropic')
     expect(within(dialog).queryByRole('region', { name: '用 Claude Code 运行时' })).toBeNull()
     await user.selectOptions(select, 'claude-code')
     await chooseModel(user, dialog, 'sonnet')
-    await user.selectOptions(within(dialog).getByLabelText('思考等级'), 'max')
+    await chooseThinking(user, dialog, '最高')
     await user.click(within(dialog).getByRole('button', { name: '创建' }))
     await waitFor(() => expect(created).toEqual({ name: '本机助手', model: { provider: 'claude-code', modelId: 'sonnet' }, thinkingLevel: 'max' }))
   })

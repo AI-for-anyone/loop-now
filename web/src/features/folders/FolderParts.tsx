@@ -23,6 +23,17 @@ export function EntryIcon({ path, type, open = false, className }: { path: strin
   return <Icon aria-hidden="true" className={cn(base, 'text-ink-500')} strokeWidth={1.9} />
 }
 
+// 文件列表与路径栏里的图标（改版）：文件夹是带藏青描边与投影的黄色文件夹块，文件是一张白色的纸；软链接与其他沿用线性图标。
+export function FolderBlock({ className }: { className?: string }) {
+  return <span aria-hidden="true" data-folder-icon className={cn('block h-[22px] w-[26px] shrink-0 rounded-[3px_6px_6px_6px] border-2 border-ink bg-riso-yellow shadow-[2px_2px_0_var(--ink)]', className)} />
+}
+
+export function ListIcon({ path, type }: { path: string; type: FolderEntry['type'] }) {
+  if (type === 'dir') return <FolderBlock />
+  if (type === 'file') return <span aria-hidden="true" data-file-icon className="mx-[3px] block h-6 w-5 shrink-0 rounded-[3px_8px_3px_3px] border-2 border-ink bg-white" />
+  return <EntryIcon path={path} type={type} className="mx-[5px] size-4" />
+}
+
 // AGENTS.md 旁的“入口”标记。
 export function EntryBadge({ className }: { className?: string }) {
   return (
@@ -91,8 +102,11 @@ export function EntryMenu({ entry, actions, className, onOpenChange }: { entry: 
   )
 }
 
+// 纸张顶部工具条上的按钮（改版）：浅纸底、2px 藏青描边的胶囊，高 34。
+const pillClass = 'h-[34px] rounded-full border-2 border-ink bg-paper-raised text-[13px] font-black hover:bg-white disabled:hover:bg-paper-raised'
+
 // 工具栏与标题栏的小按钮：高 28，图标加可选文字；只有图标时文字作为无障碍名称与悬停提示。
-export function ToolButton({ icon, label, showLabel = true, onClick, disabled, active, className, ...rest }: { icon: ReactNode; label: string; showLabel?: boolean; onClick?: () => void; disabled?: boolean; active?: boolean; className?: string } & Omit<ComponentProps<'button'>, 'onClick'>) {
+export function ToolButton({ icon, label, showLabel = true, onClick, disabled, active, pill = false, className, ...rest }: { icon: ReactNode; label: string; showLabel?: boolean; onClick?: () => void; disabled?: boolean; active?: boolean; pill?: boolean; className?: string } & Omit<ComponentProps<'button'>, 'onClick'>) {
   return (
     <button
       type="button"
@@ -103,6 +117,8 @@ export function ToolButton({ icon, label, showLabel = true, onClick, disabled, a
       className={cn(
         'inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-full text-[12.5px] font-bold whitespace-nowrap text-ink hover:bg-tint-blue focus-visible:shadow-focus disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent [&_svg]:size-[15px] [&_svg]:shrink-0',
         showLabel ? 'px-2.5' : 'w-7 justify-center',
+        pill && pillClass,
+        pill && (showLabel ? 'px-3.5' : 'w-[34px]'),
         active && 'bg-tint-blue',
         className,
       )}
@@ -115,11 +131,11 @@ export function ToolButton({ icon, label, showLabel = true, onClick, disabled, a
 }
 
 // 工具栏的“上传”菜单：上传文件或整个文件夹。
-export function UploadMenu({ onFiles, onFolder, className }: { onFiles: () => void; onFolder: () => void; className?: string }) {
+export function UploadMenu({ onFiles, onFolder, pill = false, className }: { onFiles: () => void; onFolder: () => void; pill?: boolean; className?: string }) {
   return (
     <DropdownMenu.Root modal={false}>
       <DropdownMenu.Trigger asChild>
-        <button type="button" title={t.folders.upload} className={cn('inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-ink/20 bg-white px-2.5 text-[12.5px] font-bold text-ink hover:bg-tint-blue focus-visible:shadow-focus data-[state=open]:bg-tint-blue [&_svg]:size-[15px]', className)}>
+        <button type="button" title={t.folders.upload} className={cn('inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-ink/20 bg-white px-2.5 text-[12.5px] font-bold text-ink hover:bg-tint-blue focus-visible:shadow-focus data-[state=open]:bg-tint-blue [&_svg]:size-[15px]', pill && cn(pillClass, 'px-3.5'), className)}>
           <UploadIcon aria-hidden="true" />
           <span>{t.folders.upload}</span>
         </button>

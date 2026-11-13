@@ -22,15 +22,16 @@ export function IdField({ label, id }: { label: string; id: string }) {
       <span id={labelId} className="text-[13.5px] leading-snug font-black">
         {label}
       </span>
-      <div className="flex h-11 items-center gap-2 rounded-input bg-tint-blue pr-1.5 pl-3.5">
-        <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] select-all" title={id}>
+      {/* 只读：虚线框（不是输入框的实线），等宽的 ID，右侧一个黄色的小复制按钮。 */}
+      <div className="flex h-11 items-center gap-2 rounded-input border-[1.5px] border-dashed border-ink/45 pr-1.5 pl-3.5">
+        <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-ink-700 select-all" title={id}>
           {id}
         </span>
         <Button
           type="button"
           size="xs"
           variant="secondary"
-          className="h-8 bg-riso-yellow px-3 text-[12.5px] hover:bg-riso-yellow"
+          className="h-8 rounded-[8px] border-2 border-ink bg-riso-yellow px-3 text-[12.5px] hover:bg-riso-yellow"
           aria-describedby={labelId}
           onClick={() => void copy()}
         >
