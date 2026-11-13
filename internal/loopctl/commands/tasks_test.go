@@ -38,7 +38,7 @@ func taskArtifact() map[string]any {
 }
 func taskDetail() map[string]any {
 	d := map[string]any{
-		"task":    map[string]any{"id": taskUUID, "projectId": projectUUID, "title": "通用任务", "status": "running", "currentNodeRunId": nodeUUID, "currentStepId": "work", "currentAgentId": agentUUID, "reason": nil, "createdAt": now, "updatedAt": now, "endedAt": nil, "link": "/p/默认项目/tasks/" + taskUUID, "version": 1},
+		"task":    map[string]any{"id": taskUUID, "projectId": projectUUID, "number": 12, "title": "通用任务", "status": "running", "currentNodeRunId": nodeUUID, "currentStepId": "work", "currentAgentId": agentUUID, "reason": nil, "createdAt": now, "updatedAt": now, "endedAt": nil, "link": "/p/默认项目/tasks/" + taskUUID, "version": 1},
 		"request": map[string]any{}, "workflow": taskWorkflow(), "nodes": []any{map[string]any{"id": nodeUUID, "taskId": taskUUID, "stepId": "work", "visit": 1, "attempt": 1, "agentId": agentUUID, "agentName": "dev", "runtimeId": agentUUID, "status": "submitted", "inputs": map[string]any{}, "inputVersions": []any{}, "output": map[string]any{}, "edgeId": nil, "reason": nil, "question": nil, "runIds": []any{}, "startedAt": now, "endedAt": nil}}, "artifacts": []any{taskArtifact()}, "cleanup": "none",
 	}
 	d["sleepingInstances"] = []any{}

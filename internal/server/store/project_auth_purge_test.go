@@ -154,7 +154,7 @@ func TestProjectAuthPurge(t *testing.T) {
 	t.Run("unfinished-task-refusal-preserves-authorization", func(t *testing.T) {
 		base := newModelAuthEnv(t)
 		f := seedProjectAuth(t, base)
-		if _, err := base.s.Pool.Exec(base.ctx, `INSERT INTO task_records(id,project_id,status,document,version)VALUES($1,$2,'preparing','{"view":{"task":{"status":"preparing","version":1}}}',1)`, uuid.New(), f.project.ID); err != nil {
+		if _, err := base.s.Pool.Exec(base.ctx, `INSERT INTO task_records(id,project_id,status,document,version)VALUES($1,$2,'preparing','{"view":{"task":{"status":"preparing","version":1,"number":1}}}',1)`, uuid.New(), f.project.ID); err != nil {
 			t.Fatal(err)
 		}
 		_, err := base.s.DeleteProject(base.ctx, f.project.ID)

@@ -32,6 +32,8 @@ type fixture struct {
 	org, project, agent, credential, event uuid.UUID
 	at                                     time.Time
 	secret                                 []byte
+	other                                  uuid.UUID           // 第二个项目
+	taskNumbers                            map[uuid.UUID]int64 // 导入后每个任务应得的编号
 }
 
 // seed 在源库写一组覆盖各种列类型的行：uuid、时刻、布尔、bytea、文本数组、jsonb，以及 events 表。
@@ -48,6 +50,17 @@ func seed(t *testing.T, pool *pgxpool.Pool) fixture {
 	exec(t, pool, `INSERT INTO agent_credentials(id,agent_id,purpose,secret,field_names) VALUES($1,$2,'model',$3,ARRAY['KEY','引号"与,逗号'])`, f.credential, f.agent, f.secret)
 	exec(t, pool, `INSERT INTO lifecycle_events(id,at,agent_id,type,data) VALUES($1,$2,$3,'pi.started','{"b": [1, true], "a": "文本"}')`, f.event, f.at, f.agent)
 	exec(t, pool, `SELECT setval(pg_get_serial_sequence('runs','queue_seq'), 41)`)
+	// 源库的任务没有编号：导入后按项目、创建时间（相同时按 id）补上。插入顺序故意与编号顺序不同。
+	f.other = uuid.New()
+	exec(t, pool, `INSERT INTO projects(id,organization_id,name,is_default) VALUES($1,$2,'另一个项目',false)`, f.other, f.org)
+	early, tieA, tieB, elsewhere := uuid.MustParse("00000000-0000-7000-8000-00000000000c"), uuid.MustParse("00000000-0000-7000-8000-00000000000a"), uuid.MustParse("00000000-0000-7000-8000-00000000000b"), uuid.New()
+	for _, task := range []struct {
+		id, project uuid.UUID
+		at          time.Time
+	}{{tieB, f.project, f.at.Add(time.Hour)}, {early, f.project, f.at}, {tieA, f.project, f.at.Add(time.Hour)}, {elsewhere, f.other, f.at.Add(2 * time.Hour)}} {
+		exec(t, pool, `INSERT INTO task_records(id,project_id,status,document,version,created_at,updated_at) VALUES($1,$2,'running','{"view":{"task":{"status":"running","version":1}}}',1,$3,$3)`, task.id, task.project, task.at)
+	}
+	f.taskNumbers = map[uuid.UUID]int64{early: 1, tieA: 2, tieB: 3, elsewhere: 1}
 	return f
 }
 
@@ -127,6 +140,23 @@ func TestImportConvertsValuesAndKeepsInvariants(t *testing.T) {
 	}
 	if settings != 1 || models != 1 || changes != 0 || lifecycleChanges != 0 || pgEvents == 0 || events != pgEvents {
 		t.Fatalf("单例/插件变更不对：%d %d %d %d %d/%d", settings, models, changes, lifecycleChanges, events, pgEvents)
+	}
+	// 导入后执行基线之后的迁移，任务按项目补上了编号，项目计数器接着最大的编号。
+	for id, want := range f.taskNumbers {
+		var number int64
+		if err := st.Pool.QueryRow(ctx, `SELECT number FROM task_records WHERE id=$1`, id).Scan(&number); err != nil || number != want {
+			t.Errorf("任务 %s 的编号 = %d，应为 %d：%v", id, number, want, err)
+		}
+	}
+	for project, want := range map[uuid.UUID]int64{f.project: 3, f.other: 1} {
+		var last int64
+		if err := st.Pool.QueryRow(ctx, `SELECT last_task_number FROM projects WHERE id=$1`, project).Scan(&last); err != nil || last != want {
+			t.Errorf("项目 %s 的 last_task_number = %d，应为 %d：%v", project, last, want, err)
+		}
+	}
+	page, err := st.ListTasks(ctx, f.project, "", 10)
+	if err != nil || len(page.Tasks) != 3 || page.Tasks[0].Number != 3 || page.Tasks[2].Number != 1 {
+		t.Fatalf("导入的任务按 store 读应带编号：%+v %v", page.Tasks, err)
 	}
 	// 每张表都在报告里，行数与源库一致。
 	for _, tb := range report.Tables {

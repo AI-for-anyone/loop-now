@@ -126,7 +126,7 @@ func TestBaselineShape(t *testing.T) {
 }
 
 // latestVersion 是最后一条迁移的版本号；新增迁移时同步修改。
-const latestVersion = 10
+const latestVersion = 11
 
 // TestMigrateToBaseline：导入旧库时先只迁到基线（没有基线之后新增的表），再迁到最新。
 func TestMigrateToBaseline(t *testing.T) {
@@ -490,5 +490,116 @@ func TestConsoleCompactMigrationPreservesPiCommands(t *testing.T) {
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// v11 按项目给已有任务补编号（创建时间相同时按 id），并给保存下来的任务对象（task.updated 事件、幂等动作的响应）补上编号；
+// 之后编号必有、为正、在项目内唯一，且不能改。
+func TestTaskNumberMigration(t *testing.T) {
+	ctx := context.Background()
+	log := slog.New(slog.DiscardHandler)
+	d, err := db.Open(ctx, db.Options{Dir: t.TempDir(), Logger: log})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { d.Close() })
+	if err := schema.MigrateTo(ctx, d, log, 10); err != nil {
+		t.Fatal(err)
+	}
+	st := store.New(d)
+	defaults, err := st.EnsureDefaults(ctx, "o", "p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := st.CreateProject(ctx, defaults.Organization.ID, "另一个")
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty, err := st.CreateProject(ctx, defaults.Organization.ID, "没有任务")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 版本 10 的数据用 SQL 直接写。默认项目里两条任务创建时间相同，按 id 排序；插入顺序故意与编号顺序不同。
+	a, b, c := uuid.MustParse("00000000-0000-7000-8000-00000000000a"), uuid.MustParse("00000000-0000-7000-8000-00000000000b"), uuid.MustParse("00000000-0000-7000-8000-00000000000c")
+	x := uuid.New()
+	tasks := []struct {
+		id      uuid.UUID
+		project uuid.UUID
+		created int64
+	}{{c, defaults.Project.ID, 3000}, {b, defaults.Project.ID, 2000}, {a, defaults.Project.ID, 2000}, {x, other.ID, 1000}}
+	for _, task := range tasks {
+		doc := fmt.Sprintf(`{"view":{"task":{"id":%q,"status":"running","version":1}}}`, task.id)
+		if _, err := d.Exec(ctx, `INSERT INTO task_records(id,project_id,status,document,version,created_at,updated_at) VALUES($1,$2,'running',$3,1,$4,$4)`, task.id, task.project, doc, task.created); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hash := make([]byte, 32)
+	for _, q := range []struct {
+		sql  string
+		args []any
+	}{
+		{`INSERT INTO task_events(task_id,project_id,type,data) VALUES($1,$2,'task.updated',$3)`, []any{c, defaults.Project.ID, fmt.Sprintf(`{"task":{"id":%q,"title":"t"}}`, c)}},
+		{`INSERT INTO task_events(task_id,project_id,type,data) VALUES($1,$2,'node.updated','{"node":{"id":"n"}}')`, []any{c, defaults.Project.ID}},
+		{`INSERT INTO task_actions(actor_key,action_id,operation,task_id,body_hash,response) VALUES('m','create','createTask',$1,$2,$3)`, []any{b, hash, fmt.Sprintf(`{"task":{"id":%q},"nodes":[]}`, b)}},
+		{`INSERT INTO task_actions(actor_key,action_id,operation,task_id,body_hash,response) VALUES('m','message','message',$1,$2,'{"messageId":"m1"}')`, []any{b, hash}},
+	} {
+		if _, err := d.Exec(ctx, q.sql, q.args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := schema.Migrate(ctx, d, log); err != nil {
+		t.Fatal(err)
+	}
+
+	want := map[uuid.UUID]int64{a: 1, b: 2, c: 3, x: 1}
+	for id, n := range want {
+		var column, inDoc int64
+		if err := d.QueryRow(ctx, `SELECT number, document->'$.view.task'->>'number' FROM task_records WHERE id=$1`, id).Scan(&column, &inDoc); err != nil || column != n || inDoc != n {
+			t.Errorf("任务 %s 的编号 = %d（文档 %d），应为 %d：%v", id, column, inDoc, n, err)
+		}
+	}
+	for project, n := range map[uuid.UUID]int64{defaults.Project.ID: 3, other.ID: 1, empty.ID: 0} {
+		var last int64
+		if err := d.QueryRow(ctx, `SELECT last_task_number FROM projects WHERE id=$1`, project).Scan(&last); err != nil || last != n {
+			t.Errorf("项目 %s 的 last_task_number = %d，应为 %d：%v", project, last, n, err)
+		}
+	}
+	var event, node, created, message string
+	if err := d.QueryRow(ctx, `SELECT data FROM task_events WHERE type='task.updated'`).Scan(&event); err != nil || event != fmt.Sprintf(`{"task":{"id":%q,"title":"t","number":3}}`, c) {
+		t.Errorf("task.updated 事件应补上编号：%s %v", event, err)
+	}
+	if err := d.QueryRow(ctx, `SELECT data FROM task_events WHERE type='node.updated'`).Scan(&node); err != nil || node != `{"node":{"id":"n"}}` {
+		t.Errorf("别的事件不应改动：%s %v", node, err)
+	}
+	if err := d.QueryRow(ctx, `SELECT response FROM task_actions WHERE action_id='create'`).Scan(&created); err != nil || created != fmt.Sprintf(`{"task":{"id":%q,"number":2},"nodes":[]}`, b) {
+		t.Errorf("记下的任务详情应补上编号：%s %v", created, err)
+	}
+	if err := d.QueryRow(ctx, `SELECT response FROM task_actions WHERE action_id='message'`).Scan(&message); err != nil || message != `{"messageId":"m1"}` {
+		t.Errorf("不含任务的响应不应改动：%s %v", message, err)
+	}
+
+	insert := func(number string) error {
+		id := uuid.New()
+		_, err := d.Exec(ctx, `INSERT INTO task_records(id,project_id,status,document,version) VALUES($1,$2,'running',$3,1)`, id, defaults.Project.ID,
+			fmt.Sprintf(`{"view":{"task":{"id":%q,"status":"running","version":1%s}}}`, id, number))
+		return err
+	}
+	if err := insert(""); err == nil || !strings.Contains(err.Error(), "NOT NULL constraint failed: task_records.number") {
+		t.Errorf("没有编号的任务应被拒绝：%v", err)
+	}
+	if err := insert(`,"number":0`); err == nil || !strings.Contains(err.Error(), "CHECK constraint failed: number > 0") {
+		t.Errorf("编号 0 应被拒绝：%v", err)
+	}
+	if err := insert(`,"number":2`); !db.IsUniqueViolation(err, "task_records", "project_id", "number") {
+		t.Errorf("同一项目的重复编号应被拒绝：%v", err)
+	}
+	if err := insert(`,"number":4`); err != nil {
+		t.Errorf("新编号应可写入：%v", err)
+	}
+	if _, err := d.Exec(ctx, `UPDATE task_records SET document=json_set(document,'$.view.task.number',9) WHERE id=$1`, a); !db.IsRaise(err, "task_number_is_immutable") {
+		t.Errorf("编号不能改：%v", err)
+	}
+	if _, err := d.Exec(ctx, `UPDATE task_records SET document=json_set(document,'$.view.task.title','改名') WHERE id=$1`, a); err != nil {
+		t.Errorf("改文档的其他部分不受影响：%v", err)
 	}
 }

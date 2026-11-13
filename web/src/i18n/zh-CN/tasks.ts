@@ -6,6 +6,7 @@ type S = components['schemas']
 export const tasks = {
   title: '任务', back: '返回项目任务', chooseProject: '选择项目查看任务', intro: '本项目的任务，由项目 Manager 创建',
   empty: '还没有任务。可以在对话中请项目 Manager 创建任务。', manager: '前往 Manager 对话', settings: '项目设置',
+  number: '编号', numberLabel: (number: number) => `#${number}`,
   task: '任务', state: '状态', currentNode: '当前节点', responsible: '责任 Agent', none: '—', more: '加载更多',
   wrongProject: '这个任务不属于当前项目。', missing: '找不到这个任务。', workflow: '固定流程', nodeList: '节点列表', fit: '适应视图',
   zoomOut: '缩小画布', zoomIn: '放大画布', locateCurrent: '定位当前', canvas: '流程画布，可拖动或使用方向键平移', viewing: '正在查看', panHint: '拖动空白处平移 · 方向键移动视角',

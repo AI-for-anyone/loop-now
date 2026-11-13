@@ -12868,6 +12868,7 @@ components:
       required:
         - id
         - projectId
+        - number
         - title
         - status
         - currentNodeRunId
@@ -12886,6 +12887,10 @@ components:
         projectId:
           type: string
           format: uuid
+        number:
+          description: "任务在项目里的编号（控制台显示为 #12）：每个项目从 1 开始，创建时分配，之后不变、不重用（任务被删除也不重用）。"
+          type: integer
+          minimum: 1
         title:
           type: string
         status:

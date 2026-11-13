@@ -9,6 +9,8 @@ export const tasks = {
   empty: 'No tasks yet. Ask the project Manager to create one in its chat.',
   manager: 'Go to the Manager chat',
   settings: 'Project settings',
+  number: 'No.',
+  numberLabel: (number: number) => `#${number}`,
   task: 'Task',
   state: 'State',
   currentNode: 'Current node',

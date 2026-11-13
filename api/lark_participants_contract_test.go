@@ -33,7 +33,7 @@ func TestLarkParticipantsConsoleOnlyContract(t *testing.T) {
 	check("TaskLarkSwitchParticipant", participant, false)
 	participant["bindingRevision"] = float64(0)
 	now := "2026-10-20T00:00:00Z"
-	detail := map[string]any{"sleepingInstances": []any{}, "task": map[string]any{"id": uuid.NewString(), "projectId": uuid.NewString(), "title": "t", "status": "blocked", "currentNodeRunId": nil, "currentStepId": nil, "currentAgentId": nil, "reason": nil, "createdAt": now, "updatedAt": now, "endedAt": nil, "link": "/tasks/t", "version": float64(1)}, "request": map[string]any{}, "workflow": map[string]any{"startStepId": "qa", "steps": []any{map[string]any{"id": "qa", "title": "QA", "description": "", "agentId": uuid.NewString(), "inputFields": []any{}, "outputFields": []any{}, "inputs": map[string]any{}}}, "edges": []any{}}, "nodes": []any{}, "artifacts": []any{}, "cleanup": "none"}
+	detail := map[string]any{"sleepingInstances": []any{}, "task": map[string]any{"id": uuid.NewString(), "projectId": uuid.NewString(), "number": float64(1), "title": "t", "status": "blocked", "currentNodeRunId": nil, "currentStepId": nil, "currentAgentId": nil, "reason": nil, "createdAt": now, "updatedAt": now, "endedAt": nil, "link": "/tasks/t", "version": float64(1)}, "request": map[string]any{}, "workflow": map[string]any{"startStepId": "qa", "steps": []any{map[string]any{"id": "qa", "title": "QA", "description": "", "agentId": uuid.NewString(), "inputFields": []any{}, "outputFields": []any{}, "inputs": map[string]any{}}}, "edges": []any{}}, "nodes": []any{}, "artifacts": []any{}, "cleanup": "none"}
 	check("ConsoleTaskDetail", detail, true) // old backend absence is supported.
 	detail["larkSwitchParticipants"] = []any{}
 	check("ConsoleTaskDetail", detail, true)

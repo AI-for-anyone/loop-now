@@ -91,6 +91,7 @@ function ProjectTasks({ project }: { project: Schemas['Project'] }) {
               <>
                 {/* 表头（装饰，列名在每行里有读屏说明）：下面一道 2px 实线。 */}
                 <div aria-hidden="true" className="flex items-center gap-[18px] border-b-2 border-ink px-1 pb-2 text-[12px] font-black text-ink-500 max-sm:hidden">
+                  <span className="flex-[0_0_34px]">{t.tasks.number}</span>
                   <span className="flex-[1_1_280px]">{t.tasks.task}</span>
                   <span className="flex-[0_0_84px]">{t.tasks.state}</span>
                   <span className="flex-[0_0_104px]">{t.tasks.currentNode}</span>
@@ -126,22 +127,29 @@ function ProjectTasks({ project }: { project: Schemas['Project'] }) {
   )
 }
 
-// 一个任务一行：标题（链接到详情）加副标题（等待或失败原因），状态，等宽的当前节点，责任 Agent（带头像），等宽的更新时间。
+// 一个任务一行：等宽的编号，标题（链接到详情）加副标题（等待或失败原因），状态，等宽的当前节点，责任 Agent（带头像），等宽的更新时间。
 // 行与行之间 1.5px 虚线；窄时各列换行。
 function TaskRow({ task, projectName, agentName, pending }: { task: Task; projectName: string; agentName: (id: string) => string; pending?: Parameters<typeof PendingBadge>[0]['counts'] }) {
   return (
     <li className="flex flex-wrap items-center gap-x-[18px] gap-y-1.5 border-b-[1.5px] border-dashed border-ink/25 px-1 py-3.5">
-      <span className="flex min-w-0 flex-[1_1_280px] flex-col leading-[1.4]">
-        <span className="flex min-w-0 items-start gap-2">
-          <Link
-            className="min-w-0 text-[15px] font-black break-words text-ink underline decoration-ink/30 underline-offset-4 hover:text-riso-blue hover:decoration-riso-blue"
-            to={`${tasksPath(projectName)}/${task.id}`}
-          >
-            {task.title || task.id}
-          </Link>
-          <PendingBadge counts={pending} />
+      {/* 编号与标题是一组（宽度 = 编号 34px + 间距 18px + 标题 280px 起），不换行：窄屏时编号仍在标题左边。 */}
+      <span className="flex min-w-0 flex-[1_1_332px] flex-nowrap items-center gap-x-[18px] max-sm:items-start max-sm:gap-x-2.5">
+        <span className="flex-[0_0_34px] font-mono text-[12px] font-bold text-ink-500 max-sm:leading-[21px]">
+          <span className="sr-only">{t.tasks.number}</span>
+          {t.tasks.numberLabel(task.number)}
         </span>
-        {task.reason && <span className={cn('text-[12px] break-words', task.status === 'blocked' ? 'text-red-text' : 'text-ink-500')}>{task.reason}</span>}
+        <span className="flex min-w-0 flex-1 flex-col leading-[1.4]">
+          <span className="flex min-w-0 items-start gap-2">
+            <Link
+              className="min-w-0 text-[15px] font-black break-words text-ink underline decoration-ink/30 underline-offset-4 hover:text-riso-blue hover:decoration-riso-blue"
+              to={`${tasksPath(projectName)}/${task.id}`}
+            >
+              {task.title || task.id}
+            </Link>
+            <PendingBadge counts={pending} />
+          </span>
+          {task.reason && <span className={cn('text-[12px] break-words', task.status === 'blocked' ? 'text-red-text' : 'text-ink-500')}>{task.reason}</span>}
+        </span>
       </span>
       <span className="flex-[0_0_84px]">
         <span className="sr-only">{t.tasks.state}</span>

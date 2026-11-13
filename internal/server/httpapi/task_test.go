@@ -47,6 +47,9 @@ func taskEnv(t *testing.T) (*env, caller, taskmodel.Detail) {
 	if again.Task.ID != d.Task.ID {
 		t.Fatal("create replay duplicated task")
 	}
+	if d.Task.Number != 1 || again.Task.Number != 1 {
+		t.Fatalf("项目里第一个任务的编号应为 1，重放不变：%d %d", d.Task.Number, again.Task.Number)
+	}
 	return e, manager, d
 }
 func TestTaskHTTPPermissionsMessagesArtifactAndCancel(t *testing.T) {
@@ -54,7 +57,9 @@ func TestTaskHTTPPermissionsMessagesArtifactAndCancel(t *testing.T) {
 	path := "/tasks/" + d.Task.ID.String()
 	node := d.Nodes[0]
 	manager.expect(200, "GET", path, nil)
-	e.expect(200, "GET", path, nil)
+	if console := decode[taskmodel.Detail](t, e.expect(200, "GET", path, nil)); console.Task.Number != d.Task.Number {
+		t.Fatalf("控制台任务详情应带编号：%d", console.Task.Number)
+	}
 	instance := e.agentCaller(node.RuntimeID)
 	who := decode[apitypes.Whoami](t, instance.expect(200, "GET", "/whoami", nil))
 	if who.TaskID == nil || *who.TaskID != d.Task.ID || who.RuntimeID == nil || *who.RuntimeID != node.RuntimeID {
@@ -79,8 +84,8 @@ func TestTaskHTTPPermissionsMessagesArtifactAndCancel(t *testing.T) {
 	external := e.external(secret)
 	external.expectError(403, "forbidden", "GET", path, nil)
 	page := decode[taskmodel.Page](t, e.expect(200, "GET", "/projects/"+e.dc.Project.ID.String()+"/tasks", nil))
-	if len(page.Tasks) != 1 {
-		t.Fatal("task listing missing")
+	if len(page.Tasks) != 1 || page.Tasks[0].Number != d.Task.Number {
+		t.Fatalf("task listing missing or unnumbered: %+v", page.Tasks)
 	}
 	e.expect(200, "GET", path+"/nodes/"+node.ID.String(), nil)
 	messages := decode[taskmodel.MessagePage](t, instance.expect(200, "GET", path+"/nodes/"+node.ID.String()+"/messages", nil))
@@ -155,6 +160,9 @@ func TestTaskSnapshotKeepsOldCredentialsAfterConfigRemoval(t *testing.T) {
 	e.sharedCredential(t, "cli", "gh", "任务共享CLI", "fixture-cli-before")
 	modelAccount := e.sharedCredential(t, "model", "anthropic", "任务共享模型", "fixture-model-before")
 	frozen := decode[taskmodel.Detail](t, manager.expect(201, "POST", "/tasks", map[string]any{"actionId": uuid.New(), "title": "冻结配置", "request": map[string]any{}, "workflow": d.Workflow}))
+	if frozen.Task.Number != 2 {
+		t.Fatalf("项目里第二个任务的编号应为 2：%d", frozen.Task.Number)
+	}
 	if err := e.api.Config.RemoveCLI(ctx, agent, "gh"); err != nil {
 		t.Fatal(err)
 	}

@@ -130,7 +130,7 @@ func (e projectMigrationEnv) legacyTask(t *testing.T, agent uuid.UUID) {
 	t.Helper()
 	task := uuid.New()
 	document, _ := json.Marshal(map[string]any{"view": map[string]any{"task": map[string]any{"status": "running", "version": 1}}})
-	mustExec(t, e.s, `INSERT INTO task_records(id,project_id,status,document,version)VALUES($1,$2,'running',$3,1)`, task, e.project, json.RawMessage(document))
+	mustExec(t, e.s, `INSERT INTO task_records(id,project_id,status,document,version)VALUES($1,$2,'running',json_set($3,'$.view.task.number',(SELECT coalesce(max(number),0)+1 FROM task_records WHERE project_id=$2)),1)`, task, e.project, json.RawMessage(document))
 	mustExec(t, e.s, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot)VALUES($1,$2,$3,'fixture',$4)`, uuid.New(), task, agent, []byte(`{"schemaVersion":3}`))
 }
 
@@ -155,7 +155,7 @@ func (e projectMigrationEnv) oldTask(t *testing.T, agent uuid.UUID, version int,
 		endedAt = &now
 	}
 	document, _ := json.Marshal(map[string]any{"view": map[string]any{"task": map[string]any{"status": status, "version": 1}}})
-	mustExec(t, e.s, `INSERT INTO task_records(id,project_id,status,document,version,ended_at)VALUES($1,$2,$3,$4,1,$5)`, task, e.project, status, json.RawMessage(document), endedAt)
+	mustExec(t, e.s, `INSERT INTO task_records(id,project_id,status,document,version,ended_at)VALUES($1,$2,$3,json_set($4,'$.view.task.number',(SELECT coalesce(max(number),0)+1 FROM task_records WHERE project_id=$2)),1,$5)`, task, e.project, status, json.RawMessage(document), endedAt)
 	mustExec(t, e.s, `INSERT INTO task_instances(id,task_id,agent_id,agent_name,snapshot,snapshot_sha,prepared,retired)VALUES($1,$2,$3,'fixture',$4,$6,true,$5)`, runtime, task, agent, raw, retired, sha256Hex(raw))
 	return runtime, task, raw
 }
