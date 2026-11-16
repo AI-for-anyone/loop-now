@@ -1,12 +1,12 @@
-import { backendSignals } from './backend-signals'
+import { isMissingEndpoint } from './backend-signals'
 import { focusManager, useQuery, type QueryClient } from '@tanstack/react-query'
 import type { Readable } from 'openapi-typescript-helpers'
 import { config } from '@/config'
-import { ApiError, api, call, type Schemas } from './client'
+import { api, call, type Schemas } from './client'
 
 // Only for detecting whether the account list is supported; must not be used for a 404 on a single-account resource.
 export function projectCredentialsUnsupported(error: unknown) {
-  return error instanceof ApiError && error.status === 404 && error.code === 'not_found' && error.serverMessage === backendSignals.missingEndpoint
+  return isMissingEndpoint(error)
 }
 
 export const credentialKeys = {

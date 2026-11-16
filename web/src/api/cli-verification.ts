@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Readable } from 'openapi-typescript-helpers'
-import { api, ApiError, call, type Schemas } from './client'
-import { backendSignals } from './backend-signals'
+import { api, call, type Schemas } from './client'
+import { isMissingEndpoint } from './backend-signals'
 
 export type Verification = Schemas['CLIVerificationOperation']
 export const verificationKeys = {
@@ -16,7 +16,7 @@ export function mergeVerification(previous: Verification | undefined, next: Veri
   return !verificationActive(previous) ? previous : next
 }
 export function verificationUnsupported(error: unknown) {
-  return error instanceof ApiError && error.status === 404 && error.code === 'not_found' && error.serverMessage === backendSignals.missingEndpoint
+  return isMissingEndpoint(error)
 }
 // openapi-fetch Readable removes pure-null oneOf properties from its TypeScript view.
 // The frozen wire DTO requires every property; the actual JSON retains these nulls.

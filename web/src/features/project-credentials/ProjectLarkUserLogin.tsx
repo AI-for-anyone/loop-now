@@ -6,7 +6,7 @@ import { acceptCLIAuthState, cancelCLIAuth, cliAuthActive, cliAuthKeys, startCLI
 import { invalidateProjectCredentials, useProjectAccounts } from '@/api/project-credentials'
 import { Button } from '@/components/ui/button'
 import { t } from '@/i18n'
-import { backendSignals } from '@/api/backend-signals'
+import { isMissingEndpoint } from '@/api/backend-signals'
 import { larkLoginLocatorKey, useOriginalActionLocator } from '@/lib/useOriginalActionLocator'
 import { LarkUserLogin } from './LarkUserLogin'
 import { LarkAccountDetails } from './LarkAccountDetails'
@@ -19,7 +19,7 @@ type LarkOperation = Extract<Schemas['CLIAuthOperation'], { cli: 'lark-cli' }>
 type LarkStart = Extract<Schemas['CLIAuthStart'], { cli: 'lark-cli' }>
 const invalid = () => new ApiError({ status: 502, code: 'unknown', serverMessage: copy.unsafeResponse })
 function unsupported(error: unknown) {
-  return error instanceof ApiError && (error.status === 404 && error.serverMessage === backendSignals.missingEndpoint || error.status === 422 && error.fields.some(field => field.field === 'cli'))
+  return isMissingEndpoint(error) || (error instanceof ApiError && error.status === 422 && error.fields.some(field => field.field === 'cli'))
 }
 export function ProjectLarkUserLogin({ projectId, account, applicationSetup }: { projectId: string; account?: Schemas['ProjectCredentialAccount']; applicationSetup?: ReactNode }) {
   const routed = useInRouterContext()
