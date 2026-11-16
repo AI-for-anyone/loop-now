@@ -65,7 +65,7 @@
         "retryLimit": {
           "type": "integer",
           "title": { "en-US": "Retries on failure", "zh-CN": "失败重试次数" },
-          "description": { "en-US": "Network errors, timeouts, 408, 425, 429 and 5xx are retried after 5 seconds, 30 seconds, 2 minutes, 10 minutes, 30 minutes and 1 hour.", "zh-CN": "网络错误、超时、408、429 与 5xx 会按 5 秒、30 秒、2 分钟、10 分钟、30 分钟、1 小时的间隔重试。" },
+          "description": { "en-US": "Network errors, timeouts, 408, 425, 429 and 5xx are retried after 5 seconds, 30 seconds, 2 minutes, 10 minutes, 30 minutes and 1 hour.", "zh-CN": "网络错误、超时、408、425、429 与 5xx 会按 5 秒、30 秒、2 分钟、10 分钟、30 分钟、1 小时的间隔重试。" },
           "minimum": 0,
           "maximum": 10,
           "default": 4
