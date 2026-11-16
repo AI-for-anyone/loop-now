@@ -23,16 +23,16 @@ func TestResolve(t *testing.T) {
 		ok       bool
 		want     string
 	}{
-		{"已注入", "1.2.3", info("vcs.revision", rev, "vcs.modified", "true"), true, "1.2.3"},
-		{"修订号", "", info("vcs.revision", rev, "vcs.modified", "false"), true, "dev-f988ba0c1d2e"},
-		{"未提交改动", "", info("vcs.revision", rev, "vcs.modified", "true"), true, "dev-f988ba0c1d2e-dirty"},
-		{"短修订号", "", info("vcs.revision", "abc123"), true, "dev-abc123"},
-		{"没有 VCS 信息", "", info("GOOS", "darwin"), true, "dev"},
-		{"读不到构建信息", "", nil, false, "dev"},
+		{"injected", "1.2.3", info("vcs.revision", rev, "vcs.modified", "true"), true, "1.2.3"},
+		{"revision", "", info("vcs.revision", rev, "vcs.modified", "false"), true, "dev-f988ba0c1d2e"},
+		{"uncommitted changes", "", info("vcs.revision", rev, "vcs.modified", "true"), true, "dev-f988ba0c1d2e-dirty"},
+		{"short revision", "", info("vcs.revision", "abc123"), true, "dev-abc123"},
+		{"no VCS info", "", info("GOOS", "darwin"), true, "dev"},
+		{"build info unavailable", "", nil, false, "dev"},
 	}
 	for _, c := range cases {
 		if got := resolve(c.injected, c.bi, c.ok); got != c.want {
-			t.Errorf("%s：得到 %q，期望 %q", c.name, got, c.want)
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
 		}
 	}
 }
@@ -42,11 +42,11 @@ func TestVersionPrefersInjected(t *testing.T) {
 	t.Cleanup(func() { version = old })
 	version = "2.0.0"
 	if Version() != "2.0.0" {
-		t.Fatalf("已注入时应返回注入值：%q", Version())
+		t.Fatalf("should return the injected value when injected: %q", Version())
 	}
 	version = ""
 	if v := Version(); v != "dev" && !strings.HasPrefix(v, "dev-") {
-		t.Fatalf("未注入时应为 dev 或 dev-<修订号>：%q", v)
+		t.Fatalf("should be dev or dev-<revision> when not injected: %q", v)
 	}
 }
 

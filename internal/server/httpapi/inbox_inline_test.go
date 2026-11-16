@@ -23,7 +23,7 @@ func TestInboxInlineAttributionNodeChatConversationAndPending(t *testing.T) {
 	project := e.dc.Project.ID
 	instance := e.agentCaller(node.RuntimeID)
 
-	early := sendInbox(instance, "@console", "还没有轮次")
+	early := sendInbox(instance, "@console", "no turn yet")
 	if early.Task == nil || early.Task.TaskID != d.Task.ID || early.Task.RuntimeID != node.RuntimeID || early.Task.NodeRunID != nil {
 		t.Fatalf("send before any turn: %+v", early.Task)
 	}
@@ -32,15 +32,15 @@ func TestInboxInlineAttributionNodeChatConversationAndPending(t *testing.T) {
 		uuid.New(), d.Task.ID, node.RuntimeID, node.ID, uuid.New(), uuid.New()); err != nil {
 		t.Fatal(err)
 	}
-	plain := sendInbox(instance, "@console", "进展")
+	plain := sendInbox(instance, "@console", "progress")
 	if plain.Task == nil || plain.Task.NodeRunID == nil || *plain.Task.NodeRunID != node.ID {
 		t.Fatalf("send after a node turn: %+v", plain.Task)
 	}
-	q := decode[apitypes.InboxMessage](t, instance.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "继续吗", "options": []string{"继续", "停止"}, "nodeRunId": node.ID}))
+	q := decode[apitypes.InboxMessage](t, instance.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "Continue?", "options": []string{"Continue", "Stop"}, "nodeRunId": node.ID}))
 	if q.Task == nil || q.Task.NodeRunID == nil || *q.Task.NodeRunID != node.ID {
 		t.Fatalf("question attribution: %+v", q.Task)
 	}
-	normal := sendInbox(manager, "@console", "常态消息")
+	normal := sendInbox(manager, "@console", "regular message")
 	if normal.Task != nil {
 		t.Fatal("normal agent message attributed to a task")
 	}
@@ -49,7 +49,7 @@ func TestInboxInlineAttributionNodeChatConversationAndPending(t *testing.T) {
 		t.Fatal(err)
 	}
 	addr, _ := base.Address()
-	toTask := sendInbox(e.agentCaller(e.platformAgent("旁观者").ID), addr+"#"+d.Task.ID.String(), "给任务实例")
+	toTask := sendInbox(e.agentCaller(e.platformAgent("Bystander").ID), addr+"#"+d.Task.ID.String(), "to the task instance")
 	if toTask.Task == nil || toTask.Task.RuntimeID != node.RuntimeID || toTask.Task.NodeRunID == nil || *toTask.Task.NodeRunID != node.ID {
 		t.Fatalf("message to a task instance: %+v", toTask.Task)
 	}
@@ -73,7 +73,7 @@ func TestInboxInlineAttributionNodeChatConversationAndPending(t *testing.T) {
 		t.Fatal(err)
 	}
 	last := events[len(events)-1].ID
-	answer := decode[apitypes.InboxMessage](t, e.expect(201, "POST", "/inbox/messages/"+q.ID.String()+"/reply", map[string]any{"text": "继续，按原计划"}))
+	answer := decode[apitypes.InboxMessage](t, e.expect(201, "POST", "/inbox/messages/"+q.ID.String()+"/reply", map[string]any{"text": "Continue, as planned"}))
 	if answer.AnswerTo == nil || answer.AnswerTo.MessageID != q.ID || answer.Task == nil || answer.Task.NodeRunID == nil || *answer.Task.NodeRunID != node.ID {
 		t.Fatalf("text answer: %+v %+v", answer.AnswerTo, answer.Task)
 	}
@@ -121,10 +121,10 @@ func TestInboxInlineAttributionNodeChatConversationAndPending(t *testing.T) {
 
 	// The agent's own conversation with the console: both directions, no task
 	// instance messages, newest first, paged.
-	toAgent := sendInbox(e.console(), node.AgentID.String(), "控制台发给常态Agent")
+	toAgent := sendInbox(e.console(), node.AgentID.String(), "console to the regular Agent")
 	convPath := "/agents/" + node.AgentID.String() + "/console-messages"
 	conv := decode[apitypes.InboxConversationPage](t, e.expect(200, "GET", convPath+"?limit=1", nil))
-	if len(conv.Messages) != 1 || conv.Messages[0].ID != toAgent.ID || conv.Messages[0].Text != "控制台发给常态Agent" || conv.NextCursor == nil {
+	if len(conv.Messages) != 1 || conv.Messages[0].ID != toAgent.ID || conv.Messages[0].Text != "console to the regular Agent" || conv.NextCursor == nil {
 		t.Fatalf("conversation first page: %+v", conv)
 	}
 	conv = decode[apitypes.InboxConversationPage](t, e.expect(200, "GET", convPath+"?limit=1&cursor="+*conv.NextCursor, nil))
@@ -142,7 +142,7 @@ func TestConsoleIdentityConversationWithoutInboxPage(t *testing.T) {
 	e := newEnv(t)
 	x, secret := e.identity("page-less")
 	ext := e.external(secret)
-	sent := sendInbox(e.console(), "@page-less", "你好")
+	sent := sendInbox(e.console(), "@page-less", "Hello")
 	if sent.To.Kind != "external" || sent.To.ID == nil || *sent.To.ID != x.ID || sent.WhenBusy != nil || sent.Task != nil {
 		t.Fatalf("console send to identity: %+v", sent)
 	}
@@ -150,8 +150,8 @@ func TestConsoleIdentityConversationWithoutInboxPage(t *testing.T) {
 	if got.ReadAt == nil {
 		t.Fatal("identity read")
 	}
-	back := decode[apitypes.InboxMessage](t, ext.expect(201, "POST", "/inbox/messages/"+sent.ID.String()+"/reply", map[string]any{"text": "收到"}))
-	again := decode[apitypes.InboxMessage](t, e.expect(201, "POST", "/inbox/messages/"+back.ID.String()+"/reply", map[string]any{"text": "好的"}))
+	back := decode[apitypes.InboxMessage](t, ext.expect(201, "POST", "/inbox/messages/"+sent.ID.String()+"/reply", map[string]any{"text": "got it"}))
+	again := decode[apitypes.InboxMessage](t, e.expect(201, "POST", "/inbox/messages/"+back.ID.String()+"/reply", map[string]any{"text": "OK"}))
 	if back.To.Kind != "console" || again.To.Kind != "external" || again.ThreadID != sent.ID {
 		t.Fatal("reply routing between console and identity")
 	}

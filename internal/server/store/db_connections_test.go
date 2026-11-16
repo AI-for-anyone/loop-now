@@ -23,7 +23,7 @@ func dbConnectionFixture(t *testing.T) projectMigrationEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defaults, err := st.EnsureDefaults(ctx, "组织", "项目")
+	defaults, err := st.EnsureDefaults(ctx, "Organization", "Project")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func dbConnectionFixture(t *testing.T) projectMigrationEnv {
 func TestDBConnectionSetsCASModesAndAtomicity(t *testing.T) {
 	e := dbConnectionFixture(t)
 	ctx := context.Background()
-	a := e.agent(t, "多连接", "openai")
+	a := e.agent(t, "multi-connection", "openai")
 	if err := e.s.AddAgentCLI(ctx, a, "mysql"); err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestDBConnectionSetsCASModesAndAtomicity(t *testing.T) {
 func TestDBConnectionCaptureVersionsAndFailureIsolation(t *testing.T) {
 	e := dbConnectionFixture(t)
 	ctx := context.Background()
-	a := e.agent(t, "冻结连接", "openai")
+	a := e.agent(t, "frozen connection", "openai")
 	if err := e.s.AddAgentCLI(ctx, a, "mysql"); err != nil {
 		t.Fatal(err)
 	}

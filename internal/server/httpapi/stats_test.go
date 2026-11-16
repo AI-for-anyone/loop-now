@@ -26,7 +26,7 @@ func TestStatsValidationAndContract(t *testing.T) {
 	c.expectError(422, "validation_failed", "GET", "/stats?from=2026-01-05T00:00:00Z&bucket=day", nil, "X-Contract-Invalid-Request", "1")
 	c.expectError(422, "validation_failed", "GET", window("2026-01-05T00:00:00Z", "2026-01-06T00:00:00Z", "day")+"&platform=true&projectId="+e.dc.Project.ID.String(), nil)
 
-	a, err := e.st.CreateAgent(ctx, store.ProjectScope(e.dc.Project.ID), "统计", "anthropic", "claude-x", "")
+	a, err := e.st.CreateAgent(ctx, store.ProjectScope(e.dc.Project.ID), "Stats", "anthropic", "claude-x", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestStatsValidationAndContract(t *testing.T) {
 	exec(`INSERT INTO lifecycle_events(id,at,agent_id,type,data) VALUES($1,$2,$3,'pi.started','{"startupMs":250}')`, uuid.New(), base.Add(time.Hour), a.ID)
 	for i, state := range []string{"answered", "open"} {
 		id := uuid.New()
-		exec(`INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,to_kind,text,created_at) VALUES($1,$1,'agent',$2,'console','要继续吗？',$3)`, id, a.ID, base.Add(time.Duration(i+1)*time.Hour))
+		exec(`INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,to_kind,text,created_at) VALUES($1,$1,'agent',$2,'console','Shall we continue?',$3)`, id, a.ID, base.Add(time.Duration(i+1)*time.Hour))
 		exec(`INSERT INTO inbox_questions(message_id,options,expires_at,state,answered_at) VALUES($1,'[]',$2,$3,CASE WHEN $3='answered' THEN $4 END)`,
 			id, time.Now().Add(time.Hour), state, base.Add(2*time.Hour))
 	}

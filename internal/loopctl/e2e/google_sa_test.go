@@ -55,7 +55,7 @@ func TestGoogleSACLIWithApp(t *testing.T) {
 	}
 	create := func(target string) map[string]any {
 		ext.stdin = credential(target, "https://oauth2.googleapis.com/token")
-		r := ext.run("project", "cli-account", "create", project, "--cli", "gcloud", "--name", "同名SA", "--from-file", "-")
+		r := ext.run("project", "cli-account", "create", project, "--cli", "gcloud", "--name", "Same-name SA", "--from-file", "-")
 		a := r.ok(t)
 		if a["authMethod"] != "service_account" || a["purpose"] != "cli" || a["cli"] != "gcloud" || r.Meta.RequestID == "" || strings.Contains(r.Stdout, "PRIVATE KEY") {
 			t.Fatal("unsafe or wrong actual SA metadata")
@@ -99,7 +99,7 @@ func TestGoogleSACLIWithApp(t *testing.T) {
 		t.Fatal("SA replace did not create distinct static version")
 	}
 	ext.run("project", "cli-account", "rename", project, idA, "--name", "stale", "--expected-revision", "1").fails(t, "precondition_failed", 8)
-	renamed := ext.run("project", "cli-account", "rename", project, idA, "--name", "新SA标签", "--expected-revision", fmt.Sprintf("%.0f", replaced["revision"])).ok(t)
+	renamed := ext.run("project", "cli-account", "rename", project, idA, "--name", "New SA label", "--expected-revision", fmt.Sprintf("%.0f", replaced["revision"])).ok(t)
 	if renamed["currentVersionId"] != replaced["currentVersionId"] {
 		t.Fatal("rename changed SA credential version")
 	}

@@ -35,9 +35,9 @@ func TestProjectCredentialCaptureSerializesEffectiveChanges(t *testing.T) {
 			e := projectMigrationFixture(t)
 			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 			defer cancel()
-			id := e.agent(t, "锁内捕获", "openai")
+			id := e.agent(t, "capture under lock", "openai")
 			w := projectCoreWrite(t, e, "synthetic-capture-A")
-			account, err := e.s.CreateProjectCredential(ctx, e.project, "model", "openai", "模型A", w)
+			account, err := e.s.CreateProjectCredential(ctx, e.project, "model", "openai", "Model A", w)
 			if err != nil {
 				t.Fatal(err)
 			}

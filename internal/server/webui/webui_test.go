@@ -42,17 +42,17 @@ func TestHandlerServesSinglePageApp(t *testing.T) {
 		rec := serve(t, h, "GET", c.target)
 		if rec.Code != c.status || !strings.Contains(rec.Body.String(), c.body) || rec.Header().Get("Cache-Control") != c.cache ||
 			!strings.Contains(rec.Header().Get("Content-Type"), c.typ) {
-			t.Errorf("%s：%d %q cache=%q type=%q", c.target, rec.Code, rec.Body.String(), rec.Header().Get("Cache-Control"), rec.Header().Get("Content-Type"))
+			t.Errorf("%s: %d %q cache=%q type=%q", c.target, rec.Code, rec.Body.String(), rec.Header().Get("Cache-Control"), rec.Header().Get("Content-Type"))
 		}
 		if rec.Header().Get("X-Content-Type-Options") != "nosniff" || rec.Header().Get("X-Frame-Options") != "DENY" {
-			t.Errorf("%s：缺少安全响应头", c.target)
+			t.Errorf("%s: missing security response headers", c.target)
 		}
 	}
 	if rec := serve(t, h, "HEAD", "/"); rec.Code != 200 || rec.Body.Len() != 0 {
-		t.Errorf("HEAD：%d %q", rec.Code, rec.Body.String())
+		t.Errorf("HEAD: %d %q", rec.Code, rec.Body.String())
 	}
 	if rec := serve(t, h, "POST", "/"); rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("Allow") != "GET, HEAD" {
-		t.Errorf("POST：%d %q", rec.Code, rec.Header().Get("Allow"))
+		t.Errorf("POST: %d %q", rec.Code, rec.Header().Get("Allow"))
 	}
 }
 
@@ -69,6 +69,6 @@ func TestHandlerWithoutConsole(t *testing.T) {
 // Without embedweb there is no embedded console.
 func TestEmbeddedAbsentWithoutTag(t *testing.T) {
 	if webui.Embedded() != nil {
-		t.Fatal("未带 embedweb 标签却有内嵌控制台")
+		t.Fatal("embedded console present without the embedweb tag")
 	}
 }

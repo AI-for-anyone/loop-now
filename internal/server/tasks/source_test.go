@@ -90,10 +90,10 @@ func TestCopyClaudeBaseline(t *testing.T) {
 	}
 	target, err := src.copyClaudeBaseline(context.Background(), inst, session)
 	if err != nil || filepath.Dir(target) != filepath.Join(work, "task-baselines", inst.TaskID.String()) {
-		t.Fatalf("基线：%q %v", target, err)
+		t.Fatalf("baseline: %q %v", target, err)
 	}
 	if b, _ := os.ReadFile(target); string(b) != "{\"type\":\"user\"}\n{\"type\":\"assistant\"}\n" {
-		t.Fatalf("基线内容：%q", b)
+		t.Fatalf("baseline content: %q", b)
 	}
 	outside := filepath.Join(t.TempDir(), id+".jsonl")
 	_ = os.WriteFile(outside, []byte("{}\n"), 0o600)
@@ -103,14 +103,14 @@ func TestCopyClaudeBaseline(t *testing.T) {
 	_ = os.WriteFile(broken, []byte("{\"type\":\"user\"}\n{\"type\":"), 0o600)
 	big := filepath.Join(dir, uuid.NewString()+".jsonl")
 	_ = os.WriteFile(big, []byte(strings.Repeat("{}\n", 1000)), 0o600)
-	for name, path := range map[string]string{"不在会话记录目录": outside, "名字不是会话 ID": notID, "不完整的行": broken, "超限": big, "嵌套太深": filepath.Join(dir, "x", id+".jsonl")} {
+	for name, path := range map[string]string{"not in the session record directory": outside, "name is not a session ID": notID, "incomplete line": broken, "over the size limit": big, "nested too deep": filepath.Join(dir, "x", id+".jsonl")} {
 		if _, err := src.copyClaudeBaseline(context.Background(), inst, path); err == nil {
-			t.Errorf("%s 应拒绝", name)
+			t.Errorf("%s should be rejected", name)
 		}
 	}
 	src.ClaudeProjects = nil
 	if _, err := src.copyClaudeBaseline(context.Background(), inst, session); err == nil {
-		t.Fatal("没有配置会话记录目录时应拒绝")
+		t.Fatal("should be rejected when no session record directory is configured")
 	}
 }
 
@@ -137,19 +137,19 @@ func TestArchiveClaudeSession(t *testing.T) {
 		Session []byte `json:"session"`
 	}
 	if err != nil || json.Unmarshal(data, &archived) != nil || string(archived.Session) != "{\"type\":\"user\"}\n" {
-		t.Fatalf("归档：%s %v", data, err)
+		t.Fatalf("archive: %s %v", data, err)
 	}
 	// Also accepted when claude encodes the working directory path as is (not verified on Windows).
 	if names := claudecli.ProjectDirNames(workspace); len(names) > 1 {
 		raw := write(names[1])
 		inst.SessionFile = &raw
 		if _, err := src.archiveSession(context.Background(), inst); err != nil {
-			t.Fatalf("原样编码的会话记录：%v", err)
+			t.Fatalf("session record with the path encoded as is: %v", err)
 		}
 	}
 	other := write("-some-other-workspace")
 	inst.SessionFile = &other
 	if _, err := src.archiveSession(context.Background(), inst); err == nil {
-		t.Fatal("别的工作区的会话记录不能归档到这个实例")
+		t.Fatal("a session record from another workspace must not be archived for this instance")
 	}
 }

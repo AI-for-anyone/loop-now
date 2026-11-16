@@ -25,12 +25,12 @@ func TestWriteReadyFile(t *testing.T) {
 		b, err := os.ReadFile(path)
 		var r app.Ready
 		if err != nil || json.Unmarshal(b, &r) != nil || r != (app.Ready{URL: url, PID: 42, Version: "v"}) {
-			t.Fatalf("就绪文件内容不对：%s %v", b, err)
+			t.Fatalf("unexpected ready file content: %s %v", b, err)
 		}
 	}
 	entries, _ := os.ReadDir(filepath.Dir(path))
 	if len(entries) != 1 {
-		t.Fatalf("留下了临时文件：%v", entries)
+		t.Fatalf("temporary files left behind: %v", entries)
 	}
 }
 
@@ -39,7 +39,7 @@ func TestWriteReadyFile(t *testing.T) {
 func TestConsoleFiles(t *testing.T) {
 	dir := t.TempDir()
 	if _, _, err := app.ConsoleFiles(dir); err == nil || !strings.Contains(err.Error(), config.EnvWebDir) {
-		t.Fatalf("没有 index.html 的目录应拒绝：%v", err)
+		t.Fatalf("a directory without index.html should be rejected: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
@@ -48,7 +48,7 @@ func TestConsoleFiles(t *testing.T) {
 		t.Fatalf("%v %q %v", fsys, source, err)
 	}
 	if fsys, _, err := app.ConsoleFiles(""); err != nil || fsys != nil {
-		t.Fatalf("不带 embedweb 构建时不应有控制台：%v %v", fsys, err)
+		t.Fatalf("a build without embedweb should have no console: %v %v", fsys, err)
 	}
 }
 
@@ -70,7 +70,7 @@ func TestConsoleAndReadyFileOnRealServer(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	if r.URL != "http://"+s.a.Addr() || r.PID != os.Getpid() {
-		t.Fatalf("就绪文件不对：%+v", r)
+		t.Fatalf("unexpected ready file: %+v", r)
 	}
 	for path, want := range map[string]string{"/": "loop now console", "/agents/x": "loop now console", "/api/v1/context": `"project"`} {
 		resp, err := http.Get(r.URL + path)
@@ -80,11 +80,11 @@ func TestConsoleAndReadyFileOnRealServer(t *testing.T) {
 		b, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if resp.StatusCode != 200 || !strings.Contains(string(b), want) {
-			t.Errorf("%s：%d %.80s", path, resp.StatusCode, b)
+			t.Errorf("%s: %d %.80s", path, resp.StatusCode, b)
 		}
 	}
 	s.stop()
 	if _, err := os.Stat(ready); !os.IsNotExist(err) {
-		t.Fatalf("停止后就绪文件应删除：%v", err)
+		t.Fatalf("the ready file should be removed after stopping: %v", err)
 	}
 }

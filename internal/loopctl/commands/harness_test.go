@@ -92,7 +92,7 @@ func (e *env) system(stdout *bytes.Buffer) *cli.System {
 			e.dials = append(e.dials, addr)
 			e.mu.Unlock()
 			if e.block {
-				return nil, errors.New("测试禁止网络")
+				return nil, errors.New("network disabled in tests")
 			}
 			return (&net.Dialer{}).DialContext(ctx, network, addr)
 		},
@@ -106,16 +106,16 @@ func (e *env) run(args ...string) result {
 	r.Code = cli.Run(context.Background(), commands.Registry(), args, e.system(&out))
 	r.Stdout = out.String()
 	if strings.Count(r.Stdout, "\n") != 1 || !strings.HasSuffix(r.Stdout, "\n") {
-		e.t.Fatalf("%v：标准输出应恰好是一行 JSON：%q", args, r.Stdout)
+		e.t.Fatalf("%v: stdout should be exactly one line of JSON: %q", args, r.Stdout)
 	}
 	if err := json.Unmarshal([]byte(r.Stdout), &r.Env); err != nil {
-		e.t.Fatalf("%v：输出不是 JSON：%v\n%s", args, err, r.Stdout)
+		e.t.Fatalf("%v: output is not JSON: %v\n%s", args, err, r.Stdout)
 	}
 	if r.Env.Warnings == nil {
-		e.t.Fatalf("%v：warnings 应总是数组：%s", args, r.Stdout)
+		e.t.Fatalf("%v: warnings should always be an array: %s", args, r.Stdout)
 	}
 	if r.Env.OK != (r.Code == 0) {
-		e.t.Fatalf("%v：ok 与退出码不一致：%d %s", args, r.Code, r.Stdout)
+		e.t.Fatalf("%v: ok does not match the exit code: %d %s", args, r.Code, r.Stdout)
 	}
 	return r
 }
@@ -130,7 +130,7 @@ func (e *env) dialCount() int {
 func (r result) ok(t *testing.T) map[string]any {
 	t.Helper()
 	if r.Code != 0 {
-		t.Fatalf("应成功，得到退出码 %d：%s", r.Code, r.Stdout)
+		t.Fatalf("should succeed, got exit code %d: %s", r.Code, r.Stdout)
 	}
 	var m map[string]any
 	json.Unmarshal(r.Env.Data, &m)
@@ -141,10 +141,10 @@ func (r result) ok(t *testing.T) map[string]any {
 func (r result) fails(t *testing.T, code string, exit int) {
 	t.Helper()
 	if r.Code != exit || r.Env.Error == nil || r.Env.Error.Code != code {
-		t.Fatalf("应以 %s（退出码 %d）失败，得到 %d：%s", code, exit, r.Code, r.Stdout)
+		t.Fatalf("should fail with %s (exit code %d), got %d: %s", code, exit, r.Code, r.Stdout)
 	}
 	if output.ExitCode(r.Env.Error.Category) != exit {
-		t.Fatalf("类别 %s 与退出码 %d 不对应", r.Env.Error.Category, exit)
+		t.Fatalf("category %s does not match exit code %d", r.Env.Error.Category, exit)
 	}
 }
 
@@ -162,11 +162,11 @@ func lastBody(t *testing.T, s *clitest.Stub) map[string]any {
 	t.Helper()
 	reqs := s.Requests()
 	if len(reqs) == 0 {
-		t.Fatal("桩服务没有收到请求")
+		t.Fatal("the stub server received no request")
 	}
 	var m map[string]any
 	if err := json.Unmarshal(reqs[len(reqs)-1].Body, &m); err != nil {
-		t.Fatalf("请求体不是 JSON 对象：%s", reqs[len(reqs)-1].Body)
+		t.Fatalf("request body is not a JSON object: %s", reqs[len(reqs)-1].Body)
 	}
 	return m
 }

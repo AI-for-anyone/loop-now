@@ -8,7 +8,7 @@ import (
 )
 
 func platformDirectorySample() map[string]any {
-	return map[string]any{"id": projectUUID, "name": "同名项目", "organization": map[string]any{"id": agentUUID, "name": "组织B"}, "manager": map[string]any{"id": agentUUID, "name": "负责人", "address": "组织B/同名项目/负责人"}}
+	return map[string]any{"id": projectUUID, "name": "Same-name project", "organization": map[string]any{"id": agentUUID, "name": "Org B"}, "manager": map[string]any{"id": agentUUID, "name": "Lead", "address": "Org B/Same-name project/Lead"}}
 }
 
 func TestPlatformProjectDirectoryCLI(t *testing.T) {
@@ -16,13 +16,13 @@ func TestPlatformProjectDirectoryCLI(t *testing.T) {
 	item := platformDirectorySample()
 	s.On("GET /projects", clitest.Sample{Status: http.StatusOK, Body: map[string]any{"projects": []any{item}}})
 	e := newEnv(t).agent(s.Server.URL)
-	if projects := e.run("project", "list").ok(t)["projects"].([]any); len(projects) != 1 || projects[0].(map[string]any)["manager"].(map[string]any)["address"] != "组织B/同名项目/负责人" {
+	if projects := e.run("project", "list").ok(t)["projects"].([]any); len(projects) != 1 || projects[0].(map[string]any)["manager"].(map[string]any)["address"] != "Org B/Same-name project/Lead" {
 		t.Fatal("safe directory was changed")
 	}
 	if reqs := s.Requests(); len(reqs) != 1 || reqs[0].Path != "/agent/v1/projects" {
 		t.Fatal("Agent list used wrong root")
 	}
-	s.On("GET /projects", clitest.Sample{Status: http.StatusForbidden, Body: map[string]any{"error": map[string]any{"code": "forbidden", "message": "仅平台 Agent"}}})
+	s.On("GET /projects", clitest.Sample{Status: http.StatusForbidden, Body: map[string]any{"error": map[string]any{"code": "forbidden", "message": "platform Agents only"}}})
 	e.run("project", "list").fails(t, "forbidden", 6)
 	if len(s.Requests()) != 2 {
 		t.Fatal("forbidden request retried or fell back")

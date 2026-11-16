@@ -54,11 +54,11 @@ func (f *pipeFake) next() map[string]any {
 	select {
 	case m, ok := <-f.cmds:
 		if !ok {
-			f.t.Fatal("命令流已结束")
+			f.t.Fatal("the command stream has ended")
 		}
 		return m
 	case <-time.After(5 * time.Second):
-		f.t.Fatal("等待命令超时")
+		f.t.Fatal("timed out waiting for a command")
 		return nil
 	}
 }
@@ -67,11 +67,11 @@ func (f *pipeFake) expect(typ string) string {
 	f.t.Helper()
 	m := f.next()
 	if m["type"] != typ {
-		f.t.Fatalf("期望命令 %s，实际 %v", typ, m)
+		f.t.Fatalf("want command %s, got %v", typ, m)
 	}
 	id, _ := m["id"].(string)
 	if id == "" {
-		f.t.Fatalf("命令缺少 id：%v", m)
+		f.t.Fatalf("the command has no id: %v", m)
 	}
 	return id
 }
@@ -135,7 +135,7 @@ func TestPipeOutOfOrderResponses(t *testing.T) {
 	go func() { d, err := f.c.Call(ctx, "get_state", nil); ch2 <- out{d, err} }()
 	id2 := f.expect("get_state")
 	if id1 == id2 {
-		t.Fatal("命令 id 应唯一")
+		t.Fatal("command ids should be unique")
 	}
 	f.send(
 		`{"type":"response","command":"parse","success":false,"error":"no id"}`,
@@ -150,7 +150,7 @@ func TestPipeOutOfOrderResponses(t *testing.T) {
 		}
 		var d struct{ N int }
 		if err := json.Unmarshal(o.data, &d); err != nil || d.N != i+1 {
-			t.Fatalf("第 %d 个调用拿到了错误的响应：%s", i+1, o.data)
+			t.Fatalf("call %d got the wrong response: %s", i+1, o.data)
 		}
 	}
 }
@@ -177,11 +177,11 @@ func TestPipeAbortedAppendsPartialDeltas(t *testing.T) {
 		t.Fatal(o.err)
 	}
 	if o.res != (TurnResult{Outcome: OutcomeAborted, Text: "first\n\npartial"}) {
-		t.Fatalf("结果不符：%+v", o.res)
+		t.Fatalf("unexpected result: %+v", o.res)
 	}
 	_, tools := rec.snapshot()
 	if strings.Join(tools, ",") != "start c1 bash,end c1 bash true" {
-		t.Fatalf("工具事件不符：%q", tools)
+		t.Fatalf("unexpected tool events: %q", tools)
 	}
 }
 
@@ -200,7 +200,7 @@ func TestPipeErrorSupersededAndFinalError(t *testing.T) {
 	o := recvPrompt(t, ch)
 	want := TurnResult{Outcome: OutcomeFailed, Text: "y1", ErrorCode: "pi_error", ErrorMessage: "final boom"}
 	if o.err != nil || o.res != want {
-		t.Fatalf("结果不符：%+v %v", o.res, o.err)
+		t.Fatalf("unexpected result: %+v %v", o.res, o.err)
 	}
 }
 
@@ -215,7 +215,7 @@ func TestPipeExitMidTurn(t *testing.T) {
 	o := recvPrompt(t, ch)
 	want := TurnResult{Outcome: OutcomeFailed, Text: "done\n\nhalf", ErrorCode: "pi_exited", ErrorMessage: "The Pi process exited unexpectedly."}
 	if o.err != nil || o.res != want {
-		t.Fatalf("结果不符：%+v %v", o.res, o.err)
+		t.Fatalf("unexpected result: %+v %v", o.res, o.err)
 	}
 	waitDone(t, f.c)
 }
@@ -227,7 +227,7 @@ func TestPipeExitBeforePromptResponse(t *testing.T) {
 	_ = f.out.Close()
 	o := recvPrompt(t, ch)
 	if o.err != nil || o.res.ErrorCode != "pi_exited" {
-		t.Fatalf("已发出 prompt 后进程退出应返回 pi_exited 结果：%+v %v", o.res, o.err)
+		t.Fatalf("a process exit after the prompt was sent should return a pi_exited result: %+v %v", o.res, o.err)
 	}
 }
 
@@ -247,10 +247,10 @@ func TestPipeMalformedLinesSkipped(t *testing.T) {
 	)
 	o := recvPrompt(t, ch)
 	if o.err != nil || o.res != (TurnResult{Outcome: OutcomeCompleted, Text: "ok"}) {
-		t.Fatalf("结果不符：%+v %v", o.res, o.err)
+		t.Fatalf("unexpected result: %+v %v", o.res, o.err)
 	}
 	if n := f.c.malformedLines(); n != 3 {
-		t.Fatalf("应跳过 3 行无法解析的内容，实际 %d", n)
+		t.Fatalf("should skip 3 unparsable lines, got %d", n)
 	}
 }
 
@@ -266,7 +266,7 @@ func TestPipeCRLFAndUnicodeSeparators(t *testing.T) {
 		evSettled(false)+"\r")
 	o := recvPrompt(t, ch)
 	if o.err != nil || o.res.Text != "a b c" || rec.text() != "a b c" {
-		t.Fatalf("结果不符：%+v %q %v", o.res, rec.text(), o.err)
+		t.Fatalf("unexpected result: %+v %q %v", o.res, rec.text(), o.err)
 	}
 }
 
@@ -274,12 +274,12 @@ func TestPipeLargeLine(t *testing.T) {
 	f := newPipeFake(t)
 	ch := goPrompt(testCtx(t), f.c, "x", nil)
 	id := f.expect("prompt")
-	big := strings.Repeat("长", 100<<10) // about 300KB
+	big := strings.Repeat("abc", 100<<10) // about 300KB
 	f.send(okResp(id, "prompt", map[string]any{"disposition": "started"}),
 		evStart(), evDelta(big), evEnd(big, "stop", ""), evSettled(false))
 	o := recvPrompt(t, ch)
 	if o.err != nil || o.res.Text != big {
-		t.Fatalf("超长行应完整读取：len=%d %v", len(o.res.Text), o.err)
+		t.Fatalf("an overlong line should be read in full: len=%d %v", len(o.res.Text), o.err)
 	}
 }
 
@@ -293,7 +293,7 @@ func TestPipeStaleSettledBeforeResponse(t *testing.T) {
 		evStart(), evEnd("fresh", "stop", ""), evSettled(false))
 	o := recvPrompt(t, ch)
 	if o.err != nil || o.res != (TurnResult{Outcome: OutcomeCompleted, Text: "fresh"}) {
-		t.Fatalf("结果不符：%+v %v", o.res, o.err)
+		t.Fatalf("unexpected result: %+v %v", o.res, o.err)
 	}
 }
 
@@ -306,7 +306,7 @@ func TestPipeAbortWaitsForPromptResponse(t *testing.T) {
 	go func() { abortErr <- f.c.Abort(ctx) }()
 	select {
 	case m := <-f.cmds:
-		t.Fatalf("prompt 响应前不应发出打断命令：%v", m)
+		t.Fatalf("no abort command should be sent before the prompt response: %v", m)
 	case <-time.After(150 * time.Millisecond):
 	}
 	f.send(okResp(id, "prompt", map[string]any{"disposition": "started"}), evStart(), evDelta("p"))
@@ -319,7 +319,7 @@ func TestPipeAbortWaitsForPromptResponse(t *testing.T) {
 	}
 	o := recvPrompt(t, ch)
 	if o.err != nil || o.res != (TurnResult{Outcome: OutcomeAborted, Text: "p"}) {
-		t.Fatalf("结果不符：%+v %v", o.res, o.err)
+		t.Fatalf("unexpected result: %+v %v", o.res, o.err)
 	}
 }
 
@@ -334,7 +334,7 @@ func TestPipePromptCtxCancelDetaches(t *testing.T) {
 	cancel()
 	o := recvPrompt(t, ch)
 	if !errors.Is(o.err, context.Canceled) {
-		t.Fatalf("ctx 取消应返回 ctx.Err()：%v", o.err)
+		t.Fatalf("cancelling ctx should return ctx.Err(): %v", o.err)
 	}
 	f.send(evDelta("late"), evSettled(false))
 	// The next turn runs normally, and there are no more callbacks after Prompt returns.
@@ -342,10 +342,10 @@ func TestPipePromptCtxCancelDetaches(t *testing.T) {
 	id2 := f.expect("prompt")
 	f.send(okResp(id2, "prompt", map[string]any{"disposition": "started"}), evStart(), evEnd("y", "stop", ""), evSettled(false))
 	if o := recvPrompt(t, ch2); o.err != nil || o.res.Text != "y" {
-		t.Fatalf("结果不符：%+v %v", o.res, o.err)
+		t.Fatalf("unexpected result: %+v %v", o.res, o.err)
 	}
 	if rec.text() != "a" {
-		t.Fatalf("Prompt 返回后不应再回调 sink：%q", rec.text())
+		t.Fatalf("the sink should get no more callbacks after Prompt returns: %q", rec.text())
 	}
 }
 
@@ -354,7 +354,7 @@ func TestPipeConcurrentPromptRejected(t *testing.T) {
 	ch := goPrompt(testCtx(t), f.c, "x", nil)
 	id := f.expect("prompt")
 	if _, err := f.c.Prompt(testCtx(t), "y", nil); err == nil {
-		t.Fatal("并发 Prompt 应报错")
+		t.Fatal("a concurrent Prompt should fail")
 	}
 	f.send(okResp(id, "prompt", map[string]any{"disposition": "started"}), evSettled(false))
 	if o := recvPrompt(t, ch); o.err != nil || o.res.Outcome != OutcomeCompleted {
@@ -369,7 +369,7 @@ func TestPipeCallExitWhilePending(t *testing.T) {
 	f.expect("get_state")
 	_ = f.out.Close()
 	if err := <-errCh; !errors.Is(err, ErrExited) {
-		t.Fatalf("应返回 ErrExited：%v", err)
+		t.Fatalf("should return ErrExited: %v", err)
 	}
 }
 
@@ -381,7 +381,7 @@ func TestPipeCallCtxCancel(t *testing.T) {
 	id := f.expect("get_state")
 	cancel()
 	if err := <-errCh; !errors.Is(err, context.Canceled) {
-		t.Fatalf("应返回 ctx.Err()：%v", err)
+		t.Fatalf("should return ctx.Err(): %v", err)
 	}
 	// A late response is ignored and does not block the reader goroutine.
 	f.send(okResp(id, "get_state", nil))
@@ -405,7 +405,7 @@ func TestRingBufferKeepsTail(t *testing.T) {
 		t.Fatalf("%q", r.String())
 	}
 	r2 := newRingBuffer(4)
-	_, _ = r2.Write([]byte("x长")) // when truncation falls in the middle of a multi-byte character, the incomplete prefix is dropped
+	_, _ = r2.Write([]byte("x长")) // when truncation falls in the middle of a multi-byte character, the incomplete prefix is dropped; check-english: zh (truncation inside a multi-byte character)
 	_, _ = r2.Write([]byte("ab"))
 	if r2.String() != "ab" {
 		t.Fatalf("%q", r2.String())

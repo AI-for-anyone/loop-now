@@ -117,7 +117,7 @@ func TestWebSleepIntegration(t *testing.T) {
 		if blocked {
 			description += " !error=fixture"
 		}
-		raw, err := s.a.Tasks.Create(ctx, auth.Principal{Kind: auth.KindAgent, ID: manager.ID}, taskmodel.CreateInput{ActionID: uuid.New(), Title: title, Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "当前工作", Description: description, AgentID: worker.ID, InputFields: []workflow.Field{}, OutputFields: []workflow.Field{}, Inputs: map[string]workflow.Source{}}}, Edges: []workflow.Edge{}}})
+		raw, err := s.a.Tasks.Create(ctx, auth.Principal{Kind: auth.KindAgent, ID: manager.ID}, taskmodel.CreateInput{ActionID: uuid.New(), Title: title, Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "current work", Description: description, AgentID: worker.ID, InputFields: []workflow.Field{}, OutputFields: []workflow.Field{}, Inputs: map[string]workflow.Source{}}}, Edges: []workflow.Edge{}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -154,8 +154,8 @@ func TestWebSleepIntegration(t *testing.T) {
 		}
 		return result
 	}
-	nodeTask := createTask("Web sleep 当前节点", false)
-	ordinaryTask := createTask("Web sleep 普通任务会话", true)
+	nodeTask := createTask("Web sleep current node", false)
+	ordinaryTask := createTask("Web sleep ordinary task conversation", true)
 	control := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			http.Error(rw, "POST only", 405)

@@ -44,14 +44,14 @@ func TestLarkLoginFormalContract(t *testing.T) {
 	op["status"] = "cancelled"
 	op["completedAt"] = now
 	op["errorCode"] = "auth_cancelled"
-	op["errorMessage"] = "已取消"
+	op["errorMessage"] = "Cancelled"
 	check("CLIAuthOperation", op, false)
 	op["userCode"] = nil
 	op["authorizationUrl"] = nil
 	check("CLIAuthOperation", op, true)
 	op["device_code"] = "must-not-be-public"
 	check("CLIAuthOperation", op, false)
-	identity := map[string]any{"brand": "feishu", "appId": "app-fixture", "openId": "ou-fixture", "displayName": "用户", "grantedScopes": nil, "verifiedAt": now}
+	identity := map[string]any{"brand": "feishu", "appId": "app-fixture", "openId": "ou-fixture", "displayName": "User", "grantedScopes": nil, "verifiedAt": now}
 	check("LarkIdentity", identity, true)
 	identity["grantedScopes"] = []any{}
 	check("LarkIdentity", identity, true)

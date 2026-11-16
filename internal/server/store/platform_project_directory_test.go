@@ -22,20 +22,20 @@ func TestPlatformProjectDirectoryStore(t *testing.T) {
 		}
 	}
 	orgA, orgB := uuid.New(), uuid.New()
-	exec(`INSERT INTO organizations(id,name) VALUES($1,'A组织'),($2,'B组织')`, orgA, orgB)
-	pA, err := e.s.CreateProject(ctx, orgA, "同名项目")
+	exec(`INSERT INTO organizations(id,name) VALUES($1,'Org A'),($2,'Org B')`, orgA, orgB)
+	pA, err := e.s.CreateProject(ctx, orgA, "Same-name project")
 	if err != nil {
 		t.Fatal(err)
 	}
-	pB, err := e.s.CreateProject(ctx, orgB, "同名项目")
+	pB, err := e.s.CreateProject(ctx, orgB, "Same-name project")
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := e.s.CreateAgent(ctx, store.ProjectScope(pB.ID), "负责人", "openai", "synthetic", "private-prompt-sentinel")
+	a, err := e.s.CreateAgent(ctx, store.ProjectScope(pB.ID), "Owner", "openai", "synthetic", "private-prompt-sentinel")
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := e.s.CreateAgent(ctx, store.ProjectScope(pB.ID), "替代人", "openai", "synthetic", "")
+	b, err := e.s.CreateAgent(ctx, store.ProjectScope(pB.ID), "Substitute", "openai", "synthetic", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestPlatformProjectDirectoryStore(t *testing.T) {
 	if len(items) != 3 || positions[pA.ID] >= positions[pB.ID] || string(again) != string(first) || find(pA.ID).Manager != nil {
 		t.Fatal("organization ordering/null Manager")
 	}
-	if m := find(pB.ID).Manager; m == nil || m.ID != a.ID || m.Address != "B组织/同名项目/负责人" {
+	if m := find(pB.ID).Manager; m == nil || m.ID != a.ID || m.Address != "Org B/Same-name project/Owner" {
 		t.Fatal("complete manager locator")
 	}
 	encoded, _ := json.Marshal(items)
@@ -79,14 +79,14 @@ func TestPlatformProjectDirectoryStore(t *testing.T) {
 			t.Fatal("unsafe field exposed")
 		}
 	}
-	if _, err = e.s.RenameProject(ctx, pB.ID, "新项目"); err != nil {
+	if _, err = e.s.RenameProject(ctx, pB.ID, "New project"); err != nil {
 		t.Fatal(err)
 	}
-	exec(`UPDATE organizations SET name='新组织' WHERE id=$1`, orgB)
-	if _, err = e.s.UpdateAgent(ctx, a.ID, store.AgentPatch{Name: ptrDirectoryName("新负责人")}); err != nil {
+	exec(`UPDATE organizations SET name='New org' WHERE id=$1`, orgB)
+	if _, err = e.s.UpdateAgent(ctx, a.ID, store.AgentPatch{Name: ptrDirectoryName("New owner")}); err != nil {
 		t.Fatal(err)
 	}
-	if find(pB.ID).Manager.Address != "新组织/新项目/新负责人" {
+	if find(pB.ID).Manager.Address != "New org/New project/New owner" {
 		t.Fatal("rename locator stale")
 	}
 	if _, err = e.s.SetProjectManager(ctx, pB.ID, b.ID); err != nil {

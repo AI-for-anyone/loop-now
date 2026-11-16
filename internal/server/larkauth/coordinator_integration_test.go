@@ -30,26 +30,26 @@ func newLarkFixture(t *testing.T) larkFixture {
 	t.Helper()
 	ctx := context.Background()
 	st := sqlitetest.NewStore(t)
-	d, e := st.EnsureDefaults(ctx, "Lark TEST组织", "默认项目")
+	d, e := st.EnsureDefaults(ctx, "Lark TEST org", "Default project")
 	if e != nil {
 		t.Fatal(e)
 	}
-	p, e := st.CreateProject(ctx, d.Organization.ID, "Lark隔离项目")
+	p, e := st.CreateProject(ctx, d.Organization.ID, "Lark isolated project")
 	if e != nil {
 		t.Fatal(e)
 	}
-	a, e := st.CreateAgent(ctx, store.ProjectScope(p.ID), "Lark测试", "openai", "fake-model", "")
+	a, e := st.CreateAgent(ctx, store.ProjectScope(p.ID), "Lark test", "openai", "fake-model", "")
 	if e != nil {
 		t.Fatal(e)
 	}
-	c := clicredential.Lark{Type: "lark_user", AppSecret: "fixture-app-secret", AccessToken: "fixture-access-1", RefreshToken: "fixture-refresh-1", ExpiresAt: time.Now().Add(time.Minute).UnixMilli(), RefreshExpiresAt: time.Now().Add(24 * time.Hour).UnixMilli(), Identity: cm.LarkIdentity{Brand: "feishu", AppID: "app-fixture", OpenID: "ou-fixture", DisplayName: "隔离测试用户", VerifiedAt: time.Now()}, RuntimeVariantVersion: clicredential.LarkUserVariant}
+	c := clicredential.Lark{Type: "lark_user", AppSecret: "fixture-app-secret", AccessToken: "fixture-access-1", RefreshToken: "fixture-refresh-1", ExpiresAt: time.Now().Add(time.Minute).UnixMilli(), RefreshExpiresAt: time.Now().Add(24 * time.Hour).UnixMilli(), Identity: cm.LarkIdentity{Brand: "feishu", AppID: "app-fixture", OpenID: "ou-fixture", DisplayName: "Isolated test user", VerifiedAt: time.Now()}, RuntimeVariantVersion: clicredential.LarkUserVariant}
 	plain, e := c.Encode()
 	if e != nil {
 		t.Fatal(e)
 	}
 	defer clear(plain)
 	label := c.Identity.OpenID
-	r, e := st.CreateProjectCredential(ctx, p.ID, "cli", "lark-cli", "离线用户", store.ProjectCredentialWrite{AuthMethod: "oauth", AccountLabel: &label, LarkIdentity: &c.Identity, TemplateSource: "builtin", Meta: store.CredentialMeta{TemplateVersion: "1"}, Secret: plain})
+	r, e := st.CreateProjectCredential(ctx, p.ID, "cli", "lark-cli", "Offline user", store.ProjectCredentialWrite{AuthMethod: "oauth", AccountLabel: &label, LarkIdentity: &c.Identity, TemplateSource: "builtin", Meta: store.CredentialMeta{TemplateVersion: "1"}, Secret: plain})
 	if e != nil {
 		t.Fatal(e)
 	}

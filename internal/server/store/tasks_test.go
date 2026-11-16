@@ -22,11 +22,11 @@ func taskFixture(t *testing.T) (*store.Store, store.Project, store.Agent, store.
 	t.Helper()
 	ctx := context.Background()
 	s := sqlitetest.NewStore(t)
-	dc, err := s.EnsureDefaults(ctx, "组织", "默认项目")
+	dc, err := s.EnsureDefaults(ctx, "Organization", "Default project")
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := s.CreateProject(ctx, dc.Organization.ID, "通用项目")
+	p, err := s.CreateProject(ctx, dc.Organization.ID, "General project")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func taskFixture(t *testing.T) (*store.Store, store.Project, store.Agent, store.
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := s.CreateAgent(ctx, store.ProjectScope(p.ID), "执行者", "example", "model", "")
+	a, err := s.CreateAgent(ctx, store.ProjectScope(p.ID), "executor", "example", "model", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func taskFixture(t *testing.T) (*store.Store, store.Project, store.Agent, store.
 	}
 	id := uuid.New()
 	now := time.Now().UTC()
-	r := taskmodel.Record{View: taskmodel.Detail{Task: taskmodel.Summary{ID: id, ProjectID: p.ID, Title: "通用任务", Status: "preparing", Version: 1, CreatedAt: now, UpdatedAt: now}, Request: map[string]any{"text": "sample"}, Workflow: workflow.Definition{StartStepID: "a", Steps: []workflow.Step{{ID: "a", Title: "业务自定", AgentID: a.ID}}, Edges: []workflow.Edge{}}, Nodes: []taskmodel.NodeRun{}, Artifacts: []taskmodel.Artifact{}, Cleanup: "none"}, EdgeCounts: map[string]int{}}
+	r := taskmodel.Record{View: taskmodel.Detail{Task: taskmodel.Summary{ID: id, ProjectID: p.ID, Title: "General task", Status: "preparing", Version: 1, CreatedAt: now, UpdatedAt: now}, Request: map[string]any{"text": "sample"}, Workflow: workflow.Definition{StartStepID: "a", Steps: []workflow.Step{{ID: "a", Title: "business-defined", AgentID: a.ID}}, Edges: []workflow.Edge{}}, Nodes: []taskmodel.NodeRun{}, Artifacts: []taskmodel.Artifact{}, Cleanup: "none"}, EdgeCounts: map[string]int{}}
 	instances := []store.TaskInstance{{ID: uuid.New(), TaskID: id, AgentID: a.ID, AgentName: a.Name, Snapshot: []byte("fixture"), Sources: []store.TaskFrozenSource{}}}
 	return s, p, m, a, r, instances
 }
@@ -51,7 +51,7 @@ func taskFixture(t *testing.T) (*store.Store, store.Project, store.Agent, store.
 func TestTaskActionIdempotencyAndDeletionProtection(t *testing.T) {
 	s, p, m, a, r, instances := taskFixture(t)
 	ctx := context.Background()
-	action := store.TaskAction{ActorKey: m.ID.String(), ID: uuid.New(), Operation: "createTask", Body: []byte(`{"title":"通用任务"}`)}
+	action := store.TaskAction{ActorKey: m.ID.String(), ID: uuid.New(), Operation: "createTask", Body: []byte(`{"title":"General task"}`)}
 	builds := 0
 	build := func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) { builds++; return r, instances, nil }
 	first, err := s.CreateTask(ctx, p.ID, m.ID, action, build)

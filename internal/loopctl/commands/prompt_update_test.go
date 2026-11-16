@@ -60,7 +60,7 @@ func TestAgentPromptVersionErrorsBeforeNetwork(t *testing.T) {
 
 func TestAgentPromptConflictDoesNotRefreshOrRetry(t *testing.T) {
 	s, e := stub(t)
-	s.On("PATCH /agents/{agentId}", clitest.Sample{Status: 412, Body: apiError("precondition_failed", "Prompt 已被修改，请核对最新内容")})
+	s.On("PATCH /agents/{agentId}", clitest.Sample{Status: 412, Body: apiError("precondition_failed", "the prompt was changed; check the latest content")})
 	e.stdin = "retained draft"
 	r := e.run("agent", "update", agentUUID, "--name", "also drafted", "--prompt-file", "-", "--expected-prompt-version", "1")
 	r.fails(t, "precondition_failed", 8)

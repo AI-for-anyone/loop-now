@@ -18,7 +18,7 @@ func TestProjectLoginRealOfflineHelperWindow(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			ctx := context.Background()
 			st := sqlitetest.NewStore(t)
-			dc, err := st.EnsureDefaults(ctx, "组织", "项目")
+			dc, err := st.EnsureDefaults(ctx, "Org", "Project")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -39,7 +39,7 @@ func TestProjectLoginRealOfflineHelperWindow(t *testing.T) {
 			svc := NewService(st, fakeGoHelper(t, body), nil, catalog(), ServiceOptions{LoginTimeout: time.Second * 3}, slog.New(slog.NewJSONHandler(&logs, nil)))
 			defer closeAuth(t, svc)
 			p := NewProjectService(svc, templates, 0)
-			name := "离线OAuth"
+			name := "Offline OAuth"
 			start, err := p.Start(ctx, dc.Project.ID, cm.LoginStart{Provider: "openai-codex", Name: &name})
 			if err != nil {
 				t.Fatal(err)

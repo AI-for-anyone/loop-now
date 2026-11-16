@@ -74,7 +74,7 @@ func TestCLIVerificationFormalContract(t *testing.T) {
 	bad.TemplateFingerprint = "wrong"
 	check("CLIVerificationOperation", bad, false)
 	for code, details := range map[string]any{"precondition_failed": cliverify.VersionConflictDetails{ProjectID: project, AccountID: account, ExpectedVersionID: version}, "verification_in_progress": cliverify.ConflictDetails{ProjectID: project, AccountID: account, OperationID: id, VersionID: version}, "verification_operation_conflict": cliverify.ConflictDetails{ProjectID: project, AccountID: account, OperationID: id, VersionID: version}, "verification_unsupported": cliverify.UnsupportedDetails{CLI: "gh", TemplateSource: "builtin", Reason: "template_fingerprint_mismatch"}} {
-		check("Error", map[string]any{"error": map[string]any{"code": code, "message": "固定安全错误", "details": details}}, true)
+		check("Error", map[string]any{"error": map[string]any{"code": code, "message": "Fixed safe error", "details": details}}, true)
 	}
 	found := 0
 	for path, item := range doc.Paths.Map() {

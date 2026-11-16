@@ -150,7 +150,7 @@ func TestTaskUnboundInboxLifecycleKeepsNullNode(t *testing.T) {
 	instanceID := uuid.New()
 	s.Store.InstanceID = &instanceID
 	r := current(t, s, id)
-	agent, e := s.Store.CreateAgent(ctx, store.ProjectScope(r.View.Task.ProjectID), "另一实例", "example", "model", "")
+	agent, e := s.Store.CreateAgent(ctx, store.ProjectScope(r.View.Task.ProjectID), "Other instance", "example", "model", "")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -159,7 +159,7 @@ func TestTaskUnboundInboxLifecycleKeepsNullNode(t *testing.T) {
 		t.Fatal(e)
 	}
 	message := uuid.New()
-	if e = s.DeliverInbox(ctx, store.NewInboxMessage{ID: message, From: store.ConsoleParty, To: store.Party{Kind: "agent", ID: agent.ID, RuntimeID: runtime}, Text: "协作", WhenBusy: "queue"}); e != nil {
+	if e = s.DeliverInbox(ctx, store.NewInboxMessage{ID: message, From: store.ConsoleParty, To: store.Party{Kind: "agent", ID: agent.ID, RuntimeID: runtime}, Text: "Please collaborate", WhenBusy: "queue"}); e != nil {
 		t.Fatal(e)
 	}
 	v, ok, e := s.Store.ClaimTaskInboxTurn(ctx, id, runtime)
@@ -235,20 +235,20 @@ func TestTaskReplyLogsAndUsageShareExactScope(t *testing.T) {
 func TestBlockedTaskInboxReplyDoesNotResumeWorkflow(t *testing.T) {
 	s, id, p := fixture(t, false)
 	ctx := context.Background()
-	if e := s.blockTask(ctx, id, "需要重试"); e != nil {
+	if e := s.blockTask(ctx, id, "needs a retry"); e != nil {
 		t.Fatal(e)
 	}
 	before := current(t, s, id)
 	message := uuid.New()
-	if e := s.DeliverInbox(ctx, store.NewInboxMessage{ID: message, From: store.ConsoleParty, To: store.Party{Kind: "agent", ID: p.ID, RuntimeID: p.RuntimeID}, Text: "解释现状", WhenBusy: "queue"}); e != nil {
+	if e := s.DeliverInbox(ctx, store.NewInboxMessage{ID: message, From: store.ConsoleParty, To: store.Party{Kind: "agent", ID: p.ID, RuntimeID: p.RuntimeID}, Text: "Explain where things stand", WhenBusy: "queue"}); e != nil {
 		t.Fatal(e)
 	}
 	calls := 0
 	s.Executor = &controlledExecutor{execute: func(ctx context.Context, r executor.Request, sink executor.Sink) (executor.Result, error) {
 		calls++
 		sink.Running(1)
-		sink.TextDelta("说明")
-		return executor.Result{Outcome: "completed", Text: "说明"}, nil
+		sink.TextDelta("Here is the explanation")
+		return executor.Result{Outcome: "completed", Text: "Here is the explanation"}, nil
 	}}
 	if e := s.driveInbox(ctx, p.RuntimeID); e != nil {
 		t.Fatal(e)
@@ -258,7 +258,7 @@ func TestBlockedTaskInboxReplyDoesNotResumeWorkflow(t *testing.T) {
 		t.Fatal("Inbox resumed blocked workflow")
 	}
 	messages, e := s.Store.TaskNodeMessages(ctx, id, before.Current().ID, "", 20)
-	if e != nil || len(messages.Messages) != 2 || messages.Messages[1].Text != "说明" {
+	if e != nil || len(messages.Messages) != 2 || messages.Messages[1].Text != "Here is the explanation" {
 		t.Fatal("blocked Inbox conversation missing", e, messages)
 	}
 }
@@ -267,7 +267,7 @@ func TestTaskNoncurrentInboxRunsWhileCurrentBusy(t *testing.T) {
 	s, id, p := fixture(t, false)
 	ctx := context.Background()
 	r := current(t, s, id)
-	agent, e := s.Store.CreateAgent(ctx, store.ProjectScope(r.View.Task.ProjectID), "协作者", "example", "model", "")
+	agent, e := s.Store.CreateAgent(ctx, store.ProjectScope(r.View.Task.ProjectID), "Collaborator", "example", "model", "")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -290,9 +290,9 @@ func TestTaskNoncurrentInboxRunsWhileCurrentBusy(t *testing.T) {
 			<-ctx.Done()
 			return executor.Result{Outcome: "interrupted"}, nil
 		}
-		sink.TextDelta("协作回复")
+		sink.TextDelta("Collaborator reply")
 		close(sideDone)
-		return executor.Result{Outcome: "completed", Text: "协作回复"}, nil
+		return executor.Result{Outcome: "completed", Text: "Collaborator reply"}, nil
 	}}
 	if e = s.Start(ctx); e != nil {
 		t.Fatal(e)
@@ -303,7 +303,7 @@ func TestTaskNoncurrentInboxRunsWhileCurrentBusy(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("main did not start")
 	}
-	if e = s.DeliverInbox(ctx, store.NewInboxMessage{ID: uuid.New(), From: store.ConsoleParty, To: store.Party{Kind: "agent", ID: agent.ID, RuntimeID: runtime}, Text: "帮忙", WhenBusy: "queue"}); e != nil {
+	if e = s.DeliverInbox(ctx, store.NewInboxMessage{ID: uuid.New(), From: store.ConsoleParty, To: store.Party{Kind: "agent", ID: agent.ID, RuntimeID: runtime}, Text: "Please help", WhenBusy: "queue"}); e != nil {
 		t.Fatal(e)
 	}
 	select {
@@ -325,7 +325,7 @@ func TestTaskNoncurrentInboxRunsWhileCurrentBusy(t *testing.T) {
 		t.Fatal(e)
 	}
 	for _, message := range page.Messages {
-		if message.Text == "协作回复" {
+		if message.Text == "Collaborator reply" {
 			t.Fatal("side reply polluted node conversation")
 		}
 	}
@@ -338,7 +338,7 @@ func TestRestartOfUnboundInboxDoesNotBlockWaitingNode(t *testing.T) {
 	s, id, _ := fixture(t, false)
 	ctx := context.Background()
 	r := current(t, s, id)
-	agent, e := s.Store.CreateAgent(ctx, store.ProjectScope(r.View.Task.ProjectID), "恢复协作者", "example", "model", "")
+	agent, e := s.Store.CreateAgent(ctx, store.ProjectScope(r.View.Task.ProjectID), "Restored collaborator", "example", "model", "")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -354,7 +354,7 @@ func TestRestartOfUnboundInboxDoesNotBlockWaitingNode(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if e = s.DeliverInbox(ctx, store.NewInboxMessage{ID: uuid.New(), From: store.ConsoleParty, To: store.Party{Kind: "agent", ID: agent.ID, RuntimeID: runtime}, Text: "协作", WhenBusy: "queue"}); e != nil {
+	if e = s.DeliverInbox(ctx, store.NewInboxMessage{ID: uuid.New(), From: store.ConsoleParty, To: store.Party{Kind: "agent", ID: agent.ID, RuntimeID: runtime}, Text: "Please collaborate", WhenBusy: "queue"}); e != nil {
 		t.Fatal(e)
 	}
 	v, ok, e := s.Store.ClaimTaskInboxTurn(ctx, id, runtime)

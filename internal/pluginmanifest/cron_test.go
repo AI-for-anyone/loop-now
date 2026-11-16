@@ -27,22 +27,22 @@ func TestCron(t *testing.T) {
 	} {
 		cron, err := ParseCron(c.expr)
 		if err != nil {
-			t.Fatalf("%s：%v", c.expr, err)
+			t.Fatalf("%s: %v", c.expr, err)
 		}
 		for _, s := range c.yes {
 			if !cron.Match(at(s)) {
-				t.Errorf("%s 应在 %s 触发", c.expr, s)
+				t.Errorf("%s should fire at %s", c.expr, s)
 			}
 		}
 		for _, s := range c.no {
 			if cron.Match(at(s)) {
-				t.Errorf("%s 不应在 %s 触发", c.expr, s)
+				t.Errorf("%s should not fire at %s", c.expr, s)
 			}
 		}
 	}
 	for _, bad := range []string{"* * * *", "60 * * * *", "* 24 * * *", "* * 0 * *", "* * * 13 *", "* * * * 8", "*/0 * * * *", "a * * * *", "5-1 * * * *"} {
 		if _, err := ParseCron(bad); err == nil {
-			t.Errorf("%q 应不合法", bad)
+			t.Errorf("%q should be invalid", bad)
 		}
 	}
 }

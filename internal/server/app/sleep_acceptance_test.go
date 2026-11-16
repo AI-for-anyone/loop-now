@@ -107,7 +107,7 @@ func TestSleepAppTaskWakeCommitAndExecutionRestart(t *testing.T) {
 			d, p := sleepTask(t, s, description)
 			if conversation {
 				taskWait(t, s, d.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "blocked" })
-				if _, e := s.a.API.Inbox.Send(ctx, auth.Console(), "默认项目/Worker#"+d.Task.ID.String(), "ordinary continuation", "queue"); e != nil {
+				if _, e := s.a.API.Inbox.Send(ctx, auth.Console(), "Default project/Worker#"+d.Task.ID.String(), "ordinary continuation", "queue"); e != nil {
 					t.Fatal(e)
 				}
 			}
@@ -377,7 +377,7 @@ func TestSleepAppNoncurrentConversationAndWorkflowWorkWake(t *testing.T) {
 		t.Fatal(e)
 	}
 	taskWait(t, s, d.Task.ID, func(d taskmodel.Detail) bool { return d.Nodes[0].Sleep != nil })
-	if _, e = s.a.API.Inbox.Send(ctx, auth.Console(), "默认项目/Next#"+d.Task.ID.String(), "ordinary conversation before assigned node", "queue"); e != nil {
+	if _, e = s.a.API.Inbox.Send(ctx, auth.Console(), "Default project/Next#"+d.Task.ID.String(), "ordinary conversation before assigned node", "queue"); e != nil {
 		t.Fatal(e)
 	}
 	turnB := sleepWaitTurn(t, s, runtimeB, uuid.Nil)
@@ -420,7 +420,7 @@ func TestSleepAppNoncurrentConversationAndWorkflowWorkWake(t *testing.T) {
 	// Wake A through real Inbox; its submitted output advances to B only after
 	// A successfully settles. B's existing ordinary sleep is consumed by this
 	// actual new workflow work, not by a synthetic wake call.
-	if _, e = s.a.API.Inbox.Send(ctx, auth.Console(), "默认项目/First#"+d.Task.ID.String(), "continue assigned node", "queue"); e != nil {
+	if _, e = s.a.API.Inbox.Send(ctx, auth.Console(), "Default project/First#"+d.Task.ID.String(), "continue assigned node", "queue"); e != nil {
 		t.Fatal(e)
 	}
 	continuedA := sleepWaitTurn(t, s, pa.RuntimeID, turnA.ID)

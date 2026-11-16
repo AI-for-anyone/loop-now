@@ -46,7 +46,7 @@ func runGoogleNativeProcesses(t *testing.T, disconnect bool) {
 	old := syntheticGoogle()
 	old.AccessToken = "synthetic-generation-0"
 	old.ExpiresAt = (epoch + 500) * 1000
-	row, e := f.st.CreateProjectCredential(ctx, f.project, "cli", "gcloud", "长命令", f.write(t, old))
+	row, e := f.st.CreateProjectCredential(ctx, f.project, "cli", "gcloud", "Long command", f.write(t, old))
 	if e != nil {
 		t.Fatal(e)
 	}

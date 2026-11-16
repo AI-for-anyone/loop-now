@@ -43,7 +43,7 @@ func TestLocalModePromptPathAndRestart(t *testing.T) {
 	later := filepath.Join(root, "later")
 	id := h.agent(func(s *agentconfig.Snapshot) {
 		s.Local = agentconfig.LocalAccess{UserPath: true, Directories: []agentconfig.LocalDirectory{
-			{Path: code, Note: "前端仓库", Inherited: true}, {Path: later},
+			{Path: code, Note: "Frontend repository", Inherited: true}, {Path: later},
 		}}
 	})
 	if res, _ := h.exec(id, "first"); res.Outcome != executor.OutcomeCompleted {
@@ -51,14 +51,14 @@ func TestLocalModePromptPathAndRestart(t *testing.T) {
 	}
 	d := readDump(t, dumpPath)
 	if !strings.Contains(d.SystemPrompt, "## Folders and context") || !strings.Contains(d.SystemPrompt, "Local directories") ||
-		!strings.Contains(d.SystemPrompt, "  - "+code+": 前端仓库\n") || strings.Contains(d.SystemPrompt, later) {
-		t.Fatalf("系统提示里的本机目录不对：\n%s", d.SystemPrompt)
+		!strings.Contains(d.SystemPrompt, "  - "+code+": Frontend repository\n") || strings.Contains(d.SystemPrompt, later) {
+		t.Fatalf("wrong local directories in the system prompt:\n%s", d.SystemPrompt)
 	}
 	if !strings.Contains(d.SystemPrompt, "full read and write access") || !strings.Contains(d.SystemPrompt, "never reclaimed") {
-		t.Fatalf("应如实说明读写权限：\n%s", d.SystemPrompt)
+		t.Fatalf("should state the read and write access truthfully:\n%s", d.SystemPrompt)
 	}
 	if path := d.Env["PATH"]; !strings.HasSuffix(path, basePath+sep+userBin) || countDir(path, baseA) != 1 {
-		t.Fatalf("用户 PATH 应接在最后且不重复：%s", path)
+		t.Fatalf("the user's PATH should come last without duplicates: %s", path)
 	}
 	pid := h.pid(id)
 
@@ -68,20 +68,20 @@ func TestLocalModePromptPathAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	if res, _ := h.exec(id, "second"); res.Outcome != executor.OutcomeCompleted || h.pid(id) != pid {
-		t.Fatal("目录存在与否的变化不应重启 Pi")
+		t.Fatal("a directory coming into or out of existence should not restart Pi")
 	}
 
 	// The list changes: the next dispatch restarts with the new list, and the session stays the same.
 	h.src.mu.Lock()
-	h.src.snaps[id].Local.Directories = append(h.src.snaps[id].Local.Directories, agentconfig.LocalDirectory{Path: root, Note: "整个目录"})
+	h.src.snaps[id].Local.Directories = append(h.src.snaps[id].Local.Directories, agentconfig.LocalDirectory{Path: root, Note: "Whole directory"})
 	session := h.src.recorded[id]
 	h.src.mu.Unlock()
 	if res, _ := h.exec(id, "third"); res.Outcome != executor.OutcomeCompleted || h.pid(id) == pid {
-		t.Fatal("清单变化应在下一次派发重启 Pi")
+		t.Fatal("a change to the list should restart Pi at the next dispatch")
 	}
 	d = readDump(t, dumpPath)
-	if !strings.Contains(d.SystemPrompt, "  - "+later+"\n") || !strings.Contains(d.SystemPrompt, "  - "+root+": 整个目录\n") || argValue(d.Args, "--session") != session {
-		t.Fatalf("重启后的系统提示或会话不对：%v\n%s", d.Args, d.SystemPrompt)
+	if !strings.Contains(d.SystemPrompt, "  - "+later+"\n") || !strings.Contains(d.SystemPrompt, "  - "+root+": Whole directory\n") || argValue(d.Args, "--session") != session {
+		t.Fatalf("wrong system prompt or session after the restart: %v\n%s", d.Args, d.SystemPrompt)
 	}
 	pid = h.pid(id)
 
@@ -90,10 +90,10 @@ func TestLocalModePromptPathAndRestart(t *testing.T) {
 	h.src.snaps[id].Local.UserPath = false
 	h.src.mu.Unlock()
 	if res, _ := h.exec(id, "fourth"); res.Outcome != executor.OutcomeCompleted || h.pid(id) == pid {
-		t.Fatal("PATH 开关变化应重启 Pi")
+		t.Fatal("a change to the PATH switch should restart Pi")
 	}
 	if d = readDump(t, dumpPath); strings.Contains(d.Env["PATH"], userBin) || !strings.HasSuffix(d.Env["PATH"], basePath) {
-		t.Fatalf("关掉后 PATH 不应带用户目录：%s", d.Env["PATH"])
+		t.Fatalf("PATH should not include the user's directories once turned off: %s", d.Env["PATH"])
 	}
 }
 
@@ -102,20 +102,20 @@ func TestLocalDirectoriesPromptWording(t *testing.T) {
 	snap := agentconfig.Snapshot{Local: agentconfig.LocalAccess{Directories: []agentconfig.LocalDirectory{{Path: dir}, {Path: filepath.Join(dir, "missing")}}}}
 	normal := localDirectoriesPrompt(snap)
 	if !strings.Contains(normal, "  - "+dir+"\n") || strings.Contains(normal, "missing") || strings.Contains(normal, "task copy") {
-		t.Fatalf("常态 Agent：%s", normal)
+		t.Fatalf("regular Agent: %s", normal)
 	}
 	snap.TaskID = uuid.New()
 	if task := localDirectoriesPrompt(snap); !strings.Contains(task, "not part of the task copy") || !strings.Contains(task, "other tasks may be using them") {
-		t.Fatalf("任务内实例应说明不是副本：%s", task)
+		t.Fatalf("an instance in a task should say the directories are not copies: %s", task)
 	}
 	if got := localDirectoriesPrompt(agentconfig.Snapshot{Local: agentconfig.LocalAccess{Directories: []agentconfig.LocalDirectory{{Path: filepath.Join(dir, "missing")}}}}); got != "" {
-		t.Fatalf("没有存在的目录时不应写这一条：%q", got)
+		t.Fatalf("this entry should not be written when no directory exists: %q", got)
 	}
 	// Without context folders (test setup), the local directories section is still written.
 	e := &Executor{}
 	section, err := e.contextPrompt(agentconfig.Snapshot{Local: agentconfig.LocalAccess{Directories: []agentconfig.LocalDirectory{{Path: dir}}}}, agentDirs{}, "")
 	if err != nil || !strings.HasPrefix(section, "## Folders and context\n\n- Local directories") {
-		t.Fatalf("没有上下文文件夹时：%q %v", section, err)
+		t.Fatalf("without context folders: %q %v", section, err)
 	}
 }
 
@@ -131,7 +131,7 @@ func TestAppendUserPath(t *testing.T) {
 	got = appendUserPath([]string{`C:\WINDOWS\System32` + sep + `C:\WINDOWS`}, []string{`C:\WINDOWS\system32`, `c:\windows`, `C:\Tools\bin`})
 	want = []string{`C:\WINDOWS\System32` + sep + `C:\WINDOWS`, `C:\Tools\bin`}
 	if runtime.GOOS == "windows" && strings.Join(got, "|") != strings.Join(want, "|") {
-		t.Fatalf("Windows 上应不分大小写去重：%v", got)
+		t.Fatalf("on Windows duplicates should be removed case-insensitively: %v", got)
 	}
 }
 

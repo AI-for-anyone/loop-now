@@ -201,7 +201,7 @@ func TestCLIImportInputAndNaming(t *testing.T) {
 			t.Fatal("unsafe JSON accepted")
 		}
 	}
-	for _, c := range []Candidate{{CLI: "psql", SourceKind: "pg_service", Label: strings.Repeat("界", 300)}, {CLI: "mysql", SourceKind: "mysql_login_path", Label: "bad\nlabel"}, {CLI: "gh", SourceKind: "gh_hosts_plaintext", Label: ""}} {
+	for _, c := range []Candidate{{CLI: "psql", SourceKind: "pg_service", Label: strings.Repeat("界", 300)}, {CLI: "mysql", SourceKind: "mysql_login_path", Label: "bad\nlabel"}, {CLI: "gh", SourceKind: "gh_hosts_plaintext", Label: ""}} { // check-english: zh (generated names are cut by runes, not bytes)
 		n := accountName(c)
 		if len([]rune(n)) > 200 || strings.TrimSpace(n) != n || strings.Contains(n, "\n") {
 			t.Fatal("invalid generated name")
@@ -236,11 +236,11 @@ func newImportEnv(t *testing.T) *importEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dc, err := st.EnsureDefaults(ctx, "测试组织", "默认测试项目")
+	dc, err := st.EnsureDefaults(ctx, "Test org", "Default test project")
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := st.CreateProject(ctx, dc.Organization.ID, "来源导入项目")
+	p, err := st.CreateProject(ctx, dc.Organization.ID, "Source import project")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -422,7 +422,7 @@ func TestCLIImportServiceScopeAndPreciseFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := e.st.CreateProject(ctx, p.OrganizationID, "另一个导入项目")
+	other, err := e.st.CreateProject(ctx, p.OrganizationID, "Another import project")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -572,7 +572,7 @@ func TestCLIImportProjectDeleteTxRollbackAndScopedCancel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := e.st.CreateProject(ctx, p.OrganizationID, "另项目保持")
+	other, err := e.st.CreateProject(ctx, p.OrganizationID, "Other project kept")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -666,7 +666,7 @@ func TestCLIImportProjectCancelPreventsLateScanPublication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := e.st.CreateProject(ctx, p.OrganizationID, "另项目可扫描")
+	other, err := e.st.CreateProject(ctx, p.OrganizationID, "Other project scannable")
 	if err != nil {
 		t.Fatal(err)
 	}

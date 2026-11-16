@@ -61,14 +61,14 @@ func TestFolderContextInjectionActualAppFakePi(t *testing.T) {
 	project := decode[apitypes.Context](t, s.must(200, "GET", "/context", nil)).Project.ID
 	s.must(201, "POST", "/projects/"+project.String()+"/credential-accounts", map[string]any{"purpose": "model", "provider": "anthropic", "name": "synthetic", "credential": map[string]string{"type": "api_key", "key": "synthetic-key"}})
 	path, agent := s.createAgent("Ctx")
-	s.must(200, "PUT", "/projects/"+project.String()+"/context-folder/content?path=AGENTS.md", []byte("项目约定 v1"))
-	s.must(200, "PUT", path+"/folder/content?path=AGENTS.md", []byte("自己的笔记"))
+	s.must(200, "PUT", "/projects/"+project.String()+"/context-folder/content?path=AGENTS.md", []byte("Project conventions v1"))
+	s.must(200, "PUT", path+"/folder/content?path=AGENTS.md", []byte("My own notes"))
 	root := filepath.Join(w.cfg.WorkRoot, "agents", agent.ID.String())
 	for _, p := range []string{filepath.Join(root, "AGENTS.md"), filepath.Join(root, "pi", "CLAUDE.md")} {
 		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(p, []byte("不该被读入"), 0o600); err != nil {
+		if err := os.WriteFile(p, []byte("must not be read"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -78,48 +78,48 @@ func TestFolderContextInjectionActualAppFakePi(t *testing.T) {
 	projectDir := filepath.Join(w.cfg.ContextDir, "projects", project.String())
 	d := readDump(t, dump)
 	if d.Cwd != real(t, workspace) || !slices.Contains(d.Args, "--append-system-prompt") {
-		t.Fatalf("Pi 的工作目录应是 Agent 文件夹，并追加系统提示：%s %v", d.Cwd, d.Args)
+		t.Fatalf("Pi's working directory should be the Agent folder, with an appended system prompt: %s %v", d.Cwd, d.Args)
 	}
-	for _, want := range []string{"项目约定 v1", projectDir, workspace, filepath.Join(projectDir, "AGENTS.md"), "你是测试助手"} {
+	for _, want := range []string{"Project conventions v1", projectDir, workspace, filepath.Join(projectDir, "AGENTS.md"), "You are a test assistant"} {
 		if !strings.Contains(d.SystemPrompt, want) {
-			t.Fatalf("追加的系统提示应含 %q：%s", want, d.SystemPrompt)
+			t.Fatalf("the appended system prompt should contain %q: %s", want, d.SystemPrompt)
 		}
 	}
-	if strings.Contains(d.SystemPrompt, "自己的笔记") {
-		t.Fatal("自己的入口由 Pi 从工作目录读取，不应重复放进追加的提示")
+	if strings.Contains(d.SystemPrompt, "My own notes") {
+		t.Fatal("Pi reads the Agent's own entry from its working directory; it should not be repeated in the appended prompt")
 	}
 	for _, p := range []string{filepath.Join(root, "AGENTS.md"), filepath.Join(root, "pi", "CLAUDE.md")} {
 		if _, err := os.Stat(p); !os.IsNotExist(err) {
-			t.Fatalf("平台目录中的入口文件应在启动时删除：%s", p)
+			t.Fatalf("entry files in the platform directory should be removed at startup: %s", p)
 		}
 	}
 	// Changing the entry does not trigger a restart: the Pi being reused still has the old prompt.
-	s.must(200, "PUT", "/projects/"+project.String()+"/context-folder/content?path=AGENTS.md", []byte("项目约定 v2"))
+	s.must(200, "PUT", "/projects/"+project.String()+"/context-folder/content?path=AGENTS.md", []byte("Project conventions v2"))
 	if err := os.Remove(dump); err != nil {
 		t.Fatal(err)
 	}
 	s.must(202, "POST", path+"/messages", map[string]any{"text": "!text=again"})
 	s.waitIdle(path)
 	if _, err := os.Stat(dump); !os.IsNotExist(err) {
-		t.Fatal("入口修改不应让 Pi 重启")
+		t.Fatal("changing the entry should not restart Pi")
 	}
 	// After a config change causes a restart, the new entry is read.
-	s.must(200, "PATCH", path, map[string]any{"prompt": "新的提示", "expectedPromptVersion": agent.PromptVersion})
+	s.must(200, "PATCH", path, map[string]any{"prompt": "New prompt", "expectedPromptVersion": agent.PromptVersion})
 	s.must(202, "POST", path+"/messages", map[string]any{"text": "!text=third"})
 	s.waitIdle(path)
-	if d = readDump(t, dump); !strings.Contains(d.SystemPrompt, "项目约定 v2") || !strings.Contains(d.SystemPrompt, "新的提示") {
-		t.Fatalf("重启后应读到新入口：%s", d.SystemPrompt)
+	if d = readDump(t, dump); !strings.Contains(d.SystemPrompt, "Project conventions v2") || !strings.Contains(d.SystemPrompt, "New prompt") {
+		t.Fatalf("the new entry should be read after the restart: %s", d.SystemPrompt)
 	}
 
 	// Platform Agent: the global context folder; it cannot see the project's.
 	ppath, _ := s.createPlatformAgent("PlatformCtx")
 	s.must(200, "PUT", ppath+"/model-credential", map[string]any{"provider": "anthropic", "key": "sk-test"})
-	s.must(200, "PUT", "/context-folder/content?path=AGENTS.md", []byte("全局约定"))
+	s.must(200, "PUT", "/context-folder/content?path=AGENTS.md", []byte("Global conventions"))
 	s.must(202, "POST", ppath+"/messages", map[string]any{"text": "!text=ok"})
 	s.waitIdle(ppath)
 	d = readDump(t, dump)
-	if !strings.Contains(d.SystemPrompt, "全局约定") || !strings.Contains(d.SystemPrompt, filepath.Join(w.cfg.ContextDir, "global")) || strings.Contains(d.SystemPrompt, "项目约定") {
-		t.Fatalf("平台 Agent 只看到全局上下文：%s", d.SystemPrompt)
+	if !strings.Contains(d.SystemPrompt, "Global conventions") || !strings.Contains(d.SystemPrompt, filepath.Join(w.cfg.ContextDir, "global")) || strings.Contains(d.SystemPrompt, "Project conventions") {
+		t.Fatalf("the platform Agent should see only the global context: %s", d.SystemPrompt)
 	}
 }
 
@@ -140,7 +140,7 @@ func TestTaskCopiesAgentFolderActualAppFakePi(t *testing.T) {
 	_, manager := s.createAgent("Manager")
 	wpath, worker := s.createAgent("Worker")
 	s.must(200, "PUT", "/projects/"+project.String()+"/manager", map[string]any{"agentId": manager.ID})
-	s.must(200, "PUT", wpath+"/folder/content?path=AGENTS.md", []byte("Worker 的笔记"))
+	s.must(200, "PUT", wpath+"/folder/content?path=AGENTS.md", []byte("Worker's notes"))
 	s.must(200, "PUT", wpath+"/folder/content?path=node_modules/pkg/index.js", []byte("module.exports = 1"))
 	base := filepath.Join(w.cfg.WorkRoot, "agents", worker.ID.String(), "workspace")
 	if err := os.Symlink("node_modules/pkg", filepath.Join(base, "pkg")); err != nil {
@@ -152,26 +152,26 @@ func TestTaskCopiesAgentFolderActualAppFakePi(t *testing.T) {
 	}
 	task := decode[taskmodel.Detail](t, raw)
 	runtime := task.Nodes[0].RuntimeID
-	waitFor(t, "节点进入运行", func() bool {
+	waitFor(t, "node running", func() bool {
 		var n int
 		return s.a.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM task_turns WHERE runtime_id=$1 AND status='running'`, runtime).Scan(&n) == nil && n == 1
 	})
 	copyDir := filepath.Join(w.cfg.WorkRoot, "agents", runtime.String(), "workspace")
 	if b, err := os.ReadFile(filepath.Join(copyDir, "node_modules/pkg/index.js")); err != nil || string(b) != "module.exports = 1" {
-		t.Fatalf("实例工作区应是基础文件夹的副本：%q %v", b, err)
+		t.Fatalf("the instance workspace should be a copy of the base folder: %q %v", b, err)
 	}
 	if l, _ := os.Readlink(filepath.Join(copyDir, "pkg")); l != "node_modules/pkg" {
-		t.Fatalf("软链接应原样复制：%q", l)
+		t.Fatalf("symlinks should be copied as is: %q", l)
 	}
 	d := readDump(t, dump)
-	if d.Cwd != real(t, copyDir) || !strings.Contains(d.SystemPrompt, "任务结束后回收") || !strings.Contains(d.SystemPrompt, filepath.Join("projects", project.String())) {
-		t.Fatalf("任务实例在副本中工作，并看到项目上下文：%s %s", d.Cwd, d.SystemPrompt)
+	if d.Cwd != real(t, copyDir) || !strings.Contains(d.SystemPrompt, "reclaimed when the task ends") || !strings.Contains(d.SystemPrompt, filepath.Join("projects", project.String())) {
+		t.Fatalf("the task instance should work in the copy and see the project context: %s %s", d.Cwd, d.SystemPrompt)
 	}
-	if err := os.WriteFile(filepath.Join(copyDir, "AGENTS.md"), []byte("任务里改了"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(copyDir, "AGENTS.md"), []byte("changed in the task"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := os.ReadFile(filepath.Join(base, "AGENTS.md")); string(b) != "Worker 的笔记" {
-		t.Fatal("改副本不应影响基础 Agent 的文件夹")
+	if b, _ := os.ReadFile(filepath.Join(base, "AGENTS.md")); string(b) != "Worker's notes" {
+		t.Fatal("changing the copy should not affect the base Agent's folder")
 	}
 	var snapshot []byte
 	var sources string
@@ -182,9 +182,9 @@ func TestTaskCopiesAgentFolderActualAppFakePi(t *testing.T) {
 		SchemaVersion int `json:"schemaVersion"`
 	}
 	if err := json.Unmarshal(snapshot, &env); err != nil || env.SchemaVersion != 10 || sources != "[]" {
-		t.Fatalf("新任务应是快照 v10、没有冻结来源：%d %s %v", env.SchemaVersion, sources, err)
+		t.Fatalf("a new task should be snapshot v10 with no frozen sources: %d %s %v", env.SchemaVersion, sources, err)
 	}
 	if !strings.Contains(logs.String(), "copied the task working directory") || !strings.Contains(logs.String(), "clonefile") {
-		t.Fatalf("应记录复制方式（APFS 克隆）：%s", logs.String())
+		t.Fatalf("the copy method should be logged (APFS clone): %s", logs.String())
 	}
 }

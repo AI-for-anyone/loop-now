@@ -32,9 +32,9 @@ func TestSecondInstanceOnSameDataDirRefused(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)
 	if err := buildSecond(t, w.cfg); err == nil || !strings.Contains(err.Error(), "data directory") || !strings.Contains(err.Error(), "is already used by another server process") || app.ExitCode(err) != app.ExitInstanceLocked {
-		t.Fatalf("第二个实例应拒绝启动：%v", err)
+		t.Fatalf("a second instance should refuse to start: %v", err)
 	}
-	s.createAgent("仍可用")
+	s.createAgent("still usable")
 	s.stop()
 	w.start(nil).stop()
 }
@@ -48,16 +48,16 @@ func TestSecondInstanceOnSameWorkRootRefused(t *testing.T) {
 	other := w.cfg
 	other.DataDir = filepath.Join(t.TempDir(), "other-data")
 	if err := buildSecond(t, other); err == nil || !strings.Contains(err.Error(), "work root") || !strings.Contains(err.Error(), "is already used by another server process") || app.ExitCode(err) != app.ExitInstanceLocked {
-		t.Fatalf("第二个实例应拒绝启动：%v", err)
+		t.Fatalf("a second instance should refuse to start: %v", err)
 	}
 	// Each instance creates its own directory here at startup and cleans up empty directories left by other instances.
 	if instances, _ := filepath.Glob(filepath.Join(w.cfg.WorkRoot, ".cli-verification", "*")); len(instances) != 1 {
-		t.Fatalf("被拒绝的实例不应动工作根：%v", instances)
+		t.Fatalf("the refused instance should not touch the work root: %v", instances)
 	}
 	if _, err := os.Stat(filepath.Join(config.DBDir(other.DataDir), db.DataFile)); !os.IsNotExist(err) {
-		t.Fatalf("被拒绝的实例不应建库：%v", err)
+		t.Fatalf("the refused instance should not create a database: %v", err)
 	}
-	s.createAgent("仍可用")
+	s.createAgent("still usable")
 	s.stop()
 	w.start(func(c *config.Config) { c.DataDir = other.DataDir }).stop()
 }

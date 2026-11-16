@@ -22,7 +22,7 @@ func TestListRuntimes(t *testing.T) {
 		Runtimes []runtimes.Status `json:"runtimes"`
 	}](t, e.expect(200, "GET", "/runtimes?refresh=true", nil))
 	if len(got.Runtimes) != 2 || got.Runtimes[1].ID != "claude-code" || !got.Runtimes[1].Available || got.Runtimes[1].Login.State != "logged_in" {
-		t.Fatalf("运行时：%+v", got)
+		t.Fatalf("runtimes: %+v", got)
 	}
 	e.expect(422, "GET", "/runtimes?refresh=maybe", nil, "X-Contract-Invalid-Request", "1")
 }

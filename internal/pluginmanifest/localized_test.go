@@ -17,6 +17,7 @@ import (
 func text(en, zh string) map[string]any { return map[string]any{"en-US": en, "zh-CN": zh} }
 
 // localized returns full() with every label, and title and description at several schema levels, given per language.
+// check-english: zh (zh-CN values of language-tag objects)
 func localized() map[string]any {
 	p := full()
 	ln := p["loopNow"].(map[string]any)
@@ -54,17 +55,17 @@ func TestLocalizedLabelsAndSchemaText(t *testing.T) {
 	}
 	b, _ := json.Marshal(m.Public())
 	for _, want := range []string{
-		`"label":{"en-US":"Lark account","zh-CN":"飞书账号"}`,
-		`"label":{"en-US":"Resend","zh-CN":"重发"}`,
-		`"label":{"en-US":"Lark","zh-CN":"飞书"}`,
-		`"title":{"en-US":"Callback URL","zh-CN":"回调地址"}`,
-		`{"const":"external","title":{"en-US":"Only external identities","zh-CN":"只推给外部身份"}}`,
+		`"label":{"en-US":"Lark account","zh-CN":"飞书账号"}`,                                     // check-english: zh (zh-CN value of a language-tag object)
+		`"label":{"en-US":"Resend","zh-CN":"重发"}`,                                             // check-english: zh (zh-CN value of a language-tag object)
+		`"label":{"en-US":"Lark","zh-CN":"飞书"}`,                                               // check-english: zh (zh-CN value of a language-tag object)
+		`"title":{"en-US":"Callback URL","zh-CN":"回调地址"}`,                                     // check-english: zh (zh-CN value of a language-tag object)
+		`{"const":"external","title":{"en-US":"Only external identities","zh-CN":"只推给外部身份"}}`, // check-english: zh (zh-CN value of a language-tag object)
 	} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("the API should return %s as written:\n%s", want, b)
 		}
 	}
-	if c := m.Components.Channels[0].Label; c.English() != "Lark" || c.String() != "飞书" || c.In("ja") != "飞书" {
+	if c := m.Components.Channels[0].Label; c.English() != "Lark" || c.String() != "飞书" || c.In("ja") != "飞书" { // check-english: zh (zh-CN value of a language-tag object)
 		t.Fatalf("channel label: English %q, String %q", c.English(), c.String())
 	}
 	if err := pluginmanifest.Validate(m.ConfigSchema.Map(), false, map[string]any{"url": "https://example.com", "recipients": "all", "retry": map[string]any{"limit": 3}}); err != nil {
@@ -146,7 +147,7 @@ func TestStoredManifestFromPreviousVersion(t *testing.T) {
 	if err := json.Unmarshal(old, &m); err != nil {
 		t.Fatal(err)
 	}
-	if m.Accounts[0].Label.English() != "飞书账号" || m.Components.Actions[0].Label.String() != "重发" || m.Components.Channels[0].Label.English() != "飞书" {
+	if m.Accounts[0].Label.English() != "飞书账号" || m.Components.Actions[0].Label.String() != "重发" || m.Components.Channels[0].Label.English() != "飞书" { // check-english: zh (labels as the previous version stored them, see testdata/stored-manifest-05d7852.json)
 		t.Fatalf("plain labels: %+v", m.Components)
 	}
 	again, _ := json.Marshal(m)
@@ -162,7 +163,7 @@ func TestStoredManifestFromPreviousVersion(t *testing.T) {
 // Text.In picks the way the console does; English is In("en-US"); String keeps its zh-CN first order.
 func TestTextIn(t *testing.T) {
 	both := pluginmanifest.Text{}
-	if err := json.Unmarshal([]byte(`{"en-US":"Lark","zh-CN":"飞书"}`), &both); err != nil {
+	if err := json.Unmarshal([]byte(`{"en-US":"Lark","zh-CN":"飞书"}`), &both); err != nil { // check-english: zh (zh-CN value of a language-tag object)
 		t.Fatal(err)
 	}
 	only := pluginmanifest.Text{}
@@ -171,7 +172,7 @@ func TestTextIn(t *testing.T) {
 	}
 	plain := pluginmanifest.PlainText("Lark")
 	for _, c := range []struct{ got, want string }{
-		{both.English(), "Lark"}, {both.String(), "飞书"}, {both.In("zh-CN"), "飞书"}, {both.In("ja"), "飞书"},
+		{both.English(), "Lark"}, {both.String(), "飞书"}, {both.In("zh-CN"), "飞书"}, {both.In("ja"), "飞书"}, // check-english: zh (zh-CN value of a language-tag object)
 		{only.English(), "ラーク"}, {plain.English(), "Lark"}, {plain.In("zh-CN"), "Lark"},
 	} {
 		if c.got != c.want {

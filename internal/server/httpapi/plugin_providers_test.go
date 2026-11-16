@@ -25,10 +25,10 @@ func TestPluginProvidersInCatalogAPI(t *testing.T) {
 	e.api.Models, e.api.Config.Models = reg, reg
 	providers, _ := json.Marshal(modelcatalog.Capture{Providers: []modelcatalog.CapturedProvider{captured}})
 	if err := e.st.InstallPlugin(ctx, store.Plugin{ID: "grokish", DisplayName: "Grokish", Source: json.RawMessage(`{"kind":"local","location":"/x"}`), Version: "0.1.0",
-		Manifest: json.RawMessage(`{"id":"grokish","name":"grokish","version":"0.1.0","displayName":{"zh-CN":"格罗克","en-US":"Grokish"}}`), InstallDir: "/x"}, "d", store.PluginVersionExtras{Providers: providers}); err != nil {
+		Manifest: json.RawMessage(`{"id":"grokish","name":"grokish","version":"0.1.0","displayName":{"zh-CN":"格罗克","en-US":"Grokish"}}`), InstallDir: "/x"}, "d", store.PluginVersionExtras{Providers: providers}); err != nil { // check-english: zh (zh-CN value of a language-tag object)
 		t.Fatal(err)
 	}
-	agent := decode[apitypes.Agent](t, e.expect(201, "POST", e.agents(), map[string]any{"name": "助手", "model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}}))
+	agent := decode[apitypes.Agent](t, e.expect(201, "POST", e.agents(), map[string]any{"name": "Assistant", "model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}}))
 	find := func(path string) apitypes.ModelProvider {
 		list := decode[apitypes.ModelProviderList](t, e.expect(200, "GET", path, nil))
 		for _, p := range list.Providers {
@@ -36,32 +36,32 @@ func TestPluginProvidersInCatalogAPI(t *testing.T) {
 				return p
 			}
 		}
-		t.Fatalf("目录里没有插件提供方：%+v", list)
+		t.Fatalf("the catalog has no plugin provider: %+v", list)
 		return apitypes.ModelProvider{}
 	}
 	p := find("/model-providers")
-	if p.Source != "plugin" || p.Name == nil || *p.Name != "Fake OAuth" || p.PluginID == nil || *p.PluginID != "grokish" || p.UnavailableReason != nil || string(p.PluginDisplayName) != `{"zh-CN":"格罗克","en-US":"Grokish"}` {
-		t.Fatalf("插件提供方：%+v %s", p, p.PluginDisplayName)
+	if p.Source != "plugin" || p.Name == nil || *p.Name != "Fake OAuth" || p.PluginID == nil || *p.PluginID != "grokish" || p.UnavailableReason != nil || string(p.PluginDisplayName) != `{"zh-CN":"格罗克","en-US":"Grokish"}` { // check-english: zh (zh-CN value of a language-tag object)
+		t.Fatalf("plugin provider: %+v %s", p, p.PluginDisplayName)
 	}
 	withAgent := "/model-providers?agentId=" + agent.ID.String()
 	if p = find(withAgent); p.UnavailableReason == nil || *p.UnavailableReason != "plugin_not_enabled" {
-		t.Fatalf("未启用：%+v", p.UnavailableReason)
+		t.Fatalf("not enabled: %+v", p.UnavailableReason)
 	}
 	bad := decode[apitypes.ErrorBody](t, e.expect(422, "PATCH", "/agents/"+agent.ID.String(), map[string]any{"model": map[string]string{"provider": "fake-oauth", "modelId": "fake-1"}}))
 	if len(bad.Error.Fields) != 1 || bad.Error.Fields[0].Field != "model.provider" {
-		t.Fatalf("422 字段：%+v", bad)
+		t.Fatalf("422 fields: %+v", bad)
 	}
 	if _, _, err := e.st.SaveProjectPlugin(ctx, e.dc.Project.ID, "grokish", true, store.PluginConfigUpdate{Apply: func(c store.PluginConfigRow) (store.PluginConfigRow, error) { return c, nil }}); err != nil {
 		t.Fatal(err)
 	}
 	if p = find(withAgent); p.UnavailableReason == nil || *p.UnavailableReason != "agent_not_granted" {
-		t.Fatalf("未授权：%+v", p.UnavailableReason)
+		t.Fatalf("not granted: %+v", p.UnavailableReason)
 	}
 	if err := e.st.SaveAgentPluginGrant(ctx, agent.ID, "grokish", true, nil); err != nil {
 		t.Fatal(err)
 	}
 	if p = find(withAgent); p.UnavailableReason != nil {
-		t.Fatalf("已授权：%+v", *p.UnavailableReason)
+		t.Fatalf("granted: %+v", *p.UnavailableReason)
 	}
 	e.expect(200, "PATCH", "/agents/"+agent.ID.String(), map[string]any{"model": map[string]string{"provider": "fake-oauth", "modelId": "fake-1"}})
 	e.expect(422, "GET", "/model-providers?agentId=nope", nil, "X-Contract-Invalid-Request", "1")

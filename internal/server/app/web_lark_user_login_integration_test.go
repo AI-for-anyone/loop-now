@@ -77,7 +77,7 @@ func TestWebLarkUserLoginIntegration(t *testing.T) {
 	w.cfg.ConsoleOrigins = []string{"http://127.0.0.1:4334"}
 	w.cfg.AuthLoginTimeout = 2 * time.Minute
 	p := larktest.New(t)
-	attempts := []*larktest.Attempt{p.Add("ou-web-synthetic", "桌面核实用户", nil, ""), p.Add("ou-web-late", "取消迟到用户", nil, ""), p.Add("ou-web-recovered", "原操作恢复用户", nil, "")}
+	attempts := []*larktest.Attempt{p.Add("ou-web-synthetic", "desktop verified user", nil, ""), p.Add("ou-web-late", "cancelled late user", nil, ""), p.Add("ou-web-recovered", "recovered original operation user", nil, "")}
 	control := t.TempDir()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -111,7 +111,7 @@ func TestWebLarkUserLoginIntegration(t *testing.T) {
 	address = a.Addr()
 	t.Cleanup(s.stop)
 	project := decode[apitypes.Context](t, s.must(200, "GET", "/context", nil)).Project
-	source := decode[cm.Account](t, s.must(201, "POST", "/projects/"+project.ID.String()+"/credential-accounts", map[string]any{"purpose": "cli", "cli": "lark-cli", "name": "桌面原应用", "credential": map[string]any{"type": "cli", "fields": map[string]string{"appId": "app-web-synthetic", "appSecret": "SYNTHETIC_APP_SECRET_ONLY", "brand": "feishu"}}}))
+	source := decode[cm.Account](t, s.must(201, "POST", "/projects/"+project.ID.String()+"/credential-accounts", map[string]any{"purpose": "cli", "cli": "lark-cli", "name": "desktop original app", "credential": map[string]any{"type": "cli", "fields": map[string]string{"appId": "app-web-synthetic", "appSecret": "SYNTHETIC_APP_SECRET_ONLY", "brand": "feishu"}}}))
 	manifest := map[string]any{"apiBase": s.url, "webOrigin": "http://127.0.0.1:4334", "projectId": project.ID, "projectName": project.Name, "sourceAccountId": source.ID, "controlDir": control, "evidenceDir": evidence}
 	manifestPath := filepath.Join(t.TempDir(), "manifest.json")
 	b, _ := json.Marshal(manifest)
@@ -388,8 +388,8 @@ func TestWebLarkUserLoginFailureDeleteIntegration(t *testing.T) {
 	project := decode[apitypes.Context](t, s.must(200, "GET", "/context", nil)).Project
 	accounts := "/projects/" + project.ID.String() + "/credential-accounts"
 	base := "/projects/" + project.ID.String() + "/cli-auth/operations"
-	source := decode[cm.Account](t, s.must(201, "POST", accounts, map[string]any{"purpose": "cli", "cli": "lark-cli", "name": "缺格原应用", "credential": map[string]any{"type": "cli", "fields": map[string]string{"appId": "app-web-missing-cells", "appSecret": "SYNTHETIC_ONLY_SECRET", "brand": "feishu"}}}))
-	seed := p.Add("ou-web-keep-old", "保留的核实用户", nil, "")
+	source := decode[cm.Account](t, s.must(201, "POST", accounts, map[string]any{"purpose": "cli", "cli": "lark-cli", "name": "missing cells original app", "credential": map[string]any{"type": "cli", "fields": map[string]string{"appId": "app-web-missing-cells", "appSecret": "SYNTHETIC_ONLY_SECRET", "brand": "feishu"}}}))
+	seed := p.Add("ou-web-keep-old", "kept verified user", nil, "")
 	seed.Release()
 	id := uuid.New()
 	s.must(202, "POST", base, map[string]any{"operationId": id, "cli": "lark-cli", "authType": "lark_user", "sourceAccountId": source.ID, "expectedSourceRevision": source.Revision})
@@ -419,7 +419,7 @@ func TestWebLarkUserLoginFailureDeleteIntegration(t *testing.T) {
 		return out
 	}
 	before := hashVersions()
-	failed := p.Add("ou-must-not-save", "不会保存的用户", nil, "temporarily_unavailable")
+	failed := p.Add("ou-must-not-save", "never saved user", nil, "temporarily_unavailable")
 	failed.Release()
 	manifest := map[string]any{"apiBase": s.url, "webOrigin": "http://127.0.0.1:4334", "projectId": project.ID, "projectName": project.Name, "sourceAccountId": source.ID, "userAccountId": user.ID, "evidenceDir": evidence}
 	manifestPath := filepath.Join(t.TempDir(), "manifest.json")

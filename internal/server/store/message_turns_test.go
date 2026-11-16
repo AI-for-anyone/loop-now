@@ -76,14 +76,14 @@ func (e *recEnv) list(q store.MessageQuery) store.MessagePage {
 func (e *recEnv) start(r store.Run) {
 	e.t.Helper()
 	if _, ok, err := e.s.StartQueuedRun(e.ctx, r.ID, uuid.Must(uuid.NewV7())); err != nil || !ok {
-		e.t.Fatalf("开始排队执行失败：%v %v", ok, err)
+		e.t.Fatalf("starting the queued run failed: %v %v", ok, err)
 	}
 }
 
 func (e *recEnv) finish(r store.Run, status, reason string) {
 	e.t.Helper()
 	if _, _, ok, err := e.s.FinishRun(e.ctx, r.ID, store.RunEnd{Status: status, EndReason: reason, Text: "reply"}); err != nil || !ok {
-		e.t.Fatalf("结束执行失败：%v %v", ok, err)
+		e.t.Fatalf("finishing the run failed: %v %v", ok, err)
 	}
 }
 
@@ -144,15 +144,15 @@ func newTurnFixture(t *testing.T) *turnFixture {
 	full := e.list(store.MessageQuery{Limit: 200})
 	f.all = full.Items
 	if len(f.all) != 16 {
-		t.Fatalf("消息条数不对：%d", len(f.all))
+		t.Fatalf("wrong message count: %d", len(f.all))
 	}
 	if f.current, _ = e.s.ActiveRun(e.ctx, e.agent); f.current == nil || f.current.ID != d.ID {
-		t.Fatal("d 应在进行中")
+		t.Fatal("d should be in progress")
 	}
 	f.order = refTurns(f.all, f.current)
 	want := []uuid.UUID{a.ID, b.ID, i1.ID, q1.ID, w.ID, c.ID, d.ID}
 	if !slices.Equal(f.order, want) {
-		t.Fatalf("全部轮次的顺序不对：%v，期望 %v", f.order, want)
+		t.Fatalf("wrong order of all turns: %v, want %v", f.order, want)
 	}
 	f.names = map[uuid.UUID]string{}
 	for i, id := range f.order {
@@ -160,7 +160,7 @@ func newTurnFixture(t *testing.T) *turnFixture {
 		f.names[id] = []string{"a", "b", "i1", "q1", "w", "c", "d"}[i]
 	}
 	if full.TurnsBefore != 0 || full.TurnsTotal != int64(len(want)) {
-		t.Fatalf("一页取完时 turnsBefore=%d turnsTotal=%d", full.TurnsBefore, full.TurnsTotal)
+		t.Fatalf("everything on one page: turnsBefore=%d turnsTotal=%d", full.TurnsBefore, full.TurnsTotal)
 	}
 	var epochs []int
 	for _, it := range f.all {
@@ -169,7 +169,7 @@ func newTurnFixture(t *testing.T) *turnFixture {
 		}
 	}
 	if len(epochs) != 2 {
-		t.Fatalf("对话应跨两个会话：%v", epochs)
+		t.Fatalf("the conversation should span two sessions: %v", epochs)
 	}
 	return f
 }
@@ -225,11 +225,11 @@ func TestMessagePageTurnNumbersWhilePaging(t *testing.T) {
 		for {
 			oldest := pages[0]
 			if oldest.TurnsTotal != int64(len(f.order)) {
-				t.Fatalf("limit=%d：turnsTotal=%d，期望 %d", limit, oldest.TurnsTotal, len(f.order))
+				t.Fatalf("limit=%d: turnsTotal=%d, want %d", limit, oldest.TurnsTotal, len(f.order))
 			}
 			if wrong, detail := f.numbering(pages, true); wrong > 0 {
 				first, last := seqs(pages)
-				t.Errorf("limit=%d，已加载 seq %d..%d，turnsBefore=%d：%d 轮编号不对%s", limit, first, last, oldest.TurnsBefore, wrong, detail)
+				t.Errorf("limit=%d, loaded seq %d..%d, turnsBefore=%d: %d turns numbered wrongly:%s", limit, first, last, oldest.TurnsBefore, wrong, detail)
 			}
 			if !oldest.HasMore || len(oldest.Items) == 0 {
 				break
@@ -238,7 +238,7 @@ func TestMessagePageTurnNumbersWhilePaging(t *testing.T) {
 			pages = append([]store.MessagePage{f.list(store.MessageQuery{Before: &before, Limit: limit})}, pages...)
 		}
 		if first, _ := seqs(pages); first != f.all[0].Seq {
-			t.Fatalf("limit=%d：没有翻到最早的消息", limit)
+			t.Fatalf("limit=%d: paging never reached the earliest message", limit)
 		}
 	}
 }
@@ -271,16 +271,16 @@ func TestMessagePageTurnNumbersAroundRun(t *testing.T) {
 			for {
 				oldest, newest := pages[0], pages[len(pages)-1]
 				if want := fromHere(oldest.Items[0].Seq); oldest.TurnsBefore != want {
-					t.Fatalf("定位 %s limit=%d：最早一页 turnsBefore=%d，普通取法为 %d", f.name(run), limit, oldest.TurnsBefore, want)
+					t.Fatalf("around %s limit=%d: earliest page turnsBefore=%d, a normal fetch gives %d", f.name(run), limit, oldest.TurnsBefore, want)
 				}
 				if oldest.TurnsTotal != int64(len(f.order)) || newest.TurnsTotal != int64(len(f.order)) {
-					t.Fatalf("定位 %s limit=%d：turnsTotal 不对", f.name(run), limit)
+					t.Fatalf("around %s limit=%d: wrong turnsTotal", f.name(run), limit)
 				}
 				atLatest := !newest.HasMoreAfter
 				if wrong, detail := f.numbering(pages, atLatest); wrong > 0 {
 					first, last := seqs(pages)
 					if atLatest || !f.hiddenAbove(first, last) {
-						t.Errorf("定位 %s limit=%d，已加载 seq %d..%d：%d 轮编号不对%s", f.name(run), limit, first, last, wrong, detail)
+						t.Errorf("around %s limit=%d, loaded seq %d..%d: %d turns numbered wrongly:%s", f.name(run), limit, first, last, wrong, detail)
 					}
 					knownGaps++
 				}
@@ -297,11 +297,11 @@ func TestMessagePageTurnNumbersAroundRun(t *testing.T) {
 				}
 			}
 			if first, _ := seqs(pages); first != f.all[0].Seq {
-				t.Fatalf("定位 %s limit=%d：没有翻到最早的消息", f.name(run), limit)
+				t.Fatalf("around %s limit=%d: paging never reached the earliest message", f.name(run), limit)
 			}
 		}
 	}
-	t.Logf("定位取法还没有加载到最新、已加载范围之后有排在前面的轮次的窗口：%d 个", knownGaps)
+	t.Logf("around-run windows not yet at the latest with an earlier-ordered turn after the loaded range: %d", knownGaps)
 }
 
 // hiddenAbove reports whether the loaded history (seq first..last) has this case: a turn that has no messages in the
@@ -331,22 +331,22 @@ func (f *turnFixture) hiddenAbove(first, last int64) bool {
 func TestMessagePageTurnNumbersEmpty(t *testing.T) {
 	e := newRecEnv(t)
 	if p := e.list(store.MessageQuery{Limit: 50}); len(p.Items) != 0 || p.TurnsBefore != 0 || p.TurnsTotal != 0 || p.HasMore {
-		t.Fatalf("空对话：%+v", p)
+		t.Fatalf("empty conversation: %+v", p)
 	}
 
 	f := newTurnFixture(t)
 	first, last := f.all[0].ID, f.all[len(f.all)-1].ID
 	if p := f.list(store.MessageQuery{Before: &first, Limit: 5}); len(p.Items) != 0 || p.TurnsBefore != 0 || p.TurnsTotal != 7 {
-		t.Fatalf("最早一条之前：%+v", p)
+		t.Fatalf("before the earliest message: %+v", p)
 	}
 	// After the latest message: the messages after it only contain the turn of d in progress (added from the live
 	// status), and there are 6 turns before it.
 	if p := f.list(store.MessageQuery{After: &last, Limit: 5}); len(p.Items) != 0 || p.TurnsBefore != 6 || p.TurnsTotal != 7 {
-		t.Fatalf("最新一条之后：%+v", p)
+		t.Fatalf("after the latest message: %+v", p)
 	}
 	// The latest page with only one message still queued: the user message of d (in progress) is on an earlier page,
 	// and d is still the first turn after this page.
 	if p := f.list(store.MessageQuery{Limit: 1}); len(p.Items) != 1 || p.Items[0].Run.Status != "queued" || p.TurnsBefore != 6 {
-		t.Fatalf("只有排队消息的一页：%+v", p)
+		t.Fatalf("page with only a queued message: %+v", p)
 	}
 }

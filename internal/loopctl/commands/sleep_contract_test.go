@@ -81,7 +81,7 @@ func TestSleepCommandsFormalContract(t *testing.T) {
 		code         string
 	}{{401, 5, "unauthenticated"}, {403, 6, "forbidden"}, {409, 8, "sleep_conflict"}, {422, 9, "validation_failed"}} {
 		s, e := agentStub(t)
-		s.On("POST /sleep", clitest.Sample{Status: tc.status, Body: map[string]any{"error": map[string]any{"code": tc.code, "message": "测试拒绝"}}})
+		s.On("POST /sleep", clitest.Sample{Status: tc.status, Body: map[string]any{"error": map[string]any{"code": tc.code, "message": "refused by the test"}}})
 		e.run(sleepArgs()...).fails(t, tc.code, tc.exit)
 		if !reflect.DeepEqual(ops(s), []string{"POST /sleep"}) {
 			t.Fatal(ops(s))

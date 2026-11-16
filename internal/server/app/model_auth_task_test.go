@@ -68,13 +68,13 @@ func TestAuthVersionSnapshotsSurviveReloginTaskRetryAndAppRestart(t *testing.T) 
 		}
 	}()
 	dc := decode[apitypes.Context](t, s.must(200, "GET", "/context", nil))
-	agent := decode[apitypes.Agent](t, s.must(201, "POST", "/projects/"+dc.Project.ID.String()+"/agents", map[string]any{"name": "账号版本Manager", "model": map[string]string{"provider": "openai-codex", "modelId": "gpt-6.1-sol"}, "prompt": "offline"}))
+	agent := decode[apitypes.Agent](t, s.must(201, "POST", "/projects/"+dc.Project.ID.String()+"/agents", map[string]any{"name": "account version Manager", "model": map[string]string{"provider": "openai-codex", "modelId": "gpt-6.1-sol"}, "prompt": "offline"}))
 	path := "/agents/" + agent.ID.String()
 	s.must(200, "PUT", "/projects/"+dc.Project.ID.String()+"/manager", map[string]any{"agentId": agent.ID})
 	var shared *cm.Account
 	login := func(account string) uuid.UUID {
 		fixture.account.Store(account)
-		body := map[string]any{"provider": "openai-codex", "name": "共享OAuth"}
+		body := map[string]any{"provider": "openai-codex", "name": "shared OAuth"}
 		if shared != nil {
 			body = map[string]any{"provider": "openai-codex", "accountId": shared.ID, "expectedRevision": shared.Revision}
 		}
@@ -100,7 +100,7 @@ func TestAuthVersionSnapshotsSurviveReloginTaskRetryAndAppRestart(t *testing.T) 
 		}
 		return decode[taskmodel.Detail](t, raw)
 	}
-	old := create("旧任务A", " !error !text=offline-task-A")
+	old := create("old task A", " !error !text=offline-task-A")
 	blocked := taskWait(t, s, old.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "blocked" })
 	oldRuntime := blocked.Nodes[0].RuntimeID
 	originalSession, err := s.a.Store.TaskInstance(context.Background(), oldRuntime)
@@ -111,9 +111,25 @@ func TestAuthVersionSnapshotsSurviveReloginTaskRetryAndAppRestart(t *testing.T) 
 	if a == b {
 		t.Fatal("relogin reused grant")
 	}
+	// Old task A blocking queued a "blocked" notice to the project's Manager, which is this Agent. The task runner
+	// delivers it to the Inbox on its next reconcile and the Agent replies in a turn of its own; a message sent before
+	// that turn ends gets 409 agent_busy. Wait for the notice to be delivered, then for the Agent to be idle.
+	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		var sent int
+		if err := s.a.Store.Pool.QueryRow(context.Background(), `SELECT count(*) FROM task_notifications WHERE task_id=$1 AND kind='blocked' AND sent_at IS NOT NULL`, old.Task.ID).Scan(&sent); err != nil {
+			t.Fatal(err)
+		}
+		if sent > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the blocked notice of the old task was not delivered")
+		}
+	}
+	s.waitIdle(path)
 	s.must(202, "POST", path+"/messages", map[string]any{"text": "normal B next"})
 	s.waitIdle(path)
-	newer := create("新任务B", "offline-task-B")
+	newer := create("new task B", "offline-task-B")
 	taskWait(t, s, newer.Task.ID, func(d taskmodel.Detail) bool { return d.Task.Status == "running" && len(d.Nodes[0].RunIDs) > 0 })
 	assertBound := func(runtime, version uuid.UUID, account string) {
 		snapshot, err := s.a.Tasks.Source.ExecutionSnapshot(context.Background(), runtime)

@@ -63,14 +63,14 @@ func waitCLITask(t *testing.T, s *server, id string, fn func(taskmodel.Detail) b
 func taskCLIRequest(agent, description string) taskmodel.CreateInput {
 	// Leave a space so fakepi recognizes !sleep as a separate token instead of joining it with "Node description:" (the
 	// node prompt in tasks/service.go) into one token.
-	return taskmodel.CreateInput{ActionID: uuid.New(), Title: "CLI通用任务", Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "执行", Description: " " + description, AgentID: uuid.MustParse(agent), InputFields: []workflow.Field{}, OutputFields: []workflow.Field{{Name: "file", Type: "artifact", Required: true}}, Inputs: map[string]workflow.Source{}}}, Edges: []workflow.Edge{}}}
+	return taskmodel.CreateInput{ActionID: uuid.New(), Title: "CLI general task", Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "Run", Description: " " + description, AgentID: uuid.MustParse(agent), InputFields: []workflow.Field{}, OutputFields: []workflow.Field{{Name: "file", Type: "artifact", Required: true}}, Inputs: map[string]workflow.Source{}}}, Edges: []workflow.Edge{}}}
 }
 
 func TestTaskCLIWithFakePi(t *testing.T) {
 	w := newWorld(t, false)
 	s := w.start(nil)
 	defer s.stop()
-	agent := s.createAgent("任务Manager")
+	agent := s.createAgent("Task Manager")
 	s.console(200, "PUT", "/projects/"+s.defaultProject()+"/manager", map[string]any{"agentId": agent})
 	manager := testTaskClient(t, s, agent)
 	manager.run("task", "agents").ok(t)
@@ -123,7 +123,7 @@ func TestTaskCLIBlockRetryCancel(t *testing.T) {
 	w := newWorld(t, false)
 	s := w.start(nil)
 	defer s.stop()
-	agent := s.createAgent("重试Manager")
+	agent := s.createAgent("Retry Manager")
 	s.console(200, "PUT", "/projects/"+s.defaultProject()+"/manager", map[string]any{"agentId": agent})
 	manager := testTaskClient(t, s, agent)
 	created := taskCLIInput(t, manager, taskCLIRequest(agent, "!sleep=5s"), "task", "create")
@@ -133,10 +133,10 @@ func TestTaskCLIBlockRetryCancel(t *testing.T) {
 	})
 	n := running.Nodes[0]
 	node := testTaskClient(t, s, n.RuntimeID.String())
-	node.stdin = "需要重试"
+	node.stdin = "Needs a retry"
 	node.run("task", "fail", id, n.ID.String(), "--action-id", uuid.NewString(), "--reason-file", "-").ok(t)
 	note := filepath.Join(t.TempDir(), "note")
-	os.WriteFile(note, []byte("继续原会话"), 0o600)
+	os.WriteFile(note, []byte("Continue the original session"), 0o600)
 	d := manager.run("task", "retry", id, "--action-id", uuid.NewString(), "--expected-node-run", n.ID.String(), "--note-file", note, "--yes").ok(t)
 	nextID := d["task"].(map[string]any)["currentNodeRunId"].(string)
 	if nextID == n.ID.String() {

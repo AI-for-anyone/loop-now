@@ -20,8 +20,8 @@ func TestNewRunStartsWhenHandoffPrecedesDriverRemoval(t *testing.T) {
 	for _, kind := range []string{"send", "compact"} {
 		t.Run(kind, func(t *testing.T) {
 			e := newEnv(t)
-			e.mustSend("block 首条", "")
-			e.waitStarted("block 首条")
+			e.mustSend("block first", "")
+			e.waitStarted("block first")
 
 			reached := make(chan struct{})
 			release := make(chan struct{})
@@ -40,15 +40,15 @@ func TestNewRunStartsWhenHandoffPrecedesDriverRemoval(t *testing.T) {
 				unblock()
 			})
 			if !e.ex.signal(e.agent, "release") {
-				t.Fatal("放行首条执行失败")
+				t.Fatal("failed to release the first run")
 			}
 			select {
 			case <-reached:
 			case <-time.After(5 * time.Second):
-				t.Fatal("等待空队列 Handoff 超时")
+				t.Fatal("timed out waiting for the empty-queue Handoff")
 			}
 
-			text := "交接后的普通消息"
+			text := "normal message after the handoff"
 			origin := "console"
 			type compactOutcome struct {
 				result store.Run
@@ -57,7 +57,7 @@ func TestNewRunStartsWhenHandoffPrecedesDriverRemoval(t *testing.T) {
 			var compactDone chan compactOutcome
 			var pending chan uuid.UUID
 			if kind == "compact" {
-				text = "保留关键决定"
+				text = "keep the key decisions"
 				origin = "console_compact"
 				if _, err := e.st.Pool.Exec(context.Background(), `UPDATE agent_sessions SET state='active', session_file=$2 WHERE agent_id=$1`, e.agent, "/tmp/fake-session.jsonl"); err != nil {
 					t.Fatal(err)
@@ -87,30 +87,30 @@ func TestNewRunStartsWhenHandoffPrecedesDriverRemoval(t *testing.T) {
 				}
 				select {
 				case out := <-compactDone:
-					t.Fatalf("新运行开始前 compact 已返回：%+v", out)
+					t.Fatalf("compact returned before the new run started: %+v", out)
 				default:
 				}
 				time.Sleep(10 * time.Millisecond)
 			}
 			if active == nil {
-				t.Fatal("新运行没有进入 starting")
+				t.Fatal("the new run did not reach starting")
 			}
 			if owner, err := e.co.LockOwner(context.Background(), e.agent.String()); err != nil || owner == "" {
-				t.Fatalf("新运行应已持有忙闲锁：%q %v", owner, err)
+				t.Fatalf("the new run should already hold the busy lock: %q %v", owner, err)
 			}
 			if pending != nil {
 				select {
 				case runID := <-pending:
 					if runID != active.ID {
-						t.Fatalf("pending run = %s，active run = %s", runID, active.ID)
+						t.Fatalf("pending run = %s, active run = %s", runID, active.ID)
 					}
 				case <-time.After(5 * time.Second):
-					t.Fatal("等待 compact 登记 pendingDrivers 超时")
+					t.Fatal("timed out waiting for compact to register in pendingDrivers")
 				}
 			}
 			select {
 			case got := <-e.ex.started:
-				t.Fatalf("旧驱动退出前不应执行新运行：%q", got)
+				t.Fatalf("the new run should not execute before the old driver exits: %q", got)
 			default:
 			}
 
@@ -121,10 +121,10 @@ func TestNewRunStartsWhenHandoffPrecedesDriverRemoval(t *testing.T) {
 				case out := <-compactDone:
 					c := store.ParseCompaction(out.result.Compaction)
 					if out.err != nil || c.Outcome != store.CompactionCompacted || c.TokensBefore == nil || *c.TokensBefore != 100 || *c.EstimatedTokensAfter != 40 || c.Instructions != text {
-						t.Fatalf("compact 结果不符：%+v %+v", out, c)
+						t.Fatalf("unexpected compact result: %+v %+v", out, c)
 					}
 				case <-time.After(5 * time.Second):
-					t.Fatal("等待 compact 完成超时")
+					t.Fatal("timed out waiting for compact to finish")
 				}
 			}
 			e.waitIdle()
@@ -137,8 +137,8 @@ func TestNewRunStartsWhenHandoffPrecedesDriverRemoval(t *testing.T) {
 // run afterwards.
 func TestCompactSurvivesCancelledRequest(t *testing.T) {
 	e := newEnv(t)
-	e.mustSend("block 首条", "")
-	e.waitStarted("block 首条")
+	e.mustSend("block first", "")
+	e.waitStarted("block first")
 	reached, release := make(chan struct{}), make(chan struct{})
 	var armed atomic.Bool
 	armed.Store(true)
@@ -150,7 +150,7 @@ func TestCompactSurvivesCancelledRequest(t *testing.T) {
 	})
 	t.Cleanup(func() { conversation.SetTestHookAfterDriveHandoff(nil) })
 	if !e.ex.signal(e.agent, "release") {
-		t.Fatal("放行首条执行失败")
+		t.Fatal("failed to release the first run")
 	}
 	<-reached
 	if _, err := e.st.Pool.Exec(context.Background(), `UPDATE agent_sessions SET state='active', session_file=$2 WHERE agent_id=$1`, e.agent, "/tmp/fake-session.jsonl"); err != nil {
@@ -162,27 +162,27 @@ func TestCompactSurvivesCancelledRequest(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		_, err := e.svc.Compact(ctx, e.agent, "只保留决定")
+		_, err := e.svc.Compact(ctx, e.agent, "keep only the decisions")
 		done <- err
 	}()
 	var runID uuid.UUID
 	select {
 	case runID = <-pending: // the compaction run has been created, but the driver has not started it yet
 	case <-time.After(5 * time.Second):
-		t.Fatal("等待压缩执行登记超时")
+		t.Fatal("timed out waiting for the compaction run to register")
 	}
 	cancel()
 	if err := <-done; err == nil {
-		t.Fatal("请求断开时 Compact 应返回错误")
+		t.Fatal("Compact should return an error when the request disconnects")
 	}
 	close(release)
-	e.waitStarted("只保留决定")
+	e.waitStarted("keep only the decisions")
 	e.waitIdle()
 	last, err := e.svc.LastCompaction(context.Background(), e.agent)
 	if err != nil || last == nil || last.ID != runID || last.Status != "completed" {
-		t.Fatalf("事后应能读到压缩执行：%+v %v", last, err)
+		t.Fatalf("the compaction run should be readable afterwards: %+v %v", last, err)
 	}
-	if c := store.ParseCompaction(last.Compaction); c.Instructions != "只保留决定" || c.Outcome != store.CompactionCompacted || c.TokensBefore == nil || *c.TokensBefore != 100 {
-		t.Fatalf("压缩结果：%+v", c)
+	if c := store.ParseCompaction(last.Compaction); c.Instructions != "keep only the decisions" || c.Outcome != store.CompactionCompacted || c.TokensBefore == nil || *c.TokensBefore != 100 {
+		t.Fatalf("compaction result: %+v", c)
 	}
 }

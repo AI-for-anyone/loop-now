@@ -12,10 +12,10 @@ func ptr[T any](v T) *T { return &v }
 func fixture() Definition {
 	a := uuid.New()
 	return Definition{StartStepID: "draft", Steps: []Step{
-		{ID: "draft", Title: "起草", AgentID: a, InputFields: []Field{{"request", "object", true}}, OutputFields: []Field{{"text", "string", true}}, Inputs: map[string]Source{"request": {Kind: "request", Field: ""}}},
-		{ID: "check", Title: "检查", AgentID: a, InputFields: []Field{{"text", "string", true}}, OutputFields: []Field{{"ok", "boolean", true}}, Inputs: map[string]Source{"text": {Kind: "node", NodeID: ptr("draft"), Field: "text"}}},
-		{ID: "finish", Title: "完成", AgentID: a, InputFields: []Field{}, OutputFields: []Field{}, Inputs: map[string]Source{}},
-	}, Edges: []Edge{{ID: "to_check", From: "draft", To: "check", Label: "检查"}, {ID: "revise", From: "check", To: "draft", Label: "修改", MaxTraversals: ptr(2)}, {ID: "finish", From: "check", To: "finish", Label: "通过"}}}
+		{ID: "draft", Title: "Draft", AgentID: a, InputFields: []Field{{"request", "object", true}}, OutputFields: []Field{{"text", "string", true}}, Inputs: map[string]Source{"request": {Kind: "request", Field: ""}}},
+		{ID: "check", Title: "Check", AgentID: a, InputFields: []Field{{"text", "string", true}}, OutputFields: []Field{{"ok", "boolean", true}}, Inputs: map[string]Source{"text": {Kind: "node", NodeID: ptr("draft"), Field: "text"}}},
+		{ID: "finish", Title: "Finish", AgentID: a, InputFields: []Field{}, OutputFields: []Field{}, Inputs: map[string]Source{}},
+	}, Edges: []Edge{{ID: "to_check", From: "draft", To: "check", Label: "Check"}, {ID: "revise", From: "check", To: "draft", Label: "Revise", MaxTraversals: ptr(2)}, {ID: "finish", From: "check", To: "finish", Label: "Approve"}}}
 }
 
 func TestValidationAndBoundedLoops(t *testing.T) {

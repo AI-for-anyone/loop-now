@@ -68,22 +68,22 @@ func (q *quickExec) Execute(ctx context.Context, req executor.Request, sink exec
 	sink.Phase(executor.PhaseLaunching)
 	sink.Running(1)
 	sink.Tool("t1", "bash", executor.ToolStarted)
-	sink.TextDelta("你")
-	sink.TextDelta("好")
+	sink.TextDelta("Hel")
+	sink.TextDelta("lo")
 	if strings.Contains(req.Message, "block") {
 		select {
 		case <-ch:
-			return executor.Result{Outcome: executor.OutcomeInterrupted, Text: "你好", ConfigVersion: 1}, nil
+			return executor.Result{Outcome: executor.OutcomeInterrupted, Text: "Hello", ConfigVersion: 1}, nil
 		case <-ctx.Done():
 			return executor.Result{}, ctx.Err()
 		}
 	}
 	sink.Tool("t1", "bash", executor.ToolSucceeded)
 	if strings.Contains(req.Message, "fail") {
-		return executor.Result{Outcome: executor.OutcomeFailed, Text: "你好", ErrorCode: executor.ErrWorkspaceSyncFailed,
-			ErrorMessage: "来源 app：克隆失败", ConfigVersion: 1}, nil
+		return executor.Result{Outcome: executor.OutcomeFailed, Text: "Hello", ErrorCode: executor.ErrWorkspaceSyncFailed,
+			ErrorMessage: "source app: clone failed", ConfigVersion: 1}, nil
 	}
-	return executor.Result{Outcome: executor.OutcomeCompleted, Text: "你好", ConfigVersion: 1}, nil
+	return executor.Result{Outcome: executor.OutcomeCompleted, Text: "Hello", ConfigVersion: 1}, nil
 }
 
 func (q *quickExec) Interrupt(_ context.Context, id, _ uuid.UUID) error {
@@ -162,7 +162,7 @@ func newEnv(t *testing.T) *env {
 	ctx := context.Background()
 	st := sqlitetest.NewStore(t)
 	co := coord.New(coord.Options{Prefix: "test:", StreamMaxLen: 1000, OverviewMaxLen: 1000})
-	dc, err := st.EnsureDefaults(ctx, "默认组织", "默认项目")
+	dc, err := st.EnsureDefaults(ctx, "Default organization", "Default project")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func (e *env) expect(status int, method, path string, body any, hdr ...string) [
 	e.t.Helper()
 	got, out, _ := e.do(method, path, body, hdr...)
 	if got != status {
-		e.t.Fatalf("%s %s：期望 %d，实际 %d：%s", method, path, status, got, out)
+		e.t.Fatalf("%s %s: want %d, got %d: %s", method, path, status, got, out)
 	}
 	return out
 }
@@ -260,7 +260,7 @@ func decode[T any](t *testing.T, b []byte) T {
 	t.Helper()
 	var v T
 	if err := json.Unmarshal(b, &v); err != nil {
-		t.Fatalf("解析响应失败：%v：%s", err, b)
+		t.Fatalf("decode response: %v: %s", err, b)
 	}
 	return v
 }
@@ -299,30 +299,30 @@ func TestRouteCoverage(t *testing.T) {
 			seen[key] = true
 			m, ok := meta[key]
 			if !ok {
-				t.Errorf("%s：已注册的路由不在契约中：%s", file, key)
+				t.Errorf("%s: registered route is not in the contract: %s", file, key)
 				continue
 			}
 			if m.OperationID != r.Op {
-				t.Errorf("%s：%s 的 operationId 应为 %s，路由表中为 %s", file, key, m.OperationID, r.Op)
+				t.Errorf("%s: operationId of %s should be %s, the route table has %s", file, key, m.OperationID, r.Op)
 			}
 			if withAccess && m.Access != r.Access.String() {
-				t.Errorf("%s：%s 的 x-access 为 %q，路由表中为 %q", file, key, m.Access, r.Access)
+				t.Errorf("%s: x-access of %s is %q, the route table has %q", file, key, m.Access, r.Access)
 			}
 			if withAccess && m.PluginScope != httpapi.PluginScopes()[r.Op] {
-				t.Errorf("%s：%s 的 x-plugin-scope 为 %q，插件范围表中为 %q", file, key, m.PluginScope, httpapi.PluginScopes()[r.Op])
+				t.Errorf("%s: x-plugin-scope of %s is %q, the plugin scope table has %q", file, key, m.PluginScope, httpapi.PluginScopes()[r.Op])
 			}
 		}
 		for key, m := range meta {
 			if !seen[key] {
-				t.Errorf("%s：契约中的操作没有实现：%s", file, key)
+				t.Errorf("%s: contract operation is not implemented: %s", file, key)
 			}
 			if withAccess && m.Access != "console" && m.Access != "console-and-external" {
-				t.Errorf("%s：%s 缺少 x-access 或取值不对：%q", file, key, m.Access)
+				t.Errorf("%s: %s has a missing or invalid x-access: %q", file, key, m.Access)
 			}
 		}
 	}
 	if (httpapi.Route{}).Access != httpapi.ConsoleOnly {
-		t.Fatal("路由默认应只限控制台，新路由不会因没有声明而对外开放")
+		t.Fatal("routes should default to console only, so a new route is never exposed externally for lack of a declaration")
 	}
 	check("openapi.yaml", e.api.Routes(), true)
 	check("agent-openapi.yaml", e.api.AgentRoutes(), false)
@@ -341,7 +341,7 @@ func TestContractCatchesViolation(t *testing.T) {
 	}
 	resp.Body.Close()
 	if len(v.Failures()) == 0 {
-		t.Fatal("不符合契约的响应应被发现")
+		t.Fatal("a response that violates the contract should be caught")
 	}
 }
 
@@ -367,13 +367,13 @@ func TestHostOriginAndCORS(t *testing.T) {
 		return resp
 	}
 	if r := send("GET", "/api/v1/context", "", "evil.example.com", nil); r.StatusCode != http.StatusForbidden {
-		t.Errorf("Host 不在名单中应拒绝：%d", r.StatusCode)
+		t.Errorf("a Host not on the list should be rejected: %d", r.StatusCode)
 	}
 	if r := send("POST", "/api/v1/platform/agents", "https://evil.example.com", "", strings.NewReader(`{"name":"x","model":{"provider":"anthropic","modelId":"claude-x"}}`)); r.StatusCode != http.StatusForbidden {
-		t.Errorf("非白名单来源应拒绝：%d", r.StatusCode)
+		t.Errorf("an origin not on the allowlist should be rejected: %d", r.StatusCode)
 	}
 	if _, body, _ := e.do("GET", e.agents(), nil); len(decode[map[string][]any](t, body)["agents"]) != 0 {
-		t.Error("被拒绝的写请求不应写库")
+		t.Error("a rejected write request should not write to the database")
 	}
 	r := send("OPTIONS", "/api/v1/platform/agents", "http://localhost:5173", "", nil)
 	req, _ := http.NewRequest("OPTIONS", e.srv.URL+"/api/v1/platform/agents", nil)
@@ -384,28 +384,28 @@ func TestHostOriginAndCORS(t *testing.T) {
 	pre.Body.Close()
 	if pre.StatusCode != http.StatusNoContent || pre.Header.Get("Access-Control-Allow-Origin") != "http://localhost:5173" ||
 		!strings.Contains(pre.Header.Get("Access-Control-Allow-Headers"), "Last-Event-ID") {
-		t.Errorf("白名单来源的预检应放行：%d %v", pre.StatusCode, pre.Header)
+		t.Errorf("a preflight from an allowed origin should pass: %d %v", pre.StatusCode, pre.Header)
 	}
 	_ = r
 	if r := send("GET", "/api/v1/context", "", "", nil); r.StatusCode != http.StatusOK {
-		t.Errorf("无 Origin 的本机请求应放行：%d", r.StatusCode)
+		t.Errorf("a local request without Origin should pass: %d", r.StatusCode)
 	}
 	r = send("GET", "/api/v1/health", "http://localhost:5173", "", nil)
 	if r.Header.Get("Access-Control-Allow-Origin") != "http://localhost:5173" || r.Header.Get("Access-Control-Expose-Headers") != "ETag, Loop-Now-Request-Id, Loop-Now-Version, Content-Disposition" {
-		t.Errorf("白名单来源的响应应暴露 ETag、请求头与下载文件名：%v", r.Header)
+		t.Errorf("responses to an allowed origin should expose ETag, the request headers and the download file name: %v", r.Header)
 	}
 	if r := send("GET", "/healthz", "", "", nil); r.StatusCode != http.StatusOK {
-		t.Errorf("/healthz 应可用：%d", r.StatusCode)
+		t.Errorf("/healthz should be available: %d", r.StatusCode)
 	}
 	// The console served by the server itself is same-origin: the Origin on write requests equals this request's
 	// scheme://Host, so it needs no allowlist and gets no CORS headers.
-	if r := send("POST", "/api/v1/platform/agents", e.srv.URL, "", strings.NewReader(`{"name":"同源","model":{"provider":"anthropic","modelId":"claude-x"}}`)); r.StatusCode != http.StatusCreated || r.Header.Get("Access-Control-Allow-Origin") != "" {
-		t.Errorf("同源的写请求应放行且不回 CORS 头：%d %v", r.StatusCode, r.Header)
+	if r := send("POST", "/api/v1/platform/agents", e.srv.URL, "", strings.NewReader(`{"name":"same-origin","model":{"provider":"anthropic","modelId":"claude-x"}}`)); r.StatusCode != http.StatusCreated || r.Header.Get("Access-Control-Allow-Origin") != "" {
+		t.Errorf("a same-origin write request should pass without CORS headers: %d %v", r.StatusCode, r.Header)
 	}
 	// Another allowed host name on the same port is not same-origin.
 	other := strings.Replace(e.srv.URL, "127.0.0.1", "localhost", 1)
-	if r := send("POST", "/api/v1/platform/agents", other, "", strings.NewReader(`{"name":"跨源","model":{"provider":"anthropic","modelId":"claude-x"}}`)); r.StatusCode != http.StatusForbidden {
-		t.Errorf("Host 与 Origin 不一致时不是同源：%d", r.StatusCode)
+	if r := send("POST", "/api/v1/platform/agents", other, "", strings.NewReader(`{"name":"cross-origin","model":{"provider":"anthropic","modelId":"claude-x"}}`)); r.StatusCode != http.StatusForbidden {
+		t.Errorf("a request whose Host differs from its Origin is not same-origin: %d", r.StatusCode)
 	}
 	// Without an allowlist (LOOP_NOW_CONSOLE_ORIGINS=none), even the development port 5173 is rejected, while
 	// same-origin still passes.
@@ -414,10 +414,10 @@ func TestHostOriginAndCORS(t *testing.T) {
 	defer locked.Close()
 	e.srv = locked
 	if r := send("GET", "/api/v1/context", "http://localhost:5173", "", nil); r.StatusCode != http.StatusForbidden {
-		t.Errorf("没有白名单时跨源应拒绝：%d", r.StatusCode)
+		t.Errorf("without an allowlist, cross-origin requests should be rejected: %d", r.StatusCode)
 	}
 	if r := send("GET", "/api/v1/context", locked.URL, "", nil); r.StatusCode != http.StatusOK {
-		t.Errorf("没有白名单时同源应放行：%d", r.StatusCode)
+		t.Errorf("without an allowlist, same-origin requests should pass: %d", r.StatusCode)
 	}
 }
 
@@ -440,17 +440,17 @@ func TestConsoleServedBesideAPI(t *testing.T) {
 	}
 	for _, p := range []string{"/", "/agents/x"} {
 		if code, body := get(p); code != 200 || !strings.Contains(body, "console") {
-			t.Errorf("%s：%d %q", p, code, body)
+			t.Errorf("%s: %d %q", p, code, body)
 		}
 	}
 	if code, body := get("/api/v1/context"); code != 200 || strings.Contains(body, "console") {
-		t.Errorf("API 不应被控制台接管：%d", code)
+		t.Errorf("the console should not take over the API: %d", code)
 	}
 	if code, body := get("/api/v1/no-such-route"); code != 404 || strings.Contains(body, "console") {
-		t.Errorf("API 下不存在的路径不回退到控制台：%d %q", code, body)
+		t.Errorf("a missing path under the API should not fall back to the console: %d %q", code, body)
 	}
 	if code, _ := get("/healthz"); code != 200 {
-		t.Errorf("/healthz：%d", code)
+		t.Errorf("/healthz: %d", code)
 	}
 	ext := httptest.NewServer(e.api.ExternalHandler(nil))
 	defer ext.Close()
@@ -461,15 +461,15 @@ func TestConsoleServedBesideAPI(t *testing.T) {
 	b, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if strings.Contains(string(b), "console") {
-		t.Errorf("对外端口不应提供控制台：%d", resp.StatusCode)
+		t.Errorf("the external port should not serve the console: %d", resp.StatusCode)
 	}
 }
 
 func TestAllEndpoints(t *testing.T) {
 	e := newEnv(t)
 	ctxBody := decode[apitypes.Context](t, e.expect(200, "GET", "/context", nil))
-	if ctxBody.Limits.MaxMessage != 1<<16 || ctxBody.Project.Name != "默认项目" {
-		t.Fatalf("上下文不对：%+v", ctxBody)
+	if ctxBody.Limits.MaxMessage != 1<<16 || ctxBody.Project.Name != "Default project" {
+		t.Fatalf("unexpected context: %+v", ctxBody)
 	}
 	e.expect(200, "GET", "/health", nil)
 	e.expect(200, "GET", "/model-providers", nil)
@@ -480,14 +480,14 @@ func TestAllEndpoints(t *testing.T) {
 	// Agent
 	bad := decode[apitypes.ErrorBody](t, e.expect(422, "POST", e.agents(), map[string]any{"name": "", "model": map[string]string{"provider": "anthropic", "modelId": "nope"}}, "X-Contract-Invalid-Request", "1"))
 	if len(bad.Error.Fields) != 2 {
-		t.Fatalf("应给出字段级错误：%+v", bad)
+		t.Fatalf("want field-level errors: %+v", bad)
 	}
-	agent := decode[apitypes.Agent](t, e.expect(201, "POST", e.agents(), map[string]any{"name": "助手", "model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}, "prompt": "p"}))
-	e.expect(409, "POST", e.agents(), map[string]any{"name": "助手", "model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}})
+	agent := decode[apitypes.Agent](t, e.expect(201, "POST", e.agents(), map[string]any{"name": "Assistant", "model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}, "prompt": "p"}))
+	e.expect(409, "POST", e.agents(), map[string]any{"name": "Assistant", "model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}})
 	a := "/agents/" + agent.ID.String()
 	e.expect(200, "GET", e.agents(), nil)
 	e.expect(200, "GET", a, nil)
-	e.expect(200, "PATCH", a, map[string]any{"prompt": "新的", "expectedPromptVersion": 1})
+	e.expect(200, "PATCH", a, map[string]any{"prompt": "new", "expectedPromptVersion": 1})
 	e.expect(404, "GET", "/agents/"+uuid.NewString(), nil)
 
 	// Agent folder: reads and writes the working directory directly
@@ -496,7 +496,7 @@ func TestAllEndpoints(t *testing.T) {
 	e.expect(200, "PUT", a+"/folder/content?path=guide/a.md", []byte("v2"))
 	_, body, _ := e.do("GET", a+"/folder/content?path=guide/a.md", nil)
 	if string(body) != "v2" {
-		t.Fatalf("读取内容不对：%q", body)
+		t.Fatalf("unexpected content read back: %q", body)
 	}
 	e.expect(200, "GET", a+"/folder/entries", nil)
 	e.expect(201, "POST", a+"/folder/directories", map[string]any{"path": "docs"})
@@ -508,39 +508,39 @@ func TestAllEndpoints(t *testing.T) {
 	// Available CLIs and credentials
 	e.expect(200, "PUT", a+"/clis/gh", nil)
 	e.expect(200, "PUT", a+"/clis/jq", nil)
-	private := e.platformAgent("端点私有凭证")
+	private := e.platformAgent("Endpoint private credentials")
 	privatePath := "/agents/" + private.ID.String()
 	e.expect(200, "PUT", privatePath+"/clis/gh", nil)
 	e.expect(200, "PUT", privatePath+"/clis/jq", nil)
 
 	cred := decode[apitypes.CredentialMeta](t, e.expect(200, "PUT", privatePath+"/clis/gh/credential", map[string]any{"fields": map[string]string{"token": "ghp_x"}}))
 	if cred.Status != "set" || cred.EnvNames[0] != "GH_TOKEN" {
-		t.Fatalf("凭证元数据不对：%+v", cred)
+		t.Fatalf("unexpected credential metadata: %+v", cred)
 	}
 	e.expect(422, "PUT", privatePath+"/clis/jq/credential", map[string]any{"fields": map[string]string{"x": "y"}})
 	e.expect(200, "PUT", privatePath+"/model-credential", map[string]any{"provider": "anthropic", "key": "sk"})
 	detail := decode[apitypes.Agent](t, e.expect(200, "GET", privatePath, nil))
 	if detail.ModelCredential == nil || len(detail.Clis) != 2 || strings.Contains(string(e.expect(200, "GET", privatePath, nil)), "ghp_x") {
-		t.Fatalf("详情不对或泄露明文：%+v", detail)
+		t.Fatalf("wrong detail or plaintext leaked: %+v", detail)
 	}
 	e.expect(204, "DELETE", privatePath+"/model-credential", nil)
 	e.expect(204, "DELETE", privatePath+"/clis/gh/credential", nil)
 	e.expect(204, "DELETE", a+"/clis/jq", nil)
 
 	// Skills
-	md := decode[apitypes.SkillTemplate](t, e.expect(201, "POST", "/skills", map[string]any{"skillMd": "---\nname: notes\ndescription: 记笔记\n---\n"}))
+	md := decode[apitypes.SkillTemplate](t, e.expect(201, "POST", "/skills", map[string]any{"skillMd": "---\nname: notes\ndescription: Take notes\n---\n"}))
 	zipped := decode[apitypes.SkillTemplate](t, e.expect(201, "POST", "/skills", zipUpload(t, "pdf-tools", "PDF")))
 	e.expect(409, "POST", "/skills", zipUpload(t, "pdf-tools", "PDF"))
 	e.expect(200, "GET", "/skills", nil)
 	e.expect(200, "GET", "/skills/"+zipped.ID.String(), nil)
-	e.expect(200, "PUT", "/skills/"+zipped.ID.String()+"/skill-md", map[string]any{"content": "---\nname: pdf-tools\ndescription: 新\n---\n"})
+	e.expect(200, "PUT", "/skills/"+zipped.ID.String()+"/skill-md", map[string]any{"content": "---\nname: pdf-tools\ndescription: New\n---\n"})
 	e.expect(422, "PUT", "/skills/"+zipped.ID.String()+"/skill-md", map[string]any{"content": "---\nname: pdf-tools\n---\n"})
-	e.expect(200, "PUT", "/skills/"+zipped.ID.String(), zipUpload(t, "pdf-tools", "替换"))
+	e.expect(200, "PUT", "/skills/"+zipped.ID.String(), zipUpload(t, "pdf-tools", "Replacement"))
 	k := decode[apitypes.AgentSkill](t, e.expect(201, "POST", a+"/skills", map[string]any{"templateId": zipped.ID}))
 	ks := a + "/skills/" + k.ID.String()
 	e.expect(200, "GET", a+"/skills", nil)
 	e.expect(200, "GET", ks, nil)
-	e.expect(200, "PUT", ks+"/skill-md", map[string]any{"content": "---\nname: pdf-tools\ndescription: 我的\n---\n"})
+	e.expect(200, "PUT", ks+"/skill-md", map[string]any{"content": "---\nname: pdf-tools\ndescription: Mine\n---\n"})
 	e.expect(200, "POST", ks+"/recopy", nil)
 	e.expect(204, "DELETE", "/skills/"+zipped.ID.String(), nil)
 	e.expect(409, "POST", ks+"/recopy", nil)
@@ -548,20 +548,20 @@ func TestAllEndpoints(t *testing.T) {
 	e.expect(204, "DELETE", "/skills/"+md.ID.String(), nil)
 
 	// Conversation
-	sent := decode[apitypes.SendMessageResult](t, e.expect(202, "POST", a+"/messages", map[string]any{"text": "block 你好"}))
-	busy := decode[apitypes.ErrorBody](t, e.expect(409, "POST", a+"/messages", map[string]any{"text": "第二条"}))
+	sent := decode[apitypes.SendMessageResult](t, e.expect(202, "POST", a+"/messages", map[string]any{"text": "block Hello"}))
+	busy := decode[apitypes.ErrorBody](t, e.expect(409, "POST", a+"/messages", map[string]any{"text": "second"}))
 	if busy.Error.Code != "agent_busy" {
-		t.Fatalf("应返回 agent_busy：%+v", busy)
+		t.Fatalf("want agent_busy: %+v", busy)
 	}
-	e.expect(202, "POST", a+"/messages", map[string]any{"text": "排队", "whenBusy": "queue"})
-	e.expect(202, "POST", a+"/messages", map[string]any{"text": "打断", "whenBusy": "interrupt"})
+	e.expect(202, "POST", a+"/messages", map[string]any{"text": "queued", "whenBusy": "queue"})
+	e.expect(202, "POST", a+"/messages", map[string]any{"text": "interrupt", "whenBusy": "interrupt"})
 	e.expect(422, "POST", a+"/messages", map[string]any{"text": "  "}, "X-Contract-Invalid-Request", "1")
 	e.expect(404, "GET", "/agents/not-a-uuid", nil, "X-Contract-Invalid-Request", "1")
 	e.expect(200, "GET", a+"/status", nil)
 	waitIdle(t, e, a)
 	page := decode[apitypes.MessagePage](t, e.expect(200, "GET", a+"/messages?limit=10", nil))
 	if len(page.Messages) != 6 || page.Messages[0].Run.ID != sent.Run.ID {
-		t.Fatalf("历史不对：%d", len(page.Messages))
+		t.Fatalf("unexpected history: %d", len(page.Messages))
 	}
 	e.expect(200, "GET", a+"/messages?limit=2&before="+page.Messages[2].ID.String(), nil)
 	e.expect(422, "GET", a+"/messages?limit=500", nil, "X-Contract-Invalid-Request", "1")
@@ -585,7 +585,7 @@ func waitIdle(t *testing.T, e *env, a string) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatal("等待空闲超时")
+	t.Fatal("timed out waiting for idle")
 }
 
 type sseEvent struct{ id, event, data string }
@@ -608,7 +608,7 @@ func readSSEPath(t *testing.T, e *env, path, lastID string) (<-chan sseEvent, fu
 		t.Fatal(err)
 	}
 	if resp.Header.Get("Access-Control-Allow-Origin") != "http://localhost:5173" || resp.Header.Get("Content-Type") != "text/event-stream" {
-		t.Fatalf("事件流应带 CORS 头：%v", resp.Header)
+		t.Fatalf("the event stream should carry CORS headers: %v", resp.Header)
 	}
 	ch := make(chan sseEvent, 100)
 	go func() {
@@ -641,11 +641,11 @@ func next(t *testing.T, ch <-chan sseEvent) sseEvent {
 	select {
 	case ev, ok := <-ch:
 		if !ok {
-			t.Fatal("事件流已关闭")
+			t.Fatal("event stream closed")
 		}
 		return ev
 	case <-time.After(5 * time.Second):
-		t.Fatal("等待事件超时")
+		t.Fatal("timed out waiting for an event")
 	}
 	return sseEvent{}
 }
@@ -658,11 +658,11 @@ func TestSSE(t *testing.T) {
 	ch, stop := readSSE(t, e, a, "")
 	snap := next(t, ch)
 	if snap.event != "snapshot" || snap.id == "" {
-		t.Fatalf("首个事件应是快照：%+v", snap)
+		t.Fatalf("the first event should be a snapshot: %+v", snap)
 	}
 	e.v.ValidateSSE(snap.event, []byte(snap.data))
 
-	e.expect(202, "POST", a+"/messages", map[string]any{"text": "你好"})
+	e.expect(202, "POST", a+"/messages", map[string]any{"text": "Hello"})
 	var events []sseEvent
 	var text strings.Builder
 	for {
@@ -673,15 +673,15 @@ func TestSSE(t *testing.T) {
 			text.WriteString(decode[apitypes.SseRunText](t, []byte(ev.data)).Delta)
 		}
 		if ev.event == "run.tool" && (strings.Contains(ev.data, "args") || strings.Contains(ev.data, "result")) {
-			t.Fatalf("工具事件不应含参数或输出：%s", ev.data)
+			t.Fatalf("tool events should not contain arguments or output: %s", ev.data)
 		}
 		if ev.event == "run.ended" {
 			break
 		}
 	}
 	stop()
-	if text.String() != "你好" {
-		t.Fatalf("文字增量拼接不对：%q", text.String())
+	if text.String() != "Hello" {
+		t.Fatalf("wrong concatenated text deltas: %q", text.String())
 	}
 	types := map[string]bool{}
 	for _, ev := range events {
@@ -689,7 +689,7 @@ func TestSSE(t *testing.T) {
 	}
 	for _, want := range []string{"message.created", "run.updated", "run.text", "run.tool", "run.ended"} {
 		if !types[want] {
-			t.Errorf("缺少事件 %s", want)
+			t.Errorf("missing event %s", want)
 		}
 	}
 
@@ -698,14 +698,14 @@ func TestSSE(t *testing.T) {
 	ch2, stop2 := readSSE(t, e, a, mid)
 	first := next(t, ch2)
 	if first.event == "snapshot" || first.id != events[2].id {
-		t.Fatalf("续传应从上次事件之后开始：%+v，期望 %s", first, events[2].id)
+		t.Fatalf("resuming should start after the last event: %+v, want %s", first, events[2].id)
 	}
 	stop2()
 
 	// Outside the retained range: a snapshot is pushed.
 	ch3, stop3 := readSSE(t, e, a, "1-0")
 	if ev := next(t, ch3); ev.event != "snapshot" {
-		t.Fatalf("超出保留范围应推送快照：%+v", ev)
+		t.Fatalf("outside the retained range a snapshot should be pushed: %+v", ev)
 	}
 	stop3()
 
@@ -716,7 +716,7 @@ func TestSSE(t *testing.T) {
 	ev := next(t, ch4)
 	e.v.ValidateSSE(ev.event, []byte(ev.data))
 	if ev.event != "session.updated" {
-		t.Fatalf("应推送会话更新：%+v", ev)
+		t.Fatalf("want a session update pushed: %+v", ev)
 	}
 	stop4()
 }

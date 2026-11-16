@@ -26,7 +26,7 @@ func fakeRealHome(t *testing.T) (string, map[string]string) {
 	t.Helper()
 	home := t.TempDir()
 	files := map[string]string{
-		"notes.txt":                          "用户自己的文件",
+		"notes.txt":                          "The user's own file",
 		".gitconfig":                         "[url \"file:///nonexistent-user-rewrite/\"]\n\tinsteadOf = file:///\n",
 		".lark-cli/config.json":              `{"apps":[{"appId":"user-own"}]}`,
 		".loop-now/gcloud/config/x":          "user",
@@ -73,12 +73,12 @@ func sameTree(t *testing.T, root string, want map[string]string) {
 	got := snapshotTree(t, root)
 	for k, v := range want {
 		if g, ok := got[k]; !ok || g != v {
-			t.Errorf("用户真实主目录里的 %s 被改动或删除：%q", k, g)
+			t.Errorf("%s in the user's real home directory was changed or deleted: %q", k, g)
 		}
 	}
 	for k := range got {
 		if _, ok := want[k]; !ok {
-			t.Errorf("用户真实主目录里多出了 %s", k)
+			t.Errorf("extra %s in the user's real home directory", k)
 		}
 	}
 }
@@ -141,21 +141,21 @@ func TestLoginsEnvShimsAndPrompt(t *testing.T) {
 		"TMPDIR": dirs.tmp, "PI_CODING_AGENT_DIR": dirs.pi, "GH_TOKEN": "synthetic-gh", "GIT_TERMINAL_PROMPT": "0",
 	} {
 		if d.Env[k] != v {
-			t.Errorf("%s = %q，应为 %q", k, d.Env[k], v)
+			t.Errorf("%s = %q, want %q", k, d.Env[k], v)
 		}
 	}
 	shims := filepath.Join(dirs.root, cliShimDir)
 	if path := d.Env["PATH"]; path != strings.Join([]string{shims, base, userBin}, string(os.PathListSeparator)) {
-		t.Fatalf("PATH 应为小脚本目录、执行 PATH、用户 PATH（不再直接放模板目录）：%s", path)
+		t.Fatalf("PATH should be the shim directory, the run PATH, the user's PATH (no template directories directly any more): %s", path)
 	}
 	// gh with a configured account resolves to the shim; the shim runs the original gh with the Agent's separate HOME
 	// and the environment as with the switch off.
 	gh := lookPath(d.Env["PATH"], "gh")
 	if gh != filepath.Join(shims, "gh") {
-		t.Fatalf("gh 应解析到小脚本：%s", gh)
+		t.Fatalf("gh should resolve to the shim: %s", gh)
 	}
 	if fi, err := os.Stat(shims); err != nil || fi.Mode().Perm() != 0o700 {
-		t.Fatalf("小脚本目录应只有自己可访问：%v %v", fi, err)
+		t.Fatalf("the shim directory should be accessible only to its owner: %v %v", fi, err)
 	}
 	cmd := exec.Command(gh, "auth", "status")
 	for k, v := range d.Env {
@@ -163,14 +163,14 @@ func TestLoginsEnvShimsAndPrompt(t *testing.T) {
 	}
 	out, err := cmd.Output()
 	if err != nil || string(out) != dirs.home+"|unset|unset|auth status" {
-		t.Fatalf("受管 gh 的环境不对：%q %v", out, err)
+		t.Fatalf("wrong environment for the managed gh: %q %v", out, err)
 	}
 	// tea, which is not configured, resolves via PATH to the user's local copy.
 	if tea := lookPath(d.Env["PATH"], "tea"); tea != filepath.Join(userBin, "tea") {
-		t.Fatalf("没配的 CLI 应落到用户本机：%s", tea)
+		t.Fatalf("an unconfigured CLI should resolve to the user's local copy: %s", tea)
 	}
 	if !strings.Contains(d.SystemPrompt, "Local logins: your HOME is the user's own home directory "+realHome) || !strings.Contains(d.SystemPrompt, "do not keep retrying") {
-		t.Fatalf("提示词应提醒本机登录与交互授权：\n%s", d.SystemPrompt)
+		t.Fatalf("the prompt should mention local logins and interactive authorization:\n%s", d.SystemPrompt)
 	}
 	pid := h.pid(id)
 
@@ -180,17 +180,17 @@ func TestLoginsEnvShimsAndPrompt(t *testing.T) {
 	h.src.snaps[id].Local.Logins = false
 	h.src.mu.Unlock()
 	if res, _ := h.exec(id, "second"); res.Outcome != executor.OutcomeCompleted || h.pid(id) == pid {
-		t.Fatal("登录状态开关变化应在下一次派发重启 Pi")
+		t.Fatal("a change to the logins switch should restart Pi at the next dispatch")
 	}
 	d = readDump(t, dumpPath)
 	if d.Env["HOME"] != dirs.home || d.Env["SSH_AUTH_SOCK"] != "" || d.Env["XDG_CONFIG_HOME"] != "" || strings.Contains(d.SystemPrompt, "Local logins") {
-		t.Fatalf("关掉后应复原：HOME=%s SSH=%s XDG=%s", d.Env["HOME"], d.Env["SSH_AUTH_SOCK"], d.Env["XDG_CONFIG_HOME"])
+		t.Fatalf("should be restored once turned off: HOME=%s SSH=%s XDG=%s", d.Env["HOME"], d.Env["SSH_AUTH_SOCK"], d.Env["XDG_CONFIG_HOME"])
 	}
 	if path := d.Env["PATH"]; path != strings.Join([]string{ghDir, base, userBin}, string(os.PathListSeparator)) {
-		t.Fatalf("关掉后 PATH 应回到模板目录：%s", path)
+		t.Fatalf("PATH should go back to the template directories once turned off: %s", path)
 	}
 	if _, err := os.Stat(shims); !os.IsNotExist(err) {
-		t.Fatal("关掉后不应留下旧脚本")
+		t.Fatal("no old shims should be left once turned off")
 	}
 	sameTree(t, realHome, before)
 }
@@ -199,7 +199,7 @@ func TestLoginsEnvShimsAndPrompt(t *testing.T) {
 // intercept gh, which resolves via PATH to the user's local gh and uses the real HOME.
 func TestLoginsDoNotShimUnconfiguredCLI(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("小脚本只在 Unix 上")
+		t.Skip("shims exist only on Unix")
 	}
 	realHome, _ := fakeRealHome(t)
 	userBin := t.TempDir()
@@ -221,13 +221,13 @@ func TestLoginsDoNotShimUnconfiguredCLI(t *testing.T) {
 	}
 	d := readDump(t, dumpPath)
 	if path := d.Env["PATH"]; path != base+string(os.PathListSeparator)+userBin {
-		t.Fatalf("没有受管 CLI 时 PATH 只有执行 PATH 与用户 PATH，不含小脚本或模板目录：%s", path)
+		t.Fatalf("without managed CLIs PATH should be only the run PATH and the user's PATH, with no shim or template directories: %s", path)
 	}
 	if gh := lookPath(d.Env["PATH"], "gh"); gh != filepath.Join(userBin, "gh") || d.Env["HOME"] != realHome {
-		t.Fatalf("没配的 gh 应落到用户本机并用真实 HOME：%s HOME=%s", gh, d.Env["HOME"])
+		t.Fatalf("an unconfigured gh should resolve to the user's local copy and use the real HOME: %s HOME=%s", gh, d.Env["HOME"])
 	}
 	if _, err := os.Stat(filepath.Join(h.e.dirs(id).root, cliShimDir)); !os.IsNotExist(err) {
-		t.Fatal("没有受管 CLI 时不应有小脚本目录")
+		t.Fatal("there should be no shim directory without managed CLIs")
 	}
 }
 
@@ -253,17 +253,17 @@ func TestLoginsNeverTouchRealHome(t *testing.T) {
 		s.Sources = []store.FolderSource{{ID: uuid.Must(uuid.NewV7()), Path: "app", Kind: "git", GitURL: "file://" + bare, GitBranch: "main"}}
 	})
 	if res, _ := h.exec(id, "hi"); res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("启动应成功（克隆不读用户的 git 配置）：%+v", res)
+		t.Fatalf("the start should succeed (the clone does not read the user's git config): %+v", res)
 	}
 	dirs := h.e.dirs(id)
 	if d := readDump(t, dumpPath); d.Env["HOME"] != realHome {
 		t.Fatalf("HOME = %s", d.Env["HOME"])
 	}
 	if b, err := os.ReadFile(filepath.Join(dirs.home, ".lark-cli", "config.json")); err != nil || !strings.Contains(string(b), `"agent"`) {
-		t.Fatalf("受管 CLI 的凭证文件应写在 Agent 的独立 HOME：%q %v", b, err)
+		t.Fatalf("the managed CLI's credential file should be written in the Agent's own HOME: %q %v", b, err)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dirs.root, cliShimDir, "lark-cli")); !strings.Contains(string(b), "HOME="+shellQuote(dirs.home)) {
-		t.Fatalf("lark-cli 的小脚本应恢复独立 HOME：%s", b)
+		t.Fatalf("the lark-cli shim should restore the Agent's own HOME: %s", b)
 	}
 	// Release (called when an Agent is deleted) and startup cleanup: only the Agent's own directories are deleted.
 	if err := h.e.Release(context.Background(), id); err != nil {
@@ -276,7 +276,7 @@ func TestLoginsNeverTouchRealHome(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(dirs.home); !os.IsNotExist(err) {
-		t.Fatalf("Agent 的独立 HOME 应已回收：%v", err)
+		t.Fatalf("the Agent's own HOME should be reclaimed: %v", err)
 	}
 	sameTree(t, realHome, before)
 	if !slices.Contains(h.src.deleted, id) {
@@ -310,25 +310,25 @@ func TestLoginsBuildEnv(t *testing.T) {
 	off := asMap(e.buildEnv(d, snap, nil, nil, "", log))
 	on := asMap(e.buildEnv(d, snap, nil, nil, real, log))
 	if off["HOME"] != d.home || off["SSH_AUTH_SOCK"] != "" || off["XDG_CACHE_HOME"] != "" {
-		t.Fatalf("关着时：%v", off)
+		t.Fatalf("switch off: %v", off)
 	}
 	if on["HOME"] != real || on["SSH_AUTH_SOCK"] != "/tmp/agent.sock" || on["XDG_CACHE_HOME"] != env["XDG_CACHE_HOME"] || on["TMPDIR"] != d.tmp || on["PI_CODING_AGENT_DIR"] != d.pi {
-		t.Fatalf("开着时：%v", on)
+		t.Fatalf("switch on: %v", on)
 	}
 	changed := []string{"HOME", "SSH_AUTH_SOCK", "XDG_CACHE_HOME"}
 	if runtime.GOOS == "windows" {
 		if on["USERPROFILE"] != real || on["APPDATA"] != `D:\Roaming` || on["LOCALAPPDATA"] != `D:\Local` || on["TEMP"] != d.tmp || on["TMP"] != d.tmp {
-			t.Fatalf("Windows 上的 HOME 一组变量：%v", on)
+			t.Fatalf("the HOME group of variables on Windows: %v", on)
 		}
 		changed = append(changed, "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA")
 	}
 	// Apart from this group, every other variable is identical to the switch-off case.
 	for k, v := range on {
 		if !slices.Contains(changed, k) && off[k] != v {
-			t.Errorf("%s 不应随开关变化：%q → %q", k, off[k], v)
+			t.Errorf("%s should not change with the switch: %q -> %q", k, off[k], v)
 		}
 	}
 	if got := e.loginOnlyEnv(); slices.Contains(got, "LANG") || !slices.Contains(got, "SSH_AUTH_SOCK") {
-		t.Fatalf("小脚本要去掉的变量：%v", got)
+		t.Fatalf("variables the shim removes: %v", got)
 	}
 }

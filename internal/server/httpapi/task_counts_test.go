@@ -19,7 +19,7 @@ func TestCountProjectTasks(t *testing.T) {
 	e.api.Tasks = &tasks.Service{Store: e.st, Options: tasks.Options{MaxRequest: 1 << 20}}
 	path := "/projects/" + e.dc.Project.ID.String() + "/tasks/counts"
 	if got := decode[taskmodel.Counts](t, e.expect(200, "GET", path, nil)); got != (taskmodel.Counts{}) {
-		t.Fatalf("没有任务时应全为 0：%+v", got)
+		t.Fatalf("all counts should be 0 without tasks: %+v", got)
 	}
 	for _, status := range []string{"running", "running", "blocked", "waiting", "preparing", "completed", "cancelled"} {
 		doc, _ := json.Marshal(map[string]any{"view": map[string]any{"task": map[string]any{"status": status, "version": 1}}})
@@ -33,12 +33,12 @@ func TestCountProjectTasks(t *testing.T) {
 		}
 	}
 	if got := decode[taskmodel.Counts](t, e.expect(200, "GET", path, nil)); got != (taskmodel.Counts{Preparing: 1, Running: 2, Waiting: 1, Blocked: 1}) {
-		t.Fatalf("计数 = %+v", got)
+		t.Fatalf("counts = %+v", got)
 	}
 	if bad := decode[apitypes.ErrorBody](t, e.expect(404, "GET", "/projects/"+uuid.New().String()+"/tasks/counts", nil)); bad.Error.Code != "not_found" {
-		t.Fatalf("不存在的项目：%+v", bad)
+		t.Fatalf("missing project: %+v", bad)
 	}
-	gone, err := e.st.CreateProject(t.Context(), e.dc.Organization.ID, "已删除")
+	gone, err := e.st.CreateProject(t.Context(), e.dc.Organization.ID, "Deleted")
 	if err != nil {
 		t.Fatal(err)
 	}

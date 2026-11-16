@@ -65,7 +65,7 @@ func TestCaptureProvidersWithPiLoader(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(c.Errors) != 1 || c.Errors[0].Path != "./src/broken.ts" {
-		t.Fatalf("加载失败的扩展：%+v", c.Errors)
+		t.Fatalf("extensions that failed to load: %+v", c.Errors)
 	}
 	byID := map[string]modelcatalog.CapturedProvider{}
 	for _, p := range c.Providers {
@@ -73,20 +73,20 @@ func TestCaptureProvidersWithPiLoader(t *testing.T) {
 	}
 	fake := byID["fake-oauth"]
 	if !fake.OAuth || fake.Name != "Fake OAuth" || fake.Extension != "./src/index.ts" || fake.Error != nil || !fake.CatalogEligible() || len(fake.Models) != 2 {
-		t.Fatalf("OAuth 提供方：%+v", fake)
+		t.Fatalf("OAuth provider: %+v", fake)
 	}
 	one := fake.Models[0]
 	if one.ID != "fake-1" || !one.Reasoning || !slices.Contains(one.ThinkingLevels, "high") || one.DefaultThinkingLevel != "medium" || !slices.Contains(one.Input, "image") || one.ContextWindow != 100000 {
-		t.Fatalf("模型与思考等级：%+v", one)
+		t.Fatalf("model and thinking levels: %+v", one)
 	}
 	if two := fake.Models[1]; !slices.Equal(two.ThinkingLevels, []string{"off"}) || two.DefaultThinkingLevel != "off" {
-		t.Fatalf("不推理的模型：%+v", two)
+		t.Fatalf("non-reasoning model: %+v", two)
 	}
 	if a := byID["anthropic"]; !a.OverridesBuiltin || a.CatalogEligible() || len(a.Models) != 0 {
-		t.Fatalf("覆盖内置提供方：%+v", a)
+		t.Fatalf("provider overriding a built-in one: %+v", a)
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".pi")); !os.IsNotExist(err) {
-		t.Fatal("扩展的副作用不能落在插件目录")
+		t.Fatal("extension side effects must not land in the plugin directory")
 	}
 
 	// Merged into the catalog: the new provider with OAuth appears with source plugin, and the Pi catalog part is
@@ -99,17 +99,17 @@ func TestCaptureProvidersWithPiLoader(t *testing.T) {
 	reg.SetPluginProviders([]modelcatalog.PluginProvider{{PluginID: "pi-fake-oauth", Provider: fake}, {PluginID: "pi-fake-oauth", Provider: byID["anthropic"]}})
 	p, ok := reg.Provider("fake-oauth")
 	if !ok || p.Source != "plugin" || *p.PluginID != "pi-fake-oauth" || !reg.SupportsImages("fake-oauth", "fake-1") {
-		t.Fatalf("并入目录：%+v %v", p, ok)
+		t.Fatalf("merged into the catalog: %+v %v", p, ok)
 	}
 	if level, err := reg.ResolveThinking("fake-oauth", "fake-1", nil); err != nil || level != "medium" {
-		t.Fatalf("默认思考等级：%q %v", level, err)
+		t.Fatalf("default thinking level: %q %v", level, err)
 	}
 	if a, _ := reg.Provider("anthropic"); a.Source != "builtin" {
-		t.Fatalf("内置提供方不被插件替换：%+v", a)
+		t.Fatalf("a built-in provider should not be replaced by a plugin: %+v", a)
 	}
 	// Published catalog = Pi catalog + the local CLI claude-code + this one plugin provider (anthropic, which has the
 	// same id as a built-in provider, is not merged).
 	if len(reg.Snapshot().Providers) != len(base.Providers)+2 {
-		t.Fatal("只多本机 CLI 与一个插件提供方")
+		t.Fatal("should add only the local CLI and one plugin provider")
 	}
 }

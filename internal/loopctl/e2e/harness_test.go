@@ -52,7 +52,7 @@ func newWorld(t *testing.T, external bool) *world {
 	real, err := preflight.Resolve(context.Background(), preflight.Options{PiBin: "pi", PiVersion: "1.4.0", NodeBin: "node",
 		WorkRoot: filepath.Join(t.TempDir(), "probe"), HomeDirs: []string{"/nonexistent-home"}})
 	if err != nil {
-		t.Skipf("本机没有可用的 Pi 1.4.0：%v", err)
+		t.Skipf("no usable Pi 1.4.0 on this machine: %v", err)
 	}
 	dump := filepath.Join(t.TempDir(), "dump.json")
 	t.Setenv("FAKEPI_DUMP", dump)
@@ -60,7 +60,7 @@ func newWorld(t *testing.T, external bool) *world {
 		TaskMaxSteps: 100, TaskMaxEdges: 300, TaskMaxVisits: 1000, TaskMaxRequest: 1 << 20, TaskMaxArtifact: 20 << 20, TaskMaxSession: 100 << 20, TaskReconcileInterval: 100 * time.Millisecond, TaskEventPoll: 10 * time.Millisecond, TaskRecordTimeout: time.Second,
 		DataDir:    t.TempDir(),
 		ListenAddr: "127.0.0.1:0", AllowedHosts: []string{"localhost", "127.0.0.1", "::1"}, ConsoleOrigins: []string{"http://localhost:5173"},
-		WorkRoot: filepath.Join(t.TempDir(), "work"), DefaultOrgName: "默认组织", DefaultProjectName: "默认项目",
+		WorkRoot: filepath.Join(t.TempDir(), "work"), DefaultOrgName: "Default org", DefaultProjectName: "Default project",
 		PiBin: fakepibin.Path(t), PiVersion: "1.4.0", PiMaxProcesses: 2, PiIdleTimeout: time.Minute, PiStartTimeout: 10 * time.Second,
 		PiStopGrace: 2 * time.Second, AbortTimeout: 3 * time.Second, GitCloneTimeout: 30 * time.Second, CLIInstallTimeout: time.Minute,
 		NodeBin: "node", PiAIDir: real.PiAIDir, ReconcileInterval: 500 * time.Millisecond,
@@ -105,7 +105,7 @@ func (w *world) start(mutate func(c *config.Config)) *server {
 			}
 			time.Sleep(100 * time.Millisecond)
 		}
-		w.t.Fatalf("监听 %s 失败：%v", addr, err)
+		w.t.Fatalf("listen on %s: %v", addr, err)
 		return nil
 	}
 	o := app.Options{Listener: listen(w.addr), HomeDirs: []string{"/nonexistent-home"}}
@@ -117,7 +117,7 @@ func (w *world) start(mutate func(c *config.Config)) *server {
 	}
 	a, err := app.Build(context.Background(), &cfg, config.NewLogger(io.Discard, "text", cfg.LogLevel), o)
 	if err != nil {
-		w.t.Fatalf("启动服务端失败：%v", err)
+		w.t.Fatalf("start the server: %v", err)
 	}
 	go func() { _ = a.Serve() }()
 	w.addr = a.Addr()
@@ -133,7 +133,7 @@ func (s *server) stop() {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if err := s.a.Shutdown(ctx); err != nil {
-		s.t.Errorf("停止服务端出错：%v", err)
+		s.t.Errorf("stop the server: %v", err)
 	}
 }
 
@@ -156,7 +156,7 @@ func (s *server) console(status int, method, path string, body any) map[string]a
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != status {
-		s.t.Fatalf("控制台 %s %s：期望 %d，实际 %d：%s", method, path, status, resp.StatusCode, b)
+		s.t.Fatalf("console %s %s: want %d, got %d: %s", method, path, status, resp.StatusCode, b)
 	}
 	var m map[string]any
 	_ = json.Unmarshal(b, &m)
@@ -174,7 +174,7 @@ func (s *server) waitIdle(agentID string) {
 			return
 		}
 	}
-	s.t.Fatal("等待 Agent 空闲超时")
+	s.t.Fatal("timed out waiting for the Agent to become idle")
 }
 
 // defaultProject returns the ID of the default project.
@@ -187,7 +187,7 @@ func (s *server) createAgent(name string) string {
 	s.t.Helper()
 	provider, model := s.firstModel()
 	ag := s.console(201, "POST", "/projects/"+s.defaultProject()+"/agents", map[string]any{"name": name,
-		"model": map[string]string{"provider": provider, "modelId": model}, "prompt": "你是测试助手"})
+		"model": map[string]string{"provider": provider, "modelId": model}, "prompt": "You are a test assistant"})
 	return ag["id"].(string)
 }
 
@@ -212,7 +212,7 @@ func (w *world) agentEnv() map[string]string {
 		w.t.Fatal(err)
 	}
 	if d.Env["LOOPCTL_AGENT_TOKEN"] == "" || d.Env["LOOPCTL_AGENT_URL"] == "" {
-		w.t.Fatalf("Pi 的环境中没有 Agent 令牌：%v", d.Env)
+		w.t.Fatalf("Pi's environment has no Agent token: %v", d.Env)
 	}
 	return map[string]string{"LOOPCTL_AGENT_URL": d.Env["LOOPCTL_AGENT_URL"], "LOOPCTL_AGENT_TOKEN": d.Env["LOOPCTL_AGENT_TOKEN"]}
 }
@@ -255,7 +255,7 @@ func (l *loopctl) run(args ...string) result {
 	r.Code = cli.Run(context.Background(), commands.Registry(), args, sys)
 	r.Stdout = out.String()
 	if err := json.Unmarshal(out.Bytes(), &r); err != nil {
-		l.t.Fatalf("%v：输出不是 JSON：%s", args, r.Stdout)
+		l.t.Fatalf("%v: output is not JSON: %s", args, r.Stdout)
 	}
 	return r
 }
@@ -264,10 +264,10 @@ func (l *loopctl) run(args ...string) result {
 func (r result) ok(t *testing.T) map[string]any {
 	t.Helper()
 	if r.Code != 0 {
-		t.Fatalf("应成功，得到退出码 %d：%s", r.Code, r.Stdout)
+		t.Fatalf("should succeed, got exit code %d: %s", r.Code, r.Stdout)
 	}
 	if len(r.Warn) != 0 || r.Meta.ServerVersion != buildinfo.Version() {
-		t.Fatalf("服务端版本应与 loopctl 一致且没有警告：%s", r.Stdout)
+		t.Fatalf("server version should match loopctl with no warnings: %s", r.Stdout)
 	}
 	var m map[string]any
 	_ = json.Unmarshal(r.Data, &m)
@@ -277,7 +277,7 @@ func (r result) ok(t *testing.T) map[string]any {
 func (r result) fails(t *testing.T, code string, exit int) {
 	t.Helper()
 	if r.Code != exit || r.Error == nil || r.Error.Code != code {
-		t.Fatalf("应以 %s（退出码 %d）失败，得到 %d：%s", code, exit, r.Code, r.Stdout)
+		t.Fatalf("should fail with %s (exit code %d), got %d: %s", code, exit, r.Code, r.Stdout)
 	}
 }
 

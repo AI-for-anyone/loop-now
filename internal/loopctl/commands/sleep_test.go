@@ -133,7 +133,7 @@ func TestSleepStatusPassthrough(t *testing.T) {
 
 func TestSleepRegistrationPassthrough(t *testing.T) {
 	for _, seconds := range []string{"1", "120", "2147483647"} {
-		for _, reason := range []string{"", "等待外部结果"} {
+		for _, reason := range []string{"", "waiting for an external result"} {
 			t.Run(seconds+reason, func(t *testing.T) {
 				var calls atomic.Int32
 				response := `{"sleep":{"state":"requested","wakeAt":null,"version":9},"endTurn":true}`
@@ -180,11 +180,11 @@ func TestSleepRetryAndErrors(t *testing.T) {
 		body, code string
 		exit       int
 	}{
-		{"conflict", 409, `{"error":{"code":"sleep_conflict","message":"旧运行","details":{"runId":"old"}}}`, "sleep_conflict", 8},
-		{"unauthorized", 401, `{"error":{"code":"unauthenticated","message":"令牌失效"}}`, "unauthenticated", 5},
-		{"forbidden", 403, `{"error":{"code":"forbidden","message":"身份无权"}}`, "forbidden", 6},
-		{"invalid", 422, `{"error":{"code":"invalid","message":"参数错误","fields":[{"field":"reason","message":"过长"}]}}`, "invalid", 9},
-		{"unavailable", 503, `{"error":{"code":"unavailable","message":"稍后"}}`, "unavailable", 4},
+		{"conflict", 409, `{"error":{"code":"sleep_conflict","message":"old run","details":{"runId":"old"}}}`, "sleep_conflict", 8},
+		{"unauthorized", 401, `{"error":{"code":"unauthenticated","message":"token expired"}}`, "unauthenticated", 5},
+		{"forbidden", 403, `{"error":{"code":"forbidden","message":"identity not allowed"}}`, "forbidden", 6},
+		{"invalid", 422, `{"error":{"code":"invalid","message":"invalid arguments","fields":[{"field":"reason","message":"too long"}]}}`, "invalid", 9},
+		{"unavailable", 503, `{"error":{"code":"unavailable","message":"later"}}`, "unavailable", 4},
 		{"lost", 0, "", "connection_failed", 4},
 		{"lost_receipt", -1, "", "connection_failed", 4},
 	} {

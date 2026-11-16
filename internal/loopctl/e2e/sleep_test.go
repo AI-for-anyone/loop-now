@@ -149,7 +149,7 @@ func TestSleepCLIRealAppRestart(t *testing.T) {
 					s.stop()
 				}
 			}()
-			id := s.createAgent("sleep恢复")
+			id := s.createAgent("sleep restore")
 			l := testTaskClient(t, s, id)
 			s.console(202, "POST", "/agents/"+id+"/messages", map[string]any{"text": " !sleep=800ms !text=restore_source"})
 			st := waitRunningSleepCLI(t, s, l, false, uuid.Nil)
@@ -216,7 +216,7 @@ func TestSleepCLIRealAppNormal(t *testing.T) {
 			w := newSleepWorld(t)
 			s := w.start(sleepFixtureConfig)
 			defer s.stop()
-			id := s.createAgent("sleep常态")
+			id := s.createAgent("sleep normal")
 			l := testTaskClient(t, s, id)
 			s.console(202, "POST", "/agents/"+id+"/messages", map[string]any{"text": " !sleep=800ms !text=source"})
 			st := waitRunningSleepCLI(t, s, l, false, uuid.Nil)
@@ -242,7 +242,7 @@ func TestSleepCLIRealAppNormal(t *testing.T) {
 				}
 				originalWake = st.Sleep.WakeAt
 				if mode == "early_queue" {
-					s.console(201, "POST", "/inbox/messages", map[string]any{"to": "默认项目/sleep常态", "text": "real Inbox wakes", "whenBusy": "queue"})
+					s.console(201, "POST", "/inbox/messages", map[string]any{"to": "Default project/sleep normal", "text": "real Inbox wakes", "whenBusy": "queue"})
 				} else {
 					st = waitRunningSleepCLI(t, s, l, false, first.Sleep.SourceRunID)
 					_, second := requestSleepCLI(t, l, *st.CurrentRunID, 120, "")
@@ -330,7 +330,7 @@ func TestSleepCLIRealAppTaskModes(t *testing.T) {
 			if mode == "blocked_conversation" {
 				exclude = node.RunIDs[len(node.RunIDs)-1]
 				waitCLITask(t, s, id, func(d taskmodel.Detail) bool { return d.Task.Status == "blocked" })
-				s.console(201, "POST", "/inbox/messages", map[string]any{"to": "默认项目/sleepWorker#" + id, "text": " !sleep=800ms !text=ordinary"})
+				s.console(201, "POST", "/inbox/messages", map[string]any{"to": "Default project/sleepWorker#" + id, "text": " !sleep=800ms !text=ordinary"})
 			}
 			st := waitRunningSleepCLI(t, s, l, true, exclude)
 			questionID := uuid.Nil

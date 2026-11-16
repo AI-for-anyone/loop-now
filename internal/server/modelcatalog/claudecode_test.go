@@ -18,37 +18,37 @@ func TestClaudeCodeProviderIsPublished(t *testing.T) {
 	reg := modelcatalog.NewRegistry(base)
 	p, ok := reg.Provider(agentruntime.ClaudeCodeProvider)
 	if !ok || p.Source != modelcatalog.SourceLocalCLI || p.Name != "Claude Code" || len(p.AuthMethods) != 0 {
-		t.Fatalf("claude-code 提供方：%+v %v", p, ok)
+		t.Fatalf("claude-code provider: %+v %v", p, ok)
 	}
 	for _, id := range []string{"fable", "opus", "sonnet", "haiku"} {
 		if !reg.HasModel(agentruntime.ClaudeCodeProvider, id) || !reg.SupportsImages(agentruntime.ClaudeCodeProvider, id) {
-			t.Fatalf("模型 %s 应在目录里且支持图片", id)
+			t.Fatalf("model %s should be in the catalog and support images", id)
 		}
 	}
 	if reg.HasModel(agentruntime.ClaudeCodeProvider, "custom") {
-		t.Fatal("models.json 里同 id 的自定义提供方不应发布")
+		t.Fatal("a custom provider with the same id in models.json should not be published")
 	}
 	if level, err := reg.ResolveThinking(agentruntime.ClaudeCodeProvider, "sonnet", nil); err != nil || level != "medium" {
-		t.Fatalf("未选时的等级：%q %v", level, err)
+		t.Fatalf("level when none is chosen: %q %v", level, err)
 	}
 	for _, level := range []string{"low", "xhigh", "max"} {
 		if _, err := reg.ResolveThinking(agentruntime.ClaudeCodeProvider, "opus", &level); err != nil {
-			t.Fatalf("等级 %s：%v", level, err)
+			t.Fatalf("level %s: %v", level, err)
 		}
 	}
 	for _, level := range []string{"off", "minimal"} {
 		if _, err := reg.ResolveThinking(agentruntime.ClaudeCodeProvider, "opus", &level); err == nil {
-			t.Fatalf("Claude Code 没有等级 %s", level)
+			t.Fatalf("Claude Code has no level %s", level)
 		}
 	}
 	reg.SetPluginProviders([]modelcatalog.PluginProvider{{PluginID: "squatter", Provider: modelcatalog.CapturedProvider{ID: agentruntime.ClaudeCodeProvider, OAuth: true, Models: []modelcatalog.Model{{ID: "m", Name: "M", ThinkingLevels: []string{"off"}, DefaultThinkingLevel: "off"}}}}})
 	if p, _ := reg.Provider(agentruntime.ClaudeCodeProvider); p.Source != modelcatalog.SourceLocalCLI {
-		t.Fatalf("插件不能占用 claude-code：%+v", p)
+		t.Fatalf("a plugin must not take over claude-code: %+v", p)
 	}
 	if _, ok := reg.Base().Provider(agentruntime.ClaudeCodeProvider); !ok {
-		t.Fatal("Base 也要含本机 CLI 的提供方，判断插件提供方是否撞 id 时用")
+		t.Fatal("Base should also include the local CLI provider, used to check plugin providers for id clashes")
 	}
 	if agentruntime.ForProvider(agentruntime.ClaudeCodeProvider) != agentruntime.ClaudeCode || agentruntime.ForProvider("anthropic") != agentruntime.Pi {
-		t.Fatal("运行时由提供方决定")
+		t.Fatal("the runtime should be decided by the provider")
 	}
 }

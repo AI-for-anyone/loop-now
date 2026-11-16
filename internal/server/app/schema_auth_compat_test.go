@@ -62,7 +62,7 @@ func TestSchemaCompatibilityCLIInboxAndOfflineAuth(t *testing.T) {
 	if !strings.Contains(string(s.must(200, "GET", "/external-identities", nil)), "schema-old-ci") || !strings.Contains(string(oldIdentity), "schema-old-ci") {
 		t.Fatal("existing identity changed after rejected creation")
 	}
-	path, agent := s.createPlatformAgent("schema旧CLI")
+	path, agent := s.createPlatformAgent("schema old CLI")
 	s.must(200, "PUT", path+"/clis/gh", nil)
 	for _, token := range []string{"synthetic-cli-first", "synthetic-cli-replacement"} {
 		response := s.must(200, "PUT", path+"/clis/gh/credential", map[string]any{"fields": map[string]string{"token": token}})
@@ -81,7 +81,7 @@ func TestSchemaCompatibilityCLIInboxAndOfflineAuth(t *testing.T) {
 	}
 	s.must(204, "DELETE", path+"/clis/gh/credential", nil)
 	s.must(204, "DELETE", path+"/clis/gh", nil) // do not invoke CLI installation during Inbox fixture.
-	s.must(201, "POST", "/inbox/messages", map[string]any{"to": "schema旧CLI", "text": "schema-old-inbox-fixture"})
+	s.must(201, "POST", "/inbox/messages", map[string]any{"to": "schema old CLI", "text": "schema-old-inbox-fixture"})
 	s.waitIdle(path)
 	var messages int
 	if err := s.a.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM inbox_messages WHERE from_kind='console' AND to_kind='agent' AND to_agent_id=$1 AND text='schema-old-inbox-fixture'`, agent.ID).Scan(&messages); err != nil || messages != 1 {
@@ -89,7 +89,7 @@ func TestSchemaCompatibilityCLIInboxAndOfflineAuth(t *testing.T) {
 	}
 	s.must(200, "GET", "/inbox/messages", nil)
 
-	codex := decode[apitypes.Agent](t, s.must(201, "POST", "/platform/agents", map[string]any{"name": "schema模拟Codex", "model": map[string]string{"provider": "openai-codex", "modelId": "gpt-6.1-sol"}, "prompt": "offline"}))
+	codex := decode[apitypes.Agent](t, s.must(201, "POST", "/platform/agents", map[string]any{"name": "schema simulated Codex", "model": map[string]string{"provider": "openai-codex", "modelId": "gpt-6.1-sol"}, "prompt": "offline"}))
 	base := "/agents/" + codex.ID.String() + "/model-auth"
 	op := decode[modelauth.Operation](t, s.must(200, "POST", base+"/operations", map[string]any{"provider": "openai-codex", "expectedConfigVersion": codex.ConfigVersion}))
 	succeeded := false

@@ -63,12 +63,12 @@ func TestInboxQuestionCLIRealAppOrdinary(t *testing.T) {
 	w := newWorld(t, true)
 	s := w.start(nil)
 	defer s.stop()
-	senderID := s.createAgent("普通提问者")
+	senderID := s.createAgent("Ordinary asker")
 	sender := testTaskClient(t, s, senderID)
 	recipient := questionExternal(t, w, s)
 	ask := func(text string) string {
 		t.Helper()
-		r := sender.run("inbox", "send", "@question-recipient", "--text", text, "--option", "继续", "--option", "停止")
+		r := sender.run("inbox", "send", "@question-recipient", "--text", text, "--option", "Continue", "--option", "Stop")
 		q := r.ok(t)
 		if r.Meta.Attempts != 1 || q["question"].(map[string]any)["state"] != "open" {
 			t.Fatal("actual question not created once")
@@ -76,8 +76,8 @@ func TestInboxQuestionCLIRealAppOrdinary(t *testing.T) {
 		return q["id"].(string)
 	}
 	option := ask("option question")
-	answer := recipient.run("inbox", "reply", option, "--answer", "2", "--option", "继续追问", "--option", "停止追问").ok(t)
-	if answer["text"] != "Selected: 停止" || answer["answerTo"].(map[string]any)["messageId"] != option || cliQuestionState(t, recipient, option) != "answered" {
+	answer := recipient.run("inbox", "reply", option, "--answer", "2", "--option", "Keep asking", "--option", "Stop asking").ok(t)
+	if answer["text"] != "Selected: Stop" || answer["answerTo"].(map[string]any)["messageId"] != option || cliQuestionState(t, recipient, option) != "answered" {
 		t.Fatal("actual option answer missing")
 	}
 	if answer["question"].(map[string]any)["state"] != "open" {
@@ -124,7 +124,7 @@ func TestInboxQuestionCLIRealAppOrdinary(t *testing.T) {
 	if consoleAnswer["answerTo"].(map[string]any)["messageId"] != consoleQuestion["id"] {
 		t.Fatal("actual console option answer missing")
 	}
-	fromConsole := s.console(201, "POST", "/inbox/messages", map[string]any{"to": "默认项目/普通提问者", "text": "Agent answer console", "options": []string{"yes", "no"}})
+	fromConsole := s.console(201, "POST", "/inbox/messages", map[string]any{"to": "Default project/Ordinary asker", "text": "Agent answer console", "options": []string{"yes", "no"}})
 	agentAnswer := sender.run("inbox", "reply", fromConsole["id"].(string), "--answer", "2").ok(t)
 	if agentAnswer["answerTo"].(map[string]any)["messageId"] != fromConsole["id"] || agentAnswer["to"].(map[string]any)["kind"] != "console" {
 		t.Fatal("Agent CLI failed to answer actual console question")
@@ -139,8 +139,8 @@ func TestTaskCLIQuestionAnswerTimingAndExpiry(t *testing.T) {
 			w.cfg.PiMaxProcesses = 3
 			s := w.start(nil)
 			defer s.stop()
-			_, manager := newTaskManager(t, s, "问题Manager")
-			worker := s.createAgent("问题执行者")
+			_, manager := newTaskManager(t, s, "Question Manager")
+			worker := s.createAgent("Question worker")
 			recipient := questionExternal(t, w, s)
 			created := taskCLIInput(t, manager, taskTextRequest(worker, "!sleep=1s !text=first_round"), "task", "create")
 			id := created["task"].(map[string]any)["id"].(string)
@@ -163,7 +163,7 @@ func TestTaskCLIQuestionAnswerTimingAndExpiry(t *testing.T) {
 			}
 			if mode == "late-text" {
 				waitCLITask(t, s, id, func(d taskmodel.Detail) bool { return d.Task.Status == "waiting" })
-				recipient.run("inbox", "send", "默认项目/问题执行者#"+id, "--text", "ordinary message").ok(t)
+				recipient.run("inbox", "send", "Default project/Question worker#"+id, "--text", "ordinary message").ok(t)
 				if cliQuestionState(t, recipient, qid) != "open" {
 					t.Fatal("ordinary Inbox answered task question")
 				}
@@ -205,8 +205,8 @@ func TestTaskCLIQuestionRetryCancelCloseAndLateMessages(t *testing.T) {
 	w.cfg.PiMaxProcesses = 3
 	s := w.start(nil)
 	defer s.stop()
-	managerID, manager := newTaskManager(t, s, "关闭问题Manager")
-	worker := s.createAgent("关闭问题执行者")
+	managerID, manager := newTaskManager(t, s, "Close-question Manager")
+	worker := s.createAgent("Close-question worker")
 	recipient := questionExternal(t, w, s)
 	created := taskCLIInput(t, manager, taskTextRequest(worker, "!sleep=1s !text=work"), "task", "create")
 	id := created["task"].(map[string]any)["id"].(string)

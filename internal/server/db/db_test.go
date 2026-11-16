@@ -77,7 +77,7 @@ func TestOpenPragmas(t *testing.T) {
 	}
 	for _, f := range []string{DataFile, EventsFile} {
 		if _, err := os.Stat(filepath.Join(d.Dir(), f)); err != nil {
-			t.Errorf("%s 未创建：%v", f, err)
+			t.Errorf("%s was not created: %v", f, err)
 		}
 	}
 }
@@ -118,11 +118,11 @@ func TestRoutingAndReadOnlyPool(t *testing.T) {
 		t.Fatalf("InTx after RETURNING: %v", err)
 	}
 	if _, err := d.Reader().ExecContext(ctx, `INSERT INTO t (v) VALUES ('c')`); err == nil || !strings.Contains(err.Error(), "readonly") {
-		t.Fatalf("只读池写入应被拒绝，得到 %v", err)
+		t.Fatalf("a write on the read-only pool should be rejected, got %v", err)
 	}
 	var n int
 	if err := d.QueryRow(ctx, `WITH x AS (SELECT id FROM t WHERE v='a') UPDATE t SET v='z' WHERE id IN (SELECT id FROM x) RETURNING id`).Scan(&n); err != nil {
-		t.Fatalf("WITH … UPDATE 应走写连接：%v", err)
+		t.Fatalf("WITH … UPDATE should use the write connection: %v", err)
 	}
 }
 
@@ -175,7 +175,7 @@ func TestArgsAndScan(t *testing.T) {
 		t.Errorf("time: got %v want %v (UTC)", gotAt, at.Truncate(time.Microsecond))
 	}
 	if gotNull != nil || gotIDN != nil || rawFromN != nil {
-		t.Errorf("NULL 应得 nil：%v %v %v", gotNull, gotIDN, rawFromN)
+		t.Errorf("NULL should scan as nil: %v %v %v", gotNull, gotIDN, rawFromN)
 	}
 	if atAgain == nil || !atAgain.Equal(gotAt) {
 		t.Errorf("**time.Time: %v", atAgain)
@@ -194,15 +194,15 @@ func TestArgsAndScan(t *testing.T) {
 		t.Fatal(err)
 	}
 	if stored != id.String()+"|integer|[\"a\",\"b\"]" {
-		t.Errorf("存储形式：%s", stored)
+		t.Errorf("stored form: %s", stored)
 	}
 	if _, err := d.Exec(ctx, `SELECT ?`, time.Second); !errors.Is(err, errDuration) {
-		t.Errorf("Duration 参数应被拒绝，得到 %v", err)
+		t.Errorf("a Duration argument should be rejected, got %v", err)
 	}
 	var nilSlice []string
 	var isNull bool
 	if err := d.QueryRow(ctx, `SELECT ? IS NULL`, nilSlice).Scan(&isNull); err != nil || !isNull {
-		t.Errorf("nil 切片应为 NULL：%v %v", isNull, err)
+		t.Errorf("a nil slice should be NULL: %v %v", isNull, err)
 	}
 }
 
@@ -226,7 +226,7 @@ func TestCollectHelpers(t *testing.T) {
 		t.Fatalf("ForEachRow: %d %v", sum, err)
 	}
 	if err := d.QueryRow(ctx, `SELECT 1 WHERE 0`).Scan(&v); !IsNoRows(err) {
-		t.Fatalf("没有行应得 ErrNoRows：%v", err)
+		t.Fatalf("no rows should give ErrNoRows: %v", err)
 	}
 }
 
@@ -253,20 +253,20 @@ func TestInTxHooks(t *testing.T) {
 	}
 	var s string
 	if err := d.QueryRow(ctx, `SELECT group_concat(s, ',') FROM log`).Scan(&s); err != nil || s != "body,before1,before2" || len(after) != 1 {
-		t.Fatalf("钩子顺序：%q %v %v", s, after, err)
+		t.Fatalf("hook order: %q %v %v", s, after, err)
 	}
 
 	boom := errors.New("boom")
 	for name, fn := range map[string]func(*Tx) error{
 		"fn error": func(tx *Tx) error {
 			mustExec(t, tx, `INSERT INTO log VALUES ('x')`)
-			tx.AfterCommit(func() { t.Error("回滚后不应执行 AfterCommit") })
+			tx.AfterCommit(func() { t.Error("AfterCommit should not run after a rollback") })
 			return boom
 		},
 		"before error": func(tx *Tx) error {
 			mustExec(t, tx, `INSERT INTO log VALUES ('x')`)
 			tx.BeforeCommit(func(context.Context, *Tx) error { return boom })
-			tx.AfterCommit(func() { t.Error("回滚后不应执行 AfterCommit") })
+			tx.AfterCommit(func() { t.Error("AfterCommit should not run after a rollback") })
 			return nil
 		},
 	} {
@@ -283,13 +283,13 @@ func TestInTxHooks(t *testing.T) {
 	}()
 	var n int
 	if err := d.QueryRow(ctx, `SELECT count(*) FROM log WHERE s='x'`).Scan(&n); err != nil || n != 0 {
-		t.Fatalf("回滚后不应留下行：%d %v", n, err)
+		t.Fatalf("no rows should be left after the rollback: %d %v", n, err)
 	}
 	// After the panic the write connection is still usable and not inside a transaction.
 	ctxT, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	if err := d.InTx(ctxT, func(tx *Tx) error { _, err := tx.Exec(ctx, `INSERT INTO log VALUES ('ok')`); return err }); err != nil {
-		t.Fatalf("恐慌后写事务：%v", err)
+		t.Fatalf("write transaction after a panic: %v", err)
 	}
 }
 
@@ -312,7 +312,7 @@ func TestBeginImmediate(t *testing.T) {
 		defer c.Close()
 		_, err = c.ExecContext(ctx, `BEGIN IMMEDIATE`)
 		if Code(err) != CodeBusy {
-			t.Errorf("BEGIN 之后其他连接应得 SQLITE_BUSY，得到 %v", err)
+			t.Errorf("after BEGIN another connection should get SQLITE_BUSY, got %v", err)
 		}
 		return nil
 	})
@@ -330,13 +330,13 @@ func TestNestedWriteDetected(t *testing.T) {
 	err := d.InTx(ctx, func(tx *Tx) error {
 		var n int
 		if err := d.QueryRow(ctx, `SELECT count(*) FROM t`).Scan(&n); err != nil {
-			t.Errorf("事务内经 *DB 只读应可以：%v", err)
+			t.Errorf("a read through *DB inside the transaction should work: %v", err)
 		}
 		_, err := d.Exec(ctx, `INSERT INTO t VALUES (1)`)
 		return err
 	})
 	if !errors.Is(err, ErrNestedWrite) {
-		t.Fatalf("嵌套写应得 ErrNestedWrite，得到 %v", err)
+		t.Fatalf("a nested write should give ErrNestedWrite, got %v", err)
 	}
 }
 
@@ -361,7 +361,7 @@ func TestCancellation(t *testing.T) {
 	close(hold)
 	wg.Wait()
 	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("等写连接超时应得 ctx 错误，得到 %v", err)
+		t.Fatalf("timing out while waiting for the write connection should give the ctx error, got %v", err)
 	}
 
 	// Cancelled only after the last statement: the commit completes as usual.
@@ -371,7 +371,7 @@ func TestCancellation(t *testing.T) {
 		cancel2()
 		return nil
 	}); err != nil {
-		t.Fatalf("取消发生在语句之后，提交不应受影响：%v", err)
+		t.Fatalf("a cancel after the statements should not affect the commit: %v", err)
 	}
 	// A statement run under an already cancelled ctx: the statement fails and the transaction rolls back.
 	c3, cancel3 := context.WithCancel(ctx)
@@ -382,11 +382,11 @@ func TestCancellation(t *testing.T) {
 		return err
 	})
 	if err == nil {
-		t.Fatal("已取消的语句应失败")
+		t.Fatal("a statement under a cancelled ctx should fail")
 	}
 	var got string
 	if err := d.QueryRow(ctx, `SELECT group_concat(v) FROM t`).Scan(&got); err != nil || got != "1" {
-		t.Fatalf("应只留下 1，得到 %q %v", got, err)
+		t.Fatalf("only 1 should be left, got %q %v", got, err)
 	}
 }
 
@@ -406,10 +406,10 @@ func TestReadTxSnapshot(t *testing.T) {
 		before := count()
 		mustExec(t, d, `INSERT INTO t VALUES (2)`)
 		if after := count(); after != before {
-			t.Errorf("只读事务应看到同一快照：%d → %d", before, after)
+			t.Errorf("a read transaction should see a single snapshot: %d → %d", before, after)
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO t VALUES (3)`); err == nil {
-			t.Error("只读事务里写应失败")
+			t.Error("a write in a read transaction should fail")
 		}
 		return nil
 	})
@@ -418,7 +418,7 @@ func TestReadTxSnapshot(t *testing.T) {
 	}
 	var n int
 	if err := d.QueryRow(ctx, `SELECT count(*) FROM t`).Scan(&n); err != nil || n != 2 {
-		t.Fatalf("新查询应看到最新提交：%d %v", n, err)
+		t.Fatalf("a new query should see the latest commit: %d %v", n, err)
 	}
 }
 
@@ -435,31 +435,31 @@ func TestErrorHelpers(t *testing.T) {
 
 	_, err := d.Exec(ctx, `INSERT INTO r VALUES ('3', 'a', 'running', 'y', NULL)`)
 	if !IsUniqueViolation(err, "r", "agent") || IsUniqueViolation(err, "r", "agent", "origin") || !IsUniqueViolation(err, "r") {
-		t.Errorf("部分唯一索引：%v", err)
+		t.Errorf("partial unique index: %v", err)
 	}
 	_, err = d.Exec(ctx, `INSERT INTO r VALUES ('4', 'a', 'queued', NULL, NULL)`)
 	if !IsUniqueIndexViolation(err, "r_expr") {
-		t.Errorf("表达式唯一索引：%v", err)
+		t.Errorf("expression unique index: %v", err)
 	}
 	_, err = d.Exec(ctx, `INSERT INTO r VALUES ('5', 'a', 'done', 'x', NULL)`)
 	if !IsUniqueViolation(err, "r", "agent", "origin") {
-		t.Errorf("表级唯一约束：%v", err)
+		t.Errorf("table-level unique constraint: %v", err)
 	}
 	_, err = d.Exec(ctx, `INSERT INTO r VALUES ('1', 'b', 'done', 'z', NULL)`)
 	if Code(err) != CodeConstraintPK || !IsUniqueViolation(err, "r", "id") || !IsAnyUniqueViolation(err) {
-		t.Errorf("主键：%v", err)
+		t.Errorf("primary key: %v", err)
 	}
 	_, err = d.Exec(ctx, `INSERT INTO r VALUES ('6', 'c', 'done', 'z', 'missing')`)
 	if Code(err) != CodeConstraintFK || !IsConstraint(err) || IsAnyUniqueViolation(err) {
-		t.Errorf("外键：%v", err)
+		t.Errorf("foreign key: %v", err)
 	}
 	_, err = d.Exec(ctx, `DELETE FROM r`)
 	if !IsRaise(err, "r_is_append_only") || !IsConstraint(err) {
-		t.Errorf("RAISE：%v", err)
+		t.Errorf("RAISE: %v", err)
 	}
 	var se *sqlite.Error
 	if !errors.As(err, &se) {
-		t.Errorf("应保留驱动错误：%T", err)
+		t.Errorf("the driver error should be kept: %T", err)
 	}
 }
 
@@ -491,11 +491,11 @@ func TestNextSeqAndEvents(t *testing.T) {
 		}
 	}
 	if err := d.InTx(ctx, func(tx *Tx) error { _, err := tx.NextSeq(ctx, "nope"); return err }); err == nil {
-		t.Error("未知序列应报错")
+		t.Error("an unknown sequence should return an error")
 	}
 	var n int
 	if err := d.QueryRow(ctx, `SELECT count(*) FROM runs JOIN ev.log l ON l.run = runs.id`).Scan(&n); err != nil || n != 3 {
-		t.Fatalf("跨库 JOIN：%d %v", n, err)
+		t.Fatalf("cross-database JOIN: %d %v", n, err)
 	}
 }
 
@@ -506,18 +506,18 @@ func TestLockDir(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := LockDir(dir); !errors.Is(err, ErrLocked) {
-		t.Fatalf("第二次取锁应得 ErrLocked，得到 %v", err)
+		t.Fatalf("a second lock should give ErrLocked, got %v", err)
 	}
 	b, err := os.ReadFile(filepath.Join(dir, LockFile))
 	if err != nil || strings.TrimSpace(string(b)) != strconv.Itoa(os.Getpid()) {
-		t.Errorf("锁文件内容：%q %v", b, err)
+		t.Errorf("lock file content: %q %v", b, err)
 	}
 	if err := l.Release(); err != nil {
 		t.Fatal(err)
 	}
 	l2, err := LockDir(dir)
 	if err != nil {
-		t.Fatalf("释放后应能再取：%v", err)
+		t.Fatalf("should be able to lock again after the release: %v", err)
 	}
 	l2.Release()
 }
@@ -532,14 +532,14 @@ func TestBackupAndCheckpoint(t *testing.T) {
 		mustExec(t, d, `INSERT INTO ev.e VALUES (?)`, i)
 	}
 	if data, events := d.WALSize(); data == 0 || events == 0 {
-		t.Fatalf("写入后 WAL 应非空：%d %d", data, events)
+		t.Fatalf("the WAL should not be empty after writes: %d %d", data, events)
 	}
 	res, err := d.Checkpoint(ctx, CheckpointTruncate)
 	if err != nil || len(res) != 2 || res[0].Busy || res[1].Busy {
 		t.Fatalf("Checkpoint: %+v %v", res, err)
 	}
 	if data, events := d.WALSize(); data != 0 || events != 0 {
-		t.Fatalf("TRUNCATE 后 WAL 应为 0：%d %d", data, events)
+		t.Fatalf("the WAL should be 0 after TRUNCATE: %d %d", data, events)
 	}
 	if err := d.Optimize(ctx); err != nil {
 		t.Fatal(err)
@@ -549,12 +549,12 @@ func TestBackupAndCheckpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := d.BackupTo(ctx, backup); err == nil {
-		t.Fatal("备份目标已存在时应拒绝")
+		t.Fatal("the backup should refuse an existing target")
 	}
 	b := openTestDir(t, backup)
 	var n, m int
 	if err := b.QueryRow(ctx, `SELECT (SELECT count(*) FROM t), (SELECT count(*) FROM ev.e)`).Scan(&n, &m); err != nil || n != 100 || m != 100 {
-		t.Fatalf("备份内容：%d %d %v", n, m, err)
+		t.Fatalf("backup content: %d %d %v", n, m, err)
 	}
 }
 
@@ -565,7 +565,7 @@ func TestModerncLibcPinned(t *testing.T) {
 	want := map[string]string{"modernc.org/sqlite": "v1.60.1", "modernc.org/libc": "v1.77.1"}
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		t.Skip("没有构建信息")
+		t.Skip("no build info")
 	}
 	got := map[string]string{}
 	for _, m := range info.Deps {
@@ -575,7 +575,7 @@ func TestModerncLibcPinned(t *testing.T) {
 	}
 	for path, v := range want {
 		if got[path] != v {
-			t.Errorf("%s = %q，应为 %s（两者必须成对升级）", path, got[path], v)
+			t.Errorf("%s = %q, want %s (the two must be upgraded together)", path, got[path], v)
 		}
 	}
 }
@@ -616,25 +616,25 @@ func TestWriteHookRunsForEveryWrite(t *testing.T) {
 	}
 	got, err := CollectRows(rows, RowTo[int])
 	if err != nil || len(got) != 3 {
-		t.Fatalf("写连接上的 Query：%v %v", got, err)
+		t.Fatalf("Query on the write connection: %v %v", got, err)
 	}
 	if calls != 4 {
-		t.Fatalf("钩子应执行 4 次，实际 %d", calls)
+		t.Fatalf("the hook should run 4 times, ran %d", calls)
 	}
 	var seen string
 	if err := d.QueryRow(ctx, `SELECT group_concat(n) FROM seen`).Scan(&seen); err != nil || seen != "1,2,3,3" {
-		t.Fatalf("钩子应在同一事务里看到每次写入：%q %v", seen, err)
+		t.Fatalf("the hook should see every write in the same transaction: %q %v", seen, err)
 	}
 	// RETURNING that matches no row: ErrNoRows and the transaction rolls back (the hook must still leave no trace).
 	if err := d.QueryRow(ctx, `UPDATE t SET v = 0 WHERE v < 0 RETURNING v`).Scan(&v); !IsNoRows(err) {
-		t.Fatalf("应得 ErrNoRows：%v", err)
+		t.Fatalf("want ErrNoRows: %v", err)
 	}
 	fail = true
 	if _, err := d.Exec(ctx, `INSERT INTO t VALUES (4)`); err == nil {
-		t.Fatal("钩子失败时写入应失败")
+		t.Fatal("the write should fail when the hook fails")
 	}
 	if err := d.QueryRow(ctx, `INSERT INTO t VALUES (5) RETURNING v`).Scan(&v); err == nil {
-		t.Fatal("钩子失败时 RETURNING 写入应失败")
+		t.Fatal("a RETURNING write should fail when the hook fails")
 	}
 	rows, err = d.Query(ctx, `INSERT INTO t VALUES (6) RETURNING v`)
 	if err != nil {
@@ -643,12 +643,12 @@ func TestWriteHookRunsForEveryWrite(t *testing.T) {
 	for rows.Next() {
 	}
 	if rows.Err() == nil {
-		t.Fatal("钩子失败应由 Rows.Err 报出")
+		t.Fatal("Rows.Err should report the hook failure")
 	}
 	fail = false
 	var n, s int
 	if err := d.QueryRow(ctx, `SELECT (SELECT count(*) FROM t), (SELECT count(*) FROM seen)`).Scan(&n, &s); err != nil || n != 3 || s != 4 {
-		t.Fatalf("失败的写入与钩子都应回滚：t=%d seen=%d %v", n, s, err)
+		t.Fatalf("both the failed writes and the hook should roll back: t=%d seen=%d %v", n, s, err)
 	}
 	// The write connection has been returned: writing can continue.
 	mustExec(t, d, `INSERT INTO t VALUES (7)`)
@@ -694,14 +694,14 @@ func TestSQLNowAndClockTimestamp(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !as[0].Equal(txNow) || !as[1].Equal(txNow) {
-		t.Errorf("now() 应为事务开始时刻 %v，得到 %v", txNow, as)
+		t.Errorf("now() should be the transaction start %v, got %v", txNow, as)
 	}
 	if !bs[0].After(txNow) || !bs[1].After(bs[0]) {
-		t.Errorf("clock_timestamp() 应逐次取时钟：%v（事务开始 %v）", bs, txNow)
+		t.Errorf("clock_timestamp() should read the clock on every call: %v (transaction start %v)", bs, txNow)
 	}
 	var readNow time.Time
 	if err := d.QueryRow(ctx, `SELECT now()`).Scan(&readNow); err != nil || !readNow.After(bs[1]) {
-		t.Errorf("只读连接上的 now() 取调用时刻：%v %v", readNow, err)
+		t.Errorf("now() on a read connection should be the call time: %v %v", readNow, err)
 	}
 }
 
@@ -717,7 +717,7 @@ func TestISOTime(t *testing.T) {
 		None *time.Time `json:"none"`
 	}
 	if err := json.Unmarshal([]byte(raw), &v); err != nil || !v.At.Equal(at) || v.None != nil {
-		t.Fatalf("iso_time 应保留微秒并可被 Go 解析：%s %+v %v", raw, v, err)
+		t.Fatalf("iso_time should keep microseconds and be parsable by Go: %s %+v %v", raw, v, err)
 	}
 }
 
@@ -752,12 +752,12 @@ func TestQueryHookPausesInsideTransaction(t *testing.T) {
 	go func() { _, err := d.Exec(ctx, `INSERT INTO t VALUES (3)`); other <- err }()
 	select {
 	case err := <-other:
-		t.Fatalf("停在写事务里时，别的写入应等待：%v", err)
+		t.Fatalf("while a write transaction is paused, other writes should wait: %v", err)
 	case <-time.After(100 * time.Millisecond):
 	}
 	var n int
 	if err := d.QueryRow(ctx, `SELECT count(*) FROM t`).Scan(&n); err != nil || n != 0 {
-		t.Fatalf("读到未提交的写入：%d %v", n, err)
+		t.Fatalf("read an uncommitted write: %d %v", n, err)
 	}
 	close(release)
 	if err := <-done; err != nil {
@@ -768,7 +768,7 @@ func TestQueryHookPausesInsideTransaction(t *testing.T) {
 	}
 	for _, q := range []string{`INSERT INTO t VALUES (1)`, `INSERT INTO t VALUES (3)`, `SELECT count(*) FROM t`} {
 		if _, ok := seen.Load(q); !ok {
-			t.Errorf("钩子没有看到：%s", q)
+			t.Errorf("the hook did not see: %s", q)
 		}
 	}
 	d.SetQueryHook(nil)
@@ -777,7 +777,7 @@ func TestQueryHookPausesInsideTransaction(t *testing.T) {
 		t.Fatalf("%d %v", n, err)
 	}
 	if _, ok := seen.Load(`SELECT count(*) FROM t`); ok {
-		t.Fatal("取消后钩子仍被调用")
+		t.Fatal("the hook was still called after it was removed")
 	}
 }
 
@@ -790,7 +790,7 @@ func TestWriteWaiters(t *testing.T) {
 	go func() { ended <- d.InTx(ctx, func(*Tx) error { close(held); <-release; return nil }) }()
 	<-held
 	if n := d.WriteWaiters(); n != 0 {
-		t.Fatalf("持有者不算等待：%d", n)
+		t.Fatalf("the holder should not count as a waiter: %d", n)
 	}
 	waitCtx, cancel := context.WithCancel(ctx)
 	results := make(chan error, 2)
@@ -799,16 +799,16 @@ func TestWriteWaiters(t *testing.T) {
 	deadline := time.Now().Add(5 * time.Second)
 	for d.WriteWaiters() != 2 {
 		if time.Now().After(deadline) {
-			t.Fatalf("等待数：%d", d.WriteWaiters())
+			t.Fatalf("waiters: %d", d.WriteWaiters())
 		}
 		time.Sleep(time.Millisecond)
 	}
 	cancel()
 	if err := <-results; !errors.Is(err, context.Canceled) {
-		t.Fatalf("取消的等待应返回取消：%v", err)
+		t.Fatalf("a cancelled wait should return the cancellation: %v", err)
 	}
 	if n := d.WriteWaiters(); n != 1 {
-		t.Fatalf("取消后等待数：%d", n)
+		t.Fatalf("waiters after the cancel: %d", n)
 	}
 	close(release)
 	if err := <-ended; err != nil {
@@ -818,7 +818,7 @@ func TestWriteWaiters(t *testing.T) {
 		t.Fatal(err)
 	}
 	if n := d.WriteWaiters(); n != 0 {
-		t.Fatalf("都拿到后等待数：%d", n)
+		t.Fatalf("waiters after all got the connection: %d", n)
 	}
 }
 
@@ -837,16 +837,16 @@ func TestCommitFailureRollsBackAndKeepsWriter(t *testing.T) {
 		return err
 	})
 	if Code(err) != CodeConstraintFK || after {
-		t.Fatalf("提交时的外键违反应失败且不执行提交后钩子：%v %v", err, after)
+		t.Fatalf("a foreign key violation at commit should fail without running the after-commit hook: %v %v", err, after)
 	}
 	var n int
 	if err := d.QueryRow(ctx, `SELECT count(*) FROM child`).Scan(&n); err != nil || n != 0 {
-		t.Fatalf("失败的提交不应留下数据：%d %v", n, err)
+		t.Fatalf("a failed commit should leave no data: %d %v", n, err)
 	}
 	if err := d.InTx(ctx, func(tx *Tx) error {
 		_, err := tx.Exec(ctx, `INSERT INTO parent VALUES('p1')`)
 		return err
 	}); err != nil {
-		t.Fatalf("提交失败后写连接应仍可用：%v", err)
+		t.Fatalf("the write connection should still work after a failed commit: %v", err)
 	}
 }

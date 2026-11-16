@@ -20,7 +20,7 @@ import (
 // neither waits nor asks, but fails right away with host_key_unverified and explains how to confirm it.
 func TestGitPullUsesAccessAndReportsHostKey(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("假 ssh 是 sh 脚本")
+		t.Skip("the fake ssh is a sh script")
 	}
 	ctx := context.Background()
 	f := newFixture(t, "git", 20*time.Second)
@@ -47,13 +47,13 @@ func TestGitPullUsesAccessAndReportsHostKey(t *testing.T) {
 	}
 	done := f.wait(p.ID)
 	if done.Status != "failed" || done.ErrorCode == nil || *done.ErrorCode != "host_key_unverified" || !strings.Contains(*done.ErrorMessage, "ssh -T git@code.example.com") {
-		t.Fatalf("结果：%+v %s", done, deref(done.ErrorMessage))
+		t.Fatalf("result: %+v %s", done, deref(done.ErrorMessage))
 	}
 	if got := <-gotAgent; got != f.agent {
-		t.Fatalf("GitAccess 收到的 Agent = %s", got)
+		t.Fatalf("GitAccess got Agent = %s", got)
 	}
 	if b, _ := os.ReadFile(argsLog); !strings.Contains(string(b), "BatchMode=yes") || !strings.Contains(string(b), "git@code.example.com") {
-		t.Fatalf("应经由 GIT_SSH_COMMAND 运行 ssh：%q", b)
+		t.Fatalf("ssh should run through GIT_SSH_COMMAND: %q", b)
 	}
 }
 
@@ -76,7 +76,7 @@ func TestGitPullReportsAuthFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	if done := f.wait(p.ID); done.Status != "failed" || *done.ErrorCode != "auth_failed" {
-		t.Fatalf("结果：%+v %s", done, deref(done.ErrorMessage))
+		t.Fatalf("result: %+v %s", done, deref(done.ErrorMessage))
 	}
 }
 

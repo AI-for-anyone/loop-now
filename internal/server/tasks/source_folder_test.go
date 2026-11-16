@@ -37,12 +37,12 @@ func TestCopyWorkspaceReplacesLeftovers(t *testing.T) {
 		t.Fatal(err)
 	}
 	if b, err := os.ReadFile(filepath.Join(dst, "docs", "a.md")); err != nil || string(b) != "base" {
-		t.Fatalf("应复制基础文件夹：%q %v", b, err)
+		t.Fatalf("should copy the base folder: %q %v", b, err)
 	}
 	if _, err := os.Stat(filepath.Join(dst, "stale.txt")); !os.IsNotExist(err) {
-		t.Fatal("上次残留的工作区内容应删除")
+		t.Fatal("workspace content left over from last time should be deleted")
 	}
 	if _, err := os.Stat(dst + ".copying-abc"); !os.IsNotExist(err) {
-		t.Fatal("复制中的半成品应删除")
+		t.Fatal("a half-finished copy should be deleted")
 	}
 }

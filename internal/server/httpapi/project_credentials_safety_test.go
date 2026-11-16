@@ -133,7 +133,7 @@ func TestProjectCredentialSecretChannels(t *testing.T) {
 	base := "/projects/" + e.dc.Project.ID.String()
 	accounts := base + "/credential-accounts"
 	operations := base + "/model-auth/operations"
-	agent, err := e.st.CreateAgent(ctx, store.ProjectScope(e.dc.Project.ID), "安全使用者", "openai-codex", "gpt-6.1-sol", "")
+	agent, err := e.st.CreateAgent(ctx, store.ProjectScope(e.dc.Project.ID), "Safe user", "openai-codex", "gpt-6.1-sol", "")
 	if err != nil {
 		t.Fatal(err)
 	}

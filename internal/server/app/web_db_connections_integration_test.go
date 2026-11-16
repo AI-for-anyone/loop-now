@@ -122,7 +122,7 @@ func webDBConnectionsIntegration(t *testing.T, slice string) {
 		}
 		defer clear(plain)
 		label := credential.Account
-		record, err := s.a.Store.CreateProjectCredential(context.Background(), dc.Project.ID, "cli", "gcloud", "合成Google已保存账号", store.ProjectCredentialWrite{AuthMethod: "oauth", AccountLabel: &label, TemplateSource: "builtin", Meta: store.CredentialMeta{TemplateVersion: "1"}, Secret: plain})
+		record, err := s.a.Store.CreateProjectCredential(context.Background(), dc.Project.ID, "cli", "gcloud", "合成Google已保存账号", store.ProjectCredentialWrite{AuthMethod: "oauth", AccountLabel: &label, TemplateSource: "builtin", Meta: store.CredentialMeta{TemplateVersion: "1"}, Secret: plain}) // check-english: zh (account name matched by web/scripts/google-metadata-app.mjs)
 		if err != nil {
 			t.Fatal("synthetic metadata seed failed")
 		}

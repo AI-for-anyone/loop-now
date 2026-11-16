@@ -30,7 +30,7 @@ func TestCLIImportAtomicMixedAndHistory(t *testing.T) {
 	}
 	makeItem := func(origin, token string) store.CLIImportPreparedItem {
 		t.Helper()
-		v := store.CLIImportPreparedItem{CandidateID: uuid.New(), AccountID: uuid.New(), VersionID: uuid.New(), CLI: "gh", Name: "同名账号", TemplateSource: "builtin", AuthMethod: "static", ProvenanceKeyID: "test-hmac-v1"}
+		v := store.CLIImportPreparedItem{CandidateID: uuid.New(), AccountID: uuid.New(), VersionID: uuid.New(), CLI: "gh", Name: "same-name account", TemplateSource: "builtin", AuthMethod: "static", ProvenanceKeyID: "test-hmac-v1"}
 		tm, _ := e.templates.Get("gh")
 		payload, names, err := tm.Render(map[string]string{"token": token})
 		if err != nil {
@@ -51,7 +51,7 @@ func TestCLIImportAtomicMixedAndHistory(t *testing.T) {
 		h := sha256.Sum256([]byte(uuid.NewString()))
 		in := store.CLIImportBegin{ID: uuid.New(), ProjectID: e.project, ScanID: uuid.New(), InstanceID: instance, RequestFingerprint: h[:], ExpectedRevision: revision(), ProvenanceKeyID: "test-hmac-v1", Deadline: time.Now().Add(time.Minute)}
 		for _, v := range items {
-			in.Items = append(in.Items, store.CLIImportItem{CandidateID: v.CandidateID, CLI: v.CLI, Label: "安全合成来源"})
+			in.Items = append(in.Items, store.CLIImportItem{CandidateID: v.CandidateID, CLI: v.CLI, Label: "safe synthetic source"})
 		}
 		if _, created, err := e.s.BeginCLIImport(ctx, in); err != nil || !created {
 			t.Fatal("begin", err)
@@ -150,7 +150,7 @@ func TestCLIImportAtomicMixedAndHistory(t *testing.T) {
 	key.ID = uuid.New()
 	key.ProvenanceKeyID = "different-key"
 	key.ExpectedRevision = revision()
-	key.Items = []store.CLIImportItem{{CandidateID: againB.CandidateID, CLI: againB.CLI, Label: "安全合成来源"}}
+	key.Items = []store.CLIImportItem{{CandidateID: againB.CandidateID, CLI: againB.CLI, Label: "safe synthetic source"}}
 	if _, created, err := e.s.BeginCLIImport(ctx, key); err != nil || !created {
 		t.Fatal("old provenance receipts blocked a new key", err)
 	}
@@ -171,7 +171,7 @@ func TestCLIImportCancelCommitRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := e.s.CreateProject(ctx, base.OrganizationID, "导入恢复项目")
+	p, err := e.s.CreateProject(ctx, base.OrganizationID, "Import recovery project")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestCLIImportCancelCommitRecovery(t *testing.T) {
 	makeBegin := func() store.CLIImportBegin {
 		t.Helper()
 		h := sha256.Sum256([]byte(uuid.NewString()))
-		in := store.CLIImportBegin{ID: uuid.New(), ProjectID: e.project, ScanID: uuid.New(), InstanceID: instance, RequestFingerprint: h[:], ExpectedRevision: 1, ProvenanceKeyID: "key1", Deadline: time.Now().Add(time.Minute), Items: []store.CLIImportItem{{CandidateID: uuid.New(), CLI: "gh", Label: "合成"}}}
+		in := store.CLIImportBegin{ID: uuid.New(), ProjectID: e.project, ScanID: uuid.New(), InstanceID: instance, RequestFingerprint: h[:], ExpectedRevision: 1, ProvenanceKeyID: "key1", Deadline: time.Now().Add(time.Minute), Items: []store.CLIImportItem{{CandidateID: uuid.New(), CLI: "gh", Label: "synthetic"}}}
 		if _, _, err := e.s.BeginCLIImport(ctx, in); err != nil {
 			t.Fatal(err)
 		}

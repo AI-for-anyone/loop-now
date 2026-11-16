@@ -41,7 +41,7 @@ func taskNodeInboxWorld(t *testing.T) *world {
 	}
 	w := &world{t: t, piAIDir: real.PiAIDir, cfg: config.Config{
 		DataDir:    t.TempDir(),
-		ListenAddr: "127.0.0.1:0", AllowedHosts: []string{"localhost", "127.0.0.1", "::1"}, ConsoleOrigins: []string{"http://localhost:5173"}, DefaultOrgName: "默认组织", DefaultProjectName: "默认项目",
+		ListenAddr: "127.0.0.1:0", AllowedHosts: []string{"localhost", "127.0.0.1", "::1"}, ConsoleOrigins: []string{"http://localhost:5173"}, DefaultOrgName: "Default org", DefaultProjectName: "Default project",
 		WorkRoot: filepath.Join(t.TempDir(), "work"), PiBin: fakepibin.Path(t), PiVersion: "1.4.0", PiMaxProcesses: 2, PiIdleTimeout: time.Minute, PiStartTimeout: 10 * time.Second, PiStopGrace: 2 * time.Second, AbortTimeout: 3 * time.Second, GitCloneTimeout: 30 * time.Second, CLIInstallTimeout: time.Minute,
 		NodeBin: "node", PiAIDir: real.PiAIDir, ReconcileInterval: 100 * time.Millisecond, SSEKeepalive: time.Second, EventStreamMaxLen: 1000, ShutdownTimeout: 10 * time.Second,
 		TaskMaxSteps: 100, TaskMaxEdges: 300, TaskMaxVisits: 1000, TaskMaxRequest: 1 << 20, TaskMaxArtifact: 20 << 20, TaskMaxSession: 100 << 20, TaskReconcileInterval: 50 * time.Millisecond, TaskEventPoll: 10 * time.Millisecond, TaskRecordTimeout: time.Second, SleepScanInterval: 50 * time.Millisecond, SleepScanBatch: 100,
@@ -112,7 +112,7 @@ func TestTaskNodeInboxAppActualCLIAndSSE(t *testing.T) {
 		}
 		return out.Data
 	}
-	question, e := s.a.API.Inbox.Send(context.Background(), p, "默认项目/Manager", "MANAGER_ONLY_ORIGINAL_QUESTION", "queue", inbox.QuestionInput{Options: []string{"yes", "no"}, NodeRunID: node.ID})
+	question, e := s.a.API.Inbox.Send(context.Background(), p, "Default project/Manager", "MANAGER_ONLY_ORIGINAL_QUESTION", "queue", inbox.QuestionInput{Options: []string{"yes", "no"}, NodeRunID: node.ID})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -261,7 +261,7 @@ func TestTaskNodeInboxAppActualCLIAndSSE(t *testing.T) {
 	if e != nil || q.Question == nil || q.Question.State != "open" || q.Question.Answer != nil {
 		t.Fatal("ordinary strict Inbox answered Manager original question", e)
 	}
-	ordinary, e := s.a.API.Inbox.Send(ctx, auth.Console(), "默认项目/Worker#"+d.Task.ID.String(), "LEGACY_TASK_INBOX", "queue")
+	ordinary, e := s.a.API.Inbox.Send(ctx, auth.Console(), "Default project/Worker#"+d.Task.ID.String(), "LEGACY_TASK_INBOX", "queue")
 	if e != nil {
 		t.Fatal("legacy task Inbox", e)
 	}

@@ -10,6 +10,6 @@ import (
 func skipWithoutCLITemplates(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
-		t.Skip("CLI 模板还没有 Windows 安装包")
+		t.Skip("the CLI templates have no Windows install packages yet")
 	}
 }

@@ -44,8 +44,8 @@ func TestTaskCLIRecoveryDoesNotReplayAndReplacesProcessTokens(t *testing.T) {
 					active.stop()
 				}
 			})
-			managerID, manager := newTaskManager(t, s, "恢复Manager")
-			worker := s.createAgent("恢复执行者")
+			managerID, manager := newTaskManager(t, s, "Recovery Manager")
+			worker := s.createAgent("Recovery worker")
 			created := taskCLIInput(t, manager, taskTextRequest(worker, "!sleep=10s"), "task", "create")
 			id := created["task"].(map[string]any)["id"].(string)
 			n := currentCLINode(t, waitRunningCLITask(t, s, id))

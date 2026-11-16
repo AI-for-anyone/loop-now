@@ -35,7 +35,7 @@ func readme(t *testing.T, dir, locale string) (string, string) {
 		t.Fatal(err)
 	}
 	if (r.File == nil) != (r.Markdown == nil) || r.Truncated {
-		t.Fatalf("%s %q：%+v", dir, locale, r)
+		t.Fatalf("%s %q: %+v", dir, locale, r)
 	}
 	if r.File == nil {
 		return "", ""
@@ -46,7 +46,7 @@ func readme(t *testing.T, dir, locale string) (string, string) {
 // With a language it looks for README.<locale>.md, README.<primary language>.md, README.md in turn, then the one whose
 // language tag sorts first; without a language README.md comes first.
 func TestReadmeOrder(t *testing.T) {
-	files := map[string]string{"README.zh-CN.md": "简体", "README.zh.md": "中文", "README.md": "默认", "README.fr.md": "français", "README.en-US.md": "English"}
+	files := map[string]string{"README.zh-CN.md": "Simplified Chinese", "README.zh.md": "Chinese", "README.md": "Default", "README.fr.md": "français", "README.en-US.md": "English"}
 	dir := readmeDir(t, files)
 	steps := []struct{ locale, want, remove string }{
 		{"zh-CN", "README.zh-CN.md", "README.zh-CN.md"},
@@ -60,7 +60,7 @@ func TestReadmeOrder(t *testing.T) {
 	}
 	for _, s := range steps {
 		if got, content := readme(t, dir, s.locale); got != s.want || content != files[s.want] {
-			t.Fatalf("locale %q：%s %q，期望 %s", s.locale, got, content, s.want)
+			t.Fatalf("locale %q: got %s %q, want %s", s.locale, got, content, s.want)
 		}
 		if s.remove != "" {
 			if err := os.Remove(filepath.Join(dir, s.remove)); err != nil {
@@ -70,29 +70,29 @@ func TestReadmeOrder(t *testing.T) {
 	}
 	// Falling back only goes as far as the primary language: for en-US it does not pick README.en-GB.md, which has
 	// the same primary language, but README.md.
-	dir = readmeDir(t, map[string]string{"README.en-GB.md": "GB", "README.md": "默认"})
+	dir = readmeDir(t, map[string]string{"README.en-GB.md": "GB", "README.md": "Default"})
 	if got, _ := readme(t, dir, "en-US"); got != "README.md" {
-		t.Fatalf("en-US 不应取 README.en-GB.md：%s", got)
+		t.Fatalf("en-US should not pick README.en-GB.md: %s", got)
 	}
 }
 
 // Base names are case-insensitive and the file name on disk is returned; when one language has several spellings,
 // they are sorted by file name.
 func TestReadmeCaseInsensitive(t *testing.T) {
-	dir := readmeDir(t, map[string]string{"readme.ZH-cn.MD": "简体", "Readme.md": "默认"})
-	if got, content := readme(t, dir, "zh-CN"); got != "readme.ZH-cn.MD" || content != "简体" {
-		t.Fatalf("zh-CN：%s %q", got, content)
+	dir := readmeDir(t, map[string]string{"readme.ZH-cn.MD": "Simplified Chinese", "Readme.md": "Default"})
+	if got, content := readme(t, dir, "zh-CN"); got != "readme.ZH-cn.MD" || content != "Simplified Chinese" {
+		t.Fatalf("zh-CN: %s %q", got, content)
 	}
 	if got, _ := readme(t, dir, "ZH-cn"); got != "readme.ZH-cn.MD" {
-		t.Fatalf("ZH-cn：%s", got)
+		t.Fatalf("ZH-cn: %s", got)
 	}
 	if got, _ := readme(t, dir, ""); got != "Readme.md" {
-		t.Fatalf("没给语言：%s", got)
+		t.Fatalf("no language given: %s", got)
 	}
-	both := readmeDir(t, map[string]string{"README.md": "大写", "readme.md": "小写"})
+	both := readmeDir(t, map[string]string{"README.md": "Upper case", "readme.md": "lower case"})
 	if entries, _ := os.ReadDir(both); len(entries) == 2 { // on a case-insensitive file system both are the same file
 		if got, _ := readme(t, both, ""); got != "README.md" {
-			t.Fatalf("同一语言的几种写法：%s", got)
+			t.Fatalf("several spellings of one language: %s", got)
 		}
 	}
 }
@@ -102,10 +102,10 @@ func TestReadmeAbsent(t *testing.T) {
 	dir := readmeDir(t, map[string]string{"README": "x", "README.txt": "x", "READMEX.md": "x", "README..md": "x", "README.zh_CN.md": "x",
 		"docs/README.md": "x", "README.md/inner": "x", "package.json": "{}"})
 	if got, _ := readme(t, dir, "zh-CN"); got != "" {
-		t.Fatalf("不应选出 README：%s", got)
+		t.Fatalf("should not pick a README: %s", got)
 	}
 	if got, _ := readme(t, t.TempDir(), ""); got != "" {
-		t.Fatalf("空目录：%s", got)
+		t.Fatalf("empty directory: %s", got)
 	}
 }
 
@@ -115,17 +115,17 @@ func TestReadmeTruncated(t *testing.T) {
 	exact := strings.Repeat("a", plugins.MaxReadmeBytes)
 	dir := readmeDir(t, map[string]string{"README.md": exact})
 	if r, err := plugins.ReadReadme(dir, ""); err != nil || r.Truncated || *r.Markdown != exact {
-		t.Fatalf("正好 1 MiB：%v %v", r.Truncated, err)
+		t.Fatalf("exactly 1 MiB: %v %v", r.Truncated, err)
 	}
 	// "中" (one CJK character) takes 3 bytes; it starts 1 byte before 1 MiB and crosses the limit.
-	long := strings.Repeat("a", plugins.MaxReadmeBytes-1) + "中" + "尾"
+	long := strings.Repeat("a", plugins.MaxReadmeBytes-1) + "中" + "tail" // check-english: zh (a 3-byte character crossing the size limit)
 	dir = readmeDir(t, map[string]string{"README.md": long})
 	r, err := plugins.ReadReadme(dir, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !r.Truncated || *r.Markdown != strings.Repeat("a", plugins.MaxReadmeBytes-1) || !utf8.ValidString(*r.Markdown) {
-		t.Fatalf("截断：%v %d", r.Truncated, len(*r.Markdown))
+		t.Fatalf("truncated: %v %d", r.Truncated, len(*r.Markdown))
 	}
 }
 
@@ -133,8 +133,8 @@ func TestReadmeTruncated(t *testing.T) {
 // next candidate is tried; one pointing inside is read as usual; the plugin directory itself may also be given via a
 // symlink.
 func TestReadmeSymlinks(t *testing.T) {
-	outside := readmeDir(t, map[string]string{"secret.md": "目录外的内容"})
-	dir := readmeDir(t, map[string]string{"README.en.md": "English", "docs/guide.md": "指南"})
+	outside := readmeDir(t, map[string]string{"secret.md": "content outside the directory"})
+	dir := readmeDir(t, map[string]string{"README.en.md": "English", "docs/guide.md": "Guide"})
 	link := func(target, name string) {
 		t.Helper()
 		if err := os.Symlink(target, filepath.Join(dir, name)); err != nil {
@@ -144,22 +144,22 @@ func TestReadmeSymlinks(t *testing.T) {
 	link(filepath.Join(outside, "secret.md"), "README.md")
 	link("../"+filepath.Base(outside)+"/secret.md", "README.zh.md")
 	if got, content := readme(t, dir, "zh-CN"); got != "README.en.md" || content != "English" {
-		t.Fatalf("目录外的软链接应当作没有：%s %q", got, content)
+		t.Fatalf("a symlink pointing outside should count as missing: %s %q", got, content)
 	}
 	link("docs/guide.md", "README.zh-CN.md")
-	if got, content := readme(t, dir, "zh-CN"); got != "README.zh-CN.md" || content != "指南" {
-		t.Fatalf("目录内的软链接：%s %q", got, content)
+	if got, content := readme(t, dir, "zh-CN"); got != "README.zh-CN.md" || content != "Guide" {
+		t.Fatalf("symlink inside the directory: %s %q", got, content)
 	}
 	link("missing.md", "README.de.md")
 	link("docs", "README.fr.md")
 	if got, _ := readme(t, dir, "fr"); got != "README.en.md" {
-		t.Fatalf("悬空或指到目录的软链接应当作没有：%s", got)
+		t.Fatalf("a dangling symlink or one pointing to a directory should count as missing: %s", got)
 	}
 	via := filepath.Join(t.TempDir(), "plugin")
 	if err := os.Symlink(dir, via); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := readme(t, via, "zh-CN"); got != "README.zh-CN.md" {
-		t.Fatalf("经软链接给出的插件目录：%s", got)
+		t.Fatalf("plugin directory given via a symlink: %s", got)
 	}
 }

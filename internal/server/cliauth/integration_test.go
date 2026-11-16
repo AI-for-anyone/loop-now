@@ -68,15 +68,15 @@ func newGoogleFixture(t *testing.T) googleFixture {
 	t.Helper()
 	ctx := context.Background()
 	st := sqlitetest.NewStore(t)
-	defaults, e := st.EnsureDefaults(ctx, "Google TEST组织", "默认项目")
+	defaults, e := st.EnsureDefaults(ctx, "Google TEST org", "Default project")
 	if e != nil {
 		t.Fatal(e)
 	}
-	p, e := st.CreateProject(ctx, defaults.Organization.ID, "Google隔离项目")
+	p, e := st.CreateProject(ctx, defaults.Organization.ID, "Google isolated project")
 	if e != nil {
 		t.Fatal(e)
 	}
-	a, e := st.CreateAgent(ctx, store.ProjectScope(p.ID), "Google测试", "openai", "fake-model", "")
+	a, e := st.CreateAgent(ctx, store.ProjectScope(p.ID), "Google test", "openai", "fake-model", "")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -170,7 +170,7 @@ func TestGoogleLoginStableIDAndLateCancel(t *testing.T) {
 	})
 	s := NewService(f.st, helper, nil, ServiceOptions{LoginTimeout: 3 * time.Second, RecordTimeout: time.Second}, nil)
 	t.Cleanup(func() { s.Close(ctx) })
-	name := "个人账号"
+	name := "Personal account"
 	in := cm.CLIAuthStart{OperationID: uuid.New(), CLI: "gcloud", AuthType: "google_user", Name: &name}
 	if _, e := s.Start(ctx, f.project, in); e != nil {
 		t.Fatal(e)

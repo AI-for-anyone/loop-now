@@ -127,7 +127,7 @@ func TestCommandsMatchContract(t *testing.T) {
 			continue
 		}
 		if c.AllowedFor(cli.IdentityExternal) {
-			t.Run(c.Name()+"/外部身份", func(t *testing.T) {
+			t.Run(c.Name()+"/external identity", func(t *testing.T) {
 				s, e := stub(t)
 				for op, smp := range external {
 					s.On(op, smp)
@@ -137,17 +137,17 @@ func TestCommandsMatchContract(t *testing.T) {
 				}
 				reqs := s.Requests()
 				if len(reqs) == 0 {
-					t.Fatal("没有发出请求")
+					t.Fatal("no request was sent")
 				}
 				for _, r := range reqs {
 					if a := s.Access(r.Op); a != "console-and-external" {
-						t.Errorf("%s 调用了 x-access 为 %q 的操作 %s", c.Name(), a, r.Op)
+						t.Errorf("%s called an operation with x-access %q: %s", c.Name(), a, r.Op)
 					}
 				}
 			})
 		}
 		if c.AllowedFor(cli.IdentityAgent) {
-			t.Run(c.Name()+"/Agent 身份", func(t *testing.T) {
+			t.Run(c.Name()+"/Agent identity", func(t *testing.T) {
 				s, e := agentStub(t)
 				for op, smp := range agentSamples() {
 					s.On(op, smp)
@@ -156,7 +156,7 @@ func TestCommandsMatchContract(t *testing.T) {
 					e.run(argv...).ok(t)
 				}
 				if len(s.Requests()) == 0 {
-					t.Fatal("没有发出请求")
+					t.Fatal("no request was sent")
 				}
 			})
 		}
@@ -168,9 +168,9 @@ func TestCommandsMatchContract(t *testing.T) {
 func TestZipDirMatchesServerParser(t *testing.T) {
 	dir := t.TempDir()
 	files := map[string]string{
-		"SKILL.md":           "---\nname: review\ndescription: 代码评审\n---\n正文\n",
+		"SKILL.md":           "---\nname: review\ndescription: Code review\n---\nBody\n",
 		"scripts/run.sh":     "#!/bin/sh\necho hi\n",
-		"references/深入/a.md": "中文路径\n",
+		"references/深入/a.md": "CJK path\n", // check-english: zh (CJK directory name in the skill zip)
 		"empty.txt":          "",
 	}
 	for p, c := range files {
@@ -192,6 +192,6 @@ func TestZipDirMatchesServerParser(t *testing.T) {
 		m[f.Path] = string(f.Data)
 	}
 	if !reflect.DeepEqual(m, files) || meta.Name != "review" {
-		t.Fatalf("服务端解开的内容 %v", m)
+		t.Fatalf("contents unpacked by the server %v", m)
 	}
 }

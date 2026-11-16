@@ -127,7 +127,7 @@ func TestStatsAttributionWaitAndPendingQuestions(t *testing.T) {
 	r1 := e.run(A, "console", "completed", 1*h, 10*sec, 70*sec, nil, nil, nil, nil)
 	r2 := e.run(A, "console", "interrupted", 2*h, 30*sec, 90*sec, strp("user_interrupt"), nil, nil, nil)
 	e.run(A, "console", "interrupted", 3*h, 20*sec, 40*sec, strp("user_stopped"), nil, nil, nil)
-	trigger := e.message(B, &A, 4*h, "提醒")
+	trigger := e.message(B, &A, 4*h, "reminder")
 	r5 := e.run(A, "inbox_reminder", "completed", 4*h, 5*sec, 25*sec, nil, nil, &trigger, nil)
 	r6 := e.run(A, "sleep_wake", "completed", 5*h, 5*sec, 65*sec, nil, nil, nil, &sleep)
 	r7 := e.run(A, "sleep_wake", "completed", 9*h, 5*sec, 15*sec, nil, nil, nil, &sleep)
@@ -174,12 +174,12 @@ func TestStatsAttributionWaitAndPendingQuestions(t *testing.T) {
 	e.event(D, 5*h, "pi.started", map[string]any{"startupMs": 9000})
 
 	far := time.Now().Add(240 * h)
-	e.question(A, 2*h, "第一个问题", 600*sec, far)
-	e.question(A, 26*h, "第二个问题", 1200*sec, far)
-	q3 := e.question(A, 3*h, strings.Repeat("问", 100), -1, far)
-	q4 := e.question(B, -5*24*h, "窗口之前就在等", -1, far)
-	e.question(A, 4*h, "已经过期", -1, time.Now().Add(-h))
-	e.question(D, 4*h, "已删除的 Agent", -1, far)
+	e.question(A, 2*h, "first question", 600*sec, far)
+	e.question(A, 26*h, "second question", 1200*sec, far)
+	q3 := e.question(A, 3*h, strings.Repeat("问", 100), -1, far) // check-english: zh (multi-byte text for the character-based 80-character cut of pending questions)
+	q4 := e.question(B, -5*24*h, "waiting since before the window", -1, far)
+	e.question(A, 4*h, "already expired", -1, time.Now().Add(-h))
+	e.question(D, 4*h, "deleted Agent", -1, far)
 	if err := s.SoftDeleteAgent(ctx, D); err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func TestStatsAttributionWaitAndPendingQuestions(t *testing.T) {
 		t.Fatalf("questions: %+v", q)
 	}
 	if len(q.Pending) != 2 || q.Pending[0].MessageID != q4 || q.Pending[0].AgentID != B || q.Pending[1].MessageID != q3 ||
-		q.Pending[1].Text != strings.Repeat("问", 80) || q.Pending[1].Name != "alpha" || *q.Pending[1].ProjectID != dc.Project.ID {
+		q.Pending[1].Text != strings.Repeat("问", 80) || q.Pending[1].Name != "alpha" || *q.Pending[1].ProjectID != dc.Project.ID { // check-english: zh (multi-byte text for the character-based 80-character cut of pending questions)
 		t.Fatalf("pending: %+v", q.Pending)
 	}
 
@@ -329,6 +329,6 @@ func TestStatsCountsManualCompactionAsConsole(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := r.ByOrigin.Totals; got.Console != 750 || got.Other != 30 {
-		t.Fatalf("手动压缩应计入 console：%+v", got)
+		t.Fatalf("manual compactions should count as console: %+v", got)
 	}
 }

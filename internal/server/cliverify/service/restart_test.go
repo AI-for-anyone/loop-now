@@ -60,7 +60,7 @@ func TestVerificationCrashChild(t *testing.T) {
 
 func TestWorkerActualParentSIGKILLThenRecoveryDoesNotReplay(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("崩溃夹具是 sh 脚本")
+		t.Skip("the crash fixture is a sh script")
 	}
 	var probes atomic.Int32
 	factory := func(context.Context, CommandSpec) (*exec.Cmd, error) { probes.Add(1); return nil, io.EOF }

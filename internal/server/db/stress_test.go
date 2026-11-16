@@ -23,7 +23,7 @@ import (
 func stressScale(t *testing.T, normal, long int) int {
 	t.Helper()
 	if testing.Short() {
-		t.Skip("压测在 -short 下跳过")
+		t.Skip("stress tests are skipped with -short")
 	}
 	if os.Getenv("LOOP_NOW_DB_STRESS") == "long" {
 		return long
@@ -82,7 +82,7 @@ func TestStressConcurrentWrites(t *testing.T) {
 						return err
 					}
 					if n != keys {
-						return fmt.Errorf("同一库内快照不一致：counter=%d keys=%d", n, keys)
+						return fmt.Errorf("inconsistent snapshot within one database: counter=%d keys=%d", n, keys)
 					}
 					// There is no consistency across files: under WAL a write transaction commits data.db and
 					// events.db separately, and a reader takes its snapshots of the two files one after the other,
@@ -93,7 +93,7 @@ func TestStressConcurrentWrites(t *testing.T) {
 						crossLag.Store(lag)
 					}
 					if n < last {
-						return fmt.Errorf("计数器倒退：%d → %d", last, n)
+						return fmt.Errorf("the counter went backwards: %d → %d", last, n)
 					}
 					last = n
 					return nil
@@ -143,7 +143,7 @@ func TestStressConcurrentWrites(t *testing.T) {
 					return tx.QueryRow(ctx, `UPDATE queue SET claimed_by = ? WHERE id = (SELECT id FROM queue WHERE claimed_by IS NULL ORDER BY id LIMIT 1) RETURNING id`, w).Scan(&claimed)
 				})
 				if err != nil {
-					errs <- fmt.Errorf("写者 %d 第 %d 次：%w", w, i, err)
+					errs <- fmt.Errorf("writer %d, write %d: %w", w, i, err)
 					return
 				}
 				claimedBy[w] = append(claimedBy[w], claimed)
@@ -164,14 +164,14 @@ func TestStressConcurrentWrites(t *testing.T) {
 			t.Fatal(err)
 		}
 		if n != total || keys != total || logs != total || claimed != total {
-			t.Fatalf("已确认 %d 个事务，库里 counter=%d keys=%d log=%d claimed=%d", total, n, keys, logs, claimed)
+			t.Fatalf("%d transactions confirmed, the database has counter=%d keys=%d log=%d claimed=%d", total, n, keys, logs, claimed)
 		}
 		seen := map[int]bool{}
 		for w, ids := range claimedBy {
 			for _, id := range ids {
 				var by int
 				if err := d.QueryRow(ctx, `SELECT claimed_by FROM queue WHERE id = ?`, id).Scan(&by); err != nil || by != w || seen[id] {
-					t.Fatalf("队列项 %d：库里 claimed_by=%d，确认给写者 %d，重复=%v，err=%v", id, by, w, seen[id], err)
+					t.Fatalf("queue item %d: the database has claimed_by=%d, confirmed to writer %d, duplicate=%v, err=%v", id, by, w, seen[id], err)
 				}
 				seen[id] = true
 			}
@@ -179,7 +179,7 @@ func TestStressConcurrentWrites(t *testing.T) {
 		integrityOK(t, d)
 	}
 	check(d)
-	t.Logf("读者观察到 data.db 与 events.db 最多相差 %d 个事务（跨文件没有一致快照）", crossLag.Load())
+	t.Logf("readers saw data.db and events.db differ by at most %d transactions (no consistent snapshot across files)", crossLag.Load())
 	// Close, reopen and check again: the confirmed commits are in the files.
 	if err := d.Close(); err != nil {
 		t.Fatal(err)
@@ -201,7 +201,7 @@ func TestStressReadYourWrites(t *testing.T) {
 	}
 	defer leaked.Close()
 	if !leaked.Next() {
-		t.Fatal("预期一行")
+		t.Fatal("expected one row")
 	}
 	var next atomic.Int64
 	var wg sync.WaitGroup
@@ -216,7 +216,7 @@ func TestStressReadYourWrites(t *testing.T) {
 				}
 				var n int
 				if err := d.QueryRow(ctx, `SELECT count(*) FROM t WHERE id = ?`, id).Scan(&n); err != nil || n != 1 {
-					errs <- fmt.Errorf("提交后读不到 %d：n=%d err=%v", id, n, err)
+					errs <- fmt.Errorf("cannot read %d after its commit: n=%d err=%v", id, n, err)
 					return
 				}
 			}
@@ -290,10 +290,10 @@ func TestStressCancellation(t *testing.T) {
 	if _, err := ForEachRow(rows, []any{&id, &wv, &both}, func() error {
 		w := id / perWriter
 		if !acked[w][id] {
-			return fmt.Errorf("未确认的事务 %d 却在库里", id)
+			return fmt.Errorf("unconfirmed transaction %d is in the database", id)
 		}
 		if !both || wv != w+4 {
-			return fmt.Errorf("事务 %d 不完整：ev=%v w=%d", id, both, wv)
+			return fmt.Errorf("transaction %d is incomplete: ev=%v w=%d", id, both, wv)
 		}
 		found++
 		return nil
@@ -305,11 +305,11 @@ func TestStressCancellation(t *testing.T) {
 		ackedN += len(m)
 	}
 	if found != ackedN {
-		t.Fatalf("已确认 %d 个，库里 %d 个", ackedN, found)
+		t.Fatalf("%d confirmed, %d in the database", ackedN, found)
 	}
-	t.Logf("确认 %d 个、取消 %d 个", ackedN, cancelled.Load())
+	t.Logf("%d confirmed, %d cancelled", ackedN, cancelled.Load())
 	if cancelled.Load() == 0 || ackedN == 0 {
-		t.Errorf("取消与确认都应出现，才能说明问题")
+		t.Errorf("both cancellations and confirmations should occur for the test to prove anything")
 	}
 	integrityOK(t, d)
 }
@@ -377,7 +377,7 @@ func TestStressKill(t *testing.T) {
 		}
 		_ = cmd.Wait()
 		if first {
-			t.Fatalf("第 %d 轮子进程没有提交任何事务", round)
+			t.Fatalf("round %d: the child process committed no transactions", round)
 		}
 	}
 	d := openTestDir(t, dir)
@@ -388,18 +388,18 @@ func TestStressKill(t *testing.T) {
 			t.Fatal(err)
 		}
 		if main != 1 || ev != 1 {
-			t.Fatalf("子进程确认提交了 %d，重开后 data=%d events=%d", n, main, ev)
+			t.Fatalf("the child confirmed committing %d, after reopening data=%d events=%d", n, main, ev)
 		}
 	}
 	integrityOK(t, d)
-	t.Logf("%d 轮，核对 %d 个已确认提交", rounds, len(printed))
+	t.Logf("%d rounds, %d confirmed commits checked", rounds, len(printed))
 }
 
 // TestStressKillChild only runs in the child process started by TestStressKill.
 func TestStressKillChild(t *testing.T) {
 	dir := os.Getenv(killChildDir)
 	if dir == "" {
-		t.Skip("只在 TestStressKill 的子进程里运行")
+		t.Skip("only runs in the child process of TestStressKill")
 	}
 	start, _ := strconv.Atoi(os.Getenv("LOOP_NOW_DB_KILL_START"))
 	d, err := Open(context.Background(), Options{Dir: dir})
@@ -467,7 +467,7 @@ func TestStressCheckpointWithLongReader(t *testing.T) {
 				return err
 			}
 			if again != n {
-				return fmt.Errorf("长读者快照变化：%d → %d", n, again)
+				return fmt.Errorf("the long reader's snapshot changed: %d → %d", n, again)
 			}
 			return nil
 		})
@@ -479,10 +479,10 @@ func TestStressCheckpointWithLongReader(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !res[0].Busy {
-		t.Errorf("长读者在时 TRUNCATE 应做不完：%+v", res[0])
+		t.Errorf("TRUNCATE should not complete while a long reader is active: %+v", res[0])
 	}
 	if data, _ := d.WALSize(); data == 0 {
-		t.Error("长读者在时 WAL 不应被截断")
+		t.Error("the WAL should not be truncated while a long reader is active")
 	}
 	close(release)
 	if err := <-readerDone; err != nil {
@@ -490,10 +490,10 @@ func TestStressCheckpointWithLongReader(t *testing.T) {
 	}
 	res, err = d.Checkpoint(ctx, CheckpointTruncate)
 	if err != nil || res[0].Busy {
-		t.Fatalf("读者结束后 TRUNCATE 应完成：%+v %v", res, err)
+		t.Fatalf("TRUNCATE should complete after the reader is done: %+v %v", res, err)
 	}
 	if data, _ := d.WALSize(); data != 0 {
-		t.Fatalf("TRUNCATE 后 WAL 应为 0，得到 %d", data)
+		t.Fatalf("the WAL should be 0 after TRUNCATE, got %d", data)
 	}
 	if err := errors.Join(d.Optimize(ctx)); err != nil {
 		t.Fatal(err)

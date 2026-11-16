@@ -14,9 +14,9 @@ func TestTaskCLIInboxAddressIsolationAndEndedForward(t *testing.T) {
 	w.cfg.PiMaxProcesses = 4 // Two task runtimes plus ordinary sender/Manager notification processes.
 	s := w.start(nil)
 	defer s.stop()
-	_, manager := newTaskManager(t, s, "原通信Manager")
-	worker := s.createAgent("任务收件执行者")
-	senderID := s.createAgent("通信发起者")
+	_, manager := newTaskManager(t, s, "Original messaging Manager")
+	worker := s.createAgent("Task inbox worker")
+	senderID := s.createAgent("Message sender")
 	sender := testTaskClient(t, s, senderID)
 	normal := testTaskClient(t, s, worker)
 	ids := []string{}
@@ -30,10 +30,10 @@ func TestTaskCLIInboxAddressIsolationAndEndedForward(t *testing.T) {
 		nodes = append(nodes, n)
 		clients = append(clients, testTaskClient(t, s, n.RuntimeID.String()))
 	}
-	address := "默认项目/任务收件执行者#" + ids[0]
+	address := "Default project/Task inbox worker#" + ids[0]
 	sent := sender.run("inbox", "send", address, "--text", "ordinary task message").ok(t)
 	messageID := sent["id"].(string)
-	if sent["to"].(map[string]any)["address"] != "默认组织/"+address || sent["whenBusy"] != "queue" {
+	if sent["to"].(map[string]any)["address"] != "Default org/"+address || sent["whenBusy"] != "queue" {
 		t.Fatal("task address/default queue not preserved")
 	}
 	// The active task gets a queued reminder, but ordinary Inbox cannot submit/complete its node.
@@ -58,14 +58,14 @@ func TestTaskCLIInboxAddressIsolationAndEndedForward(t *testing.T) {
 		t.Fatal("repeat read changed timestamp")
 	}
 	reply := clients[0].run("inbox", "reply", messageID, "--text", "task reply").ok(t)
-	if reply["threadId"] != sent["threadId"] || reply["from"].(map[string]any)["address"] != "默认组织/"+address {
+	if reply["threadId"] != sent["threadId"] || reply["from"].(map[string]any)["address"] != "Default org/"+address {
 		t.Fatal("task reply lost runtime/thread identity")
 	}
 	if received := sender.run("inbox", "read", reply["id"].(string)).ok(t); received["text"] != "task reply" {
 		t.Fatal("sender did not receive task reply")
 	}
 	// Interrupt switches the same runtime to the new Inbox turn, without replaying the node.
-	interrupt := sender.run("inbox", "send", "默认项目/任务收件执行者#"+ids[1], "--text", "switch to message", "--when-busy", "interrupt").ok(t)
+	interrupt := sender.run("inbox", "send", "Default project/Task inbox worker#"+ids[1], "--text", "switch to message", "--when-busy", "interrupt").ok(t)
 	if interrupt["whenBusy"] != "interrupt" {
 		t.Fatal("explicit interrupt lost")
 	}
@@ -86,9 +86,9 @@ func TestTaskCLIInboxAddressIsolationAndEndedForward(t *testing.T) {
 		cancelCLITask(t, s, manager, id)
 		clients[i].run("inbox", "list").fails(t, "unauthenticated", 5)
 	}
-	newID, newManager := newTaskManager(t, s, "接管通信Manager")
+	newID, newManager := newTaskManager(t, s, "Takeover messaging Manager")
 	forwarded := sender.run("inbox", "send", address, "--text", "after task end").ok(t)
-	if forwarded["to"].(map[string]any)["id"] != newID || forwarded["to"].(map[string]any)["address"] != "默认组织/默认项目/接管通信Manager" || !strings.Contains(forwarded["text"].(string), "[Original recipient: "+address+"]") {
+	if forwarded["to"].(map[string]any)["id"] != newID || forwarded["to"].(map[string]any)["address"] != "Default org/Default project/Takeover messaging Manager" || !strings.Contains(forwarded["text"].(string), "[Original recipient: "+address+"]") {
 		t.Fatal("ended recipient did not forward to current Manager with original address")
 	}
 	newManager.run("inbox", "read", forwarded["id"].(string)).ok(t)
@@ -101,7 +101,7 @@ func TestTaskCLIInboxAddressIsolationAndEndedForward(t *testing.T) {
 	// No current Manager is an explicit conflict; never silently deliver to console.
 	s.console(200, "DELETE", "/projects/"+s.defaultProject()+"/manager", nil)
 	sender.run("inbox", "send", address, "--text", "no Manager").fails(t, "task_conflict", 8)
-	sender.run("inbox", "send", "默认项目/任务收件执行者#"+uuid.NewString(), "--text", "unknown task").fails(t, "not_found", 7)
+	sender.run("inbox", "send", "Default project/Task inbox worker#"+uuid.NewString(), "--text", "unknown task").fails(t, "not_found", 7)
 	s.waitIdle(newID)
 	t.Log("ordinary Inbox: task # address, runtime isolation/read/reply, queue/interrupt without replay or implicit submit, ended current-Manager forwarding, late thread forwarding, revoked task tokens and explicit missing-Manager conflict")
 }
@@ -110,17 +110,17 @@ func TestTaskCLICompletedInboxRecipientForwards(t *testing.T) {
 	w := newWorld(t, false)
 	s := w.start(nil)
 	defer s.stop()
-	_, manager := newTaskManager(t, s, "完成任务Manager")
-	worker := s.createAgent("完成收件执行者")
-	sender := testTaskClient(t, s, s.createAgent("完成后发件者"))
+	_, manager := newTaskManager(t, s, "Completed task Manager")
+	worker := s.createAgent("Completed inbox worker")
+	sender := testTaskClient(t, s, s.createAgent("Post-completion sender"))
 	created := taskCLIInput(t, manager, taskTextRequest(worker, "!sleep=2s"), "task", "create")
 	id := created["task"].(map[string]any)["id"].(string)
 	node := currentCLINode(t, waitRunningCLITask(t, s, id))
 	client := testTaskClient(t, s, node.RuntimeID.String())
 	taskCLIInput(t, client, map[string]any{"actionId": uuid.NewString(), "output": map[string]any{"result": "done"}, "edgeId": nil}, "task", "submit", id, node.ID.String())
 	waitCLITask(t, s, id, func(d taskmodel.Detail) bool { return d.Task.Status == "completed" && d.Cleanup == "archived" })
-	forwarded := sender.run("inbox", "send", "默认项目/完成收件执行者#"+id, "--text", "post completion").ok(t)
-	if forwarded["to"].(map[string]any)["address"] != "默认组织/默认项目/完成任务Manager" || !strings.Contains(forwarded["text"].(string), id) {
+	forwarded := sender.run("inbox", "send", "Default project/Completed inbox worker#"+id, "--text", "post completion").ok(t)
+	if forwarded["to"].(map[string]any)["address"] != "Default org/Default project/Completed task Manager" || !strings.Contains(forwarded["text"].(string), id) {
 		t.Fatal("completed recipient did not forward with original target")
 	}
 	manager.run("inbox", "read", forwarded["id"].(string)).ok(t)

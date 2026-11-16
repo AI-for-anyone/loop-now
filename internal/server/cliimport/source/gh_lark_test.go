@@ -142,7 +142,7 @@ func TestGHRejectsYAMLGraphsTypesAndRawDiagnostics(t *testing.T) {
 }
 func TestGHSourceChangePermissionsAndSupplementRejection(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("用 chmod 制造过宽权限在 Windows 上不生效（私有性由 ACL 决定）")
+		t.Skip("making permissions too wide with chmod has no effect on Windows (privacy is decided by ACLs)")
 	}
 	home, r := fixture(t)
 	put(t, home, ghHostsFile, ghFixture())
@@ -274,7 +274,7 @@ func TestLarkRejectsDuplicateUnknownAndMalformedJSON(t *testing.T) {
 }
 func TestLarkSourceChangePrivateReadAndSupplementRejection(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("用 chmod 制造过宽权限在 Windows 上不生效（私有性由 ACL 决定）")
+		t.Skip("making permissions too wide with chmod has no effect on Windows (privacy is decided by ACLs)")
 	}
 	home, r := fixture(t)
 	put(t, home, larkPlainConfig, larkConfigFixture())

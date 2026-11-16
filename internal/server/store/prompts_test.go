@@ -16,13 +16,13 @@ func promptExpected(v int64) *int64 { return &v }
 func TestPromptLegacyAgentAndCAS(t *testing.T) {
 	ctx := context.Background()
 	st := sqlitetest.NewStore(t)
-	defaults, err := st.EnsureDefaults(ctx, "旧组织", "旧项目")
+	defaults, err := st.EnsureDefaults(ctx, "Old organization", "Old project")
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := uuid.New()
-	original := "原始Prompt\n必须保留空白\n"
-	if _, err = st.Pool.Exec(ctx, `INSERT INTO agents(id,project_id,name,model_provider,model_id,prompt,config_version)VALUES($1,$2,'旧Agent','fixture','model',$3,8)`, id, defaults.Project.ID, original); err != nil {
+	original := "Original Prompt\nwhitespace must be kept\n"
+	if _, err = st.Pool.Exec(ctx, `INSERT INTO agents(id,project_id,name,model_provider,model_id,prompt,config_version)VALUES($1,$2,'Old Agent','fixture','model',$3,8)`, id, defaults.Project.ID, original); err != nil {
 		t.Fatal(err)
 	}
 	a, err := st.GetAgent(ctx, id)
@@ -87,12 +87,12 @@ func TestPromptLegacyAgentAndCAS(t *testing.T) {
 		t.Fatal("stale mixed update accepted", err)
 	}
 	unchanged, err := st.GetAgent(ctx, id)
-	if err != nil || unchanged.Name != "旧Agent" || unchanged.PromptVersion != 2 || unchanged.ConfigVersion != 10 {
+	if err != nil || unchanged.Name != "Old Agent" || unchanged.PromptVersion != 2 || unchanged.ConfigVersion != 10 {
 		t.Fatal("mixed PATCH partially changed fields", err)
 	}
 
 	// Agent CAS also serializes two independent editors without losing either version.
-	concurrent, err := st.CreateAgent(ctx, store.ProjectScope(defaults.Project.ID), "并发编辑", "fixture", "model", "")
+	concurrent, err := st.CreateAgent(ctx, store.ProjectScope(defaults.Project.ID), "concurrent editing", "fixture", "model", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,11 +147,11 @@ func TestPromptLegacyAgentAndCAS(t *testing.T) {
 func TestPromptCaptureScopes(t *testing.T) {
 	ctx := context.Background()
 	st := sqlitetest.NewStore(t)
-	dc, err := st.EnsureDefaults(ctx, "组织", "项目")
+	dc, err := st.EnsureDefaults(ctx, "Organization", "Project")
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := st.CreateProject(ctx, dc.Organization.ID, "另一个项目")
+	other, err := st.CreateProject(ctx, dc.Organization.ID, "Another project")
 	if err != nil {
 		t.Fatal(err)
 	}

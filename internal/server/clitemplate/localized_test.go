@@ -58,13 +58,13 @@ func TestLoadOverrideDirLocalizedLabel(t *testing.T) {
 		}
 	}
 	dir := t.TempDir()
-	write(dir, `{"en-US":"Token","zh-CN":"令牌"}`)
+	write(dir, `{"en-US":"Token","zh-CN":"令牌"}`) // check-english: zh (zh-CN value of a language-tag object)
 	c, err := Load(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	gh, _ := c.Get("gh")
-	if b, _ := json.Marshal(gh.Fields[0]); !strings.Contains(string(b), `"label":{"en-US":"Token","zh-CN":"令牌"}`) {
+	if b, _ := json.Marshal(gh.Fields[0]); !strings.Contains(string(b), `"label":{"en-US":"Token","zh-CN":"令牌"}`) { // check-english: zh (zh-CN value of a language-tag object)
 		t.Fatalf("label should be returned as written: %s", b)
 	}
 	for _, bad := range []string{`{}`, `3`, `{"en-US":" "}`, `null`} {

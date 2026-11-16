@@ -28,7 +28,7 @@ func cliAuthState(status string) map[string]any {
 			a["cli"], a["authMethod"] = "gcloud", "oauth"
 			account = a
 		} else if status == "failed" {
-			op["errorCode"], op["errorMessage"] = "oauth_failed", "安全失败"
+			op["errorCode"], op["errorMessage"] = "oauth_failed", "sanitized failure"
 		}
 	}
 	return map[string]any{"operation": op, "account": account}
@@ -80,7 +80,7 @@ func TestCLIAuthInvalidZeroDial(t *testing.T) {
 		{"--operation-id", "bad", "--name", "label"},
 		{"--operation-id", "00000000-0000-0000-0000-000000000000", "--name", "label"},
 		{"--operation-id", actionUUID, "--name", " "},
-		{"--operation-id", actionUUID, "--name", strings.Repeat("字", 201)},
+		{"--operation-id", actionUUID, "--name", strings.Repeat("字", 201)}, // check-english: zh (rune-based name length limit)
 		{"--operation-id", actionUUID, "--name", "label", "--expected-revision", "1"},
 		{"--operation-id", actionUUID, "--name", "label", "--account-id", credentialAccountID, "--expected-revision", "1"},
 		{"--operation-id", actionUUID, "--account-id", credentialAccountID},
@@ -144,7 +144,7 @@ func TestCLIAuthStatesAndDetails(t *testing.T) {
 		{412, "precondition_failed", map[string]any{"resourceKind": "account", "resourceId": credentialAccountID, "expectedVersion": 1, "currentVersion": 2}},
 	} {
 		s, e := cliAuthStub(t)
-		s.On("POST /projects/{projectId}/cli-auth/operations", clitest.Sample{Status: tc.status, Body: map[string]any{"error": map[string]any{"code": tc.code, "message": "安全错误", "details": tc.details}}})
+		s.On("POST /projects/{projectId}/cli-auth/operations", clitest.Sample{Status: tc.status, Body: map[string]any{"error": map[string]any{"code": tc.code, "message": "sanitized error", "details": tc.details}}})
 		r := e.run("project", "cli-account", "login", credentialProjectID, "--cli", "gcloud", "--operation-id", actionUUID, "--account-id", credentialAccountID, "--expected-revision", "1", "--yes")
 		r.fails(t, tc.code, 8)
 		var got map[string]any

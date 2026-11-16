@@ -48,11 +48,11 @@ func githubStoreFixture(t *testing.T) projectMigrationEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defaults, err := st.EnsureDefaults(ctx, "GitHub TEST组织", "默认项目")
+	defaults, err := st.EnsureDefaults(ctx, "GitHub TEST organization", "Default project")
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := st.CreateProject(ctx, defaults.Organization.ID, "GitHub TEST项目")
+	p, err := st.CreateProject(ctx, defaults.Organization.ID, "GitHub TEST project")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestGitHubStoreVersionIdentityReLoginAndPAT(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	remark := "保留人的备注"
+	remark := "remark set by a person"
 	renamed, err := e.s.MutateProjectCredential(ctx, e.project, first.View.ID, first.View.Revision, &remark, nil, false)
 	if err != nil {
 		t.Fatal(err)
