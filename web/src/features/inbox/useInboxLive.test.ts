@@ -23,15 +23,15 @@ function setup() {
 const created = (message: Schemas['InboxMessage'], unreadTotal = 0) =>
   ({ type: 'inbox.message.created', id: '1-0', data: { message: summaryOf(message), unreadTotal } }) as const
 
-describe('收件箱事件的分发', () => {
-  it('原题状态更新失效原thread，不用后续普通消息替换原题ID', () => {
+describe('Dispatching inbox events', () => {
+  it('a question state update invalidates the original thread and does not replace the question ID with a later plain message', () => {
     const { client, invalidated } = setup()
-    const question = makeInboxMessage({ from: agentParty(agent), to: consoleParty, question: { options: [{ id: '1', label: '继续' }], expiresAt: '2099-01-01T00:00:00Z', state: 'closed', answer: null } })
+    const question = makeInboxMessage({ from: agentParty(agent), to: consoleParty, question: { options: [{ id: '1', label: 'Go on' }], expiresAt: '2099-01-01T00:00:00Z', state: 'closed', answer: null } })
     applyInboxEvent(client, { ...created(question), type: 'inbox.question.updated' })
     expect(invalidated()).toContain(JSON.stringify(keys.inboxThread(question.threadId)))
     expect(invalidated()).toContain(JSON.stringify(keys.inboxThreads))
   })
-  it('未读总数取最新事件中的值', () => {
+  it('the unread total is taken from the latest event', () => {
     const { client } = setup()
     applyInboxEvent(client, { type: 'snapshot', id: '1-0', data: { unreadTotal: 4 } })
     expect(inboxUnread.get()).toBe(4)
@@ -39,7 +39,7 @@ describe('收件箱事件的分发', () => {
     expect(inboxUnread.get()).toBe(5)
   })
 
-  it('同一事件重复到达（续传时重放）不改变结果：未读数仍取事件中的值，只是再次让视图重新获取', () => {
+  it('the same event arriving twice (replayed on resume) changes nothing: the unread count still comes from the event, the views are only refetched again', () => {
     const { client, invalidated } = setup()
     const event = created(makeInboxMessage({ from: agentParty(agent), to: consoleParty }), 2)
     applyInboxEvent(client, event)
@@ -48,9 +48,9 @@ describe('收件箱事件的分发', () => {
     expect(new Set(invalidated()).size).toBe(4)
   })
 
-  it('排队消息被人取消：已加载的视图记下取消时间，线索、线索列表与收件方的收件箱重新获取', () => {
+  it('a queued message cancelled by a person: loaded views record the cancel time; the thread, the thread list and the recipient\'s inbox are refetched', () => {
     const { client, invalidated } = setup()
-    const message = makeInboxMessage({ from: consoleParty, to: agentParty(agent), text: '先别做了' })
+    const message = makeInboxMessage({ from: consoleParty, to: agentParty(agent), text: 'Hold off for now' })
     client.setQueryData<MessagePages>(keys.agentInbox(agent.id, false), { pages: [{ messages: [summaryOf(message)], nextCursor: null }], pageParams: [null] })
     client.setQueryData<Schemas['InboxThread']>(keys.inboxThread(message.threadId), { threadId: message.threadId, participants: [consoleParty, agentParty(agent)], messages: [message] } as Schemas['InboxThread'])
     client.setQueryData(consoleKeys.agent(agent.id), [message])
@@ -63,20 +63,20 @@ describe('收件箱事件的分发', () => {
     expect(invalidated()).toEqual([JSON.stringify(consoleKeys.pending), '["taskInbox"]', JSON.stringify(keys.inboxThread(message.threadId)), JSON.stringify(keys.inboxThreads), JSON.stringify(keys.agentInbox(agent.id))])
   })
 
-  it('快照到达时重新获取全部收件箱视图', () => {
+  it('a snapshot refetches every inbox view', () => {
     const { client, invalidated } = setup()
     applyInboxEvent(client, { type: 'snapshot', id: '1-0', data: { unreadTotal: 0 } })
     expect(invalidated()).toEqual([JSON.stringify(keys.inboxThreads), '["inboxThread"]', '["agentInbox"]', '["identityInbox"]', '["consoleMessages"]', JSON.stringify(consoleKeys.pending), '["taskInbox"]'])
   })
 
-  it('发给操作者的消息更新待你处理、操作者的线索、那条线索与这个 Agent 的对话里“发给你”的消息', () => {
+  it('a message to the operator updates the waiting-for-you list, the operator\'s threads, that thread and the “to you” messages in this Agent\'s chat', () => {
     const { client, invalidated } = setup()
     const message = makeInboxMessage({ from: agentParty(agent), to: consoleParty })
     applyInboxEvent(client, created(message))
     expect(invalidated()).toEqual([JSON.stringify(consoleKeys.pending), JSON.stringify(keys.inboxThreads), JSON.stringify(keys.inboxThread(message.threadId)), JSON.stringify(consoleKeys.agent(agent.id))])
   })
 
-  it('任务实例发给你的消息让那个节点的 Inbox 记录重新获取，不进入 Agent 的普通对话', () => {
+  it('a message a task instance sends you refetches that node\'s Inbox records and does not enter the Agent\'s plain chat', () => {
     const { client, invalidated } = setup()
     const message = makeInboxMessage({ from: agentParty(agent), to: consoleParty, task: { taskId: 'task-1', nodeRunId: 'node-1', runtimeId: 'runtime-1' } })
     applyInboxEvent(client, created(message))
@@ -84,13 +84,13 @@ describe('收件箱事件的分发', () => {
     expect(invalidated()).not.toContain(JSON.stringify(consoleKeys.agent(agent.id)))
   })
 
-  it('与操作者无关的消息不进入操作者的线索：只让收件 Agent 与外部身份的收件箱重新获取', () => {
+  it('a message not involving the operator stays out of the operator\'s threads: only the inboxes of the recipient Agent and the external identity are refetched', () => {
     const { client, invalidated } = setup()
     applyInboxEvent(client, created(makeInboxMessage({ from: externalParty(ciBot), to: agentParty(agent) })))
     expect(invalidated()).toEqual([JSON.stringify(consoleKeys.pending), JSON.stringify(keys.agentInbox(agent.id)), JSON.stringify(keys.identityInbox(ciBot.id))])
   })
 
-  it('同一前缀下不是分页消息的缓存（外部身份与你往来的线索列表）在已读事件中保持原样', () => {
+  it('a cache under the same prefix that is not paged messages (the thread list between an external identity and you) stays as is on a read event', () => {
     const { client } = setup()
     const message = makeInboxMessage({ from: externalParty(ciBot), to: consoleParty })
     client.setQueryData([...keys.identityInbox(ciBot.id), 'console'], [message.threadId])
@@ -98,7 +98,7 @@ describe('收件箱事件的分发', () => {
     expect(client.getQueryData([...keys.identityInbox(ciBot.id), 'console'])).toEqual([message.threadId])
   })
 
-  it('已读事件按消息 ID 就地更新已加载的收件箱，并让收件方的列表重新获取', () => {
+  it('a read event updates loaded inboxes in place by message ID and refetches the recipient\'s list', () => {
     const { client, invalidated } = setup()
     const message = makeInboxMessage({ from: externalParty(ciBot), to: agentParty(agent) })
     const pages: MessagePages = { pages: [{ messages: [summaryOf(message)], nextCursor: null }], pageParams: [null] }
