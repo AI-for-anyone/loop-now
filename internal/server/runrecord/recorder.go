@@ -1,5 +1,6 @@
-// Package runrecord 负责运行记录与用量：接收执行器回报的事件与用量并写入数据库（记录失败只写日志，
-// 不影响执行），以及时间线、用量统计与异常列表的查询。
+// Package runrecord handles run records and usage: it receives the events and usage reported by the executor and writes
+// them to the database (a failed write is only logged and does not affect the run), and it serves the timeline, usage
+// statistics and anomaly list queries.
 package runrecord
 
 import (
@@ -13,20 +14,21 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// writeTimeout 是单条记录写入的最长时间，避免数据库异常时拖住执行器的读协程。
+// writeTimeout is the maximum time for writing one record, so a database problem cannot hold up the executor's reader
+// goroutine.
 const writeTimeout = 5 * time.Second
 
-// Recorder 实现 executor.Observer。
+// Recorder implements executor.Observer.
 type Recorder struct {
 	Store *store.Store
 	Log   *slog.Logger
-	// StatusChanged 在 Agent 的进程状态变化后调用，用于推送概览；可为空。
+	// StatusChanged is called after the Agent's process state changes, to push the overview; may be nil.
 	StatusChanged func(agentID uuid.UUID)
 }
 
 var _ executor.Observer = (*Recorder)(nil)
 
-// Event 实现 executor.Observer。
+// Event implements executor.Observer.
 func (r *Recorder) Event(agentID uuid.UUID, runID *uuid.UUID, e executor.Event) {
 	ctx, cancel := context.WithTimeout(context.Background(), writeTimeout)
 	defer cancel()
@@ -36,7 +38,7 @@ func (r *Recorder) Event(agentID uuid.UUID, runID *uuid.UUID, e executor.Event) 
 	}
 }
 
-// Usage 实现 executor.Observer。
+// Usage implements executor.Observer.
 func (r *Recorder) Usage(agentID uuid.UUID, runID *uuid.UUID, u executor.Usage) {
 	ctx, cancel := context.WithTimeout(context.Background(), writeTimeout)
 	defer cancel()
@@ -48,7 +50,7 @@ func (r *Recorder) Usage(agentID uuid.UUID, runID *uuid.UUID, u executor.Usage) 
 	}
 }
 
-// ProcessChanged 实现 executor.Observer。
+// ProcessChanged implements executor.Observer.
 func (r *Recorder) ProcessChanged(agentID uuid.UUID) {
 	if r.StatusChanged != nil {
 		r.StatusChanged(agentID)

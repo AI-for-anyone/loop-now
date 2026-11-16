@@ -146,7 +146,8 @@ func taskWakeText(turn store.TaskTurn) string {
 	return turn.Text
 }
 
-// turnTrigger 是触发这一轮的消息：Inbox 提醒为那条 Inbox 消息，其余为这一轮的用户消息。
+// turnTrigger is the message that triggered this turn: the Inbox message for an Inbox reminder, otherwise the turn's
+// user message.
 func turnTrigger(turn store.TaskTurn) uuid.UUID {
 	if turn.TriggerInboxID != nil {
 		return *turn.TriggerInboxID

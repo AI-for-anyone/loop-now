@@ -1,5 +1,5 @@
-// Package taskruntime 提供离线的运行作用域与不可变任务配置快照。
-// 它不读取当前配置、不持久化数据、不启动执行，也不作授权判断。
+// Package taskruntime provides offline run scopes and immutable task configuration snapshots. It does not read the
+// current configuration, persist data, start runs, or make authorization decisions.
 package taskruntime
 
 import (
@@ -16,7 +16,7 @@ var (
 	ErrUnsafeSerialization = errors.New("taskruntime: use explicit snapshot encoding")
 )
 
-// Scope 是资源命名空间，不是身份凭证或角色。零值无效。
+// Scope is a resource namespace, not an identity credential or a role. The zero value is invalid.
 type Scope struct {
 	agentID uuid.UUID
 	taskID  uuid.UUID

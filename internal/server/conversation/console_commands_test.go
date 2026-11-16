@@ -18,12 +18,13 @@ import (
 	"loop-now/internal/testutil/sqlitetest"
 )
 
-// maintExec 在 fakeExec 上加平台命令用到的维护接口；gate 不为空时 StopIdle 停在那里，直到 gate 关闭。
+// maintExec adds the maintenance interfaces used by platform commands on top of fakeExec; when gate is non-nil,
+// StopIdle blocks there until gate is closed.
 type maintExec struct {
 	*fakeExec
 	entered  chan string
 	gate     chan struct{}
-	listGate chan struct{} // 不为空时 ListSessions 停在那里，直到它关闭
+	listGate chan struct{} // when non-nil, ListSessions blocks there until it is closed
 }
 
 func (m *maintExec) StopIdle(ctx context.Context, _ uuid.UUID, reason string) (bool, error) {
@@ -58,7 +59,8 @@ func (m *maintExec) ResolveSession(context.Context, uuid.UUID, string, string) (
 	return nil, nil
 }
 
-// newMaintEnv 与 newEnv 相同，但对账一小时一次：平台命令之后的排队消息与提醒只能靠命令自己接着处理。
+// newMaintEnv is the same as newEnv, but reconciles only once an hour: messages and reminders queued after a platform
+// command can only be processed by the command itself continuing.
 func newMaintEnv(t *testing.T) (*env, *maintExec) {
 	t.Helper()
 	st := sqlitetest.NewStore(t)
@@ -94,7 +96,8 @@ func (e *env) waitAnyStarted() string {
 	}
 }
 
-// 平台命令占着忙闲锁时发来的消息只能排队；命令结束放开锁时要接着处理它，不能等到下一次对账。
+// A message sent while a platform command holds the busy lock can only queue; when the command ends and releases the
+// lock it must go on to process it, not wait for the next reconciliation.
 func TestMessageQueuedDuringConsoleCommandStartsWhenItEnds(t *testing.T) {
 	e, m := newMaintEnv(t)
 	m.gate = make(chan struct{})
@@ -118,7 +121,8 @@ func TestMessageQueuedDuringConsoleCommandStartsWhenItEnds(t *testing.T) {
 	e.waitIdle()
 }
 
-// /new 重开会话后要立即为会话丢失期间收到的 Inbox 消息安排提醒：先放开锁，提醒才能取得锁、马上开始。
+// After /new reopens the session it must immediately schedule a reminder for Inbox messages received while the session
+// was lost: the lock is released first, so the reminder can acquire it and start right away.
 func TestNewSessionStartsUnreadReminderRightAway(t *testing.T) {
 	e, m := newMaintEnv(t)
 	ctx := context.Background()
@@ -145,7 +149,8 @@ func TestNewSessionStartsUnreadReminderRightAway(t *testing.T) {
 	e.waitIdle()
 }
 
-// /resume 列出会话只读文件，期间不占忙闲锁：这时发来的消息照常立即开始。
+// /resume lists sessions by only reading files and does not hold the busy lock meanwhile: a message sent at that time
+// starts right away as usual.
 func TestResumeListingDoesNotHoldBusyLock(t *testing.T) {
 	e, m := newMaintEnv(t)
 	m.listGate = make(chan struct{})
@@ -169,7 +174,7 @@ func TestResumeListingDoesNotHoldBusyLock(t *testing.T) {
 	e.waitIdle()
 }
 
-// sessionUpdates 是 Agent 事件流里 session.updated 的内容，按时间顺序。
+// sessionUpdates returns the contents of session.updated in the Agent's event stream, in chronological order.
 func (e *env) sessionUpdates() []apitypes.SseSessionUpdated {
 	e.t.Helper()
 	var out []apitypes.SseSessionUpdated
@@ -188,8 +193,9 @@ func (e *env) sessionUpdates() []apitypes.SseSessionUpdated {
 	return out
 }
 
-// 会话状态的每次变化都有 session.updated，包括第一轮回复后由 none 变 active（这一步不走会话命令，
-// 由执行器记下会话文件）；状态没变时不重复推送。
+// Every change of the session state gets a session.updated, including none becoming active after the first reply (this
+// step does not go through a session command; the executor records the session file); nothing is pushed again when the
+// state did not change.
 func TestSessionUpdatedWhenFirstTurnStartsSession(t *testing.T) {
 	e := newEnv(t)
 	e.mustSend("block 第一轮", "")
@@ -214,7 +220,7 @@ func TestSessionUpdatedWhenFirstTurnStartsSession(t *testing.T) {
 	e.mustSend("第二轮", "")
 	e.waitStarted("第二轮")
 	e.waitIdle()
-	time.Sleep(200 * time.Millisecond) // 等概览状态重算
+	time.Sleep(200 * time.Millisecond) // wait for the overview status to be recomputed
 	if after := e.sessionUpdates(); len(after) != before {
 		t.Fatalf("会话没变时不应重复推送：%+v", after[before:])
 	}

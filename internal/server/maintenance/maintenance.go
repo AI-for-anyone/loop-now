@@ -1,9 +1,10 @@
-// Package maintenance 定时维护本地数据库：
-//   - 每 5 分钟一次被动检查点，WAL 超过阈值时记告警；
-//   - 每天一次截断检查点、PRAGMA optimize、清理 events.db 里 90 天前的日志，并用 VACUUM INTO 备份，
-//     只保留最近几份。
+// Package maintenance maintains the local databases on a schedule:
+//   - a passive checkpoint every 5 minutes, logging a warning when a WAL exceeds the threshold;
+//   - once a day a truncating checkpoint, PRAGMA optimize, deleting logs older than 90 days from events.db, and a
+//     backup with VACUUM INTO, keeping only the most recent few.
 //
-// 每日维护按上一次备份的时刻排期：服务频繁重启也不会跳过，刚备份过也不会重复。
+// Daily maintenance is scheduled from the time of the last backup: it is not skipped when the service restarts often,
+// and it is not repeated right after a backup.
 package maintenance
 
 import (
@@ -22,23 +23,24 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// backupLayout 是备份子目录的名字（UTC 时刻），按字典序就是按时间排序。
+// backupLayout is the name of a backup subdirectory (a UTC time), so lexicographic order is time order.
 const backupLayout = "2006-01-02T150405Z"
 
-// partialPrefix 是正在写的备份目录的前缀；写完才改成正式名字，失败时删除。
+// partialPrefix is the prefix of a backup directory still being written; it is renamed to its final name only once
+// complete, and deleted on failure.
 const partialPrefix = ".partial-"
 
-// Options 是维护的配置；为 0 的项取默认值（测试可以改小）。
+// Options configures maintenance; zero fields take their defaults (tests can make them smaller).
 type Options struct {
 	BackupDir  string
 	BackupKeep int
 
-	CheckpointInterval time.Duration // 被动检查点的间隔，默认 5 分钟
-	DailyInterval      time.Duration // 每日维护的间隔，默认 24 小时
-	StartDelay         time.Duration // 启动后第一次每日维护至少等多久，默认 1 分钟
-	LogRetention       time.Duration // events.db 日志保留多久，默认 90 天
-	WALWarnBytes       int64         // 单个 WAL 超过多少字节就告警，默认 db.WALWarnBytes
-	PruneBatch         int           // 每个删除事务最多删多少行，默认 10000
+	CheckpointInterval time.Duration // interval of passive checkpoints, default 5 minutes
+	DailyInterval      time.Duration // interval of daily maintenance, default 24 hours
+	StartDelay         time.Duration // minimum wait after start before the first daily maintenance, default 1 minute
+	LogRetention       time.Duration // how long events.db logs are kept, default 90 days
+	WALWarnBytes       int64         // warn when a single WAL exceeds this many bytes, default db.WALWarnBytes
+	PruneBatch         int           // maximum rows deleted per delete transaction, default 10000
 	Now                func() time.Time
 }
 
@@ -69,17 +71,17 @@ func (o *Options) defaults() {
 	}
 }
 
-// Service 在后台运行维护。
+// Service runs maintenance in the background.
 type Service struct {
 	st     *store.Store
 	o      Options
 	log    *slog.Logger
 	cancel context.CancelFunc
 	done   chan struct{}
-	mu     sync.Mutex // 每日维护与手动触发互斥
+	mu     sync.Mutex // daily maintenance and manual triggers are mutually exclusive
 }
 
-// Start 启动后台维护。
+// Start starts background maintenance.
 func Start(st *store.Store, o Options, log *slog.Logger) *Service {
 	o.defaults()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -88,7 +90,7 @@ func Start(st *store.Store, o Options, log *slog.Logger) *Service {
 	return s
 }
 
-// Stop 停止后台维护，等进行中的一步结束或 ctx 到期。
+// Stop stops background maintenance and waits for the step in progress to finish or for ctx to expire.
 func (s *Service) Stop(ctx context.Context) error {
 	s.cancel()
 	select {
@@ -120,7 +122,8 @@ func (s *Service) loop(ctx context.Context) {
 	}
 }
 
-// untilDaily 返回距下一次每日维护的时长：上一次备份之后满一个间隔，且至少等 StartDelay。
+// untilDaily returns the time until the next daily maintenance: one full interval after the last backup, and at least
+// StartDelay.
 func (s *Service) untilDaily() time.Duration {
 	wait := s.o.StartDelay
 	if last, ok := lastBackup(s.o.BackupDir); ok {
@@ -131,7 +134,7 @@ func (s *Service) untilDaily() time.Duration {
 	return wait
 }
 
-// Passive 执行一次被动检查点，WAL 过大时记告警。
+// Passive runs one passive checkpoint and logs a warning when a WAL is too large.
 func (s *Service) Passive(ctx context.Context) {
 	if _, err := s.st.Pool.Checkpoint(ctx, db.CheckpointPassive); err != nil && ctx.Err() == nil {
 		s.log.Warn("被动检查点失败", "err", err)
@@ -146,8 +149,9 @@ func (s *Service) warnWAL() {
 	}
 }
 
-// Daily 执行一次每日维护：截断检查点、optimize、清理旧日志、备份并只保留最近几份。
-// 一步失败不影响后面的步骤，最后合并返回各步的错误。
+// Daily runs one daily maintenance: truncating checkpoint, optimize, deleting old logs, and a backup keeping only the
+// most recent few. A failed step does not affect the later steps; the errors of all steps are joined and returned at
+// the end.
 func (s *Service) Daily(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -182,8 +186,9 @@ func (s *Service) Daily(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// Backup 把两个库备份到 dir 下以时刻命名的新子目录（data.db、events.db），返回该子目录。
-// 先写到临时目录，完整写完才改成正式名字；失败时删除临时目录。服务运行中也可以调用。
+// Backup backs up both databases into a new subdirectory of dir named by time (data.db, events.db) and returns that
+// subdirectory. It writes to a temporary directory first and renames it to the final name only once fully written; on
+// failure the temporary directory is deleted. It can be called while the service is running.
 func Backup(ctx context.Context, d *db.DB, dir string, now time.Time) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
@@ -208,7 +213,7 @@ func Backup(ctx context.Context, d *db.DB, dir string, now time.Time) (string, e
 	return final, nil
 }
 
-// backups 返回 dir 下正式的备份子目录名，从旧到新。
+// backups returns the names of the final backup subdirectories under dir, oldest first.
 func backups(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -239,7 +244,7 @@ func lastBackup(dir string) (time.Time, bool) {
 	return t, err == nil
 }
 
-// prune 只保留最新的 keep 份备份；不碰名字不是备份时刻的目录与文件。
+// prune keeps only the newest keep backups; it does not touch directories and files whose names are not backup times.
 func prune(dir string, keep int) error {
 	names, err := backups(dir)
 	if err != nil {

@@ -17,7 +17,8 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// consoleCommandRun 让发起手动压缩的请求等到这次执行结束。指令与结果记在执行上（runs.compaction），不在这里。
+// consoleCommandRun lets the request that started a manual compaction wait until that run ends. The instructions and
+// the result are recorded on the run (runs.compaction), not here.
 type consoleCommandRun struct {
 	done chan executor.Result
 }
@@ -32,7 +33,8 @@ func (s *Service) acquireConsoleCommand(ctx context.Context, agentID uuid.UUID) 
 	if !acquired {
 		return uuid.Nil, "", errNotIdle()
 	}
-	// 锁只表示没有进行中的执行；排队由数据库判断，有可开始的排队执行时不做维护，放开锁后接着处理它们。
+	// The lock only means there is no in-flight run; the queue is judged by the database: when there is a queued run
+	// that can start, no maintenance is done, and after the lock is released those runs are processed.
 	_, queued, err := s.st.NextQueuedRun(ctx, agentID)
 	if err != nil || queued {
 		s.releaseConsoleCommand(agentID, owner)
@@ -44,13 +46,16 @@ func (s *Service) acquireConsoleCommand(ctx context.Context, agentID uuid.UUID) 
 	return runID, owner, nil
 }
 
-// errNotIdle 是平台命令因 Agent 不空闲而拒绝时的错误：不论是忙闲锁被占、数据库里有进行中或排队的执行，
-// 还是运行时在做别的维护，都是 409 agent_not_idle，不带 details（agent_busy 是普通消息“选择打断或排队”用的）。
+// errNotIdle is the error for a platform command rejected because the Agent is not idle: whether the busy lock is
+// taken, the database has an in-flight or queued run, or the runtime is doing other maintenance, it is always 409
+// agent_not_idle without details (agent_busy is for regular messages, where the caller must "choose interrupt or
+// queue").
 func errNotIdle() error {
 	return apperr.Conflict(apperr.CodeAgentNotIdle, "Agent 正在回复或还有排队消息，请等它空闲后再操作")
 }
 
-// consoleCommandError 把执行器维护操作里可以预期的失败转成 409；其余错误照旧（服务端内部错误）。
+// consoleCommandError turns the expected failures of executor maintenance operations into 409; other errors are
+// returned as they are (internal server errors).
 func consoleCommandError(err error) error {
 	switch {
 	case errors.Is(err, executor.ErrMaintenanceBusy):
@@ -63,13 +68,16 @@ func consoleCommandError(err error) error {
 	return err
 }
 
-// unsupportedExecutor 是执行器没有实现某项维护操作时的错误（只有测试替身会这样）。
+// unsupportedExecutor is the error when the executor does not implement a maintenance operation (only test doubles do
+// that).
 func unsupportedExecutor(what string) error {
 	return apperr.Conflict(apperr.CodeConsoleCommandFailed, "当前执行器不支持"+what)
 }
 
-// releaseConsoleCommand 放开平台命令持有的忙闲锁，并接着处理命令期间排进来的消息与提醒：
-// 那期间的发送拿不到锁只能排队，它们的 kick 也因锁被占而落空，不在这里接着处理就要等下一次对账。
+// releaseConsoleCommand releases the busy lock held by a platform command and goes on to process the messages and
+// reminders queued during the command: sends during that time could not get the lock and could only queue, and their
+// kick came to nothing because the lock was taken; if they are not processed here they wait for the next
+// reconciliation.
 func (s *Service) releaseConsoleCommand(agentID uuid.UUID, owner string) {
 	ctx := context.Background()
 	if _, err := s.co.Release(ctx, agentID.String(), owner); err != nil {
@@ -78,13 +86,15 @@ func (s *Service) releaseConsoleCommand(agentID uuid.UUID, owner string) {
 	s.kick(ctx, agentID)
 }
 
-// holdConsoleCommand 返回放开锁的函数，可以多次调用、只放开一次：命令先放开锁，再做需要锁空闲的收尾（安排提醒）。
+// holdConsoleCommand returns a function that releases the lock; it can be called many times but releases only once: a
+// command releases the lock first and then does the cleanup that needs the lock to be free (scheduling reminders).
 func (s *Service) holdConsoleCommand(agentID uuid.UUID, owner string) func() {
 	return sync.OnceFunc(func() { s.releaseConsoleCommand(agentID, owner) })
 }
 
-// sessionChanged 在会话重开或切换之后通知控制台，并为会话不可用期间收到的 Inbox 消息补上提醒。
-// 调用时不能持有忙闲锁：提醒要取得锁才能立即开始。
+// sessionChanged notifies the console after the session was reopened or switched, and adds reminders for Inbox messages
+// received while the session was unavailable. It must not be called while holding the busy lock: a reminder has to
+// acquire the lock to start right away.
 func (s *Service) sessionChanged(ctx context.Context, agentID uuid.UUID, sess store.AgentSession) apitypes.SessionInfo {
 	info := apitypes.SessionInfo{State: sess.State, Epoch: sess.Epoch}
 	s.publishSession(ctx, agentID, info, true)
@@ -93,9 +103,12 @@ func (s *Service) sessionChanged(ctx context.Context, agentID uuid.UUID, sess st
 	return info
 }
 
-// Compact 创建真实压缩执行并等到它结束，不创建用户或助手消息。指令与结果记在执行上（runs.compaction）：
-// 请求在压缩结束前断开（刷新页面、代理超时）时压缩照常进行，结果事后从执行读取（run 事件、时间线、/session 的 lastCompaction）。
-// 正常完成（包括 Pi 没有压缩：会话太短、已经压缩过、扩展取消了压缩）返回结束后的执行；被取消或失败时返回 409 console_command_failed。
+// Compact creates a real compaction run and waits for it to end, without creating a user or assistant message. The
+// instructions and the result are recorded on the run (runs.compaction): if the request disconnects before the
+// compaction ends (page refresh, proxy timeout), the compaction still goes on and the result is read from the run
+// afterwards (run events, the timeline, lastCompaction of /session). On normal completion (including when Pi did not
+// compact: the session is too short, it was already compacted, or an extension cancelled the compaction) it returns the
+// ended run; when cancelled or failed it returns 409 console_command_failed.
 func (s *Service) Compact(ctx context.Context, agentID uuid.UUID, instructions string) (store.Run, error) {
 	if err := s.RequireCommand(ctx, agentID, "compact"); err != nil {
 		return store.Run{}, err
@@ -107,7 +120,8 @@ func (s *Service) Compact(ctx context.Context, agentID uuid.UUID, instructions s
 	command := &consoleCommandRun{done: make(chan executor.Result, 1)}
 	s.commands.Store(runID, command)
 	defer s.commands.Delete(runID)
-	// 插入时在同一写事务里确认空闲（ensureIdle），不会撞上另一次进行中的执行。
+	// Inserting confirms idleness in the same write transaction (ensureIdle), so it cannot collide with another
+	// in-flight run.
 	run, err := s.st.InsertConsoleCompactRun(ctx, agentID, runID, s.o.InstanceID, instructions)
 	if err != nil {
 		s.releaseConsoleCommand(agentID, owner)
@@ -137,12 +151,13 @@ func (s *Service) Compact(ctx context.Context, agentID uuid.UUID, instructions s
 	return store.Run{}, apperr.Conflict(apperr.CodeConsoleCommandFailed, message)
 }
 
-// LastCompaction 返回 Agent 最近一次手动压缩的执行（任何状态）；没有时为 nil。
+// LastCompaction returns the Agent's most recent manual compaction run (in any status); nil when there is none.
 func (s *Service) LastCompaction(ctx context.Context, agentID uuid.UUID) (*store.Run, error) {
 	return s.st.LatestCompactRun(ctx, agentID)
 }
 
-// NewSession 停止旧空闲进程并重开会话，保留工作区和 Web 对话历史。
+// NewSession stops the old idle process and reopens the session, keeping the workspace and the web conversation
+// history.
 func (s *Service) NewSession(ctx context.Context, agentID uuid.UUID) (apitypes.SessionInfo, error) {
 	_, owner, err := s.acquireConsoleCommand(ctx, agentID)
 	if err != nil {
@@ -165,7 +180,7 @@ func (s *Service) NewSession(ctx context.Context, agentID uuid.UUID) (apitypes.S
 	return s.sessionChanged(ctx, agentID, sess), nil
 }
 
-// Reload 停止旧空闲 Pi；没有运行时无需重载。
+// Reload stops the old idle Pi; when there is no runtime there is nothing to reload.
 func (s *Service) Reload(ctx context.Context, agentID uuid.UUID) (bool, error) {
 	_, owner, err := s.acquireConsoleCommand(ctx, agentID)
 	if err != nil {
@@ -183,7 +198,7 @@ func (s *Service) Reload(ctx context.Context, agentID uuid.UUID) (bool, error) {
 	return stopped, consoleCommandError(err)
 }
 
-// Export 下载当前受管 Pi 会话，格式只接受 html 或 jsonl。
+// Export downloads the current managed Pi session; format must be html or jsonl.
 func (s *Service) Export(ctx context.Context, agentID uuid.UUID, format string) (executor.SessionExport, error) {
 	if format != "html" && format != "jsonl" {
 		return executor.SessionExport{}, apperr.Invalid("format", "只能是 html 或 jsonl")
@@ -220,8 +235,9 @@ func (s *Service) Export(ctx context.Context, agentID uuid.UUID, format string) 
 	return out, nil
 }
 
-// ListResumeSessions 列出可恢复的受管 Pi 会话，不启动进程或调用模型。只在 Agent 空闲时列出（与恢复的条件一致），
-// 但读文件期间不占忙闲锁：列表只读，期间开始的执行不受影响。
+// ListResumeSessions lists the managed Pi sessions that can be resumed, without starting a process or calling the
+// model. It only lists while the Agent is idle (the same condition as resuming), but does not hold the busy lock while
+// reading files: the list is read-only, and runs that start meanwhile are not affected.
 func (s *Service) ListResumeSessions(ctx context.Context, agentID uuid.UUID) ([]executor.ManagedSession, error) {
 	if err := s.RequireCommand(ctx, agentID, "resume"); err != nil {
 		return nil, err
@@ -238,7 +254,7 @@ func (s *Service) ListResumeSessions(ctx context.Context, agentID uuid.UUID) ([]
 	return sessions, consoleCommandError(err)
 }
 
-// ResumeSession 停止旧空闲 Pi 后恢复已验证的受管会话，只切换模型上下文。
+// ResumeSession stops the old idle Pi and then resumes a verified managed session; it only switches the model context.
 func (s *Service) ResumeSession(ctx context.Context, agentID uuid.UUID, sessionID string) (apitypes.SessionInfo, error) {
 	if err := s.RequireCommand(ctx, agentID, "resume"); err != nil {
 		return apitypes.SessionInfo{}, err
@@ -282,17 +298,18 @@ func (s *Service) ResumeSession(ctx context.Context, agentID uuid.UUID, sessionI
 	return s.sessionChanged(ctx, agentID, sess), nil
 }
 
-// LatestReply 返回最近一条成功回复；没有时返回 nil，不调用模型。
+// LatestReply returns the most recent successful reply; nil when there is none. It does not call the model.
 func (s *Service) LatestReply(ctx context.Context, agentID uuid.UUID) (*store.Message, error) {
 	return s.st.LatestCompletedAssistant(ctx, agentID)
 }
 
-// platformCommands 是平台内置命令（对话页 "/" 菜单与 POST /messages 共用这一份）。piOnly：只适用于 Pi 会话
-// （Claude Code 的会话由它自己管理，平台不能压缩、导出或恢复）；needsSession：要有可用的会话。
+// platformCommandSpec describes one platform built-in command; platformCommands is the one list shared by the
+// conversation page's "/" menu and POST /messages. piOnly: only applies to Pi sessions (Claude Code manages its own
+// sessions; the platform cannot compact, export or resume them); needsSession: requires a usable session.
 type platformCommandSpec struct {
 	name, usage          string
 	piOnly, needsSession bool
-	zh, en               string // 中英两种说明；用法里的占位词（instructions、html|jsonl、session-id）在说明里用同样的写法
+	zh, en               string // Chinese and English descriptions; usage placeholders (instructions, html|jsonl, session-id) are spelled the same in them
 }
 
 var platformCommands = []platformCommandSpec{
@@ -312,7 +329,7 @@ var platformCommands = []platformCommandSpec{
 		zh: "不带 session-id 时列出可恢复的会话；带上完整的 session-id 时恢复那个会话", en: "Without session-id, list resumable sessions; with a full session-id, resume that session"},
 }
 
-// IsPlatformCommand 报告 name（不带 "/"）是不是平台内置命令。
+// IsPlatformCommand reports whether name (without "/") is a platform built-in command.
 func IsPlatformCommand(name string) bool {
 	return slices.ContainsFunc(platformCommands, func(c platformCommandSpec) bool { return c.name == name })
 }
@@ -327,8 +344,10 @@ var piOnlyCommands = func() map[string]bool {
 	return out
 }()
 
-// PlatformCommand 是一条平台内置命令及它此刻能不能用。UnavailableReason：runtime_unsupported（运行时不支持）、
-// session_none（还没有会话）、session_missing（会话文件丢失）；能用时为空。Agent 正忙这类随时变化的情况不在这里判断。
+// PlatformCommand is one platform built-in command and whether it can be used right now. UnavailableReason:
+// runtime_unsupported (the runtime does not support it), session_none (there is no session yet), session_missing (the
+// session file is lost); empty when it can be used. Conditions that change from moment to moment, such as the Agent
+// being busy, are not judged here.
 type PlatformCommand struct {
 	Name, Usage       string
 	Description       LocalizedDescription
@@ -336,13 +355,14 @@ type PlatformCommand struct {
 	UnavailableReason string
 }
 
-// LocalizedDescription 是平台命令的中英两种说明（接口里的 LocalizedText 对象，zh-CN 在前）。
+// LocalizedDescription holds a platform command's Chinese and English descriptions (the LocalizedText object of the
+// API, zh-CN first).
 type LocalizedDescription struct {
 	ZhCN string `json:"zh-CN"`
 	EnUS string `json:"en-US"`
 }
 
-// PlatformCommands 按 Agent 的运行时与会话状态列出平台内置命令。
+// PlatformCommands lists the platform built-in commands according to the Agent's runtime and session state.
 func (s *Service) PlatformCommands(ctx context.Context, agentID uuid.UUID) ([]PlatformCommand, error) {
 	agent, err := s.st.GetAgent(ctx, agentID)
 	if err != nil {
@@ -370,8 +390,8 @@ func (s *Service) PlatformCommands(ctx context.Context, agentID uuid.UUID) ([]Pl
 	return out, nil
 }
 
-// RequireCommand 确认 Agent 的运行时支持这个平台命令（名字不带 "/"）；不支持时返回 409 console_command_failed，
-// 调用方在取得忙闲锁、创建执行之前检查。
+// RequireCommand confirms that the Agent's runtime supports this platform command (name without "/"); when it does not,
+// it returns 409 console_command_failed. Callers check this before acquiring the busy lock and creating a run.
 func (s *Service) RequireCommand(ctx context.Context, agentID uuid.UUID, name string) error {
 	if !piOnlyCommands[name] {
 		return nil

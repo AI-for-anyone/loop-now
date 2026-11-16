@@ -355,7 +355,8 @@ func TestConcurrentReadIsolation(t *testing.T) {
 
 func TestInvalidPayloadReturnsNoPartialCredentials(t *testing.T) {
 	s := captureFixture(t)
-	// 模型部分有效，CLI部分不在允许列表中；不能返回先读出的模型凭证。
+	// The model part is valid but the CLI part is not in the allow list; the model credentials read first must not be
+	// returned.
 	s.env.Credentials = &credentialsWire{Model: map[string]string{"EXAMPLE_MODEL_KEY": secretSentinel}, CLI: map[string]payloadWire{"unallowed": {}}}
 	c, err := s.Credentials()
 	if !errors.Is(err, ErrCredentials) || c.Model != nil || c.CLI != nil {
@@ -513,7 +514,7 @@ func TestConvertedLegacySourceVersionsRejectNewIdentityFields(t *testing.T) {
 	}
 }
 
-// 新捕获复制基础 Agent 的文件夹；schema 8 的旧任务保留冻结来源，schema 9 继续可读。
+// New captures copy the base Agent's folder; old schema 8 tasks keep their frozen sources, and schema 9 stays readable.
 func TestSchemaVersionTellsFolderCopyFromFrozenSources(t *testing.T) {
 	scope, id, input := fixture(t)
 	snap, err := Capture(scope, id, input)

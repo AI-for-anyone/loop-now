@@ -16,7 +16,8 @@ import (
 	"loop-now/internal/testutil/sqlitetest"
 )
 
-// 每日维护清理保留期之外的日志、写出能打开的完整备份，并只保留最近几份；不碰备份目录里的其他东西。
+// Daily maintenance deletes logs outside the retention period, writes a complete backup that can be opened, and keeps
+// only the most recent few; it does not touch anything else in the backup directory.
 func TestDailyPrunesBacksUpAndKeepsNewest(t *testing.T) {
 	ctx := context.Background()
 	st := sqlitetest.NewStore(t)
@@ -73,7 +74,7 @@ func TestDailyPrunesBacksUpAndKeepsNewest(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "README")); err != nil {
 		t.Fatal("清理备份不应碰其他文件", err)
 	}
-	// 备份是能打开的完整库。
+	// The backup is a complete database that can be opened.
 	restored, err := db.Open(ctx, db.Options{Dir: filepath.Join(dir, newest)})
 	if err != nil {
 		t.Fatal(err)
@@ -85,7 +86,8 @@ func TestDailyPrunesBacksUpAndKeepsNewest(t *testing.T) {
 	}
 }
 
-// 每日维护按上一次备份排期：没有备份时启动后不久就做，刚备份过就等满一个间隔。
+// Daily maintenance is scheduled from the last backup: with no backup it runs shortly after start, and right after a
+// backup it waits a full interval.
 func TestDailyScheduleFollowsLastBackup(t *testing.T) {
 	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
 	dir := t.TempDir()
@@ -111,7 +113,7 @@ func TestDailyScheduleFollowsLastBackup(t *testing.T) {
 	}
 }
 
-// 备份失败时不留下看起来完整的备份。
+// A failed backup leaves nothing that looks like a complete backup.
 func TestBackupFailureLeavesNothing(t *testing.T) {
 	ctx := context.Background()
 	st := sqlitetest.NewStore(t)

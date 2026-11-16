@@ -71,8 +71,10 @@ func TestBaselineCopiesCompleteSessionAndRejectsInvalidPaths(t *testing.T) {
 	}
 }
 
-// Claude Code 运行时的分叉基线：只读 claude 会话记录目录下一层的那个 <会话 ID>.jsonl，复制到平台自己的目录；
-// 不在那里、名字不是会话 ID、有不完整的行或超限时拒绝；没有配置会话记录目录时拒绝。
+// Fork baseline for the Claude Code runtime: only the <session ID>.jsonl one level below claude's session record
+// directory is read, and it is copied to the platform's own directory; rejected when it is not there, its name is not a
+// session ID, it has an incomplete line, or it exceeds the limit; rejected when no session record directory is
+// configured.
 func TestCopyClaudeBaseline(t *testing.T) {
 	work, projects := t.TempDir(), t.TempDir()
 	src := &Source{WorkRoot: work, MaxSessionBytes: 1 << 10, ClaudeProjects: func(context.Context) string { return projects }}
@@ -112,7 +114,8 @@ func TestCopyClaudeBaseline(t *testing.T) {
 	}
 }
 
-// 任务实例的会话归档：Claude Code 的会话记录在 claude 的会话记录目录里，只认与这个实例工作区对应的子目录里的那个文件。
+// Archiving a task instance's session: Claude Code's session record is in claude's session record directory, and only
+// that file in the subdirectory corresponding to this instance's workspace is accepted.
 func TestArchiveClaudeSession(t *testing.T) {
 	work, projects := t.TempDir(), t.TempDir()
 	src := &Source{WorkRoot: work, MaxSessionBytes: 1 << 10, ClaudeProjects: func(context.Context) string { return projects }}
@@ -136,7 +139,7 @@ func TestArchiveClaudeSession(t *testing.T) {
 	if err != nil || json.Unmarshal(data, &archived) != nil || string(archived.Session) != "{\"type\":\"user\"}\n" {
 		t.Fatalf("归档：%s %v", data, err)
 	}
-	// claude 用原样的工作目录路径编码时（Windows 上未核实）也认。
+	// Also accepted when claude encodes the working directory path as is (not verified on Windows).
 	if names := claudecli.ProjectDirNames(workspace); len(names) > 1 {
 		raw := write(names[1])
 		inst.SessionFile = &raw

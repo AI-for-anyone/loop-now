@@ -15,9 +15,11 @@ import (
 	"loop-now/internal/server/conversation"
 )
 
-// 控制台收到一次执行的终态事件（手动压缩还有 /compact 请求返回）就当 Agent 空闲了。那时忙闲锁必须已经放开：
-// 紧接着发送的消息应立即开始，不能被拒成 agent_busy（而且这时也没有可给出的当前执行）。
-// CI 上 TestPlatformConsoleCompactCopyExportAndEndEventContract 偶发失败就是这样：驱动先发终态事件、再放锁。
+// The console treats the Agent as idle as soon as it receives a run's final event (for a manual compaction, also when
+// the /compact request returns). By then the busy lock must already be released: a message sent right after should
+// start immediately, not be rejected with agent_busy (and at that point there is no current run to report either). This
+// is how TestPlatformConsoleCompactCopyExportAndEndEventContract failed intermittently on CI: the driver emitted the
+// final event first and released the lock afterwards.
 func TestRunEndIsPublishedAfterLockRelease(t *testing.T) {
 	for _, kind := range []string{"reply", "compact"} {
 		t.Run(kind, func(t *testing.T) {
@@ -96,7 +98,8 @@ func TestRunEndIsPublishedAfterLockRelease(t *testing.T) {
 	}
 }
 
-// hasTerminalEvent 判断事件流里有没有这次执行的终态事件：普通回复是 run.ended，手动压缩是终态的 run.updated。
+// hasTerminalEvent reports whether the event stream has this run's final event: run.ended for a regular reply, a final
+// run.updated for a manual compaction.
 func hasTerminalEvent(t *testing.T, e *env, runID uuid.UUID) bool {
 	t.Helper()
 	for _, ev := range e.newestEvents() {

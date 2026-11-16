@@ -12,7 +12,7 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// Observer 将实例进程记录关联到真实Agent和任务轮次；常态记录保持原路径。
+// Observer links instance process records to the real Agent and task turn; regular records keep their original path.
 type Observer struct {
 	Store   *store.Store
 	Normal  executor.Observer

@@ -13,8 +13,9 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// 空队列 Handoff 已释放锁、旧驱动尚未删除 drivers 标记时，新运行已经持锁，
-// 退出后的 kick 无法接管它；旧驱动必须直接接续这次启动。
+// When a Handoff with an empty queue has released the lock and the old driver has not yet removed its drivers marker,
+// the new run already holds the lock and the kick after exiting cannot take it over; the old driver must continue with
+// this start directly.
 func TestNewRunStartsWhenHandoffPrecedesDriverRemoval(t *testing.T) {
 	for _, kind := range []string{"send", "compact"} {
 		t.Run(kind, func(t *testing.T) {
@@ -131,7 +132,9 @@ func TestNewRunStartsWhenHandoffPrecedesDriverRemoval(t *testing.T) {
 	}
 }
 
-// 发起压缩的请求在驱动读到指令之前断开（刷新页面、代理超时）：指令记在执行上，压缩照常进行，结果事后从执行读取。
+// The request that started the compaction disconnects before the driver reads the instructions (page refresh, proxy
+// timeout): the instructions are recorded on the run, the compaction goes on as usual, and the result is read from the
+// run afterwards.
 func TestCompactSurvivesCancelledRequest(t *testing.T) {
 	e := newEnv(t)
 	e.mustSend("block 首条", "")
@@ -164,7 +167,7 @@ func TestCompactSurvivesCancelledRequest(t *testing.T) {
 	}()
 	var runID uuid.UUID
 	select {
-	case runID = <-pending: // 压缩执行已经创建，驱动还没有开始它
+	case runID = <-pending: // the compaction run has been created, but the driver has not started it yet
 	case <-time.After(5 * time.Second):
 		t.Fatal("等待压缩执行登记超时")
 	}

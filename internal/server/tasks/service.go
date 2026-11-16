@@ -1,4 +1,5 @@
-// Package tasks 协调通用任务，业务字段由workflow定义，不内置任何业务流程。
+// Package tasks coordinates generic tasks; business fields are defined by the workflow, and no business process is
+// built in.
 package tasks
 
 import (
@@ -35,7 +36,8 @@ import (
 
 type Options struct {
 	InstanceID uuid.UUID
-	// AbortPollInterval 是一轮执行期间检查数据库里打断标记的间隔（打断通知丢失时的兜底）；为 0 时取 10 秒。
+	// AbortPollInterval is how often the database is checked for an interrupt flag during a turn (a fallback for when
+	// the interrupt notification is lost); 0 means 10 seconds.
 	AbortPollInterval             time.Duration
 	RecordTimeout                 time.Duration
 	MaxSteps, MaxEdges, MaxVisits int
@@ -51,7 +53,7 @@ func (o Options) abortPollInterval() time.Duration {
 }
 
 type Service struct {
-	// Hooks 在任务节点第一次开始前调用插件的 node.before_start；为空时不调用。
+	// Hooks calls plugins' node.before_start before a task node first starts; when nil, nothing is called.
 	Hooks pluginhost.Hooker
 	// Native gate is supplied only by the actual runtime manager at composition.
 	LarkSwitchNative    TaskLarkNativeManager
@@ -78,7 +80,8 @@ type Service struct {
 	started             bool
 	QuestionMaintenance func(context.Context) error
 	SystemNotice        func(context.Context, uuid.UUID, uuid.UUID, string) error
-	// InboxCancelled 在节点排队消息被人取消、事务提交后调用（追加收件箱事件）；为空时不推送。
+	// InboxCancelled is called after a queued node message has been cancelled by a person and the transaction has
+	// committed (it appends an Inbox event); when nil, nothing is pushed.
 	InboxCancelled func(context.Context, store.InboxMessage)
 }
 
@@ -101,7 +104,8 @@ func bodyAction(p auth.Principal, id uuid.UUID, op string, value any) *store.Tas
 	return &store.TaskAction{ActorKey: key, ID: id, Operation: op, Body: b}
 }
 
-// ActionRecorded 报告这个身份的动作 ID 是否已经执行过：重放直接返回原结果，同步 Hook 不再询问插件。
+// ActionRecorded reports whether this principal's action ID has already been performed: a replay returns the original
+// result directly, and synchronous hooks do not ask plugins again.
 func (s *Service) ActionRecorded(ctx context.Context, p auth.Principal, id uuid.UUID) (bool, error) {
 	return s.Store.TaskActionRecorded(ctx, bodyAction(p, id, "", nil).ActorKey, id)
 }
@@ -116,7 +120,8 @@ func manager(p auth.Principal, m *store.TaskMutation) error {
 	return apperr.Forbidden("只有人或当前项目Manager可操作任务")
 }
 
-// historyActor允许同一动作在节点推进后重放缓存响应；新动作仍必须命中当前节点。
+// historyActor lets the same action replay its cached response after the node has advanced; new actions must still
+// target the current node.
 func historyActor(p auth.Principal, m *store.TaskMutation, nodeID uuid.UUID) error {
 	if p.Kind != auth.KindAgent || p.TaskID != m.Record.View.Task.ID {
 		return apperr.Forbidden("只能操作本任务实例")
@@ -626,7 +631,8 @@ func (s *Service) closeQuestion(ctx context.Context, m *store.TaskMutation, n *t
 	if n.Question == nil || n.Question.Status != "open" {
 		return nil
 	}
-	// 问题服务的关闭适配器在相邻契约接入时执行持久化关闭；节点视图保留历史。
+	// The question service's close adapter performs the persistent close (wired in by the adjacent contract); the node
+	// view keeps the history.
 	if s.Source == nil || s.Source.CloseQuestion == nil {
 		return errors.New("统一问题关闭适配器未配置")
 	}
@@ -656,7 +662,8 @@ func (s *Service) queueNotice(ctx context.Context, m *store.TaskMutation, kind s
 	return err
 }
 
-// AvailableAgents只给当前Manager本项目选用所需的配置元数据，不读取任何凭证。
+// AvailableAgents gives the current Manager only the configuration metadata needed to choose Agents for its project; it
+// does not read any credentials.
 func (s *Service) AvailableAgents(ctx context.Context, p auth.Principal) (taskmodel.AgentList, error) {
 	if p.Kind != auth.KindAgent {
 		return taskmodel.AgentList{}, apperr.Forbidden("只有当前项目Manager可选用Agent")

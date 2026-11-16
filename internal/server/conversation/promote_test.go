@@ -89,7 +89,7 @@ func (e *env) snapshotQueue(n names) []string {
 	return n.of(snap.QueuedRuns)
 }
 
-// queues 返回数据库里的排队执行（打断、普通，各自按出队顺序）的名字。
+// queues returns the names of the queued runs in the database (interrupt and normal, each in dequeue order).
 func (e *env) queues(n names) ([]string, []string) {
 	e.t.Helper()
 	queued, err := e.st.QueuedRuns(context.Background(), e.agent)
@@ -162,7 +162,8 @@ func drain(ch chan struct{}) int {
 	}
 }
 
-// 运行中转换：当前回复被打断，转换的消息排在所有普通排队之前执行。
+// Promoting while running: the current reply is interrupted and the promoted message runs before all normally queued
+// ones.
 func TestPromoteInterruptsRunningReplyAndRunsBeforeQueue(t *testing.T) {
 	e := newEnv(t)
 	n := names{}
@@ -172,7 +173,7 @@ func TestPromoteInterruptsRunningReplyAndRunsBeforeQueue(t *testing.T) {
 	two := e.send2(n, "普通2", "queue")
 	mark := e.streamMark()
 	got := e.mustPromote(two.Run.ID)
-	// The promotion interrupts block A and the driver then starts 普通2 on its own.
+	// The promotion interrupts block A and the driver then starts "普通2" ("normal 2") on its own.
 	// Wait for that, so the checks below always run after the queue has moved on
 	// and must look at what the promotion itself returned and emitted.
 	e.waitStarted("普通2")
@@ -213,7 +214,8 @@ func TestPromoteInterruptsRunningReplyAndRunsBeforeQueue(t *testing.T) {
 	}
 }
 
-// 排在已有打断之后、全部普通排队之前；连续转换按转换先后排列；重复转换幂等。
+// It goes after existing interrupts and before all normal queued runs; consecutive promotions are ordered by when they
+// were promoted; repeating a promotion is idempotent.
 func TestPromoteOrderingAfterExistingInterrupts(t *testing.T) {
 	e := newEnv(t)
 	n := names{}
@@ -222,7 +224,7 @@ func TestPromoteOrderingAfterExistingInterrupts(t *testing.T) {
 	e.send2(n, "普通1", "queue")
 	two := e.send2(n, "普通2", "queue")
 	three := e.send2(n, "普通3", "queue")
-	e.send2(n, "打断1", "interrupt") // hold A 不理会打断，打断1停在打断队列
+	e.send2(n, "打断1", "interrupt") // hold A ignores interrupts, so "打断1" ("interrupt 1") stays in the interrupt queue
 	time.Sleep(100 * time.Millisecond)
 	drain(e.ex.intr)
 
@@ -271,7 +273,8 @@ func TestPromoteOrderingAfterExistingInterrupts(t *testing.T) {
 	}
 }
 
-// 已领取／已结束返回 run_not_queued 并带当前状态；其他来源 422；不存在或不属于该 Agent 404。
+// Already claimed / already ended returns run_not_queued with the current status; other origins 422; nonexistent or not
+// belonging to the Agent 404.
 func TestPromoteConflictsAndValidation(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -316,7 +319,7 @@ func TestPromoteConflictsAndValidation(t *testing.T) {
 	}
 }
 
-// 转换与出队并发：每条消息恰好执行一次，Redis 两个队列最终都为空。
+// Promotion racing with dequeue: every message runs exactly once, and both Redis queues end up empty.
 type lockedBuf struct {
 	mu sync.Mutex
 	b  strings.Builder
@@ -385,7 +388,8 @@ func TestPromoteRacesHandoffExactlyOnce(t *testing.T) {
 	}
 }
 
-// 引发打断的执行已被出队并开始时，标记打断不能落到它自己身上；发送打断与转换打断两条路径都覆盖。
+// When the run that causes the interrupt has already been dequeued and started, marking the interrupt must not land on
+// that run itself; covers both paths, sending an interrupt and promoting to interrupt.
 func TestTriggerAlreadyStartedIsNotInterruptedByItself(t *testing.T) {
 	for _, path := range []string{"send", "promote"} {
 		t.Run(path, func(t *testing.T) {
@@ -423,12 +427,12 @@ func TestTriggerAlreadyStartedIsNotInterruptedByItself(t *testing.T) {
 			case <-time.After(5 * time.Second):
 				t.Fatal("等待标记打断前的钩子超时")
 			}
-			e.ex.signal(e.agent, "release") // A 自然结束，B 被出队并开始
+			e.ex.signal(e.agent, "release") // A ends naturally; B is dequeued and starts
 			e.waitStarted("block B")
 			if r, err := e.st.GetRun(context.Background(), by); err != nil || r.Status == "queued" {
 				t.Fatalf("B 应已开始：%+v %v", r, err)
 			}
-			close(release) // 现在才标记打断：B 已是唯一进行中的执行
+			close(release) // only now mark the interrupt: B is the only in-flight run
 			if err := <-done; err != nil {
 				t.Fatal(err)
 			}

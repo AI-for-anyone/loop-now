@@ -14,7 +14,8 @@ import (
 	"loop-now/internal/server/taskmodel"
 )
 
-// Start 对账持久队列；重启时执行中的轮次只阻塞，绝不重放工具。
+// Start reconciles the persistent queue; on restart, turns that were running are only blocked, and tools are never
+// replayed.
 func (s *Service) Start(ctx context.Context) error {
 	if s.Options.ReconcileInterval <= 0 {
 		return errors.New("任务对账间隔必须为正")
@@ -133,7 +134,8 @@ func (s *Service) Kick(id uuid.UUID) {
 			delete(s.drivers, id)
 			delete(s.cancels, id)
 			s.mu.Unlock()
-			// 消息在最后一次空队列检查与退出之间提交时，不能丢掉即时唤醒。
+			// When a message is committed between the last empty-queue check and exiting, its immediate wake-up must
+			// not be lost.
 			if ctx.Err() == nil && driveErr == nil {
 				if r, e := s.Store.GetTask(ctx, id); e == nil && r.Current() != nil && s.larkDispatchPaused(r.Current().RuntimeID) {
 					return
@@ -229,7 +231,8 @@ func (s *Service) drive(ctx context.Context, id uuid.UUID) error {
 			return errors.New("任务缺少当前节点")
 		}
 		if n.Status == "queued" && s.Hooks != nil {
-			// node.before_start（plugins/SPEC.md §4）：节点第一次开始前询问插件，不在任务事务里等待；被阻止时任务进入阻塞并写明原因。
+			// node.before_start (plugins/SPEC.md §4): ask plugins before a node first starts, without waiting inside
+			// the task transaction; when blocked, the task becomes blocked with the reason written down.
 			project, agent, task, node := r.View.Task.ProjectID, n.AgentID, id, n.ID
 			o, e := s.Hooks.Hook(ctx, pluginhost.Intercept, pluginhost.Event("node.before_start", &project, &agent, &task, nil,
 				map[string]any{"nodeRunId": node, "stepId": n.StepID}), &project)
@@ -333,8 +336,10 @@ func (s *Service) settleTx(ctx context.Context, m *store.TaskMutation, t store.T
 		return nil, m.Emit("node.updated", map[string]any{"node": n})
 	}
 	if result.Outcome != executor.OutcomeCompleted {
-		// Inbox interrupt是同会话转向：后续提醒已经持久排队，不自动重放原轮。
-		// 被人停止（不发新消息）时，节点还有任意优先级的排队项就继续处理下一条，否则转阻塞。
+		// An Inbox interrupt is a change of direction within the same session: the follow-up reminder is already
+		// durably queued, so the original turn is not replayed automatically. When stopped by a person (without a new
+		// message), the node goes on to the next item if it still has queued items of any priority; otherwise it
+		// becomes blocked.
 		var next, stopped bool
 		if result.Outcome == executor.OutcomeInterrupted {
 			var e error
@@ -411,7 +416,8 @@ func (s *Service) settleTx(ctx context.Context, m *store.TaskMutation, t store.T
 	if e != nil {
 		return blocked(e.Error())
 	}
-	// 节点已提交结果时关闭仍未回答的问题，原消息历史保留。
+	// Once the node has submitted its result, close any still-unanswered question; the original message history is
+	// kept.
 	if e = s.closeQuestion(ctx, m, n, "node_completed"); e != nil {
 		return nil, e
 	}
@@ -576,7 +582,8 @@ func (s *Service) deliverNotices(ctx context.Context) {
 
 var _ executor.Sink = (*turnSink)(nil)
 
-// stoppedError 给被人停止的轮次记上 user_stopped（不是执行失败，也不是被新消息打断）。
+// stoppedError marks a turn stopped by a person with user_stopped (not a run failure, and not an interrupt by a new
+// message).
 func stoppedError(ctx context.Context, m *store.TaskMutation, turn uuid.UUID, outcome string, code, message *string) (*string, *string, error) {
 	if outcome != executor.OutcomeInterrupted {
 		return code, message, nil

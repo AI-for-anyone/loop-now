@@ -8,7 +8,8 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// 扩展的 ctx.ui 事件进入时间线：通知带级别，状态带键，对话标出已按取消回应。
+// Extension ctx.ui events go into the timeline: notifications carry their level, statuses carry their key, and dialogs
+// show that they were answered as cancelled.
 func TestExtensionUITimelineEntries(t *testing.T) {
 	at := time.Date(2026, 10, 27, 10, 0, 0, 0, time.UTC)
 	text := "第 3 轮"

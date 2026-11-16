@@ -185,7 +185,7 @@ func (s *Service) deliverQuestionEvent(ctx context.Context, id, qid, messageID u
 		if state != "expired" || original.From.Kind != "agent" {
 			return nil
 		}
-		// 扩展对话到期时 Pi 已收到取消，不再通知 Agent。
+		// When an extension dialog expires, Pi has already received a cancel, so the Agent is not notified any more.
 		dialog, err := store.IsExtensionDialogTx(ctx, scope.Tx, qid)
 		if err != nil {
 			return err
