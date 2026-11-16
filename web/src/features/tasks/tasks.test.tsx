@@ -15,6 +15,7 @@ import { taskKeys, tasksPath, useTaskMessages } from '@/api/tasks'
 import { lastScope } from '@/lib/scope'
 import type { Schemas } from '@/api/client'
 import { acceptTaskEvent } from './useTaskLive'
+import { narrowQuery } from '@/lib/use-media-query'
 
 const inboxCopy = t.taskInbox
 
@@ -68,12 +69,19 @@ describe('项目任务', () => {
     await screen.findByRole('link', { name: '通用任务验收' })
     expect(router.state.location.pathname).toBe(tasksPath(defaultProject.name))
   })
-  it('任务详情的标题前是编号：等宽粗体的浅墨色“#12”，不算进标题', async () => {
+  it('任务详情的页头：标题前是空心的“#12”（不算进标题），面包屑是项目›任务›#12，旁边是状态印章与归档状态，右边是红色描边的“取消任务”', async () => {
     setup(); renderRoutes(routes, detailPath())
     const heading = await screen.findByRole('heading', { level: 1, name: '通用任务验收' })
-    const number = screen.getByText('#12')
-    expect(number).toHaveClass('font-mono', 'text-[12px]', 'font-bold', 'text-ink-500')
-    expect(number.nextElementSibling).toBe(heading)
+    const number = heading.previousElementSibling!
+    expect(number).toHaveTextContent(/^#12$/)
+    expect(number).toHaveAttribute('aria-hidden', 'true')
+    expect(number).toHaveClass('font-display-latin', 'text-transparent')
+    const header = heading.closest('header')!
+    expect(within(header).getByRole('navigation', { name: '页面位置' })).toHaveTextContent(`${defaultProject.name}›任务›#12`)
+    expect(within(header).getByRole('link', { name: '任务' })).toHaveAttribute('href', tasksPath(defaultProject.name))
+    expect(within(header).getByText('阻塞')).toHaveClass('riso-tilt', 'text-red-text')
+    expect(within(header).getByText('尚未归档')).toBeInTheDocument()
+    expect(within(header).getByRole('button', { name: '取消任务' })).toHaveClass('border-red-text')
   })
   it('错误项目不显示任务详情', async () => {
     const d = makeTaskDetail('other-project'); setup(d); renderRoutes(routes, detailPath())
@@ -112,7 +120,7 @@ describe('节点记录与更新', () => {
     expect(screen.getByRole('tab', { name: '节点资料' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText(/历史成功结果/)).toBeVisible()
     expect(screen.getByText(/仅供检查，不作为成功结果/)).toBeVisible()
-    await user.click(screen.getByRole('link', { name: /输入 text 的来源/ }))
+    await user.click(screen.getByRole('link', { name: /01 质量检查 · 第 1 次的输出/ }))
     expect(router.state.location.search).toContain(oldNodeId)
     expect(screen.getByText('任务实例的回复')).toBeVisible()
     expect(screen.getByRole('textbox', { name: '消息草稿' })).toHaveAttribute('readonly')
@@ -141,7 +149,7 @@ describe('节点记录与更新', () => {
     setup(d); renderRoutes(routes, detailPath()); await screen.findByRole('heading', { name: '通用任务验收' }); await userEvent.click(screen.getByText('待回答问题 · 已关闭')); expect(screen.getByText('确认结果吗')).toBeVisible()
     expect(screen.queryByRole('link', { name: '前往回答' })).not.toBeInTheDocument()
     expect(screen.getByText('记录已归档，副本已回收')).toBeVisible()
-    await userEvent.click(screen.getByRole('tab', { name: '节点资料' })); await userEvent.click(screen.getByText('第 1 次访问 · 第 1 次尝试 · 已完成')); expect(screen.getByRole('link', { name: '下载' })).toHaveAttribute('href', apiUrl(d.artifacts[0].downloadPath))
+    await userEvent.click(screen.getByRole('tab', { name: '节点资料' })); await userEvent.click(screen.getByText('第 1 次访问 · 第 1 次尝试')); expect(screen.getByRole('link', { name: '下载' })).toHaveAttribute('href', apiUrl(d.artifacts[0].downloadPath))
   })
   it('已选记录失效明确说明，不静默切到另一条', async () => {
     setup(); renderRoutes(routes, detailPath() + '?record=missing')
@@ -219,20 +227,57 @@ it('项目改名按稳定ID跟随，保留任务及节点记录的深链接', as
   await waitFor(() => expect(decodeURIComponent(router.state.location.pathname)).toContain('/p/任务项目改名/tasks/'))
   expect(router.state.location.search).toContain(nodeId)
 })
-it('横向画布节点可键盘选择，适应与定位控件在缩放层外', async () => {
+it('流程尺上的步骤可以用键盘选中；画布的拖动、缩放与定位控件都不再有', async () => {
   const detail = makeTaskDetail(defaultProject.id)
   detail.workflow.steps.push({ ...detail.workflow.steps[0], id: 'revise', title: '返工处理' })
   detail.workflow.edges.push({ id: 'branch', from: 'check', to: 'revise', label: '需要修订' }, { id: 'return', from: 'revise', to: 'check', label: '再次检查', maxTraversals: 2 })
   setup(detail); const { router } = renderRoutes(routes, detailPath())
-  const list = await screen.findByLabelText('流程画布，可拖动或使用方向键平移')
-  const button = within(list).getByRole('button', { name: /返工处理/ })
+  const ruler = await screen.findByRole('navigation', { name: '固定流程' })
+  const button = within(ruler).getByRole('button', { name: /返工处理/ })
   button.focus(); await userEvent.keyboard('{Enter}')
   await waitFor(() => expect(router.state.location.search).toContain('step=revise'))
   // 新地址在 transition 里才渲染到页面，等页面跟上。
   expect(await screen.findByText('这个节点尚未被访问。')).toBeVisible()
-  await userEvent.click(screen.getByRole('button', { name: '适应视图' }))
-  expect(screen.getByRole('button', { name: '适应视图' }).closest('[data-task-camera]')).toBeNull(); expect(button.closest('[data-task-camera]')).not.toBeNull()
-  expect(within(list).getAllByRole('button')).toHaveLength(3)
+  // 没访问过的一步没有对话面板，纸上只有一行说明，票根里照样是流程尺（换了一个元素）。
+  const after = screen.getByRole('navigation', { name: '固定流程' })
+  expect(within(after).getByRole('button', { name: /返工处理/ })).toHaveAttribute('aria-pressed', 'true')
+  for (const name of ['适应视图', '定位当前', '放大画布', '缩小画布']) expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('流程画布，可拖动或使用方向键平移')).not.toBeInTheDocument()
+  expect(within(after).getAllByRole('button')).toHaveLength(3)
+})
+it('窄屏（票根隐藏）时，索引标签上方是一排步骤小标签，点一下同样选中这一步', async () => {
+  const original = window.matchMedia
+  window.matchMedia = ((query: string) => ({ matches: query === narrowQuery, media: query, onchange: null, addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false })) as typeof window.matchMedia
+  try {
+    setup(); const { router } = renderRoutes(routes, detailPath())
+    await screen.findByRole('heading', { name: '通用任务验收' })
+    const [chips, ruler] = screen.getAllByRole('navigation', { name: '固定流程' })
+    expect(chips).toHaveAttribute('data-workflow-chips')
+    expect(chips.compareDocumentPosition(screen.getByRole('tablist', { name: '节点记录' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(ruler).toHaveClass('max-nav:hidden')
+    await userEvent.click(within(chips).getByRole('button', { name: /提交报告/ }))
+    await waitFor(() => expect(router.state.location.search).toContain('step=finish'))
+  } finally {
+    window.matchMedia = original
+  }
+})
+it('节点资料：正在看的一次是展开的小票，其余折叠；来自其他访问的输入是链接，产物是带下载按钮的文件卡片，可以回到这次的对话', async () => {
+  const { user } = await renderDetail()
+  await user.click(screen.getByRole('tab', { name: '节点资料' }))
+  const viewing = document.querySelector(`[data-material-record="${nodeId}"]`) as HTMLDetailsElement
+  const older = document.querySelector(`[data-material-record="${oldNodeId}"]`) as HTMLDetailsElement
+  expect(viewing.open).toBe(true)
+  expect(older.open).toBe(false)
+  expect(viewing.compareDocumentPosition(older) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(within(viewing).getByText('V2·A1')).toHaveClass('bg-ink')
+  expect(within(viewing).getByRole('note')).toHaveTextContent('仅供检查，不作为成功结果')
+  expect(within(viewing).getByRole('link', { name: '01 质量检查 · 第 1 次的输出' })).toHaveAttribute('href', expect.stringContaining(`record=${oldNodeId}`))
+  await user.click(within(older).getByText('第 1 次访问 · 第 1 次尝试'))
+  const download = within(older).getByRole('link', { name: '下载' })
+  expect(download).toHaveAccessibleDescription('已保存报告.txt')
+  expect(download.closest('li')).toHaveClass('border-2', 'border-ink')
+  await user.click(within(viewing).getByRole('button', { name: '回到这次的对话' }))
+  expect(screen.getByRole('tab', { name: '对话' })).toHaveAttribute('aria-selected', 'true')
 })
 it('同一Agent执行另一个节点时切换消息范围，不沿用前一节点会话', async () => {
   const env = setup()
@@ -358,7 +403,7 @@ it('跨step来源链接定位原record而保留该step所有段，最新异常�
   await screen.findByRole('heading', { name: '通用任务验收' })
   await userEvent.click(screen.getByRole('tab', { name: '节点资料' }))
   expect(screen.getByText(/仅供检查，不作为成功结果/)).toBeVisible()
-  await userEvent.click(screen.getByRole('link', { name: /输入 review 的来源/ }))
+  await userEvent.click(screen.getByRole('link', { name: /01 质量检查 · 第 1 次的输出/ }))
   await waitFor(() => expect(router.state.location.search).toContain(`record=${oldNodeId}`))
   expect(router.state.location.search).toContain('step=check')
   expect(await screen.findByText('任务实例的回复')).toBeVisible()

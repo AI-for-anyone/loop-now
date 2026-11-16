@@ -14,6 +14,7 @@ import { ImagePicker } from '@/features/images/ImagePicker'
 import { imageProblem, type ImageDraft, type ImageLimits, type ImageUploads } from '@/features/images/image-drafts'
 import { uploadMessageImages } from '@/api/message-images'
 import { KeyHint, StopMark, type QuestionReply, type StopControl } from '@/features/chat/Composer'
+import { barKbdClass, mac } from '@/features/chat/composer-style'
 import { ReplyChip } from '@/features/console-inbox/ConsoleMessage'
 import { useAnswerQuestion } from '@/features/console-inbox/useAnswerQuestion'
 import type { NodeDraft } from './NodeRecordPanel'
@@ -21,7 +22,7 @@ import type { NodeDraft } from './NodeRecordPanel'
 const copy = t.taskInbox
 
 // 边框归共同容器所有，文字区按内容增高，上限后独立滚动。
-const inputClass = 'min-h-9 max-h-24 flex-1 resize-none overflow-y-auto rounded-none bg-transparent px-0.5 py-2 text-sm leading-5 shadow-none focus-visible:shadow-none disabled:bg-transparent'
+const inputClass = 'min-h-10 max-h-24 flex-1 resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0.5 py-[9px] text-[15px] leading-[22px] shadow-none focus-visible:shadow-none disabled:bg-transparent'
 
 type Props = { taskId: string; draft: NodeDraft; current: boolean; disabled: boolean; capability: Schemas['TaskNodeMessageCapability'] | undefined; text: string; onChange: (text: string) => void; imageLimits?: ImageLimits | null; onImages?: (images: ImageDraft[]) => void; onAccepted: (sent: string, draftImageIds?: string[]) => void; onAction: (action: NodeDraft['action']) => void; queue?: ReactNode; stop?: StopControl; reply?: QuestionReply }
 // queue: the node's queue tray, attached to the top of the input.
@@ -101,19 +102,21 @@ export function NodeMessageComposer({ taskId, draft, current, disabled, capabili
   const showStop = current && stop !== undefined && !reply && !unknown && !text.trim() && !draft.images?.length
   const stopLabel = stop?.pending ? t.chat.stopping : stop?.retry ? t.chat.retryStop : t.chat.stop
   // Draft images sit inside the same border, above the text row; the corners tighten when they show.
-  const field = (addButton?: ReactNode, strip?: ReactNode) => <div data-node-composer className={cn('flex min-h-[52px] min-w-0 flex-col border-2 border-ink/60 bg-white p-1.5 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/15', strip || reply ? 'rounded-[18px]' : 'rounded-[24px]')}>
-    {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}
-    {strip}
-    <div className="flex min-w-0 items-end gap-1.5">
-      {addButton && <span className="flex h-9 shrink-0 items-center">{addButton}</span>}
+  // 改版第 5 步（同对话页输入区）：左边圆形的加图按钮，中间藏青描边的胶囊输入框，右边荧光粉圆章发送（忙时可以停止）。
+  // 待发图片排在胶囊里、文字行上方，这时圆角收紧一些。
+  const field = (addButton?: ReactNode, strip?: ReactNode) => <div className="flex min-w-0 items-end gap-2.5">
+    {addButton && <span className="flex h-11 shrink-0 items-center">{addButton}</span>}
+    <div data-node-composer className={cn('flex min-h-11 min-w-0 flex-1 flex-col border-2 border-ink bg-paper-raised px-4 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/25', strip || reply ? 'rounded-[18px] pt-1.5' : 'rounded-[22px]')}>
+      {reply && <ReplyChip name={reply.name} preview={reply.message.preview} onCancel={reply.onCancel} />}
+      {strip}
       {editor}
-      {showStop ? <Button type="button" size="icon" className="size-9 bg-ink text-white shadow-none hover:bg-ink-700" aria-label={stopLabel} title={stopLabel} disabled={stop.pending} onClick={stop.onStop}><StopMark className="size-[13px]" /></Button>
-        : current && <Button type="button" size="icon" className="size-9 shadow-none" aria-label={sendLabel} title={sendLabel} disabled={reply ? answering : !canSend || pending || unknown} onClick={() => void (reply ? answerQuestion(reply, 'queue') : submit())}><ArrowUpIcon aria-hidden="true" className="size-[18px]" strokeWidth={2.4} /></Button>}
     </div>
+    {showStop ? <Button type="button" size="icon" className="mr-[3px] size-11 border-2 border-ink bg-ink text-white shadow-none hover:bg-ink-700" aria-label={stopLabel} title={stopLabel} disabled={stop.pending} onClick={stop.onStop}><StopMark /></Button>
+      : current && <Button type="button" variant="interrupt" size="icon" className="mr-[3px] size-11 border-2 border-ink" aria-label={sendLabel} title={sendLabel} disabled={reply ? answering : !canSend || pending || unknown} onClick={() => void (reply ? answerQuestion(reply, 'queue') : submit())}><ArrowUpIcon aria-hidden="true" className="size-5" strokeWidth={2.8} /></Button>}
   </div>
-  return <div className="mt-2 grid gap-2">
-    <div className="grid min-w-0">{queue}{imageLimits && onImages ? <ImagePicker images={draft.images ?? []} onChange={onImages} limits={imageLimits} disabled={!current || reply !== undefined} uploads={uploads} addClassName="size-9 [&>svg]:size-[18px]">{field}</ImagePicker> : field()}</div>
-    {current && <KeyHint stop={stop !== undefined} className="text-[11.5px]" />}
+  return <div className="grid gap-2">
+    <div className="flex min-w-0 flex-col">{queue && <div className={cn('flex min-w-0 flex-col sm:pr-[57px]', imageLimits && onImages && 'sm:pl-[50px]')}>{queue}</div>}{imageLimits && onImages ? <ImagePicker images={draft.images ?? []} onChange={onImages} limits={imageLimits} disabled={!current || reply !== undefined} uploads={uploads} addClassName="size-10 rounded-full border-2 border-ink bg-paper-raised text-ink hover:bg-white">{field}</ImagePicker> : field()}</div>
+    {current && <KeyHint stop={stop !== undefined} className={cn('justify-start text-[12px] text-ink-700', imageLimits && onImages && 'sm:pl-[52px]')} kbdClassName={barKbdClass} keys={{ enter: t.chat.barKeys.enter, modEnter: t.chat.barKeys.modEnter(mac) }} />}
     {localError && <p role="alert" className="text-sm text-red-text">{localError}</p>}<ErrorAlert error={answer.error} />{answer.outcome === 'ordinary' && <p role="status" className="text-sm font-bold">{t.inbox.question.ordinary}</p>}<ErrorAlert error={unconfirmedNotFound ? null : error} />{unconfirmedNotFound && <p role="status" className="text-sm">{copy.notFound}</p>}
     {targetMismatch && <p role="status" className="text-sm">{t.tasks.targetChanged}</p>}
     {unknown && <><p role="status" className="text-sm">{t.tasks.sendUnknown}</p><div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" disabled={pending} onClick={() => void recover()}>{reading ? copy.reading : copy.readOriginal}</Button>{current && <Button size="sm" disabled={!canSend || pending} onClick={() => void submit()}>{t.tasks.retryOriginalMessage}</Button>}</div></>}
