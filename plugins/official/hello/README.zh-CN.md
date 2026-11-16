@@ -37,7 +37,7 @@ loopctl plugin install hello
 ## 使用
 
 - 对 Agent 说，例如：“用 hello 工具向 Ada 问好。”它会调用 `hello`，得到 `Hello, Ada!`；配置了问候语时 `Hello` 换成你的问候语。
-- 项目里任何一次回复结束后，打开 **插件市场** › **Hello 示例** › **详情** › **日志**，能看到这样一行：`Agent <Agent id> 的一轮结束：completed，用了 1234 个 token`。状态是 `completed`、`failed` 或 `interrupted`。**事件** 页列出插件收到的每个 `run.ended` 事件。
+- 项目里任何一次回复结束后，打开 **插件市场** › **Hello 示例** › **详情** › **日志**，能看到这样一行：`Agent <Agent id> finished a run: completed, 1234 tokens`。状态是 `completed`、`failed` 或 `interrupted`。**事件** 页列出插件收到的每个 `run.ended` 事件。
 
 ## 常见问题
 

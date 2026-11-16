@@ -45,7 +45,7 @@ describe('文件夹接口', () => {
   it('已存在时 409 path_conflict；新建文件夹、移动与删除的请求', async () => {
     const calls: string[] = []
     server.use(
-      http.put(apiUrl('/context-folder/content'), () => HttpResponse.json(errorBody('path_conflict', '已存在'), { status: 409 })),
+      http.put(apiUrl('/context-folder/content'), () => HttpResponse.json(errorBody('path_conflict', 'Already exists'), { status: 409 })),
       http.post(apiUrl('/context-folder/directories'), async ({ request }) => { calls.push(`mkdir ${JSON.stringify(await request.json())}`); return HttpResponse.json(entry('docs', 'dir'), { status: 201 }) }),
       http.post(apiUrl('/context-folder/move'), async ({ request }) => { calls.push(`move ${JSON.stringify(await request.json())}`); return HttpResponse.json(entry('archive/a.md')) }),
       http.delete(apiUrl('/context-folder/entries'), ({ request }) => { calls.push(`delete ${new URL(request.url).searchParams.get('path')}`); return new HttpResponse(null, { status: 204 }) }),

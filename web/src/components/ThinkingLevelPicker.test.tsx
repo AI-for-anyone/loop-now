@@ -23,12 +23,12 @@ it('looks like a segmented control: ink border, the chosen segment yellow', () =
 })
 
 it('preserves an unavailable stored value visibly and shows the field error', () => {
-  render(<ThinkingLevelPicker value="high" levels={['low']} onChange={() => {}} error="当前模型不支持该等级" />)
+  render(<ThinkingLevelPicker value="high" levels={['low']} onChange={() => {}} error="The current model does not support this level" />)
   // The stored level is not in the catalog: no segment is selected, and a line below says the current value can't be chosen for now.
   expect(thinkingChoice(document.body)).toBeNull()
   expect(screen.getByText('高（当前值，暂不可选）')).toBeInTheDocument()
   expect(thinkingPicker(document.body)).toHaveAttribute('aria-invalid', 'true')
-  expect(screen.getByText('当前模型不支持该等级')).toBeInTheDocument()
+  expect(screen.getByText('The current model does not support this level')).toBeInTheDocument()
 })
 
 it('can disable catalog selection without losing its value', () => {

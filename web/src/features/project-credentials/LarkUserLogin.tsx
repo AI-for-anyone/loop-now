@@ -17,6 +17,8 @@ export type LarkUserLoginProps = {
   disabled?: boolean
   cancelDisabled?: boolean
   phase?: Phase
+  // Why the operation failed (CLIAuthOperation.errorCode); shown under the failed status.
+  errorCode?: Schemas['CLIAuthErrorCode'] | null
   operationId?: string | null
   operationSource?: ReactNode
   sourceDescription?: (source: Schemas['ProjectCredentialAccount']) => ReactNode
@@ -98,6 +100,7 @@ function LarkLoginForm(props: LarkUserLoginProps) {
       else if (selected) void run(() => props.onStart(selected))
     }}>{status && !active ? copy.newAttempt : target ? copy.relogin : copy.start}</Button>
     {status && <p role="status">{copy[status]}</p>}
+    {status === 'failed' && props.errorCode && <p role="status">{copy.errors[props.errorCode]}</p>}
     {(recovery || readMissing) && <p role="status">{readMissing || recovery === 'not-found' ? observed.terminal ? copy.originalUnavailable : copy.notFound : recovery === 'loading' ? copy.recovering : copy.unknown}</p>}
     {operationId && recovery && <Button type="button" variant="secondary" disabled={pending || !available} onClick={() => void run(() => props.onRecover(operationId), true)}>{copy.recover}</Button>}
     {active && windowExpired && <p role="status">{copy.windowExpired}</p>}

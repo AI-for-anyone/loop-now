@@ -13,6 +13,7 @@ import { UserChatBubble } from '@/features/chat/ChatBubble'
 import { Markdown } from '@/features/chat/Markdown'
 import { MessageImages } from '@/features/images/MessageImages'
 import { InboxNotice } from '@/features/inbox/InboxNotice'
+import { partyName } from '@/features/inbox/participants'
 import { t } from '@/i18n'
 import { QuestionChoices, UnreadDot } from './ConsoleMessage'
 import { useReadOnView } from './useAnswerQuestion'
@@ -72,7 +73,7 @@ function ConversationItem({ message }: { message: Message }) {
   return (
     <li ref={ref} data-console-message-id={message.id} className="flex min-w-0 flex-col gap-1.5">
       <span className="inline-flex flex-wrap items-center gap-2 text-[12.5px] font-bold text-ink-500">
-        {message.from.kind === 'plugin' ? <PluginSenderChip participant={message.from} /> : <span className="text-ink">{message.from.name}</span>}
+        {message.from.kind === 'plugin' ? <PluginSenderChip participant={message.from} /> : <span className="text-ink">{partyName(message.from)}</span>}
         <span aria-hidden="true">{t.chat.metaSeparator}</span>
         <time dateTime={message.createdAt}>{t.inbox.time(message.createdAt)}</time>
         {unread && <UnreadDot />}

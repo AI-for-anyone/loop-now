@@ -1,17 +1,29 @@
 import { ApiError } from '@/api/client'
 import { t } from '@/i18n'
-import { showServerText } from '@/i18n/locale'
+import { enUS } from '@/i18n/en-US'
+import { zhCN } from '@/i18n/zh-CN'
 
-// Turn any error into an explanation for people: known error codes use the message table, unknown ones use the explanation from the server.
-// The server's explanations are only in Chinese, so when the UI is not Chinese they are no longer appended to known error codes.
+// Turn any error into an explanation for people: a known error code uses the copy table, followed by the server's detail when it
+// adds something (in both UI languages; the server writes its messages in English); an unknown code shows the server's text.
 export function describeError(error: unknown): string {
   if (!(error instanceof ApiError)) return t.errors.unknown
   if (error.code === 'unreachable') return t.errors.unreachable
   if (error.code === 'unknown') return error.serverMessage ?? t.errors.unknownStatus(error.status)
   const known = t.errors.code[error.code]
-  return showServerText && error.serverMessage && error.serverMessage !== error.code && error.serverMessage !== known
-    ? t.errors.withDetail(known, error.serverMessage)
-    : known
+  const detail = serverDetail(error)
+  return detail ? t.errors.withDetail(known, detail) : known
+}
+
+const comparable = (text: string) => text.trim().replace(/[.。]$/u, '').replace(/[_\s]+/g, ' ').toLowerCase()
+
+// The server's message when it says more than the error code does; null when it only repeats the code: the code itself, the code
+// read as words ("agent_busy" → "agent busy"), or the code's copy in either UI language (older servers sent the Chinese copy).
+// Case, surrounding space, underscores and a trailing period are ignored.
+export function serverDetail(error: ApiError): string | null {
+  const message = error.serverMessage?.trim()
+  if (!message || error.code === 'unknown' || error.code === 'unreachable') return message || null
+  const same = [error.code, zhCN.errors.code[error.code], enUS.errors.code[error.code]].map(comparable)
+  return same.includes(comparable(message)) ? null : message
 }
 
 // The request ID of the failed request (response header Loop-Now-Request-Id); null when there is none.

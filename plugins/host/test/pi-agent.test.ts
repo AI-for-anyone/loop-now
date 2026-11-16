@@ -18,7 +18,7 @@ const piRoot = process.env.LOOP_NOW_TEST_PI_ROOT || '/opt/homebrew/lib/node_modu
 const piCli = path.join(piRoot, 'dist/bundle/cli.js')
 const official = fileURLToPath(new URL('../../official/', import.meta.url))
 const provider = fileURLToPath(new URL('./fixtures/pi-offline-provider.ts', import.meta.url))
-const noPi = !existsSync(piCli) && `找不到 ${piCli}`
+const noPi = !existsSync(piCli) && `${piCli} not found`
 
 type Rec = { type?: string; id?: string; data?: { messages: { role: string; toolName?: string; isError?: boolean; content: { type: string; text?: string }[] }[] } }
 
@@ -63,7 +63,7 @@ async function runPi(o: PiRun): Promise<{ messages: NonNullable<Rec['data']>['me
   const waitFor = (pred: (r: Rec) => boolean) =>
     Promise.race([
       new Promise<Rec>((resolve) => waiters.push({ pred, resolve })),
-      exited.then(() => Promise.reject(new Error(`Pi 提前退出：${stderr.slice(0, 1500)}`))),
+      exited.then(() => Promise.reject(new Error(`Pi exited early: ${stderr.slice(0, 1500)}`))),
     ])
   const send = (m: unknown) => child.stdin.write(`${JSON.stringify(m)}\n`)
   try {
@@ -103,9 +103,9 @@ describe('官方插件的 Agent 侧', { skip: noPi }, () => {
     try {
       const err = await promisify(execFile)(process.execPath, [launch, '--data', empty, '--agent', 'a1']).catch((e) => e as { code: number; stderr: string })
       assert.equal((err as { code: number }).code, 1)
-      assert.match((err as { stderr: string }).stderr, /专用浏览器还没有准备：在服务端所在机器上运行 node .*setup\.mjs/)
+      assert.match((err as { stderr: string }).stderr, /The dedicated browser is not prepared yet: on the server's machine, run node .*setup\.mjs/)
       const bad = await promisify(execFile)(process.execPath, [launch, '--data', 'relative', '--agent', 'a1']).catch((e) => e as { stderr: string })
-      assert.match((bad as { stderr: string }).stderr, /--data 须是插件数据目录的绝对路径/)
+      assert.match((bad as { stderr: string }).stderr, /--data must be the absolute path of the plugin data directory/)
     } finally {
       rmSync(empty, { recursive: true, force: true })
     }
@@ -113,7 +113,7 @@ describe('官方插件的 Agent 侧', { skip: noPi }, () => {
 
   const data = process.env.LOOP_NOW_TEST_PLAYWRIGHT_DATA
   const prepared = data && existsSync(path.join(data, 'browser/browser.json')) && existsSync(path.join(official, 'playwright/node_modules/@playwright/mcp'))
-  it('playwright：Agent 经 MCP 用准备好的 Chromium 打开网页（无头）', { timeout: 120_000, skip: !prepared && '没有准备好的浏览器（设置 LOOP_NOW_TEST_PLAYWRIGHT_DATA 并在插件目录 npm ci）' }, async () => {
+  it('playwright：Agent 经 MCP 用准备好的 Chromium 打开网页（无头）', { timeout: 120_000, skip: !prepared && 'no prepared browser (set LOOP_NOW_TEST_PLAYWRIGHT_DATA and run npm ci in the plugin folder)' }, async () => {
     const server = createServer((_req, res) => {
       res.setHeader('content-type', 'text/html; charset=utf-8')
       res.end('<!doctype html><title>Loop Now 测试页</title><h1>你好，浏览器</h1>')
@@ -143,13 +143,13 @@ describe('官方插件的 Agent 侧', { skip: noPi }, () => {
       const text = (i: number) => results[i]!.content.map((c) => c.text ?? '').join('\n')
       assert.match(text(0), /Page Title: Loop Now 测试页/)
       assert.match(text(1), /你好，浏览器/)
-      assert.ok(existsSync(path.join(data!, 'profiles', agent)), '按 Agent 分开的配置目录')
+      assert.ok(existsSync(path.join(data!, 'profiles', agent)), 'a separate profile folder per Agent')
     } finally {
       server.close()
     }
   })
 
-  it('playwright：同一 Agent 的配置目录正被占用时改用临时配置', { timeout: 30_000, skip: !prepared && '没有准备好的浏览器' }, async () => {
+  it('playwright：同一 Agent 的配置目录正被占用时改用临时配置', { timeout: 30_000, skip: !prepared && 'no prepared browser' }, async () => {
     const agent = '6f1c8e5e-0000-4000-8000-00000000beef'
     const profile = path.join(data!, 'profiles', agent)
     mkdirSync(profile, { recursive: true })
@@ -162,11 +162,11 @@ describe('官方插件的 Agent 侧', { skip: noPi }, () => {
       await new Promise<void>((resolve, reject) => {
         child.stderr.on('data', (d) => {
           stderr += d
-          if (stderr.includes('这次使用临时配置')) resolve()
+          if (stderr.includes('using a temporary profile this time')) resolve()
         })
-        child.once('exit', (code) => reject(new Error(`启动器退出 ${code}：${stderr}`)))
+        child.once('exit', (code) => reject(new Error(`the launcher exited with code ${code}: ${stderr}`)))
       })
-      assert.match(stderr, /正被另一个浏览器使用/)
+      assert.match(stderr, /is in use by another browser/)
     } finally {
       child.kill('SIGTERM')
       rmSync(profile, { recursive: true, force: true })

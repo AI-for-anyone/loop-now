@@ -8,6 +8,12 @@ export function errorBody(code: Schemas['ErrorCode'], message: string = code, ex
   return { error: { code, message, ...extra } }
 }
 
+// The server's answer when a route does not exist (as opposed to a missing resource): 404 not_found with
+// details.reason unknown_endpoint. Cast because NotFoundDetails is not in the generated contract on this branch yet.
+export function unknownEndpointBody(message = 'No such endpoint: GET /api/v1/…'): Schemas['Error'] {
+  return errorBody('not_found', message, { details: { reason: 'unknown_endpoint' } as never })
+}
+
 let seq = 0
 const id = () => `00000000-0000-7000-8000-${String(++seq).padStart(12, '0')}`
 const now = '2026-10-12T08:00:00Z'

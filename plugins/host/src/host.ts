@@ -42,7 +42,7 @@ function timeoutOf(v: unknown, fallback: number): number {
 async function within<T>(ms: number, what: string, work: Promise<T>): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new TimeoutError(`${what}超过 ${ms} 毫秒`)), Math.max(ms, 0))
+    timer = setTimeout(() => reject(new TimeoutError(`${what} timed out after ${ms} ms`)), Math.max(ms, 0))
   })
   work.catch(() => undefined)
   try {
@@ -124,7 +124,7 @@ export class Host {
 
   private handle(m: Message): void {
     if (this.shuttingDown && m.type !== 'shutdown') {
-      if (m.id) this.channel.reply(m, m.type === 'event' ? 'ack' : 'result', { ok: false, error: '宿主正在退出' })
+      if (m.id) this.channel.reply(m, m.type === 'event' ? 'ack' : 'result', { ok: false, error: 'Host is shutting down' })
       return
     }
     const plugin = typeof m.plugin === 'string' ? m.plugin : ''
@@ -153,7 +153,7 @@ export class Host {
         void this.shutdown()
         return
       default:
-        if (m.id) this.channel.reply(m, 'result', { ok: false, error: `不支持的请求 ${m.type}` })
+        if (m.id) this.channel.reply(m, 'result', { ok: false, error: `unsupported request ${m.type}` })
     }
   }
 
@@ -179,23 +179,23 @@ export class Host {
     const deadline = Date.now() + LOAD_TIMEOUT
     const left = () => deadline - Date.now()
     const entry = path.relative(payload.root, payload.entry) || payload.entry
-    let stage = `加载 ${entry}`
+    let stage = `load ${entry}`
     try {
-      const mod = await within(left(), `${stage} `, runAs(id, () => importEntry(payload.entry)))
+      const mod = await within(left(), stage, runAs(id, () => importEntry(payload.entry)))
       const register = pickRegister(mod)
-      if (!register) throw new Error(`${entry} 没有默认导出 register 函数`)
+      if (!register) throw new Error(`${entry} does not export a default register function`)
       stage = 'register'
-      await within(left(), `${stage} `, runAs(id, async () => register(rt.api)))
-      if (rt.violations.length > 0) throw new Error(rt.violations.join('；'))
+      await within(left(), stage, runAs(id, async () => register(rt.api)))
+      if (rt.violations.length > 0) throw new Error(rt.violations.join('; '))
       stage = 'lifecycle start'
-      await within(left(), `${stage} `, rt.start())
+      await within(left(), stage, rt.start())
       rt.status = 'active'
       this.plugins.set(id, rt)
       this.channel.reply(m, 'result', { ok: true })
     } catch (err) {
-      const message = err instanceof TimeoutError || rt.violations.length > 0 ? describeError(err) : `${stage} 失败：${describeError(err)}`
+      const message = err instanceof TimeoutError || rt.violations.length > 0 ? describeError(err) : `${stage} failed: ${describeError(err)}`
       if (!(err instanceof TimeoutError) && rt.violations.length === 0) {
-        this.pluginLog(id, 'error', `${stage} 失败：${briefError(err, payload.root)}`)
+        this.pluginLog(id, 'error', `${stage} failed: ${briefError(err, payload.root)}`)
       }
       await this.stopRuntime(rt)
       this.channel.reply(m, 'result', { ok: false, error: message })
@@ -218,11 +218,11 @@ export class Host {
   private async configChanged(m: Message): Promise<void> {
     const rt = this.plugins.get(m.plugin ?? '')
     if (!rt) {
-      this.channel.reply(m, 'result', { ok: false, error: '插件未加载' })
+      this.channel.reply(m, 'result', { ok: false, error: 'the plugin is not loaded' })
       return
     }
     if (!isObject(m.payload) || !isObject(m.payload.config)) {
-      this.channel.reply(m, 'result', { ok: false, error: 'config_changed 载荷缺少 config' })
+      this.channel.reply(m, 'result', { ok: false, error: 'config_changed payload is missing config' })
       return
     }
     await rt.configChanged(parseConfig(m.payload.config), CONFIG_TIMEOUT)
@@ -230,9 +230,9 @@ export class Host {
   }
 
   private eventOf(payload: unknown): Record<string, unknown> | string {
-    if (!isObject(payload) || !isObject(payload.event)) return '载荷缺少 event'
+    if (!isObject(payload) || !isObject(payload.event)) return 'Payload is missing event'
     const event = payload.event
-    if (typeof event.type !== 'string' || typeof event.id !== 'string') return 'event 缺少 id 或 type'
+    if (typeof event.type !== 'string' || typeof event.id !== 'string') return 'event is missing id or type'
     return event
   }
 
@@ -240,7 +240,7 @@ export class Host {
     const rt = this.plugins.get(m.plugin ?? '')
     let reply: Reply
     const event = this.eventOf(m.payload)
-    if (!rt) reply = { ok: false, error: '插件未加载' }
+    if (!rt) reply = { ok: false, error: 'the plugin is not loaded' }
     else if (typeof event === 'string') reply = { ok: false, error: event }
     else {
       const p = m.payload as Record<string, unknown>
@@ -255,9 +255,9 @@ export class Host {
     let reply: Reply
     const event = this.eventOf(m.payload)
     const kind = isObject(m.payload) ? m.payload.kind : undefined
-    if (!rt) reply = { ok: false, error: '插件未加载' }
+    if (!rt) reply = { ok: false, error: 'the plugin is not loaded' }
     else if (typeof event === 'string') reply = { ok: false, error: event }
-    else if (kind !== 'intercept' && kind !== 'modify' && kind !== 'claim') reply = { ok: false, error: `未知的调用种类 ${String(kind)}` }
+    else if (kind !== 'intercept' && kind !== 'modify' && kind !== 'claim') reply = { ok: false, error: `Unknown call kind ${String(kind)}` }
     else reply = await rt.call(kind as CallKind, event, timeoutOf((m.payload as Record<string, unknown>).timeoutMs, CALL_TIMEOUT))
     this.channel.reply(m, 'result', reply)
   }
@@ -267,7 +267,7 @@ export class Host {
     const rt = this.plugins.get(m.plugin ?? '')
     const p = isObject(m.payload) ? m.payload : {}
     let reply: Reply
-    if (!rt) reply = { ok: false, error: '插件未加载' }
+    if (!rt) reply = { ok: false, error: 'the plugin is not loaded' }
     else if (m.type === 'action') reply = await rt.action(p, timeoutOf(p.timeoutMs, ACTION_TIMEOUT))
     else if (m.type === 'http') reply = await rt.http(p, timeoutOf(p.timeoutMs, HTTP_TIMEOUT))
     else reply = await rt.schedule(p, timeoutOf(p.timeoutMs, SCHEDULE_TIMEOUT))
@@ -279,10 +279,10 @@ export class Host {
     if (this.shuttingDown) return
     this.shuttingDown = true
     const all = [...this.runtimes.values()]
-    await within(SHUTDOWN_TIMEOUT, '卸载全部插件', Promise.all(all.map((rt) => this.stopRuntime(rt)))).catch((err) =>
+    await within(SHUTDOWN_TIMEOUT, 'Unloading all plugins', Promise.all(all.map((rt) => this.stopRuntime(rt)))).catch((err) =>
       this.output.hostError(describeError(err)),
     )
-    this.channel.close('宿主正在退出')
+    this.channel.close('Host is shutting down')
     this.output.flush()
     this.output.protocol('', () => process.exit(0))
   }

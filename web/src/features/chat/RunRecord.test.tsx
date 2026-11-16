@@ -136,7 +136,7 @@ describe('运行记录时间线', () => {
     const run = makeRun({
       status: 'failed',
       errorCode: 'workspace_sync_failed',
-      errorMessage: '克隆 repo 失败',
+      errorMessage: 'Failed to clone repo',
       queuedAt: at(0),
       startedAt: at(0),
       runningAt: null,
@@ -150,7 +150,7 @@ describe('运行记录时间线', () => {
         at: at(0.2),
         result: 'failed',
         durationMs: 1700,
-        error: '克隆 repo 失败',
+        error: 'Failed to clone repo',
         sources: [
           { path: 'docs', kind: 'files', outcome: 'files_synced', filesWritten: 2, filesDeleted: 1, error: null },
           { path: 'repo', kind: 'git', outcome: 'failed', filesWritten: null, filesDeleted: null, error: 'Authentication failed' },
@@ -163,13 +163,13 @@ describe('运行记录时间线', () => {
     await user.click(await waitFor(recordToggle))
     const panel = document.getElementById(recordToggle().getAttribute('aria-controls')!)!
     const sync = (await within(panel).findByText('同步配置与文件夹')).closest('li')!
-    expect(sync).toHaveTextContent('同步失败：克隆 repo 失败')
+    expect(sync).toHaveTextContent('同步失败：Failed to clone repo')
     expect(sync).toHaveTextContent('docs：资料已同步（写入 2 个，删除 1 个）')
     expect(sync).toHaveTextContent('repo：失败（Authentication failed）')
     expect(sync).toHaveAttribute('data-tone', 'fail')
     expect(within(panel).queryByText('开始回复')).toBeNull()
-    expect(panel).toHaveTextContent('errorCode=workspace_sync_failed · errorMessage="克隆 repo 失败"')
-    expect(panel).toHaveTextContent('失败：工作区同步失败（克隆 repo 失败）')
+    expect(panel).toHaveTextContent('errorCode=workspace_sync_failed · errorMessage="Failed to clone repo"')
+    expect(panel).toHaveTextContent('失败：工作区同步失败（Failed to clone repo）')
   })
 
   it('回复进行中展开后，又调用了一次工具：不需要重新展开就出现在时间线中', async () => {

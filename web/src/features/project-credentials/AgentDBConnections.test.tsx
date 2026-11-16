@@ -139,9 +139,9 @@ it('正式impact集合成员明确标识连接集合，不冒充自动取用', a
 })
 
 it('工具未就绪按正式安装原因展示，不把账号保存当作工具或连接成功', () => {
-  renderRoutes([{ path: '/', element: <CliToolStatus template={{ name: 'psql', version: '18.3', fields: [], injection: 'files', install: { status: 'failed', error: '必要运行库缺失' }, warnings: [] }} /> }], '/')
+  renderRoutes([{ path: '/', element: <CliToolStatus template={{ name: 'psql', version: '18.3', fields: [], injection: 'files', install: { status: 'failed', error: 'A required runtime library is missing' }, warnings: [] }} /> }], '/')
   expect(screen.getByText('工具准备：安装失败 · psql v18.3')).toBeInTheDocument()
-  expect(screen.getByText('必要运行库缺失')).toBeInTheDocument()
+  expect(screen.getByText('A required runtime library is missing')).toBeInTheDocument()
   expect(screen.getByText('工具状态与账号录入、远端连接或认证结果分开。')).toBeInTheDocument()
 })
 

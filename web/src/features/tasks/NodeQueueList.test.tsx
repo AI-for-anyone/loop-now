@@ -111,8 +111,8 @@ it('已不在队列时 409：一行轻提示，不报错；结果不明时沿用
   const bodies: Body[] = []
   server.use(http.post(actionUrl('promote-to-interrupt'), async ({ params, request }) => {
     const body = await request.json() as Body; bodies.push(body)
-    if (params.messageId === m1.messageId) return HttpResponse.json(errorBody('task_conflict', '已读', { details: { taskId, expectedNodeRunId: nodeId, currentNodeRunId: nodeId, expectedAgentId: node.agentId, expectedRuntimeId: node.runtimeId, taskVersion: 2, reason: 'message_read', messageId: m1.messageId! } }), { status: 409 })
-    return bodies.filter(b => b.actionId === body.actionId).length === 1 ? HttpResponse.json(errorBody('internal_error', '回执暂不可确认'), { status: 500 }) : HttpResponse.json(receipt('promote_inbox_message', String(params.messageId), body, m2))
+    if (params.messageId === m1.messageId) return HttpResponse.json(errorBody('task_conflict', 'The message has already been read', { details: { taskId, expectedNodeRunId: nodeId, currentNodeRunId: nodeId, expectedAgentId: node.agentId, expectedRuntimeId: node.runtimeId, taskVersion: 2, reason: 'message_read', messageId: m1.messageId! } }), { status: 409 })
+    return bodies.filter(b => b.actionId === body.actionId).length === 1 ? HttpResponse.json(errorBody('internal_error', 'The receipt cannot be confirmed yet'), { status: 500 }) : HttpResponse.json(receipt('promote_inbox_message', String(params.messageId), body, m2))
   }))
   const user = userEvent.setup()
   setup(); await openQueue(user); act(() => stream().open())
@@ -129,7 +129,7 @@ it('已不在队列时 409：一行轻提示，不报错；结果不明时沿用
 
 it('结果不明时自动展开，期间收起了也能看到重试打断', async () => {
   let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve })
-  server.use(http.post(actionUrl('promote-to-interrupt'), async () => { await gate; return HttpResponse.json(errorBody('internal_error', '回执暂不可确认'), { status: 500 }) }))
+  server.use(http.post(actionUrl('promote-to-interrupt'), async () => { await gate; return HttpResponse.json(errorBody('internal_error', 'The receipt cannot be confirmed yet'), { status: 500 }) }))
   const user = userEvent.setup()
   setup(); await openQueue(user); act(() => stream().open())
   const target = rows()[2]
@@ -165,7 +165,7 @@ it('节点有进行中的回复、草稿为空时可以停止这一轮；这一�
   const stops: { runId: string; body: Body }[] = []
   server.use(http.post(apiUrl(`/tasks/${taskId}/nodes/${nodeId}/runs/:runId/stop`), async ({ params, request }) => {
     const body = await request.json() as Body; stops.push({ runId: String(params.runId), body })
-    if (stops.length > 1) return HttpResponse.json(errorBody('task_conflict', '已结束', { details: { taskId, expectedNodeRunId: nodeId, currentNodeRunId: nodeId, expectedAgentId: node.agentId, expectedRuntimeId: node.runtimeId, taskVersion: 2, reason: 'run_not_active', runId: String(params.runId), runStatus: 'completed' } }), { status: 409 })
+    if (stops.length > 1) return HttpResponse.json(errorBody('task_conflict', 'The run has already ended', { details: { taskId, expectedNodeRunId: nodeId, currentNodeRunId: nodeId, expectedAgentId: node.agentId, expectedRuntimeId: node.runtimeId, taskVersion: 2, reason: 'run_not_active', runId: String(params.runId), runStatus: 'completed' } }), { status: 409 })
     return HttpResponse.json({ ...receipt('stop_run', null, body), runId: String(params.runId) })
   }))
   const user = userEvent.setup()

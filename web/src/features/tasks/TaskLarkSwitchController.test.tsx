@@ -72,6 +72,12 @@ describe('formal ConsoleTaskDetail participants -> explicit switch submission', 
     renderController(value)
     expect(screen.getByRole('option', { name: /snapshot_invalid/ })).toBeDisabled()
   })
+  it('a known unavailable reason is named in the UI language', () => {
+    const value = detail(); value.larkSwitchParticipants![1].available = false; value.larkSwitchParticipants![1].unavailableReason = 'session_unavailable'
+    renderController(value)
+    expect(screen.getByRole('option', { name: /实例的会话不可用/ })).toBeDisabled()
+    expect(screen.queryByRole('option', { name: /session_unavailable/ })).toBeNull()
+  })
   it('commits original route before a single exact body, preserves future runtime and effective revisions', async () => {
     const bodies: Schemas['TaskLarkSwitchInput'][] = []
     const env = renderController()

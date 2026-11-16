@@ -38,7 +38,7 @@ describe('正式CLIAuth响应的纯null类型兼容', () => {
       { ...base, status: 'pending' },
       { ...base, status: 'awaiting_authorization', authorizationUrl: 'https://github.com/login/device', userCode: 'ABCD-1234' },
       { ...base, status: 'succeeded', accountId: '10000000-0000-7000-8000-000000000001', completedAt: '2026-10-18T00:01:00Z' },
-      ...(['failed', 'cancelled', 'expired'] as const).map(status => ({ ...base, status, completedAt: '2026-10-18T00:01:00Z', errorCode: 'oauth_failed' as const, errorMessage: '固定fixture错误' })),
+      ...(['failed', 'cancelled', 'expired'] as const).map(status => ({ ...base, status, completedAt: '2026-10-18T00:01:00Z', errorCode: 'oauth_failed' as const, errorMessage: 'Fixed fixture error' })),
     ] satisfies Schemas['CLIAuthOperation'][]
     it.each(replies)(`${target.targetAccountId ? '原账号' : '新建目标'} $status保留正式响应全部null和目标字段`, async reply => {
       server.use(http.get(apiUrl(`/projects/${defaultProject.id}/cli-auth/operations/${id}`), () => HttpResponse.json({ operation: reply, account: null })))

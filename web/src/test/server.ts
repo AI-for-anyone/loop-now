@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
-import { apiUrl, defaultProject, projectsUrl } from './api'
+import { apiUrl, defaultProject, projectsUrl, unknownEndpointBody } from './api'
 import { emptyProjectCredentialHandlers } from './project-credentials'
 import { commandList } from './commands'
 import { runtimeList } from './runtimes'
@@ -39,7 +39,7 @@ export const server = setupServer(
   http.get(apiUrl('/agents/:agentId/console-messages'), () => HttpResponse.json({ messages: [], nextCursor: null })),
   http.get(apiUrl('/inbox/pending'), () => HttpResponse.json({ questions: [], unread: [], byAgent: [], byTask: [] })),
   http.get(apiUrl('/tasks/:taskId/nodes/:nodeRunId/queue'), ({ params }) => HttpResponse.json({ taskId: params.taskId, nodeRunId: params.nodeRunId, runtimeId: '00000000-0000-7000-8000-000000000000', items: [] })),
-  http.get(apiUrl('/tasks/:taskId/nodes/:nodeRunId/runs/:runId/timeline'), () => HttpResponse.json({ error: { code: 'not_found', message: '接口不存在' } }, { status: 404 })),
+  http.get(apiUrl('/tasks/:taskId/nodes/:nodeRunId/runs/:runId/timeline'), () => HttpResponse.json(unknownEndpointBody(), { status: 404 })),
   http.get(apiUrl('/health'), () => HttpResponse.json({ ok: true, database: { ok: true, error: null, walBytes: { data: 0, events: 0 }, walWarning: false } })),
   http.get(apiUrl('/projects/:projectId/prompt'), () => HttpResponse.json({ prompt: '', promptVersion: 1 })),
   http.get(projectsUrl, () => HttpResponse.json({ projects: [defaultProject] })),

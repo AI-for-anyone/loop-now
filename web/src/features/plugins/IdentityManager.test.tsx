@@ -79,12 +79,12 @@ describe('外部身份的代管', () => {
 
   it('保存被拒（422，渠道不再声明代管）时写出原因', async () => {
     const user = userEvent.setup()
-    setup(makeIdentity(), [webhook, lark], () => HttpResponse.json(errorBody('validation_failed', '这个渠道不能代管外部身份'), { status: 422 }))
+    setup(makeIdentity(), [webhook, lark], () => HttpResponse.json(errorBody('validation_failed', 'This channel cannot host external identities'), { status: 422 }))
     const box = await section()
     await waitFor(() => expect(within(box).getAllByRole('option')).toHaveLength(2))
     await user.selectOptions(within(box).getByLabelText('代管的插件渠道'), 'Webhook 通知 · 回调')
     await user.click(within(box).getByRole('button', { name: '保存' }))
-    expect(await within(box).findByText(/这个渠道不能代管外部身份/)).toBeInTheDocument()
+    expect(await within(box).findByText(/This channel cannot host external identities/)).toBeInTheDocument()
   })
 
   it('没有能代管的插件时说明，并给出插件市场入口', async () => {

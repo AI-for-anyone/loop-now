@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { ApiError, type Schemas } from '@/api/client'
 import { acceptCLIAuthState, cancelCLIAuth, cliAuthActive, cliAuthKeys, useCLIAuthOperation, startCLIAuth, useProjectCLIAuth } from '@/api/cli-auth'
 import { invalidateProjectCredentials } from '@/api/project-credentials'
-import { backendSignals } from '@/api/backend-signals'
+import { isMissingEndpoint } from '@/api/backend-signals'
 import { t } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import { ErrorAlert } from '@/components/ErrorAlert'
@@ -83,7 +83,7 @@ function Login({ projectId, account, id, locate }: { projectId: string; account?
     const timer = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(timer)
   }, [active])
-  const unsupported = (error: unknown) => error instanceof ApiError && error.status === 404 && error.code === 'not_found' && error.serverMessage === backendSignals.missingEndpoint
+  const unsupported = (error: unknown) => isMissingEndpoint(error)
   const notFound = detail.error instanceof ApiError && detail.error.status === 404 && !unsupported(detail.error)
   const unavailable = unsupported(collection.error) || unsupported(detail.error)
   const expiredLocally = !!op && now >= Date.parse(op.expiresAt)

@@ -23,7 +23,7 @@ import { findInPath, gitUsable } from './git'
 import { defaultProfile, overridesFromFile, profileArg, profileEnv, profileFromFile, profileSummary, resolveProfile } from './profile'
 import { RestartPolicy, restartWindowMs } from './restart'
 import { SettingsFile } from './settings'
-import { stringsFor } from './strings'
+import { errorText, LocalizedError, stringsFor } from './strings'
 import { trayItems } from './tray'
 import { UpdateChecker, type Updater } from './updates'
 
@@ -119,6 +119,15 @@ describe('导航', () => {
 })
 
 describe('配置', () => {
+  // A profile error is a LocalizedError: its message is the English text (the enUS table), and the zhCN table gives the Chinese one.
+  const localized = (english: RegExp, chinese: RegExp) => (err: unknown) => {
+    assert.ok(err instanceof LocalizedError)
+    assert.match(err.message, english)
+    assert.equal(err.text(stringsFor('en-US')), err.message)
+    assert.match(err.text(stringsFor('zh-CN')), chinese)
+    return true
+  }
+
   test('命令行参数优先于环境变量', () => {
     assert.equal(profileArg(['electron', '.', '--profile=try'], { LOOP_NOW_DESKTOP_PROFILE: 'env' }), 'try')
     assert.equal(profileArg(['electron', '.'], { LOOP_NOW_DESKTOP_PROFILE: 'env' }), 'env')
@@ -176,14 +185,14 @@ describe('配置', () => {
     assert.deepEqual(overridesFromFile(file, defaultProfile, 'darwin'), { workRoot: '/Users/Shared/loop-now', dataDir: '/Users/someone/.loop_now' })
     assert.deepEqual(overridesFromFile(file, 'try', 'darwin'), {})
     assert.deepEqual(overridesFromFile(file, 'constructor', 'darwin'), {})
-    for (const [entry, message] of [
-      [{ workRoot: 'loop-now' }, /profiles\.default\.workRoot 应是绝对路径："loop-now"/],
-      [{ workRoot: 3 }, /应是绝对路径：3/],
-      [{ workroot: '/Users/Shared/loop-now' }, /只能写 workRoot、dataDir、contextDir，不认识 workroot/],
-      ['/Users/Shared/loop-now', /profiles\.default 应是对象/],
+    for (const [entry, english, chinese] of [
+      [{ workRoot: 'loop-now' }, /^profiles\.default\.workRoot in desktop\.json should be an absolute path: "loop-now"$/, /^desktop\.json 的 profiles\.default\.workRoot 应是绝对路径："loop-now"$/],
+      [{ workRoot: 3 }, /should be an absolute path: 3$/, /应是绝对路径：3$/],
+      [{ workroot: '/Users/Shared/loop-now' }, /^profiles\.default in desktop\.json may only set workRoot, dataDir, contextDir; unknown key: workroot$/, /^desktop\.json 的 profiles\.default 只能写 workRoot、dataDir、contextDir，不认识 workroot$/],
+      ['/Users/Shared/loop-now', /^profiles\.default in desktop\.json should be an object\.$/, /^desktop\.json 的 profiles\.default 应是对象$/],
     ] as const) {
       writeFileSync(file, JSON.stringify({ profiles: { default: entry } }))
-      assert.throws(() => overridesFromFile(file, defaultProfile, 'darwin'), message)
+      assert.throws(() => overridesFromFile(file, defaultProfile, 'darwin'), localized(english, chinese))
     }
   })
 
@@ -204,7 +213,13 @@ describe('配置', () => {
 
   test('不合规的名字报错', () => {
     assert.throws(() => resolveProfile('../live'))
-    assert.throws(() => resolveProfile('Try'))
+    assert.throws(
+      () => resolveProfile('Try'),
+      localized(
+        /^A profile name may only use lowercase letters, digits, underscores and hyphens, up to 32 characters: Try$/,
+        /^配置名只能用小写字母、数字、下划线与连字符，最长 32 个字符：Try$/,
+      ),
+    )
   })
 
   test('Windows：名字放在 %LOCALAPPDATA%\\Loop Now\\<名字>，日志也在其中，工作根在 platform.ts 定的位置', () => {
@@ -236,7 +251,7 @@ describe('配置', () => {
     writeFileSync(file, JSON.stringify({ profiles: { default: { workRoot: 'D:\\work\\' } } }))
     assert.deepEqual(overridesFromFile(file, defaultProfile, 'win32'), { workRoot: 'D:\\work' })
     writeFileSync(file, JSON.stringify({ profiles: { default: { workRoot: 'work' } } }))
-    assert.throws(() => overridesFromFile(file, defaultProfile, 'win32'), /应是绝对路径："work"/)
+    assert.throws(() => overridesFromFile(file, defaultProfile, 'win32'), localized(/should be an absolute path: "work"$/, /应是绝对路径："work"$/))
     const migrated = resolveProfile(defaultProfile, 'C:\\Users\\someone', { workRoot: 'D:\\work' }, 'win32', {})
     assert.equal(profileEnv(migrated).LOOP_NOW_WORK_ROOT, 'D:\\work')
     assert.match(profileSummary(migrated), /work root D:\\work \(set in desktop\.json\)$/)
@@ -374,6 +389,17 @@ describe('托盘菜单', () => {
     assert.deepEqual(labels(trayItems('degraded', 'http://127.0.0.1:9000', profile(defaultProfile), en)).slice(0, 2), ['Database unavailable · 127.0.0.1:9000（不可点）', 'Profile: default（不可点）'])
     assert.deepEqual(Object.keys(en.tray.dirs), Object.keys(s.tray.dirs))
     assert.deepEqual(Object.keys(en.external), Object.keys(s.external))
+    assert.deepEqual(Object.keys(en), Object.keys(s))
+    assert.deepEqual(Object.keys(en.cli), Object.keys(s.cli))
+    assert.deepEqual(Object.keys(en.profile), Object.keys(s.profile))
+  })
+
+  test('壳自己显示的错误按语言出文字，message 是英文；别的错误照原样显示', () => {
+    const err = new LocalizedError((t) => t.cli.pathMissing('C:\\Program Files\\Loop Now\\resources\\bin'))
+    assert.equal(err.message, 'The user PATH was written, but C:\\Program Files\\Loop Now\\resources\\bin is not in it.')
+    assert.equal(errorText(err, stringsFor('en-US')), err.message)
+    assert.equal(errorText(err, s), 'PATH 写完后没有 C:\\Program Files\\Loop Now\\resources\\bin')
+    assert.equal(errorText(new Error('Access is denied.'), s), 'Access is denied.')
   })
 })
 

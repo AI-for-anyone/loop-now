@@ -3,13 +3,13 @@ import { CircleAlertIcon, TriangleAlertIcon } from 'lucide-react'
 import { ApiError, type Schemas } from '@/api/client'
 import { useBuiltinPluginSources, usePluginInstall } from '@/api/plugins'
 import { ErrorAlert, FieldError } from '@/components/ErrorAlert'
-import { showServerText } from '@/i18n/locale'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { t } from '@/i18n'
+import { serverDetail } from '@/lib/errors'
 import { localizedText } from '@/lib/localized-text'
 import { cn } from '@/lib/utils'
 import { ManifestSummary } from './ManifestSummary'
@@ -110,15 +110,15 @@ export function ConfirmInstallDialog({ preview, onClose, onInstalled }: { previe
 
 // On install, 409 name_conflict can mean the plugin id is already installed, or that a model provider it registers has the same id as
 // one from another plugin (on update it can only be the latter);
-// explain both cases, and when the UI is in Chinese, append the server's own message (which says which one it is). Other errors show as
-// usual.
+// explain both cases and append the server's detail (which says which one it is). Other errors show as usual.
 function InstallError({ error, update }: { error: ApiError | null; update: boolean }) {
   if (error?.code !== 'name_conflict') return <ErrorAlert error={error} />
   const known = confirmText.nameConflict[update ? 'update' : 'install']
+  const detail = serverDetail(error)
   return (
     <Alert variant="error">
       <CircleAlertIcon />
-      <AlertDescription className="text-[13.5px] leading-[1.7]">{showServerText && error.serverMessage ? t.errors.withDetail(known, error.serverMessage) : known}</AlertDescription>
+      <AlertDescription className="text-[13.5px] leading-[1.7]">{detail ? t.errors.withDetail(known, detail) : known}</AlertDescription>
     </Alert>
   )
 }

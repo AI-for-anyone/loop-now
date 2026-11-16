@@ -46,7 +46,7 @@ describe('全局设置：本机模式', () => {
     await waitFor(() => expect(git).toBeChecked())
     expect(local.state.requests).toEqual([{ method: 'PATCH', path: '/api/v1/local-mode-settings', body: { git: true } }])
 
-    local.state.failNextPut = () => HttpResponse.json(errorBody('internal_error', '写入失败'), { status: 500 })
+    local.state.failNextPut = () => HttpResponse.json(errorBody('internal_error', 'Failed to write the settings'), { status: 500 })
     await user.click(cli)
     expect(await within(card).findByRole('alert')).toBeInTheDocument()
     expect(cli).toBeChecked()
@@ -91,7 +91,7 @@ describe('全局设置：本机模式', () => {
     renderRoutes(routes, '/settings')
     const card = await region('本机模式')
     const logins = await within(card).findByRole('switch', { name: '用本机的登录状态' })
-    local.state.failNextPut = () => HttpResponse.json(errorBody('internal_error', '写入失败'), { status: 500 })
+    local.state.failNextPut = () => HttpResponse.json(errorBody('internal_error', 'Failed to write the settings'), { status: 500 })
     await user.click(logins)
     const dialog = await screen.findByRole('alertdialog', { name: '打开“用本机的登录状态”？' })
     await user.click(within(dialog).getByRole('button', { name: '打开' }))
@@ -173,13 +173,13 @@ describe('项目设置：本机目录', () => {
   it('服务端的字段错误显示在改动那一行的输入框下，对话框保留输入', async () => {
     const { local, user } = setup()
     local.state.failNextPut = () =>
-      HttpResponse.json(errorBody('validation_failed', '提交的内容未通过校验', { fields: [{ field: 'directories[2].path', message: '必须是绝对路径' }] }), { status: 422 })
+      HttpResponse.json(errorBody('validation_failed', 'directories[2].path: Must be an absolute path', { fields: [{ field: 'directories[2].path', message: 'Must be an absolute path' }] }), { status: 422 })
     await user.click(await screen.findByRole('button', { name: '添加目录' }))
     const dialog = await screen.findByRole('dialog', { name: '添加本机目录' })
     const input = within(dialog).getByLabelText('绝对路径')
     await user.type(input, 'code/app')
     await user.click(within(dialog).getByRole('button', { name: '保存' }))
-    expect(await within(dialog).findByText('必须是绝对路径')).toBeInTheDocument()
+    expect(await within(dialog).findByText('Must be an absolute path')).toBeInTheDocument()
     expect(input).toHaveAttribute('aria-invalid', 'true')
     expect(input).toHaveValue('code/app')
     // The field error is already shown under the input, so it is not repeated for the whole form.

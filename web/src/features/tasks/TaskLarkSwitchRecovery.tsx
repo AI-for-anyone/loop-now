@@ -34,7 +34,8 @@ export function TaskLarkSwitchRecovery({ taskId, currentBlocked, showUnavailable
         {receipt.status === 'succeeded' && <>
           <p role="status">{receipt.dispatchStatus === 'failed' || receipt.dispatchStatus === 'interrupted' ? copy.dispatchFailed : <>{copy.dispatch} · {copy.runStatus[receipt.dispatchStatus]}</>}</p>
         </>}
-        {receipt.errorMessage && <p role="alert">{receipt.errorMessage}</p>}
+        {/* A known error code is named in the UI language; otherwise the server's fixed description. */}
+        {(receipt.errorCode || receipt.errorMessage) && <p role="alert">{(receipt.errorCode && copy.receiptErrors[receipt.errorCode]) || receipt.errorMessage}</p>}
         {action.error && <p role="status">{copy.originalUnavailable}</p>}
       </>}
       <Button type="button" variant="secondary" disabled={!readEnabled || action.isFetching} onClick={() => { void action.refetch() }}>{copy.recover}</Button>

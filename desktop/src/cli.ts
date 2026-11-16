@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import { lstat, readlink } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import { LocalizedError } from './strings'
 
 // macOS: the install location on PATH (the default macOS PATH includes /usr/local/bin), linked to the fixed Resources/bin/loopctl inside the app bundle.
 export const cliLink = '/usr/local/bin/loopctl'
@@ -77,8 +78,9 @@ export async function readUserPath(): Promise<string | Error> {
   return powershell(readUserPathScript)
 }
 
+// A PowerShell failure comes back as its stderr; a write that did not take is a LocalizedError, shown in the failure dialog.
 export async function addToUserPath(dir: string): Promise<'done' | Error> {
   const result = await powershell(addToUserPathScript(dir))
   if (result instanceof Error) return result
-  return userPathHas(result, dir) ? 'done' : new Error(`PATH 写完后没有 ${dir}`)
+  return userPathHas(result, dir) ? 'done' : new LocalizedError((s) => s.cli.pathMissing(dir))
 }

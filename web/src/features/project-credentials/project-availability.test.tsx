@@ -3,7 +3,7 @@ import { act, screen, waitFor } from '@testing-library/react'
 import { focusManager } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
-import { apiUrl, defaultProject, errorBody } from '@/test/api'
+import { apiUrl, defaultProject, errorBody, unknownEndpointBody } from '@/test/api'
 import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { providers } from '@/test/config'
@@ -21,7 +21,7 @@ describe('旧后台项目凭证兼容', () => {
     server.use(
       http.get(apiUrl('/projects/:projectId/credential-accounts'), () => {
         lists++
-        return supported ? HttpResponse.json({ projectId: defaultProject.id, credentialsRevision: 0, accounts: [] }) : HttpResponse.json(errorBody('not_found', '接口不存在'), { status: 404 })
+        return supported ? HttpResponse.json({ projectId: defaultProject.id, credentialsRevision: 0, accounts: [] }) : HttpResponse.json(unknownEndpointBody(), { status: 404 })
       }),
       http.get(apiUrl('/model-providers'), () => HttpResponse.json(providers)),
       http.get(apiUrl('/cli-templates'), () => HttpResponse.json({ templates: [] })),
@@ -52,7 +52,7 @@ describe('旧后台项目凭证兼容', () => {
     const user = userEvent.setup()
     let gone = false
     server.use(
-      http.get(apiUrl('/projects/:projectId/credential-accounts'), () => gone ? HttpResponse.json(errorBody('not_found', '项目不存在'), { status: 404 }) : HttpResponse.json({ projectId: defaultProject.id, credentialsRevision: 0, accounts: [] })),
+      http.get(apiUrl('/projects/:projectId/credential-accounts'), () => gone ? HttpResponse.json(errorBody('not_found', 'Project not found'), { status: 404 }) : HttpResponse.json({ projectId: defaultProject.id, credentialsRevision: 0, accounts: [] })),
       http.get(apiUrl('/model-providers'), () => HttpResponse.json(providers)),
       http.get(apiUrl('/cli-templates'), () => HttpResponse.json({ templates: [] })),
     )

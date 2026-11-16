@@ -96,7 +96,7 @@ export class Channel {
       clearTimeout(p.timer)
       const r = (m.payload ?? {}) as Reply
       if (r.ok) p.resolve(r.value ?? null)
-      else p.reject(new Error(r.error || '平台拒绝了请求'))
+      else p.reject(new Error(r.error || 'Platform rejected the request'))
       return
     }
     this.onMessage(m)
@@ -105,7 +105,7 @@ export class Channel {
   /** Writes one line; throws when it exceeds the limit, and the caller then sends an error reply instead. */
   send(m: Message, done?: () => void): void {
     const line = JSON.stringify(m)
-    if (Buffer.byteLength(line) + 1 > MAX_LINE) throw new Error(`消息超过 ${MAX_LINE} 字节`)
+    if (Buffer.byteLength(line) + 1 > MAX_LINE) throw new Error(`the message is longer than ${MAX_LINE} bytes`)
     this.write(`${line}\n`, done)
   }
 
@@ -115,18 +115,18 @@ export class Channel {
     try {
       this.send({ ...base, payload: reply })
     } catch (err) {
-      this.send({ ...base, payload: { ok: false, error: `回应无法发送：${(err as Error).message}` } })
+      this.send({ ...base, payload: { ok: false, error: `Could not send the reply: ${(err as Error).message}` } })
     }
   }
 
   /** Sends a host→Go request (state_*) and waits for its result. */
   request(type: string, plugin: string, payload: unknown, timeoutMs = 30_000): Promise<unknown> {
-    if (this.closed) return Promise.reject(new Error('宿主正在退出'))
+    if (this.closed) return Promise.reject(new Error('Host is shutting down'))
     const id = `h${++this.next}`
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
-        reject(new Error(`平台没有在 ${timeoutMs} 毫秒内回应 ${type}`))
+        reject(new Error(`Platform did not answer ${type} within ${timeoutMs} ms`))
       }, timeoutMs)
       this.pending.set(id, { resolve, reject, timer })
       try {

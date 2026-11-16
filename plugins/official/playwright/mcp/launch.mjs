@@ -28,7 +28,7 @@ function parse(argv) {
     }
     if (argv[i] === '--data') out.data = argv[++i] ?? ''
     else if (argv[i] === '--agent') out.agent = argv[++i] ?? ''
-    else fail(`未知的参数 ${argv[i]}`)
+    else fail(`Unknown argument ${argv[i]}`)
   }
   return out
 }
@@ -48,33 +48,33 @@ function profileInUse(dir) {
 }
 
 const args = parse(process.argv.slice(2))
-if (!path.isAbsolute(args.data)) fail('--data 须是插件数据目录的绝对路径')
-if (!/^[A-Za-z0-9-]{1,64}$/.test(args.agent)) fail('--agent 须是 Agent id')
+if (!path.isAbsolute(args.data)) fail('--data must be the absolute path of the plugin data directory')
+if (!/^[A-Za-z0-9-]{1,64}$/.test(args.agent)) fail('--agent must be an Agent id')
 
 const require = createRequire(import.meta.url)
 let mcpPkg
 try {
   mcpPkg = require('@playwright/mcp/package.json')
 } catch {
-  fail(`插件目录里没有安装 @playwright/mcp：在 ${root} 运行 npm ci --ignore-scripts --omit=dev`)
+  fail(`@playwright/mcp is not installed in the plugin directory: run npm ci --ignore-scripts --omit=dev in ${root}`)
 }
-if (mcpPkg.version !== MCP_VERSION) fail(`需要 @playwright/mcp ${MCP_VERSION}，装的是 ${mcpPkg.version}`)
+if (mcpPkg.version !== MCP_VERSION) fail(`Needs @playwright/mcp ${MCP_VERSION}, but ${mcpPkg.version} is installed`)
 
 const browserDir = path.join(args.data, 'browser')
 const manifestPath = path.join(browserDir, 'browser.json')
 if (!existsSync(manifestPath)) {
-  fail(`专用浏览器还没有准备：在服务端所在机器上运行 node ${path.join(root, 'setup.mjs')} ${args.data}`)
+  fail(`The dedicated browser is not prepared yet: on the server's machine, run node ${path.join(root, 'setup.mjs')} ${args.data}`)
 }
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
 const platform = `${process.platform}-${process.arch}`
-if (manifest.platform !== platform) fail(`准备的浏览器是 ${manifest.platform} 的，这台机器是 ${platform}；请重新运行 setup.mjs`)
-if (manifest.mcpVersion !== MCP_VERSION) fail(`准备浏览器时的 MCP 版本是 ${manifest.mcpVersion}，需要 ${MCP_VERSION}；请重新运行 setup.mjs`)
+if (manifest.platform !== platform) fail(`The prepared browser is for ${manifest.platform}, but this machine is ${platform}; run setup.mjs again`)
+if (manifest.mcpVersion !== MCP_VERSION) fail(`The browser was prepared for MCP ${manifest.mcpVersion}, but ${MCP_VERSION} is needed; run setup.mjs again`)
 const executable = path.resolve(browserDir, manifest.executable)
 if (path.relative(browserDir, executable).startsWith('..') || !existsSync(executable) || !statSync(executable).isFile()) {
-  fail('准备的浏览器可执行文件不在了；请重新运行 setup.mjs')
+  fail('The prepared browser executable is missing; run setup.mjs again')
 }
 if (createHash('sha256').update(readFileSync(executable)).digest('hex') !== manifest.sha256) {
-  fail('准备的浏览器可执行文件校验不符；请重新运行 setup.mjs')
+  fail('The prepared browser executable does not match its checksum; run setup.mjs again')
 }
 
 const profile = path.join(args.data, 'profiles', args.agent)
@@ -85,7 +85,7 @@ const mcpArgs = ['--executable-path', executable, '--output-dir', output, '--tim
 if (profileInUse(profile)) {
   // Another run of the same Agent (e.g. a copy in a task) has this profile directory open: this time use an in-memory profile,
   // discarded at the end.
-  process.stderr.write(`[playwright] 配置目录 ${profile} 正被另一个浏览器使用，这次使用临时配置\n`)
+  process.stderr.write(`[playwright] Profile ${profile} is in use by another browser; using a temporary profile this time\n`)
   mcpArgs.push('--isolated')
 } else {
   mcpArgs.push('--user-data-dir', profile)

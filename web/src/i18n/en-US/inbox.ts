@@ -11,6 +11,7 @@ export const inbox = {
   loadMore: 'Load more',
   openAgent: 'Open Agent',
   kind: { agent: 'Agent', external: 'External identity', console: 'Console', platform: 'Platform', plugin: 'Plugin' },
+  deletedParty: { agent: 'Deleted Agent', external: 'Deleted identity' } as Record<string, string>,
   question: {
     title: 'Original question',
     options: 'Options',
@@ -24,6 +25,7 @@ export const inbox = {
     ordinary: 'Saved as an ordinary note, not recorded as an answer.',
   },
   noticeType: { question_expired: 'Question expired' },
+  noticeReasons: { deadline: 'The answer deadline passed' } as Record<string, string>,
   you: 'You',
   lastFromYou: (text: string) => `You: ${text}`,
   time: (time: string) => formatDayClock(time),

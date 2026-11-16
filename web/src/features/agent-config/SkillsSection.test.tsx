@@ -25,10 +25,10 @@ describe('从 Skills 库添加', () => {
 
   it('库加载失败时显示原因', async () => {
     const { user } = await renderConfig({
-      handlers: [http.get(apiUrl('/skills'), () => HttpResponse.json(errorBody('internal_error', '数据库不可用'), { status: 500 }))],
+      handlers: [http.get(apiUrl('/skills'), () => HttpResponse.json(errorBody('internal_error', 'Database unavailable'), { status: 500 }))],
     })
     const dialog = await openAddDialog(user)
-    expect(await within(dialog).findByText(/数据库不可用/)).toBeInTheDocument()
+    expect(await within(dialog).findByText(/Database unavailable/)).toBeInTheDocument()
     expect(within(dialog).queryByText('加载中…')).not.toBeInTheDocument()
   })
 })

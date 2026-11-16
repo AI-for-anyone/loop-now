@@ -59,7 +59,7 @@ it('shows upload progress and the failed image on its own thumbnail', async () =
   let release!: () => void, uploads = 0; const gate = new Promise<void>(resolve => { release = resolve })
   server.use(http.put(apiUrl(`/agents/${agentId}/message-images/:imageId`), async ({ params }) => {
     if (++uploads === 1) return HttpResponse.json({ id: String(params.imageId), mimeType: 'image/png', size: 13, width: 2, height: 2 }, { status: 201 })
-    await gate; return HttpResponse.json({ error: { code: 'payload_too_large', message: '图片大小超限' } }, { status: 413 })
+    await gate; return HttpResponse.json({ error: { code: 'payload_too_large', message: 'The image is too large' } }, { status: 413 })
   }))
   mount(); await userEvent.upload(screen.getByLabelText('选择图片文件'), [file('先传.png'), file('后传.png')])
   await userEvent.click(screen.getByRole('button', { name: '发送' }))
@@ -68,7 +68,7 @@ it('shows upload progress and the failed image on its own thumbnail', async () =
   expect(within(items()[1]).getByText('上传中')).toBeInTheDocument()
   expect(screen.getByRole('status')).toHaveTextContent('正在上传图片…')
   release()
-  expect(await screen.findByRole('alert')).toHaveTextContent('图片大小超限')
+  expect(await screen.findByRole('alert')).toHaveTextContent('The image is too large')
   expect(within(items()[1]).getByText('上传失败')).toBeInTheDocument()
   expect(within(items()[0]).queryByText(/上传/)).not.toBeInTheDocument()
 })
@@ -83,10 +83,10 @@ it('sends pure images as scoped uploads plus formal IDs, with no base64 in the m
 })
 it('a failed unsupported-model send preserves text and images and never retries automatically', async () => {
   uploadFixture(); let count = 0
-  server.use(http.post(apiUrl(`/agents/${agentId}/messages`), () => { count++; return HttpResponse.json({ error: { code: 'validation_failed', message: '当前模型不支持图片输入' } }, { status: 422 }) }))
+  server.use(http.post(apiUrl(`/agents/${agentId}/messages`), () => { count++; return HttpResponse.json({ error: { code: 'validation_failed', message: 'The current model does not accept images' } }, { status: 422 }) }))
   mount(); await userEvent.type(screen.getByRole('textbox'), '请看图片'); await userEvent.upload(screen.getByLabelText('选择图片文件'), file('保留.png'))
   await userEvent.click(screen.getByRole('button', { name: '发送' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent('当前模型不支持图片输入')
+  expect(await screen.findByRole('alert')).toHaveTextContent('The current model does not accept images')
   expect(screen.getByRole('textbox')).toHaveValue('请看图片'); expect(screen.getByRole('button', { name: '移除图片 1' })).toBeInTheDocument(); expect(screen.getByAltText('保留.png')).toBeInTheDocument(); expect(count).toBe(1)
   expect(screen.queryByText('上传失败')).not.toBeInTheDocument()
 })
@@ -129,7 +129,7 @@ it('slash command text with an image retries agent_busy as an ordinary queued me
   uploadFixture(); const sent: Schemas['SendMessageInput'][] = []
   server.use(http.post(apiUrl(`/agents/${agentId}/messages`), async ({ request }) => {
     const body = await request.json() as Schemas['SendMessageInput']; sent.push(body)
-    if (sent.length === 1) return HttpResponse.json({ error: { code: 'agent_busy', message: 'Agent正忙', details: { currentRunId: crypto.randomUUID(), queued: { interrupt: 0, normal: 0 } } } }, { status: 409 })
+    if (sent.length === 1) return HttpResponse.json({ error: { code: 'agent_busy', message: 'The Agent is replying; interrupt it or queue the message', details: { currentRunId: crypto.randomUUID(), queued: { interrupt: 0, normal: 0 } } } }, { status: 409 })
     return accepted(body)
   }))
   mount(); await userEvent.type(screen.getByRole('textbox'), '/reload')

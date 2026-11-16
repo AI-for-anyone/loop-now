@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, ApiError, call, type Schemas } from './client'
-import { backendSignals } from './backend-signals'
+import { api, call, type Schemas } from './client'
+import { isMissingEndpoint } from './backend-signals'
 
 export type ImportOperation = Schemas['CLIImportOperation']
 export const importKey = (projectId: string, operationId: string) => ['cli-import', projectId, operationId] as const
@@ -8,7 +8,7 @@ export const importActive = (op: ImportOperation) => op.status === 'pending' || 
 export function mergeImport(previous: ImportOperation | undefined, next: ImportOperation): ImportOperation {
   return previous?.id === next.id && !importActive(previous) ? previous : next
 }
-export const importUnsupported = (e: unknown) => e instanceof ApiError && e.status === 404 && e.code === 'not_found' && e.serverMessage === backendSignals.missingEndpoint
+export const importUnsupported = (e: unknown) => isMissingEndpoint(e)
 export function scanCLIImports(projectId: string) {
   return call(api.POST('/projects/{projectId}/cli-credential-import/scans', { params: { path: { projectId } }, body: {} }))
 }

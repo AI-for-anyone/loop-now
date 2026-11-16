@@ -55,7 +55,7 @@ describe('概览页的入口', () => {
       handlers: [
         http.get(apiUrl('/usage'), () =>
           fail
-            ? HttpResponse.json(errorBody('internal_error', '服务端内部错误'), {
+            ? HttpResponse.json(errorBody('internal_error', 'Internal server error'), {
                 status: 500,
                 headers: { 'Loop-Now-Request-Id': '01890a5d-ac96-774b-bcce-b302099a8057' },
               })
@@ -246,7 +246,7 @@ describe('异常与失败', () => {
   it('以最近 24 小时为开始时间，显示总条数，从新到旧列出，可以加载更多', async () => {
     const requests: URLSearchParams[] = []
     const first = [makeAnomaly({ agentName: 'B', kind: 'run_interrupted', errorCode: null, errorMessage: null, endReason: 'user_interrupt' })]
-    const second = [makeAnomaly({ agentName: 'A', errorCode: 'workspace_sync_failed', errorMessage: '克隆失败：Authentication failed' })]
+    const second = [makeAnomaly({ agentName: 'A', errorCode: 'workspace_sync_failed', errorMessage: 'Clone failed: Authentication failed' })]
     const { snapshot, user } = await renderOverview({
       handlers: [
         http.get(apiUrl('/anomalies'), ({ request }) => {
@@ -269,13 +269,13 @@ describe('异常与失败', () => {
     expect(b).toHaveTextContent('已打断')
     expect(b).toHaveTextContent('endReason=user_interrupt')
     expect(a).toHaveTextContent('errorCode=workspace_sync_failed')
-    expect(a).toHaveTextContent('工作区同步失败：克隆失败：Authentication failed')
+    expect(a).toHaveTextContent('工作区同步失败：Clone failed: Authentication failed')
     expect(within(list).queryByRole('button', { name: '加载更多' })).toBeNull()
   })
 
   it('CLI 安装失败显示为失败，原因中包含 CLI 名称', async () => {
     const { snapshot } = await renderOverview({
-      anomalies: anomalyPage([makeAnomaly({ errorCode: 'cli_install_failed', errorMessage: 'gh 2.100.0：下载的文件 SHA-256 与模板不一致' })]),
+      anomalies: anomalyPage([makeAnomaly({ errorCode: 'cli_install_failed', errorMessage: 'gh 2.100.0: the downloaded file does not match the SHA-256 in the template' })]),
     })
     await snapshot([makeAgentOverview()])
     const item = await within(section('异常与失败')).findByRole('link')

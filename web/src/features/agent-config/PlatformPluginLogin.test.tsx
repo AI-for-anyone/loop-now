@@ -114,14 +114,14 @@ describe('平台 Agent 登录插件提供方', () => {
       answer: () => {
         if (!reject) return undefined
         reject = false
-        return HttpResponse.json(errorBody('validation_failed', '授权码不对', { fields: [{ field: 'value', message: '授权码不对' }] }), { status: 422 })
+        return HttpResponse.json(errorBody('validation_failed', 'value: Invalid authorization code', { fields: [{ field: 'value', message: 'Invalid authorization code' }] }), { status: 422 })
       },
     })
     await login()
     const input = await within(area()).findByLabelText('浏览器回调到不了时，把浏览器地址栏里的回调地址，或页面上显示的授权码粘贴到这里。')
     await user.type(input, 'fixture-secret-code')
     await user.click(within(area()).getByRole('button', { name: '提交' }))
-    expect(await within(area()).findByText(/授权码不对/)).toBeInTheDocument()
+    expect(await within(area()).findByText(/Invalid authorization code/)).toBeInTheDocument()
     expect(input).toHaveValue('')
     await user.type(input, 'fixture-second-code')
     await user.click(within(area()).getByRole('button', { name: '提交' }))
@@ -165,7 +165,7 @@ describe('平台 Agent 登录插件提供方', () => {
   })
 
   it('409 plugin_not_enabled：说明插件还没授权给这个 Agent，不说“没有启用”', async () => {
-    const { login } = await setup(() => HttpResponse.json(errorBody('plugin_not_enabled', '插件 grok 没有授权给这个 Agent'), { status: 409 }))
+    const { login } = await setup(() => HttpResponse.json(errorBody('plugin_not_enabled', 'Plugin grok is not granted to this Agent'), { status: 409 }))
     await login()
     expect(await within(area()).findByText('插件「Grok 订阅」还没有授权给这个 Agent，本次没有发起登录。在本页的“插件权限”一节授权后再登录。')).toBeInTheDocument()
     expect(within(area()).queryByText(/插件还没有启用/)).toBeNull()

@@ -132,7 +132,9 @@ export function nodeConflictNotice(error: unknown, operation: 'promote' | 'cance
       return t.chat.queueList.cancelled
     case 'run_not_active':
       return t.chat.queueList.stopEnded
+    // The node guard's reasons (the task moved on, ended, or the node can't take messages): the same wording as a message that
+    // didn't run for that reason.
     default:
-      return null
+      return reason ? t.taskInbox.targetReasons[reason] ?? null : null
   }
 }

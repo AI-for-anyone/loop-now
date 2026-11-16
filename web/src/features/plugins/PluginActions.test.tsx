@@ -83,7 +83,7 @@ describe('插件的操作按钮', () => {
       actions: {
         'webhook/resend': () =>
           ++calls === 1
-            ? HttpResponse.json(errorBody('validation_failed', 'invalid', { fields: [{ field: 'input.target', message: '这个地址不在白名单里' }] }), { status: 422 })
+            ? HttpResponse.json(errorBody('validation_failed', 'invalid', { fields: [{ field: 'input.target', message: 'This address is not on the allowlist' }] }), { status: 422 })
             : HttpResponse.json(errorBody('plugin_not_enabled', 'not enabled'), { status: 409 }),
       },
     })
@@ -92,7 +92,7 @@ describe('插件的操作按钮', () => {
     const dialog = await screen.findByRole('dialog', { name: '重发' })
     await user.type(within(dialog).getByLabelText('目标地址'), 'https://hooks.example.com/x')
     await user.click(within(dialog).getByRole('button', { name: '运行' }))
-    expect(await within(dialog).findByText('这个地址不在白名单里')).toBeInTheDocument()
+    expect(await within(dialog).findByText('This address is not on the allowlist')).toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: '运行' }))
     expect(await within(dialog).findByText('这个插件在这里还没有启用，先在项目里启用。')).toBeInTheDocument()
   })

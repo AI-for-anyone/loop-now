@@ -52,6 +52,8 @@ const zhCN = {
     pathAlreadyDetail: (dir: string) => `${dir} 已在你的用户 PATH 里。`,
     pathDone: '已把 loopctl 加进 PATH',
     pathDoneDetail: (dir: string) => `已加入 ${dir}。新开的终端里可以直接用 loopctl；已经开着的终端要重开。`,
+    // The PATH write reported success, but reading it back does not show the directory.
+    pathMissing: (dir: string) => `PATH 写完后没有 ${dir}`,
     add: '加入',
   },
   // Tray "外部身份连接方式…" (External Identity Connection…): the external TLS port's address, the self-signed certificate and the command
@@ -99,6 +101,15 @@ const zhCN = {
     badProfileTitle: '配置不可用',
     retry: '重试',
     logs: '打开日志',
+  },
+  // Why the chosen profile is unusable: the body of the status page under page.badProfileTitle (raised by profile.ts as LocalizedError).
+  profile: {
+    badName: (name: string) => `配置名只能用小写字母、数字、下划线与连字符，最长 32 个字符：${name}`,
+    // The entry for the profile under profiles in desktop.json.
+    notObject: (profile: string) => `desktop.json 的 profiles.${profile} 应是对象`,
+    unknownKey: (profile: string, allowed: readonly string[], key: string) => `desktop.json 的 profiles.${profile} 只能写 ${allowed.join('、')}，不认识 ${key}`,
+    // value is the offending value, already JSON-encoded.
+    notAbsolute: (profile: string, key: string, value: string) => `desktop.json 的 profiles.${profile}.${key} 应是绝对路径：${value}`,
   },
 }
 
@@ -150,6 +161,7 @@ const enUS: typeof zhCN = {
     pathAlreadyDetail: (dir) => `${dir} is already on your user PATH.`,
     pathDone: 'loopctl was added to PATH',
     pathDoneDetail: (dir) => `${dir} was added. New terminals can run loopctl; terminals already open need to be reopened.`,
+    pathMissing: (dir) => `The user PATH was written, but ${dir} is not in it.`,
     add: 'Add',
   },
   external: {
@@ -195,6 +207,12 @@ const enUS: typeof zhCN = {
     retry: 'Try Again',
     logs: 'Open Logs',
   },
+  profile: {
+    badName: (name) => `A profile name may only use lowercase letters, digits, underscores and hyphens, up to 32 characters: ${name}`,
+    notObject: (profile) => `profiles.${profile} in desktop.json should be an object.`,
+    unknownKey: (profile, allowed, key) => `profiles.${profile} in desktop.json may only set ${allowed.join(', ')}; unknown key: ${key}`,
+    notAbsolute: (profile, key, value) => `profiles.${profile}.${key} in desktop.json should be an absolute path: ${value}`,
+  },
 }
 
 export type Strings = typeof zhCN
@@ -205,4 +223,24 @@ export function stringsFor(language: string): Strings {
 
 export function strings(): Strings {
   return stringsFor(app.getPreferredSystemLanguages()[0] ?? app.getLocale())
+}
+
+// An error the shell shows in its own UI, with its text taken from the tables above. It can be raised before the app is ready, when the
+// language is not known yet (the profile is resolved then), so it carries how to render itself rather than the text: message is the
+// English rendering (for the shell log and anything else that prints it), and text(strings()) is the one for the UI.
+export class LocalizedError extends Error {
+  constructor(private readonly render: (s: Strings) => string) {
+    super(render(enUS))
+    this.name = 'LocalizedError'
+  }
+
+  text(s: Strings): string {
+    return this.render(s)
+  }
+}
+
+// What the UI shows for an error: the localized text of a LocalizedError, otherwise its own message (e.g. a system error from Node or
+// PowerShell's stderr).
+export function errorText(err: Error, s: Strings): string {
+  return err instanceof LocalizedError ? err.text(s) : err.message
 }

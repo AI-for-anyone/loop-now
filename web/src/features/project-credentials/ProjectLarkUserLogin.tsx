@@ -6,7 +6,7 @@ import { acceptCLIAuthState, cancelCLIAuth, cliAuthActive, cliAuthKeys, startCLI
 import { invalidateProjectCredentials, useProjectAccounts } from '@/api/project-credentials'
 import { Button } from '@/components/ui/button'
 import { t } from '@/i18n'
-import { backendSignals } from '@/api/backend-signals'
+import { isMissingEndpoint } from '@/api/backend-signals'
 import { larkLoginLocatorKey, useOriginalActionLocator } from '@/lib/useOriginalActionLocator'
 import { LarkUserLogin } from './LarkUserLogin'
 import { LarkAccountDetails } from './LarkAccountDetails'
@@ -19,7 +19,7 @@ type LarkOperation = Extract<Schemas['CLIAuthOperation'], { cli: 'lark-cli' }>
 type LarkStart = Extract<Schemas['CLIAuthStart'], { cli: 'lark-cli' }>
 const invalid = () => new ApiError({ status: 502, code: 'unknown', serverMessage: copy.unsafeResponse })
 function unsupported(error: unknown) {
-  return error instanceof ApiError && (error.status === 404 && error.serverMessage === backendSignals.missingEndpoint || error.status === 422 && error.fields.some(field => field.field === 'cli'))
+  return isMissingEndpoint(error) || (error instanceof ApiError && error.status === 422 && error.fields.some(field => field.field === 'cli'))
 }
 export function ProjectLarkUserLogin({ projectId, account, applicationSetup }: { projectId: string; account?: Schemas['ProjectCredentialAccount']; applicationSetup?: ReactNode }) {
   const routed = useInRouterContext()
@@ -93,7 +93,7 @@ function LarkLogin({ projectId, account, applicationSetup }: { projectId: string
   return <div className="grid min-w-0 gap-3">
     {account && <p role="status" className="text-sm">{copy.reloginUnavailable}</p>}
     {!locator.valid && <p role="alert">{copy.invalidLocator}</p>}
-    <LarkUserLogin projectId={projectId} targetAccount={account} sources={sources} available={available && !noSupport} disabled={disabled} cancelDisabled={mismatch || !!detail.error || !!list.error} operationId={locator.id} phase={op?.status ?? (locator.pending ? 'pending' : undefined)} recovery={recovery} expiresAt={op?.expiresAt} operationSource={operationSource}
+    <LarkUserLogin projectId={projectId} targetAccount={account} sources={sources} available={available && !noSupport} disabled={disabled} cancelDisabled={mismatch || !!detail.error || !!list.error} operationId={locator.id} phase={op?.status ?? (locator.pending ? 'pending' : undefined)} errorCode={op?.errorCode} recovery={recovery} expiresAt={op?.expiresAt} operationSource={operationSource}
       sourceDescription={application => application.larkApplication && <p>{copy.appSummary(application.larkApplication.brand, application.larkApplication.appId)}</p>}
       authorizationReady={!!url} authorizationHref={url} userCode={op?.status === 'awaiting_authorization' ? op.userCode : null}
       error={noSupport ? undefined : mismatch || badURL ? invalid() : postError ?? locator.error ?? cancelError ?? detail.error ?? list.error ?? accounts.error}
