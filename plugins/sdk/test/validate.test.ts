@@ -260,19 +260,54 @@ describe('validatePlugin', () => {
       const r = validatePlugin(plugin(`i18n-bad-${name}`, { name: 'x', version: '1.0.0', description: 'x', keywords: ['loop-now-plugin'], loopNow }, { 'README.md': '', 'platform/index.ts': 'export default () => {}\n' }))
       assert.equal(r.ok, false, name)
       const at = (path: string) => [path, `${path} ${rule}`]
+      // In a JSON Schema only an object title or description is checked here; a number is left to the JSON Schema meta-schema, as on
+      // the server. Labels are not schema keywords and are always checked.
+      const schemaPaths = typeof bad === 'object' ? ['url.title', 'url.description', 'url.oneOf[0].title'].map((path) => at(`loopNow.configSchema.properties.${path}`)) : []
       assert.deepEqual(
         r.findings.filter((f) => f.level === 'error').map((f) => [f.path, f.message]),
-        [
-          at('loopNow.configSchema.properties.url.title'),
-          at('loopNow.configSchema.properties.url.description'),
-          at('loopNow.configSchema.properties.url.oneOf[0].title'),
-          at('loopNow.accounts[0].label'),
-          at('loopNow.actions[0].label'),
-          at('loopNow.channels[0].label'),
-        ],
+        [...schemaPaths, at('loopNow.accounts[0].label'), at('loopNow.actions[0].label'), at('loopNow.channels[0].label')],
         name,
       )
     }
+  })
+
+  it('titles and descriptions are checked in every keyword that holds subschemas, at the same paths as on the server', () => {
+    const rule = 'must be a string, or an object with language tags (such as zh-CN, en-US) as keys and non-empty strings as values, with at least one entry.'
+    const bad = { title: { english: 'x' } }
+    const configSchema = {
+      type: 'object',
+      properties: { x: { type: 'object', properties: { y: { type: 'string', description: { english: 'x' } } } } },
+      patternProperties: { '^p': bad },
+      $defs: { d: bad },
+      definitions: { e: bad },
+      dependentSchemas: { x: bad },
+      dependencies: { x: bad, y: ['x'] },
+      items: bad,
+      prefixItems: [bad],
+      allOf: [bad],
+      anyOf: [bad],
+      oneOf: [bad],
+      not: bad,
+      if: bad,
+      then: bad,
+      else: bad,
+      additionalProperties: bad,
+      contains: bad,
+      propertyNames: bad,
+      unevaluatedItems: bad,
+      unevaluatedProperties: bad,
+      contentSchema: bad,
+    }
+    const loopNow = { id: 'deep-labels', platform: './platform/index.ts', configSchema, accounts: [{ kind: 'bot', label: 'Bot', fields: { type: 'object', properties: { token: { type: 'string', allOf: [bad] } } } }] }
+    const r = validatePlugin(plugin('deep-labels', { name: 'x', version: '1.0.0', description: 'x', keywords: ['loop-now-plugin'], loopNow }, { 'README.md': '', 'platform/index.ts': 'export default () => {}\n' }))
+    const at = (path: string) => [path, `${path} ${rule}`]
+    const c = (path: string) => at(`loopNow.configSchema.${path}.title`)
+    assert.deepEqual(r.findings.filter((f) => f.level === 'error').map((f) => [f.path, f.message]), [
+      at('loopNow.configSchema.properties.x.properties.y.description'),
+      ...['patternProperties.^p', '$defs.d', 'definitions.e', 'dependentSchemas.x', 'dependencies.x', 'prefixItems[0]', 'allOf[0]', 'anyOf[0]', 'oneOf[0]', 'items'].map(c),
+      ...['not', 'if', 'then', 'else', 'additionalProperties', 'contains', 'propertyNames', 'unevaluatedItems', 'unevaluatedProperties', 'contentSchema'].map(c),
+      at('loopNow.accounts[0].fields.properties.token.allOf[0].title'),
+    ])
   })
 
   it('plain string labels work as before; a missing or empty action or channel label keeps the old error', () => {
