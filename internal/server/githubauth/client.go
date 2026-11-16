@@ -40,7 +40,7 @@ type SafeError struct {
 	HTTPStatus int
 }
 
-func (e *SafeError) Error() string { return "GitHub授权失败: " + e.Code }
+func (e *SafeError) Error() string { return "GitHub authorization failed: " + e.Code }
 
 type Authorization struct {
 	URL       string
@@ -58,7 +58,7 @@ type Credential struct {
 func (Credential) String() string   { return "GitHubCredential[redacted]" }
 func (Credential) GoString() string { return "GitHubCredential[redacted]" }
 func (Credential) MarshalJSON() ([]byte, error) {
-	return nil, errors.New("GitHub秘密仅可显式编码")
+	return nil, errors.New("GitHub secrets can only be encoded explicitly")
 }
 
 // Encode uses the unchanged static CLI payload path, not a Google grant.

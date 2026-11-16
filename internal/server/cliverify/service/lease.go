@@ -26,10 +26,10 @@ func privateDirectory(path string) error {
 	}
 	info, e := os.Lstat(path)
 	if e != nil || !info.IsDir() || !privatefs.IsPrivate(path, info) || info.Mode()&os.ModeSymlink != 0 {
-		return errors.New("验证私有目录无效")
+		return errors.New("verification private directory is invalid")
 	}
 	if !privatefs.OwnedByCurrentUserPath(path, info) {
-		return errors.New("验证目录归属无效")
+		return errors.New("verification directory has the wrong owner")
 	}
 	return nil
 }
@@ -82,19 +82,19 @@ func readOwner(home string) (homeOwner, error) {
 	path := filepath.Join(home, ".owner")
 	info, e := os.Lstat(path)
 	if e != nil || !info.Mode().IsRegular() || !privatefs.IsPrivate(path, info) {
-		return owner, errors.New("验证owner标记无效")
+		return owner, errors.New("verification owner marker is invalid")
 	}
 	if !privatefs.OwnedByCurrentUserPath(path, info) {
-		return owner, errors.New("验证owner归属无效")
+		return owner, errors.New("verification owner marker has the wrong owner")
 	}
 	raw, e := os.ReadFile(path)
 	if e != nil || len(raw) > 4096 {
-		return owner, errors.New("验证owner标记不可读")
+		return owner, errors.New("verification owner marker is unreadable")
 	}
 	d := json.NewDecoder(bytes.NewReader(raw))
 	d.DisallowUnknownFields()
 	if d.Decode(&owner) != nil || d.Decode(new(any)) != io.EOF || owner.Protocol != 1 || owner.InstanceID == uuid.Nil || owner.OperationID == uuid.Nil {
-		return owner, errors.New("验证owner标记无效")
+		return owner, errors.New("verification owner marker is invalid")
 	}
 	return owner, nil
 }
@@ -116,7 +116,7 @@ func (s *Service) recoverHomes() error {
 		}
 		operations, e := os.ReadDir(parent)
 		if e != nil {
-			return errors.New("验证旧目录不可读")
+			return errors.New("old verification directories are unreadable")
 		}
 		for _, operation := range operations {
 			op, e := uuid.Parse(operation.Name())
@@ -160,7 +160,7 @@ func (s *Service) recoverHomes() error {
 					_ = os.Remove(leasePath)
 				} else {
 					lease.Close()
-					return errors.New("验证旧目录清理失败")
+					return errors.New("cannot clean up an old verification directory")
 				}
 			}
 			lease.Close()

@@ -17,18 +17,18 @@ func (s *Service) startLark(ctx context.Context, project uuid.UUID, in cm.CLIAut
 	b, e := json.Marshal(in)
 	var v cm.CLIAuthStart
 	if e != nil || json.Unmarshal(b, &v) != nil {
-		return cm.CLIAuthState{}, apperr.Invalid("body", "Lark登录字段无效")
+		return cm.CLIAuthState{}, apperr.Invalid("body", "The Lark login fields are invalid.")
 	}
 	// The different-user relogin policy remains a product decision. Do not
 	// implement either an identity gate or replacement through this unfinished
 	// branch. New-account login is independent and fully implemented below.
 	if in.AccountID != nil {
-		return cm.CLIAuthState{}, &apperr.Error{Status: 503, Code: apperr.CodeInternal, Message: "Lark重登接线尚未就绪"}
+		return cm.CLIAuthState{}, &apperr.Error{Status: 503, Code: apperr.CodeInternal, Message: "Lark re-login is not available yet."}
 	}
 	s.mu.Lock()
 	if s.closed || s.Lark == nil {
 		s.mu.Unlock()
-		return cm.CLIAuthState{}, &apperr.Error{Status: 503, Code: apperr.CodeInternal, Message: "Lark认证组件暂不可用"}
+		return cm.CLIAuthState{}, &apperr.Error{Status: 503, Code: apperr.CodeInternal, Message: "The Lark authentication component is not available. Try again later."}
 	}
 	op, created, e := s.Store.NewProjectCLIAuthOperation(ctx, project, in, time.Now().Add(s.Options.LoginTimeout))
 	if e != nil {

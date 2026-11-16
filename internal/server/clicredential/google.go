@@ -39,7 +39,7 @@ type Google struct {
 
 func (Google) String() string               { return "[Google CLI credential]" }
 func (Google) GoString() string             { return "[Google CLI credential]" }
-func (Google) MarshalJSON() ([]byte, error) { return nil, errors.New("Google秘密仅可显式编码") }
+func (Google) MarshalJSON() ([]byte, error) { return nil, errors.New("use Encode for a Google secret") }
 func (c Google) Valid() bool {
 	if c.Type != "authorized_user" || c.ExpiresAt <= 0 || c.ExpiresAt > 253402300799999 || len(c.Scopes) == 0 || len(c.Scopes) > 100 {
 		return false
@@ -58,12 +58,12 @@ func (c Google) Valid() bool {
 }
 func (c Google) Encode() ([]byte, error) {
 	if !c.Valid() {
-		return nil, errors.New("Google授权格式无效")
+		return nil, errors.New("invalid Google authorization format")
 	}
 	type wire Google
 	b, e := json.Marshal(wire(c))
 	if e != nil || len(b) > MaxBytes {
-		return nil, errors.New("Google授权格式无效")
+		return nil, errors.New("invalid Google authorization format")
 	}
 	return b, nil
 }
@@ -71,12 +71,12 @@ func DecodeGoogle(b []byte) (Google, error) {
 	var c Google
 	type wire Google
 	if len(b) > MaxBytes {
-		return c, errors.New("Google授权格式无效")
+		return c, errors.New("invalid Google authorization format")
 	}
 	d := json.NewDecoder(bytes.NewReader(b))
 	d.DisallowUnknownFields()
 	if d.Decode((*wire)(&c)) != nil || d.Decode(new(any)) != io.EOF || !c.Valid() {
-		return Google{}, errors.New("Google授权格式无效")
+		return Google{}, errors.New("invalid Google authorization format")
 	}
 	return c, nil
 }

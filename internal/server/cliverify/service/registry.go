@@ -22,7 +22,7 @@ type Registry struct{ trusted map[string]descriptor }
 func fingerprint(t *clitemplate.Template) (string, error) {
 	b, e := json.Marshal(t)
 	if e != nil {
-		return "", errors.New("模板指纹无效")
+		return "", errors.New("invalid template fingerprint")
 	}
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:]), nil
@@ -36,7 +36,7 @@ func NewRegistry() (*Registry, error) {
 	for cli, kind := range map[string]string{"gh": "github_user", "lark-cli": "lark_bot", "gcloud": "google_crm_read", "mysql": "database_select1", "psql": "database_select1"} {
 		t, ok := catalog.Get(cli)
 		if !ok {
-			return nil, errors.New("缺少固定验证模板")
+			return nil, errors.New("fixed verification template is missing")
 		}
 		h, e := fingerprint(t)
 		if e != nil {
@@ -47,14 +47,14 @@ func NewRegistry() (*Registry, error) {
 	return r, nil
 }
 func unsupported(cli, source, reason string) error {
-	e := apperr.Invalid("accountId", "该CLI模板或工具版本不支持验证")
+	e := apperr.Invalid("accountId", "This CLI template or tool version does not support verification.")
 	e.Code = apperr.CodeVerificationUnsupported
 	e.Details = cliverify.UnsupportedDetails{CLI: cli, TemplateSource: source, Reason: reason}
 	return e
 }
 func (r *Registry) lookup(catalog *clitemplate.Catalog, record store.ProjectCredentialRecord) (descriptor, error) {
 	if record.View.Purpose != store.PurposeCLI || record.View.CLI == nil || record.CLI == nil {
-		return descriptor{}, apperr.Invalid("accountId", "须为已保存CLI账号")
+		return descriptor{}, apperr.Invalid("accountId", "Must be a saved CLI account.")
 	}
 	cli := *record.View.CLI
 	d, ok := r.trusted[cli]

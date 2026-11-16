@@ -50,7 +50,7 @@ func Load(dir string, hosts []string, now time.Time) (cert tls.Certificate, cert
 	}
 	cert, err = tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
-		return tls.Certificate{}, "", false, fmt.Errorf("读取刚生成的证书失败：%w", err)
+		return tls.Certificate{}, "", false, fmt.Errorf("read the new certificate: %w", err)
 	}
 	return cert, certPath, true, nil
 }

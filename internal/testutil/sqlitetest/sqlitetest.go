@@ -25,7 +25,7 @@ func NewDB(t testing.TB) *db.DB {
 	t.Helper()
 	d := open(t, t.TempDir())
 	if err := schema.Migrate(context.Background(), d, slog.New(slog.DiscardHandler)); err != nil {
-		t.Fatalf("迁移测试库失败：%v", err)
+		t.Fatalf("migrate the test database: %v", err)
 	}
 	return d
 }
@@ -42,11 +42,11 @@ func NewStoreIn(t testing.TB, dir string) *store.Store {
 	t.Helper()
 	s, err := store.Open(context.Background(), db.Options{Dir: dir})
 	if err != nil {
-		t.Fatalf("打开测试库失败：%v", err)
+		t.Fatalf("open the test database: %v", err)
 	}
 	if err := s.Migrate(context.Background(), slog.New(slog.DiscardHandler)); err != nil {
 		s.Close()
-		t.Fatalf("迁移测试库失败：%v", err)
+		t.Fatalf("migrate the test database: %v", err)
 	}
 	return s
 }
@@ -62,11 +62,11 @@ func open(t testing.TB, dir string) *db.DB {
 	t.Helper()
 	d, err := db.Open(context.Background(), db.Options{Dir: dir})
 	if err != nil {
-		t.Fatalf("打开测试库失败：%v", err)
+		t.Fatalf("open the test database: %v", err)
 	}
 	t.Cleanup(func() {
 		if err := d.Close(); err != nil {
-			t.Errorf("关闭测试库失败：%v", err)
+			t.Errorf("close the test database: %v", err)
 		}
 	})
 	return d
@@ -90,14 +90,14 @@ func HoldWriter(t testing.TB, d *db.DB) (release func()) {
 	select {
 	case <-held:
 	case err := <-ended:
-		t.Fatalf("占住写连接失败：%v", err)
+		t.Fatalf("hold the write connection: %v", err)
 	}
 	var once sync.Once
 	release = func() {
 		once.Do(func() {
 			close(done)
 			if err := <-ended; err != nil {
-				t.Errorf("放开写连接失败：%v", err)
+				t.Errorf("release the write connection: %v", err)
 			}
 		})
 	}
@@ -113,7 +113,7 @@ func WaitWriteWaiters(t testing.TB, ctx context.Context, d *db.DB, n int64) {
 	deadline := time.Now().Add(5 * time.Second)
 	for d.WriteWaiters() < n {
 		if ctx.Err() != nil || time.Now().After(deadline) {
-			t.Fatalf("没有 %d 个写入在等写连接（现在 %d 个）", n, d.WriteWaiters())
+			t.Fatalf("fewer than %d writes are waiting for the write connection (now %d)", n, d.WriteWaiters())
 		}
 		time.Sleep(time.Millisecond)
 	}

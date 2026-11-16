@@ -51,7 +51,7 @@ func renderLarkCLI(values map[string]string, goos string, random io.Reader) ([]P
 	if goos == "darwin" {
 		key := make([]byte, 32)
 		if _, err := io.ReadFull(random, key); err != nil {
-			return nil, fmt.Errorf("生成 lark-cli 主密钥失败：%w", err)
+			return nil, fmt.Errorf("generate the lark-cli master key: %w", err)
 		}
 		files = append(files, PayloadFile{Path: larkMasterKeyPath, Content: key})
 	}

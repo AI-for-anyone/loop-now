@@ -270,7 +270,7 @@ func parseLarkPass(raw []byte, selectedIndex int) ([]larkMetadata, string, error
 func (r *Reader) discoverLark(ctx context.Context) ([]Candidate, error) {
 	pin, e := r.stat(larkPlainConfig)
 	if e != nil {
-		return []Candidate{r.add("lark-cli", "lark_bot_plaintext", "Lark 应用/Bot来源", larkPlainConfig, "", nil, nil, "source_unreadable")}, nil
+		return []Candidate{r.add("lark-cli", "lark_bot_plaintext", "Lark app/Bot source", larkPlainConfig, "", nil, nil, "source_unreadable")}, nil
 	}
 	if !pin.exists {
 		return nil, nil
@@ -283,17 +283,17 @@ func (r *Reader) discoverLark(ctx context.Context) ([]Candidate, error) {
 	apps, _, e := parseLarkPass(raw, -1)
 	pins := map[string]stamp{larkPlainConfig: pin}
 	if e != nil {
-		return []Candidate{r.add("lark-cli", "lark_bot_plaintext", "Lark 应用/Bot来源", larkPlainConfig, "", pins, nil, "unsupported")}, nil
+		return []Candidate{r.add("lark-cli", "lark_bot_plaintext", "Lark app/Bot source", larkPlainConfig, "", pins, nil, "unsupported")}, nil
 	}
 	out := []Candidate{}
 	for _, a := range apps {
-		label := "Lark 应用/Bot来源"
+		label := "Lark app/Bot source"
 		if larkAppID.MatchString(a.appID) {
-			label = "Lark 应用/Bot " + a.appID
+			label = "Lark app/Bot " + a.appID
 		}
 		out = append(out, r.add("lark-cli", "lark_bot_plaintext", label, larkPlainConfig, a.selector, pins, a.missing, a.reason))
 		if a.hasUsers {
-			out = append(out, r.add("lark-cli", "lark_user", "Lark 用户登录（不导入）", larkPlainConfig, "user:"+a.selector, pins, nil, "user_identity_unsupported"))
+			out = append(out, r.add("lark-cli", "lark_user", "Lark user login (not imported)", larkPlainConfig, "user:"+a.selector, pins, nil, "user_identity_unsupported"))
 		}
 	}
 	return out, nil

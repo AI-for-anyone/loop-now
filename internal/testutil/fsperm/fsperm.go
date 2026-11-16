@@ -13,6 +13,6 @@ import "testing"
 func Open(t testing.TB, path string) {
 	t.Helper()
 	if err := open(path); err != nil {
-		t.Fatalf("放开 %s 的权限：%v", path, err)
+		t.Fatalf("open up the permissions of %s: %v", path, err)
 	}
 }

@@ -49,7 +49,7 @@ type Service struct {
 
 func New(ctx context.Context, st *store.Store, templates *clitemplate.Catalog, installer *clitemplate.Installer, google *cliauth.Coordinator, o Options, log *slog.Logger) (*Service, error) {
 	if st == nil || templates == nil || installer == nil || !filepath.IsAbs(o.WorkRoot) || !filepath.IsAbs(o.NodeBin) || !filepath.IsAbs(o.GuardEntry) {
-		return nil, errors.New("CLI验证依赖无效")
+		return nil, errors.New("invalid CLI verification dependencies")
 	}
 	if o.Concurrency <= 0 {
 		o.Concurrency = 4
@@ -106,11 +106,11 @@ func New(ctx context.Context, st *store.Store, templates *clitemplate.Catalog, i
 func manager(ctx context.Context) (string, *uuid.UUID, error) {
 	p, ok := auth.From(ctx)
 	if !ok || (p.Kind != auth.KindConsole && p.Kind != auth.KindExternal) {
-		return "", nil, apperr.Forbidden("该身份不能管理凭证验证")
+		return "", nil, apperr.Forbidden("This identity cannot manage credential verification.")
 	}
 	if p.Kind == auth.KindExternal {
 		if p.ID == uuid.Nil {
-			return "", nil, apperr.Forbidden("外部身份无效")
+			return "", nil, apperr.Forbidden("The external identity is invalid.")
 		}
 		return string(p.Kind), &p.ID, nil
 	}
@@ -128,7 +128,7 @@ func (s *Service) Start(ctx context.Context, p, a uuid.UUID, in cliverify.Start)
 	old, e := s.Store.GetCLIVerification(ctx, p, a, in.OperationID)
 	if e == nil {
 		if old.VersionID != in.ExpectedVersionID {
-			er := apperr.Conflict(apperr.CodeVerificationOperationConflict, "验证操作目标不匹配")
+			er := apperr.Conflict(apperr.CodeVerificationOperationConflict, "This operationId was already used for a different target.")
 			er.Details = cliverify.ConflictDetails{ProjectID: p, AccountID: a, OperationID: old.ID, VersionID: old.VersionID}
 			return old, er
 		}
@@ -142,10 +142,10 @@ func (s *Service) Start(ctx context.Context, p, a uuid.UUID, in cliverify.Start)
 		return old, e
 	}
 	if record.View.DeletedAt != nil {
-		return old, apperr.NotFound("凭证账号")
+		return old, apperr.NotFound("Credential account")
 	}
 	if record.View.Purpose == store.PurposeCLI && (record.View.CurrentVersionID == nil || *record.View.CurrentVersionID != in.ExpectedVersionID) {
-		err := apperr.PreconditionFailed("CLI凭证版本已更改，请重新读取")
+		err := apperr.PreconditionFailed("The CLI credential version has changed. Reload it and try again.")
 		err.Details = cliverify.VersionConflictDetails{ProjectID: p, AccountID: a, ExpectedVersionID: in.ExpectedVersionID, CurrentVersionID: record.View.CurrentVersionID}
 		return old, err
 	}
@@ -156,14 +156,14 @@ func (s *Service) Start(ctx context.Context, p, a uuid.UUID, in cliverify.Start)
 	if !s.nodeReady {
 		e := unsupported(*record.View.CLI, record.TemplateSource, "adapter_unavailable")
 		if safe, ok := apperr.As(e); ok {
-			safe.Message = "验证运行环境需Node24"
+			safe.Message = "The verification runtime requires Node 24."
 		}
 		return old, e
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
-		return old, &apperr.Error{Status: 503, Code: apperr.CodeInternal, Message: "CLI验证服务已停止"}
+		return old, &apperr.Error{Status: 503, Code: apperr.CodeInternal, Message: "The CLI verification service has stopped."}
 	}
 	expires := time.Now().Add(s.Options.InstallTimeout + s.Options.ProbeTimeout + 2*s.Options.RecordTimeout)
 	op, created, e := s.Store.BeginCLIVerification(ctx, p, a, in, store.VerificationMetadata{TemplateSource: "builtin", CredentialFormat: d.Template.CredentialFormat(), TemplateFingerprint: d.Fingerprint, AdapterRevision: d.Revision, ProbeKind: d.Kind}, kind, actor, expires)

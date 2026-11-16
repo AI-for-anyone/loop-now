@@ -19,32 +19,32 @@ const MaxPathLen = 512
 // segments, backslashes or control characters, and must not end with a slash.
 func CleanRelPath(p string) (string, error) {
 	if p == "" {
-		return "", errors.New("路径不能为空")
+		return "", errors.New("path must not be empty")
 	}
 	if len(p) > MaxPathLen {
-		return "", fmt.Errorf("路径不能超过 %d 个字节", MaxPathLen)
+		return "", fmt.Errorf("path must be at most %d bytes", MaxPathLen)
 	}
 	if strings.HasPrefix(p, "/") {
-		return "", errors.New("必须是相对路径")
+		return "", errors.New("path must be relative")
 	}
 	if strings.ContainsRune(p, '\\') {
-		return "", errors.New("路径不能包含反斜杠")
+		return "", errors.New("path must not contain backslashes")
 	}
 	for _, r := range p {
 		if unicode.IsControl(r) {
-			return "", errors.New("路径不能包含控制字符")
+			return "", errors.New("path must not contain control characters")
 		}
 	}
 	for seg := range strings.SplitSeq(p, "/") {
 		switch seg {
 		case "":
-			return "", errors.New("路径不能包含空段或以斜杠结尾")
+			return "", errors.New("path must not contain empty segments or end with a slash")
 		case ".", "..":
-			return "", errors.New("路径不能包含 . 或 .. 段")
+			return "", errors.New("path must not contain . or .. segments")
 		}
 	}
 	if path.Clean(p) != p {
-		return "", errors.New("路径不规范")
+		return "", errors.New("path is not in clean form")
 	}
 	return p, nil
 }
@@ -60,39 +60,39 @@ var scpLike = regexp.MustCompile(`^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:[^/].*$`)
 // http(s) URLs must not embed an account or password, and ssh URLs may carry only a user name, never a password.
 func ValidateGitURL(raw string) error {
 	if raw == "" {
-		return errors.New("仓库地址不能为空")
+		return errors.New("repository URL must not be empty")
 	}
 	if strings.HasPrefix(raw, "-") || strings.ContainsAny(raw, " \t\r\n") {
-		return errors.New("仓库地址格式不对")
+		return errors.New("repository URL has an invalid format")
 	}
 	if scpLike.MatchString(raw) {
 		return nil
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
-		return errors.New("仓库地址无法解析")
+		return errors.New("repository URL cannot be parsed")
 	}
 	switch u.Scheme {
 	case "https", "http":
 		if u.User != nil {
-			return errors.New("仓库地址不能内嵌账号或密码；私有仓库请为 Agent 录入 gh 凭证")
+			return errors.New("repository URL must not embed an account or password; for a private repository, add a gh credential for the Agent")
 		}
 		if u.Host == "" {
-			return errors.New("仓库地址缺少主机")
+			return errors.New("repository URL has no host")
 		}
 	case "ssh":
 		if _, hasPassword := u.User.Password(); u.User != nil && hasPassword {
-			return errors.New("仓库地址不能内嵌密码")
+			return errors.New("repository URL must not embed a password")
 		}
 		if u.Host == "" {
-			return errors.New("仓库地址缺少主机")
+			return errors.New("repository URL has no host")
 		}
 	case "file":
 		if u.Path == "" {
-			return errors.New("仓库地址缺少路径")
+			return errors.New("repository URL has no path")
 		}
 	default:
-		return errors.New("仓库地址只支持 https、http、ssh、file 或 git@host:path 形式")
+		return errors.New("repository URL must use https, http, ssh, file or the git@host:path form")
 	}
 	return nil
 }
@@ -103,10 +103,10 @@ var badBranch = regexp.MustCompile(`(^-)|(\.\.)|([\x00-\x20~^:?*\[\\])|(@\{)|(/$
 // so they cannot be taken as command-line options.
 func ValidateBranch(b string) error {
 	if b == "" {
-		return errors.New("分支不能为空")
+		return errors.New("branch must not be empty")
 	}
 	if len(b) > 255 || badBranch.MatchString(b) {
-		return errors.New("分支名不合法")
+		return errors.New("invalid branch name")
 	}
 	return nil
 }

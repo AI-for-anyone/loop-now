@@ -16,10 +16,10 @@ type Start struct {
 
 func (in Start) Validate() error {
 	if in.OperationID == uuid.Nil {
-		return apperr.Invalid("operationId", "须提供非零UUID")
+		return apperr.Invalid("operationId", "Must not be the zero UUID.")
 	}
 	if in.ExpectedVersionID == uuid.Nil {
-		return apperr.Invalid("expectedVersionId", "须提供非零UUID")
+		return apperr.Invalid("expectedVersionId", "Must not be the zero UUID.")
 	}
 	return nil
 }

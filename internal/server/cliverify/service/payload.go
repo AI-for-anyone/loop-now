@@ -36,14 +36,14 @@ func decodePayload(raw []byte) (clitemplate.Payload, error) {
 	d := json.NewDecoder(bytes.NewReader(raw))
 	d.DisallowUnknownFields()
 	if d.Decode(&p) != nil || d.Decode(new(any)) != io.EOF {
-		return p, errors.New("CLI载荷无效")
+		return p, errors.New("invalid CLI payload")
 	}
 	return p, nil
 }
 func privateFiles(home string, p clitemplate.Payload) error {
 	for _, f := range p.Files {
 		if f.Path == "" || filepath.IsAbs(f.Path) || filepath.Clean(f.Path) != f.Path || f.Path == ".." || strings.HasPrefix(f.Path, "../") || strings.ContainsRune(f.Path, 0) {
-			return errors.New("CLI秘密路径无效")
+			return errors.New("invalid CLI secret path")
 		}
 		path := filepath.Join(home, f.Path)
 		if e := os.MkdirAll(filepath.Dir(path), 0700); e != nil {
@@ -86,19 +86,19 @@ func (s *Service) materialize(ctx context.Context, op cliverify.Operation, home 
 		}
 	case "gh":
 		if len(p.Files) != 0 || len(p.Env) != 1 || p.Env["GH_TOKEN"] == "" || strings.ContainsRune(p.Env["GH_TOKEN"], 0) {
-			return req, nil, errors.New("GitHub载荷无效")
+			return req, nil, errors.New("invalid GitHub payload")
 		}
 		extra = append(extra, "GH_TOKEN="+p.Env["GH_TOKEN"], "GH_CONFIG_DIR="+filepath.Join(home, ".config/gh"), "GH_PROMPT_DISABLED=1", "GH_NO_UPDATE_NOTIFIER=1")
 	case "lark-cli":
 		if len(p.Env) != 0 {
-			return req, nil, errors.New("Lark载荷无效")
+			return req, nil, errors.New("invalid Lark payload")
 		}
 		found := false
 		for _, f := range p.Files {
 			switch f.Path {
 			case ".lark-cli/config.json":
 				if found {
-					return req, nil, errors.New("Lark载荷重复")
+					return req, nil, errors.New("duplicate Lark payload")
 				}
 				found = true
 				var cfg struct {
@@ -114,27 +114,27 @@ func (s *Service) materialize(ctx context.Context, op cliverify.Operation, home 
 				d := json.NewDecoder(bytes.NewReader(f.Content))
 				d.DisallowUnknownFields()
 				if d.Decode(&cfg) != nil || d.Decode(new(any)) != io.EOF || len(cfg.Apps) != 1 {
-					return req, nil, errors.New("Lark载荷无效")
+					return req, nil, errors.New("invalid Lark payload")
 				}
 				a := cfg.Apps[0]
 				if a.AppID == "" || a.AppSecret == "" || a.StrictMode != "bot" || a.DefaultAs != "bot" || len(a.Users) != 0 || (a.Brand != "lark" && a.Brand != "feishu") {
-					return req, nil, errors.New("Lark身份无效")
+					return req, nil, errors.New("invalid Lark identity")
 				}
 				req.ExpectedAppID = a.AppID
 				req.ExpectedBrand = a.Brand
 			case "Library/Application Support/lark-cli/master.key.file":
 				if len(f.Content) != 32 {
-					return req, nil, errors.New("Lark私有key无效")
+					return req, nil, errors.New("invalid Lark private key")
 				}
 			default:
-				return req, nil, errors.New("Lark路径无效")
+				return req, nil, errors.New("invalid Lark path")
 			}
 		}
 		if !found {
-			return req, nil, errors.New("缺少Lark配置")
+			return req, nil, errors.New("Lark configuration is missing")
 		}
 	default:
-		return req, nil, errors.New("不支持该CLI")
+		return req, nil, errors.New("unsupported CLI")
 	}
 	if e = privateFiles(home, p); e != nil {
 		return req, nil, e

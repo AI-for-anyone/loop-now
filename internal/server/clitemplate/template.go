@@ -145,7 +145,7 @@ func Load(dir string) (*Catalog, error) {
 	}
 	if dir != "" {
 		if err := c.loadFS(os.DirFS(dir), "."); err != nil {
-			return nil, fmt.Errorf("加载 %s 中的 CLI 模板失败：%w", dir, err)
+			return nil, fmt.Errorf("load CLI templates from %s: %w", dir, err)
 		}
 	}
 	return c, nil
@@ -166,10 +166,10 @@ func (c *Catalog) loadFS(fsys fs.FS, root string) error {
 		}
 		var t Template
 		if err := json.Unmarshal(b, &t); err != nil {
-			return fmt.Errorf("%s：%w", e.Name(), err)
+			return fmt.Errorf("%s: %w", e.Name(), err)
 		}
 		if err := t.validate(); err != nil {
-			return fmt.Errorf("%s：%w", e.Name(), err)
+			return fmt.Errorf("%s: %w", e.Name(), err)
 		}
 		c.byName[t.Name] = &t
 	}
@@ -185,46 +185,46 @@ var (
 
 func (t *Template) validate() error {
 	if !cliNamePattern.MatchString(t.Name) {
-		return errors.New("模板名称不合法")
+		return errors.New("invalid template name")
 	}
 	if t.Version == "" || t.Binary == "" {
-		return errors.New("缺少 version 或 binary")
+		return errors.New("version or binary is missing")
 	}
 	if t.Injection != "env" && t.Injection != "files" {
-		return errors.New("injection 只能是 env 或 files")
+		return errors.New("injection must be env or files")
 	}
 	names := map[string]bool{}
 	for _, f := range t.Fields {
 		if f.Name == "" || f.Label == "" || names[f.Name] {
-			return fmt.Errorf("录入项 %q 不合法或重复", f.Name)
+			return fmt.Errorf("field %q is invalid or duplicated", f.Name)
 		}
 		names[f.Name] = true
 		switch f.Type {
 		case "string", "secret":
 		case "enum":
 			if len(f.Options) == 0 || (f.Default != "" && !slices.Contains(f.Options, f.Default)) {
-				return fmt.Errorf("枚举录入项 %s 的可选值或默认值不合法", f.Name)
+				return fmt.Errorf("enum field %s has invalid options or an invalid default", f.Name)
 			}
 		default:
-			return fmt.Errorf("录入项 %s 的类型 %q 不支持", f.Name, f.Type)
+			return fmt.Errorf("field %s has unsupported type %q", f.Name, f.Type)
 		}
 	}
 	for _, n := range append(slices.Clone(t.ReservedEnv), t.ReservedEnvPrefixes...) {
 		if !envNamePattern.MatchString(n) {
-			return fmt.Errorf("保留的环境变量名或前缀 %q 不合法", n)
+			return fmt.Errorf("invalid reserved environment variable name or prefix %q", n)
 		}
 	}
 	for k, v := range t.Env {
 		if !envNamePattern.MatchString(k) {
-			return fmt.Errorf("环境变量名 %q 不合法", k)
+			return fmt.Errorf("invalid environment variable name %q", k)
 		}
 		if placeholder.MatchString(v) {
-			return fmt.Errorf("固定环境变量 %s 不能引用录入项", k)
+			return fmt.Errorf("fixed environment variable %s must not reference a field", k)
 		}
 	}
 	for k, v := range t.Credential.Env {
 		if !envNamePattern.MatchString(k) {
-			return fmt.Errorf("环境变量名 %q 不合法", k)
+			return fmt.Errorf("invalid environment variable name %q", k)
 		}
 		if err := checkPlaceholders(v, names); err != nil {
 			return err
@@ -232,18 +232,18 @@ func (t *Template) validate() error {
 	}
 	for _, f := range append(t.Credential.Files, cleanupSpecs(t.Credential.CleanupPaths)...) {
 		if _, err := content.CleanRelPath(f.Path); err != nil {
-			return fmt.Errorf("凭证文件路径 %q 不合法：%v", f.Path, err)
+			return fmt.Errorf("invalid credential file path %q: %v", f.Path, err)
 		}
 		if err := checkPlaceholders(f.Content, names); err != nil {
 			return err
 		}
 	}
 	if t.Credential.Renderer != "" && t.Credential.Renderer != "lark-cli" && t.Credential.Renderer != "psql" && t.Credential.Renderer != "mysql" && t.Credential.Renderer != "gcloud" {
-		return fmt.Errorf("不认识的渲染器 %q", t.Credential.Renderer)
+		return fmt.Errorf("unknown renderer %q", t.Credential.Renderer)
 	}
 	for plat, a := range t.Install {
 		if a.URL == "" || !sha256Pattern.MatchString(a.SHA256) || (a.Format != "zip" && a.Format != "tar.gz" && a.Format != "tar.xz") || a.Path == "" {
-			return fmt.Errorf("平台 %s 的安装包定义不完整", plat)
+			return fmt.Errorf("install package definition for platform %s is incomplete", plat)
 		}
 	}
 	return nil
@@ -260,7 +260,7 @@ func cleanupSpecs(paths []string) []FileSpec {
 func checkPlaceholders(s string, names map[string]bool) error {
 	for _, m := range placeholder.FindAllStringSubmatch(s, -1) {
 		if !names[m[1]] {
-			return fmt.Errorf("占位符 {{%s}} 没有对应的录入项", m[1])
+			return fmt.Errorf("placeholder {{%s}} has no matching field", m[1])
 		}
 	}
 	return nil
@@ -368,7 +368,7 @@ func (t *Template) Render(input map[string]string) (Payload, []string, error) {
 	var fieldErrs []apperr.FieldError
 	for k := range input {
 		if !slices.ContainsFunc(t.Fields, func(f Field) bool { return f.Name == k }) {
-			fieldErrs = append(fieldErrs, apperr.Field("fields."+k, "模板中没有这个录入项"))
+			fieldErrs = append(fieldErrs, apperr.Field("fields."+k, "The template has no such field."))
 		}
 	}
 	for _, f := range t.Fields {
@@ -377,11 +377,11 @@ func (t *Template) Render(input map[string]string) (Payload, []string, error) {
 			v = f.Default
 		}
 		if v == "" && f.Required {
-			fieldErrs = append(fieldErrs, apperr.Field("fields."+f.Name, f.Label+"必填"))
+			fieldErrs = append(fieldErrs, apperr.Field("fields."+f.Name, f.Label+" is required."))
 			continue
 		}
 		if f.Type == "enum" && v != "" && !slices.Contains(f.Options, v) {
-			fieldErrs = append(fieldErrs, apperr.Field("fields."+f.Name, f.Label+"只能是 "+strings.Join(f.Options, "、")))
+			fieldErrs = append(fieldErrs, apperr.Field("fields."+f.Name, f.Label+" must be one of: "+strings.Join(f.Options, ", ")))
 			continue
 		}
 		// Database passwords are opaque: do not trim meaningful whitespace.
