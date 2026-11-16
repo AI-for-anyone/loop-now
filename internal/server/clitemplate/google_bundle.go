@@ -25,8 +25,9 @@ func (i *Installer) GoogleRuntimePaths(t *Template) (sdk, framework string) {
 	return filepath.Join(root, "google-cloud-sdk"), filepath.Join(root, "Python.framework")
 }
 
-// GoogleSelfContained 只依据安装完成标记中的 Python 依赖校验值判断运行方式。
-// 标记缺失或不可读时必须报错，不能因文件系统探测失败而退回 PATH 中的 Python。
+// GoogleSelfContained decides how to run solely from the Python dependency checksum in the install-complete marker.
+// When the marker is missing or unreadable it must return an error; it must not fall back to the Python on PATH
+// because a file system probe failed.
 func GoogleSelfContained(runtimeRoot string) (bool, error) {
 	raw, err := os.ReadFile(filepath.Join(runtimeRoot, "..", ".google-ready.json"))
 	if err != nil {
@@ -39,8 +40,8 @@ func GoogleSelfContained(runtimeRoot string) (bool, error) {
 	return ready.PythonSHA256 == "", nil
 }
 
-// googleDependency 校验并返回 macOS 私有 Python 依赖；Linux 的自包含安装包自带
-// SDK 全部运行时，没有依赖，第二个返回值为 false。
+// googleDependency validates and returns the macOS private Python dependency; the self-contained Linux install
+// package ships the SDK's entire runtime and has no dependency, so the second return value is false.
 func googleDependency(a Asset) (dep Asset, hasDep bool, err error) {
 	if len(a.Dependencies) == 0 {
 		return Asset{}, false, nil
@@ -54,8 +55,10 @@ func privatePythonShell(framework string) string {
 	return "export DYLD_FRAMEWORK_PATH=" + shellQuote(filepath.Dir(framework)) + " DYLD_LIBRARY_PATH=" + shellQuote(filepath.Join(framework, "Versions/3.13/lib")) + " PYTHONHOME=" + shellQuote(filepath.Join(framework, "Versions/3.13")) + "; exec " + shellQuote(filepath.Join(framework, "Versions/3.13/bin/python3.13")) + " -S "
 }
 
-// verifyGoogleSelfContained 验证 Linux 自包含安装：bin/gcloud 在最小环境下能打印固定版本。
-// Linux 官方包不自带 Python，使用系统 python3（镜像/Docker 环境负责提供）。
+// verifyGoogleSelfContained verifies a self-contained Linux install: bin/gcloud can print the pinned version in a
+// minimal environment.
+// The official Linux package does not ship Python and uses the system python3 (the image/Docker environment is
+// responsible for providing it).
 func verifyGoogleSelfContained(ctx context.Context, t *Template, root string) error {
 	home, e := os.MkdirTemp(root, ".verify-home-")
 	if e != nil {
@@ -84,7 +87,8 @@ func verifyGoogleSelfContained(ctx context.Context, t *Template, root string) er
 	return nil
 }
 
-// verifyGoogle 验证 macOS 私有安装：固定版本的私有 Python 与 SDK 依赖都完整。
+// verifyGoogle verifies a private macOS install: the pinned private Python and the SDK dependencies are both
+// complete.
 func verifyGoogle(ctx context.Context, t *Template, root string) error {
 	home, e := os.MkdirTemp(root, ".verify-home-")
 	if e != nil {

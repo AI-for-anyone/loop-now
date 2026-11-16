@@ -1,8 +1,11 @@
-// Package pgimport 把 PostgreSQL 时期的库一次性导入到新的 SQLite 数据目录（loop-server import-postgres）。
+// Package pgimport imports a database from the PostgreSQL era into a new SQLite data directory in one go
+// (loop-server import-postgres).
 //
-// 源库必须已经由最后一个 PostgreSQL 版本迁移到 pgschema.Latest，并且服务已经停下；导入在源库的一个
-// 可重复读只读事务里读取，目标库在一个写事务里写入，外键推迟到提交时整体检查。目标库目录里不能已经有库：
-// 导入只建新库，失败时删掉本次建的文件，不会改动源库。
+// The source database must already have been migrated to pgschema.Latest by the last PostgreSQL release, and the
+// server must be stopped; the import reads from the source in one repeatable-read, read-only transaction and writes
+// the target in one write transaction, with foreign keys deferred and checked as a whole at commit. The target
+// directory must not already contain a database: the import only creates new databases, deletes the files it created
+// on failure, and never changes the source database.
 package pgimport
 
 import (
@@ -24,35 +27,38 @@ import (
 	"loop-now/internal/server/store/schema"
 )
 
-// EnvSourceURL 是源库连接串所在的环境变量：沿用 PostgreSQL 时期服务端读的那个。
+// EnvSourceURL is the environment variable holding the source connection string: the same one the server read in the
+// PostgreSQL era.
 const EnvSourceURL = "LOOP_NOW_DATABASE_URL"
 
-// 基线有意与 PG 不同的地方（与 schema 包的 parity 测试一致）：这些只在 SQLite 里有，导入时取默认值或留空。
+// Where the baseline deliberately differs from PG (consistent with the parity test in the schema package): these
+// exist only in SQLite and are left at their defaults or empty on import.
 var (
 	sqliteOnlyTables  = []string{"sequences", "plugin_changes", "plugin_lifecycle_changes"}
 	sqliteOnlyColumns = map[string][]string{"runs": {"stop_requested"}, "task_turns": {"stop_requested"}}
 )
 
-// Options 是一次导入的输入。
+// Options is the input of one import.
 type Options struct {
-	SourceURL string // PostgreSQL 连接串；不会出现在日志与错误里
-	DBDir     string // 目标库目录（config.DBDir(数据目录)）
+	SourceURL string // PostgreSQL connection string; never appears in logs or errors
+	DBDir     string // target database directory (config.DBDir(data directory))
 	Log       *slog.Logger
 }
 
-// Table 是一张表导入的行数。
+// Table is the number of rows imported for one table.
 type Table struct {
 	Name string
 	Rows int64
 }
 
-// Report 是导入结果：源库版本与每张表的行数（只有计数，没有任何行内容）。
+// Report is the import result: the source database version and each table's row count (only counts, no row
+// contents at all).
 type Report struct {
 	Version int64
 	Tables  []Table
 }
 
-// Import 执行导入。
+// Import runs the import.
 func Import(ctx context.Context, o Options) (_ Report, err error) {
 	if o.Log == nil {
 		o.Log = slog.New(slog.DiscardHandler)
@@ -81,7 +87,7 @@ func Import(ctx context.Context, o Options) (_ Report, err error) {
 		return Report{}, fmt.Errorf("连接 PostgreSQL 失败：%w", connectCause(err))
 	}
 	defer src.Close(context.WithoutCancel(ctx))
-	// 可重复读：整次导入看到同一个快照，计数与数据一致。
+	// Repeatable read: the whole import sees one snapshot, so counts and data agree.
 	stx, err := src.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return Report{}, fmt.Errorf("开始读取 PostgreSQL 失败：%w", err)
@@ -99,15 +105,18 @@ func Import(ctx context.Context, o Options) (_ Report, err error) {
 	if err != nil {
 		return Report{}, err
 	}
-	// 库文件是本次建的（开头已确认原来没有）：失败时整个删掉。
+	// The database files were created by this run (we confirmed at the start that none existed): delete them all on
+	// failure.
 	defer func() {
 		st.Close()
 		if err != nil {
 			removeDB(o.DBDir)
 		}
 	}()
-	// 先只迁到 SQLite 基线（与源库 PG 的最终结构对应），导入并核对之后再执行基线之后的迁移：
-	// 之后的迁移新增的表与列在源库里没有，迁到最新再比对结构会拒绝导入。
+	// First migrate only to the SQLite baseline (which matches the final structure of the PG source), and run the
+	// migrations after the baseline once the import is done and verified: tables and columns added by later
+	// migrations do not exist in the source, so migrating to the latest version before comparing structures would
+	// reject the import.
 	if err = st.MigrateTo(ctx, o.Log, schema.Baseline); err != nil {
 		return Report{}, err
 	}
@@ -126,12 +135,13 @@ func Import(ctx context.Context, o Options) (_ Report, err error) {
 
 	report := Report{Version: version}
 	err = st.Pool.InTx(ctx, func(tx *db.Tx) error {
-		// 外键推迟到提交时检查：表可以按任意顺序写，约束照样全部生效。
+		// Foreign keys are deferred to commit: tables can be written in any order and every constraint still applies.
 		if _, err := tx.Exec(ctx, `PRAGMA defer_foreign_keys = ON`); err != nil {
 			return err
 		}
 		for _, p := range plans {
-			// 基线建库时写入的种子行（单例设置）由源库的行代替。
+			// Seed rows written when the baseline created the database (singleton settings) are replaced by the source's
+			// rows.
 			if _, err := tx.Exec(ctx, `DELETE FROM `+p.target()); err != nil {
 				return fmt.Errorf("清空 %s：%w", p.table, err)
 			}
@@ -145,7 +155,8 @@ func Import(ctx context.Context, o Options) (_ Report, err error) {
 		if err := setSequences(ctx, stx, tx); err != nil {
 			return err
 		}
-		// 插件捕获触发器把每一行导入都记成了一次变更；这些不是新事件，提交前清掉（源库的插件事件已原样导入）。
+		// The plugin capture triggers recorded every imported row as a change; these are not new events, so clear them
+		// before commit (the source's plugin events were imported as they are).
 		for _, t := range []string{"plugin_changes", db.EventsSchema + ".plugin_lifecycle_changes"} {
 			if _, err := tx.Exec(ctx, `DELETE FROM `+t); err != nil {
 				return err
@@ -171,7 +182,8 @@ func Import(ctx context.Context, o Options) (_ Report, err error) {
 	return report, nil
 }
 
-// connectCause 去掉 pgx 连接错误里带的连接参数（主机、用户、库名），只留下原因。
+// connectCause strips the connection parameters (host, user, database name) carried in a pgx connection error and
+// keeps only the cause.
 func connectCause(err error) error {
 	var ce *pgconn.ConnectError
 	if errors.As(err, &ce) {
@@ -191,7 +203,8 @@ func removeDB(dir string) {
 	}
 }
 
-// sourceVersion 读源库 goose 表里最后一条记录的版本；最后一条是回退记录时视为不完整。
+// sourceVersion reads the version of the last record in the source's goose table; if the last record is a rollback,
+// the source is treated as incomplete.
 func sourceVersion(ctx context.Context, tx pgx.Tx) (int64, error) {
 	var version int64
 	var applied bool
@@ -214,7 +227,8 @@ type targetTable struct {
 	columns      []targetColumn
 }
 
-// targetTables 列出新库里要导入的表与列（不含生成列与 SQLite 独有的表）。
+// targetTables lists the tables and columns to import in the new database (excluding generated columns and
+// SQLite-only tables).
 func targetTables(ctx context.Context, d *db.DB) ([]targetTable, error) {
 	var out []targetTable
 	for _, schema := range []string{"main", db.EventsSchema} {
@@ -251,7 +265,8 @@ func targetTables(ctx context.Context, d *db.DB) ([]targetTable, error) {
 	return out, nil
 }
 
-// sourceColumns 返回源库每张表的非生成列及其类型（information_schema 的 data_type）。
+// sourceColumns returns the non-generated columns of every source table with their types (data_type from
+// information_schema).
 func sourceColumns(ctx context.Context, tx pgx.Tx) (map[string]map[string]string, error) {
 	rows, err := tx.Query(ctx, `SELECT c.table_name, c.column_name, c.data_type
 		FROM information_schema.columns c JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name
@@ -277,7 +292,7 @@ func sourceColumns(ctx context.Context, tx pgx.Tx) (map[string]map[string]string
 type tablePlan struct {
 	schema, table string
 	columns       []string
-	selects       []string // 每列在 PG 里的取值表达式，结果已是 SQLite 存储的形态
+	selects       []string // per-column select expression in PG, whose result is already in SQLite storage form
 }
 
 func (p tablePlan) target() string {
@@ -287,7 +302,8 @@ func (p tablePlan) target() string {
 	return p.table
 }
 
-// plan 核对两边的表与列一一对应，并为每列选出换写表达式；有任何对不上就拒绝导入。
+// plan checks that tables and columns on both sides match one to one and picks a conversion expression for each
+// column; any mismatch rejects the import.
 func plan(targets []targetTable, sources map[string]map[string]string) ([]tablePlan, error) {
 	var problems []string
 	seen := map[string]bool{}
@@ -333,8 +349,9 @@ func plan(targets []targetTable, sources map[string]map[string]string) ([]tableP
 	return out, nil
 }
 
-// convert 返回把 PG 列取成 SQLite 存储形态的表达式：uuid 小写文本，时刻 UTC 微秒整数，json/jsonb 原样文本，
-// 数组 JSON 数组文本，bytea 原样字节，布尔与整数照取（写入时转成整数）。
+// convert returns the expression that reads a PG column in SQLite storage form: uuid as lowercase text, timestamps as
+// UTC microsecond integers, json/jsonb as their text unchanged, arrays as JSON array text, bytea as the raw bytes,
+// booleans and integers as they are (converted to integers on write).
 func convert(col, pgType, sqliteType string) (string, error) {
 	want := map[string]string{
 		"uuid": "TEXT", "text": "TEXT", "jsonb": "TEXT", "json": "TEXT", "ARRAY": "TEXT",
@@ -358,7 +375,8 @@ func convert(col, pgType, sqliteType string) (string, error) {
 	return col, nil
 }
 
-// batchRows 是每条 INSERT 最多写的行数；同时受 SQLite 每条语句的参数个数上限约束。
+// batchRows is the maximum number of rows per INSERT; it is also bounded by SQLite's limit on parameters per
+// statement.
 const batchRows = 500
 
 func copyTable(ctx context.Context, src pgx.Tx, dst *db.Tx, p tablePlan) (int64, error) {
@@ -421,7 +439,8 @@ func copyTable(ctx context.Context, src pgx.Tx, dst *db.Tx, p tablePlan) (int64,
 	return total, nil
 }
 
-// storable 把 pgx 解出的值换成 SQLite STRICT 列接受的 Go 类型；错误里不带值本身。
+// storable converts a value decoded by pgx into a Go type that a SQLite STRICT column accepts; errors never include
+// the value itself.
 func storable(v any) (any, error) {
 	switch x := v.(type) {
 	case nil, string, []byte, int64:
@@ -439,7 +458,8 @@ func storable(v any) (any, error) {
 	return nil, fmt.Errorf("意外的值类型 %T", v)
 }
 
-// setSequences 让新库的序列从源库用到的位置之后继续：取源序列的当前值与列里最大值中较大的一个。
+// setSequences makes the new database's sequences continue after the point the source reached: it takes the larger
+// of the source sequence's current value and the column's maximum value.
 func setSequences(ctx context.Context, src pgx.Tx, dst *db.Tx) error {
 	rows, err := dst.Query(ctx, `SELECT name FROM sequences ORDER BY name`)
 	if err != nil {
@@ -479,7 +499,8 @@ func setSequences(ctx context.Context, src pgx.Tx, dst *db.Tx) error {
 	return nil
 }
 
-// verify 提交后复核：每张表的行数与读到的一致，外键与库文件完整。
+// verify re-checks after commit: every table's row count matches what was read, and foreign keys and the database
+// files are intact.
 func verify(ctx context.Context, d *db.DB, plans []tablePlan, r Report) error {
 	for i, p := range plans {
 		var n int64

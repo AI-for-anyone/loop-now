@@ -134,7 +134,8 @@ func TestLarkPGTwoCoordinatorsCancelWaiterAndFreshProcess(t *testing.T) {
 func TestLarkClaimWaitingAcrossLeaseDeadlineDoesNotClaim(t *testing.T) {
 	f := newLarkFixture(t)
 	ctx := context.Background()
-	// 测试占住写连接，领取停在等写连接上，直到租约期限已过才放开。
+	// The test holds the write connection, so the claim blocks waiting for it, and only lets go once the lease deadline
+	// has passed.
 	release := sqlitetest.HoldWriter(t, f.st.Pool)
 	until := time.Now().Add(100 * time.Millisecond)
 	result := make(chan bool, 1)
@@ -145,7 +146,7 @@ func TestLarkClaimWaitingAcrossLeaseDeadlineDoesNotClaim(t *testing.T) {
 		errs <- e
 	}()
 	sqlitetest.WaitWriteWaiters(t, ctx, f.st.Pool, 1)
-	// 按墙上时钟比较，理由见 lease_boundaries_integration_test.go 的 waitExpired。
+	// Compare by wall clock; see waitExpired in lease_boundaries_integration_test.go for why.
 	for !time.Now().Round(0).After(until.Round(0)) {
 		time.Sleep(time.Millisecond)
 	}

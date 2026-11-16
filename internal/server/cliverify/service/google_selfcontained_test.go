@@ -23,7 +23,7 @@ func TestGoogleVersionSpecSelfContained(t *testing.T) {
 		t.Fatal(e)
 	}
 	ready := filepath.Join(filepath.Dir(sdk), "..", ".google-ready.json")
-	// pythonSha256 为空的安装标记表示 Linux 自包含运行树。
+	// An install marker with an empty pythonSha256 means a self-contained Linux runtime tree.
 	if e := os.WriteFile(ready, []byte(`{"pythonSha256":""}`), 0600); e != nil {
 		t.Fatal(e)
 	}
@@ -38,7 +38,8 @@ func TestGoogleVersionSpecSelfContained(t *testing.T) {
 		t.Fatal("self-contained version spec leaked macOS framework env")
 	}
 
-	// 标记带固定 Python 校验值时保持 macOS 解释路径，不探测 framework 目录。
+	// When the marker carries the pinned Python checksum, the macOS interpreter path is kept and the framework directory
+	// is not probed.
 	if e := os.WriteFile(ready, []byte(`{"pythonSha256":"pinned"}`), 0600); e != nil {
 		t.Fatal(e)
 	}

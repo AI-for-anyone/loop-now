@@ -15,7 +15,7 @@ import (
 func request(cli string) Request {
 	exe := "/fixture/bin/" + cli
 	if runtime.GOOS == "windows" {
-		exe = `C:\fixture\bin\` + cli + ".exe" // 计划只要求绝对路径
+		exe = `C:\fixture\bin\` + cli + ".exe" // the plan only requires an absolute path
 	}
 	return Request{CLI: cli, Executable: exe, ConnectionID: uuid.MustParse("0192f1a2-0000-7000-8000-000000000001"), ExpectedAppID: "synthetic-app", ExpectedBrand: "feishu"}
 }

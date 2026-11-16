@@ -16,12 +16,13 @@ import (
 	"github.com/google/uuid"
 )
 
-// convertArgs 把 Go 参数换成 SQLite 存储形式：
-//   - time.Time → UTC 微秒整数；time.Duration 拒绝（含义不明确，调用方显式换成微秒）；
-//   - uuid.UUID → 小写文本；bool → 0/1；
-//   - []byte → BLOB；json.RawMessage → 文本；
-//   - 其他切片、map、结构体 → JSON 文本（对应 pgx 对 text[] 与 jsonb 参数的编码）；
-//   - nil 指针、nil 切片 → NULL；其他指针取所指的值。
+// convertArgs converts Go arguments into their SQLite storage form:
+//   - time.Time -> UTC microsecond integer; time.Duration is rejected (its meaning is ambiguous, so the caller
+//     converts it to microseconds explicitly);
+//   - uuid.UUID -> lowercase text; bool -> 0/1;
+//   - []byte -> BLOB; json.RawMessage -> text;
+//   - other slices, maps, structs -> JSON text (matching how pgx encoded text[] and jsonb arguments);
+//   - nil pointers, nil slices -> NULL; other pointers are replaced by the value they point to.
 func convertArgs(args []any) ([]any, error) {
 	if len(args) == 0 {
 		return nil, nil
@@ -130,8 +131,9 @@ func marshalJSON(a any) (any, error) {
 	return string(b), nil
 }
 
-// isWrite 判断语句是否会写库，决定 Query 走只读池还是写连接。误判为写只会多占写连接，误判为读会被
-// 只读连接拒绝（query_only），不会悄悄出错。
+// isWrite decides whether a statement writes to the database, which picks the read-only pool or the write
+// connection for Query. Wrongly classifying a read as a write only holds the write connection needlessly; wrongly
+// classifying a write as a read gets rejected by the read-only connection (query_only), so it never fails silently.
 func isWrite(query string) bool {
 	q := skipSpaceAndComments(query)
 	kw := strings.ToUpper(firstWord(q))
@@ -174,7 +176,7 @@ func firstWord(q string) string {
 	return q[:i]
 }
 
-// containsWriteKeyword 在引号与注释之外查找 INSERT/UPDATE/DELETE/REPLACE。
+// containsWriteKeyword looks for INSERT/UPDATE/DELETE/REPLACE outside quotes and comments.
 func containsWriteKeyword(q string) bool {
 	var word strings.Builder
 	flush := func() bool {
@@ -223,7 +225,8 @@ func containsWriteKeyword(q string) bool {
 	return flush()
 }
 
-// goid 返回当前 goroutine 的编号（解析 runtime.Stack 的首行），只在嵌套写检测打开时使用。
+// goid returns the current goroutine's ID (parsed from the first line of runtime.Stack); it is only used when
+// nested-write detection is on.
 func goid() int64 {
 	var buf [64]byte
 	b := buf[:runtime.Stack(buf[:], false)]

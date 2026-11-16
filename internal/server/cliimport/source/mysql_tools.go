@@ -109,7 +109,8 @@ func runTool(ctx context.Context, root, name string, args []string, source *os.F
 	cmd.Dir = home
 	cmd.Env = append(execenv.Base(home, home), "HOME="+home, "PATH="+execenv.SystemPath(), "LC_ALL=C", "MYSQL_TEST_LOGIN_FILE="+os.DevNull)
 	if source != nil && runtime.GOOS == "windows" {
-		// 私有 fd 经 ExtraFiles 传给子进程在 Windows 上不可用（os/exec 不支持），没有 /dev/fd/3 可指。
+		// Passing a private fd to the child through ExtraFiles does not work on Windows (os/exec does not support it),
+		// and there is no /dev/fd/3 to point to.
 		return nil, fail("tool_unavailable", "private_ipc")
 	}
 	if source != nil {

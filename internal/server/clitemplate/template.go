@@ -1,4 +1,5 @@
-// Package clitemplate 管理平台内置的 CLI 模板：凭证录入项、凭证渲染与固定版本安装。
+// Package clitemplate manages the platform's built-in CLI templates: credential input fields, credential rendering
+// and pinned-version installation.
 package clitemplate
 
 import (
@@ -23,7 +24,7 @@ import (
 //go:embed templates/*.json
 var builtin embed.FS
 
-// Field 是凭证录入项。
+// Field is a credential input field.
 type Field struct {
 	Name      string   `json:"name"`
 	Label     string   `json:"label"`
@@ -34,37 +35,38 @@ type Field struct {
 	Multiline bool     `json:"multiline,omitempty"`
 }
 
-// Warning 是展示给控制台的风险提示。
+// Warning is a risk notice shown in the console.
 type Warning struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 }
 
-// Asset 是某个平台的安装包。
+// Asset is the install package for one platform.
 type Asset struct {
 	URL          string  `json:"url"`
 	SHA256       string  `json:"sha256"`
 	Format       string  `json:"format"` // zip / tar.gz
 	Dependencies []Asset `json:"dependencies,omitempty"`
 	Layout       string  `json:"layout,omitempty"` // tree preserves the complete official runtime
-	Path         string  `json:"path"`             // 安装包内二进制文件的路径
+	Path         string  `json:"path"`             // path of the binary inside the install package
 }
 
-// Credential 描述凭证怎样生成。
+// Credential describes how the credential is produced.
 type Credential struct {
 	Env   map[string]string `json:"env,omitempty"`
 	Files []FileSpec        `json:"files,omitempty"`
-	// Renderer 指定由代码实现的渲染器（格式无法用简单模板表达时使用）。
+	// Renderer names a renderer implemented in code (used when the format cannot be expressed as a simple template).
 	Renderer string `json:"renderer,omitempty"`
-	// PendingReason 非空时，该模板暂不能录入凭证。
+	// PendingReason, when non-empty, means credentials cannot be entered for this template yet.
 	PendingReason string `json:"pendingReason,omitempty"`
-	// CleanupPaths 是每次启动前要从独立 HOME 中删除的凭证文件（相对 HOME）。
+	// CleanupPaths are the credential files to delete from the isolated HOME before every start (relative to HOME).
 	CleanupPaths []string `json:"cleanupPaths,omitempty"`
-	// FormatVersion 是凭证格式的版本；格式变化时递增，已录入的旧格式凭证需要重新录入。默认 "1"。
+	// FormatVersion is the version of the credential format; it is bumped when the format changes, and credentials
+	// already entered in the old format must be entered again. Default "1".
 	FormatVersion string `json:"formatVersion,omitempty"`
 }
 
-// CredentialFormat 返回凭证格式版本。
+// CredentialFormat returns the credential format version.
 func (t *Template) CredentialFormat() string {
 	if t.Credential.FormatVersion == "" {
 		return "1"
@@ -72,13 +74,13 @@ func (t *Template) CredentialFormat() string {
 	return t.Credential.FormatVersion
 }
 
-// FileSpec 是一个由模板生成的凭证文件。
+// FileSpec is a credential file generated from the template.
 type FileSpec struct {
-	Path    string `json:"path"` // 相对执行 HOME
+	Path    string `json:"path"` // relative to the run's HOME
 	Content string `json:"content"`
 }
 
-// Template 是一个 CLI 模板。
+// Template is a CLI template.
 type Template struct {
 	Name       string               `json:"name"`
 	Version    string               `json:"version"`
@@ -87,20 +89,24 @@ type Template struct {
 	Credential Credential           `json:"credential"`
 	Binary     string               `json:"binary"`
 	Install    map[string]Asset     `json:"install"`
-	Warnings   map[string][]Warning `json:"warnings,omitempty"` // 按 GOOS
-	// Env 是执行时注入的固定环境变量（不是凭证，例如关闭后台联网的开关）。
-	// 只要该 CLI 在 Agent 的可用列表中就注入，不依赖是否录入了凭证；按当前模板生效，不随凭证保存。
+	Warnings   map[string][]Warning `json:"warnings,omitempty"` // keyed by GOOS
+	// Env are fixed environment variables injected at run time (not credentials; for example a switch that turns off
+	// background network access).
+	// They are injected whenever the CLI is in the Agent's available list, regardless of whether a credential was
+	// entered; they follow the current template and are not saved with the credential.
 	Env map[string]string `json:"env,omitempty"`
-	// ReservedEnv 与 ReservedEnvPrefixes 是该 CLI 会读取、能影响凭证、身份、主机或配置位置的环境变量（按源码核实）。
-	// 模型账号凭证不能使用这些名字；模板自己注入的变量名（Env 与 Credential.Env）也自动视为保留。
+	// ReservedEnv and ReservedEnvPrefixes are the environment variables this CLI reads that can affect its
+	// credentials, identity, host or config location (verified against its source code).
+	// Model account credentials cannot use these names; variable names the template injects itself (Env and
+	// Credential.Env) are automatically reserved too.
 	ReservedEnv         []string `json:"reservedEnv,omitempty"`
 	ReservedEnvPrefixes []string `json:"reservedEnvPrefixes,omitempty"`
 }
 
-// Platform 返回当前平台的键，例如 darwin/arm64。
+// Platform returns the key of the current platform, for example darwin/arm64.
 func Platform() string { return runtime.GOOS + "/" + runtime.GOARCH }
 
-// PlatformWarnings 返回当前平台的风险提示。
+// PlatformWarnings returns the risk notices for the current platform.
 func (t *Template) PlatformWarnings() []Warning {
 	if w := t.Warnings[runtime.GOOS]; w != nil {
 		return w
@@ -108,13 +114,14 @@ func (t *Template) PlatformWarnings() []Warning {
 	return []Warning{}
 }
 
-// Asset 返回当前平台的安装包。
+// Asset returns the install package for the current platform.
 func (t *Template) Asset() (Asset, bool) {
 	a, ok := t.Install[Platform()]
 	return a, ok
 }
 
-// CredentialFilePaths 返回该模板可能写入独立 HOME 的全部凭证文件，用于启动前清理。
+// CredentialFilePaths returns every credential file this template may write into the isolated HOME, for cleanup
+// before a start.
 func (t *Template) CredentialFilePaths() []string {
 	var out []string
 	for _, f := range t.Credential.Files {
@@ -124,12 +131,13 @@ func (t *Template) CredentialFilePaths() []string {
 	return out
 }
 
-// Catalog 是全部模板。
+// Catalog holds all templates.
 type Catalog struct {
 	byName map[string]*Template
 }
 
-// Load 加载内置模板；dir 非空时再加载该目录下的同格式模板，按名称覆盖或补充。
+// Load loads the built-in templates; when dir is non-empty it also loads templates of the same format from that
+// directory, which override or add to them by name.
 func Load(dir string) (*Catalog, error) {
 	c := &Catalog{byName: map[string]*Template{}}
 	if err := c.loadFS(builtin, "templates"); err != nil {
@@ -258,9 +266,11 @@ func checkPlaceholders(s string, names map[string]bool) error {
 	return nil
 }
 
-// Get 按名称查找模板。
-// ReservedEnvBy 返回把 name 列为保留名的模板名称；没有模板保留它时返回 false。
-// 保留名包括各模板声明的精确名与前缀，以及模板自己注入的变量名。
+// Get looks up a template by name.
+// ReservedEnvBy returns the name of the template that lists name as reserved; it returns false when no template
+// reserves it.
+// Reserved names include the exact names and prefixes each template declares, plus the variable names the template
+// injects itself.
 func (c *Catalog) ReservedEnvBy(name string) (string, bool) {
 	for _, t := range c.All() {
 		if t.reservesEnv(name) {
@@ -288,7 +298,7 @@ func (c *Catalog) Get(name string) (*Template, bool) {
 	return t, ok
 }
 
-// All 按名称排序返回全部模板。
+// All returns all templates sorted by name.
 func (c *Catalog) All() []*Template {
 	out := make([]*Template, 0, len(c.byName))
 	for _, t := range c.byName {
@@ -298,7 +308,8 @@ func (c *Catalog) All() []*Template {
 	return out
 }
 
-// AllCredentialFilePaths 返回全部模板可能写入独立 HOME 的凭证文件，去重排序。
+// AllCredentialFilePaths returns the credential files any template may write into the isolated HOME, deduplicated
+// and sorted.
 func (c *Catalog) AllCredentialFilePaths() []string {
 	set := map[string]bool{}
 	for _, t := range c.byName {
@@ -314,19 +325,20 @@ func (c *Catalog) AllCredentialFilePaths() []string {
 	return out
 }
 
-// Payload 是渲染后的凭证内容：入库保存，执行时写入独立 HOME 与进程环境。
+// Payload is the rendered credential content: it is stored in the database and, at run time, written into the
+// isolated HOME and the process environment.
 type Payload struct {
 	Env   map[string]string `json:"env"`
 	Files []PayloadFile     `json:"files"`
 }
 
-// PayloadFile 是一个凭证文件。
+// PayloadFile is one credential file.
 type PayloadFile struct {
-	Path    string `json:"path"` // 相对执行 HOME
+	Path    string `json:"path"` // relative to the run's HOME
 	Content []byte `json:"content"`
 }
 
-// EnvNames 返回排序后的环境变量名。
+// EnvNames returns the environment variable names, sorted.
 func (p Payload) EnvNames() []string {
 	out := make([]string, 0, len(p.Env))
 	for k := range p.Env {
@@ -336,7 +348,7 @@ func (p Payload) EnvNames() []string {
 	return out
 }
 
-// FilePaths 返回排序后的文件路径。
+// FilePaths returns the file paths, sorted.
 func (p Payload) FilePaths() []string {
 	out := make([]string, 0, len(p.Files))
 	for _, f := range p.Files {
@@ -346,7 +358,8 @@ func (p Payload) FilePaths() []string {
 	return out
 }
 
-// Render 按模板校验录入项并生成凭证内容。返回的 fieldNames 是实际填写的录入项名称。
+// Render validates the input fields against the template and produces the credential content. The returned
+// fieldNames are the names of the fields actually filled in.
 func (t *Template) Render(input map[string]string) (Payload, []string, error) {
 	if t.Credential.PendingReason != "" {
 		return Payload{}, nil, apperr.Invalid("cli", t.Credential.PendingReason)

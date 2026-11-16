@@ -1,14 +1,19 @@
-// Package db 是服务端对 SQLite 的访问层：数据目录下的 data.db（业务表）与 events.db（可清理的日志表，
-// 每个连接以 ev 挂载），一个只读连接池与一个只有一个连接的写连接池。
+// Package db is the server's SQLite access layer: data.db (business tables) and events.db (prunable log tables,
+// attached as ev on every connection) in the data directory, one read-only connection pool and one write pool that
+// holds a single connection.
 //
-// 调用形状与原来的 pgx 保持一致（Exec、Query、QueryRow、事务回调），参数与扫描由本包在 Go 类型与
-// SQLite 存储之间转换：时间是 UTC 微秒整数，UUID 是小写文本，数组与 JSON 是 JSON 文本，布尔是 0/1。
+// The call shape matches the former pgx one (Exec, Query, QueryRow, transaction callbacks); this package converts
+// arguments and scanned values between Go types and SQLite storage: times are UTC microsecond integers, UUIDs are
+// lowercase text, arrays and JSON are JSON text, booleans are 0/1.
 //
-// 写入一律经写连接：事务以 BEGIN IMMEDIATE 开始，单连接使所有写天然串行，因此不需要行锁与咨询锁。
-// 两个文件之间没有一致性：一个事务对 data.db 与 events.db 分别提交，读者对两个文件的快照也是先后各取，
-// 所以 events.db 只放丢几条、晚几条都无妨的日志，业务判断不读它。
-// 取得写连接受调用方 ctx 约束；取得之后提交不可取消，调用方看到的结果只有“已提交”或“未提交”。
-// 每个写入都是一个事务（单条 Exec 也是），提交前执行全局写钩子（SetWriteHook）。
+// All writes go through the write connection: transactions start with BEGIN IMMEDIATE, and the single connection
+// serializes all writes by construction, so no row locks or advisory locks are needed.
+// There is no consistency between the two files: a transaction commits data.db and events.db separately, and a
+// reader takes its snapshots of the two files one after the other, so events.db only holds logs where losing a few
+// rows or seeing them late does no harm, and business decisions never read it.
+// Acquiring the write connection is bounded by the caller's ctx; once acquired, the commit cannot be cancelled, so
+// the caller only ever sees "committed" or "not committed".
+// Every write is a transaction (a single Exec too), and the global write hook (SetWriteHook) runs before commit.
 package db
 
 import (
@@ -28,31 +33,33 @@ import (
 	"modernc.org/sqlite"
 )
 
-// 数据目录下的文件名。
+// File names in the data directory.
 const (
 	DataFile   = "data.db"
 	EventsFile = "events.db"
-	// EventsSchema 是 events.db 在每个连接上的挂载名，SQL 里写 ev.<表名>。
+	// EventsSchema is the name events.db is attached as on every connection; SQL writes ev.<table>.
 	EventsSchema = "ev"
 )
 
-// Options 控制打开方式；零值字段取默认。
+// Options controls how the database is opened; zero-valued fields take their defaults.
 type Options struct {
-	// Dir 是存放 data.db 与 events.db 的目录，必须已存在。
+	// Dir is the directory holding data.db and events.db; it must already exist.
 	Dir string
-	// ReadConns 是只读连接池的上限，默认 4。
+	// ReadConns is the size limit of the read-only pool, default 4.
 	ReadConns int
-	// Now 是时钟，默认 time.Now；测试可注入。事务的 Now() 取事务开始时刻。
+	// Now is the clock, default time.Now; tests may inject one. A transaction's Now() is the transaction start time.
 	Now func() time.Time
-	// SlowTx 是写事务持有写连接超过多久记警告，默认 200ms；负数关闭。
+	// SlowTx is how long a write transaction may hold the write connection before a warning is logged, default
+	// 200ms; negative disables it.
 	SlowTx time.Duration
-	// WriterWaitWarn 是等待写连接超过多久记警告（提示可能的嵌套写或长事务），默认 10s；负数关闭。
+	// WriterWaitWarn is how long a caller may wait for the write connection before a warning is logged (a hint of a
+	// possible nested write or long transaction), default 10s; negative disables it.
 	WriterWaitWarn time.Duration
-	// Logger 默认丢弃。
+	// Logger discards by default.
 	Logger *slog.Logger
 }
 
-// DB 持有两个连接池。可并发使用。
+// DB holds the two connection pools. It is safe for concurrent use.
 type DB struct {
 	w, r   *sql.DB
 	dir    string
@@ -60,27 +67,31 @@ type DB struct {
 	slowTx time.Duration
 	wait   time.Duration
 	log    *slog.Logger
-	// holder 记录当前持有写连接的调用点，供等待告警与嵌套写检测使用。
+	// holder records the call site currently holding the write connection, for the wait warning and nested-write
+	// detection.
 	holder atomic.Pointer[writerHolder]
-	// writeHook 是每个写事务提交前执行的全局钩子（见 SetWriteHook）。
+	// writeHook is the global hook run before every write transaction commits (see SetWriteHook).
 	writeHook atomic.Pointer[WriteHook]
-	// writeTxNow 是进行中写事务的开始时刻（UTC 微秒），写连接上的 SQL now() 返回它；没有写事务时为 0。
+	// writeTxNow is the start time (UTC microseconds) of the write transaction in progress; SQL now() on the write
+	// connection returns it. It is 0 when no write transaction is open.
 	writeTxNow atomic.Int64
-	// queryHook 在每条语句执行前调用（见 SetQueryHook）。
+	// queryHook is called before every statement runs (see SetQueryHook).
 	queryHook atomic.Pointer[QueryHook]
-	// waiters 是正在等待写连接的调用数（见 WriteWaiters）。
+	// waiters is the number of calls currently waiting for the write connection (see WriteWaiters).
 	waiters atomic.Int64
 }
 
-// WriteWaiters 返回正在等待写连接的调用数。测试用它确认某个写入已经停在等写连接上
-// （原来查 pg_stat_activity 里的锁等待）。
+// WriteWaiters returns the number of calls currently waiting for the write connection. Tests use it to confirm a
+// write is blocked waiting for the write connection (formerly done by looking at lock waits in pg_stat_activity).
 func (d *DB) WriteWaiters() int64 { return d.waiters.Load() }
 
-// QueryHook 在每条语句执行前调用，事务里的语句在事务内调用。测试用它在某条语句前暂停，检验并发下的语义
-// （原来用 pgx 的 QueryTracer 做同样的事）。
+// QueryHook is called before every statement runs; for statements inside a transaction it is called inside the
+// transaction. Tests use it to pause before a given statement and check behavior under concurrency (formerly done
+// with pgx's QueryTracer).
 type QueryHook func(ctx context.Context, query string)
 
-// SetQueryHook 设置语句钩子，nil 取消。之后开始的事务与语句生效。
+// SetQueryHook sets the statement hook; nil removes it. It applies to transactions and statements started
+// afterwards.
 func (d *DB) SetQueryHook(h QueryHook) {
 	if h == nil {
 		d.queryHook.Store(nil)
@@ -94,28 +105,30 @@ type writerHolder struct {
 	goid   int64
 }
 
-// changeOrder 是 SQL 函数 change_order() 的计数器，进程内所有库共用。
+// changeOrder is the counter behind the SQL function change_order(), shared by all databases in the process.
 var changeOrder atomic.Int64
 
-// DetectNestedWrites 打开后，同一 goroutine 在持有写连接时再次请求写连接会立即返回 ErrNestedWrite，
-// 而不是等到超时。需要解析 goroutine 栈，只在测试中打开（sqlitetest 会打开）。
+// DetectNestedWrites, when on, makes a goroutine that already holds the write connection and asks for it again get
+// ErrNestedWrite immediately instead of waiting until it times out. It has to parse goroutine stacks, so it is only
+// turned on in tests (sqlitetest turns it on).
 var DetectNestedWrites atomic.Bool
 
-// ErrNestedWrite 表示在写事务回调里又经 *DB 发起了写：写连接只有一个，这样会自己等自己。
+// ErrNestedWrite means a write was started through *DB inside a write transaction callback: there is only one write
+// connection, so the call would wait on itself.
 var ErrNestedWrite = errors.New("db: 写事务内又经 *DB 发起写入（应使用事务对象 tx）")
 
-// busyTimeoutMS 是遇到其他进程（管理子命令、备份工具）持锁时的等待上限。进程内的写已由单个写连接串行，
-// 平时碰不到它。
+// busyTimeoutMS is the maximum wait when another process (an admin subcommand, a backup tool) holds the lock.
+// Writes inside the process are already serialized by the single write connection, so it is normally never hit.
 const busyTimeoutMS = 10000
 
-// 每个连接都设置的 PRAGMA。busy_timeout 必须最先设置，驱动会把它排到最前。
+// connPragmas are set on every connection. busy_timeout must be set first; the driver puts it at the front.
 var connPragmas = []string{
 	fmt.Sprintf("busy_timeout(%d)", busyTimeoutMS),
 	"foreign_keys(1)",
 	"temp_store(MEMORY)",
 }
 
-// 每个库（main 与 ev）各自的 PRAGMA。
+// schemaPragmas are set on each database (main and ev) separately.
 var schemaPragmas = []string{
 	"synchronous=NORMAL",
 	"journal_size_limit=200000000",
@@ -123,8 +136,10 @@ var schemaPragmas = []string{
 
 const mainCacheKiB, eventsCacheKiB = 32000, 8000
 
-// Open 打开（必要时创建）数据目录下的两个库文件。先打开写连接池（建文件、设 WAL），再打开只读池。
-// Open 不取实例锁；需要独占数据目录的进程（服务、导入）另外调用 LockDir。
+// Open opens (creating them if needed) the two database files in the data directory. It opens the write pool first
+// (creating the files and setting WAL), then the read-only pool.
+// Open does not take the instance lock; processes that need the data directory to themselves (the server, the
+// importer) call LockDir separately.
 func Open(ctx context.Context, o Options) (*DB, error) {
 	if o.Dir == "" {
 		return nil, errors.New("db: 未指定数据目录")
@@ -150,8 +165,9 @@ func Open(ctx context.Context, o Options) (*DB, error) {
 	d := &DB{dir: o.Dir, now: o.Now, slowTx: o.SlowTx, wait: o.WriterWaitWarn, log: o.Logger}
 	data, events := filepath.Join(o.Dir, DataFile), filepath.Join(o.Dir, EventsFile)
 
-	// SQL 里的 now() 与 clock_timestamp() 由本包提供（UTC 微秒，经注入的时钟）：写连接上的 now() 是当前写事务的
-	// 开始时刻，与 PostgreSQL 一致；clock_timestamp() 与只读连接上的 now() 取调用时刻。
+	// now() and clock_timestamp() in SQL are provided by this package (UTC microseconds, from the injected clock):
+	// now() on the write connection is the start time of the current write transaction, as in PostgreSQL;
+	// clock_timestamp() and now() on read-only connections return the time of the call.
 	clock := func() int64 { return d.now().UnixMicro() }
 	writerNow := func() int64 {
 		if v := d.writeTxNow.Load(); v != 0 {
@@ -191,8 +207,10 @@ func Open(ctx context.Context, o Options) (*DB, error) {
 	return d, nil
 }
 
-// connector 返回一个只服务本库的驱动实例：挂载与 PRAGMA 写在它自己的连接钩子里，不影响进程里其他 SQLite 连接。
-// 每个新连接：挂载 events.db、设置两个库各自的 PRAGMA，最后执行 hook（写池设 WAL，读池设只读）。
+// connector returns a driver instance that serves only this database: the attach and PRAGMAs live in its own
+// connection hook, so other SQLite connections in the process are not affected.
+// On every new connection it attaches events.db, sets each database's PRAGMAs, and finally runs hook (WAL for the
+// write pool, read-only for the read pool).
 func connector(data, events, txlock string, now, clock func() int64, hook func(sqlite.ExecQuerierContext) error) driver.Connector {
 	q := url.Values{}
 	for _, p := range connPragmas {
@@ -205,17 +223,18 @@ func connector(data, events, txlock string, now, clock func() int64, hook func(s
 		if err := drv.RegisterFunction(name, &sqlite.FunctionImpl{NArgs: 0, Scalar: func(*sqlite.FunctionContext, []driver.Value) (driver.Value, error) {
 			return f(), nil
 		}}); err != nil {
-			panic(err) // 只会是名字或参数个数写错
+			panic(err) // can only be a wrong name or argument count
 		}
 	}
-	// change_order() 返回进程内单调递增的序号：捕获触发器在两个库的变更表里都记下它，读的时候按它还原写入顺序。
+	// change_order() returns a sequence number that increases monotonically within the process: the capture triggers
+	// record it in the change tables of both databases, and readers use it to restore the write order.
 	if err := drv.RegisterFunction("change_order", &sqlite.FunctionImpl{NArgs: 0, Scalar: func(*sqlite.FunctionContext, []driver.Value) (driver.Value, error) {
 		return changeOrder.Add(1), nil
 	}}); err != nil {
 		panic(err)
 	}
-	// iso_time(微秒) 把时间列转成 RFC 3339（UTC，保留微秒），供 SQL 里拼出的 JSON 使用：Go 解 JSON 时 time.Time
-	// 只认这种字符串。NULL 进 NULL 出。
+	// iso_time(microseconds) turns a time column into RFC 3339 (UTC, keeping microseconds) for JSON built in SQL:
+	// when Go decodes JSON, time.Time only accepts that kind of string. NULL in, NULL out.
 	if err := drv.RegisterFunction("iso_time", &sqlite.FunctionImpl{NArgs: 1, Deterministic: true, Scalar: func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
 		switch v := args[0].(type) {
 		case nil:
@@ -278,24 +297,25 @@ func pragma(c sqlite.ExecQuerierContext, p string) error {
 	return nil
 }
 
-// Close 关闭两个连接池。
+// Close closes both connection pools.
 func (d *DB) Close() error {
 	return errors.Join(d.r.Close(), d.w.Close())
 }
 
-// Dir 返回数据目录。
+// Dir returns the data directory.
 func (d *DB) Dir() string { return d.dir }
 
-// Now 返回当前时刻（经注入的时钟）。
+// Now returns the current time (from the injected clock).
 func (d *DB) Now() time.Time { return d.now() }
 
-// Writer 返回写连接池，只给迁移与维护使用；业务代码经 Exec、InTx。
+// Writer returns the write pool, only for migrations and maintenance; business code goes through Exec and InTx.
 func (d *DB) Writer() *sql.DB { return d.w }
 
-// Reader 返回只读连接池，只给维护与诊断使用；业务代码经 Query、QueryRow、ReadTx。
+// Reader returns the read-only pool, only for maintenance and diagnostics; business code goes through Query,
+// QueryRow and ReadTx.
 func (d *DB) Reader() *sql.DB { return d.r }
 
-// Ping 确认两个连接池可用。
+// Ping checks that both connection pools are usable.
 func (d *DB) Ping(ctx context.Context) error {
 	if err := d.r.PingContext(ctx); err != nil {
 		return err
@@ -308,13 +328,14 @@ func (d *DB) Ping(ctx context.Context) error {
 	return c.PingContext(ctx)
 }
 
-// Result 是写语句的结果，形状同 pgconn.CommandTag。
+// Result is the result of a write statement, shaped like pgconn.CommandTag.
 type Result struct{ rows int64 }
 
-// RowsAffected 返回受影响的行数。
+// RowsAffected returns the number of affected rows.
 func (r Result) RowsAffected() int64 { return r.rows }
 
-// Exec 在写连接上执行一条语句。它自成一个写事务（BEGIN IMMEDIATE、钩子、提交），与 InTx 的保证相同。
+// Exec runs one statement on the write connection. It forms its own write transaction (BEGIN IMMEDIATE, hook,
+// commit), with the same guarantees as InTx.
 func (d *DB) Exec(ctx context.Context, query string, args ...any) (Result, error) {
 	var res Result
 	err := d.InTx(ctx, func(tx *Tx) error {
@@ -325,8 +346,9 @@ func (d *DB) Exec(ctx context.Context, query string, args ...any) (Result, error
 	return res, err
 }
 
-// Query 执行查询。只读语句走只读池；带 INSERT/UPDATE/DELETE 的语句（如 … RETURNING）在写连接上自成一个写事务，
-// 写连接一直占用到 Rows 关闭，关闭时执行钩子并提交，提交的错误由 Rows.Err（或 Row.Scan）返回。
+// Query runs a query. Read-only statements go to the read-only pool; statements containing INSERT/UPDATE/DELETE
+// (such as ... RETURNING) form their own write transaction on the write connection, which stays held until Rows is
+// closed. Closing runs the hook and commits, and a commit error is returned by Rows.Err (or Row.Scan).
 func (d *DB) Query(ctx context.Context, query string, args ...any) (*Rows, error) {
 	if !isWrite(query) {
 		vals, err := convertArgs(args)
@@ -354,13 +376,13 @@ func (d *DB) Query(ctx context.Context, query string, args ...any) (*Rows, error
 	return rows, nil
 }
 
-// QueryRow 执行只取一行的查询；路由同 Query。
+// QueryRow runs a query that reads a single row; it is routed like Query.
 func (d *DB) QueryRow(ctx context.Context, query string, args ...any) *Row {
 	rows, err := d.Query(ctx, query, args...)
 	return &Row{rows: rows, err: err}
 }
 
-// acquireWriter 取得唯一的写连接；等待受 ctx 约束。release 归还连接。
+// acquireWriter acquires the single write connection; the wait is bounded by ctx. release returns the connection.
 func (d *DB) acquireWriter(ctx context.Context) (*sql.Conn, func(), error) {
 	var gid int64
 	if DetectNestedWrites.Load() {
@@ -399,7 +421,7 @@ func (d *DB) acquireWriter(ctx context.Context) (*sql.Conn, func(), error) {
 	}, nil
 }
 
-// callerOutsidePackage 返回本包之外最近的调用点，用于日志。
+// callerOutsidePackage returns the nearest call site outside this package, for logging.
 func callerOutsidePackage() string {
 	pcs := make([]uintptr, 16)
 	n := runtime.Callers(3, pcs)

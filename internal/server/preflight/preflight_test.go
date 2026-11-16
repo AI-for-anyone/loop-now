@@ -37,7 +37,7 @@ func TestPrepareWorkRootRejectsAncestorContextFile(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(base, "AGENTS.md"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	real, _ := filepath.EvalSymlinks(base) // Windows 的临时目录名含 8.3 短名，错误消息里是解析后的路径
+	real, _ := filepath.EvalSymlinks(base) // Windows temp dirs contain 8.3 short names; the error has the resolved path
 	_, err := PrepareWorkRoot(filepath.Join(base, "x", "loop-now"), []string{filepath.Join(base, "nonexistent-home")})
 	if err == nil || !strings.Contains(err.Error(), filepath.Join(real, "AGENTS.md")) {
 		t.Fatalf("上级目录有 AGENTS.md 应拒绝并给出路径：%v", err)
@@ -76,7 +76,8 @@ func TestDeriveExecBasePathOrder(t *testing.T) {
 	}
 }
 
-// node 所在目录排在最前，宿主上另装的 node 不会盖过配置的那个。
+// TestDeriveExecBasePathNodeFirst checks that node's directory comes first, so another node installed on the host does
+// not shadow the configured one.
 func TestDeriveExecBasePathNodeFirst(t *testing.T) {
 	dir := t.TempDir()
 	node := filepath.Join(dir, "node")

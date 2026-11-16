@@ -1,7 +1,8 @@
 package db
 
-// 并发写入压测：守住“驱动报告成功、写入却不在”这一类问题。-short 时跳过；
-// LOOP_NOW_DB_STRESS=long 时加大规模（发版前或升级 modernc 时跑）。
+// Concurrent write stress tests: they guard against the class of bugs where "the driver reports success but the
+// write is not there". Skipped with -short; LOOP_NOW_DB_STRESS=long scales them up (run before a release or when
+// upgrading modernc).
 
 import (
 	"bufio"
@@ -40,8 +41,10 @@ func integrityOK(t *testing.T, d *DB) {
 	}
 }
 
-// 多个写者同时做“读改写计数器 + 插唯一键 + 认领队列项”，读者在快照里核对计数器与行数一致，
-// 另有一个 goroutine 不停做 PASSIVE/TRUNCATE 检查点。结束后每个已确认的事务都必须完整在库里。
+// TestStressConcurrentWrites runs several writers at once doing "read-modify-write a counter + insert a unique key +
+// claim a queue item", while readers check in their snapshot that the counter matches the row count, and another
+// goroutine keeps running PASSIVE/TRUNCATE checkpoints. Afterwards every confirmed transaction must be in the
+// database in full.
 func TestStressConcurrentWrites(t *testing.T) {
 	perWriter := stressScale(t, 150, 2000)
 	const writers, readers = 8, 4
@@ -81,9 +84,11 @@ func TestStressConcurrentWrites(t *testing.T) {
 					if n != keys {
 						return fmt.Errorf("同一库内快照不一致：counter=%d keys=%d", n, keys)
 					}
-					// 跨文件没有一致性：WAL 下写事务对 data.db 与 events.db 分别提交，读者对两个文件的快照也是
-					// 先后各取一次，写入频繁时两边可能差若干个事务（Linux 上实测到几十个）。这里只记录最大差值，
-					// 不当作错误；结束后两边必须相等。业务判断不能依赖跨文件读取。
+					// There is no consistency across files: under WAL a write transaction commits data.db and
+					// events.db separately, and a reader takes its snapshots of the two files one after the other,
+					// so under heavy writes the two sides can differ by several transactions (dozens measured on
+					// Linux). Only the largest difference is recorded here, not treated as an error; once the run
+					// ends the two sides must be equal. Business decisions must not rely on reads across files.
 					if lag := int64(max(keys-logs, logs-keys)); lag > crossLag.Load() {
 						crossLag.Store(lag)
 					}
@@ -175,14 +180,15 @@ func TestStressConcurrentWrites(t *testing.T) {
 	}
 	check(d)
 	t.Logf("读者观察到 data.db 与 events.db 最多相差 %d 个事务（跨文件没有一致快照）", crossLag.Load())
-	// 关闭后重开再查一遍：已确认的提交在文件里。
+	// Close, reopen and check again: the confirmed commits are in the files.
 	if err := d.Close(); err != nil {
 		t.Fatal(err)
 	}
 	check(openTestDir(t, dir))
 }
 
-// 写连接上的提交返回后，只读池上的下一次查询必须看见它；一个一直没关的结果集不影响其他读连接。
+// TestStressReadYourWrites checks that once a commit on the write connection returns, the next query on the
+// read-only pool must see it; a result set that is never closed does not affect other read connections.
 func TestStressReadYourWrites(t *testing.T) {
 	perWriter := stressScale(t, 300, 5000)
 	d := openTest(t)
@@ -223,7 +229,8 @@ func TestStressReadYourWrites(t *testing.T) {
 	}
 }
 
-// 随机时刻取消：返回 nil 的事务必须在库里，返回错误的必须不在。没有“结果未知”。
+// TestStressCancellation cancels at random moments: a transaction that returned nil must be in the database, and one
+// that returned an error must not. There is no "outcome unknown".
 func TestStressCancellation(t *testing.T) {
 	perWriter := stressScale(t, 200, 3000)
 	const writers = 8
@@ -231,8 +238,10 @@ func TestStressCancellation(t *testing.T) {
 	ctx := context.Background()
 	mustExec(t, d, `CREATE TABLE t (id INTEGER PRIMARY KEY, w INTEGER NOT NULL) STRICT`)
 	mustExec(t, d, `CREATE TABLE ev.t (id INTEGER PRIMARY KEY) STRICT`)
-	// 超时取在“一个事务大约要多久”的 0–3 倍之间，这样取消会落在等写连接、语句中间和提交前后各个位置；
-	// 按本机实测定，-race 下也有确认也有取消。
+	// Timeouts are picked between 0 and 3 times "roughly how long one transaction takes", so cancellations land
+	// everywhere: while waiting for the write connection, mid-statement, and just before and after commit. The
+	// duration is measured on the current machine, so even under -race there are both confirmed and cancelled
+	// transactions.
 	warm := time.Now()
 	for i := range 20 {
 		mustExec(t, d, `INSERT INTO t VALUES (?, -1)`, -1-i)
@@ -307,8 +316,10 @@ func TestStressCancellation(t *testing.T) {
 
 const killChildDir = "LOOP_NOW_DB_KILL_CHILD_DIR"
 
-// 子进程不停写并在每次提交成功后打印编号，父进程随机 SIGKILL 它，再打开库核对：打印过的编号一个都不能少。
-// WAL 加 synchronous=NORMAL 下进程崩溃不丢已提交的事务（只有断电可能丢最后几笔）。
+// TestStressKill: a child process keeps writing and prints a number after each successful commit; the parent
+// SIGKILLs it at a random moment, then opens the database and checks that not a single printed number is missing.
+// With WAL plus synchronous=NORMAL a process crash does not lose committed transactions (only a power loss may lose
+// the last few).
 func TestStressKill(t *testing.T) {
 	rounds := stressScale(t, 10, 200)
 	dir := t.TempDir()
@@ -384,7 +395,7 @@ func TestStressKill(t *testing.T) {
 	t.Logf("%d 轮，核对 %d 个已确认提交", rounds, len(printed))
 }
 
-// TestStressKillChild 只在 TestStressKill 拉起的子进程里运行。
+// TestStressKillChild only runs in the child process started by TestStressKill.
 func TestStressKillChild(t *testing.T) {
 	dir := os.Getenv(killChildDir)
 	if dir == "" {
@@ -420,7 +431,8 @@ func TestStressKillChild(t *testing.T) {
 	}
 }
 
-// 长读者占着旧快照时 TRUNCATE 检查点做不完；读者结束后能把 WAL 截为 0。
+// TestStressCheckpointWithLongReader checks that a TRUNCATE checkpoint cannot finish while a long reader holds an old
+// snapshot, and that it truncates the WAL to 0 once the reader is done.
 func TestStressCheckpointWithLongReader(t *testing.T) {
 	rows := stressScale(t, 20000, 200000)
 	d := openTest(t)

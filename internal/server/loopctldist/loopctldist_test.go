@@ -46,7 +46,7 @@ func TestLoadAndInstall(t *testing.T) {
 	if st, _ := os.Stat(testenv.Exe(filepath.Join(bin, "loopctl"))); runtime.GOOS != "windows" && st.Mode()&0o111 == 0 {
 		t.Fatal("安装的二进制应可执行")
 	}
-	// 被改动后再次安装会恢复。
+	// After tampering, installing again restores it.
 	if err := os.WriteFile(testenv.Exe(filepath.Join(bin, "loopctl")), []byte("tampered"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestLoadRejects(t *testing.T) {
 			}
 		})
 	}
-	// 目录中没有服务端版本的产物。
+	// The directory has no build output for the server's version.
 	if _, err := loopctldist.Load(loopctlfake.Dir(t), "v9.9.9"); err == nil || !strings.Contains(err.Error(), "v9.9.9") {
 		t.Fatalf("没有同版本的产物时应拒绝：%v", err)
 	}

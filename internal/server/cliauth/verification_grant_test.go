@@ -235,7 +235,8 @@ func TestGoogleManagementClaimWaitPastOperationDeadline(t *testing.T) {
 	if err = f.st.Pool.QueryRow(ctx, `SELECT generation FROM google_cli_grants WHERE version_id=$1`, m.VersionID).Scan(&generation); err != nil {
 		t.Fatal(err)
 	}
-	// 测试占住写连接：领取续期的写事务要等到操作过期之后才能开始。
+	// The test holds the write connection: the write transaction that claims the renewal can only start after the
+	// operation has expired.
 	release := sqlitetest.HoldWriter(t, f.st.Pool)
 	done := make(chan error, 1)
 	go func() {

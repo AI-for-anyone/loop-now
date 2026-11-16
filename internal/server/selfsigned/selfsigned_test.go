@@ -13,7 +13,8 @@ import (
 	"time"
 )
 
-// 第一次生成，第二次沿用同一张；过期或缺少主机时换新；生成的证书能作为自己的 CA 通过 Go 客户端校验。
+// TestLoad: the first call generates a certificate and the second reuses it; it is replaced when expired or missing a
+// host; the generated certificate passes Go client verification as its own CA.
 func TestLoad(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "tls")
 	now := time.Now()
@@ -43,17 +44,17 @@ func TestLoad(t *testing.T) {
 		}
 	}
 
-	// 要求新的主机：换新。
+	// A new host is required: replaced.
 	_, _, generated, err = Load(dir, []string{"192.168.1.9", "my-mac.local"}, now)
 	if err != nil || !generated {
 		t.Fatalf("缺少主机时应重新生成：generated=%v err=%v", generated, err)
 	}
-	// 临近过期：换新。
+	// Close to expiry: replaced.
 	_, _, generated, err = Load(dir, nil, now.Add(validity-24*time.Hour))
 	if err != nil || !generated {
 		t.Fatalf("临近过期时应重新生成：generated=%v err=%v", generated, err)
 	}
-	// 损坏的文件：换新。
+	// Corrupt file: replaced.
 	if err := os.WriteFile(filepath.Join(dir, KeyFile), []byte("junk"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +63,7 @@ func TestLoad(t *testing.T) {
 		t.Fatalf("私钥损坏时应重新生成：generated=%v err=%v", generated, err)
 	}
 
-	// 用 cert.pem 当 CA 的客户端能连上以这张证书服务的 TLS 端口。
+	// A client using cert.pem as its CA can connect to a TLS port served with this certificate.
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) }))
 	srv.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
 	srv.StartTLS()

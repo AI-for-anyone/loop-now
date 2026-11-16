@@ -111,7 +111,7 @@ func TestRoutingAndReadOnlyPool(t *testing.T) {
 	if err := d.QueryRow(ctx, `INSERT INTO t (v) VALUES (?) RETURNING id`, "a").Scan(&id); err != nil || id != 1 {
 		t.Fatalf("INSERT … RETURNING via QueryRow: id=%d err=%v", id, err)
 	}
-	// 写连接已经归还：紧接着的写事务不会等待。
+	// The write connection has been returned: the next write transaction does not wait.
 	ctxT, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	if err := d.InTx(ctxT, func(tx *Tx) error { _, err := tx.Exec(ctx, `INSERT INTO t (v) VALUES ('b')`); return err }); err != nil {
@@ -285,7 +285,7 @@ func TestInTxHooks(t *testing.T) {
 	if err := d.QueryRow(ctx, `SELECT count(*) FROM log WHERE s='x'`).Scan(&n); err != nil || n != 0 {
 		t.Fatalf("回滚后不应留下行：%d %v", n, err)
 	}
-	// 恐慌之后写连接仍可用、不在事务里。
+	// After the panic the write connection is still usable and not inside a transaction.
 	ctxT, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	if err := d.InTx(ctxT, func(tx *Tx) error { _, err := tx.Exec(ctx, `INSERT INTO log VALUES ('ok')`); return err }); err != nil {
@@ -293,7 +293,8 @@ func TestInTxHooks(t *testing.T) {
 	}
 }
 
-// 写事务在 BEGIN 时就拿到写锁（IMMEDIATE），其他连接此时开写事务立即得到 SQLITE_BUSY。
+// TestBeginImmediate checks that a write transaction takes the write lock at BEGIN (IMMEDIATE), so another
+// connection starting a write transaction at that point gets SQLITE_BUSY immediately.
 func TestBeginImmediate(t *testing.T) {
 	d := openTest(t)
 	ctx := context.Background()
@@ -344,7 +345,7 @@ func TestCancellation(t *testing.T) {
 	ctx := context.Background()
 	mustExec(t, d, `CREATE TABLE t (v INTEGER) STRICT`)
 
-	// 等写连接受 ctx 约束。
+	// Waiting for the write connection is bounded by ctx.
 	hold := make(chan struct{})
 	held := make(chan struct{})
 	var wg sync.WaitGroup
@@ -363,7 +364,7 @@ func TestCancellation(t *testing.T) {
 		t.Fatalf("等写连接超时应得 ctx 错误，得到 %v", err)
 	}
 
-	// 最后一条语句之后才取消：提交照常完成。
+	// Cancelled only after the last statement: the commit completes as usual.
 	c2, cancel2 := context.WithCancel(ctx)
 	if err := d.InTx(c2, func(tx *Tx) error {
 		mustExec(t, tx, `INSERT INTO t VALUES (1)`)
@@ -372,7 +373,7 @@ func TestCancellation(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("取消发生在语句之后，提交不应受影响：%v", err)
 	}
-	// 已取消的 ctx 下执行语句：语句失败，事务回滚。
+	// A statement run under an already cancelled ctx: the statement fails and the transaction rolls back.
 	c3, cancel3 := context.WithCancel(ctx)
 	err = d.InTx(c3, func(tx *Tx) error {
 		mustExec(t, tx, `INSERT INTO t VALUES (2)`)
@@ -557,8 +558,9 @@ func TestBackupAndCheckpoint(t *testing.T) {
 	}
 }
 
-// modernc.org/sqlite 要求下游钉住它 go.mod 里同一个 modernc.org/libc 版本（见其 GitLab issue #177）。
-// 升级 sqlite 时先查它 go.mod 里的 libc 版本，再改这里和 go.mod。
+// TestModerncLibcPinned: modernc.org/sqlite requires downstream modules to pin the same modernc.org/libc version as
+// its own go.mod (see its GitLab issue #177).
+// When upgrading sqlite, first look up the libc version in its go.mod, then change it here and in go.mod.
 func TestModerncLibcPinned(t *testing.T) {
 	want := map[string]string{"modernc.org/sqlite": "v1.60.1", "modernc.org/libc": "v1.77.1"}
 	info, ok := debug.ReadBuildInfo()
@@ -578,7 +580,9 @@ func TestModerncLibcPinned(t *testing.T) {
 	}
 }
 
-// 全局写钩子在每个写事务提交前执行：InTx、单条 Exec、写连接上的 Query/QueryRow 都算；钩子出错则整个写入回滚。
+// TestWriteHookRunsForEveryWrite checks that the global write hook runs before every write transaction commits:
+// InTx, a single Exec, and Query/QueryRow on the write connection all count; if the hook fails, the whole write
+// rolls back.
 func TestWriteHookRunsForEveryWrite(t *testing.T) {
 	d := openTest(t)
 	ctx := context.Background()
@@ -621,7 +625,7 @@ func TestWriteHookRunsForEveryWrite(t *testing.T) {
 	if err := d.QueryRow(ctx, `SELECT group_concat(n) FROM seen`).Scan(&seen); err != nil || seen != "1,2,3,3" {
 		t.Fatalf("钩子应在同一事务里看到每次写入：%q %v", seen, err)
 	}
-	// 没有命中行的 RETURNING：ErrNoRows，事务回滚（钩子仍不应留下痕迹）。
+	// RETURNING that matches no row: ErrNoRows and the transaction rolls back (the hook must still leave no trace).
 	if err := d.QueryRow(ctx, `UPDATE t SET v = 0 WHERE v < 0 RETURNING v`).Scan(&v); !IsNoRows(err) {
 		t.Fatalf("应得 ErrNoRows：%v", err)
 	}
@@ -646,11 +650,12 @@ func TestWriteHookRunsForEveryWrite(t *testing.T) {
 	if err := d.QueryRow(ctx, `SELECT (SELECT count(*) FROM t), (SELECT count(*) FROM seen)`).Scan(&n, &s); err != nil || n != 3 || s != 4 {
 		t.Fatalf("失败的写入与钩子都应回滚：t=%d seen=%d %v", n, s, err)
 	}
-	// 写连接已归还：可以继续写。
+	// The write connection has been returned: writing can continue.
 	mustExec(t, d, `INSERT INTO t VALUES (7)`)
 }
 
-// SQL 的 now() 在写事务里是事务开始时刻（同一事务各语句相同），clock_timestamp() 是调用时刻；都走注入的时钟。
+// TestSQLNowAndClockTimestamp checks that SQL now() in a write transaction is the transaction start time (the same
+// for every statement in the transaction) and clock_timestamp() is the time of the call; both use the injected clock.
 func TestSQLNowAndClockTimestamp(t *testing.T) {
 	var mu sync.Mutex
 	clock := time.Date(2026, 11, 2, 8, 0, 0, 123456000, time.UTC)
@@ -716,7 +721,9 @@ func TestISOTime(t *testing.T) {
 	}
 }
 
-// 语句钩子在每条语句前、在它所在的事务里调用：在写事务里停住时，别的写入等它；只读池上的查询也经过它。
+// TestQueryHookPausesInsideTransaction checks that the statement hook is called before every statement, inside that
+// statement's transaction: while it is paused in a write transaction other writes wait for it; queries on the
+// read-only pool go through it too.
 func TestQueryHookPausesInsideTransaction(t *testing.T) {
 	d := openTest(t)
 	ctx := context.Background()
@@ -774,7 +781,8 @@ func TestQueryHookPausesInsideTransaction(t *testing.T) {
 	}
 }
 
-// WriteWaiters 数正在等写连接的调用，拿到或放弃后减掉。
+// TestWriteWaiters checks that WriteWaiters counts the calls waiting for the write connection, and drops them once
+// they get it or give up.
 func TestWriteWaiters(t *testing.T) {
 	d := openTest(t)
 	ctx := context.Background()
@@ -814,7 +822,9 @@ func TestWriteWaiters(t *testing.T) {
 	}
 }
 
-// 延迟外键在提交时才检查：提交失败时 SQLite 让事务继续开着，写连接必须回滚后再归还，否则之后的写全部失败。
+// TestCommitFailureRollsBackAndKeepsWriter: deferred foreign keys are only checked at commit; when the commit fails
+// SQLite leaves the transaction open, so the write connection must be rolled back before it is returned, or every
+// later write fails.
 func TestCommitFailureRollsBackAndKeepsWriter(t *testing.T) {
 	ctx := context.Background()
 	d := openTest(t)

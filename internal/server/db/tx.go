@@ -8,7 +8,8 @@ import (
 	"time"
 )
 
-// Querier 是 *DB 与 *Tx 共有的读写方法，供既可在事务内也可在事务外调用的函数使用。
+// Querier is the set of read and write methods shared by *DB and *Tx, for functions that may be called either
+// inside or outside a transaction.
 type Querier interface {
 	Exec(ctx context.Context, query string, args ...any) (Result, error)
 	Query(ctx context.Context, query string, args ...any) (*Rows, error)
@@ -20,8 +21,9 @@ var (
 	_ Querier = (*Tx)(nil)
 )
 
-// Tx 是一个事务。写事务（InTx）在唯一的写连接上，以 BEGIN IMMEDIATE 开始；只读事务（ReadTx）在只读池上，
-// 从第一条查询起看到同一个快照。
+// Tx is a transaction. A write transaction (InTx) runs on the single write connection and starts with BEGIN
+// IMMEDIATE; a read-only transaction (ReadTx) runs on the read-only pool and sees one snapshot from its first query
+// on.
 type Tx struct {
 	tx       *sql.Tx
 	now      time.Time
@@ -33,7 +35,8 @@ type Tx struct {
 	hook     *QueryHook
 }
 
-// SetValue 在事务上记一个值（例如“写过插件事件”），供同一事务里后执行的钩子读取；key 用调用方私有的类型。
+// SetValue records a value on the transaction (for example "plugin events were written") for hooks that run later
+// in the same transaction to read; key should be a type private to the caller.
 func (t *Tx) SetValue(key, value any) {
 	if t.values == nil {
 		t.values = map[any]any{}
@@ -41,12 +44,14 @@ func (t *Tx) SetValue(key, value any) {
 	t.values[key] = value
 }
 
-// Value 返回 SetValue 记下的值；没有时为 nil。
+// Value returns the value recorded by SetValue, or nil if there is none.
 func (t *Tx) Value(key any) any { return t.values[key] }
 
-// InTx 在写事务中执行 fn：fn 返回 nil 时依次执行 BeforeCommit 钩子与全局写钩子（SetWriteHook）再提交，提交成功后
-// 依次执行 AfterCommit 钩子；任一步出错则回滚并返回该错误。等待写连接受 ctx 约束；BEGIN 之后语句仍用调用方 ctx
-// （取消会中断语句、事务回滚），提交本身不可取消。
+// InTx runs fn in a write transaction: when fn returns nil it runs the BeforeCommit hooks and then the global write
+// hook (SetWriteHook) and commits; after a successful commit it runs the AfterCommit hooks in order. If any step
+// fails it rolls back and returns that error. Waiting for the write connection is bounded by ctx; after BEGIN,
+// statements still use the caller's ctx (cancelling interrupts the statement and the transaction rolls back), but
+// the commit itself cannot be cancelled.
 func (d *DB) InTx(ctx context.Context, fn func(*Tx) error) (err error) {
 	t, end, err := d.beginWrite(ctx)
 	if err != nil {
@@ -54,7 +59,8 @@ func (d *DB) InTx(ctx context.Context, fn func(*Tx) error) (err error) {
 	}
 	ended := false
 	defer func() {
-		// fn 恐慌时也要回滚并归还连接，否则连接带着未结束的事务回到池里。
+		// Roll back and return the connection even when fn panics, or the connection goes back to the pool with an
+		// unfinished transaction.
 		if !ended {
 			_ = end(errors.New("db: 写事务回调恐慌"))
 		}
@@ -64,8 +70,9 @@ func (d *DB) InTx(ctx context.Context, fn func(*Tx) error) (err error) {
 	return end(fnErr)
 }
 
-// beginWrite 取得写连接并以 BEGIN IMMEDIATE 开始事务；end(fnErr) 结束它：fnErr 为 nil 时执行提交前钩子与全局写钩子
-// 并提交，否则回滚；无论如何都归还写连接。end 只能调用一次。
+// beginWrite acquires the write connection and starts a transaction with BEGIN IMMEDIATE; end(fnErr) finishes it:
+// when fnErr is nil it runs the before-commit hooks and the global write hook and commits, otherwise it rolls back;
+// either way it returns the write connection. end may be called only once.
 func (d *DB) beginWrite(ctx context.Context) (*Tx, func(error) error, error) {
 	c, release, err := d.acquireWriter(ctx)
 	if err != nil {
@@ -85,7 +92,8 @@ func (d *DB) beginWrite(ctx context.Context) (*Tx, func(error) error, error) {
 			fnErr = t.runBefore(ctx, d.writeHook.Load())
 		}
 		if fnErr != nil {
-			// 语句被中断等错误会让 SQLite 自己回滚整个事务，此时再回滚会报“没有活动事务”，忽略即可。
+			// Errors such as an interrupted statement make SQLite roll back the whole transaction on its own; rolling
+			// back again then reports "no transaction is active", which is safe to ignore.
 			t.done = true
 			_ = stx.Rollback()
 			return fnErr
@@ -102,7 +110,8 @@ func (d *DB) beginWrite(ctx context.Context) (*Tx, func(error) error, error) {
 	return t, end, nil
 }
 
-// runBefore 按登记顺序执行提交前钩子（钩子可以再登记钩子），最后执行全局写钩子。
+// runBefore runs the before-commit hooks in registration order (a hook may register more hooks), then the global
+// write hook.
 func (t *Tx) runBefore(ctx context.Context, global *WriteHook) error {
 	for i := 0; i < len(t.before); i++ {
 		if err := t.before[i](ctx, t); err != nil {
@@ -117,14 +126,17 @@ func (t *Tx) runBefore(ctx context.Context, global *WriteHook) error {
 	return nil
 }
 
-// WriteHook 在每个写事务提交前、所有 BeforeCommit 钩子之后执行，包括 *DB 上的单条写语句。
-// store 用它把触发器记下的变更（plugin_changes）在同一事务里变成插件事件。
+// WriteHook runs before every write transaction commits, after all BeforeCommit hooks, including single write
+// statements on *DB.
+// store uses it to turn the changes recorded by triggers (plugin_changes) into plugin events in the same
+// transaction.
 type WriteHook func(context.Context, *Tx) error
 
-// SetWriteHook 设置全局写钩子；在开始写入之前设置。
+// SetWriteHook sets the global write hook; set it before any writes start.
 func (d *DB) SetWriteHook(h WriteHook) { d.writeHook.Store(&h) }
 
-// ReadTx 在只读池上执行 fn，fn 内的查询看到同一个快照。只读事务里登记的钩子不会执行。
+// ReadTx runs fn on the read-only pool; the queries inside fn see one snapshot. Hooks registered in a read-only
+// transaction are not run.
 func (d *DB) ReadTx(ctx context.Context, fn func(*Tx) error) error {
 	stx, err := d.r.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
@@ -135,8 +147,9 @@ func (d *DB) ReadTx(ctx context.Context, fn func(*Tx) error) error {
 	return fn(t)
 }
 
-// BeginRead 在只读池上开始一个只读事务，调用方负责 Commit 或 Rollback（可以 defer Rollback，提交后它不做事）。
-// 能写成回调时用 ReadTx。
+// BeginRead starts a read-only transaction on the read-only pool; the caller must Commit or Rollback it (deferring
+// Rollback is fine, it does nothing after a commit).
+// Use ReadTx when the work can be written as a callback.
 func (d *DB) BeginRead(ctx context.Context) (*Tx, error) {
 	stx, err := d.r.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
@@ -145,7 +158,8 @@ func (d *DB) BeginRead(ctx context.Context) (*Tx, error) {
 	return &Tx{tx: stx, now: d.now(), readOnly: true, hook: d.queryHook.Load()}, nil
 }
 
-// Commit 结束 BeginRead 开始的只读事务。写事务由 InTx 提交，不能调用它。
+// Commit ends a read-only transaction started by BeginRead. Write transactions are committed by InTx and must not
+// call it.
 func (t *Tx) Commit(context.Context) error {
 	if !t.readOnly {
 		return errors.New("db: 写事务由 InTx 提交")
@@ -157,7 +171,7 @@ func (t *Tx) Commit(context.Context) error {
 	return t.tx.Commit()
 }
 
-// Rollback 结束 BeginRead 开始的只读事务；已结束时什么也不做。
+// Rollback ends a read-only transaction started by BeginRead; it does nothing if the transaction already ended.
 func (t *Tx) Rollback(context.Context) error {
 	if !t.readOnly {
 		return errors.New("db: 写事务由 InTx 回滚")
@@ -169,22 +183,26 @@ func (t *Tx) Rollback(context.Context) error {
 	return t.tx.Rollback()
 }
 
-// Now 返回事务开始时刻，对应 PostgreSQL 的 now()：同一事务里所有语句取同一个值。
+// Now returns the transaction start time, the equivalent of PostgreSQL's now(): every statement in the same
+// transaction gets the same value.
 func (t *Tx) Now() time.Time { return t.now }
 
-// BeforeCommit 登记一个在提交前、仍在事务内执行的钩子；它返回错误会使事务回滚。
-// 用于原来由延迟约束触发器完成的工作（例如按提交时的状态生成插件事件、校验绑定组完整）。
+// BeforeCommit registers a hook that runs before commit, still inside the transaction; if it returns an error the
+// transaction rolls back.
+// It is used for work formerly done by deferred constraint triggers (for example generating plugin events from the
+// state at commit time, or checking that a binding group is complete).
 func (t *Tx) BeforeCommit(fn func(context.Context, *Tx) error) {
 	t.before = append(t.before, fn)
 }
 
-// AfterCommit 登记一个只在提交成功后执行的钩子（例如唤醒插件宿主），对应 pg_notify 的事务语义。
-// 钩子不能失败，也不应阻塞。
+// AfterCommit registers a hook that runs only after a successful commit (for example waking the plugin host),
+// matching the transactional semantics of pg_notify.
+// The hook cannot fail and should not block.
 func (t *Tx) AfterCommit(fn func()) {
 	t.after = append(t.after, fn)
 }
 
-// Exec 在事务内执行语句。
+// Exec runs a statement inside the transaction.
 func (t *Tx) Exec(ctx context.Context, query string, args ...any) (Result, error) {
 	if err := t.usable(ctx, query); err != nil {
 		return Result{}, err
@@ -201,7 +219,7 @@ func (t *Tx) Exec(ctx context.Context, query string, args ...any) (Result, error
 	return Result{rows: n}, nil
 }
 
-// Query 在事务内执行查询。
+// Query runs a query inside the transaction.
 func (t *Tx) Query(ctx context.Context, query string, args ...any) (*Rows, error) {
 	if err := t.usable(ctx, query); err != nil {
 		return nil, err
@@ -217,7 +235,7 @@ func (t *Tx) Query(ctx context.Context, query string, args ...any) (*Rows, error
 	return &Rows{rows: rows}, nil
 }
 
-// QueryRow 在事务内执行只取一行的查询。
+// QueryRow runs a query that reads a single row inside the transaction.
 func (t *Tx) QueryRow(ctx context.Context, query string, args ...any) *Row {
 	rows, err := t.Query(ctx, query, args...)
 	return &Row{rows: rows, err: err}
@@ -236,7 +254,8 @@ func (t *Tx) usable(ctx context.Context, query string) error {
 	return nil
 }
 
-// NextSeq 从 sequences 表取下一个号（对应原来的 identity 列）。只能在写事务里调用。
+// NextSeq takes the next number from the sequences table (replacing the former identity columns). It may only be
+// called in a write transaction.
 func (t *Tx) NextSeq(ctx context.Context, name string) (int64, error) {
 	var v int64
 	err := t.QueryRow(ctx, `UPDATE sequences SET value = value + 1 WHERE name = ? RETURNING value`, name).Scan(&v)

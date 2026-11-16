@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-// 安装状态，与 OpenAPI 的 CliTemplate.install.status 一致。
+// Install states, matching CliTemplate.install.status in the OpenAPI spec.
 const (
 	StateNotInstalled        = "not_installed"
 	StateInstalling          = "installing"
@@ -29,10 +29,10 @@ const (
 	StateUnsupportedPlatform = "unsupported_platform"
 )
 
-// maxBinarySize 防止异常安装包解出过大的文件。
+// maxBinarySize keeps a broken install package from extracting an oversized file.
 const maxBinarySize = 1 << 30
 
-// Installer 把模板规定的固定版本安装到 <工作根目录>/tools/<名称>/<版本>/bin。
+// Installer installs the pinned version a template specifies into <work root>/tools/<name>/<version>/bin.
 type Installer struct {
 	toolsDir string
 	client   *http.Client
@@ -49,7 +49,7 @@ type installCall struct {
 	err  error
 }
 
-// NewInstaller 创建安装器。client 为 nil 时使用默认 HTTP 客户端。
+// NewInstaller creates an installer. When client is nil the default HTTP client is used.
 func NewInstaller(workRoot string, timeout time.Duration, client *http.Client) *Installer {
 	if client == nil {
 		client = &http.Client{}
@@ -65,7 +65,7 @@ func NewInstaller(workRoot string, timeout time.Duration, client *http.Client) *
 
 func key(t *Template) string { return t.Name + "@" + t.Version }
 
-// BinDir 返回模板版本的 bin 目录。
+// BinDir returns the bin directory of a template version.
 func (i *Installer) BinDir(t *Template) string {
 	return filepath.Join(i.toolsDir, t.Name, t.Version, "bin")
 }
@@ -83,7 +83,7 @@ func (i *Installer) installed(t *Template) bool {
 	return err == nil && fi.Mode().IsRegular()
 }
 
-// Status 返回安装状态与失败原因。
+// Status returns the install state and the failure reason.
 func (i *Installer) Status(t *Template) (string, string) {
 	if _, ok := t.Asset(); !ok {
 		return StateUnsupportedPlatform, "模板没有当前平台（" + Platform() + "）的安装包；环境里已有的同名命令不受影响，可直接使用"
@@ -102,14 +102,17 @@ func (i *Installer) Status(t *Template) (string, string) {
 	return StateNotInstalled, ""
 }
 
-// Ensure 确保模板版本已安装，返回 bin 目录。同一版本并发调用只下载安装一次。
+// Ensure makes sure the template version is installed and returns its bin directory. Concurrent calls for the same
+// version download and install it only once.
 func (i *Installer) Ensure(ctx context.Context, t *Template) (string, error) {
 	dir, _, err := i.EnsureReport(ctx, t)
 	return dir, err
 }
 
-// EnsureReport 与 Ensure 相同，另外报告这次调用是否实际进行了安装尝试：
-// 已安装或等待别人进行中的安装时为 false；下载安装（无论成败）或没有当前平台的安装包时为 true。
+// EnsureReport is like Ensure, and also reports whether this call actually attempted an install:
+// false when it was already installed or the call waited for someone else's install in progress; true when it
+// downloaded and installed (whether it succeeded or failed) or when there is no install package for the current
+// platform.
 func (i *Installer) EnsureReport(ctx context.Context, t *Template) (dir string, attempted bool, err error) {
 	asset, supported := t.Asset()
 	k := key(t)
@@ -162,7 +165,8 @@ func (i *Installer) EnsureReport(ctx context.Context, t *Template) (dir string, 
 	return i.BinDir(t), attempted, nil
 }
 
-// RestoreFailures 恢复上次运行记下的安装失败（键为 名称@版本），只对本机尚未安装、当前没有进行中安装的版本生效。
+// RestoreFailures restores the install failures recorded by the previous run (keyed by name@version); it only
+// applies to versions not installed on this machine and with no install currently in progress.
 func (i *Installer) RestoreFailures(failures map[string]string, templates []*Template) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -181,7 +185,7 @@ func (i *Installer) RestoreFailures(failures map[string]string, templates []*Tem
 	}
 }
 
-// Key 返回模板版本的键（名称@版本），与 RestoreFailures 的键一致。
+// Key returns the key of a template version (name@version), the same key RestoreFailures uses.
 func Key(t *Template) string { return key(t) }
 
 func (i *Installer) install(ctx context.Context, t *Template, a Asset) error {
@@ -227,7 +231,7 @@ func (i *Installer) install(ctx context.Context, t *Template, a Asset) error {
 	}
 	if err := os.Rename(stage, final); err != nil {
 		if i.installed(t) {
-			return nil // 已被其他调用装好
+			return nil // already installed by another call
 		}
 		return err
 	}

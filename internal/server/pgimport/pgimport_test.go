@@ -32,25 +32,28 @@ type fixture struct {
 	org, project, agent, credential, event uuid.UUID
 	at                                     time.Time
 	secret                                 []byte
-	other                                  uuid.UUID           // 第二个项目
-	taskNumbers                            map[uuid.UUID]int64 // 导入后每个任务应得的编号
+	other                                  uuid.UUID           // a second project
+	taskNumbers                            map[uuid.UUID]int64 // the number each task should get after the import
 }
 
-// seed 在源库写一组覆盖各种列类型的行：uuid、时刻、布尔、bytea、文本数组、jsonb，以及 events 表。
+// seed writes a set of rows into the source database covering all column types: uuid, timestamp, boolean, bytea,
+// text array, jsonb, plus the events table.
 func seed(t *testing.T, pool *pgxpool.Pool) fixture {
 	t.Helper()
 	f := fixture{org: uuid.New(), project: uuid.New(), agent: uuid.New(), credential: uuid.New(), event: uuid.New(),
 		at: time.Date(2026, 1, 2, 3, 4, 5, 123456000, time.UTC), secret: []byte{0, 0xff, 0x10, 'x'}}
 	exec(t, pool, `INSERT INTO organizations(id,name,is_default,created_at,updated_at) VALUES($1,'组织',true,$2,$2)`, f.org, f.at)
 	exec(t, pool, `INSERT INTO projects(id,organization_id,name,is_default) VALUES($1,$2,'项目',true)`, f.project, f.org)
-	// 订阅 Agent 事件的插件：源库的触发器为下面的 Agent 写了插件事件，导入不能再补一份。
+	// A plugin subscribed to Agent events: the source's triggers wrote plugin events for the Agent below, and the
+	// import must not add a second copy.
 	exec(t, pool, `INSERT INTO plugins(id,display_name,source,version,manifest,install_dir,status) VALUES('watcher','Watcher','{}','1.0.0','{"events": ["agent.created"]}','/nonexistent','installed')`)
 	exec(t, pool, `INSERT INTO project_plugins(project_id,plugin_id,enabled) VALUES($1,'watcher',true)`, f.project)
 	exec(t, pool, `INSERT INTO agents(id,project_id,name,model_provider,model_id,created_at) VALUES($1,$2,'甲','anthropic','m',$3)`, f.agent, f.project, f.at)
 	exec(t, pool, `INSERT INTO agent_credentials(id,agent_id,purpose,secret,field_names) VALUES($1,$2,'model',$3,ARRAY['KEY','引号"与,逗号'])`, f.credential, f.agent, f.secret)
 	exec(t, pool, `INSERT INTO lifecycle_events(id,at,agent_id,type,data) VALUES($1,$2,$3,'pi.started','{"b": [1, true], "a": "文本"}')`, f.event, f.at, f.agent)
 	exec(t, pool, `SELECT setval(pg_get_serial_sequence('runs','queue_seq'), 41)`)
-	// 源库的任务没有编号：导入后按项目、创建时间（相同时按 id）补上。插入顺序故意与编号顺序不同。
+	// Tasks in the source have no numbers: after the import they are filled in per project by creation time (by id on
+	// a tie). The insertion order deliberately differs from the numbering order.
 	f.other = uuid.New()
 	exec(t, pool, `INSERT INTO projects(id,organization_id,name,is_default) VALUES($1,$2,'另一个项目',false)`, f.other, f.org)
 	early, tieA, tieB, elsewhere := uuid.MustParse("00000000-0000-7000-8000-00000000000c"), uuid.MustParse("00000000-0000-7000-8000-00000000000a"), uuid.MustParse("00000000-0000-7000-8000-00000000000b"), uuid.New()
@@ -117,7 +120,8 @@ func TestImportConvertsValuesAndKeepsInvariants(t *testing.T) {
 	if err := json.Unmarshal([]byte(data), &decoded); err != nil || !reflect.DeepEqual(decoded, map[string]any{"a": "文本", "b": []any{1.0, true}}) {
 		t.Fatalf("jsonb 换写不对：%s", data)
 	}
-	// 序列接着源库用到的位置；单例设置只有源库那一行；导入本身不产生插件变更。
+	// Sequences continue from where the source left off; the singleton settings hold only the source's row; the import
+	// itself produces no plugin changes.
 	seqs := map[string]int64{}
 	rows, err := st.Pool.Query(ctx, `SELECT name, value FROM sequences`)
 	if err != nil {
@@ -141,7 +145,8 @@ func TestImportConvertsValuesAndKeepsInvariants(t *testing.T) {
 	if settings != 1 || models != 1 || changes != 0 || lifecycleChanges != 0 || pgEvents == 0 || events != pgEvents {
 		t.Fatalf("单例/插件变更不对：%d %d %d %d %d/%d", settings, models, changes, lifecycleChanges, events, pgEvents)
 	}
-	// 导入后执行基线之后的迁移，任务按项目补上了编号，项目计数器接着最大的编号。
+	// After the import the post-baseline migrations run: tasks got their numbers per project, and the project counter
+	// continues from the largest number.
 	for id, want := range f.taskNumbers {
 		var number int64
 		if err := st.Pool.QueryRow(ctx, `SELECT number FROM task_records WHERE id=$1`, id).Scan(&number); err != nil || number != want {
@@ -158,7 +163,7 @@ func TestImportConvertsValuesAndKeepsInvariants(t *testing.T) {
 	if err != nil || len(page.Tasks) != 3 || page.Tasks[0].Number != 3 || page.Tasks[2].Number != 1 {
 		t.Fatalf("导入的任务按 store 读应带编号：%+v %v", page.Tasks, err)
 	}
-	// 每张表都在报告里，行数与源库一致。
+	// Every table is in the report, with row counts matching the source.
 	for _, tb := range report.Tables {
 		var n int64
 		if err := pool.QueryRow(ctx, `SELECT count(*) FROM `+tb.Name).Scan(&n); err != nil {
@@ -185,7 +190,8 @@ func dbFiles(t *testing.T, dir string) []string {
 	return out
 }
 
-// 不满足前提时拒绝，且不留下库文件；已有的库不被碰。
+// TestImportRefusals checks that the import refuses when a precondition is not met and leaves no database files
+// behind; an existing database is not touched.
 func TestImportRefusals(t *testing.T) {
 	ctx := context.Background()
 	t.Run("version", func(t *testing.T) {
@@ -235,7 +241,8 @@ func TestImportRefusals(t *testing.T) {
 			t.Fatalf("拒绝后留下了 %v", files)
 		}
 	})
-	// 源库里不成立的外键在提交时被拒绝，整个导入回滚并删掉新建的库文件。
+	// A foreign key that does not hold in the source is rejected at commit; the whole import rolls back and the newly
+	// created database files are deleted.
 	t.Run("foreign key", func(t *testing.T) {
 		pool, src := pgimporttest.Source(t)
 		seed(t, pool)
@@ -251,7 +258,8 @@ func TestImportRefusals(t *testing.T) {
 	})
 }
 
-// 连接失败的错误里没有连接串里的用户名与密码。
+// TestConnectErrorHidesCredentials checks that a connection failure error does not contain the user name and
+// password from the connection string.
 func TestConnectErrorHidesCredentials(t *testing.T) {
 	_, err := pgimport.Import(context.Background(), pgimport.Options{SourceURL: "postgres://fixture-user:fixture-secret@127.0.0.1:1/fixture-db?connect_timeout=2", DBDir: filepath.Join(t.TempDir(), "db")})
 	if err == nil {

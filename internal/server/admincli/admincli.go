@@ -1,14 +1,16 @@
-// Package admincli 实现服务端命令行的管理子命令：外部身份与外部令牌的管理、手动备份，以及打印版本号。
-// 子命令直接读写数据库（与服务同一个数据目录，SQLite 支持多进程短写）；改变状态的操作记审计，操作者为 cli。
+// Package admincli implements the admin subcommands of the server command line: managing external identities and
+// external tokens, manual backups, and printing the version.
+// Subcommands read and write the database directly (the same data directory as the server; SQLite supports short
+// writes from several processes); state-changing operations are audited with cli as the actor.
 //
 //	loop-server version
-//	loop-server identity create <名称>
+//	loop-server identity create <name>
 //	loop-server identity list
-//	loop-server identity delete <名称>
-//	loop-server token issue <身份名称> [--expires-in 720h]
-//	loop-server token list <身份名称>
-//	loop-server token revoke <令牌 ID>
-//	loop-server backup <目录>
+//	loop-server identity delete <name>
+//	loop-server token issue <identity name> [--expires-in 720h]
+//	loop-server token list <identity name>
+//	loop-server token revoke <token ID>
+//	loop-server backup <directory>
 package admincli
 
 import (
@@ -38,10 +40,11 @@ import (
 	"path/filepath"
 )
 
-// Commands 是全部管理子命令的名称；第一个参数是其中之一时，loop-server 执行子命令而不是启动服务。
+// Commands are the names of all admin subcommands; when the first argument is one of them, loop-server runs the
+// subcommand instead of starting the server.
 var Commands = []string{"version", "identity", "token", "backup", "import-postgres"}
 
-// IsCommand 报告参数是否为管理子命令。
+// IsCommand reports whether the argument is an admin subcommand.
 func IsCommand(arg string) bool {
 	if arg == "internal-db-cli" || arg == "internal-gcloud-cli" {
 		return true
@@ -54,7 +57,7 @@ func IsCommand(arg string) bool {
 	return false
 }
 
-// 退出码：0 成功，1 执行失败，2 用法错误。
+// Exit codes: 0 success, 1 execution failure, 2 usage error.
 const (
 	exitOK    = 0
 	exitFail  = 1
@@ -74,14 +77,16 @@ const usage = `用法：
                                    （源库须已由最后一个 PostgreSQL 版本完成迁移，服务须已停下）
 `
 
-// Options 是运行子命令所需的环境。库在 LOOP_NOW_DATA_DIR（默认 HOME 下的 .loop_now）的 db 子目录。
+// Options is the environment needed to run a subcommand. The database is in the db subdirectory of LOOP_NOW_DATA_DIR
+// (default .loop_now under HOME).
 type Options struct {
 	Getenv func(string) string
 	Stdout io.Writer
 	Stderr io.Writer
 }
 
-// Run 执行子命令，返回退出码。签发的令牌只打印一次到标准输出，其余提示写到标准错误。
+// Run runs a subcommand and returns the exit code. An issued token is printed to standard output exactly once; all
+// other messages go to standard error.
 func Run(ctx context.Context, args []string, o Options) int {
 	if len(args) > 0 && args[0] == "internal-gcloud-cli" {
 		return gcloudcli.Run(ctx, args[1:], gcloudcli.Options{Getenv: o.Getenv, Stdin: os.Stdin, Stdout: o.Stdout, Stderr: o.Stderr})
@@ -105,7 +110,8 @@ func Run(ctx context.Context, args []string, o Options) int {
 		return exitUsage
 	}
 	dbDir := config.DBDir(dataDir(o))
-	// 只打开服务已经建好的库：数据目录写错时不能悄悄建一个空库。
+	// Only open a database the server has already created: a mistyped data directory must not silently create an
+	// empty database.
 	if _, err := os.Stat(filepath.Join(dbDir, db.DataFile)); err != nil {
 		fmt.Fprintf(o.Stderr, "数据目录 %s 里没有库（%s 设置对了吗？）\n", dbDir, config.EnvDataDir)
 		return exitUsage
@@ -180,8 +186,9 @@ func dataDir(o Options) string {
 	return config.DefaultDataDir(o.Getenv)
 }
 
-// importPostgres 执行一次性导入：源库来自 pgimport.EnvSourceURL，目标是数据目录里还不存在的新库。
-// 只打印表名与行数，不打印连接串与任何行内容。
+// importPostgres runs the one-time import: the source database comes from pgimport.EnvSourceURL, and the target is a
+// new database that does not exist in the data directory yet.
+// It only prints table names and row counts, never the connection string or any row contents.
 func importPostgres(ctx context.Context, args []string, o Options) int {
 	if len(args) != 1 {
 		fmt.Fprint(o.Stderr, usage)
@@ -213,7 +220,8 @@ type cmd struct {
 	o   Options
 }
 
-// audit 记录一次改变状态的操作；status 为 0 表示成功，1 表示失败。审计写入失败时提示但不改变结果。
+// audit records a state-changing operation; status 0 means success and 1 means failure. If writing the audit entry
+// fails, a message is printed but the result is unchanged.
 func (c *cmd) audit(op string, target map[string]string, err error) {
 	status := 0
 	if err != nil {
@@ -298,7 +306,7 @@ func (c *cmd) tokenIssue(args []string) error {
 	fs.SetOutput(io.Discard)
 	expiresIn := fs.Duration("expires-in", 0, "有效期，例如 720h；不传表示永不过期")
 	var name string
-	// 身份名称可以写在选项前或后。
+	// The identity name may come before or after the options.
 	if len(args) > 0 && len(args[0]) > 0 && args[0][0] != '-' {
 		name, args = args[0], args[1:]
 	}

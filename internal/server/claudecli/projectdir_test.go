@@ -10,7 +10,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// 会话记录子目录名的编码：非字母数字都换成 -，Windows 的盘符、冒号、反斜杠、8.3 短名里的 ~ 也一样。
+// TestEncodeProjectDir covers the encoding of session transcript subdirectory names: every non-alphanumeric character
+// becomes -, including the Windows drive letter's colon, backslashes and the ~ in 8.3 short names.
 func TestEncodeProjectDir(t *testing.T) {
 	for in, want := range map[string]string{
 		`C:\Users\RUNNER~1\AppData\Local\Temp\T1\agents\0192\workspace`: "C--Users-RUNNER-1-AppData-Local-Temp-T1-agents-0192-workspace",
@@ -23,7 +24,8 @@ func TestEncodeProjectDir(t *testing.T) {
 	}
 }
 
-// 候选的子目录名：解析之后的在前、原样的在后；解析失败或结果相同时只有原样的。
+// TestProjectDirNames covers the candidate subdirectory names: the resolved one first, the one as given second; when
+// resolving fails or gives the same result, there is only the one as given.
 func TestProjectDirNames(t *testing.T) {
 	short := `C:\Users\RUNNER~1\w`
 	long := func(string) (string, error) { return `C:\Users\runneradmin\w`, nil }
@@ -40,7 +42,8 @@ func TestProjectDirNames(t *testing.T) {
 	}
 }
 
-// claude 按原样的路径编码时也能找到会话记录（macOS 的临时目录在 /var 下，解析后是 /private/var，两个候选不同）。
+// TestTranscriptPathFallsBackToRawName checks that the session transcript is still found when claude encodes the path
+// as given (on macOS the temp directory is under /var, which resolves to /private/var, so the two candidates differ).
 func TestTranscriptPathFallsBackToRawName(t *testing.T) {
 	projects, cwd := t.TempDir(), t.TempDir()
 	names := ProjectDirNames(cwd)

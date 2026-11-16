@@ -1,5 +1,7 @@
-// Package pgschema 是 PostgreSQL 时期的表结构迁移（001–034，含版本 12 的 Go 迁移），只供导入器使用：
-// 导入器据此确认源库版本，导入器的测试据此建出源库。运行时代码不引用它；用户切换到 SQLite 之后随导入器一起删除。
+// Package pgschema holds the schema migrations of the PostgreSQL era (001-034, including the Go migration for version
+// 12), used only by the importer: the importer uses it to confirm the source version, and the importer's tests use it
+// to build source databases. Runtime code does not reference it; it will be deleted together with the importer once
+// users have switched to SQLite.
 package pgschema
 
 import (
@@ -18,10 +20,10 @@ import (
 //go:embed migrations/*.sql
 var migrationFiles embed.FS
 
-// Latest 是 SQLite 基线对应的 PostgreSQL 迁移版本。
+// Latest is the PostgreSQL migration version the SQLite baseline corresponds to.
 const Latest = 34
 
-// Migrate 在 sqlDB 上执行全部 PostgreSQL 迁移（带 goose 表锁）。
+// Migrate runs all PostgreSQL migrations on sqlDB (with the goose table lock).
 func Migrate(ctx context.Context, sqlDB *sql.DB, logger *slog.Logger) error {
 	locker, err := lock.NewPostgresTableLocker(
 		lock.WithTableLockTimeout(500*time.Millisecond, 600),

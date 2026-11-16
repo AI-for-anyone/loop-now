@@ -98,8 +98,10 @@ func TestGitHubCommitDeadlineUsesFreshTerminalContext(t *testing.T) {
 	attempt := provider.Add("101", "alice", nil, "")
 	attempt.Release()
 	ctx := context.Background()
-	// 提交写账号时停在语句钩子里，直到提交的期限到（写事务因此回滚）；记下提交确实走到了这里。
-	// 终态回写要等这个写事务结束才拿得到写连接，它用新的期限。
+	// When the commit writes the account, pause in the statement hook until the commit deadline passes (so the write
+	// transaction rolls back); record that the commit really got this far.
+	// The final-state write-back can only get the write connection once this write transaction ends, and it uses a new
+	// deadline.
 	var reached atomic.Bool
 	f.st.Pool.SetQueryHook(func(ctx context.Context, q string) {
 		if strings.Contains(q, "INSERT INTO project_credential_accounts") {

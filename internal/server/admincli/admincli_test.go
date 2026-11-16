@@ -68,7 +68,7 @@ func TestAdminCommands(t *testing.T) {
 	if code, _, _ := c.run("identity"); code != 2 {
 		t.Fatalf("缺少子命令时应报用法错误：%d", code)
 	}
-	// 数据目录里没有库时报错，不新建空库。
+	// With no database in the data directory it reports an error instead of creating an empty one.
 	empty := cli{t: t, dataDir: t.TempDir()}
 	if code, _, errs := empty.run("identity", "list"); code != 2 || !strings.Contains(errs, "没有库") {
 		t.Fatalf("数据目录里没有库时应报用法错误：%d %q", code, errs)
@@ -77,7 +77,7 @@ func TestAdminCommands(t *testing.T) {
 		t.Fatalf("不应新建空库：%v", err)
 	}
 
-	// 外部身份：创建、重名、名称规则、列出。
+	// External identities: create, duplicate name, name rules, list.
 	out, _ := c.ok("identity", "create", "ci-bot")
 	if !strings.Contains(out, "@ci-bot") {
 		t.Fatalf("创建外部身份：%s", out)
@@ -92,7 +92,7 @@ func TestAdminCommands(t *testing.T) {
 		t.Fatalf("列出外部身份：%s", out)
 	}
 
-	// 令牌：签发时只打印一次到标准输出；列表只有元数据；吊销后无效。
+	// Tokens: printed to standard output exactly once when issued; the list has only metadata; invalid once revoked.
 	tok, info := c.ok("token", "issue", "ci-bot", "--expires-in", "720h")
 	tok = strings.TrimSpace(tok)
 	if _, id, _, ok := auth.ParseToken(tok); !ok || !strings.HasPrefix(tok, "lne_") || !strings.Contains(info, id.String()) {
@@ -109,7 +109,7 @@ func TestAdminCommands(t *testing.T) {
 		t.Fatalf("有效期应为 720h：%+v %v", a.Token, err)
 	}
 	c.ok("token", "revoke", id.String())
-	c.ok("token", "revoke", id.String()) // 重复吊销不报错
+	c.ok("token", "revoke", id.String()) // revoking again is not an error
 	if a, _ := st.LookupExternalToken(context.Background(), id); a.Token.RevokedAt == nil {
 		t.Fatal("吊销后应带吊销时间")
 	}
@@ -117,7 +117,7 @@ func TestAdminCommands(t *testing.T) {
 		t.Fatal("令牌 ID 不合法时应失败")
 	}
 
-	// 删除身份：令牌全部吊销，名称可以再用。
+	// Deleting an identity: all its tokens are revoked and the name can be reused.
 	c.ok("identity", "delete", "ci-bot")
 	_, fid, _, _ := auth.ParseToken(strings.TrimSpace(forever))
 	if a, _ := st.LookupExternalToken(context.Background(), fid); a.Token.RevokedAt == nil {
@@ -128,7 +128,7 @@ func TestAdminCommands(t *testing.T) {
 	}
 	c.ok("identity", "create", "ci-bot")
 
-	// 审计：操作者为 cli，没有令牌。
+	// Audit: the actor is cli, with no token.
 	audits, err := st.ListAudit(context.Background(), 50)
 	if err != nil {
 		t.Fatal(err)
@@ -150,7 +150,8 @@ func TestAdminCommands(t *testing.T) {
 	}
 }
 
-// backup 在给定目录下写一份能打开的完整备份，服务开着库时也可以；目录参数缺失时报用法错误。
+// TestAdminBackup: backup writes a complete backup that can be opened into the given directory, even while the server
+// has the database open; a missing directory argument is a usage error.
 func TestAdminBackup(t *testing.T) {
 	dataDir := t.TempDir()
 	if err := os.MkdirAll(config.DBDir(dataDir), 0o700); err != nil {
@@ -182,7 +183,8 @@ func TestAdminBackup(t *testing.T) {
 	}
 }
 
-// import-postgres 只从 LOOP_NOW_DATABASE_URL 读源库：没设时报用法错误；连不上时失败，不留下库，也不打印连接参数。
+// TestAdminImportPostgresRefusals: import-postgres reads the source database only from LOOP_NOW_DATABASE_URL: unset is
+// a usage error; when it cannot connect it fails, leaves no database behind and does not print connection parameters.
 func TestAdminImportPostgresRefusals(t *testing.T) {
 	dataDir := t.TempDir()
 	c := cli{t: t, dataDir: dataDir}
@@ -207,7 +209,8 @@ func TestAdminImportPostgresRefusals(t *testing.T) {
 	}
 }
 
-// 成功导入后每张表一行“表名<TAB>行数”，新库能被其他子命令打开。
+// TestAdminImportPostgres: after a successful import there is one line per table, "table name<TAB>row count", and the
+// new database can be opened by the other subcommands.
 func TestAdminImportPostgres(t *testing.T) {
 	pool, src := pgimporttest.Source(t)
 	if _, err := pool.Exec(context.Background(), `INSERT INTO external_identities(id,name) VALUES($1,'imported-ci')`, uuid.New()); err != nil {

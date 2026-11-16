@@ -30,13 +30,16 @@ func TestLarkLeaseBoundaryNoLateOrForeignCommit(t *testing.T) {
 			}
 			waitExpired := func() {
 				t.Helper()
-				// 按墙上时钟比较（Round(0) 去掉单调读数）：库里的 clock_timestamp() 用的是墙上时钟，
-				// Windows 上它比单调时钟粗，按单调时钟判断"已过期"时库里可能还没过。
+				// Compare by wall clock (Round(0) strips the monotonic reading): clock_timestamp() in the database uses
+				// the wall clock, which on Windows is coarser than the monotonic clock, so when the monotonic clock says
+				// "expired" the database may not have reached that point yet.
 				for !time.Now().Round(0).After(until.Round(0)) {
 					time.Sleep(time.Millisecond)
 				}
 			}
-			// 用语句钩子数凭证写入（回滚的也算）。写入时过期：在提交事务里、通过租约检查之后，停在写入语句前直到租约过期。
+			// Count credential writes with the statement hook (rolled-back ones count too). Expiring during the write:
+			// inside the commit transaction, after the lease check passed, pause before the write statement until the
+			// lease expires.
 			var writes atomic.Int64
 			f.st.Pool.SetQueryHook(func(_ context.Context, q string) {
 				if strings.HasPrefix(strings.TrimSpace(q), "UPDATE project_cli_versions") {

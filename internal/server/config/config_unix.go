@@ -8,10 +8,11 @@ import (
 	"runtime"
 )
 
-// bundledNode 是随包 Node 在发布目录里的相对路径（官方 tar 包的布局）。
+// bundledNode is the relative path of the bundled Node in the release directory (the layout of the official Node
+// tarball).
 const bundledNode = "runtime/node/bin/node"
 
-// defaultDataDir：HOME 下的 .loop_now；取不到 HOME 时为空。
+// defaultDataDir: .loop_now under HOME; empty when HOME cannot be determined.
 func defaultDataDir(getenv func(string) string) string {
 	home := getenv("HOME")
 	if home == "" {
@@ -23,7 +24,8 @@ func defaultDataDir(getenv func(string) string) string {
 	return filepath.Join(home, ".loop_now")
 }
 
-// defaultWorkRoot：用户 home 之外的机器级目录（Pi 会向上加载工作目录所有上级目录里的 AGENTS.md/CLAUDE.md）。
+// defaultWorkRoot: a machine-wide directory outside the user's home (Pi loads AGENTS.md/CLAUDE.md from every parent
+// directory of the working directory upwards).
 func defaultWorkRoot() string {
 	if runtime.GOOS == "darwin" {
 		return "/Users/Shared/loop-now"

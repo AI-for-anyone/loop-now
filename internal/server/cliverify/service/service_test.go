@@ -173,7 +173,8 @@ func mustGuardPath(t *testing.T) string {
 	return p
 }
 
-// testNode 优先用固定版本的 Node；没有时用 PATH 里的 node（CI 装的是 Node 24），都没有就跳过。
+// testNode prefers the pinned Node version; without it, it uses node from PATH (CI installs Node 24), and skips when
+// neither is available.
 func testNode(t *testing.T) string {
 	t.Helper()
 	const pinned = "/Users/ljl/.local/node-v24.21.0/bin/node"

@@ -8,9 +8,10 @@ import (
 	"os/exec"
 )
 
-// execLauncher：Windows 没有 exec(2)。退而求其次：以继承的标准句柄运行沙箱命令，等它结束后以同样的退出码退出本进程，
-// 调用方（Pi 的 shell 工具）看到的仍是一个进程、一个退出码。沙箱命令本身是 macOS 的 sandbox-exec，Windows 上 Command 阶段就会拒绝，
-// 这里只保证行为定义完整。成功不返回。
+// execLauncher: Windows has no exec(2). As the next best thing, it runs the sandbox command with the inherited standard
+// handles, waits for it to finish and exits this process with the same exit code, so the caller (Pi's shell tool)
+// still sees one process and one exit code. The sandbox command itself is macOS's sandbox-exec, which is already
+// rejected at the Command stage on Windows; this only keeps the behavior fully defined. It does not return on success.
 func execLauncher(cmd *exec.Cmd) error {
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	err := cmd.Run()

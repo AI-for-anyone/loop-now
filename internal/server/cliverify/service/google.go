@@ -23,7 +23,7 @@ func (s *Service) googleVersionSpec(home string, env []string, t *clitemplate.Te
 	}
 	env = append(env, "CLOUDSDK_CONFIG="+filepath.Join(home, ".loop-now/gcloud/config"))
 	if selfContained {
-		// Linux 自包含安装：bin/gcloud 直接执行，Python 由环境提供。
+		// Self-contained Linux install: bin/gcloud runs directly, and Python is provided by the environment.
 		if p := clitemplate.ResolveGooglePython(); p != "" {
 			env = append(env, "CLOUDSDK_PYTHON="+p)
 		}
@@ -44,7 +44,7 @@ func (s *Service) googleProbe(ctx context.Context, op cliverify.Operation, d des
 		return fail("configuration_invalid")
 	}
 	if spec.Executable == filepath.Join(sdk, "bin", "gcloud") {
-		// Linux 自包含安装：审阅固定的验证脚本由系统 Python 解释执行。
+		// Self-contained Linux install: the reviewed, pinned verification script is interpreted by the system Python.
 		py := clitemplate.ResolveGooglePython()
 		if py == "" {
 			return fail("configuration_invalid")

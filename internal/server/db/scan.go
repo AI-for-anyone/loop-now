@@ -9,19 +9,22 @@ import (
 	"time"
 )
 
-// ErrNoRows 是 QueryRow 没有结果时 Scan 返回的错误（即 sql.ErrNoRows）。
+// ErrNoRows is the error Scan returns when QueryRow has no result (that is, sql.ErrNoRows).
 var ErrNoRows = sql.ErrNoRows
 
-// Rows 是查询结果，用法同 pgx.Rows：Next、Scan、Err、Close（Close 没有返回值，可重复调用）。
+// Rows is a query result, used like pgx.Rows: Next, Scan, Err, Close (Close has no return value and may be called
+// more than once).
 type Rows struct {
 	rows *sql.Rows
-	// finish 结束 Query 在写连接上开的事务：参数是迭代中的错误，返回提交（或回滚）的结果。
+	// finish ends the transaction Query opened on the write connection: its argument is the error from iteration,
+	// and it returns the result of the commit (or rollback).
 	finish    func(error) error
 	finishErr error
 	closed    bool
 }
 
-// Next 前进到下一行；没有更多行或出错时返回 false 并自动关闭。
+// Next advances to the next row; it returns false and closes the rows automatically when there are no more rows or
+// an error occurred.
 func (r *Rows) Next() bool {
 	if r.closed {
 		return false
@@ -33,15 +36,16 @@ func (r *Rows) Next() bool {
 	return false
 }
 
-// Scan 把当前行读入 dest，按 Go 类型做解码：
-//   - INTEGER → time.Time（UTC 微秒）；
-//   - TEXT/BLOB → json.RawMessage；TEXT → 切片、map、结构体（JSON 反序列化）；
-//   - 指针的指针遇 NULL 置 nil。其余交给 database/sql。
+// Scan reads the current row into dest, decoding by Go type:
+//   - INTEGER -> time.Time (UTC microseconds);
+//   - TEXT/BLOB -> json.RawMessage; TEXT -> slices, maps, structs (JSON unmarshalling);
+//   - a pointer to a pointer is set to nil on NULL. Everything else is left to database/sql.
 func (r *Rows) Scan(dest ...any) error {
 	return scanInto(r.rows, dest)
 }
 
-// Err 返回迭代中遇到的错误；写语句的结果集关闭后还包括提交的错误。
+// Err returns the error met during iteration; for the result set of a write statement, once it is closed, this
+// also includes the commit error.
 func (r *Rows) Err() error {
 	if r.finishErr != nil {
 		return r.finishErr
@@ -49,7 +53,8 @@ func (r *Rows) Err() error {
 	return r.rows.Err()
 }
 
-// Close 关闭结果集；若它是写连接上的写语句，同时执行钩子、提交并归还写连接。
+// Close closes the result set; if it belongs to a write statement on the write connection, it also runs the hooks,
+// commits and returns the write connection.
 func (r *Rows) Close() {
 	if r.closed {
 		return
@@ -61,23 +66,24 @@ func (r *Rows) Close() {
 	}
 }
 
-// Columns 返回列名。
+// Columns returns the column names.
 func (r *Rows) Columns() ([]string, error) { return r.rows.Columns() }
 
-// Row 是 QueryRow 的结果。
+// Row is the result of QueryRow.
 type Row struct {
 	rows *Rows
 	err  error
 }
 
-// Scan 读入第一行并关闭结果；没有行时返回 ErrNoRows。写语句（… RETURNING）的提交错误也由它返回。
+// Scan reads the first row and closes the result; it returns ErrNoRows when there is no row. It also returns the
+// commit error of a write statement (... RETURNING).
 func (r *Row) Scan(dest ...any) error {
 	if r.err != nil {
 		return r.err
 	}
 	err := r.scan(dest)
 	if err != nil && r.rows.finish != nil && !r.rows.closed {
-		// 扫描失败：写语句的事务回滚。
+		// Scan failed: roll back the write statement's transaction.
 		r.rows.closed = true
 		_ = r.rows.rows.Close()
 		_ = r.rows.finish(err)
@@ -100,7 +106,8 @@ func (r *Row) scan(dest []any) error {
 	if err := r.rows.Scan(dest...); err != nil {
 		return err
 	}
-	// 读完剩余结果，确保写语句（… RETURNING）执行完毕、错误不被吞掉。
+	// Drain the remaining results so a write statement (... RETURNING) runs to completion and its errors are not
+	// swallowed.
 	for r.rows.rows.Next() {
 	}
 	return r.rows.rows.Err()
@@ -113,7 +120,7 @@ var (
 	bytesType   = reflect.TypeFor[[]byte]()
 )
 
-// decoder 把一列的原始值写进目标。
+// decoder writes a column's raw value into its destination.
 type decoder func(src any) error
 
 func scanInto(rows *sql.Rows, dest []any) error {
@@ -142,7 +149,8 @@ func scanInto(rows *sql.Rows, dest []any) error {
 	return nil
 }
 
-// decoderFor 为需要本包解码的目标返回解码函数；交给 database/sql 处理的返回 nil。
+// decoderFor returns a decode function for destinations this package must decode; it returns nil for those left to
+// database/sql.
 func decoderFor(d any) decoder {
 	pv := reflect.ValueOf(d)
 	if pv.Kind() != reflect.Pointer || pv.IsNil() {
@@ -233,15 +241,16 @@ func decodeValue(v reflect.Value, src any) error {
 	return nil
 }
 
-// Scanner 是能把当前行读入目标的东西：*Row、*Rows 都是。扫描函数的参数用它，同一个函数可用于单行与多行查询。
+// Scanner is anything that can read the current row into destinations: both *Row and *Rows are. Scan functions take
+// it as their parameter so the same function works for single-row and multi-row queries.
 type Scanner interface {
 	Scan(dest ...any) error
 }
 
-// CollectableRow 是 CollectRows 回调拿到的当前行（同 pgx 的名字）。
+// CollectableRow is the current row handed to the CollectRows callback (same name as in pgx).
 type CollectableRow = Scanner
 
-// CollectRows 逐行调用 fn 并收集结果，最后关闭 rows。形状同 pgx.CollectRows。
+// CollectRows calls fn for each row and collects the results, then closes rows. Shaped like pgx.CollectRows.
 func CollectRows[T any](rows *Rows, fn func(CollectableRow) (T, error)) ([]T, error) {
 	defer rows.Close()
 	out := []T{}
@@ -255,15 +264,16 @@ func CollectRows[T any](rows *Rows, fn func(CollectableRow) (T, error)) ([]T, er
 	return out, rows.Err()
 }
 
-// RowTo 把只有一列的行读成 T，配合 CollectRows 使用。
+// RowTo reads a single-column row as T, for use with CollectRows.
 func RowTo[T any](row CollectableRow) (T, error) {
 	var v T
 	err := row.Scan(&v)
 	return v, err
 }
 
-// ForEachRow 对每一行把列读入 scans 后调用 fn，最后关闭 rows；返回值里的 RowsAffected 是读到的行数。
-// 形状同 pgx.ForEachRow。
+// ForEachRow reads each row's columns into scans and then calls fn, and finally closes rows; RowsAffected in the
+// returned value is the number of rows read.
+// Shaped like pgx.ForEachRow.
 func ForEachRow(rows *Rows, scans []any, fn func() error) (Result, error) {
 	defer rows.Close()
 	var n int64
@@ -279,5 +289,5 @@ func ForEachRow(rows *Rows, scans []any, fn func() error) (Result, error) {
 	return Result{rows: n}, rows.Err()
 }
 
-// IsNoRows 报告 err 是否为没有结果。
+// IsNoRows reports whether err means there was no result.
 func IsNoRows(err error) bool { return errors.Is(err, ErrNoRows) }

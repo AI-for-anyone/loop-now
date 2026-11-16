@@ -14,8 +14,9 @@ import (
 	"loop-now/internal/testutil/fakeclaudebin"
 )
 
-// pi 总是可用；claude-code 报告 claude 的路径、版本与登录状态（只有是否登录、方式与订阅类型，没有邮箱与组织）；结果缓存，refresh 时重查；
-// 找不到 claude 时 not_found、login 为 null。
+// TestChecker: pi is always available; claude-code reports claude's path, version and login state (only whether it is
+// logged in, the method and the subscription type, no email or organization); results are cached and refresh checks
+// again; when claude cannot be found, the reason is not_found and login is null.
 func TestChecker(t *testing.T) {
 	home := t.TempDir()
 	now := time.Now()
@@ -46,7 +47,8 @@ func TestChecker(t *testing.T) {
 	if got := c.List(context.Background(), true)[1].Login.State; got != "logged_out" {
 		t.Fatalf("refresh 重查：%s", got)
 	}
-	// 辅助环境没有 USER 时 claude 答未登录（以 1 退出）：是 logged_out，不是 unknown。
+	// When the helper environment has no USER, claude answers not logged in (exiting with 1): that is logged_out, not
+	// unknown.
 	noUser := &runtimes.Checker{PiVersion: func() string { return "1.4.0" }, ClaudeBin: c.ClaudeBin, RealHome: func() (string, error) { return t.TempDir(), nil }, ExecBasePath: "/usr/bin:/bin"}
 	if got := noUser.List(context.Background(), true)[1].Login; got == nil || got.State != "logged_out" {
 		t.Fatalf("未登录应为 logged_out：%+v", got)
