@@ -21,7 +21,7 @@ func TestCheckProviderState(t *testing.T) {
 		{"bad id!": {Paths: []string{".x"}}},
 	} {
 		if err := CheckProviderState("providerState", bad); err == nil {
-			t.Errorf("应拒绝：%v", bad)
+			t.Errorf("should be rejected: %v", bad)
 		}
 	}
 }
@@ -40,7 +40,7 @@ func TestOverlappingStatePath(t *testing.T) {
 		{[]string{".config/ghx"}, false},            // only a sibling sharing a prefix
 	} {
 		if _, _, ok := OverlappingStatePath(c.decl, managed); ok != c.hit {
-			t.Errorf("%v：重叠 = %v，期望 %v", c.decl, ok, c.hit)
+			t.Errorf("%v: overlap = %v, want %v", c.decl, ok, c.hit)
 		}
 	}
 }

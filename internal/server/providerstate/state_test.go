@@ -22,7 +22,7 @@ func assertPrivate(t *testing.T, path string, mode os.FileMode) {
 		t.Fatal(err)
 	}
 	if !privatefs.IsPrivate(path, info) || (runtime.GOOS != "windows" && info.Mode().Perm() != mode) {
-		t.Fatalf("%s 不是只有当前用户能访问：%v", path, info.Mode())
+		t.Fatalf("%s is not accessible to the current user only: %v", path, info.Mode())
 	}
 }
 
@@ -52,7 +52,7 @@ func TestPublish(t *testing.T) {
 	}
 	fsperm.Open(t, filepath.Join(nested, "a.json"))
 	if info, err := os.Lstat(filepath.Join(nested, "a.json")); err != nil || privatefs.IsPrivate(filepath.Join(nested, "a.json"), info) {
-		t.Fatalf("发布前的文件应对所有人开放，否则核对不出收紧：%v", err)
+		t.Fatalf("the file should be open to everyone before publishing, or the tightening cannot be checked: %v", err)
 	}
 	outside := filepath.Join(t.TempDir(), "outside.txt")
 	if err := os.WriteFile(outside, []byte("x"), 0o644); err != nil {
@@ -65,11 +65,11 @@ func TestPublish(t *testing.T) {
 	}
 	committed := false
 	if err := m.Publish(v, "p", []byte(`{"type":"oauth","access":"m"}`), func() error { committed = true; return nil }); err != nil || !committed {
-		t.Fatalf("发布：%v %v", err, committed)
+		t.Fatalf("publish: %v %v", err, committed)
 	}
 	b, err := os.ReadFile(filepath.Join(m.Dir(v), AuthFile))
 	if err != nil || string(b) != `{"p":{"type":"oauth","access":"m"}}` {
-		t.Fatalf("auth.json：%s %v", b, err)
+		t.Fatalf("auth.json: %s %v", b, err)
 	}
 	// The state directory holds subscription tokens: after publishing, only the current user can access the whole
 	// tree.
@@ -79,7 +79,7 @@ func TestPublish(t *testing.T) {
 	}
 	if runtime.GOOS != "windows" {
 		if info, _ := os.Stat(outside); info.Mode().Perm() != 0o644 {
-			t.Fatal("不能经软链接改外面的文件")
+			t.Fatal("must not change a file outside through a symlink")
 		}
 	}
 
@@ -88,19 +88,19 @@ func TestPublish(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := m.Publish(v2, "p", []byte(`{"type":"oauth"}`), func() error { return ErrNotSaved }); !errors.Is(err, ErrNotSaved) {
-		t.Fatalf("提交失败：%v", err)
+		t.Fatalf("commit failure: %v", err)
 	}
 	if _, err := os.Stat(m.Dir(v2)); !os.IsNotExist(err) {
-		t.Fatal("提交失败时删除目录")
+		t.Fatal("the directory should be deleted when the commit fails")
 	}
 	v3 := uuid.New()
 	if _, err := m.Begin(v3); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.Publish(v3, "p", []byte(`"not an object"`), func() error { t.Fatal("不该提交"); return nil }); err == nil {
-		t.Fatal("不是对象的条目应拒绝")
+	if err := m.Publish(v3, "p", []byte(`"not an object"`), func() error { t.Fatal("should not commit"); return nil }); err == nil {
+		t.Fatal("an entry that is not an object should be rejected")
 	}
 	if entries, _ := os.ReadDir(m.Root); len(entries) != 1 {
-		t.Fatalf("只剩第一个版本：%v", entries)
+		t.Fatalf("only the first version should remain: %v", entries)
 	}
 }

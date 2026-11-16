@@ -20,7 +20,7 @@ func (s *memoryStore) GetModelSettings(context.Context) (store.ModelSettings, er
 }
 func (s *memoryStore) CompareAndSwapModelSettings(_ context.Context, text string, expected int64) (store.ModelSettings, error) {
 	if s.row.Revision != expected {
-		return store.ModelSettings{}, apperr.PreconditionFailed("模型配置已被修改")
+		return store.ModelSettings{}, apperr.PreconditionFailed("the model configuration was changed")
 	}
 	s.row.ModelsJSON, s.row.Revision = text, s.row.Revision+1
 	return s.row, nil
