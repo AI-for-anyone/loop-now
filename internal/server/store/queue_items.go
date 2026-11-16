@@ -392,7 +392,7 @@ func taskQueueItemsTx(ctx context.Context, tx *db.Tx, task, node uuid.UUID) ([]Q
 
 // queueNotPending returns run_not_queued: the queue item is no longer in the queue.
 func queueNotPending(runID *uuid.UUID, status, whenBusy string, message *uuid.UUID, state string) error {
-	e := apperr.Conflict(apperr.CodeRunNotQueued, "该消息已开始处理、已读或已取消，不在排队中")
+	e := apperr.Conflict(apperr.CodeRunNotQueued, "This message is no longer queued: it was started, read or cancelled.")
 	d := RunNotQueuedDetails{RunID: runID, MessageID: message, MessageState: state}
 	if status != "" {
 		d.Status = &status

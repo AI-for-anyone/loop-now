@@ -45,11 +45,11 @@ func sleepKey(agent, task uuid.UUID) string {
 	return "task/" + task.String() + "/agent/" + agent.String()
 }
 func sleepConflict() error {
-	return apperr.Conflict(apperr.CodeSleepConflict, "当前运行无法登记睡眠或动作内容冲突")
+	return apperr.Conflict(apperr.CodeSleepConflict, "The current run cannot register a sleep, or the action conflicts with an earlier request.")
 }
 func sleepPlan(p auth.Principal) (InboxLockPlan, error) {
 	if p.Kind != auth.KindAgent {
-		return InboxLockPlan{}, apperr.Forbidden("仅Agent可操作自身sleep")
+		return InboxLockPlan{}, apperr.Forbidden("Only an Agent can manage its own sleep.")
 	}
 	if p.ID == uuid.Nil || (p.TaskID == uuid.Nil) != (p.RuntimeID == uuid.Nil) {
 		return InboxLockPlan{}, sleepConflict()
@@ -63,7 +63,7 @@ func (s *Store) RequestSleep(ctx context.Context, p auth.Principal, in sleepmode
 		return out, e
 	}
 	if in.ActionID == uuid.Nil || in.RunID == uuid.Nil || in.Seconds < 1 || in.Seconds > 2147483647 || in.Reason != nil && len(*in.Reason) > maxReason {
-		return out, apperr.Invalid("sleep", "参数无效")
+		return out, apperr.Invalid("sleep", "actionId and runId are required, seconds must be between 1 and 2147483647, and reason must be within the length limit.")
 	}
 	raw, _ := json.Marshal(in)
 	hash := sha256.Sum256(raw)

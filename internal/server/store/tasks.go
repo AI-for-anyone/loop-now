@@ -71,7 +71,7 @@ func (m *TaskMutation) Emit(kind string, data any) error {
 
 func actionLock(ctx context.Context, tx *db.Tx, a TaskAction) (json.RawMessage, bool, error) {
 	if a.ID == uuid.Nil || a.ActorKey == "" || a.Operation == "" {
-		return nil, false, apperr.Invalid("actionId", "必须提供有效动作ID")
+		return nil, false, apperr.Invalid("actionId", "A valid actionId is required.")
 	}
 	var op string
 	var hash, body []byte
@@ -84,7 +84,7 @@ func actionLock(ctx context.Context, tx *db.Tx, a TaskAction) (json.RawMessage, 
 	}
 	want := sha256.Sum256(a.Body)
 	if op != a.Operation || string(hash) != string(want[:]) {
-		return nil, false, apperr.Conflict(apperr.CodeTaskConflict, "动作ID已用于其他请求")
+		return nil, false, apperr.Conflict(apperr.CodeTaskConflict, "This actionId was already used for a different request.")
 	}
 	return body, true, nil
 }
@@ -221,7 +221,7 @@ func (s *Store) MutateTask(ctx context.Context, id uuid.UUID, action *TaskAction
 		}
 		var pid uuid.UUID
 		if err := tx.QueryRow(ctx, `SELECT project_id FROM task_records WHERE id=$1`, id).Scan(&pid); err != nil {
-			return notFoundIfNoRows(err, "任务")
+			return notFoundIfNoRows(err, "Task")
 		}
 		var manager *uuid.UUID
 		var projectName string
@@ -230,7 +230,7 @@ func (s *Store) MutateTask(ctx context.Context, id uuid.UUID, action *TaskAction
 		}
 		var raw []byte
 		if err := tx.QueryRow(ctx, `SELECT document FROM task_records WHERE id=$1`, id).Scan(&raw); err != nil {
-			return notFoundIfNoRows(err, "任务")
+			return notFoundIfNoRows(err, "Task")
 		}
 		var record, before taskmodel.Record
 		if err := decodeTaskJSON(raw, &record); err != nil {
@@ -256,7 +256,7 @@ func (s *Store) MutateTask(ctx context.Context, id uuid.UUID, action *TaskAction
 			return err
 		}
 		if (originalStatus == "cancelled" || originalStatus == "completed") && record.View.Task.Status != originalStatus {
-			return apperr.Conflict(apperr.CodeTaskConflict, "已结束任务不能恢复执行")
+			return apperr.Conflict(apperr.CodeTaskConflict, "An ended task cannot be resumed.")
 		}
 		if !m.unchanged {
 			if err := s.ExpireTaskNodeInboxTx(ctx, m); err != nil {
@@ -314,10 +314,10 @@ func (s *Store) CreateTask(ctx context.Context, projectID, managerID uuid.UUID, 
 		var current *uuid.UUID
 		var projectName string
 		if err = tx.QueryRow(ctx, `SELECT manager_agent_id,name FROM projects WHERE id=$1 AND deleted_at IS NULL`, projectID).Scan(&current, &projectName); err != nil {
-			return notFoundIfNoRows(err, "项目")
+			return notFoundIfNoRows(err, "Project")
 		}
 		if current == nil || *current != managerID {
-			return apperr.Forbidden("只有当前项目Manager可创建任务")
+			return apperr.Forbidden("Only the project's current Manager can create tasks.")
 		}
 		if found {
 			out = b
@@ -330,7 +330,7 @@ func (s *Store) CreateTask(ctx context.Context, projectID, managerID uuid.UUID, 
 		r.View.Task.ProjectID = projectID
 		r.View.Task.Link = taskLink(projectName, r.View.Task.ID)
 		if r.View.Task.Status != "preparing" || r.View.Task.Version != 1 {
-			return apperr.Invalid("task", "任务初始状态无效")
+			return apperr.Invalid("task", "The initial task state is invalid.")
 		}
 		// The number is the next value of the project counter: write transactions are serialized, so concurrent
 		// creations in the same project never get the same number; if the creation fails and rolls back, the counter
@@ -388,7 +388,7 @@ func (s *Store) GetTask(ctx context.Context, id uuid.UUID) (taskmodel.Record, er
 	var raw []byte
 	var name string
 	if err = tx.QueryRow(ctx, `SELECT t.document,p.name FROM task_records t JOIN projects p ON p.id=t.project_id WHERE t.id=$1`, id).Scan(&raw, &name); err != nil {
-		return r, notFoundIfNoRows(err, "任务")
+		return r, notFoundIfNoRows(err, "Task")
 	}
 	if err = decodeTaskJSON(raw, &r); err != nil {
 		return r, err
@@ -406,7 +406,7 @@ func taskCursor(t time.Time, id uuid.UUID) string {
 func parseTaskCursor(cursor string) (time.Time, uuid.UUID, error) {
 	b, err := base64.RawURLEncoding.DecodeString(cursor)
 	if err != nil {
-		return time.Time{}, uuid.Nil, apperr.Invalid("cursor", "游标无效")
+		return time.Time{}, uuid.Nil, apperr.Invalid("cursor", "The cursor is invalid.")
 	}
 	for i, c := range b {
 		if c == '|' {
@@ -418,7 +418,7 @@ func parseTaskCursor(cursor string) (time.Time, uuid.UUID, error) {
 			break
 		}
 	}
-	return time.Time{}, uuid.Nil, apperr.Invalid("cursor", "游标无效")
+	return time.Time{}, uuid.Nil, apperr.Invalid("cursor", "The cursor is invalid.")
 }
 
 // CountTasks counts, by status, the unfinished tasks in non-deleted projects. A nil ended_at corresponds exactly to
@@ -509,7 +509,7 @@ func (s *Store) TaskInstance(ctx context.Context, id uuid.UUID) (TaskInstance, e
 	var raw []byte
 	err := s.Pool.QueryRow(ctx, `SELECT id,task_id,agent_id,agent_name,snapshot,sources,session_file,session_state,fork_source,prepared,retired FROM task_instances WHERE id=$1`, id).Scan(&i.ID, &i.TaskID, &i.AgentID, &i.AgentName, &i.Snapshot, &raw, &i.SessionFile, &i.SessionState, &i.ForkSource, &i.Prepared, &i.Retired)
 	if err != nil {
-		return i, notFoundIfNoRows(err, "任务实例")
+		return i, notFoundIfNoRows(err, "Task instance")
 	}
 	err = decodeTaskJSON(raw, &i.Sources)
 	return i, err

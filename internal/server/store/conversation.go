@@ -75,11 +75,11 @@ type Message struct {
 }
 
 // ErrActiveRunExists means the Agent already has a run in progress (the single-run constraint).
-var ErrActiveRunExists = errors.New("Agent 已有进行中的执行")
+var ErrActiveRunExists = errors.New("the Agent already has a run in progress")
 
 // ErrQueuedRunsExist means the Agent still has queued runs that can start: a new message must not skip ahead of them
 // and start directly.
-var ErrQueuedRunsExist = errors.New("Agent 还有排队的执行")
+var ErrQueuedRunsExist = errors.New("the Agent still has queued runs")
 
 // dispatchableQueued is the condition for a queued run that can start (table name runs, no alias): the sleep wake
 // turn must wait until the sleep has actually woken, the same check as in StartQueuedRun.
@@ -169,7 +169,7 @@ func (s *Store) insertMessageAndRunTx(ctx context.Context, tx *db.Tx, in NewRun)
 			return err
 		}
 		if state == "missing" {
-			return apperr.Conflict(apperr.CodeSessionMissing, "会话文件丢失，请先在控制台确认重开会话")
+			return apperr.Conflict(apperr.CodeSessionMissing, "The session file is missing. Confirm reopening the session in the console first.")
 		}
 		status, priority := "queued", 1
 		if in.WhenBusy == "interrupt" {
@@ -325,14 +325,14 @@ func (s *Store) InsertInboxWithReminder(ctx context.Context, msg *NewInboxMessag
 // starts running).
 func (s *Store) SetMessageText(ctx context.Context, id uuid.UUID, text string) (Message, error) {
 	m, err := scanMessage(s.Pool.QueryRow(ctx, `UPDATE conversation_messages SET text = $2 WHERE id = $1 RETURNING `+messageColumns, id, text))
-	return m, notFoundIfNoRows(err, "消息")
+	return m, notFoundIfNoRows(err, "Message")
 }
 
 // GetRun returns a run record with its tool status, total usage and the model used.
 func (s *Store) GetRun(ctx context.Context, id uuid.UUID) (Run, error) {
 	r, err := scanRun(s.Pool.QueryRow(ctx, `SELECT `+runColumns+` FROM runs WHERE id = $1`, id))
 	if err != nil {
-		return r, notFoundIfNoRows(err, "执行")
+		return r, notFoundIfNoRows(err, "Run")
 	}
 	return r, s.fillRuns(ctx, &r)
 }
@@ -340,7 +340,7 @@ func (s *Store) GetRun(ctx context.Context, id uuid.UUID) (Run, error) {
 // GetMessage returns one message.
 func (s *Store) GetMessage(ctx context.Context, id uuid.UUID) (Message, error) {
 	m, err := scanMessage(s.Pool.QueryRow(ctx, `SELECT `+messageColumns+` FROM conversation_messages WHERE id = $1`, id))
-	return m, notFoundIfNoRows(err, "消息")
+	return m, notFoundIfNoRows(err, "Message")
 }
 
 // ActiveRun returns the Agent's run in progress; nil when there is none.
@@ -566,7 +566,7 @@ func (s *Store) FinishRun(ctx context.Context, runID uuid.UUID, end RunEnd) (Run
 			runID, end.Status, nullIfEmpty(end.EndReason), nullIfEmpty(end.ErrorCode), nullIfEmpty(end.ErrorMessage), end.ConfigVersion, tx.Now(), nullIfEmpty(end.PiCommand), end.PiCommandHandled, nullIfEmptyBytes(end.PiCommandNotices)))
 		if errors.Is(err, db.ErrNoRows) {
 			run, err = scanRun(tx.QueryRow(ctx, `SELECT `+runColumns+` FROM runs WHERE id = $1`, runID))
-			return notFoundIfNoRows(err, "执行")
+			return notFoundIfNoRows(err, "Run")
 		}
 		if err != nil {
 			return err
@@ -711,7 +711,7 @@ func listMessagesTx(ctx context.Context, tx *db.Tx, agentID uuid.UUID, q Message
 	seqOf := func(id uuid.UUID) (int64, error) {
 		var seq int64
 		err := tx.QueryRow(ctx, `SELECT seq FROM conversation_messages WHERE id = $1 AND agent_id = $2`, id, agentID).Scan(&seq)
-		return seq, notFoundIfNoRows(err, "消息")
+		return seq, notFoundIfNoRows(err, "Message")
 	}
 	var items []MessageWithRun
 	// from is the message sequence number where this page starts: the sequence number of the first message when the
@@ -794,13 +794,13 @@ func aroundRunAnchor(ctx context.Context, q queueQuerier, agentID, runID uuid.UU
 	err := q.QueryRow(ctx, `SELECT r.origin, r.queued_at, m.seq FROM runs r LEFT JOIN conversation_messages m ON m.id = r.user_message_id
 		WHERE r.id = $1 AND r.agent_id = $2`, runID, agentID).Scan(&origin, &queuedAt, &userSeq)
 	if err != nil {
-		return 0, notFoundIfNoRows(err, "执行")
+		return 0, notFoundIfNoRows(err, "Run")
 	}
 	if userSeq != nil {
 		return *userSeq, nil
 	}
 	if origin != "console_compact" {
-		return 0, apperr.NotFound("执行")
+		return 0, apperr.NotFound("Run")
 	}
 	var last int64
 	err = q.QueryRow(ctx, `SELECT coalesce(max(seq), 0) FROM conversation_messages WHERE agent_id = $1 AND created_at <= $2`, agentID, queuedAt).Scan(&last)

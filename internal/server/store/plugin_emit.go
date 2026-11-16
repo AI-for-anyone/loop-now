@@ -104,7 +104,7 @@ func (s *Store) beforeCommit(ctx context.Context, tx *db.Tx) error {
 	// then the latter.
 	for _, c := range append(immediate, deferred...) {
 		if err := e.change(ctx, c); err != nil {
-			return fmt.Errorf("生成插件事件（%s %s）失败：%w", c.kind, c.rowID, err)
+			return fmt.Errorf("generate plugin event (%s %s): %w", c.kind, c.rowID, err)
 		}
 	}
 	return nil
@@ -131,7 +131,7 @@ func (e *pluginEmitter) change(ctx context.Context, c pluginChange) error {
 	case "lifecycle":
 		return e.lifecycle(ctx, c.rowID)
 	}
-	return fmt.Errorf("未知的变更类型 %q", c.kind)
+	return fmt.Errorf("unknown change kind %q", c.kind)
 }
 
 // ---------- Basics: subscriptions, enablement, writing ----------
@@ -571,10 +571,10 @@ func (e *pluginEmitter) identityInbound(ctx context.Context, m inboxEventRow, pl
 			err = e.tx.QueryRow(ctx, `SELECT display_name FROM plugin_parties WHERE id = $1`, m.fromPlugin).Scan(&name)
 		}
 	case "console":
-		v := "控制台"
+		v := "Console"
 		name = &v
 	default:
-		v := "平台"
+		v := "Platform"
 		name = &v
 	}
 	if err != nil && !db.IsNoRows(err) {

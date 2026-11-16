@@ -57,7 +57,7 @@ func (d *DB) Checkpoint(ctx context.Context, mode CheckpointMode) ([]CheckpointR
 		r := CheckpointResult{Schema: schema}
 		var busy int
 		if err := c.QueryRowContext(bg, fmt.Sprintf("PRAGMA %s.wal_checkpoint(%s)", schema, mode)).Scan(&busy, &r.LogFrames, &r.Checkpointed); err != nil {
-			return out, fmt.Errorf("db: %s 检查点失败：%w", schema, err)
+			return out, fmt.Errorf("db: checkpoint %s: %w", schema, err)
 		}
 		r.Busy = busy != 0
 		out = append(out, r)
@@ -97,7 +97,7 @@ func (d *DB) BackupTo(ctx context.Context, dir string) error {
 	targets := map[string]string{"main": filepath.Join(dir, DataFile), EventsSchema: filepath.Join(dir, EventsFile)}
 	for _, p := range targets {
 		if _, err := os.Stat(p); err == nil {
-			return fmt.Errorf("db: 备份目标 %s 已存在", p)
+			return fmt.Errorf("db: backup target %s already exists", p)
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -119,7 +119,7 @@ func (d *DB) BackupTo(ctx context.Context, dir string) error {
 	}()
 	for _, schema := range []string{"main", EventsSchema} {
 		if _, err := c.ExecContext(ctx, "VACUUM "+schema+" INTO ?", targets[schema]); err != nil {
-			return fmt.Errorf("db: 备份 %s 失败：%w", schema, err)
+			return fmt.Errorf("db: back up %s: %w", schema, err)
 		}
 	}
 	return nil

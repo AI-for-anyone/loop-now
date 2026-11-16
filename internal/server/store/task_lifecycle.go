@@ -75,7 +75,7 @@ func (s *Store) taskEndedEvent(ctx context.Context, m *TaskMutation, t TaskTurn)
 
 // InterruptTaskRuntime only changes rounds matching the caller's transaction.
 func (s *Store) InterruptTaskRuntime(ctx context.Context, m *TaskMutation, runtime *uuid.UUID, onlyUnbound bool) error {
-	rows, e := m.Tx.Query(ctx, `UPDATE task_turns SET error_code=CASE WHEN status='queued' AND EXISTS(SELECT 1 FROM task_console_message_lineage l WHERE l.run_id=task_turns.id) THEN 'task_conflict' ELSE error_code END,error_message=CASE WHEN status='queued' AND EXISTS(SELECT 1 FROM task_console_message_lineage l WHERE l.run_id=task_turns.id) THEN '原节点已结束或不再有效，该消息未执行' ELSE error_message END,status=CASE WHEN status='queued' THEN 'interrupted' ELSE 'aborting' END,ended_at=CASE WHEN status='queued' THEN now() ELSE ended_at END WHERE task_id=$1 AND ($2 IS NULL OR runtime_id=$2) AND (NOT $3 OR node_run_id IS NULL) AND status IN ('queued','starting','running') RETURNING `+taskTurnColumns, m.Record.View.Task.ID, runtime, onlyUnbound)
+	rows, e := m.Tx.Query(ctx, `UPDATE task_turns SET error_code=CASE WHEN status='queued' AND EXISTS(SELECT 1 FROM task_console_message_lineage l WHERE l.run_id=task_turns.id) THEN 'task_conflict' ELSE error_code END,error_message=CASE WHEN status='queued' AND EXISTS(SELECT 1 FROM task_console_message_lineage l WHERE l.run_id=task_turns.id) THEN 'The original node has ended or is no longer valid. This message was not run.' ELSE error_message END,status=CASE WHEN status='queued' THEN 'interrupted' ELSE 'aborting' END,ended_at=CASE WHEN status='queued' THEN now() ELSE ended_at END WHERE task_id=$1 AND ($2 IS NULL OR runtime_id=$2) AND (NOT $3 OR node_run_id IS NULL) AND status IN ('queued','starting','running') RETURNING `+taskTurnColumns, m.Record.View.Task.ID, runtime, onlyUnbound)
 	if e != nil {
 		return e
 	}
@@ -111,7 +111,7 @@ func (s *Store) taskAbortEvent(ctx context.Context, m *TaskMutation, t TaskTurn)
 }
 
 func (s *Store) RecoverTaskTurns(ctx context.Context, m *TaskMutation) (int, bool, error) {
-	rows, e := m.Tx.Query(ctx, `UPDATE task_turns SET status='interrupted',ended_at=now(),error_code='server_restarted',error_message='服务重启，未重放该轮' WHERE task_id=$1 AND status IN ('starting','running','aborting') RETURNING `+taskTurnColumns, m.Record.View.Task.ID)
+	rows, e := m.Tx.Query(ctx, `UPDATE task_turns SET status='interrupted',ended_at=now(),error_code='server_restarted',error_message='The server restarted. The turn was not replayed.' WHERE task_id=$1 AND status IN ('starting','running','aborting') RETURNING `+taskTurnColumns, m.Record.View.Task.ID)
 	if e != nil {
 		return 0, false, e
 	}

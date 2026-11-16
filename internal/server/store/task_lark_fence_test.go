@@ -137,7 +137,7 @@ func TestTaskLarkFenceRejectsManagerRetryWithoutChangingAttempt(t *testing.T) {
 	svc := tasks.New(s, nil, nil, tasks.Options{MaxVisits: 100}, nil)
 	defer svc.Stop(ctx)
 	_, err = svc.Retry(ctx, auth.Console(), in.TaskID, taskmodel.RetryInput{ActionID: uuid.New(), ExpectedNodeRunID: in.NodeRunID})
-	if e, ok := apperr.As(err); !ok || e.Code != "task_conflict" || e.Message != "原实例正在凭证交接，不能并发重试节点" {
+	if e, ok := apperr.As(err); !ok || e.Code != "task_conflict" || e.Message != "The original instance is in a credential handoff. The node cannot be retried at the same time." {
 		t.Fatal("manager retry bypassed handoff fence", err)
 	}
 	after, err := s.GetTask(ctx, in.TaskID)

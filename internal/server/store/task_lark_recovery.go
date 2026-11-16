@@ -25,15 +25,15 @@ type TaskLarkRecoveryAction struct {
 func (s *Store) SaveTaskLarkRecoveryTx(ctx context.Context, m *TaskMutation, actor string, action uuid.UUID, record json.RawMessage) error {
 	var object map[string]json.RawMessage
 	if json.Unmarshal(record, &object) != nil || len(object) == 0 {
-		return apperr.Invalid("recovery", "原进程恢复记录无效")
+		return apperr.Invalid("recovery", "The recovery record of the original process is invalid.")
 	}
 	var old []byte
 	var status string
 	if e := m.Tx.QueryRow(ctx, `SELECT status,recovery_record FROM task_lark_switch_actions WHERE task_id=$1 AND actor_key=$2 AND action_id=$3`, m.Record.View.Task.ID, actor, action).Scan(&status, &old); e != nil {
-		return notFoundIfNoRows(e, "Lark切换动作")
+		return notFoundIfNoRows(e, "Lark switch action")
 	}
 	if status != "pending" && status != "handoff" {
-		return apperr.Conflict("task_conflict", "原动作已结束")
+		return apperr.Conflict("task_conflict", "The original action has already ended.")
 	}
 	if old != nil {
 		var a, b any
@@ -42,12 +42,12 @@ func (s *Store) SaveTaskLarkRecoveryTx(ctx context.Context, m *TaskMutation, act
 		newDecoder := json.NewDecoder(bytes.NewReader(record))
 		newDecoder.UseNumber()
 		if oldDecoder.Decode(&a) != nil || newDecoder.Decode(&b) != nil {
-			return apperr.Conflict("task_conflict", "原进程恢复记录无效")
+			return apperr.Conflict("task_conflict", "The recovery record of the original process is invalid.")
 		}
 		x, _ := json.Marshal(a)
 		y, _ := json.Marshal(b)
 		if !bytes.Equal(x, y) {
-			return apperr.Conflict("task_conflict", "原进程恢复记录不可替换")
+			return apperr.Conflict("task_conflict", "The recovery record of the original process cannot be replaced.")
 		}
 		return nil
 	}
@@ -63,7 +63,7 @@ func (s *Store) SaveTaskLarkRecoveryTx(ctx context.Context, m *TaskMutation, act
 // only reconfirm this exact recorded recovery failure, never another outcome.
 func (s *Store) ConsumeTaskLarkRecoveryTx(ctx context.Context, m *TaskMutation, actor string, action uuid.UUID, runtimes [2]uuid.UUID, expected json.RawMessage) error {
 	deny := func() error {
-		return apperr.Conflict("task_conflict", "原进程恢复证明已变化或不属于待恢复动作")
+		return apperr.Conflict("task_conflict", "The recovery proof of the original process has changed or does not belong to the action being recovered.")
 	}
 	if action == uuid.Nil || actor == "" || runtimes[0] == uuid.Nil || runtimes[1] == uuid.Nil || runtimes[0] == runtimes[1] {
 		return deny()
@@ -83,7 +83,7 @@ func (s *Store) ConsumeTaskLarkRecoveryTx(ctx context.Context, m *TaskMutation, 
 	var failure *string
 	var captured []byte
 	if e := m.Tx.QueryRow(ctx, `SELECT status,coalesce(recovery_record=$4,false),failure_reason,captured_request FROM task_lark_switch_actions WHERE task_id=$1 AND actor_key=$2 AND action_id=$3`, m.Record.View.Task.ID, actor, action, expected).Scan(&status, &same, &failure, &captured); e != nil {
-		return notFoundIfNoRows(e, "Lark切换动作")
+		return notFoundIfNoRows(e, "Lark switch action")
 	}
 	if !same {
 		return deny()

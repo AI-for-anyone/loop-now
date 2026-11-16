@@ -90,7 +90,7 @@ func (s *Store) RemoveAgentCLI(ctx context.Context, agentID uuid.UUID, name stri
 			return err
 		}
 		if tag.RowsAffected() == 0 {
-			return apperr.NotFound("可用 CLI " + name)
+			return apperr.NotFound("Allowed CLI " + name)
 		}
 		return bumpConfig(ctx, tx, agentID)
 	})
@@ -134,7 +134,7 @@ func (s *Store) PutCredential(ctx context.Context, agentID uuid.UUID, purpose, c
 				return err
 			}
 			if !exists {
-				return apperr.Invalid("cli", cliName+" 不在该 Agent 的可用 CLI 列表中")
+				return apperr.Invalid("cli", cliName+" is not in this Agent's list of allowed CLIs.")
 			}
 			cli = &cliName
 			// Main catalog currently contains only builtin/override templates.
@@ -176,7 +176,7 @@ func (s *Store) DeleteCredential(ctx context.Context, agentID uuid.UUID, purpose
 			return err
 		}
 		if tag.RowsAffected() == 0 {
-			return apperr.NotFound("凭证")
+			return apperr.NotFound("Credential")
 		}
 		return bumpConfig(ctx, tx, agentID)
 	})

@@ -19,7 +19,7 @@ const cliOperationColumns = `id,project_id,cli_name,auth_type,target_account_id,
 
 // A final deadline fence failed after sealing. The entire transaction rolls
 // back; the service records its terminal state using a fresh bounded context.
-var ErrCLIAuthExpired = errors.New("CLI登录提交期限已过")
+var ErrCLIAuthExpired = errors.New("the CLI login commit deadline has passed")
 
 var githubUserCode = regexp.MustCompile(`^[A-Z0-9]{4}-[A-Z0-9]{4}$`)
 
@@ -33,13 +33,13 @@ func cliOperationTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, _ boo
 	if e == nil && o.CLI == "lark-cli" {
 		e = tx.QueryRow(ctx, `SELECT source_account_id,source_version_id,source_revision FROM project_cli_auth_operations WHERE id=$1 AND project_id=$2`, id, project).Scan(&o.SourceAccountID, &o.SourceVersionID, &o.SourceRevision)
 	}
-	return o, notFoundIfNoRows(e, "CLI登录操作")
+	return o, notFoundIfNoRows(e, "CLI login operation")
 }
 func cliOperationTerminal(status string) bool {
 	return status != "pending" && status != "awaiting_authorization"
 }
 func cliInProgress(project, id uuid.UUID, cli string) error {
-	e := apperr.Conflict("cli_auth_in_progress", "已有CLI登录操作或操作内容冲突")
+	e := apperr.Conflict("cli_auth_in_progress", "A CLI login operation is already in progress, or this operation conflicts with an existing one.")
 	e.Details = struct {
 		ProjectID   uuid.UUID `json:"projectId"`
 		OperationID uuid.UUID `json:"operationId"`
@@ -56,7 +56,7 @@ func (s *Store) NewProjectCLIAuthOperation(ctx context.Context, project uuid.UUI
 		return s.newProjectLarkAuthOperation(ctx, project, in, expires)
 	}
 	if in.SourceAccountID != nil || in.ExpectedSourceRevision != nil {
-		return cm.CLIAuthOperation{}, false, apperr.Invalid("body", "该CLI不接受应用来源字段")
+		return cm.CLIAuthOperation{}, false, apperr.Invalid("body", "This CLI does not accept sourceAccountId or expectedSourceRevision.")
 	}
 	var out cm.CLIAuthOperation
 	created := false
@@ -83,20 +83,20 @@ func (s *Store) NewProjectCLIAuthOperation(ctx context.Context, project uuid.UUI
 			return e
 		}
 		if !(in.CLI == "gcloud" && in.AuthType == "google_user" || in.CLI == "gh" && in.AuthType == "github_user") || in.OperationID == uuid.Nil {
-			return apperr.Invalid("cli", "CLI登录类型无效")
+			return apperr.Invalid("cli", "The CLI login type is invalid. Use gcloud with google_user or gh with github_user.")
 		}
 		if in.AccountID == nil && (in.ExpectedRevision != nil || in.CLI == "gcloud" && in.Name == nil || in.CLI == "gh" && in.Name != nil) || in.AccountID != nil && (*in.AccountID == uuid.Nil || in.ExpectedRevision == nil || *in.ExpectedRevision < 1 || in.Name != nil) {
-			return apperr.Invalid("body", "CLI登录目标无效")
+			return apperr.Invalid("body", "The CLI login target is invalid.")
 		}
 		if in.AccountID != nil {
 			var owner uuid.UUID
 			var purpose string
 			var cli *string
 			if e := tx.QueryRow(ctx, `SELECT project_id,purpose,cli_name FROM project_credential_accounts WHERE id=$1`, *in.AccountID).Scan(&owner, &purpose, &cli); e != nil {
-				return notFoundIfNoRows(e, "项目账号")
+				return notFoundIfNoRows(e, "Project account")
 			}
 			if owner != project || purpose != PurposeCLI || cli == nil || *cli != in.CLI {
-				return apperr.Invalid("accountId", "目标CLI用途或项目不匹配")
+				return apperr.Invalid("accountId", "The target account does not match this CLI or project.")
 			}
 			r, e := projectAccountTx(ctx, tx, project, *in.AccountID, true)
 			if e != nil {
@@ -106,7 +106,7 @@ func (s *Store) NewProjectCLIAuthOperation(ctx context.Context, project uuid.UUI
 				return projectAccountDeleted(project, r.View.ID)
 			}
 			if r.View.Purpose != PurposeCLI || r.View.CLI == nil || *r.View.CLI != in.CLI || in.ExpectedRevision == nil {
-				return apperr.Invalid("accountId", "目标CLI用途不匹配")
+				return apperr.Invalid("accountId", "The target account does not match this CLI.")
 			}
 			if e = credentialCAS("account", r.View.ID, *in.ExpectedRevision, r.View.Revision); e != nil {
 				return e
@@ -125,7 +125,7 @@ func (s *Store) NewProjectCLIAuthOperation(ctx context.Context, project uuid.UUI
 			return e
 		}
 		if exists {
-			return apperr.NotFound("CLI登录操作")
+			return apperr.NotFound("CLI login operation")
 		}
 		out, e = scanCLIOperation(tx.QueryRow(ctx, `INSERT INTO project_cli_auth_operations(id,project_id,cli_name,auth_type,request_hash,target_account_id,target_revision,name,expires_at)VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)RETURNING `+cliOperationColumns, in.OperationID, project, in.CLI, in.AuthType, hash, in.AccountID, in.ExpectedRevision, in.Name, expires))
 		created = e == nil
@@ -155,7 +155,7 @@ func (s *Store) ListProjectCLIAuthOperations(ctx context.Context, project uuid.U
 		cli = cliFilter[0]
 	}
 	if len(cliFilter) > 1 || cli != "gcloud" && cli != "gh" && cli != "lark-cli" {
-		return nil, apperr.Invalid("cli", "CLI登录筛选无效")
+		return nil, apperr.Invalid("cli", "Give at most one CLI: gcloud, gh or lark-cli.")
 	}
 	e := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, true); e != nil {
@@ -204,7 +204,7 @@ func (s *Store) SetProjectCLIAuthURL(ctx context.Context, project, id uuid.UUID,
 			return e
 		}
 		if out.CLI != "gcloud" {
-			return apperr.Invalid("cli", "Google授权操作类型不匹配")
+			return apperr.Invalid("cli", "The operation is not a Google authorization.")
 		}
 		out, e = scanCLIOperation(tx.QueryRow(ctx, `UPDATE project_cli_auth_operations SET status='awaiting_authorization',authorization_url=$2 WHERE id=$1 RETURNING `+cliOperationColumns, id, url))
 		return e
@@ -215,7 +215,7 @@ func (s *Store) SetProjectCLIAuthURL(ctx context.Context, project, id uuid.UUID,
 func (s *Store) SetProjectGitHubAuthorization(ctx context.Context, project, id uuid.UUID, url, code string, expires time.Time) (cm.CLIAuthOperation, error) {
 	var out cm.CLIAuthOperation
 	if url != "https://github.com/login/device" || !githubUserCode.MatchString(code) || expires.IsZero() {
-		return out, apperr.Invalid("authorization", "GitHub授权交互无效")
+		return out, apperr.Invalid("authorization", "The GitHub authorization exchange is invalid.")
 	}
 	e := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, true); e != nil {
@@ -230,7 +230,7 @@ func (s *Store) SetProjectGitHubAuthorization(ctx context.Context, project, id u
 			return e
 		}
 		if out.CLI != "gh" || out.AuthType != "github_user" {
-			return apperr.Invalid("cli", "GitHub授权操作类型不匹配")
+			return apperr.Invalid("cli", "The operation is not a GitHub authorization.")
 		}
 		var live bool
 		if e = tx.QueryRow(ctx, `SELECT min($1,$2)>clock_timestamp()`, expires, out.ExpiresAt).Scan(&live); e != nil {
@@ -258,7 +258,7 @@ func (s *Store) EndProjectCLIAuthOperation(ctx context.Context, project, id uuid
 			return e
 		}
 		if status != "failed" && status != "cancelled" && status != "expired" {
-			return apperr.Invalid("status", "CLI登录终态无效")
+			return apperr.Invalid("status", "Must be failed, cancelled or expired.")
 		}
 		source := out
 		out, e = scanCLIOperation(tx.QueryRow(ctx, `UPDATE project_cli_auth_operations SET status=$2,error_code=$3,authorization_url=NULL,user_code=NULL,completed_at=clock_timestamp() WHERE id=$1 RETURNING `+cliOperationColumns, id, status, code))
@@ -277,7 +277,7 @@ func (s *Store) CompleteProjectCLIAuthOperation(ctx context.Context, project, id
 	e := s.inTx(ctx, func(tx *db.Tx) error {
 		var deleted *time.Time
 		if e := tx.QueryRow(ctx, `SELECT deleted_at FROM projects WHERE id=$1`, project).Scan(&deleted); e != nil {
-			return notFoundIfNoRows(e, "项目")
+			return notFoundIfNoRows(e, "Project")
 		}
 		initial, e := cliOperationTx(ctx, tx, project, id, false)
 		if e != nil {
@@ -316,15 +316,15 @@ func (s *Store) CompleteProjectCLIAuthOperation(ctx context.Context, project, id
 			return e
 		}
 		if out.CLI == "gh" && (w.AuthMethod != "oauth" || w.GitHubIdentity == nil || !w.GitHubIdentity.Valid()) {
-			return apperr.Invalid("identity", "GitHub核实身份缺失")
+			return apperr.Invalid("identity", "The verified GitHub identity is missing.")
 		}
 		if out.CLI == "lark-cli" {
 			if w.AuthMethod != "oauth" || w.LarkIdentity == nil || !w.LarkIdentity.Valid() {
-				return apperr.Invalid("identity", "Lark核实身份缺失")
+				return apperr.Invalid("identity", "The verified Lark identity is missing.")
 			}
 			if out.TargetAccountID == nil {
 				if out.SourceAccountID == nil || out.SourceVersionID == nil || out.SourceRevision == nil {
-					return apperr.Invalid("sourceAccountId", "Lark应用来源缺失")
+					return apperr.Invalid("sourceAccountId", "The Lark app source is missing.")
 				}
 				source, err := projectAccountTx(ctx, tx, project, *out.SourceAccountID, true)
 				if err != nil {
@@ -356,7 +356,7 @@ func (s *Store) CompleteProjectCLIAuthOperation(ctx context.Context, project, id
 				name = &w.LarkIdentity.DisplayName
 			}
 			if name == nil {
-				return apperr.Invalid("name", "CLI登录名称缺失")
+				return apperr.Invalid("name", "The CLI login name is missing.")
 			}
 			r, e = insertProjectAccountTx(ctx, tx, project, PurposeCLI, out.CLI, *name, w)
 		} else {

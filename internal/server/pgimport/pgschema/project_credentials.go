@@ -93,7 +93,7 @@ func projectCredentialMigration() *goose.Migration {
 			return err
 		}
 		if populated {
-			return errors.New("项目凭证数据存在，拒绝有损回退；请审阅备份与refresh轮换边界")
+			return errors.New("project credential data exists, refusing a lossy rollback: review the backups and the refresh rotation boundary")
 		}
 		_, err := tx.ExecContext(ctx, `DROP TABLE project_model_auth_operations,project_credential_legacy_rows,project_model_legacy_bindings,agent_model_legacy_cleared,agent_credential_selections;
 ALTER TABLE project_credential_accounts DROP CONSTRAINT account_current_model_owner,DROP CONSTRAINT account_current_cli_owner;
@@ -110,7 +110,7 @@ ALTER TABLE projects DROP COLUMN credentials_revision;`)
 // errLegacyCredentialUpgrade is the only supported path for a database that
 // still holds credentials or task snapshots from before this migration: they
 // were encrypted with the removed master key and cannot be read here.
-var errLegacyCredentialUpgrade = errors.New("数据库低于 012 且含旧版凭证或任务快照，本版本无法直接升级：请先用移除主密钥之前的版本升级到 025，运行一次性明文凭证转换程序，再启动本版本")
+var errLegacyCredentialUpgrade = errors.New("the database is older than 012 and holds legacy credentials or task snapshots, so this version cannot upgrade it directly: first upgrade to 025 with a version from before the master key was removed, run the one-time plaintext credential conversion program, then start this version")
 
 // migrateProjectCredentials moves only non-secret legacy state. Any Agent
 // credential, model account version or task snapshot in a live project refuses

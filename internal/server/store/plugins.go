@@ -70,7 +70,7 @@ func (s *Store) ListPlugins(ctx context.Context) ([]Plugin, error) {
 // GetPlugin returns a plugin; returns not_found when it does not exist.
 func (s *Store) GetPlugin(ctx context.Context, id string) (Plugin, error) {
 	p, err := scanPlugin(s.Pool.QueryRow(ctx, `SELECT `+pluginColumns+` FROM plugins p WHERE p.id=$1`, id))
-	return p, notFoundIfNoRows(err, "插件")
+	return p, notFoundIfNoRows(err, "Plugin")
 }
 
 // PluginVersions returns the versions a plugin has installed, newest first.
@@ -159,7 +159,7 @@ func (s *Store) InstallPlugin(ctx context.Context, p Plugin, digest string, extr
 		return err
 	})
 	if isUniqueViolation(err, "plugins_pkey") {
-		return apperr.Conflict(apperr.CodeNameConflict, "插件 "+p.ID+" 已安装，请用更新")
+		return apperr.Conflict(apperr.CodeNameConflict, "Plugin "+p.ID+" is already installed. Update it instead.")
 	}
 	return err
 }
@@ -179,7 +179,7 @@ func (s *Store) UpdatePlugin(ctx context.Context, p Plugin, digest string, extra
 		case err != nil:
 			return err
 		case existing != digest:
-			return apperr.Conflict(apperr.CodePluginVersionConflict, "插件 "+p.ID+" 已装过版本 "+p.Version+"，内容不同；请改版本号")
+			return apperr.Conflict(apperr.CodePluginVersionConflict, "Plugin "+p.ID+" already has version "+p.Version+" installed with different content. Use a different version number.")
 		default:
 			if _, err = tx.Exec(ctx, `UPDATE plugin_versions SET manifest=$3, install_dir=$4, providers=$5, providers_error=$6, provider_state=$7 WHERE plugin_id=$1 AND version=$2`, p.ID, p.Version, p.Manifest, p.InstallDir, providers, providersError, state); err != nil {
 				return err
@@ -188,7 +188,7 @@ func (s *Store) UpdatePlugin(ctx context.Context, p Plugin, digest string, extra
 		tag, err := tx.Exec(ctx, `UPDATE plugins SET display_name=$2, source=$3, version=$4, manifest=$5, install_dir=$6, updated_at=now() WHERE id=$1`,
 			p.ID, p.DisplayName, p.Source, p.Version, p.Manifest, p.InstallDir)
 		if err == nil && tag.RowsAffected() == 0 {
-			return apperr.NotFound("插件")
+			return apperr.NotFound("Plugin")
 		}
 		return err
 	})
@@ -208,7 +208,7 @@ func (s *Store) DeletePlugin(ctx context.Context, id string) ([]string, error) {
 		}
 		tag, err := tx.Exec(ctx, `DELETE FROM plugins WHERE id=$1`, id)
 		if err == nil && tag.RowsAffected() == 0 {
-			return apperr.NotFound("插件")
+			return apperr.NotFound("Plugin")
 		}
 		return err
 	})
@@ -271,7 +271,7 @@ func (s *Store) savePluginConfigTx(ctx context.Context, tx *db.Tx, plugin string
 		return PluginConfigRow{}, err
 	}
 	if cur.Revision != u.ExpectedRevision {
-		return PluginConfigRow{}, apperr.PreconditionFailed("配置已被修改，请重新读取后再保存")
+		return PluginConfigRow{}, apperr.PreconditionFailed("The configuration was changed elsewhere. Read it again, then save.")
 	}
 	next, err := u.Apply(cur)
 	if err != nil {
@@ -301,7 +301,7 @@ func nonEmpty(m map[string]any) map[string]any {
 // row does not need to be locked); returns not_found when it does not exist.
 func requirePlugin(ctx context.Context, tx *db.Tx, plugin string) error {
 	var id string
-	return notFoundIfNoRows(tx.QueryRow(ctx, `SELECT id FROM plugins WHERE id=$1`, plugin).Scan(&id), "插件")
+	return notFoundIfNoRows(tx.QueryRow(ctx, `SELECT id FROM plugins WHERE id=$1`, plugin).Scan(&id), "Plugin")
 }
 
 // PluginConfigs returns the plugin's global configuration and the configurations of the projects that enabled it
@@ -375,7 +375,7 @@ func (s *Store) SaveProjectPlugin(ctx context.Context, project uuid.UUID, plugin
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var deleted *time.Time
 		if err := tx.QueryRow(ctx, `SELECT deleted_at FROM projects WHERE id=$1`, project).Scan(&deleted); err != nil || deleted != nil {
-			return notFoundIfNoRows(orNoRows(err, deleted != nil), "项目")
+			return notFoundIfNoRows(orNoRows(err, deleted != nil), "Project")
 		}
 		var before *bool
 		if err := tx.QueryRow(ctx, `SELECT enabled FROM project_plugins WHERE project_id=$1 AND plugin_id=$2`, project, plugin).Scan(&before); err != nil && !errors.Is(err, db.ErrNoRows) {
@@ -493,19 +493,19 @@ func (s *Store) SaveAgentPluginGrant(ctx context.Context, agent uuid.UUID, plugi
 				return err
 			}
 			if !on {
-				return apperr.Conflict(apperr.CodePluginNotEnabled, "项目没有启用插件 "+plugin+"，先在项目插件页启用")
+				return apperr.Conflict(apperr.CodePluginNotEnabled, "Plugin "+plugin+" is not enabled in this project. Enable it on the project plugins page first.")
 			}
 		}
 		if len(accounts) > 0 {
 			if project == nil {
-				return apperr.Invalid("accountIds", "平台 Agent 没有项目账号")
+				return apperr.Invalid("accountIds", "A platform Agent has no project accounts.")
 			}
 			var n int
 			if err := tx.QueryRow(ctx, `SELECT count(*) FROM plugin_accounts WHERE id IN (SELECT value FROM json_each($1)) AND plugin_id=$2 AND project_id=$3 AND NOT deleted`, accounts, plugin, *project).Scan(&n); err != nil {
 				return err
 			}
 			if n != len(accounts) {
-				return apperr.Invalid("accountIds", "账号不存在、已删除或不属于这个项目的这个插件")
+				return apperr.Invalid("accountIds", "An account does not exist, was deleted, or does not belong to this plugin in this project.")
 			}
 		}
 		if accounts == nil {
@@ -558,7 +558,7 @@ func (s *Store) PluginAccountsOfKind(ctx context.Context, project uuid.UUID, plu
 // GetPluginAccount returns a non-deleted account.
 func (s *Store) GetPluginAccount(ctx context.Context, project uuid.UUID, plugin string, id uuid.UUID) (PluginAccount, error) {
 	a, err := scanPluginAccount(s.Pool.QueryRow(ctx, `SELECT `+pluginAccountColumns+` FROM plugin_accounts WHERE id=$1 AND project_id=$2 AND plugin_id=$3 AND NOT deleted`, id, project, plugin))
-	return a, notFoundIfNoRows(err, "账号")
+	return a, notFoundIfNoRows(err, "Account")
 }
 
 // CreatePluginAccount adds an account; returns name_conflict when single is true (the kind does not support multiple
@@ -567,7 +567,7 @@ func (s *Store) CreatePluginAccount(ctx context.Context, a PluginAccount, single
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var deleted *time.Time
 		if err := tx.QueryRow(ctx, `SELECT deleted_at FROM projects WHERE id=$1`, a.ProjectID).Scan(&deleted); err != nil || deleted != nil {
-			return notFoundIfNoRows(orNoRows(err, deleted != nil), "项目")
+			return notFoundIfNoRows(orNoRows(err, deleted != nil), "Project")
 		}
 		if err := requirePlugin(ctx, tx, a.PluginID); err != nil {
 			return err
@@ -581,9 +581,9 @@ func (s *Store) CreatePluginAccount(ctx context.Context, a PluginAccount, single
 		}
 		if dup {
 			if single {
-				return apperr.Conflict(apperr.CodeNameConflict, "这个种类只能有一个账号")
+				return apperr.Conflict(apperr.CodeNameConflict, "This kind can have only one account.")
 			}
-			return apperr.Conflict(apperr.CodeNameConflict, "账号名称重复")
+			return apperr.Conflict(apperr.CodeNameConflict, "An account with this name already exists.")
 		}
 		var err error
 		a, err = scanPluginAccount(tx.QueryRow(ctx, `INSERT INTO plugin_accounts(id,plugin_id,project_id,kind,name,"values") VALUES($1,$2,$3,$4,$5,$6) RETURNING `+pluginAccountColumns,
@@ -600,10 +600,10 @@ func (s *Store) UpdatePluginAccount(ctx context.Context, project uuid.UUID, plug
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		cur, err := scanPluginAccount(tx.QueryRow(ctx, `SELECT `+pluginAccountColumns+` FROM plugin_accounts WHERE id=$1 AND project_id=$2 AND plugin_id=$3 AND NOT deleted`, id, project, plugin))
 		if err != nil {
-			return notFoundIfNoRows(err, "账号")
+			return notFoundIfNoRows(err, "Account")
 		}
 		if cur.Revision != expected {
-			return apperr.PreconditionFailed("账号已被修改，请重新读取后再保存")
+			return apperr.PreconditionFailed("The account was changed elsewhere. Read it again, then save.")
 		}
 		next, err := apply(cur)
 		if err != nil {
@@ -615,7 +615,7 @@ func (s *Store) UpdatePluginAccount(ctx context.Context, project uuid.UUID, plug
 			return err
 		}
 		if dup {
-			return apperr.Conflict(apperr.CodeNameConflict, "账号名称重复")
+			return apperr.Conflict(apperr.CodeNameConflict, "An account with this name already exists.")
 		}
 		out, err = scanPluginAccount(tx.QueryRow(ctx, `UPDATE plugin_accounts SET name=$2, "values"=$3, revision=revision+1 WHERE id=$1 RETURNING `+pluginAccountColumns, id, next.Name, next.Values))
 		return err
@@ -631,7 +631,7 @@ func (s *Store) DeletePluginAccount(ctx context.Context, project uuid.UUID, plug
 			return err
 		}
 		if tag.RowsAffected() == 0 {
-			return apperr.NotFound("账号")
+			return apperr.NotFound("Account")
 		}
 		_, err = tx.Exec(ctx, `UPDATE agent_plugin_grants SET account_ids=(SELECT json_group_array(v.value) FROM json_each(account_ids) v WHERE v.value<>$2)
 			WHERE plugin_id=$1 AND EXISTS (SELECT 1 FROM json_each(account_ids) v WHERE v.value=$2)`, plugin, id.String())
@@ -662,7 +662,7 @@ func (s *Store) IssuePluginToken(ctx context.Context, plugin string, id uuid.UUI
 func (s *Store) LookupPluginToken(ctx context.Context, id uuid.UUID) (PluginTokenRecord, error) {
 	var t PluginTokenRecord
 	err := s.Pool.QueryRow(ctx, `SELECT plugin_id,token_hash,scopes,revoked_at IS NOT NULL FROM plugin_tokens WHERE id=$1`, id).Scan(&t.PluginID, &t.Hash, &t.Scopes, &t.Revoked)
-	return t, notFoundIfNoRows(err, "令牌")
+	return t, notFoundIfNoRows(err, "Token")
 }
 
 // PluginSettings are the global plugin settings.

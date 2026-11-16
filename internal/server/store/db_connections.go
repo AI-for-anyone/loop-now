@@ -19,14 +19,14 @@ func dbSetExistsTx(ctx context.Context, tx *db.Tx, agent uuid.UUID, cli string) 
 }
 func requireDBCLI(ctx context.Context, tx *db.Tx, a Agent, cli string) error {
 	if !isDBCLI(cli) {
-		return apperr.Invalid("cli", "数据库CLI须为psql或mysql")
+		return apperr.Invalid("cli", "Must be a database CLI: psql or mysql.")
 	}
 	var allowed bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agent_clis WHERE agent_id=$1 AND cli_name=$2)`, a.ID, cli).Scan(&allowed); err != nil {
 		return err
 	}
 	if !allowed {
-		return apperr.Invalid("cli", "Agent未允许该CLI")
+		return apperr.Invalid("cli", "The Agent does not allow this CLI.")
 	}
 	return nil
 }
@@ -107,11 +107,11 @@ func (s *Store) mutateDBConnections(ctx context.Context, agent uuid.UUID, cli st
 	ids := slices.Clone(in.AccountIDs)
 	slices.SortFunc(ids, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
 	if !remove && in.AccountIDs == nil {
-		return out, apperr.Invalid("accountIds", "须提供连接ID数组，空数组表示无授权")
+		return out, apperr.Invalid("accountIds", "An array of connection account IDs is required. An empty array grants no connections.")
 	}
 	for i, id := range ids {
 		if id == uuid.Nil || (i > 0 && id == ids[i-1]) {
-			return out, apperr.Invalid("accountIds", "连接ID须非零且不重复")
+			return out, apperr.Invalid("accountIds", "Connection account IDs must be non-zero and unique.")
 		}
 	}
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -145,10 +145,10 @@ func (s *Store) mutateDBConnections(ctx context.Context, agent uuid.UUID, cli st
 					return projectAccountDeleted(*a.ProjectID, id)
 				}
 				if r.View.Purpose != PurposeCLI || r.View.CLI == nil || *r.View.CLI != cli {
-					return apperr.Invalid("accountIds", "连接账号项目或用途不匹配")
+					return apperr.Invalid("accountIds", "A connection account does not match the project or the purpose.")
 				}
 				if r.CLI == nil {
-					return apperr.Invalid("accountIds", "连接账号凭证不可用")
+					return apperr.Invalid("accountIds", "A connection account has no usable credential.")
 				}
 			}
 			if _, e = tx.Exec(ctx, `INSERT INTO agent_db_connection_sets(agent_id,project_id,cli_name)VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, agent, *a.ProjectID, cli); e != nil {

@@ -42,7 +42,7 @@ func partyWire(v PartyView) map[string]any {
 	case "console":
 		a := "@console"
 		addr = &a
-		name = "控制台"
+		name = "Console"
 	case "agent":
 		id = &v.ID
 		if a, ok := naming.AgentAddress(v.OrgName, v.ProjectName, v.Name, v.Platform); ok {
@@ -52,14 +52,14 @@ func partyWire(v PartyView) map[string]any {
 			addr = &a
 		}
 		if v.Deleted {
-			name = "已删除 Agent"
+			name = "Deleted Agent"
 		}
 	case "external":
 		id = &v.ID
 		a := "@" + v.Name
 		addr = &a
 		if v.Deleted {
-			name = "已删除身份"
+			name = "Deleted identity"
 		}
 	case "plugin":
 		a := PluginAddress(v)
@@ -119,7 +119,7 @@ func (s *Store) TaskNodeInboxAccess(ctx context.Context, p Party, id, run uuid.U
 	_, e = s.MutateTask(ctx, b.Target.TaskID, nil, func(m *TaskMutation) (any, error) {
 		m.Unchanged()
 		if p.Kind != "console" && (p.Kind != "agent" || p.ID != b.Target.AgentID || p.RuntimeID != b.Target.RuntimeID) {
-			return nil, apperr.NotFound("消息")
+			return nil, apperr.NotFound("Message")
 		}
 		reason := ""
 		var e error
@@ -137,7 +137,7 @@ func (s *Store) TaskNodeInboxAccess(ctx context.Context, p Party, id, run uuid.U
 				return nil, TaskConsoleConflict(m, b.Target, "chat_unavailable")
 			}
 			if run == uuid.Nil {
-				return nil, apperr.Invalid("runId", "严格节点Inbox需要明确本轮运行ID")
+				return nil, apperr.Invalid("runId", "A strict node Inbox requires the runId of this turn.")
 			}
 			var valid bool
 			if e = m.Tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM task_turns WHERE id=$1 AND task_id=$2 AND node_run_id=$3 AND runtime_id=$4 AND execution_mode=$5 AND status='running')`, run, b.Target.TaskID, b.Target.NodeRunID, b.Target.RuntimeID, b.Target.ExecutionMode).Scan(&valid); e != nil {
@@ -173,7 +173,7 @@ func (s *Store) ReadTaskNodeInbox(ctx context.Context, p Party, id, run uuid.UUI
 			return e
 		}
 		if out.To.Party != p {
-			return apperr.NotFound("消息")
+			return apperr.NotFound("Message")
 		}
 		tag, e := m.Tx.Exec(ctx, `UPDATE inbox_messages SET read_at=clock_timestamp() WHERE id=$1 AND read_at IS NULL AND cancelled_at IS NULL`, id)
 		if e != nil {
@@ -212,7 +212,7 @@ func taskNodeInboxVisibleSQL(alias string, p Party) string {
 func (s *Store) TaskNodeInboxPageTx(ctx context.Context, m *TaskMutation, node uuid.UUID, cursor string, limit int) (taskmodel.TaskNodeInboxPage, error) {
 	out := taskmodel.TaskNodeInboxPage{Items: []taskmodel.TaskNodeInboxRecord{}}
 	if limit < 1 || limit > 100 {
-		return out, apperr.Invalid("limit", "必须为1..100")
+		return out, apperr.Invalid("limit", "Must be between 1 and 100.")
 	}
 	var at *time.Time
 	var id *uuid.UUID
@@ -301,7 +301,7 @@ func (s *Store) TaskNodeInboxRecordTx(ctx context.Context, tx *db.Tx, id uuid.UU
 		return out, e
 	}
 	if !ok {
-		return out, apperr.NotFound("节点Inbox消息")
+		return out, apperr.NotFound("Node Inbox message")
 	}
 	m, e := scanInbox(tx.QueryRow(ctx, inboxSelect(160)+` WHERE m.id=$1`, id))
 	if e != nil {
@@ -474,10 +474,10 @@ func (s *Store) interruptTaskNodeTx(ctx context.Context, m *TaskMutation, target
 // taskNodeMessageConflict returns task_conflict for a node queue action; without a message (stop), messageId is
 // omitted.
 func taskNodeMessageConflict(m *TaskMutation, target TaskConsoleLineage, reason string, message uuid.UUID, run *TaskTurn) error {
-	text := map[string]string{"message_read": "这条节点消息已被读取，不在排队中", "message_cancelled": "这条节点消息已被取消",
-		"run_not_active": "这一轮回复已经结束，不能再停止"}[reason]
+	text := map[string]string{"message_read": "This node message was already read and is no longer queued.", "message_cancelled": "This node message was cancelled.",
+		"run_not_active": "The reply of this turn has already ended and can no longer be stopped."}[reason]
 	if text == "" {
-		text = "这条节点消息已开始处理或已失效，不在排队中"
+		text = "This node message has started or is no longer valid, so it is not queued."
 	}
 	e := apperr.Conflict(apperr.CodeTaskConflict, text)
 	d := taskmodel.TaskNodeMessageConflictDetails{TaskID: target.TaskID, ExpectedNodeRunID: target.NodeRunID, CurrentNodeRunID: m.Record.View.Task.CurrentNodeRunID, ExpectedAgentID: target.AgentID, ExpectedRuntimeID: target.RuntimeID, TaskVersion: m.Record.View.Task.Version, Reason: reason}

@@ -53,7 +53,7 @@ func scanTaskTurn(r db.Scanner) (TaskTurn, error) {
 func (s *Store) EnqueueTaskTurn(ctx context.Context, m *TaskMutation, text, origin string, priority int, trigger *uuid.UUID) (TaskTurn, error) {
 	node := m.Record.Current()
 	if node == nil || m.Record.Ended() {
-		return TaskTurn{}, apperr.Conflict(apperr.CodeTaskConflict, "没有可接收消息的当前任务节点")
+		return TaskTurn{}, apperr.Conflict(apperr.CodeTaskConflict, "There is no current task node that can receive messages.")
 	}
 	if origin == "task_node" {
 		if e := s.cancelUnboundInboxQueue(ctx, m, node.RuntimeID); e != nil {
@@ -212,7 +212,7 @@ func (s *Store) UpdateTaskTurn(ctx context.Context, taskID, turnID uuid.UUID, st
 func (s *Store) UpdateTaskTurnTx(ctx context.Context, m *TaskMutation, turnID uuid.UUID, status, reply string, errorCode, errorMessage *string) (TaskTurn, error) {
 	t, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1 AND task_id=$2`, turnID, m.Record.View.Task.ID))
 	if e != nil {
-		return TaskTurn{}, notFoundIfNoRows(e, "任务轮次")
+		return TaskTurn{}, notFoundIfNoRows(e, "Task turn")
 	}
 	if t.Status == "completed" || t.Status == "failed" || t.Status == "interrupted" {
 		m.Unchanged()
@@ -250,7 +250,7 @@ func (s *Store) UpdateTaskTurnTx(ctx context.Context, m *TaskMutation, turnID uu
 
 func (s *Store) TaskTurn(ctx context.Context, id uuid.UUID) (TaskTurn, error) {
 	t, err := scanTaskTurn(s.Pool.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1`, id))
-	return t, notFoundIfNoRows(err, "任务轮次")
+	return t, notFoundIfNoRows(err, "Task turn")
 }
 func (s *Store) TaskNodeMessages(ctx context.Context, taskID, nodeID uuid.UUID, cursor string, limit int) (taskmodel.MessagePage, error) {
 	if limit <= 0 {
@@ -298,7 +298,7 @@ func (s *Store) TaskNodeMessages(ctx context.Context, taskID, nodeID uuid.UUID, 
 }
 
 func (s *Store) InterruptTaskTurns(ctx context.Context, m *TaskMutation, nodeRunID uuid.UUID) error {
-	rows, err := m.Tx.Query(ctx, `UPDATE task_turns SET error_code=CASE WHEN status='queued' AND EXISTS(SELECT 1 FROM task_console_message_lineage l WHERE l.run_id=task_turns.id) THEN 'task_conflict' ELSE error_code END,error_message=CASE WHEN status='queued' AND EXISTS(SELECT 1 FROM task_console_message_lineage l WHERE l.run_id=task_turns.id) THEN '原节点已结束或不再有效，该消息未执行' ELSE error_message END,status=CASE WHEN status='queued' THEN 'interrupted' ELSE 'aborting' END,ended_at=CASE WHEN status='queued' THEN now() ELSE ended_at END WHERE task_id=$1 AND node_run_id=$2 AND status IN ('queued','starting','running') RETURNING `+taskTurnColumns, m.Record.View.Task.ID, nodeRunID)
+	rows, err := m.Tx.Query(ctx, `UPDATE task_turns SET error_code=CASE WHEN status='queued' AND EXISTS(SELECT 1 FROM task_console_message_lineage l WHERE l.run_id=task_turns.id) THEN 'task_conflict' ELSE error_code END,error_message=CASE WHEN status='queued' AND EXISTS(SELECT 1 FROM task_console_message_lineage l WHERE l.run_id=task_turns.id) THEN 'The original node has ended or is no longer valid. This message was not run.' ELSE error_message END,status=CASE WHEN status='queued' THEN 'interrupted' ELSE 'aborting' END,ended_at=CASE WHEN status='queued' THEN now() ELSE ended_at END WHERE task_id=$1 AND node_run_id=$2 AND status IN ('queued','starting','running') RETURNING `+taskTurnColumns, m.Record.View.Task.ID, nodeRunID)
 	if err != nil {
 		return err
 	}

@@ -17,7 +17,7 @@ import (
 )
 
 func importConflict(code string) error {
-	return apperr.Conflict(code, "本机导入操作冲突，请读取原操作或重新扫描")
+	return apperr.Conflict(code, "This local import conflicts with an existing operation. Read the original operation or scan again.")
 }
 func importCLI(v string) bool {
 	return v == "gh" || v == "lark-cli" || v == "gcloud" || v == "psql" || v == "mysql"
@@ -33,13 +33,13 @@ func importProjectLock(ctx context.Context, tx *db.Tx, project uuid.UUID) (int64
 	var rev int64
 	var deleted *time.Time
 	err := tx.QueryRow(ctx, `SELECT credentials_revision,deleted_at FROM projects WHERE id=$1`, project).Scan(&rev, &deleted)
-	return rev, deleted != nil, notFoundIfNoRows(err, "项目")
+	return rev, deleted != nil, notFoundIfNoRows(err, "Project")
 }
 func importOperationTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, _ bool) (CLIImportOperation, error) {
 	var o CLIImportOperation
 	err := tx.QueryRow(ctx, `SELECT id,project_id,scan_id,status,phase,created_at,deadline_at,completed_at,error_code,committed_credentials_revision FROM cli_credential_import_operations WHERE id=$1 AND project_id=$2`, id, project).Scan(&o.ID, &o.ProjectID, &o.ScanID, &o.Status, &o.Phase, &o.CreatedAt, &o.DeadlineAt, &o.CompletedAt, &o.ErrorCode, &o.CredentialsRevision)
 	if err != nil {
-		return o, notFoundIfNoRows(err, "导入操作")
+		return o, notFoundIfNoRows(err, "Import operation")
 	}
 	rows, err := tx.Query(ctx, `SELECT candidate_id,cli_name,label,status,account_id,version_id,error_code FROM cli_credential_import_items WHERE operation_id=$1 ORDER BY ordinal`, id)
 	if err != nil {
@@ -60,7 +60,7 @@ func importOperationTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, _ 
 func (s *Store) FindCLIImport(ctx context.Context, project, id uuid.UUID, fingerprint []byte) (CLIImportOperation, error) {
 	var out CLIImportOperation
 	if project == uuid.Nil || id == uuid.Nil {
-		return out, apperr.Invalid("operationId", "UUID不能为零")
+		return out, apperr.Invalid("operationId", "Must not be the zero UUID.")
 	}
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockCredentialProject(ctx, tx, project, false); e != nil {
@@ -92,12 +92,12 @@ func (s *Store) BeginCLIImport(ctx context.Context, in CLIImportBegin) (CLIImpor
 	var out CLIImportOperation
 	created := false
 	if in.ID == uuid.Nil || in.ProjectID == uuid.Nil || in.ScanID == uuid.Nil || in.InstanceID == uuid.Nil || len(in.RequestFingerprint) != 32 || in.ExpectedRevision < 1 || len(in.ProvenanceKeyID) == 0 || len(in.ProvenanceKeyID) > 200 || len(in.Items) < 1 || len(in.Items) > 20 {
-		return out, false, apperr.Invalid("operationId", "导入输入无效")
+		return out, false, apperr.Invalid("operationId", "The import request is invalid. Check the IDs, the expected revision and the number of items (1 to 20).")
 	}
 	seen := map[uuid.UUID]bool{}
 	for _, v := range in.Items {
 		if v.CandidateID == uuid.Nil || seen[v.CandidateID] || !importCLI(v.CLI) || !utf8.ValidString(v.Label) || utf8.RuneCountInString(v.Label) > 200 || strings.IndexFunc(v.Label, unicode.IsControl) >= 0 {
-			return out, false, apperr.Invalid("candidateIds", "导入条目无效")
+			return out, false, apperr.Invalid("candidateIds", "An import item is invalid: candidate IDs must be non-zero and unique, the CLI must be importable, and labels must be at most 200 characters without control characters.")
 		}
 		seen[v.CandidateID] = true
 	}
@@ -107,7 +107,7 @@ func (s *Store) BeginCLIImport(ctx context.Context, in CLIImportBegin) (CLIImpor
 			return e
 		}
 		if deleted {
-			return apperr.NotFound("项目")
+			return apperr.NotFound("Project")
 		}
 		old, e := importOperationTx(ctx, tx, in.ProjectID, in.ID, true)
 		if e == nil {
@@ -138,7 +138,7 @@ func (s *Store) BeginCLIImport(ctx context.Context, in CLIImportBegin) (CLIImpor
 		}
 		if _, e = tx.Exec(ctx, `INSERT INTO cli_credential_import_operations(id,project_id,scan_id,instance_id,request_fingerprint,expected_credentials_revision,provenance_key_id,deadline_at)VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, in.ID, in.ProjectID, in.ScanID, in.InstanceID, in.RequestFingerprint, in.ExpectedRevision, in.ProvenanceKeyID, in.Deadline); e != nil {
 			if isUniqueViolation(e, "cli_credential_import_operations_pkey") {
-				return apperr.NotFound("导入操作")
+				return apperr.NotFound("Import operation")
 			}
 			if isUniqueViolation(e, "") {
 				return importConflict("import_operation_conflict")
@@ -164,7 +164,7 @@ func (s *Store) CLIImportOriginSeen(ctx context.Context, project uuid.UUID, key 
 }
 func (s *Store) SetCLIImportPhase(ctx context.Context, project, id, instance uuid.UUID, phase string) error {
 	if phase != "extracting" && phase != "validating" && phase != "committing" {
-		return apperr.Invalid("phase", "阶段无效")
+		return apperr.Invalid("phase", "Must be extracting, validating or committing.")
 	}
 	return s.cliImportTx(ctx, func(tx *db.Tx) error {
 		_, deleted, e := importProjectLock(ctx, tx, project)
@@ -172,7 +172,7 @@ func (s *Store) SetCLIImportPhase(ctx context.Context, project, id, instance uui
 			return e
 		}
 		if deleted {
-			return apperr.NotFound("项目")
+			return apperr.NotFound("Project")
 		}
 		tag, e := tx.Exec(ctx, `UPDATE cli_credential_import_operations SET status='running',phase=$4 WHERE project_id=$1 AND id=$2 AND instance_id=$3 AND status IN('pending','running') AND deadline_at>clock_timestamp()`, project, id, instance, phase)
 		if e == nil && tag.RowsAffected() != 1 {
@@ -188,7 +188,7 @@ func finishImportTx(ctx context.Context, tx *db.Tx, o CLIImportOperation, status
 	}
 	code = importCode(code)
 	if status != "failed" && status != "cancelled" && status != "expired" {
-		return o, apperr.Invalid("status", "终态无效")
+		return o, apperr.Invalid("status", "Must be failed, cancelled or expired.")
 	}
 	if _, err := tx.Exec(ctx, `UPDATE cli_credential_import_items SET status=CASE WHEN candidate_id=$2 THEN 'failed' ELSE 'not_committed' END,error_code=CASE WHEN candidate_id=$2 THEN $3 ELSE NULL END WHERE operation_id=$1`, o.ID, failed, code); err != nil {
 		return o, err
@@ -295,7 +295,7 @@ func (s *Store) FinalizeCLIImport(ctx context.Context, project, id, instance uui
 			return e
 		}
 		if len(items) != len(o.Items) || len(items) < 1 {
-			return apperr.Invalid("candidateIds", "批次不完整")
+			return apperr.Invalid("candidateIds", "The batch is incomplete.")
 		}
 		selected := map[uuid.UUID]CLIImportItem{}
 		for _, v := range o.Items {
@@ -319,7 +319,7 @@ func (s *Store) FinalizeCLIImport(ctx context.Context, project, id, instance uui
 		for _, v := range sorted {
 			original, ok := selected[v.CandidateID]
 			if !ok || v.CLI != original.CLI || ids[v.CandidateID] || v.AccountID == uuid.Nil || v.VersionID == uuid.Nil || len(v.OriginMAC) != 32 || len(v.ContentMAC) != 32 || v.ProvenanceKeyID != key || v.TemplateSource != "builtin" || v.CredentialFormat == "" || !utf8.ValidString(v.Name) || utf8.RuneCountInString(v.Name) > 200 || strings.TrimSpace(v.Name) != v.Name || v.Name == "" || strings.IndexFunc(v.Name, unicode.IsControl) >= 0 {
-				return apperr.Invalid("candidateIds", "批次载荷无效")
+				return apperr.Invalid("candidateIds", "The batch payload is invalid.")
 			}
 			if origins[string(v.OriginMAC)] {
 				return importItemFailure(v.CandidateID, "source_conflict", importConflict("import_duplicate_source"))
@@ -327,7 +327,7 @@ func (s *Store) FinalizeCLIImport(ctx context.Context, project, id, instance uui
 			origins[string(v.OriginMAC)] = true
 			ids[v.CandidateID] = true
 			if (v.CLI == "gcloud" && v.AuthMethod != "service_account") || (v.CLI != "gcloud" && v.AuthMethod != "static") {
-				return apperr.Invalid("authMethod", "导入不接受动态认证")
+				return apperr.Invalid("authMethod", "Import does not accept dynamic authentication.")
 			}
 			var oldContent []byte
 			var account, version uuid.UUID
@@ -351,7 +351,7 @@ func (s *Store) FinalizeCLIImport(ctx context.Context, project, id, instance uui
 				return e
 			}
 			if len(v.Secret) == 0 {
-				return apperr.Invalid("credential", "缺少凭证内容")
+				return apperr.Invalid("credential", "The credential content is missing.")
 			}
 			if _, e = tx.Exec(ctx, `INSERT INTO project_credential_accounts(id,project_id,purpose,cli_name,name)VALUES($1,$2,'cli',$3,$4)`, v.AccountID, project, v.CLI, v.Name); e != nil {
 				return e
@@ -400,7 +400,7 @@ func (s *Store) FinalizeCLIImport(ctx context.Context, project, id, instance uui
 
 func (s *Store) RecoverCLIImports(ctx context.Context, instance uuid.UUID) error {
 	if instance == uuid.Nil {
-		return apperr.Invalid("instanceId", "UUID不能为零")
+		return apperr.Invalid("instanceId", "Must not be the zero UUID.")
 	}
 	rows, err := s.Pool.Query(ctx, `SELECT project_id,id FROM cli_credential_import_operations WHERE instance_id<>$1 AND status IN('pending','running') ORDER BY project_id,id`, instance)
 	if err != nil {
@@ -423,7 +423,7 @@ func (s *Store) RecoverCLIImports(ctx context.Context, instance uuid.UUID) error
 // It only touches this service instance's elapsed operations and never sources.
 func (s *Store) ExpireDueCLIImports(ctx context.Context, instance uuid.UUID) error {
 	if instance == uuid.Nil {
-		return apperr.Invalid("instanceId", "UUID不能为零")
+		return apperr.Invalid("instanceId", "Must not be the zero UUID.")
 	}
 	rows, err := s.Pool.Query(ctx, `SELECT project_id,id FROM cli_credential_import_operations WHERE instance_id=$1 AND status IN('pending','running') AND deadline_at<=clock_timestamp() ORDER BY project_id,id`, instance)
 	if err != nil {
@@ -447,7 +447,7 @@ func (s *Store) ExpireDueCLIImports(ctx context.Context, instance uuid.UUID) err
 // nor swallows undefined-table errors; target16 fixtures simply must not wire it.
 func (s *Store) TerminateProjectCLIImportsTx(ctx context.Context, tx *db.Tx, project uuid.UUID) error {
 	if project == uuid.Nil {
-		return apperr.Invalid("projectId", "UUID不能为零")
+		return apperr.Invalid("projectId", "Must not be the zero UUID.")
 	}
 	rows, err := tx.Query(ctx, `SELECT id FROM cli_credential_import_operations WHERE project_id=$1 AND status IN('pending','running') ORDER BY id`, project)
 	if err != nil {

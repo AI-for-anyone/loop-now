@@ -31,7 +31,7 @@ func scanVerification(row db.Scanner) (cliverify.Operation, error) {
 	if outcome != nil && duration != nil {
 		op.Result = &cliverify.Result{Outcome: *outcome, VerifiedAt: verified, DurationMS: *duration, ErrorCode: code, HTTPStatus: httpStatus}
 	}
-	return op, notFoundIfNoRows(err, "CLI验证操作")
+	return op, notFoundIfNoRows(err, "CLI verification operation")
 }
 func verificationTx(ctx context.Context, tx *db.Tx, project, account, id uuid.UUID, _ bool) (cliverify.Operation, error) {
 	return scanVerification(tx.QueryRow(ctx, `SELECT `+verificationColumns+` FROM cli_credential_verifications o JOIN project_credential_accounts a ON a.id=o.account_id WHERE o.project_id=$1 AND o.account_id=$2 AND o.id=$3`, project, account, id))
@@ -43,12 +43,12 @@ func lockVerificationAccount(ctx context.Context, tx *db.Tx, project, account uu
 	return projectAccountTx(ctx, tx, project, account, write)
 }
 func verificationVersionConflict(project, account, expected uuid.UUID, current *uuid.UUID) error {
-	e := apperr.PreconditionFailed("CLI凭证版本已更改，请重新读取")
+	e := apperr.PreconditionFailed("The CLI credential version has changed. Reload it and try again.")
 	e.Details = cliverify.VersionConflictDetails{ProjectID: project, AccountID: account, ExpectedVersionID: expected, CurrentVersionID: current}
 	return e
 }
 func verificationConflict(code string, op cliverify.Operation) error {
-	e := apperr.Conflict(code, "验证操作冲突，请读取原操作")
+	e := apperr.Conflict(code, "This verification conflicts with an existing operation. Read the original operation.")
 	e.Details = cliverify.ConflictDetails{ProjectID: op.ProjectID, AccountID: op.AccountID, OperationID: op.ID, VersionID: op.VersionID}
 	return e
 }
@@ -88,13 +88,13 @@ func (s *Store) BeginCLIVerification(ctx context.Context, project, account uuid.
 			return projectAccountDeleted(project, account)
 		}
 		if r.View.Purpose != PurposeCLI || r.View.CLI == nil {
-			return apperr.Invalid("accountId", "须为CLI账号")
+			return apperr.Invalid("accountId", "Must be a CLI account.")
 		}
 		if r.View.CurrentVersionID == nil || *r.View.CurrentVersionID != in.ExpectedVersionID {
 			return verificationVersionConflict(project, account, in.ExpectedVersionID, r.View.CurrentVersionID)
 		}
 		if r.CLI == nil || r.TemplateSource != meta.TemplateSource || r.CLI.TemplateVersion != meta.CredentialFormat {
-			return apperr.Invalid("accountId", "CLI模板来源或格式已更改")
+			return apperr.Invalid("accountId", "The CLI template source or format has changed.")
 		}
 		if _, e = tx.Exec(ctx, `UPDATE cli_credential_verifications SET status='expired',phase=NULL,completed_at=clock_timestamp(),result_outcome='expired',verified_at=NULL,duration_ms=max(0,coalesce((clock_timestamp()-started_at)/1000,0)),error_code='timeout',http_status=NULL WHERE account_id=$1 AND status IN('pending','running') AND expires_at<=clock_timestamp()`, account); e != nil {
 			return e
@@ -148,7 +148,7 @@ func (s *Store) CLIVerificationState(ctx context.Context, project, account uuid.
 			return e
 		}
 		if a.View.Purpose != PurposeCLI {
-			return apperr.Invalid("accountId", "须为CLI账号")
+			return apperr.Invalid("accountId", "Must be a CLI account.")
 		}
 		out = cliverify.State{AccountID: account, CurrentVersionID: a.View.CurrentVersionID}
 		if out.CurrentVersionID == nil || a.View.DeletedAt != nil {
@@ -250,7 +250,7 @@ func (s *Store) CLIVerificationPhase(ctx context.Context, project, account, id u
 	switch phase {
 	case "preparing_tool", "resolving_credentials", "probing", "recording":
 	default:
-		return errors.New("验证阶段无效")
+		return errors.New("invalid verification phase")
 	}
 	return s.inTx(ctx, func(tx *db.Tx) error {
 		if _, e := lockVerificationAccount(ctx, tx, project, account, false); e != nil {
@@ -265,7 +265,7 @@ func (s *Store) CLIVerificationPhase(ctx context.Context, project, account, id u
 			return e
 		}
 		if tag.RowsAffected() != 1 {
-			return errors.New("验证操作已结束")
+			return errors.New("the verification operation has already ended")
 		}
 		return nil
 	})
@@ -310,7 +310,7 @@ func (s *Store) FinishCLIVerification(ctx context.Context, project, account, id 
 			result.ErrorCode = nil
 		case "failed":
 			if result.ErrorCode == nil {
-				return errors.New("验证失败须有安全原因")
+				return errors.New("a failed verification needs a safe reason")
 			}
 		case "expired":
 			status = "expired"
@@ -320,7 +320,7 @@ func (s *Store) FinishCLIVerification(ctx context.Context, project, account, id 
 			status = "cancelled"
 			result.ErrorCode = nil
 		default:
-			return errors.New("验证结果无效")
+			return errors.New("invalid verification result")
 		}
 		tag, e := tx.Exec(ctx, `UPDATE cli_credential_verifications SET status=$2,phase=NULL,completed_at=clock_timestamp(),result_outcome=$3,verified_at=$4,duration_ms=max(0,coalesce((clock_timestamp()-started_at)/1000,0)),error_code=$5,http_status=$6 WHERE id=$1 AND status IN('pending','running')`, id, status, result.Outcome, verified, result.ErrorCode, result.HTTPStatus)
 		if e != nil {

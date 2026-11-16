@@ -69,14 +69,14 @@ func Import(ctx context.Context, o Options) (_ Report, err error) {
 	lock, err := db.LockDir(o.DBDir)
 	if err != nil {
 		if errors.Is(err, db.ErrLocked) {
-			return Report{}, fmt.Errorf("库目录 %s 正被服务端使用：先停掉服务再导入", o.DBDir)
+			return Report{}, fmt.Errorf("the database directory %s is in use by the server: stop the server before importing", o.DBDir)
 		}
 		return Report{}, err
 	}
 	defer lock.Release()
 	for _, name := range []string{db.DataFile, db.EventsFile} {
 		if _, err := os.Stat(filepath.Join(o.DBDir, name)); err == nil {
-			return Report{}, fmt.Errorf("库目录 %s 里已经有 %s：导入只写新库，不覆盖已有数据", o.DBDir, name)
+			return Report{}, fmt.Errorf("the database directory %s already contains %s: import only writes a new database and does not overwrite existing data", o.DBDir, name)
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return Report{}, err
 		}
@@ -84,13 +84,13 @@ func Import(ctx context.Context, o Options) (_ Report, err error) {
 
 	src, err := pgx.Connect(ctx, o.SourceURL)
 	if err != nil {
-		return Report{}, fmt.Errorf("连接 PostgreSQL 失败：%w", connectCause(err))
+		return Report{}, fmt.Errorf("connect to PostgreSQL: %w", connectCause(err))
 	}
 	defer src.Close(context.WithoutCancel(ctx))
 	// Repeatable read: the whole import sees one snapshot, so counts and data agree.
 	stx, err := src.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
-		return Report{}, fmt.Errorf("开始读取 PostgreSQL 失败：%w", err)
+		return Report{}, fmt.Errorf("start reading from PostgreSQL: %w", err)
 	}
 	defer stx.Rollback(context.WithoutCancel(ctx))
 	version, err := sourceVersion(ctx, stx)
@@ -98,7 +98,7 @@ func Import(ctx context.Context, o Options) (_ Report, err error) {
 		return Report{}, err
 	}
 	if version != pgschema.Latest {
-		return Report{}, fmt.Errorf("源库的迁移版本是 %d，导入要求 %d：先用最后一个 PostgreSQL 版本启动一次完成迁移、停掉服务，再导入", version, pgschema.Latest)
+		return Report{}, fmt.Errorf("the source database is at migration version %d, but import requires %d: start the last PostgreSQL release once to finish the migrations, stop the server, then import", version, pgschema.Latest)
 	}
 
 	st, err := store.Open(ctx, db.Options{Dir: o.DBDir, Logger: o.Log})
@@ -143,11 +143,11 @@ func Import(ctx context.Context, o Options) (_ Report, err error) {
 			// Seed rows written when the baseline created the database (singleton settings) are replaced by the source's
 			// rows.
 			if _, err := tx.Exec(ctx, `DELETE FROM `+p.target()); err != nil {
-				return fmt.Errorf("清空 %s：%w", p.table, err)
+				return fmt.Errorf("clear %s: %w", p.table, err)
 			}
 			n, err := copyTable(ctx, stx, tx, p)
 			if err != nil {
-				return fmt.Errorf("导入 %s：%w", p.table, err)
+				return fmt.Errorf("import %s: %w", p.table, err)
 			}
 			o.Log.Info("imported", "table", p.table, "rows", n)
 			report.Tables = append(report.Tables, Table{Name: p.table, Rows: n})
@@ -190,7 +190,7 @@ func connectCause(err error) error {
 		if cause := errors.Unwrap(ce); cause != nil {
 			return cause
 		}
-		return errors.New("无法连接")
+		return errors.New("cannot connect")
 	}
 	return err
 }
@@ -210,10 +210,10 @@ func sourceVersion(ctx context.Context, tx pgx.Tx) (int64, error) {
 	var applied bool
 	err := tx.QueryRow(ctx, `SELECT version_id, is_applied FROM goose_db_version ORDER BY id DESC LIMIT 1`).Scan(&version, &applied)
 	if err != nil {
-		return 0, fmt.Errorf("读取源库的迁移版本失败（不是 Loop Now 的 PostgreSQL 库？）：%w", err)
+		return 0, fmt.Errorf("read the migration version of the source database (is it a Loop Now PostgreSQL database?): %w", err)
 	}
 	if !applied {
-		return 0, fmt.Errorf("源库最后一次迁移操作是回退到 %d 之前：先用最后一个 PostgreSQL 版本完成迁移", version)
+		return 0, fmt.Errorf("the last migration operation on the source database rolled back to before %d: finish the migrations with the last PostgreSQL release first", version)
 	}
 	return version, nil
 }
@@ -312,19 +312,19 @@ func plan(targets []targetTable, sources map[string]map[string]string) ([]tableP
 		seen[t.name] = true
 		cols, ok := sources[t.name]
 		if !ok {
-			problems = append(problems, "源库没有表 "+t.name)
+			problems = append(problems, "the source database has no table "+t.name)
 			continue
 		}
 		p := tablePlan{schema: t.schema, table: t.name}
 		for _, c := range t.columns {
 			pgType, ok := cols[c.name]
 			if !ok {
-				problems = append(problems, fmt.Sprintf("源库的 %s 没有列 %s", t.name, c.name))
+				problems = append(problems, fmt.Sprintf("table %s in the source database has no column %s", t.name, c.name))
 				continue
 			}
 			expr, err := convert(pgx.Identifier{c.name}.Sanitize(), pgType, c.typ)
 			if err != nil {
-				problems = append(problems, fmt.Sprintf("%s.%s：%v", t.name, c.name, err))
+				problems = append(problems, fmt.Sprintf("%s.%s: %v", t.name, c.name, err))
 				continue
 			}
 			p.columns = append(p.columns, c.name)
@@ -332,19 +332,19 @@ func plan(targets []targetTable, sources map[string]map[string]string) ([]tableP
 		}
 		for name := range cols {
 			if !slices.ContainsFunc(t.columns, func(c targetColumn) bool { return c.name == name }) {
-				problems = append(problems, fmt.Sprintf("新库的 %s 没有列 %s", t.name, name))
+				problems = append(problems, fmt.Sprintf("table %s in the new database has no column %s", t.name, name))
 			}
 		}
 		out = append(out, p)
 	}
 	for name := range sources {
 		if !seen[name] {
-			problems = append(problems, "新库没有表 "+name)
+			problems = append(problems, "the new database has no table "+name)
 		}
 	}
 	if len(problems) > 0 {
 		slices.Sort(problems)
-		return nil, fmt.Errorf("源库结构与 SQLite 基线对不上，拒绝导入：\n  %s", strings.Join(problems, "\n  "))
+		return nil, fmt.Errorf("the source database structure does not match the SQLite baseline; refusing to import:\n  %s", strings.Join(problems, "\n  "))
 	}
 	return out, nil
 }
@@ -359,10 +359,10 @@ func convert(col, pgType, sqliteType string) (string, error) {
 		"bytea": "BLOB",
 	}[pgType]
 	if want == "" {
-		return "", fmt.Errorf("不支持的 PostgreSQL 类型 %s", pgType)
+		return "", fmt.Errorf("unsupported PostgreSQL type %s", pgType)
 	}
 	if want != sqliteType {
-		return "", fmt.Errorf("类型 %s 应对应 %s，基线里是 %s", pgType, want, sqliteType)
+		return "", fmt.Errorf("type %s should map to %s, but the baseline has %s", pgType, want, sqliteType)
 	}
 	switch pgType {
 	case "uuid", "jsonb", "json":
@@ -416,7 +416,7 @@ func copyTable(ctx context.Context, src pgx.Tx, dst *db.Tx, p tablePlan) (int64,
 		for i, v := range values {
 			v, err := storable(v)
 			if err != nil {
-				return total, fmt.Errorf("列 %s：%w", p.columns[i], err)
+				return total, fmt.Errorf("column %s: %w", p.columns[i], err)
 			}
 			args = append(args, v)
 		}
@@ -455,7 +455,7 @@ func storable(v any) (any, error) {
 		}
 		return int64(0), nil
 	}
-	return nil, fmt.Errorf("意外的值类型 %T", v)
+	return nil, fmt.Errorf("unexpected value type %T", v)
 }
 
 // setSequences makes the new database's sequences continue after the point the source reached: it takes the larger
@@ -472,21 +472,21 @@ func setSequences(ctx context.Context, src pgx.Tx, dst *db.Tx) error {
 	for _, name := range names {
 		table, column, ok := strings.Cut(name, ".")
 		if !ok {
-			return fmt.Errorf("序列名 %q 不是 表.列", name)
+			return fmt.Errorf("sequence name %q is not table.column", name)
 		}
 		var value int64
 		if err := src.QueryRow(ctx, `SELECT coalesce(max(`+pgx.Identifier{column}.Sanitize()+`), 0) FROM `+pgx.Identifier{table}.Sanitize()).Scan(&value); err != nil {
-			return fmt.Errorf("读取 %s 的最大值：%w", name, err)
+			return fmt.Errorf("read the maximum of %s: %w", name, err)
 		}
 		var seq *string
 		if err := src.QueryRow(ctx, `SELECT pg_get_serial_sequence($1, $2)`, table, column).Scan(&seq); err != nil {
-			return fmt.Errorf("查找 %s 的序列：%w", name, err)
+			return fmt.Errorf("find the sequence of %s: %w", name, err)
 		}
 		if seq != nil {
 			var last int64
 			var called bool
 			if err := src.QueryRow(ctx, `SELECT last_value, is_called FROM `+*seq).Scan(&last, &called); err != nil {
-				return fmt.Errorf("读取序列 %s：%w", name, err)
+				return fmt.Errorf("read sequence %s: %w", name, err)
 			}
 			if called && last > value {
 				value = last
@@ -508,7 +508,7 @@ func verify(ctx context.Context, d *db.DB, plans []tablePlan, r Report) error {
 			return err
 		}
 		if n != r.Tables[i].Rows {
-			return fmt.Errorf("%s 导入后有 %d 行，源库读到 %d 行", p.table, n, r.Tables[i].Rows)
+			return fmt.Errorf("%s has %d rows after the import, but %d rows were read from the source database", p.table, n, r.Tables[i].Rows)
 		}
 	}
 	for _, schema := range []string{"main", db.EventsSchema} {
@@ -522,14 +522,14 @@ func verify(ctx context.Context, d *db.DB, plans []tablePlan, r Report) error {
 		}
 		rows.Close()
 		if bad > 0 {
-			return fmt.Errorf("%s 里有 %d 处外键不成立", schema, bad)
+			return fmt.Errorf("%s has %d foreign key violations", schema, bad)
 		}
 		var result string
 		if err := d.QueryRow(ctx, fmt.Sprintf(`PRAGMA %s.quick_check`, schema)).Scan(&result); err != nil {
 			return err
 		}
 		if result != "ok" {
-			return fmt.Errorf("%s 完整性检查未通过", schema)
+			return fmt.Errorf("%s failed the integrity check", schema)
 		}
 	}
 	return nil

@@ -143,7 +143,7 @@ func scanInto(rows *sql.Rows, dest []any) error {
 			continue
 		}
 		if err := dec(*holders[i].(*any)); err != nil {
-			return fmt.Errorf("db: 第 %d 列：%w", i+1, err)
+			return fmt.Errorf("db: column %d: %w", i+1, err)
 		}
 	}
 	return nil
@@ -204,7 +204,7 @@ func decodeValue(v reflect.Value, src any) error {
 	case timeType:
 		n, ok := src.(int64)
 		if !ok {
-			return fmt.Errorf("时间列应为整数微秒，得到 %T", src)
+			return fmt.Errorf("a time column must hold integer microseconds, got %T", src)
 		}
 		v.Set(reflect.ValueOf(time.UnixMicro(n).UTC()))
 		return nil
@@ -217,7 +217,7 @@ func decodeValue(v reflect.Value, src any) error {
 		case []byte:
 			v.SetBytes(append([]byte(nil), s...))
 		default:
-			return fmt.Errorf("JSON 列应为文本，得到 %T", src)
+			return fmt.Errorf("a JSON column must hold text, got %T", src)
 		}
 		return nil
 	}
@@ -231,11 +231,11 @@ func decodeValue(v reflect.Value, src any) error {
 	case []byte:
 		b = s
 	default:
-		return fmt.Errorf("%s 应从 JSON 文本解码，得到 %T", t, src)
+		return fmt.Errorf("%s must be decoded from JSON text, got %T", t, src)
 	}
 	nv := reflect.New(t)
 	if err := json.Unmarshal(b, nv.Interface()); err != nil {
-		return fmt.Errorf("解码 %s：%w", t, err)
+		return fmt.Errorf("decode %s: %w", t, err)
 	}
 	v.Set(nv.Elem())
 	return nil

@@ -38,7 +38,7 @@ func (s *Store) BindTaskLarkTurnTx(ctx context.Context, m *TaskMutation, t TaskT
 		}
 	}
 	if !valid {
-		return apperr.Conflict(apperr.CodeTaskConflict, "恢复回合缺少原节点真实消息或sleep承接来源")
+		return apperr.Conflict(apperr.CodeTaskConflict, "The resumed turn has no real message from the original node and no sleep to continue from.")
 	}
 	_, err = m.Tx.Exec(ctx, `UPDATE task_turns SET lark_switch_action_id=$2,lark_binding_revision=$3 WHERE id=$1`, t.ID, action, revision)
 	return err
@@ -72,7 +72,7 @@ func (s *Store) CheckTaskLarkRunTx(ctx context.Context, m *TaskMutation, node, r
 		return nil
 	}
 	if run == uuid.Nil {
-		return apperr.Conflict(apperr.CodeTaskConflict, "恢复节点必须显式提供本轮准确runId")
+		return apperr.Conflict(apperr.CodeTaskConflict, "A resumed node must give the exact runId of this turn.")
 	}
 	var valid bool
 	err := m.Tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM task_turns t JOIN task_lark_credential_bindings b ON b.task_id=t.task_id AND b.continuation_node_run_id=t.node_run_id AND b.action_id=t.lark_switch_action_id AND b.revision=t.lark_binding_revision JOIN task_lark_switch_actions a ON a.task_id=b.task_id AND a.actor_key=b.actor_key AND a.action_id=b.action_id AND a.status='succeeded' WHERE t.id=$1 AND t.task_id=$2 AND t.node_run_id=$3 AND t.runtime_id=$4 AND t.status='running' AND t.execution_mode='task_node')`, run, m.Record.View.Task.ID, node, runtime).Scan(&valid)
@@ -80,7 +80,7 @@ func (s *Store) CheckTaskLarkRunTx(ctx context.Context, m *TaskMutation, node, r
 		return err
 	}
 	if !valid {
-		return apperr.Conflict(apperr.CodeTaskConflict, "runId不属于本轮恢复节点或已经失效")
+		return apperr.Conflict(apperr.CodeTaskConflict, "runId does not belong to this resumed node or is no longer valid.")
 	}
 	return nil
 }

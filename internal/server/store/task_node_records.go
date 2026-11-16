@@ -17,17 +17,17 @@ func (s *Store) TaskNodeRecord(ctx context.Context, task, node, run uuid.UUID) (
 	var agent uuid.UUID
 	t, err := scanTaskTurn(s.Pool.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1 AND task_id=$2 AND node_run_id=$3`, run, task, node))
 	if err != nil {
-		return t, agent, notFoundIfNoRows(err, "任务执行")
+		return t, agent, notFoundIfNoRows(err, "Task run")
 	}
 	err = s.Pool.QueryRow(ctx, `SELECT agent_id FROM task_instances WHERE id=$1 AND task_id=$2`, t.RuntimeID, task).Scan(&agent)
-	return t, agent, notFoundIfNoRows(err, "任务实例")
+	return t, agent, notFoundIfNoRows(err, "Task instance")
 }
 
 // TaskNodeEvents pages actual task observations. Cursor is (at,id), not a Redis
 // cursor or the unrelated decimal task SSE event ID.
 func (s *Store) TaskNodeEvents(ctx context.Context, t TaskTurn, cursor string, limit int) ([]LifecycleEvent, string, error) {
 	if limit < 1 || limit > 200 {
-		return nil, "", apperr.Invalid("limit", "必须为1..200")
+		return nil, "", apperr.Invalid("limit", "Must be between 1 and 200.")
 	}
 	var at *time.Time
 	var id *uuid.UUID

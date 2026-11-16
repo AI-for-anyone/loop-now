@@ -24,7 +24,7 @@ func scanProjectOperation(r db.Scanner) (cm.Operation, error) {
 }
 func projectOperationTx(ctx context.Context, tx *db.Tx, project, id uuid.UUID, _ bool) (cm.Operation, error) {
 	o, e := scanProjectOperation(tx.QueryRow(ctx, `SELECT `+projectOperationColumns+` FROM project_model_auth_operations WHERE id=$1 AND project_id=$2`, id, project))
-	return o, notFoundIfNoRows(e, "项目登录操作")
+	return o, notFoundIfNoRows(e, "Project login operation")
 }
 func (s *Store) NewProjectModelAuthOperation(ctx context.Context, project uuid.UUID, in cm.LoginStart, expires time.Time) (cm.Operation, bool, error) {
 	var out cm.Operation
@@ -39,7 +39,7 @@ func (s *Store) NewProjectModelAuthOperation(ctx context.Context, project uuid.U
 				return e
 			}
 			if in.ExpectedRevision == nil {
-				return apperr.Invalid("expectedRevision", "重登需要预期版本")
+				return apperr.Invalid("expectedRevision", "Required when logging in again to an existing account.")
 			}
 			if e = credentialCAS("account", r.View.ID, *in.ExpectedRevision, r.View.Revision); e != nil {
 				return e
@@ -48,7 +48,7 @@ func (s *Store) NewProjectModelAuthOperation(ctx context.Context, project uuid.U
 				return projectAccountDeleted(project, r.View.ID)
 			}
 			if r.View.Purpose != PurposeModel || r.View.Provider == nil || *r.View.Provider != in.Provider {
-				return apperr.Invalid("accountId", "仅可重登相同提供方模型账号")
+				return apperr.Invalid("accountId", "Only a model account of the same provider can be logged in again.")
 			}
 		}
 		if _, e := tx.Exec(ctx, `UPDATE project_model_auth_operations SET status='expired',authorization_url=NULL,user_code=NULL,verification_uri=NULL,device_expires_at=NULL,error_code='auth_timeout',completed_at=clock_timestamp() WHERE project_id=$1 AND status IN('pending','awaiting_authorization') AND expires_at<=clock_timestamp()`, project); e != nil {
@@ -62,7 +62,7 @@ func (s *Store) NewProjectModelAuthOperation(ctx context.Context, project uuid.U
 				out = old
 				return nil
 			}
-			conflict := apperr.Conflict(apperr.CodeProjectModelAuthInProgress, "目标账号已有不同登录操作")
+			conflict := apperr.Conflict(apperr.CodeProjectModelAuthInProgress, "The target account already has a different login operation.")
 			conflict.Details = struct {
 				ProjectID   uuid.UUID `json:"projectId"`
 				OperationID uuid.UUID `json:"operationId"`
@@ -168,7 +168,7 @@ func endProjectOperationTx(ctx context.Context, tx *db.Tx, id uuid.UUID, status,
 }
 func (s *Store) EndProjectModelAuthOperation(ctx context.Context, project, id uuid.UUID, status, code string) (cm.Operation, error) {
 	if status != "failed" && status != "cancelled" && status != "expired" {
-		return cm.Operation{}, apperr.Invalid("status", "非法登录终态")
+		return cm.Operation{}, apperr.Invalid("status", "Must be failed, cancelled or expired.")
 	}
 	var out cm.Operation
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -195,7 +195,7 @@ func (s *Store) CompleteProjectModelAuthOperation(ctx context.Context, project, 
 		}
 		var deleted *time.Time
 		if e = tx.QueryRow(ctx, `SELECT deleted_at FROM projects WHERE id=$1`, project).Scan(&deleted); e != nil {
-			return notFoundIfNoRows(e, "项目")
+			return notFoundIfNoRows(e, "Project")
 		}
 		var target *ProjectCredentialRecord
 		if initial.TargetAccountID != nil {
@@ -227,7 +227,7 @@ func (s *Store) CompleteProjectModelAuthOperation(ctx context.Context, project, 
 		var record ProjectCredentialRecord
 		if target == nil {
 			if out.Name == nil {
-				return apperr.Invalid("name", "登录操作缺少账号名称")
+				return apperr.Invalid("name", "The login operation has no account name.")
 			}
 			record, e = insertProjectAccountTx(ctx, tx, project, PurposeModel, out.Provider, *out.Name, w)
 		} else {

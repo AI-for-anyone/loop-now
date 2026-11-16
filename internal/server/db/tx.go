@@ -62,7 +62,7 @@ func (d *DB) InTx(ctx context.Context, fn func(*Tx) error) (err error) {
 		// Roll back and return the connection even when fn panics, or the connection goes back to the pool with an
 		// unfinished transaction.
 		if !ended {
-			_ = end(errors.New("db: 写事务回调恐慌"))
+			_ = end(errors.New("db: the write transaction callback panicked"))
 		}
 	}()
 	fnErr := fn(t)
@@ -81,7 +81,7 @@ func (d *DB) beginWrite(ctx context.Context) (*Tx, func(error) error, error) {
 	stx, err := c.BeginTx(context.WithoutCancel(ctx), nil)
 	if err != nil {
 		release()
-		return nil, nil, fmt.Errorf("db: 开始写事务失败：%w", err)
+		return nil, nil, fmt.Errorf("db: begin the write transaction: %w", err)
 	}
 	t := &Tx{tx: stx, now: d.now(), hook: d.queryHook.Load()}
 	d.writeTxNow.Store(t.now.UnixMicro())
@@ -100,7 +100,7 @@ func (d *DB) beginWrite(ctx context.Context) (*Tx, func(error) error, error) {
 		}
 		t.done = true
 		if err := stx.Commit(); err != nil {
-			return fmt.Errorf("db: 提交失败：%w", err)
+			return fmt.Errorf("db: commit: %w", err)
 		}
 		for _, f := range t.after {
 			f()
@@ -140,7 +140,7 @@ func (d *DB) SetWriteHook(h WriteHook) { d.writeHook.Store(&h) }
 func (d *DB) ReadTx(ctx context.Context, fn func(*Tx) error) error {
 	stx, err := d.r.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
-		return fmt.Errorf("db: 开始只读事务失败：%w", err)
+		return fmt.Errorf("db: begin a read-only transaction: %w", err)
 	}
 	t := &Tx{tx: stx, now: d.now(), readOnly: true, hook: d.queryHook.Load()}
 	defer func() { t.done = true; _ = stx.Rollback() }()
@@ -153,7 +153,7 @@ func (d *DB) ReadTx(ctx context.Context, fn func(*Tx) error) error {
 func (d *DB) BeginRead(ctx context.Context) (*Tx, error) {
 	stx, err := d.r.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
-		return nil, fmt.Errorf("db: 开始只读事务失败：%w", err)
+		return nil, fmt.Errorf("db: begin a read-only transaction: %w", err)
 	}
 	return &Tx{tx: stx, now: d.now(), readOnly: true, hook: d.queryHook.Load()}, nil
 }
@@ -162,7 +162,7 @@ func (d *DB) BeginRead(ctx context.Context) (*Tx, error) {
 // call it.
 func (t *Tx) Commit(context.Context) error {
 	if !t.readOnly {
-		return errors.New("db: 写事务由 InTx 提交")
+		return errors.New("db: write transactions are committed by InTx")
 	}
 	if t.done {
 		return sql.ErrTxDone
@@ -174,7 +174,7 @@ func (t *Tx) Commit(context.Context) error {
 // Rollback ends a read-only transaction started by BeginRead; it does nothing if the transaction already ended.
 func (t *Tx) Rollback(context.Context) error {
 	if !t.readOnly {
-		return errors.New("db: 写事务由 InTx 回滚")
+		return errors.New("db: write transactions are rolled back by InTx")
 	}
 	if t.done {
 		return nil
@@ -246,7 +246,7 @@ func (t *Tx) usable(ctx context.Context, query string) error {
 		return sql.ErrTxDone
 	}
 	if t.readOnly && isWrite(query) {
-		return errors.New("db: 只读事务里不能写")
+		return errors.New("db: cannot write in a read-only transaction")
 	}
 	if t.hook != nil {
 		(*t.hook)(ctx, query)
@@ -260,7 +260,7 @@ func (t *Tx) NextSeq(ctx context.Context, name string) (int64, error) {
 	var v int64
 	err := t.QueryRow(ctx, `UPDATE sequences SET value = value + 1 WHERE name = ? RETURNING value`, name).Scan(&v)
 	if errors.Is(err, ErrNoRows) {
-		return 0, fmt.Errorf("db: 没有序列 %q", name)
+		return 0, fmt.Errorf("db: no sequence %q", name)
 	}
 	return v, err
 }

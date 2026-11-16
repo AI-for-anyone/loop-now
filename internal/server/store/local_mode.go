@@ -92,7 +92,7 @@ func (s *Store) localDirectories(ctx context.Context, o localDirectoryOwner, id 
 
 func (s *Store) putLocalDirectories(ctx context.Context, o localDirectoryOwner, id uuid.UUID, expected int64, dirs []LocalDirectoryEntry) (LocalDirectoryList, error) {
 	if expected < 0 {
-		return LocalDirectoryList{}, apperr.Invalid("expectedRevision", "必须是不小于 0 的整数")
+		return LocalDirectoryList{}, apperr.Invalid("expectedRevision", "Must be a non-negative integer.")
 	}
 	if dirs == nil {
 		dirs = []LocalDirectoryEntry{}
@@ -107,7 +107,7 @@ func (s *Store) putLocalDirectories(ctx context.Context, o localDirectoryOwner, 
 			WHERE `+o.column+` = $1 AND revision = $3 RETURNING revision, directories`, id, dirs, expected).Scan(&out.Revision, &out.Directories)
 	}
 	if IsNotFound(err) {
-		return LocalDirectoryList{}, apperr.PreconditionFailed("本机目录清单已被修改，请重新读取后再保存")
+		return LocalDirectoryList{}, apperr.PreconditionFailed("The local directory list was changed elsewhere. Read it again, then save.")
 	}
 	return out, err
 }

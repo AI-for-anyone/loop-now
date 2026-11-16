@@ -95,7 +95,7 @@ func isUniqueViolation(err error, constraint string) bool {
 	}
 	target, ok := uniqueTargets[constraint]
 	if !ok {
-		panic(fmt.Sprintf("store: 唯一约束 %s 没有登记在 uniqueTargets", constraint))
+		panic(fmt.Sprintf("store: unique constraint %s is not registered in uniqueTargets", constraint))
 	}
 	return db.IsUniqueViolation(err, target.table, target.cols...)
 }

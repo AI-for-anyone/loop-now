@@ -198,7 +198,7 @@ func TestImportRefusals(t *testing.T) {
 		pool, src := pgimporttest.Source(t)
 		exec(t, pool, `INSERT INTO goose_db_version(version_id,is_applied) VALUES($1,true)`, pgschema.Latest+1)
 		dir := filepath.Join(t.TempDir(), "db")
-		if _, err := pgimport.Import(ctx, pgimport.Options{SourceURL: src, DBDir: dir}); err == nil || !strings.Contains(err.Error(), "迁移版本") {
+		if _, err := pgimport.Import(ctx, pgimport.Options{SourceURL: src, DBDir: dir}); err == nil || !strings.Contains(err.Error(), "migration version") {
 			t.Fatalf("版本不符应拒绝：%v", err)
 		}
 		if files := dbFiles(t, dir); len(files) != 0 {
@@ -211,7 +211,7 @@ func TestImportRefusals(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, db.DataFile), []byte("keep"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := pgimport.Import(ctx, pgimport.Options{SourceURL: src, DBDir: dir}); err == nil || !strings.Contains(err.Error(), "不覆盖") {
+		if _, err := pgimport.Import(ctx, pgimport.Options{SourceURL: src, DBDir: dir}); err == nil || !strings.Contains(err.Error(), "does not overwrite") {
 			t.Fatalf("已有库应拒绝：%v", err)
 		}
 		if b, err := os.ReadFile(filepath.Join(dir, db.DataFile)); err != nil || string(b) != "keep" {
@@ -226,7 +226,7 @@ func TestImportRefusals(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer lock.Release()
-		if _, err := pgimport.Import(ctx, pgimport.Options{SourceURL: src, DBDir: dir}); err == nil || !strings.Contains(err.Error(), "停掉服务") {
+		if _, err := pgimport.Import(ctx, pgimport.Options{SourceURL: src, DBDir: dir}); err == nil || !strings.Contains(err.Error(), "stop the server") {
 			t.Fatalf("服务占着目录时应拒绝：%v", err)
 		}
 	})
@@ -234,7 +234,7 @@ func TestImportRefusals(t *testing.T) {
 		pool, src := pgimporttest.Source(t)
 		exec(t, pool, `ALTER TABLE agents ADD COLUMN extra text`)
 		dir := filepath.Join(t.TempDir(), "db")
-		if _, err := pgimport.Import(ctx, pgimport.Options{SourceURL: src, DBDir: dir}); err == nil || !strings.Contains(err.Error(), "新库的 agents 没有列 extra") {
+		if _, err := pgimport.Import(ctx, pgimport.Options{SourceURL: src, DBDir: dir}); err == nil || !strings.Contains(err.Error(), "table agents in the new database has no column extra") {
 			t.Fatalf("结构不符应拒绝：%v", err)
 		}
 		if files := dbFiles(t, dir); len(files) != 0 {

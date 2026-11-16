@@ -27,7 +27,7 @@ func (s *Store) PublishTaskLarkSwitchTx(ctx context.Context, m *TaskMutation, ac
 	var raw []byte
 	err := m.Tx.QueryRow(ctx, `SELECT status,reservation_task_version,node_run_id,captured_request FROM task_lark_switch_actions WHERE actor_key=$1 AND action_id=$2 AND task_id=$3`, actor, action, m.Record.View.Task.ID).Scan(&state, &reservedVersion, &originalNode, &raw)
 	if err != nil {
-		return 0, false, notFoundIfNoRows(err, "Lark切换动作")
+		return 0, false, notFoundIfNoRows(err, "Lark switch action")
 	}
 	if state == "succeeded" {
 		var revision int64
@@ -35,7 +35,7 @@ func (s *Store) PublishTaskLarkSwitchTx(ctx context.Context, m *TaskMutation, ac
 		return revision, false, err
 	}
 	conflict := func() (int64, bool, error) {
-		return 0, false, apperr.Conflict("task_conflict", "原切换预留或节点条件已变化")
+		return 0, false, apperr.Conflict("task_conflict", "The original switch reservation or the node conditions have changed.")
 	}
 	old := m.Record.Current()
 	if (state != "pending" && state != "handoff") || old == nil || old.ID != originalNode || old.Status != "blocked" || m.Record.View.Task.Status != "blocked" || m.Record.Ended() || m.Record.View.Task.Version != reservedVersion {
@@ -159,7 +159,7 @@ func (s *Store) PublishTaskLarkSwitchTx(ctx context.Context, m *TaskMutation, ac
 		return 0, false, err
 	}
 	if tag.RowsAffected() != 1 {
-		return 0, false, errors.New("Lark切换预留未完成")
+		return 0, false, errors.New("the Lark switch reservation was not completed")
 	}
 	if _, err = m.Tx.Exec(ctx, `DELETE FROM task_lark_switch_fences WHERE actor_key=$1 AND action_id=$2 AND task_id=$3`, actor, action, next.TaskID); err != nil {
 		return 0, false, err

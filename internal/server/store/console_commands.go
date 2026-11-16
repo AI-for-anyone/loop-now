@@ -62,10 +62,10 @@ func (s *Store) InsertConsoleCompactRun(ctx context.Context, agentID, runID, ins
 			return err
 		}
 		if state == "missing" {
-			return apperr.Conflict(apperr.CodeSessionMissing, "会话文件丢失，请先在控制台确认重开会话")
+			return apperr.Conflict(apperr.CodeSessionMissing, "The session file is missing. Confirm reopening the session in the console first.")
 		}
 		if state != "active" || file == nil {
-			return apperr.Conflict(apperr.CodeSessionNone, "当前还没有会话，无需压缩")
+			return apperr.Conflict(apperr.CodeSessionNone, "There is no session yet, so there is nothing to compact.")
 		}
 		now := tx.Now()
 		queueSeq, err := tx.NextSeq(ctx, "runs.queue_seq")

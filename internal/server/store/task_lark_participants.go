@@ -26,7 +26,7 @@ func (s *Store) TaskLarkParticipants(ctx context.Context, id uuid.UUID) (taskmod
 	var raw []byte
 	var projectName string
 	if err = tx.QueryRow(ctx, `SELECT t.document,p.name FROM task_records t JOIN projects p ON p.id=t.project_id WHERE t.id=$1`, id).Scan(&raw, &projectName); err != nil {
-		return r.View, nil, notFoundIfNoRows(err, "任务")
+		return r.View, nil, notFoundIfNoRows(err, "Task")
 	}
 	if err = decodeTaskJSON(raw, &r); err != nil {
 		return r.View, nil, err
