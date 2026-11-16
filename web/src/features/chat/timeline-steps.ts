@@ -5,26 +5,28 @@ type Entry = Schemas['TimelineEntry']
 type Run = Schemas['Run']
 type Runtime = Schemas['AgentRuntime']
 
-// 节点颜色：中性浅蓝、开始回复孔版蓝、成功绿、失败朱红、进行中黄、打断荧光粉。
+// Node colors: neutral light blue, started-replying riso blue, success green, failure vermilion, in-progress yellow, interrupt
+// fluorescent pink.
 export type StepTone = 'neutral' | 'run' | 'ok' | 'fail' | 'warn' | 'hot'
 
 export interface TimelineStep {
   key: string
   at: string
   label: string
-  // 对应的字段名，等宽字体显示。
+  // The corresponding field name, shown in a monospaced font.
   field: string | null
   command: string | null
   detail: string | null
-  // 逐条列出的补充说明（同步的各个来源、Pi 错误输出的末尾片段）。
+  // Additional notes listed one per line (each synced source, the tail of Pi's error output).
   lines: string[]
-  // 原样显示的输出片段（等宽、保留换行）。
+  // An output snippet shown verbatim (monospaced, keeping line breaks).
   output: string | null
   duration: string | null
   tone: StepTone
-  // 细项：CLI 安装、配置同步归在“准备运行环境”下，模型调用归在“开始回复”之后，缩进显示。
+  // Sub-item: CLI install and config sync belong under “准备运行环境” (Preparing the environment), model calls come after
+  // “开始回复” (Started replying); shown indented.
   sub: boolean
-  // 扩展的对话请求转成的问题（对话里的一条 Inbox 消息）；有时可以跳到它。
+  // The question an extension's dialog request was turned into (an Inbox message in the conversation); when present, you can jump to it.
   questionId?: string | null
 }
 
@@ -35,14 +37,15 @@ function modelLabel(provider: string | null, model: string | null): string {
   return provider !== null && model !== null ? t.overview.usage.model(provider, model) : t.overview.usage.unknownModel
 }
 
-// 启动阶段的用时：到下一个阶段、进入回复或结束为止。
+// Duration of a startup phase: until the next phase, the start of the reply, or the end.
 const PHASE_BOUNDARY: ReadonlySet<Entry['type']> = new Set(['phase', 'running', 'ended'])
 
-// 进程条目上的运行时；旧记录没有，即 Pi。
+// The runtime on a process entry; old records don't have one, which means Pi.
 const runtimeName = (runtime: Runtime | undefined) => t.runtime.names[runtime ?? 'pi']
 
-// 启动阶段属于哪个运行时：取这一轮之后启动或复用的进程条目上的；没有进程条目（启动前就失败）时，
-// Claude Code 特有的 runtime_* 失败也说明是它；都拿不到时按 Pi。
+// Which runtime a startup phase belongs to: taken from the process entry started or reused after it in this turn; when there is no
+// process entry (it failed before starting),
+// a runtime_* failure, which is specific to Claude Code, also identifies it; when neither is available, assume Pi.
 function launchRuntime(entries: Entry[], from: number): Runtime | undefined {
   for (const entry of entries.slice(from + 1)) {
     if (entry.type === 'pi_started' || entry.type === 'pi_reused') return entry.runtime
@@ -50,8 +53,10 @@ function launchRuntime(entries: Entry[], from: number): Runtime | undefined {
   return entries.some((entry) => entry.type === 'ended' && entry.errorCode?.startsWith('runtime_')) ? 'claude-code' : undefined
 }
 
-// Claude Code 报告的订阅额度：info 是 claude 原样给的对象，字段可能缺或不是预期的类型，缺的不写。
-// 额度种类与状态不认识时原样显示；重置时间是秒级时间戳（也容忍毫秒与日期字符串）。
+// Subscription usage limits reported by Claude Code: info is the object exactly as claude gave it; fields may be missing or not of the
+// expected type, and missing ones are left out.
+// Unknown limit types and statuses are shown as is; the reset time is a timestamp in seconds (milliseconds and date strings are
+// tolerated too).
 function rateLimitStep(info: Record<string, unknown>): { field: string | null; detail: string; tone: StepTone } {
   const copy = t.timeline.detail.rateLimit
   const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : null)
@@ -75,8 +80,9 @@ function endedLabel(entry: Extract<Entry, { type: 'ended' }>): { label: string; 
   return { label: t.timeline.step.ended.user_interrupt, tone: 'hot' }
 }
 
-// 把时间线条目转为界面上的步骤。没有入队条目时（空闲时发送，或本功能上线前的回复）按执行的入队时间补一步。
-// bash 显示记录中的实际命令；不展示其他参数或工具输出。
+// Turn timeline entries into steps for the UI. When there is no queued entry (sent while idle, or a reply from before this feature
+// shipped), add a step at the run's queued time.
+// bash shows the actual command from the record; no other arguments or tool output are shown.
 export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entries: Entry[]): TimelineStep[] {
   const steps: TimelineStep[] = []
   const step = (entry: { type: string; at: string }, index: number, fields: Partial<TimelineStep> & { label: string }): TimelineStep => ({
@@ -103,7 +109,7 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
     )
   }
 
-  // 最近一个“Pi 启动”阶段的步骤；新启动或复用进程的说明并入其中。
+  // The step of the most recent “Pi 启动” (Pi start) phase; the note about a newly started or reused process is merged into it.
   let launching: TimelineStep | null = null
   entries.forEach((entry, index) => {
     switch (entry.type) {
@@ -121,7 +127,8 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
         steps.push(
           step(entry, index, {
             label: t.timeline.step.promoted[entry.to],
-            // Inbox 消息逐条转换时记在接收它的打断提醒上，带消息 ID。
+            // When Inbox messages are converted one by one, this is recorded on the interrupt reminder that receives the message, with
+            // the message ID.
             field: entry.messageId ? `${t.timeline.field.promoted(entry.from, entry.to)} · ${t.timeline.field.message(entry.messageId)}` : t.timeline.field.promoted(entry.from, entry.to),
             tone: entry.to === 'interrupt' ? 'hot' : 'neutral',
           }),
@@ -296,8 +303,9 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
             : step(entry, index, { label: t.timeline.step.abort_requested, field: t.timeline.field.abort, tone: 'hot' }),
         )
         break
-      // Agent 侧扩展经 ctx.ui 发来的请求：通知与状态是淡色的一步，警告、错误带颜色；对话类写明结局（已回答、已取消、已过期），
-      // 转成了问题的可以跳到对话里的那个问题。
+      // Requests from an Agent-side extension via ctx.ui: notifications and statuses are a faint step, warnings and errors are
+      // colored; dialog-type requests state their outcome (answered, cancelled, expired),
+      // and those turned into a question can jump to that question in the conversation.
       case 'extension_ui': {
         const ui = t.plugins.chat.ui
         const dialog = entry.method !== 'notify' && entry.method !== 'setStatus'
@@ -335,7 +343,7 @@ export function buildSteps(run: Pick<Run, 'queuedAt' | 'whenBusy'> | null, entri
   return steps
 }
 
-// 回复的总用时：从入队到结束；进行中时为 null。
+// Total duration of a reply: from queued to ended; null while in progress.
 export function runDurationMs(run: Pick<Run, 'queuedAt' | 'endedAt'>): number | null {
   return run.endedAt ? ms(run.queuedAt, run.endedAt) : null
 }

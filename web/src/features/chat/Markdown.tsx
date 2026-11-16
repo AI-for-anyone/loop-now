@@ -8,7 +8,7 @@ import { remarkHttpLinks } from './remark-http-links'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { t } from '@/i18n'
 
-// react-markdown 会把语法树节点作为 node 传给自定义组件，不能透传到 DOM 上。
+// react-markdown passes the syntax tree node to custom components as node, which must not be passed through to the DOM.
 function withoutNode<T extends ExtraProps>({ node, ...props }: T) {
   void node
   return props
@@ -20,7 +20,7 @@ function nodeText(node: ExtraProps['node']): string {
   return node?.children.map(child => child.type === 'text' ? child.value : child.type === 'element' ? nodeText(child) : '').join('') ?? ''
 }
 
-// 代码块的语言取自 rehype-highlight 保留的 language-* 类名；没有写语言时不显示。
+// The code block's language comes from the language-* class name that rehype-highlight keeps; nothing is shown when no language is given.
 function codeLanguage(node: ExtraProps['node']): string | null {
   const code = node?.children.find((child) => child.type === 'element' && child.tagName === 'code')
   const classes = code?.type === 'element' ? code.properties.className : undefined
@@ -28,8 +28,8 @@ function codeLanguage(node: ExtraProps['node']): string | null {
   return language ? language.slice('language-'.length) : null
 }
 
-// 代码块：孔版蓝加网点底、白字、粉色印刷投影；顶部一行是语言名与复制操作。
-// 复制的内容取自渲染后的文字，即代码原文，不含高亮标记。
+// Code block: riso blue with a halftone-dot fill, white text, pink print shadow; the top row holds the language name and the copy action.
+// What gets copied is taken from the rendered text, i.e. the original code, without highlighting markup.
 function CodeBlock(allProps: ComponentProps<'pre'> & ExtraProps) {
   const { text, streaming } = useContext(MarkdownSource)
   const language = codeLanguage(allProps.node)
@@ -67,8 +67,8 @@ function CodeBlock(allProps: ComponentProps<'pre'> & ExtraProps) {
   )
 }
 
-// 链接：危险协议被 urlTransform 清空后按文字显示；只有绝对 http(s) 与 mailto 链接在新标签页打开，
-// 页内锚点（如脚注）留在当前页跳转。
+// Links: once urlTransform has emptied a dangerous protocol, the link is shown as text; only absolute http(s) and mailto links open in
+// a new tab, while in-page anchors (e.g. footnotes) jump within the current page.
 function Link(allProps: ComponentProps<'a'> & ExtraProps) {
   const { href, ...props } = withoutNode(allProps)
   if (!href) return <span title={props.title}>{props.children}</span>
@@ -80,7 +80,8 @@ function Image(allProps: ComponentProps<'img'> & ExtraProps) {
   return <img {...withoutNode(allProps)} loading="lazy" referrerPolicy="no-referrer" className="max-w-full" />
 }
 
-// 插件的 README 不在控制台里：相对链接没有可解析的位置，只显示文字；绝对链接与页内锚点（如脚注）同回复。
+// A plugin's README doesn't live in the console: relative links have nowhere to resolve to, so only their text is shown; absolute
+// links and in-page anchors (e.g. footnotes) behave as in replies.
 function ReadmeLink(allProps: ComponentProps<'a'> & ExtraProps) {
   const href = allProps.href
   if (href && (/^(https?:\/\/|mailto:)/i.test(href) || href.startsWith('#'))) return <Link {...allProps} />
@@ -88,13 +89,13 @@ function ReadmeLink(allProps: ComponentProps<'a'> & ExtraProps) {
   return <span title={title}>{children}</span>
 }
 
-// README 里的图片不加载，只显示替代文字。
+// Images in a README aren't loaded; only their alt text is shown.
 function AltText(allProps: ComponentProps<'img'> & ExtraProps) {
   const { alt } = withoutNode(allProps)
   return alt ? <span>{alt}</span> : null
 }
 
-// 表格用控制台的表格组件，外层可以单独横向滚动。
+// Tables use the console's table components, whose wrapper can scroll horizontally on its own.
 const tableComponents = {
   table: (props: ComponentProps<'table'> & ExtraProps) => <Table {...withoutNode(props)} />,
   thead: (props: ComponentProps<'thead'> & ExtraProps) => <TableHeader {...withoutNode(props)} />,
@@ -104,7 +105,7 @@ const tableComponents = {
   td: (props: ComponentProps<'td'> & ExtraProps) => <TableCell {...withoutNode(props)} />,
 }
 
-// 回复中的输出光标：1s 步进闪烁；减少动态效果时停止闪烁，常亮显示。
+// The output cursor while replying: blinks in 1s steps; with reduced motion it stops blinking and stays on.
 const cursorClass = 'riso-cursor ml-1 inline-block h-[1.2em] w-2.5 bg-riso-pink align-[-0.25em] motion-reduce:animate-none'
 
 export function Cursor() {
@@ -113,7 +114,8 @@ export function Cursor() {
 
 type HastNode = { type: string; tagName?: string; value?: string; properties?: Record<string, unknown>; children?: HastNode[] }
 
-// 脚注标题的 id 固定为 footnote-label，不受 clobberPrefix 影响；这里给它和引用它的 aria-describedby 加上本条回复的前缀。
+// The footnote heading's id is always footnote-label and isn't affected by clobberPrefix; here it and the aria-describedby that
+// references it get this reply's prefix.
 function rehypePrefixFootnoteLabel(prefix: string) {
   const id = prefix + 'footnote-label'
   const visit = (node: HastNode) => {
@@ -130,7 +132,8 @@ function rehypePrefixFootnoteLabel(prefix: string) {
 const TEXT_BLOCKS = new Set(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
 const CONTAINERS = new Set(['ul', 'ol', 'li', 'blockquote'])
 
-// 把输出光标插在最后一段文字的末尾（沿列表、引用往里找），与文字同行；最后一块是代码块、表格等时放在它们之后。
+// Insert the output cursor at the end of the last paragraph of text (searching inward through lists and blockquotes), on the same
+// line as the text; when the last block is a code block, table or the like, put it after that block.
 function rehypeCursor() {
   return (tree: HastNode) => {
     let parent = tree
@@ -145,11 +148,13 @@ function rehypeCursor() {
   }
 }
 
-// 回复按 Markdown 渲染。不启用原始 HTML：回复中的 HTML 按文字显示，脚本不会执行；
-// 链接经 react-markdown 默认的 urlTransform 过滤危险协议。
-// 每条回复各自渲染，脚注 id 加上本实例的前缀，多条回复同用 [^1] 时 id 不重复。
-// cursor 为真时（回复进行中）在文字末尾显示输出光标；readme 为真时按插件 README 处理相对链接与图片。
-// leadLabels：列表项开头的加粗词做成黄色小标签，用于回复与消息；文档（插件 README、文件夹里的 Markdown 文件）不做。
+// Replies are rendered as Markdown. Raw HTML is not enabled: HTML in a reply is shown as text and scripts never run;
+// links go through react-markdown's default urlTransform, which filters out dangerous protocols.
+// Each reply renders separately, and footnote ids get this instance's prefix, so ids don't collide when several replies all use [^1].
+// When cursor is true (reply in progress), the output cursor shows at the end of the text; when readme is true, relative links and
+// images are handled as for a plugin README.
+// leadLabels: the bold word at the start of a list item becomes a small yellow label; used for replies and messages, not for documents
+// (plugin READMEs, Markdown files in folders).
 export const Markdown = memo(function Markdown({ text, cursor = false, readme = false, leadLabels = !readme }: { text: string; cursor?: boolean; readme?: boolean; leadLabels?: boolean }) {
   const prefix = `md-${useId().replace(/[^\w-]/g, '')}-`
   return (
@@ -162,7 +167,8 @@ export const Markdown = memo(function Markdown({ text, cursor = false, readme = 
           footnoteLabel: t.chat.footnoteLabel,
           footnoteBackLabel: (referenceIndex, rereferenceIndex) => t.chat.footnoteBackLabel(referenceIndex + 1, rereferenceIndex),
         }}
-        // 标签放在光标之后处理：光标跟着标签后面的文字一起包起来，仍在文字末尾。
+        // Labels are processed after the cursor: the cursor gets wrapped together with the text after the label and stays at the end
+        // of the text.
         rehypePlugins={[[rehypeHighlight, { detect: false, ignore: ['mermaid'] }], [rehypePrefixFootnoteLabel, prefix], ...(cursor ? [rehypeCursor] : []), ...(leadLabels ? [rehypeLeadLabel] : [])]}
         components={{ pre: CodeBlock, a: readme ? ReadmeLink : Link, img: readme ? AltText : Image, ...tableComponents }}
       >

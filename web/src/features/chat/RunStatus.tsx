@@ -7,8 +7,10 @@ import { runStatusText } from './run-status-text'
 
 type Run = Schemas['Run']
 
-// 回复的状态，放在回复上方名称与时间的那一行：进行中显示阶段文字；已打断、服务端重启中断与失败显示为结局印章，
-// 已打断用粉色、服务端重启中断用藏青，都不用红色；正常完成不显示。状态都是静态的，回复中的动态由输出光标表示。
+// A reply's status, on the name-and-time line above the reply: in progress shows the phase text; interrupted, cut off by a server
+// restart, and failed show as outcome stamps,
+// interrupted in pink and cut off by a server restart in navy, neither in red; a normal completion shows nothing. Statuses are all
+// static; activity during a reply is conveyed by the output cursor.
 export function RunStatusBadge({ run }: { run: Run }) {
   if (run.status === 'failed') {
     return (
@@ -33,7 +35,8 @@ export function RunStatusBadge({ run }: { run: Run }) {
   )
 }
 
-// 失败的回复另加浅红说明块：失败原因的中文说明与服务端给出的错误信息。
+// A failed reply also gets a light red note block: the localized explanation of the failure reason and the error message from the
+// server.
 export function FailureNote({ run }: { run: Run }) {
   if (run.status !== 'failed') return null
   return (
@@ -44,7 +47,7 @@ export function FailureNote({ run }: { run: Run }) {
   )
 }
 
-// 工具进行中的旋转图标；减少动态效果时去掉旋转图标，换成静态的“…”。
+// Spinning icon while a tool is running; with reduced motion the spinner is removed and replaced by a static "…".
 function ToolSpinner() {
   return (
     <>
@@ -56,9 +59,9 @@ function ToolSpinner() {
   )
 }
 
-// 工具调用只显示名称与状态，不显示参数与输出。Run.tools 是状态变化的记录，
-// 同一个 toolCallId 可能有多项，按出现顺序合并，只显示最新的状态。
-// 这一轮被打断时，没有结束的工具变灰、改为虚线边框，标明已打断。
+// Tool calls show only their name and state, not arguments or output. Run.tools is a log of state changes,
+// so the same toolCallId may have several entries; they are merged in order of appearance and only the latest state is shown.
+// When this turn was interrupted, tools that hadn't finished turn gray with a dashed border, marked as interrupted.
 export function ToolList({ tools: events, interrupted = false }: { tools: Schemas['ToolEvent'][]; interrupted?: boolean }) {
   const latest = new Map<string, Schemas['ToolEvent']>()
   for (const event of events) latest.set(event.toolCallId, event)

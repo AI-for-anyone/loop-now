@@ -3,9 +3,10 @@ import { RulerMark, Stub } from '@/components/Sheet'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 
-// 刻度尺滚动跟随可见轮时，刻度与上下边缘留出的距离。
+// When the ruler scrolls to follow the visible turns, the distance kept between the ticks and the top and bottom edges.
 const FOLLOW_MARGIN = 16
-// 预览（约 32px 高）的中线离刻度尺上下边至少这么远，免得伸到纸张外面被裁掉。
+// The preview's center line (the preview is about 32px tall) stays at least this far from the ruler's top and bottom edges, so it
+// doesn't stick out of the sheet and get clipped.
 const HINT_HALF = 16
 
 export interface RulerTurn {
@@ -19,31 +20,39 @@ interface MessageRulerProps {
   turns: RulerTurn[]
   visible: ReadonlySet<string>
   onJump: (key: string) => void
-  // 第一条刻度是第几轮。不知道时（更早的历史还没加载完，也没有给出前面的轮数）为 null：只画刻度，不写数字。
+  // The turn number of the first tick. null when unknown (earlier history isn't fully loaded and no count of the preceding turns was
+  // given): only ticks are drawn, without numbers.
   firstNumber: number | null
-  // 底部的总轮数；不知道时不显示。
+  // The total turn count at the bottom; not shown when unknown.
   total: number | null
   className?: string
 }
 
-// 纸张右侧票根里的刻度尺，取代原生滚动条：一轮一条刻度，贴着纸张右缘，从上到下与对话流同序；每 5 轮一条长刻度带数字，底部是总轮数。
-// 当前可见的轮次用一笔黄色记号笔罩住（从第一条可见刻度到最后一条），左侧一个粉色箭头。
-// 悬停或聚焦刻度时刻度变长、变粉，并在左侧单行显示这一轮的开头；点击跳到那一轮。
-// 刻度间距随票根高度变化，上限 23px、下限 8px；再放不下就让刻度尺自己滚动，并跟着可见轮滚动。
-// 不加过渡与平滑滚动：控制台只保留三个动效，减少动态效果时也就不用另做处理。
+// The ruler in the stub on the right of the sheet, replacing the native scrollbar: one tick per turn, against the right edge of the
+// sheet, in the same top-to-bottom order as the conversation flow; every 5 turns a long tick with a number, and the total turn count at
+// the bottom.
+// The currently visible turns are covered by one yellow highlighter mark (from the first visible tick to the last), with a pink arrow on
+// the left.
+// Hovering or focusing a tick makes it longer and pink and shows the start of that turn on one line to its left; clicking jumps to that
+// turn.
+// Tick spacing follows the stub's height, at most 23px and at least 8px; when they still don't fit, the ruler scrolls on its own and
+// follows the visible turns.
+// No transitions or smooth scrolling: the console keeps only three animations, so reduced motion needs no special handling either.
 export function MessageRuler({ turns, visible, onJump, firstNumber, total, className }: MessageRulerProps) {
   const nav = useRef<HTMLElement>(null)
   const list = useRef<HTMLOListElement>(null)
-  // 悬停与聚焦各记一份；两者都有时显示悬停的那条。
+  // Hover and focus are tracked separately; when both are set, show the hovered one.
   const [hovered, setHovered] = useState<Hint | null>(null)
   const [focused, setFocused] = useState<Hint | null>(null)
-  // 键盘聚焦时才保留预览：鼠标点击也会让按钮获得焦点（按下时），那时移开鼠标预览就该消失。
+  // Keep the preview only for keyboard focus: a mouse click also focuses the button (on press), and then the preview should disappear
+  // once the mouse moves away.
   const pointing = useRef(false)
 
   const visibleList = turns.flatMap((turn, index) => (visible.has(turn.key) ? [index] : []))
   const firstVisible = visibleList[0] ?? -1
   const lastVisible = visibleList[visibleList.length - 1] ?? -1
-  // 刻度尺可以滚动时，让可见轮的刻度留在刻度尺的可视范围里；可见轮多到放不下时以最上面的一条为准。
+  // When the ruler can scroll, keep the ticks of the visible turns within its visible range; when there are too many visible turns to
+  // fit, the topmost one wins.
   const visibleIndexes = visibleList.join(',')
   useLayoutEffect(() => {
     const el = list.current
@@ -58,8 +67,9 @@ export function MessageRuler({ turns, visible, onJump, firstNumber, total, class
     else if (bottom > el.scrollTop + el.clientHeight) el.scrollTop = Math.min(top, bottom - el.clientHeight)
   }, [visibleIndexes])
 
-  // 预览显示在票根左侧、与刻度对齐。刻度尺会滚动并裁掉溢出的内容，预览因此放在外层，按刻度的位置算出高度，
-  // 并夹在票根上下边之内。
+  // The preview shows to the left of the stub, aligned with the tick. The ruler scrolls and clips overflowing content, so the preview
+  // lives in the outer layer, with its height (vertical position) computed from the tick's position,
+  // clamped within the stub's top and bottom edges.
   const place = (key: string): Hint | null => {
     const index = turns.findIndex((turn) => turn.key === key)
     const tick = index >= 0 ? list.current?.children[index] : undefined
@@ -86,7 +96,8 @@ export function MessageRuler({ turns, visible, onJump, firstNumber, total, class
           const long = number !== null && number % 5 === 0
           return (
             <li key={turn.key} className="relative flex min-h-2 flex-[0_1_23px]">
-              {/* 记号笔画在第一条可见刻度所在的这一格里：每格一样高，按格数算出要罩住的高度，刻度间距变了也不用量。 */}
+              {/* The highlighter mark is drawn in the cell of the first visible tick: every cell is the same height, so the height to
+                  cover is computed from the number of cells, with no measuring needed when the tick spacing changes. */}
               {index === firstVisible && (
                 <RulerMark
                   data-ruler-mark

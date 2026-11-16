@@ -21,24 +21,26 @@ import { describeError } from '@/lib/errors'
 import { applyCommand, matchCommands, slashToken, type Command } from './slash-commands'
 import { SlashCommandMenu } from './SlashCommandMenu'
 
-// 编辑撤回的排队消息时，把原文与图片放回输入框；输入框里已有的内容保留在前面。
+// When a queued message is withdrawn for editing, put its text and images back into the input box; whatever is already in the input
+// box stays in front.
 export interface ComposerHandle {
   refill: (text: string, images: ImageDraft[]) => void
   resume: (sessionId: string) => void
 }
 
-// 停止当前回复：忙时输入框为空，发送按钮换成停止。
+// Stop the current reply: when busy and the input box is empty, the send button turns into a stop button.
 export interface StopControl {
   pending: boolean
-  // 上次停止的结果不明，再点沿用原 actionId。
+  // The outcome of the last stop is unknown; clicking again reuses the original actionId.
   retry: boolean
   onStop: () => void
 }
 
-// 回复一条问题：输入框上方显示回复谁的问题，发出的文字作为这个问题的回答（不是普通对话消息）。
+// Answering a question: above the input box it shows whose question is being answered, and the text sent becomes the answer to that
+// question (not an ordinary conversation message).
 export interface QuestionReply {
   message: Schemas['InboxMessage']
-  // 提问的一方，显示在回复提示里。
+  // The party who asked, shown in the reply hint.
   name: string
   maxBytes?: number
   onCancel: () => void
@@ -48,26 +50,31 @@ export interface QuestionReply {
 interface ComposerProps {
   ref?: Ref<ComposerHandle>
   agentId: string
-  // 忙时输入框的占位文字里用到。
+  // Used in the input box placeholder while busy.
   agentName: string
   busy: boolean
   disabled: boolean
-  // 会话文件丢失时，如果 /resume 此刻可用（以服务端的命令列表为准），仍允许无图片的 /resume，其余输入继续受 disabled 门禁约束。
-  // /resume 不可用（Claude Code 的 Agent）时不放行：不留只能输入一条必被拒绝的命令的死路。
+  // When the session file is missing and /resume is available right now (per the server's command list), an image-free /resume is still
+  // allowed; all other input stays behind the disabled gate.
+  // When /resume isn't available (a Claude Code Agent), nothing is let through: don't leave a dead end where the only thing you can type
+  // is a command that is bound to be rejected.
   allowResumeWhenDisabled?: boolean
   imageLimits?: ImageLimits | null
   maxMessageBytes: number | undefined
-  // 发送成功后把结果交给对话页，历史请求进行中时也能显示这条消息。
+  // After a successful send, hand the result to the chat page so the message shows even while a history request is in flight.
   onSent: (result: Schemas['SendMessageResult']) => void
-  // 以 / 开头的消息被平台或插件认领时：结果与原来的命令，由对话页显示成一行，不算发出的消息。
-  // /copy 的内容没能写进剪贴板时带上 copyFailed，对话页在那一行给出手动复制的办法。
+  // When a message starting with / is claimed by the platform or a plugin: the result and the original command, which the chat page
+  // shows as one line; it doesn't count as a sent message.
+  // When the /copy content couldn't be written to the clipboard, copyFailed is passed along and the chat page offers a way to copy it
+  // by hand on that line.
   onCommand?: (result: Schemas['ConsoleCommandResult'], command: string, outcome?: { copyFailed: boolean }) => void
-  // 贴在输入框顶上的排队消息，由对话页给出。
+  // Queued messages attached to the top of the input box, provided by the chat page.
   queue?: ReactNode
-  // 输入区下方的一行：左边是忙碌提示（接着是按键说明），右边是实时连接状态，都由对话页给出。
+  // The line below the input area: the busy hint on the left (followed by the key hints) and the live connection status on the right,
+  // both provided by the chat page.
   status?: ReactNode
   connection?: ReactNode
-  // 有进行中的回复时由对话页给出。
+  // Provided by the chat page when a reply is in progress.
   stop?: StopControl
   reply?: QuestionReply
 }
@@ -75,10 +82,10 @@ interface ComposerProps {
 const encoder = new TextEncoder()
 type CommandList = Schemas['AgentCommandList']
 
-// 服务端列出的平台内置命令名；列表还没取到时为 null。
+// Names of the built-in platform commands listed by the server; null while the list hasn't been fetched yet.
 const platformNames = (list: CommandList | undefined) => (list ? new Set(list.commands.filter((command) => command.source === 'platform').map((command) => command.name)) : null)
 
-// 边框归外面的输入框容器所有，文字区按内容增高，上限后独立滚动。
+// The border belongs to the outer input box container; the text area grows with its content and scrolls on its own past the maximum.
 const inputClass =
   'field-sizing-fixed min-h-10 max-h-60 w-full flex-none resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0 py-2 text-[15.5px] leading-6 shadow-none focus-visible:shadow-none disabled:bg-transparent max-nav:text-base'
 
@@ -93,34 +100,39 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
   const [localError, setLocalError] = useState<string | null>(null)
   const [confirmNew, setConfirmNew] = useState(false)
   const [confirmResume, setConfirmResume] = useState(false)
-  // 只有从列表发起的恢复保存原草稿；手动输入命令仍保持原确认行为。
+  // Only a resume started from the list saves the original draft; a command typed by hand keeps the original confirmation behavior.
   const [resumeDraft, setResumeDraft] = useState<string | null>(null)
   const answer = useAnswerQuestion()
   const replyId = reply?.message.id
-  // "/" 菜单：输入以 "/" 开头、光标还在第一个词里时打开，按这个词筛选命令；Esc 关掉后，这个词变了再打开。回复问题时不显示菜单。
-  // 命令只认服务端的列表（GET /agents/{id}/commands）：先是平台内置命令，带此刻能不能用；然后是 Pi 命令。
+  // The "/" menu: opens when the input starts with "/" and the caret is still in the first word, and filters commands by that word;
+  // after Esc closes it, it reopens once that word changes. The menu isn't shown while answering a question.
+  // Commands come only from the server's list (GET /agents/{id}/commands): first the built-in platform commands, each with whether it
+  // can be used right now; then the Pi commands.
   const [caret, setCaret] = useState(0)
   const [dismissed, setDismissed] = useState<string | null>(null)
   const [active, setActive] = useState(0)
-  // 会话丢失、又允许 /resume 时也要读列表：/resume 此刻可用才放开输入框。
+  // The list must also be read when the session is missing and /resume is allowed: the input box opens up only if /resume is available
+  // right now.
   const gate = disabled && allowResumeWhenDisabled
   const token = reply || (disabled && !gate) ? null : slashToken(text, caret)
   const menuRequested = token !== null && dismissed !== token
   if (token === null && dismissed !== null) setDismissed(null)
   const commands = useAgentCommands(agentId, menuRequested || gate)
   const listed = commands.data?.commands ?? []
-  // 读不到列表时不把输入框锁死：照旧放行 /resume，由服务端判断（/resume 是会话丢失后唯一不丢上下文的出路）。
+  // Don't lock the input box when the list can't be read: let /resume through anyway and let the server decide (after the session is
+  // lost, /resume is the only way out that keeps the context).
   const resumeOpen = gate && (commands.isError || listed.some((command) => command.source === 'platform' && command.name === 'resume' && command.available))
   const resumeAllowed = resumeOpen && !reply && (images.length === 0 || confirmResume) && /^\/resume(?:\s+\S+)?$/.test(text.trim())
   const inputDisabled = disabled && !resumeOpen
   const submitDisabled = disabled && !resumeAllowed
-  // 带图片的 "/" 文字是普通消息，不提示平台命令；会话丢失时只提示 /resume。
+  // "/" text with images is an ordinary message, so platform commands aren't suggested; when the session is missing, only /resume is
+  // suggested.
   const pool = (images.length > 0 ? listed.filter((command) => command.source !== 'platform') : listed).filter((command) => !disabled || (command.source === 'platform' && command.name === 'resume'))
   const matched = matchCommands(pool, token ?? '/')
-  // 此刻不能用的命令不能选，置灰列在菜单下方并写明原因。
+  // Commands that can't be used right now can't be chosen; they are grayed out at the bottom of the menu with the reason.
   const selectable = matched.filter((command) => command.available)
   const blocked = matched.filter((command) => !command.available)
-  // 会话丢失时只在有 /resume 可提示、或读不到列表（要说明原因）时打开菜单。
+  // When the session is missing, open the menu only if there is a /resume to suggest, or the list can't be read (the reason must be shown).
   const menuOpen = menuRequested && !inputDisabled && (matched.length > 0 || ((!disabled || commands.isError) && images.length === 0))
   const menuStatus = matched.length > 0
     ? null
@@ -128,7 +140,8 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
       ? t.chat.commands.failed(describeError(commands.error))
       : !commands.data
         ? t.chat.commands.loading
-        // 列表写明了运行时：不是 Pi 的 Agent 没有 Pi 命令（运行多少次也不会有）；Pi 的 Agent 还没启动过时才说“运行一次后才有”。
+        // The list states the runtime: a non-Pi Agent has no Pi commands (no matter how many times it runs); only for a Pi Agent that
+        // has never started do we say “运行一次后才有” (The command list appears after the Agent has run once).
         : commands.data.runtime !== 'pi'
           ? t.chat.commands.noPi(t.runtime.names[commands.data.runtime])
           : commands.data.capturedAt === null
@@ -154,7 +167,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
     setActive(next)
     document.getElementById(optionId(next))?.scrollIntoView?.({ block: 'nearest' })
   }
-  // 进入回复问题的模式时把光标放进输入框。
+  // Put the cursor in the input box when entering question-reply mode.
   useEffect(() => {
     if (replyId) editorRef.current?.focus()
   }, [replyId])
@@ -162,7 +175,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
   useImperativeHandle(ref, () => ({
     refill: (value, drafts) => {
       setText((current) => (current.trim() === '' ? value : `${current}\n${value}`))
-      // 放回的文字光标在末尾，不当作正在输入命令。
+      // For text put back, the caret is at the end, so it doesn't count as typing a command.
       setCaret(Number.MAX_SAFE_INTEGER)
       setImages((current) => [...current, ...drafts])
       editorRef.current?.focus()
@@ -171,13 +184,14 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
       if (replyId || busyRequest.current) return
       setResumeDraft(text)
       setText(`/resume ${sessionId}`)
-      // 这不是在输入命令：光标算在末尾，命令菜单不打开（菜单只看第一个词，拿整句去关它是关不掉的）。
+      // This isn't typing a command: the caret counts as being at the end, so the command menu doesn't open (the menu only looks at the
+      // first word, so dismissing it with the whole sentence wouldn't close it).
       setCaret(Number.MAX_SAFE_INTEGER)
       setConfirmResume(true)
     },
   }), [replyId, text])
 
-  // 补全命令后把光标放到命令后面的空白之后。
+  // After completing a command, put the caret after the whitespace following the command.
   useLayoutEffect(() => {
     const at = pendingCaret.current
     if (at === null || !editorRef.current) return
@@ -203,7 +217,8 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
     return () => observer.disconnect()
   }, [text])
 
-  // 忙时 Enter 排队，⌘／Ctrl+Enter 作为打断发送；点发送按钮为排队。平台命令不自动排队重试。
+  // While busy, Enter queues and ⌘/Ctrl+Enter sends as an interrupt; clicking the send button queues. Platform commands are not
+  // automatically retried as queued messages.
   const submit = async (whenBusy: Schemas['WhenBusy'] = 'queue', confirmed = false) => {
     if (submitDisabled || busyRequest.current) return
     setLocalError(null); setImageError(null); setUploads({})
@@ -216,18 +231,22 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
       await answerQuestion(reply, whenBusy)
       return
     }
-    // 从列表确认的恢复始终是平台命令；已有图片留在输入框，不上传也不随命令发送。
+    // A resume confirmed from the list is always a platform command; images already attached stay in the input box and are neither
+    // uploaded nor sent with the command.
     const confirmedResume = confirmed && confirmResume && /^\/resume\s+\S/.test(text.trim())
-    // 这条文字是不是平台内置命令，只认服务端列的命令名；列表还没取到时现取。
+    // Whether this text is a built-in platform command is decided only by the command names the server lists; if the list hasn't been
+    // fetched yet, fetch it now.
     const word = images.length === 0 ? /^\/(\S+)/.exec(text.trim())?.[1] : undefined
     let names = platformNames(commands.data)
     if (word !== undefined && names === null) {
-      // 现取列表期间发送按钮不可点，表示正在处理；不重试，取不到就按下面的退路走。
+      // While the list is being fetched the send button can't be clicked, showing that work is in progress; no retry: if it can't be
+      // fetched, take the fallback below.
       busyRequest.current = true; setSubmitting(true)
-      try { names = platformNames(await client.ensureQueryData({ ...agentCommandsQuery(agentId), retry: false })) } catch { /* 取不到列表：见下 */ } finally { busyRequest.current = false; setSubmitting(false) }
+      try { names = platformNames(await client.ensureQueryData({ ...agentCommandsQuery(agentId), retry: false })) } catch { /* List unavailable: see below. */ } finally { busyRequest.current = false; setSubmitting(false) }
     }
     const platform = confirmedResume || (word !== undefined && names?.has(word) === true)
-    // 列表取不到时不知道哪些是平台命令，但 /new 与 /resume <id> 仍先确认：多问一句没有坏处，漏掉确认会直接重开或切换会话。
+    // Without the list we don't know which ones are platform commands, but /new and /resume <id> still ask for confirmation first:
+    // asking once more does no harm, while skipping the confirmation would restart or switch the session outright.
     const guarded = platform || (word !== undefined && names === null)
     if (!confirmed && guarded && /^\/new(?:\s|$)/.test(text.trim())) {
       setConfirmNew(true)
@@ -247,7 +266,8 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
     try {
       const refs = await uploadMessageImages({ kind: 'agent', agentId }, sentImages, setUploads)
       const input = { text: sent, ...(refs.length ? { imageIds: refs.map(ref => ref.id) } : {}) }
-      // 普通消息在空闲判断过期后按所选方式重发；平台命令直接报告忙碌，不转成排队消息。
+      // An ordinary message is resent the chosen way when the idle check turns out to be stale; a platform command just reports busy and
+      // is not turned into a queued message.
       const result = platform
         ? await send.mutateAsync(input)
         : await send.mutateAsync(busy ? { ...input, whenBusy } : input).catch((error: unknown) => {
@@ -255,12 +275,15 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
           return send.mutateAsync({ ...input, whenBusy })
         })
       if (isCommandResult(result)) {
-        // /copy：这时已经过了一次网络往返，Safari 里不再算在按键手势内，写剪贴板可能被拒绝；用 http 的局域网地址打开时
-        // 根本没有 navigator.clipboard。写不进去不算命令失败：内容照常交给对话页，由那一行给出手动复制的办法。
+        // /copy: a network round trip has already happened by now, so Safari no longer counts this as part of the key gesture and may
+        // refuse the clipboard write; when the console is opened at an http LAN address, there is no navigator.clipboard at all.
+        // Failing to write doesn't count as the command failing: the content goes to the chat page as usual, and that line offers a way
+        // to copy it by hand.
         const copyFailed = result.source === 'platform' && result.copyText != null && !(await copyText(result.copyText))
         if (result.source === 'platform' && result.exportFormat) await downloadAgentSession(agentId, result.exportFormat)
         onCommand?.(result, sent, copyFailed ? { copyFailed } : undefined)
-        // 命令改变了会话（/new、/resume）时服务端会推 session.updated，命令列表在那时重读，这里不另读。
+        // When the command changed the session (/new, /resume), the server pushes session.updated and the command list is reread then,
+        // so it isn't reread here.
       } else {
         upsertMessage(client, agentId, result.message)
         onSent(result)
@@ -269,7 +292,8 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
         setText(resumeDraft)
         setResumeDraft(null)
       } else {
-        // 去掉已发出的部分，只留下发送期间新输入的文字；已发出的部分在发送期间被改动过时全部保留。
+        // Remove the part that was sent and keep only text typed during the send; if the sent part was changed during the send, keep
+        // everything.
         setText((current) => (current.startsWith(sent) ? current.slice(sent.length) : current))
       }
       setImages(current => current.filter(image => !sentImages.some(sent => sent.id === image.id)))
@@ -278,7 +302,8 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
     } finally { busyRequest.current = false; setSubmitting(false) }
   }
 
-  // 回复问题：只发文字，Agent 正忙时同样按排队或打断发送。是否记为答案以响应为准，记为普通留言时在下方说明。
+  // Answering a question: text only; when the Agent is busy it is likewise sent as queued or as an interrupt. Whether it is recorded as
+  // the answer depends on the response; when it is saved as an ordinary note, a notice below says so.
   const answerQuestion = async (target: QuestionReply, whenBusy: Schemas['WhenBusy']) => {
     if (images.length) { setLocalError(t.consoleInbox.replyNoImages); return }
     if (target.maxBytes !== undefined && encoder.encode(text).length > target.maxBytes) { setLocalError(t.chat.tooLong(target.maxBytes)); return }
@@ -294,7 +319,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    // 输入法组字时的按键用于上屏，不补全、不发送。
+    // Key presses during IME composition commit the composed text; they neither complete nor send.
     if (event.nativeEvent.isComposing || event.keyCode === 229) return
     if (menuOpen) {
       if (event.key === 'Escape') {
@@ -302,7 +327,8 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
         setDismissed(token)
         return
       }
-      // 菜单里有命令时，上下键在命令间移动，Enter 或 Tab 补全选中的命令（不发送）；没有命令时照常发送。
+      // When the menu has commands, the up/down keys move between them and Enter or Tab completes the selected command (without
+      // sending); when it has none, send as usual.
       if (menuItems.length > 0) {
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
           event.preventDefault()
@@ -329,8 +355,10 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
   const editor = <Textarea ref={editorRef} aria-label={t.chat.inputLabel} placeholder={reply ? t.consoleInbox.replyPlaceholder : busy ? t.chat.busyPlaceholder(agentName) : t.chat.inputPlaceholder(agentName)} value={text} disabled={inputDisabled}
     onChange={event => { setText(event.target.value); setCaret(event.target.selectionStart) }} onSelect={event => setCaret(event.currentTarget.selectionStart)} onKeyDown={onKeyDown} rows={1} className={inputClass}
     aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={menuItems.length > 0} aria-controls={menuItems.length > 0 ? listId : undefined} aria-activedescendant={menuItems.length > 0 ? optionId(active) : undefined} />
-  // 一行三样：左边加图片的圆按钮，中间输入框，右边发送的荧光粉圆章（忙且输入框为空时换成藏青的停止按钮）。
-  // 输入框是浅纸底、藏青描边，单行时是一颗胶囊；回复条与待发送图片排在同一描边里、文字行之上。
+  // Three things in a row: the round add-image button on the left, the input box in the middle, and the fluorescent pink round send
+  // stamp on the right (it turns into a navy stop button when busy and the input box is empty).
+  // The input box has a light paper fill and a navy border, and is a pill when it has one line; the reply bar and images waiting to be
+  // sent sit inside the same border, above the text line.
   const input = (addButton?: ReactNode, strip?: ReactNode) => <SlashCommandMenu open={menuOpen} listId={listId} optionId={optionId} items={menuItems} blocked={menuBlocked} active={active} status={menuStatus} onActive={setActive} onChoose={choose} onDismiss={() => setDismissed(token)}><div data-chat-composer className="flex min-w-0 items-end gap-2.5">
     {addButton && <span className="flex h-11 shrink-0 items-center">{addButton}</span>}
     <div data-chat-input className="flex min-h-11 min-w-0 flex-1 flex-col rounded-[22px] border-2 border-ink bg-paper-raised px-4 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/25">
@@ -345,7 +373,8 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
     )}
   </div></SlashCommandMenu>
   return (
-    // 输入区是纸张底部的一条浅黄色栏，上缘一道藏青线。宽屏时上下留白收紧，给对话多留几行。
+    // The input area is a light yellow bar at the bottom of the sheet, with a navy line along its top edge. On wide screens the top and
+    // bottom padding is tighter, leaving a few more lines for the conversation.
     <div data-chat-bar className="flex shrink-0 flex-col gap-2.5 border-t-2 border-ink bg-tint-yellow px-[clamp(12px,2vw,22px)] pt-3.5 pb-3 nav:gap-1.5 nav:pt-2.5 nav:pb-2">
       {localError && (
         <p role="alert" className="text-[13px] font-black text-red-text">
@@ -354,12 +383,14 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
       )}
       <ErrorAlert error={imageError ?? (send.error?.code === 'agent_busy' ? null : send.error)} />
       {answer.outcome === 'ordinary' && <p role="status" className="text-[13px] font-bold">{t.inbox.question.ordinary}</p>}
-      {/* 排队托盘与输入框之间没有间距，连成一体：托盘贴在输入框上沿，左右让出加号与发送按钮的位置（手机宽度下占满一行）。 */}
+      {/* No gap between the queue tray and the input box, so they read as one piece: the tray sits on the top edge of the input box,
+          leaving room on the left and right for the plus and send buttons (at phone width it takes the full row). */}
       <div className="flex min-w-0 flex-col">
         {queue && <div className={cn('flex min-w-0 flex-col sm:pr-[57px]', imageLimits && 'sm:pl-[50px]')}>{queue}</div>}
         {imageLimits ? <ImagePicker images={images} onChange={setImages} limits={imageLimits} disabled={disabled || reply !== undefined} uploads={uploads} addClassName="size-10 rounded-full border-2 border-ink bg-paper-raised text-ink hover:bg-white">{input}</ImagePicker> : input()}
       </div>
-      {/* 下面一行：左边是忙碌提示与按键说明（空闲时是发送与换行，忙时是排队与打断），右边是实时连接状态。宽屏时与输入框左缘对齐。 */}
+      {/* The line below: on the left the busy hint and key hints (send and new line when idle, queue and interrupt when busy), on the
+          right the live connection status. On wide screens it lines up with the left edge of the input box. */}
       <div className={cn('flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 pr-1 text-[12px]', imageLimits && 'nav:pl-[52px]')}>
         <div className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-1.5">
           {status}
@@ -395,7 +426,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
 }
 
 const kbdClass = 'rounded-stamp border border-ink/25 bg-white px-[5px] font-mono text-[11px] leading-4 font-medium text-ink-700'
-// 空闲时输入框下方的按键说明：回车发送，Shift + 回车换行。
+// Key hints below the input box when idle: Enter sends, Shift + Enter starts a new line.
 function IdleHint() {
   return (
     <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-ink-700">
@@ -408,8 +439,9 @@ function IdleHint() {
   )
 }
 
-// 输入框下方的按键说明：Enter 排队，⌘／Ctrl+Enter 立即打断；有进行中的回复时说明停止按钮。任务节点的输入框也用它（样式与按键写法是默认值）；
-// 对话页的输入区另给样式，并把按键写成这个界面语言的写法（中文是“回车”）。
+// Key hints below the input box: Enter queues, ⌘/Ctrl+Enter interrupts right away; when a reply is in progress, also explain the stop
+// button. The task node input box uses it too (with the default style and key labels);
+// the chat page's input area passes its own style and writes the keys the way the UI language does (in Chinese, “回车” (Enter)).
 export function KeyHint({
   stop = false,
   className,
@@ -441,7 +473,7 @@ export function KeyHint({
   )
 }
 
-// 停止按钮上的实心方块。
+// The solid square on the stop button.
 export function StopMark({ className = 'size-3.5' }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
