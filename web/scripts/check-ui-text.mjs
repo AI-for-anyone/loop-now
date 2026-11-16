@@ -1,6 +1,6 @@
 // Checks for Chinese UI text written directly in component code: UI copy must come from src/i18n/. The English copy
 // table (i18n/en-US) must not contain Chinese either.
-// Only string literals, template literals and JSX text are checked; comments are not restricted here.
+// Only string literals, template literals and JSX text are checked here; comments are checked by check-comments.mjs.
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
