@@ -263,7 +263,7 @@ export class PluginRuntime {
     const p = this.payload
     const m = p.manifest
     const requireState = () => {
-      if (!m.permissions.includes('state')) throw new Error('Manifest does not declare the state permission')
+      if (!m.permissions.includes('state')) throw new Error('the manifest does not declare the state permission')
       if (this.status === 'unloaded') throw new Error('Plugin is disabled; cannot read or write state')
     }
     const checkKey = (key: unknown, what = 'key') => {
@@ -307,7 +307,7 @@ export class PluginRuntime {
       return data as InboxMessage
     }
     const inboxCall = async (permission: string, path: string, body: unknown): Promise<InboxMessage> => {
-      if (!m.permissions.includes(permission)) throw new Error(`Manifest does not declare the ${permission} permission`)
+      if (!m.permissions.includes(permission)) throw new Error(`the manifest does not declare the ${permission} permission`)
       return platformJson('POST', path, body)
     }
     // Body for answering a question: an option (optionally with text), or text only.
@@ -322,7 +322,7 @@ export class PluginRuntime {
       if (!m.channels.some((c) => c.id === channelId)) throw new Error(`Channel ${String(channelId)} is not declared in the manifest's loopNow.channels`)
     }
     const requireManage = (identityId: unknown, id: unknown, what: string) => {
-      if (!m.permissions.includes('identities.manage')) throw new Error('Manifest does not declare the identities.manage permission')
+      if (!m.permissions.includes('identities.manage')) throw new Error('the manifest does not declare the identities.manage permission')
       if (!m.channels.some((c) => c.manageIdentities)) throw new Error("No channel in the manifest's loopNow.channels declares manageIdentities")
       if (typeof identityId !== 'string' || identityId === '') throw new TypeError('identityId is required')
       if (typeof id !== 'string' || id === '') throw new TypeError(`${what} is required`)
@@ -370,7 +370,7 @@ export class PluginRuntime {
           checkKey(key)
           const json = JSON.stringify(value)
           if (json === undefined) throw new TypeError('value must be serializable to JSON')
-          if (Buffer.byteLength(json) > VALUE_MAX) throw new RangeError(`value must not exceed ${VALUE_MAX} bytes`)
+          if (Buffer.byteLength(json) > VALUE_MAX) throw new RangeError(`value must be at most ${VALUE_MAX} bytes`)
           await state('state_set', { projectId: projectOf(o), key, value: JSON.parse(json) })
         },
         delete: async (key: string, o?: StateOptions) => {
@@ -407,8 +407,8 @@ export class PluginRuntime {
       }),
       accounts: Object.freeze({
         list: async (projectId: string, kind: string) => {
-          if (!m.permissions.includes('accounts.read')) throw new Error('Manifest does not declare the accounts.read permission')
-          if (typeof kind !== 'string' || !m.accountKinds.includes(kind)) throw new Error(`Manifest does not declare account kind ${String(kind)}`)
+          if (!m.permissions.includes('accounts.read')) throw new Error('the manifest does not declare the accounts.read permission')
+          if (typeof kind !== 'string' || !m.accountKinds.includes(kind)) throw new Error(`the manifest does not declare account kind ${String(kind)}`)
           if (typeof projectId !== 'string' || projectId === '') throw new Error('projectId is invalid')
           const v = await this.deps.request('accounts_list', this.id, { projectId, kind })
           return (Array.isArray(v) ? v : []) as Account[]
@@ -541,7 +541,7 @@ export class PluginRuntime {
   }
 
   private async runEvent(event: Record<string, unknown>, attempt: number, timeoutMs: number): Promise<Reply> {
-    if (this.status !== 'active') return { ok: false, error: '插件未加载' }
+    if (this.status !== 'active') return { ok: false, error: 'the plugin is not loaded' }
     const type = String(event.type)
     const list = [...(this.handlers.get(type) ?? [])]
     // Events delivered per channel: channel.outbound goes to the channel's outbound, identity.inbound to identityInbound.
@@ -577,7 +577,7 @@ export class PluginRuntime {
 
   /** Synchronous calls (intercept, modify, claim): runs this plugin's handlers in registration order, combined into one result. */
   async call(kind: CallKind, event: Record<string, unknown>, timeoutMs: number): Promise<Reply> {
-    if (this.status !== 'active') return { ok: false, error: '插件未加载' }
+    if (this.status !== 'active') return { ok: false, error: 'the plugin is not loaded' }
     const type = String(event.type)
     const list = [...(this.handlers.get(type) ?? [])]
     try {
@@ -589,7 +589,7 @@ export class PluginRuntime {
             for (const handler of list) {
               const r = await handler(current, ctx)
               if (isObject(r) && r.block === true) {
-                return { block: true, reason: typeof r.reason === 'string' && r.reason !== '' ? r.reason : '没有说明原因' }
+                return { block: true, reason: typeof r.reason === 'string' && r.reason !== '' ? r.reason : 'No reason given.' }
               }
             }
             return {}
@@ -628,7 +628,7 @@ export class PluginRuntime {
 
   /** Console action buttons (action): returns {notice, url?}. */
   async action(payload: Record<string, unknown>, timeoutMs: number): Promise<Reply> {
-    if (this.status !== 'active') return { ok: false, error: '插件未加载' }
+    if (this.status !== 'active') return { ok: false, error: 'the plugin is not loaded' }
     const actionId = String(payload.actionId)
     const handler = this.actions.get(actionId)
     if (!handler) return { ok: false, error: `Plugin has not registered action ${actionId}` }
@@ -647,7 +647,7 @@ export class PluginRuntime {
 
   /** HTTP entry (http): passes the request to the api.http.handle handler and returns its status, headers and body (base64) as is. */
   async http(payload: Record<string, unknown>, timeoutMs: number): Promise<Reply> {
-    if (this.status !== 'active') return { ok: false, error: '插件未加载' }
+    if (this.status !== 'active') return { ok: false, error: 'the plugin is not loaded' }
     const handler = this.httpHandler
     if (!handler) return { ok: false, error: 'Plugin has not registered an HTTP handler' }
     const method = typeof payload.method === 'string' ? payload.method.toUpperCase() : 'GET'
@@ -690,7 +690,7 @@ export class PluginRuntime {
 
   /** Scheduled jobs (schedule): replies ok once handled. */
   async schedule(payload: Record<string, unknown>, timeoutMs: number): Promise<Reply> {
-    if (this.status !== 'active') return { ok: false, error: '插件未加载' }
+    if (this.status !== 'active') return { ok: false, error: 'the plugin is not loaded' }
     const scheduleId = String(payload.scheduleId)
     const handler = this.schedules.get(scheduleId)
     if (!handler) return { ok: false, error: `Plugin has not registered scheduled job ${scheduleId}` }

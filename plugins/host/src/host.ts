@@ -153,7 +153,7 @@ export class Host {
         void this.shutdown()
         return
       default:
-        if (m.id) this.channel.reply(m, 'result', { ok: false, error: `不支持的请求 ${m.type}` })
+        if (m.id) this.channel.reply(m, 'result', { ok: false, error: `unsupported request ${m.type}` })
     }
   }
 
@@ -218,7 +218,7 @@ export class Host {
   private async configChanged(m: Message): Promise<void> {
     const rt = this.plugins.get(m.plugin ?? '')
     if (!rt) {
-      this.channel.reply(m, 'result', { ok: false, error: '插件未加载' })
+      this.channel.reply(m, 'result', { ok: false, error: 'the plugin is not loaded' })
       return
     }
     if (!isObject(m.payload) || !isObject(m.payload.config)) {
@@ -240,7 +240,7 @@ export class Host {
     const rt = this.plugins.get(m.plugin ?? '')
     let reply: Reply
     const event = this.eventOf(m.payload)
-    if (!rt) reply = { ok: false, error: '插件未加载' }
+    if (!rt) reply = { ok: false, error: 'the plugin is not loaded' }
     else if (typeof event === 'string') reply = { ok: false, error: event }
     else {
       const p = m.payload as Record<string, unknown>
@@ -255,7 +255,7 @@ export class Host {
     let reply: Reply
     const event = this.eventOf(m.payload)
     const kind = isObject(m.payload) ? m.payload.kind : undefined
-    if (!rt) reply = { ok: false, error: '插件未加载' }
+    if (!rt) reply = { ok: false, error: 'the plugin is not loaded' }
     else if (typeof event === 'string') reply = { ok: false, error: event }
     else if (kind !== 'intercept' && kind !== 'modify' && kind !== 'claim') reply = { ok: false, error: `Unknown call kind ${String(kind)}` }
     else reply = await rt.call(kind as CallKind, event, timeoutOf((m.payload as Record<string, unknown>).timeoutMs, CALL_TIMEOUT))
@@ -267,7 +267,7 @@ export class Host {
     const rt = this.plugins.get(m.plugin ?? '')
     const p = isObject(m.payload) ? m.payload : {}
     let reply: Reply
-    if (!rt) reply = { ok: false, error: '插件未加载' }
+    if (!rt) reply = { ok: false, error: 'the plugin is not loaded' }
     else if (m.type === 'action') reply = await rt.action(p, timeoutOf(p.timeoutMs, ACTION_TIMEOUT))
     else if (m.type === 'http') reply = await rt.http(p, timeoutOf(p.timeoutMs, HTTP_TIMEOUT))
     else reply = await rt.schedule(p, timeoutOf(p.timeoutMs, SCHEDULE_TIMEOUT))

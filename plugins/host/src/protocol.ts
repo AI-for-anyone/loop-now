@@ -105,7 +105,7 @@ export class Channel {
   /** Writes one line; throws when it exceeds the limit, and the caller then sends an error reply instead. */
   send(m: Message, done?: () => void): void {
     const line = JSON.stringify(m)
-    if (Buffer.byteLength(line) + 1 > MAX_LINE) throw new Error(`Message exceeds ${MAX_LINE} bytes`)
+    if (Buffer.byteLength(line) + 1 > MAX_LINE) throw new Error(`the message is longer than ${MAX_LINE} bytes`)
     this.write(`${line}\n`, done)
   }
 

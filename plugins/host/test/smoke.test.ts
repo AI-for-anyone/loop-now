@@ -36,7 +36,7 @@ async function until<T>(what: string, fn: () => T | undefined | false, timeoutMs
   for (;;) {
     const v = fn()
     if (v) return v
-    if (Date.now() > deadline) throw new Error(`等待${what}超时`)
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${what}`)
     await new Promise((r) => setTimeout(r, 10))
   }
 }
@@ -74,7 +74,7 @@ describe('官方插件 webhook', () => {
         excerpt: 'hello there',
       }
       assert.deepEqual((await host.event('webhook', toExternal)).payload, { ok: true })
-      const hit = await until('第一次 POST', () => received[0])
+      const hit = await until('the first POST', () => received[0])
       assert.equal(hit.url, '/global')
       assert.equal(JSON.parse(hit.body).id, toExternal.id)
       assert.equal(JSON.parse(hit.body).excerpt, 'hello there')
@@ -87,7 +87,7 @@ describe('官方插件 webhook', () => {
           timestamp: hit.headers['x-loop-now-timestamp'] as string,
         }),
       )
-      const records = await until('投递记录', () => {
+      const records = await until('the delivery record', () => {
         const rs = [...host.stateOf('webhook').entries()].filter(([k]) => k.startsWith('deliveries/'))
         return rs.length === 1 && (rs[0]![1] as { status: string }).status === 'delivered' && rs
       })
@@ -101,7 +101,7 @@ describe('官方插件 webhook', () => {
       // Messages to Agents are not pushed by default; another project configured all, so they are pushed to its own URL.
       await host.event('webhook', { ...toExternal, id: '01JWEBHOOK00000000000000002', to: { kind: 'agent', id: 'a2', address: 'dev@demo' } })
       await host.event('webhook', { ...toExternal, id: '01JWEBHOOK00000000000000003', projectId: other, to: { kind: 'agent', id: 'a3', address: 'qa@other' } })
-      await until('第二次 POST', () => received.length >= 2)
+      await until('the second POST', () => received.length >= 2)
       await new Promise((r) => setTimeout(r, 100))
       assert.deepEqual(
         received.map((r) => [r.url, JSON.parse(r.body).id, r.headers['x-loop-now-signature'] === undefined ? 'unsigned' : 'signed']),
@@ -110,7 +110,7 @@ describe('官方插件 webhook', () => {
           ['/other', '01JWEBHOOK00000000000000003', 'signed'],
         ],
       )
-      assert.ok(!JSON.stringify(host.messages).includes('whsec-global-0001'), '密钥不出现在协议消息里')
+      assert.ok(!JSON.stringify(host.messages).includes('whsec-global-0001'), 'the secret does not appear in protocol messages')
       assert.deepEqual((await host.request('unload', 'webhook', {})).payload, { ok: true })
     } finally {
       await host.close()
@@ -179,16 +179,16 @@ describe('官方插件 webhook 代管外部身份', () => {
         question: { id: 'q1', options: [{ id: 'yes', label: '发布' }, { id: 'no', label: '不发' }], allowText: true, deadline: null }, excerpt: '要不要发布？',
       }
       assert.deepEqual((await host.event('webhook', question)).payload, { ok: true })
-      const first = await until('推送提问', () => pushed[0])
+      const first = await until('the pushed question', () => pushed[0])
       const sent = JSON.parse(first.body)
       assert.equal(sent.answerUrl, 'https://loop.example.com:8781/hooks/webhook/answer')
       assert.deepEqual(sent.question.options, question.question.options)
-      assert.equal(sent.text, '全文 q1', '推送附全文')
+      assert.equal(sent.text, '全文 q1', 'the push carries the full text')
       assert.ok(verifySignature({ secret, body: first.body, signature: first.headers['x-loop-now-signature'] as string, timestamp: first.headers['x-loop-now-timestamp'] as string }))
       const plain = await host.event('webhook', { ...question, messageId: 'm2', isQuestion: false, question: null, excerpt: '发布完了告诉我' })
       assert.deepEqual(plain.payload, { ok: true })
-      await until('推送消息', () => pushed[1])
-      assert.equal(JSON.parse(pushed[1]!.body).answerUrl, 'https://loop.example.com:8781/hooks/webhook/answer', '普通消息也可以经回答入口回复')
+      await until('the pushed message', () => pushed[1])
+      assert.equal(JSON.parse(pushed[1]!.body).answerUrl, 'https://loop.example.com:8781/hooks/webhook/answer', 'a regular message can also be replied to through the answer endpoint')
 
       const answer = async (body: unknown, opts: { sign?: string; ts?: number } = {}) => {
         const raw = JSON.stringify(body)
@@ -203,10 +203,10 @@ describe('官方插件 webhook 代管外部身份', () => {
       }
       assert.deepEqual(await answer({ messageId: 'q1', optionId: 'yes' }), { status: 200, body: { ok: true, messageId: 'r1', answered: true } })
       assert.deepEqual(await answer({ messageId: 'm2', text: '好的' }), { status: 200, body: { ok: true, messageId: 'r2', answered: false } })
-      assert.equal((await answer({ messageId: 'q1', text: 'late' })).status, 409, '提问已关闭时文字回答只存成回复')
+      assert.equal((await answer({ messageId: 'q1', text: 'late' })).status, 409, 'when the question is closed, a text answer is stored as a reply only')
       assert.deepEqual((await answer({ messageId: 'q1', optionId: 'stale' })).body.error.code, 'already_answered')
       assert.equal((await answer({ messageId: 'q1', optionId: 'yes' }, { sign: 'wrong-secret' })).status, 401)
-      assert.equal((await answer({ messageId: 'q1', optionId: 'yes' }, { ts: Math.floor(Date.now() / 1000) - 3600 })).status, 401, '过旧的签名拒绝')
+      assert.equal((await answer({ messageId: 'q1', optionId: 'yes' }, { ts: Math.floor(Date.now() / 1000) - 3600 })).status, 401, 'a signature that is too old is refused')
       assert.equal((await answer({ messageId: 'unknown', optionId: 'yes' })).status, 404)
       assert.equal((await answer({ messageId: 'q1', optionId: 'yes', text: 'both' })).status, 422)
       assert.deepEqual(
@@ -310,10 +310,10 @@ describe('validate 子命令', () => {
       result.findings.map((f: { level: string; message: string }) => [f.level, f.message]),
       [
         ['error', "Subscribed to inbox.received, which is not declared in the manifest's loopNow.events"],
-        ['warning', '声明了 run.started，但 register 里没有订阅（可能在 start 里订阅）'],
+        ['warning', 'run.started is declared, but register does not subscribe to it (the plugin may subscribe in start).'],
       ],
     )
     const statik = await validate(p.root)
-    assert.equal(statik.code, 0, '不加 --load 时只做静态检查')
+    assert.equal(statik.code, 0, 'without --load only the static checks run')
   })
 })
