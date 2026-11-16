@@ -156,7 +156,12 @@ func providerLoginPrompt(snap agentconfig.Snapshot, home string) string {
 	if home == "" || snap.ProviderState == nil || len(snap.ProviderState.Paths) == 0 {
 		return ""
 	}
-	return "- Model subscription: your model provider " + snap.Provider + " uses the extension's own login in the user's home directory on this machine, not the subscription account configured in the project.\n"
+	// A platform Agent logs in to the provider in its own model credential; a project Agent uses a project account.
+	account := "the subscription account configured in the project"
+	if snap.ContextProjectID == nil {
+		account = "the subscription account logged in for this Agent"
+	}
+	return "- Model subscription: your model provider " + snap.Provider + " uses the extension's own login in the user's home directory on this machine, not " + account + ".\n"
 }
 
 // loginsPrompt returns the "Local logins" item (with a trailing newline): when
