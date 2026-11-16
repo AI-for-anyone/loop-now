@@ -295,10 +295,11 @@ it('同一Agent执行另一个节点时切换消息范围，不沿用前一节�
   await userEvent.click(screen.getByRole('tab', { name: '节点资料' })); expect(screen.getByText(/另一个节点输入/)).toBeVisible()
 })
 
-it('消息可选错误字段显示服务端脱敏失败原因，兼容旧消息省略字段', async () => {
-  const env = setup(); env.message = { ...env.message, status: 'failed', errorCode: 'pi_error', errorMessage: 'Failure reason redacted by the server' }
+it('a failed task turn shows the copy for its error code; the server sentence only restates it', async () => {
+  const env = setup(); env.message = { ...env.message, status: 'failed', errorCode: 'pi_error', errorMessage: 'Pi returned an error.' }
   renderRoutes(routes, detailPath())
-  expect(await screen.findByText('Agent 报告错误 · Failure reason redacted by the server')).toBeVisible()
+  expect(await screen.findByText('Agent 报告错误')).toBeVisible()
+  expect(screen.queryByText(/Pi returned an error/)).toBeNull()
 })
 
 // The missing endpoint is recognized by the server's signal (details.reason unknown_endpoint) and, for older servers, by their fixed

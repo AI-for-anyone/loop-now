@@ -26,8 +26,15 @@ it.each([
   ['task_conflict', 'interrupted', '节点或执行条件已变化，这条消息没有执行'],
   ['server_restarted', 'interrupted', '服务重启，这一轮没有重放'],
   ['pi_exited', 'failed', 'Agent 进程异常退出'],
-] as const)('a task turn with errorCode %s is named in Chinese, not as a generic run error', (errorCode, status, label) => {
-  render(<TaskMessageBubble message={{ ...makeTaskMessage(), role: 'assistant', status, errorCode, errorMessage: 'Fixed server description' }} agent={agent} />)
-  expect(screen.getByText(`${label} · Fixed server description`)).toBeInTheDocument()
-  expect(screen.queryByText(/执行错误/)).toBeNull()
+] as const)('a task turn with errorCode %s shows only its copy: the server text just restates the code', (errorCode, status, label) => {
+  render(<TaskMessageBubble message={{ ...makeTaskMessage(), role: 'assistant', status, errorCode, errorMessage: 'The Pi process exited while replying.' }} agent={agent} />)
+  expect(screen.getByText(label)).toBeInTheDocument()
+  expect(screen.queryByText(/执行错误|while replying/)).toBeNull()
+})
+it.each([
+  ['an unknown code', 'some_new_code', 'The task turn failed.'],
+  ['no code', null, '旧数据：任务回合执行失败'],
+])('with %s the server text is the fallback, English or (older turns) Chinese', (_, errorCode, errorMessage) => {
+  render(<TaskMessageBubble message={{ ...makeTaskMessage(), role: 'assistant', status: 'failed', errorCode, errorMessage }} agent={agent} />)
+  expect(screen.getByText(`执行错误 · ${errorMessage}`)).toBeInTheDocument()
 })
