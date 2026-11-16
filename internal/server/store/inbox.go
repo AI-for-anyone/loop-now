@@ -334,8 +334,9 @@ func (s *Store) ListConsoleConversation(ctx context.Context, agentID uuid.UUID, 
 }
 
 // ConsolePending returns the messages pending for the console, newest first: questions to the console that are still
-// open and not expired, and other unread messages. Both queries run in the same repeatable-read transaction, with the
-// same snapshot and now(), so the two lists never overlap.
+// open and not expired, and other unread messages. Both queries run in one read transaction (ReadTx) and see the same
+// snapshot. now() on a read connection is the time of each call, though, so a question that expires in the moment
+// between the two queries can appear in both lists.
 func (s *Store) ConsolePending(ctx context.Context, preview int) (questions, unread []InboxMessage, err error) {
 	open := `EXISTS (SELECT 1 FROM inbox_questions q WHERE q.message_id = m.id AND q.state = 'open' AND q.expires_at > now())`
 	list := func(tx *db.Tx, where string) ([]InboxMessage, error) {
@@ -512,10 +513,10 @@ type InboxReadEffect struct {
 	Voided       []uuid.UUID
 }
 
-// markRead marks the unread messages sent to p whose column equals id as read. When the recipient is a regular Agent
-// it first locks the Agent row with FOR NO KEY UPDATE, and for a task instance it first locks the task row, then
-// writes the read state: the same lock order as cancel, promote to interrupt and dequeue. The transaction only marks
-// and voids; it does no other work such as images.
+// markRead marks the unread messages sent to p whose column equals id as read. For a regular Agent it runs in one
+// write transaction that first checks the Agent is live (writes are serialized, so no row lock is needed); for a task
+// instance it runs inside MutateTask on the task, like cancel, promote to interrupt and dequeue. The transaction only
+// marks and voids; it does no other work such as images.
 func (s *Store) markRead(ctx context.Context, p Party, column string, id uuid.UUID) ([]ReadReceipt, InboxReadEffect, error) {
 	var out []ReadReceipt
 	var links []readLink

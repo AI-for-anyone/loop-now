@@ -124,8 +124,9 @@ func generate(dir, certPath, keyPath string, hosts []string, now time.Time) erro
 	if err != nil {
 		return err
 	}
-	// Write the private key first, then the certificate, each as a temp file that is renamed into place: a reader sees
-	// either the new pair or the old one.
+	// Write the private key first, then the certificate, each as a temp file that is renamed into place, so neither
+	// file is ever half-written. The two renames are separate, though: a reader between them sees the new key with the
+	// old certificate. Load treats a mismatched pair as unreadable and regenerates it.
 	if err := writeAtomic(keyPath, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}), 0o600); err != nil {
 		return err
 	}

@@ -413,8 +413,8 @@ func (o claudeObserver) RateLimit(info map[string]any, inTurn bool) {
 }
 
 // syncClaudePlugin rebuilds the plugin directory the platform gives Claude Code (--plugin-dir): the built-in Skill
-// loopctl, the Agent's Skill copies and the Skills of granted plugins, rebuilt as a whole on every start. The returned
-// Skill names carry the plugin name as their namespace (such as loop-now:loopctl).
+// loopctl, the Agent's Skill copies and the Skills of granted plugins, rebuilt as a whole on every start. Claude Code
+// shows these Skills with the plugin name as their namespace (such as loop-now:loopctl).
 func (e *Executor) syncClaudePlugin(ctx context.Context, snap agentconfig.Snapshot, d agentDirs) error {
 	if err := os.RemoveAll(d.claudePlugin); err != nil {
 		return err

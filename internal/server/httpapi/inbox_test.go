@@ -736,8 +736,8 @@ func TestTokensOnConsoleAndAgentEntries(t *testing.T) {
 	other.token = ""
 	other.expectError(401, "unauthenticated", "GET", "/whoami", nil)
 	agent.expectError(403, "forbidden_origin", "GET", "/whoami", nil, "Origin", "http://localhost:5173")
-	// The Agent API has only 5 endpoints; other paths give 404 (not in the contract, so requested with a client that
-	// does not validate against the contract).
+	// Paths that are not Agent API routes give 404 (/inbox/threads is a console route; it is not in the Agent contract,
+	// so it is requested with a client that does not validate against the contract).
 	raw := agent
 	raw.client = http.DefaultClient
 	raw.expect(404, "GET", "/inbox/threads", nil)

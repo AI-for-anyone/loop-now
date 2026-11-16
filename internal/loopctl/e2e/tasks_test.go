@@ -61,8 +61,8 @@ func waitCLITask(t *testing.T, s *server, id string, fn func(taskmodel.Detail) b
 }
 
 func taskCLIRequest(agent, description string) taskmodel.CreateInput {
-	// Leave a space so fakepi recognizes !sleep as a separate token instead of joining it with “节点说明：”
-	// ("Node description:") into one token.
+	// Leave a space so fakepi recognizes !sleep as a separate token instead of joining it with "Node description:" (the
+	// node prompt in tasks/service.go) into one token.
 	return taskmodel.CreateInput{ActionID: uuid.New(), Title: "CLI通用任务", Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "执行", Description: " " + description, AgentID: uuid.MustParse(agent), InputFields: []workflow.Field{}, OutputFields: []workflow.Field{{Name: "file", Type: "artifact", Required: true}}, Inputs: map[string]workflow.Source{}}}, Edges: []workflow.Edge{}}}
 }
 

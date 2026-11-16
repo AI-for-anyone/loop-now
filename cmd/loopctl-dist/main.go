@@ -1,5 +1,5 @@
-// loopctl-dist cross-compiles loopctl for arm64 and amd64 on macOS and Linux, and generates SHA256SUMS and
-// manifest.json.
+// loopctl-dist cross-compiles loopctl for the platforms in Platforms (arm64 and amd64 on macOS and Linux, and amd64
+// on Windows), and generates SHA256SUMS and manifest.json.
 //
 //	go run ./cmd/loopctl-dist -version <version> -out <dir>
 //

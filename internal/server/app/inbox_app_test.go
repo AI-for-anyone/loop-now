@@ -265,7 +265,7 @@ func TestExternalPortTLS(t *testing.T) {
 	s.must(200, "GET", "/context", nil)
 }
 
-// reminders returns the Agent's platform reminder runs: status and replies.
+// reminders returns the statuses of the Agent's platform reminder runs, in queue order.
 func reminders(t *testing.T, s *server, agentID uuid.UUID) (statuses []string) {
 	t.Helper()
 	rows, err := s.a.Store.Pool.Query(context.Background(), `SELECT status FROM runs WHERE agent_id = $1 AND origin = 'inbox_reminder' ORDER BY queue_seq`, agentID)

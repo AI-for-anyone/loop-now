@@ -83,7 +83,7 @@ func scanTemplate(row db.Scanner) (SkillTemplate, error) {
 	return t, err
 }
 
-// ListSkillTemplates lists the project's template library.
+// ListSkillTemplates lists the global Skill template library.
 func (s *Store) ListSkillTemplates(ctx context.Context) ([]SkillTemplate, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT `+templateColumns+` FROM skill_templates t ORDER BY t.name`)
 	if err != nil {
@@ -102,7 +102,7 @@ func (s *Store) GetSkillTemplate(ctx context.Context, id uuid.UUID) (SkillTempla
 	return t, err
 }
 
-// CreateSkillTemplate creates a template; returns name_conflict when the name is already used within the project.
+// CreateSkillTemplate creates a template; returns name_conflict when the name is already used in the library.
 func (s *Store) CreateSkillTemplate(ctx context.Context, meta content.SkillMeta, files []content.File) (SkillTemplate, error) {
 	id := uuid.Must(uuid.NewV7())
 	err := s.inTx(ctx, func(tx *db.Tx) error {

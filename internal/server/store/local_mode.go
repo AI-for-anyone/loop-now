@@ -8,7 +8,7 @@ import (
 	"loop-now/internal/server/apperr"
 )
 
-// LocalModeSettings are the three global switches of "本机模式" ("Local mode") in the personal edition.
+// LocalModeSettings are the four global switches of "本机模式" ("Local mode") in the personal edition.
 type LocalModeSettings struct {
 	Directories bool `json:"directories"` // bind local directories
 	Git         bool `json:"git"`         // "从 Git 拉取" ("Pull from Git") uses the local git identity

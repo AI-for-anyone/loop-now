@@ -32,7 +32,7 @@ func build(t *testing.T, version string) (*Manifest, string) {
 	return m, dir
 }
 
-// Binaries for 4 platforms, SHA256SUMS and manifest.json; the digests match shasum's results; the version the
+// Binaries for the 5 platforms, SHA256SUMS and manifest.json; the digests match shasum's results; the version the
 // binary for this machine reports matches the manifest.
 func TestBuild(t *testing.T) {
 	if testing.Short() {

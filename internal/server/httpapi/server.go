@@ -506,7 +506,7 @@ func writeError(w http.ResponseWriter, err error) {
 	writeJSON(w, e.Status, body)
 }
 
-// handle logs internal errors in one place.
+// fail writes the error response and logs internal errors in one place.
 func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 	if _, ok := apperr.As(err); !ok {
 		var tooLarge *http.MaxBytesError

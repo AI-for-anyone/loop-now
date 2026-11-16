@@ -339,7 +339,7 @@ func TestServerLogs(t *testing.T) {
 	})
 }
 
-// readOverviewSnapshot connects to the overview event stream (optionally with Last-Event-ID) and returns the first
+// firstOverviewEvent connects to the overview event stream (optionally with Last-Event-ID) and returns the first
 // event.
 func (s *server) firstOverviewEvent(lastID string) (event string, data []byte) {
 	s.t.Helper()
