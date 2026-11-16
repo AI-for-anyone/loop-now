@@ -34,7 +34,7 @@ func (r *Recorder) Event(agentID uuid.UUID, runID *uuid.UUID, e executor.Event) 
 	defer cancel()
 	err := r.Store.AddEvent(ctx, store.LifecycleEvent{AgentID: agentID, RunID: runID, Type: e.Type, At: e.At, Data: e.Data})
 	if err != nil {
-		r.Log.Warn("写入运行记录失败", "agentId", agentID, "runId", runID, "type", e.Type, "err", err)
+		r.Log.Warn("failed to write the run record", "agentId", agentID, "runId", runID, "type", e.Type, "err", err)
 	}
 }
 
@@ -46,7 +46,7 @@ func (r *Recorder) Usage(agentID uuid.UUID, runID *uuid.UUID, u executor.Usage) 
 		ResponseModel: u.ResponseModel, StopReason: u.StopReason, Input: u.Input, Output: u.Output, CacheRead: u.CacheRead,
 		CacheWrite: u.CacheWrite, Reasoning: u.Reasoning, DurationMs: u.DurationMs})
 	if err != nil {
-		r.Log.Warn("写入用量失败", "agentId", agentID, "runId", runID, "kind", u.Kind, "err", err)
+		r.Log.Warn("failed to write usage", "agentId", agentID, "runId", runID, "kind", u.Kind, "err", err)
 	}
 }
 

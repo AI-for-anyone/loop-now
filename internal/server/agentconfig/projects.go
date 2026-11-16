@@ -42,19 +42,19 @@ func (s *Service) DeleteProject(ctx context.Context, id uuid.UUID) error {
 	}
 	if s.ModelAuth != nil {
 		if err := s.ModelAuth.CancelProjectLogins(ctx, id, nil); err != nil && s.Logger != nil {
-			s.Logger.Warn("项目登录资源清理超时", "projectId", id, "code", "auth_cleanup_timeout")
+			s.Logger.Warn("project login resource cleanup timed out", "projectId", id, "code", "auth_cleanup_timeout")
 		}
 	}
 	if s.CancelProjectCLILogins != nil {
 		if e := s.CancelProjectCLILogins(ctx, id); e != nil && s.Logger != nil {
-			s.Logger.Warn("项目CLI登录资源清理超时", "stage", "deleted_project_login_cleanup", "projectId", id.String())
+			s.Logger.Warn("project CLI login resource cleanup timed out", "stage", "deleted_project_login_cleanup", "projectId", id.String())
 		}
 	}
 	s.cancelDeletedAgentLogins(ctx, ids)
 	for _, aid := range ids {
 		if s.Releaser != nil {
 			if err := s.Releaser.Release(ctx, aid); err != nil {
-				s.Logger.Error("释放已删除项目中 Agent 的执行资源失败", "projectId", id, "agentId", aid, "err", err)
+				s.Logger.Error("failed to release the run resources of an Agent in a deleted project", "projectId", id, "agentId", aid, "err", err)
 			}
 		}
 		if s.AgentRemoved != nil {

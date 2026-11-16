@@ -155,7 +155,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 			a.closeResources()
 		}
 	}()
-	log.Info("服务端实例启动", "instanceId", a.InstanceID, "config", cfg)
+	log.Info("server instance starting", "instanceId", a.InstanceID, "config", cfg)
 	for _, w := range cfg.Warnings {
 		log.Warn(w)
 	}
@@ -189,7 +189,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		}
 		return a, err
 	}
-	log.Info("启动检查通过", "piBin", res.PiBin, "piAIDir", res.PiAIDir, "workRoot", res.WorkRoot, "execBasePath", res.ExecBasePath)
+	log.Info("startup checks passed", "piBin", res.PiBin, "piAIDir", res.PiAIDir, "workRoot", res.WorkRoot, "execBasePath", res.ExecBasePath)
 	if a.Store, err = store.Open(ctx, db.Options{Dir: dbDir, Logger: log}); err != nil {
 		return a, err
 	}
@@ -205,7 +205,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	if err != nil {
 		return a, fmt.Errorf("安装 loopctl 失败：%w", err)
 	}
-	log.Info("已安装 loopctl", "version", dist.Manifest.Version, "binDir", loopctlBin)
+	log.Info("loopctl installed", "version", dist.Manifest.Version, "binDir", loopctlBin)
 	var extTLS *tls.Config
 	if cfg.ExternalListenAddr != "" {
 		var cert tls.Certificate
@@ -217,7 +217,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 			if err != nil {
 				return a, fmt.Errorf("准备对外端口的自签证书失败：%w", err)
 			}
-			log.Info("对外端口使用自签证书", "cert", certPath, "generated", generated)
+			log.Info("external port uses a self-signed certificate", "cert", certPath, "generated", generated)
 			cert = c
 		} else {
 			c, err := tls.LoadX509KeyPair(cfg.ExternalTLSCert, cfg.ExternalTLSKey)
@@ -239,7 +239,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		return a, err
 	}
 	models := modelcatalog.NewRegistry(builtinModels)
-	log.Info("已读取 Pi 模型目录", "providers", len(builtinModels.Providers))
+	log.Info("loaded the Pi model catalog", "providers", len(builtinModels.Providers))
 
 	templates, err := clitemplate.Load(cfg.CLITemplateDir)
 	if err != nil {
@@ -254,7 +254,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		return a, fmt.Errorf("读取自定义模型配置失败：%w", reloadErr)
 	}
 	if settings.LoadError != "" {
-		log.Warn("自定义模型配置无效，已退回内置目录", "error", settings.LoadError)
+		log.Warn("custom model configuration is invalid; fell back to the built-in catalog", "error", settings.LoadError)
 	}
 	defaults, err := a.Store.EnsureDefaults(ctx, cfg.DefaultOrgName, cfg.DefaultProjectName)
 	if err != nil {
@@ -264,7 +264,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	if n, err := a.Store.RevokeAgentTokensNotFrom(ctx, a.InstanceID); err != nil {
 		return a, err
 	} else if n > 0 {
-		log.Info("已作废上一次运行签发的 Agent 令牌", "count", n)
+		log.Info("revoked the Agent tokens issued by the previous server run", "count", n)
 	}
 	// Listen first: the address of the Agent-only API must be known before any Pi starts.
 	a.listener = o.Listener
@@ -496,9 +496,9 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		return a, err
 	}
 	if console != nil {
-		log.Info("控制台由服务端提供", "source", consoleSource)
+		log.Info("console is served by the server", "source", consoleSource)
 	} else {
-		log.Info("服务端没有控制台文件，只提供 API（开发时用 vite，或设置 " + config.EnvWebDir + "）")
+		log.Info("no console files on the server; serving the API only (use vite in development, or set " + config.EnvWebDir + ")")
 	}
 	a.API = &httpapi.Server{Hooks: appHooks{a}, CLIImport: a.CLIImport, CLIVerification: a.CLIVerification, CLIAuth: a.CLIAuth, ModelAuth: a.ModelAuth, ModelSettings: a.ModelSettings, ProjectCredentials: projectCredentials,
 		O: httpapi.Options{
@@ -528,11 +528,11 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		return a, fmt.Errorf("回放退役文件夹来源失败：%w", err)
 	}
 	if legacy.Sources > 0 || legacy.UnclonedGitDirs > 0 {
-		log.Info("已回放退役文件夹来源", "sources", legacy.Sources, "filesWritten", legacy.FilesWritten, "filesDeleted", legacy.FilesDeleted,
+		log.Info("replayed retired folder sources", "sources", legacy.Sources, "filesWritten", legacy.FilesWritten, "filesDeleted", legacy.FilesDeleted,
 			"filesSkipped", legacy.FilesSkipped, "unclonedGitSources", legacy.UnclonedGitDirs)
 	}
 	for _, p := range local.AncestorEntryFiles(res.WorkRoot) {
-		log.Warn("工作根目录的上级目录中有上下文入口文件，Pi 会把它读进每个 Agent 的系统提示；请移走", "path", p)
+		log.Warn("a context entry file sits in a parent directory of the work root; Pi reads it into every Agent's system prompt, so move it away", "path", p)
 	}
 	if err = a.Conv.Start(ctx); err != nil {
 		return a, err
@@ -580,10 +580,10 @@ func (a *App) Addr() string { return a.listener.Addr().String() }
 // Serve serves HTTP until Shutdown.
 func (a *App) Serve() error {
 	if a.external != nil {
-		a.Log.Info("开始提供对外端口（TLS）", "addr", a.ExternalAddr())
+		a.Log.Info("serving the external port (TLS)", "addr", a.ExternalAddr())
 		go func() {
 			if err := a.external.Serve(a.extListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				a.Log.Error("对外端口停止服务", "err", err)
+				a.Log.Error("external port stopped serving", "err", err)
 			}
 		}()
 	}
@@ -595,7 +595,7 @@ func (a *App) Serve() error {
 		a.PluginHost.Start(settings.Disabled)
 		a.Plugins.WakeOnCommit()
 	}
-	a.Log.Info("开始提供服务", "addr", a.Addr())
+	a.Log.Info("serving", "addr", a.Addr())
 	if a.Cfg.ReadyFile != "" {
 		// The listener has long been open and connections queue up before Serve starts, so writing the ready file now
 		// cannot lead anyone to connect to a port that does not answer yet.
@@ -656,7 +656,7 @@ func (a *App) Shutdown(ctx context.Context) error {
 		_ = os.Remove(a.Cfg.ReadyFile)
 	}
 	a.closeResources()
-	a.Log.Info("服务端已停止")
+	a.Log.Info("server stopped")
 	return errors.Join(errs...)
 }
 
@@ -719,7 +719,7 @@ func (a *App) askDialog(ctx context.Context, agentID, runID uuid.UUID, req pirpc
 	ans, err := a.API.Inbox.AskDialog(ctx, inbox.Dialog{AgentID: agentID, RunID: runID, RequestID: req.ID, Method: req.Method, Title: req.Title,
 		Message: req.Message, Placeholder: req.Placeholder, Options: req.Options, Timeout: req.Timeout})
 	if err != nil {
-		a.Log.Warn("扩展对话提问失败，按取消回应", "agentId", agentID, "runId", runID, "err", err)
+		a.Log.Warn("extension dialog question failed; answering as cancelled", "agentId", agentID, "runId", runID, "err", err)
 	}
 	return pirpc.DialogResponse{Cancelled: ans.Cancelled, Confirmed: ans.Confirmed, Value: ans.Value, Outcome: ans.Outcome, QuestionID: ans.QuestionID}
 }
@@ -793,10 +793,10 @@ func (a *App) sweepProviderStates(ctx context.Context, pending bool) {
 		return keep, nil
 	}, pending)
 	if err != nil {
-		a.Log.Warn("清理插件提供方状态目录失败", "err", err)
+		a.Log.Warn("failed to sweep plugin provider state directories", "err", err)
 	}
 	if len(removed) > 0 {
-		a.Log.Info("已删除不再需要的插件提供方状态目录", "count", len(removed))
+		a.Log.Info("deleted plugin provider state directories that are no longer needed", "count", len(removed))
 	}
 }
 
@@ -880,11 +880,11 @@ func (a *App) assemblePlugins(cfg *config.Config, res *preflight.Resolved, log *
 	// Merge the model providers registered by plugins into the model catalog; if they cannot be read, only log it, and
 	// fail explicitly when an Agent uses one.
 	if err := a.Plugins.PublishProviders(context.Background()); err != nil {
-		log.Warn("把插件注册的模型提供方并入模型目录失败", "err", err)
+		log.Warn("failed to merge plugin-registered model providers into the model catalog", "err", err)
 	}
 	a.API.Plugins = a.Plugins
 	if cfg.PluginHostEntry == "" {
-		log.Info("没有配置插件宿主入口，插件的平台侧不运行", "env", config.EnvPluginHostEntry)
+		log.Info("no plugin host entry point configured; plugin platform sides do not run", "env", config.EnvPluginHostEntry)
 		return nil
 	}
 	env := append(execenv.Base(root, ""), "PATH="+res.ExecBasePath, "HOME="+root, "LANG=C.UTF-8", "LOOP_NOW_PLUGINS_ROOT="+root, "LOOP_NOW_API_URL="+a.Plugins.APIURL)
@@ -987,7 +987,7 @@ func (a *App) closeResources() {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), budget)
 		if e := a.Installer.Close(ctx); e != nil && a.Log != nil {
-			a.Log.Warn("CLI共享安装尚未收敛", "errorCode", "installer_drain_timeout")
+			a.Log.Warn("shared CLI installs have not settled yet", "errorCode", "installer_drain_timeout")
 		}
 		cancel()
 	}

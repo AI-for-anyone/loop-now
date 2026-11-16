@@ -578,7 +578,7 @@ func (s *Service) reloadHost(ctx context.Context, id string, touched bool) {
 		return
 	}
 	if err := s.Host.Reload(ctx, id); err != nil {
-		s.Log.Warn("宿主重新加载插件失败", "plugin", id, "err", err)
+		s.Log.Warn("plugin host failed to reload the plugin", "plugin", id, "err", err)
 	}
 }
 
@@ -611,7 +611,7 @@ func (s *Service) Uninstall(ctx context.Context, id string, deleteData bool) err
 	}
 	if s.Host != nil {
 		if err := s.Host.Unload(ctx, id); err != nil {
-			s.Log.Warn("宿主卸载插件失败", "plugin", id, "err", err)
+			s.Log.Warn("plugin host failed to unload the plugin", "plugin", id, "err", err)
 		}
 	}
 	dirs, err := s.Store.DeletePlugin(ctx, id)
@@ -623,7 +623,7 @@ func (s *Service) Uninstall(ctx context.Context, id string, deleteData bool) err
 		// install directories.
 		if strings.HasPrefix(d, filepath.Join(s.Root, id)+string(filepath.Separator)) {
 			if err := os.RemoveAll(d); err != nil {
-				s.Log.Warn("删除插件安装目录失败", "plugin", id, "dir", d, "err", err)
+				s.Log.Warn("failed to delete the plugin install directory", "plugin", id, "dir", d, "err", err)
 			}
 		}
 	}
@@ -646,7 +646,7 @@ func (s *Service) BuiltinSources() []BuiltinSource {
 	}
 	entries, err := os.ReadDir(s.OfficialDir)
 	if err != nil {
-		s.Log.Warn("读取官方插件目录失败", "dir", s.OfficialDir, "err", err)
+		s.Log.Warn("failed to read the official plugin directory", "dir", s.OfficialDir, "err", err)
 		return out
 	}
 	for _, e := range entries {
@@ -655,7 +655,7 @@ func (s *Service) BuiltinSources() []BuiltinSource {
 		}
 		m, err := ReadManifest(filepath.Join(s.OfficialDir, e.Name()), s.PlatformVersion)
 		if err != nil || m.ID != e.Name() {
-			s.Log.Warn("跳过官方插件目录中的条目", "name", e.Name(), "err", err)
+			s.Log.Warn("skipping an entry in the official plugin directory", "name", e.Name(), "err", err)
 			continue
 		}
 		out = append(out, BuiltinSource{ID: m.ID, DisplayName: m.DisplayName, Description: m.Description, Version: m.Version})
@@ -722,7 +722,7 @@ func (s *Service) configChanged(ctx context.Context, id string) {
 		err = s.Host.ConfigChanged(ctx, id, map[string]any{"config": cfg})
 	}
 	if err != nil && !errors.Is(err, pluginhost.ErrNotLoaded) {
-		s.Log.Warn("通知插件配置变化失败", "plugin", id, "err", err)
+		s.Log.Warn("failed to notify the plugin of a config change", "plugin", id, "err", err)
 	}
 }
 
@@ -1166,7 +1166,7 @@ func (s *Service) Hook(ctx context.Context, kind pluginhost.Kind, event map[stri
 		include = func(id string) bool {
 			on, err := s.Store.PluginEnabledIn(ctx, id, *project)
 			if err != nil {
-				s.Log.Warn("读取插件启用状态失败", "plugin", id, "err", err)
+				s.Log.Warn("failed to read plugin enablement", "plugin", id, "err", err)
 			}
 			return on
 		}

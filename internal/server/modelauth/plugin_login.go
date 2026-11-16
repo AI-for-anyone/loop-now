@@ -268,12 +268,12 @@ func (p *ProjectService) pluginLogin(ctx context.Context, op cm.Operation, work 
 	}
 	status, code := pluginLoginFailure(ctx, err)
 	if s.Log != nil {
-		s.Log.Warn("插件提供方登录未完成", "projectId", op.ProjectID, "operationId", op.ID, "provider", op.Provider, "plugin", plugin, "code", code, "stage", stage, "detail", helperDiagnostic(err))
+		s.Log.Warn("plugin provider login did not complete", "projectId", op.ProjectID, "operationId", op.ID, "provider", op.Provider, "plugin", plugin, "code", code, "stage", stage, "detail", helperDiagnostic(err))
 	}
 	record, stop := context.WithTimeout(context.Background(), s.Options.RecordTimeout)
 	defer stop()
 	if _, err := s.Store.EndProjectModelAuthOperation(record, op.ProjectID, op.ID, status, code); err != nil && s.Log != nil {
-		s.Log.Warn("保存项目登录状态失败", "projectId", op.ProjectID, "operationId", op.ID, "code", "auth_unavailable")
+		s.Log.Warn("failed to save the project login status", "projectId", op.ProjectID, "operationId", op.ID, "code", "auth_unavailable")
 	}
 }
 

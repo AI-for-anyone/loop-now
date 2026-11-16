@@ -81,7 +81,7 @@ func unsupportedExecutor(what string) error {
 func (s *Service) releaseConsoleCommand(agentID uuid.UUID, owner string) {
 	ctx := context.Background()
 	if _, err := s.co.Release(ctx, agentID.String(), owner); err != nil {
-		s.log.Warn("放开平台命令的忙闲锁失败，等待对账", "agentId", agentID, "err", err)
+		s.log.Warn("failed to release the busy lock of a platform command; waiting for reconciliation", "agentId", agentID, "err", err)
 	}
 	s.kick(ctx, agentID)
 }

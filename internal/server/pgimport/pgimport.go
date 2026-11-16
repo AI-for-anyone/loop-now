@@ -149,7 +149,7 @@ func Import(ctx context.Context, o Options) (_ Report, err error) {
 			if err != nil {
 				return fmt.Errorf("导入 %s：%w", p.table, err)
 			}
-			o.Log.Info("已导入", "table", p.table, "rows", n)
+			o.Log.Info("imported", "table", p.table, "rows", n)
 			report.Tables = append(report.Tables, Table{Name: p.table, Rows: n})
 		}
 		if err := setSequences(ctx, stx, tx); err != nil {

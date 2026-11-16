@@ -184,7 +184,7 @@ func TestTaskCopiesAgentFolderActualAppFakePi(t *testing.T) {
 	if err := json.Unmarshal(snapshot, &env); err != nil || env.SchemaVersion != 10 || sources != "[]" {
 		t.Fatalf("新任务应是快照 v10、没有冻结来源：%d %s %v", env.SchemaVersion, sources, err)
 	}
-	if !strings.Contains(logs.String(), "任务工作目录已复制") || !strings.Contains(logs.String(), "clonefile") {
+	if !strings.Contains(logs.String(), "copied the task working directory") || !strings.Contains(logs.String(), "clonefile") {
 		t.Fatalf("应记录复制方式（APFS 克隆）：%s", logs.String())
 	}
 }

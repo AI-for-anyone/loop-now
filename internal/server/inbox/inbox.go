@@ -733,7 +733,7 @@ func (s *Service) append(ctx context.Context, typ string, payload func(unread in
 		return err
 	})
 	if err != nil {
-		s.Log.Warn("写入收件箱事件流失败", "type", typ, "err", err)
+		s.Log.Warn("failed to write to the Inbox event stream", "type", typ, "err", err)
 	}
 	return err
 }

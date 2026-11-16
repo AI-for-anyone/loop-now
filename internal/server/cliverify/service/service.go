@@ -286,7 +286,7 @@ func (s *Service) Close(ctx context.Context) error {
 }
 func (s *Service) safeLog(code string) {
 	if s.log != nil {
-		s.log.Warn("CLI验证状态维护失败", "errorCode", code)
+		s.log.Warn("CLI verification status maintenance failed", "errorCode", code)
 	}
 }
 func (s *Service) record(op cliverify.Operation, result cliverify.Result) {
@@ -363,7 +363,7 @@ func (s *Service) run(ctx context.Context, op cliverify.Operation, d descriptor)
 	clear(vout.Stderr)
 	if !ok || actual != d.Template.Version || vout.ExitCode != 0 || vout.Overflow || vout.Cancelled {
 		if s.log != nil {
-			s.log.Warn("CLI验证工具版本校验失败", "cli", op.CLI, "exitCode", vout.ExitCode, "versionMatched", ok, "fixedVersionMatched", actual == d.Template.Version, "cancelled", vout.Cancelled, "outputOverflow", vout.Overflow)
+			s.log.Warn("CLI verification tool version check failed", "cli", op.CLI, "exitCode", vout.ExitCode, "versionMatched", ok, "fixedVersionMatched", actual == d.Template.Version, "cancelled", vout.Cancelled, "outputOverflow", vout.Overflow)
 		}
 		code = "tool_unsupported"
 		return

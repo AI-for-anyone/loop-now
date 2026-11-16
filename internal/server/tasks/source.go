@@ -336,12 +336,12 @@ func (s *Source) copyWorkspace(inst store.TaskInstance) error {
 	res, err := folders.CopyTree(folders.AgentWorkspace(s.WorkRoot, inst.AgentID), dst)
 	if err != nil {
 		if s.Log != nil {
-			s.Log.Error("任务工作目录复制失败", "taskId", inst.TaskID, "runtimeId", inst.ID, "agentId", inst.AgentID, "err", err)
+			s.Log.Error("failed to copy the task working directory", "taskId", inst.TaskID, "runtimeId", inst.ID, "agentId", inst.AgentID, "err", err)
 		}
 		return fmt.Errorf("任务工作目录复制失败：%w", err)
 	}
 	if s.Log != nil {
-		s.Log.Info("任务工作目录已复制", "taskId", inst.TaskID, "runtimeId", inst.ID, "agentId", inst.AgentID, "method", res.Method, "durationMs", res.Duration.Milliseconds())
+		s.Log.Info("copied the task working directory", "taskId", inst.TaskID, "runtimeId", inst.ID, "agentId", inst.AgentID, "method", res.Method, "durationMs", res.Duration.Milliseconds())
 	}
 	return nil
 }

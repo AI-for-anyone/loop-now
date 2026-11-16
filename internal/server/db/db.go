@@ -398,7 +398,7 @@ func (d *DB) acquireWriter(ctx context.Context) (*sql.Conn, func(), error) {
 			if h := d.holder.Load(); h != nil {
 				caller = h.caller
 			}
-			d.log.Warn("等待写连接超时未得", "waited", d.wait, "holder", caller, "waiter", callerOutsidePackage())
+			d.log.Warn("timed out waiting for the write connection", "waited", d.wait, "holder", caller, "waiter", callerOutsidePackage())
 		})
 	}
 	d.waiters.Add(1)
@@ -415,7 +415,7 @@ func (d *DB) acquireWriter(ctx context.Context) (*sql.Conn, func(), error) {
 	return c, func() {
 		h := d.holder.Swap(nil)
 		if held := time.Since(start); d.slowTx > 0 && held > d.slowTx && h != nil {
-			d.log.Warn("写连接持有过久", "held", held, "caller", h.caller)
+			d.log.Warn("write connection held too long", "held", held, "caller", h.caller)
 		}
 		c.Close()
 	}, nil

@@ -130,7 +130,7 @@ func (s *Service) StopRun(ctx context.Context, agentID, runID, actionID uuid.UUI
 	if err == nil && changed {
 		s.emitRun(ctx, agentID, runID)
 		if err := s.co.PublishInterrupt(ctx, agentID.String(), runID.String()); err != nil {
-			s.log.Warn("发布停止命令失败，等待驱动循环的定时检查", "agentId", agentID, "err", err)
+			s.log.Warn("failed to publish the stop command; waiting for the driver loop's periodic check", "agentId", agentID, "err", err)
 		}
 	}
 	return out, err

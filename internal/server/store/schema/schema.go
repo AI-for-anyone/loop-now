@@ -51,7 +51,7 @@ func Migrate(ctx context.Context, d *db.DB, logger *slog.Logger) error {
 		return fmt.Errorf("执行数据库迁移失败：%w", err)
 	}
 	for _, r := range results {
-		logger.Info("已执行数据库迁移", "version", r.Source.Version, "file", r.Source.Path, "duration", r.Duration)
+		logger.Info("applied database migrations", "version", r.Source.Version, "file", r.Source.Path, "duration", r.Duration)
 	}
 	return nil
 }
@@ -68,7 +68,7 @@ func MigrateTo(ctx context.Context, d *db.DB, logger *slog.Logger, version int64
 		return fmt.Errorf("执行数据库迁移失败：%w", err)
 	}
 	for _, r := range results {
-		logger.Info("已执行数据库迁移", "version", r.Source.Version, "file", r.Source.Path, "duration", r.Duration)
+		logger.Info("applied database migrations", "version", r.Source.Version, "file", r.Source.Path, "duration", r.Duration)
 	}
 	return nil
 }

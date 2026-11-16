@@ -133,7 +133,7 @@ func (s *Service) googleProbe(ctx context.Context, op cliverify.Operation, d des
 	}
 	if output.ExitCode != 0 || output.Cancelled || output.Overflow {
 		if s.log != nil {
-			s.log.Warn("CLI验证子进程未正常结束", "cli", op.CLI, "exitCode", output.ExitCode, "cancelled", output.Cancelled, "outputOverflow", output.Overflow)
+			s.log.Warn("CLI verification child process did not exit cleanly", "cli", op.CLI, "exitCode", output.ExitCode, "cancelled", output.Cancelled, "outputOverflow", output.Overflow)
 		}
 		return fail("probe_failed")
 	}

@@ -25,7 +25,7 @@ func (s *Service) captureProviders(ctx context.Context, dir string, m Manifest) 
 	}
 	c, err := s.CaptureProviders(ctx, dir, m.Extensions)
 	if err != nil {
-		s.Log.Warn("读取插件注册的模型提供方失败", "plugin", m.ID, "err", err)
+		s.Log.Warn("failed to read plugin-registered model providers", "plugin", m.ID, "err", err)
 		msg := err.Error()
 		return empty, &msg
 	}
@@ -94,7 +94,7 @@ func (s *Service) PublishProviders(ctx context.Context) error {
 
 func (s *Service) publishProviders(ctx context.Context) {
 	if err := s.PublishProviders(ctx); err != nil {
-		s.Log.Warn("把插件提供方并入模型目录失败", "err", err)
+		s.Log.Warn("failed to merge plugin providers into the model catalog", "err", err)
 	}
 }
 

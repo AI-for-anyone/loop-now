@@ -224,7 +224,7 @@ func TestRecordFailureDoesNotAffectRun(t *testing.T) {
 	if r := s.replies(a); len(r) != 1 || r[0].Run.Status != "completed" {
 		t.Fatalf("记录失败不应影响回复：%+v", r)
 	}
-	if !strings.Contains(logs.String(), "写入运行记录失败") || !strings.Contains(logs.String(), "pi.started") {
+	if !strings.Contains(logs.String(), "failed to write the run record") || !strings.Contains(logs.String(), "pi.started") {
 		t.Fatalf("日志中应有记录失败的警告：\n%s", logs.String())
 	}
 }
@@ -270,7 +270,7 @@ func TestServerLogs(t *testing.T) {
 			info = append(info, l)
 		}
 	}
-	if len(info) != 2 || info[0]["msg"] != "回复开始" || info[1]["msg"] != "回复结束" {
+	if len(info) != 2 || info[0]["msg"] != "reply started" || info[1]["msg"] != "reply ended" {
 		t.Fatalf("这条回复在 info 级别应只有开始与结束两行：%v", info)
 	}
 	end := info[1]
@@ -290,7 +290,7 @@ func TestServerLogs(t *testing.T) {
 	failed := s.replies(a)[2].Run
 	found := false
 	for _, l := range parseLogs(t, logs.String()) {
-		if l["msg"] == "回复结束" && l["runId"] == failed.ID.String() {
+		if l["msg"] == "reply ended" && l["runId"] == failed.ID.String() {
 			found = l["status"] == "failed" && l["errorCode"] == "pi_error"
 		}
 	}

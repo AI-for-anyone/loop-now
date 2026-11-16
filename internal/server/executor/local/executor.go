@@ -482,7 +482,7 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 		if victim := e.lruIdleLocked(); victim != nil {
 			delete(e.procs, victim.agentID)
 			e.mu.Unlock()
-			victim.log.Info("进程数已到上限，关闭最久未用的空闲 " + victim.drv.name() + " 进程")
+			victim.log.Info("process limit reached; closing the least recently used idle " + victim.drv.name() + " process")
 			e.stop(victim, stopCause{reason: stopEvicted, forAgent: &snap.AgentID})
 			continue
 		}
@@ -678,7 +678,7 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 	startup := time.Since(begin)
 	e.event(snap.AgentID, &runID, store.EventPiStarted, map[string]any{
 		"pid": client.Pid(), "configVersion": snap.ConfigVersion, "startupMs": startup.Milliseconds(), "reason": startReason, "runtime": drv.runtime()})
-	e.snapshotLog(snap).Info(drv.name()+" 进程启动", "runId", runID, "pid", client.Pid(), "startup", startup, "reason", startReason)
+	e.snapshotLog(snap).Info(drv.name()+" process started", "runId", runID, "pid", client.Pid(), "startup", startup, "reason", startReason)
 	return p, nil
 }
 
@@ -741,7 +741,7 @@ func (e *Executor) recordExit(p *proc, runID *uuid.UUID) {
 		stderr := tail(p.rt.Stderr(), e.o.StderrTailBytes)
 		e.event(p.agentID, runID, store.EventPiExited, map[string]any{
 			"pid": p.rt.Pid(), "uptimeMs": time.Since(p.startedAt).Milliseconds(), "exit": exit, "stderrTail": stderr, "runtime": p.drv.runtime()})
-		p.log.Warn(p.drv.name()+" 进程意外退出", "runId", runID, "pid", p.rt.Pid(), "exit", exit)
+		p.log.Warn(p.drv.name()+" process exited unexpectedly", "runId", runID, "pid", p.rt.Pid(), "exit", exit)
 		e.obs.ProcessChanged(p.agentID)
 	})
 }
@@ -788,7 +788,7 @@ func (e *Executor) recordSession(p *proc) error {
 	ctx, cancel := context.WithTimeout(context.Background(), e.o.StartTimeout)
 	defer cancel()
 	if err := e.src.RecordSessionFile(ctx, p.agentID, p.sessionFile); err != nil {
-		p.log.Error("记录会话文件失败", "runId", p.curRun.Load(), "code", "session_record_failed")
+		p.log.Error("failed to record the session file", "runId", p.curRun.Load(), "code", "session_record_failed")
 		return errors.New("session_record_failed")
 	}
 	p.recorded = p.sessionFile
@@ -903,7 +903,7 @@ func (e *Executor) revokeToken(tokenID uuid.UUID, log *slog.Logger) error {
 	ctx, cancel := context.WithTimeout(context.Background(), e.handoffTimeout())
 	defer cancel()
 	if err := e.o.Tokens.RevokeAgentToken(ctx, tokenID); err != nil {
-		log.Error("作废 Agent 令牌失败", "tokenId", tokenID, "err", err)
+		log.Error("failed to revoke the Agent token", "tokenId", tokenID, "err", err)
 		return ErrRuntimeStopUnconfirmed
 	}
 	return nil
@@ -916,7 +916,7 @@ func (e *Executor) recordStop(p *proc, why stopCause, at time.Time) {
 		data["forAgentId"] = why.forAgent.String()
 	}
 	e.obs.Event(p.agentID, why.runID, executor.Event{Type: store.EventPiStopped, At: at, Data: data})
-	p.log.Info(p.drv.name()+" 进程停止", "runId", why.runID, "pid", p.rt.Pid(), "reason", why.reason)
+	p.log.Info(p.drv.name()+" process stopped", "runId", why.runID, "pid", p.rt.Pid(), "reason", why.reason)
 }
 
 func waitDone(p *proc, d time.Duration) bool {
@@ -1058,7 +1058,7 @@ func (e *Executor) abort(r *run, p *proc) {
 		return
 	default:
 	}
-	p.log.Warn("打断超时，强制结束 "+p.drv.name()+" 进程", "runId", r.id)
+	p.log.Warn("interrupt timed out; force-ending the "+p.drv.name()+" process", "runId", r.id)
 	e.mu.Lock()
 	if e.procs[p.agentID] == p {
 		delete(e.procs, p.agentID)
@@ -1219,7 +1219,7 @@ func (e *Executor) writePidFile(p *proc) {
 	defer e.mu.Unlock()
 	b, _ := json.Marshal(pidRecord{PID: p.rt.Pid(), StartedAt: p.startedAt, InstanceID: e.o.InstanceID.String(), Hostname: e.o.Hostname, SessionDir: p.dirs.sessions, ProcessStart: start})
 	if err := os.WriteFile(p.dirs.pidFile, b, 0o600); err != nil {
-		p.log.Warn("写入 pi.pid 失败", "err", err)
+		p.log.Warn("failed to write pi.pid", "err", err)
 	}
 }
 
@@ -1270,7 +1270,7 @@ func (e *Executor) CleanupStaleExceptPending(ctx context.Context, pending []Pend
 		var rec pidRecord
 		if json.Unmarshal(b, &rec) == nil && rec.PID > 0 && rec.Hostname == e.o.Hostname && rec.InstanceID != e.o.InstanceID.String() {
 			if isOurPi(rec) {
-				e.log.Warn("结束上一次运行遗留的 Pi 进程", "pid", rec.PID, "pidFile", f)
+				e.log.Warn("ending a Pi process left over from the previous server run", "pid", rec.PID, "pidFile", f)
 				_ = procgroup.Terminate(rec.PID)
 				for i := 0; i < 20 && processAlive(rec.PID); i++ {
 					time.Sleep(100 * time.Millisecond)

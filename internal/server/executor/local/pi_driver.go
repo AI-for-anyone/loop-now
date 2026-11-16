@@ -106,7 +106,7 @@ func (pd piDriver) start(ctx context.Context, spec startSpec) (started, error) {
 		return started{}, fail(executor.ErrPiStartFailed, "启动 Pi 失败：%v", err)
 	}
 	if err := procgroup.Started(cmd); err != nil {
-		e.snapshotLog(snap).Warn("Pi 进程没有纳入整组管理，停止时只能结束它本身", "pid", client.Pid(), "err", err)
+		e.snapshotLog(snap).Warn("Pi process is not under group management; stopping can only end the process itself", "pid", client.Pid(), "err", err)
 	}
 	if bridge != nil {
 		bridge.ChildStarted()

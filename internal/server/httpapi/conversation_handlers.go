@@ -254,7 +254,7 @@ func (s *Server) pumpEventsFiltered(w http.ResponseWriter, r *http.Request, curs
 		events, err := read(ctx, cursor, block)
 		if err != nil {
 			if ctx.Err() == nil {
-				s.Log.Warn("读取事件流失败", append(logAttrs, "err", err)...)
+				s.Log.Warn("failed to read the event stream", append(logAttrs, "err", err)...)
 			}
 			return
 		}

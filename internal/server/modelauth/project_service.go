@@ -295,11 +295,11 @@ func (p *ProjectService) Delete(ctx context.Context, project, id uuid.UUID, expe
 		return cm.Account{}, e
 	}
 	if e = p.Auth.CancelProjectLogins(ctx, project, &id); e != nil && p.Auth.Log != nil {
-		p.Auth.Log.Warn("项目账号登录资源清理超时", "projectId", project, "accountId", id, "code", "auth_cleanup_timeout")
+		p.Auth.Log.Warn("project account login resource cleanup timed out", "projectId", project, "accountId", id, "code", "auth_cleanup_timeout")
 	}
 	if p.CancelCLILogins != nil {
 		if e = p.CancelCLILogins(ctx, project, &id); e != nil && p.Auth.Log != nil {
-			p.Auth.Log.Warn("CLI登录资源清理超时", "stage", "deleted_account_login_cleanup", "accountId", id.String())
+			p.Auth.Log.Warn("CLI login resource cleanup timed out", "stage", "deleted_account_login_cleanup", "accountId", id.String())
 		}
 	}
 	p.changed(ctx, project)

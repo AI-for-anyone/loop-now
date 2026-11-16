@@ -74,7 +74,7 @@ func (s *Server) pluginAllowed(r *http.Request, rt Route, p auth.Principal) erro
 	err := s.pluginGate(r, rt, p)
 	if err != nil && apperr.Is(err, apperr.CodeForbidden) {
 		if lerr := s.Store.AppendPluginHostLog(context.WithoutCancel(r.Context()), p.Plugin, "warn", "调用 "+rt.Op+" 被拒绝："+err.Error()); lerr != nil {
-			s.Log.Warn("写入插件日志失败", "plugin", p.Plugin, "err", lerr)
+			s.Log.Warn("failed to write the plugin log", "plugin", p.Plugin, "err", lerr)
 		}
 	}
 	return err

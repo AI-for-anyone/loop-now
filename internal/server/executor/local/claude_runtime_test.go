@@ -537,7 +537,7 @@ func TestClaudePurgeOnRelease(t *testing.T) {
 	missing := newClaudeHarness(t, nil)
 	other := missing.claudeAgent(nil)
 	missing.e.o.ClaudeBin = filepath.Join(t.TempDir(), "no-claude")
-	if err := missing.e.Release(context.Background(), other); err != nil || !strings.Contains(missing.logs.String(), "找不到 claude") {
+	if err := missing.e.Release(context.Background(), other); err != nil || !strings.Contains(missing.logs.String(), "claude not found") {
 		t.Fatalf("找不到 claude 时跳过并记日志：%v %s", err, missing.logs.String())
 	}
 }
@@ -566,7 +566,7 @@ func TestClaudePurgeSkippedWhenArchiveFails(t *testing.T) {
 	if got := h.purgeLog(); len(got) != 0 {
 		t.Fatalf("归档失败时不应 purge：%v", got)
 	}
-	if !strings.Contains(h.logs.String(), "归档 Claude Code 的会话记录失败") {
+	if !strings.Contains(h.logs.String(), "failed to archive the Claude Code session transcript") {
 		t.Fatalf("应记日志：%s", h.logs.String())
 	}
 }
@@ -605,7 +605,7 @@ func TestClaudeSkillsVisibleToAgent(t *testing.T) {
 		}
 	}
 	logs := h.logs.String()
-	if strings.Count(logs, "平台以外的技能") != 1 || !strings.Contains(logs, "update-config") || !strings.Contains(logs, "dataviz") || strings.Contains(logs, "loop-now:loopctl") {
+	if strings.Count(logs, "Skills from outside the platform") != 1 || !strings.Contains(logs, "update-config") || !strings.Contains(logs, "dataviz") || strings.Contains(logs, "loop-now:loopctl") {
 		t.Fatalf("多出的技能应记一次警告（只列多出的）：%s", logs)
 	}
 }
@@ -623,7 +623,7 @@ func TestClaudeTranscriptNotFoundDegrades(t *testing.T) {
 			t.Fatalf("%s：%+v", msg, res)
 		}
 	}
-	if n := strings.Count(h.logs.String(), "找不到 Claude Code 的会话记录"); n != 1 {
+	if n := strings.Count(h.logs.String(), "Claude Code session transcript not found"); n != 1 {
 		t.Fatalf("应记一次警告，记了 %d 次：%s", n, h.logs.String())
 	}
 	h.src.mu.Lock()

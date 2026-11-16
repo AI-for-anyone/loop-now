@@ -149,7 +149,7 @@ func (s *Service) Kick(id uuid.UUID) {
 		}()
 		driveErr = s.drive(ctx, id)
 		if driveErr != nil && ctx.Err() == nil && s.Log != nil {
-			s.Log.Error("任务协调失败", "task_id", id, "error", driveErr)
+			s.Log.Error("task coordination failed", "task_id", id, "error", driveErr)
 		}
 	}()
 }
@@ -162,7 +162,7 @@ func (s *Service) reconcile() {
 	}
 	for _, id := range ids {
 		if err := s.ReconcileTaskLarkInbox(s.ctx, id); err != nil && s.Log != nil {
-			s.Log.Warn("任务凭证交接延期Inbox对账失败", "task_id", id, "code", "task_lark_inbox_reconcile_failed")
+			s.Log.Warn("failed to reconcile Inbox messages deferred by a task credential handoff", "task_id", id, "code", "task_lark_inbox_reconcile_failed")
 		}
 		instances, e := s.Store.TaskInstances(s.ctx, id)
 		if e == nil {
@@ -174,7 +174,7 @@ func (s *Service) reconcile() {
 	}
 	if s.QuestionMaintenance != nil {
 		if err := s.QuestionMaintenance(s.ctx); err != nil {
-			s.Log.Warn("统一问题对账失败", "code", "question_reconcile_failed")
+			s.Log.Warn("unified question reconciliation failed", "code", "question_reconcile_failed")
 		}
 	}
 	s.deliverNotices(s.ctx)
@@ -529,7 +529,7 @@ func (t *turnSink) warn(err error) {
 		if inst, e := t.service.Store.TaskInstance(t.ctx, t.turn.RuntimeID); e == nil {
 			log = log.With("agentId", inst.AgentID)
 		}
-		log.Warn("写入任务运行记录失败", "taskId", t.turn.TaskID, "runtimeId", t.turn.RuntimeID, "nodeRunId", taskNodeRef(t.turn.NodeRunID), "runId", t.turn.ID, "instanceId", t.service.Store.InstanceID, "inboxMessageId", t.turn.TriggerInboxID, "requestId", t.turn.RequestID, "error", err)
+		log.Warn("failed to write the task run record", "taskId", t.turn.TaskID, "runtimeId", t.turn.RuntimeID, "nodeRunId", taskNodeRef(t.turn.NodeRunID), "runId", t.turn.ID, "instanceId", t.service.Store.InstanceID, "inboxMessageId", t.turn.TriggerInboxID, "requestId", t.turn.RequestID, "error", err)
 	}
 }
 func (t *turnSink) event(kind string, data map[string]any) {

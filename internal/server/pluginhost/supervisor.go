@@ -383,7 +383,7 @@ func (s *Supervisor) launch() (*conn, error) {
 		c.stop(s.o.ShutdownGrace)
 		return c, nil
 	}
-	s.o.Log.Info("插件宿主已就绪", "pid", c.cmd.Process.Pid, "hostVersion", s.hostVersion)
+	s.o.Log.Info("plugin host ready", "pid", c.cmd.Process.Pid, "hostVersion", s.hostVersion)
 	s.loadAll(c)
 	s.setState(StateRunning)
 	return c, nil
@@ -442,7 +442,7 @@ func (s *Supervisor) afterExit(c *conn, err error) {
 	}
 	known := s.known
 	s.mu.Unlock()
-	s.o.Log.Error("插件宿主意外退出", "err", crash.Error, "inFlight", len(crash.InFlight), "willRestart", !gaveUp)
+	s.o.Log.Error("plugin host exited unexpectedly", "err", crash.Error, "inFlight", len(crash.InFlight), "willRestart", !gaveUp)
 	s.enqueueLog("", "error", "插件宿主意外退出："+crash.Error)
 	if gaveUp {
 		s.markAll(known, StatusHostStopped)
@@ -452,7 +452,7 @@ func (s *Supervisor) afterExit(c *conn, err error) {
 func (s *Supervisor) markAll(specs []Spec, status string) {
 	for _, spec := range specs {
 		if err := s.o.Store.SetPluginStatus(context.Background(), spec.ID, status, nil); err != nil {
-			s.o.Log.Warn("更新插件状态失败", "plugin", spec.ID, "err", err)
+			s.o.Log.Warn("failed to update the plugin status", "plugin", spec.ID, "err", err)
 		}
 	}
 }
@@ -463,7 +463,7 @@ func (s *Supervisor) loadAll(c *conn) {
 	ctx := context.Background()
 	specs, err := s.o.Specs(ctx)
 	if err != nil {
-		s.o.Log.Error("读取要加载的插件失败", "err", err)
+		s.o.Log.Error("failed to read the plugins to load", "err", err)
 		s.enqueueLog("", "error", "读取要加载的插件失败："+err.Error())
 		return
 	}
@@ -489,10 +489,10 @@ func (s *Supervisor) loadOne(ctx context.Context, c *conn, spec Spec) {
 		if errors.As(err, &pe) {
 			msg = pe.Message
 		}
-		s.o.Log.Warn("插件加载失败", "plugin", spec.ID, "err", msg)
+		s.o.Log.Warn("plugin failed to load", "plugin", spec.ID, "err", msg)
 		s.enqueueLog(spec.ID, "error", "加载失败："+msg)
 		if serr := s.o.Store.SetPluginStatus(ctx, spec.ID, StatusError, &msg); serr != nil {
-			s.o.Log.Warn("更新插件状态失败", "plugin", spec.ID, "err", serr)
+			s.o.Log.Warn("failed to update the plugin status", "plugin", spec.ID, "err", serr)
 		}
 		return
 	}
@@ -501,7 +501,7 @@ func (s *Supervisor) loadOne(ctx context.Context, c *conn, spec Spec) {
 	s.loaded[spec.ID] = lp
 	s.mu.Unlock()
 	if serr := s.o.Store.SetPluginStatus(ctx, spec.ID, StatusActive, nil); serr != nil {
-		s.o.Log.Warn("更新插件状态失败", "plugin", spec.ID, "err", serr)
+		s.o.Log.Warn("failed to update the plugin status", "plugin", spec.ID, "err", serr)
 	}
 }
 
@@ -515,7 +515,7 @@ func (s *Supervisor) Reload(ctx context.Context, id string) error {
 		return nil
 	}
 	if err := s.unloadOne(ctx, c, id); err != nil {
-		s.o.Log.Warn("卸载插件失败", "plugin", id, "err", err)
+		s.o.Log.Warn("failed to unload the plugin", "plugin", id, "err", err)
 	}
 	specs, err := s.o.Specs(ctx)
 	if err != nil {
@@ -592,7 +592,7 @@ func (s *Supervisor) onStderr(line string) {
 		s.stderr = s.stderr[len(s.stderr)-stderrTail:]
 	}
 	s.mu.Unlock()
-	s.o.Log.Warn("插件宿主输出", "plugin", plugin, "line", text)
+	s.o.Log.Warn("plugin host output", "plugin", plugin, "line", text)
 	s.enqueueLog(plugin, "warn", text)
 }
 
@@ -609,7 +609,7 @@ func (s *Supervisor) onMessage(c *conn, m Message) {
 		default:
 			level = "info"
 		}
-		s.o.Log.Log(context.Background(), slogLevel(level), "插件日志", "plugin", m.Plugin, "message", p.Message)
+		s.o.Log.Log(context.Background(), slogLevel(level), "plugin log", "plugin", m.Plugin, "message", p.Message)
 		s.enqueueLog(m.Plugin, level, p.Message)
 	case TypeStateGet, TypeStateSet, TypeStateDelete, TypeStateList:
 		go func() {
@@ -622,7 +622,7 @@ func (s *Supervisor) onMessage(c *conn, m Message) {
 			c.respond(m.ID, m.Plugin, v, err)
 		}()
 	default:
-		s.o.Log.Warn("插件宿主发来了未知的消息", "type", m.Type, "plugin", m.Plugin)
+		s.o.Log.Warn("plugin host sent an unknown message", "type", m.Type, "plugin", m.Plugin)
 		if m.ID != "" {
 			c.respond(m.ID, m.Plugin, nil, fmt.Errorf("不支持的请求 %s", m.Type))
 		}
@@ -763,7 +763,7 @@ func (s *Supervisor) enqueueLog(plugin, level, line string) {
 	select {
 	case s.logs <- logLine{plugin, level, line}:
 	default:
-		s.o.Log.Warn("插件宿主日志队列已满，丢弃一行", "plugin", plugin)
+		s.o.Log.Warn("plugin host log queue is full; dropped a line", "plugin", plugin)
 	}
 }
 
@@ -771,7 +771,7 @@ func (s *Supervisor) writeLogs() {
 	defer close(s.logDone)
 	for l := range s.logs {
 		if err := s.o.Store.AppendPluginHostLog(context.Background(), l.plugin, l.level, l.line); err != nil {
-			s.o.Log.Warn("写入插件宿主日志失败", "err", err)
+			s.o.Log.Warn("failed to write the plugin host log", "err", err)
 		}
 	}
 }
@@ -783,10 +783,10 @@ func (s *Supervisor) prune() {
 	defer t.Stop()
 	for {
 		if err := s.o.Store.PrunePluginHostLog(context.Background(), time.Now().Add(-s.o.LogRetention)); err != nil {
-			s.o.Log.Warn("清理插件宿主日志失败", "err", err)
+			s.o.Log.Warn("failed to prune plugin host logs", "err", err)
 		}
 		if err := s.o.Store.PrunePluginEvents(context.Background(), time.Now().Add(-s.o.EventRetention)); err != nil {
-			s.o.Log.Warn("清理插件事件失败", "err", err)
+			s.o.Log.Warn("failed to prune plugin events", "err", err)
 		}
 		select {
 		case <-t.C:

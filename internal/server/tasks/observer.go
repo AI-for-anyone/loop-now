@@ -123,7 +123,7 @@ func (o *Observer) failed(runtime uuid.UUID, run *uuid.UUID, err error) {
 			attrs = append(attrs, "nodeRunId", taskNodeRef(t.NodeRunID), "inboxMessageId", t.TriggerInboxID, "requestId", t.RequestID)
 		}
 	}
-	o.Log.Warn("写入任务运行记录失败", attrs...)
+	o.Log.Warn("failed to write the task run record", attrs...)
 }
 
 var _ executor.Observer = (*Observer)(nil)

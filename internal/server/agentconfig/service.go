@@ -244,7 +244,7 @@ func (s *Service) DeleteAgent(ctx context.Context, id uuid.UUID) error {
 	s.cancelDeletedAgentLogins(ctx, []uuid.UUID{id})
 	if s.Releaser != nil {
 		if err := s.Releaser.Release(ctx, id); err != nil {
-			s.Logger.Error("释放已删除 Agent 的执行资源失败", "agentId", id, "err", err)
+			s.Logger.Error("failed to release the run resources of a deleted Agent", "agentId", id, "err", err)
 		}
 	}
 	if s.AgentRemoved != nil {

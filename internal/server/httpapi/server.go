@@ -470,7 +470,7 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
-		s.Log.Debug("HTTP 请求", "requestId", reqid.From(r.Context()), "method", r.Method, "path", r.URL.Path, "status", rec.status, "duration", time.Since(start))
+		s.Log.Debug("HTTP request", "requestId", reqid.From(r.Context()), "method", r.Method, "path", r.URL.Path, "status", rec.status, "duration", time.Since(start))
 	})
 }
 
@@ -511,7 +511,7 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 	if _, ok := apperr.As(err); !ok {
 		var tooLarge *http.MaxBytesError
 		if !errors.As(err, &tooLarge) && !errors.Is(err, context.Canceled) {
-			s.Log.Error("处理请求失败", "requestId", reqid.From(r.Context()), "method", r.Method, "path", r.URL.Path, "err", err)
+			s.Log.Error("request failed", "requestId", reqid.From(r.Context()), "method", r.Method, "path", r.URL.Path, "err", err)
 		}
 	}
 	writeError(w, err)

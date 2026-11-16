@@ -585,7 +585,7 @@ func (s *Server) folderChanged(r *http.Request, path string) {
 		by["address"] = p.Address
 	}
 	if err := s.Store.EmitPluginEvent(ctx, "folder.changed", project, agent, nil, nil, map[string]any{"level": level, "path": path, "by": by}); err != nil {
-		s.Log.Warn("写入文件夹变化事件失败", "err", err)
+		s.Log.Warn("failed to write the folder change event", "err", err)
 	}
 }
 

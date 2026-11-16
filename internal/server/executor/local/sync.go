@@ -263,7 +263,7 @@ func (e *Executor) syncSkills(ctx context.Context, snap agentconfig.Snapshot, di
 	var dirs []string
 	for _, k := range snap.Skills {
 		if k.Name == guide.SkillName {
-			e.snapshotLog(snap).Warn("Skill 副本使用了内置 Skill 的名称，已跳过", "skill", k.Name)
+			e.snapshotLog(snap).Warn("a Skill copy uses the name of a built-in Skill; skipped", "skill", k.Name)
 			continue
 		}
 		for _, f := range k.Files {

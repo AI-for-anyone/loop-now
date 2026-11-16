@@ -128,7 +128,7 @@ func (s *Server) authenticate(r *http.Request, prefix string) (auth.Principal, e
 		return auth.Principal{}, unauthenticated()
 	}
 	if err := s.Store.TouchExternalToken(ctx, id); err != nil {
-		s.Log.Warn("记录令牌最近使用时间失败", "tokenId", id, "err", err)
+		s.Log.Warn("failed to record the token's last-used time", "tokenId", id, "err", err)
 	}
 	return auth.External(t.Identity.ID, t.Identity.Name), nil
 }
@@ -200,7 +200,7 @@ func (s *Server) audit(r *http.Request, rt Route, p auth.Principal, status int) 
 		e.Target[m[1]] = r.PathValue(m[1])
 	}
 	if err := s.Store.InsertAudit(context.WithoutCancel(r.Context()), e); err != nil {
-		s.Log.Error("写入审计失败", "requestId", reqid.From(r.Context()), "operation", rt.Op, "err", err)
+		s.Log.Error("failed to write the audit record", "requestId", reqid.From(r.Context()), "operation", rt.Op, "err", err)
 	}
 }
 

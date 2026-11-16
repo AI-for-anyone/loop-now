@@ -216,12 +216,12 @@ func (s *Service) runGitPull(p store.FolderGitPull, f Folder) {
 	}
 	code, message := s.clone(ctx, p, f)
 	if code != "" {
-		log.Warn("从 Git 拉取失败", "errorCode", code)
+		log.Warn("pull from Git failed", "errorCode", code)
 	} else {
-		log.Info("从 Git 拉取完成")
+		log.Info("pull from Git finished")
 	}
 	if err := s.Store.FinishFolderGitPull(context.WithoutCancel(ctx), p.ID, code, message); err != nil {
-		log.Error("记录拉取结果失败", "err", err)
+		log.Error("failed to record the pull result", "err", err)
 	}
 }
 

@@ -100,7 +100,7 @@ func (s *Service) AskDialog(ctx context.Context, d Dialog) (DialogAnswer, error)
 			return cancelled("expired", &id), nil
 		case !st.ExpiresAt.After(time.Now()):
 			if err := s.ReconcileQuestions(context.WithoutCancel(ctx)); err != nil {
-				s.Log.Warn("扩展对话提问到期处理失败", "question", id, "err", err)
+				s.Log.Warn("failed to expire an extension dialog question", "question", id, "err", err)
 			}
 			return cancelled("expired", &id), nil
 		}
@@ -115,7 +115,7 @@ func (s *Service) endDialog(id uuid.UUID) {
 		err = s.ReconcileQuestions(ctx)
 	}
 	if err != nil {
-		s.Log.Warn("结束扩展对话提问失败", "question", id, "err", err)
+		s.Log.Warn("failed to end an extension dialog question", "question", id, "err", err)
 	}
 }
 

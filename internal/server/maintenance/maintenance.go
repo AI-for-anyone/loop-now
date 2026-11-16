@@ -115,7 +115,7 @@ func (s *Service) loop(ctx context.Context) {
 			s.Passive(ctx)
 		case <-daily.C:
 			if err := s.Daily(ctx); err != nil && ctx.Err() == nil {
-				s.log.Error("每日数据库维护失败", "err", err)
+				s.log.Error("daily database maintenance failed", "err", err)
 			}
 			daily.Reset(s.untilDaily())
 		}
@@ -137,7 +137,7 @@ func (s *Service) untilDaily() time.Duration {
 // Passive runs one passive checkpoint and logs a warning when a WAL is too large.
 func (s *Service) Passive(ctx context.Context) {
 	if _, err := s.st.Pool.Checkpoint(ctx, db.CheckpointPassive); err != nil && ctx.Err() == nil {
-		s.log.Warn("被动检查点失败", "err", err)
+		s.log.Warn("passive checkpoint failed", "err", err)
 	}
 	s.warnWAL()
 }
@@ -145,7 +145,7 @@ func (s *Service) Passive(ctx context.Context) {
 func (s *Service) warnWAL() {
 	data, events := s.st.Pool.WALSize()
 	if data > s.o.WALWarnBytes || events > s.o.WALWarnBytes {
-		s.log.Warn("WAL 过大：可能有长时间不结束的读事务挡住了检查点", "dataWALBytes", data, "eventsWALBytes", events, "thresholdBytes", s.o.WALWarnBytes)
+		s.log.Warn("WAL is too large: a long-running read transaction may be blocking checkpoints", "dataWALBytes", data, "eventsWALBytes", events, "thresholdBytes", s.o.WALWarnBytes)
 	}
 }
 
@@ -162,7 +162,7 @@ func (s *Service) Daily(ctx context.Context) error {
 	}
 	for _, r := range results {
 		if r.Busy {
-			s.log.Warn("截断检查点没有做完：有读事务占着旧快照", "schema", r.Schema, "logFrames", r.LogFrames, "checkpointed", r.Checkpointed)
+			s.log.Warn("truncate checkpoint did not complete: a read transaction is holding an old snapshot", "schema", r.Schema, "logFrames", r.LogFrames, "checkpointed", r.Checkpointed)
 		}
 	}
 	if err := s.st.Pool.Optimize(ctx); err != nil {
@@ -172,12 +172,12 @@ func (s *Service) Daily(ctx context.Context) error {
 	if n, err := s.st.PruneEventLogs(ctx, before, s.o.PruneBatch); err != nil {
 		errs = append(errs, fmt.Errorf("清理旧日志：%w", err))
 	} else if n > 0 {
-		s.log.Info("已清理旧日志", "rows", n, "before", before)
+		s.log.Info("pruned old logs", "rows", n, "before", before)
 	}
 	if path, err := Backup(ctx, s.st.Pool, s.o.BackupDir, s.o.Now()); err != nil {
 		errs = append(errs, fmt.Errorf("备份：%w", err))
 	} else {
-		s.log.Info("已备份数据库", "dir", path)
+		s.log.Info("backed up the database", "dir", path)
 		if err := prune(s.o.BackupDir, s.o.BackupKeep); err != nil {
 			errs = append(errs, fmt.Errorf("清理旧备份：%w", err))
 		}

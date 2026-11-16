@@ -171,13 +171,13 @@ func (p *ProjectService) login(ctx context.Context, op cm.Operation, work *login
 		if errors.As(e, &failure) {
 			diagnostic = failure.provider
 		}
-		s.Log.Warn("项目模型登录未完成", "projectId", op.ProjectID, "operationId", op.ID, "code", code, "stage", stage, "providerStage", diagnostic.Stage, "category", diagnostic.Category, "httpStatus", diagnostic.HTTPStatus)
+		s.Log.Warn("project model login did not complete", "projectId", op.ProjectID, "operationId", op.ID, "code", code, "stage", stage, "providerStage", diagnostic.Stage, "category", diagnostic.Category, "httpStatus", diagnostic.HTTPStatus)
 	}
 	// A failed commit's deadline must never poison the independent terminal write.
 	failure, stop := context.WithTimeout(context.Background(), s.Options.RecordTimeout)
 	defer stop()
 	if _, err := s.Store.EndProjectModelAuthOperation(failure, op.ProjectID, op.ID, status, code); err != nil && s.Log != nil {
-		s.Log.Warn("保存项目登录状态失败", "projectId", op.ProjectID, "operationId", op.ID, "code", "auth_unavailable")
+		s.Log.Warn("failed to save the project login status", "projectId", op.ProjectID, "operationId", op.ID, "code", "auth_unavailable")
 	}
 }
 func (p *ProjectService) GetLogin(ctx context.Context, project, id uuid.UUID) (cm.LoginState, error) {
@@ -233,7 +233,7 @@ func (s *Service) cancelProjectLoginAndDrain(ctx context.Context, id uuid.UUID) 
 	case <-w.done:
 	case <-drain.Done():
 		if s.Log != nil {
-			s.Log.Warn("项目登录资源清理超时", "operationId", id, "code", "auth_cleanup_timeout")
+			s.Log.Warn("project login resource cleanup timed out", "operationId", id, "code", "auth_cleanup_timeout")
 		}
 	}
 }

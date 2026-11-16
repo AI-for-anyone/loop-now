@@ -129,7 +129,7 @@ func (e *Executor) purgeClaude(ctx context.Context, agentID uuid.UUID) {
 	d := e.dirs(agentID)
 	log := e.log.With("agentId", agentID)
 	if !within(e.o.WorkRoot, d.workspace) {
-		log.Error("工作区不在平台的工作根之下，不清理 Claude Code 的数据", "workspace", d.workspace)
+		log.Error("workspace is not under the platform's work root; not cleaning up Claude Code's data", "workspace", d.workspace)
 		return
 	}
 	home, err := e.o.RealHome()
@@ -138,7 +138,7 @@ func (e *Executor) purgeClaude(ctx context.Context, agentID uuid.UUID) {
 	}
 	bin, err := e.claudeBinary(ctx)
 	if err != nil {
-		log.Info("找不到 claude，跳过清理 Claude Code 的数据")
+		log.Info("claude not found; skipping cleanup of Claude Code's data")
 		return
 	}
 	env := e.claudeHelperEnv(ctx, home)
@@ -151,7 +151,7 @@ func (e *Executor) purgeClaude(ctx context.Context, agentID uuid.UUID) {
 		}
 		found = true
 		if err := archiveClaudeTranscripts(projectDir, filepath.Join(d.sessions, "claude")); err != nil {
-			log.Warn("归档 Claude Code 的会话记录失败，不清理它的数据", "err", err)
+			log.Warn("failed to archive the Claude Code session transcript; not cleaning up its data", "err", err)
 			return
 		}
 	}
@@ -159,7 +159,7 @@ func (e *Executor) purgeClaude(ctx context.Context, agentID uuid.UUID) {
 		return // this workspace never used Claude Code
 	}
 	if err := e.purgeClaudeWorkspace(ctx, bin, env, agentID, d.workspace); err != nil {
-		log.Warn("claude purge 失败", "err", err)
+		log.Warn("claude purge failed", "err", err)
 	}
 }
 
@@ -168,7 +168,7 @@ func (e *Executor) purgeClaude(ctx context.Context, agentID uuid.UUID) {
 // and returns an error.
 func (e *Executor) purgeClaudeWorkspace(ctx context.Context, bin string, env []string, agentID uuid.UUID, path string) error {
 	if !filepath.IsAbs(path) || !within(e.o.WorkRoot, path) || filepath.Clean(path) != e.dirs(agentID).workspace {
-		e.log.Error("拒绝清理不是该 Agent 工作区的路径", "agentId", agentID, "path", path)
+		e.log.Error("refusing to clean up a path that is not this Agent's workspace", "agentId", agentID, "path", path)
 		return fmt.Errorf("路径 %s 不是该 Agent 在平台工作根之下的工作区", path)
 	}
 	return claudecli.Purge(ctx, bin, env, path)
@@ -269,7 +269,7 @@ func (cd claudeDriver) start(ctx context.Context, spec startSpec) (started, erro
 		return started{}, fail(executor.ErrRuntimeStartFailed, "启动 Claude Code %s 失败：%v", version, err)
 	}
 	if err := procgroup.Started(cmd); err != nil {
-		e.snapshotLog(snap).Warn("Claude Code 进程没有纳入整组管理，停止时只能结束它本身", "pid", client.Pid(), "err", err)
+		e.snapshotLog(snap).Warn("Claude Code process is not under group management; stopping can only end the process itself", "pid", client.Pid(), "err", err)
 	}
 	return started{rt: client, binary: bin, version: version, sessionID: sessionID}, nil
 }
@@ -336,7 +336,7 @@ func (cd claudeDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 		// The session record written by claude was not found (for example on Windows, where it encodes the working
 		// directory differently from us): the turn ends normally and this is not treated as a save failure; the
 		// conversation continues as usual in this process, and the next start opens a new session.
-		p.log.Warn("找不到 Claude Code 的会话记录，下次启动将开新会话", "sessionId", p.sessionID, "workspace", p.dirs.workspace, "version", p.runtimeVersion)
+		p.log.Warn("Claude Code session transcript not found; the next start opens a new session", "sessionId", p.sessionID, "workspace", p.dirs.workspace, "version", p.runtimeVersion)
 	}
 	cc, _ := p.rt.(*ccstream.Client)
 	if cc != nil {
@@ -377,7 +377,7 @@ func checkClaudeSkills(p *proc, init *ccstream.Init) {
 		}
 	}
 	if len(extra) > 0 {
-		p.log.Warn("Claude Code 报告了平台以外的技能，Agent 能看到它们；请把它们补进 ClaudeCodeHiddenSkills", "version", init.Version, "skills", extra)
+		p.log.Warn("Claude Code reported Skills from outside the platform, and the Agent can see them; add them to ClaudeCodeHiddenSkills", "version", init.Version, "skills", extra)
 	}
 }
 
@@ -433,7 +433,7 @@ func (e *Executor) syncClaudePlugin(ctx context.Context, snap agentconfig.Snapsh
 	for _, src := range snap.Plugins.Skills {
 		target := filepath.Join(dir, filepath.Base(src))
 		if _, err := os.Lstat(target); err == nil {
-			e.snapshotLog(snap).Warn("插件的 Skill 与已有的 Skill 同名，已跳过", "skill", filepath.Base(src))
+			e.snapshotLog(snap).Warn("a plugin Skill has the same name as an existing Skill; skipped", "skill", filepath.Base(src))
 			continue
 		}
 		if err := copyTree(src, target); err != nil {

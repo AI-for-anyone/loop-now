@@ -216,7 +216,7 @@ func (c *Coordinator) refresh(a refreshAccess, generation int64, lease uuid.UUID
 		err := a.fail(record, generation, lease, code)
 		cancel()
 		if err != nil && c.Log != nil {
-			c.Log.Warn("Google CLI刷新状态回写失败", "stage", "refresh_failure_record", "versionId", a.version.String())
+			c.Log.Warn("failed to write back the Google CLI refresh status", "stage", "refresh_failure_record", "versionId", a.version.String())
 		}
 	}
 }

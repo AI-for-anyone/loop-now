@@ -120,7 +120,7 @@ func (s *Service) Stop(ctx context.Context) error {
 func (s *Service) endInFlight(ctx context.Context) {
 	runs, err := s.st.ActiveRuns(ctx)
 	if err != nil {
-		s.log.Warn("停止：读取进行中的执行失败，留到下次启动收尾", "err", err)
+		s.log.Warn("stop: failed to read active runs; they are finished at the next start", "err", err)
 		return
 	}
 	for _, r := range runs {
@@ -241,7 +241,7 @@ func (s *Service) interruptActive(ctx context.Context, agentID, byRunID uuid.UUI
 	}
 	active, err := s.st.MarkAborting(ctx, agentID, byRunID)
 	if err != nil {
-		s.log.Error("标记打断失败", "agentId", agentID, "err", err)
+		s.log.Error("failed to mark the interrupt", "agentId", agentID, "err", err)
 		return
 	}
 	if active == nil {
@@ -249,7 +249,7 @@ func (s *Service) interruptActive(ctx context.Context, agentID, byRunID uuid.UUI
 	}
 	s.emitRun(ctx, agentID, active.ID)
 	if err := s.co.PublishInterrupt(ctx, agentID.String(), active.ID.String()); err != nil {
-		s.log.Warn("发布打断命令失败，等待驱动循环的定时检查", "agentId", agentID, "err", err)
+		s.log.Warn("failed to publish the interrupt command; waiting for the driver loop's periodic check", "agentId", agentID, "err", err)
 	}
 }
 
@@ -284,7 +284,7 @@ func (s *Service) restoreRunLock(ctx context.Context, agentID uuid.UUID, run sto
 	}
 	status, err := s.st.RunStatus(ctx, run.ID)
 	if err != nil {
-		s.log.Warn("补设忙闲锁后确认执行状态失败，保留锁", "agentId", agentID, "runId", run.ID, "err", err)
+		s.log.Warn("failed to confirm the run status after re-setting the busy lock; keeping the lock", "agentId", agentID, "runId", run.ID, "err", err)
 		return
 	}
 	switch status {
@@ -355,7 +355,7 @@ func (s *Service) startNext(ctx context.Context, agentID uuid.UUID, next string)
 				return
 			}
 			if err != nil {
-				s.log.Error("开始排队执行失败", "agentId", agentID, "runId", next, "err", err)
+				s.log.Error("failed to start a queued run", "agentId", agentID, "runId", next, "err", err)
 				_, _ = s.co.Release(ctx, agentID.String(), owner)
 				return
 			}
@@ -407,7 +407,7 @@ func (s *Service) drive(agentID uuid.UUID, run store.Run, owner string) {
 	var cur sync.Map // "run" -> uuid.UUID
 	interrupts, err := s.co.SubscribeInterrupts(subCtx, agentID.String())
 	if err != nil {
-		s.log.Warn("订阅打断命令失败，改由定时检查发现打断", "agentId", agentID, "err", err)
+		s.log.Warn("failed to subscribe to interrupt commands; periodic checks will detect interrupts instead", "agentId", agentID, "err", err)
 	} else {
 		go func() {
 			for id := range interrupts {
@@ -441,7 +441,7 @@ func (s *Service) drive(agentID uuid.UUID, run store.Run, owner string) {
 		publish()
 		if err != nil || !ok || next == "" {
 			if err != nil {
-				s.log.Warn("交接忙闲锁失败，等待对账", "agentId", agentID, "err", err)
+				s.log.Warn("failed to hand off the busy lock; waiting for reconciliation", "agentId", agentID, "err", err)
 			}
 			if err == nil && ok && next == "" {
 				if h := testHookAfterDriveHandoff.Load(); h != nil {
@@ -457,7 +457,7 @@ func (s *Service) drive(agentID uuid.UUID, run store.Run, owner string) {
 				var serr error
 				run, started, serr = s.st.StartQueuedRun(ctx, runID, s.o.InstanceID)
 				if serr != nil {
-					s.log.Error("开始排队执行失败", "agentId", agentID, "runId", next, "err", serr)
+					s.log.Error("failed to start a queued run", "agentId", agentID, "runId", next, "err", serr)
 					_, _ = s.co.Release(ctx, agentID.String(), owner)
 					return
 				}
@@ -515,7 +515,7 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	if run.StartedAt != nil {
 		attrs = append(attrs, "queuedMs", run.StartedAt.Sub(run.QueuedAt).Milliseconds())
 	}
-	s.log.Info("回复开始", attrs...)
+	s.log.Info("reply started", attrs...)
 	if st, err := s.st.RunStatus(ctx, run.ID); err == nil && st == "aborting" {
 		return executor.Result{Outcome: executor.OutcomeInterrupted}, ""
 	}
@@ -675,7 +675,7 @@ func (s *Service) recordRunEnd(ctx context.Context, agentID, runID uuid.UUID, en
 		r, msg, finished, err = s.st.FinishRun(ctx, runID, end)
 	}
 	if err != nil {
-		s.log.Error("结束执行失败", "agentId", agentID, "runId", runID, "err", err)
+		s.log.Error("failed to end the run", "agentId", agentID, "runId", runID, "err", err)
 		return store.Run{}, nil, false
 	}
 	if !finished {
@@ -689,7 +689,7 @@ func (s *Service) recordRunEnd(ctx context.Context, agentID, runID uuid.UUID, en
 		}
 		attrs = append(attrs, "durationMs", r.EndedAt.Sub(begin).Milliseconds())
 	}
-	s.log.Info("回复结束", attrs...)
+	s.log.Info("reply ended", attrs...)
 	return r, msg, true
 }
 
@@ -716,7 +716,7 @@ type runSink struct {
 func (k *runSink) Phase(phase string) {
 	ctx := k.s.ctx
 	if err := k.s.st.SetRunPhase(ctx, k.runID, phase); err != nil {
-		k.s.log.Warn("更新执行阶段失败", "runId", k.runID, "agentId", k.agentID, "err", err)
+		k.s.log.Warn("failed to update the run phase", "runId", k.runID, "agentId", k.agentID, "err", err)
 	}
 	k.s.emitRun(ctx, k.agentID, k.runID)
 }
@@ -724,7 +724,7 @@ func (k *runSink) Phase(phase string) {
 func (k *runSink) Running(configVersion int64) {
 	ctx := k.s.ctx
 	if err := k.s.st.SetRunRunning(ctx, k.runID, configVersion); err != nil {
-		k.s.log.Warn("更新执行状态失败", "runId", k.runID, "agentId", k.agentID, "err", err)
+		k.s.log.Warn("failed to update the run status", "runId", k.runID, "agentId", k.agentID, "err", err)
 	}
 	k.s.emitRun(ctx, k.agentID, k.runID)
 }
@@ -732,7 +732,7 @@ func (k *runSink) Running(configVersion int64) {
 func (k *runSink) TextDelta(delta string) {
 	data, _ := json.Marshal(apitypes.SseRunText{RunID: k.runID, Delta: delta})
 	if _, err := k.s.co.AppendText(k.s.ctx, k.agentID.String(), k.runID.String(), delta, apitypes.EventRunText, data); err != nil {
-		k.s.log.Warn("写入文字增量失败", "runId", k.runID, "agentId", k.agentID, "err", err)
+		k.s.log.Warn("failed to write the text delta", "runId", k.runID, "agentId", k.agentID, "err", err)
 	}
 }
 
@@ -740,7 +740,7 @@ func (k *runSink) Tool(callID, name, state string) {
 	ctx := k.s.ctx
 	ev := store.ToolEvent{ToolCallID: callID, ToolName: name, State: state, At: time.Now()}
 	if err := k.s.st.AddToolEvent(ctx, k.runID, ev); err != nil {
-		k.s.log.Warn("记录工具状态失败", "runId", k.runID, "agentId", k.agentID, "err", err)
+		k.s.log.Warn("failed to record the tool status", "runId", k.runID, "agentId", k.agentID, "err", err)
 	}
 	k.s.emit(ctx, k.agentID, apitypes.EventRunTool, apitypes.SseRunTool{RunID: k.runID, ToolCallID: callID, ToolName: name, State: state, At: ev.At})
 }
@@ -757,7 +757,7 @@ func (s *Service) recoverAfterRestart(ctx context.Context) error {
 			continue
 		}
 		text, _ := s.co.RunText(ctx, r.ID.String())
-		s.log.Warn("上次运行遗留的进行中执行，标为服务端重启中断", "agentId", r.AgentID, "runId", r.ID)
+		s.log.Warn("run left active by the previous server run; marked as interrupted by a server restart", "agentId", r.AgentID, "runId", r.ID)
 		s.endRun(ctx, r.AgentID, r.ID, store.RunEnd{Status: "interrupted", EndReason: "server_restart", Text: text})
 		if r.InstanceID != nil {
 			_, _ = s.co.Release(ctx, r.AgentID.String(), coord.LockValue(r.ID.String(), r.InstanceID.String()))
@@ -783,7 +783,7 @@ func (s *Service) reconcileLoop() {
 func (s *Service) reconcile(ctx context.Context) {
 	active, err := s.st.ActiveRuns(ctx)
 	if err != nil {
-		s.log.Warn("对账：读取进行中执行失败", "err", err)
+		s.log.Warn("reconcile: failed to read active runs", "err", err)
 		return
 	}
 	for _, r := range active {
@@ -791,7 +791,7 @@ func (s *Service) reconcile(ctx context.Context) {
 	}
 	agents, err := s.st.AgentsWithQueuedRuns(ctx)
 	if err != nil {
-		s.log.Warn("对账：读取排队执行失败", "err", err)
+		s.log.Warn("reconcile: failed to read queued runs", "err", err)
 		return
 	}
 	for _, agentID := range agents {
@@ -806,11 +806,11 @@ func (s *Service) reconcile(ctx context.Context) {
 func (s *Service) emit(ctx context.Context, agentID uuid.UUID, typ string, payload any) bool {
 	data, err := json.Marshal(payload)
 	if err != nil {
-		s.log.Error("序列化事件失败", "type", typ, "err", err)
+		s.log.Error("failed to encode an event", "type", typ, "err", err)
 		return false
 	}
 	if _, err := s.co.AppendEvent(ctx, agentID.String(), typ, data); err != nil {
-		s.log.Warn("写入事件流失败", "agentId", agentID, "type", typ, "err", err)
+		s.log.Warn("failed to write to the event stream", "agentId", agentID, "type", typ, "err", err)
 		return false
 	}
 
@@ -825,7 +825,7 @@ func (s *Service) emitMessage(ctx context.Context, agentID uuid.UUID, m store.Me
 func (s *Service) emitRun(ctx context.Context, agentID, runID uuid.UUID) {
 	r, err := s.st.GetRun(ctx, runID)
 	if err != nil {
-		s.log.Warn("读取执行失败", "runId", runID, "err", err)
+		s.log.Warn("failed to read the run", "runId", runID, "err", err)
 		return
 	}
 	s.emit(ctx, agentID, apitypes.EventRunUpdated, apitypes.SseRunUpdated{Run: apitypes.FromRun(r)})
@@ -837,7 +837,7 @@ func (s *Service) emitRun(ctx context.Context, agentID, runID uuid.UUID) {
 func (s *Service) emitQueue(ctx context.Context, agentID uuid.UUID) {
 	runs, items, err := s.queueState(ctx, agentID)
 	if err != nil {
-		s.log.Warn("读取排队列表失败", "agentId", agentID, "err", err)
+		s.log.Warn("failed to read the queue", "agentId", agentID, "err", err)
 		return
 	}
 	s.emit(ctx, agentID, apitypes.EventQueueUpdated, apitypes.SseQueueUpdated{QueuedRuns: runs, Items: items})
@@ -932,14 +932,14 @@ func (s *Service) pushAgentStatus(agentID uuid.UUID) {
 		// subscriptions can filter on it.
 		pid, perr := s.st.AgentProjectAny(ctx, agentID)
 		if perr != nil && !apperr.Is(perr, apperr.CodeNotFound) {
-			s.log.Warn("读取已删除 Agent 的归属失败", "agentId", agentID, "err", perr)
+			s.log.Warn("failed to read the owner of a deleted Agent", "agentId", agentID, "err", perr)
 		}
 		s.appendOverview(ctx, apitypes.EventAgentRemoved, apitypes.SseAgentRemoved{AgentID: agentID, Scope: apitypes.ScopeOf(pid), ProjectID: pid})
 		s.sessions.Delete(agentID)
 		return
 	}
 	if err != nil {
-		s.log.Warn("计算概览状态失败", "agentId", agentID, "err", err)
+		s.log.Warn("failed to compute the overview status", "agentId", agentID, "err", err)
 		return
 	}
 	s.appendOverview(ctx, apitypes.EventAgentStatus, apitypes.SseAgentStatus{Agent: item})
@@ -949,11 +949,11 @@ func (s *Service) pushAgentStatus(agentID uuid.UUID) {
 func (s *Service) appendOverview(ctx context.Context, typ string, payload any) {
 	data, err := json.Marshal(payload)
 	if err != nil {
-		s.log.Error("序列化概览事件失败", "type", typ, "err", err)
+		s.log.Error("failed to encode an overview event", "type", typ, "err", err)
 		return
 	}
 	if _, err := s.co.AppendOverview(ctx, typ, data); err != nil {
-		s.log.Warn("写入概览事件流失败", "type", typ, "err", err)
+		s.log.Warn("failed to write to the overview event stream", "type", typ, "err", err)
 	}
 }
 

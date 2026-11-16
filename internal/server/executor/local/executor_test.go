@@ -1118,7 +1118,7 @@ func TestTaskProcessLogsUseConfigurationAgentAndRuntime(t *testing.T) {
 			t.Fatal(err)
 		}
 		msg, _ := row["msg"].(string)
-		if msg != "Pi 进程启动" && msg != "Pi 进程停止" {
+		if msg != "Pi process started" && msg != "Pi process stopped" {
 			continue
 		}
 		seen[msg] = true
@@ -1126,7 +1126,7 @@ func TestTaskProcessLogsUseConfigurationAgentAndRuntime(t *testing.T) {
 			t.Fatalf("log scope mismatch: %v", row)
 		}
 	}
-	if !seen["Pi 进程启动"] || !seen["Pi 进程停止"] {
+	if !seen["Pi process started"] || !seen["Pi process stopped"] {
 		t.Fatal("missing process logs", buf.String())
 	}
 }

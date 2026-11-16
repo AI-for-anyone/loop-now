@@ -35,12 +35,12 @@ func main() {
 	if cfg.StopOnStdinClose {
 		// The shell closing the write end of standard input is equivalent to sending SIGTERM: Windows has no
 		// termination signal that can be delivered, so the desktop shell relies on this for a graceful stop.
-		ctx = stopOnStdinClose(ctx, os.Stdin, func() { log.Info("stdin 关闭，开始优雅退出") })
+		ctx = stopOnStdinClose(ctx, os.Stdin, func() { log.Info("stdin closed, shutting down gracefully") })
 	}
 
 	a, err := app.Build(ctx, cfg, log, app.Options{})
 	if err != nil {
-		log.Error("启动失败", "err", err)
+		log.Error("startup failed", "err", err)
 		os.Exit(app.ExitCode(err))
 	}
 	serveErr := make(chan error, 1)
@@ -48,16 +48,16 @@ func main() {
 
 	select {
 	case <-ctx.Done():
-		log.Info("收到停止信号，开始优雅退出")
+		log.Info("stop signal received, shutting down gracefully")
 	case err := <-serveErr:
 		if err != nil {
-			log.Error("HTTP 服务异常退出", "err", err)
+			log.Error("HTTP server exited unexpectedly", "err", err)
 		}
 	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 	if err := a.Shutdown(shutdownCtx); err != nil {
-		log.Error("停止过程中出错", "err", err)
+		log.Error("error while stopping", "err", err)
 		os.Exit(1)
 	}
 }

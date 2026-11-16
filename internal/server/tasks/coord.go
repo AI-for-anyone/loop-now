@@ -37,7 +37,7 @@ func (s *Service) executeTurn(ctx context.Context, turn store.TaskTurn, sink exe
 		if turn.Priority == 0 {
 			whenBusy = "interrupt"
 		}
-		log.Info("任务回复开始", "whenBusy", whenBusy, "queuedMs", queuedMs)
+		log.Info("task reply started", "whenBusy", whenBusy, "queuedMs", queuedMs)
 		defer func() {
 			durationMs := time.Since(begin).Milliseconds()
 			timeout := s.Options.RecordTimeout
@@ -73,12 +73,12 @@ func (s *Service) executeTurn(ctx context.Context, turn store.TaskTurn, sink exe
 			}
 			attrs := []any{"outcome", outcome, "status", outcome, "endReason", endReason, "durationMs", durationMs, "errorCode", code}
 			if e != nil {
-				log.Warn("汇总任务回复用量失败", "error", e)
+				log.Warn("failed to sum up task reply usage", "error", e)
 			}
 			if e == nil {
 				attrs = append(attrs, "input", input, "output", output, "cacheRead", read, "cacheWrite", write, "total", input+output+read+write, "tokens", input+output+read+write)
 			}
-			log.Info("任务回复结束", attrs...)
+			log.Info("task reply ended", attrs...)
 		}()
 	}
 

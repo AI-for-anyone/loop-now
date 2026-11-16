@@ -109,7 +109,7 @@ func (s *Service) larkLogin(ctx context.Context, op cm.CLIAuthOperation) {
 		status, code = "cancelled", "auth_cancelled"
 	}
 	if s.Log != nil {
-		s.Log.Warn("Lark CLI登录未完成", "stage", stage, "category", code, "httpStatus", httpStatus, "operationId", op.ID.String())
+		s.Log.Warn("Lark CLI login did not complete", "stage", stage, "category", code, "httpStatus", httpStatus, "operationId", op.ID.String())
 	}
 	s.end(op, status, code)
 }

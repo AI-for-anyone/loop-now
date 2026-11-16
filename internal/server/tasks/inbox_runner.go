@@ -64,7 +64,7 @@ func (s *Service) KickInbox(runtime uuid.UUID) {
 		}()
 		driveErr = s.driveInbox(ctx, runtime)
 		if driveErr != nil && ctx.Err() == nil && s.Log != nil {
-			s.Log.Error("任务Inbox派发失败", "runtimeId", runtime, "error", driveErr)
+			s.Log.Error("task Inbox dispatch failed", "runtimeId", runtime, "error", driveErr)
 		}
 	}()
 }

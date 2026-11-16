@@ -58,7 +58,7 @@ func (s *Supervisor) dispatch(ctx context.Context, c *conn, lp *loadedPlugin) {
 		d, err := s.o.Store.ClaimPluginDelivery(ctx, id, lease)
 		if err != nil {
 			if ctx.Err() == nil {
-				s.o.Log.Warn("读取待投递的插件事件失败", "plugin", id, "err", err)
+				s.o.Log.Warn("failed to read plugin events awaiting delivery", "plugin", id, "err", err)
 			}
 		}
 		if d == nil {
@@ -96,7 +96,7 @@ func (s *Supervisor) dispatch(ctx context.Context, c *conn, lp *loadedPlugin) {
 			err = s.o.Store.FailPluginDelivery(wctx, id, d.ID, reason, retry)
 		}
 		if err != nil {
-			s.o.Log.Warn("记录插件事件投递结果失败", "plugin", id, "event", d.ID, "err", err)
+			s.o.Log.Warn("failed to record the plugin event delivery result", "plugin", id, "event", d.ID, "err", err)
 		}
 	}
 }

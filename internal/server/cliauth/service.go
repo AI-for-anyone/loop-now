@@ -218,7 +218,7 @@ func (s *Service) end(op cm.CLIAuthOperation, status, code string) {
 	ctx, cancel := context.WithTimeout(context.Background(), s.Options.RecordTimeout)
 	defer cancel()
 	if _, e := s.Store.EndProjectCLIAuthOperation(ctx, op.ProjectID, op.ID, status, code); e != nil && s.Log != nil {
-		s.Log.Warn("CLI登录终态回写失败", "stage", "login_terminal_record", "operationId", op.ID.String(), "cli", op.CLI)
+		s.Log.Warn("failed to write back the final CLI login status", "stage", "login_terminal_record", "operationId", op.ID.String(), "cli", op.CLI)
 	}
 }
 
@@ -274,7 +274,7 @@ func (s *Service) githubLogin(ctx context.Context, op cm.CLIAuthOperation) {
 		status, code = "cancelled", "auth_cancelled"
 	}
 	if s.Log != nil {
-		s.Log.Warn("GitHub CLI登录未完成", "stage", stage, "category", code, "httpStatus", httpStatus, "operationId", op.ID.String())
+		s.Log.Warn("GitHub CLI login did not complete", "stage", stage, "category", code, "httpStatus", httpStatus, "operationId", op.ID.String())
 	}
 	s.end(op, status, code)
 }
@@ -328,7 +328,7 @@ func (s *Service) Close(ctx context.Context) error {
 		if err != nil {
 			recordErr = errors.Join(recordErr, err)
 			if s.Log != nil {
-				s.Log.Warn("GitHub登录关闭状态写入失败", "stage", "github_shutdown_record", "operationId", pending.id.String())
+				s.Log.Warn("failed to write the closed state of the GitHub login", "stage", "github_shutdown_record", "operationId", pending.id.String())
 			}
 		}
 		// A late successful result now observes the committed terminal state.

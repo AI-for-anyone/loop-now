@@ -53,7 +53,7 @@ func (s *Service) remindUnread(ctx context.Context, agentID uuid.UUID) {
 		err = s.scheduleReminder(ctx, agentID, id, "queue", nil)
 	}
 	if err != nil {
-		s.log.Warn("重开会话后安排平台提醒失败", "agentId", agentID, "err", err)
+		s.log.Warn("failed to schedule a platform reminder after the session was reopened", "agentId", agentID, "err", err)
 	}
 }
 
@@ -94,7 +94,7 @@ func (s *Service) scheduleReminder(ctx context.Context, agentID, triggerID uuid.
 	}
 	switch {
 	case out.SessionMissing:
-		s.log.Warn("Agent 会话丢失，Inbox 消息已保存，未安排提醒；重开会话后补上", "agentId", agentID, "inboxMessageId", triggerID)
+		s.log.Warn("Agent session is missing; the Inbox message is saved but no reminder was scheduled; it is added once the session is reopened", "agentId", agentID, "inboxMessageId", triggerID)
 	case out.Created:
 		s.emitMessage(ctx, agentID, *out.Message, *out.Run)
 		s.emitRun(ctx, agentID, out.Run.ID)

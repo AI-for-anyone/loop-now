@@ -63,11 +63,11 @@ func (u *UserPath) run() {
 	raw, source, err := u.resolve(ctx)
 	dirs := splitDirs(raw)
 	if err != nil || len(dirs) == 0 {
-		u.log.Warn("没有读到登录 shell 的 PATH，“用本机的 CLI”改用服务端进程自己的 PATH", "err", err)
+		u.log.Warn("could not read PATH from the login shell; \"Use local CLIs\" falls back to the server process's own PATH", "err", err)
 		dirs, source = splitDirs(os.Getenv("PATH")), "process"
 	}
 	u.dirs = dirs
-	u.log.Info("已解析用户的 PATH", "source", source, "dirs", len(dirs))
+	u.log.Info("resolved the user's PATH", "source", source, "dirs", len(dirs))
 }
 
 // splitDirs splits PATH by the platform's separator, keeps only absolute paths (dropping . and relative directories),

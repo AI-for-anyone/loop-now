@@ -498,7 +498,7 @@ func (e *Executor) cacheCommands(p *proc) {
 	defer cancel()
 	data, err := p.client.Call(ctx, "get_commands", nil)
 	if err != nil {
-		p.log.Warn("读取 Pi 命令列表失败", "err", err)
+		p.log.Warn("failed to read the Pi command list", "err", err)
 		return
 	}
 	var raw struct {
@@ -512,7 +512,7 @@ func (e *Executor) cacheCommands(p *proc) {
 		} `json:"commands"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
-		p.log.Warn("解析 Pi 命令列表失败", "err", err)
+		p.log.Warn("failed to parse the Pi command list", "err", err)
 		return
 	}
 	out := executor.PiCommands{CapturedAt: time.Now().UTC(), Commands: []executor.PiCommand{}}
@@ -533,12 +533,12 @@ func (e *Executor) cacheCommands(p *proc) {
 	path := filepath.Join(p.dirs.root, commandsFile)
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		p.log.Warn("保存 Pi 命令列表失败", "err", err)
+		p.log.Warn("failed to save the Pi command list", "err", err)
 		return
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		_ = os.Remove(tmp)
-		p.log.Warn("保存 Pi 命令列表失败", "err", err)
+		p.log.Warn("failed to save the Pi command list", "err", err)
 	}
 }
 

@@ -167,7 +167,7 @@ func (c *Coordinator) fail(v store.ModelAuthVersion, attempt uuid.UUID, code str
 	defer cancel()
 	e := c.Store.FailModelAuthRefresh(ctx, v.ID, attempt, code)
 	if c.Log != nil {
-		c.Log.Warn("模型授权刷新不可用", "agentId", v.AgentID, "versionId", v.ID, "provider", v.Provider, "attemptId", attempt, "code", code, "recorded", e == nil)
+		c.Log.Warn("model authorization refresh is unavailable", "agentId", v.AgentID, "versionId", v.ID, "provider", v.Provider, "attemptId", attempt, "code", code, "recorded", e == nil)
 	}
 }
 func (c *Coordinator) Close(ctx context.Context) error {
@@ -201,7 +201,7 @@ func (c *Coordinator) recoverAbandoned(ctx context.Context) {
 			count, err := c.Store.RecoverStaleModelAuthRefresh(record, time.Now().Add(-horizon))
 			stop()
 			if c.Log != nil && ctx.Err() == nil && (err != nil || count > 0) {
-				c.Log.Warn("模型授权刷新恢复检查", "recorded", err == nil, "unavailableCount", count)
+				c.Log.Warn("model authorization refresh recovery check", "recorded", err == nil, "unavailableCount", count)
 			}
 		}
 	}
