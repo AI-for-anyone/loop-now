@@ -8462,7 +8462,8 @@ paths:
       description: |
         Uses the node interrupt path: the turn ends as interrupted with errorCode=user_stopped. When the node still has
         queued items (of any priority), it goes on with the next one; when it has none, the node becomes blocked with
-        the reason "stopped by a person", and you can still send it messages or retry afterwards.
+        a reason saying it was stopped by a person (that text is still sent in Chinese for now), and you can still send
+        it messages or retry afterwards.
         When the turn has already ended, returns 409 task_conflict with reason=run_not_active plus runId and runStatus;
         when a stop or interrupt is already in progress, returns status=already_stopping.
         actionId rules are the same as for promoting to an interrupt.
