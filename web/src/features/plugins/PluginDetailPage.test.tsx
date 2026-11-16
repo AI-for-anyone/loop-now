@@ -38,7 +38,7 @@ function renderDetail(path = '/plugins/webhook', initial: Parameters<typeof fake
 }
 
 describe('插件详情', () => {
-  it('页头：名称、官方来源、版本与状态；页签写在地址里；概览列出组件、启用项目、最近事件、投递记录与日志', async () => {
+  it('页头：名称、官方来源、版本与状态；页签贴在纸张上沿、写在地址里；概览按编号分区：它包含什么、启用项目、最近动静（事件、投递记录、日志三个数字），票根里是目录尺', async () => {
     renderDetail()
     expect(await screen.findByRole('heading', { level: 1, name: 'Webhook 通知' })).toBeInTheDocument()
     const tabs = screen.getByRole('navigation', { name: 'Webhook 通知' })
@@ -49,18 +49,24 @@ describe('插件详情', () => {
       ['投递记录', null],
       ['日志', null],
     ])
-    expect(screen.getByRole('navigation', { name: '页面位置' })).toHaveTextContent('全局 · 插件市场 › webhook')
-    const contains = screen.getByRole('region', { name: '这个插件包含' })
+    expect(screen.getByRole('navigation', { name: '页面位置' })).toHaveTextContent('全局›插件市场›webhook')
+    const contains = screen.getByRole('region', { name: '它包含什么' })
     expect(within(contains).getByText('inbox.read').parentElement).toHaveTextContent('读收件箱消息正文')
     const enabled = screen.getByRole('region', { name: '在哪些项目启用' })
     await waitFor(() => expect(within(enabled).getByRole('switch', { name: `在 ${defaultProject.name} 启用 Webhook 通知` })).toHaveAttribute('aria-checked', 'true'))
     expect(within(enabled).getByText(defaultProject.name).closest('li')).toHaveTextContent('回调地址 → https://hooks.example.com/propanda')
-    const events = screen.getByRole('region', { name: '最近事件' })
-    await waitFor(() => expect(within(events).getAllByRole('listitem')).toHaveLength(4))
-    expect(within(events).getAllByRole('listitem')[0]).toHaveTextContent('已处理 · 120 ms')
-    expect(within(events).getAllByRole('listitem')[1]).toHaveTextContent('处理失败 · 尝试 3 次timeout after 15000ms')
-    const logs = screen.getByRole('region', { name: '日志' })
-    await waitFor(() => expect(within(logs).getAllByRole('listitem')).toHaveLength(3))
+    // 最近动静：接口不给总数，只算已经读到的条数，后面还有就加“+”；每栏链到对应的页签。
+    const activity = screen.getByRole('region', { name: '最近动静' })
+    const figure = (name: string) => within(activity).getByRole('heading', { name }).nextElementSibling
+    await waitFor(() => expect(figure('事件')).toHaveTextContent(/^50\+$/))
+    await waitFor(() => expect(figure('投递记录')).toHaveTextContent(/^4$/))
+    await waitFor(() => expect(figure('日志')).toHaveTextContent(/^100\+$/))
+    expect(within(activity).getByRole('link', { name: '看全部事件 ›' })).toHaveAttribute('href', '/plugins/webhook/events')
+    expect(within(activity).getByRole('link', { name: '看全部日志 ›' })).toHaveAttribute('href', '/plugins/webhook/logs')
+    expect(screen.queryByRole('region', { name: '最近事件' })).not.toBeInTheDocument()
+    const toc = screen.getByRole('navigation', { name: '目录' })
+    expect(within(toc).getAllByRole('link').map((link) => link.textContent)).toEqual(['01它包含什么', '02在哪些项目启用', '03最近动静'])
+    expect(within(toc).getByText('v1.2.0')).toBeInTheDocument()
   })
 
   it('在另一个项目启用：带上它现有的项目级配置与版本', async () => {
@@ -205,7 +211,7 @@ describe('插件详情的说明与仓库', () => {
 
   it('没有 README 时不显示说明卡片', async () => {
     const { client } = renderDetail()
-    await screen.findByRole('region', { name: '这个插件包含' })
+    await screen.findByRole('region', { name: '它包含什么' })
     await waitFor(() => expect(client.getQueryState(['plugins', 'readme', 'webhook'])?.status).toBe('success'))
     expect(screen.queryByRole('region', { name: '说明' })).toBeNull()
   })
@@ -301,7 +307,7 @@ describe('插件详情的模型提供方', () => {
     expect(panel).toHaveTextContent('没有读出模型提供方。')
     unmount()
     renderDetail()
-    await screen.findByRole('region', { name: '这个插件包含' })
+    await screen.findByRole('region', { name: '它包含什么' })
     expect(screen.queryByRole('region', { name: '模型提供方' })).toBeNull()
   })
 })
@@ -315,13 +321,27 @@ describe('插件详情的来源标签', () => {
     const { unmount } = renderDetail(`/plugins/${id}`, { details: [detail], markets: [official, other] })
     const heading = await screen.findByRole('heading', { level: 1, name: id })
     const text = await waitFor(() => {
-      const found = heading.parentElement!.querySelector('h1 + span')?.textContent
+      // 来源标签是页头元信息里的第一项（标题前是首字母方块）。
+      const found = heading.closest('header')!.querySelector('[data-page-meta] > span')?.textContent
       if (!found) throw new Error('来源标签还没显示')
       return found
     })
     unmount()
     return text
   }
+
+  it('票根底部写当前版本与更新状态：市场里有新版本时写“有新版本”，页头是更新按钮；已是最新时页头是一个不能点的“已是最新”', async () => {
+    const newer = makeMarket({ plugins: [makeMarketEntry({ id: 'grok', displayName: 'Grok CLI', installedVersion: '1.0.0', version: '1.1.0', updateAvailable: true })] })
+    const first = renderDetail('/plugins/grok', { details: [fromMarket('grok', newer.url)], markets: [newer] })
+    let toc = await screen.findByRole('navigation', { name: '目录' })
+    expect(await within(toc).findByText('有新版本 v1.1.0')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '更新到 v1.1.0' })).toBeEnabled()
+    first.unmount()
+    renderDetail('/plugins/grok', { details: [fromMarket('grok', official.url)], markets: [official] })
+    toc = await screen.findByRole('navigation', { name: '目录' })
+    expect(await within(toc).findByText('已是最新')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '已是最新' })).toBeDisabled()
+  })
 
   it('按安装时的规则：官方市场装的算官方；其他市场标为已验证的写已验证；未验证的和不是从市场装的写未审核', async () => {
     expect(await badge('grok', fromMarket('grok', official.url))).toBe('官方')

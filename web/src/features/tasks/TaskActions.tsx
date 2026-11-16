@@ -17,7 +17,7 @@ export function TaskActions({ task, disabled = false, showRetry = true, showCanc
   // 改版第 5 步：“重试当前节点”是荧光粉主按钮（藏青描边加投影）；“取消任务”是红色描边的胶囊按钮。
   return <div className="flex flex-wrap items-center gap-2.5">
     {showRetry && task.status === 'blocked' && task.currentNodeRunId && <Button variant="interrupt" className="mr-[3px] border-2 border-ink" disabled={disabled || action.isPending} onClick={() => { target.current = { actionId: crypto.randomUUID(), nodeRunId: task.currentNodeRunId! }; setRetrying(true) }}>{t.tasks.retry}</Button>}
-    {showCancel && !ended && <Button variant="secondary" size="sm" className="h-[34px] border-2 border-red-text bg-paper-raised px-4 text-[13px] text-red-text shadow-none hover:bg-tint-red" disabled={disabled || action.isPending} onClick={() => { cancelId.current = crypto.randomUUID(); setCancelling(true) }}>{t.tasks.cancel}</Button>}
+    {showCancel && !ended && <Button variant="danger-outline" size="xs" className="px-4" disabled={disabled || action.isPending} onClick={() => { cancelId.current = crypto.randomUUID(); setCancelling(true) }}>{t.tasks.cancel}</Button>}
     <ConfirmDialog open={retrying} onOpenChange={setRetrying} title={t.tasks.retry} body={t.tasks.retryBody} confirmLabel={t.tasks.retry} onConfirm={async () => {
       if (!target.current || disabled) return Promise.reject(new Error(t.tasks.reconnecting))
       await action.mutateAsync({ kind: 'retry', body: { actionId: target.current.actionId, expectedNodeRunId: target.current.nodeRunId, note } }); setNote('')

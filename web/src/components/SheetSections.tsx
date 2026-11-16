@@ -23,6 +23,8 @@ interface SheetSectionProps {
   // 标题旁的条目数，只作视觉提示；分区名称仍是标题本身。
   count?: number
   actions?: ReactNode
+  // 标题后面的一句说明（浅墨色小字）。
+  meta?: ReactNode
   // danger：删除一类的分区，编号与标题红色，内容放在红色斜纹的底上。
   tone?: 'default' | 'danger'
   children: ReactNode
@@ -30,7 +32,7 @@ interface SheetSectionProps {
 
 // 编号分区（改版通用规则第 4 条）：左侧空心编号，标题是 ZCOOL 30px 加一笔黄色记号笔；分区直接排在纸上，
 // 彼此之间一道 2px 虚线（第一个上面没有）。标题可以接收焦点，供目录跳转后移入焦点。
-export function SheetSection({ id, titleId, index, title, count, actions, tone = 'default', children }: SheetSectionProps) {
+export function SheetSection({ id, titleId, index, title, count, actions, meta, tone = 'default', children }: SheetSectionProps) {
   const danger = tone === 'danger'
   return (
     <section id={id} aria-label={title} className={cn('flex scroll-mt-6 gap-[18px] text-ink', index > 0 && 'border-t-2 border-dashed border-ink/[0.22] pt-6')}>
@@ -51,6 +53,7 @@ export function SheetSection({ id, titleId, index, title, count, actions, tone =
               </span>
             )}
           </h2>
+          {meta && <span className="text-[12.5px] text-ink-500">{meta}</span>}
           {actions && <div className="ml-auto flex flex-wrap gap-1.5">{actions}</div>}
         </div>
         <div data-section-body className={cn('flex min-w-0 flex-col gap-3.5', danger && 'riso-stripes-red rounded-panel bg-error-field px-5 py-[18px]')}>
@@ -96,7 +99,8 @@ function useActiveSection(ids: string[]) {
 // 点击目录项滚动到对应分区，并把焦点移到分区标题；不用平滑滚动，控制台只保留三个动效。
 // 编号在 DOM 里排在名称前面（读屏读成“01 基本信息”），显示时用 order 排到名称后面。
 // 带着分区地址打开页面（例如统计页的“去看它的提示词”）时，滚动到那个分区并把焦点移到它的标题。
-export function SectionToc({ label, items, className }: { label: string; items: SectionTocItem[]; className?: string }) {
+// footer：尺子底部的一行（例如插件详情的当前版本与更新状态）。
+export function SectionToc({ label, items, className, footer }: { label: string; items: SectionTocItem[]; className?: string; footer?: ReactNode }) {
   const [active, setActive] = useActiveSection(items.map((item) => item.id))
   const { hash } = useLocation()
 
@@ -146,6 +150,7 @@ export function SectionToc({ label, items, className }: { label: string; items: 
           )
         })}
       </ol>
+      {footer && <div className="mt-auto flex shrink-0 flex-col items-end gap-0.5 pr-[22px] pt-4">{footer}</div>}
     </Stub>
   )
 }

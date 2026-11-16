@@ -21,13 +21,14 @@ export function PageFrame({ className, ...props }: ComponentProps<'div'>) {
 // 面包屑最后一项是当前页面，就是标题本身。页头是尺寸容器：宽于 820px 时显示装饰，各行文字给它让出位置。
 // 宽屏时与 Agent 页头一样紧凑：标题 40px，元信息并到标题右边一行（放不下时换行），装饰缩到和页头同高；窄屏照旧。
 // current：面包屑最后一项的写法（默认就是标题，任务详情写成“#11”）；lead：标题前面的东西（如任务编号），不算进标题；
-// actions：这一行靠右的操作（如“取消任务”）。
+// actions：这一行靠右的操作（如“取消任务”）；note：标题下面的一行说明（如插件的简介与来源）。
 export function PageHeader({
   crumbs,
   title,
   current = title,
   lead,
   actions,
+  note,
   children,
   className,
 }: {
@@ -36,6 +37,7 @@ export function PageHeader({
   current?: string
   lead?: ReactNode
   actions?: ReactNode
+  note?: ReactNode
   children?: ReactNode
   className?: string
 }) {
@@ -83,6 +85,7 @@ export function PageHeader({
         )}
         {actions && <div data-page-actions className="flex flex-wrap items-center gap-2.5 nav:ml-auto">{actions}</div>}
       </div>
+      {note && <div data-page-note className="relative text-[13px] text-ink-700 [overflow-wrap:anywhere] @[820px]:pr-[316px] nav:@[820px]:pr-[196px]">{note}</div>}
     </header>
   )
 }
