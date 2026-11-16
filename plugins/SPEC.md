@@ -56,13 +56,13 @@
     "events": ["inbox.received"],
     "permissions": ["inbox.read", "state"],
     "configSchema": { "...": "JSON Schema；secret 字段加 \"x-secret\": true；项目级可覆盖的字段加 \"x-scope\": \"project\"" },
-    "accounts": [{ "kind": "lark", "label": "飞书账号", "fields": { "...": "JSON Schema" }, "multiple": true }],
+    "accounts": [{ "kind": "lark", "label": { "en-US": "Lark account", "zh-CN": "飞书账号" }, "fields": { "...": "JSON Schema" }, "multiple": true }],
     "mcpServers": { "browser": { "command": "node", "args": ["./mcp/server.js"], "env": { "PROFILE_DIR": "${LOOP_NOW_PLUGIN_DATA}/profiles/${LOOP_NOW_AGENT_ID}" } } },
     "bin": ["./bin"],
-    "actions": [{ "id": "resend", "label": "重发", "where": ["identity"], "fields": { "...": "JSON Schema" } }],
+    "actions": [{ "id": "resend", "label": { "en-US": "Resend", "zh-CN": "重发" }, "where": ["identity"], "fields": { "...": "JSON Schema" } }],
     "http": true,
     "schedule": [{ "id": "sweep", "cron": "*/10 * * * *" }],
-    "channels": [{ "id": "lark", "label": "飞书" }]
+    "channels": [{ "id": "lark", "label": { "en-US": "Lark", "zh-CN": "飞书" } }]
   }
 }
 ```
@@ -73,10 +73,14 @@
 - `loopNow.id` 是平台内唯一标识，小写字母、数字、连字符，安装后不可改；`name` 是 npm 名，两者无关。
 - `loopNow.displayName` 与顶层 `description` 可以是字符串，也可以是按语言的对象，如 `{ "zh-CN": "Webhook 通知", "en-US": "Webhook notifications" }`。
   - 对象至少一项；键为语言标签，按 BCP 47 的写法，须匹配 `^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$`（如 zh-CN、en-US、en）；值去掉首尾空白后非空。不合格的对象，以及数字、数组、布尔、null，一律拒绝安装。
-  - 字符串没有指明语言，各语言都显示它。`displayName` 为空或缺省时回落到 npm 名，再回落到 `id`。
+  - A string counts as English and is shown in every language. An empty or missing `displayName` falls back to the npm name, then to `id`.
   - 平台原样保存并原样返回，保留作者写的键顺序。
   - 控制台按当前语言取，没有时依次用 zh-CN、en-US、作者写的第一项；服务端没有语言的地方（插件表的显示名、插件发件人名的兜底）依次用 zh-CN、en-US、第一项。
   - 发布到 npm 的插件，npm 期望 `description` 是字符串；只从 git、本地目录或市场安装的插件不受影响。
+- The labels in `loopNow.accounts`, `loopNow.actions` and `loopNow.channels`, and `title` and `description` at any level of `configSchema` and of the account and action `fields` schemas (including the `oneOf` entries that name enum options), are localized text with the same rules as `displayName`. Official plugins write `en-US` first, then `zh-CN`.
+  - A value with the wrong shape is rejected at install, with its path in the message, such as `loopNow.configSchema.properties.url.title` or `loopNow.channels[0].label`. A `title` or `description` that is neither a string nor an object is rejected as an invalid JSON Schema.
+  - JSON Schema wants strings in `title` and `description`, so the platform validates values against a copy of the schema with the English text in place of each localized one. The stored and returned schema stays as written.
+  - Where the server puts such a label into a log or a message, it uses the English text: `en-US`, then `zh-CN`, then the first entry.
 - `loopNow.platform` 缺省表示没有平台侧；`pi.extensions` 为空表示没有 Agent 侧。只带 skills 的也是合法插件。
 - **清单说了算**：平台侧在代码里订阅的事件、调用的平台接口范围，必须在 `events`、`permissions` 内，超出的订阅在加载时报错并让插件进入"错误"状态；超出范围的 API 调用返回 403 并记录到插件日志。
 - `configSchema` 由平台渲染成表单；`x-secret` 字段只写不回显；`x-scope: project` 字段在项目启用时可覆盖，其余为全局值。

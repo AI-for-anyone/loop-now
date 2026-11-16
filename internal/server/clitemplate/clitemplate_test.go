@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"loop-now/internal/pluginmanifest"
 	"loop-now/internal/server/apperr"
 )
 
@@ -150,7 +151,7 @@ func TestRenderLark(t *testing.T) {
 }
 
 func TestTemplateEnvRejectsPlaceholders(t *testing.T) {
-	tmpl := &Template{Name: "x", Version: "1", Binary: "x", Injection: "env", Fields: []Field{{Name: "token", Label: "t", Type: "secret"}},
+	tmpl := &Template{Name: "x", Version: "1", Binary: "x", Injection: "env", Fields: []Field{{Name: "token", Label: pluginmanifest.PlainText("t"), Type: "secret"}},
 		Env: map[string]string{"X_MODE": "{{token}}"}}
 	if err := tmpl.validate(); err == nil || !strings.Contains(err.Error(), "must not reference a field") {
 		t.Fatalf("固定环境变量引用录入项时应拒绝加载：%v", err)
@@ -201,7 +202,7 @@ func TestRenderLarkCLIByPlatform(t *testing.T) {
 }
 
 func TestRenderEnumValidation(t *testing.T) {
-	tmpl := &Template{Name: "x", Fields: []Field{{Name: "brand", Label: "品牌", Type: "enum", Options: []string{"feishu", "lark"}, Default: "feishu", Required: true}},
+	tmpl := &Template{Name: "x", Fields: []Field{{Name: "brand", Label: pluginmanifest.PlainText("品牌"), Type: "enum", Options: []string{"feishu", "lark"}, Default: "feishu", Required: true}},
 		Credential: Credential{Env: map[string]string{"B": "{{brand}}"}}}
 	if p, _, err := tmpl.Render(map[string]string{}); err != nil || p.Env["B"] != "feishu" {
 		t.Fatalf("未填写时应使用默认值：%+v %v", p, err)

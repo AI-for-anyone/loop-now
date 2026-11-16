@@ -51,7 +51,7 @@ type Manifest struct {
 // AccountKind is an account kind declared by the manifest.
 type AccountKind struct {
 	Kind     string `json:"kind"`
-	Label    string `json:"label"`
+	Label    Text   `json:"label"`
 	Fields   Schema `json:"fields"`
 	Multiple bool   `json:"multiple"`
 }
@@ -59,7 +59,7 @@ type AccountKind struct {
 // Action is a console action button. Fields is the form's JSON Schema, an empty object when there is no input.
 type Action struct {
 	ID     string   `json:"id"`
-	Label  string   `json:"label"`
+	Label  Text     `json:"label"`
 	Where  []string `json:"where"`
 	Fields Schema   `json:"fields"`
 }
@@ -67,7 +67,7 @@ type Action struct {
 // Channel is a channel.
 type Channel struct {
 	ID    string `json:"id"`
-	Label string `json:"label"`
+	Label Text   `json:"label"`
 	// ManageIdentities reports that this channel can manage external identities on their behalf
 	// (plugins/SPEC.md §12); it requires the identities.manage scope.
 	ManageIdentities bool `json:"manageIdentities"`
@@ -348,28 +348,43 @@ func (m *Manifest) validate(dir, platformVersion string) error {
 	if t, ok := m.ConfigSchema.Map()["type"]; ok && t != "object" {
 		return invalid("loopNow.configSchema must have type object.")
 	}
+	if err := CheckSchemaText("loopNow.configSchema", m.ConfigSchema.Map()); err != nil {
+		return err
+	}
 	if _, err := CompileSchema(m.ConfigSchema.Map(), false); err != nil {
 		return invalid("loopNow.configSchema is not a valid JSON Schema: " + err.Error())
 	}
 	kinds := map[string]bool{}
-	for _, a := range m.Accounts {
+	for i, a := range m.Accounts {
 		if !kindPattern.MatchString(a.Kind) || kinds[a.Kind] {
 			return invalid("Each kind in loopNow.accounts must be unique, use only lowercase letters, digits or underscores, and start with a letter.")
 		}
 		kinds[a.Kind] = true
+		if err := a.Label.Check(fmt.Sprintf("loopNow.accounts[%d].label", i)); err != nil {
+			return err
+		}
 		if a.Fields.IsZero() {
 			return invalid("loopNow.accounts entry " + a.Kind + " has no fields.")
+		}
+		if err := CheckSchemaText(fmt.Sprintf("loopNow.accounts[%d].fields", i), a.Fields.Map()); err != nil {
+			return err
 		}
 		if _, err := CompileSchema(a.Fields.Map(), true); err != nil {
 			return invalid("loopNow.accounts entry " + a.Kind + " has fields that are not a valid JSON Schema: " + err.Error())
 		}
 	}
 	ids := map[string]bool{}
-	for _, a := range m.Components.Actions {
-		if !slugPattern.MatchString(a.ID) || ids[a.ID] || a.Label == "" || len(a.Where) == 0 {
+	for i, a := range m.Components.Actions {
+		if err := a.Label.Check(fmt.Sprintf("loopNow.actions[%d].label", i)); err != nil {
+			return err
+		}
+		if !slugPattern.MatchString(a.ID) || ids[a.ID] || a.Label.String() == "" || len(a.Where) == 0 {
 			return invalid("Each entry in loopNow.actions must have a unique id, a label and where.")
 		}
 		if !a.Fields.IsZero() {
+			if err := CheckSchemaText(fmt.Sprintf("loopNow.actions[%d].fields", i), a.Fields.Map()); err != nil {
+				return err
+			}
 			if _, err := CompileSchema(a.Fields.Map(), true); err != nil {
 				return invalid("loopNow.actions entry " + a.ID + " has fields that are not a valid JSON Schema: " + err.Error())
 			}
@@ -382,8 +397,11 @@ func (m *Manifest) validate(dir, platformVersion string) error {
 		}
 	}
 	channelIDs := map[string]bool{}
-	for _, c := range m.Components.Channels {
-		if !slugPattern.MatchString(c.ID) || c.Label == "" || channelIDs[c.ID] {
+	for i, c := range m.Components.Channels {
+		if err := c.Label.Check(fmt.Sprintf("loopNow.channels[%d].label", i)); err != nil {
+			return err
+		}
+		if !slugPattern.MatchString(c.ID) || c.Label.String() == "" || channelIDs[c.ID] {
 			return invalid("Each entry in loopNow.channels must have a unique id and a label.")
 		}
 		channelIDs[c.ID] = true

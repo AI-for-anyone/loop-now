@@ -3,7 +3,7 @@
   "version": "2.100.0",
   "injection": "env",
   "fields": [
-    { "name": "token", "label": "访问令牌", "type": "secret", "required": true }
+    { "name": "token", "label": { "en-US": "Access token", "zh-CN": "访问令牌" }, "type": "secret", "required": true }
   ],
   "credential": {
     "env": { "GH_TOKEN": "{{token}}" }
