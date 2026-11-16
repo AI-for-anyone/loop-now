@@ -8,8 +8,8 @@ type Widen<T> = T extends string
     ? (...args: A) => Widen<R>
     : { readonly [K in keyof T]: Widen<T[K]> }
 
-// 文案表的结构。新增语言时，按这个类型提供一份文案表。
+// Shape of the copy table. To add a language, provide a copy table of this type.
 export type Messages = Widen<typeof zhCN>
 
-// 当前界面语言的文案表，页面加载时选定。
+// Copy table for the current UI language, chosen when the page loads.
 export const t: Messages = locale === 'en-US' ? enUS : zhCN

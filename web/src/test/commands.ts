@@ -2,7 +2,8 @@ import type { Schemas } from '@/api/client'
 
 type Command = Schemas['AgentCommand']
 
-// 与服务端的平台命令表一致（internal/server/conversation/console_commands.go）：用法与中英两种说明。
+// Matches the server's platform command table (internal/server/conversation/console_commands.go):
+// usage plus descriptions in both Chinese and English.
 const specs: [string, string, string, string][] = [
   ['session', '/session', '查看当前会话、模型和进程状态', 'Show the current session, model, and process'],
   ['new', '/new', '重开会话，保留页面里的对话历史', "Start a new session and keep the page's history"],
@@ -13,7 +14,8 @@ const specs: [string, string, string, string][] = [
   ['resume', '/resume [session-id]', '不带 session-id 时列出可恢复的会话；带上完整的 session-id 时恢复那个会话', 'Without session-id, list resumable sessions; with a full session-id, resume that session'],
 ]
 
-// GET /agents/{id}/commands 开头的 7 个平台内置命令（契约的固定顺序）。默认都可用；overrides 按命令名改，例如标成不可用。
+// The 7 built-in platform commands at the start of GET /agents/{id}/commands (in the contract's fixed
+// order). All available by default; overrides change them by command name, e.g. to mark one unavailable.
 export function platformCommands(overrides: Partial<Record<string, Partial<Command>>> = {}): Command[] {
   return specs.map(([name, usage, zh, en]) => ({
     name,
@@ -29,17 +31,17 @@ export function platformCommands(overrides: Partial<Record<string, Partial<Comma
   }))
 }
 
-// Pi 的命令（扩展命令、提示模板、技能）：没有用法，恒可用；说明是扩展给的原文。
+// Pi commands (extension commands, prompt templates, skills): no usage, always available; the description is the extension's original text.
 export function piCommand(name: string, overrides: Partial<Command> = {}): Command {
   return { name, source: 'pi', piSource: 'extension', description: null, pluginId: null, pluginDisplayName: null, usage: null, available: true, unavailableReason: null, ...overrides }
 }
 
-// 命令列表（契约 AgentCommandList）：默认是 Pi 的 Agent、Pi 还没启动过、只有平台命令。
+// Command list (contract AgentCommandList): by default a Pi Agent whose Pi has never started, with only platform commands.
 export function commandList(commands: Command[] = platformCommands(), overrides: Partial<Schemas['AgentCommandList']> = {}): Schemas['AgentCommandList'] {
   return { runtime: 'pi', capturedAt: null, commands, ...overrides }
 }
 
-// Claude Code 的 Agent：没有 Pi 会话，/compact、/export、/resume 不可用，也没有 Pi 命令。
+// Claude Code Agent: no Pi session, so /compact, /export and /resume are unavailable, and there are no Pi commands.
 export const claudeCodeCommands = () =>
   platformCommands(Object.fromEntries(['compact', 'export', 'resume'].map((name) => [name, { available: false, unavailableReason: 'runtime_unsupported' as const }])))
 export const claudeCodeList = () => commandList(claudeCodeCommands(), { runtime: 'claude-code' })

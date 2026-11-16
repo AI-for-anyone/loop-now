@@ -12,15 +12,15 @@ interface ChatSetup {
   agent?: Schemas['Agent']
   messages?: Schemas['Message'][]
   hasMore?: boolean
-  // 这一页的轮次计数等字段；不给时按“这一页就是全部历史”算（见 makeMessagePage）。
+  // Turn counts and similar fields for this page; when not given, treated as "this page is the whole history" (see makeMessagePage).
   page?: Partial<Schemas['MessagePage']>
   status?: Partial<Schemas['AgentStatus']>
   handlers?: HttpHandler[]
-  // 默认打开对话页地址；需要带定位锚点等时另行指定。
+  // Opens the chat page path by default; specify another when it needs a locate anchor or the like.
   path?: string
 }
 
-// 打开某个 Agent 的对话页，返回事件流控制与发送记录。
+// Opens an Agent's chat page and returns the event stream controls and the record of sends.
 export async function renderChat(setup: ChatSetup = {}) {
   const agent = setup.agent ?? makeAgent()
   const sent: Schemas['SendMessageInput'][] = []
@@ -35,7 +35,8 @@ export async function renderChat(setup: ChatSetup = {}) {
   const user = userEvent.setup()
   const result = renderRoutes(routes, setup.path ?? defaultAgentPath(agent.id, 'chat'))
   await screen.findByRole('log')
-  // 事件流在对话页挂载后才建立；全量并行运行时可能晚于对话区出现，等它建立后再返回。
+  // The event stream is set up only after the chat page mounts; in full parallel runs it
+  // may appear later than the conversation area, so wait until it exists before returning.
   const source = await waitFor(() => {
     const found = FakeEventSource.instances.find((s) => s.url.endsWith(`/agents/${agent.id}/events`))
     if (!found) throw new Error('对话事件流还没有建立')

@@ -8,8 +8,9 @@ const WAN = 10_000
 const NAMES = ['web', 'server', 'manager', 'test', 'worker', 'cli'] as const
 export type StatsAgentName = (typeof NAMES)[number]
 
-// 统计页第二版设计稿（Stats.dc.html 的 renderVals）里的示意数据，按 GET /stats 的形状写出：近 7 天，按天分桶。
-// agents 给出各个名称对应的 Agent ID 与所属项目，等你回答与“去看它的提示词”据此生成链接。
+// Sample data from the second design draft of the stats page (renderVals in Stats.dc.html), written in the
+// shape of GET /stats: the last 7 days, bucketed by day. agents gives the Agent ID and project for each
+// name; the links in “等你回答” (Waiting for your answer) and “去看它的提示词” (View its prompt) are built from it.
 export function statsFixture(agents: Record<StatsAgentName, StatsAgentRef>, now: Date = new Date()): Report {
   const { from, to } = statsWindow('week', now)
   const buckets = Array.from({ length: 7 }, (_, i) => new Date(from.getFullYear(), from.getMonth(), from.getDate() + i).toISOString())
@@ -36,7 +37,7 @@ export function statsFixture(agents: Record<StatsAgentName, StatsAgentRef>, now:
     task: sum(origins.map((o) => o.task)),
     other: sum(origins.map((o) => o.other)),
   }
-  // 分项：输出 3%、缓存写入 4%，其余为输入与缓存读，缓存命中 79%。
+  // Breakdown: output 3%, cache writes 4%, the rest input and cache reads; cache hit rate 79%.
   const output = Math.round(total * 0.03)
   const cacheWrite = Math.round(total * 0.04)
   const cacheRead = Math.round((total - output - cacheWrite) * 0.79)
@@ -147,7 +148,7 @@ export function statsFixture(agents: Record<StatsAgentName, StatsAgentRef>, now:
   }
 }
 
-// 这段时间什么都没有：全零的桶，并发全为 null。
+// Nothing at all in this period: all-zero buckets, concurrency all null.
 export function emptyStatsFixture(now: Date = new Date()): Report {
   const report = statsFixture(Object.fromEntries(NAMES.map((name) => [name, { agentId: '', projectId: null }])) as Record<StatsAgentName, StatsAgentRef>, now)
   const zero = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }

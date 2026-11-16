@@ -1,20 +1,20 @@
-// 项目账号、CLI 连接与授权界面。
+// Project accounts, CLI connections and authorization screens.
 export const credentials = {
-  // 移除 CLI 时的确认说明。
+  // Confirmation text when removing a CLI.
   clis: {
     removeProjectBody: "移除这个 CLI 的权限和账号选择，项目共享账号保留。已有任务继续沿用启动时的权限和凭证。",
   },
-  // Agent 配置里 CLI 的工具准备状态。
+  // Tool setup status of a CLI in Agent config.
   status: {
     toolSetupLabel: "工具准备：",
     toolSetupNote: "工具状态与账号录入、远端连接或认证结果分开。",
   },
-  // 打开授权页前先弹出的空白窗口。
+  // Blank window opened first, before the authorization page.
   authWindow: {
     title: "正在准备授权页",
     body: "正在准备授权页，请稍候。返回控制台可查看进度或继续本次登录。",
   },
-  // 选择项目账号的下拉框与保存按钮。
+  // Dropdown for choosing a project account, and the save button.
   selectionField: {
     restoreAutomatic: "恢复当前提供方自动取用",
     choosePlaceholder: "请选择项目账号",
@@ -24,12 +24,13 @@ export const credentials = {
     manageInSettings: "去项目设置维护账号",
     effectNote: "变更从下一条派发消息和新任务生效；当前回复和已有任务保留启动时的账号版本与权限。",
   },
-  // Agent 配置页：模型与 CLI 的账号来源。
+  // Agent config page: where the model and CLI accounts come from.
   agentSelection: {
-    // 插件提供方、声明了状态路径、开着"用本机的登录状态"时，服务端说明这一项实际用的是本机该扩展自己的登录。
+    // For a plugin provider that declares state paths, with "用本机的登录状态" (Use local logins) on, the
+    // server explains that this item actually uses that extension's own login on this machine.
     localLogin: {
       active: "已开启“用本机的登录状态”：这里用的是本机该扩展自己的登录，不是所选的项目账号。",
-      // 平台 Agent 自己的模型凭证里：用的不是这个 Agent 登录的账号。
+      // In the platform Agent's own model credentials: what is used isn't the account this Agent logged in with.
       activeOwn: "已开启“用本机的登录状态”：这里用的是本机该扩展自己的登录，不是这个 Agent 的登录。",
       missing: "已开启“用本机的登录状态”，但本机没有该扩展的登录，Agent 启动会失败。关闭这个开关，或在本机登录后再试。",
       settings: "去本机模式设置",
@@ -51,7 +52,7 @@ export const credentials = {
     labelSeparator: "：",
     projectSourcePrefix: "项目来源 ",
   },
-  // Agent 配置页：mysql / psql 的连接授权集合。
+  // Agent config page: the set of connection grants for mysql / psql.
   dbConnections: {
     statusResolved: "已解析",
     statusNotConfigured: "未配置连接",
@@ -87,7 +88,7 @@ export const credentials = {
     manageInSettings: "去项目设置维护账号",
     deleteSetNote: "删除集合配置不删除账号，会恢复原单账号规则；与保存空集合不同。当前回复和已有任务继续使用已捕获的连接与版本。",
   },
-  // 编辑账号时配置已在别处更新。
+  // The config was updated elsewhere while the account was being edited.
   conflict: {
     title: "配置已在别处更新，尚未保存本次修改",
     body: "你的草稿已保留。核对最新安全信息后，采用该版本再保存；不会自动覆盖或重发。",
@@ -99,7 +100,7 @@ export const credentials = {
     reread: "重新读取最新信息",
     adopt: "已核对，采用此版本",
   },
-  // 录入、替换与改名账号的表单。
+  // Form for entering, replacing and renaming accounts.
   editor: {
     nameRequired: "请填写账号名称",
     keyRequired: "请填写 API Key",
@@ -114,7 +115,7 @@ export const credentials = {
     save: "保存",
     saveKey: "保存密钥",
   },
-  // 项目 gcloud 账号的 Google 浏览器登录。
+  // Google browser login for a project gcloud account.
   google: {
     callbackUnavailable: "本机 Google 登录回调不可用，请核对端口后重试。",
     cancelled: "本次登录已取消。",
@@ -146,7 +147,7 @@ export const credentials = {
     reread: "重新读取 Google 登录状态",
     note: "由你完成官方浏览器授权；打开页面不等于登录成功。原账号与当前回复、已有任务的捕获版本分别保留。",
   },
-  // 项目设置：项目账号列表。
+  // Project settings: the list of project accounts.
   accounts: {
     title: "项目账号",
     unsupported: "当前后台尚未支持项目凭证，更新后台后重试。模型账号和 CLI 账号暂不可登录或录入。",
@@ -202,8 +203,9 @@ export const credentials = {
     deleteBody: (revision: number) => `停止新的取用。明确选择此账号的 Agent 将显示账号已删除，不会自动切换；当前回复和已有任务保留已捕获版本。核对版本 ${revision}；若版本冲突，请取消并重新读取账号后确认。`,
     deleteConfirm: "删除账号",
   },
-  // 添加模型账号时的提供方选择器与账号列表里的提供方。entries 的键、分组与 id 见 features/project-credentials/provider-catalog.ts；
-  // alias 是搜索别名（空格分隔），variants 是地区变体的名字，与那张表里的 id 一一对应。
+  // Provider picker when adding a model account, and the provider shown in the account list. For the keys, groups
+  // and ids of entries, see features/project-credentials/provider-catalog.ts; alias holds search aliases
+  // (space-separated), and variants holds the names of regional variants, matching the ids in that table one to one.
   providerPicker: {
     trigger: "搜索或选择提供方…",
     search: "搜索提供方",
@@ -219,7 +221,7 @@ export const credentials = {
     apiKey: "API 密钥",
     login: (name: string) => `登录 ${name}`,
     groups: { vendor: "模型厂商", domestic: "国内厂商", gateway: "聚合与网关", cloud: "云平台", inference: "推理平台", plugin: "插件提供", other: "其他" },
-    // 插件的 Pi 扩展注册的提供方：标出是哪个插件。
+    // Provider registered by a plugin's Pi extension: shows which plugin.
     plugin: (name: string) => `插件 · ${name}`,
     entries: {
       codex: { name: "OpenAI Codex", alias: "codex chatgpt" },
@@ -257,8 +259,9 @@ export const credentials = {
       typesafe: { name: "typesafe", alias: "" },
     },
   },
-  // 项目模型账号的浏览器登录（Codex）。
-  // 项目模型账号的登录：Codex，或插件注册的带 OAuth 的提供方。插件提供方还可能用设备码，或在登录中途问你问题。
+  // Browser login for a project model account (Codex).
+  // Login for a project model account: Codex, or a provider with OAuth registered by a plugin.
+  // Plugin providers may also use a device code, or ask you questions partway through the login.
   projectLogin: {
     nameLabel: (provider: string) => `新 ${provider} 账号名称`,
     nameLocked: "已有一项新建登录正在进行，本次账号名称已锁定。",
@@ -271,7 +274,7 @@ export const credentials = {
     urlRejectedNoOpen: "授权地址未通过安全校验，未打开未知地址，也不会自动重新发起登录。",
     reread: "重新读取登录状态",
     continueOrCancel: "请按下方的提示继续本次登录，或「取消登录」。",
-    // 插件提供方的授权页：标出要打开的主机。
+    // Authorization page of a plugin provider: shows the host that will be opened.
     openHost: (host: string) => `打开授权页（${host}）`,
     device: {
       intro: (host: string) => `打开 ${host}，输入下面的代码完成登录。`,
@@ -283,7 +286,8 @@ export const credentials = {
     prompt: {
       title: "登录需要你回答",
       detail: "回答下面的问题后，登录继续。",
-      // manual_code：浏览器回调到不了时手工粘贴；扩展没给说明时用这句。
+      // manual_code: paste by hand when the browser callback can't get through;
+      // this sentence is used when the extension gives no instructions.
       manualDefault: "浏览器回调到不了时，把浏览器地址栏里的回调地址，或页面上显示的授权码粘贴到这里。",
       textDefault: "回答",
       required: "请填写回答",
@@ -292,7 +296,7 @@ export const credentials = {
       submitting: "正在提交…",
     },
   },
-  // 账号状态与取用结果的说明。
+  // Descriptions of account status and of the result of picking an account.
   accountCopy: {
     statusSaved: "已保存",
     statusLoggedIn: "已登录",
@@ -310,12 +314,12 @@ export const credentials = {
     unavailable: "当前取用账号不可用，请去项目设置维护",
     requiresLogin: "当前取用账号需要重新登录，请去项目设置维护",
   },
-  // 删除项目被未结束的任务挡住。
+  // Deleting the project is blocked by unfinished tasks.
   projectSettings: {
     deleteBlocked: "项目仍有未结束任务，项目和账号没有删除。sleep 任务也须结束。",
     viewTaskPrefix: "查看任务 ",
   },
-  // 从服务端本机导入 CLI 账号。
+  // Importing CLI accounts from the server's own machine.
   cliImport: {
     entry: '从本机导入', close: '收起本机导入', title: '从服务端本机导入 CLI 账号',
     intro: '本机指服务端所在机器。仅扫描安全候选，由你选择后保存到当前项目；不是安装工具或插件，不会自动测试连接。',
@@ -346,7 +350,7 @@ export const credentials = {
     errors: { source_changed: '来源已变化，请重新扫描。', source_unreadable: '来源不可读，本批未保存。', missing_field: '缺少必要字段，本批未保存。', unsupported: '选中来源暂不支持。', template_mismatch: '模板已变化，请重新扫描。', supplement_override: '补项试图覆盖原有字段，未保存。', invalid_credential: '完整凭证或公开证书校验未通过。', consumer_failed: '选中来源处理失败，本批未保存。', precondition_failed: '项目账号版本已变化，请重新核对。', source_conflict: '来源或原账号已变化，未覆盖账号。', provenance_key_changed: '来源回执暂不能安全比较，未重复创建账号。', cancelled: '本次操作已取消。', timeout: '本次操作已超时，未自动重试。', worker_restarted: '服务端重启结束了本次操作，未重新提取来源。', project_deleted: '目标项目已删除，未恢复账号。', internal_error: '本次处理失败，请读取原操作确认结果。' },
     details: '安全操作标识', operationId: '操作 ID：', accountId: '账号 ID：', versionId: '凭证版本：',
   },
-  // CLI 账号的连接验证。
+  // Connection verification of CLI accounts.
   verification: {
     title: '连接验证', test: '测试连接', again: '重新测试', cancel: '取消本次验证', cancelling: '正在取消…', recover: '查询本次结果', reload: '重新读取验证状态',
     scope: '仅测试此账号已保存的凭证版本，未保存草稿不参与；保存、安装和连接验证是独立状态。',
@@ -362,7 +366,7 @@ export const credentials = {
     errors: { tool_unsupported: '工具或模板不支持验证。', tool_prepare_failed: '工具准备失败，尚未证明账号连接状态。', credential_unavailable: '此版本凭证暂不可用。', configuration_invalid: '连接配置无效，请检查已保存配置。', tls_failed: 'TLS 校验失败，未降低安全设置。', authentication_failed: '本次认证失败。', database_unavailable: '指定数据库暂不可用。', permission_denied: '本次固定检查权限不足，不代表所有认证均无效。', provider_policy: '供应商策略拒绝本次固定检查。', rate_limited: '供应商限制请求频率，请稍后手动重试。', network_failed: '网络连接失败。', timeout: '本次验证超时，未自动重试。', requires_login: '此版本需要重新登录，未自动发起登录。', target_changed: '测试目标已变化，未改用其他版本。', server_restarted: '服务端重启，本次验证已结束，未自动重跑。', probe_failed: '固定检查未通过，无法进一步确定原因。', internal_error: '验证暂时失败，请查询或稍后手动重试。' },
     version: '凭证版本：', time: '验证时间：', completed: '结束时间：', tool: '本次工具版本：', details: '验证目标详情', deadline: '操作期限：', http: '安全 HTTP 状态：',
   },
-  // GitHub 账号登录与个人访问令牌。
+  // GitHub account login and personal access tokens.
   github: {
     title: 'GitHub 账号', purpose: '供允许使用 gh 的 Agent 访问 GitHub 仓库、PR 和 Issue。',
     login: '登录 GitHub', relogin: '重新登录 GitHub', pat: '使用个人访问令牌（PAT）', patHelp: '如何创建个人访问令牌',
@@ -390,7 +394,7 @@ export const credentials = {
     operation: '操作 ID：', newTarget: '本项目新 GitHub 账号', target: (name: string) => `重登目标：${name}（备注保留）`,
     errors: { callback_unavailable: '授权暂不可用。', auth_cancelled: '本次授权已取消。', auth_timeout: '本次授权超时。', network_error: '授权网络请求失败。', oauth_failed: 'GitHub 授权未完成。', invalid_response: '未取得符合契约的有效授权结果。', account_mismatch: '本次授权响应身份信息不一致，原账号保持。', requires_login: '此版本需要重新登录。', helper_unavailable: 'GitHub 授权组件暂不可用。', version_conflict: '账号已在别处更新，本次未覆盖；请核对最新账号。', server_restarted: '服务已重启，本次授权结束，未自动重新发起。' },
   },
-  // 飞书应用与用户身份。
+  // Lark app and user identity.
   lark: {
     title: '飞书用户登录', bot: '应用身份 · bot', user: '用户身份 · user',
     application: '授权使用的项目应用', chooseApplication: '请明确选择已有应用账号',

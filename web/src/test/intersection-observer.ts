@@ -1,4 +1,4 @@
-// jsdom 没有 IntersectionObserver。这个假实现记下所有观察者，测试可以手动触发某个元素进入或离开视口。
+// jsdom has no IntersectionObserver. This fake records every observer, so tests can manually make an element enter or leave the viewport.
 export class FakeIntersectionObserver {
   static instances: FakeIntersectionObserver[] = []
   readonly targets = new Set<Element>()
@@ -25,7 +25,7 @@ export class FakeIntersectionObserver {
     return []
   }
 
-  // 让观察着 target 的观察者收到一次进入或离开视口的通知。
+  // Sends the observers watching target one notification that it entered or left the viewport.
   static trigger(target: Element, isIntersecting: boolean) {
     for (const observer of FakeIntersectionObserver.instances) {
       if (!observer.targets.has(target)) continue

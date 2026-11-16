@@ -1,7 +1,7 @@
 import { config } from '@/config'
 import type { Schemas } from '@/api/client'
 
-// 测试中拼接服务端地址，以及构造符合契约的数据。
+// Builds server URLs in tests and constructs data that matches the contract.
 export const apiUrl = (path: string) => `${config.apiBase}${path}`
 
 export function errorBody(code: Schemas['ErrorCode'], message: string = code, extra: Partial<Schemas['Error']['error']> = {}): Schemas['Error'] {
@@ -12,7 +12,7 @@ let seq = 0
 const id = () => `00000000-0000-7000-8000-${String(++seq).padStart(12, '0')}`
 const now = '2026-10-12T08:00:00Z'
 
-// 排队托盘中的一项。默认是控制台在对话中发出、普通排队的消息。
+// One item in the queue tray. By default, a message the console sent in the conversation, queued normally.
 export function makeQueueItem(overrides: Partial<Schemas['QueueItem']> = {}): Schemas['QueueItem'] {
   return { kind: 'run', runId: id(), messageId: null, from: { kind: 'console', id: null, address: '@console', name: '控制台', deleted: false, pluginId: null, channelId: null }, text: '排队的消息', images: [], whenBusy: 'queue', queuedAt: '2026-10-12T08:00:00Z', ...overrides }
 }
@@ -43,15 +43,16 @@ export function makeMessage(overrides: Partial<Schemas['Message']> = {}): Schema
   return { id: id(), role: 'user', origin: 'console', text: '你好', createdAt: now, sessionEpoch: 1, run: makeRun(), ...overrides }
 }
 
-// 一页对话历史（符合契约）。轮次计数默认按“这一页就是全部历史”算：前面没有轮次，总数是这一页里的轮次数
-// （一次执行一轮；排队中的、排队中即作废没有真正执行的不算）。分页的样例自己给 hasMore、turnsBefore、turnsTotal。
+// One page of conversation history (matching the contract). Turn counts default to treating "this page is the whole history": no
+// turns before it, and the total is the number of turns on this page (one run is one turn; runs still queued, or voided while
+// queued without ever really running, don't count). Paging fixtures supply hasMore, turnsBefore and turnsTotal themselves.
 const VOIDED: ReadonlySet<string | null> = new Set(['user_cancelled', 'merged_into_interrupt', 'no_pending_messages'])
 export function makeMessagePage(messages: Schemas['Message'][] = [], overrides: Partial<Schemas['MessagePage']> = {}): Schemas['MessagePage'] {
   const turns = new Set(messages.filter((message) => message.run.status !== 'queued' && !VOIDED.has(message.run.endReason)).map((message) => message.run.id))
   return { messages, hasMore: false, hasMoreAfter: false, turnsBefore: 0, turnsTotal: turns.size, ...overrides }
 }
 
-// 默认属于测试上下文中的默认项目。
+// Belongs to the default project of the test context by default.
 export function makeAgent(overrides: Partial<Schemas['Agent']> = {}): Schemas['Agent'] {
   return {
     id: id(),
@@ -59,7 +60,8 @@ export function makeAgent(overrides: Partial<Schemas['Agent']> = {}): Schemas['A
     projectId: context.project.id,
     isManager: false,
     name: '开发助手',
-    // 地址由服务端按名称拼出；样例默认为 null（契约允许，名称不满足命名规则时就是 null），需要地址的测试自己给出。
+    // The server builds the address from the name; fixtures default to null (the contract allows it: it
+    // is null when the name doesn't meet the naming rules), and tests that need an address supply one.
     address: null,
     model: { provider: 'anthropic', modelId: 'claude-sonnet-5-5' },
     runtime: 'pi',
@@ -128,7 +130,7 @@ export const context: Schemas['Context'] = {
   limits,
 }
 
-// 默认项目：与 context.project 是同一个项目。
+// Default project: the same project as context.project.
 export const defaultProject: Schemas['Project'] = {
   id: context.project.id,
   organizationId: context.organization.id,
@@ -147,9 +149,9 @@ export function makeProject(overrides: Partial<Schemas['Project']> = {}): Schema
 export const projectsUrl = apiUrl('/projects')
 export const platformAgentsUrl = apiUrl('/platform/agents')
 export const projectAgentsUrl = (projectId: string) => apiUrl(`/projects/${projectId}/agents`)
-// 默认项目的 Agent 列表与新建地址。
+// Agent list and create URL of the default project.
 export const agentsUrl = projectAgentsUrl(context.project.id)
 
-// 控制台中默认项目的地址，项目名已编码，与控制台自己生成的地址相同。
+// Console path of the default project, with the project name encoded, the same as the path the console generates itself.
 export const defaultAgentsPath = `/p/${encodeURIComponent(context.project.name)}/agents`
 export const defaultAgentPath = (agentId: string, tab: 'chat' | 'config') => `${defaultAgentsPath}/${agentId}/${tab}`

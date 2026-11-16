@@ -1,7 +1,8 @@
 import type { FolderEntry, FolderSource, GitPull } from '@/features/folders/folder-source'
 import { joinPath, nameOf, parentOf, segmentsOf, within } from '@/features/folders/folder-source'
 
-// 内存中的演示文件夹，形状与 /agents/{agentId}/folder 等接口一致：文件管理器的测试与界面方案截图共用。
+// In-memory demo folders, shaped like /agents/{agentId}/folder and related
+// endpoints: shared by the file manager tests and the UI mockup screenshots.
 
 type Node =
   | { kind: 'dir'; children: Map<string, Node>; modifiedAt: string }
@@ -143,7 +144,7 @@ function workspace(): Node {
   return root
 }
 
-// 项目共享文件夹：还没有 AGENTS.md；顶层有 160 多个文件夹，用于检验分页。
+// Project shared folder: no AGENTS.md yet; more than 160 folders at the top level, to exercise paging.
 function project(): Node {
   const root = dir(60)
   const areas = ['billing', 'search', 'auth', 'gateway', 'ledger', 'notify', 'report', 'import']
@@ -168,12 +169,12 @@ export interface MockFolderOptions {
   key: string
   preset: keyof typeof PRESETS
   latency?: number
-  // 每页条数；真实接口默认 500，演示用小一些以便看到分页。
+  // Entries per page; the real endpoint defaults to 500, the demo uses fewer so that paging is visible.
   pageSize?: number
-  // 只有 Agent 的文件夹能从 Git 拉取。地址含 "fail" 时拉取失败。
+  // Only Agent folders can pull from Git. Pulling fails when the address contains "fail".
   git?: boolean
   gitDuration?: number
-  // 上传每个文件用多久。
+  // How long each file takes to upload.
   uploadDuration?: number
 }
 
@@ -286,7 +287,7 @@ export function createMockFolder({ key, preset, latency = 120, pageSize = 100, g
           }, gitDuration)
           return { ...pull }
         },
-        // 新的在前。
+        // Newest first.
         async list() {
           await wait(40)
           return [...pulls.values()].reverse().map((pull) => ({ ...pull }))
