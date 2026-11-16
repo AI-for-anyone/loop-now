@@ -24,6 +24,10 @@ jobs:
           node-version: 24.21.0
       - name: go vet
         run: go vet ./cmd/... ./internal/... ./api/...
+      # Go comments and log messages must be in English (a quoted Chinese original followed by its English is allowed
+      # in comments); see scripts/check-english for the exact rule.
+      - name: English comments and log messages
+        run: go run ./scripts/check-english
       # The whole server must cross-compile to Windows (process groups, locks, permissions and no-follow opens each have a Windows implementation); real runs are in server-windows.
       - name: go vet (windows cross)
         run: GOOS=windows GOARCH=amd64 go vet ./cmd/... ./internal/... ./api/... ./auth-helper/...
