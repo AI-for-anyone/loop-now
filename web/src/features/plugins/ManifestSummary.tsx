@@ -3,6 +3,7 @@ import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { fieldsOf } from './schema-form'
+import { localizedText } from '@/lib/localized-text'
 
 type Manifest = Schemas['PluginManifest']
 const text = t.plugins.confirm
@@ -73,15 +74,15 @@ export function ManifestSummary({ manifest, columns = true, preview, layout = 'g
   const secretCount = configFields.filter((field) => field.secret).length
   const platformRows = [
     c.platform && <Row key="code" name={text.platformCode} hint={text.platformCodeHint} />,
-    c.channels.length > 0 && <Row key="channels" name={text.channels} hint={list(c.channels.map((channel) => channel.label))} />,
+    c.channels.length > 0 && <Row key="channels" name={text.channels} hint={list(c.channels.map((channel) => localizedText(channel.label)))} />,
     c.channels.some((channel) => channel.manageIdentities) && (
-      <Row key="manage" name={text.manageIdentities} hint={`${list(c.channels.filter((channel) => channel.manageIdentities).map((channel) => channel.label))} · ${text.manageIdentitiesHint}`} />
+      <Row key="manage" name={text.manageIdentities} hint={`${list(c.channels.filter((channel) => channel.manageIdentities).map((channel) => localizedText(channel.label)))} · ${text.manageIdentitiesHint}`} />
     ),
-    ...manifest.accounts.map((account) => <Row key={`account-${account.kind}`} name={text.accountKind(account.label)} hint={list(fieldsOf(account.fields).map((field) => field.label))} />),
+    ...manifest.accounts.map((account) => <Row key={`account-${account.kind}`} name={text.accountKind(localizedText(account.label))} hint={list(fieldsOf(account.fields).map((field) => field.label))} />),
     configFields.length > 0 && <Row key="config" name={text.config(configFields.length)} hint={secretCount ? text.secrets(secretCount) : list(configFields.map((field) => field.label))} />,
     c.http && <Row key="http" name={text.http} hint={text.httpHint} />,
     c.schedules.length > 0 && <Row key="schedule" name={text.schedule} hint={list(c.schedules.map((schedule) => text.scheduleItem(schedule.id, schedule.cron)))} />,
-    c.actions.length > 0 && <Row key="actions" name={text.actions} hint={list(c.actions.map((action) => action.label))} />,
+    c.actions.length > 0 && <Row key="actions" name={text.actions} hint={list(c.actions.map((action) => localizedText(action.label)))} />,
   ].filter(Boolean)
   const agentRows = [
     c.agentExtensions > 0 && <Row key="ext" name={text.extensions(c.agentExtensions)} hint={preview ? text.extensionsPreviewHint[preview] : text.extensionsHint} />,
