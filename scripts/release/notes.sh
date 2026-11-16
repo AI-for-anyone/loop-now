@@ -37,7 +37,7 @@ if [ -z "${notes//[[:space:]]/}" ] && [ "$(git -C "$root" cat-file -t "refs/tags
 	[ "$(printf '%s' "$notes" | tr -d '[:space:]')" = "$tag" ] && notes=""
 fi
 if [ -z "${notes//[[:space:]]/}" ]; then
-	echo "发布说明为空：在 CHANGELOG.md 加一节 \"## $tag\"，或用 git tag -a $tag 写上注解" >&2
+	echo "The release notes are empty: add a \"## $tag\" section to CHANGELOG.md, or write an annotation with git tag -a $tag." >&2
 	exit 1
 fi
 # Drop leading blank lines (command substitution has already removed the trailing newlines).
