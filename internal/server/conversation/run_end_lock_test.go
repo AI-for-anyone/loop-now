@@ -43,56 +43,56 @@ func TestRunEndIsPublishedAfterLockRelease(t *testing.T) {
 
 			var first uuid.UUID
 			if kind == "reply" {
-				first = e.mustSend("第一条", "").Run.ID
-				e.waitStarted("第一条")
+				first = e.mustSend("first message", "").Run.ID
+				e.waitStarted("first message")
 			} else {
 				if _, err := e.st.Pool.Exec(ctx, `UPDATE agent_sessions SET state='active', session_file=$2 WHERE agent_id=$1`, e.agent, "/tmp/fake-session.jsonl"); err != nil {
 					t.Fatal(err)
 				}
 				done := make(chan error, 1)
 				go func() {
-					run, err := e.svc.Compact(ctx, e.agent, "保留关键决定")
+					run, err := e.svc.Compact(ctx, e.agent, "keep the key decisions")
 					first = run.ID
 					done <- err
 				}()
-				e.waitStarted("保留关键决定")
+				e.waitStarted("keep the key decisions")
 				select {
 				case err := <-done:
 					if err != nil {
-						t.Fatalf("压缩失败：%v", err)
+						t.Fatalf("compaction failed: %v", err)
 					}
 				case <-time.After(5 * time.Second):
-					t.Fatal("压缩结束后 /compact 请求应返回")
+					t.Fatal("the /compact request should return once the compaction ends")
 				}
 			}
 			select {
 			case id := <-reached:
 				if id != first {
-					t.Fatalf("结束的执行不对：%s，期望 %s", id, first)
+					t.Fatalf("wrong run ended: %s, want %s", id, first)
 				}
 			case <-time.After(5 * time.Second):
-				t.Fatal("等待执行结束超时")
+				t.Fatal("timed out waiting for the run to end")
 			}
 			if !hasTerminalEvent(t, e, first) {
-				t.Fatal("执行结束的通知里应已有终态事件")
+				t.Fatal("the terminal event should already exist when the run end is announced")
 			}
 
-			msg, err := e.send("紧接着的消息", "")
+			msg, err := e.send("follow-up message", "")
 			if err != nil {
 				var details any
 				if ae, ok := apperr.As(err); ok {
 					details = ae.Details
 				}
-				t.Fatalf("终态事件发出之后发送应立即开始：%v %+v", err, details)
+				t.Fatalf("a send after the terminal event should start right away: %v %+v", err, details)
 			}
 			if msg.Run.Status != "starting" || msg.Run.WhenBusy != nil {
-				t.Fatalf("紧接着的消息应立即开始、不排队：%+v", msg.Run)
+				t.Fatalf("the follow-up message should start right away, not queue: %+v", msg.Run)
 			}
 			unblock()
-			e.waitStarted("紧接着的消息")
+			e.waitStarted("follow-up message")
 			e.waitIdle()
-			if h := e.history(); len(h) == 0 || h[len(h)-1].Text != "回复：紧接着的消息" {
-				t.Fatalf("紧接着的消息应得到回复：%+v", h)
+			if h := e.history(); len(h) == 0 || h[len(h)-1].Text != "Reply: follow-up message" {
+				t.Fatalf("the follow-up message should get a reply: %+v", h)
 			}
 		})
 	}

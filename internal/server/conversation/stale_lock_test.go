@@ -18,8 +18,8 @@ import (
 // stayed taken.
 func TestReconcileDoesNotLeaveLockOfFinishedRun(t *testing.T) {
 	e, _ := newMaintEnv(t) // reconciliation runs once an hour; only the manual one below happens
-	e.mustSend("block 当前", "")
-	e.waitStarted("block 当前")
+	e.mustSend("block current", "")
+	e.waitStarted("block current")
 	reached, release := make(chan uuid.UUID, 1), make(chan struct{})
 	var once sync.Once
 	conversation.SetTestHookBeforeRestoreLock(func(runID uuid.UUID) {
@@ -37,7 +37,7 @@ func TestReconcileDoesNotLeaveLockOfFinishedRun(t *testing.T) {
 	select {
 	case <-reached: // reconciliation has read the in-flight run and is about to re-set the lock
 	case <-time.After(5 * time.Second):
-		t.Fatal("对账没有读到进行中的执行")
+		t.Fatal("reconciliation did not read the in-flight run")
 	}
 	e.ex.signal(e.agent, "release")
 	deadline := time.Now().Add(5 * time.Second)
@@ -47,14 +47,14 @@ func TestReconcileDoesNotLeaveLockOfFinishedRun(t *testing.T) {
 			break // the run has ended and its driver has released the lock
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("执行结束后锁应放开：%q", owner)
+			t.Fatalf("the lock should be released after the run ends: %q", owner)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	close(release)
 	<-done
 	e.waitIdle()
-	e.mustSend("下一条", "")
-	e.waitStarted("下一条")
+	e.mustSend("next", "")
+	e.waitStarted("next")
 	e.waitIdle()
 }

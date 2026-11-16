@@ -40,7 +40,7 @@ func (e *env) deliver(text, whenBusy string) uuid.UUID {
 	id := uuid.Must(uuid.NewV7())
 	msg := store.NewInboxMessage{ID: id, From: store.AgentParty(e.sender()), To: store.AgentParty(e.agent), Text: text, WhenBusy: whenBusy}
 	if err := e.svc.DeliverInbox(context.Background(), msg); err != nil {
-		e.t.Fatalf("投递 %q 失败：%v", text, err)
+		e.t.Fatalf("delivering %q failed: %v", text, err)
 	}
 	return id
 }
@@ -100,7 +100,7 @@ func (e *env) expectQueue(want ...string) {
 	}
 	get, snap, event := e.queueViews()
 	if !slices.Equal(get, want) || !slices.Equal(snap, want) || !slices.Equal(event, want) {
-		e.t.Fatalf("排队列表应为 %v：接口 %v 快照 %v 事件 %v", want, get, snap, event)
+		e.t.Fatalf("queue list should be %v: API %v snapshot %v event %v", want, get, snap, event)
 	}
 }
 
@@ -122,7 +122,7 @@ func (e *env) mustAct(do queueAct, subject uuid.UUID) apitypes.AgentQueueActionR
 	e.t.Helper()
 	r, _, err := e.act(do, subject, uuid.New())
 	if err != nil {
-		e.t.Fatalf("排队动作失败：%v", err)
+		e.t.Fatalf("queue action failed: %v", err)
 	}
 	return r
 }
@@ -199,22 +199,22 @@ func (e *env) read(message uuid.UUID) store.InboxReadEffect {
 // other unread messages will be reminded about separately later.
 func TestQueueListsEachMessageInProcessingOrder(t *testing.T) {
 	e := newEnv(t)
-	e.mustSend("hold 当前", "")
-	e.waitStarted("hold 当前")
-	e.mustSend("普通1", "queue")
-	a := e.deliver("收件A", "queue")
-	b := e.deliver("收件B", "queue")
-	c := e.deliver("收件C", "interrupt")
-	e.expectQueue("inbox:收件C!", "普通1", "inbox:收件A", "inbox:收件B")
+	e.mustSend("hold current", "")
+	e.waitStarted("hold current")
+	e.mustSend("normal 1", "queue")
+	a := e.deliver("mail A", "queue")
+	b := e.deliver("mail B", "queue")
+	c := e.deliver("mail C", "interrupt")
+	e.expectQueue("inbox:mail C!", "normal 1", "inbox:mail A", "inbox:mail B")
 	if e.carrier(a) != e.carrier(b) || e.carrier(a) == e.carrier(c) {
-		t.Fatal("同优先级的消息应并入同一轮提醒，打断消息另起一轮")
+		t.Fatal("messages of the same priority should share one reminder, and an interrupt message should get its own")
 	}
 	e.ex.signal(e.agent, "release")
 	e.waitIdleOrDump(names{})
 	got := e.ex.messages()
 	if len(got) != 4 || !strings.Contains(got[1], c.String()) || strings.Contains(got[1], a.String()) || !strings.Contains(got[1], "2 more unread messages") ||
-		got[2] != "普通1" || !strings.Contains(got[3], a.String()) || !strings.Contains(got[3], b.String()) || !strings.Contains(got[3], "sender") {
-		t.Fatalf("执行顺序或提醒点名不对：%q", got)
+		got[2] != "normal 1" || !strings.Contains(got[3], a.String()) || !strings.Contains(got[3], b.String()) || !strings.Contains(got[3], "sender") {
+		t.Fatalf("wrong execution order or reminder naming: %q", got)
 	}
 	e.expectQueue()
 }
@@ -224,57 +224,57 @@ func TestQueueListsEachMessageInProcessingOrder(t *testing.T) {
 // effects.
 func TestPromoteInboxMessageMovesItAndVoidsEmptiedReminder(t *testing.T) {
 	e := newEnv(t)
-	cur := e.mustSend("hold 当前", "")
-	e.waitStarted("hold 当前")
-	a := e.deliver("收件A", "queue")
-	b := e.deliver("收件B", "queue")
+	cur := e.mustSend("hold current", "")
+	e.waitStarted("hold current")
+	a := e.deliver("mail A", "queue")
+	b := e.deliver("mail B", "queue")
 	normal := e.carrier(a)
 	action := uuid.New()
 	r, raw, err := e.act(e.svc.PromoteInboxMessage, b, action)
 	if err != nil || r.Status != "accepted" || r.Item == nil || *r.Item.MessageID != b || r.Item.WhenBusy != "queue" || r.Run == nil || r.Operation != apitypes.QueuePromoteInboxMessage {
-		t.Fatalf("转换回执：%+v %v", r, err)
+		t.Fatalf("promote receipt: %+v %v", r, err)
 	}
 	interrupt := r.Run.ID
 	if interrupt == normal || e.carrier(b) != interrupt || e.runOf(normal).Status != "queued" {
-		t.Fatal("应新建打断提醒承载 B，原提醒仍承载 A")
+		t.Fatal("a new interrupt reminder should carry B, and the original reminder should still carry A")
 	}
-	e.expectQueue("inbox:收件B!", "inbox:收件A")
+	e.expectQueue("inbox:mail B!", "inbox:mail A")
 	var by string
 	if err := e.st.Pool.QueryRow(context.Background(), `SELECT data->>'byRunId' FROM lifecycle_events WHERE run_id=$1 AND type=$2`, cur.Run.ID, store.EventRunAbortRequested).Scan(&by); err != nil || by != interrupt.String() {
-		t.Fatalf("应打断当前回复：%q %v", by, err)
+		t.Fatalf("the current reply should be interrupted: %q %v", by, err)
 	}
 	aborts, promoted := e.eventCount(store.EventRunAbortRequested), e.eventCount(store.EventRunPromoted)
 	if _, again, err := e.act(e.svc.PromoteInboxMessage, b, action); err != nil || !bytes.Equal(again, raw) {
-		t.Fatalf("同一 actionId 重放应返回首次回执：%v", err)
+		t.Fatalf("replaying the same actionId should return the first receipt: %v", err)
 	}
 	if _, _, err := e.act(e.svc.PromoteInboxMessage, a, action); !apperr.Is(err, apperr.CodeActionConflict) {
-		t.Fatalf("同一 actionId 换对象应 action_conflict：%v", err)
+		t.Fatalf("the same actionId on another subject should be action_conflict: %v", err)
 	}
 	if r := e.mustAct(e.svc.PromoteInboxMessage, b); r.Status != "already_interrupt" {
-		t.Fatalf("已经是打断：%+v", r)
+		t.Fatalf("already an interrupt: %+v", r)
 	}
 	if e.eventCount(store.EventRunAbortRequested) != aborts || e.eventCount(store.EventRunPromoted) != promoted {
-		t.Fatal("重放与 already_interrupt 不应再打断或记录转换")
+		t.Fatal("a replay or already_interrupt should not interrupt again or record a promotion")
 	}
 	if r := e.mustAct(e.svc.PromoteInboxMessage, a); r.Run.ID != interrupt {
-		t.Fatalf("A 应并入已有的打断提醒：%+v", r)
+		t.Fatalf("A should join the existing interrupt reminder: %+v", r)
 	}
 	if v := e.runOf(normal); v.Status != "interrupted" || v.EndReason != "merged_into_interrupt" || e.queued(normal) {
-		t.Fatalf("拆空的提醒应作废并移出 Redis：%s %s", v.Status, v.EndReason)
+		t.Fatalf("the emptied reminder should be voided and removed from Redis: %s %s", v.Status, v.EndReason)
 	}
-	e.expectQueue("inbox:收件A!", "inbox:收件B!")
+	e.expectQueue("inbox:mail A!", "inbox:mail B!")
 	e.ex.signal(e.agent, "release")
 	e.waitIdleOrDump(names{})
 	if got := e.ex.messages(); len(got) != 2 || !strings.Contains(got[1], a.String()) || !strings.Contains(got[1], b.String()) {
-		t.Fatalf("打断提醒应点名 A 与 B 且只执行一次：%q", got)
+		t.Fatalf("the interrupt reminder should name A and B and run only once: %q", got)
 	}
 	var promotedMsg string
 	if err := e.st.Pool.QueryRow(context.Background(), `SELECT data->>'messageId' FROM lifecycle_events WHERE run_id=$1 AND type=$2 ORDER BY at LIMIT 1`, interrupt, store.EventRunPromoted).Scan(&promotedMsg); err != nil || promotedMsg != b.String() {
-		t.Fatalf("promoted 事件应带 messageId：%q %v", promotedMsg, err)
+		t.Fatalf("the promoted event should carry messageId: %q %v", promotedMsg, err)
 	}
 	_, _, err = e.act(e.svc.PromoteInboxMessage, a, uuid.New())
 	if ae, ok := apperr.As(err); !ok || ae.Code != apperr.CodeRunNotQueued || ae.Details.(store.RunNotQueuedDetails).MessageState == "" {
-		t.Fatalf("已处理的消息应 run_not_queued：%v", err)
+		t.Fatalf("an already handled message should be run_not_queued: %v", err)
 	}
 }
 
@@ -283,63 +283,63 @@ func TestPromoteInboxMessageMovesItAndVoidsEmptiedReminder(t *testing.T) {
 func TestCancelQueuedRunAndInboxMessage(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
-	e.mustSend("hold 当前", "")
-	e.waitStarted("hold 当前")
-	mine := e.mustSend("撤回我", "queue")
+	e.mustSend("hold current", "")
+	e.waitStarted("hold current")
+	mine := e.mustSend("withdraw me", "queue")
 	action := uuid.New()
 	r, raw, err := e.act(e.svc.CancelRun, mine.Run.ID, action)
-	if err != nil || r.Status != "accepted" || r.Item == nil || r.Item.Text != "撤回我" || r.Item.Kind != "run" || r.Run.Status != "interrupted" || r.Run.EndReason == nil || *r.Run.EndReason != "user_cancelled" {
-		t.Fatalf("撤回回执：%+v %v", r, err)
+	if err != nil || r.Status != "accepted" || r.Item == nil || r.Item.Text != "withdraw me" || r.Item.Kind != "run" || r.Run.Status != "interrupted" || r.Run.EndReason == nil || *r.Run.EndReason != "user_cancelled" {
+		t.Fatalf("withdraw receipt: %+v %v", r, err)
 	}
 	if e.queued(mine.Run.ID) {
-		t.Fatal("撤回的执行应移出 Redis 队列")
+		t.Fatal("the withdrawn run should be removed from the Redis queue")
 	}
 	if _, again, err := e.act(e.svc.CancelRun, mine.Run.ID, action); err != nil || !bytes.Equal(again, raw) {
-		t.Fatalf("重放应返回首次回执：%v", err)
+		t.Fatalf("a replay should return the first receipt: %v", err)
 	}
 	if r := e.mustAct(e.svc.CancelRun, mine.Run.ID); r.Status != "already_cancelled" {
-		t.Fatalf("已经撤回：%+v", r)
+		t.Fatalf("already withdrawn: %+v", r)
 	}
-	a := e.deliver("收件A", "queue")
-	b := e.deliver("收件B", "queue")
+	a := e.deliver("mail A", "queue")
+	b := e.deliver("mail B", "queue")
 	rem := e.carrier(a)
-	if r := e.mustAct(e.svc.CancelInboxMessage, a); r.Status != "accepted" || r.Item.Text != "收件A" || r.Run.Status != "queued" {
-		t.Fatalf("取消 A：%+v", r)
+	if r := e.mustAct(e.svc.CancelInboxMessage, a); r.Status != "accepted" || r.Item.Text != "mail A" || r.Run.Status != "queued" {
+		t.Fatalf("cancel A: %+v", r)
 	}
 	if n, _ := e.st.CountInboxUnread(ctx, store.AgentParty(e.agent)); n != 1 {
-		t.Fatalf("已取消的消息不计为未读：%d", n)
+		t.Fatalf("cancelled messages should not count as unread: %d", n)
 	}
-	e.expectQueue("inbox:收件B")
+	e.expectQueue("inbox:mail B")
 	if r := e.mustAct(e.svc.CancelInboxMessage, b); r.Run.Status != "interrupted" || *r.Run.EndReason != "user_cancelled" {
-		t.Fatalf("取消最后一条后提醒应作废：%+v", r.Run)
+		t.Fatalf("the reminder should be voided after cancelling the last message: %+v", r.Run)
 	}
 	if r := e.mustAct(e.svc.CancelInboxMessage, b); r.Status != "already_cancelled" {
-		t.Fatalf("已经取消：%+v", r)
+		t.Fatalf("already cancelled: %+v", r)
 	}
 	e.expectQueue()
 	if e.queued(rem) || e.eventCount(store.EventMessageCancelled) != 2 {
-		t.Fatal("作废的提醒应移出 Redis，每条取消记一条事件")
+		t.Fatal("the voided reminder should leave Redis, and each cancel should record one event")
 	}
 	m, err := e.st.GetInboxMessage(ctx, a, 200)
 	if err != nil || m.CancelledAt == nil || m.ReadAt != nil {
-		t.Fatalf("消息应记为已取消：%+v %v", m, err)
+		t.Fatalf("the message should be recorded as cancelled: %+v %v", m, err)
 	}
 	store.RedactCancelledFor(store.AgentParty(e.agent), &m)
 	if m.Text != store.CancelledNotice || m.Preview != store.CancelledNotice {
-		t.Fatalf("收件 Agent 只看到取消说明：%q", m.Text)
+		t.Fatalf("the recipient Agent should only see the cancellation notice: %q", m.Text)
 	}
 	full, _ := e.st.GetInboxMessage(ctx, a, 200)
 	store.RedactCancelledFor(store.AgentParty(e.sender()), &full)
-	if full.Text != "收件A" {
-		t.Fatal("发件方看到全文")
+	if full.Text != "mail A" {
+		t.Fatal("the sender should see the full text")
 	}
 	if changed, _, err := e.st.MarkInboxRead(ctx, a, store.AgentParty(e.agent)); err != nil || changed {
-		t.Fatalf("已取消的消息不会变为已读：%v %v", changed, err)
+		t.Fatalf("a cancelled message should not become read: %v %v", changed, err)
 	}
 	e.ex.signal(e.agent, "release")
 	e.waitIdleOrDump(names{})
 	if got := e.ex.messages(); len(got) != 1 {
-		t.Fatalf("撤回和取消的都不应执行：%q", got)
+		t.Fatalf("withdrawn and cancelled messages should not run: %q", got)
 	}
 }
 
@@ -347,25 +347,25 @@ func TestCancelQueuedRunAndInboxMessage(t *testing.T) {
 // pending messages left is voided right then, instead of being skipped later when it starts.
 func TestReadLeavesQueueAndVoidsReminder(t *testing.T) {
 	e := newEnv(t)
-	e.mustSend("hold 当前", "")
-	e.waitStarted("hold 当前")
-	a := e.deliver("收件A", "queue")
-	b := e.deliver("收件B", "queue")
+	e.mustSend("hold current", "")
+	e.waitStarted("hold current")
+	a := e.deliver("mail A", "queue")
+	b := e.deliver("mail B", "queue")
 	rem := e.carrier(a)
 	if eff := e.read(a); !eff.QueueChanged || len(eff.Voided) != 0 {
-		t.Fatalf("读走 A：%+v", eff)
+		t.Fatalf("read A: %+v", eff)
 	}
-	e.expectQueue("inbox:收件B")
+	e.expectQueue("inbox:mail B")
 	if eff := e.read(b); !eff.QueueChanged || !slices.Equal(eff.Voided, []uuid.UUID{rem}) {
-		t.Fatalf("读走最后一条应作废提醒：%+v", eff)
+		t.Fatalf("reading the last message should void the reminder: %+v", eff)
 	}
 	if r := e.runOf(rem); r.Status != "interrupted" || r.EndReason != "no_pending_messages" || e.queued(rem) {
-		t.Fatalf("作废的提醒：%s %s", r.Status, r.EndReason)
+		t.Fatalf("voided reminder: %s %s", r.Status, r.EndReason)
 	}
 	e.expectQueue()
 	// Fallback: marked as read directly, bypassing the read path; when the reminder starts it finds no pending messages
 	// and is voided without starting Pi.
-	c := e.deliver("收件C", "queue")
+	c := e.deliver("mail C", "queue")
 	late := e.carrier(c)
 	if _, err := e.st.Pool.Exec(context.Background(), `UPDATE inbox_messages SET read_at=now() WHERE id=$1`, c); err != nil {
 		t.Fatal(err)
@@ -373,7 +373,7 @@ func TestReadLeavesQueueAndVoidsReminder(t *testing.T) {
 	e.ex.signal(e.agent, "release")
 	e.waitIdleOrDump(names{})
 	if r := e.runOf(late); r.Status != "interrupted" || r.EndReason != "no_pending_messages" || len(e.ex.messages()) != 1 {
-		t.Fatalf("开始时没有待处理消息应作废：%s %s %q", r.Status, r.EndReason, e.ex.messages())
+		t.Fatalf("a reminder with no pending messages when it starts should be voided: %s %s %q", r.Status, r.EndReason, e.ex.messages())
 	}
 }
 
@@ -381,34 +381,34 @@ func TestReadLeavesQueueAndVoidsReminder(t *testing.T) {
 // the run has already ended it returns run_not_active.
 func TestStopOnlyStopsThisReplyAndQueueContinues(t *testing.T) {
 	e := newEnv(t)
-	cur := e.mustSend("block 当前", "")
-	e.waitStarted("block 当前")
-	next := e.mustSend("普通1", "queue")
+	cur := e.mustSend("block current", "")
+	e.waitStarted("block current")
+	next := e.mustSend("normal 1", "queue")
 	if _, _, err := e.act(e.svc.StopRun, next.Run.ID, uuid.New()); !apperr.Is(err, apperr.CodeRunNotActive) {
-		t.Fatalf("排队中的执行不能停止：%v", err)
+		t.Fatalf("a queued run cannot be stopped: %v", err)
 	}
 	action := uuid.New()
 	r, raw, err := e.act(e.svc.StopRun, cur.Run.ID, action)
 	if err != nil || r.Status != "accepted" || r.Item != nil || r.Run.ID != cur.Run.ID {
-		t.Fatalf("停止回执：%+v %v", r, err)
+		t.Fatalf("stop receipt: %+v %v", r, err)
 	}
 	e.waitIdleOrDump(names{})
 	if v := e.runOf(cur.Run.ID); v.Status != "interrupted" || v.EndReason != "user_stopped" {
-		t.Fatalf("被停止的回复：%s %s", v.Status, v.EndReason)
+		t.Fatalf("stopped reply: %s %s", v.Status, v.EndReason)
 	}
-	if v := e.runOf(next.Run.ID); v.Status != "completed" || e.executed("普通1") != 1 {
-		t.Fatalf("停止后队列应继续：%s", v.Status)
+	if v := e.runOf(next.Run.ID); v.Status != "completed" || e.executed("normal 1") != 1 {
+		t.Fatalf("the queue should continue after a stop: %s", v.Status)
 	}
 	if _, again, err := e.act(e.svc.StopRun, cur.Run.ID, action); err != nil || !bytes.Equal(again, raw) {
-		t.Fatalf("重放应返回首次回执：%v", err)
+		t.Fatalf("a replay should return the first receipt: %v", err)
 	}
 	_, _, err = e.act(e.svc.StopRun, cur.Run.ID, uuid.New())
 	if ae, ok := apperr.As(err); !ok || ae.Code != apperr.CodeRunNotActive || ae.Details.(store.RunNotActiveDetails).Status != "interrupted" {
-		t.Fatalf("已结束的回复应 run_not_active：%v", err)
+		t.Fatalf("an ended reply should be run_not_active: %v", err)
 	}
 	var stop string
 	if err := e.st.Pool.QueryRow(context.Background(), `SELECT data->'stop' FROM lifecycle_events WHERE run_id=$1 AND type=$2`, cur.Run.ID, store.EventRunAbortRequested).Scan(&stop); err != nil || stop != "true" {
-		t.Fatalf("abort_requested 应带 stop：%q %v", stop, err)
+		t.Fatalf("abort_requested should carry stop: %q %v", stop, err)
 	}
 }
 
@@ -417,10 +417,10 @@ func TestStopOnlyStopsThisReplyAndQueueContinues(t *testing.T) {
 func TestCancelRacesDequeueExactlyOnce(t *testing.T) {
 	e := newEnv(t)
 	for i := range 15 {
-		cur := "block 当前" + string(rune('a'+i))
+		cur := "block current" + string(rune('a'+i))
 		e.mustSend(cur, "queue")
 		e.waitStarted(cur)
-		q := e.mustSend("排队"+string(rune('a'+i)), "queue")
+		q := e.mustSend("queued"+string(rune('a'+i)), "queue")
 		var wg sync.WaitGroup
 		var cancelErr error
 		wg.Go(func() { e.ex.signal(e.agent, "release") })
@@ -429,12 +429,12 @@ func TestCancelRacesDequeueExactlyOnce(t *testing.T) {
 		e.waitIdleOrDump(names{})
 		drainStarted(e.ex.started)
 		r := e.runOf(q.Run.ID)
-		ran := e.executed("排队" + string(rune('a'+i)))
+		ran := e.executed("queued" + string(rune('a'+i)))
 		switch {
 		case cancelErr == nil && r.EndReason == "user_cancelled" && ran == 0:
 		case apperr.Is(cancelErr, apperr.CodeRunNotQueued) && r.Status == "completed" && ran == 1:
 		default:
-			t.Fatalf("第 %d 轮：撤回 %v，状态 %s/%s，执行 %d 次", i, cancelErr, r.Status, r.EndReason, ran)
+			t.Fatalf("round %d: withdraw %v, status %s/%s, executed %d times", i, cancelErr, r.Status, r.EndReason, ran)
 		}
 	}
 }
@@ -444,10 +444,10 @@ func TestCancelRacesDequeueExactlyOnce(t *testing.T) {
 func TestPromoteMessageRacesReminderStart(t *testing.T) {
 	e := newEnv(t)
 	for i := range 15 {
-		cur := "block 当前" + string(rune('a'+i))
+		cur := "block current" + string(rune('a'+i))
 		e.mustSend(cur, "queue")
 		e.waitStarted(cur)
-		m := e.deliver("收件"+string(rune('a'+i)), "queue")
+		m := e.deliver("mail"+string(rune('a'+i)), "queue")
 		var wg sync.WaitGroup
 		var err error
 		wg.Go(func() { e.ex.signal(e.agent, "release") })
@@ -456,14 +456,14 @@ func TestPromoteMessageRacesReminderStart(t *testing.T) {
 		e.waitIdleOrDump(names{})
 		drainStarted(e.ex.started)
 		if err != nil && !apperr.Is(err, apperr.CodeRunNotQueued) {
-			t.Fatalf("第 %d 轮：%v", i, err)
+			t.Fatalf("round %d: %v", i, err)
 		}
 		if n := e.executed(m.String()); n != 1 {
-			t.Fatalf("第 %d 轮：消息被点名执行 %d 次（转换 %v）", i, n, err)
+			t.Fatalf("round %d: the message was named in %d runs (promote %v)", i, n, err)
 		}
 		var open int
 		if e2 := e.st.Pool.QueryRow(context.Background(), `SELECT count(*) FROM runs WHERE agent_id=$1 AND status='queued'`, e.agent).Scan(&open); e2 != nil || open != 0 {
-			t.Fatalf("第 %d 轮：仍有排队执行 %d", i, open)
+			t.Fatalf("round %d: queued runs remain: %d", i, open)
 		}
 		// Handled in this round; mark it read so the next round's reminder does not count it.
 		e.read(m)
@@ -475,10 +475,10 @@ func TestPromoteMessageRacesReminderStart(t *testing.T) {
 func TestCancelRacesRead(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
-	e.mustSend("hold 当前", "")
-	e.waitStarted("hold 当前")
+	e.mustSend("hold current", "")
+	e.waitStarted("hold current")
 	for i := range 20 {
-		m := e.deliver("收件"+string(rune('a'+i)), "queue")
+		m := e.deliver("mail"+string(rune('a'+i)), "queue")
 		var wg sync.WaitGroup
 		var cancelErr, readErr error
 		var readChanged bool
@@ -500,14 +500,14 @@ func TestCancelRacesRead(t *testing.T) {
 		case cancelErr == nil && !readChanged && v.CancelledAt != nil && v.ReadAt == nil:
 		case apperr.Is(cancelErr, apperr.CodeRunNotQueued) && readChanged && v.ReadAt != nil && v.CancelledAt == nil:
 		default:
-			t.Fatalf("第 %d 轮：取消 %v 读取 %v，消息 read=%v cancelled=%v", i, cancelErr, readChanged, v.ReadAt, v.CancelledAt)
+			t.Fatalf("round %d: cancel %v read %v, message read=%v cancelled=%v", i, cancelErr, readChanged, v.ReadAt, v.CancelledAt)
 		}
 	}
 	e.expectQueue()
 	e.ex.signal(e.agent, "release")
 	e.waitIdleOrDump(names{})
 	if got := e.ex.messages(); len(got) != 1 {
-		t.Fatalf("全部消息已读或取消，提醒不应执行：%q", got)
+		t.Fatalf("all messages are read or cancelled, so the reminder should not run: %q", got)
 	}
 }
 
@@ -516,10 +516,10 @@ func TestCancelRacesRead(t *testing.T) {
 func TestReadVoidRacesReminderStart(t *testing.T) {
 	e := newEnv(t)
 	for i := range 15 {
-		cur := "block 当前" + string(rune('a'+i))
+		cur := "block current" + string(rune('a'+i))
 		e.mustSend(cur, "queue")
 		e.waitStarted(cur)
-		m := e.deliver("收件"+string(rune('a'+i)), "queue")
+		m := e.deliver("mail"+string(rune('a'+i)), "queue")
 		rem := e.carrier(m)
 		var wg sync.WaitGroup
 		wg.Go(func() { e.ex.signal(e.agent, "release") })
@@ -533,7 +533,7 @@ func TestReadVoidRacesReminderStart(t *testing.T) {
 		case r.Status == "interrupted" && r.EndReason == "no_pending_messages" && ran == 0:
 		case r.Status == "completed" && ran == 1:
 		default:
-			t.Fatalf("第 %d 轮：提醒 %s/%s，执行 %d 次", i, r.Status, r.EndReason, ran)
+			t.Fatalf("round %d: reminder %s/%s, executed %d times", i, r.Status, r.EndReason, ran)
 		}
 	}
 }
@@ -543,9 +543,9 @@ func TestReadVoidRacesReminderStart(t *testing.T) {
 func TestStopRacesFinishAndNextStart(t *testing.T) {
 	e := newEnv(t)
 	for i := range 15 {
-		cur := e.mustSend("block 当前"+string(rune('a'+i)), "queue")
-		e.waitStarted("block 当前" + string(rune('a'+i)))
-		next := e.mustSend("下一条"+string(rune('a'+i)), "queue")
+		cur := e.mustSend("block current"+string(rune('a'+i)), "queue")
+		e.waitStarted("block current" + string(rune('a'+i)))
+		next := e.mustSend("next"+string(rune('a'+i)), "queue")
 		var wg sync.WaitGroup
 		var err error
 		wg.Go(func() { e.ex.signal(e.agent, "release") })
@@ -555,13 +555,13 @@ func TestStopRacesFinishAndNextStart(t *testing.T) {
 		drainStarted(e.ex.started)
 		c, n := e.runOf(cur.Run.ID), e.runOf(next.Run.ID)
 		if n.Status != "completed" || n.AbortRequestedAt != nil {
-			t.Fatalf("第 %d 轮：下一条不应被停止：%s", i, n.Status)
+			t.Fatalf("round %d: the next run should not be stopped: %s", i, n.Status)
 		}
 		switch {
 		case err == nil && (c.EndReason == "user_stopped" || c.Status == "completed"):
 		case apperr.Is(err, apperr.CodeRunNotActive) && c.Status == "completed":
 		default:
-			t.Fatalf("第 %d 轮：停止 %v，当前回复 %s/%s", i, err, c.Status, c.EndReason)
+			t.Fatalf("round %d: stop %v, current reply %s/%s", i, err, c.Status, c.EndReason)
 		}
 	}
 }
@@ -572,12 +572,12 @@ func TestReadsConcurrentWithFinishRun(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
 	for round := range 5 {
-		cur := "block 当前" + string(rune('a'+round))
+		cur := "block current" + string(rune('a'+round))
 		e.mustSend(cur, "queue")
 		e.waitStarted(cur)
 		msgs := []uuid.UUID{}
 		for i := range 8 {
-			msgs = append(msgs, e.deliver("收件"+string(rune('a'+round))+string(rune('0'+i)), "queue"))
+			msgs = append(msgs, e.deliver("mail"+string(rune('a'+round))+string(rune('0'+i)), "queue"))
 		}
 		var wg sync.WaitGroup
 		errs := make(chan error, len(msgs)+2)
@@ -590,21 +590,21 @@ func TestReadsConcurrentWithFinishRun(t *testing.T) {
 		}
 		wg.Go(func() { e.ex.signal(e.agent, "release") })
 		wg.Go(func() {
-			_, err := e.send("并发"+string(rune('a'+round)), "queue")
+			_, err := e.send("concurrent"+string(rune('a'+round)), "queue")
 			errs <- err
 		})
 		wg.Wait()
 		close(errs)
 		for err := range errs {
 			if err != nil {
-				t.Fatalf("第 %d 轮：%v", round, err)
+				t.Fatalf("round %d: %v", round, err)
 			}
 		}
 		e.waitIdleOrDump(names{})
 		drainStarted(e.ex.started)
 		var unread int
 		if err := e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM inbox_messages WHERE to_agent_id=$1 AND read_at IS NULL`, e.agent).Scan(&unread); err != nil || unread != 0 {
-			t.Fatalf("第 %d 轮：读取应全部生效：%d %v", round, unread, err)
+			t.Fatalf("round %d: every read should take effect: %d %v", round, unread, err)
 		}
 	}
 }

@@ -28,11 +28,11 @@ func fixture(t *testing.T, loop bool) (*Service, uuid.UUID, auth.Principal) {
 	t.Helper()
 	ctx := context.Background()
 	st := sqlitetest.NewStore(t)
-	dc, e := st.EnsureDefaults(ctx, "组织", "项目")
+	dc, e := st.EnsureDefaults(ctx, "Acme", "Website redesign")
 	if e != nil {
 		t.Fatal(e)
 	}
-	a, e := st.CreateAgent(ctx, store.ProjectScope(dc.Project.ID), "执行者", "example", "model", "")
+	a, e := st.CreateAgent(ctx, store.ProjectScope(dc.Project.ID), "Worker", "example", "model", "")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -42,14 +42,14 @@ func fixture(t *testing.T, loop bool) (*Service, uuid.UUID, auth.Principal) {
 	}
 	id, runtime := uuid.New(), uuid.New()
 	now := time.Now().UTC()
-	def := workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "处理", AgentID: a.ID, InputFields: []workflow.Field{}, OutputFields: []workflow.Field{{Name: "answer", Type: "string", Required: true}}, Inputs: map[string]workflow.Source{}}}, Edges: []workflow.Edge{}}
+	def := workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "Handle", AgentID: a.ID, InputFields: []workflow.Field{}, OutputFields: []workflow.Field{{Name: "answer", Type: "string", Required: true}}, Inputs: map[string]workflow.Source{}}}, Edges: []workflow.Edge{}}
 	if loop {
 		limit := 1
 		def.Edges = []workflow.Edge{{ID: "again", From: "work", To: "work", MaxTraversals: &limit}}
 	}
 	inst := store.TaskInstance{ID: runtime, TaskID: id, AgentID: a.ID, AgentName: a.Name, Snapshot: []byte("fixture"), Sources: []store.TaskFrozenSource{}}
 	node := freshNode(id, def.Steps[0], inst, 1, 1)
-	record := taskmodel.Record{View: taskmodel.Detail{Task: taskmodel.Summary{ID: id, ProjectID: dc.Project.ID, Title: "任务", Status: "preparing", CreatedAt: now, UpdatedAt: now, Version: 1}, Request: map[string]any{}, Workflow: def, Nodes: []taskmodel.NodeRun{node}, Artifacts: []taskmodel.Artifact{}, Cleanup: "none"}, EdgeCounts: map[string]int{}}
+	record := taskmodel.Record{View: taskmodel.Detail{Task: taskmodel.Summary{ID: id, ProjectID: dc.Project.ID, Title: "Task", Status: "preparing", CreatedAt: now, UpdatedAt: now, Version: 1}, Request: map[string]any{}, Workflow: def, Nodes: []taskmodel.NodeRun{node}, Artifacts: []taskmodel.Artifact{}, Cleanup: "none"}, EdgeCounts: map[string]int{}}
 	setCurrent(&record, node)
 	_, e = st.CreateTask(ctx, dc.Project.ID, a.ID, store.TaskAction{ActorKey: "fixture", ID: uuid.New(), Operation: "create", Body: []byte(`{}`)}, func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) {
 		return record, []store.TaskInstance{inst}, nil
@@ -342,9 +342,9 @@ func TestQuestionOneOpenWaitingAndLateAnswerDoesNotWakeNewAttempt(t *testing.T) 
 	created := 0
 	create := func(tx *db.Tx) (taskmodel.Question, error) {
 		created++
-		msg := store.NewInboxMessage{ID: messageID, From: store.Party{Kind: "agent", ID: p.ID, RuntimeID: p.RuntimeID}, To: store.ConsoleParty, Text: "请选择"}
+		msg := store.NewInboxMessage{ID: messageID, From: store.Party{Kind: "agent", ID: p.ID, RuntimeID: p.RuntimeID}, To: store.ConsoleParty, Text: "Please choose"}
 		e := store.InsertInboxMessage(ctx, tx, msg)
-		return taskmodel.Question{ID: questionID, ThreadID: messageID, MessageID: messageID, Text: "请选择", Status: "open", CanAnswer: true}, e
+		return taskmodel.Question{ID: questionID, ThreadID: messageID, MessageID: messageID, Text: "Please choose", Status: "open", CanAnswer: true}, e
 	}
 	if _, e := s.OpenQuestion(ctx, p, nodeID, create); e != nil {
 		t.Fatal(e)
@@ -394,7 +394,7 @@ func TestManagerHandoffAndStaleRetry(t *testing.T) {
 	s, id, old := fixture(t, false)
 	ctx := context.Background()
 	r := current(t, s, id)
-	a, e := s.Store.CreateAgent(ctx, store.ProjectScope(r.View.Task.ProjectID), "新Manager", "example", "model", "")
+	a, e := s.Store.CreateAgent(ctx, store.ProjectScope(r.View.Task.ProjectID), "New Manager", "example", "model", "")
 	if e != nil {
 		t.Fatal(e)
 	}

@@ -6,7 +6,7 @@ import (
 )
 
 func TestTaskConsoleMessageInput(t *testing.T) {
-	base := `"actionId":"0192f1a2-0000-7000-8000-000000000001","expectedAgentId":"0192f1a2-0000-7000-8000-000000000002","expectedRuntimeId":"0192f1a2-0000-7000-8000-000000000003","text":"原节点消息"`
+	base := `"actionId":"0192f1a2-0000-7000-8000-000000000001","expectedAgentId":"0192f1a2-0000-7000-8000-000000000002","expectedRuntimeId":"0192f1a2-0000-7000-8000-000000000003","text":"original node message"`
 	var in TaskNodeMessageInput
 	if err := json.Unmarshal([]byte("{"+base+"}"), &in); err != nil || in.WhenBusy != "queue" {
 		t.Fatal("missing whenBusy must default queue", err)

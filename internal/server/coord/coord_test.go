@@ -58,7 +58,7 @@ func assertOwner(t *testing.T, c *coord.Coord, agent, want string) {
 	got, err := c.LockOwner(context.Background(), agent)
 	check(t, err)
 	if got != want {
-		t.Fatalf("锁持有者 = %q，期望 %q", got, want)
+		t.Fatalf("lock holder = %q, want %q", got, want)
 	}
 }
 
@@ -72,7 +72,7 @@ func TestKeys(t *testing.T) {
 	}
 	for got, want := range cases {
 		if got != want {
-			t.Errorf("键名 %q，期望 %q", got, want)
+			t.Errorf("key name %q, want %q", got, want)
 		}
 	}
 	if v := coord.LockValue("r1", "i1"); v != "r1|i1" {
@@ -92,13 +92,13 @@ func TestAcquire(t *testing.T) {
 
 	// Free: succeeds (busy locks do not expire).
 	if !must[bool](t)(c.Acquire(ctx, agent, ownerA)) {
-		t.Fatal("空闲时应拿到锁")
+		t.Fatal("should get the lock when it is free")
 	}
 	assertOwner(t, c, agent, ownerA)
 
 	// Already held: rejected without changing the holder.
 	if must[bool](t)(c.Acquire(ctx, agent, coord.LockValue("run-b", "inst"))) {
-		t.Fatal("锁被持有时不应拿到锁")
+		t.Fatal("should not get the lock while it is held")
 	}
 	assertOwner(t, c, agent, ownerA)
 }
@@ -124,7 +124,7 @@ func TestAcquireConcurrent(t *testing.T) {
 		}
 	}
 	if won != 1 {
-		t.Fatalf("并发获取锁成功 %d 次，期望 1 次", won)
+		t.Fatalf("concurrent lock acquisition succeeded %d times, want 1", won)
 	}
 }
 
@@ -137,41 +137,41 @@ func TestHoldRestoreRelease(t *testing.T) {
 
 	// When the lock is free, Hold sets it to owner; when it is already owner, nothing changes.
 	if !must[bool](t)(c.Hold(ctx, agent, owner)) {
-		t.Fatal("锁空闲时 Hold 应拿到")
+		t.Fatal("Hold should get the lock when it is free")
 	}
 	assertOwner(t, c, agent, owner)
 	if !must[bool](t)(c.Hold(ctx, agent, owner)) {
-		t.Fatal("持有者匹配时 Hold 应成功")
+		t.Fatal("Hold should succeed when the holder matches")
 	}
 	assertOwner(t, c, agent, owner)
 
 	// Rejected without changes when the holder does not match.
 	if must[bool](t)(c.Hold(ctx, agent, other)) {
-		t.Fatal("持有者不匹配时 Hold 应失败")
+		t.Fatal("Hold should fail when the holder does not match")
 	}
 	assertOwner(t, c, agent, owner)
 
 	// Restore only sets the lock when it does not exist.
 	if must[bool](t)(c.Restore(ctx, agent, other)) {
-		t.Fatal("锁存在时 Restore 不应覆盖")
+		t.Fatal("Restore should not overwrite an existing lock")
 	}
 	assertOwner(t, c, agent, owner)
 
 	// Release deletes after checking the holder.
 	if must[bool](t)(c.Release(ctx, agent, other)) {
-		t.Fatal("持有者不匹配时 Release 不应删除")
+		t.Fatal("Release should not delete when the holder does not match")
 	}
 	assertOwner(t, c, agent, owner)
 	if !must[bool](t)(c.Release(ctx, agent, owner)) {
-		t.Fatal("持有者匹配时 Release 应删除")
+		t.Fatal("Release should delete when the holder matches")
 	}
 	assertOwner(t, c, agent, "")
 	if must[bool](t)(c.Release(ctx, agent, owner)) {
-		t.Fatal("锁不存在时 Release 应返回 false")
+		t.Fatal("Release should return false when the lock does not exist")
 	}
 
 	if !must[bool](t)(c.Restore(ctx, agent, other)) {
-		t.Fatal("锁不存在时 Restore 应设置")
+		t.Fatal("Restore should set the lock when it does not exist")
 	}
 	assertOwner(t, c, agent, other)
 }
@@ -182,36 +182,36 @@ func TestSwap(t *testing.T) {
 	const agent = "agent-3"
 	owner := coord.LockValue("run-0", "inst")
 	if !must[bool](t)(c.Acquire(ctx, agent, owner)) {
-		t.Fatal("应拿到锁")
+		t.Fatal("should get the lock")
 	}
 	// Holder mismatch, or an empty current while the lock exists: no change.
 	for _, current := range []string{coord.LockValue("run-zz", "inst"), ""} {
 		if must[bool](t)(c.Swap(ctx, agent, current, "x|inst")) {
-			t.Fatalf("current=%q 时不应换锁", current)
+			t.Fatalf("should not swap the lock when current=%q", current)
 		}
 		assertOwner(t, c, agent, owner)
 	}
 	// Hand over to the next run: swap the lock holder.
 	next := coord.LockValue("run-1", "inst")
 	if !must[bool](t)(c.Swap(ctx, agent, owner, next)) {
-		t.Fatal("应换锁")
+		t.Fatal("should swap the lock")
 	}
 	assertOwner(t, c, agent, next)
 	// No next run: delete the lock; when the lock does not exist, a non-empty current does not match.
 	if !must[bool](t)(c.Swap(ctx, agent, next, "")) {
-		t.Fatal("应删除锁")
+		t.Fatal("should delete the lock")
 	}
 	assertOwner(t, c, agent, "")
 	if must[bool](t)(c.Swap(ctx, agent, next, "y|inst")) {
-		t.Fatal("锁不存在时非空 current 不应匹配")
+		t.Fatal("a non-empty current should not match when the lock does not exist")
 	}
 	// An empty current when the lock does not exist: it can take over directly, or do nothing at all.
 	if !must[bool](t)(c.Swap(ctx, agent, "", "")) {
-		t.Fatal("空闲时空交接应成功")
+		t.Fatal("an empty handoff should succeed when the lock is free")
 	}
 	assertOwner(t, c, agent, "")
 	if !must[bool](t)(c.Swap(ctx, agent, "", "n3|inst-y")) {
-		t.Fatal("空闲时应能接手")
+		t.Fatal("should be able to take over when the lock is free")
 	}
 	assertOwner(t, c, agent, "n3|inst-y")
 }
@@ -225,22 +225,22 @@ func TestEventsAndText(t *testing.T) {
 	text, last, err := c.Snapshot(ctx, agent, run)
 	check(t, err)
 	if text != "" || last != "0-0" {
-		t.Fatalf("空事件流快照 = (%q, %q)", text, last)
+		t.Fatalf("empty stream snapshot = (%q, %q)", text, last)
 	}
 	if first := must[string](t)(c.FirstEventID(ctx, agent)); first != "" {
-		t.Fatalf("空事件流 FirstEventID = %q", first)
+		t.Fatalf("empty stream FirstEventID = %q", first)
 	}
 	if evs := must[[]coord.Event](t)(c.ReadEvents(ctx, agent, "0-0", 10, 0)); len(evs) != 0 {
-		t.Fatalf("空事件流不应读到事件：%v", evs)
+		t.Fatalf("an empty stream should yield no events: %v", evs)
 	}
 
 	startID := must[string](t)(c.AppendEvent(ctx, agent, "run_started", []byte(`{"runId":"run-5"}`)))
 	ids := []string{startID}
-	deltas := []string{"你好", "，", "world", "", "！"}
+	deltas := []string{"你好", ", ", "world", "", "!"} // check-english: zh (multi-byte text round trip through the stream)
 	for i, d := range deltas {
 		id := must[string](t)(c.AppendText(ctx, agent, run, d, "text_delta", fmt.Appendf(nil, `{"i":%d}`, i)))
 		if coord.CompareIDs(id, ids[len(ids)-1]) <= 0 {
-			t.Fatalf("条目 ID 应递增：%s 后为 %s", ids[len(ids)-1], id)
+			t.Fatalf("entry IDs should increase: %s followed by %s", ids[len(ids)-1], id)
 		}
 		ids = append(ids, id)
 	}
@@ -248,17 +248,17 @@ func TestEventsAndText(t *testing.T) {
 	text, last, err = c.Snapshot(ctx, agent, run)
 	check(t, err)
 	if want := strings.Join(deltas, ""); text != want {
-		t.Fatalf("快照文字 = %q，期望 %q", text, want)
+		t.Fatalf("snapshot text = %q, want %q", text, want)
 	}
 	if last != ids[len(ids)-1] {
-		t.Fatalf("快照 lastID = %q，期望 %q", last, ids[len(ids)-1])
+		t.Fatalf("snapshot lastID = %q, want %q", last, ids[len(ids)-1])
 	}
 	if got := must[string](t)(c.RunText(ctx, run)); got != text {
-		t.Fatalf("RunText = %q，期望 %q", got, text)
+		t.Fatalf("RunText = %q, want %q", got, text)
 	}
 	// With an empty runID the text is not read.
 	if text2, last2, err := c.Snapshot(ctx, agent, ""); err != nil || text2 != "" || last2 != last {
-		t.Fatalf("空 runID 快照 = (%q, %q, %v)", text2, last2, err)
+		t.Fatalf("snapshot with empty runID = (%q, %q, %v)", text2, last2, err)
 	}
 
 	// Read from after the snapshot position: a blocking read that times out returns an empty result, not an error.
@@ -266,10 +266,10 @@ func TestEventsAndText(t *testing.T) {
 	evs, err := c.ReadEvents(ctx, agent, last, 10, 100*time.Millisecond)
 	check(t, err)
 	if len(evs) != 0 {
-		t.Fatalf("快照之后不应有事件：%v", evs)
+		t.Fatalf("there should be no events after the snapshot: %v", evs)
 	}
 	if time.Since(start) < 80*time.Millisecond {
-		t.Fatal("ReadEvents 应阻塞到超时")
+		t.Fatal("ReadEvents should block until the timeout")
 	}
 
 	// Events appended during a blocking read are seen by it.
@@ -279,15 +279,15 @@ func TestEventsAndText(t *testing.T) {
 		done <- evs
 	}()
 	time.Sleep(100 * time.Millisecond)
-	laterID := must[string](t)(c.AppendText(ctx, agent, run, "后续", "text_delta", []byte("later")))
+	laterID := must[string](t)(c.AppendText(ctx, agent, run, "more text", "text_delta", []byte("later")))
 	ids = append(ids, laterID)
 	select {
 	case evs := <-done:
 		if len(evs) != 1 || evs[0].ID != laterID || evs[0].Type != "text_delta" || string(evs[0].Data) != "later" {
-			t.Fatalf("阻塞读取得到 %+v，期望仅 %s", evs, laterID)
+			t.Fatalf("blocking read got %+v, want only %s", evs, laterID)
 		}
 	case <-time.After(10 * time.Second):
-		t.Fatal("阻塞读取未返回")
+		t.Fatal("blocking read did not return")
 	}
 
 	// Reading from a middle position: returns the remaining events in order without duplicates.
@@ -299,29 +299,29 @@ func TestEventsAndText(t *testing.T) {
 		gotIDs[i] = e.ID
 	}
 	if !slices.Equal(gotIDs, ids[mid+1:]) {
-		t.Fatalf("从 %s 之后读到 %v，期望 %v", ids[mid], gotIDs, ids[mid+1:])
+		t.Fatalf("read after %s got %v, want %v", ids[mid], gotIDs, ids[mid+1:])
 	}
 	if evs[0].Type != "text_delta" || string(evs[0].Data) != fmt.Sprintf(`{"i":%d}`, mid) {
-		t.Fatalf("事件内容不符：%+v", evs[0])
+		t.Fatalf("unexpected event content: %+v", evs[0])
 	}
 
 	// COUNT limits the number of entries.
 	evs, err = c.ReadEvents(ctx, agent, "0-0", 2, 0)
 	check(t, err)
 	if len(evs) != 2 || evs[0].ID != startID || evs[0].Type != "run_started" || string(evs[0].Data) != `{"runId":"run-5"}` {
-		t.Fatalf("COUNT=2 读取得到 %+v", evs)
+		t.Fatalf("read with COUNT=2 got %+v", evs)
 	}
 
 	if first := must[string](t)(c.FirstEventID(ctx, agent)); first != startID {
-		t.Fatalf("FirstEventID = %q，期望 %q", first, startID)
+		t.Fatalf("FirstEventID = %q, want %q", first, startID)
 	}
 
 	check(t, c.DeleteRunText(ctx, run))
 	if got := must[string](t)(c.RunText(ctx, run)); got != "" {
-		t.Fatalf("删除后 RunText = %q", got)
+		t.Fatalf("RunText after delete = %q", got)
 	}
 	if text, _, err := c.Snapshot(ctx, agent, run); err != nil || text != "" {
-		t.Fatalf("删除后快照文字 = %q（%v）", text, err)
+		t.Fatalf("snapshot text after delete = %q (%v)", text, err)
 	}
 }
 
@@ -344,16 +344,16 @@ func TestStreamTrim(t *testing.T) {
 	}
 	retained := must[string](t)(c.FirstEventID(ctx, agent))
 	if coord.CompareIDs(retained, firstID) <= 0 {
-		t.Fatalf("应裁剪早期条目：最早保留 %s，首条 %s", retained, firstID)
+		t.Fatalf("early entries should be trimmed: oldest kept %s, first written %s", retained, firstID)
 	}
 	if evs := must[[]coord.Event](t)(c.ReadEvents(ctx, agent, "0-0", 0, 0)); len(evs) != 10 || evs[9].ID != lastID {
-		t.Fatalf("应只保留最近 10 条：%d", len(evs))
+		t.Fatalf("only the latest 10 entries should be kept: %d", len(evs))
 	}
 	if _, last, err := c.Snapshot(ctx, agent, "run-6"); err != nil || last != lastID {
-		t.Fatalf("裁剪后快照 lastID = %q（%v），期望 %q", last, err, lastID)
+		t.Fatalf("snapshot lastID after trim = %q (%v), want %q", last, err, lastID)
 	}
 	if text := must[string](t)(c.RunText(ctx, "run-6")); len(text) != 250 {
-		t.Fatalf("回复文字长度 = %d，期望 250", len(text))
+		t.Fatalf("reply text length = %d, want 250", len(text))
 	}
 }
 
@@ -374,7 +374,7 @@ func TestCompareIDs(t *testing.T) {
 	}
 	for _, tc := range cases {
 		if got := coord.CompareIDs(tc.a, tc.b); got != tc.want {
-			t.Errorf("CompareIDs(%q, %q) = %d，期望 %d", tc.a, tc.b, got, tc.want)
+			t.Errorf("CompareIDs(%q, %q) = %d, want %d", tc.a, tc.b, got, tc.want)
 		}
 	}
 }
@@ -395,10 +395,10 @@ func TestInterruptPubSub(t *testing.T) {
 		select {
 		case got := <-ch:
 			if got != want {
-				t.Fatalf("收到 %q，期望 %q", got, want)
+				t.Fatalf("got %q, want %q", got, want)
 			}
 		case <-time.After(5 * time.Second):
-			t.Fatalf("未收到 %q", want)
+			t.Fatalf("did not receive %q", want)
 		}
 	}
 
@@ -409,6 +409,6 @@ func TestInterruptPubSub(t *testing.T) {
 			_, ok = <-ch
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("ctx 结束后通道应关闭")
+		t.Fatal("the channel should close after ctx ends")
 	}
 }

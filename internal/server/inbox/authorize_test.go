@@ -24,28 +24,28 @@ func TestAuthorizeSend(t *testing.T) {
 		reply    bool
 		allowed  bool
 	}{
-		{"同组织的 Agent 互发", agentIn(orgA, false), agentIn(orgA, false), false, true},
-		{"发给其他组织的普通 Agent", agentIn(orgA, false), agentIn(orgB, false), false, false},
-		{"普通 Agent 发给其他组织的 Manager", agentIn(orgA, false), agentIn(orgB, true), false, false},
-		{"Manager 发给其他组织的普通 Agent", agentIn(orgA, true), agentIn(orgB, false), false, false},
-		{"Manager 发给其他组织的 Manager", agentIn(orgA, true), agentIn(orgB, true), false, true},
-		{"组织内 Agent 发给平台 Agent", agentIn(orgA, false), platform, false, true},
-		{"平台 Agent 发给任何组织的 Agent", platform, agentIn(orgB, false), false, true},
-		{"平台 Agent 互发", platform, platform, false, true},
-		{"控制台发给任何组织的 Agent", console, agentIn(orgB, false), false, true},
-		{"外部身份发给任何组织的 Agent", external, agentIn(orgB, false), false, true},
-		{"Agent 发给控制台", agentIn(orgA, false), console, false, true},
-		{"Agent 发给外部身份", agentIn(orgA, false), external, false, true},
-		{"回复其他组织的 Agent", agentIn(orgB, false), agentIn(orgA, false), true, true},
+		{"Agent to Agent in the same organization", agentIn(orgA, false), agentIn(orgA, false), false, true},
+		{"Agent to a regular Agent in another organization", agentIn(orgA, false), agentIn(orgB, false), false, false},
+		{"regular Agent to a Manager in another organization", agentIn(orgA, false), agentIn(orgB, true), false, false},
+		{"Manager to a regular Agent in another organization", agentIn(orgA, true), agentIn(orgB, false), false, false},
+		{"Manager to a Manager in another organization", agentIn(orgA, true), agentIn(orgB, true), false, true},
+		{"organization Agent to a platform Agent", agentIn(orgA, false), platform, false, true},
+		{"platform Agent to an Agent in any organization", platform, agentIn(orgB, false), false, true},
+		{"platform Agents to each other", platform, platform, false, true},
+		{"console to an Agent in any organization", console, agentIn(orgB, false), false, true},
+		{"external identity to an Agent in any organization", external, agentIn(orgB, false), false, true},
+		{"Agent to the console", agentIn(orgA, false), console, false, true},
+		{"Agent to an external identity", agentIn(orgA, false), external, false, true},
+		{"reply to an Agent in another organization", agentIn(orgB, false), agentIn(orgA, false), true, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			err := AuthorizeSend(c.from, c.to, c.reply)
 			if c.allowed && err != nil {
-				t.Fatalf("应允许：%v", err)
+				t.Fatalf("should be allowed: %v", err)
 			}
 			if !c.allowed && !apperr.Is(err, apperr.CodeForbidden) {
-				t.Fatalf("应以 forbidden 拒绝：%v", err)
+				t.Fatalf("should be rejected as forbidden: %v", err)
 			}
 		})
 	}
