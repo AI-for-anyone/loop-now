@@ -32,8 +32,8 @@ export const config = {
       plugins_disabled: 'all plugins are turned off',
     },
     pluginUnavailableNote: {
-      plugin_not_enabled: (plugin: string) => `This project hasn't enabled the plugin "${plugin}". Enable it on the project's Plugins page, then grant it to this Agent under "Plugins" on this page.`,
-      agent_not_granted: (plugin: string) => `The plugin "${plugin}" isn't granted to this Agent yet. Grant it under "Plugins" on this page to choose this provider.`,
+      plugin_not_enabled: (plugin: string) => `This project hasn't enabled the plugin "${plugin}". Enable it on the project's Plugins page, then grant it to this Agent under "Plugin grants" on this page.`,
+      agent_not_granted: (plugin: string) => `The plugin "${plugin}" isn't granted to this Agent yet. Grant it under "Plugin grants" on this page to choose this provider.`,
       plugins_disabled: 'All plugins are turned off in global settings. You can save, but the Agent will fail to start.',
     },
     modelOption: (name: string, id: string) => (name === id ? id : `${name} (${id})`),
@@ -63,7 +63,7 @@ export const config = {
   modelLogin: {
     loading: 'Checking the model account and login status…',
     unsupported: "Console login isn't available for this provider yet.",
-    notGranted: (plugin: string) => `The plugin "${plugin}" isn't granted to this Agent yet, so no login was started. Grant it under "Plugins" on this page, then log in.`,
+    notGranted: (plugin: string) => `The plugin "${plugin}" isn't granted to this Agent yet, so no login was started. Grant it under "Plugin grants" on this page, then log in.`,
     setKey: 'Enter API key',
     replaceKey: 'Replace API key',
     keyRequired: 'Enter an API key',

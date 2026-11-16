@@ -31,8 +31,8 @@ export const config = {
     },
     // 选中的是现在不能用的插件提供方时，选择器下方的说明。
     pluginUnavailableNote: {
-      plugin_not_enabled: (plugin: string) => `项目还没有启用插件「${plugin}」。在项目的插件页启用它、再在本页的“插件”一节授权给这个 Agent 后才能选。`,
-      agent_not_granted: (plugin: string) => `插件「${plugin}」还没有授权给这个 Agent。在本页的“插件”一节授权后才能选。`,
+      plugin_not_enabled: (plugin: string) => `项目还没有启用插件「${plugin}」。在项目的插件页启用它、再在本页的“插件权限”一节授权给这个 Agent 后才能选。`,
+      agent_not_granted: (plugin: string) => `插件「${plugin}」还没有授权给这个 Agent。在本页的“插件权限”一节授权后才能选。`,
       plugins_disabled: '全局设置里已停用全部插件：可以保存，但 Agent 启动时会失败。',
     },
     modelOption: (name: string, id: string) => (name === id ? id : `${name}（${id}）`),
@@ -62,7 +62,7 @@ export const config = {
     loading: '正在查询模型账号与登录状态…',
     unsupported: '当前提供方暂未开放控制台认证。',
     // 发起登录时 409 plugin_not_enabled：插件没有授权给这个 Agent。
-    notGranted: (plugin: string) => `插件「${plugin}」还没有授权给这个 Agent，本次没有发起登录。在本页的“插件”一节授权后再登录。`,
+    notGranted: (plugin: string) => `插件「${plugin}」还没有授权给这个 Agent，本次没有发起登录。在本页的“插件权限”一节授权后再登录。`,
     setKey: '录入 API Key',
     replaceKey: '替换 API Key',
     keyRequired: '请填写 API Key',

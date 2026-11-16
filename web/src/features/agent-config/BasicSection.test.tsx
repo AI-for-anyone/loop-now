@@ -270,7 +270,7 @@ describe('插件提供方', () => {
     const agent = makeAgent({ model: { provider: 'grok-cli', modelId: 'grok-4' } })
     await renderConfig({ agent, handlers: [http.get(apiUrl('/model-providers'), () => HttpResponse.json(catalog([pluginProvider('grok-cli', { unavailableReason: 'plugin_not_enabled' })]))), grokModels] })
     const basic = region('基本信息')
-    expect(await within(basic).findByText('项目还没有启用插件「Grok 订阅」。在项目的插件页启用它、再在本页的“插件”一节授权给这个 Agent 后才能选。')).toHaveAttribute('role', 'note')
+    expect(await within(basic).findByText('项目还没有启用插件「Grok 订阅」。在项目的插件页启用它、再在本页的“插件权限”一节授权给这个 Agent 后才能选。')).toHaveAttribute('role', 'note')
     expect(within(basic).getByLabelText('模型提供方')).toHaveValue('grok-cli')
   })
 
@@ -289,7 +289,7 @@ describe('插件提供方', () => {
     expect(option(select, 'grok-cli')).toHaveTextContent('Grok CLI · grok-cli（插件「Grok 订阅」，2 个模型） — 插件未授权给这个 Agent')
     expect(option(select, 'grok-ok')).toBeEnabled()
     expect(option(select, 'grok-ok')).toHaveTextContent(/^Grok OK · grok-ok（插件「Grok 订阅」，2 个模型）$/)
-    expect(within(basic).getByText('插件「Grok 订阅」还没有授权给这个 Agent。在本页的“插件”一节授权后才能选。')).toHaveAttribute('role', 'note')
+    expect(within(basic).getByText('插件「Grok 订阅」还没有授权给这个 Agent。在本页的“插件权限”一节授权后才能选。')).toHaveAttribute('role', 'note')
     expect(within(basic).queryByText(/只给项目 Agent 用/)).toBeNull()
   })
 
@@ -321,6 +321,6 @@ describe('插件提供方', () => {
     expect(await within(basic).findByText('插件 grok 没有授权给这个 Agent')).toBeInTheDocument()
     await waitFor(() => expect(option(select, 'grok-cli')).toBeDisabled())
     expect(reads).toBeGreaterThan(before)
-    expect(within(basic).getByText('插件「Grok 订阅」还没有授权给这个 Agent。在本页的“插件”一节授权后才能选。')).toHaveAttribute('role', 'note')
+    expect(within(basic).getByText('插件「Grok 订阅」还没有授权给这个 Agent。在本页的“插件权限”一节授权后才能选。')).toHaveAttribute('role', 'note')
   })
 })

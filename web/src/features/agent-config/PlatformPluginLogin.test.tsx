@@ -166,7 +166,7 @@ describe('平台 Agent 登录插件提供方', () => {
   it('409 plugin_not_enabled：说明插件还没授权给这个 Agent，不说“没有启用”', async () => {
     const { login } = await setup(() => HttpResponse.json(errorBody('plugin_not_enabled', '插件 grok 没有授权给这个 Agent'), { status: 409 }))
     await login()
-    expect(await within(area()).findByText('插件「Grok 订阅」还没有授权给这个 Agent，本次没有发起登录。在本页的“插件”一节授权后再登录。')).toBeInTheDocument()
+    expect(await within(area()).findByText('插件「Grok 订阅」还没有授权给这个 Agent，本次没有发起登录。在本页的“插件权限”一节授权后再登录。')).toBeInTheDocument()
     expect(within(area()).queryByText(/插件还没有启用/)).toBeNull()
     expect(within(area()).getByText('本次登录失败')).toBeInTheDocument()
   })
