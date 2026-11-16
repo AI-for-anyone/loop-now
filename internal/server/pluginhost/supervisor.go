@@ -356,7 +356,7 @@ func (s *Supervisor) launch() (*conn, error) {
 	s.mu.Unlock()
 	c, err := startConn(s.o.Command, s.o.Dir, s.o.Env, s.onMessage, s.onStderr)
 	if err != nil {
-		return nil, fmt.Errorf("无法启动插件宿主：%w", err)
+		return nil, fmt.Errorf("start the plugin host: %w", err)
 	}
 	timer := time.NewTimer(s.o.ReadyTimeout)
 	defer timer.Stop()
@@ -364,7 +364,7 @@ func (s *Supervisor) launch() (*conn, error) {
 	case p := <-c.ready:
 		if p.Protocol != ProtocolVersion {
 			c.kill()
-			return nil, fmt.Errorf("插件宿主的协议版本为 %d，服务端只支持 %d", p.Protocol, ProtocolVersion)
+			return nil, fmt.Errorf("the plugin host uses protocol version %d, but the server only supports %d", p.Protocol, ProtocolVersion)
 		}
 		s.mu.Lock()
 		s.conn, s.startedAt, s.hostVersion = c, time.Now(), p.HostVersion
@@ -376,9 +376,9 @@ func (s *Supervisor) launch() (*conn, error) {
 		}
 	case <-timer.C:
 		c.kill()
-		return nil, fmt.Errorf("插件宿主没有在 %s 内就绪", s.o.ReadyTimeout)
+		return nil, fmt.Errorf("the plugin host was not ready within %s", s.o.ReadyTimeout)
 	case <-c.done:
-		return nil, fmt.Errorf("插件宿主在就绪前退出：%v", c.exitErr)
+		return nil, fmt.Errorf("the plugin host exited before it was ready: %v", c.exitErr)
 	case <-s.quit:
 		c.stop(s.o.ShutdownGrace)
 		return c, nil
@@ -443,7 +443,7 @@ func (s *Supervisor) afterExit(c *conn, err error) {
 	known := s.known
 	s.mu.Unlock()
 	s.o.Log.Error("plugin host exited unexpectedly", "err", crash.Error, "inFlight", len(crash.InFlight), "willRestart", !gaveUp)
-	s.enqueueLog("", "error", "插件宿主意外退出："+crash.Error)
+	s.enqueueLog("", "error", "The plugin host exited unexpectedly: "+crash.Error)
 	if gaveUp {
 		s.markAll(known, StatusHostStopped)
 	}
@@ -464,7 +464,7 @@ func (s *Supervisor) loadAll(c *conn) {
 	specs, err := s.o.Specs(ctx)
 	if err != nil {
 		s.o.Log.Error("failed to read the plugins to load", "err", err)
-		s.enqueueLog("", "error", "读取要加载的插件失败："+err.Error())
+		s.enqueueLog("", "error", "Could not read the plugins to load: "+err.Error())
 		return
 	}
 	s.mu.Lock()
@@ -490,7 +490,7 @@ func (s *Supervisor) loadOne(ctx context.Context, c *conn, spec Spec) {
 			msg = pe.Message
 		}
 		s.o.Log.Warn("plugin failed to load", "plugin", spec.ID, "err", msg)
-		s.enqueueLog(spec.ID, "error", "加载失败："+msg)
+		s.enqueueLog(spec.ID, "error", "Could not load the plugin: "+msg)
 		if serr := s.o.Store.SetPluginStatus(ctx, spec.ID, StatusError, &msg); serr != nil {
 			s.o.Log.Warn("failed to update the plugin status", "plugin", spec.ID, "err", serr)
 		}
@@ -566,7 +566,7 @@ func (s *Supervisor) ConfigChanged(ctx context.Context, id string, payload any) 
 
 // ErrNotLoaded means the plugin is not currently in the plugin host (the host is not running, is disabled, or the
 // load failed).
-var ErrNotLoaded = errors.New("插件未加载")
+var ErrNotLoaded = errors.New("the plugin is not loaded")
 
 // Request sends a request to a loaded plugin and waits for the result (action, http, schedule and so on).
 func (s *Supervisor) Request(ctx context.Context, typ, plugin string, payload any, timeout time.Duration) (json.RawMessage, error) {
@@ -624,7 +624,7 @@ func (s *Supervisor) onMessage(c *conn, m Message) {
 	default:
 		s.o.Log.Warn("plugin host sent an unknown message", "type", m.Type, "plugin", m.Plugin)
 		if m.ID != "" {
-			c.respond(m.ID, m.Plugin, nil, fmt.Errorf("不支持的请求 %s", m.Type))
+			c.respond(m.ID, m.Plugin, nil, fmt.Errorf("unsupported request %s", m.Type))
 		}
 	}
 }
@@ -642,24 +642,24 @@ func (s *Supervisor) handleAccounts(m Message) (any, error) {
 	}
 	s.mu.Unlock()
 	if spec == nil {
-		return nil, errors.New("插件未加载")
+		return nil, errors.New("the plugin is not loaded")
 	}
 	if !slices.Contains(spec.Permissions, "accounts.read") {
-		return nil, errors.New("清单没有声明 accounts.read 权限")
+		return nil, errors.New("the manifest does not declare the accounts.read permission")
 	}
 	var r struct {
 		ProjectID string `json:"projectId"`
 		Kind      string `json:"kind"`
 	}
 	if err := json.Unmarshal(m.Payload, &r); err != nil {
-		return nil, errors.New("请求无法解析")
+		return nil, errors.New("the request cannot be parsed")
 	}
 	if !slices.Contains(spec.AccountKinds, r.Kind) {
-		return nil, fmt.Errorf("清单没有声明账号种类 %s", r.Kind)
+		return nil, fmt.Errorf("the manifest does not declare account kind %s", r.Kind)
 	}
 	project, err := uuid.Parse(r.ProjectID)
 	if err != nil {
-		return nil, errors.New("projectId 无效")
+		return nil, errors.New("projectId is invalid")
 	}
 	ctx := context.Background()
 	on, err := s.o.Store.PluginEnabledIn(ctx, m.Plugin, project)
@@ -667,7 +667,7 @@ func (s *Supervisor) handleAccounts(m Message) (any, error) {
 		return nil, err
 	}
 	if !on {
-		return nil, errors.New("插件没有在这个项目里启用")
+		return nil, errors.New("the plugin is not enabled in this project")
 	}
 	accounts, err := s.o.Store.PluginAccountsOfKind(ctx, project, m.Plugin, r.Kind)
 	if err != nil {
@@ -697,25 +697,25 @@ func (s *Supervisor) handleState(m Message) (any, error) {
 	}
 	s.mu.Unlock()
 	if spec == nil {
-		return nil, fmt.Errorf("插件 %q 未加载", m.Plugin)
+		return nil, fmt.Errorf("plugin %q is not loaded", m.Plugin)
 	}
 	if !slices.Contains(spec.Permissions, "state") {
-		return nil, errors.New("清单没有声明 state 权限")
+		return nil, errors.New("the manifest does not declare the state permission")
 	}
 	var r stateRequest
 	if err := json.Unmarshal(m.Payload, &r); err != nil {
-		return nil, errors.New("请求无法解析")
+		return nil, errors.New("the request cannot be parsed")
 	}
 	var project *uuid.UUID
 	if r.ProjectID != nil {
 		id, err := uuid.Parse(*r.ProjectID)
 		if err != nil {
-			return nil, errors.New("projectId 必须是 UUID")
+			return nil, errors.New("projectId must be a UUID")
 		}
 		project = &id
 	}
 	if m.Type != TypeStateList && (len(r.Key) == 0 || len(r.Key) > 512) {
-		return nil, errors.New("key 必须是 1 到 512 字节")
+		return nil, errors.New("key must be 1 to 512 bytes")
 	}
 	ctx := context.Background()
 	switch m.Type {
@@ -727,10 +727,10 @@ func (s *Supervisor) handleState(m Message) (any, error) {
 		return v, err
 	case TypeStateSet:
 		if len(r.Value) == 0 {
-			return nil, errors.New("缺少 value")
+			return nil, errors.New("value is missing")
 		}
 		if len(r.Value) > stateValueMax {
-			return nil, fmt.Errorf("value 不能超过 %d 字节", stateValueMax)
+			return nil, fmt.Errorf("value must be at most %d bytes", stateValueMax)
 		}
 		return nil, s.o.Store.PluginStateSet(ctx, m.Plugin, project, r.Key, r.Value)
 	case TypeStateDelete:

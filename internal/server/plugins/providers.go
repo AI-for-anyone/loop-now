@@ -50,7 +50,7 @@ func (s *Service) checkProviderConflicts(ctx context.Context, id string, c model
 	}
 	for _, o := range others {
 		if o.PluginID != id && mine[o.Provider.ID] {
-			return apperr.Conflict(apperr.CodeNameConflict, "插件 "+o.PluginID+" 已注册模型提供方 "+o.Provider.ID+"，不能再由插件 "+id+" 注册")
+			return apperr.Conflict(apperr.CodeNameConflict, "Plugin "+o.PluginID+" already registers model provider "+o.Provider.ID+", so plugin "+id+" cannot register it as well.")
 		}
 	}
 	return nil

@@ -39,7 +39,7 @@ var langTag = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$`)
 // ValidLanguageTag reports whether s has the shape of a language tag (such as zh-CN, en-US, en).
 func ValidLanguageTag(s string) bool { return langTag.MatchString(s) }
 
-var errText = errors.New("须是字符串，或以语言标签（如 zh-CN、en-US）为键、非空字符串为值的对象，至少一项")
+var errText = errors.New("must be a string, or an object with language tags (such as zh-CN, en-US) as keys and non-empty strings as values, with at least one entry.")
 
 // parse returns the value of the string form, or the keys (in the order the author wrote them) and entries of the
 // object form.

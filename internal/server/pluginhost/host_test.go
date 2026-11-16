@@ -198,7 +198,7 @@ func TestHostLoadsDeliversEventsAndKeepsState(t *testing.T) {
 	e.eventually("宿主日志", func() (bool, string) {
 		s := e.scalar(`SELECT string_agg(coalesce(plugin_id,'-')||':'||level||':'||line, ' | ' ORDER BY id) FROM plugin_host_log`)
 		return strings.Contains(s, "alpha:warn:loaded") && strings.Contains(s, `alpha:info:state {"n":1} [{"key":"probe/a","value":{"n":1}}]`) &&
-			strings.Contains(s, "-:warn:fake host booting") && strings.Contains(s, "beta:error:加载失败：清单与代码订阅不符"), s
+			strings.Contains(s, "-:warn:fake host booting") && strings.Contains(s, "beta:error:Could not load the plugin: 清单与代码订阅不符"), s
 	})
 	st := e.sup.Status()
 	if st.State != pluginhost.StateRunning || st.HostVersion != "fake-1" || len(st.Loaded) != 1 || st.Loaded[0] != "alpha" || st.LastCrash != nil {
@@ -259,7 +259,7 @@ func TestHostRestartPolicyAndCrashReport(t *testing.T) {
 
 // A ready timeout and a protocol version mismatch each count as one failure under the restart policy.
 func TestHostReadyTimeoutAndProtocolMismatch(t *testing.T) {
-	for _, c := range []struct{ mode, want string }{{"no-ready", "就绪"}, {"bad-protocol", "协议版本为 99"}, {"crash-after-ready", "exit status 3"}} {
+	for _, c := range []struct{ mode, want string }{{"no-ready", "ready"}, {"bad-protocol", "protocol version 99"}, {"crash-after-ready", "exit status 3"}} {
 		t.Run(c.mode, func(t *testing.T) {
 			e := newHostEnv(t, c.mode, []pluginhost.Spec{spec("alpha", nil, "inbox.received")}, func(o *pluginhost.Options) {
 				o.ReadyTimeout = 300 * time.Millisecond
@@ -368,16 +368,16 @@ func TestHostCallPolicies(t *testing.T) {
 	}
 	start := time.Now()
 	out, err := e.sup.Call(ctx, pluginhost.Intercept, ev("run.before_start"), nil)
-	if err != nil || !out.Blocked || out.Plugin != "c" || out.Reason != "被 c 阻止" || time.Since(start) < 300*time.Millisecond {
+	if err != nil || !out.Blocked || out.Plugin != "c" || out.Reason != "Blocked by c." || time.Since(start) < 300*time.Millisecond {
 		t.Fatalf("拦截：b 超时放行，c 阻止：%+v %v %s", out, err, time.Since(start))
 	}
 	if out, _ = e.sup.Call(ctx, pluginhost.Intercept, ev("run.before_start"), func(id string) bool { return id != "c" }); out.Blocked {
 		t.Fatalf("排除 c 后应放行：%+v", out)
 	}
-	if out, _ = e.sup.Call(ctx, pluginhost.Intercept, ev("node.before_submit"), nil); !out.Blocked || out.Plugin != "d" || !strings.Contains(out.Reason, "检查出错") {
+	if out, _ = e.sup.Call(ctx, pluginhost.Intercept, ev("node.before_submit"), nil); !out.Blocked || out.Plugin != "d" || !strings.Contains(out.Reason, "check failed") {
 		t.Fatalf("failClosed 的插件出错时应阻止：%+v", out)
 	}
-	if out, _ = e.sup.Call(ctx, pluginhost.Intercept, ev("task.before_start"), nil); !out.Blocked || out.Plugin != "f" || !strings.Contains(out.Reason, "插件未加载") {
+	if out, _ = e.sup.Call(ctx, pluginhost.Intercept, ev("task.before_start"), nil); !out.Blocked || out.Plugin != "f" || !strings.Contains(out.Reason, "the plugin is not loaded") {
 		t.Fatalf("failClosed 的插件未加载时应阻止：%+v", out)
 	}
 	out, err = e.sup.Call(ctx, pluginhost.Modify, ev("sleep.before_schedule"), nil)
@@ -471,7 +471,7 @@ func TestHostSchedules(t *testing.T) {
 	}
 	e.eventually("跳过记入日志", func() (bool, string) {
 		s := e.scalar(`SELECT string_agg(line, '|') FROM plugin_host_log WHERE plugin_id='cron'`)
-		return strings.Contains(s, "定时任务 slow 上一次还没有结束"), s
+		return strings.Contains(s, "Scheduled job slow has not finished its previous run"), s
 	})
 	now.Store(base.Add(60 * time.Minute).UnixNano())
 	e.eventually("10:00 触发 hourly", func() (bool, string) { return schedules("hourly") == 1, "" })

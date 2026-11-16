@@ -139,7 +139,7 @@ func TestRealHostLoadsDeliversEventsAndKeepsState(t *testing.T) {
 	}
 	e.eventually("宿主日志", func() (bool, string) {
 		s := e.hostLog()
-		return strings.Contains(s, `alpha:info:state {"n":1}`) && strings.Contains(s, "to stderr") && strings.Contains(s, "beta:error:加载失败"), s
+		return strings.Contains(s, `alpha:info:state {"n":1}`) && strings.Contains(s, "to stderr") && strings.Contains(s, "beta:error:Could not load the plugin"), s
 	})
 	logs := e.hostLog()
 	if !strings.Contains(logs, "alpha:info:ev inbox.received "+early+" hi null") {
@@ -306,7 +306,7 @@ func TestRealHostCallPolicies(t *testing.T) {
 	if out, _ = e.sup.Call(ctx, pluginhost.Intercept, ev("node.before_submit"), nil); !out.Blocked || out.Plugin != "d" || !strings.Contains(out.Reason, "检查出错") {
 		t.Errorf("failClosed 的插件出错时应阻止：%+v", out)
 	}
-	if out, _ = e.sup.Call(ctx, pluginhost.Intercept, ev("task.before_start"), nil); !out.Blocked || out.Plugin != "f" || !strings.Contains(out.Reason, "插件未加载") {
+	if out, _ = e.sup.Call(ctx, pluginhost.Intercept, ev("task.before_start"), nil); !out.Blocked || out.Plugin != "f" || !strings.Contains(out.Reason, "the plugin is not loaded") {
 		t.Errorf("failClosed 的插件未加载时应阻止：%+v", out)
 	}
 	out, err = e.sup.Call(ctx, pluginhost.Modify, ev("sleep.before_schedule"), nil)
@@ -404,7 +404,7 @@ func TestRealHostAccountsList(t *testing.T) {
 		return strings.Contains(s, "alpha:info:denied"), s
 	})
 	logs := e.hostLog()
-	if !strings.Contains(logs, `alpha:info:accounts [["值班","mail","pw-值班"],["备份","mail","pw-备份"]]`) || !strings.Contains(logs, "插件没有在这个项目里启用") {
+	if !strings.Contains(logs, `alpha:info:accounts [["值班","mail","pw-值班"],["备份","mail","pw-备份"]]`) || !strings.Contains(logs, "the plugin is not enabled in this project") {
 		t.Fatalf("宿主日志：%s", logs)
 	}
 }

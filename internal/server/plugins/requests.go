@@ -38,11 +38,11 @@ func (s *Service) hostRequest(ctx context.Context, typ, plugin string, payload a
 	case errors.Is(err, pluginhost.ErrNotLoaded):
 		return nil, notLoaded
 	case errors.Is(err, pluginhost.ErrTimeout):
-		return nil, &apperr.Error{Status: http.StatusGatewayTimeout, Code: apperr.CodePluginTimeout, Message: "插件 " + plugin + " 没有在 " + s.RequestTimeout.String() + " 内回应"}
+		return nil, &apperr.Error{Status: http.StatusGatewayTimeout, Code: apperr.CodePluginTimeout, Message: "Plugin " + plugin + " did not respond within " + s.RequestTimeout.String() + "."}
 	case errors.As(err, &pe):
-		return nil, &apperr.Error{Status: http.StatusBadGateway, Code: apperr.CodePluginFailed, Message: "插件 " + plugin + "：" + pe.Message}
+		return nil, &apperr.Error{Status: http.StatusBadGateway, Code: apperr.CodePluginFailed, Message: "Plugin " + plugin + ": " + pe.Message}
 	case errors.Is(err, pluginhost.ErrHostExited):
-		return nil, &apperr.Error{Status: http.StatusBadGateway, Code: apperr.CodePluginFailed, Message: "插件宿主在处理请求时退出"}
+		return nil, &apperr.Error{Status: http.StatusBadGateway, Code: apperr.CodePluginFailed, Message: "The plugin host exited while handling the request."}
 	}
 	return nil, err
 }
@@ -73,7 +73,7 @@ func (s *Service) Action(ctx context.Context, plugin, action string, where Actio
 	}
 	i := slices.IndexFunc(m.Components.Actions, func(a Action) bool { return a.ID == action })
 	if i < 0 {
-		return ActionResult{}, apperr.NotFound("操作")
+		return ActionResult{}, apperr.NotFound("Action")
 	}
 	a := m.Components.Actions[i]
 	kind, project, err := s.actionScope(ctx, where)
@@ -81,19 +81,19 @@ func (s *Service) Action(ctx context.Context, plugin, action string, where Actio
 		return ActionResult{}, err
 	}
 	if !slices.Contains(a.Where, kind) {
-		return ActionResult{}, apperr.Invalid("where", "操作 "+action+" 不在"+kind+"页面上")
+		return ActionResult{}, apperr.Invalid("where", "Action "+action+" is not on the "+kind+" page.")
 	}
 	if err := validateAgainst(a.Fields, true, input, "input"); err != nil {
 		return ActionResult{}, err
 	}
-	notEnabled := apperr.Conflict(apperr.CodePluginNotEnabled, "插件 "+plugin+" 没有在运行")
+	notEnabled := apperr.Conflict(apperr.CodePluginNotEnabled, "Plugin "+plugin+" is not running.")
 	if project != nil {
 		on, err := s.Store.PluginEnabledIn(ctx, plugin, *project)
 		if err != nil {
 			return ActionResult{}, err
 		}
 		if !on {
-			return ActionResult{}, apperr.Conflict(apperr.CodePluginNotEnabled, "插件 "+plugin+" 没有在这个项目里启用")
+			return ActionResult{}, apperr.Conflict(apperr.CodePluginNotEnabled, "Plugin "+plugin+" is not enabled in this project.")
 		}
 	}
 	raw, err := s.hostRequest(ctx, pluginhost.TypeAction, plugin,
@@ -103,7 +103,7 @@ func (s *Service) Action(ctx context.Context, plugin, action string, where Actio
 	}
 	var out ActionResult
 	if err := json.Unmarshal(raw, &out); err != nil || out.Notice == "" {
-		return ActionResult{}, &apperr.Error{Status: http.StatusBadGateway, Code: apperr.CodePluginFailed, Message: "插件 " + plugin + " 的回应缺少 notice"}
+		return ActionResult{}, &apperr.Error{Status: http.StatusBadGateway, Code: apperr.CodePluginFailed, Message: "Plugin " + plugin + " responded without a notice."}
 	}
 	return out, nil
 }
@@ -115,7 +115,7 @@ func (s *Service) actionScope(ctx context.Context, w ActionWhere) (string, *uuid
 	case w.IdentityID != nil:
 		x, err := s.Store.GetExternalIdentity(ctx, *w.IdentityID)
 		if err == nil && x.DeletedAt != nil {
-			err = apperr.NotFound("外部身份")
+			err = apperr.NotFound("External identity")
 		}
 		return "identity", nil, err
 	case w.TaskID != nil:
@@ -181,30 +181,30 @@ func (s *Service) HTTP(ctx context.Context, plugin string, req HTTPRequest) (HTT
 	_, m, err := s.get(ctx, plugin)
 	if err != nil || !m.Components.HTTP {
 		if err == nil || store.IsNotFound(err) {
-			err = apperr.NotFound("插件 HTTP 入口")
+			err = apperr.NotFound("Plugin HTTP entry point")
 		}
 		return HTTPResponse{}, err
 	}
 	if !s.limiter.allow(plugin, time.Now()) {
-		return HTTPResponse{}, &apperr.Error{Status: http.StatusTooManyRequests, Code: apperr.CodeRateLimited, Message: "插件 " + plugin + " 的 HTTP 入口请求过多"}
+		return HTTPResponse{}, &apperr.Error{Status: http.StatusTooManyRequests, Code: apperr.CodeRateLimited, Message: "Plugin " + plugin + " is getting too many requests on its HTTP endpoint. Try again later."}
 	}
 	payload := struct {
 		HTTPRequest
 		TimeoutMs int64 `json:"timeoutMs"`
 	}{req, s.RequestTimeout.Milliseconds()}
-	raw, err := s.hostRequest(ctx, pluginhost.TypeHTTP, plugin, payload, apperr.NotFound("插件 HTTP 入口"))
+	raw, err := s.hostRequest(ctx, pluginhost.TypeHTTP, plugin, payload, apperr.NotFound("Plugin HTTP entry point"))
 	if err != nil {
 		return HTTPResponse{}, err
 	}
 	var out HTTPResponse
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return HTTPResponse{}, &apperr.Error{Status: http.StatusBadGateway, Code: apperr.CodePluginFailed, Message: "插件 " + plugin + " 的回应无法解析"}
+		return HTTPResponse{}, &apperr.Error{Status: http.StatusBadGateway, Code: apperr.CodePluginFailed, Message: "Plugin " + plugin + " sent a response that could not be parsed."}
 	}
 	if out.Status == 0 {
 		out.Status = http.StatusOK
 	}
 	if out.Status < 100 || out.Status > 599 {
-		return HTTPResponse{}, &apperr.Error{Status: http.StatusBadGateway, Code: apperr.CodePluginFailed, Message: "插件 " + plugin + " 回应的状态码不合法"}
+		return HTTPResponse{}, &apperr.Error{Status: http.StatusBadGateway, Code: apperr.CodePluginFailed, Message: "Plugin " + plugin + " responded with an invalid status code."}
 	}
 	for k := range out.Headers {
 		if slices.Contains(hopHeaders, strings.ToLower(k)) {

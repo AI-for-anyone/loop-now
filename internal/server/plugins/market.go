@@ -131,7 +131,7 @@ func (s *Service) fetchMarket(ctx context.Context, raw string) (marketFile, erro
 	var file marketFile
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "https" || u.Host == "" {
-		return file, fmt.Errorf("市场地址须是 https 地址")
+		return file, fmt.Errorf("the market URL must be an https URL")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -145,35 +145,35 @@ func (s *Service) fetchMarket(ctx context.Context, raw string) (marketFile, erro
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return file, fmt.Errorf("读取市场失败：%w", err)
+		return file, fmt.Errorf("fetch the market: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return file, fmt.Errorf("读取市场失败：HTTP %d", resp.StatusCode)
+		return file, fmt.Errorf("fetch the market: HTTP %d", resp.StatusCode)
 	}
 	b, err := io.ReadAll(io.LimitReader(resp.Body, maxMarketBytes+1))
 	if err != nil {
-		return file, fmt.Errorf("读取市场失败：%w", err)
+		return file, fmt.Errorf("fetch the market: %w", err)
 	}
 	if len(b) > maxMarketBytes {
-		return file, fmt.Errorf("市场文件超过 4 MiB")
+		return file, fmt.Errorf("the market file is larger than 4 MiB")
 	}
 	if err := json.Unmarshal(b, &file); err != nil {
-		return file, fmt.Errorf("市场文件不是合法的 JSON：%w", err)
+		return file, fmt.Errorf("the market file is not valid JSON: %w", err)
 	}
 	if file.Plugins == nil {
 		file.Plugins = []marketEntry{}
 	}
 	for _, e := range file.Plugins {
 		if e.ID == "" {
-			return file, fmt.Errorf("市场里有缺少 id 的条目")
+			return file, fmt.Errorf("the market has an entry without an id")
 		}
 		if _, err := marketSource(e, ""); err != nil {
-			return file, fmt.Errorf("市场条目 %s：%s", e.ID, apperrMessage(err))
+			return file, fmt.Errorf("market entry %s: %s", e.ID, apperrMessage(err))
 		}
 		for _, err := range []error{e.DisplayName.Check("displayName"), e.Description.Check("description"), pluginmanifest.CheckProviderState("providerState", e.ProviderState)} {
 			if err != nil {
-				return file, fmt.Errorf("市场条目 %s：%s", e.ID, err.Error())
+				return file, fmt.Errorf("market entry %s: %s", e.ID, err.Error())
 			}
 		}
 	}
@@ -185,7 +185,7 @@ func (s *Service) fetchMarket(ctx context.Context, raw string) (marketFile, erro
 func marketSource(e marketEntry, version string) (Source, error) {
 	kind, loc, ok := strings.Cut(e.Source, ":")
 	if !ok || loc == "" {
-		return Source{}, apperr.Invalid("source", "来源须写成 git:<地址>[@ref] 或 npm:<包规格>")
+		return Source{}, apperr.Invalid("source", "Must be written as git:<url>[@ref] or npm:<package spec>.")
 	}
 	switch kind {
 	case SourceGit:
@@ -196,7 +196,7 @@ func marketSource(e marketEntry, version string) (Source, error) {
 			src.Location, src.Ref = loc[:i], &ref
 		}
 		if version != "" && (e.Version == nil || *e.Version != version) {
-			return Source{}, apperr.Invalid("source.version", "市场里的 git 条目只能安装市场给出的版本")
+			return Source{}, apperr.Invalid("source.version", "A git entry from a market can only be installed at the version the market gives.")
 		}
 		return src, nil
 	case SourceNPM:
@@ -209,14 +209,14 @@ func marketSource(e marketEntry, version string) (Source, error) {
 		}
 		return Source{Kind: SourceNPM, Location: loc}, nil
 	}
-	return Source{}, apperr.Invalid("source", "来源须写成 git:<地址>[@ref] 或 npm:<包规格>")
+	return Source{}, apperr.Invalid("source", "Must be written as git:<url>[@ref] or npm:<package spec>.")
 }
 
 // resolveMarket finds the entry in the market and returns the actual source and whether it needs no confirmation
 // (the official market or a verified entry).
 func (s *Service) resolveMarket(ctx context.Context, src Source) (Source, bool, *marketEntry, error) {
 	if src.Market == "" || src.ID == "" {
-		return Source{}, false, nil, apperr.Invalid("source", "市场来源须给出 market 与 id")
+		return Source{}, false, nil, apperr.Invalid("source", "A market source must give market and id.")
 	}
 	file, err := s.fetchMarket(ctx, src.Market)
 	if err != nil {
@@ -224,7 +224,7 @@ func (s *Service) resolveMarket(ctx context.Context, src Source) (Source, bool, 
 	}
 	i := slices.IndexFunc(file.Plugins, func(e marketEntry) bool { return e.ID == src.ID })
 	if i < 0 {
-		return Source{}, false, nil, apperr.NotFound("市场里的插件 " + src.ID)
+		return Source{}, false, nil, apperr.NotFound("Market plugin " + src.ID)
 	}
 	e := file.Plugins[i]
 	out, err := marketSource(e, src.Version)

@@ -71,11 +71,11 @@ func (s *Service) fetch(ctx context.Context, src Source, dest string) (string, R
 	switch src.Kind {
 	case SourceBuiltin:
 		if s.OfficialDir == "" || !pluginmanifest.ValidID(src.Location) {
-			return "", out, apperr.NotFound("官方插件")
+			return "", out, apperr.NotFound("Official plugin")
 		}
 		from := filepath.Join(s.OfficialDir, src.Location)
 		if info, err := os.Stat(from); err != nil || !info.IsDir() {
-			return "", out, apperr.NotFound("官方插件")
+			return "", out, apperr.NotFound("Official plugin")
 		}
 		if err := copyTree(from, dest); err != nil {
 			return "", out, err
@@ -83,11 +83,11 @@ func (s *Service) fetch(ctx context.Context, src Source, dest string) (string, R
 		return dest, out, nil
 	case SourceLocal:
 		if !filepath.IsAbs(src.Location) {
-			return "", out, apperr.Invalid("source.location", "本地目录须是服务端本机的绝对路径")
+			return "", out, apperr.Invalid("source.location", "The local folder must be an absolute path on the server machine.")
 		}
 		dir := filepath.Clean(src.Location)
 		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-			return "", out, sourceFailed("本地目录 %s 不存在", dir)
+			return "", out, sourceFailed("Local folder %s does not exist.", dir)
 		}
 		out.Location = dir
 		return dir, out, nil
@@ -102,19 +102,19 @@ func (s *Service) fetch(ctx context.Context, src Source, dest string) (string, R
 		}
 		return dest, out, nil
 	}
-	return "", out, apperr.Invalid("source.kind", "只能是 builtin、local、git 或 npm")
+	return "", out, apperr.Invalid("source.kind", "Must be builtin, local, git or npm.")
 }
 
 func (s *Service) gitFetch(ctx context.Context, src Source, dest string, out *ResolvedSource) error {
 	if strings.HasPrefix(src.Location, "-") {
-		return apperr.Invalid("source.location", "git 地址无效")
+		return apperr.Invalid("source.location", "The git URL is invalid.")
 	}
 	ref := ""
 	if src.Ref != nil {
 		ref = *src.Ref
 	}
 	if strings.HasPrefix(ref, "-") {
-		return apperr.Invalid("source.ref", "ref 无效")
+		return apperr.Invalid("source.ref", "The ref is invalid.")
 	}
 	args := []string{"clone", "--quiet"}
 	if ref == "" {
@@ -124,16 +124,16 @@ func (s *Service) gitFetch(ctx context.Context, src Source, dest string, out *Re
 	}
 	args = append(args, "--", src.Location, dest)
 	if _, err := s.run(ctx, "", s.GitBin, args...); err != nil {
-		return sourceFailed("git 克隆失败：%v", err)
+		return sourceFailed("Could not clone the git repository: %v", err)
 	}
 	if ref != "" && commitPattern.MatchString(ref) {
 		if _, err := s.run(ctx, dest, s.GitBin, "checkout", "--quiet", ref); err != nil {
-			return sourceFailed("git 检出 %s 失败：%v", ref, err)
+			return sourceFailed("Could not check out %s in the git repository: %v", ref, err)
 		}
 	}
 	commit, err := s.run(ctx, dest, s.GitBin, "rev-parse", "HEAD")
 	if err != nil {
-		return sourceFailed("读取 git 提交失败：%v", err)
+		return sourceFailed("Could not read the git commit: %v", err)
 	}
 	c := strings.TrimSpace(commit)
 	out.Commit = &c
@@ -142,7 +142,7 @@ func (s *Service) gitFetch(ctx context.Context, src Source, dest string, out *Re
 
 func (s *Service) npmFetch(ctx context.Context, spec, dest string) error {
 	if spec == "" || strings.HasPrefix(spec, "-") {
-		return apperr.Invalid("source.location", "npm 包规格无效")
+		return apperr.Invalid("source.location", "The npm package spec is invalid.")
 	}
 	pack := dest + ".pack"
 	if err := os.MkdirAll(pack, 0o700); err != nil {
@@ -151,17 +151,17 @@ func (s *Service) npmFetch(ctx context.Context, spec, dest string) error {
 	defer os.RemoveAll(pack)
 	raw, err := s.run(ctx, pack, s.npm(), "pack", spec, "--pack-destination", pack, "--json", "--ignore-scripts")
 	if err != nil {
-		return sourceFailed("npm pack 失败：%v", err)
+		return sourceFailed("Could not run npm pack: %v", err)
 	}
 	var files []struct {
 		Filename string `json:"filename"`
 	}
 	if json.Unmarshal([]byte(raw), &files) != nil || len(files) != 1 {
-		return sourceFailed("npm pack 的输出无法解析")
+		return sourceFailed("Could not parse the output of npm pack.")
 	}
 	f, err := os.Open(filepath.Join(pack, filepath.Base(files[0].Filename)))
 	if err != nil {
-		return sourceFailed("找不到 npm pack 生成的文件：%v", err)
+		return sourceFailed("Could not find the file created by npm pack: %v", err)
 	}
 	defer f.Close()
 	return extractTarball(f, dest)
@@ -172,7 +172,7 @@ func (s *Service) npmFetch(ctx context.Context, spec, dest string) error {
 func extractTarball(r io.Reader, dest string) error {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
-		return sourceFailed("npm 包不是 gzip：%v", err)
+		return sourceFailed("The npm package is not gzip: %v", err)
 	}
 	tr := tar.NewReader(gz)
 	var total int64
@@ -182,7 +182,7 @@ func extractTarball(r io.Reader, dest string) error {
 			return nil
 		}
 		if err != nil {
-			return sourceFailed("npm 包无法解开：%v", err)
+			return sourceFailed("Could not unpack the npm package: %v", err)
 		}
 		name := filepath.Clean(filepath.FromSlash(h.Name))
 		if i := strings.IndexRune(name, filepath.Separator); i >= 0 {
@@ -191,7 +191,7 @@ func extractTarball(r io.Reader, dest string) error {
 			continue
 		}
 		if filepath.IsAbs(name) || name == ".." || strings.HasPrefix(name, ".."+string(filepath.Separator)) {
-			return sourceFailed("npm 包含有越界路径 %s", h.Name)
+			return sourceFailed("The npm package contains a path outside its folder: %s", h.Name)
 		}
 		target := filepath.Join(dest, name)
 		switch h.Typeflag {
@@ -202,7 +202,7 @@ func extractTarball(r io.Reader, dest string) error {
 		case tar.TypeReg:
 			total += h.Size
 			if total > maxPackageBytes {
-				return sourceFailed("npm 包解开后超过 %d MiB", maxPackageBytes>>20)
+				return sourceFailed("The npm package is larger than %d MiB when unpacked.", maxPackageBytes>>20)
 			}
 			if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 				return err
@@ -250,7 +250,7 @@ func (s *Service) installDeps(ctx context.Context, dir string) error {
 		}
 	}
 	if _, err := s.run(ctx, dir, s.npm(), args...); err != nil {
-		return sourceFailed("安装依赖失败（npm %s）：%v", args[0], err)
+		return sourceFailed("Could not install dependencies (npm %s): %v", args[0], err)
 	}
 	return nil
 }
@@ -267,7 +267,7 @@ func (s *Service) npm() string {
 // error.
 func (s *Service) run(ctx context.Context, dir, bin string, args ...string) (string, error) {
 	if bin == "" {
-		return "", errors.New("服务端没有配置需要的可执行文件（git 或 node）")
+		return "", errors.New("the server has no required executable configured (git or node)")
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.FetchTimeout)
 	defer cancel()
@@ -285,7 +285,7 @@ func (s *Service) run(ctx context.Context, dir, bin string, args ...string) (str
 		if len(tail) > 500 {
 			tail = "…" + tail[len(tail)-500:]
 		}
-		return "", fmt.Errorf("%v：%s", err, tail)
+		return "", fmt.Errorf("%v: %s", err, tail)
 	}
 	return stdout.String(), nil
 }

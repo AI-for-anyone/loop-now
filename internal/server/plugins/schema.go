@@ -38,7 +38,7 @@ func mergeSecrets(current map[string]string, patch map[string]*string, allowed [
 	}
 	for k, v := range patch {
 		if !slices.Contains(allowed, k) {
-			return nil, apperr.Invalid(field, "secrets 中的 "+k+" 不是这里可以设置的 secret 字段")
+			return nil, apperr.Invalid(field, "In secrets, "+k+" is not a secret field that can be set here.")
 		}
 		if v == nil {
 			delete(out, k)
@@ -54,10 +54,10 @@ func mergeSecrets(current map[string]string, patch map[string]*string, allowed [
 func checkValueFields(values map[string]any, secrets, allowed []string, field string) error {
 	for k := range values {
 		if slices.Contains(secrets, k) {
-			return apperr.Invalid(field, k+" 是 secret 字段，请放在 secrets 里")
+			return apperr.Invalid(field, k+" is a secret field. Put it in secrets.")
 		}
 		if allowed != nil && !slices.Contains(allowed, k) {
-			return apperr.Invalid(field, k+" 不能在项目里覆盖")
+			return apperr.Invalid(field, k+" cannot be overridden in a project.")
 		}
 	}
 	return nil
