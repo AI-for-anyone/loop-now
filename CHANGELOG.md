@@ -43,6 +43,15 @@ User-facing changes in each version. The release pipeline takes the matching ver
 - The plugin host's and SDK's errors, validation results and logs are now in English; `api/plugin-host-protocol.md` is now in English.
 - Prompt given to Agents: with "Use local logins" on, the text for a platform Agent no longer speaks of "the subscription account configured in the project".
 
+### Labels follow the UI language
+
+- The field labels of the CLI credential templates (gh, gcloud, mysql, psql, lark-cli) and the form text of the official plugins (hello, webhook, playwright) now come in English and Chinese: the English UI shows English and the Chinese UI shows Chinese. Until now they were Chinese only.
+- Plugin manifests can give a `LocalizedText` (a string, or an object keyed by `en-US` and `zh-CN`) for channel, action and account-kind labels, and for `title` and `description` at any level of `configSchema` and of account and action fields, including the titles of `oneOf` options. A plain string is treated as English and shown in every language, so existing manifests keep working.
+- API: `CliTemplateField.label`, `PluginAccountKind.label`, `PluginAction.label` and `PluginComponents.channels[].label` are now `LocalizedText`.
+- An official plugin that is already installed keeps the labels stored at installation until it is reinstalled or updated.
+- An account kind with `"label": null` is now rejected, like a null `displayName`.
+- Downgrading: once a manifest or template with two-language labels is stored, an older version cannot read it.
+
 ### Documentation
 
 - The changelog is now written in English first, with the Chinese version in `CHANGELOG.zh-CN.md`; GitHub Release notes show the English section followed by the Chinese one. `AGENTS.md` is English with `AGENTS.zh-CN.md` beside it, and `MAIN.md` is English.
