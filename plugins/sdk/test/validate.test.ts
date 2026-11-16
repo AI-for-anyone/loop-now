@@ -248,7 +248,7 @@ describe('validatePlugin', () => {
 
   it('a label or title that is neither a string nor a valid per-language object is reported at its path', () => {
     const rule = 'must be a string, or an object with language tags (such as zh-CN, en-US) as keys and non-empty strings as values, with at least one entry.'
-    for (const [name, bad] of [['empty', {}], ['bad_key', { english: 'x' }], ['blank', { 'en-US': ' ' }], ['number', 42]] as const) {
+    for (const [name, bad] of [['empty', {}], ['bad_key', { english: 'x' }], ['blank', { 'en-US': ' ' }], ['number', 42], ['boolean', true], ['array', ['x']], ['null', null]] as const) {
       const loopNow = {
         id: `bad-${name.replace('_', '-')}`,
         platform: './platform/index.ts',
@@ -260,12 +260,19 @@ describe('validatePlugin', () => {
       const r = validatePlugin(plugin(`i18n-bad-${name}`, { name: 'x', version: '1.0.0', description: 'x', keywords: ['loop-now-plugin'], loopNow }, { 'README.md': '', 'platform/index.ts': 'export default () => {}\n' }))
       assert.equal(r.ok, false, name)
       const at = (path: string) => [path, `${path} ${rule}`]
-      // In a JSON Schema only an object title or description is checked here; a number is left to the JSON Schema meta-schema, as on
-      // the server. Labels are not schema keywords and are always checked.
-      const schemaPaths = typeof bad === 'object' ? ['url.title', 'url.description', 'url.oneOf[0].title'].map((path) => at(`loopNow.configSchema.properties.${path}`)) : []
+      // A schema title or description that is not an object (a number, a boolean, an array, null) gets the same sentence here. The
+      // server leaves those to the JSON Schema meta-schema, which rejects them at install time with its own wording; reporting them in
+      // validate lets the plugin author see them first.
       assert.deepEqual(
         r.findings.filter((f) => f.level === 'error').map((f) => [f.path, f.message]),
-        [...schemaPaths, at('loopNow.accounts[0].label'), at('loopNow.actions[0].label'), at('loopNow.channels[0].label')],
+        [
+          at('loopNow.configSchema.properties.url.title'),
+          at('loopNow.configSchema.properties.url.description'),
+          at('loopNow.configSchema.properties.url.oneOf[0].title'),
+          at('loopNow.accounts[0].label'),
+          at('loopNow.actions[0].label'),
+          at('loopNow.channels[0].label'),
+        ],
         name,
       )
     }

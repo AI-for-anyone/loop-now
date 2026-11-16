@@ -448,13 +448,14 @@ const SCHEMA_MAPS = ['properties', 'patternProperties', '$defs', 'definitions', 
 const SCHEMA_ARRAYS = ['prefixItems', 'allOf', 'anyOf', 'oneOf'] as const
 const SCHEMA_SINGLES = ['not', 'if', 'then', 'else', 'additionalProperties', 'contains', 'propertyNames', 'unevaluatedItems', 'unevaluatedProperties', 'contentSchema'] as const
 
-// checkLocalizedText reports a title or description that is an object but not valid LocalizedText, in every subschema. A title or
-// description that is neither a string nor an object (a number, say) is not reported here: the server leaves it to the JSON Schema
-// meta-schema, which requires a string (the server replaces a valid per-language object with its English text before compiling).
+// checkLocalizedText reports a title or description that is neither a string nor valid LocalizedText, in every subschema. The server
+// reports an invalid object with the same sentence and leaves other values (a number, a boolean, an array, null) to the JSON Schema
+// meta-schema, which rejects them at install time; here they get the same sentence, so a plugin author sees them when running
+// validate.
 function checkLocalizedText(s: unknown, p: string, error: (p: string, m: string) => void): void {
   if (!isObject(s)) return
   for (const key of ['title', 'description'] as const) {
-    if (isObject(s[key]) && !isLocalizedObject(s[key])) error(`${p}.${key}`, `${p}.${key} ${LOCALIZED_RULE}`)
+    if (s[key] !== undefined && typeof s[key] !== 'string' && !isLocalizedObject(s[key])) error(`${p}.${key}`, `${p}.${key} ${LOCALIZED_RULE}`)
   }
   for (const key of SCHEMA_MAPS) {
     const map = s[key]
