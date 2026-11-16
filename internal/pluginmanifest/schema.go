@@ -10,11 +10,13 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-// 配置与账号字段按清单里的 JSON Schema 校验（plugins/SPEC.md §2）：顶层属性带 "x-secret": true 的是 secret 字段，
-// 只写不回显；带 "x-scope": "project" 的可在项目里覆盖。
+// Config and account fields are validated against the JSON Schema in the manifest (plugins/SPEC.md §2): a top-level
+// property with "x-secret": true is a secret field, write-only and never echoed back; one with "x-scope": "project"
+// can be overridden per project.
 
-// CompileSchema 编译插件声明的 JSON Schema。required 为 false 时忽略顶层 required：
-// 全局配置与项目配置分开保存，任何一处都可能还没填全，必填项由表单提示。
+// CompileSchema compiles a JSON Schema declared by a plugin. When required is false the top-level required is
+// ignored: global and project config are stored separately and either may not be filled in completely yet, so
+// required fields are pointed out by the form instead.
 func CompileSchema(schema map[string]any, required bool) (*jsonschema.Schema, error) {
 	if !required {
 		schema = maps.Clone(schema)
@@ -31,7 +33,7 @@ func CompileSchema(schema map[string]any, required bool) (*jsonschema.Schema, er
 	return c.Compile("plugin.json")
 }
 
-// toSchemaValue 把 Go 值转成校验库要求的形式（数字为 json.Number）。
+// toSchemaValue converts a Go value into the form the validation library expects (numbers as json.Number).
 func toSchemaValue(v any) (any, error) {
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -40,7 +42,7 @@ func toSchemaValue(v any) (any, error) {
 	return jsonschema.UnmarshalJSON(bytes.NewReader(b))
 }
 
-// Validate 用 schema 校验 value；不合规则时返回 *Error。
+// Validate validates value against schema; it returns an *Error when value breaks the rules.
 func Validate(schema map[string]any, required bool, value map[string]any) error {
 	sch, err := CompileSchema(schema, required)
 	if err != nil {
@@ -61,7 +63,7 @@ func Validate(schema map[string]any, required bool, value map[string]any) error 
 	return nil
 }
 
-// properties 返回顶层属性的子 schema。
+// properties returns the sub-schemas of the top-level properties.
 func properties(schema map[string]any) map[string]map[string]any {
 	out := map[string]map[string]any{}
 	props, _ := schema["properties"].(map[string]any)
@@ -73,7 +75,7 @@ func properties(schema map[string]any) map[string]map[string]any {
 	return out
 }
 
-// SecretFields 返回 x-secret 的顶层字段，按清单里的先后。
+// SecretFields returns the top-level x-secret fields, in manifest order.
 func SecretFields(schema Schema) []string {
 	var out []string
 	props := properties(schema.Map())
@@ -85,7 +87,8 @@ func SecretFields(schema Schema) []string {
 	return out
 }
 
-// ProjectFields 返回可在项目覆盖（x-scope: project）的顶层字段，按清单里的先后。
+// ProjectFields returns the top-level fields that can be overridden per project (x-scope: project), in manifest
+// order.
 func ProjectFields(schema Schema) []string {
 	out := []string{}
 	props := properties(schema.Map())
@@ -97,20 +100,23 @@ func ProjectFields(schema Schema) []string {
 	return out
 }
 
-// Schema 是清单里的一份 JSON Schema（configSchema、accounts[].fields、actions[].fields）。序列化时原样输出清单里的写法：
-// 属性的先后就是表单字段的先后，存进数据库与经接口返回都保持不变。Map 是解析后的值，供校验与查找字段。零值是空对象。
+// Schema is one JSON Schema from the manifest (configSchema, accounts[].fields, actions[].fields). It marshals to
+// exactly what the manifest wrote: the order of properties is the order of form fields, and it stays unchanged when
+// stored in the database and when returned by the API. Map is the parsed value, used for validation and for looking
+// up fields. The zero value is an empty object.
 type Schema struct {
 	raw json.RawMessage
 	m   map[string]any
 }
 
-// NewSchema 由解析后的值构造（没有原文，属性按键名排序；测试与默认值用）。
+// NewSchema builds a Schema from a parsed value (there is no original text, so properties are sorted by key; used
+// by tests and for defaults).
 func NewSchema(m map[string]any) Schema {
 	raw, _ := json.Marshal(m)
 	return Schema{raw: raw, m: m}
 }
 
-// MarshalJSON 原样输出清单里的写法。
+// MarshalJSON outputs exactly what the manifest wrote.
 func (s Schema) MarshalJSON() ([]byte, error) {
 	if len(s.raw) == 0 {
 		return []byte("{}"), nil
@@ -118,7 +124,8 @@ func (s Schema) MarshalJSON() ([]byte, error) {
 	return s.raw, nil
 }
 
-// UnmarshalJSON 保留原文（去掉空白），同时解析出 Map；null 视为没有给出。
+// UnmarshalJSON keeps the original text (with whitespace removed) and also parses it into Map; null counts as not
+// given.
 func (s *Schema) UnmarshalJSON(b []byte) error {
 	if string(bytes.TrimSpace(b)) == "null" {
 		*s = Schema{}
@@ -136,7 +143,7 @@ func (s *Schema) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// Map 返回解析后的值；没有给出时为空对象。
+// Map returns the parsed value; an empty object when the schema was not given.
 func (s Schema) Map() map[string]any {
 	if s.m == nil {
 		return map[string]any{}
@@ -144,10 +151,10 @@ func (s Schema) Map() map[string]any {
 	return s.m
 }
 
-// IsZero 报告清单里有没有给出这份 schema。
+// IsZero reports whether this schema was absent from the manifest.
 func (s Schema) IsZero() bool { return len(s.raw) == 0 && s.m == nil }
 
-// Properties 返回顶层 properties 的键，按清单里的先后。
+// Properties returns the keys of the top-level properties, in manifest order.
 func (s Schema) Properties() []string {
 	var out []string
 	dec := json.NewDecoder(bytes.NewReader(s.raw))

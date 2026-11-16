@@ -1,4 +1,5 @@
-// Package pluginmanifest 读取并校验插件清单（plugins/SPEC.md §2），服务端与 loopctl 共用；不依赖服务端的其他包。
+// Package pluginmanifest reads and validates plugin manifests (plugins/SPEC.md §2). It is shared by the server and
+// loopctl, and does not depend on any other server package.
 package pluginmanifest
 
 import (
@@ -14,11 +15,12 @@ import (
 	"strings"
 )
 
-// ManifestFile 是插件目录里唯一的清单文件。
+// ManifestFile is the only manifest file in a plugin directory.
 const ManifestFile = "package.json"
 
-// Manifest 是校验过的清单，原样保存在 plugins.manifest：事件触发器按其中的 events 找订阅者。
-// 前半部分是接口里的 PluginManifest；后半部分是给 Pi 与宿主用的路径，都相对安装目录。
+// Manifest is a validated manifest, stored as-is in plugins.manifest; event triggers use its events to find
+// subscribers. The first part is the API's PluginManifest; the second part holds paths for Pi and the plugin host,
+// all relative to the install directory.
 type Manifest struct {
 	ID                 string        `json:"id"`
 	Name               string        `json:"name"`
@@ -38,13 +40,15 @@ type Manifest struct {
 	Platform   string                     `json:"platform"`
 	Bin        []string                   `json:"bin"`
 	MCPServers map[string]json.RawMessage `json:"mcpServers"`
-	// ProviderState 是 loopNow.providerState：插件注册的模型提供方有哪些状态随项目账号走（plugins/SPEC.md §13）。
+	// ProviderState is loopNow.providerState: which state of the model providers registered by the plugin travels
+	// with the project's accounts (plugins/SPEC.md §13).
 	ProviderState map[string]ProviderState `json:"providerState,omitempty"`
-	// OwnDisplayName 表示 DisplayName 是包自己写的 loopNow.displayName（不是退到 npm 名或 id）；只在读清单时有，不保存。
+	// OwnDisplayName reports that DisplayName is the package's own loopNow.displayName (not a fallback to the npm
+	// name or the id). It is only set while reading the manifest and is not stored.
 	OwnDisplayName bool `json:"-"`
 }
 
-// AccountKind 是清单声明的账号种类。
+// AccountKind is an account kind declared by the manifest.
 type AccountKind struct {
 	Kind     string `json:"kind"`
 	Label    string `json:"label"`
@@ -52,7 +56,7 @@ type AccountKind struct {
 	Multiple bool   `json:"multiple"`
 }
 
-// Action 是控制台操作按钮；Fields 是表单的 JSON Schema，没有输入时为空对象。
+// Action is a console action button. Fields is the form's JSON Schema, an empty object when there is no input.
 type Action struct {
 	ID     string   `json:"id"`
 	Label  string   `json:"label"`
@@ -60,15 +64,16 @@ type Action struct {
 	Fields Schema   `json:"fields"`
 }
 
-// Channel 是渠道。
+// Channel is a channel.
 type Channel struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
-	// ManageIdentities 表示这个渠道能代管外部身份（plugins/SPEC.md §12），需要 identities.manage 范围。
+	// ManageIdentities reports that this channel can manage external identities on their behalf
+	// (plugins/SPEC.md §12); it requires the identities.manage scope.
 	ManageIdentities bool `json:"manageIdentities"`
 }
 
-// ManagingChannels 返回声明了能代管外部身份的渠道。
+// ManagingChannels returns the channels declared as able to manage external identities.
 func (m Manifest) ManagingChannels() []string {
 	out := []string{}
 	for _, c := range m.Components.Channels {
@@ -79,13 +84,13 @@ func (m Manifest) ManagingChannels() []string {
 	return out
 }
 
-// Schedule 是定时任务。
+// Schedule is a scheduled job.
 type Schedule struct {
 	ID   string `json:"id"`
 	Cron string `json:"cron"`
 }
 
-// Components 是安装前展示的组成。
+// Components is the breakdown of parts shown before installing.
 type Components struct {
 	AgentExtensions int        `json:"agentExtensions"`
 	Skills          []string   `json:"skills"`
@@ -98,7 +103,7 @@ type Components struct {
 	Schedules       []Schedule `json:"schedules"`
 }
 
-// PublicManifest 是接口里的 PluginManifest（不含路径）。
+// PublicManifest is the API's PluginManifest (without paths).
 type PublicManifest struct {
 	ID                 string        `json:"id"`
 	Name               string        `json:"name"`
@@ -114,14 +119,14 @@ type PublicManifest struct {
 	Components         Components    `json:"components"`
 }
 
-// Public 返回接口里的清单。
+// Public returns the manifest as exposed by the API.
 func (m Manifest) Public() PublicManifest {
 	return PublicManifest{ID: m.ID, Name: m.Name, Version: m.Version, DisplayName: m.DisplayName, Description: m.Description,
 		MinPlatformVersion: m.MinPlatformVersion, Events: m.Events, Permissions: m.Permissions, FailClosed: m.FailClosed,
 		ConfigSchema: m.ConfigSchema, Accounts: m.Accounts, Components: m.Components}
 }
 
-// HookKind 是事件的种类（plugins/SPEC.md §4）。
+// HookKind is the kind of an event (plugins/SPEC.md §4).
 type HookKind string
 
 const (
@@ -131,7 +136,7 @@ const (
 	HookObserve   HookKind = "observe"
 )
 
-// Events 是平台产生的全部事件及其种类。
+// Events lists every event the platform produces, with its kind.
 var Events = map[string]HookKind{
 	"run.before_start": HookIntercept, "task.before_start": HookIntercept, "node.before_start": HookIntercept,
 	"node.before_submit": HookIntercept, "inbox.before_send": HookIntercept,
@@ -145,11 +150,12 @@ var Events = map[string]HookKind{
 	"agent.created": HookObserve, "agent.updated": HookObserve, "agent.deleted": HookObserve,
 	"pi.started": HookObserve, "pi.exited": HookObserve, "model.retry": HookObserve, "context.compacted": HookObserve,
 	"folder.changed": HookObserve, "plugin.enabled": HookObserve, "plugin.disabled": HookObserve, "plugin.config_changed": HookObserve,
-	// channel.outbound 只发给消息线索所属的插件（plugins/SPEC.md §11），不按订阅广播。
+	// channel.outbound goes only to the plugin that owns the message thread (plugins/SPEC.md §11); it is not
+	// broadcast to subscribers.
 	"channel.outbound": HookObserve, "identity.inbound": HookObserve,
 }
 
-// Permissions 是清单 permissions 的可选值（plugins/SPEC.md §5）。
+// Permissions lists the allowed values of the manifest's permissions (plugins/SPEC.md §5).
 var Permissions = []string{"agents.read", "agents.write", "tasks.read", "tasks.write", "runs.read", "inbox.read", "inbox.send",
 	"folders.read", "folders.write", "identities.read", "identities.manage", "state", "accounts.read"}
 
@@ -161,10 +167,10 @@ var (
 	idFromName     = regexp.MustCompile(`[^a-z0-9]+`)
 )
 
-// ValidID 报告 id 是否是合法的插件 id。
+// ValidID reports whether id is a valid plugin id.
 func ValidID(id string) bool { return idPattern.MatchString(id) }
 
-// packageJSON 是 package.json 里平台读取的部分。
+// packageJSON is the part of package.json that the platform reads.
 type packageJSON struct {
 	Name        string `json:"name"`
 	Version     string `json:"version"`
@@ -193,8 +199,10 @@ type packageJSON struct {
 	} `json:"loopNow"`
 }
 
-// ReadManifest 读取并校验插件目录的清单：package.json 的 pi 段（Pi 标准包清单）与 loopNow 段。
-// 清单放在哪里只由这个函数决定。platformVersion 为平台的发布版本，非 YYYY.MM 形式（开发版）时不检查 minPlatformVersion。
+// ReadManifest reads and validates the manifest of a plugin directory: the pi section of package.json (the standard
+// Pi package manifest) and the loopNow section. Only this function decides where the manifest lives.
+// platformVersion is the platform's release version; when it is not of the form YYYY.MM (a development build),
+// minPlatformVersion is not checked.
 func ReadManifest(dir, platformVersion string) (Manifest, error) {
 	b, err := os.ReadFile(filepath.Join(dir, ManifestFile))
 	if errors.Is(err, os.ErrNotExist) {
@@ -239,7 +247,7 @@ func ReadManifest(dir, platformVersion string) (Manifest, error) {
 		m.ProviderState = ln.ProviderState
 	}
 	if m.ID == "" {
-		// 只有 pi 段的标准 Pi 包：用 npm 名去掉作用域作为 id。
+		// A standard Pi package with only a pi section: use the npm name without its scope as the id.
 		name := m.Name
 		if i := strings.LastIndex(name, "/"); i >= 0 {
 			name = name[i+1:]
@@ -396,7 +404,8 @@ func (m *Manifest) validate(dir, platformVersion string) error {
 	return nil
 }
 
-// checkPath 要求清单里的路径在插件目录内且存在；allowDir 为 false 时只能是文件。
+// checkPath requires a manifest path to be inside the plugin directory and to exist; when allowDir is false it
+// must be a file.
 func checkPath(dir, rel, field string, allowDir bool) error {
 	clean := filepath.Clean(rel)
 	if rel == "" || filepath.IsAbs(rel) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
@@ -412,9 +421,11 @@ func checkPath(dir, rel, field string, allowDir bool) error {
 	return nil
 }
 
-// checkMCPServer 按 Pi mcp.json 的规则与判断顺序检查一条 mcpServers：type 可省，只能是 stdio、http 或 streamable-http
-// （Pi 不支持 SSE）；带 url 且 type 不是 stdio 的是 streamable HTTP 条目，url 须是 http 或 https 地址；
-// 否则须带非空的 command 且 type 不是 http 类。headers、args、env 等其余字段原样交给 Pi。报错文字与 SDK 的 validate 相同。
+// checkMCPServer checks one mcpServers entry using the rules and the order of checks of Pi's mcp.json: type may be
+// omitted and can only be stdio, http or streamable-http (Pi does not support SSE); an entry with a url whose type
+// is not stdio is a streamable HTTP entry, and the url must be an http or https address; otherwise the entry must
+// have a non-empty command and a type that is not one of the http kinds. headers, args, env and the other fields are
+// passed to Pi as-is. The error texts are the same as the SDK's validate.
 func checkMCPServer(name string, raw json.RawMessage) error {
 	field := "loopNow.mcpServers 的 " + strconv.Quote(name)
 	bad := invalid(field + " 须是带 command 的 stdio 条目或带 http/https url 的 streamable HTTP 条目，名称为小写字母、数字、下划线或连字符")
@@ -430,8 +441,9 @@ func checkMCPServer(name string, raw json.RawMessage) error {
 		return invalid(field + " 的 type 只能是 stdio、http 或 streamable-http")
 	}
 	if u, ok := srv["url"].(string); ok && typ != "stdio" {
-		// 与 SDK 相同：写出来须是 http:// 或 https:// 加主机（Pi 的 URL.canParse 会把 "http:foo" 规范成 http://foo/，这里不收），
-		// 端口不超过 65535（URL.canParse 拒绝，url.Parse 不查）。
+		// Same as the SDK: it must be written as http:// or https:// plus a host (Pi's URL.canParse normalizes
+		// "http:foo" to http://foo/; we do not accept that here), and the port must not exceed 65535 (URL.canParse
+		// rejects it, url.Parse does not check).
 		p, err := url.Parse(u)
 		if err != nil || p.Scheme != "http" && p.Scheme != "https" || p.Host == "" || p.Hostname() == "" {
 			return bad
@@ -449,7 +461,8 @@ func checkMCPServer(name string, raw json.RawMessage) error {
 	return bad
 }
 
-// versionAtLeast 比较 YYYY.MM 形式的发布版本；平台版本不是这种形式（开发版）时视为满足。
+// versionAtLeast compares release versions of the form YYYY.MM; when the platform version is not of that form (a
+// development build) the requirement counts as met.
 func versionAtLeast(platform, required string) bool {
 	have, ok := releaseParts(platform)
 	if !ok {
@@ -494,7 +507,7 @@ func nonNil(v []string) []string {
 	return v
 }
 
-// Error 是清单或配置不合规则的说明。
+// Error describes how a manifest or a config breaks the rules.
 type Error struct{ Message string }
 
 func (e *Error) Error() string { return e.Message }

@@ -9,12 +9,13 @@ import (
 	"loop-now/internal/server/apperr"
 )
 
-// validateAgainst 用插件声明的 schema 校验 value；不合规则时返回 field 上的 422。
+// validateAgainst validates value against the schema declared by the plugin; when it breaks the rules it returns a
+// 422 on field.
 func validateAgainst(schema pluginmanifest.Schema, required bool, value map[string]any, field string) error {
 	return asInvalid(pluginmanifest.Validate(schema.Map(), required, value), field)
 }
 
-// asInvalid 把清单包的说明变成 field 上的 422。
+// asInvalid turns an error from the manifest package into a 422 on field.
 func asInvalid(err error, field string) error {
 	var e *pluginmanifest.Error
 	if errors.As(err, &e) {
@@ -28,7 +29,8 @@ var (
 	projectFields = pluginmanifest.ProjectFields
 )
 
-// mergeSecrets 把要写入的 secret 合并到现有值：null 清除，其余覆盖；只接受 allowed 中的字段。
+// mergeSecrets merges the secrets to write into the current values: null clears a secret, anything else overwrites
+// it; only fields in allowed are accepted.
 func mergeSecrets(current map[string]string, patch map[string]*string, allowed []string, field string) (map[string]string, error) {
 	out := maps.Clone(current)
 	if out == nil {
@@ -47,7 +49,8 @@ func mergeSecrets(current map[string]string, patch map[string]*string, allowed [
 	return out, nil
 }
 
-// checkValueFields 要求 values 里没有 secret 字段，且只含 allowed 中的字段（allowed 为 nil 时不限）。
+// checkValueFields requires values to contain no secret fields and only fields in allowed (no restriction when
+// allowed is nil).
 func checkValueFields(values map[string]any, secrets, allowed []string, field string) error {
 	for k := range values {
 		if slices.Contains(secrets, k) {
@@ -60,7 +63,7 @@ func checkValueFields(values map[string]any, secrets, allowed []string, field st
 	return nil
 }
 
-// combine 把 values 与 secrets 合成一个对象（校验与交给插件时用）。
+// combine merges values and secrets into one object (used for validation and when handing them to the plugin).
 func combine(values map[string]any, secrets map[string]string) map[string]any {
 	out := maps.Clone(values)
 	if out == nil {
@@ -72,7 +75,7 @@ func combine(values map[string]any, secrets map[string]string) map[string]any {
 	return out
 }
 
-// secretsSet 返回已设置的 secret 字段名，排序。
+// secretsSet returns the names of the secret fields that are set, sorted.
 func secretsSet(secrets map[string]string) []string {
 	out := slices.Collect(maps.Keys(secrets))
 	if out == nil {

@@ -7,15 +7,16 @@ import (
 	"time"
 )
 
-// Cron 是清单 schedule[] 的五段 cron：分 时 日 月 周，按服务端本地时间匹配。
-// 每段可以是 *、数字、a-b 区间、逗号分隔的列表，以及 */n、a-b/n 步长；周的 0 与 7 都是星期日。
-// 日与周都不是 * 时，两者满足其一即匹配（与常见 cron 一致）。
+// Cron is the five-field cron of the manifest's schedule[]: minute hour day-of-month month day-of-week, matched
+// against the server's local time. Each field can be *, a number, an a-b range, a comma-separated list, and */n or
+// a-b/n steps; both 0 and 7 in day-of-week are Sunday. When neither day-of-month nor day-of-week is *, matching
+// either one is enough (as in common cron implementations).
 type Cron struct {
 	minute, hour, dom, month, dow uint64
 	domAny, dowAny                bool
 }
 
-// ParseCron 解析五段 cron 表达式。
+// ParseCron parses a five-field cron expression.
 func ParseCron(expr string) (Cron, error) {
 	f := strings.Fields(expr)
 	if len(f) != 5 {
@@ -76,7 +77,7 @@ func cronField(field string, min, max int) (uint64, error) {
 	return bits, nil
 }
 
-// Match 报告 t 所在的那一分钟是否应触发。
+// Match reports whether the minute containing t should fire.
 func (c Cron) Match(t time.Time) bool {
 	if c.minute&(1<<t.Minute()) == 0 || c.hour&(1<<t.Hour()) == 0 || c.month&(1<<int(t.Month())) == 0 {
 		return false

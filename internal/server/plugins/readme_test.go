@@ -10,7 +10,7 @@ import (
 	"loop-now/internal/server/plugins"
 )
 
-// readmeDir 建一个插件目录，files 是文件名到内容。
+// readmeDir creates a plugin directory; files maps file names to contents.
 func readmeDir(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -26,7 +26,8 @@ func readmeDir(t *testing.T, files map[string]string) string {
 	return dir
 }
 
-// readme 读出 dir 的 README，返回选中的文件名与内容；没有时都为空。
+// readme reads the README of dir and returns the chosen file name and its content; both are empty when there is
+// none.
 func readme(t *testing.T, dir, locale string) (string, string) {
 	t.Helper()
 	r, err := plugins.ReadReadme(dir, locale)
@@ -42,7 +43,8 @@ func readme(t *testing.T, dir, locale string) (string, string) {
 	return *r.File, *r.Markdown
 }
 
-// 给了语言时依次找 README.<locale>.md、README.<主语言>.md、README.md，再取语言标签排序最前的；没给时 README.md 优先。
+// With a language it looks for README.<locale>.md, README.<primary language>.md, README.md in turn, then the one whose
+// language tag sorts first; without a language README.md comes first.
 func TestReadmeOrder(t *testing.T) {
 	files := map[string]string{"README.zh-CN.md": "简体", "README.zh.md": "中文", "README.md": "默认", "README.fr.md": "français", "README.en-US.md": "English"}
 	dir := readmeDir(t, files)
@@ -66,14 +68,16 @@ func TestReadmeOrder(t *testing.T) {
 			}
 		}
 	}
-	// 回落只到主语言：给 en-US 时不选同主语言的 README.en-GB.md，而是 README.md。
+	// Falling back only goes as far as the primary language: for en-US it does not pick README.en-GB.md, which has
+	// the same primary language, but README.md.
 	dir = readmeDir(t, map[string]string{"README.en-GB.md": "GB", "README.md": "默认"})
 	if got, _ := readme(t, dir, "en-US"); got != "README.md" {
 		t.Fatalf("en-US 不应取 README.en-GB.md：%s", got)
 	}
 }
 
-// 基名不区分大小写，返回磁盘上的文件名；同一语言有几种写法时按文件名排序。
+// Base names are case-insensitive and the file name on disk is returned; when one language has several spellings,
+// they are sorted by file name.
 func TestReadmeCaseInsensitive(t *testing.T) {
 	dir := readmeDir(t, map[string]string{"readme.ZH-cn.MD": "简体", "Readme.md": "默认"})
 	if got, content := readme(t, dir, "zh-CN"); got != "readme.ZH-cn.MD" || content != "简体" {
@@ -86,14 +90,14 @@ func TestReadmeCaseInsensitive(t *testing.T) {
 		t.Fatalf("没给语言：%s", got)
 	}
 	both := readmeDir(t, map[string]string{"README.md": "大写", "readme.md": "小写"})
-	if entries, _ := os.ReadDir(both); len(entries) == 2 { // 不区分大小写的文件系统上两者是同一个文件
+	if entries, _ := os.ReadDir(both); len(entries) == 2 { // on a case-insensitive file system both are the same file
 		if got, _ := readme(t, both, ""); got != "README.md" {
 			t.Fatalf("同一语言的几种写法：%s", got)
 		}
 	}
 }
 
-// 不是 README 的文件、子目录里的 README、名叫 README.md 的目录都不算。
+// Files that are not READMEs, READMEs in subdirectories, and a directory named README.md do not count.
 func TestReadmeAbsent(t *testing.T) {
 	dir := readmeDir(t, map[string]string{"README": "x", "README.txt": "x", "READMEX.md": "x", "README..md": "x", "README.zh_CN.md": "x",
 		"docs/README.md": "x", "README.md/inner": "x", "package.json": "{}"})
@@ -105,14 +109,15 @@ func TestReadmeAbsent(t *testing.T) {
 	}
 }
 
-// 超过 1 MiB 时只返回前 1 MiB，不在一个字符中间截断；正好 1 MiB 不算截断。
+// Beyond 1 MiB only the first 1 MiB is returned, without cutting through a character; exactly 1 MiB does not count as
+// truncated.
 func TestReadmeTruncated(t *testing.T) {
 	exact := strings.Repeat("a", plugins.MaxReadmeBytes)
 	dir := readmeDir(t, map[string]string{"README.md": exact})
 	if r, err := plugins.ReadReadme(dir, ""); err != nil || r.Truncated || *r.Markdown != exact {
 		t.Fatalf("正好 1 MiB：%v %v", r.Truncated, err)
 	}
-	// "中" 占 3 字节，从 1 MiB 前 1 字节开始，跨过上限。
+	// "中" (one CJK character) takes 3 bytes; it starts 1 byte before 1 MiB and crosses the limit.
 	long := strings.Repeat("a", plugins.MaxReadmeBytes-1) + "中" + "尾"
 	dir = readmeDir(t, map[string]string{"README.md": long})
 	r, err := plugins.ReadReadme(dir, "")
@@ -124,7 +129,9 @@ func TestReadmeTruncated(t *testing.T) {
 	}
 }
 
-// 软链接解析后须仍在插件目录内：指到目录外的当作没有，接着找下一个；指到目录内的照常读；插件目录本身经软链接给出也可以。
+// A symlink must still be inside the plugin directory once resolved: one pointing outside counts as missing and the
+// next candidate is tried; one pointing inside is read as usual; the plugin directory itself may also be given via a
+// symlink.
 func TestReadmeSymlinks(t *testing.T) {
 	outside := readmeDir(t, map[string]string{"secret.md": "目录外的内容"})
 	dir := readmeDir(t, map[string]string{"README.en.md": "English", "docs/guide.md": "指南"})

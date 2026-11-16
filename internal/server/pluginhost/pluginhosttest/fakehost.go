@@ -1,5 +1,6 @@
-// Package pluginhosttest 是测试用的假插件宿主：Node 宿主就绪前，测试用测试二进制自身充当宿主进程
-// （以 Env=1 运行一个只调用 Run 的测试）。每个插件的行为由 load 载荷决定，收到的消息记入 FAKE_HOST_JOURNAL 供测试核对。
+// Package pluginhosttest is a fake plugin host for tests: until the Node plugin host is ready, tests use the test
+// binary itself as the host process (running, with Env=1, a test that only calls Run). Each plugin's behavior is set
+// by its load payload, and received messages are recorded in FAKE_HOST_JOURNAL for tests to check.
 package pluginhosttest
 
 import (
@@ -14,21 +15,21 @@ import (
 	"time"
 )
 
-// Env 为 1 时测试二进制作为假宿主运行。
+// Env set to 1 makes the test binary run as the fake plugin host.
 const Env = "LOOPNOW_FAKE_PLUGIN_HOST"
 
-// fakePlugin 是 load 载荷里给假宿主的行为说明。
+// fakePlugin is the behavior description for the fake plugin host in the load payload.
 type fakePlugin struct {
 	Fail        string         `json:"fail"`
 	StateProbe  bool           `json:"stateProbe"`
 	FailEvents  []string       `json:"failEvents"`
 	HangEvents  []string       `json:"hangEvents"`
 	CrashEvents []string       `json:"crashEvents"`
-	Intercept   string         `json:"intercept"` // allow、block、hang、error
+	Intercept   string         `json:"intercept"` // allow, block, hang, error
 	Patch       map[string]any `json:"patch"`
 	ModifyHang  bool           `json:"modifyHang"`
-	Claim       string         `json:"claim"` // yes、no、hang
-	// HangSchedules 中的定时条目收到后不回应。
+	Claim       string         `json:"claim"` // yes, no, hang
+	// HangSchedules lists the schedule entries that get no response once received.
 	HangSchedules []string `json:"hangSchedules"`
 }
 
@@ -39,8 +40,9 @@ type fakeMsg struct {
 	Payload json.RawMessage `json:"payload,omitempty"`
 }
 
-// Run 以假宿主运行：先发 ready，再处理 Go 发来的消息，标准输入关闭后返回。
-// FAKE_HOST_JOURNAL 是记录收到的消息的文件，FAKE_HOST_MODE 可为 no-ready、bad-protocol、crash-after-ready。
+// Run runs as the fake plugin host: it first sends ready, then handles the messages from Go, and returns once standard
+// input is closed. FAKE_HOST_JOURNAL is the file that records received messages; FAKE_HOST_MODE can be no-ready,
+// bad-protocol or crash-after-ready.
 func Run() {
 	var mu sync.Mutex
 	out := bufio.NewWriter(os.Stdout)
@@ -82,7 +84,8 @@ func Run() {
 	plugins := map[string]fakePlugin{}
 	pending := map[string]chan json.RawMessage{}
 	next := 0
-	// askRaw 发出宿主→Go 的请求并等待 result，返回整个回应（ok、value、error）。
+	// askRaw sends a plugin host -> Go request, waits for the result and returns the whole response (ok, value,
+	// error).
 	askRaw := func(typ, plugin string, payload any) json.RawMessage {
 		mu.Lock()
 		next++
@@ -99,7 +102,7 @@ func Run() {
 			return nil
 		}
 	}
-	// ask 同 askRaw，只返回 value。
+	// ask is like askRaw but only returns value.
 	ask := func(typ, plugin string, payload any) json.RawMessage {
 		var r struct {
 			Value json.RawMessage `json:"value"`
@@ -107,7 +110,7 @@ func Run() {
 		_ = json.Unmarshal(askRaw(typ, plugin, payload), &r)
 		return r.Value
 	}
-	// projects 返回 load 或 config_changed 载荷里 config.projects 的项目 ID（排序）。
+	// projects returns the project IDs in config.projects of a load or config_changed payload (sorted).
 	projects := func(payload json.RawMessage) []string {
 		var p struct {
 			Config struct {
@@ -211,7 +214,7 @@ func Run() {
 			_ = json.Unmarshal(m.Payload, &p)
 			record(map[string]any{"type": "action", "plugin": m.Plugin, "actionId": p.ActionID, "where": p.Where, "input": p.Input})
 			if p.ActionID == "probe-accounts" {
-				// 用操作驱动一次 accounts_list，把 Go 的整个回应作为提示返回。
+				// Use the action to drive one accounts_list call and return Go's whole response as the notice.
 				raw := askRaw("accounts_list", m.Plugin, map[string]any{"projectId": p.Input["projectId"], "kind": p.Input["kind"]})
 				reply(m.ID, "result", m.Plugin, true, map[string]any{"notice": string(raw)}, "")
 				return

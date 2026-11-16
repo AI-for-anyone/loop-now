@@ -23,8 +23,8 @@ import (
 	"loop-now/internal/server/apperr"
 )
 
-// Source 是安装来源（接口里的 PluginSource）。market 来源给出 Market 与 ID（Version 可选），
-// 由 resolveMarket 换成条目的 git 或 npm 来源。
+// Source is an install source (the API's PluginSource). A market source gives Market and ID (Version is optional)
+// and is turned into the entry's git or npm source by resolveMarket.
 type Source struct {
 	Kind     string  `json:"kind"`
 	Location string  `json:"location"`
@@ -34,17 +34,18 @@ type Source struct {
 	Version  string  `json:"version,omitempty"`
 }
 
-// ResolvedSource 是安装时记录的精确来源（接口里的 PluginResolvedSource），原样保存在 plugins.source。
+// ResolvedSource is the exact source recorded at install time (the API's PluginResolvedSource), stored as-is in
+// plugins.source.
 type ResolvedSource struct {
 	Kind       string  `json:"kind"`
 	Location   string  `json:"location"`
 	Ref        *string `json:"ref"`
 	Commit     *string `json:"commit"`
 	NpmVersion *string `json:"npmVersion"`
-	Market     *string `json:"market"` // 从市场安装时的市场地址
+	Market     *string `json:"market"` // the market address when installed from a market
 }
 
-// 来源种类。
+// Source kinds.
 const (
 	SourceBuiltin = "builtin"
 	SourceLocal   = "local"
@@ -53,7 +54,8 @@ const (
 	SourceMarket  = "market"
 )
 
-// maxPackageBytes 是一个插件包解开后的总大小上限（不含依赖安装）。
+// maxPackageBytes is the limit on the total unpacked size of one plugin package (not counting installed
+// dependencies).
 const maxPackageBytes = 512 << 20
 
 var commitPattern = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
@@ -62,7 +64,8 @@ func sourceFailed(format string, args ...any) error {
 	return &apperr.Error{Status: 422, Code: apperr.CodePluginSourceFailed, Message: fmt.Sprintf(format, args...)}
 }
 
-// fetch 把来源取到 dest（local 来源不复制，返回原目录），返回插件目录与精确来源。
+// fetch fetches the source into dest (a local source is not copied; its original directory is returned) and returns
+// the plugin directory and the exact source.
 func (s *Service) fetch(ctx context.Context, src Source, dest string) (string, ResolvedSource, error) {
 	out := ResolvedSource{Kind: src.Kind, Location: src.Location, Ref: src.Ref}
 	switch src.Kind {
@@ -164,7 +167,8 @@ func (s *Service) npmFetch(ctx context.Context, spec, dest string) error {
 	return extractTarball(f, dest)
 }
 
-// extractTarball 解开 npm 包（gzip 的 tar，顶层目录 package/），只接受普通文件与目录。
+// extractTarball unpacks an npm package (a gzipped tar with the top-level directory package/), accepting only regular
+// files and directories.
 func extractTarball(r io.Reader, dest string) error {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
@@ -222,9 +226,10 @@ func extractTarball(r io.Reader, dest string) error {
 	}
 }
 
-// installDeps 为 git 与 npm 来源安装运行依赖：有锁文件用 npm ci，没有用 npm install，都不运行安装脚本、不装开发依赖，
-// 也不装 peerDependencies（Pi 包按约定把 Pi 自己的包声明为 peer，由运行它的 Pi 提供，与 Pi 的安装器一致）。
-// 没有 dependencies 时什么也不做。
+// installDeps installs runtime dependencies for git and npm sources: npm ci when there is a lock file, npm install
+// otherwise. Neither runs install scripts or installs dev dependencies, and neither installs peerDependencies (by
+// convention a Pi package declares Pi's own packages as peers, provided by the Pi that runs it; this matches Pi's
+// installer). It does nothing when there are no dependencies.
 func (s *Service) installDeps(ctx context.Context, dir string) error {
 	b, err := os.ReadFile(filepath.Join(dir, ManifestFile))
 	if err != nil {
@@ -250,7 +255,7 @@ func (s *Service) installDeps(ctx context.Context, dir string) error {
 	return nil
 }
 
-// npm 是与 node 同目录的 npm；没有配置 node 时为空。
+// npm is the npm in the same directory as node; empty when node is not configured.
 func (s *Service) npm() string {
 	if s.NodeBin == "" {
 		return ""
@@ -258,7 +263,8 @@ func (s *Service) npm() string {
 	return filepath.Join(filepath.Dir(s.NodeBin), "npm")
 }
 
-// run 执行一个外部命令，返回标准输出；失败时错误带标准错误的末尾。
+// run runs an external command and returns its standard output; on failure the error carries the tail of standard
+// error.
 func (s *Service) run(ctx context.Context, dir, bin string, args ...string) (string, error) {
 	if bin == "" {
 		return "", errors.New("服务端没有配置需要的可执行文件（git 或 node）")
@@ -284,7 +290,8 @@ func (s *Service) run(ctx context.Context, dir, bin string, args ...string) (str
 	return stdout.String(), nil
 }
 
-// digest 返回插件内容的 sha256：按相对路径排序的每个文件的路径与内容摘要；不含 node_modules 与 .git。
+// digest returns the sha256 of the plugin content: the path and content digest of every file, sorted by relative
+// path; node_modules and .git are excluded.
 func digest(dir string) (string, error) {
 	var files []string
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
@@ -319,7 +326,7 @@ func digest(dir string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// copyTree 复制目录（普通文件与目录；符号链接跳过）。
+// copyTree copies a directory (regular files and directories; symlinks are skipped).
 func copyTree(from, to string) error {
 	return filepath.WalkDir(from, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {

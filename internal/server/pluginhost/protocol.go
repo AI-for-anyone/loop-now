@@ -1,15 +1,16 @@
-// Package pluginhost 监护插件宿主进程（plugins/SPEC.md §3）：拉起与就绪握手、平台侧的加载与卸载、
-// 观察类事件的持久投递、同步调用的超时策略、崩溃重启与全局停用。线上格式见 api/plugin-host-protocol.md。
+// Package pluginhost supervises the plugin host process (plugins/SPEC.md §3): launching it and the ready handshake,
+// loading and unloading platform sides, durable delivery of observe events, the timeout policy of synchronous calls,
+// restarting after crashes, and disabling globally. The wire format is in api/plugin-host-protocol.md.
 package pluginhost
 
 import "encoding/json"
 
-// ProtocolVersion 是宿主在 ready 里声明、Go 侧接受的协议版本。
+// ProtocolVersion is the protocol version the plugin host declares in ready and the Go side accepts.
 const ProtocolVersion = 1
 
-// 消息类型。Go→宿主：load、unload、config_changed、event、call、action、http、schedule、shutdown；
-// 宿主→Go：ready、result、ack、log、state_get、state_set、state_delete、state_list。
-// result 是任一方对另一方请求的回应；ack 只回应 event。
+// Message types. Go -> plugin host: load, unload, config_changed, event, call, action, http, schedule, shutdown;
+// plugin host -> Go: ready, result, ack, log, state_get, state_set, state_delete, state_list.
+// result is either side's response to a request from the other side; ack only answers event.
 const (
 	TypeReady         = "ready"
 	TypeResult        = "result"
@@ -31,10 +32,10 @@ const (
 	TypeShutdown      = "shutdown"
 )
 
-// MaxLine 是一行消息的最大字节数（含换行）。
+// MaxLine is the maximum size in bytes of one message line (including the newline).
 const MaxLine = 16 << 20
 
-// Message 是协议的一行：{"id","type","plugin","payload"}。
+// Message is one line of the protocol: {"id","type","plugin","payload"}.
 type Message struct {
 	ID      string          `json:"id,omitempty"`
 	Type    string          `json:"type"`
@@ -42,26 +43,26 @@ type Message struct {
 	Payload json.RawMessage `json:"payload,omitempty"`
 }
 
-// Reply 是 result 与 ack 的载荷：成功时 ok 为 true 并可带 value，失败时带 error。
+// Reply is the payload of result and ack: on success ok is true and value may be set; on failure error is set.
 type Reply struct {
 	OK    bool            `json:"ok"`
 	Value json.RawMessage `json:"value,omitempty"`
 	Error string          `json:"error,omitempty"`
 }
 
-// readyPayload 是宿主启动后第一行 ready 的载荷。
+// readyPayload is the payload of ready, the first line the plugin host sends after starting.
 type readyPayload struct {
 	Protocol    int    `json:"protocol"`
 	HostVersion string `json:"hostVersion"`
 }
 
-// logPayload 是宿主 log 消息的载荷。
+// logPayload is the payload of the plugin host's log message.
 type logPayload struct {
 	Level   string `json:"level"`
 	Message string `json:"message"`
 }
 
-// stateRequest 是 state_* 请求的载荷；projectId 为空表示插件全局。
+// stateRequest is the payload of state_* requests; an empty projectId means plugin-global state.
 type stateRequest struct {
 	ProjectID *string         `json:"projectId"`
 	Key       string          `json:"key"`

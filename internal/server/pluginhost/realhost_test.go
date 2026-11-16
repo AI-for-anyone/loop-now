@@ -17,8 +17,10 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// 真实宿主：设置 LOOP_NOW_PLUGIN_HOST_ENTRY（构建好的 plugins/host/dist/main.js）时，用 node 运行它，
-// 插件是写在临时目录里的 index.ts，load 载荷按协议的形状给出。场景与假宿主的测试相同，观察都经数据库与宿主日志。
+// Real plugin host: when LOOP_NOW_PLUGIN_HOST_ENTRY (the built plugins/host/dist/main.js) is set, it is run with
+// node; plugins are index.ts files written to a temporary directory, and load payloads follow the shape of the
+// protocol. The scenarios are the same as the fake host tests, and everything is observed through the database and
+// the plugin host log.
 
 type realPlugin struct {
 	id          string
@@ -28,11 +30,12 @@ type realPlugin struct {
 	schedules   []pluginmanifest.Schedule
 	http        bool
 	actions     []pluginmanifest.Action
-	accounts    []string // 账号种类
+	accounts    []string // account kinds
 	code        string   // index.ts
 }
 
-// newRealHostEnv 准备以真实宿主运行的监护（尚未 Start）；没有设置宿主入口时跳过。
+// newRealHostEnv prepares a supervisor that runs the real plugin host (not yet started); it skips when the host
+// entry point is not set.
 func newRealHostEnv(t *testing.T, plugins []realPlugin, tune func(*pluginhost.Options)) *hostEnv {
 	t.Helper()
 	entry := os.Getenv("LOOP_NOW_PLUGIN_HOST_ENTRY")
@@ -77,7 +80,8 @@ func newRealHostEnv(t *testing.T, plugins []realPlugin, tune func(*pluginhost.Op
 			AccountKinds: p.accounts, Load: load})
 	}
 	return newHostEnv(t, "", specs, func(o *pluginhost.Options) {
-		// 与服务端装配宿主时一样只给必要的环境变量（app.assemblePlugins）。
+		// Only pass the necessary environment variables, the same as when the server assembles the plugin host
+		// (app.assemblePlugins).
 		o.Command = []string{node, entry}
 		o.Env = []string{"PATH=" + filepath.Dir(node) + ":/usr/bin:/bin", "HOME=" + o.Dir, "LANG=C.UTF-8", "LOOP_NOW_PLUGINS_ROOT=" + o.Dir, "LOOP_NOW_API_URL=http://127.0.0.1:9/api/v1"}
 		o.ReadyTimeout, o.LoadTimeout = 10*time.Second, 10*time.Second
@@ -87,7 +91,7 @@ func newRealHostEnv(t *testing.T, plugins []realPlugin, tune func(*pluginhost.Op
 	})
 }
 
-// hostLog 返回宿主日志，每行 插件:级别:内容，按写入顺序。
+// hostLog returns the plugin host log, one plugin:level:content per line, in write order.
 func (e *hostEnv) hostLog() string {
 	return e.scalar(`SELECT string_agg(coalesce(plugin_id,'-')||':'||level||':'||line, ' | ' ORDER BY id) FROM plugin_host_log`)
 }
@@ -111,7 +115,8 @@ func TestRealHostLoadsDeliversEventsAndKeepsState(t *testing.T) {
 	early := e.addEvent("inbox.received", base, "alpha", "beta")
 
 	e.sup.Start(false)
-	// alpha 加载后就开始投递，这时 beta 可能还没加载完；全部加载完（状态都已写库）宿主才进入运行中。
+	// alpha starts delivering as soon as it is loaded, when beta may not be loaded yet; the plugin host only becomes
+	// running once all are loaded (and their statuses written to the database).
 	e.eventually("加载与投递完成", func() (bool, string) {
 		s := e.scalar(`SELECT string_agg(event_id||'='||status||'/'||attempts, ',' ORDER BY event_id) FROM plugin_event_deliveries WHERE plugin_id='alpha'`)
 		st := e.sup.Status().State
@@ -175,7 +180,7 @@ func TestRealHostRestartPolicyAndCrashReport(t *testing.T) {
 	if !strings.Contains(st.LastCrash.Error, "exit status 5") || len(st.LastCrash.InFlight) != 1 {
 		t.Errorf("崩溃原因与未完成的请求：%+v", st.LastCrash)
 	}
-	// 先记为已停止，再把插件写成宿主已停止。
+	// First recorded as stopped, then the plugins are written as host stopped.
 	e.eventually("插件标为宿主已停止", func() (bool, string) {
 		s := e.scalar(`SELECT status FROM plugins WHERE id='alpha'`)
 		return s == "host_stopped", s
@@ -253,7 +258,8 @@ export default function (api) {
 	for _, m := range regexp.MustCompile(`alpha:info:(start|stop) \d+`).FindAllString(e.hostLog(), -1) {
 		seq = append(seq, strings.TrimPrefix(m, "alpha:info:"))
 	}
-	// 每次加载都重新执行模块，模块里的计数每次从 1 开始：启用、停用、重新启用、Reload（卸载再加载）、卸载。
+	// Every load runs the module again, so the counter in the module starts at 1 each time: enable, disable,
+	// re-enable, Reload (unload then load), unload.
 	if strings.Join(seq, ",") != "start 1,stop 1,start 1,stop 1,start 1,stop 1" {
 		t.Errorf("生命周期顺序：%v", seq)
 	}
@@ -320,7 +326,7 @@ func TestRealHostCallPolicies(t *testing.T) {
 	}
 }
 
-// 第三阶段：action、http 与 schedule（插件会话接上之前预期失败）。
+// Phase three: action, http and schedule (expected to fail until the plugin session has hooked them up).
 func TestRealHostActionsHTTPAndSchedules(t *testing.T) {
 	var now, reads atomic.Int64
 	base := time.Date(2026, 10, 27, 9, 0, 30, 0, time.Local)
@@ -337,7 +343,8 @@ func TestRealHostActionsHTTPAndSchedules(t *testing.T) {
 		o.ScheduleTick = 10 * time.Millisecond
 	})
 	e.sup.Start(false)
-	// 定时协程启动时读一次时钟记下加载的那一分钟，之后每个刻度读一次：多读两次后再拨钟，才不会被当成加载时所在的那一分钟。
+	// When the schedule goroutine starts, it reads the clock once to record the load minute, then once per tick: only
+	// after two extra reads can the clock be moved without it being taken as the load minute.
 	e.eventually("加载", func() (bool, string) {
 		st := e.sup.Status()
 		return len(st.Loaded) == 1 && reads.Load() >= 3, e.scalar(`SELECT status||'|'||coalesce(last_error,'') FROM plugins WHERE id='alpha'`)
@@ -362,7 +369,8 @@ func TestRealHostActionsHTTPAndSchedules(t *testing.T) {
 	e.eventually("schedule", func() (bool, string) { s := e.hostLog(); return strings.Contains(s, "alpha:info:swept"), s })
 }
 
-// accounts_list：插件在启用了它的项目里按添加先后读到某种账号（values 含 secret 字段）；没有启用的项目被拒绝。
+// accounts_list: in a project that has the plugin enabled, the plugin reads the accounts of a kind in the order they
+// were added (values include secret fields); a project without it enabled is rejected.
 func TestRealHostAccountsList(t *testing.T) {
 	ctx := context.Background()
 	e := newRealHostEnv(t, []realPlugin{{id: "alpha", permissions: []string{"accounts.read"}, accounts: []string{"mail"}, code: ""}}, nil)
@@ -382,7 +390,7 @@ func TestRealHostAccountsList(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// 插件代码要用到项目 ID：在写好的 index.ts 里替换。
+	// The plugin code needs the project ID: substitute it into the written index.ts.
 	writeCode(t, e, "alpha", `export default function (api) {
   api.lifecycle.on('start', async () => {
     const list = await api.accounts.list('`+project.String()+`', 'mail')
@@ -401,7 +409,7 @@ func TestRealHostAccountsList(t *testing.T) {
 	}
 }
 
-// writeCode 改写已登记插件的 index.ts（load 载荷里的 entry）。
+// writeCode rewrites the index.ts of a registered plugin (the entry in the load payload).
 func writeCode(t *testing.T, e *hostEnv, id, code string) {
 	t.Helper()
 	for _, s := range e.specs {

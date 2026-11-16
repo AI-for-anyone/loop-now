@@ -45,7 +45,7 @@ func newEnv(t *testing.T) *env {
 	return e
 }
 
-// nodeBin 返回本机的 node（npm 来源的测试需要）；没有时为空。
+// nodeBin returns the local node (needed by the npm source tests); empty when there is none.
 func nodeBin() string {
 	p := filepath.Join(os.Getenv("HOME"), ".local/node-v24.21.0/bin/node")
 	if _, err := os.Stat(p); err == nil {
@@ -54,7 +54,8 @@ func nodeBin() string {
 	return ""
 }
 
-// plugin 写一个插件目录：平台侧、Agent 扩展、Skill、CLI 目录、MCP 服务器、配置与账号都有。
+// plugin writes a plugin directory that has everything: a platform side, an Agent extension, a Skill, a CLI
+// directory, an MCP server, config and accounts.
 func plugin(t *testing.T, dir, id, version string) string {
 	t.Helper()
 	pkg := map[string]any{
@@ -111,8 +112,10 @@ func code(err error) string {
 	return ""
 }
 
-// 本地目录原地使用、须确认；官方来源直接装，复制到 <Root>/<id>/<version>/；同版本同内容的更新沿用原目录，内容不同须改版本号；
-// 卸载删除平台的安装目录（本地目录不删），数据目录只在要求时删除。
+// A local directory is used in place and needs confirmation; an official source installs directly and is copied to
+// <Root>/<id>/<version>/; an update with the same version and content reuses the existing directory, while different
+// content requires a new version number. Uninstall deletes the platform's install directories (not a local
+// directory), and the data directory only when asked.
 func TestInstallLocalAndBuiltin(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -215,7 +218,8 @@ func TestInstallLocalAndBuiltin(t *testing.T) {
 	}
 }
 
-// git 来源按分支克隆，记下提交，去掉 .git；npm 来源（本机有 node 时）打包后解开。两者都是非官方来源。
+// A git source is cloned by branch, its commit is recorded and .git is removed; an npm source (when node is available
+// locally) is packed and then unpacked. Both are unofficial sources.
 func TestInstallGitAndNPM(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -262,7 +266,8 @@ func TestInstallGitAndNPM(t *testing.T) {
 	}
 }
 
-// 全局配置：secret 只写不回显，按 schema 校验，版本不一致 412，保存后发 plugin.config_changed；项目配置只能写 x-scope project 的字段。
+// Global config: secrets are write-only and never echoed back, values are validated against the schema, a revision
+// mismatch gives 412, and saving sends plugin.config_changed; project config can only write x-scope project fields.
 func TestConfigAccountsAndGrants(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -293,7 +298,8 @@ func TestConfigAccountsAndGrants(t *testing.T) {
 	}
 	key := "pk"
 	pp, err := e.svc.PutProject(ctx, e.project, "cfg", plugins.ProjectInput{Enabled: true, Values: map[string]any{"channel": "#ops"}, Secrets: map[string]*string{"key": &key}})
-	// 上面用 json_set 改过清单；这里只核对有哪些字段（先后见 httpapi 的 TestPluginSchemaOrder）。
+	// The manifest was changed with json_set above; here we only check which fields exist (for their order see
+	// TestPluginSchemaOrder in httpapi).
 	if err != nil || !pp.Enabled || pp.Config.Revision != 1 || pp.Config.SecretsSet[0] != "key" || !slices.Equal(slices.Sorted(slices.Values(pp.ProjectFields)), []string{"channel", "key"}) {
 		t.Fatalf("项目配置：%+v %v", pp, err)
 	}
@@ -310,7 +316,7 @@ func TestConfigAccountsAndGrants(t *testing.T) {
 		t.Fatalf("事件：%v", events)
 	}
 
-	// 账号：单账号种类只能有一个；secret 字段不回显；required 生效。
+	// Accounts: a single-account kind can only have one; secret fields are not echoed back; required is enforced.
 	sec := map[string]string{"secret": "lark-secret"}
 	if _, err := e.svc.CreateAccount(ctx, e.project, "cfg", plugins.AccountCreate{Kind: "lark", Name: "主", Values: map[string]any{}, Secrets: sec}); code(err) != apperr.CodeValidationFailed {
 		t.Fatalf("缺少 required 字段：%v", err)
@@ -332,7 +338,8 @@ func TestConfigAccountsAndGrants(t *testing.T) {
 		t.Fatalf("修改账号（secret 保留）：%+v %v", lark, err)
 	}
 
-	// 授权：项目 Agent 要项目启用；平台 Agent 不受限制、没有账号。
+	// Grants: a project Agent needs the plugin enabled in the project; a platform Agent is unrestricted and has no
+	// accounts.
 	agent, err := e.st.CreateAgent(ctx, store.ProjectScope(e.project), "worker", "anthropic", "m", "")
 	if err != nil {
 		t.Fatal(err)
@@ -348,7 +355,8 @@ func TestConfigAccountsAndGrants(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 交给 Pi 的东西：路径为绝对路径，mcp.json 的占位与相对路径已换成这个插件与 Agent 的值，配置不含 secret，账号按种类注入。
+	// What is handed to Pi: paths are absolute, the placeholders and relative paths in mcp.json have been replaced
+	// with the values for this plugin and Agent, the config contains no secrets, and accounts are injected per kind.
 	assets, err := e.svc.AgentAssets(ctx, agent.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -371,7 +379,8 @@ func TestConfigAccountsAndGrants(t *testing.T) {
 		mcp.Env["HOME_DIR"] != root || mcp.Env["OTHER"] != "${KEEP_ME}" {
 		t.Fatalf("mcp：%+v", mcp)
 	}
-	// url 条目原样交给 Pi：只换这三个占位符（headers 里也换），其余 ${…} 留给 Pi，不按安装目录解析。
+	// A url entry is handed to Pi as-is: only these three placeholders are replaced (in headers too); any other ${...}
+	// is left for Pi and is not resolved against the install directory.
 	var design map[string]any
 	if err := json.Unmarshal(assets.MCPServers["cfg-design"], &design); err != nil {
 		t.Fatal(err)
@@ -397,7 +406,8 @@ func TestConfigAccountsAndGrants(t *testing.T) {
 	if len(views) != 1 || !views[0].Granted || !views[0].Available || len(views[0].AccountIDs) != 2 {
 		t.Fatalf("删除账号后授权里的引用应移除：%+v", views)
 	}
-	// 项目停用：授权保留但不再挂载；新的授权被拒绝。全局停用：什么都不挂载。
+	// Disabled in the project: the grant is kept but no longer mounted, and new grants are rejected. Disabled
+	// globally: nothing is mounted.
 	if _, err := e.svc.PutProject(ctx, e.project, "cfg", plugins.ProjectInput{Enabled: false, Values: map[string]any{"channel": "#ops"}, ExpectedRevision: 1}); err != nil {
 		t.Fatal(err)
 	}
@@ -418,7 +428,8 @@ func TestConfigAccountsAndGrants(t *testing.T) {
 	}
 }
 
-// 宿主加载的插件按安装顺序给出；每个插件在加载前才签发令牌，只吊销它自己的旧令牌。
+// The plugins for the plugin host to load come in install order; each plugin gets its token issued only right
+// before loading, and only its own old token is revoked.
 func TestSpecsIssueTokensPerPlugin(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()

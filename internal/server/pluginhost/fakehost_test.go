@@ -9,7 +9,7 @@ import (
 
 const fakeHostEnv = pluginhosttest.Env
 
-// 假宿主见 pluginhosttest；LOOPNOW_FAKE_PLUGIN_HOST=1 时只跑这个测试。
+// The fake plugin host is in pluginhosttest; with LOOPNOW_FAKE_PLUGIN_HOST=1 only this test runs.
 func TestFakeHostProcess(t *testing.T) {
 	if os.Getenv(fakeHostEnv) != "1" {
 		t.Skip("只在作为假宿主进程运行时执行")

@@ -8,12 +8,13 @@ import (
 	"strings"
 )
 
-// Text 是可以按语言给出的文字（plugins/SPEC.md §2）：字符串，或以语言标签为键、非空字符串为值的对象，
-// 例如 {"zh-CN": "飞书", "en-US": "Lark"}。原样保存与返回（对象保留作者写的键顺序），由控制台按当前语言取字；
-// 服务端需要单个字符串时用 String。缺省时是空字符串。
+// Text is text that can be given per language (plugins/SPEC.md §2): a string, or an object with language tags as
+// keys and non-empty strings as values, for example {"zh-CN": "飞书", "en-US": "Lark"}. It is stored and returned
+// as-is (an object keeps the key order the author wrote), and the console picks the text for the current language;
+// the server uses String when it needs a single string. When omitted it is the empty string.
 type Text struct{ raw json.RawMessage }
 
-// PlainText 返回字符串形式的文字。
+// PlainText returns text in its plain string form.
 func PlainText(s string) Text {
 	b, _ := json.Marshal(s)
 	return Text{raw: b}
@@ -26,21 +27,22 @@ func (t Text) MarshalJSON() ([]byte, error) {
 	return t.raw, nil
 }
 
-// UnmarshalJSON 原样记下；是否合规则由 Check 判断。
+// UnmarshalJSON records the value as-is; Check decides whether it follows the rules.
 func (t *Text) UnmarshalJSON(b []byte) error {
 	t.raw = append(json.RawMessage(nil), b...)
 	return nil
 }
 
-// langTag 是语言标签的写法（不做完整的 BCP 47 解析，与 SDK 的检查相同）。
+// langTag is the shape of a language tag (no full BCP 47 parsing; the same check as the SDK).
 var langTag = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$`)
 
-// ValidLanguageTag 报告 s 是否是语言标签的写法（如 zh-CN、en-US、en）。
+// ValidLanguageTag reports whether s has the shape of a language tag (such as zh-CN, en-US, en).
 func ValidLanguageTag(s string) bool { return langTag.MatchString(s) }
 
 var errText = errors.New("须是字符串，或以语言标签（如 zh-CN、en-US）为键、非空字符串为值的对象，至少一项")
 
-// parse 返回字符串形式的值，或对象形式的键（按作者写的顺序）与各项。
+// parse returns the value of the string form, or the keys (in the order the author wrote them) and entries of the
+// object form.
 func (t Text) parse() (plain string, keys []string, values map[string]string, err error) {
 	raw := bytes.TrimSpace(t.raw)
 	switch {
@@ -80,7 +82,7 @@ func (t Text) parse() (plain string, keys []string, values map[string]string, er
 	return "", keys, values, nil
 }
 
-// Check 检查文字的写法；field 是出现在提示里的字段名。
+// Check checks the shape of the text; field is the field name shown in the error message.
 func (t Text) Check(field string) error {
 	if _, _, _, err := t.parse(); err != nil {
 		return invalid(field + " " + errText.Error())
@@ -88,7 +90,8 @@ func (t Text) Check(field string) error {
 	return nil
 }
 
-// String 返回服务端需要单个字符串时用的文字：字符串原样；对象依次取 zh-CN、en-US、作者写的第一项。
+// String returns the text the server uses when it needs a single string: a string as-is; for an object, zh-CN,
+// then en-US, then the first entry the author wrote.
 func (t Text) String() string {
 	plain, keys, values, err := t.parse()
 	if err != nil || len(keys) == 0 {

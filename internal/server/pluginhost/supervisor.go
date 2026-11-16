@@ -16,26 +16,28 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// Spec 是一个有平台侧的插件的加载说明，由安装与授权服务给出；顺序就是加载与同步调用的顺序。
+// Spec describes how to load one plugin that has a platform side; it comes from the install and grant service. The
+// order of the specs is the order of loading and of synchronous calls.
 type Spec struct {
 	ID string
-	// Events 是清单 loopNow.events：观察类事件与同步 Hook 都在内。
+	// Events is the manifest's loopNow.events: both observe events and synchronous hooks are included.
 	Events []string
-	// Permissions 是清单 loopNow.permissions；宿主的 state_* 请求需要 state。
+	// Permissions is the manifest's loopNow.permissions; the plugin host's state_* requests need state.
 	Permissions []string
-	// FailClosed 为 true 时拦截类 Hook 超时或出错按阻止处理。
+	// FailClosed makes a timeout or error of an intercept hook count as blocking.
 	FailClosed bool
-	// Load 是 load 消息的载荷，原样发给宿主。
+	// Load is the payload of the load message, sent to the plugin host as-is.
 	Load json.RawMessage
-	// Prepare 不为空时在加载前调用，返回值代替 Load（例如这时才签发插件令牌，只影响这一个插件）。
+	// Prepare, when not nil, is called before loading and its return value replaces Load (for example, the plugin
+	// token is only issued at that point, affecting just this one plugin).
 	Prepare func(context.Context) (json.RawMessage, error)
-	// Schedules 是清单 schedule[]：加载后按 cron 发 schedule 请求。
+	// Schedules is the manifest's schedule[]: after loading, schedule requests are sent according to cron.
 	Schedules []pluginmanifest.Schedule
-	// AccountKinds 是清单 accounts[].kind；宿主的 accounts_list 只能读这些种类。
+	// AccountKinds is the manifest's accounts[].kind; the plugin host's accounts_list can only read these kinds.
 	AccountKinds []string
 }
 
-// Store 是宿主监护需要的持久化操作，由 *store.Store 实现。
+// Store is the persistence the plugin host supervisor needs, implemented by *store.Store.
 type Store interface {
 	PluginStateGet(ctx context.Context, plugin string, project *uuid.UUID, key string) (json.RawMessage, error)
 	PluginStateSet(ctx context.Context, plugin string, project *uuid.UUID, key string, value json.RawMessage) error
@@ -52,35 +54,36 @@ type Store interface {
 	FailPluginDelivery(ctx context.Context, plugin, eventID, reason string, retryAt *time.Time) error
 }
 
-// Options 是宿主监护的参数；时长为零时取默认值。
+// Options are the parameters of the plugin host supervisor; zero durations take the default values.
 type Options struct {
-	// Command 是启动宿主的命令：node 与平台内置的宿主入口。
+	// Command is the command that starts the plugin host: node and the platform's built-in host entry point.
 	Command []string
-	// Dir 是宿主的工作目录：<work root>/platform/plugins/。
+	// Dir is the plugin host's working directory: <work root>/platform/plugins/.
 	Dir   string
 	Env   []string
 	Store Store
-	// Specs 返回宿主启动后要加载的插件，每次（重新）启动都会调用。
+	// Specs returns the plugins to load once the plugin host has started; it is called on every (re)start.
 	Specs func(context.Context) ([]Spec, error)
 	Log   *slog.Logger
 
-	ReadyTimeout  time.Duration // 等待 ready，默认 30 秒
-	LoadTimeout   time.Duration // load、unload、config_changed，默认 30 秒
-	CallTimeout   time.Duration // 同步 Hook，默认 15 秒
-	EventTimeout  time.Duration // 观察类事件的 ack，默认 60 秒
-	ShutdownGrace time.Duration // shutdown 后等宿主自行退出，默认 5 秒
-	RestartDelay  time.Duration // 崩溃后重启前的等待，默认 1 秒
-	RestartLimit  int           // 窗口内第几次退出后不再重启，默认 3
-	RestartWindow time.Duration // 默认 5 分钟
-	// Backoff 是观察类事件失败后的重投间隔；第 len(Backoff)+1 次仍失败后标为 failed。
+	ReadyTimeout  time.Duration // waiting for ready, default 30 seconds
+	LoadTimeout   time.Duration // load, unload, config_changed, default 30 seconds
+	CallTimeout   time.Duration // synchronous hooks, default 15 seconds
+	EventTimeout  time.Duration // ack of observe events, default 60 seconds
+	ShutdownGrace time.Duration // wait for the host to exit on its own after shutdown, default 5 seconds
+	RestartDelay  time.Duration // wait before restarting after a crash, default 1 second
+	RestartLimit  int           // stop restarting after this many exits within the window, default 3
+	RestartWindow time.Duration // default 5 minutes
+	// Backoff is the redelivery interval after an observe event fails; once attempt len(Backoff)+1 still fails, it is
+	// marked failed.
 	Backoff        []time.Duration
-	PollInterval   time.Duration // 没有通知时检查到期重投的间隔，默认 5 秒
-	LogRetention   time.Duration // 宿主日志保留时长，默认 7 天
-	EventRetention time.Duration // 观察类事件与投递记录保留时长，默认 30 天
+	PollInterval   time.Duration // interval for checking due redeliveries without a notification, default 5 seconds
+	LogRetention   time.Duration // how long plugin host logs are kept, default 7 days
+	EventRetention time.Duration // how long observe events and delivery records are kept, default 30 days
 
-	Now             func() time.Time // 定时任务用的时钟，默认 time.Now
-	ScheduleTick    time.Duration    // 检查定时任务的间隔，默认 1 秒
-	ScheduleTimeout time.Duration    // 一次定时任务等待回应的时长，默认 10 分钟
+	Now             func() time.Time // clock for scheduled jobs, default time.Now
+	ScheduleTick    time.Duration    // interval for checking scheduled jobs, default 1 second
+	ScheduleTimeout time.Duration    // how long one scheduled job waits for a response, default 10 minutes
 }
 
 func (o *Options) defaults() {
@@ -115,17 +118,17 @@ func (o *Options) defaults() {
 	}
 }
 
-// 宿主状态。
+// Plugin host states.
 const (
-	StateDisabled   = "disabled"   // 全局停用
-	StateStarting   = "starting"   // 已拉起，等待 ready 与加载
-	StateRunning    = "running"    // 运行中
-	StateRestarting = "restarting" // 崩溃后等待重启
-	StateStopped    = "stopped"    // 窗口内退出次数达到上限，不再自动重启
-	StateIdle       = "idle"       // 服务端停止中或尚未启动
+	StateDisabled   = "disabled"   // disabled globally
+	StateStarting   = "starting"   // launched, waiting for ready and loading
+	StateRunning    = "running"    // running
+	StateRestarting = "restarting" // waiting to restart after a crash
+	StateStopped    = "stopped"    // exits within the window reached the limit; no more automatic restarts
+	StateIdle       = "idle"       // the server is stopping or has not started yet
 )
 
-// 插件状态（plugins.status）。
+// Plugin statuses (plugins.status).
 const (
 	StatusInstalled   = "installed"
 	StatusActive      = "active"
@@ -133,7 +136,7 @@ const (
 	StatusHostStopped = "host_stopped"
 )
 
-// Crash 记录宿主最近一次意外退出及当时在处理的请求。
+// Crash records the plugin host's most recent unexpected exit and the requests it was handling at the time.
 type Crash struct {
 	At       time.Time  `json:"at"`
 	Error    string     `json:"error"`
@@ -142,7 +145,7 @@ type Crash struct {
 	Stderr   []string   `json:"stderr"`
 }
 
-// HostStatus 是宿主的当前状态，供插件页展示。
+// HostStatus is the plugin host's current status, shown on the plugins page.
 type HostStatus struct {
 	State       string      `json:"state"`
 	PID         int         `json:"pid,omitempty"`
@@ -153,7 +156,7 @@ type HostStatus struct {
 	Loaded      []string    `json:"loaded"`
 }
 
-// stderrTail 是崩溃记录里保留的最后几行标准错误。
+// stderrTail is the number of last standard error lines kept in a crash record.
 const stderrTail = 10
 
 type loadedPlugin struct {
@@ -165,7 +168,7 @@ type loadedPlugin struct {
 
 type logLine struct{ plugin, level, line string }
 
-// Supervisor 监护一个宿主进程。
+// Supervisor supervises one plugin host process.
 type Supervisor struct {
 	o Options
 
@@ -191,14 +194,15 @@ type Supervisor struct {
 	logDone    chan struct{}
 }
 
-// New 创建宿主监护；调用 Start 后才拉起宿主。
+// New creates a plugin host supervisor; the host is only launched once Start is called.
 func New(o Options) *Supervisor {
 	o.defaults()
 	return &Supervisor{o: o, state: StateIdle, loaded: map[string]*loadedPlugin{}, signal: make(chan struct{}, 1),
 		quit: make(chan struct{}), runDone: make(chan struct{}), logs: make(chan logLine, 1024), logDone: make(chan struct{})}
 }
 
-// Start 开始监护；disabled 为 true（全局停用）时不拉起宿主，直到 SetDisabled(false)。
+// Start starts supervising; when disabled is true (disabled globally) the plugin host is not launched until
+// SetDisabled(false).
 func (s *Supervisor) Start(disabled bool) {
 	s.mu.Lock()
 	s.disabled = disabled
@@ -207,7 +211,7 @@ func (s *Supervisor) Start(disabled bool) {
 	go s.run()
 }
 
-// Stop 让宿主退出并停止监护。
+// Stop makes the plugin host exit and stops supervising.
 func (s *Supervisor) Stop(ctx context.Context) error {
 	s.mu.Lock()
 	if s.stopping {
@@ -238,7 +242,8 @@ func (s *Supervisor) Stop(ctx context.Context) error {
 	}
 }
 
-// SetDisabled 打开或关闭全局停用：停用时停止宿主，重新启用时清零重启计数并拉起宿主。
+// SetDisabled turns the global disable on or off: disabling stops the plugin host; re-enabling resets the restart
+// count and launches the host.
 func (s *Supervisor) SetDisabled(disabled bool) {
 	s.mu.Lock()
 	s.disabled = disabled
@@ -253,7 +258,8 @@ func (s *Supervisor) SetDisabled(disabled bool) {
 	s.poke()
 }
 
-// Restart 人工重新启动宿主：清零重启计数；宿主在运行时先让它退出。
+// Restart restarts the plugin host on manual request: it resets the restart count, and first makes the host exit if
+// it is running.
 func (s *Supervisor) Restart() {
 	s.mu.Lock()
 	s.gaveUp, s.exits = false, nil
@@ -265,7 +271,7 @@ func (s *Supervisor) Restart() {
 	s.poke()
 }
 
-// Status 返回宿主的当前状态。
+// Status returns the plugin host's current status.
 func (s *Supervisor) Status() HostStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -296,7 +302,8 @@ func (s *Supervisor) setState(state string) {
 	s.mu.Unlock()
 }
 
-// run 是监护循环：按需拉起宿主，等它退出，再按重启策略决定下一步。
+// run is the supervision loop: it launches the plugin host when needed, waits for it to exit, and then decides the
+// next step by the restart policy.
 func (s *Supervisor) run() {
 	defer close(s.runDone)
 	go s.prune()
@@ -341,7 +348,8 @@ func (s *Supervisor) run() {
 	}
 }
 
-// launch 拉起宿主、等待 ready 并加载插件；返回 nil 时说明没有起来，err 是原因。
+// launch launches the plugin host, waits for ready and loads the plugins; a nil return means the host did not come
+// up, and err is the reason.
 func (s *Supervisor) launch() (*conn, error) {
 	s.mu.Lock()
 	s.stderr = nil
@@ -381,9 +389,11 @@ func (s *Supervisor) launch() (*conn, error) {
 	return c, nil
 }
 
-// afterExit 在宿主退出后停止投递，并按是否意外退出记录崩溃、决定是否重启。
+// afterExit stops delivery after the plugin host exits and, depending on whether the exit was unexpected, records a
+// crash and decides whether to restart.
 func (s *Supervisor) afterExit(c *conn, err error) {
-	// 先取下退出时未完成的请求，再停投递协程：停投递会撤回它们等待中的请求。
+	// Take the requests that were unfinished at exit first, then stop the delivery goroutines: stopping delivery
+	// withdraws their pending requests.
 	var pending []inflight
 	var last *inflight
 	if c != nil {
@@ -447,7 +457,8 @@ func (s *Supervisor) markAll(specs []Spec, status string) {
 	}
 }
 
-// loadAll 加载 Specs 给出的全部插件；单个插件加载失败只让它进入错误状态。
+// loadAll loads every plugin returned by Specs; a single plugin failing to load only puts that plugin into the error
+// status.
 func (s *Supervisor) loadAll(c *conn) {
 	ctx := context.Background()
 	specs, err := s.o.Specs(ctx)
@@ -494,7 +505,8 @@ func (s *Supervisor) loadOne(ctx context.Context, c *conn, spec Spec) {
 	}
 }
 
-// Reload 在宿主内卸载并按最新的 Specs 重新加载一个插件（安装新版本、启用变化）；宿主未运行时下次启动生效。
+// Reload unloads one plugin in the plugin host and loads it again from the latest Specs (a new version installed,
+// a change in enabling); when the host is not running it takes effect on the next start.
 func (s *Supervisor) Reload(ctx context.Context, id string) error {
 	s.mu.Lock()
 	c := s.conn
@@ -520,7 +532,7 @@ func (s *Supervisor) Reload(ctx context.Context, id string) error {
 	return nil
 }
 
-// Unload 在宿主内卸载一个插件（卸载插件、不再有平台侧）。
+// Unload unloads one plugin in the plugin host (the plugin was uninstalled or no longer has a platform side).
 func (s *Supervisor) Unload(ctx context.Context, id string) error {
 	s.mu.Lock()
 	c := s.conn
@@ -546,16 +558,17 @@ func (s *Supervisor) unloadOne(ctx context.Context, c *conn, id string) error {
 	return err
 }
 
-// ConfigChanged 把新的配置交给已加载的插件；插件未加载时返回 ErrNotLoaded。
+// ConfigChanged hands the new config to a loaded plugin; it returns ErrNotLoaded when the plugin is not loaded.
 func (s *Supervisor) ConfigChanged(ctx context.Context, id string, payload any) error {
 	_, err := s.Request(ctx, TypeConfigChanged, id, payload, s.o.LoadTimeout)
 	return err
 }
 
-// ErrNotLoaded 表示插件当前不在宿主里（宿主未运行、停用或加载失败）。
+// ErrNotLoaded means the plugin is not currently in the plugin host (the host is not running, is disabled, or the
+// load failed).
 var ErrNotLoaded = errors.New("插件未加载")
 
-// Request 向已加载的插件发出一个请求并等待 result（action、http、schedule 等）。
+// Request sends a request to a loaded plugin and waits for the result (action, http, schedule and so on).
 func (s *Supervisor) Request(ctx context.Context, typ, plugin string, payload any, timeout time.Duration) (json.RawMessage, error) {
 	s.mu.Lock()
 	c, lp := s.conn, s.loaded[plugin]
@@ -566,7 +579,8 @@ func (s *Supervisor) Request(ctx context.Context, typ, plugin string, payload an
 	return c.request(ctx, typ, plugin, payload, timeout, inflight{})
 }
 
-// onStderr 把宿主标准错误的一行记入平台日志与宿主日志；带 [<id>] 前缀的归到该插件。
+// onStderr records one line of the plugin host's standard error in the platform log and the host log; a line with
+// an [<id>] prefix is attributed to that plugin.
 func (s *Supervisor) onStderr(line string) {
 	plugin, text := "", line
 	if m := stderrPrefix.FindStringSubmatch(line); m != nil {
@@ -582,7 +596,8 @@ func (s *Supervisor) onStderr(line string) {
 	s.enqueueLog(plugin, "warn", text)
 }
 
-// onMessage 处理宿主发来的日志与请求；请求在单独的 goroutine 里处理，不阻塞读取回应。
+// onMessage handles logs and requests from the plugin host; requests are handled in separate goroutines so they do
+// not block reading responses.
 func (s *Supervisor) onMessage(c *conn, m Message) {
 	switch m.Type {
 	case TypeLog:
@@ -614,8 +629,9 @@ func (s *Supervisor) onMessage(c *conn, m Message) {
 	}
 }
 
-// handleAccounts 回答 accounts_list：要加载的（含正在加载、lifecycle start 中的）、清单声明了 accounts.read 与这个账号种类、
-// 在 projectId 启用了的插件，读到这个项目里该种类未删除的账号（按添加先后，values 含 secret 字段）。
+// handleAccounts answers accounts_list: a plugin in the load list (including one still loading or in its lifecycle
+// start) whose manifest declares accounts.read and this account kind, and that is enabled in projectId, gets the
+// non-deleted accounts of that kind in this project (in the order they were added; values include secret fields).
 func (s *Supervisor) handleAccounts(m Message) (any, error) {
 	s.mu.Lock()
 	var spec *Spec
@@ -668,7 +684,7 @@ func (s *Supervisor) handleAccounts(m Message) (any, error) {
 	return out, nil
 }
 
-// stateValueMax 是一项状态值的最多字节数。
+// stateValueMax is the maximum size in bytes of one state value.
 const stateValueMax = 1 << 20
 
 func (s *Supervisor) handleState(m Message) (any, error) {
@@ -736,7 +752,8 @@ func slogLevel(level string) slog.Level {
 	return slog.LevelInfo
 }
 
-// enqueueLog 把一行日志交给写入协程；队列满时丢弃，不阻塞协议读取。
+// enqueueLog hands one log line to the writer goroutine; when the queue is full the line is dropped so protocol
+// reading is never blocked.
 func (s *Supervisor) enqueueLog(plugin, level, line string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -759,7 +776,8 @@ func (s *Supervisor) writeLogs() {
 	}
 }
 
-// prune 每小时删除超过保留时长的宿主日志与观察类事件（含投递记录）。
+// prune deletes, every hour, plugin host logs and observe events (including delivery records) older than their
+// retention period.
 func (s *Supervisor) prune() {
 	t := time.NewTicker(time.Hour)
 	defer t.Stop()
