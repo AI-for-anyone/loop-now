@@ -170,7 +170,7 @@ describe('观察类事件', () => {
     assert.deepEqual(good.payload, { ok: true })
     assert.deepEqual((await host.event('flaky', { type: 'run.started' })).payload, { ok: true })
     const warned = host.logs('flaky').find((l) => l.level === 'warn' && /处理失败了/.test(l.message))!
-    assert.match(warned.message, /^run\.ended 的处理函数出错：处理失败了\nat .*index\.ts:2:/)
+    assert.match(warned.message, /^Handler for run\.ended failed: 处理失败了\nat .*index\.ts:2:/)
     assert.equal(warned.message.split('\n').length, 2)
   })
 
@@ -429,7 +429,7 @@ describe('同步调用', () => {
     await host.load(p)
     const r = await host.call('shaper', 'modify', { type: 'sleep.before_schedule', durationSeconds: 60, reason: null })
     assert.deepEqual(r.payload, { ok: true, value: { patch: { durationSeconds: 120, reason: 'saw 120' } } })
-    assert.ok(host.logs('shaper').some((l) => /不能改固定字段 id/.test(l.message)))
+    assert.ok(host.logs('shaper').some((l) => /changes the fixed field id$/.test(l.message)))
     assert.deepEqual((await host.call('shaper', 'modify', { type: 'message.before_enqueue', text: 'x' })).payload, { ok: true, value: {} })
   })
 
@@ -844,10 +844,10 @@ describe('配置、密钥与输出', () => {
     )
     await host.load(p)
     assert.deepEqual((await host.event('noisy', { type: 'run.ended' })).payload, { ok: true })
-    const uncaught = await host.waitLog('noisy', /^未捕获的异常：定时器里炸了/)
+    const uncaught = await host.waitLog('noisy', /^Uncaught exception: 定时器里炸了/)
     assert.equal(uncaught.message.split('\n').length, 2, '只带说明与插件代码里的一帧')
     assert.ok(uncaught.message.split('\n')[1]!.includes(p.root), uncaught.message)
-    await host.waitLog('noisy', /^未处理的 Promise 拒绝：没人接的拒绝/)
+    await host.waitLog('noisy', /^Unhandled promise rejection: 没人接的拒绝/)
     await host.waitStderr((lines) => lines.includes('[noisy] to stderr'))
     assert.deepEqual(
       host.stderr.filter((l) => l.startsWith('[noisy]')),

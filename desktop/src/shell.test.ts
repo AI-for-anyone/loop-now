@@ -146,7 +146,7 @@ describe('配置', () => {
     for (const d of [p.dataDir, p.contextDir, p.workRoot]) assert.ok(!d.includes('.loop_now') && !d.startsWith('/Users/Shared/loop-now/'))
     assert.equal(
       profileSummary(p),
-      '配置 default，数据目录 /Users/someone/Library/Application Support/Loop Now/default/data，上下文目录 /Users/someone/Library/Application Support/Loop Now/default/context，工作根 /Users/Shared/loop-now-desktop/default',
+      'profile default, data directory /Users/someone/Library/Application Support/Loop Now/default/data, context directory /Users/someone/Library/Application Support/Loop Now/default/context, work root /Users/Shared/loop-now-desktop/default',
     )
   })
 
@@ -158,8 +158,8 @@ describe('配置', () => {
       LOOP_NOW_WORK_ROOT: '/Users/Shared/loop-now',
     })
     assert.equal(p.shellDir, '/Users/someone/Library/Application Support/Loop Now/default/shell')
-    assert.match(profileSummary(p), /，工作根 \/Users\/Shared\/loop-now（desktop\.json 指定）$/)
-    assert.doesNotMatch(profileSummary(p), /data（desktop\.json 指定）/)
+    assert.match(profileSummary(p), /, work root \/Users\/Shared\/loop-now \(set in desktop\.json\)$/)
+    assert.doesNotMatch(profileSummary(p), /data \(set in desktop\.json\)/)
 
     const all = resolveProfile('/private/tmp/x', undefined, { workRoot: '/Users/Shared/w', dataDir: '/Users/someone/.loop_now', contextDir: '/Users/someone/.loop_now/context' }, 'darwin')
     assert.deepEqual([all.shellDir, all.logDir, all.dataDir, all.contextDir, all.workRoot], ['/private/tmp/x/shell', '/private/tmp/x/logs', '/Users/someone/.loop_now', '/Users/someone/.loop_now/context', '/Users/Shared/w'])
@@ -239,7 +239,7 @@ describe('配置', () => {
     assert.throws(() => overridesFromFile(file, defaultProfile, 'win32'), /应是绝对路径："work"/)
     const migrated = resolveProfile(defaultProfile, 'C:\\Users\\someone', { workRoot: 'D:\\work' }, 'win32', {})
     assert.equal(profileEnv(migrated).LOOP_NOW_WORK_ROOT, 'D:\\work')
-    assert.match(profileSummary(migrated), /工作根 D:\\work（desktop\.json 指定）$/)
+    assert.match(profileSummary(migrated), /work root D:\\work \(set in desktop\.json\)$/)
   })
 })
 
@@ -567,7 +567,7 @@ describe('检查更新', () => {
     const notes: string[] = []
     updater.fail = new Error('找不到 latest-mac.yml')
     await new UpdateChecker(updater, (n) => notes.push(n)).check()
-    assert.deepEqual(notes, ['检查更新失败：找不到 latest-mac.yml'])
+    assert.deepEqual(notes, ['Update check failed: 找不到 latest-mac.yml'])
   })
 
   test('已装正式版：最新的是预发布或正式版都检查得到', async () => {

@@ -561,7 +561,7 @@ export class PluginRuntime {
             await handler(structuredClone(event), ctx)
           } catch (err) {
             if (signal.aborted) throw signal.reason
-            this.log('warn', `${type} 的处理函数出错：${this.brief(err)}`)
+            this.log('warn', `Handler for ${type} failed: ${this.brief(err)}`)
             failures.push(describeError(err))
           }
         }
@@ -598,7 +598,7 @@ export class PluginRuntime {
               if (!isObject(r) || !isObject(r.patch)) continue
               for (const [k, v] of Object.entries(r.patch)) {
                 if (FIXED_FIELDS.includes(k)) {
-                  this.log('warn', `${type} 的 patch 不能改固定字段 ${k}，已忽略`)
+                  this.log('warn', `Ignored a ${type} patch that changes the fixed field ${k}`)
                   continue
                 }
                 patch[k] = v
@@ -619,7 +619,7 @@ export class PluginRuntime {
       })
       return { ok: true, value }
     } catch (err) {
-      if (!(err instanceof TimeoutError)) this.log('warn', `${type} 的处理函数出错：${this.brief(err)}`)
+      if (!(err instanceof TimeoutError)) this.log('warn', `Handler for ${type} failed: ${this.brief(err)}`)
       return { ok: false, error: describeError(err) }
     }
   }

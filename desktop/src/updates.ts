@@ -60,7 +60,7 @@ export class UpdateChecker extends EventEmitter<{ available: [version: string] }
     try {
       await this.updater.checkForUpdates()
     } catch (err) {
-      this.note(`检查更新失败：${(err as Error).message}`)
+      this.note(`Update check failed: ${(err as Error).message}`)
     }
   }
 }

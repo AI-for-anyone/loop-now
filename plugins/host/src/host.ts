@@ -72,8 +72,8 @@ export class Host {
       (m) => this.handle(m),
       (problem) => this.output.hostError(problem),
     )
-    process.on('uncaughtException', (err) => this.unhandled(err, '未捕获的异常'))
-    process.on('unhandledRejection', (err) => this.unhandled(err, '未处理的 Promise 拒绝'))
+    process.on('uncaughtException', (err) => this.unhandled(err, 'Uncaught exception'))
+    process.on('unhandledRejection', (err) => this.unhandled(err, 'Unhandled promise rejection'))
   }
 
   start(): void {
@@ -108,8 +108,8 @@ export class Host {
       if (stack.includes(rt.payload.root + path.sep)) owner = rt.id
     }
     const rt = owner ? this.runtimes.get(owner) : undefined
-    if (rt) this.pluginLog(rt.id, 'error', `${what}：${briefError(err, rt.payload.root)}`)
-    else this.output.hostError(`${what}：${stack}`)
+    if (rt) this.pluginLog(rt.id, 'error', `${what}: ${briefError(err, rt.payload.root)}`)
+    else this.output.hostError(`${what}: ${stack}`)
   }
 
   // load, unload and config_changed for the same plugin are handled one after another.

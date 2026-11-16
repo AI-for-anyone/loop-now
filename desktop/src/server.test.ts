@@ -23,7 +23,7 @@ function buildFake(): boolean {
     execFileSync('go', ['build', '-o', bin, './test/fakeserver'], { cwd: join(__dirname, '..'), stdio: 'pipe', env: { ...process.env, CGO_ENABLED: '0' } })
     return true
   } catch (err) {
-    console.log(`跳过服务端进程测试：编不出假服务端（${(err as Error).message.split('\n')[0]}）`)
+    console.log(`Skipping the server process tests: could not build the fake server (${(err as Error).message.split('\n')[0]})`)
     return false
   }
 }
@@ -88,7 +88,7 @@ describe('服务端进程', () => {
     assert.equal(server.alive, false)
     assert.equal(await waitGone(stamp.pid, 5_000), true)
     assert.deepEqual(states, ['starting', 'running', 'stopping', 'stopped'])
-    assert.ok(!notes.some((n) => n.includes('强制结束')), `应是自己退出（macOS SIGTERM，Windows 关 stdin）：${notes.join('\n')}`)
+    assert.ok(!notes.some((n) => n.includes('force-killing')), `应是自己退出（macOS SIGTERM，Windows 关 stdin）：${notes.join('\n')}`)
     // Windows: the server stopped by itself after reading EOF on stdin (the fake server writes a line to stderr).
     if (process.platform === 'win32') assert.match(log.tail(5), /stdin closed, shutting down/)
   })
@@ -106,8 +106,8 @@ describe('服务端进程', () => {
     assert.equal(written.externalUrl, server.externalUrl)
     // The fake server puts a certificate in the directory, as the real server does.
     assert.ok(existsSync(join(tlsDir, 'cert.pem')), '证书目录应交给了服务端')
-    assert.ok(notes.some((n) => n.includes('对外 TLS 端口 由系统选择')), notes.join('\n'))
-    assert.ok(notes.some((n) => n.includes(`对外 TLS 端口 ${server.externalUrl}`)), notes.join('\n'))
+    assert.ok(notes.some((n) => n.includes('external TLS port chosen by the system')), notes.join('\n'))
+    assert.ok(notes.some((n) => n.includes(`external TLS port ${server.externalUrl}`)), notes.join('\n'))
     await server.stop()
     assert.equal(server.externalUrl, undefined)
   })
@@ -154,7 +154,7 @@ describe('服务端进程', () => {
     const ready = untilReady(server)
     await server.start()
     await ready
-    assert.ok(notes.some((n) => n.includes(`停掉上次留下的服务端（pid ${orphan.pid}）`)), notes.join('\n'))
+    assert.ok(notes.some((n) => n.includes(`Stopping the server left over from the last run (pid ${orphan.pid})`)), notes.join('\n'))
     await orphanExit
     assert.equal(alive(orphan.pid!), false)
     await server.stop()
@@ -169,7 +169,7 @@ describe('服务端进程', () => {
     const ready = untilReady(server)
     await server.start()
     await ready
-    assert.ok(!notes.some((n) => n.includes('停掉上次留下的服务端')), notes.join('\n'))
+    assert.ok(!notes.some((n) => n.includes('Stopping the server left over from the last run')), notes.join('\n'))
     await server.stop()
   })
 

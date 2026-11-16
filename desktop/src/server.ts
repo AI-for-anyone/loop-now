@@ -96,8 +96,8 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
 
   private launch(port: number, externalPort: number | undefined): void {
     this.o.log.resetTail()
-    const chosen = (p: number) => (p === 0 ? '由系统选择' : String(p))
-    this.o.note(`启动服务端 ${this.o.bin}，端口 ${chosen(port)}${externalPort === undefined ? '' : `，对外 TLS 端口 ${chosen(externalPort)}`}`)
+    const chosen = (p: number) => (p === 0 ? 'chosen by the system' : String(p))
+    this.o.note(`Starting server ${this.o.bin}, port ${chosen(port)}${externalPort === undefined ? '' : `, external TLS port ${chosen(externalPort)}`}`)
     rmSync(this.o.readyFile, { force: true })
     const externalEnv: NodeJS.ProcessEnv =
       externalPort === undefined || !this.o.external
@@ -185,7 +185,7 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
 
     this.url = ready.url
     this.externalUrl = ready.externalUrl
-    this.o.note(`服务端已就绪：${ready.url}（${ready.version}，pid ${ready.pid}）${ready.externalUrl ? `，对外 TLS 端口 ${ready.externalUrl}` : ''}`)
+    this.o.note(`Server ready: ${ready.url} (${ready.version}, pid ${ready.pid})${ready.externalUrl ? `, external TLS port ${ready.externalUrl}` : ''}`)
     await this.writeStamp(ready.pid)
     this.setState(ready.healthy ? 'running' : 'degraded')
     this.emit('ready', ready.url)
@@ -236,7 +236,7 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
     const { child } = run
     if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return
     const inTime = await terminateChild(child, run.exited, stopGraceMs, this.platform)
-    if (!inTime) this.o.note(`服务端 ${stopGraceMs / 1000} 秒内没有退出，强制结束`)
+    if (!inTime) this.o.note(`Server did not exit within ${stopGraceMs / 1000} seconds, force-killing it`)
   }
 
   // A server left behind when the shell last exited abnormally would hold the data directory: if the pid in the ready file is still alive,
@@ -244,7 +244,7 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
   private async clearStale(): Promise<void> {
     const ready = readReady(this.o.readyFile)
     if (ready && isOurServer(await processInfo(ready.pid, this.platform), this.o.bin, ready.pid, readStamp(this.o.stampFile), this.platform)) {
-      this.o.note(`停掉上次留下的服务端（pid ${ready.pid}）`)
+      this.o.note(`Stopping the server left over from the last run (pid ${ready.pid})`)
       await terminateStale(ready.pid, stopGraceMs, this.platform)
     }
     rmSync(this.o.readyFile, { force: true })

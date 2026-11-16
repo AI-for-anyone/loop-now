@@ -139,6 +139,6 @@ export function profileEnv(profile: Profile): NodeJS.ProcessEnv {
 // The profile part of the first shell log line on every start: the profile name and the three directories handed to the server, with those
 // specified by desktop.json marked.
 export function profileSummary(profile: Profile): string {
-  const dir = (path: string, key: keyof DirOverrides) => (profile.overrides[key] ? `${path}（desktop.json 指定）` : path)
-  return `配置 ${profile.label}，数据目录 ${dir(profile.dataDir, 'dataDir')}，上下文目录 ${dir(profile.contextDir, 'contextDir')}，工作根 ${dir(profile.workRoot, 'workRoot')}`
+  const dir = (path: string, key: keyof DirOverrides) => (profile.overrides[key] ? `${path} (set in desktop.json)` : path)
+  return `profile ${profile.label}, data directory ${dir(profile.dataDir, 'dataDir')}, context directory ${dir(profile.contextDir, 'contextDir')}, work root ${dir(profile.workRoot, 'workRoot')}`
 }
