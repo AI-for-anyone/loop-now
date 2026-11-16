@@ -77,7 +77,7 @@ func TestInboxQuestionCLIRealAppOrdinary(t *testing.T) {
 	}
 	option := ask("option question")
 	answer := recipient.run("inbox", "reply", option, "--answer", "2", "--option", "继续追问", "--option", "停止追问").ok(t)
-	if answer["text"] != "选择：停止" || answer["answerTo"].(map[string]any)["messageId"] != option || cliQuestionState(t, recipient, option) != "answered" {
+	if answer["text"] != "Selected: 停止" || answer["answerTo"].(map[string]any)["messageId"] != option || cliQuestionState(t, recipient, option) != "answered" {
 		t.Fatal("actual option answer missing")
 	}
 	if answer["question"].(map[string]any)["state"] != "open" {

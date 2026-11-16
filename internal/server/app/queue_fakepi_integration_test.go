@@ -262,7 +262,7 @@ func TestQueueNodeStopActualAppFakePi(t *testing.T) {
 		t.Fatalf("被停止的轮次：%s %s", st, code)
 	}
 	d, _ := s.a.Tasks.Get(ctx, auth.Console(), task.Task.ID)
-	if d.Task.Reason == nil || !strings.Contains(*d.Task.Reason, "已被人停止") {
+	if d.Task.Reason == nil || !strings.Contains(*d.Task.Reason, "Stopped by a person.") {
 		t.Fatalf("阻塞原因：%+v", d.Task.Reason)
 	}
 	if code, raw := s.call("POST", base+"/runs/"+active.String()+"/stop", body(worker, task)); code != 409 {

@@ -148,7 +148,7 @@ func TestObservabilityAcrossRestart(t *testing.T) {
 			install = &e
 		}
 	}
-	if install == nil || install.Result != "failed" || install.CLI != "zz" || install.Error == nil || !strings.Contains(*install.Error, "摘要不符") {
+	if install == nil || install.Result != "failed" || install.CLI != "zz" || install.Error == nil || !strings.Contains(*install.Error, "checksum mismatch") {
 		t.Fatalf("时间线应有 CLI 安装失败：%+v", install)
 	}
 
@@ -166,7 +166,7 @@ func TestObservabilityAcrossRestart(t *testing.T) {
 	for _, tp := range tmpls.Templates {
 		if tp.Name == "zz" {
 			found = true
-			if tp.Install.Status != "failed" || tp.Install.Error == nil || !strings.Contains(*tp.Install.Error, "摘要不符") {
+			if tp.Install.Status != "failed" || tp.Install.Error == nil || !strings.Contains(*tp.Install.Error, "checksum mismatch") {
 				t.Fatalf("重启后应仍显示安装失败及原因：%+v", tp.Install)
 			}
 		}
