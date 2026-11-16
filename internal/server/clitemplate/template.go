@@ -377,11 +377,11 @@ func (t *Template) Render(input map[string]string) (Payload, []string, error) {
 			v = f.Default
 		}
 		if v == "" && f.Required {
-			fieldErrs = append(fieldErrs, apperr.Field("fields."+f.Name, f.Label+" is required."))
+			fieldErrs = append(fieldErrs, apperr.Field("fields."+f.Name, "Required."))
 			continue
 		}
 		if f.Type == "enum" && v != "" && !slices.Contains(f.Options, v) {
-			fieldErrs = append(fieldErrs, apperr.Field("fields."+f.Name, f.Label+" must be one of: "+strings.Join(f.Options, ", ")))
+			fieldErrs = append(fieldErrs, apperr.Field("fields."+f.Name, "Must be one of: "+strings.Join(f.Options, ", ")+"."))
 			continue
 		}
 		// Database passwords are opaque: do not trim meaningful whitespace.

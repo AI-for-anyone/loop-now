@@ -327,3 +327,29 @@ func TestInstallUnsupportedPlatform(t *testing.T) {
 		t.Fatalf("状态应为 unsupported_platform：%s", st)
 	}
 }
+
+// Field messages of a template do not repeat the field's label (labels come from the template files and are not
+// English): the error is already attached to fields.<name>.
+func TestRenderFieldMessagesOmitLabel(t *testing.T) {
+	c, _ := Load("")
+	gh, _ := c.Get("gh")
+	_, _, err := gh.Render(map[string]string{})
+	if e, ok := apperr.As(err); !ok || len(e.Fields) != 1 || e.Fields[0].Field != "fields.token" || e.Fields[0].Message != "Required." {
+		t.Fatalf("missing required field: %+v", err)
+	}
+	lark, _ := c.Get("lark-cli")
+	_, _, err = lark.Render(map[string]string{"brand": "other"})
+	e, ok := apperr.As(err)
+	if !ok {
+		t.Fatalf("invalid enum value: %v", err)
+	}
+	found := false
+	for _, f := range e.Fields {
+		if f.Field == "fields.brand" {
+			found = f.Message == "Must be one of: feishu, lark."
+		}
+	}
+	if !found {
+		t.Fatalf("invalid enum value: %+v", e.Fields)
+	}
+}
