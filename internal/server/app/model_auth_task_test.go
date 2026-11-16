@@ -111,6 +111,22 @@ func TestAuthVersionSnapshotsSurviveReloginTaskRetryAndAppRestart(t *testing.T) 
 	if a == b {
 		t.Fatal("relogin reused grant")
 	}
+	// Old task A blocking queued a "blocked" notice to the project's Manager, which is this Agent. The task runner
+	// delivers it to the Inbox on its next reconcile and the Agent replies in a turn of its own; a message sent before
+	// that turn ends gets 409 agent_busy. Wait for the notice to be delivered, then for the Agent to be idle.
+	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		var sent int
+		if err := s.a.Store.Pool.QueryRow(context.Background(), `SELECT count(*) FROM task_notifications WHERE task_id=$1 AND kind='blocked' AND sent_at IS NOT NULL`, old.Task.ID).Scan(&sent); err != nil {
+			t.Fatal(err)
+		}
+		if sent > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the blocked notice of the old task was not delivered")
+		}
+	}
+	s.waitIdle(path)
 	s.must(202, "POST", path+"/messages", map[string]any{"text": "normal B next"})
 	s.waitIdle(path)
 	newer := create("new task B", "offline-task-B")
