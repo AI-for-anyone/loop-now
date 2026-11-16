@@ -89,7 +89,7 @@ describe('Stats page', () => {
   it('a question waiting for your answer opens the chat of that Agent; “View its prompt” goes to the prompt block of the Agent whose wakes cost the most', async () => {
     const { refs } = renderStats()
     const questions = await screen.findByRole('region', { name: 'Waiting for your answer' })
-    const link = within(questions).getByRole('link', { name: /侧栏宽度 244 还是 260/ })
+    const link = within(questions).getByRole('link', { name: /Sidebar width 244 or 260/ })
     expect(link).toHaveAttribute('href', `${project}/agents/${refs.web.agentId}/chat`)
     expect(link).toHaveTextContent('Waited 5 min')
     const wakes = region('Who burns tokens after waking')

@@ -25,7 +25,7 @@ function renderMarket(initial: Parameters<typeof fakePlugins>[0] = {}) {
 describe('Plugin market', () => {
   it('the sidebar marks "Plugin market" as current; installed plugins list their source, what each side has, the number of enabled projects and granted Agents, and status', async () => {
     renderMarket({ host: makeHost({ loaded: ['webhook', 'playwright'], today: { delivered: 412, failed: 1 } }) })
-    const webhook = (await screen.findByRole('link', { name: 'Webhook 通知' })).closest('li')!
+    const webhook = (await screen.findByRole('link', { name: 'Webhook notifications' })).closest('li')!
     expect(currentSidebarLinks().map((link) => link.textContent)).toEqual(['Plugin market'])
     await waitFor(() => expect(webhook).toHaveTextContent('Platform side'))
     expect(webhook).toHaveTextContent('webhook · v1.2.0Official')
@@ -71,9 +71,9 @@ describe('Plugin market', () => {
 
   it('official plugins not installed yet are listed separately; Install previews from the builtin source and opens its details after confirming', async () => {
     const user = userEvent.setup()
-    const { fake, router } = renderMarket({ builtin: [{ id: 'hello', displayName: 'hello example', description: 'A minimal example on each side', version: '1.0.0' }, { id: 'webhook', displayName: 'Webhook 通知', description: 'x', version: '1.2.0' }] })
+    const { fake, router } = renderMarket({ builtin: [{ id: 'hello', displayName: 'hello example', description: 'A minimal example on each side', version: '1.0.0' }, { id: 'webhook', displayName: 'Webhook notifications', description: 'x', version: '1.2.0' }] })
     const section = await screen.findByRole('region', { name: 'Official plugins that ship with the platform' })
-    expect(within(section).queryByText('Webhook 通知')).toBeNull()
+    expect(within(section).queryByText('Webhook notifications')).toBeNull()
     await user.click(within(section).getByRole('button', { name: 'Install' }))
     const dialog = await screen.findByRole('dialog', { name: /Install/ })
     expect(fake.requests.find((r) => r.path === '/plugin-previews')?.body).toEqual({ source: { kind: 'builtin', location: 'hello' } })
@@ -107,7 +107,7 @@ describe('Plugin market on the sheet', () => {
     const tabs = await screen.findByRole('navigation', { name: 'Plugin market' })
     expect(within(tabs).getByRole('link', { name: /Installed/ })).toHaveClass('h-10', 'bg-riso-yellow')
     expect(within(tabs).getByRole('link', { name: 'Official market' })).toHaveClass('h-[34px]', 'bg-paper-tab')
-    const card = (await screen.findByRole('link', { name: 'Webhook 通知' })).closest('li')!
+    const card = (await screen.findByRole('link', { name: 'Webhook notifications' })).closest('li')!
     expect(card.closest('[data-sheet]')).not.toBeNull()
     expect(card).toHaveClass('border-2', 'border-ink', 'shadow-print-pink')
   })

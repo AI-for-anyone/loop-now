@@ -74,7 +74,7 @@ describe('Lark login presentation, injected actions only', () => {
     expect(p.onStart).not.toHaveBeenCalled()
   })
   it('remark is never treated as identity; unknown and empty granted scopes stay distinct', () => {
-    const account = { ...app, authMethod: 'oauth' as const, name: '人的备注' }
+    const account = { ...app, authMethod: 'oauth' as const, name: 'Human note' }
     const view = render(<LarkAccountDetails account={account} />)
     expect(screen.getByText(copy.unknownIdentity)).toBeInTheDocument()
     expect(screen.getByText(copy.unknownGrants)).toBeInTheDocument()

@@ -46,7 +46,7 @@ it('going back to Standard sends null, a later name-only change does not carry t
   await waitFor(() => expect(picker()).toHaveDisplayValue('Standard'))
   expect(save()).toBeDisabled()
   await user.type(within(basic()).getByLabelText('Display name'), '2'); await user.click(save())
-  await waitFor(() => expect(writes[1]).toEqual({ name: '开发助手2' }))
+  await waitFor(() => expect(writes[1]).toEqual({ name: 'dev-helper2' }))
 })
 it('switching to another provider hides and clears the speed while keeping the name draft; the Prompt is not touched', async () => {
   const { user, writes } = await setup('priority')
@@ -54,9 +54,9 @@ it('switching to another provider hides and clears the speed while keeping the n
   await user.selectOptions(within(basic()).getByLabelText('Model provider'), 'anthropic')
   await chooseModel(user, basic(), 'claude-sonnet-5-5')
   expect(within(basic()).queryByLabelText('Codex speed')).toBeNull()
-  expect(within(basic()).getByLabelText('Display name')).toHaveValue('开发助手2')
+  expect(within(basic()).getByLabelText('Display name')).toHaveValue('dev-helper2')
   await user.click(save())
-  await waitFor(() => expect(writes).toEqual([{ name: '开发助手2', model: { provider: 'anthropic', modelId: 'claude-sonnet-5-5' }, thinkingLevel: null, serviceTier: null }]))
+  await waitFor(() => expect(writes).toEqual([{ name: 'dev-helper2', model: { provider: 'anthropic', modelId: 'claude-sonnet-5-5' }, thinkingLevel: null, serviceTier: null }]))
 })
 it('switching models within the same provider keeps the speed; it is not tied to the thinking default', async () => {
   const { user, writes } = await setup('ultrafast')
@@ -71,7 +71,7 @@ it('a 422 field error keeps the speed and other drafts and does not roll back on
   await user.selectOptions(picker(), 'ultrafast'); await user.click(save())
   expect(await within(basic()).findByText('This speed is not available for this account')).toBeInTheDocument()
   expect(picker()).toHaveValue('ultrafast')
-  expect(within(basic()).getByLabelText('Display name')).toHaveValue('开发助手2')
+  expect(within(basic()).getByLabelText('Display name')).toHaveValue('dev-helper2')
   expect(save()).toBeEnabled(); expect(writes).toHaveLength(1)
 })
 it('a server refresh updates an untouched speed; an edited draft is kept and a concurrent change is reported', async () => {

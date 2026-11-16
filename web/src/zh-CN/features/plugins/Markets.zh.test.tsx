@@ -20,7 +20,7 @@ function renderMarket(path: string, initial: Parameters<typeof fakePlugins>[0] =
         plugins: [
           makeMarketEntry(),
           makeMarketEntry({ id: 'git-commit', displayName: 'Git 自动提交', description: '回合结束后自动提交', version: '1.2.0', installedVersion: '1.1.2', updateAvailable: true }),
-          makeMarketEntry({ id: 'webhook', displayName: 'Webhook 通知', version: '1.2.0', installedVersion: '1.2.0' }),
+          makeMarketEntry({ id: 'webhook', displayName: 'Webhook notifications', version: '1.2.0', installedVersion: '1.2.0' }),
         ],
       }),
       makeMarket({ url: 'https://plugins.example.com/market.json', name: '社区市场', official: false, plugins: [makeMarketEntry({ id: 'lark-notify', displayName: '飞书通知', verified: false, version: '0.3.1' })] }),

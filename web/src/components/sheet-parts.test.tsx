@@ -35,7 +35,7 @@ describe('Index tabs', () => {
   const tabs = (path: string) =>
     render(
       <MemoryRouter initialEntries={[path]}>
-        <IndexTabs aria-label="开发助手">
+        <IndexTabs aria-label="dev-helper">
           <IndexTabLink to="/chat">Chat</IndexTabLink>
           <IndexTabLink to="/config">Config</IndexTabLink>
         </IndexTabs>
@@ -44,7 +44,7 @@ describe('Index tabs', () => {
 
   it('is a named group of navigation links with the current page marked', () => {
     tabs('/config')
-    const nav = screen.getByRole('navigation', { name: '开发助手' })
+    const nav = screen.getByRole('navigation', { name: 'dev-helper' })
     expect(within(nav).getAllByRole('link').map((link) => link.textContent)).toEqual(['Chat', 'Config'])
     expect(within(nav).getByRole('link', { name: 'Config' })).toHaveAttribute('aria-current', 'page')
     expect(within(nav).getByRole('link', { name: 'Chat' })).not.toHaveAttribute('aria-current')
@@ -60,7 +60,7 @@ describe('Index tabs', () => {
 
   it('on narrow screens the tabs get narrower and scroll sideways when they do not fit, without widening the page', () => {
     tabs('/chat')
-    expect(screen.getByRole('navigation', { name: '开发助手' })).toHaveClass('max-nav:overflow-x-auto', 'max-nav:no-scrollbar')
+    expect(screen.getByRole('navigation', { name: 'dev-helper' })).toHaveClass('max-nav:overflow-x-auto', 'max-nav:no-scrollbar')
     expect(screen.getByRole('link', { name: 'Chat' })).toHaveClass('max-sm:px-2.5')
     expect(screen.getByRole('link', { name: 'Config' })).toHaveClass('max-sm:px-2.5')
   })

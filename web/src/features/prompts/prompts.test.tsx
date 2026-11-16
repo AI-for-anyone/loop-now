@@ -66,7 +66,7 @@ describe('Agent prompt: formal CAS and a separate draft', () => {
     await user.click(savedBlock === 'basic' ? within(basic()).getByRole('button', { name: 'Save' }) : saveAgent())
     await waitFor(() => expect(savedBlock === 'basic' ? within(basic()).getByRole('button', { name: 'Save' }) : saveAgent()).toBeDisabled())
     expect(savedBlock === 'basic' ? saveAgent() : within(basic()).getByRole('button', { name: 'Save' })).toBeEnabled()
-    expect(submissions[0]).toEqual(savedBlock === 'basic' ? { name: '开发助手Rename' } : { prompt: 'Draft', expectedPromptVersion: 1 })
+    expect(submissions[0]).toEqual(savedBlock === 'basic' ? { name: 'dev-helperRename' } : { prompt: 'Draft', expectedPromptVersion: 1 })
     await user.click(screen.getByRole('link', { name: 'Edit in project settings' }))
     expect(await screen.findAllByRole('alertdialog')).toHaveLength(1)
     await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel' }))

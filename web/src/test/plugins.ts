@@ -11,9 +11,9 @@ export const webhookSchema = {
   type: 'object',
   required: ['url'],
   properties: {
-    url: { type: 'string', format: 'uri', title: '回调地址', description: '事件会 POST 到这里', 'x-scope': 'project' },
-    secret: { type: 'string', title: '签名密钥', description: '用来算 X-Loop-Now-Signature', 'x-secret': true },
-    retries: { type: 'integer', title: '重试上限', minimum: 0, maximum: 10, default: 5 },
+    url: { type: 'string', format: 'uri', title: 'Callback URL', description: 'Events are POSTed here', 'x-scope': 'project' },
+    secret: { type: 'string', title: 'Signing secret', description: 'Used to compute X-Loop-Now-Signature', 'x-secret': true },
+    retries: { type: 'integer', title: 'Retry limit', minimum: 0, maximum: 10, default: 5 },
   },
 } as unknown as Record<string, never>
 
@@ -26,8 +26,8 @@ export function makeManifest(overrides: Partial<Schemas['PluginManifest']> = {})
     id: 'webhook',
     name: '@loop-now/webhook',
     version: '1.2.0',
-    displayName: 'Webhook 通知',
-    description: '收件箱有新消息时 POST 到回调地址',
+    displayName: 'Webhook notifications',
+    description: 'POSTs new inbox messages to the callback URL',
     minPlatformVersion: null,
     events: ['inbox.received'],
     permissions: ['inbox.read', 'state'],
@@ -46,8 +46,8 @@ export function makeResolvedSource(overrides: Partial<Schemas['PluginResolvedSou
 export function makePlugin(overrides: Partial<Schemas['Plugin']> = {}): Schemas['Plugin'] {
   return {
     id: 'webhook',
-    displayName: 'Webhook 通知',
-    description: '收件箱有新消息时 POST 到回调地址',
+    displayName: 'Webhook notifications',
+    description: 'POSTs new inbox messages to the callback URL',
     version: '1.2.0',
     source: makeResolvedSource(),
     status: 'active',
@@ -109,7 +109,7 @@ export function makeHost(overrides: Partial<Schemas['PluginHostStatus']> = {}): 
 }
 
 export function makeProjectPlugin(overrides: Partial<Schemas['ProjectPlugin']> = {}): Schemas['ProjectPlugin'] {
-  return { pluginId: 'webhook', displayName: 'Webhook 通知', version: '1.2.0', status: 'active', enabled: false, projectFields: ['url'], config: makeConfig(), ...overrides }
+  return { pluginId: 'webhook', displayName: 'Webhook notifications', version: '1.2.0', status: 'active', enabled: false, projectFields: ['url'], config: makeConfig(), ...overrides }
 }
 
 export function makeDelivery(overrides: Partial<Schemas['PluginDelivery']> = {}): Schemas['PluginDelivery'] {
@@ -136,7 +136,7 @@ export function makeAccount(overrides: Partial<Schemas['PluginAccount']> = {}): 
     pluginId: 'lark-notify',
     projectId: '00000000-0000-7000-8000-00000000aaaa',
     kind: 'lark',
-    name: '研发群机器人',
+    name: 'Dev group bot',
     values: { appId: 'cli_a1b2' },
     secretsSet: ['appSecret'],
     revision: 1,
@@ -147,7 +147,7 @@ export function makeAccount(overrides: Partial<Schemas['PluginAccount']> = {}): 
 // Lark account kind: App ID (plain field) and App Secret (secret).
 export const larkAccountKind: Schemas['PluginAccountKind'] = {
   kind: 'lark',
-  label: '飞书应用',
+  label: 'Lark app',
   multiple: true,
   fields: {
     type: 'object',
@@ -225,7 +225,7 @@ export function fakePlugins(initial: Partial<FakePluginState> = {}) {
     http.post(apiUrl('/plugins/:pluginId/actions/:actionId'), async ({ request, params }) => {
       const { body } = await note(request)
       const custom = state.actions[`${params.pluginId}/${params.actionId}`]
-      return custom ? custom(body) : HttpResponse.json({ notice: '已完成', url: null })
+      return custom ? custom(body) : HttpResponse.json({ notice: 'Done', url: null })
     }),
     http.get(apiUrl('/plugin-host'), () => HttpResponse.json(state.host)),
     http.post(apiUrl('/plugin-host/restart'), async ({ request }) => {
@@ -346,13 +346,13 @@ export function fakePlugins(initial: Partial<FakePluginState> = {}) {
 
 // The market and the entries in it.
 export function makeMarketEntry(overrides: Partial<Schemas['PluginMarketEntry']> = {}): Schemas['PluginMarketEntry'] {
-  return { id: 'usage-report', displayName: '用量周报', description: '每周一把上周的 token 和花费发到你的收件箱。', source: 'git:https://github.com/loop-now/usage-report@v0.9.0', version: '0.9.0', verified: true, installedVersion: null, updateAvailable: false, providerState: {}, ...overrides }
+  return { id: 'usage-report', displayName: 'Weekly usage report', description: 'Every Monday, sends last week\'s tokens and cost to your inbox.', source: 'git:https://github.com/loop-now/usage-report@v0.9.0', version: '0.9.0', verified: true, installedVersion: null, updateAvailable: false, providerState: {}, ...overrides }
 }
 
 export function makeMarket(overrides: Partial<Schemas['PluginMarket']> = {}): Schemas['PluginMarket'] {
-  return { url: 'https://market.loop-now.dev/loop-now-market.json', name: 'Loop Now 官方市场', official: true, error: null, plugins: [makeMarketEntry()], ...overrides }
+  return { url: 'https://market.loop-now.dev/loop-now-market.json', name: 'Loop Now official market', official: true, error: null, plugins: [makeMarketEntry()], ...overrides }
 }
 
 export function makeAction(overrides: Partial<Schemas['PluginAction']> = {}): Schemas['PluginAction'] {
-  return { id: 'resend', label: '重发', where: ['global'], fields: {} as never, ...overrides }
+  return { id: 'resend', label: 'Resend', where: ['global'], fields: {} as never, ...overrides }
 }

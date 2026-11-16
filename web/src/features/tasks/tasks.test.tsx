@@ -42,16 +42,16 @@ const detailPath = () => `${tasksPath(defaultProject.name)}/${taskId}`
 async function renderDetail() {
   const env = setup()
   const result = renderRoutes(routes, detailPath())
-  await screen.findByRole('heading', { name: '通用任务验收' })
+  await screen.findByRole('heading', { name: 'General task acceptance' })
   env.open()
-  await screen.findByText('任务实例的回复')
+  await screen.findByText('Reply from the task instance')
   return { ...env, env, ...result, user: userEvent.setup() }
 }
 
 describe('project tasks', () => {
   it('the list shows only project facts, a responsible Agent does not mean running, and Tasks is the current item in the sidebar', async () => {
     const env = setup(); renderRoutes(routes, tasksPath(defaultProject.name)); env.open()
-    expect(await screen.findByRole('link', { name: '通用任务验收' })).toHaveAttribute('href', detailPath())
+    expect(await screen.findByRole('link', { name: 'General task acceptance' })).toHaveAttribute('href', detailPath())
     const nav = screen.getByRole('navigation', { name: 'Main navigation' })
     expect(within(nav).getAllByRole('link').filter((l) => l.getAttribute('aria-current') === 'page').map((l) => l.textContent)).toEqual(['Tasks'])
     // Since the redesign, “Blocked” also appears in the status label and the stub, so only look at this row in the list.
@@ -66,12 +66,12 @@ describe('project tasks', () => {
   })
   it('the default tasks entry uses the most recent project', async () => {
     setup(); lastScope.set(defaultProject.id); const { router } = renderRoutes(routes, '/tasks')
-    await screen.findByRole('link', { name: '通用任务验收' })
+    await screen.findByRole('link', { name: 'General task acceptance' })
     expect(router.state.location.pathname).toBe(tasksPath(defaultProject.name))
   })
   it('task detail header: a hollow “#12” before the title (not part of the title), the breadcrumb project›Tasks›#12, the status stamp and archive state beside it, and a red-outlined “Cancel task” on the right', async () => {
     setup(); renderRoutes(routes, detailPath())
-    const heading = await screen.findByRole('heading', { level: 1, name: '通用任务验收' })
+    const heading = await screen.findByRole('heading', { level: 1, name: 'General task acceptance' })
     const number = heading.previousElementSibling!
     expect(number).toHaveTextContent(/^#12$/)
     expect(number).toHaveAttribute('aria-hidden', 'true')
@@ -100,14 +100,14 @@ describe('node records and updates', () => {
     setup()
     const key = `taskLarkSwitch.${taskId}`, original = '30000000-0000-7000-8000-000000000001'
     const { router } = renderRoutes(routes, `${detailPath()}?${key}=${original}`)
-    await screen.findByText('任务实例的回复')
+    await screen.findByText('Reply from the task instance')
     await waitFor(() => expect(new URLSearchParams(router.state.location.search).get('record')).toBe(nodeId))
     expect(new URLSearchParams(router.state.location.search).get(key)).toBe(original)
-    await userEvent.click(screen.getByRole('button', { name: /提交报告/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Submit report/ }))
     await waitFor(() => expect(new URLSearchParams(router.state.location.search).get('step')).toBe('finish'))
     expect(new URLSearchParams(router.state.location.search).get(key)).toBe(original)
     expect(new URLSearchParams(router.state.location.search).has('record')).toBe(false)
-    await userEvent.click(screen.getByRole('button', { name: /质量检查/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Quality check/ }))
     await waitFor(() => expect(new URLSearchParams(router.state.location.search).get('record')).toBe(nodeId))
     expect(new URLSearchParams(router.state.location.search).get(key)).toBe(original)
   })
@@ -115,14 +115,14 @@ describe('node records and updates', () => {
     const { user, router, env } = await renderDetail()
     expect(screen.getByRole('tab', { name: 'Conversation' })).toHaveAttribute('aria-selected', 'true')
     expect(await screen.findByText('history node reply')).toBeVisible()
-    expect(screen.getByText('任务实例的回复')).toBeVisible()
+    expect(screen.getByText('Reply from the task instance')).toBeVisible()
     await user.click(screen.getByRole('button', { name: /Run boundary · Visit 1/ }))
     expect(screen.getByRole('tab', { name: 'Node materials' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByText(/历史成功结果/)).toBeVisible()
+    expect(screen.getByText(/Earlier successful result/)).toBeVisible()
     expect(screen.getByText(/for inspection only and is not passed downstream as a success/)).toBeVisible()
-    await user.click(screen.getByRole('link', { name: /01 质量检查 · output of visit 1/ }))
+    await user.click(screen.getByRole('link', { name: /01 Quality check · output of visit 1/ }))
     expect(router.state.location.search).toContain(oldNodeId)
-    expect(screen.getByText('任务实例的回复')).toBeVisible()
+    expect(screen.getByText('Reply from the task instance')).toBeVisible()
     expect(screen.getByRole('textbox', { name: 'Message draft' })).toHaveAttribute('readonly')
     expect(screen.queryByRole('button', { name: 'Retry current node' })).not.toBeInTheDocument()
     env.detail = { ...env.detail, task: { ...env.detail.task, status: 'running', version: 3 } }
@@ -146,7 +146,7 @@ describe('node records and updates', () => {
   })
   it('a closed question cannot be answered, artifact downloads use the platform path, and the archive state shows on its own', async () => {
     const d = makeTaskDetail(defaultProject.id); d.cleanup = 'archived'; d.task.status = 'cancelled'; d.nodes[1].question = { id: nodeId, threadId: taskId, messageId: oldNodeId, text: 'Confirm the result?', status: 'closed', canAnswer: false }
-    setup(d); renderRoutes(routes, detailPath()); await screen.findByRole('heading', { name: '通用任务验收' }); await userEvent.click(screen.getByText('Open question · Closed')); expect(screen.getByText('Confirm the result?')).toBeVisible()
+    setup(d); renderRoutes(routes, detailPath()); await screen.findByRole('heading', { name: 'General task acceptance' }); await userEvent.click(screen.getByText('Open question · Closed')); expect(screen.getByText('Confirm the result?')).toBeVisible()
     expect(screen.queryByRole('link', { name: 'Go answer' })).not.toBeInTheDocument()
     expect(screen.getByText('Records archived; copies reclaimed')).toBeVisible()
     await userEvent.click(screen.getByRole('tab', { name: 'Node materials' })); await userEvent.click(screen.getByText('Visit 1 · attempt 1')); expect(screen.getByRole('link', { name: 'Download' })).toHaveAttribute('href', apiUrl(d.artifacts[0].downloadPath))
@@ -154,7 +154,7 @@ describe('node records and updates', () => {
   it('an invalid selected record is stated plainly instead of silently switching to another one', async () => {
     setup(); renderRoutes(routes, detailPath() + '?record=missing')
     expect(await screen.findByText('Can\'t find that record. Pick the node again.')).toBeVisible()
-    expect(screen.queryByText('任务实例的回复')).not.toBeInTheDocument()
+    expect(screen.queryByText('Reply from the task instance')).not.toBeInTheDocument()
   })
   it('losing the connection disables control actions, and a focus refresh fills in the facts', async () => {
     const { env, client } = await renderDetail()
@@ -202,16 +202,16 @@ it('paged node messages update by the same ID, and messages of other nodes are n
     const next = new URL(request.url).searchParams.has('cursor')
     return HttpResponse.json(next ? { messages: [{ ...env.message, text: 'update after paging' }, makeTaskMessage(oldNodeId, 'not from the current node')], nextCursor: null } : { messages: [env.message], nextCursor: 'page-2' })
   }))
-  renderRoutes(routes, detailPath()); await screen.findByText('任务实例的回复')
+  renderRoutes(routes, detailPath()); await screen.findByText('Reply from the task instance')
   await userEvent.click(screen.getByRole('button', { name: 'Load more' }))
   expect(await screen.findByText('update after paging')).toBeVisible()
-  expect(screen.queryByText('任务实例的回复')).not.toBeInTheDocument()
+  expect(screen.queryByText('Reply from the task instance')).not.toBeInTheDocument()
   expect(screen.queryByText('not from the current node')).not.toBeInTheDocument()
 })
 it('project task events discover new tasks, and the list is fetched again after reconnecting', async () => {
   const env = setup(); let summaries = [env.detail.task]
   server.use(http.get(apiUrl(`/projects/${defaultProject.id}/tasks`), () => HttpResponse.json({ tasks: summaries, nextCursor: null })))
-  renderRoutes(routes, tasksPath(defaultProject.name)); await screen.findByRole('link', { name: '通用任务验收' })
+  renderRoutes(routes, tasksPath(defaultProject.name)); await screen.findByRole('link', { name: 'General task acceptance' })
   const stream = FakeEventSource.instances.find((s) => s.url.endsWith(`/projects/${defaultProject.id}/tasks/events`))!
   act(() => stream.open()); summaries = [...summaries, { ...env.detail.task, id: oldNodeId, title: 'Task created by the Manager' }]
   act(() => stream.emit('task.updated', { task: summaries[1] }, '9'))
@@ -251,12 +251,12 @@ it('on narrow screens (stub hidden), a row of small step tags sits above the ind
   window.matchMedia = ((query: string) => ({ matches: query === narrowQuery, media: query, onchange: null, addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false })) as typeof window.matchMedia
   try {
     setup(); const { router } = renderRoutes(routes, detailPath())
-    await screen.findByRole('heading', { name: '通用任务验收' })
+    await screen.findByRole('heading', { name: 'General task acceptance' })
     const [chips, ruler] = screen.getAllByRole('navigation', { name: 'Workflow' })
     expect(chips).toHaveAttribute('data-workflow-chips')
     expect(chips.compareDocumentPosition(screen.getByRole('tablist', { name: 'Node record' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(ruler).toHaveClass('max-nav:hidden')
-    await userEvent.click(within(chips).getByRole('button', { name: /提交报告/ }))
+    await userEvent.click(within(chips).getByRole('button', { name: /Submit report/ }))
     await waitFor(() => expect(router.state.location.search).toContain('step=finish'))
   } finally {
     window.matchMedia = original
@@ -274,10 +274,10 @@ it('node materials: the visit being viewed is an expanded ticket and the others 
   // The yellow highlighter marks on the three subheadings Input, Output and Artifacts cover only the text.
   for (const name of ['Inputs', 'Output', 'Artifacts']) expect(within(viewing).getByRole('heading', { name })).toHaveClass('riso-marker', 'inline-block')
   expect(within(viewing).getByRole('note')).toHaveTextContent('for inspection only and is not passed downstream as a success')
-  expect(within(viewing).getByRole('link', { name: '01 质量检查 · output of visit 1' })).toHaveAttribute('href', expect.stringContaining(`record=${oldNodeId}`))
+  expect(within(viewing).getByRole('link', { name: '01 Quality check · output of visit 1' })).toHaveAttribute('href', expect.stringContaining(`record=${oldNodeId}`))
   await user.click(within(older).getByText('Visit 1 · attempt 1'))
   const download = within(older).getByRole('link', { name: 'Download' })
-  expect(download).toHaveAccessibleDescription('已保存报告.txt')
+  expect(download).toHaveAccessibleDescription('saved-report.txt')
   expect(download.closest('li')).toHaveClass('border-2', 'border-ink')
   await user.click(within(viewing).getByRole('button', { name: 'Back to this conversation' }))
   expect(screen.getByRole('tab', { name: 'Conversation' })).toHaveAttribute('aria-selected', 'true')
@@ -288,10 +288,10 @@ it('when the same Agent runs another node, the message scope switches instead of
   const otherRun = '00000000-0000-7000-8000-000000000402'
   env.detail = { ...env.detail, nodes: [...env.detail.nodes, { ...env.detail.nodes[1], id: otherId, stepId: 'finish', status: 'completed', visit: 1, inputs: { from: 'input of another node' }, output: { report: 'result of another node' }, runIds: [otherRun] }] }
   server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/${otherId}/messages`), () => HttpResponse.json({ messages: [{ ...makeTaskMessage(otherId, 'another node conversation of the same Agent'), runId: otherRun }], nextCursor: null })))
-  renderRoutes(routes, detailPath()); await screen.findByText('任务实例的回复')
-  await userEvent.click(screen.getByRole('button', { name: /提交报告/ }))
+  renderRoutes(routes, detailPath()); await screen.findByText('Reply from the task instance')
+  await userEvent.click(screen.getByRole('button', { name: /Submit report/ }))
   expect(await screen.findByText('another node conversation of the same Agent')).toBeVisible()
-  expect(screen.queryByText('任务实例的回复')).not.toBeInTheDocument()
+  expect(screen.queryByText('Reply from the task instance')).not.toBeInTheDocument()
   await userEvent.click(screen.getByRole('tab', { name: 'Node materials' })); expect(screen.getByText(/input of another node/)).toBeVisible()
 })
 
@@ -314,7 +314,7 @@ it.each([
 ] as const)('capability failure %s/%s disables sending safely and keeps the draft; only a missing endpoint means an old server', async (status, code, message, unsupported, details) => {
   const env = setup(); let gets = 0
   server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), () => { gets++; return HttpResponse.json(errorBody(code, message, details ? { details: details as never } : {}), { status }) }))
-  renderRoutes(routes, detailPath()); await screen.findByText('任务实例的回复')
+  renderRoutes(routes, detailPath()); await screen.findByText('Reply from the task instance')
   const box = screen.getByRole('textbox', { name: 'Message draft' })
   await userEvent.type(box, 'original node draft')
   expect(await screen.findByText(unsupported ? 'Node messages aren\'t enabled on this server yet' : new RegExp(message))).toBeVisible()
@@ -371,14 +371,14 @@ it('reconnecting reconciles all loaded pages from the first cursor, and a partia
     const cursor = new URL(request.url).searchParams.get('cursor'); cursors.push(cursor)
     return HttpResponse.json(cursor ? { messages: [makeTaskMessage(nodeId, refreshed ? 'old page error reconciled' : 'old page original content', 'older-page-id')], nextCursor: null } : { messages: refreshed ? [] : [env.message], nextCursor: 'independent-cursor' })
   }))
-  renderRoutes(routes, detailPath()); await screen.findByText('任务实例的回复')
+  renderRoutes(routes, detailPath()); await screen.findByText('Reply from the task instance')
   await userEvent.click(screen.getByRole('button', { name: 'Load more' }))
   await screen.findByText('old page original content')
   refreshed = true; cursors.length = 0
   act(() => { const es = FakeEventSource.instances.find(s => s.url.endsWith(`/tasks/${taskId}/events`))!; es.interrupt(); es.open() })
   expect(await screen.findByText('old page error reconciled')).toBeVisible()
   expect(cursors).toEqual([null, 'independent-cursor'])
-  expect(screen.getByText('任务实例的回复')).toBeVisible()
+  expect(screen.getByText('Reply from the task instance')).toBeVisible()
 })
 
 it('two run segments each load more than 50 messages without sharing cursors or gaps, and clicking a node goes back to the conversation by default', async () => {
@@ -397,7 +397,7 @@ it('two run segments each load more than 50 messages without sharing cursors or 
   await screen.findByText('current segment #51')
   expect(cursors).toContainEqual({ node: nodeId, cursor: `cursor-for-${nodeId}` })
   await userEvent.click(screen.getByRole('tab', { name: 'Node materials' }))
-  await userEvent.click(screen.getByRole('button', { name: /质量检查/ }))
+  await userEvent.click(screen.getByRole('button', { name: /Quality check/ }))
   expect(screen.getByRole('tab', { name: 'Conversation' })).toHaveAttribute('aria-selected', 'true')
   expect(screen.getByText('history segment #51')).toBeVisible()
 })
@@ -407,17 +407,17 @@ it('a source link across steps locates the original record while keeping all seg
   const third = { ...env.detail.nodes[1], id: thirdId, stepId: 'finish', visit: 1, attempt: 1, inputVersions: [{ input: 'review', nodeRunId: oldNodeId }] }
   env.detail = { ...env.detail, nodes: [...env.detail.nodes, third], task: { ...env.detail.task, currentStepId: 'finish', currentNodeRunId: thirdId } }
   const { router } = renderRoutes(routes, detailPath())
-  await screen.findByRole('heading', { name: '通用任务验收' })
+  await screen.findByRole('heading', { name: 'General task acceptance' })
   await userEvent.click(screen.getByRole('tab', { name: 'Node materials' }))
   expect(screen.getByText(/for inspection only and is not passed downstream as a success/)).toBeVisible()
-  await userEvent.click(screen.getByRole('link', { name: /01 质量检查 · output of visit 1/ }))
+  await userEvent.click(screen.getByRole('link', { name: /01 Quality check · output of visit 1/ }))
   await waitFor(() => expect(router.state.location.search).toContain(`record=${oldNodeId}`))
   expect(router.state.location.search).toContain('step=check')
-  expect(await screen.findByText('任务实例的回复')).toBeVisible()
+  expect(await screen.findByText('Reply from the task instance')).toBeVisible()
   expect(screen.getByText('history node reply')).toBeVisible()
   expect(screen.getByRole('textbox', { name: 'Message draft' })).toHaveAttribute('readonly')
   await userEvent.click(screen.getByRole('tab', { name: 'Node materials' }))
-  expect(screen.getByText(/历史成功结果/)).toBeVisible()
+  expect(screen.getByText(/Earlier successful result/)).toBeVisible()
 })
 
 it('the waiting state keeps the platform facts, the fixed reason and the original question permission, and shows no retry for history', async () => {
@@ -426,7 +426,7 @@ it('the waiting state keeps the platform facts, the fixed reason and the origina
   detail.nodes[1].reason = 'Waiting for the Manager to confirm the original question'
   detail.nodes[1].question = { id: oldNodeId, messageId: oldNodeId, threadId: taskId, text: 'Original question from the Manager', status: 'open', canAnswer: false }
   setup(detail); renderRoutes(routes, detailPath())
-  await screen.findByRole('heading', { name: '通用任务验收' })
+  await screen.findByRole('heading', { name: 'General task acceptance' })
   const status = document.querySelector('[data-node-status]') as HTMLElement
   expect(within(status).getByText('Waiting for reply')).toBeVisible()
   expect(within(status).getAllByText('Waiting for the Manager to confirm the original question')[0]).toBeVisible()
@@ -458,12 +458,12 @@ it('an unknown send result keeps the original action while other nodes are viewe
       const body = await request.json() as Schemas['TaskNodeInboxInput']; bodies.push(body)
       return bodies.length === 1 ? HttpResponse.json(errorBody('internal_error', 'The receipt cannot be confirmed'), { status: 500 }) : HttpResponse.json(taskInboxReceipt(body), { status: 201 })
     }))
-  renderRoutes(routes, detailPath()); await screen.findByText('任务实例的回复'); env.open()
+  renderRoutes(routes, detailPath()); await screen.findByText('Reply from the task instance'); env.open()
   await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled())
   await userEvent.type(screen.getByRole('textbox', { name: 'Message draft' }), 'original action draft')
   await userEvent.click(screen.getByRole('button', { name: 'Send' })); await screen.findByRole('button', { name: 'Retry checking the original message' })
-  await userEvent.click(screen.getByRole('button', { name: /提交报告/ })); await screen.findByText('This node hasn\'t been visited yet.')
-  await userEvent.click(screen.getByRole('button', { name: /质量检查/ }))
+  await userEvent.click(screen.getByRole('button', { name: /Submit report/ })); await screen.findByText('This node hasn\'t been visited yet.')
+  await userEvent.click(screen.getByRole('button', { name: /Quality check/ }))
   const retry = await screen.findByRole('button', { name: 'Retry checking the original message' })
   expect(screen.getByRole('textbox', { name: 'Message draft' })).toHaveValue('original action draft')
   expect(bodies).toHaveLength(1)
@@ -504,7 +504,7 @@ describe('task list on the sheet', () => {
     server.use(
       http.get(apiUrl(`/projects/${defaultProject.id}/tasks`), () => HttpResponse.json({ tasks, nextCursor })),
       http.get(apiUrl(`/projects/${defaultProject.id}/tasks/counts`), () => HttpResponse.json(counts)),
-      http.get(agentsUrl, () => HttpResponse.json({ agents: [toListItem(makeAgent({ id: base.task.currentAgentId!, name: '任务检查员' }))] })),
+      http.get(agentsUrl, () => HttpResponse.json({ agents: [toListItem(makeAgent({ id: base.task.currentAgentId!, name: 'task-checker' }))] })),
     )
     renderRoutes(routes, tasksPath(defaultProject.name))
     const list = await screen.findByRole('list', { name: 'Tasks' })
@@ -560,7 +560,7 @@ describe('task list on the sheet', () => {
     expect(stamp).toHaveClass('riso-tilt', 'text-red-text')
     expect(within(rowOf('Weekly report draft')).getByText('Completed')).toHaveClass('bg-tint-green', 'text-green-text')
     // The responsible Agent has an avatar (two small overprinted circles).
-    expect(within(running).getByText('任务检查员').previousElementSibling).toHaveAttribute('aria-hidden', 'true')
+    expect(within(running).getByText('task-checker').previousElementSibling).toHaveAttribute('aria-hidden', 'true')
   })
 
   it('the number is the first column: the header says “No.” and each row has a monospace bold light-ink “#12” in the same group as the title, so narrow screens do not split them', async () => {

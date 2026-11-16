@@ -16,7 +16,7 @@ const list: Schemas['AgentCommandList'] = {
   capturedAt: '2026-11-10T08:00:00Z',
   commands: [
     ...platformCommands(),
-    command('review', { description: 'Review the current changes', pluginId: 'reviewer', pluginDisplayName: { 'zh-CN': '代码审查', 'en-US': 'Code review' } }),
+    command('review', { description: 'Review the current changes', pluginId: 'reviewer', pluginDisplayName: { 'zh-CN': '代码审查', 'en-US': 'Code review' } }), // check-english: zh (LocalizedText: the Chinese entry is part of the data)
     command('skill:loopctl', { piSource: 'skill', description: 'Manage Agents <b>and tasks</b> with loopctl' }),
     command('summarize', { piSource: 'prompt', description: 'Write the conversation up as a summary' }),
   ],
@@ -35,7 +35,7 @@ function setup(commands: () => Response = () => HttpResponse.json(list)) {
       return HttpResponse.json({ run, message: makeMessage({ text: body.text, run }) }, { status: 202 })
     }),
   )
-  renderWithQuery(<Composer agentId="agent-1" agentName="开发助手" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
+  renderWithQuery(<Composer agentId="agent-1" agentName="dev-helper" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
   return { user: userEvent.setup(), input: screen.getByRole('textbox', { name: 'Message' }), sent, reads: () => reads }
 }
 
@@ -184,7 +184,7 @@ describe('the "/" command menu of the input box', () => {
 
   it('platform command descriptions use the server\'s Chinese and English text, picked by UI language; filtering uses that text too', async () => {
     const [session] = platformCommands()
-    const ping = { ...session, name: 'ping', usage: '/ping [host]', description: { 'zh-CN': '测一下网络', 'en-US': 'Check the network' } }
+    const ping = { ...session, name: 'ping', usage: '/ping [host]', description: { 'zh-CN': '测一下网络', 'en-US': 'Check the network' } } // check-english: zh (LocalizedText: the Chinese entry is part of the data)
     const { user, input } = setup(() => HttpResponse.json(commandList([session, ping])))
     await user.type(input, '/network')
     await waitFor(() => expect(labels()).toEqual(['/ping [host]']))

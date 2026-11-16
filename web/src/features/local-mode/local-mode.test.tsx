@@ -106,7 +106,7 @@ describe('Global settings: local mode', () => {
 })
 
 describe('Project settings: local directories', () => {
-  const project = makeProject({ name: '模型接入' })
+  const project = makeProject({ name: 'model-access' })
   const path = `/p/${encodeURIComponent(project.name)}/settings`
   function setup(init: Parameters<typeof localModeBackend>[0] = {}) {
     const local = localModeBackend({ projects: { [project.id]: { revision: 2, directories: [dir('/Users/me/code/app', 'Main repo'), dir('/Users/me/missing-dir')] } }, ...init })
@@ -222,11 +222,11 @@ describe('Agent config: local directories', () => {
     })
     const { user } = await renderConfig({ agent, handlers: local.handlers })
     const section = await region('Local directories')
-    const inherited = await within(section).findByRole('region', { name: 'From project "测试项目"' })
+    const inherited = await within(section).findByRole('region', { name: 'From project "test-project"' })
     expect(inherited).toHaveTextContent('/Users/me/shared')
     expect(inherited).toHaveTextContent('Project docs')
     expect(within(inherited).queryByRole('button')).toBeNull()
-    expect(within(inherited).getByRole('link', { name: 'Edit in project settings' })).toHaveAttribute('href', `/p/${encodeURIComponent('测试项目')}/settings`)
+    expect(within(inherited).getByRole('link', { name: 'Edit in project settings' })).toHaveAttribute('href', `/p/${encodeURIComponent('test-project')}/settings`)
     for (const caution of cautions) expect(within(section).getByText(caution)).toBeInTheDocument()
 
     const own = within(section).getByRole('list', { name: 'Local directories' })
@@ -268,7 +268,7 @@ describe('Pull from Git fails: hints about the local git identity', () => {
     const base = createMockFolder({ key: 'w', preset: 'workspace', latency: 0, git: true })
     const source: FolderSource = { ...base, git: { ...base.git!, list: async () => [failedPull(errorCode, url)] } }
     const view = renderRoutes([
-      { path: '/', element: <FileManager source={source} rootLabel="开发助手's folder" limits={limits} className="h-[600px]" /> },
+      { path: '/', element: <FileManager source={source} rootLabel="dev-helper's folder" limits={limits} className="h-[600px]" /> },
       { path: '/settings', element: <p>Global settings</p> },
     ], '/')
     return { reads, ...view }

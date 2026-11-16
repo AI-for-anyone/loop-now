@@ -40,7 +40,7 @@ it.each([
 ] as const)('capability failure %s/%s disables sending safely and keeps the draft; only a missing endpoint means an old server', async (status, code, message, unsupported, details) => {
   const env = setup(); let gets = 0
   server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), () => { gets++; return HttpResponse.json(errorBody(code, message, details ? { details: details as never } : {}), { status }) }))
-  renderRoutes(routes, detailPath()); await screen.findByText('任务实例的回复')
+  renderRoutes(routes, detailPath()); await screen.findByText('Reply from the task instance')
   const box = screen.getByRole('textbox', { name: '消息草稿' })
   await userEvent.type(box, '原节点草稿')
   expect(await screen.findByText(unsupported ? '当前服务尚未启用节点消息' : new RegExp(message))).toBeVisible()

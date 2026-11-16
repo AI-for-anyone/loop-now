@@ -14,7 +14,7 @@ describe('Uptime and time used in this reply keep counting on the page', () => {
   it('the Pi process has been up 3 minutes; after staying 1 minute it shows about 4 minutes; the time used in this reply counts up the same way', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-10-13T10:03:00Z'))
-    const agent = makeAgentOverview({ name: '开发助手' })
+    const agent = makeAgentOverview({ name: 'dev-helper' })
     agent.status = makeStatus(agent.agentId, {
       busy: true,
       processState: 'busy',
@@ -25,7 +25,7 @@ describe('Uptime and time used in this reply keep counting on the page', () => {
     const live: OverviewState = { ...initialOverviewState, synced: true, connection: 'open', agents: [agent] }
     const router = createMemoryRouter([{ path: '/', element: <RunStatusSection live={live} /> }])
     render(<RouterProvider router={router} />)
-    const row = within(screen.getByRole('table')).getByText('开发助手').closest('tr')!
+    const row = within(screen.getByRole('table')).getByText('dev-helper').closest('tr')!
     expect(row).toHaveTextContent('up 3 min 0 s')
     expect(row).toHaveTextContent('30 s elapsed')
     await act(async () => vi.advanceTimersByTime(60_000))

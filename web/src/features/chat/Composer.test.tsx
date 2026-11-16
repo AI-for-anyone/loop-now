@@ -15,7 +15,7 @@ it('sleep uses the idle busy=false send path, without requiring whenBusy or aski
     const body = await request.json() as Schemas['SendMessageInput']; sent.push(body)
     return HttpResponse.json({ run, message: makeMessage({ text: body.text, run }) }, { status: 202 })
   }))
-  renderWithQuery(<Composer agentId="sleep-agent" agentName="开发助手" busy={false} disabled={false} maxMessageBytes={4096} onSent={onSent} />)
+  renderWithQuery(<Composer agentId="sleep-agent" agentName="dev-helper" busy={false} disabled={false} maxMessageBytes={4096} onSent={onSent} />)
   await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'New work')
   await userEvent.click(screen.getByRole('button', { name: 'Send' }))
   await waitFor(() => expect(sent).toEqual([{ text: 'New work' }]))
@@ -32,7 +32,7 @@ it('when an idle send races with a real busy state, does not ask and sends again
     const run = makeRun({ status: 'queued', whenBusy: body.whenBusy })
     return HttpResponse.json({ run, message: makeMessage({ text: body.text, run }) }, { status: 202 })
   }))
-  renderWithQuery(<Composer agentId="sleep-agent" agentName="开发助手" busy={false} disabled={false} maxMessageBytes={4096} onSent={onSent} />)
+  renderWithQuery(<Composer agentId="sleep-agent" agentName="dev-helper" busy={false} disabled={false} maxMessageBytes={4096} onSent={onSent} />)
   await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Keep this work')
   await userEvent.click(screen.getByRole('button', { name: 'Send' }))
   await waitFor(() => expect(sent).toEqual([{ text: 'Keep this work' }, { text: 'Keep this work', whenBusy: 'queue' }]))
@@ -48,7 +48,7 @@ it('a send error while busy is not retried; keeps the text and shows the error',
     sent.push(await request.json() as Schemas['SendMessageInput'])
     return HttpResponse.json({ error: { code: 'internal_error', message: 'Something went wrong' } }, { status: 500 })
   }))
-  renderWithQuery(<Composer agentId="sleep-agent" agentName="开发助手" busy disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
+  renderWithQuery(<Composer agentId="sleep-agent" agentName="dev-helper" busy disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
   await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Work while busy')
   await userEvent.click(screen.getByRole('button', { name: 'Queue' }))
   expect(await screen.findByText(/Internal server error/)).toBeInTheDocument()
@@ -64,7 +64,7 @@ it('when busy, Enter queues and ⌘/Ctrl+Enter sends as an interrupt; when an id
     const run = makeRun({ status: 'queued', whenBusy: body.whenBusy })
     return HttpResponse.json({ run, message: makeMessage({ text: body.text, run }) }, { status: 202 })
   }))
-  const view = renderWithQuery(<Composer agentId="sleep-agent" agentName="开发助手" busy disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
+  const view = renderWithQuery(<Composer agentId="sleep-agent" agentName="dev-helper" busy disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
   const box = screen.getByRole('textbox', { name: 'Message' })
   // When busy, the key hints appear below the input.
   expect(screen.getByText('to interrupt')).toBeVisible()
@@ -77,7 +77,7 @@ it('when busy, Enter queues and ⌘/Ctrl+Enter sends as an interrupt; when an id
   await userEvent.type(box, 'Ctrl works too{Control>}{Enter}{/Control}')
   await waitFor(() => expect(sent.at(-1)).toEqual({ text: 'Ctrl works too', whenBusy: 'interrupt' }))
 
-  view.rerender(<Composer agentId="sleep-agent" agentName="开发助手" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
+  view.rerender(<Composer agentId="sleep-agent" agentName="dev-helper" busy={false} disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
   expect(screen.queryByText('to interrupt')).toBeNull()
   await waitFor(() => expect(box).toHaveValue(''))
   await userEvent.type(box, 'Thought it was idle{Meta>}{Enter}{/Meta}')
@@ -85,7 +85,7 @@ it('when busy, Enter queues and ⌘/Ctrl+Enter sends as an interrupt; when an id
 })
 
 // "Printed sheet" redesign: the input area merges into the bottom of the sheet.
-const mountBar = (busy = false) => renderWithQuery(<Composer agentId="bar-agent" agentName="开发助手" busy={busy} disabled={false} maxMessageBytes={4096} onSent={() => {}} stop={busy ? { onStop: () => {}, pending: false, retry: false } : undefined} />)
+const mountBar = (busy = false) => renderWithQuery(<Composer agentId="bar-agent" agentName="dev-helper" busy={busy} disabled={false} maxMessageBytes={4096} onSent={() => {}} stop={busy ? { onStop: () => {}, pending: false, retry: false } : undefined} />)
 
 it('the input area is a light yellow bar at the bottom of the sheet with a 2px navy line along its top edge', () => {
   mountBar()
@@ -104,7 +104,7 @@ it('the input has a light paper background and a navy border; the send button is
 
 it('when idle the placeholder is “Message <Agent>” and no longer explains the keys', () => {
   mountBar()
-  expect(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Message 开发助手')
+  expect(screen.getByRole('textbox', { name: 'Message' })).toHaveAttribute('placeholder', 'Message dev-helper')
 })
 
 it('when idle, the line under the input says Enter to send, Shift + Enter for a new line', () => {
@@ -131,8 +131,8 @@ it('when busy, the key hints switch to queue and interrupt, and with an empty in
 })
 
 it('the queue tray sits on the top edge of the input, leaving room at the sides for the plus and send buttons', () => {
-  renderWithQuery(<Composer agentId="bar-agent" agentName="开发助手" busy disabled={false} maxMessageBytes={4096} imageLimits={{ maxCount: 4, maxImageBytes: 1024, maxTotalBytes: 4096 }} onSent={() => {}} queue={<section aria-label="排队的消息">Queued · 1</section>} />)
-  const slot = screen.getByRole('region', { name: '排队的消息' }).parentElement!
+  renderWithQuery(<Composer agentId="bar-agent" agentName="dev-helper" busy disabled={false} maxMessageBytes={4096} imageLimits={{ maxCount: 4, maxImageBytes: 1024, maxTotalBytes: 4096 }} onSent={() => {}} queue={<section aria-label="A queued message">Queued · 1</section>} />)
+  const slot = screen.getByRole('region', { name: 'A queued message' }).parentElement!
   // At phone width the tray spans the full row and no longer leaves room at the sides; otherwise it would be too narrow.
   expect(slot).toHaveClass('sm:pl-[50px]', 'sm:pr-[57px]')
   expect(slot).not.toHaveClass('pl-[50px]')

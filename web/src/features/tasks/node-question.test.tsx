@@ -17,7 +17,7 @@ import { makeTaskDetail, nodeId, taskId } from '@/test/tasks'
 // the node input; whether a question can be answered follows the question state that the task provides.
 function setup(canAnswer = true, notExecuted: Schemas['TaskNodeInboxNotExecuted'] | null = null) {
   const detail = makeTaskDetail(defaultProject.id), node = detail.nodes[1]
-  const from: Schemas['InboxParticipant'] = { kind: 'agent', id: node.agentId, name: node.agentName, address: `测试项目/${node.agentName}#${taskId}`, deleted: false, pluginId: null, channelId: null }
+  const from: Schemas['InboxParticipant'] = { kind: 'agent', id: node.agentId, name: node.agentName, address: `test-project/${node.agentName}#${taskId}`, deleted: false, pluginId: null, channelId: null }
   const question = makeInboxMessage({ from, to: consoleParty, text: 'Do all 12 cases have to pass for acceptance?', whenBusy: null, task: { taskId, nodeRunId: nodeId, runtimeId: node.runtimeId } })
   question.question = { options: [{ id: '1', label: 'All pass' }, { id: '2', label: 'Allow 1 known failure' }], expiresAt: '2099-01-01T00:00:00Z', state: 'open', answer: null }
   node.question = { id: question.id, threadId: question.threadId, messageId: question.id, text: question.text, status: 'open', canAnswer }
@@ -76,10 +76,10 @@ it('“Reply to this question” puts the node input in reply mode: the text goe
   const { question, inbox, nodePosts } = setup()
   const user = userEvent.setup()
   await user.click(within(await waitFor(() => item(question))).getByRole('button', { name: 'Reply to this question' }))
-  expect(screen.getByText("Replying to 任务检查员's question")).toBeVisible()
+  expect(screen.getByText("Replying to task-checker's question")).toBeVisible()
   await user.type(screen.getByRole('textbox', { name: 'Message draft' }), 'Allow one, note it in the conclusion{Enter}')
   await waitFor(() => expect(inbox.sent).toEqual([{ text: 'Allow one, note it in the conclusion', whenBusy: 'queue', replyTo: question.id }]))
-  await waitFor(() => expect(screen.queryByText("Replying to 任务检查员's question")).toBeNull())
+  await waitFor(() => expect(screen.queryByText("Replying to task-checker's question")).toBeNull())
   expect(nodePosts()).toBe(0)
 })
 

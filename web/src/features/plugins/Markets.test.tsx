@@ -18,7 +18,7 @@ function renderMarket(path: string, initial: Parameters<typeof fakePlugins>[0] =
         plugins: [
           makeMarketEntry(),
           makeMarketEntry({ id: 'git-commit', displayName: 'Git auto-commit', description: 'Commits automatically after each turn', version: '1.2.0', installedVersion: '1.1.2', updateAvailable: true }),
-          makeMarketEntry({ id: 'webhook', displayName: 'Webhook 通知', version: '1.2.0', installedVersion: '1.2.0' }),
+          makeMarketEntry({ id: 'webhook', displayName: 'Webhook notifications', version: '1.2.0', installedVersion: '1.2.0' }),
         ],
       }),
       makeMarket({ url: 'https://plugins.example.com/market.json', name: 'Community market', official: false, plugins: [makeMarketEntry({ id: 'lark-notify', displayName: 'Lark notifications', verified: false, version: '0.3.1' })] }),
@@ -46,10 +46,10 @@ describe('Plugin market tabs', () => {
     const user = userEvent.setup()
     const { fake, router } = renderMarket('/plugins?tab=official')
     const card = (name: string) => screen.getByRole('heading', { name }).closest('li')!
-    await screen.findByRole('heading', { name: '用量周报' })
-    expect(card('Webhook 通知')).toHaveTextContent('v1.2.0 installedUp to date')
+    await screen.findByRole('heading', { name: 'Weekly usage report' })
+    expect(card('Webhook notifications')).toHaveTextContent('v1.2.0 installedUp to date')
     expect(within(card('Git auto-commit')).getByRole('button', { name: 'Update to v1.2.0' })).toBeInTheDocument()
-    await user.click(within(card('用量周报')).getByRole('button', { name: 'Install' }))
+    await user.click(within(card('Weekly usage report')).getByRole('button', { name: 'Install' }))
     const dialog = await screen.findByRole('dialog', { name: /Install/ })
     expect(fake.requests.find((r) => r.path === '/plugin-previews')?.body).toEqual({ source: { kind: 'market', market: OFFICIAL, id: 'usage-report', version: '0.9.0' } })
     await user.click(within(dialog).getByRole('button', { name: 'Install' }))
@@ -71,8 +71,8 @@ describe('Plugin market tabs', () => {
       ],
     })
     const card = (name: string) => screen.getByRole('heading', { name }).closest('li')!
-    await screen.findByRole('heading', { name: '用量周报' })
-    const link = within(card('用量周报')).getByRole('link', { name: 'Repository' })
+    await screen.findByRole('heading', { name: 'Weekly usage report' })
+    const link = within(card('Weekly usage report')).getByRole('link', { name: 'Repository' })
     expect(link).toHaveAttribute('href', 'https://github.com/loop-now/usage-report/tree/v0.9.0')
     expect(link).toHaveAttribute('target', '_blank')
     expect(link.getAttribute('rel')).toContain('noopener')
@@ -110,7 +110,7 @@ describe('Plugin market tabs', () => {
     const { fake } = renderMarket('/plugins')
     const card = (await screen.findByRole('link', { name: 'Git auto-commit' })).closest('li')!
     const update = await within(card).findByRole('button', { name: 'Update to v1.2.0' })
-    expect(within(screen.getByRole('link', { name: 'Webhook 通知' }).closest('li')!).queryByRole('button', { name: /Update to/ })).toBeNull()
+    expect(within(screen.getByRole('link', { name: 'Webhook notifications' }).closest('li')!).queryByRole('button', { name: /Update to/ })).toBeNull()
     await user.click(update)
     await screen.findByRole('dialog', { name: /Update Git auto-commit/ })
     expect(fake.requests.find((r) => r.path === '/plugin-previews')?.body).toEqual({ source: { kind: 'market', market: OFFICIAL, id: 'git-commit', version: '1.2.0' } })
@@ -135,7 +135,7 @@ describe('Plugin names and descriptions the author gives per language', () => {
       markets: [
         makeMarket({
           plugins: [
-            makeMarketEntry({ id: 'lark-notify', displayName: { 'en-US': 'Lark notify', 'zh-CN': '飞书通知' }, description: { 'en-US': 'Push to Lark', 'zh-CN': '推送到飞书' } }),
+            makeMarketEntry({ id: 'lark-notify', displayName: { 'en-US': 'Lark notify', 'zh-CN': '飞书通知' }, description: { 'en-US': 'Push to Lark', 'zh-CN': '推送到飞书' } }), // check-english: zh (LocalizedText: the Chinese entry is part of the data)
             makeMarketEntry({ id: 'weekly', displayName: { 'en-US': 'Weekly report' }, description: { ja: '週報を送る', 'en-US': 'Send a weekly report' } }), // check-english: zh (Japanese text: a language other than the UI language)
             makeMarketEntry({ id: 'ja-only', displayName: { ja: '週報' }, description: 'Only one wording' }), // check-english: zh (Japanese text: an entry with neither the UI language nor en-US)
           ],
@@ -150,7 +150,7 @@ describe('Plugin names and descriptions the author gives per language', () => {
   })
 
   it('installed cards and the plugin detail header also pick the name and description by language', async () => {
-    const localized = makeDetail(makePlugin({ id: 'lark-notify', displayName: { 'en-US': 'Lark notify', 'zh-CN': '飞书通知' }, description: { 'en-US': 'Push to Lark', 'zh-CN': '推送到飞书' } }))
+    const localized = makeDetail(makePlugin({ id: 'lark-notify', displayName: { 'en-US': 'Lark notify', 'zh-CN': '飞书通知' }, description: { 'en-US': 'Push to Lark', 'zh-CN': '推送到飞书' } })) // check-english: zh (LocalizedText: the Chinese entry is part of the data)
     const { router } = renderMarket('/plugins', { details: [localized] })
     expect(await screen.findByRole('link', { name: 'Lark notify' })).toBeInTheDocument()
     await router.navigate('/plugins/lark-notify')

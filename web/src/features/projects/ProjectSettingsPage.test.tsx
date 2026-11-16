@@ -12,8 +12,8 @@ import { findScopeSwitcher, sidebar } from '@/test/shell'
 const base = (name: string) => `/p/${encodeURIComponent(name)}`
 
 function setup(options: { agents?: 'some' | 'none' } = {}) {
-  const other = makeProject({ name: '模型接入' })
-  const dev = makeAgent({ name: '开发助手', projectId: other.id })
+  const other = makeProject({ name: 'model-access' })
+  const dev = makeAgent({ name: 'dev-helper', projectId: other.id })
   const planner = makeAgent({ name: 'Planning assistant', projectId: other.id })
   const backend = projectBackend({ projects: [defaultProject, other], agents: options.agents === 'none' ? [] : [dev, planner] })
   server.use(...backend.handlers)
@@ -26,7 +26,7 @@ describe('Renaming a project', () => {
   it('after a successful rename the URL switches to the new name, and the scope switcher shows the new name', async () => {
     const { state, other } = setup()
     const user = userEvent.setup()
-    const { router } = renderRoutes(routes, `${base('模型接入')}/settings`)
+    const { router } = renderRoutes(routes, `${base('model-access')}/settings`)
     const nameCard = await card('Project name')
     expect(within(nameCard).getByText(other.id)).toBeInTheDocument()
     const input = within(nameCard).getByLabelText('Project name')
@@ -47,19 +47,19 @@ describe('Renaming a project', () => {
   it('on a duplicate name, explains next to the name and leaves the project unchanged', async () => {
     setup()
     const user = userEvent.setup()
-    const { router } = renderRoutes(routes, `${base('模型接入')}/settings`)
+    const { router } = renderRoutes(routes, `${base('model-access')}/settings`)
     const nameCard = await card('Project name')
     const input = within(nameCard).getByLabelText('Project name')
     await user.clear(input)
-    await user.type(input, '测试项目')
+    await user.type(input, 'test-project')
     await user.click(within(nameCard).getByRole('button', { name: 'Save' }))
     expect(await within(nameCard).findByText('A project with this name already exists. Pick another.')).toBeInTheDocument()
-    expect(router.state.location.pathname).toBe(`${base('模型接入')}/settings`)
+    expect(router.state.location.pathname).toBe(`${base('model-access')}/settings`)
   })
 
   it('the default project can be renamed but not deleted', async () => {
     setup()
-    renderRoutes(routes, `${base('测试项目')}/settings`)
+    renderRoutes(routes, `${base('test-project')}/settings`)
     expect(within(await card('Project name')).getByRole('textbox', { name: 'Project name' })).toBeEnabled()
     const danger = await card('Delete project')
     expect(within(danger).getByText('The default project can\'t be deleted, but it can be renamed.')).toBeInTheDocument()
@@ -71,14 +71,14 @@ describe('Project Manager', () => {
   it('assigns, changes and removes the Manager; the list and the details mark the Manager', async () => {
     const { state, other, dev, planner } = setup()
     const user = userEvent.setup()
-    renderRoutes(routes, `${base('模型接入')}/settings`)
+    renderRoutes(routes, `${base('model-access')}/settings`)
     const managerCard = await card('Manager')
     expect(within(managerCard).getByText('This project has no Manager yet')).toBeInTheDocument()
 
     await user.click(await within(managerCard).findByRole('combobox', { name: 'Assign Manager' }))
-    await user.click(await screen.findByRole('option', { name: '开发助手' }))
-    expect(await within(managerCard).findByText('"开发助手" is now the Manager')).toBeInTheDocument()
-    expect(within(managerCard).getByRole('link', { name: '开发助手' })).toHaveAttribute('href', `${base('模型接入')}/agents/${dev.id}/chat`)
+    await user.click(await screen.findByRole('option', { name: 'dev-helper' }))
+    expect(await within(managerCard).findByText('"dev-helper" is now the Manager')).toBeInTheDocument()
+    expect(within(managerCard).getByRole('link', { name: 'dev-helper' })).toHaveAttribute('href', `${base('model-access')}/agents/${dev.id}/chat`)
     expect(state.requests).toContainEqual({ method: 'PUT', path: `/api/v1/projects/${other.id}/manager`, body: { agentId: dev.id } })
 
     await user.click(within(managerCard).getByRole('combobox', { name: 'Change Manager' }))
@@ -95,17 +95,17 @@ describe('Project Manager', () => {
   it('the Agent list and the details header mark the Manager', async () => {
     const { state, other, dev } = setup()
     state.projects.find((p) => p.id === other.id)!.managerAgentId = dev.id
-    renderRoutes(routes, `${base('模型接入')}/agents/${dev.id}/config`)
+    renderRoutes(routes, `${base('model-access')}/agents/${dev.id}/config`)
     const list = await screen.findByRole('list', { name: 'Agents' })
-    await waitFor(() => expect(within(list).getByRole('link', { name: /开发助手/ })).toHaveTextContent('Manager'))
+    await waitFor(() => expect(within(list).getByRole('link', { name: /dev-helper/ })).toHaveTextContent('Manager'))
     expect(within(list).getByRole('link', { name: /Planning assistant/ })).not.toHaveTextContent('Manager')
-    const heading = await screen.findByRole('heading', { level: 1, name: '开发助手' })
+    const heading = await screen.findByRole('heading', { level: 1, name: 'dev-helper' })
     expect(heading.parentElement).toHaveTextContent('Manager')
   })
 
   it('when the project has no Agents, explains that an Agent has to be created first', async () => {
     setup({ agents: 'none' })
-    renderRoutes(routes, `${base('模型接入')}/settings`)
+    renderRoutes(routes, `${base('model-access')}/settings`)
     const managerCard = await card('Manager')
     expect(await within(managerCard).findByText('The project has no Agents yet. Create one first.')).toBeInTheDocument()
     await userEvent.setup().click(within(managerCard).getByRole('button', { name: 'Create an Agent' }))
@@ -118,26 +118,26 @@ describe('Delete project', () => {
     const { state, other, dev } = setup()
     state.busy.add(dev.id)
     const user = userEvent.setup()
-    const { router } = renderRoutes(routes, `${base('模型接入')}/settings`)
+    const { router } = renderRoutes(routes, `${base('model-access')}/settings`)
     const danger = await card('Delete project')
     await user.click(within(danger).getByRole('button', { name: 'Delete this project' }))
-    const confirm = await screen.findByRole('alertdialog', { name: 'Delete project "模型接入"?' })
+    const confirm = await screen.findByRole('alertdialog', { name: 'Delete project "model-access"?' })
     expect(confirm).toHaveTextContent('This also deletes the project\'s 2 Agents and its shared accounts and credentials')
     await user.click(within(confirm).getByRole('button', { name: 'Delete project' }))
 
     const alert = await within(danger).findByRole('alert')
     expect(alert).toHaveTextContent('Some Agents in the project aren\'t idle, so the project wasn\'t deleted.')
-    expect(within(alert).getByRole('link', { name: 'Open chat with "开发助手"' })).toHaveAttribute('href', `${base('模型接入')}/agents/${dev.id}/chat`)
-    expect(router.state.location.pathname).toBe(`${base('模型接入')}/settings`)
+    expect(within(alert).getByRole('link', { name: 'Open chat with "dev-helper"' })).toHaveAttribute('href', `${base('model-access')}/agents/${dev.id}/chat`)
+    expect(router.state.location.pathname).toBe(`${base('model-access')}/settings`)
 
     state.busy.clear()
     await user.click(within(danger).getByRole('button', { name: 'Delete this project' }))
     await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete project' }))
     await waitFor(() => expect(router.state.location.pathname).toBe(defaultAgentsPath))
     expect(state.projects.map((p) => p.id)).not.toContain(other.id)
-    await user.click(await findScopeSwitcher('测试项目'))
+    await user.click(await findScopeSwitcher('test-project'))
     await waitFor(() =>
-      expect(within(screen.getByRole('listbox', { name: 'Scopes' })).queryByRole('option', { name: /模型接入/ })).toBeNull(),
+      expect(within(screen.getByRole('listbox', { name: 'Scopes' })).queryByRole('option', { name: /model-access/ })).toBeNull(),
     )
   })
 })
@@ -163,12 +163,12 @@ describe('Creating and deleting Agents by scope', () => {
     const { state, other, dev, planner } = setup()
     state.projects.find((p) => p.id === other.id)!.managerAgentId = dev.id
     const user = userEvent.setup()
-    const { router } = renderRoutes(routes, `${base('模型接入')}/agents/${dev.id}/config`)
+    const { router } = renderRoutes(routes, `${base('model-access')}/agents/${dev.id}/config`)
     await user.click(await screen.findByRole('button', { name: 'Delete this Agent' }))
     const confirm = await screen.findByRole('alertdialog')
     expect(confirm).toHaveTextContent('It\'s the project Manager, so the project will no longer have a Manager.')
     await user.click(within(confirm).getByRole('button', { name: 'Delete' }))
-    await waitFor(() => expect(router.state.location.pathname).toBe(`${base('模型接入')}/agents/${planner.id}/chat`))
+    await waitFor(() => expect(router.state.location.pathname).toBe(`${base('model-access')}/agents/${planner.id}/chat`))
     expect(state.projects.find((p) => p.id === other.id)?.managerAgentId).toBeNull()
   })
 })
@@ -192,7 +192,7 @@ describe('Project settings on a sheet', () => {
 
   it('the eight sections are numbered 01–08 in order and sit directly on the sheet with dashed lines between them; the Delete project section stays red', async () => {
     setup()
-    renderRoutes(routes, `${base('模型接入')}/settings`)
+    renderRoutes(routes, `${base('model-access')}/settings`)
     await screen.findByRole('region', { name: 'Project name' })
     const sheet = region('Project name').closest('[data-sheet]')!
     titles.forEach((name, index) => {
@@ -211,7 +211,7 @@ describe('Project settings on a sheet', () => {
   it('the contents sit in the stub on the right of the sheet: a row of ticks on the right edge, each entry is “name number”, the Delete project entry is red; clicking an entry jumps to the section and focuses its heading', async () => {
     setup()
     const user = userEvent.setup()
-    renderRoutes(routes, `${base('模型接入')}/settings`)
+    renderRoutes(routes, `${base('model-access')}/settings`)
     await screen.findByRole('region', { name: 'Project name' })
     const toc = screen.getByRole('navigation', { name: 'Contents' })
     expect(toc).toHaveClass('border-l-2', 'border-dashed', 'max-nav:hidden')
@@ -223,7 +223,7 @@ describe('Project settings on a sheet', () => {
 
   it('the Project folder section: an intro plus a file manager with a 2px navy border, with labeled pill buttons; no overview stub', async () => {
     setup()
-    renderRoutes(routes, `${base('模型接入')}/settings`)
+    renderRoutes(routes, `${base('model-access')}/settings`)
     const folder = await screen.findByRole('region', { name: 'Project folder' })
     const manager = folder.querySelector('[data-file-manager]')!
     expect(manager).toHaveClass('border-2', 'border-ink', 'rounded-card')

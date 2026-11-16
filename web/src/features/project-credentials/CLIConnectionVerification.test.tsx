@@ -109,7 +109,7 @@ describe('Manual verification for five tools, formal HTTP fixture', () => {
     renderWithQuery(<><CLIConnectionVerification account={account} /><CLIConnectionVerification account={other} /></>)
     await screen.findByText(t.credentials.verification.empty)
     expect(within(screen.getByRole('region', { name: `${t.credentials.verification.title} · Another account` })).getByRole('button', { name: t.credentials.verification.test })).toBeEnabled()
-    expect(within(screen.getByRole('region', { name: `${t.credentials.verification.title} · 数据库账号` })).getByRole('button', { name: t.credentials.verification.again })).toBeDisabled()
+    expect(within(screen.getByRole('region', { name: `${t.credentials.verification.title} · Database account` })).getByRole('button', { name: t.credentials.verification.again })).toBeDisabled()
   })
   it.each(['timeout', 'tls_failed', 'provider_policy'] as const)('%s safe failure is not retried automatically', async errorCode => {
     const env = setup(verificationOperation({ status: 'failed', phase: null, completedAt: '2026-10-16T10:01:00Z', result: { outcome: 'failed', verifiedAt: null, durationMs: 1, errorCode, httpStatus: null } }))

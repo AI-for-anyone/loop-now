@@ -44,7 +44,7 @@ describe('Chinese console', () => {
       '外部身份',
       '全局设置',
     ])
-    expect(within(sidebar()).getByRole('button', { name: '切换范围，当前：测试项目' })).toBeInTheDocument()
+    expect(within(sidebar()).getByRole('button', { name: '切换范围，当前：test-project' })).toBeInTheDocument()
   })
 
   it('overview sections and run status summary', async () => {
@@ -58,7 +58,7 @@ describe('Chinese console', () => {
   it('chat composer', async () => {
     await renderChat()
     const box = screen.getByRole('textbox', { name: '消息' })
-    expect(box).toHaveAttribute('placeholder', '给 开发助手 发消息')
+    expect(box).toHaveAttribute('placeholder', '给 dev-helper 发消息')
     // The Chinese UI writes Enter as “回车” in the key hints.
     expect(screen.getByText('Shift + 回车')).toBeInTheDocument()
     expect(screen.getByText('换行')).toBeInTheDocument()

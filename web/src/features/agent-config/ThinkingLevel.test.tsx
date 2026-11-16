@@ -48,7 +48,7 @@ it('going back to the default sends null explicitly; a later name-only change do
   await waitFor(() => expect(writes).toEqual([{ thinkingLevel: null }]))
   await waitFor(() => expect(save()).toBeDisabled())
   await user.type(within(basic()).getByLabelText('Display name'), '2'); await user.click(save())
-  await waitFor(() => expect(writes[1]).toEqual({ name: '开发助手2' }))
+  await waitFor(() => expect(writes[1]).toEqual({ name: 'dev-helper2' }))
 })
 
 it("switching models goes back to the default so the old model's level is not carried into the new model", async () => {

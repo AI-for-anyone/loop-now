@@ -7,7 +7,7 @@ import { renderWithQuery } from '@/test/render'
 // elsewhere (the task node input). Moved from src/features/chat/Composer.test.tsx, which checks the same layout in English.
 
 // "Printed sheet" redesign: the input area merges into the bottom of the sheet.
-const mountBar = (busy = false) => renderWithQuery(<Composer agentId="bar-agent" agentName="开发助手" busy={busy} disabled={false} maxMessageBytes={4096} onSent={() => {}} stop={busy ? { onStop: () => {}, pending: false, retry: false } : undefined} />)
+const mountBar = (busy = false) => renderWithQuery(<Composer agentId="bar-agent" agentName="dev-helper" busy={busy} disabled={false} maxMessageBytes={4096} onSent={() => {}} stop={busy ? { onStop: () => {}, pending: false, retry: false } : undefined} />)
 
 it('when busy, the key hints switch to queue and interrupt, and with an empty input the send button becomes a navy stop button', () => {
   mountBar(true)

@@ -14,8 +14,8 @@ const base = (name: string) => `/p/${encodeURIComponent(name)}`
 const lastScope = () => window.localStorage.getItem('loop-now.lastScope')
 
 function setup() {
-  const other = makeProject({ name: '模型接入' })
-  const a = makeAgent({ name: '开发助手', projectId: other.id })
+  const other = makeProject({ name: 'model-access' })
+  const a = makeAgent({ name: 'dev-helper', projectId: other.id })
   const b = makeAgent({ name: 'Patrol assistant', scope: 'platform', projectId: null })
   const c = makeAgent({ name: 'Default assistant' })
   const backend = projectBackend({ projects: [defaultProject, other], agents: [a, b, c] })
@@ -28,12 +28,12 @@ const agentLinks = async () => within(await screen.findByRole('list', { name: 'A
 describe('URLs with a project', () => {
   it('opening a project Agent\'s Chat page directly: the sidebar shows that project\'s list with the Agent selected, and the scope switcher shows the project', async () => {
     const { other, a } = setup()
-    renderRoutes(routes, `${base('模型接入')}/agents/${a.id}/chat`)
+    renderRoutes(routes, `${base('model-access')}/agents/${a.id}/chat`)
     const list = await screen.findByRole('list', { name: 'Agents' })
-    await waitFor(() => expect(within(list).getByRole('link', { name: /开发助手/ })).toHaveAttribute('aria-current', 'page'))
+    await waitFor(() => expect(within(list).getByRole('link', { name: /dev-helper/ })).toHaveAttribute('aria-current', 'page'))
     expect(within(list).queryByRole('link', { name: /Default assistant/ })).toBeNull()
     expect(screen.getByRole('link', { name: 'Chat' })).toHaveAttribute('aria-current', 'page')
-    expect(scopeSwitcher('模型接入')).toBeInTheDocument()
+    expect(scopeSwitcher('model-access')).toBeInTheDocument()
     expect(lastScope()).toBe(other.id)
   })
 
@@ -42,14 +42,14 @@ describe('URLs with a project', () => {
     const second = makeAgent({ name: 'Planning assistant', projectId: other.id })
     state.agents.push(second)
     state.projects.find((p) => p.id === other.id)!.managerAgentId = second.id
-    const first = renderRoutes(routes, `${base('模型接入')}/agents`)
-    await waitFor(() => expect(first.router.state.location.pathname).toBe(`${base('模型接入')}/agents/${second.id}/chat`))
+    const first = renderRoutes(routes, `${base('model-access')}/agents`)
+    await waitFor(() => expect(first.router.state.location.pathname).toBe(`${base('model-access')}/agents/${second.id}/chat`))
     expect(first.router.state.historyAction).toBe('REPLACE')
     first.unmount()
 
     state.projects.find((p) => p.id === other.id)!.managerAgentId = null
-    const next = renderRoutes(routes, `${base('模型接入')}/agents`)
-    await waitFor(() => expect(next.router.state.location.pathname).toBe(`${base('模型接入')}/agents/${a.id}/chat`))
+    const next = renderRoutes(routes, `${base('model-access')}/agents`)
+    await waitFor(() => expect(next.router.state.location.pathname).toBe(`${base('model-access')}/agents/${a.id}/chat`))
     next.unmount()
 
     const platform = renderRoutes(routes, '/platform/agents')
@@ -79,13 +79,13 @@ describe('URLs with a project', () => {
 
   it('project renamed while open: follows it by ID to the URL with the new name and says so, without adding a history entry', async () => {
     const { state, other, a } = setup()
-    const { router, client } = renderRoutes(routes, `${base('模型接入')}/agents/${a.id}/chat`)
+    const { router, client } = renderRoutes(routes, `${base('model-access')}/agents/${a.id}/chat`)
     await agentLinks()
     state.projects.find((p) => p.id === other.id)!.name = 'Model adapters'
     await act(() => client.invalidateQueries({ queryKey: ['projects'] }))
     await waitFor(() => expect(router.state.location.pathname).toBe(`${base('Model adapters')}/agents/${a.id}/chat`))
     expect(router.state.historyAction).toBe('REPLACE')
-    const note = await screen.findByText('Project "模型接入" was renamed to "Model adapters" elsewhere; the address has been updated.')
+    const note = await screen.findByText('Project "model-access" was renamed to "Model adapters" elsewhere; the address has been updated.')
     // The router's new URL reaches the page only inside a transition: if "Got it" is clicked while router.state has
     // already changed but the page still shows the old URL, the old URL still follows the project by ID and the sticky note gets
     // put back. Wait until the page has also switched to the new URL ("Chat" marked as the current page) before clicking.
@@ -97,11 +97,11 @@ describe('URLs with a project', () => {
 
   it('project deleted while open: says the project was deleted and offers a way to the default project', async () => {
     const { state, other } = setup()
-    const { client } = renderRoutes(routes, `${base('模型接入')}/agents`)
+    const { client } = renderRoutes(routes, `${base('model-access')}/agents`)
     await agentLinks()
     state.projects = state.projects.filter((p) => p.id !== other.id)
     await act(() => client.invalidateQueries({ queryKey: ['projects'] }))
-    expect(await screen.findByText('Project "模型接入" was deleted')).toBeInTheDocument()
+    expect(await screen.findByText('Project "model-access" was deleted')).toBeInTheDocument()
     expect(screen.getByText('It was deleted elsewhere; its Agents are hidden from the list.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Go to the default project' })).toBeInTheDocument()
   })
@@ -109,7 +109,7 @@ describe('URLs with a project', () => {
   it('opening an old URL: switches to the URL where the Agent actually lives and keeps the hash', async () => {
     const { a } = setup()
     const { router } = renderRoutes(routes, `/agents/${a.id}/chat#run-r1`)
-    await waitFor(() => expect(router.state.location.pathname).toBe(`${base('模型接入')}/agents/${a.id}/chat`))
+    await waitFor(() => expect(router.state.location.pathname).toBe(`${base('model-access')}/agents/${a.id}/chat`))
     expect(router.state.location.hash).toBe('#run-r1')
   })
 
@@ -150,15 +150,15 @@ describe('Scope switcher', () => {
     const user = userEvent.setup()
     const { router } = renderRoutes(routes, defaultAgentsPath)
     await agentLinks()
-    await user.click(scopeSwitcher('测试项目'))
+    await user.click(scopeSwitcher('test-project'))
     const options = within(await screen.findByRole('listbox', { name: 'Scopes' })).getAllByRole('option')
-    expect(options.map((o) => o.textContent)).toEqual(['Global', '测试项目Default1 Agent', '模型接入1 Agent'])
+    expect(options.map((o) => o.textContent)).toEqual(['Global', 'test-projectDefault1 Agent', 'model-access1 Agent'])
     expect(options[1]).toHaveAttribute('aria-selected', 'true')
     await user.click(options[2])
-    await waitFor(() => expect(router.state.location.search).toBe(`?${new URLSearchParams({ project: '模型接入' })}`))
+    await waitFor(() => expect(router.state.location.search).toBe(`?${new URLSearchParams({ project: 'model-access' })}`))
     expect(router.state.location.pathname).toBe('/')
-    expect(scopeSwitcher('模型接入')).toBeInTheDocument()
-    await waitFor(async () => expect((await agentLinks()).map((l) => l.textContent)).toEqual(['开发助手']))
+    expect(scopeSwitcher('model-access')).toBeInTheDocument()
+    await waitFor(async () => expect((await agentLinks()).map((l) => l.textContent)).toEqual(['dev-helper']))
     expect(lastScope()).toBe(other.id)
   })
 
@@ -168,23 +168,23 @@ describe('Scope switcher', () => {
     const user = userEvent.setup()
     const { router } = renderRoutes(routes, defaultAgentsPath)
     await agentLinks()
-    await user.click(scopeSwitcher('测试项目'))
+    await user.click(scopeSwitcher('test-project'))
     await screen.findByRole('listbox', { name: 'Scopes' })
     await user.keyboard('{ArrowUp}{Enter}')
     await waitFor(() => expect(router.state.location.pathname).toBe('/'))
     expect(router.state.location.search).toBe('')
     expect(scopeSwitcher('Global')).toBeInTheDocument()
-    expect(within(sidebar()).getByRole('list', { name: 'Projects' })).toHaveTextContent('测试项目模型接入')
+    expect(within(sidebar()).getByRole('list', { name: 'Projects' })).toHaveTextContent('test-projectmodel-access')
     expect(await within(within(sidebar()).getByRole('list', { name: 'Platform Agents' })).findByRole('link', { name: 'Patrol assistant' })).toBeInTheDocument()
     expect(lastScope()).toBe('platform')
   })
 
   it('filters projects by name; “Global” and “New project” stay available, and there is no project settings shortcut any more', async () => {
     const extra = makeProject({ name: 'Writing team' })
-    server.use(...projectBackend({ projects: [defaultProject, makeProject({ name: '模型接入' }), extra] }).handlers)
+    server.use(...projectBackend({ projects: [defaultProject, makeProject({ name: 'model-access' }), extra] }).handlers)
     const user = userEvent.setup()
     renderRoutes(routes, defaultAgentsPath)
-    await user.click(await within(sidebar()).findByRole('button', { name: 'Switch scope, current: 测试项目' }))
+    await user.click(await within(sidebar()).findByRole('button', { name: 'Switch scope, current: test-project' }))
     await user.type(await screen.findByRole('searchbox', { name: 'Filter projects by name' }), 'Writ')
     const options = within(screen.getByRole('listbox', { name: 'Scopes' })).getAllByRole('option')
     expect(options.map((o) => o.textContent?.replace(/\d+ Agents?$/, ''))).toEqual(['Global', 'Writing team'])
@@ -198,9 +198,9 @@ describe('Scope switcher', () => {
     server.use(...overviewHandlers)
     const user = userEvent.setup()
     const { router } = renderRoutes(routes, '/')
-    await user.click(await within(await within(sidebar()).findByRole('list', { name: 'Projects' })).findByRole('link', { name: '模型接入' }))
-    expect(router.state.location.search).toBe(`?${new URLSearchParams({ project: '模型接入' })}`)
-    expect(scopeSwitcher('模型接入')).toBeInTheDocument()
+    await user.click(await within(await within(sidebar()).findByRole('list', { name: 'Projects' })).findByRole('link', { name: 'model-access' }))
+    expect(router.state.location.search).toBe(`?${new URLSearchParams({ project: 'model-access' })}`)
+    expect(scopeSwitcher('model-access')).toBeInTheDocument()
     expect(lastScope()).toBe(other.id)
   })
 
@@ -208,8 +208,8 @@ describe('Scope switcher', () => {
     const { other } = setup()
     window.localStorage.setItem('loop-now.lastScope', other.id)
     const first = renderRoutes(routes, '/skills')
-    expect(await within(sidebar()).findByRole('button', { name: 'Switch scope, current: 模型接入' })).toBeInTheDocument()
-    expect(await within(await screen.findByRole('list', { name: 'Agents' })).findByRole('link', { name: '开发助手' })).toBeInTheDocument()
+    expect(await within(sidebar()).findByRole('button', { name: 'Switch scope, current: model-access' })).toBeInTheDocument()
+    expect(await within(await screen.findByRole('list', { name: 'Agents' })).findByRole('link', { name: 'dev-helper' })).toBeInTheDocument()
     first.unmount()
 
     window.localStorage.removeItem('loop-now.lastScope')
@@ -223,7 +223,7 @@ describe('New project', () => {
     const { state } = setup()
     const user = userEvent.setup()
     const { router } = renderRoutes(routes, defaultAgentsPath)
-    await user.click(await within(sidebar()).findByRole('button', { name: 'Switch scope, current: 测试项目' }))
+    await user.click(await within(sidebar()).findByRole('button', { name: 'Switch scope, current: test-project' }))
     await user.click(await screen.findByRole('button', { name: 'New project' }))
     const dialog = await screen.findByRole('dialog', { name: 'New project' })
     const input = within(dialog).getByLabelText('Project name')
@@ -234,10 +234,10 @@ describe('New project', () => {
     expect(state.requests.filter((r) => r.method === 'POST')).toHaveLength(0)
 
     await user.clear(input)
-    await user.type(input, '模型接入')
+    await user.type(input, 'model-access')
     await user.click(within(dialog).getByRole('button', { name: 'Create' }))
     expect(await within(dialog).findByText('A project with this name already exists. Pick another.')).toBeInTheDocument()
-    expect(input).toHaveValue('模型接入')
+    expect(input).toHaveValue('model-access')
 
     await user.clear(input)
     await user.type(input, 'Docs site')
@@ -269,7 +269,7 @@ describe('The Skills library is global', () => {
     expect(first).toHaveLength(2)
     unmount()
 
-    for (const path of [`${base('模型接入')}/agents/${a.id}/config`, `/platform/agents/${b.id}/config`]) {
+    for (const path of [`${base('model-access')}/agents/${a.id}/config`, `/platform/agents/${b.id}/config`]) {
       const view = renderRoutes(routes, path)
       await user.click(within(await screen.findByRole('region', { name: 'Skills' })).getByRole('button', { name: 'Add from library' }))
       const dialog = await screen.findByRole('dialog')

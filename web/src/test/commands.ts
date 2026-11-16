@@ -5,13 +5,13 @@ type Command = Schemas['AgentCommand']
 // Matches the server's platform command table (internal/server/conversation/console_commands.go):
 // usage plus descriptions in both Chinese and English.
 const specs: [string, string, string, string][] = [
-  ['session', '/session', '查看当前会话、模型和进程状态', 'Show the current session, model, and process'],
-  ['new', '/new', '重开会话，保留页面里的对话历史', "Start a new session and keep the page's history"],
-  ['compact', '/compact [instructions]', '压缩当前会话的上下文；instructions 是给这次压缩的附加说明，可省略', 'Compact the current context; instructions are optional guidance for this compaction'],
-  ['reload', '/reload', '停止当前进程，下一条消息时重新加载', 'Stop the process; it reloads on the next message'],
-  ['copy', '/copy', '复制最近一条有文字的成功回复', 'Copy the latest successful reply that has text'],
-  ['export', '/export [html|jsonl]', '导出当前会话，格式为 html（默认）或 jsonl', 'Export the current session as html (default) or jsonl'],
-  ['resume', '/resume [session-id]', '不带 session-id 时列出可恢复的会话；带上完整的 session-id 时恢复那个会话', 'Without session-id, list resumable sessions; with a full session-id, resume that session'],
+  ['session', '/session', '查看当前会话、模型和进程状态', 'Show the current session, model, and process'],  // check-english: zh (command descriptions in both languages)
+  ['new', '/new', '重开会话，保留页面里的对话历史', "Start a new session and keep the page's history"],  // check-english: zh (command descriptions in both languages)
+  ['compact', '/compact [instructions]', '压缩当前会话的上下文；instructions 是给这次压缩的附加说明，可省略', 'Compact the current context; instructions are optional guidance for this compaction'],  // check-english: zh (command descriptions in both languages)
+  ['reload', '/reload', '停止当前进程，下一条消息时重新加载', 'Stop the process; it reloads on the next message'],  // check-english: zh (command descriptions in both languages)
+  ['copy', '/copy', '复制最近一条有文字的成功回复', 'Copy the latest successful reply that has text'],  // check-english: zh (command descriptions in both languages)
+  ['export', '/export [html|jsonl]', '导出当前会话，格式为 html（默认）或 jsonl', 'Export the current session as html (default) or jsonl'],  // check-english: zh (command descriptions in both languages)
+  ['resume', '/resume [session-id]', '不带 session-id 时列出可恢复的会话；带上完整的 session-id 时恢复那个会话', 'Without session-id, list resumable sessions; with a full session-id, resume that session'],  // check-english: zh (command descriptions in both languages)
 ]
 
 // The 7 built-in platform commands at the start of GET /agents/{id}/commands (in the contract's fixed

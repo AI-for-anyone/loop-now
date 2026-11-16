@@ -27,7 +27,7 @@ const overviewHandlers = () => [
   http.get(apiUrl('/anomalies'), () => HttpResponse.json({ items: [], total: 0, nextCursor: null })),
 ]
 
-const project = `/p/${encodeURIComponent('测试项目')}`
+const project = `/p/${encodeURIComponent('test-project')}`
 const globalEntries = ['/plugins', '/skills', '/stats', '/identities', '/settings']
 const hrefs = () => sidebarLinks().map((link) => link.getAttribute('href'))
 const names = () => sidebarLinks().map((link) => link.textContent)
@@ -40,8 +40,8 @@ describe('sidebar and page structure', () => {
     expect(await screen.findByRole('heading', { name: 'Overview', level: 1 })).toBeInTheDocument()
     await within(sidebar()).findByRole('link', { name: 'Inspector' })
     expect(scopeSwitcher('Global')).toBeInTheDocument()
-    expect(names()).toEqual(['LOOP NOW', 'Overview', '测试项目', 'Inspector', 'Plugin market', 'Skills library', 'Stats', 'External identities', 'Global settings'])
-    expect(hrefs()).toEqual(['/', '/', '/?project=%E6%B5%8B%E8%AF%95%E9%A1%B9%E7%9B%AE', `/platform/agents/${platform.id}`, ...globalEntries])
+    expect(names()).toEqual(['LOOP NOW', 'Overview', 'test-project', 'Inspector', 'Plugin market', 'Skills library', 'Stats', 'External identities', 'Global settings'])
+    expect(hrefs()).toEqual(['/', '/', '/?project=test-project', `/platform/agents/${platform.id}`, ...globalEntries])
     expect(currentSidebarLinks().map((link) => link.textContent)).toEqual(['Overview'])
     expect(within(sidebar()).getByRole('list', { name: 'Platform Agents' })).toBeInTheDocument()
   })
@@ -69,36 +69,36 @@ describe('sidebar and page structure', () => {
   })
 
   it('opening an Agent config page directly: the sidebar shows its project with the Agent selected; the global entries are still reachable in the project', async () => {
-    const agent = makeAgent({ name: '开发助手' })
+    const agent = makeAgent({ name: 'dev-helper' })
     server.use(...baseHandlers([agent]))
     renderRoutes(routes, defaultAgentPath(agent.id, 'config'))
     const list = await within(sidebar()).findByRole('list', { name: 'Agents' })
-    await waitFor(() => expect(within(list).getByRole('link', { name: '开发助手' })).toHaveAttribute('aria-current', 'page'))
-    expect(scopeSwitcher('测试项目')).toBeInTheDocument()
-    expect(names()).toEqual(['LOOP NOW', 'Overview', 'Tasks', 'Project folder', 'Project settings', '开发助手', 'Plugin market', 'Skills library', 'Stats', 'External identities', 'Global settings'])
-    expect(hrefs()).toEqual(['/', '/?project=%E6%B5%8B%E8%AF%95%E9%A1%B9%E7%9B%AE', `${project}/tasks`, `${project}/folder`, `${project}/settings`, `${project}/agents/${agent.id}`, ...globalEntries])
+    await waitFor(() => expect(within(list).getByRole('link', { name: 'dev-helper' })).toHaveAttribute('aria-current', 'page'))
+    expect(scopeSwitcher('test-project')).toBeInTheDocument()
+    expect(names()).toEqual(['LOOP NOW', 'Overview', 'Tasks', 'Project folder', 'Project settings', 'dev-helper', 'Plugin market', 'Skills library', 'Stats', 'External identities', 'Global settings'])
+    expect(hrefs()).toEqual(['/', '/?project=test-project', `${project}/tasks`, `${project}/folder`, `${project}/settings`, `${project}/agents/${agent.id}`, ...globalEntries])
     expect(within(sidebar()).queryByRole('link', { name: /Inbox/ })).toBeNull()
     expect(await screen.findByRole('link', { name: 'Config' })).toHaveAttribute('aria-current', 'page')
     // Main-area page header: the location breadcrumb, the title in the display font, and the model.
-    expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('测试项目›Agent›开发助手')
-    expect(screen.getByRole('heading', { name: '开发助手', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('test-project›Agent›dev-helper')
+    expect(screen.getByRole('heading', { name: 'dev-helper', level: 1 })).toBeInTheDocument()
     expect(screen.getByText('anthropic · claude-sonnet-5-5')).toBeInTheDocument()
   })
 
   it('opening a global page (Plugin market, Global settings) from a project keeps the current project in the sidebar', async () => {
-    const agent = makeAgent({ name: '开发助手' })
+    const agent = makeAgent({ name: 'dev-helper' })
     server.use(...baseHandlers([agent]))
     const user = userEvent.setup()
     const { router } = renderRoutes(routes, defaultAgentPath(agent.id, 'chat'))
-    await within(sidebar()).findByRole('link', { name: '开发助手' })
+    await within(sidebar()).findByRole('link', { name: 'dev-helper' })
     await user.click(within(sidebar()).getByRole('link', { name: 'Plugin market' }))
     expect(router.state.location.pathname).toBe('/plugins')
-    expect(scopeSwitcher('测试项目')).toBeInTheDocument()
+    expect(scopeSwitcher('test-project')).toBeInTheDocument()
     expect(currentSidebarLinks().map((link) => link.textContent)).toEqual(['Plugin market'])
     await user.click(within(sidebar()).getByRole('link', { name: 'Global settings' }))
     expect(router.state.location.pathname).toBe('/settings')
-    expect(scopeSwitcher('测试项目')).toBeInTheDocument()
-    expect(within(sidebar()).getByRole('link', { name: '开发助手' })).not.toHaveAttribute('aria-current')
+    expect(scopeSwitcher('test-project')).toBeInTheDocument()
+    expect(within(sidebar()).getByRole('link', { name: 'dev-helper' })).not.toHaveAttribute('aria-current')
   })
 
   it('a platform Agent address is in the global scope: the sidebar lists the projects and platform Agents and selects it', async () => {
@@ -108,7 +108,7 @@ describe('sidebar and page structure', () => {
     const list = await within(sidebar()).findByRole('list', { name: 'Platform Agents' })
     await waitFor(() => expect(within(list).getByRole('link', { name: 'Inspector' })).toHaveAttribute('aria-current', 'page'))
     expect(scopeSwitcher('Global')).toBeInTheDocument()
-    expect(within(sidebar()).getByRole('list', { name: 'Projects' })).toHaveTextContent('测试项目')
+    expect(within(sidebar()).getByRole('list', { name: 'Projects' })).toHaveTextContent('test-project')
     expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global›Platform Agent›Inspector')
   })
 
@@ -121,18 +121,18 @@ describe('sidebar and page structure', () => {
   })
 
   it('opening the address of an Agent Inbox tab directly selects the Agent and shows the Inbox tab', async () => {
-    const agent = makeAgent({ name: '开发助手' })
+    const agent = makeAgent({ name: 'dev-helper' })
     server.use(http.get(apiUrl(`/agents/${agent.id}/inbox`), () => HttpResponse.json({ messages: [], nextCursor: null })), ...baseHandlers([agent]))
     renderRoutes(routes, `${defaultAgentsPath}/${agent.id}/inbox`)
     const list = await screen.findByRole('list', { name: 'Agents' })
-    await waitFor(() => expect(within(list).getByRole('link', { name: /开发助手/ })).toHaveAttribute('aria-current', 'page'))
-    const tabs = await screen.findByRole('navigation', { name: '开发助手' })
+    await waitFor(() => expect(within(list).getByRole('link', { name: /dev-helper/ })).toHaveAttribute('aria-current', 'page'))
+    const tabs = await screen.findByRole('navigation', { name: 'dev-helper' })
     expect(within(tabs).getByRole('link', { name: 'Inbox' })).toHaveAttribute('aria-current', 'page')
     expect(await screen.findByText('No Inbox messages yet.')).toBeInTheDocument()
   })
 
   it('the Agent “Folder” tab sits between Config and Inbox and opens the one folder of this Agent', async () => {
-    const agent = makeAgent({ name: '开发助手' })
+    const agent = makeAgent({ name: 'dev-helper' })
     const reads: string[] = []
     server.use(
       http.get(apiUrl(`/agents/${agent.id}/folder/entries`), ({ request }) => {
@@ -143,17 +143,17 @@ describe('sidebar and page structure', () => {
       ...baseHandlers([agent]),
     )
     renderRoutes(routes, `${defaultAgentsPath}/${agent.id}/folder`)
-    const tabs = await screen.findByRole('navigation', { name: '开发助手' })
+    const tabs = await screen.findByRole('navigation', { name: 'dev-helper' })
     expect(within(tabs).getAllByRole('link').map((link) => link.textContent)).toEqual(['Chat', 'Config', 'Folder', 'Inbox'])
     expect(within(tabs).getByRole('link', { name: 'Folder' })).toHaveAttribute('aria-current', 'page')
-    expect(await screen.findByRole('tree', { name: 'File tree' })).toHaveTextContent("开发助手's folder")
+    expect(await screen.findByRole('tree', { name: 'File tree' })).toHaveTextContent("dev-helper's folder")
     expect(await within(screen.getByRole('region', { name: 'AGENTS.md' })).findByText('Working notes')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Pull from Git' })).toBeInTheDocument()
     expect(reads).toContain('')
     // Redesign: the folder sits directly on the tab's sheet, with the overview in the stub on the
     // right; the description that used to sit at the top of the tab moved into the footer note.
     expect(screen.getByRole('complementary', { name: 'Overview' }).closest('[data-sheet]')).not.toBeNull()
-    expect(document.querySelector('[data-folder-footer]')).toHaveTextContent("开发助手's folder: it works here")
+    expect(document.querySelector('[data-folder-footer]')).toHaveTextContent("dev-helper's folder: it works here")
   })
 
   it('the sidebar “Project folder” opens the folder shared by the project and becomes current', async () => {
@@ -198,17 +198,17 @@ describe('sidebar and page structure', () => {
   })
 
   it('on narrow screens the menu button opens the sidebar as a drawer, which closes by itself once an entry changes the address', async () => {
-    const agent = makeAgent({ name: '开发助手' })
+    const agent = makeAgent({ name: 'dev-helper' })
     server.use(...baseHandlers([agent]))
     const user = userEvent.setup()
     const { router } = renderRoutes(routes, defaultAgentPath(agent.id, 'chat'))
-    await within(sidebar()).findByRole('link', { name: '开发助手' })
+    await within(sidebar()).findByRole('link', { name: 'dev-helper' })
     const menu = screen.getByRole('button', { name: 'Open navigation' })
     expect(menu).toHaveAttribute('aria-expanded', 'false')
     await user.click(menu)
     const drawer = await screen.findByRole('dialog', { name: 'Main navigation' })
     expect(menu).toHaveAttribute('aria-expanded', 'true')
-    expect(await within(drawer).findByRole('link', { name: '开发助手' })).toHaveAttribute('aria-current', 'page')
+    expect(await within(drawer).findByRole('link', { name: 'dev-helper' })).toHaveAttribute('aria-current', 'page')
     await user.click(within(drawer).getByRole('link', { name: 'Project settings' }))
     expect(router.state.location.pathname).toBe(`${project}/settings`)
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Main navigation' })).toBeNull())
@@ -229,18 +229,18 @@ describe('sidebar and page structure', () => {
 
 describe('Agent list', () => {
   it('lists the Agents that are not deleted', async () => {
-    const a = makeAgent({ name: '开发助手' })
+    const a = makeAgent({ name: 'dev-helper' })
     const b = makeAgent({ name: 'Test Assistant', model: { provider: 'openai', modelId: 'gpt-x' } })
     server.use(...baseHandlers([a, b]))
     renderRoutes(routes, defaultAgentsPath)
     const list = await screen.findByRole('list', { name: 'Agents' })
-    await waitFor(() => expect(within(list).getAllByRole('link').map((link) => link.textContent)).toEqual(['开发助手', 'Test Assistant']))
+    await waitFor(() => expect(within(list).getAllByRole('link').map((link) => link.textContent)).toEqual(['dev-helper', 'Test Assistant']))
   })
 
   // jsdom does no layout, so we can only confirm that the scroll area is a positioning container; that the whole
   // page does not get stretched taller is checked with browser screenshots (.local-build/chat-scroll-fix).
   it('the scroll area of the list is a positioning container, so the description in the “needs you” badge does not stretch the whole page', async () => {
-    server.use(...baseHandlers([makeAgent({ name: '开发助手' })]))
+    server.use(...baseHandlers([makeAgent({ name: 'dev-helper' })]))
     renderRoutes(routes, defaultAgentsPath)
     const list = await screen.findByRole('list', { name: 'Agents' })
     expect(list.closest('.overflow-y-auto')).toHaveClass('relative')
@@ -299,7 +299,7 @@ describe('connection and error display', () => {
   })
 
   it('a disconnect after loading also shows the global notice; Retry refetches the failed queries and the notice goes away once connected', async () => {
-    const agent = makeAgent({ name: '开发助手' })
+    const agent = makeAgent({ name: 'dev-helper' })
     let up = true
     let listCalls = 0
     // While disconnected, every endpoint is unreachable (while connected, requests go on to the handlers below): if
@@ -316,7 +316,7 @@ describe('connection and error display', () => {
     const user = userEvent.setup()
     const { client } = renderRoutes(routes, defaultAgentsPath)
     const list = await screen.findByRole('list', { name: 'Agents' })
-    await within(list).findByRole('link', { name: /开发助手/ })
+    await within(list).findByRole('link', { name: /dev-helper/ })
     expect(banner()).toBeNull()
 
     up = false
@@ -400,8 +400,8 @@ describe('global settings page', () => {
     )
     renderRoutes(routes, '/settings')
     // The names in the test data differ from the row labels, so the assertions are scoped to the value that belongs to each label.
-    await waitFor(() => expect(screen.getByText('Default organization').nextElementSibling).toHaveTextContent('测试组织'))
-    expect(screen.getByText('Default project').nextElementSibling).toHaveTextContent('测试项目')
+    await waitFor(() => expect(screen.getByText('Default organization').nextElementSibling).toHaveTextContent('test-org'))
+    expect(screen.getByText('Default project').nextElementSibling).toHaveTextContent('test-project')
     // The connection status in the sidebar also shows “Database unavailable”, so scope this to the page body.
     const page = screen.getByRole('main')
     expect(await within(page).findByText('Database unavailable')).toBeInTheDocument()

@@ -4,7 +4,7 @@ import { makeTaskMessage } from '@/test/tasks'
 import { TaskMessageBubble } from '@/features/tasks/TaskMessageBubble'
 
 // Task turns stored before the switch to English: the old Chinese wake sentence and an old Chinese errorMessage without a code.
-const agent = { id: 'agent', name: '任务检查员' }
+const agent = { id: 'agent', name: 'task-checker' }
 const sleepId = '00000000-0000-7000-8000-000000005101'
 it.each([
   ['Chinese (sessions from before the switch)', `平台通知：sleep已到期，请接着原会话处理。sleepId=${sleepId}；说明：wait for the review bot`],

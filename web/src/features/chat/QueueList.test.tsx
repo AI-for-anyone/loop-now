@@ -18,7 +18,7 @@ const queueList = () => screen.getByRole('region', { name: 'Queued messages' })
 const rows = () => within(queueList()).getAllByRole('listitem').filter((item) => item.hasAttribute('data-kind'))
 const texts = () => rows().map((item) => within(item).getByRole('button', { expanded: false }).textContent)
 const log = () => screen.getByRole('log')
-const manager = agentParty({ id: '57000000-0000-7000-8000-000000000001', name: 'test', address: '测试项目/test' })
+const manager = agentParty({ id: '57000000-0000-7000-8000-000000000001', name: 'test', address: 'test-project/test' })
 
 function receipt(agentId: string, actionId: string, operation: Schemas['AgentQueueActionReceipt']['operation'], item: Schemas['QueueItem'] | null, queue: Schemas['QueueItem'][], run: Schemas['Run'] | null = null): Schemas['AgentQueueActionReceipt'] {
   return { actionId, agentId, operation, status: 'accepted', item, run, queue }
@@ -61,7 +61,7 @@ describe('queue tray above the input box', () => {
     expect(within(log()).queryByText(/^(Cut in line|Run lint while you are at it)$/)).toBeNull()
 
     // When busy, a message is queued directly without asking for a choice; the tray updates with queue.updated.
-    expect(screen.getByLabelText('Message')).toHaveAttribute('placeholder', '开发助手 is replying; new messages will queue')
+    expect(screen.getByLabelText('Message')).toHaveAttribute('placeholder', 'dev-helper is replying; new messages will queue')
     await user.type(screen.getByLabelText('Message'), 'One more thing{Enter}')
     await waitFor(() => expect(sent).toEqual([{ text: 'One more thing', whenBusy: 'queue' }]))
     expect(screen.queryByRole('dialog')).toBeNull()

@@ -30,7 +30,7 @@ describe('File manager', () => {
     const entry = await findRow('AGENTS.md')
     expect(tree().querySelectorAll('[role=treeitem]')[1]).toBe(entry)
     expect(within(entry).getByText('Entry')).toBeInTheDocument()
-    expect(await within(screen.getByRole('region', { name: 'AGENTS.md' })).findByText('你负责 Loop Now 服务端（Go）的开发与维护。')).toBeInTheDocument()
+    expect(await within(screen.getByRole('region', { name: 'AGENTS.md' })).findByText('You develop and maintain the Loop Now server (Go).')).toBeInTheDocument()
     expect(list.mock.calls.map(([path]) => path)).toEqual([])
 
     await user.click(await findRow('web'))
@@ -171,7 +171,7 @@ describe('File manager', () => {
     expect(await screen.findByText('File is over 1.0 MiB; it can\'t be previewed or edited online.')).toBeInTheDocument()
     await user.click(await findRow('current-notes.md'))
     expect(await screen.findByText('Symlink to handoff/notes.md')).toBeInTheDocument()
-    expect(await screen.findByText('budget 账本的写入顺序已改完，测试待跑。')).toBeInTheDocument()
+    expect(await screen.findByText('The budget ledger write order is done; the tests still need a run.')).toBeInTheDocument()
   })
 
   it('symlink pointing outside the folder: when the server refuses to read it, says why instead of showing the generic validation error', async () => {

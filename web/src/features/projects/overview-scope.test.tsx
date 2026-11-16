@@ -7,7 +7,7 @@ import { FakeEventSource } from '@/test/fake-event-source'
 import { anomalyPage, makeAgentOverview, makeAnomaly, makeUsageRow, nextId, renderOverview, usagePage } from '@/test/overview'
 import { scopeSwitcher, sidebar } from '@/test/shell'
 
-const other = makeProject({ name: '模型接入' })
+const other = makeProject({ name: 'model-access' })
 const empty = makeProject({ name: 'Sandbox' })
 const base = (name: string) => `/p/${encodeURIComponent(name)}`
 const globalNavigation = () => within(sidebar()).queryAllByRole('link').filter(link => ['/plugins', '/skills', '/identities', '/settings'].includes(link.getAttribute('href') ?? ''))
@@ -47,11 +47,11 @@ describe('Filtering the overview by project or platform', () => {
   it('one project only: all three blocks request only this project, it stays after a refresh, and rows are not labeled with their owner', async () => {
     const a = makeAgentOverview({ name: 'Planning assistant', projectId: other.id })
     const { queries, handlers } = recordingHandlers(usagePage([makeUsageRow({ agentName: 'Planning assistant', projectId: other.id })]))
-    await renderOverview({ path: `/?project=${encodeURIComponent('模型接入')}`, handlers })
+    await renderOverview({ path: `/?project=${encodeURIComponent('model-access')}`, handlers })
     await waitFor(() => expect(stream().url).toContain(`projectId=${other.id}`))
     await snapshot([a])
-    expect(screen.getByRole('combobox', { name: 'Scope' })).toHaveDisplayValue('模型接入')
-    expect(scopeSwitcher('模型接入')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Scope' })).toHaveDisplayValue('model-access')
+    expect(scopeSwitcher('model-access')).toBeInTheDocument()
     expect(navLink('Overview')).toHaveAttribute('href', query(other.name))
     expect(navLink('Overview')).toHaveAttribute('aria-current', 'page')
     expect(navLink('Tasks')).toHaveAttribute('href', `${base(other.name)}/tasks`)
@@ -60,7 +60,7 @@ describe('Filtering the overview by project or platform', () => {
     expect(globalNavigation()).toHaveLength(4)
     const table = await screen.findByRole('table', { name: /Agent/ })
     expect(within(table).getByText('Planning assistant')).toBeInTheDocument()
-    expect(within(table).queryByText('模型接入')).toBeNull()
+    expect(within(table).queryByText('model-access')).toBeNull()
     await waitFor(() => expect(queries.usage.at(-1)?.get('projectId')).toBe(other.id))
     await waitFor(() => expect(queries.anomalies.at(-1)?.get('projectId')).toBe(other.id))
     expect(queries.usage.at(-1)?.get('platform')).toBeNull()
@@ -94,7 +94,7 @@ describe('Filtering the overview by project or platform', () => {
     await snapshot([a, b])
     const table = await screen.findByRole('table', { name: /Agent/ })
     const rowOf = (name: string) => within(table).getByText(name).closest('tr')!
-    await waitFor(() => expect(rowOf('Planning assistant')).toHaveTextContent('模型接入'))
+    await waitFor(() => expect(rowOf('Planning assistant')).toHaveTextContent('model-access'))
     expect(rowOf('Integration patrol')).toHaveTextContent('Platform')
     expect(await screen.findByText('Deleted project')).toBeInTheDocument()
     const anomalies = await screen.findByRole('region', { name: 'Issues and failures' })
@@ -129,7 +129,7 @@ describe('Filtering the overview by project or platform', () => {
     const { user, router } = await renderOverview({ handlers })
     await snapshot([makeAgentOverview()])
     await user.click(within(sidebar()).getByRole('button', { name: /^Switch scope, current: / }))
-    await user.click(within(await screen.findByRole('listbox', { name: 'Scopes' })).getByRole('option', { name: /模型接入/ }))
+    await user.click(within(await screen.findByRole('listbox', { name: 'Scopes' })).getByRole('option', { name: /model-access/ }))
     await waitFor(() => expect(router.state.location.search).toBe(query(other.name).slice(1)))
     expect(await screen.findByRole('combobox', { name: 'Scope' })).toHaveDisplayValue(other.name)
     await user.click(navLink('Overview'))
@@ -163,7 +163,7 @@ describe('Filtering the overview by project or platform', () => {
     const select = () => screen.getByRole('combobox', { name: 'Scope' })
     await screen.findByRole('option', { name: other.name })
     await user.selectOptions(select(), other.name)
-    expect(scopeSwitcher('模型接入')).toBeInTheDocument()
+    expect(scopeSwitcher('model-access')).toBeInTheDocument()
     expect(navLink('Tasks')).toHaveAttribute('href', `${base(other.name)}/tasks`)
     await user.selectOptions(select(), 'Platform')
     expect(scopeSwitcher('Global')).toBeInTheDocument()
@@ -176,7 +176,7 @@ describe('Filtering the overview by project or platform', () => {
     const { handlers } = recordingHandlers()
     await renderOverview({ path: '/?platform=1', handlers })
     expect(scopeSwitcher('Global')).toBeInTheDocument()
-    expect(await within(within(sidebar()).getByRole('list', { name: 'Projects' })).findByRole('link', { name: '模型接入' })).toHaveAttribute('href', query(other.name))
+    expect(await within(within(sidebar()).getByRole('list', { name: 'Projects' })).findByRole('link', { name: 'model-access' })).toHaveAttribute('href', query(other.name))
     expect(within(sidebar()).queryByRole('link', { name: 'Tasks' })).toBeNull()
     expect(window.localStorage.getItem('loop-now.lastScope')).toBe(other.id)
   })

@@ -72,13 +72,13 @@ describe('Desktop shell notifications and the Dock unread count', () => {
     const detail = makeTaskDetail(defaultProject.id, defaultProject.name)
     server.use(http.get(apiUrl(`/tasks/${taskId}`), () => HttpResponse.json(detail)), http.get(projectsUrl, () => HttpResponse.json({ projects: [defaultProject] })))
     await start()
-    const message = summaryOf(makeInboxMessage({ from: agentParty({ ...agent, name: '任务检查员' }), to: consoleParty, text: 'Check done, waiting for your confirmation', task: { taskId, nodeRunId: nodeId, runtimeId: crypto.randomUUID() } }))
+    const message = summaryOf(makeInboxMessage({ from: agentParty({ ...agent, name: 'task-checker' }), to: consoleParty, text: 'Check done, waiting for your confirmation', task: { taskId, nodeRunId: nodeId, runtimeId: crypto.randomUUID() } }))
     await emitInbox('inbox.message.created', { message, unreadTotal: 3 })
     await waitFor(() => expect(bridge.notify).toHaveBeenCalledTimes(1))
     expect(bridge.notify).toHaveBeenCalledWith({
       id: message.id,
-      title: 'Task waiting: 通用任务验收',
-      body: '任务检查员: Check done, waiting for your confirmation',
+      title: 'Task waiting: General task acceptance',
+      body: 'task-checker: Check done, waiting for your confirmation',
       path: `/p/${encodeURIComponent(defaultProject.name)}/tasks/${taskId}?record=${nodeId}`,
     })
   })
@@ -87,10 +87,10 @@ describe('Desktop shell notifications and the Dock unread count', () => {
     const detail = makeTaskDetail(defaultProject.id, defaultProject.name)
     server.use(http.get(apiUrl(`/tasks/${taskId}`), () => HttpResponse.json(detail)), http.get(projectsUrl, () => HttpResponse.json({ projects: [defaultProject] })))
     await start()
-    const message = question({ from: agentParty({ ...agent, name: '任务检查员' }), task: { taskId, nodeRunId: nodeId, runtimeId: crypto.randomUUID() } })
+    const message = question({ from: agentParty({ ...agent, name: 'task-checker' }), task: { taskId, nodeRunId: nodeId, runtimeId: crypto.randomUUID() } })
     await emitInbox('inbox.message.created', { message, unreadTotal: 3 })
     await waitFor(() => expect(bridge.notify).toHaveBeenCalledTimes(1))
-    expect(bridge.notify.mock.calls[0][0]).toMatchObject({ title: 'Waiting for your reply: 任务检查员', body: 'Task "通用任务验收": Merge this PR?' })
+    expect(bridge.notify.mock.calls[0][0]).toMatchObject({ title: 'Waiting for your reply: task-checker', body: 'Task "General task acceptance": Merge this PR?' })
   })
 
   it('no notification: while the window is visible and focused, for a plain message an Agent sends you, for a question no longer open, for a message sent to an Agent', async () => {

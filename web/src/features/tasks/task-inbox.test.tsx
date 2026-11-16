@@ -23,7 +23,7 @@ it('real Inbox record SSE events merge directly, notification, read and reply st
     http.get(apiUrl(`/tasks/${taskId}/nodes/:node/inbox-messages`), ({ params }) => { reads++; return HttpResponse.json({ items: params.node === nodeId ? records : [], nextCursor: null }) }),
     http.post(apiUrl('/inbox/messages/:id/read'), () => { readPosts++; return HttpResponse.json({}) }))
   renderRoutes(routes, `${tasksPath(defaultProject.name)}/${taskId}`)
-  await screen.findByText('真实Inbox输入'); expect(screen.getByText('Received; unread by the Agent')).toBeVisible()
+  await screen.findByText('Real inbox input'); expect(screen.getByText('Received; unread by the Agent')).toBeVisible()
   const es = FakeEventSource.instances.find(source => source.url.endsWith(`/tasks/${taskId}/events`))!
   const notified = { ...root, runLinks: [{ runId, role: 'notification' as const }] }
   records = [notified]; const before = reads
@@ -37,7 +37,7 @@ it('real Inbox record SSE events merge directly, notification, read and reply st
   await screen.findByText('Read by the Agent'); await waitFor(() => expect(screen.getAllByText('same actual text')).toHaveLength(2))
   expect(screen.getByText('Inbox reply')).toBeVisible(); expect(screen.getByText('Agent work output')).toBeVisible()
   expect(document.querySelectorAll(`[data-inbox-message-id="${root.message.id}"]`)).toHaveLength(1); expect(readPosts).toBe(0)
-  expect(within(screen.getByText('真实Inbox输入').closest<HTMLElement>('[data-inbox-message-id]')!).queryByText('Inbox reply')).toBeNull()
+  expect(within(screen.getByText('Real inbox input').closest<HTMLElement>('[data-inbox-message-id]')!).queryByText('Inbox reply')).toBeNull()
 })
 
 it('the Inbox read request start protects read, links and not-run facts, and a fresh partial page neither deletes nor downgrades them', () => {

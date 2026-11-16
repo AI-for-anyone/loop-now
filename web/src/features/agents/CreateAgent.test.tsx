@@ -90,12 +90,12 @@ describe('Creating an Agent', () => {
       created = body
       return HttpResponse.json(makeAgent({ name: body.name, model: body.model }), { status: 201 })
     })
-    const dialog = await fill(user, '开发助手')
+    const dialog = await fill(user, 'dev-helper')
     await user.click(within(dialog).getByRole('button', { name: 'Create' }))
-    await waitFor(() => expect(created).toEqual({ name: '开发助手', model: { provider: 'anthropic', modelId: 'claude-sonnet-5-5' } }))
+    await waitFor(() => expect(created).toEqual({ name: 'dev-helper', model: { provider: 'anthropic', modelId: 'claude-sonnet-5-5' } }))
     await waitFor(() => expect(router.state.location.pathname).toMatch(new RegExp(`^${defaultAgentsPath}/.+/config$`)))
     const list = await screen.findByRole('list', { name: 'Agents' })
-    await waitFor(() => expect(within(list).getByRole('link', { name: /开发助手/ })).toHaveAttribute('aria-current', 'page'))
+    await waitFor(() => expect(within(list).getByRole('link', { name: /dev-helper/ })).toHaveAttribute('aria-current', 'page'))
   })
 
   it('a plugin provider cannot be picked at create time: the option is disabled and says to grant the plugin after creating, and the catalog request has no agentId', async () => {
@@ -153,7 +153,7 @@ describe('Creating an Agent', () => {
       calls += 1
       return HttpResponse.json({}, { status: 201 })
     })
-    const dialog = await fill(user, '开发助手', false)
+    const dialog = await fill(user, 'dev-helper', false)
     await user.click(within(dialog).getByRole('button', { name: 'Create' }))
     expect(await within(dialog).findByText('Choose a model')).toBeInTheDocument()
     expect(calls).toBe(0)
@@ -161,19 +161,19 @@ describe('Creating an Agent', () => {
 
   it('on a duplicate name, shows the reason next to the name and keeps the input', async () => {
     const { user } = setup(() => HttpResponse.json(errorBody('name_conflict', 'dup'), { status: 409 }))
-    const dialog = await fill(user, '开发助手')
+    const dialog = await fill(user, 'dev-helper')
     await user.click(within(dialog).getByRole('button', { name: 'Create' }))
     expect(await within(dialog).findByText('The project already has an Agent with this name. Pick another.')).toBeInTheDocument()
-    expect(within(dialog).getByLabelText('Display name')).toHaveValue('开发助手')
+    expect(within(dialog).getByLabelText('Display name')).toHaveValue('dev-helper')
     expect(within(dialog).getByRole('combobox', { name: 'Model' })).toHaveTextContent('claude-sonnet-5-5')
   })
 
   it('on a network error, says the server is unreachable and keeps the input', async () => {
     const { user } = setup(() => HttpResponse.error())
-    const dialog = await fill(user, '开发助手')
+    const dialog = await fill(user, 'dev-helper')
     await user.click(within(dialog).getByRole('button', { name: 'Create' }))
     expect(await within(dialog).findByText('Can\'t reach the server')).toBeInTheDocument()
-    expect(within(dialog).getByLabelText('Display name')).toHaveValue('开发助手')
+    expect(within(dialog).getByLabelText('Display name')).toHaveValue('dev-helper')
   })
 
   it('a name that breaks the naming rules is flagged locally first and not submitted', async () => {
@@ -221,7 +221,7 @@ describe('Creating an Agent', () => {
   it('shows the reason when the provider\'s model list fails to load', async () => {
     const { user } = setup(() => HttpResponse.json({}, { status: 201 }))
     server.use(http.get(apiUrl('/model-providers/openai/models'), () => HttpResponse.json(errorBody('internal_error', 'boom'), { status: 500 })))
-    const dialog = await fill(user, '开发助手', false)
+    const dialog = await fill(user, 'dev-helper', false)
     await user.selectOptions(await within(dialog).findByLabelText('Model provider'), 'openai')
     expect(await within(dialog).findByText('Couldn\'t load the model catalog, so the model can\'t be changed right now.')).toBeInTheDocument()
     expect(within(dialog).getByText(/^Reason: Internal server error/)).toBeInTheDocument()

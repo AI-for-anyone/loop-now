@@ -40,8 +40,8 @@ function renderDetail(path = '/plugins/webhook', initial: Parameters<typeof fake
 describe('Plugin details', () => {
   it('header: name, official source, version and status; tabs sit on the top edge of the sheet and are kept in the URL; the overview has numbered sections: what it contains, enabled projects, recent activity (three numbers for events, deliveries and logs), with the section ruler in the stub', async () => {
     renderDetail()
-    expect(await screen.findByRole('heading', { level: 1, name: 'Webhook 通知' })).toBeInTheDocument()
-    const tabs = screen.getByRole('navigation', { name: 'Webhook 通知' })
+    expect(await screen.findByRole('heading', { level: 1, name: 'Webhook notifications' })).toBeInTheDocument()
+    const tabs = screen.getByRole('navigation', { name: 'Webhook notifications' })
     expect(within(tabs).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('aria-current')])).toEqual([
       ['Overview', 'page'],
       ['Config', null],
@@ -53,8 +53,8 @@ describe('Plugin details', () => {
     const contains = screen.getByRole('region', { name: 'What it contains' })
     expect(within(contains).getByText('inbox.read').parentElement).toHaveTextContent('Read Inbox message bodies')
     const enabled = screen.getByRole('region', { name: 'Enabled in projects' })
-    await waitFor(() => expect(within(enabled).getByRole('switch', { name: `Enable Webhook 通知 in ${defaultProject.name}` })).toHaveAttribute('aria-checked', 'true'))
-    expect(within(enabled).getByText(defaultProject.name).closest('li')).toHaveTextContent('回调地址 → https://hooks.example.com/propanda')
+    await waitFor(() => expect(within(enabled).getByRole('switch', { name: `Enable Webhook notifications in ${defaultProject.name}` })).toHaveAttribute('aria-checked', 'true'))
+    expect(within(enabled).getByText(defaultProject.name).closest('li')).toHaveTextContent('Callback URL → https://hooks.example.com/propanda')
     // Recent activity: the API gives no total, so count only the entries read
     // so far and add "+" when there are more; each column links to its tab.
     const activity = screen.getByRole('region', { name: 'Recent activity' })
@@ -73,7 +73,7 @@ describe('Plugin details', () => {
   it('enabling in another project sends its existing project config and revision', async () => {
     const user = userEvent.setup()
     const { fake } = renderDetail()
-    const toggle = await screen.findByRole('switch', { name: `Enable Webhook 通知 in ${other.name}` })
+    const toggle = await screen.findByRole('switch', { name: `Enable Webhook notifications in ${other.name}` })
     await waitFor(() => expect(toggle).toBeEnabled())
     await user.click(toggle)
     await waitFor(() => expect(fake.writes()).toEqual([{ method: 'PUT', path: `/projects/${other.id}/plugins/webhook`, query: {}, body: { enabled: true, values: {}, expectedRevision: 0 } }]))
@@ -82,14 +82,14 @@ describe('Plugin details', () => {
   it('config tab: the global form generated from the manifest with the secret set; saving sends the revision; project overrides and the environment for the plugin process', async () => {
     const user = userEvent.setup()
     const { fake } = renderDetail('/plugins/webhook/config')
-    expect(await screen.findByLabelText('回调地址')).toHaveValue('https://hooks.example.com/loop-now')
+    expect(await screen.findByLabelText('Callback URL')).toHaveValue('https://hooks.example.com/loop-now')
     expect(screen.getByText('Set')).toBeInTheDocument()
-    await user.clear(screen.getByLabelText('重试上限'))
-    await user.type(screen.getByLabelText('重试上限'), '3')
+    await user.clear(screen.getByLabelText('Retry limit'))
+    await user.type(screen.getByLabelText('Retry limit'), '3')
     await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(fake.writes()).toEqual([{ method: 'PUT', path: '/plugins/webhook/config', query: {}, body: { values: { url: 'https://hooks.example.com/loop-now', retries: 3 }, expectedRevision: 2 } }]))
     const overrides = screen.getByRole('region', { name: 'Project overrides' })
-    await waitFor(() => expect(overrides).toHaveTextContent(`${defaultProject.name}1 override回调地址 → https://hooks.example.com/propanda`))
+    await waitFor(() => expect(overrides).toHaveTextContent(`${defaultProject.name}1 overrideCallback URL → https://hooks.example.com/propanda`))
     expect(screen.getByRole('region', { name: 'Environment for the plugin process' })).toHaveTextContent('LOOP_NOW_PLUGIN_DATA=/work/platform/plugins/webhook/data')
     expect(screen.getByRole('region', { name: 'Environment for the plugin process' })).toHaveTextContent('Only inbox.read, state')
   })
@@ -134,7 +134,7 @@ describe('Plugin details', () => {
     const user = userEvent.setup()
     const { fake } = renderDetail()
     await user.click(await screen.findByRole('button', { name: 'Check for updates' }))
-    const dialog = await screen.findByRole('dialog', { name: /Update Webhook 通知/ })
+    const dialog = await screen.findByRole('dialog', { name: /Update Webhook notifications/ })
     expect(dialog).toHaveTextContent('webhook · v1.2.0 → v1.3.0')
     await user.click(within(dialog).getByRole('button', { name: 'Update' }))
     await waitFor(() => expect(fake.writes().map((r) => [r.method, r.path, r.body])).toEqual([
@@ -147,7 +147,7 @@ describe('Plugin details', () => {
     const user = userEvent.setup()
     const { fake, router } = renderDetail()
     await user.click(await screen.findByRole('button', { name: 'Uninstall' }))
-    const dialog = await screen.findByRole('alertdialog', { name: 'Uninstall Webhook 通知?' })
+    const dialog = await screen.findByRole('alertdialog', { name: 'Uninstall Webhook notifications?' })
     await user.click(within(dialog).getByRole('checkbox', { name: 'Also delete the data folder /work/platform/plugins/webhook/data' }))
     await user.click(within(dialog).getByRole('button', { name: 'Uninstall' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/plugins'))
@@ -163,7 +163,7 @@ describe('Plugin details', () => {
 
 describe('Plugin details: README and repository', () => {
   const readme = [
-    '# Webhook 通知',
+    '# Webhook notifications',
     '',
     '## Config',
     '',
@@ -233,7 +233,7 @@ describe('Plugin details: README and repository', () => {
 
   it('official plugins have no repository link', async () => {
     renderDetail()
-    await screen.findByRole('heading', { level: 1, name: 'Webhook 通知' })
+    await screen.findByRole('heading', { level: 1, name: 'Webhook notifications' })
     expect(screen.queryByRole('link', { name: 'Repository' })).toBeNull()
   })
 })
@@ -299,7 +299,7 @@ describe('Plugin details: model providers', () => {
     unmount()
     renderDetail()
     await user.click(await screen.findByRole('button', { name: 'Uninstall' }))
-    expect(await screen.findByRole('alertdialog', { name: 'Uninstall Webhook 通知?' })).not.toHaveTextContent('subscription accounts')
+    expect(await screen.findByRole('alertdialog', { name: 'Uninstall Webhook notifications?' })).not.toHaveTextContent('subscription accounts')
   })
 
   it('Pi extensions without registered providers: says none were found; a plugin with no extensions and nothing read does not show this section', async () => {

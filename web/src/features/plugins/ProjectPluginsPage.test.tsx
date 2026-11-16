@@ -40,8 +40,8 @@ const card = async (name: string) => (await screen.findByRole('link', { name }))
 describe('Project plugins page', () => {
   it('one card per installed plugin with an enable switch; a plugin with only an Agent side says to grant it in the Agent config', async () => {
     renderProject()
-    const webhook = await card('Webhook 通知')
-    expect(within(webhook).getByRole('switch', { name: 'Enable Webhook 通知 in this project' })).toHaveAttribute('aria-checked', 'true')
+    const webhook = await card('Webhook notifications')
+    expect(within(webhook).getByRole('switch', { name: 'Enable Webhook notifications in this project' })).toHaveAttribute('aria-checked', 'true')
     const playwright = await card('Dedicated browser')
     expect(within(playwright).getByRole('switch', { name: 'Enable Dedicated browser in this project' })).toHaveAttribute('aria-checked', 'false')
     await waitFor(() => expect(playwright).toHaveTextContent('Agent side only. After enabling, grant it in an Agent\'s config.'))
@@ -59,9 +59,9 @@ describe('Project plugins page', () => {
   it('project config has only x-scope: project fields and shows the global value; saving keeps it enabled and sends the revision', async () => {
     const user = userEvent.setup()
     const { fake } = renderProject()
-    const webhook = await card('Webhook 通知')
-    const url = await within(webhook).findByLabelText('回调地址')
-    expect(within(webhook).queryByLabelText('重试上限')).toBeNull()
+    const webhook = await card('Webhook notifications')
+    const url = await within(webhook).findByLabelText('Callback URL')
+    expect(within(webhook).queryByLabelText('Retry limit')).toBeNull()
     expect(webhook).toHaveTextContent('Global value: https://hooks.example.com/loop-now')
     await user.type(url, 'https://hooks.example.com/propanda')
     await user.click(within(webhook).getByRole('button', { name: 'Save' }))
@@ -72,7 +72,7 @@ describe('Project plugins page', () => {
 
   it('lists only the events of this project', async () => {
     const { fake } = renderProject()
-    const webhook = await card('Webhook 通知')
+    const webhook = await card('Webhook notifications')
     await waitFor(() => expect(within(webhook).getAllByText('inbox.received')).toHaveLength(1))
     expect(within(webhook).queryByText('run.ended')).toBeNull()
     expect(fake.requests.find((r) => r.path === '/plugins/webhook/deliveries')?.query).toEqual({ limit: '3', projectId: defaultProject.id })
@@ -82,8 +82,8 @@ describe('Project plugins page', () => {
     const user = userEvent.setup()
     const { fake } = renderProject()
     const larkCard = await card('Lark notifications')
-    const accounts = await within(larkCard).findByRole('region', { name: 'Accounts · 飞书应用' })
-    await waitFor(() => expect(within(accounts).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['研发群机器人cli_a1b2EditDelete', 'Personal testcli_9f8e7d…EditDelete']))
+    const accounts = await within(larkCard).findByRole('region', { name: 'Accounts · Lark app' })
+    await waitFor(() => expect(within(accounts).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Dev group botcli_a1b2EditDelete', 'Personal testcli_9f8e7d…EditDelete']))
 
     await user.click(within(accounts).getByRole('button', { name: 'Add account' }))
     await user.type(within(accounts).getByLabelText('Name'), 'On-call bot')
@@ -99,9 +99,9 @@ describe('Project plugins page', () => {
     await user.click(within(accounts).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(within(accounts).getByText('Personal test 2')).toBeInTheDocument())
 
-    await user.click(within(accounts).getByRole('button', { name: 'Delete 研发群机器人' }))
-    await user.click(within(await screen.findByRole('alertdialog', { name: 'Delete account 研发群机器人?' })).getByRole('button', { name: 'Delete' }))
-    await waitFor(() => expect(within(accounts).queryByText('研发群机器人')).toBeNull())
+    await user.click(within(accounts).getByRole('button', { name: 'Delete Dev group bot' }))
+    await user.click(within(await screen.findByRole('alertdialog', { name: 'Delete account Dev group bot?' })).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(within(accounts).queryByText('Dev group bot')).toBeNull())
 
     const base = `/projects/${defaultProject.id}/plugins/lark-notify/accounts`
     expect(fake.writes().map((r) => [r.method, r.path, r.body])).toEqual([

@@ -10,7 +10,7 @@ import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
 
-const agentPlugin = (overrides: Partial<Schemas['AgentPlugin']>): Schemas['AgentPlugin'] => ({ pluginId: 'webhook', displayName: 'Webhook 通知', available: true, granted: false, accountIds: [], accountKinds: [], ...overrides })
+const agentPlugin = (overrides: Partial<Schemas['AgentPlugin']>): Schemas['AgentPlugin'] => ({ pluginId: 'webhook', displayName: 'Webhook notifications', available: true, granted: false, accountIds: [], accountKinds: [], ...overrides })
 const bot = makeAccount({ projectId: defaultProject.id, pluginId: 'lark-notify' })
 const personal = makeAccount({ id: '72000000-0000-7000-8000-000000000002', projectId: defaultProject.id, pluginId: 'lark-notify', name: 'Personal test' })
 
@@ -31,7 +31,7 @@ describe('Plugin section of the Agent config page', () => {
     ])
     const plugins = await section()
     const lark = await within(plugins).findByRole('button', { name: /Lark notifications/ })
-    await waitFor(() => expect(lark).toHaveTextContent('Lark notificationsGranted· Accounts: 研发群机器人'))
+    await waitFor(() => expect(lark).toHaveTextContent('Lark notificationsGranted· Accounts: Dev group bot'))
     expect(within(plugins).getByRole('button', { name: /Dedicated browser/ })).toHaveTextContent('Dedicated browserNot granted')
     const group = within(plugins).getByRole('button', { name: 'Not enabled in project (1)' })
     expect(within(plugins).getByRole('link', { name: 'Enable on the project\'s plugin page' })).toHaveAttribute('href', `/p/${encodeURIComponent(defaultProject.name)}/plugins`)
@@ -74,8 +74,8 @@ describe('Plugin section of the Agent config page', () => {
     const user = userEvent.setup()
     renderAgent([agentPlugin({}), agentPlugin({ pluginId: 'playwright', displayName: 'Dedicated browser' })])
     const plugins = await section()
-    await user.click(await within(plugins).findByRole('button', { name: /Webhook 通知/ }))
-    await user.click(within(plugins).getByRole('checkbox', { name: 'Grant Webhook 通知' }))
+    await user.click(await within(plugins).findByRole('button', { name: /Webhook notifications/ }))
+    await user.click(within(plugins).getByRole('checkbox', { name: 'Grant Webhook notifications' }))
     await user.click(within(plugins).getByRole('button', { name: /Dedicated browser/ }))
     const dialog = await screen.findByRole('alertdialog', { name: 'Discard unsaved grant changes?' })
     await user.click(within(dialog).getByRole('button', { name: 'Discard changes' }))
@@ -86,9 +86,9 @@ describe('Plugin section of the Agent config page', () => {
     const user = userEvent.setup()
     const { fake, agent } = renderAgent([agentPlugin({})])
     const plugins = await section()
-    await user.click(await within(plugins).findByRole('button', { name: /Webhook 通知/ }))
+    await user.click(await within(plugins).findByRole('button', { name: /Webhook notifications/ }))
     fake.state.agents[agent.id] = [agentPlugin({ available: false })]
-    await user.click(within(plugins).getByRole('checkbox', { name: 'Grant Webhook 通知' }))
+    await user.click(within(plugins).getByRole('checkbox', { name: 'Grant Webhook notifications' }))
     await user.click(within(plugins).getByRole('button', { name: 'Save' }))
     expect(await within(plugins).findByText('This plugin isn\'t enabled in the project yet; enable it there before granting.')).toBeInTheDocument()
   })
@@ -139,7 +139,7 @@ describe('Plugin section of the Agent config page', () => {
     const plugins = await section()
     await user.click(await within(plugins).findByRole('button', { name: /Lark notifications/ }))
     const form = within(plugins).getByRole('region', { name: 'Lark notifications' })
-    expect(within(form).queryByRole('group', { name: 'Accounts · 飞书应用' })).toBeNull()
+    expect(within(form).queryByRole('group', { name: 'Accounts · Lark app' })).toBeNull()
     await user.click(within(form).getByRole('checkbox', { name: 'Grant Lark notifications' }))
     await user.click(within(form).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(fake.writes().map((r) => r.body)).toEqual([{ granted: true, accountIds: [] }]))

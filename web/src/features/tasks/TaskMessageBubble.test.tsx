@@ -3,7 +3,7 @@ import { expect, it } from 'vitest'
 import { makeTaskMessage } from '@/test/tasks'
 import { TaskMessageBubble } from './TaskMessageBubble'
 
-const agent = { id: 'agent', name: '任务检查员' }
+const agent = { id: 'agent', name: 'task-checker' }
 const sleepId = '00000000-0000-7000-8000-000000005101'
 // The old Chinese wake sentence and old Chinese errorMessage cases are in src/zh-CN/features/tasks/TaskMessageBubble.zh.test.tsx.
 it.each([

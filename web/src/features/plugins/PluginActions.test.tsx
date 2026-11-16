@@ -24,7 +24,7 @@ const webhook = makeDetail(
   makeManifest({
     components: makeComponents({
       actions: [
-        makeAction({ id: 'resend', label: '重发', where: ['global'], fields: resendFields }),
+        makeAction({ id: 'resend', label: 'Resend', where: ['global'], fields: resendFields }),
         makeAction({ id: 'ping', label: 'Test push', where: ['project'] }),
         makeAction({ id: 'poke', label: 'Send it one', where: ['agent'] }),
         makeAction({ id: 'sync', label: 'Sync', where: ['task', 'identity'] }),
@@ -34,7 +34,7 @@ const webhook = makeDetail(
 )
 
 function setup(initial: Parameters<typeof fakePlugins>[0] = {}, agent = makeAgent()) {
-  const fake = fakePlugins({ details: [webhook], projects: { [defaultProject.id]: { webhook: makeProjectPlugin({ enabled: true }) } }, agents: { [agent.id]: [{ pluginId: 'webhook', displayName: 'Webhook 通知', available: true, granted: true, accountIds: [], accountKinds: [] }] }, ...initial })
+  const fake = fakePlugins({ details: [webhook], projects: { [defaultProject.id]: { webhook: makeProjectPlugin({ enabled: true }) } }, agents: { [agent.id]: [{ pluginId: 'webhook', displayName: 'Webhook notifications', available: true, granted: true, accountIds: [], accountKinds: [] }] }, ...initial })
   server.use(...fake.handlers, ...baseHandlers([agent]))
   return { fake, agent }
 }
@@ -45,10 +45,10 @@ describe('Plugin action buttons', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null)
     const { fake } = setup({ actions: { 'webhook/resend': () => HttpResponse.json({ notice: 'Resent 3', url: 'https://hooks.example.com/log' }) } })
     renderRoutes(routes, '/plugins/webhook')
-    const group = await screen.findByRole('group', { name: 'Actions from plugin Webhook 通知' })
-    expect(within(group).getAllByRole('button').map((b) => b.textContent)).toEqual(['重发'])
-    await user.click(within(group).getByRole('button', { name: '重发' }))
-    const dialog = await screen.findByRole('dialog', { name: '重发' })
+    const group = await screen.findByRole('group', { name: 'Actions from plugin Webhook notifications' })
+    expect(within(group).getAllByRole('button').map((b) => b.textContent)).toEqual(['Resend'])
+    await user.click(within(group).getByRole('button', { name: 'Resend' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Resend' })
     await user.click(within(dialog).getByRole('button', { name: 'Run' }))
     expect(within(dialog).getByText('Required', { selector: '.font-bold' })).toBeInTheDocument()
     await user.type(within(dialog).getByLabelText('Target URL'), 'https://hooks.example.com/x')
@@ -58,7 +58,7 @@ describe('Plugin action buttons', () => {
     const toast = await screen.findByText('Resent 3')
     expect(within(toast).getByRole('link', { name: 'Open' })).toHaveAttribute('href', 'https://hooks.example.com/log')
     expect(open).toHaveBeenCalledWith('https://hooks.example.com/log', '_blank', 'noopener,noreferrer')
-    expect(screen.queryByRole('dialog', { name: '重发' })).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Resend' })).toBeNull()
     open.mockRestore()
   })
 
@@ -69,8 +69,8 @@ describe('Plugin action buttons', () => {
     const user = userEvent.setup()
     setup({ actions: { 'webhook/resend': () => HttpResponse.json(errorBody(code, code), { status }) } })
     renderRoutes(routes, '/plugins/webhook')
-    await user.click(await screen.findByRole('button', { name: '重发' }))
-    const dialog = await screen.findByRole('dialog', { name: '重发' })
+    await user.click(await screen.findByRole('button', { name: 'Resend' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Resend' })
     await user.type(within(dialog).getByLabelText('Target URL'), 'https://hooks.example.com/x')
     await user.click(within(dialog).getByRole('button', { name: 'Run' }))
     expect(await within(dialog).findByText(message)).toBeInTheDocument()
@@ -88,8 +88,8 @@ describe('Plugin action buttons', () => {
       },
     })
     renderRoutes(routes, '/plugins/webhook')
-    await user.click(await screen.findByRole('button', { name: '重发' }))
-    const dialog = await screen.findByRole('dialog', { name: '重发' })
+    await user.click(await screen.findByRole('button', { name: 'Resend' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Resend' })
     await user.type(within(dialog).getByLabelText('Target URL'), 'https://hooks.example.com/x')
     await user.click(within(dialog).getByRole('button', { name: 'Run' }))
     expect(await within(dialog).findByText('This address is not on the allowlist')).toBeInTheDocument()
@@ -101,13 +101,13 @@ describe('Plugin action buttons', () => {
     const user = userEvent.setup()
     const { fake } = setup()
     renderRoutes(routes, `/p/${encodeURIComponent(defaultProject.name)}/plugins`)
-    const card = (await screen.findByRole('link', { name: 'Webhook 通知' })).closest('li')!
+    const card = (await screen.findByRole('link', { name: 'Webhook notifications' })).closest('li')!
     await user.click(await within(card).findByRole('button', { name: 'Test push' }))
     const dialog = await screen.findByRole('dialog', { name: 'Test push' })
     expect(dialog).toHaveTextContent('Run "Test push"?')
     await user.click(within(dialog).getByRole('button', { name: 'Run' }))
     await waitFor(() => expect(fake.writes().at(-1)).toEqual({ method: 'POST', path: '/plugins/webhook/actions/ping', query: {}, body: { where: { projectId: defaultProject.id }, input: {} } }))
-    expect(await screen.findByText('已完成')).toBeInTheDocument()
+    expect(await screen.findByText('Done')).toBeInTheDocument()
   })
 
   it('Agent actions sit in the plugin row of the Agent config page (once expanded) with this Agent as where', async () => {
@@ -115,7 +115,7 @@ describe('Plugin action buttons', () => {
     const { fake, agent } = setup()
     renderRoutes(routes, defaultAgentPath(agent.id, 'config'))
     const section = await screen.findByRole('region', { name: 'Plugin grants' })
-    await user.click(await within(section).findByRole('button', { name: /Webhook 通知/ }))
+    await user.click(await within(section).findByRole('button', { name: /Webhook notifications/ }))
     await user.click(await within(section).findByRole('button', { name: 'Send it one' }))
     await user.click(within(await screen.findByRole('dialog', { name: 'Send it one' })).getByRole('button', { name: 'Run' }))
     await waitFor(() => expect(fake.writes().at(-1)?.body).toEqual({ where: { agentId: agent.id }, input: {} }))
@@ -127,7 +127,7 @@ describe('Plugin action buttons', () => {
     const fake = fakePlugins({ details: [webhook, other], projects: { [defaultProject.id]: { webhook: makeProjectPlugin({ enabled: true }) } } })
     server.use(...fake.handlers)
     const task = renderWithQuery(<><PagePluginActions page="task" where={{ taskId: '73000000-0000-7000-8000-000000000001' }} projectId={defaultProject.id} /><Toasts /></>)
-    await screen.findByRole('group', { name: 'Actions from plugin Webhook 通知' })
+    await screen.findByRole('group', { name: 'Actions from plugin Webhook notifications' })
     await waitFor(() => expect(screen.queryByRole('group', { name: 'Actions from plugin Another' })).toBeNull())
     await user.click(screen.getByRole('button', { name: 'Sync' }))
     await user.click(within(await screen.findByRole('dialog', { name: 'Sync' })).getByRole('button', { name: 'Run' }))
@@ -135,7 +135,7 @@ describe('Plugin action buttons', () => {
     task.unmount()
     renderWithQuery(<PagePluginActions page="identity" where={{ identityId: '74000000-0000-7000-8000-000000000001' }} />)
     expect(await screen.findByRole('group', { name: 'Actions from plugin Another' })).toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'Actions from plugin Webhook 通知' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Actions from plugin Webhook notifications' })).toBeInTheDocument()
   })
 })
 

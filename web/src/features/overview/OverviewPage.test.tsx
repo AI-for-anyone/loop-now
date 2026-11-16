@@ -63,12 +63,12 @@ describe('Overview page entry', () => {
         ),
       ],
     })
-    await snapshot([makeAgentOverview({ name: '开发助手' })])
+    await snapshot([makeAgentOverview({ name: 'dev-helper' })])
     const usage = section('Usage')
     const alert = await within(usage).findByRole('alert')
     expect(alert).toHaveTextContent("Couldn't load usage")
     expect(alert).toHaveTextContent('01890a5d-ac96-774b-bcce-b302099a8057')
-    expect(within(section('Run status')).getByRole('table')).toHaveTextContent('开发助手')
+    expect(within(section('Run status')).getByRole('table')).toHaveTextContent('dev-helper')
     expect(await within(section('Issues and failures')).findByText('Test helper')).toBeInTheDocument()
     expect(within(section('Issues and failures')).queryByRole('alert')).toBeNull()
     fail = false
@@ -80,7 +80,7 @@ describe('Overview page entry', () => {
 
 describe('Run status', () => {
   it('an Agent starts replying: without reloading, it shows replying and the current phase, and the “Replying” count goes up by one', async () => {
-    const agent = makeAgentOverview({ name: '开发助手' })
+    const agent = makeAgentOverview({ name: 'dev-helper' })
     const { snapshot, emit } = await renderOverview()
     await snapshot([agent, makeAgentOverview({ name: 'Test helper' })])
     const tiles = screen.getByRole('list', { name: 'Run status summary' })
@@ -91,8 +91,8 @@ describe('Run status', () => {
     const run = makeRun({ status: 'starting', phase: 'preparing', endedAt: null, runningAt: null, configVersion: 3 })
     await emit('agent.status', { agent: { ...agent, status: makeStatus(agent.agentId, { busy: true, currentRun: run, processState: 'starting' }) } })
     expect(busyTile).toHaveTextContent('1')
-    expect(busyTile).toHaveTextContent('开发助手')
-    const row = within(screen.getByRole('table')).getByText('开发助手').closest('tr')!
+    expect(busyTile).toHaveTextContent('dev-helper')
+    const row = within(screen.getByRole('table')).getByText('dev-helper').closest('tr')!
     expect(row).toHaveTextContent('Replying')
     expect(row).toHaveTextContent('Preparing the environment')
     expect(row).toHaveTextContent('config v3')
@@ -114,11 +114,11 @@ describe('Run status', () => {
   })
 
   it('after the Pi process exits on idle it shows not running, with the time and reason of the exit', async () => {
-    const agent = makeAgentOverview({ name: '开发助手' })
+    const agent = makeAgentOverview({ name: 'dev-helper' })
     agent.status = makeStatus(agent.agentId, { processState: 'idle', processPid: 4321, processStartedAt: new Date(Date.now() - 60_000).toISOString() })
     const { snapshot, emit } = await renderOverview()
     await snapshot([agent])
-    const row = () => within(screen.getByRole('table')).getByText('开发助手').closest('tr')!
+    const row = () => within(screen.getByRole('table')).getByText('dev-helper').closest('tr')!
     expect(row()).toHaveTextContent('Ready · PID 4321')
     const exitAt = new Date()
     exitAt.setHours(10, 20, 0, 0)
@@ -142,10 +142,10 @@ describe('Run status', () => {
   })
 
   it('clicking an Agent opens its chat page', async () => {
-    const agent = makeAgent({ name: '开发助手' })
+    const agent = makeAgent({ name: 'dev-helper' })
     const { snapshot, user } = await renderOverview({ handlers: baseHandlers([agent]) })
     await snapshot([makeAgentOverview({ agentId: agent.id, name: agent.name })])
-    await user.click(within(screen.getByRole('table')).getByRole('link', { name: /开发助手/ }))
+    await user.click(within(screen.getByRole('table')).getByRole('link', { name: /dev-helper/ }))
     expect(await screen.findByRole('log', { name: 'Conversation' })).toBeInTheDocument()
   })
 
@@ -160,7 +160,7 @@ describe('Run status', () => {
   })
 
   it('when the event stream drops it shows reconnecting, and after recovery the latest state', async () => {
-    const agent = makeAgentOverview({ name: '开发助手' })
+    const agent = makeAgentOverview({ name: 'dev-helper' })
     const { snapshot, source, emit } = await renderOverview()
     await snapshot([agent])
     expect(screen.getByText('Run status is updating live')).toBeInTheDocument()
@@ -178,7 +178,7 @@ describe('Usage', () => {
   it('shows today by Agent by default; shows the total and its four parts, a total per row with details, and no cost', async () => {
     const { snapshot } = await renderOverview({
       usage: usagePage([
-        makeUsageRow({ agentName: '开发助手', input: 92140, output: 8420, cacheRead: 61440, cacheWrite: 4096 }),
+        makeUsageRow({ agentName: 'dev-helper', input: 92140, output: 8420, cacheRead: 61440, cacheWrite: 4096 }),
         makeUsageRow({ agentName: 'Old helper', agentDeleted: true, input: 100, output: 10 }),
       ]),
     })
@@ -189,7 +189,7 @@ describe('Usage', () => {
     expect(await within(usage).findByText('Total · Today')).toBeInTheDocument()
     expect(within(usage).getByText('166,206', { selector: 'span.riso-misreg' })).toBeInTheDocument()
     const rows = within(usage).getAllByRole('listitem')
-    expect(rows[0]).toHaveTextContent('开发助手')
+    expect(rows[0]).toHaveTextContent('dev-helper')
     expect(rows[0]).toHaveAccessibleDescription('Input 92,140 · Output 8,420 · Cache read 61,440 · Cache write 4,096 · Total 166,096')
     expect(rows[1]).toHaveTextContent('Old helperDeleted')
     expect(screen.getByRole('main')).not.toHaveTextContent(/cost|fee|price|dollar|USD|\$/i)
@@ -377,12 +377,12 @@ describe('Overview on a sheet', () => {
 
   it('Agent table: a solid line under the header, dashed lines between rows; model names monospace; idle is a light green pill', async () => {
     const { snapshot } = await renderOverview()
-    await snapshot([makeAgentOverview({ name: '开发助手' })])
+    await snapshot([makeAgentOverview({ name: 'dev-helper' })])
     const table = screen.getByRole('table')
     // Placed directly on the sheet, not wrapped in a white card.
     expect(table.parentElement).not.toHaveClass('bg-white', 'shadow-print-rest')
     expect(table.querySelector('thead tr')).toHaveClass('border-b-2', 'border-ink')
-    const row = within(table).getByText('开发助手').closest('tr')!
+    const row = within(table).getByText('dev-helper').closest('tr')!
     expect(row).toHaveClass('border-b-[1.5px]', 'border-dashed')
     expect(within(row).getByText(/ \/ /)).toHaveClass('font-mono')
     const pill = within(row).getByText('Idle').closest('[data-state-pill]')!
@@ -392,12 +392,12 @@ describe('Overview on a sheet', () => {
 
   it('usage: bars have a halftone fill, the largest row has a small yellow “Most” tag; period and grouping are segmented buttons, the chosen one yellow', async () => {
     const { snapshot } = await renderOverview({
-      usage: usagePage([makeUsageRow({ agentName: '开发助手', input: 9000, output: 1000 }), makeUsageRow({ agentName: 'Test helper', input: 2000, output: 500 })]),
+      usage: usagePage([makeUsageRow({ agentName: 'dev-helper', input: 9000, output: 1000 }), makeUsageRow({ agentName: 'Test helper', input: 2000, output: 500 })]),
     })
     await snapshot([makeAgentOverview()])
     const usage = section('Usage')
     const lines = await within(usage).findAllByRole('listitem')
-    expect(lines[0]).toHaveTextContent('开发助手')
+    expect(lines[0]).toHaveTextContent('dev-helper')
     expect(within(lines[0]).getByText('Most')).toHaveClass('bg-riso-yellow')
     expect(within(lines[1]).queryByText('Most')).toBeNull()
     const track = lines[0].querySelector('[data-usage-track]')!

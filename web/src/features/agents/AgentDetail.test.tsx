@@ -208,15 +208,15 @@ describe('Header and tab layout', () => {
   })
 
   it('the model sits in a monospace light-blue tag; the address sits in a dashed box, and the button next to it copies the address and says it was copied', async () => {
-    const { user, header } = await open(makeAgent({ name: 'Agent A', address: '测试组织/测试项目/Agent A' }))
+    const { user, header } = await open(makeAgent({ name: 'Agent A', address: 'test-org/test-project/Agent A' }))
     expect(within(header).getByText('anthropic · claude-sonnet-5-5')).toHaveClass('font-mono', 'bg-tint-blue')
-    const address = within(header).getByText('测试组织/测试项目/Agent A')
+    const address = within(header).getByText('test-org/test-project/Agent A')
     expect(address).toHaveClass('font-mono')
     expect(address.parentElement).toHaveClass('border-dashed')
     // English UI issue: the copy button's label glues t.common.copy and t.agents.address.label together without a space ("CopyAddress").
     const copy = within(header).getByRole('button', { name: 'CopyAddress' })
     await user.click(copy)
-    expect(await navigator.clipboard.readText()).toBe('测试组织/测试项目/Agent A')
+    expect(await navigator.clipboard.readText()).toBe('test-org/test-project/Agent A')
     expect(await within(header).findByText('Copied')).toBeInTheDocument()
     expect(copy).toHaveAccessibleName('CopyAddress')
   })
@@ -245,7 +245,7 @@ describe('Header and tab layout', () => {
   })
 
   it('on wide screens the header is compact: right of the title, one row holds identity, status, runtime, model and address and wraps when it does not fit; the breadcrumb is tighter; the sheet\'s top edge is closer to the top of the window', async () => {
-    const { title, header } = await open(makeAgent({ name: 'manager', isManager: true, address: '测试组织/测试项目/manager' }))
+    const { title, header } = await open(makeAgent({ name: 'manager', isManager: true, address: 'test-org/test-project/manager' }))
     expect(header).toHaveClass('nav:gap-1.5', 'nav:pt-3', 'nav:pb-2.5')
     const row = title.closest('[data-agent-title-row]')!
     // Narrow screens keep two rows as before (title and badges in one, model and address in the other);
@@ -255,7 +255,7 @@ describe('Header and tab layout', () => {
     expect(rows).toHaveLength(2)
     for (const inner of rows) expect(inner).toHaveClass('nav:contents')
     expect(rows[0]).toContainElement(title)
-    expect(rows[1]).toContainElement(within(header).getByText('测试组织/测试项目/manager'))
+    expect(rows[1]).toContainElement(within(header).getByText('test-org/test-project/manager'))
     expect(within(header).getByRole('navigation', { name: 'Breadcrumb' }).querySelector('ol')).toHaveClass('nav:leading-4')
   })
 

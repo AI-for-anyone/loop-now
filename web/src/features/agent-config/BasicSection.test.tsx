@@ -172,7 +172,7 @@ describe('Model choice', () => {
     expect(within(basic).getByText('anthropic / retired-model')).toBeInTheDocument()
     expect(saveButton()).toBeEnabled()
     await user.click(saveButton())
-    await waitFor(() => expect(saved).toEqual({ name: '开发助手2' }))
+    await waitFor(() => expect(saved).toEqual({ name: 'dev-helper2' }))
   })
 
   it("when a provider's model list fails to load, shows the reason and keeps showing the current model", async () => {

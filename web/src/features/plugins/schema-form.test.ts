@@ -6,9 +6,9 @@ const schema = {
   type: 'object',
   required: ['url', 'token'],
   properties: {
-    url: { type: 'string', format: 'uri', title: '回调地址', 'x-scope': 'project' },
+    url: { type: 'string', format: 'uri', title: 'Callback URL', 'x-scope': 'project' },
     token: { type: 'string', title: 'Token', 'x-secret': true },
-    retries: { type: 'integer', title: '重试上限', minimum: 0, maximum: 10, default: 5 },
+    retries: { type: 'integer', title: 'Retry limit', minimum: 0, maximum: 10, default: 5 },
     ratio: { type: 'number', title: 'Ratio' },
     verbose: { type: 'boolean', title: 'Verbose logs', 'x-scope': 'project' },
     level: { enum: ['low', 'high', 3], title: 'Level' },

@@ -10,7 +10,7 @@ import { agentParty, consoleParty, externalParty, makeIdentity, makeInboxMessage
 import { createTestQueryClient } from '@/test/render'
 import { applyInboxEvent } from './useInboxLive'
 
-const agent = makeAgent({ name: '开发助手' })
+const agent = makeAgent({ name: 'dev-helper' })
 const ciBot = makeIdentity({ name: 'ci-bot' })
 
 function setup() {

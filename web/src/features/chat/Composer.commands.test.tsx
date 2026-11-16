@@ -26,7 +26,7 @@ function commandResult(overrides: Partial<Schemas['ConsoleCommandResult']> = {})
 }
 
 function renderComposer(onCommand = vi.fn()) {
-  renderWithQuery(<Composer agentId="sleep-agent" agentName="开发助手" busy={false} disabled={false} maxMessageBytes={4096} onSent={vi.fn()} onCommand={onCommand} />)
+  renderWithQuery(<Composer agentId="sleep-agent" agentName="dev-helper" busy={false} disabled={false} maxMessageBytes={4096} onSent={vi.fn()} onCommand={onCommand} />)
   return onCommand
 }
 
@@ -146,7 +146,7 @@ it('clicking “Resume” in the session list opens the confirmation dialog, not
   let reads = 0
   server.use(http.get(apiUrl('/agents/sleep-agent/commands'), () => { reads += 1; return HttpResponse.json(commandList()) }))
   const handle = createRef<ComposerHandle>()
-  renderWithQuery(<Composer ref={handle} agentId="sleep-agent" agentName="开发助手" busy={false} disabled={false} maxMessageBytes={4096} onSent={vi.fn()} />)
+  renderWithQuery(<Composer ref={handle} agentId="sleep-agent" agentName="dev-helper" busy={false} disabled={false} maxMessageBytes={4096} onSent={vi.fn()} />)
   const box = screen.getByRole('textbox', { name: 'Message' })
   act(() => handle.current!.resume('12345678-1234-1234-1234-123456789abc'))
   expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
@@ -240,7 +240,7 @@ it('Esc closes the suggestions and keeps the command; Enter still sends directly
 })
 
 it('when the session is missing, the command suggestions offer only /resume', async () => {
-  renderWithQuery(<Composer agentId="sleep-agent" agentName="开发助手" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
+  renderWithQuery(<Composer agentId="sleep-agent" agentName="dev-helper" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
   // The input is enabled only after the command list has been fetched and confirms that /resume is available right now.
   const box = screen.getByRole('textbox', { name: 'Message' })
   expect(box).toBeDisabled()
@@ -254,7 +254,7 @@ it('when the session is missing, the command suggestions offer only /resume', as
 it('when the session is missing and /resume is unavailable (a Claude Code Agent), the input stays disabled, leaving no dead end where the only thing to type is a command sure to be rejected', async () => {
   let reads = 0
   server.use(http.get(apiUrl('/agents/sleep-agent/commands'), () => { reads += 1; return HttpResponse.json(claudeCodeList()) }))
-  renderWithQuery(<Composer agentId="sleep-agent" agentName="开发助手" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
+  renderWithQuery(<Composer agentId="sleep-agent" agentName="dev-helper" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
   await waitFor(() => expect(reads).toBe(1))
   await new Promise((resolve) => setTimeout(resolve, 30))
   expect(screen.getByRole('textbox', { name: 'Message' })).toBeDisabled()
@@ -307,7 +307,7 @@ it('completing a platform command keeps the arguments already written', async ()
 
 it('when the session is missing and the command list cannot be read: does not lock the input, still lets /resume through (the server decides), and says in the menu that the list could not be read', async () => {
   server.use(http.get(apiUrl('/agents/sleep-agent/commands'), () => HttpResponse.json({ error: { code: 'internal_error', message: 'boom' } }, { status: 500 })))
-  renderWithQuery(<Composer agentId="sleep-agent" agentName="开发助手" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
+  renderWithQuery(<Composer agentId="sleep-agent" agentName="dev-helper" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
   const box = screen.getByRole('textbox', { name: 'Message' })
   await waitFor(() => expect(box).toBeEnabled())
   await userEvent.type(box, '/res')

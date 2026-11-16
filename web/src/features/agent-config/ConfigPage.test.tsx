@@ -499,7 +499,7 @@ describe('Credentials are write-only', () => {
     await user.click(within(item).getByRole('button', { name: 'Enter credential' }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByLabelText('App Secret')).toHaveAttribute('type', 'password')
-    expect(within(dialog).getByLabelText('品牌')).toHaveValue('feishu')
+    expect(within(dialog).getByLabelText('Brand')).toHaveValue('feishu')
     await user.type(within(dialog).getByLabelText('App ID'), 'cli_app_id')
     await user.click(within(dialog).getByRole('button', { name: 'Save' }))
     expect(await within(dialog).findByText('Required')).toBeInTheDocument()

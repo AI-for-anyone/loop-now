@@ -19,7 +19,7 @@ function uploadFixture() {
     return HttpResponse.json(ref, { status: 201 })
   }))
 }
-function mount(busy = false) { renderWithQuery(<Composer agentId={agentId} agentName="开发助手" busy={busy} disabled={false} maxMessageBytes={4096} imageLimits={limits} onSent={() => {}} />) }
+function mount(busy = false) { renderWithQuery(<Composer agentId={agentId} agentName="dev-helper" busy={busy} disabled={false} maxMessageBytes={4096} imageLimits={limits} onSent={() => {}} />) }
 function accepted(body: Schemas['SendMessageInput']) {
   const run = makeRun({ status: 'starting', endedAt: null })
   return HttpResponse.json({ run, message: { ...makeMessage({ text: body.text, run }), images: (body.imageIds ?? []).map(id => refs.get(id)!) } }, { status: 202 })

@@ -24,21 +24,21 @@ describe('workflow ruler', () => {
     const detail = makeTaskDetail('project')
     ruler(detail)
     const nav = screen.getByRole('navigation', { name: 'Workflow' })
-    const current = within(nav).getByRole('button', { name: /质量检查/ })
+    const current = within(nav).getByRole('button', { name: /Quality check/ })
     expect(current).toHaveAttribute('aria-current', 'step')
     expect(current).toHaveAttribute('aria-pressed', 'true')
-    expect(current).toHaveTextContent('01质量检查任务检查员· Blocked×2')
+    expect(current).toHaveTextContent('01Quality checktask-checker· Blocked×2')
     // The status and the visit count are wrapped together, so they move together when the line wraps.
     expect(current.querySelector('[data-step-state]')).toHaveTextContent('· Blocked×2')
     expect(current.querySelector('[data-step-state]')).toHaveClass('whitespace-nowrap')
     expect(nav.querySelector('[data-step-dot="0"]')).toHaveTextContent('01')
     expect(nav.querySelector('[data-step-dot="0"]')).toHaveClass('bg-riso-yellow')
-    const todo = within(nav).getByRole('button', { name: /提交报告/ })
+    const todo = within(nav).getByRole('button', { name: /Submit report/ })
     expect(todo).not.toHaveAttribute('aria-current')
     expect(todo).toHaveTextContent('· not yet')
     expect(nav.querySelector('[data-step-dot="1"]')).toHaveClass('border-dashed')
     // Between steps, the edge's condition is written out; the bottom shows which step the task has reached.
-    expect(within(nav).getByText('↓ 通过')).toBeInTheDocument()
+    expect(within(nav).getByText('↓ Pass')).toBeInTheDocument()
     expect(within(nav).getByText('at step 1')).toBeInTheDocument()
     expect(within(nav).getByText('at step 1').previousElementSibling).toHaveTextContent('1 / 2')
   })
@@ -49,7 +49,7 @@ describe('workflow ruler', () => {
     expect(workflowSteps(detail)[1].jumps).toMatchObject([{ to: 0, back: true, used: 1 }])
     ruler(detail)
     const nav = screen.getByRole('navigation', { name: 'Workflow' })
-    expect(within(nav).getByText('返工 → 01 · used 1/3').closest('p')).toHaveClass('text-pink-text')
+    expect(within(nav).getByText('Rework → 01 · used 1/3').closest('p')).toHaveClass('text-pink-text')
   })
 
   it('the selected step lists its visits below it and clicking one jumps to it; the one being viewed is marked “viewing”', async () => {
@@ -61,7 +61,7 @@ describe('workflow ruler', () => {
     expect(items[1]).toHaveAttribute('aria-current', 'true')
     await userEvent.click(items[0])
     expect(onRecord).toHaveBeenCalledWith('check', oldNodeId)
-    await userEvent.click(screen.getByRole('button', { name: /提交报告/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Submit report/ }))
     expect(onSelect).toHaveBeenCalledWith('finish')
   })
 

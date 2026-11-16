@@ -17,7 +17,7 @@ import { tasksPath } from '@/api/tasks'
 
 const detail = makeTaskDetail(defaultProject.id), node = detail.nodes[1]
 const runI = '54000000-0000-7000-8000-000000000001', runQ = '54000000-0000-7000-8000-000000000002'
-const manager = agentParty({ id: '56000000-0000-7000-8000-000000000001', name: 'Manager', address: '测试项目/Manager' })
+const manager = agentParty({ id: '56000000-0000-7000-8000-000000000001', name: 'Manager', address: 'test-project/Manager' })
 const entry = (messageId: string, text: string, runId: string, whenBusy: Schemas['WhenBusy'] = 'queue', from: Schemas['InboxParticipant'] = consoleParty) => makeQueueItem({ kind: 'inbox', runId, messageId, from, text, whenBusy, queuedAt: taskTime })
 const m3 = entry('53000000-0000-7000-8000-000000000003', 'Stop now and check', runI, 'interrupt', manager)
 const m1 = entry('53000000-0000-7000-8000-000000000001', 'Note one: check the logs first', runQ)

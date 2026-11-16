@@ -133,7 +133,7 @@ describe('GitHub accounts page and the existing PAT form', () => {
     server.use(http.post<{ projectId: string }, Schemas['CLIAuthStart']>(apiUrl('/projects/:projectId/cli-auth/operations'), async ({ request }) => { const body = await request.json(); accounts = [next]; return HttpResponse.json({ operation: githubOperation('succeeded', body.operationId, { targetAccountId: old.id, targetRevision: old.revision }), account: next }, { status: 202 }) }),
       http.get(apiUrl('/projects/:projectId/cli-auth/operations/:operationId'), ({ params }) => HttpResponse.json({ operation: githubOperation('succeeded', String(params.operationId), { targetAccountId: old.id, targetRevision: old.revision }), account: next })))
     renderAccounts(); await user.click(await screen.findByRole('button', { name: copy.relogin })); await screen.findByText('@verified-new-user')
-    expect(screen.getByRole('heading', { name: '保留的备注' })).toBeInTheDocument(); expect(screen.queryByText('@old-user')).toBeNull(); expect(screen.getByText('9007199254740993')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Kept note' })).toBeInTheDocument(); expect(screen.queryByText('@old-user')).toBeNull(); expect(screen.getByText('9007199254740993')).toBeInTheDocument()
     expect(screen.getByText(scopes === null ? copy.unknownScopes : copy.emptyScopes)).toBeInTheDocument(); expect(screen.queryByRole('link', { name: copy.open })).toBeNull()
   })
 
@@ -141,7 +141,7 @@ describe('GitHub accounts page and the existing PAT form', () => {
     const user = userEvent.setup(), account = githubAccount(); let accounts: Schemas['ProjectCredentialAccount'][] = [account, { ...githubAccount(), id: '10000000-0000-7000-8000-000000000002', name: 'Another note' }], puts = 0
     accountsHandlers(() => accounts)
     server.use(http.patch(apiUrl('/projects/:projectId/credential-accounts/:accountId'), () => { puts++; return HttpResponse.json({ error: { code: 'precondition_failed', message: 'fixture conflict' } }, { status: 412 }) }))
-    const env = renderAccounts(); const row = (await screen.findByRole('heading', { name: '保留的备注' })).closest('li')!
+    const env = renderAccounts(); const row = (await screen.findByRole('heading', { name: 'Kept note' })).closest('li')!
     expect(await screen.findAllByRole('button', { name: copy.relogin })).toHaveLength(2)
     await user.click(within(row).getByRole('button', { name: 'Rename' })); await user.clear(screen.getByLabelText('Account name')); await user.type(screen.getByLabelText('Account name'), 'Local note draft'); await user.click(screen.getByRole('button', { name: 'Save' })); await waitFor(() => expect(puts).toBe(1)); expect(screen.getByLabelText('Account name')).toHaveValue('Local note draft')
     accounts = [projectAccount({ purpose: 'cli', provider: null, cli: 'gh', authMethod: null, githubIdentity: null, revision: 3 })]; await act(() => env.client.invalidateQueries({ queryKey: credentialKeys.project(defaultProject.id) }))

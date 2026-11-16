@@ -53,15 +53,15 @@ describe('Sidebar search', () => {
   })
 
   it('matches by address: typing part of an address filters to that Agent; an Agent without an address matches by name only', async () => {
-    const reviewer = makeAgent({ name: 'Review', address: '测试组织/测试项目/Review' })
+    const reviewer = makeAgent({ name: 'Review', address: 'test-org/test-project/Review' })
     const legacy = makeAgent({ name: 'old/bot', address: null })
-    const { user } = setup([reviewer, legacy, makeAgent({ name: 'Writing assistant', address: '测试组织/测试项目/Writing assistant' })])
+    const { user } = setup([reviewer, legacy, makeAgent({ name: 'Writing assistant', address: 'test-org/test-project/Writing assistant' })])
     await waitFor(() => expect(names()).toHaveLength(3))
     const search = within(sidebar()).getByRole('searchbox', { name: 'Search Agents' })
-    await user.type(search, '测试项目/Rev')
+    await user.type(search, 'test-project/Rev')
     expect(names()).toEqual([expect.stringContaining('Review')])
     await user.clear(search)
-    await user.type(search, '测试组织')
+    await user.type(search, 'test-org')
     expect(names()).toHaveLength(2)
     expect(names().some((name) => name.includes('old/bot'))).toBe(false)
   })
@@ -139,14 +139,14 @@ describe('Look and status of the Agent rows in the sidebar', () => {
   })
 
   it('questions and messages sent to you and not yet handled show a “Needs your reply” sticker on the row', async () => {
-    const agent = makeAgent({ name: '开发助手' })
+    const agent = makeAgent({ name: 'dev-helper' })
     server.use(
       http.get(apiUrl('/inbox/pending'), () => HttpResponse.json({ questions: [], unread: [], byAgent: [{ agentId: agent.id, projectId: null, questions: 1, unread: 2 }], byTask: [] })),
       ...baseHandlers([agent]),
     )
     renderRoutes(routes, defaultAgentsPath)
     const list = await screen.findByRole('list', { name: 'Agents' })
-    expect(await within(list).findByRole('link', { name: /^开发助手\s*Needs your reply: 1 question, 2 new messages/ })).toHaveTextContent('3')
+    expect(await within(list).findByRole('link', { name: /^dev-helper\s*Needs your reply: 1 question, 2 new messages/ })).toHaveTextContent('3')
   })
 
   it('when the server is unreachable, shows the halftone skeleton and “Can\'t reach the server”, and the create button is disabled', async () => {

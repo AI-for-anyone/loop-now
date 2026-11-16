@@ -26,7 +26,7 @@ const lark = makePreview({
 function handlers({ preview = lark, install }: { preview?: typeof lark; install?: (body: Record<string, unknown>) => Response | undefined } = {}) {
   const previews: unknown[] = [], installs: Record<string, unknown>[] = []
   server.use(
-    http.get(apiUrl('/plugin-sources/builtin'), () => HttpResponse.json({ sources: [{ id: 'hello', displayName: 'hello example', description: 'A minimal example on each side', version: '1.0.0' }, { id: 'webhook', displayName: 'Webhook 通知', description: 'POSTs when the Inbox gets a new message', version: '1.2.0' }] })),
+    http.get(apiUrl('/plugin-sources/builtin'), () => HttpResponse.json({ sources: [{ id: 'hello', displayName: 'hello example', description: 'A minimal example on each side', version: '1.0.0' }, { id: 'webhook', displayName: 'Webhook notifications', description: 'POSTs when the Inbox gets a new message', version: '1.2.0' }] })),
     http.post(apiUrl('/plugin-previews'), async ({ request }) => {
       previews.push(await request.json())
       return HttpResponse.json(preview, { status: 201 })
@@ -74,7 +74,7 @@ describe('Installing a plugin: read manifest → confirm → install', () => {
     const hello = makePreview({ manifest: makeManifest({ id: 'hello', displayName: 'hello example', version: '1.0.0', components: makeComponents({ agentExtensions: 1, skills: ['skills/hello'] }) }) })
     const { previews, installs } = handlers({ preview: hello })
     renderInstall()
-    expect(await screen.findByRole('radio', { name: /Webhook 通知/ })).toBeDisabled()
+    expect(await screen.findByRole('radio', { name: /Webhook notifications/ })).toBeDisabled()
     await user.click(screen.getByRole('radio', { name: /hello example/ }))
     await user.click(screen.getByRole('button', { name: 'Read manifest' }))
     const dialog = await screen.findByRole('dialog', { name: /Install hello example/ })
@@ -176,7 +176,7 @@ describe('Installing a plugin: read manifest → confirm → install', () => {
     await user.click(screen.getByRole('radio', { name: 'git repository' }))
     await user.type(screen.getByLabelText('Repository URL'), 'https://example.com/webhook.git')
     await user.click(screen.getByRole('button', { name: 'Read manifest' }))
-    const dialog = await screen.findByRole('dialog', { name: /Install Webhook 通知/ })
+    const dialog = await screen.findByRole('dialog', { name: /Install Webhook notifications/ })
     await user.click(within(dialog).getByRole('button', { name: 'Install' }))
     expect(await within(dialog).findByRole('note')).toHaveTextContent('nobody has reviewed it')
     await user.click(within(dialog).getByRole('button', { name: 'I\'ve reviewed it, install' }))

@@ -10,8 +10,8 @@ import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
 
-const agent = makeAgent({ name: 'Code review assistant', address: '测试组织/测试项目/Code review assistant' })
-const tester = makeAgent({ name: 'Testing assistant', address: '测试组织/测试项目/Testing assistant' })
+const agent = makeAgent({ name: 'Code review assistant', address: 'test-org/test-project/Code review assistant' })
+const tester = makeAgent({ name: 'Testing assistant', address: 'test-org/test-project/Testing assistant' })
 
 // Open the Agent's Inbox tab and record every request to the inbox endpoints (method, path and query parameters).
 async function renderAgentInbox(messages: Schemas['InboxMessage'][]) {
@@ -60,7 +60,7 @@ describe('Each Agent\'s inbox is read-only', () => {
     const items = list.getAllByRole('listitem')
     expect(items).toHaveLength(2)
     expect(items[0]).toHaveTextContent(/Console@consoleInterrupt.*Read \d{2}:\d{2}/)
-    expect(items[1]).toHaveTextContent(/Testing assistant测试组织\/测试项目\/Testing assistant.*I added two tests for the naming package.*Unread$/)
+    expect(items[1]).toHaveTextContent(/Testing assistanttest-org\/test-project\/Testing assistant.*I added two tests for the naming package.*Unread$/)
     expect(screen.getByText('Read-only view: opening a message doesn\'t mark it read')).toBeInTheDocument()
   })
 
@@ -119,10 +119,10 @@ describe('Each Agent\'s inbox is read-only', () => {
 describe('Showing the Agent address', () => {
   it('copy address: the clipboard holds the full address', async () => {
     const { user } = await renderAgentInbox(received().slice(0, 1))
-    expect(screen.getByText('测试组织/测试项目/Code review assistant')).toBeInTheDocument()
+    expect(screen.getByText('test-org/test-project/Code review assistant')).toBeInTheDocument()
     // English UI issue: the copy button's name glues t.common.copy and t.agents.address.label without a space (“CopyAddress”).
     await user.click(screen.getByRole('button', { name: 'CopyAddress' }))
-    await expect(navigator.clipboard.readText()).resolves.toBe('测试组织/测试项目/Code review assistant')
+    await expect(navigator.clipboard.readText()).resolves.toBe('test-org/test-project/Code review assistant')
     expect(await screen.findByRole('button', { name: 'CopyAddress' })).toHaveTextContent('Copied')
   })
 
@@ -163,7 +163,7 @@ describe('The inbox on the sheet', () => {
     const { list } = await renderAgentInbox([second, first])
     const [read, fresh] = list.getAllByRole('listitem')
     for (const item of [read, fresh]) expect(item).toHaveClass('border-b-[1.5px]', 'border-dashed')
-    expect(within(fresh).getByText('测试组织/测试项目/Testing assistant')).toHaveClass('font-mono', 'truncate')
+    expect(within(fresh).getByText('test-org/test-project/Testing assistant')).toHaveClass('font-mono', 'truncate')
     expect(within(fresh).getByText('I added two tests for the naming package, give them a run.')).toHaveClass('truncate', 'font-bold')
     expect(fresh.querySelector('time')).toHaveClass('font-mono')
     const stamp = within(fresh).getByText('Unread').closest('[data-read-state]')!
