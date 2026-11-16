@@ -7,7 +7,7 @@ import "testing"
 // modes.
 func TestReply(t *testing.T) {
 	const runLine = "Run ID for this turn: 0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b.\n"
-	const legacyLine = "本轮运行ID：0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b。\n"
+	const legacyLine = "本轮运行ID：0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b。\n" // check-english: zh (the run ID line older sessions start with)
 	cases := []struct {
 		msg           string
 		normal, neutr string
@@ -26,17 +26,9 @@ func TestReply(t *testing.T) {
 				want = c.neutr
 			}
 			if got := parseDirectives(c.msg).reply(c.msg); got != want {
-				t.Errorf("neutral=%v %q：%q，期望 %q", mode, c.msg, got, want)
+				t.Errorf("neutral=%v %q: got %q, want %q", mode, c.msg, got, want)
 			}
 		}
 	}
 	neutral = false
-	if say("问", "asks") != "问" {
-		t.Fatal("默认模式用中文")
-	}
-	neutral = true
-	defer func() { neutral = false }()
-	if say("问", "asks") != "asks" {
-		t.Fatal("中性模式用英文")
-	}
 }

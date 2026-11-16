@@ -256,12 +256,12 @@ func TestRecordsCrashDuringRun(t *testing.T) {
 	id := h.agent(nil)
 	h.execRun(id, "first")
 	runID, res := h.execRun(id, "!crash")
-	if res.ErrorCode != executor.ErrPiExited || !strings.Contains(res.ErrorMessage, "模拟崩溃") {
+	if res.ErrorCode != executor.ErrPiExited || !strings.Contains(res.ErrorMessage, "simulated crash") {
 		t.Fatalf("崩溃的错误信息应带 Pi 错误输出：%+v", res)
 	}
 	waitFor(t, "意外退出事件", func() bool { return len(h.obs.eventsOf(id, store.EventPiExited)) == 1 })
 	ex := h.obs.eventsOf(id, store.EventPiExited)[0]
-	if ex.run == nil || *ex.run != runID || !strings.Contains(ex.ev.Data["stderrTail"].(string), "模拟崩溃") ||
+	if ex.run == nil || *ex.run != runID || !strings.Contains(ex.ev.Data["stderrTail"].(string), "simulated crash") ||
 		!strings.Contains(ex.ev.Data["exit"].(string), "exit status 3") {
 		t.Fatalf("回复中崩溃的事件不对：%+v", ex)
 	}
