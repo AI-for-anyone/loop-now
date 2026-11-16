@@ -64,7 +64,7 @@ func clearProviderLinks(d agentDirs) error {
 // never a symlink or junction that leads outside the state directory.
 func mkdirPrivate(root, dir string) error {
 	if !within(root, dir) {
-		return errors.New("路径不在状态目录里")
+		return errors.New("the path is not inside the state directory")
 	}
 	rel, err := filepath.Rel(root, dir)
 	if err != nil {
@@ -80,7 +80,7 @@ func mkdirPrivate(root, dir string) error {
 				return err
 			}
 			if isLink(p, info) || !info.IsDir() {
-				return errors.New("状态目录里的 " + p + " 不是目录")
+				return errors.New("state directory entry " + p + " is not a directory")
 			}
 			continue
 		}
@@ -106,10 +106,10 @@ func within(dir, path string) bool {
 func (e *Executor) linkProviderState(snap agentconfig.Snapshot, d agentDirs, loginHome string) error {
 	st := snap.ProviderState
 	if !slices.Contains(snap.Plugins.IDs, st.PluginID) {
-		return fail(executor.ErrCredentialUnavailable, "模型提供方 %s 来自插件 %s，这个 Agent 现在没有挂载它（未授权、项目未启用、全局停用或已卸载）", snap.Provider, st.PluginID)
+		return fail(executor.ErrCredentialUnavailable, "Model provider %s comes from plugin %s, which is not mounted for this Agent right now (not granted, not enabled in the project, disabled globally, or uninstalled).", snap.Provider, st.PluginID)
 	}
 	if err := pluginmanifest.CheckProviderState("providerState", map[string]pluginmanifest.ProviderState{snap.Provider: {Paths: st.Paths}}); len(st.Paths) > 0 && err != nil {
-		return fail(executor.ErrCredentialUnavailable, "插件 %s 声明的状态路径不合规：%v", st.PluginID, err)
+		return fail(executor.ErrCredentialUnavailable, "Plugin %s declares invalid state paths: %v", st.PluginID, err)
 	}
 	// On every start and reuse the platform deletes and rewrites the CLI templates' credential files in HOME (for all
 	// templates, not just the ones this Agent configured), so the state paths must not overlap with them.
@@ -120,30 +120,30 @@ func (e *Executor) linkProviderState(snap agentconfig.Snapshot, d agentDirs, log
 		}
 	}
 	if p, m, ok := pluginmanifest.OverlappingStatePath(st.Paths, managed); ok {
-		return fail(executor.ErrCredentialUnavailable, "插件 %s 声明的状态路径 %s 与 CLI 的配置文件 %s 重叠", st.PluginID, p, m)
+		return fail(executor.ErrCredentialUnavailable, "Plugin %s declares the state path \"%s\", which overlaps the CLI configuration file \"%s\".", st.PluginID, p, m)
 	}
 	info, err := os.Lstat(st.Dir)
 	auth := filepath.Join(st.Dir, "auth.json")
 	if err == nil && info.IsDir() && info.Mode()&fs.ModeSymlink == 0 {
 		info, err = os.Lstat(auth)
 		if err == nil && !info.Mode().IsRegular() {
-			err = errors.New("不是普通文件")
+			err = errors.New("not a regular file")
 		}
 	} else if err == nil {
-		err = errors.New("不是目录")
+		err = errors.New("not a directory")
 	}
 	// A platform Agent's subscription is its own login (plugins/SPEC.md §13); tell the user where to log in again.
-	account, relogin := "项目账号", "请在项目里重新登录该账号"
+	account, relogin := "the project account", "Log in to this account again in the project."
 	if snap.ContextProjectID == nil {
-		account, relogin = "这个 Agent 自己的登录", "请在这个 Agent 的模型凭证里重新登录"
+		account, relogin = "this Agent's own login", "Log in again in this Agent's model credentials."
 	}
 	if err != nil {
-		return fail(executor.ErrCredentialUnavailable, "订阅账号的状态已不存在，%s", relogin)
+		return fail(executor.ErrCredentialUnavailable, "The subscription account's state no longer exists. %s", relogin)
 	}
 	if loginHome != "" {
 		for _, p := range st.Paths {
 			if _, err := os.Lstat(filepath.Join(loginHome, filepath.FromSlash(p))); err != nil {
-				return fail(executor.ErrCredentialUnavailable, "已开启“用本机的登录状态”，此时用的是本机自己的登录而不是%s；本机没有该扩展的登录（%s），关闭开关或在本机登录后再试", account, p)
+				return fail(executor.ErrCredentialUnavailable, "\"Use local logins\" is on, so this computer's own login is used instead of %s, but this computer has no login for the extension (%s). Turn the switch off, or log in on this computer, and try again.", account, p)
 			}
 		}
 	}
@@ -155,7 +155,7 @@ func (e *Executor) linkProviderState(snap agentconfig.Snapshot, d agentDirs, log
 	undo := func(cause error) error {
 		_ = record()
 		_ = clearProviderLinks(d)
-		return fail(executor.ErrCredentialUnavailable, "为订阅账号建立链接失败：%v", cause)
+		return fail(executor.ErrCredentialUnavailable, "Could not create the links for the subscription account: %v", cause)
 	}
 	piAuth := filepath.Join(d.pi, "auth.json")
 	if err := os.Remove(piAuth); err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -182,7 +182,7 @@ func (e *Executor) linkProviderState(snap agentconfig.Snapshot, d agentDirs, log
 				return undo(err)
 			}
 			if info.Mode()&fs.ModeSymlink != 0 || !(info.IsDir() || info.Mode().IsRegular()) {
-				return undo(errors.New("状态目录里的 " + p + " 不是普通文件或目录"))
+				return undo(errors.New("state directory entry " + p + " is not a regular file or directory"))
 			}
 			if err := os.MkdirAll(filepath.Dir(link), 0o700); err != nil {
 				return undo(err)

@@ -25,4 +25,4 @@ func processStart(pid int) (string, error) {
 
 // processCommandLine does not read other processes' command lines on Windows: an old pi.pid without a recorded start
 // time is never confirmed.
-func processCommandLine(int) (string, error) { return "", fmt.Errorf("不支持读取进程命令行") }
+func processCommandLine(int) (string, error) { return "", fmt.Errorf("cannot read the command line") }

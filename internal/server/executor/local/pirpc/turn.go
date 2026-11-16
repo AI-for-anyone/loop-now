@@ -336,7 +336,7 @@ func (t *turn) settled(aborted bool) {
 	case len(t.ended) > 0 && t.ended[len(t.ended)-1].stopReason == "error":
 		msg := t.ended[len(t.ended)-1].errorMessage
 		if msg == "" {
-			msg = "Pi 报告本轮以错误结束"
+			msg = "Pi reported that this turn ended with an error."
 		}
 		res = TurnResult{Outcome: OutcomeFailed, Text: t.text(false), ErrorCode: ErrorCodePi, ErrorMessage: msg}
 	default:
@@ -356,7 +356,7 @@ func (t *turn) exited() {
 		Outcome:      OutcomeFailed,
 		Text:         t.text(true),
 		ErrorCode:    ErrorCodePiExited,
-		ErrorMessage: "Pi 进程意外退出",
+		ErrorMessage: "The Pi process exited unexpectedly.",
 	})
 }
 

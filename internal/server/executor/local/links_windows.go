@@ -15,11 +15,11 @@ import (
 // and the Agent directory are both under the work root, on the same volume.
 func linkDir(target, link string) error {
 	if strings.ContainsAny(target+link, "\"&|<>^%") {
-		return fmt.Errorf("路径含有不能交给 mklink 的字符")
+		return fmt.Errorf("the path contains characters that cannot be passed to mklink")
 	}
 	cmd := filepath.Join(os.Getenv("SystemRoot"), "System32", "cmd.exe")
 	if out, err := exec.Command(cmd, "/c", "mklink", "/J", link, target).CombinedOutput(); err != nil {
-		return fmt.Errorf("建立目录联接失败：%v %s", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("create the directory junction: %v %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
 }

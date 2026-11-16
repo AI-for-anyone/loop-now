@@ -169,7 +169,7 @@ func (e *Executor) purgeClaude(ctx context.Context, agentID uuid.UUID) {
 func (e *Executor) purgeClaudeWorkspace(ctx context.Context, bin string, env []string, agentID uuid.UUID, path string) error {
 	if !filepath.IsAbs(path) || !within(e.o.WorkRoot, path) || filepath.Clean(path) != e.dirs(agentID).workspace {
 		e.log.Error("refusing to clean up a path that is not this Agent's workspace", "agentId", agentID, "path", path)
-		return fmt.Errorf("路径 %s 不是该 Agent 在平台工作根之下的工作区", path)
+		return fmt.Errorf("path %s is not this Agent's workspace under the platform work root", path)
 	}
 	return claudecli.Purge(ctx, bin, env, path)
 }
@@ -231,15 +231,15 @@ func (cd claudeDriver) start(ctx context.Context, spec startSpec) (started, erro
 	e, snap, d := cd.e, spec.snap, spec.d
 	bin, err := e.claudeBinary(ctx)
 	if err != nil {
-		return started{}, fail(executor.ErrRuntimeUnavailable, "本机没有找到 Claude Code：在登录 shell 的 PATH 里找不到 claude，请先在这台机器上安装并登录")
+		return started{}, fail(executor.ErrRuntimeUnavailable, "Claude Code was not found on this computer: claude is not on the login shell's PATH. Install Claude Code on this computer and log in first.")
 	}
 	home, err := e.o.RealHome()
 	if err != nil || !filepath.IsAbs(home) {
-		return started{}, fail(executor.ErrInternal, "读取服务端用户的主目录失败（Claude Code 需要用本机的登录）")
+		return started{}, fail(executor.ErrInternal, "Could not read the server user's home directory (Claude Code needs this computer's login).")
 	}
 	version, err := e.claude.Version(ctx, bin, e.claudeHelperEnv(ctx, home))
 	if err != nil {
-		return started{}, fail(executor.ErrRuntimeUnavailable, "无法读取本机 Claude Code（%s）的版本：%v", bin, err)
+		return started{}, fail(executor.ErrRuntimeUnavailable, "Could not read the version of Claude Code on this computer (%s): %v", bin, err)
 	}
 	args := []string{"-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
 		"--model", snap.ModelID}
@@ -266,7 +266,7 @@ func (cd claudeDriver) start(ctx context.Context, spec startSpec) (started, erro
 	}
 	client, err := ccstream.Start(cmd, ccstream.Options{InitTimeout: e.o.StartTimeout, Kill: procgroup.Kill})
 	if err != nil {
-		return started{}, fail(executor.ErrRuntimeStartFailed, "启动 Claude Code %s 失败：%v", version, err)
+		return started{}, fail(executor.ErrRuntimeStartFailed, "Could not start Claude Code %s: %v", version, err)
 	}
 	if err := procgroup.Started(cmd); err != nil {
 		e.snapshotLog(snap).Warn("Claude Code process is not under group management; stopping can only end the process itself", "pid", client.Pid(), "err", err)
@@ -352,7 +352,7 @@ func (cd claudeDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 		if last := cc.LastResult(); last.TerminalReason == "api_error" && last.APIErrorStatus == nil {
 			if auth, err := claudecli.AuthStatus(ctx, p.runtimeBinary, env); err == nil && !auth.LoggedIn {
 				tr.ErrorCode = executor.ErrRuntimeLoginRequired
-				tr.ErrorMessage = "本机的 Claude Code 没有登录：请在这台机器上运行 claude 完成登录后再试"
+				tr.ErrorMessage = "Claude Code is not logged in on this computer. Run claude on this computer, log in, and try again."
 			}
 		}
 	case executor.ErrRuntimeStartFailed:
@@ -360,7 +360,7 @@ func (cd claudeDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 		case <-p.rt.Done():
 		case <-time.After(e.o.StopGrace):
 		}
-		tr.ErrorMessage = strings.TrimSpace(fmt.Sprintf("Claude Code %s：%s %s", p.runtimeVersion, tr.ErrorMessage, tail(p.rt.Stderr(), e.o.StderrTailBytes)))
+		tr.ErrorMessage = strings.TrimSpace(fmt.Sprintf("Claude Code %s: %s %s", p.runtimeVersion, tr.ErrorMessage, tail(p.rt.Stderr(), e.o.StderrTailBytes)))
 	}
 	return tr
 }
@@ -382,11 +382,11 @@ func checkClaudeSkills(p *proc, init *ccstream.Init) {
 }
 
 func (claudeDriver) exited() (string, string) {
-	return executor.ErrRuntimeExited, "Claude Code 进程已退出"
+	return executor.ErrRuntimeExited, "The Claude Code process exited."
 }
 
 func (claudeDriver) crashMessage(p *proc, stderrTail string) string {
-	return "Claude Code " + p.runtimeVersion + " 进程异常退出 " + stderrTail
+	return "Claude Code " + p.runtimeVersion + " process exited unexpectedly. " + stderrTail
 }
 
 // claudeObserver passes the usage Claude Code reports (one per model per turn) and rate limit events to the executor's
@@ -437,7 +437,7 @@ func (e *Executor) syncClaudePlugin(ctx context.Context, snap agentconfig.Snapsh
 			continue
 		}
 		if err := copyTree(src, target); err != nil {
-			return fmt.Errorf("复制插件的 Skill %s 失败：%w", filepath.Base(src), err)
+			return fmt.Errorf("copy the plugin Skill %s: %w", filepath.Base(src), err)
 		}
 	}
 	return nil

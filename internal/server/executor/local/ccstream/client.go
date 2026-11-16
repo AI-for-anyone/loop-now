@@ -126,7 +126,7 @@ type Client struct {
 // bounded ring buffer. When cmd.WaitDelay is zero it is set to exitGrace.
 func Start(cmd *exec.Cmd, o Options) (*Client, error) {
 	if cmd.Stdin != nil || cmd.Stdout != nil {
-		return nil, errors.New("ccstream: cmd.Stdin/cmd.Stdout 必须为空，由客户端接管")
+		return nil, errors.New("ccstream: cmd.Stdin and cmd.Stdout must be nil; the client takes them over")
 	}
 	if o.InterruptGrace <= 0 {
 		o.InterruptGrace = defaultInterruptGrace
@@ -245,7 +245,7 @@ func (c *Client) Prompt(ctx context.Context, text string, sink runturn.Sink, ima
 	}
 	if c.turn != nil {
 		c.mu.Unlock()
-		return runturn.Result{}, errors.New("ccstream: 上一轮还没有结束")
+		return runturn.Result{}, errors.New("ccstream: the previous turn has not ended yet")
 	}
 	t := newTurn(sink)
 	c.turn = t
@@ -267,7 +267,7 @@ func (c *Client) Prompt(ctx context.Context, text string, sink runturn.Sink, ima
 		if closed {
 			return c.exitedBeforeTurn()
 		}
-		return runturn.Result{}, fmt.Errorf("ccstream: 写入消息失败：%w", err)
+		return runturn.Result{}, fmt.Errorf("ccstream: write the message: %w", err)
 	}
 	if waitInit {
 		timer := time.AfterFunc(c.o.InitTimeout, func() { c.initTimedOut(t) })
@@ -294,7 +294,7 @@ func (c *Client) exitedBeforeTurn() (runturn.Result, error) {
 	started := c.init != nil
 	c.mu.Unlock()
 	if !started {
-		return runturn.Result{Outcome: runturn.OutcomeFailed, ErrorCode: codeStartFailed, ErrorMessage: "Claude Code 在第一轮开始前退出"}, nil
+		return runturn.Result{Outcome: runturn.OutcomeFailed, ErrorCode: codeStartFailed, ErrorMessage: "Claude Code exited before the first turn started."}, nil
 	}
 	return runturn.Result{}, runturn.ErrExited
 }

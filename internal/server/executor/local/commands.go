@@ -31,7 +31,7 @@ import (
 // stays in the chain).
 func maintenanceErr(err error) error {
 	if errors.Is(err, ErrRuntimeBusy) {
-		return fmt.Errorf("%w：%w", executor.ErrMaintenanceBusy, err)
+		return fmt.Errorf("%w: %w", executor.ErrMaintenanceBusy, err)
 	}
 	return err
 }
@@ -59,12 +59,12 @@ func (e *Executor) compact(ctx context.Context, p *proc, r *run, req executor.Re
 			case <-p.rt.Done():
 			case <-time.After(e.o.StopGrace):
 			}
-			res.ErrorMessage = strings.TrimSpace("Pi 进程异常退出 " + tail(p.client.Stderr(), e.o.StderrTailBytes))
+			res.ErrorMessage = strings.TrimSpace("The Pi process exited unexpectedly. " + tail(p.client.Stderr(), e.o.StderrTailBytes))
 		}
 		return res
 	}
 	if sessionErr != nil {
-		return failed(executor.ErrInternal, "会话记录保存失败", snap.ConfigVersion)
+		return failed(executor.ErrInternal, "Could not save the session record.", snap.ConfigVersion)
 	}
 	res.Outcome = executor.OutcomeCompleted
 	res.Compaction = &executor.CompactionResult{TokensBefore: result.TokensBefore, EstimatedTokensAfter: result.EstimatedTokensAfter, Skipped: result.Skipped}
@@ -75,7 +75,7 @@ func (e *Executor) compact(ctx context.Context, p *proc, r *run, req executor.Re
 // reason of the platform command (idleStopReasons).
 func (e *Executor) StopIdle(ctx context.Context, agentID uuid.UUID, reason string) (bool, error) {
 	if !slices.Contains(idleStopReasons, reason) {
-		return false, fmt.Errorf("未知的停止原因 %q", reason)
+		return false, fmt.Errorf("unknown stop reason %q", reason)
 	}
 	return e.stopIdle(ctx, agentID, reason)
 }
@@ -92,7 +92,7 @@ func (e *Executor) stopIdle(ctx context.Context, agentID uuid.UUID, reason strin
 	p := e.procs[agentID]
 	if e.runs[agentID] != nil || p != nil && p.busy {
 		e.mu.Unlock()
-		return false, fmt.Errorf("%w：常态轮次尚未完全结束", executor.ErrMaintenanceBusy)
+		return false, fmt.Errorf("%w: the regular turn has not fully finished", executor.ErrMaintenanceBusy)
 	}
 	delete(e.procs, agentID)
 	e.mu.Unlock()
@@ -114,7 +114,7 @@ func (e *Executor) stopIdle(ctx context.Context, agentID uuid.UUID, reason strin
 // starts the runtime or touches a live idle process.
 func (e *Executor) ExportSession(ctx context.Context, agentID uuid.UUID, sessionFile, format string) (executor.SessionExport, error) {
 	if format != "jsonl" && format != "html" {
-		return executor.SessionExport{}, fmt.Errorf("不支持的导出格式 %q", format)
+		return executor.SessionExport{}, fmt.Errorf("unsupported export format %q", format)
 	}
 	free, err := e.reserveMaintenance(ctx, agentID)
 	if err != nil {
@@ -134,7 +134,7 @@ func (e *Executor) ExportSession(ctx context.Context, agentID uuid.UUID, session
 	d := e.dirs(agentID)
 	file, err := managedSessionFile(d, sessionFile)
 	if errors.Is(err, fs.ErrNotExist) {
-		return executor.SessionExport{}, fmt.Errorf("%w：会话文件不存在", executor.ErrNoSession)
+		return executor.SessionExport{}, fmt.Errorf("%w: the session file does not exist", executor.ErrNoSession)
 	}
 	if err != nil {
 		return executor.SessionExport{}, err
@@ -177,19 +177,19 @@ func (e *Executor) exportHTML(ctx context.Context, d agentDirs, sessionFile stri
 	cmd.Stdout, cmd.Stderr = io.Discard, &limitedBuffer{b: &stderr, max: 4 << 10}
 	procgroup.Configure(cmd)
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("启动 pi --export 失败：%w", err)
+		return nil, fmt.Errorf("start pi --export: %w", err)
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 	select {
 	case err := <-done:
 		if err != nil {
-			return nil, fmt.Errorf("pi --export 失败：%v %s", err, strings.TrimSpace(stderr.String()))
+			return nil, fmt.Errorf("pi --export failed: %v %s", err, strings.TrimSpace(stderr.String()))
 		}
 	case <-ctx.Done():
 		_ = procgroup.Kill(cmd.Process.Pid)
 		<-done
-		return nil, fmt.Errorf("pi --export 没有完成：%w", ctx.Err())
+		return nil, fmt.Errorf("pi --export did not finish: %w", ctx.Err())
 	}
 	return os.ReadFile(output)
 }
@@ -467,7 +467,7 @@ func truncateSessionText(text string, limit int) string {
 // symlinks.
 func managedSessionFile(d agentDirs, path string) (string, error) {
 	if path == "" || !filepath.IsAbs(path) {
-		return "", errors.New("会话路径不受平台管理")
+		return "", errors.New("the session path is not managed by the platform")
 	}
 	dir, err := filepath.EvalSymlinks(d.sessions)
 	if err != nil {
@@ -478,11 +478,11 @@ func managedSessionFile(d agentDirs, path string) (string, error) {
 		return "", err
 	}
 	if filepath.Dir(resolved) != filepath.Clean(dir) {
-		return "", errors.New("会话路径不在平台管理的 sessions 目录内")
+		return "", errors.New("the session path is not inside the platform-managed sessions directory")
 	}
 	info, err := os.Stat(resolved)
 	if err != nil || !info.Mode().IsRegular() {
-		return "", errors.New("会话路径不是普通文件")
+		return "", errors.New("the session path is not a regular file")
 	}
 	return resolved, nil
 }

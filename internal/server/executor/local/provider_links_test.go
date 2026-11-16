@@ -130,7 +130,7 @@ func TestProviderStateLinks(t *testing.T) {
 	})
 	// A platform Agent's (no project context) subscription account is its own login, so the hint says to log in again
 	// in its model credentials; for a project Agent the hint says to log in again in the project.
-	if res, _ := h.exec(e, "hi"); res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, "这个 Agent 的模型凭证里重新登录") {
+	if res, _ := h.exec(e, "hi"); res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, "again in this Agent's model credentials") {
 		t.Fatalf("状态目录不在（平台 Agent）：%+v", res)
 	}
 	project := uuid.New()
@@ -140,7 +140,7 @@ func TestProviderStateLinks(t *testing.T) {
 		s.ContextProjectID = &project
 		s.ProviderState, s.Plugins = &st, agentconfig.PluginAssets{IDs: []string{"grokish"}}
 	})
-	if res, _ := h.exec(pe, "hi"); res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, "在项目里重新登录") {
+	if res, _ := h.exec(pe, "hi"); res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, "again in the project") {
 		t.Fatalf("状态目录不在（项目 Agent）：%+v", res)
 	}
 	// A declared path covers the credential file of any CLI template (not only those this Agent configured): fail
@@ -231,8 +231,8 @@ func TestProviderStateWithLocalLogins(t *testing.T) {
 		s.ProviderState, s.Plugins = state, agentconfig.PluginAssets{IDs: []string{"grokish"}}
 	})
 	res, _ := h.exec(id, "hi")
-	if res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, "用本机的登录状态") || !strings.Contains(res.ErrorMessage, ".pi/fake-oauth") ||
-		!strings.Contains(res.ErrorMessage, "而不是这个 Agent 自己的登录") {
+	if res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, "Use local logins") || !strings.Contains(res.ErrorMessage, ".pi/fake-oauth") ||
+		!strings.Contains(res.ErrorMessage, "instead of this Agent's own login") {
 		t.Fatalf("本机没有该扩展的登录：%+v", res)
 	}
 	sameTree(t, realHome, before)

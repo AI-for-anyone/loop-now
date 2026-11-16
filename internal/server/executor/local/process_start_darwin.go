@@ -16,7 +16,7 @@ func processStart(pid int) (string, error) {
 		return "", err
 	}
 	if int(info.Proc.P_pid) != pid {
-		return "", fmt.Errorf("进程 %d 不存在", pid)
+		return "", fmt.Errorf("process %d does not exist", pid)
 	}
 	return fmt.Sprintf("%d.%06d", info.Proc.P_starttime.Sec, info.Proc.P_starttime.Usec), nil
 }

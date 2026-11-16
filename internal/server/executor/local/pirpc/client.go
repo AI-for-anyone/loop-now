@@ -94,16 +94,16 @@ type Client struct {
 // When cmd.WaitDelay is zero it is set to exitGrace.
 func Start(cmd *exec.Cmd) (*Client, error) {
 	if cmd.Stdin != nil || cmd.Stdout != nil {
-		return nil, errors.New("pirpc: cmd.Stdin/cmd.Stdout 必须为空，由客户端接管")
+		return nil, errors.New("pirpc: cmd.Stdin and cmd.Stdout must be nil; the client takes them over")
 	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return nil, fmt.Errorf("pirpc: 创建 stdin 管道失败：%w", err)
+		return nil, fmt.Errorf("pirpc: create the stdin pipe: %w", err)
 	}
 	pr, pw, err := os.Pipe()
 	if err != nil {
 		_ = stdin.Close()
-		return nil, fmt.Errorf("pirpc: 创建 stdout 管道失败：%w", err)
+		return nil, fmt.Errorf("pirpc: create the stdout pipe: %w", err)
 	}
 	cmd.Stdout = pw
 	ring := newRingBuffer(stderrLimit)
@@ -119,7 +119,7 @@ func Start(cmd *exec.Cmd) (*Client, error) {
 		_ = pr.Close()
 		_ = pw.Close()
 		_ = stdin.Close()
-		return nil, fmt.Errorf("pirpc: 启动 Pi 失败：%w", err)
+		return nil, fmt.Errorf("pirpc: start Pi: %w", err)
 	}
 	// The parent no longer holds the write end, so the read end sees EOF once the child exits.
 	_ = pw.Close()
@@ -202,7 +202,7 @@ func (c *Client) Call(ctx context.Context, typ string, params map[string]any) (j
 		return nil, err
 	}
 	if !resp.Success {
-		return nil, fmt.Errorf("pirpc: 命令 %s 失败：%s", typ, resp.Error)
+		return nil, fmt.Errorf("pirpc: command %s failed: %s", typ, resp.Error)
 	}
 	return resp.Data, nil
 }
@@ -220,7 +220,7 @@ func (c *Client) GetState(ctx context.Context) (State, error) {
 	}
 	if len(data) > 0 {
 		if err := json.Unmarshal(data, &s); err != nil {
-			return State{}, fmt.Errorf("pirpc: 解析 get_state 响应失败：%w", err)
+			return State{}, fmt.Errorf("pirpc: parse the get_state response: %w", err)
 		}
 	}
 	return State{SessionFile: s.SessionFile, SessionID: s.SessionID, ThinkingLevel: s.ThinkingLevel}, nil
@@ -237,7 +237,7 @@ func (c *Client) SetThinkingLevel(ctx context.Context, level string) error {
 		return err
 	}
 	if state.ThinkingLevel != level {
-		return fmt.Errorf("pirpc: 实际思考等级与本轮配置不一致")
+		return fmt.Errorf("pirpc: the actual thinking level does not match the setting for this turn")
 	}
 	return nil
 }
@@ -262,7 +262,7 @@ const (
 )
 
 // ErrCompactAborted means a platform Abort cancelled a manual compaction in progress.
-var ErrCompactAborted = errors.New("pirpc: 手动压缩已被取消")
+var ErrCompactAborted = errors.New("pirpc: the manual compaction was cancelled")
 
 // compactSkipped tells from Pi's error text whether it is a normal "did not compact" result.
 func compactSkipped(message string) string {
@@ -281,7 +281,7 @@ func compactSkipped(message string) string {
 // cancel this compaction.
 func (c *Client) Compact(ctx context.Context, customInstructions string) (CompactResult, error) {
 	if !c.busy.CompareAndSwap(false, true) {
-		return CompactResult{}, errors.New("pirpc: 已有进行中的 prompt 或 compact")
+		return CompactResult{}, errors.New("pirpc: a prompt or compact is already in progress")
 	}
 	defer c.busy.Store(false)
 	if err := ctx.Err(); err != nil {
@@ -314,14 +314,14 @@ func (c *Client) Compact(ctx context.Context, customInstructions string) (Compac
 			}
 			return CompactResult{Skipped: reason}, nil
 		}
-		return CompactResult{}, fmt.Errorf("pirpc: 命令 compact 失败：%s", resp.Error)
+		return CompactResult{}, fmt.Errorf("pirpc: command compact failed: %s", resp.Error)
 	}
 	var data struct {
 		TokensBefore         int64 `json:"tokensBefore"`
 		EstimatedTokensAfter int64 `json:"estimatedTokensAfter"`
 	}
 	if err := json.Unmarshal(resp.Data, &data); err != nil {
-		return CompactResult{}, fmt.Errorf("pirpc: 解析 compact 响应失败：%w", err)
+		return CompactResult{}, fmt.Errorf("pirpc: parse the compact response: %w", err)
 	}
 	return CompactResult{TokensBefore: data.TokensBefore, EstimatedTokensAfter: data.EstimatedTokensAfter}, nil
 }
@@ -335,7 +335,7 @@ func (c *Client) Prompt(ctx context.Context, text string, sink TurnSink, images 
 		sink = nopSink{}
 	}
 	if !c.busy.CompareAndSwap(false, true) {
-		return TurnResult{}, errors.New("pirpc: 已有进行中的 prompt")
+		return TurnResult{}, errors.New("pirpc: a prompt is already in progress")
 	}
 	defer c.busy.Store(false)
 	if err := ctx.Err(); err != nil {
@@ -369,7 +369,7 @@ func (c *Client) Prompt(ctx context.Context, text string, sink TurnSink, images 
 	if !resp.Success {
 		msg := resp.Error
 		if msg == "" {
-			msg = "Pi 拒绝了 prompt"
+			msg = "Pi rejected the prompt."
 		}
 		return TurnResult{Outcome: OutcomeFailed, ErrorCode: ErrorCodePi, ErrorMessage: msg}, nil
 	}
@@ -430,7 +430,7 @@ func (c *Client) newID() string {
 // notSentError means a command could not be written to Pi's stdin.
 type notSentError struct{ err error }
 
-func (e *notSentError) Error() string { return "pirpc: 写入命令失败：" + e.err.Error() }
+func (e *notSentError) Error() string { return "pirpc: write the command: " + e.err.Error() }
 func (e *notSentError) Unwrap() []error {
 	return []error{ErrExited, e.err}
 }
@@ -461,7 +461,7 @@ func (c *Client) roundTrip(ctx context.Context, id, typ string, params map[strin
 	msg["type"] = typ
 	line, err := json.Marshal(msg)
 	if err != nil {
-		return nil, fmt.Errorf("pirpc: 编码命令 %s 失败：%w", typ, err)
+		return nil, fmt.Errorf("pirpc: encode command %s: %w", typ, err)
 	}
 	line = append(line, '\n')
 	c.writeMu.Lock()

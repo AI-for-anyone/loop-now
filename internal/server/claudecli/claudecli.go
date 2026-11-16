@@ -23,7 +23,7 @@ import (
 )
 
 // ErrNotFound means claude cannot be found in the given PATH.
-var ErrNotFound = errors.New("在登录 shell 的 PATH 里找不到 claude")
+var ErrNotFound = errors.New("claude is not on the login shell's PATH")
 
 // commandTimeout is the time limit for claude's own short commands (--version, auth status, purge).
 const commandTimeout = 30 * time.Second
@@ -133,12 +133,12 @@ func run(ctx context.Context, bin string, env []string, args ...string) ([]byte,
 	if err := cmd.Run(); err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) && ctx.Err() == nil {
-			return stdout.Bytes(), fmt.Errorf("claude %s 失败：%s", args[0], exit.ProcessState.String())
+			return stdout.Bytes(), fmt.Errorf("claude %s failed: %s", args[0], exit.ProcessState.String())
 		}
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("claude %s 超时", args[0])
+			return nil, fmt.Errorf("claude %s timed out", args[0])
 		}
-		return nil, fmt.Errorf("claude %s 无法运行", args[0])
+		return nil, fmt.Errorf("claude %s could not run", args[0])
 	}
 	return stdout.Bytes(), nil
 }
@@ -153,7 +153,7 @@ func Version(ctx context.Context, bin string, env []string) (string, error) {
 	}
 	v := versionPattern.FindString(strings.TrimSpace(string(out)))
 	if v == "" {
-		return "", errors.New("claude --version 的输出里没有版本号")
+		return "", errors.New("the output of claude --version has no version number")
 	}
 	return v, nil
 }
@@ -189,7 +189,7 @@ func AuthStatus(ctx context.Context, bin string, env []string) (Auth, error) {
 		if runErr != nil {
 			return Auth{}, runErr
 		}
-		return Auth{}, errors.New("claude auth status 的输出不是预期的 JSON")
+		return Auth{}, errors.New("the output of claude auth status is not the expected JSON")
 	}
 	clear(out)
 	a := Auth{LoggedIn: *raw.LoggedIn, AuthMethod: raw.AuthMethod, SubscriptionType: raw.SubscriptionType, LoginExpiresAt: raw.LoginExpiresAt}

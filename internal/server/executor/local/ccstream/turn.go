@@ -130,11 +130,11 @@ func (t *turn) exited(started bool) {
 	case t.interrupted:
 		t.finish(runturn.Result{Outcome: runturn.OutcomeAborted, Text: t.partial()})
 	case !started && t.initTimeout:
-		t.finish(runturn.Result{Outcome: runturn.OutcomeFailed, ErrorCode: codeStartFailed, ErrorMessage: "Claude Code 启动超时：在时限内没有就绪"})
+		t.finish(runturn.Result{Outcome: runturn.OutcomeFailed, ErrorCode: codeStartFailed, ErrorMessage: "Claude Code timed out while starting: it was not ready within the time limit."})
 	case !started:
-		t.finish(runturn.Result{Outcome: runturn.OutcomeFailed, ErrorCode: codeStartFailed, ErrorMessage: "Claude Code 在第一轮开始前退出"})
+		t.finish(runturn.Result{Outcome: runturn.OutcomeFailed, ErrorCode: codeStartFailed, ErrorMessage: "Claude Code exited before the first turn started."})
 	default:
-		t.finish(runturn.Result{Outcome: runturn.OutcomeFailed, Text: t.partial(), ErrorCode: codeExited, ErrorMessage: "Claude Code 进程已退出"})
+		t.finish(runturn.Result{Outcome: runturn.OutcomeFailed, Text: t.partial(), ErrorCode: codeExited, ErrorMessage: "The Claude Code process exited."})
 	}
 }
 
@@ -296,7 +296,7 @@ func (c *Client) finishTurn(t *turn, m wireLine, obs Observer) {
 			msg = strings.TrimSpace(strings.Join(m.Errors, "; "))
 		}
 		if msg == "" {
-			msg = "Claude Code 报告这一轮以错误结束（" + info.Subtype + "，" + info.TerminalReason + "）"
+			msg = "Claude Code reported that this turn ended with an error (" + info.Subtype + ", " + info.TerminalReason + ")."
 		}
 		t.finish(runturn.Result{Outcome: runturn.OutcomeFailed, Text: t.partial(), ErrorCode: codeError, ErrorMessage: msg})
 	}

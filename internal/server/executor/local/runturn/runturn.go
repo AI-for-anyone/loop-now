@@ -6,7 +6,7 @@ package runturn
 import "errors"
 
 // ErrExited means the runtime process has exited or its stdout has been closed.
-var ErrExited = errors.New("运行时进程已退出")
+var ErrExited = errors.New("the runtime process has exited")
 
 // Sink receives the live events of a turn. Calls happen on the client's reader goroutine; implementations must return
 // quickly and must not call the client's methods synchronously from a callback.

@@ -334,7 +334,7 @@ func TestRecordsWorkspaceSyncFailure(t *testing.T) {
 		t.Fatalf("应以工作区同步失败结束：%+v", res)
 	}
 	evs := h.obs.eventsOf(id, store.EventWorkspaceSync)
-	if len(evs) != 1 || *evs[0].run != runID || evs[0].ev.Data["result"] != "failed" || !strings.Contains(evs[0].ev.Data["error"].(string), "来源 app") {
+	if len(evs) != 1 || *evs[0].run != runID || evs[0].ev.Data["result"] != "failed" || !strings.Contains(evs[0].ev.Data["error"].(string), "Source app") {
 		t.Fatalf("同步失败事件不对：%+v", evs)
 	}
 	sources := evs[0].ev.Data["sources"].([]map[string]any)
@@ -367,7 +367,7 @@ func TestRecordsCLIInstall(t *testing.T) {
 	}
 	evs := h.obs.eventsOf(id, store.EventCLIInstall)
 	if len(evs) != 1 || *evs[0].run != runID || evs[0].ev.Data["result"] != "failed" || evs[0].ev.Data["cli"] != "zz" ||
-		evs[0].ev.Data["version"] != "1.0.0" || !strings.Contains(evs[0].ev.Data["error"].(string), "当前平台") {
+		evs[0].ev.Data["version"] != "1.0.0" || !strings.Contains(evs[0].ev.Data["error"].(string), "current platform") {
 		t.Fatalf("安装失败事件不对：%+v", evs)
 	}
 

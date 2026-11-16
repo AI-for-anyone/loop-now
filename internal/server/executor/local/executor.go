@@ -273,13 +273,13 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 
 	snap, err := e.src.ExecutionSnapshot(runCtx, req.AgentID)
 	if errors.Is(err, agentconfig.ErrCredentialUnavailable) {
-		return failed(executor.ErrCredentialUnavailable, "该 Agent 有凭证不可用或需要重新录入，请重新录入后再试", 0), nil
+		return failed(executor.ErrCredentialUnavailable, "Some of this Agent's credentials are unavailable or need to be entered again. Enter them again and try again.", 0), nil
 	}
 	if err != nil {
 		return executor.Result{}, err
 	}
 	if req.Origin == executor.OriginConsoleCompact && isClaude(snap) {
-		return failed(executor.ErrRuntimeError, "当前运行时不支持 Pi 手动压缩", snap.ConfigVersion), nil
+		return failed(executor.ErrRuntimeError, "The current runtime does not support Pi manual compaction.", snap.ConfigVersion), nil
 	}
 	if blocked, reason, err := e.beforeRun(runCtx, snap, req); err != nil {
 		return executor.Result{}, err
@@ -287,16 +287,16 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 		return failed(executor.ErrPluginBlocked, reason, snap.ConfigVersion), nil
 	}
 	if len(req.Images) > 0 && !e.o.Models.SupportsImages(snap.Provider, snap.ModelID) {
-		return failed(executor.ErrImageUnsupported, "本轮选定模型不支持图片，图片未发送", snap.ConfigVersion), nil
+		return failed(executor.ErrImageUnsupported, "The model selected for this turn does not support images. The images were not sent.", snap.ConfigVersion), nil
 	}
 	// Dynamic Lark credentials must never reach the legacy bot/direct launch
 	// path. Keep this closed until the concrete captured-scope runtime factory
 	// and private exec manager are wired; no boolean/mock readiness bypass.
 	if snap.LarkBinding != nil && e.o.LarkFactory == nil {
-		return failed(executor.ErrCredentialUnavailable, "Lark 用户运行通道尚未装配", snap.ConfigVersion), nil
+		return failed(executor.ErrCredentialUnavailable, "The Lark user runtime channel is not wired up yet.", snap.ConfigVersion), nil
 	}
 	if snap.Session.State == "missing" {
-		return failed(executor.ErrSessionMissing, "会话文件丢失，请在控制台确认重开会话", snap.ConfigVersion), nil
+		return failed(executor.ErrSessionMissing, "The session file is missing. Confirm reopening the session in the console first.", snap.ConfigVersion), nil
 	}
 
 	p, err := e.acquire(runCtx, r, snap, sink)
@@ -370,7 +370,7 @@ func (e *Executor) Execute(ctx context.Context, req executor.Request, sink execu
 	}
 	sessionErr := e.turnFinished(p)
 	if err == nil && sessionErr != nil && tr.Outcome == runturn.OutcomeCompleted {
-		return failed(executor.ErrInternal, "会话记录保存失败", snap.ConfigVersion), nil
+		return failed(executor.ErrInternal, "Could not save the session record.", snap.ConfigVersion), nil
 	}
 	if err != nil {
 		return executor.Result{}, err
@@ -446,7 +446,7 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 				e.mu.Unlock()
 				if err := e.syncCredentialFiles(snap, p.dirs); err != nil {
 					e.turnFinished(p)
-					return nil, fail(executor.ErrCredentialUnavailable, "CLI凭证缓存重建失败")
+					return nil, fail(executor.ErrCredentialUnavailable, "Could not rebuild the CLI credential cache.")
 				}
 				if err := p.drv.refresh(snap, p.dirs); err != nil {
 					e.turnFinished(p)
@@ -512,7 +512,7 @@ func (e *Executor) acquire(ctx context.Context, r *run, snap agentconfig.Snapsho
 		if e.closed {
 			e.mu.Unlock()
 			e.stop(p, stopCause{reason: stopShutdown})
-			return nil, errors.New("执行器已关闭")
+			return nil, errors.New("the executor is closed")
 		}
 		p.busy = true
 		e.procs[snap.AgentID] = p
@@ -595,7 +595,7 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 	attached := false
 	defer func() {
 		if !attached && e.closeLarkRuntime(lark) != nil {
-			result, err = nil, fail(executor.ErrCredentialUnavailable, "Lark 用户运行通道回收未确认")
+			result, err = nil, fail(executor.ErrCredentialUnavailable, "Release of the Lark user runtime channel was not confirmed.")
 		}
 	}()
 	prep, err := e.prepare(ctx, snap, d, runID, shim)
@@ -610,7 +610,7 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 			if mErr := e.src.MarkSessionMissing(ctx, snap.AgentID, &runID); mErr != nil {
 				return nil, mErr
 			}
-			return nil, fail(executor.ErrSessionMissing, "记录的会话文件 %s 已不存在，请在控制台确认重开会话", snap.Session.SessionFile)
+			return nil, fail(executor.ErrSessionMissing, "The recorded session file %s no longer exists. Confirm reopening the session in the console first.", snap.Session.SessionFile)
 		}
 		sessionFile = snap.Session.SessionFile
 	}
@@ -619,7 +619,7 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 	if e.o.Tokens != nil {
 		id, tok, err := e.o.Tokens.IssueAgentToken(ctx, snap.AgentID)
 		if err != nil {
-			return nil, fail(executor.ErrInternal, "签发 Agent 令牌失败：%v", err)
+			return nil, fail(executor.ErrInternal, "Could not issue the Agent token: %v", err)
 		}
 		tokenID = id
 		env = append(slices.Clone(env), "LOOPCTL_AGENT_URL="+e.o.AgentURL, "LOOPCTL_AGENT_TOKEN="+tok)
@@ -628,12 +628,12 @@ func (e *Executor) launch(ctx context.Context, snap agentconfig.Snapshot, sink e
 	if snap.GoogleBinding != nil {
 		if !filepath.IsAbs(e.o.GoogleRuntimeEntry) {
 			e.revokeToken(tokenID, e.snapshotLog(snap))
-			return nil, fail(executor.ErrCredentialUnavailable, "Google刷新通道未配置")
+			return nil, fail(executor.ErrCredentialUnavailable, "The Google refresh channel is not configured.")
 		}
 		googleBridge, err = cliauth.NewBroker(*snap.GoogleBinding, e.o.GoogleResolver)
 		if err != nil {
 			e.revokeToken(tokenID, e.snapshotLog(snap))
-			return nil, fail(executor.ErrCredentialUnavailable, "Google刷新通道不可用")
+			return nil, fail(executor.ErrCredentialUnavailable, "The Google refresh channel is not available.")
 		}
 		for key, value := range googleBridge.Environment() {
 			env = append(env, key+"="+value)
@@ -731,7 +731,7 @@ func (e *Executor) recordExit(p *proc, runID *uuid.UUID) {
 		case <-p.rt.Done():
 		case <-time.After(e.o.StopGrace):
 		}
-		exit := "进程仍未结束"
+		exit := "the process has not exited yet"
 		if !alive(p) {
 			exit = "exit status 0"
 			if err := p.rt.ExitErr(); err != nil {
@@ -1138,9 +1138,9 @@ func (e *Executor) beforeRun(ctx context.Context, snap agentconfig.Snapshot, req
 	}
 	reason := o.Reason
 	if reason == "" {
-		reason = "没有说明原因"
+		reason = "No reason given."
 	}
-	return true, "插件 " + o.Plugin + " 阻止了这一轮：" + reason, nil
+	return true, "Plugin " + o.Plugin + " blocked this turn: " + reason, nil
 }
 
 // FreezeForFork is called by the task preparer that holds the regular dispatch gate: it stops the idle Pi once the

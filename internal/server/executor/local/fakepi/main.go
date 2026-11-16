@@ -128,13 +128,13 @@ func run(args []string) int {
 		return exportFile(o)
 	}
 	if o.mode != "rpc" {
-		fmt.Fprintln(os.Stderr, "fakepi: 只支持 --mode rpc")
+		fmt.Fprintln(os.Stderr, "fakepi: only --mode rpc is supported")
 		return 2
 	}
 	cwd, _ := os.Getwd()
 	if p := os.Getenv("FAKEPI_DUMP"); p != "" {
 		if err := dump(p, args, cwd); err != nil {
-			fmt.Fprintf(os.Stderr, "fakepi: 写入 FAKEPI_DUMP 失败：%v\n", err)
+			fmt.Fprintf(os.Stderr, "fakepi: write FAKEPI_DUMP: %v\n", err)
 			return 1
 		}
 	}
@@ -205,7 +205,7 @@ func openSession(o options, cwd string) (*session, error) {
 			return nil, err
 		}
 		if _, err := os.Stat(p); err != nil {
-			return nil, fmt.Errorf("会话文件不存在：%s", p)
+			return nil, fmt.Errorf("session file does not exist: %s", p)
 		}
 		s.file, s.flushed = p, true
 		if err := s.load(); err != nil {
@@ -235,11 +235,11 @@ func openSession(o options, cwd string) (*session, error) {
 		}
 		lines := bytes.Split(bytes.TrimSpace(data), []byte{'\n'})
 		if len(lines) == 0 {
-			return nil, fmt.Errorf("分叉源为空")
+			return nil, fmt.Errorf("the fork source is empty")
 		}
 		var head map[string]any
 		if json.Unmarshal(lines[0], &head) != nil || head["type"] != "session" {
-			return nil, fmt.Errorf("分叉源无效")
+			return nil, fmt.Errorf("the fork source is invalid")
 		}
 		head["id"] = s.id
 		head["cwd"] = cwd
@@ -453,7 +453,7 @@ type response struct {
 func (s *server) emit(v any) {
 	b, err := json.Marshal(v)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "fakepi: 编码输出失败：%v\n", err)
+		fmt.Fprintf(os.Stderr, "fakepi: encode output: %v\n", err)
 		return
 	}
 	s.outMu.Lock()
@@ -656,7 +656,7 @@ func exportFile(o options) int {
 		}
 	}
 	if len(o.positional) == 0 {
-		fmt.Fprintln(os.Stderr, "fakepi: --export 需要输出路径")
+		fmt.Fprintln(os.Stderr, "fakepi: --export needs an output path")
 		return 2
 	}
 	content := os.Getenv("FAKEPI_EXPORT_CONTENT")
@@ -721,7 +721,7 @@ func (s *server) persist(d directives, msg map[string]any) {
 		return
 	}
 	if err := s.sess.append(msg); err != nil {
-		fmt.Fprintf(os.Stderr, "fakepi: 写入会话文件失败：%v\n", err)
+		fmt.Fprintf(os.Stderr, "fakepi: write the session file: %v\n", err)
 	}
 }
 
@@ -990,7 +990,7 @@ func parseUsage(v string) *usageSpec {
 	for i := 0; i < len(parts) && i < 5; i++ {
 		_, err := fmt.Sscanf(parts[i], "%d", &n[i])
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "fakepi: 无效的用量：%s\n", v)
+			fmt.Fprintf(os.Stderr, "fakepi: invalid usage: %s\n", v)
 			return nil
 		}
 	}
@@ -1046,7 +1046,7 @@ func parseDirectives(msg string) directives {
 		case key == "!sleep" && hasVal:
 			dur, err := time.ParseDuration(val)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "fakepi: 无效的 !sleep：%s\n", val)
+				fmt.Fprintf(os.Stderr, "fakepi: invalid !sleep: %s\n", val)
 			}
 			d.sleep = dur
 		case key == "!error" && hasVal:

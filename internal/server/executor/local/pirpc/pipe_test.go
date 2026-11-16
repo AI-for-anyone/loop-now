@@ -213,7 +213,7 @@ func TestPipeExitMidTurn(t *testing.T) {
 		evStart(), evDelta("half"))
 	_ = f.out.Close()
 	o := recvPrompt(t, ch)
-	want := TurnResult{Outcome: OutcomeFailed, Text: "done\n\nhalf", ErrorCode: "pi_exited", ErrorMessage: "Pi 进程意外退出"}
+	want := TurnResult{Outcome: OutcomeFailed, Text: "done\n\nhalf", ErrorCode: "pi_exited", ErrorMessage: "The Pi process exited unexpectedly."}
 	if o.err != nil || o.res != want {
 		t.Fatalf("结果不符：%+v %v", o.res, o.err)
 	}

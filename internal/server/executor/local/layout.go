@@ -206,7 +206,7 @@ func syncCLIShims(d agentDirs, loginHome string, bins, unset []string) (string, 
 	}
 	for _, bin := range bins {
 		var b strings.Builder
-		b.WriteString("#!/bin/sh\n# Loop Now：受管 CLI 以 Agent 的独立 HOME 运行（用本机的登录状态开着时）。\n")
+		b.WriteString("#!/bin/sh\n# Loop Now: a managed CLI runs with the Agent's own HOME (while \"Use local logins\" is on).\n")
 		b.WriteString("HOME=" + shellQuote(d.home) + "\nexport HOME\n")
 		if len(unset) > 0 {
 			b.WriteString("unset " + strings.Join(unset, " ") + "\n")
