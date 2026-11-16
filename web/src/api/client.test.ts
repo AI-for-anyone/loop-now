@@ -2,7 +2,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { apiUrl, errorBody } from '@/test/api'
 import { server } from '@/test/server'
-import { api, ApiError, call, rawBody, reachability } from './client'
+import { api, ApiError, call, rawBody, reachability, toApiError } from './client'
 
 describe('call', () => {
   it('成功时返回数据', async () => {
@@ -22,6 +22,11 @@ describe('call', () => {
     expect(error).toBeInstanceOf(ApiError)
     expect(error).toMatchObject({ status: 422, code: 'validation_failed', serverMessage: '校验失败' })
     expect((error as ApiError).fieldMessage('name')).toBe('不能为空')
+  })
+
+  // Every code in the contract must survive parsing; these two were once missing and fell back to 'unknown'.
+  it.each(['cli_auth_in_progress', 'credential_selection_mode_conflict'] as const)('keeps the contract code %s instead of falling back to unknown', (code) => {
+    expect(toApiError(409, errorBody(code, 'conflict'))).toMatchObject({ status: 409, code, serverMessage: 'conflict' })
   })
 
   it('agent_busy 带上当前执行与排队数量', async () => {
