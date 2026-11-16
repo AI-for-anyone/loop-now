@@ -3722,7 +3722,7 @@ export interface components {
         CliName: string;
         CliTemplateField: {
             name: string;
-            label: string;
+            label: components["schemas"]["LocalizedText"];
             /** @enum {string} */
             type: "string" | "secret" | "enum";
             /** @description Allowed values when type is enum */
@@ -7513,15 +7513,15 @@ export interface components {
         };
         PluginAccountKind: {
             kind: string;
-            label: string;
-            /** @description JSON Schema of the account fields; secret fields carry `x-secret: true` */
+            label: components["schemas"]["LocalizedText"];
+            /** @description JSON Schema of the account fields; secret fields carry `x-secret: true`; `title` and `description` may be LocalizedText as in configSchema */
             fields: Record<string, never>;
             multiple: boolean;
         };
         PluginAction: {
             id: string;
-            label: string;
-            /** @description JSON Schema of the action form (an object); an empty object when there is no input */
+            label: components["schemas"]["LocalizedText"];
+            /** @description JSON Schema of the action form (an object); an empty object when there is no input; `title` and `description` may be LocalizedText as in configSchema */
             fields: Record<string, never>;
             where: ("agent" | "task" | "project" | "identity" | "global")[];
         };
@@ -7540,7 +7540,7 @@ export interface components {
             actions: components["schemas"]["PluginAction"][];
             channels: {
                 id: string;
-                label: string;
+                label: components["schemas"]["LocalizedText"];
                 /** @description This channel can manage external identities (plugins/SPEC.md §12); requires the identities.manage scope */
                 manageIdentities: boolean;
             }[];
@@ -7550,7 +7550,7 @@ export interface components {
                 cron: string;
             }[];
         };
-        /** @description Text in plugin manifests and market entries that can be given per language (displayName, description): a string, or an object keyed by language tag (such as `zh-CN`, `en-US`) whose values are strings that are non-empty after trimming, with at least one entry. The server returns it as is (objects keep the author's key order) and does not translate it; the console picks the current language → zh-CN → en-US → the first entry. An empty string when absent. */
+        /** @description Text that can be given per language: plugin manifests and market entries (displayName, description, the labels of channels, actions and account kinds, and title, description and oneOf entry titles inside their JSON Schemas) and CLI template field labels. A string, which counts as English and is shown in every language; or an object keyed by language tag (such as `en-US`, `zh-CN`) whose values are strings that are non-empty after trimming, with at least one entry; official templates and plugins give en-US first and zh-CN. The server returns it as is (objects keep the author's key order) and does not translate it; the console picks the current language → zh-CN → en-US → the first entry. An empty string when absent. */
         LocalizedText: string | {
             [key: string]: string;
         };
@@ -7568,7 +7568,7 @@ export interface components {
             permissions: components["schemas"]["PluginPermission"][];
             /** @description Block rather than allow when an intercepting Hook times out or errors */
             failClosed: boolean;
-            /** @description JSON Schema of the config form; an empty object when there is no config */
+            /** @description JSON Schema of the config form; an empty object when there is no config. `title` and `description` at any level, including the oneOf entries that name enum options, may be LocalizedText; they are returned as written */
             configSchema: Record<string, never>;
             accounts: components["schemas"]["PluginAccountKind"][];
             components: components["schemas"]["PluginComponents"];

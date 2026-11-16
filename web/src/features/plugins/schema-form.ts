@@ -1,19 +1,23 @@
+import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
+import { localizedText } from '@/lib/localized-text'
 
 // The configSchema and the account fields in a plugin manifest are JSON Schema (an object whose properties are the fields).
 // Only the parts the form needs are recognized here: string (format uri for URLs), number / integer, boolean, enum (or oneOf with
 // const + title), required, and two extensions: x-secret (write-only, never echoed) and x-scope: project (can be overridden per project).
+// title and description (including the title that names a oneOf option) may be a LocalizedText; the form shows them in the UI
+// language (localizedText).
 // Fields of other types are read-only on the page, and their original values are saved unchanged.
 
 const text = t.plugins.form
 
 export type JsonSchema = {
   type?: string | string[]
-  title?: string
-  description?: string
+  title?: Schemas['LocalizedText']
+  description?: Schemas['LocalizedText']
   format?: string
   enum?: unknown[]
-  oneOf?: { const?: unknown; title?: string }[]
+  oneOf?: { const?: unknown; title?: Schemas['LocalizedText'] }[]
   default?: unknown
   minimum?: number
   maximum?: number
@@ -71,6 +75,11 @@ function kindOf(schema: JsonSchema): FieldKind {
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
+// A title or description as text in the UI language: a string as is, a per-language object through localizedText; anything else
+// (not allowed by the manifest rules) is ignored.
+const textOf = (value: unknown): string | undefined =>
+  typeof value === 'string' ? value : isObject(value) && Object.values(value).every((v) => typeof v === 'string') ? localizedText(value as Record<string, string>) || undefined : undefined
+
 // List the fields in the order of properties. Project mode keeps only the x-scope: project fields.
 export function fieldsOf(schema: unknown, mode: FormMode = 'global'): Field[] {
   if (!isObject(schema) || !isObject(schema.properties)) return []
@@ -85,12 +94,12 @@ export function fieldsOf(schema: unknown, mode: FormMode = 'global'): Field[] {
           ? []
           : property.enum?.length
             ? property.enum.map((value) => ({ value, label: String(value) }))
-            : (property.oneOf ?? []).filter((option) => 'const' in option).map((option) => ({ value: option.const, label: option.title ?? String(option.const) }))
+            : (property.oneOf ?? []).filter((option) => 'const' in option).map((option) => ({ value: option.const, label: textOf(option.title) ?? String(option.const) }))
       return {
         name,
         kind,
-        label: property.title || name,
-        description: property.description,
+        label: textOf(property.title) || name,
+        description: textOf(property.description),
         // In project overrides, every field may be left empty to keep using the global value.
         required: mode === 'global' && required.has(name),
         secret: property['x-secret'] === true,

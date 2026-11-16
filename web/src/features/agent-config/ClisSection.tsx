@@ -11,6 +11,7 @@ import { selectClass } from '@/lib/field'
 import type { Schemas } from '@/api/client'
 import { putCliCredential, useAddCli, useCliTemplates, useDeleteCliCredential, useRemoveCli } from '@/api/queries'
 import { t } from '@/i18n'
+import { localizedText } from '@/lib/localized-text'
 import { fieldMessages, unmatchedFieldError } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 import { CliToolStatus, CredentialStatus, WarningList } from './CredentialStatus'
@@ -205,7 +206,7 @@ function CliCredentialDialog({ agentId, cli, template, onClose }: { agentId: str
             if (field.multiline) return <CredentialFields key={field.name} fields={[field]} values={values} errors={message ? { [field.name]: message } : {}} disabled={pending} onChange={(name, value) => setValues(previous => ({ ...previous, [name]: value }))} />
             return (
               <div key={field.name} className="grid gap-1.5">
-                <Label htmlFor={id}>{field.label}</Label>
+                <Label htmlFor={id}>{localizedText(field.label)}</Label>
                 {field.type === 'enum' ? (
                   <select id={id} className={selectClass} value={values[field.name]} onChange={(e) => setValues((v) => ({ ...v, [field.name]: e.target.value }))}>
                     {(field.options ?? []).map((option) => (

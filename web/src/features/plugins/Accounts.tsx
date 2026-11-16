@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { SchemaFields } from './SchemaForm'
 import { fieldsOf, initialDraft, isDirty, serverFieldErrors, toPayload, validate } from './schema-form'
 import { Quiet } from './parts'
+import { localizedText } from '@/lib/localized-text'
 
 type Account = Schemas['PluginAccount']
 type Kind = Schemas['PluginAccountKind']
@@ -95,9 +96,9 @@ export function AccountsManager({ projectId, pluginId, kinds }: { projectId: str
         const mine = list.filter((account) => account.kind === kind.kind)
         const full = !kind.multiple && mine.length > 0
         return (
-          <section key={kind.kind} aria-label={text.title(kind.label)} className="grid min-w-0 gap-2">
+          <section key={kind.kind} aria-label={text.title(localizedText(kind.label))} className="grid min-w-0 gap-2">
             <h3 className="text-[13px] font-black text-ink-700">
-              {text.title(kind.label)}
+              {text.title(localizedText(kind.label))}
               {!kind.multiple && <span className="ml-2 font-bold text-ink-500">{text.single}</span>}
             </h3>
             {accounts.isSuccess && mine.length === 0 && editing !== `new:${kind.kind}` && <Quiet>{text.empty}</Quiet>}
