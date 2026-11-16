@@ -14,7 +14,7 @@ import (
 // resource without reading the message; a missing resource still returns not_found without details.
 func TestUnknownEndpointDetails(t *testing.T) {
 	e := newEnv(t)
-	a := e.platformAgent("未知接口")
+	a := e.platformAgent("Unknown endpoint")
 	_, secret := e.identity("unknown-endpoint")
 	console, agent, external := e.console(), e.agentCaller(a.ID), e.external(secret)
 	for name, c := range map[string]caller{"console": console, "agent": agent, "external": external} {

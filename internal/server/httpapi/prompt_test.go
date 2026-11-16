@@ -23,25 +23,25 @@ func TestPromptContractCASAndAccess(t *testing.T) {
 	}
 	e.expect(422, "PATCH", path, map[string]any{"prompt": "x"}, "X-Contract-Invalid-Request", "1")
 	e.expect(422, "PUT", project, map[string]any{"prompt": "x"}, "X-Contract-Invalid-Request", "1")
-	saved := decode[store.ProjectPrompt](t, e.expect(200, "PUT", project, map[string]any{"prompt": "公共规则", "expectedPromptVersion": 1}))
+	saved := decode[store.ProjectPrompt](t, e.expect(200, "PUT", project, map[string]any{"prompt": "Shared rules", "expectedPromptVersion": 1}))
 	if saved.PromptVersion != 2 {
 		t.Fatal("project version did not advance")
 	}
-	e.expect(412, "PUT", project, map[string]any{"prompt": "公共规则", "expectedPromptVersion": 1})
-	same := decode[store.ProjectPrompt](t, e.expect(200, "PUT", project, map[string]any{"prompt": "公共规则", "expectedPromptVersion": 2}))
+	e.expect(412, "PUT", project, map[string]any{"prompt": "Shared rules", "expectedPromptVersion": 1})
+	same := decode[store.ProjectPrompt](t, e.expect(200, "PUT", project, map[string]any{"prompt": "Shared rules", "expectedPromptVersion": 2}))
 	if same.PromptVersion != 2 {
 		t.Fatal("same text generated version")
 	}
-	patched := decode[apitypes.Agent](t, e.expect(200, "PATCH", path, map[string]any{"prompt": "职责", "expectedPromptVersion": 1}))
+	patched := decode[apitypes.Agent](t, e.expect(200, "PATCH", path, map[string]any{"prompt": "Duties", "expectedPromptVersion": 1}))
 	if patched.PromptVersion != 2 {
 		t.Fatal("Agent prompt version absent")
 	}
-	e.expect(412, "PATCH", path, map[string]any{"name": "不应提交", "prompt": "职责", "expectedPromptVersion": 1})
+	e.expect(412, "PATCH", path, map[string]any{"name": "Should not be committed", "prompt": "Duties", "expectedPromptVersion": 1})
 	actual := decode[apitypes.Agent](t, e.expect(200, "GET", path, nil))
-	if actual.Name != a.Name || actual.Prompt != "职责" || actual.ConfigVersion != patched.ConfigVersion {
+	if actual.Name != a.Name || actual.Prompt != "Duties" || actual.ConfigVersion != patched.ConfigVersion {
 		t.Fatal("mixed stale PATCH partially committed")
 	}
-	actual = decode[apitypes.Agent](t, e.expect(200, "PATCH", path, map[string]any{"name": "只有改名"}))
+	actual = decode[apitypes.Agent](t, e.expect(200, "PATCH", path, map[string]any{"name": "Only renamed"}))
 	if actual.PromptVersion != 2 {
 		t.Fatal("rename changed Prompt version")
 	}
@@ -61,10 +61,10 @@ func TestPromptContractCASAndAccess(t *testing.T) {
 		e.console().expectError(403, "forbidden", method, project, body, "Authorization", "Bearer "+agent.token)
 	}
 	// External Agent config ability stays available and uses the same CAS.
-	external.expect(200, "PATCH", path, map[string]any{"prompt": "外部职责", "expectedPromptVersion": 3})
+	external.expect(200, "PATCH", path, map[string]any{"prompt": "External duties", "expectedPromptVersion": 3})
 	e.expect(204, "DELETE", path, nil)
 	e.expect(404, "PATCH", path, map[string]any{"prompt": "x", "expectedPromptVersion": 4})
-	p, err := e.st.CreateProject(context.Background(), e.dc.Organization.ID, "删除Prompt项目")
+	p, err := e.st.CreateProject(context.Background(), e.dc.Organization.ID, "Deleted Prompt project")
 	if err != nil {
 		t.Fatal(err)
 	}

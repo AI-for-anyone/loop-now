@@ -27,23 +27,23 @@ func TestPlatformConsoleCommandsPrecedePlugins(t *testing.T) {
 	e := newEnv(t)
 	hooks := &fakeHooks{outcomes: map[string]pluginhost.Outcome{}}
 	e.api.Hooks = hooks
-	_, path := e.newAgent("命令助手")
+	_, path := e.newAgent("Command assistant")
 	hooks.set("console.command", pluginhost.Outcome{Handled: true, Plugin: "bot", Value: json.RawMessage(`{"handled":true,"reply":"plugin"}`)})
 
 	session := consoleCommand(t, e, path, "/session")
 	if !session.Handled || session.Source != "platform" || session.Command != "session" || session.Session == nil || session.Session.Model.ModelID != "claude-x" || session.Session.ThinkingLevel == "" {
-		t.Fatalf("session 结果不符：%+v", session)
+		t.Fatalf("unexpected session result: %+v", session)
 	}
 	copyResult := consoleCommand(t, e, path, "/copy")
 	if copyResult.Source != "platform" || copyResult.CopyText != nil {
-		t.Fatalf("没有回复时 copyText 应为 null：%+v", copyResult)
+		t.Fatalf("with no reply copyText should be null: %+v", copyResult)
 	}
 	if n := hooks.count("console.command"); n != 0 {
-		t.Fatalf("内置命令不应交给插件：%d", n)
+		t.Fatalf("built-in commands should not go to plugins: %d", n)
 	}
 	plugin := consoleCommand(t, e, path, "/unknown value")
 	if plugin.Source != "plugin" || plugin.Plugin != "bot" || plugin.Reply == nil || *plugin.Reply != "plugin" {
-		t.Fatalf("未知命令应保留插件行为：%+v", plugin)
+		t.Fatalf("unknown commands should keep the plugin behavior: %+v", plugin)
 	}
 	e.expectError(422, "validation_failed", "POST", path+"/messages", map[string]any{"text": "/session extra"})
 	e.expectError(422, "validation_failed", "POST", path+"/messages", map[string]any{"text": "/export xml"})
@@ -52,7 +52,7 @@ func TestPlatformConsoleCommandsPrecedePlugins(t *testing.T) {
 func TestPlatformConsoleCompactCopyExportAndEndEventContract(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	agent, path := e.newAgent("会话助手")
+	agent, path := e.newAgent("Session assistant")
 	e.expectError(409, "session_none", "GET", path+"/session/export?format=html", nil)
 	if err := e.st.RecordSessionFile(ctx, agent.ID, "/tmp/managed-session.jsonl"); err != nil {
 		t.Fatal(err)
@@ -61,9 +61,9 @@ func TestPlatformConsoleCompactCopyExportAndEndEventContract(t *testing.T) {
 	events, closeEvents := readSSE(t, e, path, "")
 	defer closeEvents()
 	_ = next(t, events) // snapshot
-	compact := consoleCommand(t, e, path, "/compact 保留关键决定")
+	compact := consoleCommand(t, e, path, "/compact keep the key decisions")
 	if compact.TokensBefore == nil || *compact.TokensBefore != 4200 || compact.EstimatedTokensAfter == nil || *compact.EstimatedTokensAfter != 350 {
-		t.Fatalf("compact Token 结果不符：%+v", compact)
+		t.Fatalf("unexpected compact token result: %+v", compact)
 	}
 	foundTerminal := false
 	for range 20 {
@@ -74,7 +74,7 @@ func TestPlatformConsoleCompactCopyExportAndEndEventContract(t *testing.T) {
 			if err := json.Unmarshal([]byte(event.data), &ended); err != nil {
 				t.Fatal(err)
 			}
-			t.Fatalf("compact 不得发送 run.ended 或空消息：%+v", ended)
+			t.Fatalf("compact must not send run.ended or an empty message: %+v", ended)
 		case "run.updated":
 			var updated apitypes.SseRunUpdated
 			if err := json.Unmarshal([]byte(event.data), &updated); err != nil {
@@ -89,10 +89,10 @@ func TestPlatformConsoleCompactCopyExportAndEndEventContract(t *testing.T) {
 		}
 	}
 	if !foundTerminal {
-		t.Fatal("没有收到 compact 的终态 run.updated")
+		t.Fatal("no terminal run.updated received for compact")
 	}
 	if page := decode[apitypes.MessagePage](t, e.expect(200, "GET", path+"/messages", nil)); len(page.Messages) != 0 {
-		t.Fatalf("compact 不应创建用户或助手消息：%+v", page.Messages)
+		t.Fatalf("compact should not create user or assistant messages: %+v", page.Messages)
 	}
 
 	e.expect(202, "POST", path+"/messages", map[string]any{"text": "successful"})
@@ -108,7 +108,7 @@ func TestPlatformConsoleCompactCopyExportAndEndEventContract(t *testing.T) {
 			t.Fatal(err)
 		}
 		if ended.Message.ID == uuid.Nil || ended.Message.Run.ID != ended.Run.ID {
-			t.Fatalf("普通 run.ended 必须带非空消息：%+v", ended)
+			t.Fatalf("a regular run.ended must carry a non-empty message: %+v", ended)
 		}
 		if ended.Run.Status == "completed" {
 			foundNormalEnd = true
@@ -116,27 +116,27 @@ func TestPlatformConsoleCompactCopyExportAndEndEventContract(t *testing.T) {
 		}
 	}
 	if !foundNormalEnd {
-		t.Fatal("普通完成仍应发送带消息的 run.ended")
+		t.Fatal("a regular completion should still send run.ended with a message")
 	}
 	e.expect(202, "POST", path+"/messages", map[string]any{"text": "fail"})
 	e.waitAgentIdle(path)
 	copied := consoleCommand(t, e, path, "/copy")
-	if copied.CopyText == nil || *copied.CopyText != "你好" {
-		t.Fatalf("copy 应取最近成功回复而不是失败回复：%+v", copied)
+	if copied.CopyText == nil || *copied.CopyText != "Hello" {
+		t.Fatalf("copy should take the latest successful reply, not the failed one: %+v", copied)
 	}
 	if got := consoleCommand(t, e, path, "/export"); got.ExportFormat == nil || *got.ExportFormat != "html" {
-		t.Fatalf("默认导出格式应为 html：%+v", got)
+		t.Fatalf("the default export format should be html: %+v", got)
 	}
 	if got := consoleCommand(t, e, path, "/export jsonl"); got.ExportFormat == nil || *got.ExportFormat != "jsonl" {
-		t.Fatalf("显式导出格式不符：%+v", got)
+		t.Fatalf("unexpected explicit export format: %+v", got)
 	}
 	_, body, header := e.do("GET", path+"/session/export?format=jsonl", nil)
 	if string(body) != "{}\n" || !strings.Contains(header.Get("Content-Disposition"), "session.jsonl") {
-		t.Fatalf("JSONL 下载不符：%q %v", body, header)
+		t.Fatalf("unexpected JSONL download: %q %v", body, header)
 	}
 	_, body, header = e.do("GET", path+"/session/export?format=html", nil)
 	if string(body) != "<html>exported</html>" || !strings.Contains(header.Get("Content-Type"), "text/html") {
-		t.Fatalf("HTML 下载不符：%q %v", body, header)
+		t.Fatalf("unexpected HTML download: %q %v", body, header)
 	}
 	if err := e.st.MarkSessionMissing(ctx, agent.ID, nil); err != nil {
 		t.Fatal(err)
@@ -149,10 +149,10 @@ func TestPlatformConsoleCompactCopyExportAndEndEventContract(t *testing.T) {
 func TestAgentBusyWithoutRunReportsNullCurrentRun(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	agent, path := e.newAgent("忙碌助手")
+	agent, path := e.newAgent("Busy assistant")
 	owner := coord.LockValue(uuid.NewString(), uuid.NewString()) // holds the lock in place of a platform command that creates no run
 	if ok, err := e.co.Acquire(ctx, agent.ID.String(), owner); err != nil || !ok {
-		t.Fatalf("取锁失败：%v %v", ok, err)
+		t.Fatalf("acquire lock: %v %v", ok, err)
 	}
 	var busy struct {
 		Error struct {
@@ -160,37 +160,37 @@ func TestAgentBusyWithoutRunReportsNullCurrentRun(t *testing.T) {
 			Details map[string]json.RawMessage `json:"details"`
 		} `json:"error"`
 	}
-	if err := json.Unmarshal(e.expect(409, "POST", path+"/messages", map[string]any{"text": "第一条"}), &busy); err != nil {
+	if err := json.Unmarshal(e.expect(409, "POST", path+"/messages", map[string]any{"text": "first message"}), &busy); err != nil {
 		t.Fatal(err)
 	}
 	if busy.Error.Code != "agent_busy" || string(busy.Error.Details["currentRunId"]) != "null" || string(busy.Error.Details["queued"]) != `{"interrupt":0,"normal":0}` {
-		t.Fatalf("没有执行时 currentRunId 应为 null：%+v", busy.Error)
+		t.Fatalf("with no run currentRunId should be null: %+v", busy.Error)
 	}
-	e.expect(202, "POST", path+"/messages", map[string]any{"text": "排队", "whenBusy": "queue"})
+	e.expect(202, "POST", path+"/messages", map[string]any{"text": "queued", "whenBusy": "queue"})
 	if ok, err := e.co.Release(ctx, agent.ID.String(), owner); err != nil || !ok {
-		t.Fatalf("放锁失败：%v %v", ok, err)
+		t.Fatalf("release lock: %v %v", ok, err)
 	}
 	e.waitAgentIdle(path)
 	page := decode[apitypes.MessagePage](t, e.expect(200, "GET", path+"/messages", nil))
-	if len(page.Messages) != 2 || page.Messages[0].Text != "排队" || page.Messages[1].Run.Status != "completed" {
-		t.Fatalf("排队的消息应在锁放开后得到回复：%+v", page.Messages)
+	if len(page.Messages) != 2 || page.Messages[0].Text != "queued" || page.Messages[1].Run.Status != "completed" {
+		t.Fatalf("the queued message should get a reply after the lock is released: %+v", page.Messages)
 	}
 }
 
 func TestPlatformConsoleNewReloadAndDatabaseIdleGate(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	agent, path := e.newAgent("维护助手")
+	agent, path := e.newAgent("Maintenance assistant")
 	if err := e.st.RecordSessionFile(ctx, agent.ID, "/tmp/managed-session.jsonl"); err != nil {
 		t.Fatal(err)
 	}
 	reloaded := consoleCommand(t, e, path, "/reload")
 	if reloaded.ProcessStopped == nil || !*reloaded.ProcessStopped {
-		t.Fatalf("reload 应返回进程停止结果：%+v", reloaded)
+		t.Fatalf("reload should return the process stop result: %+v", reloaded)
 	}
 	reset := consoleCommand(t, e, path, "/new")
 	if reset.ResetSession == nil || reset.ResetSession.State != "none" || reset.ResetSession.Epoch != 2 {
-		t.Fatalf("new 应保留历史并重开会话：%+v", reset)
+		t.Fatalf("new should keep the history and reopen the session: %+v", reset)
 	}
 	if err := e.st.RecordSessionFile(ctx, agent.ID, "/tmp/managed-session.jsonl"); err != nil {
 		t.Fatal(err)
@@ -204,14 +204,14 @@ func TestPlatformConsoleNewReloadAndDatabaseIdleGate(t *testing.T) {
 	}
 	e.expectError(409, "agent_not_idle", "GET", path+"/session/export?format=html", nil)
 	if got := consoleCommand(t, e, path, "/session"); got.Session == nil || !got.Session.Status.Busy {
-		t.Fatalf("session 只读查询在忙碌时仍应可用：%+v", got)
+		t.Fatalf("the read-only session query should still work while busy: %+v", got)
 	}
 }
 
 func TestPlatformConsoleResumeLifecycle(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	agent, path := e.newAgent("恢复助手")
+	agent, path := e.newAgent("Resume assistant")
 	oldFile, targetFile := "/managed/old.jsonl", "/managed/target.jsonl"
 	e.expect(202, "POST", path+"/messages", map[string]any{"text": "old history"})
 	e.waitAgentIdle(path)
@@ -219,15 +219,15 @@ func TestPlatformConsoleResumeLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.ex.sessions = []executor.ManagedSession{
-		{ID: "old-full-session-id", Path: oldFile, Title: "旧会话标题", Preview: "旧会话最近消息", UpdatedAt: time.Now().Add(-time.Hour)},
-		{ID: "target-full-session-id", Path: targetFile, Title: "目标会话标题", Preview: "目标会话最近消息", UpdatedAt: time.Now()},
+		{ID: "old-full-session-id", Path: oldFile, Title: "Old session title", Preview: "Old session latest message", UpdatedAt: time.Now().Add(-time.Hour)},
+		{ID: "target-full-session-id", Path: targetFile, Title: "Target session title", Preview: "Target session latest message", UpdatedAt: time.Now()},
 	}
 	events, closeEvents := readSSE(t, e, path, "")
 	defer closeEvents()
 	_ = next(t, events)
 	listed := consoleCommand(t, e, path, "/resume")
-	if listed.ResumeSessions == nil || len(listed.ResumeSessions) != 2 || listed.ResumeSessions[0].ID != "old-full-session-id" || listed.ResumeSessions[0].Title != "旧会话标题" || listed.ResumeSessions[0].Preview != "旧会话最近消息" || !listed.ResumeSessions[0].Current || listed.ResumedSession != nil {
-		t.Fatalf("resume 列表不符：%+v", listed)
+	if listed.ResumeSessions == nil || len(listed.ResumeSessions) != 2 || listed.ResumeSessions[0].ID != "old-full-session-id" || listed.ResumeSessions[0].Title != "Old session title" || listed.ResumeSessions[0].Preview != "Old session latest message" || !listed.ResumeSessions[0].Current || listed.ResumedSession != nil {
+		t.Fatalf("unexpected resume list: %+v", listed)
 	}
 	for _, command := range []string{"/resume unknown", "/resume /managed/target.jsonl", "/resume ../target.jsonl"} {
 		e.expectError(422, "validation_failed", "POST", path+"/messages", map[string]any{"text": command})
@@ -239,15 +239,15 @@ func TestPlatformConsoleResumeLifecycle(t *testing.T) {
 	}
 	resumed := consoleCommand(t, e, path, "/resume target-full-session-id")
 	if resumed.ResumedSession == nil || resumed.ResumedSession.State != "active" || resumed.ResumedSession.Epoch != 2 {
-		t.Fatalf("恢复结果不符：%+v", resumed)
+		t.Fatalf("unexpected resume result: %+v", resumed)
 	}
 	sess, err := e.st.GetAgentSession(ctx, agent.ID)
 	if err != nil || sess.SessionFile != targetFile || sess.State != "active" || sess.Epoch != 2 {
-		t.Fatalf("恢复后的数据库会话不符：%+v %v", sess, err)
+		t.Fatalf("unexpected database session after resume: %+v %v", sess, err)
 	}
 	after, err := e.st.GetAgent(ctx, agent.ID)
 	if err != nil || after.ConfigVersion != before.ConfigVersion || after.PromptVersion != before.PromptVersion || after.ModelProvider != before.ModelProvider || after.ModelID != before.ModelID || after.Prompt != before.Prompt {
-		t.Fatalf("恢复不得回滚模型配置或 Prompt：before=%+v after=%+v %v", before, after, err)
+		t.Fatalf("resume must not roll back the model config or Prompt: before=%+v after=%+v %v", before, after, err)
 	}
 	found := false
 	for range 20 {
@@ -265,20 +265,20 @@ func TestPlatformConsoleResumeLifecycle(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatal("没有收到恢复后的 session.updated")
+		t.Fatal("no session.updated received after resume")
 	}
 	e.expect(202, "POST", path+"/messages", map[string]any{"text": "new epoch"})
 	e.waitAgentIdle(path)
 	page := decode[apitypes.MessagePage](t, e.expect(200, "GET", path+"/messages", nil))
 	if len(page.Messages) != 4 || page.Messages[0].SessionEpoch != 1 || page.Messages[2].SessionEpoch != 2 {
-		t.Fatalf("历史应保留且新消息使用新 epoch：%+v", page.Messages)
+		t.Fatalf("the history should be kept and new messages should use the new epoch: %+v", page.Messages)
 	}
 }
 
 func TestPlatformConsoleNewThenResume(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	agent, path := e.newAgent("重开后恢复")
+	agent, path := e.newAgent("Resume after new")
 	oldFile := "/managed/old.jsonl"
 	if err := e.st.RecordSessionFile(ctx, agent.ID, oldFile); err != nil {
 		t.Fatal(err)
@@ -286,15 +286,15 @@ func TestPlatformConsoleNewThenResume(t *testing.T) {
 	e.ex.sessions = []executor.ManagedSession{{ID: "old-full-session-id", Path: oldFile, UpdatedAt: time.Now()}}
 	reset := consoleCommand(t, e, path, "/new")
 	if reset.ResetSession == nil || reset.ResetSession.State != "none" || reset.ResetSession.Epoch != 2 {
-		t.Fatalf("重开结果不符：%+v", reset)
+		t.Fatalf("unexpected reopen result: %+v", reset)
 	}
 	resumed := consoleCommand(t, e, path, "/resume old-full-session-id")
 	if resumed.ResumedSession == nil || resumed.ResumedSession.State != "active" || resumed.ResumedSession.Epoch != 3 {
-		t.Fatalf("new 后应能恢复旧会话：%+v", resumed)
+		t.Fatalf("after new the old session should be resumable: %+v", resumed)
 	}
 	sess, err := e.st.GetAgentSession(ctx, agent.ID)
 	if err != nil || sess.SessionFile != oldFile || sess.State != "active" || sess.Epoch != 3 {
-		t.Fatalf("new 后恢复的数据库状态不符：%+v %v", sess, err)
+		t.Fatalf("unexpected database state after resuming following new: %+v %v", sess, err)
 	}
 }
 
@@ -303,19 +303,19 @@ func TestPlatformConsoleNewThenResume(t *testing.T) {
 // busy lock, which is also agent_not_idle (platform commands do not use agent_busy).
 func TestPlatformConsoleQueuedWorkAlsoBlocksMaintenance(t *testing.T) {
 	e := newEnv(t)
-	agent, path := e.newAgent("排队门禁")
+	agent, path := e.newAgent("Queue gate")
 	_, _, err := e.st.InsertMessageAndRun(context.Background(), store.NewRun{AgentID: agent.ID, RunID: uuid.Must(uuid.NewV7()), Text: "block queued", Start: false, InstanceID: uuid.Must(uuid.NewV7())})
 	if err != nil {
 		t.Fatal(err)
 	}
 	e.expectError(409, "agent_not_idle", "POST", path+"/messages", map[string]any{"text": "/new"})
 	if st := decode[apitypes.AgentStatus](t, e.expect(200, "GET", path+"/status", nil)); st.CurrentRun == nil || st.CurrentRun.Status == "queued" {
-		t.Fatalf("排队消息应已开始：%+v", st)
+		t.Fatalf("the queued message should have started: %+v", st)
 	}
 	for _, command := range []string{"/new", "/reload", "/compact", "/resume", "/resume target-full-session-id"} {
 		body := decode[apitypes.ErrorBody](t, e.expect(409, "POST", path+"/messages", map[string]any{"text": command}))
 		if body.Error.Code != "agent_not_idle" || body.Error.Details != nil {
-			t.Fatalf("%s 忙时应是不带 details 的 agent_not_idle：%+v", command, body.Error)
+			t.Fatalf("%s while busy should be agent_not_idle without details: %+v", command, body.Error)
 		}
 	}
 	e.expectError(409, "agent_not_idle", "GET", path+"/session/export?format=jsonl", nil)
@@ -328,7 +328,7 @@ func TestClaudeCannotResumePiSession(t *testing.T) {
 	e := newEnv(t)
 	reg := modelcatalog.NewRegistry(e.api.Models.Snapshot())
 	e.api.Models, e.api.Config.Models = reg, reg
-	agent, path := e.newAgent("会话助手")
+	agent, path := e.newAgent("Session assistant")
 	e.expect(200, "PATCH", path, map[string]any{"model": map[string]string{"provider": "claude-code", "modelId": "sonnet"}})
 	e.ex.sessions = []executor.ManagedSession{{ID: "old-pi", Path: "/tmp/old-pi.jsonl"}}
 	for _, command := range []string{"/resume", "/resume old-pi"} {
@@ -336,7 +336,7 @@ func TestClaudeCannotResumePiSession(t *testing.T) {
 	}
 	sess, err := e.st.IdleSession(context.Background(), agent.ID)
 	if err != nil || sess.State != "none" {
-		t.Fatalf("不得切换成 Pi 会话：%+v %v", sess, err)
+		t.Fatalf("must not switch to a Pi session: %+v %v", sess, err)
 	}
 }
 
@@ -344,11 +344,11 @@ func TestClaudeCannotResumePiSession(t *testing.T) {
 // are 409, not 500 internal_error.
 func TestPlatformConsoleMaintenanceErrorsAreConflicts(t *testing.T) {
 	e := newEnv(t)
-	agent, path := e.newAgent("维护失败")
+	agent, path := e.newAgent("Maintenance errors")
 	if err := e.st.RecordSessionFile(context.Background(), agent.ID, "/managed/s.jsonl"); err != nil {
 		t.Fatal(err)
 	}
-	busy := fmt.Errorf("%w：runtime_busy", executor.ErrMaintenanceBusy)
+	busy := fmt.Errorf("%w: runtime_busy", executor.ErrMaintenanceBusy)
 	e.ex.stopErr = busy
 	for _, command := range []string{"/reload", "/new"} {
 		e.expectError(409, "agent_not_idle", "POST", path+"/messages", map[string]any{"text": command})
@@ -359,7 +359,7 @@ func TestPlatformConsoleMaintenanceErrorsAreConflicts(t *testing.T) {
 	e.expectError(409, "agent_not_idle", "POST", path+"/messages", map[string]any{"text": "/resume some-session"})
 	e.ex.listErr = nil
 	for err, code := range map[error]string{busy: "agent_not_idle", executor.ErrNoSession: "session_none",
-		fmt.Errorf("%w：Claude Code", executor.ErrUnsupportedRuntime): "console_command_failed"} {
+		fmt.Errorf("%w: Claude Code", executor.ErrUnsupportedRuntime): "console_command_failed"} {
 		e.ex.exportErr = err
 		e.expectError(409, code, "GET", path+"/session/export?format=html", nil)
 	}
@@ -371,33 +371,33 @@ func TestClaudeCodeConsoleCommandSupport(t *testing.T) {
 	e := newEnv(t)
 	reg := modelcatalog.NewRegistry(e.api.Models.Snapshot())
 	e.api.Models, e.api.Config.Models = reg, reg
-	agent, path := e.newAgent("Claude 命令")
+	agent, path := e.newAgent("Claude commands")
 	e.expect(200, "PATCH", path, map[string]any{"model": map[string]string{"provider": "claude-code", "modelId": "sonnet"}})
 	if err := e.st.RecordSessionFile(context.Background(), agent.ID, "/managed/claude-session"); err != nil {
 		t.Fatal(err)
 	}
-	for _, command := range []string{"/compact", "/compact 保留决定", "/export", "/export jsonl", "/resume", "/resume some-id"} {
+	for _, command := range []string{"/compact", "/compact keep the decisions", "/export", "/export jsonl", "/resume", "/resume some-id"} {
 		body := decode[apitypes.ErrorBody](t, e.expect(409, "POST", path+"/messages", map[string]any{"text": command}))
 		if body.Error.Code != "console_command_failed" || !strings.Contains(body.Error.Message, "Claude Code") {
-			t.Fatalf("%s 应以 console_command_failed 拒绝并写明运行时：%+v", command, body.Error)
+			t.Fatalf("%s should be rejected with console_command_failed naming the runtime: %+v", command, body.Error)
 		}
 	}
 	e.expectError(409, "console_command_failed", "GET", path+"/session/export?format=html", nil)
 	var runs int
 	if err := e.st.Pool.QueryRow(context.Background(), `SELECT count(*) FROM runs WHERE agent_id = $1`, agent.ID).Scan(&runs); err != nil || runs != 0 {
-		t.Fatalf("不支持的命令不应产生执行：%d %v", runs, err)
+		t.Fatalf("unsupported commands should not create runs: %d %v", runs, err)
 	}
 	if got := consoleCommand(t, e, path, "/session"); got.Session == nil {
-		t.Fatalf("/session：%+v", got)
+		t.Fatalf("/session: %+v", got)
 	}
 	if got := consoleCommand(t, e, path, "/copy"); got.Command != "copy" {
-		t.Fatalf("/copy：%+v", got)
+		t.Fatalf("/copy: %+v", got)
 	}
 	if got := consoleCommand(t, e, path, "/reload"); got.ProcessStopped == nil {
-		t.Fatalf("/reload：%+v", got)
+		t.Fatalf("/reload: %+v", got)
 	}
 	if got := consoleCommand(t, e, path, "/new"); got.ResetSession == nil {
-		t.Fatalf("/new：%+v", got)
+		t.Fatalf("/new: %+v", got)
 	}
 }
 
@@ -405,31 +405,31 @@ func TestClaudeCodeConsoleCommandSupport(t *testing.T) {
 // not compact, with the reason stated; /session can read the most recent compaction.
 func TestPlatformConsoleCompactResultOnRun(t *testing.T) {
 	e := newEnv(t)
-	agent, path := e.newAgent("压缩结果")
+	agent, path := e.newAgent("Compaction result")
 	if err := e.st.RecordSessionFile(context.Background(), agent.ID, "/managed/s.jsonl"); err != nil {
 		t.Fatal(err)
 	}
 	if got := consoleCommand(t, e, path, "/session"); got.Session == nil || got.Session.LastCompaction != nil {
-		t.Fatalf("还没有压缩过：%+v", got.Session)
+		t.Fatalf("nothing compacted yet: %+v", got.Session)
 	}
-	done := consoleCommand(t, e, path, "/compact 保留决定")
+	done := consoleCommand(t, e, path, "/compact keep the decisions")
 	c := done.CompactRun.Compaction
-	if done.CompactRun == nil || done.CompactRun.Status != "completed" || c == nil || c.Instructions != "保留决定" || c.Outcome == nil || *c.Outcome != "compacted" ||
+	if done.CompactRun == nil || done.CompactRun.Status != "completed" || c == nil || c.Instructions != "keep the decisions" || c.Outcome == nil || *c.Outcome != "compacted" ||
 		c.TokensBefore == nil || *c.TokensBefore != 4200 || done.TokensBefore == nil || *done.TokensBefore != 4200 {
-		t.Fatalf("压缩结果：%+v %+v", done, c)
+		t.Fatalf("compaction result: %+v %+v", done, c)
 	}
 	e.ex.compactSkip = "already_compacted"
 	skipped := consoleCommand(t, e, path, "/compact")
 	sc := skipped.CompactRun.Compaction
 	if sc == nil || sc.Outcome == nil || *sc.Outcome != "skipped" || sc.SkipReason == nil || *sc.SkipReason != "already_compacted" || skipped.TokensBefore != nil {
-		t.Fatalf("没有压缩也应正常完成并写明原因：%+v %+v", skipped, sc)
+		t.Fatalf("without compaction it should still complete normally and state the reason: %+v %+v", skipped, sc)
 	}
 	session := consoleCommand(t, e, path, "/session")
 	if last := session.Session.LastCompaction; last == nil || last.ID != skipped.CompactRun.ID || last.Compaction == nil || *last.Compaction.Outcome != "skipped" {
-		t.Fatalf("/session 应给出最近一次压缩：%+v", session.Session.LastCompaction)
+		t.Fatalf("/session should give the latest compaction: %+v", session.Session.LastCompaction)
 	}
 	if page := decode[apitypes.MessagePage](t, e.expect(200, "GET", path+"/messages?aroundRun="+skipped.CompactRun.ID.String(), nil)); page.Messages == nil {
-		t.Fatal("定位压缩执行应返回一页（没有消息时为空列表）")
+		t.Fatal("locating a compaction run should return a page (an empty list when there are no messages)")
 	}
 }
 
@@ -438,15 +438,15 @@ func TestPlatformConsoleCompactResultOnRun(t *testing.T) {
 func TestAnomalyMarksFailedCompaction(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	agent, _ := e.newAgent("压缩异常")
+	agent, _ := e.newAgent("Compaction anomaly")
 	if err := e.st.RecordSessionFile(ctx, agent.ID, "/managed/s.jsonl"); err != nil {
 		t.Fatal(err)
 	}
-	compact, err := e.st.InsertConsoleCompactRun(ctx, agent.ID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), "保留决定")
+	compact, err := e.st.InsertConsoleCompactRun(ctx, agent.ID, uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), "keep the decisions")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := e.st.FinishRun(ctx, compact.ID, store.RunEnd{Status: "failed", ErrorCode: "pi_error", ErrorMessage: "模型出错"}); err != nil {
+	if _, _, _, err := e.st.FinishRun(ctx, compact.ID, store.RunEnd{Status: "failed", ErrorCode: "pi_error", ErrorMessage: "model error"}); err != nil {
 		t.Fatal(err)
 	}
 	_, normal, err := e.st.InsertMessageAndRun(ctx, store.NewRun{AgentID: agent.ID, RunID: uuid.Must(uuid.NewV7()), Text: "x", Start: true, InstanceID: uuid.Must(uuid.NewV7())})
@@ -462,17 +462,17 @@ func TestAnomalyMarksFailedCompaction(t *testing.T) {
 		switch it.RunID {
 		case compact.ID:
 			seen++
-			if it.Compaction == nil || it.Compaction.Instructions != "保留决定" || it.Compaction.Outcome != nil {
-				t.Fatalf("失败的压缩应带 compaction：%+v", it.Compaction)
+			if it.Compaction == nil || it.Compaction.Instructions != "keep the decisions" || it.Compaction.Outcome != nil {
+				t.Fatalf("a failed compaction should carry compaction: %+v", it.Compaction)
 			}
 		case normal.ID:
 			seen++
 			if it.Compaction != nil {
-				t.Fatalf("普通执行的 compaction 应为 null：%+v", it.Compaction)
+				t.Fatalf("compaction of a regular run should be null: %+v", it.Compaction)
 			}
 		}
 	}
 	if seen != 2 {
-		t.Fatalf("两条异常都应列出：%+v", page.Items)
+		t.Fatalf("both anomalies should be listed: %+v", page.Items)
 	}
 }

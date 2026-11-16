@@ -49,7 +49,7 @@ func (f *authControllerStub) Input(_ context.Context, _ uuid.UUID, _ uuid.UUID, 
 
 func TestModelAuthConsoleContractAndIdentityBoundary(t *testing.T) {
 	e := newEnv(t)
-	a := e.platformAgent("认证边界")
+	a := e.platformAgent("Auth boundary")
 	now := time.Now().UTC()
 	url := "https://auth.openai.com/oauth/authorize?state=fixture&code_challenge=fixture"
 	stub := &authControllerStub{operation: modelauth.Operation{ID: uuid.New(), AgentID: a.ID, Provider: "openai-codex", ConfigVersion: 1, Status: "awaiting_authorization", StartedAt: now, ExpiresAt: now.Add(time.Minute), AuthorizationURL: &url}}
@@ -84,7 +84,7 @@ func TestModelAuthConsoleContractAndIdentityBoundary(t *testing.T) {
 	stub.operation.Prompt = &cm.LoginPrompt{ID: "1", Kind: "select", Message: "Pick", Options: []cm.LoginPromptOption{{ID: "device", Label: "Device"}}}
 	answered := decode[modelauth.State](t, e.expect(200, "POST", routes[4].path, routes[4].body))
 	if answered.Operation == nil || answered.Operation.Prompt != nil || len(stub.answers) != 1 || stub.answers[0] != "1" {
-		t.Fatalf("回答：%+v %v", answered.Operation, stub.answers)
+		t.Fatalf("answer: %+v %v", answered.Operation, stub.answers)
 	}
 	op := decode[modelauth.Operation](t, e.expect(200, "POST", routes[3].path, routes[3].body))
 	if op.Status != "cancelled" || op.AuthorizationURL != nil {

@@ -35,44 +35,44 @@ func TestPluginInboxSender(t *testing.T) {
 	ctx := context.Background()
 	e.installPlugin(writePluginDir(t, "bridge", "inbox.send", "inbox.read"))
 	e.expect(200, "PUT", "/projects/"+e.dc.Project.ID.String()+"/plugins/bridge", map[string]any{"enabled": true, "values": map[string]any{}, "expectedRevision": 0})
-	agent, path := e.newAgent("助手")
-	other := decode[apitypes.Project](t, e.expect(201, "POST", "/projects", map[string]any{"name": "别的项目"}))
-	e.expect(201, "POST", "/projects/"+other.ID.String()+"/agents", map[string]any{"name": "项目外", "model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}})
+	agent, path := e.newAgent("Assistant")
+	other := decode[apitypes.Project](t, e.expect(201, "POST", "/projects", map[string]any{"name": "Other project"}))
+	e.expect(201, "POST", "/projects/"+other.ID.String()+"/agents", map[string]any{"name": "Outside project", "model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}})
 	auth := []string{"Authorization", "Bearer " + e.pluginToken()}
 
 	sent := decode[apitypes.InboxMessage](t, e.expect(201, "POST", "/inbox/messages",
-		map[string]any{"to": "默认项目/助手", "text": "飞书群里有人问部署进度", "channelId": "lark", "senderName": "飞书 · 张三"}, auth...))
-	if f := sent.From; f.Kind != "plugin" || *f.PluginID != "bridge" || *f.ChannelID != "lark" || *f.Address != "plugin:bridge/lark" || f.Name != "飞书 · 张三" || f.ID != nil {
-		t.Fatalf("插件发件方：%+v", f)
+		map[string]any{"to": "Default project/Assistant", "text": "Someone in the Lark group asks how the deploy is going", "channelId": "lark", "senderName": "Lark · Alice"}, auth...))
+	if f := sent.From; f.Kind != "plugin" || *f.PluginID != "bridge" || *f.ChannelID != "lark" || *f.Address != "plugin:bridge/lark" || f.Name != "Lark · Alice" || f.ID != nil {
+		t.Fatalf("plugin sender: %+v", f)
 	}
-	e.console().expectError(403, "forbidden", "POST", "/inbox/messages", map[string]any{"to": "别的项目/项目外", "text": "x"}, auth...)
+	e.console().expectError(403, "forbidden", "POST", "/inbox/messages", map[string]any{"to": "Other project/Outside project", "text": "x"}, auth...)
 	e.console().expectError(403, "forbidden", "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "x"}, auth...)
-	e.expectError(422, "validation_failed", "POST", "/inbox/messages", map[string]any{"to": "默认项目/助手", "text": "x", "channelId": "lark"})
+	e.expectError(422, "validation_failed", "POST", "/inbox/messages", map[string]any{"to": "Default project/Assistant", "text": "x", "channelId": "lark"})
 	e.waitAgentIdle(path)
 
-	reply := decode[apitypes.InboxMessage](t, e.agentCaller(agent.ID).expect(201, "POST", "/inbox/messages/"+sent.ID.String()+"/reply", map[string]any{"text": "今晚八点上线"}))
-	if to := reply.To; to.Kind != "plugin" || *to.ChannelID != "lark" || to.Name != "飞书 · 张三" {
-		t.Fatalf("回复给插件：%+v", to)
+	reply := decode[apitypes.InboxMessage](t, e.agentCaller(agent.ID).expect(201, "POST", "/inbox/messages/"+sent.ID.String()+"/reply", map[string]any{"text": "Going live at eight tonight"}))
+	if to := reply.To; to.Kind != "plugin" || *to.ChannelID != "lark" || to.Name != "Lark · Alice" {
+		t.Fatalf("reply to the plugin: %+v", to)
 	}
 	var data []byte
 	var target string
 	if err := e.st.Pool.QueryRow(ctx, `SELECT e.data, d.plugin_id FROM plugin_events e JOIN plugin_event_deliveries d ON d.event_id=e.id WHERE e.type='channel.outbound'`).Scan(&data, &target); err != nil || target != "bridge" {
-		t.Fatalf("channel.outbound 只投给 bridge：%q %v", target, err)
+		t.Fatalf("channel.outbound should go to bridge only: %q %v", target, err)
 	}
 	var ev map[string]any
 	_ = json.Unmarshal(data, &ev)
-	if ev["messageId"] != reply.ID.String() || ev["threadId"] != sent.ID.String() || ev["channelId"] != "lark" || ev["excerpt"] != "今晚八点上线" ||
+	if ev["messageId"] != reply.ID.String() || ev["threadId"] != sent.ID.String() || ev["channelId"] != "lark" || ev["excerpt"] != "Going live at eight tonight" ||
 		ev["isQuestion"] != false || ev["question"] != nil {
-		t.Fatalf("channel.outbound：%v", ev)
+		t.Fatalf("channel.outbound: %v", ev)
 	}
 
 	page := decode[apitypes.InboxMessagePage](t, e.expect(200, "GET", "/inbox/messages", nil, auth...))
 	if len(page.Messages) != 1 || page.Messages[0].ID != reply.ID {
-		t.Fatalf("插件的 Inbox：%+v", page.Messages)
+		t.Fatalf("the plugin's Inbox: %+v", page.Messages)
 	}
-	again := decode[apitypes.InboxMessage](t, e.expect(201, "POST", "/inbox/messages/"+reply.ID.String()+"/reply", map[string]any{"text": "好的，已转告"}, auth...))
-	if again.From.Kind != "plugin" || *again.From.ChannelID != "lark" || again.From.Name != "飞书 · 张三" || again.To.ID == nil || *again.To.ID != agent.ID {
-		t.Fatalf("插件继续回复：%+v", again)
+	again := decode[apitypes.InboxMessage](t, e.expect(201, "POST", "/inbox/messages/"+reply.ID.String()+"/reply", map[string]any{"text": "OK, passed it on"}, auth...))
+	if again.From.Kind != "plugin" || *again.From.ChannelID != "lark" || again.From.Name != "Lark · Alice" || again.To.ID == nil || *again.To.ID != agent.ID {
+		t.Fatalf("the plugin replies again: %+v", again)
 	}
 }
 
@@ -87,17 +87,17 @@ func TestPluginThreadQuestions(t *testing.T) {
 		e.installPlugin(writePluginDir(t, id, "inbox.send", "inbox.read"))
 		e.expect(200, "PUT", "/projects/"+e.dc.Project.ID.String()+"/plugins/"+id, map[string]any{"enabled": true, "values": map[string]any{}, "expectedRevision": 0})
 	}
-	agent, path := e.newAgent("助手")
+	agent, path := e.newAgent("Assistant")
 	bridge := []string{"Authorization", "Bearer " + e.pluginTokenFor("bridge")}
 	other := []string{"Authorization", "Bearer " + e.pluginTokenFor("other")}
 	sent := decode[apitypes.InboxMessage](t, e.expect(201, "POST", "/inbox/messages",
-		map[string]any{"to": "默认项目/助手", "text": "要发版吗", "channelId": "slack", "senderName": "Slack · 李四"}, bridge...))
+		map[string]any{"to": "Default project/Assistant", "text": "Shall we release?", "channelId": "slack", "senderName": "Slack · Bob"}, bridge...))
 	e.waitAgentIdle(path)
 
 	q := decode[apitypes.InboxMessage](t, e.agentCaller(agent.ID).expect(201, "POST", "/inbox/messages/"+sent.ID.String()+"/reply",
-		map[string]any{"text": "今晚发吗？", "options": []string{"发", "不发"}}))
+		map[string]any{"text": "Release tonight?", "options": []string{"Yes", "No"}}))
 	if q.Question == nil || q.To.Kind != "plugin" || *q.To.ChannelID != "slack" {
-		t.Fatalf("Agent 在插件线索里提问：%+v", q)
+		t.Fatalf("the Agent asks in the plugin thread: %+v", q)
 	}
 	var data []byte
 	if err := e.st.Pool.QueryRow(ctx, `SELECT e.data FROM plugin_events e JOIN plugin_event_deliveries d ON d.event_id=e.id
@@ -109,28 +109,28 @@ func TestPluginThreadQuestions(t *testing.T) {
 	question, _ := ev["question"].(map[string]any)
 	options, _ := question["options"].([]any)
 	if ev["isQuestion"] != true || ev["messageId"] != q.ID.String() || question["id"] != q.ID.String() || question["allowText"] != true || question["deadline"] == nil ||
-		len(options) != 2 || options[0].(map[string]any)["id"] != "1" || options[1].(map[string]any)["label"] != "不发" {
-		t.Fatalf("channel.outbound 带提问：%v", ev)
+		len(options) != 2 || options[0].(map[string]any)["id"] != "1" || options[1].(map[string]any)["label"] != "No" {
+		t.Fatalf("channel.outbound with a question: %v", ev)
 	}
 
 	reply := "/inbox/messages/" + q.ID.String() + "/reply"
-	e.console().expectError(422, "validation_failed", "POST", reply, map[string]any{"text": "反问", "options": []string{"a"}}, bridge...)
+	e.console().expectError(422, "validation_failed", "POST", reply, map[string]any{"text": "counter-question", "options": []string{"a"}}, bridge...)
 	e.console().expectError(403, "forbidden", "POST", reply, map[string]any{"optionId": "1"}, other...)
 	answer := decode[apitypes.InboxMessage](t, e.expect(201, "POST", reply, map[string]any{"optionId": "1"}, bridge...))
 	if answer.From.Kind != "plugin" || answer.To.ID == nil || *answer.To.ID != agent.ID || answer.AnswerTo == nil || answer.AnswerTo.MessageID != q.ID {
-		t.Fatalf("插件作答：%+v", answer)
+		t.Fatalf("plugin answers: %+v", answer)
 	}
 	if m, err := e.st.GetInboxMessage(ctx, q.ID, 200); err != nil || m.Question.State != "answered" || *m.Question.Answer.OptionID != "1" {
-		t.Fatalf("问题记为已回答：%+v %v", m.Question, err)
+		t.Fatalf("question recorded as answered: %+v %v", m.Question, err)
 	}
 	e.console().expectError(409, "already_answered", "POST", reply, map[string]any{"optionId": "2"}, bridge...)
 	var actor string
 	if err := e.st.Pool.QueryRow(ctx, `SELECT actor_kind||'|'||actor_address FROM audit_log WHERE operation='replyInboxMessage' AND status=201 ORDER BY at DESC LIMIT 1`).Scan(&actor); err != nil || actor != "plugin|plugin:bridge" {
-		t.Fatalf("审计：%q %v", actor, err)
+		t.Fatalf("audit: %q %v", actor, err)
 	}
 	e.waitAgentIdle(path)
 	var reminders int
 	if err := e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM runs WHERE agent_id=$1 AND origin='inbox_reminder' AND trigger_inbox_message_id=$2`, agent.ID, answer.ID).Scan(&reminders); err != nil || reminders != 1 {
-		t.Fatalf("作答应提醒 Agent 一次：%d %v", reminders, err)
+		t.Fatalf("answering should remind the Agent once: %d %v", reminders, err)
 	}
 }

@@ -14,7 +14,7 @@ import (
 
 func TestProjectCredentialHTTPCRUDSelections(t *testing.T) {
 	e := newEnv(t)
-	a, path := e.newAgent("共享使用者")
+	a, path := e.newAgent("Shared user")
 	_, token := e.identity("credential-admin")
 	external := e.external(token)
 	base := "/projects/" + e.dc.Project.ID.String() + "/credential-accounts"
@@ -29,7 +29,7 @@ func TestProjectCredentialHTTPCRUDSelections(t *testing.T) {
 	create := func(name string) cm.Account {
 		return decode[cm.Account](t, external.expect(201, "POST", base, map[string]any{"purpose": "model", "provider": "anthropic", "name": name, "credential": map[string]any{"type": "api_key", "key": "synthetic-project-key"}}))
 	}
-	x := create("共享X")
+	x := create("Shared X")
 	state = decode[cm.Selections](t, e.expect(200, "GET", path+"/credential-selections", nil))
 	if state.Selections[0].Mode != "automatic" || state.Selections[0].ResolvedAccountID == nil || *state.Selections[0].ResolvedAccountID != x.ID {
 		t.Fatal("unique not automatic")
@@ -38,7 +38,7 @@ func TestProjectCredentialHTTPCRUDSelections(t *testing.T) {
 	if metadata.ModelCredential == nil || metadata.ModelCredential.ProjectID == nil || metadata.ModelCredential.AccountID == nil || *metadata.ModelCredential.AccountID != x.ID {
 		t.Fatal("legacy read lost project source")
 	}
-	y := create("共享Y")
+	y := create("Shared Y")
 	state = decode[cm.Selections](t, e.expect(200, "GET", path+"/credential-selections", nil))
 	if state.Selections[0].Status != "selection_required" || len(state.Selections[0].Candidates) != 2 {
 		t.Fatal("multi candidate silently picked")
@@ -48,7 +48,7 @@ func TestProjectCredentialHTTPCRUDSelections(t *testing.T) {
 		t.Fatal("explicit missing")
 	}
 	external.expectError(412, "precondition_failed", "PUT", path+"/credential-selections", map[string]any{"purpose": "model", "provider": "anthropic", "accountId": y.ID, "expectedConfigVersion": state.ConfigVersion - 1})
-	renamed := decode[cm.Account](t, external.expect(200, "PATCH", base+"/"+x.ID.String(), map[string]any{"name": "重命名", "expectedRevision": x.Revision}))
+	renamed := decode[cm.Account](t, external.expect(200, "PATCH", base+"/"+x.ID.String(), map[string]any{"name": "Renamed", "expectedRevision": x.Revision}))
 	if renamed.ID != x.ID || renamed.CurrentVersionID == nil || *renamed.CurrentVersionID != *x.CurrentVersionID {
 		t.Fatal("rename changed identity")
 	}
@@ -74,7 +74,7 @@ func TestProjectCredentialHTTPCRUDSelections(t *testing.T) {
 	external.expectError(409, "project_credential_required", "DELETE", path+"/model-credential", nil)
 	e.expect(200, "PUT", path+"/clis/gh", nil)
 	external.expectError(409, "project_credential_required", "PUT", path+"/clis/gh/credential", map[string]any{"fields": map[string]string{"token": "synthetic-legacy-gh"}})
-	cli := decode[cm.Account](t, external.expect(201, "POST", base, map[string]any{"purpose": "cli", "cli": "gh", "name": "共享gh", "credential": map[string]any{"type": "cli", "fields": map[string]string{"token": "synthetic-gh"}}}))
+	cli := decode[cm.Account](t, external.expect(201, "POST", base, map[string]any{"purpose": "cli", "cli": "gh", "name": "Shared gh", "credential": map[string]any{"type": "cli", "fields": map[string]string{"token": "synthetic-gh"}}}))
 	legacyRead := decode[apitypes.Agent](t, e.expect(200, "GET", path, nil))
 	foundCLI := false
 	for _, tool := range legacyRead.Clis {
@@ -87,7 +87,7 @@ func TestProjectCredentialHTTPCRUDSelections(t *testing.T) {
 	}
 	state = decode[cm.Selections](t, e.expect(200, "GET", path+"/credential-selections", nil))
 	external.expectError(422, "credential_scope_mismatch", "PUT", path+"/credential-selections", map[string]any{"purpose": "model", "provider": "anthropic", "accountId": cli.ID, "expectedConfigVersion": state.ConfigVersion})
-	platform := e.platformAgent("私有兼容")
+	platform := e.platformAgent("Private compat")
 	e.expect(200, "PUT", "/agents/"+platform.ID.String()+"/model-credential", map[string]any{"provider": "anthropic", "key": "synthetic-platform-key"})
 	external.expectError(403, "forbidden", "GET", "/agents/"+platform.ID.String()+"/model-auth", nil)
 	agentCaller := e.agentCaller(a.ID)
@@ -109,14 +109,14 @@ func TestProjectCredentialHTTPResolutionErrorsAndLegacyHistory(t *testing.T) {
 	x := e.sharedCredential(t, "model", "anthropic", "A", "synthetic-A")
 	e.sharedCredential(t, "model", "anthropic", "B", "synthetic-B")
 	create := func() {
-		manager.expectError(409, "credential_selection_required", "POST", "/tasks", map[string]any{"actionId": uuid.New(), "title": "需选择", "request": map[string]any{}, "workflow": task.Workflow})
+		manager.expectError(409, "credential_selection_required", "POST", "/tasks", map[string]any{"actionId": uuid.New(), "title": "Needs selection", "request": map[string]any{}, "workflow": task.Workflow})
 	}
 	create()
 	state := decode[cm.Selections](t, e.expect(200, "GET", path+"/credential-selections", nil))
 	state = decode[cm.Selections](t, e.expect(200, "PUT", path+"/credential-selections", map[string]any{"purpose": "model", "provider": "anthropic", "accountId": x.ID, "expectedConfigVersion": state.ConfigVersion}))
 	e.expect(200, "DELETE", "/projects/"+e.dc.Project.ID.String()+"/credential-accounts/"+x.ID.String()+"?expectedRevision=1", nil)
 	e.expectError(409, "credential_account_deleted", "PUT", path+"/credential-selections", map[string]any{"purpose": "model", "provider": "anthropic", "accountId": x.ID, "expectedConfigVersion": state.ConfigVersion})
-	manager.expectError(409, "credential_account_deleted", "POST", "/tasks", map[string]any{"actionId": uuid.New(), "title": "已删明确账号", "request": map[string]any{}, "workflow": task.Workflow})
+	manager.expectError(409, "credential_account_deleted", "POST", "/tasks", map[string]any{"actionId": uuid.New(), "title": "Explicit account deleted", "request": map[string]any{}, "workflow": task.Workflow})
 	// The old project login entry cannot start even without a usable helper.
 	e.expectError(409, "project_credential_required", "POST", path+"/model-auth/operations", map[string]any{"provider": "openai-codex", "expectedConfigVersion": state.ConfigVersion})
 	old := uuid.New()
@@ -140,8 +140,8 @@ func TestProjectCredentialHTTPResolutionErrorsAndLegacyHistory(t *testing.T) {
 	// helper lifecycle coverage is separate (4.2/7.4), not claimed by this test.
 	e.api.Config.ModelAuth.Helper = projectContractWaitingLogin{}
 	base := "/projects/" + e.dc.Project.ID.String() + "/model-auth/operations"
-	stateOp := decode[cm.LoginState](t, e.expect(202, "POST", base, map[string]any{"provider": "openai-codex", "name": "等待登录"}))
-	e.expectError(409, "model_auth_in_progress", "POST", base, map[string]any{"provider": "openai-codex", "name": "另一登录"})
+	stateOp := decode[cm.LoginState](t, e.expect(202, "POST", base, map[string]any{"provider": "openai-codex", "name": "Waiting for login"}))
+	e.expectError(409, "model_auth_in_progress", "POST", base, map[string]any{"provider": "openai-codex", "name": "Another login"})
 	e.expect(200, "POST", base+"/"+stateOp.Operation.ID.String()+"/cancel", nil)
 	if failures := e.v.Failures(); len(failures) > 0 {
 		t.Fatal(failures)
@@ -159,7 +159,7 @@ func (projectContractWaitingLogin) Login(ctx context.Context, _ uuid.UUID, notif
 }
 func TestProjectCredentialHTTPInvalidPresenceNoWrites(t *testing.T) {
 	e := newEnv(t)
-	_, path := e.newAgent("输入边界")
+	_, path := e.newAgent("Input bounds")
 	base := "/projects/" + e.dc.Project.ID.String() + "/credential-accounts"
 	for _, input := range []any{
 		map[string]any{"purpose": "model", "provider": "anthropic", "cli": nil, "name": "bad", "credential": map[string]any{"type": "api_key", "key": "sentinel-secret"}},
@@ -199,8 +199,8 @@ func (e *env) sharedCredential(t *testing.T, purpose, slot, name, value string) 
 
 func TestProjectCredentialHTTPSelectionScopeAndTemplate(t *testing.T) {
 	e := newEnv(t)
-	a, path := e.newAgent("选择边界")
-	cli := e.sharedCredential(t, "cli", "gh", "共享工具", "synthetic-gh")
+	a, path := e.newAgent("Selection bounds")
+	cli := e.sharedCredential(t, "cli", "gh", "Shared tool", "synthetic-gh")
 	e.expect(200, "PUT", path+"/clis/jq", nil)
 	state := decode[cm.Selections](t, e.expect(200, "GET", path+"/credential-selections", nil))
 	for _, item := range state.Selections {
@@ -209,8 +209,8 @@ func TestProjectCredentialHTTPSelectionScopeAndTemplate(t *testing.T) {
 		}
 	}
 	e.expectError(422, "validation_failed", "PUT", path+"/credential-selections", map[string]any{"purpose": "cli", "cli": "jq", "accountId": cli.ID, "expectedConfigVersion": state.ConfigVersion})
-	project := decode[apitypes.Project](t, e.expect(201, "POST", "/projects", map[string]any{"name": "其他项目账号"}))
-	other := decode[cm.Account](t, e.expect(201, "POST", "/projects/"+project.ID.String()+"/credential-accounts", map[string]any{"purpose": "model", "provider": "anthropic", "name": "另一项目", "credential": map[string]string{"type": "api_key", "key": "synthetic-other"}}))
+	project := decode[apitypes.Project](t, e.expect(201, "POST", "/projects", map[string]any{"name": "Other project accounts"}))
+	other := decode[cm.Account](t, e.expect(201, "POST", "/projects/"+project.ID.String()+"/credential-accounts", map[string]any{"purpose": "model", "provider": "anthropic", "name": "Another project", "credential": map[string]string{"type": "api_key", "key": "synthetic-other"}}))
 	e.expectError(404, "not_found", "PUT", path+"/credential-selections", map[string]any{"purpose": "model", "provider": "anthropic", "accountId": other.ID, "expectedConfigVersion": state.ConfigVersion})
 	after := decode[cm.Selections](t, e.expect(200, "GET", path+"/credential-selections", nil))
 	if after.ConfigVersion != state.ConfigVersion {

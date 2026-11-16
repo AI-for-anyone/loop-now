@@ -26,7 +26,7 @@ func platformDirectoryHTTPStore(t *testing.T) *store.Store {
 func TestPlatformProjectDirectoryHTTP(t *testing.T) {
 	ctx := context.Background()
 	st := platformDirectoryHTTPStore(t)
-	dc, err := st.EnsureDefaults(ctx, "组织", "项目")
+	dc, err := st.EnsureDefaults(ctx, "Org", "Project")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,8 +38,8 @@ func TestPlatformProjectDirectoryHTTP(t *testing.T) {
 		}
 		return a
 	}
-	platform := makeAgent(store.PlatformScope(), "平台发现者")
-	manager := makeAgent(store.ProjectScope(dc.Project.ID), "项目负责人")
+	platform := makeAgent(store.PlatformScope(), "Platform explorer")
+	manager := makeAgent(store.ProjectScope(dc.Project.ID), "Project lead")
 	if _, err = st.SetProjectManager(ctx, dc.Project.ID, manager.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestPlatformProjectDirectoryHTTP(t *testing.T) {
 	if err = json.Unmarshal(b, &response); err != nil {
 		t.Fatal(err)
 	}
-	if len(response.Projects) != 1 || response.Projects[0].Manager == nil || response.Projects[0].Manager.ID != manager.ID || response.Projects[0].Manager.Address != "组织/项目/项目负责人" {
+	if len(response.Projects) != 1 || response.Projects[0].Manager == nil || response.Projects[0].Manager.ID != manager.ID || response.Projects[0].Manager.Address != "Org/Project/Project lead" {
 		t.Fatal("wrong safe directory")
 	}
 	for _, bad := range []string{"prompt", "private-prompt", "model", "credential", "agentCount"} {

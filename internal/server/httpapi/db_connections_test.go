@@ -10,7 +10,7 @@ import (
 
 func TestDBConnectionHTTPContract(t *testing.T) {
 	e := newEnv(t)
-	a, path := e.newAgent("数据库集合")
+	a, path := e.newAgent("Database collection")
 	_, token := e.identity("db-admin")
 	external := e.external(token)
 	e.expect(200, "PUT", path+"/clis/mysql", nil)
@@ -46,7 +46,7 @@ func TestDBConnectionHTTPContract(t *testing.T) {
 	agentCaller := e.agentCaller(a.ID)
 	agentCaller.client = &http.Client{}
 	agentCaller.expectError(404, "not_found", "GET", target, nil)
-	platform := e.platformAgent("数据库私有")
+	platform := e.platformAgent("Database private")
 	external.expectError(422, "validation_failed", "GET", "/agents/"+platform.ID.String()+"/db-connections/mysql", nil)
 	if failures := e.v.Failures(); len(failures) > 0 {
 		t.Fatal(strings.Join(failures, "\n"))

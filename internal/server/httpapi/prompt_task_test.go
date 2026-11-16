@@ -42,7 +42,7 @@ func TestTaskPromptSingleProjectVersionAndFrozenRestore(t *testing.T) {
 	e := newEnv(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	account := e.sharedCredential(t, "model", "anthropic", "任务共享模型", "synthetic-fixture")
+	account := e.sharedCredential(t, "model", "anthropic", "Task shared model", "synthetic-fixture")
 	ids := []uuid.UUID{}
 	for _, name := range []string{"Manager", "Worker"} {
 		a := decode[apitypes.Agent](t, e.expect(201, "POST", e.agents(), map[string]any{"name": name, "model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}, "prompt": name + "-old"}))
