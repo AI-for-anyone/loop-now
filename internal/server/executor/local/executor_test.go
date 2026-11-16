@@ -286,15 +286,15 @@ func TestEnvAndArgs(t *testing.T) {
 	ghDir := preinstall(t, h.root, "gh", "2.100.0", "gh")
 	preinstall(t, h.root, "lark-cli", "1.0.94", "lark-cli")
 	id := h.agent(func(s *agentconfig.Snapshot) {
-		s.Prompt = "你是助手"
+		s.Prompt = "You are an assistant"
 		s.ModelCredential, _ = modelcredential.APIKey("sk-test")
 		s.CLIs = []string{"gh", "jq"}
 		s.ModelEnv = map[string]string{"ANTHROPIC_API_KEY": "sk-test", "PATH": "/evil", "GITHUB_TOKEN": "leak", "GH_HOST": "evil.example", "HTTPS_PROXY": "http://127.0.0.1:7890"}
 		s.CLIPayloads["gh"] = clitemplate.Payload{Env: map[string]string{"GH_TOKEN": "ghp_test"}}
 	})
-	res, _ := h.exec(id, "你好")
-	if res.Outcome != executor.OutcomeCompleted || !strings.Contains(res.Text, "你好") {
-		t.Fatalf("执行结果不对：%+v", res)
+	res, _ := h.exec(id, "hello")
+	if res.Outcome != executor.OutcomeCompleted || !strings.Contains(res.Text, "hello") {
+		t.Fatalf("wrong execution result: %+v", res)
 	}
 	d := readDump(t, dumpPath)
 	agentRoot := filepath.Join(h.root, "agents", id.String())
@@ -304,12 +304,12 @@ func TestEnvAndArgs(t *testing.T) {
 	}
 	for k, v := range want {
 		if d.Env[k] != v {
-			t.Errorf("环境变量 %s = %q，期望 %q", k, d.Env[k], v)
+			t.Errorf("environment variable %s = %q, want %q", k, d.Env[k], v)
 		}
 	}
 	for k := range d.Env {
 		if strings.HasPrefix(k, "LOOP_NOW_") {
-			t.Errorf("不应把服务端变量 %s 传给 Pi", k)
+			t.Errorf("server variable %s should not be passed to Pi", k)
 		}
 	}
 	// Legacy snapshot data cannot inject model or proxy variables into the process.
@@ -334,18 +334,18 @@ func TestEnvAndArgs(t *testing.T) {
 		}
 	}
 	if !strings.HasPrefix(d.Env["PATH"], ghDir+":") || !strings.HasSuffix(d.Env["PATH"], "/usr/bin:/bin:/usr/sbin:/sbin") || strings.Contains(d.Env["PATH"], "lark-cli") {
-		t.Errorf("PATH 顺序不对：%s", d.Env["PATH"])
+		t.Errorf("wrong PATH order: %s", d.Env["PATH"])
 	}
 	if d.Cwd != filepath.Join(agentRoot, "workspace") && !strings.HasSuffix(d.Cwd, filepath.Join(id.String(), "workspace")) {
-		t.Errorf("工作目录不对：%s", d.Cwd)
+		t.Errorf("wrong working directory: %s", d.Cwd)
 	}
 	for _, f := range []string{"--no-approve", "--offline", "--no-skills"} {
 		if !slices.Contains(d.Args, f) {
-			t.Errorf("缺少参数 %s：%v", f, d.Args)
+			t.Errorf("missing argument %s: %v", f, d.Args)
 		}
 	}
 	if argValue(d.Args, "--provider") != "anthropic" || argValue(d.Args, "--model") != "claude-x" || argValue(d.Args, "--append-system-prompt") == "" || slices.Contains(d.Args, "--session") {
-		t.Errorf("参数不对：%v", d.Args)
+		t.Errorf("wrong arguments: %v", d.Args)
 	}
 }
 
@@ -373,23 +373,23 @@ func TestSyncSkillsAndCredentialFiles(t *testing.T) {
 
 	h.exec(id, "hi")
 	if b, _ := os.ReadFile(filepath.Join(agentRoot, "home", ".demo", "cred")); string(b) != "secret-1" {
-		t.Fatalf("凭证文件未写入：%q", b)
+		t.Fatalf("the credential file was not written: %q", b)
 	}
 	if _, err := os.Stat(filepath.Join(agentRoot, "skills", "old")); !os.IsNotExist(err) {
-		t.Fatal("不在配置中的 Skill 目录应被删除")
+		t.Fatal("a Skill directory not in the config should be deleted")
 	}
 	if _, err := os.Stat(filepath.Join(agentRoot, "skills", "pdf-tools", "SKILL.md")); err != nil {
-		t.Fatal("配置中的 Skill 应被写入")
+		t.Fatal("the Skill in the config should be written")
 	}
 	// Remove demo from the available list: after the restart the credential file is deleted.
 	pid := h.pid(id)
 	h.src.update(id, func(s *agentconfig.Snapshot) { s.CLIs = nil; delete(s.CLIPayloads, "demo") })
 	h.exec(id, "hi")
 	if h.pid(id) == pid {
-		t.Fatal("配置变化后应重启进程")
+		t.Fatal("the process should restart after a config change")
 	}
 	if _, err := os.Stat(filepath.Join(agentRoot, "home", ".demo", "cred")); !os.IsNotExist(err) {
-		t.Fatal("移除 CLI 后其凭证文件应被删除")
+		t.Fatal("a CLI's credential file should be deleted after the CLI is removed")
 	}
 }
 
@@ -407,7 +407,7 @@ func TestLarkCLICredentialFiles(t *testing.T) {
 	}
 	lark, ok := builtin.Get("lark-cli")
 	if !ok {
-		t.Fatal("缺少内置 lark-cli 模板")
+		t.Fatal("the built-in lark-cli template is missing")
 	}
 	payload, _, err := lark.Render(map[string]string{"appId": "cli_test", "appSecret": "lark-secret-1"})
 	if err != nil {
@@ -422,29 +422,29 @@ func TestLarkCLICredentialFiles(t *testing.T) {
 	mode := func(rel string) os.FileMode {
 		fi, err := os.Stat(filepath.Join(home, rel))
 		if err != nil {
-			t.Fatalf("%s 不存在：%v", rel, err)
+			t.Fatalf("%s does not exist: %v", rel, err)
 		}
 		return fi.Mode().Perm()
 	}
 	if b, _ := os.ReadFile(filepath.Join(home, ".lark-cli", "config.json")); !strings.Contains(string(b), `"appSecret": "lark-secret-1"`) || !strings.Contains(string(b), `"strictMode": "bot"`) {
-		t.Fatalf("配置文件内容不对：%s", b)
+		t.Fatalf("wrong config file contents: %s", b)
 	}
 	if mode(".lark-cli") != 0o700 || mode(".lark-cli/config.json") != 0o600 {
-		t.Fatalf("权限不对：目录 %v，文件 %v", mode(".lark-cli"), mode(".lark-cli/config.json"))
+		t.Fatalf("wrong permissions: directory %v, file %v", mode(".lark-cli"), mode(".lark-cli/config.json"))
 	}
 	keyPath := "Library/Application Support/lark-cli/master.key.file"
 	if runtime.GOOS == "darwin" {
 		if b, _ := os.ReadFile(filepath.Join(home, keyPath)); len(b) != 32 || mode(keyPath) != 0o600 || mode("Library/Application Support/lark-cli") != 0o700 {
-			t.Fatalf("macOS 主密钥文件不对：%d 字节，%v", len(b), mode(keyPath))
+			t.Fatalf("wrong macOS master key file: %d bytes, %v", len(b), mode(keyPath))
 		}
 	}
 	d := readDump(t, dumpPath)
 	if d.Env["LARKSUITE_CLI_NO_UPDATE_NOTIFIER"] != "1" || d.Env["LARKSUITE_CLI_NO_SKILLS_NOTIFIER"] != "1" || d.Env["LARKSUITE_CLI_REMOTE_META"] != "off" {
-		t.Errorf("缺少关闭后台联网的变量：%v", d.Env)
+		t.Errorf("missing the variables that turn off background network access: %v", d.Env)
 	}
 	for k, v := range d.Env {
 		if strings.Contains(v, "lark-secret-1") || k == "LARKSUITE_CLI_APP_ID" || k == "LARKSUITE_CLI_APP_SECRET" {
-			t.Errorf("凭证不应出现在 Pi 环境中：%s", k)
+			t.Errorf("credentials should not appear in Pi's environment: %s", k)
 		}
 	}
 	// Delete the credentials but keep lark-cli: the credential files are cleaned up, and the fixed variables are still
@@ -452,21 +452,21 @@ func TestLarkCLICredentialFiles(t *testing.T) {
 	h.src.update(id, func(s *agentconfig.Snapshot) { delete(s.CLIPayloads, "lark-cli") })
 	h.exec(id, "hi")
 	if _, err := os.Stat(filepath.Join(home, ".lark-cli", "config.json")); !os.IsNotExist(err) {
-		t.Error("删除凭证后配置文件应被删除")
+		t.Error("the config file should be deleted after the credentials are deleted")
 	}
 	if d := readDump(t, dumpPath); d.Env["LARKSUITE_CLI_REMOTE_META"] != "off" {
-		t.Errorf("没有凭证时也应注入固定变量：%v", d.Env)
+		t.Errorf("the fixed variables should be injected even without credentials: %v", d.Env)
 	}
 	// Remove lark-cli from the available list: the fixed variables are no longer injected.
 	h.src.update(id, func(s *agentconfig.Snapshot) { s.CLIs = nil })
 	h.exec(id, "hi")
 	for _, rel := range []string{".lark-cli/config.json", keyPath} {
 		if _, err := os.Stat(filepath.Join(home, rel)); !os.IsNotExist(err) {
-			t.Errorf("移除 lark-cli 后 %s 应被删除", rel)
+			t.Errorf("%s should be deleted after lark-cli is removed", rel)
 		}
 	}
 	if d := readDump(t, dumpPath); d.Env["LARKSUITE_CLI_REMOTE_META"] != "" {
-		t.Errorf("移除 lark-cli 后不应再注入固定变量：%v", d.Env)
+		t.Errorf("the fixed variables should no longer be injected after lark-cli is removed: %v", d.Env)
 	}
 }
 
@@ -486,7 +486,7 @@ func TestSyncFilesSourceRules(t *testing.T) {
 	h.exec(id, "hi")
 	for _, f := range []string{"docs/a.md", "docs/c.md", "docs/d.md", "docs/e.md", "old/x.md"} {
 		if _, err := os.Stat(filepath.Join(ws, f)); err != nil {
-			t.Fatalf("首次同步应写入 %s", f)
+			t.Fatalf("the first sync should write %s", f)
 		}
 	}
 	// The Agent changed a and c, deleted e, and created b itself.
@@ -505,23 +505,23 @@ func TestSyncFilesSourceRules(t *testing.T) {
 
 	read := func(p string) string { b, _ := os.ReadFile(filepath.Join(ws, p)); return string(b) }
 	if read("docs/a.md") != "human-a" || read("docs/b.md") != "human-b" {
-		t.Errorf("人工修改应覆盖磁盘：a=%q b=%q", read("docs/a.md"), read("docs/b.md"))
+		t.Errorf("a person's edits should overwrite the disk: a=%q b=%q", read("docs/a.md"), read("docs/b.md"))
 	}
 	if read("docs/c.md") != "agent-c" {
-		t.Errorf("没被人改过的已有文件不应覆盖：%q", read("docs/c.md"))
+		t.Errorf("an existing file nobody edited should not be overwritten: %q", read("docs/c.md"))
 	}
 	if read("docs/e.md") != "e1" {
-		t.Errorf("缺少的文件应补写：%q", read("docs/e.md"))
+		t.Errorf("a missing file should be written again: %q", read("docs/e.md"))
 	}
 	if _, err := os.Stat(filepath.Join(ws, "docs/d.md")); !os.IsNotExist(err) {
-		t.Error("人删除的文件应从磁盘删除")
+		t.Error("a file a person deleted should be deleted from disk")
 	}
 	if _, err := os.Stat(filepath.Join(ws, "old/x.md")); err != nil {
-		t.Error("配置中删掉的来源，磁盘目录应保留")
+		t.Error("the disk directory of a source removed from the config should be kept")
 	}
 	for _, f := range h.src.files[srcID] {
 		if f.Pending != "none" {
-			t.Errorf("同步后人工修改记录应清除：%+v", f)
+			t.Errorf("the record of a person's edits should be cleared after the sync: %+v", f)
 		}
 	}
 }
@@ -541,10 +541,10 @@ func TestSyncRefusesSymlinkEscape(t *testing.T) {
 	}
 	res, _ := h.exec(id, "hi")
 	if res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrWorkspaceSyncFailed {
-		t.Fatalf("经符号链接写到工作区之外应失败：%+v", res)
+		t.Fatalf("writing outside the workspace through a symlink should fail: %+v", res)
 	}
 	if _, err := os.Stat(filepath.Join(outside, "a.md")); !os.IsNotExist(err) {
-		t.Fatal("不应写到工作区之外")
+		t.Fatal("should not write outside the workspace")
 	}
 }
 
@@ -579,24 +579,24 @@ func TestCloneRepo(t *testing.T) {
 	ws := filepath.Join(h.root, "agents", id.String(), "workspace")
 	res, _ := h.exec(id, "hi")
 	if res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrWorkspaceSyncFailed {
-		t.Fatalf("克隆失败应以 workspace_sync_failed 失败：%+v", res)
+		t.Fatalf("a failed clone should fail with workspace_sync_failed: %+v", res)
 	}
 	if _, err := os.Stat(filepath.Join(ws, "app")); !os.IsNotExist(err) {
-		t.Fatal("克隆失败后不应留下来源目录")
+		t.Fatal("a failed clone should leave no source directory")
 	}
 	entries, _ := os.ReadDir(ws)
 	if len(entries) != 0 {
-		t.Fatalf("克隆失败后不应留下临时目录：%v", entries)
+		t.Fatalf("a failed clone should leave no temp directory: %v", entries)
 	}
 	h.src.update(id, func(s *agentconfig.Snapshot) { s.Sources[0].GitURL = "file://" + bare })
 	if res, _ := h.exec(id, "hi"); res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("修正地址后应克隆成功：%+v", res)
+		t.Fatalf("the clone should succeed after the URL is fixed: %+v", res)
 	}
 	_ = os.WriteFile(filepath.Join(ws, "app", "README.md"), []byte("agent change"), 0o644)
 	h.src.update(id, func(s *agentconfig.Snapshot) { s.Prompt = "changed" })
 	h.exec(id, "hi")
 	if b, _ := os.ReadFile(filepath.Join(ws, "app", "README.md")); string(b) != "agent change" {
-		t.Fatalf("已有仓库不应被重置：%q", b)
+		t.Fatalf("an existing repository should not be reset: %q", b)
 	}
 }
 
@@ -611,21 +611,21 @@ func TestReuseIdleAndResume(t *testing.T) {
 	pid := h.pid(id)
 	h.exec(id, "two")
 	if h.pid(id) != pid {
-		t.Fatal("配置未变、未超时时应复用同一进程")
+		t.Fatal("the same process should be reused when the config is unchanged and there was no timeout")
 	}
 	recorded := h.src.recorded[id]
 	if recorded == "" {
-		t.Fatal("会话文件写盘后应被记录")
+		t.Fatal("the session file should be recorded once it is on disk")
 	}
 	time.Sleep(time.Second)
 	if st := h.e.Process(id).State; st != executor.ProcessStopped {
-		t.Fatalf("空闲超时后进程应退出：%s", st)
+		t.Fatalf("the process should exit after the idle timeout: %s", st)
 	}
 	if res, _ := h.exec(id, "three"); res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("重新启动后应正常回复：%+v", res)
+		t.Fatalf("should reply normally after the restart: %+v", res)
 	}
 	if argValue(readDump(t, dumpPath).Args, "--session") != recorded {
-		t.Fatal("重新启动时应用记录的会话文件接续")
+		t.Fatal("the restart should resume from the recorded session file")
 	}
 }
 
@@ -640,11 +640,11 @@ func TestSessionMissing(t *testing.T) {
 	}
 	res, _ := h.exec(id, "two")
 	if res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrSessionMissing || !h.src.missing[id] {
-		t.Fatalf("记录的会话文件被删除后应判为丢失：%+v", res)
+		t.Fatalf("should count as missing after the recorded session file is deleted: %+v", res)
 	}
 	res, _ = h.exec(id, "three")
 	if res.ErrorCode != executor.ErrSessionMissing {
-		t.Fatalf("标记解除前后续消息也应失败：%+v", res)
+		t.Fatalf("later messages should fail too until the mark is cleared: %+v", res)
 	}
 }
 
@@ -655,15 +655,15 @@ func TestFirstTurnRejectedIsNotMissing(t *testing.T) {
 	id := h.agent(nil)
 	res, _ := h.exec(id, "!rejectprompt !nosession")
 	if res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrPiError {
-		t.Fatalf("首轮被拒应失败：%+v", res)
+		t.Fatalf("a rejected first turn should fail: %+v", res)
 	}
 	if h.src.recorded[id] != "" {
-		t.Fatal("未写盘的会话文件不应被记录")
+		t.Fatal("a session file that is not on disk should not be recorded")
 	}
 	time.Sleep(700 * time.Millisecond)
 	res, _ = h.exec(id, "again")
 	if res.Outcome != executor.OutcomeCompleted || h.src.missing[id] || slices.Contains(readDump(t, dumpPath).Args, "--session") {
-		t.Fatalf("应从新会话开始，不判为丢失：%+v missing=%v", res, h.src.missing[id])
+		t.Fatalf("should start a new session, not count as missing: %+v missing=%v", res, h.src.missing[id])
 	}
 }
 
@@ -673,7 +673,7 @@ func TestCredentialUnavailable(t *testing.T) {
 	h.src.unavailable = true
 	res, _ := h.exec(id, "hi")
 	if res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable {
-		t.Fatalf("凭证不可用时应失败：%+v", res)
+		t.Fatalf("should fail when the credential is unavailable: %+v", res)
 	}
 }
 
@@ -685,7 +685,7 @@ func TestEvictIdleAtLimit(t *testing.T) {
 	h.exec(a, "hi")
 	h.exec(b, "hi")
 	if h.pid(a) != 0 || h.pid(b) == 0 {
-		t.Fatal("到上限时应关闭最久未用的空闲进程")
+		t.Fatal("at the limit the least recently used idle process should be closed")
 	}
 }
 
@@ -695,12 +695,12 @@ func TestWaitForSlotAndInterruptWhileWaiting(t *testing.T) {
 	var wg sync.WaitGroup
 	var aDone, bDone time.Time
 	sinkB := newSink()
-	wg.Go(func() { h.exec(a, "!sleep=400ms 慢回复"); aDone = time.Now() })
+	wg.Go(func() { h.exec(a, "!sleep=400ms slow reply"); aDone = time.Now() })
 	time.Sleep(200 * time.Millisecond)
 	wg.Go(func() {
 		res, err := h.e.Execute(context.Background(), executor.Request{AgentID: b, Message: "hi"}, sinkB)
 		if err != nil || res.Outcome != executor.OutcomeCompleted {
-			t.Errorf("B 应在等待后完成：%+v %v", res, err)
+			t.Errorf("B should complete after waiting: %+v %v", res, err)
 		}
 		bDone = time.Now()
 	})
@@ -715,17 +715,17 @@ func TestWaitForSlotAndInterruptWhileWaiting(t *testing.T) {
 	select {
 	case res := <-cRes:
 		if res.Outcome != executor.OutcomeInterrupted {
-			t.Errorf("等待名额时被打断应直接放弃：%+v", res)
+			t.Errorf("an interrupt while waiting for a slot should give up at once: %+v", res)
 		}
 	case <-time.After(3 * time.Second):
-		t.Error("等待名额时被打断应立即返回")
+		t.Error("an interrupt while waiting for a slot should return right away")
 	}
 	wg.Wait()
 	if !bDone.After(aDone) {
-		t.Fatal("B 应在 A 结束后才开始")
+		t.Fatal("B should start only after A ends")
 	}
 	if !slices.Contains(sinkB.phases, executor.PhaseWaitingSlot) {
-		t.Fatalf("B 应报告等待名额：%v", sinkB.phases)
+		t.Fatalf("B should report waiting for a slot: %v", sinkB.phases)
 	}
 }
 
@@ -737,7 +737,7 @@ func TestInterruptKeepsProcess(t *testing.T) {
 	sink := newSink()
 	resCh := make(chan executor.Result, 1)
 	go func() {
-		res, _ := h.e.Execute(context.Background(), executor.Request{AgentID: id, Message: "!sleep=2s !text=第一段_第二段_第三段"}, sink)
+		res, _ := h.e.Execute(context.Background(), executor.Request{AgentID: id, Message: "!sleep=2s !text=first_part_second_part_third_part"}, sink)
 		resCh <- res
 	}()
 	<-sink.gotText
@@ -746,13 +746,13 @@ func TestInterruptKeepsProcess(t *testing.T) {
 	select {
 	case res := <-resCh:
 		if res.Outcome != executor.OutcomeInterrupted || res.Text == "" {
-			t.Fatalf("打断后应为已打断并保留已产生的文字：%+v", res)
+			t.Fatalf("after an interrupt the result should be interrupted and keep the text produced so far: %+v", res)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("打断后应很快结束")
+		t.Fatal("should end quickly after an interrupt")
 	}
 	if res, _ := h.exec(id, "next"); res.Outcome != executor.OutcomeCompleted || h.pid(id) != pid {
-		t.Fatalf("打断后同一进程应继续处理下一条：%+v", res)
+		t.Fatalf("the same process should handle the next message after an interrupt: %+v", res)
 	}
 }
 
@@ -771,13 +771,13 @@ func TestInterruptTimeoutKillsProcess(t *testing.T) {
 	select {
 	case res := <-resCh:
 		if res.Outcome != executor.OutcomeInterrupted {
-			t.Fatalf("打断超时后应记为已打断：%+v", res)
+			t.Fatalf("should be recorded as interrupted after the interrupt timeout: %+v", res)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("打断超时后应强制结束进程")
+		t.Fatal("the process should be killed after the interrupt timeout")
 	}
 	if res, _ := h.exec(id, "next"); res.Outcome != executor.OutcomeCompleted || h.pid(id) == pid {
-		t.Fatalf("强制结束后应由新进程接着处理：%+v", res)
+		t.Fatalf("a new process should take over after the kill: %+v", res)
 	}
 }
 
@@ -787,10 +787,10 @@ func TestCrashThenRestart(t *testing.T) {
 	h.exec(id, "first")
 	res, _ := h.exec(id, "!crash")
 	if res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrPiExited || res.Text == "" {
-		t.Fatalf("进程崩溃应以 pi_exited 失败并保留文字：%+v", res)
+		t.Fatalf("a process crash should fail with pi_exited and keep the text: %+v", res)
 	}
 	if res, _ := h.exec(id, "after"); res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("崩溃后下一条消息应由新进程处理：%+v", res)
+		t.Fatalf("the next message after a crash should be handled by a new process: %+v", res)
 	}
 }
 
@@ -821,13 +821,13 @@ func TestCleanupStale(t *testing.T) {
 	select {
 	case <-waited:
 	case <-time.After(5 * time.Second):
-		t.Fatal("遗留的 Pi 进程应被结束")
+		t.Fatal("the leftover Pi process should be ended")
 	}
 	if _, err := os.Stat(d.pidFile); !os.IsNotExist(err) {
-		t.Fatal("pi.pid 应被删除")
+		t.Fatal("pi.pid should be deleted")
 	}
 	if _, err := os.Stat(h.e.dirs(deletedID).home); !os.IsNotExist(err) {
-		t.Fatal("已删除 Agent 的独立 HOME 应被删除")
+		t.Fatal("the own HOME of a deleted Agent should be deleted")
 	}
 }
 
@@ -835,20 +835,20 @@ func TestCleanupStale(t *testing.T) {
 // longer contains --mode rpc and the session directory) is still recognized and ended; one whose start time does not
 // match (the PID was reused by another process) is left alone.
 func TestCleanupStaleRecognizesRetitledPiByStartTime(t *testing.T) {
-	skipOnWindows(t, "夹具用 /bin/sleep 充当被改了标题的 Pi")
+	skipOnWindows(t, "the fixture uses /bin/sleep as a retitled Pi")
 	h := newHarness(t, nil, "")
 	id := h.agent(nil)
 	if res, _ := h.exec(id, "hi"); res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("执行失败：%+v", res)
+		t.Fatalf("execution failed: %+v", res)
 	}
 	var written pidRecord
 	if raw, err := os.ReadFile(h.e.dirs(id).pidFile); err != nil || json.Unmarshal(raw, &written) != nil {
-		t.Fatal("读不到 pi.pid", err)
+		t.Fatal("cannot read pi.pid", err)
 	}
 	if start, err := processStart(h.pid(id)); err != nil {
-		t.Skip("本平台读不到进程启动时刻")
+		t.Skip("this platform cannot read the process start time")
 	} else if written.PID != h.pid(id) || written.ProcessStart != start {
-		t.Fatalf("pi.pid 应记下进程启动时刻：%+v，期望 %s", written, start)
+		t.Fatalf("pi.pid should record the process start time: %+v, want %s", written, start)
 	}
 
 	spawn := func(pidFile string, start func(pid int) string) (*exec.Cmd, chan struct{}) {
@@ -877,15 +877,15 @@ func TestCleanupStaleRecognizesRetitledPiByStartTime(t *testing.T) {
 	select {
 	case <-leftover:
 	case <-time.After(5 * time.Second):
-		t.Fatal("改了标题的遗留 Pi 应被结束")
+		t.Fatal("the retitled leftover Pi should be ended")
 	}
 	select {
 	case <-unrelated:
-		t.Fatal("启动时刻对不上的进程不应被结束")
+		t.Fatal("a process whose start time does not match should not be ended")
 	default:
 	}
 	if !processAlive(reused.Process.Pid) {
-		t.Fatal("启动时刻对不上的进程不应被结束")
+		t.Fatal("a process whose start time does not match should not be ended")
 	}
 }
 
@@ -898,13 +898,13 @@ func TestReleaseRemovesHome(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(d.home); !os.IsNotExist(err) {
-		t.Fatal("释放后独立 HOME 应被删除")
+		t.Fatal("the own HOME should be deleted after the release")
 	}
 	if _, err := os.Stat(d.workspace); err != nil {
-		t.Fatal("释放后工作区应保留")
+		t.Fatal("the workspace should be kept after the release")
 	}
 	if h.e.Process(id).State != executor.ProcessStopped {
-		t.Fatal("释放后进程应停止")
+		t.Fatal("the process should stop after the release")
 	}
 }
 
@@ -956,15 +956,15 @@ func TestAgentTokens(t *testing.T) {
 	id := h.agent(func(s *agentconfig.Snapshot) {
 		s.ModelEnv = map[string]string{"ANTHROPIC_API_KEY": "sk-test", "LOOPCTL_AGENT_TOKEN": "forged", "LOOPCTL_TOKEN": "forged"}
 	})
-	h.exec(id, "你好")
+	h.exec(id, "hello")
 	d := readDump(t, dumpPath)
 	live := tokens.live()
 	if len(live) != 1 || d.Env["LOOPCTL_AGENT_TOKEN"] != live[0] || d.Env["LOOPCTL_AGENT_URL"] != "http://127.0.0.1:8780/agent/v1" {
-		t.Fatalf("应注入本进程的令牌与接口地址：%v %v", live, d.Env)
+		t.Fatalf("this process's token and API address should be injected: %v %v", live, d.Env)
 	}
 	for _, k := range []string{"LOOPCTL_TOKEN", "LOOPCTL_URL"} {
 		if _, ok := d.Env[k]; ok {
-			t.Errorf("LOOPCTL_ 开头的变量不能由凭证或透传设置：%s", k)
+			t.Errorf("variables starting with LOOPCTL_ must not be set by credentials or passthrough: %s", k)
 		}
 	}
 
@@ -973,10 +973,10 @@ func TestAgentTokens(t *testing.T) {
 	h.src.mu.Lock()
 	h.src.snaps[id].ConfigVersion = 2
 	h.src.mu.Unlock()
-	h.exec(id, "再来")
+	h.exec(id, "once more")
 	live = tokens.live()
 	if len(live) != 1 || live[0] == first || readDump(t, dumpPath).Env["LOOPCTL_AGENT_TOKEN"] != live[0] {
-		t.Fatalf("Pi 重启后旧令牌应作废、换成新令牌：%v", live)
+		t.Fatalf("after Pi restarts the old token should be revoked and replaced by a new one: %v", live)
 	}
 
 	// The process is force-killed: its token is revoked immediately.
@@ -988,19 +988,19 @@ func TestAgentTokens(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	if n := len(tokens.live()); n != 0 {
-		t.Fatalf("进程被强制结束后令牌应作废：%d", n)
+		t.Fatalf("the token should be revoked after the process is killed: %d", n)
 	}
 
 	// Release the Agent (on deletion): the process stops and the token is revoked.
-	h.exec(id, "重新启动")
+	h.exec(id, "restart")
 	if len(tokens.live()) != 1 {
-		t.Fatal("重新启动后应有一个有效令牌")
+		t.Fatal("there should be one valid token after the restart")
 	}
 	if err := h.e.Release(context.Background(), id); err != nil {
 		t.Fatal(err)
 	}
 	if n := len(tokens.live()); n != 0 {
-		t.Fatalf("释放后令牌应作废：%d", n)
+		t.Fatalf("the token should be revoked after the release: %d", n)
 	}
 }
 
@@ -1014,15 +1014,15 @@ func TestLoopctlInPathAndBuiltinSkill(t *testing.T) {
 	h.env["FAKEPI_DUMP"] = dumpPath
 	preinstall(t, h.root, "gh", "2.100.0", "gh")
 	id := h.agent(func(s *agentconfig.Snapshot) { s.CLIs = []string{"gh"} })
-	h.exec(id, "你好")
+	h.exec(id, "hello")
 	d := readDump(t, dumpPath)
 	if first := strings.Split(d.Env["PATH"], ":")[0]; first != binDir {
-		t.Fatalf("loopctl 应在 PATH 的最前面：%s", d.Env["PATH"])
+		t.Fatalf("loopctl should come first in PATH: %s", d.Env["PATH"])
 	}
 	skillDir := filepath.Join(h.root, "agents", id.String(), "skills", guide.SkillName)
 	b, err := os.ReadFile(filepath.Join(skillDir, "SKILL.md"))
 	if err != nil || !bytes.Equal(b, guide.Files()["SKILL.md"]) {
-		t.Fatalf("内置 Skill 应写入同版本 loopctl 生成的内容：%v", err)
+		t.Fatalf("the built-in Skill should contain what loopctl of the same version generates: %v", err)
 	}
 	found := false
 	for i, a := range d.Args {
@@ -1031,7 +1031,7 @@ func TestLoopctlInPathAndBuiltinSkill(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("Pi 应加载内置 Skill：%v", d.Args)
+		t.Fatalf("Pi should load the built-in Skill: %v", d.Args)
 	}
 }
 

@@ -40,11 +40,11 @@ func TestActualPiRPCUsesPGCoordinatorAcrossTwoProcessesAndLongRound(t *testing.T
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	st := sqlitetest.NewStore(t)
-	_, err := st.EnsureDefaults(ctx, "认证测试组织", "认证测试项目")
+	_, err := st.EnsureDefaults(ctx, "Auth test org", "Auth test project")
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := st.CreateAgent(ctx, store.PlatformScope(), "绑定账号", "openai-codex", "gpt-6.1-sol", "")
+	a, err := st.CreateAgent(ctx, store.PlatformScope(), "Account binding", "openai-codex", "gpt-6.1-sol", "")
 	if err != nil {
 		t.Fatal(err)
 	}

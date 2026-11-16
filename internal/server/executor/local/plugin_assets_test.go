@@ -37,7 +37,7 @@ func TestPluginAssetsReachPi(t *testing.T) {
 	}
 	args := pluginArgs(p)
 	if strings.Join(args, " ") != "-e /p/a/agent.ts -e /p/b/agent.ts --skill /p/a/skills -e builtin:mcp" {
-		t.Fatalf("参数：%v", args)
+		t.Fatalf("arguments: %v", args)
 	}
 	if err := writePluginMCP(d, p, false); err != nil {
 		t.Fatal(err)
@@ -47,24 +47,24 @@ func TestPluginAssetsReachPi(t *testing.T) {
 		MCPServers map[string]map[string]any `json:"mcpServers"`
 	}
 	if err != nil || json.Unmarshal(b, &file) != nil || file.MCPServers["a-browser"]["command"] != "node" {
-		t.Fatalf("mcp.json：%s %v", b, err)
+		t.Fatalf("mcp.json: %s %v", b, err)
 	}
 	if design := file.MCPServers["a-design"]; design["url"] != "http://127.0.0.1:3845/mcp" || design["type"] != "http" ||
 		design["headers"].(map[string]any)["Authorization"] != "Bearer ${FIGMA_TOKEN}" {
-		t.Fatalf("url 条目应原样写入：%s", b)
+		t.Fatalf("a url entry should be written as is: %s", b)
 	}
 	env := e.buildEnv(d, agentconfig.Snapshot{Plugins: p}, []string{"/cli/gh"}, nil, "", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if !slices.Contains(env, "PATH="+strings.Join([]string{"/cli/gh", "/p/a/bin", "/usr/bin"}, string(os.PathListSeparator))) || !slices.Contains(env, `LOOP_NOW_PLUGIN_A_CONFIG={"x":1}`) || !slices.Contains(env, "HOME="+d.home) {
-		t.Fatalf("环境：%v", env)
+		t.Fatalf("environment: %v", env)
 	}
 	if err := writePluginMCP(d, agentconfig.PluginAssets{}, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(d.pi, "mcp.json")); !os.IsNotExist(err) {
-		t.Fatalf("没有 MCP 服务器时应删除 mcp.json：%v", err)
+		t.Fatalf("mcp.json should be deleted when there are no MCP servers: %v", err)
 	}
 	if len(pluginArgs(agentconfig.PluginAssets{})) != 0 {
-		t.Fatal("没有插件时不加参数")
+		t.Fatal("no arguments should be added without plugins")
 	}
 }
 
@@ -75,7 +75,7 @@ type blockingHooks struct {
 
 func (b *blockingHooks) Hook(_ context.Context, kind pluginhost.Kind, event map[string]any, _ *uuid.UUID) (pluginhost.Outcome, error) {
 	b.events = append(b.events, event)
-	return pluginhost.Outcome{Blocked: b.block, Plugin: "guard", Reason: "维护中"}, nil
+	return pluginhost.Outcome{Blocked: b.block, Plugin: "guard", Reason: "Under maintenance"}, nil
 }
 
 // When run.before_start blocks, this turn fails with plugin_blocked and Pi is not started; when it allows, the run goes
@@ -86,18 +86,18 @@ func TestRunBeforeStartHook(t *testing.T) {
 	id := h.agent(nil)
 	msg := uuid.New()
 	res, err := h.e.Execute(context.Background(), executor.Request{AgentID: id, RunID: uuid.Must(uuid.NewV7()), Message: "hi", Origin: "console", MessageID: msg}, newSink())
-	if err != nil || res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrPluginBlocked || !strings.Contains(res.ErrorMessage, "guard") || !strings.Contains(res.ErrorMessage, "维护中") {
-		t.Fatalf("被阻止：%+v %v", res, err)
+	if err != nil || res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrPluginBlocked || !strings.Contains(res.ErrorMessage, "guard") || !strings.Contains(res.ErrorMessage, "Under maintenance") {
+		t.Fatalf("blocked: %+v %v", res, err)
 	}
 	if h.pid(id) != 0 {
-		t.Fatal("被阻止时不应启动 Pi")
+		t.Fatal("Pi should not start when blocked")
 	}
 	if ev := hooks.events[0]; ev["type"] != "run.before_start" || ev["origin"] != "console" || ev["messageId"] != msg {
-		t.Fatalf("事件：%v", ev)
+		t.Fatalf("event: %v", ev)
 	}
 	hooks.block = false
 	if res, _ := h.exec(id, "hi"); res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("放行后照常执行：%+v", res)
+		t.Fatalf("should run as usual once allowed: %+v", res)
 	}
 }
 
@@ -126,10 +126,10 @@ func TestExtensionDialogsReachPi(t *testing.T) {
 	id := h.agent(nil)
 	run, res := h.execRun(id, "!ask=select")
 	if res.Outcome != executor.OutcomeCompleted || res.Text != "answer value=production" {
-		t.Fatalf("Pi 收到回答：%+v", res)
+		t.Fatalf("Pi should receive the answer: %+v", res)
 	}
 	if c := <-calls; c.agent != id || c.run != run || c.req.Method != "select" || len(c.req.Options) != 2 {
-		t.Fatalf("交给 Dialogs 的对话：%+v", c)
+		t.Fatalf("dialog handed to Dialogs: %+v", c)
 	}
 	done := make(chan executor.Result, 1)
 	runID := uuid.Must(uuid.NewV7())
@@ -138,16 +138,16 @@ func TestExtensionDialogsReachPi(t *testing.T) {
 		done <- res
 	}()
 	if c := <-calls; c.req.Method != "confirm" || c.run != runID {
-		t.Fatalf("第二轮的对话：%+v", c)
+		t.Fatalf("dialog of the second turn: %+v", c)
 	}
 	_ = h.e.Interrupt(context.Background(), id, runID)
 	select {
 	case res := <-done:
 		if res.Outcome != executor.OutcomeInterrupted {
-			t.Fatalf("打断后：%+v", res)
+			t.Fatalf("after the interrupt: %+v", res)
 		}
 	case <-time.After(10 * time.Second):
-		t.Fatal("打断后这一轮应结束")
+		t.Fatal("this turn should end after the interrupt")
 	}
 	close(block)
 }

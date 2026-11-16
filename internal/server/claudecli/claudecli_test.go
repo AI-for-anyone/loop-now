@@ -19,7 +19,7 @@ import (
 // with symlinks resolved; when nothing is found it returns ErrNotFound.
 func TestFind(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Windows 上按扩展名找，另行验证")
+		t.Skip("on Windows the lookup goes by extension; verified separately")
 	}
 	notExec, real, link := t.TempDir(), t.TempDir(), t.TempDir()
 	_ = os.WriteFile(filepath.Join(notExec, "claude"), []byte("x"), 0o600)
@@ -31,27 +31,27 @@ func TestFind(t *testing.T) {
 	got, err := claudecli.Find([]string{"", "relative", notExec, link})
 	want, _ := filepath.EvalSymlinks(target)
 	if err != nil || got != want {
-		t.Fatalf("Find：%q %v（期望 %q）", got, err, want)
+		t.Fatalf("Find: %q %v (want %q)", got, err, want)
 	}
 	if _, err := claudecli.Find([]string{notExec}); err != claudecli.ErrNotFound {
-		t.Fatalf("找不到：%v", err)
+		t.Fatalf("not found: %v", err)
 	}
 }
 
 func TestStripEnvAndEnv(t *testing.T) {
 	got := claudecli.StripEnv([]string{"HOME=/h", "ANTHROPIC_API_KEY=x", "ANTHROPIC_BASE_URL=y", "CLAUDECODE=1", "CLAUDE_CONFIG_DIR=z", "CLAUDE_CODE_OAUTH_TOKEN=t", "PATH=/bin"})
 	if strings.Join(got, ",") != "HOME=/h,PATH=/bin" {
-		t.Fatalf("StripEnv：%v", got)
+		t.Fatalf("StripEnv: %v", got)
 	}
 	env := strings.Join(claudecli.Env(claudecli.EnvOptions{Home: "/home/u", User: "u", Path: []string{"/a", "/b"},
 		Extra: []string{"LANG=C.UTF-8", "HOME=/evil", "USER=evil", "ANTHROPIC_API_KEY=x"}}), "\n")
 	for _, want := range []string{"HOME=/home/u", "PATH=/a" + string(os.PathListSeparator) + "/b", "USER=u", "LOGNAME=u", "LANG=C.UTF-8"} {
 		if !strings.Contains(env, want) {
-			t.Fatalf("Env 缺少 %s：%s", want, env)
+			t.Fatalf("Env is missing %s: %s", want, env)
 		}
 	}
 	if strings.Contains(env, "evil") || strings.Contains(env, "ANTHROPIC") {
-		t.Fatalf("Extra 不能覆盖基础变量，也不带 Anthropic 变量：%s", env)
+		t.Fatalf("Extra must not override base variables or carry Anthropic variables: %s", env)
 	}
 }
 
@@ -63,36 +63,36 @@ func TestVersionAndAuthStatus(t *testing.T) {
 	home := t.TempDir()
 	env := claudecli.Env(claudecli.EnvOptions{Home: home, User: "tester", Path: []string{"/usr/bin", "/bin"}})
 	if v, err := claudecli.Version(context.Background(), bin, env); err != nil || v != "9.9.9" {
-		t.Fatalf("版本：%q %v", v, err)
+		t.Fatalf("version: %q %v", v, err)
 	}
 	a, err := claudecli.AuthStatus(context.Background(), bin, env)
 	if err != nil || !a.LoggedIn || a.AuthMethod != "claude.ai" || a.SubscriptionType != "max" || a.ProjectsDirectory != filepath.Join(home, ".claude", "projects") {
-		t.Fatalf("auth status：%+v %v", a, err)
+		t.Fatalf("auth status: %+v %v", a, err)
 	}
 	b, _ := json.Marshal(a)
 	for _, secret := range []string{"private@example.com", "Private Org", "org-private-id"} {
 		if strings.Contains(string(b), secret) {
-			t.Fatalf("不应保留 %q：%s", secret, b)
+			t.Fatalf("%q should not be kept: %s", secret, b)
 		}
 	}
 	// Like the real claude: without USER it cannot find the login and exits with 1 but still prints JSON; going by the
 	// output this is "not logged in", not an error.
 	noUser := claudecli.Env(claudecli.EnvOptions{Home: home, Path: []string{"/usr/bin", "/bin"}})
 	if a, err = claudecli.AuthStatus(context.Background(), bin, noUser); err != nil || a.LoggedIn || a.AuthMethod != "none" {
-		t.Fatalf("没有 USER：%+v %v", a, err)
+		t.Fatalf("without USER: %+v %v", a, err)
 	}
 	_ = os.WriteFile(filepath.Join(home, ".fakeclaude-logged-out"), nil, 0o600)
 	if a, err = claudecli.AuthStatus(context.Background(), bin, env); err != nil || a.LoggedIn {
-		t.Fatalf("未登录：%+v %v", a, err)
+		t.Fatalf("not logged in: %+v %v", a, err)
 	}
 	_ = os.Remove(filepath.Join(home, ".fakeclaude-logged-out"))
 	failing := append(env, "FAKECLAUDE_AUTH_FAIL=1")
 	if _, err = claudecli.AuthStatus(context.Background(), bin, failing); err == nil || strings.Contains(err.Error(), "private@example.com") {
-		t.Fatalf("失败时不带输出：%v", err)
+		t.Fatalf("the error on failure should carry no output: %v", err)
 	}
 	var probe claudecli.Probe
 	if dir := probe.ProjectsDir(context.Background(), bin, env, home); dir != filepath.Join(home, ".claude", "projects") {
-		t.Fatalf("projects 目录：%s", dir)
+		t.Fatalf("projects directory: %s", dir)
 	}
 }
 
@@ -102,23 +102,23 @@ func TestTranscriptPaths(t *testing.T) {
 	projects, cwd := t.TempDir(), t.TempDir()
 	id := uuid.NewString()
 	if claudecli.TranscriptPath(projects, cwd, id) != "" {
-		t.Fatal("还没有时为空")
+		t.Fatal("should be empty before the transcript exists")
 	}
 	p := filepath.Join(projects, claudecli.ProjectDirName(cwd), id+".jsonl")
 	_ = os.MkdirAll(filepath.Dir(p), 0o700)
 	_ = os.WriteFile(p, []byte("{}\n"), 0o600)
 	if got := claudecli.TranscriptPath(projects, cwd, id); got != p {
-		t.Fatalf("TranscriptPath：%q", got)
+		t.Fatalf("TranscriptPath: %q", got)
 	}
 	if claudecli.TranscriptPath(projects, cwd, "../x") != "" || !claudecli.InProjects(projects, p) {
-		t.Fatal("会话 ID 必须是 UUID；p 在 projects 下")
+		t.Fatal("the session ID must be a UUID; p should be under projects")
 	}
 	for _, bad := range []string{filepath.Join(projects, id+".jsonl"), filepath.Join(projects, "a", "b", id+".jsonl"), filepath.Join(projects, "a", "notes.jsonl"), filepath.Join(t.TempDir(), "a", id+".jsonl")} {
 		if claudecli.InProjects(projects, bad) {
-			t.Errorf("不应算作会话记录：%s", bad)
+			t.Errorf("should not count as a session transcript: %s", bad)
 		}
 	}
 	if strings.ContainsAny(claudecli.ProjectDirName("/a b/c.d"), " /.") {
-		t.Fatal("非字母数字都换成 -")
+		t.Fatal("every non-alphanumeric character should become -")
 	}
 }

@@ -48,7 +48,7 @@ func (o *obsRec) waitUsage(t *testing.T, n int) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("等待 %d 条用量超时", n)
+	t.Fatalf("timed out waiting for %d usage entries", n)
 }
 
 func usageJSON(in, out, cr, cw int64) map[string]any {
@@ -114,7 +114,7 @@ func TestObserveUsageAndNotices(t *testing.T) {
 		evSettled(false),
 	)
 	if out := recvPrompt(t, ch); out.err != nil || out.res.Outcome != OutcomeCompleted {
-		t.Fatalf("本轮结果不对：%+v %v", out.res, out.err)
+		t.Fatalf("wrong result for this turn: %+v %v", out.res, out.err)
 	}
 	// Warm-up between two turns: belongs to no turn.
 	f.send(jsonLine(map[string]any{"type": "entry_appended", "entry": map[string]any{"type": "usage", "kind": "cache_warm",
@@ -137,43 +137,43 @@ func TestObserveUsageAndNotices(t *testing.T) {
 		{"cache_warm", "anthropic", "claude-sonnet-4-5", "", "", 0, 1, 60000, 0, false},
 	}
 	if len(usage) != len(wants) {
-		t.Fatalf("用量条数应为 %d，实际 %d：%+v", len(wants), len(usage), usage)
+		t.Fatalf("want %d usage entries, got %d: %+v", len(wants), len(usage), usage)
 	}
 	for i, w := range wants {
 		u := usage[i]
 		if u.Kind != w.kind || u.Provider != w.provider || u.Model != w.model || u.ResponseModel != w.resp || u.StopReason != w.stop ||
 			u.Input != w.in || u.Output != w.out || u.CacheRead != w.cr || u.CacheWrite != w.cw || inTurn[i] != w.turn {
-			t.Errorf("第 %d 条用量不对：%+v（inTurn=%v），期望 %+v", i, u, inTurn[i], w)
+			t.Errorf("wrong usage entry %d: %+v (inTurn=%v), want %+v", i, u, inTurn[i], w)
 		}
 	}
 	if usage[0].DurationMs == nil || *usage[0].DurationMs != 1200 {
-		t.Errorf("助手消息应带 durationMs：%+v", usage[0].DurationMs)
+		t.Errorf("assistant messages should carry durationMs: %+v", usage[0].DurationMs)
 	}
 	if usage[5].Reasoning == nil || *usage[5].Reasoning != 7 {
-		t.Errorf("推理 token 应保留：%+v", usage[5].Reasoning)
+		t.Errorf("reasoning tokens should be kept: %+v", usage[5].Reasoning)
 	}
 	if usage[3].Reasoning != nil {
-		t.Errorf("未报告推理 token 时应为空")
+		t.Errorf("should be empty when no reasoning tokens are reported")
 	}
 
 	if len(notices) != 3 {
-		t.Fatalf("事件条数应为 3，实际 %d：%+v", len(notices), notices)
+		t.Fatalf("want 3 events, got %d: %+v", len(notices), notices)
 	}
 	if notices[0].Type != NoticeCompaction || notices[0].Data["result"] != "succeeded" || notices[0].Data["tokensBefore"] != int64(150000) {
-		t.Errorf("压缩事件不对：%+v", notices[0])
+		t.Errorf("wrong compaction event: %+v", notices[0])
 	}
 	if _, ok := notices[0].Data["durationMs"]; !ok {
-		t.Errorf("压缩事件应带用时：%+v", notices[0])
+		t.Errorf("the compaction event should carry the duration: %+v", notices[0])
 	}
 	if notices[1].Type != NoticeRetryStarted || notices[1].Data["attempt"] != 1 || notices[1].Data["errorMessage"] != "529 overloaded" {
-		t.Errorf("重试开始事件不对：%+v", notices[1])
+		t.Errorf("wrong retry start event: %+v", notices[1])
 	}
 	if notices[2].Type != NoticeRetryEnded || notices[2].Data["success"] != true {
-		t.Errorf("重试结束事件不对：%+v", notices[2])
+		t.Errorf("wrong retry end event: %+v", notices[2])
 	}
 	for i, in := range nTurn {
 		if !in {
-			t.Errorf("第 %d 个事件应在一轮之中", i)
+			t.Errorf("event %d should be within a turn", i)
 		}
 	}
 }
@@ -196,13 +196,13 @@ func TestObserveCompactionFailedAndAborted(t *testing.T) {
 	}
 	usage, _, notices, nTurn := obs.snapshot()
 	if len(usage) != 0 {
-		t.Fatalf("失败或中止的压缩不应产生用量：%+v", usage)
+		t.Fatalf("a failed or aborted compaction should produce no usage: %+v", usage)
 	}
 	if len(notices) != 2 || notices[0].Data["result"] != "failed" || notices[0].Data["errorMessage"] != "boom" || notices[1].Data["result"] != "aborted" {
-		t.Fatalf("压缩事件不对：%+v", notices)
+		t.Fatalf("wrong compaction event: %+v", notices)
 	}
 	if nTurn[0] || nTurn[1] {
-		t.Fatal("没有进行中的一轮时 inTurn 应为 false")
+		t.Fatal("inTurn should be false when no turn is in progress")
 	}
 }
 
@@ -228,7 +228,7 @@ func TestObserveMatchesSessionStats(t *testing.T) {
 	before := stats()
 	res, err := p.Prompt(ctx, "!usage=100,20,1000,5 !tool=bash !toolusage=3,1 !compact=500,50 !warm=0,1,2000 !retry hello", nil)
 	if err != nil || res.Outcome != OutcomeCompleted {
-		t.Fatalf("Prompt 失败：%+v %v", res, err)
+		t.Fatalf("Prompt failed: %+v %v", res, err)
 	}
 	after := stats()
 	usage, _, _, _ := obs.snapshot()
@@ -241,7 +241,7 @@ func TestObserveMatchesSessionStats(t *testing.T) {
 	}
 	diff := func(k string) float64 { return after[k].(float64) - before[k].(float64) }
 	if in != diff("input") || out != diff("output") || cr != diff("cacheRead") || cw != diff("cacheWrite") {
-		t.Fatalf("观察到的用量与 get_session_stats 的增量不一致：观察 %v/%v/%v/%v，统计 %v/%v/%v/%v（%d 条）",
+		t.Fatalf("observed usage does not match the get_session_stats increase: observed %v/%v/%v/%v, stats %v/%v/%v/%v (%d entries)",
 			in, out, cr, cw, diff("input"), diff("output"), diff("cacheRead"), diff("cacheWrite"), len(usage))
 	}
 	// One for the failed attempt that was retried, one for the tool call, one for the final reply = 3 assistant
@@ -251,6 +251,6 @@ func TestObserveMatchesSessionStats(t *testing.T) {
 		kinds[u.Kind]++
 	}
 	if kinds["assistant"] != 3 || kinds["tool"] != 1 || kinds["compaction"] != 1 || kinds["cache_warm"] != 1 {
-		t.Fatalf("各类用量条数不对：%v", kinds)
+		t.Fatalf("wrong usage entry counts per kind: %v", kinds)
 	}
 }

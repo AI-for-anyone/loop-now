@@ -18,7 +18,7 @@ import (
 // no Prompt/model request, credentials, user HOME or network is used.
 func TestInstalledPi14ThinkingResumeDefaultAndClampVerification(t *testing.T) {
 	if _, err := exec.LookPath("pi"); err != nil {
-		t.Skip("本机没有 pi")
+		t.Skip("pi is not installed on this machine")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()

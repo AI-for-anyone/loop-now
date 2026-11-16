@@ -110,7 +110,7 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 	deadline := time.Now().Add(10 * time.Second)
 	for !cond() {
 		if time.Now().After(deadline) {
-			t.Fatalf("等待超时：%s", what)
+			t.Fatalf("timed out waiting: %s", what)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -140,32 +140,32 @@ func TestRecordsStartReuseAndConfigChange(t *testing.T) {
 
 	run1, res := h.execRun(id, "hi")
 	if res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("第一次执行失败：%+v", res)
+		t.Fatalf("the first execution failed: %+v", res)
 	}
 	evs := h.obs.eventsOf(id)
 	if got := types(evs); strings.Join(got, ",") != store.EventWorkspaceSync+","+store.EventPiStarted {
-		t.Fatalf("首次启动的事件应为同步、启动：%v", got)
+		t.Fatalf("the events of the first start should be sync, start: %v", got)
 	}
 	for _, e := range evs {
 		if e.run == nil || *e.run != run1 {
-			t.Fatalf("事件应关联到这次执行：%+v", e)
+			t.Fatalf("the event should be linked to this execution: %+v", e)
 		}
 	}
 	if sync := evs[0].ev.Data; sync["result"] != "succeeded" {
-		t.Fatalf("同步应成功：%v", sync)
+		t.Fatalf("the sync should succeed: %v", sync)
 	}
 	started := evs[1].ev.Data
 	if started["reason"] != "no_process" || started["pid"] != h.pid(id) || started["configVersion"] != int64(1) {
-		t.Fatalf("启动事件不对：%v", started)
+		t.Fatalf("wrong start event: %v", started)
 	}
 	if _, ok := started["startupMs"].(int64); !ok {
-		t.Fatalf("启动事件应带启动用时：%v", started)
+		t.Fatalf("the start event should carry the startup time: %v", started)
 	}
 
 	run2, _ := h.execRun(id, "again")
 	reused := h.obs.eventsOf(id, store.EventPiReused)
 	if len(reused) != 1 || *reused[0].run != run2 || reused[0].ev.Data["pid"] != h.pid(id) {
-		t.Fatalf("第二次执行应复用进程：%+v", reused)
+		t.Fatalf("the second execution should reuse the process: %+v", reused)
 	}
 
 	oldPid := h.pid(id)
@@ -173,17 +173,17 @@ func TestRecordsStartReuseAndConfigChange(t *testing.T) {
 	run3, _ := h.execRun(id, "after change")
 	stopped := h.obs.eventsOf(id, store.EventPiStopped)
 	if len(stopped) != 1 || stopped[0].ev.Data["reason"] != "config_changed" || *stopped[0].run != run3 || stopped[0].ev.Data["pid"] != oldPid {
-		t.Fatalf("配置变化应记录停止旧进程：%+v", stopped)
+		t.Fatalf("a config change should record stopping the old process: %+v", stopped)
 	}
 	starts := h.obs.eventsOf(id, store.EventPiStarted)
 	if len(starts) != 2 || starts[1].ev.Data["reason"] != "config_changed" || *starts[1].run != run3 {
-		t.Fatalf("配置变化后应记录重启：%+v", starts)
+		t.Fatalf("a restart should be recorded after a config change: %+v", starts)
 	}
 	h.obs.mu.Lock()
 	changed := h.obs.changed[id]
 	h.obs.mu.Unlock()
 	if changed == 0 {
-		t.Fatal("进程状态变化应通知观察者")
+		t.Fatal("process state changes should notify the observer")
 	}
 }
 
@@ -192,35 +192,35 @@ func TestRecordsUsageAttribution(t *testing.T) {
 	id := h.agent(nil)
 	runID, res := h.execRun(id, "!usage=100,20,1000,0 !respmodel=claude-x-2026 !tool=bash !toolusage=3,1 !compact=500,50 !warmafter=0,1,2000 hi")
 	if res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("执行失败：%+v", res)
+		t.Fatalf("execution failed: %+v", res)
 	}
-	waitFor(t, "两轮之间的预热用量", func() bool { return len(h.obs.usageOf(id)) == 5 })
+	waitFor(t, "warm-up usage between two turns", func() bool { return len(h.obs.usageOf(id)) == 5 })
 	usage := h.obs.usageOf(id)
 	kinds := []string{}
 	for _, u := range usage[:4] {
 		kinds = append(kinds, u.u.Kind)
 		if u.run == nil || *u.run != runID {
-			t.Fatalf("一轮之中的用量应关联到这次执行：%+v", u)
+			t.Fatalf("usage within a turn should be linked to this execution: %+v", u)
 		}
 	}
 	if strings.Join(kinds, ",") != "assistant,tool,compaction,assistant" {
-		t.Fatalf("用量顺序不对：%v", kinds)
+		t.Fatalf("wrong usage order: %v", kinds)
 	}
 	if a := usage[0].u; a.Provider != "anthropic" || a.Model != "claude-x" || a.ResponseModel != "claude-x-2026" || a.Input != 100 || a.CacheRead != 1000 || a.StopReason != "toolUse" {
-		t.Fatalf("助手用量不对：%+v", a)
+		t.Fatalf("wrong assistant usage: %+v", a)
 	}
 	if tool := usage[1].u; tool.Provider != "" || tool.Model != "" || tool.Input != 3 {
-		t.Fatalf("工具用量应记为未知模型：%+v", tool)
+		t.Fatalf("tool usage should be recorded as an unknown model: %+v", tool)
 	}
 	if c := usage[2].u; c.Provider != "anthropic" || c.Model != "claude-x" || c.Input != 500 {
-		t.Fatalf("压缩用量应计入进程启动时的模型：%+v", c)
+		t.Fatalf("compaction usage should count toward the model the process started with: %+v", c)
 	}
 	if w := usage[4]; w.run != nil || w.u.Kind != "cache_warm" || w.u.CacheRead != 2000 {
-		t.Fatalf("两轮之间的预热不应属于任何执行：%+v", w)
+		t.Fatalf("warm-up between two turns should belong to no execution: %+v", w)
 	}
 	comp := h.obs.eventsOf(id, store.EventContextCompaction)
 	if len(comp) != 1 || comp[0].ev.Data["result"] != "succeeded" || *comp[0].run != runID {
-		t.Fatalf("应记录一次压缩：%+v", comp)
+		t.Fatalf("one compaction should be recorded: %+v", comp)
 	}
 }
 
@@ -230,7 +230,7 @@ func TestRecordsRetry(t *testing.T) {
 	runID, _ := h.execRun(id, "!retry hi")
 	evs := h.obs.eventsOf(id, store.EventModelRetryStarted, store.EventModelRetryEnded)
 	if len(evs) != 2 || evs[0].ev.Type != store.EventModelRetryStarted || evs[1].ev.Data["success"] != true || *evs[1].run != runID {
-		t.Fatalf("应记录一次重试的开始与结束：%+v", evs)
+		t.Fatalf("the start and end of one retry should be recorded: %+v", evs)
 	}
 }
 
@@ -238,16 +238,16 @@ func TestRecordsIdleTimeout(t *testing.T) {
 	h := newHarness(t, func(o *Options) { o.IdleTimeout = 200 * time.Millisecond }, "")
 	id := h.agent(nil)
 	h.execRun(id, "hi")
-	waitFor(t, "空闲超时停止", func() bool { return len(h.obs.eventsOf(id, store.EventPiStopped)) == 1 })
+	waitFor(t, "stop on idle timeout", func() bool { return len(h.obs.eventsOf(id, store.EventPiStopped)) == 1 })
 	st := h.obs.eventsOf(id, store.EventPiStopped)[0]
 	if st.run != nil || st.ev.Data["reason"] != "idle_timeout" {
-		t.Fatalf("空闲超时的停止事件不对：%+v", st)
+		t.Fatalf("wrong stop event for the idle timeout: %+v", st)
 	}
 	if len(h.obs.eventsOf(id, store.EventPiExited)) != 0 {
-		t.Fatal("主动停止不应记为意外退出")
+		t.Fatal("a deliberate stop should not be recorded as an unexpected exit")
 	}
 	if p := h.e.Process(id); p.State != executor.ProcessStopped || p.StartedAt != nil || p.PID != 0 {
-		t.Fatalf("停止后进程状态不对：%+v", p)
+		t.Fatalf("wrong process state after the stop: %+v", p)
 	}
 }
 
@@ -257,13 +257,13 @@ func TestRecordsCrashDuringRun(t *testing.T) {
 	h.execRun(id, "first")
 	runID, res := h.execRun(id, "!crash")
 	if res.ErrorCode != executor.ErrPiExited || !strings.Contains(res.ErrorMessage, "simulated crash") {
-		t.Fatalf("崩溃的错误信息应带 Pi 错误输出：%+v", res)
+		t.Fatalf("the crash error message should carry Pi's error output: %+v", res)
 	}
-	waitFor(t, "意外退出事件", func() bool { return len(h.obs.eventsOf(id, store.EventPiExited)) == 1 })
+	waitFor(t, "unexpected exit event", func() bool { return len(h.obs.eventsOf(id, store.EventPiExited)) == 1 })
 	ex := h.obs.eventsOf(id, store.EventPiExited)[0]
 	if ex.run == nil || *ex.run != runID || !strings.Contains(ex.ev.Data["stderrTail"].(string), "simulated crash") ||
 		!strings.Contains(ex.ev.Data["exit"].(string), "exit status 3") {
-		t.Fatalf("回复中崩溃的事件不对：%+v", ex)
+		t.Fatalf("wrong event for a crash during a reply: %+v", ex)
 	}
 }
 
@@ -273,13 +273,13 @@ func TestRecordsIdleCrash(t *testing.T) {
 	h.execRun(id, "hi")
 	pid := h.pid(id)
 	if pid == 0 {
-		t.Fatal("应有存活进程")
+		t.Fatal("there should be a live process")
 	}
 	_ = procgroup.Kill(pid)
-	waitFor(t, "空闲时意外退出事件", func() bool { return len(h.obs.eventsOf(id, store.EventPiExited)) == 1 })
+	waitFor(t, "unexpected exit event while idle", func() bool { return len(h.obs.eventsOf(id, store.EventPiExited)) == 1 })
 	ex := h.obs.eventsOf(id, store.EventPiExited)[0]
 	if ex.run != nil {
-		t.Fatalf("空闲时退出不应关联执行：%+v", ex)
+		t.Fatalf("an exit while idle should not be linked to an execution: %+v", ex)
 	}
 }
 
@@ -290,7 +290,7 @@ func TestRecordsEvicted(t *testing.T) {
 	h.execRun(b, "b")
 	st := h.obs.eventsOf(a, store.EventPiStopped)
 	if len(st) != 1 || st[0].ev.Data["reason"] != "evicted" || st[0].ev.Data["forAgentId"] != b.String() || st[0].run != nil {
-		t.Fatalf("腾出名额应记录停止原因与目标 Agent：%+v", st)
+		t.Fatalf("freeing a slot should record the stop reason and the target Agent: %+v", st)
 	}
 }
 
@@ -309,15 +309,15 @@ func TestRecordsAbortTimeout(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		t.Fatal("打断超时后应结束")
+		t.Fatal("should end after the interrupt timeout")
 	}
-	waitFor(t, "打断超时的停止事件", func() bool { return len(h.obs.eventsOf(id, store.EventPiStopped)) == 1 })
+	waitFor(t, "stop event for the interrupt timeout", func() bool { return len(h.obs.eventsOf(id, store.EventPiStopped)) == 1 })
 	st := h.obs.eventsOf(id, store.EventPiStopped)[0]
 	if st.ev.Data["reason"] != "abort_timeout" || st.run == nil || *st.run != runID {
-		t.Fatalf("打断超时的停止事件不对：%+v", st)
+		t.Fatalf("wrong stop event for the interrupt timeout: %+v", st)
 	}
 	if len(h.obs.eventsOf(id, store.EventPiExited)) != 0 {
-		t.Fatal("强制结束不应记为意外退出")
+		t.Fatal("a kill should not be recorded as an unexpected exit")
 	}
 }
 
@@ -331,25 +331,25 @@ func TestRecordsWorkspaceSyncFailure(t *testing.T) {
 	})
 	runID, res := h.execRun(id, "hi")
 	if res.ErrorCode != executor.ErrWorkspaceSyncFailed {
-		t.Fatalf("应以工作区同步失败结束：%+v", res)
+		t.Fatalf("should end with a workspace sync failure: %+v", res)
 	}
 	evs := h.obs.eventsOf(id, store.EventWorkspaceSync)
 	if len(evs) != 1 || *evs[0].run != runID || evs[0].ev.Data["result"] != "failed" || !strings.Contains(evs[0].ev.Data["error"].(string), "Source app") {
-		t.Fatalf("同步失败事件不对：%+v", evs)
+		t.Fatalf("wrong sync failure event: %+v", evs)
 	}
 	sources := evs[0].ev.Data["sources"].([]map[string]any)
 	if len(sources) != 2 || sources[0]["outcome"] != "files_synced" || sources[1]["outcome"] != "failed" || sources[1]["path"] != "app" {
-		t.Fatalf("各来源的处理结果不对：%+v", sources)
+		t.Fatalf("wrong per-source outcomes: %+v", sources)
 	}
 	if len(h.obs.eventsOf(id, store.EventPiStarted)) != 0 {
-		t.Fatal("同步失败时不应启动 Pi")
+		t.Fatal("Pi should not start when the sync fails")
 	}
 }
 
 func TestRecordsCLIInstall(t *testing.T) {
 	skipWithoutCLITemplates(t)
 	// A template with install packages only for other platforms: the install attempt fails with
-	// “没有当前平台的安装包” ("no install package for the current platform") and is recorded.
+	// "no install package for the current platform" and is recorded.
 	dir := t.TempDir()
 	tmpl := `{"name":"zz","version":"1.0.0","injection":"env","fields":[],"credential":{"env":{}},"binary":"zz",
 		"install":{"plan9/mips":{"url":"https://example.invalid/zz.zip","sha256":"` + strings.Repeat("0", 64) + `","format":"zip","path":"zz"}}}`
@@ -358,17 +358,17 @@ func TestRecordsCLIInstall(t *testing.T) {
 	}
 	h := newHarness(t, nil, dir)
 	if _, ok := h.e.tmpl.Get("zz"); !ok {
-		t.Skip("模板目录覆盖方式与预期不同，跳过")
+		t.Skip("the template directory override works differently than expected; skipping")
 	}
 	id := h.agent(func(s *agentconfig.Snapshot) { s.CLIs = []string{"zz"} })
 	runID, res := h.execRun(id, "hi")
 	if res.ErrorCode != executor.ErrCLIInstallFailed {
-		t.Fatalf("应以 CLI 安装失败结束：%+v", res)
+		t.Fatalf("should end with a CLI install failure: %+v", res)
 	}
 	evs := h.obs.eventsOf(id, store.EventCLIInstall)
 	if len(evs) != 1 || *evs[0].run != runID || evs[0].ev.Data["result"] != "failed" || evs[0].ev.Data["cli"] != "zz" ||
 		evs[0].ev.Data["version"] != "1.0.0" || !strings.Contains(evs[0].ev.Data["error"].(string), "current platform") {
-		t.Fatalf("安装失败事件不对：%+v", evs)
+		t.Fatalf("wrong install failure event: %+v", evs)
 	}
 
 	// A CLI that is already installed produces no install event.
@@ -376,7 +376,7 @@ func TestRecordsCLIInstall(t *testing.T) {
 	h2 := h.agent(func(s *agentconfig.Snapshot) { s.CLIs = []string{"gh"} })
 	h.execRun(h2, "hi")
 	if evs := h.obs.eventsOf(h2, store.EventCLIInstall); len(evs) != 0 {
-		t.Fatalf("已安装时不应记录安装：%+v", evs)
+		t.Fatalf("no install should be recorded when already installed: %+v", evs)
 	}
 }
 
@@ -387,8 +387,8 @@ func TestInterruptTargetsOnlyGivenRun(t *testing.T) {
 	id := h.agent(nil)
 	ctx := context.Background()
 	runA := uuid.Must(uuid.NewV7())
-	if res, err := h.e.Execute(ctx, executor.Request{AgentID: id, RunID: runA, Message: "第一轮"}, newSink()); err != nil || res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("A 应正常完成：%+v %v", res, err)
+	if res, err := h.e.Execute(ctx, executor.Request{AgentID: id, RunID: runA, Message: "first turn"}, newSink()); err != nil || res.Outcome != executor.OutcomeCompleted {
+		t.Fatalf("A should complete normally: %+v %v", res, err)
 	}
 	start := func(runID uuid.UUID, msg string) (*recSink, chan executor.Result) {
 		sink, done := newSink(), make(chan executor.Result, 1)
@@ -404,20 +404,20 @@ func TestInterruptTargetsOnlyGivenRun(t *testing.T) {
 		case res := <-done:
 			return res
 		case <-time.After(10 * time.Second):
-			t.Fatal("等待执行结束超时")
+			t.Fatal("timed out waiting for the execution to end")
 			return executor.Result{}
 		}
 	}
 	runB := uuid.Must(uuid.NewV7())
-	_, doneB := start(runB, "!sleep=300ms 第二轮")
+	_, doneB := start(runB, "!sleep=300ms second turn")
 	_ = h.e.Interrupt(ctx, id, runA) // the late interrupt aimed at A
 	if res := wait(doneB); res.Outcome != executor.OutcomeCompleted {
-		t.Fatalf("针对 A 的打断不应作用到 B：%+v", res)
+		t.Fatalf("an interrupt aimed at A should not affect B: %+v", res)
 	}
 	runC := uuid.Must(uuid.NewV7())
-	_, doneC := start(runC, "!sleep=10s 第三轮")
+	_, doneC := start(runC, "!sleep=10s third turn")
 	_ = h.e.Interrupt(ctx, id, runC)
 	if res := wait(doneC); res.Outcome != executor.OutcomeInterrupted {
-		t.Fatalf("针对 C 的打断应生效：%+v", res)
+		t.Fatalf("an interrupt aimed at C should take effect: %+v", res)
 	}
 }
