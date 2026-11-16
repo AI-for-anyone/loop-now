@@ -93,6 +93,8 @@ function SkillItem({ agentId, skill, sourceName }: { agentId: string; skill: Sch
         body={t.config.skills.removeBody}
         confirmLabel={t.common.remove}
         destructive
+        // 只是从这个 Agent 移除，之后可以从库里再加回来。
+        irreversible={false}
         onConfirm={() => remove.mutateAsync(skill.id)}
       />
     </li>

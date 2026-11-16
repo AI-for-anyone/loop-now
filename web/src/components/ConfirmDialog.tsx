@@ -20,6 +20,9 @@ interface ConfirmDialogProps {
   confirmLabel?: string
   cancelLabel?: string
   destructive?: boolean
+  // 危险操作是否真的撤销不了（默认是）：只是解除关联、可以重新加回来、不丢数据的操作传 false，不盖“不可撤销”印章；
+  // “危险操作”标签、红色投影与红色确认按钮不受影响。
+  irreversible?: boolean
   confirmDisabled?: boolean
   scrollBody?: boolean
   // 说明之后的补充内容，例如逐条列出的后果（说明本身是一段文字，不能放列表）。
@@ -36,6 +39,7 @@ export function ConfirmDialog({
   confirmLabel = t.common.confirm,
   cancelLabel = t.common.cancel,
   destructive,
+  irreversible = true,
   confirmDisabled = false,
   scrollBody = false,
   onConfirm,
@@ -80,7 +84,7 @@ export function ConfirmDialog({
         <AlertDialogHeader className={`gap-3 ${scrollBody ? 'shrink-0' : ''}`}>
           <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2 pr-12">
             <AlertDialogTitle className="leading-[1.2]">{title}</AlertDialogTitle>
-            {destructive && (
+            {destructive && irreversible && (
               <span className="riso-tilt inline-flex min-h-6 items-center rounded-[4px] px-2.5 text-[12.5px] font-black tracking-[0.06em] whitespace-nowrap text-red-text [--tilt-bg:transparent] [--tilt-shadow:inset_0_0_0_2px_var(--red-text)] [--tilt:-6deg]">
                 {t.common.irreversible}
               </span>

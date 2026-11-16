@@ -242,6 +242,8 @@ function DirectoryEditor({ listing, save, reload }: { listing: Listing; save: Sa
         body={copy.removeBody}
         confirmLabel={copy.remove}
         destructive
+        // 只从清单移除，目录和文件都还在，可以再加回来。
+        irreversible={false}
         onConfirm={() => (removing ? remove(removing) : undefined)}
       />
     </>

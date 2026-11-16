@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within, cleanup } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '@/api/client'
@@ -433,6 +433,27 @@ describe('可用 CLI', () => {
     const item = within(region('可用 CLI')).getByRole('listitem', { name: 'gh' })
     await user.click(within(item).getByRole('button', { name: '移除' }))
     expect(await screen.findByRole('alertdialog')).toHaveTextContent('项目共享账号保留。已有任务继续沿用启动时的权限和凭证。')
+  })
+})
+
+describe('移除 CLI 的“不可撤销”印章', () => {
+  // 只有连同已录入的凭证一起删除时撤销不了；没有凭证的、项目级的移除可以再加回来，不盖印章（仍是危险操作的样子）。
+  const removeDialog = async (agent: Parameters<typeof makeAgent>[0]) => {
+    const { user } = await renderConfig({ agent: makeAgent(agent) })
+    await user.click(within(within(region('可用 CLI')).getByRole('listitem', { name: 'gh' })).getByRole('button', { name: '移除' }))
+    return screen.findByRole('alertdialog')
+  }
+  it('平台 Agent 移除带凭证的 CLI：凭证一起删除，盖印章', async () => {
+    const dialog = await removeDialog({ scope: 'platform', projectId: null, clis: [{ name: 'gh', hasTemplate: true, credential: credentialMeta({ envNames: ['GH_TOKEN'] }) }] })
+    expect(within(dialog).getByText('不可撤销')).toBeInTheDocument()
+  })
+  it('没有录入凭证的 CLI、项目 CLI：不盖印章', async () => {
+    let dialog = await removeDialog({ scope: 'platform', projectId: null, clis: [{ name: 'gh', hasTemplate: true, credential: null }] })
+    expect(dialog.querySelector('[data-dialog-tab]')).toHaveTextContent('危险操作')
+    expect(within(dialog).queryByText('不可撤销')).not.toBeInTheDocument()
+    cleanup()
+    dialog = await removeDialog({ clis: [{ name: 'gh', hasTemplate: true, credential: credentialMeta({ envNames: ['GH_TOKEN'] }) }] })
+    expect(within(dialog).queryByText('不可撤销')).not.toBeInTheDocument()
   })
 })
 

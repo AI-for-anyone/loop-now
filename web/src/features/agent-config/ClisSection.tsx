@@ -155,6 +155,8 @@ function CliItem({
         body={project ? t.credentials.clis.removeProjectBody : cli.credential ? t.config.clis.removeBodyWithCredential : t.config.clis.removeBody}
         confirmLabel={t.common.remove}
         destructive
+        // 只有连同已录入的凭证一起删除时撤销不了；没有凭证的、项目级的移除（共享账号保留）可以再加回来。
+        irreversible={!project && !!cli.credential}
         onConfirm={() => remove.mutateAsync(cli.name)}
       />
       <ConfirmDialog

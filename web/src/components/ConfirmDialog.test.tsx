@@ -66,4 +66,12 @@ describe('确认框', () => {
     expect(dialog.querySelector('[data-dialog-tab]')).toHaveTextContent('确认')
     expect(within(dialog).queryByText('不可撤销')).not.toBeInTheDocument()
   })
+
+  it('只是解除关联、能重新加回来的危险操作（irreversible=false）：仍是“危险操作”标签和红色按钮，但不盖“不可撤销”印章', () => {
+    render(<ConfirmDialog open onOpenChange={() => {}} title="从清单移除 /work/docs？" confirmLabel="移除" destructive irreversible={false} onConfirm={() => {}} />)
+    const dialog = screen.getByRole('alertdialog', { name: '从清单移除 /work/docs？' })
+    expect(dialog.querySelector('[data-dialog-tab]')).toHaveTextContent('危险操作')
+    expect(within(dialog).getByRole('button', { name: '移除' })).toHaveAttribute('data-variant', 'destructive')
+    expect(within(dialog).queryByText('不可撤销')).not.toBeInTheDocument()
+  })
 })
