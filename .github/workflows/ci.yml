@@ -109,6 +109,9 @@ jobs:
       - run: npm run typecheck
       - run: npm run api:check
       - run: npm run lint
+      # UI text stays in the i18n tables, and comments in web, desktop and plugins must be in English (a quoted Chinese
+      # original followed by its English is allowed); see web/scripts/check-ui-text.mjs and check-comments.mjs.
+      - run: npm run check:text
       - run: npm test
       - run: npm run build
 
