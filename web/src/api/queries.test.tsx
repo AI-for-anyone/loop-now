@@ -19,8 +19,8 @@ import {
   type MessagePages,
 } from './queries'
 
-describe('Agent 列表与新建按作用域进行', () => {
-  it('按项目列出、新建其中的 Agent', async () => {
+describe('Agent list and creation go by scope', () => {
+  it('lists the Agents of a project and creates one in it', async () => {
     const agent = makeAgent()
     const created: unknown[] = []
     server.use(
@@ -32,11 +32,11 @@ describe('Agent 列表与新建按作用域进行', () => {
     )
     const { result } = renderHookWithQuery(() => ({ agents: useAgents(context.project.id), create: useCreateAgent(context.project.id) }))
     await waitFor(() => expect(result.current.agents.data?.agents.map((a) => a.id)).toEqual([agent.id]))
-    await act(() => result.current.create.mutateAsync({ name: '新助手', model: agent.model }))
-    expect(created).toEqual([{ name: '新助手', model: agent.model }])
+    await act(() => result.current.create.mutateAsync({ name: 'New Assistant', model: agent.model }))
+    expect(created).toEqual([{ name: 'New Assistant', model: agent.model }])
   })
 
-  it('平台的 Agent 走 /platform/agents', async () => {
+  it('platform Agents go through /platform/agents', async () => {
     const agent = makeAgent({ scope: 'platform', projectId: null })
     const created: unknown[] = []
     server.use(
@@ -48,19 +48,19 @@ describe('Agent 列表与新建按作用域进行', () => {
     )
     const { result } = renderHookWithQuery(() => ({ agents: useAgents(PLATFORM), create: useCreateAgent(PLATFORM) }))
     await waitFor(() => expect(result.current.agents.data?.agents.map((a) => a.id)).toEqual([agent.id]))
-    await act(() => result.current.create.mutateAsync({ name: '巡检助手', model: agent.model }))
-    expect(created).toEqual([{ name: '巡检助手', model: agent.model }])
+    await act(() => result.current.create.mutateAsync({ name: 'Inspector', model: agent.model }))
+    expect(created).toEqual([{ name: 'Inspector', model: agent.model }])
   })
 
-  it('作用域尚未确定时不请求', () => {
+  it('does not request while the scope is not known yet', () => {
     const { result } = renderHookWithQuery(() => useAgents(null))
     expect(result.current.fetchStatus).toBe('idle')
   })
 })
 
-describe('变更后的缓存失效', () => {
-  it('修改 Agent 后重新获取 Agent 详情', async () => {
-    const agent = makeAgent({ name: '旧名字' })
+describe('cache invalidation after changes', () => {
+  it('refetches the Agent details after editing the Agent', async () => {
+    const agent = makeAgent({ name: 'Old name' })
     let current = agent
     server.use(
       http.get(apiUrl(`/agents/${agent.id}`), () => HttpResponse.json(current)),
@@ -71,14 +71,14 @@ describe('变更后的缓存失效', () => {
       http.get(agentsUrl, () => HttpResponse.json({ agents: [] })),
     )
     const { result } = renderHookWithQuery(() => ({ agent: useAgent(agent.id), update: useUpdateAgent(agent.id) }))
-    await waitFor(() => expect(result.current.agent.data?.name).toBe('旧名字'))
-    await act(() => result.current.update.mutateAsync({ name: '新名字' }))
-    await waitFor(() => expect(result.current.agent.data?.name).toBe('新名字'))
+    await waitFor(() => expect(result.current.agent.data?.name).toBe('Old name'))
+    await act(() => result.current.update.mutateAsync({ name: 'New name' }))
+    await waitFor(() => expect(result.current.agent.data?.name).toBe('New name'))
   })
 })
 
-describe('凭证不进入查询缓存', () => {
-  it('录入模型凭证与 CLI 凭证后，缓存中找不到明文', async () => {
+describe('credentials stay out of the query cache', () => {
+  it('after entering a model credential and a CLI credential, the cache holds no plain text', async () => {
     const agent = makeAgent()
     const meta = { status: 'set', updatedAt: '2026-10-12T00:00:00Z', fieldNames: [], envNames: ['ANTHROPIC_API_KEY'], filePaths: [], warnings: [] }
     server.use(
@@ -100,8 +100,8 @@ describe('凭证不进入查询缓存', () => {
   })
 })
 
-describe('历史缓存的更新', () => {
-  it('按 ID 插入新消息，并按执行更新用户消息与回复', async () => {
+describe('history cache updates', () => {
+  it('inserts new messages by ID and updates the user message and the reply by run', async () => {
     const agentId = 'a1'
     const run = makeRun({ status: 'running' })
     const user = makeMessage({ run })
@@ -109,7 +109,7 @@ describe('历史缓存的更新', () => {
     const { result, client } = renderHookWithQuery(() => useMessages(agentId))
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
-    const reply = makeMessage({ role: 'assistant', text: '好的', run: { ...run, status: 'completed' } })
+    const reply = makeMessage({ role: 'assistant', text: 'OK', run: { ...run, status: 'completed' } })
     act(() => {
       upsertMessage(client, agentId, reply)
       upsertMessage(client, agentId, reply)
@@ -123,8 +123,8 @@ describe('历史缓存的更新', () => {
   })
 })
 
-describe('执行状态不倒退', () => {
-  it('结束事件先到、发送响应后到时，保留已结束的状态', async () => {
+describe('run status does not go backwards', () => {
+  it('keeps the ended status when the end event arrives before the send response', async () => {
     const agentId = 'a2'
     const run = makeRun({ status: 'completed' })
     const user = makeMessage({ run })
