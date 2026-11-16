@@ -526,7 +526,7 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 		var err error
 		msg, err = s.st.GetMessage(ctx, run.UserMessageID)
 		if err != nil {
-			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "Reading the message failed: " + err.Error()}, ""
+			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "Could not read the message: " + err.Error()}, ""
 		}
 	}
 	if run.Origin == "sleep_wake" {
@@ -535,7 +535,7 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	if run.Origin == "inbox_reminder" {
 		text, void, err := s.prepareReminder(ctx, agentID, run)
 		if err != nil {
-			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "Preparing the platform reminder failed: " + err.Error()}, ""
+			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "Could not prepare the platform reminder: " + err.Error()}, ""
 		}
 		if void {
 			return executor.Result{Outcome: outcomeVoided}, ""
