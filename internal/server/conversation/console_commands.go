@@ -312,6 +312,8 @@ type platformCommandSpec struct {
 	zh, en               string // Chinese and English descriptions; usage placeholders (instructions, html|jsonl, session-id) are spelled the same in them
 }
 
+// platformCommands is the list of platform commands.
+// check-english: zh (the console shows the zh descriptions in the Chinese interface)
 var platformCommands = []platformCommandSpec{
 	{name: "session", usage: "/session",
 		zh: "查看当前会话、模型和进程状态", en: "Show the current session, model, and process"},

@@ -9,9 +9,13 @@
 //   - any line of the API contracts api/*.yaml that contains Chinese: their descriptions, summaries, titles and
 //     comments are English, and so are examples. (A pattern that must match Chinese writes it with \u escapes, which
 //     are plain ASCII in the file.)
+//   - a string literal containing Chinese in a non-test .go file: messages returned to callers or shown to people are
+//     English. Text that must stay Chinese is marked explicitly with "check-english: zh" and a reason, either in the
+//     doc comment of the top-level declaration that holds it (the whole declaration is allowed: for example a table of
+//     interface copy in both languages) or in a comment at the end of the literal's line (for example a prefix that
+//     parses text written by older versions).
 //
-// It does not look at Go string literals in general: error messages and test data are covered by a later step of the
-// English pass, and shipped SQL migrations are never rewritten.
+// Test files may keep Chinese test data and test messages, and shipped SQL migrations are never rewritten.
 //
 // Run from the repository root:
 //
@@ -34,7 +38,7 @@ import (
 )
 
 // quoted matches one quoted span on a single line; its content may contain Chinese.
-var quoted = regexp.MustCompile("\"[^\"\\n]*\"|“[^”\\n]*”|‘[^’\\n]*’|`[^`\\n]*`|「[^」\\n]*」|『[^』\\n]*』")
+var quoted = regexp.MustCompile("\"[^\"\\n]*\"|“[^”\\n]*”|‘[^’\\n]*’|`[^`\\n]*`|「[^」\\n]*」|『[^』\\n]*』") // check-english: zh (the CJK quotation marks this check accepts)
 
 func chinese(s string) bool {
 	for _, r := range s {
@@ -78,6 +82,57 @@ func logger(x ast.Expr) bool {
 	return false
 }
 
+// allowMarker marks Chinese string literals that must stay as they are.
+const allowMarker = "check-english: zh"
+
+// stringLiterals reports the string literals of a non-test file that contain Chinese and are not marked with
+// allowMarker (in the doc comment of their top-level declaration, or in a comment on their line).
+func stringLiterals(fset *token.FileSet, f *ast.File, path string) []string {
+	allowedLines := map[int]bool{}
+	type span struct{ from, to token.Pos }
+	var allowed []span
+	for _, g := range f.Comments {
+		if strings.Contains(g.Text(), allowMarker) {
+			allowedLines[fset.Position(g.Pos()).Line] = true
+		}
+	}
+	for _, d := range f.Decls {
+		var doc *ast.CommentGroup
+		switch v := d.(type) {
+		case *ast.GenDecl:
+			doc = v.Doc
+		case *ast.FuncDecl:
+			doc = v.Doc
+		}
+		if doc != nil && strings.Contains(doc.Text(), allowMarker) {
+			allowed = append(allowed, span{d.Pos(), d.End()})
+		}
+	}
+	var out []string
+	ast.Inspect(f, func(n ast.Node) bool {
+		lit, ok := n.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			return true
+		}
+		s, err := strconv.Unquote(lit.Value)
+		if err != nil || !chinese(s) {
+			return true
+		}
+		pos := fset.Position(lit.Pos())
+		if allowedLines[pos.Line] || allowedLines[fset.Position(lit.End()).Line] {
+			return true
+		}
+		for _, sp := range allowed {
+			if lit.Pos() >= sp.from && lit.End() <= sp.to {
+				return true
+			}
+		}
+		out = append(out, fmt.Sprintf("%s:%d: string is not in English (mark it with %q and a reason if it must stay): %s", path, pos.Line, allowMarker, lit.Value))
+		return true
+	})
+	return out
+}
+
 func main() {
 	root := "."
 	if len(os.Args) > 1 {
@@ -111,6 +166,9 @@ func main() {
 					}
 				}
 			}
+		}
+		if !strings.HasSuffix(path, "_test.go") {
+			problems = append(problems, stringLiterals(fset, f, path)...)
 		}
 		ast.Inspect(f, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
@@ -165,7 +223,7 @@ func main() {
 		for _, p := range problems {
 			fmt.Println(p)
 		}
-		fmt.Printf("check-english: %d problem(s). Write Go comments, log messages and the API contracts in English; a quoted Chinese original followed by its English is allowed in Go comments.\n", len(problems))
+		fmt.Printf("check-english: %d problem(s). Write Go comments, log messages, Go strings and the API contracts in English; a quoted Chinese original followed by its English is allowed in Go comments.\n", len(problems))
 		os.Exit(1)
 	}
 	fmt.Println("check-english: ok")

@@ -445,7 +445,7 @@ func sessionMessageText(content json.RawMessage) string {
 
 func normalizeSessionUserText(text string) string {
 	text = strings.TrimSpace(text)
-	if strings.HasPrefix(text, "本轮运行ID：") || strings.HasPrefix(text, "Run ID for this turn: ") {
+	if strings.HasPrefix(text, "本轮运行ID：") || strings.HasPrefix(text, "Run ID for this turn: ") { // check-english: zh (older sessions start with this line)
 		newline := strings.IndexByte(text, '\n')
 		if newline < 0 {
 			return ""
