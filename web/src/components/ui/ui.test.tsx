@@ -14,107 +14,107 @@ import { RadioCard, RadioCards } from './radio-cards'
 import { Sheet, SheetBody, SheetContent, SheetHeader, SheetTitle } from './sheet'
 import { Table, TableBody, TableCell, TableRow } from './table'
 
-describe('按钮', () => {
-  it('按 variant 与 size 渲染，焦点用印刷焦点环，禁用时去掉投影', () => {
+describe('Button', () => {
+  it('renders by variant and size, uses the print focus ring, and drops the shadow when disabled', () => {
     render(
       <>
-        <Button variant="interrupt">打断</Button>
+        <Button variant="interrupt">Interrupt</Button>
         <Button variant="ghost" size="sm">
-          移除
+          Remove
         </Button>
-        <Button disabled>保存</Button>
+        <Button disabled>Save</Button>
       </>,
     )
-    const interrupt = screen.getByRole('button', { name: '打断' })
+    const interrupt = screen.getByRole('button', { name: 'Interrupt' })
     expect(interrupt).toHaveAttribute('data-variant', 'interrupt')
     expect(interrupt.className).toContain('bg-riso-pink')
     expect(interrupt.className).toContain('focus-visible:shadow-focus')
     // Ghost actions inside lists are 36px tall.
-    expect(screen.getByRole('button', { name: '移除' }).className).toContain('h-9')
-    const disabled = screen.getByRole('button', { name: '保存' })
+    expect(screen.getByRole('button', { name: 'Remove' }).className).toContain('h-9')
+    const disabled = screen.getByRole('button', { name: 'Save' })
     expect(disabled).toBeDisabled()
     expect(disabled.className).toContain('disabled:shadow-none')
   })
 })
 
-describe('徽标', () => {
-  it('印章带状态色调，已打断与服务端重启中断不用红色', () => {
+describe('Badge', () => {
+  it('stamps carry the status tone; interrupted and cut off by a server restart are not red', () => {
     render(
       <>
         <Badge variant="stamp" tone="interrupted">
-          已打断
+          Interrupted
         </Badge>
         <Badge variant="stamp" tone="restart">
-          服务端重启中断
+          Cut off by a server restart
         </Badge>
         <Badge variant="stamp" tone="danger">
-          失败
+          Failed
         </Badge>
       </>,
     )
-    expect(screen.getByText('已打断')).toHaveAttribute('data-tone', 'interrupted')
-    expect(screen.getByText('已打断').className).toContain('text-pink-text')
-    expect(screen.getByText('服务端重启中断').className).toContain('text-ink-700')
-    expect(screen.getByText('失败').className).toContain('text-red-text')
-    expect(screen.getByText('已打断').className).not.toContain('red')
+    expect(screen.getByText('Interrupted')).toHaveAttribute('data-tone', 'interrupted')
+    expect(screen.getByText('Interrupted').className).toContain('text-pink-text')
+    expect(screen.getByText('Cut off by a server restart').className).toContain('text-ink-700')
+    expect(screen.getByText('Failed').className).toContain('text-red-text')
+    expect(screen.getByText('Interrupted').className).not.toContain('red')
   })
 })
 
-describe('输入框', () => {
-  it('出错时按 aria-invalid 切换成浅红底', () => {
-    render(<Input aria-label="名称" aria-invalid />)
-    const input = screen.getByLabelText('名称')
+describe('Input', () => {
+  it('switches to a light red background by aria-invalid on error', () => {
+    render(<Input aria-label="Name" aria-invalid />)
+    const input = screen.getByLabelText('Name')
     expect(input).toHaveAttribute('aria-invalid', 'true')
     expect(input.className).toContain('aria-invalid:bg-error-field')
   })
 })
 
-describe('右侧抽屉', () => {
+describe('Right-side drawer', () => {
   function SheetDemo() {
     const [open, setOpen] = useState(false)
     return (
       <>
         <button type="button" onClick={() => setOpen(true)}>
-          打开
+          Open
         </button>
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetContent aria-describedby={undefined}>
             <SheetHeader>
-              <SheetTitle>模板</SheetTitle>
+              <SheetTitle>Template</SheetTitle>
             </SheetHeader>
-            <SheetBody>内容</SheetBody>
+            <SheetBody>Content</SheetBody>
           </SheetContent>
         </Sheet>
       </>
     )
   }
 
-  it('Esc 关闭，焦点回到打开它的按钮', async () => {
+  it('Esc closes it and focus returns to the button that opened it', async () => {
     const user = userEvent.setup()
     render(<SheetDemo />)
-    const trigger = screen.getByRole('button', { name: '打开' })
+    const trigger = screen.getByRole('button', { name: 'Open' })
     await user.click(trigger)
-    expect(await screen.findByRole('dialog', { name: '模板' })).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: 'Template' })).toBeInTheDocument()
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     await waitFor(() => expect(trigger).toHaveFocus())
   })
 })
 
-describe('对话框与确认框', () => {
+describe('Dialog and confirmation dialog', () => {
   // Console dialogs are controlled by state and unmounted when closed; they have no Radix Trigger.
   function DialogDemo() {
     const [open, setOpen] = useState(false)
     return (
       <>
         <button type="button" onClick={() => setOpen(true)}>
-          新建
+          New
         </button>
         {open && (
           <Dialog open onOpenChange={(next) => !next && setOpen(false)}>
             <DialogContent aria-describedby={undefined}>
-              <DialogTitle>新建 Agent</DialogTitle>
-              <input aria-label="名称" />
+              <DialogTitle>New Agent</DialogTitle>
+              <input aria-label="Name" />
             </DialogContent>
           </Dialog>
         )}
@@ -127,47 +127,47 @@ describe('对话框与确认框', () => {
     return (
       <>
         <button type="button" onClick={() => setOpen(true)}>
-          删除
+          Delete
         </button>
         <AlertDialog open={open} onOpenChange={setOpen}>
           <AlertDialogContent>
-            <AlertDialogTitle>删除 Agent？</AlertDialogTitle>
-            <AlertDialogDescription>删除后不能恢复。</AlertDialogDescription>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogTitle>Delete Agent?</AlertDialogTitle>
+            <AlertDialogDescription>This can't be undone.</AlertDialogDescription>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
           </AlertDialogContent>
         </AlertDialog>
       </>
     )
   }
 
-  it('对话框按 Esc 关闭后，焦点回到打开它的按钮', async () => {
+  it('after a dialog closes with Esc, focus returns to the button that opened it', async () => {
     const user = userEvent.setup()
     render(<DialogDemo />)
-    const opener = screen.getByRole('button', { name: '新建' })
+    const opener = screen.getByRole('button', { name: 'New' })
     await user.click(opener)
-    expect(await screen.findByRole('dialog', { name: '新建 Agent' })).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: 'New Agent' })).toBeInTheDocument()
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     await waitFor(() => expect(opener).toHaveFocus())
   })
 
-  it('确认框点“取消”关闭后，焦点回到打开它的按钮', async () => {
+  it('after a confirmation dialog closes with “Cancel”, focus returns to the button that opened it', async () => {
     const user = userEvent.setup()
     render(<ConfirmDemo />)
-    const opener = screen.getByRole('button', { name: '删除' })
+    const opener = screen.getByRole('button', { name: 'Delete' })
     await user.click(opener)
-    await user.click(await screen.findByRole('button', { name: '取消' }))
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     await waitFor(() => expect(opener).toHaveFocus())
   })
 })
 
-describe('可过滤的下拉', () => {
+describe('Filterable dropdown', () => {
   function ComboboxDemo() {
     const [value, setValue] = useState<string | null>(null)
     return (
       <>
-        <span id="label">模型</span>
+        <span id="label">Model</span>
         <Combobox
           aria-labelledby="label"
           value={value}
@@ -177,21 +177,21 @@ describe('可过滤的下拉', () => {
             { value: 'b', label: 'Beta', hint: 'beta-2' },
             { value: 'c', label: 'Gamma', hint: 'gamma-3' },
           ]}
-          placeholder="选择模型"
-          filterLabel="按名称或 ID 过滤"
-          emptyText="没有匹配的模型"
+          placeholder="Choose a model"
+          filterLabel="Filter by name or ID"
+          emptyText="No matching models"
         />
       </>
     )
   }
 
-  it('过滤后用上下键加回车选择，Esc 关闭', async () => {
+  it('after filtering, the up and down keys plus Enter choose, Esc closes', async () => {
     const user = userEvent.setup()
     render(<ComboboxDemo />)
-    const trigger = screen.getByRole('combobox', { name: '模型' })
-    expect(trigger).toHaveTextContent('选择模型')
+    const trigger = screen.getByRole('combobox', { name: 'Model' })
+    expect(trigger).toHaveTextContent('Choose a model')
     await user.click(trigger)
-    const filter = await screen.findByRole('searchbox', { name: '按名称或 ID 过滤' })
+    const filter = await screen.findByRole('searchbox', { name: 'Filter by name or ID' })
     await user.type(filter, 'a')
     expect(within(screen.getByRole('listbox')).getAllByRole('option')).toHaveLength(3)
     await user.clear(filter)
@@ -212,22 +212,22 @@ describe('可过滤的下拉', () => {
     expect(trigger).toHaveTextContent('Gamma')
   })
 
-  it('没有匹配时显示说明', async () => {
+  it('shows a note when nothing matches', async () => {
     const user = userEvent.setup()
     render(<ComboboxDemo />)
-    await user.click(screen.getByRole('combobox', { name: '模型' }))
+    await user.click(screen.getByRole('combobox', { name: 'Model' }))
     await user.type(await screen.findByRole('searchbox'), 'zzz')
-    expect(screen.getByText('没有匹配的模型')).toBeInTheDocument()
+    expect(screen.getByText('No matching models')).toBeInTheDocument()
   })
 })
 
-describe('卡片式单选', () => {
-  it('不预选，方向键切换', async () => {
+describe('Radio cards', () => {
+  it('nothing is preselected; the arrow keys switch', async () => {
     const user = userEvent.setup()
     render(
-      <RadioCards aria-label="方式">
-        <RadioCard value="queue" title="排队" />
-        <RadioCard value="interrupt" title="打断" />
+      <RadioCards aria-label="Mode">
+        <RadioCard value="queue" title="Queue" />
+        <RadioCard value="interrupt" title="Interrupt" />
       </RadioCards>,
     )
     const radios = screen.getAllByRole('radio')
@@ -243,13 +243,13 @@ describe('卡片式单选', () => {
   })
 })
 
-describe('表格', () => {
-  it('外层容器可以单独横向滚动', () => {
+describe('Table', () => {
+  it('the outer container can scroll sideways on its own', () => {
     render(
       <Table>
         <TableBody>
           <TableRow>
-            <TableCell>令牌</TableCell>
+            <TableCell>Token</TableCell>
           </TableRow>
         </TableBody>
       </Table>,
@@ -260,8 +260,8 @@ describe('表格', () => {
 
 // Redesign: inputs, textareas and selects all have a white background, a 2px navy
 // border and 12px rounded corners (as do all form controls in the design mockups).
-it('表单控件是 2px 藏青描边、12px 圆角', () => {
-  render(<><input aria-label="x" className={fieldClass} /><Input aria-label="名称" /><Textarea aria-label="说明" /></>)
-  for (const name of ['名称', '说明']) expect(screen.getByLabelText(name)).toHaveClass('rounded-input', 'bg-white', 'shadow-[inset_0_0_0_2px_var(--ink)]')
+it('form controls have a 2px navy border and 12px rounded corners', () => {
+  render(<><input aria-label="x" className={fieldClass} /><Input aria-label="Name" /><Textarea aria-label="About" /></>)
+  for (const name of ['Name', 'About']) expect(screen.getByLabelText(name)).toHaveClass('rounded-input', 'bg-white', 'shadow-[inset_0_0_0_2px_var(--ink)]')
   expect(selectClass).toContain('shadow-[inset_0_0_0_2px_var(--ink)]')
 })

@@ -9,9 +9,9 @@ import { ThinkingLevelPicker } from './ThinkingLevelPicker'
 it('offers only catalog levels plus default, and emits null for default', async () => {
   const onChange = vi.fn()
   render(<ThinkingLevelPicker value="high" levels={['low', 'high']} defaultLevel="low" onChange={onChange} />)
-  expect(thinkingOptions(document.body)).toEqual(['默认（低）', '低', '高'])
-  expect(thinkingChoice(document.body)).toBe('高')
-  await chooseThinking(userEvent.setup(), document.body, '默认（低）')
+  expect(thinkingOptions(document.body)).toEqual(['Default (Low)', 'Low', 'High'])
+  expect(thinkingChoice(document.body)).toBe('High')
+  await chooseThinking(userEvent.setup(), document.body, 'Default (Low)')
   expect(onChange).toHaveBeenCalledWith(null)
 })
 
@@ -26,7 +26,7 @@ it('preserves an unavailable stored value visibly and shows the field error', ()
   render(<ThinkingLevelPicker value="high" levels={['low']} onChange={() => {}} error="The current model does not support this level" />)
   // The stored level is not in the catalog: no segment is selected, and a line below says the current value can't be chosen for now.
   expect(thinkingChoice(document.body)).toBeNull()
-  expect(screen.getByText('高（当前值，暂不可选）')).toBeInTheDocument()
+  expect(screen.getByText('High (current value, not selectable now)')).toBeInTheDocument()
   expect(thinkingPicker(document.body)).toHaveAttribute('aria-invalid', 'true')
   expect(screen.getByText('The current model does not support this level')).toBeInTheDocument()
 })
@@ -34,5 +34,5 @@ it('preserves an unavailable stored value visibly and shows the field error', ()
 it('can disable catalog selection without losing its value', () => {
   render(<ThinkingLevelPicker value={null} levels={[]} disabled onChange={() => {}} />)
   for (const radio of screen.getAllByRole('radio')) expect(radio).toBeDisabled()
-  expect(thinkingChoice(document.body)).toBe('默认')
+  expect(thinkingChoice(document.body)).toBe('Default')
 })
