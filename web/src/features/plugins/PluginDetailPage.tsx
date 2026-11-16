@@ -335,7 +335,7 @@ export function PluginDetailPage() {
           ))}
         </IndexTabs>
         <Sheet className="flex-1">
-          <span aria-hidden="true" data-sheet-band className="block h-3.5 shrink-0 border-b-2 border-ink bg-riso-blue bg-[radial-gradient(rgb(255_255_255/.35)_1.3px,transparent_1.7px)] bg-size-[7px_7px]" />
+          <span aria-hidden="true" data-sheet-band className="block h-3.5 shrink-0 border-b-2 border-ink bg-riso-blue bg-[radial-gradient(rgb(255_255_255/.32)_1.2px,transparent_1.5px)] bg-size-[8px_8px]" />
           {tab === 'overview' ? (
             <Overview detail={detail} footer={versionFooter} />
           ) : (

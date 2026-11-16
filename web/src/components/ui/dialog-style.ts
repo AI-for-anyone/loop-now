@@ -28,7 +28,7 @@ export const dialogPaperClass = (kind: DialogKind) =>
 
 // 右上角的关闭：黄色圆章（藏青描边、小投影）。弹窗里位置相对外层（在标签下方 18px），纸滚动时不动。
 export const closeStampClass =
-  'inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full border-2 border-ink bg-riso-yellow text-ink shadow-[2px_2px_0_var(--ink)] outline-none hover:bg-[#ffd92e] focus-visible:shadow-focus'
+  'inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full border-2 border-ink bg-riso-yellow text-ink shadow-[2px_2px_0_var(--ink)] outline-none hover:shadow-[3px_3px_0_var(--ink)] focus-visible:shadow-focus'
 
 // 按钮区：上方一条虚线。里面的主按钮是荧光粉（每个弹窗最多一个）、次要按钮是浅纸底，都是藏青描边加投影；危险操作的确认是红色。
 const footerButtons =
