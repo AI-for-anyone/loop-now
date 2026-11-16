@@ -33,7 +33,7 @@ export function DangerZone({ agent, idle }: { agent: Schemas['Agent']; idle: boo
           agent.isManager ? (
             <>
               <span className="block">{body}</span>
-              {/* 担任项目 Manager 时多一块浅蓝底、加粗的说明。 */}
+              {/* When the Agent is the project Manager, add an extra bold note on a light-blue background. */}
               <span className="mt-2 block rounded-input bg-tint-blue px-3 py-2 font-black text-ink">{t.config.danger.managerNote}</span>
             </>
           ) : (
@@ -44,7 +44,7 @@ export function DangerZone({ agent, idle }: { agent: Schemas['Agent']; idle: boo
         destructive
         onConfirm={async () => {
           await remove.mutateAsync()
-          // Agent 已删除，基本信息里未保存的修改没有意义，直接回到它所在项目或平台的列表。
+          // The Agent is deleted, so unsaved edits in Basics no longer matter; go straight back to the list of its project or the platform.
           void navigate(agentsPath(scope), { state: skipUnsavedPrompt })
         }}
       />

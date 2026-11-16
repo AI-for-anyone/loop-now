@@ -8,7 +8,7 @@ import { joinPath, parentOf, type FolderSource, type UploadItem } from './folder
 
 export interface UploadRow {
   id: string
-  // 相对文件夹根目录的完整路径。
+  // The full path relative to the folder root.
   path: string
   size: number
   loaded: number
@@ -16,9 +16,10 @@ export interface UploadRow {
   error: string | null
 }
 
-// 上传一批文件到某个文件夹：按并发上限依次上传，逐个记下进度；一个失败不影响其他。
-// 全部结束后 onDone 收到受影响的文件夹（目标文件夹及上传带出的子文件夹）。
-// 超过 maxUpload（Context.limits.maxFolderUpload）的文件不发出，直接记为失败。
+// Upload a batch of files to a folder: upload them in turn up to the concurrency limit, recording each one's progress; one failure doesn't
+// affect the others.
+// When all are done, onDone receives the affected folders (the target folder and the subfolders the upload brought in).
+// Files over maxUpload (Context.limits.maxFolderUpload) are not sent and are recorded as failed right away.
 export function useFolderUploads(source: FolderSource, maxUpload: number | undefined, onDone: (dirs: string[]) => void) {
   const [rows, setRows] = useState<UploadRow[]>([])
   const patch = (id: string, value: Partial<UploadRow>) => setRows((old) => old.map((row) => (row.id === id ? { ...row, ...value } : row)))
@@ -41,7 +42,7 @@ export function useFolderUploads(source: FolderSource, maxUpload: number | undef
   return { rows, start, clear }
 }
 
-// 拖入的文件与文件夹：文件夹按 webkitGetAsEntry 逐级读出，路径带子目录。
+// Dropped files and folders: folders are read level by level via webkitGetAsEntry, and paths include subfolders.
 export async function droppedItems(transfer: DataTransfer): Promise<UploadItem[]> {
   const entries = Array.from(transfer.items).map((item) => item.webkitGetAsEntry?.()).filter((entry): entry is FileSystemEntry => !!entry)
   if (entries.length === 0) return Array.from(transfer.files).map((file) => ({ path: file.name, file }))

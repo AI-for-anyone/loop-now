@@ -15,8 +15,9 @@ function platformReply(result: Schemas['ConsoleCommandResult']): string {
     case 'session':
       return result.session ? text.session(result.session) : text.noReply
     case 'compact': {
-      // 结果在这次压缩的执行上（compactRun.compaction）：压缩了写前后的 token；Pi 没有压缩时按原因说明，这时 token 为 null。
-      // 只读 compactRun.compaction；ConsoleCommandResult 上的 tokensBefore、estimatedTokensAfter 已弃用，不再读。
+      // The result lives on this compaction's run (compactRun.compaction): if it compacted, show the tokens before and after; if Pi
+      // didn't compact, explain the reason, and the tokens are null in that case.
+      // Read only compactRun.compaction; tokensBefore and estimatedTokensAfter on ConsoleCommandResult are deprecated and no longer read.
       const compaction = result.compactRun?.compaction
       if (compaction?.outcome === 'skipped' && compaction.skipReason) return text.compactSkipped[compaction.skipReason]
       if (compaction?.outcome === 'compacted' && compaction.tokensBefore != null && compaction.estimatedTokensAfter != null) return text.compact(compaction.tokensBefore, compaction.estimatedTokensAfter)
@@ -38,8 +39,9 @@ function platformReply(result: Schemas['ConsoleCommandResult']): string {
   }
 }
 
-// /resume 列出的会话，按列表的规则排：上面一道 2px 实线，行与行之间 1.5px 虚线；ID 与时间用等宽字；
-// 当前会话标一个黄色标签（选中态一律是黄色），其余各行右边是“恢复”。
+// The sessions listed by /resume, laid out by the list rules: a 2px solid line on top, 1.5px dashed lines between rows; ID and time in a
+// monospace font;
+// the current session gets a yellow tag (the selected state is always yellow), and every other row has “恢复” (Resume) on the right.
 function ResumeSessionList({ sessions, onResume }: { sessions: Schemas['ConsoleResumeSession'][]; onResume?: (sessionId: string) => void }) {
   const text = t.chat.commands
   return (
@@ -73,8 +75,10 @@ function ResumeSessionList({ sessions, onResume }: { sessions: Schemas['ConsoleR
   )
 }
 
-// /copy 的内容没能自动写进剪贴板（Safari 里已不在按键手势内，或用 http 的局域网地址打开时没有剪贴板接口）：
-// 内容放在只读的框里，旁边的“复制”是一次新的点击，这时浏览器会放行；仍然不行就选中框里的内容，直接按复制键。
+// The /copy content couldn't be written to the clipboard automatically (in Safari the key gesture is already over, or there is no
+// clipboard API when the page is opened via a plain-http LAN address):
+// the content goes in a read-only box, and the “复制” (Copy) button next to it is a fresh click, which the browser allows; if that still
+// fails, select the content in the box so the person can press the copy shortcut directly.
 function ManualCopy({ text: content }: { text: string }) {
   const box = useRef<HTMLTextAreaElement>(null)
   const [copied, setCopied] = useState(false)
@@ -83,7 +87,7 @@ function ManualCopy({ text: content }: { text: string }) {
       setCopied(true)
       return
     }
-    // 选中全部（iOS 上 select() 对只读框不一定生效），方便直接按复制键。
+    // Select everything (on iOS, select() doesn't always work on a read-only box) so the copy shortcut can be pressed directly.
     box.current?.focus({ preventScroll: true })
     box.current?.setSelectionRange(0, content.length)
   }
@@ -108,8 +112,9 @@ function ManualCopy({ text: content }: { text: string }) {
   )
 }
 
-// 平台或插件认领的 / 命令：不作为普通对话消息。抬头是一张分段的小票（命令｜来源｜时间），结果排在下面，左侧一道虚线。
-// copyFailed：/copy 的内容没能写进剪贴板，改成说明原因并给出手动复制的办法。
+// A / command claimed by the platform or a plugin: not shown as an ordinary chat message. The header is a segmented receipt
+// (command | source | time), with the result below it and a dashed line on the left.
+// copyFailed: the /copy content couldn't be written to the clipboard, so explain why instead and offer a way to copy it manually.
 export function CommandLine({ command, result, at, onResume, copyFailed = false }: { command: string; result: Schemas['ConsoleCommandResult']; at: string; onResume?: (sessionId: string) => void; copyFailed?: boolean }) {
   const platform = result.source === 'platform'
   const manualCopy = platform && result.command === 'copy' && copyFailed && result.copyText != null ? result.copyText : null
@@ -139,7 +144,8 @@ export function CommandLine({ command, result, at, onResume, copyFailed = false 
   )
 }
 
-// 插件渠道来的发件人：一个小标签“插件 · 名称”，不链接到外部身份；插件已卸载时标出。
+// A sender that came through a plugin channel: a small tag “插件 · 名称” (Plugin · name), not linked to an external identity; marked when
+// the plugin has been uninstalled.
 export function PluginSenderChip({ participant, className }: { participant: Schemas['InboxParticipant']; className?: string }) {
   return (
     <span title={participant.address ?? undefined} className={cn('inline-flex min-w-0 items-center gap-1 rounded-[6px] bg-tint-blue px-1.5 py-px text-[11.5px] leading-4 font-black text-ink', className)}>

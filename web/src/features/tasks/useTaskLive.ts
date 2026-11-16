@@ -49,7 +49,8 @@ export function useTaskLive(id: string, project: boolean) {
       onEvent: (event: TaskEvent | ProjectTaskEvent) => {
         if (event.type !== 'snapshot' && !acceptTaskEvent(lastId, event.id)) return
         lastId = event.id
-        // 左侧栏的运行数：任务有变化（含新任务）时立即重读该项目的计数；项目事件流重连后也重读一次，补上断开期间的变化。
+        // The sidebar's running count: when a task changes (including new tasks), re-read that project's counts right away; also re-read
+        // once after the project event stream reconnects, to catch changes made while disconnected.
         if (event.type === 'task.updated') void client.invalidateQueries({ queryKey: taskKeys.counts(event.data.task.projectId) }, { cancelRefetch: false })
         else if (project && event.type === 'snapshot') void client.invalidateQueries({ queryKey: taskKeys.counts(id) }, { cancelRefetch: false })
         if (!project && event.type === 'message.created' && taskMessageProjection(client).message(id, event.id, event.data)) return

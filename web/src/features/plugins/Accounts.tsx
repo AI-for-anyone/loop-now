@@ -17,14 +17,14 @@ type Account = Schemas['PluginAccount']
 type Kind = Schemas['PluginAccountKind']
 const text = t.plugins.accounts
 
-// 账号一行的摘要：第一个非空的普通字段（截断），secret 一律不显示。
+// The one-line summary of an account: the first non-empty regular field (truncated); secrets are never shown.
 function preview(account: Account): string | null {
   const value = Object.values(account.values as Record<string, unknown>).find((v) => typeof v === 'string' && v !== '') as string | undefined
   return value ? (value.length > 12 ? `${value.slice(0, 10)}…` : value) : null
 }
 
-// 添加或修改一个账号：名称加上这个种类的字段（按 JSON Schema 生成，密钥只写）。
-// 修改按版本保存；别处改过（412）时说明并关上表单，列表随之重新读取。
+// Add or edit an account: a name plus the fields of this kind (generated from the JSON Schema; secrets are write-only).
+// Edits are saved against a revision; if it was changed elsewhere (412), explain that and close the form, and the list is re-read.
 function AccountForm({ projectId, pluginId, kind, account, onDone }: { projectId: string; pluginId: string; kind: Kind; account?: Account; onDone: () => void }) {
   const fields = fieldsOf(kind.fields)
   const id = useId()
@@ -50,7 +50,7 @@ function AccountForm({ projectId, pluginId, kind, account, onDone }: { projectId
     const onError = (error: ApiError) => setErrors(serverFieldErrors(fields, error.fields))
     if (account) update.mutate({ name: name.trim(), values: values as never, ...(secrets ? { secrets } : {}), expectedRevision: account.revision }, { onSuccess: onDone, onError })
     else {
-      // 新账号只能设值，不会有“清除”。
+      // A new account can only set values; there is no “清除” (Clear).
       const set = Object.fromEntries(Object.entries(secrets ?? {}).filter((entry): entry is [string, string] => entry[1] !== null))
       create.mutate({ kind: kind.kind, name: name.trim(), values: values as never, ...(Object.keys(set).length ? { secrets: set } : {}) }, { onSuccess: onDone, onError })
     }
@@ -79,7 +79,8 @@ function AccountForm({ projectId, pluginId, kind, account, onDone }: { projectId
   )
 }
 
-// 项目里一个插件的账号：按清单声明的种类分组，每组列出账号，可添加、修改、删除。不支持多账号的种类有一个后不能再加。
+// A plugin's accounts in a project: grouped by the kinds the manifest declares, each group listing its accounts, which can be added,
+// edited and deleted. A kind that doesn't support multiple accounts can't take another once it has one.
 export function AccountsManager({ projectId, pluginId, kinds }: { projectId: string; pluginId: string; kinds: Kind[] }) {
   const accounts = usePluginAccounts(projectId, pluginId, kinds.length > 0)
   const remove = useDeletePluginAccount(projectId, pluginId)

@@ -6,7 +6,8 @@ const text = t.plugins.providers
 type Detail = Schemas['PluginDetail']
 type Provider = Schemas['PluginModelProvider']
 
-// 没进模型目录的原因：只有带 OAuth、与内置和 models.json 都不同 id、注册无误的才会进。
+// Why it isn't in the model catalog: only providers that have OAuth, have an id different from both the built-in ones and models.json,
+// and registered without errors get in.
 function outside(provider: Provider): string | null {
   if (provider.inCatalog) return null
   if (provider.error !== null) return text.error(provider.error)
@@ -15,7 +16,8 @@ function outside(provider: Provider): string | null {
   return text.notInCatalog
 }
 
-// 当前版本的 Pi 扩展注册的模型提供方，安装或更新时读出，只读。名称与错误是扩展原文，按纯文本显示。
+// The model providers registered by the current version's Pi extensions, read when installing or updating; read-only. Names and errors
+// are the extension's own text, shown as plain text.
 export function PluginProviders({ detail }: { detail: Detail }) {
   const { providers, providerErrors, providersError, providerState } = detail
   return (

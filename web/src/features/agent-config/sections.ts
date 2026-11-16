@@ -1,4 +1,4 @@
-// 配置页的区块，顺序即分区目录的顺序。区块与目录按这里的编号找到彼此。
+// The config page's sections; this order is the order of the section contents. Sections and contents find each other by the numbers here.
 export const SECTION_KEYS = ['basic', 'prompt', 'local-dirs', 'model-credential', 'skills', 'clis', 'plugins', 'danger'] as const
 export type SectionKey = (typeof SECTION_KEYS)[number]
 

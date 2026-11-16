@@ -27,8 +27,10 @@ import { ProjectCredentialsAvailable, useProjectCredentialsAvailable } from './p
 import { providerEntries, providerName } from './provider-catalog'
 import { AuthBadges, ProviderPicker } from './ProviderPicker'
 
-// 单次能力读取统一模型/CLI错误；已有表单在暂时不可用时保留，不转为其他凭证身份。
-// embedded：项目设置里排在“项目账号”这个编号分区里——不可用时的说明直接放进分区，模型账号与 CLI 账号是分区里的两块。
+// A single capability read covers the errors for both model and CLI; existing forms are kept while temporarily unavailable and are never
+// switched to a different credential identity.
+// embedded: in project settings it sits inside the numbered section “项目账号” (Project accounts): the unavailable notice goes straight
+// into the section, and model accounts and CLI accounts are two blocks within the section.
 export function ProjectCredentialSettings({ projectId, embedded = false }: { projectId: string; embedded?: boolean }) {
   const accounts = useProjectAccounts(projectId)
   const available = !!accounts.data && !accounts.error
@@ -69,20 +71,23 @@ function Accounts({ projectId, purpose, cli, initialSlot = cli ?? '' }: Accounts
   const entry = entries.find(item => item.options.some(option => option.id === slot))
   const options = (templates.data?.templates ?? []).map(item => ({ value: item.name, label: item.name }))
   const live = accounts.data?.accounts.filter(account => account.purpose === purpose && (!cli || account.cli === cli)) ?? []
-  // 远端删除不能把仍在编辑的秘密表单直接卸载；保留编辑拥有者，提交/GET再读安全tombstone。
+  // A remote delete must not unmount a secret form that is still being edited; keep the editing owner, and let the submit / a GET re-read
+  // the safe tombstone.
   const list = [...live, ...Object.values(retained).filter(account => !live.some(item => item.id === account.id))]
   const saveNew = async (input: CredentialInput) => {
     await createProjectAccount(projectId, purpose === 'model' ? { purpose, provider: slot, name: input.name.trim(), credential: { type: 'api_key', key: input.key } } : { purpose, cli: slot, name: input.name.trim(), credential: { type: 'cli', fields: input.fields } })
     saved.current = true
     await invalidateProjectCredentials(client, projectId)
   }
-  // 换了一家提供方时，只能填密钥的直接打开录入表单；同一家切换地区变体不动已填的内容。
+  // When switching to a different provider, one that only takes a key opens the entry form directly; switching region variants of the same
+  // provider leaves what was already filled in untouched.
   const pick = (next: string) => {
     const methods = providers.data?.providers.find(item => item.id === next)?.authMethods ?? []
     if (!entry?.options.some(option => option.id === next)) setCreating(methods.includes('api_key') && !methods.includes('oauth'))
     setSlot(next)
   }
-  // 模型账号的录入表单关上后回到选提供方：取消时重开面板，保存成功后收起。
+  // After the model account entry form closes, go back to choosing a provider: reopen the panel on cancel, collapse it after a successful
+  // save.
   const closeNew = () => {
     setCreating(false)
     if (purpose === 'model') { setSlot(''); setPicking(!saved.current) }
@@ -101,7 +106,8 @@ function Accounts({ projectId, purpose, cli, initialSlot = cli ?? '' }: Accounts
         : <><Label htmlFor={id}>{t.credentials.accounts.addCliLabel}</Label>
           <select id={id} className={selectClass} disabled={creating || !!cli} value={slot} onChange={e => setSlot(e.target.value)}><option value="">{t.credentials.accounts.choose}</option>{options.filter(option => !cli || option.value === cli).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></>}
       <ErrorAlert error={purpose === 'model' ? providers.error : templates.error} />
-      {/* 重开面板选别家时，下面的表单先藏起来，已填的内容保留；Esc 收起面板后原样回来。 */}
+      {/* When the panel is reopened to pick another provider, the form below is hidden first with its filled-in content kept; after Esc
+          closes the panel, it comes back as it was. */}
       <div className="contents" hidden={picking}>
       {purpose === 'cli' && template && <CliToolStatus template={template} />}
       {slot && <AccountImpact projectId={projectId} purpose={purpose} slot={slot} />}
@@ -128,7 +134,7 @@ export function AccountImpact({ projectId, purpose, slot, accountId }: { project
   </div>
 }
 
-// provider：模型账号在提供方目录里的这一项（目录没加载或已没有这个提供方时为空）。
+// provider: the model account's entry in the provider catalog (empty when the catalog isn't loaded or no longer has this provider).
 function AccountRow({ account, template, provider, missing, onEditing }: { account: Schemas['ProjectCredentialAccount']; template?: Schemas['CliTemplate']; provider?: Schemas['ModelProvider']; missing: boolean; onEditing: (editing: boolean) => void }) {
   const methods = provider?.authMethods ?? []
   const client = useQueryClient()
@@ -178,8 +184,9 @@ function GitHubIdentity({ account }: { account: Schemas['ProjectCredentialAccoun
   </dl>
 }
 
-// 嵌在编号分区里时（项目设置）：不是卡片，是分区里的一块，标题小一号（h3），两块之间一道虚线；
-// merged：内容直接并进分区（分区标题就是这一块的标题）。
+// When embedded in a numbered section (project settings): not a card but a block within the section, with a title one size smaller (h3)
+// and a dashed line between the two blocks;
+// merged: the content merges straight into the section (the section title is this block's title).
 const AccountsLayout = createContext(false)
 function AccountCard({ title, children, merged = false }: { title: string; children: ReactNode; merged?: boolean }) {
   const id = useId()

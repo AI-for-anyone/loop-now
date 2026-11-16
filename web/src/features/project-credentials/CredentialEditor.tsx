@@ -11,7 +11,7 @@ import { CredentialFields } from './CredentialFields'
 import { useCredentialDraft } from './useCredentialDraft'
 import { fieldMessages, unmatchedFieldError } from '@/lib/errors'
 
-// 本地表单值，不是HTTP载荷；接线时调用方按正式生成的credential oneOf构造请求。
+// Local form values, not the HTTP payload; when wiring it up, the caller builds the request from the officially generated credential oneOf.
 export type CredentialInput = { name: string; key: string; fields: Record<string, string> }
 export function CredentialEditor({ id, name = '', mode, template, revision, summary, readLatest, onSave, onClose }: {
   id: string

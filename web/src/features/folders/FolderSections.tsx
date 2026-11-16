@@ -9,8 +9,10 @@ import { overviewPath } from '@/lib/scope'
 import { t } from '@/i18n'
 import { FileManager } from './FileManager'
 
-// Agent 的“文件夹”页签：它唯一的文件夹，既是工作目录，也是它自己的上下文。直接排在页签的纸上（右侧票根里是概况），
-// 说明放在底部。窄屏时给定高度、随整页滚动；宽屏时占满页签剩下的高度（与对话页签相同）。
+// The Agent's “文件夹” (Folder) tab: its one and only folder, both its working directory and its own context. Laid directly on the tab's
+// sheet (with the overview in the stub on the right),
+// with the note at the bottom. On narrow screens it gets a fixed height and scrolls with the whole page; on wide screens it fills the
+// tab's remaining height (same as the Chat tab).
 export function AgentFolderTab() {
   const { agent } = useAgentContext()
   const context = useContextInfo()
@@ -28,9 +30,11 @@ export function AgentFolderTab() {
   )
 }
 
-// 项目设置与全局设置里的共享文件夹：占满主栏宽度，高度随视口；没有“从 Git 拉取”。
-// 项目设置里“项目文件夹”、全局设置里“全局文件夹”一区的内容：一句说明加一个文件管理器
-// （改版：纸上分区里 2px 藏青描边的一块，与文件夹页同样的工具条与列表，没有票根）。
+// The shared folder in project settings and global settings: fills the main column's width, height follows the viewport; no
+// “从 Git 拉取” (Pull from Git).
+// The content of the “项目文件夹” (Project folder) section in project settings and the “全局文件夹” (Global folder) section in global
+// settings: one sentence of explanation plus a file manager
+// (redesign: a block with a 2px navy outline inside a section of the sheet, with the same toolbar and list as the folder page, and no stub).
 export function ContextFolderBody({ scope }: { scope: { kind: 'project'; projectId: string } | { kind: 'global' } }) {
   const context = useContextInfo()
   const source = useMemo(() => folderSource(scope), [scope.kind === 'project' ? scope.projectId : 'global']) // eslint-disable-line react-hooks/exhaustive-deps
@@ -50,8 +54,9 @@ export function ContextFolderBody({ scope }: { scope: { kind: 'project'; project
   )
 }
 
-// 左侧栏“项目文件夹”打开的页面：项目里的 Agent 共用的文件夹。页头是共用的页面标题（面包屑、标题与说明），
-// 文件夹在一张纸上，与 Agent 的文件夹页签同一种版式（右侧票根里是概况）。
+// The page opened by “项目文件夹” (Project folder) in the sidebar: the folder shared by the Agents in the project. The header is the
+// shared page title (breadcrumbs, title and description);
+// the folder sits on a sheet, in the same layout as the Agent's Folder tab (with the overview in the stub on the right).
 export function ProjectFolderPage() {
   const scope = useScope()
   const context = useContextInfo()

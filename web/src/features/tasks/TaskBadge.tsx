@@ -2,8 +2,10 @@ import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 
-// 任务与节点的状态（改版通用规则第 6 条）：阻塞是略微倾斜的红色描边印章；执行中与已提交是荧光粉胶囊，已完成浅绿胶囊，
-// 等待回复浅黄胶囊，准备中、排队与已取消是浅蓝胶囊。任务列表、任务详情的页头、节点头和流程尺都用它。
+// Task and node statuses (general rule 6 of the redesign): blocked is a slightly tilted red-outlined stamp; running and submitted are
+// fluorescent-pink pills, completed a light-green pill,
+// waiting for reply a light-yellow pill, and preparing, queued and cancelled light-blue pills. Used by the task list, the task detail
+// header, the node header and the workflow ruler.
 export function TaskBadge({ status, className }: { status: Schemas['TaskStatus'] | Schemas['TaskNodeStatus']; className?: string }) {
   const labels: Record<string, string> = { ...t.tasks.statuses, ...t.tasks.nodeStatuses }
   const label = labels[status]

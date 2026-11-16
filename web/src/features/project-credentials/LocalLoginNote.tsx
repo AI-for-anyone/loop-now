@@ -3,8 +3,9 @@ import type { Schemas } from '@/api/client'
 import { localModeSettingsPath } from '@/features/local-mode/LocalModeCard'
 import { t } from '@/i18n'
 
-// 开着"用本机的登录状态"时，插件提供方用的是本机该扩展自己的登录：有就说明不是这里的账号（项目 Agent 是所选的项目账号，
-// 平台 Agent 是它自己的登录）；没有就醒目提示启动会失败，并给本机模式设置的入口。
+// With "用本机的登录状态" (Use local logins) on, a plugin provider uses that extension's own login on this machine: if there is one, explain
+// that it isn't the account here (for a project Agent, the chosen project account;
+// for a platform Agent, its own login); if there isn't, warn prominently that starting will fail, and link to the local mode settings.
 export function LocalLoginNote({ state, owner = 'project' }: { state: NonNullable<Schemas['ModelAuthState']['localLogin']>; owner?: 'project' | 'agent' }) {
   const copy = t.credentials.agentSelection.localLogin
   if (state === 'active') return <p role="note" className="min-w-0 rounded-input bg-tint-blue px-3 py-2 text-[13.5px] [overflow-wrap:anywhere]">{owner === 'agent' ? copy.activeOwn : copy.active}</p>

@@ -12,7 +12,7 @@ export function CliToolStatus({ template }: { template: Schemas['CliTemplate'] }
   </div>
 }
 
-// 服务端标记的风险提示：浅黄底加藏青顶条。
+// Risk warnings flagged by the server: light-yellow background with a navy top bar.
 export function WarningList({ warnings }: { warnings: Schemas['Warning'][] }) {
   if (warnings.length === 0) return null
   return (
@@ -28,7 +28,8 @@ export function WarningList({ warnings }: { warnings: Schemas['Warning'][] }) {
   )
 }
 
-// 凭证只显示状态与元数据，不显示明文。各项作为同一行的弹性条目输出，由外层决定排列；凭证的风险提示占满一行。
+// A credential shows only its status and metadata, never the plaintext. Each item is rendered as a flex item on the same row, and
+// the outer container decides the layout; the credential's risk warnings take up a full row.
 export function CredentialStatus({ credential }: { credential: Schemas['CredentialMeta'] | null }) {
   if (!credential) {
     return (

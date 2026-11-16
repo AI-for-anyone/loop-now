@@ -18,9 +18,9 @@ function Field({ label, hint, children, id }: { label: string; hint?: string; ch
   )
 }
 
-// 仓库地址的末段作为默认的目标文件夹：https://github.com/acme/budget-ledger.git → budget-ledger。
+// The last segment of the repository URL is the default target folder: https://github.com/acme/budget-ledger.git → budget-ledger.
 const repoName = (url: string) => url.trim().replace(/\.git$/, '').replace(/\/+$/, '').split(/[/:]/).at(-1) ?? ''
-// https 地址里带用户名或密码（user:token@host）时拒绝；ssh 形式的 git@host:path 不在此列。
+// Reject an https URL that contains a username or password (user:token@host); the ssh form git@host:path is not affected.
 const hasCredentials = (url: string) => /^[a-z][a-z0-9+.-]*:\/\/[^/@]+@/i.test(url.trim())
 
 export function GitPullDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (input: GitPullInput) => Promise<void> }) {

@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label'
 import { selectClass } from '@/lib/field'
 import { Textarea } from '@/components/ui/textarea'
 
-// 沿用当前正式模板定义；这里仅渲染输入，不能接收已保存秘密或执行请求。
+// Follows the current official template definition; this only renders the inputs and can neither receive saved secrets nor make requests.
 export function CredentialFields({ fields, values, errors = {}, disabled, onChange }: {
   fields: Schemas['CliTemplate']['fields']
   values: Record<string, string>
