@@ -82,8 +82,8 @@ async function runPi(o: PiRun): Promise<{ messages: NonNullable<Rec['data']>['me
   }
 }
 
-describe('官方插件的 Agent 侧', { skip: noPi }, () => {
-  it('hello：注册 hello 工具，按插件配置问候', { timeout: 60_000 }, async () => {
+describe('The Agent side of the official plugins', { skip: noPi }, () => {
+  it('hello: registers the hello tool and greets as the plugin config says', { timeout: 60_000 }, async () => {
     const { messages } = await runPi({
       extensions: [path.join(official, 'hello/agent/index.ts')],
       calls: [{ name: 'hello', arguments: { name: 'Loop' } }],
@@ -94,7 +94,7 @@ describe('官方插件的 Agent 侧', { skip: noPi }, () => {
     assert.equal(result.content[0]!.text, 'Hi, Loop!')
   })
 
-  it('playwright：扩展补上浏览器规则；MCP 启动器在没有准备浏览器时说明怎么准备', { timeout: 60_000 }, async () => {
+  it('playwright: the extension adds the browser rules; without a prepared browser the MCP launcher explains how to prepare one', { timeout: 60_000 }, async () => {
     const { seen } = await runPi({ extensions: [path.join(official, 'playwright/agent/index.ts')], calls: [] })
     assert.match(seen, /The dedicated browser \(tools starting with mcp__playwright_browser__\)/)
     assert.match(seen, /require the user's explicit consent first/)
@@ -113,10 +113,10 @@ describe('官方插件的 Agent 侧', { skip: noPi }, () => {
 
   const data = process.env.LOOP_NOW_TEST_PLAYWRIGHT_DATA
   const prepared = data && existsSync(path.join(data, 'browser/browser.json')) && existsSync(path.join(official, 'playwright/node_modules/@playwright/mcp'))
-  it('playwright：Agent 经 MCP 用准备好的 Chromium 打开网页（无头）', { timeout: 120_000, skip: !prepared && 'no prepared browser (set LOOP_NOW_TEST_PLAYWRIGHT_DATA and run npm ci in the plugin folder)' }, async () => {
+  it('playwright: the Agent opens a page through MCP with the prepared Chromium (headless)', { timeout: 120_000, skip: !prepared && 'no prepared browser (set LOOP_NOW_TEST_PLAYWRIGHT_DATA and run npm ci in the plugin folder)' }, async () => {
     const server = createServer((_req, res) => {
       res.setHeader('content-type', 'text/html; charset=utf-8')
-      res.end('<!doctype html><title>Loop Now 测试页</title><h1>你好，浏览器</h1>')
+      res.end('<!doctype html><title>Loop Now test page</title><h1>Hello, browser</h1>')
     })
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
     const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`
@@ -141,15 +141,15 @@ describe('官方插件的 Agent 侧', { skip: noPi }, () => {
       assert.equal(results.length, 2, JSON.stringify(messages).slice(0, 2000))
       for (const r of results) assert.equal(r.isError ?? false, false, JSON.stringify(r).slice(0, 2000))
       const text = (i: number) => results[i]!.content.map((c) => c.text ?? '').join('\n')
-      assert.match(text(0), /Page Title: Loop Now 测试页/)
-      assert.match(text(1), /你好，浏览器/)
+      assert.match(text(0), /Page Title: Loop Now test page/)
+      assert.match(text(1), /Hello, browser/)
       assert.ok(existsSync(path.join(data!, 'profiles', agent)), 'a separate profile folder per Agent')
     } finally {
       server.close()
     }
   })
 
-  it('playwright：同一 Agent 的配置目录正被占用时改用临时配置', { timeout: 30_000, skip: !prepared && 'no prepared browser' }, async () => {
+  it("playwright: uses a temporary profile while the same Agent's profile directory is in use", { timeout: 30_000, skip: !prepared && 'no prepared browser' }, async () => {
     const agent = '6f1c8e5e-0000-4000-8000-00000000beef'
     const profile = path.join(data!, 'profiles', agent)
     mkdirSync(profile, { recursive: true })

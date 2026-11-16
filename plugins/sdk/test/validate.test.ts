@@ -27,7 +27,7 @@ function plugin(name: string, pkg: unknown, files: Record<string, string> = {}):
 
 describe('validatePlugin', () => {
   for (const id of ['webhook', 'hello', 'playwright']) {
-    it(`官方插件 ${id} 没有错误也没有提醒`, () => {
+    it(`official plugin ${id} has no errors and no warnings`, () => {
       const r = validatePlugin(path.join(official, id))
       assert.deepEqual(r.findings, [])
       assert.equal(r.ok, true)
@@ -35,7 +35,7 @@ describe('validatePlugin', () => {
     })
   }
 
-  it('报出清单里的每个错误', () => {
+  it('Reports every error in the manifest', () => {
     const dir = plugin(
       'bad',
       {
@@ -79,11 +79,11 @@ describe('validatePlugin', () => {
     ])
   })
 
-  it('mcpServers 接受 stdio 与 streamable HTTP 条目（与 Pi 选传输的方式相同），其余报错', () => {
+  it('mcpServers accepts stdio and streamable HTTP entries (chosen the way Pi chooses the transport) and reports anything else', () => {
     const good = {
       stdio: { command: 'node', args: ['./mcp/server.js'] },
       typed_stdio: { type: 'stdio', command: 'node' },
-      http: { url: 'http://127.0.0.1:3845/mcp', description: '本机服务' },
+      http: { url: 'http://127.0.0.1:3845/mcp', description: 'Local service' },
       https: { type: 'streamable-http', url: 'https://mcp.example.com/mcp', oauth: { clientName: 'Loop Now' } },
       typed_http: { type: 'http', url: 'https://mcp.example.com/mcp' },
       both: { url: 'https://mcp.example.com/mcp', command: 'node' },
@@ -118,16 +118,16 @@ describe('validatePlugin', () => {
     assert.match(r.findings[2]!.message, /^"file_url" must be a stdio entry with a command or a streamable HTTP entry with an http or https url/)
   })
 
-  it('不是插件的目录与坏 JSON', () => {
+  it('A folder that is not a plugin, and bad JSON', () => {
     assert.match(validatePlugin(plugin('plain', { name: 'x', version: '1.0.0' })).findings[0]!.message, /so it is not a plugin/)
     assert.match(validatePlugin(plugin('broken', '{')).findings[0]!.message, /is not valid JSON/)
     assert.match(validatePlugin(path.join(tmp, 'absent')).findings[0]!.message, /is not a directory/)
     assert.match(validatePlugin(plugin('empty', { name: 'x', version: '1.0.0', loopNow: { id: 'x' } })).findings[0]!.message, /neither an Agent side/)
   })
 
-  it('description 与 loopNow.displayName 可以是字符串或按语言的对象；对象须至少一项、键为语言标签、值非空', () => {
-    const name = { 'zh-CN': '示例', 'en-US': 'Example' }
-    const description = { 'zh-CN': '一个示例插件', en: 'An example plugin', 'zh-Hant-TW': '一個範例外掛' }
+  it('description and loopNow.displayName may be a string or a per-language object; the object needs at least one entry, language tags as keys and non-empty values', () => {
+    const name = { 'zh-CN': '示例', 'en-US': 'Example' }  // check-english: zh (LocalizedText: the Chinese entries are part of the data under test)
+    const description = { 'zh-CN': '一个示例插件', en: 'An example plugin', 'zh-Hant-TW': '一個範例外掛' }  // check-english: zh (LocalizedText: the Chinese entries are part of the data under test)
     const ok = validatePlugin(plugin('i18n-ok', { name: 'i18n-ok', version: '1.0.0', description, keywords: ['loop-now-plugin'], loopNow: { id: 'i18n-ok', displayName: name, mcpServers: { s: { command: 'node' } } } }, { 'README.md': '' }))
     assert.deepEqual(ok.findings, [])
     assert.deepEqual(ok.manifest!.displayName, name)
@@ -135,12 +135,12 @@ describe('validatePlugin', () => {
 
     const bad: [string, unknown][] = [
       ['empty', {}],
-      ['bad_key', { zh_CN: '示例' }],
+      ['bad_key', { zh_CN: 'Example' }],
       ['long_key', { 'en-US-abcdefghi': 'x' }],
       ['blank_value', { 'zh-CN': '  ' }],
       ['number_value', { 'zh-CN': 1 }],
       ['number', 42],
-      ['array', ['示例']],
+      ['array', ['Example']],
       ['null', null],
       ['boolean', true],
     ]
@@ -164,7 +164,7 @@ describe('validatePlugin', () => {
     assert.deepEqual(plain.findings.map((f) => f.path), ['description', 'loopNow.displayName'])
   })
 
-  it('只有 pi 段的 Pi 包按 npm 名得到 id；提醒依赖放法', () => {
+  it('A Pi package with only a pi section gets its id from the npm name; warns about where dependencies go', () => {
     const dir = plugin(
       'pi-only',
       {
@@ -186,7 +186,7 @@ describe('validatePlugin', () => {
     )
   })
 
-  it('x-secret 在配置与账号字段的顶层生效，x-scope 只在配置的顶层生效；其余位置给提醒', () => {
+  it('x-secret works at the top level of config and account fields, x-scope only at the top level of config; elsewhere they get a warning', () => {
     const secret = { type: 'string', 'x-secret': true }
     const r = validatePlugin(plugin('secret-places', {
       name: 'secret-places', version: '1.0.0', description: 'x', keywords: ['loop-now-plugin'],
@@ -210,19 +210,19 @@ describe('validatePlugin', () => {
     ])
   })
 
-  it('代管外部身份的渠道须有 identities.manage', () => {
+  it('A channel that manages external identities needs identities.manage', () => {
     const pkg = (permissions: string[]) => ({
       name: 'x', version: '1.0.0', description: 'x', keywords: ['loop-now-plugin'],
-      loopNow: { id: 'x', displayName: 'X', platform: './p.ts', permissions, channels: [{ id: 'mail', label: '邮件', manageIdentities: true }, { id: 'chat', label: '聊天', manageIdentities: 'yes' }] },
+      loopNow: { id: 'x', displayName: 'X', platform: './p.ts', permissions, channels: [{ id: 'mail', label: 'Mail', manageIdentities: true }, { id: 'chat', label: 'Chat', manageIdentities: 'yes' }] },
     })
     const bad = validatePlugin(plugin('identity-bad', pkg([]), { 'p.ts': '', 'README.md': '' }))
     assert.deepEqual(bad.findings.map((f) => f.path), ['loopNow.channels[0].manageIdentities', 'loopNow.channels[1].manageIdentities'])
-    const good = validatePlugin(plugin('identity-good', { ...pkg(['identities.manage']), loopNow: { ...pkg(['identities.manage']).loopNow, channels: [{ id: 'mail', label: '邮件', manageIdentities: true }] } }, { 'p.ts': '', 'README.md': '' }))
+    const good = validatePlugin(plugin('identity-good', { ...pkg(['identities.manage']), loopNow: { ...pkg(['identities.manage']).loopNow, channels: [{ id: 'mail', label: 'Mail', manageIdentities: true }] } }, { 'p.ts': '', 'README.md': '' }))
     assert.deepEqual(good.findings, [])
     assert.deepEqual(good.manifest!.identityChannels, ['mail'])
   })
 
-  it('平台版本比较', () => {
+  it('Comparing platform versions', () => {
     assert.equal(versionAtLeast('2026.11', '2026.11'), true)
     assert.equal(versionAtLeast('2026.12.1', '2026.11'), true)
     assert.equal(versionAtLeast('2026.10', '2026.11'), false)
