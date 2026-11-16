@@ -9,7 +9,7 @@ import (
 )
 
 // Text is text that can be given per language (plugins/SPEC.md §2): a string, or an object with language tags as
-// keys and non-empty strings as values, for example {"zh-CN": "飞书", "en-US": "Lark"}. It is stored and returned
+// keys and non-empty strings as values, for example {"en-US": "Lark", "zh-CN": "飞书"}. It is stored and returned
 // as-is (an object keeps the key order the author wrote), and the console picks the text for the current language;
 // the server uses String when it needs a single string. When omitted it is the empty string.
 type Text struct{ raw json.RawMessage }
@@ -90,17 +90,30 @@ func (t Text) Check(field string) error {
 	return nil
 }
 
-// String returns the text the server uses when it needs a single string: a string as-is; for an object, zh-CN,
-// then en-US, then the first entry the author wrote.
-func (t Text) String() string {
+// Valid reports whether the text has an accepted shape (see Check).
+func (t Text) Valid() bool {
+	_, _, _, err := t.parse()
+	return err == nil
+}
+
+// In returns the text for language lang, picked the way the console does: a string as-is (it counts as English and
+// is shown in every language); for an object, lang, then zh-CN, then en-US, then the first entry the author wrote.
+func (t Text) In(lang string) string {
 	plain, keys, values, err := t.parse()
 	if err != nil || len(keys) == 0 {
 		return plain
 	}
-	for _, k := range []string{"zh-CN", "en-US"} {
+	for _, k := range []string{lang, "zh-CN", "en-US"} {
 		if v, ok := values[k]; ok {
 			return v
 		}
 	}
 	return values[keys[0]]
 }
+
+// English returns the text for en-US; the server uses it where a label or title goes into a log or a message.
+func (t Text) English() string { return t.In("en-US") }
+
+// String returns the text the server uses when it needs a single string and has no language: a string as-is; for an
+// object, zh-CN, then en-US, then the first entry the author wrote.
+func (t Text) String() string { return t.In("") }

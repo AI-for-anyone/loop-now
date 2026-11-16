@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { selectClass } from '@/lib/field'
 import { Textarea } from '@/components/ui/textarea'
+import { localizedText } from '@/lib/localized-text'
 
 // Follows the current official template definition; this only renders the inputs and can neither receive saved secrets nor make requests.
 export function CredentialFields({ fields, values, errors = {}, disabled, onChange }: {
@@ -18,7 +19,7 @@ export function CredentialFields({ fields, values, errors = {}, disabled, onChan
   return <>{fields.map(field => {
     const id = `${prefix}-${field.name}`
     return <div key={field.name} className="grid min-w-0 gap-1.5">
-      <Label htmlFor={id}>{field.label}{field.required ? ' *' : ''}</Label>
+      <Label htmlFor={id}>{localizedText(field.label)}{field.required ? ' *' : ''}</Label>
       {field.type === 'enum'
         ? <select id={id} className={selectClass} value={values[field.name] ?? ''} disabled={disabled} aria-invalid={!!errors[field.name]} onChange={e => onChange(field.name, e.target.value)}>
           {(field.options ?? []).map(option => <option key={option} value={option}>{option}</option>)}

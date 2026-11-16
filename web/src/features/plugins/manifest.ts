@@ -1,5 +1,6 @@
 import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
+import { localizedText } from '@/lib/localized-text'
 
 type Manifest = Schemas['PluginManifest']
 
@@ -19,9 +20,9 @@ export function componentChips(manifest: Manifest): string[] {
     c.mcpServers.length ? chips.mcp(c.mcpServers.length) : null,
     c.skills.length ? chips.skills(c.skills.length) : null,
     c.bin.length ? chips.bin(c.bin.length) : null,
-    ...c.channels.map((channel) => chips.channel(channel.label)),
+    ...c.channels.map((channel) => chips.channel(localizedText(channel.label))),
     c.channels.some((channel) => channel.manageIdentities) ? chips.manageIdentities : null,
-    ...manifest.accounts.map((account) => chips.account(account.label)),
+    ...manifest.accounts.map((account) => chips.account(localizedText(account.label))),
     c.http ? chips.http : null,
     c.schedules.length ? chips.schedule : null,
     manifest.events.length ? chips.events(manifest.events.length) : null,

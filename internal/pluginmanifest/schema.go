@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -26,11 +28,105 @@ func CompileSchema(schema map[string]any, required bool) (*jsonschema.Schema, er
 	if err != nil {
 		return nil, err
 	}
+	// doc is a fresh copy, so the annotations can be replaced in place.
+	walkSchema(doc, "", func(node map[string]any, _ string) error {
+		for _, k := range localizedKeywords {
+			if obj, ok := node[k].(map[string]any); ok {
+				if text, ok := textOf(obj); ok {
+					node[k] = text.English()
+				}
+			}
+		}
+		return nil
+	})
 	c := jsonschema.NewCompiler()
 	if err := c.AddResource("plugin.json", doc); err != nil {
 		return nil, err
 	}
 	return c.Compile("plugin.json")
+}
+
+// localizedKeywords are the annotations that may be localized text (plugins/SPEC.md §2). The JSON Schema metaschema
+// wants strings there, so CompileSchema compiles a copy with their English text; the schema itself is stored and
+// returned as written.
+var localizedKeywords = []string{"title", "description"}
+
+// Keywords whose values hold sub-schemas, by shape: a schema (or, for items in older drafts, a list of schemas), a list
+// of schemas, or an object of schemas.
+var (
+	schemaKeywords    = []string{"additionalProperties", "items", "additionalItems", "contains", "not", "if", "then", "else", "propertyNames", "unevaluatedItems", "unevaluatedProperties", "contentSchema"}
+	schemaListKeyword = []string{"allOf", "anyOf", "oneOf", "prefixItems"}
+	schemaMapKeywords = []string{"properties", "patternProperties", "$defs", "definitions", "dependentSchemas", "dependencies"}
+)
+
+// walkSchema calls visit for v and every sub-schema in it that is an object, with its path such as
+// ".properties.url" (empty for v itself). Values of other keywords (const, enum, default, examples) are data and are
+// not visited. It stops at the first error.
+func walkSchema(v any, path string, visit func(node map[string]any, path string) error) error {
+	node, ok := v.(map[string]any)
+	if !ok {
+		return nil
+	}
+	if err := visit(node, path); err != nil {
+		return err
+	}
+	for _, k := range schemaKeywords {
+		switch sub := node[k].(type) {
+		case map[string]any:
+			if err := walkSchema(sub, path+"."+k, visit); err != nil {
+				return err
+			}
+		case []any:
+			for i, s := range sub {
+				if err := walkSchema(s, fmt.Sprintf("%s.%s[%d]", path, k, i), visit); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	for _, k := range schemaListKeyword {
+		list, _ := node[k].([]any)
+		for i, s := range list {
+			if err := walkSchema(s, fmt.Sprintf("%s.%s[%d]", path, k, i), visit); err != nil {
+				return err
+			}
+		}
+	}
+	for _, k := range schemaMapKeywords {
+		m, _ := node[k].(map[string]any)
+		for _, name := range slices.Sorted(maps.Keys(m)) {
+			if err := walkSchema(m[name], path+"."+k+"."+name, visit); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// textOf reads an object-valued annotation as Text and reports whether it has an accepted shape.
+func textOf(obj map[string]any) (Text, bool) {
+	b, err := json.Marshal(obj)
+	if err != nil {
+		return Text{}, false
+	}
+	t := Text{raw: b}
+	return t, t.Valid()
+}
+
+// CheckSchemaText checks that every object-valued title and description in schema is valid localized text; field is
+// where the schema sits in the manifest, such as loopNow.configSchema. Other non-string values are left to the
+// metaschema, which rejects them when the schema is compiled.
+func CheckSchemaText(field string, schema map[string]any) error {
+	return walkSchema(schema, "", func(node map[string]any, path string) error {
+		for _, k := range localizedKeywords {
+			if obj, ok := node[k].(map[string]any); ok {
+				if _, ok := textOf(obj); !ok {
+					return invalid(field + path + "." + k + " " + errText.Error())
+				}
+			}
+		}
+		return nil
+	})
 }
 
 // toSchemaValue converts a Go value into the form the validation library expects (numbers as json.Number).

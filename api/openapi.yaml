@@ -10482,7 +10482,7 @@ components:
       additionalProperties: false
       properties:
         name: { type: string }
-        label: { type: string }
+        label: { $ref: "#/components/schemas/LocalizedText" }
         type:
           type: string
           enum: [string, secret, enum]
@@ -19529,8 +19529,8 @@ components:
       additionalProperties: false
       properties:
         kind: { type: string }
-        label: { type: string }
-        fields: { description: "JSON Schema of the account fields; secret fields carry `x-secret: true`", type: object }
+        label: { $ref: "#/components/schemas/LocalizedText" }
+        fields: { description: "JSON Schema of the account fields; secret fields carry `x-secret: true`; `title` and `description` may be LocalizedText as in configSchema", type: object }
         multiple: { type: boolean }
 
     PluginAction:
@@ -19539,8 +19539,8 @@ components:
       additionalProperties: false
       properties:
         id: { type: string }
-        label: { type: string }
-        fields: { description: "JSON Schema of the action form (an object); an empty object when there is no input", type: object }
+        label: { $ref: "#/components/schemas/LocalizedText" }
+        fields: { description: "JSON Schema of the action form (an object); an empty object when there is no input; `title` and `description` may be LocalizedText as in configSchema", type: object }
         where:
           type: array
           items: { type: string, enum: [agent, task, project, identity, global] }
@@ -19565,7 +19565,7 @@ components:
             additionalProperties: false
             properties:
               id: { type: string }
-              label: { type: string }
+              label: { $ref: "#/components/schemas/LocalizedText" }
               manageIdentities: { description: "This channel can manage external identities (plugins/SPEC.md §12); requires the identities.manage scope", type: boolean }
         http: { type: boolean }
         schedules:
@@ -19580,11 +19580,13 @@ components:
 
     LocalizedText:
       description: >-
-        Text in plugin manifests and market entries that can be given per language (displayName, description): a string,
-        or an object keyed by language tag (such as `zh-CN`, `en-US`) whose values are strings that are non-empty after
-        trimming, with at least one entry. The server returns it as is (objects keep the author's key order) and does
-        not translate it; the console picks the current language → zh-CN → en-US → the first entry. An empty string when
-        absent.
+        Text that can be given per language: plugin manifests and market entries (displayName, description, the labels
+        of channels, actions and account kinds, and title, description and oneOf entry titles inside their JSON Schemas)
+        and CLI template field labels. A string, which counts as English and is shown in every language; or an object
+        keyed by language tag (such as `en-US`, `zh-CN`) whose values are strings that are non-empty after trimming, with
+        at least one entry; official templates and plugins give en-US first and zh-CN. The server returns it as is
+        (objects keep the author's key order) and does not translate it; the console picks the current language → zh-CN
+        → en-US → the first entry. An empty string when absent.
       oneOf:
         - type: string
         - type: object
@@ -19607,7 +19609,7 @@ components:
         events: { description: "Subscribed events", type: array, items: { type: string } }
         permissions: { type: array, items: { $ref: "#/components/schemas/PluginPermission" } }
         failClosed: { description: "Block rather than allow when an intercepting Hook times out or errors", type: boolean }
-        configSchema: { description: "JSON Schema of the config form; an empty object when there is no config", type: object }
+        configSchema: { description: "JSON Schema of the config form; an empty object when there is no config. `title` and `description` at any level, including the oneOf entries that name enum options, may be LocalizedText; they are returned as written", type: object }
         accounts: { type: array, items: { $ref: "#/components/schemas/PluginAccountKind" } }
         components: { $ref: "#/components/schemas/PluginComponents" }
 

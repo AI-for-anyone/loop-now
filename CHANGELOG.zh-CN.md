@@ -43,6 +43,15 @@ English: [CHANGELOG.md](CHANGELOG.md)
 - 插件宿主与 SDK 的错误、校验结果和日志改成英文；`api/plugin-host-protocol.md` 改成英文。
 - 给 Agent 的提示：开着“用本机的登录状态”时，对平台 Agent 不再说成“项目里配置的订阅账号”。
 
+### 标签跟随界面语言
+
+- CLI 凭证模板（gh、gcloud、mysql、psql、lark-cli）的字段标签和官方插件（hello、webhook、playwright）表单里的文字现在有英文和中文两套：英文界面显示英文，中文界面显示中文。以前只有中文。
+- 插件清单里，渠道、操作按钮、账号种类的 label，以及 `configSchema`、账号字段、操作字段里任何层级的 `title` 和 `description`（包括 `oneOf` 选项的标题），都可以写成 `LocalizedText`（一个字符串，或以 `en-US`、`zh-CN` 为键的对象）。只写一个字符串时按英文看待，各种语言都显示它，所以已有的清单照常可用。
+- 接口：`CliTemplateField.label`、`PluginAccountKind.label`、`PluginAction.label`、`PluginComponents.channels[].label` 改为 `LocalizedText`。
+- 已经安装的官方插件仍显示安装时存下来的标签，重新安装或更新后才换成新的。
+- 账号种类写 `"label": null` 现在会被拒绝，与 `displayName` 为 null 时一致。
+- 降级：存过带两种语言标签的清单或模板之后，旧版本读不了它。
+
 ### 文档
 
 - 更新日志改为英文为主，中文版放在 `CHANGELOG.zh-CN.md`；GitHub 的发布说明先是英文一节，后面接中文一节。`AGENTS.md` 是英文，旁边有 `AGENTS.zh-CN.md`；`MAIN.md` 只有英文。
