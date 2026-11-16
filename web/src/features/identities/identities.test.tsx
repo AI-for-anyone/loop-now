@@ -83,118 +83,121 @@ async function renderIdentities(backend: Backend, path = '/identities') {
   server.use(...handlers, ...baseHandlers([]))
   const user = userEvent.setup()
   const result = renderRoutes(routes, path)
-  await screen.findByRole('heading', { name: /^外部身份/, level: 1 })
+  await screen.findByRole('heading', { name: /^External identities/, level: 1 })
   return { ...result, user, writes }
 }
 
-const list = () => within(screen.getByRole('complementary', { name: '外部身份列表' }))
+const list = () => within(screen.getByRole('complementary', { name: 'External identities' }))
 const tokenTable = async () => within(await screen.findByRole('table'))
 
-describe('创建外部身份', () => {
-  it('还没有外部身份时说明为空；创建 ci-bot 后它出现在列表中并被选中', async () => {
+describe('Create external identity', () => {
+  it('without external identities says the list is empty; after ci-bot is created it appears in the list and is selected', async () => {
     const { user, writes, router } = await renderIdentities({ identities: [], tokens: {} })
-    expect(await screen.findByText('还没有外部身份。')).toBeInTheDocument()
-    await user.click(list().getByRole('button', { name: '新建' }))
-    const dialog = within(await screen.findByRole('dialog', { name: '新建外部身份' }))
-    expect(dialog.getByText(/不能是 console 或 platform/)).toBeInTheDocument()
-    await user.type(dialog.getByRole('textbox', { name: '名称' }), 'ci-bot')
-    await user.click(dialog.getByRole('button', { name: '创建' }))
+    expect(await screen.findByText('No external identities yet.')).toBeInTheDocument()
+    await user.click(list().getByRole('button', { name: 'New' }))
+    const dialog = within(await screen.findByRole('dialog', { name: 'New external identity' }))
+    expect(dialog.getByText(/Can't be console or platform/)).toBeInTheDocument()
+    await user.type(dialog.getByRole('textbox', { name: 'Name' }), 'ci-bot')
+    await user.click(dialog.getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(writes).toEqual([{ method: 'POST', path: '/external-identities', body: { name: 'ci-bot' } }]))
     await waitFor(() => expect(list().getByRole('link', { name: /ci-bot/ })).toHaveAttribute('aria-current', 'page'))
     expect(router.state.location.pathname).toMatch(/^\/identities\/.+/)
     expect(await screen.findByRole('heading', { name: 'ci-bot', level: 2 })).toBeInTheDocument()
   })
 
-  it('名称不满足规则或是保留名称时不提交，并说明原因', async () => {
+  it('does not submit a name that breaks the rules or is reserved, and says why', async () => {
     const { user, writes } = await renderIdentities({ identities: [], tokens: {} })
-    await user.click(list().getByRole('button', { name: '新建' }))
-    const dialog = within(await screen.findByRole('dialog', { name: '新建外部身份' }))
-    const input = dialog.getByRole('textbox', { name: '名称' })
+    await user.click(list().getByRole('button', { name: 'New' }))
+    const dialog = within(await screen.findByRole('dialog', { name: 'New external identity' }))
+    const input = dialog.getByRole('textbox', { name: 'Name' })
     await user.type(input, 'platform')
-    await user.click(dialog.getByRole('button', { name: '创建' }))
-    expect(dialog.getByRole('alert')).toHaveTextContent('名称不能是 platform，这是保留名称')
+    await user.click(dialog.getByRole('button', { name: 'Create' }))
+    expect(dialog.getByRole('alert')).toHaveTextContent('The name can\'t be platform; it\'s reserved')
     await user.clear(input)
     await user.type(input, 'CI Bot')
-    await user.click(dialog.getByRole('button', { name: '创建' }))
-    expect(dialog.getByRole('alert')).toHaveTextContent('名称只能使用小写字母')
+    await user.click(dialog.getByRole('button', { name: 'Create' }))
+    expect(dialog.getByRole('alert')).toHaveTextContent('Use only lowercase letters')
     expect(writes).toEqual([])
   })
 
-  it('名称重复：在名称旁显示原因，填写的内容保持不变', async () => {
+  it('duplicate name: shows the reason next to the name and keeps what was typed', async () => {
     const { user } = await renderIdentities({ identities: [makeIdentity({ name: 'ci-bot' })], tokens: {} })
-    await user.click(await list().findByRole('button', { name: '新建' }))
-    const dialog = within(await screen.findByRole('dialog', { name: '新建外部身份' }))
-    await user.type(dialog.getByRole('textbox', { name: '名称' }), 'ci-bot')
-    await user.click(dialog.getByRole('button', { name: '创建' }))
-    expect(await dialog.findByRole('alert')).toHaveTextContent('名称已被占用')
-    expect(dialog.getByRole('textbox', { name: '名称' })).toHaveValue('ci-bot')
+    await user.click(await list().findByRole('button', { name: 'New' }))
+    const dialog = within(await screen.findByRole('dialog', { name: 'New external identity' }))
+    await user.type(dialog.getByRole('textbox', { name: 'Name' }), 'ci-bot')
+    await user.click(dialog.getByRole('button', { name: 'Create' }))
+    expect(await dialog.findByRole('alert')).toHaveTextContent('That name is already taken')
+    expect(dialog.getByRole('textbox', { name: 'Name' })).toHaveValue('ci-bot')
   })
 })
 
-describe('删除外部身份', () => {
-  it('确认框列出四条后果；删除后它从列表中消失，之前与它的线索仍可查看，对方显示为已删除身份', async () => {
+describe('Delete external identity', () => {
+  it('the confirmation lists four consequences; after deletion it disappears from the list, earlier threads with it can still be viewed and it shows as a deleted identity', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
     const backend: Backend = { identities: [ciBot, makeIdentity({ name: 'deploy-watcher' })], tokens: { [ciBot.id]: [makeToken(), makeToken()] } }
     const { user, writes } = await renderIdentities(backend, `/identities/${ciBot.id}`)
     expect(await list().findByRole('link', { name: /ci-bot/ })).toBeInTheDocument()
-    await user.click(await screen.findByRole('button', { name: '删除外部身份' }))
-    const confirm = within(await screen.findByRole('alertdialog', { name: '删除外部身份「ci-bot」？' }))
+    await user.click(await screen.findByRole('button', { name: 'Delete external identity' }))
+    const confirm = within(await screen.findByRole('alertdialog', { name: 'Delete external identity "ci-bot"?' }))
     expect(confirm.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-      '它的全部令牌会同时吊销；',
-      '它发过、收过的消息保留，显示为已删除身份；',
-      '之后发给它的消息会被拒绝；',
-      '名称不再占用，可以重新创建同名身份。',
+      'all its tokens are revoked at once;',
+      'messages it sent and received are kept and shown as from a deleted identity;',
+      'messages sent to it afterwards are rejected;',
+      'the name is freed, so an identity with the same name can be created again.',
     ])
-    await user.click(confirm.getByRole('button', { name: '删除' }))
+    await user.click(confirm.getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(writes).toEqual([{ method: 'DELETE', path: `/external-identities/${ciBot.id}` }]))
     await waitFor(() => expect(list().queryByRole('link', { name: /ci-bot/ })).toBeNull())
     expect(list().getByRole('link', { name: /deploy-watcher/ })).toBeInTheDocument()
   })
 
-  it('已删除的身份：只显示只读收件箱与删除时间，不请求令牌，也不能签发、吊销或删除', async () => {
+  it('deleted identity: shows only the read-only inbox and the deletion time, requests no tokens, and cannot issue, revoke or delete', async () => {
     const gone = makeIdentity({ name: 'release-bot', deletedAt: '2026-10-11T02:00:00Z' })
-    const inbox = { [gone.id]: [makeInboxMessage({ from: externalParty(gone, true), to: consoleParty, text: 'v0.1.0 已发布', readAt: '2026-10-11T01:00:00Z' })] }
+    const inbox = { [gone.id]: [makeInboxMessage({ from: externalParty(gone, true), to: consoleParty, text: 'v0.1.0 released', readAt: '2026-10-11T01:00:00Z' })] }
     await renderIdentities({ identities: [gone], tokens: {}, inbox }, `/identities/${gone.id}`)
     expect(await screen.findByRole('heading', { name: 'release-bot', level: 2 })).toBeInTheDocument()
-    expect(screen.getByText('已删除身份')).toBeInTheDocument()
-    expect(screen.getByText(/^删除于/)).toBeInTheDocument()
-    expect(await screen.findByText('v0.1.0 已发布')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '签发令牌' })).toBeNull()
-    expect(screen.queryByRole('button', { name: '删除外部身份' })).toBeNull()
+    expect(screen.getByText('Deleted identity')).toBeInTheDocument()
+    expect(screen.getByText(/^Deleted \d/)).toBeInTheDocument()
+    expect(await screen.findByText('v0.1.0 released')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Issue token' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Delete external identity' })).toBeNull()
     expect(screen.queryByRole('table')).toBeNull()
   })
 })
 
-describe('签发令牌', () => {
-  it('签发并复制：明文与风险说明只显示一次，关闭前确认；关闭后页面、地址、浏览器存储与查询缓存中都没有明文', async () => {
+describe('Issue token', () => {
+  it('issue and copy: the plaintext and the risk note show only once, closing asks for confirmation; after closing the plaintext is nowhere in the page, the URL, browser storage or the query cache', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
     const { user, writes, client, router } = await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}`)
-    expect(await screen.findByRole('note')).toHaveTextContent(/令牌拥有外部 CLI 的全部权限.*泄露令牌等于把平台的控制权交给对方/)
-    await user.click(screen.getByRole('button', { name: '签发令牌' }))
-    const issue = within(await screen.findByRole('dialog', { name: '为 ci-bot 签发令牌' }))
-    expect(issue.getByRole('radio', { name: '30 天' })).toBeChecked()
-    expect(issue.getByText(/^到期时间：/)).toBeInTheDocument()
-    expect(issue.getByText(/令牌拥有外部 CLI 的全部权限/)).toBeInTheDocument()
+    expect(await screen.findByRole('note')).toHaveTextContent(/A token has every permission of the external CLI.*A leaked token hands control of the platform to whoever has it/)
+    await user.click(screen.getByRole('button', { name: 'Issue token' }))
+    const issue = within(await screen.findByRole('dialog', { name: 'Issue a token for ci-bot' }))
+    expect(issue.getByRole('radio', { name: '30 days' })).toBeChecked()
+    expect(issue.getByText(/^Expires /)).toBeInTheDocument()
+    expect(issue.getByText(/A token has every permission of the external CLI/)).toBeInTheDocument()
     const before = Date.now()
-    await user.click(issue.getByRole('button', { name: '签发' }))
-    const result = within(await screen.findByRole('dialog', { name: '令牌已签发' }))
+    await user.click(issue.getByRole('button', { name: 'Issue' }))
+    const result = within(await screen.findByRole('dialog', { name: 'Token issued' }))
     const expiresAt = (writes[0].body as { expiresAt: string }).expiresAt
     const days = (Date.parse(expiresAt) - before) / 86_400_000
     expect(days).toBeGreaterThan(29.99)
     expect(days).toBeLessThan(30.01)
     expect(result.getByText(SECRET)).toBeInTheDocument()
-    expect(result.getByRole('alert')).toHaveTextContent('这是唯一一次显示令牌明文。关闭后无法再查看，请现在复制并妥善保存。')
-    expect(result.getByText(/令牌拥有外部 CLI 的全部权限/)).toBeInTheDocument()
-    await user.click(result.getByRole('button', { name: '复制' }))
+    // English UI issue: the bold onceStrong and onceBody are joined without a space ("…in full.Once you close…").
+    expect(result.getByRole('alert')).toHaveTextContent('This is the only time the token is shown in full.Once you close this, you can\'t see it again. Copy it now and keep it safe.')
+    expect(result.getByText(/A token has every permission of the external CLI/)).toBeInTheDocument()
+    await user.click(result.getByRole('button', { name: 'Copy' }))
     await expect(navigator.clipboard.readText()).resolves.toBe(SECRET)
-    // Closing needs confirmation; choosing “返回” (Back) keeps the plaintext.
-    await user.click(result.getByRole('button', { name: '我已保存，关闭' }))
-    const confirm = within(await screen.findByRole('alertdialog', { name: '确认已保存令牌？' }))
-    expect(confirm.getByText('关闭后，这个令牌的明文不会再显示，也无法找回。')).toBeInTheDocument()
-    await user.click(confirm.getByRole('button', { name: '返回' }))
+    // Closing needs confirmation; choosing “Back” keeps the plaintext.
+    await user.click(result.getByRole('button', { name: 'I\'ve saved it, close' }))
+    const confirm = within(await screen.findByRole('alertdialog', { name: 'Have you saved the token?' }))
+    expect(confirm.getByText('Once closed, this token\'s full value won\'t be shown again and can\'t be recovered.')).toBeInTheDocument()
+    await user.click(confirm.getByRole('button', { name: 'Back' }))
     expect(screen.getByText(SECRET)).toBeInTheDocument()
     await user.keyboard('{Escape}')
-    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '确认关闭' }))
+    // English UI issue: the confirm button (t.identities.confirmClose) and the dialog's X (t.common.close) are both named "Close",
+    // though the X only goes back and the confirm closes the token for good; the footer's button is the confirm.
+    await user.click(within((await screen.findByRole('alertdialog')).querySelector<HTMLElement>('[data-slot="alert-dialog-footer"]')!).getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(screen.queryByText(SECRET)).toBeNull())
     expect(document.body.innerHTML).not.toContain(SECRET)
     expect(JSON.stringify(client.getQueryCache().getAll().map((query) => query.state.data))).not.toContain(SECRET)
@@ -205,137 +208,138 @@ describe('签发令牌', () => {
     // Look at the token list again: it has this token's metadata but not the plaintext.
     const table = await tokenTable()
     expect(table.getAllByRole('row')).toHaveLength(2)
-    expect(table.getByText('有效')).toBeInTheDocument()
+    expect(table.getByText('Active')).toBeInTheDocument()
     expect(table.queryByText(SECRET)).toBeNull()
   })
 
-  it('只显示一次的令牌：便签提醒，明文在虚线框里、旁边黄色“复制”；右上角的关闭也要先确认已保存', async () => {
+  it('token shown only once: a sticky-note warning, the plaintext in a dashed box with a yellow “Copy” next to it; the close button in the top right also asks to confirm it was saved', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
     const { user } = await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}`)
-    await user.click(await screen.findByRole('button', { name: '签发令牌' }))
-    await user.click(within(await screen.findByRole('dialog', { name: '为 ci-bot 签发令牌' })).getByRole('button', { name: '签发' }))
-    const box = await screen.findByRole('dialog', { name: '令牌已签发' })
+    await user.click(await screen.findByRole('button', { name: 'Issue token' }))
+    await user.click(within(await screen.findByRole('dialog', { name: 'Issue a token for ci-bot' })).getByRole('button', { name: 'Issue' }))
+    const box = await screen.findByRole('dialog', { name: 'Token issued' })
     const result = within(box)
-    expect(box.querySelector('[data-dialog-tab]')).toHaveTextContent('令牌')
+    expect(box.querySelector('[data-dialog-tab]')).toHaveTextContent('Token')
     expect(result.getByRole('alert')).toHaveClass('riso-tilt')
-    const copy = result.getByRole('button', { name: '复制' })
+    const copy = result.getByRole('button', { name: 'Copy' })
     expect(copy).toHaveClass('bg-riso-yellow')
     expect(copy.parentElement).toHaveClass('border-dashed')
-    await user.click(result.getByRole('button', { name: '关闭' }))
-    expect(await screen.findByRole('alertdialog', { name: '确认已保存令牌？' })).toBeInTheDocument()
+    await user.click(result.getByRole('button', { name: 'Close' }))
+    expect(await screen.findByRole('alertdialog', { name: 'Have you saved the token?' })).toBeInTheDocument()
     // While the confirmation dialog is open, the result dialog is still there (only
     // temporarily hidden from screen readers), and the plaintext is not lost.
     expect(box).toBeInTheDocument()
     expect(within(box).getByText(SECRET)).toBeInTheDocument()
   })
-  it('改选“永不过期”时不提交到期时间；指定日期取当天结束时刻，早于今天的日期不提交', async () => {
+  it('choosing “Never expires” submits no expiry; a picked date means the end of that day, and a date before today is not submitted', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
     const { user, writes } = await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}`)
-    await user.click(await screen.findByRole('button', { name: '签发令牌' }))
-    let issue = within(await screen.findByRole('dialog', { name: '为 ci-bot 签发令牌' }))
-    await user.click(issue.getByRole('radio', { name: '永不过期' }))
-    expect(issue.getByText('令牌不会自动失效，只能手动吊销。')).toBeInTheDocument()
-    await user.click(issue.getByRole('button', { name: '签发' }))
+    await user.click(await screen.findByRole('button', { name: 'Issue token' }))
+    let issue = within(await screen.findByRole('dialog', { name: 'Issue a token for ci-bot' }))
+    await user.click(issue.getByRole('radio', { name: 'Never expires' }))
+    expect(issue.getByText('The token won\'t expire on its own; it can only be revoked by hand.')).toBeInTheDocument()
+    await user.click(issue.getByRole('button', { name: 'Issue' }))
     await waitFor(() => expect(writes.at(-1)?.body).toEqual({}))
-    await user.click(within(await screen.findByRole('dialog', { name: '令牌已签发' })).getByRole('button', { name: '我已保存，关闭' }))
-    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '确认关闭' }))
-    await user.click(await screen.findByRole('button', { name: '签发令牌' }))
-    issue = within(await screen.findByRole('dialog', { name: '为 ci-bot 签发令牌' }))
-    await user.click(issue.getByRole('radio', { name: '指定日期' }))
-    const date = issue.getByLabelText('到期日期（当天结束时失效）')
+    await user.click(within(await screen.findByRole('dialog', { name: 'Token issued' })).getByRole('button', { name: 'I\'ve saved it, close' }))
+    // The footer's "Close" is the confirm (see the English UI issue above).
+    await user.click(within((await screen.findByRole('alertdialog')).querySelector<HTMLElement>('[data-slot="alert-dialog-footer"]')!).getByRole('button', { name: 'Close' }))
+    await user.click(await screen.findByRole('button', { name: 'Issue token' }))
+    issue = within(await screen.findByRole('dialog', { name: 'Issue a token for ci-bot' }))
+    await user.click(issue.getByRole('radio', { name: 'Pick a date' }))
+    const date = issue.getByLabelText('Expiry date (expires at the end of that day)')
     await user.type(date, '2020-01-01')
-    await user.click(issue.getByRole('button', { name: '签发' }))
-    expect(issue.getByRole('alert')).toHaveTextContent('请选择今天或以后的日期')
+    await user.click(issue.getByRole('button', { name: 'Issue' }))
+    expect(issue.getByRole('alert')).toHaveTextContent('Pick today or a later date')
     expect(writes).toHaveLength(1)
     await user.clear(date)
     await user.type(date, '2099-12-31')
-    await user.click(issue.getByRole('button', { name: '签发' }))
+    await user.click(issue.getByRole('button', { name: 'Issue' }))
     await waitFor(() => expect(writes).toHaveLength(2))
     expect(new Date((writes[1].body as { expiresAt: string }).expiresAt).getTime()).toBe(new Date(2099, 11, 31, 23, 59, 59, 999).getTime())
   })
 })
 
-describe('查看与吊销令牌', () => {
-  it('只显示元数据；吊销其中一个令牌后它显示为已吊销，另一个仍为有效；已过期的令牌显示已过期', async () => {
+describe('View and revoke tokens', () => {
+  it('shows only metadata; after one token is revoked it shows as revoked and the other stays active; an expired token shows as expired', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
     const first = makeToken({ lastUsedAt: '2026-10-12T06:02:00Z' })
     const second = makeToken({ expiresAt: '2099-01-01T00:00:00Z' })
     const old = makeToken({ expiresAt: '2026-09-08T00:30:00Z' })
     const { user, writes } = await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [first, second, old] } }, `/identities/${ciBot.id}`)
     const table = await tokenTable()
-    expect(table.getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['标识', '签发时间', '过期时间', '最后使用', '状态', '操作'])
+    expect(table.getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['ID', 'Issued', 'Expires', 'Last used', 'Status', 'Actions'])
     const rowOf = (prefix: string) => table.getByText(prefix).closest('tr')!
-    expect(rowOf(first.prefix)).toHaveTextContent(/永不过期.*有效/)
-    expect(rowOf(old.prefix)).toHaveTextContent(/从未使用.*已过期/)
+    expect(rowOf(first.prefix)).toHaveTextContent(/Never expires.*Active/)
+    expect(rowOf(old.prefix)).toHaveTextContent(/Never used.*Expired/)
     expect(within(rowOf(old.prefix)).queryByRole('button')).toBeNull()
-    expect(list().getByRole('link', { name: /ci-bot/ })).toHaveTextContent('2 个有效令牌')
-    await user.click(within(rowOf(first.prefix)).getByRole('button', { name: `吊销 ${first.prefix}` }))
-    const confirm = within(await screen.findByRole('alertdialog', { name: `吊销令牌 ${first.prefix}？` }))
-    expect(confirm.getByText(/ci-bot 的其他令牌不受影响/)).toBeInTheDocument()
-    await user.click(confirm.getByRole('button', { name: '吊销' }))
+    expect(list().getByRole('link', { name: /ci-bot/ })).toHaveTextContent('2 active tokens')
+    await user.click(within(rowOf(first.prefix)).getByRole('button', { name: `Revoke ${first.prefix}` }))
+    const confirm = within(await screen.findByRole('alertdialog', { name: `Revoke token ${first.prefix}?` }))
+    expect(confirm.getByText(/ci-bot's other tokens are not affected/)).toBeInTheDocument()
+    await user.click(confirm.getByRole('button', { name: 'Revoke' }))
     await waitFor(() => expect(writes).toEqual([{ method: 'DELETE', path: `/external-identities/${ciBot.id}/tokens/${first.id}` }]))
-    await waitFor(() => expect(rowOf(first.prefix)).toHaveTextContent('已吊销'))
-    expect(rowOf(second.prefix)).toHaveTextContent('有效')
-    expect(within(rowOf(second.prefix)).getByRole('button', { name: `吊销 ${second.prefix}` })).toBeInTheDocument()
+    await waitFor(() => expect(rowOf(first.prefix)).toHaveTextContent('Revoked'))
+    expect(rowOf(second.prefix)).toHaveTextContent('Active')
+    expect(within(rowOf(second.prefix)).getByRole('button', { name: `Revoke ${second.prefix}` })).toBeInTheDocument()
   })
 })
 
-describe('外部身份的收件箱只读', () => {
-  it('列出收到和发出的消息，标明方向与已读；可以按方向与未读筛选；查看全文不改变已读状态', async () => {
+describe('Read-only inbox of an external identity', () => {
+  it('lists received and sent messages with their direction and read state; filters by direction and unread; opening the full text does not change the read state', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
-    const reviewer = makeAgent({ name: '代码审查助手', address: '测试组织/测试项目/代码审查助手' })
-    const gotIt = makeInboxMessage({ from: agentParty(reviewer), to: externalParty(ciBot), text: '修复已合并，麻烦重跑一次夜间构建。' })
-    const sent = makeInboxMessage({ from: externalParty(ciBot), to: consoleParty, text: '夜间构建失败：naming 有 1 个用例未通过。', readAt: '2026-10-12T09:00:00Z' })
+    const reviewer = makeAgent({ name: 'Code reviewer', address: '测试组织/测试项目/Code reviewer' })
+    const gotIt = makeInboxMessage({ from: agentParty(reviewer), to: externalParty(ciBot), text: 'Fix merged; please rerun the nightly build.' })
+    const sent = makeInboxMessage({ from: externalParty(ciBot), to: consoleParty, text: 'Nightly build failed: 1 test in naming did not pass.', readAt: '2026-10-12T09:00:00Z' })
     const { user } = await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] }, inbox: { [ciBot.id]: [gotIt, sent] } }, `/identities/${ciBot.id}`)
     // The list reloads when the filter changes, so look it up again each time.
-    const inboxList = () => within(screen.getByRole('list', { name: '收件箱' }))
-    await screen.findByRole('list', { name: '收件箱' })
+    const inboxList = () => within(screen.getByRole('list', { name: 'Inbox' }))
+    await screen.findByRole('list', { name: 'Inbox' })
     const items = inboxList().getAllByRole('listitem')
-    expect(items[0]).toHaveTextContent(/^收到代码审查助手.*修复已合并.*未读$/)
-    expect(items[1]).toHaveTextContent(/^发出控制台@console.*对方已读$/)
-    expect(screen.getByText('只读，不会改变已读状态')).toBeInTheDocument()
-    await user.click(screen.getByRole('radio', { name: '发出' }))
+    expect(items[0]).toHaveTextContent(/^ReceivedCode reviewer.*Fix merged.*Unread$/)
+    expect(items[1]).toHaveTextContent(/^SentConsole@console.*Read$/)
+    expect(screen.getByText('Read-only; doesn\'t change read status')).toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: 'Sent' }))
     await waitFor(() => expect(inboxList().getAllByRole('listitem')).toHaveLength(1))
-    expect(inboxList().getByRole('listitem')).toHaveTextContent('发出')
-    await user.click(screen.getByRole('checkbox', { name: '只看未读' }))
-    expect(await screen.findByText('没有符合条件的消息。')).toBeInTheDocument()
-    await user.click(screen.getByRole('radio', { name: '全部' }))
-    await screen.findByRole('list', { name: '收件箱' })
-    await user.click(inboxList().getByRole('button', { name: /代码审查助手/ }))
-    expect(await inboxList().findByText('修复已合并，麻烦重跑一次夜间构建。', { selector: 'p' })).toBeInTheDocument()
-    expect(within(inboxList().getByRole('button', { name: /代码审查助手/ })).getByText('未读')).toBeInTheDocument()
+    expect(inboxList().getByRole('listitem')).toHaveTextContent('Sent')
+    await user.click(screen.getByRole('checkbox', { name: 'Unread only' }))
+    expect(await screen.findByText('No matching messages.')).toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: 'All' }))
+    await screen.findByRole('list', { name: 'Inbox' })
+    await user.click(inboxList().getByRole('button', { name: /Code reviewer/ }))
+    expect(await inboxList().findByText('Fix merged; please rerun the nightly build.', { selector: 'p' })).toBeInTheDocument()
+    expect(within(inboxList().getByRole('button', { name: /Code reviewer/ })).getByText('Unread')).toBeInTheDocument()
   })
 })
 
 // "Printed sheet" redesign, step 4: external identities sit on a sheet, with the list on the left and the selected identity on the right.
-describe('纸张上的外部身份', () => {
-  it('页头是页面标题：面包屑“全局›外部身份”，旁边是身份个数；荧光粉的“新建”在列表顶上', async () => {
+describe('External identities on the sheet', () => {
+  it('the header is the page title: breadcrumb “Global›External identities”, next to it the number of identities; the fluorescent pink “New” sits at the top of the list', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
     await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}`)
-    const header = screen.getByRole('heading', { level: 1, name: '外部身份' }).closest('header')!
-    expect(within(header).getByRole('navigation', { name: '页面位置' })).toHaveTextContent('全局›外部身份')
-    expect(await within(header).findByText('1 个')).toBeInTheDocument()
-    expect(list().getByRole('button', { name: '新建' })).toHaveClass('bg-riso-pink', 'border-2', 'border-ink')
+    const header = screen.getByRole('heading', { level: 1, name: 'External identities' }).closest('header')!
+    expect(within(header).getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Global›External identities')
+    expect(await within(header).findByText('1 identity')).toBeInTheDocument()
+    expect(list().getByRole('button', { name: 'New' })).toHaveClass('bg-riso-pink', 'border-2', 'border-ink')
   })
 
-  it('列表与详情在一张纸上；选中的身份是黄底、藏青描边加投影的一块', async () => {
+  it('list and details are on one sheet; the selected identity is a yellow block with a navy outline and a shadow', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
     const release = makeIdentity({ name: 'release-bot' })
     await renderIdentities({ identities: [ciBot, release], tokens: { [ciBot.id]: [], [release.id]: [] } }, `/identities/${ciBot.id}`)
     await screen.findByRole('heading', { level: 2, name: 'ci-bot' })
-    const aside = screen.getByRole('complementary', { name: '外部身份列表' })
+    const aside = screen.getByRole('complementary', { name: 'External identities' })
     expect(aside.closest('[data-sheet]')).toContainElement(screen.getByRole('heading', { level: 2, name: 'ci-bot' }))
     expect(list().getByRole('link', { name: /ci-bot/ })).toHaveClass('bg-riso-yellow', 'border-ink', 'shadow-[4px_4px_0_var(--ink)]')
     expect(list().getByRole('link', { name: /release-bot/ })).not.toHaveClass('bg-riso-yellow')
   })
 
-  it('身份名是展示字加黄色记号笔，地址等宽；“删除外部身份”是红色描边按钮；令牌的风险说明是黄色便签', async () => {
+  it('the identity name is in the display face with a yellow marker and the address is monospaced; “Delete external identity” is a red outlined button; the token risk note is a yellow sticky note', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
     await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}`)
     const name = await screen.findByRole('heading', { level: 2, name: 'ci-bot' })
     expect(name).toHaveClass('riso-marker', 'font-display-cn')
     expect(screen.getByText(ciBot.address)).toHaveClass('font-mono')
-    expect(screen.getByRole('button', { name: '删除外部身份' })).toHaveClass('border-2', 'border-red-text', 'text-red-text', 'rounded-full')
+    expect(screen.getByRole('button', { name: 'Delete external identity' })).toHaveClass('border-2', 'border-red-text', 'text-red-text', 'rounded-full')
     expect(await screen.findByRole('note')).toHaveClass('riso-tilt')
   })
 })
