@@ -18,76 +18,76 @@ function renderForm(props: Partial<Parameters<typeof ConfigForm>[0]> = {}) {
   return { ...utils, onSave, reload }
 }
 
-describe('插件配置表单的保存', () => {
-  it('已设置的密钥只显示“已设置”；点更换出现输入框，保存时只发新值，并带上当前版本', async () => {
+describe('Saving the plugin config form', () => {
+  it('a secret already set only shows "Set"; Replace shows an input, and saving sends only the new value with the current revision', async () => {
     const user = userEvent.setup()
     const { onSave } = renderForm()
-    expect(screen.getByText('已设置')).toBeInTheDocument()
+    expect(screen.getByText('Set')).toBeInTheDocument()
     expect(screen.queryByLabelText('签名密钥', { selector: 'input' })).toBeNull()
-    expect(screen.getByRole('button', { name: '保存' })).toBeDisabled()
-    await user.click(screen.getByRole('button', { name: '更换 签名密钥' }))
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Replace 签名密钥' }))
     await user.type(screen.getByLabelText('签名密钥'), 'new-secret')
-    await user.click(screen.getByRole('button', { name: '保存' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
     expect(onSave).toHaveBeenCalledWith({ values: { url: 'https://a.example/hook', retries: 5 }, secrets: { secret: 'new-secret' }, expectedRevision: 3 })
-    expect(await screen.findByText('已保存')).toBeInTheDocument()
+    expect(await screen.findByText('Saved')).toBeInTheDocument()
   })
 
-  it('本地校验不过时不发请求，在对应的项下标出原因', async () => {
+  it('when local validation fails, sends no request and marks the reason under each field', async () => {
     const user = userEvent.setup()
     const { onSave } = renderForm()
     await user.clear(screen.getByLabelText('回调地址'))
     await user.type(screen.getByLabelText('回调地址'), 'hooks.example.com')
     await user.clear(screen.getByLabelText('重试上限'))
     await user.type(screen.getByLabelText('重试上限'), '20')
-    await user.click(screen.getByRole('button', { name: '保存' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(onSave).not.toHaveBeenCalled()
     expect(screen.getByLabelText('回调地址')).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByText('请填完整地址，例如 https://…')).toBeInTheDocument()
-    expect(screen.getByText('不能大于 10')).toBeInTheDocument()
+    expect(screen.getByText('Enter a full URL, e.g. https://…')).toBeInTheDocument()
+    expect(screen.getByText('Must be at most 10')).toBeInTheDocument()
   })
 
-  it('412：说明别处改过；载入最新会放弃修改，用我的修改覆盖则按最新版本重新保存', async () => {
+  it('412: says it changed elsewhere; loading the latest discards the changes, and overwriting saves again on the latest revision', async () => {
     const user = userEvent.setup()
     const { onSave, reload } = renderForm()
     onSave.mockRejectedValueOnce(conflict())
     await user.clear(screen.getByLabelText('重试上限'))
     await user.type(screen.getByLabelText('重试上限'), '2')
-    await user.click(screen.getByRole('button', { name: '保存' }))
-    const group = await screen.findByRole('group', { name: '配置已在别处修改' })
-    expect(screen.getByRole('button', { name: '保存' })).toBeDisabled()
-    await user.click(within(group).getByRole('button', { name: '用我的修改覆盖' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    const group = await screen.findByRole('group', { name: 'Config changed elsewhere' })
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    await user.click(within(group).getByRole('button', { name: 'Overwrite with my changes' }))
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2))
     expect(reload).toHaveBeenCalledTimes(1)
     expect(onSave).toHaveBeenLastCalledWith({ values: { url: 'https://a.example/hook', retries: 2 }, expectedRevision: 7 })
-    expect(screen.queryByRole('group', { name: '配置已在别处修改' })).toBeNull()
+    expect(screen.queryByRole('group', { name: 'Config changed elsewhere' })).toBeNull()
   })
 
-  it('412 后选载入最新：输入框换成服务端的新值', async () => {
+  it('choosing to load the latest after 412 replaces the inputs with the new server values', async () => {
     const user = userEvent.setup()
     const { onSave } = renderForm()
     onSave.mockRejectedValueOnce(conflict())
     await user.clear(screen.getByLabelText('重试上限'))
     await user.type(screen.getByLabelText('重试上限'), '2')
-    await user.click(screen.getByRole('button', { name: '保存' }))
-    await user.click(await screen.findByRole('button', { name: '载入最新，放弃我的修改' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await user.click(await screen.findByRole('button', { name: 'Load the latest, discard my changes' }))
     await waitFor(() => expect(screen.getByLabelText('回调地址')).toHaveValue('https://other.example/hook'))
     expect(screen.getByLabelText('重试上限')).toHaveValue('')
     expect(onSave).toHaveBeenCalledTimes(1)
   })
 
-  it('422 的字段错误标到对应的项', async () => {
+  it('422 field errors are marked on their fields', async () => {
     const user = userEvent.setup()
     const { onSave } = renderForm()
     onSave.mockRejectedValueOnce(new ApiError({ status: 422, code: 'validation_failed', serverMessage: 'invalid', fields: [{ field: 'values.url', message: 'The address is unreachable' }] }))
     await user.clear(screen.getByLabelText('重试上限'))
     await user.type(screen.getByLabelText('重试上限'), '1')
-    await user.click(screen.getByRole('button', { name: '保存' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByText('The address is unreachable')).toBeInTheDocument()
     expect(screen.getByLabelText('回调地址')).toHaveAttribute('aria-invalid', 'true')
   })
 
-  it('项目覆盖只列 x-scope: project 的项，写出全局值；留空的不发送', async () => {
+  it('project overrides list only x-scope: project fields and show the global value; empty ones are not sent', async () => {
     const user = userEvent.setup()
     const { onSave } = renderForm({
       mode: 'project',
@@ -96,9 +96,9 @@ describe('插件配置表单的保存', () => {
     })
     expect(screen.queryByLabelText('重试上限')).toBeNull()
     expect(screen.queryByText('签名密钥')).toBeNull()
-    expect(screen.getByText(/全局值：https:\/\/hooks.example.com\/loop-now/)).toBeInTheDocument()
+    expect(screen.getByText(/Global value: https:\/\/hooks.example.com\/loop-now/)).toBeInTheDocument()
     await user.type(screen.getByLabelText('回调地址'), 'https://hooks.example.com/propanda')
-    await user.click(screen.getByRole('button', { name: '保存' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(onSave).toHaveBeenCalledWith({ values: { url: 'https://hooks.example.com/propanda' }, expectedRevision: 0 }))
   })
 })

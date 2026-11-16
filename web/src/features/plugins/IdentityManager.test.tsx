@@ -12,10 +12,10 @@ import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
 
 // One webhook channel can manage external identities; the lark-notify plugin's channel cannot (it does not appear among the choices).
-const webhook = makeDetail(makePlugin(), makeManifest({ permissions: ['state', 'identities.manage'], components: makeComponents({ channels: [{ id: 'hooks', label: '回调', manageIdentities: true }] }) }))
+const webhook = makeDetail(makePlugin(), makeManifest({ permissions: ['state', 'identities.manage'], components: makeComponents({ channels: [{ id: 'hooks', label: 'Callback', manageIdentities: true }] }) }))
 const lark = makeDetail(
-  makePlugin({ id: 'lark-notify', displayName: '飞书通知', version: '0.3.1' }),
-  makeManifest({ id: 'lark-notify', displayName: '飞书通知', version: '0.3.1', components: makeComponents({ channels: [{ id: 'lark', label: '飞书', manageIdentities: false }] }) }),
+  makePlugin({ id: 'lark-notify', displayName: 'Lark notifications', version: '0.3.1' }),
+  makeManifest({ id: 'lark-notify', displayName: 'Lark notifications', version: '0.3.1', components: makeComponents({ channels: [{ id: 'lark', label: 'Lark', manageIdentities: false }] }) }),
 )
 
 function setup(identity: Schemas['ExternalIdentity'], plugins = [webhook, lark], manager?: (body: { managedBy: Schemas['ExternalIdentityManager'] | null }) => Response | undefined) {
@@ -42,74 +42,74 @@ function setup(identity: Schemas['ExternalIdentity'], plugins = [webhook, lark],
   return { writes, fake }
 }
 
-const section = () => screen.findByRole('region', { name: '代管' })
+const section = () => screen.findByRole('region', { name: 'Managed by' })
 
-describe('外部身份的代管', () => {
-  it('列出声明了代管的插件渠道；选一个保存，写出当前由谁代管', async () => {
+describe('Managing external identities', () => {
+  it('lists the plugin channels that declare managing; choosing one and saving shows who manages it now', async () => {
     const user = userEvent.setup()
     const { writes } = setup(makeIdentity())
     const box = await section()
-    const select = within(box).getByLabelText('代管的插件渠道')
-    await waitFor(() => expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['不代管', 'Webhook 通知 · 回调']))
-    expect(within(box).getByRole('button', { name: '保存' })).toBeDisabled()
-    await user.selectOptions(select, 'Webhook 通知 · 回调')
-    await user.click(within(box).getByRole('button', { name: '保存' }))
+    const select = within(box).getByLabelText('Managing plugin channel')
+    await waitFor(() => expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['Not managed', 'Webhook 通知 · Callback']))
+    expect(within(box).getByRole('button', { name: 'Save' })).toBeDisabled()
+    await user.selectOptions(select, 'Webhook 通知 · Callback')
+    await user.click(within(box).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(writes).toEqual([{ managedBy: { pluginId: 'webhook', channelId: 'hooks' } }]))
-    expect(await within(box).findByRole('status')).toHaveTextContent('由 Webhook 通知 · 回调 代管')
+    expect(await within(box).findByRole('status')).toHaveTextContent('Managed by Webhook 通知 · Callback')
   })
 
-  it('改回不代管：保存 null', async () => {
+  it('switching back to not managed saves null', async () => {
     const user = userEvent.setup()
     const { writes } = setup(makeIdentity({ managedBy: { pluginId: 'webhook', channelId: 'hooks' } }))
     const box = await section()
-    const select = within(box).getByLabelText('代管的插件渠道')
-    await waitFor(() => expect(select).toHaveDisplayValue('Webhook 通知 · 回调'))
-    await user.selectOptions(select, '不代管')
-    await user.click(within(box).getByRole('button', { name: '保存' }))
+    const select = within(box).getByLabelText('Managing plugin channel')
+    await waitFor(() => expect(select).toHaveDisplayValue('Webhook 通知 · Callback'))
+    await user.selectOptions(select, 'Not managed')
+    await user.click(within(box).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(writes).toEqual([{ managedBy: null }]))
     await waitFor(() => expect(within(box).queryByRole('status')).toBeNull())
   })
 
-  it('代管插件不是运行中：提示未运行，绑定照旧', async () => {
+  it('the managing plugin is not running: says so and keeps the binding', async () => {
     setup(makeIdentity({ managedBy: { pluginId: 'webhook', channelId: 'hooks' } }), [makeDetail(makePlugin({ status: 'host_stopped' }), webhook.manifest), lark])
     const box = await section()
-    expect(await within(box).findByText(/代管插件未运行（宿主已停止）/)).toBeInTheDocument()
-    expect(within(box).getByRole('link', { name: '看插件' })).toHaveAttribute('href', '/plugins/webhook')
+    expect(await within(box).findByText(/The managing plugin isn't running \(Host stopped\)/)).toBeInTheDocument()
+    expect(within(box).getByRole('link', { name: 'View plugin' })).toHaveAttribute('href', '/plugins/webhook')
   })
 
-  it('保存被拒（422，渠道不再声明代管）时写出原因', async () => {
+  it('shows the reason when saving is rejected (422, the channel no longer declares managing)', async () => {
     const user = userEvent.setup()
     setup(makeIdentity(), [webhook, lark], () => HttpResponse.json(errorBody('validation_failed', 'This channel cannot host external identities'), { status: 422 }))
     const box = await section()
     await waitFor(() => expect(within(box).getAllByRole('option')).toHaveLength(2))
-    await user.selectOptions(within(box).getByLabelText('代管的插件渠道'), 'Webhook 通知 · 回调')
-    await user.click(within(box).getByRole('button', { name: '保存' }))
+    await user.selectOptions(within(box).getByLabelText('Managing plugin channel'), 'Webhook 通知 · Callback')
+    await user.click(within(box).getByRole('button', { name: 'Save' }))
     expect(await within(box).findByText(/This channel cannot host external identities/)).toBeInTheDocument()
   })
 
-  it('没有能代管的插件时说明，并给出插件市场入口', async () => {
+  it('says so when no plugin can manage identities, with a link to the plugin market', async () => {
     setup(makeIdentity(), [lark])
     const box = await section()
-    expect(await within(box).findByText('还没有能代管外部身份的插件。')).toBeInTheDocument()
-    expect(within(box).getByRole('link', { name: '插件市场' })).toHaveAttribute('href', '/plugins')
+    expect(await within(box).findByText('No plugins can manage external identities yet.')).toBeInTheDocument()
+    expect(within(box).getByRole('link', { name: 'Plugin market' })).toHaveAttribute('href', '/plugins')
   })
 })
 
-describe('插件页里的“可代管外部身份”', () => {
-  it('安装前确认与插件详情的“包含”都列出能代管的渠道，卡片上有标签', async () => {
+describe('"Can manage external identities" on plugin pages', () => {
+  it('the install confirmation and "What it contains" in plugin details both list the managing channels, and the card has a tag', async () => {
     const user = userEvent.setup()
     const fake = fakePlugins({ details: [webhook] })
     server.use(...fake.handlers, ...baseHandlers([]), http.post(apiUrl('/plugin-previews'), () => HttpResponse.json(makePreview({ manifest: { ...webhook.manifest, version: '1.3.0' }, installedVersion: '1.2.0' }), { status: 201 })))
     const { router } = renderRoutes(routes, '/plugins')
     const card = (await screen.findByRole('link', { name: 'Webhook 通知' })).closest('li')!
-    await waitFor(() => expect(card).toHaveTextContent('可代管外部身份'))
+    await waitFor(() => expect(card).toHaveTextContent('Can manage external identities'))
     await router.navigate('/plugins/webhook')
-    const contains = await screen.findByRole('region', { name: '它包含什么' })
-    expect(within(contains).getByText('可代管外部身份').parentElement).toHaveTextContent('可代管外部身份 · 回调 · 把发给外部身份的消息推出去，再把回复以这个身份送回')
-    expect(within(contains).getByText('identities.manage').parentElement).toHaveTextContent('代管外部身份：读它的收件箱，以它的名义回复与回答')
-    await user.click(screen.getByRole('button', { name: '检查更新' }))
-    const dialog = await screen.findByRole('dialog', { name: /更新 Webhook 通知/ })
-    expect(within(dialog).getByText('可代管外部身份').parentElement).toHaveTextContent('可代管外部身份 · 回调')
+    const contains = await screen.findByRole('region', { name: 'What it contains' })
+    expect(within(contains).getByText('Can manage external identities').parentElement).toHaveTextContent('Can manage external identities · Callback · Pushes messages sent to external identities out, and sends replies back as that identity')
+    expect(within(contains).getByText('identities.manage').parentElement).toHaveTextContent('Manage external identities: read their Inbox, reply and answer in their name')
+    await user.click(screen.getByRole('button', { name: 'Check for updates' }))
+    const dialog = await screen.findByRole('dialog', { name: /Update Webhook 通知/ })
+    expect(within(dialog).getByText('Can manage external identities').parentElement).toHaveTextContent('Can manage external identities · Callback')
     expect(within(dialog).getByText('identities.manage')).toBeInTheDocument()
   })
 })
