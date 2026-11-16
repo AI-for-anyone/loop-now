@@ -189,7 +189,7 @@ function CliCredentialDialog({ agentId, cli, template, onClose }: { agentId: str
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[540px]">
+      <DialogContent kind="edit" className="sm:max-w-[540px]">
         <DialogHeader>
           <DialogTitle>{t.config.clis.credentialTitle(cli.name)}</DialogTitle>
           {cli.credential && <DialogDescription>{t.config.clis.replaceHint}</DialogDescription>}

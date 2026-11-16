@@ -74,10 +74,18 @@ export function ConfirmDialog({
         onOpenChange(next)
       }}
     >
-      {/* 确认框：标题 ZCOOL 26，说明 14.5 / 1.75；删除类操作的确认按钮用 destructive。 */}
-      <AlertDialogContent className={`gap-3 pb-[22px] data-[size=default]:sm:max-w-[470px] ${scrollBody ? 'flex max-h-[calc(100dvh-2rem)] flex-col' : ''}`} onEscapeKeyDown={(event) => pending && event.preventDefault()}>
+      {/* 确认框：标题 ZCOOL 28 加粉色错版，说明 14.5 / 1.75。删除一类的操作（destructive）：顶边标签“危险操作”、
+          纸的投影是红色，标题旁一个“不可撤销”斜印章，确认按钮是红色。 */}
+      <AlertDialogContent kind={destructive ? 'danger' : 'confirm'} className="data-[size=default]:sm:max-w-[470px]" paperClassName={`gap-3.5 ${scrollBody ? 'flex flex-col' : ''}`} onEscapeKeyDown={(event) => pending && event.preventDefault()}>
         <AlertDialogHeader className={`gap-3 ${scrollBody ? 'shrink-0' : ''}`}>
-          <AlertDialogTitle className="leading-[1.25]">{title}</AlertDialogTitle>
+          <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2 pr-12">
+            <AlertDialogTitle className="leading-[1.2]">{title}</AlertDialogTitle>
+            {destructive && (
+              <span className="riso-tilt inline-flex min-h-6 items-center rounded-[4px] px-2.5 text-[12.5px] font-black tracking-[0.06em] whitespace-nowrap text-red-text [--tilt-bg:transparent] [--tilt-shadow:inset_0_0_0_2px_var(--red-text)] [--tilt:-6deg]">
+                {t.common.irreversible}
+              </span>
+            )}
+          </div>
           {body && <AlertDialogDescription className="text-[14.5px] leading-[1.75]">{body}</AlertDialogDescription>}
         </AlertDialogHeader>
         {scrollBody ? <div className="min-h-0 space-y-3 overflow-y-auto overscroll-contain pr-1" data-confirm-scroll>{children}<ErrorAlert error={error} /></div> : <>{children}<ErrorAlert error={error} /></>}

@@ -57,7 +57,7 @@ export function ConfirmInstallDialog({ preview, onClose, onInstalled }: { previe
         : confirmText.trustedInstall
   return (
     <Dialog open onOpenChange={(open) => !open && !install.isPending && onClose()}>
-      <DialogContent className="sm:max-w-[700px]">
+      <DialogContent kind={update ? 'update' : 'install'} className="sm:max-w-[700px]">
         <DialogHeader>
           <DialogTitle className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pr-12">
             <span>{update ? confirmText.update(localizedText(manifest.displayName)) : confirmText.install(localizedText(manifest.displayName))}</span>
@@ -155,7 +155,7 @@ export function InstallSourceDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={(next) => installer.pending === null && onOpenChange(next)}>
-        <DialogContent className="sm:max-w-[560px]">
+        <DialogContent kind="install" className="sm:max-w-[560px]">
           <DialogHeader>
             <DialogTitle>{text.title}</DialogTitle>
           </DialogHeader>

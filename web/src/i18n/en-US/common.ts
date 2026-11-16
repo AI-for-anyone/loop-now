@@ -11,6 +11,8 @@ export const common = {
   edit: 'Edit',
   add: 'Add',
   close: 'Close',
+  dialogKinds: { create: 'New', danger: 'Danger', confirm: 'Confirm', edit: 'Edit', view: 'View', token: 'Token', choose: 'Choose', install: 'Install', update: 'Update', action: 'Action', pull: 'Pull' },
+  irreversible: 'Irreversible',
   retry: 'Retry',
   reload: 'Reload',
   loading: 'Loading…',

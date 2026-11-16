@@ -15,7 +15,7 @@ export function TasksEntry() {
   const scope = projects.data ? resolveLastScope(projects.data.projects, remembered) : null
   if (!scope) return <div className="p-6"><ErrorAlert error={projects.error} />{t.common.loading}</div>
   if (scope.kind === 'project') return <Navigate replace to={tasksPath(scope.project.name)} />
-  return <Dialog open onOpenChange={(open) => { if (!open) void navigate('/platform/agents') }}><DialogContent showCloseButton={false}><DialogHeader><DialogTitle>{t.tasks.chooseProject}</DialogTitle></DialogHeader>
+  return <Dialog open onOpenChange={(open) => { if (!open) void navigate('/platform/agents') }}><DialogContent kind="choose" showCloseButton={false}><DialogHeader><DialogTitle>{t.tasks.chooseProject}</DialogTitle></DialogHeader>
     <div className="grid gap-3">{projects.data?.projects.map((p) => <Button key={p.id} asChild variant="secondary"><Link to={tasksPath(p.name)}>{p.name}</Link></Button>)}
     <Button asChild variant="secondary"><Link to="/platform/agents">{t.common.cancel}</Link></Button></div>
   </DialogContent></Dialog>

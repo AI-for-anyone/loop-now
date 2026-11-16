@@ -10,6 +10,9 @@ export const common = {
   edit: '编辑',
   add: '添加',
   close: '关闭',
+  // 弹窗顶边索引标签上的类别（改版第 5 步）。
+  dialogKinds: { create: '新建', danger: '危险操作', confirm: '确认', edit: '编辑', view: '查看', token: '令牌', choose: '选择', install: '安装', update: '更新', action: '操作', pull: '拉取' },
+  irreversible: '不可撤销',
   retry: '重试',
   reload: '重新加载',
   loading: '加载中…',

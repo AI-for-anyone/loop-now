@@ -45,7 +45,7 @@ function ActionDialog({ plugin, action, where, onClose }: { plugin: { id: string
   const notEnabled = invoke.error instanceof ApiError && invoke.error.code === 'plugin_not_enabled'
   return (
     <Dialog open onOpenChange={(open) => !open && !invoke.isPending && onClose()}>
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent kind="action" className="sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle>{action.label}</DialogTitle>
           <DialogDescription>{text.by(plugin.displayName)}</DialogDescription>

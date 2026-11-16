@@ -294,7 +294,7 @@ function DirectoryDialog({ target, listing, save, reload, onClose }: { target: T
 
   return (
     <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
-      <DialogContent className="sm:max-w-[560px]">
+      <DialogContent kind={target.kind === 'add' ? 'create' : 'edit'} className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>{target.kind === 'add' ? copy.dialog.addTitle : copy.dialog.editTitle}</DialogTitle>
           <DialogDescription>{copy.cautions[0]}</DialogDescription>

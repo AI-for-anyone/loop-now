@@ -4,8 +4,11 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 import { AlertDialog as AlertDialogPrimitive } from "radix-ui"
 
+import { XIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { overlayClass } from "@/components/ui/dialog"
+import { DialogTab } from "@/components/ui/dialog"
+import { closeStampClass, dialogContentClass, dialogFooterClass, dialogPaperClass, overlayClass, type DialogKind } from "@/components/ui/dialog-style"
+import { t } from "@/i18n"
 import { useReturnFocus } from "@/lib/return-focus"
 
 function AlertDialog({
@@ -43,14 +46,21 @@ function AlertDialogOverlay({
   )
 }
 
+// 确认框（改版第 5 步）：与对话框同一张小纸——顶边写明类别的索引标签（默认“确认”，危险操作浅红底红字、纸投影红色），
+// 右上角黄色圆章关闭（就是“取消”，放在最前面，打开时焦点仍落在按钮区的取消上）。
 function AlertDialogContent({
   className,
+  paperClassName,
+  children,
   size = "default",
+  kind = "confirm",
   onOpenAutoFocus,
   onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content> & {
   size?: "default" | "sm"
+  kind?: DialogKind
+  paperClassName?: string
 }) {
   // 确认框由状态控制开合，没有 Radix 的 Trigger；关闭时把焦点还给打开前的元素。
   const focusHandlers = useReturnFocus(onOpenAutoFocus, onCloseAutoFocus)
@@ -60,13 +70,24 @@ function AlertDialogContent({
       <AlertDialogPrimitive.Content
         data-slot="alert-dialog-content"
         data-size={size}
+        data-kind={kind}
         className={cn(
-          "group/alert-dialog-content fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-5 rounded-dialog bg-paper-raised p-[26px] text-ink shadow-print-dialog outline-none data-[size=default]:sm:max-w-[480px] data-[size=sm]:sm:max-w-sm",
+          dialogContentClass,
+          "group/alert-dialog-content data-[size=default]:sm:max-w-[480px] data-[size=sm]:sm:max-w-sm",
           className
         )}
         {...focusHandlers}
         {...props}
-      />
+      >
+        <AlertDialogPrimitive.Cancel data-slot="alert-dialog-close" className={cn(closeStampClass, "absolute top-[52px] right-[26px] z-[1] max-sm:right-[18px]")}>
+          <XIcon className="size-[15px]" strokeWidth={2.8} />
+          <span className="sr-only">{t.common.close}</span>
+        </AlertDialogPrimitive.Cancel>
+        <DialogTab kind={kind} />
+        <div data-dialog-paper className={cn(dialogPaperClass(kind), paperClassName)}>
+          {children}
+        </div>
+      </AlertDialogPrimitive.Content>
     </AlertDialogPortal>
   )
 }
@@ -94,10 +115,7 @@ function AlertDialogFooter({
   return (
     <div
       data-slot="alert-dialog-footer"
-      className={cn(
-        "flex flex-wrap justify-end gap-2.5",
-        className
-      )}
+      className={cn(dialogFooterClass, className)}
       {...props}
     />
   )
@@ -127,7 +145,7 @@ function AlertDialogTitle({
     <AlertDialogPrimitive.Title
       data-slot="alert-dialog-title"
       className={cn(
-        "font-display-cn text-[26px] leading-[1.2] font-normal",
+        "font-display-cn text-[28px] leading-[1.15] font-normal text-riso-blue [text-shadow:2.5px_2.5px_0_var(--riso-pink)]",
         className
       )}
       {...props}
@@ -143,7 +161,7 @@ function AlertDialogDescription({
     <AlertDialogPrimitive.Description
       data-slot="alert-dialog-description"
       className={cn(
-        "text-[14px] text-ink-700 *:[a]:underline *:[a]:underline-offset-3",
+        "text-[14px] leading-[1.7] text-ink-700 *:[a]:underline *:[a]:underline-offset-3",
         className
       )}
       {...props}
