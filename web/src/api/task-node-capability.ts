@@ -3,7 +3,7 @@ import { isMissingEndpoint } from './backend-signals'
 import { api, call } from './client'
 
 export const nodeCapabilityKey = (taskId: string, nodeRunId: string) => ['taskNodeCapability', taskId, nodeRunId] as const
-// Only the old router's exact missing-interface response means unsupported.
+// Only a missing endpoint (an older server; see isMissingEndpoint) means unsupported.
 // A missing task/node, permission denial or unknown error remains a real error.
 export function nodeMessagesUnsupported(error: unknown) {
   return isMissingEndpoint(error)

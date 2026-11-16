@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import type { Schemas } from '@/api/client'
 import { verificationKeys } from '@/api/cli-verification'
-import { apiUrl, errorBody } from '@/test/api'
+import { apiUrl, errorBody, unknownEndpointBody } from '@/test/api'
 import { verificationAccount, verificationOperation, verificationPassed } from '@/test/cli-verification'
 import { renderWithQuery } from '@/test/render'
 import { server } from '@/test/server'
@@ -76,8 +76,11 @@ describe('五工具手动验证正式HTTP fixture', () => {
     await screen.findByRole('alert'); expect(screen.queryByText(t.credentials.verification.empty)).toBeNull(); expect(screen.queryByText(t.credentials.verification.unsupported)).toBeNull()
     expect(screen.getByRole('button', { name: t.credentials.verification.test })).toBeDisabled()
   })
-  it('仅旧路由固定接口不存在404提示不支持', async () => {
-    setup(); server.use(http.get(apiUrl(base), () => HttpResponse.json(errorBody('not_found', '接口不存在'), { status: 404 })))
+  it.each([
+    ['the unknown_endpoint signal', unknownEndpointBody()],
+    ["an older server's fixed text", errorBody('not_found', '接口不存在')],
+  ])('仅旧路由固定接口不存在404提示不支持 (%s)', async (_, body) => {
+    setup(); server.use(http.get(apiUrl(base), () => HttpResponse.json(body, { status: 404 })))
     renderWithQuery(<CLIConnectionVerification account={account} />)
     await screen.findByText(t.credentials.verification.unsupported); expect(screen.queryByText(t.credentials.verification.empty)).toBeNull()
   })

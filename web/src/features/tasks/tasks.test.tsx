@@ -6,7 +6,7 @@ import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { routes } from '@/app/routes'
 import { renderRoutes, renderHookWithQuery } from '@/test/render'
-import { agentsUrl, apiUrl, defaultProject, errorBody, makeAgent, projectsUrl, toListItem } from '@/test/api'
+import { agentsUrl, apiUrl, defaultProject, errorBody, makeAgent, projectsUrl, toListItem, unknownEndpointBody } from '@/test/api'
 import { baseHandlers } from '@/test/shell'
 import { server } from '@/test/server'
 import { FakeEventSource } from '@/test/fake-event-source'
@@ -301,15 +301,18 @@ it('消息可选错误字段显示服务端脱敏失败原因，兼容旧消息�
   expect(await screen.findByText('Agent 报告错误 · Failure reason redacted by the server')).toBeVisible()
 })
 
+// The missing endpoint is recognized by the server's signal (details.reason unknown_endpoint) and, for older servers, by their fixed
+// text; once recognized, task events no longer re-read the capability (gets stays 1).
 it.each([
-  [404, 'not_found', '接口不存在', true],
-  [404, 'not_found', 'Node run not found', false],
-  [401, 'unauthenticated', 'A console identity is required', false],
-  [403, 'forbidden', 'No permission to act on this node', false],
-  [500, 'internal_error', 'Cannot check the target right now', false],
-] as const)('capability失败%s/%s安全禁发并保留草稿，只有接口缺失是旧服务', async (status, code, message, unsupported) => {
+  [404, 'not_found', 'No such endpoint: GET /api/v1/tasks/…/message-capability', true, { reason: 'unknown_endpoint' }],
+  [404, 'not_found', '接口不存在', true, undefined],
+  [404, 'not_found', 'Node run not found', false, undefined],
+  [401, 'unauthenticated', 'A console identity is required', false, undefined],
+  [403, 'forbidden', 'No permission to act on this node', false, undefined],
+  [500, 'internal_error', 'Cannot check the target right now', false, undefined],
+] as const)('capability失败%s/%s安全禁发并保留草稿，只有接口缺失是旧服务', async (status, code, message, unsupported, details) => {
   const env = setup(); let gets = 0
-  server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), () => { gets++; return HttpResponse.json(errorBody(code, message), { status }) }))
+  server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), () => { gets++; return HttpResponse.json(errorBody(code, message, details ? { details: details as never } : {}), { status }) }))
   renderRoutes(routes, detailPath()); await screen.findByText('任务实例的回复')
   const box = screen.getByRole('textbox', { name: '消息草稿' })
   await userEvent.type(box, '原节点草稿')
@@ -318,7 +321,7 @@ it.each([
   env.emit('node.updated', { node: env.detail.nodes[1] }, '20')
   await waitFor(() => expect(box).toHaveValue('原节点草稿'))
   if (unsupported) { await new Promise(resolve => setTimeout(resolve, 120)); expect(gets).toBe(1) }
-  expect(screen.queryByText(unsupported ? '资源不存在或已删除：接口不存在' : '当前服务尚未启用节点消息')).not.toBeInTheDocument()
+  expect(screen.queryByText(unsupported ? `资源不存在或已删除：${message}` : '当前服务尚未启用节点消息')).not.toBeInTheDocument()
 })
 
 it('新attempt和任务结束保留原nodeRun草稿，只有手动选新执行才出现新空稿', async () => {
@@ -437,7 +440,7 @@ it('等待状态保留平台事实、固定原因和原题权限，不显示历�
 it('旧后端能力缺失后窗口focus重新取同一正式GET，可恢复而不改草稿或目标', async () => {
   setup(); let ready = false, count = 0
   const detail = makeTaskDetail(defaultProject.id)
-  server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), ({ params }) => { count++; return ready ? HttpResponse.json({ taskId, nodeRunId: String(params.node), agentId: detail.nodes[1].agentId, runtimeId: detail.nodes[1].runtimeId, canSend: false, reason: 'The original session is unavailable', handlingHint: 'Check the task instance' }) : HttpResponse.json(errorBody('not_found', '接口不存在'), { status: 404 }) }))
+  server.use(http.get(apiUrl(`/tasks/${taskId}/nodes/:node/message-capability`), ({ params }) => { count++; return ready ? HttpResponse.json({ taskId, nodeRunId: String(params.node), agentId: detail.nodes[1].agentId, runtimeId: detail.nodes[1].runtimeId, canSend: false, reason: 'The original session is unavailable', handlingHint: 'Check the task instance' }) : HttpResponse.json(unknownEndpointBody(), { status: 404 }) }))
   renderRoutes(routes, detailPath()); await screen.findByText('当前服务尚未启用节点消息')
   await userEvent.type(screen.getByRole('textbox', { name: '消息草稿' }), '升级前草稿')
   ready = true; act(() => window.dispatchEvent(new Event('focus')))

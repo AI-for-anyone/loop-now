@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import type { Schemas } from '@/api/client'
-import { apiUrl, defaultProject } from './api'
+import { apiUrl, defaultProject, unknownEndpointBody } from './api'
 
 // Existing fixtures have no verified OAuth identity. Keep both generated null
 // branches so CLI/name overrides cannot accidentally imply another identity.
@@ -22,7 +22,7 @@ export function emptySelections(agent: Schemas['Agent']): Schemas['CredentialSel
 export const emptyProjectCredentialHandlers = [
   // Unrelated credential fixtures predate the optional verification interface.
   // Tests exercising verification override this exact old-router response.
-  http.get(apiUrl('/projects/:projectId/credential-accounts/:accountId/verification-operations'), () => HttpResponse.json({ error: { code: 'not_found', message: '接口不存在' } }, { status: 404 })),
+  http.get(apiUrl('/projects/:projectId/credential-accounts/:accountId/verification-operations'), () => HttpResponse.json(unknownEndpointBody(), { status: 404 })),
   http.get(apiUrl('/projects/:projectId/credential-accounts'), ({ params }) => HttpResponse.json({ projectId: params.projectId, credentialsRevision: 1, accounts: [] })),
   http.get(apiUrl('/projects/:projectId/model-auth/operations'), () => HttpResponse.json({ operations: [] })),
 ]
