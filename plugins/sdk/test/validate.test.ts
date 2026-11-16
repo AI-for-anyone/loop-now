@@ -1,4 +1,5 @@
-// 校验库测试：官方插件通过；常见错误逐项报出；只有 pi 段的标准 Pi 包按 npm 名得到 id。
+// Validation library tests: official plugins pass; common errors are reported one by one; a standard Pi package with only a pi section
+// gets its id from the npm name.
 
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -156,7 +157,7 @@ describe('validatePlugin', () => {
       )
     }
 
-    // 字符串照旧：空或缺省只提醒，displayName 回落到 npm 名。
+    // Strings work as before: empty or missing only warns, and displayName falls back to the npm name.
     const plain = validatePlugin(plugin('i18n-plain', { name: 'plain-name', version: '1.0.0', description: '', keywords: ['loop-now-plugin'], loopNow: { id: 'plain', displayName: '', mcpServers: { s: { command: 'node' } } } }, { 'README.md': '' }))
     assert.equal(plain.ok, true)
     assert.equal(plain.manifest!.displayName, 'plain-name')

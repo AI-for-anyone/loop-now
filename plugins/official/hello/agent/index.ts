@@ -1,5 +1,5 @@
-// Agent 侧：标准的 Pi 扩展，由已授权 Agent 的 Pi 进程加载（plugins/SPEC.md §2.1）。
-// 平台把生效的配置（不含 secret 字段）放在环境变量 LOOP_NOW_PLUGIN_HELLO_CONFIG 里。
+// Agent side: a standard Pi extension, loaded by the Pi process of granted Agents (plugins/SPEC.md §2.1).
+// The platform puts the effective config (without secret fields) in the environment variable LOOP_NOW_PLUGIN_HELLO_CONFIG.
 
 import { defineTool, type ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import { Type } from 'typebox'

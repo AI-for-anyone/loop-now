@@ -1,7 +1,9 @@
-// MCP 服务器入口：核对已准备好的专用 Chromium，再在本进程里启动固定版本的官方 Playwright MCP（stdio）。
-// 运行时不下载、不调用 npx。浏览器在插件数据目录里，由 setup.mjs 预先准备；配置文件按 Agent 分开。
+// MCP server entry: checks the prepared dedicated Chromium, then starts the pinned version of the official Playwright MCP (stdio)
+// in this process. Nothing is downloaded and npx is never called at run time. The browser lives in the plugin data directory,
+// prepared beforehand by setup.mjs; profiles are kept separately per Agent.
 //
-// 用法（平台写进 Agent 的 mcp.json）：node launch.mjs --data <插件数据目录> --agent <Agent id> [-- <传给 MCP 的额外参数>]
+// Usage (the platform writes this into the Agent's mcp.json): node launch.mjs --data <plugin data dir> --agent <Agent id>
+// [-- <extra args passed to the MCP>]
 
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readlinkSync, statSync } from 'node:fs'
@@ -31,7 +33,8 @@ function parse(argv) {
   return out
 }
 
-// Chromium 用 SingletonLock（指向 "<主机名>-<pid>" 的符号链接）独占配置目录；持有它的进程还在时目录正被别的浏览器使用。
+// Chromium locks a profile directory with SingletonLock (a symlink pointing to "<hostname>-<pid>"); while the process holding it is
+// still alive, the directory is in use by another browser.
 function profileInUse(dir) {
   try {
     const target = readlinkSync(path.join(dir, 'SingletonLock'))
@@ -80,7 +83,8 @@ mkdirSync(profile, { recursive: true, mode: 0o700 })
 mkdirSync(output, { recursive: true, mode: 0o700 })
 const mcpArgs = ['--executable-path', executable, '--output-dir', output, '--timeout-action', '10000', '--timeout-navigation', '45000']
 if (profileInUse(profile)) {
-  // 同一 Agent 的另一个执行（例如任务里的副本）正开着这个配置目录：这次用只在内存里的配置，结束即丢弃。
+  // Another run of the same Agent (e.g. a copy in a task) has this profile directory open: this time use an in-memory profile,
+  // discarded at the end.
   process.stderr.write(`[playwright] 配置目录 ${profile} 正被另一个浏览器使用，这次使用临时配置\n`)
   mcpArgs.push('--isolated')
 } else {
@@ -88,7 +92,7 @@ if (profileInUse(profile)) {
 }
 mcpArgs.push(...args.extra)
 
-// 包的 exports 没有导出 cli.js：按 package.json 的 bin 在包目录里找。
+// The package's exports do not export cli.js: find it in the package directory via the bin in package.json.
 const cli = path.join(path.dirname(require.resolve('@playwright/mcp/package.json')), mcpPkg.bin['playwright-mcp'])
 process.argv = [process.argv[0], cli, ...mcpArgs]
 await import(pathToFileURL(cli).href)

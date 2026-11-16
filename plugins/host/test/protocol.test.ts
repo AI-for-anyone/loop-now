@@ -1,4 +1,4 @@
-// 宿主协议测试：经标准输入输出驱动构建好的宿主（先 npm run build），覆盖 api/plugin-host-protocol.md 的各项约定。
+// Host protocol tests: drive the built host over stdin/stdout (run npm run build first), covering each rule in api/plugin-host-protocol.md.
 
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'

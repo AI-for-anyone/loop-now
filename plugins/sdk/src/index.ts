@@ -1,5 +1,6 @@
-// @loop-now/plugin-sdk：Loop Now 插件平台侧的类型与运行库（plugins/SPEC.md §2.2、§3、§7）。
-// 在宿主里运行时，宿主提供这个包的实例；插件把它放在 peerDependencies，开发时装在 devDependencies 里取类型。
+// @loop-now/plugin-sdk: types and runtime library for the platform side of Loop Now plugins (plugins/SPEC.md §2.2, §3, §7).
+// When running in the host, the host provides this package's instance; plugins list it in peerDependencies, and install it
+// in devDependencies during development to get the types.
 
 export * from './events.ts'
 export type * from './types.ts'
@@ -11,7 +12,7 @@ export { ulid, ULID_PATTERN } from './ulid.ts'
 
 import type { PluginRegister } from './types.ts'
 
-/** 只为类型推断：`export default definePlugin((api) => { ... })`。 */
+/** Only for type inference: `export default definePlugin((api) => { ... })`. */
 export function definePlugin(register: PluginRegister): PluginRegister {
   return register
 }

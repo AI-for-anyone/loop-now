@@ -1,9 +1,11 @@
-// Webhook 通知：订阅 inbox.received，把事件 POST 到配置的回调地址。
-// 投递交给 SDK 的投递库：先存进插件状态再回 ack，所以宿主或服务端重启不会丢；失败按退避重试，
-// 每次投递在 deliveries/<ULID> 留一条记录，插件页可以看到。
+// Webhook notifications: subscribes to inbox.received and POSTs the event to the configured callback URL.
+// Delivery goes through the SDK's delivery library: the event is saved to plugin state before the ack, so a host or server restart
+// loses nothing; failures are retried with backoff,
+// and each delivery leaves a record in deliveries/<ULID> that shows on the plugin page.
 //
-// 代管外部身份（plugins/SPEC.md §12）：身份交给本插件的 identity 渠道后，发给它的消息与提问以 identity.inbound 送到这里，
-// 同样 POST 到回调地址，并附 answerUrl；对方把回复或回答签名后 POST 到 /hooks/webhook/answer，插件以该身份送回平台。
+// Managing external identities (plugins/SPEC.md §12): once an identity is handed to this plugin's identity channel, messages and
+// questions sent to it arrive here as identity.inbound and are likewise POSTed to the callback URL, with an answerUrl; the other side
+// signs its reply or answer and POSTs it to /hooks/webhook/answer, and the plugin sends it back to the platform as that identity.
 
 import { createDelivery, type InboxMessage, type PluginAPI, SIGNATURE_HEADER, TIMESTAMP_HEADER, verifySignature } from '@loop-now/plugin-sdk'
 
@@ -15,7 +17,10 @@ interface WebhookConfig {
   publicBaseUrl?: string
 }
 
-/** 推送过的代管身份消息：回答入口靠它知道以哪个身份、按哪个项目的密钥验签。 */
+/**
+ * A message pushed for a managed identity: the answer endpoint uses it to know which identity to act as
+ * and which project's secret to verify the signature with.
+ */
 interface PushedMessage {
   identityId: string
   projectId: string | null
@@ -44,7 +49,7 @@ function fail(status: number, code: string, message: string): Response {
 export default function register(api: PluginAPI) {
   const delivery = createDelivery(api, { userAgent: `loop-now-webhook/${api.version}` })
 
-  // 回调地址有误时重投也没用：记一条错误，确认这个事件。
+  // Redelivering does not help when the callback URL is wrong: log an error and acknowledge the event.
   const target = (config: WebhookConfig): string | null => {
     if (!config.url) return null
     if (!URL.canParse(config.url)) {
@@ -54,7 +59,7 @@ export default function register(api: PluginAPI) {
     return config.url
   }
 
-  // 只留最近推送的若干条；更早的消息不再接受经回答入口回复。
+  // Keep only the most recently pushed entries; older messages no longer accept replies through the answer endpoint.
   const prunePushed = async () => {
     const all = await api.state.list<PushedMessage>(PUSHED)
     if (all.length <= PUSHED_KEEP) return
@@ -68,7 +73,7 @@ export default function register(api: PluginAPI) {
     if (!url) return
     if ((config.recipients ?? 'external') === 'external' && event.to.kind !== 'external') return
     const signed = api.secrets.get('secret', event.projectId) !== undefined
-    // 同一事件重复送达时，投递库按 eventId 与目标去重，不会发两次。
+    // When the same event arrives again, the delivery library deduplicates by eventId and target, so it is not sent twice.
     await delivery.deliver({
       target: url,
       method: 'POST',
@@ -94,9 +99,10 @@ export default function register(api: PluginAPI) {
       }
       const signed = api.secrets.get('secret', event.projectId) !== undefined
       const base = api.config.get<WebhookConfig>().publicBaseUrl?.replace(/\/+$/, '')
-      // 回答入口只接受签名的请求，所以没有密钥时不给 answerUrl。
+      // The answer endpoint accepts only signed requests, so no answerUrl is given without a secret.
       const answerUrl = base && signed ? `${base}/hooks/${api.id}/answer` : undefined
-      // 事件只带摘要；给人看的推送附上全文（读失败时抛错，平台重投）。
+      // The event carries only an excerpt; the push meant for people includes the full text (if reading fails, it throws and the platform
+      // redelivers).
       const full = await api.identities.read(event.identityId, event.messageId)
       const pushed: PushedMessage = { identityId: event.identityId, projectId: event.projectId, questionId: event.question?.id ?? null, at: event.at }
       await api.state.set(PUSHED + event.messageId, pushed)
@@ -113,7 +119,7 @@ export default function register(api: PluginAPI) {
     },
   })
 
-  // 回答入口：POST /hooks/webhook/answer，正文 { messageId, questionId?, optionId? | text }，用推送时的同一密钥签名。
+  // Answer endpoint: POST /hooks/webhook/answer with body { messageId, questionId?, optionId? | text }, signed with the same secret as the push.
   api.http.handle(async (request) => {
     const path = new URL(request.url).pathname
     if (path !== '/answer') return fail(404, 'not_found', `没有 ${path}`)
@@ -156,7 +162,7 @@ export default function register(api: PluginAPI) {
       const status = e.status && [403, 404, 409, 413, 422].includes(e.status) ? e.status : 502
       return fail(status, e.code ?? 'platform_error', e.message)
     }
-    // 提问已关闭时文字回答会存成普通回复、不回答任何提问。
+    // When the question is closed, a text answer is saved as a plain reply and answers no question.
     if (question && !result.answerTo) {
       return json(409, { ok: false, messageId: result.id, error: { code: 'question_closed', message: '回复已保存，但提问已关闭或已过期，没有被回答' } })
     }

@@ -1,15 +1,18 @@
-// 外发 HTTP 投递库（plugins/SPEC.md §3、§7）：队列存在插件状态里，宿主或服务端重启后继续；失败按退避重试；
-// 每次投递写一条 deliveries/<ULID> 记录（§7 的形状，插件页按这个前缀读出），只保留最近的若干条。
+// Outgoing HTTP delivery library (plugins/SPEC.md §3, §7): the queue is stored in plugin state and resumes after a host or server
+// restart; failures are retried with backoff. Each delivery writes a deliveries/<ULID> record (the §7 shape; the plugin page reads
+// this prefix), and only the most recent ones are kept.
 //
-// 状态：
-// - pending：等待发送（新建或人工重发后），nextAttemptAt 为预定时间；
-// - delivered：收到 2xx；
-// - failed：最后一次失败。nextAttemptAt 不为 null 时会在那时重试；为 null 时是不可重试的失败（4xx、重定向、签名密钥缺失），不再重试；
-// - abandoned：重试次数用尽，放弃。
-// 终态（delivered、不再重试的 failed、abandoned）可用 resend 人工重发。
+// Statuses:
+// - pending: waiting to be sent (new, or after a manual resend); nextAttemptAt is the scheduled time;
+// - delivered: got a 2xx;
+// - failed: the last attempt failed. With a non-null nextAttemptAt it is retried at that time; with null it is a non-retryable failure
+//   (4xx, redirect, missing signing secret) and is not retried;
+// - abandoned: retries used up; given up.
+// Terminal states (delivered, failed with no further retry, abandoned) can be resent manually with resend.
 //
-// 请求本身（目标、头、正文、签名方式）另存在 delivery-requests/<ULID>，与记录一起保留、一起删除；签名密钥不落盘，
-// 每次尝试时按字段名从插件配置的 secret 读取，所以改了密钥后重试用新密钥。
+// The request itself (target, headers, body, signing settings) is stored separately in delivery-requests/<ULID>, kept and deleted
+// together with the record. The signing secret is never written to disk: each attempt reads it by field name from the plugin config's
+// secrets, so retries after a secret change use the new secret.
 
 import { DELIVERY_HEADER, SIGNATURE_HEADER, signBody, TIMESTAMP_HEADER } from './signature.ts'
 import type { PluginAPI } from './types.ts'
@@ -17,7 +20,7 @@ import { ulid } from './ulid.ts'
 
 export type DeliveryStatus = 'pending' | 'delivered' | 'failed' | 'abandoned'
 
-/** 状态键 deliveries/<id> 的值，形状由 plugins/SPEC.md §7 规定。 */
+/** Value of the state key deliveries/<id>; the shape is defined by plugins/SPEC.md §7. */
 export interface DeliveryRecord {
   id: string
   at: string
@@ -33,52 +36,55 @@ export interface DeliveryRecord {
 }
 
 export interface DeliverySigning {
-  /** 插件配置里 x-secret 字段的名称；每次尝试时用 api.secrets.get(secretField, projectId) 取值。 */
+  /** Name of an x-secret field in the plugin config; each attempt reads its value with api.secrets.get(secretField, projectId). */
   secretField: string
   projectId?: string | null
 }
 
 export interface DeliveryRequest {
-  /** http 或 https 地址。 */
+  /** An http or https URL. */
   target: string
-  /** 默认 POST。 */
+  /** Defaults to POST. */
   method?: string
   headers?: Record<string, string>
-  /** 字符串原样发送；其他值按 JSON 发送并默认加 content-type: application/json。 */
+  /** Strings are sent as is; other values are sent as JSON, with content-type: application/json added by default. */
   body?: unknown
-  /** 设置后每次尝试加 x-loop-now-timestamp 与 x-loop-now-signature 头（见 signBody）。 */
+  /** When set, each attempt adds the x-loop-now-timestamp and x-loop-now-signature headers (see signBody). */
   signing?: DeliverySigning
-  /** 触发这次投递的事件；同一事件对同一目标只投递一次（观察类事件可能重复送达）。 */
+  /** The event that triggered this delivery; one event is delivered to one target only once (observe events may arrive more than once). */
   eventId?: string | null
   eventType?: string | null
-  /** 这次投递最多尝试几次（含第一次），默认取 createDelivery 的 maxAttempts。 */
+  /** Maximum attempts for this delivery (including the first); defaults to createDelivery's maxAttempts. */
   maxAttempts?: number
 }
 
 export interface DeliveryOptions {
-  /** 最多尝试几次（含第一次），默认 5。 */
+  /** Maximum attempts (including the first), 5 by default. */
   maxAttempts?: number
-  /** 第 n 次失败后等多久重试；次数超过列表长度时用最后一项。默认 5 秒、30 秒、2 分钟、10 分钟、30 分钟、1 小时。 */
+  /**
+   * How long to wait before retrying after the nth failure; past the end of the list the last item is used.
+   * Defaults to 5 seconds, 30 seconds, 2 minutes, 10 minutes, 30 minutes, 1 hour.
+   */
   backoffMs?: number[]
-  /** 每次尝试的超时，默认 15 秒。 */
+  /** Timeout per attempt, 15 seconds by default. */
   timeoutMs?: number
-  /** 保留最近多少条记录，默认 500；更早的终态记录连同请求一起删除。 */
+  /** How many recent records to keep, 500 by default; older terminal records are deleted along with their requests. */
   keep?: number
-  /** 同时进行的尝试数，默认 4。 */
+  /** Number of attempts running at the same time, 4 by default. */
   concurrency?: number
-  /** 默认 loop-now-plugin-<id>/<version>。 */
+  /** Defaults to loop-now-plugin-<id>/<version>. */
   userAgent?: string
-  /** 测试用：替换 fetch。 */
+  /** For tests: replaces fetch. */
   fetch?: typeof fetch
 }
 
 export interface Delivery {
-  /** 保存这次投递并安排第一次尝试，立即返回记录（不等 HTTP 结果）。 */
+  /** Saves this delivery and schedules the first attempt; returns the record right away (without waiting for the HTTP result). */
   deliver(request: DeliveryRequest): Promise<DeliveryRecord>
-  /** 人工重发一条终态记录；已在等待或重试中的不变。 */
+  /** Manually resends a terminal record; records already waiting or retrying are left unchanged. */
   resend(id: string): Promise<DeliveryRecord>
   get(id: string): Promise<DeliveryRecord | null>
-  /** 新的在前。 */
+  /** Newest first. */
   list(): Promise<DeliveryRecord[]>
 }
 
@@ -96,7 +102,7 @@ interface StoredRequest {
   body: string | null
   signing: DeliverySigning | null
   maxAttempts: number
-  /** 人工重发时的已尝试次数；本轮的次数 = attempts - round。 */
+  /** Attempts already made at the time of a manual resend; attempts in this round = attempts - round. */
   round: number
 }
 
@@ -179,7 +185,7 @@ class DeliveryQueue implements Delivery {
     this.timer = null
   }
 
-  // serialize 让新建、重发与清理逐个进行，同一事件不会被并发的 deliver 建成两条。
+  // serialize runs create, resend and prune one at a time, so concurrent deliver calls cannot create two records for the same event.
   private serialize<T>(fn: () => Promise<T>): Promise<T> {
     const next = this.chain.then(fn, fn)
     this.chain = next.catch(() => undefined)
@@ -212,7 +218,8 @@ class DeliveryQueue implements Delivery {
         lastError: null,
         updatedAt: iso(now),
       }
-      // 先写记录再写请求：中间退出时记录找不到请求，尝试时标为放弃，不会留下没人引用的请求。
+      // Write the record before the request: if we exit in between, the record finds no request and is marked abandoned on its attempt,
+      // and no request is left behind without a record referring to it.
       await this.api.state.set(RECORD_PREFIX + id, record)
       await this.api.state.set(REQUEST_PREFIX + id, stored)
       this.records.set(id, record)
@@ -323,7 +330,7 @@ class DeliveryQueue implements Delivery {
     try {
       stored = await this.api.state.get<StoredRequest>(REQUEST_PREFIX + id)
     } catch (err) {
-      if (!this.stopped) this.api.log.warn(`读取投递 ${id} 的请求失败：${(err as Error).message}`)
+      if (!this.stopped) this.api.log.warn(`Failed to read the request for delivery ${id}: ${(err as Error).message}`)
       return
     }
     if (this.stopped) return
@@ -332,7 +339,7 @@ class DeliveryQueue implements Delivery {
       return
     }
     const outcome = await this.send(id, stored)
-    if (outcome === null) return // 插件停止，留到下次加载
+    if (outcome === null) return // The plugin stopped; leave it for the next load
     await this.finish(record, outcome, stored, false)
   }
 
@@ -397,11 +404,11 @@ class DeliveryQueue implements Delivery {
     try {
       await this.api.state.set(RECORD_PREFIX + record.id, next)
     } catch (err) {
-      if (!this.stopped) this.api.log.warn(`保存投递记录 ${record.id} 失败：${(err as Error).message}`)
+      if (!this.stopped) this.api.log.warn(`Failed to save delivery record ${record.id}: ${(err as Error).message}`)
     }
   }
 
-  // prune 只删终态记录：还在等待或重试的保留到结束，哪怕超出保留条数。
+  // prune deletes only terminal records: ones still waiting or retrying are kept until they finish, even beyond the keep count.
   private async prune(): Promise<void> {
     if (this.records.size <= this.keep) return
     const oldest = [...this.records.values()].sort((a, b) => (a.id < b.id ? -1 : 1))

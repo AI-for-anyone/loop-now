@@ -1,5 +1,7 @@
-// 官方插件的 Agent 侧在真实的 Pi（RPC 模式）里加载并被调用：用进程内的离线模型（fixtures/pi-offline-provider.ts）按脚本发出工具调用。
-// 没有可用的 Pi 时跳过（LOOP_NOW_TEST_PI_ROOT 指定 Pi 包目录）；playwright 另需准备好的数据目录（LOOP_NOW_TEST_PLAYWRIGHT_DATA，见 setup.mjs）。
+// The Agent sides of the official plugins are loaded and called in a real Pi (RPC mode): an in-process offline model
+// (fixtures/pi-offline-provider.ts) makes scripted tool calls.
+// Skipped when no Pi is available (LOOP_NOW_TEST_PI_ROOT points to the Pi package directory); playwright also needs a prepared data
+// directory (LOOP_NOW_TEST_PLAYWRIGHT_DATA, see setup.mjs).
 
 import assert from 'node:assert/strict'
 import { execFile, spawn } from 'node:child_process'
@@ -28,7 +30,7 @@ interface PiRun {
   noExtensions?: boolean
 }
 
-/** 跑一轮：发一条提示，等 agent_end，取回消息与模型每轮看到的上下文。 */
+/** Runs one turn: sends a prompt, waits for agent_end, and returns the messages plus the context the model saw on each turn. */
 async function runPi(o: PiRun): Promise<{ messages: NonNullable<Rec['data']>['messages']; seen: string; records: Rec[] }> {
   const dir = mkdtempSync(path.join(tmpdir(), 'loop-now-pi-'))
   const agentDir = path.join(dir, 'agent')
@@ -120,7 +122,8 @@ describe('官方插件的 Agent 侧', { skip: noPi }, () => {
     const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`
     const agent = '6f1c8e5e-0000-4000-8000-00000000c0de'
     try {
-      // 与服务端合并写入的 mcp.json 一样：清单里的 browser 条目，占位符已替换、相对路径已改成绝对路径；测试另加 --headless。
+      // Same as the mcp.json the server merges and writes: the manifest's browser entry with placeholders replaced and relative paths made
+      // absolute; the test adds --headless.
       const manifest = JSON.parse(readFileSync(path.join(official, 'playwright/package.json'), 'utf8'))
       const entry = manifest.loopNow.mcpServers.browser
       const args = (entry.args as string[]).map((a) =>
