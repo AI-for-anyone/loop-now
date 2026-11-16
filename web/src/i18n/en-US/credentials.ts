@@ -26,6 +26,7 @@ export const credentials = {
   agentSelection: {
     localLogin: {
       active: '"Use local logins" is on: this uses the extension\'s own login on this computer, not the project account chosen here.',
+      activeOwn: '"Use local logins" is on: this uses the extension\'s own login on this computer, not this Agent\'s login.',
       missing: '"Use local logins" is on, but this computer has no login for the extension, so the Agent will fail to start. Turn the switch off, or log in on this computer, and try again.',
       settings: 'Open local mode settings',
     },

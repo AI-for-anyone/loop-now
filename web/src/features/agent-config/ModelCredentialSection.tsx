@@ -6,9 +6,13 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Input } from '@/components/ui/input'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ErrorAlert, FieldError } from '@/components/ErrorAlert'
-import type { Schemas } from '@/api/client'
+import { ApiError, type Schemas } from '@/api/client'
 import { invalidateAgent, putModelCredential, useDeleteModelCredential, useModelProviders } from '@/api/queries'
-import { cancelModelLogin, loginActive, modelAuthKey, startModelLogin, useModelAuth } from '@/api/model-auth'
+import { answerModelLogin, cancelModelLogin, loginActive, modelAuthKey, startModelLogin, useModelAuth } from '@/api/model-auth'
+import { LocalLoginNote } from '@/features/project-credentials/LocalLoginNote'
+import { DeviceCode, LoginPrompt } from '@/features/project-credentials/ProjectLogin'
+import { hostOf, pluginAuthorizationUrl } from '@/features/project-credentials/project-authorization'
+import { pluginName, providerName } from '@/features/project-credentials/provider-catalog'
 import { t } from '@/i18n'
 import { fieldMessages, unmatchedFieldError } from '@/lib/errors'
 import { Section } from './Section'
@@ -17,11 +21,14 @@ import { LoginFeedback } from './LoginFeedback'
 import { reserveAuthorizationWindow } from './authorizationWindow'
 import { useSecretSubmit } from './useSecretSubmit'
 
+// 不属于项目的 Agent 自己的模型凭证：API Key，或浏览器登录订阅账号（Codex，或插件注册的带 OAuth 的提供方）。
+// Codex：点登录时先开一个空白窗口（防弹窗拦截），拿到授权地址后导航过去。
+// 插件提供方：与项目登录相同，不预开窗口，地址通过通用检查后给原生链接（写明目标主机）；还可能给设备码，或中途问一个问题。
 export function ModelCredentialSection({ agent }: { agent: Schemas['Agent'] }) {
   const client = useQueryClient(), auth = useModelAuth(agent), providers = useModelProviders()
   const queryKey = modelAuthKey(agent.id, agent.model.provider, agent.configVersion)
   const [editing, setEditing] = useState(false), [deleting, setDeleting] = useState(false)
-  const [starting, setStarting] = useState(false), [cancelling, setCancelling] = useState(false)
+  const [starting, setStarting] = useState(false), [cancelling, setCancelling] = useState(false), [answering, setAnswering] = useState(false)
   const [blocked, setBlocked] = useState(false), [error, setError] = useState<unknown>(null)
   const [startFailed, setStartFailed] = useState(false)
   const remove = useDeleteModelCredential(agent.id)
@@ -36,12 +43,18 @@ export function ModelCredentialSection({ agent }: { agent: Schemas['Agent'] }) {
   const active = loginActive(operation)
   const current = providers.data?.providers.find(p => p.id === agent.model.provider)
   const methods = current?.authMethods ?? []
-  // 这里是不属于项目的 Agent 自己的凭证：插件提供方只给项目 Agent 用（账号在项目里登录），不能在这里登录。
   const plugin = current?.source === 'plugin'
-  const oauth = !plugin && methods.includes('oauth')
+  const oauth = methods.includes('oauth')
   const apiKey = methods.includes('api_key')
   const unavailable = !auth.data || !!auth.error || !!providers.error || starting || active || cancelling
-  const copy = t.config.modelLogin
+  const copy = t.config.modelLogin, steps = t.credentials.projectLogin
+  const loginLabel = plugin && current ? t.credentials.providerPicker.login(providerName(current.id, current)) : copy.login
+  // 插件提供方的授权地址、设备码与问题只在登录进行中显示；地址由服务端校验过，这里再做通用检查。
+  const authorizationHref = plugin && active && operation?.authorizationUrl && pluginAuthorizationUrl(operation.authorizationUrl) ? operation.authorizationUrl : undefined
+  const rejectedAuthorization = plugin && active && !!operation?.authorizationUrl && !authorizationHref
+  const device = plugin && active ? operation?.deviceCode ?? null : null
+  const deviceHref = device && pluginAuthorizationUrl(device.verificationUri) ? device.verificationUri : undefined
+  const prompt = plugin && active ? operation?.prompt ?? null : null
 
   useEffect(() => {
     mounted.current = true
@@ -79,7 +92,7 @@ export function ModelCredentialSection({ agent }: { agent: Schemas['Agent'] }) {
     if (submitting.current || unavailable || !oauth) return
     submitting.current = true
     popup.current?.closeUnused()
-    popup.current = reserveAuthorizationWindow()
+    popup.current = plugin ? null : reserveAuthorizationWindow()
     opened.current = null
     setPreviousOperation(operation?.id ?? null)
     setStartFailed(false); setBlocked(false); setError(null); setStarting(true)
@@ -103,16 +116,36 @@ export function ModelCredentialSection({ agent }: { agent: Schemas['Agent'] }) {
     catch (e) { if (mounted.current) { setError(e); void refresh() } }
     finally { submitting.current = false; if (mounted.current) setCancelling(false) }
   }
+  // 回答登录中途的问题：回答只随这次请求发出，不进任何缓存；服务端清空 prompt 后，下一步可能带来新问题或地址。
+  const answer = async (promptId: string, value: string) => {
+    if (!operation || !active || submitting.current) return
+    const id = operation.id
+    submitting.current = true; setAnswering(true); setError(null)
+    try {
+      const next = await answerModelLogin(agent.id, id, { promptId, value })
+      if (!mounted.current) return
+      await client.cancelQueries({ queryKey })
+      if (!mounted.current) return
+      client.setQueryData<Schemas['ModelAuthState']>(queryKey, old => (old?.operation?.id === id ? next : old))
+      await refresh()
+    } catch (e) { if (mounted.current) setError(e) }
+    finally { submitting.current = false; if (mounted.current) setAnswering(false) }
+  }
   const open = () => {
     if (!active || !operation?.authorizationUrl) return
     const target = reserveAuthorizationWindow()
     setBlocked(!target.navigate(operation.authorizationUrl)); target.closeUnused()
   }
   const failedToStart = startFailed && (!operation || operation.id === previousOperation)
-  const view = starting ? 'opening' : failedToStart ? 'failed' : operation?.status === 'pending' ? 'opening' : operation?.status === 'awaiting_authorization' ? 'waiting' : operation?.status === 'succeeded' ? 'success' : operation?.status
+  // 409 plugin_not_enabled：插件没有授权给这个 Agent（平台 Agent 没有项目启用这一层），写进登录结果，不再另显示通用错误。
+  const notGranted = failedToStart && plugin && error instanceof ApiError && error.code === 'plugin_not_enabled'
+  const view = starting ? 'opening' : failedToStart ? 'failed' : operation?.status === 'pending' ? (prompt ? 'waiting' : 'opening') : operation?.status === 'awaiting_authorization' ? 'waiting' : operation?.status === 'succeeded' ? 'success' : operation?.status
+  const detail = notGranted && current ? copy.notGranted(pluginName(current))
+    : !failedToStart && operation?.errorCode ? copy.errors[operation.errorCode]
+      : prompt ? steps.prompt.detail : device ? steps.device.intro(hostOf(device.verificationUri)) : undefined
   return (
     <Section id="model-credential" title={t.config.modelCredential.title} actions={<>
-      {oauth && <Button size="sm" variant="secondary" disabled={unavailable} onClick={() => void start()}>{credential ? copy.relogin : copy.login}</Button>}
+      {oauth && <Button size="sm" variant="secondary" disabled={unavailable} onClick={() => void start()}>{credential ? copy.relogin : loginLabel}</Button>}
       {apiKey && <Button size="sm" variant="secondary" disabled={unavailable} onClick={() => setEditing(true)}>{credential ? copy.replaceKey : copy.setKey}</Button>}
       {credential && <Button size="sm" variant="ghost" disabled={unavailable} onClick={() => setDeleting(true)}>{t.common.delete}</Button>}
     </>}>
@@ -124,17 +157,22 @@ export function ModelCredentialSection({ agent }: { agent: Schemas['Agent'] }) {
         {credential?.accountLabel && <p className="break-all">{t.common.labelledValue(copy.account, credential.accountLabel)}</p>}
         {credential && <p className="text-[13px] text-ink-500">{t.common.updatedAt(credential.updatedAt)}</p>}
         {credential && <WarningList warnings={credential.warnings} />}
+        {auth.data?.localLogin && <LocalLoginNote state={auth.data.localLogin} owner="agent" />}
       </div>
       {auth.isPending && <p className="text-[13px]">{copy.loading}</p>}
-      {!providers.isPending && !providers.error && !oauth && !apiKey && <p className="text-[13px]">{plugin ? copy.pluginUnsupported : copy.unsupported}</p>}
-      <ErrorAlert error={auth.error ?? providers.error ?? error} />
+      {!providers.isPending && !providers.error && !oauth && !apiKey && <p className="text-[13px]">{copy.unsupported}</p>}
+      <ErrorAlert error={auth.error ?? providers.error ?? (notGranted ? null : error)} />
       {(auth.error || providers.error) && <Button size="sm" variant="secondary" className="self-start" onClick={() => { void auth.refetch(); void providers.refetch() }}>{t.common.retry}</Button>}
       {view && <div className="grid min-w-0 gap-2"><h3 className="text-[14px] font-black">{copy.operation}</h3>
-        <LoginFeedback view={view} hasAccount={!!credential} blocked={blocked} cancelling={cancelling}
-          detail={!failedToStart && operation?.errorCode ? copy.errors[operation.errorCode] : undefined}
-          onOpen={active && operation?.authorizationUrl ? open : undefined}
+        <LoginFeedback view={view} title={prompt ? steps.prompt.title : undefined} hasAccount={!!credential} blocked={blocked} cancelling={cancelling}
+          detail={detail}
+          authorizationHref={authorizationHref} openLabel={authorizationHref ? steps.openHost(hostOf(authorizationHref)) : undefined}
+          onOpen={plugin ? (authorizationHref ? () => setBlocked(false) : undefined) : active && operation?.authorizationUrl ? open : undefined}
           onCancel={active && !starting && !auth.error ? () => void cancel() : undefined}
           onRetry={!unavailable && oauth ? () => void start() : undefined} />
+        {device && <DeviceCode code={device} href={deviceHref} />}
+        {prompt && operation && <LoginPrompt key={`${operation.id}:${prompt.id}`} prompt={prompt} disabled={answering || cancelling} answering={answering} onAnswer={value => answer(prompt.id, value)} />}
+        {rejectedAuthorization && <div role="alert" className="grid gap-2 text-[13px]"><p>{steps.urlRejectedNoOpen}</p><Button type="button" size="sm" variant="secondary" className="justify-self-start" onClick={() => void auth.refetch()}>{steps.reread}</Button></div>}
         {active && operation && <p className="text-[12px] text-ink-500">{copy.expiresAt(operation.expiresAt)}</p>}
       </div>}
       {editing && <ApiKeyDialog agent={agent} onClose={() => setEditing(false)} onSaved={refresh} />}

@@ -76,7 +76,8 @@ func NewService(st *store.Store, h LoginHelper, c *Coordinator, models modelcata
 	return &Service{Store: st, Helper: h, Coordinator: c, Models: models, Options: o, Log: log, operations: map[uuid.UUID]*loginWorker{}}
 }
 func (s *Service) State(ctx context.Context, agentID uuid.UUID) (State, error) {
-	if _, e := s.Store.GetAgent(ctx, agentID); e != nil {
+	a, e := s.Store.GetAgent(ctx, agentID)
+	if e != nil {
 		return State{}, e
 	}
 	operation, e := s.Store.LatestModelAuthOperation(ctx, agentID)
@@ -98,6 +99,11 @@ func (s *Service) State(ctx context.Context, agentID uuid.UUID) (State, error) {
 		return State{}, e
 	}
 	view.Credential = meta
+	if s.Project != nil && s.Project.LocalLogin != nil {
+		if view.LocalLogin, e = s.Project.LocalLogin(ctx, a.ModelProvider); e != nil {
+			return State{}, e
+		}
+	}
 	return view, nil
 }
 func (s *Service) Metadata(ctx context.Context, agentID uuid.UUID) (*Metadata, error) {
@@ -197,10 +203,19 @@ func (s *Service) Start(ctx context.Context, agentID uuid.UUID, input LoginInput
 	if e := s.Store.RequirePrivateAgentCredentials(ctx, agentID); e != nil {
 		return Operation{}, e
 	}
-	if input.Provider != "openai-codex" || input.ExpectedConfigVersion < 1 {
-		return Operation{}, apperr.Invalid("provider", "只支持openai-codex控制台登录")
+	if input.ExpectedConfigVersion < 1 {
+		return Operation{}, apperr.Invalid("expectedConfigVersion", "须提供已保存的配置版本")
 	}
-	if s.Helper == nil {
+	plugin := ""
+	if input.Provider != "openai-codex" {
+		var ok bool
+		if plugin, ok = s.pluginProvider(input.Provider); !ok {
+			return Operation{}, apperr.Invalid("provider", "只支持openai-codex与插件提供方的控制台登录")
+		}
+		if e := s.checkPluginLogin(ctx, agentID, plugin); e != nil {
+			return Operation{}, e
+		}
+	} else if s.Helper == nil {
 		return Operation{}, ErrHelperUnavailable
 	}
 	s.mu.Lock()
@@ -219,8 +234,12 @@ func (s *Service) Start(ctx context.Context, agentID uuid.UUID, input LoginInput
 	work := &loginWorker{agentID: agentID, cancel: cancel, done: make(chan struct{})}
 	s.operations[op.ID] = work
 	s.workers.Add(1)
-	go s.login(loginCtx, op, work)
-	return operationView(op), nil
+	if plugin != "" {
+		go s.pluginLogin(loginCtx, op, work, plugin)
+	} else {
+		go s.login(loginCtx, op, work)
+	}
+	return s.view(op), nil
 }
 func (s *Service) login(ctx context.Context, op store.ModelAuthOperation, work *loginWorker) {
 	defer s.workers.Done()
@@ -316,7 +335,7 @@ func (s *Service) Get(ctx context.Context, agentID, id uuid.UUID) (Operation, er
 			s.cancel(id)
 		}
 	}
-	return operationView(op), nil
+	return s.view(op), nil
 }
 func (s *Service) Cancel(ctx context.Context, agentID, id uuid.UUID) (Operation, error) {
 	if _, e := s.Store.GetAgent(ctx, agentID); e != nil {
@@ -329,7 +348,7 @@ func (s *Service) Cancel(ctx context.Context, agentID, id uuid.UUID) (Operation,
 	if e == nil {
 		s.cancel(id)
 	}
-	return operationView(op), e
+	return s.view(op), e
 }
 func (s *Service) cancel(id uuid.UUID) {
 	s.mu.Lock()

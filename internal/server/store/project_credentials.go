@@ -774,10 +774,13 @@ func (s *Store) RequirePrivateAgentCredentials(ctx context.Context, id uuid.UUID
 	return nil
 }
 
-// ProviderStateVersionsInUse 返回插件提供方状态目录要保留的版本（plugins/SPEC.md §13）：未删除账号的当前模型版本，
-// 与未结束任务快照绑定的模型版本。其余版本的状态目录可以由清理器删除（运行中的 Pi 在用的由执行器另行保留）。
+// ProviderStateVersionsInUse returns the versions whose plugin-provider state directories must be kept
+// (plugins/SPEC.md §13): the current model version of every live account, the current model version of every live
+// Agent (a platform Agent's own login), and the model versions bound by unfinished task snapshots. The sweeper may
+// remove the other directories (the executor adds the ones a running Pi uses).
 func (s *Store) ProviderStateVersionsInUse(ctx context.Context) (map[uuid.UUID]bool, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT current_model_version_id FROM project_credential_accounts WHERE deleted_at IS NULL AND current_model_version_id IS NOT NULL
+		UNION SELECT m.version_id FROM agent_model_auth m JOIN agents a ON a.id=m.agent_id WHERE a.deleted_at IS NULL AND m.version_id IS NOT NULL
 		UNION SELECT json_extract(CAST(i.snapshot AS TEXT), '$.credentials.modelAuth.versionId') FROM task_instances i JOIN task_records r ON r.id=i.task_id
 			WHERE r.ended_at IS NULL AND json_extract(CAST(i.snapshot AS TEXT), '$.credentials.modelAuth.versionId') IS NOT NULL`)
 	if err != nil {

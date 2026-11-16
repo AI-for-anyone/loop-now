@@ -790,6 +790,34 @@ func (a *App) providerStateSweeper(ctx context.Context, every time.Duration) {
 	}
 }
 
+// deleteProviderLogins removes the subscription logins of these model providers when a plugin is uninstalled with
+// "delete data" (plugins/SPEC.md §13). Project model accounts are deleted like a normal account deletion; a platform
+// Agent's own login is cleared like "clear credential" (the pointer is emptied and the sweeper removes the state
+// directory once nothing uses it).
+func (a *App) deleteProviderLogins(ctx context.Context, providers []string) error {
+	accounts, err := a.Store.ModelAccountsOf(ctx, providers)
+	if err != nil {
+		return err
+	}
+	if a.API != nil && a.API.ProjectCredentials != nil {
+		for _, acc := range accounts {
+			if _, err := a.API.ProjectCredentials.Delete(ctx, acc.ProjectID, acc.ID, acc.Revision); err != nil {
+				return err
+			}
+		}
+	}
+	cleared, err := a.Store.ClearPlatformModelLogins(ctx, providers)
+	if err != nil {
+		return err
+	}
+	if a.ModelAuth != nil && a.ModelAuth.Changed != nil {
+		for _, id := range cleared {
+			a.ModelAuth.Changed(id)
+		}
+	}
+	return nil
+}
+
 // pluginAssets 返回 Agent 已授权插件交给 Pi 的东西；插件服务没有装配时（历史 schema 的测试）为空。
 func (a *App) pluginAssets(ctx context.Context, agentID uuid.UUID) (agentconfig.PluginAssets, error) {
 	if a.Plugins == nil {
@@ -810,18 +838,7 @@ func (a *App) assemblePlugins(cfg *config.Config, res *preflight.Resolved, log *
 	if a.Config != nil && a.Config.Templates != nil {
 		a.Plugins.ManagedHomePaths = a.Config.Templates.AllCredentialFilePaths
 	}
-	a.Plugins.DeleteProviderAccounts = func(ctx context.Context, providers []string) error {
-		accounts, err := a.Store.ModelAccountsOf(ctx, providers)
-		if err != nil || a.API == nil || a.API.ProjectCredentials == nil {
-			return err
-		}
-		for _, acc := range accounts {
-			if _, err := a.API.ProjectCredentials.Delete(ctx, acc.ProjectID, acc.ID, acc.Revision); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
+	a.Plugins.DeleteProviderAccounts = a.deleteProviderLogins
 	if a.ModelSettings != nil {
 		modelOptions := a.ModelSettings.Options
 		a.Plugins.Models = a.ModelSettings.Models

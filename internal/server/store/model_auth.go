@@ -118,6 +118,50 @@ func (s *Store) SetModelAuthOperationURL(ctx context.Context, operationID uuid.U
 	})
 	return o, err
 }
+
+// MarkModelAuthOperationAwaiting marks a login in progress as awaiting authorization (a plugin provider gave a
+// device code; the code itself stays in memory). An operation that already ended is returned unchanged.
+func (s *Store) MarkModelAuthOperationAwaiting(ctx context.Context, operationID uuid.UUID) (ModelAuthOperation, error) {
+	o, err := scanModelAuthOperation(s.Pool.QueryRow(ctx, `UPDATE model_auth_operations SET status='awaiting_authorization' WHERE id=$1 AND status IN `+modelAuthActive+` RETURNING `+modelAuthOperationColumns, operationID))
+	if errors.Is(err, db.ErrNoRows) {
+		o, err = scanModelAuthOperation(s.Pool.QueryRow(ctx, `SELECT `+modelAuthOperationColumns+` FROM model_auth_operations WHERE id=$1`, operationID))
+	}
+	return o, notFoundIfNoRows(err, "模型登录操作")
+}
+
+// ClearPlatformModelLogins clears the model credential of every live platform Agent whose current login belongs to
+// one of these providers (uninstalling a plugin with "delete data", plugins/SPEC.md §13). It works like "clear
+// credential": the pointer is emptied and the config version bumped; the version itself is kept. It returns the
+// Agents it cleared.
+func (s *Store) ClearPlatformModelLogins(ctx context.Context, providers []string) ([]uuid.UUID, error) {
+	if len(providers) == 0 {
+		return nil, nil
+	}
+	var out []uuid.UUID
+	err := s.inTx(ctx, func(tx *db.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT m.agent_id FROM agent_model_auth m JOIN agents a ON a.id=m.agent_id JOIN model_auth_versions v ON v.id=m.version_id
+			WHERE a.deleted_at IS NULL AND a.project_id IS NULL AND v.provider IN (SELECT value FROM json_each($1)) ORDER BY m.agent_id`, providers)
+		if err != nil {
+			return err
+		}
+		ids, err := db.CollectRows(rows, func(r db.CollectableRow) (uuid.UUID, error) {
+			var id uuid.UUID
+			return id, r.Scan(&id)
+		})
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			if err := setModelAuthPointer(ctx, tx, id, nil); err != nil {
+				return err
+			}
+		}
+		out = ids
+		return nil
+	})
+	return out, err
+}
+
 func endModelAuthOperation(ctx context.Context, tx *db.Tx, id uuid.UUID, status, code string) (ModelAuthOperation, error) {
 	return scanModelAuthOperation(tx.QueryRow(ctx, `UPDATE model_auth_operations SET status=$2,error_code=$3,authorization_url=NULL,completed_at=clock_timestamp() WHERE id=$1 RETURNING `+modelAuthOperationColumns, id, status, nullIfEmpty(code)))
 }
@@ -142,8 +186,7 @@ func (s *Store) EndModelAuthOperation(ctx context.Context, operationID uuid.UUID
 }
 
 // insertModelAuthVersion stores a new account version before switching the pointer.
-func insertModelAuthVersion(ctx context.Context, tx *db.Tx, agentID uuid.UUID, provider, method string, label *string, secret []byte) (ModelAuthVersion, error) {
-	id := uuid.Must(uuid.NewV7())
+func insertModelAuthVersion(ctx context.Context, tx *db.Tx, id, agentID uuid.UUID, provider, method string, label *string, secret []byte) (ModelAuthVersion, error) {
 	return scanModelAuthVersion(tx.QueryRow(ctx, `INSERT INTO model_auth_versions(id,agent_id,provider,auth_method,account_label,secret) VALUES($1,$2,$3,$4,$5,$6) RETURNING `+modelAuthVersionColumns, id, agentID, provider, method, label, secret))
 }
 func setModelAuthPointer(ctx context.Context, tx *db.Tx, agentID uuid.UUID, versionID *uuid.UUID) error {
@@ -154,6 +197,16 @@ func setModelAuthPointer(ctx context.Context, tx *db.Tx, agentID uuid.UUID, vers
 	return bumpConfig(ctx, tx, agentID)
 }
 func (s *Store) CompleteModelAuthOperation(ctx context.Context, operationID uuid.UUID, accountLabel *string, secret []byte) (ModelAuthOperation, *ModelAuthVersion, error) {
+	return s.completeModelAuthOperation(ctx, operationID, uuid.Must(uuid.NewV7()), accountLabel, secret)
+}
+
+// CompletePluginModelAuthOperation is CompleteModelAuthOperation with a caller-chosen version ID: a plugin-provider
+// login has already written its state directory under that ID (plugins/SPEC.md §13).
+func (s *Store) CompletePluginModelAuthOperation(ctx context.Context, operationID, versionID uuid.UUID, secret []byte) (ModelAuthOperation, *ModelAuthVersion, error) {
+	return s.completeModelAuthOperation(ctx, operationID, versionID, nil, secret)
+}
+
+func (s *Store) completeModelAuthOperation(ctx context.Context, operationID, versionID uuid.UUID, accountLabel *string, secret []byte) (ModelAuthOperation, *ModelAuthVersion, error) {
 	var o ModelAuthOperation
 	var v *ModelAuthVersion
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -189,7 +242,7 @@ func (s *Store) CompleteModelAuthOperation(ctx context.Context, operationID uuid
 			o, err = endModelAuthOperation(ctx, tx, operationID, "failed", "configuration_changed")
 			return err
 		}
-		saved, err := insertModelAuthVersion(ctx, tx, agentID, o.Provider, "oauth", accountLabel, secret)
+		saved, err := insertModelAuthVersion(ctx, tx, versionID, agentID, o.Provider, "oauth", accountLabel, secret)
 		if err != nil {
 			return err
 		}
@@ -220,7 +273,7 @@ func (s *Store) PutModelAuthKey(ctx context.Context, agentID uuid.UUID, provider
 		if err = validateModelAuthAgent(a, provider, expectedConfigVersion); err != nil {
 			return err
 		}
-		v, err = insertModelAuthVersion(ctx, tx, agentID, provider, "api_key", nil, secret)
+		v, err = insertModelAuthVersion(ctx, tx, uuid.Must(uuid.NewV7()), agentID, provider, "api_key", nil, secret)
 		if err != nil {
 			return err
 		}

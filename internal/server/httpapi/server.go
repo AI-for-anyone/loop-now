@@ -188,6 +188,7 @@ func (s *Server) Routes() []Route {
 		{"POST", "/agents/{agentId}/model-auth/operations", "startModelAuthLogin", ConsoleOnly, s.startModelAuthLogin},
 		{"GET", "/agents/{agentId}/model-auth/operations/{operationId}", "getModelAuthLogin", ConsoleOnly, s.getModelAuthLogin},
 		{"POST", "/agents/{agentId}/model-auth/operations/{operationId}/cancel", "cancelModelAuthLogin", ConsoleOnly, s.cancelModelAuthLogin},
+		{"POST", "/agents/{agentId}/model-auth/operations/{operationId}/input", "answerModelAuthLogin", ConsoleOnly, s.answerModelAuthLogin},
 		{"GET", "/tasks/{taskId}", "getTask", ConsoleOnly, s.getTask},
 		{"GET", "/tasks/{taskId}/nodes/{nodeRunId}", "getTaskNodeRun", ConsoleOnly, s.getTaskNode},
 		{"GET", "/tasks/{taskId}/nodes/{nodeRunId}/messages", "listTaskNodeMessages", ConsoleOnly, s.listTaskNodeMessages},

@@ -106,23 +106,22 @@ func (s *Service) PluginProviderUnusable(ctx context.Context, agent uuid.UUID, p
 	return plugin, reason, err
 }
 
-// validatePluginProvider 要求选用插件注册的模型提供方的 Agent 能用这个插件（项目已启用、Agent 已获授权）。
-// agent 为空表示新建的 Agent：还没有授权，不能直接选插件提供方。
+// validatePluginProvider requires an Agent that picks a plugin-registered model provider to be able to use that
+// plugin: a project Agent needs the plugin enabled in its project and granted to it; a platform Agent only needs the
+// grant. A nil agent means a new Agent, which has no grants yet and so cannot pick a plugin provider.
 func (s *Service) validatePluginProvider(ctx context.Context, agent *uuid.UUID, provider string) error {
 	plugin, ok := s.pluginProvider(provider)
 	if !ok {
 		return nil
 	}
 	if agent == nil {
-		return apperr.Invalid("model.provider", "模型提供方 "+provider+" 来自插件 "+plugin+"：先建好 Agent、在项目里启用该插件并授权给 Agent，再选这个提供方")
+		return apperr.Invalid("model.provider", "模型提供方 "+provider+" 来自插件 "+plugin+"：先建好 Agent、把该插件授权给它（项目 Agent 还要在项目里启用该插件），再选这个提供方")
 	}
 	_, reason, err := s.PluginProviderUnusable(ctx, *agent, provider)
 	if err != nil {
 		return err
 	}
 	switch reason {
-	case store.PluginUnusablePlatformAgent:
-		return apperr.Invalid("model.provider", "模型提供方 "+provider+" 来自插件 "+plugin+"，只能给项目 Agent 用")
 	case store.PluginUnusableNotEnabled:
 		return apperr.Invalid("model.provider", "模型提供方 "+provider+" 来自插件 "+plugin+"：先在项目里启用该插件")
 	case store.PluginUnusableNotGranted:

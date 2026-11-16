@@ -103,6 +103,12 @@ func TestPluginProvidersReachCatalog(t *testing.T) {
 	if _, ok := reg2.Provider("fake-oauth"); !ok {
 		t.Fatal("换 Pi 目录后插件提供方应保留")
 	}
+	// 默认卸载保留各项目的订阅账号与平台 Agent 自己的登录；选“删除数据”时才删掉它注册的提供方的登录。
+	var deleted [][]string
+	e.svc.DeleteProviderAccounts = func(_ context.Context, providers []string) error {
+		deleted = append(deleted, slices.Clone(providers))
+		return nil
+	}
 	if err := e.svc.Uninstall(ctx, "grokish", false); err != nil {
 		t.Fatal(err)
 	}
@@ -111,6 +117,22 @@ func TestPluginProvidersReachCatalog(t *testing.T) {
 	}
 	if _, err := os.Stat(dirA); err != nil {
 		t.Fatal("本地来源目录不删")
+	}
+	if len(deleted) != 0 {
+		t.Fatalf("默认卸载不删登录：%v", deleted)
+	}
+	pv, err = e.svc.Preview(ctx, plugins.PreviewRequest{Source: &plugins.Source{Kind: "local", Location: dirA}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Install(ctx, plugins.InstallInput{PreviewID: pv.PreviewID, Confirm: true}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.Uninstall(ctx, "grokish", true); err != nil {
+		t.Fatal(err)
+	}
+	if len(deleted) != 1 || !slices.Contains(deleted[0], "fake-oauth") {
+		t.Fatalf("删除数据时删掉它注册的提供方的登录：%v", deleted)
 	}
 }
 

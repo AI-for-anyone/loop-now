@@ -4017,6 +4017,8 @@ components:
         - server_restarted
         - invalid_authorization_url
         - helper_unavailable
+        - plugin_unavailable
+        - extension_load_failed
 
     ModelAuthLoginInput:
       type: object
@@ -4026,6 +4028,8 @@ components:
         - expectedConfigVersion
       properties:
         provider:
+          description: |
+            须是 Agent 当前的模型提供方：openai-codex，或模型目录里 source 为 plugin、authMethods 含 oauth 的插件提供方（plugins/SPEC.md §13）。
           type: string
         expectedConfigVersion:
           type: integer
@@ -4052,6 +4056,8 @@ components:
         - authorizationUrl
         - errorCode
         - errorMessage
+        - deviceCode
+        - prompt
       properties:
         id:
           type: string
@@ -4060,9 +4066,10 @@ components:
           type: string
           format: uuid
         provider:
+          description: openai-codex，或插件注册的模型提供方（plugins/SPEC.md §13）。
           type: string
-          enum:
-            - openai-codex
+          minLength: 1
+          maxLength: 64
         configVersion:
           type: integer
           minimum: 1
@@ -4092,9 +4099,13 @@ components:
             - 'null'
           format: uri
           description: >-
-            仅console-only当前活动登录操作可重复取得的授权URL；固定HTTPS
-            issuer/path且query禁止token/code。终态清除，不进AgentDetail/日志/审计/浏览器持久存储。
+            仅console-only当前活动登录操作可重复取得的授权URL。Codex 固定HTTPS
+            issuer/path且query禁止token/code；插件提供方是扩展给的 https 地址，服务端已校验（无用户名密码与 fragment、不含授权码或令牌）。
+            终态清除，不进AgentDetail/日志/审计/浏览器持久存储。
         errorCode:
+          description: |
+            插件提供方登录另有 plugin_unavailable（插件已卸载或停用）与 extension_load_failed（插件扩展加载失败或没有注册这个提供方的登录），
+            其余与项目插件登录相同；用户取消为 status=cancelled、errorCode 为 null。
           oneOf:
             - $ref: '#/components/schemas/ModelAuthErrorCode'
             - type: 'null'
@@ -4103,6 +4114,18 @@ components:
             - string
             - 'null'
           description: 安全固定描述，不回显provider异常、授权码或令牌。
+        deviceCode:
+          description: 设备码登录（只有插件提供方）：打开 verificationUri 输入 userCode；地址已由服务端校验。只在内存里，终态与 Codex 登录为 null。
+          anyOf:
+            - $ref: '#/components/schemas/ProjectModelLoginDeviceCode'
+            - type: 'null'
+        prompt:
+          description: |
+            插件提供方登录中等人回答的问题（选择、文字或手工粘贴授权码），用 POST …/operations/{operationId}/input 回答；
+            message 与选项是扩展给的文字，按不可信纯文本显示。只在内存里，终态与 Codex 登录为 null。
+          anyOf:
+            - $ref: '#/components/schemas/ProjectModelLoginPrompt'
+            - type: 'null'
 
     ModelAuthState:
       type: object
@@ -4119,6 +4142,44 @@ components:
           oneOf:
             - $ref: '#/components/schemas/ModelAuthOperation'
             - type: 'null'
+        localLogin:
+          description: |
+            只在 Agent 当前的模型提供方来自插件、且声明了随账号走的状态路径时给出（plugins/SPEC.md §13），其余省略。
+            开着“用本机的登录状态”时，这个提供方用的是本机主目录里该扩展自己的登录，不是这个 Agent 的登录：
+            active 表示本机有这份登录；missing 表示本机没有，Pi 启动前会以 credential_unavailable 失败（关闭开关或在本机登录后再试）。
+            开关关着时省略。
+          type: string
+          enum: [active, missing]
+
+    ProjectModelLoginDeviceCode:
+      type: object
+      additionalProperties: false
+      required: [userCode, verificationUri, expiresAt]
+      properties:
+        userCode: { type: string, minLength: 1 }
+        verificationUri: { type: string }
+        expiresAt: { type: [string, "null"], format: date-time }
+    ProjectModelLoginPrompt:
+      type: object
+      additionalProperties: false
+      required: [id, kind, message, options]
+      properties:
+        id: { type: string }
+        kind:
+          description: select 从 options 里选一个 id；text 填文字；manual_code 是浏览器回调到不了时手工粘贴的回调地址或授权码（message 可能为空）。
+          type: string
+          enum: [select, text, manual_code]
+        message: { type: string, maxLength: 501 }
+        options:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, label]
+            properties:
+              id: { type: string }
+              label: { type: string }
 
     ModelCredentialInput:
       type: object
@@ -4244,8 +4305,9 @@ components:
           enum: [builtin, config, plugin, local_cli]
           description: |
             builtin 为纯内置目录；config 表示该 Provider 有原生 models.json 配置或覆盖；
-            plugin 为已安装插件的 Pi 扩展注册的提供方（plugins/SPEC.md §13），只用于项目 Agent：
-            选它须项目已启用该插件、Agent 已获授权（否则修改 Agent 返回 422，新建 Agent 时不能直接选），账号用项目里登录的订阅账号。
+            plugin 为已安装插件的 Pi 扩展注册的提供方（plugins/SPEC.md §13）：项目 Agent 选它须项目已启用该插件、Agent 已获授权，
+            账号用项目里登录的订阅账号；平台 Agent 选它须插件已授权给这个 Agent，账号在这个 Agent 自己的模型凭证里登录
+            （POST /agents/{agentId}/model-auth/operations）。不满足时修改 Agent 返回 422，新建 Agent 时不能直接选。
             local_cli 为用户本机安装的 CLI 提供的模型（目前只有 claude-code：本机的 Claude Code），用 CLI 自己在本机的登录，
             不需要账号，平台不保存令牌；项目 Agent 与平台 Agent 都能选。模型 id 是 Claude Code 的别名（fable、opus、sonnet、haiku），
             思考等级即 Claude Code 的 effort（low 到 max）。本机是否装了、是否登录见 GET /runtimes，没装时照常可选，运行时以 runtime_* 失败。
@@ -4262,12 +4324,12 @@ components:
             - type: "null"
         unavailableReason:
           type: [string, "null"]
-          enum: [platform_agent, plugin_not_enabled, agent_not_granted, plugins_disabled, null]
+          enum: [plugin_not_enabled, agent_not_granted, plugins_disabled, null]
           description: |
             只在带 agentId 查询、且 source 为 plugin 时可能非空：这个 Agent 现在不能用它的原因。
-            platform_agent：平台 Agent，插件提供方只给项目 Agent 用；plugin_not_enabled：Agent 所在项目没有启用该插件；
+            plugin_not_enabled：Agent 所在项目没有启用该插件（只有项目 Agent；平台 Agent 没有项目启用这一层）；
             agent_not_granted：插件没有授权给这个 Agent；plugins_disabled：全局停用了全部插件（不挡保存，但 Pi 启动会失败）。
-            前三种情形下修改 Agent 选它返回 422（validation_failed，字段 model.provider，消息说明是哪一种）。
+            前两种情形下修改 Agent 选它返回 422（validation_failed，字段 model.provider，消息说明是哪一种）。
             插件被卸载后它的提供方从目录里消失（已选它的 Agent 启动时明确失败）。
         apiKeyEnvVars:
           description: 旧环境凭证兼容诊断元数据，不能作为模型凭证录入字段。

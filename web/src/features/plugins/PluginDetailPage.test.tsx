@@ -268,9 +268,9 @@ describe('插件详情的模型提供方', () => {
     expect(panel).toHaveTextContent('安装或更新时从 Pi 扩展读出')
     const items = within(within(panel).getAllByRole('list')[0]).getAllByRole('listitem')
     expect(items.map((item) => item.textContent)).toEqual([
-      'Grok CLIgrok-cliOAuth 登录已进模型目录登录状态随项目账号保存：.grok/auth.json、.config/grok3 个模型 · 来自 extensions/grok.ts',
+      'Grok CLIgrok-cliOAuth 登录已进模型目录登录状态随项目账号和平台 Agent 的登录保存：.grok/auth.json、.config/grok3 个模型 · 来自 extensions/grok.ts',
       'anthropicOAuth 登录与 Pi 内置提供方同 id：只覆盖它的设置，不进模型目录2 个模型 · 来自 extensions/grok.ts',
-      'grok-key没有注册 OAuth 登录，不进模型目录登录状态随项目账号保存：.grok-key2 个模型 · 来自 extensions/grok.ts',
+      'grok-key没有注册 OAuth 登录，不进模型目录登录状态随项目账号和平台 Agent 的登录保存：.grok-key2 个模型 · 来自 extensions/grok.ts',
       '<b>坏</b>grok-badOAuth 登录注册出错：TypeError: <script>x</script>2 个模型 · 来自 extensions/grok.ts',
       'grok-dupOAuth 登录没有进模型目录（例如与 models.json 里的提供方同 id）2 个模型 · 来自 extensions/grok.ts',
       // 进了目录却没声明状态路径：提醒登录可能不随账号保存。
@@ -294,7 +294,7 @@ describe('插件详情的模型提供方', () => {
     const { unmount } = renderDetail('/plugins/grok', { details: [withProviders({ providers: [provider('grok-cli', { inCatalog: true })] })] })
     await user.click(await screen.findByRole('button', { name: '卸载' }))
     const dialog = await screen.findByRole('alertdialog', { name: '卸载 Grok 订阅？' })
-    expect(dialog).toHaveTextContent('它注册的模型提供方在各项目里的订阅账号默认保留，重新安装后恢复；勾选后这些账号一并删除（被未结束任务用着的保留到任务结束）。')
+    expect(dialog).toHaveTextContent('它注册的模型提供方在各项目里的订阅账号和平台 Agent 自己的登录默认保留，重新安装后恢复；勾选后一并删除（被未结束任务用着的账号保留到任务结束）。')
     unmount()
     renderDetail()
     await user.click(await screen.findByRole('button', { name: '卸载' }))

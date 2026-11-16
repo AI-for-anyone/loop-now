@@ -76,6 +76,10 @@ export function providerName(id: string, provider?: Schemas['ModelProvider']): s
   return known ? copyOf(known.key).name : id
 }
 
+// 注册插件提供方的那个插件的名称：插件清单里的显示名（按界面语言），没有时用插件 id。
+export const pluginName = (provider: Schemas['ModelProvider']) =>
+  provider.pluginDisplayName === null ? provider.pluginId ?? '' : localizedText(provider.pluginDisplayName) || provider.pluginId || ''
+
 // 把接口给的提供方目录收成选择器的条目：分组按 providerGroups 的顺序，组内按表里的顺序，未知 id 排在"其他"的最后。
 export function providerEntries(providers: Schemas['ModelProvider'][]): ProviderEntry[] {
   const builtin = providers.filter(provider => provider.source !== 'plugin')
@@ -94,7 +98,7 @@ export function providerEntries(providers: Schemas['ModelProvider'][]): Provider
   }
   for (const provider of providers) {
     if (provider.source !== 'plugin') continue
-    const plugin = provider.pluginDisplayName === null ? provider.pluginId ?? '' : localizedText(provider.pluginDisplayName) || provider.pluginId || ''
+    const plugin = pluginName(provider)
     entries.push(entry(`plugin:${provider.id}`, 'plugin', provider.name || provider.id, unknownColor, false, [{ id: provider.id, label: provider.id, provider }], `${plugin} ${provider.pluginId ?? ''}`, plugin))
   }
   return providerGroups.flatMap(group => entries.filter(item => item.group === group))

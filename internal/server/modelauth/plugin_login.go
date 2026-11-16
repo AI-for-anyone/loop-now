@@ -19,7 +19,8 @@ import (
 // 插件提供方的项目登录（plugins/SPEC.md §13）。账号就是项目模型账号；一次成功登录产生一个模型认证版本，
 // 它的“凭证”只记下插件（modelcredential.PluginState），令牌与扩展的状态在以版本 ID 命名的状态目录里。
 
-// PluginLogins 是 ProjectService 支持插件提供方登录所需的东西；为空时只支持 Codex。
+// PluginLogins is what plugin-provider logins need, shared by project accounts and platform Agents' own logins.
+// Without it only Codex logins are supported.
 type PluginLogins struct {
 	Helper PluginLoginHelper
 	States *providerstate.Manager
@@ -34,27 +35,113 @@ type pluginLoginState struct {
 	mu      sync.Mutex
 	prompt  *cm.LoginPrompt
 	replies chan cm.LoginInput
+	// device is the device code of a platform Agent login. That operation table has no device-code columns, so it
+	// lives in memory only (project logins keep theirs in the database).
+	device *cm.DeviceCode
+}
+
+// answer hands the person's answer to the helper process. Only the pending question can be answered, and a select
+// answer must be one of its options.
+func (st *pluginLoginState) answer(in cm.LoginInput) error {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	q := st.prompt
+	if q == nil || q.ID != in.PromptID {
+		return apperr.Invalid("promptId", "没有这个待回答的问题，请刷新后重试")
+	}
+	if q.Kind == "select" && !slices.ContainsFunc(q.Options, func(o cm.LoginPromptOption) bool { return o.ID == in.Value }) {
+		return apperr.Invalid("value", "请从选项中选择")
+	}
+	select {
+	case st.replies <- in:
+		st.prompt = nil
+		return nil
+	default:
+		return apperr.Invalid("promptId", "回答正在处理，请稍后重试")
+	}
+}
+
+func (st *pluginLoginState) setPrompt(q cm.LoginPrompt) {
+	st.mu.Lock()
+	st.prompt = &q
+	st.mu.Unlock()
+}
+
+func (st *pluginLoginState) closePrompt(id string) {
+	st.mu.Lock()
+	if st.prompt != nil && st.prompt.ID == id {
+		st.prompt = nil
+	}
+	st.mu.Unlock()
+}
+
+// register records a plugin login in progress; unregister drops it when the login ends.
+func (l *PluginLogins) register(id uuid.UUID) *pluginLoginState {
+	state := &pluginLoginState{replies: make(chan cm.LoginInput, 4)}
+	l.mu.Lock()
+	if l.ops == nil {
+		l.ops = map[uuid.UUID]*pluginLoginState{}
+	}
+	l.ops[id] = state
+	l.mu.Unlock()
+	return state
+}
+
+func (l *PluginLogins) unregister(id uuid.UUID) {
+	l.mu.Lock()
+	delete(l.ops, id)
+	l.mu.Unlock()
+}
+
+func (l *PluginLogins) state(id uuid.UUID) *pluginLoginState {
+	if l == nil {
+		return nil
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.ops[id]
+}
+
+// pluginLoginFailure maps a failed plugin-provider login to the operation's terminal status and error code.
+func pluginLoginFailure(ctx context.Context, err error) (status, code string) {
+	status, code = "failed", "auth_failed"
+	switch {
+	case errors.Is(err, errPluginUnavailable):
+		code = "plugin_unavailable"
+	case errors.Is(err, ErrExtensionLoad):
+		code = "extension_load_failed"
+	case errors.Is(err, ErrInvalidAuthorizationURL):
+		code = "invalid_authorization_url"
+	case errors.Is(err, ErrCallbackPortBusy):
+		code = "auth_port_busy"
+	case errors.Is(err, ErrAuthExpired) || errors.Is(ctx.Err(), context.DeadlineExceeded):
+		status, code = "expired", "auth_timeout"
+	case errors.Is(err, ErrAuthCancelled) || ctx.Err() != nil:
+		status, code = "cancelled", ""
+	case errors.Is(err, ErrHelperUnavailable):
+		code = "helper_unavailable"
+	}
+	return status, code
 }
 
 // pluginProvider 返回注册了 provider 的插件；不是带 OAuth 的插件提供方时 ok 为 false。
-func (p *ProjectService) pluginProvider(provider string) (string, bool) {
-	if p.Auth.Models == nil {
+func (s *Service) pluginProvider(provider string) (string, bool) {
+	if s.Models == nil {
 		return "", false
 	}
-	v, ok := p.Auth.Models.Provider(provider)
+	v, ok := s.Models.Provider(provider)
 	if !ok || v.Source != "plugin" || v.PluginID == nil || !slices.Contains(v.AuthMethods, "oauth") {
 		return "", false
 	}
 	return *v.PluginID, true
 }
 
+func (p *ProjectService) pluginProvider(provider string) (string, bool) {
+	return p.Auth.pluginProvider(provider)
+}
+
 func (p *ProjectService) pluginState(id uuid.UUID) *pluginLoginState {
-	if p.Plugins == nil {
-		return nil
-	}
-	p.Plugins.mu.Lock()
-	defer p.Plugins.mu.Unlock()
-	return p.Plugins.ops[id]
+	return p.Plugins.state(id)
 }
 
 // withPrompt 给进行中的插件登录操作带上等人回答的问题。
@@ -129,36 +216,18 @@ func (u pluginUI) DeviceCode(code, uri string, expiresIn time.Duration) error {
 	return nil
 }
 
-func (u pluginUI) Prompt(q cm.LoginPrompt) {
-	u.state.mu.Lock()
-	u.state.prompt = &q
-	u.state.mu.Unlock()
-}
+func (u pluginUI) Prompt(q cm.LoginPrompt) { u.state.setPrompt(q) }
 
-func (u pluginUI) PromptClosed(id string) {
-	u.state.mu.Lock()
-	if u.state.prompt != nil && u.state.prompt.ID == id {
-		u.state.prompt = nil
-	}
-	u.state.mu.Unlock()
-}
+func (u pluginUI) PromptClosed(id string) { u.state.closePrompt(id) }
 
 // pluginLogin 运行一次插件提供方登录：新状态目录 → 辅助进程登录 → 写 auth.json 并改名为正式目录 → 提交账号与版本。
 func (p *ProjectService) pluginLogin(ctx context.Context, op cm.Operation, work *loginWorker, plugin string) {
 	s := p.Auth
 	defer s.workers.Done()
 	defer work.cancel()
-	state := &pluginLoginState{replies: make(chan cm.LoginInput, 4)}
-	p.Plugins.mu.Lock()
-	if p.Plugins.ops == nil {
-		p.Plugins.ops = map[uuid.UUID]*pluginLoginState{}
-	}
-	p.Plugins.ops[op.ID] = state
-	p.Plugins.mu.Unlock()
+	state := p.Plugins.register(op.ID)
 	defer func() {
-		p.Plugins.mu.Lock()
-		delete(p.Plugins.ops, op.ID)
-		p.Plugins.mu.Unlock()
+		p.Plugins.unregister(op.ID)
 		s.mu.Lock()
 		delete(s.operations, op.ID)
 		s.mu.Unlock()
@@ -193,23 +262,7 @@ func (p *ProjectService) pluginLogin(ctx context.Context, op cm.Operation, work 
 	if errors.Is(err, ErrAuthCancelled) && ctx.Err() == nil {
 		err = ErrAuthCancelled
 	}
-	status, code := "failed", "auth_failed"
-	switch {
-	case errors.Is(err, errPluginUnavailable):
-		code = "plugin_unavailable"
-	case errors.Is(err, ErrExtensionLoad):
-		code = "extension_load_failed"
-	case errors.Is(err, ErrInvalidAuthorizationURL):
-		code = "invalid_authorization_url"
-	case errors.Is(err, ErrCallbackPortBusy):
-		code = "auth_port_busy"
-	case errors.Is(err, ErrAuthExpired) || errors.Is(ctx.Err(), context.DeadlineExceeded):
-		status, code = "expired", "auth_timeout"
-	case errors.Is(err, ErrAuthCancelled) || ctx.Err() != nil:
-		status, code = "cancelled", ""
-	case errors.Is(err, ErrHelperUnavailable):
-		code = "helper_unavailable"
-	}
+	status, code := pluginLoginFailure(ctx, err)
 	if s.Log != nil {
 		s.Log.Warn("插件提供方登录未完成", "projectId", op.ProjectID, "operationId", op.ID, "provider", op.Provider, "plugin", plugin, "code", code, "stage", stage, "detail", helperDiagnostic(err))
 	}
@@ -267,23 +320,8 @@ func (p *ProjectService) Input(ctx context.Context, project, id uuid.UUID, in cm
 	if terminal(o.Status) || st == nil {
 		return cm.LoginState{}, apperr.Invalid("promptId", "这次登录没有在等回答")
 	}
-	st.mu.Lock()
-	q := st.prompt
-	if q == nil || q.ID != in.PromptID {
-		st.mu.Unlock()
-		return cm.LoginState{}, apperr.Invalid("promptId", "没有这个待回答的问题，请刷新后重试")
+	if err := st.answer(in); err != nil {
+		return cm.LoginState{}, err
 	}
-	if q.Kind == "select" && !slices.ContainsFunc(q.Options, func(o cm.LoginPromptOption) bool { return o.ID == in.Value }) {
-		st.mu.Unlock()
-		return cm.LoginState{}, apperr.Invalid("value", "请从选项中选择")
-	}
-	select {
-	case st.replies <- in:
-		st.prompt = nil
-	default:
-		st.mu.Unlock()
-		return cm.LoginState{}, apperr.Invalid("promptId", "回答正在处理，请稍后重试")
-	}
-	st.mu.Unlock()
 	return p.loginView(ctx, o)
 }

@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"context"
 	"github.com/google/uuid"
+	cm "loop-now/internal/server/credentialmodel"
 	"loop-now/internal/server/modelauth"
 	"net/http"
 	"testing"
@@ -12,6 +13,7 @@ import (
 type authControllerStub struct {
 	operation modelauth.Operation
 	calls     int
+	answers   []string
 }
 
 func (f *authControllerStub) State(context.Context, uuid.UUID) (modelauth.State, error) {
@@ -38,6 +40,13 @@ func (f *authControllerStub) Cancel(context.Context, uuid.UUID, uuid.UUID) (mode
 	return f.operation, nil
 }
 
+func (f *authControllerStub) Input(_ context.Context, _ uuid.UUID, _ uuid.UUID, in cm.LoginInput) (modelauth.State, error) {
+	f.calls++
+	f.answers = append(f.answers, in.PromptID)
+	f.operation.Prompt = nil
+	return modelauth.State{Operation: &f.operation}, nil
+}
+
 func TestModelAuthConsoleContractAndIdentityBoundary(t *testing.T) {
 	e := newEnv(t)
 	a := e.platformAgent("认证边界")
@@ -54,7 +63,8 @@ func TestModelAuthConsoleContractAndIdentityBoundary(t *testing.T) {
 	routes := []struct {
 		method, path string
 		body         any
-	}{{"GET", base, nil}, {"POST", base + "/operations", map[string]any{"provider": "openai-codex", "expectedConfigVersion": 1}}, {"GET", base + "/operations/" + stub.operation.ID.String(), nil}, {"POST", base + "/operations/" + stub.operation.ID.String() + "/cancel", map[string]any{}}}
+	}{{"GET", base, nil}, {"POST", base + "/operations", map[string]any{"provider": "openai-codex", "expectedConfigVersion": 1}}, {"GET", base + "/operations/" + stub.operation.ID.String(), nil}, {"POST", base + "/operations/" + stub.operation.ID.String() + "/cancel", map[string]any{}},
+		{"POST", base + "/operations/" + stub.operation.ID.String() + "/input", map[string]any{"promptId": "1", "value": "device"}}}
 	for _, route := range routes {
 		external.expectError(403, "forbidden", route.method, route.path, route.body)
 		agent.expectError(404, "not_found", route.method, route.path, route.body)
@@ -69,6 +79,13 @@ func TestModelAuthConsoleContractAndIdentityBoundary(t *testing.T) {
 	}
 	e.expect(200, "POST", routes[1].path, routes[1].body)
 	e.expect(200, "GET", routes[2].path, nil)
+	// 插件提供方登录的回答：经同一控制台边界，返回 ModelAuthState。
+	stub.operation.Provider = "fake-oauth"
+	stub.operation.Prompt = &cm.LoginPrompt{ID: "1", Kind: "select", Message: "Pick", Options: []cm.LoginPromptOption{{ID: "device", Label: "Device"}}}
+	answered := decode[modelauth.State](t, e.expect(200, "POST", routes[4].path, routes[4].body))
+	if answered.Operation == nil || answered.Operation.Prompt != nil || len(stub.answers) != 1 || stub.answers[0] != "1" {
+		t.Fatalf("回答：%+v %v", answered.Operation, stub.answers)
+	}
 	op := decode[modelauth.Operation](t, e.expect(200, "POST", routes[3].path, routes[3].body))
 	if op.Status != "cancelled" || op.AuthorizationURL != nil {
 		t.Fatal("terminal operation retained authorization URL")
