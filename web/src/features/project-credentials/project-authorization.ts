@@ -1,6 +1,9 @@
 // 与固定Pi1.1.0及后端safe URL契约一致：token字样的组织开关不是令牌载荷。
 // 精确列出允许的参数，未知键（含code/token/verifier秘密键）仍拒绝。
 const authorizationParameters = new Set(['response_type', 'client_id', 'redirect_uri', 'scope', 'code_challenge', 'code_challenge_method', 'state', 'id_token_add_organizations', 'codex_cli_simplified_flow', 'originator'])
+// 授权地址或输入代码的地址的主机名，用在链接文字里；解析不了时原样返回。
+export const hostOf = (url: string) => { try { return new URL(url).host } catch { return url } }
+
 // 插件提供方的地址由扩展给出、服务端已校验；这里只做通用检查：https、没有用户名密码、没有 fragment。
 export function pluginAuthorizationUrl(value: string): boolean {
   try {

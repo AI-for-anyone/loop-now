@@ -32,3 +32,10 @@ export function cancelModelLogin(agentId: string, operationId: string) {
     params: { path: { agentId, operationId } }, body: {},
   }))
 }
+
+// 回答插件提供方登录中途的问题：回答按秘密处理，直接发出，不经 mutation 缓存、不记日志；返回新的认证状态。
+export function answerModelLogin(agentId: string, operationId: string, body: Schemas['ProjectModelLoginInput']) {
+  return call(api.POST('/agents/{agentId}/model-auth/operations/{operationId}/input', {
+    params: { path: { agentId, operationId } }, body,
+  }))
+}

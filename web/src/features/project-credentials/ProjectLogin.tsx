@@ -8,15 +8,13 @@ import { Label } from '@/components/ui/label'
 import { ErrorAlert, FieldError } from '@/components/ErrorAlert'
 import { LoginFeedback } from '@/features/agent-config/LoginFeedback'
 import { reserveAuthorizationWindow } from '@/features/agent-config/authorizationWindow'
-import { pluginAuthorizationUrl, projectAuthorizationUrl } from './project-authorization'
+import { hostOf, pluginAuthorizationUrl, projectAuthorizationUrl } from './project-authorization'
 import { providerName } from './provider-catalog'
 import { t } from '@/i18n'
 import { useProjectCredentialsAvailable } from './project-availability'
 import { useDirtyForm } from '@/features/prompts/draft-navigation'
 const loginErrors: Readonly<Record<string, string>> = t.config.modelLogin.errors
 const copy = t.credentials.projectLogin
-
-const hostOf = (url: string) => { try { return new URL(url).host } catch { return url } }
 
 // 项目模型账号的浏览器登录。provider 是要登录的提供方：Codex，或插件注册的带 OAuth 的提供方（source 为 plugin）。
 // Codex：点登录时先开一个空白窗口（防弹窗拦截），拿到授权地址后导航过去，地址走严格白名单。
@@ -128,7 +126,8 @@ export function ProjectLogin({ projectId, provider, account }: { projectId: stri
 }
 
 // 设备码登录：大号显示代码（可复制），链接到输入代码的地址（服务端已校验，这里再做通用检查），写明代码的有效期。
-function DeviceCode({ code, href }: { code: Schemas['ProjectModelLoginDeviceCode']; href?: string }) {
+// 平台 Agent 自己的模型凭证登录插件提供方时也用它。
+export function DeviceCode({ code, href }: { code: Schemas['ProjectModelLoginDeviceCode']; href?: string }) {
   const labelId = useId()
   const [copied, setCopied] = useState(false)
   const copyCode = async () => {
@@ -149,8 +148,8 @@ function DeviceCode({ code, href }: { code: Schemas['ProjectModelLoginDeviceCode
 }
 
 // 登录中途的问题：select 列出选项让人自己选（不替人预选），text 填文字，manual_code 粘贴回调地址或授权码。
-// 问题与选项是扩展原文，按纯文本显示。回答按秘密处理：提交后清空，不放进缓存。
-function LoginPrompt({ prompt, disabled, answering, onAnswer }: { prompt: Schemas['ProjectModelLoginPrompt']; disabled: boolean; answering: boolean; onAnswer: (value: string) => Promise<void> }) {
+// 问题与选项是扩展原文，按纯文本显示。回答按秘密处理：提交后清空，不放进缓存。平台 Agent 的插件提供方登录也用它。
+export function LoginPrompt({ prompt, disabled, answering, onAnswer }: { prompt: Schemas['ProjectModelLoginPrompt']; disabled: boolean; answering: boolean; onAnswer: (value: string) => Promise<void> }) {
   const id = useId()
   const [value, setValue] = useState(''), [missing, setMissing] = useState(false)
   const text = copy.prompt
