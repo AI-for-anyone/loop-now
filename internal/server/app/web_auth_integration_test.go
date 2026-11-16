@@ -162,7 +162,7 @@ func TestWebAuthIntegration(t *testing.T) {
 		}
 		return uuid.MustParse(agent["id"].(string))
 	}
-	codexID, keyID := create("Web联调Codex", "openai-codex"), create("Web联调Key", "anthropic")
+	codexID, keyID := create("Web integration Codex", "openai-codex"), create("Web integration Key", "anthropic")
 	var checkpoints []map[string]any
 	var checkpointMu sync.Mutex
 	control := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {

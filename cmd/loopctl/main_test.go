@@ -26,10 +26,10 @@ func TestDependencies(t *testing.T) {
 			continue
 		}
 		if !strings.HasPrefix(pkg, "loop-now/") {
-			t.Errorf("引用了第三方包 %s", pkg)
+			t.Errorf("imports third-party package %s", pkg)
 		}
 		if strings.HasPrefix(pkg, "loop-now/internal/server") || strings.HasPrefix(pkg, "loop-now/internal/testutil") || pkg == "loop-now/internal/loopctl/clitest" {
-			t.Errorf("引用了不应进入 loopctl 的包 %s", pkg)
+			t.Errorf("imports package %s, which must not be in loopctl", pkg)
 		}
 	}
 }
@@ -39,7 +39,7 @@ func TestDependencies(t *testing.T) {
 func TestProcessOutput(t *testing.T) {
 	bin := testenv.Exe(filepath.Join(t.TempDir(), "loopctl"))
 	if out, err := exec.Command("go", "build", "-ldflags", "-X loop-now/internal/buildinfo.version=9.9.9-test", "-o", bin, ".").CombinedOutput(); err != nil {
-		t.Fatalf("构建失败：%v\n%s", err, out)
+		t.Fatalf("build failed: %v\n%s", err, out)
 	}
 	home := t.TempDir()
 	cases := []struct {
@@ -68,10 +68,10 @@ func TestProcessOutput(t *testing.T) {
 			t.Fatal(err)
 		}
 		if code != c.exit {
-			t.Errorf("%v：退出码 %d，应为 %d：%s", c.args, code, c.exit, stdout.String())
+			t.Errorf("%v: exit code %d, want %d: %s", c.args, code, c.exit, stdout.String())
 		}
 		if stderr.Len() != 0 {
-			t.Errorf("%v：标准错误不为空：%s", c.args, stderr.String())
+			t.Errorf("%v: stderr is not empty: %s", c.args, stderr.String())
 		}
 		var v struct {
 			OK   bool `json:"ok"`
@@ -80,10 +80,10 @@ func TestProcessOutput(t *testing.T) {
 			} `json:"meta"`
 		}
 		if strings.Count(stdout.String(), "\n") != 1 || json.Unmarshal(stdout.Bytes(), &v) != nil || v.OK != (c.exit == 0) {
-			t.Errorf("%v：标准输出应恰好是一个 JSON 对象：%q", c.args, stdout.String())
+			t.Errorf("%v: stdout should be exactly one JSON object: %q", c.args, stdout.String())
 		}
 		if v.Meta.ClientVersion != "9.9.9-test" {
-			t.Errorf("%v：版本应来自 ldflags 注入：%s", c.args, v.Meta.ClientVersion)
+			t.Errorf("%v: version should come from ldflags: %s", c.args, v.Meta.ClientVersion)
 		}
 	}
 }

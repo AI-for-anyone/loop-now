@@ -36,7 +36,7 @@ func build(t *testing.T, version string) (*Manifest, string) {
 // binary for this machine reports matches the manifest.
 func TestBuild(t *testing.T) {
 	if testing.Short() {
-		t.Skip("交叉编译 4 个平台较慢")
+		t.Skip("cross-compiling for 4 platforms is slow")
 	}
 	m, dir := build(t, "0.0.0-disttest")
 	if m.Program != "loopctl" || m.Version != "0.0.0-disttest" || m.SchemaVersion != 1 || len(m.Artifacts) != 5 || m.GoVersion != runtime.Version() {
@@ -45,19 +45,19 @@ func TestBuild(t *testing.T) {
 	var onDisk Manifest
 	b, _ := os.ReadFile(filepath.Join(dir, "manifest.json"))
 	if err := json.Unmarshal(b, &onDisk); err != nil || len(onDisk.Artifacts) != 5 {
-		t.Fatalf("manifest.json：%v", err)
+		t.Fatalf("manifest.json: %v", err)
 	}
 	if shasum, err := exec.LookPath("shasum"); err == nil && runtime.GOOS != "windows" { // shasum.bat on the runner cannot be run directly
 		cmd := exec.Command(shasum, "-a", "256", "-c", "SHA256SUMS")
 		cmd.Dir = dir
 		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("shasum -c 失败：%v\n%s", err, out)
+			t.Fatalf("shasum -c failed: %v\n%s", err, out)
 		}
 	}
 	for _, a := range m.Artifacts {
 		_, sum, _ := digest(filepath.Join(dir, a.File))
 		if sum != a.SHA256 {
-			t.Errorf("%s 的摘要与清单不一致", a.File)
+			t.Errorf("%s digest does not match the manifest", a.File)
 		}
 		if file, err := exec.LookPath("file"); err == nil {
 			out, _ := exec.Command(file, filepath.Join(dir, a.File)).Output()
@@ -67,7 +67,7 @@ func TestBuild(t *testing.T) {
 			}[a.OS+"/"+a.Arch]
 			for _, w := range want {
 				if !strings.Contains(string(out), w) {
-					t.Errorf("%s：file 的结果 %q 中没有 %q", a.File, strings.TrimSpace(string(out)), w)
+					t.Errorf("%s: file output %q does not contain %q", a.File, strings.TrimSpace(string(out)), w)
 				}
 			}
 		}
@@ -82,7 +82,7 @@ func TestBuild(t *testing.T) {
 				} `json:"data"`
 			}
 			if json.Unmarshal(out, &v); v.Data.Version != m.Version {
-				t.Errorf("本机二进制报告的版本为 %q，清单为 %q", v.Data.Version, m.Version)
+				t.Errorf("native binary reports version %q, manifest says %q", v.Data.Version, m.Version)
 			}
 		}
 	}
@@ -91,14 +91,14 @@ func TestBuild(t *testing.T) {
 // Building twice from the same commit with the same version number gives identical SHA256SUMS.
 func TestReproducible(t *testing.T) {
 	if testing.Short() {
-		t.Skip("交叉编译 4 个平台较慢")
+		t.Skip("cross-compiling for 4 platforms is slow")
 	}
 	_, a := build(t, "0.0.0-repro")
 	_, b := build(t, "0.0.0-repro")
 	x, _ := os.ReadFile(filepath.Join(a, "SHA256SUMS"))
 	y, _ := os.ReadFile(filepath.Join(b, "SHA256SUMS"))
 	if len(x) == 0 || string(x) != string(y) {
-		t.Fatalf("两次构建的 SHA256SUMS 不同：\n%s\n%s", x, y)
+		t.Fatalf("SHA256SUMS differ between two builds:\n%s\n%s", x, y)
 	}
 }
 
@@ -106,14 +106,14 @@ func TestRejectsBadInput(t *testing.T) {
 	root, _ := moduleRoot(context.Background())
 	for _, v := range []string{"", "../x", "a b", "-x"} {
 		if _, _, err := Build(context.Background(), root, v, t.TempDir()); err == nil {
-			t.Errorf("版本号 %q 应被拒绝", v)
+			t.Errorf("version %q should be rejected", v)
 		}
 	}
 	out := t.TempDir()
 	os.MkdirAll(filepath.Join(out, "1.0.0"), 0o755)
 	os.WriteFile(filepath.Join(out, "1.0.0", "old"), []byte("x"), 0o644)
 	if _, _, err := Build(context.Background(), root, "1.0.0", out); err == nil {
-		t.Error("输出目录不为空时应拒绝")
+		t.Error("should refuse a non-empty output directory")
 	}
 }
 
@@ -122,7 +122,7 @@ func TestRejectsBadInput(t *testing.T) {
 // serves downloads on the external port (tasks 8.3).
 func TestServerAcceptsArtifacts(t *testing.T) {
 	if testing.Short() {
-		t.Skip("交叉编译 4 个平台较慢")
+		t.Skip("cross-compiling for 4 platforms is slow")
 	}
 	root, err := moduleRoot(context.Background())
 	if err != nil {
@@ -135,10 +135,10 @@ func TestServerAcceptsArtifacts(t *testing.T) {
 	}
 	d, err := loopctldist.Load(out, version)
 	if err != nil {
-		t.Fatalf("服务端拒绝了产物：%v", err)
+		t.Fatalf("server rejected the build output: %v", err)
 	}
 	if _, err := loopctldist.Load(out, "0.0.0-other"); err == nil {
-		t.Fatal("版本不同时服务端应拒绝")
+		t.Fatal("server should reject a different version")
 	}
 	binDir, err := d.Install(t.TempDir())
 	if err != nil {
@@ -154,7 +154,7 @@ func TestServerAcceptsArtifacts(t *testing.T) {
 		} `json:"data"`
 	}
 	if json.Unmarshal(b, &v); v.Data.Version != version {
-		t.Fatalf("装进工具目录的 loopctl 报告的版本为 %q", v.Data.Version)
+		t.Fatalf("loopctl installed in the tools directory reports version %q", v.Data.Version)
 	}
 	srv := httptest.NewServer(d.Handler())
 	defer srv.Close()
@@ -167,10 +167,10 @@ func TestServerAcceptsArtifacts(t *testing.T) {
 		resp.Body.Close()
 		h := sha256.Sum256(body)
 		if resp.StatusCode != 200 || resp.Header.Get("X-Content-SHA256") != hex.EncodeToString(h[:]) {
-			t.Errorf("%s：%d，X-Content-SHA256 %q", name, resp.StatusCode, resp.Header.Get("X-Content-SHA256"))
+			t.Errorf("%s: %d, X-Content-SHA256 %q", name, resp.StatusCode, resp.Header.Get("X-Content-SHA256"))
 		}
 	}
 	if resp, _ := http.Get(srv.URL + "/downloads/loopctl/../go.mod"); resp == nil || resp.StatusCode == 200 {
-		t.Error("清单之外的文件不应提供下载")
+		t.Error("files outside the manifest should not be downloadable")
 	}
 }

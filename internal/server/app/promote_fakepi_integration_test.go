@@ -31,7 +31,7 @@ func promoteWorld(t *testing.T) *world {
 	real, err := preflight.Resolve(context.Background(), preflight.Options{PiBin: "pi", PiVersion: "1.4.0", NodeBin: "node",
 		WorkRoot: filepath.Join(t.TempDir(), "probe"), HomeDirs: []string{"/nonexistent-home"}})
 	if err != nil {
-		t.Skipf("本机没有可用的 Pi 1.4.0（读取模型目录需要）：%v", err)
+		t.Skipf("no usable Pi 1.4.0 on this machine (needed to read the model catalog): %v", err)
 	}
 	wrapper := filepath.Join(t.TempDir(), "pi")
 	if err = os.WriteFile(wrapper, []byte("#!/bin/sh\nif [ \"$1\" = --version ] || [ \"$1\" = -v ]; then echo 1.4.0; exit 0; fi\nexec "+fakepibin.Path(t)+" \"$@\"\n"), 0o755); err != nil {
@@ -41,7 +41,7 @@ func promoteWorld(t *testing.T) *world {
 		TaskMaxSteps: 100, TaskMaxEdges: 300, TaskMaxVisits: 1000, TaskMaxRequest: 1 << 20, TaskMaxArtifact: 20 << 20, TaskMaxSession: 100 << 20, TaskReconcileInterval: 50 * time.Millisecond, TaskEventPoll: 10 * time.Millisecond, TaskRecordTimeout: time.Second,
 		DataDir:    t.TempDir(),
 		ListenAddr: "127.0.0.1:0", AllowedHosts: []string{"localhost", "127.0.0.1", "::1"}, ConsoleOrigins: []string{"http://localhost:5173"},
-		WorkRoot: filepath.Join(t.TempDir(), "work"), DefaultOrgName: "默认组织", DefaultProjectName: "默认项目",
+		WorkRoot: filepath.Join(t.TempDir(), "work"), DefaultOrgName: "Default org", DefaultProjectName: "Default project",
 		PiBin: wrapper, PiVersion: "1.4.0", PiMaxProcesses: 2, PiIdleTimeout: time.Minute, PiStartTimeout: 10 * time.Second,
 		PiStopGrace: 2 * time.Second, AbortTimeout: 2 * time.Second, GitCloneTimeout: 30 * time.Second, CLIInstallTimeout: time.Minute,
 		NodeBin: "node", PiAIDir: real.PiAIDir, ReconcileInterval: 500 * time.Millisecond,
@@ -59,7 +59,7 @@ func waitFor(t *testing.T, what string, ok func() bool) {
 			return
 		}
 	}
-	t.Fatal("等待超时：" + what)
+	t.Fatal("timed out waiting: " + what)
 }
 
 // firstSSESnapshot reads the first event of an SSE stream, which must be a snapshot.
@@ -83,7 +83,7 @@ func firstSSESnapshot(t *testing.T, url string, out any) {
 		}
 		if v, ok := strings.CutPrefix(line, "data: "); ok {
 			if event != "snapshot" {
-				t.Fatalf("第一条事件应为 snapshot：%s", event)
+				t.Fatalf("the first event should be snapshot: %s", event)
 			}
 			if err = json.Unmarshal([]byte(v), out); err != nil {
 				t.Fatal(err)
@@ -91,7 +91,7 @@ func firstSSESnapshot(t *testing.T, url string, out any) {
 			return
 		}
 	}
-	t.Fatal("没有读到 snapshot")
+	t.Fatal("no snapshot read")
 }
 
 func TestPromoteToInterruptActualAppFakePi(t *testing.T) {
@@ -112,7 +112,7 @@ func TestPromoteToInterruptActualAppFakePi(t *testing.T) {
 	// The current reply ignores the abort and the executor kills it after AbortTimeout: this leaves a window for
 	// observing the queue.
 	first := send("!sleep=30s !noabort !text=first", "")
-	waitFor(t, "第一条进入运行", func() bool {
+	waitFor(t, "first message running", func() bool {
 		r, e := s.a.Store.GetRun(ctx, first.ID)
 		return e == nil && r.Status == "running"
 	})
@@ -134,20 +134,20 @@ func TestPromoteToInterruptActualAppFakePi(t *testing.T) {
 		return out
 	}
 	if !slices.Equal(itemRuns(got.Queue), []uuid.UUID{n2.ID, n1.ID}) || got.Run.WhenBusy == nil || *got.Run.WhenBusy != "interrupt" || got.Queue[0].WhenBusy != "interrupt" {
-		t.Fatalf("转换结果：%+v", got)
+		t.Fatalf("promote result: %+v", got)
 	}
 	var snap apitypes.SseSnapshot
 	firstSSESnapshot(t, s.url+path+"/events", &snap)
 	if !slices.Equal(ids(snap.QueuedRuns), []uuid.UUID{n2.ID, n1.ID}) || *snap.QueuedRuns[0].WhenBusy != "interrupt" || *snap.QueuedRuns[1].WhenBusy != "queue" {
-		t.Fatalf("SSE 快照的排队顺序或 whenBusy 不对：%+v", snap.QueuedRuns)
+		t.Fatalf("wrong queue order or whenBusy in the SSE snapshot: %+v", snap.QueuedRuns)
 	}
 	if code, body := s.call("POST", path+"/runs/"+first.ID.String()+"/promote-to-interrupt", map[string]any{"actionId": uuid.New()}); code != 409 || !strings.Contains(string(body), "run_not_queued") {
-		t.Fatalf("进行中的执行应 409 run_not_queued：%d %s", code, body)
+		t.Fatalf("a run in progress should get 409 run_not_queued: %d %s", code, body)
 	}
 	if code, _ := s.call("POST", path+"/runs/"+n2.ID.String()+"/promote-to-interrupt", map[string]any{"actionId": uuid.New()}); code != 200 {
-		t.Fatalf("重复转换应幂等：%d", code)
+		t.Fatalf("a repeated promote should be idempotent: %d", code)
 	}
-	waitFor(t, "全部执行结束", func() bool {
+	waitFor(t, "all runs ended", func() bool {
 		for _, id := range []uuid.UUID{first.ID, n1.ID, n2.ID} {
 			r, e := s.a.Store.GetRun(ctx, id)
 			if e != nil || r.EndedAt == nil {
@@ -160,10 +160,10 @@ func TestPromoteToInterruptActualAppFakePi(t *testing.T) {
 	r1, _ := s.a.Store.GetRun(ctx, n1.ID)
 	r2, _ := s.a.Store.GetRun(ctx, n2.ID)
 	if a.Status != "interrupted" || a.EndReason != "user_interrupt" {
-		t.Fatalf("当前回复应被打断：%s %s", a.Status, a.EndReason)
+		t.Fatalf("the current reply should be interrupted: %s %s", a.Status, a.EndReason)
 	}
 	if r1.Status != "completed" || r2.Status != "completed" || !r2.StartedAt.Before(*r1.StartedAt) {
-		t.Fatalf("转换的消息应先于普通排队执行：n2=%s@%v n1=%s@%v", r2.Status, r2.StartedAt, r1.Status, r1.StartedAt)
+		t.Fatalf("the promoted message should run before ordinary queued ones: n2=%s@%v n1=%s@%v", r2.Status, r2.StartedAt, r1.Status, r1.StartedAt)
 	}
 	_ = agent
 }
@@ -185,7 +185,7 @@ func TestPromoteTaskNodeInboxActualAppFakePi(t *testing.T) {
 	task := decode[taskmodel.Detail](t, raw)
 	node, runtime := task.Nodes[0].ID, task.Nodes[0].RuntimeID
 	var active uuid.UUID
-	waitFor(t, "节点进入运行", func() bool {
+	waitFor(t, "node running", func() bool {
 		return s.a.Store.Pool.QueryRow(ctx, `SELECT id FROM task_turns WHERE runtime_id=$1 AND status='running'`, runtime).Scan(&active) == nil
 	})
 	base := "/tasks/" + task.Task.ID.String() + "/nodes/" + node.String()
@@ -199,20 +199,20 @@ func TestPromoteTaskNodeInboxActualAppFakePi(t *testing.T) {
 		}
 		return m.ID
 	}
-	m1, m2 := send("第一条排队"), send("第二条排队")
+	m1, m2 := send("first queued"), send("second queued")
 	q := decode[taskmodel.TaskNodeQueue](t, s.must(200, "GET", base+"/queue", nil))
-	if len(q.Items) != 2 || q.Items[0].WhenBusy != "queue" || *q.Items[0].MessageID != m1 || *q.Items[1].MessageID != m2 || q.Items[0].RunID != q.Items[1].RunID || q.Items[0].Text != "第一条排队" {
-		t.Fatalf("排队列表：%+v", q)
+	if len(q.Items) != 2 || q.Items[0].WhenBusy != "queue" || *q.Items[0].MessageID != m1 || *q.Items[1].MessageID != m2 || q.Items[0].RunID != q.Items[1].RunID || q.Items[0].Text != "first queued" {
+		t.Fatalf("queue list: %+v", q)
 	}
 	normal := q.Items[0].RunID
 	receipt := decode[taskmodel.TaskNodeQueueActionReceipt](t, s.must(200, "POST", base+"/inbox-messages/"+m2.String()+"/promote-to-interrupt", map[string]any{"actionId": uuid.New(), "expectedAgentId": worker.ID, "expectedRuntimeId": runtime}))
 	q = decode[taskmodel.TaskNodeQueue](t, s.must(200, "GET", base+"/queue", nil))
 	if receipt.Status != "accepted" || len(q.Items) != 2 || q.Items[0].RunID != receipt.RunID || q.Items[0].WhenBusy != "interrupt" || *q.Items[0].MessageID != m2 || q.Items[1].RunID != normal || *q.Items[1].MessageID != m1 {
-		t.Fatalf("转换后的排队列表：%+v %+v", receipt, q)
+		t.Fatalf("queue list after promote: %+v %+v", receipt, q)
 	}
 	var queueEvents int
 	if err = s.a.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM task_events WHERE task_id=$1 AND type='task.node.queue.updated'`, task.Task.ID).Scan(&queueEvents); err != nil || queueEvents < 3 {
-		t.Fatalf("应推送排队列表事件：%d %v", queueEvents, err)
+		t.Fatalf("queue list events should be pushed: %d %v", queueEvents, err)
 	}
 	defer func() {
 		if !t.Failed() {
@@ -230,7 +230,7 @@ func TestPromoteTaskNodeInboxActualAppFakePi(t *testing.T) {
 		d, _ := s.a.Tasks.Get(ctx, auth.Console(), task.Task.ID)
 		t.Logf("task %s node %+v", d.Task.Status, d.Nodes[len(d.Nodes)-1].Status)
 	}()
-	waitFor(t, "转换的打断组被领取", func() bool {
+	waitFor(t, "promoted interrupt group claimed", func() bool {
 		var started bool
 		return s.a.Store.Pool.QueryRow(ctx, `SELECT started_at IS NOT NULL FROM task_turns WHERE id=$1`, receipt.RunID).Scan(&started) == nil && started
 	})
@@ -244,10 +244,10 @@ func TestPromoteTaskNodeInboxActualAppFakePi(t *testing.T) {
 		t.Fatal(err)
 	}
 	if activeStatus != "interrupted" || normalStart != nil && !promotedStart.Before(*normalStart) {
-		t.Fatalf("当前轮应被打断，转换的消息应先被领取：%s %v %v", activeStatus, promotedStart, normalStart)
+		t.Fatalf("the current turn should be interrupted and the promoted message claimed first: %s %v %v", activeStatus, promotedStart, normalStart)
 	}
 	var links int
 	if err = s.a.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM task_node_inbox_run_links WHERE message_id=$1 AND run_id=$2 AND role='notification'`, m2, receipt.RunID).Scan(&links); err != nil || links != 1 {
-		t.Fatalf("转换的消息应由打断组通知：%d %v", links, err)
+		t.Fatalf("the promoted message should be notified by the interrupt group: %d %v", links, err)
 	}
 }

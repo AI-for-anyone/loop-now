@@ -90,12 +90,12 @@ func webProjectCredentialsIntegration(t *testing.T, slice string) {
 	private := decode[apitypes.Agent](t, s.must(201, "POST", "/platform/agents", map[string]any{"name": "WebPlatformPrivate", "model": worker.Model}))
 	var mainAccount credentialmodel.Account
 	if deleteOnly {
-		mainAccount = decode[credentialmodel.Account](t, s.must(201, "POST", "/projects/"+dc.Project.ID.String()+"/credential-accounts", map[string]any{"purpose": "model", "provider": worker.Model.Provider, "name": "单账号删除相邻回归", "credential": map[string]any{"type": "api_key", "key": "synthetic-main-delete-neighbor"}}))
+		mainAccount = decode[credentialmodel.Account](t, s.must(201, "POST", "/projects/"+dc.Project.ID.String()+"/credential-accounts", map[string]any{"purpose": "model", "provider": worker.Model.Provider, "name": "single account delete neighbour regression", "credential": map[string]any{"type": "api_key", "key": "synthetic-main-delete-neighbor"}}))
 		s.must(200, "PUT", "/agents/"+worker.ID.String()+"/credential-selections", map[string]any{"purpose": "model", "provider": worker.Model.Provider, "accountId": mainAccount.ID, "expectedConfigVersion": worker.ConfigVersion})
 		s.must(200, "PUT", "/agents/"+private.ID.String()+"/model-credential", map[string]any{"provider": private.Model.Provider, "key": "synthetic-platform-delete-neighbor", "expectedConfigVersion": private.ConfigVersion})
 	}
 	removeProject := decode[apitypes.Project](t, s.must(201, "POST", "/projects", map[string]any{"name": "WebCredentialDeleteProject"}))
-	removeAccount := decode[credentialmodel.Account](t, s.must(201, "POST", "/projects/"+removeProject.ID.String()+"/credential-accounts", map[string]any{"purpose": "model", "provider": worker.Model.Provider, "name": "删除项目测试账号", "credential": map[string]any{"type": "api_key", "key": "synthetic-delete-project-key"}}))
+	removeAccount := decode[credentialmodel.Account](t, s.must(201, "POST", "/projects/"+removeProject.ID.String()+"/credential-accounts", map[string]any{"purpose": "model", "provider": worker.Model.Provider, "name": "delete project test account", "credential": map[string]any{"type": "api_key", "key": "synthetic-delete-project-key"}}))
 	manifest := map[string]any{"slice": slice, "apiBase": s.url, "webOrigin": "http://127.0.0.1:4317", "projectId": dc.Project.ID, "projectName": dc.Project.Name, "agentId": worker.ID, "provider": worker.Model.Provider, "platformAgentId": private.ID, "deleteProjectId": removeProject.ID, "deleteProjectName": removeProject.Name, "mainAccountId": mainAccount.ID, "mainAccountName": mainAccount.Name}
 	manifestPath := filepath.Join(t.TempDir(), "project-credentials-browser-manifest.json")
 	raw, _ := json.Marshal(manifest)

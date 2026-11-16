@@ -160,7 +160,7 @@ func TestInstallRejectsSymlinksAndPublicDirectories(t *testing.T) {
 				}
 			case "public-parent":
 				if runtime.GOOS == "windows" {
-					t.Skip("chmod 在 Windows 上改不了 ACL，无法制造公开目录")
+					t.Skip("chmod cannot change ACLs on Windows, so a public directory cannot be made")
 				}
 				if err := os.Chmod(parent, 0755); err != nil {
 					t.Fatal(err)
@@ -194,7 +194,7 @@ func TestInstallRejectsSymlinksAndPublicDirectories(t *testing.T) {
 }
 func TestInstallConcurrentIdenticalBinaryAssets(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Windows 上目录被别的句柄打开时不能改名，并发发布的竞争语义不同")
+		t.Skip("on Windows a directory open by another handle cannot be renamed, so concurrent publishing races differently")
 	}
 	root := assetRoot(t)
 	var wg sync.WaitGroup

@@ -73,7 +73,7 @@ func TestInboxWithFakePi(t *testing.T) {
 	// Agent tokens the previous run did not revoke normally (for example, the server was killed) are revoked at
 	// startup.
 	s := w.start(setup)
-	a, ag := s.createAgent("开发助手")
+	a, ag := s.createAgent("dev assistant")
 	stale := uuid.Must(uuid.NewV7())
 	if _, err := s.a.Store.Pool.Exec(context.Background(), `INSERT INTO agent_tokens (id, agent_id, instance_id, secret_hash) VALUES ($1, $2, $3, $4)`,
 		stale, ag.ID, uuid.Must(uuid.NewV7()), make([]byte, 32)); err != nil {
@@ -84,25 +84,25 @@ func TestInboxWithFakePi(t *testing.T) {
 	defer func() { s.stop() }()
 	var revoked bool
 	if err := s.a.Store.Pool.QueryRow(context.Background(), `SELECT revoked_at IS NOT NULL FROM agent_tokens WHERE id = $1`, stale).Scan(&revoked); err != nil || !revoked {
-		t.Fatalf("启动时应作废上一次运行的 Agent 令牌：%v %v", revoked, err)
+		t.Fatalf("startup should revoke Agent tokens of the previous run: %v %v", revoked, err)
 	}
 
 	// First talk for one turn to create a session, and wait for Pi to exit on idle timeout.
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "你好"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "hello"})
 	s.waitIdle(a)
 	sessionBefore, err := s.a.Store.GetAgentSession(context.Background(), ag.ID)
 	if err != nil || sessionBefore.SessionFile == "" {
-		t.Fatalf("应已有会话：%+v %v", sessionBefore, err)
+		t.Fatalf("there should be a session already: %+v %v", sessionBefore, err)
 	}
 	firstToken := dumpedEnv(t, dump)["LOOPCTL_AGENT_TOKEN"]
 	agentBase := strings.TrimSuffix(s.url, "/api/v1") + "/agent/v1"
 	if env := dumpedEnv(t, dump); env["LOOPCTL_AGENT_URL"] != agentBase {
-		t.Fatalf("注入的接口地址应指向本服务端的 Agent 接口：%s，期望 %s", env["LOOPCTL_AGENT_URL"], agentBase)
+		t.Fatalf("the injected API URL should point to this server's Agent API: %s, want %s", env["LOOPCTL_AGENT_URL"], agentBase)
 	}
 	// The first entry on the Agent's PATH is the loopctl of the same version.
 	loopctl := filepath.Join(strings.Split(dumpedEnv(t, dump)["PATH"], ":")[0], "loopctl")
 	if out, err := exec.Command(loopctl).Output(); err != nil || !strings.Contains(string(out), `"version":"`+buildinfo.Version()+`"`) {
-		t.Fatalf("Agent 运行的 loopctl 应与服务端同版本：%s %v", out, err)
+		t.Fatalf("the loopctl the Agent runs should be the server's version: %s %v", out, err)
 	}
 	deadline := time.Now().Add(10 * time.Second)
 	for s.a.Executor.Process(ag.ID).State != executor.ProcessStopped && time.Now().Before(deadline) {
@@ -117,40 +117,40 @@ func TestInboxWithFakePi(t *testing.T) {
 		}
 	}
 	if code != 401 {
-		t.Fatalf("Pi 退出后旧令牌应失效：%d", code)
+		t.Fatalf("the old token should be invalid after Pi exits: %d", code)
 	}
 
 	// An Inbox message arrives while Pi has exited: start Pi and begin a reminder turn on the original session.
-	s.must(201, "POST", "/inbox/messages", map[string]any{"to": "默认项目/开发助手", "text": "请看一下"})
+	s.must(201, "POST", "/inbox/messages", map[string]any{"to": "Default project/dev assistant", "text": "Please take a look"})
 	s.waitIdle(a)
 	reply := s.replies(a)
 	last := reply[len(reply)-1]
 	if last.Origin != "inbox_reminder" || last.Run.Status != "completed" {
-		t.Fatalf("提醒那一轮应完成：%+v", last)
+		t.Fatalf("the reminder turn should complete: %+v", last)
 	}
 	sessionAfter, _ := s.a.Store.GetAgentSession(context.Background(), ag.ID)
 	if sessionAfter.SessionFile != sessionBefore.SessionFile || sessionAfter.Epoch != sessionBefore.Epoch {
-		t.Fatalf("提醒应接着原会话：%+v → %+v", sessionBefore, sessionAfter)
+		t.Fatalf("the reminder should continue the original session: %+v → %+v", sessionBefore, sessionAfter)
 	}
 	// The new process has a new token and can use it to read its own Inbox.
 	tok := dumpedEnv(t, dump)["LOOPCTL_AGENT_TOKEN"]
 	if tok == "" || tok == firstToken {
-		t.Fatalf("新进程应有新令牌")
+		t.Fatalf("the new process should have a new token")
 	}
 	code, body := agentGet(t, agentBase, tok, "/whoami")
-	if who := decode[apitypes.Whoami](t, body); code != 200 || who.Kind != "agent" || who.Address == nil || *who.Address != "默认组织/默认项目/开发助手" {
-		t.Fatalf("Agent 的 whoami：%d %s", code, body)
+	if who := decode[apitypes.Whoami](t, body); code != 200 || who.Kind != "agent" || who.Address == nil || *who.Address != "Default org/Default project/dev assistant" {
+		t.Fatalf("Agent whoami: %d %s", code, body)
 	}
 	code, body = agentGet(t, agentBase, tok, "/inbox/messages?unread=true")
-	if page := decode[apitypes.InboxMessagePage](t, body); code != 200 || len(page.Messages) != 1 || page.Messages[0].Preview != "请看一下" {
-		t.Fatalf("Agent 列出收件箱：%d %s", code, body)
+	if page := decode[apitypes.InboxMessagePage](t, body); code != 200 || len(page.Messages) != 1 || page.Messages[0].Preview != "Please take a look" {
+		t.Fatalf("Agent lists its Inbox: %d %s", code, body)
 	}
 
 	// Server restart: tokens issued before the restart are no longer valid.
 	s.stop()
 	s = w.start(setup)
 	if code, _ := agentGet(t, strings.TrimSuffix(s.url, "/api/v1")+"/agent/v1", tok, "/whoami"); code != 401 {
-		t.Fatalf("服务端重启后旧令牌应失效：%d", code)
+		t.Fatalf("old tokens should be invalid after a server restart: %d", code)
 	}
 }
 
@@ -161,7 +161,7 @@ func TestStartupRejectsLoopctlMismatch(t *testing.T) {
 	_, err := app.Build(context.Background(), &cfg, config.NewLogger(io.Discard, "text", cfg.LogLevel),
 		app.Options{HomeDirs: []string{"/nonexistent-home"}})
 	if err == nil || !strings.Contains(err.Error(), buildinfo.Version()) {
-		t.Fatalf("没有同版本的 loopctl 产物时应拒绝启动，并给出服务端版本：%v", err)
+		t.Fatalf("startup should be refused without a loopctl build of the same version, naming the server version: %v", err)
 	}
 }
 
@@ -217,26 +217,26 @@ func TestExternalPortTLS(t *testing.T) {
 
 	// No token: 401; plain HTTP cannot connect (TLS only).
 	if resp, _ := get("/api/v1/context", ""); resp.StatusCode != 401 || resp.Header.Get("Loop-Now-Version") != buildinfo.Version() {
-		t.Fatalf("对外端口未带令牌应返回 401 并带版本头：%d %v", resp.StatusCode, resp.Header)
+		t.Fatalf("the external port should return 401 with the version header without a token: %d %v", resp.StatusCode, resp.Header)
 	}
 	if resp, err := http.Get("http://" + s.a.ExternalAddr() + "/api/v1/context"); err == nil && resp.StatusCode < 400 {
-		t.Fatalf("对外端口不应接受明文 HTTP：%d", resp.StatusCode)
+		t.Fatalf("the external port should not accept plain HTTP: %d", resp.StatusCode)
 	}
 
 	x := decode[apitypes.ExternalIdentity](t, s.must(201, "POST", "/external-identities", map[string]any{"name": "ci-bot"}))
 	issued := decode[apitypes.ExternalTokenIssued](t, s.must(201, "POST", "/external-identities/"+x.ID.String()+"/tokens", nil))
 	resp, body := get("/api/v1/whoami", issued.Secret)
 	if who := decode[apitypes.Whoami](t, body); resp.StatusCode != 200 || who.Kind != "external" {
-		t.Fatalf("对外端口的 whoami：%d %s", resp.StatusCode, body)
+		t.Fatalf("whoami on the external port: %d %s", resp.StatusCode, body)
 	}
 	if resp, _ := get("/api/v1/external-identities", issued.Secret); resp.StatusCode != 403 {
-		t.Fatalf("只限控制台的接口在对外端口上应返回 403：%d", resp.StatusCode)
+		t.Fatalf("console-only APIs should return 403 on the external port: %d", resp.StatusCode)
 	}
 
 	// Download the loopctl of the same version as the server: it matches the SHA-256 in the manifest; downloads also
 	// need a token.
 	if resp, _ := get("/downloads/loopctl/manifest.json", ""); resp.StatusCode != 401 {
-		t.Fatalf("下载也需要令牌：%d", resp.StatusCode)
+		t.Fatalf("downloads should need a token too: %d", resp.StatusCode)
 	}
 	resp, body = get("/downloads/loopctl/manifest.json", issued.Secret)
 	var m struct {
@@ -246,7 +246,7 @@ func TestExternalPortTLS(t *testing.T) {
 		} `json:"artifacts"`
 	}
 	if err := json.Unmarshal(body, &m); err != nil || resp.StatusCode != 200 || m.Version != buildinfo.Version() {
-		t.Fatalf("下载清单：%d %s", resp.StatusCode, body)
+		t.Fatalf("download manifest: %d %s", resp.StatusCode, body)
 	}
 	for _, a := range m.Artifacts {
 		if a.OS != "darwin" || a.Arch != "arm64" {
@@ -255,11 +255,11 @@ func TestExternalPortTLS(t *testing.T) {
 		resp, bin := get("/downloads/loopctl/"+a.File, issued.Secret)
 		sum := sha256.Sum256(bin)
 		if resp.StatusCode != 200 || hex.EncodeToString(sum[:]) != a.SHA256 || resp.Header.Get("X-Content-SHA256") != a.SHA256 {
-			t.Fatalf("下载 darwin/arm64 的 loopctl：%d", resp.StatusCode)
+			t.Fatalf("download loopctl for darwin/arm64: %d", resp.StatusCode)
 		}
 	}
 	if resp, _ := get("/downloads/loopctl/../manifest.json", issued.Secret); resp.StatusCode == 200 {
-		t.Fatal("清单中没有的路径不应下载成功")
+		t.Fatal("a path not in the manifest should not download")
 	}
 	// The console API does not change when the external port is enabled: still no login needed.
 	s.must(200, "GET", "/context", nil)
@@ -284,32 +284,32 @@ func reminders(t *testing.T, s *server, agentID uuid.UUID) (statuses []string) {
 func TestReminderRecovery(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)
-	a, ag := s.createAgent("开发助手")
+	a, ag := s.createAgent("dev assistant")
 	s.waitIdle(a)
 
 	// A reminder is queued at restart: after the restart it runs once as usual.
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=30s 很长的回复"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=30s a very long reply"})
 	s.waitRunning(a)
-	s.must(201, "POST", "/inbox/messages", map[string]any{"to": ag.ID.String(), "text": "排队中"})
+	s.must(201, "POST", "/inbox/messages", map[string]any{"to": ag.ID.String(), "text": "in the queue"})
 	if got := reminders(t, s, ag.ID); len(got) != 1 || got[0] != "queued" {
-		t.Fatalf("应有一轮排队中的提醒：%v", got)
+		t.Fatalf("there should be one queued reminder turn: %v", got)
 	}
 	s.stop()
 	s = w.start(nil)
 	defer func() { s.stop() }()
 	s.waitIdle(a)
 	if got := reminders(t, s, ag.ID); len(got) != 1 || got[0] != "completed" {
-		t.Fatalf("重启后排队中的提醒应照常执行一次：%v", got)
+		t.Fatalf("after the restart the queued reminder should run once as usual: %v", got)
 	}
 
 	// Reminders queued while busy are dequeued from the database and run only once.
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=30s 又一个很长的回复"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=30s another very long reply"})
 	s.waitRunning(a)
-	s.must(201, "POST", "/inbox/messages", map[string]any{"to": ag.ID.String(), "text": "丢失前一"})
-	s.must(201, "POST", "/inbox/messages", map[string]any{"to": ag.ID.String(), "text": "丢失前二"})
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "结束长回复", "whenBusy": "interrupt"})
+	s.must(201, "POST", "/inbox/messages", map[string]any{"to": ag.ID.String(), "text": "before loss 1"})
+	s.must(201, "POST", "/inbox/messages", map[string]any{"to": ag.ID.String(), "text": "before loss 2"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "end the long reply", "whenBusy": "interrupt"})
 	s.waitIdle(a)
 	if got := reminders(t, s, ag.ID); len(got) != 2 || got[1] != "completed" {
-		t.Fatalf("排队的提醒应按数据库出队并只执行一次：%v", got)
+		t.Fatalf("queued reminders should be dequeued from the database and run only once: %v", got)
 	}
 }

@@ -70,52 +70,52 @@ func TestObservabilityWithFakePi(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)
 	defer s.stop()
-	a, ag := s.createAgent("观测")
+	a, ag := s.createAgent("observer")
 
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "!usage=100,20,1000,0 !tool=bash 你好"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "!usage=100,20,1000,0 !tool=bash hello"})
 	s.waitIdle(a)
 	first := s.replies(a)[0]
 	if u := first.Run.Usage; u.Calls != 2 || u.Input != 200 || u.Output != 40 || u.CacheRead != 2000 || u.Total != 2240 {
-		t.Fatalf("回复的用量合计不对：%+v", u)
+		t.Fatalf("wrong usage total for the reply: %+v", u)
 	}
 	if m := first.Run.Model; m == nil || m.Provider != ag.Model.Provider || m.ModelID != ag.Model.ModelID {
-		t.Fatalf("回复所用的模型不对：%+v，期望 %+v", m, ag.Model)
+		t.Fatalf("wrong model for the reply: %+v, want %+v", m, ag.Model)
 	}
 	if first.Run.RunningAt == nil || first.Run.StartedAt == nil {
-		t.Fatalf("回复的时间点不全：%+v", first.Run)
+		t.Fatalf("the reply is missing timestamps: %+v", first.Run)
 	}
 	types := entryTypes(s.timeline(a, first.Run.ID.String()))
 	if types[0] != "dispatched" || types[len(types)-1] != "ended" {
-		t.Fatalf("时间线应以派发开始、结束收尾：%v", types)
+		t.Fatalf("the timeline should start with dispatched and end with ended: %v", types)
 	}
 	order := []string{"dispatched", "phase:preparing", "workspace_sync", "phase:launching", "pi_started", "running", "model_call:assistant", "tool", "ended"}
 	last := -1
 	for _, want := range order {
 		i := indexOf(types, want)
 		if i < 0 || i < last {
-			t.Fatalf("时间线缺少或顺序不对：%s 在 %v", want, types)
+			t.Fatalf("timeline entry missing or out of order: %s in %v", want, types)
 		}
 		last = i
 	}
 
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "再来"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "again"})
 	s.waitIdle(a)
 	second := s.replies(a)[1]
 	if types := entryTypes(s.timeline(a, second.Run.ID.String())); indexOf(types, "pi_reused") < 0 || indexOf(types, "pi_started") >= 0 {
-		t.Fatalf("第二条回复应复用进程：%v", types)
+		t.Fatalf("the second reply should reuse the process: %v", types)
 	}
 
 	since := url.QueryEscape(time.Now().Add(-time.Hour).Format(time.RFC3339))
 	usage := decode[apitypes.UsagePage](t, s.must(200, "GET", "/usage?from="+since, nil))
 	if len(usage.Rows) != 1 || usage.Rows[0].Calls != 3 || usage.Rows[0].Total != 2240 || *usage.Rows[0].Model != ag.Model.ModelID {
-		t.Fatalf("用量统计不对：%+v", usage.Rows)
+		t.Fatalf("wrong usage stats: %+v", usage.Rows)
 	}
 
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "!error=模拟错误"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "!error=simulated_error"})
 	s.waitIdle(a)
 	list := decode[apitypes.AnomalyPage](t, s.must(200, "GET", "/anomalies?from="+since, nil))
-	if list.Total != 1 || list.Items[0].Kind != "run_failed" || *list.Items[0].ErrorCode != "pi_error" || list.Items[0].AgentName != "观测" {
-		t.Fatalf("异常列表不对：%+v", list)
+	if list.Total != 1 || list.Items[0].Kind != "run_failed" || *list.Items[0].ErrorCode != "pi_error" || list.Items[0].AgentName != "observer" {
+		t.Fatalf("wrong anomaly list: %+v", list)
 	}
 }
 
@@ -134,13 +134,13 @@ func TestObservabilityAcrossRestart(t *testing.T) {
 	w.cfg.CLITemplateDir = dir
 	s := w.start(nil)
 
-	a, _ := s.createAgent("装 CLI")
+	a, _ := s.createAgent("CLI installer")
 	s.must(200, "PUT", a+"/clis/zz", nil)
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "hi"})
 	s.waitIdle(a)
 	failed := s.replies(a)[0]
 	if failed.Run.ErrorCode == nil || *failed.Run.ErrorCode != "cli_install_failed" {
-		t.Fatalf("应以 CLI 安装失败结束：%+v", failed.Run)
+		t.Fatalf("should end with a CLI install failure: %+v", failed.Run)
 	}
 	var install *timelineEntry
 	for _, e := range s.timeline(a, failed.Run.ID.String()) {
@@ -149,11 +149,11 @@ func TestObservabilityAcrossRestart(t *testing.T) {
 		}
 	}
 	if install == nil || install.Result != "failed" || install.CLI != "zz" || install.Error == nil || !strings.Contains(*install.Error, "checksum mismatch") {
-		t.Fatalf("时间线应有 CLI 安装失败：%+v", install)
+		t.Fatalf("the timeline should have the CLI install failure: %+v", install)
 	}
 
-	b, _ := s.createAgent("长回复")
-	s.must(202, "POST", b+"/messages", map[string]any{"text": "!sleep=10s 很长的回复"})
+	b, _ := s.createAgent("long reply")
+	s.must(202, "POST", b+"/messages", map[string]any{"text": "!sleep=10s a very long reply"})
 	s.waitRunning(b)
 	s.stop()
 
@@ -167,12 +167,12 @@ func TestObservabilityAcrossRestart(t *testing.T) {
 		if tp.Name == "zz" {
 			found = true
 			if tp.Install.Status != "failed" || tp.Install.Error == nil || !strings.Contains(*tp.Install.Error, "checksum mismatch") {
-				t.Fatalf("重启后应仍显示安装失败及原因：%+v", tp.Install)
+				t.Fatalf("after the restart the install failure and its reason should still show: %+v", tp.Install)
 			}
 		}
 	}
 	if !found {
-		t.Fatal("模板目录中没有 zz")
+		t.Fatal("zz is not in the template directory")
 	}
 	list := decode[apitypes.AnomalyPage](t, s2.must(200, "GET", "/anomalies", nil))
 	kinds := map[string]int{}
@@ -180,7 +180,7 @@ func TestObservabilityAcrossRestart(t *testing.T) {
 		kinds[it.Kind]++
 	}
 	if kinds["server_restart"] != 1 || kinds["run_failed"] != 1 {
-		t.Fatalf("异常列表应有一条重启中断与一条安装失败：%+v", list.Items)
+		t.Fatalf("the anomaly list should have one restart interruption and one install failure: %+v", list.Items)
 	}
 }
 
@@ -218,14 +218,14 @@ func TestRecordFailureDoesNotAffectRun(t *testing.T) {
 		WHEN NEW.type = 'pi.started' BEGIN SELECT RAISE(ABORT, 'boom'); END`); err != nil {
 		t.Fatal(err)
 	}
-	a, _ := s.createAgent("记录失败")
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "你好"})
+	a, _ := s.createAgent("record failure")
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "hello"})
 	s.waitIdle(a)
 	if r := s.replies(a); len(r) != 1 || r[0].Run.Status != "completed" {
-		t.Fatalf("记录失败不应影响回复：%+v", r)
+		t.Fatalf("a record failure should not affect the reply: %+v", r)
 	}
 	if !strings.Contains(logs.String(), "failed to write the run record") || !strings.Contains(logs.String(), "pi.started") {
-		t.Fatalf("日志中应有记录失败的警告：\n%s", logs.String())
+		t.Fatalf("the log should have a record failure warning:\n%s", logs.String())
 	}
 }
 
@@ -240,7 +240,7 @@ func parseLogs(t *testing.T, raw string) []logLine {
 		}
 		var m logLine
 		if err := json.Unmarshal([]byte(l), &m); err != nil {
-			t.Fatalf("JSON 日志的每行都应可以单独解析：%q：%v", l, err)
+			t.Fatalf("every JSON log line should parse on its own: %q: %v", l, err)
 		}
 		out = append(out, m)
 	}
@@ -256,10 +256,10 @@ func TestServerLogs(t *testing.T) {
 	w.logTo = logs
 	s := w.start(nil)
 	defer s.stop()
-	a, ag := s.createAgent("日志")
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "预热"})
+	a, ag := s.createAgent("logger")
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "warm-up"})
 	s.waitIdle(a)
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "!usage=10,5 !tool=bash !tool=bash !tool=bash 秘密正文xyz"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "!usage=10,5 !tool=bash !tool=bash !tool=bash secret-body-xyz"})
 	s.waitIdle(a)
 	run := s.replies(a)[1].Run
 
@@ -271,21 +271,21 @@ func TestServerLogs(t *testing.T) {
 		}
 	}
 	if len(info) != 2 || info[0]["msg"] != "reply started" || info[1]["msg"] != "reply ended" {
-		t.Fatalf("这条回复在 info 级别应只有开始与结束两行：%v", info)
+		t.Fatalf("this reply should have only a start line and an end line at info level: %v", info)
 	}
 	end := info[1]
 	if end["agentId"] != ag.ID.String() || end["status"] != "completed" || end["tokens"] != float64(30) {
-		t.Fatalf("结束日志不对：%v", end)
+		t.Fatalf("wrong end log: %v", end)
 	}
 	if _, ok := end["durationMs"]; !ok {
-		t.Fatalf("结束日志应带总用时：%v", end)
+		t.Fatalf("the end log should carry the total duration: %v", end)
 	}
-	if strings.Contains(logs.String(), "秘密正文xyz") {
-		t.Fatal("日志中不应出现消息正文")
+	if strings.Contains(logs.String(), "secret-body-xyz") {
+		t.Fatal("message bodies should not appear in the log")
 	}
 
 	// A failed reply: the end log carries the error code.
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "!error=模拟失败 再来"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "!error=simulated_failure again"})
 	s.waitIdle(a)
 	failed := s.replies(a)[2].Run
 	found := false
@@ -295,7 +295,7 @@ func TestServerLogs(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("失败回复的结束日志应带错误码：%+v", failed)
+		t.Fatalf("the end log of a failed reply should carry the error code: %+v", failed)
 	}
 
 	// Internal API error: the error log carries the request ID, matching the response header.
@@ -314,7 +314,7 @@ func TestServerLogs(t *testing.T) {
 	}
 	resp.Body.Close()
 	if resp.StatusCode != 500 {
-		t.Fatalf("应返回 500：%d", resp.StatusCode)
+		t.Fatalf("should return 500: %d", resp.StatusCode)
 	}
 	rid := resp.Header.Get("Loop-Now-Request-Id")
 	ok := false
@@ -324,7 +324,7 @@ func TestServerLogs(t *testing.T) {
 		}
 	}
 	if !ok || rid == "" {
-		t.Fatalf("接口错误日志应带请求编号 %q", rid)
+		t.Fatalf("the API error log should carry request ID %q", rid)
 	}
 	if _, err := st.Pool.Exec(context.Background(), `ALTER TABLE usage_records_hidden RENAME TO usage_records`); err != nil {
 		t.Fatal(err)
@@ -333,7 +333,7 @@ func TestServerLogs(t *testing.T) {
 	// No log files are written.
 	_ = filepath.WalkDir(w.cfg.WorkRoot, func(p string, d os.DirEntry, err error) error {
 		if err == nil && !d.IsDir() && strings.HasSuffix(p, ".log") {
-			t.Errorf("服务端不应写日志文件：%s", p)
+			t.Errorf("the server should not write log files: %s", p)
 		}
 		return nil
 	})
@@ -365,7 +365,7 @@ func (s *server) firstOverviewEvent(lastID string) (event string, data []byte) {
 			return event, []byte(strings.TrimPrefix(line, "data: "))
 		}
 	}
-	s.t.Fatal("没有收到概览事件")
+	s.t.Fatal("no overview event received")
 	return "", nil
 }
 
@@ -374,10 +374,10 @@ func (s *server) firstOverviewEvent(lastID string) (event string, data []byte) {
 func TestRecoveryCrashRecords(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)
-	a, ag := s.createAgent("崩溃记录")
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=30s 很长"})
+	a, ag := s.createAgent("crash records")
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=30s very long"})
 	s.waitRunning(a)
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "排队的", "whenBusy": "queue"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "queued", "whenBusy": "queue"})
 	_ = s.a.Conv.Stop(context.Background()) // simulate a forced kill: no graceful exit
 	s.a.ReleaseInstanceLocks()
 	s2 := w.start(nil)
@@ -386,21 +386,21 @@ func TestRecoveryCrashRecords(t *testing.T) {
 	s2.waitIdle(a)
 	r := s2.replies(a)
 	if len(r) != 2 || *r[0].Run.EndReason != "server_restart" || r[1].Run.Status != "completed" {
-		t.Fatalf("重启后的回复不对：%+v", r)
+		t.Fatalf("wrong replies after the restart: %+v", r)
 	}
 	es := s2.timeline(a, r[0].Run.ID.String())
 	if last := es[len(es)-1]; last.Type != "ended" {
-		t.Fatalf("重启中断的回复应以结束条目收尾：%+v", es)
+		t.Fatalf("a reply interrupted by a restart should end with an ended entry: %+v", es)
 	}
 	list := decode[apitypes.AnomalyPage](t, s2.must(200, "GET", "/anomalies", nil))
 	if list.Total != 1 || list.Items[0].Kind != "server_restart" || list.Items[0].RunID != r[0].Run.ID {
-		t.Fatalf("异常列表应有一条服务端重启中断：%+v", list)
+		t.Fatalf("the anomaly list should have one server restart interruption: %+v", list)
 	}
 	ev, data := s2.firstOverviewEvent("")
 	snap := decode[apitypes.SseOverviewSnapshot](t, data)
 	if ev != "snapshot" || len(snap.Agents) != 1 || snap.Agents[0].AgentID != ag.ID || snap.Agents[0].Status.Busy ||
 		snap.Agents[0].Status.Queued.Normal != 0 || snap.Agents[0].LastRun == nil || snap.Agents[0].LastRun.Status != "completed" {
-		t.Fatalf("重启后的概览快照不对：%s", data)
+		t.Fatalf("wrong overview snapshot after the restart: %s", data)
 	}
 }
 
@@ -410,20 +410,20 @@ func TestRecoveryUnknownStreamPosition(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)
 	defer s.stop()
-	a, _ := s.createAgent("位置失效")
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "!usage=10,5 你好"})
+	a, _ := s.createAgent("stale position")
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "!usage=10,5 hello"})
 	s.waitIdle(a)
 	_, data := s.firstOverviewEvent("")
 	_ = data
 	before := s.replies(a)[0]
 	if ev, _ := s.firstOverviewEvent("9999999999999-0"); ev != "snapshot" {
-		t.Fatalf("事件流丢失后重连应推送快照：%s", ev)
+		t.Fatalf("reconnecting after the event stream is lost should push a snapshot: %s", ev)
 	}
 	after := s.replies(a)[0]
 	if after.Run.Usage != before.Run.Usage || len(s.timeline(a, after.Run.ID.String())) == 0 {
-		t.Fatalf("重连不应影响运行记录与用量：%+v %+v", before.Run.Usage, after.Run.Usage)
+		t.Fatalf("reconnecting should not affect run records and usage: %+v %+v", before.Run.Usage, after.Run.Usage)
 	}
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "继续"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "continue"})
 	s.waitIdle(a)
 }
 
@@ -433,21 +433,21 @@ func TestRecoveryAbortTimeout(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(func(c *config.Config) { c.AbortTimeout = time.Second })
 	defer s.stop()
-	a, _ := s.createAgent("打断超时")
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=10s !noabort 很长"})
+	a, _ := s.createAgent("abort timeout")
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=10s !noabort very long"})
 	s.waitRunning(a)
-	s.must(202, "POST", a+"/messages", map[string]any{"text": "打断", "whenBusy": "interrupt"})
+	s.must(202, "POST", a+"/messages", map[string]any{"text": "interrupt", "whenBusy": "interrupt"})
 	s.waitIdle(a)
 	first := s.replies(a)[0]
 	if first.Run.Status != "interrupted" || first.Run.AbortRequestedAt == nil {
-		t.Fatalf("应以已打断结束并记录发起打断时间：%+v", first.Run)
+		t.Fatalf("should end as interrupted and record when the interrupt was requested: %+v", first.Run)
 	}
 	types := entryTypes(s.timeline(a, first.Run.ID.String()))
 	ia, is, ie := indexOf(types, "abort_requested"), indexOf(types, "pi_stopped"), indexOf(types, "ended")
 	if ia < 0 || is < ia || ie != len(types)-1 || indexOf(types, "pi_exited") >= 0 {
-		t.Fatalf("时间线应依次有发起打断、强制结束、结束：%v", types)
+		t.Fatalf("the timeline should have abort requested, forced stop and ended in order: %v", types)
 	}
 	if indexOf(types, "model_call:assistant") >= 0 {
-		t.Fatalf("被强制结束的那次调用没有用量报告：%v", types)
+		t.Fatalf("the call that was force-stopped has no usage report: %v", types)
 	}
 }

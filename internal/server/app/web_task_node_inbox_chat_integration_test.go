@@ -99,7 +99,7 @@ func TestWebTaskNodeInboxChatIntegration(t *testing.T) {
 	if os.WriteFile(authPath, raw, 0600) != nil {
 		t.Fatal("private test identity unavailable")
 	}
-	question, e := s.a.API.Inbox.Send(context.Background(), p, "默认项目/Manager", "WEB_MANAGER_ONLY_ORIGINAL", "queue", inbox.QuestionInput{Options: []string{"yes", "no"}, NodeRunID: node.ID})
+	question, e := s.a.API.Inbox.Send(context.Background(), p, "Default project/Manager", "WEB_MANAGER_ONLY_ORIGINAL", "queue", inbox.QuestionInput{Options: []string{"yes", "no"}, NodeRunID: node.ID})
 	if e != nil {
 		t.Fatal("TEST Manager question failed", e)
 	}

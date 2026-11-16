@@ -591,7 +591,7 @@ func TestProjectCredentialsRuntimeTaskFixedSnapshots(t *testing.T) {
 	}
 	clear(before)
 	clear(after)
-	address := "默认项目/runtime-worker#" + created.Task.ID.String()
+	address := "Default project/runtime-worker#" + created.Task.ID.String()
 	if _, e = r.s.a.API.Inbox.Send(ctx, auth.Console(), address, "wake captured node !sleep=800ms !text=wake-A", "queue"); e != nil {
 		t.Fatal(e)
 	}

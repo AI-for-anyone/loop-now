@@ -46,7 +46,7 @@ func TestTaskRunsForkAndArchivesWithFakePi(t *testing.T) {
 	s := w.start(nil)
 	defer s.stop()
 	ctx := context.Background()
-	path, agent := s.createAgent("任务Manager")
+	path, agent := s.createAgent("task Manager")
 	dc := decode[apitypes.Context](t, s.must(200, "GET", "/context", nil))
 	s.must(200, "PUT", "/projects/"+dc.Project.ID.String()+"/manager", map[string]any{"agentId": agent.ID})
 	s.must(202, "POST", path+"/messages", map[string]any{"text": "baseline normal"})
@@ -59,7 +59,7 @@ func TestTaskRunsForkAndArchivesWithFakePi(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	body, e := s.a.Tasks.Create(ctx, auth.Principal{Kind: auth.KindAgent, ID: agent.ID}, taskmodel.CreateInput{ActionID: uuid.New(), Title: "fakepi任务", Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "执行", Description: " !sleep=1s !tool=bash !usage=7,11,0,0", AgentID: agent.ID, InputFields: []workflow.Field{}, OutputFields: []workflow.Field{{Name: "file", Type: "artifact", Required: true}}, Inputs: map[string]workflow.Source{}}}, Edges: []workflow.Edge{}}})
+	body, e := s.a.Tasks.Create(ctx, auth.Principal{Kind: auth.KindAgent, ID: agent.ID}, taskmodel.CreateInput{ActionID: uuid.New(), Title: "fakepi task", Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "run", Description: " !sleep=1s !tool=bash !usage=7,11,0,0", AgentID: agent.ID, InputFields: []workflow.Field{}, OutputFields: []workflow.Field{{Name: "file", Type: "artifact", Required: true}}, Inputs: map[string]workflow.Source{}}}, Edges: []workflow.Edge{}}})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -116,7 +116,7 @@ func TestTaskRunsForkAndArchivesWithFakePi(t *testing.T) {
 	if e = s.a.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM task_archives WHERE runtime_id=$1`, node.RuntimeID).Scan(&archives); e != nil || archives != 1 {
 		t.Fatal("task archive missing", e, archives)
 	}
-	secondBody, e := s.a.Tasks.Create(ctx, auth.Principal{Kind: auth.KindAgent, ID: agent.ID}, taskmodel.CreateInput{ActionID: uuid.New(), Title: "引用隔离", Request: map[string]any{}, Workflow: created.Workflow})
+	secondBody, e := s.a.Tasks.Create(ctx, auth.Principal{Kind: auth.KindAgent, ID: agent.ID}, taskmodel.CreateInput{ActionID: uuid.New(), Title: "reference isolation", Request: map[string]any{}, Workflow: created.Workflow})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -142,12 +142,12 @@ func TestTaskRestartBlocksSubmittedFakePiRoundWithoutReplay(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)
 	ctx := context.Background()
-	path, agent := s.createAgent("恢复Manager")
+	path, agent := s.createAgent("recovery Manager")
 	dc := decode[apitypes.Context](t, s.must(200, "GET", "/context", nil))
 	s.must(200, "PUT", "/projects/"+dc.Project.ID.String()+"/manager", map[string]any{"agentId": agent.ID})
 	s.must(202, "POST", path+"/messages", map[string]any{"text": "baseline for restart"})
 	s.waitIdle(path)
-	body, e := s.a.Tasks.Create(ctx, auth.Principal{Kind: auth.KindAgent, ID: agent.ID}, taskmodel.CreateInput{ActionID: uuid.New(), Title: "中断恢复", Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "执行", Description: " !sleep=10s", AgentID: agent.ID, InputFields: []workflow.Field{}, OutputFields: []workflow.Field{}, Inputs: map[string]workflow.Source{}}}, Edges: []workflow.Edge{}}})
+	body, e := s.a.Tasks.Create(ctx, auth.Principal{Kind: auth.KindAgent, ID: agent.ID}, taskmodel.CreateInput{ActionID: uuid.New(), Title: "recovery after interruption", Request: map[string]any{}, Workflow: workflow.Definition{StartStepID: "work", Steps: []workflow.Step{{ID: "work", Title: "run", Description: " !sleep=10s", AgentID: agent.ID, InputFields: []workflow.Field{}, OutputFields: []workflow.Field{}, Inputs: map[string]workflow.Source{}}}, Edges: []workflow.Edge{}}})
 	if e != nil {
 		s.stop()
 		t.Fatal(e)

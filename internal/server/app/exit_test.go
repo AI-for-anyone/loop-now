@@ -26,12 +26,12 @@ func TestExitCode(t *testing.T) {
 	defer ln.Close()
 	_, inUse := net.Listen("tcp", ln.Addr().String())
 	for err, want := range map[error]int{
-		fmt.Errorf("数据目录 x 已被另一个服务进程使用：%w", locked): app.ExitInstanceLocked,
-		fmt.Errorf("监听 x 失败：%w", inUse):             app.ExitAddrInUse,
-		errors.New("其他启动失败"):                        1,
+		fmt.Errorf("data directory x is already used by another server process: %w", locked): app.ExitInstanceLocked,
+		fmt.Errorf("listen on x failed: %w", inUse):                                          app.ExitAddrInUse,
+		errors.New("other startup failure"):                                                  1,
 	} {
 		if got := app.ExitCode(err); got != want {
-			t.Errorf("%v：退出码 %d，期望 %d", err, got, want)
+			t.Errorf("%v: exit code %d, want %d", err, got, want)
 		}
 	}
 }

@@ -19,7 +19,7 @@ import (
 func requirePi(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("pi"); err != nil {
-		t.Skip("本机没有 pi")
+		t.Skip("no pi on this machine")
 	}
 }
 

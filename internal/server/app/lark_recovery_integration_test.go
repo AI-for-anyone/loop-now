@@ -21,7 +21,7 @@ func larkAppSource(t *testing.T, s *server) (uuid.UUID, string, string, cm.Accou
 	project := decode[apitypes.Context](t, s.must(200, "GET", "/context", nil)).Project.ID
 	accounts := "/projects/" + project.String() + "/credential-accounts"
 	base := "/projects/" + project.String() + "/cli-auth/operations"
-	source := decode[cm.Account](t, s.must(201, "POST", accounts, map[string]any{"purpose": "cli", "cli": "lark-cli", "name": "离线应用", "credential": map[string]any{"type": "cli", "fields": map[string]string{"appId": "app-fixture", "appSecret": "fixture-app-secret", "brand": "feishu"}}}))
+	source := decode[cm.Account](t, s.must(201, "POST", accounts, map[string]any{"purpose": "cli", "cli": "lark-cli", "name": "offline app", "credential": map[string]any{"type": "cli", "fields": map[string]string{"appId": "app-fixture", "appSecret": "fixture-app-secret", "brand": "feishu"}}}))
 	return project, base, accounts, source
 }
 func TestLarkAppUnknownStartRealBeforeAndAfterCommit(t *testing.T) {
@@ -33,7 +33,7 @@ func TestLarkAppUnknownStartRealBeforeAndAfterCommit(t *testing.T) {
 			defer s.stop()
 			s.a.CLIAuth.Lark = p.Client
 			_, base, accounts, source := larkAppSource(t, s)
-			a := p.Add("ou-unknown", "未知响应用户", nil, "")
+			a := p.Add("ou-unknown", "unknown response user", nil, "")
 			if after {
 				a.Release()
 			}
@@ -122,7 +122,7 @@ func TestLarkAppRestartEndsActualPendingFlow(t *testing.T) {
 	defer func() { s.stop() }()
 	s.a.CLIAuth.Lark = p.Client
 	project, base, _, source := larkAppSource(t, s)
-	p.Add("ou-never-authorized", "不授权", nil, "")
+	p.Add("ou-never-authorized", "never authorizes", nil, "")
 	id := uuid.New()
 	s.must(202, "POST", base, map[string]any{"operationId": id, "cli": "lark-cli", "authType": "lark_user", "sourceAccountId": source.ID, "expectedSourceRevision": source.Revision})
 	waitLarkApp(t, s, base, id, "awaiting_authorization")

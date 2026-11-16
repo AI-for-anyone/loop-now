@@ -18,17 +18,17 @@ func TestStopOnStdinClose(t *testing.T) {
 	}
 	select {
 	case <-ctx.Done():
-		t.Fatal("写入不应触发退出")
+		t.Fatal("a write should not trigger exit")
 	case <-time.After(50 * time.Millisecond):
 	}
 	_ = pw.Close()
 	select {
 	case <-ctx.Done():
 	case <-time.After(2 * time.Second):
-		t.Fatal("关闭标准输入后应取消")
+		t.Fatal("closing stdin should cancel")
 	}
 	if calls != 1 {
-		t.Fatalf("回调应恰好一次：%d", calls)
+		t.Fatalf("callback should run exactly once: %d", calls)
 	}
 }
 
@@ -43,7 +43,7 @@ func TestStopOnStdinCloseParentFirst(t *testing.T) {
 	_ = pw.Close()
 	select {
 	case <-called:
-		t.Fatal("父 ctx 已结束时不应再报告 stdin 关闭")
+		t.Fatal("stdin close should not be reported once the parent ctx is done")
 	case <-time.After(100 * time.Millisecond):
 	}
 }
