@@ -19,15 +19,15 @@ func TestAccountDeletionRevokesInFlightBoundRefresh(t *testing.T) {
 	st, _ := authFixture(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	dc, err := st.EnsureDefaults(ctx, "组织", "项目")
+	dc, err := st.EnsureDefaults(ctx, "Org", "Project")
 	if err != nil {
 		t.Fatal(err)
 	}
-	source, err := st.CreateAgent(ctx, store.ProjectScope(dc.Project.ID), "原来源", "openai-codex", "fixture", "")
+	source, err := st.CreateAgent(ctx, store.ProjectScope(dc.Project.ID), "Original source", "openai-codex", "fixture", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	consumer, err := st.CreateAgent(ctx, store.ProjectScope(dc.Project.ID), "存活消费者", "openai-codex", "fixture", "")
+	consumer, err := st.CreateAgent(ctx, store.ProjectScope(dc.Project.ID), "Live consumer", "openai-codex", "fixture", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestAccountDeletionRevokesInFlightBoundRefresh(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer clear(plain)
-	account, err := st.CreateProjectCredential(ctx, dc.Project.ID, "model", "openai-codex", "原共享账号", store.ProjectCredentialWrite{AuthMethod: "oauth", Secret: plain})
+	account, err := st.CreateProjectCredential(ctx, dc.Project.ID, "model", "openai-codex", "Original shared account", store.ProjectCredentialWrite{AuthMethod: "oauth", Secret: plain})
 	if err != nil {
 		t.Fatal(err)
 	}

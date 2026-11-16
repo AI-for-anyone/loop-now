@@ -11,7 +11,7 @@ import (
 )
 
 func TestLarkSecretCodecAndBinding(t *testing.T) {
-	c := Lark{Type: "lark_user", AppSecret: "synthetic-app-secret", AccessToken: "synthetic-access", RefreshToken: "synthetic-refresh", ExpiresAt: time.Now().Add(time.Hour).UnixMilli(), RefreshExpiresAt: time.Now().Add(24 * time.Hour).UnixMilli(), Identity: cm.LarkIdentity{Brand: "feishu", AppID: "app-fixture", OpenID: "ou-fixture", DisplayName: "离线用户", VerifiedAt: time.Now()}, RuntimeVariantVersion: LarkUserVariant}
+	c := Lark{Type: "lark_user", AppSecret: "synthetic-app-secret", AccessToken: "synthetic-access", RefreshToken: "synthetic-refresh", ExpiresAt: time.Now().Add(time.Hour).UnixMilli(), RefreshExpiresAt: time.Now().Add(24 * time.Hour).UnixMilli(), Identity: cm.LarkIdentity{Brand: "feishu", AppID: "app-fixture", OpenID: "ou-fixture", DisplayName: "Offline user", VerifiedAt: time.Now()}, RuntimeVariantVersion: LarkUserVariant}
 	b := LarkBinding{ProjectID: uuid.New(), AccountID: uuid.New(), VersionID: uuid.New(), AgentID: uuid.New(), Brand: c.Identity.Brand, AppID: c.Identity.AppID, OpenID: c.Identity.OpenID, RuntimeVariantVersion: LarkUserVariant}
 	if !c.Matches(b) {
 		t.Fatal("valid fixed identity rejected")

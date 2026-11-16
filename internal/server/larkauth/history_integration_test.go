@@ -101,7 +101,7 @@ func TestLarkHistoricalVersionsTwoAgentsAndAtomicProjectPurge(t *testing.T) {
 		t.Fatal("successful rotation did not commit")
 	}
 	// A second project must survive both rollback and successful purge.
-	d, err := f.st.EnsureDefaults(ctx, "Lark TEST组织", "默认项目")
+	d, err := f.st.EnsureDefaults(ctx, "Lark TEST org", "Default project")
 	if err != nil {
 		t.Fatal(err)
 	}

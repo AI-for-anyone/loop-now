@@ -44,7 +44,7 @@ func runGoogleNativeHelperPrincipalPG(t *testing.T, responseLost, management boo
 	old := syntheticGoogle()
 	rapt := "original-rapt"
 	old.RAPTToken = &rapt
-	r, e := f.st.CreateProjectCredential(ctx, f.project, "cli", "gcloud", "SDK原生", f.write(t, old))
+	r, e := f.st.CreateProjectCredential(ctx, f.project, "cli", "gcloud", "SDK native", f.write(t, old))
 	if e != nil {
 		t.Fatal(e)
 	}

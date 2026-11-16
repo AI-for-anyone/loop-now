@@ -24,14 +24,14 @@ func gitOrSkip(t *testing.T) string {
 	t.Helper()
 	git, err := exec.LookPath("git")
 	if err != nil {
-		t.Skip("没有 git")
+		t.Skip("git not found")
 	}
 	return git
 }
 
 func TestGitIdentityEnvUsesRealHomeAndNeverPrompts(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("HOME 的来源在 Windows 上是 USERPROFILE")
+		t.Skip("on Windows HOME comes from USERPROFILE")
 	}
 	git := gitOrSkip(t)
 	home := t.TempDir()
@@ -51,17 +51,17 @@ func TestGitIdentityEnvUsesRealHomeAndNeverPrompts(t *testing.T) {
 	}
 	for k, v := range want {
 		if got, ok := envValue(env, k); !ok || got != v {
-			t.Errorf("%s = %q（有=%v），应为 %q", k, got, ok, v)
+			t.Errorf("%s = %q (present=%v), want %q", k, got, ok, v)
 		}
 	}
 	if _, ok := envValue(env, "XDG_CONFIG_HOME"); ok {
-		t.Error("没设置的 XDG_CONFIG_HOME 不应出现")
+		t.Error("an unset XDG_CONFIG_HOME should not appear")
 	}
 }
 
 func TestGitIdentityEnvKeepsUsersSSHCommand(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("HOME 的来源在 Windows 上是 USERPROFILE")
+		t.Skip("on Windows HOME comes from USERPROFILE")
 	}
 	git := gitOrSkip(t)
 	home := t.TempDir()
@@ -76,12 +76,12 @@ func TestGitIdentityEnvKeepsUsersSSHCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got, _ := envValue(env, "GIT_SSH_COMMAND"); got != "ssh -i ~/.ssh/work_key -o BatchMode=yes" {
-		t.Fatalf("应沿用 core.sshCommand 并加 BatchMode：%q", got)
+		t.Fatalf("should keep core.sshCommand and add BatchMode: %q", got)
 	}
 	t.Setenv("GIT_SSH_COMMAND", "ssh -F /etc/custom")
 	env, _ = GitIdentityEnv(context.Background(), git, "/usr/bin", nil, t.TempDir())
 	if got, _ := envValue(env, "GIT_SSH_COMMAND"); got != "ssh -F /etc/custom -o BatchMode=yes" {
-		t.Fatalf("进程环境里的 GIT_SSH_COMMAND 优先：%q", got)
+		t.Fatalf("GIT_SSH_COMMAND from the process environment should win: %q", got)
 	}
 }
 
@@ -91,7 +91,7 @@ func TestGitIdentityEnvKeepsUsersSSHCommand(t *testing.T) {
 // so that the Agent's gh token neither reads nor writes the github.com entries in the local credential store.
 func TestScopedHelperOverridesOnlyGitHub(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("助手脚本用 sh 写")
+		t.Skip("the helper scripts are written in sh")
 	}
 	git := gitOrSkip(t)
 	home := t.TempDir()
@@ -116,20 +116,20 @@ func TestScopedHelperOverridesOnlyGitHub(t *testing.T) {
 		cmd.Stdin = strings.NewReader("protocol=https\nhost=" + host + "\n\n")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			t.Fatalf("credential fill %s：%v：%s", host, err, out)
+			t.Fatalf("credential fill %s: %v: %s", host, err, out)
 		}
 		return string(out)
 	}
 	if out := fill("github.com"); !strings.Contains(out, "password=agent-token") {
-		t.Fatalf("github.com 应只用 Agent 的助手：%s", out)
+		t.Fatalf("github.com should use only the Agent's helper: %s", out)
 	}
 	if b, _ := os.ReadFile(log); len(b) != 0 {
-		t.Fatalf("github.com 不应调用本机的助手：%q", b)
+		t.Fatalf("github.com should not call the local helper: %q", b)
 	}
 	if out := fill("code.example.com"); !strings.Contains(out, "password=user-secret") {
-		t.Fatalf("其他主机应用本机的助手：%s", out)
+		t.Fatalf("other hosts should use the local helper: %s", out)
 	}
 	if b, _ := os.ReadFile(log); !slices.Contains(strings.Fields(string(b)), "get") {
-		t.Fatalf("其他主机应调用本机的助手：%q", b)
+		t.Fatalf("other hosts should call the local helper: %q", b)
 	}
 }

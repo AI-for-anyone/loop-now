@@ -7,7 +7,7 @@ import (
 )
 
 func TestDisplayBashCommand(t *testing.T) {
-	plain := "git status --short\nprintf '%s\\n' 完成"
+	plain := "git status --short\nprintf '%s\\n' done"
 	if got := Display("bash", plain); got != plain {
 		t.Fatal("ordinary command changed", got)
 	}
@@ -26,7 +26,7 @@ func TestDisplayBashCommand(t *testing.T) {
 	}
 	// Secret detection precedes truncation: a secret outside the visible prefix
 	// must not let an earlier portion of the same sensitive command escape.
-	long := strings.Repeat("界", MaxChars+10)
+	long := strings.Repeat("界", MaxChars+10) // check-english: zh (rune-based truncation keeps UTF-8 valid)
 	if got := Display("bash", long); !utf8.ValidString(got) || utf8.RuneCountInString(got) != MaxChars || !strings.HasSuffix(got, "…") {
 		t.Fatal("bound/UTF8", len(got))
 	}

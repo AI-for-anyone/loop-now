@@ -21,7 +21,7 @@ func TestSplitDirsKeepsAbsoluteUniqueInOrder(t *testing.T) {
 	}
 	if runtime.GOOS == "windows" {
 		if got := splitDirs(strings.Join([]string{`C:\WINDOWS\system32`, `/usr/bin`, `C:\Windows\System32\`, `C:\Tools`}, sep)); !slices.Equal(got, []string{`C:\WINDOWS\system32`, `C:\Tools`}) {
-			t.Fatalf("Windows 上应去掉 /usr/bin 这类无盘符路径并不分大小写去重：%v", got)
+			t.Fatalf("on Windows, paths without a drive such as /usr/bin should be dropped and duplicates removed case-insensitively: %v", got)
 		}
 	}
 }
@@ -32,12 +32,12 @@ func TestUserPathFallsBackToProcessPath(t *testing.T) {
 	u := NewUserPath(nil, time.Second)
 	u.resolve = func(context.Context) (string, string, error) { return "", "shell", errors.New("boom") }
 	if got := u.Dirs(context.Background()); !slices.Equal(got, []string{proc}) {
-		t.Fatalf("失败时应退回进程 PATH：%v", got)
+		t.Fatalf("should fall back to the process PATH on failure: %v", got)
 	}
 	// Resolve only once.
-	u.resolve = func(context.Context) (string, string, error) { t.Fatal("不应再解析"); return "", "", nil }
+	u.resolve = func(context.Context) (string, string, error) { t.Fatal("should not resolve again"); return "", "", nil }
 	if got := u.Dirs(context.Background()); !slices.Equal(got, []string{proc}) {
-		t.Fatalf("第二次 = %v", got)
+		t.Fatalf("second call = %v", got)
 	}
 }
 
@@ -48,11 +48,11 @@ func TestUserPathDirsHonoursCallerContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	if got := u.Dirs(ctx); got != nil {
-		t.Fatalf("调用方超时应返回空：%v", got)
+		t.Fatalf("should return nil when the caller times out: %v", got)
 	}
 	close(release)
 	if got := u.Dirs(context.Background()); !slices.Equal(got, []string{filepath.Clean("/x")}) && runtime.GOOS != "windows" {
-		t.Fatalf("解析完成后 = %v", got)
+		t.Fatalf("after resolving = %v", got)
 	}
 }
 
@@ -61,7 +61,7 @@ func TestUserPathDirsHonoursCallerContext(t *testing.T) {
 func writeShellProfile(t *testing.T, profile string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
-		t.Skip("Windows 不读登录 shell")
+		t.Skip("Windows does not read a login shell")
 	}
 	home := t.TempDir()
 	if err := os.WriteFile(filepath.Join(home, ".profile"), []byte(profile), 0o600); err != nil {
@@ -75,7 +75,7 @@ func writeShellProfile(t *testing.T, profile string) {
 
 func TestLoginShellPathReadsProfile(t *testing.T) {
 	custom := filepath.Join(t.TempDir(), "custom-bin")
-	writeShellProfile(t, "echo 欢迎信息\nexport PATH='"+custom+"':\"$PATH\"\necho 更多输出\n")
+	writeShellProfile(t, "echo Welcome message\nexport PATH='"+custom+"':\"$PATH\"\necho more output\n")
 	t.Setenv("PATH", "/usr/bin:/bin")
 	raw, source, err := loginShellPath(context.Background())
 	if err != nil {
@@ -94,13 +94,13 @@ func TestLoginShellPathTimesOut(t *testing.T) {
 	begin := time.Now()
 	_, _, err := loginShellPath(ctx)
 	if err == nil || time.Since(begin) > 5*time.Second {
-		t.Fatalf("应在时限内失败：%v %s", err, time.Since(begin))
+		t.Fatalf("should fail within the time limit: %v %s", err, time.Since(begin))
 	}
 	// The whole resolver falls back to the process PATH.
 	proc := filepath.Join(t.TempDir(), "proc-bin")
 	t.Setenv("PATH", proc)
 	u := NewUserPath(nil, 300*time.Millisecond)
 	if got := u.Dirs(context.Background()); !slices.Equal(got, []string{proc}) {
-		t.Fatalf("超时后应退回进程 PATH：%v", got)
+		t.Fatalf("should fall back to the process PATH after a timeout: %v", got)
 	}
 }

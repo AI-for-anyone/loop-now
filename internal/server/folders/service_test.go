@@ -57,7 +57,7 @@ func git(t *testing.T, dir string, args ...string) string {
 	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("git %v：%v %s", args, err, out)
+		t.Fatalf("git %v: %v %s", args, err, out)
 	}
 	return strings.TrimSpace(string(out))
 }
@@ -101,7 +101,7 @@ func (f *fixture) wait(id uuid.UUID) store.FolderGitPull {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	f.t.Fatal("等待拉取结束超时")
+	f.t.Fatal("timed out waiting for the pull to finish")
 	return store.FolderGitPull{}
 }
 
@@ -123,47 +123,47 @@ func TestGitPullSingleBranchFullHistory(t *testing.T) {
 	action := uuid.New()
 	p, err := f.svc.StartGitPull(ctx, f.agent, folders.GitPullInput{ActionID: action, URL: url, Branch: "main", Path: "src/app"})
 	if err != nil || p.Status != "queued" {
-		t.Fatalf("登记：%v %+v", err, p)
+		t.Fatalf("register: %v %+v", err, p)
 	}
 	again, err := f.svc.StartGitPull(ctx, f.agent, folders.GitPullInput{ActionID: action, URL: url, Branch: "main", Path: "src/app"})
 	if err != nil || again.ID != p.ID {
-		t.Fatalf("同一 actionId 应返回原操作：%v", err)
+		t.Fatalf("the same actionId should return the original operation: %v", err)
 	}
 	if _, err := f.svc.StartGitPull(ctx, f.agent, folders.GitPullInput{ActionID: action, URL: url, Branch: "feature", Path: "src/app"}); errCode(err) != apperr.CodeActionConflict {
-		t.Fatalf("同一 actionId 换内容应冲突：%v", err)
+		t.Fatalf("the same actionId with different content should conflict: %v", err)
 	}
 	if done := f.wait(p.ID); done.Status != "succeeded" || done.FinishedAt == nil || done.ErrorCode != nil {
-		t.Fatalf("结果：%+v", done)
+		t.Fatalf("result: %+v", done)
 	}
 	dir := filepath.Join(folders.AgentWorkspace(f.work, f.agent), "src", "app")
 	if n := git(t, dir, "rev-list", "--count", "HEAD"); n != "3" {
-		t.Fatalf("应保留完整历史（3 次提交）：%s", n)
+		t.Fatalf("should keep the full history (3 commits): %s", n)
 	}
 	if b := git(t, dir, "branch", "-a"); strings.Contains(b, "feature") {
-		t.Fatalf("只拉这一个分支：%s", b)
+		t.Fatalf("should pull only this branch: %s", b)
 	}
 	if shallow, _ := os.Stat(filepath.Join(dir, ".git", "shallow")); shallow != nil {
-		t.Fatal("不应是浅克隆")
+		t.Fatal("should not be a shallow clone")
 	}
 	if list, err := f.svc.GitPulls(ctx, f.agent, 20); err != nil || len(list) != 1 || list[0].ID != p.ID || list[0].Status != "succeeded" {
-		t.Fatalf("最近的拉取：%v %+v", err, list)
+		t.Fatalf("recent pulls: %v %+v", err, list)
 	}
 	if _, err := f.svc.GitPulls(ctx, uuid.New(), 20); errCode(err) != apperr.CodeNotFound {
-		t.Fatalf("Agent 不存在应 404：%v", err)
+		t.Fatalf("missing Agent should be 404: %v", err)
 	}
 	if left, _ := os.ReadDir(filepath.Join(folders.AgentRoot(f.work, f.agent), ".git-pulls")); len(left) != 0 {
-		t.Fatalf("临时目录应清理：%v", left)
+		t.Fatalf("temporary directory should be cleaned up: %v", left)
 	}
 	// The target is no longer empty: the request conflicts right away and leaves no pull record; a replay with the same
 	// actionId still returns the original operation.
 	if _, err := f.svc.StartGitPull(ctx, f.agent, folders.GitPullInput{ActionID: uuid.New(), URL: url, Branch: "main", Path: "src/app"}); errCode(err) != apperr.CodePathConflict {
-		t.Fatalf("目标不为空应冲突：%v", err)
+		t.Fatalf("a non-empty target should conflict: %v", err)
 	}
 	if list, _ := f.svc.GitPulls(ctx, f.agent, 20); len(list) != 1 {
-		t.Fatalf("同步冲突不应留下记录：%+v", list)
+		t.Fatalf("a synchronous conflict should leave no record: %+v", list)
 	}
 	if replay, err := f.svc.StartGitPull(ctx, f.agent, folders.GitPullInput{ActionID: action, URL: url, Branch: "main", Path: "src/app"}); err != nil || replay.ID != p.ID || replay.Status != "succeeded" {
-		t.Fatalf("重放应返回原操作：%v %+v", err, replay)
+		t.Fatalf("a replay should return the original operation: %v %+v", err, replay)
 	}
 	// An empty directory can be a target.
 	if err := os.MkdirAll(filepath.Join(folders.AgentWorkspace(f.work, f.agent), "empty"), 0o755); err != nil {
@@ -174,13 +174,13 @@ func TestGitPullSingleBranchFullHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	if done := f.wait(p.ID); done.Status != "succeeded" {
-		t.Fatalf("拉到空目录：%+v", done)
+		t.Fatalf("pull into an empty directory: %+v", done)
 	}
 	if list, _ := f.svc.GitPulls(ctx, f.agent, 1); len(list) != 1 || list[0].ID != p.ID {
-		t.Fatalf("新的在前、按 limit 截取：%+v", list)
+		t.Fatalf("newest first, cut at limit: %+v", list)
 	}
 	if _, err := os.Stat(filepath.Join(folders.AgentWorkspace(f.work, f.agent), "empty", "feature.txt")); err != nil {
-		t.Fatal("应拉到 feature 分支的内容")
+		t.Fatal("should pull the feature branch contents")
 	}
 }
 
@@ -188,7 +188,7 @@ func TestGitPullSingleBranchFullHistory(t *testing.T) {
 // server_restart.
 func TestGitPullFailures(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("慢 git 夹具是 sh 脚本")
+		t.Skip("the slow git fixture is a sh script")
 	}
 	ctx := context.Background()
 	f := newFixture(t, "git", time.Minute)
@@ -198,10 +198,10 @@ func TestGitPullFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	if done := f.wait(p.ID); done.Status != "failed" || *done.ErrorCode != "branch_not_found" || done.ErrorMessage == nil {
-		t.Fatalf("分支不存在：%+v", done)
+		t.Fatalf("missing branch: %+v", done)
 	}
 	if _, err := os.Lstat(filepath.Join(folders.AgentWorkspace(f.work, f.agent), "x")); !os.IsNotExist(err) {
-		t.Fatal("失败时不应留下目标目录")
+		t.Fatal("a failure should not leave the target directory")
 	}
 	for _, in := range []folders.GitPullInput{
 		{ActionID: uuid.New(), URL: "https://user:token@example.com/r.git", Branch: "main", Path: "x"},
@@ -209,11 +209,11 @@ func TestGitPullFailures(t *testing.T) {
 		{ActionID: uuid.Nil, URL: url, Branch: "main", Path: "x"},
 	} {
 		if _, err := f.svc.StartGitPull(ctx, f.agent, in); errCode(err) != apperr.CodeValidationFailed {
-			t.Fatalf("%+v 应 422：%v", in, err)
+			t.Fatalf("%+v should be 422: %v", in, err)
 		}
 	}
 	if _, err := f.svc.StartGitPull(ctx, uuid.New(), folders.GitPullInput{ActionID: uuid.New(), URL: url, Branch: "main", Path: "x"}); errCode(err) != apperr.CodeNotFound {
-		t.Fatalf("Agent 不存在应 404：%v", err)
+		t.Fatalf("missing Agent should be 404: %v", err)
 	}
 
 	slow := filepath.Join(t.TempDir(), "slow-git")
@@ -226,7 +226,7 @@ func TestGitPullFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	if done := g.wait(p.ID); done.Status != "failed" || *done.ErrorCode != "timeout" {
-		t.Fatalf("超时：%+v", done)
+		t.Fatalf("timeout: %+v", done)
 	}
 
 	// A queued record left by the previous run: marked server_restart at startup.
@@ -238,7 +238,7 @@ func TestGitPullFailures(t *testing.T) {
 	}
 	var code string
 	if err := g.st.Pool.QueryRow(ctx, `SELECT error_code FROM agent_folder_git_pulls WHERE path='y'`).Scan(&code); err != nil || code != "server_restart" {
-		t.Fatalf("重启后：%q %v", code, err)
+		t.Fatalf("after restart: %q %v", code, err)
 	}
 }
 
@@ -250,7 +250,7 @@ func TestApplyLegacyFolderSourcesOnce(t *testing.T) {
 	must := func(sql string, args ...any) {
 		t.Helper()
 		if _, err := f.st.Pool.Exec(ctx, sql, args...); err != nil {
-			t.Fatalf("%s：%v", sql, err)
+			t.Fatalf("%s: %v", sql, err)
 		}
 	}
 	blob := func(text string) string {
@@ -267,13 +267,13 @@ func TestApplyLegacyFolderSourcesOnce(t *testing.T) {
 	file := func(src uuid.UUID, path, text, pending string) {
 		must(`INSERT INTO agent_folder_files(source_id,path,blob_sha256,size,utf8,pending) VALUES($1,$2,$3,$4,true,$5)`, src, path, blob(text), len(text), pending)
 	}
-	file(fresh, "a.md", "全新", "none")
-	file(fresh, "gone.md", "待删", "delete")
-	file(synced, "keep.md", "旧内容（磁盘上已有）", "none")
-	file(synced, "edit.md", "人改过", "write")
+	file(fresh, "a.md", "brand new", "none")
+	file(fresh, "gone.md", "to delete", "delete")
+	file(synced, "keep.md", "old content (already on disk)", "none")
+	file(synced, "edit.md", "edited by a person", "write")
 	file(synced, "del.md", "x", "delete")
 	ws := folders.AgentWorkspace(f.work, f.agent)
-	for p, text := range map[string]string{"notes/keep.md": "磁盘上的版本", "notes/edit.md": "旧", "notes/del.md": "将被删除"} {
+	for p, text := range map[string]string{"notes/keep.md": "version on disk", "notes/edit.md": "old", "notes/del.md": "will be deleted"} {
 		if err := os.MkdirAll(filepath.Dir(filepath.Join(ws, p)), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -286,7 +286,7 @@ func TestApplyLegacyFolderSourcesOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	if sum.Sources != 2 || sum.FilesWritten != 2 || sum.FilesDeleted != 1 || sum.UnclonedGitDirs != 1 {
-		t.Fatalf("回放结果：%+v", sum)
+		t.Fatalf("replay result: %+v", sum)
 	}
 	read := func(p string) string {
 		b, err := os.ReadFile(filepath.Join(ws, p))
@@ -295,20 +295,20 @@ func TestApplyLegacyFolderSourcesOnce(t *testing.T) {
 		}
 		return string(b)
 	}
-	if read("docs/a.md") != "全新" || read("docs/gone.md") != "<missing>" || read("notes/keep.md") != "磁盘上的版本" || read("notes/edit.md") != "人改过" || read("notes/del.md") != "<missing>" {
-		t.Fatalf("磁盘内容：%q %q %q %q %q", read("docs/a.md"), read("docs/gone.md"), read("notes/keep.md"), read("notes/edit.md"), read("notes/del.md"))
+	if read("docs/a.md") != "brand new" || read("docs/gone.md") != "<missing>" || read("notes/keep.md") != "version on disk" || read("notes/edit.md") != "edited by a person" || read("notes/del.md") != "<missing>" {
+		t.Fatalf("disk contents: %q %q %q %q %q", read("docs/a.md"), read("docs/gone.md"), read("notes/keep.md"), read("notes/edit.md"), read("notes/del.md"))
 	}
 	var pending int
 	if err := f.st.Pool.QueryRow(ctx, `SELECT count(*) FROM agent_folder_files WHERE pending<>'none'`).Scan(&pending); err != nil || pending != 3 {
-		t.Fatalf("旧表数据不应修改：%d %v", pending, err)
+		t.Fatalf("old table data should not change: %d %v", pending, err)
 	}
-	if err := os.WriteFile(filepath.Join(ws, "notes/edit.md"), []byte("人在新接口里又改了"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(ws, "notes/edit.md"), []byte("edited again through the new API"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if sum, err := f.svc.ApplyLegacyFolderSources(ctx); err != nil || sum.Sources != 0 || sum.FilesWritten != 0 {
-		t.Fatalf("第二次应不再回放：%+v %v", sum, err)
+		t.Fatalf("the second run should not replay: %+v %v", sum, err)
 	}
-	if read("notes/edit.md") != "人在新接口里又改了" {
-		t.Fatal("第二次启动不应覆盖新的修改")
+	if read("notes/edit.md") != "edited again through the new API" {
+		t.Fatal("the second start should not overwrite the new edit")
 	}
 }

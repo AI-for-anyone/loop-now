@@ -14,7 +14,7 @@ import (
 
 func TestCapturedDiscoverySelectionAndHostTrap(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("假的原生命令是 sh 脚本")
+		t.Skip("the fake native command is a sh script")
 	}
 	home := t.TempDir()
 	native := filepath.Join(t.TempDir(), "native")

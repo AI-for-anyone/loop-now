@@ -29,11 +29,11 @@ func authFixture(t *testing.T) (*store.Store, store.Agent) {
 	t.Helper()
 	st := sqlitetest.NewStore(t)
 	ctx := context.Background()
-	_, e := st.EnsureDefaults(ctx, "组织", "项目")
+	_, e := st.EnsureDefaults(ctx, "Org", "Project")
 	if e != nil {
 		t.Fatal(e)
 	}
-	a, e := st.CreateAgent(ctx, store.PlatformScope(), "认证Agent", "openai-codex", "fixture", "")
+	a, e := st.CreateAgent(ctx, store.PlatformScope(), "Auth Agent", "openai-codex", "fixture", "")
 	if e != nil {
 		t.Fatal(e)
 	}

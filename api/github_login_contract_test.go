@@ -98,7 +98,7 @@ func TestGitHubLoginFormalContract(t *testing.T) {
 				end["accountId"] = account
 			} else {
 				end["errorCode"] = "oauth_failed"
-				end["errorMessage"] = "固定安全错误"
+				end["errorMessage"] = "Fixed safe error"
 			}
 			check("CLIAuthOperation", end, true)
 			bad = clone(end)
@@ -126,7 +126,7 @@ func TestGitHubLoginFormalContract(t *testing.T) {
 		check("CLIAuthOperation", google, false)
 	})
 	identity := map[string]any{"host": "github.com", "userId": "12345678901234567890", "login": "fixture-user", "grantedScopes": nil, "verifiedAt": now}
-	acct := map[string]any{"id": account, "projectId": project, "purpose": "cli", "provider": nil, "cli": "gh", "name": "备注", "accountLabel": "fixture-user", "revision": float64(2), "currentVersionId": version, "authMethod": "oauth", "status": "logged_in", "template": nil, "createdAt": now, "updatedAt": now, "deletedAt": nil, "githubIdentity": identity}
+	acct := map[string]any{"id": account, "projectId": project, "purpose": "cli", "provider": nil, "cli": "gh", "name": "Note", "accountLabel": "fixture-user", "revision": float64(2), "currentVersionId": version, "authMethod": "oauth", "status": "logged_in", "template": nil, "createdAt": now, "updatedAt": now, "deletedAt": nil, "githubIdentity": identity}
 	t.Run("version_identity_and_pat_compatibility", func(t *testing.T) {
 		for _, scopes := range []any{nil, []any{}, []any{"repo", "read:org"}} {
 			v := clone(identity)
@@ -174,8 +174,8 @@ func TestGitHubLoginFormalContract(t *testing.T) {
 		check("ProjectCredentialAccount", bad, false)
 	})
 	t.Run("errors_and_route_classification", func(t *testing.T) {
-		check("Error", map[string]any{"error": map[string]any{"code": "cli_auth_in_progress", "message": "固定安全错误", "details": map[string]any{"projectId": project, "operationId": id, "cli": "gh"}}}, true)
-		check("Error", map[string]any{"error": map[string]any{"code": "precondition_failed", "message": "版本已变化", "details": map[string]any{"resourceKind": "account", "resourceId": account, "expectedVersion": float64(1), "currentVersion": float64(2)}}}, true)
+		check("Error", map[string]any{"error": map[string]any{"code": "cli_auth_in_progress", "message": "Fixed safe error", "details": map[string]any{"projectId": project, "operationId": id, "cli": "gh"}}}, true)
+		check("Error", map[string]any{"error": map[string]any{"code": "precondition_failed", "message": "Version changed", "details": map[string]any{"resourceKind": "account", "resourceId": account, "expectedVersion": float64(1), "currentVersion": float64(2)}}}, true)
 		found := 0
 		for path, item := range doc.Paths.Map() {
 			for _, operation := range item.Operations() {

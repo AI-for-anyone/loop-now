@@ -128,7 +128,7 @@ func TestPGSelectedExtractionAndSupplements(t *testing.T) {
 }
 func TestSourceBindingPermissionsAndNoFollow(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("用 chmod 制造过宽权限在 Windows 上不生效（私有性由 ACL 决定）")
+		t.Skip("making permissions too wide with chmod has no effect on Windows (privacy is decided by ACLs)")
 	}
 	home, r := fixture(t)
 	put(t, home, ".pg_service.conf", "[alpha]\nhost=offline.invalid\nport=5432\nuser=worker\ndbname=db\nsslmode=disable\n")
@@ -386,7 +386,7 @@ func TestBadSAAndEncryptedClientKeyRejected(t *testing.T) {
 }
 func TestPostExtractionRecheckAndCtimeBinding(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Windows 的来源身份没有 ctime／inode，改写内容而不改大小与 mtime 时无法区分")
+		t.Skip("on Windows the source identity has no ctime/inode, so rewriting content without changing size and mtime cannot be detected")
 	}
 	home, r := fixture(t)
 	body := "[x]\nhost=h\nport=5432\nuser=u\ndbname=db\nsslmode=disable\npassword=synthetic\n"

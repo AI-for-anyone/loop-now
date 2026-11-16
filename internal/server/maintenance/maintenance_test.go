@@ -61,7 +61,7 @@ func TestDailyPrunesBacksUpAndKeepsNewest(t *testing.T) {
 		t.Fatal(err)
 	}
 	if events != 1 || audits != 0 {
-		t.Fatalf("保留期之外的日志应清理、之内的保留：%d %d", events, audits)
+		t.Fatalf("logs older than the retention period should be removed and newer ones kept: %d %d", events, audits)
 	}
 	names, err := backups(dir)
 	if err != nil {
@@ -69,10 +69,10 @@ func TestDailyPrunesBacksUpAndKeepsNewest(t *testing.T) {
 	}
 	newest := now.Format(backupLayout)
 	if want := append(slices.Clone(existing[2:]), newest); !slices.Equal(names, want) {
-		t.Fatalf("应只保留最近 7 份：%v，期望 %v", names, want)
+		t.Fatalf("only the latest 7 should be kept: %v, want %v", names, want)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "README")); err != nil {
-		t.Fatal("清理备份不应碰其他文件", err)
+		t.Fatal("cleaning up backups should not touch other files", err)
 	}
 	// The backup is a complete database that can be opened.
 	restored, err := db.Open(ctx, db.Options{Dir: filepath.Join(dir, newest)})
@@ -82,7 +82,7 @@ func TestDailyPrunesBacksUpAndKeepsNewest(t *testing.T) {
 	defer restored.Close()
 	var agents, kept int
 	if err := restored.QueryRow(ctx, `SELECT (SELECT count(*) FROM agents),(SELECT count(*) FROM lifecycle_events WHERE type='pi.started')`).Scan(&agents, &kept); err != nil || agents != 1 || kept != 1 {
-		t.Fatalf("备份内容不对：%d %d %v", agents, kept, err)
+		t.Fatalf("unexpected backup contents: %d %d %v", agents, kept, err)
 	}
 }
 
@@ -94,7 +94,7 @@ func TestDailyScheduleFollowsLastBackup(t *testing.T) {
 	s := &Service{o: Options{BackupDir: dir, Now: func() time.Time { return now }}}
 	s.o.defaults()
 	if got := s.untilDaily(); got != time.Minute {
-		t.Fatalf("没有备份时：%v", got)
+		t.Fatalf("with no backup: %v", got)
 	}
 	if err := os.Mkdir(filepath.Join(dir, now.Add(-2*time.Hour).Format(backupLayout)), 0o700); err != nil {
 		t.Fatal(err)
@@ -103,13 +103,13 @@ func TestDailyScheduleFollowsLastBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := s.untilDaily(); got != 22*time.Hour {
-		t.Fatalf("两小时前备份过（未完成的不算）：%v", got)
+		t.Fatalf("backed up two hours ago (unfinished ones do not count): %v", got)
 	}
 	if err := os.Mkdir(filepath.Join(dir, now.Add(-30*time.Hour).Format(backupLayout)), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if got := s.untilDaily(); got != 22*time.Hour {
-		t.Fatalf("按最新一份排期：%v", got)
+		t.Fatalf("scheduled from the newest backup: %v", got)
 	}
 }
 
@@ -122,17 +122,17 @@ func TestBackupFailureLeavesNothing(t *testing.T) {
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
 	if _, err := Backup(cancelled, st.Pool, dir, now); err == nil {
-		t.Fatal("取消的备份应失败")
+		t.Fatal("a cancelled backup should fail")
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil || len(entries) != 0 {
-		t.Fatalf("失败的备份留下了 %d 项：%v", len(entries), err)
+		t.Fatalf("a failed backup left %d entries: %v", len(entries), err)
 	}
 	path, err := Backup(ctx, st.Pool, dir, now)
 	if err != nil || filepath.Base(path) != now.Format(backupLayout) {
 		t.Fatal(path, err)
 	}
 	if _, err := Backup(ctx, st.Pool, dir, now); err == nil {
-		t.Fatal("同一时刻的备份已存在时应拒绝")
+		t.Fatal("should refuse when a backup for the same moment exists")
 	}
 }

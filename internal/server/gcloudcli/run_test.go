@@ -29,7 +29,7 @@ func TestControlledArguments(t *testing.T) {
 // runs google-cloud-sdk/bin/gcloud directly, still applying the credential and argument allowlist constraints.
 func TestRunSelfContained(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("假的 gcloud 是 sh 脚本")
+		t.Skip("the fake gcloud is a sh script")
 	}
 	base := t.TempDir()
 	root := filepath.Join(base, "runtime")
@@ -73,10 +73,10 @@ func TestRunSelfContained(t *testing.T) {
 
 func TestRunSelfContainedOAuth(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("假的 gcloud 是 sh 脚本")
+		t.Skip("the fake gcloud is a sh script")
 	}
 	if clitemplate.ResolveGooglePython() == "" {
-		t.Skip("自包含 gcloud 运行需要系统 Python")
+		t.Skip("running a self-contained gcloud needs the system Python")
 	}
 	base := t.TempDir()
 	root := filepath.Join(base, "runtime")

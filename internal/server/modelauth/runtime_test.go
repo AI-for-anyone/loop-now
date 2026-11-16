@@ -24,7 +24,7 @@ func (f resolverFunc) Resolve(ctx context.Context, binding modelcredential.Bindi
 
 func TestRuntimePrivateChannelBindsIdentityAndSanitizesFailure(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("刷新桥经 ExtraFiles 传私有管道并给匿名管道设截止时间，Windows 都不支持")
+		t.Skip("the refresh bridge passes a private pipe through ExtraFiles and sets deadlines on anonymous pipes; Windows supports neither")
 	}
 	ref := modelcredential.Binding{VersionID: uuid.New(), AgentID: uuid.New(), Provider: "openai-codex"}
 	var calls atomic.Int32

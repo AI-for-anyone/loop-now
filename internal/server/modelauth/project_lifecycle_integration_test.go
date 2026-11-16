@@ -44,11 +44,11 @@ func newLifecycleEnv(t *testing.T, options ServiceOptions) *lifecycleEnv {
 	t.Helper()
 	ctx := context.Background()
 	st := sqlitetest.NewStore(t)
-	defaults, err := st.EnsureDefaults(ctx, "认证生命周期组织", "默认项目")
+	defaults, err := st.EnsureDefaults(ctx, "Auth lifecycle org", "Default project")
 	if err != nil {
 		t.Fatal(err)
 	}
-	project, err := st.CreateProject(ctx, defaults.Organization.ID, "认证生命周期项目")
+	project, err := st.CreateProject(ctx, defaults.Organization.ID, "Auth lifecycle project")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func (e *lifecycleEnv) release() {
 func (e *lifecycleEnv) start(account *cm.Account) cm.Operation {
 	e.t.Helper()
 	in := cm.LoginStart{Provider: "openai-codex"}
-	name := "生命周期新账号"
+	name := "Lifecycle new account"
 	if account == nil {
 		in.Name = &name
 	} else {
@@ -142,7 +142,7 @@ func (e *lifecycleEnv) seedAccount() cm.Account {
 		e.t.Fatal(err)
 	}
 	defer clear(plain)
-	record, err := e.st.CreateProjectCredential(context.Background(), e.project, store.PurposeModel, "openai-codex", "原账号", store.ProjectCredentialWrite{AuthMethod: "oauth", Secret: plain})
+	record, err := e.st.CreateProjectCredential(context.Background(), e.project, store.PurposeModel, "openai-codex", "Original account", store.ProjectCredentialWrite{AuthMethod: "oauth", Secret: plain})
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -310,7 +310,7 @@ func TestProjectLifecycleConcurrentRevisionChangeSealZero(t *testing.T) {
 	e := newLifecycleEnv(t, ServiceOptions{})
 	old := e.seedAccount()
 	op := e.start(&old)
-	changed, err := e.p.Rename(context.Background(), e.project, old.ID, cm.Rename{Name: "并发改名", ExpectedRevision: old.Revision})
+	changed, err := e.p.Rename(context.Background(), e.project, old.ID, cm.Rename{Name: "Concurrent rename", ExpectedRevision: old.Revision})
 	if err != nil {
 		t.Fatal(err)
 	}

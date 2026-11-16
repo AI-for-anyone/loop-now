@@ -23,7 +23,7 @@ func TestProjectCredentialFormalContract(t *testing.T) {
 		}
 	}
 	id, project, agent, version := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
-	account := map[string]any{"id": id, "projectId": project, "purpose": "model", "provider": "openai-codex", "cli": nil, "name": "共享账号", "accountLabel": nil, "revision": float64(1), "currentVersionId": version, "authMethod": "oauth", "status": "logged_in", "template": nil, "createdAt": "2026-10-15T12:00:00Z", "updatedAt": "2026-10-15T12:00:00Z", "deletedAt": nil}
+	account := map[string]any{"id": id, "projectId": project, "purpose": "model", "provider": "openai-codex", "cli": nil, "name": "Shared account", "accountLabel": nil, "revision": float64(1), "currentVersionId": version, "authMethod": "oauth", "status": "logged_in", "template": nil, "createdAt": "2026-10-15T12:00:00Z", "updatedAt": "2026-10-15T12:00:00Z", "deletedAt": nil}
 	check("ProjectCredentialAccount", account)
 	check("ProjectCredentialAccountList", map[string]any{"projectId": project, "credentialsRevision": float64(1), "accounts": []any{account}})
 	check("ProjectCredentialCreate", map[string]any{"purpose": "model", "provider": "openai", "name": "key", "credential": map[string]any{"type": "api_key", "key": "fixture-not-real"}})
@@ -86,7 +86,7 @@ func TestProjectCredentialFormalContract(t *testing.T) {
 		"model_auth_in_progress":        map[string]any{"projectId": project, "operationId": id},
 		"task_not_idle":                 map[string]any{"projectId": project, "tasks": []any{map[string]any{"id": id, "status": "running"}}},
 	} {
-		check("Error", map[string]any{"error": map[string]any{"code": code, "message": "固定安全提示", "details": details}})
+		check("Error", map[string]any{"error": map[string]any{"code": code, "message": "Fixed safe message", "details": details}})
 	}
 	for path, item := range doc.Paths.Map() {
 		for _, op := range item.Operations() {

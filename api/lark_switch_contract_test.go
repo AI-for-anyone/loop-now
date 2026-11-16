@@ -61,7 +61,7 @@ func TestTaskLarkSwitchFormalContract(t *testing.T) {
 	out["status"] = "succeeded"
 	out["bindingRevision"] = float64(1)
 	out["continuation"] = map[string]any{"nodeRunId": id(), "attempt": float64(2), "runId": id()}
-	out["recoveryInstruction"] = "仅继续QA，保留已有成果"
+	out["recoveryInstruction"] = "Continue QA only and keep the existing results"
 	out["finishedAt"] = now
 	for _, status := range []string{"queued", "starting", "running", "aborting", "completed", "failed", "interrupted"} {
 		out["dispatchStatus"] = status

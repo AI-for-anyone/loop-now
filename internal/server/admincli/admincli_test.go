@@ -48,7 +48,7 @@ func (c cli) ok(args ...string) (stdout, stderr string) {
 	c.t.Helper()
 	code, out, errs := c.run(args...)
 	if code != 0 {
-		c.t.Fatalf("loop-server %s：退出码 %d：%s", strings.Join(args, " "), code, errs)
+		c.t.Fatalf("loop-server %s: exit code %d: %s", strings.Join(args, " "), code, errs)
 	}
 	return out, errs
 }
@@ -63,68 +63,68 @@ func TestAdminCommands(t *testing.T) {
 	c := cli{t: t, dataDir: dataDir}
 
 	if out, _ := c.ok("version"); strings.TrimSpace(out) != buildinfo.Version() {
-		t.Fatalf("version 应打印服务端版本：%q", out)
+		t.Fatalf("version should print the server version: %q", out)
 	}
 	if code, _, _ := c.run("identity"); code != 2 {
-		t.Fatalf("缺少子命令时应报用法错误：%d", code)
+		t.Fatalf("a missing subcommand should be a usage error: %d", code)
 	}
 	// With no database in the data directory it reports an error instead of creating an empty one.
 	empty := cli{t: t, dataDir: t.TempDir()}
 	if code, _, errs := empty.run("identity", "list"); code != 2 || !strings.Contains(errs, "no database") {
-		t.Fatalf("数据目录里没有库时应报用法错误：%d %q", code, errs)
+		t.Fatalf("no database in the data directory should be a usage error: %d %q", code, errs)
 	}
 	if _, err := os.Stat(filepath.Join(config.DBDir(empty.dataDir), "data.db")); !os.IsNotExist(err) {
-		t.Fatalf("不应新建空库：%v", err)
+		t.Fatalf("should not create an empty database: %v", err)
 	}
 
 	// External identities: create, duplicate name, name rules, list.
 	out, _ := c.ok("identity", "create", "ci-bot")
 	if !strings.Contains(out, "@ci-bot") {
-		t.Fatalf("创建外部身份：%s", out)
+		t.Fatalf("create external identity: %s", out)
 	}
 	if code, _, errs := c.run("identity", "create", "ci-bot"); code != 1 || !strings.Contains(errs, "ci-bot") {
-		t.Fatalf("重名应失败：%d %s", code, errs)
+		t.Fatalf("a duplicate name should fail: %d %s", code, errs)
 	}
 	if code, _, _ := c.run("identity", "create", "Console"); code != 1 {
-		t.Fatal("不合规的名称应失败")
+		t.Fatal("an invalid name should fail")
 	}
 	if out, _ := c.ok("identity", "list"); !strings.Contains(out, "ci-bot") {
-		t.Fatalf("列出外部身份：%s", out)
+		t.Fatalf("list external identities: %s", out)
 	}
 
 	// Tokens: printed to standard output exactly once when issued; the list has only metadata; invalid once revoked.
 	tok, info := c.ok("token", "issue", "ci-bot", "--expires-in", "720h")
 	tok = strings.TrimSpace(tok)
 	if _, id, _, ok := auth.ParseToken(tok); !ok || !strings.HasPrefix(tok, "lne_") || !strings.Contains(info, id.String()) {
-		t.Fatalf("签发的令牌：%q %q", tok, info)
+		t.Fatalf("issued token: %q %q", tok, info)
 	}
 	forever, _ := c.ok("token", "issue", "--expires-in", "0s", "ci-bot")
 	list, _ := c.ok("token", "list", "ci-bot")
 	if strings.Contains(list, tok[12:]) || !strings.Contains(list, tok[:12]) || !strings.Contains(list, "never") {
-		t.Fatalf("令牌列表只有元数据：%s", list)
+		t.Fatalf("the token list should hold only metadata: %s", list)
 	}
 	_, id, _, _ := auth.ParseToken(tok)
 	a, err := st.LookupExternalToken(context.Background(), id)
 	if err != nil || a.Token.ExpiresAt == nil || a.Token.ExpiresAt.Sub(time.Now()) < 719*time.Hour {
-		t.Fatalf("有效期应为 720h：%+v %v", a.Token, err)
+		t.Fatalf("the lifetime should be 720h: %+v %v", a.Token, err)
 	}
 	c.ok("token", "revoke", id.String())
 	c.ok("token", "revoke", id.String()) // revoking again is not an error
 	if a, _ := st.LookupExternalToken(context.Background(), id); a.Token.RevokedAt == nil {
-		t.Fatal("吊销后应带吊销时间")
+		t.Fatal("should have a revocation time after revoking")
 	}
 	if code, _, _ := c.run("token", "revoke", "not-a-uuid"); code != 1 {
-		t.Fatal("令牌 ID 不合法时应失败")
+		t.Fatal("an invalid token ID should fail")
 	}
 
 	// Deleting an identity: all its tokens are revoked and the name can be reused.
 	c.ok("identity", "delete", "ci-bot")
 	_, fid, _, _ := auth.ParseToken(strings.TrimSpace(forever))
 	if a, _ := st.LookupExternalToken(context.Background(), fid); a.Token.RevokedAt == nil {
-		t.Fatal("删除身份后它的令牌应全部吊销")
+		t.Fatal("deleting an identity should revoke all its tokens")
 	}
 	if code, _, _ := c.run("token", "list", "ci-bot"); code != 1 {
-		t.Fatal("已删除的身份不能列出令牌")
+		t.Fatal("listing tokens of a deleted identity should fail")
 	}
 	c.ok("identity", "create", "ci-bot")
 
@@ -136,17 +136,17 @@ func TestAdminCommands(t *testing.T) {
 	ops := map[string]int{}
 	for _, e := range audits {
 		if e.ActorKind != "cli" || e.RequestID != nil {
-			t.Fatalf("命令行的审计操作者应为 cli：%+v", e)
+			t.Fatalf("the audit actor of the command line should be cli: %+v", e)
 		}
 		ops[e.Operation]++
 		for _, v := range e.Target {
 			if strings.HasPrefix(v, "lne_") {
-				t.Fatalf("审计中不应有令牌：%+v", e)
+				t.Fatalf("the audit should contain no token: %+v", e)
 			}
 		}
 	}
 	if ops["identity.create"] != 3 || ops["token.issue"] != 2 || ops["token.revoke"] != 2 || ops["identity.delete"] != 1 {
-		t.Fatalf("改变状态的命令都应记审计（含失败的）：%v", ops)
+		t.Fatalf("every state-changing command should be audited (failed ones too): %v", ops)
 	}
 }
 
@@ -164,13 +164,13 @@ func TestAdminBackup(t *testing.T) {
 	}
 	c := cli{t: t, dataDir: dataDir}
 	if code, _, _ := c.run("backup"); code != 2 {
-		t.Fatalf("缺少目录时应报用法错误：%d", code)
+		t.Fatalf("a missing directory should be a usage error: %d", code)
 	}
 	target := t.TempDir()
 	out, _ := c.ok("backup", target)
 	path := strings.TrimSpace(out)
 	if filepath.Dir(path) != target {
-		t.Fatalf("备份应在目标目录下：%q", path)
+		t.Fatalf("the backup should be in the target directory: %q", path)
 	}
 	restored, err := db.Open(context.Background(), db.Options{Dir: path})
 	if err != nil {
@@ -179,7 +179,7 @@ func TestAdminBackup(t *testing.T) {
 	defer restored.Close()
 	var projects int
 	if err := restored.QueryRow(context.Background(), `SELECT count(*) FROM projects`).Scan(&projects); err != nil || projects != 1 {
-		t.Fatalf("备份内容不对：%d %v", projects, err)
+		t.Fatalf("unexpected backup contents: %d %v", projects, err)
 	}
 }
 
@@ -189,23 +189,23 @@ func TestAdminImportPostgresRefusals(t *testing.T) {
 	dataDir := t.TempDir()
 	c := cli{t: t, dataDir: dataDir}
 	if code, _, errs := c.run("import-postgres"); code != 2 || !strings.Contains(errs, pgimport.EnvSourceURL) {
-		t.Fatalf("没有源库时应报用法错误：%d %s", code, errs)
+		t.Fatalf("no source database should be a usage error: %d %s", code, errs)
 	}
 	c.env = map[string]string{pgimport.EnvSourceURL: "postgres://fixture-user:fixture-secret@127.0.0.1:1/fixture-db?connect_timeout=2"}
 	if code, _, _ := c.run("import-postgres", "extra"); code != 2 {
-		t.Fatalf("多余参数应报用法错误：%d", code)
+		t.Fatalf("extra arguments should be a usage error: %d", code)
 	}
 	code, out, errs := c.run("import-postgres")
 	if code != 1 {
-		t.Fatalf("连不上源库应失败：%d", code)
+		t.Fatalf("an unreachable source database should fail: %d", code)
 	}
 	for _, s := range []string{"fixture-user", "fixture-secret", "fixture-db"} {
 		if strings.Contains(out+errs, s) {
-			t.Fatalf("输出里带了连接参数：%s", errs)
+			t.Fatalf("the output contains connection parameters: %s", errs)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(config.DBDir(dataDir), db.DataFile)); !os.IsNotExist(err) {
-		t.Fatal("失败的导入留下了库", err)
+		t.Fatal("a failed import left a database behind", err)
 	}
 }
 
@@ -219,9 +219,9 @@ func TestAdminImportPostgres(t *testing.T) {
 	c := cli{t: t, dataDir: t.TempDir(), env: map[string]string{pgimport.EnvSourceURL: src}}
 	out, _ := c.ok("import-postgres")
 	if !strings.Contains(out, "external_identities\t1\n") {
-		t.Fatalf("输出里没有导入的行数：%s", out)
+		t.Fatalf("the output lacks the imported row counts: %s", out)
 	}
 	if list, _ := c.ok("identity", "list"); !strings.Contains(list, "imported-ci") {
-		t.Fatalf("导入的身份不在新库里：%s", list)
+		t.Fatalf("the imported identity is not in the new database: %s", list)
 	}
 }

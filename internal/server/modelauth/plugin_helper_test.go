@@ -93,20 +93,20 @@ func TestPluginHelperWithPiLoader(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(got) != `{"access":"vault-marker","refresh":"vault-marker","expires":9007199254740991,"type":"oauth"}` {
-		t.Fatalf("认证条目：%s", got)
+		t.Fatalf("auth entry: %s", got)
 	}
 	if len(ui.prompts) != 1 || ui.prompts[0].Kind != "select" || ui.prompts[0].Message != "Pick a method" || ui.device != "WXYZ-1234 https://accounts.example.test/device" {
-		t.Fatalf("交互：%+v %q", ui.prompts, ui.device)
+		t.Fatalf("interaction: %+v %q", ui.prompts, ui.device)
 	}
 	if b, err := os.ReadFile(filepath.Join(home, ".pi", "fake-oauth", "accounts.json")); err != nil || string(b) != `{"stored":null}` {
-		t.Fatalf("扩展的状态写在 HOME：%s %v", b, err)
+		t.Fatalf("the extension state should be written under HOME: %s %v", b, err)
 	}
 	if entries, _ := os.ReadDir(home); len(entries) != 1 {
-		t.Fatalf("HOME 里只有扩展自己的东西：%v", entries)
+		t.Fatalf("HOME should hold only the extension's own files: %v", entries)
 	}
 
 	// This provider is not registered: extension_load_failed.
 	if _, err := h.Login(context.Background(), PluginLoginRequest{OperationID: [16]byte{2}, Provider: "other", Extensions: []string{ext}, Home: home}, ui, ui.replies); err != ErrExtensionLoad {
-		t.Fatalf("没有这个提供方：%v", err)
+		t.Fatalf("unknown provider: %v", err)
 	}
 }
