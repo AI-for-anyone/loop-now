@@ -26,7 +26,7 @@ func (a *App) configureCLIImport(ctx context.Context, cfg *config.Config, o Opti
 	if factory == nil {
 		u, e := user.LookupId(strconv.Itoa(os.Getuid()))
 		if e != nil || u == nil || !filepath.IsAbs(u.HomeDir) {
-			return errors.New("本机导入来源用户不可确定")
+			return errors.New("cannot determine the local user to import from")
 		}
 		root := filepath.Clean(u.HomeDir)
 		factory = func(ctx context.Context) (cliimport.Reader, error) {

@@ -26,7 +26,7 @@ type AgentSkillDetail struct {
 
 func (s *Service) extractZip(data []byte) ([]content.File, content.SkillMeta, error) {
 	if int64(len(data)) > s.Limits.MaxSkillArchive {
-		return nil, content.SkillMeta{}, apperr.TooLarge("压缩包超过上限")
+		return nil, content.SkillMeta{}, apperr.TooLarge("The archive exceeds the size limit.")
 	}
 	files, meta, err := content.ExtractSkillZip(data, content.SkillArchiveLimits{MaxTotal: s.Limits.MaxSkillArchive, MaxEntries: s.Limits.MaxSkillEntries})
 	if err != nil {
@@ -45,14 +45,14 @@ func (s *Service) extractZip(data []byte) ([]content.File, content.SkillMeta, er
 // use it.
 func checkSkillName(name string) error {
 	if name == guide.SkillName {
-		return apperr.Conflict(apperr.CodeNameConflict, guide.SkillName+" 是内置 Skill 的名称，不能使用")
+		return apperr.Conflict(apperr.CodeNameConflict, guide.SkillName+" is the name of the built-in Skill and cannot be used.")
 	}
 	return nil
 }
 
 func (s *Service) parseMarkdown(md string, field string) (content.SkillMeta, error) {
 	if int64(len(md)) > s.Limits.MaxUploadFile {
-		return content.SkillMeta{}, apperr.TooLarge("SKILL.md 超过上限")
+		return content.SkillMeta{}, apperr.TooLarge("SKILL.md exceeds the size limit.")
 	}
 	meta, err := content.ParseSkillMarkdown([]byte(md))
 	if err != nil {

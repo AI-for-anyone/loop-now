@@ -18,7 +18,7 @@ func Options(t testing.TB) modelcatalog.Options {
 	if root := os.Getenv("LOOP_NOW_TEST_PI_PACKAGE_DIR"); root != "" {
 		node, err := exec.LookPath("node")
 		if err != nil {
-			t.Skipf("本机没有 Node：%v", err)
+			t.Skipf("Node is not available on this machine: %v", err)
 		}
 		piAIDir := os.Getenv("LOOP_NOW_TEST_PI_AI_DIR")
 		if piAIDir == "" {
@@ -28,7 +28,7 @@ func Options(t testing.TB) modelcatalog.Options {
 	}
 	r, err := preflight.Resolve(context.Background(), preflight.Options{PiBin: "pi", PiVersion: "1.4.0", NodeBin: "node", WorkRoot: filepath.Join(t.TempDir(), "root"), HomeDirs: []string{"/nonexistent-home"}})
 	if err != nil {
-		t.Skipf("本机没有可用的 Pi 1.4.0：%v", err)
+		t.Skipf("Pi 1.4.0 is not available on this machine: %v", err)
 	}
 	return modelcatalog.Options{NodeBin: r.NodeBin, PiAIDir: r.PiAIDir, PiPackageDir: r.PiPackageDir, PiVersion: "1.4.0", Path: r.ExecBasePath}
 }

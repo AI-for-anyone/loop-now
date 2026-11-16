@@ -36,11 +36,11 @@ func projectOperationView(o cm.Operation) cm.Operation {
 
 // pluginErrorMessages are the error messages for plugin provider logins (without the extension's original text).
 var pluginErrorMessages = map[string]string{
-	"auth_failed":               "订阅授权未完成",
-	"auth_port_busy":            "登录回调需要的本机端口已被占用，请结束其他登录后重试",
-	"extension_load_failed":     "插件扩展加载失败，或没有注册这个提供方的登录",
-	"plugin_unavailable":        "插件已卸载或停用",
-	"invalid_authorization_url": "插件给出的授权地址不合规",
+	"auth_failed":               "Subscription authorization did not complete.",
+	"auth_port_busy":            "The local port the login callback needs is already in use. Finish your other logins and try again.",
+	"extension_load_failed":     "Could not load the plugin extension, or the extension does not register a login for this provider.",
+	"plugin_unavailable":        "The plugin was uninstalled or turned off.",
+	"invalid_authorization_url": "The authorization URL given by the plugin is not allowed.",
 }
 
 func (p *ProjectService) loginView(ctx context.Context, o cm.Operation) (cm.LoginState, error) {
@@ -63,18 +63,18 @@ func (p *ProjectService) Start(ctx context.Context, project uuid.UUID, in cm.Log
 	if in.Provider != "openai-codex" {
 		var ok bool
 		if plugin, ok = p.pluginProvider(in.Provider); !ok {
-			return cm.LoginState{}, apperr.Invalid("provider", "只支持Codex与插件提供方的订阅登录")
+			return cm.LoginState{}, apperr.Invalid("provider", "Subscription login supports only openai-codex and plugin providers.")
 		}
 	}
 	if in.AccountID == nil {
 		if in.Name == nil || in.ExpectedRevision != nil {
-			return cm.LoginState{}, apperr.Invalid("name", "新建登录须有名称且无目标版本")
+			return cm.LoginState{}, apperr.Invalid("name", "A login for a new account requires name and must not have expectedRevision.")
 		}
 		if e := validateAccountName(*in.Name); e != nil {
 			return cm.LoginState{}, e
 		}
 	} else if *in.AccountID == uuid.Nil || in.Name != nil || in.ExpectedRevision == nil || *in.ExpectedRevision < 1 {
-		return cm.LoginState{}, apperr.Invalid("accountId", "重登需要账号ID与预期版本")
+		return cm.LoginState{}, apperr.Invalid("accountId", "Logging in again requires a valid accountId and an expectedRevision of at least 1, and no name.")
 	}
 	s := p.Auth
 	if plugin != "" {

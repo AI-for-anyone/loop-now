@@ -12,7 +12,7 @@ import (
 	"loop-now/internal/server/store"
 )
 
-var ErrCredentialUnavailable = errors.New("绑定的模型账号凭证不可用")
+var ErrCredentialUnavailable = errors.New("the bound model account credential is unavailable")
 
 type Refresher interface {
 	Refresh(context.Context, modelcredential.Credential) (modelcredential.Credential, error)

@@ -17,12 +17,12 @@ import (
 func consoleFiles(dir string) (fs.FS, string, error) {
 	if dir != "" {
 		if _, err := os.Stat(filepath.Join(dir, "index.html")); err != nil {
-			return nil, "", fmt.Errorf("控制台目录 %s 里没有 index.html（%s）：%w", dir, config.EnvWebDir, err)
+			return nil, "", fmt.Errorf("console directory %s has no index.html (%s): %w", dir, config.EnvWebDir, err)
 		}
 		return os.DirFS(dir), dir, nil
 	}
 	if embedded := webui.Embedded(); embedded != nil {
-		return embedded, "内嵌", nil
+		return embedded, "embedded", nil
 	}
 	return nil, "", nil
 }

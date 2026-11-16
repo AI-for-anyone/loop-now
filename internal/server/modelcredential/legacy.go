@@ -8,7 +8,7 @@ import (
 // ErrLegacyUnresolved is a compatibility gate, not an approved migration policy.
 // Original stored payloads and v1 mappings remain untouched. Unknown/proxy
 // inputs are not silently projected into an API key or process environment.
-var ErrLegacyUnresolved = errors.New("旧模型凭证的等价接入尚待兼容评审")
+var ErrLegacyUnresolved = errors.New("equivalent support for legacy model credentials awaits a compatibility review")
 
 func LegacySingleKey(provider string, env map[string]string) (Credential, error) {
 	if len(env) == 0 {

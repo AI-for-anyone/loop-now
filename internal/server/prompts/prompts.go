@@ -25,14 +25,14 @@ type Layers struct {
 
 func (l Layers) Validate() error {
 	if l.Format != FormatV1 || l.AgentVersion < 1 {
-		return errors.New("Prompt组合版本无效")
+		return errors.New("invalid prompt composition version")
 	}
 	if l.ProjectID == nil {
 		if l.ProjectPrompt != "" || l.ProjectVersion != 0 {
-			return errors.New("平台Agent不能继承项目Prompt")
+			return errors.New("a platform Agent cannot inherit a project prompt")
 		}
 	} else if *l.ProjectID == uuid.Nil || l.ProjectVersion < 1 {
-		return errors.New("项目Prompt版本无效")
+		return errors.New("invalid project prompt version")
 	}
 	return nil
 }

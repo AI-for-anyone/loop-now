@@ -24,7 +24,7 @@ type CopyResult struct {
 func CopyTree(src, dst string) (CopyResult, error) {
 	begin := time.Now()
 	if _, err := os.Lstat(dst); err == nil {
-		return CopyResult{}, fmt.Errorf("目标 %s 已存在", dst)
+		return CopyResult{}, fmt.Errorf("target %s already exists", dst)
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return CopyResult{}, err
 	}
@@ -39,7 +39,7 @@ func CopyTree(src, dst string) (CopyResult, error) {
 		return CopyResult{}, err
 	}
 	if !info.IsDir() {
-		return CopyResult{}, fmt.Errorf("来源 %s 不是目录", src)
+		return CopyResult{}, fmt.Errorf("source %s is not a directory", src)
 	}
 	tmp := dst + ".copying-" + randHex()
 	method := "clonefile"
@@ -58,7 +58,7 @@ func CopyTree(src, dst string) (CopyResult, error) {
 	return CopyResult{Method: method, Duration: time.Since(begin)}, nil
 }
 
-var errCloneUnsupported = errors.New("文件系统不支持克隆")
+var errCloneUnsupported = errors.New("the file system does not support cloning")
 
 // plainCopy copies a directory recursively: it keeps permissions and symlinks (copying the link contents as is) and
 // skips special files such as sockets and devices.

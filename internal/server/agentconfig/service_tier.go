@@ -7,12 +7,12 @@ import "loop-now/internal/server/apperr"
 func ResolveServiceTier(provider string, selected *string) (*string, error) {
 	if selected != nil {
 		if provider != "openai-codex" {
-			return nil, apperr.Invalid("serviceTier", "仅openai-codex支持速度档位")
+			return nil, apperr.Invalid("serviceTier", "Only openai-codex supports a service tier.")
 		}
 		switch *selected {
 		case "default", "priority", "ultrafast":
 		default:
-			return nil, apperr.Invalid("serviceTier", "仅支持default、priority、ultrafast或null")
+			return nil, apperr.Invalid("serviceTier", "Must be default, priority, ultrafast or null.")
 		}
 	}
 	if provider != "openai-codex" {

@@ -60,7 +60,7 @@ func CaptureProviders(ctx context.Context, o Options, dir string, extensions []s
 		return out, nil
 	}
 	if o.PiPackageDir == "" {
-		return out, fmt.Errorf("读取插件提供方需要 Pi 主程序目录")
+		return out, fmt.Errorf("reading plugin providers requires the Pi package directory")
 	}
 	tmp, err := os.MkdirTemp("", "loopnow-providers-")
 	if err != nil {
@@ -96,9 +96,9 @@ func CaptureProviders(ctx context.Context, o Options, dir string, extensions []s
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
-			return out, fmt.Errorf("读取插件提供方超时")
+			return out, fmt.Errorf("timed out reading plugin providers")
 		}
-		return out, fmt.Errorf("读取插件提供方失败：%w：%s", err, clip(bytes.TrimSpace(stderr.Bytes()), 2000))
+		return out, fmt.Errorf("read plugin providers: %w: %s", err, clip(bytes.TrimSpace(stderr.Bytes()), 2000))
 	}
 	var raw struct {
 		PiVersion string             `json:"piVersion"`
@@ -106,10 +106,10 @@ func CaptureProviders(ctx context.Context, o Options, dir string, extensions []s
 		Errors    []CaptureError     `json:"errors"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &raw); err != nil {
-		return out, fmt.Errorf("解析插件提供方失败：%w", err)
+		return out, fmt.Errorf("parse plugin providers: %w", err)
 	}
 	if raw.PiVersion != o.PiVersion {
-		return out, fmt.Errorf("Pi 版本 %s 与期望的 %s 不一致", raw.PiVersion, o.PiVersion)
+		return out, fmt.Errorf("Pi version %s does not match the expected %s", raw.PiVersion, o.PiVersion)
 	}
 	rel := func(p string) string {
 		if r, ok := abs[p]; ok {
@@ -128,7 +128,7 @@ func CaptureProviders(ctx context.Context, o Options, dir string, extensions []s
 		for i := range p.Models {
 			m := &p.Models[i]
 			if len(m.ThinkingLevels) == 0 || !slices.Contains(m.ThinkingLevels, m.DefaultThinkingLevel) {
-				msg := fmt.Sprintf("模型 %s 的思考等级元数据无效", m.ID)
+				msg := fmt.Sprintf("Model %s has invalid thinking level metadata.", m.ID)
 				p.Error = &msg
 			}
 			if m.Input == nil {

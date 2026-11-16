@@ -60,7 +60,7 @@ func (s *Service) Settings(ctx context.Context) (store.LocalModeSettings, error)
 // UpdateSettings changes only the switches present in the request; at least one is required.
 func (s *Service) UpdateSettings(ctx context.Context, p SettingsPatch) (store.LocalModeSettings, error) {
 	if p.Directories == nil && p.Git == nil && p.CLI == nil && p.Logins == nil {
-		return store.LocalModeSettings{}, apperr.Invalid("body", "至少修改 directories、git、cli、logins 中的一项")
+		return store.LocalModeSettings{}, apperr.Invalid("body", "Provide at least one of directories, git, cli or logins.")
 	}
 	return s.Store.UpdateLocalModeSettings(ctx, store.LocalModeSettingsPatch{Directories: p.Directories, Git: p.Git, CLI: p.CLI, Logins: p.Logins})
 }
@@ -139,9 +139,9 @@ func (s *Service) agentView(ctx context.Context, a store.Agent, own store.LocalD
 func validatePut(in PutInput) (int64, []store.LocalDirectoryEntry, error) {
 	var errs []apperr.FieldError
 	if in.ExpectedRevision == nil {
-		errs = append(errs, apperr.Field("expectedRevision", "必须提供读到的 revision（从未保存过为 0）"))
+		errs = append(errs, apperr.Field("expectedRevision", "Pass the revision you read (0 if the list was never saved)."))
 	} else if *in.ExpectedRevision < 0 {
-		errs = append(errs, apperr.Field("expectedRevision", "必须是不小于 0 的整数"))
+		errs = append(errs, apperr.Field("expectedRevision", "Must be a non-negative integer."))
 	}
 	dirs, err := Validate(in.Directories)
 	if err != nil {

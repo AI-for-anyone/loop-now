@@ -22,47 +22,47 @@ func (v *CLIAuthStart) UnmarshalJSON(b []byte) error {
 	type wire CLIAuthStart
 	var in wire
 	if strict(b, &in) != nil {
-		return errors.New("CLI登录字段无效")
+		return errors.New("invalid CLI login fields")
 	}
 	var fields map[string]json.RawMessage
 	json.Unmarshal(b, &fields)
 	for _, k := range []string{"operationId", "cli", "authType"} {
 		if _, ok := fields[k]; !ok || string(fields[k]) == "null" {
-			return errors.New("CLI登录字段无效")
+			return errors.New("invalid CLI login fields")
 		}
 	}
 	if in.OperationID == uuid.Nil || !(in.CLI == "gcloud" && in.AuthType == "google_user" || in.CLI == "gh" && in.AuthType == "github_user" || in.CLI == "lark-cli" && in.AuthType == "lark_user") {
-		return errors.New("CLI登录字段无效")
+		return errors.New("invalid CLI login fields")
 	}
 	if in.CLI == "lark-cli" {
 		allowed := map[string]bool{"operationId": true, "cli": true, "authType": true, "sourceAccountId": true, "expectedSourceRevision": true, "accountId": true, "expectedRevision": true}
 		for key := range fields {
 			if !allowed[key] {
-				return errors.New("Lark登录字段无效")
+				return errors.New("invalid Lark login fields")
 			}
 		}
 		if fields["name"] != nil {
-			return errors.New("Lark登录不接受名称")
+			return errors.New("a Lark login does not accept name")
 		}
 		if in.AccountID == nil {
 			if fields["accountId"] != nil || fields["expectedRevision"] != nil || in.SourceAccountID == nil || *in.SourceAccountID == uuid.Nil || in.ExpectedSourceRevision == nil || *in.ExpectedSourceRevision < 1 {
-				return errors.New("Lark应用来源无效")
+				return errors.New("invalid Lark app source")
 			}
 		} else if *in.AccountID == uuid.Nil || in.ExpectedRevision == nil || *in.ExpectedRevision < 1 || fields["sourceAccountId"] != nil || fields["expectedSourceRevision"] != nil {
-			return errors.New("Lark重登字段无效")
+			return errors.New("invalid fields for a Lark re-login")
 		}
 		*v = CLIAuthStart(in)
 		return nil
 	}
 	if fields["sourceAccountId"] != nil || fields["expectedSourceRevision"] != nil {
-		return errors.New("CLI应用来源字段无效")
+		return errors.New("invalid CLI app source fields")
 	}
 	if in.AccountID == nil {
 		if in.ExpectedRevision != nil || fields["accountId"] != nil || fields["expectedRevision"] != nil || in.CLI == "gcloud" && in.Name == nil || in.CLI == "gh" && fields["name"] != nil {
-			return errors.New("CLI登录新建字段无效")
+			return errors.New("invalid fields for a new CLI login")
 		}
 	} else if *in.AccountID == uuid.Nil || in.ExpectedRevision == nil || *in.ExpectedRevision < 1 || fields["name"] != nil {
-		return errors.New("CLI登录重登字段无效")
+		return errors.New("invalid fields for a CLI re-login")
 	}
 	*v = CLIAuthStart(in)
 	return nil

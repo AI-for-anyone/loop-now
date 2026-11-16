@@ -63,18 +63,18 @@ func TestValidateReportsIndexedFieldErrors(t *testing.T) {
 	}
 	errs := fieldErrors(t, func() error { _, err := Validate(in); return err }())
 	want := map[string]string{
-		"directories[1].path": "绝对路径",
-		"directories[2].path": "应写作 " + root,
-		"directories[3].path": "与第 1 项重复",
-		"directories[4].path": "控制字符",
-		"directories[5].path": "不能为空",
-		"directories[6].note": "最长",
-		"directories[7].note": "控制字符",
-		"directories[8].path": "最长",
+		"directories[1].path": "absolute path",
+		"directories[2].path": "Write it as " + root,
+		"directories[3].path": "Duplicates item 1",
+		"directories[4].path": "control characters",
+		"directories[5].path": "Must not be empty",
+		"directories[6].note": "Must be at most",
+		"directories[7].note": "control characters",
+		"directories[8].path": "Must be at most",
 	}
 	if runtime.GOOS != "windows" {
-		want["directories[9].path"] = "应写作 " + root + "/x"
-		want["directories[10].path"] = "应写作 " + root + "/y"
+		want["directories[9].path"] = "Write it as " + root + "/x"
+		want["directories[10].path"] = "Write it as " + root + "/y"
 	}
 	for field, sub := range want {
 		if !strings.Contains(errs[field], sub) {
@@ -97,7 +97,7 @@ func TestValidateLimitsAndMissingList(t *testing.T) {
 	for i := range many {
 		many[i] = DirectoryInput{Path: filepath.Join(t.TempDir(), "d")}
 	}
-	if errs := fieldErrors(t, func() error { _, err := Validate(many); return err }()); !strings.Contains(errs["directories"], "最多") {
+	if errs := fieldErrors(t, func() error { _, err := Validate(many); return err }()); !strings.Contains(errs["directories"], "at most") {
 		t.Fatalf("超过上限应报 directories：%v", errs)
 	}
 }

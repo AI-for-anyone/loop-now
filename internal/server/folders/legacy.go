@@ -108,7 +108,7 @@ func (f Folder) removeFile(rel string) error {
 		return err
 	}
 	if info.IsDir() {
-		return errors.New("目标是目录")
+		return errors.New("the target is a directory")
 	}
 	return root.Remove(rel)
 }

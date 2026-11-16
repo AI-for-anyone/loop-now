@@ -41,7 +41,7 @@ func (s *Service) checkPluginLogin(ctx context.Context, agentID uuid.UUID, plugi
 		return err
 	}
 	if reason != "" {
-		return apperr.Conflict(apperr.CodePluginNotEnabled, "插件 "+plugin+" 没有授权给这个 Agent，先授权再登录")
+		return apperr.Conflict(apperr.CodePluginNotEnabled, "Plugin "+plugin+" is not granted to this Agent. Grant it first, then log in.")
 	}
 	return nil
 }
@@ -223,11 +223,11 @@ func (s *Service) Input(ctx context.Context, agentID, id uuid.UUID, in cm.LoginI
 		return State{}, err
 	}
 	if len(in.Value) > 4096 {
-		return State{}, apperr.Invalid("value", "回答不能超过 4096 字节")
+		return State{}, apperr.Invalid("value", "Must be at most 4096 bytes.")
 	}
 	st := s.plugins().state(id)
 	if terminal(o.Status) || st == nil {
-		return State{}, apperr.Invalid("promptId", "这次登录没有在等回答")
+		return State{}, apperr.Invalid("promptId", "This login is not waiting for an answer.")
 	}
 	if err := st.answer(in); err != nil {
 		return State{}, err

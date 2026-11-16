@@ -26,10 +26,10 @@ import (
 
 var (
 	// ErrExtensionLoad means the plugin extension failed to load or did not register an OAuth login for this provider.
-	ErrExtensionLoad = errors.New("插件扩展加载失败")
+	ErrExtensionLoad = errors.New("could not load the plugin extension")
 	// ErrInvalidAuthorizationURL means the authorization URL or device code URL given by the extension is not
 	// acceptable.
-	ErrInvalidAuthorizationURL = errors.New("授权地址无效")
+	ErrInvalidAuthorizationURL = errors.New("invalid authorization URL")
 )
 
 // ValidPluginURL is the generic check for plugin provider authorization URLs and device code URLs: https, no user name,

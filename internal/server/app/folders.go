@@ -100,7 +100,7 @@ func gitPullEnv(home, basePath string, ghEnv []string, helper string, useLocal b
 func folderGHCredential(ctx context.Context, cfg *agentconfig.Service, templates *clitemplate.Catalog, installer *clitemplate.Installer, agentID uuid.UUID) ([]string, string, error) {
 	snap, err := cfg.ExecutionSnapshot(ctx, agentID)
 	if errors.Is(err, agentconfig.ErrCredentialUnavailable) {
-		return nil, "", errors.New("Agent 的凭证不可用，请先在配置页修复")
+		return nil, "", errors.New("the Agent's credentials are unavailable; fix them on the config page first")
 	}
 	if err != nil {
 		return nil, "", err
@@ -111,11 +111,11 @@ func folderGHCredential(ctx context.Context, cfg *agentconfig.Service, templates
 	}
 	template, ok := templates.Get("gh")
 	if !ok {
-		return nil, "", errors.New("gh CLI 模板不可用")
+		return nil, "", errors.New("the gh CLI template is unavailable")
 	}
 	dir, err := installer.Ensure(ctx, template)
 	if err != nil {
-		return nil, "", errors.New("gh CLI 安装失败")
+		return nil, "", errors.New("could not install the gh CLI")
 	}
 	var env []string
 	for k, v := range payload.Env {

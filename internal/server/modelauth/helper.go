@@ -20,11 +20,11 @@ import (
 )
 
 var (
-	ErrHelperUnavailable = errors.New("认证辅助组件不可用")
-	ErrAuthCancelled     = errors.New("认证操作已取消")
-	ErrAuthExpired       = errors.New("认证操作已到期")
-	ErrRefreshUncertain  = errors.New("凭证轮换结果不确定，不能重试旧令牌")
-	ErrCallbackPortBusy  = errors.New("认证回调端口已被占用")
+	ErrHelperUnavailable = errors.New("the login helper is not available")
+	ErrAuthCancelled     = errors.New("the auth operation was cancelled")
+	ErrAuthExpired       = errors.New("the auth operation expired")
+	ErrRefreshUncertain  = errors.New("the credential rotation result is uncertain, so the old token must not be retried")
+	ErrCallbackPortBusy  = errors.New("the auth callback port is already in use")
 )
 
 const MaxFrame = 1024 * 1024

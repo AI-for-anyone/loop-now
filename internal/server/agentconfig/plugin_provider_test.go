@@ -34,7 +34,7 @@ func TestPluginProviderNeedsGrant(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := e.svc.CreateAgent(ctx, e.scope, "新建", "fake-oauth", "fake-1", ""); !isField(err, "model.provider", "先建好 Agent") {
+	if _, err := e.svc.CreateAgent(ctx, e.scope, "新建", "fake-oauth", "fake-1", ""); !isField(err, "model.provider", "Create the Agent first") {
 		t.Fatalf("新建 Agent 不能直接选插件提供方：%v", err)
 	}
 	a := e.agent(t)
@@ -43,7 +43,7 @@ func TestPluginProviderNeedsGrant(t *testing.T) {
 		_, err := e.svc.UpdateAgent(ctx, a.ID, agentconfig.AgentPatch{Provider: &p, ModelID: &m})
 		return err
 	}
-	if err := set(); !isField(err, "model.provider", "先在项目里启用") {
+	if err := set(); !isField(err, "model.provider", "Enable the plugin in the project first") {
 		t.Fatalf("项目未启用：%v", err)
 	}
 	if _, reason, _ := e.svc.PluginProviderUnusable(ctx, a.ID, "fake-oauth"); reason != store.PluginUnusableNotEnabled {
@@ -52,7 +52,7 @@ func TestPluginProviderNeedsGrant(t *testing.T) {
 	if _, _, err := e.st.SaveProjectPlugin(ctx, e.scope.ProjectID, "grokish", true, store.PluginConfigUpdate{Apply: func(c store.PluginConfigRow) (store.PluginConfigRow, error) { return c, nil }}); err != nil {
 		t.Fatal(err)
 	}
-	if err := set(); !isField(err, "model.provider", "先把该插件授权") {
+	if err := set(); !isField(err, "model.provider", "Grant the plugin to this Agent") {
 		t.Fatalf("未授权：%v", err)
 	}
 	if err := e.st.SaveAgentPluginGrant(ctx, a.ID, "grokish", true, nil); err != nil {
@@ -68,7 +68,7 @@ func TestPluginProviderNeedsGrant(t *testing.T) {
 		t.Fatal("内置提供方不受影响")
 	}
 
-	if _, err := e.svc.CreateAgent(ctx, store.PlatformScope(), "平台新建", "fake-oauth", "fake-1", ""); !isField(err, "model.provider", "先建好 Agent") {
+	if _, err := e.svc.CreateAgent(ctx, store.PlatformScope(), "平台新建", "fake-oauth", "fake-1", ""); !isField(err, "model.provider", "Create the Agent first") {
 		t.Fatalf("新建平台 Agent 也不能直接选插件提供方：%v", err)
 	}
 	platform, err := e.svc.CreateAgent(ctx, store.PlatformScope(), "平台助手", "anthropic", "claude-x", "")
@@ -83,7 +83,7 @@ func TestPluginProviderNeedsGrant(t *testing.T) {
 		_, err := e.svc.UpdateAgent(ctx, platform.ID, agentconfig.AgentPatch{Provider: &p, ModelID: &m})
 		return err
 	}
-	if err := setPlatform(); !isField(err, "model.provider", "先把该插件授权") {
+	if err := setPlatform(); !isField(err, "model.provider", "Grant the plugin to this Agent") {
 		t.Fatalf("平台 Agent 没授权不能选：%v", err)
 	}
 	if err := e.st.SaveAgentPluginGrant(ctx, platform.ID, "grokish", true, nil); err != nil {
