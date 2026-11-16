@@ -21,7 +21,7 @@
     "pretest": "node scripts/check-node.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check:text": "node scripts/check-ui-text.mjs && node scripts/check-comments.mjs",
+    "check:text": "node scripts/check-ui-text.mjs && node scripts/check-comments.mjs && node scripts/check-test-strings.mjs",
     "check:fonts": "node scripts/check-fonts.mjs",
     "check:dist": "node scripts/check-dist.mjs"
   },

@@ -11,9 +11,9 @@ import { basename, extname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 
-const CJK = /[\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]/
+export const CJK = /[\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]/
 const QUOTED = /“[^”]*”|「[^」]*」|『[^』]*』|"[^"\n]*"|'[^'\nA-Za-z]*'/g
-const SKIPPED_DIRS = new Set(['node_modules', 'dist', 'coverage', '.vite', 'test-results', '.local-build', 'release', 'out'])
+export const SKIPPED_DIRS = new Set(['node_modules', 'dist', 'coverage', '.vite', 'test-results', '.local-build', 'release', 'out'])
 const SCRIPT_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'])
 const HASH_EXTENSIONS = new Set(['.py', '.sh', '.example'])
 
@@ -30,7 +30,7 @@ function kindOf(path, source) {
 
 // Every comment range in a TS/JS file: the leading and trailing trivia of every node and token, deduplicated.
 // This also finds comments inside JSX expressions ({/* … */}); JSX text itself never holds comments.
-function scriptComments(path, source) {
+export function scriptComments(path, source) {
   const scriptKind = path.endsWith('.tsx') || path.endsWith('.jsx') ? ts.ScriptKind.TSX : path.endsWith('.ts') ? ts.ScriptKind.TS : ts.ScriptKind.JS
   const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, scriptKind)
   const ranges = new Map()
@@ -87,7 +87,7 @@ export function findChineseComments(path, source) {
   return hits.sort((a, b) => a.line - b.line)
 }
 
-function listFiles(dir) {
+export function listFiles(dir) {
   const files = []
   for (const name of readdirSync(dir)) {
     if (SKIPPED_DIRS.has(name)) continue
