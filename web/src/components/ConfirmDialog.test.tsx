@@ -53,4 +53,25 @@ describe('确认框', () => {
     expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
     expect(screen.queryByText(/Agent 不空闲/)).toBeNull()
   })
+
+  it('删除一类的确认（destructive）：顶边标签“危险操作”，标题旁一个“不可撤销”斜印章，确认按钮是红色；普通确认是“确认”，没有印章', () => {
+    const { unmount } = render(<ConfirmDialog open onOpenChange={() => {}} title="卸载 Grok CLI？" confirmLabel="卸载" destructive onConfirm={() => {}} />)
+    let dialog = screen.getByRole('alertdialog', { name: '卸载 Grok CLI？' })
+    expect(dialog.querySelector('[data-dialog-tab]')).toHaveTextContent('危险操作')
+    expect(within(dialog).getByText('不可撤销')).toHaveClass('riso-tilt', 'text-red-text')
+    expect(within(dialog).getByRole('button', { name: '卸载' })).toHaveAttribute('data-variant', 'destructive')
+    unmount()
+    render(<ConfirmDialog open onOpenChange={() => {}} title="重试当前节点" confirmLabel="重试" onConfirm={() => {}} />)
+    dialog = screen.getByRole('alertdialog', { name: '重试当前节点' })
+    expect(dialog.querySelector('[data-dialog-tab]')).toHaveTextContent('确认')
+    expect(within(dialog).queryByText('不可撤销')).not.toBeInTheDocument()
+  })
+
+  it('只是解除关联、能重新加回来的危险操作（irreversible=false）：仍是“危险操作”标签和红色按钮，但不盖“不可撤销”印章', () => {
+    render(<ConfirmDialog open onOpenChange={() => {}} title="从清单移除 /work/docs？" confirmLabel="移除" destructive irreversible={false} onConfirm={() => {}} />)
+    const dialog = screen.getByRole('alertdialog', { name: '从清单移除 /work/docs？' })
+    expect(dialog.querySelector('[data-dialog-tab]')).toHaveTextContent('危险操作')
+    expect(within(dialog).getByRole('button', { name: '移除' })).toHaveAttribute('data-variant', 'destructive')
+    expect(within(dialog).queryByText('不可撤销')).not.toBeInTheDocument()
+  })
 })

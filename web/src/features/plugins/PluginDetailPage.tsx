@@ -1,17 +1,22 @@
 import { useState, type ReactNode } from 'react'
 import { Link, NavLink, useNavigate, useParams } from 'react-router'
 import type { Schemas } from '@/api/client'
-import { marketEntryOf, marketSource, usePlugin, usePluginConfig, usePluginMarkets, usePluginReadme, useProjectPlugin, useSavePluginConfig, useUninstallPlugin } from '@/api/plugins'
+import { marketEntryOf, marketSource, usePlugin, usePluginConfig, usePluginDeliveries, usePluginLogs, usePluginMarkets, usePluginReadme, usePluginState, useProjectPlugin, useSavePluginConfig, useUninstallPlugin } from '@/api/plugins'
+import { RECORD_PREFIX, recordRows } from './records'
 import { useProjects } from '@/api/queries'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { SectionError } from '@/components/RequestError'
+import { IndexTabs } from '@/components/IndexTabs'
+import { PageFrame, PageHeader } from '@/components/PageHeader'
+import { Sheet } from '@/components/Sheet'
+import { SectionToc, SheetSection } from '@/components/SheetSections'
 import { Button } from '@/components/ui/button'
 import { DraftNavigationGuard } from '@/features/prompts/DraftNavigationGuard'
 import { t } from '@/i18n'
 import { isNotFound } from '@/lib/errors'
 import { localizedText } from '@/lib/localized-text'
-import { pageTitleClass } from '@/lib/page-title'
+import { indexTabClass } from '@/lib/index-tab'
 import { cn } from '@/lib/utils'
 import { AccountsManager } from './Accounts'
 import { DeliveriesList, LogsView, RecordsTable } from './Activity'
@@ -34,12 +39,6 @@ type Tab = 'overview' | 'config' | 'accounts' | 'events' | 'records' | 'logs'
 const TABS: Tab[] = ['overview', 'config', 'accounts', 'events', 'records', 'logs']
 const copy = text.detail
 
-const tabClass = ({ isActive }: { isActive: boolean }) =>
-  cn(
-    'inline-flex h-8 items-center rounded-full border-2 px-4 text-[13.5px] font-black whitespace-nowrap outline-none focus-visible:shadow-focus',
-    isActive ? 'border-ink bg-riso-yellow text-ink shadow-print-ink' : 'border-transparent text-ink-700 hover:bg-tint-blue hover:text-ink',
-  )
-
 function Panel({ title, hint, children, footer, className }: { title: string; hint?: ReactNode; children: ReactNode; footer?: ReactNode; className?: string }) {
   return (
     <section aria-label={title} className={cn(cardClass, 'flex min-w-0 flex-col gap-3 px-4 py-3.5', className)}>
@@ -56,51 +55,84 @@ const more = (to: string, label: string) => (
   </Link>
 )
 
-// 概览底部占满一行的说明卡片：当前已装版本的 README；没有 README 时不显示。
-function ReadmePanel({ pluginId }: { pluginId: string }) {
-  const readme = usePluginReadme(pluginId)
-  if (readme.isPending || readme.data?.file === null) return null
-  return (
-    <Panel title={t.plugins.readme.title} hint={readme.data?.file} footer={readme.data?.truncated && <TruncatedNote />} className="lg:col-span-2">
-      <ErrorAlert error={readme.error} />
-      {readme.data && <ReadmeMarkdown readme={readme.data} />}
-    </Panel>
-  )
-}
-
 // 有没有模型提供方可说：带 Pi 扩展，或者读出了提供方、出了错。
 const hasProviderInfo = (detail: Detail) =>
   detail.manifest.components.agentExtensions > 0 || detail.providers.length > 0 || detail.providerErrors.length > 0 || detail.providersError !== null
 
-function Overview({ detail }: { detail: Detail }) {
-  const id = detail.plugin.id
+// 只算已经读到的条数，后面还有就加“+”（接口不给总数，同文件夹页）。
+const loaded = (count: number, more: boolean) => `${count}${more ? '+' : ''}`
+
+// 概览第 04 区“最近动静”：原来分开的事件、投递记录、日志合成三栏，每栏一个大数字、一行说明和“看全部”链接。
+function RecentActivity({ pluginId }: { pluginId: string }) {
+  const deliveries = usePluginDeliveries(pluginId)
+  const records = usePluginState(pluginId, RECORD_PREFIX)
+  const logs = usePluginLogs(pluginId)
+  const events = (deliveries.data?.pages ?? []).flatMap((page) => page.deliveries)
+  const lines = (logs.data?.pages ?? []).flatMap((page) => page.entries)
+  const columns = [
+    { key: 'events', title: copy.tabs.events, error: deliveries.error, value: deliveries.data && loaded(events.length, deliveries.hasNextPage), note: events.length ? copy.latest(t.chat.time(events[0].at)) : text.events.empty, link: copy.allEvents },
+    { key: 'records', title: copy.records, error: records.error, value: records.data && String(recordRows(records.data.entries).length), note: copy.recordsHint, link: copy.allRecords },
+    { key: 'logs', title: copy.logs, error: logs.error, value: logs.data && loaded(lines.length, logs.hasNextPage), note: `${copy.logsHint} · ${lines.length ? copy.latest(t.chat.time(lines[0].at)) : text.logs.empty}`, link: copy.allLogs },
+  ] as const
   return (
-    <div className="grid min-w-0 gap-3.5 lg:grid-cols-2 lg:items-start">
-      <div className="grid min-w-0 gap-3.5">
-        <Panel title={copy.contains}>
-          <ManifestSummary manifest={detail.manifest} columns={false} />
-        </Panel>
-        {hasProviderInfo(detail) && (
-          <Panel title={text.providers.title} hint={text.providers.hint}>
-            <PluginProviders detail={detail} />
-          </Panel>
-        )}
-        <Panel title={copy.enabledIn} hint={copy.enabledInHint}>
-          <ProjectEnableList pluginId={id} schema={detail.manifest.configSchema} />
-        </Panel>
+    <div className="-ml-[18px] flex flex-wrap gap-y-3.5">
+      {columns.map((column) => (
+        <div key={column.key} data-activity={column.key} className="flex min-w-0 flex-[1_1_200px] flex-col gap-2 border-l-2 border-dashed border-ink/30 px-[18px] pt-0.5 pb-1">
+          <div className="flex items-baseline justify-between gap-2.5">
+            <h3 className="text-[14px] font-black">{column.title}</h3>
+            <span className="font-display-latin text-[34px] leading-none font-extrabold text-riso-blue">{column.value || '—'}</span>
+          </div>
+          {column.error ? <ErrorAlert error={column.error} /> : <p className="text-[12.5px] text-ink-500 [overflow-wrap:anywhere]">{column.note}</p>}
+          <Link to={pluginPath(pluginId, column.key)} className="mt-auto self-start text-[13px] font-black text-riso-blue underline underline-offset-3 outline-none focus-visible:shadow-focus">
+            {column.link} ›
+          </Link>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// 概览（改版第 5 步）：按 01–05 编号分区排在纸上——它包含什么、模型提供方（有才显示）、在哪些项目启用、最近动静、
+// 说明（有 README 才显示）；右侧票根是目录尺，底部写当前版本与更新状态。
+function Overview({ detail, footer }: { detail: Detail; footer: ReactNode }) {
+  const id = detail.plugin.id
+  const readme = usePluginReadme(id)
+  const showReadme = !readme.isPending && readme.data?.file !== null
+  const parts: { key: string; title: string; meta?: string; body: ReactNode }[] = [
+    { key: 'contains', title: copy.contains, meta: copy.containsHint, body: <ManifestSummary manifest={detail.manifest} columns={false} layout="table" /> },
+    ...(hasProviderInfo(detail) ? [{ key: 'providers', title: text.providers.title, meta: text.providers.hint, body: <PluginProviders detail={detail} /> }] : []),
+    { key: 'projects', title: copy.enabledIn, meta: copy.enabledInHint, body: <ProjectEnableList pluginId={id} schema={detail.manifest.configSchema} /> },
+    { key: 'activity', title: copy.activity, body: <RecentActivity pluginId={id} /> },
+    ...(showReadme
+      ? [{
+          key: 'readme',
+          title: t.plugins.readme.title,
+          meta: copy.readmeHint,
+          body: (
+            <div className="flex min-w-0 flex-col gap-2.5 rounded-card border-2 border-ink bg-white px-[22px] py-[18px]">
+              {readme.data?.file && <span className="self-start rounded-[4px] bg-tint-blue px-2 font-mono text-[12px] leading-[22px]">{readme.data.file}</span>}
+              <ErrorAlert error={readme.error} />
+              {readme.data && <ReadmeMarkdown readme={readme.data} />}
+              {readme.data?.truncated && <TruncatedNote />}
+            </div>
+          ),
+        }]
+      : []),
+  ]
+  const partId = (key: string) => `plugin-${key}`
+  return (
+    <div className="flex min-h-0 flex-1">
+      {/* 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。 */}
+      <div className="relative h-full min-w-0 flex-1 overflow-y-auto">
+        <div className="flex max-w-[1000px] flex-col gap-6 pt-6 pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,34px)]">
+          {parts.map((part, index) => (
+            <SheetSection key={part.key} id={partId(part.key)} titleId={`${partId(part.key)}-title`} index={index} title={part.title} meta={part.meta}>
+              {part.body}
+            </SheetSection>
+          ))}
+        </div>
       </div>
-      <div className="grid min-w-0 gap-3.5">
-        <Panel title={copy.recentEvents} footer={more(pluginPath(id, 'events'), copy.allEvents)}>
-          <DeliveriesList pluginId={id} compact={4} />
-        </Panel>
-        <Panel title={copy.records} hint={copy.recordsHint} footer={more(pluginPath(id, 'records'), copy.allRecords)}>
-          <RecordsTable pluginId={id} compact={4} />
-        </Panel>
-        <Panel title={copy.logs} hint={copy.logsHint} footer={more(pluginPath(id, 'logs'), copy.allLogs)}>
-          <LogsView pluginId={id} compact={3} />
-        </Panel>
-      </div>
-      <ReadmePanel pluginId={id} />
+      <SectionToc label={t.config.toc.title} items={parts.map((part) => ({ id: partId(part.key), titleId: `${partId(part.key)}-title`, title: part.title }))} footer={footer} />
     </div>
   )
 }
@@ -198,19 +230,19 @@ function UpdateButton({ plugin, installer }: { plugin: Schemas['Plugin']; instal
   const busy = installer.pending !== null
   if (!plugin.source.market)
     return (
-      <Button size="sm" disabled={busy} onClick={() => void installer.begin('update', { pluginId: plugin.id })}>
+      <Button size="xs" disabled={busy} onClick={() => void installer.begin('update', { pluginId: plugin.id })}>
         {busy ? copy.checking : text.update}
       </Button>
     )
   const entry = marketEntryOf(markets.data?.markets, plugin)
   if (!entry?.updateAvailable)
     return (
-      <Button size="sm" variant="secondary" disabled>
+      <Button size="xs" variant="secondary" disabled className="bg-paper-tab text-ink-500 disabled:opacity-100">
         {text.markets.upToDate}
       </Button>
     )
   return (
-    <Button size="sm" disabled={busy} onClick={() => void installer.begin('update', { source: marketSource(plugin.source.market!, entry) })}>
+    <Button size="xs" disabled={busy} onClick={() => void installer.begin('update', { source: marketSource(plugin.source.market!, entry) })}>
       {busy ? copy.checking : text.markets.updateTo(entry.version)}
     </Button>
   )
@@ -224,6 +256,7 @@ export function PluginDetailPage() {
   const query = usePlugin(pluginId)
   const uninstall = useUninstallPlugin(pluginId)
   const installer = usePluginInstaller()
+  const markets = usePluginMarkets()
   const [removing, setRemoving] = useState(false)
   const [deleteData, setDeleteData] = useState(false)
   const detail = query.data
@@ -240,81 +273,97 @@ export function PluginDetailPage() {
   // git 来源的仓库：有网页时给链接；SSH 写法没有网页，只显示地址。
   const repository = plugin.source.kind === 'git' ? { location: plugin.source.location, href: repositoryUrl(plugin.source.location, plugin.source.ref) } : null
   const tabs = TABS.filter((value) => value !== 'accounts' || manifest.accounts.length > 0)
+  const name = localizedText(plugin.displayName)
+  const entry = plugin.source.market ? marketEntryOf(markets.data?.markets, plugin) : undefined
+  // 票根底部：当前版本号，下面写更新状态（从市场装的才知道有没有新版本）。
+  const versionFooter = (
+    <>
+      <span className="font-display-latin text-[30px] leading-none font-extrabold text-riso-blue [overflow-wrap:anywhere]">v{plugin.version}</span>
+      {entry && <span className="text-[12.5px] font-black text-ink-700">{entry.updateAvailable && entry.version ? copy.updateAvailable(entry.version) : text.markets.upToDate}</span>}
+    </>
+  )
   return (
     <DraftNavigationGuard>
-      {/* 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。 */}
-      <div className="relative h-full overflow-y-auto">
-        <div className="mx-auto flex max-w-[1180px] flex-col gap-4 px-4 pt-[22px] pb-16 sm:px-8">
-          <header className="flex flex-wrap items-start gap-x-4 gap-y-3">
-            <div className="flex min-w-0 flex-[1_1_28rem] flex-col gap-1.5">
-              <nav aria-label={t.shell.breadcrumb} className="text-[12px] font-bold text-ink-500">
-                {`${text.eyebrow} · `}
-                <Link to="/plugins" className="hover:text-ink hover:underline">
-                  {copy.crumb}
-                </Link>
-                {' › '}
-                <span aria-current="page" className="text-riso-blue">
-                  {plugin.id}
-                </span>
-              </nav>
-              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-                <h1 className={pageTitleClass}>{localizedText(plugin.displayName)}</h1>
-                <InstalledSourceBadge plugin={plugin} />
-                <IdVersion id={plugin.id} version={plugin.version} />
-                <StatusLabel status={plugin.status} />
-                {repository &&
-                  (repository.href ? <RepositoryLink href={repository.href} /> : <span className="min-w-0 font-mono text-[12px] text-ink-700 [overflow-wrap:anywhere]">{repository.location}</span>)}
-              </div>
-              <p className="text-[13px] text-ink-700 [overflow-wrap:anywhere]">
-                {[localizedText(plugin.description), text.from[plugin.source.kind], copy.installedOn(t.chat.time(plugin.installedAt))].filter(Boolean).join(' · ')}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2.5 sm:ml-auto">
-              <PluginActionButtons plugin={{ id: plugin.id, displayName: localizedText(plugin.displayName) }} actions={manifest.components.actions} page="global" where={{}} />
+      {/* 插件详情（改版第 5 步）：紧凑页头（黄色首字母方块、名称、来源与版本、状态，右边是更新状态与红色描边的“卸载”，
+          下一行是一句说明和来源）；页签贴在纸张上沿，纸张顶边一条孔版蓝网点色带（同插件市场的卡片）。 */}
+      <PageFrame>
+        <PageHeader
+          crumbs={[{ label: t.shell.global }, { label: copy.crumb, to: '/plugins' }]}
+          current={plugin.id}
+          title={name}
+          lead={
+            <span aria-hidden="true" className="flex size-[46px] shrink-0 items-center justify-center self-center rounded-[12px] border-2 border-ink bg-riso-yellow font-display-latin text-[24px] leading-none font-extrabold text-ink shadow-[3px_3px_0_var(--riso-pink)] max-nav:size-10 max-nav:text-[20px]">
+              {name.slice(0, 1).toUpperCase()}
+            </span>
+          }
+          actions={
+            <>
+              <PluginActionButtons plugin={{ id: plugin.id, displayName: name }} actions={manifest.components.actions} page="global" where={{}} />
               <UpdateButton plugin={plugin} installer={installer} />
-              <Button size="sm" variant="destructive-link" onClick={() => setRemoving(true)}>
+              <Button size="xs" variant="danger-outline" className="px-4" onClick={() => setRemoving(true)}>
                 {text.uninstall}
               </Button>
+            </>
+          }
+          note={
+            <>
+              {[localizedText(plugin.description), text.from[plugin.source.kind], copy.installedOn(t.chat.time(plugin.installedAt))].filter(Boolean).join(' · ')}
+              {repository && (
+                <>
+                  {' · '}
+                  {repository.href ? <RepositoryLink href={repository.href} /> : <span className="font-mono text-[12px]">{repository.location}</span>}
+                </>
+              )}
+            </>
+          }
+        >
+          <InstalledSourceBadge plugin={plugin} />
+          <IdVersion id={plugin.id} version={plugin.version} />
+          <StatusLabel status={plugin.status} />
+        </PageHeader>
+        <ErrorAlert error={installer.errorFor('update')} />
+        {plugin.status === 'error' && plugin.lastError && (
+          <p role="alert" className="mb-2.5 rounded-input bg-tint-red px-3.5 py-2.5 text-[13.5px] font-bold text-red-text [overflow-wrap:anywhere]">
+            {plugin.lastError}
+          </p>
+        )}
+        <IndexTabs aria-label={name}>
+          {tabs.map((value) => (
+            <NavLink key={value} to={pluginPath(plugin.id, value === 'overview' ? undefined : value)} end className={cn(indexTabClass(value === tab), 'max-sm:px-3')} aria-current={value === tab ? 'page' : undefined}>
+              {copy.tabs[value]}
+            </NavLink>
+          ))}
+        </IndexTabs>
+        <Sheet className="flex-1">
+          <span aria-hidden="true" data-sheet-band className="block h-3.5 shrink-0 border-b-2 border-ink bg-riso-blue bg-[radial-gradient(rgb(255_255_255/.32)_1.2px,transparent_1.5px)] bg-size-[8px_8px]" />
+          {tab === 'overview' ? (
+            <Overview detail={detail} footer={versionFooter} />
+          ) : (
+            <div className="relative min-h-0 flex-1 overflow-y-auto">
+              <div className="flex max-w-[1180px] flex-col gap-4 pt-6 pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,34px)]">
+                {tab === 'config' && <ConfigTab detail={detail} />}
+                {tab === 'accounts' && <AccountsTab detail={detail} />}
+                {tab === 'events' && (
+                  <Panel title={copy.tabs.events}>
+                    <DeliveriesList pluginId={plugin.id} />
+                  </Panel>
+                )}
+                {tab === 'records' && (
+                  <Panel title={copy.records} hint={copy.recordsHint}>
+                    <RecordsTable pluginId={plugin.id} />
+                  </Panel>
+                )}
+                {tab === 'logs' && (
+                  <Panel title={copy.logs} hint={copy.logsHint}>
+                    <LogsView pluginId={plugin.id} />
+                  </Panel>
+                )}
+                {detail.versions.length > 1 && <p className="text-[12.5px] text-ink-500">{copy.versionsLine(detail.versions)}</p>}
+              </div>
             </div>
-          </header>
-          <ErrorAlert error={installer.errorFor('update')} />
-          {plugin.status === 'error' && plugin.lastError && (
-            <p role="alert" className="rounded-input bg-tint-red px-3.5 py-2.5 text-[13.5px] font-bold text-red-text [overflow-wrap:anywhere]">
-              {plugin.lastError}
-            </p>
           )}
-          <nav aria-label={localizedText(plugin.displayName)} className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
-            {tabs.map((value) => (
-              <NavLink key={value} to={pluginPath(plugin.id, value === 'overview' ? undefined : value)} end className={() => tabClass({ isActive: value === tab })} aria-current={value === tab ? 'page' : undefined}>
-                {copy.tabs[value]}
-              </NavLink>
-            ))}
-          </nav>
-          {tab === 'overview' && <Overview detail={detail} />}
-          {tab === 'config' && <ConfigTab detail={detail} />}
-          {tab === 'accounts' && <AccountsTab detail={detail} />}
-          {tab === 'events' && (
-            <Panel title={copy.tabs.events}>
-              <DeliveriesList pluginId={plugin.id} />
-            </Panel>
-          )}
-          {tab === 'records' && (
-            <Panel title={copy.records} hint={copy.recordsHint}>
-              <RecordsTable pluginId={plugin.id} />
-            </Panel>
-          )}
-          {tab === 'logs' && (
-            <Panel title={copy.logs} hint={copy.logsHint}>
-              <LogsView pluginId={plugin.id} />
-            </Panel>
-          )}
-          {detail.versions.length > 1 && (
-            <p className="text-[12.5px] text-ink-500">
-              {copy.versionsLine(detail.versions)}
-            </p>
-          )}
-        </div>
-      </div>
+        </Sheet>
+      </PageFrame>
       {installer.dialog}
       <ConfirmDialog
         open={removing}

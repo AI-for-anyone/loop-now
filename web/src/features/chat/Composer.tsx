@@ -13,6 +13,7 @@ import { ImagePicker } from '@/features/images/ImagePicker'
 import { imageProblem, type ImageDraft, type ImageLimits, type ImageUploads } from '@/features/images/image-drafts'
 import { uploadMessageImages } from '@/api/message-images'
 import { cn } from '@/lib/utils'
+import { barKbdClass, mac } from './composer-style'
 import { ReplyChip } from '@/features/console-inbox/ConsoleMessage'
 import { useAnswerQuestion } from '@/features/console-inbox/useAnswerQuestion'
 import { copyText } from '@/lib/clipboard'
@@ -393,11 +394,7 @@ export function Composer({ ref, agentId, agentName, busy, disabled, allowResumeW
   )
 }
 
-const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 const kbdClass = 'rounded-stamp border border-ink/25 bg-white px-[5px] font-mono text-[11px] leading-4 font-medium text-ink-700'
-// 纸张底部输入区里的按键：浅纸底、藏青描边。
-const barKbdClass = 'rounded-stamp border-[1.5px] border-ink bg-paper-raised px-1.5 font-sans text-[11px] leading-[17px] font-black text-ink'
-
 // 空闲时输入框下方的按键说明：回车发送，Shift + 回车换行。
 function IdleHint() {
   return (

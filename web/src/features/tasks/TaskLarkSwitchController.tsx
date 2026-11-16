@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { type Schemas } from '@/api/client'
 import { useProjectAccounts } from '@/api/project-credentials'
@@ -19,7 +19,8 @@ type Participant = Schemas['TaskLarkSwitchParticipant']
 type Members = readonly [Participant, Participant]
 const usable = (member: Participant) => member.available && member.larkAllowed === true
 const memberKey = (member: Participant) => JSON.stringify([member.agentId, member.runtimeId, member.baseSnapshotSHA, member.larkAllowed, member.bindingRevision, member.prepared, member.available, member.unavailableReason, member.stepIds])
-export function TaskLarkSwitchController({ detail, node, disabled }: { detail: Schemas['ConsoleTaskDetail']; node: Schemas['TaskNodeRun']; disabled: boolean }) {
+// children：调用方决定按钮和面板各放在哪里（任务详情把按钮放在“重试当前节点”旁边，面板放在下面）。
+export function TaskLarkSwitchController({ detail, node, disabled, children = stacked }: { detail: Schemas['ConsoleTaskDetail']; node: Schemas['TaskNodeRun']; disabled: boolean; children?: (parts: { toggle: ReactNode; panel: ReactNode }) => ReactNode }) {
   const locator = useOriginalActionLocator(taskLarkSwitchLocatorKey(detail.task.id)), client = useQueryClient()
   const [error, setError] = useState<unknown>(null)
   const current = detail.task.status === 'blocked' && detail.task.currentNodeRunId === node.id && detail.task.currentAgentId === node.agentId
@@ -47,12 +48,36 @@ export function TaskLarkSwitchController({ detail, node, disabled }: { detail: S
     })
     if (!began) reject(new Error(copy.changed))
   })
-  return <>
-    {shownParticipants !== undefined && current && <><ParticipantForm detail={detail} node={node} participants={shownParticipants} disabled={participants === undefined || disabled || !locator.valid || !!locator.id || locator.pending} stage={locator.pending ? 'sending' : 'review'} onConfirm={submit} />{participants === undefined && <p role="status">{copy.switchUnavailable}</p>}</>}
-    <TaskLarkSwitchRecovery taskId={detail.task.id} currentBlocked={current && shownParticipants === undefined} showUnavailable={shownParticipants === undefined} readEnabled={!locator.pending} />
-    <ErrorAlert error={error} />
-  </>
+  // 摆放（改版第 5 步）：节点头里只放一个次要按钮（在“重试当前节点”旁边），点开后在下面展开原来的表单；默认收起。
+  // 能力未就绪（没有参与者投影）时按钮禁用，原因是按钮旁的一行小字。需要人注意的东西（已有原操作 ID、正在发送或交接、
+  // 结果、核对原操作、各种错误）不藏在收起状态里：这时面板自动展开。守卫、请求与文案都和原来一样。
+  const [open, setOpen] = useState(false)
+  const panelId = useId()
+  const available = shownParticipants !== undefined
+  const attention = !!locator.id || locator.pending || !locator.valid || !!locator.error || !!error
+  const expanded = open || attention
+  // 按钮和原因是两个并排的元素：放得下时原因在按钮旁边，放不下时换到按钮下面一行。
+  const toggle = current ? (
+    <>
+      <Button type="button" variant="secondary" data-lark-switch-toggle aria-expanded={expanded} aria-controls={panelId} disabled={!available} onClick={() => setOpen(value => !value)}
+        className="mr-[3px] border-2 border-ink bg-paper-raised shadow-[3px_3px_0_var(--ink)] hover:bg-white">
+        {copy.switch}
+      </Button>
+      {!available && <span role="status" className="min-w-0 text-[12.5px] text-ink-700">{copy.switchUnavailable}</span>}
+    </>
+  ) : null
+  const panel = (
+    <div id={panelId} data-lark-switch-panel hidden={!expanded} className="min-w-0">
+      {shownParticipants !== undefined && current && <><ParticipantForm detail={detail} node={node} participants={shownParticipants} disabled={participants === undefined || disabled || !locator.valid || !!locator.id || locator.pending} stage={locator.pending ? 'sending' : 'review'} onConfirm={submit} />{participants === undefined && <p role="status">{copy.switchUnavailable}</p>}</>}
+      <TaskLarkSwitchRecovery taskId={detail.task.id} currentBlocked={current && shownParticipants === undefined} showUnavailable={false} readEnabled={!locator.pending} />
+      <ErrorAlert error={error} />
+    </div>
+  )
+  return children({ toggle, panel })
 }
+
+// 单独使用时（测试等）：按钮在上，面板在下。
+const stacked = ({ toggle, panel }: { toggle: ReactNode; panel: ReactNode }) => <>{toggle}{panel}</>
 function ParticipantForm({ detail, node, participants, disabled, stage, onConfirm }: { detail: Schemas['ConsoleTaskDetail']; node: Schemas['TaskNodeRun']; participants: Participant[]; disabled: boolean; stage: 'review' | 'sending' | 'handing-over' | 'committed' | 'rejected' | 'unknown'; onConfirm: (account: Schemas['ProjectCredentialAccount'], members: Members) => Promise<void> }) {
   const [selected, setSelected] = useState<Members | null>(null)
   const [publisherId, setPublisherId] = useState(''), [followupId, setFollowupId] = useState('')

@@ -18,7 +18,7 @@ interface SkillMdDialogProps {
 export function SkillMdDialog({ title, initial, loadError, onSave, onClose }: SkillMdDialogProps) {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[760px]">
+      <DialogContent kind="edit" className="sm:max-w-[760px]">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>

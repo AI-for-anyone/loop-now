@@ -15,6 +15,7 @@ import { t } from '@/i18n'
 import { indexTabClass } from '@/lib/index-tab'
 import { overviewPath } from '@/lib/scope'
 import { cn } from '@/lib/utils'
+import { TaskBadge } from './TaskBadge'
 import { useTaskLive } from './useTaskLive'
 
 type Task = Schemas['TaskSummary']
@@ -153,7 +154,7 @@ function TaskRow({ task, projectName, agentName, pending }: { task: Task; projec
       </span>
       <span className="flex-[0_0_84px]">
         <span className="sr-only">{t.tasks.state}</span>
-        <TaskState status={task.status} />
+        <TaskBadge status={task.status} />
       </span>
       <span className="min-w-0 flex-[0_0_104px]">
         <span className="sr-only">{t.tasks.currentNode}</span>
@@ -182,28 +183,3 @@ function TaskRow({ task, projectName, agentName, pending }: { task: Task; projec
     </li>
   )
 }
-
-// 任务状态（改版通用规则第 6 条）：执行中荧光粉胶囊，阻塞是略微倾斜的红色描边印章，已完成浅绿胶囊，
-// 等待回复浅黄胶囊，准备中与已取消是浅蓝胶囊。
-function TaskState({ status }: { status: Schemas['TaskStatus'] }) {
-  const label = t.tasks.statuses[status]
-  if (status === 'blocked') {
-    return (
-      <span
-        data-task-state={status}
-        className="riso-tilt inline-flex min-h-[22px] items-center rounded-[4px] px-2.5 text-[12.5px] font-black tracking-[0.06em] whitespace-nowrap text-red-text [--tilt-bg:transparent] [--tilt-shadow:inset_0_0_0_2px_var(--red-text)] [--tilt:-3deg]"
-      >
-        {label}
-      </span>
-    )
-  }
-  const tone =
-    status === 'running' ? 'bg-riso-pink text-ink' : status === 'completed' ? 'bg-tint-green text-green-text' : status === 'waiting' ? 'bg-tint-yellow text-ink' : 'bg-tint-blue text-ink-700'
-  return (
-    <span data-task-state={status} className={cn('inline-block rounded-full px-2.5 text-[12.5px] leading-[22px] font-black whitespace-nowrap', tone)}>
-      {label}
-    </span>
-  )
-}
-
-export function LiveState({ state }: { state: string }) { return <p role="status" className="text-sm font-bold text-ink-700">{state === 'open' ? t.tasks.updating : t.tasks.reconnecting}</p> }

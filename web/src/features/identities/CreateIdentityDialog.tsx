@@ -42,7 +42,7 @@ export function CreateIdentityDialog({ onClose }: { onClose: () => void }) {
   const nameError = localError ?? serverError
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent kind="create" className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>{t.identities.createTitle}</DialogTitle>
         </DialogHeader>

@@ -20,6 +20,9 @@ interface ConfirmDialogProps {
   confirmLabel?: string
   cancelLabel?: string
   destructive?: boolean
+  // 危险操作是否真的撤销不了（默认是）：只是解除关联、可以重新加回来、不丢数据的操作传 false，不盖“不可撤销”印章；
+  // “危险操作”标签、红色投影与红色确认按钮不受影响。
+  irreversible?: boolean
   confirmDisabled?: boolean
   scrollBody?: boolean
   // 说明之后的补充内容，例如逐条列出的后果（说明本身是一段文字，不能放列表）。
@@ -36,6 +39,7 @@ export function ConfirmDialog({
   confirmLabel = t.common.confirm,
   cancelLabel = t.common.cancel,
   destructive,
+  irreversible = true,
   confirmDisabled = false,
   scrollBody = false,
   onConfirm,
@@ -74,10 +78,18 @@ export function ConfirmDialog({
         onOpenChange(next)
       }}
     >
-      {/* 确认框：标题 ZCOOL 26，说明 14.5 / 1.75；删除类操作的确认按钮用 destructive。 */}
-      <AlertDialogContent className={`gap-3 pb-[22px] data-[size=default]:sm:max-w-[470px] ${scrollBody ? 'flex max-h-[calc(100dvh-2rem)] flex-col' : ''}`} onEscapeKeyDown={(event) => pending && event.preventDefault()}>
+      {/* 确认框：标题 ZCOOL 28 加粉色错版，说明 14.5 / 1.75。删除一类的操作（destructive）：顶边标签“危险操作”、
+          纸的投影是红色，标题旁一个“不可撤销”斜印章，确认按钮是红色。 */}
+      <AlertDialogContent kind={destructive ? 'danger' : 'confirm'} className="data-[size=default]:sm:max-w-[470px]" paperClassName={`gap-3.5 ${scrollBody ? 'flex flex-col' : ''}`} onEscapeKeyDown={(event) => pending && event.preventDefault()}>
         <AlertDialogHeader className={`gap-3 ${scrollBody ? 'shrink-0' : ''}`}>
-          <AlertDialogTitle className="leading-[1.25]">{title}</AlertDialogTitle>
+          <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2 pr-12">
+            <AlertDialogTitle className="leading-[1.2]">{title}</AlertDialogTitle>
+            {destructive && irreversible && (
+              <span className="riso-tilt inline-flex min-h-6 items-center rounded-[4px] px-2.5 text-[12.5px] font-black tracking-[0.06em] whitespace-nowrap text-red-text [--tilt-bg:transparent] [--tilt-shadow:inset_0_0_0_2px_var(--red-text)] [--tilt:-6deg]">
+                {t.common.irreversible}
+              </span>
+            )}
+          </div>
           {body && <AlertDialogDescription className="text-[14.5px] leading-[1.75]">{body}</AlertDialogDescription>}
         </AlertDialogHeader>
         {scrollBody ? <div className="min-h-0 space-y-3 overflow-y-auto overscroll-contain pr-1" data-confirm-scroll>{children}<ErrorAlert error={error} /></div> : <>{children}<ErrorAlert error={error} /></>}

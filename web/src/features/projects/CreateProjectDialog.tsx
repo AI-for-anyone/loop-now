@@ -34,7 +34,7 @@ export function CreateProjectDialog({ onClose }: { onClose: () => void }) {
   const nameError = localError ?? projectNameError(create.error)
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent kind="create" className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>{t.projects.create.title}</DialogTitle>
         </DialogHeader>

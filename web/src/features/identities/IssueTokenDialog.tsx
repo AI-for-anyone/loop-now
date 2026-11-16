@@ -1,7 +1,8 @@
 import { useId, useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { CheckIcon } from 'lucide-react'
+import { CopyIcon } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { StickyNote } from '@/components/StickyNote'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -73,31 +74,25 @@ export function IssueTokenDialog({ identity, onClose }: { identity: Schemas['Ext
       <>
         {/* 结果框不能直接关掉：Esc、点遮罩与关闭按钮都先确认已保存。 */}
         <Dialog open onOpenChange={(open) => !open && setConfirming(true)}>
-          <DialogContent className="sm:max-w-[600px]" showCloseButton={false}>
-            <DialogHeader className="flex-row items-center gap-3">
-              <span
-                aria-hidden="true"
-                className="inline-flex size-10 shrink-0 -rotate-6 items-center justify-center rounded-full bg-tint-green text-green-text shadow-[3px_3px_0_var(--green-text)]"
-              >
-                <CheckIcon className="size-[18px]" strokeWidth={3} />
-              </span>
+          <DialogContent kind="token" className="sm:max-w-[600px]">
+            {/* 改版第 5 步：只显示一次的内容——黄色便签提醒，令牌放在虚线框里，旁边黄色“复制”按钮。 */}
+            <DialogHeader>
               <DialogTitle>{t.identities.issued}</DialogTitle>
             </DialogHeader>
-            <Alert variant="error" role="alert">
-              <AlertDescription className="text-[14px] leading-[1.7] text-ink">
-                <span className="font-black text-red-text">{t.identities.onceStrong}</span>
-                {t.identities.onceBody}
-              </AlertDescription>
-            </Alert>
+            <StickyNote role="alert" className="items-start text-[13.5px] leading-[1.7] font-normal [&>svg]:mt-[5px]">
+              <span className="font-black text-red-text">{t.identities.onceStrong}</span>
+              {t.identities.onceBody}
+            </StickyNote>
             <div className="grid gap-1.5">
               <span id={secretLabelId} className="text-[13.5px] font-black">
                 {t.identities.secret}
               </span>
-              <div className="flex items-center gap-2.5 rounded-card bg-ink py-2 pr-2 pl-4 shadow-print-pink">
-                <code aria-labelledby={secretLabelId} className="min-w-0 flex-1 font-mono text-[13.5px] break-all text-riso-yellow select-all">
+              <div className="flex items-center gap-2.5 rounded-input border-2 border-dashed border-ink bg-white py-2 pr-2 pl-4">
+                <code aria-labelledby={secretLabelId} className="min-w-0 flex-1 font-mono text-[13.5px] break-all text-ink select-all">
                   {issued.secret}
                 </code>
-                <Button type="button" size="sm" className="bg-riso-yellow text-ink shadow-none" onClick={() => void copy()}>
+                <Button type="button" size="xs" className="mr-0.5 h-8 border-2 border-ink bg-riso-yellow text-ink shadow-[2px_2px_0_var(--ink)]" onClick={() => void copy()}>
+                  <CopyIcon aria-hidden="true" />
                   {copied ? t.common.copied : t.common.copy}
                 </Button>
               </div>
@@ -110,7 +105,7 @@ export function IssueTokenDialog({ identity, onClose }: { identity: Schemas['Ext
             </dl>
             <p className="text-[13px] leading-[1.7] text-ink-700">{t.identities.riskShort}</p>
             <DialogFooter>
-              <Button type="button" variant="secondary" onClick={() => setConfirming(true)}>
+              <Button type="button" onClick={() => setConfirming(true)}>
                 {t.identities.savedClose}
               </Button>
             </DialogFooter>
@@ -132,7 +127,7 @@ export function IssueTokenDialog({ identity, onClose }: { identity: Schemas['Ext
   const preview = choice === 'never' ? null : expiresAtOf(choice, date)
   return (
     <Dialog open onOpenChange={(open) => !open && !pending && onClose()}>
-      <DialogContent className="sm:max-w-[560px]">
+      <DialogContent kind="create" className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>{t.identities.issueTitle(identity.name)}</DialogTitle>
         </DialogHeader>

@@ -3,7 +3,7 @@ import { PlusIcon } from 'lucide-react'
 import { Link, Outlet, useNavigate, useParams } from 'react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Sheet, SheetBody, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { ErrorAlert } from '@/components/ErrorAlert'
@@ -126,10 +126,6 @@ function EmptyLibrary({ children }: { children: ReactNode }) {
 }
 
 // 抽屉底栏：在正文滚动区域之外，始终可见。
-function SheetFooterBar({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn('flex flex-wrap items-center gap-x-4 gap-y-2.5 px-[26px] py-4 shadow-[inset_0_3px_0_rgb(24_38_94/.1)]', className)}>{children}</div>
-}
-
 const editorClass = 'px-4 py-3.5 font-mono text-[13px] leading-[1.7]'
 const sectionTitleClass = 'font-display-cn text-[24px] leading-[1.2] font-normal'
 
@@ -155,14 +151,14 @@ export function NewSkillSheet() {
           <Textarea id={editorId} className={cn(editorClass, 'min-h-[520px]')} value={editor.content} onChange={(e) => editor.setContent(e.target.value)} />
           <ErrorAlert error={editor.error} />
         </SheetBody>
-        <SheetFooterBar className="justify-end">
+        <SheetFooter className="justify-end">
           <Button variant="secondary" onClick={close}>
             {t.common.cancel}
           </Button>
           <Button disabled={!editor.canSave} onClick={() => void editor.save()}>
             {t.skills.submitCreate}
           </Button>
-        </SheetFooterBar>
+        </SheetFooter>
       </SheetContent>
     </Sheet>
   )
@@ -245,14 +241,14 @@ function SkillDetailBody({ skillId, data, refreshError }: { skillId: string; dat
           <SkillUpload buttonClassName="bg-white hover:bg-white/80" onArchive={async (archive) => setReplacement(archive)} />
         </section>
       </SheetBody>
-      <SheetFooterBar>
+      <SheetFooter>
         <Button size="sm" variant="destructive-link" onClick={() => setDeleting(true)}>
           {t.common.delete}
         </Button>
         <Button className="ml-auto" disabled={!editor.canSave} onClick={() => void editor.save()}>
           {t.common.save}
         </Button>
-      </SheetFooterBar>
+      </SheetFooter>
       <ConfirmDialog
         open={replacement !== null}
         onOpenChange={(open) => !open && setReplacement(null)}

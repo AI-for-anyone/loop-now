@@ -18,6 +18,8 @@ const buttonVariants = cva(
         "destructive-link":
           "bg-transparent text-red-text underline decoration-red decoration-2 underline-offset-4 hover:bg-tint-red/40",
         ink: "bg-ink text-riso-yellow shadow-[2px_2px_0_var(--riso-pink)]",
+        // 页头里的危险操作（取消任务、卸载插件）：浅纸底、红色描边红字的胶囊。
+        "danger-outline": "border-2 border-red-text bg-paper-raised text-red-text hover:bg-tint-red",
       },
       size: {
         default: "h-[42px] px-5 text-[14.5px]",

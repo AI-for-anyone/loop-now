@@ -208,6 +208,24 @@ describe('签发令牌', () => {
     expect(table.queryByText(SECRET)).toBeNull()
   })
 
+  it('只显示一次的令牌：便签提醒，明文在虚线框里、旁边黄色“复制”；右上角的关闭也要先确认已保存', async () => {
+    const ciBot = makeIdentity({ name: 'ci-bot' })
+    const { user } = await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}`)
+    await user.click(await screen.findByRole('button', { name: '签发令牌' }))
+    await user.click(within(await screen.findByRole('dialog', { name: '为 ci-bot 签发令牌' })).getByRole('button', { name: '签发' }))
+    const box = await screen.findByRole('dialog', { name: '令牌已签发' })
+    const result = within(box)
+    expect(box.querySelector('[data-dialog-tab]')).toHaveTextContent('令牌')
+    expect(result.getByRole('alert')).toHaveClass('riso-tilt')
+    const copy = result.getByRole('button', { name: '复制' })
+    expect(copy).toHaveClass('bg-riso-yellow')
+    expect(copy.parentElement).toHaveClass('border-dashed')
+    await user.click(result.getByRole('button', { name: '关闭' }))
+    expect(await screen.findByRole('alertdialog', { name: '确认已保存令牌？' })).toBeInTheDocument()
+    // 确认框打开时结果框仍在（只是暂时对读屏隐藏），明文没有丢。
+    expect(box).toBeInTheDocument()
+    expect(within(box).getByText(SECRET)).toBeInTheDocument()
+  })
   it('改选“永不过期”时不提交到期时间；指定日期取当天结束时刻，早于今天的日期不提交', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })
     const { user, writes } = await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] } }, `/identities/${ciBot.id}`)

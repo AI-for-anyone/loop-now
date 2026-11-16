@@ -154,7 +154,7 @@ function ApiKeyDialog({ agent, onClose, onSaved }: { agent: Schemas['Agent']; on
       setKey(''); await onSaved(); onClose()
     }
   }
-  return <Dialog open onOpenChange={open => { if (!open) { setKey(''); onClose() } }}><DialogContent>
+  return <Dialog open onOpenChange={open => { if (!open) { setKey(''); onClose() } }}><DialogContent kind="edit">
     <DialogHeader><DialogTitle>{t.config.modelLogin.setKey}</DialogTitle></DialogHeader>
     <form className="grid gap-4" onSubmit={event => void save(event)} autoComplete="off">
       <p className="text-[14px] break-words">{t.common.labelledValue(t.config.modelLogin.provider, agent.model.provider)}</p>

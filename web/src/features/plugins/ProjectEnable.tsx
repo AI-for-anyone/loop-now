@@ -20,7 +20,7 @@ function EnableRow({ project, pluginId, schema }: { project: Schemas['Project'];
   const fields = fieldsOf(schema, 'project')
   const first = item && fields.find((field) => (item.config.values as Record<string, unknown>)[field.name] !== undefined)
   return (
-    <li className="grid min-w-0 gap-1 rounded-input bg-ink/[0.04] px-3 py-2.5">
+    <li className="grid min-w-0 gap-1 border-b-[1.5px] border-dashed border-ink/25 px-1 py-[11px]">
       <div className="flex min-w-0 items-center gap-3">
         <Link to={projectPluginsPath(project)} className="min-w-0 truncate text-[14px] font-black outline-none hover:underline focus-visible:shadow-focus">
           {project.name}
@@ -52,7 +52,8 @@ export function ProjectEnableList({ pluginId, schema }: { pluginId: string; sche
   if (projects.isPending) return <Quiet>{t.common.loading}</Quiet>
   if (!list.length) return <Quiet>{text.noProjects}</Quiet>
   return (
-    <ul className="grid min-w-0 gap-1.5">
+    // 改版第 5 步：表头一道实线，项目之间虚线（通用规则第 9 条）。
+    <ul className="grid min-w-0 border-t-2 border-ink">
       {list.map((project) => (
         <EnableRow key={project.id} project={project} pluginId={pluginId} schema={schema} />
       ))}

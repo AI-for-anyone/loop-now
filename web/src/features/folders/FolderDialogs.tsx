@@ -37,7 +37,7 @@ export function GitPullDialog({ onClose, onSubmit }: { onClose: () => void; onSu
   }
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent kind="pull" className="sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle>{t.folders.git.title}</DialogTitle>
           <DialogDescription>{t.folders.git.intro}</DialogDescription>
@@ -79,7 +79,7 @@ export function MoveDialog({ entry, onClose, onSubmit }: { entry: FolderEntry; o
   }
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent kind="edit" className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>{t.folders.moveDialog.title(nameOf(entry.path))}</DialogTitle>
         </DialogHeader>

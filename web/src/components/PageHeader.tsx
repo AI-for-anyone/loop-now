@@ -20,7 +20,28 @@ export function PageFrame({ className, ...props }: ComponentProps<'div'>) {
 // 用于项目与全局的页面（概览、任务、项目设置、项目文件夹……）；Agent 详情有自己的页头（名称、徽标、地址）。
 // 面包屑最后一项是当前页面，就是标题本身。页头是尺寸容器：宽于 820px 时显示装饰，各行文字给它让出位置。
 // 宽屏时与 Agent 页头一样紧凑：标题 40px，元信息并到标题右边一行（放不下时换行），装饰缩到和页头同高；窄屏照旧。
-export function PageHeader({ crumbs, title, children, className }: { crumbs: Crumb[]; title: string; children?: ReactNode; className?: string }) {
+// current：面包屑最后一项的写法（默认就是标题，任务详情写成“#11”）；lead：标题前面的东西（如任务编号），不算进标题；
+// actions：这一行靠右的操作（如“取消任务”）；note：标题下面的一行说明（如插件的简介与来源）。
+export function PageHeader({
+  crumbs,
+  title,
+  current = title,
+  lead,
+  actions,
+  note,
+  children,
+  className,
+}: {
+  crumbs: Crumb[]
+  title: string
+  current?: string
+  lead?: ReactNode
+  actions?: ReactNode
+  note?: ReactNode
+  children?: ReactNode
+  className?: string
+}) {
+  const heading = <h1 className={cn(sheetTitleClass, 'self-start nav:self-auto nav:text-[40px] nav:leading-none nav:[text-shadow:3px_3px_0_var(--riso-pink)]', lead && 'min-w-0 [overflow-wrap:anywhere]')}>{title}</h1>
   return (
     <header data-page-header className={cn('@container relative flex shrink-0 flex-col gap-3 pt-[22px] pb-[18px] nav:gap-1.5 nav:pt-3 nav:pb-2.5', className)}>
       <OverprintDeco compact />
@@ -41,7 +62,7 @@ export function PageHeader({ crumbs, title, children, className }: { crumbs: Cru
             </Fragment>
           ))}
           <li aria-current="page" className="min-w-0 [overflow-wrap:anywhere] text-riso-blue">
-            {title}
+            {current}
           </li>
         </ol>
       </nav>
@@ -49,13 +70,22 @@ export function PageHeader({ crumbs, title, children, className }: { crumbs: Cru
         data-page-title-row
         className="relative flex min-w-0 flex-col gap-3 @[820px]:pr-[316px] nav:flex-row nav:flex-wrap nav:items-center nav:gap-x-4 nav:gap-y-1.5 nav:@[820px]:pr-[196px]"
       >
-        <h1 className={cn(sheetTitleClass, 'self-start nav:self-auto nav:text-[40px] nav:leading-none nav:[text-shadow:3px_3px_0_var(--riso-pink)]')}>{title}</h1>
+        {lead ? (
+          <div data-page-title-lead className="flex min-w-0 items-baseline gap-3.5 self-start nav:self-auto">
+            {lead}
+            {heading}
+          </div>
+        ) : (
+          heading
+        )}
         {children && (
           <div data-page-meta className="flex min-h-[26px] min-w-0 flex-wrap items-center gap-x-3.5 gap-y-2 text-[12.5px] text-ink-700">
             {children}
           </div>
         )}
+        {actions && <div data-page-actions className="flex flex-wrap items-center gap-2.5 nav:ml-auto">{actions}</div>}
       </div>
+      {note && <div data-page-note className="relative text-[13px] text-ink-700 [overflow-wrap:anywhere] @[820px]:pr-[316px] nav:@[820px]:pr-[196px]">{note}</div>}
     </header>
   )
 }

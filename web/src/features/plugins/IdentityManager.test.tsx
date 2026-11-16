@@ -104,7 +104,7 @@ describe('插件页里的“可代管外部身份”', () => {
     const card = (await screen.findByRole('link', { name: 'Webhook 通知' })).closest('li')!
     await waitFor(() => expect(card).toHaveTextContent('可代管外部身份'))
     await router.navigate('/plugins/webhook')
-    const contains = await screen.findByRole('region', { name: '这个插件包含' })
+    const contains = await screen.findByRole('region', { name: '它包含什么' })
     expect(within(contains).getByText('可代管外部身份').parentElement).toHaveTextContent('可代管外部身份 · 回调 · 把发给外部身份的消息推出去，再把回复以这个身份送回')
     expect(within(contains).getByText('identities.manage').parentElement).toHaveTextContent('代管外部身份：读它的收件箱，以它的名义回复与回答')
     await user.click(screen.getByRole('button', { name: '检查更新' }))

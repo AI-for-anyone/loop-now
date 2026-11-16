@@ -44,7 +44,7 @@ export function CreateAgentDialog({ scope, onClose }: { scope: Scope; onClose: (
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <DialogContent kind="create">
         <DialogHeader>
           <DialogTitle>{t.createAgent.title}</DialogTitle>
         </DialogHeader>

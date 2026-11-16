@@ -1,4 +1,5 @@
-import { ScissorsIcon, ZapIcon, type LucideIcon } from 'lucide-react'
+import { ScissorsIcon, ZapIcon } from 'lucide-react'
+import { CutLine } from '@/components/CutLine'
 import { MessageImages } from '@/features/images/MessageImages'
 import { UserChatBubble, AgentChatReply, SleepWakeLine } from './ChatBubble'
 import { Fragment, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
@@ -97,17 +98,6 @@ function interruptedBy(previous: Turn, turn: Turn) {
 }
 
 // 裁切线：对话流里的分隔线。左端一个图标，两段 2px 的粉色虚线夹着一句说明；“会话已重开”左端是剪刀，“已打断”是闪电。
-function CutLine({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
-  return (
-    <div role="separator" aria-label={label} className="flex items-center gap-2.5">
-      <Icon aria-hidden="true" className="size-4 shrink-0 text-pink-text" strokeWidth={2.2} />
-      <span aria-hidden="true" data-cut-line className="h-0 flex-1 border-t-2 border-dashed border-riso-pink" />
-      <span className="text-[12px] font-black text-pink-text">{label}</span>
-      <span aria-hidden="true" data-cut-line className="h-0 flex-1 border-t-2 border-dashed border-riso-pink" />
-    </div>
-  )
-}
-
 // 设置滚动位置并记下实际结果（浏览器会把位置限制在可滚动的范围内）。
 function scrollTo(el: HTMLElement, top: number, last: { current: number }) {
   el.scrollTop = top

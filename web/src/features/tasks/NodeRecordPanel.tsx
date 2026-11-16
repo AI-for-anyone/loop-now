@@ -2,7 +2,16 @@ import { useTaskInboxMessages } from '@/api/task-inbox'
 import { TaskInboxMessageBubble } from './TaskInboxMessageBubble'
 import { ConsoleMessage } from '@/features/console-inbox/ConsoleMessage'
 import { TaskMessageBubble } from './TaskMessageBubble'
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { CircleAlertIcon, DownloadIcon, FileTextIcon, ScissorsIcon } from 'lucide-react'
+import { AgentAvatar } from '@/components/AgentAvatar'
+import { CutLine } from '@/components/CutLine'
+import { HollowNumber } from '@/components/NumberedSection'
+import { Sheet } from '@/components/Sheet'
+import { StickyNote } from '@/components/StickyNote'
+import { indexTabClass, indexTabsClass } from '@/lib/index-tab'
+import { cn } from '@/lib/utils'
+import { stepNumber } from './workflow-steps'
 import { NodeMessageComposer } from './NodeMessageComposer'
 import { NodeQueueList } from './NodeQueueList'
 import { TaskActions } from './TaskActions'
@@ -39,7 +48,9 @@ export function PendingQuestion({ question }: { question: Schemas['TaskQuestionR
 }
 type Node = Schemas['TaskNodeRun']
 export type NodeDraft = { text: string; images?: ImageDraft[]; agentId: string; runtimeId: string; nodeRunId: string; agentName: string; action?: { body: Schemas['TaskNodeInboxInput']; draftImageIds?: string[]; state: 'sending' | 'unknown' | 'rejected' | 'accepted'; error?: unknown; receipt?: Schemas['TaskNodeInboxReceipt'] } }
-export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAccepted, onAction, drafts, disabled }: { detail: Schemas['ConsoleTaskDetail']; node: Node; draft: NodeDraft; onDraft: (text: string) => void; onImages?: (images: ImageDraft[]) => void; onAccepted: (text: string, draftImageIds?: string[]) => void; onAction: (action: NodeDraft['action']) => void; drafts: NodeDraft[]; disabled: boolean }) {
+// 任务详情的纸张（改版第 5 步）：纸张上沿两张索引标签（对话、节点资料），纸上左边是所选节点这一次访问的内容，
+// 右边是调用方给的票根（流程尺，stub）。
+export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAccepted, onAction, drafts, disabled, stub }: { detail: Schemas['ConsoleTaskDetail']; node: Node; draft: NodeDraft; onDraft: (text: string) => void; onImages?: (images: ImageDraft[]) => void; onAccepted: (text: string, draftImageIds?: string[]) => void; onAction: (action: NodeDraft['action']) => void; drafts: NodeDraft[]; disabled: boolean; stub?: ReactNode }) {
   const records = detail.nodes.filter(n => n.stepId === node.stepId).sort((a, b) => a.visit - b.visit || a.attempt - b.attempt || a.id.localeCompare(b.id))
   const [tab, setTab] = useState<'conversation' | 'materials'>('conversation')
   const [groups, setGroups] = useState(() => ({ open: new Set([node.id]), closed: new Set<string>() }))
@@ -117,51 +128,155 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
     })
   }
   const oldDrafts = drafts.filter(d => d.nodeRunId !== draft.nodeRunId && (d.text || d.images?.length))
-  return <section className="flex h-[800px] min-h-0 min-w-0 flex-col overflow-hidden rounded-panel bg-white shadow-print-rest lg:h-full">
-    <div className="max-h-[35%] min-h-0 shrink overflow-y-auto border-b border-ink-200 bg-paper-raised p-4" data-node-status>
-      <div className="flex flex-wrap items-center justify-between gap-2"><strong>{detail.workflow.steps.find(s => s.id === node.stepId)?.title} · {node.agentName}</strong><TaskBadge status={node.status} /></div>
-      <p className="mt-1 text-xs">{t.tasks.visit(node.visit, node.attempt)} · {current ? t.tasks.currentNode : t.tasks.readonly}</p>
-      {statusReason && <><p className="mt-2 line-clamp-2 break-words">{statusReason}</p><details className="mt-2 text-sm"><summary>{t.tasks.details}</summary><p className="mt-2 whitespace-pre-wrap break-words">{statusReason}</p></details></>}
-      {node.sleep?.state === 'sleeping' && node.sleep.nodeRunId === node.id && node.sleep.runtimeId === node.runtimeId && node.sleep.wakeAt && <SleepUntil at={node.sleep.wakeAt} reason={node.sleep.reason} />}
-      <div className="mt-2"><TaskActions task={detail.task} showRetry={current} showCancel={false} disabled={disabled} /></div>
-      <TaskLarkSwitchController detail={detail} node={node} disabled={disabled} />
-      {node.question && <details className="mt-2"><summary>{t.tasks.question} · {t.tasks.questionState[node.question.status]}</summary><PendingQuestion question={node.question} /></details>}
+  const stepIndex = detail.workflow.steps.findIndex(s => s.id === node.stepId)
+  const stepTitle = detail.workflow.steps[stepIndex]?.title
+  const number = stepNumber(stepIndex)
+  const [reasonHead, ...reasonRest] = (statusReason ?? '').split('\n')
+  // 节点资料：正在看的那一次排在最前面，其余按新到旧；只有展开过的（默认是正在看的那一次）打开。
+  const materialRecords = [...records.filter(r => r.id === node.id), ...records.filter(r => r.id !== node.id).reverse()]
+  const artifactCount = detail.artifacts.filter(a => records.some(r => r.id === a.nodeRunId)).length
+  const backToConversation = (id: string) => {
+    setTab('conversation')
+    requestAnimationFrame(() => {
+      const el = conversation.current, target = el?.querySelector<HTMLElement>(`[data-record="${id}"]`)
+      if (el && target) el.scrollTop += target.getBoundingClientRect().top - el.getBoundingClientRect().top
+    })
+  }
+  const pad = 'px-[clamp(14px,3vw,34px)]'
+  return <>
+    {/* 两张索引标签贴在纸张上沿：对话、节点资料。左右方向键在两者之间切换。 */}
+    <div role="tablist" className={indexTabsClass} aria-label={t.tasks.record} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); const next = tab === 'conversation' ? 'materials' : 'conversation'; setTab(next); event.currentTarget.querySelector<HTMLButtonElement>(`[data-tab="${next}"]`)?.focus() } }}>
+      {(['conversation', 'materials'] as const).map(value => <button key={value} type="button" role="tab" data-tab={value} aria-selected={tab === value} aria-controls={`task-${value}`} tabIndex={tab === value ? 0 : -1} className={cn(indexTabClass(tab === value), 'cursor-pointer')} onClick={() => setTab(value)}>{value === 'conversation' ? t.tasks.conversationTab : t.tasks.materials}</button>)}
     </div>
-    <div role="tablist" className="flex shrink-0 gap-2 border-b border-ink-200 p-3" aria-label={t.tasks.record} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); const next = tab === 'conversation' ? 'materials' : 'conversation'; setTab(next); event.currentTarget.querySelector<HTMLButtonElement>(`[data-tab="${next}"]`)?.focus() } }}>
-      {(['conversation', 'materials'] as const).map(value => <button key={value} role="tab" data-tab={value} aria-selected={tab === value} aria-controls={`task-${value}`} tabIndex={tab === value ? 0 : -1} className={tab === value ? 'rounded-input bg-riso-yellow px-4 py-2 font-bold' : 'rounded-input px-4 py-2'} onClick={() => setTab(value)}>{value === 'conversation' ? t.tasks.conversationTab : t.tasks.materials}</button>)}
-    </div>
-    <div id="task-conversation" role="tabpanel" aria-label={t.tasks.conversation} hidden={tab !== 'conversation'} className="min-h-[120px] flex-1 overflow-hidden">
-      <div ref={conversation} tabIndex={0} onScroll={capture} aria-label={t.tasks.conversation} className="relative h-full min-w-0 overflow-y-auto overscroll-contain p-4" data-conversation-scroll>
-        {records.map(record => <MessageSegment key={record.id} detail={detail} node={record} suppressInboxError={current && record.id === node.id} onMaterials={() => showMaterials(record.id)} onReply={current && record.id === node.id ? message => setReplying({ nodeRunId: node.id, messageId: message.id }) : undefined} />)}
-      </div>
-    </div>
-    <div id="task-materials" role="tabpanel" aria-label={t.tasks.materials} hidden={tab !== 'materials'} ref={materials} tabIndex={0} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4" data-materials-scroll>
-      {records.map(record => <details key={record.id} data-material-record={record.id} open={groups.open.has(record.id) || record.id === records.at(-1)?.id && !groups.closed.has(record.id)} onToggle={event => { const open = event.currentTarget.open; setGroups(old => { const next = { open: new Set(old.open), closed: new Set(old.closed) }; if (open) { next.open.add(record.id); next.closed.delete(record.id) } else { next.open.delete(record.id); next.closed.add(record.id) } return next }) }} className="mb-4 rounded-card border border-ink-200 p-3">
-        <summary className="cursor-pointer font-bold">{t.tasks.visit(record.visit, record.attempt)} · {t.tasks.nodeStatuses[record.status]}</summary><div className="mt-4 grid gap-5">
-          {record.reason && <p className="break-words">{record.reason}</p>}
-          <DataBlock title={t.tasks.input} value={record.inputs} />
-          {record.inputVersions.length > 0 && <div><h3 className="font-bold">{t.tasks.versions}</h3><ul>{record.inputVersions.map(v => <li key={v.input}><Link className="break-all text-riso-blue underline" to={`?${new URLSearchParams({ step: detail.nodes.find(n => n.id === v.nodeRunId)?.stepId ?? '', record: v.nodeRunId })}`}>{t.tasks.source(v.input)} · {v.nodeRunId}</Link></li>)}</ul></div>}
-          <div>{record.status === 'blocked' && record.output && <p className="mb-2 rounded-card bg-tint-red p-3 font-bold text-red-text">{t.tasks.inspectOnly}</p>}<DataBlock title={t.tasks.output} value={record.output} /></div>
-          <Artifacts artifacts={detail.artifacts.filter(a => a.nodeRunId === record.id)} />
+    {/* 窄屏时整页滚动，纸张给一个固定高度（约一屏），对话仍在纸里自己滚动。 */}
+    <Sheet className="min-h-0 flex-1 max-nav:h-[max(560px,calc(100dvh-72px))] max-nav:flex-none">
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div id="task-conversation" role="tabpanel" aria-label={t.tasks.conversation} hidden={tab !== 'conversation'} className="flex min-h-0 flex-1 flex-col">
+            {/* 节点头：空心步号加步名（黄色记号笔）、Agent、第几次访问、“当前节点”藏青小标签、状态印章；
+                下面是原因（阻塞时红色便签）和恢复动作（荧光粉“重试当前节点”，其余是次要按钮）。 */}
+            <div className={cn('flex max-h-[45%] min-h-0 shrink-0 flex-col gap-3 overflow-y-auto border-b-2 border-ink pt-[22px] pb-4 max-nav:pt-4', pad)} data-node-status>
+              <NodeHeading number={number} title={stepTitle} agentId={node.agentId} agentName={node.agentName}>
+                <span className="font-mono text-[12px] text-ink-500">{t.tasks.visit(node.visit, node.attempt)}</span>
+                {current ? <span className="rounded-[4px] bg-ink px-2 text-[11.5px] leading-5 font-black text-white">{t.tasks.currentNode}</span> : <span className="text-[12px] font-bold text-ink-500">{t.tasks.readonly}</span>}
+                <TaskBadge className="ml-auto" status={node.status} />
+              </NodeHeading>
+              {/* 原因便签旁边是恢复动作：荧光粉“重试当前节点”，旁边是“更换 Lark 账号并继续 QA”（次要按钮，点开在下面展开表单）。 */}
+              <TaskLarkSwitchController detail={detail} node={node} disabled={disabled}>
+                {(lark) => <>
+                  {(statusReason || current) && <div className="flex flex-wrap items-start gap-x-[22px] gap-y-3">
+                {statusReason && <StickyNote tone={node.status === 'blocked' ? 'red' : 'yellow'} className="min-w-0 flex-[1_1_380px] items-start text-[14px] leading-[1.6] font-normal [&>svg]:mt-[3px]">
+                  <strong className="block font-black [overflow-wrap:anywhere]">{reasonHead}</strong>
+                  {reasonRest.length > 0 && <span className="line-clamp-2 text-ink [overflow-wrap:anywhere]">{reasonRest.join('\n')}</span>}
+                  <details className="mt-0.5"><summary className="cursor-pointer font-black underline underline-offset-3">{t.tasks.details}</summary><p className="mt-1 whitespace-pre-wrap text-ink [overflow-wrap:anywhere]">{statusReason}</p></details>
+                </StickyNote>}
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 pt-1.5"><TaskActions task={detail.task} showRetry={current} showCancel={false} disabled={disabled} />{lark.toggle}</div>
+                  </div>}
+                  {lark.panel}
+                </>}
+              </TaskLarkSwitchController>
+              {node.sleep?.state === 'sleeping' && node.sleep.nodeRunId === node.id && node.sleep.runtimeId === node.runtimeId && node.sleep.wakeAt && <SleepUntil at={node.sleep.wakeAt} reason={node.sleep.reason} />}
+              {node.question && <details className="text-[13.5px]"><summary className="cursor-pointer font-bold">{t.tasks.question} · {t.tasks.questionState[node.question.status]}</summary><PendingQuestion question={node.question} /></details>}
+            </div>
+            <div className="min-h-[120px] flex-1 overflow-hidden">
+              <div ref={conversation} tabIndex={0} onScroll={capture} aria-label={t.tasks.conversation} className={cn('relative h-full min-w-0 overflow-y-auto overscroll-contain pt-5 pb-3 outline-none focus-visible:shadow-focus', pad)} data-conversation-scroll>
+                {records.map(record => <MessageSegment key={record.id} detail={detail} node={record} suppressInboxError={current && record.id === node.id} onMaterials={() => showMaterials(record.id)} onReply={current && record.id === node.id ? message => setReplying({ nodeRunId: node.id, messageId: message.id }) : undefined} />)}
+              </div>
+            </div>
+            {newMessages && <Button variant="secondary" size="sm" className="mx-4 mb-2 shrink-0 self-center" onClick={() => { const el = conversation.current; if (el) el.scrollTop = el.scrollHeight; following.current = true; setNewMessages(false) }}>{t.tasks.newMessages}</Button>}
+            {/* 输入区：纸张底部的浅黄色栏（同对话页），上方一行写清发给谁。 */}
+            <div className="flex max-h-[45dvh] min-h-0 shrink-0 flex-col gap-2 overflow-y-auto border-t-2 border-ink bg-tint-yellow px-[clamp(12px,2vw,22px)] pt-2.5 pb-3" data-node-draft>
+              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] font-bold text-ink-700 sm:pl-[52px]">
+                <span>{t.tasks.page.sendTo}</span>
+                <span className="rounded-[4px] border-[1.5px] border-ink bg-paper-raised px-[7px] leading-[18px] font-black text-ink [overflow-wrap:anywhere]">{number} {stepTitle} · {draft.agentName} · {t.tasks.visit(node.visit, node.attempt)}</span>
+                <details className="ml-1"><summary className="cursor-pointer text-ink-500 underline decoration-dotted underline-offset-3">{t.tasks.targetDetails}</summary><p className="mt-1 font-mono text-[11.5px] font-normal break-all">{t.tasks.task}: {detail.task.id}<br />{t.tasks.record}: {draft.nodeRunId}<br />{t.tasks.instance}: {draft.runtimeId}</p></details>
+              </div>
+              {current && unsupported && <p role="status" className="text-[13px] font-bold">{t.tasks.nodeMessagesUnsupported}</p>}
+              {current && !unsupported && <ErrorAlert error={capability.error ?? inbox.error} />}
+              {current && capability.data && !capability.data.canSend && <p role="status" className="text-[13px] font-bold">{capability.data.reason} · {capability.data.handlingHint}</p>}
+              {!current && (draft.text || !!draft.images?.length) && <p role="status" className="text-[13px] font-bold">{t.tasks.draftChanged}</p>}
+              <NodeMessageComposer taskId={detail.task.id} draft={draft} current={current} disabled={disabled || unsupported || !!capability.error || !!inbox.error || inbox.isPending || capability.isFetching} capability={capability.data} text={draft.text} onChange={onDraft} onImages={onImages} imageLimits={messageImageLimits(context.data?.limits)} onAccepted={onAccepted} onAction={onAction}
+                queue={<><QueueMessages notice={stop.notice} error={stop.error} />{current && !unsupported && <NodeQueueList taskId={detail.task.id} nodeRunId={node.id} agentId={node.agentId} runtimeId={node.runtimeId} disabled={disabled} onEdit={refill} />}</>}
+                stop={current && !unsupported && activeRunId ? stop.control(activeRunId, refreshMessages) : undefined}
+                reply={current && replyTarget ? { message: replyTarget, name: node.agentName, maxBytes: context.data?.limits.maxInboxMessage, onCancel: () => setReplying(null), onDone: () => setReplying(null) } : undefined} />
+              {draft.text && !current && <Button size="sm" variant="secondary" className="self-start" onClick={() => void navigator.clipboard.writeText(draft.text)}>{t.tasks.copyDraft}</Button>}
+              {oldDrafts.length > 0 && <details className="text-[13px]"><summary className="cursor-pointer font-bold">{t.tasks.draftChanged}</summary>{oldDrafts.map(d => <div key={d.nodeRunId} className="mt-2"><p className="break-all">{d.agentName} · {d.nodeRunId}</p><pre className="whitespace-pre-wrap break-words">{d.text}</pre><div className="flex flex-wrap gap-2">{d.images?.map(image => <DraftImagePreview key={image.id} file={image.file} />)}</div><Button size="sm" variant="secondary" onClick={() => void navigator.clipboard.writeText(d.text)}>{t.tasks.copyDraft}</Button></div>)}</details>}
+            </div>
+          </div>
+          <div id="task-materials" role="tabpanel" aria-label={t.tasks.materials} hidden={tab !== 'materials'} ref={materials} tabIndex={0} className="min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none focus-visible:shadow-focus" data-materials-scroll>
+            <div className={cn('border-b-2 border-ink pt-[22px] pb-4 max-nav:pt-4', pad)}>
+              <NodeHeading number={number} title={stepTitle} agentId={node.agentId} agentName={node.agentName}>
+                <span className="font-mono text-[12px] text-ink-500">{t.tasks.page.visits(records.length)} · {t.tasks.page.artifactCount(artifactCount)}</span>
+              </NodeHeading>
+            </div>
+            <div className={cn('flex flex-col gap-4 pt-5 pb-8', pad)}>
+              {materialRecords.map((record, index) => <MaterialRecord key={record.id} detail={detail} record={record} viewing={record.id === node.id} divided={index > 0}
+                open={groups.open.has(record.id)}
+                onToggle={open => setGroups(old => { const next = { open: new Set(old.open), closed: new Set(old.closed) }; if (open) { next.open.add(record.id); next.closed.delete(record.id) } else { next.open.delete(record.id); next.closed.add(record.id) } return next })}
+                onConversation={() => backToConversation(record.id)} />)}
+            </div>
+          </div>
         </div>
-      </details>)}
+        {stub}
+      </div>
+    </Sheet>
+  </>
+}
+
+// 节点头的第一行：空心步号、步名（ZCOOL 30px 加黄色记号笔）、Agent，后面跟调用方给的说明（第几次访问、状态……）。
+function NodeHeading({ number, title, agentId, agentName, children }: { number: string; title: string | undefined; agentId: string; agentName: string; children?: ReactNode }) {
+  return <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <HollowNumber className="w-auto">{number}</HollowNumber>
+    <h2 className="riso-marker self-start px-1.5 font-display-cn text-[30px] leading-[1.25] font-normal [overflow-wrap:anywhere] max-nav:text-[26px]">{title}</h2>
+    <span className="flex items-center gap-1.5 text-[13.5px] font-black"><AgentAvatar size="sm" id={agentId} />{agentName}</span>
+    {children}
+  </div>
+}
+
+// 节点资料里的一次访问：一张“小票”。顶上一行是版本号（V2·A1）、第几次访问、状态、起止时间；
+// 打开后是输入（键值表，来自其他访问的值做成链接）、输出（浅蓝底的 JSON）、产物（带下载按钮的文件卡片）。
+// 被退回的那次（阻塞但有输出）顶上一条红色提醒。没在看的访问默认折叠。
+function MaterialRecord({ detail, record, viewing, divided, open, onToggle, onConversation }: { detail: Schemas['TaskDetail']; record: Node; viewing: boolean; divided: boolean; open: boolean; onToggle: (open: boolean) => void; onConversation: () => void }) {
+  const values = Object.entries(record.inputs)
+  const versions = new Map(record.inputVersions.map(v => [v.input, v.nodeRunId]))
+  const keys = [...new Set([...values.map(([key]) => key), ...versions.keys()])]
+  const source = (id: string) => { const from = detail.nodes.find(n => n.id === id), index = detail.workflow.steps.findIndex(s => s.id === from?.stepId); return { from, index } }
+  return <details data-material-record={record.id} open={open} onToggle={event => onToggle(event.currentTarget.open)} className={cn('group min-w-0', divided && 'border-t-2 border-dashed border-ink/40 pt-4')}>
+    <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1.5 [&::-webkit-details-marker]:hidden">
+      <span className={cn('rounded-[4px] px-2 font-mono text-[11.5px] leading-[22px] font-bold', viewing ? 'bg-ink text-white' : 'bg-paper-tab text-ink-700')}>{t.tasks.page.version(record.visit, record.attempt)}</span>
+      <span className="text-[15px] font-black">{t.tasks.visit(record.visit, record.attempt)}</span>
+      <TaskBadge status={record.status} />
+      {record.startedAt && <span className="font-mono text-[12px] text-ink-500">{t.tasks.page.ran(record.startedAt, record.endedAt)}</span>}
+      <span className="ml-auto text-[13px] font-black text-riso-blue">{open ? t.tasks.page.collapse : t.tasks.page.expand}<span aria-hidden="true"> {open ? '▴' : '▾'}</span></span>
+    </summary>
+    <div className="mt-3.5 flex flex-col gap-5">
+      <div className="flex flex-wrap items-center justify-end gap-x-5 gap-y-2.5">
+        {record.status === 'blocked' && record.output && <p role="note" className="flex min-w-0 flex-[1_1_320px] items-center gap-2 rounded-[4px] bg-tint-red px-4 py-2.5 text-[13.5px] font-black text-red-text"><CircleAlertIcon aria-hidden="true" className="size-4 shrink-0" strokeWidth={2.4} />{t.tasks.inspectOnly}</p>}
+        <button type="button" className="shrink-0 cursor-pointer text-[13px] font-black text-riso-blue underline underline-offset-3" onClick={onConversation}>{t.tasks.page.backToConversation}</button>
+      </div>
+      {record.reason && record.status !== 'blocked' && <p className="text-[14px] [overflow-wrap:anywhere]">{record.reason}</p>}
+      <div className="grid min-w-0 gap-x-7 gap-y-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <section className="min-w-0">
+          <h3 className="riso-marker mb-2 inline-block px-1 font-display-cn text-[20px] leading-[1.3] font-normal">{t.tasks.page.inputs}</h3>
+          {keys.length === 0 ? <p className="text-[13.5px] text-ink-500">{t.tasks.none}</p> : <dl className="grid grid-cols-[minmax(72px,auto)_minmax(0,1fr)] border-t-2 border-ink text-[13.5px]">
+            {keys.map(key => { const version = versions.get(key), value = record.inputs[key], origin = version ? source(version) : null
+              return <div key={key} className="contents">
+                <dt className="border-b-[1.5px] border-dashed border-ink/25 py-2.5 pr-4 pl-0.5 font-mono text-[12.5px] text-ink-700 [overflow-wrap:anywhere]">{key}</dt>
+                <dd className="flex min-w-0 flex-col gap-1 border-b-[1.5px] border-dashed border-ink/25 py-2.5 [overflow-wrap:anywhere]">
+                  {version && <Link className="font-black text-riso-blue underline underline-offset-3" to={`?${new URLSearchParams({ step: origin?.from?.stepId ?? '', record: version })}`}>{origin?.from ? t.tasks.page.versionLink(stepNumber(origin.index), detail.workflow.steps[origin.index]?.title ?? '', origin.from.visit) : `${t.tasks.source(key)} · ${version}`}</Link>}
+                  {value !== undefined && (typeof value === 'string' ? <span className={cn(version && 'text-[12.5px] text-ink-700')}>{value}</span> : <code className="font-mono text-[12px] break-all">{JSON.stringify(value)}</code>)}
+                </dd>
+              </div> })}
+          </dl>}
+        </section>
+        <section className="min-w-0">
+          <h3 className="riso-marker mb-2 inline-block px-1 font-display-cn text-[20px] leading-[1.3] font-normal">{t.tasks.output}</h3>
+          {record.output === null ? <p className="text-[13.5px] text-ink-500">{t.tasks.noOutput}</p> : <pre className="max-w-full overflow-x-auto rounded-card bg-tint-blue px-[18px] py-3.5 font-mono text-[13px] leading-[1.7] whitespace-pre-wrap break-all">{JSON.stringify(record.output, null, 2)}</pre>}
+        </section>
+      </div>
+      <Artifacts artifacts={detail.artifacts.filter(a => a.nodeRunId === record.id)} />
     </div>
-    {tab === 'conversation' && newMessages && <Button variant="secondary" className="mx-4 mb-2 shrink-0" onClick={() => { const el = conversation.current; if (el) el.scrollTop = el.scrollHeight; following.current = true; setNewMessages(false) }}>{t.tasks.newMessages}</Button>}
-    <div hidden={tab !== 'conversation'} className="max-h-[45dvh] min-h-0 shrink overflow-y-auto border-t border-ink-200 p-3" data-node-draft>
-      <p className="text-xs font-bold">{t.tasks.draftTarget} · {detail.workflow.steps.find(s => s.id === node.stepId)?.title} · {draft.agentName} · {t.tasks.visit(node.visit, node.attempt)}</p>
-      {current && unsupported && <p role="status" className="mt-2 text-sm">{t.tasks.nodeMessagesUnsupported}</p>}
-      {current && !unsupported && <ErrorAlert error={capability.error ?? inbox.error} />}
-      {current && capability.data && !capability.data.canSend && <p role="status" className="mt-2 text-sm">{capability.data.reason} · {capability.data.handlingHint}</p>}
-      <details className="mt-1 text-xs"><summary>{t.tasks.targetDetails}</summary><p className="mt-1 break-all">{t.tasks.task}: {detail.task.id}<br />{t.tasks.record}: {draft.nodeRunId}<br />{t.tasks.instance}: {draft.runtimeId}</p></details>
-      {!current && (draft.text || !!draft.images?.length) && <p role="status" className="mt-2 text-sm">{t.tasks.draftChanged}</p>}
-      <NodeMessageComposer taskId={detail.task.id} draft={draft} current={current} disabled={disabled || unsupported || !!capability.error || !!inbox.error || inbox.isPending || capability.isFetching} capability={capability.data} text={draft.text} onChange={onDraft} onImages={onImages} imageLimits={messageImageLimits(context.data?.limits)} onAccepted={onAccepted} onAction={onAction}
-        queue={<><QueueMessages notice={stop.notice} error={stop.error} />{current && !unsupported && <NodeQueueList taskId={detail.task.id} nodeRunId={node.id} agentId={node.agentId} runtimeId={node.runtimeId} disabled={disabled} onEdit={refill} />}</>}
-        stop={current && !unsupported && activeRunId ? stop.control(activeRunId, refreshMessages) : undefined}
-        reply={current && replyTarget ? { message: replyTarget, name: node.agentName, maxBytes: context.data?.limits.maxInboxMessage, onCancel: () => setReplying(null), onDone: () => setReplying(null) } : undefined} />
-      {draft.text && !current && <Button size="sm" variant="secondary" onClick={() => void navigator.clipboard.writeText(draft.text)}>{t.tasks.copyDraft}</Button>}
-      {oldDrafts.length > 0 && <details className="mt-2 text-sm"><summary>{t.tasks.draftChanged}</summary>{oldDrafts.map(d => <div key={d.nodeRunId} className="mt-2"><p className="break-all">{d.agentName} · {d.nodeRunId}</p><pre className="whitespace-pre-wrap break-words">{d.text}</pre><div className="flex flex-wrap gap-2">{d.images?.map(image => <DraftImagePreview key={image.id} file={image.file} />)}</div><Button size="sm" variant="secondary" onClick={() => void navigator.clipboard.writeText(d.text)}>{t.tasks.copyDraft}</Button></div>)}</details>}
-    </div>
-  </section>
+  </details>
 }
 // A question the node raised is answerable only while the task still says so; other messages to you defer to the server.
 const answerableFor = (node: Node, message: Schemas['InboxMessage']) => node.question?.messageId === message.id ? node.question.status === 'open' && node.question.canAnswer : true
@@ -190,9 +305,10 @@ function MessageSegment({ detail, node, onMaterials, suppressInboxError, onReply
       return { key: `inbox:${record.message.id}`, at: record.message.createdAt, body }
     }),
   ].sort((a, b) => a.at.localeCompare(b.at) || a.key.localeCompare(b.key))
-  return <section data-record={node.id} data-reading-anchor={`record:${node.id}`} className="mb-6 min-w-0">
-    <button className="mb-3 w-full rounded-input bg-paper-raised p-3 text-left font-bold underline decoration-dotted" onClick={onMaterials}>{t.tasks.execution} · {t.tasks.visit(node.visit, node.attempt)} · {t.tasks.nodeStatuses[node.status]}</button>
-    {node.reason && <p className="mb-3 break-words text-sm">{node.reason}</p>}
+  const cutLabel = `${t.tasks.visit(node.visit, node.attempt)} · ${t.tasks.nodeStatuses[node.status]} · ${t.tasks.page.seeMaterials}`
+  return <section data-record={node.id} data-reading-anchor={`record:${node.id}`} className="mb-7 min-w-0">
+    {/* 同一节点的各次访问之间是剪刀裁切线（同对话页“会话已重开”），中间的说明点开是这一次的节点资料。 */}
+    <div className="mb-[18px]"><CutLine icon={ScissorsIcon} label={t.tasks.execution}><button type="button" className="min-w-0 cursor-pointer text-center text-[12.5px] font-black text-ink underline decoration-dotted underline-offset-4 [overflow-wrap:anywhere]" aria-label={`${t.tasks.execution} · ${cutLabel}`} onClick={onMaterials}>{cutLabel}</button></CutLine></div>
     <ErrorAlert error={messages.error} />{(messages.isPending || inbox.isPending) && <p>{t.common.loading}</p>}{messages.isSuccess && inbox.isSuccess && rows.length === 0 && <p>{t.tasks.noMessages}</p>}
     {!suppressInboxError && !nodeMessagesUnsupported(inbox.error) && <ErrorAlert error={inbox.error} />}
     <ol className="flex min-w-0 flex-col gap-7 pb-2 pr-2">{rows.map(row => <li key={row.key} data-message-id={row.key} data-reading-anchor={`message:${row.key}`} className="min-w-0">{row.body}</li>)}</ol>
@@ -200,5 +316,15 @@ function MessageSegment({ detail, node, onMaterials, suppressInboxError, onReply
     {messages.hasNextPage && <div className="mt-4"><p className="text-sm">{t.tasks.incomplete}</p><Button variant="secondary" disabled={messages.isFetching} onClick={() => void messages.fetchNextPage({ cancelRefetch: false })}>{t.tasks.more}</Button></div>}
   </section>
 }
-function DataBlock({ title, value }: { title: string; value: unknown }) { return <section className="min-w-0"><h3 className="mb-2 font-bold">{title}</h3>{value === null ? <p>{t.tasks.noOutput}</p> : <pre className="max-w-full overflow-x-auto rounded-input bg-tint-blue p-3 text-sm whitespace-pre-wrap break-all">{JSON.stringify(value, null, 2)}</pre>}</section> }
-export function Artifacts({ artifacts }: { artifacts: Schemas['TaskArtifact'][] }) { return <section className="min-w-0"><h3 className="mb-3 font-display-cn text-[28px]">{t.tasks.artifacts}</h3>{artifacts.length === 0 && <p>{t.tasks.noArtifacts}</p>}<ul className="grid gap-3">{artifacts.map((a) => <li key={a.id} className="flex min-w-0 flex-wrap justify-between gap-2 rounded-card bg-tint-blue p-3"><span className="min-w-0 break-all">{a.name} · {a.contentType} · {a.size}</span><a href={config.apiBase + artifactUrl(a)} className="font-bold text-riso-blue underline">{t.tasks.download}</a></li>)}</ul></section> }
+// 产物：带下载按钮的文件卡片（黄色文件图标、等宽文件名、类型与大小）。
+export function Artifacts({ artifacts }: { artifacts: Schemas['TaskArtifact'][] }) {
+  return <section className="min-w-0">
+    <h3 className="riso-marker mb-3 inline-block px-1 font-display-cn text-[20px] leading-[1.3] font-normal">{t.tasks.page.artifacts}</h3>
+    {artifacts.length === 0 && <p className="text-[13.5px] text-ink-500">{t.tasks.noArtifacts}</p>}
+    <ul className="grid gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(260px,1fr))]">{artifacts.map((a) => <li key={a.id} className="mr-1 flex min-w-0 items-center gap-3 rounded-card border-2 border-ink bg-paper-raised px-3.5 py-3 shadow-[4px_4px_0_var(--ink)]">
+      <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-[10px] border-2 border-ink bg-riso-yellow"><FileTextIcon className="size-4" strokeWidth={2.4} /></span>
+      <span className="flex min-w-0 flex-1 flex-col leading-[1.4]"><span id={`artifact-${a.id}`} className="font-mono text-[13.5px] font-bold break-all">{a.name}</span><span className="text-[12px] text-ink-500">{a.contentType} · {t.common.bytes(a.size)}</span></span>
+      <a href={config.apiBase + artifactUrl(a)} aria-label={t.tasks.download} aria-describedby={`artifact-${a.id}`} title={t.tasks.download} className="flex size-9 shrink-0 items-center justify-center rounded-full border-2 border-ink bg-paper-raised text-ink outline-none hover:bg-riso-yellow focus-visible:shadow-focus"><DownloadIcon aria-hidden="true" className="size-4" strokeWidth={2.4} /></a>
+    </li>)}</ul>
+  </section>
+}

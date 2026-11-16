@@ -4,8 +4,9 @@ import { t } from "@/i18n"
 import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { Button } from "@/components/ui/button"
+import { closeStampClass, dialogContentClass, dialogFooterClass, dialogPaperClass, dialogTabClass, overlayClass, type DialogKind } from "@/components/ui/dialog-style"
 import { useReturnFocus } from "@/lib/return-focus"
-import { XIcon } from "lucide-react"
+import { CircleAlertIcon, PlusIcon, XIcon } from "lucide-react"
 
 function Dialog({
   ...props
@@ -31,10 +32,6 @@ function DialogClose({
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
 }
 
-// 遮罩：藏青 45% 加网点。不做进出场动画。
-const overlayClass =
-  "fixed inset-0 isolate z-50 bg-ink/45 [background-image:radial-gradient(rgb(255_255_255/.08)_1px,transparent_1.3px)] [background-size:6px_6px]"
-
 function DialogOverlay({
   className,
   ...props
@@ -48,16 +45,34 @@ function DialogOverlay({
   )
 }
 
-// 对话框：纸白底、22 圆角、孔版蓝印刷投影。
+// 顶边的索引标签：写明弹窗的类别（新建带加号，危险操作带感叹号）。
+function DialogTab({ kind }: { kind: DialogKind }) {
+  const Icon = kind === "create" ? PlusIcon : kind === "danger" ? CircleAlertIcon : null
+  return (
+    <div className="relative z-[1] flex shrink-0 pl-6">
+      <span data-dialog-tab={kind} className={dialogTabClass(kind)}>
+        {Icon && <Icon aria-hidden="true" className="size-[13px]" strokeWidth={2.8} />}
+        {t.common.dialogKinds[kind]}
+      </span>
+    </div>
+  )
+}
+
+// 对话框（改版第 5 步，全站统一）：一张小纸，顶边贴一张写明类别的索引标签；右上角黄色圆章关闭；
+// 按钮区（DialogFooter）上方一条虚线。kind 决定标签的字和颜色（危险操作的纸投影是红色）。
 function DialogContent({
   className,
+  paperClassName,
   children,
+  kind = "edit",
   showCloseButton = true,
   onOpenAutoFocus,
   onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  kind?: DialogKind
+  paperClassName?: string
 }) {
   // 对话框由状态控制开合，没有 Radix 的 Trigger；关闭时把焦点还给打开前的元素。
   const focusHandlers = useReturnFocus(onOpenAutoFocus, onCloseAutoFocus)
@@ -66,20 +81,19 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
-        className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100vh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-5 overflow-y-auto rounded-dialog bg-paper-raised p-[26px] text-[14.5px] text-ink shadow-print-dialog outline-none sm:max-w-[540px]",
-          className
-        )}
+        data-kind={kind}
+        className={cn(dialogContentClass, "sm:max-w-[540px]", className)}
         {...focusHandlers}
         {...props}
       >
-        {children}
+        <DialogTab kind={kind} />
+        <div data-dialog-paper className={cn(dialogPaperClass(kind), paperClassName)}>
+          {children}
+        </div>
         {showCloseButton && (
-          <DialogPrimitive.Close data-slot="dialog-close" asChild>
-            <Button variant="secondary" className="absolute top-5 right-5" size="icon">
-              <XIcon />
-              <span className="sr-only">{t.common.close}</span>
-            </Button>
+          <DialogPrimitive.Close data-slot="dialog-close" className={cn(closeStampClass, "absolute top-[52px] right-[26px] max-sm:right-[18px]")}>
+            <XIcon className="size-[15px]" strokeWidth={2.8} />
+            <span className="sr-only">{t.common.close}</span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Content>
@@ -108,7 +122,7 @@ function DialogFooter({
   return (
     <div
       data-slot="dialog-footer"
-      className={cn("flex flex-wrap justify-end gap-2.5", className)}
+      className={cn(dialogFooterClass, className)}
       {...props}
     >
       {children}
@@ -128,7 +142,7 @@ function DialogTitle({
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("font-display-cn text-[28px] leading-[1.2] font-normal", className)}
+      className={cn("font-display-cn text-[30px] leading-[1.15] font-normal text-riso-blue [text-shadow:2.5px_2.5px_0_var(--riso-pink)]", className)}
       {...props}
     />
   )
@@ -141,7 +155,7 @@ function DialogDescription({
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
-      className={cn("text-[14px] text-ink-700 *:[a]:underline *:[a]:underline-offset-3", className)}
+      className={cn("text-[13.5px] leading-[1.7] text-ink-700 *:[a]:underline *:[a]:underline-offset-3", className)}
       {...props}
     />
   )
@@ -157,6 +171,6 @@ export {
   DialogOverlay,
   DialogPortal,
   DialogTitle,
+  DialogTab,
   DialogTrigger,
-  overlayClass,
 }
