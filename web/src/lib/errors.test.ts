@@ -4,21 +4,22 @@ import { describeError, serverDetail } from './errors'
 
 const error = (serverMessage: string | null, code: ApiError['code'] = 'agent_busy') => new ApiError({ status: 409, code, serverMessage })
 
-// The server's message is English detail: the Chinese UI shows the code's copy followed by it (English UI: see english.test.tsx).
-describe('describeError (Chinese UI)', () => {
+// The server's message is English detail: the English UI shows the code's copy followed by it (Chinese UI: see
+// src/zh-CN/lib/errors.zh.test.ts).
+describe('describeError (English UI)', () => {
   it('appends the server detail to the copy of a known code', () => {
-    expect(describeError(error('run 7f3a is still replying'))).toBe('Agent 正忙：run 7f3a is still replying')
+    expect(describeError(error('run 7f3a is still replying'))).toBe('The Agent is busy: run 7f3a is still replying')
   })
 
   it.each([
     ['the code itself', 'agent_busy'],
     ['the code as words, any case, with a trailing period', 'Agent busy.'],
     ['the English copy of the code', 'The Agent is busy'],
-    ['the Chinese copy of the code (older servers)', 'Agent 正忙'],
+    ['the Chinese copy of the code (older servers)', 'Agent 正忙'], // check-english: zh (older servers sent the Chinese copy)
     ['nothing', ''],
     ['no message at all', null],
   ])('drops a message that only repeats the code: %s', (_, message) => {
-    expect(describeError(error(message))).toBe('Agent 正忙')
+    expect(describeError(error(message))).toBe('The Agent is busy')
     expect(serverDetail(error(message))).toBeNull()
   })
 
