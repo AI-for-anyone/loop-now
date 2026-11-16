@@ -7,7 +7,7 @@ const zhSupplement = ['src/zh-CN/**/*.test.{ts,tsx}']
 // Test files not moved to the English UI yet; they still run in the Chinese UI. Transitional: empty once the move is done.
 const notYetEnglish = [
   'scripts/**/*.test.ts',
-  ...['app'].map((dir) => `src/${dir}/**/*.test.{ts,tsx}`),
+  ...[].map((dir) => `src/${dir}/**/*.test.{ts,tsx}`),
   ...['console-inbox', 'desktop', 'images', 'inbox', 'prompts', 'settings'].map(
     (dir) => `src/features/${dir}/**/*.test.{ts,tsx}`,
   ),
