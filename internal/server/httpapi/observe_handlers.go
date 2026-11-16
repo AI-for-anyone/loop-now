@@ -59,7 +59,7 @@ func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 	for i, name := range []string{"from", "to"} {
 		t, err := queryTime(r, name)
 		if err == nil && t == nil {
-			err = apperr.Invalid(name, "必须提供")
+			err = apperr.Invalid(name, "Required. Give an RFC 3339 time.")
 		}
 		if err != nil {
 			s.fail(w, r, err)
@@ -90,7 +90,7 @@ func (s *Server) listAnomalies(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("limit"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 || n > 100 {
-			s.fail(w, r, apperr.Invalid("limit", "必须是 1 到 100 之间的整数"))
+			s.fail(w, r, apperr.Invalid("limit", "Must be an integer between 1 and 100."))
 			return
 		}
 		limit = n
@@ -116,7 +116,7 @@ func queryTime(r *http.Request, name string) (*time.Time, error) {
 	}
 	t, err := time.Parse(time.RFC3339Nano, v)
 	if err != nil {
-		return nil, apperr.Invalid(name, "必须是 RFC 3339 时间")
+		return nil, apperr.Invalid(name, "Must be an RFC 3339 time, such as 2026-01-02T15:04:05Z.")
 	}
 	return &t, nil
 }

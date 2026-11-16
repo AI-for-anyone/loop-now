@@ -35,7 +35,7 @@ func (s *Server) platformConsoleCommand(r *http.Request, agentID uuid.UUID, text
 	}
 	out := platformResult(name)
 	if name != "compact" && name != "export" && name != "resume" && args != "" {
-		return out, true, apperr.Invalid("text", "/"+name+" 不接受参数")
+		return out, true, apperr.Invalid("text", "/"+name+" takes no arguments.")
 	}
 	switch name {
 	case "session":
@@ -99,7 +99,7 @@ func (s *Server) platformConsoleCommand(r *http.Request, agentID uuid.UUID, text
 			format = "html"
 		}
 		if format != "html" && format != "jsonl" {
-			return out, true, apperr.Invalid("text", "/export 只接受 html 或 jsonl")
+			return out, true, apperr.Invalid("text", "/export accepts only html or jsonl.")
 		}
 		out.ExportFormat = &format
 	case "resume":

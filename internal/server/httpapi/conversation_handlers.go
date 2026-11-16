@@ -26,7 +26,7 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("limit"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 || n > 200 {
-			s.fail(w, r, apperr.Invalid("limit", "必须是 1 到 200 之间的整数"))
+			s.fail(w, r, apperr.Invalid("limit", "Must be an integer between 1 and 200."))
 			return
 		}
 		limit = n
@@ -43,14 +43,14 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request) {
 		}
 		u, err := uuid.Parse(v)
 		if err != nil {
-			s.fail(w, r, apperr.Invalid(p.name, "不是合法的 UUID"))
+			s.fail(w, r, apperr.Invalid(p.name, "Must be a valid UUID."))
 			return
 		}
 		*p.dst = &u
 		set++
 	}
 	if set > 1 {
-		s.fail(w, r, apperr.Invalid("before", "before、after、aroundRun 最多只能传一个"))
+		s.fail(w, r, apperr.Invalid("before", "Give at most one of before, after and aroundRun."))
 		return
 	}
 	page, err := s.Conv.History(r.Context(), id, q)
@@ -77,7 +77,7 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Text == nil {
-		s.fail(w, r, apperr.Invalid("text", "正文须为字符串，纯图片时传空字符串"))
+		s.fail(w, r, apperr.Invalid("text", "Must be a string. Send an empty string for an image-only message."))
 		return
 	}
 	ids, imageErr := s.imageIDs(in.ImageIDs)
@@ -143,7 +143,7 @@ func (s *Server) queueAction(param string, do func(ctx context.Context, agentID,
 			return
 		}
 		if in.ActionID == uuid.Nil {
-			s.fail(w, r, apperr.Invalid("actionId", "必须提供有效动作ID"))
+			s.fail(w, r, apperr.Invalid("actionId", "A valid actionId is required."))
 			return
 		}
 		out, err := do(r.Context(), id, subject, in.ActionID)

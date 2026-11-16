@@ -185,7 +185,7 @@ func TestPluginTokenScopes(t *testing.T) {
 		t.Fatalf("审计：%q %v", actor, err)
 	}
 	var logged int
-	if err := e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM plugin_host_log WHERE plugin_id='watch' AND line LIKE '调用%被拒绝%'`).Scan(&logged); err != nil || logged != 3 {
+	if err := e.st.Pool.QueryRow(ctx, `SELECT count(*) FROM plugin_host_log WHERE plugin_id='watch' AND line LIKE 'Call to %_was denied%'`).Scan(&logged); err != nil || logged != 3 {
 		t.Fatalf("拒绝应记入插件日志：%d %v", logged, err)
 	}
 	fresh := token()

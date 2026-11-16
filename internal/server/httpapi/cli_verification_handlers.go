@@ -11,7 +11,7 @@ func (s *Server) cliVerificationReady(w http.ResponseWriter, r *http.Request) bo
 	if s.CLIVerification != nil {
 		return true
 	}
-	s.fail(w, r, &apperr.Error{Status: 503, Code: apperr.CodeInternal, Message: "CLI验证组件尚未装配"})
+	s.fail(w, r, &apperr.Error{Status: 503, Code: apperr.CodeInternal, Message: "The CLI verification component is not set up on this server."})
 	return false
 }
 

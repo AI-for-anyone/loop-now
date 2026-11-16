@@ -11,7 +11,7 @@ import (
 func (s *Server) listPlatformProjects(w http.ResponseWriter, r *http.Request) {
 	p := principal(r)
 	if p.Kind != auth.KindAgent {
-		s.fail(w, r, apperr.Forbidden("仅平台 Agent 可以读取项目目录"))
+		s.fail(w, r, apperr.Forbidden("Only a platform Agent can read the project directory."))
 		return
 	}
 	// Re-read current persisted ownership; neither a token claim nor a supplied
@@ -22,7 +22,7 @@ func (s *Server) listPlatformProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if a.ProjectID != nil {
-		s.fail(w, r, apperr.Forbidden("仅平台 Agent 可以读取项目目录"))
+		s.fail(w, r, apperr.Forbidden("Only a platform Agent can read the project directory."))
 		return
 	}
 	items, err := s.Store.ListPlatformProjectDirectory(r.Context())

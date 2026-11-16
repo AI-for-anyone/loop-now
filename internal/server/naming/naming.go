@@ -27,21 +27,21 @@ func IsUUIDForm(s string) bool { return uuidForm.MatchString(s) }
 func Validate(what, name string) string {
 	switch {
 	case name == "":
-		return what + "不能为空"
+		return what + " must not be empty."
 	case utf8.RuneCountInString(name) > MaxLen:
-		return what + "不能超过 100 个字符"
+		return what + " must be at most 100 characters."
 	case !utf8.ValidString(name):
-		return what + "不是有效的 UTF-8 文本"
+		return what + " must be valid UTF-8 text."
 	case strings.IndexFunc(name, unicode.IsControl) >= 0:
-		return what + "不能含控制字符"
+		return what + " must not contain control characters."
 	case startsOrEndsWithSpace(name):
-		return what + "首尾不能有空白"
+		return what + " must not start or end with whitespace."
 	case strings.HasPrefix(name, "@"):
-		return what + "不能以 @ 开头"
+		return what + " must not start with @."
 	case strings.ContainsAny(name, "/#"):
-		return what + "不能含 / 或 #"
+		return what + " must not contain / or #."
 	case IsUUIDForm(name):
-		return what + "不能是 UUID 格式"
+		return what + " must not be in UUID format."
 	}
 	return ""
 }

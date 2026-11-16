@@ -13,7 +13,7 @@ func promptText(raw json.RawMessage) (*string, error) {
 	}
 	var value string
 	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) || json.Unmarshal(raw, &value) != nil {
-		return nil, apperr.Invalid("prompt", "须为文本，可保存为空")
+		return nil, apperr.Invalid("prompt", "Must be a string. An empty string is allowed.")
 	}
 	return &value, nil
 }
@@ -23,7 +23,7 @@ func promptVersion(raw json.RawMessage, required bool) (*int64, error) {
 	}
 	var value int64
 	if len(raw) == 0 || json.Unmarshal(raw, &value) != nil || value < 1 {
-		return nil, apperr.Invalid("expectedPromptVersion", "须提供正整数Prompt编辑版本")
+		return nil, apperr.Invalid("expectedPromptVersion", "Must be a positive integer.")
 	}
 	return &value, nil
 }
@@ -56,7 +56,7 @@ func (s *Server) putProjectPrompt(w http.ResponseWriter, r *http.Request) {
 	}
 	text, err := promptText(in.Prompt)
 	if err == nil && text == nil {
-		err = apperr.Invalid("prompt", "须提供Prompt文本")
+		err = apperr.Invalid("prompt", "Required. Send the prompt text; an empty string is allowed.")
 	}
 	if err != nil {
 		s.fail(w, r, err)

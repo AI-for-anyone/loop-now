@@ -106,7 +106,7 @@ func AuthorizeSend(from, to Participant, isReply bool) error {
 	case from.ProjectManager && to.ProjectManager:
 		return nil
 	}
-	return apperr.Forbidden("不能向其他组织的 Agent 发送新消息（只有项目 Manager 之间可以）")
+	return apperr.Forbidden("New messages to Agents in another organization are not allowed. Only project Managers can message each other across organizations.")
 }
 
 // recipient is a resolved recipient.
@@ -117,13 +117,13 @@ type recipient struct {
 	agent     *store.Agent // when the recipient is an Agent
 }
 
-func notFoundRecipient() error { return apperr.NotFound("收件人") }
+func notFoundRecipient() error { return apperr.NotFound("Recipient") }
 
 // resolve resolves a recipient address for the sender; sender is the sending Agent (nil for other principals), and
 // two-segment addresses are resolved within its organization.
 func (s *Service) resolve(ctx context.Context, sender *store.Agent, addr string) (recipient, error) {
 	if addr == "" {
-		return recipient{}, apperr.Invalid("to", "收件地址不能为空")
+		return recipient{}, apperr.Invalid("to", "A recipient address is required.")
 	}
 	if name, ok := strings.CutPrefix(addr, "@"); ok {
 		if name == "console" {
@@ -216,7 +216,7 @@ func (s *Service) sender(ctx context.Context, p auth.Principal) (Participant, *s
 	a, err := s.St.GetAddressableAgent(ctx, p.ID)
 	if err != nil {
 		if store.IsNotFound(err) {
-			return Participant{}, nil, apperr.Unauthenticated("Agent 已删除")
+			return Participant{}, nil, apperr.Unauthenticated("The Agent has been deleted.")
 		}
 		return Participant{}, nil, err
 	}
@@ -227,13 +227,13 @@ func (s *Service) sender(ctx context.Context, p auth.Principal) (Participant, *s
 
 func (s *Service) checkText(text, whenBusy string) error {
 	if strings.TrimSpace(text) == "" {
-		return apperr.Invalid("text", "正文不能为空")
+		return apperr.Invalid("text", "Must not be empty or only whitespace.")
 	}
 	if int64(len(text)) > s.O.MaxMessage {
-		return apperr.TooLarge("正文超过长度上限")
+		return apperr.TooLarge("The message text exceeds the length limit.")
 	}
 	if whenBusy != "" && whenBusy != "interrupt" && whenBusy != "queue" {
-		return apperr.Invalid("whenBusy", "只能是 interrupt 或 queue")
+		return apperr.Invalid("whenBusy", "Must be interrupt or queue.")
 	}
 	return nil
 }
@@ -248,7 +248,7 @@ func (s *Service) Send(ctx context.Context, p auth.Principal, to, text, whenBusy
 		input = extra[0]
 	}
 	if p.Kind != auth.KindPlugin && (input.Channel != "" || input.SenderName != "") {
-		return store.InboxMessage{}, apperr.Invalid("channelId", "只有插件可以指定渠道与发件名称")
+		return store.InboxMessage{}, apperr.Invalid("channelId", "Only plugins can set channelId and senderName.")
 	}
 	from, senderAgent, err := s.sender(ctx, p)
 	if err != nil {
@@ -291,10 +291,10 @@ func (s *Service) Send(ctx context.Context, p auth.Principal, to, text, whenBusy
 // channel and sender name on the message.
 func (s *Service) pluginSend(ctx context.Context, p auth.Principal, rcpt recipient, msg *store.NewInboxMessage, input QuestionInput) error {
 	if rcpt.agent == nil {
-		return apperr.Forbidden("插件只能发给 Agent")
+		return apperr.Forbidden("Plugins can only send messages to Agents.")
 	}
 	if input.Options != nil {
-		return apperr.Invalid("options", "插件不能发出问题")
+		return apperr.Invalid("options", "Plugins cannot ask questions.")
 	}
 	if project := rcpt.agent.ProjectID; project != nil {
 		on, err := s.St.PluginEnabledIn(ctx, p.Plugin, *project)
@@ -302,7 +302,7 @@ func (s *Service) pluginSend(ctx context.Context, p auth.Principal, rcpt recipie
 			return err
 		}
 		if !on {
-			return apperr.Forbidden("插件没有在收件 Agent 的项目里启用")
+			return apperr.Forbidden("The plugin is not enabled in the recipient Agent's project.")
 		}
 	}
 	from, err := s.St.EnsurePluginParty(ctx, p.Plugin)
@@ -335,7 +335,7 @@ func (s *Service) Reply(ctx context.Context, p auth.Principal, messageID uuid.UU
 	}
 	check := text
 	if input.OptionID != nil && check == "" {
-		check = "选择"
+		check = "selected"
 	}
 	if err := s.checkText(check, whenBusy); err != nil {
 		return store.InboxMessage{}, err
@@ -352,7 +352,7 @@ func (s *Service) Reply(ctx context.Context, p auth.Principal, messageID uuid.UU
 		return store.InboxMessage{}, e
 	} else if strict {
 		if input.Options != nil || input.OptionID != nil || input.NodeRunID != uuid.Nil {
-			return store.InboxMessage{}, apperr.Invalid("body", "严格节点普通Inbox回复不接受原题答案或新题字段")
+			return store.InboxMessage{}, apperr.Invalid("body", "A plain Inbox reply to a strict node cannot answer the original question or ask a new one (options, optionId and nodeRunId are not accepted).")
 		}
 		m, _, e := s.St.ReplyTaskNodeInbox(ctx, me, messageID, input.RunID, text, whenBusy)
 		if e == nil {
@@ -379,17 +379,17 @@ func (s *Service) Reply(ctx context.Context, p auth.Principal, messageID uuid.UU
 		other = a
 	default:
 		if me.Kind == "plugin" {
-			return store.InboxMessage{}, apperr.Forbidden("消息不在这个插件的线索里")
+			return store.InboxMessage{}, apperr.Forbidden("The message is not in a thread of this plugin.")
 		}
-		return store.InboxMessage{}, apperr.NotFound("消息")
+		return store.InboxMessage{}, apperr.NotFound("Message")
 	}
 	if other.Kind == "platform" {
-		return store.InboxMessage{}, apperr.Forbidden("平台通知不接受回复")
+		return store.InboxMessage{}, apperr.Forbidden("Platform notifications do not accept replies.")
 	}
 	// In a thread started by a plugin, the Agent may ask questions and the plugin's reply answers them (SPEC §11); the
 	// plugin itself cannot ask questions.
 	if me.Kind == "plugin" && input.Options != nil {
-		return store.InboxMessage{}, apperr.Invalid("options", "插件不能发出问题")
+		return store.InboxMessage{}, apperr.Invalid("options", "Plugins cannot ask questions.")
 	}
 	channel, sender := pluginSide(orig)
 	thread := orig.ThreadID
@@ -498,7 +498,7 @@ func (s *Service) Query(unread bool, cursor string, limit int) (store.InboxListQ
 	case limit == 0:
 		limit = s.O.PageDefault
 	case limit < 0:
-		return store.InboxListQuery{}, apperr.Invalid("limit", "必须至少为 1")
+		return store.InboxListQuery{}, apperr.Invalid("limit", "Must be at least 1.")
 	case limit > s.O.PageMax:
 		limit = s.O.PageMax
 	}
@@ -566,7 +566,7 @@ func (s *Service) checkThread(ctx context.Context, p auth.Principal, threadID uu
 		return err
 	}
 	if me := Party(p); me != a && me != b {
-		return apperr.NotFound("线索")
+		return apperr.NotFound("Thread")
 	}
 	return nil
 }
@@ -657,7 +657,7 @@ func (s *Service) AgentInboxMessage(ctx context.Context, agentID, messageID uuid
 		return m, err
 	}
 	if m.To.Party != store.AgentParty(agentID) {
-		return store.InboxMessage{}, apperr.NotFound("消息")
+		return store.InboxMessage{}, apperr.NotFound("Message")
 	}
 	return m, nil
 }
@@ -670,7 +670,7 @@ func (s *Service) IdentityInbox(ctx context.Context, identityID uuid.UUID, direc
 		direction = "all"
 	case "all", "received", "sent":
 	default:
-		return store.InboxPage{}, apperr.Invalid("direction", "只能是 received、sent 或 all")
+		return store.InboxPage{}, apperr.Invalid("direction", "Must be received, sent or all.")
 	}
 	if _, err := s.St.GetExternalIdentity(ctx, identityID); err != nil {
 		return store.InboxPage{}, err
@@ -688,7 +688,7 @@ func (s *Service) IdentityInboxMessage(ctx context.Context, identityID, messageI
 		return m, err
 	}
 	if p := store.IdentityParty(identityID); m.To.Party != p && m.From.Party != p {
-		return store.InboxMessage{}, apperr.NotFound("消息")
+		return store.InboxMessage{}, apperr.NotFound("Message")
 	}
 	return m, nil
 }
@@ -751,7 +751,7 @@ func (s *Service) Snapshot(ctx context.Context) (apitypes.SseInboxSnapshot, stri
 		return err
 	})
 	if err != nil {
-		return snap, "", errors.Join(errors.New("读取收件箱快照失败"), err)
+		return snap, "", errors.Join(errors.New("read the Inbox snapshot"), err)
 	}
 	return snap, last, nil
 }

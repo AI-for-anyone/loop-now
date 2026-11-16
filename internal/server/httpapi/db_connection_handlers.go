@@ -53,12 +53,12 @@ func (s *Server) deleteAgentDBConnections(w http.ResponseWriter, r *http.Request
 	q := r.URL.Query()
 	values := q["expectedConfigVersion"]
 	if len(q) != 1 || len(values) != 1 {
-		s.fail(w, r, apperr.Invalid("expectedConfigVersion", "须提供单个配置版本"))
+		s.fail(w, r, apperr.Invalid("expectedConfigVersion", "Must be given exactly once, as the only query parameter."))
 		return
 	}
 	expected, e := strconv.ParseInt(values[0], 10, 64)
 	if e != nil || expected < 1 {
-		s.fail(w, r, apperr.Invalid("expectedConfigVersion", "配置版本须为正整数"))
+		s.fail(w, r, apperr.Invalid("expectedConfigVersion", "Must be a positive integer."))
 		return
 	}
 	if !s.projectCredentialReady(w, r) {

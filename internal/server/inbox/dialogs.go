@@ -130,11 +130,11 @@ func dialogQuestion(d Dialog) (string, []string, bool) {
 		}
 	}
 	if len(lines) == 0 {
-		lines = append(lines, "扩展请求"+map[string]string{"confirm": "确认", "select": "选择", "input": "输入"}[d.Method])
+		lines = append(lines, "Extension request: "+map[string]string{"confirm": "confirmation", "select": "selection", "input": "input"}[d.Method])
 	}
 	switch d.Method {
 	case "confirm":
-		return strings.Join(lines, "\n"), []string{"是", "否"}, true
+		return strings.Join(lines, "\n"), []string{"Yes", "No"}, true
 	case "select":
 		if len(d.Options) == 0 || len(d.Options) > 10 {
 			return "", nil, false
@@ -144,13 +144,13 @@ func dialogQuestion(d Dialog) (string, []string, bool) {
 		for i, o := range d.Options {
 			label := strings.TrimSpace(o)
 			if label == "" {
-				label = "（空）"
+				label = "(empty)"
 			}
 			if utf8.RuneCountInString(label) > 50 {
 				label = string([]rune(label)[:49]) + "…"
 			}
 			for n := 2; seen[label]; n++ {
-				suffix := fmt.Sprintf("（%d）", n)
+				suffix := fmt.Sprintf(" (%d)", n)
 				base := []rune(label)
 				if len(base)+utf8.RuneCountInString(suffix) > 50 {
 					base = base[:50-utf8.RuneCountInString(suffix)]
@@ -162,11 +162,11 @@ func dialogQuestion(d Dialog) (string, []string, bool) {
 		}
 		return strings.Join(lines, "\n"), options, true
 	case "input":
-		hint := "直接回复文字作答"
+		hint := "Reply with text to answer"
 		if strings.TrimSpace(d.Placeholder) != "" {
-			hint += "（" + d.Placeholder + "）"
+			hint += " (" + d.Placeholder + ")"
 		}
-		return strings.Join(append(lines, hint), "\n"), []string{"取消"}, true
+		return strings.Join(append(lines, hint), "\n"), []string{"Cancel"}, true
 	}
 	return "", nil, false
 }

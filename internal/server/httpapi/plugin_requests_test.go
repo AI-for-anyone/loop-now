@@ -127,7 +127,7 @@ func TestPluginActions(t *testing.T) {
 
 	journal := e.startFakeHost("bridge")
 	res := decode[map[string]any](t, e.expect(200, "POST", "/plugins/bridge/actions/resend", act(onAgent, map[string]any{"note": "再发一次"})))
-	if res["notice"] != "已执行 resend" || res["url"] != "https://example.test/resend" {
+	if res["notice"] != "Ran resend" || res["url"] != "https://example.test/resend" {
 		t.Fatalf("操作结果：%v", res)
 	}
 	got := journalEntries(t, journal, "action")
@@ -382,10 +382,10 @@ func TestPluginAccountsList(t *testing.T) {
 		t.Fatalf("按添加先后，values 含 secret 字段：%v", list)
 	}
 	for _, c := range []struct{ plugin, project, kind, want string }{
-		{"bridge", other.ID.String(), "mail", "插件没有在这个项目里启用"},
-		{"bridge", project, "sms", "清单没有声明账号种类 sms"},
-		{"bridge", "x", "mail", "projectId 无效"},
-		{"plain", project, "mail", "清单没有声明 accounts.read 权限"},
+		{"bridge", other.ID.String(), "mail", "the plugin is not enabled in this project"},
+		{"bridge", project, "sms", "the manifest does not declare account kind sms"},
+		{"bridge", "x", "mail", "projectId is invalid"},
+		{"plain", project, "mail", "the manifest does not declare the accounts.read permission"},
 	} {
 		if got := ask(c.plugin, c.project, c.kind); got["ok"] != false || got["error"] != c.want {
 			t.Fatalf("%+v：%v", c, got)

@@ -20,10 +20,10 @@ func (s *Server) imageIDs(raw json.RawMessage) ([]uuid.UUID, error) {
 		return ids, nil
 	}
 	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) || json.Unmarshal(raw, &ids) != nil {
-		return nil, apperr.Invalid("imageIds", "须为图片ID数组")
+		return nil, apperr.Invalid("imageIds", "Must be an array of image IDs.")
 	}
 	if len(ids) > s.O.Limits.MaxMessageImages {
-		return nil, apperr.TooLarge("图片数量超限")
+		return nil, apperr.TooLarge("Too many images.")
 	}
 	return ids, nil
 }
@@ -41,16 +41,16 @@ func (s *Server) imageModel(ctx context.Context, owner store.ImageOwner) error {
 			return e
 		}
 		if inst.TaskID != owner.TaskID || inst.AgentID != owner.AgentID {
-			return apperr.NotFound("任务实例")
+			return apperr.NotFound("Task instance")
 		}
 		snap, e := taskruntime.Decode(inst.Snapshot)
 		if e != nil {
-			return apperr.Invalid("images", "任务配置不可用")
+			return apperr.Invalid("images", "The task instance's configuration is unavailable, so image support cannot be checked.")
 		}
 		provider, model = snap.Configuration().Provider, snap.Configuration().ModelID
 	}
 	if !s.Models.SupportsImages(provider, model) {
-		return apperr.Invalid("imageIds", "选定模型不支持图片，未发送消息；请明确选择支持图片的模型")
+		return apperr.Invalid("imageIds", "The selected model does not support images, so the message was not sent. Choose a model that supports images.")
 	}
 	return nil
 }
@@ -61,7 +61,7 @@ func (s *Server) uploadMessageImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if id == uuid.Nil {
-		s.fail(w, r, apperr.Invalid("imageId", "图片ID不得为空"))
+		s.fail(w, r, apperr.Invalid("imageId", "Must not be the zero UUID."))
 		return
 	}
 	owner := store.ImageOwner{}
@@ -85,7 +85,7 @@ func (s *Server) uploadMessageImage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !cap.CanSend {
-			s.fail(w, r, apperr.Conflict(apperr.CodeTaskConflict, "原节点当前不能接收图片；保留原草稿"))
+			s.fail(w, r, apperr.Conflict(apperr.CodeTaskConflict, "The node cannot receive images right now. Keep your draft and try again later."))
 			return
 		}
 		owner = store.ImageOwner{AgentID: cap.AgentID, TaskID: task, NodeRunID: node, RuntimeID: cap.RuntimeID}
@@ -102,12 +102,12 @@ func (s *Server) uploadMessageImage(w http.ResponseWriter, r *http.Request) {
 	}
 	mimeType, _, e := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if e != nil {
-		s.fail(w, r, apperr.Invalid("Content-Type", "图片类型无效"))
+		s.fail(w, r, apperr.Invalid("Content-Type", "Must be a valid image media type, such as image/png."))
 		return
 	}
 	data, e := io.ReadAll(http.MaxBytesReader(w, r.Body, s.O.Limits.MaxMessageImageBytes))
 	if e != nil {
-		s.fail(w, r, apperr.TooLarge("图片字节超限"))
+		s.fail(w, r, apperr.TooLarge("The image exceeds the size limit."))
 		return
 	}
 	ref, e := messageimage.Inspect(data, mimeType, s.O.Limits.MaxMessageImageBytes, s.O.Limits.MaxMessageImagePixels)
@@ -134,7 +134,7 @@ func (s *Server) getMessageImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if v.ConversationID == nil && v.InboxID == nil {
-		s.fail(w, r, apperr.NotFound("图片"))
+		s.fail(w, r, apperr.NotFound("Image"))
 		return
 	}
 	if v.TaskID == uuid.Nil {
@@ -159,7 +159,7 @@ func (s *Server) getMessageImage(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if !found {
-			s.fail(w, r, apperr.NotFound("图片"))
+			s.fail(w, r, apperr.NotFound("Image"))
 			return
 		}
 	}

@@ -45,7 +45,7 @@ func (s *Server) listFolder(of folderOf) http.HandlerFunc {
 		limit := 0
 		if v := q.Get("limit"); v != "" {
 			if limit, err = strconv.Atoi(v); err != nil || limit < 1 || limit > folders.MaxPageSize {
-				s.fail(w, r, apperr.Invalid("limit", "须为 1 到 2000"))
+				s.fail(w, r, apperr.Invalid("limit", "Must be an integer between 1 and 2000."))
 				return
 			}
 		}
@@ -87,12 +87,12 @@ func (s *Server) putFolderFile(of folderOf) http.HandlerFunc {
 		create := false
 		if v := r.URL.Query().Get("create"); v != "" {
 			if create, err = strconv.ParseBool(v); err != nil {
-				s.fail(w, r, apperr.Invalid("create", "只能是 true 或 false"))
+				s.fail(w, r, apperr.Invalid("create", "Must be true or false."))
 				return
 			}
 		}
 		if r.ContentLength > s.O.Limits.MaxFolderUpload {
-			s.fail(w, r, apperr.TooLarge("文件超过上传上限"))
+			s.fail(w, r, apperr.TooLarge("The file exceeds the upload size limit."))
 			return
 		}
 		e, err := f.Write(r.URL.Query().Get("path"), r.Body, s.O.Limits.MaxFolderUpload, create)
@@ -211,7 +211,7 @@ func (s *Server) listGitPulls(w http.ResponseWriter, r *http.Request) {
 	limit := 20
 	if v := r.URL.Query().Get("limit"); v != "" {
 		if limit, err = strconv.Atoi(v); err != nil || limit < 1 || limit > 100 {
-			s.fail(w, r, apperr.Invalid("limit", "须为 1 到 100"))
+			s.fail(w, r, apperr.Invalid("limit", "Must be an integer between 1 and 100."))
 			return
 		}
 	}

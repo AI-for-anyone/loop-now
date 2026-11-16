@@ -401,7 +401,7 @@ func (s *Server) checkHost(next http.Handler) http.Handler {
 		}
 		host = strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(host, "["), "]"))
 		if !slices.Contains(s.O.AllowedHosts, host) {
-			writeError(w, &apperr.Error{Status: http.StatusForbidden, Code: apperr.CodeInvalidHost, Message: "Host 不在允许名单中"})
+			writeError(w, &apperr.Error{Status: http.StatusForbidden, Code: apperr.CodeInvalidHost, Message: "The request's Host is not allowed. Add it to LOOP_NOW_ALLOWED_HOSTS on the server."})
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -417,7 +417,7 @@ func (s *Server) cors(next http.Handler) http.Handler {
 		origin := r.Header.Get("Origin")
 		if origin != "" && !sameOrigin(r, origin) {
 			if !slices.Contains(s.O.ConsoleOrigins, origin) {
-				writeError(w, &apperr.Error{Status: http.StatusForbidden, Code: apperr.CodeForbiddenOrigin, Message: "来源不在控制台白名单中"})
+				writeError(w, &apperr.Error{Status: http.StatusForbidden, Code: apperr.CodeForbiddenOrigin, Message: "The request's Origin is not an allowed console origin. Add it to LOOP_NOW_CONSOLE_ORIGINS on the server."})
 				return
 			}
 			h := w.Header()
@@ -494,9 +494,9 @@ func writeError(w http.ResponseWriter, err error) {
 	if !ok {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			e = apperr.TooLarge("请求体超过上限")
+			e = apperr.TooLarge("The request body exceeds the size limit.")
 		} else {
-			e = &apperr.Error{Status: http.StatusInternalServerError, Code: apperr.CodeInternal, Message: "服务端内部错误"}
+			e = &apperr.Error{Status: http.StatusInternalServerError, Code: apperr.CodeInternal, Message: "Internal server error."}
 		}
 	}
 	body := apitypes.ErrorBody{Error: apitypes.ErrorDetail{Code: e.Code, Message: e.Message, Details: e.Details}}
@@ -525,12 +525,12 @@ func readJSON(w http.ResponseWriter, r *http.Request, limit int64, v any) error 
 	if err := dec.Decode(v); err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			return apperr.TooLarge("请求体超过上限")
+			return apperr.TooLarge("The request body exceeds the size limit.")
 		}
-		return apperr.Invalid("body", "请求体不是合法的 JSON 或包含未知字段："+err.Error())
+		return apperr.Invalid("body", "The request body is not valid JSON or contains unknown fields: "+err.Error())
 	}
 	if dec.More() {
-		return apperr.Invalid("body", "请求体只能包含一个 JSON 对象")
+		return apperr.Invalid("body", "The request body must contain a single JSON object.")
 	}
 	return nil
 }
@@ -540,7 +540,7 @@ func readBody(w http.ResponseWriter, r *http.Request, limit int64) ([]byte, erro
 	if err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			return nil, apperr.TooLarge("请求体超过上限")
+			return nil, apperr.TooLarge("The request body exceeds the size limit.")
 		}
 		return nil, err
 	}
@@ -550,7 +550,7 @@ func readBody(w http.ResponseWriter, r *http.Request, limit int64) ([]byte, erro
 func pathUUID(r *http.Request, name string) (uuid.UUID, error) {
 	id, err := uuid.Parse(r.PathValue(name))
 	if err != nil {
-		return uuid.Nil, apperr.NotFound("资源") // a malformed ID cannot match any resource
+		return uuid.Nil, apperr.NotFound("Resource") // a malformed ID cannot match any resource
 	}
 	return id, nil
 }

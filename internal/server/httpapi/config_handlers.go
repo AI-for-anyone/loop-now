@@ -58,7 +58,7 @@ func (s *Server) listModelProviders(w http.ResponseWriter, r *http.Request) {
 	if raw := r.URL.Query().Get("agentId"); raw != "" {
 		id, err := uuid.Parse(raw)
 		if err != nil || id == uuid.Nil {
-			s.fail(w, r, apperr.Invalid("agentId", "须为有效UUID"))
+			s.fail(w, r, apperr.Invalid("agentId", "Must be a valid non-zero UUID."))
 			return
 		}
 		if _, err := s.Store.GetAgent(r.Context(), id); err != nil {
@@ -119,7 +119,7 @@ func (s *Server) listModelProviders(w http.ResponseWriter, r *http.Request) {
 func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.Models.Provider(r.PathValue("providerId"))
 	if !ok {
-		writeError(w, apperr.NotFound("提供方"))
+		writeError(w, apperr.NotFound("Model provider"))
 		return
 	}
 	out := apitypes.ModelList{ProviderID: p.ID, Models: []apitypes.Model{}}
@@ -200,14 +200,14 @@ func (s *Server) updateAgent(w http.ResponseWriter, r *http.Request) {
 	if len(in.ThinkingLevel) > 0 {
 		p.ThinkingLevelSet = true
 		if err := json.Unmarshal(in.ThinkingLevel, &p.ThinkingLevel); err != nil {
-			s.fail(w, r, apperr.Invalid("thinkingLevel", "须为合法思考等级或null"))
+			s.fail(w, r, apperr.Invalid("thinkingLevel", "Must be a thinking level string or null."))
 			return
 		}
 	}
 	if len(in.ServiceTier) > 0 {
 		p.ServiceTierSet = true
 		if err := json.Unmarshal(in.ServiceTier, &p.ServiceTier); err != nil {
-			s.fail(w, r, apperr.Invalid("serviceTier", "须为速度档位或null"))
+			s.fail(w, r, apperr.Invalid("serviceTier", "Must be a service tier string or null."))
 			return
 		}
 	}
@@ -307,7 +307,7 @@ func (s *Server) putModelCredential(w http.ResponseWriter, r *http.Request) {
 	}
 	writer, ok := s.ModelAuth.(modelauth.KeyController)
 	if !ok {
-		writeError(w, &apperr.Error{Status: 503, Code: apperr.CodeInternal, Message: "模型账号认证组件尚未装配"})
+		writeError(w, &apperr.Error{Status: 503, Code: apperr.CodeInternal, Message: "The model login component is not set up on this server."})
 		return
 	}
 	v, err := writer.PutKey(r.Context(), id, in)
@@ -323,7 +323,7 @@ func (s *Server) deleteModelCredential(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		writer, ok := s.ModelAuth.(modelauth.KeyController)
 		if !ok {
-			writeError(w, &apperr.Error{Status: 503, Code: apperr.CodeInternal, Message: "模型账号认证组件尚未装配"})
+			writeError(w, &apperr.Error{Status: 503, Code: apperr.CodeInternal, Message: "The model login component is not set up on this server."})
 			return
 		}
 		err = writer.Clear(r.Context(), id)
@@ -356,13 +356,13 @@ func (s *Server) readArchive(w http.ResponseWriter, r *http.Request) ([]byte, er
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			return nil, apperr.TooLarge("压缩包超过上限")
+			return nil, apperr.TooLarge("The archive exceeds the size limit.")
 		}
-		return nil, apperr.Invalid("archive", "需要 multipart/form-data 中名为 archive 的 zip 文件")
+		return nil, apperr.Invalid("archive", "Upload a zip file in a multipart/form-data field named archive.")
 	}
 	f, _, err := r.FormFile("archive")
 	if err != nil {
-		return nil, apperr.Invalid("archive", "缺少名为 archive 的文件")
+		return nil, apperr.Invalid("archive", "No file was uploaded in the archive field.")
 	}
 	defer f.Close()
 	return io.ReadAll(f)

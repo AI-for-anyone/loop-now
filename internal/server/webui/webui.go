@@ -31,11 +31,11 @@ func Handler(fsys fs.FS) http.Handler {
 		h.Set("X-Frame-Options", "DENY")
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			h.Set("Allow", "GET, HEAD")
-			http.Error(w, "只支持 GET 与 HEAD", http.StatusMethodNotAllowed)
+			http.Error(w, "Only GET and HEAD are supported.", http.StatusMethodNotAllowed)
 			return
 		}
 		if fsys == nil {
-			http.Error(w, "这个服务端没有内嵌控制台：用带 embedweb 标签的构建，或用 LOOP_NOW_WEB_DIR 指定控制台目录", http.StatusNotFound)
+			http.Error(w, "This server has no embedded console. Build it with the embedweb tag, or set LOOP_NOW_WEB_DIR to the console directory.", http.StatusNotFound)
 			return
 		}
 		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
@@ -51,7 +51,7 @@ func Handler(fsys fs.FS) http.Handler {
 		default:
 			name = "index.html"
 			if data, err = readFile(fsys, name); err != nil {
-				http.Error(w, "控制台目录里没有 index.html", http.StatusNotFound)
+				http.Error(w, "The console directory has no index.html.", http.StatusNotFound)
 				return
 			}
 		}
@@ -78,7 +78,7 @@ func readFile(fsys fs.FS, name string) ([]byte, error) {
 	if st, err := f.Stat(); err != nil {
 		return nil, err
 	} else if st.IsDir() {
-		return nil, errors.New("是目录")
+		return nil, errors.New("is a directory")
 	}
 	return io.ReadAll(f)
 }

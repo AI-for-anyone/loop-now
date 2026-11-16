@@ -159,7 +159,7 @@ func TestInboxAddressing(t *testing.T) {
 	waitIdle(t, e, a)
 
 	m := sendInbox(con, "默认项目/开发助手", "你好")
-	if m.From.Kind != "console" || strOf(m.From.Address) != "@console" || m.From.Name != "控制台" || m.From.ID != nil {
+	if m.From.Kind != "console" || strOf(m.From.Address) != "@console" || m.From.Name != "Console" || m.From.ID != nil {
 		t.Fatalf("发件人应为控制台操作者：%+v", m.From)
 	}
 	if m.To.Kind != "agent" || strOf(m.To.Address) != "默认组织/默认项目/开发助手" || *m.To.ID != dev.ID || m.ThreadID != m.ID || m.InReplyTo != nil {
@@ -490,7 +490,7 @@ func TestInboxThreadsAndViews(t *testing.T) {
 		t.Fatalf("已删除的身份应带删除时间：%+v", gone)
 	}
 	after := decode[apitypes.InboxMessagePage](t, e.expect(200, "GET", "/external-identities/"+ci.ID.String()+"/inbox", nil))
-	if len(after.Messages) != 2 || !after.Messages[0].From.Deleted || after.Messages[0].From.Name != "已删除身份" ||
+	if len(after.Messages) != 2 || !after.Messages[0].From.Deleted || after.Messages[0].From.Name != "Deleted identity" ||
 		strOf(after.Messages[0].From.Address) != "@ci-bot" || *after.Messages[0].From.ID != ci.ID {
 		t.Fatalf("删除后的历史消息：%+v", after.Messages[0].From)
 	}

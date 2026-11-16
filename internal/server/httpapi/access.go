@@ -40,7 +40,7 @@ func (s *Server) newMux(prefix string, routes []Route) *http.ServeMux {
 // unknownEndpoint is the 404 for a request that matches no endpoint. Its details (reason unknown_endpoint) let clients
 // tell an unsupported endpoint from a missing resource without reading the message.
 func unknownEndpoint() error {
-	e := apperr.NotFound("接口")
+	e := apperr.NotFound("Endpoint")
 	e.Details = apitypes.NotFoundDetails{Reason: apitypes.NotFoundUnknownEndpoint}
 	return e
 }
@@ -66,7 +66,7 @@ func (s *Server) ExternalHandler(downloads http.Handler) http.Handler {
 }
 
 func unauthenticated() error {
-	return apperr.Unauthenticated("令牌缺失、无效、已过期或已吊销")
+	return apperr.Unauthenticated("The token is missing, invalid, expired or revoked.")
 }
 
 // externalAuth verifies an external token and sets the request identity to the external identity the token belongs to.
@@ -86,7 +86,7 @@ func (s *Server) externalAuth(next http.Handler) http.Handler {
 func (s *Server) agentAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Origin") != "" {
-			writeError(w, &apperr.Error{Status: http.StatusForbidden, Code: apperr.CodeForbiddenOrigin, Message: "Agent 接口不接受带 Origin 的请求"})
+			writeError(w, &apperr.Error{Status: http.StatusForbidden, Code: apperr.CodeForbiddenOrigin, Message: "The Agent API does not accept requests with an Origin header."})
 			return
 		}
 		p, err := s.authenticate(r, auth.AgentPrefix)
@@ -155,7 +155,7 @@ func (s *Server) guard(rt Route) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		p, _ := auth.From(r.Context())
 		if p.Kind == auth.KindExternal && rt.Access != ConsoleAndExternal {
-			writeError(w, apperr.Forbidden("外部身份不能使用这个接口"))
+			writeError(w, apperr.Forbidden("External identities cannot use this endpoint. It is available to the console only."))
 			return
 		}
 		if p.Kind == auth.KindPlugin {

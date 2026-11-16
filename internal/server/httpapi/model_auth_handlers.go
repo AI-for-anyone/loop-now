@@ -12,7 +12,7 @@ func (s *Server) modelAuthReady(w http.ResponseWriter, r *http.Request) bool {
 	if s.ModelAuth != nil {
 		return true
 	}
-	writeError(w, &apperr.Error{Status: http.StatusServiceUnavailable, Code: apperr.CodeInternal, Message: "模型账号认证组件尚未装配"})
+	writeError(w, &apperr.Error{Status: http.StatusServiceUnavailable, Code: apperr.CodeInternal, Message: "The model login component is not set up on this server."})
 	return false
 }
 func (s *Server) getModelAuthState(w http.ResponseWriter, r *http.Request) {
@@ -45,11 +45,11 @@ func (s *Server) startModelAuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if input.Provider == "" || len(input.Provider) > 64 {
-		s.fail(w, r, apperr.Invalid("provider", "须给出 Agent 当前的模型提供方"))
+		s.fail(w, r, apperr.Invalid("provider", "Must be the Agent's current model provider, at most 64 bytes."))
 		return
 	}
 	if input.ExpectedConfigVersion < 1 {
-		s.fail(w, r, apperr.Invalid("expectedConfigVersion", "须提供已保存的配置版本"))
+		s.fail(w, r, apperr.Invalid("expectedConfigVersion", "Must be the Agent's saved config version (at least 1)."))
 		return
 	}
 	if !s.modelAuthReady(w, r) {
@@ -58,7 +58,7 @@ func (s *Server) startModelAuthLogin(w http.ResponseWriter, r *http.Request) {
 	view, e := s.ModelAuth.Start(r.Context(), id, input)
 	if e != nil {
 		if errors.Is(e, modelauth.ErrHelperUnavailable) {
-			e = &apperr.Error{Status: http.StatusServiceUnavailable, Code: apperr.CodeInternal, Message: "模型账号认证组件暂不可用"}
+			e = &apperr.Error{Status: http.StatusServiceUnavailable, Code: apperr.CodeInternal, Message: "The model login component is not available right now. Try again later."}
 		}
 		s.fail(w, r, e)
 		return
@@ -137,7 +137,7 @@ func (s *Server) answerModelAuthLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { in.Value = "" }()
 	if in.PromptID == "" {
-		s.fail(w, r, apperr.Invalid("promptId", "须给出问题 ID"))
+		s.fail(w, r, apperr.Invalid("promptId", "Give the ID of the login prompt you are answering."))
 		return
 	}
 	if !s.modelAuthReady(w, r) {
