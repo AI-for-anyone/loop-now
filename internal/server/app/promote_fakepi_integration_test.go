@@ -109,7 +109,8 @@ func TestPromoteToInterruptActualAppFakePi(t *testing.T) {
 		}
 		return decode[apitypes.SendMessageResult](t, s.must(202, "POST", path+"/messages", body)).Run
 	}
-	// 当前回复不理会中止，执行器在 AbortTimeout 后强制结束：留出观察排队的窗口。
+	// The current reply ignores the abort and the executor kills it after AbortTimeout: this leaves a window for
+	// observing the queue.
 	first := send("!sleep=30s !noabort !text=first", "")
 	waitFor(t, "第一条进入运行", func() bool {
 		r, e := s.a.Store.GetRun(ctx, first.ID)

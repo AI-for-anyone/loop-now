@@ -23,9 +23,11 @@ type ProjectService struct {
 	Templates       *clitemplate.Catalog
 	MaxCredential   int64
 	CancelCLILogins func(context.Context, uuid.UUID, *uuid.UUID) error
-	// Plugins 支持插件提供方的订阅登录（plugins/SPEC.md §13）；为空时只支持 Codex。
+	// Plugins supports subscription logins for plugin providers (plugins/SPEC.md §13); when nil, only Codex is
+	// supported.
 	Plugins *PluginLogins
-	// LocalLogin 报告开着“用本机的登录状态”时插件提供方用的本机登录：nil 表示不适用，否则 active 或 missing。
+	// LocalLogin reports the local login a plugin provider uses while "Use local logins" is on: nil means not
+	// applicable, otherwise active or missing.
 	LocalLogin func(ctx context.Context, provider string) (*string, error)
 }
 

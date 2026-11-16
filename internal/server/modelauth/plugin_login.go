@@ -16,15 +16,17 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// 插件提供方的项目登录（plugins/SPEC.md §13）。账号就是项目模型账号；一次成功登录产生一个模型认证版本，
-// 它的“凭证”只记下插件（modelcredential.PluginState），令牌与扩展的状态在以版本 ID 命名的状态目录里。
+// Project logins for plugin providers (plugins/SPEC.md §13). The account is the project model account; each successful
+// login creates one model auth version whose "credential" records only the plugin (modelcredential.PluginState); the
+// tokens and the extension's state live in the state directory named after the version ID.
 
 // PluginLogins is what plugin-provider logins need, shared by project accounts and platform Agents' own logins.
 // Without it only Codex logins are supported.
 type PluginLogins struct {
 	Helper PluginLoginHelper
 	States *providerstate.Manager
-	// Extensions 返回插件当前版本 Pi 扩展的绝对路径；插件不存在时返回 not_found。
+	// Extensions returns the absolute paths of the Pi extensions of the plugin's current version; returns not_found
+	// when the plugin does not exist.
 	Extensions func(ctx context.Context, plugin string) ([]string, error)
 
 	mu  sync.Mutex
@@ -124,7 +126,7 @@ func pluginLoginFailure(ctx context.Context, err error) (status, code string) {
 	return status, code
 }
 
-// pluginProvider 返回注册了 provider 的插件；不是带 OAuth 的插件提供方时 ok 为 false。
+// pluginProvider returns the plugin that registered provider; ok is false when it is not a plugin provider with OAuth.
 func (s *Service) pluginProvider(provider string) (string, bool) {
 	if s.Models == nil {
 		return "", false
@@ -144,7 +146,7 @@ func (p *ProjectService) pluginState(id uuid.UUID) *pluginLoginState {
 	return p.Plugins.state(id)
 }
 
-// withPrompt 给进行中的插件登录操作带上等人回答的问题。
+// withPrompt attaches the question waiting for a person's answer to an in-progress plugin login operation.
 func (p *ProjectService) withPrompt(o cm.Operation) cm.Operation {
 	if terminal(o.Status) {
 		return o
@@ -160,7 +162,8 @@ func (p *ProjectService) withPrompt(o cm.Operation) cm.Operation {
 	return o
 }
 
-// checkPluginLogin 在开始插件提供方登录前检查插件可用：已装好登录组件、插件在这个项目里启用。
+// checkPluginLogin checks, before a plugin provider login starts, that the plugin can be used: the login components are
+// installed and the plugin is enabled in this project.
 func (p *ProjectService) checkPluginLogin(ctx context.Context, project uuid.UUID, plugin string) error {
 	if p.Plugins == nil || p.Plugins.Helper == nil || p.Plugins.States == nil || p.Plugins.Extensions == nil {
 		return ErrHelperUnavailable
@@ -220,7 +223,8 @@ func (u pluginUI) Prompt(q cm.LoginPrompt) { u.state.setPrompt(q) }
 
 func (u pluginUI) PromptClosed(id string) { u.state.closePrompt(id) }
 
-// pluginLogin 运行一次插件提供方登录：新状态目录 → 辅助进程登录 → 写 auth.json 并改名为正式目录 → 提交账号与版本。
+// pluginLogin runs one plugin provider login: new state directory -> helper process login -> write auth.json and rename
+// to the final directory -> commit the account and version.
 func (p *ProjectService) pluginLogin(ctx context.Context, op cm.Operation, work *loginWorker, plugin string) {
 	s := p.Auth
 	defer s.workers.Done()
@@ -275,7 +279,8 @@ func (p *ProjectService) pluginLogin(ctx context.Context, op cm.Operation, work 
 
 var errPluginUnavailable = errors.New("插件不可用")
 
-// publishPluginLogin 把登录成功的状态目录变成正式版本，与数据库提交在同一把锁下。
+// publishPluginLogin turns the state directory of a successful login into a final version, under the same lock as the
+// database commit.
 func (p *ProjectService) publishPluginLogin(op cm.Operation, plugin string, version uuid.UUID, entry []byte) error {
 	s := p.Auth
 	credential, err := modelcredential.PluginStateOf(plugin)
@@ -307,7 +312,8 @@ func (p *ProjectService) publishPluginLogin(op cm.Operation, plugin string, vers
 	return err
 }
 
-// Input 把人对登录中问题的回答交给辅助进程。只能回答当前正在等的那个问题；回答只在内存里转交，不保存、不记日志。
+// Input hands a person's answer to a login question to the helper process. Only the question currently being waited on
+// can be answered; the answer is passed on only in memory and is never saved or logged.
 func (p *ProjectService) Input(ctx context.Context, project, id uuid.UUID, in cm.LoginInput) (cm.LoginState, error) {
 	o, err := p.Auth.Store.GetProjectModelAuthOperation(ctx, project, id)
 	if err != nil {

@@ -18,7 +18,8 @@ type pausePromptCapture struct {
 	entered, release chan struct{}
 }
 
-// hook 在采集读 Agent 行之前停住：这时项目的提示词已经读过，采集所在的写事务还没结束。
+// hook pauses before the capture reads the Agent row: by then the project's prompt has been read, and the write
+// transaction the capture runs in has not finished.
 func (p *pausePromptCapture) hook(ctx context.Context, q string) {
 	if strings.Contains(q, "agents.prompt_version") && strings.Contains(q, "FROM agents WHERE id=$1") {
 		p.once.Do(func() {
@@ -64,7 +65,8 @@ func TestPromptCaptureProjectLockAndAccountCoherence(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
 	}
-	// 项目已读、Agent 未读，采集的写事务还开着：真实的项目 UPDATE 要等它结束。
+	// Project read, Agent not yet read, the capture's write transaction still open: a real project UPDATE has to wait
+	// for it to finish.
 	written := make(chan error, 1)
 	go func() {
 		_, err := e.st.Pool.Exec(ctx, `UPDATE projects SET prompt='project-B',prompt_version=prompt_version+1 WHERE id=$1`, project)

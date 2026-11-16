@@ -18,7 +18,8 @@ import (
 	"loop-now/internal/testutil/sqlitetest"
 )
 
-// platformPluginLogin 给平台 Agent 记下一次插件提供方登录（与登录成功时相同的数据库提交），并建好它的状态目录。
+// platformPluginLogin records one plugin provider login for a platform Agent (the same database commit as a successful
+// login) and creates its state directory.
 func platformPluginLogin(t *testing.T, st *store.Store, states *providerstate.Manager, agent store.Agent) uuid.UUID {
 	t.Helper()
 	ctx := context.Background()
@@ -48,8 +49,10 @@ func platformPluginLogin(t *testing.T, st *store.Store, states *providerstate.Ma
 	return version
 }
 
-// 平台 Agent 自己的插件提供方登录（plugins/SPEC.md §13）：清理器保留它当前版本的状态目录；卸载插件并删除数据时
-// 清掉这些提供方下的平台 Agent 登录（与清除凭证相同、通知 Agent 变了），别的提供方不动，之后旧目录由清理器删除。
+// A platform Agent's own plugin provider login (plugins/SPEC.md §13): the sweeper keeps the state directory of its
+// current version; uninstalling the plugin with data deletion clears the platform Agent logins under those providers
+// (same as clearing the credential, and notifies that the Agent changed) and leaves other providers alone; the sweeper
+// deletes the old directories afterwards.
 func TestPlatformProviderLoginsSweepAndUninstall(t *testing.T) {
 	ctx := context.Background()
 	st := sqlitetest.NewStore(t)

@@ -48,7 +48,8 @@ func names(p Page) []string {
 	return out
 }
 
-// 列表只列一层：目录在前、按名称排序、按游标分页；正在写入的临时文件不出现。
+// Listing covers only one level: directories first, sorted by name, paged by cursor; temporary files being written do
+// not appear.
 func TestListOneLevelDirsFirstWithCursor(t *testing.T) {
 	f := testFolder(t)
 	for _, p := range []string{"b.txt", "a.txt", "z/deep/x.txt", "m/y.txt", "c.txt"} {
@@ -95,7 +96,7 @@ func TestListOneLevelDirsFirstWithCursor(t *testing.T) {
 	}
 }
 
-// 一个目录里有大量条目时按页返回，不需要一次列完。
+// A directory with a great many entries is returned page by page, without listing it all at once.
 func TestListLargeDirectoryPages(t *testing.T) {
 	f := testFolder(t)
 	if err := os.MkdirAll(f.Dir, 0o700); err != nil {
@@ -116,7 +117,8 @@ func TestListLargeDirectoryPages(t *testing.T) {
 	}
 }
 
-// 写入：自动创建上级目录；create 时已存在冲突；覆盖保留权限；超限 413；目标是目录或软链接 422。
+// Write: parent directories are created automatically; with create, an existing file conflicts; overwriting keeps
+// permissions; over the limit is 413; a target that is a directory or a symlink is 422.
 func TestWriteCreateOverwriteAndLimits(t *testing.T) {
 	f := testFolder(t)
 	e := mustWrite(t, f, "a/b/c.txt", "v1")
@@ -161,7 +163,8 @@ func TestWriteCreateOverwriteAndLimits(t *testing.T) {
 	}
 }
 
-// 路径安全：.. 与绝对路径拒绝；指向文件夹之外的软链接不会被跟随；指向内部的软链接可以读。
+// Path safety: .. and absolute paths are rejected; symlinks pointing outside the folder are not followed; symlinks
+// pointing inside can be read.
 func TestPathSafetyAndSymlinks(t *testing.T) {
 	f := testFolder(t)
 	mustWrite(t, f, "docs/a.md", "inside")
@@ -224,7 +227,7 @@ func TestPathSafetyAndSymlinks(t *testing.T) {
 	}
 }
 
-// 新建目录、移动与删除。
+// Create directories, move and delete.
 func TestMkdirMoveDelete(t *testing.T) {
 	f := testFolder(t)
 	mustWrite(t, f, "a.txt", "a")
@@ -272,7 +275,8 @@ func TestMkdirMoveDelete(t *testing.T) {
 	t.Fatal("回收区应在后台清空")
 }
 
-// 复制文件夹：克隆后改动副本不影响原文件夹；保留软链接与权限；来源不存在时得到空目录；目标已存在报错。
+// Copying a folder: after the clone, changing the copy does not affect the original folder; symlinks and permissions
+// are kept; a missing source gives an empty directory; an existing target is an error.
 func TestCopyTreeCloneAndFallback(t *testing.T) {
 	for _, mode := range []string{"clonefile", "copy"} {
 		t.Run(mode, func(t *testing.T) {

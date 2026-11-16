@@ -12,13 +12,13 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// TemplateDetail 是模板详情。
+// TemplateDetail is the detail of a template.
 type TemplateDetail struct {
 	store.SkillTemplate
 	SkillMD string
 }
 
-// AgentSkillDetail 是副本详情。
+// AgentSkillDetail is the detail of a copy.
 type AgentSkillDetail struct {
 	store.AgentSkill
 	SkillMD string
@@ -41,7 +41,8 @@ func (s *Service) extractZip(data []byte) ([]content.File, content.SkillMeta, er
 	return files, meta, nil
 }
 
-// checkSkillName 拒绝内置 Skill 的名称：模板库与 Agent 的 Skill 副本都不能使用。
+// checkSkillName rejects the name of the built-in Skill: neither the template library nor an Agent's Skill copies may
+// use it.
 func checkSkillName(name string) error {
 	if name == guide.SkillName {
 		return apperr.Conflict(apperr.CodeNameConflict, guide.SkillName+" 是内置 Skill 的名称，不能使用")
@@ -70,12 +71,12 @@ func (s *Service) skillMD(ctx context.Context, files []store.SkillFile) (string,
 	return "", nil
 }
 
-// ListSkillTemplates 列出模板库。
+// ListSkillTemplates lists the template library.
 func (s *Service) ListSkillTemplates(ctx context.Context) ([]store.SkillTemplate, error) {
 	return s.Store.ListSkillTemplates(ctx)
 }
 
-// GetSkillTemplate 返回模板详情。
+// GetSkillTemplate returns the detail of a template.
 func (s *Service) GetSkillTemplate(ctx context.Context, id uuid.UUID) (TemplateDetail, error) {
 	t, err := s.Store.GetSkillTemplate(ctx, id)
 	if err != nil {
@@ -85,7 +86,7 @@ func (s *Service) GetSkillTemplate(ctx context.Context, id uuid.UUID) (TemplateD
 	return TemplateDetail{SkillTemplate: t, SkillMD: md}, err
 }
 
-// CreateSkillFromZip 用 zip 压缩包创建模板。
+// CreateSkillFromZip creates a template from a zip archive.
 func (s *Service) CreateSkillFromZip(ctx context.Context, data []byte) (TemplateDetail, error) {
 	files, meta, err := s.extractZip(data)
 	if err != nil {
@@ -98,7 +99,7 @@ func (s *Service) CreateSkillFromZip(ctx context.Context, data []byte) (Template
 	return s.GetSkillTemplate(ctx, t.ID)
 }
 
-// CreateSkillFromMarkdown 只用一份 SKILL.md 新建模板。
+// CreateSkillFromMarkdown creates a template from a single SKILL.md.
 func (s *Service) CreateSkillFromMarkdown(ctx context.Context, md string) (TemplateDetail, error) {
 	meta, err := s.parseMarkdown(md, "skillMd")
 	if err != nil {
@@ -111,7 +112,7 @@ func (s *Service) CreateSkillFromMarkdown(ctx context.Context, md string) (Templ
 	return s.GetSkillTemplate(ctx, t.ID)
 }
 
-// ReplaceSkillFromZip 用 zip 压缩包整体替换模板。
+// ReplaceSkillFromZip replaces a template entirely with a zip archive.
 func (s *Service) ReplaceSkillFromZip(ctx context.Context, id uuid.UUID, data []byte) (TemplateDetail, error) {
 	files, meta, err := s.extractZip(data)
 	if err != nil {
@@ -123,7 +124,7 @@ func (s *Service) ReplaceSkillFromZip(ctx context.Context, id uuid.UUID, data []
 	return s.GetSkillTemplate(ctx, id)
 }
 
-// UpdateSkillTemplateMarkdown 在线编辑模板的 SKILL.md。
+// UpdateSkillTemplateMarkdown edits a template's SKILL.md online.
 func (s *Service) UpdateSkillTemplateMarkdown(ctx context.Context, id uuid.UUID, md string) (TemplateDetail, error) {
 	meta, err := s.parseMarkdown(md, "content")
 	if err != nil {
@@ -135,17 +136,17 @@ func (s *Service) UpdateSkillTemplateMarkdown(ctx context.Context, id uuid.UUID,
 	return s.GetSkillTemplate(ctx, id)
 }
 
-// DeleteSkillTemplate 删除模板。
+// DeleteSkillTemplate deletes a template.
 func (s *Service) DeleteSkillTemplate(ctx context.Context, id uuid.UUID) error {
 	return s.Store.DeleteSkillTemplate(ctx, id)
 }
 
-// ListAgentSkills 列出 Agent 的副本。
+// ListAgentSkills lists the Agent's copies.
 func (s *Service) ListAgentSkills(ctx context.Context, agentID uuid.UUID) ([]store.AgentSkill, error) {
 	return s.Store.ListAgentSkills(ctx, agentID)
 }
 
-// GetAgentSkill 返回副本详情。
+// GetAgentSkill returns the detail of a copy.
 func (s *Service) GetAgentSkill(ctx context.Context, agentID, skillID uuid.UUID) (AgentSkillDetail, error) {
 	k, err := s.Store.GetAgentSkill(ctx, agentID, skillID)
 	if err != nil {
@@ -155,7 +156,7 @@ func (s *Service) GetAgentSkill(ctx context.Context, agentID, skillID uuid.UUID)
 	return AgentSkillDetail{AgentSkill: k, SkillMD: md}, err
 }
 
-// AddAgentSkill 把模板复制给 Agent。
+// AddAgentSkill copies a template to an Agent.
 func (s *Service) AddAgentSkill(ctx context.Context, agentID, templateID uuid.UUID) (AgentSkillDetail, error) {
 	k, err := s.Store.AddAgentSkill(ctx, agentID, templateID)
 	if err != nil {
@@ -164,7 +165,7 @@ func (s *Service) AddAgentSkill(ctx context.Context, agentID, templateID uuid.UU
 	return s.GetAgentSkill(ctx, agentID, k.ID)
 }
 
-// UpdateAgentSkillMarkdown 在线编辑副本的 SKILL.md。
+// UpdateAgentSkillMarkdown edits a copy's SKILL.md online.
 func (s *Service) UpdateAgentSkillMarkdown(ctx context.Context, agentID, skillID uuid.UUID, md string) (AgentSkillDetail, error) {
 	meta, err := s.parseMarkdown(md, "content")
 	if err != nil {
@@ -176,7 +177,7 @@ func (s *Service) UpdateAgentSkillMarkdown(ctx context.Context, agentID, skillID
 	return s.GetAgentSkill(ctx, agentID, skillID)
 }
 
-// RecopyAgentSkill 用来源模板的当前内容整体覆盖副本。
+// RecopyAgentSkill overwrites a copy entirely with the current content of its source template.
 func (s *Service) RecopyAgentSkill(ctx context.Context, agentID, skillID uuid.UUID) (AgentSkillDetail, error) {
 	if _, err := s.Store.RecopyAgentSkill(ctx, agentID, skillID); err != nil {
 		return AgentSkillDetail{}, err
@@ -184,7 +185,7 @@ func (s *Service) RecopyAgentSkill(ctx context.Context, agentID, skillID uuid.UU
 	return s.GetAgentSkill(ctx, agentID, skillID)
 }
 
-// RemoveAgentSkill 从 Agent 上移除副本。
+// RemoveAgentSkill removes a copy from an Agent.
 func (s *Service) RemoveAgentSkill(ctx context.Context, agentID, skillID uuid.UUID) error {
 	return s.Store.RemoveAgentSkill(ctx, agentID, skillID)
 }

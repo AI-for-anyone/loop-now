@@ -364,7 +364,7 @@ func (e *projectRefreshEnv) capture(t *testing.T) [2]modelcredential.Binding {
 		t.Fatal("normal capture failed", err)
 	}
 	out[0] = normal.ModelAuth.Clone()
-	// 与调用方相同：在一个写事务里读项目提示词并采集任务 Agent。
+	// Same as the caller: read the project prompt and capture the task Agents in one write transaction.
 	err = e.st.Pool.InTx(ctx, func(tx *db.Tx) error {
 		var prompt string
 		var version int64

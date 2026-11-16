@@ -6,14 +6,17 @@ import (
 	"loop-now/internal/server/agentruntime"
 )
 
-// SourceLocalCLI 是用户本机安装的 CLI 提供的模型：由对应的运行时执行，用 CLI 自己的登录，不需要账号。
+// SourceLocalCLI marks models provided by a CLI installed on the user's computer: they are run by the matching runtime,
+// use the CLI's own login, and need no account.
 const SourceLocalCLI = "local_cli"
 
-// claudeCodeEfforts 是 Claude Code 的 --effort 取值，直接作为这些模型的思考等级（没有 off 与 minimal）。
+// claudeCodeEfforts are Claude Code's --effort values, used directly as the thinking levels of these models (there is
+// no off or minimal).
 var claudeCodeEfforts = []string{"low", "medium", "high", "xhigh", "max"}
 
-// ClaudeCodeProvider 是 Claude Code 运行时的模型目录：模型 id 是 Claude Code 的别名，随 Claude Code 指向各系列最新的模型。
-// 上下文窗口与最大输出取随包 Pi 目录里 Claude 5 系列的值；默认等级 medium 与平台"未选时按 medium"一致。
+// ClaudeCodeProvider is the model catalog of the Claude Code runtime: model ids are Claude Code aliases, which follow
+// Claude Code to the latest model of each family. Context window and max output take the values of the Claude 5 family
+// in the bundled Pi catalog; the default level medium matches the platform's "medium when none is chosen" rule.
 func ClaudeCodeProvider() Provider {
 	model := func(id, name string) Model {
 		return Model{ID: id, Name: name, Reasoning: true, ThinkingLevels: slices.Clone(claudeCodeEfforts), DefaultThinkingLevel: "medium",
@@ -28,7 +31,8 @@ func ClaudeCodeProvider() Provider {
 		}}
 }
 
-// withLocal 返回 base 加上本机 CLI 的提供方（Claude Code）。本机提供方的 id 是保留的：base 里同 id 的（models.json 里自定义的）不发布。
+// withLocal returns base plus the providers of local CLIs (Claude Code). The ids of local providers are reserved:
+// providers in base with the same id (custom ones from models.json) are not published.
 func withLocal(base *Catalog) *Catalog {
 	if base == nil {
 		return nil

@@ -274,7 +274,8 @@ func TestCLIImportActualAppProjectDeleteCommitAndRollback(t *testing.T) {
 	}
 	id, r := start(p.ID)
 	other, neighbor := start(q.ID)
-	// 在提交时才失败：删除项目时插入一行指向不存在项目的记录，延迟外键在 COMMIT 时拒绝。
+	// Fail only at commit: deleting the project inserts a row referencing a nonexistent project, and the deferred
+	// foreign key rejects it at COMMIT.
 	for _, q := range []string{
 		`CREATE TABLE fail_import_project_delete(ref TEXT REFERENCES projects(id) DEFERRABLE INITIALLY DEFERRED)`,
 		`CREATE TRIGGER fail_import_project_delete AFTER UPDATE OF deleted_at ON projects WHEN NEW.deleted_at IS NOT NULL BEGIN INSERT INTO fail_import_project_delete VALUES('synthetic commit refusal'); END`,

@@ -55,7 +55,8 @@ type Selection struct {
 	ResolvedVersionID *uuid.UUID `json:"resolvedVersionId"`
 	Status            string     `json:"status"`
 	Candidates        []Account  `json:"candidates"`
-	// LocalLogin 只对插件提供方（声明了随账号走的状态路径）在开着“用本机的登录状态”时给出：active 或 missing。
+	// LocalLogin is given only for plugin providers (that declare state paths travelling with the account) while "Use
+	// local logins" is on: active or missing.
 	LocalLogin *string `json:"localLogin,omitempty"`
 }
 type Selections struct {
@@ -206,20 +207,22 @@ type Operation struct {
 	AuthorizationURL *string    `json:"authorizationUrl"`
 	ErrorCode        *string    `json:"errorCode"`
 	ErrorMessage     *string    `json:"errorMessage"`
-	// DeviceCode 与 Prompt 只有插件提供方的登录会有（plugins/SPEC.md §13）；终态时都为空。
+	// DeviceCode and Prompt exist only for plugin provider logins (plugins/SPEC.md §13); both are empty in a terminal
+	// state.
 	DeviceCode *DeviceCode  `json:"deviceCode"`
 	Prompt     *LoginPrompt `json:"prompt"`
 }
 
-// DeviceCode 是设备码登录给人看的验证码与验证地址。
+// DeviceCode is the verification code and verification URL shown to a person for a device code login.
 type DeviceCode struct {
 	UserCode        string     `json:"userCode"`
 	VerificationURI string     `json:"verificationUri"`
 	ExpiresAt       *time.Time `json:"expiresAt"`
 }
 
-// LoginPrompt 是登录过程中等人回答的一个问题：select 从 options 里选一个 id，text 与 manual_code 填文字
-// （manual_code 是浏览器回调到不了时手工粘贴的回调地址或授权码）。message 与 options 是扩展原文，按纯文本显示。
+// LoginPrompt is one question waiting for a person's answer during login: select picks one id from options, text and
+// manual_code take text (manual_code is the callback URL or authorization code pasted by hand when the browser callback
+// cannot get through). message and options are the extension's original text and are shown as plain text.
 type LoginPrompt struct {
 	ID      string              `json:"id"`
 	Kind    string              `json:"kind"`
@@ -227,13 +230,13 @@ type LoginPrompt struct {
 	Options []LoginPromptOption `json:"options"`
 }
 
-// LoginPromptOption 是 select 的一个选项。
+// LoginPromptOption is one option of a select.
 type LoginPromptOption struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
 }
 
-// LoginInput 是回答登录中的问题。
+// LoginInput answers a question during login.
 type LoginInput struct {
 	PromptID string `json:"promptId"`
 	Value    string `json:"value"`

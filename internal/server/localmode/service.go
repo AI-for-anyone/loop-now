@@ -10,25 +10,27 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// Service 读写本机模式的开关与本机目录清单，并给出启动 Pi 时生效的部分。
+// Service reads and writes the local mode switches and the lists of local directories, and returns the part that takes
+// effect when Pi starts.
 type Service struct {
 	Store *store.Store
 }
 
-// DirectoryView 是读回的一项，带服务端此刻 stat 的状态。
+// DirectoryView is one entry as read back, with the status the server stats right now.
 type DirectoryView struct {
 	Path   string  `json:"path"`
 	Note   *string `json:"note"`
 	Status string  `json:"status"`
 }
 
-// ProjectDirectories 是项目的清单（api/openapi.yaml 的 ProjectLocalDirectories）。
+// ProjectDirectories is a project's list (ProjectLocalDirectories in api/openapi.yaml).
 type ProjectDirectories struct {
 	Revision    int64           `json:"revision"`
 	Directories []DirectoryView `json:"directories"`
 }
 
-// AgentDirectories 是 Agent 自己的清单与继承自项目的条目（api/openapi.yaml 的 AgentLocalDirectories）。
+// AgentDirectories is an Agent's own list plus the entries inherited from the project (AgentLocalDirectories in
+// api/openapi.yaml).
 type AgentDirectories struct {
 	Revision    int64           `json:"revision"`
 	Directories []DirectoryView `json:"directories"`
@@ -36,13 +38,13 @@ type AgentDirectories struct {
 	Inherited   []DirectoryView `json:"inherited"`
 }
 
-// PutInput 是整体替换一份清单的请求（api/openapi.yaml 的 LocalDirectoriesPut）。
+// PutInput is a request that replaces a whole list (LocalDirectoriesPut in api/openapi.yaml).
 type PutInput struct {
 	ExpectedRevision *int64           `json:"expectedRevision"`
 	Directories      []DirectoryInput `json:"directories"`
 }
 
-// SettingsPatch 是修改开关的请求（api/openapi.yaml 的 LocalModeSettingsPatch）。
+// SettingsPatch is a request that changes switches (LocalModeSettingsPatch in api/openapi.yaml).
 type SettingsPatch struct {
 	Directories *bool `json:"directories"`
 	Git         *bool `json:"git"`
@@ -50,12 +52,12 @@ type SettingsPatch struct {
 	Logins      *bool `json:"logins"`
 }
 
-// Settings 读取开关。
+// Settings reads the switches.
 func (s *Service) Settings(ctx context.Context) (store.LocalModeSettings, error) {
 	return s.Store.GetLocalModeSettings(ctx)
 }
 
-// UpdateSettings 只改请求里带的开关，至少要带一个。
+// UpdateSettings changes only the switches present in the request; at least one is required.
 func (s *Service) UpdateSettings(ctx context.Context, p SettingsPatch) (store.LocalModeSettings, error) {
 	if p.Directories == nil && p.Git == nil && p.CLI == nil && p.Logins == nil {
 		return store.LocalModeSettings{}, apperr.Invalid("body", "至少修改 directories、git、cli、logins 中的一项")
@@ -63,7 +65,7 @@ func (s *Service) UpdateSettings(ctx context.Context, p SettingsPatch) (store.Lo
 	return s.Store.UpdateLocalModeSettings(ctx, store.LocalModeSettingsPatch{Directories: p.Directories, Git: p.Git, CLI: p.CLI, Logins: p.Logins})
 }
 
-// ProjectDirectories 返回未删除项目的清单。
+// ProjectDirectories returns the list of a project that is not deleted.
 func (s *Service) ProjectDirectories(ctx context.Context, projectID uuid.UUID) (ProjectDirectories, error) {
 	if _, err := s.Store.GetProject(ctx, projectID); err != nil {
 		return ProjectDirectories{}, err
@@ -75,7 +77,7 @@ func (s *Service) ProjectDirectories(ctx context.Context, projectID uuid.UUID) (
 	return ProjectDirectories{Revision: list.Revision, Directories: views(list.Directories)}, nil
 }
 
-// PutProjectDirectories 整体替换项目的清单。
+// PutProjectDirectories replaces a project's whole list.
 func (s *Service) PutProjectDirectories(ctx context.Context, projectID uuid.UUID, in PutInput) (ProjectDirectories, error) {
 	if _, err := s.Store.GetProject(ctx, projectID); err != nil {
 		return ProjectDirectories{}, err
@@ -91,7 +93,8 @@ func (s *Service) PutProjectDirectories(ctx context.Context, projectID uuid.UUID
 	return ProjectDirectories{Revision: list.Revision, Directories: views(list.Directories)}, nil
 }
 
-// AgentDirectories 返回未删除的常态或平台 Agent 自己的清单与继承自项目的条目。
+// AgentDirectories returns the own list of a regular or platform Agent that is not deleted, plus the entries inherited
+// from the project.
 func (s *Service) AgentDirectories(ctx context.Context, agentID uuid.UUID) (AgentDirectories, error) {
 	a, err := s.Store.GetAgent(ctx, agentID)
 	if err != nil {
@@ -104,7 +107,7 @@ func (s *Service) AgentDirectories(ctx context.Context, agentID uuid.UUID) (Agen
 	return s.agentView(ctx, a, list)
 }
 
-// PutAgentDirectories 整体替换 Agent 自己的清单。
+// PutAgentDirectories replaces an Agent's own whole list.
 func (s *Service) PutAgentDirectories(ctx context.Context, agentID uuid.UUID, in PutInput) (AgentDirectories, error) {
 	a, err := s.Store.GetAgent(ctx, agentID)
 	if err != nil {
@@ -167,10 +170,11 @@ func views(list []store.LocalDirectoryEntry) []DirectoryView {
 	return out
 }
 
-// Access 返回 agentID（常态或平台 Agent；任务内实例传它的基础 Agent）启动 Pi 时本机模式生效的部分：
-// “绑定本机目录”开启时为项目的清单加 Agent 自己的清单（同一路径只算一次，项目的在前），“用本机的 CLI”开启时接上用户的 PATH，
-// “用本机的登录状态”开启时 Pi 沿用用户真实的 HOME。
-// 已删除的基础 Agent（任务仍在进行）照样按它的记录取清单。
+// Access returns the part of local mode that takes effect when agentID (a regular or platform Agent; for an instance
+// inside a task, pass its base Agent) starts Pi: when "Bind local directories" is on, the project's list plus the
+// Agent's own list (each path counted once, the project's first); when "Use local CLIs" is on, the user's PATH is
+// appended; when "Use local logins" is on, Pi keeps the user's real HOME. A deleted base Agent (whose task is still
+// running) still gets its list from its record.
 func (s *Service) Access(ctx context.Context, agentID uuid.UUID) (agentconfig.LocalAccess, error) {
 	settings, err := s.Store.GetLocalModeSettings(ctx)
 	if err != nil {

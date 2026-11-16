@@ -34,7 +34,7 @@ func TestUserPathFallsBackToProcessPath(t *testing.T) {
 	if got := u.Dirs(context.Background()); !slices.Equal(got, []string{proc}) {
 		t.Fatalf("失败时应退回进程 PATH：%v", got)
 	}
-	// 只解析一次。
+	// Resolve only once.
 	u.resolve = func(context.Context) (string, string, error) { t.Fatal("不应再解析"); return "", "", nil }
 	if got := u.Dirs(context.Background()); !slices.Equal(got, []string{proc}) {
 		t.Fatalf("第二次 = %v", got)
@@ -56,7 +56,8 @@ func TestUserPathDirsHonoursCallerContext(t *testing.T) {
 	}
 }
 
-// writeShellProfile 准备一个只含 rc 文件的临时 HOME，SHELL 指向 /bin/sh（以交互式登录方式运行时读 ~/.profile 与 $ENV）。
+// writeShellProfile prepares a temporary HOME containing only an rc file, with SHELL pointing to /bin/sh (which reads
+// ~/.profile and $ENV when run as an interactive login shell).
 func writeShellProfile(t *testing.T, profile string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -95,7 +96,7 @@ func TestLoginShellPathTimesOut(t *testing.T) {
 	if err == nil || time.Since(begin) > 5*time.Second {
 		t.Fatalf("应在时限内失败：%v %s", err, time.Since(begin))
 	}
-	// 整个解析器退回进程 PATH。
+	// The whole resolver falls back to the process PATH.
 	proc := filepath.Join(t.TempDir(), "proc-bin")
 	t.Setenv("PATH", proc)
 	u := NewUserPath(nil, 300*time.Millisecond)

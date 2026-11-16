@@ -105,7 +105,8 @@ func (c *Coordinator) Resolve(ctx context.Context, b modelcredential.Binding) (m
 			if e != nil || value.AuthMethod() != v.AuthMethod {
 				return modelcredential.Credential{}, ErrCredentialUnavailable
 			}
-			// 插件提供方的订阅登录由扩展自己在状态目录里刷新，平台不刷新。
+			// Subscription logins of plugin providers are refreshed by the extension itself in the state directory; the
+			// platform does not refresh them.
 			if value.Kind() == "api_key" || value.Kind() == modelcredential.PluginState || value.ExpiresAt().After(c.Options.Now().Add(c.Options.RefreshSkew)) {
 				return value, nil
 			}

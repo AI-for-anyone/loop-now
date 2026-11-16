@@ -486,7 +486,8 @@ func taskLarkActualNativeScope(t *testing.T, unknownC bool) {
 				return
 			}
 			defer close(barrier)
-			// C 已提交：占住唯一的写连接，确认 C 结果的写事务等到超时，结果未知。
+			// C is committed: hold the only writer connection so the write transaction confirming C's result waits
+			// until it times out, leaving the result unknown.
 			heldMu.Lock()
 			defer heldMu.Unlock()
 			release = sqlitetest.HoldWriter(t, server.a.Store.Pool)

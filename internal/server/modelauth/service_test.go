@@ -34,8 +34,9 @@ func closeAuth(t *testing.T, s *Service) {
 
 type metadataQueryKey struct{}
 
-// metadataTracer 让 State 读过版本元数据之后、发出下一条语句之前停住（只管带 metadataQueryKey 的上下文）。
-// 语句钩子在语句之前调用，所以停在“下一条”之前，等价于原来停在元数据查询结束之后。
+// metadataTracer makes State pause after it has read the version metadata and before it issues the next statement (only
+// for contexts carrying metadataQueryKey). The statement hook is called before the statement, so it pauses before the
+// "next" one, which is equivalent to the old pause right after the metadata query.
 type metadataTracer struct {
 	entered, release chan struct{}
 	sawMeta, once    atomic.Bool
@@ -223,8 +224,9 @@ func TestStateNeverCombinesOldMetadataWithNewSuccessfulLogin(t *testing.T) {
 		result <- state
 		errs <- e
 	}()
-	// State 读过版本元数据后若还有下一次读取，就停在它前面，让登录在这之间提交；
-	// 元数据若是最后一次读取（应有的顺序），State 读完就返回，没有可以与成功配对的旧元数据。
+	// If State does another read after reading the version metadata, pause before it so the login commits in between;
+	// if the metadata is the last read (the expected order), State returns as soon as it has read it, and there is no
+	// stale metadata that could be paired with the success.
 	succeed := func() {
 		close(releaseLogin)
 		waitAuth(t, func() bool {

@@ -13,7 +13,8 @@ import (
 )
 
 func TestLoadFromLocalPi(t *testing.T) {
-	// 断网也能读：子进程只拿到 PATH 与临时 HOME，脚本只读本地文件。
+	// Reading works offline too: the child process gets only PATH and a temporary HOME, and the script reads only local
+	// files.
 	c, err := modelcatalog.Load(context.Background(), catalogtest.Options(t))
 	if err != nil {
 		t.Fatal(err)

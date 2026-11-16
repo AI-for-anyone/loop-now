@@ -18,8 +18,9 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// 插件注册的模型提供方：新建 Agent 不能直接选；项目 Agent 修改时要求项目已启用该插件、Agent 已获授权，原因分别说明；
-// 平台 Agent 没有项目启用这一层，授权了就能选。
+// Model providers registered by plugins: a new Agent cannot pick one directly; changing a project Agent requires the
+// project to have the plugin enabled and the Agent to be granted it, each reason reported separately; a platform Agent
+// has no project enable layer and can pick it once granted.
 func TestPluginProviderNeedsGrant(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -104,8 +105,9 @@ func isField(err error, field, contains string) bool {
 	return ae.Fields[0].Field == field && strings.Contains(ae.Fields[0].Message, contains)
 }
 
-// 平台 Agent 用自己登录的插件提供方启动 Pi：执行快照里的模型绑定是它自己的版本，状态按（插件、提供方、版本）取，
-// 插件按授权挂载；与项目 Agent 走同一条链接与失败规则（executor/local 的 linkProviderState）。
+// A platform Agent starts Pi with a plugin provider it logged in to itself: the model binding in the execution snapshot
+// is its own version, the state is looked up by (plugin, provider, version), and plugins are mounted by grant; it
+// follows the same linking and failure rules as a project Agent (linkProviderState in executor/local).
 func TestPlatformAgentPluginProviderSnapshot(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -170,7 +172,7 @@ func TestPlatformAgentPluginProviderSnapshot(t *testing.T) {
 	if !slices.Contains(snap.Plugins.IDs, "grokish") {
 		t.Fatalf("授权的插件挂载：%+v", snap.Plugins)
 	}
-	// 清除凭证后没有模型凭证，也就不取状态目录。
+	// After the credential is cleared there is no model credential, so no state directory is looked up.
 	if err := auth.Clear(ctx, a.ID); err != nil {
 		t.Fatal(err)
 	}

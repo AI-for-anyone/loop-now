@@ -16,7 +16,8 @@ import (
 	"loop-now/internal/server/folders"
 )
 
-// 拉取用 GitAccess 给出的环境与 clone 前的参数；SSH 主机未确认时不等待、不询问，直接以 host_key_unverified 失败并说明怎么确认。
+// A pull uses the environment and the pre-clone arguments given by GitAccess; when an SSH host is not confirmed, it
+// neither waits nor asks, but fails right away with host_key_unverified and explains how to confirm it.
 func TestGitPullUsesAccessAndReportsHostKey(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("假 ssh 是 sh 脚本")
@@ -56,7 +57,8 @@ func TestGitPullUsesAccessAndReportsHostKey(t *testing.T) {
 	}
 }
 
-// HTTPS 被要求认证而又没有可用凭证：不弹提示，报 auth_failed（页面据此提示打开“用本机的 git 身份”）。
+// HTTPS demands authentication and no credential is available: no prompt, auth_failed is reported (based on which the
+// page suggests turning on "Use local git identity").
 func TestGitPullReportsAuthFailure(t *testing.T) {
 	ctx := context.Background()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

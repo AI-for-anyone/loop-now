@@ -26,7 +26,8 @@ func buildSecond(t *testing.T, cfg config.Config) error {
 	return err
 }
 
-// 一个数据目录只给一个服务进程：第二个实例拒绝启动且不影响第一个；第一个停止后可以再启动。
+// One data directory serves only one server process: a second instance refuses to start and does not affect the first;
+// after the first stops, it can start again.
 func TestSecondInstanceOnSameDataDirRefused(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)
@@ -38,8 +39,9 @@ func TestSecondInstanceOnSameDataDirRefused(t *testing.T) {
 	w.start(nil).stop()
 }
 
-// 一个工作根也只给一个服务进程：数据目录不同、工作根相同的第二个实例同样拒绝启动（退出码相同），
-// 既不动工作根，也不在自己的数据目录里建库；第一个停止后它可以启动。
+// One work root also serves only one server process: a second instance with a different data directory but the same
+// work root also refuses to start (with the same exit code), neither touching the work root nor creating a database in
+// its own data directory; after the first stops, it can start.
 func TestSecondInstanceOnSameWorkRootRefused(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)
@@ -48,7 +50,7 @@ func TestSecondInstanceOnSameWorkRootRefused(t *testing.T) {
 	if err := buildSecond(t, other); err == nil || !strings.Contains(err.Error(), "工作根") || !strings.Contains(err.Error(), "已被另一个服务进程使用") || app.ExitCode(err) != app.ExitInstanceLocked {
 		t.Fatalf("第二个实例应拒绝启动：%v", err)
 	}
-	// 每个实例启动时在这里建自己的目录，并清理别的实例留下的空目录。
+	// Each instance creates its own directory here at startup and cleans up empty directories left by other instances.
 	if instances, _ := filepath.Glob(filepath.Join(w.cfg.WorkRoot, ".cli-verification", "*")); len(instances) != 1 {
 		t.Fatalf("被拒绝的实例不应动工作根：%v", instances)
 	}

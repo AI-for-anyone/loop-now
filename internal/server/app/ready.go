@@ -11,8 +11,9 @@ import (
 	"loop-now/internal/server/webui"
 )
 
-// consoleFiles 选出控制台的静态文件：配置了 LOOP_NOW_WEB_DIR 时用那个目录（必须有 index.html），
-// 否则用二进制里内嵌的；都没有时为 nil（API 之外的路径回答 404 并说明）。
+// consoleFiles picks the console's static files: when LOOP_NOW_WEB_DIR is configured, that directory (which must
+// contain index.html); otherwise the files embedded in the binary; nil when neither exists (paths outside the API
+// answer 404 with an explanation).
 func consoleFiles(dir string) (fs.FS, string, error) {
 	if dir != "" {
 		if _, err := os.Stat(filepath.Join(dir, "index.html")); err != nil {
@@ -26,7 +27,8 @@ func consoleFiles(dir string) (fs.FS, string, error) {
 	return nil, "", nil
 }
 
-// Ready 是就绪文件的内容：桌面壳据此找到控制台地址（监听端口为 0 时只能从这里知道），以及开了对外端口时它的 https 地址。
+// Ready is the content of the ready file: the desktop shell uses it to find the console address (the only way to learn
+// it when the listen port is 0) and, when the external port is on, its https address.
 type Ready struct {
 	URL         string `json:"url"`
 	PID         int    `json:"pid"`
@@ -34,7 +36,8 @@ type Ready struct {
 	ExternalURL string `json:"externalUrl,omitempty"`
 }
 
-// writeReadyFile 原子地写出就绪文件：先写同目录下的临时文件再改名，读的一方不会读到半个文件。
+// writeReadyFile writes the ready file atomically: it writes a temporary file in the same directory and then renames
+// it, so a reader never sees half a file.
 func writeReadyFile(path string, r Ready) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err

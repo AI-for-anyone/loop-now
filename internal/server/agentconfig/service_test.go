@@ -38,7 +38,7 @@ type env struct {
 	svc      *agentconfig.Service
 	st       *store.Store
 	releaser *fakeReleaser
-	scope    store.Scope // 默认项目
+	scope    store.Scope // default project
 }
 
 func newEnv(t *testing.T) *env {
@@ -93,7 +93,7 @@ func TestCreateAndQueryAgent(t *testing.T) {
 	if err != nil || a.ID == b.ID || a.ConfigVersion != 1 {
 		t.Fatalf("不同名的 Agent 应正常创建：%v %v", b, err)
 	}
-	// 改名为已有的名字被拒绝。
+	// Renaming to an existing name is rejected.
 	dup := a.Name
 	_, err = e.svc.UpdateAgent(ctx, b.ID, agentconfig.AgentPatch{Name: &dup})
 	wantCode(t, err, apperr.CodeNameConflict)
@@ -108,7 +108,8 @@ func TestCreateAndQueryAgent(t *testing.T) {
 	}
 }
 
-// 名称会组成 Inbox 地址：创建与改名都按 naming 的规则校验，字段级错误指向 name，且不做任何修改。
+// Names form the Inbox address: both create and rename validate by the naming rules, the field-level error points to
+// name, and nothing is changed.
 func TestAgentNameRules(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -130,7 +131,7 @@ func TestAgentNameRules(t *testing.T) {
 	if err != nil || got.Name != a.Name || got.ConfigVersion != a.ConfigVersion {
 		t.Fatalf("被拒绝的改名不应改动 Agent：%+v %v", got, err)
 	}
-	// 中间的空格与 @ 是允许的。
+	// Spaces in the middle and @ are allowed.
 	if _, err := e.svc.CreateAgent(ctx, e.scope, "dev assistant@前端", "anthropic", "claude-x", ""); err != nil {
 		t.Fatalf("合法名称被拒绝：%v", err)
 	}
@@ -166,7 +167,7 @@ func TestDeleteAgent(t *testing.T) {
 	if _, err := e.svc.PutCLICredential(ctx, a.ID, "gh", map[string]string{"token": "ghp_example"}); err != nil {
 		t.Fatal(err)
 	}
-	// 有排队消息时拒绝删除。
+	// Deletion is refused while there are queued messages.
 	runID := uuid.Must(uuid.NewV7())
 	if _, err := e.st.Pool.Exec(ctx, `INSERT INTO runs (id, agent_id, user_message_id, config_version, priority, queue_seq, status) VALUES ($1, $2, $3, 1, 1, 1, 'queued')`,
 		runID, a.ID, uuid.Must(uuid.NewV7())); err != nil {
@@ -179,7 +180,7 @@ func TestDeleteAgent(t *testing.T) {
 	if err := e.svc.DeleteAgent(ctx, a.ID); err != nil {
 		t.Fatal(err)
 	}
-	// 已软删除的 Agent 不占用名字。
+	// A soft-deleted Agent does not hold on to its name.
 	if _, err := e.svc.CreateAgent(ctx, e.scope, a.Name, "anthropic", "claude-x", ""); err != nil {
 		t.Fatalf("已删除 Agent 的名字应可再用：%v", err)
 	}
@@ -236,7 +237,7 @@ func TestSkillTemplatesAndCopies(t *testing.T) {
 	_, err = e.svc.AddAgentSkill(ctx, a.ID, tmpl.ID)
 	wantCode(t, err, apperr.CodeNameConflict)
 
-	// 编辑模板不影响已有副本，且保留其他文件。
+	// Editing a template does not affect existing copies and keeps the other files.
 	newMD := "---\nname: pdf-tools\ndescription: 新描述\n---\n新正文\n"
 	edited, err := e.svc.UpdateSkillTemplateMarkdown(ctx, tmpl.ID, newMD)
 	if err != nil || len(edited.Files) != 2 || edited.Description != "新描述" {
@@ -246,7 +247,7 @@ func TestSkillTemplatesAndCopies(t *testing.T) {
 	if gotA.Description != "测试用 Skill" {
 		t.Fatalf("编辑模板不应影响已有副本：%s", gotA.Description)
 	}
-	// 单独编辑副本，再用最新模板重新复制覆盖。
+	// Edit a copy on its own, then recopy it from the latest template to overwrite it.
 	if _, err := e.svc.UpdateAgentSkillMarkdown(ctx, a.ID, copyA.ID, "---\nname: pdf-tools\ndescription: 我改的\n---\n"); err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +255,7 @@ func TestSkillTemplatesAndCopies(t *testing.T) {
 	if err != nil || re.Description != "新描述" || re.SkillMD != newMD {
 		t.Fatalf("重新复制应整体覆盖：%+v %v", re, err)
 	}
-	// 删除模板后副本仍在，来源为空，不能重新复制。
+	// After the template is deleted the copy remains, its source is empty, and it cannot be recopied.
 	if err := e.svc.DeleteSkillTemplate(ctx, tmpl.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -280,8 +281,9 @@ func TestCLIsAndCredentials(t *testing.T) {
 	_, err = e.svc.PutCLICredential(ctx, a.ID, "jq", map[string]string{"x": "y"})
 	wantCode(t, err, apperr.CodeValidationFailed)
 	_, err = e.svc.PutCLICredential(ctx, a.ID, "lark-cli", map[string]string{"appId": "a", "appSecret": "s"})
-	wantCode(t, err, apperr.CodeValidationFailed) // 不在可用列表中
-	// 加入可用列表后可以录入 lark-cli 凭证：以配置文件注入，元数据中没有明文，也没有风险提示。
+	wantCode(t, err, apperr.CodeValidationFailed) // not in the available list
+	// After adding it to the available list, a lark-cli credential can be entered: injected as a config file, with no
+	// plaintext in the metadata and no risk warning.
 	c := e.agent(t)
 	if _, err := e.svc.AddCLI(ctx, c.ID, "lark-cli"); err != nil {
 		t.Fatal(err)
@@ -307,7 +309,8 @@ func TestCLIsAndCredentials(t *testing.T) {
 	}
 	_, err = e.svc.PutModelCredential(ctx, a.ID, map[string]string{"1BAD": "x"})
 	wantCode(t, err, apperr.CodeValidationFailed)
-	// CLI 模板读取的变量不能作为模型账号凭证，字段级错误指向 env.<变量名>；代理等通用变量照常允许。
+	// Variables read by CLI templates cannot be used as model account credentials, and the field-level error points to
+	// env.<variable name>; generic variables such as proxies are allowed as usual.
 	for _, name := range []string{"GITHUB_TOKEN", "GH_HOST", "LARKSUITE_CLI_APP_SECRET", "LARK_CHANNEL"} {
 		_, err = e.svc.PutModelCredential(ctx, b.ID, map[string]string{"ANTHROPIC_API_KEY": "k", name: "x"})
 		ae, _ := apperr.As(err)
@@ -319,19 +322,19 @@ func TestCLIsAndCredentials(t *testing.T) {
 		t.Fatalf("代理变量应允许录入：%v", err)
 	}
 
-	// 凭证以明文存入 secret 列。
+	// The credential is stored as plaintext in the secret column.
 	var stored bool
 	_ = e.st.Pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agent_credentials WHERE agent_id = $1 AND cli_name = 'gh' AND instr(secret, CAST('ghp_example' AS BLOB)) > 0)`, a.ID).Scan(&stored)
 	if !stored {
 		t.Fatal("secret 列中没有明文凭证")
 	}
 
-	// 详情只返回元数据。
+	// The detail returns only metadata.
 	d, err := e.svc.GetAgentDetail(ctx, a.ID)
 	if err != nil || len(d.CLIs) != 2 || d.ModelCredential == nil || d.ModelCredential.EnvNames[0] != "ANTHROPIC_API_KEY" {
 		t.Fatalf("详情不对：%+v %v", d, err)
 	}
-	// 移除 CLI 时一并删除凭证。
+	// Removing a CLI also deletes its credential.
 	if err := e.svc.RemoveCLI(ctx, a.ID, "gh"); err != nil {
 		t.Fatal(err)
 	}
@@ -341,7 +344,8 @@ func TestCLIsAndCredentials(t *testing.T) {
 	}
 }
 
-// 删除项目：其中每个 Agent 都交给执行器释放（停止 Pi、删除凭证文件），并通知概览移除；项目名按命名规则校验。
+// Deleting a project: each of its Agents is handed to the executor for release (stop Pi, delete credential files) and
+// the overview is told to remove it; the project name is validated by the naming rules.
 func TestDeleteProjectReleasesAgents(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()

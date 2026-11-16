@@ -34,7 +34,7 @@ func projectOperationView(o cm.Operation) cm.Operation {
 	return o
 }
 
-// pluginErrorMessages 是插件提供方登录的错误说明（不含扩展原文）。
+// pluginErrorMessages are the error messages for plugin provider logins (without the extension's original text).
 var pluginErrorMessages = map[string]string{
 	"auth_failed":               "订阅授权未完成",
 	"auth_port_busy":            "登录回调需要的本机端口已被占用，请结束其他登录后重试",

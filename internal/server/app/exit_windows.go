@@ -8,5 +8,5 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// Windows 上 net.Listen 的"地址已被占用"是 Winsock 的 WSAEADDRINUSE。
+// On Windows, "address already in use" from net.Listen is Winsock's WSAEADDRINUSE.
 func addrInUse(err error) bool { return errors.Is(err, windows.WSAEADDRINUSE) }

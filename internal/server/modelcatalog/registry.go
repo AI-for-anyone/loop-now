@@ -6,9 +6,9 @@ import (
 	"sync/atomic"
 )
 
-// Registry 原子发布完整的目录快照；保存配置时不会暴露合并到一半的目录。
-// 发布的目录 = Pi 目录（内置加 models.json，Replace 给出）+ 本机 CLI 的提供方（Claude Code，固定）
-// + 已安装插件注册的提供方（SetPluginProviders 给出）。
+// Registry atomically publishes complete catalog snapshots; saving the config never exposes a half-merged catalog.
+// Published catalog = Pi catalog (built-in plus models.json, given by Replace) + the providers of local CLIs (Claude
+// Code, fixed) + the providers registered by installed plugins (given by SetPluginProviders).
 type Registry struct {
 	current atomic.Pointer[Catalog]
 	mu      sync.Mutex
@@ -24,7 +24,7 @@ func NewRegistry(initial *Catalog) *Registry {
 
 func (r *Registry) Snapshot() *Catalog { return r.current.Load() }
 
-// Replace 换掉 Pi 目录部分，插件提供方保留。
+// Replace replaces the Pi catalog part; plugin providers are kept.
 func (r *Registry) Replace(c *Catalog) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -32,7 +32,8 @@ func (r *Registry) Replace(c *Catalog) {
 	r.current.Store(withPlugins(withLocal(c), r.plugins))
 }
 
-// SetPluginProviders 换掉插件提供方部分；只有注册了 OAuth 登录、与 Pi 目录不同 id 的进目录。
+// SetPluginProviders replaces the plugin provider part; only providers that registered an OAuth login and whose id
+// differs from the Pi catalog go into the catalog.
 func (r *Registry) SetPluginProviders(plugins []PluginProvider) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -40,7 +41,8 @@ func (r *Registry) SetPluginProviders(plugins []PluginProvider) {
 	r.current.Store(withPlugins(withLocal(r.base), r.plugins))
 }
 
-// Base 返回不含插件提供方的目录：Pi 目录加本机 CLI 的提供方（判断插件提供方是否与已有的同 id 时用）。
+// Base returns the catalog without plugin providers: the Pi catalog plus the providers of local CLIs (used to check
+// whether a plugin provider has the same id as an existing one).
 func (r *Registry) Base() *Catalog {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -11,8 +11,10 @@ import (
 	"loop-now/internal/server/modelcatalog/catalogtest"
 )
 
-// fakeExtension 是一个最小的“订阅登录”Pi 扩展：从 Pi 的包里导入（验证扩展加载器的模块别名），
-// 加载时在 HOME 下写一个文件（验证副作用只落在临时目录），注册一个 OAuth 提供方、覆盖一个内置提供方，另有一个扩展加载失败。
+// fakeExtension is a minimal "subscription login" Pi extension: it imports from Pi's packages (checking the module
+// aliases of the extension loader), writes a file under HOME when loaded (checking that side effects land only in the
+// temporary directory), registers one OAuth provider and overrides one built-in provider; one more extension fails to
+// load.
 const fakeExtension = `import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { lazyStream } from '@earendil-works/pi-ai';
@@ -87,7 +89,8 @@ func TestCaptureProvidersWithPiLoader(t *testing.T) {
 		t.Fatal("扩展的副作用不能落在插件目录")
 	}
 
-	// 并入目录：带 OAuth 的新提供方以 plugin 来源出现，Pi 目录部分不变。
+	// Merged into the catalog: the new provider with OAuth appears with source plugin, and the Pi catalog part is
+	// unchanged.
 	base, err := modelcatalog.Load(context.Background(), options)
 	if err != nil {
 		t.Fatal(err)
@@ -104,7 +107,8 @@ func TestCaptureProvidersWithPiLoader(t *testing.T) {
 	if a, _ := reg.Provider("anthropic"); a.Source != "builtin" {
 		t.Fatalf("内置提供方不被插件替换：%+v", a)
 	}
-	// 发布的目录 = Pi 目录 + 本机 CLI 的 claude-code + 这一个插件提供方（与内置同 id 的 anthropic 不并入）。
+	// Published catalog = Pi catalog + the local CLI claude-code + this one plugin provider (anthropic, which has the
+	// same id as a built-in provider, is not merged).
 	if len(reg.Snapshot().Providers) != len(base.Providers)+2 {
 		t.Fatal("只多本机 CLI 与一个插件提供方")
 	}

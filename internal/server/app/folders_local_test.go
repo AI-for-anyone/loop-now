@@ -12,7 +12,7 @@ func TestGitPullEnv(t *testing.T) {
 	helper := "!'/cli/gh' auth git-credential"
 	gh := []string{"GH_TOKEN=synthetic"}
 
-	// git 开关关闭：与原来相同，Agent 的独立 HOME，先清空本机助手再只用 gh。
+	// git switch off: same as before, the Agent's own HOME; clear the local helpers first, then use only gh.
 	off := gitPullEnv(home, "/usr/bin:/bin", gh, helper, false, nil)
 	if !slices.Equal(off.Env, []string{"HOME=" + home, "PATH=/usr/bin:/bin", "GIT_TERMINAL_PROMPT=0", ghConfig, "GH_TOKEN=synthetic"}) ||
 		!slices.Equal(off.Args, []string{"-c", "credential.helper=", "-c", "credential.helper=" + helper}) {
@@ -22,7 +22,7 @@ func TestGitPullEnv(t *testing.T) {
 		t.Fatalf("没有 gh 时匿名：%+v", anon)
 	}
 
-	// git 开关开启：用本机的环境，不清空本机助手；gh 只用于 github.com。
+	// git switch on: use the local environment without clearing the local helpers; gh is used only for github.com.
 	local := []string{"HOME=/Users/me", "SSH_AUTH_SOCK=/tmp/agent.sock", "GIT_TERMINAL_PROMPT=0"}
 	on := gitPullEnv(home, "/usr/bin", gh, helper, true, local)
 	if !slices.Equal(on.Env, append(slices.Clone(local), ghConfig, "GH_TOKEN=synthetic")) ||

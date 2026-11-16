@@ -1,4 +1,5 @@
-// Package modelconfig 管理原生 models.json 文档，并通过固定 Pi 校验后原子发布目录。
+// Package modelconfig manages the native models.json document and atomically publishes the catalog after validating it
+// with the pinned Pi.
 package modelconfig
 
 import (
@@ -21,7 +22,7 @@ type Settings struct {
 
 const fallbackLoadError = "保存的 models.json 未通过当前 Pi 校验，已临时使用内置模型目录；请修正后重新保存。"
 
-// Store 是设置服务需要的窄持久化接口；生产实现是 store.Store。
+// Store is the narrow persistence interface the settings service needs; the production implementation is store.Store.
 type Store interface {
 	GetModelSettings(context.Context) (store.ModelSettings, error)
 	CompareAndSwapModelSettings(context.Context, string, int64) (store.ModelSettings, error)
@@ -35,8 +36,9 @@ type Service struct {
 	loadError string
 }
 
-// Reload 从数据库重建当前目录。用户配置失效时保留原文供修复，但先退回内置目录，
-// 避免 Pi 升级或 schema 变化让控制台本身无法启动。
+// Reload rebuilds the current catalog from the database. When the user config is invalid, the original text is kept for
+// fixing, but the built-in catalog is used first, so that a Pi upgrade or a schema change cannot stop the console
+// itself from starting.
 func (s *Service) Reload(ctx context.Context) (Settings, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

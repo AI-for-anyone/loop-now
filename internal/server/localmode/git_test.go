@@ -85,9 +85,10 @@ func TestGitIdentityEnvKeepsUsersSSHCommand(t *testing.T) {
 	}
 }
 
-// TestScopedHelperOverridesOnlyGitHub 用真实 git 核对“按地址限定的凭证助手”的语义：命令行的
-// credential.https://github.com.helper 先清空再只放 Agent 的助手，github.com 不再问本机的助手；其他主机仍用本机的。
-// app 的 folderGitAccess 依赖这一点，让 Agent 的 gh 令牌不读、不写本机凭证库里 github.com 的条目。
+// TestScopedHelperOverridesOnlyGitHub checks with real git the semantics of an "address-scoped credential helper": on
+// the command line, credential.https://github.com.helper is first cleared and then set to only the Agent's helper, so
+// github.com no longer asks the local helpers while other hosts still use them. folderGitAccess in app relies on this,
+// so that the Agent's gh token neither reads nor writes the github.com entries in the local credential store.
 func TestScopedHelperOverridesOnlyGitHub(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("助手脚本用 sh 写")
