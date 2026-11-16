@@ -1,265 +1,271 @@
-# 更新日志
+# Changelog
 
-各版本面向使用者的变化。发布流水线取对应版本的一节作为 GitHub Release 的说明（见 `scripts/release/notes.sh`）。
+中文：[CHANGELOG.zh-CN.md](CHANGELOG.zh-CN.md)
 
-## 未发布
+User-facing changes in each version. The release pipeline takes the matching version's section as the GitHub Release notes (see `scripts/release/notes.sh`), followed by the Chinese section from CHANGELOG.zh-CN.md.
 
-### 控制台改版（第 5 步）
+## Unreleased
 
-- 任务详情放到纸张上，任务状态改成印章（受阻是红色）。流程图不再是可以拖动、缩放的画布，改成纸张右侧票根里的一把竖尺：每个节点一格，黄色圆点是任务现在走到的节点，记号和箭头跟着你正在看的节点；返工的回路标出已经用了几次（如“已用 2/3 次”）。窄窗口里流程尺换成一排步骤标签。
-- 任务对话：同一节点的多次访问用裁切线隔开，从裁切线可以去看那一次的节点资料；节点资料先显示正在看的那一次，其余收起。输入区和 Agent 对话页一样（胶囊输入框、粉色圆形发送按钮）。“更换 Lark 账号并继续”成了“重试当前节点”旁边的按钮，点了才展开；有换号正在进行或出错时自动展开。
-- 插件详情：概览按编号分区（它包含什么、在哪些项目启用、最近动静、说明），事件、投递记录、日志在概览里并成“最近动静”的三个数字（只算已加载的，没加载完带“+”）；右侧票根里是目录尺、当前版本和更新状态。配置、账号、事件、投递记录、日志页签放进同一张纸，内容不变。
-- 所有弹窗统一成一张小纸：顶边的索引标签写明类别（新建是黄色，危险操作是红色，其余是蓝色），右上角是黄色圆形的关闭按钮，按钮区上方一条虚线，主按钮是粉色。
-- 危险操作的确认框是红色投影、红色确认按钮；删掉就找不回来的操作盖“不可撤销”印章，能再加回来的（移除本机目录、移除没有录入凭证的 CLI）不盖。
-- 签发令牌的弹窗：令牌放在虚线框里，复制按钮是黄色，“只显示这一次”的提醒是黄色便签。
-- 抽屉（Skills 库的新建和详情、模型示例）：页头带网点，底部按钮栏是浅黄色。
+### Console redesign (step 5)
 
-### 平台 Agent 也能用插件带来的模型提供方
+- The task details move onto the sheet, and the task status becomes a stamp (red when blocked). The flow diagram is no longer a canvas you can drag and zoom; it is now a vertical ruler in the stub on the right of the sheet: one cell per node, a yellow dot on the node the task has reached, and a marker and arrow that follow the node you are viewing; a rework loop shows how many times it has been used (for example "used 2/3"). In narrow windows the flow ruler is replaced by a row of step labels.
+- Task conversation: multiple visits to the same node are separated by cut lines, and from a cut line you can open the node materials for that visit; the node materials show the visit you are viewing first, with the others collapsed. The input area matches the Agent chat page (pill-shaped input box, pink round send button). "Switch Lark account and continue QA" is now a button next to "Retry current node" and expands only when clicked; it expands automatically when an account switch is in progress or has failed.
+- Plugin details: the overview is split into numbered sections (What it contains, Enabled in projects, Recent activity, About); events, deliveries and logs are combined in the overview into the three numbers of "Recent activity" (counting only what has been loaded, with a "+" when not everything is loaded); the stub on the right holds the contents ruler, the current version and the update status. The Config, Accounts, Events, Deliveries and Logs tabs move onto the same sheet, with their content unchanged.
+- All dialogs now share one form, a small sheet: an index tab on the top edge names the category (yellow for creating something, red for dangerous actions, blue for everything else), a yellow round close button sits in the top right corner, a dashed line runs above the button area, and the primary button is pink.
+- Confirmation dialogs for dangerous actions have a red shadow and a red confirm button; actions that delete something for good carry an "Irreversible" stamp, while those that can be added back (removing a local directory, removing a CLI that has no credentials entered) do not.
+- Issue-token dialog: the token sits in a dashed box, the copy button is yellow, and the reminder that the token is shown only this once is a yellow sticky note.
+- Drawers (creating and viewing details in the Skills library, model examples): the header has halftone dots, and the button bar at the bottom is light yellow.
 
-- 不属于任何项目的 Agent 现在也能用插件带来的模型提供方（如 pi-grok-cli）。在 Agent 配置的“插件权限”里把插件授权给它，就能在模型提供方里选；没授权时选择器会说明原因。新建 Agent 时仍然不能直接选，建好、授权之后再改。
-- 订阅登录跟着 Agent 走：在这个 Agent 的“模型账号凭证”里登录、重新登录或取消，过程和项目里登录一样（浏览器授权、设备码，扩展要你选择或粘贴授权码时在页面上回答）。每个平台 Agent 各登录一次，不和项目账号共用。
-- 其余规则和项目 Agent 相同：登录状态由扩展自己保存和刷新，不进数据库；开着“用本机的登录状态”时用的是这台电脑上该扩展自己的登录，页面会提示本机有没有这份登录；卸载插件默认保留登录，勾选“同时删除数据”时一并清除。
-- 接口：`POST /agents/{agentId}/model-auth/operations` 接受插件提供方；`ModelAuthOperation` 新增 `deviceCode`、`prompt`；新增 `POST /agents/{agentId}/model-auth/operations/{operationId}/input`；`ModelAuthState` 新增可选的 `localLogin`；`GET /model-providers` 的不可用原因去掉 `platform_agent`。
+### Platform Agents can also use model providers from plugins
 
-### 日志改为英文
+- Agents that do not belong to any project can now also use model providers that come from plugins (such as pi-grok-cli). Grant the plugin to the Agent under "Plugin grants" in the Agent config, and its provider can be chosen as the model provider; without the grant, the picker explains why. It still cannot be chosen directly when creating an Agent; create the Agent, grant the plugin, then change it.
+- The subscription login belongs to the Agent: log in, log in again or cancel under this Agent's "Model account credential", with the same process as logging in within a project (browser authorization, device code, and answering on the page when the extension asks you to choose or paste an authorization code). Each platform Agent logs in once on its own and does not share project accounts.
+- The other rules are the same as for project Agents: the login state is saved and refreshed by the extension itself and is not stored in the database; with "Use local logins" on, the extension's own login on this computer is used, and the page tells you whether this computer has that login; uninstalling the plugin keeps the login by default and clears it as well when "Also delete the data folder" is checked.
+- API: `POST /agents/{agentId}/model-auth/operations` accepts plugin providers; `ModelAuthOperation` gains `deviceCode` and `prompt`; new `POST /agents/{agentId}/model-auth/operations/{operationId}/input`; `ModelAuthState` gains an optional `localLogin`; `platform_agent` is removed from the unavailability reasons of `GET /model-providers`.
 
-- 服务端日志、桌面版的 `shell.log` 和插件宿主的日志改成英文，方便不读中文的贡献者排查问题。日志的字段名不变；错误消息和界面文案这一版不变。
-- 代码里的注释全部改成英文（不影响使用）。
-- 接口定义（`api/openapi.yaml`、`api/agent-openapi.yaml`）里的说明改成英文；路径、字段、枚举和校验规则都没变。
+### Logs are now in English
 
-### 错误消息改为英文
+- Server logs, the desktop app's `shell.log` and the plugin host's logs are now in English, so that contributors who do not read Chinese can troubleshoot. Log field names and UI copy are unchanged.
+- All comments in the code are now in English (no effect on use).
+- The descriptions in the API definitions (`api/openapi.yaml`, `api/agent-openapi.yaml`) are now in English; paths, fields, enums and validation rules are all unchanged.
 
-- 服务端、loopctl 和各命令行程序返回的错误消息改成英文，方便不读中文的使用者和贡献者。错误码、HTTP 状态和字段名都不变。
-- 中文界面仍按错误码显示中文说明；带具体信息的细节（比如哪个字段、超了多少、运行失败的原因）以英文原文附在后面。英文界面现在也能看到这些细节。表单里输入框旁的校验提示目前是英文。
-- 只是把错误码读成一句话的地方（任务轮次的失败说明、模型登录、Lark 切换回执）只显示界面自己的文案，不再重复附上服务端的句子。
-- 收件箱里的“平台”“控制台”“已删除 Agent”“已删除身份”改由界面按语言显示。
-- 补上一批以前直接显示成英文码或没有显示的状态说明：任务消息没有执行的原因、Lark 登录失败和参与方不可用的原因、连接验证不支持的原因、凭证模板状态等。
-- 修复：`cli_auth_in_progress` 和 `credential_selection_mode_conflict` 两种错误以前被当成未知错误，显示服务端原文而不是界面文案。
-- 已有数据里保存的中文说明不变，照原样显示。
-- 接口：请求的方法和路径不匹配任何接口时，404 `not_found` 带 `details.reason = "unknown_endpoint"`（新增 `NotFoundDetails`）；资源不存在时不带。
-- 桌面版：配置文件有误、安装 loopctl 失败的提示跟随系统语言。
-- 插件宿主与 SDK 的错误、校验结果和日志改成英文；`api/plugin-host-protocol.md` 改成英文。
-- 给 Agent 的提示：开着“用本机的登录状态”时，对平台 Agent 不再说成“项目里配置的订阅账号”。
+### Error messages are now in English
+
+- Error messages returned by the server, loopctl and the other command-line programs are now in English, for users and contributors who do not read Chinese. Error codes, HTTP statuses and field names are all unchanged.
+- The Chinese UI still shows a Chinese explanation for each error code; details that carry specifics (such as which field, by how much a limit was exceeded, or why a run failed) are appended in the original English. The English UI now shows these details too. Validation hints next to form inputs are in English for now.
+- Places that only turn an error code into a sentence (the failure explanation of a task turn, model login, Lark switch receipts) show only the UI's own copy and no longer append the server's sentence as well.
+- In the inbox, "Platform", "Console", "Deleted Agent" and "Deleted identity" are now shown by the UI in its own language.
+- Added a batch of status explanations that used to appear as raw English codes or not at all: why a task message was not run, why a Lark login failed and why a participant is unavailable, why a connection test is not supported, credential template statuses, and so on.
+- Fix: the `cli_auth_in_progress` and `credential_selection_mode_conflict` errors used to be treated as unknown errors, showing the server's original text instead of the UI's copy.
+- Chinese explanations saved in existing data are unchanged and are shown as they are.
+- API: when a request's method and path match no endpoint, the 404 `not_found` carries `details.reason = "unknown_endpoint"` (new `NotFoundDetails`); it is absent when a resource does not exist.
+- Desktop app: the messages for an invalid configuration file and for a failed loopctl installation follow the system language.
+- The plugin host's and SDK's errors, validation results and logs are now in English; `api/plugin-host-protocol.md` is now in English.
+- Prompt given to Agents: with "Use local logins" on, the text for a platform Agent no longer speaks of "the subscription account configured in the project".
+
+### Documentation
+
+- The changelog is now written in English first, with the Chinese version in `CHANGELOG.zh-CN.md`; GitHub Release notes show the English section followed by the Chinese one. `AGENTS.md` is English with `AGENTS.zh-CN.md` beside it, and `MAIN.md` is English.
 
 ## v0.2.6
 
-控制台改版继续：Agent 的配置、文件夹、收件箱，项目的概览、任务、设置，以及五个全局页面都放到了纸张上；宽窗口里对话占的地方更大；任务有了项目内编号（#12）；修复回复刚结束时马上发消息会被当成 Agent 正忙。
+The console redesign continues: the Agent's Config, Folder and Inbox tabs, the project's overview, tasks and settings, and the five global pages are all on the sheet now; the conversation takes up more room in wide windows; tasks have a per-project number (#12); and a fix for a message sent right after a reply ends being treated as if the Agent were busy.
 
-### 控制台改版（第 2 步）
+### Console redesign (step 2)
 
-- Agent 的“配置、文件夹、收件箱”三个页签也放到纸张上，与对话页同一套样式。
-- 配置页按编号分区（01 基本信息、02 Prompt……），右侧票根里是目录尺，当前所在的分区用黄色记号笔标出；顶部的生效说明改成黄色便签；思考等级改成分段按钮（新建 Agent 的对话框里也是）。全站的输入框统一改成粗描边。
-- 文件夹页：工具条放在纸张顶部，“还没有 AGENTS.md”做成醒目的卡片，文件列表用等宽字显示大小和时间，票根里显示文件夹数、文件数和总大小（还没读完时数字后面带“+”）。项目文件夹页用同一套样式。
-- 收件箱页：未读是倾斜的印章，已读是带读取时间的小标签，票根里显示未读数和总数。
-- 纸张里的滚动条改成细的藏青色。
+- The Agent's "Config", "Folder" and "Inbox" tabs are now on the sheet too, in the same style as the chat page.
+- The config page is split into numbered sections (01 Basics, 02 Prompt, ...), with a contents ruler in the stub on the right where the current section is marked with yellow highlighter; the note at the top about when changes take effect is now a yellow sticky note; the thinking level is now a segmented button (in the new-Agent dialog too). Input boxes across the whole console now have a thick outline.
+- Folder page: the toolbar sits at the top of the sheet, "No AGENTS.md yet" is a prominent card, the file list shows sizes and times in monospace, and the stub shows the number of folders, the number of files and the total size (with a "+" after the number while reading is not finished). The project folder page uses the same style.
+- Inbox page: unread is a tilted stamp, read is a small label with the time it was read, and the stub shows the unread count and the total.
+- Scrollbars inside the sheet are now thin and navy.
 
-### 对话页加宽
+### Wider chat page
 
-- 宽窗口里对话占的地方更大：回复正文最宽从 760px 放到 1100px，代码块、表格和图片跟着变宽；Agent 对话里你发的消息最宽占到对话栏的 88%。
-- Agent 页头变矮：标题缩小，身份、运行时、状态、模型和地址并到标题右侧一行，四个页签都一样。
-- 左侧的轮次编号栏变窄，输入区上下的空白收紧。
-- 窄窗口（侧栏收起时）不变。
+- The conversation takes up more room in wide windows: the maximum width of reply text grows from 760px to 1100px, and code blocks, tables and images widen with it; in an Agent conversation, the messages you send can take up to 88% of the conversation column.
+- The Agent page header is shorter: the title is smaller, and the identity, runtime, status, model and address are merged into one line to the right of the title; this is the same on all four tabs.
+- The turn-number column on the left is narrower, and the space above and below the input area is tighter.
+- Narrow windows (when the sidebar is collapsed) are unchanged.
 
-### 控制台改版（第 3 步）
+### Console redesign (step 3)
 
-- 项目的概览、任务列表和项目设置也放到纸张上；项目页和全局页的页头统一成紧凑的一行：面包屑、大标题，说明和实时状态放在标题旁边。
-- 概览：运行状态、用量、异常与失败按 01–03 编号分区；状态卡片用粗描边和大号数字；用量条改成网点填充（输入蓝、输出粉），用得最多的一行标黄色“最多”；时间范围和分组改成分段按钮。“待你处理”的消息仍在最上面。
-- 任务列表：状态筛选（全部、进行中、受阻、已完成）做成纸张上沿的索引标签，带数量；每个任务一行，显示状态、当前节点、负责的 Agent 和更新时间，受阻是倾斜的红色印章；票根里是进行中、受阻、已完成三个大数字。筛选只作用于已加载的任务，全部和已完成没加载完时数字后面带“+”。
-- 项目设置：八个部分按 01–08 编号分区，右侧票根里是目录尺。
-- 侧栏：选中的 Agent 名称不再被截断（标记放不下时换到第二行）；窗口较矮时侧栏的滚动条改成蓝底上的细白条。
+- The project's overview, task list and project settings are now on the sheet too; project pages and global pages share one compact header row: breadcrumb and large title, with the description and live status next to the title.
+- Overview: Run status, Usage, and Issues and failures are numbered sections 01-03; status cards have a thick outline and large numbers; usage bars are filled with halftone dots (blue for input, pink for output), and the row with the highest usage gets a yellow "Most" mark; the time range and grouping are now segmented buttons. Messages under "Needs you" are still at the very top.
+- Task list: the status filter (All, In progress, Blocked, Completed) becomes index tabs along the top edge of the sheet, each with a count; each task is one row showing its status, current node, responsible Agent and update time, and blocked is a tilted red stamp; the stub shows three large numbers for in progress, blocked and completed. The filter applies only to tasks that have been loaded; All and Completed show a "+" after the number when not everything is loaded.
+- Project settings: the eight parts are numbered sections 01-08, with a contents ruler in the stub on the right.
+- Sidebar: the selected Agent's name is no longer truncated (its badges wrap to a second line when they do not fit); in short windows the sidebar's scrollbar is now a thin white bar on blue.
 
-### 控制台改版（第 4 步）
+### Console redesign (step 4)
 
-- 全局设置、外部身份、插件市场、Skills 库和统计五个全局页面也放到纸张上，页头和项目页一样紧凑。
-- 全局设置：七个部分按编号分区，右侧票根里是目录尺；可以改什么写在顶部的黄色便签里；语言改成分段按钮。开关打开时是黄色，全站一致。
-- 外部身份：列表和详情在同一张纸上，选中的身份是黄色色块；令牌的风险提示改成黄色便签；令牌表直接铺在纸上，“吊销”是红色。
-- 插件市场：已安装、官方市场、其他市场改成纸张上沿的索引标签；插件卡片顶部有蓝、粉、黄轮换的网点色带；“官方”标记改成深色小胶囊，全站一致。
-- Skills 库：模板卡片去掉了倾斜，空状态重新画过，“在线新建”是唯一的粉色按钮。
-- 统计：关键指标做成大号数字卡片，投影颜色区分含义（失败和中断粉色、等你回复黄色、token 总数蓝色）；每张图表是一个编号分区，图表和数字一个不少。
+- The five global pages (Global settings, External identities, Plugin market, Skills library and Stats) are now on the sheet too, with the same compact header as the project pages.
+- Global settings: the seven parts are numbered sections, with a contents ruler in the stub on the right; what can be changed is written on a yellow sticky note at the top; the language is now a segmented button. Switches are yellow when on, consistently across the console.
+- External identities: the list and the details are on the same sheet, and the selected identity is a yellow block; the token risk warning is now a yellow sticky note; the token table lies directly on the sheet, and "Revoke" is red.
+- Plugin market: Installed, Official market and Other markets become index tabs along the top edge of the sheet; plugin cards have a halftone band at the top that rotates through blue, pink and yellow; the "Official" mark is now a small dark pill, consistently across the console.
+- Skills library: template cards are no longer tilted, the empty state has been redrawn, and "Create online" is the only pink button.
+- Stats: key metrics are cards with large numbers, and the shadow color tells them apart (pink for failed and interrupted, yellow for waiting for your answer, blue for total tokens); each chart is a numbered section, and no chart or number has been removed.
 
-### 任务编号
+### Task numbers
 
-- 每个任务有了项目内的编号，显示为 #12：任务列表最前面多了一列“编号”，任务详情的标题前也有。
-- 编号在每个项目里从 1 开始，创建任务时分配，之后不变；任务删掉了，它的编号也不会再给别的任务用。升级时已有的任务按创建顺序补上编号。
-- 接口里的任务对象多了 `number` 字段（控制台接口和 Agent 接口都有）。
+- Every task now has a number within its project, shown as #12: the task list has a new first column, "No.", and the number also appears before the title in the task details.
+- Numbers start at 1 in each project, are assigned when a task is created and never change afterwards; when a task is deleted, its number is not reused for another task. On upgrade, existing tasks are numbered in creation order.
+- Task objects in the API gain a `number` field (in both the console API and the Agent API).
 
-### 修复
+### Fixes
 
-- Agent 回复刚结束（或 `/compact` 刚返回）时马上发消息，偶尔会被当成 Agent 还在忙，白白排一次队；这时发会话命令会直接报“Agent 不空闲”。现在要等 Agent 真正空出来才通知回复结束（PR #54）。
-- 接口：`AgentBusyDetails.currentRunId` 在没有进行中或排队中的执行时为 null，不再给全零的 ID。
+- A message sent right after an Agent's reply ended (or right after `/compact` returned) was occasionally treated as if the Agent were still busy and was queued for nothing; a session command sent at that moment failed outright with "The Agent isn't idle". The end of a reply is now announced only once the Agent is really free (PR #54).
+- API: `AgentBusyDetails.currentRunId` is null when no run is in progress or queued, instead of an all-zero ID.
 
 ## v0.2.5
 
-控制台开始改版（第 1 步：外壳和 Agent 的对话页），对话页有了带轮次编号的新刻度尺；对话框里可以用内置命令管理会话；修复 Agent 偶尔一直显示“回复中”。
+The console redesign begins (step 1: the shell and the Agent's chat page), and the chat page gets a new ruler with turn numbers; built-in commands in the chat box manage the session; and a fix for an Agent occasionally showing "Replying" forever.
 
-### 控制台改版（第 1 步）
+### Console redesign (step 1)
 
-- 控制台开始按新设计改版，风格仍是孔版印刷，颜色和字体不变，这一步改了外壳和 Agent 的对话页。
-- 页面主体放在一张“纸”上：白色纸面、藏青描边、蓝色实色投影，底色带一点纸张颗粒。Agent 的“对话、配置、文件夹、收件箱”改成贴在纸张上沿的索引标签。
-- 页头的标题更大，右上角多了一组蓝、粉、黄叠印的装饰；模型和地址并成一行，复制地址改成图标按钮。
-- 对话页的刻度尺重新设计成一把尺子，放在纸张右侧的“票根”里：一轮一条刻度，每 5 轮一条长刻度带数字，底部是总轮数；当前看到的位置用一笔黄色记号笔标出。它同时代替了滚动条，滚轮、触控板和键盘滚动不变。悬停看预览、点击跳转照旧。
-- 每一轮左侧显示它是第几轮。编号在整个对话里连续，会话重开也不重新计数；往上翻加载更早的消息时已有的编号不变。
-- 输入区并入纸张底部，发送按钮是粉色圆章；按键说明移到输入框下面一行。
-- “会话已切换”的分隔线改成带剪刀的裁切线；“运行记录”做成分段的小票；回复里列表项开头的加粗词显示成黄色小标签。
-- 侧栏的项目卡片、选中行统一了描边和投影，空白处多了一片网点装饰。
+- The console starts moving to a new design. The style is still risograph, with the same colors and fonts; this step changes the shell and the Agent's chat page.
+- The main part of the page sits on a "sheet": a white surface, a navy outline and a solid blue shadow, on a background with a little paper grain. The Agent's "Chat", "Config", "Folder" and "Inbox" are now index tabs attached to the top edge of the sheet.
+- The header title is larger, and the top right corner gains a decoration of overprinted blue, pink and yellow; the model and address are merged into one line, and copying the address is now an icon button.
+- The chat page's ruler has been redesigned as an actual ruler, placed in the "stub" on the right of the sheet: one tick per turn, a long tick with a number every 5 turns, and the total number of turns at the bottom; the position you are viewing is marked with a stroke of yellow highlighter. It also replaces the scrollbar; scrolling with the wheel, trackpad and keyboard is unchanged. Hovering for a preview and clicking to jump work as before.
+- Each turn shows its number on the left. Numbering is continuous across the whole conversation and does not restart when the session is reopened; when you scroll up and earlier messages load, the existing numbers do not change.
+- The input area is merged into the bottom of the sheet, and the send button is a pink round stamp; the key hints move to a line below the input box.
+- The "Session switched" divider is now a cut line with scissors; the "Run log" is a receipt in segments; bold words at the start of list items in replies are shown as small yellow labels.
+- The sidebar's project cards and selected row now share the same outline and shadow, and the empty area gains a patch of halftone dots.
 
-### 对话里的会话命令
+### Session commands in the chat
 
-- Agent 的对话框里可以用内置命令管理会话（外部贡献者 airob0t 提交，PR #25）：`/session` 查看当前会话、模型和进程状态；`/new` 开新会话，页面历史保留；`/compact [说明]` 压缩上下文；`/reload` 停掉当前进程，下一条消息重新加载；`/copy` 复制最近一条有内容的回复；`/export [html|jsonl]` 导出会话；`/resume [会话 ID]` 列出并恢复保留下来的旧会话，只切换模型上下文，不回滚文件和配置。任务节点的对话里没有这些命令。
-- 输入“/”会列出命令；当前不能用的单独列在“现在不能用”一组并写明原因。选中只是填进输入框，不直接执行；`/new` 和恢复会话前会先确认。
-- 用 Claude Code 运行的 Agent 支持 `/session`、`/new`、`/reload`、`/copy`；`/compact`、`/export`、`/resume` 需要 Pi 的会话，会直接提示不支持。
-- 压缩时内容太少或刚压缩过，会说明“不用压缩”，不算失败；压缩结果记在这次执行上，刷新页面后仍能看到。压缩用掉的 token 在统计里算作“你发的消息”。
-- 导出 HTML 用 Pi 自带的导出，不再为此启动 Agent；导出的页面里只有对话内容，没有系统提示词和工具定义。
-- 浏览器不允许写剪贴板时（例如用 http 的局域网地址打开控制台），`/copy` 把内容放在一个只读框里，可以再点一次“复制”或手动选中复制。
-- 概览的“异常与失败”里，失败的手动压缩标为“压缩失败”；点“查看压缩”会在对话页它发生的位置显示一张说明卡片，带这次的运行记录。
-- Agent 从 Pi 换成 Claude Code 后，命令菜单不再列出之前留下的 Pi 命令。
+- Built-in commands in the Agent's chat box manage the session (contributed by external contributor airob0t, PR #25): `/session` shows the current session, model and process state; `/new` starts a new session and keeps the page history; `/compact [instructions]` compacts the context; `/reload` stops the current process, and the next message reloads it; `/copy` copies the latest reply that has content; `/export [html|jsonl]` exports the session; `/resume [session-id]` lists and resumes older sessions that were kept, switching only the model context without rolling back files or config. These commands are not available in task node conversations.
+- Typing "/" lists the commands; those that cannot be used right now are listed separately in a "Not available now" group, each with its reason. Selecting a command only fills it into the input box and does not run it; `/new` and resuming a session ask for confirmation first.
+- Agents running on Claude Code support `/session`, `/new`, `/reload` and `/copy`; `/compact`, `/export` and `/resume` need a Pi session and report right away that they are not supported.
+- When there is too little content to compact or the session was just compacted, the command says that there is no need to compact, and this does not count as a failure; the compaction result is recorded on that run and is still visible after refreshing the page. Tokens used by compaction are counted under "Your messages" in Stats.
+- HTML export uses Pi's own exporter and no longer starts the Agent for it; the exported page contains only the conversation, without the system prompt or tool definitions.
+- When the browser does not allow writing to the clipboard (for example when the console is opened at an http LAN address), `/copy` puts the content in a read-only box, where you can click "Copy" again or select the text and copy it by hand.
+- In "Issues and failures" on the overview, a failed manual compaction is labeled "Compaction failed"; clicking "View compaction" shows a note card on the chat page at the place where it happened, with the run log for it.
+- After an Agent is switched from Pi to Claude Code, the command menu no longer lists the Pi commands left over from before.
 
-### 修复
+### Fixes
 
-- Agent 偶尔会在回复结束后一直显示“回复中”：发给它的消息被拒绝或排队不动，要重启 Loop Now 才恢复。原因是后台对账给刚结束的回复补上了忙碌标记、之后没人撤掉；现在补上后会再确认一次，已经结束就立刻撤掉，并接着处理排队的消息。
+- An Agent would occasionally keep showing "Replying" after its reply had ended: messages sent to it were rejected or stayed in the queue, and only restarting Loop Now fixed it. The cause was that background reconciliation put the busy mark back on a reply that had just ended, and nothing removed it afterwards; now it checks once more after restoring the mark, removes it immediately if the reply has already ended, and goes on to handle the queued messages.
 
 ## v0.2.4
 
-Agent 对话页多了一条消息刻度尺：一眼看出对话有多少轮、现在看到哪，点一下跳到某一轮。
+The Agent chat page gains a message ruler: see at a glance how many turns the conversation has and where you are, and click to jump to a turn.
 
-### 控制台
+### Console
 
-- Agent 对话页的消息列表右侧多了一条刻度尺：一条刻度是一轮对话，屏幕上能看到的那几轮刻度加深。鼠标悬停或用键盘移到某条刻度上，会显示那一轮你发的消息开头；点一下跳到那一轮。轮次很多时刻度先变密，再多刻度尺自己滚动并跟着当前位置走。只包含已加载的轮次，往上翻加载更早的消息后刻度会增加。少于两轮或窗口较窄（左侧栏收起）时不显示。
+- A ruler now runs along the right of the message list on the Agent chat page: each tick is one turn of the conversation, and the ticks for the turns visible on screen are darker. Hovering over a tick, or moving to it with the keyboard, shows the beginning of the message you sent in that turn; clicking jumps to that turn. With many turns the ticks first get denser, and with even more the ruler scrolls on its own and follows the current position. It covers only the turns that have been loaded, and ticks are added as you scroll up and earlier messages load. It is hidden when there are fewer than two turns or the window is narrow (left sidebar collapsed).
 
 ## v0.2.3
 
-Agent 可以用这台电脑上安装的 Claude Code 运行；插件可以带来模型提供方和订阅登录，首个是社区扩展 pi-grok-cli；平台交给模型的固定文字改为英文。
+Agents can run on the Claude Code installed on this computer; plugins can bring model providers and subscription logins, the first being the community extension pi-grok-cli; and the fixed text the platform gives to models is now in English.
 
-### Agent 可以用本机的 Claude Code 运行
+### Agents can run on the local Claude Code
 
-- Agent 除了随包的 Pi，还可以由这台电脑上安装的 Claude Code 执行。在 Agent 的模型提供方里选"Claude Code"即可，模型是 fable、opus、sonnet、haiku（随 Claude Code 指向各系列最新的模型），思考等级 low 到 max。项目里的 Agent 和不属于项目的 Agent 都支持。
-- 用的是你本人在这台电脑上的 Claude Code 登录：Loop Now 只启动本机未经修改的 `claude`，不读取、不保存它的登录信息，也不提供"在 Loop Now 里登录 Claude"。环境里的 `ANTHROPIC_API_KEY` 等变量不会传给它。需要先在本机装好 Claude Code 并在终端里登录；"全局设置 › Agent 运行时"显示是否找到、版本和登录状态。
-- 这类 Agent 以你真实的家目录运行：它执行 gh、git 等命令时用的是你本人的登录，相当于对它单独开启了"用本机的登录状态"（与那个全局开关无关）。和 Pi 的 Agent 一样不经确认直接执行命令。Agent 自己的文件夹、任务副本和回收不变。
-- 不加载你个人的 Claude Code 设置（CLAUDE.md、hooks、MCP、插件、自带技能、自动记忆），Agent 看到的技能只有平台给的。只保留作用在 Agent 自身的工具（执行命令、读写文件、技能、子任务、联网搜索）；给本机其他 Claude 会话发消息、手机推送、云端例行任务、定时唤醒等不提供，定时和通知用 Loop Now 自己的 sleep 与收件箱。
-- 插件：技能与 MCP 工具可用；Pi 扩展不适用，所以没有 `/pi:` 命令和插件带来的模型提供方，经扩展注入的规则也拿不到。只含 Pi 扩展的插件在 Agent 的插件授权里会标出。
-- 在 Pi 与 Claude Code 之间切换模型提供方会开始新会话：原会话保留但不带过去，等待中的 sleep 取消。保存前会确认；Agent 正在回复时不能切换。
-- Claude Code 的会话记录由它自己写在 `~/.claude/projects/` 下，按 Agent 的工作目录分开。删除 Agent 或任务回收时，Loop Now 先把这份记录归档到自己的数据目录，再用 `claude purge` 清掉对应的那一份，不动你平时使用 Claude Code 的记录。
-- 运行记录里显示订阅额度的状态（如 5 小时额度与重置时间）。用量按每轮每个模型记一条，被打断的那一轮不计用量。
-- 已知限制：只在 macOS 上用 Claude Code 2.1.322 验证过，Windows 未验证；任务里的 Claude Code Agent 和插件的 MCP 工具只通过了自动测试，没有用真实的 Claude Code 验证；Claude Code 升级后参数或输出若有变化，可能需要更新 Loop Now。
+- Besides the bundled Pi, an Agent can now be run by the Claude Code installed on this computer. Choose "Claude Code" as the Agent's model provider; the models are fable, opus, sonnet and haiku (each follows Claude Code to the latest model of its family), and the thinking level goes from low to max. Both Agents in a project and Agents that belong to no project are supported.
+- It uses your own Claude Code login on this computer: Loop Now only starts the unmodified local `claude`, does not read or store its login information, and does not offer a way to "log in to Claude inside Loop Now". Variables such as `ANTHROPIC_API_KEY` in the environment are not passed to it. You need to install Claude Code on this computer and log in from a terminal first; "Global settings > Agent runtimes" shows whether it was found, its version and its login status.
+- Such an Agent runs with your real home directory: when it runs commands such as gh or git it uses your own logins, as if "Use local logins" were turned on for it alone (regardless of that global switch). Like Pi Agents, it runs commands directly without asking for confirmation. The Agent's own folder, task copies and reclaiming are unchanged.
+- Your personal Claude Code settings are not loaded (CLAUDE.md, hooks, MCP, plugins, built-in skills, auto memory), and the only skills the Agent sees are those the platform provides. Only tools that act on the Agent itself are kept (running commands, reading and writing files, skills, subtasks, web search); sending messages to other Claude sessions on this computer, mobile push notifications, cloud routines, scheduled wake-ups and the like are not provided, and scheduling and notifications use Loop Now's own sleep and inbox.
+- Plugins: skills and MCP tools work; Pi extensions do not apply, so there are no `/pi:` commands and no model providers from plugins, and rules injected through extensions are not available either. Plugins that contain only Pi extensions are marked in the Agent's plugin grants.
+- Switching the model provider between Pi and Claude Code starts a new session: the original session is kept but not carried over, and pending sleeps are cancelled. You are asked to confirm before saving; you cannot switch while the Agent is replying.
+- Claude Code writes its session records itself under `~/.claude/projects/`, separated by the Agent's working directory. When an Agent is deleted or a task is reclaimed, Loop Now first archives these records into its own data directory and then uses `claude purge` to remove just that copy, leaving the records of your everyday Claude Code use untouched.
+- The run log shows the status of the subscription limit (such as the 5-hour limit and its reset time). Usage is recorded as one entry per model per turn, and a turn that was interrupted records no usage.
+- Known limitations: verified only on macOS with Claude Code 2.1.322, and not verified on Windows; Claude Code Agents in tasks and plugins' MCP tools have only passed automated tests and have not been verified with a real Claude Code; if Claude Code's arguments or output change after it is upgraded, Loop Now may need an update.
 
-### 本机模式
+### Local mode
 
-- 新增第四个开关"用本机的登录状态"，默认关闭（升级后也是关闭），打开时要确认一次。开启后，Agent 直接用你在这台电脑上各个工具的登录，等同以你本人的身份操作，所有 Agent 共用（任务里的 Agent 也一样）；Loop Now 里已为 Agent 配了账号的 CLI 仍用配置的账号。它与"用本机的 CLI"互相独立：只开这一项时，只有 Agent 原本就能调用的命令用得上这些登录。
+- A fourth switch, "Use local logins", is added. It is off by default (and stays off after upgrading) and asks for confirmation once when turned on. Once on, Agents directly use your logins for the tools on this computer, which is the same as acting as you, and all Agents share them (Agents in tasks too); CLIs that already have an account configured for the Agent in Loop Now still use the configured account. It is independent of "Use local CLIs": with only this one on, only commands Agents could already run can use these logins.
 
-### 插件带来的模型提供方
+### Model providers from plugins
 
-- 插件市场里的 Pi 扩展可以带来模型提供方和订阅登录。安装（或更新）确认后，Loop Now 读取扩展注册的提供方和模型，在插件详情的"模型提供方"里列出；带登录的提供方进入模型目录。
-- 订阅账号按项目管理：在项目设置的"模型账号"里选插件的提供方登录（浏览器登录或设备码，由扩展决定有哪些方式），再在 Agent 配置里选用。Agent 要先被授权该插件，才能在模型配置里选它的提供方；新建 Agent 时不能直接选，建好后再改。
-- 登录状态由扩展自己保存和刷新，放在 Loop Now 的数据目录里（只有当前用户可读），不进数据库，也不进备份；同一项目里选用同一账号的 Agent 共用一份。任务沿用开始时的那次登录，重新登录不影响进行中的任务。
-- 卸载插件默认保留各项目的订阅账号，重新安装后恢复；勾选"同时删除数据"时一并删除。
-- 开着"用本机的登录状态"时，这类提供方用的是这台电脑上该扩展自己的登录，而不是项目账号；本机没有这份登录时 Agent 启动会直接报错并说明原因。
-- 首个可用的是社区扩展 pi-grok-cli（SuperGrok 或 X Premium 订阅，非 xAI 官方），在官方插件市场里安装。
-- 不属于任何项目的 Agent 暂不支持这类提供方。
+- Pi extensions in the plugin market can bring model providers and subscription logins. After you confirm an install (or update), Loop Now reads the providers and models the extension registers and lists them under "Model providers" in the plugin details; providers that come with a login enter the model catalog.
+- Subscription accounts are managed per project: under "Model accounts" in project settings, choose the plugin's provider and log in (browser login or device code; the extension decides which methods exist), then select the account in the Agent config. The plugin must first be granted to the Agent before its provider can be chosen in the model config; it cannot be chosen directly when creating an Agent, so create the Agent and change it afterwards.
+- The login state is saved and refreshed by the extension itself and kept in Loop Now's data directory (readable only by the current user); it is not stored in the database or in backups; Agents in the same project that use the same account share one copy. A task keeps using the login from when it started, and logging in again does not affect tasks in progress.
+- Uninstalling a plugin keeps each project's subscription accounts by default, and they are restored after reinstalling; they are deleted as well when "Also delete the data folder" is checked.
+- With "Use local logins" on, such providers use the extension's own login on this computer rather than the project account; when this computer has no such login, starting the Agent fails right away with an error that explains why.
+- The first one available is the community extension pi-grok-cli (a SuperGrok or X Premium subscription; not official from xAI), installed from the official plugin market.
+- Agents that do not belong to any project do not support such providers yet.
 
-### 给模型的固定文字改为英文
+### Fixed text given to models is now in English
 
-- 平台交给模型的固定文字全部改成英文：系统提示里平台追加的段落（文件夹与上下文、本机目录、本机登录等）、每条消息开头的运行 ID 行、平台发给 Agent 的通知和提醒（sleep 到期、任务节点开始、Inbox 提醒、提问状态、给 Manager 的任务通知等）、loopctl 的技能说明与命令描述、官方插件给模型的提示。此前这些是中文，用英文和 Agent 说话时它常常回中文；现在新开的会话会跟随你用的语言。已有的对话里历史还是中文，模型可能继续用中文回复。
-- 错误信息、失败原因和界面文案不变。
-- 副作用：既给模型读又显示在控制台里的几处平台文字（对话里的平台提醒正文、任务通知、"提问已到期"、转发时的原收件人标注）在中文界面里也显示英文。
+- All fixed text the platform gives to models is now in English: the paragraphs the platform appends to the system prompt (folders and context, local directories, local logins and so on), the run ID line at the start of each message, the notices and reminders the platform sends to Agents (sleep due, task node started, Inbox reminders, question status, task notices to the Manager and so on), loopctl's skill instructions and command descriptions, and the prompts official plugins give to models. These used to be in Chinese, so an Agent you spoke to in English often replied in Chinese; newly started sessions now follow the language you use. In existing conversations the history is still in Chinese, and the model may keep replying in Chinese.
+- Error messages, failure reasons and UI copy are unchanged.
+- Side effect: a few pieces of platform text that are both read by the model and shown in the console (the body of platform reminders in a conversation, task notices, the "question has expired" notice, the original-recipient note on forwarded messages) appear in English in the Chinese UI as well.
 
-### 控制台
+### Console
 
-- 对话输入框输入 "/" 时弹出 Pi 的命令列表（扩展命令、技能、提示模板），显示为 `/pi:<名称>`；用 ↑↓ 选择，Enter 或 Tab 补全。发送 `/pi:<名称> 参数` 会让 Pi 执行这条命令；命令自己处理完、没有模型回复时，这一轮显示"命令已执行，没有回复"。列表在 Agent 运行过一次后才有。不带 `pi:` 的 `/xxx` 和以前一样：先交给插件认领，没人认领就作为普通文字发给模型。
-- 项目里左侧栏的"任务"旁显示正在运行的任务数（准备中、等待和阻塞的不算），为 0 时不显示。任务开始或结束后几秒内自动更新，打开任务页时即时更新，不用刷新页面。
-- 总览的"Pi 进程"一列改名为"进程"，统计页的"Pi 冷启动／Pi 异常退出"改为"冷启动／进程异常退出"：这些数字包含两种运行时的进程。
+- Typing "/" in the chat input box brings up Pi's command list (extension commands, skills, prompt templates), shown as `/pi:<name>`; choose with ↑↓ and fill in with Enter or Tab. Sending `/pi:<name> arguments` makes Pi run that command; when the command handles everything itself and there is no model reply, the turn shows "Command ran; no reply". The list is available only after the Agent has run once. A `/xxx` without `pi:` works as before: it is first offered to plugins to claim, and if none claims it, it is sent to the model as ordinary text.
+- In a project, the number of running tasks is shown next to "Tasks" in the left sidebar (preparing, waiting and blocked tasks are not counted); nothing is shown when it is 0. It updates automatically within a few seconds after a task starts or ends, and immediately when you open the tasks page, with no need to refresh the page.
+- The "Pi process" column on the overview is renamed "Process", and "Pi cold starts / Pi crashes" on the Stats page become "Cold starts / Process crashes": these numbers cover the processes of both runtimes.
 
-### 修复
+### Fixes
 
-- Windows：Agent 进程刚退出时偶尔被误判为仍在运行，导致停止或交接报 `runtime_stop_unconfirmed`。
-- 执行时间线：最后一次工具调用与结束落在同一时刻时，"结束"不再排到工具调用前面。
+- Windows: an Agent process that had just exited was occasionally misjudged as still running, which made a stop or handover report `runtime_stop_unconfirmed`.
+- Run timeline: when the last tool call and the end fall at the same instant, the "end" entry is no longer placed before the tool call.
 
-### 服务端
+### Server
 
-- 新增 `GET /agents/{agentId}/commands`（Pi 上次启动时的命令列表）、`POST /projects/{projectId}/model-auth/operations/{operationId}/input`（回答登录中途的问题）；`GET /model-providers` 可带 `agentId`，返回插件提供方对该 Agent 是否可用及原因。
-- 插件清单与市场条目新增可选的 `providerState`：声明提供方有哪些 HOME 下的路径随项目账号保存。
-- 新增 `GET /projects/{projectId}/tasks/counts`（仅控制台）：按状态返回项目里未结束的任务数。
-- 新增 `GET /runtimes`（仅控制台）：各运行时是否可用、版本，以及本机 Claude Code 的路径与登录状态（不含邮箱和组织）。Agent 新增只读的 `runtime`（`pi`／`claude-code`，由模型提供方决定）；模型提供方新增 `runtime`，`source` 新增 `local_cli`。
-- 失败原因新增 `runtime_unavailable`、`runtime_login_required`、`runtime_start_failed`、`runtime_exited`、`runtime_error`（Claude Code 运行时用，Pi 的 `pi_*` 不变）；时间线的进程条目新增可选的 `runtime`，新增 `model_rate_limit` 条目。
+- New `GET /agents/{agentId}/commands` (the command list from Pi's last start) and `POST /projects/{projectId}/model-auth/operations/{operationId}/input` (answers a question asked in the middle of a login); `GET /model-providers` can take `agentId` and returns whether each plugin provider is available to that Agent and why.
+- Plugin manifests and market entries gain an optional `providerState`: it declares which paths under HOME the provider has saved along with the project account.
+- New `GET /projects/{projectId}/tasks/counts` (console only): returns the number of unfinished tasks in the project by status.
+- New `GET /runtimes` (console only): whether each runtime is available and its version, plus the path and login status of the local Claude Code (without email or organization). Agents gain a read-only `runtime` (`pi` / `claude-code`, determined by the model provider); model providers gain `runtime`, and `source` gains `local_cli`.
+- Failure reasons gain `runtime_unavailable`, `runtime_login_required`, `runtime_start_failed`, `runtime_exited` and `runtime_error` (used by the Claude Code runtime; Pi's `pi_*` are unchanged); process entries in the timeline gain an optional `runtime`, and there is a new `model_rate_limit` entry.
 
 ## v0.2.2
 
-新增"本机模式"：让 Agent 直接用这台电脑上已有的目录、git 凭证和命令。三项各有开关，在"全局设置 › 本机模式"里，默认全部开启，升级后也是。
+New "Local mode": lets Agents directly use the directories, git credentials and commands already on this computer. Each of the three has its own switch under "Global settings > Local mode"; all are on by default, and after upgrading too.
 
-### 本机模式
+### Local mode
 
-- 绑定本机目录：在项目设置和 Agent 配置里登记本机目录（绝对路径加备注），项目登记的对项目里所有 Agent 有效。Agent 自己的文件夹不变，这些目录是另外告诉它可以去干活的地方。Agent 在里面的改动直接落在真实文件上，任务里也一样，不走任务副本；这份清单只是告知，不是访问隔离。目录不存在时会标出来，暂不告诉 Agent。
-- 用本机的 git 身份："从 Git 拉取"时，HTTPS 地址可以用这台电脑上已保存的 git 凭证（如钥匙串），SSH 地址可以用 ssh-agent 里的密钥，GitHub 以外的私有仓库因此可以拉取。SSH 地址用 `~/.ssh` 下的密钥一直可用，不受这个开关影响。Agent 配了 GitHub 账号时，github.com 仍只用该账号。
-- 用本机的 CLI：Agent 能调用这台电脑上安装的命令（你的 PATH 接在 Agent 的 PATH 之后）；这些命令的登录状态仍用 Loop Now 里配置的账号。PATH 在服务端启动时读取一次，新装的工具要重启 Loop Now 才看得到。
-- 拉取失败时区分"认证失败"和"SSH 主机密钥未确认"，并给出下一步怎么做。
+- Bind local directories: register local directories (an absolute path plus a note) in project settings and in the Agent config; those registered on a project apply to all Agents in the project. The Agent's own folder is unchanged; these directories are additional places it is told it can work in. The Agent's changes there land directly on the real files, in tasks too, without going through a task copy; the list only informs the Agent and is not access isolation. A directory that does not exist is marked, and the Agent is not told about it for the time being.
+- Use local git identity: for "Pull from Git", HTTPS addresses can use the git credentials saved on this computer (such as in the keychain) and SSH addresses can use the keys in ssh-agent, so private repositories outside GitHub can be pulled. SSH addresses using keys under `~/.ssh` have always worked and are not affected by this switch. When the Agent has a GitHub account configured, github.com still uses only that account.
+- Use local CLIs: Agents can run the commands installed on this computer (your PATH is appended after the Agent's PATH); for their logins, these commands still use the accounts configured in Loop Now. PATH is read once when the server starts, so newly installed tools are seen only after restarting Loop Now.
+- When a pull fails, "Authentication failed" and "SSH host key not verified" are told apart, each with what to do next.
 
-### 服务端
+### Server
 
-- `loop-server import-postgres` 改为先建到基线结构、导入并核对后再应用后续迁移。
+- `loop-server import-postgres` now first builds the baseline schema, imports and verifies the data, and only then applies the later migrations.
 
 ## v0.2.1
 
-修复桌面版里外部身份和 `loopctl` 用不了的问题。
+Fixes external identities and `loopctl` not working in the desktop app.
 
-### 桌面版
+### Desktop app
 
-- 外部身份和 `loopctl` 可以用了：桌面版自动在本机（127.0.0.1）开对外 TLS 端口，端口第一次由系统选、之后沿用，证书是服务端自己维护的自签证书（`~/Library/Application Support/Loop Now/<配置>/shell/tls/cert.pem`）。菜单栏图标多了"外部身份连接方式…"，显示地址、证书位置和把令牌配进 `loopctl` 的命令，可以一键复制。之前创建的 `lne_` 令牌不用重发。目前只接受本机的连接。
+- External identities and `loopctl` now work: the desktop app automatically opens the external TLS port on this machine (127.0.0.1); the port is chosen by the system the first time and reused afterwards, and the certificate is a self-signed one maintained by the server itself (`~/Library/Application Support/Loop Now/<profile>/shell/tls/cert.pem`). The menu bar icon gains "External Identity Connection...", which shows the address, the certificate location and the command that sets the token up in `loopctl`, each copyable with one click. `lne_` tokens created earlier do not need to be reissued. Only connections from this machine are accepted for now.
 
-### 服务端
+### Server
 
-- 新增 `LOOP_NOW_EXTERNAL_TLS_SELF_SIGNED=<目录>`：对外端口改用服务端在该目录里维护的自签证书（`cert.pem`、`key.pem`，没有或临近过期时生成，覆盖回环地址与对外监听的主机），与 `LOOP_NOW_EXTERNAL_TLS_CERT`／`LOOP_NOW_EXTERNAL_TLS_KEY` 互斥。开了对外端口时就绪文件多一项 `externalUrl`。
+- New `LOOP_NOW_EXTERNAL_TLS_SELF_SIGNED=<dir>`: the external port uses a self-signed certificate that the server maintains in that directory (`cert.pem` and `key.pem`, generated when missing or close to expiry, covering the loopback addresses and the host the external listener is bound to); mutually exclusive with `LOOP_NOW_EXTERNAL_TLS_CERT` / `LOOP_NOW_EXTERNAL_TLS_KEY`. When the external port is open, the ready file gains an `externalUrl` entry.
 
 ## v0.2.0
 
-这一版把存储换成了 SQLite，不再需要 PostgreSQL 和 Redis，并推出 macOS 桌面版。从 v0.1.0 升级要做一次数据导入，见下文"从 v0.1.0 升级"。
+This version switches storage to SQLite, no longer needs PostgreSQL or Redis, and introduces the macOS desktop app. Upgrading from v0.1.0 requires a one-time data import; see "Upgrading from v0.1.0" below.
 
-### 桌面版（macOS Apple Silicon）
+### Desktop app (macOS Apple Silicon)
 
-- 一个 DMG 里带着服务端、控制台、Node 24.21 和 Pi 1.4.0，不需要另装任何东西。下载 `loop-now-desktop-<版本>-mac-arm64.dmg`，拖进"应用程序"即可。
-- 菜单栏图标显示运行状态，可以打开窗口、在浏览器中打开、设置登录时启动、查看日志、重启和退出。关掉窗口时服务端和 Agent 继续在后台运行。
-- 页面的提醒以系统通知和 Dock 未读数显示；外部链接在系统浏览器中打开。
-- 数据与源码安装分开：数据库和每日备份在 `~/Library/Application Support/Loop Now/default/data`，Agent 工作区在 `/Users/Shared/loop-now-desktop/default`，日志在 `~/Library/Logs/Loop Now/default`。用 `open -a "Loop Now" --args --profile=<名字>` 可以另用一套独立的数据。
-- 安装包尚未经过 Apple 公证：第一次打开时，到"系统设置 › 隐私与安全性"点"仍要打开"。菜单栏的"检查更新"只提示新版本并打开下载页，不会自动安装。
-- 目前只有 Apple Silicon 版。外部身份和 `loopctl` 需要的对外 TLS 端口，桌面版暂时还不能开启。
+- One DMG carries the server, the console, Node 24.21 and Pi 1.4.0; nothing else needs to be installed. Download `loop-now-desktop-<version>-mac-arm64.dmg` and drag the app into "Applications".
+- The menu bar icon shows the running status and lets you open the window, open in the browser, set launch at login, view logs, restart and quit. When you close the window, the server and the Agents keep running in the background.
+- Alerts from the page appear as system notifications and as an unread count on the Dock; external links open in the system browser.
+- Data is kept separate from a source installation: the database and daily backups are in `~/Library/Application Support/Loop Now/default/data`, Agent workspaces in `/Users/Shared/loop-now-desktop/default`, and logs in `~/Library/Logs/Loop Now/default`. `open -a "Loop Now" --args --profile=<name>` runs it with a separate, independent set of data.
+- The package is not yet notarized by Apple: the first time you open it, go to "System Settings > Privacy & Security" and click "Open Anyway". "Check for updates" in the menu bar only announces a new version and opens the download page; it does not install automatically.
+- Only an Apple Silicon build exists for now. The external TLS port that external identities and `loopctl` need cannot be opened in the desktop app yet.
 
-### 存储只用 SQLite
+### Storage uses SQLite only
 
-- 运行只需要一个 `loop-server` 和一个数据目录（`LOOP_NOW_DATA_DIR`，默认 `~/.loop_now`）。数据库在其中的 `db/` 下，首次启动时自动创建。
-- 每天自动备份到 `<数据目录>/backups`，保留最近 7 份（`LOOP_NOW_BACKUP_DIR`、`LOOP_NOW_BACKUP_KEEP` 可改）；`loop-server backup <目录>` 可以随时手动备份，服务运行中也可以。
-- 凭证仍以明文保存在数据目录的数据库文件里，同一用户的其他进程可以直接读取。请保护好数据目录和备份。
+- Running needs only one `loop-server` and one data directory (`LOOP_NOW_DATA_DIR`, default `~/.loop_now`). The database is under `db/` inside it and is created automatically on first start.
+- A backup is made automatically every day to `<data dir>/backups`, keeping the latest 7 (changeable with `LOOP_NOW_BACKUP_DIR` and `LOOP_NOW_BACKUP_KEEP`); `loop-server backup <dir>` makes a manual backup at any time, even while the server is running.
+- Credentials are still stored in plain text in the database file in the data directory, and other processes of the same user can read them directly. Protect the data directory and the backups.
 
-### 发行包
+### Release bundles
 
-- 每个版本在 GitHub Releases 提供服务端发行包，平台有 macOS（Apple Silicon、Intel）和 Linux（x86_64、ARM64）。包里有内嵌控制台的 `loop-server`、`loopctl`、插件宿主、官方插件，以及 Node 24.21.0 和 Pi 1.4.0，解开后不用另装 Node 和 Pi。控制台就在服务端口的根路径（默认 `http://127.0.0.1:8780/`）。
-- 全部文件的校验和在 `SHA256SUMS` 里。
+- Each version provides server release bundles on GitHub Releases, for macOS (Apple Silicon, Intel) and Linux (x86_64, ARM64). A bundle contains `loop-server` with the console built in, `loopctl`, the plugin host, the official plugins, plus Node 24.21.0 and Pi 1.4.0, so after unpacking there is no need to install Node or Pi separately. The console is served at the root path of the server port (default `http://127.0.0.1:8780/`).
+- Checksums for all files are in `SHA256SUMS`.
 
-### 控制台
+### Console
 
-- 项目设置 › 模型账号：提供方改为可搜索的选择面板。按用途分组，显示名称、别名和地区版本；已有账号的提供方排在前面。只需 API Key 的提供方直接打开填写表单，Codex 直接进入登录。账号行显示提供方名称、id 和认证方式，更新时间按控制台的语言格式显示。
-- 插件详情页和安装、更新前的预览会显示插件的 README（按控制台语言选择）；来自 git 的插件显示仓库链接。官方插件都有中英文 README。
-- 控制台支持英文：默认跟随浏览器语言，可以在"全局设置"里切换，也可以用 `?lang=` 指定。
-- 全局设置 › 模型配置可以编辑固定版本 Pi 的原生 `models.json`，添加自定义 Provider 或覆盖内置 Provider。`apiKey` 和 `headers` 只接受 `$NAME` 形式的环境变量引用，真实凭证仍在项目的模型账号里配置。
+- Project settings > Model accounts: the provider is now chosen from a searchable panel. Providers are grouped by purpose and show their name, aliases and regional variants; providers that already have an account come first. Providers that need only an API key open the form directly, and Codex goes straight to login. Account rows show the provider name, id and authentication method, and the update time is formatted for the console's language.
+- The plugin details page and the preview before installing or updating show the plugin's README (chosen by the console language); plugins that come from git show a repository link. All official plugins have READMEs in Chinese and English.
+- The console supports English: it follows the browser language by default, can be switched in "Global settings", and can also be set with `?lang=`.
+- Global settings > Model settings can edit the native `models.json` of the pinned Pi version, to add custom providers or override built-in ones. `apiKey` and `headers` accept only environment variable references of the form `$NAME`; real credentials are still configured in the project's model accounts.
 
-### 插件与工具
+### Plugins and tools
 
-- 插件清单的 `mcpServers` 支持 streamable HTTP 条目（`http://` 或 `https://` 地址）。
-- 插件的 `displayName`、`description` 可以按语言分别写，控制台按当前语言显示。
-- Agent 在插件的线索里回复时可以带选项提问，插件用 SDK 的 `api.channels.answer` 作答；插件拿到的 `config.projects` 只包含启用了它的项目。
-- mysql、gcloud 两个 CLI 工具支持 Linux/arm64。
-- 新增 Docker Compose 一体化运行，端口只绑定本机回环地址。
+- `mcpServers` in the plugin manifest supports streamable HTTP entries (`http://` or `https://` addresses).
+- A plugin's `displayName` and `description` can be written per language, and the console shows them in the current language.
+- When replying in a plugin's thread, an Agent can ask a question with options, and the plugin answers with the SDK's `api.channels.answer`; the `config.projects` a plugin receives contains only the projects that have it enabled.
+- The mysql and gcloud CLI tools support Linux/arm64.
+- New all-in-one Docker Compose setup, with ports bound only to the local loopback address.
 
-### 从 v0.1.0 升级
+### Upgrading from v0.1.0
 
-v0.1.0 的数据在 PostgreSQL 里，v0.2.0 要一次性导入到 SQLite。导入只读旧库、不改动它，需要回退时旧版本仍可以用旧库运行（切换后产生的数据不会回到旧库）。
+v0.1.0 keeps its data in PostgreSQL, and v0.2.0 needs it imported into SQLite once. The import only reads the old database and does not modify it, so if you need to roll back, the old version can still run on the old database (data created after the switch does not go back into the old database).
 
-1. 导入要求旧库已经迁移到 PostgreSQL 版的最后一个迁移，而 v0.1.0 还差两个迁移。先检出 tag `pg-final`（PostgreSQL 版的最后一个提交），从源码构建，用原来的配置启动一次，迁移完成后停掉服务。
-2. 用 v0.2.0 的 `loop-server`：让 `LOOP_NOW_DATA_DIR` 指向一个还没有数据库的数据目录（默认的 `~/.loop_now` 里只要还没有 `db/` 就可以），把 `LOOP_NOW_DATABASE_URL` 设为旧库，运行一次 `loop-server import-postgres`。它在一个一致的快照里复制全部数据，核对行数、外键与完整性，并打印每张表的行数；任何一步失败都不会留下新库。
-3. 保持原来的 `LOOP_NOW_WORK_ROOT`，在这个数据目录上启动 v0.2.0。之后不再需要 Redis。
+1. The import requires the old database to be migrated to the last migration of the PostgreSQL version, and v0.1.0 is two migrations short of that. First check out the tag `pg-final` (the last commit of the PostgreSQL version), build from source, start it once with your original configuration, and stop the server once the migrations have finished.
+2. With v0.2.0's `loop-server`: point `LOOP_NOW_DATA_DIR` at a data directory that has no database yet (the default `~/.loop_now` is fine as long as it has no `db/` yet), set `LOOP_NOW_DATABASE_URL` to the old database, and run `loop-server import-postgres` once. It copies all data within one consistent snapshot, verifies row counts, foreign keys and integrity, and prints the row count of every table; if any step fails, no new database is left behind.
+3. Keep your original `LOOP_NOW_WORK_ROOT` and start v0.2.0 on this data directory. Redis is no longer needed after that.
 
-### 不兼容的变化
+### Breaking changes
 
-- 不再使用 PostgreSQL 和 Redis。`LOOP_NOW_REDIS_URL`、`LOOP_NOW_REDIS_KEY_PREFIX`、`LOOP_NOW_LOCK_TTL`、`LOOP_NOW_LOCK_RENEW_INTERVAL`、`LOOP_NOW_RUN_TEXT_TTL` 已删除，设置了也不再读取；`LOOP_NOW_DATABASE_URL` 只在 `loop-server import-postgres` 导入时读取。
-- 健康接口 `GET /api/v1/health` 改为 `{ok, database}`：去掉了 `postgres`、`redis` 字段，`database` 里带数据库状态、WAL 大小和告警。`loopctl health` 也改为显示数据库状态。
-- 一个数据目录、一个工作根同时只能由一个服务端使用。启动失败的退出码固定为：2 配置错误，3 数据目录或工作根被另一个服务端占用，4 监听地址被占用，其他错误为 1。
-- 进行中的回复只保存在内存里：正常停止服务时，回复以已经生成的内容结束并标为中断；服务端崩溃时这部分内容会丢失（以前保存在 Redis 里）。
-- 生命周期事件、工具调用事件和审计日志只保留最近 90 天，每天清理一次。
-- 新安装创建的默认组织和默认项目都叫 `default`（原来是"默认组织""默认项目"），已有数据不受影响。
+- PostgreSQL and Redis are no longer used. `LOOP_NOW_REDIS_URL`, `LOOP_NOW_REDIS_KEY_PREFIX`, `LOOP_NOW_LOCK_TTL`, `LOOP_NOW_LOCK_RENEW_INTERVAL` and `LOOP_NOW_RUN_TEXT_TTL` have been removed and are no longer read even if set; `LOOP_NOW_DATABASE_URL` is read only by `loop-server import-postgres` during the import.
+- The health endpoint `GET /api/v1/health` now returns `{ok, database}`: the `postgres` and `redis` fields are gone, and `database` carries the database status, WAL size and warnings. `loopctl health` now shows the database status as well.
+- A data directory and a work root can each be used by only one server at a time. Exit codes for startup failures are fixed: 2 for a configuration error, 3 when the data directory or work root is in use by another server, 4 when the listen address is in use, and 1 for other errors.
+- A reply in progress is kept only in memory: when the server is stopped normally, the reply ends with the content generated so far and is marked as interrupted; when the server crashes, that content is lost (it used to be stored in Redis).
+- Lifecycle events, tool call events and audit logs are kept only for the latest 90 days and are cleaned up once a day.
+- The default organization and default project created by a new installation are both named `default` (previously “默认组织” and “默认项目”, Chinese for "Default organization" and "Default project"); existing data is not affected.
