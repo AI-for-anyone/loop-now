@@ -5,10 +5,13 @@
 //     quotation marks. Quoting a Chinese UI text or error message is allowed when it is wrapped in "...", “...”,
 //     ‘...’, `...`, 「...」 or 『...』 on one line, followed by its English, e.g. “用本机的登录状态” ("Use local logins");
 //   - a log message (the message argument of Debug/Info/Warn/Error, their Context variants, Log and LogAttrs on a
-//     logger) that is a string literal containing Chinese.
+//     logger) that is a string literal containing Chinese;
+//   - any line of the API contracts api/*.yaml that contains Chinese: their descriptions, summaries, titles and
+//     comments are English, and so are examples. (A pattern that must match Chinese writes it with \u escapes, which
+//     are plain ASCII in the file.)
 //
-// It does not look at string literals in general: error messages, test data and API descriptions are covered by
-// later steps of the English pass, and shipped SQL migrations are never rewritten.
+// It does not look at Go string literals in general: error messages and test data are covered by a later step of the
+// English pass, and shipped SQL migrations are never rewritten.
 //
 // Run from the repository root:
 //
@@ -140,12 +143,29 @@ func main() {
 		fmt.Fprintln(os.Stderr, "check-english:", err)
 		os.Exit(2)
 	}
+	contracts, err := filepath.Glob(filepath.Join(root, "api", "*.yaml"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "check-english:", err)
+		os.Exit(2)
+	}
+	for _, path := range contracts {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "check-english:", err)
+			os.Exit(2)
+		}
+		for i, line := range strings.Split(string(src), "\n") {
+			if chinese(line) {
+				problems = append(problems, fmt.Sprintf("%s:%d: API contract text is not in English: %s", path, i+1, strings.TrimSpace(line)))
+			}
+		}
+	}
 	if len(problems) > 0 {
 		sort.Strings(problems)
 		for _, p := range problems {
 			fmt.Println(p)
 		}
-		fmt.Printf("check-english: %d problem(s). Write Go comments and log messages in English; a quoted Chinese original followed by its English is allowed in comments.\n", len(problems))
+		fmt.Printf("check-english: %d problem(s). Write Go comments, log messages and the API contracts in English; a quoted Chinese original followed by its English is allowed in Go comments.\n", len(problems))
 		os.Exit(1)
 	}
 	fmt.Println("check-english: ok")
