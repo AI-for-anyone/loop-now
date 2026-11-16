@@ -1,4 +1,4 @@
-// 选择的文件及其相对路径。目录上传时路径取 webkitRelativePath，包含所选目录名。
+// A chosen file and its relative path. For directory uploads the path is webkitRelativePath, which includes the chosen directory's name.
 export interface PickedFile {
   path: string
   file: File
@@ -8,7 +8,8 @@ export function pickedFiles(files: FileList | File[]): PickedFile[] {
   return Array.from(files).map((file) => ({ path: (file.webkitRelativePath || file.name).replace(/^\/+/, ''), file }))
 }
 
-// 按并发上限依次执行任务，返回与输入顺序一致的结果；一个任务失败不影响其他任务。
+// Run tasks in turn within the concurrency limit and return results in the same order as the input; one failed task does not affect the
+// others.
 export async function runPool<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<PromiseSettledResult<R>[]> {
   const results: PromiseSettledResult<R>[] = new Array(items.length)
   let next = 0
@@ -26,7 +27,7 @@ export async function runPool<T, R>(items: T[], limit: number, task: (item: T) =
   return results
 }
 
-// 把相对路径拼到上传资料来源中的目标目录下。
+// Join a relative path under the target directory in the source the files are uploaded to.
 export function joinPath(dir: string, path: string): string {
   const base = dir.replace(/^\/+|\/+$/g, '')
   return base ? `${base}/${path}` : path

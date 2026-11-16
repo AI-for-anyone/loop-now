@@ -1,5 +1,6 @@
-# 字体构建工具（只在更新字体时使用，装在仓库外的虚拟环境 ~/.local/loop-now-font-tools）。
-# 安装：~/.local/loop-now-font-tools/bin/pip install --require-hashes -r web/scripts/fonts/requirements.txt
+# Font build tools (only needed when updating fonts; installed in a virtual environment outside the repository,
+# ~/.local/loop-now-font-tools).
+# Install: ~/.local/loop-now-font-tools/bin/pip install --require-hashes -r web/scripts/fonts/requirements.txt
 fonttools==4.53.1 \
     --hash=sha256:3b3c8ebafbee8d9002bd8f1195d09ed2bd9ff134ddec37ee8f6a6375e6a4f0e8 \
     --hash=sha256:d92d3c2a1b39631a6131c2fa25b5406855f97969b068e7e08413325bc0afba58 \

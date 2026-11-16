@@ -20,14 +20,15 @@ interface ConfirmDialogProps {
   confirmLabel?: string
   cancelLabel?: string
   destructive?: boolean
-  // 危险操作是否真的撤销不了（默认是）：只是解除关联、可以重新加回来、不丢数据的操作传 false，不盖“不可撤销”印章；
-  // “危险操作”标签、红色投影与红色确认按钮不受影响。
+  // Whether the dangerous action really cannot be undone (default: yes): pass false for actions that only unlink something, can be added
+  // back and lose no data, so the “不可撤销” (Irreversible) stamp is not shown;
+  // the “危险操作” (Danger) label, the red shadow and the red confirm button are not affected.
   irreversible?: boolean
   confirmDisabled?: boolean
   scrollBody?: boolean
-  // 说明之后的补充内容，例如逐条列出的后果（说明本身是一段文字，不能放列表）。
+  // Extra content after the description, e.g. a list of consequences (the description itself is a paragraph of text and cannot hold a list).
   children?: ReactNode
-  // 返回的 Promise 失败时，确认框保持打开并显示错误；成功后调用 onOpenChange(false)。
+  // When the returned Promise fails, the dialog stays open and shows the error; on success, onOpenChange(false) is called.
   onConfirm: () => Promise<unknown> | void
 }
 
@@ -47,7 +48,7 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<unknown>(null)
-  // 每次打开时清除上次留下的错误，包括由父组件直接关闭的情况。
+  // Clear the error left from last time on every open, including when the parent component closed the dialog directly.
   const [wasOpen, setWasOpen] = useState(open)
   if (open !== wasOpen) {
     setWasOpen(open)
@@ -72,14 +73,15 @@ export function ConfirmDialog({
     <AlertDialog
       open={open}
       onOpenChange={(next) => {
-        // 提交进行中不能关闭，结果与失败原因都要留在确认框中。
+        // It cannot be closed while submitting: both the result and the failure reason have to stay in the dialog.
         if (!next && pending) return
         if (!next) setError(null)
         onOpenChange(next)
       }}
     >
-      {/* 确认框：标题 ZCOOL 28 加粉色错版，说明 14.5 / 1.75。删除一类的操作（destructive）：顶边标签“危险操作”、
-          纸的投影是红色，标题旁一个“不可撤销”斜印章，确认按钮是红色。 */}
+      {/* Confirmation dialog: ZCOOL 28 title with a misregistered pink copy, description 14.5 / 1.75. Delete-type actions (destructive): the
+          label “危险操作” (Danger) on the top edge, a red shadow under the sheet, a tilted “不可撤销” (Irreversible) stamp next to the title,
+          and a red confirm button. */}
       <AlertDialogContent kind={destructive ? 'danger' : 'confirm'} className="data-[size=default]:sm:max-w-[470px]" paperClassName={`gap-3.5 ${scrollBody ? 'flex flex-col' : ''}`} onEscapeKeyDown={(event) => pending && event.preventDefault()}>
         <AlertDialogHeader className={`gap-3 ${scrollBody ? 'shrink-0' : ''}`}>
           <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2 pr-12">

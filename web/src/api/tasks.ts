@@ -20,8 +20,9 @@ export function useProjectTasks(projectId: string) {
     getNextPageParam: (page: Schemas['TaskPage']) => page.nextCursor ?? undefined,
   })
 }
-// 项目里未结束任务按状态的计数，供左侧栏“任务”旁的运行数使用。没有单独的推送：按 Agent 列表的间隔重新读，
-// 窗口重新获得焦点时也读；打开着的任务列表或任务详情收到任务变化时立即重读（见 useTaskLive）。
+// Counts of the project's unfinished tasks by state, for the running count next to “任务” (Tasks) in the sidebar. There is no push for it:
+// it is re-read at the Agent list's interval and when the window regains focus; an open task list or task detail page re-reads it as
+// soon as it receives a task change (see useTaskLive).
 export function useProjectTaskCounts(projectId: string | undefined) {
   return useQuery({
     queryKey: taskKeys.counts(projectId ?? ''),

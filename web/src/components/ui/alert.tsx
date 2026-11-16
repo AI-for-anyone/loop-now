@@ -2,7 +2,8 @@ import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
-// note：黄色便签，背景层轻微倾斜，顶部贴一条半透明白胶带；warning：浅黄底加 6px 藏青顶条；error：浅红底；info：浅蓝底。
+// note: a yellow sticky note with a slightly tilted background layer and a strip of translucent white tape at the top; warning: light
+// yellow background with a 6px navy bar at the top; error: light red background; info: light blue background.
 const alertVariants = cva(
   "group/alert relative grid w-full gap-0.5 px-4 py-3 text-left text-[14px] leading-[1.7] text-ink has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pr-18 has-[>svg]:grid-cols-[auto_1fr] has-[>svg]:gap-x-2.5 *:[svg]:row-span-2 *:[svg]:mt-1 *:[svg]:text-current *:[svg:not([class*='size-'])]:size-4",
   {

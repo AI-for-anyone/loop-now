@@ -7,8 +7,9 @@ import { sleepProjections } from '@/features/sleep/projection'
 export const keys = {
   context: ['context'] as const,
   health: ['health'] as const,
-  // 提供方目录没有版本号也没有推送：['modelProviders'] 是全局目录与各 Agent 视角目录的共同前缀，
-  // 插件安装、更新、卸载、项目启用、授权、全局停用和保存 models.json 后整体失效。
+  // The provider catalog has no version number and no push updates: ['modelProviders'] is the common prefix of the global catalog and of
+  // each Agent's view of it, and the whole lot is invalidated after a plugin is installed, updated, uninstalled, enabled in a project or
+  // granted, after plugins are disabled globally, and after models.json is saved.
   modelProviders: ['modelProviders'] as const,
   agentModelProviders: (agentId: string) => ['modelProviders', 'agent', agentId] as const,
   runtimes: ['runtimes'] as const,
@@ -16,7 +17,7 @@ export const keys = {
   models: (providerId: string) => ['models', providerId] as const,
   cliTemplates: ['cliTemplates'] as const,
   projects: ['projects'] as const,
-  // Agent 列表按作用域（项目 ID 或 platform）各有一份；['agents'] 是它们共同的前缀，用于整体失效。
+  // There is one Agent list per scope (project ID or platform); ['agents'] is their common prefix, used to invalidate them all at once.
   agents: ['agents'] as const,
   scopeAgents: (scope: ScopeKey) => ['agents', scope] as const,
   agent: (agentId: string) => ['agent', agentId] as const,
@@ -25,7 +26,8 @@ export const keys = {
   agentSkills: (agentId: string) => ['agentSkills', agentId] as const,
   agentCommands: (agentId: string) => ['agentCommands', agentId] as const,
   agentSkill: (agentId: string, agentSkillId: string) => ['agentSkill', agentId, agentSkillId] as const,
-  // 对话历史：最新的一页起向前翻；定位到某条回复时另用一份以它为中心的缓存（前缀相同，失效与对账一并处理）。
+  // Conversation history: paged backward from the latest page; jumping to a specific reply uses a separate cache centered on it
+  // (same prefix, so invalidation and reconciliation cover both).
   messages: (agentId: string) => ['messages', agentId] as const,
   messagesAround: (agentId: string, runId: string) => ['messages', agentId, 'around', runId] as const,
   timeline: (agentId: string, runId: string) => ['timeline', agentId, runId] as const,
@@ -33,7 +35,8 @@ export const keys = {
   anomalies: (scope = 'all') => ['anomalies', scope] as const,
   skills: ['skills'] as const,
   skill: (skillId: string) => ['skill', skillId] as const,
-  // 收件箱。线索列表与 Agent、外部身份的收件箱都是游标分页；同一个 Agent 或外部身份的各种筛选共用前缀，事件到达时一并失效。
+  // Inbox. The thread list and the inboxes of Agents and external identities all use cursor pagination; the various filters of the same
+  // Agent or external identity share a prefix and are invalidated together when an event arrives.
   inboxThreads: ['inboxThreads'] as const,
   inboxThread: (threadId: string) => ['inboxThread', threadId] as const,
   agentInbox: (agentId: string, unreadOnly?: boolean) =>
@@ -54,7 +57,7 @@ export type InboxDirection = 'all' | 'received' | 'sent'
 
 const agentPath = (agentId: string) => ({ params: { path: { agentId } } })
 
-// ---- 读取 ----
+// ---- Reads ----
 
 const contextQuery = { queryKey: keys.context, queryFn: () => call(api.GET('/context')), staleTime: Infinity }
 
@@ -63,8 +66,8 @@ export function useContextInfo() {
 }
 
 
-// 健康检查在数据库不可用时返回 503，响应体同样是 Health，这里两种都作为数据返回。
-// 顶栏常驻显示连接状态：按 Agent 列表的刷新间隔定期查询，窗口重新获得焦点时也查询。
+// The health check returns 503 when the database is unavailable, with a Health body all the same; both are returned as data here.
+// The top bar always shows the connection status: poll at the Agent list's refresh interval, and also when the window regains focus.
 export function useHealth() {
   return useQuery({
     refetchInterval: config.agentListPollMs,
@@ -84,8 +87,8 @@ export function useHealth() {
   })
 }
 
-// 带 agentId 时插件提供方另给出这个 Agent 现在不能用的原因（unavailableReason）；项目启用与授权可能在别处改，
-// 所以这份不长期缓存，打开页面和回到窗口时重新读取。
+// With agentId, plugin providers also give the reason this Agent cannot use them right now (unavailableReason); project enablement and
+// grants can change elsewhere, so this is not cached for long and is re-read when a page opens and when the window regains focus.
 export function useModelProviders(agentId?: string) {
   return useQuery({
     queryKey: agentId ? keys.agentModelProviders(agentId) : keys.modelProviders,
@@ -94,13 +97,14 @@ export function useModelProviders(agentId?: string) {
   })
 }
 
-// 各运行时在本机是否可用（Claude Code 有没有装、登没登录）。服务端缓存 30 秒，这里同样 30 秒内不重读；
-// enabled 为 false 时不读（模型选择只在选了 Claude Code 时才需要）。
+// Whether each runtime is available on this machine (whether Claude Code is installed, whether it is logged in). The server caches this
+// for 30 seconds, and likewise it is not re-read here within 30 seconds; nothing is read while enabled is false (model selection only
+// needs it when Claude Code is chosen).
 export function useRuntimes(enabled = true) {
   return useQuery({ queryKey: keys.runtimes, queryFn: () => call(api.GET('/runtimes')), staleTime: 30_000, enabled })
 }
 
-// 不用服务端的缓存重新检查（refresh=true），结果直接换进 useRuntimes 的缓存。
+// Re-check without the server's cache (refresh=true) and put the result straight into the useRuntimes cache.
 export function useRefreshRuntimes() {
   const client = useQueryClient()
   return useMutation<Schemas['RuntimeList'], ApiError, void>({
@@ -109,7 +113,7 @@ export function useRefreshRuntimes() {
   })
 }
 
-// 插件改变了提供方目录或 Agent 能否用它：目录和各提供方的模型列表一起重新读取。
+// A plugin changed the provider catalog or whether an Agent can use it: re-read the catalog and every provider's model list together.
 export const invalidateModelCatalog = (client: QueryClient) =>
   Promise.all([client.invalidateQueries({ queryKey: keys.modelProviders }), client.invalidateQueries({ queryKey: ['models'] })])
 
@@ -151,7 +155,7 @@ export function useCliTemplates() {
   return useQuery({ queryKey: keys.cliTemplates, queryFn: () => call(api.GET('/cli-templates')) })
 }
 
-// 未删除的项目，默认项目在前，其余按名称排序（服务端的顺序）。与 Agent 列表同样定期刷新。
+// Projects that are not deleted, the default project first and the rest sorted by name (the server's order). Polled like the Agent list.
 export function useProjects() {
   return useQuery({
     queryKey: keys.projects,
@@ -166,7 +170,7 @@ const listAgents = (scope: ScopeKey) =>
     ? call(api.GET('/platform/agents'))
     : call(api.GET('/projects/{projectId}/agents', { params: { path: { projectId: scope } } }))
 
-// 某个项目或平台中的 Agent；scope 为 null 时（作用域尚未确定）不请求。
+// The Agents of a project or of the platform; no request while scope is null (the scope is not known yet).
 export function useAgents(scope: ScopeKey | null) {
   const client = useQueryClient()
   return useQuery({
@@ -195,9 +199,11 @@ export function useAgentSkills(agentId: string) {
   return useQuery({ queryKey: keys.agentSkills(agentId), queryFn: () => call(api.GET('/agents/{agentId}/skills', agentPath(agentId))) })
 }
 
-// 对话页 "/" 菜单的命令：平台内置命令（带此刻能不能用）与 Pi 命令。第一次输入 "/" 时才读取；发送前要确认某条文字是不是平台命令时，
-// 用同一份查询现取（不重试，免得发送前白等）。平台命令能不能用只取决于运行时与会话状态，两者每次变化服务端都推 session.updated，
-// 对话页收到它时重读（见 useAgentLive）；重开会话、改配置之后不另读。
+// Commands for the "/" menu on the conversation page: the platform's built-in commands (with whether each can be used right now) and Pi
+// commands. Read only when "/" is first typed; when we must check before sending whether some text is a platform command, the same query
+// is fetched on the spot (no retry, so sending does not wait for nothing). Whether a platform command can be used depends only on the
+// runtime and the session state; the server pushes session.updated every time either one changes, and the conversation page re-reads when
+// it receives that (see useAgentLive); there is no extra read after the session is restarted or the config changes.
 export const agentCommandsQuery = (agentId: string) => ({
   queryKey: keys.agentCommands(agentId),
   queryFn: () => call(api.GET('/agents/{agentId}/commands', agentPath(agentId))),
@@ -221,9 +227,11 @@ export type MessagePages = InfiniteData<Schemas['MessagePage'], unknown>
 
 type MessagePageParam = { before: string } | { after: string } | { aroundRun: string } | null
 
-// 对话历史。不传 aroundRun 时从最新的一页开始；传入时第一页以这条回复为中心，之后可以向两边翻。
-// pages[0] 总是已加载的最新一页，之后的页依次更早；每页内按时间正序。
-// 向更早翻用 fetchNextPage（before），向更新翻用 fetchPreviousPage（after），后者把新页插在最前面。
+// Conversation history. Without aroundRun it starts from the latest page; with it, the first page is centered on that reply, and from
+// there you can page in both directions.
+// pages[0] is always the latest loaded page, and each later page is older; within a page, messages are in chronological order.
+// Paging to older messages uses fetchNextPage (before), paging to newer ones uses fetchPreviousPage (after); the latter inserts the new
+// page at the front.
 export function useMessages(agentId: string, aroundRun: string | null = null) {
   return useInfiniteQuery({
     queryKey: aroundRun ? keys.messagesAround(agentId, aroundRun) : keys.messages(agentId),
@@ -241,7 +249,8 @@ export function useMessages(agentId: string, aroundRun: string | null = null) {
   })
 }
 
-// 一次执行的运行记录，展开时才请求。已结束的执行不再变化；进行中的由对话页按事件重新获取。
+// The run log of one run, requested only when it is expanded. A run that has ended no longer changes; one in progress is refetched by
+// the conversation page as events arrive.
 export function useRunTimeline(agentId: string, runId: string, enabled: boolean, ended: boolean) {
   return useQuery({
     queryKey: keys.timeline(agentId, runId),
@@ -251,7 +260,8 @@ export function useRunTimeline(agentId: string, runId: string, enabled: boolean,
   })
 }
 
-// 用量：from 在每次请求时计算，时间段的边界随时间推移（例如“近 30 天”）。不给范围时统计全部，否则只统计该项目或平台。
+// Usage: from is computed on every request, so the bounds of the period move with time (e.g. “近 30 天” (Last 30 days)). Without a scope
+// everything is counted, otherwise only that project or the platform.
 export function useUsage(range: string, from: () => string, scope: ScopeQuery = {}) {
   return useQuery({
     queryKey: keys.usage(range, scopeQueryKey(scope)),
@@ -264,8 +274,9 @@ export function useUsage(range: string, from: () => string, scope: ScopeQuery = 
 export type AnomalyPage = Schemas['AnomalyPage'] & { from: string }
 type AnomalyPageParam = { from: string; cursor: string } | null
 
-// 异常与失败：第一页请求时确定开始时间，之后的页沿用它，与游标一起保证翻页不重复、不缺失。
-// 定期刷新时从第一页重新开始，开始时间随之更新。
+// Anomalies and failures: the start time is fixed when the first page is requested and later pages reuse it; together with the cursor
+// this makes sure paging neither repeats nor skips anything.
+// A periodic refresh starts again from the first page, and the start time is updated with it.
 export function useAnomalies(from: () => string, scope: ScopeQuery = {}) {
   return useInfiniteQuery({
     queryKey: keys.anomalies(scopeQueryKey(scope)),
@@ -297,9 +308,9 @@ export function useSkill(skillId: string) {
   })
 }
 
-// ---- 缓存更新 ----
+// ---- Cache updates ----
 
-// 更新这个 Agent 的全部历史缓存：最新的一份，以及定位到某条回复时的那份。
+// Update all of this Agent's history caches: the latest one, and the one used when jumping to a specific reply.
 function updateMessages(
   client: QueryClient,
   agentId: string,
@@ -321,14 +332,16 @@ const RUN_STAGE: Record<Schemas['RunStatus'], number> = {
   interrupted: 4,
 }
 
-// 两份同一执行的数据中取更新的一份。发送请求的响应可能晚于事件流中的结束事件到达，
-// 不能让较早的状态覆盖较新的状态。
+// Of two copies of the same run, take the newer one. The response to the send request can arrive later than the end event on the event
+// stream, and an older state must not overwrite a newer one.
 export function newerRun(current: Schemas['Run'], incoming: Schemas['Run']): Schemas['Run'] {
   return RUN_STAGE[incoming.status] >= RUN_STAGE[current.status] ? incoming : current
 }
 
-// 按消息 ID 插入或替换历史中的消息：已存在就替换（执行状态不倒退），否则追加到最新一页末尾。
-// 定位时还没有加载到最新的那份缓存不追加，新消息由对话页提示，不插在中间。
+// Insert or replace a message in the history by message ID: replace it if it already exists (the run state never goes backward), otherwise
+// append it to the end of the latest page.
+// A cache positioned on a reply that has not loaded up to the latest page does not get the message appended; the conversation page points
+// out new messages instead of inserting them in the middle.
 export function upsertMessage(client: QueryClient, agentId: string, message: Schemas['Message']) {
   updateMessages(client, agentId, (messages, index, data) => {
     const exists = data.pages.some((page) => page.messages.some((m) => m.id === message.id))
@@ -337,13 +350,14 @@ export function upsertMessage(client: QueryClient, agentId: string, message: Sch
   })
 }
 
-// 用户消息与回复共用同一个执行，执行状态变化时一并更新（不倒退）。
+// A user message and its reply share the same run, so both are updated when the run state changes (never backward).
 export function updateRunInMessages(client: QueryClient, agentId: string, run: Schemas['Run']) {
   updateMessages(client, agentId, (messages) => messages.map((m) => (m.run.id === run.id ? { ...m, run: newerRun(m.run, run) } : m)))
 }
 
-// ---- 凭证 ----
-// 凭证明文不经过 TanStack Query 的变更缓存（它会保留调用参数），由表单以局部状态直接提交。
+// ---- Credentials ----
+// Plaintext credentials do not go through TanStack Query's mutation cache (it keeps the call arguments); forms submit them directly
+// from local state.
 
 export function putModelCredential(agentId: string, body: Schemas['ModelCredentialInput']) {
   return call(api.PUT('/agents/{agentId}/model-credential', { ...agentPath(agentId), body }))
@@ -353,12 +367,12 @@ export function putCliCredential(agentId: string, cli: string, fields: Record<st
   return call(api.PUT('/agents/{agentId}/clis/{cli}/credential', { params: { path: { agentId, cli } }, body: { fields } }))
 }
 
-// 凭证提交成功后，刷新 Agent 详情中的凭证元数据。
+// After a credential is submitted successfully, refresh the credential metadata in the Agent details.
 export function invalidateAgent(client: QueryClient, agentId: string) {
   return Promise.all([client.invalidateQueries({ queryKey: keys.agent(agentId) }), client.invalidateQueries({ queryKey: keys.agents })])
 }
 
-// ---- 变更 ----
+// ---- Mutations ----
 
 function useInvalidate() {
   const client = useQueryClient()
@@ -373,7 +387,7 @@ function useAgentMutation<TVariables, TData>(agentId: string, fn: (variables: TV
   })
 }
 
-// 在某个项目或平台中新建 Agent。项目的 Agent 数随之变化，项目列表一并刷新。
+// Create an Agent in a project or the platform. The project's Agent count changes with it, so the project list is refreshed too.
 export function useCreateAgent(scope: ScopeKey) {
   const invalidate = useInvalidate()
   return useMutation<Schemas['Agent'], ApiError, Schemas['AgentCreate']>({
@@ -395,18 +409,19 @@ export function useDeleteAgent(agentId: string) {
     mutationFn: () => call(api.DELETE('/agents/{agentId}', agentPath(agentId))),
     onSuccess: async () => {
       client.removeQueries({ queryKey: keys.agent(agentId) })
-      // 删除担任 Manager 的 Agent 会取消项目的 Manager，项目的 Agent 数也会变。
+      // Deleting the Agent that is the Manager removes the project's Manager, and the project's Agent count changes too.
       await Promise.all([client.invalidateQueries({ queryKey: keys.agents }), client.invalidateQueries({ queryKey: keys.projects })])
     },
   })
 }
 
 
-// ---- 项目 ----
+// ---- Projects ----
 
 const projectPath = (projectId: string) => ({ params: { path: { projectId } } })
 
-// 把服务端返回的项目写回项目列表。改名后，带新名称的地址与项目列表在同一次渲染中一致。
+// Write the project returned by the server back into the project list. After a rename, the URL with the new name and the project list
+// agree within the same render.
 function putProject(client: QueryClient, project: Schemas['Project']) {
   client.setQueryData<{ projects: Schemas['Project'][] }>(keys.projects, (data) =>
     data ? { projects: data.projects.map((p) => (p.id === project.id ? project : p)) } : data,
@@ -433,8 +448,8 @@ export function useRenameProject(projectId: string) {
   })
 }
 
-// 删除项目：成功后，最近使用的作用域若是它就清除；它的 Agent 列表不再需要。
-// 409 agent_not_idle 的 details（ProjectNotIdleDetails）原样留在 ApiError 中，由页面列出忙碌的 Agent。
+// Delete a project: on success, clear the last-used scope if it was this project; its Agent list is no longer needed.
+// The details (ProjectNotIdleDetails) of a 409 agent_not_idle stay in the ApiError unchanged, and the page lists the busy Agents.
 export function useDeleteProject(projectId: string) {
   const client = useQueryClient()
   return useMutation<void, ApiError, void>({
@@ -449,7 +464,8 @@ export function useDeleteProject(projectId: string) {
   })
 }
 
-// 指定或取消 Manager 会改变项目的 managerAgentId，以及新旧 Manager 的 isManager（列表与详情中都有）。
+// Assigning or removing the Manager changes the project's managerAgentId and the isManager of the old and new Manager (present in both
+// the list and the details).
 function useManagerMutation<TVariables>(projectId: string, fn: (variables: TVariables) => Promise<Schemas['Project']>) {
   const client = useQueryClient()
   return useMutation<Schemas['Project'], ApiError, TVariables>({
@@ -528,7 +544,8 @@ export function useUpdateAgentSkillMarkdown(agentId: string) {
   )
 }
 
-// 发送的结果：一般是新消息与它的执行；以 / 开头、被某个插件认领的命令返回插件的回复（ConsoleCommandResult），不产生消息。
+// The result of sending: usually the new message and its run; a command that starts with / and is claimed by a plugin returns the plugin's
+// reply (ConsoleCommandResult) and creates no message.
 export type SendOutcome = Schemas['SendMessageResult'] | Schemas['ConsoleCommandResult']
 export const isCommandResult = (outcome: SendOutcome): outcome is Schemas['ConsoleCommandResult'] => 'handled' in outcome
 

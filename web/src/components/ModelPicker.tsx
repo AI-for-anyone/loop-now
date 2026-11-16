@@ -14,16 +14,18 @@ interface ModelPickerProps {
   value: Schemas['ModelRef'] | null
   onChange: (value: Schemas['ModelRef'] | null) => void
   error?: string
-  // 选中的模型与提供方（目录里有时）：放思考等级等跟着模型走的设置。
+  // The selected model and provider (when they are in the catalog): for settings that follow the model, such as the thinking level.
   children?: (model: Schemas['Model'] | undefined, provider: Schemas['ModelProvider'] | undefined) => ReactNode
-  // 修改中的 Agent：带上它读目录，插件提供方标出这个 Agent 现在不能用的原因。新建 Agent 时不给，插件提供方不能直接选。
+  // The Agent being edited: the catalog is read with it, so plugin providers show why this Agent cannot use them right now. Not given when
+  // creating an Agent, and then plugin providers cannot be picked directly.
   agentId?: string
 }
 
 type Provider = Schemas['ModelProvider']
 type Unavailable = 'create' | NonNullable<Provider['unavailableReason']>
 
-// 插件提供方此刻对这个 Agent 不能用的原因；新建时一律要等创建、授权之后。plugins_disabled 不挡保存。
+// Why a plugin provider cannot be used by this Agent right now; when creating an Agent, it always has to wait until after creation and
+// grant. plugins_disabled does not block saving.
 const unavailableOf = (provider: Provider, agentId: string | undefined): Unavailable | null =>
   provider.source !== 'plugin' ? null : agentId === undefined ? 'create' : provider.unavailableReason
 const blocks = (reason: Unavailable | null) => reason !== null && reason !== 'plugins_disabled'
@@ -39,7 +41,7 @@ function providerOption(provider: Provider, agentId: string | undefined) {
   return reason ? basic.unavailableOption(label, basic.pluginUnavailable[reason]) : label
 }
 
-// 选中的插件提供方现在不能给这个 Agent 用：说明原因和去哪里处理。
+// The selected plugin provider cannot be used by this Agent right now: explain why and where to fix it.
 function unavailableNote(provider: Provider, agentId: string | undefined): string | null {
   const reason = unavailableOf(provider, agentId), note = t.config.basic.pluginUnavailableNote
   if (reason === null || reason === 'create') return null
@@ -47,9 +49,12 @@ function unavailableNote(provider: Provider, agentId: string | undefined): strin
   return note[reason]
 }
 
-// 先选提供方，再选该提供方下的模型。模型用可过滤的下拉，模型较多时可以按名称或 ID 过滤。
-// 插件提供方此刻不能选时，选项带上原因并禁用（全局停用全部插件只提示，不禁用）。
-// 选了本机的 Claude Code：说明它用本机的安装和登录，不需要账号；本机没装好或没登录时另外提醒（仍然可以选）。
+// Pick the provider first, then a model of that provider. Models use a filterable dropdown, so with many models you can filter by name
+// or ID.
+// When a plugin provider cannot be picked right now, its option carries the reason and is disabled (all plugins disabled globally only
+// shows a hint and does not disable it).
+// With the local Claude Code picked: explain that it uses this machine's installation and login and needs no account; add a warning when
+// it is not installed properly or not logged in on this machine (it can still be picked).
 export function ModelPicker({ value, onChange, error, children, agentId }: ModelPickerProps) {
   const providerId = useId()
   const modelLabelId = useId()
@@ -58,14 +63,15 @@ export function ModelPicker({ value, onChange, error, children, agentId }: Model
   const models = useModels(provider)
   const claudeCode = providers.data?.providers.find((p) => p.id === provider)?.runtime === 'claude-code'
   const runtimes = useRuntimes(claudeCode)
-  // 记住每个提供方最近选定的模型：切到别的提供方再切回时恢复，目录中没有的模型也能恢复。
+  // Remember the model last picked for each provider: it is restored when switching to another provider and back, even a model that is
+  // not in the catalog.
   const [chosen, setChosen] = useState<Record<string, Schemas['ModelRef']>>(() => (value ? { [value.provider]: value } : {}))
   const [seen, setSeen] = useState(value)
   if (value !== seen) {
     setSeen(value)
     if (value) {
       setChosen((current) => ({ ...current, [value.provider]: value }))
-      // 模型被外部改成别的提供方（例如表单跟随服务端刷新）时，提供方一起切换。
+      // When the model is changed from outside to another provider (e.g. the form follows a server refresh), switch the provider along with it.
       if (value.provider !== provider) setProvider(value.provider)
     }
   }
@@ -87,7 +93,8 @@ export function ModelPicker({ value, onChange, error, children, agentId }: Model
   const current = providers.data?.providers.find((p) => p.id === provider)
   const note = current ? unavailableNote(current, agentId) : null
 
-  // 排成两栏时（Agent 配置页）同一行的字段按顶部对齐，提供方下面的说明不会把旁边的模型往下推。
+  // In the two-column layout (Agent config page), fields in the same row align to the top, so the note under the provider does not push
+  // the model next to it down.
   return (
     <div className="grid items-start gap-3">
       <div className="grid gap-1.5">
@@ -144,15 +151,16 @@ export function ModelPicker({ value, onChange, error, children, agentId }: Model
   )
 }
 
-// 本机的 Claude Code 现在用不了（没找到、读不出版本、没登录）：与全局设置里同样的说明，再说明处理好之前运行会失败。
-// 读不到运行时状态或登录状态判断不了时不提醒。
+// The local Claude Code cannot be used right now (not found, version unreadable, not logged in): the same explanation as in global
+// settings, plus a note that runs will fail until it is fixed.
+// No warning when the runtime status cannot be read or the login state cannot be determined.
 function RuntimeWarning({ status }: { status: Schemas['RuntimeStatus'] | undefined }) {
   const problem = runtimeProblem(status)
   if (!problem) return null
   return <p role="note" className="rounded-input bg-tint-yellow px-3 py-2 text-[13.5px] font-bold text-ink">{t.runtime.status.pickerWarning(t.runtime.status.problems[problem])}</p>
 }
 
-// 提供方列表或某个提供方的模型列表无法获取：显示原因，并保留显示当前模型。
+// The provider list or a provider's model list cannot be fetched: show the reason, and keep showing the current model.
 function CatalogUnavailable({ error, value }: { error: unknown; value: Schemas['ModelRef'] | null }) {
   return (
     <div className="grid gap-1.5">

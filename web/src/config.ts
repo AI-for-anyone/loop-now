@@ -1,4 +1,4 @@
-// 控制台的运行参数。都可以在构建时通过 VITE_ 环境变量覆盖。
+// The console's runtime parameters. All of them can be overridden at build time with VITE_ environment variables.
 function numberFromEnv(value: string | undefined, fallback: number): number {
   const parsed = Number(value)
   return value !== undefined && value !== '' && Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
@@ -11,30 +11,31 @@ export const config = {
   eventRetryMaxMs: numberFromEnv(import.meta.env.VITE_LOOP_NOW_EVENT_RETRY_MAX_MS, 30000),
   uploadConcurrency: numberFromEnv(import.meta.env.VITE_LOOP_NOW_UPLOAD_CONCURRENCY, 4),
   messagePageSize: 50,
-  // 概览的用量与异常列表的刷新间隔；窗口重新获得焦点时也刷新。
+  // Refresh interval of the overview's usage and anomaly lists; they also refresh when the window regains focus.
   overviewPollMs: numberFromEnv(import.meta.env.VITE_LOOP_NOW_OVERVIEW_POLL_MS, 30000),
-  // 概览的默认值（用户已确认）：用量看今天、按 Agent；异常看最近 24 小时。
+  // Overview defaults (confirmed by the user): usage shows today, by Agent; anomalies show the last 24 hours.
   overviewDefaults: {
     usageRange: 'today' as const,
     usageDimension: 'agent' as const,
     anomalyWindowHours: 24,
   },
   anomalyPageSize: 20,
-  // 收件箱：线索列表、Agent 与外部身份收件箱每页的条数。
+  // Inbox: items per page in the thread list and in the inboxes of Agents and external identities.
   inboxPageSize: 20,
-  // 签发令牌时预选的有效期（天，用户已确认）。
+  // The validity period preselected when issuing a token (days, confirmed by the user).
   tokenDefaultDays: 30,
-  // 运行记录默认收起（用户已确认）。
+  // The run log is collapsed by default (confirmed by the user).
   runRecordExpanded: false,
-  // 回复进行中展开运行记录时，同一执行两次重新获取之间至少间隔这么久。
+  // When the run log is expanded while a reply is in progress, at least this long passes between two refetches of the same run.
   timelineRefreshMinMs: 1000,
-  // 排队消息无法转为打断时，输入框上方的轻提示显示这么久后自动消失。
+  // When a queued message cannot be turned into an interrupt, the toast above the input is shown this long and then disappears.
   queueNoticeMs: 6000,
-  // 文件上传全部成功后，进度卡片停留多久再收起。
+  // How long the progress card stays after all file uploads succeed, before it collapses.
   uploadPanelMs: 4000,
 }
 
-// 显示用的接口地址。服务端在同一端口提供控制台时 apiBase 是相对路径 /api/v1，按当前页面解析成绝对地址；解析不了时原样返回。
+// The API URL for display. When the server serves the console on the same port, apiBase is the relative path /api/v1 and is resolved to
+// an absolute URL against the current page; returned as is when it cannot be resolved.
 export function absoluteApiBase(): string {
   try {
     return new URL(config.apiBase, window.location.href).href.replace(/\/+$/, '')

@@ -1,9 +1,13 @@
 import { cn } from '@/lib/utils'
 
-// 页头右上角的装饰：一片网点，蓝、粉、黄三个叠印的圆，左上角一个套准标记。纯装饰，读屏不读、不挡点击。
-// 放在页头里：页头要是定位容器，也要是尺寸容器（@container）。页头不到 820px 宽时不显示（窄屏、半屏窗口）；
-// 显示时页头里的各行文字用 @[820px]:pr-[316px] 让出它的位置，长名称换行而不是压在圆上。
-// compact：Agent 的紧凑页头（宽屏）里整体缩到 0.6 倍、贴着右上角，和页头同高；窄屏照旧。
+// The decoration in the top right of the page header: a patch of halftone dots, three overprinted circles in blue, pink and yellow, and a
+// registration mark in the top left. Purely decorative: screen readers skip it and it does not block clicks.
+// Put it inside the header: the header must be a positioned container and also a size container (@container). It is hidden when the
+// header is narrower than 820px (narrow screens, half-screen windows);
+// while it is shown, each line of text in the header makes room for it with @[820px]:pr-[316px], so long names wrap instead of running
+// over the circles.
+// compact: in an Agent's compact header (wide screens) the whole thing shrinks to 0.6x and hugs the top right corner, matching the header's
+// height; narrow screens are unchanged.
 export function OverprintDeco({ className, compact = false }: { className?: string; compact?: boolean }) {
   return (
     <div
@@ -15,7 +19,7 @@ export function OverprintDeco({ className, compact = false }: { className?: stri
       <span className="absolute top-2 left-[70px] size-24 rounded-full bg-riso-blue mix-blend-multiply" />
       <span className="absolute top-[26px] left-[132px] size-24 rounded-full bg-riso-pink mix-blend-multiply" />
       <span className="absolute top-2 left-[194px] size-24 rounded-full bg-riso-yellow mix-blend-multiply" />
-      {/* 尺寸写在类名里（不用 width 属性），免得被当成页面上的图表。 */}
+      {/* Size is set in class names (not the width attribute), so it is not mistaken for a chart on the page. */}
       <svg viewBox="0 0 18 18" fill="none" stroke="var(--ink)" strokeWidth="1.2" className="absolute top-1 left-5 size-[18px]">
         <circle cx="9" cy="9" r="5" />
         <path d="M9 0v18M0 9h18" />

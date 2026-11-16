@@ -1,10 +1,12 @@
 import { avatarPair } from '@/lib/avatar'
 import { cn } from '@/lib/utils'
 
-// 左侧栏是孔版蓝底：头像里的孔版蓝换成浅色版，叠印只在头像内部混色，不与底色相乘。
+// The sidebar has a riso-blue background: the riso blue in the avatar is swapped for its light version, and the overprint only blends
+// colors inside the avatar, without multiplying with the background.
 const onBlue = (color: string) => (color === 'var(--riso-blue)' ? 'var(--riso-blue-soft)' : color)
 
-// 两个叠印的圆，只作装饰；名称在旁边照常显示。sm 是左侧栏一行里的小号（两个 16px 的圆）。
+// Two overprinted circles, purely decorative; the name is shown next to them as usual. sm is the small size for a sidebar row (two 16px
+// circles).
 export function AgentAvatar({ id, size = 'md', className }: { id: string; size?: 'sm' | 'md'; className?: string }) {
   if (size === 'sm') {
     const [back, front] = avatarPair(id).map(onBlue)

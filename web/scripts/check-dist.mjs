@@ -1,5 +1,5 @@
-// 在 npm run build 之后检查 dist/：不能出现外部字体地址，@font-face 只能引用同源文件，
-// 每款字体的 OFL.txt 都随产物分发。
+// Check dist/ after npm run build: no external font URLs may appear, @font-face may only reference same-origin files,
+// and every font's OFL.txt ships with the build output.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -17,7 +17,7 @@ function filesUnder(dir) {
 }
 
 if (!existsSync(distDir)) {
-  console.error('check-dist: 没有 dist/，请先运行 npm run build')
+  console.error('check-dist: no dist/; run npm run build first')
   process.exit(1)
 }
 
@@ -25,20 +25,20 @@ const forbidden = /fonts\.googleapis\.com|fonts\.gstatic\.com/
 for (const file of filesUnder(distDir).filter((path) => /\.(html|css|js)$/.test(path))) {
   const text = readFileSync(file, 'utf8')
   const name = relative(distDir, file)
-  if (forbidden.test(text)) problems.push(`${name} 中出现了外部字体地址`)
+  if (forbidden.test(text)) problems.push(`${name} contains an external font URL`)
   if (file.endsWith('.css')) {
     for (const [face] of text.matchAll(/@font-face\s*{[^}]*}/g)) {
-      if (/url\(\s*['"]?(https?:)?\/\//.test(face)) problems.push(`${name} 的 @font-face 引用了外部地址`)
+      if (/url\(\s*['"]?(https?:)?\/\//.test(face)) problems.push(`${name} has an @font-face that references an external URL`)
     }
   }
 }
 
 for (const font of lock.fonts) {
-  if (!existsSync(join(distDir, 'fonts', font.id, 'OFL.txt'))) problems.push(`产物中缺少 fonts/${font.id}/OFL.txt`)
+  if (!existsSync(join(distDir, 'fonts', font.id, 'OFL.txt'))) problems.push(`fonts/${font.id}/OFL.txt is missing from the build output`)
 }
 
 if (problems.length > 0) {
   for (const problem of problems) console.error(`check-dist: ${problem}`)
   process.exit(1)
 }
-console.log('check-dist: 产物中没有外部字体地址，许可证文件齐全')
+console.log('check-dist: no external font URLs in the build output, and all license files are present')

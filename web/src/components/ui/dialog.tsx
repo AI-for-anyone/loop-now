@@ -45,7 +45,7 @@ function DialogOverlay({
   )
 }
 
-// 顶边的索引标签：写明弹窗的类别（新建带加号，危险操作带感叹号）。
+// The index tab on the top edge: names the dialog's kind (create with a plus sign, danger with an exclamation mark).
 function DialogTab({ kind }: { kind: DialogKind }) {
   const Icon = kind === "create" ? PlusIcon : kind === "danger" ? CircleAlertIcon : null
   return (
@@ -58,8 +58,9 @@ function DialogTab({ kind }: { kind: DialogKind }) {
   )
 }
 
-// 对话框（改版第 5 步，全站统一）：一张小纸，顶边贴一张写明类别的索引标签；右上角黄色圆章关闭；
-// 按钮区（DialogFooter）上方一条虚线。kind 决定标签的字和颜色（危险操作的纸投影是红色）。
+// Dialog (redesign step 5, the same across the whole site): a small sheet with an index tab naming its kind stuck to the top edge; a yellow
+// round stamp in the top right closes it;
+// a dashed line above the button area (DialogFooter). kind sets the tab's text and color (danger gives the sheet a red shadow).
 function DialogContent({
   className,
   paperClassName,
@@ -74,7 +75,7 @@ function DialogContent({
   kind?: DialogKind
   paperClassName?: string
 }) {
-  // 对话框由状态控制开合，没有 Radix 的 Trigger；关闭时把焦点还给打开前的元素。
+  // The dialog is opened and closed by state, without a Radix Trigger; on close, focus returns to the element that had it before opening.
   const focusHandlers = useReturnFocus(onOpenAutoFocus, onCloseAutoFocus)
   return (
     <DialogPortal>

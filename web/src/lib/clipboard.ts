@@ -1,6 +1,8 @@
-// 把文字写进剪贴板，写不进去时返回 false，不抛错。
-// navigator.clipboard 只在安全上下文里有（用 http 的局域网地址打开控制台时没有），并且 Safari 只允许在按键、点击的手势里写；
-// 网络请求回来之后再写就会被拒绝。这两种情况退到旧的复制命令（同样可能因为不在手势内而失败）。
+// Write text to the clipboard; returns false instead of throwing when it cannot be written.
+// navigator.clipboard only exists in secure contexts (not when the console is opened from a LAN address over http), and Safari only allows
+// writing inside a key press or click gesture;
+// writing after a network request comes back is refused. In both cases fall back to the old copy command (which can also fail for not
+// being inside a gesture).
 export async function copyText(text: string): Promise<boolean> {
   try {
     if (typeof navigator.clipboard?.writeText === 'function') {
@@ -8,7 +10,7 @@ export async function copyText(text: string): Promise<boolean> {
       return true
     }
   } catch {
-    // 被浏览器拒绝：试旧的复制命令。
+    // Refused by the browser: try the old copy command.
   }
   return legacyCopy(text)
 }
@@ -22,7 +24,8 @@ function legacyCopy(text: string): boolean {
   area.setAttribute('aria-hidden', 'true')
   area.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none'
   document.body.appendChild(area)
-  // 复制命令复制的是当前选中的内容：临时输入框要先拿到焦点再全选，用完把焦点还回去。
+  // The copy command copies the current selection: the temporary text area must take focus and select all first, and focus is given back
+  // afterwards.
   area.focus({ preventScroll: true })
   area.select()
   try {

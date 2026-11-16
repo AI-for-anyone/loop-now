@@ -15,7 +15,8 @@ import { Sidebar } from './Sidebar'
 
 const text = t.shell
 
-// 左侧栏沿用的范围。项目记下解析到的 ID：停留期间项目改名，仍按 ID 找到同一个项目。
+// The scope the sidebar keeps. For a project, the resolved ID is recorded: if the project is renamed while you are on it, the same project
+// is still found by ID.
 type Kept = { kind: 'global' } | { kind: 'project'; name: string; id: string | null }
 
 const sameKept = (a: Kept, b: Kept | null) =>
@@ -27,19 +28,23 @@ function resolve(kept: Kept, list: Schemas['Project'][] | undefined): ResolvedSh
   return { kind: 'project', name: project?.name ?? kept.name, project }
 }
 
-// 直接打开全局页面、本次还没有到过任何范围时：用最近使用的项目，没有记录（或记录的是平台）时为全局。
+// When a global page is opened directly and no scope has been visited yet this time: use the last-used project, or global when there is
+// no record (or the record is the platform).
 function remembered(list: Schemas['Project'][] | undefined): Kept {
   const project = list?.find((p) => p.id === lastScope.get())
   return project ? { kind: 'project', name: project.name, id: project.id } : GLOBAL
 }
 
-// 与左侧栏切换宽屏、窄屏的宽度一致（index.css 里的 --breakpoint-nav）。
+// Matches the width at which the sidebar switches between the wide and narrow layouts (--breakpoint-nav in index.css).
 const wide = '(min-width: 56.3125rem)'
 
-// 控制台的外框：左侧栏加主区。左侧栏的范围来自地址（项目页与概览）；全局页面不带范围，沿用之前的范围，
-// 所以从项目里打开插件市场、全局设置等不会丢掉当前项目。宽度 ≤ 900 时左侧栏收进抽屉，顶部换成一条窄的蓝色栏。
-// 宽度 ≥ 1024 时外框固定为视口高度，各栏在自己的区域内滚动；更窄时整页一起滚动，左侧栏贴在视口里。
-// 在桌面壳的窗口里，窄屏顶部的蓝色栏也用来拖动窗口，菜单按钮让到系统的红绿灯按钮右边。
+// The console's frame: the sidebar plus the main area. The sidebar's scope comes from the URL (project pages and the overview); global pages
+// carry no scope and keep the previous one, so opening the plugin market, global settings and so on from inside a project does not lose
+// the current project. At widths ≤ 900 the sidebar folds into a drawer and the top becomes a narrow blue bar.
+// At widths ≥ 1024 the frame is fixed to the viewport height and each column scrolls within its own area; when narrower, the whole page
+// scrolls together and the sidebar sticks to the viewport.
+// In a desktop shell window, the blue bar at the top of the narrow layout also drags the window, and the menu button moves aside to the
+// right of the system's traffic-light buttons.
 export function AppLayout() {
   const location = useLocation()
   const projects = useProjects()
@@ -56,14 +61,14 @@ export function AppLayout() {
   if (next && !sameKept(next, kept)) setKept(next)
   const scope = resolve(next ?? kept ?? remembered(list), list)
 
-  // 抽屉只在打开它时的地址上保持打开：点任何入口换了地址就自动关上。
+  // The drawer stays open only at the URL where it was opened: clicking any entry changes the URL and closes it automatically.
   const [drawerAt, setDrawerAt] = useState<string | null>(null)
   const drawerOpen = drawerAt === location.key
   const searchOnOpen = useRef(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const drawerSearchRef = useRef<HTMLInputElement>(null)
 
-  // ⌘K（或 Ctrl+K）聚焦左侧栏的搜索；窄屏时先打开抽屉。
+  // ⌘K (or Ctrl+K) focuses the sidebar search; on narrow screens it opens the drawer first.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== 'k') return
@@ -78,7 +83,7 @@ export function AppLayout() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [location.key])
 
-  // 窗口变宽到常驻左侧栏时关上抽屉，不留下看不见的遮罩。
+  // Close the drawer when the window becomes wide enough for the permanent sidebar, so no invisible overlay is left behind.
   useEffect(() => {
     const query = window.matchMedia(wide)
     const onChange = () => {
@@ -88,7 +93,8 @@ export function AppLayout() {
     return () => query.removeEventListener('change', onChange)
   }, [])
 
-  // 进入控制台后建立一条收件箱事件流，发给你的消息、待你处理的汇总与各个收件箱视图都靠它实时更新。
+  // Open one inbox event stream on entering the console; messages sent to you, the "needs you" summary and every inbox view rely on it for
+  // live updates.
   useInboxLive()
   useDesktopNavigation()
   return (

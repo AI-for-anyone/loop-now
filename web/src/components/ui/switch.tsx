@@ -2,8 +2,9 @@ import * as React from "react"
 import { Switch as SwitchPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 
-// 开关（改版）：2px 藏青描边的胶囊，里面一个藏青圆钮；关时浅纸底、圆钮在左，开时黄底（选中态一律黄色）、圆钮在右。
-// 名称用 aria-label 或关联的 label 给出。
+// Switch (redesign): a pill with a 2px navy border holding a round navy knob; when off, a light paper background with the knob on the left;
+// when on, a yellow background (selected states are always yellow) with the knob on the right.
+// Its name comes from aria-label or an associated label.
 function Switch({ className, ...props }: React.ComponentProps<typeof SwitchPrimitive.Root>) {
   return (
     <SwitchPrimitive.Root

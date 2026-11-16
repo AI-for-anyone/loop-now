@@ -1,4 +1,5 @@
-// 轻提示：右下角的一条短消息，几秒后自动消失（例如插件操作按钮返回的结果）。带链接时一并显示。
+// Toast: a short message in the bottom right that disappears on its own after a few seconds (e.g. the result returned by a plugin action
+// button). A link, when there is one, is shown with it.
 export type Toast = { id: number; text: string; link?: { href: string; label: string } }
 
 const LIFETIME_MS = 6000
@@ -27,7 +28,7 @@ export const toastStore = {
     toasts = toasts.filter((toast) => toast.id !== id)
     emit()
   },
-  // 只供测试在用例之间复位。
+  // Only for tests, to reset between cases.
   reset() {
     toasts = []
     emit()

@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 
-// 项目 Manager 的标记：藏青底白字加旗子图标，不倾斜。列表卡片用 12px，详情头部用 13px。
+// The project Manager marker: white text on navy with a flag icon, not tilted. 12px on list cards, 13px in the details header.
 export function ManagerBadge({ size = 'sm', className }: { size?: 'sm' | 'md'; className?: string }) {
   return (
     <Badge

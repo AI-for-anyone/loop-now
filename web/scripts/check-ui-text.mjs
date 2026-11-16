@@ -1,5 +1,6 @@
-// 检查组件代码中直接书写的中文界面文字：界面文案必须来自 src/i18n/。英文文案表（i18n/en-US）里也不能有中文。
-// 只检查字符串、模板字符串与 JSX 文字，注释不受限制。
+// Checks for Chinese UI text written directly in component code: UI copy must come from src/i18n/. The English copy
+// table (i18n/en-US) must not contain Chinese either.
+// Only string literals, template literals and JSX text are checked; comments are not restricted here.
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,7 +15,7 @@ const IGNORED = [
   (path) => path.split(sep)[0] === 'test',
   (path) => /\.test\.tsx?$/.test(path),
   (path) => path.endsWith('.gen.ts'),
-  // 服务端协议里的固定文字，用于识别旧服务端，不是界面文案。
+  // Fixed text from the server protocol, used to recognize older servers; it is not UI copy.
   (path) => path === join('api', 'backend-signals.ts'),
 ]
 
@@ -38,7 +39,7 @@ export function findUiText(path, source) {
   }
   const visit = (node) => {
     if (ts.isTemplateExpression(node)) {
-      // 一个模板字符串只报告一次，插值部分仍要检查。
+      // Report a template literal once; its interpolations are still checked.
       report(node, [node.head.text, ...node.templateSpans.map((span) => span.literal.text)].join('…'))
       for (const span of node.templateSpans) visit(span.expression)
       return
@@ -65,6 +66,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const dir = process.argv[2] ?? fileURLToPath(new URL('../src', import.meta.url))
   const problems = checkDir(dir)
   for (const p of problems)
-    console.error(p.english ? `${p.file}:${p.line}: 英文文案表里有中文「${p.text}」` : `${p.file}:${p.line}: 直接书写的界面文字「${p.text}」，请改用 src/i18n/ 中的文案`)
+    console.error(p.english ? `${p.file}:${p.line}: Chinese text in the English copy table: "${p.text}"` : `${p.file}:${p.line}: hard-coded UI text "${p.text}"; use copy from src/i18n/ instead`)
   if (problems.length > 0) process.exit(1)
 }

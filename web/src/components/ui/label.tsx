@@ -2,7 +2,7 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Label as LabelPrimitive } from "radix-ui"
 
-// 表单字段标签：13.5 / 900。
+// Form field label: 13.5 / 900.
 function Label({
   className,
   ...props

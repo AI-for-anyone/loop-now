@@ -1,9 +1,11 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
-// 表格：外层容器可以单独横向滚动，窄屏时整页不出现横向滚动；表头浅蓝加粗，行之间是 2px 虚线。
-// 容器带 relative：表格里绝对定位的读屏文字（sr-only）以它为包含块，随表格一起滚动，不会把整页撑宽。
-// card：外面那层横向滚动区是白底卡片（默认）；直接排在纸张上的表格传 false，不要卡片。
+// Table: the outer container can scroll horizontally on its own, so the whole page never scrolls horizontally on narrow screens; the header
+// is light blue and bold, with 2px dashed lines between rows.
+// The container is relative: absolutely positioned screen-reader text (sr-only) in the table uses it as its containing block, scrolls
+// along with the table and does not widen the whole page.
+// card: the outer horizontal scroll area is a white card (default); tables placed directly on the sheet pass false for no card.
 function Table({ className, card = true, ...props }: React.ComponentProps<"table"> & { card?: boolean }) {
   return (
     <div data-slot="table-container" className={cn("relative w-full max-w-full overflow-x-auto", card && "rounded-card bg-white shadow-print-rest")}>

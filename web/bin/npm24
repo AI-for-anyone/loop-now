@@ -1,6 +1,6 @@
 #!/bin/sh
-# 用 .node-version 规定的 Node 及其自带的 npm 执行命令，不依赖系统默认的 node。
-# Node 所在目录默认为 ~/.local/node-v<版本>/bin，可用 LOOP_NOW_WEB_NODE_BIN 覆盖。
+# Run commands with the Node version pinned in .node-version and the npm bundled with it, without relying on the system's default node.
+# The Node directory defaults to ~/.local/node-v<version>/bin and can be overridden with LOOP_NOW_WEB_NODE_BIN.
 set -eu
 
 web_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -8,13 +8,13 @@ expected="v$(tr -d '[:space:]' < "$web_dir/.node-version")"
 node_bin="${LOOP_NOW_WEB_NODE_BIN:-$HOME/.local/node-$expected/bin}"
 
 if [ ! -x "$node_bin/node" ] || [ ! -x "$node_bin/npm" ]; then
-  echo "npm24: 在 ${node_bin} 中找不到 node 或 npm。请安装 Node ${expected}，或用 LOOP_NOW_WEB_NODE_BIN 指向它的 bin 目录。" >&2
+  echo "npm24: node or npm not found in ${node_bin}. Install Node ${expected}, or point LOOP_NOW_WEB_NODE_BIN at its bin directory." >&2
   exit 1
 fi
 
 actual=$("$node_bin/node" --version)
 if [ "$actual" != "$expected" ]; then
-  echo "npm24: ${node_bin}/node 的版本是 ${actual}，期望 ${expected}。" >&2
+  echo "npm24: ${node_bin}/node is version ${actual}, expected ${expected}." >&2
   exit 1
 fi
 

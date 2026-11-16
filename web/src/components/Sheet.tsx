@@ -1,8 +1,10 @@
 import type { ComponentProps, ElementType, Ref } from 'react'
 import { cn } from '@/lib/utils'
 
-// 纸张：页面主体放在一张纸上。浅纸底（带主区那层很淡的颗粒）、2px 藏青描边、18px 圆角、6px 孔版蓝实色投影；右侧留 6px 给投影。
-// 内容超出时由里面的区域自己滚动，纸张本身裁掉溢出的部分。纸张里的滚动条一律是细的藏青半透明滚动条（riso-scrollbar）。
+// Sheet: the page body sits on a sheet of paper. Light paper background (with the very faint grain of the main area), 2px navy border,
+// 18px corner radius, 6px riso-blue solid offset shadow; 6px is left free on the right for the shadow.
+// When content overflows, the areas inside scroll on their own and the sheet itself clips the overflow. Scrollbars inside the sheet are
+// always the thin translucent navy ones (riso-scrollbar).
 export function Sheet({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
@@ -13,8 +15,10 @@ export function Sheet({ className, ...props }: ComponentProps<'div'>) {
   )
 }
 
-// 票根：纸张右侧用 2px 虚线隔出的一条，里面是一把尺子（对话页是轮次，配置页是目录，文件夹与收件箱是几个大数字）。
-// 顶部一个小标题。窄屏（左侧栏收进抽屉时）不显示。作为导航区（as="nav"）并用 aria-label 命名时，小标题不再读一遍。
+// Stub: a strip on the right side of the sheet, set off by a 2px dashed line, holding a ruler (turns on the conversation page, the
+// contents on the config page, a few big numbers for the folder and the inbox).
+// A small heading at the top. Not shown on narrow screens (when the sidebar is folded into the drawer). When it is a navigation region
+// (as="nav") named with aria-label, the small heading is not read a second time.
 export function Stub({
   as: Tag = 'div',
   label,
@@ -32,7 +36,8 @@ export function Stub({
   )
 }
 
-// 尺子右缘的一排刻度（每 23px 一条 2px 的短线），纯装饰；放在定位容器里，占满它的高度。
+// The row of ticks on the ruler's right edge (a 2px short line every 23px), purely decorative; placed in a positioned container, it fills
+// that container's height.
 export function RulerTicks({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
@@ -43,7 +48,8 @@ export function RulerTicks({ className, ...props }: ComponentProps<'div'>) {
   )
 }
 
-// 尺子上标出当前位置的一笔：略微倾斜的黄色记号笔，左侧一个粉色小箭头。纯装饰；位置与高度由调用方给（style 或类名）。
+// The stroke marking the current position on the ruler: a slightly tilted yellow highlighter mark with a small pink arrow on its left.
+// Purely decorative; the caller provides position and height (style or class names).
 export function RulerMark({ className, ...props }: ComponentProps<'span'>) {
   return (
     <span aria-hidden="true" className={cn('pointer-events-none absolute right-0 left-0 block', className)} {...props}>
@@ -53,7 +59,8 @@ export function RulerMark({ className, ...props }: ComponentProps<'span'>) {
   )
 }
 
-// 票根里的一个大数字（文件夹页的文件数、收件箱的未读数……）：上面是 Bricolage 34px 的数，下面是一行小字说明，靠右排。
+// A big number in the stub (the file count on the folder page, the unread count in the inbox…): a Bricolage 34px number on top, a line of
+// small caption text below, right-aligned.
 const FIGURE_TONE = { blue: 'text-riso-blue', ink: 'text-ink', pink: 'text-pink-text', red: 'text-red-text', green: 'text-green-text' } as const
 
 export function StubFigure({ value, label, tone = 'blue' }: { value: string; label: string; tone?: keyof typeof FIGURE_TONE }) {

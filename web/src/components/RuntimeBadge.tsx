@@ -3,8 +3,10 @@ import { Badge } from '@/components/ui/badge'
 import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
 
-// Agent 的运行时标记：只标 Claude Code 的 Agent，Pi 是默认运行时，不标，存量界面不变。
-// Agent 头部用带文字的胶囊；左侧栏一行很窄，只放一个小图标（悬停与读屏给出全称），随行的文字颜色。
+// The Agent's runtime marker: only Claude Code Agents are marked; Pi is the default runtime and is not marked, so the existing UI stays
+// unchanged.
+// The Agent header uses a pill with text; a sidebar row is narrow, so it gets only a small icon (hover and screen readers give the full
+// name) in the row's text color.
 export function RuntimeBadge({ runtime }: { runtime: Schemas['AgentRuntime'] }) {
   if (runtime !== 'claude-code') return null
   return (

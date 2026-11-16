@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils'
 
-// 左侧栏的一组线性图标（17px、2.2 描边），取自导航设计稿 A4。只作装饰，名称在旁边照常显示。
+// The sidebar's set of line icons (17px, 2.2 stroke), taken from navigation design draft A4. Purely decorative; the name is shown next to
+// them as usual.
 const paths = {
   overview: (
     <>

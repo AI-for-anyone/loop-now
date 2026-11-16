@@ -28,7 +28,8 @@ function NavItem({ to, icon, label, current, badge, onClick, compact = false }: 
   )
 }
 
-// 地址落在哪一项：项目与平台的地址取范围之后的第一段与 Agent ID，其余取第一段。
+// Which entry the URL falls on: for project and platform URLs, the first segment after the scope plus the Agent ID; otherwise the first
+// segment.
 function place(pathname: string) {
   const parts = pathname.split('/').filter(Boolean)
   const scoped = parts[0] === 'p' ? parts.slice(2) : parts[0] === 'platform' ? parts.slice(1) : null
@@ -40,7 +41,7 @@ function place(pathname: string) {
   }
 }
 
-// 全局范围的“项目”分组：点一个项目即切换到它的范围（进入它的概览）。
+// The “项目” (Projects) group in the global scope: clicking a project switches to its scope (opens its overview).
 function ProjectGroup({ projects, search }: { projects: Schemas['Project'][] | undefined; search: string }) {
   const headingId = useId()
   const keyword = search.trim().toLowerCase()
@@ -79,8 +80,10 @@ const sum = (rows: PendingCounts[]): PendingCounts => ({
   unread: rows.reduce((total, row) => total + row.unread, 0),
 })
 
-// 列表下方空白处的装饰：一片伸出左缘的网点圆，旁边一粉一黄两个小色点。它占列表下面剩余的高度，
-// 剩余高度放不下整片装饰时不显示（见 index.css 的 .sidebar-deco），所以不会压到文字；读屏不读，也不挡点击。窄屏的抽屉里不显示。
+// Decoration in the empty space below the list: a halftone-dot circle sticking out past the left edge, with two small dots beside it, one
+// pink and one yellow. It takes up the remaining height below the list and is hidden when that height cannot fit the whole decoration (see
+// .sidebar-deco in index.css), so it never covers text; screen readers skip it and it does not block clicks. Not shown in the drawer on
+// narrow screens.
 function SidebarDeco() {
   return (
     <div className="sidebar-deco-slot">
@@ -93,9 +96,11 @@ function SidebarDeco() {
   )
 }
 
-// 左侧栏：品牌蓝网点底、白字。顶部是标志、范围切换与搜索；中间是当前范围的入口与 Agent；
-// 底部（虚线以下）是任何范围都能到达的全局入口与连接状态。宽屏常驻，窄屏放在抽屉里（onClose 为抽屉的关闭按钮）。
-// 在桌面壳的窗口里，最上面多一条拖动窗口的区域，系统的红绿灯按钮在这一条里（位置见 desktop/src/window.ts）。
+// The sidebar: brand-blue halftone background, white text. At the top: the logo, the scope switcher and search; in the middle: the current
+// scope's entries and Agents; at the bottom (below the dashed line): the global entries reachable from any scope, and the connection
+// status. Always visible on wide screens, in a drawer on narrow ones (onClose is the drawer's close button).
+// In a desktop shell window there is an extra strip at the very top for dragging the window, and the system's traffic-light buttons sit in
+// that strip (for their position see desktop/src/window.ts).
 export function Sidebar({
   scope,
   projects,
@@ -115,11 +120,11 @@ export function Sidebar({
   const [creating, setCreating] = useState<Scope | null>(null)
   const pending = useInboxPending().data
   const project = scope.kind === 'project' ? scope.project : undefined
-  // 待你处理的条数：项目里按发件 Agent 所属项目统计，全局为全部。
+  // The number of items that need you: in a project, counted by the project of the sending Agent; in global, all of them.
   const mine = (item: Schemas['InboxPendingItem']) => scope.kind === 'global' || (project !== undefined && item.projectId === project.id)
   const overviewCounts = pending && { questions: pending.questions.filter(mine).length, unread: pending.unread.filter(mine).length }
   const taskCounts = pending && project && sum(pending.byTask.filter((row) => row.projectId === project.id))
-  // 正在运行的任务数只算 running；只在项目范围读取。
+  // The running task count only counts running; read only in project scope.
   const running = useProjectTaskCounts(project?.id).data?.running
   const searchLabel = scope.kind === 'project' ? text.search.project : text.search.global
   const desktop = inDesktopWindow()
@@ -164,8 +169,10 @@ export function Sidebar({
         </label>
       </div>
 
-      {/* 滚动区本身是定位容器：待你处理角标里的 sr-only 说明随列表滚动并被裁剪，不会按未滚动时的位置撑高整页。 */}
-      {/* 窗口矮时出现的滚动条：蓝底上一条细的半透明白色滚动条，看得清又不扎眼。 */}
+      {/* The scroll area itself is the positioning container: the sr-only description in the "needs you" badge scrolls with the list and is
+          clipped, instead of stretching the whole page from its unscrolled position. */}
+      {/* The scrollbar that appears when the window is short: a thin translucent white scrollbar on the blue background, visible without being
+          glaring. */}
       <div className="relative flex min-h-0 flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto px-3.5 pt-1 pb-3 [scrollbar-color:rgb(255_255_255/.45)_transparent] [scrollbar-width:thin]">
         <NavItem
           to={overviewPath(scope)}
@@ -182,7 +189,8 @@ export function Sidebar({
               label={text.items.tasks}
               current={here.section === 'tasks'}
               badge={
-                // 运行数在前、“待你回复”贴纸在后；两者都没有时整个容器不占位。
+                // The running count comes first and the “待你回复” (Needs your reply) sticker after it; when neither is present the container
+                // takes no space.
                 <span className="flex shrink-0 items-center gap-1.5 empty:hidden">
                   <RunningTaskBadge count={running} />
                   <PendingBadge sticker counts={taskCounts} />
@@ -196,7 +204,8 @@ export function Sidebar({
               label={text.items.projectSettings}
               current={here.section === 'settings' || here.section === 'plugins'}
             />
-            {/* 地址里的项目找不到时没有 Agent 分组（主区说明找不到）；项目列表还没加载出来时分组里是加载中。 */}
+            {/* No Agent group when the project in the URL cannot be found (the main area says so); while the project list has not loaded yet,
+                the group shows loading. */}
             {(project || !projects) && (
               <AgentNavGroup
                 scope={project ? { kind: 'project', project } : null}

@@ -7,21 +7,28 @@ import { cn } from '@/lib/utils'
 
 export interface Crumb {
   label: string
-  // 没有地址的一层只显示文字（例如概览页上它自己的范围）。
+  // A level without a URL shows text only (e.g. the scope itself on the overview page).
   to?: string
 }
 
-// 页面外框：页头在上，纸张在下。左右与底部的留白随窗口宽度变化，底部给纸张的投影留出位置（与 Agent 页相同）。
+// Page frame: the header on top, the sheet below. The side and bottom margins change with the window width, and the bottom leaves room
+// for the sheet's shadow (same as the Agent page).
 export function PageFrame({ className, ...props }: ComponentProps<'div'>) {
   return <div className={cn('flex h-full min-h-0 flex-col px-[clamp(14px,2.4vw,34px)] pb-[26px] max-nav:pb-4', className)} {...props} />
 }
 
-// 页面标题（改版通用规则第 3 条）：面包屑、ZCOOL 标题（孔版蓝加荧光粉错版）、一行元信息，右上角叠印装饰。
-// 用于项目与全局的页面（概览、任务、项目设置、项目文件夹……）；Agent 详情有自己的页头（名称、徽标、地址）。
-// 面包屑最后一项是当前页面，就是标题本身。页头是尺寸容器：宽于 820px 时显示装饰，各行文字给它让出位置。
-// 宽屏时与 Agent 页头一样紧凑：标题 40px，元信息并到标题右边一行（放不下时换行），装饰缩到和页头同高；窄屏照旧。
-// current：面包屑最后一项的写法（默认就是标题，任务详情写成“#11”）；lead：标题前面的东西（如任务编号），不算进标题；
-// actions：这一行靠右的操作（如“取消任务”）；note：标题下面的一行说明（如插件的简介与来源）。
+// Page title (rule 3 of the redesign's general rules): breadcrumbs, a ZCOOL title (riso blue with a misregistered fluorescent pink copy),
+// a line of meta info, and an overprint decoration in the top right corner.
+// Used for project and global pages (overview, tasks, project settings, project folder…); Agent details have their own header (name,
+// badges, address).
+// The last breadcrumb is the current page, i.e. the title itself. The header is a size container: wider than 820px it shows the
+// decoration, and every line of text makes room for it.
+// On wide screens it is as compact as the Agent header: a 40px title, the meta info moved onto the title's line to its right (wrapping
+// when it does not fit), and the decoration shrunk to the header's height; narrow screens are unchanged.
+// current: how the last breadcrumb is written (the title by default; task details write “#11”); lead: something before the title (such
+// as the task number) that is not counted as part of the title;
+// actions: actions on the right of this line (such as “取消任务” (Cancel task)); note: a line of explanation under the title (such as a
+// plugin's summary and source).
 export function PageHeader({
   crumbs,
   title,
@@ -90,7 +97,8 @@ export function PageHeader({
   )
 }
 
-// 页头元信息里的实时状态：连上时绿点加说明（如“实时更新中”），断开时红点加“正在重连”；还在连接时只占位，不闪一下红色。
+// Live status in the header's meta info: a green dot plus a label when connected (such as “实时更新中” (Live)), a red dot plus
+// "reconnecting" when disconnected; while still connecting it only holds the space, without a flash of red.
 export function LiveDot({ state, label }: { state: 'connecting' | 'open' | 'reconnecting' | 'closed'; label: string }) {
   if (state === 'connecting') return <span role="status" aria-live="polite" />
   const open = state === 'open'

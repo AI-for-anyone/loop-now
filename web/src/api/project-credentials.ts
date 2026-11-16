@@ -4,7 +4,7 @@ import type { Readable } from 'openapi-typescript-helpers'
 import { config } from '@/config'
 import { ApiError, api, call, type Schemas } from './client'
 
-// 仅用于账号列表能力探测，不应用于单账号资源的404。
+// Only for detecting whether the account list is supported; must not be used for a 404 on a single-account resource.
 export function projectCredentialsUnsupported(error: unknown) {
   return error instanceof ApiError && error.status === 404 && error.code === 'not_found' && error.serverMessage === backendSignals.missingEndpoint
 }
@@ -32,8 +32,9 @@ export function replaceProjectAccount(projectId: string, accountId: string, cred
 export function deleteProjectAccount(projectId: string, accountId: string, expectedRevision: number) {
   return call(api.DELETE('/projects/{projectId}/credential-accounts/{accountId}', { params: { path: { projectId, accountId }, query: { expectedRevision } } }))
 }
-// openapi-fetch的Readable会剔除纯null属性（NonNullable<null>=never）。
-// 按生成的正式mode分支恢复必为null的字段，保持组件直接使用完整正式DTO；不修改生成类型。
+// openapi-fetch's Readable drops properties that can only be null (NonNullable<null> = never).
+// Restore the fields that must be null per branch of the generated mode union, so components keep using the complete DTO as defined;
+// the generated types are not modified.
 function selectionResponse(data: Readable<Schemas['CredentialSelections']>): Schemas['CredentialSelections'] {
   return { ...data, selections: data.selections.map(item => item.mode === 'explicit' ? item : item.mode === 'legacy_cleared' ? { ...item, selectedAccountId: null, resolvedAccountId: null, resolvedVersionId: null } : { ...item, selectedAccountId: null }) }
 }
@@ -49,7 +50,8 @@ export async function putSelection(agentId: string, body: Schemas['CredentialSel
 export function useCredentialImpact(projectId: string, purpose: Schemas['ProjectCredentialPurpose'], slot: string, accountId?: string, enabled = true) {
   return useQuery({ queryKey: [...credentialKeys.project(projectId), 'impact', purpose, slot, accountId ?? null], queryFn: ({ signal }) => call(api.GET('/projects/{projectId}/credential-account-impact', { params: { path: { projectId }, query: purpose === 'model' ? { purpose, provider: slot, accountId } : { purpose, cli: slot, accountId } }, signal })), enabled: enabled && !!slot, staleTime: 0 })
 }
-// 项目里全部进行中的登录（Codex 与插件提供方），每条带 provider；匹配时同时比 provider 与 targetAccountId。
+// All logins in progress in the project (Codex and plugin providers), each with its provider; matching compares both provider and
+// targetAccountId.
 export function useProjectLogins(projectId: string, enabled = true) {
   return useQuery({ queryKey: credentialKeys.operations(projectId), queryFn: ({ signal }) => call(api.GET('/projects/{projectId}/model-auth/operations', { params: { path: { projectId } }, signal })), enabled, gcTime: 0, retry: false, refetchOnMount: 'always', refetchOnWindowFocus: 'always', refetchIntervalInBackground: true, refetchInterval: query => focusManager.isFocused() || query.state.data?.operations.some(projectLoginActive) ? 1500 : false })
 }
@@ -60,7 +62,8 @@ export function startProjectLogin(projectId: string, body: Schemas['ProjectModel
 export function readProjectLogin(projectId: string, operationId: string, signal?: AbortSignal) {
   return call(api.GET('/projects/{projectId}/model-auth/operations/{operationId}', { params: { path: { projectId, operationId } }, signal }))
 }
-// 回答登录中途的问题：回答按秘密处理，直接发出，不经 mutation 缓存、不记日志。
+// Answer a question asked partway through a login: the answer is treated as a secret and sent directly, without the mutation cache and
+// without logging.
 export function answerProjectLogin(projectId: string, operationId: string, body: Schemas['ProjectModelLoginInput']) {
   return call(api.POST('/projects/{projectId}/model-auth/operations/{operationId}/input', { params: { path: { projectId, operationId } }, body }))
 }
