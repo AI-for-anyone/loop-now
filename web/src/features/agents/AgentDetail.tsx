@@ -20,8 +20,9 @@ import type { AgentOutletContext, AgentStickerState } from './agent-context'
 import { AgentAddress } from './AgentAddress'
 import { SleepUntil } from '@/features/sleep/SleepUntil'
 
-// 标题旁的状态标签（描边、略倾斜的胶囊），按会话丢失、正忙（加当前阶段）、空闲的优先级显示。对话页交来的实时状态优先；
-// 没有实时状态时取定期查询的状态接口，接口结果到达前取 Agent 详情中的忙闲与会话状态。
+// The status tag next to the title (an outlined, slightly tilted pill), shown by priority: session lost, busy (plus the current
+// phase), idle. The live status handed over by the Chat tab takes precedence; without it, the periodically polled status endpoint
+// is used, and until that result arrives, the busy/idle and session state from the Agent details.
 function StatusChip({ agent, live }: { agent: Schemas['Agent']; live: AgentStickerState | null }) {
   const status = useAgentStatus(agent.id, config.agentListPollMs)
   const polled: AgentStickerState = status.data
@@ -69,20 +70,23 @@ export function AgentDetail() {
   const scope = useScope()
   const projects = useProjects()
   const agent = useAgent(agentId)
-  // 对话页交来的实时状态，记下所属的 Agent，切换 Agent 时不会用到上一个 Agent 的状态。
+  // The live status handed over by the Chat tab, recorded together with the Agent it belongs to, so that switching Agents never
+  // uses the previous Agent's status.
   const [live, setLive] = useState<{ agentId: string; state: AgentStickerState } | null>(null)
   const reportLiveStatus = useCallback((state: AgentStickerState | null) => setLive(state ? { agentId, state } : null), [agentId])
 
   if (isNotFound(agent.error)) {
     return <p className="px-6 py-7 text-[15px] text-ink-500" role="status">{t.agents.notFound}</p>
   }
-  // 已有数据时，后台刷新失败只在页签上方提示，不卸载页签内容，避免丢失未保存的编辑。
+  // Once data exists, a failed background refresh is only reported above the tabs; the tab content is not unmounted, so
+  // unsaved edits are not lost.
   if (!agent.data) {
     if (agent.isError) return <ErrorAlert error={agent.error} className="mx-6 my-7 w-auto" />
     return <p className="px-6 py-7 text-[15px] text-ink-500">{t.common.loading}</p>
   }
 
-  // 地址中的项目或平台与 Agent 的实际归属不一致时，改用实际所在的地址，页签、查询参数与锚点不变。
+  // When the project or platform in the URL doesn't match where the Agent actually belongs, switch to the URL where it actually
+  // lives, keeping the tab, query parameters and hash unchanged.
   const actual = projects.data ? agentScope(agent.data, projects.data.projects) : null
   if (actual && !sameScope(actual, scope)) {
     const tab = location.pathname.split('/').at(-1)
@@ -91,10 +95,12 @@ export function AgentDetail() {
   }
 
   return (
-    // 页头与索引标签在上，页签内容在下面那张纸里。左右与底部的留白随窗口宽度变化，底部给纸张的投影留出位置。
+    // The page header and index tabs are on top, and the tab content is in the sheet below. The left, right and bottom padding
+    // varies with the window width; the bottom padding leaves room for the sheet's shadow.
     <div className="flex h-full min-h-0 flex-col px-[clamp(14px,2.4vw,34px)] pb-[26px] max-nav:pb-4">
-      {/* 宽屏时页头紧凑（四个页签都用）：面包屑更紧，标题 40px，身份、状态、运行时、模型与地址并在标题右边一行，放不下时换行；
-          装饰缩到和页头同高。窄屏照旧。 */}
+      {/* On wide screens the header is compact (used by all four tabs): a tighter breadcrumb, a 40px title, and the role (Manager),
+          status, runtime, model and address in one row to the right of the title, wrapping when they don't fit;
+          the decoration shrinks to the header's height. Narrow screens stay as before. */}
       <header className="@container relative flex shrink-0 flex-col gap-3 pt-[22px] pb-[18px] nav:gap-1.5 nav:pt-3 nav:pb-2.5" data-agent-header>
         <OverprintDeco compact />
         <nav aria-label={t.shell.breadcrumb} className="relative">
@@ -122,7 +128,8 @@ export function AgentDetail() {
             <RuntimeBadge runtime={agent.data.runtime} />
             <StatusChip agent={agent.data} live={live?.agentId === agentId ? live.state : null} />
           </div>
-          {/* 模型与地址：模型是浅蓝底的等宽标签，地址在虚线框里。窄屏单独一行。 */}
+          {/* Model and address: the model is a monospace tag on a light blue background, the address is in a dashed box.
+              On narrow screens they get a row of their own. */}
           <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-2 text-[12px] nav:contents">
             <span className="min-w-0 rounded-stamp bg-tint-blue px-[9px] font-mono text-[12px] leading-[22px] [overflow-wrap:anywhere]">{`${agent.data.model.provider} · ${agent.data.model.modelId}`}</span>
             <AgentAddress address={agent.data.address} />
@@ -138,7 +145,7 @@ export function AgentDetail() {
       <Sheet className="flex-1">
         {agent.isError && <ErrorAlert error={agent.error} className="mx-6 mt-3 w-auto" />}
         <div className="min-h-0 flex-1">
-          {/* 按 Agent 重新挂载页签：草稿、对话框、实时状态与滚动位置都不能带到另一个 Agent。 */}
+          {/* Remount the tabs per Agent: drafts, dialogs, live status and scroll position must not carry over to another Agent. */}
           <Outlet key={agentId} context={{ agent: agent.data, reportLiveStatus } satisfies AgentOutletContext} />
         </div>
       </Sheet>

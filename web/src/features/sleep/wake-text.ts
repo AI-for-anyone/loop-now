@@ -1,7 +1,11 @@
-// 到期唤醒消息是平台写给模型的指令，现在是英文：
-// "Platform notice: your sleep is due; continue in the original conversation. sleepId=<ID>"，有说明时再接 "; note: <说明>"。
-// 改成英文之前的会话里是中文："平台通知：sleep已到期，请接着原会话处理。sleepId=<ID>"，有说明时再接"；说明：<说明>"，不迁移，两种都认。
-// 界面只取 Agent 自己写的说明；格式对不上时返回 null，原文只放进悬停提示。
+// The wake-up message sent when a sleep is due is an instruction from the platform to the model, and is now in English:
+// "Platform notice: your sleep is due; continue in the original conversation. sleepId=<ID>", followed by "; note: <note>"
+// when there is a note.
+// Sessions from before the switch to English have it in Chinese: "平台通知：sleep已到期，请接着原会话处理。sleepId=<ID>"
+// (the same message in Chinese), followed by "；说明：<说明>" ("; note: <note>") when there is a note. They are not migrated;
+// both forms are recognized.
+// The UI only takes the note the Agent wrote itself; when the format doesn't match, return null, and the original text only
+// goes into the hover tooltip.
 const wakeTexts = [
   /^Platform notice: your sleep is due; continue in the original conversation\. sleepId=[0-9a-f-]+(?:; note: ([\s\S]*))?$/u,
   /^平台通知：sleep已到期，请接着原会话处理。sleepId=[0-9a-f-]+(?:；说明：([\s\S]*))?$/u,

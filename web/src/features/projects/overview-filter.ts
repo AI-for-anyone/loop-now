@@ -4,12 +4,13 @@ import type { Schemas } from '@/api/client'
 import { useProjects } from '@/api/queries'
 import { PLATFORM, scopeQueryKey, type ScopeQuery } from '@/lib/scope'
 
-// 概览页的范围筛选，写在概览地址的查询参数中：?project=<项目名> 或 ?platform=1，都没有时为全部。
-// 顶栏从同一地址读取当前选择，全部范围对应未选择项目。
+// The overview page's scope filter, stored in the overview URL's query parameters: ?project=<project name> or ?platform=1; with
+// neither, it is All.
+// The top bar reads the current selection from the same URL; the All scope corresponds to no project being selected.
 export type OverviewFilter =
   | { kind: 'all' }
   | { kind: 'platform' }
-  // project 为 undefined：项目列表还没加载完；null：找不到同名的未删除项目。
+  // project is undefined: the project list hasn't finished loading; null: no undeleted project with this name exists.
   | { kind: 'project'; name: string; project: Schemas['Project'] | null | undefined }
 
 export function useOverviewFilter() {
@@ -24,17 +25,19 @@ export function useOverviewFilter() {
         ? { kind: 'platform' }
         : { kind: 'all' }
 
-  // 选择项：'' 为全部，PLATFORM 为平台，其余为项目名。
+  // The selected value: '' is All, PLATFORM is the platform, anything else is a project name.
   const select = (value: string) =>
     setParams(value === '' ? {} : value === PLATFORM ? { platform: '1' } : { project: value.slice('project:'.length) })
 
-  // 传给概览事件流、用量与异常的范围参数；项目还没解析出来时为 null，这时不请求。
+  // The scope parameters passed to the overview event stream, usage and anomalies; null while the project hasn't been resolved
+  // yet, in which case nothing is requested.
   const query: ScopeQuery | null =
     filter.kind === 'all' ? {} : filter.kind === 'platform' ? { platform: true } : filter.project ? { projectId: filter.project.id } : null
   return { filter, projects: list, select, query, key: query ? scopeQueryKey(query) : null }
 }
 
-// 选“全部”时，运行状态、用量与异常的各行标出所属项目或“平台”；选定范围后不标。
+// With “全部” (All) selected, each row in run status, usage and anomalies is tagged with its project or “平台” (Platform);
+// once a scope is selected, rows are not tagged.
 export type ScopeLabel = { kind: 'platform' } | { kind: 'project'; name: string } | { kind: 'deleted' }
 export const ScopeLabelContext = createContext<((scope: Schemas['AgentScope'], projectId: string | null) => ScopeLabel) | null>(null)
 

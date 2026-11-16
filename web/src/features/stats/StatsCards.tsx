@@ -16,10 +16,10 @@ const text = t.stats
 
 type Report = Schemas['StatsReport']
 export type ScopeOf = (projectId: string | null) => Scope | null
-// 横轴：每个桶的短标签与提示框标题，由页面按桶宽算好传进来。
+// The x-axis: each bucket's short label and tooltip title, computed by the page from the bucket width and passed in.
 export type Axis = { labels: string[]; shortLabels: string[]; titles: string[]; hourly: boolean; rangeLabel: string }
 
-// 平均上下文超过这个数（token）就该考虑让它重开会话。
+// Once the average context exceeds this many tokens, consider having the Agent start a new session.
 export const REOPEN_CONTEXT = 120_000
 
 const COLOR = {
@@ -34,8 +34,9 @@ const COLOR = {
 
 const wanOf = (tokens: number) => tokens / 10_000
 
-// 统计页里（有编号时）是纸上的一个编号分区（改版）：上方一道虚线，左侧空心编号，标题是 ZCOOL 加黄色记号笔，
-// 单位与右侧的图例跟在标题后面；不在统计页里时照旧是一张白底卡片。
+// On the stats page (when it has a number) this is a numbered section on the sheet (redesign): a dashed line on top, an outlined
+// number on the left, a ZCOOL title with a yellow highlighter mark, followed by the unit and the legend on the right; outside
+// the stats page it is still a white card as before.
 export function Card({ title, unit, aside, children, className }: { title: string; unit?: ReactNode; aside?: ReactNode; children: ReactNode; className?: string }) {
   const titleId = useId()
   const number = useContext(CardNumber)
@@ -72,7 +73,7 @@ export function Card({ title, unit, aside, children, className }: { title: strin
 const Note = ({ children }: { children: ReactNode }) => <p className="text-[11.5px] leading-[1.5] text-ink-500">{children}</p>
 const Quiet = ({ children }: { children: ReactNode }) => <p className="py-2 text-[12.5px] text-ink-500">{children}</p>
 
-// 1. 每天（今天是每小时）的用量，按触发来源堆叠：你发的消息、定时唤醒、Agent 互相提醒与任务、其他。
+// 1. Daily usage (hourly for today), stacked by trigger: your messages, scheduled wakes, Agent-to-Agent reminders and tasks, other.
 export function OriginsCard({ report, axis }: { report: Report; axis: Axis }) {
   const { series, unrequestedShare } = report.byOrigin
   const columns = [
@@ -102,7 +103,7 @@ export function OriginsCard({ report, axis }: { report: Report; axis: Axis }) {
   )
 }
 
-// 唤醒的频率：按相邻两次的平均间隔写成“每 4 小时醒一次”。
+// Wake frequency: written from the average interval between consecutive wakes, as in “每 4 小时醒一次” (Wakes every 4 h).
 function cadence(wake: Schemas['StatsAgentWakes']) {
   const s = wake.avgIntervalSeconds
   if (s === null) return text.wakes.once
@@ -111,7 +112,8 @@ function cadence(wake: Schemas['StatsAgentWakes']) {
   return text.wakes.every(interval)
 }
 
-// 谁在睡醒后烧钱：按唤醒消耗排的 Agent；底部说明消耗最多的那个每次醒来用多少，链接到它的提示词（睡多久由它自己决定）。
+// Who burns tokens after waking: Agents ranked by what their wakes consume; the note at the bottom says how much the top
+// spender uses per wake and links to its prompt (how long it sleeps is its own decision).
 export function WakesCard({ report, scopeOf }: { report: Report; scopeOf: ScopeOf }) {
   const wakes = report.wakes
   const count = wakes.reduce((sum, w) => sum + w.count, 0)
@@ -160,7 +162,7 @@ export function WakesCard({ report, scopeOf }: { report: Report; scopeOf: ScopeO
   )
 }
 
-// 2. 每次模型调用送进去多少上下文，按 Agent；平均超过 12 万的标“该重开”。
+// 2. How much context is sent with each model call, per Agent; an average above 120K gets marked “该重开” (New session due).
 export function ContextCard({ report }: { report: Report }) {
   const agents = report.context.agents.slice(0, 6)
   const max = agents[0]?.avgInputPerCall ?? 0
@@ -192,7 +194,8 @@ export function ContextCard({ report }: { report: Report }) {
   )
 }
 
-// 3. 等你回答：时间窗内问了多少、你平均多久回、最久的一次；下面是现在还开着的问题，点开到那个 Agent 的对话。
+// 3. Waiting for your answer: how many questions were asked in the time window, how long you take to reply on average, and
+// the longest wait; below are the questions still open now, each opening that Agent's chat.
 export function QuestionsCard({ report, axis, scopeOf }: { report: Report; axis: Axis; scopeOf: ScopeOf }) {
   const { asked, avgAnswerSeconds, maxAnswerSeconds, pending } = report.questions
   const now = useNow(60_000)
@@ -246,7 +249,7 @@ export function QuestionsCard({ report, axis, scopeOf }: { report: Report; axis:
   )
 }
 
-// 4. 发出去多久开始回：你发的消息从排入到开始回复的 p50 与 p90，含排队。
+// 4. Time to first reply: p50 and p90 from your message being queued to the reply starting, including time spent queued.
 export function WaitCard({ report, axis }: { report: Report; axis: Axis }) {
   const series = [
     { key: 'p50', label: text.wait.p50Short, color: COLOR.blue, values: report.wait.series.map((b) => b.p50) },
@@ -281,7 +284,7 @@ export function WaitCard({ report, axis }: { report: Report; axis: Axis }) {
   )
 }
 
-// 5. 回复结果：每个时段完成、被打断或停止、失败的回合数。
+// 5. Reply outcomes: the number of turns per period that completed, were interrupted or stopped, or failed.
 export function OutcomesCard({ report, axis }: { report: Report; axis: Axis }) {
   const { totals, series } = report.outcomes
   const runs = totals.completed + totals.interrupted + totals.failed
@@ -312,7 +315,8 @@ export function OutcomesCard({ report, axis }: { report: Report; axis: Axis }) {
 
 const reasonText = (reason: Schemas['StatsOutcomeReason']) => (reason.code === null ? text.reasons.noCode : (text.reasons.codes[reason.code] ?? reason.code))
 
-// 没完成的原因：打断、停止、失败各自的原因与次数；失败最多的原因写在底部。
+// Why replies didn't finish: the reasons and counts for interrupted, stopped and failed turns; the most common failure reason
+// is written at the bottom.
 export function ReasonsCard({ report }: { report: Report }) {
   const { reasons, totals } = report.outcomes
   const total = reasons.reduce((sum, r) => sum + r.count, 0)
@@ -348,7 +352,8 @@ export function ReasonsCard({ report }: { report: Report }) {
 
 const rateOr = (rate: number | null) => (rate === null ? text.none : text.percent(rate))
 
-// Agent 体检：每个 Agent 一行，窄屏时表格在卡片里横向滚动。完成率不到 95% 标红。
+// Agent health: one row per Agent; on narrow screens the table scrolls horizontally inside the card. A completion rate below
+// 95% is marked red.
 export function HealthCard({ report }: { report: Report }) {
   const columns = text.health.columns
   const cell = 'px-2 py-2 text-right'
@@ -401,7 +406,7 @@ export function HealthCard({ report }: { report: Report }) {
   )
 }
 
-// 工具调用：按次数排的工具与各自的失败率。
+// Tool calls: tools ranked by call count, each with its failure rate.
 export function ToolsCard({ report }: { report: Report }) {
   const { byName, callsPerRunAvg, callsPerRunMax } = report.tools
   const tools = byName.slice(0, 6)
@@ -432,7 +437,7 @@ export function ToolsCard({ report }: { report: Report }) {
   )
 }
 
-// 按模型系列（Claude、GPT、其他）汇总 token 占比，从多到少。
+// Sum token shares by model family (Claude, GPT, other), from largest to smallest.
 function familyShares(tokens: Schemas['StatsTokens']) {
   const sums = new Map<ModelFamily, number>()
   for (const row of tokens.byModel) {
@@ -446,7 +451,7 @@ function familyShares(tokens: Schemas['StatsTokens']) {
     .map(([family, n]) => text.process.share(text.process.families[family], text.wholePercent(total ? n / total : 0)))
 }
 
-// 模型与进程：模型重试、Pi 异常退出与冷启动、按模型的 token 占比与估算花费。
+// Models and processes: model retries, Pi crashes and cold starts, token share by model, and the estimated cost.
 export function ProcessCard({ report }: { report: Report }) {
   const { modelRetries, piExits, piColdStarts, piColdStartAvgMs } = report.process
   const shares = familyShares(report.tokens)
@@ -483,7 +488,8 @@ export function ProcessCard({ report }: { report: Report }) {
   )
 }
 
-// 一天里有多忙：服务端本地时间每个小时平均同时在回复的数目；还没到的小时为空。
+// How busy the day gets: the average number of concurrent replies for each hour in the server's local time; hours that
+// haven't come yet are empty.
 export function BusyCard({ report }: { report: Report }) {
   const values = report.concurrency
   const known = values.filter((v): v is number => v !== null)

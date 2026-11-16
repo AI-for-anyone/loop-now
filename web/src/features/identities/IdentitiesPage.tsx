@@ -22,9 +22,12 @@ import { PageFrame, PageHeader } from '@/components/PageHeader'
 import { Sheet } from '@/components/Sheet'
 import { StickyNote } from '@/components/StickyNote'
 
-// 外部身份（改版“一张印出来的纸”第 4 步）：页头是共用的页面标题（旁边是身份个数与“新建”）；纸上左边是未删除的外部身份，
-// 选中的一项是黄底、藏青描边加投影的一块；右边是所选身份的令牌与只读收件箱。打开 /identities 时选中第一个。
-// 已删除的身份不在列表中，但可以从线索中的“已删除身份”链接进入详情，只显示只读收件箱与删除时间。窄屏时列表在上、详情在下。
+// External identities (step 4 of the "printed sheet" redesign): the header is the shared page title (next to it the identity
+// count and “新建” (New)); on the sheet, the undeleted external identities are on the left, the selected one a yellow block
+// with a navy outline and shadow; on the right are the selected identity's tokens and read-only inbox. Opening /identities
+// selects the first one.
+// Deleted identities aren't in the list, but their details can be opened from the “已删除身份” (Deleted identity) link in a
+// thread, showing only the read-only inbox and the deletion time. On narrow screens the list is on top and the details below.
 export function IdentitiesPage() {
   const { identityId } = useParams()
   const identities = useIdentities()
@@ -34,7 +37,7 @@ export function IdentitiesPage() {
 
   return (
     <PageFrame>
-      {/* 跳到第一个身份时页面不卸载，加载期间打开的对话框不会丢失。 */}
+      {/* Redirecting to the first identity doesn't unmount the page, so a dialog opened while loading isn't lost. */}
       {!identityId && list.length > 0 && <Navigate replace to={`/identities/${list[0].id}`} />}
       <PageHeader crumbs={[{ label: t.shell.global }]} title={t.identities.title}>
         {identities.data && <span>{t.identities.count(list.length)}</span>}
@@ -45,7 +48,7 @@ export function IdentitiesPage() {
             aria-label={t.identities.list}
             className="flex shrink-0 flex-col gap-2 overflow-y-auto border-b-2 border-dashed border-ink/40 px-4 py-4 nav:w-[236px] nav:border-r-2 nav:border-b-0 nav:py-5"
           >
-            {/* “新建”是本页唯一的荧光粉主按钮，放在列表顶上。 */}
+            {/* “新建” (New) is the only fluorescent pink primary button on this page, placed at the top of the list. */}
             <Button variant="interrupt" size="xs" className="mb-1.5 self-start border-2 border-ink" onClick={() => setCreating(true)}>
               <PlusIcon />
               {t.identities.create}
@@ -77,7 +80,8 @@ export function IdentitiesPage() {
               })}
             </ul>
           </aside>
-          {/* 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。 */}
+          {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text)
+              scroll with the content instead of stretching the whole page based on their unscrolled position. */}
           <section className="relative min-h-0 min-w-0 flex-1 overflow-y-auto pt-6 pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(14px,2vw,30px)]">
             {identityId ? (
               <IdentityDetail key={identityId} identityId={identityId} />
@@ -106,7 +110,7 @@ function IdentityDetail({ identityId }: { identityId: string }) {
       <IdentityHeader identity={identity.data} />
       {!deleted && <PagePluginActions page="identity" where={{ identityId }} />}
       {!deleted && <IdentityManager identity={identity.data} />}
-      {/* 令牌只显示一次、拥有全部权限：黄色便签（改版通用规则第 8 条）。 */}
+      {/* A token is shown only once and has every permission: a yellow sticky note (redesign general rule 8). */}
       {!deleted && (
         <StickyNote className="self-start">
           <span className="font-black">{t.identities.riskTitle}</span>
@@ -136,7 +140,8 @@ function IdentityHeader({ identity }: { identity: Schemas['ExternalIdentity'] })
     setTimeout(() => setCopied(false), 1500)
   }
   return (
-    // 改版：身份名是 ZCOOL 34px 加一笔黄色记号笔，下面是等宽的地址；右边是红色描边的“删除外部身份”。
+    // Redesign: the identity name is ZCOOL 34px with a stroke of yellow highlighter, with the monospace address below; on the
+    // right is the red-outlined “删除外部身份” (Delete external identity).
     <div className="flex flex-wrap items-start gap-x-[18px] gap-y-2.5">
       <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-2">
       <h2 className="riso-marker self-start px-1.5 font-display-cn text-[34px] leading-[1.2] font-normal [overflow-wrap:anywhere]">

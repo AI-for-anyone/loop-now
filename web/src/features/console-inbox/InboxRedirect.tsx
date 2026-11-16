@@ -4,13 +4,14 @@ import { useProjects } from '@/api/queries'
 import { tasksPath, useTask } from '@/api/tasks'
 import { t } from '@/i18n'
 
-// 收件箱页已经去掉，旧的 /inbox/<线索> 地址转到消息现在所在的地方：任务实例的线索到任务节点，
-// Agent 的线索到它的对话，外部身份的线索到它的页面；读不到线索或分辨不出时回到概览。
+// The inbox page has been removed; old /inbox/<thread> URLs redirect to where the messages live now: a task instance's thread
+// to the task node, an Agent's thread to its chat, an external identity's thread to its page; when the thread can't be
+// loaded or identified, go back to the overview.
 export function InboxRedirect() {
   const { threadId = null } = useParams()
   const [search] = useSearchParams()
   const thread = useConsoleThread(threadId)
-  // 旧的任务问题链接带 ?task=；其余按线索里消息的任务归属判断。
+  // Old task question links carry ?task=; otherwise decide by the task the thread's messages belong to.
   const ref = thread.data?.messages.find((message) => message.task)?.task
   const taskId = search.get('task') ?? ref?.taskId ?? null
   if (!threadId) return <Navigate replace to="/" />

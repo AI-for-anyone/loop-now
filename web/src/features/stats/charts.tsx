@@ -2,12 +2,15 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEve
 import { cn } from '@/lib/utils'
 import { niceTicks } from './ticks'
 
-// 统计页的图表：内联 SVG，不用图表库。2px 折线；柱子顶端 4px 圆角、底端贴住基线，堆叠的段之间留 2px；网格线退后。
-// 多系列的图都有图例；柱子按列、折线按最近的横坐标显示提示框，键盘聚焦后可用左右方向键逐个查看。
+// Charts for the stats page: inline SVG, no chart library. 2px lines; bars have 4px rounded tops and sit flush on the baseline,
+// with 2px between stacked segments; grid lines stay in the background.
+// Every multi-series chart has a legend; bars show a tooltip per column, lines for the nearest x value, and once focused by
+// keyboard the left and right arrow keys step through them one by one.
 
 export type Series = { key: string; label: string; color: string; values: (number | null)[] }
 
-// 容器宽度：图表按实际像素计算几何，文字不随缩放变形。浏览器首次观察时就会回调一次；不支持时用 fallback。
+// Container width: charts compute their geometry in actual pixels, so text isn't distorted by scaling. The browser calls back
+// once as soon as it starts observing; where that isn't supported, fallback is used.
 function useWidth(fallback: number) {
   const ref = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(fallback)
@@ -23,11 +26,11 @@ function useWidth(fallback: number) {
   return [ref, width] as const
 }
 
-// 横轴标签之间至少留 gap 像素：从最后一个（今天、现在）往前每隔几个显示一个。
+// Leave at least gap pixels between x-axis labels: counting back from the last one (today, now), show one every few labels.
 const labelEvery = (n: number, room: number, gap: number) => Math.max(1, Math.ceil(n / Math.max(1, Math.floor(room / gap))))
 
 
-// 折线遇到 null 断开。
+// Lines break at null values.
 function linePath(points: ({ x: number; y: number } | null)[]) {
   let d = ''
   let pen = false
@@ -57,7 +60,8 @@ export function Legend({ items }: { items: { label: string; color: string; kind:
 
 type TipRow = { label: string; value: string; color?: string }
 
-// 提示框：数值在前、加粗，系列名在后；每行用一小段系列颜色的线作标记。靠近两端时不越出图表。
+// Tooltip: the value first, in bold, then the series name; each row is marked with a short line in the series color. Near
+// either edge it doesn't spill out of the chart.
 function Tip({ id, x, width, title, rows }: { id: string; x: number; width: number; title: string; rows: TipRow[] }) {
   const shift = x < 90 ? undefined : x > width - 90 ? 'translateX(-100%)' : 'translateX(-50%)'
   return (
@@ -79,7 +83,7 @@ function Tip({ id, x, width, title, rows }: { id: string; x: number; width: numb
   )
 }
 
-// 只有键盘带来的聚焦才自动显示提示框；鼠标点进来时由指针位置决定。
+// Only keyboard focus shows the tooltip automatically; when focus comes from a mouse click, the pointer position decides.
 function focusVisible(element: Element) {
   try {
     return element.matches(':focus-visible')
@@ -88,7 +92,8 @@ function focusVisible(element: Element) {
   }
 }
 
-// 图表的外框：可聚焦，左右方向键、Home、End 在各列之间移动，Esc 收起提示框；指针离开或失去焦点时收起。
+// The chart frame: focusable; the left and right arrow keys, Home and End move between columns, and Esc hides the tooltip;
+// it also hides when the pointer leaves or focus is lost.
 function Frame({
   label,
   count,
@@ -140,8 +145,9 @@ function Frame({
 
 const AXIS = { fontSize: 11, fill: 'var(--ink-500)' }
 
-// 堆叠柱状图。values 已换成纵轴的单位；format 写提示框里的数，axis 写纵轴刻度，tops 写柱顶的合计（柱子够宽时才写），
-// totalLabel 给出时提示框末尾多一行合计。
+// Stacked column chart. values are already converted to the y-axis unit; format writes the numbers in the tooltip, axis writes
+// the y-axis ticks, tops writes the total above each bar (only when bars are wide enough), and when totalLabel is given the
+// tooltip ends with an extra total row.
 export function StackedColumns({
   label,
   labels,
@@ -229,7 +235,7 @@ export function StackedColumns({
           const stackH = parts.reduce((sum, part) => sum + Math.max(part.value * scale, 1), 0)
           return (
             <g key={i} opacity={active !== null && active !== i ? 0.45 : 1}>
-              {/* 改版：各段紧挨着叠起来，整根柱子外面一圈 2px 藏青描边。 */}
+              {/* Redesign: the segments are stacked flush against each other, with a 2px navy outline around the whole bar. */}
               {parts.map((part) => {
                 const h = Math.max(part.value * scale, 1)
                 const y = top + plotH - base * scale - h
@@ -257,7 +263,8 @@ export function StackedColumns({
   )
 }
 
-// 折线图（含面积）。ticks 是纵轴刻度；ends 在每条线最后一个点上标出数值；peak 标出最高点；labelAt 指定哪些横轴标签要写。
+// Line chart (with area). ticks are the y-axis ticks; ends labels the value at the last point of each line; peak marks the
+// highest point; labelAt picks which x-axis labels to draw.
 export function LineChart({
   label,
   labels,
@@ -300,7 +307,7 @@ export function LineChart({
   const every = labelEvery(n, plotW, 52)
   const points = series.map((s) => s.values.map((v, i) => (v === null ? null : { x: x(i), y: y(v) })))
 
-  // 每条线最后一个点的数值；两条标签靠得太近时，下面那条移到点的下方。
+  // The value at the last point of each line; when two labels are too close, the lower one moves below its point.
   const endMarks = ends
     ? series
         .map((s) => {
@@ -351,7 +358,7 @@ export function LineChart({
               <path d={`${linePath(points[j])}V${top + plotH}H${points[j].find((p) => p)?.x ?? left}Z`} fill={s.color} opacity={0.1} />
             )}
             <path d={linePath(points[j])} fill="none" stroke={s.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-            {/* 前后都断开的单个点画成小圆点，免得看不见。 */}
+            {/* A single point with breaks on both sides is drawn as a small dot so it stays visible. */}
             {points[j].map((p, i) => p && !points[j][i - 1] && !points[j][i + 1] && <circle key={i} cx={p.x} cy={p.y} r={2.5} fill={s.color} />)}
           </g>
         ))}
@@ -391,7 +398,7 @@ export function LineChart({
   )
 }
 
-// 指标卡里的小折线：只看走势，不标数值。少于两个点时不画。
+// The small line in a metric card: shows the trend only, with no values. Not drawn with fewer than two points.
 export function Spark({ values, className }: { values: (number | null)[]; className?: string }) {
   const known = values.filter((v): v is number => v !== null)
   if (known.length < 2) return <span aria-hidden="true" className={cn('block h-[26px]', className)} />
@@ -406,7 +413,7 @@ export function Spark({ values, className }: { values: (number | null)[]; classN
   )
 }
 
-// 横条：长度为 value ÷ max，右端 4px 圆角，左端贴住起点。
+// Horizontal bar: its length is value ÷ max, with a 4px rounded right end and the left end flush with the start.
 export function Bar({ value, max, color, height = 'h-3.5' }: { value: number; max: number; color: string; height?: string }) {
   return (
     <span aria-hidden="true" className={cn('flex min-w-0', height)}>

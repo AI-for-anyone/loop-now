@@ -5,7 +5,8 @@ import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { Participant } from './participants'
 
-// 头像：Agent 为两个叠印的圆（颜色按 ID 选取）；外部身份与控制台为藏青圆、黄色 @、粉色投影。已删除的变淡。
+// Avatar: an Agent gets two overprinted circles (colors picked by ID); external identities and the console get a navy circle
+// with a yellow @ and a pink shadow. Deleted ones are faded.
 export function PartyAvatar({ party, className }: { party: Participant; className?: string }) {
   if (party.kind === 'agent' && party.id) {
     return <AgentAvatar id={party.id} className={cn(party.deleted && 'opacity-50', className)} />
@@ -24,12 +25,13 @@ export function PartyAvatar({ party, className }: { party: Participant; classNam
   )
 }
 
-// 已删除标记：浅黄小胶囊。
+// Deleted mark: a small light yellow pill.
 export function DeletedMark({ label, className }: { label: string; className?: string }) {
   return <span className={cn('shrink-0 rounded-full bg-tint-yellow px-2 text-[11.5px] leading-[20px] font-black text-ink', className)}>{label}</span>
 }
 
-// 收件箱事件流的连接状态：连接正常时显示“实时更新中”，断线重连期间沿用对话页的“连接中断，正在重连…”；首次连接时不显示。
+// Connection state of the inbox event stream: when connected, show “实时更新中” (Live); while reconnecting after a drop, reuse
+// the Chat tab's “连接中断，正在重连…” (Connection lost, reconnecting…); nothing is shown during the first connection.
 export function InboxLiveStatus({ className }: { className?: string }) {
   const state = useSyncExternalStore(inboxConnection.subscribe, inboxConnection.get)
   if (state === 'connecting') return <span role="status" aria-live="polite" className={className} />

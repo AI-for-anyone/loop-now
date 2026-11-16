@@ -4,8 +4,10 @@ import { cn } from '@/lib/utils'
 
 const text = t.consoleInbox
 
-// 待你回复的数字：发给你的 open 问题与未读消息之和，荧光粉圆底（原导航上未读数的样式）；为 0 时不显示。
-// 读屏与悬停提示说明其中几个是问题、几条是新消息。左侧栏用 sticker：描边、倾斜的贴纸（倾斜只画在底色层上）。
+// The "needs your reply" number: the sum of open questions and unread messages sent to you, on a fluorescent pink circle (the
+// style of the unread count in the old navigation); hidden when 0.
+// Screen readers and the hover tooltip say how many are questions and how many are new messages. The sidebar uses sticker: an
+// outlined, tilted sticker (the tilt is drawn only on the background layer).
 export function PendingBadge({ counts, sticker = false, className }: { counts: PendingCounts | undefined; sticker?: boolean; className?: string }) {
   const total = pendingTotal(counts)
   if (!counts || total === 0) return null

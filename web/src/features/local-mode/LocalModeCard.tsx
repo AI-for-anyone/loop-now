@@ -8,13 +8,15 @@ import { Switch } from '@/components/ui/switch'
 import { t } from '@/i18n'
 
 export const LOCAL_MODE_ANCHOR = 'local-mode'
-// 其他页面的提示（Git 拉取失败、本机目录清单）链到这里，打开全局设置并滚动到本机模式。
+// Hints on other pages (failed Git pull, the local directories list) link here, which opens global settings and scrolls to
+// local mode.
 export const localModeSettingsPath = `/settings#${LOCAL_MODE_ANCHOR}`
 
 type Key = keyof Schemas['LocalModeSettings']
 const KEYS: Key[] = ['directories', 'git', 'cli', 'logins']
 
-// 一项开关：名称与说明在左，开关在右，旁边写着“开”或“关”；行与行之间 1.5px 虚线（改版）。
+// One switch: name and description on the left, the switch on the right with “开” (On) or “关” (Off) next to it; 1.5px dashed
+// lines between rows (redesign).
 function SwitchRow({ name, checked, disabled, onChange }: { name: Key; checked: boolean; disabled: boolean; onChange: (value: boolean) => void }) {
   const id = useId()
   const copy = t.localMode.settings.items[name]
@@ -36,9 +38,12 @@ function SwitchRow({ name, checked, disabled, onChange }: { name: Key; checked: 
   )
 }
 
-// 全局设置里的“本机模式”：四个开关，按下即保存，每次只改那一项。读不到当前值时不显示开关，免得按默认值误导。
-// “用本机的登录状态”等于让 Agent 以你本人的身份使用本机工具，打开前先确认一次；关闭不用确认。
-// 改版后是全局设置纸上的一个编号分区的内容（分区的 id 是 LOCAL_MODE_ANCHOR，标题由分区给出）。
+// “本机模式” (Local mode) in global settings: four switches, each saved as soon as it is toggled, changing only that one item.
+// When the current values can't be read, the switches aren't shown, so the defaults don't mislead.
+// “用本机的登录状态” (Use local logins) amounts to letting Agents use the tools on this computer as you, so turning it on asks
+// for confirmation once; turning it off doesn't.
+// After the redesign this is the content of one numbered section on the global settings sheet (the section's id is
+// LOCAL_MODE_ANCHOR, and the section provides the title).
 export function LocalModeCard() {
   const settings = useLocalModeSettings()
   const update = useUpdateLocalModeSettings()
@@ -51,7 +56,8 @@ export function LocalModeCard() {
     else update.mutate({ [key]: value })
   }
 
-  // 带着 #local-mode 打开时滚动到这一区；等开关读到后再滚一次，免得内容还没撑开。
+  // When opened with #local-mode, scroll to this section; scroll again once the switches have loaded, in case the content
+  // hadn't expanded yet.
   const loaded = settings.isSuccess
   useEffect(() => {
     if (hash === `#${LOCAL_MODE_ANCHOR}`) document.getElementById(LOCAL_MODE_ANCHOR)?.scrollIntoView({ block: 'start' })
@@ -70,7 +76,8 @@ export function LocalModeCard() {
       )}
       <ErrorAlert error={confirmingLogins ? null : update.error} />
       <p className="text-[12.5px] leading-[1.7] text-ink-500">{t.localMode.settings.effect}</p>
-      {/* 确认框里的保存失败留在确认框里显示；关掉确认框时清掉，免得卡片上再显示一遍。 */}
+      {/* A save failure inside the confirmation dialog stays in the dialog; it is cleared when the dialog closes so the card
+          doesn't show it a second time. */}
       <ConfirmDialog
         open={confirmingLogins}
         onOpenChange={(open) => {

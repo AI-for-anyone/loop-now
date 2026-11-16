@@ -13,7 +13,8 @@ const text = t.shell
 
 type Option = { kind: 'global' } | { kind: 'project'; project: Schemas['Project'] }
 
-// 选项行：当前项打勾、黄底；键盘高亮为 2px 藏青内描边；悬停为浅蓝。
+// Option row: the current item gets a check mark and a yellow background; keyboard highlight is a 2px navy inner outline;
+// hover is light blue.
 const rowClass = (current: boolean, active: boolean) =>
   cn(
     'grid min-h-[38px] cursor-pointer grid-cols-[18px_minmax(0,1fr)_max-content] items-center gap-2 rounded-ticket py-0 pr-3 pl-2.5 text-[14px]',
@@ -21,7 +22,7 @@ const rowClass = (current: boolean, active: boolean) =>
     active && 'shadow-[inset_0_0_0_2px_var(--ink)]',
   )
 
-// 触发按钮左侧的黄色小方块：项目取名称的第一个字，全局是地球图标。
+// The small yellow square on the left of the trigger button: the first character of the name for a project, a globe icon for Global.
 function ScopeMark({ scope }: { scope: ResolvedShellScope }) {
   return (
     <span aria-hidden="true" className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-[8px] border-2 border-ink bg-riso-yellow font-display-latin text-[13px] leading-none font-extrabold uppercase">
@@ -30,9 +31,11 @@ function ScopeMark({ scope }: { scope: ResolvedShellScope }) {
   )
 }
 
-// 左侧栏顶部的范围切换：收起时是白色卡片，显示当前范围；展开后依次列出“全局”、各个项目（带 Agent 数）与“新建项目”。
-// 焦点留在过滤框中，上下键在选项间移动、回车进入；“新建项目”用 Tab 到达；Esc 关闭，焦点回到触发按钮。
-// 选择后进入该范围的概览，并记住它（不带项目的旧地址按它跳转）。
+// The scope switcher at the top of the sidebar: collapsed, it is a white card showing the current scope; expanded, it lists
+// “全局” (Global), each project (with its Agent count) and “新建项目” (New project), in that order.
+// Focus stays in the filter box; the up and down arrow keys move between options and Enter opens one; “新建项目” (New project)
+// is reached with Tab; Esc closes the list and returns focus to the trigger button.
+// Choosing a scope opens its overview and remembers it (legacy URLs without a project redirect based on it).
 export function ScopeSwitcher({ scope, projects }: { scope: ResolvedShellScope; projects: Schemas['Project'][] | undefined }) {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
@@ -125,7 +128,7 @@ export function ScopeSwitcher({ scope, projects }: { scope: ResolvedShellScope; 
           aria-label={text.scope.label(name)}
           title={name}
           className={cn(
-            // 项目卡片：与选中的行同一种描边和投影，右侧给投影留 3px。
+            // Project card: same outline and shadow as the selected row, with 3px on the right left free for the shadow.
             'mr-[3px] flex min-h-12 items-center gap-2.5 rounded-card border-2 border-ink bg-paper-raised px-2.5 text-[14.5px] text-ink shadow-[4px_4px_0_var(--ink)] outline-none focus-visible:shadow-focus',
             open && 'shadow-[4px_4px_0_var(--ink),0_0_0_3px_var(--riso-yellow)]',
           )}
@@ -168,7 +171,7 @@ export function ScopeSwitcher({ scope, projects }: { scope: ResolvedShellScope; 
               <span id={groupId} className="px-3 pt-0.5 text-[12px] font-black text-ink-500">
                 {text.scope.projects(shown.length)}
               </span>
-              {/* 最多显示 7 行，超出时在列表内滚动；窄屏时最高半屏。 */}
+              {/* Show at most 7 rows and scroll inside the list beyond that; on narrow screens at most half the screen height. */}
               <ul role="group" aria-labelledby={groupId} className="flex max-h-[min(280px,50vh)] flex-col gap-0.5 overflow-y-auto">
                 {shown.length === 0 && (
                   <li role="presentation" className="px-3 py-2 text-[13.5px] text-ink-500">

@@ -1,5 +1,6 @@
 import { createContext } from 'react'
 
-// 统计页的编号分区：每张图是纸上的一个编号分区，编号由统计页按排列顺序给出（01 是关键指标）。
-// 不在统计页里（没有编号）时，卡片照旧是一张白底卡片。
+// Numbered sections of the stats page: each chart is a numbered section on the sheet, numbered by the stats page in display
+// order (01 is the key metrics).
+// Outside the stats page (no number), the card is still a white card as before.
 export const CardNumber = createContext<number | null>(null)

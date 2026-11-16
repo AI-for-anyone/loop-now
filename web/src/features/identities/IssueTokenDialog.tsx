@@ -18,8 +18,9 @@ import { defaultExpiry, expiresAtOf, todayInput, type ExpiryChoice } from './ide
 
 const choices: ExpiryChoice[] = ['never', 'd7', 'd30', 'd90', 'date']
 
-// 签发令牌。明文只在签发结果中显示一次：只存在这个对话框的局部状态里，不进入查询缓存、浏览器存储或地址；
-// 结果框关闭前要确认已保存，关闭时清空。有效期默认预选 30 天，“永不过期”仍然可以选。
+// Issue a token. The plaintext is shown only once, in the issue result: it lives only in this dialog's local state and never
+// goes into the query cache, browser storage or the URL; before the result dialog closes, the user must confirm it was saved,
+// and it is cleared on close. The expiry defaults to 30 days; “永不过期” (Never expires) can still be chosen.
 export function IssueTokenDialog({ identity, onClose }: { identity: Schemas['ExternalIdentity']; onClose: () => void }) {
   const client = useQueryClient()
   const [choice, setChoice] = useState<ExpiryChoice>(defaultExpiry(config.tokenDefaultDays))
@@ -58,7 +59,7 @@ export function IssueTokenDialog({ identity, onClose }: { identity: Schemas['Ext
     try {
       await navigator.clipboard.writeText(issued.secret)
     } catch {
-      // 浏览器不允许写剪贴板时保持原样，人仍可以手动选中复制。
+      // If the browser doesn't allow writing to the clipboard, leave things as they are; the person can still select and copy by hand.
       return
     }
     setCopied(true)
@@ -72,10 +73,12 @@ export function IssueTokenDialog({ identity, onClose }: { identity: Schemas['Ext
   if (issued) {
     return (
       <>
-        {/* 结果框不能直接关掉：Esc、点遮罩与关闭按钮都先确认已保存。 */}
+        {/* The result dialog can't be closed directly: Esc, clicking the overlay and the close button all ask to confirm it was
+            saved first. */}
         <Dialog open onOpenChange={(open) => !open && setConfirming(true)}>
           <DialogContent kind="token" className="sm:max-w-[600px]">
-            {/* 改版第 5 步：只显示一次的内容——黄色便签提醒，令牌放在虚线框里，旁边黄色“复制”按钮。 */}
+            {/* Redesign step 5: content shown only once gets a yellow sticky-note warning, with the token in a dashed box and a
+                yellow “复制” (Copy) button next to it. */}
             <DialogHeader>
               <DialogTitle>{t.identities.issued}</DialogTitle>
             </DialogHeader>

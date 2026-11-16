@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react'
 import type { Scope } from '@/lib/scope'
 
-// 项目或平台页面中的当前作用域，由 ProjectScopeRoute、PlatformScopeRoute 提供。
+// The current scope in project or platform pages, provided by ProjectScopeRoute and PlatformScopeRoute.
 export const ScopeContext = createContext<Scope | null>(null)
 
 export function useScope(): Scope {

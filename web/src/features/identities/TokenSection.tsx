@@ -13,8 +13,10 @@ import { cn } from '@/lib/utils'
 const headClass = 'py-2 pl-1 text-[12px] font-black text-ink-500'
 import { IssueTokenDialog } from './IssueTokenDialog'
 
-// 令牌区块：表格列出全部令牌（含已吊销与已过期的，新的在前），有效的可以单独吊销；签发在对话框中进行。
-// 改版：直接排在纸上，标题小一号；表头下一道实线、行间虚线（通用规则第 9 条），状态是胶囊，“吊销”是红字。
+// The tokens block: a table lists all tokens (including revoked and expired ones, newest first); active ones can be revoked
+// individually; issuing happens in a dialog.
+// Redesign: laid out directly on the sheet with a title one size smaller; a solid line under the table header and dashed lines
+// between rows (general rule 9); the status is a pill and “吊销” (Revoke) is red text.
 export function TokenSection({ identity }: { identity: Schemas['ExternalIdentity'] }) {
   const tokens = useIdentityTokens(identity.id, true)
   const revoke = useRevokeToken(identity.id)
