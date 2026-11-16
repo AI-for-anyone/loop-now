@@ -6,7 +6,8 @@ import { apiUrl, makeStatus } from '@/test/api'
 import { renderChat } from '@/test/chat'
 import { commandList, platformCommands } from '@/test/commands'
 
-// 命令此刻能不能用取决于会话状态：会话一变就要重新读，不能等缓存过期。
+// Whether a command can be used right now depends on the session state: as soon as the
+// session changes, the list must be read again instead of waiting for the cache to expire.
 describe('命令列表跟着会话状态更新', () => {
   it('收到 session.updated 后重新读命令列表：刚建好会话，/compact 不再是“还没有会话”', async () => {
     let session: 'none' | 'active' = 'none'
@@ -27,7 +28,7 @@ describe('命令列表跟着会话状态更新', () => {
     await userEvent.clear(input)
     session = 'active'
     await emit('session.updated', { state: 'active', epoch: 1 })
-    // 缓存的列表作废，下次打开菜单时重新读（不必等 30 秒的缓存过期）。
+    // The cached list is invalidated and read again the next time the menu opens (no need to wait for the 30-second cache to expire).
     await user.type(input, '/comp')
     await waitFor(() => expect(screen.getByRole('option', { name: /\/compact/ })).toBeInTheDocument())
     expect(reads).toBe(2)

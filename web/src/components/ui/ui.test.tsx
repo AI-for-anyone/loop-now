@@ -29,7 +29,7 @@ describe('按钮', () => {
     expect(interrupt).toHaveAttribute('data-variant', 'interrupt')
     expect(interrupt.className).toContain('bg-riso-pink')
     expect(interrupt.className).toContain('focus-visible:shadow-focus')
-    // 列表内的 ghost 操作高 36。
+    // Ghost actions inside lists are 36px tall.
     expect(screen.getByRole('button', { name: '移除' }).className).toContain('h-9')
     const disabled = screen.getByRole('button', { name: '保存' })
     expect(disabled).toBeDisabled()
@@ -102,7 +102,7 @@ describe('右侧抽屉', () => {
 })
 
 describe('对话框与确认框', () => {
-  // 控制台的对话框由状态控制、关闭时卸载，没有 Radix 的 Trigger。
+  // Console dialogs are controlled by state and unmounted when closed; they have no Radix Trigger.
   function DialogDemo() {
     const [open, setOpen] = useState(false)
     return (
@@ -196,7 +196,7 @@ describe('可过滤的下拉', () => {
     expect(within(screen.getByRole('listbox')).getAllByRole('option')).toHaveLength(3)
     await user.clear(filter)
     await user.type(filter, 'ta')
-    // 只有 Beta 的名称或 ID 中含有“ta”。
+    // Only Beta has "ta" in its name or ID.
     expect(within(screen.getByRole('listbox')).getAllByRole('option').map((o) => o.getAttribute('aria-label'))).toEqual(['Beta'])
     await user.keyboard('{Enter}')
     await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
@@ -234,7 +234,8 @@ describe('卡片式单选', () => {
     for (const radio of radios) expect(radio).not.toBeChecked()
     await user.click(radios[0])
     expect(radios[0]).toBeChecked()
-    // Radix 在按住方向键期间把焦点移到下一项并选中它（焦点在定时器中移动），所以按下与松开分开。
+    // While the arrow key is held down, Radix moves focus to the next item and selects
+    // it (focus moves in a timer), so key down and key up are sent separately.
     await user.keyboard('{ArrowDown>}')
     await waitFor(() => expect(radios[1]).toBeChecked())
     await user.keyboard('{/ArrowDown}')
@@ -257,7 +258,8 @@ describe('表格', () => {
   })
 })
 
-// 改版：输入框、多行输入、下拉都是白底、2px 藏青描边、12px 圆角（设计稿里所有表单控件都是这样）。
+// Redesign: inputs, textareas and selects all have a white background, a 2px navy
+// border and 12px rounded corners (as do all form controls in the design mockups).
 it('表单控件是 2px 藏青描边、12px 圆角', () => {
   render(<><input aria-label="x" className={fieldClass} /><Input aria-label="名称" /><Textarea aria-label="说明" /></>)
   for (const name of ['名称', '说明']) expect(screen.getByLabelText(name)).toHaveClass('rounded-input', 'bg-white', 'shadow-[inset_0_0_0_2px_var(--ink)]')

@@ -78,7 +78,8 @@ describe('liveReducer', () => {
   })
 
   it('执行状态只前进不倒退：结束后晚到的打断中更新不让它重新成为当前执行', () => {
-    // 打断并发送：结束事件与下一条执行的开始由驱动循环发出，打断中的更新由发送请求发出，可能晚到。
+    // Interrupt and send: the end event and the start of the next run are emitted by the driver
+    // loop, while the aborting update is emitted by the send request and may arrive late.
     const a = makeRun({ status: 'running', startedAt: '2026-10-12T08:00:00Z', endedAt: null })
     const b = makeRun({ status: 'queued', whenBusy: 'interrupt', startedAt: null })
     const bStarting = { ...b, status: 'starting' as const, phase: 'launching' as const, startedAt: '2026-10-12T08:00:10Z' }
@@ -127,7 +128,8 @@ describe('liveReducer', () => {
   })
 
   it('不认识的旧执行先成为当前执行时，较晚开始的执行仍能接替它', () => {
-    // 快照时已结束的执行，其打断中更新晚于快照到达；它的结束事件在快照之前，不会再来。
+    // A run that had already ended at snapshot time: its aborting update arrives after the
+    // snapshot, and its end event came before the snapshot, so it will not come again.
     const old = makeRun({ status: 'aborting', startedAt: '2026-10-12T08:00:00Z', endedAt: null })
     const next = makeRun({ status: 'queued', whenBusy: 'interrupt', startedAt: null })
     const nextStarting = { ...next, status: 'starting' as const, phase: 'launching' as const, startedAt: '2026-10-12T08:00:10Z' }
@@ -154,13 +156,13 @@ describe('liveReducer', () => {
       { type: 'run.ended', id: '2-0', data: { run: ended, message: reply } },
     )
     state = liveReducer(state, { type: 'sent', result: { message: sent, run: queuedRun } })
-    // 发送结果晚于结束事件到达时，不让执行倒退。
+    // When a send result arrives after the end event, it does not move the run backward.
     state = liveReducer(state, { type: 'sent', result: { message: question, run } })
     state = apply(state, { type: 'snapshot', id: '3-0', data: { status: makeStatus('a'), currentText: null, queuedRuns: [], queueItems: [] } })
     expect(Object.keys(state.messages)).toEqual([question.id, reply.id, sent.id])
     expect(state.runs[run.id]).toEqual(ended)
     expect(state.runs[queuedRun.id]).toEqual(queuedRun)
-    // 发送结果只记入历史部分，忙闲与队列仍以事件为准。
+    // A send result is recorded only in the history part; busy/idle state and the queue still follow the events.
     expect(state.queued).toEqual([])
   })
 
@@ -193,11 +195,11 @@ describe('liveReducer', () => {
     const seq = state.queueSeq
     const promoted = { ...b, whenBusy: 'interrupt' as const }
     const receipt = (queue: typeof state.queueItems): Schemas['AgentQueueActionReceipt'] => ({ actionId: 'action', agentId: 'a', operation: 'promote_run', status: 'accepted', item: itemB, run: promoted, queue })
-    // 回执先到：采用回执里的列表，执行状态随之更新。
+    // The receipt arrives first: use the list in the receipt, and update the run status accordingly.
     const next = liveReducer(state, { type: 'queueAction', receipt: receipt([{ ...itemB, whenBusy: 'interrupt' }, itemA]), seq })
     expect(next.queueItems.map((item) => item.text)).toEqual(['乙', '甲'])
     expect(next.runs[b.id]).toEqual(promoted)
-    // 回执之前已收到更新的列表（a 已开始）：回执里的旧列表不覆盖它。
+    // A newer list (a has started) was received before the receipt: the older list in the receipt does not overwrite it.
     state = apply(state, { type: 'queue.updated', id: '2-0', data: { queuedRuns: [promoted], items: [{ ...itemB, whenBusy: 'interrupt' }] } })
     state = liveReducer(state, { type: 'queueAction', receipt: receipt([{ ...itemB, whenBusy: 'interrupt' }, itemA]), seq })
     expect(state.queueItems.map((item) => item.text)).toEqual(['乙'])

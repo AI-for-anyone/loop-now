@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { UserChatBubble } from './ChatBubble'
 
-// 用户气泡是 Agent 对话与任务节点对话共用的组件：任务节点对话不受对话页放宽的影响。
+// The user bubble is a component shared by Agent chat and task node chat: task node chat is not affected by the chat page's widening.
 describe('用户气泡', () => {
   it('默认最宽是所在列的 80%（任务节点对话用这个）', () => {
     render(<UserChatBubble text="帮我看一下" time="09:14" />)

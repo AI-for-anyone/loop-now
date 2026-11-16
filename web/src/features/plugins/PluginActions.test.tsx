@@ -17,7 +17,8 @@ const resendFields = {
   properties: { target: { type: 'string', format: 'uri', title: '目标地址' }, attempts: { type: 'integer', title: '次数', minimum: 1 } },
 } as unknown as Record<string, never>
 
-// webhook 带四个操作：全局的“重发”（有表单）、项目的“测试推送”、Agent 的“发一条给它”、任务与外部身份的“同步”。
+// The webhook has four actions: the global “重发” (Resend, with a form), the project's “测试推送” (Test
+// push), the Agent's “发一条给它” (Send it one), and “同步” (Sync) for tasks and external identities.
 const webhook = makeDetail(
   makePlugin(),
   makeManifest({

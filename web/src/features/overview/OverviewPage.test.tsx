@@ -327,7 +327,7 @@ describe('异常与失败', () => {
   })
 })
 
-// 改版“一张印出来的纸”第 3 步：概览的页头是页面标题，内容排在一张纸上，按 01、02、03 编号。
+// "Printed sheet" redesign, step 3: the overview's header is the page title, and the content sits on a sheet, numbered 01, 02, 03.
 describe('纸张上的概览', () => {
   const sectionNumber = (name: string) => section(name).querySelector('[data-section-number]')
 
@@ -379,7 +379,7 @@ describe('纸张上的概览', () => {
     const { snapshot } = await renderOverview()
     await snapshot([makeAgentOverview({ name: '开发助手' })])
     const table = screen.getByRole('table')
-    // 直接排在纸上，不套白底卡片。
+    // Placed directly on the sheet, not wrapped in a white card.
     expect(table.parentElement).not.toHaveClass('bg-white', 'shadow-print-rest')
     expect(table.querySelector('thead tr')).toHaveClass('border-b-2', 'border-ink')
     const row = within(table).getByText('开发助手').closest('tr')!

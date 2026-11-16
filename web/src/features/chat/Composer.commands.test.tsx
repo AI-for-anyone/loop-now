@@ -80,7 +80,8 @@ it('/resume 列表不需要确认', async () => {
   expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
 })
 
-// 平台命令因忙被拒一律是 409 agent_not_idle（不带 details）：说明原因，不重试、不转成排队，命令留在输入框里。
+// A platform command rejected because the Agent is busy always gets 409 agent_not_idle (without details):
+// explain why, do not retry, do not turn it into a queued message, and leave the command in the input.
 it.each(['/reload', '/resume', '/new'])('%s 遇到 agent_not_idle：说明 Agent 不空闲，不重试也不排队', async (command) => {
   const sent: Schemas['SendMessageInput'][] = []
   server.use(http.post(apiUrl('/agents/sleep-agent/messages'), async ({ request }) => {
@@ -90,7 +91,7 @@ it.each(['/reload', '/resume', '/new'])('%s 遇到 agent_not_idle：说明 Agent
   const onCommand = renderComposer()
   await userEvent.type(screen.getByRole('textbox', { name: '消息' }), command)
   await userEvent.keyboard('{Escape}{Enter}')
-  // /new 先确认。
+  // /new asks for confirmation first.
   if (command === '/new') await userEvent.click(await screen.findByRole('button', { name: '重开会话' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('Agent 不空闲：还有进行中的回复或排队消息')
   expect(sent).toEqual([{ text: command }])
@@ -137,8 +138,10 @@ it.each([
   expect(box).toHaveValue('')
 })
 
-// 从列表恢复时输入框里被填上“/resume <id>”。这不是在输入命令：不该打开命令菜单，也就不该为它去读命令列表。
-// （菜单即使打开，确认框拿走焦点时也会被关掉，所以看不到它；这里用“有没有去读命令列表”来确认菜单根本没有被要求打开。）
+// Resuming from the list fills the input with "/resume <id>". That is not typing a command:
+// it should not open the command menu, and so should not read the command list for it.
+// (Even if the menu did open, it would close when the confirmation dialog takes focus, so it can't be
+// seen; here "was the command list read" is used to confirm that the menu was never asked to open at all.)
 it('从会话列表点“恢复”：弹出确认框，不打开命令菜单', async () => {
   let reads = 0
   server.use(http.get(apiUrl('/agents/sleep-agent/commands'), () => { reads += 1; return HttpResponse.json(commandList()) }))
@@ -175,7 +178,7 @@ it('/export 取得文件并触发下载后才显示命令结果', async () => {
   await waitFor(() => expect(onCommand).toHaveBeenCalledTimes(1))
   expect(createObjectURL).toHaveBeenCalledTimes(1)
   expect(click).toHaveBeenCalledTimes(1)
-  // blob 地址要等浏览器读完再撤销（见 session-export.test.ts），不在点击后立刻撤销。
+  // The blob URL is revoked only after the browser has finished reading it (see session-export.test.ts), not right after the click.
   expect(revokeObjectURL).not.toHaveBeenCalled()
   expect(click.mock.invocationCallOrder[0]).toBeLessThan(onCommand.mock.invocationCallOrder[0])
 })
@@ -236,7 +239,7 @@ it('Esc 关闭提示后保留命令，回车仍可直接发送', async () => {
 
 it('会话丢失时命令提示只开放 /resume', async () => {
   renderWithQuery(<Composer agentId="sleep-agent" agentName="开发助手" busy={false} disabled allowResumeWhenDisabled maxMessageBytes={4096} onSent={vi.fn()} />)
-  // 命令列表取到、确认 /resume 此刻可用之后，输入框才放开。
+  // The input is enabled only after the command list has been fetched and confirms that /resume is available right now.
   const box = screen.getByRole('textbox', { name: '消息' })
   expect(box).toBeDisabled()
   await waitFor(() => expect(box).toBeEnabled())
@@ -329,7 +332,7 @@ it('发送前还要现取命令列表时，发送按钮先变成不可点，表�
   )
   const onCommand = renderComposer()
   const box = screen.getByRole('textbox', { name: '消息' })
-  // 粘贴进来的命令没有经过“/”菜单，列表还没取过。
+  // A pasted command did not go through the "/" menu, so the list has not been fetched yet.
   await userEvent.click(box)
   await userEvent.paste('/reload')
   await userEvent.keyboard('{Escape}')

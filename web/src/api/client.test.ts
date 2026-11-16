@@ -67,7 +67,7 @@ describe('call', () => {
 })
 
 describe('reachability', () => {
-  // 一个请求的响应由测试决定何时返回：fail 为 true 时按网络错误结束。
+  // The test decides when the response to a request is returned: when fail is true, the request ends with a network error.
   function heldHandler(path: string) {
     let release: (fail: boolean) => void = () => {}
     const held = new Promise<boolean>((resolve) => (release = resolve))

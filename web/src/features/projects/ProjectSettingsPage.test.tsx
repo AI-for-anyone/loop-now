@@ -40,7 +40,7 @@ describe('项目改名', () => {
     expect(saved).toHaveTextContent('已保存')
     expect(saved).toHaveTextContent('地址已改为 /p/模型适配/settings')
     expect(within(await card('项目名称')).getByLabelText('项目名称')).toHaveValue('模型适配')
-    // 在本控制台改名，不贴“在别处改名”的便签。
+    // Renamed in this console, so the “在别处改名” (renamed elsewhere) sticky note is not shown.
     expect(screen.queryByText(/已在别处改名/)).toBeNull()
   })
 
@@ -173,7 +173,8 @@ describe('按作用域新建与删除 Agent', () => {
   })
 })
 
-// 改版“一张印出来的纸”第 3 步：项目设置排在一张纸上，编号分区与票根里的目录尺，和 Agent 配置页同一套。
+// "Printed sheet" redesign, step 3: project settings sit on a sheet, with numbered
+// sections and the section ruler in the stub, the same set as the Agent Config page.
 describe('纸张上的项目设置', () => {
   const titles = ['项目名称', '项目 Prompt', '项目文件夹', '本机目录', '插件', 'Manager', '项目账号', '删除项目']
   const region = (name: string) => screen.getByRole('region', { name })

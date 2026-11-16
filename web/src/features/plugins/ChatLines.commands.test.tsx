@@ -7,7 +7,7 @@ import { makeRun } from '@/test/api'
 
 const base: Schemas['ConsoleCommandResult'] = { handled: true, source: 'platform', plugin: '', reply: null, command: 'compact' }
 
-// /compact 的结果在这次压缩的执行上（compactRun.compaction）。
+// The result of /compact is on the run of this compaction (compactRun.compaction).
 const compaction = (overrides: Partial<Schemas['RunCompaction']>): Schemas['ConsoleCommandResult'] => ({
   ...base,
   command: 'compact',
@@ -52,7 +52,7 @@ it('/resume 显示可读标题、摘要、短 ID 和当前标记，点击恢复�
   expect(screen.getByRole('note')).toHaveTextContent('已恢复会话（epoch 2），页面历史仍保留')
 })
 
-// 改版“一张印出来的纸”：命令结果的抬头是一张分段的小票，/resume 的会话列表按表格规则排。
+// "Printed sheet" redesign: a command result's header is a segmented receipt, and the /resume session list follows the table rules.
 it('命令结果的抬头是分段的小票：命令｜来源｜时间，命令与时间用等宽字；结果排在下面，左侧一道虚线', () => {
   render(<CommandLine command="/compact 保留决定" at="2026-10-31T01:00:00Z" result={compaction({ outcome: 'compacted', tokensBefore: 4200, estimatedTokensAfter: 350 })} />)
   const line = screen.getByRole('note')
@@ -82,7 +82,8 @@ it('/resume 的会话列表：上面一道实线，行与行之间虚线；当�
   expect(screen.getByRole('button', { name: '恢复' })).toHaveClass('border-2', 'border-ink', 'bg-paper-raised')
 })
 
-// /compact 的结果读返回里的 compactRun.compaction：压缩了写前后的 token；Pi 没有压缩时按原因说明（这时 token 为 null）。
+// The /compact result reads compactRun.compaction from the response: when it compacted, show the
+// tokens before and after; when Pi did not compact, explain the reason (the tokens are null then).
 
 it('/compact 压缩了：显示压缩前后的 token（读 compactRun.compaction）', () => {
   render(<CommandLine command="/compact" at="2026-10-31T01:00:00Z" result={compaction({ outcome: 'compacted', tokensBefore: 52000, estimatedTokensAfter: 4100 })} />)
@@ -101,7 +102,8 @@ it.each([
   expect(line).not.toHaveTextContent('null')
 })
 
-// /copy 写剪贴板失败（Safari 里已不在按键手势内、http 地址没有 navigator.clipboard）：内容不丢，给一个能手动复制的办法。
+// /copy failed to write to the clipboard (in Safari the call is no longer inside the key gesture; an http
+// URL has no navigator.clipboard): the content is not lost, and a way to copy it by hand is offered.
 it('/copy 没能写进剪贴板：说明原因，内容放在只读的框里可以选中，旁边的按钮再复制一次', async () => {
   const writeText = vi.fn(() => Promise.resolve())
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })

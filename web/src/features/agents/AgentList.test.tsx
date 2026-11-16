@@ -79,7 +79,7 @@ describe('左侧栏的搜索', () => {
   })
 
   it('搜索期间定期刷新仍在进行，新出现的匹配项会显示', async () => {
-    // 在列表开始轮询前接管计时器，列表的定时刷新才能被推进。
+    // Take over the timers before the list starts polling; only then can the list's periodic refresh be advanced.
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
       const { user, listed, listCalls } = setup([review, deploy])
@@ -152,7 +152,8 @@ describe('左侧栏 Agent 行的外观与状态', () => {
   it('无法连接时显示网点骨架和“无法连接服务端”，新建按钮禁用', async () => {
     server.use(http.all(`${config.apiBase}/*`, () => HttpResponse.error()))
     renderRoutes(routes, defaultAgentsPath)
-    // 上一个用例还在途中的请求可能在这里返回、短暂改变连接状态；等左侧栏稳定在骨架上再看。
+    // A request still in flight from the previous test case may return here and briefly change
+    // the connection status; wait for the sidebar to settle on the skeleton before checking.
     await waitFor(() => {
       expect(within(sidebar()).getByText('无法连接服务端')).toBeInTheDocument()
       expect(sidebar().querySelectorAll('.riso-skeleton')).toHaveLength(3)
@@ -162,7 +163,8 @@ describe('左侧栏 Agent 行的外观与状态', () => {
   })
 })
 
-// 改版“一张印出来的纸”第 10 条：项目卡片与选中行统一描边和投影，选中行里的 Manager 标记，搜索框与装饰。
+// "Printed sheet" redesign, item 10: the project card and the selected row share one border
+// and shadow style; the Manager badge in the selected row; the search box and the decoration.
 describe('左侧栏的样式', () => {
   const manager = makeAgent({ name: 'manager', isManager: true })
   const other = makeAgent({ name: '研究员', isManager: true })
@@ -189,12 +191,13 @@ describe('左侧栏的样式', () => {
     expect(tag).not.toHaveClass('bg-ink')
   })
 
-  // 改版第 3 步：选中的 Manager 行原来只给名字留 66px（侧栏出现滚动条时 55px），“manager”被截成“man…”。
+  // Redesign step 3: the selected Manager row used to leave only 66px for the name
+  // (55px when the sidebar shows a scrollbar), so "manager" was cut to "man…".
   it('名字放得下时完整显示：名字先占满一行，右边的运行时、状态与 Manager 标记放不下时换到下一行；过长的才截断，悬停看到全名', async () => {
     setup([manager, other], defaultAgentPath(manager.id, 'config'))
     const row = await within(sidebar()).findByRole('link', { name: /manager/ })
     await waitFor(() => expect(row).toHaveAttribute('aria-current', 'page'))
-    // 选中行不再固定高度，换行时随内容长高。
+    // The selected row no longer has a fixed height; it grows with its content when it wraps.
     expect(row).toHaveClass('min-h-10')
     expect(row).not.toHaveClass('h-10')
     const name = within(row).getByText('manager')
@@ -204,7 +207,7 @@ describe('左侧栏的样式', () => {
     const tags = within(row).getByText('Manager').parentElement!
     expect(tags).toHaveClass('ml-auto', 'shrink-0')
     expect(tags).not.toContainElement(name)
-    // 没选中的行同样排法。
+    // Unselected rows use the same layout.
     const unselected = within(sidebar()).getByRole('link', { name: /研究员/ })
     expect(unselected).toHaveClass('min-h-9')
     expect(within(unselected).getByText('研究员')).toHaveAttribute('title', '研究员')
@@ -229,7 +232,7 @@ describe('左侧栏的样式', () => {
     await within(sidebar()).findByRole('link', { name: /manager/ })
     const deco = sidebar().querySelector<HTMLElement>('[data-sidebar-deco]')!
     expect(deco).toHaveAttribute('aria-hidden', 'true')
-    // 窄屏的抽屉里不显示。
+    // Not shown in the drawer on narrow screens.
     expect(deco).toHaveClass('pointer-events-none', 'sidebar-deco', 'max-nav:hidden')
     expect(deco.parentElement).toHaveClass('sidebar-deco-slot')
     expect(deco.querySelectorAll('span')).toHaveLength(3)

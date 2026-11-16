@@ -22,7 +22,7 @@ const list: Schemas['AgentCommandList'] = {
   ],
 }
 
-// 对话页的输入框：记下读命令列表的次数与发出的消息。
+// The chat page's input: record how many times the command list is read and which messages are sent.
 function setup(commands: () => Response = () => HttpResponse.json(list)) {
   let reads = 0
   const sent: Schemas['SendMessageInput'][] = []
@@ -61,7 +61,7 @@ describe('输入框的 "/" 命令菜单', () => {
     expect(input).toHaveFocus()
   })
 
-  // 改版“一张印出来的纸”：菜单是一小张纸，选中的一项是黄色，来源写在小标签里。
+  // "Printed sheet" redesign: the menu is a small sheet, the selected item is yellow, and the source is written in a small label.
   it('菜单是一张小纸；选中的一项是黄色；来源写在标签里：平台命令藏青底白字，Pi 的命令浅蓝底', async () => {
     const { user, input } = setup()
     await user.type(input, '/')
@@ -72,7 +72,7 @@ describe('输入框的 "/" 命令菜单', () => {
     expect(options()[0]).not.toHaveClass('aria-selected:bg-tint-blue')
     expect(within(options()[0]).getByText('平台命令')).toHaveClass('rounded-full', 'bg-ink', 'text-white')
     expect(within(options()[7]).getByText('扩展命令 · 插件 · 代码审查')).toHaveClass('rounded-stamp', 'bg-tint-blue', 'text-ink')
-    // 底部的按键说明与列表之间是一道虚线。
+    // A dashed line separates the key hints at the bottom from the list.
     expect(panel.lastElementChild).toHaveClass('border-t-[1.5px]', 'border-dashed')
   })
 
@@ -172,7 +172,8 @@ describe('输入框的 "/" 命令菜单', () => {
     expect([...blocked.querySelectorAll('code')].map((code) => code.textContent)).toEqual(['/compact [instructions]', '/export [html|jsonl]', '/resume [session-id]'])
     expect(within(blocked).getAllByText('这个 Agent 用 Claude Code 运行，没有 Pi 会话')).toHaveLength(3)
     expect(within(blocked).queryByRole('option')).toBeNull()
-    // 没有匹配的命令时只说没有匹配，不说“运行一次后才有命令列表”（它没有 Pi，运行了也不会有）。
+    // When no command matches, it only says so; it does not say “运行一次后才有命令列表” (The command list appears after
+    // the Agent has run once), because this Agent has no Pi and would not get a list by running either.
     await user.clear(input)
     await user.type(input, '/review')
     expect(await screen.findByRole('status')).toHaveTextContent('没有匹配的命令。')
@@ -198,7 +199,7 @@ describe('输入框的 "/" 命令菜单', () => {
     await user.type(input, '/')
     await waitFor(() => expect(labels()).toEqual(['/session', '/ping [host]']))
     expect(options()[0]).toHaveTextContent('/session平台命令查看当前会话、模型和进程状态')
-    // 服务端没给说明（null）时不写说明，也不用控制台自己的文字补上。
+    // When the server gives no description (null), none is shown, and the console does not fill one in with its own text.
     expect(options()[1]).toHaveTextContent(/^\/ping \[host\]平台命令$/)
     await user.keyboard('{ArrowDown}{Enter}')
     expect(input).toHaveValue('/ping')
@@ -213,18 +214,18 @@ describe('输入框的 "/" 命令菜单', () => {
     expect(blocked).toHaveTextContent('/compact [instructions]平台命令还没有会话，先发一条消息')
     expect(blocked).toHaveTextContent('/export [html|jsonl]平台命令会话文件丢失，先 /new 或 /resume')
     for (const item of blocked.querySelectorAll('li')) expect(item).toHaveClass('text-ink-500')
-    // 点不可用的命令不填入输入框。
+    // Clicking an unavailable command does not fill it into the input.
     await user.click(within(blocked).getByText('/compact [instructions]'))
     expect(input).toHaveValue('/')
     await user.keyboard('{ArrowDown}{ArrowDown}')
     expect(options()[2]).toHaveAttribute('aria-selected', 'true')
     expect(labels()[2]).toBe('/reload')
-    // 只匹配到不可用的命令时没有可选项，回车照常发出，由服务端说明为什么不行。
+    // When only unavailable commands match, there is nothing to choose; Enter sends as usual and the server explains why it won't work.
     await user.clear(input)
     await user.type(input, '/comp')
     await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
     expect(screen.getByRole('group', { name: '现在不能用' })).toHaveTextContent('/compact [instructions]')
-    expect(input).not.toHaveAttribute('aria-activedescendant')    // 没有可选的命令：底部不再写“↑↓ 选择 · Enter 或 Tab 补全”，改成告诉人回车会照原文发出；读屏也会读到。
+    expect(input).not.toHaveAttribute('aria-activedescendant')    // No command can be chosen: the footer no longer says “↑↓ 选择 · Enter 或 Tab 补全” (↑↓ to choose · Enter or Tab to fill in) and instead tells the person that Enter sends the text as typed; screen readers read it too.
     expect(screen.queryByText('↑↓ 选择 · Enter 或 Tab 补全 · Esc 关闭')).toBeNull()
     expect(screen.getByRole('status')).toHaveTextContent('匹配的命令现在都不能用，回车会照原文发出')
   })
@@ -259,7 +260,7 @@ describe('补全的规则', () => {
 
   it('commandText：Pi 的命令写成 /pi:<name>；以后别的来源（如平台命令）写成 /<name>，补全与筛选随之', () => {
     expect(commandText(command('skill:loopctl'))).toBe('/pi:skill:loopctl')
-    // 平台命令在前端与服务端返回的 Pi 命令合并。
+    // Platform commands are merged in the frontend with the Pi commands returned by the server.
     const platform = { ...command('session'), source: 'platform' as const, usage: '/session' }
     expect(commandText(platform)).toBe('/session')
     expect(applyCommand('/se', platform)).toEqual({ text: '/session ', caret: 9 })

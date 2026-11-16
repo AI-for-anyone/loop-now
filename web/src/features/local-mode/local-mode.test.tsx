@@ -77,7 +77,7 @@ describe('全局设置：本机模式', () => {
     await waitFor(() => expect(logins).toBeChecked())
     expect(local.state.requests).toEqual([{ method: 'PATCH', path: '/api/v1/local-mode-settings', body: { logins: true } }])
 
-    // 关闭不用确认。
+    // Turning it off needs no confirmation.
     await user.click(logins)
     await waitFor(() => expect(logins).not.toBeChecked())
     expect(screen.queryByRole('alertdialog')).toBeNull()
@@ -97,7 +97,7 @@ describe('全局设置：本机模式', () => {
     await user.click(within(dialog).getByRole('button', { name: '打开' }))
     expect(await within(dialog).findByRole('alert')).toBeInTheDocument()
     expect(logins).not.toBeChecked()
-    // 卡片上不再重复显示同一个错误；关掉确认框后也不留。
+    // The card no longer shows the same error a second time, and none is left behind after the confirmation dialog closes.
     expect(within(card).queryByRole('alert', { hidden: true })).toBeNull()
     await user.click(within(dialog).getByRole('button', { name: '取消' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
@@ -125,7 +125,7 @@ describe('项目设置：本机目录', () => {
     expect(within(missing).getByText('目录不存在')).toBeInTheDocument()
     expect(within(missing).getByText('这一项暂不告诉 Agent。')).toBeInTheDocument()
     for (const caution of cautions) expect(within(card).getByText(caution)).toBeInTheDocument()
-    // 开关开着时不提示“清单暂不生效”。
+    // While the switch is on, there is no hint that the list is not in effect for now.
     expect(within(card).queryByText(/已关闭/)).toBeNull()
   })
 
@@ -182,7 +182,7 @@ describe('项目设置：本机目录', () => {
     expect(await within(dialog).findByText('必须是绝对路径')).toBeInTheDocument()
     expect(input).toHaveAttribute('aria-invalid', 'true')
     expect(input).toHaveValue('code/app')
-    // 字段错误已在输入框下显示，不再整体重复。
+    // The field error is already shown under the input, so it is not repeated for the whole form.
     expect(within(dialog).queryByRole('alert')).toBeNull()
   })
 
@@ -194,7 +194,8 @@ describe('项目设置：本机目录', () => {
     local.state.projects.set(project.id, { revision: 3, directories: [dir('/Users/me/other')] })
     await user.click(within(dialog).getByRole('button', { name: '保存' }))
     expect(await within(dialog).findByText('清单刚在别处被修改，已读取最新内容；请核对后再保存一次。')).toBeInTheDocument()
-    // 对话框打开时页面其余部分对读屏隐藏，所以带 hidden 查询背后已经换成最新的清单。
+    // While the dialog is open the rest of the page is hidden from screen readers, so query
+    // with hidden to see that the list behind it has already been replaced with the latest one.
     await waitFor(() => expect(within(screen.getByRole('list', { name: '本机目录列表', hidden: true })).getAllByRole('listitem', { hidden: true }).map((row) => row.getAttribute('aria-label'))).toEqual(['/Users/me/other']))
     await user.click(within(dialog).getByRole('button', { name: '保存' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
@@ -257,7 +258,7 @@ describe('从 Git 拉取失败：本机 git 身份的提示', () => {
     id: crypto.randomUUID(), agentId: 'a', url, branch: 'main', path: 'app', status: 'failed', errorCode,
     errorMessage: 'fatal: Authentication failed', createdAt: '2026-11-10T08:00:00Z', finishedAt: '2026-11-10T08:00:05Z',
   })
-  // 开关的读取次数：只有 HTTPS 地址认证失败时才需要读。
+  // How many times the switch is read: it only needs to be read when authentication fails for an HTTPS URL.
   function setup(errorCode: GitPull['errorCode'], url: string, git: boolean) {
     const reads = { count: 0 }
     server.use(http.get(apiUrl('/local-mode-settings'), () => {

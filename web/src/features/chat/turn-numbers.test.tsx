@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { apiUrl, makeMessage, makeMessagePage, makeRun, makeStatus } from '@/test/api'
 import { renderChat } from '@/test/chat'
 
-// 对话页的轮次编号取自消息页的 turnsBefore、turnsTotal（契约 MessagePage）。
+// The chat page takes its turn numbers from the message page's turnsBefore and turnsTotal (MessagePage in the contract).
 const turn = (question: string, minute: number) => {
   const time = new Date(Date.UTC(2026, 10, 12, 8, minute)).toISOString()
   const run = makeRun({ queuedAt: time, startedAt: time, runningAt: time, endedAt: time })
@@ -71,7 +71,7 @@ describe('对话页的轮次编号', () => {
   })
 })
 
-// 手动压缩（/compact）进行中：Agent 的当前执行是这次压缩，它不是一轮。
+// A manual compaction (/compact) is in progress: the Agent's current run is this compaction, which is not a turn.
 describe('手动压缩进行中', () => {
   it('不多出一轮：没有新的轮次块、编号和刻度，总数不变；忙碌状态照常显示', async () => {
     const { agent, emit } = await renderChat({ messages: [...turn('第一问', 1), ...turn('第二问', 2)], page: { turnsBefore: 24, turnsTotal: 26 }, hasMore: true })

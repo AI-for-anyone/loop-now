@@ -47,7 +47,7 @@ describe('确认框', () => {
     const { rerender } = render(<ConfirmDialog open {...props} />)
     await user.click(screen.getByRole('button', { name: '替换' }))
     expect(await screen.findByText(/Agent 不空闲/)).toBeInTheDocument()
-    // 父组件直接关闭确认框（不经过 onOpenChange），之后再打开。
+    // The parent closes the confirmation dialog directly (without going through onOpenChange), then opens it again.
     rerender(<ConfirmDialog open={false} {...props} />)
     rerender(<ConfirmDialog open {...props} />)
     expect(await screen.findByRole('alertdialog')).toBeInTheDocument()

@@ -81,7 +81,8 @@ describe('订阅额度（model_rate_limit）', () => {
   })
 })
 
-// 平台命令（/new、/reload、/resume）会停掉空闲的进程，旧记录里还有 /export html 用完即停的临时进程。
+// Platform commands (/new, /reload, /resume) stop an idle process; older records also contain
+// the temporary process that /export html started and stopped as soon as it was done.
 describe('平台命令停止进程的原因', () => {
   it.each([
     ['session_reset', '重开会话（/new）后停止'],

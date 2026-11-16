@@ -13,7 +13,8 @@ import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
 import { makeTaskDetail, nodeId, taskId } from '@/test/tasks'
 
-// 任务实例发给你的问题排在节点对话里，在那里点选项或用节点输入框回复；能否回答以任务给出的问题状态为准。
+// Questions a task instance sends you are listed in the node chat, where you click an option or reply in
+// the node input; whether a question can be answered follows the question state that the task provides.
 function setup(canAnswer = true) {
   const detail = makeTaskDetail(defaultProject.id), node = detail.nodes[1]
   const from: Schemas['InboxParticipant'] = { kind: 'agent', id: node.agentId, name: node.agentName, address: `测试项目/${node.agentName}#${taskId}`, deleted: false, pluginId: null, channelId: null }

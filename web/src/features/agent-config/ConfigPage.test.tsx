@@ -27,14 +27,15 @@ describe('版面', () => {
     expect(within(basic).getByRole('button', { name: '已复制' })).toBeInTheDocument()
   })
 
-  // jsdom 不排版，只能确认滚动区是定位容器；整页不被撑高由浏览器检查。
+  // jsdom does no layout, so we can only confirm that the scroll area is a positioning
+  // container; that the whole page does not get stretched taller is checked in a browser.
   it('页面的滚动区是定位容器，区块里的读屏说明不会撑高整页', async () => {
     await renderConfig()
     expect(region('基本信息').closest('.overflow-y-auto')).toHaveClass('relative')
   })
 })
 
-// 改版“一张印出来的纸”第 2 步：编号分区、黄色便签、票根里的目录尺。
+// "Printed sheet" redesign, step 2: numbered sections, yellow sticky notes and the section ruler in the stub.
 describe('改版的版式', () => {
   const sections = ['基本信息', 'Prompt', '本机目录', '模型账号凭证', 'Skills', '可用 CLI', '插件权限', '删除 Agent']
 
@@ -69,13 +70,14 @@ describe('改版的版式', () => {
     expect(within(region('基本信息')).getByRole('button', { name: '复制' })).toHaveClass('border-2', 'border-ink', 'bg-riso-yellow')
   })
 
-  // jsdom 不排版：位置由浏览器检查确认（左栏“模型提供方”下面的说明不再把右栏“模型”往下推）。
+  // jsdom does no layout: positions are confirmed with a browser check (the note under “模型提供方”
+  // (Model provider) in the left column no longer pushes “模型” (Model) in the right column down).
   it('同一行的两栏字段按顶部对齐：一栏下面的说明往下长，不把旁边那栏往下推', async () => {
     await renderConfig()
     const basic = region('基本信息')
-    // 内部 ID 与显示名称一行。
+    // Internal ID and display name share a row.
     expect(within(basic).getByLabelText('显示名称').closest('.grid')!.parentElement).toHaveClass('items-start')
-    // 模型提供方与模型一行（模型选择器里的网格）。
+    // Model provider and model share a row (the grid inside the model picker).
     expect(within(basic).getByLabelText('模型提供方').closest('.grid')!.parentElement).toHaveClass('items-start')
   })
 
@@ -103,14 +105,14 @@ describe('改版的版式', () => {
     const toc = screen.getByRole('navigation', { name: '目录' })
     expect(toc).toHaveClass('border-l-2', 'border-dashed', 'max-nav:hidden')
     expect(within(toc).getByText('目录')).toHaveAttribute('aria-hidden', 'true')
-    // 右缘一排刻度（装饰）。
+    // A row of ticks along the right edge (decoration).
     expect(toc.querySelector('ol > div[aria-hidden="true"]')).toHaveClass('absolute', 'right-0', 'w-3')
     expect(toc.querySelector('[data-ruler-mark]')).toBeNull()
     act(() => FakeIntersectionObserver.trigger(region('Skills'), true))
     const current = within(toc).getByRole('link', { name: 'Skills' })
     expect(current.closest('li')!.querySelector('[data-ruler-mark]')).not.toBeNull()
     expect(toc.querySelectorAll('[data-ruler-mark]')).toHaveLength(1)
-    // 删除 Agent 一项是红色。
+    // The Delete Agent entry is red.
     expect(within(toc).getByRole('link', { name: '删除 Agent' })).toHaveClass('text-red-text')
   })
 })
@@ -138,7 +140,7 @@ describe('分区目录', () => {
       const clis = region('可用 CLI')
       expect(within(clis).getByRole('heading', { level: 2, name: '可用 CLI' })).toHaveFocus()
       expect(scroll.mock.contexts).toContain(clis)
-      // 不改变地址。
+      // The URL does not change.
       expect(router.state.location.pathname).toMatch(/\/config$/)
       expect(router.state.location.hash).toBe('')
 
@@ -158,7 +160,7 @@ describe('分区目录', () => {
     expect(highlighted()).toEqual([tocLink('Skills')])
     act(() => FakeIntersectionObserver.trigger(region('Skills'), false))
     expect(highlighted()).toEqual([tocLink('可用 CLI')])
-    // 全部离开视口时保留上一次的高亮。
+    // When all of them have left the viewport, the last highlight is kept.
     act(() => FakeIntersectionObserver.trigger(region('可用 CLI'), false))
     expect(highlighted()).toEqual([tocLink('可用 CLI')])
   })
@@ -446,7 +448,8 @@ describe('可用 CLI', () => {
 })
 
 describe('移除 CLI 的“不可撤销”印章', () => {
-  // 只有连同已录入的凭证一起删除时撤销不了；没有凭证的、项目级的移除可以再加回来，不盖印章（仍是危险操作的样子）。
+  // Removal can't be undone only when the stored credential is deleted along with it; a removal without a credential,
+  // or at project level, can be added back, so it gets no stamp (it still looks like a dangerous action).
   const removeDialog = async (agent: Parameters<typeof makeAgent>[0]) => {
     const { user } = await renderConfig({ agent: makeAgent(agent) })
     await user.click(within(within(region('可用 CLI')).getByRole('listitem', { name: 'gh' })).getByRole('button', { name: '移除' }))
@@ -526,7 +529,8 @@ describe('删除 Agent', () => {
     const { user, router } = await renderConfig({
       agent,
       handlers: [
-        // 删除后列表里不再有它：项目没有 Agent 了，Agent 页停在首次使用的空状态，不跳到别的 Agent。
+        // After the deletion the list no longer contains it: the project has no Agents left, so
+        // the Agent page stays on the first-use empty state instead of jumping to another Agent.
         http.get(agentsUrl, () => HttpResponse.json({ agents: deleted ? [] : [toListItem(agent)] })),
         http.delete(apiUrl(`/agents/${agent.id}`), () => {
           deleted = true

@@ -20,12 +20,13 @@ const endpoint = apiUrl(`/tasks/${taskId}/lark-account-switches`), account = lar
 function setup() {
   server.use(http.get(apiUrl(`/projects/${defaultProject.id}/credential-accounts`), () => HttpResponse.json({ projectId: defaultProject.id, credentialsRevision: 1, accounts: [account] })))
 }
-// 改版第 5 步：表单收在“更换 Lark 账号并继续 QA”按钮下面，默认收起；这里的用例先点开再操作表单。
+// Redesign step 5: the form is tucked under the “更换 Lark 账号并继续 QA” (Switch Lark account and continue
+// QA) button and collapsed by default; the test cases here open it first and then use the form.
 function openSwitch() {
   const toggle = document.querySelector<HTMLButtonElement>('[data-lark-switch-toggle]')
   if (toggle && !toggle.disabled && toggle.getAttribute('aria-expanded') === 'false') fireEvent.click(toggle)
 }
-// 表单里的“更换 Lark 账号并继续 QA”（和上面的展开按钮同名）。
+// The “更换 Lark 账号并继续 QA” (Switch Lark account and continue QA) button inside the form (it has the same name as the expand button above).
 const switchButton = () => within(document.querySelector<HTMLElement>('[data-lark-switch-panel]')!).getByRole('button', { name: copy.switch })
 function renderController(value = detail(), query = '') {
   setup()

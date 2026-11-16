@@ -54,7 +54,7 @@ function timelineHandler(agentId: string, build: () => Schemas['RunTimeline']) {
   return { handler, calls }
 }
 
-// 回复中的运行记录展开项。
+// The expandable run record inside a reply.
 const recordToggle = () => screen.getByRole('button', { name: /^运行记录/ })
 
 describe('运行记录时间线', () => {
@@ -219,7 +219,7 @@ describe('运行记录时间线', () => {
   })
 })
 
-// 改版“一张印出来的纸”：触发条做成分段的小票。
+// "Printed sheet" redesign: the toggle bar is styled as a segmented receipt.
 describe('运行记录的触发条', () => {
   const parts = (toggle: HTMLElement) => [...toggle.querySelectorAll('[data-receipt-part]')].map((part) => part.textContent)
 
@@ -235,7 +235,7 @@ describe('运行记录的触发条', () => {
     expect(name).not.toHaveClass('font-mono')
     expect(duration).toHaveClass('font-mono', 'border-l-[1.5px]', 'border-dashed')
     expect(tokens).toHaveClass('font-mono', 'border-l-[1.5px]', 'border-dashed')
-    // 窄屏放不下时各段换行，不伸到底色外面。
+    // When it doesn't fit on a narrow screen, the segments wrap instead of extending past the background.
     expect(toggle).toHaveClass('flex-wrap', 'max-w-full')
   })
 

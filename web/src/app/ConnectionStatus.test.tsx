@@ -9,7 +9,8 @@ import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
 import { routes } from './routes'
 
-// 顶栏的连接状态区域；“数据库不可用”在全局设置页上也会出现，断言都限定在这个区域内。
+// The connection status area in the top bar. “数据库不可用” (Database unavailable) also
+// appears on the global settings page, so all assertions are scoped to this area.
 const topStatus = () => screen.getByRole('status', { name: '连接状态' })
 const banner = () => screen.queryByText(/控制台访问的服务端地址是/)
 
@@ -74,14 +75,14 @@ describe('顶栏连接状态', () => {
     server.use(http.get(apiUrl('/health'), () => HttpResponse.json(errorBody('not_found'), { status: 404 })), ...baseHandlers([]))
     renderRoutes(routes, defaultAgentsPath)
     expect(await within(topStatus()).findByText('无法连接')).toBeInTheDocument()
-    // 请求到达了服务端，所以不显示无法连接的全局提示。
+    // The request reached the server, so the global notice about being unable to connect is not shown.
     expect(banner()).toBeNull()
   })
 
   it('服务端停止期间显示无法连接，恢复后下一次健康查询时显示已连接', async () => {
     let up = false
     let healthCalls = 0
-    // 在健康查询开始轮询前接管计时器，定时刷新才能被推进。
+    // Take over the timers before the health query starts polling; only then can the periodic refresh be advanced.
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
       server.use(

@@ -142,7 +142,8 @@ describe('统计页', () => {
   })
 })
 
-// 改版“一张印出来的纸”第 4 步：统计排在一张纸上，按 01、02…编号；关键指标是白底卡片，投影颜色区分含义。
+// "Printed sheet" redesign, step 4: stats sit on a sheet, numbered 01, 02, ...;
+// key metrics are white cards whose shadow color tells their meanings apart.
 describe('纸张上的统计', () => {
   it('页头是页面标题：面包屑“全局›统计”，旁边是分段的时间范围与虚线框里的范围选择', async () => {
     renderStats()

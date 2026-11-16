@@ -6,14 +6,15 @@ import { apiUrl, context, errorBody, limits, makeMessage, makeQueueItem, makeRun
 import { agentParty } from '@/test/inbox'
 import { renderChat } from '@/test/chat'
 
-// 排队消息逐条显示在输入框顶上的排队托盘，不在对话流中；列表以快照与 queue.updated 为准。
+// Queued messages are shown one by one in the queue tray above the input, not in the
+// conversation stream; the snapshot and queue.updated are authoritative for the list.
 
 function snapshot(agentId: string, status: Partial<Schemas['AgentStatus']>, queuedRuns: Schemas['Run'][] = [], queueItems: Schemas['QueueItem'][] = []) {
   return { status: makeStatus(agentId, status), currentText: '', queuedRuns, queueItems }
 }
 
 const queueList = () => screen.getByRole('region', { name: '排队消息' })
-// 每条排队消息一行；行内的图片缩略图也是 listitem，不算。
+// One row per queued message; image thumbnails inside a row are listitems too and don't count.
 const rows = () => within(queueList()).getAllByRole('listitem').filter((item) => item.hasAttribute('data-kind'))
 const texts = () => rows().map((item) => within(item).getByRole('button', { expanded: false }).textContent)
 const log = () => screen.getByRole('log')
@@ -52,14 +53,14 @@ describe('输入框上方的排队托盘', () => {
     expect(within(first).getByRole('button', { name: '编辑这条排队消息' })).toBeEnabled()
     expect(within(second).getByRole('button', { name: '打断' })).toBeEnabled()
     expect(within(second).getByRole('button', { name: '编辑这条排队消息' })).toBeEnabled()
-    // 别人发来的 Inbox 消息：标明发送方，可以打断和取消，不能编辑。
+    // An Inbox message sent by someone else: it names the sender and can be promoted to interrupt or cancelled, but not edited.
     expect(within(third).getByText('test')).toBeInTheDocument()
     expect(within(third).getByRole('button', { name: '打断' })).toBeEnabled()
     expect(within(third).queryByRole('button', { name: '编辑这条排队消息' })).toBeNull()
     for (const row of rows()) expect(within(row).getByRole('button', { name: '取消这条排队消息' })).toBeEnabled()
     expect(within(log()).queryByText(/^(插队|顺便把 lint 也跑一下)$/)).toBeNull()
 
-    // 忙时直接排队，不弹选择；托盘随 queue.updated 更新。
+    // When busy, a message is queued directly without asking for a choice; the tray updates with queue.updated.
     expect(screen.getByLabelText('消息')).toHaveAttribute('placeholder', '开发助手 正在回复，新消息会排队')
     await user.type(screen.getByLabelText('消息'), '再补一句{Enter}')
     await waitFor(() => expect(sent).toEqual([{ text: '再补一句', whenBusy: 'queue' }]))
@@ -67,7 +68,7 @@ describe('输入框上方的排队托盘', () => {
     await emit('queue.updated', { queuedRuns: [], items: [interrupt, own, inbox, makeQueueItem({ text: '再补一句' })] })
     await waitFor(() => expect(within(queueList()).getByRole('heading', { name: '排队 4' })).toBeInTheDocument())
     expect(texts().at(-1)).toBe('再补一句')
-    // 托盘在输入框正上方；输入框下方说明按键，忙碌状态不重复排队计数。
+    // The tray sits right above the input; the key hints are below the input, and the busy status does not repeat the queue count.
     expect(queueList().compareDocumentPosition(screen.getByLabelText('消息')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.getByText('Agent 正忙（回复中）')).toBeInTheDocument()
     expect(screen.getByText('只停止当前回复')).toBeInTheDocument()
@@ -161,7 +162,7 @@ describe('输入框上方的排队托盘', () => {
     })
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: current }, [], [a, b]))
     await user.click(within(rows()[1]).getByRole('button', { name: '打断' }))
-    // 回执到达之前：普通一已开始，服务端推送了新的列表。
+    // Before the receipt arrives: “普通一” (normal one) has started and the server has pushed a new list.
     await emit('queue.updated', { queuedRuns: [], items: [{ ...b, whenBusy: 'interrupt' }] })
     await waitFor(() => expect(texts()).toEqual(['普通二']))
     await act(async () => release())
@@ -223,7 +224,7 @@ describe('输入框上方的排队托盘', () => {
     await waitFor(() => expect(texts()).toEqual(['留着']))
     expect(bodies).toHaveLength(2)
     expect(bodies[1]).toEqual(bodies[0])
-    // 撤回的这一轮没有执行，不进入对话流。
+    // The withdrawn turn never ran, so it does not enter the conversation stream.
     expect(within(log()).queryByText('不要了')).toBeNull()
   })
 
@@ -272,7 +273,7 @@ describe('输入框上方的排队托盘', () => {
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: current }))
     await user.click(screen.getByRole('button', { name: '停止当前回复' }))
     await waitFor(() => expect(bodies).toEqual([{ runId: current.id, body: { actionId: expect.stringMatching(/^[\da-f-]{36}$/) } }]))
-    // 有文字时是排队发送。
+    // With text in the input, the button queues the message.
     await user.type(screen.getByLabelText('消息'), '新消息')
     expect(screen.queryByRole('button', { name: '停止当前回复' })).toBeNull()
     expect(screen.getByRole('button', { name: '排队发送' })).toBeEnabled()

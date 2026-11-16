@@ -12,14 +12,14 @@ import { DraftNavigationGuard } from '@/features/prompts/DraftNavigationGuard'
 import { ProjectAccounts } from './ProjectAccounts'
 import { ProjectLogin } from './ProjectLogin'
 
-// 插件注册的提供方的项目登录：浏览器授权、设备码、登录中途的问题。
+// Project login for a provider registered by a plugin: browser authorization, device code, and questions asked mid-login.
 const grok = pluginProvider('grok-cli')
 const grokOp = (overrides: Partial<Schemas['ProjectModelAuthOperation']> = {}) =>
   projectOperation({ id: '30000000-0000-7000-8000-0000000000a1', provider: 'grok-cli', name: 'Grok 账号', status: 'pending', authorizationUrl: null, ...overrides })
 
 afterEach(() => vi.restoreAllMocks())
 
-// 登录状态由测试控制：发起返回 start，之后每次读取返回 state（回答、取消改写它）。
+// The test controls the login state: starting returns start, and every later read returns state (answering and cancelling rewrite it).
 function setup(start: Schemas['ProjectModelAuthOperation'], options: { account?: Schemas['ProjectCredentialAccount']; list?: Schemas['ProjectModelAuthOperation'][]; answer?: (body: Schemas['ProjectModelLoginInput']) => Response | undefined } = {}) {
   const starts: unknown[] = [], answers: Schemas['ProjectModelLoginInput'][] = []
   const box: { state: Schemas['ProjectModelAuthState'] | null } = { state: null }

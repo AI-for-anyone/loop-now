@@ -33,7 +33,7 @@ describe('对话里的 / 命令', () => {
     expect(command).toHaveTextContent('插件 webhook 处理了这条命令')
     expect(command).toHaveTextContent('最近 24 小时送出 9 个事件，失败 0。')
     expect(box).toHaveValue('')
-    // 没有变成一条“你发的”消息气泡：命令文字只出现在这一行说明里。
+    // It did not turn into a "sent by you" message bubble: the command text appears only in this one-line note.
     const shown = within(screen.getByRole('log')).getAllByText('/webhook status')
     expect(shown).toHaveLength(1)
     expect(shown[0].closest('[data-console-command]')).toBe(command)

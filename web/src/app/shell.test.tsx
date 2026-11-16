@@ -16,11 +16,12 @@ import { openInboxStream } from '@/test/inbox'
 import { AppLayout } from './AppLayout'
 import { FakeEventSource } from '@/test/fake-event-source'
 
-// 全局连接提示：以说明中的服务端地址区分于各页面内的错误提示。
+// Global connection notice: told apart from the error messages inside each page by the server address in its description.
 const banner = () => screen.queryByText(/控制台访问的服务端地址是/)?.closest<HTMLElement>('[role="alert"]') ?? null
 const findBanner = async () => (await screen.findByText(/控制台访问的服务端地址是/)).closest<HTMLElement>('[role="alert"]')!
 
-// 概览页的接口：用量与异常为空；概览事件流不推送时运行状态停在加载中。
+// Endpoints for the overview page: usage and anomalies are empty; while
+// the overview event stream pushes nothing, the run status stays loading.
 const overviewHandlers = () => [
   http.get(apiUrl('/usage'), () => HttpResponse.json({ from: null, to: null, rows: [] })),
   http.get(apiUrl('/anomalies'), () => HttpResponse.json({ items: [], total: 0, nextCursor: null })),
@@ -78,7 +79,7 @@ describe('左侧栏与页面结构', () => {
     expect(hrefs()).toEqual(['/', '/?project=%E6%B5%8B%E8%AF%95%E9%A1%B9%E7%9B%AE', `${project}/tasks`, `${project}/folder`, `${project}/settings`, `${project}/agents/${agent.id}`, ...globalEntries])
     expect(within(sidebar()).queryByRole('link', { name: /收件箱/ })).toBeNull()
     expect(await screen.findByRole('link', { name: '配置' })).toHaveAttribute('aria-current', 'page')
-    // 主区页头：位置链、展示字标题与模型。
+    // Main-area page header: the location breadcrumb, the title in the display font, and the model.
     expect(screen.getByRole('navigation', { name: '页面位置' })).toHaveTextContent('测试项目›Agent›开发助手')
     expect(screen.getByRole('heading', { name: '开发助手', level: 1 })).toBeInTheDocument()
     expect(screen.getByText('anthropic · claude-sonnet-5-5')).toBeInTheDocument()
@@ -149,7 +150,8 @@ describe('左侧栏与页面结构', () => {
     expect(await within(screen.getByRole('region', { name: 'AGENTS.md' })).findByText('工作说明')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '从 Git 拉取' })).toBeInTheDocument()
     expect(reads).toContain('')
-    // 改版：文件夹直接排在页签的纸上，右侧票根里是概况；原来页签顶上的说明挪到底部说明里。
+    // Redesign: the folder sits directly on the tab's sheet, with the overview in the stub on the
+    // right; the description that used to sit at the top of the tab moved into the footer note.
     expect(screen.getByRole('complementary', { name: '概况' }).closest('[data-sheet]')).not.toBeNull()
     expect(document.querySelector('[data-folder-footer]')).toHaveTextContent('开发助手 的文件夹：它在这里工作')
   })
@@ -167,7 +169,7 @@ describe('左侧栏与页面结构', () => {
     expect(await screen.findByRole('heading', { name: '项目文件夹', level: 1 })).toBeInTheDocument()
     expect(await screen.findByRole('tree', { name: '文件树' })).toHaveTextContent('项目文件夹')
     expect(currentSidebarLinks().map((link) => link.textContent)).toEqual(['项目文件夹'])
-    // 改版：标题在纸外面，文件夹在一张纸上，右侧票根里是概况。
+    // Redesign: the title is outside the sheet, the folder is on a sheet, and the overview is in the stub on the right.
     const sheet = screen.getByRole('complementary', { name: '概况' }).closest('[data-sheet]')!
     expect(sheet).not.toBeNull()
     expect(sheet).not.toContainElement(screen.getByRole('heading', { name: '项目文件夹', level: 1 }))
@@ -235,7 +237,8 @@ describe('Agent 列表', () => {
     await waitFor(() => expect(within(list).getAllByRole('link').map((link) => link.textContent)).toEqual(['开发助手', '测试助手']))
   })
 
-  // jsdom 不排版，只能确认滚动区是定位容器；整页不被撑高由浏览器截图检查（.local-build/chat-scroll-fix）。
+  // jsdom does no layout, so we can only confirm that the scroll area is a positioning container; that the whole
+  // page does not get stretched taller is checked with browser screenshots (.local-build/chat-scroll-fix).
   it('列表的滚动区是定位容器，待你处理角标里的说明文字不会撑高整页', async () => {
     server.use(...baseHandlers([makeAgent({ name: '开发助手' })]))
     renderRoutes(routes, defaultAgentsPath)
@@ -280,10 +283,12 @@ describe('Agent 列表', () => {
 
 describe('连接与错误展示', () => {
   it('服务端未启动时显示地址与重试，左侧栏的连接状态为无法连接', async () => {
-    // 所有接口都连不上：默认处理器（如待处理的消息）有响应时，提示会随之消失又出现。
+    // Every endpoint is unreachable: if a default handler (e.g. pending messages)
+    // responded, the notice would disappear and reappear along with it.
     server.use(http.all(apiUrl('/*'), () => HttpResponse.error()))
     renderRoutes(routes, defaultAgentsPath)
-    // 上一个用例遗留的请求可能稍后才收到响应，提示随之重新挂载，所以每次重新取提示。
+    // A request left over from the previous test case may get its response
+    // later and remount the notice, so look up the notice again each time.
     await waitFor(() => {
       const alert = banner()
       expect(alert).toHaveTextContent('无法连接到服务端')
@@ -297,8 +302,9 @@ describe('连接与错误展示', () => {
     const agent = makeAgent({ name: '开发助手' })
     let up = true
     let listCalls = 0
-    // 断连时所有接口都连不上（连上时交给后面的处理器）：只让列表失败时，页面上其他请求的成功会让提示
-    // 消失又出现，测试拿到的提示可能已被替换，点它的重试不会发出请求。
+    // While disconnected, every endpoint is unreachable (while connected, requests go on to the handlers below): if
+    // only the list failed, other requests on the page would succeed and make the notice disappear and reappear;
+    // the notice the test holds might then have been replaced, and clicking its retry would send no request.
     server.use(
       http.all(apiUrl('/*'), () => (up ? undefined : HttpResponse.error())),
       http.get(agentsUrl, () => {
@@ -360,7 +366,7 @@ describe('连接与错误展示', () => {
     )
     const user = userEvent.setup()
     renderRoutes(routes, defaultAgentsPath)
-    // 没有 Agent 时主区的空状态也有一个“新建 Agent”，这里用左侧栏的“+”。
+    // When there is no Agent, the empty state in the main area also has a “新建 Agent” (New Agent); here we use the “+” in the sidebar.
     await user.click(await within(sidebar()).findByRole('button', { name: '新建 Agent' }))
     await user.type(screen.getByLabelText('显示名称'), '很长的名字')
     await user.selectOptions(await screen.findByLabelText('模型提供方'), 'anthropic')
@@ -393,10 +399,10 @@ describe('全局设置页', () => {
       ...baseHandlers([]),
     )
     renderRoutes(routes, '/settings')
-    // 测试数据的名称与行标签不同，断言限定在标签对应的值上。
+    // The names in the test data differ from the row labels, so the assertions are scoped to the value that belongs to each label.
     await waitFor(() => expect(screen.getByText('默认组织').nextElementSibling).toHaveTextContent('测试组织'))
     expect(screen.getByText('默认项目').nextElementSibling).toHaveTextContent('测试项目')
-    // 左侧栏的连接状态也显示“数据库不可用”，这里限定在页面主体内。
+    // The connection status in the sidebar also shows “数据库不可用” (Database unavailable), so scope this to the page body.
     const page = screen.getByRole('main')
     expect(await within(page).findByText('数据库不可用')).toBeInTheDocument()
     expect(within(page).getByText('数据库：无法打开数据库文件')).toBeInTheDocument()
@@ -405,10 +411,11 @@ describe('全局设置页', () => {
     expect(within(gh).getByText('摘要不符')).toBeInTheDocument()
     const lark = screen.getByRole('region', { name: 'lark-cli' })
     expect(within(lark).getByRole('note')).toHaveTextContent('钥匙串')
-    // 左侧栏有范围切换与搜索，“没有修改操作”指页面主体里文件夹以外的部分。
+    // The sidebar has the scope switcher and search, so "no editing actions"
+    // (in the test title) means the parts of the page body outside the folder.
     expect(within(page).getByRole('region', { name: '全局文件夹' })).toBeInTheDocument()
     const outsideFolder = (el: HTMLElement) => !el.closest('[data-file-manager]')
-    // 运行时状态的“重新检查”只是重新读取，不修改服务端。
+    // The runtime status “重新检查” (Check again) button only reads again; it does not modify the server.
     expect(within(page).queryAllByRole('button').filter(outsideFolder).map((button) => button.textContent)).toEqual(['重新检查'])
     expect(within(page).queryAllByRole('textbox').filter(outsideFolder)).toEqual([])
   })
@@ -440,7 +447,7 @@ describe('全局设置页', () => {
     const reload = vi.spyOn(browserPage, 'reload').mockImplementation(() => {})
     const user = userEvent.setup()
     renderRoutes(routes, '/settings')
-    // 改版后界面语言是分段按钮（原来是下拉框）。
+    // After the redesign, the interface language is a segmented control (it used to be a dropdown).
     const group = await screen.findByRole('radiogroup', { name: '界面语言' })
     expect(within(group).getByRole('radio', { name: '中文' })).toHaveAttribute('aria-checked', 'true')
     expect(group).toHaveAccessibleDescription('只影响这个浏览器；切换后页面会重新加载。')

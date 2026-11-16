@@ -55,7 +55,8 @@ describe('插件详情', () => {
     const enabled = screen.getByRole('region', { name: '在哪些项目启用' })
     await waitFor(() => expect(within(enabled).getByRole('switch', { name: `在 ${defaultProject.name} 启用 Webhook 通知` })).toHaveAttribute('aria-checked', 'true'))
     expect(within(enabled).getByText(defaultProject.name).closest('li')).toHaveTextContent('回调地址 → https://hooks.example.com/propanda')
-    // 最近动静：接口不给总数，只算已经读到的条数，后面还有就加“+”；每栏链到对应的页签。
+    // Recent activity: the API gives no total, so count only the entries read
+    // so far and add "+" when there are more; each column links to its tab.
     const activity = screen.getByRole('region', { name: '最近动静' })
     const figure = (name: string) => within(activity).getByRole('heading', { name }).nextElementSibling
     await waitFor(() => expect(figure('事件')).toHaveTextContent(/^50\+$/))
@@ -273,7 +274,7 @@ describe('插件详情的模型提供方', () => {
       'grok-key没有注册 OAuth 登录，不进模型目录登录状态随项目账号和平台 Agent 的登录保存：.grok-key2 个模型 · 来自 extensions/grok.ts',
       '<b>坏</b>grok-badOAuth 登录注册出错：TypeError: <script>x</script>2 个模型 · 来自 extensions/grok.ts',
       'grok-dupOAuth 登录没有进模型目录（例如与 models.json 里的提供方同 id）2 个模型 · 来自 extensions/grok.ts',
-      // 进了目录却没声明状态路径：提醒登录可能不随账号保存。
+      // In the model catalog but no state path declared: warn that the login may not be saved with the account.
       'Grok Baregrok-bareOAuth 登录已进模型目录没有声明登录状态路径，登录可能不随账号保存2 个模型 · 来自 extensions/grok.ts',
     ])
     expect(panel.querySelector('b, script')).toBeNull()
@@ -321,7 +322,7 @@ describe('插件详情的来源标签', () => {
     const { unmount } = renderDetail(`/plugins/${id}`, { details: [detail], markets: [official, other] })
     const heading = await screen.findByRole('heading', { level: 1, name: id })
     const text = await waitFor(() => {
-      // 来源标签是页头元信息里的第一项（标题前是首字母方块）。
+      // The source label is the first item in the header's meta info (the title is preceded by an initial-letter block).
       const found = heading.closest('header')!.querySelector('[data-page-meta] > span')?.textContent
       if (!found) throw new Error('来源标签还没显示')
       return found
@@ -348,7 +349,7 @@ describe('插件详情的来源标签', () => {
     expect(await badge('grok', fromMarket('grok', other.url))).toBe('npm · 已验证')
     expect(await badge('raw', fromMarket('raw', other.url))).toBe('npm · 未审核')
     expect(await badge('direct', fromMarket('direct', null, 'git'))).toBe('git · 未审核')
-    // 市场已不在列表里：无从判断，按未审核。
+    // The market is no longer in the list: there is no way to tell, so treat it as unreviewed.
     expect(await badge('gone', fromMarket('gone', 'https://removed.example/market.json'))).toBe('npm · 未审核')
   })
 })

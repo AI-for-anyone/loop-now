@@ -6,12 +6,13 @@ import { makeTaskDetail, nodeId, oldNodeId } from '@/test/tasks'
 import { WorkflowChips, WorkflowRuler } from './WorkflowRuler'
 import { edgeUses, workflowPosition, workflowSteps } from './workflow-steps'
 
-// 两步的流程（质量检查 → 提交报告，提交报告可以返工回质量检查），当前停在质量检查的第 2 次访问。
-// 再加一次已完成、走过返工线的“提交报告”，返工线就用过 1 次。
+// A two-step workflow (“质量检查” (quality check) → “提交报告” (submit report), where submit report
+// can send rework back to quality check), currently stopped at the 2nd visit of quality check.
+// Add one more completed submit-report visit that took the rework edge, so the rework edge has been used once.
 function detailWithRework(): Schemas['TaskDetail'] {
   const detail = makeTaskDetail('project')
   const report: Schemas['TaskNodeRun'] = { ...detail.nodes[0], id: '00000000-0000-7000-8000-000000000301', stepId: 'finish', visit: 1, status: 'completed', edgeId: 'again' }
-  // 一次失败（阻塞）时选了返工线的访问不算用过。
+  // A visit that chose the rework edge when it failed (blocked) does not count as a use.
   const failed: Schemas['TaskNodeRun'] = { ...report, id: '00000000-0000-7000-8000-000000000302', visit: 2, status: 'blocked' }
   return { ...detail, nodes: [...detail.nodes, report, failed] }
 }
@@ -27,7 +28,7 @@ describe('流程尺', () => {
     expect(current).toHaveAttribute('aria-current', 'step')
     expect(current).toHaveAttribute('aria-pressed', 'true')
     expect(current).toHaveTextContent('01质量检查任务检查员· 阻塞×2')
-    // 状态和访问次数包在一起，换行时一起走。
+    // The status and the visit count are wrapped together, so they move together when the line wraps.
     expect(current.querySelector('[data-step-state]')).toHaveTextContent('· 阻塞×2')
     expect(current.querySelector('[data-step-state]')).toHaveClass('whitespace-nowrap')
     expect(nav.querySelector('[data-step-dot="0"]')).toHaveTextContent('01')
@@ -36,7 +37,7 @@ describe('流程尺', () => {
     expect(todo).not.toHaveAttribute('aria-current')
     expect(todo).toHaveTextContent('· 还没到')
     expect(nav.querySelector('[data-step-dot="1"]')).toHaveClass('border-dashed')
-    // 步与步之间写连线的条件；底部是走到第几步。
+    // Between steps, the edge's condition is written out; the bottom shows which step the task has reached.
     expect(within(nav).getByText('↓ 通过')).toBeInTheDocument()
     expect(within(nav).getByText('走到第 1 步')).toBeInTheDocument()
     expect(within(nav).getByText('走到第 1 步').previousElementSibling).toHaveTextContent('1 / 2')
