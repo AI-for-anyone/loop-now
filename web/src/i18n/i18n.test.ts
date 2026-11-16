@@ -1,33 +1,39 @@
 import { describe, expect, it } from 'vitest'
 import { enUS } from './en-US'
 import { grouped, plural } from './format'
-import { resolveLocale } from './locale'
+import { locale, resolveLocale } from './locale'
 import { t } from './index'
 import { zhCN } from './zh-CN'
 
-describe('文案表', () => {
-  it('key 有类型检查，函数文案按参数生成', () => {
+// The Chinese table on its own (its punctuation, units and date formats): see src/zh-CN/i18n/zh-table.zh.test.ts.
+describe('copy tables', () => {
+  it('the main suite runs in the English UI (the Chinese UI: src/zh-CN)', () => {
+    expect(locale).toBe('en-US')
+    expect(t).toBe(enUS)
+  })
+
+  it('keys are type-checked, and function copy is built from its arguments', () => {
     // @ts-expect-error a string key that doesn't exist fails the type check
     expect(t.common.notExist).toBeUndefined()
-    expect(t.common.save).toBe('保存')
+    expect(t.common.save).toBe('Save')
     expect(t.chat.tooLong(65536)).toContain('64.0 KiB')
   })
 
-  it('错误码与失败原因都有中文说明', () => {
-    expect(t.errors.code.agent_busy).toBe('Agent 正忙')
-    expect(t.chat.runError.pi_exited).toBe('Agent 进程异常退出')
+  it('error codes and failure reasons have English text', () => {
+    expect(t.errors.code.agent_busy).toBe('The Agent is busy')
+    expect(t.chat.runError.pi_exited).toBe('Agent process exited unexpectedly')
   })
 
-  it('数字与复数按 locale 交给 Intl', () => {
+  it('numbers and plurals go to Intl with the locale', () => {
     expect(grouped('zh-CN', 1234567)).toBe('1,234,567')
     expect(plural('en-US', 1, { one: 'reply', other: 'replies' })).toBe('reply')
     expect(plural('en-US', 3, { one: 'reply', other: 'replies' })).toBe('replies')
-    expect(plural('zh-CN', 1, { other: '条' })).toBe('条')
+    expect(plural('zh-CN', 1, { other: '条' })).toBe('条') // check-english: zh (a Chinese plural form, next to the English ones)
   })
 
   // The types already require the same shape; loose Record<string, string>
   // maps (failure reasons, thinking levels, etc.) are checked key by key here.
-  it('英文文案表与中文的键一一对应，函数参数个数相同', () => {
+  it('the English table has the same keys as the Chinese one, and its functions take the same number of arguments', () => {
     const shape = (value: unknown, path: string, out: string[]) => {
       if (typeof value === 'function') out.push(`${path}()${value.length}`)
       else if (value && typeof value === 'object') for (const [key, child] of Object.entries(value)) shape(child, `${path}.${key}`, out)
@@ -37,7 +43,7 @@ describe('文案表', () => {
     expect(shape(enUS, 't', [])).toEqual(shape(zhCN, 't', []))
   })
 
-  it('界面语言：?lang= 优先，其次是保存的选择，最后按浏览器语言（zh 开头用中文，其余用英文）', () => {
+  it('UI language: ?lang= first, then the saved choice, then the browser language (Chinese for zh*, English otherwise)', () => {
     expect(resolveLocale('?lang=en-US', 'zh-CN', ['zh-CN'])).toBe('en-US')
     expect(resolveLocale('?lang=en', null, ['zh-CN'])).toBe('en-US')
     expect(resolveLocale('?lang=zh', 'en-US', ['en-US'])).toBe('zh-CN')
