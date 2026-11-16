@@ -1,9 +1,10 @@
 import { within } from '@testing-library/react'
 import type { UserEvent } from '@testing-library/user-event'
+import { t } from '@/i18n'
 
 // The thinking level is a group of segmented buttons (a radio group named “思考等级”
 // (Thinking level)): each segment is a radio option, named by the text on it.
-export const thinkingPicker = (container: HTMLElement) => within(container).getByRole('radiogroup', { name: '思考等级' })
+export const thinkingPicker = (container: HTMLElement) => within(container).getByRole('radiogroup', { name: t.config.basic.thinking.title })
 
 // Names of the segments, in order.
 export const thinkingOptions = (container: HTMLElement) => within(thinkingPicker(container)).getAllByRole('radio').map((radio) => radio.textContent)
