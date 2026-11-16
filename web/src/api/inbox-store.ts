@@ -1,7 +1,9 @@
 import type { ConnectionState } from './events'
 
-// 收件箱的两项全局状态：操作者的未读总数（导航上的数字）与收件箱事件流的连接状态（“实时更新中”）。
-// 未读总数以最新到达的值为准：事件流中的事件、线索列表与“标为已读”的响应都会带回它。
+// Two pieces of global inbox state: the operator's total unread count (the number in the navigation) and the connection state of the
+// inbox event stream (“实时更新中” (Live)).
+// The total unread count follows the value that arrived most recently: events on the event stream, the thread list and the "mark as
+// read" response all bring it back.
 function createStore<T>(initial: T) {
   let value = initial
   const listeners = new Set<() => void>()
@@ -18,13 +20,13 @@ function createStore<T>(initial: T) {
         listeners.delete(listener)
       }
     },
-    // 只供测试在用例之间复位。
+    // Only for tests, to reset between cases.
     reset() {
       value = initial
     },
   }
 }
 
-// 事件流的快照到达之前为 null，导航上不显示数字。
+// null until the event stream's snapshot arrives, so the navigation shows no number.
 export const inboxUnread = createStore<number | null>(null)
 export const inboxConnection = createStore<ConnectionState>('connecting')

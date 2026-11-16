@@ -3,8 +3,10 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 import { Slot } from "radix-ui"
 
-// 三种形态：chip 是按状态着色的胶囊；stamp 是回复结局的描边印章（只用于已打断、服务端重启中断、失败）；
-// sticker 是 Agent 头部的大圆贴纸。印章与贴纸的倾斜只画在 ::before 上。每种状态都带文字，不只靠颜色区分。
+// Three forms: chip is a pill colored by state; stamp is an outlined stamp for how a reply ended (only for interrupted, interrupted by a
+// server restart, and failed);
+// sticker is the big round sticker in the Agent header. The tilt of stamps and stickers is drawn only on ::before. Every state carries
+// text and is never told apart by color alone.
 const badgeVariants = cva(
   "group/badge inline-flex w-fit shrink-0 items-center justify-center gap-1.5 whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-3.5!",
   {
@@ -25,7 +27,7 @@ const badgeVariants = cva(
         warning: "",
         interrupted: "",
         restart: "",
-        // 身份标记（如项目 Manager）：藏青底白字，不属于任何状态色。
+        // Role marker (such as the project Manager): white text on navy, not one of the state colors.
         role: "",
       },
     },

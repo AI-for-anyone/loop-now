@@ -46,8 +46,10 @@ function AlertDialogOverlay({
   )
 }
 
-// 确认框（改版第 5 步）：与对话框同一张小纸——顶边写明类别的索引标签（默认“确认”，危险操作浅红底红字、纸投影红色），
-// 右上角黄色圆章关闭（就是“取消”，放在最前面，打开时焦点仍落在按钮区的取消上）。
+// Confirmation dialog (redesign step 5): the same small sheet as the dialog, with an index tab on the top edge naming the kind (“确认”
+// (Confirm) by default; danger is red text on light red, with a red sheet shadow),
+// and a yellow round stamp in the top right that closes it (it acts as “取消” (Cancel), comes first, and on open focus still lands on
+// Cancel in the button area).
 function AlertDialogContent({
   className,
   paperClassName,
@@ -62,7 +64,8 @@ function AlertDialogContent({
   kind?: DialogKind
   paperClassName?: string
 }) {
-  // 确认框由状态控制开合，没有 Radix 的 Trigger；关闭时把焦点还给打开前的元素。
+  // The confirmation dialog is opened and closed by state, without a Radix Trigger; on close, focus returns to the element that had it
+  // before opening.
   const focusHandlers = useReturnFocus(onOpenAutoFocus, onCloseAutoFocus)
   return (
     <AlertDialogPortal>

@@ -3,7 +3,8 @@ import { chromium } from '/Users/ljl/.npm/_npx/705bc6b22212b352/node_modules/pla
 import { mkdirSync, writeFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 
-// 实际React + HTTP fixture；所有API与供应商导航均拦截，不连接当前DEV/数据库/供应商。
+// Real React + HTTP fixture; every API call and provider navigation is intercepted, and nothing connects to the current DEV, database
+// or provider.
 const origin = process.env.PROJECT_CREDENTIALS_WEB_ORIGIN ?? 'http://127.0.0.1:4317'
 const out = new URL('../test-results/add-project-credentials/fixture/', import.meta.url)
 mkdirSync(out, { recursive: true })
@@ -36,9 +37,10 @@ await context.route('**/*', async route => {
   }
   const path = url.pathname.slice('/api/v1'.length)
   if (method === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Headers': 'content-type', 'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE' } })
-  // 本驱动不验Inbox事件；明确终止默认shell事件流，不能把它当真实SSE或重连证据。
+  // This driver does not verify Inbox events; it explicitly ends the default shell event stream, which must not be taken as evidence of real
+  // SSE or reconnects.
   if (path === '/inbox/events') return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': origin } })
-  if (method !== 'GET') writes.push({ method, path }) // 不记录秘密载荷。
+  if (method !== 'GET') writes.push({ method, path }) // Do not record secret payloads.
   if (path === '/health') return json(route, { ok: true, database: { ok: true, error: null, walBytes: { data: 0, events: 0 }, walWarning: false } })
   if (path === '/context') return json(route, { organization: { id: project.organizationId, name: '测试组织' }, project: { id: project.id, name: project.name }, limits })
   if (path === '/projects') return json(route, { projects: [defaultProject, project] })
@@ -89,9 +91,9 @@ try {
   await model.getByRole('button', { name: '保存', exact: true }).click()
   await model.getByText('配置已在别处更新，尚未保存本次修改').waitFor()
   assert.ok(conflict); assert.equal(await model.getByLabel('API Key', { exact: true }).inputValue(), 'fixture-only-secret')
-  await shot(model.getByRole('alert'), 'conflict-desktop'); ok('实际React项目账号/CLI安全状态及CAS412遮蔽草稿，固定基线')
+  await shot(model.getByRole('alert'), 'conflict-desktop'); ok('real React project account/CLI safe states, CAS 412 keeps the masked draft, fixed baseline')
   await page.setViewportSize({ width: 390, height: 844 })
-  await shot(model, 'conflict-mobile'); await shot(cli, 'cli-mobile'); ok('390实际页面无整页横向溢出，区块截图可扩高')
+  await shot(model, 'conflict-mobile'); await shot(cli, 'cli-mobile'); ok('real page at 390 wide has no page-wide horizontal overflow, region screenshots may grow taller')
   await model.getByRole('button', { name: '取消', exact: true }).click()
   await page.goto(origin + base + `/agents/${agent.id}/config`)
   const accountArea = page.getByRole('region', { name: '模型账号凭证', exact: true })
@@ -102,7 +104,7 @@ try {
   await accountArea.getByRole('button', { name: '恢复当前提供方自动取用' }).click()
   await accountArea.getByText('自动使用唯一对应的项目账号').waitFor()
   assert.equal(writes.filter(write => write.path.endsWith('/credential-selections')).length, 1)
-  await shot(accountArea, 'automatic-mobile'); ok('项目Agent无私有秘密表单，legacy按mode展示，恢复只发单provider PUT')
+  await shot(accountArea, 'automatic-mobile'); ok('project Agent has no private secret form, legacy shown by mode, restoring sends only a single-provider PUT')
   await page.setViewportSize({ width: 1440, height: 1000 }); await shot(accountArea, 'automatic-desktop')
   await page.setViewportSize({ width: 390, height: 844 })
   for (const scene of ['zero', 'many', 'deleted']) {
@@ -113,7 +115,7 @@ try {
     if (scene === 'deleted') assert.equal(await accountArea.getByRole('combobox').inputValue(), id('99'))
     await shot(accountArea, `${scene}-mobile`)
   }
-  ok('实际React零/多含不可用/明确已删状态，无默认第一条或回落')
+  ok('real React zero / many incl. unavailable / explicitly deleted states, no default to the first entry and no fallback')
   const clis = page.getByRole('region', { name: '可用 CLI', exact: true })
   await clis.getByRole('listitem', { name: 'gh' }).getByRole('button', { name: '移除' }).click()
   await shot(page.getByRole('alertdialog'), 'remove-cli-mobile'); await page.getByRole('alertdialog').getByRole('button', { name: '取消', exact: true }).click()
@@ -129,7 +131,7 @@ try {
   await page.getByRole('alertdialog').getByRole('button', { name: '删除项目', exact: true }).click()
   await page.getByText('项目仍有未结束任务，项目和账号没有删除。sleep 任务也须结束。').waitFor()
   await shot(page.getByRole('region', { name: '删除项目', exact: true }), 'delete-blocked-mobile')
-  ok('三类删除说明/任务结构化链接及登录失败保旧，HTTP fixture不触发真实删除或授权')
+  ok('three kinds of delete explanation / structured task links, a failed login keeps the old one, the HTTP fixture triggers no real delete or authorization')
   await page.goto(origin + `/platform/agents/${platformAgent.id}/config`)
   const privateArea = page.getByRole('region', { name: '模型账号凭证', exact: true })
   await privateArea.getByRole('button', { name: '录入 API Key', exact: true }).waitFor()
@@ -139,9 +141,9 @@ try {
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('API Key', { exact: true }).waitFor()
   assert.equal(await dialog.getByLabel('API Key', { exact: true }).getAttribute('type'), 'password')
-  await shot(dialog, 'platform-keyboard-mobile'); ok('平台私有表单保留，键盘打开及遮蔽字段')
+  await shot(dialog, 'platform-keyboard-mobile'); ok('platform private form kept, opens by keyboard, field is masked')
   assert.deepEqual(errors, []); assert.deepEqual(blocked, []); assert.deepEqual(unhandled, [])
-  ok('浏览器0异常，所有API为HTTP fixture，0供应商或DEV网络请求')
+  ok('0 browser errors, every API is the HTTP fixture, 0 provider or DEV network requests')
   writeFileSync(new URL('results.json', out), JSON.stringify({ level: 'React + intercepted HTTP fixture; no App/database/OAuth', origin, viewports: ['1440x1000', '390x844'], screenshotBoundary: 'region screenshots may exceed viewport height', checks, errors, blocked, unhandled, httpConsole, writes }, null, 2))
 } catch (error) {
   writeFileSync(new URL('failure.json', out), JSON.stringify({ message: error.message, checks, errors, blocked, unhandled }, null, 2)); throw error

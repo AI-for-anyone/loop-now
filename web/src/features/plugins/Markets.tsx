@@ -18,9 +18,10 @@ type Market = Schemas['PluginMarket']
 type Entry = Schemas['PluginMarketEntry']
 const text = t.plugins.markets
 
-// 市场里的一个插件：名称、官方或已验证、说明、来源（git 仓库有网页时链过去）、版本；
-// 没装的可安装，装了的写已装版本，有新版本时可更新。
-// 改版：卡片顶上一条带网点的色带（index：第几张卡，蓝、粉、黄轮换），名称是展示字。
+// A plugin in a market: name, official or verified, description, source (linked when the git repository has a web page), version;
+// one not installed can be installed, an installed one shows its installed version and can be updated when there is a new version.
+// Redesign: a color band with halftone dots across the top of the card (index: which card it is, cycling blue, pink, yellow), and the
+// name is set in the display font.
 function EntryCard({ market, entry, installer, index }: { market: Market; entry: Entry; installer: ReturnType<typeof usePluginInstaller>; index: number }) {
   const key = `${market.url}#${entry.id}`
   const busy = installer.pending !== null
@@ -102,7 +103,7 @@ function MarketSection({ market, installer, titled }: { market: Market; installe
   )
 }
 
-// 官方市场或其他市场的插件；安装或更新后打开插件详情。
+// Plugins from the official market or from other markets; after installing or updating, open the plugin details.
 export function MarketPlugins({ official }: { official: boolean }) {
   const navigate = useNavigate()
   const markets = usePluginMarkets()
@@ -132,7 +133,7 @@ const isHttps = (value: string) => {
   }
 }
 
-// 其他市场的地址：保存在全局插件设置的 markets 里（与一键停用一起保存）。
+// URLs of other markets: saved in markets of the global plugin settings (saved together with the "Disable all" kill switch).
 function MarketSettings() {
   const id = useId()
   const settings = usePluginSettings()
@@ -149,7 +150,7 @@ function MarketSettings() {
     save.mutate({ ...settings.data, markets: [...markets, next] }, { onSuccess: () => setUrl('') })
   }
   return (
-    // 改版：市场地址的管理是纸上一块虚线框，不是卡片。
+    // Redesign: managing market URLs is a dashed box on the sheet, not a card.
     <section aria-label={text.manage} className="flex min-w-0 flex-col gap-3 rounded-card border-2 border-dashed border-ink/40 px-4 py-3.5">
       <h2 className="text-[15px] font-black">{text.manage}</h2>
       <p className="text-[12.5px] text-ink-700">{text.manageHint}</p>

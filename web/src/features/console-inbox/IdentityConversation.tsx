@@ -22,8 +22,10 @@ const text = t.consoleInbox
 type Message = Schemas['InboxMessage']
 const encoder = new TextEncoder()
 
-// 外部身份与你的往来：它发给你的消息与你发给它的消息按时间排列，发给你的进入视野时标为已读。
-// 回复接在最近一条消息之后（最近一条是待回答的问题时，回复就是它的答案）；新消息另起一条线索。已删除的身份只能查看。
+// The exchange between an external identity and you: the messages it sent you and the ones you sent it, in time order; the
+// ones sent to you are marked read when they scroll into view.
+// A reply follows the latest message (when the latest message is an unanswered question, the reply is its answer); a new
+// message starts a new thread. Deleted identities can only be viewed.
 export function IdentityConversation({ identity }: { identity: Schemas['ExternalIdentity'] }) {
   const conversation = useIdentityConversation(identity.id)
   const titleId = useId()
@@ -86,7 +88,7 @@ function ConversationItem({ message }: { message: Message }) {
   )
 }
 
-// 回复最近一条消息：收件人由服务端确定为线索中的另一方。
+// Reply to the latest message: the server sets the recipient to the other party in the thread.
 function ReplyBox({ last, name }: { last: Message; name: string }) {
   const reply = useReplyInbox()
   const context = useContextInfo()

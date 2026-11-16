@@ -4,7 +4,8 @@ import { expect, it, vi } from 'vitest'
 import { chooseThinking, thinkingChoice, thinkingOptions, thinkingPicker } from '@/test/thinking'
 import { ThinkingLevelPicker } from './ThinkingLevelPicker'
 
-// 改版：思考等级是一组分段按钮（2px 藏青描边、选中的一段黄色），单选组的语义，左右方向键在段之间移动。
+// Redesign: the thinking level is a set of segmented buttons (2px navy border, the selected
+// segment yellow) with radio-group semantics; the left and right arrow keys move between segments.
 it('offers only catalog levels plus default, and emits null for default', async () => {
   const onChange = vi.fn()
   render(<ThinkingLevelPicker value="high" levels={['low', 'high']} defaultLevel="low" onChange={onChange} />)
@@ -23,7 +24,7 @@ it('looks like a segmented control: ink border, the chosen segment yellow', () =
 
 it('preserves an unavailable stored value visibly and shows the field error', () => {
   render(<ThinkingLevelPicker value="high" levels={['low']} onChange={() => {}} error="当前模型不支持该等级" />)
-  // 存着的等级不在目录里：没有哪一段选中，下面写明当前值暂不可选。
+  // The stored level is not in the catalog: no segment is selected, and a line below says the current value can't be chosen for now.
   expect(thinkingChoice(document.body)).toBeNull()
   expect(screen.getByText('高（当前值，暂不可选）')).toBeInTheDocument()
   expect(thinkingPicker(document.body)).toHaveAttribute('aria-invalid', 'true')

@@ -3,7 +3,8 @@ import { config } from '@/config'
 import type { FolderSource, UploadItem } from '@/features/folders/folder-source'
 import { joinPath } from '@/features/folders/folder-source'
 
-// 三组文件夹接口（只限控制台）：Agent 的文件夹、项目共享文件夹与全局共享文件夹，接口相同，前缀不同。
+// Three sets of folder endpoints (console only): the Agent's folder, the project's shared folder and the global shared folder; same
+// endpoints, different prefixes.
 export type FolderScope = { kind: 'agent'; agentId: string } | { kind: 'project'; projectId: string } | { kind: 'global' }
 
 type Entry = Schemas['FolderEntry']
@@ -13,7 +14,8 @@ const prefixOf = (scope: FolderScope) =>
 const contentURL = (scope: FolderScope, path: string, create?: boolean) =>
   `${config.apiBase}${prefixOf(scope)}/content?${new URLSearchParams({ path, ...(create === undefined ? {} : { create: String(create) }) })}`
 
-// 写入文件：按 path 逐个 PUT 原始字节，上级文件夹由服务端自动创建。用 XHR 是为了拿到上传进度。
+// Write files: PUT the raw bytes for each path one by one; the server creates parent folders automatically. XHR is used to get upload
+// progress.
 function putContent(scope: FolderScope, path: string, body: Blob, create: boolean, onProgress?: (loaded: number) => void): Promise<Entry> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
@@ -22,7 +24,7 @@ function putContent(scope: FolderScope, path: string, body: Blob, create: boolea
     if (onProgress) xhr.upload.onprogress = (event) => onProgress(event.loaded)
     xhr.onload = () => {
       let parsed: unknown = xhr.responseText
-      try { parsed = xhr.responseText ? JSON.parse(xhr.responseText) : null } catch { /* 非 JSON 的错误正文原样保留 */ }
+      try { parsed = xhr.responseText ? JSON.parse(xhr.responseText) : null } catch { /* Error bodies that are not JSON are kept as they are */ }
       if (xhr.status >= 200 && xhr.status < 300) resolve(parsed as Entry)
       else reject(toApiError(xhr.status, parsed, xhr.getResponseHeader(REQUEST_ID_HEADER)))
     }
@@ -70,7 +72,7 @@ export function folderSource(scope: FolderScope): FolderSource {
       else if (scope.kind === 'project') await call(api.DELETE('/projects/{projectId}/context-folder/entries', { params: { ...params, path: { projectId: scope.projectId } } }))
       else await call(api.DELETE('/context-folder/entries', { params }))
     },
-    // 上传覆盖同名文件（create=false）：与在线保存一样以最后一次写入为准。
+    // An upload overwrites a file with the same name (create=false): like saving in place, the last write wins.
     upload: async (target: string, item: UploadItem, onProgress) => { await putContent(scope, joinPath(target, item.path), item.file, false, onProgress) },
     contentURL: (path) => contentURL(scope, path),
     ...(scope.kind === 'agent'

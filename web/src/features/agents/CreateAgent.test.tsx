@@ -35,7 +35,7 @@ function setup(onCreate: (body: Schemas['AgentCreate']) => Response) {
 }
 
 async function fill(user: ReturnType<typeof userEvent.setup>, name: string, pickModel = true) {
-  // 没有 Agent 时主区的空状态也有一个“新建 Agent”，这里用左侧栏的“+”。
+  // When there is no Agent, the empty state in the main area also has a “新建 Agent” (New Agent); here we use the “+” in the sidebar.
   await user.click(await within(sidebar()).findByRole('button', { name: '新建 Agent' }))
   const dialog = await screen.findByRole('dialog')
   await user.type(within(dialog).getByLabelText('显示名称'), name)
@@ -129,7 +129,7 @@ describe('创建 Agent', () => {
     expect(option).toBeEnabled()
     await user.selectOptions(select, 'claude-code')
     expect(within(dialog).getByText('用本机安装的 Claude Code 和你在本机的登录，平台不保存登录信息。')).toHaveAttribute('role', 'note')
-    // 选的那一刻就该知道的两条；插件与 /pi: 命令只在配置页说明。
+    // The two points you need to know the moment you choose it; plugins and /pi: commands are explained only on the Config page.
     const differences = within(dialog).getByRole('region', { name: '用 Claude Code 运行时' })
     expect(within(differences).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
       '用你本机的家目录和登录运行：它执行 gh、git 等命令时用的是你本人的登录。',

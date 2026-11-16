@@ -19,7 +19,7 @@ const dialog = (kind?: DialogKind) =>
     </Dialog>,
   )
 
-// 改版第 5 步：全站弹窗统一成一张小纸，顶边贴一张写明类别的索引标签。
+// Redesign step 5: every dialog across the app becomes a small sheet, with an index tab on its top edge that names the dialog's kind.
 describe('弹窗的样子', () => {
   it('顶边的索引标签写明类别：新建是黄色带加号，危险操作浅红底红字、纸的投影是红色，其余浅蓝底', () => {
     const { unmount } = dialog('create')

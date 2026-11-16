@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 
-// 当前窗口是否符合一条媒体查询（例如窄屏），窗口变化时重新渲染。测试环境里的 matchMedia 一律不匹配。
+// Whether the current window matches a media query (e.g. a narrow screen), re-rendering when the window changes. In the test environment
+// matchMedia never matches.
 export function useMediaQuery(query: string): boolean {
   return useSyncExternalStore(
     (onChange) => {
@@ -13,5 +14,5 @@ export function useMediaQuery(query: string): boolean {
   )
 }
 
-// 左侧栏收进抽屉、票根隐藏的窄屏（与 Tailwind 的 max-nav 一致）。
+// Narrow screens, where the sidebar folds into the drawer and stubs are hidden (matches Tailwind's max-nav).
 export const narrowQuery = '(width < 56.3125rem)'

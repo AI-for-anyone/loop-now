@@ -16,7 +16,8 @@ type Where = Schemas['PluginActionInput']['where']
 export type ActionPage = Action['where'][number]
 const text = t.plugins.actions
 
-// 一个操作的表单弹窗：按操作的 fields 生成；没有字段时只确认一下。结果以轻提示显示，带链接时同时在新窗口打开。
+// The form dialog for one action: generated from the action's fields; with no fields it just asks for confirmation. The result shows as a
+// toast, and if it carries a link, the link also opens in a new window.
 function ActionDialog({ plugin, action, where, onClose }: { plugin: { id: string; displayName: string }; action: Action; where: Where; onClose: () => void }) {
   const fields = fieldsOf(action.fields)
   const invoke = useInvokePluginAction(plugin.id, action.id)
@@ -27,7 +28,8 @@ function ActionDialog({ plugin, action, where, onClose }: { plugin: { id: string
     const local = validate(fields, draft)
     setErrors(local)
     if (Object.keys(local).length) return
-    // 操作的输入整体交给插件：标了 x-secret 的字段也按普通值放进 input（只是输入时不回显）。
+    // The action's input goes to the plugin as a whole: fields marked x-secret are also put into input as ordinary values (they are just
+    // not echoed while typing).
     const { values, secrets } = toPayload(fields, draft, {})
     const input = { ...values, ...Object.fromEntries(Object.entries(secrets ?? {}).filter(([, value]) => value !== null)) }
     invoke.mutate(
@@ -67,7 +69,7 @@ function ActionDialog({ plugin, action, where, onClose }: { plugin: { id: string
   )
 }
 
-// 一个插件在这种页面上的操作按钮（清单 actions 里 where 含这种页面的）。
+// One plugin's action buttons on this kind of page (the actions in the manifest whose where includes this kind of page).
 export function PluginActionButtons({ plugin, actions, page, where, className }: { plugin: { id: string; displayName: string }; actions: Action[]; page: ActionPage; where: Where; className?: string }) {
   const [open, setOpen] = useState<Action | null>(null)
   const mine = actions.filter((action) => action.where.includes(page))
@@ -90,7 +92,8 @@ function OnePlugin({ pluginId, page, where }: { pluginId: string; page: ActionPa
   return <PluginActionButtons plugin={{ id: detail.data.plugin.id, displayName: localizedText(detail.data.plugin.displayName) }} actions={detail.data.manifest.components.actions} page={page} where={where} />
 }
 
-// 任务页、外部身份页用：列出所有已安装插件在这种页面上的操作。给了 projectId 时只列在这个项目启用了的插件。
+// Used by the task page and the external identity page: lists the actions of all installed plugins on this kind of page. When projectId
+// is given, only plugins enabled in that project are listed.
 export function PagePluginActions({ page, where, projectId, className }: { page: ActionPage; where: Where; projectId?: string; className?: string }) {
   const plugins = usePlugins()
   const project = useProjectPlugins(projectId ?? '')

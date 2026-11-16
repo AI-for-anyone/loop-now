@@ -8,9 +8,10 @@ import { FakeEventSource } from './fake-event-source'
 import { FakeIntersectionObserver } from './intersection-observer'
 import { server } from './server'
 
-// Vitest 5.0.0 的 jsdom 兼容层按 `_buffer` 读取 jsdom Blob 的内容，而 jsdom 28 起改名为 `_bytes`，
-// 导致经 fetch 发送的 Blob 请求体变成 "undefined"。Vitest 5.0.3 已修复；升级到该版本或更新后删除这段。
-// 补上之后，multipart 请求中文件部分的内容与文件名在 jsdom 中仍不可靠，相关测试只检查字段名。
+// Vitest 5.0.0's jsdom compatibility layer reads the content of a jsdom Blob through `_buffer`, but jsdom renamed it
+// to `_bytes` in version 28, so Blob request bodies sent through fetch become "undefined". Fixed in Vitest 5.0.3;
+// remove this block after upgrading to that version or later. Even with this patch, the content and file name of
+// file parts in multipart requests are still unreliable in jsdom, so the related tests only check field names.
 {
   const blob = new Blob()
   const implSymbol = Object.getOwnPropertySymbols(Object.getOwnPropertyDescriptors(blob))[0]
@@ -38,19 +39,20 @@ afterEach(() => {
   inboxUnread.reset()
   inboxConnection.reset()
   toastStore.reset()
-  // 最近使用的项目或平台记在浏览器存储中，不能带到下一个测试。
+  // The recently used project or platform is remembered in browser storage and must not carry over to the next test.
   window.localStorage.clear()
 })
 afterAll(() => server.close())
 
-// jsdom 缺少的浏览器接口，Radix 组件会用到。
+// Browser APIs missing from jsdom that Radix components use.
 if (!Element.prototype.hasPointerCapture) {
   Element.prototype.hasPointerCapture = () => false
   Element.prototype.setPointerCapture = () => {}
   Element.prototype.releasePointerCapture = () => {}
 }
 if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {}
-// CodeMirror 在 jsdom 中测量选区时需要浏览器的 Range 几何接口；返回一个零尺寸矩形即可满足布局计算。
+// CodeMirror needs the browser's Range geometry APIs to measure selections in
+// jsdom; returning a zero-size rectangle is enough for its layout calculations.
 if (!Range.prototype.getClientRects) {
   Range.prototype.getClientRects = () => [new DOMRect()] as unknown as DOMRectList
   Range.prototype.getBoundingClientRect = () => new DOMRect()

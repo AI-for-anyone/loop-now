@@ -51,7 +51,8 @@ export function TaskDetail() {
     else next.delete('record')
     return next
   })
-  // 点流程尺上的一步：选中它，看它最近的一次访问；节点资料页签回到对话（面板按选中次数重新挂载）。
+  // Clicking a step on the workflow ruler: select it and view its most recent visit; the Node materials tab goes back to Conversation
+  // (the panel remounts keyed by the selection count).
   const select = (id: string) => {
     setSelection(old => old + 1)
     const latest = detail.nodes.filter((n) => n.stepId === id).sort((a, b) => a.visit - b.visit || a.attempt - b.attempt).at(-1)
@@ -59,9 +60,11 @@ export function TaskDetail() {
   }
   const project = scope.project
   const ruler = <WorkflowRuler detail={detail} selected={step} record={node?.id} onSelect={select} onRecord={viewRecord} agentName={agentName} />
-  // 任务详情（改版第 5 步）：紧凑页头（空心的任务编号、状态印章、归档状态、实时状态、起止时间，右边红色描边的“取消任务”），
-  // 下面整页一张纸：纸张上沿两张索引标签，纸上是所选节点的对话或节点资料，右侧票根里是竖排的流程尺。
-  // 窄屏时票根隐藏，索引标签上方换成一排横向可滚动的步骤小标签。
+  // Task details (redesign step 5): a compact page header (hollow task number, status stamp, archive status, live status, created and
+  // updated times, and a red-outlined “取消任务” (Cancel task) on the right),
+  // and below it one sheet filling the page: two index tabs on the sheet's top edge, the selected node's conversation or node materials
+  // on the sheet, and the vertical workflow ruler in the stub on the right.
+  // On narrow screens the stub is hidden, and a horizontally scrollable row of small step tags appears above the index tabs instead.
   return <PageFrame>
     <PageHeader
       crumbs={[{ label: project.name, to: overviewPath({ kind: 'project', name: project.name }) }, { label: t.tasks.title, to: tasksPath(project.name) }]}
@@ -90,7 +93,8 @@ export function TaskDetail() {
   </PageFrame>
 }
 
-// 所选的一步还没被访问（或指定的记录不存在）时：纸上只有一行说明，票根里照样是流程尺。
+// When the selected step hasn't been visited yet (or the requested record doesn't exist): the sheet holds just one line of explanation,
+// and the stub still shows the workflow ruler.
 function EmptySheet({ stub, children }: { stub: ReactNode; children: ReactNode }) {
   return <Sheet className="mt-[34px] min-h-0 flex-1">
     <div className="flex min-h-0 flex-1">

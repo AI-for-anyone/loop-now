@@ -2,7 +2,7 @@
 @import "./styles/shadcn-tailwind.css";
 @import "./styles/fonts.css";
 
-/* 视觉“版 · 孔版印刷”，依据 loop-now-uiux 交接说明（画布 Version 16）。控制台只做浅色。 */
+/* Visual style "Plate · Risograph print", following the loop-now-uiux handoff notes (canvas Version 16). The console is light theme only. */
 
 @theme inline {
     --font-sans: 'Noto Sans SC', 'PingFang SC', sans-serif;
@@ -75,7 +75,7 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* 形状：类名为 rounded-stamp、rounded-panel 等，同时输出为 :root 上的同名变量。 */
+/* Shapes: class names such as rounded-stamp and rounded-panel, also output as variables of the same name on :root. */
 @theme {
     --radius-stamp: 4px;
     --radius-ticket: 10px;
@@ -84,21 +84,22 @@
     --radius-panel: 18px;
     --radius-bubble: 20px;
     --radius-dialog: 22px;
-    /* 左侧栏常驻的最小宽度（901px）：更窄时收进抽屉。类名为 nav: 与 max-nav:。 */
+    /* The minimum width for the permanent sidebar (901px): narrower than that, it folds into a drawer. The class prefixes are nav: and
+       max-nav:. */
     --breakpoint-nav: 56.3125rem;
 }
 
 :root {
-    /* 纸与油墨 */
+    /* Paper and ink */
     --paper: #F3EFE6;
     --paper-raised: #FBF9F4;
-    /* 索引标签未选中时的米灰：比纸色深一档。 */
+    /* The beige-gray of an unselected index tab: one step darker than the paper. */
     --paper-tab: #E8E2D4;
     --ink: #18265E;
     --ink-700: #3B4778;
     --ink-500: #5A628A;
     --riso-blue: #2443B5;
-    /* 孔版蓝的浅色版：只用于蓝底左侧栏里的头像，原色的圆在蓝底上看不见。 */
+    /* A light version of riso blue: only for avatars in the blue sidebar, where circles in the original color would be invisible on the blue. */
     --riso-blue-soft: #8EA2FF;
     --riso-pink: #FF4FA3;
     --pink-text: #B8287A;
@@ -115,7 +116,8 @@
     --tint-yellow: #FFF4B8;
     --error-field: #FFF4F2;
 
-    /* 统计图表：系列按固定顺序取蓝、粉、赭，“其他”为中性灰；回复结果用完成、打断、失败三种状态色；网格线退后 */
+    /* Stats charts: series take blue, pink and ochre in a fixed order, with “其他” (Other) in neutral gray; reply outcomes use the three state
+       colors for completed, interrupted and failed; grid lines recede */
     --chart-blue: #2443B5;
     --chart-pink: #E0428F;
     --chart-ochre: #C98500;
@@ -125,7 +127,7 @@
     --status-interrupt: #FAB219;
     --status-fail: #D03B3B;
 
-    /* 印刷投影：只用实色偏移，不加模糊 */
+    /* Print shadows: solid offset only, no blur */
     --print-rest: 2px 2px 0 rgb(24 38 94 / .12);
     --print-pink: 4px 4px 0 var(--riso-pink);
     --print-blue: 4px 4px 0 var(--riso-blue);
@@ -133,7 +135,7 @@
     --print-dialog: 6px 6px 0 var(--riso-blue);
     --focus-ring: 0 0 0 3px var(--riso-yellow), 0 0 0 5px var(--ink);
 
-    /* shadcn 变量 */
+    /* shadcn variables */
     --background: var(--paper);
     --foreground: var(--ink);
     --card: var(--paper-raised);
@@ -172,14 +174,16 @@
   }
 }
 
-/* 网点、颗粒、错版与倾斜。倾斜只画在 ::before 上，元素本体不变换。 */
+/* Halftone dots, grain, misregistration and tilt. Tilt is drawn only on ::before; the element itself is not transformed. */
 @layer utilities {
   .riso-paper {
     background-color: var(--paper);
   }
-  /* 主区米色底上的纸张颗粒：128px 的平铺图（藏青色、最多约 6% 的不透明度），不用滤镜，滚动时不重算。 */
-  /* 纸张里的滚动条（改版）：细、藏青半透明，轨道透明，不用系统的灰色滚动条。scrollbar-width 不继承，
-     所以连同所有后代一起设上；用 :where 不加优先级，需要隐藏滚动条的地方（no-scrollbar 及其断点写法）照旧隐藏。 */
+  /* Paper grain on the beige background of the main area: a 128px tiled image (navy, at most about 6% opacity), no filters, so nothing is
+     recomputed while scrolling. */
+  /* Scrollbars inside the sheet (redesign): thin, translucent navy, with a transparent track, instead of the system's gray scrollbar.
+     scrollbar-width is not inherited, so it is set on all descendants as well; :where adds no specificity, so places that need to hide the
+     scrollbar (no-scrollbar and its breakpoint forms) still hide it. */
   :where(.riso-scrollbar, .riso-scrollbar *) {
     scrollbar-width: thin;
     scrollbar-color: color-mix(in srgb, var(--ink) 38%, transparent) transparent;
@@ -188,7 +192,8 @@
     background-image: url('./assets/paper-grain.png');
     background-size: 128px 128px;
   }
-  /* 桌面壳窗口里拖动窗口的区域（系统标题栏藏起来了）；区域里的按钮、链接、输入框照常点击。 */
+  /* The area for dragging the window in a desktop shell window (the system title bar is hidden); buttons, links and inputs in the area can
+     still be clicked as usual. */
   .window-drag {
     -webkit-app-region: drag;
   }
@@ -207,7 +212,7 @@
     background-image: radial-gradient(rgb(168 38 26 / .10) 1px, transparent 1.3px);
     background-size: 6px 6px;
   }
-  /* 只用于 ≥ 28px 的展示字 */
+  /* Only for display type ≥ 28px */
   .riso-misreg {
     text-shadow: 5px 3px 0 rgb(255 79 163 / .85);
   }
@@ -229,7 +234,7 @@
     transform: rotate(-1deg);
     z-index: -1;
   }
-  /* 分区标题上的一笔黄色记号笔：文字下半部的黄色条。 */
+  /* The stroke of yellow highlighter mark on section titles: a yellow bar over the lower half of the text. */
   .riso-marker {
     background: linear-gradient(transparent 0, transparent 62%, var(--riso-yellow) 62%, var(--riso-yellow) 94%, transparent 94%);
   }
@@ -247,7 +252,8 @@
     box-shadow: var(--tilt-shadow, var(--print-rest));
     transform: rotate(var(--tilt, -1deg));
   }
-  /* 左侧栏列表下面的装饰位：占剩余高度；放得下整片装饰（约 200px）时才显示，放不下就不显示，不压文字。 */
+  /* The decoration slot below the sidebar list: takes the remaining height; the decoration shows only when all of it fits (about 200px),
+     otherwise it is hidden, so it never covers text. */
   .sidebar-deco-slot {
     position: relative;
     flex: 1 1 0;
@@ -267,7 +273,7 @@
     background-image: radial-gradient(rgb(36 67 181 / .18) 1.2px, transparent 1.5px);
     background-size: 6px 6px;
   }
-  /* 原生 select 右侧的下拉箭头（藏青）。 */
+  /* The dropdown arrow on the right of a native select (navy). */
   .select-chevron {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2318265E' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     background-position: right 14px center;
@@ -276,7 +282,8 @@
   .riso-stripes-red {
     background-image: repeating-linear-gradient(-45deg, rgb(217 56 30 / .08) 0 8px, transparent 8px 16px);
   }
-  /* 三个动效之二：输出光标 1s 步进闪烁、工具进行中图标 0.9s 匀速旋转（第三个是按钮按下的位移）。 */
+  /* Two of the three animations: the output cursor blinking in 1s steps, and the tool-in-progress icon spinning steadily every 0.9s (the
+     third is the button press offset). */
   .riso-cursor {
     animation: riso-blink 1s steps(2, start) infinite;
   }
@@ -297,7 +304,8 @@
   }
 }
 
-/* 减少动态效果时关闭全部动画与过渡；组件上另有 motion-reduce: 变体把旋转图标换成静态显示。 */
+/* With reduced motion, turn off all animations and transitions; components also have motion-reduce: variants that show the spinning
+   icon as static. */
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,
@@ -307,7 +315,7 @@
   }
 }
 
-/* Agent 回复的 Markdown 样式 */
+/* Markdown styles for Agent replies */
 @layer components {
   .markdown {
     @apply text-base leading-[1.8] break-words;
@@ -337,12 +345,13 @@
   .markdown blockquote {
     @apply border-l-4 border-riso-pink pl-3 text-ink-700;
   }
-  /* 行内代码：浅蓝底的等宽小标签。 */
+  /* Inline code: a small monospace label on light blue. */
   .markdown :not(pre) > code {
     @apply rounded-stamp bg-tint-blue px-[7px] py-px font-mono text-[0.85em];
   }
-  /* 列表项开头的加粗词：黄色小标签（由 rehype-lead-label 标出）。整张无序列表每一项都是“标签 + 行内文字”时
-     （.md-lead-list）改成横排：标签在左、文字在右，不画圆点，相邻两项之间留 6px；最外层的这种列表不缩进，子列表保留缩进。 */
+  /* A bold word at the start of a list item: a small yellow label (marked by rehype-lead-label). When every item of an unordered list is
+     "label + inline text" (.md-lead-list), lay the items out side by side: label on the left, text on the right, no bullets, 6px between
+     adjacent items; the outermost such list is not indented, while sublists keep their indentation. */
   .markdown .md-lead {
     @apply mr-3 inline-block rounded-stamp bg-riso-yellow px-[9px] text-[13.5px] leading-6 font-black;
   }
@@ -372,7 +381,7 @@
   }
 }
 
-/* 代码高亮：孔版蓝底上的配色，每一种与底色的对比度都不低于 4.5:1（见 tokens 对比度测试）。 */
+/* Code highlighting: colors on the riso-blue background, each with a contrast of at least 4.5:1 against it (see the tokens contrast test). */
 .hljs {
   color: #FFFFFF;
 }
@@ -425,7 +434,8 @@
   font-weight: 700;
 }
 
-/* 文件管理器的代码视图：白底上的浅色配色，沿用纸与油墨的颜色；只作用于 .code-view 之内，对话里的代码块不受影响。 */
+/* The file manager's code view: a light color scheme on white, reusing the paper and ink colors; applies only inside .code-view, so code
+   blocks in conversations are not affected. */
 .code-view .hljs { color: var(--ink); }
 .code-view .hljs-keyword,
 .code-view .hljs-selector-tag,
@@ -452,7 +462,8 @@
 .code-view .hljs-deletion { color: var(--red-text); }
 .code-view .hljs-addition { color: var(--green-text); }
 
-/* 英文界面：ZCOOL 只适合中文，展示字换成仓库自带的 Bricolage Grotesque（只带了 800 一种字重）。 */
+/* English UI: ZCOOL only suits Chinese, so display type switches to the Bricolage Grotesque bundled in the repository (only the 800
+   weight is included). */
 html:lang(en) .font-display-cn {
   font-family: 'Bricolage Grotesque', 'Noto Sans SC', sans-serif;
 }

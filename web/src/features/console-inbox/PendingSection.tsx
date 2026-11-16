@@ -16,9 +16,12 @@ const text = t.consoleInbox
 
 type Item = Schemas['InboxPendingItem'] & { kind: 'question' | 'unread' }
 
-// 待你处理：发给你的 open 问题在前，其他未读消息在后，各自从新到旧；每条链接到消息所在的对话或任务节点。
-// 按概览的范围筛选：项目只看这个项目的，平台只看平台 Agent 的。没有待处理的内容时整块不显示。
-// 改版：排在概览纸张的最上面，不编号；浅粉底、2px 藏青描边、荧光粉实色投影的卡片，条目之间虚线。
+// Needs you: open questions sent to you first, then other unread messages, each group newest first; each item links to the
+// chat or task node where the message lives.
+// Filtered by the overview's scope: a project shows only that project's items, the platform only those of platform Agents.
+// When nothing is pending, the whole block is hidden.
+// Redesign: placed at the very top of the overview sheet, unnumbered; a light pink card with a 2px navy outline and a solid
+// fluorescent pink offset shadow, with dashed lines between items.
 export function PendingSection({ scope = {} }: { scope?: ScopeQuery }) {
   const titleId = useId()
   const pending = useInboxPending()
@@ -76,7 +79,7 @@ function PendingRow({ item }: { item: Item }) {
   return <li>{target ? <Link to={target} className={`${rowClass} hover:bg-tint-pink-2`}>{body(target)}</Link> : <div className={rowClass}>{body(null)}</div>}</li>
 }
 
-// 任务实例发来的：链接到任务里这条消息所属的节点，标出任务名称。
+// From a task instance: link to the node in the task that this message belongs to, and show the task name.
 function TaskRow({ item, task, render }: { item: Item; task: Schemas['InboxTaskRef']; render: (target: string | null, field?: string) => ReactNode }) {
   const detail = useTask(task.taskId)
   const projects = useProjects()

@@ -10,7 +10,7 @@ export function useModelAuth(agent: Schemas['Agent']) {
   return useQuery({
     queryKey: modelAuthKey(agent.id, agent.model.provider, agent.configVersion),
     queryFn: ({ signal }) => call(api.GET('/agents/{agentId}/model-auth', { params: { path: { agentId: agent.id } }, signal })),
-    // 授权地址只存在活动页面内存中；离开后清除查询，不使用持久化缓存。
+    // The authorization URL lives only in the memory of the active page; the query is cleared on leaving, and no persistent cache is used.
     gcTime: 0,
     staleTime: 0,
     retry: false,
@@ -33,7 +33,8 @@ export function cancelModelLogin(agentId: string, operationId: string) {
   }))
 }
 
-// 回答插件提供方登录中途的问题：回答按秘密处理，直接发出，不经 mutation 缓存、不记日志；返回新的认证状态。
+// Answer a question asked partway through a plugin provider's login: the answer is treated as a secret and sent directly, without the
+// mutation cache and without logging; returns the new auth state.
 export function answerModelLogin(agentId: string, operationId: string, body: Schemas['ProjectModelLoginInput']) {
   return call(api.POST('/agents/{agentId}/model-auth/operations/{operationId}/input', {
     params: { path: { agentId, operationId } }, body,

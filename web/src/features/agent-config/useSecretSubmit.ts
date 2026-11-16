@@ -2,7 +2,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { invalidateAgent } from '@/api/queries'
 
-// 提交凭证：请求与状态只保存在组件内，不进入查询缓存；成功后刷新 Agent 的凭证元数据。
+// Submit a credential: the request and its state live only inside the component and never enter the query cache; on success, refresh
+// the Agent's credential metadata.
 export function useSecretSubmit(agentId: string) {
   const client = useQueryClient()
   const [pending, setPending] = useState(false)
@@ -21,7 +22,7 @@ export function useSecretSubmit(agentId: string) {
       setPending(false)
     }
   }
-  // 本地校验拦下提交时，上一次提交的服务端错误可能已对应不上改过的输入，先清掉。
+  // When local validation blocks a submit, the server error from the previous submit may no longer match the edited input, so clear it first.
   const clearError = () => setError(null)
   return { submit, pending, error, clearError }
 }

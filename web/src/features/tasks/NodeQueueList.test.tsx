@@ -68,21 +68,21 @@ it('默认收成一行：排队总数、第一条的发送方与摘要（打断�
   expect(rows().map(li => li.getAttribute('data-kind'))).toEqual(['interrupt', 'queue', 'queue'])
   expect(rowTexts()).toEqual(['立刻停下检查', '补充一：先看日志', '补充二：再看配置'])
   const [first, second, third] = rows()
-  // Another Agent's message: sender chip, cancel, no edit; already an interrupt, so no 打断.
+  // Another Agent's message: sender chip, cancel, no edit; already an interrupt, so no “打断” (Interrupt).
   expect(within(first).getByText('Manager')).toBeVisible(); expect(within(first).getByText('下一条处理')).toBeVisible()
   expect(within(first).queryByRole('button', { name: '打断' })).toBeNull()
   expect(within(first).queryByRole('button', { name: '编辑这条排队消息' })).toBeNull()
   expect(within(first).getByRole('button', { name: '取消这条排队消息' })).toBeEnabled()
   for (const row of [second, third]) { expect(within(row).getByText('你')).toBeVisible(); expect(within(row).getByRole('button', { name: '打断' })).toBeEnabled(); expect(within(row).getByRole('button', { name: '编辑这条排队消息' })).toBeEnabled() }
-  // 托盘在节点输入框正上方。
+  // The tray sits right above the node input.
   expect(queueList().compareDocumentPosition(screen.getByLabelText('消息草稿')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
-  // 排队变化不改变展开状态；收起后回到一行。
+  // Queue changes do not change the expanded state; once collapsed, it goes back to one line.
   act(() => stream().emit('task.node.queue.updated', queueOf(m1, m2), '15'))
   await waitFor(() => expect(rows()).toHaveLength(2)); expect(toggle('收起')).toBeVisible()
   await user.click(toggle('收起'))
   expect(list).not.toBeVisible(); expect(queueList().querySelector('[data-queue-summary]')).toHaveTextContent(/^你补充一：先看日志$/)
-  // 列表从有到无时整块消失。
+  // When the list goes from non-empty to empty, the whole block disappears.
   act(() => stream().emit('task.node.queue.updated', queueOf(), '16'))
   await waitFor(() => expect(screen.queryByRole('region', { name: '排队消息' })).toBeNull())
   expect(document.querySelector('[data-node-queue]')).toBeNull()
@@ -210,7 +210,7 @@ it('排队中的节点消息只在托盘里，开始处理后才进入对话；�
   await waitFor(() => expect(bubble(cancelled.message.id)).not.toBeNull())
   expect(within(bubble(cancelled.message.id) as HTMLElement).getByText('已被人取消')).toBeInTheDocument()
   expect(bubble(queued.message.id)).toBeNull()
-  // 开始处理：离开排队列表，进入对话流。
+  // Processing starts: it leaves the queue list and enters the conversation stream.
   act(() => stream().emit('task.node.queue.updated', queueOf(), '40'))
   await waitFor(() => expect(bubble(queued.message.id)).not.toBeNull())
   expect(screen.queryByRole('region', { name: '排队消息' })).toBeNull()
@@ -219,14 +219,15 @@ it('排队中的节点消息只在托盘里，开始处理后才进入对话；�
 it('排队中的节点轮次（平台提醒与空回复）不在对话里，开始后才出现', async () => {
   const turn = (id: string, role: 'user' | 'assistant', text: string, status: Schemas['TaskMessage']['status']): Schemas['TaskMessage'] => ({ id, nodeRunId: nodeId, runId: runQ, role, origin: 'inbox_reminder', text, status, createdAt: taskTime })
   const work: Schemas['TaskMessage'] = { id: '55000000-0000-7000-8000-000000000020', nodeRunId: nodeId, runId: runI, role: 'assistant', origin: 'task_node', text: '正在调整账本', status: 'running', createdAt: taskTime }
-  // 排队中的平台提醒轮次，正文是服务端的占位文字（开始执行时才换成提醒正文）。
+  // A queued platform reminder turn; its body is the server's placeholder
+  // text (replaced with the reminder text only when it starts running).
   const prompt = turn('55000000-0000-7000-8000-000000000021', 'user', 'Platform reminder', 'queued'), reply = turn('55000000-0000-7000-8000-000000000022', 'assistant', '', 'queued')
   setup({ queue: () => queueOf(m1), messages: [work, prompt, reply] })
   await screen.findByText('正在调整账本')
   const row = (id: string) => document.querySelector(`[data-conversation-scroll] [data-message-id="task:${id}"]`)
   expect(screen.queryByText('Platform reminder')).toBeNull()
   expect(row(reply.id)).toBeNull()
-  // 轮次开始：按 ID 更新为进行中，进入对话流。
+  // The turn starts: it is updated to running by ID and enters the conversation stream.
   act(() => stream().emit('message.created', { ...prompt, status: 'running' }, '41'))
   expect(await screen.findByText('Platform reminder')).toBeInTheDocument()
 })

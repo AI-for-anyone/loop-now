@@ -28,7 +28,8 @@ import { NewSkillSheet, SkillDetailSheet, SkillsPage } from '@/features/skills-l
 import { StatsPage } from '@/features/stats/StatsPage'
 import { AppLayout } from './AppLayout'
 
-// 项目与平台共用的 Agent 页：所选 Agent 的对话、配置、文件夹与收件箱（Agent 列表在左侧栏里）。
+// The Agent page shared by projects and the platform: the selected Agent's conversation, config, folder and inbox (the Agent list is in
+// the sidebar).
 const agentsRoute = (): RouteObject => ({
   path: 'agents',
   element: <AgentsPage />,
@@ -53,9 +54,10 @@ export const routes: RouteObject[] = [
     path: '/',
     element: <AppLayout />,
     children: [
-      // 根地址是概览页：不带参数是全局，?project=<项目名> 是这个项目。
+      // The root URL is the overview page: global without parameters, that project with ?project=<project name>.
       { index: true, element: <OverviewPage /> },
-      // 当前项目体现在地址中：项目在 /p/<项目名> 下，平台持有的 Agent 在 /platform 下（左侧栏归在全局之下）。
+      // The current project is part of the URL: projects live under /p/<project name>, and Agents owned by the platform under /platform (filed
+      // under global in the sidebar).
       {
         path: 'p/:projectName',
         element: <ProjectScopeRoute />,
@@ -66,27 +68,29 @@ export const routes: RouteObject[] = [
         element: <PlatformScopeRoute />,
         children: [{ index: true, element: <ScopeIndexRedirect /> }, agentsRoute()],
       },
-      // 不带项目的旧地址：改写到最近使用的项目或平台，或 Agent 实际所在的地址。
+      // Old URLs without a project: rewrite to the last-used project or the platform, or to where the Agent actually lives.
       { path: 'agents', element: <LegacyAgentsRedirect /> },
       { path: 'tasks', element: <TasksEntry /> },
       { path: 'agents/:agentId/*', element: <LegacyAgentRedirect /> },
       {
         path: 'skills',
         element: <SkillsPage />,
-        // 详情与在线新建是叠在模板网格上的抽屉，由地址控制开合。
+        // The details and in-place creation are drawers stacked on the template grid, opened and closed by the URL.
         children: [
           { path: 'new', element: <NewSkillSheet /> },
           { path: ':skillId', element: <SkillDetailSheet /> },
         ],
       },
-      // 收件箱页已去掉：Agent 发给你的消息在它的对话里，外部身份的在它的页面上。旧地址按线索转过去。
+      // The inbox page is gone: messages an Agent sends you are in its conversation, an external identity's are on its page. Old URLs are
+      // forwarded by thread.
       { path: 'inbox/:threadId?', element: <InboxRedirect /> },
-      // 外部身份属于平台，不在任何项目之下。
+      // External identities belong to the platform, not to any project.
       { path: 'identities/:identityId?', element: <IdentitiesPage /> },
       { path: 'plugins', element: <PluginsPage /> },
-      // 插件详情：概览之外的页签接在后面（/plugins/<id>/config 等）。
+      // Plugin details: tabs other than the overview are appended to the path (/plugins/<id>/config and so on).
       { path: 'plugins/:pluginId/:tab?', element: <PluginDetailPage /> },
-      // 统计页与概览一样可按全部、项目或平台筛选（写在地址里），左侧栏沿用之前的范围。
+      // Like the overview, the stats page can be filtered to everything, a project or the platform (kept in the URL); the sidebar keeps the
+      // previous scope.
       { path: 'stats', element: <StatsPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: '*', element: <Navigate to="/" replace /> },

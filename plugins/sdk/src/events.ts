@@ -1,9 +1,10 @@
-// 平台事件目录（plugins/SPEC.md §4；字段合同以 api/openapi.yaml 的 PluginEvent 为准）。
-// 事件的种类决定处理函数怎样被调用、返回什么：拦截可阻止，修改按字段合并，认领第一个处理者赢，观察只通知。
+// Platform event catalog (plugins/SPEC.md §4; the field contract is PluginEvent in api/openapi.yaml).
+// An event's kind decides how its handlers are called and what they return: intercept can block, modify merges by field,
+// claim lets the first handler win, observe only notifies.
 
 export type HookKind = 'intercept' | 'modify' | 'claim' | 'observe'
 
-/** 每个事件的种类。与 internal/pluginmanifest 的 Events 一致。 */
+/** The kind of each event. Matches Events in internal/pluginmanifest. */
 export const EVENTS = {
   'run.before_start': 'intercept',
   'task.before_start': 'intercept',
@@ -51,7 +52,7 @@ export type EventType = keyof typeof EVENTS
 export type EventKind<E extends EventType> = (typeof EVENTS)[E]
 export type EventsOfKind<K extends HookKind> = { [E in EventType]: EventKind<E> extends K ? E : never }[EventType]
 
-/** 清单 permissions 的可选值（plugins/SPEC.md §5）。 */
+/** Allowed values of the manifest's permissions (plugins/SPEC.md §5). */
 export const PERMISSIONS = [
   'agents.read',
   'agents.write',
@@ -70,7 +71,10 @@ export const PERMISSIONS = [
 
 export type Permission = (typeof PERMISSIONS)[number]
 
-/** 参与方：agent 带 id 与地址，external 带 id 与 @名称，plugin 带 plugin:<id> 地址，console 与 platform 只有 kind 与控制台地址。 */
+/**
+ * A party: agent carries an id and an address, external an id and an @name, plugin a plugin:<id> address;
+ * console and platform have only kind and the console address.
+ */
 export interface Party {
   kind: 'agent' | 'console' | 'external' | 'platform' | 'plugin'
   id: string | null
@@ -89,7 +93,7 @@ export interface RunTokens {
 
 interface TaskFields {
   title: string
-  /** 阻塞、取消的原因；没有时为 null。 */
+  /** Reason for blocking or cancelling; null when there is none. */
   reason: string | null
 }
 
@@ -105,7 +109,7 @@ interface InboxFields {
   from: Party
   to: Party
   isQuestion: boolean
-  /** 正文前 80 个字符；正文用 inbox.read 范围的接口另取。 */
+  /** First 80 characters of the body; fetch the body separately via the API under the inbox.read scope. */
   excerpt: string
 }
 
@@ -116,18 +120,21 @@ interface QuestionFields {
   to: Party
 }
 
-/** 事件里的提问：代管的外部身份收到的（identity.inbound，plugins/SPEC.md §12），或 Agent 在渠道线索里提的（channel.outbound）。 */
+/**
+ * A question in an event: one a managed external identity received (identity.inbound, plugins/SPEC.md §12),
+ * or one an Agent asked in a channel thread (channel.outbound).
+ */
 export interface EventQuestion {
-  /** 提问消息的 id，回答时用它（api.identities.answer / api.channels.answer 的 questionId）。 */
+  /** Id of the question message, used to answer it (questionId of api.identities.answer / api.channels.answer). */
   id: string
   options: { id: string; label: string }[]
-  /** 是否允许不选选项、直接用文字回答。 */
+  /** Whether answering with text only, without choosing an option, is allowed. */
   allowText: boolean
-  /** RFC 3339；过期后不能再回答。 */
+  /** RFC 3339; it can no longer be answered after this. */
   deadline: string | null
 }
 
-/** 旧名，同 EventQuestion。 */
+/** Old name, same as EventQuestion. */
 export type IdentityQuestion = EventQuestion
 
 interface AgentFields {
@@ -135,7 +142,7 @@ interface AgentFields {
   address: string
 }
 
-/** 每个事件自己的字段（固定字段之外）。 */
+/** Each event's own fields (beyond the fixed fields). */
 export interface EventFields {
   'run.queued': { origin: RunOrigin }
   'run.started': { origin: RunOrigin }
@@ -164,7 +171,7 @@ export interface EventFields {
   'agent.created': AgentFields
   'agent.updated': AgentFields
   'agent.deleted': AgentFields
-  /** reason：启动原因或停止原因，意外退出为 unexpected_exit。 */
+  /** reason: why it started or stopped; unexpected_exit for an unexpected exit. */
   'pi.started': { reason: string }
   'pi.exited': { reason: string }
   'model.retry': { attempt: number; delayMs: number }
@@ -174,8 +181,9 @@ export interface EventFields {
   'plugin.disabled': { pluginId: string }
   'plugin.config_changed': { pluginId: string }
   /**
-   * Agent 在插件发来的线索里回复：只发给线索所属的插件，按 channelId 交给该渠道的 outbound。正文用 api.channels.read 另取。
-   * Agent 提问时 isQuestion 为 true、question 给出选项，用 api.channels.answer 作答。
+   * The Agent replied in a thread a plugin started: sent only to the plugin that owns the thread, and passed to that channel's outbound
+   * by channelId. Fetch the body separately with api.channels.read.
+   * When the Agent asks a question, isQuestion is true and question gives the options; answer with api.channels.answer.
    */
   'channel.outbound': {
     messageId: string
@@ -184,12 +192,13 @@ export interface EventFields {
     from: Party
     isQuestion: boolean
     question: EventQuestion | null
-    /** 正文前 80 个字符。 */
+    /** First 80 characters of the body. */
     excerpt: string
   }
   /**
-   * 插件代管的外部身份收到了消息或提问（plugins/SPEC.md §12）：只发给代管插件，按 channelId 交给该渠道的 identityInbound。
-   * 正文用 api.identities.read 另取；回复与回答用 api.identities.reply / answer。
+   * An external identity managed by a plugin received a message or question (plugins/SPEC.md §12): sent only to the managing plugin,
+   * and passed to that channel's identityInbound by channelId.
+   * Fetch the body separately with api.identities.read; reply and answer with api.identities.reply / answer.
    */
   'identity.inbound': {
     identityId: string
@@ -200,7 +209,7 @@ export interface EventFields {
     nodeRunId: string | null
     isQuestion: boolean
     question: EventQuestion | null
-    /** 正文前 80 个字符。 */
+    /** First 80 characters of the body. */
     excerpt: string
   }
   'run.before_start': { origin: RunOrigin; messageId: string | null }
@@ -214,14 +223,14 @@ export interface EventFields {
   'console.command': { command: string; text: string; from: Party }
 }
 
-/** 每个事件都有的固定字段；同名时固定字段优先。 */
+/** Fixed fields every event has; on a name clash the fixed field wins. */
 export interface EventBase<E extends EventType = EventType> {
-  /** ULID；观察类事件至少送达一次，按它去重。 */
+  /** ULID; observe events are delivered at least once, so deduplicate by it. */
   id: string
   type: E
-  /** RFC 3339。 */
+  /** RFC 3339. */
   at: string
-  /** 项目内的事件为该项目；平台 Agent 与全局事件为 null。 */
+  /** The project for events within a project; null for platform Agents and global events. */
   projectId: string | null
   agentId: string | null
   taskId: string | null
@@ -230,13 +239,13 @@ export interface EventBase<E extends EventType = EventType> {
 
 export type PluginEvent<E extends EventType = EventType> = E extends EventType ? EventBase<E> & EventFields[E] : never
 
-/** 拦截：返回 `{ block: true, reason }` 阻止，其余放行。 */
+/** Intercept: return `{ block: true, reason }` to block; anything else lets it through. */
 export type InterceptResult = { block: true; reason: string } | { block?: false } | void | undefined
 
-/** 修改：返回 `{ patch }`，按字段合并到事件，下一个处理者看到合并后的事件。 */
+/** Modify: return `{ patch }`, merged into the event by field; the next handler sees the merged event. */
 export type ModifyResult<E extends EventType> = { patch: Partial<EventFields[E]> } | void | undefined
 
-/** 认领：返回 `{ handled: true, ... }` 认领，整个对象交给调用点（console.command 可带 reply）。 */
+/** Claim: return `{ handled: true, ... }` to claim; the whole object goes to the call site (console.command may include reply). */
 export type ClaimResult = { handled: true; reply?: string | null; [key: string]: unknown } | { handled?: false } | void | undefined
 
 export type EventResult<E extends EventType> = EventKind<E> extends 'intercept'

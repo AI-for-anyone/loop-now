@@ -9,7 +9,7 @@ import { edgeUses, stepNumber, workflowPosition, workflowSteps, type StepState, 
 
 type Props = {
   detail: Schemas['TaskDetail']
-  // 选中的一步（地址里的 step）和正在看的那一次访问（record）。
+  // The selected step (step in the URL) and the visit being viewed (record).
   selected: string | null
   record: string | undefined
   onSelect: (stepId: string) => void
@@ -19,7 +19,8 @@ type Props = {
 
 const stateText: Record<StepState, string> = { done: 'text-green-text', current: 'text-ink', visited: 'text-ink-700', todo: 'text-ink-500' }
 
-// 每一步的状态说明：走过的写最近一次访问的状态（阻塞红字、已完成绿字），没到的写“还没到”。
+// Each step's status label: a visited step shows the status of its latest visit (blocked in red, completed in green); one not reached
+// yet says “还没到” (not yet).
 function StepStatus({ view }: { view: StepView }) {
   if (!view.latest) return <span className="text-[11.5px] font-bold text-ink-500">· {t.tasks.ruler.todo}</span>
   const status = view.latest.status
@@ -30,7 +31,8 @@ function StepStatus({ view }: { view: StepView }) {
   )
 }
 
-// 尺子上的点：已完成是藏青对勾点，当前步是黄色大圆点加荧光粉投影（写着步号），走过没完成是藏青描边的空心点，没到的是虚线圈。
+// Dots on the ruler: done is a navy dot with a check mark, the current step a big yellow dot with a fluorescent-pink offset shadow (showing
+// the step number), visited but not completed a hollow dot with a navy outline, and not reached a dashed circle.
 function StepDot({ view }: { view: StepView }) {
   if (view.state === 'current') {
     return (
@@ -58,10 +60,14 @@ interface Geometry {
   dots: { x: number; y: number }[]
 }
 
-// 流程图（改版第 5 步）：右侧票根里竖排的一把尺子，取代原来可拖动、可缩放的画布。每一步是尺子上的一个点，
-// 步与步之间写连线的条件；返工等不走向下一步的连线写在出发的那一步下面，返工另画一条粉色虚线弧。
-// 点一步就选中它；选中的那一步下面列出各次访问，点哪次跳到哪次。正在看的那一步罩一笔黄色记号笔、左侧粉色小箭头。
-// 步骤多时尺子自己上下滚动，当前步保持在可见范围内。底部的大数字是走到第几步。窄屏时票根隐藏，由 WorkflowChips 代替。
+// Workflow diagram (redesign step 5): a vertical ruler in the stub on the right, replacing the old draggable, zoomable canvas. Each step
+// is a dot on the ruler,
+// with the edge conditions written between steps; edges that don't lead to the next step, such as rework, are written under the step
+// they start from, and rework also gets a pink dashed arc.
+// Clicking a step selects it; the selected step lists its visits below it, and clicking one jumps to that visit. The step being viewed
+// gets a stroke of yellow highlighter and a small pink arrow on the left.
+// With many steps the ruler scrolls up and down on its own, keeping the current step in view. The big number at the bottom is which step
+// has been reached. On narrow screens the stub is hidden and WorkflowChips takes its place.
 export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, agentName }: Props) {
   const views = workflowSteps(detail)
   const position = workflowPosition(detail)
@@ -70,7 +76,8 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
   const [geometry, setGeometry] = useState<Geometry>({ height: 0, dots: [] })
   const currentStep = detail.task.currentStepId
 
-  // 竖线与弧线要连到各步的点上：布局后量出每个点的中心，窗口或内容变化时重新量。
+  // The vertical line and the arcs must connect to each step's dot: measure each dot's center after layout, and measure again when the
+  // window or content changes.
   useLayoutEffect(() => {
     const el = content.current
     if (!el) return
@@ -88,7 +95,8 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
     return () => observer?.disconnect()
   })
 
-  // 当前步换了（或刚打开）时，把它滚进尺子的可见范围；用户自己滚动之后不再干预。
+  // When the current step changes (or the page just opened), scroll it into the ruler's visible area; once the user scrolls on their own,
+  // don't interfere.
   useLayoutEffect(() => {
     const box = scroller.current
     const target = box?.querySelector<HTMLElement>('[aria-current="step"]')
@@ -115,7 +123,7 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--ink-500)" />
                 </marker>
               </defs>
-              {/* 走过的部分是藏青实线，还没到的部分是浅墨色虚线。 */}
+              {/* The part already traveled is a solid navy line; the part not reached yet is a light-ink dashed line. */}
               <line x1={lineX} x2={lineX} y1={dot(0).y} y2={dot(reached).y} stroke="var(--ink)" strokeWidth={3} />
               {reached < views.length - 1 && <line x1={lineX} x2={lineX} y1={dot(reached).y} y2={dot(views.length - 1).y} stroke="var(--ink-500)" strokeWidth={3} strokeDasharray="7 5" />}
               {views.flatMap((view) =>
@@ -148,7 +156,7 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
             return (
               <Fragment key={view.step.id}>
                 <div data-ruler-step={view.step.id} className="relative">
-                  {/* 记号笔罩住整一步（英文换成三行时也罩得住）。 */}
+                  {/* The highlighter mark covers the whole step (even when English text wraps to three lines). */}
                   {isSelected && <RulerMark className="top-0.5 right-1 bottom-0.5 left-[62px]" />}
                   <button
                     type="button"
@@ -164,7 +172,8 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
                     <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] font-bold text-ink-700">
                       <AgentAvatar size="sm" id={view.step.agentId} />
                       <span className="min-w-0 truncate">{name}</span>
-                      {/* 状态和访问次数是一个整体：放不下时一起换到下一行，“×2”不会单独落下。 */}
+                      {/* Status and visit count are one unit: when they don't fit, they wrap to the next line together, so "×2" is never
+                          left dangling on its own. */}
                       <span data-step-state className="inline-flex items-baseline gap-x-1.5 whitespace-nowrap">
                         <StepStatus view={view} />
                         {view.records.length > 1 && <span className="font-mono text-[11px] text-ink-500">×{view.records.length}</span>}
@@ -186,7 +195,7 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
                             className={cn('flex min-h-[26px] cursor-pointer items-center gap-2 text-left text-[12.5px] text-ink outline-none focus-visible:shadow-focus', here ? 'font-black' : 'font-bold')}
                           >
                             <span aria-hidden="true" className="mt-[11px] h-0.5 w-2.5 shrink-0 self-start bg-ink" />
-                            {/* “在看”跟着文字一起换行（英文较长时不会被挤到一边）。 */}
+                            {/* “在看” (viewing) wraps along with the text (so longer English text doesn't push it aside). */}
                             <span className="min-w-0 py-0.5 leading-[1.6]">
                               <span className={cn(here && 'underline decoration-2 underline-offset-4')}>
                                 {t.tasks.ruler.visit(item.visit, item.attempt)} · {t.tasks.nodeStatuses[item.status]}
@@ -232,8 +241,9 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
   )
 }
 
-// 窄屏（票根隐藏时）：索引标签上方一排横向可滚动的步骤小标签，状态颜色与尺子一致，点一下同样选中这一步；
-// 正在看的那一步前面一个粉色小箭头。
+// Narrow screens (when the stub is hidden): a horizontally scrollable row of small step tags above the index tabs, with status colors
+// matching the ruler; a click likewise selects the step;
+// the step being viewed has a small pink arrow in front of it.
 export function WorkflowChips({ detail, selected, onSelect }: Pick<Props, 'detail' | 'selected' | 'onSelect'>) {
   const views = workflowSteps(detail)
   const row = useRef<HTMLElement>(null)

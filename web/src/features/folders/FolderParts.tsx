@@ -11,7 +11,8 @@ import { extensionOf, isEntryFile, nameOf, type FolderEntry } from './folder-sou
 
 const CODE = new Set(['go', 'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'py', 'css', 'html', 'sql', 'mod', 'sum', 'xml'])
 
-// 文件类型图标：文件夹用孔版蓝，AGENTS.md 用粉色，其余文件用次要文字色；软链接与不能操作的条目各有标记。
+// File type icons: folders in riso blue, AGENTS.md in pink, other files in the secondary text color; symlinks and entries that can't be
+// acted on each have their own marker.
 export function EntryIcon({ path, type, open = false, className }: { path: string; type: FolderEntry['type']; open?: boolean; className?: string }) {
   const base = cn('size-4 shrink-0', className)
   if (type === 'symlink') return <FileSymlinkIcon aria-hidden="true" className={cn(base, 'text-ink-500')} strokeWidth={1.9} />
@@ -23,7 +24,8 @@ export function EntryIcon({ path, type, open = false, className }: { path: strin
   return <Icon aria-hidden="true" className={cn(base, 'text-ink-500')} strokeWidth={1.9} />
 }
 
-// 文件列表与路径栏里的图标（改版）：文件夹是带藏青描边与投影的黄色文件夹块，文件是一张白色的纸；软链接与其他沿用线性图标。
+// Icons in the file list and the path bar (redesign): a folder is a yellow folder block with a navy outline and an offset shadow, a file is
+// a white sheet of paper; symlinks and other entries keep the line icons.
 export function FolderBlock({ className }: { className?: string }) {
   return <span aria-hidden="true" data-folder-icon className={cn('block h-[22px] w-[26px] shrink-0 rounded-[3px_6px_6px_6px] border-2 border-ink bg-riso-yellow shadow-[2px_2px_0_var(--ink)]', className)} />
 }
@@ -34,7 +36,7 @@ export function ListIcon({ path, type }: { path: string; type: FolderEntry['type
   return <EntryIcon path={path} type={type} className="mx-[5px] size-4" />
 }
 
-// AGENTS.md 旁的“入口”标记。
+// The “入口” (Entry) badge next to AGENTS.md.
 export function EntryBadge({ className }: { className?: string }) {
   return (
     <span title={t.folders.entry.hint} className={cn('shrink-0 rounded-stamp bg-tint-pink-2 px-1.5 text-[11px] leading-[18px] font-black text-pink-text', className)}>
@@ -44,7 +46,7 @@ export function EntryBadge({ className }: { className?: string }) {
 }
 
 export interface EntryActions {
-  // 打开一项；null 为根目录。
+  // Open an item; null is the root.
   open: (entry: FolderEntry | null) => void
   create: (dir: string, type: 'file' | 'dir') => void
   upload: (dir: string) => void
@@ -65,7 +67,8 @@ function Item({ icon, children, onSelect, danger = false }: { icon: ReactNode; c
   )
 }
 
-// 文件或文件夹的“更多操作”菜单：树里每一行与列表每一行都有，文件页标题栏也用它。
+// The “更多操作” (More actions) menu of a file or folder: every row in the tree and in the list has one, and the file page's title bar
+// uses it too.
 export function EntryMenu({ entry, actions, className, onOpenChange }: { entry: FolderEntry; actions: EntryActions; className?: string; onOpenChange?: (open: boolean) => void }) {
   const icon = 'size-3.5', path = entry.path
   return (
@@ -102,10 +105,11 @@ export function EntryMenu({ entry, actions, className, onOpenChange }: { entry: 
   )
 }
 
-// 纸张顶部工具条上的按钮（改版）：浅纸底、2px 藏青描边的胶囊，高 34。
+// Buttons on the toolbar at the top of the sheet (redesign): pills with a light paper background and a 2px navy outline, 34 high.
 const pillClass = 'h-[34px] rounded-full border-2 border-ink bg-paper-raised text-[13px] font-black hover:bg-white disabled:hover:bg-paper-raised'
 
-// 工具栏与标题栏的小按钮：高 28，图标加可选文字；只有图标时文字作为无障碍名称与悬停提示。
+// Small buttons for the toolbar and title bar: 28 high, an icon plus optional text; with only the icon, the text serves as the accessible
+// name and the hover tooltip.
 export function ToolButton({ icon, label, showLabel = true, onClick, disabled, active, pill = false, className, ...rest }: { icon: ReactNode; label: string; showLabel?: boolean; onClick?: () => void; disabled?: boolean; active?: boolean; pill?: boolean; className?: string } & Omit<ComponentProps<'button'>, 'onClick'>) {
   return (
     <button
@@ -130,7 +134,7 @@ export function ToolButton({ icon, label, showLabel = true, onClick, disabled, a
   )
 }
 
-// 工具栏的“上传”菜单：上传文件或整个文件夹。
+// The toolbar's “上传” (Upload) menu: upload files or a whole folder.
 export function UploadMenu({ onFiles, onFolder, pill = false, className }: { onFiles: () => void; onFolder: () => void; pill?: boolean; className?: string }) {
   return (
     <DropdownMenu.Root modal={false}>

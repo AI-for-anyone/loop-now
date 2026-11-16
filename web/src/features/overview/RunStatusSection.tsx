@@ -15,14 +15,15 @@ type AgentOverview = Schemas['AgentOverview']
 
 const elapsedSince = (time: string, now: number) => t.overview.elapsed(now - Date.parse(time))
 
-// 汇总卡最多列出的 Agent 名称个数，更多的写“等 N 个”。
+// The most Agent names a summary card lists; beyond that it says “等 N 个” (and N more).
 const NAMES_SHOWN = 3
 
 function names(agents: AgentOverview[]): string {
   return agents.length === 0 ? '' : t.overview.run.names(agents.slice(0, NAMES_SHOWN).map((agent) => agent.name), agents.length)
 }
 
-// 四张汇总卡的底色（改版：带色底、2px 藏青描边、4px 藏青实色投影的卡片，不再倾斜）。
+// Background colors of the four summary cards (redesign: cards with a tinted background, a 2px navy outline and a 4px solid navy
+// offset shadow, no longer tilted).
 const TILES = [
   { key: 'busy', bg: 'bg-tint-pink-2' },
   { key: 'idle', bg: 'bg-tint-green' },
@@ -59,7 +60,8 @@ function SummaryTiles({ agents }: { agents: AgentOverview[] }) {
   )
 }
 
-// 状态胶囊（改版通用规则第 6 条）：略微倾斜的底子，藏青描边；回复中荧光粉、空闲浅绿带绿点；会话丢失是红色描边的印章。
+// Status pill (redesign general rule 6): a slightly tilted background with a navy outline; fluorescent pink for replying, light
+// green with a green dot for idle; session lost is a stamp with a red outline.
 const STATE_PILL: Record<AgentRowState, { label: string; back: string; text: string; dot?: string }> = {
   busy: { label: t.overview.run.busy, back: 'bg-riso-pink shadow-[inset_0_0_0_2px_var(--ink)]', text: 'text-ink', dot: 'bg-ink' },
   idle: { label: t.overview.run.idle, back: 'bg-tint-green shadow-[inset_0_0_0_2px_var(--ink)]', text: 'text-green-text', dot: 'bg-green' },
@@ -79,7 +81,8 @@ function StatePill({ state }: { state: AgentRowState }) {
   )
 }
 
-// 当前回复：阶段、本轮已用时间（从派发起）与配置版本；没有进行中的回复时显示上一条的结果与结束时间。
+// Current reply: the phase, the time spent on this turn so far (counted from dispatch) and the config version; when no reply is
+// in progress, show the previous reply's result and end time.
 function RunCell({ agent, now }: { agent: AgentOverview; now: number }) {
   const current = agent.status.currentRun
   let main: string
@@ -119,14 +122,15 @@ function RunCell({ agent, now }: { agent: AgentOverview; now: number }) {
 function QueueCell({ queued }: { queued: Schemas['QueueCounts'] }) {
   const total = queued.interrupt + queued.normal
   return (
-    // relative：读屏用的说明是绝对定位的，没有定位祖先时会逃出表格的横向滚动区，把整页撑宽。
+    // relative: the screen-reader text is absolutely positioned; without a positioned ancestor it escapes the table's horizontal
+    // scroll area and stretches the whole page wider.
     <span className="relative inline-flex items-baseline gap-1.5">
-      {/* 排队数是展示字；读屏读到的是旁边的完整说明。 */}
+      {/* The queue count is display type; screen readers read the full description next to it. */}
       <span
         aria-hidden="true"
         className={cn(
           'font-display-latin text-[20px] font-extrabold',
-          // 错版投影只用于 ≥ 28px 的展示字，这里 26px 不加。
+          // The misregistration shadow is only for display type ≥ 28px; at 20px here it is left off.
           total > 0 ? 'text-riso-pink' : 'text-ink-500',
         )}
       >
@@ -149,7 +153,8 @@ const PROCESS_DOT: Record<Schemas['ProcessState'], string> = {
   stopped: 'bg-ink-500',
 }
 
-// Pi 进程：状态与进程号；运行中显示已运行时长，未运行时显示上次退出的时间与原因。
+// Pi process: state and PID; while running, show how long it has been up; when not running, show the time and reason of the
+// last exit.
 function ProcessCell({ agent, now }: { agent: AgentOverview; now: number }) {
   const { processState, processPid, processStartedAt } = agent.status
   const exit = agent.lastProcessExit
@@ -169,11 +174,12 @@ function ProcessCell({ agent, now }: { agent: AgentOverview; now: number }) {
   )
 }
 
-// 表头下一道 2px 实线，行与行之间 1.5px 虚线（改版通用规则第 9 条）；表格直接排在纸上，不套卡片。
+// A 2px solid line under the table header and 1.5px dashed lines between rows (redesign general rule 9); the table sits
+// directly on the sheet, not wrapped in a card.
 const headClass = 'py-2 pl-1 text-[12px] font-black text-ink-500'
 
 function AgentTable({ agents }: { agents: AgentOverview[] }) {
-  // 运行时长与本轮已用时间每秒走动，由页面自己计算，不向服务端请求。
+  // Uptime and the time spent on the current turn tick every second, computed by the page itself without asking the server.
   const now = useNow(1000)
   return (
     <Table aria-label={t.overview.run.tableLabel} className="min-w-[860px]" card={false}>
@@ -253,7 +259,8 @@ function Skeleton() {
   )
 }
 
-// 运行状态：四个汇总数与 Agent 表，随概览事件流实时更新。纸张上的第 number 个编号分区。
+// Run status: the four summary counts and the Agent table, updated live from the overview event stream. It is numbered
+// section `number` on the sheet.
 export function RunStatusSection({ live, number = 1 }: { live: OverviewState; number?: number }) {
   return (
     <NumberedSection

@@ -3,7 +3,8 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 import { Slot } from "radix-ui"
 
-// 孔版印刷按钮：全部胶囊形，实色偏移投影；按下时投影收回、向右下移 2px（80ms），这是控制台仅有的三个动效之一。
+// Risograph-print buttons: all pill-shaped, with a solid offset shadow; when pressed, the shadow retracts and the button moves 2px down and
+// to the right (80ms), one of only three animations in the console.
 const buttonVariants = cva(
   "group/button inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border-0 font-black whitespace-nowrap outline-none select-none transition-[translate,box-shadow] duration-[80ms] focus-visible:shadow-focus active:not-aria-[haspopup]:translate-x-[2px] active:not-aria-[haspopup]:translate-y-[2px] active:not-aria-[haspopup]:shadow-none disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none motion-reduce:transition-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
@@ -18,7 +19,7 @@ const buttonVariants = cva(
         "destructive-link":
           "bg-transparent text-red-text underline decoration-red decoration-2 underline-offset-4 hover:bg-tint-red/40",
         ink: "bg-ink text-riso-yellow shadow-[2px_2px_0_var(--riso-pink)]",
-        // 页头里的危险操作（取消任务、卸载插件）：浅纸底、红色描边红字的胶囊。
+        // Dangerous actions in a page header (cancel task, uninstall plugin): a pill with a light paper background, red border and red text.
         "danger-outline": "border-2 border-red-text bg-paper-raised text-red-text hover:bg-tint-red",
       },
       size: {
@@ -32,7 +33,7 @@ const buttonVariants = cva(
       },
     },
     compoundVariants: [
-      // 列表内的移除、删除、编辑等操作高 36。
+      // Remove, delete, edit and similar actions inside lists are 36 high.
       { variant: "ghost", size: "sm", className: "h-9 px-3" },
       { variant: "destructive-link", size: "sm", className: "h-9 px-3" },
     ],

@@ -1,4 +1,5 @@
-// 投递库测试：用内存里的假 PluginAPI 与本机 HTTP 服务，覆盖重试、退避、放弃、去重、重启后继续、保留条数与记录形状。
+// Delivery library tests: with an in-memory fake PluginAPI and a local HTTP server, covers retries, backoff, abandoning, deduplication,
+// resuming after a restart, the keep count and the record shape.
 
 import assert from 'node:assert/strict'
 import { createServer, type IncomingMessage, type Server } from 'node:http'
@@ -74,7 +75,7 @@ afterEach(() => {
   servers = []
 })
 
-/** 本机服务：responder 决定每个请求的状态码（返回 null 表示一直不回应）。 */
+/** Local server: responder decides each request's status code (returning null means never responding). */
 async function serve(responder: (n: number, r: Received) => number | null): Promise<{ url: string; received: Received[] }> {
   const received: Received[] = []
   const server = createServer(async (req, res) => {

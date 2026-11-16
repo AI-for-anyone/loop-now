@@ -1,5 +1,6 @@
-// 用 test/fakeserver（Go 写的最小服务端：监听、写就绪文件、回答 /healthz）真的拉起、停掉、清理孤儿，在当前系统上跑：
-// macOS／Linux 走 SIGTERM，Windows 走 taskkill。没有 go 时跳过，不算通过。
+// Uses test/fakeserver (a minimal server written in Go: listens, writes the ready file, answers /healthz) to really launch, stop and clean
+// up orphans, on the current OS: macOS/Linux go through SIGTERM, Windows through taskkill. Skipped when go is missing, which does not count
+// as passing.
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -22,7 +23,7 @@ function buildFake(): boolean {
     execFileSync('go', ['build', '-o', bin, './test/fakeserver'], { cwd: join(__dirname, '..'), stdio: 'pipe', env: { ...process.env, CGO_ENABLED: '0' } })
     return true
   } catch (err) {
-    console.log(`跳过服务端进程测试：编不出假服务端（${(err as Error).message.split('\n')[0]}）`)
+    console.log(`Skipping the server process tests: could not build the fake server (${(err as Error).message.split('\n')[0]})`)
     return false
   }
 }
@@ -87,8 +88,8 @@ describe('服务端进程', () => {
     assert.equal(server.alive, false)
     assert.equal(await waitGone(stamp.pid, 5_000), true)
     assert.deepEqual(states, ['starting', 'running', 'stopping', 'stopped'])
-    assert.ok(!notes.some((n) => n.includes('强制结束')), `应是自己退出（macOS SIGTERM，Windows 关 stdin）：${notes.join('\n')}`)
-    // Windows：服务端是读到 stdin EOF 后自己停的（假服务端会写一句到 stderr）。
+    assert.ok(!notes.some((n) => n.includes('force-killing')), `应是自己退出（macOS SIGTERM，Windows 关 stdin）：${notes.join('\n')}`)
+    // Windows: the server stopped by itself after reading EOF on stdin (the fake server writes a line to stderr).
     if (process.platform === 'win32') assert.match(log.tail(5), /stdin closed, shutting down/)
   })
 
@@ -103,10 +104,10 @@ describe('服务端进程', () => {
     assert.notEqual(new URL(server.externalUrl!).port, new URL(url).port)
     const written = JSON.parse(readFileSync(readyFile, 'utf8')) as { externalUrl?: string }
     assert.equal(written.externalUrl, server.externalUrl)
-    // 假服务端照真服务端的样子在目录里放证书。
+    // The fake server puts a certificate in the directory, as the real server does.
     assert.ok(existsSync(join(tlsDir, 'cert.pem')), '证书目录应交给了服务端')
-    assert.ok(notes.some((n) => n.includes('对外 TLS 端口 由系统选择')), notes.join('\n'))
-    assert.ok(notes.some((n) => n.includes(`对外 TLS 端口 ${server.externalUrl}`)), notes.join('\n'))
+    assert.ok(notes.some((n) => n.includes('external TLS port chosen by the system')), notes.join('\n'))
+    assert.ok(notes.some((n) => n.includes(`external TLS port ${server.externalUrl}`)), notes.join('\n'))
     await server.stop()
     assert.equal(server.externalUrl, undefined)
   })
@@ -142,7 +143,8 @@ describe('服务端进程', () => {
   test('启动时清理上次留下的孤儿：就绪文件里的 pid 正是这个可执行文件时停掉它', async (t) => {
     if (!available) return t.skip('没有 go')
     const { server, notes, readyFile } = make('b')
-    // 模拟壳上次异常退出：直接拉一个服务端，让它把就绪文件写在壳要读的位置。
+    // Simulates the shell having exited abnormally last time: launch a server directly and have it write the ready file where the shell
+    // will read it.
     const orphan = spawn(bin, [], { env: { ...process.env, LOOP_NOW_LISTEN_ADDR: '127.0.0.1:0', LOOP_NOW_READY_FILE: readyFile }, stdio: 'ignore', windowsHide: true })
     const orphanExit = new Promise<void>((resolve) => orphan.once('exit', () => resolve()))
     for (let i = 0; i < 100 && !existsSync(readyFile); i++) await sleep(100)
@@ -152,7 +154,7 @@ describe('服务端进程', () => {
     const ready = untilReady(server)
     await server.start()
     await ready
-    assert.ok(notes.some((n) => n.includes(`停掉上次留下的服务端（pid ${orphan.pid}）`)), notes.join('\n'))
+    assert.ok(notes.some((n) => n.includes(`Stopping the server left over from the last run (pid ${orphan.pid})`)), notes.join('\n'))
     await orphanExit
     assert.equal(alive(orphan.pid!), false)
     await server.stop()
@@ -161,13 +163,13 @@ describe('服务端进程', () => {
   test('就绪文件里的 pid 是别的程序时不动它', async (t) => {
     if (!available) return t.skip('没有 go')
     const { server, notes, readyFile } = make('c')
-    // 自己（node）就是一个"别的程序"。
+    // This process (node) is itself "another program".
     mkdirSync(join(readyFile, '..'), { recursive: true })
     writeFileSync(readyFile, JSON.stringify({ url: 'http://127.0.0.1:1', pid: process.pid, version: 'x' }))
     const ready = untilReady(server)
     await server.start()
     await ready
-    assert.ok(!notes.some((n) => n.includes('停掉上次留下的服务端')), notes.join('\n'))
+    assert.ok(!notes.some((n) => n.includes('Stopping the server left over from the last run')), notes.join('\n'))
     await server.stop()
   })
 

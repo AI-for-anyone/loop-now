@@ -10,31 +10,33 @@ import { isUnreachable } from '@/lib/errors'
 
 const failedToConnect = (query: Query) => isUnreachable(query.state.error)
 
-// 重新获取因无法连接而失败的查询。进行中的请求先取消再重发：它可能是断连时发出的，沿用它的结果会把失败
-// 延续到下一次轮询；重试和重连都要向恢复后的服务端重新发请求。被取消的请求不影响可达性。
+// Refetch the queries that failed because the server could not be reached. A request in progress is cancelled first and sent again: it may
+// have been sent while disconnected, and reusing its result would carry the failure over to the next poll; both retry and reconnect must
+// send new requests to the recovered server. Cancelled requests do not affect reachability.
 const refetchFailed = (client: QueryClient) => client.refetchQueries({ type: 'active', predicate: failedToConnect }, { cancelRefetch: true })
 
-// 重试时另外探测一次健康检查，只有修改失败时也能确认连接是否恢复。
+// On retry, also probe the health check once, so we can tell whether the connection is back even when only a mutation failed.
 async function retry(client: QueryClient) {
   await Promise.allSettled([refetchFailed(client), api.GET('/health')])
 }
 
-// 任一请求没有到达服务端时显示全局的连接提示，之后任一请求收到响应即消失。
+// Show the global connection notice when any request does not reach the server; it disappears as soon as any later request gets a response.
 export function ConnectionBanner() {
-  // 启动时读取默认上下文，同时作为第一次连接探测。
+  // Read the default context at startup, which also serves as the first connection probe.
   useContextInfo()
   const reachable = useSyncExternalStore(reachability.subscribe, reachability.isReachable)
   const client = useQueryClient()
   const wasReachable = useRef(reachable)
 
-  // 连接恢复后重新获取断连期间失败的查询，不必等窗口重新获得焦点。
+  // Once the connection is back, refetch the queries that failed while disconnected, without waiting for the window to regain focus.
   useEffect(() => {
     if (reachable && !wasReachable.current) void refetchFailed(client)
     wasReachable.current = reachable
   }, [reachable, client])
 
   if (reachable) return null
-  // 全宽红色横幅：浅红网点底、底部藏青线。断线图标的倾斜画在 ::before 上。
+  // Full-width red banner: light red halftone dots on the background, a navy line at the bottom. The tilt of the disconnected icon is drawn
+  // on ::before.
   return (
     <div
       role="alert"

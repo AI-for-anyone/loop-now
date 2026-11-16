@@ -24,8 +24,10 @@ const confirmText = t.plugins.confirm
 const sourceLine = (source: Schemas['PluginResolvedSource']) =>
   [source.location, source.ref ?? source.npmVersion].filter(Boolean).join(' @ ') + (source.commit ? ` (${source.commit.slice(0, 7)})` : '')
 
-// 安装与更新的第二步：展示预览里的清单与 README，人确认后按预览安装。非官方来源要明确确认（confirm），
-// 服务端仍认为需要确认（409 plugin_confirmation_required）时补上警告，再点一次即带 confirm 安装。
+// Step two of installing and updating: show the manifest and README from the preview, and install from the preview once the person
+// confirms. Unofficial sources need explicit confirmation (confirm);
+// if the server still considers confirmation necessary (409 plugin_confirmation_required), add the warning, and one more click installs
+// with confirm.
 export function ConfirmInstallDialog({ preview, onClose, onInstalled }: { preview: Preview; onClose: () => void; onInstalled?: (plugin: Schemas['Plugin']) => void }) {
   const install = usePluginInstall()
   const [forced, setForced] = useState(false)
@@ -106,8 +108,10 @@ export function ConfirmInstallDialog({ preview, onClose, onInstalled }: { previe
   )
 }
 
-// 409 name_conflict 在安装时可能是插件 id 已装过，也可能是它注册的模型提供方与别的插件同 id（更新时只会是后者）；
-// 说明这两种情形，界面是中文时附上服务端的原话（它写明是哪一种）。其余错误照常显示。
+// On install, 409 name_conflict can mean the plugin id is already installed, or that a model provider it registers has the same id as
+// one from another plugin (on update it can only be the latter);
+// explain both cases, and when the UI is in Chinese, append the server's own message (which says which one it is). Other errors show as
+// usual.
 function InstallError({ error, update }: { error: ApiError | null; update: boolean }) {
   if (error?.code !== 'name_conflict') return <ErrorAlert error={error} />
   const known = confirmText.nameConflict[update ? 'update' : 'install']
@@ -121,7 +125,8 @@ function InstallError({ error, update }: { error: ApiError | null; update: boole
 
 const isAbsolutePath = (value: string) => value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value)
 
-// 安装入口：三种来源（随平台发布的官方插件、git 仓库、服务端本机目录），读取清单后进入确认。
+// The install entry point: three sources (official plugins that ship with the platform, a git repository, a local folder on the server
+// machine); after the manifest is read, it moves on to confirmation.
 export function InstallSourceDialog({
   open,
   onOpenChange,

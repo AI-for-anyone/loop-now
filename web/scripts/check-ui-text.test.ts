@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-// @ts-expect-error 脚本是无类型声明的 ESM 模块
+// @ts-expect-error the script is an ESM module without type declarations
 import { checkDir } from './check-ui-text.mjs'
 
 const dirs: string[] = []

@@ -16,10 +16,14 @@ import { useDirtyForm } from '@/features/prompts/draft-navigation'
 const loginErrors: Readonly<Record<string, string>> = t.config.modelLogin.errors
 const copy = t.credentials.projectLogin
 
-// 项目模型账号的浏览器登录。provider 是要登录的提供方：Codex，或插件注册的带 OAuth 的提供方（source 为 plugin）。
-// Codex：点登录时先开一个空白窗口（防弹窗拦截），拿到授权地址后导航过去，地址走严格白名单。
-// 插件提供方：服务端已校验地址，这里只做通用检查；不预开窗口，拿到地址后由人点原生链接（旁边写目标主机名）。
-// 插件提供方还可能给设备码（打开地址输入代码），或在中途问一个问题（选一项、填文字、粘贴回调地址或授权码）。
+// Browser login for a project model account. provider is the provider to log in to: Codex, or a plugin-registered provider with OAuth
+// (source is plugin).
+// Codex: on clicking log in, first open a blank window (to get past popup blockers), then navigate it once the authorization URL arrives;
+// the URL must pass a strict allow-list.
+// Plugin providers: the server has already validated the URL, and only the generic check is done here; no window is opened in advance,
+// and once the URL arrives the person clicks a native link (with the target host name next to it).
+// A plugin provider may also give a device code (open the URL and enter the code), or ask a question mid-way (pick an option, type text,
+// or paste the callback URL or authorization code).
 export function ProjectLogin({ projectId, provider, account }: { projectId: string; provider: Schemas['ModelProvider']; account?: Schemas['ProjectCredentialAccount'] }) {
   const available = useProjectCredentialsAvailable()
   const plugin = provider.source === 'plugin'
@@ -92,7 +96,8 @@ export function ProjectLogin({ projectId, provider, account }: { projectId: stri
     } catch (e) { if (mounted.current && currentId.current === id) setError(e) }
     finally { busy.current = false; if (mounted.current) setCancelling(false) }
   }
-  // 回答中途的问题：回答只随这次请求发出，不进任何缓存；服务端清空 prompt 后，下一步可能带来新问题或地址。
+  // Answer a question asked mid-way: the answer is sent only with this request and never goes into any cache; after the server clears the
+  // prompt, the next step may bring a new question or URL.
   const answer = async (promptId: string, value: string) => {
     if (!available || !op || busy.current) return
     const id = op.id; busy.current = true; setAnswering(true); setError(null)
@@ -108,14 +113,16 @@ export function ProjectLogin({ projectId, provider, account }: { projectId: stri
   return <div className="grid min-w-0 gap-3">
     {!account && <div className="grid gap-1.5">
       <Label htmlFor={`login-name-${projectId}-${provider.id}`}>{copy.nameLabel(displayName)}</Label>
-      {/* 恢复进行中的操作只投影其固定名称，不覆盖用户尚未提交的本地草稿。 */}
+      {/* Restoring an in-progress operation only displays its fixed name; it doesn't overwrite the user's local draft that hasn't been
+          submitted yet. */}
       <Input id={`login-name-${projectId}-${provider.id}`} maxLength={200} value={active ? (op?.name ?? name) : name} disabled={starting || active} aria-describedby={active ? `login-name-hint-${projectId}-${provider.id}` : undefined} onChange={e => setName(e.target.value)} />
       {active && <p id={`login-name-hint-${projectId}-${provider.id}`} role="status" className="text-[13px] text-ink-700">{copy.nameLocked}{guidance}{copy.restartNote}</p>}
     </div>}
     <Button type="button" variant="secondary" className="justify-self-start" disabled={!available || starting || active || (!account && !name.trim()) || collection.isPending} onClick={() => void start()}>{account ? copy.relogin : t.credentials.providerPicker.login(displayName)}</Button>
     {op?.name && <p className="text-[13px] [overflow-wrap:anywhere]">{copy.newAccountLabel}{op.name}</p>}
     {view && <LoginFeedback view={view} title={prompt ? copy.prompt.title : undefined} detail={feedbackDetail} hasAccount={!!account && account.status !== 'deleted'} blocked={blocked && !!authorizationHref} cancelling={cancelling} onCancel={active ? () => void cancel() : undefined} onRetry={!active ? () => void start() : undefined} authorizationHref={authorizationHref} openLabel={plugin && authorizationHref ? copy.openHost(hostOf(authorizationHref)) : undefined} onOpen={authorizationHref ? () => {
-      // URL已知：由原生链接同步导航，清掉尚未导航的预留窗，避免旧WindowProxy/HMR引用干扰。
+      // The URL is known: the native link navigates synchronously, so close the reserved window that hasn't navigated yet, to avoid
+      // interference from stale WindowProxy/HMR references.
       popup.current?.closeUnused(); popup.current = null; navigated.current = op!.id; setBlocked(false)
     } : undefined} />}
     {device && <DeviceCode code={device} href={deviceHref} />}
@@ -125,8 +132,9 @@ export function ProjectLogin({ projectId, provider, account }: { projectId: stri
   </div>
 }
 
-// 设备码登录：大号显示代码（可复制），链接到输入代码的地址（服务端已校验，这里再做通用检查），写明代码的有效期。
-// 平台 Agent 自己的模型凭证登录插件提供方时也用它。
+// Device code login: shows the code in large type (copyable), links to the code-entry URL (validated by the server, with the generic check
+// applied here again), and states when the code expires.
+// Also used when a platform Agent's own model credential logs in to a plugin provider.
 export function DeviceCode({ code, href }: { code: Schemas['ProjectModelLoginDeviceCode']; href?: string }) {
   const labelId = useId()
   const [copied, setCopied] = useState(false)
@@ -147,8 +155,10 @@ export function DeviceCode({ code, href }: { code: Schemas['ProjectModelLoginDev
   </div>
 }
 
-// 登录中途的问题：select 列出选项让人自己选（不替人预选），text 填文字，manual_code 粘贴回调地址或授权码。
-// 问题与选项是扩展原文，按纯文本显示。回答按秘密处理：提交后清空，不放进缓存。平台 Agent 的插件提供方登录也用它。
+// A question asked mid-login: select lists the options for the person to choose (nothing is preselected for them), text takes typed
+// text, manual_code takes a pasted callback URL or authorization code.
+// The question and options are the extension's own text, shown as plain text. The answer is treated as a secret: cleared after submitting
+// and never put into a cache. A platform Agent's plugin provider login uses it too.
 export function LoginPrompt({ prompt, disabled, answering, onAnswer }: { prompt: Schemas['ProjectModelLoginPrompt']; disabled: boolean; answering: boolean; onAnswer: (value: string) => Promise<void> }) {
   const id = useId()
   const [value, setValue] = useState(''), [missing, setMissing] = useState(false)

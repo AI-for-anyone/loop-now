@@ -1,7 +1,8 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
-// 纸白卡片：18 圆角、轻投影。卡片里的条目用白底小块，不再套卡片。不裁切溢出，倾斜背景层与投影要完整显示。
+// Paper-white card: 18 corner radius, light shadow. Items inside a card use small white blocks, not nested cards. Overflow is not
+// clipped, so tilted background layers and shadows show in full.
 function Card({
   className,
   size = "default",

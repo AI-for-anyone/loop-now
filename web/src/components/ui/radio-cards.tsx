@@ -2,7 +2,8 @@ import * as React from "react"
 import { RadioGroup as RadioGroupPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 
-// 卡片式单选：白底卡片；选中时背景层换成黄底加粉色投影并轻微倾斜（只转 ::before，卡片本体不转）。
+// Card-style radio group: white cards; when selected, the background layer turns yellow with a pink shadow and tilts slightly (only
+// ::before rotates, not the card itself).
 function RadioCards({ className, ...props }: React.ComponentProps<typeof RadioGroupPrimitive.Root>) {
   return <RadioGroupPrimitive.Root data-slot="radio-cards" className={cn("grid gap-3", className)} {...props} />
 }

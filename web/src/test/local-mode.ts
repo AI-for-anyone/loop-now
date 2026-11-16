@@ -5,8 +5,9 @@ import { apiUrl, errorBody } from './api'
 type Directory = Schemas['LocalDirectory']
 type Listing = { revision: number; directories: Directory[] }
 
-// 本机模式的假服务端：内存中保存三个开关与项目、Agent 的本机目录清单，按契约响应读写与修订号检查。
-// 路径里带 missing 的目录视为不存在。测试可以直接改 state 模拟“在别处”的修改，或用 failNextPut 让下一次保存失败。
+// Fake server for local mode: keeps the four switches and the local directory lists of projects and Agents in memory, and
+// answers reads, writes and revision checks per the contract. Directories whose path contains missing are treated as nonexistent.
+// Tests can change state directly to simulate changes made "elsewhere", or use failNextPut to make the next save fail.
 export function localModeBackend(init: { settings?: Partial<Schemas['LocalModeSettings']>; projects?: Record<string, Listing>; agents?: Record<string, Listing & { projectId: string | null }> } = {}) {
   const state = {
     settings: { directories: true, git: true, cli: true, logins: false, ...init.settings } as Schemas['LocalModeSettings'],
@@ -23,7 +24,7 @@ export function localModeBackend(init: { settings?: Partial<Schemas['LocalModeSe
     const { revision, directories, projectId } = agent(agentId)
     return { revision, directories, projectId, inherited: projectId ? project(projectId).directories : [] }
   }
-  // 修订号不符为 412；否则（除非测试安排了失败）整体替换并加一。
+  // 412 on a revision mismatch; otherwise (unless the test arranged a failure) replace the whole list and increment the revision.
   const put = async (request: Request, current: Listing, store: (next: Listing) => void) => {
     const body = (await request.json()) as Schemas['LocalDirectoriesPut']
     state.requests.push({ method: 'PUT', path: new URL(request.url).pathname, body })

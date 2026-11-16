@@ -14,7 +14,8 @@ export function TaskActions({ task, disabled = false, showRetry = true, showCanc
   const cancelId = useRef('')
   const action = useTaskAction(task.id, task.projectId)
   const ended = task.status === 'completed' || task.status === 'cancelled'
-  // 改版第 5 步：“重试当前节点”是荧光粉主按钮（藏青描边加投影）；“取消任务”是红色描边的胶囊按钮。
+  // Redesign step 5: “重试当前节点” (Retry current node) is the fluorescent-pink primary button (navy outline plus offset shadow);
+  // “取消任务” (Cancel task) is a red-outlined pill button.
   return <div className="flex flex-wrap items-center gap-2.5">
     {showRetry && task.status === 'blocked' && task.currentNodeRunId && <Button variant="interrupt" className="mr-[3px] border-2 border-ink" disabled={disabled || action.isPending} onClick={() => { target.current = { actionId: crypto.randomUUID(), nodeRunId: task.currentNodeRunId! }; setRetrying(true) }}>{t.tasks.retry}</Button>}
     {showCancel && !ended && <Button variant="danger-outline" size="xs" className="px-4" disabled={disabled || action.isPending} onClick={() => { cancelId.current = crypto.randomUUID(); setCancelling(true) }}>{t.tasks.cancel}</Button>}

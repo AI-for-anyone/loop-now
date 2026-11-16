@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { CheckIcon, CopyIcon } from 'lucide-react'
 import { t } from '@/i18n'
 
-// Agent 的 Inbox 地址：项目中的 Agent 为完整地址（组织名/项目名/Agent名），平台 Agent 为名称本身。地址写在虚线框里，
-// 框内右侧一个小按钮复制它；复制后图标换成对勾并读出“已复制”。
-// 名称不满足命名规则时服务端不给地址，这里说明原因：先改名才有地址，发 Inbox 消息时改用内部 ID。
+// The Agent's Inbox address: for an Agent in a project it is the full address (org name/project name/Agent name); for a
+// platform Agent it is just the name. The address sits in a dashed box, with a small button on the right inside the box that
+// copies it; after copying, the icon turns into a check mark and screen readers announce “已复制” (Copied).
+// When the name doesn't meet the naming rules the server gives no address, and this explains why: rename the Agent first
+// to get an address; until then, use the internal ID to send it Inbox messages.
 export function AgentAddress({ address }: { address: string | null }) {
   const [copied, setCopied] = useState(false)
   if (!address) return <p className="max-w-[560px] text-[12.5px] leading-snug font-bold text-ink-700">{t.agents.address.missing}</p>
@@ -12,7 +14,7 @@ export function AgentAddress({ address }: { address: string | null }) {
     try {
       await navigator.clipboard.writeText(address)
     } catch {
-      // 浏览器不允许写剪贴板时保持原样，人仍可以手动选中复制。
+      // If the browser doesn't allow writing to the clipboard, leave things as they are; the person can still select and copy by hand.
       return
     }
     setCopied(true)

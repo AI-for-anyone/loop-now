@@ -4,14 +4,14 @@ import { newerSleep } from '@/features/sleep/projection'
 
 type AgentOverview = Schemas['AgentOverview']
 
-// 概览的运行状态：各 Agent 的最新状态，按快照中的顺序排列，之后新出现的排在末尾。
+// The overview's run status: each Agent's latest status, in snapshot order, with Agents that appear later added at the end.
 export interface OverviewState {
   connection: ConnectionState
   lastEventId: string | null
-  // 是否已收到快照；收到之前运行状态显示加载中。
+  // Whether the snapshot has arrived; until then the run status shows loading.
   synced: boolean
   agents: AgentOverview[]
-  // 最近一次收到状态变化的时刻（浏览器时间，ISO 字符串）。
+  // When the latest status change was received (browser time, ISO string).
   lastChangeAt: string | null
 }
 
@@ -54,7 +54,8 @@ export function overviewReducer(state: OverviewState, action: OverviewAction): O
       return state.connection === action.state ? state : { ...state, connection: action.state }
     case 'event': {
       const { event } = action
-      // 快照总是整体替换；其他事件按事件 ID 去重，只处理比已处理位置更新的事件。
+      // A snapshot always replaces everything; other events are deduplicated by event ID, and only events newer than the
+      // position already processed are handled.
       if (event.type !== 'snapshot' && event.id && state.lastEventId && compareEventIds(event.id, state.lastEventId) <= 0) return state
       const next = applyEvent(state, event, action.at)
       return { ...next, lastEventId: event.id || state.lastEventId }
@@ -62,7 +63,8 @@ export function overviewReducer(state: OverviewState, action: OverviewAction): O
   }
 }
 
-// 四个汇总数：回复中（busy）、空闲（不忙且会话正常）、会话丢失、排队中（所有 Agent 的打断与普通排队数之和）。
+// The four summary counts: replying (busy), idle (not busy and the session is fine), session lost, and queued (the sum of
+// interrupt and normal queue counts across all Agents).
 export interface OverviewSummary {
   busy: AgentOverview[]
   idle: AgentOverview[]
@@ -83,7 +85,7 @@ export function summarize(agents: AgentOverview[]): OverviewSummary {
   }
 }
 
-// 每行的状态，与 Agent 头部贴纸的优先级一致：会话丢失、回复中、空闲。
+// Each row's state, with the same priority as the Agent header sticker: session lost, replying, idle.
 export type AgentRowState = 'sessionMissing' | 'busy' | 'idle'
 
 export function rowState(agent: AgentOverview): AgentRowState {

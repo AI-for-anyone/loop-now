@@ -14,12 +14,13 @@ import { ProjectAccounts } from './ProjectAccounts'
 import { providerCatalog } from './provider-catalog'
 import { pluginProvider } from '@/test/config'
 
-// 项目设置 › 模型账号：添加账号时用搜索面板选提供方，账号列表的每一行显示同样的提供方名称。
+// Project settings › Model accounts: adding an account uses a search panel to choose
+// the provider, and each row of the account list shows the same provider name.
 const provider = (id: string, modelCount: number, authMethods: Schemas['ModelAuthMethod'][] = ['api_key']): Schemas['ModelProvider'] => ({ id, name: null, pluginId: null, pluginDisplayName: null, unavailableReason: null, source: 'builtin', runtime: 'pi', apiKeyEnvVars: [], modelCount, authMethods })
 const catalog: Schemas['ModelProvider'][] = [
   provider('anthropic', 17), provider('deepseek', 2), provider('moonshotai', 4), provider('moonshotai-cn', 4), provider('no-login', 5, []),
   provider('openai-codex', 7, ['oauth']), provider('openrouter', 401), provider('typesafe', 0), provider('zai', 7), provider('zai-coding-cn', 4), provider('zz-new', 3),
-  // 本机的 Claude Code：用它自己在本机的登录，没有项目账号。
+  // The local Claude Code: it uses its own login on this machine and has no project account.
   { ...provider('claude-code', 4, []), name: 'Claude Code', source: 'local_cli', runtime: 'claude-code' },
 ]
 const codexAccount = projectAccount({ id: '10000000-0000-7000-8000-000000000002', provider: 'openai-codex', authMethod: 'oauth', status: 'logged_in', name: 'Codex 账号' })
@@ -76,7 +77,8 @@ describe('模型提供方选择器', () => {
 
     expect(option('OpenAI Codex')).toHaveTextContent(/openai-codex.*已有 1 个.*登录.*7 个模型/)
     expect(option('Anthropic')).toHaveTextContent(/anthropic.*API 密钥.*17 个模型/)
-    // 地区变体收成一条：显示第一个 id 和还有几个，模型数取各变体中最多的，不相加。
+    // Regional variants collapse into one entry: it shows the first id and how many more
+    // there are, and the model count is the largest among the variants, not their sum.
     expect(option('Moonshot Kimi')).toHaveTextContent(/moonshotai \+1.*4 个模型/)
     expect(within(option('zz-new')).queryByText('zz-new', { selector: '.font-mono' })).toBeNull()
   })
@@ -118,7 +120,7 @@ describe('模型提供方选择器', () => {
     expect(await screen.findByText(/当前没有匹配的使用者/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '保存密钥' }))
     await waitFor(() => expect(bodies).toEqual([{ purpose: 'model', provider: 'moonshotai-cn', name: 'Kimi 中国', credential: { type: 'api_key', key: 'variant-secret' } }]))
-    // 保存后收起，回到触发按钮。
+    // After saving, it collapses back to the trigger button.
     expect(await screen.findByRole('button', { name: '添加模型账号 · 提供方' })).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByLabelText('API Key')).toBeNull()
   })

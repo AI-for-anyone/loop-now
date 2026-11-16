@@ -11,7 +11,7 @@ import { renderRoutes } from '@/test/render'
 import { server } from '@/test/server'
 import { baseHandlers } from '@/test/shell'
 
-// webhook 的一个渠道能代管外部身份；飞书通知的渠道不能（不出现在选择里）。
+// One webhook channel can manage external identities; the lark-notify plugin's channel cannot (it does not appear among the choices).
 const webhook = makeDetail(makePlugin(), makeManifest({ permissions: ['state', 'identities.manage'], components: makeComponents({ channels: [{ id: 'hooks', label: '回调', manageIdentities: true }] }) }))
 const lark = makeDetail(
   makePlugin({ id: 'lark-notify', displayName: '飞书通知', version: '0.3.1' }),

@@ -20,7 +20,7 @@ async function setup(limits: Partial<Schemas['Limits']> = {}) {
   const onArchive = vi.fn<(archive: Blob) => Promise<unknown>>(() => Promise.resolve())
   const user = userEvent.setup()
   const { client } = renderWithQuery(<SkillUpload onArchive={onArchive} />)
-  // 等上限加载完成，预检才会生效。
+  // The precheck takes effect only after the limits have loaded.
   await waitFor(() => expect(client.isFetching()).toBe(0))
   return { user, onArchive }
 }
@@ -73,7 +73,7 @@ describe('上传目录', () => {
   })
 
   it('打包后的压缩包超过上限时本地提示，不上传', async () => {
-    // 原始内容只有 2 字节，但压缩包带有文件头，会超过 100 字节的上限。
+    // The raw content is only 2 bytes, but the archive carries file headers, so it exceeds the 100-byte limit.
     const { user, onArchive } = await setup({ maxSkillArchive: 100 })
     await user.upload(screen.getByLabelText('上传目录'), [withPath('a', 'demo/SKILL.md'), withPath('b', 'demo/scripts/run.sh')])
     expect(await screen.findByText('超过压缩包上限（100 B）')).toBeInTheDocument()

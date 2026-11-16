@@ -8,7 +8,7 @@ import { t } from '@/i18n'
 const copy = t.taskInbox
 
 export function TaskMessageBubble({ message, agent, taskId, nodeRunId, runtimeId }: { message: Schemas['TaskMessage']; agent: { id: string; name: string }; taskId?: string; nodeRunId?: string; runtimeId?: string }) {
-  // A turn stopped by a person is labelled 已停止, not shown as an error.
+  // A turn stopped by a person is labelled “已停止” (Stopped), not shown as an error.
   const stopped = message.status === 'interrupted' && message.errorCode === 'user_stopped'
   if (message.role === 'user') {
     if (message.origin === 'sleep_wake') return <SleepWakeLine text={message.text} at={message.createdAt} sleepId={message.wakeSleepId} />

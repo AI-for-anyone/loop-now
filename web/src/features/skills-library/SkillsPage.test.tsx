@@ -74,7 +74,7 @@ describe('上传 Skill', () => {
     const { user, router } = setup('/skills', [
       http.post(apiUrl('/skills'), async ({ request }) => {
         contentType = request.headers.get('Content-Type')
-        // jsdom 环境中 multipart 的文件内容不可靠（见 test/setup.ts），这里只检查字段名。
+        // Multipart file content is unreliable under jsdom (see test/setup.ts), so only the field name is checked here.
         hasArchive = (await request.text()).includes('name="archive"')
         return HttpResponse.json(detail(), { status: 201 })
       }),
@@ -176,7 +176,7 @@ describe('替换与删除模板', () => {
     ])
     const sheet = await screen.findByRole('dialog', { name: 'pdf-tools' })
     await within(sheet).findByRole('list', { name: '文件' })
-    // 网格的工具栏也有“上传目录”（用于新建），替换只用抽屉里的那个。
+    // The grid's toolbar also has “上传目录” (Upload folder), used for creating; replacing uses only the one in the drawer.
     await user.upload(within(sheet).getByLabelText('上传目录'), [withPath('---\nname: pdf-tools\n---', 'pdf-tools/SKILL.md')])
     const confirm = await screen.findByRole('alertdialog')
     expect(confirm).toHaveTextContent('已复制给 Agent 的 Skill 副本不受影响')
@@ -211,14 +211,15 @@ describe('抽屉由地址控制开合', () => {
     const { user, router } = setup('/skills/sk-1', [], templates)
     const sheet = await screen.findByRole('dialog', { name: 'pdf-tools' })
     expect(within(sheet).getByText('处理 PDF')).toBeInTheDocument()
-    // 抽屉是模态的，网格对辅助技术暂时隐藏，但仍在页面上。
+    // The drawer is modal: the grid is temporarily hidden from assistive technology but is still on the page.
     const list = await screen.findByRole('list', { name: 'Skills 库', hidden: true })
     await waitFor(() => expect(within(list).getAllByRole('link', { hidden: true })).toHaveLength(2))
     expect(within(list).getByRole('link', { name: /pdf-tools/, hidden: true })).toHaveAttribute('aria-current', 'true')
 
     await user.click(within(sheet).getByRole('button', { name: '关闭' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/skills'))
-    // 抽屉随地址开合，新地址在 transition 里才渲染到页面，等抽屉真正关上。
+    // The drawer opens and closes with the URL, and the new URL reaches the page
+    // only inside a transition, so wait until the drawer has actually closed.
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(screen.getByRole('list', { name: 'Skills 库' })).toBeInTheDocument()
   })
@@ -231,7 +232,8 @@ describe('抽屉由地址控制开合', () => {
 
     await user.keyboard('{Escape}')
     await waitFor(() => expect(router.state.location.pathname).toBe('/skills'))
-    // 抽屉随地址开合，新地址在 transition 里才渲染到页面，等抽屉真正关上。
+    // The drawer opens and closes with the URL, and the new URL reaches the page
+    // only inside a transition, so wait until the drawer has actually closed.
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
@@ -240,7 +242,8 @@ describe('抽屉由地址控制开合', () => {
     const sheet = await screen.findByRole('dialog', { name: '新建 Skill' })
     await user.click(within(sheet).getByRole('button', { name: '取消' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/skills'))
-    // 抽屉随地址开合，新地址在 transition 里才渲染到页面，等抽屉真正关上。
+    // The drawer opens and closes with the URL, and the new URL reaches the page
+    // only inside a transition, so wait until the drawer has actually closed.
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
@@ -259,7 +262,7 @@ describe('抽屉由地址控制开合', () => {
   })
 })
 
-// 改版“一张印出来的纸”第 4 步：Skills 库的页头、空状态与模板卡片。
+// "Printed sheet" redesign, step 4: the Skills library's page header, empty state and template cards.
 describe('纸张上的 Skills 库', () => {
   it('页头是页面标题：面包屑“全局›Skills 库”，旁边写着共几个模板', async () => {
     setup('/skills')

@@ -86,8 +86,9 @@ describe('带项目的地址', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe(`${base('模型适配')}/agents/${a.id}/chat`))
     expect(router.state.historyAction).toBe('REPLACE')
     const note = await screen.findByText('项目「模型接入」已在别处改名为「模型适配」，地址已随之更新。')
-    // 路由的新地址在 transition 里才渲染到页面：router.state 已变而页面还是旧地址时点"知道了"，旧地址下仍按 ID 跟随，
-    // 便签会被重新贴上。等页面也换到新地址（"对话"标为当前页）再点。
+    // The router's new URL reaches the page only inside a transition: if "知道了" (Got it) is clicked while router.state has
+    // already changed but the page still shows the old URL, the old URL still follows the project by ID and the sticky note gets
+    // put back. Wait until the page has also switched to the new URL ("对话" (Chat) marked as the current page) before clicking.
     await waitFor(() => expect(screen.getByRole('link', { name: '对话' })).toHaveAttribute('aria-current', 'page'))
     await userEvent.setup().click(within(note.parentElement!).getByRole('button', { name: '知道了' }))
     await waitFor(() => expect(screen.queryByText(/已在别处改名/)).toBeNull())
@@ -116,7 +117,7 @@ describe('带项目的地址', () => {
     const { b } = setup()
     const { router } = renderRoutes(routes, `${defaultAgentsPath}/${b.id}/config`)
     await waitFor(() => expect(router.state.location.pathname).toBe(`/platform/agents/${b.id}/config`))
-    // 改写前默认项目的列表也在页面上出现过，每次重新查找列表。
+    // The default project's list also appeared on the page before the rewrite, so look up the list again each time.
     await waitFor(() =>
       expect(within(screen.getByRole('list', { name: '平台 Agent' })).getByRole('link', { name: /巡检助手/ })).toHaveAttribute('aria-current', 'page'),
     )
@@ -136,7 +137,7 @@ describe('带项目的地址', () => {
   })
 })
 
-// 范围切换进入所选范围的概览，概览要读用量与异常。
+// Switching scope enters the overview of the chosen scope, and the overview reads usage and anomalies.
 const overviewHandlers = [
   http.get(apiUrl('/usage'), () => HttpResponse.json({ from: null, to: null, rows: [] })),
   http.get(apiUrl('/anomalies'), () => HttpResponse.json({ items: [], total: 0, nextCursor: null })),

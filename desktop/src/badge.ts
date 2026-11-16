@@ -1,8 +1,9 @@
 import { app, nativeImage, type BrowserWindow, type NativeImage } from 'electron'
 import { badgeStyle, current, type PlatformId } from './platform'
 
-// 未读数怎么显示：macOS 是 Dock 角标；Windows 没有 Dock，任务栏按钮上放一个圆点 overlay（Windows 的 overlay 是 16px 小图，
-// 放不下可读的数字），未读数变多而窗口没有焦点时闪一下任务栏按钮提醒。
+// How the unread count is shown: on macOS as a Dock badge; Windows has no Dock, so a dot overlay goes on the taskbar button (a Windows
+// overlay is a 16px icon, too small for a readable number), and when the count grows while the window is unfocused, the taskbar button
+// flashes once as a reminder.
 export type BadgePlan = { dock?: number; overlay?: boolean; flash?: boolean }
 
 export function badgePlan(previous: number, next: number, p: PlatformId = current): BadgePlan {
@@ -10,7 +11,7 @@ export function badgePlan(previous: number, next: number, p: PlatformId = curren
   return { overlay: next > 0, flash: next > previous }
 }
 
-// 16×16 的红点（BGRA 位图，Electron 不提供画图，像素自己算），带一圈透明边与抗锯齿。
+// A 16×16 red dot (a BGRA bitmap; Electron offers no drawing, so the pixels are computed by hand), with a transparent margin and anti-aliasing.
 export function dotBitmap(size = 16): Buffer {
   const buf = Buffer.alloc(size * size * 4)
   const c = (size - 1) / 2
@@ -20,7 +21,7 @@ export function dotBitmap(size = 16): Buffer {
       const d = Math.hypot(x - c, y - c)
       const a = Math.max(0, Math.min(1, r - d + 0.5))
       const i = (y * size + x) * 4
-      // 预乘 alpha 的 BGRA：#E5484D
+      // BGRA with premultiplied alpha: #E5484D
       buf[i] = Math.round(0x4d * a)
       buf[i + 1] = Math.round(0x48 * a)
       buf[i + 2] = Math.round(0xe5 * a)
@@ -39,7 +40,7 @@ export class Badge {
   constructor(
     private readonly window: () => BrowserWindow | undefined,
     private readonly platform: PlatformId = current,
-    // 显示用的文字：overlay 的无障碍说明。
+    // Text to show: the overlay's accessibility description.
     private readonly describe: (count: number) => string = (n) => `${n}`,
   ) {}
 

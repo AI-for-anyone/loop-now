@@ -7,7 +7,7 @@ import { apiUrl, errorBody, makeAgent, makeMessage, makeRun } from '@/test/api'
 import { renderChat } from '@/test/chat'
 import { renderRoutes } from '@/test/render'
 
-// 300 条消息（150 轮）的对话历史，按 before、after、aroundRun 与 limit 分页，与服务端规则一致。
+// A conversation history of 300 messages (150 turns), paged by before, after, aroundRun and limit, following the server's rules.
 function history(agentId: string) {
   const messages: Schemas['Message'][] = []
   for (let i = 0; i < 150; i++) {
@@ -15,7 +15,8 @@ function history(agentId: string) {
     const run = makeRun({ queuedAt: time, startedAt: time, runningAt: time, endedAt: time })
     messages.push(makeMessage({ text: `问题 ${i}`, createdAt: time, run }), makeMessage({ role: 'assistant', text: `回答 ${i}`, createdAt: time, run }))
   }
-  // 每轮两条消息：这一页之前的轮次数是完整排在它前面的轮次（一轮被页边界切开时，这一轮算在这一页）。
+  // Two messages per turn: the turn count before this page is the number of complete
+  // turns in front of it (a turn cut by the page boundary counts toward this page).
   const page = (start: number, end: number): Schemas['MessagePage'] => ({
     messages: messages.slice(start, end),
     hasMore: start > 0,
@@ -58,7 +59,7 @@ const located = () => document.querySelector<HTMLElement>('[data-located]')
 async function openLocated(index: number) {
   const agent = makeAgent()
   const data = history(agent.id)
-  // 第 index 条消息（从 1 数起）对应的回复。
+  // The reply belonging to message number index (counting from 1).
   const target = data.messages[index - 1].run.id
   const result = await renderChat({ agent, handlers: data.handlers, path: `/agents/${agent.id}/chat#run-${target}` })
   await waitFor(() => expect(located()).not.toBeNull())
@@ -68,7 +69,8 @@ async function openLocated(index: number) {
 describe('从概览定位到回复', () => {
   it('定位时照常编号（用这一页之前的轮次数）；还没加载到最新时，尺子底部的总数用接口给的总轮数', async () => {
     await openLocated(40)
-    // 第 n 轮写的是“问题 n-1”“回答 n-1”。这一页从一轮的中间开始（第一块只有回复）、到一轮的中间结束，编号照样对得上。
+    // Turn n reads “问题 n-1” (question n-1) and “回答 n-1” (answer n-1). This page starts in the middle of a turn
+    // (the first block has only a reply) and ends in the middle of a turn, and the numbers still line up.
     const blocks = [...document.querySelectorAll<HTMLElement>('[data-run-id]')]
     expect(blocks.length).toBeLessThan(150)
     for (const block of [blocks[0], blocks[blocks.length - 1]]) {
@@ -90,7 +92,7 @@ describe('从概览定位到回复', () => {
     expect(screen.getByText('正在查看定位的回复')).toBeInTheDocument()
 
     for (let i = 0; i < 10 && screen.queryByRole('button', { name: '加载更新的消息' }); i++) {
-      // 页面上有上百轮对话时 user-event 的指针检查很慢，这里直接触发点击。
+      // With hundreds of turns on the page, user-event's pointer checks are very slow, so fire the click directly.
       fireEvent.click(screen.getByRole('button', { name: '加载更新的消息' }))
       await waitFor(() => expect(screen.queryByText('正在加载更新的消息…')).toBeNull())
     }
@@ -99,7 +101,8 @@ describe('从概览定位到回复', () => {
     expect(ids).toHaveLength(150)
     expect(new Set(ids).size).toBe(150)
     expect(ids).toEqual(data.messages.filter((m) => m.role === 'user').map((m) => m.run.id))
-    // 逐页加载到 150 轮、每轮渲染 Markdown 与运行记录，整套测试并行时较慢。
+    // Loading page by page up to 150 turns, rendering Markdown and a run
+    // record for every turn, is slow when the whole suite runs in parallel.
   }, 20_000)
 
   it('回到最新：显示最新的一页，之后像平常一样', async () => {

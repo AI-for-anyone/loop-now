@@ -8,18 +8,19 @@ import { isNotFound } from '@/lib/errors'
 import { agentPath, agentScope, agentsPath, lastScope, projectBase, renamedHere, resolveLastScope, type Scope } from '@/lib/scope'
 import { ScopeContext } from './scope-context'
 
-// 地址中的项目名换成新名称，其后的路径、查询参数与锚点不变。
+// Replace the project name in the URL with the new name, keeping the rest of the path, the query parameters and the hash unchanged.
 function withProjectName(location: Location, name: string) {
   const rest = location.pathname.split('/').slice(3)
   return `${projectBase(name)}${rest.length ? `/${rest.join('/')}` : ''}${location.search}${location.hash}`
 }
 
-// 找不到项目、项目已删除时整块内容换成的说明（交接说明第 11.5 节）。没有左侧列表，地址保持原样。
+// The notice that replaces the whole content when the project can't be found or was deleted (handoff notes, section 11.5).
+// There is no sidebar list, and the URL stays as it is.
 function ScopeNotice({ kind, name, defaultScope }: { kind: 'missing' | 'deleted'; name: string; defaultScope: Scope | null }) {
   return (
     <div role="alert" className="flex h-full min-h-80 flex-col items-center justify-center gap-3.5 overflow-y-auto p-6 text-center">
       {kind === 'missing' ? (
-        // 网点蓝圆加一个粉色虚线空圆：要找的项目不在了。
+        // A halftone blue circle plus an empty pink dashed circle: the project you are looking for is gone.
         <span aria-hidden="true" className="relative h-[130px] w-[200px] shrink-0">
           <span className="riso-halftone absolute top-[5px] left-2.5 size-[120px] rounded-full bg-riso-blue" />
           <span className="absolute top-[5px] left-[76px] size-[116px] rounded-full border-[3px] border-dashed border-pink-text" />
@@ -45,14 +46,15 @@ function ScopeNotice({ kind, name, defaultScope }: { kind: 'missing' | 'deleted'
   )
 }
 
-// 停留期间项目在别处被改名时的黄色便签，保留到点“知道了”或离开这个项目为止。
+// The yellow sticky note shown when the project is renamed elsewhere while you are on it; it stays until you click
+// “知道了” (Got it) or leave this project.
 function RenamedNote({ from, to, onDismiss }: { from: string; to: string; onDismiss: () => void }) {
   return (
     <div
       role="status"
       className="riso-tilt mx-4 mt-4 flex max-w-[820px] shrink-0 flex-wrap items-center gap-x-[18px] gap-y-2.5 py-3.5 pr-[18px] pl-5 [--tilt-bg:var(--riso-yellow)] [--tilt-shadow:3px_3px_0_rgb(24_38_94/.18)] [--tilt:-0.5deg] sm:mx-[30px]"
     >
-      {/* 胶带：只作装饰。 */}
+      {/* Tape: decoration only. */}
       <span aria-hidden="true" className="absolute -top-[9px] left-7 h-[18px] w-16 -rotate-4 bg-white/60" />
       <span className="flex-[1_1_420px] text-[15px] font-bold">{t.projects.renamed(from, to)}</span>
       <Button variant="ink" size="sm" className="text-white" onClick={onDismiss}>
@@ -62,15 +64,19 @@ function RenamedNote({ from, to, onDismiss }: { from: string; to: string; onDism
   )
 }
 
-// /p/:projectName/…：按项目列表精确解析名称（区分大小写），列表加载完成前不判断找不到。
-// 解析到的项目 ID 记在本页：停留期间项目在别处被改名，按 ID 换到新名称的地址并贴便签；被删除时说明已删除。
-// 在本控制台改名时（renamedHere 中有它）只换地址，不贴便签，由项目设置页自己说明。
+// /p/:projectName/…: resolve the name exactly against the project list (case-sensitive); "not found" isn't decided until the
+// list has finished loading.
+// The resolved project ID is remembered on this page: if the project is renamed elsewhere while you are on it, switch by ID to
+// the URL with the new name and put up a sticky note; if it is deleted, say it was deleted.
+// When it was renamed in this console (it is in renamedHere), only switch the URL without a sticky note; the project settings
+// page explains it itself.
 export function ProjectScopeRoute() {
   const { projectName = '' } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
   const projects = useProjects()
-  // 本页解析到的项目 ID 与改名便签；按 React 的做法在渲染中根据上一次的结果更新。
+  // The project ID resolved on this page and the rename sticky note; updated during render from the previous result, the
+  // React way.
   const [resolvedId, setResolvedId] = useState<string | null>(null)
   const [note, setNote] = useState<{ id: string; from: string; to: string } | null>(null)
   const list = projects.data?.projects
@@ -94,7 +100,8 @@ export function ProjectScopeRoute() {
   if (!list) return <AgentsPlaceholder error={projects.error} />
   const defaultProject = list.find((p) => p.isDefault)
   const defaultScope: Scope | null = defaultProject ? { kind: 'project', project: defaultProject } : null
-  // 改名后、地址换成新名称之前，页面按 ID 继续显示同一个项目，不卸载页面内容。
+  // After a rename and before the URL switches to the new name, the page keeps showing the same project by ID without
+  // unmounting the page content.
   if (!current) return <ScopeNotice kind={resolvedId ? 'deleted' : 'missing'} name={projectName} defaultScope={defaultScope} />
 
   return (
@@ -111,7 +118,7 @@ export function ProjectScopeRoute() {
 
 const platformScope: Scope = { kind: 'platform' }
 
-// /platform/…：平台持有的 Agent，与项目共用 Agent 页、对话页与配置页。
+// /platform/…: Agents owned by the platform; they share the Agents page, the Chat tab and the Config tab with projects.
 export function PlatformScopeRoute() {
   useEffect(() => {
     lastScope.set('platform')
@@ -123,7 +130,8 @@ export function PlatformScopeRoute() {
   )
 }
 
-// 旧地址 /agents：进入最近使用的项目或平台；没有记录或记录的项目已不存在时，进入默认项目。
+// Legacy URL /agents: go to the most recently used project or the platform; when nothing is recorded or the recorded project no
+// longer exists, go to the default project.
 export function LegacyAgentsRedirect() {
   const location = useLocation()
   const projects = useProjects()
@@ -132,8 +140,10 @@ export function LegacyAgentsRedirect() {
   return <Navigate replace to={`${agentsPath(scope)}${location.search}${location.hash}`} />
 }
 
-// 旧地址 /agents/:agentId/…：读取 Agent，改用它实际所在的地址，保留其后的页签、查询参数与锚点。
-// Agent 不存在时，在最近使用的项目或平台中打开同一地址，由详情页说明该 Agent 不存在。
+// Legacy URL /agents/:agentId/…: load the Agent and switch to the URL where it actually lives, keeping the tab, query parameters
+// and hash that follow.
+// When the Agent doesn't exist, open the same path in the most recently used project or the platform, and let the detail page
+// say that the Agent doesn't exist.
 export function LegacyAgentRedirect() {
   const { agentId = '', '*': rest = '' } = useParams()
   const location = useLocation()
@@ -147,8 +157,9 @@ export function LegacyAgentRedirect() {
   return <Navigate replace to={`${agentsPath(scope)}/${agentId}${rest ? `/${rest}` : ''}${location.search}${location.hash}`} />
 }
 
-// /p/<项目名>、/platform 进入 Agent 页；/…/agents/<Agent ID> 进入对话页。
-// 用编码后的绝对地址跳转：React Router 按解码后的路径解析相对地址，项目名含“?”“%”时相对地址会出错。
+// /p/<project name> and /platform go to the Agents page; /…/agents/<Agent ID> goes to the Chat tab.
+// Navigate with encoded absolute URLs: React Router resolves relative URLs against the decoded path, so a relative URL breaks
+// when the project name contains "?" or "%".
 export function ScopeIndexRedirect() {
   const scope = useContext(ScopeContext)
   return scope ? <Navigate replace to={agentsPath(scope)} /> : null

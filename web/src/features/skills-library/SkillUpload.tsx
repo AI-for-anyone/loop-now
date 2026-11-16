@@ -10,17 +10,19 @@ import { pickedFiles } from '@/lib/upload'
 import { skillFiles, totalSize, zipDirectory } from '@/lib/zip'
 
 interface SkillUploadProps {
-  // 选好 zip 或打包好目录后调用；返回的 Promise 失败时显示原因。
+  // Called once a zip is picked or a folder is packed; when the returned Promise rejects, the reason is shown.
   onArchive: (archive: Blob) => Promise<unknown>
   disabled?: boolean
-  // 上传按钮的尺寸与附加样式：Skills 库工具栏用 lg，抽屉里浅蓝底上的按钮用白底。
+  // Size and extra classes of the upload buttons: the Skills library toolbar uses lg; buttons on the light blue background in
+  // the drawer use a white background.
   size?: 'sm' | 'lg'
   buttonClassName?: string
-  // 自定义布局：按钮组与结果提示分开摆放（工具栏放按钮，提示放在工具栏下方）。不传时按钮在上、提示在下。
+  // Custom layout: place the button group and the result message separately (buttons in the toolbar, the message below the
+  // toolbar). When omitted, the buttons go on top and the message below.
   children?: (parts: { actions: ReactNode; feedback: ReactNode }) => ReactNode
 }
 
-// 上传 Skill：选择 zip，或选择目录后在浏览器中打包成 zip。按服务端上限先做预检。
+// Upload a Skill: pick a zip, or pick a folder and pack it into a zip in the browser. Checked against the server limits first.
 export function SkillUpload({ onArchive, disabled, size = 'sm', buttonClassName, children }: SkillUploadProps) {
   const context = useContextInfo()
   const limits = context.data?.limits
@@ -60,7 +62,7 @@ export function SkillUpload({ onArchive, disabled, size = 'sm', buttonClassName,
     setError(null)
     setLocalError(null)
     if (picked.length === 0) return
-    // 服务端忽略的 .DS_Store、__MACOSX/ 不计入上限，也不放进压缩包。
+    // .DS_Store and __MACOSX/, which the server ignores, don't count toward the limits and aren't put into the archive.
     const files = skillFiles(picked)
     if (limits && files.length > limits.maxSkillEntries) {
       setLocalError(t.skills.tooManyEntries(limits.maxSkillEntries))
@@ -70,7 +72,7 @@ export function SkillUpload({ onArchive, disabled, size = 'sm', buttonClassName,
       setLocalError(t.skills.tooLarge(limits.maxSkillArchive))
       return
     }
-    // 读取与打包期间也算上传中，避免再次上传。
+    // Reading and packing also count as uploading, to prevent a second upload.
     setPending(true)
     let archive: Blob
     try {
@@ -80,7 +82,7 @@ export function SkillUpload({ onArchive, disabled, size = 'sm', buttonClassName,
       setPending(false)
       return
     }
-    // 服务端同时限制压缩包本身的大小，打包后的大小可能超过文件原始大小之和。
+    // The server also limits the size of the archive itself, and the packed size can exceed the sum of the original file sizes.
     if (limits && archive.size > limits.maxSkillArchive) {
       setLocalError(t.skills.tooLarge(limits.maxSkillArchive))
       setPending(false)
@@ -106,7 +108,8 @@ export function SkillUpload({ onArchive, disabled, size = 'sm', buttonClassName,
     </>
   )
 
-  // 本地预检与服务端的失败原因都用错误横幅显示；名称重复时在原因下方提示改用替换。
+  // Failure reasons from both the local check and the server are shown in an error banner; on a name conflict, a hint below
+  // the reason suggests using replace instead.
   const message = localError ?? (error ? describeError(error) : null)
   const feedback = message ? (
     <Alert variant="error" className="shadow-print-ink">

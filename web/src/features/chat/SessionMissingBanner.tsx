@@ -4,7 +4,8 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useResetSession } from '@/api/queries'
 import { t } from '@/i18n'
 
-// 会话文件丢失的横幅：浅红网点底加藏青印刷投影。仍有执行未结束时不能重开会话。
+// Banner for a missing session file: light red halftone-dot fill with a navy print shadow. The session can't be restarted while a run
+// is still unfinished.
 export function SessionMissingBanner({ agentId, hasRunInProgress }: { agentId: string; hasRunInProgress: boolean }) {
   const reset = useResetSession(agentId)
   const [confirming, setConfirming] = useState(false)

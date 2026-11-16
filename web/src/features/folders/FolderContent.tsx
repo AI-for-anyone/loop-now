@@ -11,7 +11,7 @@ import { useFolderFile, useFolderList } from './folder-queries'
 import { EntryBadge, EntryIcon, EntryMenu, ToolButton, type EntryActions, ListIcon } from './FolderParts'
 import { highlightCode } from './highlight'
 
-// ---------- 文件夹 ----------
+// ---------- Folder ----------
 
 interface DirViewProps {
   source: FolderSource
@@ -22,7 +22,7 @@ interface DirViewProps {
   onEditEntry: (entry: FolderEntry) => void
 }
 
-// 文件夹的内容列表（名称、大小、修改时间）；根目录下面接着显示 AGENTS.md，没有时提示创建。
+// A folder's content list (name, size, modified time); at the root, AGENTS.md is shown below it, or a prompt to create it if missing.
 export function DirView({ source, path, title, actions, onCreateEntry, onEditEntry }: DirViewProps) {
   const list = useFolderList(source, path)
   const entries = list.data?.pages.flatMap((page) => page.entries) ?? []
@@ -40,7 +40,8 @@ export function DirView({ source, path, title, actions, onCreateEntry, onEditEnt
       {list.isSuccess && entries.length === 0 && <p className="px-4 py-8 text-center text-[13px] text-ink-500">{t.folders.empty}<br />{t.folders.emptyHint}</p>}
       {entries.length > 0 && (
         <table className="w-full table-fixed border-collapse text-[13px]">
-          {/* 表头下一道 2px 实线，行与行之间 1.5px 虚线；大小与时间用等宽字（改版通用规则第 9 条）。 */}
+          {/* A 2px solid line under the header and 1.5px dashed lines between rows; size and time use a monospace font (rule 9 of the
+              redesign's general rules). */}
           <thead className="sticky top-0 z-10 bg-paper-raised/95 text-[12px] font-black text-ink-500 backdrop-blur-sm">
             <tr className="border-b-2 border-ink">
               <th className="py-2 pl-2.5 text-left font-black">{t.folders.columns.name}</th>
@@ -87,10 +88,11 @@ function Pending() {
   )
 }
 
-// 根目录还没有 AGENTS.md：说明它的作用，一键创建。
+// The root has no AGENTS.md yet: explain what it is for and offer one-click creation.
 function EntryMissing({ onCreate }: { onCreate: () => void }) {
   return (
-    // 改版：浅粉底、2px 藏青描边、荧光粉实色投影的卡片，右边是创建按钮。
+    // Redesign: a card with a light-pink background, a 2px navy outline and a fluorescent-pink solid offset shadow, with the create
+    // button on the right.
     <div role="note" className="mx-1 mt-4 mr-2 flex flex-wrap items-center justify-between gap-x-[18px] gap-y-2.5 rounded-card border-2 border-ink bg-tint-pink-2 px-[18px] py-3.5 shadow-print-pink">
       <div className="min-w-0 flex-[1_1_240px]">
         <p className="text-[15px] font-black">{t.folders.entry.missingTitle}</p>
@@ -101,7 +103,7 @@ function EntryMissing({ onCreate }: { onCreate: () => void }) {
   )
 }
 
-// 根目录列表下面的 AGENTS.md：像代码仓库首页的 README 一样直接显示内容。
+// AGENTS.md below the root listing: its content is shown directly, like the README on a code repository's home page.
 function EntryPreview({ source, entry, onEdit }: { source: FolderSource; entry: FolderEntry; onEdit: () => void }) {
   const file = useFolderFile(source, entry.path)
   return (
@@ -120,13 +122,13 @@ function EntryPreview({ source, entry, onEdit }: { source: FolderSource; entry: 
   )
 }
 
-// ---------- 文件 ----------
+// ---------- File ----------
 
 export interface EditState {
   path: string
   original: string
   text: string
-  // 原有的 BOM 与换行，保存时照原样写回。
+  // The original BOM and line endings, written back as they were on save.
   format: TextFormat
   saving: boolean
   error: unknown
@@ -173,7 +175,8 @@ export function FileView({ source, entry, limits, actions, edit, mode, onMode, o
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* 窄时名称独占一行，操作按钮换到下一行；宽时同一行，说明文字先截断。 */}
+      {/* When narrow, the name takes a row of its own and the action buttons wrap to the next row; when wide, they share one row and the
+          hint text is truncated first. */}
       <div className={cn('flex min-h-11 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-ink/10 px-4 py-1.5 @min-[34rem]:flex-nowrap', editing && 'bg-tint-yellow/50')}>
         <EntryIcon path={path} type={entry.type} />
         <h3 className="min-w-0 shrink truncate text-[14px] font-black">{entry.name}</h3>
@@ -225,7 +228,7 @@ function Notice({ children, download }: { children: ReactNode; download?: () => 
   )
 }
 
-// 只读的代码视图：行号加高亮，不折行，长行横向滚动。
+// Read-only code view: line numbers plus highlighting, no wrapping, long lines scroll horizontally.
 function CodeView({ path, text }: { path: string; text: string }) {
   const html = useMemo(() => highlightCode(text, languageOf(path)), [text, path])
   const count = Math.max(1, text.split('\n').length - (text.endsWith('\n') ? 1 : 0))
@@ -239,7 +242,7 @@ function CodeView({ path, text }: { path: string; text: string }) {
   )
 }
 
-// 在线编辑：等宽文本框，Tab 插入制表符，⌘S／Ctrl+S 保存。
+// Online editing: a monospace text box; Tab inserts a tab character, ⌘S / Ctrl+S saves.
 function Editor({ value, onChange, onSave, label }: { value: string; onChange: (text: string) => void; onSave: () => void; label: string }) {
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') { event.preventDefault(); onSave() }

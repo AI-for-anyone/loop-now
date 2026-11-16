@@ -6,7 +6,7 @@ type S = components['schemas']
 export const timeline = {
   toggle: (duration: string, tokens: string) => `运行记录 · ${duration} · ${tokens} token`,
   toggleRunning: (elapsed: string) => `运行记录 · 已用 ${elapsed}`,
-  // 触发条做成分段的小票：名称之后的各段。
+  // The toggle bar is drawn as a segmented ticket: these are the segments after the name.
   toggleParts: { tokens: (tokens: string) => `${tokens} token`, running: (elapsed: string) => `已用 ${elapsed}` },
   title: '运行记录',
   total: (duration: string) => `合计 ${duration}`,
@@ -26,7 +26,7 @@ export const timeline = {
     dispatched: '派发',
     waiting_slot: '等待执行名额',
     preparing: '准备运行环境',
-    // 进程的几步写出运行时（Pi 或 Claude Code，取条目上的；旧记录没有，即 Pi）。
+    // The process steps name the runtime (Pi or Claude Code, taken from the entry; old records lack it, which means Pi).
     launching: (runtime: string) => `${runtime} 启动`,
     cli_install: (cli: string) => `安装 ${cli}`,
     workspace_sync: '同步配置与文件夹',
@@ -76,7 +76,8 @@ export const timeline = {
     processReused: (runtime: string, pid: number) => `复用常驻的 ${runtime} 进程，PID ${pid}。`,
     processStopped: (pid: number, reason: string, uptime: string) => `PID ${pid}，${reason}，运行了 ${uptime}。`,
     processExited: (pid: number, exit: string, uptime: string) => `PID ${pid}，${exit}，运行了 ${uptime}。`,
-    // Claude Code 报告的订阅额度（info 是 claude 原样给的，字段可能缺）：额度种类、状态、重置时间；不认识的值原样显示。
+    // Subscription limits reported by Claude Code (info is passed through from claude as is, so
+    // fields may be missing): limit type, status, reset time; unknown values are shown as is.
     rateLimit: {
       type: { five_hour: '5 小时额度', seven_day: '7 天额度', seven_day_opus: '7 天 Opus 额度', seven_day_sonnet: '7 天 Sonnet 额度', overage: '超额用量' } as Record<string, string>,
       status: { allowed: '可用', allowed_warning: '快用完了', rejected: '已用完' } as Record<string, string>,
@@ -127,7 +128,7 @@ export const timeline = {
     endReasonField: (reason: string) => `endReason=${reason}`,
     statusField: (status: string) => `status=${status}`,
   },
-  // 时长：不足 1 秒用毫秒，不足 100 秒保留一位小数，更长的用分秒。
+  // Duration: milliseconds under 1 second, one decimal place under 100 seconds, minutes and seconds beyond that.
   duration: (ms: number) => formatStepDuration(ms),
   clock: (time: string) => formatPreciseClock(time),
   locate: {

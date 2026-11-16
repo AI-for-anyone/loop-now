@@ -1,6 +1,7 @@
 import { formatCount as grouped } from './format'
 
-// 统计页（第二版设计稿）。数值与时长的写法也在这里：token 以“万”为单位，时长按大小换成秒、分、小时。
+// Stats page (second design draft). How numbers and durations are written lives here too: tokens
+// in units of “万” (wan, 10,000), durations switch to seconds, minutes or hours depending on size.
 const oneDecimal = (value: number) => grouped(Math.round(value * 10) / 10)
 
 export const stats = {
@@ -22,7 +23,8 @@ export const stats = {
   none: '—',
   total: '合计',
 
-  // token 用“万”：10 万以上取整，10 万以下保留一位小数；不到 1,000 时直接写 token 数。
+  // Tokens in “万” (wan, 10,000): whole numbers from 100,000 up, one decimal
+  // place below 100,000; below 1,000 the token count is written out as is.
   wan: (tokens: number) => {
     if (tokens < 1000) return `${grouped(tokens)} token`
     const wan = tokens / 10_000
@@ -35,9 +37,9 @@ export const stats = {
   percent: (rate: number) => `${oneDecimal(rate * 100)}%`,
   wholePercent: (rate: number) => `${Math.round(rate * 100)}%`,
   usd: (usd: number) => `$${usd < 10 ? usd.toFixed(2) : grouped(Math.round(usd))}`,
-  // 等待与间隔：不到 1 分钟写秒，不到 1 小时写分（一位小数），再长写小时。
+  // Waits and intervals: seconds under 1 minute, minutes (one decimal place) under 1 hour, hours beyond that.
   seconds: (s: number) => (s < 60 ? `${grouped(Math.round(s))} 秒` : s < 3600 ? `${oneDecimal(s / 60)} 分` : `${oneDecimal(s / 3600)} 小时`),
-  // 回合时长：1 分 40 秒这样的写法。
+  // Turn duration: written like “1 分 40 秒” (1 min 40 s).
   clock: (s: number) => {
     const total = Math.round(s)
     if (total < 60) return `${total} 秒`
@@ -45,7 +47,7 @@ export const stats = {
     const minutes = Math.round((total % 3600) / 60)
     return minutes ? `${Math.floor(total / 3600)} 小时 ${minutes} 分` : `${Math.floor(total / 3600)} 小时`
   },
-  // 你多久回、等了多久：分钟取整，两小时以上写小时。
+  // How long you take to reply and how long it waited: rounded to whole minutes, in hours from two hours up.
   minutes: (s: number) => (s < 60 ? '不到 1 分钟' : s < 7200 ? `${Math.round(s / 60)} 分钟` : `${oneDecimal(s / 3600)} 小时`),
 
   kpis: {
@@ -138,7 +140,7 @@ export const stats = {
     title: '没完成的原因',
     total: (n: number) => `共 ${grouped(n)} 次`,
     kinds: { interrupted: '打断', stopped: '停止', failed: '失败' },
-    // 结束原因与错误码的说法；不认识的直接显示代码。
+    // Wording for end reasons and error codes; unknown ones show the code as is.
     codes: {
       user_interrupt: '你发了打断消息',
       user_stopped: '你按了停止',

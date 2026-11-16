@@ -4,15 +4,18 @@ type Detail = Schemas['TaskDetail']
 type Node = Schemas['TaskNodeRun']
 type Edge = Schemas['TaskWorkflowEdge']
 
-// 一步在流程尺上的样子：已完成（最近一次访问已完成）、当前步（任务还没结束时停在这一步）、走过但没完成、还没到。
+// How a step looks on the workflow ruler: done (its latest visit completed), current (the unfinished task is at this step), visited but
+// not completed, or not reached yet.
 export type StepState = 'done' | 'current' | 'visited' | 'todo'
 
-// 不是走向下一步的连线（返工、跳过几步、回到自己）：写在出发的那一步下面，返工画成粉色虚线弧。
+// An edge that doesn't lead to the next step (rework, skipping steps, looping back to itself): written under the step it starts from;
+// rework is drawn as a pink dashed arc.
 export interface StepJump {
   edge: Edge
   to: number
   back: boolean
-  // 这条线已经走过几次：从出发步完成、选了这条线的访问数（服务端按同样的规则数，与 maxTraversals 比较）。
+  // How many times this edge has been taken: the number of visits that completed the starting step and chose this edge (the server
+  // counts by the same rule and compares it with maxTraversals).
   used: number
 }
 
@@ -23,14 +26,14 @@ export interface StepView {
   records: Node[]
   latest: Node | undefined
   state: StepState
-  // 走向下一步的连线说明（写在两步之间）。
+  // Labels of the edges leading to the next step (written between the two steps).
   next: Edge[]
   jumps: StepJump[]
 }
 
 export const stepNumber = (index: number) => String(index + 1).padStart(2, '0')
 
-// 同一步的各次访问按访问、尝试的先后排。
+// The visits of one step, ordered by visit, then attempt.
 export const sortRecords = (records: Node[]) => [...records].sort((a, b) => a.visit - b.visit || a.attempt - b.attempt || a.id.localeCompare(b.id))
 
 export const taskEnded = (task: Schemas['TaskSummary']) => task.status === 'completed' || task.status === 'cancelled'
@@ -63,7 +66,8 @@ export function workflowSteps(detail: Detail): StepView[] {
   })
 }
 
-// 尺子底部的大数字：走到第几步（任务没结束时是当前步，结束后是最后访问的那一步），以及是否已经全部走完。
+// The big number at the bottom of the ruler: which step it has reached (the current step while the task is unfinished, the last visited
+// step once it has ended), and whether every step is done.
 export function workflowPosition(detail: Detail) {
   const { steps } = detail.workflow
   const total = steps.length

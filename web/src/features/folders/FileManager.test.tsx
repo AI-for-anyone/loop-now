@@ -129,7 +129,8 @@ describe('文件管理器', () => {
     expect((await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'AGENTS.md' })).value).toContain('Agent 每次启动时先读这个文件')
   })
 
-  // 两次拉取各要等一轮 1.5 秒的轮询，单独运行约 4 秒，全量并行时会超过默认的 5 秒。
+  // Each of the two pulls waits for one 1.5-second polling round; run alone the test takes
+  // about 4 seconds, and with the full suite in parallel it exceeds the default 5 seconds.
   it('从 Git 拉取：进行中与成功显示在状态栏；失败的拉取刷新后仍在，可以看 git 输出', async () => {
     const { source, user, unmount } = setup()
     const start = vi.spyOn(source.git!, 'start')
@@ -150,7 +151,7 @@ describe('文件管理器', () => {
     await user.click(within(dialog).getByRole('button', { name: '开始拉取' }))
     expect(await screen.findByText('拉取失败：无法克隆仓库', undefined, { timeout: 4000 })).toBeInTheDocument()
 
-    // 刷新页面：最近一次失败的拉取仍显示，可以看 git 输出。
+    // Reload the page: the most recent failed pull is still shown, and its git output can be viewed.
     unmount()
     renderWithQuery(<FileManager source={source} rootLabel="server 的文件夹" limits={limits} />, createTestQueryClient())
     expect(await screen.findByText('拉取失败：无法克隆仓库')).toBeInTheDocument()

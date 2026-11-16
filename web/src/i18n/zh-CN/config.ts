@@ -19,17 +19,18 @@ export const config = {
     modelEmpty: '没有匹配的模型',
     modelCount: (count: number) => `${count} 个模型`,
     providerOption: (id: string, count: number) => `${id}（${count} 个模型）`,
-    // 插件的 Pi 扩展注册的提供方：显示名是扩展给的（不可信文本，原样显示），后面是 id 和注册它的插件。
+    // Provider registered by a plugin's Pi extension: the display name comes from the extension
+    // (untrusted text, shown as is), followed by the id and the plugin that registered it.
     pluginProviderOption: (name: string | null, id: string, plugin: string, count: number) => `${name && name !== id ? `${name} · ${id}` : id}（插件「${plugin}」，${count} 个模型）`,
     unavailableOption: (option: string, reason: string) => `${option} — ${reason}`,
-    // 选项后面的短说明；plugins_disabled 不挡保存，只提示。
+    // Short note after the option; plugins_disabled doesn't block saving, it only warns.
     pluginUnavailable: {
       create: '创建后授权插件再选择',
       plugin_not_enabled: '项目未启用该插件',
       agent_not_granted: '插件未授权给这个 Agent',
       plugins_disabled: '插件已全部停用',
     },
-    // 选中的是现在不能用的插件提供方时，选择器下方的说明。
+    // Note below the picker when the selected provider is a plugin provider that can't be used right now.
     pluginUnavailableNote: {
       plugin_not_enabled: (plugin: string) => `项目还没有启用插件「${plugin}」。在项目的插件页启用它、再在本页的“插件权限”一节授权给这个 Agent 后才能选。`,
       agent_not_granted: (plugin: string) => `插件「${plugin}」还没有授权给这个 Agent。在本页的“插件权限”一节授权后才能选。`,
@@ -61,7 +62,7 @@ export const config = {
   modelLogin: {
     loading: '正在查询模型账号与登录状态…',
     unsupported: '当前提供方暂未开放控制台认证。',
-    // 发起登录时 409 plugin_not_enabled：插件没有授权给这个 Agent。
+    // 409 plugin_not_enabled when starting a login: the plugin isn't granted to this Agent.
     notGranted: (plugin: string) => `插件「${plugin}」还没有授权给这个 Agent，本次没有发起登录。在本页的“插件权限”一节授权后再登录。`,
     setKey: '录入 API Key',
     replaceKey: '替换 API Key',

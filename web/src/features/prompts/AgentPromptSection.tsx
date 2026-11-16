@@ -25,7 +25,8 @@ function InheritedPrompt({ projectId, projectName }: { projectId: string; projec
 }
 export function AgentPromptSection({ agent }: { agent: Schemas['Agent'] }) {
   const client = useQueryClient(), scope = useScope()
-  // 与详情页共用Agent缓存；只在配置页观察器添加轮询，不改变对话页策略。
+  // Shares the Agent cache with the detail page; polling is added only through the Config tab's observer, without changing
+  // the Chat tab's strategy.
   useAgent(agent.id, config.agentListPollMs)
   return <Section id="prompt" title={t.prompts.sectionTitle}>
     {agent.scope === 'project' && scope.kind === 'project' && <InheritedPrompt projectId={scope.project.id} projectName={scope.project.name} />}

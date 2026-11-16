@@ -4,9 +4,9 @@ export function createQueryClient() {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        // 控制台只访问本机服务端，浏览器判断外网离线时不暂停请求。
+        // The console only talks to the local server, so requests are not paused when the browser decides it is offline from the internet.
         networkMode: 'always',
-        // 服务端不可达或资源不存在时不重试，直接显示原因。
+        // Do not retry when the server is unreachable or the resource does not exist; show the reason right away.
         retry: (count, error) => count < 2 && !('status' in error && (error.status === 0 || error.status === 404)),
       },
       mutations: { networkMode: 'always' },

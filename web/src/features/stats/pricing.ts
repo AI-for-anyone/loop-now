@@ -1,8 +1,9 @@
 import type { Schemas } from '@/api/client'
 
-// 统计页的花费估算：按 API 标准档单价（美元 / 百万 token）折算，仅供参考。
-// 取自 Anthropic 与 OpenAI 的公开价目（2026-10）；缓存写入取 5 分钟（Claude）或 30 分钟（OpenAI）一档，
-// 价目没有列出缓存写入的模型按输入单价计。不在表里的模型不计入估算，页面上说明有哪些没算。
+// Cost estimate for the stats page: converted at standard-tier API prices (USD per million tokens), for reference only.
+// Taken from Anthropic's and OpenAI's public price lists (2026-10); cache writes use the 5-minute tier (Claude) or the
+// 30-minute tier (OpenAI), and models whose price list doesn't list cache writes are charged at the input price. Models not in
+// the table are left out of the estimate, and the page says which ones were not counted.
 type Price = { input: number; output: number; cacheRead: number; cacheWrite?: number }
 
 const claude = (input: number, output: number, cacheRead: number): Price => ({ input, output, cacheRead, cacheWrite: input * 1.25 })
@@ -40,7 +41,8 @@ const PRICES: Record<string, Price> = {
   'gpt-5-mini': { input: 0.25, output: 2, cacheRead: 0.025 },
 }
 
-// 模型名去掉提供方前缀、日期后缀（claude-sonnet-4-5-20250929）与上下文标记（[1m]），不区分大小写。
+// Strip the provider prefix, the date suffix (claude-sonnet-4-5-20250929) and the context marker ([1m]) from the model name;
+// case-insensitive.
 function priceOf(model: string): Price | null {
   const id = model
     .toLowerCase()
@@ -52,8 +54,10 @@ function priceOf(model: string): Price | null {
 
 export type CostEstimate = { usd: number; priced: boolean; unpriced: string[] }
 
-// 服务端按模型只给出合计 token，没有分项：每个模型按时间窗内全部用量的分项比例（输入、输出、缓存读、缓存写）折算。
-// 没有任何可估算的模型时 priced 为 false；unpriced 是没有单价的模型（未知模型记为 null 不列出名称）。
+// Per model the server only gives total tokens, with no breakdown: each model is converted using the breakdown ratios
+// (input, output, cache read, cache write) of all usage in the time window.
+// priced is false when there is no model that can be estimated; unpriced lists the models without a price (an unknown model,
+// recorded as null, is included without listing a name).
 export function estimateCost(tokens: Schemas['StatsTokens']): CostEstimate {
   const { input, output, cacheRead, cacheWrite, total } = tokens.totals
   const parts = input + output + cacheRead + cacheWrite
@@ -75,7 +79,7 @@ export function estimateCost(tokens: Schemas['StatsTokens']): CostEstimate {
   return { usd, priced, unpriced }
 }
 
-// 模型所属的系列：Claude、GPT（含 Codex），其余为其他。
+// The family a model belongs to: Claude, GPT (including Codex), and other for everything else.
 export type ModelFamily = 'claude' | 'gpt' | 'other'
 export function modelFamily(provider: string | null, model: string | null): ModelFamily {
   const id = (model ?? '').toLowerCase()

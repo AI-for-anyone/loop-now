@@ -10,9 +10,12 @@ import { runtimeProblem } from '@/lib/runtime'
 const text = t.runtime.status
 const loginTone = { logged_in: 'success', logged_out: 'warning', unknown: 'neutral' } as const
 
-// 全局设置里的 Agent 运行时：Pi 随平台安装；Claude Code 看本机有没有 claude、能不能读出版本、有没有登录。
-// 服务端缓存 30 秒，“重新检查”不用缓存。登录只给方式与订阅类型，邮箱与组织服务端不返回。
-// 改版后是全局设置纸上一个编号分区的内容：说明与“重新检查”一行，下面每个运行时一张卡片。
+// Agent runtimes in global settings: Pi is installed with the platform; for Claude Code, check whether claude exists on this
+// computer, whether its version can be read, and whether it is logged in.
+// The server caches for 30 seconds; “重新检查” (Check again) bypasses the cache. For the login, only the method and the
+// subscription type are given; the server doesn't return the email or the organization.
+// After the redesign this is the content of one numbered section on the global settings sheet: a row with the description and
+// “重新检查” (Check again), with one card per runtime below.
 export function RuntimesCard() {
   const runtimes = useRuntimes()
   const refresh = useRefreshRuntimes()
@@ -43,7 +46,8 @@ function RuntimeRow({ runtime }: { runtime: Schemas['RuntimeStatus'] }) {
   const login = runtime.login
   const account = login ? [login.authMethod, login.subscriptionType && text.subscription(login.subscriptionType)].filter(Boolean).join(' · ') : ''
   return (
-    // 改版：白底、2px 藏青描边、藏青实色投影的卡片，名称是展示字，后面跟着状态胶囊与等宽的版本号。
+    // Redesign: a white card with a 2px navy outline and a solid navy offset shadow; the name is in display type, followed by
+    // a status pill and the version number in monospace.
     <section aria-label={name} className="mr-[5px] mb-[5px] flex min-w-0 flex-col gap-2.5 rounded-card border-2 border-ink bg-white px-[18px] py-3.5 shadow-[5px_5px_0_var(--ink)]">
       <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
         <span className="font-display-cn text-[26px] leading-[1.1]">{name}</span>

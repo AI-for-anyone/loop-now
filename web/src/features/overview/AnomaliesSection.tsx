@@ -21,13 +21,13 @@ const STAMP_TONE: Record<Schemas['AnomalyKind'], 'danger' | 'interrupted' | 'res
 }
 
 
-// 对应的字段：失败为错误码，打断与重启中断为结束原因。
+// The matching field: the error code for failures, the end reason for interruptions and restart cut-offs.
 function fieldOf(item: Anomaly): string {
   if (item.kind === 'run_failed') return t.timeline.result.errorField(item.errorCode ?? 'unknown', null)
   return t.timeline.result.endReasonField(item.endReason ?? (item.kind === 'server_restart' ? 'server_restart' : 'user_interrupt'))
 }
 
-// 失败的手动压缩（compaction 不为 null）后面写上这次压缩的命令。
+// For a failed manual compaction (compaction is not null), append the command of that compaction.
 const compactCommand = (compaction: Schemas['RunCompaction']) => (compaction.instructions ? `/compact ${compaction.instructions}` : '/compact')
 
 function reasonOf(item: Anomaly): string {
@@ -38,7 +38,8 @@ function reasonOf(item: Anomaly): string {
   return item.kind === 'server_restart' ? t.overview.anomalies.restartReason : t.overview.anomalies.interruptedReason
 }
 
-// 会话文件丢失进入对话页，由那里的横幅处理重开会话；其他条目定位到这条回复（或这次手动压缩）并展开它的运行记录。
+// A missing session file goes to the Chat tab, where a banner handles starting a new session; other items jump to that reply
+// (or that manual compaction) and expand its run log.
 function targetOf(item: Anomaly): { to: string; action: string } {
   if (item.errorCode === 'session_missing') return { to: `/agents/${item.agentId}/chat`, action: t.overview.anomalies.handle }
   return { to: `/agents/${item.agentId}/chat#run-${item.runId}`, action: item.compaction ? t.overview.anomalies.viewCompaction : t.overview.anomalies.view }
@@ -58,7 +59,7 @@ function AnomalyItem({ item }: { item: Anomaly }) {
         </span>
         <span className="flex min-w-0 flex-col gap-[3px]">
           <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-            {/* 列表中的印章不倾斜，免得一屏中倾斜的元素过多。 */}
+            {/* Stamps in the list aren't tilted, to avoid too many tilted elements on one screen. */}
             <Badge variant="stamp" tone={STAMP_TONE[item.kind]} className="[--stamp-tilt:0deg]">
               {item.compaction ? t.overview.anomalies.compactionFailed : t.overview.anomalies.kind[item.kind]}
             </Badge>
@@ -80,8 +81,9 @@ function AnomalyItem({ item }: { item: Anomaly }) {
   )
 }
 
-// 异常与失败：最近 24 小时内未正常完成的回复，从新到旧，可以加载更多。纸张上的第 number 个编号分区；
-// 列表上缘一道 2px 实线，条目之间虚线（改版通用规则第 9 条）。
+// Issues and failures: replies in the last 24 hours that didn't complete normally, newest first, with "load more". It is
+// numbered section `number` on the sheet; a 2px solid line runs along the top of the list, with dashed lines between items
+// (redesign general rule 9).
 export function AnomaliesSection({ scope = {}, number = 3 }: { scope?: ScopeQuery; number?: number }) {
   const anomalies = useAnomalies(() => new Date(Date.now() - config.overviewDefaults.anomalyWindowHours * 60 * 60 * 1000).toISOString(), scope)
   const pages = anomalies.data?.pages

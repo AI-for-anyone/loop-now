@@ -9,7 +9,7 @@ import { AGENT_EVENT_NAMES, INBOX_EVENT_NAMES, OVERVIEW_EVENT_NAMES } from './ev
 // unknown and validate the parsed object rather than asserting an API shape.
 const { load }: { load: (source: string) => unknown } = createRequire(import.meta.url)('js-yaml')
 
-// 按解析后的路径读取，不依赖 YAML/JSON 块的引号、缩进或端点顺序。
+// Read by path in the parsed document, so nothing depends on quoting, indentation or endpoint order in the YAML/JSON blocks.
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

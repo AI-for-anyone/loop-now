@@ -6,7 +6,7 @@ import { createMockFolder } from '@/test/folders'
 import { t } from '@/i18n'
 import { FileManager } from './FileManager'
 
-// 改版“一张印出来的纸”第 2 步：Agent 的文件夹页签与项目文件夹页放在纸张上（variant="sheet"）。
+// "Printed sheet" redesign, step 2: the Agent's Folder tab and the project folder page sit on a sheet (variant="sheet").
 const limits = { maxBytes: 1 << 20, extensions: ['.md', '.go', '.ts', '.json'] }
 
 function setup(preset: 'workspace' | 'project' = 'workspace') {
@@ -29,7 +29,7 @@ describe('纸张上的文件夹', () => {
       expect(button).toHaveClass('h-[34px]', 'rounded-full', 'border-2', 'border-ink', 'bg-paper-raised')
       expect(button).toHaveTextContent(name)
     }
-    // 根目录名称前是一个黄色的文件夹块。
+    // The root folder's name is preceded by a yellow folder block.
     expect(screen.getByRole('navigation', { name: '位置' }).querySelector('[data-folder-icon]')).toHaveClass('bg-riso-yellow', 'border-2', 'border-ink')
   })
 
@@ -59,11 +59,11 @@ describe('纸张上的文件夹', () => {
   it('文件树里选中的一项是黄色', async () => {
     const { user } = setup()
     const tree = await screen.findByRole('tree')
-    // 一开始选中的是根目录。
+    // The root folder is selected at first.
     const root = within(tree).getAllByRole('treeitem')[0]
     expect(root).toHaveAttribute('aria-selected', 'true')
     expect(root).toHaveClass('bg-riso-yellow')
-    // 打开另一个文件夹后，黄色跟着走。
+    // After opening another folder, the yellow follows it.
     const web = () => tree.querySelector<HTMLElement>('[role=treeitem][data-path="web"]')
     await waitFor(() => expect(web()).not.toBeNull())
     await user.click(web()!)

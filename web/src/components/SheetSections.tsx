@@ -4,34 +4,36 @@ import { HollowNumber } from '@/components/NumberedSection'
 import { RulerMark, RulerTicks, Stub } from '@/components/Sheet'
 import { cn } from '@/lib/utils'
 
-// 设置一类页面（Agent 配置、项目设置）的编号分区与票根里的目录尺：同一套，按 id 找到彼此。
+// The numbered sections of settings-type pages (Agent config, project settings) and the section ruler in the stub: one set, which find each
+// other by id.
 export interface SectionTocItem {
-  // 分区元素的 id（目录项的锚点）与分区标题的 id（跳转后移入焦点）。
+  // The id of the section element (the anchor of its ruler entry) and the id of the section title (receives focus after a jump).
   id: string
   titleId: string
   title: string
-  // 删除一类的分区：编号、标题与目录项是红色。
+  // A delete-type section: its number, title and ruler entry are red.
   danger?: boolean
 }
 
 interface SheetSectionProps {
   id: string
   titleId: string
-  // 第几个分区（从 0 起），编号显示为 01、02…，与目录尺上的编号一致。
+  // Which section this is (from 0); the number is shown as 01, 02…, matching the number on the section ruler.
   index: number
   title: string
-  // 标题旁的条目数，只作视觉提示；分区名称仍是标题本身。
+  // The item count next to the title, only a visual hint; the section's name is still just the title.
   count?: number
   actions?: ReactNode
-  // 标题后面的一句说明（浅墨色小字）。
+  // A one-line note after the title (small text in light ink).
   meta?: ReactNode
-  // danger：删除一类的分区，编号与标题红色，内容放在红色斜纹的底上。
+  // danger: a delete-type section, with a red number and title and the content on a red diagonal-stripe background.
   tone?: 'default' | 'danger'
   children: ReactNode
 }
 
-// 编号分区（改版通用规则第 4 条）：左侧空心编号，标题是 ZCOOL 30px 加一笔黄色记号笔；分区直接排在纸上，
-// 彼此之间一道 2px 虚线（第一个上面没有）。标题可以接收焦点，供目录跳转后移入焦点。
+// Numbered section (rule 4 of the redesign's general rules): an outlined number on the left, and a ZCOOL 30px title with a stroke of yellow
+// highlighter mark; sections sit directly on the sheet, separated by a 2px dashed line (none above the first one). The title can take
+// focus, so focus can move to it after a jump from the ruler.
 export function SheetSection({ id, titleId, index, title, count, actions, meta, tone = 'default', children }: SheetSectionProps) {
   const danger = tone === 'danger'
   return (
@@ -66,8 +68,9 @@ export function SheetSection({ id, titleId, index, title, count, actions, meta, 
 
 const observable = () => typeof IntersectionObserver !== 'undefined'
 
-// 分区进入视口上部（上方 45%）时算作当前分区，多个同时可见时取靠前的一个。
-// 浏览器不支持 IntersectionObserver 时不高亮，其余功能不受影响。
+// A section counts as current when it enters the upper part of the viewport (the top 45%); when several are visible at once, the first
+// one wins.
+// When the browser does not support IntersectionObserver nothing is highlighted, and everything else still works.
 function useActiveSection(ids: string[]) {
   const [active, setActive] = useState<string | null>(null)
   const key = ids.join(' ')
@@ -94,12 +97,16 @@ function useActiveSection(ids: string[]) {
   return [active, setActive] as const
 }
 
-// 分区目录：纸张右侧票根里的一把目录尺（改版通用规则第 5 条）。右缘一排刻度，每项是“名称 编号 短刻度”，
-// 当前分区那一项用略微倾斜的黄色记号笔加粉色小箭头标出；删除一类的分区一项是红色。窄屏（左侧栏收进抽屉时）不显示。
-// 点击目录项滚动到对应分区，并把焦点移到分区标题；不用平滑滚动，控制台只保留三个动效。
-// 编号在 DOM 里排在名称前面（读屏读成“01 基本信息”），显示时用 order 排到名称后面。
-// 带着分区地址打开页面（例如统计页的“去看它的提示词”）时，滚动到那个分区并把焦点移到它的标题。
-// footer：尺子底部的一行（例如插件详情的当前版本与更新状态）。
+// Section contents: a section ruler in the stub on the right side of the sheet (rule 5 of the redesign's general rules). A row of ticks on
+// the right edge; each entry is "name, number, short tick",
+// and the current section's entry is marked with a slightly tilted yellow highlighter mark plus a small pink arrow; a delete-type
+// section's entry is red. Not shown on narrow screens (when the sidebar is folded into the drawer).
+// Clicking an entry scrolls to its section and moves focus to the section title; no smooth scrolling, as the console keeps only three
+// animations.
+// In the DOM the number comes before the name (screen readers read “01 基本信息” (01 Basics)), and order moves it after the name on screen.
+// When a page is opened with a section in its URL (e.g. “去看它的提示词” (View its prompt) on the stats page), it scrolls to that section
+// and moves focus to its title.
+// footer: a line at the bottom of the ruler (e.g. the current version and update status on the plugin details page).
 export function SectionToc({ label, items, className, footer }: { label: string; items: SectionTocItem[]; className?: string; footer?: ReactNode }) {
   const [active, setActive] = useActiveSection(items.map((item) => item.id))
   const { hash } = useLocation()
@@ -112,7 +119,8 @@ export function SectionToc({ label, items, className, footer }: { label: string;
   }, [hash]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const jump = (item: SectionTocItem) => {
-    // 先按点击的目录项高亮：靠近页尾的分区滚动后可能到不了视口上部。不支持观察时不高亮，免得滚动后高亮停在旧的分区上。
+    // Highlight the clicked entry first: a section near the end of the page may never reach the upper part of the viewport after scrolling.
+    // Without observer support nothing is highlighted, so that the highlight does not stay on the old section after scrolling.
     if (observable()) setActive(item.id)
     document.getElementById(item.id)?.scrollIntoView({ block: 'start' })
     document.getElementById(item.titleId)?.focus({ preventScroll: true })

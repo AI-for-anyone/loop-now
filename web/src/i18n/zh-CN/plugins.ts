@@ -1,7 +1,8 @@
 import type { Schemas } from '@/api/client'
 import { formatClock } from './format'
 
-// 插件（第二版）：插件市场、安装前确认、插件详情、项目插件页与 Agent 配置页的插件段。
+// Plugins (second version): the plugin market, confirmation before installing, plugin
+// details, the project Plugins page and the plugins section of the Agent config page.
 export const plugins = {
   title: '插件市场',
   eyebrow: '全局',
@@ -20,7 +21,7 @@ export const plugins = {
   } satisfies Record<Schemas['PluginSource']['kind'], string>,
   unverified: (kind: string) => `${kind} · 未审核`,
   verifiedSource: (kind: string) => `${kind} · 已验证`,
-  // 来源的一句话说法：详情页头与安装前的警告里用。
+  // One-phrase description of the source: used in the detail page header and in the warning before installing.
   from: {
     builtin: '随平台发布',
     git: '来自 git',
@@ -51,7 +52,7 @@ export const plugins = {
     http: 'HTTP 入口',
     schedule: '定时',
   },
-  // 控制台操作按钮（清单 actions，按 where 出现在对应页面）。
+  // Console action buttons (actions in the manifest; each appears on the page given by where).
   actions: {
     group: (name: string) => `插件 ${name} 的操作`,
     by: (name: string) => `插件 ${name}`,
@@ -61,7 +62,7 @@ export const plugins = {
     open: '打开',
     notEnabled: '这个插件在这里还没有启用，先在项目里启用。',
   },
-  // 外部身份页的“代管”。
+  // The “代管” (Managed by) section on the external identity page.
   manager: {
     title: '代管',
     intro: '让一个插件的渠道代管这个身份：发给它的消息和提问由插件推到飞书、邮件等地方，人的回复以这个身份送回。一个身份只能有一个代管者。',
@@ -75,7 +76,7 @@ export const plugins = {
     none: '还没有能代管外部身份的插件。',
     save: '保存',
   },
-  // 宿主状态条与一键停用。
+  // Host status bar and one-click disable.
   host: {
     label: '插件宿主',
     state: {
@@ -126,7 +127,7 @@ export const plugins = {
   install: '安装',
   update: '检查更新',
   uninstall: '卸载',
-  // 安装入口：三种来源。
+  // Install entry: three kinds of source.
   installEntry: {
     open: '安装插件',
     title: '安装插件',
@@ -146,7 +147,7 @@ export const plugins = {
     required: '请填写',
     absolute: '请填写绝对路径',
   },
-  // 安装前确认。
+  // Confirmation before installing.
   confirm: {
     install: (name: string) => `安装 ${name}`,
     update: (name: string) => `更新 ${name}`,
@@ -163,9 +164,11 @@ export const plugins = {
     platformCodeHint: '在共享的插件宿主里运行',
     extensions: (count: number) => `Pi 扩展 ${count} 个文件`,
     extensionsHint: '授权的 Agent 启动时加载',
-    // 安装、更新前的预览：扩展注册的模型提供方要在确认之后才读取（会运行插件代码）。
+    // Preview before installing or updating: the model providers an extension
+    // registers are read only after confirmation (reading them runs plugin code).
     extensionsPreviewHint: { install: '授权的 Agent 启动时加载，安装后读取它注册的模型提供方', update: '授权的 Agent 启动时加载，更新后重新读取它注册的模型提供方' },
-    // 409 name_conflict：插件 id 已装过，或它注册的模型提供方与另一个已安装插件的同 id。
+    // 409 name_conflict: the plugin id is already installed, or a model provider
+    // it registers has the same id as one from another installed plugin.
     nameConflict: { install: '没有安装：这个插件 id 已经装过，或者它注册的模型提供方与另一个已安装插件的同 id', update: '没有更新：它注册的模型提供方与另一个已安装插件的同 id' },
     skills: 'Skill',
     mcp: 'MCP 服务器',
@@ -199,7 +202,7 @@ export const plugins = {
     expires: (at: string) => `预览在 ${at} 前有效`,
     installed: (name: string) => `已安装 ${name}`,
   },
-  // 权限与事件的一行说明。
+  // One-line descriptions of permissions and events.
   permissionHints: {
     'agents.read': '读 Agent 的配置与状态',
     'agents.write': '改 Agent 的配置、唤醒 Agent',
@@ -257,14 +260,15 @@ export const plugins = {
     'console.command': '对话框里的 / 命令（可认领）',
     'identity.inbound': '代管的外部身份收到消息或提问',
   } satisfies Record<Schemas['PluginEvent']['type'], string>,
-  // 插件的 README：详情页的卡片与安装前的预览里显示。
+  // The plugin's README: shown in a card on the detail page and in the preview before installing.
   readme: {
     title: '说明',
     truncated: '说明太长，只显示了开头的部分。',
   },
-  // 来源是 git 仓库时链到它的网页。
+  // Links to the repository's web page when the source is a git repository.
   repository: '仓库',
-  // 插件详情里，Pi 扩展注册的模型提供方（安装或更新时读出）。名称与错误是扩展原文。
+  // In plugin details, the model providers registered by Pi extensions (read
+  // at install or update). Names and errors are the extension's original text.
   providers: {
     title: '模型提供方',
     hint: '安装或更新时从 Pi 扩展读出',
@@ -279,11 +283,13 @@ export const plugins = {
     models: (count: number) => `${count} 个模型`,
     extension: (path: string) => `来自 ${path}`,
     loadErrors: '加载失败的扩展',
-    // 插件声明了哪些 HOME 下的路径随账号保存（扩展的登录与状态；项目账号与平台 Agent 自己的登录都是）；进了目录却没声明的，登录可能不随账号保存。
+    // Which paths under HOME the plugin declares to be saved with the account (the extension's
+    // login and state; this covers both project accounts and platform Agents' own logins). If the
+    // login lands in a directory the plugin didn't declare, it may not be saved with the account.
     statePaths: '登录状态随项目账号和平台 Agent 的登录保存：',
     noStatePaths: '没有声明登录状态路径，登录可能不随账号保存',
   },
-  // 插件详情。
+  // Plugin details.
   detail: {
     crumb: '插件市场',
     notFound: '没有这个插件，可能已被卸载。',
@@ -292,7 +298,8 @@ export const plugins = {
     tabs: { overview: '概览', config: '配置', accounts: '账号', events: '事件', records: '投递记录', logs: '日志' },
     contains: '它包含什么',
     containsHint: '安装前看过的清单，原样留在这里',
-    // 概览第 04 区：事件、投递记录、日志三栏，各一个大数字（只算已经读到的，后面还有就加“+”）。
+    // Section 04 of the overview: three columns for events, deliveries and logs, each with
+    // one big number (counting only what has been loaded; a “+” is added when there is more).
     activity: '最近动静',
     latest: (at: string) => `最近一条 ${at}`,
     readmeHint: '当前版本的 README',
@@ -315,7 +322,8 @@ export const plugins = {
     uninstallTitle: (name: string) => `卸载 ${name}？`,
     uninstallBody: '会删除它的配置、项目启用、Agent 授权、账号、状态、事件投递与令牌。已经启动的 Agent 继续用已加载的部分，直到下次启动。',
     deleteData: (dir: string) => `同时删除数据目录 ${dir}`,
-    // 插件注册了模型提供方时补充：项目里的订阅账号与平台 Agent 自己的登录默认保留，删除数据时一起删。
+    // Extra note when the plugin registers model providers: the subscription accounts in projects and the
+    // platform Agents' own logins are kept by default, and deleted along with the data when deleting data.
     deleteDataProviders: '它注册的模型提供方在各项目里的订阅账号和平台 Agent 自己的登录默认保留，重新安装后恢复；勾选后一并删除（被未结束任务用着的账号保留到任务结束）。',
     uninstalling: '正在卸载…',
     checking: '正在检查…',
@@ -375,10 +383,10 @@ export const plugins = {
     empty: '最近 7 天没有日志。',
     more: '加载更早的日志',
     recent: (count: number) => `最近 ${count} 条`,
-    // 日志行前的时刻：本地时间的时:分:秒。
+    // Time before each log line: local time as hours:minutes:seconds.
     clock: (at: string) => formatClock(at),
   },
-  // 项目插件页。
+  // Project Plugins page.
   project: {
     title: '插件',
     intro: (name: string) => `这里决定哪些插件在 ${name} 里工作。没装的插件去插件市场装。给某个 Agent 用的工具，在那个 Agent 的配置里授权。`,
@@ -404,12 +412,12 @@ export const plugins = {
     settingsCardBody: '为这个项目启用插件、填写项目级配置和账号。',
     settingsLink: '管理项目插件',
   },
-  // Agent 配置页的插件段。
+  // Plugins section of the Agent config page.
   agent: {
     intro: '授权后下次启动 Pi 生效，不打断当前回合。',
-    // Claude Code 运行时的 Agent：没有 Pi，启动的是 Claude Code。
+    // Agent on the Claude Code runtime: there is no Pi; what starts is Claude Code.
     introClaudeCode: '授权后下次启动生效，不打断当前回合。',
-    // Claude Code 运行时的 Agent：插件 Agent 侧只有 Pi 扩展（没有技能、MCP 服务器和命令目录）。
+    // Agent on the Claude Code runtime: the plugin's Agent side has only Pi extensions (no skills, MCP servers or command directories).
     piOnly: 'Agent 侧只有 Pi 扩展，对 Claude Code 不起作用',
     empty: '还没有安装插件。',
     granted: '已授权',
@@ -430,25 +438,27 @@ export const plugins = {
     discard: '放弃修改',
     keepEditing: '继续编辑',
   },
-  // 对话里与插件有关的几种行：/ 命令的回复、Agent 侧扩展的通知与状态、插件渠道来的发件人。
+  // Plugin-related rows in the conversation: replies to / commands, notifications
+  // and status from Agent-side extensions, and senders coming from plugin channels.
   chat: {
     command: (plugin: string) => `插件 ${plugin} 处理了这条命令`,
     noReply: '没有回复',
     sender: (name: string) => `插件 · ${name}`,
     uninstalled: '已卸载',
-    // 运行记录里的扩展请求（Pi 的 extension_ui_request）。
+    // Extension requests in the run log (Pi's extension_ui_request).
     ui: {
       notify: '扩展通知',
       setStatus: '扩展状态',
       dialog: '扩展请求对话',
       cleared: '已清除',
-      // 对话类请求的结局：在对话里作为问题回答了、立即按取消回应（任务轮次、选项太多、编辑器），或没等到回答（到期或这一轮先结束）。
+      // Outcome of a dialog-type request: answered as a question in the conversation, answered with cancel right
+      // away (task turns, too many options, editor), or no answer came in time (it expired or the turn ended first).
       answered: { answered: '已回答', cancelled: '已取消：这种对话不能转成问题，已按取消回应', expired: '已过期：到期前没有回答，或这一轮先结束了' },
       viewQuestion: '查看问题',
       level: { info: '提示', warning: '警告', error: '错误' },
     },
   },
-  // 按 JSON Schema 生成的表单。
+  // Forms generated from a JSON Schema.
   form: {
     required: '必填',
     optional: '可选',

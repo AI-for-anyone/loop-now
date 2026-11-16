@@ -39,7 +39,7 @@ export function ClisSection({ agent }: { agent: Schemas['Agent'] }) {
   }
 
   const templateOf = (cli: string) => templates.data?.templates.find((tpl) => tpl.name === cli)
-  // 模板还没拿到时不能录入凭证，说明原因。
+  // Credentials can't be entered until the templates have arrived; explain why.
   const unavailableReason = templates.data
     ? t.config.clis.credentialUnavailable.missing
     : templates.isError
@@ -102,10 +102,10 @@ function CliItem({
   const [deletingCredential, setDeletingCredential] = useState(false)
   const remove = useRemoveCli(agentId)
   const deleteCredential = useDeleteCliCredential(agentId)
-  // 模板不可用时不保留打开状态，免得模板之后到达时对话框自己弹出。
+  // Don't keep the open state while the template is unavailable, so the dialog doesn't pop up by itself when the template arrives later.
   if (editing && !template) setEditing(false)
 
-  // 每个 CLI 一张白底条目；有模板的 CLI 把凭证状态与录入按钮放在单独的浅蓝子框内。
+  // One white entry per CLI; a CLI with a template puts its credential status and entry buttons in a separate light-blue inner box.
   return (
     <li className="grid gap-2.5 rounded-card bg-white px-4 py-3.5" aria-label={cli.name}>
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2">
@@ -155,7 +155,8 @@ function CliItem({
         body={project ? t.credentials.clis.removeProjectBody : cli.credential ? t.config.clis.removeBodyWithCredential : t.config.clis.removeBody}
         confirmLabel={t.common.remove}
         destructive
-        // 只有连同已录入的凭证一起删除时撤销不了；没有凭证的、项目级的移除（共享账号保留）可以再加回来。
+        // Only a removal that also deletes an entered credential can't be undone; a CLI removed without a credential, or removed at
+        // project level (the shared account is kept), can be added back.
         irreversible={!project && !!cli.credential}
         onConfirm={() => remove.mutateAsync(cli.name)}
       />

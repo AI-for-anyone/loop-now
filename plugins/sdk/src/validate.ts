@@ -1,5 +1,6 @@
-// 插件目录的校验（plugins/SPEC.md §2）：错误项与服务端 internal/pluginmanifest 拒绝安装的规则一致，
-// 另给出不影响安装、但作者通常应当修正的提醒。JSON Schema 只做结构检查，完整编译由服务端在安装时做。
+// Validation of a plugin directory (plugins/SPEC.md §2): errors match the rules by which the server's internal/pluginmanifest refuses
+// to install; it also gives warnings that do not block installing but that authors should usually fix.
+// JSON Schema gets structural checks only; the server compiles it fully at install time.
 
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
@@ -10,12 +11,15 @@ export type FindingLevel = 'error' | 'warning'
 
 export interface Finding {
   level: FindingLevel
-  /** 清单里的位置，如 loopNow.events[2]；整个目录的问题为空字符串。 */
+  /** Location in the manifest, such as loopNow.events[2]; an empty string for problems with the whole directory. */
   path: string
   message: string
 }
 
-/** 按语言的文字（plugins/SPEC.md §2）：字符串（各语言都显示它），或以语言标签为键的对象，如 { "zh-CN": "…", "en-US": "…" }。 */
+/**
+ * Localized text (plugins/SPEC.md §2): a string (shown for every language), or an object keyed by language tag,
+ * such as { "zh-CN": "…", "en-US": "…" }.
+ */
 export type LocalizedText = string | Record<string, string>
 
 export interface ValidatedManifest {
@@ -32,7 +36,7 @@ export interface ValidatedManifest {
   actions: string[]
   schedules: string[]
   channels: string[]
-  /** 声明了 manageIdentities、能代管外部身份的渠道。 */
+  /** Channels that declare manageIdentities and so can manage external identities. */
   identityChannels: string[]
   http: boolean
   mcpServers: string[]
@@ -47,7 +51,7 @@ export interface ValidationResult {
 }
 
 export interface ValidateOptions {
-  /** 平台的发布版本（YYYY.MM）；省略或不是这种形式时不检查 minPlatformVersion。 */
+  /** The platform release version (YYYY.MM); when omitted or not in that form, minPlatformVersion is not checked. */
   platformVersion?: string
 }
 
@@ -55,13 +59,14 @@ const ID_PATTERN = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/
 const VERSION_PATTERN = /^[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$/
 const KIND_PATTERN = /^[a-z][a-z0-9_]{0,31}$/
 const SLUG_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/
-/** 语言标签按 BCP 47 的写法：主语言 2 到 3 个字母，后接若干以连字符分隔的子标签（zh-CN、en-US、en、zh-Hant-TW）。 */
+/** Language tag per BCP 47: a 2 to 3 letter primary language, then zero or more hyphen-separated subtags (zh-CN, en-US, en, zh-Hant-TW). */
 const LANGUAGE_TAG = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/
 const LOCALIZED_RULE = '须是字符串，或以语言标签（如 zh-CN、en-US）为键、非空字符串为值的对象，至少一项'
 const WHERE = ['agent', 'task', 'project', 'identity', 'global']
 const SCHEMA_TYPES = ['object', 'array', 'string', 'number', 'integer', 'boolean', 'null']
 const ENTRY_EXTENSIONS = ['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs']
-// Pi 提供给扩展的包（Pi 文档 packages.md）与宿主提供给平台侧的 SDK：应放在 peerDependencies，不随插件安装。
+// Packages Pi provides to extensions (Pi docs packages.md) and the SDK the host provides to the platform side: these belong in
+// peerDependencies and are not installed with the plugin.
 const HOST_PROVIDED = [
   '@loop-now/plugin-sdk',
   '@earendil-works/pi-ai',
@@ -74,10 +79,11 @@ const HOST_PROVIDED = [
 type Json = Record<string, unknown>
 
 /**
- * 一条 mcpServers 条目能否交给 Pi（与 Pi 的 validateMcpServerConfig 选传输的方式相同，服务端 internal/pluginmanifest 同此）：
- * 有 url 且 type 省略或为 http、streamable-http 时是 streamable HTTP，url 须是写明 http:// 或 https:// 加主机的地址
- * （URL 会把 http:foo 规范成 http://foo/，服务端按主机非空判断，所以另查写法）；
- * 否则有非空 command 且 type 省略或为 stdio 时是 stdio。返回 null 表示可以，否则是哪类问题。
+ * Whether an mcpServers entry can be handed to Pi (the transport is chosen the same way as Pi's validateMcpServerConfig; the server's
+ * internal/pluginmanifest does the same):
+ * with a url and type omitted or http or streamable-http, it is streamable HTTP, and the url must spell out http:// or https:// plus a host
+ * (URL normalizes http:foo to http://foo/ and the server checks for a non-empty host, so the spelling is checked separately);
+ * otherwise, with a non-empty command and type omitted or stdio, it is stdio. Returns null when acceptable, otherwise which kind of problem.
  */
 function mcpEntryProblem(cfg: unknown): 'sse' | 'type' | 'entry' | null {
   if (!isObject(cfg)) return 'entry'
@@ -97,8 +103,9 @@ function strings(v: unknown): v is string[] {
 }
 
 /**
- * 读一个按语言的字段（description、loopNow.displayName）：缺省为 fallback；字符串原样；对象须至少一项，
- * 键为语言标签，值为去掉空白后非空的字符串。别的形式报错并按 fallback 处理。与服务端 internal/pluginmanifest 同一规则。
+ * Reads a localized field (description, loopNow.displayName): fallback when missing; a string as is; an object must have at least one entry,
+ * keyed by language tag, with values that are non-empty after trimming whitespace. Any other form is an error and is treated as fallback.
+ * Same rules as the server's internal/pluginmanifest.
  */
 function localizedField(v: unknown, field: string, fallback: string, error: (p: string, m: string) => void): LocalizedText {
   if (v === undefined) return fallback
@@ -176,7 +183,7 @@ export function validatePlugin(dir: string, options: ValidateOptions = {}): Vali
   let id = typeof lnObj.id === 'string' ? lnObj.id : ''
   if (lnObj.id !== undefined && typeof lnObj.id !== 'string') error('loopNow.id', 'loopNow.id 须是字符串')
   if (id === '') {
-    // 只有 pi 段的标准 Pi 包：用 npm 名去掉作用域作为 id（与服务端一致）。
+    // A standard Pi package with only a pi section: use the npm name without its scope as the id (same as the server).
     id = (name.split('/').pop() ?? '')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
@@ -313,7 +320,7 @@ export function validatePlugin(dir: string, options: ValidateOptions = {}): Vali
     scheduleIds.push(s.id)
   })
 
-  // 以下是提醒：不影响安装。
+  // The following are warnings: they do not block installing.
   const keywords = strings(pkg.keywords) ? pkg.keywords : []
   if (ln !== undefined && !keywords.includes('loop-now-plugin')) warn('keywords', '建议在 keywords 里加上 loop-now-plugin，便于在市场与 npm 上被找到')
   if (extensions.length > 0 && !keywords.includes('pi-package')) warn('keywords', '带 Pi 扩展的插件建议加上 pi-package 关键字（Pi 包的约定）')
@@ -367,8 +374,9 @@ function checkPath(root: string, rel: string, field: string, allowDir: boolean, 
   return true
 }
 
-// checkSchema 做结构检查：type、properties、required、items、enum 的形状，以及 x-secret 与 x-scope 只用在生效的位置：
-// top 说明这份 Schema 的顶层字段上哪个生效（服务端对配置与账号字段的顶层认 x-secret，只对配置的顶层认 x-scope），其余位置给提醒。
+// checkSchema does structural checks: the shapes of type, properties, required, items and enum, and that x-secret and x-scope are used
+// only where they take effect: top says which of them takes effect on this schema's top-level fields (the server honors x-secret at
+// the top level of config and account fields, and x-scope only at the top level of config); anywhere else gets a warning.
 function checkSchema(
   schema: Json,
   at: string,
@@ -425,7 +433,7 @@ function releaseParts(v: string): number[] | null {
   return out.length >= 2 ? out : null
 }
 
-// versionAtLeast 比较 YYYY.MM 形式的发布版本；平台版本不是这种形式（开发版）时视为满足。
+// versionAtLeast compares release versions in YYYY.MM form; a platform version not in that form (a dev build) counts as satisfying it.
 export function versionAtLeast(platform: string, required: string): boolean {
   const have = releaseParts(platform)
   if (have === null) return true

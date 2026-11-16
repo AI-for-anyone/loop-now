@@ -8,7 +8,7 @@ import { chooseModel } from '@/test/model-picker'
 import { runtimeList } from '@/test/runtimes'
 import { thinkingOptions } from '@/test/thinking'
 
-// 运行时由模型提供方决定：选本机的 Claude Code 就是 Claude Code 运行时，其余是 Pi。
+// The runtime is determined by the model provider: choosing the local Claude Code means the Claude Code runtime; anything else is Pi.
 const region = (name: string) => screen.getByRole('region', { name })
 const saveButton = () => within(region('基本信息')).getByRole('button', { name: '保存' })
 const option = (select: HTMLElement, value: string) => within(select).queryAllByRole('option').find((item) => (item as HTMLOptionElement).value === value) as HTMLOptionElement | undefined
@@ -42,7 +42,7 @@ describe('选择 Claude Code', () => {
     expect(thinkingOptions(basic)).toEqual(['默认（中）', '低', '中', '高', '更高', '最高'])
     expect(within(basic).queryByLabelText('Codex 速度')).toBeNull()
 
-    // 换回 Pi 的提供方，说明随之收起。
+    // Switching back to a Pi provider collapses the notes again.
     await user.selectOptions(select, 'anthropic')
     expect(within(basic).queryByText(providerNote)).toBeNull()
     expect(within(basic).queryByRole('region', { name: differencesTitle })).toBeNull()
@@ -146,7 +146,7 @@ describe('Claude Code 不需要账号', () => {
   })
 
   it('项目 Agent：不显示 Claude Code 的账号来源与去项目设置的入口', async () => {
-    // 默认的账号来源里有 claude-code 这一项（没有候选账号），与服务端一致。
+    // The default account sources include a claude-code entry (with no candidate accounts), matching the server.
     await renderConfig({ agent: claudeAgent(), handlers: [catalog] })
     const section = region('模型账号凭证')
     expect(section).toHaveTextContent(account)
@@ -174,7 +174,7 @@ describe('本机的 Claude Code 不可用或没登录', () => {
     const basic = region('基本信息')
     const select = within(basic).getByLabelText('模型提供方')
     await waitFor(() => expect(option(select, 'claude-code')).toBeDefined())
-    // 没选 Claude Code 时不读运行时状态。
+    // The runtime status is not read while Claude Code is not selected.
     expect(status.reads()).toBe(0)
     await user.selectOptions(select, 'claude-code')
     expect(await within(basic).findByText('本机没找到 claude：装好 Claude Code，并确认在终端里能运行 claude。处理好之前，用它的 Agent 运行会失败。')).toHaveAttribute('role', 'note')

@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto'
 
-// ULID（https://github.com/ulid/spec）：48 位毫秒时间加 80 位随机数，Crockford Base32，按字典序即按时间排序。
-// 同一毫秒内递增随机部分，保证同一进程里生成的 id 严格递增。
+// ULID (https://github.com/ulid/spec): 48-bit millisecond time plus 80 random bits, Crockford Base32; lexicographic order is time order.
+// Within the same millisecond the random part is incremented, so ids generated in one process are strictly increasing.
 
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 

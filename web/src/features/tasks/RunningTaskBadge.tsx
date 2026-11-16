@@ -1,9 +1,11 @@
 import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 
-// 左侧栏“任务”一项旁的运行数：项目里状态为 running 的任务个数（准备中、等待、阻塞的不算）；没读到或为 0 时不显示。
-// 白底、藏青描边与藏青字的小胶囊，选中（黄底）与未选中（蓝底）时都看得清，也与粉色的“待你回复”贴纸区分开。
-// 数字对读屏隐藏，改读“N 个任务正在运行”；悬停时显示同一句。
+// The running count next to the “任务” (Tasks) item in the sidebar: the number of tasks in the project whose status is running
+// (preparing, waiting and blocked don't count); not shown when it hasn't been read or is 0.
+// A small pill with a white background, navy outline and navy text, readable whether the item is selected (yellow background) or not
+// (blue background), and distinct from the pink “待你回复” (Needs your reply) sticker.
+// The number is hidden from screen readers, which read “N 个任务正在运行” (N tasks running) instead; hovering shows the same sentence.
 export function RunningTaskBadge({ count, className }: { count: number | undefined; className?: string }) {
   if (!count) return null
   const label = t.shell.runningTasks(count)

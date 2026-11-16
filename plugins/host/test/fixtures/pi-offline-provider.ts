@@ -1,5 +1,6 @@
-// 只用于测试的进程内模型，不连接任何真实供应商。PI_TEST_TOOL_CALLS（JSON 数组 [{name, arguments}]）是前几轮依次发出的工具调用，
-// 之后一轮回复 done；PI_TEST_REPORT 设置时，每轮把模型收到的消息追加一行写进这个文件。
+// In-process model for tests only; it connects to no real provider. PI_TEST_TOOL_CALLS (a JSON array [{name, arguments}]) holds
+// the tool calls made one per turn in the first turns, after which a turn replies done; when PI_TEST_REPORT is set, each turn
+// appends one line with the messages the model received to that file.
 import { appendFileSync } from 'node:fs'
 
 import { createAssistantMessageEventStream } from '@earendil-works/pi-ai'

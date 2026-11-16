@@ -5,7 +5,8 @@ import { ConfirmInstallDialog } from './InstallFlow'
 
 type Preview = Schemas['PluginPreview']
 
-// 安装与更新共用的第一步：取来源的预览，成功后打开确认框。begin 的 key 用来标出是哪个按钮在读取。
+// The first step shared by installing and updating: fetch a preview of the source, and on success open the confirmation dialog. The key
+// passed to begin marks which button is loading.
 export function usePluginInstaller(onInstalled?: (plugin: Schemas['Plugin']) => void) {
   const [preview, setPreview] = useState<Preview | null>(null)
   const [pending, setPending] = useState<string | null>(null)

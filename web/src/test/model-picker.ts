@@ -1,7 +1,7 @@
 import { within } from '@testing-library/react'
 import type { UserEvent } from '@testing-library/user-event'
 
-// 在模型下拉（combobox）中选择一个模型：打开下拉，点击 ID 对应的选项。
+// Picks a model in the model dropdown (combobox): opens the dropdown and clicks the option for the ID.
 export async function chooseModel(user: UserEvent, scope: HTMLElement, modelId: string) {
   await user.click(await within(scope).findByRole('combobox', { name: '模型' }))
   const listbox = await within(document.body).findByRole('listbox')
@@ -12,7 +12,7 @@ export async function chooseModel(user: UserEvent, scope: HTMLElement, modelId: 
   await user.click(option)
 }
 
-// 打开模型下拉，返回各选项的完整说明。
+// Opens the model dropdown and returns the full description of each option.
 export async function modelOptions(user: UserEvent, scope: HTMLElement): Promise<string[]> {
   await user.click(await within(scope).findByRole('combobox', { name: '模型' }))
   const listbox = await within(document.body).findByRole('listbox')

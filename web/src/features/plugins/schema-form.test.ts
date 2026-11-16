@@ -49,7 +49,7 @@ describe('按 JSON Schema 生成的配置表单', () => {
     const draft = initialDraft(fields, { values: { url: 'https://a.example/x', retries: 2, verbose: true, level: 3 }, secretsSet: ['token'], revision: 4 })
     expect(draft.values).toEqual({ url: 'https://a.example/x', retries: '2', ratio: '', verbose: 'true', level: '2', mode: '' })
     expect(draft.secrets).toEqual({ token: { mode: 'keep', value: '' } })
-    // 项目覆盖不填默认值。
+    // Project overrides are not prefilled with default values.
     expect(initialDraft(fieldsOf(schema, 'project'), { values: {}, secretsSet: [], revision: 0 }, 'project').values).toEqual({ url: '', verbose: '' })
   })
 
@@ -61,7 +61,7 @@ describe('按 JSON Schema 生成的配置表单', () => {
     expect(validate(fields, bad)).toEqual({ url: '请填完整地址，例如 https://…', token: '必填', retries: '请填整数', ratio: '请填数字' })
     const range = { ...draft, values: { ...draft.values, url: 'https://ok.example', retries: '11' }, secrets: { token: { mode: 'keep' as const, value: '' } } }
     expect(validate(fields, range, ['token'])).toEqual({ retries: '不能大于 10' })
-    // 必填密钥不能清除。
+    // A required secret cannot be cleared.
     expect(validate(fields, { ...range, values: { ...range.values, retries: '1' }, secrets: { token: { mode: 'clear', value: '' } } }, ['token'])).toEqual({ token: '必填' })
   })
 

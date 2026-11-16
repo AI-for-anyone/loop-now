@@ -5,8 +5,9 @@ import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { DraftImagePreview } from './ImagePreview'
 import { imageMimeTypes, imageProblem, type ImageDraft, type ImageLimits, type ImageUploads } from './image-drafts'
-// 传入函数时，添加按钮与缩略图条交给它放进输入框里（addClassName 调整按钮大小；没有图片时缩略图条为 null），否则都排在下方。
-// uploads 是发送时各图片的上传状态，显示在对应缩略图上。
+// When a function is passed as children, the add button and the thumbnail strip are handed to it to place inside the composer
+// (addClassName adjusts the button size; the strip is null when there are no images); otherwise both go below.
+// uploads is the upload state of each image while sending, shown on the matching thumbnail.
 export function ImagePicker({ images, onChange, limits, disabled, uploads, addClassName, children }: { images: ImageDraft[]; onChange: (images: ImageDraft[]) => void; limits: ImageLimits; disabled?: boolean; uploads?: ImageUploads; addClassName?: string; children?: ReactNode | ((addButton: ReactNode, strip: ReactNode) => ReactNode) }) {
   const input = useRef<HTMLInputElement>(null)
   const [error, setError] = useState(''), [dragging, setDragging] = useState(false)
@@ -18,7 +19,8 @@ export function ImagePicker({ images, onChange, limits, disabled, uploads, addCl
   const paste = (event: ClipboardEvent) => { const files = Array.from(event.clipboardData.files); if (files.length && !disabled) { event.preventDefault(); add(files) } }
   const drag = (event: DragEvent) => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); if (!disabled) setDragging(true) } }
   const addButton = <Button type="button" variant="secondary" size="icon-sm" className={cn('bg-transparent text-ink-700 hover:bg-tint-blue', addClassName)} aria-label={t.images.add} title={t.images.add} disabled={disabled} onClick={() => input.current?.click()}><PlusIcon aria-hidden="true" className="size-5" /></Button>
-  // 缩略图条在输入框里横向滚动，窄屏也不撑宽页面；× 在缩略图角上，一直显示。
+  // The thumbnail strip scrolls horizontally inside the composer, so it doesn't widen the page even on narrow screens; the ×
+  // sits on the thumbnail's corner and is always visible.
   const strip = images.length > 0 ? <div className="relative min-w-0">
     <ul aria-label={t.images.preview} className="flex min-w-0 gap-2 overflow-x-auto px-1 pt-1 pb-2 [scrollbar-width:thin]">{images.map((image, index) => {
       const upload = uploads?.[image.id]

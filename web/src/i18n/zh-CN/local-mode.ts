@@ -2,10 +2,11 @@ import type { components } from '@/api/schema.gen'
 
 type S = components['schemas']
 
-// 个人版“本机模式”：全局设置里的四个开关，以及项目设置与 Agent 配置里的本机目录。
+// Personal edition “本机模式” (Local mode): the four switches in global
+// settings, plus the local directories in project settings and Agent config.
 export const localMode = {
   settings: {
-    // 开关旁边写着的当前状态。
+    // Current state written next to the switch.
     on: '开',
     off: '关',
     title: '本机模式',
@@ -29,7 +30,7 @@ export const localMode = {
         description: 'Agent 直接用你在这台电脑上各个工具的登录，等同以你本人的身份操作，所有 Agent 共用这些登录；Loop Now 里已为 Agent 配了账号的 CLI 仍用配置的账号。与“用本机的 CLI”互相独立：只开这一项时，只有 Agent 原本就能调用的命令用得上这些登录。',
       },
     } satisfies Record<keyof S['LocalModeSettings'], { label: string; description: string }>,
-    // 打开“用本机的登录状态”前的确认（关闭不用确认）。
+    // Confirmation before turning on “用本机的登录状态” (Use local logins) (turning it off needs no confirmation).
     loginsConfirm: {
       title: '打开“用本机的登录状态”？',
       body: '打开后，从 Agent 处理下一条消息起：',

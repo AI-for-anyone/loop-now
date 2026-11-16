@@ -1,4 +1,4 @@
-// 插件宿主入口（plugins/SPEC.md §3）。Go 以 `node main.js` 启动它；`node main.js validate <目录>` 校验插件目录。
+// Plugin host entry (plugins/SPEC.md §3). Go starts it with `node main.js`; `node main.js validate <dir>` validates a plugin directory.
 
 import { Host, HOST_VERSION } from './host.ts'
 import { runValidate } from './validate.ts'
@@ -11,6 +11,6 @@ if (command === 'validate') {
 } else if (command === undefined) {
   new Host().start()
 } else {
-  process.stderr.write(`未知的参数 ${command}；不带参数运行宿主，或 validate <插件目录>\n`)
+  process.stderr.write(`Unknown argument ${command}; run the host without arguments, or validate <plugin dir>\n`)
   process.exitCode = 2
 }

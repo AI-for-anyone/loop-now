@@ -12,7 +12,8 @@ import { Quiet } from './parts'
 const text = t.plugins.detail
 const projectPluginsPath = (project: Schemas['Project']) => `/p/${encodeURIComponent(project.name)}/plugins`
 
-// 一个项目一行：项目名、覆盖了几项，右边是启用开关。开关保存时带上项目现有的项目级配置与版本，配置本身不变。
+// One row per project: project name, how many fields are overridden, and the enable switch on the right. When the switch saves, it sends
+// along the project's existing project-level config and revision, so the config itself doesn't change.
 function EnableRow({ project, pluginId, schema }: { project: Schemas['Project']; pluginId: string; schema: unknown }) {
   const { item, error } = useProjectPlugin(project.id, pluginId)
   const save = useSaveProjectPlugin(project.id, pluginId)
@@ -44,7 +45,7 @@ function EnableRow({ project, pluginId, schema }: { project: Schemas['Project'];
   )
 }
 
-// 在哪些项目启用：每个项目一个开关。
+// Which projects enable it: one switch per project.
 export function ProjectEnableList({ pluginId, schema }: { pluginId: string; schema: unknown }) {
   const projects = useProjects()
   const list = projects.data?.projects ?? []
@@ -52,7 +53,7 @@ export function ProjectEnableList({ pluginId, schema }: { pluginId: string; sche
   if (projects.isPending) return <Quiet>{t.common.loading}</Quiet>
   if (!list.length) return <Quiet>{text.noProjects}</Quiet>
   return (
-    // 改版第 5 步：表头一道实线，项目之间虚线（通用规则第 9 条）。
+    // Redesign step 5: a solid line at the header, dashed lines between projects (general rule 9).
     <ul className="grid min-w-0 border-t-2 border-ink">
       {list.map((project) => (
         <EnableRow key={project.id} project={project} pluginId={pluginId} schema={schema} />

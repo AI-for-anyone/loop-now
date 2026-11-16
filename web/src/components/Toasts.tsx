@@ -3,7 +3,7 @@ import { XIcon } from 'lucide-react'
 import { t } from '@/i18n'
 import { toastStore } from '@/lib/toast'
 
-// 轻提示的显示位置：右下角叠放，新的在下面；读屏按礼貌模式朗读。
+// Where toasts appear: stacked in the bottom right, newest at the bottom; screen readers announce them politely.
 export function Toasts() {
   const toasts = useSyncExternalStore(toastStore.subscribe, toastStore.get)
   return (

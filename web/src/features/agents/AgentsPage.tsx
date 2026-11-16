@@ -12,13 +12,15 @@ import { agentPath, scopeKey, type Scope } from '@/lib/scope'
 import { cn } from '@/lib/utils'
 import { CreateAgentDialog } from './CreateAgentDialog'
 
-// Agent 页通过路由出口把“新建 Agent”交给主区的空状态。
+// The Agents page passes “新建 Agent” (New Agent) to the main area's empty state through the route outlet.
 interface AgentsOutletContext {
   openCreate: () => void
 }
 
-// 当前项目或平台的 Agent 页。Agent 列表在左侧栏里，这里只有所选 Agent 的页面（没有选时是提示或首次使用的空状态）。
-// 从项目设置的“去新建 Agent”进入时，地址的 state 中带 openCreate，打开时直接弹出新建对话框。
+// The Agents page of the current project or the platform. The Agent list is in the sidebar; this only holds the selected
+// Agent's page (or, when none is selected, a hint or the first-use empty state).
+// When entered from “去新建 Agent” (Create an Agent) in the project settings, the location state carries openCreate and the
+// New Agent dialog opens right away.
 export function AgentsPage() {
   const scope = useScope()
   const location = useLocation()
@@ -32,17 +34,20 @@ export function AgentsPage() {
   )
 }
 
-// 作用域还没确定时（项目列表加载中或加载失败）的主区：无法连接时不另作说明（全局提示与左侧栏的骨架已经说明），
-// 其他错误显示出来，加载中只显示“加载中…”。
+// The main area while the scope isn't settled yet (project list loading or failed to load): when the server can't be reached,
+// nothing extra is said (the global notice and the sidebar skeleton already say it); other errors are shown, and while
+// loading only “加载中…” (Loading…) is shown.
 export function AgentsPlaceholder({ error }: { error: unknown }) {
   if (isUnreachable(error)) return null
   if (error) return <ErrorAlert error={error} className="mx-6 my-7 w-auto" />
   return <p className="px-6 py-7 text-[14px] text-ink-500">{t.common.loading}</p>
 }
 
-// 没有打开 Agent 时的主区：没有 Agent 时显示首次使用的空状态。项目里有 Agent 时直接进入 Manager 的对话，
-// 没有 Manager 时进入列表中的第一个；平台仍提示从左侧栏选择。列表加载出来之前不显示内容。
-// 只在打开时已有 Agent 才跳转：先显示了空状态、之后才出现的 Agent（例如刚新建的）由新建流程自己打开配置页。
+// The main area when no Agent is open: with no Agents, show the first-use empty state. In a project that has Agents, go
+// straight to the Manager's chat, or to the first Agent in the list when there is no Manager; the platform still asks to pick
+// one from the sidebar. Nothing is shown before the list has loaded.
+// Only redirect when Agents already exist on opening: for an Agent that appears after the empty state was shown (for example
+// one just created), the create flow opens its Config tab itself.
 export function AgentsIndex() {
   const { openCreate } = useOutletContext<AgentsOutletContext>()
   const scope = useScope()
@@ -63,16 +68,18 @@ export function AgentsIndex() {
   )
 }
 
-// 首次使用的空状态：项目用蓝粉叠印，平台用蓝绿叠印，两者区分开。
+// The first-use empty state: projects use a blue-and-pink overprint and the platform a blue-and-green one, to tell them apart.
 function FirstUse({ scope, onCreate }: { scope: Scope; onCreate: () => void }) {
   const platform = scope.kind === 'platform'
   const titleId = useId()
-  // 与列表头的新建按钮一致，无法连接时禁用。
+  // Same as the New button in the list header: disabled when the server can't be reached.
   const reachable = useSyncExternalStore(reachability.subscribe, reachability.isReachable)
-  // 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。
+  // The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text) scroll
+  // with the content instead of stretching the whole page based on their unscrolled position.
   return (
     <section aria-labelledby={titleId} className="relative flex h-full flex-col items-center justify-center gap-[22px] overflow-y-auto p-6 text-center">
-      {/* 叠印插图：网点蓝圆、荧光粉（平台为绿）圆与黄圆，叠印处用 multiply 混色。 */}
+      {/* Overprint illustration: a halftone blue circle, a fluorescent pink (green for the platform) circle and a yellow circle;
+          where they overlap they blend with multiply. */}
       <span aria-hidden="true" className="relative h-40 w-[220px] shrink-0">
         <span className="riso-halftone absolute top-2.5 left-2.5 size-[140px] rounded-full bg-riso-blue" />
         <span className={cn('absolute top-0 left-[76px] size-[140px] rounded-full mix-blend-multiply', platform ? 'bg-green' : 'bg-riso-pink')} />

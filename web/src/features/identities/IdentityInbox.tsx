@@ -11,8 +11,10 @@ import { t } from '@/i18n'
 
 const directions: InboxDirection[] = ['all', 'received', 'sent']
 
-// 外部身份的收件箱（只读）：收到与发出的消息，可以按方向筛选、只看未读；对发出的消息，“未读”表示对方还没读。
-// 查看全文不改变已读状态，不提供替它标记已读的操作；已删除的身份也可以查看。
+// An external identity's inbox (read-only): received and sent messages, filterable by direction and unread only; for sent
+// messages, “未读” (Unread) means the other party hasn't read it yet.
+// Viewing the full text doesn't change the read state, and there is no action to mark messages read on its behalf; deleted
+// identities can be viewed too.
 export function IdentityInbox({ identityId }: { identityId: string }) {
   const [direction, setDirection] = useState<InboxDirection>('all')
   const [unreadOnly, setUnreadOnly] = useState(false)

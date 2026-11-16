@@ -17,12 +17,15 @@ import { useSkillMdEditor } from './use-skill-md-editor'
 import { PageFrame, PageHeader } from '@/components/PageHeader'
 import { Sheet as PaperSheet } from '@/components/Sheet'
 
-// 上传目录、上传 zip：白底、藏青描边加藏青投影的胶囊；在线新建是本页唯一的荧光粉主按钮（改版通用规则第 7 条）。
+// Upload folder and Upload zip: white pills with a navy outline and a navy shadow; creating online is the only fluorescent
+// pink primary button on this page (redesign general rule 7).
 const uploadButtonClass = 'border-2 border-ink bg-white shadow-[3px_3px_0_var(--ink)] hover:bg-paper-raised'
 
-// 抽屉的开合由地址决定：/skills/:skillId 打开详情抽屉，/skills/new 打开在线新建抽屉，关闭后回到 /skills。
-// 抽屉作为子路由渲染在网格之上，所以刷新或直接打开这两个地址时网格照常显示。
-// 改版：页头是共用的页面标题（旁边写着共几个模板，有模板时还有上传与新建入口）；模板与空状态排在一张纸上。
+// The URL decides whether a drawer is open: /skills/:skillId opens the detail drawer, /skills/new opens the create-online
+// drawer, and closing goes back to /skills.
+// Drawers render as child routes on top of the grid, so the grid still shows when either URL is refreshed or opened directly.
+// Redesign: the header is the shared page title (next to it the template count, plus the upload and create entries when there
+// are templates); the templates and the empty state are laid out on one sheet.
 export function SkillsPage() {
   const skills = useSkills()
   const navigate = useNavigate()
@@ -48,7 +51,7 @@ export function SkillsPage() {
         <PageFrame>
           <PageHeader crumbs={[{ label: t.shell.global }]} title={t.skills.title}>
             {skills.isSuccess && <span>{t.skills.count(list.length)}</span>}
-            {/* 空库时上传与新建入口只放在空状态里，不重复出现在页头。 */}
+            {/* With an empty library, the upload and create entries only appear in the empty state, not again in the header. */}
             {!empty && skills.isSuccess && (
               <>
                 {actions}
@@ -57,7 +60,8 @@ export function SkillsPage() {
             )}
           </PageHeader>
           <PaperSheet className="mt-2 flex-1">
-            {/* 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。 */}
+            {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text)
+                scroll with the content instead of stretching the whole page based on their unscrolled position. */}
             <div className="relative min-h-0 flex-1 overflow-y-auto">
               <div className={cn('flex min-h-full flex-col gap-6 pt-6 pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,30px)]', empty && 'justify-center')}>
                 {feedback}
@@ -88,8 +92,9 @@ export function SkillsPage() {
   )
 }
 
-// 模板卡片：名称（等宽）、文件数、描述与更新时间。整张卡片是打开详情抽屉的链接。
-// 改版：白底、2px 藏青描边、藏青实色投影的卡片；悬停浅黄，当前打开的一张黄底加荧光粉投影（选中态一律黄色）。
+// Template card: name (monospace), file count, description and update time. The whole card is a link that opens the detail drawer.
+// Redesign: a white card with a 2px navy outline and a solid navy offset shadow; light yellow on hover, and the one currently
+// open is yellow with a fluorescent pink shadow (the selected state is always yellow).
 function TemplateCard({ skill, selected }: { skill: Schemas['SkillTemplateSummary']; selected: boolean }) {
   return (
     <Link
@@ -109,7 +114,8 @@ function TemplateCard({ skill, selected }: { skill: Schemas['SkillTemplateSummar
   )
 }
 
-// 空状态（改版）：一片网点、两张叠印的卡片（孔版蓝、荧光粉）和一个黄色的圆，下面是黄色记号笔标题与三个入口。
+// Empty state (redesign): a patch of halftone dots, two overprinted cards (riso blue, fluorescent pink) and a yellow circle,
+// with a yellow highlighter-mark title and three entries below.
 function EmptyLibrary({ children }: { children: ReactNode }) {
   return (
     <div data-empty-library className="flex flex-col items-center gap-[22px] px-6 py-10 text-center">
@@ -125,7 +131,7 @@ function EmptyLibrary({ children }: { children: ReactNode }) {
   )
 }
 
-// 抽屉底栏：在正文滚动区域之外，始终可见。
+// Drawer footer: outside the body's scroll area, always visible.
 const editorClass = 'px-4 py-3.5 font-mono text-[13px] leading-[1.7]'
 const sectionTitleClass = 'font-display-cn text-[24px] leading-[1.2] font-normal'
 
@@ -175,13 +181,14 @@ export function SkillDetailSheet() {
   if (notFound) {
     body = <p className="text-[14px] text-ink-500">{t.skills.notFound}</p>
   } else if (!data) {
-    // 已有数据时，后台刷新失败只在抽屉中提示，不卸载编辑器与确认框，避免丢失未保存的编辑。
+    // Once data exists, a failed background refresh is only reported in the drawer; the editor and confirmation dialogs are
+    // not unmounted, so unsaved edits are not lost.
     body = skill.isError ? <ErrorAlert error={skill.error} /> : <p className="text-[14px] text-ink-500">{t.common.loading}</p>
   }
 
   return (
     <Sheet open onOpenChange={(open) => !open && void navigate('/skills')}>
-      {/* 没有模板数据时抽屉没有说明文字，去掉 aria-describedby。 */}
+      {/* Without template data the drawer has no description text, so drop aria-describedby. */}
       <SheetContent {...(data && !notFound ? {} : { 'aria-describedby': undefined })}>
         <SheetHeader>
           {data && !notFound ? (
@@ -200,7 +207,7 @@ export function SkillDetailSheet() {
   )
 }
 
-// 详情抽屉的正文与底栏：文件列表、SKILL.md 编辑器、替换；底栏为删除与保存。
+// Body and footer of the detail drawer: the file list, the SKILL.md editor and replace; the footer holds delete and save.
 function SkillDetailBody({ skillId, data, refreshError }: { skillId: string; data: Schemas['SkillTemplate']; refreshError: unknown }) {
   const navigate = useNavigate()
   const update = useUpdateSkillMarkdown(skillId)
@@ -209,7 +216,8 @@ function SkillDetailBody({ skillId, data, refreshError }: { skillId: string; dat
   const [replacement, setReplacement] = useState<Blob | null>(null)
   const [deleting, setDeleting] = useState(false)
   const editorId = useId()
-  // 服务端内容更新（updatedAt 变化）后用新内容重置编辑器；后台刷新失败时保留编辑。
+  // When the server content changes (updatedAt changes), reset the editor to the new content; a failed background refresh
+  // keeps the edits.
   const editor = useSkillMdEditor(data.skillMd, (content) => update.mutateAsync(content), data.updatedAt)
 
   return (

@@ -5,7 +5,7 @@ import { t } from '@/i18n'
 import { agentsUrl, apiUrl, context, makeAgent, makeMessagePage, makeStatus, toListItem } from './api'
 import { emptySelections } from './project-credentials'
 
-// 整个控制台的默认接口处理器。MSW 在一次 server.use 中按顺序匹配，测试中的覆盖要写在它们前面。
+// Default endpoint handlers for the whole console. MSW matches in order within one server.use, so overrides in tests must come before them.
 export function baseHandlers(agents: Schemas['Agent'][] = [makeAgent()]) {
   return [
     http.get(apiUrl('/context'), () => HttpResponse.json(context)),
@@ -24,10 +24,11 @@ export function baseHandlers(agents: Schemas['Agent'][] = [makeAgent()]) {
   ]
 }
 
-// 左侧栏与其中的链接；aria-current 为 page 的是当前项。链接文字含状态标签与“待你回复”的读屏文字。
+// The left sidebar and its links; the one with aria-current page is the current item. Link
+// text includes the status labels and the screen-reader text “待你回复” (Needs your reply).
 export const sidebar = () => screen.getByRole('navigation', { name: t.shell.nav })
 export const sidebarLinks = () => within(sidebar()).getAllByRole('link')
 export const currentSidebarLinks = () => sidebarLinks().filter((link) => link.getAttribute('aria-current') === 'page')
 export const scopeSwitcher = (name: string) => within(sidebar()).getByRole('button', { name: t.shell.scope.label(name) })
-// 导航会触发侧栏按新范围重渲染，随后立即查询时用这个异步变体等一拍。
+// Navigating makes the sidebar re-render for the new scope; for a query right afterwards, use this async variant to wait a tick.
 export const findScopeSwitcher = (name: string) => within(sidebar()).findByRole('button', { name: `切换范围，当前：${name}` })

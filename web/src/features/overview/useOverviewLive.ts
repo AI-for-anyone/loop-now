@@ -3,9 +3,10 @@ import { connectOverviewEvents } from '@/api/events'
 import type { ScopeQuery } from '@/lib/scope'
 import { initialOverviewState, overviewReducer } from './overview-state'
 
-// 订阅概览事件流。概览事件只在运行状态变化时推送，频率低，逐条更新界面。
-// 永久断开后一直按退避间隔重连，新连接由服务端先推送快照。
-// 范围在挂载时确定：概览页按范围给这一块设 key，换范围时重新挂载并重新连接。
+// Subscribe to the overview event stream. Overview events are only pushed when the run status changes, which is infrequent,
+// so the UI is updated event by event.
+// After a permanent disconnect it keeps reconnecting at backoff intervals; on a new connection the server pushes a snapshot first.
+// The scope is fixed at mount: the overview page keys this block by scope, so changing the scope remounts and reconnects.
 export function useOverviewLive(scope: ScopeQuery = {}) {
   const [state, dispatch] = useReducer(overviewReducer, initialOverviewState)
   const [initialScope] = useState(scope)

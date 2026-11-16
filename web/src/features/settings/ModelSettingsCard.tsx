@@ -111,7 +111,7 @@ export function ModelSettingsCard() {
   const settings = useModelSettings()
   const copy = t.settings.models
   const initial = useMemo(() => settings.data ? asDraft(settings.data) : null, [settings.data])
-  // 改版后是全局设置纸上一个编号分区的内容（标题由分区给出）。
+  // After the redesign this is the content of one numbered section on the global settings sheet (the section provides the title).
   return <div className="grid min-w-0 gap-4">
     <p className="text-[13.5px] text-ink-700">{copy.description}</p>
       <p className="text-[13px] leading-relaxed text-ink-500">{copy.effect}</p>

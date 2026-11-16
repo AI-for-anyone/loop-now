@@ -29,7 +29,8 @@ type Config = Schemas['PluginConfig']
 
 const hintClass = 'text-[12.5px] leading-snug text-ink-500'
 
-// 按字段生成的输入项。project 模式下每一项都可以留空沿用全局值，下面写出全局值；布尔值改成三选一（用全局值、是、否）。
+// Inputs generated from the fields. In project mode every field may be left empty to keep using the global value, which is shown below
+// it; booleans become a choice of three (use global value, yes, no).
 export function SchemaFields({
   fields,
   draft,
@@ -147,7 +148,8 @@ export function SchemaFields({
   )
 }
 
-// secret 字段：只写不回显。设置过时显示“已设置 · 更换”，点更换才出现输入框；可选的还能清除。
+// A secret field: write-only, never echoed back. Once set, it shows “已设置 · 更换” (Set · Replace), and the input appears only after
+// clicking Replace; optional ones can also be cleared.
 function SecretInput({
   inputId,
   hintId,
@@ -219,8 +221,10 @@ export type ConfigPayload = { values: Record<string, unknown>; secrets?: Record<
 
 const isConflict = (error: unknown) => error instanceof ApiError && error.status === 412
 
-// 配置表单的保存流程：本地校验后按 expectedRevision 保存；412（别处改过）时说明并让人选载入最新或用自己的修改覆盖；
-// 422 的字段错误标到对应的项。服务端的配置换了版本、而这里没有改动时直接换成新版本。
+// The config form's save flow: after local validation, save against expectedRevision; on 412 (changed elsewhere), explain and let the
+// person choose between loading the latest and overwriting with their own changes;
+// 422 field errors are marked on the matching fields. When the server's config moves to a new revision and nothing was changed here,
+// switch to the new revision directly.
 export function ConfigForm({
   formId,
   schema,
@@ -258,7 +262,7 @@ export function ConfigForm({
   const [pending, setPending] = useState(false)
   const [saved, setSaved] = useState(false)
   const dirty = isDirty(initial, draft) || extraDirty
-  // 全局配置从未保存过时可以直接保存，存下清单里的默认值。
+  // When the global config has never been saved, it can be saved as is, storing the defaults from the manifest.
   const firstSave = mode === 'global' && base.revision === 0
   useDirtyForm(formId, dirty)
 
@@ -269,10 +273,11 @@ export function ConfigForm({
     setDraft(fresh)
     setErrors({})
   }
-  // 服务端有了更新的版本（别处保存、启用开关保存）且这里没有改动：换成新版本。
+  // The server has a newer revision (saved elsewhere, or saved by the enable switch) and nothing was changed here: switch to the new revision.
   if (config.revision > base.revision && !dirty && !pending) adopt(config)
 
-  // against 是这次保存所对照的服务端配置：平常是当前版本，覆盖时是刚载入的最新版本。
+  // against is the server config this save is checked against: normally the current revision; when overwriting, the latest revision just
+  // loaded.
   const submit = async (against: Config) => {
     const local = validate(fields, draft, against.secretsSet)
     setErrors(local)

@@ -2,15 +2,19 @@ import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
 import { localizedText } from '@/lib/localized-text'
 
-// 模型提供方的前端小表：每一条按用途分组，收进一个提供方 id，或者同一家的几个地区变体（选中后再切，写入账号的仍是具体 id）。
-// 显示名、搜索别名、变体名在文案表的 credentials.providerPicker.entries 里。接口目录里不在这张表上的 id 落到"其他"，
-// 直接显示 id，所以 Pi 目录新增提供方不会丢；这张表上有、目录里没有的 id 不显示。插件注册的提供方（source 为 plugin）
-// 不查这张表，单独成"插件提供"一组，显示扩展给的名称（不可信文本，原样显示）和注册它的插件。
+// The front end's small table of model providers: each entry is grouped by use and holds one provider id, or several region variants of
+// the same provider (switched after selection; the account still stores the concrete id).
+// Display names, search aliases and variant names live in the copy table under credentials.providerPicker.entries. Ids in the API
+// catalog that aren't in this table fall into "其他" (Other)
+// and show the bare id, so providers newly added to the Pi catalog aren't lost; ids in this table but not in the catalog are not shown.
+// Plugin-registered providers (source is plugin)
+// skip this table and form their own "插件提供" (From plugins) group, showing the name the extension gives (untrusted text, shown as is)
+// and the plugin that registers it.
 export const providerGroups = ['vendor', 'domestic', 'gateway', 'cloud', 'inference', 'plugin', 'other'] as const
 export type ProviderGroup = (typeof providerGroups)[number]
 type EntryKey = keyof typeof t.credentials.providerPicker.entries
 
-// recommended 的几家放在选择器顶部的芯片里。color 是首字母色块的底色。
+// The recommended ones go in the chips at the top of the picker. color is the background of the initial-letter block.
 export const providerCatalog: { key: EntryKey; group: ProviderGroup; ids: string[]; color: string; recommended?: boolean }[] = [
   { key: 'codex', group: 'vendor', ids: ['openai-codex'], color: '#10a37f', recommended: true },
   { key: 'anthropic', group: 'vendor', ids: ['anthropic'], color: '#c96a3a', recommended: true },
@@ -48,7 +52,7 @@ export const providerCatalog: { key: EntryKey; group: ProviderGroup; ids: string
 ]
 const unknownColor = '#666666'
 
-// 表里每个 id 所在的条目。
+// The entry each id in the table belongs to.
 const byId = new Map(providerCatalog.flatMap(entry => entry.ids.map(id => [id, entry] as const)))
 
 export type ProviderEntry = {
@@ -57,30 +61,34 @@ export type ProviderEntry = {
   name: string
   color: string
   recommended: boolean
-  // 目录里实际有的 id，按表里的顺序；有几个时 label 是变体名，用来在选中条里切换。
+  // The ids actually present in the catalog, in table order; when there are several, label is the variant name, used for switching in the
+  // selection bar.
   options: { id: string; label: string; provider: Schemas['ModelProvider'] }[]
   authMethods: Schemas['ModelAuthMethod'][]
-  // 插件提供方：注册它的插件的显示名；其余为 null。
+  // Plugin provider: the display name of the plugin that registers it; null otherwise.
   plugin: string | null
-  // 各变体是同一批模型的不同区域或套餐，取最大的一个，不相加。
+  // The variants are different regions or plans for the same set of models, so take the largest count rather than adding them up.
   modelCount: number
   search: string
 }
 
 const copyOf = (key: EntryKey) => t.credentials.providerPicker.entries[key] as { name: string; alias: string; variants?: readonly string[] }
 
-// 账号列表等只有 id 时的显示名：表里有的用显示名，没有的直接用 id。插件提供方用扩展给的名称（给了目录里的这一项时）。
+// Display name where only the id is known (account lists etc.): use the display name if it is in the table, otherwise the bare id. A
+// plugin provider uses the name the extension gives (when its catalog entry is passed in).
 export function providerName(id: string, provider?: Schemas['ModelProvider']): string {
   if (provider?.source === 'plugin') return provider.name || id
   const known = byId.get(id)
   return known ? copyOf(known.key).name : id
 }
 
-// 注册插件提供方的那个插件的名称：插件清单里的显示名（按界面语言），没有时用插件 id。
+// The name of the plugin that registers a plugin provider: the display name from the plugin manifest (in the UI language), or the plugin
+// id if there is none.
 export const pluginName = (provider: Schemas['ModelProvider']) =>
   provider.pluginDisplayName === null ? provider.pluginId ?? '' : localizedText(provider.pluginDisplayName) || provider.pluginId || ''
 
-// 把接口给的提供方目录收成选择器的条目：分组按 providerGroups 的顺序，组内按表里的顺序，未知 id 排在"其他"的最后。
+// Turn the provider catalog from the API into picker entries: groups in providerGroups order, table order within a group, and unknown ids
+// at the end of "其他" (Other).
 export function providerEntries(providers: Schemas['ModelProvider'][]): ProviderEntry[] {
   const builtin = providers.filter(provider => provider.source !== 'plugin')
   const present = new Map(builtin.map(provider => [provider.id, provider]))
@@ -110,12 +118,13 @@ function entry(key: string, group: ProviderGroup, name: string, color: string, r
   return { key, group, name, color, recommended, options, authMethods, plugin, modelCount, search: [name, ...options.map(option => option.id), alias].join(' ').toLowerCase() }
 }
 
-// 输入即筛：每个词都要出现在显示名、id 或别名里。不搜索时隐藏没有可用模型的条目。
+// Filter as you type: every word must appear in the display name, an id or the aliases. When not searching, hide entries with no
+// available models.
 export function matchesProvider(entry: ProviderEntry, query: string): boolean {
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
   if (!words.length) return entry.modelCount > 0
   return words.every(word => entry.search.includes(word))
 }
 
-// 首字母色块里的字。
+// The letter inside the initial-letter block.
 export const providerInitial = (name: string) => name.trim().charAt(0).toUpperCase()

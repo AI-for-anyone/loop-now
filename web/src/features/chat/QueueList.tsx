@@ -12,13 +12,14 @@ import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { conflictNotice, useQueueActions, useQueueNotice } from './queue-actions'
 
-// 排队列表的一行，即一条排队消息。打断的行底色浅粉、标明下一条处理；actions 放在行尾，例如打断。
+// One row of the queue list, i.e. one queued message. An interrupt row has a light pink fill and is marked as handled next; actions go
+// at the end of the row, e.g. interrupt.
 export interface QueueRow {
   key: string
   interrupt: boolean
-  // 行首图标：自己发的或 Inbox 消息。任务节点的行不用图标，只用发送方标签。
+  // Icon at the start of the row: sent by yourself, or an Inbox message. Task node rows use no icon, only the sender label.
   kind?: 'own' | 'inbox'
-  // 发送方标签：自己发的为描边的“你”，其余为发送方名称。
+  // Sender label: an outlined “你” (You) for your own messages, otherwise the sender's name.
   sender?: { name: string; own: boolean }
   text: string
   images: Schemas['MessageImage'][]
@@ -26,16 +27,18 @@ export interface QueueRow {
 }
 
 interface QueuePanelProps {
-  // 排队总数：可能多于已列出的消息（消息还没有加载到的只计入总数）。
+  // Total queued count: may be more than the messages listed (messages not loaded yet only count toward the total).
   count: number
-  // 已按服务端的处理顺序排列。
+  // Already in the server's processing order.
   rows: QueueRow[]
-  // 任务节点面板里的排队列表：行更紧凑，可以收起，收起时只占一行：总数、第一条的发送方与摘要、展开控件。
-  // 展开状态由调用方保存。不传为普通对话的排队列表，总是展开。
+  // The queue list in the task node panel: more compact rows, collapsible; when collapsed it takes a single line: the total, the
+  // first message's sender and summary, and the expand control.
+  // The caller keeps the expanded state. Omitted for the queue list of an ordinary conversation, which is always expanded.
   collapse?: { expanded: boolean; onToggle: () => void }
 }
 
-// 贴在输入框顶上的排队托盘：比输入框收进一些，没有底边，与输入框连成一体；没有排队时不占位置，消息开始执行后进入对话流。
+// The queue tray attached to the top of the input box: inset a little from the input box, with no bottom border, so the two read as one
+// piece; takes no space when nothing is queued, and a message moves into the conversation flow once it starts running.
 export function QueuePanel({ count, rows, collapse }: QueuePanelProps) {
   const listId = useId()
   if (count === 0 && rows.length === 0) return null
@@ -113,7 +116,7 @@ const kindIcons = {
   inbox: <MailIcon aria-hidden="true" className="size-3.5 shrink-0 text-riso-blue" strokeWidth={2} />,
 }
 
-// 正文默认截成一行，悬停显示全文，点击展开或收起。
+// The text is truncated to one line by default; hovering shows the full text, and clicking expands or collapses it.
 function QueueItem({ dense, interrupt, kind, sender, text, images, actions }: Omit<QueueRow, 'key'> & { dense: boolean }) {
   const [expanded, setExpanded] = useState(false)
   return (
@@ -160,7 +163,8 @@ function QueueItem({ dense, interrupt, kind, sender, text, images, actions }: Om
   )
 }
 
-// 行尾的打断：转为打断，排到下一条处理。请求进行中禁用，防止连点。
+// The interrupt at the end of a row: promote to an interrupt, handled next. Disabled while the request is in flight, to prevent repeated
+// clicks.
 export function PromoteButton({ pending, disabled = false, label = t.chat.queueList.promote, onClick }: { pending: boolean; disabled?: boolean; label?: string; onClick: () => void }) {
   return (
     <button
@@ -178,8 +182,9 @@ export function PromoteButton({ pending, disabled = false, label = t.chat.queueL
 
 const iconButtonClass = 'inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-ink-500 hover:bg-tint-blue hover:text-ink focus-visible:shadow-focus disabled:cursor-default disabled:opacity-50'
 
-// 行尾的编辑（✎，只有自己发的）与取消（×）：编辑撤回这条消息，把文字与图片放回输入框。
-// 不能编辑的行留出同样宽的空位，各行的打断与取消对齐成固定的两列。
+// Edit (✎, only for your own messages) and cancel (×) at the end of a row: edit withdraws this message and puts its text and images back
+// into the input box.
+// Rows that can't be edited leave a blank of the same width, so interrupt and cancel line up in two fixed columns across rows.
 export function RowButtons({ disabled, onEdit, onCancel, cancelLabel = t.chat.queueList.cancel }: { disabled: boolean; onEdit?: () => void; onCancel: () => void; cancelLabel?: string }) {
   return (
     <span className="flex shrink-0">
@@ -197,7 +202,7 @@ export function RowButtons({ disabled, onEdit, onCancel, cancelLabel = t.chat.qu
   )
 }
 
-// 无法操作排队消息时的一行轻提示：不弹窗、不挡操作（见 useQueueNotice）。
+// A light one-line notice when a queued message can't be acted on: no dialog, doesn't block anything (see useQueueNotice).
 export function QueueNotice({ text }: { text: string | null }) {
   if (!text) return null
   return (
@@ -207,7 +212,7 @@ export function QueueNotice({ text }: { text: string | null }) {
   )
 }
 
-// 托盘上方的轻提示与错误；都没有时不占位置，托盘仍贴着输入框。
+// Light notices and errors above the tray; when there are none they take no space and the tray stays attached to the input box.
 export function QueueMessages({ notice, error }: { notice: string | null; error: unknown }) {
   return (
     <div className="mb-2 grid gap-2 empty:hidden">
@@ -219,17 +224,19 @@ export function QueueMessages({ notice, error }: { notice: string | null; error:
 
 interface QueueListProps {
   agentId: string
-  // 逐条排队列表，已按服务端的处理顺序排列。
+  // The per-item queue list, already in the server's processing order.
   items: Schemas['QueueItem'][]
-  // 动作开始时的 live.queueSeq：回执到达前又收到过新列表时，不用回执里的旧列表覆盖。
+  // live.queueSeq when the action started: if a new list arrived before the receipt, don't overwrite it with the stale list in the
+  // receipt.
   queueSeq: number
   onReceipt: (receipt: Schemas['AgentQueueActionReceipt'], seq: number) => void
-  // 编辑：撤回成功后把原文与图片交给输入框。
+  // Edit: after a successful withdrawal, hand the original text and images to the input box.
   onEdit: (text: string, images: ImageDraft[]) => void
 }
 
-// 普通对话的排队列表，每条消息一行。每一行都能转为打断（打断的行除外）和取消；自己发的还能编辑。
-// 顺序以服务端返回的列表与 queue.updated 为准。
+// The queue list of an ordinary conversation, one row per message. Every row can be promoted to an interrupt (except interrupt rows)
+// and cancelled; your own messages can also be edited.
+// The order follows the list returned by the server and queue.updated.
 export function QueueList({ agentId, items, queueSeq, onReceipt, onEdit }: QueueListProps) {
   const client = useQueryClient()
   const actions = useQueueActions()
@@ -240,7 +247,8 @@ export function QueueList({ agentId, items, queueSeq, onReceipt, onEdit }: Queue
     const row = queueItemKey(item), seq = queueSeq
     setError(null)
     notice.clear()
-    // 编辑先取回图片再撤回：图片读不出来时消息留在队列里，不会丢。编辑与取消各用各的 actionId。
+    // Edit fetches the images first and then withdraws: if the images can't be read, the message stays in the queue and isn't lost.
+    // Edit and cancel each use their own actionId.
     let drafts: ImageDraft[] = []
     const result = await actions.run(row, edit ? 'edit' : operation, async (actionId) => {
       if (edit && item.images.length > 0) drafts = await imageDraftsOf(item.images)
@@ -261,7 +269,7 @@ export function QueueList({ agentId, items, queueSeq, onReceipt, onEdit }: Queue
       setError(result.error)
       return
     }
-    // 已不在队列：提示后重新读取，排队列表随之更新。
+    // No longer in the queue: show the notice, then reread so the queue list updates accordingly.
     notice.show(text)
     void client.invalidateQueries({ queryKey: keys.agentQueue(agentId) })
     void client.invalidateQueries({ queryKey: keys.agentStatus(agentId) })

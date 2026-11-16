@@ -39,7 +39,8 @@ type Report = Schemas['StatsReport']
 
 const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
 
-// 横轴标签：按小时为“15 点”；按天为“10/21”，回复结果图用更短的“21”；今天写“今天”。
+// X-axis labels: hourly they read “15 点” (15:00); daily "10/21", with the shorter "21" in the reply outcomes chart; today
+// reads “今天” (Today).
 function axisOf(report: Report, range: StatsRange): Axis {
   const today = new Date()
   const hourly = report.bucket === 'hour'
@@ -49,13 +50,14 @@ function axisOf(report: Report, range: StatsRange): Axis {
   return { labels, shortLabels, titles: labels, hourly, rangeLabel: text.ranges[range] }
 }
 
-// 这段时间什么都没发生：没有用量、没有已结束的回合、没有提问。
+// Nothing happened in this period: no usage, no finished turns, no questions.
 const isEmpty = (report: Report) =>
   report.tokens.totals.total === 0 &&
   report.outcomes.totals.completed + report.outcomes.totals.interrupted + report.outcomes.totals.failed === 0 &&
   report.questions.asked === 0
 
-// tone：投影颜色区分含义——中性藏青，失败与中断荧光粉，等你回答黄，合计孔版蓝（改版）。
+// tone: the shadow color tells the meaning apart: neutral navy, fluorescent pink for failures and interruptions, yellow for
+// waiting for your answer, riso blue for totals (redesign).
 type Tile = { label: string; value: string; delta: string; bad: boolean; spark: (number | null)[]; tone: 'ink' | 'pink' | 'yellow' | 'blue' }
 
 function tiles(report: Report): Tile[] {
@@ -125,7 +127,8 @@ const TILE_SHADOW = {
   blue: 'shadow-[4px_4px_0_var(--riso-blue)]',
 } as const
 
-// 关键指标：纸上的第一个编号分区。白底、2px 藏青描边的卡片，投影颜色区分含义；数字是 Bricolage 大字。
+// Key metrics: the first numbered section on the sheet. White cards with a 2px navy outline, where the shadow color tells the
+// meaning apart; the numbers are large Bricolage type.
 function Kpis({ report }: { report: Report }) {
   return (
     <div className="flex min-w-0 flex-col gap-[18px]">
@@ -147,12 +150,14 @@ function Kpis({ report }: { report: Report }) {
   )
 }
 
-// 范围筛选：全部项目、各项目、平台，写在地址里（与概览相同的 ?project= / ?platform=1），默认全部。
+// Scope filter: all projects, each project, or the platform, stored in the URL (the same ?project= / ?platform=1 as the
+// overview); all by default.
 function ScopeSelect({ overview }: { overview: ReturnType<typeof useOverviewFilter> }) {
   const { filter, projects } = overview
   const value = filter.kind === 'all' ? '' : filter.kind === 'platform' ? PLATFORM : `project:${filter.name}`
   const id = useId()
-  // 改版：与概览同样的虚线框，里面写着“范围 当前范围”，右边一个小箭头；仍是原生下拉。
+  // Redesign: the same dashed box as the overview, reading “范围” (Scope) followed by the current scope, with a small arrow on
+  // the right; still a native select.
   return (
     <span className="relative inline-flex h-[26px] max-w-full min-w-0 items-center gap-2 rounded-[4px] border-[1.5px] border-dashed border-ink/45 pr-1.5 pl-2.5 text-[12.5px] font-bold text-ink focus-within:shadow-focus">
       <label htmlFor={id} aria-hidden="true" className="shrink-0 text-ink-500">
@@ -187,9 +192,12 @@ function ScopeSelect({ overview }: { overview: ReturnType<typeof useOverviewFilt
 
 const scopeName = (filter: OverviewFilter) => (filter.kind === 'all' ? text.global : filter.kind === 'platform' ? text.platform : filter.name)
 
-// 统计页：第一屏是六个关键指标与最该知道的几件事，虚线以下是排查时再看的明细。
-// 时间范围：今天按小时，近 7 天、近 30 天按天；范围与概览一样可选全部、某个项目或平台。
-// 改版：页头是共用的页面标题（旁边是分段的时间范围、虚线框里的范围与时间窗口）；内容排在一张纸上，按 01、02…编号。
+// The stats page: the first screen holds the six key metrics and the few things most worth knowing; below the dashed line
+// are the details to look at when troubleshooting.
+// Time range: today by hour, the last 7 and last 30 days by day; as in the overview, the scope can be all, one project or
+// the platform.
+// Redesign: the header is the shared page title (next to it the segmented time range, the scope in a dashed box, and the time
+// window); the content is laid out on one sheet, numbered 01, 02, ...
 export function StatsPage() {
   const overview = useOverviewFilter()
   const [range, setRange] = useState<StatsRange>('week')
@@ -210,7 +218,8 @@ export function StatsPage() {
         <span className="font-mono text-[12px] text-ink-500">{`${scopeName(filter)} · ${eyebrow}`}</span>
       </PageHeader>
       <Sheet className="mt-2 flex-1">
-        {/* 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。 */}
+        {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text)
+            scroll with the content instead of stretching the whole page based on their unscrolled position. */}
         <div className="relative min-h-0 flex-1 overflow-y-auto">
           <div className="flex max-w-[1480px] flex-col gap-6 pt-6 pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,30px)]">
             {overview.query ? (
@@ -227,7 +236,7 @@ export function StatsPage() {
 
 function StatsBody({ range, query, projects }: { range: StatsRange; query: ScopeQuery; projects: Schemas['Project'][] | undefined }) {
   const stats = useStats(range, query)
-  // Agent 所在的作用域：平台 Agent 的 projectId 为 null；项目不在列表里时不给链接。
+  // The scope an Agent lives in: a platform Agent's projectId is null; when the project isn't in the list, no link is given.
   const scopeOf: ScopeOf = (projectId) => {
     if (projectId === null) return { kind: 'platform' }
     const project = projects?.find((p) => p.id === projectId)
@@ -250,7 +259,7 @@ function StatsBody({ range, query, projects }: { range: StatsRange; query: Scope
       </p>
     )
   const axis = axisOf(report, range)
-  // 每张图是纸上的一个编号分区，按排列顺序编号（01 是关键指标）。
+  // Each chart is a numbered section on the sheet, numbered in display order (01 is the key metrics).
   const n = (number: number, card: ReactNode) => <CardNumber.Provider value={number}>{card}</CardNumber.Provider>
   return (
     <div className={cn('flex flex-col gap-6', stats.isPlaceholderData && 'opacity-60')} aria-busy={stats.isPlaceholderData || undefined}>
@@ -268,7 +277,7 @@ function StatsBody({ range, query, projects }: { range: StatsRange; query: Scope
         {n(7, <OutcomesCard report={report} axis={axis} />)}
         {n(8, <ReasonsCard report={report} />)}
       </div>
-      {/* 虚线以下是排查时再看的明细。 */}
+      {/* Below the dashed line are the details to look at when troubleshooting. */}
       <p className="mt-2 self-start rounded-full bg-ink px-3 text-[12.5px] leading-6 font-black text-white">{text.more}</p>
       {n(9, <HealthCard report={report} />)}
       <div className="grid gap-x-8 gap-y-6 md:grid-cols-2 xl:grid-cols-3">

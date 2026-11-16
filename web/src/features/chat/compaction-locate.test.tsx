@@ -5,8 +5,9 @@ import type { Schemas } from '@/api/client'
 import { apiUrl, defaultAgentPath, makeAgent, makeMessage, makeMessagePage, makeRun } from '@/test/api'
 import { renderChat } from '@/test/chat'
 
-// 从概览的“压缩失败”点“查看压缩”：地址带 #run-<这次压缩>。压缩不是一轮，定位返回的那一页里没有它；
-// 对话页用运行记录接口取到这次执行，在它发生的位置显示一张说明。
+// From “压缩失败” (Compaction failed) in the overview, click “查看压缩” (View compaction): the URL carries
+// #run-<id of this compaction>. A compaction is not a turn, so the page returned by locate does not contain it;
+// the chat page fetches this run through the run record endpoint and shows a note at the place where it happened.
 const at = (minute: number) => new Date(Date.UTC(2026, 10, 12, 8, minute)).toISOString()
 const turn = (question: string, minute: number) => {
   const run = makeRun({ queuedAt: at(minute), startedAt: at(minute), runningAt: at(minute), endedAt: at(minute) })
@@ -57,15 +58,15 @@ describe('定位到一次手动压缩', () => {
     expect(within(note).getByText('压缩失败')).toBeInTheDocument()
     expect(note).toHaveTextContent('Agent 报告错误：compaction failed')
     expect(note).toHaveTextContent('手动压缩不是对话里的一轮，没有消息')
-    // 运行记录默认展开，复用同一次取到的时间线。
+    // The run record is expanded by default and reuses the timeline from that same fetch.
     const toggle = within(note).getByRole('button', { name: /^运行记录/ })
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    // 排在压缩前后的两轮之间。
+    // Placed between the two turns before and after the compaction.
     const before = screen.getByText('压缩前的问题')
     const after = screen.getByText('压缩后的问题')
     expect(before.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(note.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    // 不占编号与刻度：仍是两轮，编号接着 3 往下数。
+    // It takes no number and no tick: there are still two turns, numbered on from 3.
     expect([...document.querySelectorAll('[data-turn-number]')].map((n) => n.textContent)).toEqual(['4', '5'])
     expect(within(screen.getByRole('navigation', { name: '对话轮次' })).getAllByRole('button')).toHaveLength(2)
   })
@@ -92,7 +93,7 @@ describe('定位到一次手动压缩', () => {
       ],
     })
     await waitFor(() => expect(document.querySelector('[data-located]')).not.toBeNull())
-    // 普通回复的运行记录默认展开会读一次时间线；不该再为“找压缩”多读。
+    // A normal reply's run record, expanded by default, reads the timeline once; there must be no extra read to "find the compaction".
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(timelineReads).toBeLessThanOrEqual(1)
     expect(card()).toBeNull()

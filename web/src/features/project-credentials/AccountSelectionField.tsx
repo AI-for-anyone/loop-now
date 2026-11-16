@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { selectClass } from '@/lib/field'
 
-// 纯展示输入。状态说明由正式解析结果的调用方给出，不在此按候选可用性重新解析。
+// A presentation-only input. The status explanation is supplied by the caller from the authoritative resolution result; it is not
+// re-resolved here from candidate availability.
 export function AccountSelectionField({ label, description, options, value, currentLabel, canRestore, restoreLabel = t.credentials.selectionField.restoreAutomatic, disabled, pending, dirty, settingsPath, onChange, onSave, onRestore }: {
   label: string
   description: string

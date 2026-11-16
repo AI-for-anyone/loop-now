@@ -1,4 +1,4 @@
-// 测试用的 EventSource：由测试代码主动推送事件、打开或关闭连接。
+// EventSource for tests: test code pushes events and opens or closes the connection itself.
 type Listener = (event: MessageEvent<string>) => void
 
 export class FakeEventSource {
@@ -46,7 +46,7 @@ export class FakeEventSource {
     this.readyState = FakeEventSource.CLOSED
   }
 
-  // ---- 测试控制 ----
+  // ---- Test controls ----
 
   open() {
     this.readyState = FakeEventSource.OPEN
@@ -58,13 +58,13 @@ export class FakeEventSource {
     for (const listener of this.listeners.get(type) ?? []) listener(event)
   }
 
-  // 模拟浏览器的自动重连：连接中断但仍在重连。
+  // Simulates the browser's automatic reconnect: the connection dropped but is still reconnecting.
   interrupt() {
     this.readyState = FakeEventSource.CONNECTING
     this.onerror?.(new Event('error'))
   }
 
-  // 模拟浏览器永久关闭连接（例如服务端返回错误状态）。
+  // Simulates the browser closing the connection for good (e.g. the server returned an error status).
   fail() {
     this.readyState = FakeEventSource.CLOSED
     this.onerror?.(new Event('error'))

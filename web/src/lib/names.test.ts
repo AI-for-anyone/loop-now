@@ -23,7 +23,7 @@ describe('nameRuleError', () => {
   })
 })
 
-// 用契约中 EntityName 的 pattern 与 not.pattern 逐个码点比对本地预检的结果。
+// Compare the local precheck's results code point by code point with the pattern and not.pattern of EntityName in the contract.
 describe('与契约 EntityName 一致', () => {
   const yaml = readFileSync(resolve(process.cwd(), '../api/openapi.yaml'), 'utf8')
   const block = yaml.slice(yaml.indexOf('    EntityName:'))

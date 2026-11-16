@@ -48,11 +48,11 @@ describe('用量时间段的边界（浏览器本地时区）', () => {
   })
 
   it('本周从周一零点开始：周三、周日、周一零点之后都回到同一个周一', () => {
-    const monday = '2026-10-11T16:00:00.000Z' // 2026-10-12（周一）00:00 +08:00
-    expect(usageRangeStart('week', new Date('2026-10-14T02:30:00Z')).toISOString()).toBe(monday) // 周三 10:30
-    expect(usageRangeStart('week', new Date('2026-10-18T15:59:59Z')).toISOString()).toBe(monday) // 周日 23:59:59
-    expect(usageRangeStart('week', new Date('2026-10-11T16:00:01Z')).toISOString()).toBe(monday) // 周一 00:00:01
-    expect(usageRangeStart('week', new Date('2026-10-11T15:59:59Z')).toISOString()).toBe('2026-10-04T16:00:00.000Z') // 上周日 23:59:59
+    const monday = '2026-10-11T16:00:00.000Z' // 2026-10-12 (Monday) 00:00 +08:00
+    expect(usageRangeStart('week', new Date('2026-10-14T02:30:00Z')).toISOString()).toBe(monday) // Wednesday 10:30
+    expect(usageRangeStart('week', new Date('2026-10-18T15:59:59Z')).toISOString()).toBe(monday) // Sunday 23:59:59
+    expect(usageRangeStart('week', new Date('2026-10-11T16:00:01Z')).toISOString()).toBe(monday) // Monday 00:00:01
+    expect(usageRangeStart('week', new Date('2026-10-11T15:59:59Z')).toISOString()).toBe('2026-10-04T16:00:00.000Z') // previous Sunday 23:59:59
   })
 
   it('近 30 天为当前时刻往前 30×24 小时', () => {

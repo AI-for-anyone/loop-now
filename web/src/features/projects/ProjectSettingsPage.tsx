@@ -28,7 +28,8 @@ import { PageFrame, PageHeader } from '@/components/PageHeader'
 import { Sheet } from '@/components/Sheet'
 import { SectionToc, SheetSection } from '@/components/SheetSections'
 
-// 项目设置的编号分区，顺序即目录尺的顺序（改版：与 Agent 配置页同一套，排在一张纸上，右侧票根里是目录尺）。
+// The numbered sections of the project settings; their order is the order of the section ruler (redesign: the same set-up as
+// the Agent Config tab, laid out on one sheet, with the section ruler in the stub on the right).
 const KEYS = ['name', 'prompt', 'folder', 'local-dirs', 'plugins', 'manager', 'accounts', 'danger'] as const
 type Key = (typeof KEYS)[number]
 const partId = (key: Key) => `settings-${key}`
@@ -44,7 +45,8 @@ const titles: Record<Key, string> = {
   danger: t.projects.settings.danger.title,
 }
 
-// 一个编号分区。danger：删除项目一区，编号、标题与目录项红色，内容在红色斜纹的底上（默认项目不能删除，不用红色）。
+// One numbered section. danger: the Delete project section, whose number, title and ruler entry are red and whose content sits
+// on a red diagonal-stripe background (the default project can't be deleted, so it doesn't use red).
 function Part({ id, tone = 'default', children }: { id: Key; tone?: 'default' | 'danger'; children: ReactNode }) {
   return (
     <SheetSection id={partId(id)} titleId={partTitleId(id)} index={KEYS.indexOf(id)} title={titles[id]} tone={tone}>
@@ -53,8 +55,9 @@ function Part({ id, tone = 'default', children }: { id: Key; tone?: 'default' | 
   )
 }
 
-// 项目设置（交接说明第 11.3 节）：只在项目中有，平台没有设置页。页头是共用的页面标题（面包屑是项目名称，
-// 旁边是默认项目标记与项目 ID）；八个分区排在一张纸上，右侧票根里是目录尺，窄屏不显示目录。
+// Project settings (handoff notes, section 11.3): only projects have them; the platform has no settings page. The header is the
+// shared page title (the breadcrumb is the project name, next to it the default-project badge and the project ID); the eight
+// sections are laid out on one sheet, with the section ruler in the stub on the right; narrow screens don't show the ruler.
 export function ProjectSettingsPage() {
   const scope = useScope()
   if (scope.kind !== 'project') return null
@@ -69,10 +72,12 @@ export function ProjectSettingsPage() {
         </PageHeader>
         <Sheet className="mt-2 flex-1">
           <div className="flex min-h-0 flex-1">
-            {/* 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。 */}
+            {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text)
+                scroll with the content instead of stretching the whole page based on their unscrolled position. */}
             <div className="relative h-full min-w-0 flex-1 overflow-y-auto">
               <div className="flex max-w-[960px] flex-col gap-6 pt-[26px] pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,30px)]">
-                {/* 按项目 ID 重新挂载：输入框与提示不会带到另一个项目；改名后仍是同一个 ID，“已保存”保留。 */}
+                {/* Remount by project ID: inputs and messages don't carry over to another project; after a rename the ID is
+                    the same, so “已保存” (Saved) stays. */}
                 <NameCard key={`name-${project.id}`} project={project} />
                 <Part id="prompt">
                   <ProjectPromptForm projectId={project.id} />
@@ -110,7 +115,8 @@ export function ProjectSettingsPage() {
   )
 }
 
-// 改名：本地按命名规则预检；保存后项目列表即是新名称，地址由 ProjectScopeRoute 按 ID 换成新名称（不贴“在别处改名”的便签）。
+// Rename: checked locally against the naming rules first; once saved, the project list has the new name and ProjectScopeRoute
+// switches the URL to the new name by ID (without putting up the "renamed elsewhere" sticky note).
 function NameCard({ project }: { project: Schemas['Project'] }) {
   const rename = useRenameProject(project.id)
   const hintId = useId()
@@ -177,7 +183,8 @@ const statusBadge = (agent: Schemas['AgentListItem']) =>
     <Badge tone="success">{t.agents.idle}</Badge>
   )
 
-// Manager：从本项目的 Agent 中指定、更换或取消；立即生效，不弹确认框，结果用绿色提示。Agent 正忙时也可以指定。
+// Manager: assign, change or remove it from among this project's Agents; takes effect immediately with no confirmation
+// dialog, and the result is shown as a green message. An Agent can be assigned even while it is busy.
 function ManagerCard({ project, scope }: { project: Schemas['Project']; scope: Scope }) {
   const navigate = useNavigate()
   const labelId = useId()
@@ -269,8 +276,10 @@ function ManagerCard({ project, scope }: { project: Schemas['Project']; scope: S
 const busyAgentsOf = (error: unknown): { id: string; name: string }[] | null =>
   error instanceof ApiError && error.code === 'agent_not_idle' && error.details && 'agents' in error.details ? error.details.agents : null
 
-// 删除项目：四条说明与删除按钮；确认框说明将删除的 Agent 数，焦点默认在“取消”上。
-// 服务端因 Agent 不空闲拒绝时关闭确认框，在本卡片列出这些 Agent，保留到下一次点删除或离开页面；成功后进入默认项目。
+// Delete project: four notes and the delete button; the confirmation dialog states how many Agents will be deleted, and focus
+// starts on “取消” (Cancel).
+// When the server refuses because some Agents aren't idle, close the confirmation dialog and list those Agents in this card,
+// keeping them until the next click on delete or until leaving the page; on success, go to the default project.
 function DangerCard({ project }: { project: Schemas['Project'] }) {
   const navigate = useNavigate()
   const projects = useProjects()

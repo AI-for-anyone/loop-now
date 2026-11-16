@@ -1,9 +1,10 @@
-// 控制台页面里的 window.loopNowDesktop（页面一侧的类型与用法见 web/src/features/desktop/desktop.ts）。
-// 只把调用转给主进程；主进程核对调用来自服务端提供的控制台页面，并检查内容。
+// window.loopNowDesktop in the console page (for the page-side types and usage see web/src/features/desktop/desktop.ts).
+// It only forwards calls to the main process; the main process verifies that a call comes from the console page served by the server and
+// checks its content.
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 
 contextBridge.exposeInMainWorld('loopNowDesktop', {
-  // 壳所在的平台：页面据此决定要不要留顶部的拖动区（只有 macOS 藏了系统标题栏）。
+  // The shell's platform: the page uses it to decide whether to leave a drag area at the top (only macOS hides the system title bar).
   platform: process.platform,
   notify: (notification: unknown) => ipcRenderer.send('loop-now:notify', notification),
   setBadge: (count: unknown) => ipcRenderer.send('loop-now:badge', count),

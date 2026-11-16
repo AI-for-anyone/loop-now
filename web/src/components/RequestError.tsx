@@ -4,7 +4,7 @@ import { t } from '@/i18n'
 import { describeError, requestIdOf } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 
-// 请求编号（响应头 Loop-Now-Request-Id）与复制按钮，便于把出错的请求交给开发排查。
+// The request ID (response header Loop-Now-Request-Id) with a copy button, so a failed request can be handed to developers to investigate.
 export function RequestId({ id }: { id: string }) {
   const labelId = useId()
   const [copied, setCopied] = useState(false)
@@ -12,7 +12,7 @@ export function RequestId({ id }: { id: string }) {
     try {
       await navigator.clipboard.writeText(id)
     } catch {
-      // 浏览器不允许写剪贴板时保持原样，人仍可以手动选中复制。
+      // When the browser does not allow writing to the clipboard, leave things as they are; the person can still select and copy by hand.
       return
     }
     setCopied(true)
@@ -38,7 +38,8 @@ export function RequestId({ id }: { id: string }) {
   )
 }
 
-// 某一块加载失败：浅红网点横幅，说明原因、请求编号（有时）和重试，只放在出错的那一块里。
+// One block failed to load: a light red halftone banner with the reason, the request ID (when there is one) and a retry, placed only in
+// the block that failed.
 export function SectionError({ title, error, onRetry, className }: { title: string; error: unknown; onRetry: () => void; className?: string }) {
   const requestId = requestIdOf(error)
   return (

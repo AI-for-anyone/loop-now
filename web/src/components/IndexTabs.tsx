@@ -3,8 +3,10 @@ import { NavLink, type NavLinkProps } from 'react-router'
 import { indexTabClass, indexTabsClass } from '@/lib/index-tab'
 import { cn } from '@/lib/utils'
 
-// 一排索引标签，紧贴在下面那张纸的上沿：左侧缩进 26px，底边对齐，当前页的标签高出一截。
-// 窄屏时放不下可以横向滚动，不把整页撑宽；上方留 6px，滚动容器不会裁掉标签的焦点环。
+// A row of index tabs sitting right on the top edge of the sheet below: indented 26px on the left, bottom edges aligned, and the current
+// page's tab a step taller.
+// On narrow screens, when they do not fit, they scroll horizontally instead of widening the whole page; 6px is left above so the scroll
+// container does not clip the tabs' focus rings.
 export function IndexTabs({ className, ...props }: ComponentProps<'nav'>) {
   return (
     <nav
@@ -14,7 +16,7 @@ export function IndexTabs({ className, ...props }: ComponentProps<'nav'>) {
   )
 }
 
-// 页签：地址匹配时是当前页（aria-current=page）。
+// A tab: it is the current page when the URL matches (aria-current=page).
 export function IndexTabLink({ className, ...props }: Omit<NavLinkProps, 'className'> & { className?: string }) {
   return <NavLink className={({ isActive }) => cn(indexTabClass(isActive), className)} {...props} />
 }

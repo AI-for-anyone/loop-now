@@ -7,9 +7,10 @@ import { cn } from '@/lib/utils'
 
 // Presentation only: task adapters never invent a normal Message/Run or query
 // the normal Agent's runtime to share these visual components.
-// 打断发出的消息：浅粉底加荧光粉描边，名称一行带一个小小的“打断”。
-// wakeSleepId：这条消息提前唤醒了 sleep，名称一行标“提前唤醒 sleep”。
-// wide：Agent 对话页宽屏时气泡最宽是对话列的 88%（不超过回复正文的 1100px）；窄屏与任务节点对话仍是 80%。
+// A message sent as an interrupt: light pink fill with a fluorescent pink border, and a small “打断” (Interrupt) on the name line.
+// wakeSleepId: this message woke a sleep early; the name line is marked “提前唤醒 sleep” (Woke early).
+// wide: on a wide screen of the Agent chat page the bubble is at most 88% of the conversation column (no wider than the reply
+// body's 1100px); narrow screens and task node conversations stay at 80%.
 export function UserChatBubble({ text, time, interrupted = false, wakeSleepId, images, wide = false }: { images?: ReactNode; text: string; time: string; interrupted?: boolean; wakeSleepId?: string | null; wide?: boolean }) {
   return <div className="flex flex-col items-end gap-1.5">
     <span className="inline-flex items-center gap-2 text-[12.5px] font-bold text-ink-500"><span>{t.chat.you}</span> {t.chat.metaSeparator} {time}{interrupted && <span className="text-[11.5px] font-black text-pink-text">{t.chat.interruptTag}</span>}{wakeSleepId && <EarlyWake sleepId={wakeSleepId} />}</span>
@@ -21,8 +22,10 @@ export function PlatformChatReminder({ text, at, wakeSleepId, label }: { text: s
     <span className="flex gap-2.5 text-[14.5px] leading-[1.75]"><MailIcon aria-hidden="true" className="mt-1 size-4 shrink-0" strokeWidth={2.2} /><span className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]"><span className="mr-3 font-black">{label ?? t.chat.platformReminderAt(at)}</span>{text}{wakeSleepId && <span className="mt-2 block"><EarlyWake sleepId={wakeSleepId} /></span>}</span></span>
   </div>
 }
-// sleep 到期唤醒：一行淡色元信息，不是消息。依次是闹钟、“sleep 到期唤醒”、时间、睡了多久（知道时）和 Agent 的说明；
-// 说明截断成一行（手机宽度下另起一行，与文字对齐），完整说明与 sleep ID 在悬停提示里，平台写给模型的指令不显示。
+// A sleep that woke on schedule: one line of faint meta info, not a message. In order: an alarm clock,
+// “sleep 到期唤醒” (Woke up on schedule), the time, how long it slept (when known) and the Agent's note.
+// The note is truncated to one line (at phone width it starts a new line, aligned with the text); the full note and the sleep ID are
+// in the hover tooltip. The instruction the platform wrote for the model is not shown.
 export function SleepWakeLine({ text, at, sleepId, slept }: { text: string; at: string; sleepId?: string | null; slept?: number }) {
   const parsed = sleepWakeNote(text), note = parsed?.note
   const tip = [parsed ? note : text, sleepId && t.sleep.idTip(sleepId)].filter(Boolean).join('\n')
@@ -35,7 +38,7 @@ export function SleepWakeLine({ text, at, sleepId, slept }: { text: string; at: 
     {note && <><span aria-hidden="true" className="shrink-0 max-sm:hidden">{t.chat.metaSeparator}</span><span className="min-w-0 truncate max-sm:basis-full max-sm:pl-5">{note}</span></>}
   </div>
 }
-// 被新消息提前唤醒的 sleep：一个小标记，sleep ID 在悬停提示里。
+// A sleep woken early by a new message: a small marker, with the sleep ID in the hover tooltip.
 export function EarlyWake({ sleepId }: { sleepId: string }) {
   return <span data-early-wake title={t.sleep.idTip(sleepId)} className="inline-flex shrink-0 items-center gap-1 text-[11.5px] font-bold text-ink-500"><AlarmClockIcon aria-hidden="true" className="size-3" strokeWidth={2.4} />{t.sleep.wokeEarly}</span>
 }

@@ -1,4 +1,5 @@
-// 带上这个导航状态的跳转不经过“有未保存的修改”提示，例如删除 Agent 成功后回到列表。
+// Navigation carrying this state skips the “有未保存的修改” (You have unsaved changes) prompt, e.g. returning to the list after an
+// Agent is deleted.
 export const skipUnsavedPrompt = { skipUnsavedPrompt: true } as const
 
 export function skipsUnsavedPrompt(state: unknown): boolean {

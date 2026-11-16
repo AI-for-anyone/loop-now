@@ -3,7 +3,7 @@ import { formatDayClock, formatBytes } from './format'
 
 type S = components['schemas']
 
-// 文件管理器：Agent 的工作区、项目共享文件夹与全局共享文件夹。
+// File manager: the Agent's workspace, the project shared folder and the global shared folder.
 export const folders = {
   agent: { intro: (name: string) => `${name} 的文件夹：它在这里工作，这里也是它自己的上下文。根目录的 AGENTS.md 是它每次启动时先读的说明。` },
   project: { title: '项目文件夹', intro: '项目里的每个 Agent 都能读到这里的文件。根目录的 AGENTS.md 是项目内通用的说明。' },
@@ -37,7 +37,8 @@ export const folders = {
     template: '# 工作说明\n\n写给 Agent 的职责、约定和注意事项。Agent 每次启动时先读这个文件。\n',
   },
   concurrent: 'Agent 可能正在同时修改这些文件；同一个文件以最后一次保存为准。',
-  // 纸张右侧票根里的概况：当前文件夹里的文件夹数、文件数与文件总大小（只算已经读到的，没读完时数字后面加 +）。
+  // Summary in the stub on the right of the sheet: the number of folders and files in the current folder and
+  // their total size (counting only what has been loaded; a + follows the numbers until everything is loaded).
   stub: { title: '概况', dirs: '文件夹', files: '文件' },
   columns: { name: '名称', size: '大小', modified: '修改时间' },
   summary: (dirs: number, files: number) => `${dirs} 个文件夹 · ${files} 个文件`,
@@ -117,7 +118,7 @@ export const folders = {
       clone_failed: '无法克隆仓库',
       server_restart: '服务重启，已中止',
     } satisfies Record<NonNullable<S['FolderGitPull']['errorCode']>, string>,
-    // HTTPS 地址认证失败、或 SSH 主机未确认时，状态栏上方的提示。
+    // Hint above the status bar when authentication to an HTTPS address fails or an SSH host hasn't been confirmed.
     hints: {
       enableGit: '“用本机的 git 身份”没有打开，HTTPS 地址的拉取用不到这台电脑上已保存的 git 凭证。打开后重试。',
       openSettings: '去全局设置打开',

@@ -169,7 +169,7 @@ describe('Markdown 渲染与安全', () => {
   })
 })
 
-// 改版“一张印出来的纸”：列表项开头的加粗词做成黄色小标签。
+// "Printed sheet" redesign: a bold word at the start of a list item becomes a small yellow label.
 describe('列表项开头的加粗词', () => {
   const items = (container: HTMLElement) => [...container.querySelectorAll('li')]
 
@@ -202,7 +202,7 @@ describe('列表项开头的加粗词', () => {
     expect(mixed.container.querySelectorAll('strong.md-lead')).toHaveLength(2)
     expect(items(mixed.container)[0].textContent).toBe('导出会停')
     mixed.unmount()
-    // 一项带子列表、另一项不带：两项排法要一致，都不横排。
+    // One item has a sublist and the other doesn't: both must use the same layout, and neither is laid out horizontally.
     const nested = render(<Markdown text={'- **导出**：两个问题\n  - 大文件会停\n- **搜索**：不准'} />)
     expect(nested.container.querySelector('.md-lead-item')).toBeNull()
     expect(nested.container.querySelectorAll('strong.md-lead')).toHaveLength(2)

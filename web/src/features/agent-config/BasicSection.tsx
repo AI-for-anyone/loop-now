@@ -38,7 +38,8 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
   const [nameRule, setNameRule] = useState<string | undefined>(undefined)
   const [confirmingSwitch, setConfirmingSwitch] = useState(false)
 
-  // 表单所依据的服务端值。服务端刷新出新值时：人没改过的项跟随最新值，改过的项保留人的输入。
+  // The server values the form is based on. When the server refreshes with new values, fields the person hasn't edited follow the
+  // latest values, and edited fields keep the person's input.
   const [base, setBase] = useState({ name: agent.name, model: agent.model, thinkingLevel: agent.thinkingLevel ?? null, serviceTier: serverTier })
   const [serverUpdated, setServerUpdated] = useState(false)
   if (agent.name !== base.name || !sameModel(agent.model, base.model) || (agent.thinkingLevel ?? null) !== base.thinkingLevel || serverTier !== base.serviceTier) {
@@ -48,8 +49,9 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
     if (!edited.thinkingLevel && !edited.model) setThinkingLevel(agent.thinkingLevel ?? null)
     if (!edited.serviceTier && !edited.model) setServiceTier(serverTier)
     if (!edited.model && agent.model.provider !== 'openai-codex') setServiceTier(null)
-    // 有未保存的修改时，服务端带来了与表单不同的值（别处改了没改过的项，或把改过的项改成了别的值）就提示；
-    // 保存自己的修改后服务端的值与表单相同，不提示。
+    // With unsaved edits, show a notice when the server brings a value that differs from the form (someone elsewhere changed a field
+    // not edited here, or changed an edited field to some other value);
+    // after saving our own edits the server's values match the form, so no notice.
     const unsaved = edited.name || edited.model || edited.thinkingLevel || edited.serviceTier
     const differs =
       (agent.name !== base.name && agent.name !== name) ||
@@ -65,7 +67,8 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
   const tierChanged = serviceTier !== serverTier
   const dirty = name !== agent.name || modelChanged || thinkingChanged || tierChanged
   useDirtyForm('basic', dirty)
-  // 运行时由模型提供方决定：选中的提供方换了运行时，保存即切换（新会话开始），先确认。
+  // The runtime is determined by the model provider: if the selected provider uses a different runtime, saving switches it (a new
+  // session starts), so confirm first.
   const nextRuntime = model ? runtimeOfProvider(model.provider, providers.data?.providers) : agent.runtime
   const switchesRuntime = modelChanged && nextRuntime !== agent.runtime
 
@@ -78,7 +81,7 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
     else void submit()
   }
 
-  // 失败不抛出：确认框照常关上，错误显示在本节（字段错误在对应输入旁）。
+  // Failures don't throw: the confirm dialog closes as usual and the error shows in this section (field errors next to their inputs).
   const submit = async () => {
     const body: Schemas['AgentUpdate'] = {}
     if (name !== agent.name) body.name = name
@@ -87,7 +90,8 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
     if (tierChanged) body.serviceTier = serviceTier
     if (Object.keys(body).length === 0) return
     const saved = await update.mutateAsync(body).catch((error: unknown) => {
-      // 插件提供方不能选（项目没启用、没授权等）：目录里的标记可能过时了，重新读取以显示原因。
+      // The plugin provider can't be chosen (not enabled in the project, not granted, etc.): the flags in the catalog may be stale,
+      // so refetch it to show the reason.
       if (fieldMessages(error, (field) => field === 'model.provider')) void invalidateModelCatalog(client)
       return null
     })
@@ -99,13 +103,14 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
 
   const shownInline = (field: string) => field === 'name' || field === 'thinkingLevel' || field === 'serviceTier' || isModelField(field)
   const nameError = nameRule ?? agentNameError(update.error, agent.scope)
-  // 契约里改 Agent 只在切换运行时才因 Agent 正在回复返回 409 agent_not_idle。
+  // Per the contract, updating an Agent returns 409 agent_not_idle (because the Agent is replying) only when it switches the runtime.
   const notIdle = update.error instanceof ApiError && update.error.code === 'agent_not_idle'
 
   return (
     <Section id="basic" title={t.config.basic.title}>
-      {/* 内部 ID 与显示名称一行两列，窄时换行；模型提供方与模型同样按两列排（ModelPicker 内部的网格）。
-          同一行的字段按顶部对齐：一栏下面的说明往下长，不把旁边那栏往下推。 */}
+      {/* Internal ID and display name sit in two columns on one row and wrap when narrow; model provider and model are laid out in two
+          columns the same way (the grid inside ModelPicker).
+          Fields on the same row align to the top: help text under one column grows downward without pushing the neighboring column down. */}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] items-start gap-4">
         <IdField label={t.config.basic.id} id={agent.id} />
         <div className="grid content-start gap-1.5">
@@ -119,7 +124,8 @@ export function BasicSection({ agent, busy }: { agent: Schemas['Agent']; busy: b
           {(selected, provider) => <>
             <ThinkingLevelPicker value={thinkingLevel} onChange={setThinkingLevel} levels={selected?.thinkingLevels ?? []} defaultLevel={selected?.defaultThinkingLevel} disabled={!selected?.thinkingLevels?.length} error={fieldMessages(update.error, field => field === 'thinkingLevel')} />
             {model?.provider === 'openai-codex' && <CodexServiceTierPicker value={serviceTier} onChange={setServiceTier} error={fieldMessages(update.error, field => field === 'serviceTier')} />}
-            {/* 选中提供方就显示（模型还没选时也是）；目录不可用时按表单里的模型或 Agent 现在的运行时。 */}
+            {/* Shown as soon as a provider is selected (even before a model is chosen); when the catalog is unavailable, go by the model in
+                the form or the Agent's current runtime. */}
             {(provider?.runtime ?? nextRuntime) === 'claude-code' && <ClaudeCodeDifferences className="col-span-full" />}
           </>}
         </ModelPicker>

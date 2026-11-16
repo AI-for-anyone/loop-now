@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import { LiveDot, PageFrame, PageHeader } from './PageHeader'
 
-// 改版“一张印出来的纸”第 3 步：项目与全局页面共用的页面标题（不是 Agent 页头）。
+// "Printed sheet" redesign, step 3: the page title shared by project and global pages (not the Agent page header).
 describe('页面标题', () => {
   const renderHeader = (meta?: React.ReactNode) =>
     render(

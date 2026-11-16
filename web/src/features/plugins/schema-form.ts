@@ -1,8 +1,9 @@
 import { t } from '@/i18n'
 
-// 插件清单里的 configSchema 与账号 fields 是 JSON Schema（一个 object，properties 是各个字段）。
-// 这里只认表单用得到的部分：string（format uri 为地址）、number / integer、boolean、enum（或 oneOf 的 const + title）、
-// required，以及两个扩展：x-secret（只写不回显）与 x-scope: project（项目里可覆盖）。其余类型的字段在页面上只读，原值照旧保存。
+// The configSchema and the account fields in a plugin manifest are JSON Schema (an object whose properties are the fields).
+// Only the parts the form needs are recognized here: string (format uri for URLs), number / integer, boolean, enum (or oneOf with
+// const + title), required, and two extensions: x-secret (write-only, never echoed) and x-scope: project (can be overridden per project).
+// Fields of other types are read-only on the page, and their original values are saved unchanged.
 
 const text = t.plugins.form
 
@@ -40,12 +41,14 @@ export type Field = {
   maxLength?: number
 }
 
-// 表单里每一项的草稿：普通字段一律是输入框里的文字（布尔为 'true' / 'false'，空串表示没填）；
-// secret 字段只记要做的事：保留原值、换成新值，或清除。
+// The draft of each form field: a regular field is always the text in its input (booleans are 'true' / 'false', and the empty string
+// means not filled in);
+// a secret field records only what to do: keep the existing value, replace it with a new value, or clear it.
 export type SecretDraft = { mode: 'keep' | 'set' | 'clear'; value: string }
 export type Draft = { values: Record<string, string>; secrets: Record<string, SecretDraft> }
 
-// 表单的用途：global 是插件的全局配置，project 是某个项目对 x-scope: project 字段的覆盖（留空即用全局值）。
+// What the form is for: global is the plugin's global config; project is one project's overrides of the x-scope: project fields (empty
+// means use the global value).
 export type FormMode = 'global' | 'project'
 
 const typeOf = (schema: JsonSchema) => (Array.isArray(schema.type) ? schema.type.find((t) => t !== 'null') : schema.type)
@@ -68,7 +71,7 @@ function kindOf(schema: JsonSchema): FieldKind {
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
-// 按 properties 的顺序列出字段。project 模式只留 x-scope: project 的字段。
+// List the fields in the order of properties. Project mode keeps only the x-scope: project fields.
 export function fieldsOf(schema: unknown, mode: FormMode = 'global'): Field[] {
   if (!isObject(schema) || !isObject(schema.properties)) return []
   const root = schema as JsonSchema
@@ -88,7 +91,7 @@ export function fieldsOf(schema: unknown, mode: FormMode = 'global'): Field[] {
         kind,
         label: property.title || name,
         description: property.description,
-        // 项目覆盖时每一项都可以留空沿用全局值。
+        // In project overrides, every field may be left empty to keep using the global value.
         required: mode === 'global' && required.has(name),
         secret: property['x-secret'] === true,
         projectScope: property['x-scope'] === 'project',
@@ -104,7 +107,7 @@ export function fieldsOf(schema: unknown, mode: FormMode = 'global'): Field[] {
 
 const optionIndex = (field: Field, value: unknown) => field.options.findIndex((option) => Object.is(option.value, value) || JSON.stringify(option.value) === JSON.stringify(value))
 
-// 已保存的值写成输入框里的文字；enum 记选项的序号，数字、字符串都能原样还原。
+// Turn a saved value into the text for its input; enum stores the option's index, so numbers and strings alike are restored exactly.
 function toText(field: Field, value: unknown): string {
   if (value === undefined || value === null) return ''
   if (field.kind === 'enum') {
@@ -115,7 +118,8 @@ function toText(field: Field, value: unknown): string {
   return typeof value === 'string' || typeof value === 'number' ? String(value) : ''
 }
 
-// 初始草稿：全局配置还没保存过时（revision 0）用清单里的默认值；项目覆盖不填默认值，留空即沿用全局值。
+// Initial draft: when the global config has never been saved (revision 0), use the defaults from the manifest; project overrides don't
+// fill in defaults, and empty means keep using the global value.
 export function initialDraft(fields: Field[], config: { values: Record<string, unknown>; secretsSet: string[]; revision: number }, mode: FormMode = 'global'): Draft {
   const values: Record<string, string> = {}
   const secrets: Record<string, SecretDraft> = {}
@@ -140,7 +144,8 @@ const isAbsoluteUrl = (value: string) => {
   }
 }
 
-// 逐项校验，返回出错的字段与原因；没有错误时为空对象。secret 字段：必填且从未设置时要填。
+// Validate field by field, returning the failing fields and their reasons; an empty object when there are no errors. A secret field
+// must be filled in when it is required and has never been set.
 export function validate(fields: Field[], draft: Draft, secretsSet: string[] = []): Record<string, string> {
   const errors: Record<string, string> = {}
   for (const field of fields) {
@@ -167,8 +172,10 @@ export function validate(fields: Field[], draft: Draft, secretsSet: string[] = [
   return errors
 }
 
-// 草稿转成请求体的 values 与 secrets：没填的可选项不发送（项目覆盖里即沿用全局值）；
-// 页面上编辑不了的字段原样带回，保存不会把它们清掉。secrets 只带要改的：新值或 null（清除）。
+// Turn the draft into the request body's values and secrets: optional fields left empty are not sent (in project overrides, that means
+// keep using the global value);
+// fields that can't be edited on the page are sent back unchanged, so saving doesn't wipe them. secrets carries only what changes: a new
+// value or null (clear).
 export function toPayload(fields: Field[], draft: Draft, saved: Record<string, unknown>) {
   const values: Record<string, unknown> = {}
   const secrets: Record<string, string | null> = {}
@@ -194,13 +201,14 @@ export function toPayload(fields: Field[], draft: Draft, saved: Record<string, u
   return { values, ...(Object.keys(secrets).length ? { secrets } : {}) }
 }
 
-// 有改动：普通字段的文字变了，或 secret 要换新值、要清除（点了“更换”但没填不算）。
+// Has changes: the text of a regular field changed, or a secret is to be replaced with a new value or cleared (clicking “更换” (Replace)
+// without filling anything in doesn't count).
 export function isDirty(initial: Draft, draft: Draft): boolean {
   if (JSON.stringify(initial.values) !== JSON.stringify(draft.values)) return true
   return Object.values(draft.secrets).some((secret) => secret.mode === 'clear' || (secret.mode === 'set' && secret.value !== ''))
 }
 
-// 服务端 422 的字段错误按字段名对上表单里的一项；路径可能带前缀（values.url、secrets.token）。
+// Match the server's 422 field errors to form fields by field name; the path may carry a prefix (values.url, secrets.token).
 export function serverFieldErrors(fields: Field[], errors: { field: string; message: string }[]): Record<string, string> {
   const out: Record<string, string> = {}
   for (const error of errors) {
@@ -210,7 +218,7 @@ export function serverFieldErrors(fields: Field[], errors: { field: string; mess
   return out
 }
 
-// 全局值在项目覆盖里作为提示（“全局值：…”）；secret 只说是否已设置。
+// The global value shown as a hint in project overrides (“全局值：…” (Global value: ...)); for a secret, only whether it is set.
 export function describeValue(field: Field, value: unknown): string | null {
   if (value === undefined || value === null || value === '') return null
   if (field.kind === 'enum') return field.options[optionIndex(field, value)]?.label ?? String(value)

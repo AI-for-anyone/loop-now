@@ -3,7 +3,8 @@ import { ApiError } from '@/api/client'
 import { config } from '@/config'
 import { t } from '@/i18n'
 
-// 无法操作排队消息时的一行轻提示（由 QueueNotice 显示），过一会儿自动消失；再次显示同一句时重新计时。
+// A light one-line notice when a queued message can't be acted on (shown by QueueNotice); it disappears by itself after a while, and
+// showing the same text again restarts the timer.
 export function useQueueNotice() {
   const [notice, setNotice] = useState<{ text: string; seq: number } | null>(null)
   const seq = useRef(0)
@@ -17,7 +18,7 @@ export function useQueueNotice() {
   return { text: notice?.text ?? null, show, clear }
 }
 
-// 同一条消息的请求进行中时不再发出；pending 中是进行中的键。
+// While a request for a message is in flight, no further request is sent for it; pending holds the keys in flight.
 export function usePendingKeys() {
   const inFlight = useRef(new Set<string>())
   const [pending, setPending] = useState<ReadonlySet<string>>(() => new Set())
@@ -36,11 +37,13 @@ export function usePendingKeys() {
 
 export type QueueActionResult<T> = { ok: true; value: T } | { ok: false; error: unknown; indeterminate: boolean }
 
-// 请求没有到达服务端或服务端出错：结果不明，动作可能已经生效。
+// The request didn't reach the server or the server errored: the outcome is unknown and the action may already have taken effect.
 export const isIndeterminate = (error: unknown) => error instanceof ApiError && (error.status === 0 || error.status >= 500)
 
-// 排队消息上的动作（打断、撤回、停止）：同一行一次只发一个请求。结果不明时保留 actionId，按钮改为重试，
-// 重试沿用同一 actionId，服务端返回首次结果；有了确定结果后丢弃。行已在请求中时返回 null。
+// Actions on queued messages (interrupt, withdraw, stop): only one request at a time per row. When the outcome is unknown, the
+// actionId is kept and the button turns into a retry;
+// the retry reuses the same actionId and the server returns the first result; the actionId is dropped once a definite result is in.
+// Returns null when the row already has a request in flight.
 export function useQueueActions() {
   const { pending, begin, end } = usePendingKeys()
   const actionIds = useRef(new Map<string, string>())
@@ -75,7 +78,8 @@ export function useQueueActions() {
   return { pending, isUnknown, run }
 }
 
-// 普通对话里排队项已不在队列、或要停止的回复已经结束时的轻提示；其他错误返回 null，照常报错。
+// The light notice in an ordinary conversation when a queued item is no longer in the queue, or the reply to stop has already ended;
+// returns null for other errors, which are reported as usual.
 export function conflictNotice(error: unknown, operation: 'promote' | 'cancel' | 'stop'): string | null {
   if (!(error instanceof ApiError)) return null
   if (error.code === 'run_not_active') return t.chat.queueList.stopEnded
@@ -86,7 +90,8 @@ export function conflictNotice(error: unknown, operation: 'promote' | 'cancel' |
   return operation === 'cancel' ? t.chat.queueList.dispatchedCancel : t.chat.queueList.dispatched
 }
 
-// 停止当前回复：只停这一次，不发送新消息。结果不明时沿用 actionId 重试；这次回复已经结束等冲突只给一行提示。
+// Stop the current reply: stops only this one, without sending a new message. When the outcome is unknown, retry with the same
+// actionId; conflicts such as this reply having already ended only get a one-line notice.
 export function useStopReply<R>(request: (runId: string, actionId: string) => Promise<R>, notices: (error: unknown) => string | null) {
   const actions = useQueueActions()
   const notice = useQueueNotice()
@@ -112,7 +117,8 @@ export function useStopReply<R>(request: (runId: string, actionId: string) => Pr
   return { control, notice: notice.text, error }
 }
 
-// 任务节点里同样的冲突：task_conflict 的 reason 说明排队项已不在队列，或要停止的这一轮已经结束。
+// The same conflicts in a task node: the reason of task_conflict says the queued item is no longer in the queue, or the turn to stop
+// has already ended.
 export function nodeConflictNotice(error: unknown, operation: 'promote' | 'cancel' | 'stop'): string | null {
   const reason = error instanceof ApiError && error.code === 'task_conflict' && error.details && 'reason' in error.details ? error.details.reason : null
   switch (reason) {

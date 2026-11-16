@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError, call, type Schemas } from './client'
 
-// 个人版“本机模式”：全局三个开关，以及项目与 Agent 各自的本机目录清单。
+// “本机模式” (Local mode) in the personal edition: three global switches, plus the local directory lists of each project and each Agent.
 export const localModeKeys = {
   settings: ['local-mode-settings'] as const,
   projectDirectories: (projectId: string) => ['project-local-directories', projectId] as const,
-  // ['agent-local-directories'] 是全部 Agent 清单的共同前缀：项目清单变化后，Agent 页里继承的条目一并重新读取。
+  // ['agent-local-directories'] is the common prefix of every Agent's list: after a project's list changes, the entries inherited on the
+  // Agent page are re-read too.
   agentDirectories: ['agent-local-directories'] as const,
   agentDirectoriesOf: (agentId: string) => ['agent-local-directories', agentId] as const,
 }
@@ -18,7 +19,7 @@ export function useLocalModeSettings(enabled = true) {
   })
 }
 
-// 每次只改一项，响应是修改后的全部开关。
+// Change one item at a time; the response is the full set of switches after the change.
 export function useUpdateLocalModeSettings() {
   const client = useQueryClient()
   return useMutation<Schemas['LocalModeSettings'], ApiError, Schemas['LocalModeSettingsPatch']>({
@@ -41,7 +42,7 @@ export function useAgentLocalDirectories(agentId: string) {
   return useQuery({ queryKey: localModeKeys.agentDirectoriesOf(agentId), queryFn: () => getAgentLocalDirectories(agentId) })
 }
 
-// 整体替换清单；响应带每项的 status，直接作为新的缓存，不再读一次。
+// Replace the whole list; the response carries each entry's status and becomes the new cache directly, with no second read.
 export function usePutProjectLocalDirectories(projectId: string) {
   const client = useQueryClient()
   return useMutation<Schemas['ProjectLocalDirectories'], ApiError, Schemas['LocalDirectoriesPut']>({

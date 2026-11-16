@@ -1,4 +1,4 @@
-// 构建可发布的 dist/：esbuild 生成 ESM，tsc 生成声明文件。
+// Builds the publishable dist/: esbuild produces ESM, tsc produces the declaration files.
 import { execFileSync } from 'node:child_process'
 import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -22,7 +22,7 @@ await build({
 })
 const tsc = createRequire(import.meta.url).resolve('typescript/bin/tsc')
 execFileSync(process.execPath, [tsc, '-p', 'tsconfig.build.json'], { cwd: here, stdio: 'inherit' })
-// 声明文件里的相对导入改成 .js，与发布的 JavaScript 一致。
+// Rewrite relative imports in the declaration files to .js, matching the published JavaScript.
 for (const name of readdirSync(new URL('dist', import.meta.url))) {
   if (!name.endsWith('.d.ts')) continue
   const file = new URL(`dist/${name}`, import.meta.url)

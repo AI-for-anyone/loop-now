@@ -1,8 +1,10 @@
 type HastNode = { type: string; tagName?: string; value?: string; properties?: Record<string, unknown>; children?: HastNode[] }
 
-// 列表项里出现这些块级内容（分段、子列表、代码块等）时，这一项不能排成“标签 + 文字”的一行。
+// When a list item contains any of these block-level elements (paragraphs, sublists, code blocks, etc.), the item can't be laid out
+// as a single "label + text" line.
 const BLOCKS = new Set(['p', 'ul', 'ol', 'pre', 'blockquote', 'table', 'div', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
-// 标签最长这么宽（中文等宽字符算 2，其余算 1）：再长就是一句加粗的话，不是一个词。
+// The maximum width of a label (a full-width character such as Chinese counts as 2, everything else as 1): anything longer is a bold
+// sentence, not a word.
 const MAX_UNITS = 24
 
 const textOf = (node: HastNode): string => (node.type === 'text' ? (node.value ?? '') : (node.children ?? []).map(textOf).join(''))
@@ -15,7 +17,7 @@ function addClass(node: HastNode, name: string) {
   properties.className = [...(Array.isArray(current) ? current : current ? [current] : []), name]
 }
 
-// 这段内容开头（忽略空白）是不是一个加粗词；是的话返回它的位置，不是返回 -1。
+// Whether this content starts (ignoring whitespace) with a bold word; if so return its position, otherwise -1.
 function leadIndex(children: HastNode[]): number {
   const index = children.findIndex((child) => !blank(child))
   const first = children[index]
@@ -25,17 +27,18 @@ function leadIndex(children: HastNode[]): number {
 }
 
 interface Lead {
-  // 加粗词所在的那一段内容（列表项本身，或分段列表项的第一段）与它在其中的位置。
+  // The content holding the bold word (the list item itself, or the first paragraph of a list item with paragraphs) and the word's
+  // position in it.
   children: HastNode[]
   index: number
-  // 这一项只有行内内容，可以排成“标签 + 文字”的一行。
+  // This item has only inline content and can be laid out as a single "label + text" line.
   inline: boolean
 }
 
 function leadOf(item: HastNode): Lead | null {
   const children = item.children ?? []
   const first = children.find((child) => !blank(child))
-  // 分段的列表项：加粗词在第一段的开头。
+  // A list item with paragraphs: the bold word is at the start of the first paragraph.
   if (first?.type === 'element' && first.tagName === 'p') {
     const index = leadIndex(first.children ?? [])
     return index < 0 ? null : { children: first.children!, index, inline: false }
@@ -44,8 +47,9 @@ function leadOf(item: HastNode): Lead | null {
   return index < 0 ? null : { children, index, inline: !children.some((child) => child.type === 'element' && BLOCKS.has(child.tagName ?? '')) }
 }
 
-// 标签后面当分隔用的冒号不再显示（标签本身已经把“词”和“说明”分开了）：全角冒号，或后面是空白、行尾的半角冒号。
-// 端口（localhost:3000）、时间（12:30）、盘符（C:\）、作用域（std::vector）里的冒号是内容，保留。
+// A colon used as a separator after the label is no longer shown (the label itself already separates the "word" from the
+// "explanation"): a full-width colon (U+FF1A), or an ASCII colon followed by whitespace or the end of the line.
+// Colons in ports (localhost:3000), times (12:30), drive letters (C:\) and scopes (std::vector) are content and are kept.
 function dropColon({ children, index }: Lead) {
   const next = children[index + 1]
   if (next?.type === 'text' && next.value) next.value = next.value.replace(/^(?:：|:(?=\s|$))\s*/u, '')
@@ -59,8 +63,10 @@ function markList(list: HastNode) {
     addClass(lead.children[lead.index], 'md-lead')
     dropColon(lead)
   }
-  // 横排按整张列表决定：无序列表里每一项都是“加粗词 + 行内文字”时才改，标签在左、其余文字包成一块排在右边、不画圆点。
-  // 只要有一项不是（普通的一项、带子列表或分段的一项），整张列表保留圆点和缩进，各项排法一致。有序列表要保留序号，不改。
+  // The side-by-side layout is decided for the whole list: only when every item of an unordered list is "bold word + inline text" is
+  // it changed, with the label on the left, the rest of the text wrapped into one block on the right, and no bullets.
+  // If even one item isn't (a plain item, or one with a sublist or paragraphs), the whole list keeps its bullets and indentation so all
+  // items are laid out the same way. Ordered lists must keep their numbers and are left unchanged.
   if (list.tagName !== 'ul' || items.length === 0 || !leads.every((lead) => lead?.inline)) return
   addClass(list, 'md-lead-list')
   items.forEach((item, at) => {
@@ -73,10 +79,10 @@ function markList(list: HastNode) {
   })
 }
 
-// 回复里列表项开头的加粗词做成黄色小标签（样式见 index.css 的 .md-lead）。
+// Turn the bold word at the start of list items in replies into a small yellow label (styles in .md-lead in index.css).
 export function rehypeLeadLabel() {
   const visit = (node: HastNode) => {
-    // 先处理里面的子列表，再处理这一张。
+    // Handle the sublists inside first, then this list.
     node.children?.forEach(visit)
     if (node.type === 'element' && (node.tagName === 'ul' || node.tagName === 'ol')) markList(node)
   }

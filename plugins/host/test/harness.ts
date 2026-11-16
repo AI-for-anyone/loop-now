@@ -1,5 +1,5 @@
-// 测试用的“Go 侧”：拉起构建好的宿主（dist/main.js，或 LOOP_NOW_PLUGIN_HOST_ENTRY 指定的入口），按
-// api/plugin-host-protocol.md 收发消息，并像 Go 一样在内存里回应 state_*。它是 internal/server/pluginhost 假宿主测试的镜像。
+// The "Go side" for tests: starts the built host (dist/main.js, or the entry given by LOOP_NOW_PLUGIN_HOST_ENTRY), exchanges messages per
+// api/plugin-host-protocol.md, and answers state_* in memory like Go does. It mirrors the fake-host tests in internal/server/pluginhost.
 
 import { type ChildProcess, spawn } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -14,7 +14,7 @@ export interface Msg {
   id?: string
   type: string
   plugin?: string
-  // 测试里按需取字段。
+  // Tests pick the fields they need.
   payload?: any
 }
 
@@ -31,10 +31,10 @@ export class HostHarness {
   readonly dir: string
   readonly messages: Msg[] = []
   readonly stderr: string[] = []
-  /** 标准输出里不是 JSON 的行：应当始终为空。 */
+  /** Lines on stdout that are not JSON: should always be empty. */
   readonly badLines: string[] = []
   readonly state = new Map<string, unknown>()
-  /** accounts_list 的回答：键为 <plugin>/<projectId>/<kind>；不在 enabledIn 里的项目按未启用回答。 */
+  /** Answers for accounts_list, keyed by <plugin>/<projectId>/<kind>; projects not in enabledIn are answered as not enabled. */
   readonly accounts = new Map<string, unknown[]>()
   readonly enabledIn = new Set<string>()
   readonly exited: Promise<{ code: number | null; signal: NodeJS.Signals | null }>
@@ -112,7 +112,7 @@ export class HostHarness {
     }
   }
 
-  // 与服务端的 accounts_list 规则一致：权限、种类、项目、启用。
+  // Same accounts_list rules as the server: permission, kind, project, enabled.
   private answerAccounts(m: Msg): void {
     const plugin = m.plugin ?? ''
     const p = m.payload ?? {}
@@ -125,7 +125,7 @@ export class HostHarness {
     reply(true, this.accounts.get(`${plugin}/${p.projectId}/${p.kind}`) ?? [])
   }
 
-  /** 插件全局（projectId 为空）或某项目的状态。 */
+  /** The plugin's global state (projectId empty) or one project's state. */
   stateOf(plugin: string, projectId: string | null = null): Map<string, unknown> {
     const scope = `${plugin}\u0000${projectId ?? ''}\u0000`
     return new Map([...this.state.entries()].filter(([k]) => k.startsWith(scope)).map(([k, v]) => [k.slice(scope.length), v]))
@@ -135,7 +135,7 @@ export class HostHarness {
     this.child.stdin!.write(`${JSON.stringify(m)}\n`)
   }
 
-  /** 等一条满足条件的消息：已经收到的也算。 */
+  /** Waits for a message that matches; one already received counts too. */
   waitFor(pred: (m: Msg) => boolean, timeoutMs = 10_000): Promise<Msg> {
     const found = this.messages.find(pred)
     if (found) return Promise.resolve(found)
@@ -156,8 +156,8 @@ export class HostHarness {
   }
 
   /**
-   * 等标准错误满足条件：已经收到的也算，之后每来一行重新判断。
-   * 标准错误与协议消息走两条管道，先后不保证，所以不能用 waitFor 等标准错误。
+   * Waits until stderr matches; lines already received count too, and the check runs again on every new line.
+   * stderr and protocol messages travel through two pipes with no ordering guarantee, so waitFor cannot be used to wait for stderr.
    */
   waitStderr(pred: (lines: string[]) => boolean, timeoutMs = 10_000): Promise<void> {
     if (pred(this.stderr)) return Promise.resolve()
@@ -176,7 +176,7 @@ export class HostHarness {
     })
   }
 
-  /** 发出 Go→宿主的请求，等它的 result 或 ack。 */
+  /** Sends a Go→host request and waits for its result or ack. */
   async request(type: string, plugin: string | undefined, payload: unknown, timeoutMs = 10_000): Promise<Msg> {
     const id = `g${++this.next}`
     const reply = this.waitFor((m) => m.id === id && (m.type === 'result' || m.type === 'ack'), timeoutMs)
@@ -226,7 +226,7 @@ export class HostHarness {
 
 let eventSeq = 0
 
-/** 补上事件的固定字段。 */
+/** Fills in the event's fixed fields. */
 export function makeEvent(fields: Record<string, unknown>): Record<string, unknown> {
   return {
     id: `01JTEST${String(++eventSeq).padStart(19, '0')}`,
@@ -297,7 +297,7 @@ export function loadPayload(id: string, root: string, entry: string, o: PayloadO
   }
 }
 
-/** 在临时目录里写一个只有平台侧的插件，返回 load 载荷。 */
+/** Writes a platform-side-only plugin into a temp directory and returns the load payload. */
 export class Fixtures {
   readonly dir = mkdtempSync(path.join(tmpdir(), 'loop-now-fixtures-'))
 

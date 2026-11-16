@@ -2,8 +2,9 @@ import { t } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { Section } from './Section'
 
-// 选了 Claude Code 时，如实写出它和 Pi 的 Agent 不同的地方；文字简短，逐条列出。
-// brief：新建时只列选的那一刻就该知道的两条（本机家目录与登录、不经确认执行命令），插件与 /pi: 命令留在配置页。
+// When Claude Code is chosen, state plainly how it differs from a Pi Agent; keep the text short, one point per item.
+// brief: on creation, list only the two points worth knowing the moment it is chosen (the local home directory and login, and running
+// commands without confirmation); plugins and /pi: commands are left to the config page.
 export function ClaudeCodeDifferences({ className, brief = false }: { className?: string; brief?: boolean }) {
   const copy = t.runtime.differences
   return (
@@ -19,7 +20,7 @@ export function ClaudeCodeDifferences({ className, brief = false }: { className?
   )
 }
 
-// 平台 Agent 的模型账号一节：Claude Code 用本机自己的登录，没有账号可登录或录入。
+// The model account section for a platform Agent: Claude Code uses this machine's own login, so there is no account to log in to or enter.
 export function ClaudeCodeAccountSection() {
   return (
     <Section id="model-credential" title={t.config.modelCredential.title}>

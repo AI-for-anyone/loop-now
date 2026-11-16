@@ -19,7 +19,8 @@ type Participant = Schemas['TaskLarkSwitchParticipant']
 type Members = readonly [Participant, Participant]
 const usable = (member: Participant) => member.available && member.larkAllowed === true
 const memberKey = (member: Participant) => JSON.stringify([member.agentId, member.runtimeId, member.baseSnapshotSHA, member.larkAllowed, member.bindingRevision, member.prepared, member.available, member.unavailableReason, member.stepIds])
-// children：调用方决定按钮和面板各放在哪里（任务详情把按钮放在“重试当前节点”旁边，面板放在下面）。
+// children: the caller decides where the button and the panel each go (task details puts the button next to “重试当前节点” (Retry current
+// node) and the panel below).
 export function TaskLarkSwitchController({ detail, node, disabled, children = stacked }: { detail: Schemas['ConsoleTaskDetail']; node: Schemas['TaskNodeRun']; disabled: boolean; children?: (parts: { toggle: ReactNode; panel: ReactNode }) => ReactNode }) {
   const locator = useOriginalActionLocator(taskLarkSwitchLocatorKey(detail.task.id)), client = useQueryClient()
   const [error, setError] = useState<unknown>(null)
@@ -48,15 +49,19 @@ export function TaskLarkSwitchController({ detail, node, disabled, children = st
     })
     if (!began) reject(new Error(copy.changed))
   })
-  // 摆放（改版第 5 步）：节点头里只放一个次要按钮（在“重试当前节点”旁边），点开后在下面展开原来的表单；默认收起。
-  // 能力未就绪（没有参与者投影）时按钮禁用，原因是按钮旁的一行小字。需要人注意的东西（已有原操作 ID、正在发送或交接、
-  // 结果、核对原操作、各种错误）不藏在收起状态里：这时面板自动展开。守卫、请求与文案都和原来一样。
+  // Placement (redesign step 5): the node header holds just one secondary button (next to “重试当前节点” (Retry current node)); clicking it
+  // expands the original form below; collapsed by default.
+  // While the capability isn't ready (no participant projection) the button is disabled, with the reason in small text beside it. Anything
+  // that needs the person's attention (an existing original action ID, sending or handing over in progress,
+  // results, checking the original action, any error) is never hidden in the collapsed state: the panel expands automatically then. The
+  // guards, requests and copy are all the same as before.
   const [open, setOpen] = useState(false)
   const panelId = useId()
   const available = shownParticipants !== undefined
   const attention = !!locator.id || locator.pending || !locator.valid || !!locator.error || !!error
   const expanded = open || attention
-  // 按钮和原因是两个并排的元素：放得下时原因在按钮旁边，放不下时换到按钮下面一行。
+  // The button and the reason are two side-by-side elements: the reason sits next to the button when it fits, and wraps to the line below
+  // the button when it doesn't.
   const toggle = current ? (
     <>
       <Button type="button" variant="secondary" data-lark-switch-toggle aria-expanded={expanded} aria-controls={panelId} disabled={!available} onClick={() => setOpen(value => !value)}
@@ -76,7 +81,7 @@ export function TaskLarkSwitchController({ detail, node, disabled, children = st
   return children({ toggle, panel })
 }
 
-// 单独使用时（测试等）：按钮在上，面板在下。
+// When used on its own (tests etc.): button on top, panel below.
 const stacked = ({ toggle, panel }: { toggle: ReactNode; panel: ReactNode }) => <>{toggle}{panel}</>
 function ParticipantForm({ detail, node, participants, disabled, stage, onConfirm }: { detail: Schemas['ConsoleTaskDetail']; node: Schemas['TaskNodeRun']; participants: Participant[]; disabled: boolean; stage: 'review' | 'sending' | 'handing-over' | 'committed' | 'rejected' | 'unknown'; onConfirm: (account: Schemas['ProjectCredentialAccount'], members: Members) => Promise<void> }) {
   const [selected, setSelected] = useState<Members | null>(null)

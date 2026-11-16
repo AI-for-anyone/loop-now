@@ -5,10 +5,13 @@ import type { components, paths } from './schema.gen'
 export type Schemas = components['schemas']
 export type ErrorCode = Schemas['ErrorCode']
 
-// 服务端是否可达：最近一次请求收到任何 HTTP 响应即为可达，请求没有到达服务端时为不可达。
-// 全局连接提示订阅这里，覆盖查询、修改以及不进入查询缓存的凭证提交。
-// “最近一次”按请求开始的先后：比已有结果的请求更早开始的请求，结束得再晚也已过时，不再改变可达性
-// （例如断连时发出、恢复后才失败的请求，不能把已经消失的连接提示带回来）。
+// Whether the server is reachable: reachable if the most recent request got any HTTP response, unreachable if the request did not reach
+// the server.
+// The global connection notice subscribes here, which covers queries, mutations, and the credential submissions that skip the query cache.
+// "Most recent" goes by the order in which requests started: a request that started before one that already has a result is stale
+// however late it finishes, and no longer changes reachability
+// (e.g. a request sent while disconnected that only fails after the connection is back must not bring back a connection notice that
+// has already gone away).
 let reachable = true
 let started = 0
 let settled = 0
@@ -34,14 +37,15 @@ export const reachability = {
       reachabilityListeners.delete(listener)
     }
   },
-  // 只供测试在用例之间复位：之前的用例里还没结束的请求一律视为过时。
+  // Only for tests, to reset between cases: requests from earlier cases that have not finished are all treated as stale.
   reset: () => {
     settled = started
     setReachable(true)
   },
 }
 
-// 服务端版本：取自最近一次响应的 Loop-Now-Version 头（跨域时服务端经 Access-Control-Expose-Headers 暴露），全局设置中显示。
+// Server version: taken from the Loop-Now-Version header of the most recent response (for cross-origin requests the server exposes it via
+// Access-Control-Expose-Headers), shown in global settings.
 export const VERSION_HEADER = 'Loop-Now-Version'
 let serverVersion: string | null = null
 const versionListeners = new Set<() => void>()
@@ -54,7 +58,7 @@ export const serverVersionStore = {
       versionListeners.delete(listener)
     }
   },
-  // 只供测试在用例之间复位。
+  // Only for tests, to reset between cases.
   reset: () => {
     serverVersion = null
   },
@@ -69,7 +73,7 @@ function noteVersion(response: Response) {
 
 export const api = createClient<paths>({
   baseUrl: config.apiBase,
-  // 每次请求时再取 globalThis.fetch，测试中替换的 fetch 才能生效。
+  // Read globalThis.fetch on every request so that a fetch replaced in tests takes effect.
   fetch: async (request) => {
     const order = ++started
     try {
@@ -78,8 +82,8 @@ export const api = createClient<paths>({
       noteVersion(response)
       return response
     } catch (cause) {
-      // 主动取消的请求不说明服务端是否可达。按请求自己的 signal 判断：取消时抛出的 DOMException 可能来自
-      // 另一个环境（测试中的 jsdom 与 Node 各有一个），instanceof 不可靠。
+      // A request we aborted ourselves says nothing about whether the server is reachable. Check the request's own signal: the DOMException
+      // thrown on abort may come from another realm (in tests, jsdom and Node each have one), so instanceof is unreliable.
       if (!request.signal.aborted) settle(order, false)
       throw cause
     }
@@ -88,15 +92,15 @@ export const api = createClient<paths>({
 
 type ErrorDetails = NonNullable<Schemas['Error']['error']['details']>
 
-// 控制台内统一的接口错误。status 为 0 表示请求没有到达服务端，或被跨域拦截。
+// The console's single API error type. status 0 means the request did not reach the server, or was blocked by CORS.
 export class ApiError extends Error {
   readonly status: number
   readonly code: ErrorCode | 'unreachable' | 'unknown'
   readonly serverMessage: string | null
-  // 按 code 定义：agent_busy 带 AgentBusyDetails，删除项目时的 agent_not_idle 带 ProjectNotIdleDetails。
+  // Defined per code: agent_busy carries AgentBusyDetails, and agent_not_idle when deleting a project carries ProjectNotIdleDetails.
   readonly details: ErrorDetails | undefined
   readonly fields: Schemas['FieldError'][]
-  // 响应头 Loop-Now-Request-Id，与服务端日志中的 requestId 一致；请求没有到达服务端时为 null。
+  // The Loop-Now-Request-Id response header, matching requestId in the server logs; null when the request did not reach the server.
   readonly requestId: string | null
 
   constructor(init: {
@@ -197,7 +201,7 @@ export function toApiError(status: number, body: unknown, requestId: string | nu
   return new ApiError({ status, code: 'unknown', serverMessage: typeof body === 'string' && body !== '' ? body : null, requestId })
 }
 
-// 从响应中取请求编号（跨域时服务端经 Access-Control-Expose-Headers 暴露）。
+// Get the request ID from a response (for cross-origin requests the server exposes it via Access-Control-Expose-Headers).
 export function requestIdOf(response: Response): string | null {
   return response.headers.get(REQUEST_ID_HEADER)
 }
@@ -208,7 +212,7 @@ interface FetchResult<T> {
   response: Response
 }
 
-// 执行一次 openapi-fetch 请求：成功时返回 data，失败时抛出 ApiError。
+// Run one openapi-fetch request: return data on success, throw ApiError on failure.
 export async function call<T>(request: Promise<FetchResult<T>>): Promise<T> {
   let result: FetchResult<T>
   try {
@@ -221,7 +225,7 @@ export async function call<T>(request: Promise<FetchResult<T>>): Promise<T> {
   return result.data as T
 }
 
-// 以原始字节发送请求体（资料上传与在线编辑）。
+// Send the request body as raw bytes (file uploads and in-place editing).
 export function rawBody(content: Blob) {
   return {
     body: content as unknown as string,
@@ -230,7 +234,7 @@ export function rawBody(content: Blob) {
   }
 }
 
-// 以 multipart 发送 Skill 压缩包，字段名为 archive。
+// Send a Skill archive as multipart, in a field named archive.
 export function archiveBody(archive: Blob, filename = 'skill.zip') {
   return {
     body: { archive: archive as unknown as string },

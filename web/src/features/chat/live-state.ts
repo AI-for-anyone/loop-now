@@ -12,25 +12,27 @@ export interface LiveRun {
   text: string
 }
 
-// 对话页的实时部分：当前执行、排队执行、会话状态与连接状态。历史部分在查询缓存中。
+// The live part of the chat page: current run, queued runs, session state and connection state. The history part lives in the query cache.
 export interface LiveState {
   agentId: string | null
   sleep: Schemas['SleepInfo'] | null
   sleepRevision: number
   connection: ConnectionState
   lastEventId: string | null
-  // 收到快照的次数；变化时对话页重新获取历史，消除断线期间的差异。
+  // Number of snapshots received; when it changes the chat page refetches the history to clear up differences from while disconnected.
   snapshots: number
   current: LiveRun | null
   queued: Run[]
-  // 逐条排队列表（输入框上方的排队托盘），按实际处理顺序；快照与 queue.updated 整体替换。
+  // Per-item queue list (the queue tray above the input box), in actual processing order; replaced wholesale by snapshots and queue.updated.
   queueItems: Schemas['QueueItem'][]
-  // 收到快照或 queue.updated 的次数。排队动作开始后又收到过时，动作回执里的列表已经过时，不再采用。
+  // Number of snapshots or queue.updated events received. If one arrived after a queue action started, the list in the action's
+  // receipt is already stale and is not used.
   queueSeq: number
   session: Schemas['SessionInfo'] | null
-  // 事件与发送结果中出现过的消息和执行，按 ID 合并，执行只保留最新的状态。历史请求进行中时写入缓存的内容
-  // 会被请求结果覆盖，所以构建对话轮次时再把它们合并到历史之上；快照不清除它们。
-  // 执行的已知状态也用来识别乱序到达的旧更新。
+  // Messages and runs seen in events and send results, merged by ID; for runs only the latest state is kept. Anything written to the
+  // cache while a history request is in flight gets overwritten by the request's result, so they are merged on top of the history again
+  // when building conversation turns; snapshots don't clear them.
+  // The known state of runs is also used to recognize stale updates that arrive out of order.
   messages: Record<string, Message>
   runs: Record<string, Run>
 }
@@ -72,7 +74,8 @@ export function queuedCounts(state: LiveState): Schemas['QueueCounts'] {
   return { interrupt, normal: state.queued.length - interrupt }
 }
 
-// 按服务端的处理顺序插入排队执行：打断消息排在已有打断消息之后、所有普通排队消息之前。
+// Insert a queued run in the server's processing order: interrupt messages go after existing interrupt messages and before all normal
+// queued messages.
 function insertQueued(queued: Run[], run: Run): Run[] {
   if (queued.some((item) => item.id === run.id)) return queued.map((item) => (item.id === run.id ? run : item))
   if (run.whenBusy !== 'interrupt') return [...queued, run]
@@ -81,15 +84,16 @@ function insertQueued(queued: Run[], run: Run): Run[] {
   return [...queued.slice(0, firstNormal), run, ...queued.slice(firstNormal)]
 }
 
-// 记下执行的最新状态。同一执行的更新可能乱序到达（发送请求与驱动循环分别发出事件），
-// 比已知状态更早的更新返回 null，执行状态只前进不倒退。
+// Record the latest state of a run. Updates for the same run may arrive out of order (the send request and the driver loop emit events
+// separately); an update older than the known state returns null, so a run's state only moves forward, never back.
 function recordRun(runs: Record<string, Run>, run: Run): Record<string, Run> | null {
   const known = runs[run.id]
   if (known && newerRun(known, run) !== run) return null
   return { ...runs, [run.id]: run }
 }
 
-// queue.updated 是完整列表：按服务端给出的出队顺序整体替换排队执行，已知已经开始或结束的不放回队列。
+// queue.updated is the complete list: replace the queued runs wholesale in the dequeue order the server gives; runs already known to
+// have started or ended are not put back into the queue.
 function applyQueue(state: LiveState, queuedRuns: Run[]): LiveState {
   let runs = state.runs
   const queued: Run[] = []
@@ -113,7 +117,8 @@ function applyRun(state: LiveState, run: Run): LiveState {
   const queued = state.queued.filter((item) => item.id !== run.id)
   if (isInProgress(run)) {
     const current = state.current
-    // 同一 Agent 的执行依次进行：当前执行开始得更晚时，这是另一个执行晚到的旧更新，不替换当前执行。
+    // An Agent's runs happen one after another: if the current run started later, this is a late, stale update for another run and
+    // does not replace the current run.
     if (current && current.run.id !== run.id && compareTimes(runStartedAt(run), runStartedAt(current.run)) <= 0) {
       return { ...state, runs, queued }
     }
@@ -188,12 +193,14 @@ export function liveReducer(state: LiveState, action: LiveAction): LiveState {
     case 'connection':
       return state.connection === action.state ? state : { ...state, connection: action.state }
     case 'sent': {
-      // 发送结果只补进历史部分；忙闲与队列以事件为准。结果晚于事件到达时执行状态不倒退。
+      // The send result only fills in the history part; busy/idle and the queue follow the events. If the result arrives after the
+      // events, the run's state doesn't move back.
       const { message, run } = action.result
       return recordMessage({ ...state, runs: recordRun(state.runs, run) ?? state.runs }, message)
     }
     case 'queueAction': {
-      // 回执里的执行照常记入（状态只前进不倒退）；回执里的列表只在动作开始后没有收到新列表时采用。
+      // The run in the receipt is recorded as usual (its state only moves forward, never back); the list in the receipt is used only if
+      // no new list has arrived since the action started.
       const { receipt, seq } = action
       const next = receipt.run ? applyRun(state, receipt.run) : state
       return seq === state.queueSeq ? { ...next, queueItems: receipt.queue } : next
@@ -202,7 +209,8 @@ export function liveReducer(state: LiveState, action: LiveAction): LiveState {
       return action.events.reduce((next, event) => liveReducer(next, { type: 'event', event }), state)
     case 'event': {
       const { event } = action
-      // 快照总是整体替换；其他事件按事件 ID 去重，只处理比已处理位置更新的事件。
+      // A snapshot always replaces everything; other events are deduplicated by event ID, and only events newer than the position
+      // already processed are handled.
       if (event.type !== 'snapshot' && event.id && state.lastEventId && compareEventIds(event.id, state.lastEventId) <= 0) {
         return state
       }

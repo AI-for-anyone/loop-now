@@ -1,6 +1,7 @@
-// 插件输出的归属：插件代码（加载、register、生命周期、处理函数）在 AsyncLocalStorage 里带着自己的 id 运行，
-// 从中派生的定时器与 Promise 也带着它。console.* 变成该插件的 log 消息；写到标准输出或标准错误的内容逐行加 [<id>] 前缀
-// 写到标准错误。标准输出只留给协议。宿主自身的输出不加前缀。
+// Attributing plugin output: plugin code (loading, register, lifecycle, handlers) runs in AsyncLocalStorage carrying its own id,
+// and timers and Promises derived from it carry it too. console.* becomes a log message of that plugin; anything written to stdout
+// or stderr goes to stderr with an [<id>] prefix on each line.
+// stdout is reserved for the protocol. The host's own output gets no prefix.
 
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { format } from 'node:util'
@@ -18,18 +19,18 @@ export function currentPlugin(): string | undefined {
 }
 
 export interface OutputHooks {
-  /** 插件的 console.* 调用。 */
+  /** A plugin's console.* calls. */
   log(plugin: string, level: Level, message: string): void
-  /** 遮住插件的 secret 值。 */
+  /** Masks the plugin's secret values. */
   mask(plugin: string, text: string): string
 }
 
 export interface Output {
-  /** 写协议行（原始标准输出）。 */
+  /** Writes a protocol line (raw stdout). */
   protocol(line: string, done?: () => void): void
-  /** 宿主自身写标准错误。 */
+  /** The host's own writes to stderr. */
   hostError(text: string): void
-  /** 把插件没写完的半行补上换行写出。 */
+  /** Writes out a plugin's unfinished partial line, adding the newline. */
   flush(plugin?: string): void
 }
 
@@ -65,7 +66,7 @@ export function installOutput(hooks: OutputHooks): Output {
       return true
     }
 
-  // 任何人写标准输出（包括 console.dir、console.table）都改到标准错误，协议行只经 rawOut。
+  // Anything anyone writes to stdout (including console.dir and console.table) goes to stderr; protocol lines go only through rawOut.
   process.stdout.write = redirect(rawErr) as typeof process.stdout.write
   process.stderr.write = redirect(rawErr) as typeof process.stderr.write
 

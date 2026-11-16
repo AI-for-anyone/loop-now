@@ -6,7 +6,7 @@ import { ENTRY_FILE, isEntryFile, nameProblem, type FolderEntry, type FolderSour
 import { useFolderList } from './folder-queries'
 import { EntryBadge, EntryIcon, EntryMenu, type EntryActions } from './FolderParts'
 
-// 正在新建或重命名的那一项：在树里就地输入名称。
+// The item being created or renamed: its name is typed in place in the tree.
 export type Naming = { mode: 'create'; dir: string; type: 'file' | 'dir' } | { mode: 'rename'; entry: FolderEntry }
 
 interface TreeContext {
@@ -17,7 +17,8 @@ interface TreeContext {
   dropTarget: string | null
   actions: EntryActions
   onToggle: (path: string) => void
-  // 点击树里的一行：选中它，但不改变它自己的展开状态（展开与收起由同一次点击的 onToggle 负责）。
+  // Clicking a row in the tree selects it without changing its own expanded state (expanding and collapsing are handled by onToggle for
+  // the same click).
   onSelect: (entry: FolderEntry) => void
   onName: (value: string) => void
   onNameCancel: () => void
@@ -27,17 +28,18 @@ interface TreeContext {
 
 const INDENT = 14
 const pad = (depth: number) => ({ paddingLeft: 8 + depth * INDENT })
-// 缩进参考线：每一级一条竖线，深层目录里也能看清层级。
+// Indent guides: one vertical line per level, so the hierarchy stays readable in deep folders.
 function Guides({ depth }: { depth: number }) {
   return Array.from({ length: depth }, (_, level) => <span key={level} aria-hidden="true" className="pointer-events-none absolute inset-y-0 border-l border-ink/10" style={{ left: 8 + level * INDENT + 7 }} />)
 }
 
 const rowClass = 'group relative flex h-7 cursor-pointer items-center gap-1.5 rounded-[6px] pr-1 text-ink outline-none select-none hover:bg-ink/[0.045] focus-visible:shadow-[inset_0_0_0_2px_var(--riso-blue)]'
-// 选中的一项是黄色（选中态一律黄色）。
+// The selected item is yellow (the selected state is always yellow).
 const selectedClass = 'bg-riso-yellow font-black hover:bg-riso-yellow'
 const dropClass = 'bg-tint-yellow shadow-[inset_0_0_0_1.5px_var(--ink)] hover:bg-tint-yellow'
 
-// 文件树：根目录一行，其下逐级展开，只读取展开了的文件夹。行按 DOM 顺序平铺，上下键按显示顺序移动。
+// File tree: one row for the root, expanded level by level below it; only expanded folders are read. Rows are laid out flat in DOM
+// order, and the up/down keys move in display order.
 export function FileTree({ rootLabel, ...ctx }: TreeContext & { rootLabel: string }) {
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const rows = [...event.currentTarget.querySelectorAll<HTMLElement>('[role=treeitem]')]
@@ -48,7 +50,7 @@ export function FileTree({ rootLabel, ...ctx }: TreeContext & { rootLabel: strin
     else if (event.key === 'Home') go(rows[0])
     else if (event.key === 'End') go(rows.at(-1))
     else if (event.key === 'ArrowLeft' && index >= 0) {
-      // 已收起的项：回到上一级文件夹。
+      // On a collapsed item: go back to the parent folder.
       const level = Number(rows[index].getAttribute('aria-level'))
       if (rows[index].getAttribute('aria-expanded') !== 'true') go(rows.slice(0, index).reverse().find((row) => Number(row.getAttribute('aria-level')) === level - 1))
     }
@@ -82,7 +84,7 @@ function TreeLevel({ ctx, path, depth }: { ctx: TreeContext; path: string; depth
   if (list.isPending) return <StatusRow depth={depth} loading>{t.folders.loading}</StatusRow>
   if (list.isError) return <StatusRow depth={depth} error>{list.error instanceof Error ? list.error.message : String(list.error)}</StatusRow>
   const entries = list.data.pages.flatMap((page) => page.entries)
-  // 根目录的 AGENTS.md 排在最前：它是 Agent 每次启动时先读的入口。
+  // The root's AGENTS.md comes first: it is the entry point the Agent reads first every time it starts.
   const ordered = path === '' ? [...entries].sort((a, b) => Number(b.name === ENTRY_FILE && b.type === 'file') - Number(a.name === ENTRY_FILE && a.type === 'file')) : entries
   return (
     <>
@@ -153,7 +155,7 @@ function TreeNode({ ctx, entry, depth }: { ctx: TreeContext; entry: FolderEntry;
   )
 }
 
-// 就地输入名称：Enter 确认，Esc 取消；失去焦点时名称有效就确认，否则取消。
+// Typing a name in place: Enter confirms, Esc cancels; on blur, a valid name is confirmed, otherwise it cancels.
 function NameRow({ ctx, depth, type, initial }: { ctx: TreeContext; depth: number; type: 'file' | 'dir'; initial: string }) {
   const [value, setValue] = useState(initial)
   const [touched, setTouched] = useState(false)

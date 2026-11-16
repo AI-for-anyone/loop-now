@@ -1,16 +1,17 @@
-// 控制台的界面语言，在页面加载时确定一次：地址里的 ?lang=（便于截图）优先，其次是全局设置里为这个浏览器保存的选择，
-// 最后按浏览器语言，zh 开头用中文，其余用英文。在全局设置里换语言会保存选择并重新加载页面。
+// The console's UI language, decided once when the page loads: ?lang= in the address (handy for screenshots) comes
+// first, then the choice saved for this browser in global settings, and last the browser language: Chinese if it
+// starts with zh, English otherwise. Changing the language in global settings saves the choice and reloads the page.
 export const locales = ['zh-CN', 'en-US'] as const
 export type Locale = (typeof locales)[number]
 
-// 语言名用各自的语言写，不随界面语言变化。
+// Language names are written in their own language and don't change with the UI language.
 export const localeNames: Record<Locale, string> = { 'zh-CN': '中文', 'en-US': 'English' }
 
 export const localeStorageKey = 'loop-now.locale'
 
 const isLocale = (value: string | null): value is Locale => locales.includes(value as Locale)
 
-// ?lang= 也接受 zh、en 这样的简写。
+// ?lang= also accepts short forms such as zh and en.
 function fromParam(value: string | null): Locale | null {
   if (!value) return null
   if (isLocale(value)) return value
@@ -25,7 +26,7 @@ export function resolveLocale(search: string, saved: string | null, languages: r
   return languages[0]?.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en-US'
 }
 
-// 浏览器存储可能不可用（隐私模式、被禁用），读写失败时按没有保存处理。
+// Browser storage may be unavailable (private mode, disabled); when reading or writing fails, treat it as if nothing was saved.
 function readSaved(): string | null {
   try {
     return window.localStorage.getItem(localeStorageKey)
@@ -36,16 +37,17 @@ function readSaved(): string | null {
 
 export const locale: Locale = resolveLocale(window.location.search, readSaved(), navigator.languages?.length ? navigator.languages : [navigator.language])
 
-// 重新加载页面；测试里替换它。
+// Reloads the page; tests replace it.
 export const page = { reload: () => window.location.reload() }
 
 export function chooseLocale(next: Locale) {
   try {
     window.localStorage.setItem(localeStorageKey, next)
   } catch {
-    // 存不下时只影响这一次：地址里没有 ?lang= 时，重新加载后仍按浏览器语言。
+    // If it can't be saved, only this one time is affected: without ?lang=
+    // in the address, the reloaded page still follows the browser language.
   }
-  // 地址里的 ?lang= 优先于保存的选择，换语言时一并去掉。
+  // ?lang= in the address takes precedence over the saved choice, so remove it as well when changing the language.
   const url = new URL(window.location.href)
   if (url.searchParams.has('lang')) {
     url.searchParams.delete('lang')
@@ -54,6 +56,7 @@ export function chooseLocale(next: Locale) {
   page.reload()
 }
 
-// 服务端返回的说明文字（错误说明、字段校验、执行失败原因）只有中文。界面不是中文时，
-// 有错误码文案的地方只显示文案表里的说明，不再附上服务端原文；没有错误码文案的原样显示。
+// Explanatory text returned by the server (error descriptions, field validation, reasons a run failed) is
+// only in Chinese. When the UI isn't Chinese, places that have error-code copy show only the description from
+// the copy table, without appending the server's original text; places without error-code copy show it as is.
 export const showServerText = locale === 'zh-CN'

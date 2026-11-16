@@ -6,9 +6,11 @@ import { useReturnFocus } from "@/lib/return-focus"
 import { cn } from "@/lib/utils"
 import { t } from "@/i18n"
 
-// 右侧抽屉（改版第 5 步）：宽 620，左缘 2px 藏青线加孔版蓝实色投影；头部是孔版蓝网点底，标题、说明和关闭按钮（黄色圆章）都在里面；
-// 底部（SheetFooter）是一条浅黄色按钮栏，同对话页的输入区，危险动作在左、主按钮在右。不做进出场动画。
-// 标题 24px，不加错版投影（错版只用于 ≥ 28px 的展示字）。
+// Right-side drawer (redesign step 5): 620 wide, with a 2px navy line on the left edge plus a riso-blue solid offset shadow; the header has
+// a riso-blue halftone background and holds the title, description and close button (a yellow round stamp);
+// the bottom (SheetFooter) is a light yellow button bar, like the input area on the conversation page, with dangerous actions on the left
+// and the primary button on the right. No enter or exit animation.
+// The title is 24px, without the misregistered shadow (misregistration is only used for display type ≥ 28px).
 function Sheet(props: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="sheet" {...props} />
 }
@@ -20,7 +22,7 @@ function SheetContent({
   onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content>) {
-  // 抽屉由地址控制开合，没有 Radix 的 Trigger；关闭时把焦点还给打开前的元素。
+  // The drawer is opened and closed by the URL, without a Radix Trigger; on close, focus returns to the element that had it before opening.
   const focusHandlers = useReturnFocus(onOpenAutoFocus, onCloseAutoFocus)
   return (
     <DialogPrimitive.Portal>

@@ -2,14 +2,15 @@ import type { Schemas } from '@/api/client'
 
 type Run = Schemas['Run']
 
-// 执行开始的时间；尚未开始的按入队时间。
+// When the run started; for a run that hasn't started yet, when it was queued.
 export function runStartedAt(run: Run): string {
   return run.startedAt ?? run.queuedAt
 }
 
-// 按数值比较两个 RFC 3339 时间。服务端（Go）输出的小数秒去掉了末尾的 0，位数不定，
-// 按字符串比较会排错；Date.parse 只精确到毫秒，所以小数部分补齐到纳秒后单独比较。
-// 无法解析的时间视为相同，由调用方决定次序。
+// Compare two RFC 3339 times numerically. The server (Go) drops trailing zeros from fractional seconds, so the number of digits varies
+// and comparing them as strings sorts them wrong; Date.parse is only precise to the millisecond, so the fractional part is padded to
+// nanoseconds and compared separately.
+// Times that can't be parsed count as equal, and the caller decides the order.
 export function compareTimes(a: string, b: string): number {
   const ka = timeKey(a)
   const kb = timeKey(b)

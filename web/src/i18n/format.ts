@@ -1,49 +1,50 @@
-// 各语言文案表共用的格式化：日期、时间、数字与复数按传入的 locale 交给 Intl，文案表各自传入自己的 locale。
-// 时长等需要文字单位的格式在各语言的文案表里。
+// Formatting shared by every language's copy table: dates, times, numbers and plurals are handed to Intl with the locale passed in,
+// and each copy table passes its own locale. Formats that need words for units, such as durations, live in each language's copy table.
 
-// 时间（时:分，可带秒），24 小时制。用 hourCycle h23 而不是 hour12: false：后者在部分浏览器的 en-US 下把零点写成 24 点。
+// Time (hours:minutes, optionally with seconds), 24-hour clock. Uses hourCycle h23 rather
+// than hour12: false, because in some browsers the latter writes midnight as 24 under en-US.
 export function clock(locale: string, time: string, seconds = true): string {
   return new Date(time).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', ...(seconds ? { second: '2-digit' } : {}), hourCycle: 'h23' })
 }
 
-// 月与日。
+// Month and day.
 export function monthDay(locale: string, time: string): string {
   return new Date(time).toLocaleDateString(locale, { month: 'numeric', day: 'numeric' })
 }
 
-// 月、日加时分，24 小时制。
+// Month and day plus hours and minutes, 24-hour clock.
 export function monthDayClock(locale: string, time: string): string {
   return new Date(time).toLocaleString(locale, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 }
 
-// 日期加时间，24 小时制。
+// Date plus time, 24-hour clock.
 export function dateTime(locale: string, time: string): string {
   return new Date(time).toLocaleString(locale, { hourCycle: 'h23' })
 }
 
-// 带千位分隔的数。
+// Number with thousands separators.
 export function grouped(locale: string, value: number): string {
   return value.toLocaleString(locale)
 }
 
-// 简写的大数（15K、2.5M），最多一位小数。
+// Abbreviated large number (15K, 2.5M), at most one decimal place.
 export function compact(locale: string, value: number): string {
   return value.toLocaleString(locale, { notation: 'compact', maximumFractionDigits: 1 })
 }
 
-// 按数量选复数形式；没有对应形式时用 other。
+// Picks the plural form for the count; uses other when there is no matching form.
 export function plural(locale: string, count: number, forms: Partial<Record<Intl.LDMLPluralRule, string>> & { other: string }): string {
   return forms[new Intl.PluralRules(locale).select(count)] ?? forms.other
 }
 
-// 运行记录中每一步的时间，精确到毫秒；与语言无关。
+// Time of each step in the run log, to the millisecond; independent of language.
 export function preciseClock(time: string): string {
   const date = new Date(time)
   const pad = (value: number, size = 2) => String(value).padStart(size, '0')
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`
 }
 
-// 字节数，二进制单位；与语言无关。
+// Byte count in binary units; independent of language.
 export function bytes(size: number): string {
   if (size < 1024) return `${size} B`
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KiB`

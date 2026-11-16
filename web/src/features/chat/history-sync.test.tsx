@@ -5,7 +5,8 @@ import type { Schemas } from '@/api/client'
 import { apiUrl, makeMessage, makeMessagePage, makeRun, makeStatus } from '@/test/api'
 import { renderChat } from '@/test/chat'
 
-// 历史请求进行中（首次加载、加载更早的消息、快照触发的重新获取）时到达的事件与发送结果不能丢。
+// Events and send results that arrive while a history request is in flight (the first
+// load, loading older messages, or a refetch triggered by a snapshot) must not be lost.
 
 function deferred() {
   let resolve!: () => void
@@ -22,7 +23,7 @@ function turn(text: string, reply: string) {
   return [makeMessage({ text, run }), makeMessage({ role: 'assistant', text: reply, run })]
 }
 
-// 一轮正在回复的对话，以及它结束时事件流给出的执行与回复。
+// A turn whose reply is in progress, plus the run and reply that the event stream delivers when it ends.
 function replyingTurn(text: string, reply: string) {
   const run = makeRun({ status: 'running', endedAt: null })
   const ended: Schemas['Run'] = { ...run, status: 'completed', endedAt: '2026-10-12T08:00:30Z' }
@@ -67,7 +68,7 @@ describe('历史请求进行中到达的事件', () => {
       handlers: [
         http.get(apiUrl('/agents/:agentId/messages'), async () => {
           calls += 1
-          // 重新获取在执行结束之前读取了历史，到达时却晚于结束事件。
+          // The refetch read the history before the run ended, but its response arrives after the end event.
           if (calls > 1) await gate.promise
           return HttpResponse.json(makeMessagePage([question]))
         }),
@@ -94,7 +95,7 @@ describe('历史请求进行中到达的事件', () => {
         }),
       ],
     })
-    // 排队托盘只跟随服务端的排队列表；这里用已开始的下一轮检验事件不丢失。
+    // The queue tray only follows the server's queue list; here the next turn, already started, is used to check that no event is lost.
     const later = makeMessage({ text: '后来的问题', run: makeRun({ status: 'starting', phase: 'launching', startedAt: '2026-10-12T09:00:00Z', endedAt: null }) })
     await emit('run.ended', { run: ended, message: reply })
     await emit('message.created', { message: later })
@@ -114,7 +115,8 @@ describe('历史请求进行中到达的事件', () => {
         http.get(apiUrl('/agents/:agentId/messages'), async () => {
           calls += 1
           if (calls === 1) {
-            // 首次加载在执行结束之前读取；执行在快照之前结束，事件流不会再发结束事件。
+            // The first load reads before the run ends; the run ends before the
+            // snapshot, so the event stream will not send the end event again.
             await gate.promise
             return HttpResponse.json(makeMessagePage([question]))
           }
@@ -149,7 +151,8 @@ describe('历史请求进行中到达的事件', () => {
       ],
     })
     expect(await screen.findByText('之前的回答')).toBeInTheDocument()
-    // 事件流断开期间（收不到 message.created）快照触发重新获取，此时发送了一条消息。
+    // While the event stream is disconnected (so message.created is not
+    // received), a snapshot triggers a refetch, and a message is sent meanwhile.
     await emit('snapshot', snapshot(agent.id, {}))
     await waitFor(() => expect(calls).toBe(2))
     await user.type(screen.getByLabelText('消息'), '新消息')
@@ -190,7 +193,7 @@ describe('加载更早的消息与重新获取', () => {
     gate.resolve()
     expect(await screen.findByText('断线期间的回答')).toBeInTheDocument()
     expect(olderCalls).toBe(0)
-    // 重新获取完成后可以继续加载更早的消息。
+    // Once the refetch has completed, older messages can be loaded again.
     fireEvent.scroll(screen.getByRole('log'))
     expect(await screen.findByText('更早的回答')).toBeInTheDocument()
     expect(screen.getByText('断线期间的回答')).toBeInTheDocument()

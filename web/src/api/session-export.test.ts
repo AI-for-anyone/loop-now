@@ -14,7 +14,8 @@ afterEach(() => {
   }
 })
 
-// 浏览器在点击之后才异步开始读取 blob：立刻撤销地址，Firefox 和 Safari 可能读不到内容，下载失败却照样提示成功。
+// The browser starts reading the blob asynchronously, only after the click: if the URL is revoked right away,
+// Firefox and Safari may not be able to read the content, and the download fails while the UI still reports success.
 it('触发下载之后不立刻撤销 blob 地址，过一会儿再撤销', async () => {
   const revoke = vi.fn()
   Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: () => 'blob:session' })

@@ -1,5 +1,6 @@
-// validate 子命令：静态校验（SDK 的 validatePlugin），加 --load 时再在隔离的运行时里加载平台侧、调用 register，
-// 核对代码实际订阅与注册的和清单是否一致。--load 会执行插件代码，只用于自己的或已审阅的目录。
+// validate subcommand: static validation (the SDK's validatePlugin). With --load it also loads the platform side in an isolated runtime,
+// calls register, and checks that what the code actually subscribes to and registers matches the manifest.
+// --load runs plugin code, so use it only on your own or reviewed directories.
 
 import path from 'node:path'
 
@@ -20,15 +21,15 @@ export async function runValidate(args: string[]): Promise<number> {
     else if (arg === '--load') load = true
     else if (dir === undefined) dir = arg
     else {
-      process.stderr.write(`多余的参数：${arg}\n`)
+      process.stderr.write(`Unexpected argument: ${arg}\n`)
       return 2
     }
   }
   if (!dir) {
-    process.stderr.write('用法：node main.js validate <插件目录> [--platform-version YYYY.MM] [--load]\n')
+    process.stderr.write('Usage: node main.js validate <plugin dir> [--platform-version YYYY.MM] [--load]\n')
     return 2
   }
-  // 插件代码的输出不能混进标准输出的 JSON。
+  // Plugin code output must not get mixed into the JSON on stdout.
   const output = installOutput({ log: (plugin, level, message) => process.stderr.write(`[${plugin}] ${level}: ${message}\n`), mask: (_, t) => t })
   const result = validatePlugin(dir, { platformVersion })
   if (load && result.ok && result.manifest?.platform) {

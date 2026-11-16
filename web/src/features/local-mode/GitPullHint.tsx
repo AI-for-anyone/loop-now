@@ -6,10 +6,13 @@ import { localModeSettingsPath } from './LocalModeCard'
 
 const isHttp = (url: string) => /^https?:\/\//i.test(url.trim())
 
-// “从 Git 拉取”失败后、状态栏上方的提示。
-// - SSH 主机未确认：开关开不开都一样（ssh 按系统账户的主目录找 ~/.ssh），统一提示先在本机终端核对指纹。
-// - HTTPS 地址认证失败且“用本机的 git 身份”关着：提示去打开，开启后才能用本机已保存的 git 凭证。
-// 其他情况（含 SSH 地址认证失败）不加提示，照常看 git 输出；只有 HTTPS 认证失败时才读取开关。
+// The hint shown above the status bar after “从 Git 拉取” (Pull from Git) fails.
+// - SSH host not verified: the switch makes no difference either way (ssh looks for ~/.ssh in the system account's home
+//   directory), so always suggest checking the fingerprint in a terminal on this computer first.
+// - Authentication failed for an HTTPS address and “用本机的 git 身份” (Use local git identity) is off: suggest turning it on,
+//   since only then can the git credentials saved on this computer be used.
+// In all other cases (including authentication failures for SSH addresses) no hint is added and the git output is read as
+// usual; the switch is only read when HTTPS authentication failed.
 export function GitPullHint({ pull }: { pull: Pick<Schemas['FolderGitPull'], 'errorCode' | 'url'> }) {
   const httpAuth = pull.errorCode === 'auth_failed' && isHttp(pull.url)
   const settings = useLocalModeSettings(httpAuth)

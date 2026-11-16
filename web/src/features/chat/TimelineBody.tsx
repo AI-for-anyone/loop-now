@@ -12,7 +12,8 @@ const DOT: Record<StepTone, string> = {
   hot: 'bg-riso-pink shadow-[0_0_0_2px_var(--ink)]',
 }
 
-// 跳到对话里的那个问题（发给你的消息带 data-console-message-id）；问题不在当前加载的对话里时不动。
+// Jump to that question in the conversation (messages sent to you carry data-console-message-id); do nothing when the question isn't
+// in the currently loaded conversation.
 function QuestionLink({ id }: { id: string }) {
   const jump = () => {
     const target = document.querySelector<HTMLElement>(`[data-console-message-id="${id}"]`)

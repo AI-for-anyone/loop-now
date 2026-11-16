@@ -1,4 +1,5 @@
-// 平台侧：在插件宿主里运行。register 只做注册；宿主在插件停用时自动取消这些注册。
+// Platform side: runs in the plugin host. register only registers things;
+// the host cancels these registrations automatically when the plugin is disabled.
 
 import type { PluginAPI } from '@loop-now/plugin-sdk'
 

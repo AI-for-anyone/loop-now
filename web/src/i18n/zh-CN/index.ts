@@ -25,7 +25,8 @@ import { shell } from './shell'
 import { stats } from './stats'
 import { taskInbox } from './task-inbox'
 
-// 控制台的中文文案，按功能区分文件。文案表的结构（Messages）由这里推导，其他语言须与它同形。
+// Chinese copy for the console, split into files by feature. The shape of the
+// copy table (Messages) is derived from here, and other languages must match it.
 export const zhCN = {
   app,
   common,

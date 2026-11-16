@@ -16,11 +16,12 @@ export const chat = {
   tooLong: (limit: number) => `消息超过上限（${formatBytes(limit)}）`,
   busyBar: (phase: string) => `Agent 正忙（${phase}）`,
   inputLabel: '消息',
-  // 输入框以 "/" 开头时弹出的 Pi 命令菜单；只有 /pi:<name> 才会交给 Pi 执行，其余 "/" 消息照常发出。
+  // Pi command menu that pops up when the input starts with "/"; only /pi:<name>
+  // is handed to Pi to run, and other "/" messages are sent as usual.
 
-  // 扩展命令由 Pi 直接处理、没有交给模型：这一轮没有助手回复。
+  // Extension command handled directly by Pi without going to the model: this turn has no assistant reply.
   piCommandHandled: '命令已执行，没有回复',
-  // 扩展命令的输出（notify 消息）超过上限被截断；警告与错误的级别写在块上方。
+  // Extension command output (notify messages) went over the limit and was truncated; the warning or error level is shown above the block.
   piCommandTruncated: '输出过长，已截断',
   noticeLevel: { warning: '警告', error: '错误' },
   you: '你',
@@ -56,7 +57,8 @@ export const chat = {
     plugin_blocked: '插件阻止了本轮执行',
     image_unsupported: '当前模型不支持图片输入',
     internal_error: '服务端内部错误',
-    // Claude Code 运行时的失败：前两种告诉人在本机怎么处理，其余如实说明，后面接服务端的 errorMessage。
+    // Failures of the Claude Code runtime: the first two tell the person how to fix it on
+    // their machine, the rest say plainly what happened; the server's errorMessage follows.
     runtime_unavailable: '本机没找到 claude：装好 Claude Code，并确认在终端里能运行 claude',
     runtime_login_required: '本机的 Claude Code 没有登录：在本机终端运行 claude 并登录',
     runtime_start_failed: 'Claude Code 没能启动',
@@ -76,7 +78,7 @@ export const chat = {
     notCaptured: 'Agent 运行一次后才有命令列表。',
     noMatch: '没有匹配的命令。',
     noPi: (runtime: string) => `没有匹配的命令。这个 Agent 用 ${runtime} 运行，没有 Pi 命令。`,
-    // 菜单下方置灰的命令：此刻不能用，各写明原因。
+    // Grayed-out commands below the menu: unavailable right now, each with its reason.
     unavailable: {
       title: '现在不能用',
       onlyBlocked: '匹配的命令现在都不能用，回车会照原文发出',
@@ -89,7 +91,7 @@ export const chat = {
     noReply: '命令已执行',
     session: (session: S['ConsoleSessionStatus']) => `会话 ${{ none: '无会话', active: '活动', missing: '丢失' }[session.status.session.state]} · epoch ${session.status.session.epoch} · 模型 ${session.model.provider}/${session.model.modelId} · 思考 ${session.thinkingLevel} · 进程 ${{ stopped: '已停止', starting: '启动中', idle: '空闲', busy: '忙碌' }[session.status.processState]} · 排队 ${session.status.queued.normal + session.status.queued.interrupt}`,
     compact: (before: number, after: number) => `上下文已压缩：${before} → 约 ${after} tokens`,
-    // Pi 没有压缩但正常完成的几种情况。
+    // Cases where Pi didn't compact but finished normally.
     compactSkipped: {
       too_small: '会话内容太少，不用压缩',
       already_compacted: '上次压缩之后还没有新内容，不用再压缩',
@@ -100,7 +102,7 @@ export const chat = {
     newSession: (epoch: number) => `已重开会话（epoch ${epoch}），页面历史仍保留`,
     copied: '已复制最近一条成功回复',
     nothingToCopy: '没有可复制的回复',
-    // /copy 的内容没能写进剪贴板时，在结果那一行给出手动复制的办法。
+    // When the /copy content couldn't be written to the clipboard, the result line explains how to copy it by hand.
     copyManual: '浏览器没有允许控制台写入剪贴板。内容在下面：点“复制”再试一次，或者选中后自己复制。',
     copyManualLabel: '要复制的内容',
     exported: (format: string) => `已下载 ${format} 会话导出文件`,
@@ -116,7 +118,7 @@ export const chat = {
     resumeConfirmTitle: '确认恢复这个会话？',
     resumeConfirmBody: '只恢复模型对话上下文，页面历史保留；不会回滚工作区、模型配置、Prompt、Skills 或权限。',
     resumeConfirmAction: '恢复会话',
-  },  // 定位到一次手动压缩（/compact）：它不是一轮，在它发生的位置显示一张说明。
+  },  // Jumping to a manual compaction (/compact): it isn't a turn, so a note is shown where it happened.
   compactionNote: {
     title: '手动压缩',
     target: '定位到的手动压缩',
@@ -126,7 +128,7 @@ export const chat = {
     running: '正在压缩…',
   },
 
-  // 被 Inbox 唤醒的那一轮，发送者显示为平台提醒。
+  // The turn woken by the Inbox: the sender is shown as a platform reminder.
   platformReminderAt: (time: string) => `平台提醒 · ${formatDayClock(time)}`,
   inboxReminder: { title: '平台提醒', from: (name: string) => `来自 ${name}`, deleted: (label: string) => `（${label}）`, received: '收到 Inbox 消息' },
   connection: {
@@ -150,31 +152,33 @@ export const chat = {
   toolsLabel: '工具调用',
   messagesLabel: '对话',
   loadOlder: '加载更早的消息',
-  // 纸张右侧票根里的刻度尺：一条刻度一轮对话，名称用这一轮开头的文字。
+  // Ruler in the stub on the right of the sheet: one tick per conversation turn, named after the opening text of that turn.
   ruler: {
     label: '对话轮次',
-    // 票根顶上的小标题与底部的总轮数。
+    // Small heading at the top of the stub and the total number of turns at the bottom.
     title: '轮次',
     total: (count: number) => `共 ${count} 轮`,
-    // 平台提醒、sleep 唤醒那一轮：写明是哪种提醒，再接说明。
+    // Turns from a platform reminder or a sleep wake-up: say which kind of reminder, then the text.
     labeled: (kind: string, text: string) => `${kind}：${text}`,
     noText: '没有文字的一轮',
   },
-  // 消息与回复上方的时间，以及名称与时间之间的分隔。
+  // Time above messages and replies, and the separator between name and time.
   time: (time: string) => formatMonthDayClock(time),
   metaSeparator: '·',
-  // 减少动态效果时，工具进行中的旋转图标换成这个静态标记。
+  // With reduced motion, the spinning icon of a tool in progress is replaced by this static mark.
   toolStaticMark: '…',
-  // 被打断的那一轮里没有结束的工具。
+  // Tools that hadn't finished in an interrupted turn.
   toolInterrupted: '已打断',
   interruptDivider: '已打断，先处理这条',
-  // 输入框下方的按键说明：Enter 排队，⌘／Ctrl+Enter 作为打断发送。
+  // Key hints under the input: Enter queues, ⌘/Ctrl+Enter sends as an interrupt.
   keyHint: { enter: 'Enter', modEnter: (mac: boolean) => (mac ? '⌘ Enter' : 'Ctrl Enter'), queue: '排队', interrupt: '立即打断', stopMark: '■', stop: '只停止当前回复' },
-  // 对话页输入区里按键的写法：中文界面统一写“回车”，修饰键写法不变。任务节点输入框的按键说明仍用上面 keyHint 里的写法。
+  // How keys are written in the chat page's input area: the Chinese UI always writes “回车” (Enter); modifier
+  // keys are written as before. Key hints in the task node input still use the keyHint wording above.
   barKeys: { enter: '回车', shiftEnter: 'Shift + 回车', modEnter: (mac: boolean) => (mac ? '⌘ 回车' : 'Ctrl 回车') },
-  // 空闲时输入框下方的按键说明：回车 发送 · Shift + 回车 换行。
+  // Key hints under the input when idle: “回车 发送 · Shift + 回车 换行” (Enter send · Shift + Enter new line).
   idleHint: { send: '发送', newline: '换行' },
-  // 忙时输入框为空时，发送按钮换成停止：只停止这一次回复，不发送新消息，之后排队的消息照常处理。
+  // When busy with an empty input, the send button becomes Stop: it stops only this
+  // reply and sends no new message; messages queued after it are handled as usual.
   stop: '停止当前回复',
   stopping: '正在停止当前回复…',
   retryStop: '重试停止当前回复',
