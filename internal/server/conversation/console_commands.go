@@ -51,7 +51,7 @@ func (s *Service) acquireConsoleCommand(ctx context.Context, agentID uuid.UUID) 
 // agent_not_idle without details (agent_busy is for regular messages, where the caller must "choose interrupt or
 // queue").
 func errNotIdle() error {
-	return apperr.Conflict(apperr.CodeAgentNotIdle, "Agent 正在回复或还有排队消息，请等它空闲后再操作")
+	return apperr.Conflict(apperr.CodeAgentNotIdle, "The Agent is replying or has queued messages. Wait until it is idle, then try again.")
 }
 
 // consoleCommandError turns the expected failures of executor maintenance operations into 409; other errors are
@@ -61,9 +61,9 @@ func consoleCommandError(err error) error {
 	case errors.Is(err, executor.ErrMaintenanceBusy):
 		return errNotIdle()
 	case errors.Is(err, executor.ErrNoSession):
-		return apperr.Conflict(apperr.CodeSessionNone, "当前还没有可操作的会话")
+		return apperr.Conflict(apperr.CodeSessionNone, "There is no session to act on yet.")
 	case errors.Is(err, executor.ErrUnsupportedRuntime):
-		return apperr.Conflict(apperr.CodeConsoleCommandFailed, "当前运行时不支持这个命令")
+		return apperr.Conflict(apperr.CodeConsoleCommandFailed, "The current runtime does not support this command.")
 	}
 	return err
 }
@@ -71,7 +71,7 @@ func consoleCommandError(err error) error {
 // unsupportedExecutor is the error when the executor does not implement a maintenance operation (only test doubles do
 // that).
 func unsupportedExecutor(what string) error {
-	return apperr.Conflict(apperr.CodeConsoleCommandFailed, "当前执行器不支持"+what)
+	return apperr.Conflict(apperr.CodeConsoleCommandFailed, "The current executor does not support "+what)
 }
 
 // releaseConsoleCommand releases the busy lock held by a platform command and goes on to process the messages and
@@ -142,11 +142,11 @@ func (s *Service) Compact(ctx context.Context, agentID uuid.UUID, instructions s
 	case "completed":
 		return ended, nil
 	case "interrupted":
-		return store.Run{}, apperr.Conflict(apperr.CodeConsoleCommandFailed, "压缩已取消")
+		return store.Run{}, apperr.Conflict(apperr.CodeConsoleCommandFailed, "The compaction was cancelled.")
 	}
 	message := ended.ErrorMessage
 	if message == "" {
-		message = "压缩未能完成"
+		message = "The compaction did not finish."
 	}
 	return store.Run{}, apperr.Conflict(apperr.CodeConsoleCommandFailed, message)
 }
@@ -167,7 +167,7 @@ func (s *Service) NewSession(ctx context.Context, agentID uuid.UUID) (apitypes.S
 	defer release()
 	stopper, ok := s.ex.(executor.IdleProcessStopper)
 	if !ok {
-		return apitypes.SessionInfo{}, unsupportedExecutor("停止空闲进程")
+		return apitypes.SessionInfo{}, unsupportedExecutor("stopping idle processes.")
 	}
 	if _, err := stopper.StopIdle(ctx, agentID, "session_reset"); err != nil {
 		return apitypes.SessionInfo{}, consoleCommandError(err)
@@ -192,7 +192,7 @@ func (s *Service) Reload(ctx context.Context, agentID uuid.UUID) (bool, error) {
 	}
 	stopper, ok := s.ex.(executor.IdleProcessStopper)
 	if !ok {
-		return false, unsupportedExecutor("重载")
+		return false, unsupportedExecutor("reloading.")
 	}
 	stopped, err := stopper.StopIdle(ctx, agentID, "console_reload")
 	return stopped, consoleCommandError(err)
@@ -201,7 +201,7 @@ func (s *Service) Reload(ctx context.Context, agentID uuid.UUID) (bool, error) {
 // Export downloads the current managed Pi session; format must be html or jsonl.
 func (s *Service) Export(ctx context.Context, agentID uuid.UUID, format string) (executor.SessionExport, error) {
 	if format != "html" && format != "jsonl" {
-		return executor.SessionExport{}, apperr.Invalid("format", "只能是 html 或 jsonl")
+		return executor.SessionExport{}, apperr.Invalid("format", "Must be html or jsonl.")
 	}
 	if err := s.RequireCommand(ctx, agentID, "export"); err != nil {
 		return executor.SessionExport{}, err
@@ -216,21 +216,21 @@ func (s *Service) Export(ctx context.Context, agentID uuid.UUID, format string) 
 		return executor.SessionExport{}, err
 	}
 	if sess.State == "missing" {
-		return executor.SessionExport{}, apperr.Conflict(apperr.CodeSessionMissing, "会话文件丢失，请先在控制台确认重开会话")
+		return executor.SessionExport{}, apperr.Conflict(apperr.CodeSessionMissing, "The session file is missing. Confirm reopening the session in the console first.")
 	}
 	if sess.State != "active" || sess.SessionFile == "" {
-		return executor.SessionExport{}, apperr.Conflict(apperr.CodeSessionNone, "当前还没有可导出的会话")
+		return executor.SessionExport{}, apperr.Conflict(apperr.CodeSessionNone, "There is no session to export yet.")
 	}
 	exporter, ok := s.ex.(executor.SessionExporter)
 	if !ok {
-		return executor.SessionExport{}, unsupportedExecutor("会话导出")
+		return executor.SessionExport{}, unsupportedExecutor("exporting sessions.")
 	}
 	out, err := exporter.ExportSession(ctx, agentID, sess.SessionFile, format)
 	if err != nil {
 		if mapped := consoleCommandError(err); mapped != err {
 			return executor.SessionExport{}, mapped
 		}
-		return executor.SessionExport{}, fmt.Errorf("导出会话失败：%w", err)
+		return executor.SessionExport{}, fmt.Errorf("export the session: %w", err)
 	}
 	return out, nil
 }
@@ -248,7 +248,7 @@ func (s *Service) ListResumeSessions(ctx context.Context, agentID uuid.UUID) ([]
 	}
 	lister, ok := s.ex.(executor.SessionLister)
 	if !ok {
-		return nil, unsupportedExecutor("列出会话")
+		return nil, unsupportedExecutor("listing sessions.")
 	}
 	sessions, err := lister.ListSessions(ctx, agentID, sess.SessionFile)
 	return sessions, consoleCommandError(err)
@@ -271,21 +271,21 @@ func (s *Service) ResumeSession(ctx context.Context, agentID uuid.UUID, sessionI
 	}
 	lister, ok := s.ex.(executor.SessionLister)
 	if !ok {
-		return apitypes.SessionInfo{}, unsupportedExecutor("恢复会话")
+		return apitypes.SessionInfo{}, unsupportedExecutor("resuming sessions.")
 	}
 	target, err := lister.ResolveSession(ctx, agentID, sessionID, sess.SessionFile)
 	if err != nil {
 		return apitypes.SessionInfo{}, consoleCommandError(err)
 	}
 	if target == nil {
-		return apitypes.SessionInfo{}, apperr.Invalid("text", "未知或无效的会话 ID")
+		return apitypes.SessionInfo{}, apperr.Invalid("text", "The session ID is unknown or invalid.")
 	}
 	if target.Current {
-		return apitypes.SessionInfo{}, apperr.Conflict(apperr.CodeConsoleCommandFailed, "这已经是当前会话，无需恢复")
+		return apitypes.SessionInfo{}, apperr.Conflict(apperr.CodeConsoleCommandFailed, "This is already the current session. There is nothing to resume.")
 	}
 	stopper, ok := s.ex.(executor.IdleProcessStopper)
 	if !ok {
-		return apitypes.SessionInfo{}, unsupportedExecutor("停止空闲进程")
+		return apitypes.SessionInfo{}, unsupportedExecutor("stopping idle processes.")
 	}
 	if _, err := stopper.StopIdle(ctx, agentID, "session_resumed"); err != nil {
 		return apitypes.SessionInfo{}, consoleCommandError(err)
@@ -401,7 +401,7 @@ func (s *Service) RequireCommand(ctx context.Context, agentID uuid.UUID, name st
 		return err
 	}
 	if agentruntime.ForProvider(agent.ModelProvider) == agentruntime.ClaudeCode {
-		return apperr.Conflict(apperr.CodeConsoleCommandFailed, "Claude Code 的 Agent 不支持 /"+name+"：这个命令只适用于 Pi 会话")
+		return apperr.Conflict(apperr.CodeConsoleCommandFailed, "Claude Code Agents do not support /"+name+". This command only works in Pi sessions.")
 	}
 	return nil
 }

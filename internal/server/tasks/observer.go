@@ -37,7 +37,7 @@ func (o *Observer) Event(runtime uuid.UUID, run *uuid.UUID, e executor.Event) {
 	if run != nil {
 		turn, e := o.Store.TaskTurn(ctx, *run)
 		if e != nil || turn.RuntimeID != runtime {
-			o.failed(runtime, run, errors.New("任务轮次与运行实例不匹配或不可读取"))
+			o.failed(runtime, run, errors.New("the task turn does not match the runtime instance or cannot be read"))
 			return
 		}
 		if turn.NodeRunID != uuid.Nil {
@@ -79,7 +79,7 @@ func (o *Observer) Usage(runtime uuid.UUID, run *uuid.UUID, u executor.Usage) {
 	if run != nil {
 		turn, e := o.Store.TaskTurn(ctx, *run)
 		if e != nil || turn.RuntimeID != runtime {
-			o.failed(runtime, run, errors.New("任务轮次与运行实例不匹配或不可读取"))
+			o.failed(runtime, run, errors.New("the task turn does not match the runtime instance or cannot be read"))
 			return
 		}
 	}

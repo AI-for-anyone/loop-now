@@ -28,7 +28,7 @@ type Service struct {
 // Usage sums the usage within [from, to) of the scope; a nil from or to means unbounded.
 func (s *Service) Usage(ctx context.Context, f store.ScopeFilter, from, to *time.Time) (apitypes.UsagePage, error) {
 	if from != nil && to != nil && !from.Before(*to) {
-		return apitypes.UsagePage{}, apperr.Invalid("from", "开始时间必须早于结束时间")
+		return apitypes.UsagePage{}, apperr.Invalid("from", "Must be earlier than to.")
 	}
 	rows, err := s.Store.UsageSummary(ctx, f, from, to)
 	if err != nil {
@@ -53,14 +53,14 @@ var statsSteps = map[string]time.Duration{"hour": time.Hour, "day": 24 * time.Ho
 // buckets.
 func (s *Service) Stats(ctx context.Context, f store.ScopeFilter, from, to time.Time, bucket string) (store.StatsReport, error) {
 	if !from.Before(to) {
-		return store.StatsReport{}, apperr.Invalid("from", "开始时间必须早于结束时间")
+		return store.StatsReport{}, apperr.Invalid("from", "Must be earlier than to.")
 	}
 	step, ok := statsSteps[bucket]
 	if !ok {
-		return store.StatsReport{}, apperr.Invalid("bucket", "必须是 hour 或 day")
+		return store.StatsReport{}, apperr.Invalid("bucket", "Must be hour or day.")
 	}
 	if (to.Sub(from)+step-1)/step > 1000 {
-		return store.StatsReport{}, apperr.Invalid("bucket", "桶数不能超过 1000，请缩短时间范围或改用更宽的桶")
+		return store.StatsReport{}, apperr.Invalid("bucket", "Must not produce more than 1000 buckets. Shorten the time range or use a wider bucket.")
 	}
 	out, err := s.Store.Stats(ctx, f, from, to, step)
 	out.Bucket = bucket
@@ -75,7 +75,7 @@ func (s *Service) Anomalies(ctx context.Context, f store.ScopeFilter, from *time
 	if cursor != "" {
 		parsed, ok := decodeCursor(cursor)
 		if !ok {
-			return apitypes.AnomalyPage{}, apperr.Invalid("cursor", "游标无效")
+			return apitypes.AnomalyPage{}, apperr.Invalid("cursor", "The cursor is invalid.")
 		}
 		c = &parsed
 	}
@@ -140,7 +140,7 @@ func (s *Service) Timeline(ctx context.Context, agentID, runID uuid.UUID) (apity
 		return apitypes.RunTimeline{}, err
 	}
 	if run.AgentID != agentID {
-		return apitypes.RunTimeline{}, apperr.NotFound("执行")
+		return apitypes.RunTimeline{}, apperr.NotFound("Run")
 	}
 	events, err := s.Store.RunEvents(ctx, runID)
 	if err != nil {

@@ -23,7 +23,7 @@ func (s *Service) ResolveTaskRecipient(ctx context.Context, agentID, taskID uuid
 		}
 	}
 	if runtime == uuid.Nil {
-		return store.Party{}, false, apperr.NotFound("任务内Agent")
+		return store.Party{}, false, apperr.NotFound("Agent in this task")
 	}
 	r, err := s.Store.GetTask(ctx, taskID)
 	if err != nil {
@@ -37,7 +37,7 @@ func (s *Service) ResolveTaskRecipient(ctx context.Context, agentID, taskID uuid
 		return store.Party{}, false, err
 	}
 	if project.ManagerAgentID == nil {
-		return store.Party{}, false, conflict("任务已结束，项目尚未指定Manager")
+		return store.Party{}, false, conflict("The task has ended and the project has no Manager yet.")
 	}
 	return store.AgentParty(*project.ManagerAgentID), true, nil
 }
@@ -50,7 +50,7 @@ func (s *Service) DeliverInbox(ctx context.Context, msg store.NewInboxMessage) e
 		return err
 	}
 	if inst.AgentID != msg.To.ID {
-		return apperr.NotFound("任务内Agent")
+		return apperr.NotFound("Agent in this task")
 	}
 	_, err = s.Store.MutateTask(ctx, inst.TaskID, nil, func(m *store.TaskMutation) (any, error) {
 		m.Unchanged()
@@ -69,7 +69,7 @@ func (s *Service) DeliverInboxTx(ctx context.Context, tx *db.Tx, m *store.TaskMu
 	inst := store.TaskInstance{ID: msg.To.RuntimeID, AgentID: msg.To.ID, TaskID: m.Record.View.Task.ID}
 
 	if m.Record.Ended() {
-		return conflict("任务已结束，请重新解析收件人")
+		return conflict("The task has ended. Resolve the recipient again.")
 	}
 	exists, e := store.InboxMessageExistsTx(ctx, m.Tx, msg.ID)
 	if e != nil {

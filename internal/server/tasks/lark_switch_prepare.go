@@ -30,14 +30,14 @@ func (s *Source) taskPreparationCheckTx(ctx context.Context, m *store.TaskMutati
 		if err != nil {
 			return false, 0, err
 		}
-		return false, 0, conflict("原实例正在凭证交接，未准备新副本")
+		return false, 0, conflict("The original instance is in a credential handoff. No new copy was prepared.")
 	}
 	revision, err := s.Store.TaskLarkMemberRevisionTx(ctx, m, inst.ID)
 	if err != nil {
 		return false, 0, err
 	}
 	if expected != nil && revision != *expected {
-		return false, 0, conflict("准备期间固定任务绑定已变化，旧准备结果未发布")
+		return false, 0, conflict("The pinned task binding changed during preparation. The outdated preparation was not published.")
 	}
 	return prepared, revision, nil
 }

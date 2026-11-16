@@ -16,7 +16,7 @@ func TestToolCommandScopedProjection(t *testing.T) {
 		{Type: "tool.command", Data: map[string]any{"toolCallId": "secret", "toolName": "bash", "command": "TOKEN=PRIVATE curl localhost"}},
 	}
 	commands := toolCommands(events)
-	for _, tc := range []struct{ id, name, want string }{{"one", "bash", "git status --short"}, {"missing", "bash", ""}, {"read", "read", ""}, {"secret", "bash", "[含敏感凭证的命令已隐藏]"}} {
+	for _, tc := range []struct{ id, name, want string }{{"one", "bash", "git status --short"}, {"missing", "bash", ""}, {"read", "read", ""}, {"secret", "bash", "[Command hidden because it contains credentials]"}} {
 		got := withToolCommand(apitypes.TimelineToolEntry{ToolCallID: tc.id, ToolName: tc.name}, commands).(apitypes.TimelineToolEntry)
 		if tc.want == "" && got.Command != nil || tc.want != "" && (got.Command == nil || *got.Command != tc.want) {
 			t.Fatal("wrong tool association", tc.id)

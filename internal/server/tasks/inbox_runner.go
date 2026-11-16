@@ -92,7 +92,7 @@ func (s *Service) driveInbox(ctx context.Context, runtime uuid.UUID) error {
 		if e != nil {
 			result.Outcome = executor.OutcomeFailed
 			result.ErrorCode = executor.ErrInternal
-			result.ErrorMessage = "Inbox执行基础设施失败"
+			result.ErrorMessage = "The Inbox execution infrastructure failed."
 		}
 		if result.Outcome != "completed" && result.Outcome != "interrupted" && result.Outcome != "failed" {
 			result.Outcome = "failed"

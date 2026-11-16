@@ -138,16 +138,16 @@ func (s *Service) endInFlight(ctx context.Context) {
 // must choose interrupt or queue.
 func (s *Service) Send(ctx context.Context, agentID uuid.UUID, text, whenBusy string, imageIDs ...uuid.UUID) (apitypes.Message, error) {
 	if strings.TrimSpace(text) == "" && len(imageIDs) == 0 {
-		return apitypes.Message{}, apperr.Invalid("text", "消息不能为空")
+		return apitypes.Message{}, apperr.Invalid("text", "Must not be blank unless images are attached.")
 	}
 	if int64(len(text)) > s.o.MaxMessage {
-		return apitypes.Message{}, apperr.TooLarge("消息超过长度上限")
+		return apitypes.Message{}, apperr.TooLarge("The message text exceeds the size limit.")
 	}
 	if whenBusy != "" && whenBusy != "interrupt" && whenBusy != "queue" {
-		return apitypes.Message{}, apperr.Invalid("whenBusy", "只能是 interrupt 或 queue")
+		return apitypes.Message{}, apperr.Invalid("whenBusy", "Must be interrupt or queue.")
 	}
 	if s.ctx.Err() != nil {
-		return apitypes.Message{}, errors.New("服务端正在停止")
+		return apitypes.Message{}, errors.New("the server is shutting down")
 	}
 
 	runID := uuid.Must(uuid.NewV7())
@@ -212,7 +212,7 @@ func (s *Service) busyError(ctx context.Context, agentID uuid.UUID) error {
 		details.CurrentRunID = &queued[0].ID
 		s.kick(ctx, agentID)
 	}
-	e := apperr.Conflict(apperr.CodeAgentBusy, "Agent 正在回复，请选择打断或排队")
+	e := apperr.Conflict(apperr.CodeAgentBusy, "The Agent is replying. Choose to interrupt it or queue the message.")
 	e.Details = details
 	return e
 }
@@ -526,7 +526,7 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 		var err error
 		msg, err = s.st.GetMessage(ctx, run.UserMessageID)
 		if err != nil {
-			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "读取消息失败：" + err.Error()}, ""
+			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "Reading the message failed: " + err.Error()}, ""
 		}
 	}
 	if run.Origin == "sleep_wake" {
@@ -535,7 +535,7 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	if run.Origin == "inbox_reminder" {
 		text, void, err := s.prepareReminder(ctx, agentID, run)
 		if err != nil {
-			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "准备平台提醒失败：" + err.Error()}, ""
+			return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "Preparing the platform reminder failed: " + err.Error()}, ""
 		}
 		if void {
 			return executor.Result{Outcome: outcomeVoided}, ""
@@ -580,7 +580,7 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	}
 	images, imageErr := s.st.ImageContents(ctx, msg.Images)
 	if imageErr != nil {
-		return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "图片内容不可用"}, ""
+		return executor.Result{Outcome: executor.OutcomeFailed, ErrorCode: executor.ErrInternal, ErrorMessage: "The image content is not available."}, ""
 	}
 	trigger := run.UserMessageID
 	if run.TriggerInboxID != nil {
@@ -671,7 +671,7 @@ func (s *Service) recordRunEnd(ctx context.Context, agentID, runID uuid.UUID, en
 	if errors.Is(err, store.ErrSleepSessionNotSaved) {
 		end.Status = "failed"
 		end.ErrorCode = executor.ErrInternal
-		end.ErrorMessage = "会话记录保存失败"
+		end.ErrorMessage = "Could not save the session record."
 		r, msg, finished, err = s.st.FinishRun(ctx, runID, end)
 	}
 	if err != nil {

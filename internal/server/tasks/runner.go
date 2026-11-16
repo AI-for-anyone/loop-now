@@ -18,15 +18,15 @@ import (
 // replayed.
 func (s *Service) Start(ctx context.Context) error {
 	if s.Options.ReconcileInterval <= 0 {
-		return errors.New("任务对账间隔必须为正")
+		return errors.New("the task reconcile interval must be positive")
 	}
 	if s.Coord != nil && (s.Options.RecordTimeout <= 0 || s.Options.InstanceID == uuid.Nil) {
-		return errors.New("任务协调参数未完整配置")
+		return errors.New("the task coordination options are incomplete")
 	}
 	s.mu.Lock()
 	if s.started {
 		s.mu.Unlock()
-		return errors.New("任务服务已经启动")
+		return errors.New("the task service is already started")
 	}
 	s.mu.Unlock()
 	ids, err := s.Store.TaskIDs(ctx, []string{"preparing", "running", "waiting", "blocked"})
@@ -51,7 +51,7 @@ func (s *Service) Start(ctx context.Context) error {
 			if !currentInterrupted {
 				return nil, nil
 			}
-			block(m.Record, "服务重启时节点正在执行，请重试当前节点或取消任务")
+			block(m.Record, "The node was running when the server restarted. Retry the current node or cancel the task.")
 			if consoleSource != uuid.Nil {
 				if e = s.Store.RecordTaskConsoleEligibilityTx(ctx, m, consoleSource); e != nil {
 					return nil, e
@@ -199,7 +199,7 @@ func (s *Service) drive(ctx context.Context, id uuid.UUID) error {
 		}
 		if r.View.Task.Status == "preparing" {
 			if s.Source == nil {
-				return errors.New("任务执行源未配置")
+				return errors.New("the task execution source is not configured")
 			}
 			instances, e := s.Store.TaskInstances(ctx, id)
 			if e != nil {
@@ -210,7 +210,7 @@ func (s *Service) drive(ctx context.Context, id uuid.UUID) error {
 					if ctx.Err() != nil {
 						return ctx.Err()
 					}
-					return s.blockTask(ctx, id, "任务分叉或目录准备失败")
+					return s.blockTask(ctx, id, "Could not prepare the task fork or its directories.")
 				}
 			}
 			_, e = s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
@@ -228,7 +228,7 @@ func (s *Service) drive(ctx context.Context, id uuid.UUID) error {
 		}
 		n := r.Current()
 		if n == nil {
-			return errors.New("任务缺少当前节点")
+			return errors.New("the task has no current node")
 		}
 		if n.Status == "queued" && s.Hooks != nil {
 			// node.before_start (plugins/SPEC.md §4): ask plugins before a node first starts, without waiting inside
@@ -242,9 +242,9 @@ func (s *Service) drive(ctx context.Context, id uuid.UUID) error {
 			if o.Blocked {
 				reason := o.Reason
 				if reason == "" {
-					reason = "没有说明原因"
+					reason = "No reason given."
 				}
-				return s.blockTask(ctx, id, "插件 "+o.Plugin+" 阻止节点开始："+reason)
+				return s.blockTask(ctx, id, "Plugin "+o.Plugin+" blocked the node from starting: "+reason)
 			}
 		}
 		turn, found, e := s.Store.ClaimTaskTurn(ctx, id, n.RuntimeID)
@@ -262,7 +262,7 @@ func (s *Service) drive(ctx context.Context, id uuid.UUID) error {
 		if e != nil {
 			result.Outcome = executor.OutcomeFailed
 			result.ErrorCode = executor.ErrInternal
-			result.ErrorMessage = "执行基础设施失败"
+			result.ErrorMessage = "The execution infrastructure failed."
 		}
 		var code, message *string
 		if result.ErrorCode != "" {
@@ -366,9 +366,9 @@ func (s *Service) settleTx(ctx context.Context, m *store.TaskMutation, t store.T
 			return nil, m.Emit("node.updated", map[string]any{"node": n})
 		}
 		if stopped {
-			block(m.Record, "已被人停止")
+			block(m.Record, "Stopped by a person.")
 		} else {
-			block(m.Record, "节点执行异常结束，已提交的结果保留但不推进")
+			block(m.Record, "The node run ended abnormally. Any submitted result is kept, but the task does not advance.")
 		}
 		var executed bool
 		if e := m.Tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM lifecycle_events WHERE task_turn_id=$1 AND type=$2)`, t.ID, store.EventRunRunning).Scan(&executed); e != nil {
@@ -390,7 +390,7 @@ func (s *Service) settleTx(ctx context.Context, m *store.TaskMutation, t store.T
 			return nil, e
 		}
 		if !valid {
-			return blocked("恢复回合缺少本轮有效提交，保留已有输出但不推进节点")
+			return blocked("The resumed turn has no valid submission of its own. The existing output is kept, but the node does not advance.")
 		}
 	}
 	if n.Output == nil {
@@ -410,7 +410,7 @@ func (s *Service) settleTx(ctx context.Context, m *store.TaskMutation, t store.T
 			m.Record.View.Task.Status = "waiting"
 			return nil, m.Emit("node.updated", map[string]any{"node": n})
 		}
-		return blocked("节点轮次结束但未提交结果，也没有等待中的问题")
+		return blocked("The node's turn ended without submitting a result or leaving an open question.")
 	}
 	edge, e := m.Record.View.Workflow.SelectEdge(n.StepID, n.EdgeID, m.Record.EdgeCounts)
 	if e != nil {
@@ -422,7 +422,7 @@ func (s *Service) settleTx(ctx context.Context, m *store.TaskMutation, t store.T
 		return nil, e
 	}
 	if edge != nil && len(m.Record.View.Nodes) >= s.Options.MaxVisits {
-		return blocked("任务节点访问次数达到上限")
+		return blocked("The task reached its limit of node visits.")
 	}
 	if e = s.Store.InterruptTaskTurns(ctx, m, n.ID); e != nil {
 		return nil, e
@@ -592,6 +592,6 @@ func stoppedError(ctx context.Context, m *store.TaskMutation, turn uuid.UUID, ou
 	if err != nil || !stopped {
 		return code, message, err
 	}
-	c, msg := "user_stopped", "已被人停止"
+	c, msg := "user_stopped", "Stopped by a person."
 	return &c, &msg, nil
 }

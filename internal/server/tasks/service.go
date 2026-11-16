@@ -117,56 +117,56 @@ func manager(p auth.Principal, m *store.TaskMutation) error {
 	if p.Kind == auth.KindAgent && m.ManagerID != nil && p.ID == *m.ManagerID {
 		return nil
 	}
-	return apperr.Forbidden("只有人或当前项目Manager可操作任务")
+	return apperr.Forbidden("Only a person or the project's current Manager can act on this task.")
 }
 
 // historyActor lets the same action replay its cached response after the node has advanced; new actions must still
 // target the current node.
 func historyActor(p auth.Principal, m *store.TaskMutation, nodeID uuid.UUID) error {
 	if p.Kind != auth.KindAgent || p.TaskID != m.Record.View.Task.ID {
-		return apperr.Forbidden("只能操作本任务实例")
+		return apperr.Forbidden("Only an Agent instance of this task can do this.")
 	}
 	for _, n := range m.Record.View.Nodes {
 		if n.ID == nodeID && n.RuntimeID == p.RuntimeID && n.AgentID == p.ID {
 			return nil
 		}
 	}
-	return apperr.Forbidden("节点不属于当前任务实例")
+	return apperr.Forbidden("The node does not belong to the current task instance.")
 }
 func nodeActor(p auth.Principal, m *store.TaskMutation, nodeID uuid.UUID) error {
 	n := m.Record.Current()
 	if p.Kind != auth.KindAgent || p.TaskID != m.Record.View.Task.ID || n == nil || p.RuntimeID != n.RuntimeID || p.ID != n.AgentID {
-		return apperr.Forbidden("只能操作当前任务实例的节点")
+		return apperr.Forbidden("Only the task instance running the current node can do this.")
 	}
 	if n.ID != nodeID {
-		return conflict("节点运行已变化，请重新读取任务")
+		return conflict("The node run has changed. Read the task again.")
 	}
 	return nil
 }
 
 func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.CreateInput) (json.RawMessage, error) {
 	if p.Kind != auth.KindAgent {
-		return nil, apperr.Forbidden("任务只能由项目Manager通过Agent接口创建")
+		return nil, apperr.Forbidden("Only the project's Manager can create tasks, through the Agent API.")
 	}
 	if strings.TrimSpace(in.Title) == "" || len([]rune(in.Title)) > 200 || in.ActionID == uuid.Nil || in.Request == nil {
-		return nil, apperr.Invalid("task", "标题、原始要求或动作ID无效")
+		return nil, apperr.Invalid("task", "title must not be blank and must be at most 200 characters; request and a valid actionId are required.")
 	}
 	if err := in.Workflow.Validate(workflow.Limits{MaxSteps: s.Options.MaxSteps, MaxEdges: s.Options.MaxEdges}); err != nil {
 		return nil, fieldError(err)
 	}
 	encoded, err := json.Marshal(in)
 	if err != nil {
-		return nil, apperr.Invalid("task", "任务不能编码")
+		return nil, apperr.Invalid("task", "The task cannot be encoded as JSON.")
 	}
 	if int64(len(encoded)) > s.Options.MaxRequest {
-		return nil, apperr.TooLarge("任务定义与输入超限")
+		return nil, apperr.TooLarge("The task definition and input exceed the size limit.")
 	}
 	a, err := s.Store.GetAgent(ctx, p.ID)
 	if err != nil {
 		return nil, err
 	}
 	if a.ProjectID == nil || !a.IsManager {
-		return nil, apperr.Forbidden("只有当前项目Manager可创建任务")
+		return nil, apperr.Forbidden("Only the project's current Manager can create tasks.")
 	}
 	action := bodyAction(p, in.ActionID, "createTask", in)
 	out, err := s.Store.CreateTask(ctx, *a.ProjectID, p.ID, *action, func(tx *db.Tx) (taskmodel.Record, []store.TaskInstance, error) {
@@ -182,7 +182,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 				return taskmodel.Record{}, nil, e
 			}
 			if !received {
-				return taskmodel.Record{}, nil, apperr.Invalid("sourceInboxMessageId", "原消息须属于发起Manager的Inbox")
+				return taskmodel.Record{}, nil, apperr.Invalid("sourceInboxMessageId", "Must be a message in the requesting Manager's Inbox.")
 			}
 		}
 		now := time.Now().UTC()
@@ -220,7 +220,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 				return taskmodel.Record{}, nil, e
 			}
 			if capture.Agent.ProjectID == nil || *capture.Agent.ProjectID != *a.ProjectID {
-				return taskmodel.Record{}, nil, apperr.Invalid("workflow.steps.agentId", "执行Agent必须属于本项目")
+				return taskmodel.Record{}, nil, apperr.Invalid("workflow.steps.agentId", "Must be an Agent in this project.")
 			}
 			creds := taskruntime.Credentials{ModelAuth: capture.ModelAuth, Model: map[string]string{}, CLI: map[string]taskruntime.CredentialPayload{}}
 			dbEntries := map[string][]clitemplate.DatabaseEntry{}
@@ -230,11 +230,11 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 				}
 				if row.LarkBinding != nil {
 					if !row.LarkBinding.Valid() || row.LarkBinding.AgentID != aid || row.LarkBinding.ProjectID != project.ID {
-						return taskmodel.Record{}, nil, apperr.Invalid("credentials", "Lark授权绑定无效")
+						return taskmodel.Record{}, nil, apperr.Invalid("credentials", "The Lark authorization binding is invalid.")
 					}
 					c, e := clicredential.DecodeLark(row.Secret)
 					if e != nil || !c.Matches(*row.LarkBinding) {
-						return taskmodel.Record{}, nil, apperr.Invalid("credentials", "Lark授权不可用")
+						return taskmodel.Record{}, nil, apperr.Invalid("credentials", "The Lark authorization is not available.")
 					}
 					binding := *row.LarkBinding
 					creds.LarkBinding = &binding
@@ -242,10 +242,10 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 				}
 				if row.GoogleBinding != nil {
 					if !row.GoogleBinding.Valid() || row.GoogleBinding.AgentID != aid || row.GoogleBinding.ProjectID != project.ID {
-						return taskmodel.Record{}, nil, apperr.Invalid("credentials", "Google授权绑定无效")
+						return taskmodel.Record{}, nil, apperr.Invalid("credentials", "The Google authorization binding is invalid.")
 					}
 					if _, e := clicredential.DecodeGoogle(row.Secret); e != nil {
-						return taskmodel.Record{}, nil, apperr.Invalid("credentials", "Google授权不可用")
+						return taskmodel.Record{}, nil, apperr.Invalid("credentials", "The Google authorization is not available.")
 					}
 					binding := *row.GoogleBinding
 					creds.GoogleBinding = &binding
@@ -254,12 +254,12 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 				if row.Purpose == store.PurposeCLI {
 					template, ok := s.Config.Templates.Get(row.CLIName)
 					if !ok || row.TemplateSource != "builtin" || template.CredentialFormat() != row.TemplateVersion {
-						return taskmodel.Record{}, nil, apperr.Invalid("credentials", "CLI凭证模板不可用，请重新录入")
+						return taskmodel.Record{}, nil, apperr.Invalid("credentials", "The CLI credential template is not available. Enter the credential again.")
 					}
 				}
 				var payload clitemplate.Payload
 				if e := json.Unmarshal(row.Secret, &payload); e != nil {
-					return taskmodel.Record{}, nil, apperr.Invalid("credentials", "凭证不可用")
+					return taskmodel.Record{}, nil, apperr.Invalid("credentials", "A credential is not available.")
 				}
 				if row.Purpose == store.PurposeModel {
 					creds.Model = payload.Env
@@ -270,7 +270,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 					}
 					if row.CLIName == "psql" || row.CLIName == "mysql" {
 						if row.DBConnection == nil || row.DBConnection.VersionID == nil {
-							return taskmodel.Record{}, nil, apperr.Invalid("credentials", "数据库捕获身份缺失")
+							return taskmodel.Record{}, nil, apperr.Invalid("credentials", "The captured database identity is missing.")
 						}
 						item := dbcli.Connection{ProjectID: capture.Agent.ProjectID, AccountID: row.DBConnection.AccountID, Name: row.DBConnection.Name, VersionID: *row.DBConnection.VersionID}
 						dbEntries[row.CLIName] = append(dbEntries[row.CLIName], clitemplate.DatabaseEntry{Connection: item, Payload: payload})
@@ -284,7 +284,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 				if cli == "psql" || cli == "mysql" {
 					payload, err := clitemplate.AggregateDatabase(cli, dbEntries[cli])
 					if err != nil {
-						return taskmodel.Record{}, nil, apperr.Invalid("credentials", "数据库捕获配置无效")
+						return taskmodel.Record{}, nil, apperr.Invalid("credentials", "The captured database configuration is invalid.")
 					}
 					files := []taskruntime.File{}
 					for _, f := range payload.Files {
@@ -296,7 +296,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, in taskmodel.Cre
 			scope, _ := taskruntime.TaskScope(aid, id)
 			snapshot, e := taskruntime.Capture(scope, uuid.Must(uuid.NewV7()), taskruntime.CaptureInput{Configuration: capture.Configuration, Credentials: creds})
 			if e != nil {
-				return taskmodel.Record{}, nil, apperr.Invalid("snapshot", "任务配置快照不可用")
+				return taskmodel.Record{}, nil, apperr.Invalid("snapshot", "The task configuration snapshot is not available.")
 			}
 			data, e := snapshot.Encode()
 			if e != nil {
@@ -363,7 +363,7 @@ func (s *Service) Get(ctx context.Context, p auth.Principal, id uuid.UUID) (task
 		return s.QuestionViews(ctx, p, r.View)
 	}
 	if p.Kind != auth.KindAgent {
-		return taskmodel.Detail{}, apperr.Forbidden("任务接口不向外部身份开放")
+		return taskmodel.Detail{}, apperr.Forbidden("The task API is not open to external identities.")
 	}
 	project, err := s.Store.GetProject(ctx, r.View.Task.ProjectID)
 	if err != nil {
@@ -381,15 +381,15 @@ func (s *Service) Get(ctx context.Context, p auth.Principal, id uuid.UUID) (task
 			return s.QuestionViews(ctx, p, r.View)
 		}
 	}
-	return taskmodel.Detail{}, apperr.Forbidden("不是本任务参与方")
+	return taskmodel.Detail{}, apperr.Forbidden("The caller is not a participant in this task.")
 }
 
 func (s *Service) Submit(ctx context.Context, p auth.Principal, id, nodeID uuid.UUID, in taskmodel.SubmitInput) (json.RawMessage, error) {
 	if in.RunID != nil && *in.RunID == uuid.Nil {
-		return nil, apperr.Invalid("runId", "runId不能为零UUID")
+		return nil, apperr.Invalid("runId", "Must not be the zero UUID.")
 	}
 	if in.Output == nil {
-		return nil, apperr.Invalid("output", "必须提交结果对象")
+		return nil, apperr.Invalid("output", "A result object is required.")
 	}
 	action := bodyAction(p, in.ActionID, "submitTaskNode", struct {
 		NodeID uuid.UUID
@@ -402,7 +402,7 @@ func (s *Service) Submit(ctx context.Context, p auth.Principal, id, nodeID uuid.
 		}
 		n := m.Record.Current()
 		if m.Record.Ended() || n.Status == "blocked" || n.Status == "completed" || n.Output != nil {
-			return nil, conflict("当前节点不能再次提交")
+			return nil, conflict("The current node cannot submit again: the task has ended, or the node is blocked or has already submitted.")
 		}
 		var runID uuid.UUID
 		if in.RunID != nil {
@@ -416,7 +416,7 @@ func (s *Service) Submit(ctx context.Context, p auth.Principal, id, nodeID uuid.
 			return nil, e
 		}
 		if sleeping {
-			return nil, apperr.Conflict(apperr.CodeSleepConflict, "节点已登记sleep，不能同时提交")
+			return nil, apperr.Conflict(apperr.CodeSleepConflict, "The node has a registered sleep and cannot submit at the same time.")
 		}
 		step, _ := m.Record.View.Workflow.Step(n.StepID)
 		if err := workflow.ValidateValues(step.OutputFields, in.Output); err != nil {
@@ -437,7 +437,7 @@ func (s *Service) Submit(ctx context.Context, p auth.Principal, id, nodeID uuid.
 					return nil, err
 				}
 				if !exists {
-					return nil, apperr.Invalid(field.Name, "成果不属于本任务")
+					return nil, apperr.Invalid(field.Name, "The artifact does not belong to this task.")
 				}
 			}
 		}
@@ -461,10 +461,10 @@ func (s *Service) Submit(ctx context.Context, p auth.Principal, id, nodeID uuid.
 }
 func (s *Service) Fail(ctx context.Context, p auth.Principal, id, nodeID uuid.UUID, in taskmodel.FailInput) (json.RawMessage, error) {
 	if in.RunID != nil && *in.RunID == uuid.Nil {
-		return nil, apperr.Invalid("runId", "runId不能为零UUID")
+		return nil, apperr.Invalid("runId", "Must not be the zero UUID.")
 	}
 	if strings.TrimSpace(in.Reason) == "" {
-		return nil, apperr.Invalid("reason", "必须提供失败原因")
+		return nil, apperr.Invalid("reason", "A failure reason is required.")
 	}
 	action := bodyAction(p, in.ActionID, "failTaskNode", struct {
 		NodeID uuid.UUID
@@ -476,7 +476,7 @@ func (s *Service) Fail(ctx context.Context, p auth.Principal, id, nodeID uuid.UU
 			return nil, e
 		}
 		if m.Record.Ended() || m.Record.Current().Status == "blocked" {
-			return nil, conflict("任务已结束")
+			return nil, conflict("The task has ended.")
 		}
 		var runID uuid.UUID
 		if in.RunID != nil {
@@ -503,16 +503,16 @@ func (s *Service) Retry(ctx context.Context, p auth.Principal, id uuid.UUID, in 
 	out, err := s.Store.MutateTask(ctx, id, action, func(m *store.TaskMutation) (any, error) {
 		old := m.Record.Current()
 		if m.Record.View.Task.Status != "blocked" || old == nil || old.ID != in.ExpectedNodeRunID {
-			return nil, conflict("任务或当前阻塞节点已变化")
+			return nil, conflict("The task or its current blocked node has changed.")
 		}
 		if fenced, err := s.Store.TaskLarkRuntimeFencedTx(ctx, m, old.RuntimeID); err != nil || fenced {
 			if err != nil {
 				return nil, err
 			}
-			return nil, conflict("原实例正在凭证交接，不能并发重试节点")
+			return nil, conflict("The original instance is in a credential handoff. The node cannot be retried at the same time.")
 		}
 		if len(m.Record.View.Nodes) >= s.Options.MaxVisits {
-			return nil, conflict("任务节点访问与重试记录达到上限，请取消任务")
+			return nil, conflict("The task reached its limit of node visits and retries. Cancel the task.")
 		}
 		if err := s.closeQuestion(ctx, m, old, "task_retry"); err != nil {
 			return nil, err
@@ -563,7 +563,7 @@ func (s *Service) Cancel(ctx context.Context, p auth.Principal, id uuid.UUID, in
 			return m.Record.View, nil
 		}
 		if m.Record.Ended() {
-			return nil, conflict("任务已结束")
+			return nil, conflict("The task has ended.")
 		}
 		for i := range m.Record.View.Nodes {
 			n := &m.Record.View.Nodes[i]
@@ -604,7 +604,7 @@ func (s *Service) Cancel(ctx context.Context, p auth.Principal, id uuid.UUID, in
 func (s *Service) prepareNode(ctx context.Context, m *store.TaskMutation, note string) error {
 	n := m.Record.Current()
 	if n == nil {
-		return conflict("当前节点不存在")
+		return conflict("The task has no current node.")
 	}
 	step, _ := m.Record.View.Workflow.Step(n.StepID)
 	inputs, versions, err := workflow.ResolveInputs(step, m.Record.View.Request, successful(m.Record))
@@ -634,7 +634,7 @@ func (s *Service) closeQuestion(ctx context.Context, m *store.TaskMutation, n *t
 	// The question service's close adapter performs the persistent close (wired in by the adjacent contract); the node
 	// view keeps the history.
 	if s.Source == nil || s.Source.CloseQuestion == nil {
-		return errors.New("统一问题关闭适配器未配置")
+		return errors.New("the question close adapter is not configured")
 	}
 	status, err := s.Source.CloseQuestion(ctx, m.Tx, n.Question.ID, reason)
 	if err != nil {
@@ -643,7 +643,7 @@ func (s *Service) closeQuestion(ctx context.Context, m *store.TaskMutation, n *t
 	switch status {
 	case "closed", "answered", "expired":
 	default:
-		return errors.New("统一问题关闭后未返回有效终态")
+		return errors.New("closing the question did not return a valid final state")
 	}
 	n.Question.Status = status
 	n.Question.CanAnswer = false
@@ -666,14 +666,14 @@ func (s *Service) queueNotice(ctx context.Context, m *store.TaskMutation, kind s
 // does not read any credentials.
 func (s *Service) AvailableAgents(ctx context.Context, p auth.Principal) (taskmodel.AgentList, error) {
 	if p.Kind != auth.KindAgent {
-		return taskmodel.AgentList{}, apperr.Forbidden("只有当前项目Manager可选用Agent")
+		return taskmodel.AgentList{}, apperr.Forbidden("Only the project's current Manager can choose Agents.")
 	}
 	a, err := s.Store.GetAgent(ctx, p.ID)
 	if err != nil {
 		return taskmodel.AgentList{}, err
 	}
 	if a.ProjectID == nil || !a.IsManager {
-		return taskmodel.AgentList{}, apperr.Forbidden("只有当前项目Manager可选用Agent")
+		return taskmodel.AgentList{}, apperr.Forbidden("Only the project's current Manager can choose Agents.")
 	}
 	agents, err := s.Store.ListAgents(ctx, store.ProjectScope(*a.ProjectID))
 	if err != nil {
@@ -696,14 +696,14 @@ func (s *Service) AvailableAgents(ctx context.Context, p auth.Principal) (taskmo
 
 func (s *Service) ManagerTasks(ctx context.Context, p auth.Principal, cursor string, limit int) (taskmodel.Page, error) {
 	if p.Kind != auth.KindAgent {
-		return taskmodel.Page{}, apperr.Forbidden("只有当前项目Manager可查询项目任务")
+		return taskmodel.Page{}, apperr.Forbidden("Only the project's current Manager can list the project's tasks.")
 	}
 	a, e := s.Store.GetAgent(ctx, p.ID)
 	if e != nil {
 		return taskmodel.Page{}, e
 	}
 	if a.ProjectID == nil || !a.IsManager {
-		return taskmodel.Page{}, apperr.Forbidden("只有当前项目Manager可查询项目任务")
+		return taskmodel.Page{}, apperr.Forbidden("Only the project's current Manager can list the project's tasks.")
 	}
 	return s.Store.ListTasks(ctx, *a.ProjectID, cursor, limit)
 }

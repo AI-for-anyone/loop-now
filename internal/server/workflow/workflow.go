@@ -80,12 +80,12 @@ func (d Definition) Outgoing(id string) []Edge {
 
 func (d Definition) Validate(l Limits) error {
 	if len(d.Steps) == 0 || l.MaxSteps > 0 && len(d.Steps) > l.MaxSteps || l.MaxEdges > 0 && len(d.Edges) > l.MaxEdges {
-		return invalid("workflow", "节点/连线数量无效或超限")
+		return invalid("workflow", "Must have at least one step and stay within the step and edge limits.")
 	}
 	nodes := map[string]Step{}
 	for _, n := range d.Steps {
 		if !nodeName.MatchString(n.ID) || nodes[n.ID].ID != "" || strings.TrimSpace(n.Title) == "" || n.AgentID == uuid.Nil {
-			return invalid("workflow.steps", "节点名称、标题、Agent或唯一性无效")
+			return invalid("workflow.steps", "Each step needs a unique id (a letter or _ followed by letters, digits, _ or -, at most 64 characters), a title that is not blank, and an agentId.")
 		}
 		if err := validateFields(n.InputFields); err != nil {
 			return err
@@ -96,23 +96,23 @@ func (d Definition) Validate(l Limits) error {
 		decl := fieldMap(n.InputFields)
 		for name, src := range n.Inputs {
 			if _, ok := decl[name]; !ok {
-				return invalid("workflow.steps.inputs", "映射指向未声明输入")
+				return invalid("workflow.steps.inputs", "Each mapped input must be declared in the step's inputFields.")
 			}
 			if src.Kind != "request" && src.Kind != "node" || src.Kind == "node" && (src.NodeID == nil || *src.NodeID == "") || src.Kind == "request" && src.NodeID != nil {
-				return invalid("workflow.steps.inputs", "输入来源无效")
+				return invalid("workflow.steps.inputs", "Each input source must have kind request without a nodeId, or kind node with a nodeId.")
 			}
 		}
 		nodes[n.ID] = n
 	}
 	if _, ok := nodes[d.StartStepID]; !ok {
-		return invalid("workflow.startStepId", "起始节点不存在")
+		return invalid("workflow.startStepId", "Must be the id of a step in the workflow.")
 	}
 	edges := map[string]bool{}
 	adj := map[string][]string{}
 	unbounded := map[string][]string{}
 	for _, e := range d.Edges {
 		if !nodeName.MatchString(e.ID) || edges[e.ID] || nodes[e.From].ID == "" || nodes[e.To].ID == "" || e.MaxTraversals != nil && *e.MaxTraversals < 1 {
-			return invalid("workflow.edges", "连线、节点引用或次数上限无效")
+			return invalid("workflow.edges", "Each edge needs a unique id (a letter or _ followed by letters, digits, _ or -, at most 64 characters), from and to must name existing steps, and maxTraversals must be at least 1 when set.")
 		}
 		edges[e.ID] = true
 		adj[e.From] = append(adj[e.From], e.To)
@@ -133,7 +133,7 @@ func (d Definition) Validate(l Limits) error {
 	}
 	reach(d.StartStepID)
 	if len(seen) != len(nodes) {
-		return invalid("workflow.steps", "包含从起点不可达节点")
+		return invalid("workflow.steps", "Every step must be reachable from the start step.")
 	}
 	color := map[string]int{}
 	var cycle func(string) bool
@@ -155,7 +155,7 @@ func (d Definition) Validate(l Limits) error {
 	}
 	for id := range nodes {
 		if cycle(id) {
-			return invalid("workflow.edges", "每条回路必须经过有次数上限的连线")
+			return invalid("workflow.edges", "Every loop must pass through an edge with maxTraversals.")
 		}
 	}
 	for _, n := range d.Steps {
@@ -163,11 +163,11 @@ func (d Definition) Validate(l Limits) error {
 			if src.Kind == "node" {
 				prev, ok := nodes[*src.NodeID]
 				if !ok {
-					return invalid("workflow.steps.inputs", "来源节点不存在")
+					return invalid("workflow.steps.inputs", "The source nodeId must name a step in the workflow.")
 				}
 				if src.Field != "" {
 					if _, ok := fieldMap(prev.OutputFields)[src.Field]; !ok {
-						return invalid("workflow.steps.inputs", "来源输出未声明")
+						return invalid("workflow.steps.inputs", "The source field must be declared in the source step's outputFields.")
 					}
 				}
 			}
@@ -180,13 +180,13 @@ func validateFields(fields []Field) error {
 	seen := map[string]bool{}
 	for _, f := range fields {
 		if !fieldName.MatchString(f.Name) || seen[f.Name] {
-			return invalid("workflow.fields", "字段名称无效或重复")
+			return invalid("workflow.fields", "Field names must be unique and consist of a letter or _ followed by letters, digits or _, at most 64 characters.")
 		}
 		seen[f.Name] = true
 		switch f.Type {
 		case "string", "number", "integer", "boolean", "object", "array", "artifact":
 		default:
-			return invalid("workflow.fields", "字段类型无效")
+			return invalid("workflow.fields", "Field type must be string, number, integer, boolean, object, array or artifact.")
 		}
 	}
 	return nil
@@ -203,19 +203,19 @@ func ValidateValues(fields []Field, values map[string]any) error {
 	decl := fieldMap(fields)
 	for key := range values {
 		if _, ok := decl[key]; !ok {
-			return invalid(key, "未声明的字段")
+			return invalid(key, "This field is not declared.")
 		}
 	}
 	for _, f := range fields {
 		v, ok := values[f.Name]
 		if !ok || v == nil {
 			if f.Required {
-				return invalid(f.Name, "缺少必需字段")
+				return invalid(f.Name, "This field is required.")
 			}
 			continue
 		}
 		if !matches(f.Type, v) {
-			return invalid(f.Name, "字段类型不匹配")
+			return invalid(f.Name, "The value does not match the declared field type.")
 		}
 	}
 	return nil
@@ -314,7 +314,7 @@ func ResolveInputs(step Step, request map[string]any, results []SuccessfulResult
 		}
 		copy, err := CloneValue(v)
 		if err != nil {
-			return nil, nil, invalid(f.Name, "输入不可编码")
+			return nil, nil, invalid(f.Name, "The input value cannot be encoded as JSON.")
 		}
 		out[f.Name] = copy
 		if resultID != uuid.Nil {
@@ -345,22 +345,22 @@ func (d Definition) SelectEdge(stepID string, edgeID *string, counts map[string]
 	edges := d.Outgoing(stepID)
 	if len(edges) == 0 {
 		if edgeID != nil {
-			return nil, invalid("edgeId", "末节点出口必须为空")
+			return nil, invalid("edgeId", "Must be empty: this step has no outgoing edges.")
 		}
 		return nil, nil
 	}
 	if edgeID == nil {
-		return nil, invalid("edgeId", "必须选择节点出口")
+		return nil, invalid("edgeId", "Must name one of the step's outgoing edges.")
 	}
 	for _, e := range edges {
 		if e.ID == *edgeID {
 			if e.MaxTraversals != nil && counts[e.ID] >= *e.MaxTraversals {
-				return nil, invalid("edgeId", "回路次数超过上限")
+				return nil, invalid("edgeId", "This edge has reached its maxTraversals limit.")
 			}
 			return &e, nil
 		}
 	}
-	return nil, invalid("edgeId", fmt.Sprintf("连线不属于当前节点 %s", stepID))
+	return nil, invalid("edgeId", fmt.Sprintf("Must name an outgoing edge of step %s.", stepID))
 }
 
 // integerNumber decides from the decimal literal, without rounding through float64 and without allocating big integers

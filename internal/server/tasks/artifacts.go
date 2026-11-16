@@ -20,14 +20,14 @@ import (
 
 func (s *Service) Publish(ctx context.Context, p auth.Principal, taskID, nodeID, actionID uuid.UUID, name, contentType string, data []byte) (json.RawMessage, error) {
 	if name == "" || name == "." || name == ".." || name != path.Base(name) || strings.ContainsAny(name, "/\\") || len([]rune(name)) > 200 || strings.IndexFunc(name, unicode.IsControl) >= 0 {
-		return nil, apperr.Invalid("name", "成果名称必须是单个有效文件名")
+		return nil, apperr.Invalid("name", "Must be a single valid file name of at most 200 characters, without path separators or control characters.")
 	}
 	if int64(len(data)) > s.Options.MaxArtifact {
-		return nil, apperr.TooLarge("成果超限")
+		return nil, apperr.TooLarge("The artifact exceeds the size limit.")
 	}
 	media, _, err := mime.ParseMediaType(contentType)
 	if err != nil || !strings.Contains(media, "/") {
-		return nil, apperr.Invalid("contentType", "成果媒体类型无效")
+		return nil, apperr.Invalid("contentType", "Must be a valid media type, such as text/plain.")
 	}
 	sha := content.SHA256Hex(data)
 	action := bodyAction(p, actionID, "publishTaskArtifact", struct {
@@ -40,7 +40,7 @@ func (s *Service) Publish(ctx context.Context, p auth.Principal, taskID, nodeID,
 			return nil, e
 		}
 		if m.Record.Ended() || m.Record.Current().Status == "blocked" {
-			return nil, conflict("当前节点不能发布成果")
+			return nil, conflict("The current node cannot publish artifacts: the task has ended or the node is blocked.")
 		}
 		_, e := m.Tx.Exec(ctx, `INSERT INTO blobs(sha256,size,data) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, sha, len(data), data)
 		if e != nil {
@@ -70,5 +70,5 @@ func (s *Service) Download(ctx context.Context, p auth.Principal, taskID, artifa
 			return a, data, e
 		}
 	}
-	return taskmodel.Artifact{}, nil, apperr.NotFound("成果")
+	return taskmodel.Artifact{}, nil, apperr.NotFound("Artifact")
 }

@@ -30,7 +30,7 @@ func (s *Service) cleanup(ctx context.Context, id uuid.UUID) (err error) {
 		}
 	}()
 	if s.Source == nil || s.Source.FreezeNormal == nil {
-		return errors.New("任务归档器未配置")
+		return errors.New("the task archiver is not configured")
 	}
 	instances, err := s.Store.TaskInstances(ctx, id)
 	if err != nil {
@@ -128,7 +128,7 @@ func (s *Service) cleanup(ctx context.Context, id uuid.UUID) (err error) {
 	}
 	_, err = s.Store.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
 		if !m.Record.Ended() {
-			return nil, errors.New("只能清理结束的任务")
+			return nil, errors.New("only ended tasks can be cleaned up")
 		}
 		m.Record.View.Cleanup = "archived"
 		return nil, nil
@@ -141,7 +141,7 @@ func (s *Service) cleanup(ctx context.Context, id uuid.UUID) (err error) {
 // subdirectory of claude's session record directory that corresponds to the instance workspace are accepted).
 func (s *Source) archiveSession(ctx context.Context, inst store.TaskInstance) ([]byte, error) {
 	if inst.SessionState == "missing" {
-		return nil, errors.New("任务会话丢失，保留目录等待修复")
+		return nil, errors.New("the task session is missing; the directory is kept for repair")
 	}
 	var data []byte
 	if inst.SessionFile != nil {
@@ -150,7 +150,7 @@ func (s *Source) archiveSession(ctx context.Context, inst store.TaskInstance) ([
 		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
 			base, rel = s.claudeInstanceSession(ctx, inst, *inst.SessionFile)
 			if base == "" {
-				return nil, errors.New("任务会话不在该实例目录")
+				return nil, errors.New("the task session is not in the instance's directory")
 			}
 		}
 		root, err := os.OpenRoot(base)
@@ -160,7 +160,7 @@ func (s *Source) archiveSession(ctx context.Context, inst store.TaskInstance) ([
 		defer root.Close()
 		info, err := root.Lstat(rel)
 		if err != nil || !info.Mode().IsRegular() {
-			return nil, errors.New("任务会话不是普通文件")
+			return nil, errors.New("the task session is not a regular file")
 		}
 		f, err := root.Open(rel)
 		if err != nil {
@@ -169,14 +169,14 @@ func (s *Source) archiveSession(ctx context.Context, inst store.TaskInstance) ([
 		defer f.Close()
 		data, err = io.ReadAll(io.LimitReader(f, s.MaxSessionBytes+1))
 		if err != nil || int64(len(data)) > s.MaxSessionBytes {
-			return nil, errors.New("任务会话读取失败或归档超限")
+			return nil, errors.New("the task session cannot be read or exceeds the archive size limit")
 		}
 		if len(strings.TrimSpace(string(data))) == 0 {
-			return nil, errors.New("任务会话为空")
+			return nil, errors.New("the task session is empty")
 		}
 		for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
 			if !json.Valid([]byte(line)) {
-				return nil, errors.New("任务会话含不完整记录")
+				return nil, errors.New("the task session contains incomplete records")
 			}
 		}
 	}

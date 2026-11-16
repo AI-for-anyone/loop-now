@@ -10,7 +10,7 @@ import (
 
 func (s *Service) GetLarkSwitchParticipants(ctx context.Context, p auth.Principal, id uuid.UUID) (taskmodel.Detail, []taskmodel.LarkSwitchParticipant, error) {
 	if p.Kind != auth.KindConsole {
-		return taskmodel.Detail{}, nil, apperr.Forbidden("任务凭证参与者仅限控制台")
+		return taskmodel.Detail{}, nil, apperr.Forbidden("Only the console can view task credential participants.")
 	}
 	d, participants, err := s.Store.TaskLarkParticipants(ctx, id)
 	if err != nil {

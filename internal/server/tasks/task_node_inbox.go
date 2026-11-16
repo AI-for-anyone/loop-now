@@ -18,19 +18,19 @@ import (
 
 func (s *Service) SendNodeInboxMessage(ctx context.Context, p auth.Principal, task, node uuid.UUID, in taskmodel.TaskNodeMessageInput, maxBytes int) (json.RawMessage, error) {
 	if p.Kind != auth.KindConsole {
-		return nil, apperr.Forbidden("只有控制台可发送严格节点Inbox")
+		return nil, apperr.Forbidden("Only the console can send strict node Inbox messages.")
 	}
 	if task == uuid.Nil || node == uuid.Nil || in.ActionID == uuid.Nil || in.ExpectedAgentID == uuid.Nil || in.ExpectedRuntimeID == uuid.Nil || !utf8.ValidString(in.Text) || (strings.TrimSpace(in.Text) == "" && len(in.ImageIDs) == 0) {
-		return nil, apperr.Invalid("body", "动作、目标和正文必须有效")
+		return nil, apperr.Invalid("body", "actionId, expectedAgentId and expectedRuntimeId must be non-zero UUIDs, and text must be valid UTF-8 and not blank unless images are attached.")
 	}
 	if maxBytes < 1 || len(in.Text) > maxBytes {
-		return nil, apperr.TooLarge("Inbox正文超限")
+		return nil, apperr.TooLarge("The Inbox message text exceeds the size limit.")
 	}
 	if in.WhenBusy == "" {
 		in.WhenBusy = "queue"
 	}
 	if in.WhenBusy != "queue" && in.WhenBusy != "interrupt" {
-		return nil, apperr.Invalid("whenBusy", "仅支持queue或interrupt")
+		return nil, apperr.Invalid("whenBusy", "Must be queue or interrupt.")
 	}
 	target := store.TaskConsoleLineage{TaskID: task, NodeRunID: node, AgentID: in.ExpectedAgentID, RuntimeID: in.ExpectedRuntimeID}
 	action := bodyAction(p, in.ActionID, "sendTaskNodeInboxMessage", struct {
@@ -103,10 +103,10 @@ func (s *Service) SendNodeInboxMessage(ctx context.Context, p auth.Principal, ta
 func (s *Service) nodeQueueAction(ctx context.Context, p auth.Principal, task, node, subject uuid.UUID, in taskmodel.TaskNodeQueueActionInput, op, operation string,
 	fn func(m *store.TaskMutation, target store.TaskConsoleLineage) (store.TaskNodeQueueResult, error)) (json.RawMessage, error) {
 	if p.Kind != auth.KindConsole {
-		return nil, apperr.Forbidden("只有控制台可调整节点排队")
+		return nil, apperr.Forbidden("Only the console can change a node's queue.")
 	}
 	if task == uuid.Nil || node == uuid.Nil || subject == uuid.Nil || in.ActionID == uuid.Nil || in.ExpectedAgentID == uuid.Nil || in.ExpectedRuntimeID == uuid.Nil {
-		return nil, apperr.Invalid("body", "动作、目标和对象必须有效")
+		return nil, apperr.Invalid("body", "actionId, expectedAgentId, expectedRuntimeId and the target item must be non-zero UUIDs.")
 	}
 	target := store.TaskConsoleLineage{TaskID: task, NodeRunID: node, AgentID: in.ExpectedAgentID, RuntimeID: in.ExpectedRuntimeID}
 	action := bodyAction(p, in.ActionID, op, struct {
@@ -196,7 +196,7 @@ func (s *Service) StopNodeRun(ctx context.Context, p auth.Principal, task, node,
 func (s *Service) NodeQueue(ctx context.Context, p auth.Principal, task, node uuid.UUID) (taskmodel.TaskNodeQueue, error) {
 	var out taskmodel.TaskNodeQueue
 	if p.Kind != auth.KindConsole {
-		return out, apperr.Forbidden("只有控制台可读节点Inbox排队")
+		return out, apperr.Forbidden("Only the console can read a node's Inbox queue.")
 	}
 	_, e := s.Store.MutateTask(ctx, task, nil, func(m *store.TaskMutation) (any, error) {
 		m.Unchanged()
@@ -213,7 +213,7 @@ func (s *Service) NodeQueue(ctx context.Context, p auth.Principal, task, node uu
 func (s *Service) NodeInboxMessages(ctx context.Context, p auth.Principal, task, node uuid.UUID, cursor string, limit int) (taskmodel.TaskNodeInboxPage, error) {
 	var out taskmodel.TaskNodeInboxPage
 	if p.Kind != auth.KindConsole {
-		return out, apperr.Forbidden("只有控制台可读节点Inbox历史")
+		return out, apperr.Forbidden("Only the console can read a node's Inbox history.")
 	}
 	_, e := s.Store.MutateTask(ctx, task, nil, func(m *store.TaskMutation) (any, error) {
 		m.Unchanged()
@@ -229,20 +229,20 @@ func (s *Service) NodeInboxMessages(ctx context.Context, p auth.Principal, task,
 
 func (s *Service) NodeInboxAction(ctx context.Context, p auth.Principal, task, node, action uuid.UUID) (json.RawMessage, error) {
 	if p.Kind != auth.KindConsole {
-		return nil, apperr.Forbidden("只有控制台可查询节点Inbox动作")
+		return nil, apperr.Forbidden("Only the console can look up node Inbox actions.")
 	}
 	actor := string(p.Kind) + ":" + p.ID.String() + ":" + p.RuntimeID.String()
 	var raw json.RawMessage
 	e := s.Store.Pool.QueryRow(ctx, `SELECT response FROM task_actions WHERE actor_key=$1 AND action_id=$2 AND task_id=$3 AND operation='sendTaskNodeInboxMessage'`, actor, action, task).Scan(&raw)
 	if errors.Is(e, db.ErrNoRows) {
-		return nil, apperr.NotFound("节点Inbox动作")
+		return nil, apperr.NotFound("Node Inbox action")
 	}
 	if e != nil {
 		return nil, e
 	}
 	var receipt taskmodel.TaskNodeInboxReceipt
 	if json.Unmarshal(raw, &receipt) != nil || receipt.TaskID != task || receipt.NodeRunID != node {
-		return nil, apperr.NotFound("节点Inbox动作")
+		return nil, apperr.NotFound("Node Inbox action")
 	}
 	return raw, nil
 }
