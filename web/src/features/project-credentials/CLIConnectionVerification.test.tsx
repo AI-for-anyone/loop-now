@@ -146,4 +146,23 @@ describe('五工具手动验证正式HTTP fixture', () => {
     expect(reads).toBeGreaterThan(1); expect(env.posts).toHaveLength(1)
   })
 
+  it('verification_unsupported names its reason in the UI language', async () => {
+    const user = userEvent.setup(); setup()
+    server.use(http.post(apiUrl(base), () => HttpResponse.json(errorBody('verification_unsupported', 'Template does not support verification', { details: { cli: 'mysql', templateSource: 'builtin', reason: 'template_fingerprint_mismatch' } }), { status: 422 })))
+    renderWithQuery(<CLIConnectionVerification account={account} />); await readReady(); await user.click(screen.getByRole('button', { name: t.credentials.verification.test }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('此工具或模板暂不支持连接验证：账号用的模板与平台内置的验证模板不一致')
+    expect(screen.queryByText(/Template does not support verification/)).toBeNull()
+  })
+  it('the account template status is named, not shown as a code', async () => {
+    setup()
+    const withTemplate = { ...account, template: { source: 'builtin', credentialFormat: '1', fieldNames: ['password'], warnings: [], status: 'incompatible' } }
+    server.use(
+      http.get(apiUrl('/model-providers'), () => HttpResponse.json({ providers: [] })),
+      http.get(apiUrl('/cli-templates'), () => HttpResponse.json({ templates: [{ name: 'mysql', version: '8.4.9', fields: [{ name: 'password', label: '密码', type: 'secret', required: true }], injection: 'files', install: { status: 'installed' }, warnings: [] }] })),
+      http.get(apiUrl(`/projects/${account.projectId}/credential-accounts`), () => HttpResponse.json({ projectId: account.projectId, credentialsRevision: 1, accounts: [withTemplate] })),
+    )
+    renderWithQuery(<DirtyContext.Provider value={() => {}}><ProjectAccounts projectId={account.projectId} purpose="cli" /></DirtyContext.Provider>)
+    expect(await screen.findByText(/模板状态 格式与当前模板不兼容/)).toBeInTheDocument()
+    expect(screen.queryByText(/模板状态 incompatible/)).toBeNull()
+  })
 })

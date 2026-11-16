@@ -3,5 +3,5 @@ import { Badge } from '@/components/ui/badge'
 import { t } from '@/i18n'
 
 export function InboxNotice({ notice }: { notice: Schemas['InboxNotice'] }) {
-  return <div className="mt-2 grid gap-1"><Badge>{t.inbox.noticeType[notice.type]}</Badge><p className="text-sm break-words">{notice.reason}</p></div>
+  return <div className="mt-2 grid gap-1"><Badge>{t.inbox.noticeType[notice.type]}</Badge><p className="text-sm break-words">{t.inbox.noticeReasons[notice.reason] ?? notice.reason}</p></div>
 }

@@ -304,7 +304,7 @@ function MessageSegment({ detail, node, onMaterials, suppressInboxError, onReply
     ...workRows.map(message => ({ key: `task:${message.id}`, at: message.createdAt, body: <TaskMessageBubble message={message} agent={{ id: node.agentId, name: node.agentName }} taskId={detail.task.id} nodeRunId={node.id} runtimeId={inbox.data && !nodeMessagesUnsupported(inbox.error) ? node.runtimeId : undefined} /> })),
     ...(inbox.data?.items ?? []).filter(record => !queued.has(record.message.id)).map(record => {
       const extras = <>
-        {record.notExecuted && <p role="status" className="rounded-input bg-tint-yellow p-2 text-sm [overflow-wrap:anywhere]">{inboxCopy.notExecuted} · {record.notExecuted.reason}</p>}
+        {record.notExecuted && <p role="status" className="rounded-input bg-tint-yellow p-2 text-sm [overflow-wrap:anywhere]">{inboxCopy.notExecuted} · {inboxCopy.targetReasons[record.notExecuted.reason] ?? record.notExecuted.reason}</p>}
         {record.runLinks.length > 0 && <details className="text-xs [overflow-wrap:anywhere]"><summary>{inboxCopy.links}</summary><ul>{record.runLinks.map(link => <li key={`${link.runId}:${link.role}`}>{link.role === 'notification' ? inboxCopy.notification : link.role === 'read' ? inboxCopy.readLink : inboxCopy.replyLink} · {link.runId}</li>)}</ul></details>}
       </>
       // Messages this node's instance sent you show as “发给你” (For you) (with options when it asked a question); the rest keep the Inbox bubble.

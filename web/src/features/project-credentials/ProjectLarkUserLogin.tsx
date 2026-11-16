@@ -93,7 +93,7 @@ function LarkLogin({ projectId, account, applicationSetup }: { projectId: string
   return <div className="grid min-w-0 gap-3">
     {account && <p role="status" className="text-sm">{copy.reloginUnavailable}</p>}
     {!locator.valid && <p role="alert">{copy.invalidLocator}</p>}
-    <LarkUserLogin projectId={projectId} targetAccount={account} sources={sources} available={available && !noSupport} disabled={disabled} cancelDisabled={mismatch || !!detail.error || !!list.error} operationId={locator.id} phase={op?.status ?? (locator.pending ? 'pending' : undefined)} recovery={recovery} expiresAt={op?.expiresAt} operationSource={operationSource}
+    <LarkUserLogin projectId={projectId} targetAccount={account} sources={sources} available={available && !noSupport} disabled={disabled} cancelDisabled={mismatch || !!detail.error || !!list.error} operationId={locator.id} phase={op?.status ?? (locator.pending ? 'pending' : undefined)} errorCode={op?.errorCode} recovery={recovery} expiresAt={op?.expiresAt} operationSource={operationSource}
       sourceDescription={application => application.larkApplication && <p>{copy.appSummary(application.larkApplication.brand, application.larkApplication.appId)}</p>}
       authorizationReady={!!url} authorizationHref={url} userCode={op?.status === 'awaiting_authorization' ? op.userCode : null}
       error={noSupport ? undefined : mismatch || badURL ? invalid() : postError ?? locator.error ?? cancelError ?? detail.error ?? list.error ?? accounts.error}

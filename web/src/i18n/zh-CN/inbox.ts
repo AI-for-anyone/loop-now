@@ -21,6 +21,8 @@ export const inbox = {
     ordinary: '已保存为普通留言，未记为问题答案。',
   },
   noticeType: { question_expired: '问题到期通知' } satisfies Record<S['InboxNotice']['type'], string>,
+  // InboxNotice.reason is a code; unknown ones are shown as is.
+  noticeReasons: { deadline: '已过回答期限' } as Record<string, string>,
   you: '你',
   lastFromYou: (text: string) => `你：${text}`,
   time: (time: string) => formatDayClock(time),

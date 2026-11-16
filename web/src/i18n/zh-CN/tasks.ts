@@ -48,5 +48,10 @@ export const tasks = {
   filters: { label: '状态筛选', all: '全部', active: '进行中', blocked: '阻塞', completed: '已完成' },
   progress: { title: '进度', active: '进行中', blocked: '阻塞', completed: '已完成' },
   loading: '加载任务中…', updating: '实时更新中', reconnecting: '连接中断，正在重连…',
+  // Task-turn error codes that are not run error codes (those come from chat.runError): set by the task coordinator.
+  turnErrors: {
+    task_conflict: '节点或执行条件已变化，这条消息没有执行',
+    server_restarted: '服务重启，这一轮没有重放',
+  } as Record<string, string>,
   messageError: '执行错误', user: '平台', assistant: 'Agent', messageStatuses: { queued: '排队中', starting: '启动中', running: '回复中', aborting: '正在打断', completed: '已完成', failed: '失败', interrupted: '已打断' } satisfies Record<S['TaskMessage']['status'], string>,
 } as const

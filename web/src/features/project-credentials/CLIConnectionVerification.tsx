@@ -6,6 +6,8 @@ import { keys } from '@/api/queries'
 import { credentialKeys } from '@/api/project-credentials'
 import { t } from '@/i18n'
 import { Button } from '@/components/ui/button'
+import { CircleAlertIcon } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ErrorAlert } from '@/components/ErrorAlert'
 import { useProjectCredentialsAvailable } from './project-availability'
 
@@ -36,6 +38,9 @@ function VerificationVersion({ account, version }: { account: Schemas['ProjectCr
   const unsupported = verificationUnsupported(state.error)
   const requestError = unknown && op ? detail.error ?? state.error : error ?? detail.error ?? state.error
   const conflict = error instanceof ApiError && error.code === 'verification_in_progress'
+  // verification_unsupported carries why (details.reason): name it in the UI language instead of appending the server's text.
+  const unsupportedReason = requestError instanceof ApiError && requestError.code === 'verification_unsupported' && requestError.details && 'reason' in requestError.details && requestError.details.reason in copy.unsupportedReasons
+    ? copy.unsupportedReasons[requestError.details.reason as keyof typeof copy.unsupportedReasons] : null
   const changed = !current || error instanceof ApiError && error.status === 412 && error.details && 'expectedVersionId' in error.details
   const query = async () => { await Promise.allSettled([state.refetch(), ...(id ? [detail.refetch()] : [])]) }
   const store = (next: Verification) => {
@@ -96,7 +101,7 @@ function VerificationVersion({ account, version }: { account: Schemas['ProjectCr
         <details><summary>{copy.details}</summary><p className="[overflow-wrap:anywhere]">{copy.version}{op.versionId}</p>{op.result?.httpStatus && <p>{copy.http}{op.result.httpStatus}</p>}</details>
       </div>}
       {!op && state.data && !state.error && !detail.error && !unresolved && !changed && <p>{copy.empty}</p>}
-      <ErrorAlert error={requestError} />
+      {unsupportedReason ? <Alert variant="error"><CircleAlertIcon /><AlertDescription className="text-[13.5px] leading-[1.7]">{t.errors.withDetail(t.errors.code.verification_unsupported, unsupportedReason)}</AlertDescription></Alert> : <ErrorAlert error={requestError} />}
     </>}
     <div className="flex flex-wrap gap-2">
       <Button type="button" size="sm" variant="secondary" disabled={!available || starting || active || unresolved || !!changed || state.isError || state.isPending || unsupported} onClick={() => void start()}>{starting ? copy.status.pending : op ? copy.again : copy.test}</Button>

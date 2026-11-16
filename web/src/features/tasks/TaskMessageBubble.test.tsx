@@ -22,3 +22,12 @@ it('a console message that woke the node early carries only a small tag', () => 
   expect(screen.getByText('提前唤醒 sleep').closest('[data-early-wake]')).toHaveAttribute('title', `sleep ${sleepId}`)
   expect(screen.queryByText(/唤醒关联|5101/u)).toBeNull()
 })
+it.each([
+  ['task_conflict', 'interrupted', '节点或执行条件已变化，这条消息没有执行'],
+  ['server_restarted', 'interrupted', '服务重启，这一轮没有重放'],
+  ['pi_exited', 'failed', 'Agent 进程异常退出'],
+] as const)('a task turn with errorCode %s is named in Chinese, not as a generic run error', (errorCode, status, label) => {
+  render(<TaskMessageBubble message={{ ...makeTaskMessage(), role: 'assistant', status, errorCode, errorMessage: 'Fixed server description' }} agent={agent} />)
+  expect(screen.getByText(`${label} · Fixed server description`)).toBeInTheDocument()
+  expect(screen.queryByText(/执行错误/)).toBeNull()
+})
