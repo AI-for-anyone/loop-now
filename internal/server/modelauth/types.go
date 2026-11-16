@@ -5,6 +5,7 @@ import (
 	"context"
 	"github.com/google/uuid"
 	"loop-now/internal/server/clitemplate"
+	cm "loop-now/internal/server/credentialmodel"
 	"time"
 )
 
@@ -24,10 +25,17 @@ type Operation struct {
 	AuthorizationURL *string    `json:"authorizationUrl"`
 	ErrorCode        *string    `json:"errorCode"`
 	ErrorMessage     *string    `json:"errorMessage"`
+	// DeviceCode and Prompt are only set for plugin-provider logins (plugins/SPEC.md §13); they live in memory and
+	// are nil once the operation ends.
+	DeviceCode *cm.DeviceCode  `json:"deviceCode"`
+	Prompt     *cm.LoginPrompt `json:"prompt"`
 }
 type State struct {
 	Credential *Metadata  `json:"credential"`
 	Operation  *Operation `json:"operation"`
+	// LocalLogin is set only for a plugin provider that declares account state paths, while "use this machine's
+	// logins" is on: active or missing.
+	LocalLogin *string `json:"localLogin,omitempty"`
 }
 
 // Controller exposes only redacted console views. Runtime refresh uses private IPC.
@@ -36,6 +44,8 @@ type Controller interface {
 	Start(context.Context, uuid.UUID, LoginInput) (Operation, error)
 	Get(context.Context, uuid.UUID, uuid.UUID) (Operation, error)
 	Cancel(context.Context, uuid.UUID, uuid.UUID) (Operation, error)
+	// Input answers the question a plugin-provider login is waiting on.
+	Input(context.Context, uuid.UUID, uuid.UUID, cm.LoginInput) (State, error)
 }
 
 // Metadata is the safe shared credential view; it never contains token material.

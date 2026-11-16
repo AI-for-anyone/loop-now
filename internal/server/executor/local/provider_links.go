@@ -124,13 +124,18 @@ func (e *Executor) linkProviderState(snap agentconfig.Snapshot, d agentDirs, log
 	} else if err == nil {
 		err = errors.New("不是目录")
 	}
+	// A platform Agent's subscription is its own login (plugins/SPEC.md §13); tell the user where to log in again.
+	account, relogin := "项目账号", "请在项目里重新登录该账号"
+	if snap.ContextProjectID == nil {
+		account, relogin = "这个 Agent 自己的登录", "请在这个 Agent 的模型凭证里重新登录"
+	}
 	if err != nil {
-		return fail(executor.ErrCredentialUnavailable, "订阅账号的状态已不存在，请在项目里重新登录该账号")
+		return fail(executor.ErrCredentialUnavailable, "订阅账号的状态已不存在，%s", relogin)
 	}
 	if loginHome != "" {
 		for _, p := range st.Paths {
 			if _, err := os.Lstat(filepath.Join(loginHome, filepath.FromSlash(p))); err != nil {
-				return fail(executor.ErrCredentialUnavailable, "已开启“用本机的登录状态”，此时用的是本机自己的登录而不是项目账号；本机没有该扩展的登录（%s），关闭开关或在本机登录后再试", p)
+				return fail(executor.ErrCredentialUnavailable, "已开启“用本机的登录状态”，此时用的是本机自己的登录而不是%s；本机没有该扩展的登录（%s），关闭开关或在本机登录后再试", account, p)
 			}
 		}
 	}

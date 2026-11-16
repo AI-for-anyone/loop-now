@@ -408,15 +408,16 @@ func (s *Store) PluginEnabledIn(ctx context.Context, plugin string, project uuid
 	return on, err
 }
 
-// 项目 Agent 不能用某个插件的 Agent 侧的原因（AgentPluginUsability 的结果）。
+// Reasons an Agent cannot use a plugin's Agent side (results of AgentPluginUsability).
 const (
-	PluginUnusablePlatformAgent = "platform_agent"     // 平台 Agent：插件提供方要用项目账号
-	PluginUnusableNotEnabled    = "plugin_not_enabled" // Agent 所在项目没有启用该插件
-	PluginUnusableNotGranted    = "agent_not_granted"  // 没有授权给这个 Agent
+	PluginUnusableNotEnabled = "plugin_not_enabled" // the Agent's project has not enabled the plugin (project Agents only)
+	PluginUnusableNotGranted = "agent_not_granted"  // the plugin is not granted to this Agent
 )
 
-// AgentPluginUsability 报告 Agent 能否用这个插件的 Agent 侧：为空表示能用（项目已启用、Agent 已授权），
-// 否则是 PluginUnusable* 之一。插件是否安装、全局是否停用不在这里看。
+// AgentPluginUsability reports whether an Agent can use a plugin's Agent side: empty means it can, otherwise one of
+// PluginUnusable*. A project Agent needs the plugin enabled in its project and granted to it; a platform Agent has no
+// project layer and only needs the grant (matching plugins.AgentAssets). Whether the plugin is installed or plugins
+// are disabled globally is not checked here.
 func (s *Store) AgentPluginUsability(ctx context.Context, agent uuid.UUID, plugin string) (string, error) {
 	var project *uuid.UUID
 	var enabled, granted bool
@@ -427,9 +428,7 @@ func (s *Store) AgentPluginUsability(ctx context.Context, agent uuid.UUID, plugi
 	switch {
 	case err != nil:
 		return "", notFoundIfNoRows(err, "Agent")
-	case project == nil:
-		return PluginUnusablePlatformAgent, nil
-	case !enabled:
+	case project != nil && !enabled:
 		return PluginUnusableNotEnabled, nil
 	case !granted:
 		return PluginUnusableNotGranted, nil

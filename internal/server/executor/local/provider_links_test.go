@@ -123,8 +123,19 @@ func TestProviderStateLinks(t *testing.T) {
 		st.Dir = filepath.Join(t.TempDir(), "gone")
 		s.ProviderState, s.Plugins = &st, agentconfig.PluginAssets{IDs: []string{"grokish"}}
 	})
-	if res, _ := h.exec(e, "hi"); res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, "重新登录") {
-		t.Fatalf("状态目录不在：%+v", res)
+	// 平台 Agent（没有项目上下文）的订阅账号是它自己的登录，提示去它的模型凭证里重登；项目 Agent 提示去项目里重登。
+	if res, _ := h.exec(e, "hi"); res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, "这个 Agent 的模型凭证里重新登录") {
+		t.Fatalf("状态目录不在（平台 Agent）：%+v", res)
+	}
+	project := uuid.New()
+	pe := h.agent(func(s *agentconfig.Snapshot) {
+		st := *state
+		st.Dir = filepath.Join(t.TempDir(), "gone")
+		s.ContextProjectID = &project
+		s.ProviderState, s.Plugins = &st, agentconfig.PluginAssets{IDs: []string{"grokish"}}
+	})
+	if res, _ := h.exec(pe, "hi"); res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, "在项目里重新登录") {
+		t.Fatalf("状态目录不在（项目 Agent）：%+v", res)
 	}
 	// 声明路径盖住了任何一个 CLI 模板的凭证文件（不只是这个 Agent 配了的）：明确失败，不让每轮删写凭证文件时出错。
 	managed := h.e.tmpl.AllCredentialFilePaths()
@@ -210,7 +221,8 @@ func TestProviderStateWithLocalLogins(t *testing.T) {
 		s.ProviderState, s.Plugins = state, agentconfig.PluginAssets{IDs: []string{"grokish"}}
 	})
 	res, _ := h.exec(id, "hi")
-	if res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, "用本机的登录状态") || !strings.Contains(res.ErrorMessage, ".pi/fake-oauth") {
+	if res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, "用本机的登录状态") || !strings.Contains(res.ErrorMessage, ".pi/fake-oauth") ||
+		!strings.Contains(res.ErrorMessage, "而不是这个 Agent 自己的登录") {
 		t.Fatalf("本机没有该扩展的登录：%+v", res)
 	}
 	sameTree(t, realHome, before)

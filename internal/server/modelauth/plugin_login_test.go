@@ -29,6 +29,8 @@ import (
 type fakePluginHelper struct {
 	fail  error
 	homes []string
+	// gate 不为空时，给出设备码后等它关上（或登录被取消）再返回，用来看进行中的视图。
+	gate chan struct{}
 }
 
 const fakeEntry = `{"type":"oauth","access":"vault-marker","refresh":"vault-marker","expires":9007199254740991}`
@@ -63,6 +65,13 @@ func (f *fakePluginHelper) Login(ctx context.Context, req PluginLoginRequest, ui
 	}
 	if err := ui.DeviceCode("ABCD-EFGH", "https://accounts.example.test/device", 10*time.Minute); err != nil {
 		return nil, err
+	}
+	if f.gate != nil {
+		select {
+		case <-f.gate:
+		case <-ctx.Done():
+			return nil, ErrAuthCancelled
+		}
 	}
 	return []byte(fakeEntry), nil
 }
