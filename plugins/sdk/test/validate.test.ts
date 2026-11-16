@@ -248,7 +248,7 @@ describe('validatePlugin', () => {
 
   it('a label or title that is neither a string nor a valid per-language object is reported at its path', () => {
     const rule = 'must be a string, or an object with language tags (such as zh-CN, en-US) as keys and non-empty strings as values, with at least one entry.'
-    for (const [name, bad] of [['empty', {}], ['bad_key', { english: 'x' }], ['blank', { 'en-US': ' ' }], ['number', 42]] as const) {
+    for (const [name, bad] of [['empty', {}], ['bad_key', { english: 'x' }], ['blank', { 'en-US': ' ' }], ['number', 42], ['boolean', true], ['array', ['x']], ['null', null]] as const) {
       const loopNow = {
         id: `bad-${name.replace('_', '-')}`,
         platform: './platform/index.ts',
@@ -260,6 +260,9 @@ describe('validatePlugin', () => {
       const r = validatePlugin(plugin(`i18n-bad-${name}`, { name: 'x', version: '1.0.0', description: 'x', keywords: ['loop-now-plugin'], loopNow }, { 'README.md': '', 'platform/index.ts': 'export default () => {}\n' }))
       assert.equal(r.ok, false, name)
       const at = (path: string) => [path, `${path} ${rule}`]
+      // A schema title or description that is not an object (a number, a boolean, an array, null) gets the same sentence here. The
+      // server leaves those to the JSON Schema meta-schema, which rejects them at install time with its own wording; reporting them in
+      // validate lets the plugin author see them first.
       assert.deepEqual(
         r.findings.filter((f) => f.level === 'error').map((f) => [f.path, f.message]),
         [
@@ -273,6 +276,45 @@ describe('validatePlugin', () => {
         name,
       )
     }
+  })
+
+  it('titles and descriptions are checked in every keyword that holds subschemas, at the same paths as on the server', () => {
+    const rule = 'must be a string, or an object with language tags (such as zh-CN, en-US) as keys and non-empty strings as values, with at least one entry.'
+    const bad = { title: { english: 'x' } }
+    const configSchema = {
+      type: 'object',
+      properties: { x: { type: 'object', properties: { y: { type: 'string', description: { english: 'x' } } } } },
+      patternProperties: { '^p': bad },
+      $defs: { d: bad },
+      definitions: { e: bad },
+      dependentSchemas: { x: bad },
+      dependencies: { x: bad, y: ['x'] },
+      items: bad,
+      prefixItems: [bad],
+      allOf: [bad],
+      anyOf: [bad],
+      oneOf: [bad],
+      not: bad,
+      if: bad,
+      then: bad,
+      else: bad,
+      additionalProperties: bad,
+      contains: bad,
+      propertyNames: bad,
+      unevaluatedItems: bad,
+      unevaluatedProperties: bad,
+      contentSchema: bad,
+    }
+    const loopNow = { id: 'deep-labels', platform: './platform/index.ts', configSchema, accounts: [{ kind: 'bot', label: 'Bot', fields: { type: 'object', properties: { token: { type: 'string', allOf: [bad] } } } }] }
+    const r = validatePlugin(plugin('deep-labels', { name: 'x', version: '1.0.0', description: 'x', keywords: ['loop-now-plugin'], loopNow }, { 'README.md': '', 'platform/index.ts': 'export default () => {}\n' }))
+    const at = (path: string) => [path, `${path} ${rule}`]
+    const c = (path: string) => at(`loopNow.configSchema.${path}.title`)
+    assert.deepEqual(r.findings.filter((f) => f.level === 'error').map((f) => [f.path, f.message]), [
+      at('loopNow.configSchema.properties.x.properties.y.description'),
+      ...['patternProperties.^p', '$defs.d', 'definitions.e', 'dependentSchemas.x', 'dependencies.x', 'prefixItems[0]', 'allOf[0]', 'anyOf[0]', 'oneOf[0]', 'items'].map(c),
+      ...['not', 'if', 'then', 'else', 'additionalProperties', 'contains', 'propertyNames', 'unevaluatedItems', 'unevaluatedProperties', 'contentSchema'].map(c),
+      at('loopNow.accounts[0].fields.properties.token.allOf[0].title'),
+    ])
   })
 
   it('plain string labels work as before; a missing or empty action or channel label keeps the old error', () => {

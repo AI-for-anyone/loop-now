@@ -411,10 +411,6 @@ function checkSchema(
       const types = Array.isArray(t) ? t : [t]
       if (!types.every((x) => typeof x === 'string' && SCHEMA_TYPES.includes(x))) error(`${p}.type`, `type must be ${orList(SCHEMA_TYPES)}.`)
     }
-    // title and description may be localized text at any level (a string, or a per-language object).
-    for (const key of ['title', 'description'] as const) {
-      if (s[key] !== undefined && typeof s[key] !== 'string' && !isLocalizedObject(s[key])) error(`${p}.${key}`, `${p}.${key} ${LOCALIZED_RULE}`)
-    }
     if (s.enum !== undefined && !Array.isArray(s.enum)) error(`${p}.enum`, 'enum must be an array.')
     if (Array.isArray(s.oneOf)) s.oneOf.forEach((option, i) => walk(option, `${p}.oneOf[${i}]`, depth + 1))
     if (s.required !== undefined && !strings(s.required)) error(`${p}.required`, 'required must be an array of strings.')
@@ -443,6 +439,35 @@ function checkSchema(
     }
   }
   walk(schema, at, 0)
+  checkLocalizedText(schema, at, error)
+}
+
+// Keywords whose value holds subschemas, the same list the server walks: a map of name to schema, an array of schemas, or one schema.
+// (dependencies may also map a name to an array of property names; such values are not schemas and are skipped.)
+const SCHEMA_MAPS = ['properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas', 'dependencies'] as const
+const SCHEMA_ARRAYS = ['prefixItems', 'allOf', 'anyOf', 'oneOf'] as const
+const SCHEMA_SINGLES = ['not', 'if', 'then', 'else', 'additionalProperties', 'contains', 'propertyNames', 'unevaluatedItems', 'unevaluatedProperties', 'contentSchema'] as const
+
+// checkLocalizedText reports a title or description that is neither a string nor valid LocalizedText, in every subschema. The server
+// reports an invalid object with the same sentence and leaves other values (a number, a boolean, an array, null) to the JSON Schema
+// meta-schema, which rejects them at install time; here they get the same sentence, so a plugin author sees them when running
+// validate.
+function checkLocalizedText(s: unknown, p: string, error: (p: string, m: string) => void): void {
+  if (!isObject(s)) return
+  for (const key of ['title', 'description'] as const) {
+    if (s[key] !== undefined && typeof s[key] !== 'string' && !isLocalizedObject(s[key])) error(`${p}.${key}`, `${p}.${key} ${LOCALIZED_RULE}`)
+  }
+  for (const key of SCHEMA_MAPS) {
+    const map = s[key]
+    if (isObject(map)) for (const [name, sub] of Object.entries(map)) checkLocalizedText(sub, `${p}.${key}.${name}`, error)
+  }
+  for (const key of SCHEMA_ARRAYS) {
+    const list = s[key]
+    if (Array.isArray(list)) list.forEach((sub, i) => checkLocalizedText(sub, `${p}.${key}[${i}]`, error))
+  }
+  if (Array.isArray(s.items)) s.items.forEach((sub, i) => checkLocalizedText(sub, `${p}.items[${i}]`, error))
+  else checkLocalizedText(s.items, `${p}.items`, error)
+  for (const key of SCHEMA_SINGLES) checkLocalizedText(s[key], `${p}.${key}`, error)
 }
 
 function releaseParts(v: string): number[] | null {
