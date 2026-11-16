@@ -1,12 +1,14 @@
-# Loop Now 工作约定
+# Loop Now working agreements
 
-- 先读根目录 `MAIN.md`，它是唯一持续维护的项目概览、关键决定和状态文档；其余代码、接口和测试按当前任务需要读取。
-- 不另建提案、规格增量、任务清单、签收或同步流程；工作范围只来自用户的明确要求。
-- 只做用户当前要求的事。先明确交付结果和必要验收；新增能力、重构、容错或额外门槛须先向用户说明，不能自行扩大范围。
-- 用户要求讨论时先讨论；表达不完整时一次问一个关键问题。建议、已确认决定和已实现事实分别表达。
-- `MAIN.md` 由主协调会话统一维护，更新当前结论、删除过时内容，保持简短；不另建重复的全局设计、进度、验收或 HTML 阅读版。
-- 测试以当前改动的实际风险为限。已有检查通过后，只有新改动或新失败才重跑；如实区分源码、隔离测试、本地部署和真实业务结果。
-- 收到“停止／暂停”立即停止推进；有已派发会话时直接中断并清理待办，不能仅给它们排队发送停止消息。清空的旧派工不能自动恢复。
-- Git 提交、推送、部署、业务数据写入和对外消息按用户授权执行。保留现有数据和共享工作区改动，不输出或提交凭证。
-- API 以 `api/*.yaml` 为准；Web 类型由它生成，不手改生成文件。
-- 代码面向贡献者的文字用英文：注释、日志、错误消息、接口说明、提交信息。注释里引用界面原文时保留原文并在后面附英文。界面文案只放在文案表里（zh-CN 与 en-US 两套）。`npm run check:text`（web、desktop、plugins）和 `go run ./scripts/check-english`（Go）在 CI 里检查注释和日志。
+中文：[AGENTS.zh-CN.md](AGENTS.zh-CN.md) (this English file is authoritative)
+
+- Read `MAIN.md` in the repository root first. It is the only maintained document for the project overview, key decisions and status; read the rest of the code, APIs and tests as the current task needs.
+- Do not set up separate proposals, spec deltas, task lists, sign-off or sync processes; the scope of work comes only from the user's explicit requests.
+- Do only what the user is currently asking for. Make the deliverable and the necessary acceptance clear first; explain a new capability, refactor, fault-tolerance measure or extra gate to the user before adding it, and do not widen the scope on your own.
+- When the user asks to discuss, discuss first; when a request is incomplete, ask one key question at a time. Keep suggestions, confirmed decisions and implemented facts apart.
+- `MAIN.md` is maintained by the main coordinating session alone: update the current conclusions, delete what is out of date, keep it short; do not create duplicate global design, progress, acceptance or HTML reading versions.
+- Test to the extent of the real risk of the current change. Once the existing checks pass, rerun them only for new changes or new failures; say truthfully which of source, isolated tests, local deployment and real business results a claim rests on.
+- On "stop" or "pause" (“停止／暂停”), stop advancing at once; when sessions have been dispatched, interrupt them directly and clear the pending work instead of only queueing a stop message for them. Dispatches that were cleared must not resume by themselves.
+- Git commits, pushes, deployments, business data writes and outbound messages follow the user's authorization. Preserve existing data and other people's changes in shared workspaces; never print or commit credentials.
+- The API is defined by `api/*.yaml`; the Web types are generated from it; do not edit generated files by hand.
+- English first, Chinese as a supplement. Text that faces contributors is English: comments, logs, error messages, API descriptions, commit messages, test names and test data. Documents are authoritative in English, with the Chinese version in a `.zh-CN.md` file of the same name (README, CHANGELOG, AGENTS); `MAIN.md` exists in English only, and quotes the user's own words in the original Chinese followed by English. UI copy lives only in the copy tables (en-US and zh-CN); other text shown in the UI uses `LocalizedText` with English first. Test data may be Chinese where the test is about handling Chinese; mark it with `check-english: zh (reason)`. `npm run check:text` (web, desktop, plugins) and `go run ./scripts/check-english` (Go, `api/*.yaml`) enforce this in CI.

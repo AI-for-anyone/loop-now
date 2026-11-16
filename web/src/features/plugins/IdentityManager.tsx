@@ -33,7 +33,7 @@ function useCandidates() {
     detail.data
       ? detail.data.manifest.components.channels
           .filter((channel) => channel.manageIdentities)
-          .map((channel) => ({ pluginId: detail.data.plugin.id, channelId: channel.id, pluginName: localizedText(detail.data.plugin.displayName), channelLabel: channel.label, status: list.find((p) => p.id === detail.data.plugin.id)?.status ?? detail.data.plugin.status }))
+          .map((channel) => ({ pluginId: detail.data.plugin.id, channelId: channel.id, pluginName: localizedText(detail.data.plugin.displayName), channelLabel: localizedText(channel.label), status: list.find((p) => p.id === detail.data.plugin.id)?.status ?? detail.data.plugin.status }))
       : [],
   )
   return { candidates, pending: plugins.isPending || details.some((detail) => detail.isPending), error: plugins.error ?? details.find((detail) => detail.error)?.error ?? null }

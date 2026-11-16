@@ -3,7 +3,8 @@
 # level-2 heading whose first word is the tag or the version without v, optionally in brackets, e.g. "## v0.2.0",
 # "## [0.2.0] - 2026-11-05", "## v0.3.0-beta.1"), up to the next level-2 heading; failing that, the tag annotation.
 # If both are empty (an annotation that only repeats the tag name counts as empty) it fails, so no Release goes out
-# with empty notes.
+# with empty notes. English comes first: when CHANGELOG.zh-CN.md has a section for the same version, it is appended
+# after the English notes under a "中文" heading; a missing Chinese section is not an error.
 #
 #   scripts/release/notes.sh <tag>
 #
@@ -19,9 +20,10 @@ tag="$1"
 version="${tag#v}"
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 
-notes=""
-if [ -f "$root/CHANGELOG.md" ]; then
-	notes="$(awk -v tag="$tag" -v version="$version" '
+# section FILE: this version's section of a changelog file, without its heading; empty when the file or section is missing.
+section() {
+	[ -f "$1" ] || return 0
+	awk -v tag="$tag" -v version="$version" '
 		/^## / {
 			if (found) exit
 			head = $2
@@ -30,8 +32,10 @@ if [ -f "$root/CHANGELOG.md" ]; then
 			next
 		}
 		found { print }
-	' "$root/CHANGELOG.md")"
-fi
+	' "$1"
+}
+
+notes="$(section "$root/CHANGELOG.md")"
 if [ -z "${notes//[[:space:]]/}" ] && [ "$(git -C "$root" cat-file -t "refs/tags/$tag" 2>/dev/null)" = tag ]; then
 	notes="$(git -C "$root" for-each-ref "refs/tags/$tag" --format='%(contents:subject)%0a%0a%(contents:body)')"
 	[ "$(printf '%s' "$notes" | tr -d '[:space:]')" = "$tag" ] && notes=""
@@ -42,3 +46,10 @@ if [ -z "${notes//[[:space:]]/}" ]; then
 fi
 # Drop leading blank lines (command substitution has already removed the trailing newlines).
 printf '%s\n' "$notes" | sed '/[^[:space:]]/,$!d'
+
+# The Chinese supplement, when this version has one.
+chinese="$(section "$root/CHANGELOG.zh-CN.md")"
+if [ -n "${chinese//[[:space:]]/}" ]; then
+	printf '\n---\n\n## 中文\n\n'
+	printf '%s\n' "$chinese" | sed '/[^[:space:]]/,$!d'
+fi

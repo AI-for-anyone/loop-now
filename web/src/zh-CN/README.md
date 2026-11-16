@@ -22,6 +22,8 @@ in English, next to its code. A file here mirrors the path of the code it tests 
   - names the console gives itself (console, platform, deleted parties) whatever the server sends:
     `features/inbox/participants.zh.test.ts`;
   - per-language plugin names and descriptions with their fallbacks: `features/plugins/Markets.zh.test.tsx`;
+  - per-language labels written by plugin and CLI template authors (form titles, descriptions, options, field labels):
+    `features/plugins/localized-labels.zh.test.tsx`;
   - provider search by Chinese name: `features/project-credentials/ProviderPicker.zh.test.tsx`.
 - **Text from older servers and older stored data that is still Chinese**
   - an older server's fixed `接口不存在` (no such endpoint): `api/backend-signals.zh.test.ts`,
