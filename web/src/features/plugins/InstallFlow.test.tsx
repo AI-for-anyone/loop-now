@@ -22,7 +22,7 @@ const lark = makePreview({
   }),
 })
 
-// 预览与安装两个接口：记下每次的请求体。
+// The preview and install endpoints: record every request body.
 function handlers({ preview = lark, install }: { preview?: typeof lark; install?: (body: Record<string, unknown>) => Response | undefined } = {}) {
   const previews: unknown[] = [], installs: Record<string, unknown>[] = []
   server.use(
@@ -80,7 +80,7 @@ describe('安装插件：读取清单 → 确认 → 安装', () => {
     const dialog = await screen.findByRole('dialog', { name: /安装 hello 示例/ })
     expect(previews).toEqual([{ source: { kind: 'builtin', location: 'hello' } }])
     expect(within(dialog).queryByRole('note')).toBeNull()
-    // 扩展注册的模型提供方在确认安装之后才读取（会运行插件代码）。
+    // The model providers registered by the extension are read only after the install is confirmed (reading them runs plugin code).
     expect(within(dialog).getByText('Pi 扩展 1 个文件').parentElement).toHaveTextContent('Pi 扩展 1 个文件 · 授权的 Agent 启动时加载，安装后读取它注册的模型提供方')
     await user.click(within(dialog).getByRole('button', { name: '安装' }))
     await waitFor(() => expect(installs).toEqual([{ previewId: hello.previewId }]))

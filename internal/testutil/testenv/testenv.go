@@ -1,4 +1,5 @@
-// Package testenv 为测试读取本机开发配置：环境变量优先，未设置时读取仓库根目录的 .env.local。
+// Package testenv reads the local development config for tests: environment variables take precedence; when one is
+// not set, .env.local in the repository root is read.
 package testenv
 
 import (
@@ -15,7 +16,8 @@ var (
 	values map[string]string
 )
 
-// Get 返回环境变量的值；进程环境中没有时，再查 .env.local。
+// Get returns the value of an environment variable; when the process environment does not have it, .env.local is
+// checked.
 func Get(name string) string {
 	if v := os.Getenv(name); v != "" {
 		return v
@@ -47,7 +49,8 @@ func load() {
 	}
 }
 
-// Exe 给测试时 go build 出来的程序路径加上平台的可执行扩展名（Windows 上 .exe，其他平台原样）。
+// Exe adds the platform's executable extension to the path of a program built with go build during tests (.exe on
+// Windows, unchanged on other platforms).
 func Exe(path string) string {
 	if runtime.GOOS == "windows" && filepath.Ext(path) != ".exe" {
 		return path + ".exe"
@@ -55,7 +58,7 @@ func Exe(path string) string {
 	return path
 }
 
-// RepoRoot 从当前目录向上查找 go.mod 所在目录。
+// RepoRoot searches upward from the current directory for the directory containing go.mod.
 func RepoRoot() string {
 	dir, err := os.Getwd()
 	if err != nil {

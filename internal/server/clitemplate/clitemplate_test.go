@@ -135,7 +135,7 @@ func TestRenderLark(t *testing.T) {
 	if hasKey != (runtime.GOOS == "darwin") || len(p.Files) != len(files) {
 		t.Fatalf("本平台（%s）生成的文件不对：%v", runtime.GOOS, p.FilePaths())
 	}
-	// 每个可能写入的凭证文件都在启动前清理的范围内。
+	// Every credential file that may be written is covered by the cleanup before a start.
 	for path := range files {
 		if !slices.Contains(lark.CredentialFilePaths(), path) {
 			t.Errorf("%s 不在清理范围内：%v", path, lark.CredentialFilePaths())
@@ -157,7 +157,8 @@ func TestTemplateEnvRejectsPlaceholders(t *testing.T) {
 	}
 }
 
-// 模型账号凭证不能使用的变量名：各模板按源码声明的精确名与前缀，加上模板自己注入的变量名。
+// TestReservedEnv covers the variable names model account credentials cannot use: the exact names and prefixes each
+// template declares based on the CLI's source code, plus the variable names the template injects itself.
 func TestReservedEnv(t *testing.T) {
 	c, _ := Load("")
 	reserved := map[string]string{
@@ -171,7 +172,8 @@ func TestReservedEnv(t *testing.T) {
 			t.Errorf("%s 应由 %s 保留，实际 %q %v", name, want, got, ok)
 		}
 	}
-	// 用户已决定：代理、证书、GIT_*、SSH_* 等通用变量不保留（design.md 已知风险）。
+	// Decided by the user: generic variables such as proxies, certificates, GIT_* and SSH_* are not reserved (a known
+	// risk in design.md).
 	for _, name := range []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "HTTPS_PROXY", "https_proxy", "NO_PROXY", "SSL_CERT_FILE", "GIT_SSH_COMMAND", "SSH_AUTH_SOCK", "XDG_CACHE_HOME", "GITHUB", "LARK"} {
 		if tmpl, ok := c.ReservedEnvBy(name); ok {
 			t.Errorf("%s 不应被保留（实际由 %s 保留）", name, tmpl)
@@ -209,7 +211,7 @@ func TestRenderEnumValidation(t *testing.T) {
 	}
 }
 
-// ---- 安装器 ----
+// ---- Installer ----
 
 func tarGz(t *testing.T, name string, data []byte) []byte {
 	var buf bytes.Buffer

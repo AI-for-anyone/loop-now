@@ -35,7 +35,8 @@ type lifecycleEnv struct {
 	helper  *Helper
 	seeded  int64
 	logs    bytes.Buffer
-	// attempts 数尝试写入凭证版本的语句（回滚的也算），由语句钩子计数。
+	// attempts counts the statements that try to write credential versions (rolled-back ones included), counted by the
+	// statement hook.
 	attempts atomic.Int64
 }
 
@@ -288,7 +289,8 @@ func TestProjectLifecycleDeferredCommitFailurePreservesOld(t *testing.T) {
 	e := newLifecycleEnv(t, ServiceOptions{})
 	old := e.seedAccount()
 	op := e.start(&old)
-	// SQLite 没有延迟到提交时的触发器：在写入版本时失败，整个事务同样回滚。
+	// SQLite has no triggers deferred to commit time: fail when the version is written, and the whole transaction rolls
+	// back just the same.
 	_, err := e.st.Pool.Exec(context.Background(), `CREATE TRIGGER lifecycle_fail_commit AFTER INSERT ON model_auth_versions BEGIN SELECT RAISE(ABORT, 'synthetic deferred commit failure'); END`)
 	if err != nil {
 		t.Fatal(err)
@@ -359,10 +361,12 @@ func TestProjectLifecycleRecordDeadlineFreshTerminalContext(t *testing.T) {
 	e := newLifecycleEnv(t, ServiceOptions{RecordTimeout: 200 * time.Millisecond})
 	old := e.seedAccount()
 	op := e.start(&old)
-	// 凭证提交写版本时停在语句钩子里，直到提交的期限到（写事务回滚）；终态回写用新的上下文，之后拿到写连接。
+	// The credential commit pauses in the statement hook while writing the version until the commit deadline passes
+	// (the write transaction rolls back); the terminal state write-back uses a new context and gets the writer
+	// connection afterwards.
 	var blocked atomic.Bool
 	e.st.Pool.SetQueryHook(func(ctx context.Context, q string) {
-		// 停住的写入在上下文结束后不会执行，不计入尝试次数。
+		// A paused write does not run after its context ends and does not count as an attempt.
 		if strings.Contains(q, "INSERT INTO model_auth_versions") && blocked.CompareAndSwap(false, true) {
 			select {
 			case <-ctx.Done():
@@ -388,8 +392,10 @@ func TestProjectLifecycleSuccessMetadataAfterActualCommit(t *testing.T) {
 	old := e.seedAccount()
 	op := e.start(&old)
 	ctx := context.Background()
-	// 提交事务写完账号与操作之后、真正提交之前停住：每个写事务提交前最后一条语句是插件变更的收取，
-	// 写过凭证版本的那个事务停在那里，直到测试放开；结果因此不能在提交可见之前就显示为成功。
+	// Pause after the commit transaction has written the account and operation but before it actually commits: the last
+	// statement before each write transaction commits collects plugin changes, and the transaction that wrote the
+	// credential version pauses there until the test releases it; so the result cannot show success before the commit
+	// is visible.
 	var sawVersion, blocking atomic.Bool
 	unblock := make(chan struct{})
 	var unblockOnce sync.Once

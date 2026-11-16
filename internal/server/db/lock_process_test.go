@@ -13,7 +13,8 @@ import (
 
 const lockChildDir = "LOOP_NOW_DB_LOCK_CHILD_DIR"
 
-// 实例锁跨进程生效：另一个进程持锁时取锁失败；持锁进程被杀后锁自动释放。
+// TestLockDirAcrossProcesses checks that the instance lock works across processes: taking it fails while another
+// process holds it, and it is released automatically once the holding process is killed.
 func TestLockDirAcrossProcesses(t *testing.T) {
 	dir := t.TempDir()
 	child := func(mode string) *exec.Cmd {
@@ -71,7 +72,7 @@ func TestLockDirAcrossProcesses(t *testing.T) {
 	}
 }
 
-// TestLockDirChild 只在 TestLockDirAcrossProcesses 拉起的子进程里运行。
+// TestLockDirChild only runs in the child process started by TestLockDirAcrossProcesses.
 func TestLockDirChild(t *testing.T) {
 	dir := os.Getenv(lockChildDir)
 	if dir == "" {

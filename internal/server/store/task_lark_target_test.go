@@ -132,7 +132,8 @@ func TestTaskLarkTargetLockWaitCannotCrossGrantExpiry(t *testing.T) {
 	r, _ := s.GetTask(ctx, reservation.TaskID)
 	expires := time.Now().Add(time.Second)
 	account := larkSwitchTarget(t, s, r.View.Task.ProjectID, expires)
-	// 任务事务里读目标版本时停住，直到授权过期：校验必须用读到之后的时刻，而不是事务开始的时刻。
+	// Pause while reading the target version in the task transaction until the authorization expires: the check must
+	// use the time after the read, not the time the transaction started.
 	entered, resume := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	s.Pool.SetQueryHook(func(_ context.Context, q string) {

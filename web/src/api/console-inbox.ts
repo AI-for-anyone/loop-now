@@ -3,8 +3,9 @@ import { api, call, type Schemas } from './client'
 import { keys } from './queries'
 import { taskInboxKeys } from './task-inbox'
 
-// 操作者（@console）的 Inbox 不再有单独的页面：Agent 发给你的消息与问题显示在它的对话里，任务实例的显示在节点对话里，
-// 外部身份与你的往来显示在它的页面上；待你处理的汇总显示在 Agent 列表、任务列表与概览上。
+// The operator's (@console) Inbox no longer has a page of its own: messages and questions an Agent sends you show in its conversation,
+// those from task instances show in the node conversation, and your exchanges with an external identity show on its page; the summary
+// of what needs you shows on the Agent list, the task list and the overview.
 
 type Message = Schemas['InboxMessage']
 
@@ -13,10 +14,12 @@ export const consoleKeys = {
   pending: ['inboxPending'] as const,
 }
 
-// 一次最多读这么多页；超出时只用已读到的部分（最新的在前）。每个 Agent 与你的往来通常不多，读完后整体按时间合并进对话。
+// Read at most this many pages at a time; beyond that, only what has been read is used (newest first). Each Agent usually has few
+// exchanges with you, so once read they are merged into the conversation by time as a whole.
 const maxPages = 20
 
-// 你与一个 Agent（不含它的任务实例）之间的全部消息，两个方向都有，按时间正序。读取不改变已读状态。
+// All messages between you and one Agent (not including its task instances), in both directions, in chronological order. Reading does
+// not change the read state.
 export function useAgentConsoleMessages(agentId: string) {
   return useQuery({
     queryKey: consoleKeys.agent(agentId),
@@ -38,7 +41,8 @@ export function useAgentConsoleMessages(agentId: string) {
 
 const byTime = (a: Pick<Message, 'createdAt' | 'id'>, b: Pick<Message, 'createdAt' | 'id'>) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)
 
-// 待你处理：发给你的 open 问题与其他未读消息，带按 Agent、按任务的汇总。收件箱事件流的任何事件都让它重新获取。
+// Needs you: open questions and other unread messages sent to you, with summaries per Agent and per task. Any event on the inbox event
+// stream makes it refetch.
 export function useInboxPending() {
   return useQuery({ queryKey: consoleKeys.pending, queryFn: () => call(api.GET('/inbox/pending')) })
 }
@@ -51,13 +55,14 @@ const threadQuery = (threadId: string) => ({
   queryFn: () => call(api.GET('/inbox/threads/{threadId}', { params: { path: { threadId } } })),
 })
 
-// 一条线索的全部消息。
+// All messages of one thread.
 export function useConsoleThread(threadId: string | null) {
   return useQuery({ ...threadQuery(threadId ?? ''), enabled: threadId !== null })
 }
 
-// 外部身份与你的往来：从它的收件箱（两个方向）里找出与你之间的线索，再读出这些线索的全文，按时间正序合并。
-// 它与 Agent 之间的往来只在下方的收件箱记录里查看。threads 为这些线索，最近有消息的在前。
+// Your exchanges with an external identity: find the threads between it and you in its inbox (both directions), then read the full text
+// of those threads and merge them in chronological order.
+// Its exchanges with Agents are only shown in the inbox records below. threads holds these threads, the one with the latest message first.
 export function useIdentityConversation(identityId: string) {
   const inbox = useQuery({
     queryKey: [...keys.identityInbox(identityId), 'console'],
@@ -82,8 +87,8 @@ export function useIdentityConversation(identityId: string) {
   return { threads, messages, isPending: inbox.isPending || details.some((detail) => detail.isPending), error }
 }
 
-// 消息的已读或取消时间变了：就地改你与 Agent 的往来和线索里的这条消息。任务节点的 Inbox 记录由它自己的投影合并，
-// 重新获取后带上新的时间。
+// A message's read or cancel time changed: update this message in place in your exchanges with Agents and in threads. A task node's Inbox
+// records are merged by its own projection and pick up the new time when refetched.
 export function patchConsoleMessage(client: QueryClient, messageId: string, patch: Partial<Pick<Message, 'readAt' | 'cancelledAt'>>) {
   const apply = (message: Message) => (message.id === messageId ? { ...message, ...patch } : message)
   client.setQueriesData<Message[]>({ queryKey: ['consoleMessages'] }, (data) => data?.map(apply))
@@ -91,7 +96,8 @@ export function patchConsoleMessage(client: QueryClient, messageId: string, patc
   void client.invalidateQueries({ queryKey: [taskInboxKeys.records('')[0]] })
 }
 
-// 发给你的消息进入视野时标为已读，与原收件箱打开线索时的已读含义相同。待你处理随后重新获取。
+// A message sent to you is marked read when it comes into view, the same meaning of "read" as opening a thread in the old inbox. The
+// "needs you" summary is refetched afterwards.
 export async function markMessageRead(client: QueryClient, messageId: string) {
   const message = await call(api.POST('/inbox/messages/{messageId}/read', { params: { path: { messageId } } }))
   patchConsoleMessage(client, message.id, { readAt: message.readAt })
@@ -99,7 +105,7 @@ export async function markMessageRead(client: QueryClient, messageId: string) {
   return message
 }
 
-// 线索里另一方（不是你的那一方）。
+// The other party in a thread (the side that is not you).
 export function counterpartOf(messages: Pick<Message, 'from' | 'to'>[]) {
   const first = messages[0]
   return first ? (first.from.kind === 'console' ? first.to : first.from) : undefined

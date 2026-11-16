@@ -1,8 +1,11 @@
-// Package folders 实现人可以直接操作的文件夹：Agent 文件夹（它的工作目录，也是它自己的上下文）
-// 与项目、全局上下文文件夹；以及从 Git 一次性拉取、任务开始时复制 Agent 文件夹、退役文件夹来源的一次性回放。
+// Package folders implements the folders people can work with directly: Agent folders (an Agent's working directory,
+// which is also its own context) and project and global context folders; plus one-time pulls from Git, copying the
+// Agent folder when a task starts, and the one-time replay of retired folder sources.
 //
-// 所有路径操作都经 os.Root，以文件夹根为锚：相对路径不能含 .. 或以 / 开头，指向文件夹之外的软链接不会被跟随。
-// 没有锁，人和 Agent 同时修改时以最后一次写入为准；写入先写同目录的临时文件再改名，读取方不会看到写了一半的文件。
+// All path operations go through os.Root, anchored at the folder root: relative paths may not contain .. or start
+// with a slash, and symlinks pointing outside the folder are not followed. There is no lock: when a person and an
+// Agent change something at the same time, the last write wins; writes go to a temporary file in the same directory
+// and are then renamed, so readers never see a half-written file.
 package folders
 
 import (
@@ -24,13 +27,14 @@ import (
 	"loop-now/internal/server/content"
 )
 
-// Folder 是一个文件夹及其回收区。回收区与文件夹在同一卷上、位于文件夹之外，删除时先改名进去再在后台删除。
+// Folder is a folder and its trash. The trash is on the same volume as the folder but outside it; a deletion first
+// renames the item into the trash and then deletes it in the background.
 type Folder struct {
-	Dir   string // 文件夹的绝对路径
-	Trash string // 回收区的绝对路径
+	Dir   string // absolute path of the folder
+	Trash string // absolute path of the trash
 }
 
-// Entry 是文件夹中的一项。
+// Entry is one item in a folder.
 type Entry struct {
 	Name          string
 	Path          string
@@ -40,7 +44,7 @@ type Entry struct {
 	SymlinkTarget *string
 }
 
-// Page 是列出的一层。
+// Page is one listed level.
 type Page struct {
 	Path       string
 	Entries    []Entry
@@ -48,13 +52,14 @@ type Page struct {
 }
 
 const (
-	// DefaultPageSize 与 MaxPageSize 是列表每页条数的默认值与上限。
+	// DefaultPageSize and MaxPageSize are the default and the maximum number of entries per list page.
 	DefaultPageSize = 500
 	MaxPageSize     = 2000
 	tempPrefix      = ".loop-now-tmp-"
 )
 
-// cleanPath 校验并返回文件夹内的相对路径；allowRoot 时空串表示文件夹根（"."）。
+// cleanPath validates and returns a relative path inside the folder; with allowRoot, an empty string means the folder
+// root (".").
 func cleanPath(field, p string, allowRoot bool) (string, error) {
 	if p == "" && allowRoot {
 		return ".", nil
@@ -75,7 +80,8 @@ func (f Folder) open() (*os.Root, error) {
 
 func notFound() error { return apperr.NotFound("文件或目录") }
 
-// mapErr 把文件系统错误转为接口错误：不存在为 404，越界（经由软链接或 ..）为 422。
+// mapErr turns file system errors into API errors: not found is 404, escaping the folder (through a symlink or ..) is
+// 422.
 func mapErr(field string, err error) error {
 	switch {
 	case err == nil:
@@ -122,7 +128,8 @@ func (f Folder) stat(root *os.Root, field, rel string) (Entry, error) {
 	return entryOf(root, rel, info), nil
 }
 
-// sortKey 让目录排在前面，同类按名称排序；游标就是上一页最后一项的键。
+// sortKey puts directories first and sorts by name within each kind; the cursor is the key of the last item on the
+// previous page.
 func sortKey(isDir bool, name string) string {
 	if isDir {
 		return "0/" + name
@@ -130,7 +137,7 @@ func sortKey(isDir bool, name string) string {
 	return "1/" + name
 }
 
-// List 列出 dir 这一层（不递归、不统计目录大小）。
+// List lists the level dir (not recursive, no directory sizes).
 func (f Folder) List(dir, cursor string, limit int) (Page, error) {
 	rel, err := cleanPath("path", dir, true)
 	if err != nil {
@@ -173,7 +180,7 @@ func (f Folder) List(dir, cursor string, limit int) (Page, error) {
 	items := make([]item, 0, len(list))
 	for _, de := range list {
 		if strings.HasPrefix(de.Name(), tempPrefix) {
-			continue // 正在写入的临时文件
+			continue // a temporary file being written
 		}
 		k := sortKey(de.IsDir(), de.Name())
 		if k > after {
@@ -194,14 +201,14 @@ func (f Folder) List(dir, cursor string, limit int) (Page, error) {
 		p := path.Join(rel, it.name)
 		info, err := root.Lstat(p)
 		if err != nil {
-			continue // 列出后被删除
+			continue // deleted after listing
 		}
 		page.Entries = append(page.Entries, entryOf(root, p, info))
 	}
 	return page, nil
 }
 
-// Open 打开一个文件用于下载；目录或特殊文件返回 422。调用方关闭返回的文件。
+// Open opens a file for download; a directory or special file returns 422. The caller closes the returned file.
 func (f Folder) Open(file string) (*os.File, fs.FileInfo, error) {
 	rel, err := cleanPath("path", file, false)
 	if err != nil {
@@ -227,8 +234,10 @@ func (f Folder) Open(file string) (*os.File, fs.FileInfo, error) {
 	return h, info, nil
 }
 
-// Write 用 body 的内容新建或覆盖一个文件：流式写入同目录的临时文件后改名；缺少的上级目录自动创建。
-// create 时目标已存在返回 path_conflict；目标是目录或软链接返回 422；超过 max 字节返回 413。覆盖时保留原文件的权限。
+// Write creates or overwrites a file with the contents of body: it streams into a temporary file in the same directory
+// and then renames it; missing parent directories are created automatically. With create, an existing target returns
+// path_conflict; a target that is a directory or a symlink returns 422; more than max bytes returns 413. Overwriting
+// keeps the original file's permissions.
 func (f Folder) Write(file string, body io.Reader, max int64, create bool) (Entry, error) {
 	rel, err := cleanPath("path", file, false)
 	if err != nil {
@@ -295,7 +304,8 @@ func mkdirAll(root *os.Root, dir string) error {
 	return nil
 }
 
-// Mkdir 新建目录（含缺少的上级目录）；已是目录时原样返回，已有同名文件时返回 path_conflict。
+// Mkdir creates a directory (including missing parents); returns it as is when it is already a directory, and returns
+// path_conflict when a file with the same name exists.
 func (f Folder) Mkdir(dir string) (Entry, error) {
 	rel, err := cleanPath("path", dir, false)
 	if err != nil {
@@ -315,7 +325,8 @@ func (f Folder) Mkdir(dir string) (Entry, error) {
 	return f.stat(root, "path", rel)
 }
 
-// Move 在文件夹内改名或移动；目标已存在返回 path_conflict，不覆盖；不能移到自身之下。缺少的上级目录自动创建。
+// Move renames or moves within the folder; an existing target returns path_conflict and is not overwritten; an item
+// cannot be moved under itself. Missing parent directories are created automatically.
 func (f Folder) Move(from, to string) (Entry, error) {
 	src, err := cleanPath("from", from, false)
 	if err != nil {
@@ -350,8 +361,9 @@ func (f Folder) Move(from, to string) (Entry, error) {
 	return f.stat(root, "to", dst)
 }
 
-// Delete 删除一个文件或目录（软链接只删链接本身）：先改名进回收区（立即返回），再在后台删除；不能删除文件夹根。
-// 回收区与文件夹不在同一卷上时退回为直接删除。
+// Delete deletes a file or directory (for a symlink, only the link itself): it is first renamed into the trash
+// (returning immediately) and then deleted in the background; the folder root cannot be deleted. When the trash and the
+// folder are not on the same volume, it falls back to deleting directly.
 func (f Folder) Delete(target string) error {
 	rel, err := cleanPath("path", target, false)
 	if err != nil {
@@ -365,7 +377,8 @@ func (f Folder) Delete(target string) error {
 	if _, err := root.Lstat(rel); err != nil {
 		return mapErr("path", err)
 	}
-	// 上级目录经 os.Root 打开（中间的软链接只能指向文件夹内部），再按最后一段名称移动，不跟随最后一段。
+	// The parent directory is opened through os.Root (symlinks along the way can only point inside the folder), then
+	// the item is moved by its last name segment, without following the last segment.
 	parent, err := root.Open(path.Dir(rel))
 	if err != nil {
 		return mapErr("path", err)
@@ -392,7 +405,7 @@ func (f Folder) Delete(target string) error {
 	return nil
 }
 
-// EmptyTrash 删除回收区中残留的条目（上次运行未删完的）。
+// EmptyTrash deletes entries left in the trash (those the previous run did not finish deleting).
 func (f Folder) EmptyTrash() error {
 	err := os.RemoveAll(f.Trash)
 	if errors.Is(err, fs.ErrNotExist) {

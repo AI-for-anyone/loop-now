@@ -1,5 +1,6 @@
-// Package cli 是 loopctl 的命令注册表、解析器、schema 与执行流程。
-// 命令定义是唯一的事实来源：解析、schema、--help 与内置 Skill 都由它生成。
+// Package cli holds loopctl's command registry, parser, schema and execution flow.
+// The command definitions are the single source of truth: parsing, schema, --help and the built-in Skill are all
+// generated from them.
 package cli
 
 import (
@@ -9,38 +10,39 @@ import (
 	"strings"
 )
 
-// Identity 是调用身份。
+// Identity is the identity a call is made with.
 type Identity string
 
-// 两种身份。
+// The two identities.
 const (
 	IdentityAgent    Identity = "agent"
 	IdentityExternal Identity = "external"
 )
 
-// FlagType 是选项的类型。
+// FlagType is the type of an option.
 type FlagType string
 
-// 选项类型。
+// Option types.
 const (
 	TypeString      FlagType = "string"
 	TypeInt         FlagType = "int"
 	TypeBool        FlagType = "bool"
 	TypeDuration    FlagType = "duration"
-	TypeTime        FlagType = "time" // RFC 3339，例如 2026-10-13T00:00:00+08:00
+	TypeTime        FlagType = "time" // RFC 3339, for example 2026-10-13T00:00:00+08:00
 	TypeEnum        FlagType = "enum"
 	TypePath        FlagType = "path"
 	TypePathOrStdin FlagType = "path-or-stdin"
 )
 
-// Arg 是位置参数。位置参数都是必填的；Variadic 只能用于最后一个参数，表示零到多个。
+// Arg is a positional argument. Positional arguments are always required; Variadic may only be set on the last
+// argument and means zero or more values.
 type Arg struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Variadic    bool   `json:"variadic,omitempty"`
 }
 
-// Flag 是选项，名称不带前缀 --。
+// Flag is an option; its name is stored without the -- prefix.
 type Flag struct {
 	Name        string   `json:"name"`
 	Type        FlagType `json:"type"`
@@ -53,47 +55,48 @@ type Flag struct {
 	Description string   `json:"description"`
 }
 
-// ConstraintKind 是选项之间的约束。
+// ConstraintKind is a kind of constraint between options.
 type ConstraintKind string
 
-// 约束种类。
+// Constraint kinds.
 const (
-	ExactlyOne ConstraintKind = "exactlyOne" // 必须且只能提供其中一个
-	AtMostOne  ConstraintKind = "atMostOne"  // 最多提供其中一个
-	AtLeastOne ConstraintKind = "atLeastOne" // 至少提供其中一个
-	Together   ConstraintKind = "together"   // 要么都提供，要么都不提供
+	ExactlyOne ConstraintKind = "exactlyOne" // exactly one of them must be given
+	AtMostOne  ConstraintKind = "atMostOne"  // at most one of them may be given
+	AtLeastOne ConstraintKind = "atLeastOne" // at least one of them must be given
+	Together   ConstraintKind = "together"   // either all of them or none of them
 )
 
-// Constraint 约束一组选项。
+// Constraint constrains a group of options.
 type Constraint struct {
 	Kind  ConstraintKind `json:"kind"`
 	Flags []string       `json:"flags"`
-	Hint  string         `json:"hint,omitempty"` // 约束不满足时附在说明后的提示
+	Hint  string         `json:"hint,omitempty"` // hint appended to the message when the constraint is not met
 }
 
-// RunFunc 执行命令，返回 data；错误为 *output.Error 时按其类别退出。
+// RunFunc runs the command and returns data; when the error is an *output.Error, the process exits according to
+// its category.
 type RunFunc func(ctx context.Context, inv *Invocation) (any, error)
 
-// Command 是一条命令的完整定义。
+// Command is the complete definition of one command.
 type Command struct {
 	Path        []string
 	Summary     string
-	Identities  []Identity // 为空表示不需要身份（version、schema）
-	Network     bool       // 是否连接服务端
+	Identities  []Identity // empty means no identity is needed (version, schema)
+	Network     bool       // whether it connects to the server
 	Args        []Arg
 	Flags       []Flag
 	Constraints []Constraint
-	Destructive bool   // 删除类或覆盖类，必须带 --yes
-	Stdin       bool   // 可能读取标准输入（由 - 或 --token-stdin 明确要求时）
-	Retry       bool   // 请求失败时是否会自动重试
-	Output      string // 输出说明：OpenAPI 结构名，或本地结构的描述
+	Destructive bool   // deletes or overwrites; must be given --yes
+	Stdin       bool   // may read standard input (when explicitly asked for with - or --token-stdin)
+	Retry       bool   // whether a failed request is retried automatically
+	Output      string // output description: an OpenAPI schema name, or a description of a local structure
 	Run         RunFunc
 }
 
-// Name 返回以空格连接的命令路径。
+// Name returns the command path joined with spaces.
 func (c *Command) Name() string { return strings.Join(c.Path, " ") }
 
-// AllowedFor 判断身份能否使用该命令。
+// AllowedFor reports whether the identity may use the command.
 func (c *Command) AllowedFor(id Identity) bool {
 	if len(c.Identities) == 0 {
 		return true
@@ -106,7 +109,7 @@ func (c *Command) AllowedFor(id Identity) bool {
 	return false
 }
 
-// flag 按名称查找本命令声明的选项（不含全局选项）。
+// flag looks up an option declared by this command by name (global options are not included).
 func (c *Command) flag(name string) (Flag, bool) {
 	for _, f := range c.Flags {
 		if f.Name == name {
@@ -116,13 +119,13 @@ func (c *Command) flag(name string) (Flag, bool) {
 	return Flag{}, false
 }
 
-// YesFlag 是删除类与覆盖类命令自动带上的确认选项。
+// YesFlag is the confirmation option added automatically to commands that delete or overwrite.
 var YesFlag = Flag{Name: "yes", Type: TypeBool, Description: "Confirm a deletion or overwrite; without it no request is sent"}
 
-// HelpFlag 对所有命令都可用。
+// HelpFlag is available on every command.
 var HelpFlag = Flag{Name: "help", Type: TypeBool, Description: "Print this command's description (same as schema <command path>) without running it"}
 
-// ConnectionFlags 是连接服务端的命令接受的全局选项。
+// ConnectionFlags are the global options accepted by commands that connect to the server.
 var ConnectionFlags = []Flag{
 	{Name: "profile", Type: TypeString, Description: "External identity: choose a profile from the config file; defaults to LOOPCTL_PROFILE, then default"},
 	{Name: "server", Type: TypeString, Description: "External identity: root address of the external port (https://); takes precedence over LOOPCTL_URL and the profile"},
@@ -130,19 +133,20 @@ var ConnectionFlags = []Flag{
 	{Name: "timeout", Type: TypeDuration, Description: "Timeout for a single request, for example 30s; takes precedence over LOOPCTL_TIMEOUT; default 60s"},
 }
 
-// Registry 是命令树。
+// Registry is the command tree.
 type Registry struct {
 	commands []*Command
-	groups   map[string]string // 命令组路径 → 说明
+	groups   map[string]string // command group path -> summary
 }
 
-// NewRegistry 创建空注册表。
+// NewRegistry creates an empty registry.
 func NewRegistry() *Registry { return &Registry{groups: map[string]string{}} }
 
-// Group 声明一个命令组的说明。
+// Group declares the summary of a command group.
 func (r *Registry) Group(path, summary string) { r.groups[path] = summary }
 
-// Add 注册命令；路径重复、命令与命令组同名、父路径既非命令也非命令组时 panic，由测试发现。
+// Add registers a command. It panics when the path is a duplicate, when a command has the same name as a command
+// group, or when a parent path is neither a command nor a command group; tests catch these.
 func (r *Registry) Add(c *Command) {
 	name := c.Name()
 	for _, x := range r.commands {
@@ -167,14 +171,14 @@ func (r *Registry) Add(c *Command) {
 	r.commands = append(r.commands, c)
 }
 
-// Commands 返回全部命令，按路径排序。
+// Commands returns all commands, sorted by path.
 func (r *Registry) Commands() []*Command {
 	out := append([]*Command(nil), r.commands...)
 	sort.Slice(out, func(i, j int) bool { return out[i].Name() < out[j].Name() })
 	return out
 }
 
-// Find 按完整路径查找命令。
+// Find looks up a command by its full path.
 func (r *Registry) Find(path ...string) *Command {
 	name := strings.Join(path, " ")
 	for _, c := range r.commands {
@@ -185,13 +189,13 @@ func (r *Registry) Find(path ...string) *Command {
 	return nil
 }
 
-// isGroup 判断路径是否是命令组。
+// isGroup reports whether the path is a command group.
 func (r *Registry) isGroup(path []string) bool {
 	_, ok := r.groups[strings.Join(path, " ")]
 	return ok
 }
 
-// children 返回命令组的直接子项名称（子命令组与命令）。
+// children returns the names of the direct children of a command group (sub-groups and commands).
 func (r *Registry) children(path []string) []string {
 	seen := map[string]bool{}
 	for _, c := range r.commands {
@@ -219,7 +223,8 @@ func equalPrefix(p, prefix []string) bool {
 	return true
 }
 
-// effectiveFlags 返回命令实际接受的选项：自身选项、连接选项（仅连接服务端的命令）与 --help。
+// effectiveFlags returns the options a command actually accepts: its own options, the connection options (only
+// for commands that connect to the server) and --help.
 func effectiveFlags(c *Command) []Flag {
 	out := append([]Flag(nil), c.Flags...)
 	if c.Network {

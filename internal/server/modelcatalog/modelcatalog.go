@@ -1,4 +1,4 @@
-// Package modelcatalog 用固定版本 Pi 的原生运行时读取模型目录（离线）。
+// Package modelcatalog reads the model catalog (offline) with the native runtime of a pinned Pi version.
 package modelcatalog
 
 import (
@@ -20,7 +20,7 @@ import (
 //go:embed catalog.mjs
 var script []byte
 
-// Model 是目录中的一个模型。
+// Model is one model in the catalog.
 type Model struct {
 	ThinkingLevels       []string `json:"thinkingLevels"`
 	DefaultThinkingLevel string   `json:"defaultThinkingLevel"`
@@ -32,20 +32,20 @@ type Model struct {
 	Input                []string `json:"input"`
 }
 
-// Provider 是目录中的一个提供方。
+// Provider is one provider in the catalog.
 type Provider struct {
 	ID string `json:"id"`
-	// Name 是提供方自己给的显示名；Pi 内置与 models.json 的提供方没有。
+	// Name is the display name the provider gives itself; providers built into Pi and from models.json have none.
 	Name   string `json:"name,omitempty"`
 	Source string `json:"source"`
-	// PluginID 是注册它的插件（Source 为 plugin 时）。
+	// PluginID is the plugin that registered it (when Source is plugin).
 	PluginID      *string  `json:"pluginId,omitempty"`
 	APIKeyEnvVars []string `json:"apiKeyEnvVars"`
 	AuthMethods   []string `json:"authMethods"`
 	Models        []Model  `json:"models"`
 }
 
-// Catalog 是一次加载产生的不可变模型目录。
+// Catalog is an immutable model catalog produced by one load.
 type Catalog struct {
 	PiVersion      string
 	GeneratedAt    *time.Time
@@ -55,7 +55,7 @@ type Catalog struct {
 	providerConfig map[string]json.RawMessage
 }
 
-// Reader 是模型目录的当前读取入口；Catalog 与 Registry 都实现它。
+// Reader is the current read entry point of the model catalog; both Catalog and Registry implement it.
 type Reader interface {
 	Snapshot() *Catalog
 	Provider(string) (*Provider, bool)
@@ -65,18 +65,18 @@ type Reader interface {
 	ModelsJSONFor(string) ([]byte, string)
 }
 
-// Options 是读取目录所需的参数。
+// Options are the parameters needed to read the catalog.
 type Options struct {
-	NodeBin      string // node 的绝对路径
+	NodeBin      string // absolute path of node
 	PiAIDir      string
-	PiPackageDir string // 自定义配置需要 Pi 主程序的 ModelRuntime
-	PiVersion    string // pi-ai 的版本必须与之相等
-	Path         string // 运行 node 时的 PATH
+	PiPackageDir string // custom config needs the ModelRuntime of the Pi main program
+	PiVersion    string // the pi-ai version must equal this
+	Path         string // PATH when running node
 	ModelsJSON   []byte
 	Revision     int64
 }
 
-// Load 运行内嵌脚本读取目录，并校验 pi-ai 版本与原生 models.json。
+// Load runs the embedded script to read the catalog and validates the pi-ai version and the native models.json.
 func Load(ctx context.Context, o Options) (*Catalog, error) {
 	tmp, err := os.MkdirTemp("", "loopnow-catalog-")
 	if err != nil {
@@ -102,7 +102,7 @@ func Load(ctx context.Context, o Options) (*Catalog, error) {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, o.NodeBin, args...)
-	// 空环境：只给 PATH 与临时 HOME，不传服务端的任何变量。
+	// Empty environment: only PATH and a temporary HOME, none of the server's variables are passed.
 	cmd.Env = []string{"PATH=" + o.Path, "HOME=" + tmp, "PI_OFFLINE=1"}
 	cmd.Dir = tmp
 	var stdout, stderr bytes.Buffer
@@ -138,7 +138,7 @@ func Load(ctx context.Context, o Options) (*Catalog, error) {
 	return c, nil
 }
 
-// New 用给定数据构造目录；也供测试使用。
+// New builds a catalog from the given data; also used by tests.
 func New(piVersion string, generatedAt *time.Time, providers []Provider) *Catalog {
 	c := &Catalog{PiVersion: piVersion, GeneratedAt: generatedAt, Providers: providers, byID: map[string]*Provider{}, providerConfig: map[string]json.RawMessage{}}
 	sort.Slice(c.Providers, func(i, j int) bool { return c.Providers[i].ID < c.Providers[j].ID })
@@ -175,7 +175,7 @@ func New(piVersion string, generatedAt *time.Time, providers []Provider) *Catalo
 
 func (c *Catalog) Snapshot() *Catalog { return c }
 
-// ModelsJSONFor 返回只含所选 Provider 的原生配置及其稳定身份。
+// ModelsJSONFor returns the native config containing only the selected Provider, and its stable identity.
 func (c *Catalog) ModelsJSONFor(provider string) ([]byte, string) {
 	if c == nil {
 		return nil, ""
@@ -191,7 +191,7 @@ func (c *Catalog) ModelsJSONFor(provider string) ([]byte, string) {
 	return data, ConfigIdentity(data)
 }
 
-// ConfigIdentity 是冻结 models.json 片段的稳定进程重建身份。
+// ConfigIdentity is the stable process-rebuild identity of a captured models.json fragment.
 func ConfigIdentity(data []byte) string {
 	if len(data) == 0 {
 		return ""
@@ -221,13 +221,13 @@ func (c *Catalog) ResolveThinking(provider, modelID string, selected *string) (s
 	return "", fmt.Errorf("模型目录中没有模型 %s/%s", provider, modelID)
 }
 
-// Provider 按 ID 查找提供方。
+// Provider looks up a provider by ID.
 func (c *Catalog) Provider(id string) (*Provider, bool) {
 	p, ok := c.byID[id]
 	return p, ok
 }
 
-// HasModel 判断模型是否在目录中。
+// HasModel reports whether the model is in the catalog.
 func (c *Catalog) HasModel(provider, modelID string) bool {
 	p, ok := c.byID[provider]
 	if !ok {

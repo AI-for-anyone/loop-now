@@ -1,4 +1,4 @@
-// Package taskmodel 保存服务端任务契约的数据类型，不包含执行或存储行为。
+// Package taskmodel holds the data types of the server's task contract; it contains no execution or storage behavior.
 package taskmodel
 
 import (
@@ -9,8 +9,9 @@ import (
 	"loop-now/internal/server/workflow"
 )
 
-// Summary 是任务对象（api/openapi.yaml 的 TaskSummary）。Number 是任务在项目里的编号（控制台显示为 #12）：
-// 从 1 开始，创建时由存储层分配，之后不变、不重用。
+// Summary is the task object (TaskSummary in api/openapi.yaml). Number is the task's number within the project (shown
+// as #12 in the console): it starts at 1, is assigned by the storage layer on creation, and never changes or gets
+// reused.
 type Summary struct {
 	ID               uuid.UUID  `json:"id"`
 	ProjectID        uuid.UUID  `json:"projectId"`
@@ -82,7 +83,7 @@ type Detail struct {
 	Cleanup           string              `json:"cleanup"`
 }
 
-// Record 是数据库中原子保存的聚合，计数等内部字段不进入API。
+// Record is the aggregate saved atomically in the database; internal fields such as counts do not go into the API.
 type Record struct {
 	CreationRequestID    *uuid.UUID     `json:"creationRequestId,omitempty"`
 	SourceInboxMessageID *uuid.UUID     `json:"sourceInboxMessageId,omitempty"`
@@ -133,7 +134,7 @@ type Page struct {
 	NextCursor *string   `json:"nextCursor"`
 }
 
-// Counts 是项目里未结束的任务按状态的计数（api/openapi.yaml 的 TaskCounts）。
+// Counts are the counts of the project's unfinished tasks by status (TaskCounts in api/openapi.yaml).
 type Counts struct {
 	Preparing int64 `json:"preparing"`
 	Running   int64 `json:"running"`

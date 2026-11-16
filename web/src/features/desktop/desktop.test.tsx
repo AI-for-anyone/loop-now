@@ -11,7 +11,8 @@ import { baseHandlers } from '@/test/shell'
 import { makeTaskDetail, nodeId, taskId } from '@/test/tasks'
 import type { DesktopBridge } from './desktop'
 
-// 桌面壳的窗口里：收件箱事件交给它显示 Dock 未读数与系统通知，点通知后由它把地址交回页面；页面顶部留出拖动窗口的区域。
+// Inside the desktop shell's window: inbox events are handed to the shell to show the Dock unread count and system notifications, and
+// when a notification is clicked the shell hands the address back to the page; the top of the page leaves room for dragging the window.
 const agent = makeAgent({ name: '审查员' })
 const question = (overrides: Partial<Schemas['InboxMessage']> = {}) =>
   summaryOf(

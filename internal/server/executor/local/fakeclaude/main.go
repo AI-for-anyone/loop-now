@@ -1,29 +1,34 @@
-// Command fakeclaude 是测试用的假 Claude Code：说与 claude -p --input-format/--output-format stream-json 相同的协议，
-// 不联网、不读任何凭证。它还回答 --version、auth status --json（带上 email 等字段，用来核对平台丢弃它们）与 purge。
+// Command fakeclaude is a fake Claude Code for tests: it speaks the same protocol as claude -p
+// --input-format/--output-format stream-json, without network access and without reading any credentials. It also
+// answers --version, auth status --json (including fields such as email, to check that the platform drops them) and
+// purge.
 //
-// 每条 user 消息的文字决定回复：
+// The text of each user message decides the reply:
 //
-//	fake:history     回复 history=<这个会话里此前的 user 消息数>（接续或分叉的会话也算）
-//	fake:env         回复平台关心的环境变量（JSON）
-//	fake:args        回复启动参数（JSON）
-//	fake:images      回复 images=<图片数>
-//	fake:tool <命令> 调用一次 Bash 工具再回复 ran
-//	fake:tool2 <命令> 同上，但工具调用只出现在完整的 assistant 消息里，结果为错误，回复 ran2
-//	fake:bigline     输出很长的一行后不再输出
-//	fake:subagent    先输出一段子 Agent 的文字（parent_tool_use_id 非空），再回复 main
-//	fake:error <msg> 这一轮以错误结束
-//	fake:notloggedin 像未登录时那样以 api_error 结束
-//	fake:slow        每 50ms 输出一个点，直到被打断（控制消息或 SIGINT）
-//	fake:noack       同上，但不回应打断控制消息，只能靠 SIGINT
-//	fake:exit        输出一点文字后以退出码 3 退出
-//	fake:ratelimit   先输出 rate_limit_event 再回复
-//	fake:usage2      result 里有两个模型的用量
-//	其他             回复 echo: <文字>
+//	fake:history       reply history=<number of earlier user messages in this session> (continued or forked sessions count too)
+//	fake:env           reply with the environment variables the platform cares about (JSON)
+//	fake:args          reply with the startup arguments (JSON)
+//	fake:images        reply images=<number of images>
+//	fake:tool <cmd>    call the Bash tool once, then reply ran
+//	fake:tool2 <cmd>   same, but the tool call appears only in the full assistant message and its result is an error; reply ran2
+//	fake:bigline       print one very long line, then print nothing more
+//	fake:subagent      first print some sub-Agent text (non-empty parent_tool_use_id), then reply main
+//	fake:error <msg>   end the turn with an error
+//	fake:notloggedin   end with api_error, as when not logged in
+//	fake:slow          print a dot every 50ms until interrupted (control message or SIGINT)
+//	fake:noack         same, but do not answer the interrupt control message, so only SIGINT works
+//	fake:exit          print a little text, then exit with exit code 3
+//	fake:ratelimit     print a rate_limit_event first, then reply
+//	fake:usage2        result carries usage for two models
+//	anything else      reply echo: <text>
 //
-// 环境变量：FAKECLAUDE_VERSION 改版本号；FAKECLAUDE_EXIT_AT_START=1 启动即报不认识的选项并退出；FAKECLAUDE_NO_INIT=1 收到消息也不输出；
-// FAKECLAUDE_LOGGED_IN=0 或 HOME 下有 .fakeclaude-logged-out 让 auth status 报未登录；FAKECLAUDE_AUTH_FAIL=1 让 auth status 失败；
-// FAKECLAUDE_NO_TRANSCRIPT=1 不写会话记录（模拟平台找不到它）；FAKECLAUDE_EXTRA_SKILLS（逗号分隔）加进 init 的技能列表，模拟 claude 新增的自带技能；
-// FAKECLAUDE_ARGS_FILE 每次启动追加一行参数（JSON）；purge 调用记在 FAKECLAUDE_LOG 与 HOME 下的 .fakeclaude-purge.log（每次一行：purge <路径> -y）。
+// Environment variables: FAKECLAUDE_VERSION changes the version; FAKECLAUDE_EXIT_AT_START=1 reports an unknown option
+// and exits right at startup; FAKECLAUDE_NO_INIT=1 prints nothing even when a message arrives; FAKECLAUDE_LOGGED_IN=0,
+// or a .fakeclaude-logged-out file under HOME, makes auth status report logged out; FAKECLAUDE_AUTH_FAIL=1 makes auth
+// status fail; FAKECLAUDE_NO_TRANSCRIPT=1 writes no session record (simulating the platform not finding it);
+// FAKECLAUDE_EXTRA_SKILLS (comma-separated) is added to the Skill list in init, simulating bundled Skills added by a
+// new claude; FAKECLAUDE_ARGS_FILE gets one line of arguments (JSON) appended per start; purge calls are logged to
+// FAKECLAUDE_LOG and to .fakeclaude-purge.log under HOME (one line each: purge <path> -y).
 package main
 
 import (
@@ -94,9 +99,10 @@ func authStatus() {
 		os.Exit(2)
 	}
 	home, _ := os.UserHomeDir()
-	// auth status 由平台以最小的环境运行，测试改用 HOME 下的标记文件控制。
+	// The platform runs auth status with a minimal environment, so tests control it with a marker file under HOME
+	// instead.
 	_, loggedOut := os.Stat(filepath.Join(home, ".fakeclaude-logged-out"))
-	// 与真的 claude 一样：没有 USER 时找不到本机的登录。
+	// Like the real claude: without USER it cannot find the local login.
 	loggedIn := os.Getenv("FAKECLAUDE_LOGGED_IN") != "0" && loggedOut != nil && os.Getenv("USER") != ""
 	method := "claude.ai"
 	if !loggedIn {
@@ -107,13 +113,13 @@ func authStatus() {
 		"configDirectory": filepath.Join(home, ".claude"), "projectsDirectory": filepath.Join(home, ".claude", "projects"), "analyticsDisabled": false, "storedClaudeAiLogin": true})
 	fmt.Println(string(b))
 	if !loggedIn {
-		os.Exit(1) // 真的 claude 未登录时以 1 退出，但照常输出 JSON
+		os.Exit(1) // the real claude exits with 1 when not logged in, but still prints the JSON
 	}
 }
 
 func purge(args []string) {
 	home, _ := os.UserHomeDir()
-	// purge 也由平台以最小的环境运行：除 FAKECLAUDE_LOG 外，也记在 HOME 下。
+	// The platform also runs purge with a minimal environment: besides FAKECLAUDE_LOG, it is also logged under HOME.
 	for _, f := range []string{os.Getenv("FAKECLAUDE_LOG"), filepath.Join(home, ".fakeclaude-purge.log")} {
 		if f == "" {
 			continue
@@ -126,13 +132,13 @@ func purge(args []string) {
 	fmt.Println("Purged 1 item(s).")
 }
 
-// flags 是假 claude 关心的启动参数。
+// flags are the startup arguments the fake claude cares about.
 type flags struct {
 	model, sessionID, resume string
 	fork                     bool
 	tools                    []string
 	mcp                      []string
-	skills                   []string // 来自 --plugin-dir 的技能（<插件名>:<技能名>）与 FAKECLAUDE_EXTRA_SKILLS
+	skills                   []string // Skills from --plugin-dir (<plugin name>:<Skill name>) and FAKECLAUDE_EXTRA_SKILLS
 }
 
 func parse(args []string) flags {
@@ -203,13 +209,15 @@ func projectsDir() string {
 	return filepath.Join(home, ".claude", "projects")
 }
 
-// transcript 是会话记录：放在 ~/.claude/projects/<工作目录编码> 下，编码与平台用同一个函数（解析之后的那个）。
+// transcript is the session record: it lives under ~/.claude/projects/<encoded working directory>, encoded with the
+// same function the platform uses (the one applied after path resolution).
 func transcript(id string) string {
 	cwd, _ := os.Getwd()
 	return filepath.Join(projectsDir(), claudecli.ProjectDirName(cwd), id+".jsonl")
 }
 
-// history 读出要接续的会话里已有的 user 消息数：resume 是 .jsonl 路径时读它，否则按会话 ID 在 projects 下找。
+// history reads the number of user messages already in the session to continue: when resume is a .jsonl path it reads
+// that file, otherwise it looks up the session ID under projects.
 func history(resume string) (int, []string) {
 	path := resume
 	if !strings.HasSuffix(resume, ".jsonl") {
@@ -279,7 +287,7 @@ func openSession(f flags) *session {
 	return s
 }
 
-// inbound 是 stdin 上的一行。
+// inbound is one line on stdin.
 type inbound struct {
 	Type      string `json:"type"`
 	RequestID string `json:"request_id"`
@@ -384,13 +392,13 @@ func turn(f flags, sess *session, model, text string, images, prior int, lines c
 		emit(map[string]any{"type": "user", "parent_tool_use_id": nil, "message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "tool_result", "tool_use_id": id, "content": "ok", "is_error": false}}}})
 		reply(model, "ran")
 	case "fake:tool2":
-		// 工具调用只出现在完整的 assistant 消息里（没有 content_block_start）。
+		// The tool call appears only in the full assistant message (no content_block_start).
 		id := "toolu_fake_2"
 		emit(map[string]any{"type": "assistant", "parent_tool_use_id": nil, "message": map[string]any{"id": "msg_tool2", "model": model, "content": []any{map[string]any{"type": "tool_use", "id": id, "name": "Bash", "input": map[string]any{"command": arg}}}}})
 		emit(map[string]any{"type": "user", "parent_tool_use_id": nil, "message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "tool_result", "tool_use_id": id, "content": "ok", "is_error": true}}}})
 		reply(model, "ran2")
 	case "fake:bigline":
-		// 一行很长的输出，之后不再输出（读方若停读，这里会卡住）。
+		// One very long line of output, then nothing more (if the reader stops reading, this blocks).
 		stream(nil, map[string]any{"type": "content_block_delta", "index": 0, "delta": map[string]any{"type": "text_delta", "text": strings.Repeat("x", 8192)}})
 		time.Sleep(30 * time.Second)
 		return
@@ -453,7 +461,7 @@ func stream(parent *string, event map[string]any) {
 	emit(map[string]any{"type": "stream_event", "event": event, "parent_tool_use_id": parent})
 }
 
-// reply 以流式文字加完整的 assistant 消息给出一段回复。
+// reply gives a reply as streamed text plus the full assistant message.
 func reply(model, text string) {
 	lastReply = text
 	stream(nil, map[string]any{"type": "message_start", "message": map[string]any{"id": "msg_reply", "model": model}})
@@ -481,7 +489,8 @@ func result(fields map[string]any, usage map[string]any) {
 	emit(m)
 }
 
-// envReport 是平台关心的环境变量：目录、PATH、loopctl，以及不该出现的 Anthropic／Claude 变量名。
+// envReport lists the environment variables the platform cares about: directories, PATH, loopctl, and Anthropic/Claude
+// variable names that must not be present.
 func envReport() string {
 	var forbidden []string
 	for _, kv := range os.Environ() {

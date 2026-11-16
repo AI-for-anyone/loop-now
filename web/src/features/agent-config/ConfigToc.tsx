@@ -13,7 +13,7 @@ const titles: Record<SectionKey, string> = {
   danger: t.config.danger.title,
 }
 
-// 配置页的分区目录：共用的 SectionToc（项目设置也用它），删除 Agent 一项是红色。
+// The config page's section contents: the shared SectionToc (project settings use it too), with the Delete Agent entry in red.
 export function ConfigToc({ className }: { className?: string }) {
   const items = SECTION_KEYS.map((key) => ({ id: sectionId(key), titleId: sectionTitleId(key), title: titles[key], danger: key === 'danger' }))
   return <SectionToc label={t.config.toc.title} items={items} className={className} />

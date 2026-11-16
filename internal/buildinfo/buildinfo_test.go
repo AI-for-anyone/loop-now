@@ -50,7 +50,7 @@ func TestVersionPrefersInjected(t *testing.T) {
 	}
 }
 
-// 打印当前版本，便于用 -ldflags 手动核对注入：
+// Print the current version, to check injection by hand with -ldflags:
 //
 //	go test -run TestVersionReport -v -ldflags "-X loop-now/internal/buildinfo.version=1.2.3" ./internal/buildinfo/
 func TestVersionReport(t *testing.T) {

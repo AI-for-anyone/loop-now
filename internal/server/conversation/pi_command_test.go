@@ -24,8 +24,9 @@ func TestPiCommandParse(t *testing.T) {
 	}
 }
 
-// 对话页的 /pi:<name>：保存与显示用原文，发给 Pi 的是 /<name>（不加运行 ID）；Pi 直接处理时这一轮 completed、没有回复、piCommand.handled；
-// 不带 pi: 的 /xxx 照旧加运行 ID 交给 Agent。
+// /pi:<name> on the conversation page: the original text is saved and displayed, and /<name> is sent to Pi (without the
+// run ID); when Pi handles it directly the turn is completed, has no reply, and has piCommand.handled; a /xxx without
+// pi: still gets the run ID and goes to the Agent as before.
 func TestPiCommandRuns(t *testing.T) {
 	e := newEnv(t)
 	e.mustSend("/pi:handled-cmd gui", "")

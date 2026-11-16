@@ -11,7 +11,8 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// 准备重试时，上次失败留下的工作区与复制中的半成品先删除，再完整复制基础 Agent 的文件夹。
+// When preparation is retried, the workspace left by the last failure and the partial copy are deleted first, and then
+// the base Agent's folder is copied in full.
 func TestCopyWorkspaceReplacesLeftovers(t *testing.T) {
 	work := t.TempDir()
 	s := &Source{WorkRoot: work}

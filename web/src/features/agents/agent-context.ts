@@ -1,7 +1,8 @@
 import { useOutletContext } from 'react-router'
 import type { Schemas } from '@/api/client'
 
-// 头部状态贴纸显示的状态：会话是否丢失、是否正忙，以及当前执行的阶段文字（没有进行中的执行时为 null）。
+// The state shown by the status sticker in the header: whether the session is lost, whether the Agent is busy, and the
+// phase text of the current run (null when no run is in progress).
 export interface AgentStickerState {
   sessionMissing: boolean
   busy: boolean
@@ -9,8 +10,9 @@ export interface AgentStickerState {
   sleep?: Schemas['SleepInfo'] | null
 }
 
-// Agent 详情页通过路由出口把当前 Agent 交给“对话”和“配置”页签。
-// 对话页收到快照后用 reportLiveStatus 把实时状态交给头部贴纸，离开时传 null，头部回到轮询的状态。
+// The Agent detail page passes the current Agent to the “对话” (Chat) and “配置” (Config) tabs through the route outlet.
+// Once the Chat tab receives a snapshot, it hands the live status to the header sticker with reportLiveStatus; when it is
+// left it passes null, and the header goes back to the polled status.
 export interface AgentOutletContext {
   agent: Schemas['Agent']
   reportLiveStatus: (state: AgentStickerState | null) => void

@@ -201,7 +201,8 @@ func TestGitHubAppDeletionEndsActualPendingRequest(t *testing.T) {
 			if err := s.a.Store.Pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM project_cli_versions WHERE account_id=$1),(SELECT count(*) FROM github_cli_identities WHERE account_id=$1)`, first.Account.ID).Scan(&versions, &identities); err != nil {
 				t.Fatal(err)
 			}
-			// 没有进行中任务在用，删除账号和删除项目一样清掉版本与身份（迁移 030 起的清理规则）。
+			// With no running task using them, deleting the account clears versions and identities just like deleting
+			// the project (the cleanup rule since migration 030).
 			if versions != 0 || identities != 0 {
 				t.Fatal(kind + " deletion retained credential/history")
 			}

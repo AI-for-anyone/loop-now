@@ -46,7 +46,7 @@ func addCatalog(r *cli.Registry) {
 	})
 }
 
-// withAgent 先把第一个位置参数解析为 Agent ID，再执行 fn。
+// withAgent first resolves the first positional argument to an Agent ID and then runs fn.
 func withAgent(fn func(ctx context.Context, inv *cli.Invocation, id string) (any, error)) cli.RunFunc {
 	return func(ctx context.Context, inv *cli.Invocation) (any, error) {
 		id, err := agentID(ctx, inv, inv.Args[0])
@@ -57,7 +57,7 @@ func withAgent(fn func(ctx context.Context, inv *cli.Invocation, id string) (any
 	}
 }
 
-// agentFields 组装创建与修改 Agent 的请求体。
+// agentFields assembles the request body for creating and updating an Agent.
 func agentFields(inv *cli.Invocation) (map[string]any, error) {
 	body := map[string]any{}
 	if inv.Has("name") {

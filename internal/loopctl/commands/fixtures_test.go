@@ -1,6 +1,8 @@
 package commands_test
 
-// 符合 api/openapi.yaml 的样例响应（已包含 add-observability、add-project-layer 与 add-inbox-and-external-access 的字段）。契约文件更新后，按新契约同步修改这里。
+// Sample responses that match api/openapi.yaml (already including the fields from add-observability,
+// add-project-layer and add-inbox-and-external-access). When the contract file is updated, update these to match
+// the new contract.
 
 const now = "2026-10-13T00:00:00Z"
 

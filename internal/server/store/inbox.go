@@ -18,31 +18,32 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// ---------- 参与方 ----------
+// ---------- Parties ----------
 
-// Party 是 Inbox 消息的一方：Agent、控制台操作者、外部身份或插件。
+// Party is one side of an Inbox message: an Agent, the console operator, an external identity or a plugin.
 type Party struct {
-	RuntimeID uuid.UUID // 非零时是任务实例，不能读取常态或其他任务Inbox
+	RuntimeID uuid.UUID // when non-zero, it is a task instance and cannot read the regular or another task's Inbox
 	Kind      string    // agent / console / external / plugin
-	ID        uuid.UUID // Agent ID、外部身份 ID 或插件一方（plugin_parties）的 ID；控制台操作者为 uuid.Nil
+	ID        uuid.UUID // Agent ID, external identity ID or plugin party ID (plugin_parties); uuid.Nil for the console
 }
 
-// pluginPartyNamespace 是插件一方 ID 的命名空间：每个插件对应一个固定的 ID。
+// pluginPartyNamespace is the namespace for plugin party IDs: each plugin maps to one fixed ID.
 var pluginPartyNamespace = uuid.MustParse("6f1c9a4e-5d2b-4e8a-9c3f-2b7d0e1a8c55")
 
-// PluginParty 返回插件作为 Inbox 一方的参与方。
+// PluginParty returns the party for a plugin acting as one side of the Inbox.
 func PluginParty(plugin string) Party {
 	return Party{Kind: "plugin", ID: uuid.NewSHA1(pluginPartyNamespace, []byte(plugin))}
 }
 
-// ConsoleParty 是控制台操作者。
+// ConsoleParty is the console operator.
 var ConsoleParty = Party{Kind: "console"}
 
-// AgentParty 与 IdentityParty 构造对应的参与方。
+// AgentParty and IdentityParty build the corresponding parties.
 func AgentParty(id uuid.UUID) Party    { return Party{Kind: "agent", ID: id} }
 func IdentityParty(id uuid.UUID) Party { return Party{Kind: "external", ID: id} }
 
-// cond 返回“side 一方是 p”的 SQL 条件；side 为 from 或 to，arg 是 p.ID 的占位符序号（控制台不使用）。
+// cond returns the SQL condition "the side party is p"; side is from or to, and arg is the placeholder number for
+// p.ID (unused for the console).
 func (p Party) cond(alias, side string, arg int) string {
 	switch p.Kind {
 	case "agent":
@@ -83,7 +84,7 @@ func (p Party) pluginPartyID() *uuid.UUID {
 	return nil
 }
 
-// PluginAddress 是插件一方的地址：plugin:<插件 id>，有渠道时加 /<渠道>。
+// PluginAddress is the address of a plugin party: plugin:<plugin id>, plus /<channel> when there is a channel.
 func PluginAddress(v PartyView) string {
 	if v.ChannelID == "" {
 		return "plugin:" + v.PluginID
@@ -91,24 +92,25 @@ func PluginAddress(v PartyView) string {
 	return "plugin:" + v.PluginID + "/" + v.ChannelID
 }
 
-// PartyView 是参与方的展示信息，地址由调用方按名称生成。
+// PartyView is the display information of a party; the caller builds the address from the names.
 type PartyView struct {
 	TaskID    *uuid.UUID
-	ProjectID *uuid.UUID // Agent 所属项目；平台 Agent 与其他参与方为空
+	ProjectID *uuid.UUID // project of the Agent; nil for a platform Agent and for other parties
 	Party
-	Name        string // Agent 名或外部身份名；控制台为空
-	OrgName     string // Agent 所属项目的组织名与项目名；平台 Agent 为空
+	Name        string // Agent name or external identity name; empty for the console
+	OrgName     string // organization and project names of the Agent's project; empty for a platform Agent
 	ProjectName string
-	Platform    bool // 平台持有的 Agent
-	Deleted     bool // Agent、外部身份已删除，或插件已卸载
-	// PluginID 与 ChannelID：插件一方的插件与这条消息的渠道（没有渠道时为空）；Name 为这条消息上插件的发件名称。
+	Platform    bool // an Agent owned by the platform
+	Deleted     bool // the Agent or external identity is deleted, or the plugin is uninstalled
+	// PluginID and ChannelID: the plugin of a plugin party and the channel of this message (empty when there is no
+	// channel); Name is the plugin's sender name on this message.
 	PluginID  string
 	ChannelID string
 }
 
-// ---------- 消息 ----------
+// ---------- Messages ----------
 
-// InboxMessage 是一条 Inbox 消息；列表中 Text 只有前若干个字符（Preview 为 true）。
+// InboxMessage is one Inbox message; in lists, Text holds only the first few characters (Preview is true).
 type InboxMessage struct {
 	Images    []messageimage.Ref
 	Question  *InboxQuestion
@@ -121,28 +123,32 @@ type InboxMessage struct {
 	To        PartyView
 	Text      string
 	Preview   string
-	WhenBusy  string // 发给人时为空
+	WhenBusy  string // empty when sent to a person
 	CreatedAt time.Time
 	ReadAt    *time.Time
-	// CancelledAt 不为空表示这条排队消息已被人取消：收件方不再处理，不计为未读。
+	// A non-nil CancelledAt means a person cancelled this queued message: the recipient no longer handles it, and it
+	// does not count as unread.
 	CancelledAt *time.Time
-	// ReminderRunID 与 ReminderTurnID 是承载这条消息的平台提醒（常态 Agent）或任务轮次（任务实例的非严格消息）。
+	// ReminderRunID and ReminderTurnID are the platform reminder (regular Agent) or task turn (non-strict message of a
+	// task instance) that carries this message.
 	ReminderRunID  *uuid.UUID
 	ReminderTurnID *uuid.UUID
-	// Task 是消息所属的任务实例：发件方是任务实例时取发件方，否则取收件方；都不是时为空。
+	// Task is the task instance the message belongs to: the sender when the sender is a task instance, otherwise the
+	// recipient; nil when neither is.
 	Task *InboxTaskRef
 }
 
-// InboxTaskRef 对应 InboxTaskRef。NodeRunID 由 inboxNodeSQL 得出，无法确定时为空。
+// InboxTaskRef corresponds to InboxTaskRef. NodeRunID comes from inboxNodeSQL and is nil when it cannot be determined.
 type InboxTaskRef struct {
 	TaskID    uuid.UUID  `json:"taskId"`
 	NodeRunID *uuid.UUID `json:"nodeRunId"`
 	RuntimeID uuid.UUID  `json:"runtimeId"`
 }
 
-// inboxNodeSQL 是消息 a 归属的任务节点，按顺序取第一个能确定的：严格节点消息的绑定；
-// 任务提问及回复它的消息取问题的绑定；发给任务实例的其他消息取承载它的提醒轮次；
-// 否则取该任务实例在消息时间或之前最近一次开始的轮次。与任务实例无关或都无法确定时为 NULL。
+// inboxNodeSQL is the task node that message a belongs to, taking the first one that can be determined, in order: the
+// binding of a strict node message; for a task question and the messages replying to it, the question's binding; for
+// other messages to a task instance, the reminder turn that carries it; otherwise the task instance's most recent turn
+// that started at or before the message time. NULL when it is unrelated to a task instance or none can be determined.
 func inboxNodeSQL(a string) string {
 	return strings.ReplaceAll(`coalesce(
  (SELECT nb.node_run_id FROM task_node_inbox_messages nb WHERE nb.message_id=$m.id),
@@ -151,7 +157,7 @@ func inboxNodeSQL(a string) string {
  (SELECT tt.node_run_id FROM task_turns tt WHERE tt.runtime_id=coalesce($m.from_runtime_id,$m.to_runtime_id) AND tt.node_run_id IS NOT NULL AND tt.started_at<=$m.created_at ORDER BY tt.started_at DESC,tt.id DESC LIMIT 1))`, "$m", a)
 }
 
-// partyJoin 生成某一方的 JOIN 与列；p 为别名前缀，side 为 from 或 to。
+// partyJoin builds the JOINs and columns for one party; p is the alias prefix and side is from or to.
 func partyJoin(p, side string) (cols, joins string) {
 	r := strings.NewReplacer("$p", p, "$s", side)
 	cols = r.Replace(`m.$s_kind, coalesce(m.$s_agent_id, m.$s_identity_id, m.$s_plugin_party_id, '00000000-0000-0000-0000-000000000000'),
@@ -175,7 +181,8 @@ func inboxSelect(previewChars int) string {
 	fc, fj := partyJoin("f", "from")
 	tc, tj := partyJoin("t", "to")
 	n := strconv.Itoa(previewChars)
-	// 提问与回答拼成 JSON：嵌套的 JSON 列要包 json()，时间用 iso_time() 转成 Go 能解析的字符串。
+	// Questions and answers are assembled into JSON: nested JSON columns must be wrapped in json(), and times are
+	// converted with iso_time() into strings Go can parse.
 	return `SELECT m.id, m.thread_id, m.in_reply_to, m.text, substr(m.text, 1, ` + n + `), coalesce(m.when_busy, ''),
 		m.created_at, m.read_at, ` + fc + `, ` + tc + `,
 		(SELECT json_object('options', json(q.options), 'expiresAt', iso_time(q.expires_at), 'state', q.state, 'answer',
@@ -220,18 +227,18 @@ func scanInbox(row db.Scanner) (InboxMessage, error) {
 	return m, err
 }
 
-// InboxCursor 是列表的游标：上一页最后一条的 (时间, ID)。
+// InboxCursor is the list cursor: (time, ID) of the last item on the previous page.
 type InboxCursor struct {
 	At time.Time
 	ID uuid.UUID
 }
 
-// Encode 返回不透明的游标字符串。
+// Encode returns an opaque cursor string.
 func (c InboxCursor) Encode() string {
 	return base64.RawURLEncoding.EncodeToString([]byte(strconv.FormatInt(c.At.UnixMicro(), 10) + "_" + c.ID.String()))
 }
 
-// DecodeInboxCursor 解析游标；无效时返回 validation_failed。
+// DecodeInboxCursor parses a cursor; returns validation_failed when it is invalid.
 func DecodeInboxCursor(s string) (*InboxCursor, error) {
 	if s == "" {
 		return nil, nil
@@ -256,18 +263,18 @@ func DecodeInboxCursor(s string) (*InboxCursor, error) {
 	return &InboxCursor{At: time.UnixMicro(us), ID: uid}, nil
 }
 
-// InboxPage 是一页消息与下一页的游标。
+// InboxPage is one page of messages and the cursor for the next page.
 type InboxPage struct {
 	Messages []InboxMessage
 	Next     *InboxCursor
 }
 
-// InboxListQuery 是列表的筛选条件。
+// InboxListQuery holds the list filters.
 type InboxListQuery struct {
 	UnreadOnly bool
 	Cursor     *InboxCursor
 	Limit      int
-	Preview    int // 摘要的字符数
+	Preview    int // number of characters in the preview
 }
 
 func (s *Store) pageInbox(ctx context.Context, where string, args []any, q InboxListQuery) (InboxPage, error) {
@@ -300,12 +307,13 @@ func (s *Store) pageInbox(ctx context.Context, where string, args []any, q Inbox
 	return page, nil
 }
 
-// ListInboxReceived 列出发给 p 的消息，新的在前。
+// ListInboxReceived lists the messages sent to p, newest first.
 func (s *Store) ListInboxReceived(ctx context.Context, p Party, q InboxListQuery) (InboxPage, error) {
 	return s.pageInbox(ctx, p.cond("m", "to", 1), []any{p.ID}, q)
 }
 
-// ListInboxOfIdentity 列出外部身份收到与（或）发出的消息，新的在前；direction 为 received、sent 或 all。
+// ListInboxOfIdentity lists the messages an external identity received and/or sent, newest first; direction is
+// received, sent or all.
 func (s *Store) ListInboxOfIdentity(ctx context.Context, identityID uuid.UUID, direction string, q InboxListQuery) (InboxPage, error) {
 	p := IdentityParty(identityID)
 	where := "(" + p.cond("m", "to", 1) + " OR " + p.cond("m", "from", 1) + ")"
@@ -318,14 +326,16 @@ func (s *Store) ListInboxOfIdentity(ctx context.Context, identityID uuid.UUID, d
 	return s.pageInbox(ctx, where, []any{identityID}, q)
 }
 
-// ListConsoleConversation 列出控制台与常态 Agent（不含它的任务实例）之间两个方向的消息，新的在前。
+// ListConsoleConversation lists the messages in both directions between the console and a regular Agent (not its task
+// instances), newest first.
 func (s *Store) ListConsoleConversation(ctx context.Context, agentID uuid.UUID, q InboxListQuery) (InboxPage, error) {
 	return s.pageInbox(ctx, `((m.from_kind = 'console' AND m.to_kind = 'agent' AND m.to_agent_id = $1 AND m.to_runtime_id IS NULL)
 		OR (m.to_kind = 'console' AND m.from_kind = 'agent' AND m.from_agent_id = $1 AND m.from_runtime_id IS NULL))`, []any{agentID}, q)
 }
 
-// ConsolePending 返回控制台待处理的消息，新的在前：发给控制台、仍为 open 且未过期的问题，
-// 与其他未读消息。两次查询在同一个可重复读事务中，快照与 now() 相同，两张列表恰好互不重复。
+// ConsolePending returns the messages pending for the console, newest first: questions to the console that are still
+// open and not expired, and other unread messages. Both queries run in the same repeatable-read transaction, with the
+// same snapshot and now(), so the two lists never overlap.
 func (s *Store) ConsolePending(ctx context.Context, preview int) (questions, unread []InboxMessage, err error) {
 	open := `EXISTS (SELECT 1 FROM inbox_questions q WHERE q.message_id = m.id AND q.state = 'open' AND q.expires_at > now())`
 	list := func(tx *db.Tx, where string) ([]InboxMessage, error) {
@@ -345,13 +355,13 @@ func (s *Store) ConsolePending(ctx context.Context, preview int) (questions, unr
 	return questions, unread, err
 }
 
-// GetInboxMessage 返回一条消息的全文；不存在时返回 not_found。
+// GetInboxMessage returns the full text of one message; returns not_found when it does not exist.
 func (s *Store) GetInboxMessage(ctx context.Context, id uuid.UUID, preview int) (InboxMessage, error) {
 	m, err := scanInbox(s.Pool.QueryRow(ctx, inboxSelect(preview)+` WHERE m.id = $1`, id))
 	return m, notFoundIfNoRows(err, "消息")
 }
 
-// NewInboxMessage 是写入消息的参数。ThreadID 为空表示开启新线索。
+// NewInboxMessage holds the parameters for writing a message. An empty ThreadID starts a new thread.
 type NewInboxMessage struct {
 	Images        []messageimage.Ref
 	ForwardTaskID uuid.UUID // internal ended-task routing hint, never accepted from requests
@@ -360,19 +370,23 @@ type NewInboxMessage struct {
 	InReplyTo     *uuid.UUID
 	From, To      Party
 	Text          string
-	WhenBusy      string // 发给 Agent 时必填；发给人时必须为空
-	// PluginChannel 与 PluginSender 是消息中插件一方的渠道与发件名称（SPEC §11）；与插件无关或没有时为空。
+	WhenBusy      string // required when sent to an Agent; must be empty when sent to a person
+	// PluginChannel and PluginSender are the channel and sender name of the plugin party in the message (SPEC §11);
+	// empty when unrelated to a plugin or absent.
 	PluginChannel string
 	PluginSender  string
 }
 
-// InsertInboxMessage 在事务中写入一条消息；收件人是 Agent 或外部身份时，先锁住它并确认未删除。
-// 调用方在同一事务中继续安排提醒，保证消息与提醒一起生效。
+// InsertInboxMessage writes one message in the transaction; when the recipient is an Agent or an external identity,
+// it first locks it and confirms it is not deleted.
+// The caller goes on to arrange the reminder in the same transaction, so the message and the reminder take effect
+// together.
 func InsertInboxMessage(ctx context.Context, tx *db.Tx, in NewInboxMessage) error {
 	switch in.To.Kind {
 	case "agent":
 		if in.To.RuntimeID != uuid.Nil {
-			// 未结束任务已保护Agent免于删除；调用者先锁任务，不能倒锁Agent。
+			// An unfinished task already protects the Agent from deletion; callers lock the task first and must not
+			// lock the Agent in the reverse order.
 			var exists bool
 			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM task_instances WHERE id=$1 AND agent_id=$2 AND NOT retired)`, in.To.RuntimeID, in.To.ID).Scan(&exists); err != nil {
 				return err
@@ -421,10 +435,12 @@ func notFoundAs(err error, what string) error {
 	return err
 }
 
-// InboxTx 在事务中执行 fn（供 Inbox 服务把写消息与安排提醒放在同一事务中）。
+// InboxTx runs fn in a transaction (so the Inbox service can write the message and arrange the reminder in the same
+// transaction).
 func (s *Store) InboxTx(ctx context.Context, fn func(*db.Tx) error) error { return s.inTx(ctx, fn) }
 
-// ThreadParties 返回线索的两方（第一条消息的发件人与收件人）；线索不存在时返回 not_found。
+// ThreadParties returns the two parties of a thread (the sender and recipient of the first message); returns
+// not_found when the thread does not exist.
 func (s *Store) ThreadParties(ctx context.Context, threadID uuid.UUID) (from, to Party, err error) {
 	var fa, fi, fp, ta, ti, tp *uuid.UUID
 	err = s.Pool.QueryRow(ctx, `SELECT from_kind, from_agent_id, from_identity_id, from_plugin_party_id, to_kind, to_agent_id, to_identity_id, to_plugin_party_id,
@@ -446,7 +462,8 @@ func partyID(ids ...*uuid.UUID) uuid.UUID {
 	return uuid.Nil
 }
 
-// EnsurePluginParty 登记已安装的插件作为 Inbox 的一方，名称取插件当前的显示名称；插件不存在时返回 not_found。
+// EnsurePluginParty registers an installed plugin as an Inbox party, named after the plugin's current display name;
+// returns not_found when the plugin does not exist.
 func (s *Store) EnsurePluginParty(ctx context.Context, plugin string) (Party, error) {
 	p := PluginParty(plugin)
 	tag, err := s.Pool.Exec(ctx, `INSERT INTO plugin_parties(id,plugin_id,display_name)
@@ -458,8 +475,9 @@ func (s *Store) EnsurePluginParty(ctx context.Context, plugin string) (Party, er
 	return p, err
 }
 
-// MarkInboxRead 把发给 p 的消息标为已读；changed 表示这次由未读变为已读。消息不存在或不是发给 p 时返回 not_found。
-// 已取消的消息不会变为已读。eff 是读取对排队的影响（见 markRead）。
+// MarkInboxRead marks a message sent to p as read; changed means this call moved it from unread to read. Returns
+// not_found when the message does not exist or was not sent to p.
+// A cancelled message never becomes read. eff is the effect of the read on the queue (see markRead).
 func (s *Store) MarkInboxRead(ctx context.Context, id uuid.UUID, p Party) (changed bool, eff InboxReadEffect, err error) {
 	receipts, eff, err := s.markRead(ctx, p, "m.id", id)
 	if err != nil || len(receipts) == 1 {
@@ -470,29 +488,34 @@ func (s *Store) MarkInboxRead(ctx context.Context, id uuid.UUID, p Party) (chang
 	return false, eff, notFoundIfNoRows(err, "消息")
 }
 
-// ReadReceipt 是一条刚标为已读的消息。
+// ReadReceipt is a message just marked as read.
 type ReadReceipt struct {
 	ID       uuid.UUID
 	ThreadID uuid.UUID
 	ReadAt   time.Time
 }
 
-// MarkThreadRead 把线索中发给 p 的未读消息全部标为已读，返回这次标记的消息与读取对排队的影响。
+// MarkThreadRead marks all unread messages sent to p in a thread as read, and returns the messages marked by this call
+// and the effect of the read on the queue.
 func (s *Store) MarkThreadRead(ctx context.Context, threadID uuid.UUID, p Party) ([]ReadReceipt, InboxReadEffect, error) {
 	return s.markRead(ctx, p, "m.thread_id", threadID)
 }
 
-// InboxReadEffect 是一次读取对排队的影响：读走的消息原本由排队中的提醒承载时 QueueChanged 为 true；
-// 因此不再有待处理消息的提醒随即作废（no_pending_messages），常态 Agent 的列在 Voided 中。
-// AgentID 为收件的常态 Agent；任务实例的变化已在任务事件中推送，这里只给出 QueueChanged。
+// InboxReadEffect is the effect of one read on the queue: QueueChanged is true when a message that was read had been
+// carried by a queued reminder; reminders left with no pending messages as a result are voided right away
+// (no_pending_messages), and those of regular Agents are listed in Voided.
+// AgentID is the recipient regular Agent; changes for task instances are already pushed in task events, so only
+// QueueChanged is given here.
 type InboxReadEffect struct {
 	AgentID      uuid.UUID
 	QueueChanged bool
 	Voided       []uuid.UUID
 }
 
-// markRead 把发给 p、column 等于 id 的未读消息标为已读。收件方是常态 Agent 时先以 FOR NO KEY UPDATE 锁 Agent 行，
-// 任务实例先锁任务行，再写已读：与取消、转为打断、出队同一加锁顺序。事务只做标记与作废，不处理图片等其他工作。
+// markRead marks the unread messages sent to p whose column equals id as read. When the recipient is a regular Agent
+// it first locks the Agent row with FOR NO KEY UPDATE, and for a task instance it first locks the task row, then
+// writes the read state: the same lock order as cancel, promote to interrupt and dequeue. The transaction only marks
+// and voids; it does no other work such as images.
 func (s *Store) markRead(ctx context.Context, p Party, column string, id uuid.UUID) ([]ReadReceipt, InboxReadEffect, error) {
 	var out []ReadReceipt
 	var links []readLink
@@ -588,7 +611,7 @@ func markReadTx(ctx context.Context, q queueQuerier, p Party, column string, id 
 	return out, links, err
 }
 
-// EarliestUnreadInbox 返回发给 Agent 的最早一条未读消息；没有未读时 ok 为 false。
+// EarliestUnreadInbox returns the earliest unread message sent to the Agent; ok is false when there is nothing unread.
 func (s *Store) EarliestUnreadInbox(ctx context.Context, agentID uuid.UUID) (id uuid.UUID, ok bool, err error) {
 	err = s.Pool.QueryRow(ctx, `SELECT id FROM inbox_messages m WHERE `+unreadCond("m")+` AND `+AgentParty(agentID).cond("m", "to", 1)+`
 		ORDER BY m.created_at, m.id LIMIT 1`, agentID).Scan(&id)
@@ -598,7 +621,7 @@ func (s *Store) EarliestUnreadInbox(ctx context.Context, agentID uuid.UUID) (id 
 	return id, err == nil, err
 }
 
-// CountInboxUnread 统计发给 p 的未读消息数。
+// CountInboxUnread counts the unread messages sent to p.
 func (s *Store) CountInboxUnread(ctx context.Context, p Party) (int, error) {
 	return countUnread(ctx, s.Pool, p)
 }
@@ -613,11 +636,12 @@ func countUnread(ctx context.Context, q queryRower, p Party) (int, error) {
 	return n, err
 }
 
-// inboxEventLockKey 是串行化收件箱事件追加的 advisory lock 键。
+// inboxEventLockKey is the advisory lock key that serializes appending Inbox events.
 const inboxEventLockKey = 0x6c6e5f696e626f78 // "ln_inbox"
 
-// WithInboxEventLock 在一个短事务中取 advisory lock，统计控制台操作者的未读总数后调用 fn（追加事件或读取快照位置）。
-// 追加事件因此是串行的：越靠后的事件，其未读总数越新。
+// WithInboxEventLock takes the advisory lock in a short transaction, counts the console operator's total unread, then
+// calls fn (to append an event or read the snapshot position).
+// Appending events is therefore serialized: the later the event, the more recent its unread total.
 func (s *Store) WithInboxEventLock(ctx context.Context, fn func(consoleUnread int) error) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
 		n, err := countUnread(ctx, tx, ConsoleParty)
@@ -628,30 +652,31 @@ func (s *Store) WithInboxEventLock(ctx context.Context, fn func(consoleUnread in
 	})
 }
 
-// ---------- 线索 ----------
+// ---------- Threads ----------
 
-// InboxThreadRow 是线索列表中的一项。
+// InboxThreadRow is one item in the thread list.
 type InboxThreadRow struct {
 	ThreadID    uuid.UUID
-	Root        InboxMessage // 第一条消息：两方即线索的参与方
+	Root        InboxMessage // first message: its two sides are the thread's parties
 	Last        InboxMessage
 	UnreadCount int
 }
 
-// InboxThreadPage 是一页线索。
+// InboxThreadPage is one page of threads.
 type InboxThreadPage struct {
 	Threads []InboxThreadRow
 	Next    *InboxCursor
 }
 
-// ListInboxThreads 列出 p 参与的线索，按最后一条消息的时间倒序。
+// ListInboxThreads lists the threads p takes part in, ordered by the time of the last message, newest first.
 func (s *Store) ListInboxThreads(ctx context.Context, p Party, cursor *InboxCursor, limit, preview int) (InboxThreadPage, error) {
 	var cAt *time.Time
 	var cID *uuid.UUID
 	if cursor != nil {
 		cAt, cID = &cursor.At, &cursor.ID
 	}
-	// 先按参与方筛出线索的第一条，再用相关子查询取每条线索的最后一条（走 thread_id 索引）。
+	// First select each thread's first message by party, then use a correlated subquery to take each thread's last
+	// message (using the thread_id index).
 	rows, err := s.Pool.Query(ctx, `SELECT t.root_id, last.id, t.unread FROM (
 			SELECT root.id AS root_id,
 				(SELECT l.id FROM inbox_messages l WHERE l.thread_id = root.id ORDER BY l.created_at DESC, l.id DESC LIMIT 1) AS last_id,
@@ -678,7 +703,7 @@ func (s *Store) ListInboxThreads(ctx context.Context, p Party, cursor *InboxCurs
 	var page InboxThreadPage
 	if len(found) > limit {
 		found = found[:limit]
-		page.Next = &InboxCursor{} // 由最后一项的最后一条消息补全
+		page.Next = &InboxCursor{} // completed from the last message of the last item
 	}
 	ids := make([]uuid.UUID, 0, 2*len(found))
 	for _, x := range found {
@@ -717,7 +742,7 @@ func (s *Store) inboxByIDs(ctx context.Context, ids []uuid.UUID, preview int) (m
 	return out, nil
 }
 
-// ListThreadMessages 返回线索中的全部消息，按时间正序。
+// ListThreadMessages returns all messages in a thread, oldest first.
 func (s *Store) ListThreadMessages(ctx context.Context, threadID uuid.UUID, preview int) ([]InboxMessage, error) {
 	rows, err := s.Pool.Query(ctx, inboxSelect(preview)+` WHERE m.thread_id = $1 ORDER BY m.created_at, m.id`, threadID)
 	if err != nil {
@@ -726,9 +751,10 @@ func (s *Store) ListThreadMessages(ctx context.Context, threadID uuid.UUID, prev
 	return db.CollectRows(rows, func(r db.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
 }
 
-// ---------- 地址解析 ----------
+// ---------- Address resolution ----------
 
-// FindAgentByPath 在未删除的项目中按组织名、项目名与 Agent 名查找未删除的 Agent；orgID 不为空时按组织 ID 限定。
+// FindAgentByPath finds a non-deleted Agent by organization name, project name and Agent name in non-deleted projects;
+// when orgID is not nil it restricts the search to that organization ID.
 func (s *Store) FindAgentByPath(ctx context.Context, orgName string, orgID *uuid.UUID, project, name string) (Agent, error) {
 	a, err := scanAgent(s.Pool.QueryRow(ctx, `SELECT `+agentColumns+` FROM agents
 		JOIN projects p ON p.id = agents.project_id AND p.deleted_at IS NULL
@@ -738,14 +764,15 @@ func (s *Store) FindAgentByPath(ctx context.Context, orgName string, orgID *uuid
 	return a, notFoundIfNoRows(err, "Agent")
 }
 
-// FindPlatformAgent 按名称查找未删除的平台 Agent。
+// FindPlatformAgent finds a non-deleted platform Agent by name.
 func (s *Store) FindPlatformAgent(ctx context.Context, name string) (Agent, error) {
 	a, err := scanAgent(s.Pool.QueryRow(ctx, `SELECT `+agentColumns+` FROM agents
 		WHERE agents.deleted_at IS NULL AND agents.project_id IS NULL AND agents.name = $1`, name))
 	return a, notFoundIfNoRows(err, "Agent")
 }
 
-// GetAddressableAgent 返回可寻址的 Agent：未删除，且属于未删除的项目或平台。
+// GetAddressableAgent returns an addressable Agent: not deleted, and belonging to a non-deleted project or to the
+// platform.
 func (s *Store) GetAddressableAgent(ctx context.Context, id uuid.UUID) (Agent, error) {
 	a, err := scanAgent(s.Pool.QueryRow(ctx, `SELECT `+agentColumns+` FROM agents
 		LEFT JOIN projects p ON p.id = agents.project_id
@@ -753,11 +780,12 @@ func (s *Store) GetAddressableAgent(ctx context.Context, id uuid.UUID) (Agent, e
 	return a, notFoundIfNoRows(err, "Agent")
 }
 
-// CancelledNotice 是收件 Agent 读到被人取消的消息时得到的正文。
+// CancelledNotice is the text the recipient Agent gets when it reads a message a person cancelled.
 const CancelledNotice = "This message was cancelled by a person: do not handle it, and there is no need to wait or reply."
 
-// RedactCancelledFor 在收件 Agent 自己读取或列出时隐去被人取消的消息的正文与图片，只留取消说明：
-// 模型看到原文仍可能照做。发件方与控制台看到的保持原样。
+// RedactCancelledFor hides the text and images of a message a person cancelled when the recipient Agent itself reads
+// or lists it, leaving only the cancellation notice: if the model saw the original text it might still act on it. The
+// sender and the console see it unchanged.
 func RedactCancelledFor(p Party, m *InboxMessage) {
 	if m.CancelledAt == nil || p.Kind != "agent" || m.To.Party != p {
 		return
@@ -765,7 +793,7 @@ func RedactCancelledFor(p Party, m *InboxMessage) {
 	m.Text, m.Preview, m.Images = CancelledNotice, CancelledNotice, nil
 }
 
-// IsNotFound 报告错误是否为 not_found。
+// IsNotFound reports whether the error is not_found.
 func IsNotFound(err error) bool {
 	return errors.Is(err, db.ErrNoRows) || apperr.Is(err, apperr.CodeNotFound)
 }

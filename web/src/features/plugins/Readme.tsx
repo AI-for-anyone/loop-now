@@ -16,7 +16,8 @@ export function ReadmeMarkdown({ readme }: { readme: Schemas['PluginReadme'] }) 
   )
 }
 
-// 安装或更新前的确认框里：清单下方的 README，单独滚动，免得把安装按钮推得很远。没有 README 时不显示。
+// In the confirmation dialog before installing or updating: the README below the manifest, scrolling on its own so it doesn't push the
+// install button far down. Not shown when there is no README.
 export function PreviewReadme({ previewId }: { previewId: string }) {
   const readme = usePreviewReadme(previewId)
   if (readme.isPending || readme.data?.file === null) return null
@@ -28,7 +29,8 @@ export function PreviewReadme({ previewId }: { previewId: string }) {
       </h3>
       <ErrorAlert error={readme.error} />
       {readme.data && (
-        // 滚动区是定位容器，里面绝对定位的读屏文字不会撑高对话框；可聚焦，键盘也能滚动。
+        // The scroll area is the positioning container, so absolutely positioned screen-reader text inside it doesn't stretch the dialog;
+        // it is focusable, so it can also be scrolled with the keyboard.
         <div tabIndex={0} aria-label={readme.data.file ?? text.title} className="relative max-h-[40vh] min-w-0 overflow-y-auto rounded-input bg-ink/[0.04] px-4 py-3 outline-none focus-visible:shadow-focus">
           <ReadmeMarkdown readme={readme.data} />
         </div>

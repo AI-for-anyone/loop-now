@@ -1,4 +1,5 @@
-// Package content 提供上传内容相关的校验：相对路径、仓库地址、SKILL.md、Skill 压缩包与可在线编辑的文本。
+// Package content provides validation for uploaded content: relative paths, repository URLs, SKILL.md, Skill
+// archives and text that can be edited online.
 package content
 
 import (
@@ -11,11 +12,11 @@ import (
 	"unicode"
 )
 
-// MaxPathLen 是相对路径的最大长度。
+// MaxPathLen is the maximum length of a relative path.
 const MaxPathLen = 512
 
-// CleanRelPath 校验并返回规范的相对路径：不能为空、不能是绝对路径、不能含 `..` 或 `.` 段、
-// 不能含反斜杠或控制字符，也不能以斜杠结尾。
+// CleanRelPath validates and returns a clean relative path: it must not be empty, absolute, or contain `..` or `.`
+// segments, backslashes or control characters, and must not end with a slash.
 func CleanRelPath(p string) (string, error) {
 	if p == "" {
 		return "", errors.New("路径不能为空")
@@ -48,15 +49,15 @@ func CleanRelPath(p string) (string, error) {
 	return p, nil
 }
 
-// PathsOverlap 判断两个相对路径是否相同或互相包含。
+// PathsOverlap reports whether two relative paths are the same or one contains the other.
 func PathsOverlap(a, b string) bool {
 	return a == b || strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
 }
 
 var scpLike = regexp.MustCompile(`^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:[^/].*$`)
 
-// ValidateGitURL 校验代码仓库地址：支持 https、http、ssh、file 与 git@host:path 形式；
-// http(s) 地址不能内嵌账号或密码，ssh 地址只能带用户名、不能带密码。
+// ValidateGitURL validates a code repository URL: https, http, ssh, file and the git@host:path form are supported;
+// http(s) URLs must not embed an account or password, and ssh URLs may carry only a user name, never a password.
 func ValidateGitURL(raw string) error {
 	if raw == "" {
 		return errors.New("仓库地址不能为空")
@@ -98,7 +99,8 @@ func ValidateGitURL(raw string) error {
 
 var badBranch = regexp.MustCompile(`(^-)|(\.\.)|([\x00-\x20~^:?*\[\\])|(@\{)|(/$)|(\.lock$)|(^/)|(//)`)
 
-// ValidateBranch 按 git 引用名的主要规则校验分支名，并拒绝以 - 开头以免被当作命令行选项。
+// ValidateBranch validates a branch name against the main rules for git ref names, and rejects names starting with -
+// so they cannot be taken as command-line options.
 func ValidateBranch(b string) error {
 	if b == "" {
 		return errors.New("分支不能为空")

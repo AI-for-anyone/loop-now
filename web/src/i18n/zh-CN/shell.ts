@@ -1,4 +1,5 @@
-// 左侧栏与主区页头。范围只有“全局”与各个项目两种，平台持有的 Agent 归在全局之下。
+// Left sidebar and main-area page header. There are only two kinds of scope, “全局”
+// (Global) and individual projects; platform-held Agents belong under Global.
 export const shell = {
   nav: '主导航',
   global: '全局',
@@ -27,7 +28,8 @@ export const shell = {
     identities: '外部身份',
     settings: '全局设置',
   },
-  // “任务”一项旁的运行数：状态为 running 的任务个数，读屏与悬停提示用这句。
+  // Running count next to the “任务” (Tasks) item: the number of tasks with status
+  // running; this sentence is used by screen readers and the hover tooltip.
   runningTasks: (count: number) => `${count} 个任务正在运行`,
   groups: {
     agents: 'Agent',
@@ -41,7 +43,7 @@ export const shell = {
   noProjects: '还没有项目',
   menu: '打开导航',
   closeMenu: '关闭导航',
-  // 主区页头的位置链：项目 › Agent › 名称。
+  // Location trail in the main-area page header: project › Agent › name.
   breadcrumb: '页面位置',
   agentCrumb: 'Agent',
   platformAgentCrumb: '平台 Agent',

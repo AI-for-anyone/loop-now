@@ -1,4 +1,4 @@
-// Package app 把各模块装配成可启动、可停止的服务端。
+// Package app assembles the modules into a server that can be started and stopped.
 package app
 
 import (
@@ -58,10 +58,10 @@ import (
 	"loop-now/internal/server/webui"
 )
 
-// WorkRootLockFile 是工作根里的实例锁文件名。
+// WorkRootLockFile is the name of the instance lock file in the work root.
 const WorkRootLockFile = ".loop-now-server.lock"
 
-// App 是装配好的服务端。
+// App is the assembled server.
 type App struct {
 	CLIImport       *cliimport.Service
 	CLIVerification *cliverifyservice.Service
@@ -69,7 +69,7 @@ type App struct {
 	CLIAuth         *cliauth.Service
 	ModelAuth       *modelauth.Service
 	ModelSettings   *modelconfig.Service
-	// ProviderStates 是插件提供方订阅账号的状态目录。
+	// ProviderStates holds the state directories of plugin provider subscription accounts.
 	ProviderStates *providerstate.Manager
 	Cfg            *config.Config
 	InstanceID     uuid.UUID
@@ -77,9 +77,10 @@ type App struct {
 
 	Store *store.Store
 	Coord *coord.Coord
-	// dirLock、workLock 是数据目录与工作根的实例锁，关闭时最后放开。
+	// dirLock and workLock are the instance locks on the data directory and the work root; they are released last on
+	// close.
 	dirLock, workLock *db.DirLock
-	// Maintenance 定时做检查点、清理旧日志与备份。
+	// Maintenance periodically runs checkpoints and cleans up old logs and backups.
 	Maintenance *maintenance.Service
 	Executor    *local.Executor
 	Conv        *conversation.Service
@@ -87,25 +88,27 @@ type App struct {
 	Folders     *folders.Service
 	Config      *agentconfig.Service
 	API         *httpapi.Server
-	// LocalMode 是个人版“本机模式”的开关与本机目录清单；UserPath 解析并缓存用户的 PATH。
+	// LocalMode holds the personal edition's "local mode" switches and list of local directories; UserPath resolves and
+	// caches the user's PATH.
 	LocalMode *localmode.Service
 	UserPath  *localmode.UserPath
-	// Plugins 是插件第二版的安装与配置；PluginHost 在配置了宿主入口时监护插件宿主，否则为空。
+	// Plugins handles installation and configuration for plugins v2; PluginHost supervises the plugin host when a host
+	// entry point is configured, and is nil otherwise.
 	Plugins    *plugins.Service
 	PluginHost *pluginhost.Supervisor
 
 	listener net.Listener
-	// readyWritten 表示本进程写过就绪文件，退出时要删掉它。
+	// readyWritten records that this process wrote the ready file, which must be removed on exit.
 	readyWritten bool
 	http         *http.Server
 	baseCancel   context.CancelFunc
 
-	// 对外端口（未配置时为空）：TLS，只认外部令牌。
+	// External port (nil when not configured): TLS, accepts only external tokens.
 	extListener net.Listener
 	external    *http.Server
 }
 
-// Options 允许测试替换部分依赖。
+// Options lets tests replace some dependencies.
 type Options struct {
 	// CLIImportReaderFactory is an explicit isolated synthetic-source fixture.
 	CLIImportReaderFactory func(context.Context) (cliimport.Reader, error)
@@ -121,19 +124,21 @@ type Options struct {
 	// Nil preserves the production fixed HTTPS transport; never configured via env/API.
 	LarkHTTPTransport http.RoundTripper
 	AuthLoginHelper   modelauth.LoginHelper
-	// PluginLoginHelper 替换插件提供方的登录辅助进程（测试用）。
+	// PluginLoginHelper replaces the login helper process for plugin providers (for tests).
 	PluginLoginHelper modelauth.PluginLoginHelper
 	AuthRefresher     modelauth.Refresher
-	// Listener 非空时直接使用（测试用），否则按配置的监听地址监听。
+	// Listener, when non-nil, is used as is (for tests); otherwise the server listens on the configured listen address.
 	Listener net.Listener
-	// ExternalListener 非空时作为对外端口的监听器（测试用，仍按配置的证书启用 TLS），否则按配置的对外监听地址监听。
+	// ExternalListener, when non-nil, is the listener for the external port (for tests; TLS is still enabled with the
+	// configured certificate); otherwise the server listens on the configured external listen address.
 	ExternalListener net.Listener
-	// HomeDirs 覆盖工作根目录校验时使用的 home 目录（测试用）。
+	// HomeDirs overrides the home directories used when validating the work root directory (for tests).
 	HomeDirs []string
 }
 
-// Build 按启动顺序完成检查与装配：检查 → 实例 ID → 模型目录 → 迁移 → 默认组织与项目 →
-// 清理遗留进程 → 重启处理 → 对账协程。调用 Serve 后开始提供 HTTP 服务。
+// Build runs the checks and assembly in startup order: checks -> instance ID -> model catalog -> migrations -> default
+// organization and project -> clean up leftover processes -> restart handling -> reconciliation goroutines. The HTTP
+// service starts once Serve is called.
 func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options) (a *App, err error) {
 	if cfg.MaxMessageImages <= 0 {
 		cfg.MaxMessageImages = 4
@@ -150,17 +155,18 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 			a.closeResources()
 		}
 	}()
-	log.Info("服务端实例启动", "instanceId", a.InstanceID, "config", cfg)
+	log.Info("server instance starting", "instanceId", a.InstanceID, "config", cfg)
 	for _, w := range cfg.Warnings {
 		log.Warn(w)
 	}
 
-	// 依赖检查。
+	// Dependency checks.
 	dbDir := config.DBDir(cfg.DataDir)
 	if err = os.MkdirAll(dbDir, 0o700); err != nil {
 		return a, fmt.Errorf("创建数据目录失败：%w", err)
 	}
-	// 一个数据目录只给一个服务进程：后台维护、迁移与内存里的协调状态都假定只有本进程在写。
+	// One data directory serves only one server process: background maintenance, migrations and the in-memory
+	// coordination state all assume this process is the only writer.
 	if a.dirLock, err = db.LockDir(dbDir); err != nil {
 		if errors.Is(err, db.ErrLocked) {
 			return a, fmt.Errorf("数据目录 %s 已被另一个服务进程使用（%s）：%w", dbDir, config.EnvDataDir, err)
@@ -174,21 +180,23 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	if err != nil {
 		return a, err
 	}
-	// 一个工作根也只给一个服务进程：Agent 目录、共享的工具与平台文件，以及启动时的各项清理都假定工作根里只有本实例。
-	// 在建库之前取锁，被拒绝的实例不在自己的数据目录里留下新库。
+	// One work root also serves only one server process: Agent directories, the shared tool and platform files, and all
+	// the cleanup done at startup assume this instance is the only one in the work root. Take the lock before creating
+	// the database, so a rejected instance does not leave a new database in its own data directory.
 	if a.workLock, err = db.LockPath(filepath.Join(res.WorkRoot, WorkRootLockFile)); err != nil {
 		if errors.Is(err, db.ErrLocked) {
 			return a, fmt.Errorf("工作根 %s 已被另一个服务进程使用（%s）：%w", res.WorkRoot, config.EnvWorkRoot, err)
 		}
 		return a, err
 	}
-	log.Info("启动检查通过", "piBin", res.PiBin, "piAIDir", res.PiAIDir, "workRoot", res.WorkRoot, "execBasePath", res.ExecBasePath)
+	log.Info("startup checks passed", "piBin", res.PiBin, "piAIDir", res.PiAIDir, "workRoot", res.WorkRoot, "execBasePath", res.ExecBasePath)
 	if a.Store, err = store.Open(ctx, db.Options{Dir: dbDir, Logger: log}); err != nil {
 		return a, err
 	}
 	a.Store.InstanceID = &a.InstanceID
 
-	// 同版本的 loopctl：校验构建产物，安装本机平台的二进制，放进 Agent 的 PATH。
+	// loopctl of the same version: verify the build output, install the binary for this platform, put it on the Agent's
+	// PATH.
 	dist, err := loopctldist.Load(cfg.LoopctlDistDir, buildinfo.Version())
 	if err != nil {
 		return a, err
@@ -197,18 +205,19 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	if err != nil {
 		return a, fmt.Errorf("安装 loopctl 失败：%w", err)
 	}
-	log.Info("已安装 loopctl", "version", dist.Manifest.Version, "binDir", loopctlBin)
+	log.Info("loopctl installed", "version", dist.Manifest.Version, "binDir", loopctlBin)
 	var extTLS *tls.Config
 	if cfg.ExternalListenAddr != "" {
 		var cert tls.Certificate
 		if cfg.ExternalTLSSelfSigned != "" {
-			// 服务端自己维护的自签证书：覆盖回环地址与对外监听的主机；loopctl 把 cert.pem 当 --ca-file。
+			// Self-signed certificate maintained by the server itself: it covers the loopback addresses and the
+			// external listen host; loopctl uses cert.pem as --ca-file.
 			host, _, _ := net.SplitHostPort(cfg.ExternalListenAddr)
 			c, certPath, generated, err := selfsigned.Load(cfg.ExternalTLSSelfSigned, []string{host}, time.Now())
 			if err != nil {
 				return a, fmt.Errorf("准备对外端口的自签证书失败：%w", err)
 			}
-			log.Info("对外端口使用自签证书", "cert", certPath, "generated", generated)
+			log.Info("external port uses a self-signed certificate", "cert", certPath, "generated", generated)
 			cert = c
 		} else {
 			c, err := tls.LoadX509KeyPair(cfg.ExternalTLSCert, cfg.ExternalTLSKey)
@@ -230,7 +239,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		return a, err
 	}
 	models := modelcatalog.NewRegistry(builtinModels)
-	log.Info("已读取 Pi 模型目录", "providers", len(builtinModels.Providers))
+	log.Info("loaded the Pi model catalog", "providers", len(builtinModels.Providers))
 
 	templates, err := clitemplate.Load(cfg.CLITemplateDir)
 	if err != nil {
@@ -245,19 +254,19 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		return a, fmt.Errorf("读取自定义模型配置失败：%w", reloadErr)
 	}
 	if settings.LoadError != "" {
-		log.Warn("自定义模型配置无效，已退回内置目录", "error", settings.LoadError)
+		log.Warn("custom model configuration is invalid; fell back to the built-in catalog", "error", settings.LoadError)
 	}
 	defaults, err := a.Store.EnsureDefaults(ctx, cfg.DefaultOrgName, cfg.DefaultProjectName)
 	if err != nil {
 		return a, err
 	}
-	// 上一次运行签发的 Agent 令牌全部作废：那些 Pi 进程已随服务端退出。
+	// Revoke all Agent tokens issued by the previous run: those Pi processes exited along with the server.
 	if n, err := a.Store.RevokeAgentTokensNotFrom(ctx, a.InstanceID); err != nil {
 		return a, err
 	} else if n > 0 {
-		log.Info("已作废上一次运行签发的 Agent 令牌", "count", n)
+		log.Info("revoked the Agent tokens issued by the previous server run", "count", n)
 	}
-	// 先监听：Agent 专用接口的地址要在启动任何 Pi 之前确定。
+	// Listen first: the address of the Agent-only API must be known before any Pi starts.
 	a.listener = o.Listener
 	if a.listener == nil {
 		if a.listener, err = net.Listen("tcp", cfg.ListenAddr); err != nil {
@@ -283,14 +292,16 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	a.Config.LocalAccess = a.LocalMode.Access
 	a.Config.ProviderState = a.providerState
 	a.UserPath = localmode.NewUserPath(log, localmode.DefaultUserPathTimeout)
-	// 用到用户 PATH 的开关（cli、git）开着时提前在后台解析，免得第一次启动 Pi 或拉取时等登录 shell。
+	// When a switch that uses the user's PATH (cli, git) is on, resolve it in the background ahead of time, so the
+	// first Pi start or pull does not wait for the login shell.
 	if settings, err := a.Store.GetLocalModeSettings(ctx); err != nil {
 		return a, err
 	} else if settings.CLI || settings.Git {
 		a.UserPath.Start()
 	}
 
-	// 登录 helper 与平台扩展按内容寻址装在 platform/auth-helper/<摘要>/ 下：不同构建的文件互不覆盖。
+	// The login helper and platform extensions are installed content-addressed under platform/auth-helper/<digest>/:
+	// files from different builds never overwrite each other.
 	platformDir := filepath.Join(res.WorkRoot, "platform")
 	if err = os.MkdirAll(platformDir, 0700); err != nil {
 		return a, err
@@ -322,7 +333,8 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		return a, err
 	}
 	projectCredentials := modelauth.NewProjectService(a.ModelAuth, templates, cfg.MaxCredential)
-	// 插件提供方的订阅登录（plugins/SPEC.md §13）：状态目录在 platform/provider-states/ 下，辅助进程与 Codex 登录同一组内嵌资产。
+	// Subscription login for plugin providers (plugins/SPEC.md §13): state directories live under
+	// platform/provider-states/; the helper process uses the same set of embedded assets as the Codex login.
 	a.ProviderStates = &providerstate.Manager{Root: filepath.Join(platformDir, "provider-states")}
 	var pluginLogin modelauth.PluginLoginHelper = &modelauth.PluginHelper{Options: modelauth.PluginHelperOptions{NodeBin: res.NodeBin, Entry: filepath.Join(authRoot, "provider-main.mjs"),
 		WorkRoot: platformDir, BasePath: res.ExecBasePath, PiPackageRoot: packageRoot, PiVersion: cfg.PiVersion, Timeout: cfg.AuthLoginTimeout, StopGrace: cfg.PiStopGrace}}
@@ -402,8 +414,9 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	taskSource.LocalAccess = a.LocalMode.Access
 	taskSource.ProviderState = a.providerState
 	taskObserver := &tasks.Observer{Store: a.Store, Normal: recorder, Timeout: cfg.TaskRecordTimeout, Log: log}
-	// config.Load 总会给出上下文文件夹的根与文件夹上传上限；直接构造配置（测试）时为空：根放在工作根目录下
-	// （不写到进程的当前目录），上限取默认值。
+	// config.Load always provides the context folder root and the folder upload limit; they are empty when the config
+	// is built directly (tests): the root then goes under the work root directory (never into the process's current
+	// directory) and the limit takes its default.
 	contextDir, maxFolderUpload := cfg.ContextDir, cfg.MaxFolderUpload
 	if contextDir == "" {
 		contextDir = filepath.Join(res.WorkRoot, "context")
@@ -437,7 +450,8 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	if err = a.Executor.CleanupStaleExceptPending(ctx, protectedLark); err != nil {
 		return a, err
 	}
-	// 插件提供方订阅账号的状态目录：启动时删掉不再需要的版本与上次没登录完的暂存目录。
+	// State directories of plugin provider subscription accounts: at startup, delete versions that are no longer needed
+	// and the staging directories of logins that did not finish last time.
 	a.sweepProviderStates(ctx, true)
 	if err = a.recoverPendingLarkSwitches(ctx, pendingLark, larkRuntime, cfg.TaskRecordTimeout); err != nil {
 		return a, err
@@ -459,7 +473,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	if err = a.configureCLIImport(ctx, cfg, o, templates, res.WorkRoot); err != nil {
 		return a, err
 	}
-	a.Config.AgentRemoved = a.Conv.EmitAgentStatus // Agent 已删除时推送移除事件
+	a.Config.AgentRemoved = a.Conv.EmitAgentStatus // push a removal event when an Agent is deleted
 
 	inboxSvc := &inbox.Service{Tasks: a.Tasks, St: a.Store, Co: a.Coord, Conv: a.Conv, Log: log, O: inbox.Options{
 		MaxMessage: cfg.MaxInboxMessage, PreviewChars: cfg.InboxPreviewChars, PageDefault: 20, PageMax: cfg.InboxPageMax,
@@ -482,9 +496,9 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		return a, err
 	}
 	if console != nil {
-		log.Info("控制台由服务端提供", "source", consoleSource)
+		log.Info("console is served by the server", "source", consoleSource)
 	} else {
-		log.Info("服务端没有控制台文件，只提供 API（开发时用 vite，或设置 " + config.EnvWebDir + "）")
+		log.Info("no console files on the server; serving the API only (use vite in development, or set " + config.EnvWebDir + ")")
 	}
 	a.API = &httpapi.Server{Hooks: appHooks{a}, CLIImport: a.CLIImport, CLIVerification: a.CLIVerification, CLIAuth: a.CLIAuth, ModelAuth: a.ModelAuth, ModelSettings: a.ModelSettings, ProjectCredentials: projectCredentials,
 		O: httpapi.Options{
@@ -504,7 +518,8 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	baseCtx, baseCancel := context.WithCancel(context.Background())
 	a.baseCancel = baseCancel
 	go a.providerStateSweeper(baseCtx, 10*time.Minute)
-	// 文件夹：中断的拉取标为失败、清空回收区；在任何 Pi 启动之前一次性回放退役文件夹来源中未落到磁盘的人工修改。
+	// Folders: mark interrupted pulls as failed and empty the trash; before any Pi starts, replay once the manual edits
+	// from retired folder sources that never reached disk.
 	if err = a.Folders.Start(ctx); err != nil {
 		return a, err
 	}
@@ -513,11 +528,11 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 		return a, fmt.Errorf("回放退役文件夹来源失败：%w", err)
 	}
 	if legacy.Sources > 0 || legacy.UnclonedGitDirs > 0 {
-		log.Info("已回放退役文件夹来源", "sources", legacy.Sources, "filesWritten", legacy.FilesWritten, "filesDeleted", legacy.FilesDeleted,
+		log.Info("replayed retired folder sources", "sources", legacy.Sources, "filesWritten", legacy.FilesWritten, "filesDeleted", legacy.FilesDeleted,
 			"filesSkipped", legacy.FilesSkipped, "unclonedGitSources", legacy.UnclonedGitDirs)
 	}
 	for _, p := range local.AncestorEntryFiles(res.WorkRoot) {
-		log.Warn("工作根目录的上级目录中有上下文入口文件，Pi 会把它读进每个 Agent 的系统提示；请移走", "path", p)
+		log.Warn("a context entry file sits in a parent directory of the work root; Pi reads it into every Agent's system prompt, so move it away", "path", p)
 	}
 	if err = a.Conv.Start(ctx); err != nil {
 		return a, err
@@ -551,7 +566,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger, o Options)
 	return a, nil
 }
 
-// ExternalAddr 返回对外端口的实际监听地址；未开启时为空。
+// ExternalAddr returns the actual listen address of the external port; empty when it is not enabled.
 func (a *App) ExternalAddr() string {
 	if a.extListener == nil {
 		return ""
@@ -559,16 +574,16 @@ func (a *App) ExternalAddr() string {
 	return a.extListener.Addr().String()
 }
 
-// Addr 返回实际监听地址。
+// Addr returns the actual listen address.
 func (a *App) Addr() string { return a.listener.Addr().String() }
 
-// Serve 开始提供 HTTP 服务，直到 Shutdown。
+// Serve serves HTTP until Shutdown.
 func (a *App) Serve() error {
 	if a.external != nil {
-		a.Log.Info("开始提供对外端口（TLS）", "addr", a.ExternalAddr())
+		a.Log.Info("serving the external port (TLS)", "addr", a.ExternalAddr())
 		go func() {
 			if err := a.external.Serve(a.extListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				a.Log.Error("对外端口停止服务", "err", err)
+				a.Log.Error("external port stopped serving", "err", err)
 			}
 		}()
 	}
@@ -580,9 +595,10 @@ func (a *App) Serve() error {
 		a.PluginHost.Start(settings.Disabled)
 		a.Plugins.WakeOnCommit()
 	}
-	a.Log.Info("开始提供服务", "addr", a.Addr())
+	a.Log.Info("serving", "addr", a.Addr())
 	if a.Cfg.ReadyFile != "" {
-		// 监听器早已打开，连接在 Serve 开始前排队，所以这时写出就绪文件不会让人连上一个还不回答的端口。
+		// The listener has long been open and connections queue up before Serve starts, so writing the ready file now
+		// cannot lead anyone to connect to a port that does not answer yet.
 		ready := Ready{URL: "http://" + a.Addr(), PID: os.Getpid(), Version: buildinfo.Version()}
 		if a.external != nil {
 			ready.ExternalURL = "https://" + a.ExternalAddr()
@@ -598,12 +614,13 @@ func (a *App) Serve() error {
 	return nil
 }
 
-// Shutdown 优雅退出：停止接收请求、停止派发、结束全部 Pi 进程。
-// 进行中的执行保持原状态，下次启动时标为“服务端重启中断”。
+// Shutdown exits gracefully: stop accepting requests, stop dispatching, end all Pi processes. Runs in progress keep
+// their current state and are marked as interrupted by a server restart at the next startup.
 func (a *App) Shutdown(ctx context.Context) error {
 	var errs []error
 	if a.http != nil {
-		// SSE 连接不会自行结束：取消所有请求共用的上下文，让事件流尽快退出，再等待其余请求。
+		// SSE connections never end by themselves: cancel the context shared by all requests so event streams exit
+		// quickly, then wait for the remaining requests.
 		a.baseCancel()
 		if a.external != nil {
 			if err := a.external.Shutdown(ctx); err != nil {
@@ -639,11 +656,12 @@ func (a *App) Shutdown(ctx context.Context) error {
 		_ = os.Remove(a.Cfg.ReadyFile)
 	}
 	a.closeResources()
-	a.Log.Info("服务端已停止")
+	a.Log.Info("server stopped")
 	return errors.Join(errs...)
 }
 
-// restoreInstallFailures 把运行记录中各 CLI 版本最近一次失败的安装恢复到安装器，重启后仍能看到失败原因。
+// restoreInstallFailures restores into the installer the most recent failed install of each CLI version from the run
+// records, so the failure reason is still visible after a restart.
 func restoreInstallFailures(ctx context.Context, st *store.Store, inst *clitemplate.Installer, templates *clitemplate.Catalog) error {
 	results, err := st.LatestCLIInstalls(ctx)
 	if err != nil {
@@ -659,7 +677,7 @@ func restoreInstallFailures(ctx context.Context, st *store.Store, inst *clitempl
 	return nil
 }
 
-// agentTokens 用数据库保存 Agent 令牌：只存摘要，记下签发的服务端实例。
+// agentTokens keeps Agent tokens in the database: it stores only digests and records the issuing server instance.
 type agentTokens struct {
 	st       *store.Store
 	instance uuid.UUID
@@ -680,7 +698,8 @@ func (t agentTokens) RevokeAgentToken(ctx context.Context, id uuid.UUID) error {
 	return t.st.RevokeAgentToken(ctx, id)
 }
 
-// appHooks 把同步 Hook 交给插件服务；插件服务在执行器与任务服务之后装配，没有装配时（历史 schema 的测试）不调用插件。
+// appHooks hands synchronous Hooks to the plugin service. The plugin service is assembled after the executor and the
+// task service; when it is not assembled (tests on a historical schema) plugins are not called.
 type appHooks struct{ a *App }
 
 func (h appHooks) Hook(ctx context.Context, kind pluginhost.Kind, event map[string]any, project *uuid.UUID) (pluginhost.Outcome, error) {
@@ -690,8 +709,9 @@ func (h appHooks) Hook(ctx context.Context, kind pluginhost.Kind, event map[stri
 	return h.a.Plugins.Hook(ctx, kind, event, project)
 }
 
-// askDialog 把扩展在一轮之中发来的 confirm、select、input 变成这个 Agent 发给控制台的提问（plugins/SPEC.md §11），
-// 等到回答、到期或这一轮结束；出错时按取消回应。
+// askDialog turns a confirm, select or input sent by an extension during a turn into a question from this Agent to the
+// console (plugins/SPEC.md §11), and waits for the answer, the deadline or the end of the turn; on error it responds as
+// cancelled.
 func (a *App) askDialog(ctx context.Context, agentID, runID uuid.UUID, req pirpc.DialogRequest) pirpc.DialogResponse {
 	if a.API == nil || a.API.Inbox == nil {
 		return pirpc.DialogResponse{Cancelled: true, Outcome: "cancelled"}
@@ -699,12 +719,13 @@ func (a *App) askDialog(ctx context.Context, agentID, runID uuid.UUID, req pirpc
 	ans, err := a.API.Inbox.AskDialog(ctx, inbox.Dialog{AgentID: agentID, RunID: runID, RequestID: req.ID, Method: req.Method, Title: req.Title,
 		Message: req.Message, Placeholder: req.Placeholder, Options: req.Options, Timeout: req.Timeout})
 	if err != nil {
-		a.Log.Warn("扩展对话提问失败，按取消回应", "agentId", agentID, "runId", runID, "err", err)
+		a.Log.Warn("extension dialog question failed; answering as cancelled", "agentId", agentID, "runId", runID, "err", err)
 	}
 	return pirpc.DialogResponse{Cancelled: ans.Cancelled, Confirmed: ans.Confirmed, Value: ans.Value, Outcome: ans.Outcome, QuestionID: ans.QuestionID}
 }
 
-// providerState 给出插件提供方订阅账号的状态目录（按版本）与插件当前版本声明的随账号走的路径（plugins/SPEC.md §13）。
+// providerState returns the state directory (per version) of a plugin provider subscription account and the paths that
+// the plugin's current version declares as travelling with the account (plugins/SPEC.md §13).
 func (a *App) providerState(ctx context.Context, plugin, provider string, version uuid.UUID) (*agentconfig.ProviderState, error) {
 	if a.ProviderStates == nil {
 		return nil, agentconfig.ErrCredentialUnavailable
@@ -719,8 +740,10 @@ func (a *App) providerState(ctx context.Context, plugin, provider string, versio
 	return &agentconfig.ProviderState{PluginID: plugin, VersionID: version, Dir: a.ProviderStates.Dir(version), Paths: paths}, nil
 }
 
-// providerLocalLogin 报告开着“用本机的登录状态”时插件提供方用的本机登录（plugins/SPEC.md §13）：提供方来自插件、
-// 声明了随账号走的状态路径、开关开着时，按真实家目录下这些路径是否都在给出 active 或 missing；其余为 nil。只看是否存在，不读内容。
+// providerLocalLogin reports the local login a plugin provider uses while "Use local logins" is on
+// (plugins/SPEC.md §13): when the provider comes from a plugin, declares state paths that travel with the account, and
+// the switch is on, it returns active or missing depending on whether all of those paths exist under the real home
+// directory; otherwise nil. It only checks existence and never reads the contents.
 func (a *App) providerLocalLogin(ctx context.Context, provider string) (*string, error) {
 	if a.Plugins == nil || a.LocalMode == nil || a.ModelSettings == nil {
 		return nil, nil
@@ -750,8 +773,9 @@ func (a *App) providerLocalLogin(ctx context.Context, provider string) (*string,
 	return &state, nil
 }
 
-// sweepProviderStates 删除不再需要的插件提供方状态目录（plugins/SPEC.md §13）：保留未删除账号的当前版本、
-// 未结束任务绑定的版本，以及运行中的 Pi 正在用的版本。pending 为 true（启动时）也删除登录暂存目录。
+// sweepProviderStates deletes plugin provider state directories that are no longer needed (plugins/SPEC.md §13). It
+// keeps the current version of each account that is not deleted, versions bound to unfinished tasks, and versions in
+// use by a running Pi. When pending is true (at startup) it also deletes login staging directories.
 func (a *App) sweepProviderStates(ctx context.Context, pending bool) {
 	if a.ProviderStates == nil {
 		return
@@ -769,14 +793,15 @@ func (a *App) sweepProviderStates(ctx context.Context, pending bool) {
 		return keep, nil
 	}, pending)
 	if err != nil {
-		a.Log.Warn("清理插件提供方状态目录失败", "err", err)
+		a.Log.Warn("failed to sweep plugin provider state directories", "err", err)
 	}
 	if len(removed) > 0 {
-		a.Log.Info("已删除不再需要的插件提供方状态目录", "count", len(removed))
+		a.Log.Info("deleted plugin provider state directories that are no longer needed", "count", len(removed))
 	}
 }
 
-// providerStateSweeper 定期清理（重登、删除账号、任务结束之后留下的旧版本），直到 ctx 结束。
+// providerStateSweeper periodically cleans up (old versions left after a re-login, an account deletion or the end of a
+// task) until ctx ends.
 func (a *App) providerStateSweeper(ctx context.Context, every time.Duration) {
 	t := time.NewTicker(every)
 	defer t.Stop()
@@ -818,7 +843,8 @@ func (a *App) deleteProviderLogins(ctx context.Context, providers []string) erro
 	return nil
 }
 
-// pluginAssets 返回 Agent 已授权插件交给 Pi 的东西；插件服务没有装配时（历史 schema 的测试）为空。
+// pluginAssets returns what the Agent's granted plugins hand to Pi; empty when the plugin service is not assembled
+// (tests on a historical schema).
 func (a *App) pluginAssets(ctx context.Context, agentID uuid.UUID) (agentconfig.PluginAssets, error) {
 	if a.Plugins == nil {
 		return agentconfig.PluginAssets{}, nil
@@ -826,8 +852,10 @@ func (a *App) pluginAssets(ctx context.Context, agentID uuid.UUID) (agentconfig.
 	return a.Plugins.AgentAssets(ctx, agentID)
 }
 
-// assemblePlugins 装配插件第二版：安装目录在 <work root>/platform/plugins/；配置了宿主入口时准备宿主监护（Serve 时启动）。
-// 宿主的环境变量只给必要的几项，不继承服务端的环境（其中有数据库地址等）。
+// assemblePlugins assembles plugins v2: the install directory is <work root>/platform/plugins/; when a host entry point
+// is configured it prepares supervision of the plugin host (started in Serve). The host gets only the few environment
+// variables it needs and does not inherit the server's environment (which contains the database address, among other
+// things).
 func (a *App) assemblePlugins(cfg *config.Config, res *preflight.Resolved, log *slog.Logger) error {
 	root := filepath.Join(res.WorkRoot, "platform", "plugins")
 	if err := os.MkdirAll(root, 0o700); err != nil {
@@ -849,13 +877,14 @@ func (a *App) assemblePlugins(cfg *config.Config, res *preflight.Resolved, log *
 	if err := a.Plugins.Init(); err != nil {
 		return err
 	}
-	// 插件注册的模型提供方并入模型目录；读不出时只记日志，Agent 用到时再明确报错。
+	// Merge the model providers registered by plugins into the model catalog; if they cannot be read, only log it, and
+	// fail explicitly when an Agent uses one.
 	if err := a.Plugins.PublishProviders(context.Background()); err != nil {
-		log.Warn("把插件注册的模型提供方并入模型目录失败", "err", err)
+		log.Warn("failed to merge plugin-registered model providers into the model catalog", "err", err)
 	}
 	a.API.Plugins = a.Plugins
 	if cfg.PluginHostEntry == "" {
-		log.Info("没有配置插件宿主入口，插件的平台侧不运行", "env", config.EnvPluginHostEntry)
+		log.Info("no plugin host entry point configured; plugin platform sides do not run", "env", config.EnvPluginHostEntry)
 		return nil
 	}
 	env := append(execenv.Base(root, ""), "PATH="+res.ExecBasePath, "HOME="+root, "LANG=C.UTF-8", "LOOP_NOW_PLUGINS_ROOT="+root, "LOOP_NOW_API_URL="+a.Plugins.APIURL)
@@ -868,8 +897,9 @@ func (a *App) assemblePlugins(cfg *config.Config, res *preflight.Resolved, log *
 	return nil
 }
 
-// agentURL 返回注入给 Pi 的 Agent 专用接口地址。Pi 与服务端在同一台机器上：
-// 监听回环地址时用它本身；监听全部地址时用 127.0.0.1；监听某个具体地址时用该地址。端口与监听器相同。
+// agentURL returns the address of the Agent-only API injected into Pi. Pi and the server run on the same machine: when
+// listening on a loopback address, use that address; when listening on all addresses, use 127.0.0.1; when listening on
+// a specific address, use that address. The port is the listener's port.
 func agentURL(addr net.Addr) string {
 	host, port := "127.0.0.1", ""
 	if ta, ok := addr.(*net.TCPAddr); ok {
@@ -942,7 +972,7 @@ func (a *App) closeResources() {
 		cancel()
 	}
 	if a.listener != nil && a.http == nil {
-		_ = a.listener.Close() // 装配失败：监听器还没交给 HTTP 服务
+		_ = a.listener.Close() // assembly failed: the listener has not been handed to the HTTP server yet
 	}
 	if a.extListener != nil && a.external == nil {
 		_ = a.extListener.Close()
@@ -957,7 +987,7 @@ func (a *App) closeResources() {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), budget)
 		if e := a.Installer.Close(ctx); e != nil && a.Log != nil {
-			a.Log.Warn("CLI共享安装尚未收敛", "errorCode", "installer_drain_timeout")
+			a.Log.Warn("shared CLI installs have not settled yet", "errorCode", "installer_drain_timeout")
 		}
 		cancel()
 	}

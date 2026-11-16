@@ -1,5 +1,5 @@
-// Package workflow 定义通用的固定流程、字段校验与显式输入映射。
-// 所有业务节点和字段均由 Manager 定义，包本身不执行 Agent 或外部操作。
+// Package workflow defines generic fixed flows, field validation and explicit input mapping. All business nodes and
+// fields are defined by the Manager; the package itself does not run Agents or external operations.
 package workflow
 
 import (
@@ -49,7 +49,7 @@ type Definition struct {
 	Edges       []Edge `json:"edges"`
 }
 
-// Limits 由平台运行配置提供；校验器本身不写死图大小。
+// Limits are provided by the platform's runtime configuration; the validator itself does not hard-code graph sizes.
 type Limits struct{ MaxSteps, MaxEdges int }
 
 type Error struct{ Field, Message string }
@@ -276,8 +276,8 @@ type InputVersion struct {
 	NodeRunID uuid.UUID `json:"nodeRunId"`
 }
 
-// ResolveInputs 的 results 必须是按成功顺序排列的成功结果；失败提交不应传入。
-// 结果深拷贝，返回的版本关联供持久化追溯。
+// The results passed to ResolveInputs must be successful results in the order they succeeded; failed submissions must
+// not be passed in. Results are deep-copied, and the returned version links are for tracing in persistence.
 func ResolveInputs(step Step, request map[string]any, results []SuccessfulResult) (map[string]any, []InputVersion, error) {
 	latest := map[string]SuccessfulResult{}
 	for _, r := range results {
@@ -339,7 +339,8 @@ func CloneValue(v any) (any, error) {
 	return out, err
 }
 
-// SelectEdge 只判断合法出口和上限，不执行条件表达式，不修改计数。
+// SelectEdge only checks for a valid exit and the limits; it does not evaluate condition expressions and does not
+// modify the counts.
 func (d Definition) SelectEdge(stepID string, edgeID *string, counts map[string]int) (*Edge, error) {
 	edges := d.Outgoing(stepID)
 	if len(edges) == 0 {
@@ -362,7 +363,8 @@ func (d Definition) SelectEdge(stepID string, edgeID *string, counts map[string]
 	return nil, invalid("edgeId", fmt.Sprintf("连线不属于当前节点 %s", stepID))
 }
 
-// integerNumber按十进制字面值判断，不经float64舍入，也不为巨大指数分配大整数。
+// integerNumber decides from the decimal literal, without rounding through float64 and without allocating big integers
+// for huge exponents.
 func integerNumber(raw string) bool {
 	mantissa, exponent, hasExp := strings.Cut(strings.ToLower(raw), "e")
 	digits := strings.ReplaceAll(strings.TrimPrefix(mantissa, "-"), ".", "")

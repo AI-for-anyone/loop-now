@@ -13,7 +13,7 @@ import { server } from './server'
 let seq = 0
 const id = () => `00000000-0000-7000-9000-${String(++seq).padStart(12, '0')}`
 
-// 概览中的一个 Agent，默认空闲、Pi 进程未运行、没有回复过。
+// An Agent on the overview; by default idle, Pi process not running, never replied.
 export function makeAgentOverview(overrides: Partial<Schemas['AgentOverview']> = {}): Schemas['AgentOverview'] {
   const agentId = overrides.agentId ?? id()
   return {
@@ -60,7 +60,7 @@ export function makeAnomaly(overrides: Partial<Schemas['Anomaly']> = {}): Schema
     errorCode: 'pi_exited',
     errorMessage: 'exit status 137',
     endReason: null,
-    // 不是失败的手动压缩时为 null（契约 Anomaly.compaction）。
+    // null unless it is a failed manual compaction (contract Anomaly.compaction).
     compaction: null,
     ...overrides,
   }
@@ -82,7 +82,7 @@ interface OverviewSetup {
   path?: string
 }
 
-// 打开概览页：用量与异常接口默认为空，概览事件流由测试推送。
+// Opens the overview page: usage and anomaly endpoints are empty by default, and tests push the overview event stream.
 export async function renderOverview(setup: OverviewSetup = {}) {
   server.use(
     ...(setup.handlers ?? []),

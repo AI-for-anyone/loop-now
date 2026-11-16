@@ -15,16 +15,20 @@ import (
 	"loop-now/internal/server/executor"
 )
 
-// 插件提供方订阅账号的状态（plugins/SPEC.md §13）：启动 Pi 前，Agent 的 Pi 目录里的 auth.json 链接到账号状态目录里的
-// auth.json，声明随账号走的 HOME 路径链接到状态目录里的同名路径；同项目多个 Agent 共用一份，由扩展自己刷新。
-// 本次建的链接记在 Agent 目录里，下次启动、释放与清理前先删掉，所以换账号、换模型、解绑都收得干净，
-// 删除 Agent 目录时也不会经链接动到状态目录。链接只建在平台自己的 Agent 目录里，从不建在用户真实的家目录里。
+// State of a plugin provider's subscription account (plugins/SPEC.md §13): before Pi starts, auth.json in the Agent's
+// Pi directory is linked to auth.json in the account's state directory, and the HOME paths declared to follow the
+// account are linked to the paths of the same name in the state directory; several Agents of the same project share one
+// copy, which the extension refreshes itself. The links created this time are recorded in the Agent directory and
+// removed before the next start, release and cleanup, so switching account, switching model and unbinding all clean up
+// fully, and deleting the Agent directory cannot reach the state directory through a link. Links are only ever created
+// in the platform's own Agent directory, never in the user's real home directory.
 
-// providerLinksFile 记下上次建的链接（绝对路径）。
+// providerLinksFile records the links created last time (absolute paths).
 const providerLinksFile = "provider-links.json"
 
-// clearProviderLinks 删除上次建的链接：只删 Agent HOME 与 Pi 目录里的链接本身（Windows 上的 auth.json 是硬链接，也删），
-// 不跟随、不碰链接指向的状态目录。
+// clearProviderLinks deletes the links created last time: only the links themselves in the Agent HOME and the Pi
+// directory (on Windows auth.json is a hard link, which is deleted too); it neither follows them nor touches the state
+// directory they point to.
 func clearProviderLinks(d agentDirs) error {
 	record := filepath.Join(d.root, providerLinksFile)
 	b, err := os.ReadFile(record)
@@ -54,9 +58,10 @@ func clearProviderLinks(d agentDirs) error {
 	return os.Remove(record)
 }
 
-// mkdirPrivate 在状态目录 root 里建出 dir 与缺少的上级目录。状态目录里放的是订阅令牌：新建的每一级都显式设为
-// 只有当前用户能访问（Windows 上是受保护的 DACL，不只靠继承上级的 ACL）；已有的一级必须是真正的目录，
-// 不经软链接或联接走到状态目录外面。
+// mkdirPrivate creates dir and any missing parent directories inside the state directory root. The state directory
+// holds subscription tokens: every newly created level is explicitly made accessible only to the current user (on
+// Windows a protected DACL, not just the ACL inherited from the parent); every existing level must be a real directory,
+// never a symlink or junction that leads outside the state directory.
 func mkdirPrivate(root, dir string) error {
 	if !within(root, dir) {
 		return errors.New("路径不在状态目录里")
@@ -94,8 +99,10 @@ func within(dir, path string) bool {
 	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
-// linkProviderState 为插件提供方的订阅账号建链接。loginHome 不为空（开着“用本机的登录状态”）时 HOME 是用户真实的家目录：
-// 不在那里建任何链接，扩展用用户本人目录下自己的状态；声明的路径在那里不存在时明确失败，不让 Pi 起来后才报未登录。
+// linkProviderState creates the links for a plugin provider's subscription account. When loginHome is not empty
+// (“用本机的登录状态” ("Use local logins") is on), HOME is the user's real home directory: no link is created there and
+// the extension uses its own state in the user's own directory; when a declared path does not exist there it fails
+// explicitly, instead of letting Pi start and only then report that it is not logged in.
 func (e *Executor) linkProviderState(snap agentconfig.Snapshot, d agentDirs, loginHome string) error {
 	st := snap.ProviderState
 	if !slices.Contains(snap.Plugins.IDs, st.PluginID) {
@@ -104,7 +111,8 @@ func (e *Executor) linkProviderState(snap agentconfig.Snapshot, d agentDirs, log
 	if err := pluginmanifest.CheckProviderState("providerState", map[string]pluginmanifest.ProviderState{snap.Provider: {Paths: st.Paths}}); len(st.Paths) > 0 && err != nil {
 		return fail(executor.ErrCredentialUnavailable, "插件 %s 声明的状态路径不合规：%v", st.PluginID, err)
 	}
-	// 平台每次启动与复用时都会在 HOME 里删写 CLI 模板的凭证文件（全部模板，不只是这个 Agent 配了的），状态路径不能与它们重叠。
+	// On every start and reuse the platform deletes and rewrites the CLI templates' credential files in HOME (for all
+	// templates, not just the ones this Agent configured), so the state paths must not overlap with them.
 	managed := slices.Clone(e.tmpl.AllCredentialFilePaths())
 	for _, payload := range snap.CLIPayloads {
 		for _, f := range payload.Files {
@@ -163,7 +171,8 @@ func (e *Executor) linkProviderState(snap agentconfig.Snapshot, d agentDirs, log
 			link := filepath.Join(d.home, filepath.FromSlash(p))
 			info, err := os.Lstat(target)
 			if errors.Is(err, fs.ErrNotExist) {
-				// 登录时扩展还没写这条路径：在状态目录里建一个空目录，扩展之后写进去的东西都随账号走。
+				// The extension had not written this path yet at login: create an empty directory in the state
+				// directory, so whatever the extension writes there later follows the account.
 				err = mkdirPrivate(st.Dir, target)
 				if err == nil {
 					info, err = os.Lstat(target)
@@ -178,7 +187,8 @@ func (e *Executor) linkProviderState(snap agentconfig.Snapshot, d agentDirs, log
 			if err := os.MkdirAll(filepath.Dir(link), 0o700); err != nil {
 				return undo(err)
 			}
-			// 原处是 Agent 自己 HOME 里的旧东西（平台目录）：删掉；是链接时只删链接本身，不进到链接里面。
+			// What is in place is old content in the Agent's own HOME (a platform directory): delete it; if it is a
+			// link, delete only the link itself without going into it.
 			if old, err := os.Lstat(link); err == nil && isLink(link, old) {
 				if err := os.Remove(link); err != nil {
 					return undo(err)

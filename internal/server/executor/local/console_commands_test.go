@@ -47,7 +47,7 @@ func TestConsoleCompactUsesRealRunAndPiResult(t *testing.T) {
 	}
 }
 
-// sessionFile 是 Agent 当前记下的会话文件（执行器写给数据库的那份）。
+// sessionFile is the session file currently recorded for the Agent (the one the executor wrote to the database).
 func (h *harness) sessionFile(id uuid.UUID) string {
 	h.src.mu.Lock()
 	defer h.src.mu.Unlock()
@@ -70,7 +70,7 @@ func TestConsoleStopIdleAndExportLifecycle(t *testing.T) {
 		t.Fatalf("JSONL 导出不符：%+v %v", jsonl, err)
 	}
 	pid := h.pid(id)
-	// 有空闲进程时也用 pi --export，不动那个进程。
+	// Even with an idle process, pi --export is used and that process is left alone.
 	html, err := h.e.ExportSession(context.Background(), id, session, "html")
 	if err != nil || html.ContentType != "text/html; charset=utf-8" || string(html.Data) != "<html>exported session</html>" || filepath.Ext(html.Filename) != ".html" {
 		t.Fatalf("HTML 导出不符：%+v %v", html, err)
@@ -97,7 +97,7 @@ func TestConsoleStopIdleAndExportLifecycle(t *testing.T) {
 	if err != nil || stopped {
 		t.Fatalf("没有进程时应返回 false：%v %v", stopped, err)
 	}
-	// 没有进程时导出也不启动运行时。
+	// Without a process, export does not start the runtime either.
 	if _, err := h.e.ExportSession(context.Background(), id, session, "html"); err != nil || h.pid(id) != 0 {
 		t.Fatalf("没有进程时导出：%v pid=%d", err, h.pid(id))
 	}
@@ -107,7 +107,8 @@ func TestConsoleStopIdleAndExportLifecycle(t *testing.T) {
 	}
 }
 
-// 导出只认 sessions 目录里的会话文件；会话文件不在了是 ErrNoSession；pi --export 失败如实报错并清理临时文件。
+// Export only accepts session files in the sessions directory; a session file that no longer exists is ErrNoSession; a
+// failing pi --export is reported as is and its temp files are cleaned up.
 func TestConsoleExportChecksSessionFile(t *testing.T) {
 	h := newHarness(t, func(o *Options) { o.Passthrough = append(o.Passthrough, "FAKEPI_EXPORT_FAIL") }, "")
 	id := h.agent(nil)
@@ -311,7 +312,8 @@ func TestSessionUserTextStripsCurrentAndLegacyRunID(t *testing.T) {
 	}
 }
 
-// 维护操作里可以预期的失败带 executor 的哨兵错误，对话服务据此返回 409。
+// Expected failures in maintenance operations carry executor's sentinel errors, which the conversation service turns
+// into a 409.
 func TestMaintenanceErrorsCarrySentinels(t *testing.T) {
 	h := newHarness(t, nil, "")
 	id := h.agent(nil)
@@ -330,13 +332,14 @@ func TestMaintenanceErrorsCarrySentinels(t *testing.T) {
 	if _, err := h.e.ExportSession(ctx, id, "/x.jsonl", "jsonl"); !errors.Is(err, executor.ErrMaintenanceBusy) {
 		t.Fatalf("维护进行中导出应是 ErrMaintenanceBusy：%v", err)
 	}
-	// 列出会话只读文件，维护进行中也可以。
+	// Listing sessions only reads files, so it also works while maintenance is in progress.
 	if _, err := h.e.ListSessions(ctx, id, ""); err != nil {
 		t.Fatalf("列出会话不受维护影响：%v", err)
 	}
 }
 
-// StopIdle 只接受平台命令的停止原因，记下的 pi.stopped 原因都在契约的枚举里。
+// StopIdle only accepts the stop reasons of platform commands, and the pi.stopped reasons it records are all in the
+// contract's enum.
 func TestStopIdleRejectsUnknownReason(t *testing.T) {
 	h := newHarness(t, nil, "")
 	id := h.agent(nil)
@@ -345,7 +348,8 @@ func TestStopIdleRejectsUnknownReason(t *testing.T) {
 	}
 }
 
-// Pi 没有压缩（会话太短、已经压缩过）时这次执行正常完成，结果里写明原因；其余失败仍是失败。
+// When Pi does not compact (session too short, already compacted), the run completes normally and the result states
+// the reason; other failures are still failures.
 func TestConsoleCompactSkippedIsCompleted(t *testing.T) {
 	h := newHarness(t, func(o *Options) { o.Passthrough = append(o.Passthrough, "FAKEPI_COMPACT_ERROR") }, "")
 	id := h.agent(nil)
@@ -355,7 +359,7 @@ func TestConsoleCompactSkippedIsCompleted(t *testing.T) {
 	compact := func(piError string) executor.Result {
 		t.Helper()
 		h.env["FAKEPI_COMPACT_ERROR"] = piError
-		// 环境变量只在 Pi 启动时读：每种情况先停掉空闲进程。
+		// Environment variables are read only when Pi starts: stop the idle process first for each case.
 		if _, err := h.e.StopIdle(context.Background(), id, "console_reload"); err != nil {
 			t.Fatal(err)
 		}
@@ -382,7 +386,9 @@ func userLine(text string) string {
 	return string(b) + "\n"
 }
 
-// 长会话：标题只向前读、预览只从末尾往回读，中间的内容（包括损坏的行）不读；文件没变时用缓存，变了重新读。
+// Long session: the title is read only forwards and the preview only backwards from the end, and the content in between
+// (including corrupt lines) is not read; the cache is used while the file is unchanged and it is re-read when it
+// changes.
 func TestListSessionsReadsOnlyHeadAndTail(t *testing.T) {
 	h := newHarness(t, nil, "")
 	id := h.agent(nil)
@@ -418,7 +424,7 @@ func TestListSessionsReadsOnlyHeadAndTail(t *testing.T) {
 	if got := list(); got.Title != "第一条问题" || got.Preview != "最后一条问题" {
 		t.Fatalf("标题与预览：%q %q", got.Title, got.Preview)
 	}
-	// 内容换了但大小与修改时间不变：仍用缓存。
+	// Content changed but size and modification time did not: the cache is still used.
 	info, _ := os.Stat(path)
 	same := strings.Replace(b.String(), "最后一条问题", "改过的问题题", 1)
 	if err := os.WriteFile(path, []byte(same), 0o600); err != nil {
@@ -441,7 +447,7 @@ func TestListSessionsReadsOnlyHeadAndTail(t *testing.T) {
 	}
 }
 
-// 按 ID 恢复只读各文件的头一行；ID 重复或找不到时没有结果。
+// Resolving by ID reads only the first line of each file; there is no result when the ID is duplicated or not found.
 func TestResolveSessionByHeader(t *testing.T) {
 	h := newHarness(t, nil, "")
 	id := h.agent(nil)

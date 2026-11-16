@@ -91,7 +91,7 @@ func TestProjectCredentialCLIWithApp(t *testing.T) {
 	if v := modelSelection(); v["status"] != "account_deleted" || v["selectedAccountId"] != account || v["resolvedAccountId"] != nil {
 		t.Fatal("deleted explicit selection fell back")
 	}
-	// 删除账号时清掉没有进行中任务在用的版本（迁移 030 起的清理规则）。
+	// Deleting an account cleans up the versions no running task is using (the cleanup rule since migration 030).
 	for _, v := range []string{oldVersion, replaced["currentVersionId"].(string)} {
 		var exists bool
 		if err := s.a.Store.Pool.QueryRow(context.Background(), "SELECT EXISTS(SELECT 1 FROM model_auth_versions WHERE id=$1)", v).Scan(&exists); err != nil || exists {

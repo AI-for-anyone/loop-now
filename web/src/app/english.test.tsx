@@ -14,7 +14,8 @@ import { server } from '@/test/server'
 import { baseHandlers, sidebar, sidebarLinks } from '@/test/shell'
 import { routes } from './routes'
 
-// 英文界面：这个文件的地址带 ?lang=en-US，整份按英文文案表渲染。中文界面的行为由其余测试覆盖，这里只确认各区域换成了英文。
+// English UI: this file's URL carries ?lang=en-US, so the whole file renders with the English string table. The
+// other tests cover the behavior of the Chinese UI; here we only confirm that each area has switched to English.
 describe('English console', () => {
   it('picks en-US from ?lang=', () => {
     expect(locale).toBe('en-US')
@@ -54,7 +55,7 @@ describe('English console', () => {
     await renderChat()
     const box = screen.getByRole('textbox', { name: 'Message' })
     expect(box).toHaveAttribute('placeholder', 'Message 开发助手')
-    // 英文界面的按键说明写 Enter。
+    // The English UI writes Enter in the key hints.
     expect(screen.getByText('Shift + Enter')).toBeInTheDocument()
     expect(screen.getByText('new line')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()

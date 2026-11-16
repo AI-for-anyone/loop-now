@@ -16,15 +16,18 @@ var errNotFound = errors.New("procgroup: no such process group")
 
 const stillActive = 259 // STILL_ACTIVE
 
-// jobs 记录本进程创建的 Job Object，按组长 PID 索引。句柄在组长退出后由 watch 协程关闭；
-// 关闭时 KILL_ON_JOB_CLOSE 会结束组里剩下的后代，与 Unix 上“组长退出后 kill(-pid)”的做法一致。
+// jobs records the Job Objects this process created, indexed by the group leader's PID. A handle is closed by the
+// watch goroutine after the group leader exits; on close, KILL_ON_JOB_CLOSE ends the descendants left in the group,
+// matching the Unix approach of "kill(-pid) after the group leader exits".
 var jobs struct {
 	sync.Mutex
 	m map[int]windows.Handle
 }
 
-// configure：新的控制台进程组（服务端自己收到 Ctrl+C 时不会传给子进程，对应 Unix 的 Setpgid 脱离终端），
-// 不弹控制台窗口（服务端由桌面壳在后台拉起时，node.exe 这类控制台程序否则会各开一个窗口）。
+// configure: a new console process group (a Ctrl+C the server itself receives is not passed on to the child,
+// the counterpart of detaching from the terminal with Setpgid on Unix), and no console window (when the desktop
+// shell starts the server in the background, console programs such as node.exe would otherwise each open a
+// window).
 func configure(cmd *exec.Cmd) {
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
@@ -33,9 +36,12 @@ func configure(cmd *exec.Cmd) {
 	cmd.SysProcAttr.HideWindow = true
 }
 
-// started 为进程建一个 Job Object（KILL_ON_JOB_CLOSE：句柄全部关闭时整组结束，服务端崩溃也不留孤儿），
-// 把进程放进去并开始守护。Windows 8 起 Job 可以嵌套，服务端自己在别的 Job 里（桌面壳、CI runner）也能成功。
-// 进程从 CreateProcess 到 Assign 之间有一小段窗口，这期间它拉起的子进程不在 Job 里；node 启动远慢于这段时间。
+// started creates a Job Object for the process (KILL_ON_JOB_CLOSE: the whole group ends when all handles are
+// closed, so even a server crash leaves no orphans), puts the process into it and starts watching it. Since
+// Windows 8 Jobs can be nested, so this also works when the server itself runs inside another Job (desktop shell,
+// CI runner).
+// There is a small window between CreateProcess and Assign during which children the process starts are not in
+// the Job; node takes far longer than that to start.
 func started(cmd *exec.Cmd) error {
 	pid := cmd.Process.Pid
 	job, err := windows.CreateJobObject(nil, nil)
@@ -62,7 +68,7 @@ func started(cmd *exec.Cmd) error {
 	if jobs.m == nil {
 		jobs.m = map[int]windows.Handle{}
 	}
-	if old, ok := jobs.m[pid]; ok { // PID 被复用而旧记录还在：旧 Job 里早已没有进程，关掉即可
+	if old, ok := jobs.m[pid]; ok { // PID reused while the old entry is still there: the old Job has long been empty, just close it
 		windows.CloseHandle(old)
 	}
 	jobs.m[pid] = job
@@ -71,7 +77,8 @@ func started(cmd *exec.Cmd) error {
 	return nil
 }
 
-// watch 等组长退出后关闭 Job 句柄：关闭即结束仍存活的后代。
+// watch waits for the group leader to exit and then closes the Job handle; closing it ends any descendants still
+// alive.
 func watch(pid int, proc, job windows.Handle) {
 	_, _ = windows.WaitForSingleObject(proc, windows.INFINITE)
 	windows.CloseHandle(proc)
@@ -83,8 +90,9 @@ func watch(pid int, proc, job windows.Handle) {
 	windows.CloseHandle(job)
 }
 
-// withJob 在持锁期间把本进程登记的 Job 句柄交给 fn：watch 协程只在拿到锁之后才从表里删掉并关闭句柄，
-// fn 里用的句柄因此一定有效。没有登记时返回 false。
+// withJob hands the Job handle registered by this process to fn while holding the lock: the watch goroutine only
+// removes a handle from the table and closes it after taking the lock, so the handle used in fn is always valid.
+// It returns false when nothing is registered.
 func withJob(pid int, fn func(windows.Handle) error) (bool, error) {
 	jobs.Lock()
 	defer jobs.Unlock()
@@ -95,10 +103,12 @@ func withJob(pid int, fn func(windows.Handle) error) (bool, error) {
 	return true, fn(job)
 }
 
-// jobProcessIDs 返回 Job 里登记的全部进程 PID（JobObjectBasicProcessIdList）。已经退出但进程对象还没销毁的进程
-// （父进程或本包的 watch 协程还握着它的句柄）仍在列表里，也仍计入 ActiveProcesses，所以存活要另行判断。
+// jobProcessIDs returns the PIDs of all processes registered in the Job (JobObjectBasicProcessIdList). A process
+// that has exited but whose process object has not been destroyed yet (the parent or this package's watch goroutine
+// still holds its handle) is still in the list and still counted in ActiveProcesses, so liveness has to be checked
+// separately.
 func jobProcessIDs(job windows.Handle) ([]uint32, error) {
-	const header = 8 // NumberOfAssignedProcesses、NumberOfProcessIdsInList 两个 DWORD
+	const header = 8 // two DWORDs: NumberOfAssignedProcesses, NumberOfProcessIdsInList
 	ptr := int(unsafe.Sizeof(uintptr(0)))
 	capacity := 64
 	for {
@@ -111,7 +121,8 @@ func jobProcessIDs(job windows.Handle) ([]uint32, error) {
 			return nil, err
 		}
 		if err != nil || listed < assigned {
-			// 列表装不下：按内核报的总数放大再查一次（数量在两次查询之间还可能变化，所以留余量）。
+			// The list did not fit: grow to the total the kernel reported and query again (the count can still
+			// change between the two queries, so leave some headroom).
 			capacity = max(assigned, capacity*2) + 16
 			continue
 		}
@@ -123,12 +134,14 @@ func jobProcessIDs(job windows.Handle) ([]uint32, error) {
 	}
 }
 
-// jobAlive 报告 Job 里是否还有没退出的进程。
+// jobAlive reports whether the Job still has a process that has not exited.
 //
-// 不能只看 ActiveProcesses：组长退出后内核先让它的进程句柄进入有信号状态（cmd.Wait 由此返回），
-// 直到进程对象销毁才把它从 Job 的计数里去掉；而 Go 的 os.Process 与本包的 watch 协程此时可能还握着句柄。
-// 在这个窗口里查 ActiveProcesses 会得到 1，让“进程已退出且组里没人”的确认偶发失败（CI 上的 Windows runner 就撞到过）。
-// 这里改为枚举组里的 PID，逐个看退出码是否仍是 STILL_ACTIVE。
+// Looking at ActiveProcesses alone is not enough: after the group leader exits, the kernel first signals its
+// process handle (which is what makes cmd.Wait return), and only removes it from the Job's count once the process
+// object is destroyed; Go's os.Process and this package's watch goroutine may still hold handles at that point.
+// Querying ActiveProcesses in that window returns 1, which makes the check "the process has exited and the group is
+// empty" fail now and then (the Windows runner on CI has hit this).
+// So instead enumerate the PIDs in the group and check for each whether its exit code is still STILL_ACTIVE.
 func jobAlive(job windows.Handle) (bool, error) {
 	pids, err := jobProcessIDs(job)
 	if err != nil {
@@ -142,8 +155,9 @@ func jobAlive(job windows.Handle) (bool, error) {
 	return false, nil
 }
 
-// kill 结束整组：本进程建的 Job 用 TerminateJobObject；上一个服务端实例留下的进程（只有 pid，没有 Job）退回到
-// 结束该进程本身——它的后代在上一个实例退出、Job 句柄关闭时已经随之结束。
+// kill ends the whole group: a Job this process created is ended with TerminateJobObject; for a process left by a
+// previous server instance (only a pid, no Job) it falls back to ending that process itself - its descendants
+// already ended when the previous instance exited and its Job handle was closed.
 func kill(pid int) error {
 	if ok, err := withJob(pid, func(job windows.Handle) error {
 		if live, err := jobAlive(job); err == nil && !live {

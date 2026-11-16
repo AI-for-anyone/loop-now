@@ -57,7 +57,7 @@ func TestFakeErrorStopReason(t *testing.T) {
 	if res != want {
 		t.Fatalf("结果不符：%+v", res)
 	}
-	// 出错后进程仍可继续处理下一条消息。
+	// After an error the process can still handle the next message.
 	res, err = p.Prompt(ctx, "again", nil)
 	if err != nil || res.Text != "echo: again" {
 		t.Fatalf("出错后应能继续对话：%+v %v", res, err)
@@ -128,7 +128,7 @@ func TestFakeAbortMidTurnKeepsPartialText(t *testing.T) {
 	if out.res != (TurnResult{Outcome: OutcomeAborted, Text: "aaa"}) {
 		t.Fatalf("打断应保留已产生的文字：%+v", out.res)
 	}
-	// 同一进程继续处理下一条消息。
+	// The same process goes on to handle the next message.
 	res, err := p.Prompt(ctx, "after", nil)
 	if err != nil || res.Text != "echo: after" {
 		t.Fatalf("打断后应能继续：%+v %v", res, err)

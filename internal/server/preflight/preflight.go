@@ -1,4 +1,5 @@
-// Package preflight 在服务端开始提供服务前检查运行依赖，并推导依赖本机环境的配置默认值。
+// Package preflight checks the runtime dependencies before the server starts serving, and derives the configuration
+// defaults that depend on the local machine.
 package preflight
 
 import (
@@ -18,37 +19,39 @@ import (
 	"loop-now/internal/privatefs"
 )
 
-// Resolved 是检查通过后得到的本机绝对路径与推导值。
+// Resolved holds the absolute local paths and derived values obtained once the checks pass.
 type Resolved struct {
-	PiBin        string // PI_BIN 解析后的绝对路径（保留符号链接本身，便于识别进程命令行）
-	PiRealPath   string // PI_BIN 解析符号链接后的真实路径
-	PiPackageDir string // Pi 安装包根目录
+	PiBin        string // absolute path of PI_BIN (the symlink itself is kept, so process command lines can be recognized)
+	PiRealPath   string // real path of PI_BIN with symlinks resolved
+	PiPackageDir string // root directory of the Pi package
 	PiAIDir      string
 	NodeBin      string
 	GitBin       string
 	ExecBasePath string
-	WorkRoot     string // 解析符号链接后的绝对路径
+	WorkRoot     string // absolute path with symlinks resolved
 }
 
-// HostCommonDirs 是执行 PATH 中排在系统目录之前的宿主常用目录（存在的才加入）；按平台取自 execenv。
+// HostCommonDirs are the common host machine directories that come before the system directories in the run PATH
+// (only those that exist are added); taken per platform from execenv.
 var HostCommonDirs = execenv.HostCommonDirs()
 
-// SystemDirs 是执行 PATH 末尾的系统目录；按平台取自 execenv。
+// SystemDirs are the system directories at the end of the run PATH; taken per platform from execenv.
 var SystemDirs = execenv.SystemDirs()
 
-// Options 是检查所需的输入。
+// Options is the input the checks need.
 type Options struct {
 	PiBin        string
 	PiVersion    string
-	PiAIDir      string // 为空时推导
+	PiAIDir      string // derived when empty
 	NodeBin      string
-	ExecBasePath string // 为空时推导
+	ExecBasePath string // derived when empty
 	WorkRoot     string
-	// HomeDirs 是不允许包含工作根目录的 home 目录；为空时取当前用户的 home。
+	// HomeDirs are the home directories that must not contain the work root; when empty, the current user's home is
+	// used.
 	HomeDirs []string
 }
 
-// Resolve 检查 Pi、node、git 与工作根目录，并推导执行 PATH 与 pi-ai 目录。
+// Resolve checks Pi, node, git and the work root, and derives the run PATH and the pi-ai directory.
 func Resolve(ctx context.Context, o Options) (*Resolved, error) {
 	r := &Resolved{}
 	var err error
@@ -101,9 +104,12 @@ func lookPath(name string) (string, error) {
 	return filepath.Abs(p)
 }
 
-// DeriveExecBasePath 按“node 真实所在目录 → 宿主常用目录 → git 真实所在目录 → 系统目录”拼接执行 PATH 的基础部分。
-// node 排在最前：Pi 以 `#!/usr/bin/env node` 启动，配置的（或随包的）node 不能被宿主上另装的 node 盖过。
-// node 在系统目录里时例外，仍排在宿主常用目录之后，免得系统目录里的旧工具盖过宿主上装的。
+// DeriveExecBasePath builds the base part of the run PATH in the order "node's real directory -> common host
+// directories -> git's real directory -> system directories".
+// node comes first: Pi starts with `#!/usr/bin/env node`, and the configured (or bundled) node must not be shadowed by
+// another node installed on the host.
+// The exception is a node inside a system directory: it still comes after the common host directories, so old tools
+// in the system directories do not shadow the ones installed on the host.
 func DeriveExecBasePath(nodeBin, gitBin string) string {
 	var dirs []string
 	add := func(d string) {
@@ -134,9 +140,10 @@ func DeriveExecBasePath(nodeBin, gitBin string) string {
 	return strings.Join(dirs, string(os.PathListSeparator))
 }
 
-// PiCommand 返回启动 Pi 的命令：piBin 是 JavaScript 入口（随包布局的 dist/bundle/cli.js）时由 node 运行它——
-// Windows 没有 shebang，Unix 上 `#!/usr/bin/env node` 的效果也是如此；否则直接执行 piBin（PATH 上的 pi 命令）。
-// nodeBin 为空时按 PATH 找 node。
+// PiCommand returns the command that starts Pi: when piBin is a JavaScript entry (dist/bundle/cli.js in the bundled
+// layout) node runs it - Windows has no shebang, and on Unix `#!/usr/bin/env node` has the same effect; otherwise
+// piBin (the pi command on PATH) is run directly.
+// When nodeBin is empty, node is looked up on PATH.
 func PiCommand(nodeBin, piBin string, args ...string) *exec.Cmd {
 	if IsJavaScriptEntry(piBin) {
 		if nodeBin == "" {
@@ -147,7 +154,7 @@ func PiCommand(nodeBin, piBin string, args ...string) *exec.Cmd {
 	return exec.Command(piBin, args...)
 }
 
-// IsJavaScriptEntry 报告 path 是否是要交给 node 运行的脚本文件。
+// IsJavaScriptEntry reports whether path is a script file that node must run.
 func IsJavaScriptEntry(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".js", ".mjs", ".cjs":
@@ -161,7 +168,8 @@ func checkPiVersion(ctx context.Context, nodeBin, piBin, want, path string) erro
 	defer cancel()
 	cmd := PiCommand(nodeBin, piBin, "--version")
 	cmd = exec.CommandContext(ctx, cmd.Path, cmd.Args[1:]...)
-	// Pi 以 `#!/usr/bin/env node` 启动（或由 node 直接运行 cli.js），需要能在 PATH 中找到 node；其余环境一律不传。
+	// Pi starts with `#!/usr/bin/env node` (or node runs cli.js directly), so node must be found on PATH; no other
+	// environment is passed.
 	cmd.Env = append(execenv.Base(os.TempDir(), os.TempDir()), "PATH="+path, "PI_OFFLINE=1", "PI_SKIP_VERSION_CHECK=1", "HOME="+os.TempDir())
 	out, err := cmd.Output()
 	if err != nil {
@@ -174,7 +182,7 @@ func checkPiVersion(ctx context.Context, nodeBin, piBin, want, path string) erro
 	return nil
 }
 
-// findPackageRoot 从 start 向上查找 name 为 pkgName 的 package.json 所在目录。
+// findPackageRoot walks up from start looking for the directory of a package.json whose name is pkgName.
 func findPackageRoot(start, pkgName string) string {
 	dir := filepath.Dir(start)
 	for {
@@ -220,12 +228,12 @@ func currentHomes() []string {
 	return homes
 }
 
-// ContextFileNames 是 Pi 会从工作目录及其上级目录加载的上下文文件。
+// ContextFileNames are the context files Pi loads from the working directory and its parent directories.
 var ContextFileNames = []string{"AGENTS.md", "CLAUDE.md"}
 
-// PrepareWorkRoot 校验并准备工作根目录，返回解析符号链接后的绝对路径：
-// 不能位于 homes 中任何一个目录之内；它及其上级目录中不能有 AGENTS.md/CLAUDE.md；
-// 不存在时创建，权限为 0700。
+// PrepareWorkRoot validates and prepares the work root and returns its absolute path with symlinks resolved:
+// it must not be inside any of the homes directories; neither it nor its parent directories may contain
+// AGENTS.md/CLAUDE.md; it is created with mode 0700 when missing.
 func PrepareWorkRoot(workRoot string, homes []string) (string, error) {
 	abs, err := filepath.Abs(workRoot)
 	if err != nil {
@@ -273,7 +281,8 @@ func PrepareWorkRoot(workRoot string, homes []string) (string, error) {
 	return real, nil
 }
 
-// resolveExisting 解析路径中已存在部分的符号链接，再拼上尚不存在的部分。
+// resolveExisting resolves symlinks in the part of the path that exists, then appends the part that does not exist
+// yet.
 func resolveExisting(p string) (string, error) {
 	p = filepath.Clean(p)
 	var rest []string

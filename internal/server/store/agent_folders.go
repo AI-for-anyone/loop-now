@@ -11,7 +11,7 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// FolderGitPull 是一次“从 Git 拉取”到 Agent 文件夹的操作。
+// FolderGitPull is one "从 Git 拉取" ("Pull from Git") operation into an Agent folder.
 type FolderGitPull struct {
 	ID           uuid.UUID
 	AgentID      uuid.UUID
@@ -34,8 +34,9 @@ func scanGitPull(row db.Scanner) (FolderGitPull, error) {
 	return p, err
 }
 
-// CreateFolderGitPull 登记一次排队的拉取。同一 Agent 的同一 actionId 返回原操作（created=false），
-// 内容不同时返回 action_conflict；同一目标已有进行中的拉取时返回 path_conflict。
+// CreateFolderGitPull registers a queued pull. The same actionId for the same Agent returns the original operation
+// (created=false), or action_conflict when the content differs; returns path_conflict when the same target already has
+// a pull in progress.
 func (s *Store) CreateFolderGitPull(ctx context.Context, p FolderGitPull) (FolderGitPull, bool, error) {
 	var out FolderGitPull
 	created := false
@@ -69,7 +70,7 @@ func (s *Store) CreateFolderGitPull(ctx context.Context, p FolderGitPull) (Folde
 	return out, created, err
 }
 
-// FindFolderGitPull 按 actionId 查找 Agent 已受理的拉取。
+// FindFolderGitPull looks up, by actionId, a pull the Agent has already accepted.
 func (s *Store) FindFolderGitPull(ctx context.Context, agentID, actionID uuid.UUID) (FolderGitPull, bool, error) {
 	p, err := scanGitPull(s.Pool.QueryRow(ctx, `SELECT `+gitPullColumns+` FROM agent_folder_git_pulls WHERE agent_id = $1 AND action_id = $2`, agentID, actionID))
 	if errors.Is(err, db.ErrNoRows) {
@@ -78,13 +79,13 @@ func (s *Store) FindFolderGitPull(ctx context.Context, agentID, actionID uuid.UU
 	return p, err == nil, err
 }
 
-// GetFolderGitPull 返回 Agent 的一次拉取；不存在时返回 not_found。
+// GetFolderGitPull returns one of the Agent's pulls; returns not_found when it does not exist.
 func (s *Store) GetFolderGitPull(ctx context.Context, agentID, id uuid.UUID) (FolderGitPull, error) {
 	p, err := scanGitPull(s.Pool.QueryRow(ctx, `SELECT `+gitPullColumns+` FROM agent_folder_git_pulls WHERE id = $1 AND agent_id = $2`, id, agentID))
 	return p, notFoundIfNoRows(err, "拉取操作")
 }
 
-// ListFolderGitPulls 返回 Agent 最近的 limit 次拉取，新的在前。
+// ListFolderGitPulls returns the Agent's most recent limit pulls, newest first.
 func (s *Store) ListFolderGitPulls(ctx context.Context, agentID uuid.UUID, limit int) ([]FolderGitPull, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT `+gitPullColumns+` FROM agent_folder_git_pulls WHERE agent_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2`, agentID, limit)
 	if err != nil {
@@ -93,13 +94,13 @@ func (s *Store) ListFolderGitPulls(ctx context.Context, agentID uuid.UUID, limit
 	return db.CollectRows(rows, func(r db.CollectableRow) (FolderGitPull, error) { return scanGitPull(r) })
 }
 
-// StartFolderGitPull 把排队的拉取标为进行中；已不在排队时返回 false。
+// StartFolderGitPull marks a queued pull as in progress; returns false when it is no longer queued.
 func (s *Store) StartFolderGitPull(ctx context.Context, id uuid.UUID) (bool, error) {
 	tag, err := s.Pool.Exec(ctx, `UPDATE agent_folder_git_pulls SET status = 'running' WHERE id = $1 AND status = 'queued'`, id)
 	return tag.RowsAffected() == 1, err
 }
 
-// FinishFolderGitPull 记下拉取的结果；code 为空表示成功。
+// FinishFolderGitPull records the result of a pull; an empty code means success.
 func (s *Store) FinishFolderGitPull(ctx context.Context, id uuid.UUID, code, message string) error {
 	status := "succeeded"
 	if code != "" {
@@ -110,7 +111,8 @@ func (s *Store) FinishFolderGitPull(ctx context.Context, id uuid.UUID, code, mes
 	return err
 }
 
-// FailInterruptedFolderGitPulls 在启动时把上次运行中断的拉取标为失败（server_restart），返回它们（用于清理临时目录）。
+// FailInterruptedFolderGitPulls marks, at startup, the pulls interrupted by the previous run as failed
+// (server_restart) and returns them (so their temporary directories can be cleaned up).
 func (s *Store) FailInterruptedFolderGitPulls(ctx context.Context) ([]FolderGitPull, error) {
 	rows, err := s.Pool.Query(ctx, `UPDATE agent_folder_git_pulls SET status = 'failed', error_code = 'server_restart', error_message = '服务重启时仍在进行，已中止', finished_at = $1
 		WHERE status IN ('queued', 'running') RETURNING `+gitPullColumns, s.Pool.Now())
@@ -120,7 +122,7 @@ func (s *Store) FailInterruptedFolderGitPulls(ctx context.Context) ([]FolderGitP
 	return db.CollectRows(rows, func(r db.CollectableRow) (FolderGitPull, error) { return scanGitPull(r) })
 }
 
-// LegacyFolderSource 是一个尚未回放的退役上传资料来源。
+// LegacyFolderSource is a retired uploaded-material source that has not been replayed yet.
 type LegacyFolderSource struct {
 	ID       uuid.UUID
 	AgentID  uuid.UUID
@@ -129,7 +131,8 @@ type LegacyFolderSource struct {
 	Files    []SyncFile
 }
 
-// PendingLegacyFolderSources 返回未删除的 Agent 名下、尚未回放过的上传资料来源及其全部文件记录（含待删除）。
+// PendingLegacyFolderSources returns the uploaded-material sources of non-deleted Agents that have not been replayed
+// yet, with all their file records (including those pending deletion).
 func (s *Store) PendingLegacyFolderSources(ctx context.Context) ([]LegacyFolderSource, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT s.id, s.agent_id, s.path, s.synced_at FROM agent_folder_sources s JOIN agents a ON a.id = s.agent_id
 		WHERE a.deleted_at IS NULL AND s.kind = 'files' AND NOT EXISTS (SELECT 1 FROM agent_folder_legacy_applied l WHERE l.source_id = s.id)
@@ -152,20 +155,21 @@ func (s *Store) PendingLegacyFolderSources(ctx context.Context) ([]LegacyFolderS
 	return out, nil
 }
 
-// RecordLegacyFolderApplied 记下一个退役来源已回放到磁盘。
+// RecordLegacyFolderApplied records that a retired source has been replayed onto disk.
 func (s *Store) RecordLegacyFolderApplied(ctx context.Context, src LegacyFolderSource, written, deleted int) error {
 	_, err := s.Pool.Exec(ctx, `INSERT INTO agent_folder_legacy_applied (source_id, agent_id, files_written, files_deleted) VALUES ($1, $2, $3, $4)
 		ON CONFLICT (source_id) DO NOTHING`, src.ID, src.AgentID, written, deleted)
 	return err
 }
 
-// LegacyGitSource 是一个退役的代码仓库来源（只用于启动时统计从未克隆成功的来源）。
+// LegacyGitSource is a retired code repository source (used only to count, at startup, the sources that were never
+// cloned successfully).
 type LegacyGitSource struct {
 	AgentID uuid.UUID
 	Path    string
 }
 
-// LegacyGitSources 返回未删除的 Agent 名下的退役代码仓库来源。
+// LegacyGitSources returns the retired code repository sources of non-deleted Agents.
 func (s *Store) LegacyGitSources(ctx context.Context) ([]LegacyGitSource, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT s.agent_id, s.path FROM agent_folder_sources s JOIN agents a ON a.id = s.agent_id
 		WHERE a.deleted_at IS NULL AND s.kind = 'git' ORDER BY s.agent_id, s.path`)

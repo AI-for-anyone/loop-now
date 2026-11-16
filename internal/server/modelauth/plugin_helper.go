@@ -19,18 +19,22 @@ import (
 	cm "loop-now/internal/server/credentialmodel"
 )
 
-// 插件提供方的订阅登录（plugins/SPEC.md §13）：一次登录一个辅助进程（auth-helper/provider-main.mjs），HOME 是这次登录的
-// 新状态目录；授权地址、设备码与要人回答的问题经 PluginLoginUI 交给控制台，回答经 replies 交还辅助进程。
+// Subscription login for plugin providers (plugins/SPEC.md §13): one helper process per login
+// (auth-helper/provider-main.mjs), with HOME set to this login's new state directory; the authorization URL, device
+// code and questions a person must answer go to the console through PluginLoginUI, and answers go back to the helper
+// process through replies.
 
 var (
-	// ErrExtensionLoad 表示插件扩展加载失败或没有注册这个提供方的 OAuth 登录。
+	// ErrExtensionLoad means the plugin extension failed to load or did not register an OAuth login for this provider.
 	ErrExtensionLoad = errors.New("插件扩展加载失败")
-	// ErrInvalidAuthorizationURL 表示扩展给出的授权地址或设备码地址不合规。
+	// ErrInvalidAuthorizationURL means the authorization URL or device code URL given by the extension is not
+	// acceptable.
 	ErrInvalidAuthorizationURL = errors.New("授权地址无效")
 )
 
-// ValidPluginURL 是插件提供方授权地址与设备码地址的通用检查：https、没有用户名密码与 fragment、
-// 查询里不带授权码或令牌、不超过 4096 字节。Codex 仍用 ValidAuthorizationURL 的严格白名单。
+// ValidPluginURL is the generic check for plugin provider authorization URLs and device code URLs: https, no user name,
+// password or fragment, no authorization code or token in the query, at most 4096 bytes. Codex still uses the strict
+// allowlist of ValidAuthorizationURL.
 func ValidPluginURL(raw string) bool {
 	if len(raw) > 4096 {
 		return false
@@ -52,16 +56,18 @@ func ValidPluginURL(raw string) bool {
 	return true
 }
 
-// PluginLoginRequest 是一次插件提供方登录。
+// PluginLoginRequest is one plugin provider login.
 type PluginLoginRequest struct {
 	OperationID uuid.UUID
 	Provider    string
-	// Extensions 是插件 Pi 扩展的绝对路径；Home 是这次登录的状态目录（辅助进程的 HOME）。
+	// Extensions are the absolute paths of the plugin's Pi extensions; Home is this login's state directory (the helper
+	// process's HOME).
 	Extensions []string
 	Home       string
 }
 
-// PluginLoginUI 接收登录过程中要给人看的东西；返回错误时登录结束（视为取消）。
+// PluginLoginUI receives what must be shown to a person during login; returning an error ends the login (treated as
+// cancelled).
 type PluginLoginUI interface {
 	AuthURL(url string) error
 	DeviceCode(code, uri string, expiresIn time.Duration) error
@@ -69,18 +75,19 @@ type PluginLoginUI interface {
 	PromptClosed(id string)
 }
 
-// PluginLoginHelper 运行一次插件提供方登录，成功时返回 login 的返回值（Pi 认证条目，JSON 对象）。
+// PluginLoginHelper runs one plugin provider login and, on success, returns the return value of login (a Pi auth entry,
+// as a JSON object).
 type PluginLoginHelper interface {
 	Login(ctx context.Context, req PluginLoginRequest, ui PluginLoginUI, replies <-chan cm.LoginInput) ([]byte, error)
 }
 
-// PluginHelperOptions 是辅助进程的参数。
+// PluginHelperOptions are the parameters of the helper process.
 type PluginHelperOptions struct {
 	NodeBin, Entry, WorkRoot, BasePath, PiPackageRoot, PiVersion string
 	Timeout, StopGrace                                           time.Duration
 }
 
-// PluginHelper 用 auth-helper/provider-main.mjs 运行插件提供方登录。
+// PluginHelper runs plugin provider logins with auth-helper/provider-main.mjs.
 type PluginHelper struct{ Options PluginHelperOptions }
 
 type pluginFrame struct {
@@ -109,7 +116,7 @@ func (h *PluginHelper) Login(ctx context.Context, req PluginLoginRequest, ui Plu
 	if ctx.Err() != nil {
 		return nil, ErrAuthCancelled
 	}
-	// 这次操作自己的临时目录与 PI_CODING_AGENT_DIR，不进状态目录。
+	// This operation's own temporary directory and PI_CODING_AGENT_DIR, kept out of the state directory.
 	root, err := os.MkdirTemp(h.Options.WorkRoot, "provider-login-")
 	if err != nil {
 		return nil, failed("operation_directory")

@@ -2,7 +2,7 @@ import { config } from '@/config'
 import type { ScopeQuery } from '@/lib/scope'
 import type { Schemas } from './client'
 
-// 事件名与 OpenAPI 中 x-sse-events 的对应。scripts 中的契约测试会核对两者一致。
+// Maps event names to x-sse-events in the OpenAPI spec. A contract test in scripts checks that the two agree.
 export interface AgentEventDataMap {
   snapshot: Schemas['SseSnapshot']
   'message.created': Schemas['SseMessageCreated']
@@ -33,7 +33,7 @@ export type AgentEvent = {
   [K in AgentEventName]: { type: K; id: string; data: AgentEventDataMap[K] }
 }[AgentEventName]
 
-// 概览事件流：所有 Agent 的运行状态。事件名与 OpenAPI 中 /overview/events 的 x-sse-events 对应。
+// Overview event stream: the run state of every Agent. Event names match x-sse-events of /overview/events in the OpenAPI spec.
 export interface OverviewEventDataMap {
   snapshot: Schemas['SseOverviewSnapshot']
   'agent.status': Schemas['SseAgentStatus']
@@ -48,7 +48,7 @@ export type OverviewEvent = {
   [K in OverviewEventName]: { type: K; id: string; data: OverviewEventDataMap[K] }
 }[OverviewEventName]
 
-// 收件箱事件流：覆盖全部 Inbox 消息。事件名与 OpenAPI 中 /inbox/events 的 x-sse-events 对应。
+// Inbox event stream: covers all Inbox messages. Event names match x-sse-events of /inbox/events in the OpenAPI spec.
 export interface InboxEventDataMap {
   snapshot: Schemas['SseInboxSnapshot']
   'inbox.message.created': Schemas['SseInboxMessageCreated']
@@ -70,7 +70,8 @@ export type ConnectionState = 'connecting' | 'open' | 'reconnecting' | 'closed'
 export interface StreamOptions<E> {
   onEvent: (event: E) => void
   onState: (state: ConnectionState) => void
-  // 事件流被浏览器永久关闭（例如服务端返回错误状态）时调用；返回 false 表示不再重连。
+  // Called when the browser closes the event stream for good (e.g. the server returned an error status); returning false means do not
+  // reconnect.
   onClosed: () => Promise<boolean>
   createEventSource?: (url: string) => EventSource
   retryMinMs?: number
@@ -89,7 +90,8 @@ export function agentEventsUrl(agentId: string): string {
   return `${config.apiBase}/agents/${encodeURIComponent(agentId)}/events`
 }
 
-// 概览事件流；不传范围参数时包含所有未删除项目与平台中的 Agent，按项目或平台筛选时只含该范围。
+// Overview event stream; without scope parameters it includes the Agents in every project that is not deleted and in the platform;
+// filtered by project or platform it includes only that scope.
 export function overviewEventsUrl(scope: ScopeQuery = {}): string {
   const query = new URLSearchParams()
   if (scope.projectId) query.set('projectId', scope.projectId)
@@ -98,12 +100,12 @@ export function overviewEventsUrl(scope: ScopeQuery = {}): string {
   return `${config.apiBase}/overview/events${search ? `?${search}` : ''}`
 }
 
-// 打开某个 Agent 的事件流。返回值用于关闭连接。
+// Open an Agent's event stream. The return value closes the connection.
 export function connectAgentEvents({ agentId, ...options }: AgentEventsOptions): () => void {
   return connectEventStream(agentEventsUrl(agentId), AGENT_EVENT_NAMES, options)
 }
 
-// 打开概览事件流。返回值用于关闭连接。
+// Open the overview event stream. The return value closes the connection.
 export function connectOverviewEvents({ scope, ...options }: OverviewEventsOptions & { scope?: ScopeQuery }): () => void {
   return connectEventStream(overviewEventsUrl(scope), OVERVIEW_EVENT_NAMES, options)
 }
@@ -112,12 +114,13 @@ export function inboxEventsUrl(): string {
   return `${config.apiBase}/inbox/events`
 }
 
-// 打开收件箱事件流。返回值用于关闭连接。
+// Open the inbox event stream. The return value closes the connection.
 export function connectInboxEvents(options: InboxEventsOptions): () => void {
   return connectEventStream(inboxEventsUrl(), INBOX_EVENT_NAMES, options)
 }
 
-// 浏览器的自动重连会带上 Last-Event-ID；永久关闭时按退避间隔重建连接，新连接由服务端先推送快照。
+// The browser's automatic reconnect sends Last-Event-ID; after a permanent close the connection is rebuilt after a backoff interval, and
+// on the new connection the server pushes a snapshot first.
 export function connectEventStream<E extends { type: string; id: string; data: unknown }>(
   url: string,
   names: readonly E['type'][],
@@ -183,7 +186,7 @@ export function connectEventStream<E extends { type: string; id: string; data: u
   }
 }
 
-// 比较两个事件流条目 ID（形如 1700000000000-0）。格式不符时按字符串比较。
+// Compare two event stream entry IDs (like 1700000000000-0). Compared as strings when the format does not match.
 export function compareEventIds(a: string, b: string): number {
   const pa = /^(\d+)-(\d+)$/.exec(a)
   const pb = /^(\d+)-(\d+)$/.exec(b)

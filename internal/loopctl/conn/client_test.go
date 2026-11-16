@@ -51,7 +51,7 @@ func newCA(t *testing.T) *testCA {
 
 func writeCA(t *testing.T) string { return newCA(t).path }
 
-// tlsServer 启动一个使用该 CA 签发证书的 TLS 服务。
+// tlsServer starts a TLS server whose certificate is issued by this CA.
 func (ca *testCA) tlsServer(t *testing.T, h http.Handler) *httptest.Server {
 	t.Helper()
 	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -78,7 +78,7 @@ type harness struct {
 	sleeps []time.Duration
 }
 
-// agentClient 用 Agent 身份连接明文回环服务。
+// agentClient connects to a plain-text loopback server with the Agent identity.
 func agentClient(t *testing.T, url string, env map[string]string) *harness {
 	t.Helper()
 	m := map[string]string{EnvAgentToken: agentToken, EnvAgentURL: url + "/agent/v1"}
@@ -97,7 +97,7 @@ func agentClient(t *testing.T, url string, env map[string]string) *harness {
 	return h
 }
 
-// sequence 依次返回给定的状态码，最后一个重复使用，并记录请求次数。
+// sequence returns the given status codes in order, reusing the last one, and counts the requests.
 func sequence(n *int32, statuses ...int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		i := int(atomic.AddInt32(n, 1)) - 1
@@ -326,7 +326,7 @@ func TestReadInterruptedIsRetried(t *testing.T) {
 		if atomic.AddInt32(&n, 1) == 1 {
 			w.Header().Set("Content-Length", "100")
 			io.WriteString(w, "partial")
-			return // 连接在响应体中途关闭
+			return // the connection is closed in the middle of the response body
 		}
 		io.WriteString(w, "complete")
 	}))

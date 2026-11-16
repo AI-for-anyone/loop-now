@@ -1,5 +1,7 @@
-// loop-server 是 Loop Now 的服务端。配置全部来自环境变量，见 internal/server/config。
-// 带管理子命令时（version、identity、token，见 internal/server/admincli）只执行子命令，不启动服务。
+// loop-server is the Loop Now server. All configuration comes from environment variables; see
+// internal/server/config.
+// When given an admin subcommand (version, identity, token; see internal/server/admincli), it only runs the
+// subcommand and does not start the server.
 package main
 
 import (
@@ -15,7 +17,8 @@ import (
 )
 
 func main() {
-	// 管理子命令（外部身份、令牌、版本）直接读写数据库，不启动服务。
+	// Admin subcommands (external identities, tokens, version) read and write the database directly without
+	// starting the server.
 	if len(os.Args) > 1 && admincli.IsCommand(os.Args[1]) {
 		os.Exit(admincli.Run(context.Background(), os.Args[1:], admincli.Options{Getenv: os.Getenv, Stdout: os.Stdout, Stderr: os.Stderr}))
 	}
@@ -25,18 +28,19 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
-	// 日志只写 stderr，保存与轮转交给启动服务端的方式。
+	// Logs go only to stderr; keeping and rotating them is left to whatever starts the server.
 	log := config.NewLogger(os.Stderr, cfg.LogFormat, cfg.LogLevel)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if cfg.StopOnStdinClose {
-		// 壳关掉标准输入的写端即等同于发 SIGTERM：Windows 上没有可投递的终止信号，桌面壳靠它优雅停止。
-		ctx = stopOnStdinClose(ctx, os.Stdin, func() { log.Info("stdin 关闭，开始优雅退出") })
+		// The shell closing the write end of standard input is equivalent to sending SIGTERM: Windows has no
+		// termination signal that can be delivered, so the desktop shell relies on this for a graceful stop.
+		ctx = stopOnStdinClose(ctx, os.Stdin, func() { log.Info("stdin closed, shutting down gracefully") })
 	}
 
 	a, err := app.Build(ctx, cfg, log, app.Options{})
 	if err != nil {
-		log.Error("启动失败", "err", err)
+		log.Error("startup failed", "err", err)
 		os.Exit(app.ExitCode(err))
 	}
 	serveErr := make(chan error, 1)
@@ -44,16 +48,16 @@ func main() {
 
 	select {
 	case <-ctx.Done():
-		log.Info("收到停止信号，开始优雅退出")
+		log.Info("stop signal received, shutting down gracefully")
 	case err := <-serveErr:
 		if err != nil {
-			log.Error("HTTP 服务异常退出", "err", err)
+			log.Error("HTTP server exited unexpectedly", "err", err)
 		}
 	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 	if err := a.Shutdown(shutdownCtx); err != nil {
-		log.Error("停止过程中出错", "err", err)
+		log.Error("error while stopping", "err", err)
 		os.Exit(1)
 	}
 }

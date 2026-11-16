@@ -7,8 +7,9 @@ type Plugin = Schemas['Plugin']
 type ConfigUpdate = Schemas['PluginConfigUpdate']
 export type DeliveryFilter = { status?: Schemas['PluginDelivery']['status']; projectId?: string }
 
-// 插件（第二版）。['plugins'] 是全部插件查询的共同前缀：安装、更新、卸载、启用、授权之后整体失效，
-// 列表上的启用项目数与授权 Agent 数随之刷新。插件的 Pi 扩展会注册模型提供方，这些操作之后模型目录也一起失效。
+// Plugins (second version). ['plugins'] is the common prefix of every plugin query: they are all invalidated after an install, update,
+// uninstall, enable or grant, so the counts of enabled projects and granted Agents in the list refresh with them. A plugin's Pi extension
+// registers model providers, so the model catalog is invalidated as well after these operations.
 export const pluginKeys = {
   all: ['plugins'] as const,
   list: ['plugins', 'list'] as const,
@@ -32,7 +33,7 @@ const projectPluginPath = (projectId: string, pluginId: string) => ({ params: { 
 
 export const invalidatePlugins = (client: QueryClient) => client.invalidateQueries({ queryKey: pluginKeys.all })
 
-// ---------- 读取 ----------
+// ---------- Reads ----------
 
 export function usePlugins() {
   return useQuery({ queryKey: pluginKeys.list, queryFn: () => call(api.GET('/plugins')) })
@@ -42,8 +43,9 @@ export function usePlugin(pluginId: string) {
   return useQuery({ queryKey: pluginKeys.detail(pluginId), queryFn: () => call(api.GET('/plugins/{pluginId}', pluginPath(pluginId))) })
 }
 
-// README 按控制台的语言选文件（服务端按 README.<语言>.md → README.<主语言>.md → README.md 兜底）；
-// 已装插件的随更新失效，预览里的不会变，也不放在 ['plugins'] 下：预览用于安装后就读不到了，装好时不能重新读。
+// The README file is picked by the console's language (the server falls back README.<language>.md → README.<primary language>.md → README.md).
+// An installed plugin's README is invalidated on update. The one in a preview never changes and is not kept under ['plugins'] either: once a
+// preview has been used for an install it can no longer be read, so it must not be re-read when the install finishes.
 export function usePluginReadme(pluginId: string) {
   return useQuery({ queryKey: pluginKeys.readme(pluginId), queryFn: () => call(api.GET('/plugins/{pluginId}/readme', { params: { path: { pluginId }, query: { locale } } })) })
 }
@@ -60,7 +62,7 @@ export function usePluginConfig(pluginId: string) {
   return useQuery({ queryKey: pluginKeys.config(pluginId), queryFn: () => call(api.GET('/plugins/{pluginId}/config', pluginPath(pluginId))) })
 }
 
-// 宿主日志：新的在前，按 nextBefore 往更早翻页。
+// Host logs: newest first; page back to older entries with nextBefore.
 export function usePluginLogs(pluginId: string, limit = 100) {
   return useInfiniteQuery({
     queryKey: pluginKeys.logs(pluginId),
@@ -70,7 +72,7 @@ export function usePluginLogs(pluginId: string, limit = 100) {
   })
 }
 
-// 观察类事件对这个插件的投递：按事件时间新的在前，可按状态、项目筛选。
+// Deliveries of observation events to this plugin: newest event time first, filterable by status and project.
 export function usePluginDeliveries(pluginId: string, filter: DeliveryFilter = {}, limit = 50) {
   return useInfiniteQuery({
     queryKey: pluginKeys.deliveries(pluginId, filter),
@@ -81,7 +83,7 @@ export function usePluginDeliveries(pluginId: string, filter: DeliveryFilter = {
   })
 }
 
-// 插件的持久状态（只读），例如投递记录约定的 deliveries/ 前缀。
+// The plugin's persistent state (read-only), e.g. the deliveries/ prefix that delivery records use by convention.
 export function usePluginState(pluginId: string, prefix: string, projectId?: string) {
   return useQuery({
     queryKey: pluginKeys.state(pluginId, prefix, projectId),
@@ -89,29 +91,33 @@ export function usePluginState(pluginId: string, prefix: string, projectId?: str
   })
 }
 
-// 宿主状态会自己变化（启动、崩溃后重启），插件市场页停留时定期刷新。
+// The host state changes on its own (starting, restarting after a crash), so it is polled while the plugin market page stays open.
 export function usePluginHost(refetchInterval: number | false = 10_000) {
   return useQuery({ queryKey: pluginKeys.host, queryFn: () => call(api.GET('/plugin-host')), refetchInterval })
 }
 
-// 随平台发布的官方插件，安装入口的“官方”来源里列出；按 id 安装（source kind builtin）。
+// Official plugins that ship with the platform, listed under the “官方” (Official) source of the install entry; installed by id
+// (source kind builtin).
 export function useBuiltinPluginSources() {
   return useQuery({ queryKey: pluginKeys.builtin, queryFn: () => call(api.GET('/plugin-sources/builtin')) })
 }
 
-// 各市场的插件（官方市场与全局设置里加的市场），标出已安装的版本与可更新；某个市场读取失败时它的 error 不为空。
+// The plugins of every market (the official market and the markets added in global settings), marking the installed version and available
+// updates; when a market fails to load, its error is not empty.
 export function usePluginMarkets(enabled = true) {
   return useQuery({ queryKey: pluginKeys.markets, queryFn: () => call(api.GET('/plugin-markets')), enabled })
 }
 
-// 已安装的插件在它来源市场里的条目；不是从市场装的、或市场里已没有它时为 undefined。
+// An installed plugin's entry in the market it came from; undefined when it was not installed from a market or the market no longer has it.
 export function marketEntryOf(markets: Schemas['PluginMarket'][] | undefined, plugin: Pick<Schemas['Plugin'], 'id' | 'source'>) {
   if (!plugin.source.market) return undefined
   return markets?.find((market) => market.url === plugin.source.market)?.plugins.find((entry) => entry.id === plugin.id)
 }
 
-// 已安装插件的来源算不算审阅过，与服务端安装时的判断一致：随平台发布的、从官方市场装的为 official，市场标为已验证的为 verified，
-// 其余为 null。装的时候只记下了市场地址，所以从市场装的要看市场列表：还没读到时为 undefined；市场或条目已不在列表里时按未审阅。
+// Whether an installed plugin's source counts as reviewed, matching the server's judgment at install time: official for plugins that ship
+// with the platform or come from the official market, verified for markets marked as verified, null for the rest. Only the market URL is
+// recorded at install time, so plugins from a market need the market list: undefined while it has not been read yet, and treated as
+// unreviewed when the market or the entry is no longer in the list.
 export function pluginTrust(markets: Schemas['PluginMarket'][] | undefined, plugin: Pick<Schemas['Plugin'], 'id' | 'source'>): 'official' | 'verified' | null | undefined {
   if (plugin.source.kind === 'builtin') return 'official'
   if (!plugin.source.market) return null
@@ -121,7 +127,8 @@ export function pluginTrust(markets: Schemas['PluginMarket'][] | undefined, plug
   return market?.plugins.find((entry) => entry.id === plugin.id)?.verified ? 'verified' : null
 }
 
-// 市场里的来源：按市场地址与条目 id 安装；version 给出时装这个版本（更新时用市场里的新版本）。
+// A source in a market: install by market URL and entry id; when version is given, install that version (an update uses the market's
+// new version).
 export const marketSource = (market: string, entry: Pick<Schemas['PluginMarketEntry'], 'id' | 'version'>): Schemas['PluginSource'] => ({
   kind: 'market',
   market,
@@ -141,7 +148,7 @@ export function useProjectPlugins(projectId: string) {
   })
 }
 
-// 这个插件在某个项目里的启用状态与项目级配置（取自项目插件列表）。
+// This plugin's enablement state and project-level config in a project (taken from the project's plugin list).
 export function useProjectPlugin(projectId: string, pluginId: string) {
   const list = useProjectPlugins(projectId)
   return { ...list, item: list.data?.plugins.find((plugin) => plugin.pluginId === pluginId) }
@@ -159,14 +166,15 @@ export function useAgentPlugins(agentId: string) {
   return useQuery({ queryKey: pluginKeys.agent(agentId), queryFn: () => call(api.GET('/agents/{agentId}/plugins', { params: { path: { agentId } } })) })
 }
 
-// ---------- 安装、更新、卸载 ----------
+// ---------- Install, update, uninstall ----------
 
-// 第一步：取来插件并读出清单。新安装给 source，更新前预览给 pluginId。
+// Step one: fetch the plugin and read its manifest. A new install passes source; a preview before an update passes pluginId.
 export function previewPlugin(body: Schemas['PluginPreviewRequest']) {
   return call(api.POST('/plugin-previews', { body }))
 }
 
-// 第二步：按预览安装或更新。非官方来源须带 confirm（人在确认框里看过之后）。
+// Step two: install or update from the preview. A non-official source must carry confirm (after a person has reviewed it in the
+// confirmation dialog).
 export function usePluginInstall() {
   const client = useQueryClient()
   return useMutation<Plugin, ApiError, { preview: Schemas['PluginPreview']; confirm: boolean }>({
@@ -193,7 +201,7 @@ export function useUninstallPlugin(pluginId: string) {
   })
 }
 
-// ---------- 配置、宿主、全局设置 ----------
+// ---------- Config, host, global settings ----------
 
 export function useSavePluginConfig(pluginId: string) {
   const client = useQueryClient()
@@ -211,7 +219,8 @@ export function useRestartPluginHost() {
   })
 }
 
-// 一键停用：停止宿主、不再给新启动的 Pi 挂载 Agent 侧；宿主状态与各插件状态随之变化。
+// One-click disable: stop the host and stop mounting the Agent side into newly started Pi; the host state and every plugin's state change
+// with it.
 export function useSavePluginSettings() {
   const client = useQueryClient()
   return useMutation<Schemas['PluginSettings'], ApiError, Schemas['PluginSettings']>({
@@ -223,7 +232,7 @@ export function useSavePluginSettings() {
   })
 }
 
-// ---------- 项目启用与账号 ----------
+// ---------- Project enablement and accounts ----------
 
 export function useSaveProjectPlugin(projectId: string, pluginId: string) {
   const client = useQueryClient()
@@ -255,7 +264,7 @@ export function useUpdatePluginAccount(projectId: string, pluginId: string, acco
   })
 }
 
-// 删除账号：各 Agent 授权里对它的引用随之移除，Agent 的插件段一并失效。
+// Delete an account: references to it in Agent grants are removed with it, and the Agents' plugin sections are invalidated too.
 export function useDeletePluginAccount(projectId: string, pluginId: string) {
   const client = useQueryClient()
   return useMutation<void, ApiError, string>({
@@ -269,16 +278,17 @@ export function useDeletePluginAccount(projectId: string, pluginId: string) {
   })
 }
 
-// ---------- 控制台操作按钮 ----------
+// ---------- Console action buttons ----------
 
-// 插件清单 actions 声明的操作：where 是按钮所在的页面对象（全局为空对象），input 是按操作的 fields 生成的表单值。
+// Actions declared in the plugin manifest's actions: where is the page object the button sits on (an empty object when global), and
+// input is the form values generated from the action's fields.
 export function useInvokePluginAction(pluginId: string, actionId: string) {
   return useMutation<Schemas['PluginActionResult'], ApiError, Schemas['PluginActionInput']>({
     mutationFn: (body) => call(api.POST('/plugins/{pluginId}/actions/{actionId}', { params: { path: { pluginId, actionId } }, body })),
   })
 }
 
-// ---------- Agent 授权 ----------
+// ---------- Agent grants ----------
 
 export function useSaveAgentPlugin(agentId: string, pluginId: string) {
   const client = useQueryClient()

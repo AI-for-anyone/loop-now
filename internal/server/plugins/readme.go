@@ -18,20 +18,21 @@ import (
 	"loop-now/internal/server/apperr"
 )
 
-// 插件的 README（plugins/SPEC.md §2.3）：插件根目录里的 README.md 与按语言的 README.<语言>.md，
-// 控制台在插件详情与安装预览里展示。
+// Plugin READMEs (plugins/SPEC.md §2.3): README.md and the per-language README.<language>.md in the plugin's root
+// directory, shown by the console in the plugin details and in the install preview.
 
-// MaxReadmeBytes 是返回的 README 的大小上限，超出的部分截掉。
+// MaxReadmeBytes is the size limit of a returned README; anything beyond it is cut off.
 const MaxReadmeBytes = 1 << 20
 
-// Readme 是接口里的 PluginReadme；没有任何 README 时 File 与 Markdown 为空。
+// Readme is the API's PluginReadme; File and Markdown are nil when there is no README at all.
 type Readme struct {
 	File      *string `json:"file"`
 	Markdown  *string `json:"markdown"`
 	Truncated bool    `json:"truncated"`
 }
 
-// Readme 读已安装插件当前版本的 README；locale 为空表示没有指定语言。
+// Readme reads the README of the current version of an installed plugin; an empty locale means no language was
+// specified.
 func (s *Service) Readme(ctx context.Context, id, locale string) (Readme, error) {
 	p, err := s.Store.GetPlugin(ctx, id)
 	if err != nil {
@@ -40,7 +41,8 @@ func (s *Service) Readme(ctx context.Context, id, locale string) (Readme, error)
 	return ReadReadme(p.InstallDir, locale)
 }
 
-// PreviewReadme 读预览里插件的 README；预览过期、已用于安装或不存在时返回 404。
+// PreviewReadme reads the README of the plugin in a preview; it returns 404 when the preview has expired, has
+// already been used for an install, or does not exist.
 func (s *Service) PreviewReadme(id uuid.UUID, locale string) (Readme, error) {
 	s.expirePreviews()
 	s.mu.Lock()
@@ -51,14 +53,15 @@ func (s *Service) PreviewReadme(id uuid.UUID, locale string) (Readme, error) {
 	}
 	r, err := ReadReadme(pv.dir, locale)
 	if errors.Is(err, fs.ErrNotExist) {
-		// 读的同时预览被安装或过期，暂存目录已经删掉。
+		// The preview was installed or expired while we were reading, and its staging directory is already gone.
 		return Readme{}, apperr.NotFound("预览")
 	}
 	return r, err
 }
 
-// ReadReadme 在插件根目录 dir 的直接子文件里按 locale 选出 README 并读出。
-// 软链接解析后不在 dir 里的、解析不了的、不是普通文件的都当作没有。
+// ReadReadme picks a README for locale among the direct child files of the plugin root directory dir and reads it.
+// Symlinks that resolve outside dir or cannot be resolved, and anything that is not a regular file, count as
+// missing.
 func ReadReadme(dir, locale string) (Readme, error) {
 	root, err := filepath.EvalSymlinks(dir)
 	if err != nil {
@@ -95,11 +98,12 @@ func ReadReadme(dir, locale string) (Readme, error) {
 	return Readme{}, nil
 }
 
-// readmeOrder 给出 README 的尝试顺序：给了 locale 时 README.<locale>.md、README.<主语言>.md、README.md，
-// 没给时 README.md；之后是其余的 README.<语言>.md，按语言标签排序。基名不区分大小写；
-// 同一语言有几种大小写写法的文件时按文件名排序。
+// readmeOrder gives the order in which READMEs are tried: with a locale, README.<locale>.md,
+// README.<primary language>.md, README.md; without one, README.md; after that the remaining README.<language>.md,
+// sorted by language tag. Base names are case-insensitive; when one language has files in several spellings of case,
+// they are sorted by file name.
 func readmeOrder(names []string, locale string) []string {
-	byTag := map[string][]string{} // 小写的语言标签 → 文件名；"" 是 README.md
+	byTag := map[string][]string{} // lower-case language tag -> file names; "" is README.md
 	for _, name := range names {
 		lower := strings.ToLower(name)
 		if len(lower) < len("readme.md") || !strings.HasPrefix(lower, "readme") || !strings.HasSuffix(lower, ".md") {
@@ -131,7 +135,8 @@ func readmeOrder(names []string, locale string) []string {
 	return out
 }
 
-// openInside 打开 root 的直接子文件 name；解析后不在 root 里或不是普通文件时返回 nil。
+// openInside opens the direct child file name of root; it returns nil when the resolved path is not inside root or
+// is not a regular file.
 func openInside(root, name string) (*os.File, error) {
 	real, err := filepath.EvalSymlinks(filepath.Join(root, name))
 	if err != nil {
@@ -151,7 +156,7 @@ func openInside(root, name string) (*os.File, error) {
 	return f, nil
 }
 
-// cutRunes 去掉截断时留在末尾的半个 UTF-8 字符。
+// cutRunes removes a partial UTF-8 character left at the end by truncation.
 func cutRunes(b []byte) []byte {
 	for i := len(b) - 1; i >= 0 && i >= len(b)-utf8.UTFMax; i-- {
 		if utf8.RuneStart(b[i]) {

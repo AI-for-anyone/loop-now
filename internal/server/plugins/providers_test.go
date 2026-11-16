@@ -14,7 +14,8 @@ import (
 	"loop-now/internal/server/plugins"
 )
 
-// fakeCapture 按扩展所在插件目录给出注册的提供方，不运行任何代码；记下每次被读取的目录。
+// fakeCapture returns the registered providers by the plugin directory of the extensions without running any code,
+// and records every directory it is asked to read.
 type fakeCapture struct {
 	byDir map[string]modelcatalog.Capture
 	dirs  []string
@@ -30,8 +31,10 @@ func provider(id string, oauth bool) modelcatalog.CapturedProvider {
 		Models: []modelcatalog.Model{{ID: "m1", Name: "M1", ThinkingLevels: []string{"off"}, DefaultThinkingLevel: "off", Input: []string{"text"}}}}
 }
 
-// 安装确认后读取插件注册的提供方：带 OAuth 的新提供方并入模型目录（source=plugin、带 pluginId），
-// 不带 OAuth 的、与内置同 id 的只记录；另一个插件注册同一 id 时不安装（409）；卸载后从目录里消失。
+// Once an install is confirmed, the providers registered by the plugin are read: a new provider with OAuth is
+// merged into the model catalog (source=plugin, with pluginId); one without OAuth, or with the same id as a built-in
+// provider, is only recorded; when another plugin registers the same id it is not installed (409); after an
+// uninstall the provider disappears from the catalog.
 func TestPluginProvidersReachCatalog(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -89,7 +92,7 @@ func TestPluginProvidersReachCatalog(t *testing.T) {
 		t.Fatal("冲突时不应安装")
 	}
 
-	// 服务重启：从数据库重新并入。
+	// Server restart: merged in again from the database.
 	reg2 := modelcatalog.NewRegistry(base)
 	e.svc.Models = reg2
 	if err := e.svc.PublishProviders(ctx); err != nil {
@@ -98,12 +101,13 @@ func TestPluginProvidersReachCatalog(t *testing.T) {
 	if _, ok := reg2.Provider("fake-oauth"); !ok {
 		t.Fatal("重启后应从数据库并入")
 	}
-	// models.json 换掉 Pi 目录部分时插件提供方保留。
+	// When models.json replaces the Pi catalog part, the plugin providers are kept.
 	reg2.Replace(modelcatalog.New("1.4.0", nil, nil))
 	if _, ok := reg2.Provider("fake-oauth"); !ok {
 		t.Fatal("换 Pi 目录后插件提供方应保留")
 	}
-	// 默认卸载保留各项目的订阅账号与平台 Agent 自己的登录；选“删除数据”时才删掉它注册的提供方的登录。
+	// By default an uninstall keeps every project's subscription accounts and platform Agents' own logins; only when
+	// deleting data is chosen are the logins of the providers it registered deleted.
 	var deleted [][]string
 	e.svc.DeleteProviderAccounts = func(_ context.Context, providers []string) error {
 		deleted = append(deleted, slices.Clone(providers))
@@ -136,7 +140,7 @@ func TestPluginProvidersReachCatalog(t *testing.T) {
 	}
 }
 
-// 读取失败不阻止安装，原因随版本保存在 providersError。
+// A failed read does not block the install; the reason is saved with the version in providersError.
 func TestPluginProviderCaptureFailureKeepsInstall(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -152,7 +156,8 @@ func TestPluginProviderCaptureFailureKeepsInstall(t *testing.T) {
 	}
 }
 
-// 安装时：声明的状态路径与 CLI 模板的凭证文件重叠，在详情的 providerErrors 里提前提示（仍然安装）。
+// At install time, a declared state path that overlaps a CLI template's credential file is pointed out ahead of time
+// in the details' providerErrors (the plugin is still installed).
 func TestProviderStateOverlapWarning(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()

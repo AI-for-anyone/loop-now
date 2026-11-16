@@ -5,7 +5,8 @@ import (
 	"testing"
 )
 
-// skipWithoutCLITemplates 跳过要安装 CLI 模板的验证测试：模板目前没有 Windows 安装包，验证会以 verification_unsupported 结束。
+// skipWithoutCLITemplates skips verification tests that need to install CLI templates: the templates have no Windows
+// install packages yet, so verification would end with verification_unsupported.
 func skipWithoutCLITemplates(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS == "windows" {

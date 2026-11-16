@@ -13,7 +13,8 @@ import (
 	"loop-now/internal/server/modelcatalog/catalogtest"
 )
 
-// 真实的登录辅助进程：随包 Pi 的扩展加载器加载假扩展，问题经私有管道往返，扩展的状态写进 HOME，返回值只在结果里。
+// The real login helper process: the bundled Pi's extension loader loads a fake extension, questions travel back and
+// forth over a private pipe, the extension's state is written into HOME, and the return value is only in the result.
 const loginExtension = `import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readStoredCredential } from '@earendil-works/pi-coding-agent';
@@ -68,7 +69,7 @@ func TestPluginHelperWithPiLoader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 安装目录与它的上级都须是 0700。
+	// The install directory and its parent must both be 0700.
 	if err := os.Chmod(work, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +105,7 @@ func TestPluginHelperWithPiLoader(t *testing.T) {
 		t.Fatalf("HOME 里只有扩展自己的东西：%v", entries)
 	}
 
-	// 没有注册这个提供方：extension_load_failed。
+	// This provider is not registered: extension_load_failed.
 	if _, err := h.Login(context.Background(), PluginLoginRequest{OperationID: [16]byte{2}, Provider: "other", Extensions: []string{ext}, Home: home}, ui, ui.replies); err != ErrExtensionLoad {
 		t.Fatalf("没有这个提供方：%v", err)
 	}

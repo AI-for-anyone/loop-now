@@ -22,7 +22,7 @@ import (
 	"loop-now/internal/server/pluginhost/pluginhosttest"
 )
 
-// 假宿主见 pluginhosttest；LOOPNOW_FAKE_PLUGIN_HOST=1 时只跑这个测试。
+// The fake host is in pluginhosttest; with LOOPNOW_FAKE_PLUGIN_HOST=1 only this test runs.
 func TestFakeHostProcess(t *testing.T) {
 	if os.Getenv(pluginhosttest.Env) != "1" {
 		t.Skip("只在作为假宿主进程运行时执行")
@@ -31,7 +31,7 @@ func TestFakeHostProcess(t *testing.T) {
 	os.Exit(0)
 }
 
-// patchManifest 修改插件目录 package.json 里的 loopNow。
+// patchManifest changes loopNow in the package.json of a plugin directory.
 func patchManifest(t *testing.T, dir string, patch func(loopNow map[string]any)) {
 	t.Helper()
 	path := filepath.Join(dir, "package.json")
@@ -50,7 +50,8 @@ func patchManifest(t *testing.T, dir string, patch func(loopNow map[string]any))
 	}
 }
 
-// startFakeHost 以假宿主拉起插件宿主，等 ids 都加载完成，返回假宿主的记录文件。
+// startFakeHost starts the plugin host with the fake host, waits until all ids are loaded, and returns the fake host's
+// journal file.
 func (e *env) startFakeHost(ids ...string) string {
 	e.t.Helper()
 	journal := filepath.Join(e.t.TempDir(), "journal.jsonl")
@@ -58,7 +59,8 @@ func (e *env) startFakeHost(ids ...string) string {
 	return journal
 }
 
-// startHost 以 command 拉起插件宿主（测试里没有事件通知，投递靠短间隔轮询），等 ids 都加载完成。
+// startHost starts the plugin host with command (tests have no event notifications, so delivery relies on
+// short-interval polling) and waits until all ids are loaded.
 func (e *env) startHost(command, env []string, ids ...string) *pluginhost.Supervisor {
 	e.t.Helper()
 	sup := pluginhost.New(pluginhost.Options{
@@ -82,7 +84,7 @@ func (e *env) startHost(command, env []string, ids ...string) *pluginhost.Superv
 	return sup
 }
 
-// journalEntries 读出假宿主记录里某类消息。
+// journalEntries reads the messages of one kind from the fake host's journal.
 func journalEntries(t *testing.T, path, typ string) []map[string]any {
 	t.Helper()
 	f, err := os.Open(path)
@@ -101,8 +103,9 @@ func journalEntries(t *testing.T, path, typ string) []map[string]any {
 	return out
 }
 
-// 操作按钮：清单里的操作在 where 允许的页面上执行，input 按 fields 校验，所在项目须启用插件、插件须在宿主里；
-// 插件的回应作为提示返回，插件报错 502、超时 504。
+// Action buttons: an action in the manifest runs on the pages its where allows, input is validated against fields, the
+// project must have the plugin enabled, and the plugin must be in the host; the plugin's response is returned as a
+// notice; a plugin error gives 502, a timeout 504.
 func TestPluginActions(t *testing.T) {
 	e := newEnv(t)
 	project := e.dc.Project.ID.String()
@@ -142,9 +145,11 @@ func TestPluginActions(t *testing.T) {
 	e.expectError(504, "plugin_timeout", "POST", "/plugins/bridge/actions/resend", act(onAgent, map[string]any{"note": "x", "mode": "hang"}))
 }
 
-// HTTP 入口：对外端口的 /hooks/<id>/… 不要令牌，回环的 /api/v1/plugins/<id>/http/… 由控制台或该插件的令牌调用；
-// 方法、路径、查询、头与正文交给插件（不带 Authorization 与 Cookie），插件的状态码、头与正文原样返回（去掉逐跳头）。
-// 正文超过 1 MiB 返回 413，没有 HTTP 入口的插件 404，插件报错 502，每个插件每秒超过 20 次返回 429。
+// HTTP entry point: /hooks/<id>/… on the external port needs no token; loopback /api/v1/plugins/<id>/http/… is called
+// with the console or the plugin's own token; method, path, query, headers and body go to the plugin (without
+// Authorization and Cookie), and the plugin's status code, headers and body are returned as is (minus hop-by-hop
+// headers). A body over 1 MiB gives 413, a plugin without an HTTP entry point 404, a plugin error 502, and more than 20
+// calls per second per plugin 429.
 func TestPluginHTTPIngress(t *testing.T) {
 	e := newEnv(t)
 	dir := writePluginDir(t, "bridge")
@@ -152,7 +157,7 @@ func TestPluginHTTPIngress(t *testing.T) {
 	e.installPlugin(dir)
 	e.installPlugin(writePluginDir(t, "plain"))
 	journal := e.startFakeHost("bridge", "plain")
-	e.external("") // 启动对外端口
+	e.external("") // start the external port
 	send := func(method, url string, body []byte, hdr ...string) (*http.Response, map[string]any) {
 		t.Helper()
 		req, _ := http.NewRequest(method, url, bytes.NewReader(body))
@@ -220,7 +225,7 @@ func TestPluginHTTPIngress(t *testing.T) {
 	}
 }
 
-// pluginTokenFor 返回某个插件的新令牌（与宿主加载时的做法相同）。
+// pluginTokenFor returns a new token for a plugin (the same way the host does when loading it).
 func (e *env) pluginTokenFor(id string) string {
 	e.t.Helper()
 	specs, err := e.api.Plugins.Specs(context.Background())
@@ -244,8 +249,10 @@ func (e *env) pluginTokenFor(id string) string {
 	return ""
 }
 
-// 市场：汇总官方市场与设置里的市场，标出已装版本与可更新；读取失败的市场只在自己的 error 里说明。
-// 从市场预览按条目的来源获取，官方市场的条目免确认，记下市场地址；更新时重新读取市场。
+// Markets: the official market and the markets in the settings are merged, with installed versions and available
+// updates marked; a market that fails to load only reports it in its own error. A preview from a market is fetched from
+// the entry's source; entries from the official market need no confirmation, and the market address is recorded; an
+// update re-reads the market.
 func TestPluginMarkets(t *testing.T) {
 	e := newEnv(t)
 	repo := t.TempDir()
@@ -307,7 +314,7 @@ func TestPluginMarkets(t *testing.T) {
 	if installed["version"] != "2.0.0" {
 		t.Fatalf("从市场安装：%+v", installed)
 	}
-	// 包没写 loopNow.displayName：用市场条目的显示名，而不是 npm 包名。
+	// The package does not set loopNow.displayName: the market entry's display name is used, not the npm package name.
 	if installed["displayName"] != "Gitty" {
 		t.Fatalf("显示名应取市场条目：%v", installed["displayName"])
 	}
@@ -333,8 +340,10 @@ func TestPluginMarkets(t *testing.T) {
 	}
 }
 
-// 宿主的 accounts_list（经假宿主的 probe-accounts 操作驱动）：已加载、声明了 accounts.read 与该种类、在项目里启用了的插件
-// 读到这个项目里该种类未删除的账号，按添加先后，values 含 secret 字段；其余情况回应 ok:false 与原因。
+// The host's accounts_list (driven by the fake host's probe-accounts action): a plugin that is loaded, declares
+// accounts.read and that kind, and is enabled in the project reads the non-deleted accounts of that kind in this
+// project, in the order they were added, with values including secret fields; any other case gets ok:false and a
+// reason.
 func TestPluginAccountsList(t *testing.T) {
 	e := newEnv(t)
 	project := e.dc.Project.ID.String()
@@ -384,8 +393,9 @@ func TestPluginAccountsList(t *testing.T) {
 	}
 }
 
-// 宿主拿到的 config.projects 只含启用了插件、未删除的项目（没有项目级配置时为空配置）；项目启用或停用插件时发 config_changed，
-// 带最新的项目列表。只存了配置、没有启用的项目不在其中。
+// The config.projects the host gets only contain non-deleted projects that have the plugin enabled (an empty config
+// when there is no project-level config); enabling or disabling the plugin in a project sends config_changed with the
+// latest project list. Projects that only stored a config without enabling the plugin are not included.
 func TestPluginConfigProjects(t *testing.T) {
 	e := newEnv(t)
 	e.installPlugin(writePluginDir(t, "bridge"))

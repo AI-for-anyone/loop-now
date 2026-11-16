@@ -19,7 +19,7 @@ const (
 
 func envOf(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
 
-// writeConfig 写入配置文件并返回路径。
+// writeConfig writes the config file and returns its path.
 func writeConfig(t *testing.T, profiles map[string]config.Profile) string {
 	t.Helper()
 	path := config.Path(t.TempDir())
@@ -39,7 +39,8 @@ func TestResolveAgent(t *testing.T) {
 	}
 }
 
-// Agent 身份不读取配置文件：即使配置文件权限过宽也不受影响。
+// The Agent identity does not read the config file: even a config file with overly wide permissions does not
+// affect it.
 func TestResolveAgentIgnoresConfigFile(t *testing.T) {
 	path := writeConfig(t, map[string]config.Profile{"default": {Server: "https://x.example", Token: extToken}})
 	os.Chmod(path, 0o644)

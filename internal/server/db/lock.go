@@ -10,25 +10,28 @@ import (
 	"loop-now/internal/filelock"
 )
 
-// LockFile 是数据目录里的实例锁文件名。
+// LockFile is the name of the instance lock file in the data directory.
 const LockFile = "loop-now.lock"
 
-// ErrLocked 表示另一个进程正持有这把实例锁（数据目录或工作根的）。
+// ErrLocked means another process holds this instance lock (of the data directory or the work root).
 var ErrLocked = errors.New("db: 实例锁正被另一个 Loop Now 进程持有")
 
-// DirLock 是一个目录的实例锁：服务和导入在整个运行期间持有，保证同一数据目录（服务还有工作根）只有一个进程在
-// 调度执行、迁移和导入。进程退出时操作系统自动释放，不需要过期时间。管理子命令只做短写，不取这把锁。
+// DirLock is a directory's instance lock: the server and the importer hold it for their whole lifetime, so that only
+// one process schedules runs, migrates and imports on a given data directory (and, for the server, work root). The
+// operating system releases it automatically when the process exits, so no expiry is needed. Admin subcommands only
+// do short writes and do not take this lock.
 type DirLock struct {
 	f *os.File
 }
 
-// LockDir 以不等待的方式取得数据目录 dir 的实例锁，见 LockPath。
+// LockDir takes the instance lock of data directory dir without waiting; see LockPath.
 func LockDir(dir string) (*DirLock, error) {
 	return LockPath(filepath.Join(dir, LockFile))
 }
 
-// LockPath 以不等待的方式取得锁文件 path（不存在时创建）上的实例锁，并把本进程 PID 写进锁文件（只供诊断）。
-// 已被其他进程（或本进程另一次取锁）持有时返回 ErrLocked。
+// LockPath takes the instance lock on lock file path (created if missing) without waiting, and writes this
+// process's PID into the lock file (for diagnostics only).
+// It returns ErrLocked when another process (or another lock attempt by this process) holds it.
 func LockPath(path string) (*DirLock, error) {
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
@@ -47,7 +50,7 @@ func LockPath(path string) (*DirLock, error) {
 	return &DirLock{f: f}, nil
 }
 
-// Release 释放实例锁。锁文件保留，下次直接复用。
+// Release releases the instance lock. The lock file is kept and reused next time.
 func (l *DirLock) Release() error {
 	if l == nil || l.f == nil {
 		return nil

@@ -1,10 +1,10 @@
 import { connect, createServer } from 'node:net'
 
-// 第一次启动交给系统选端口，不去碰 8780（单独部署的服务端在用）；之后沿用记住的端口
-// （控制台的语言、范围等存在按源区分的 localStorage 里，端口变了就丢）。
+// On the first start the system picks the port, keeping away from 8780 (used by a standalone server deployment); later starts reuse the
+// remembered port (the console's language, scope, etc. are stored in per-origin localStorage and are lost if the port changes).
 
-// 有没有进程在这个端口上接受连接。macOS 上别的进程监听通配地址时，本机地址仍能再绑定成功，
-// 只试监听会把它遮住，所以先试连接。
+// Whether some process accepts connections on this port. On macOS, when another process listens on the wildcard address, binding the
+// loopback address still succeeds, so trying only to listen would hide it; that is why a connection is tried first.
 function accepts(port: number, host: string): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = connect({ port, host })
@@ -18,7 +18,7 @@ function accepts(port: number, host: string): Promise<boolean> {
   })
 }
 
-// 能不能在 127.0.0.1 上独占监听这个端口。只是试探，紧接着就关掉，真正监听的是服务端。
+// Whether this port can be listened on exclusively at 127.0.0.1. Only a probe that is closed right away; the server does the real listening.
 function canListen(port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const server = createServer()
@@ -32,7 +32,7 @@ export async function portFree(port: number): Promise<boolean> {
   return canListen(port)
 }
 
-// 想用的端口空闲就用它，否则返回 0 交给系统选，实际端口从就绪文件里读。
+// Use the wanted port if it is free; otherwise return 0 to let the system pick, and the actual port is read from the ready file.
 export async function choosePort(wanted: number): Promise<number> {
   return wanted !== 0 && (await portFree(wanted)) ? wanted : 0
 }

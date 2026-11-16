@@ -17,7 +17,7 @@ type Run = Schemas['Run']
 
 const ENDED: ReadonlySet<Run['status']> = new Set(['completed', 'failed', 'interrupted'])
 
-// 结局：印章、字段与原因。原因文字沿用对话页的 chat.failure 与 chat.status.*。
+// Outcome: stamp, field and reason. The reason text reuses the chat page's chat.failure and chat.status.*.
 function Result({ run }: { run: Run }) {
   if (!ENDED.has(run.status)) return null
   const restart = run.status === 'interrupted' && run.endReason === 'server_restart'
@@ -75,11 +75,12 @@ function Timeline({ timeline }: { timeline: Schemas['RunTimeline'] }) {
 interface RunRecordProps {
   agentId: string
   run: Run
-  // 从概览定位到这条回复时自动展开；其余默认收起。
+  // Expanded automatically when this reply was located from the overview; collapsed by default otherwise.
   defaultOpen?: boolean
 }
 
-// 回复下方的运行记录：收起时是一张小票式的按钮，写着总用时与 token 数（进行中只写已用时间）；展开时请求时间线。
+// The run record below a reply: when collapsed it's a receipt-style button showing the total duration and token count (only the elapsed
+// time while in progress); expanding it requests the timeline.
 export function RunRecord({ agentId, run, defaultOpen = false }: RunRecordProps) {
   const [open, setOpen] = useState(defaultOpen)
   const panelId = useId()
@@ -90,12 +91,13 @@ export function RunRecord({ agentId, run, defaultOpen = false }: RunRecordProps)
   const done = ended && duration !== null
   const elapsed = t.overview.elapsed(now - Date.parse(run.queuedAt))
   const label = done ? t.timeline.toggle(t.timeline.duration(duration), t.overview.tokens(run.usage.total)) : t.timeline.toggleRunning(elapsed)
-  // 小票上名称之后的各段：结束后是耗时与 token 数，进行中只有已用时间。
+  // The parts of the receipt after the name: once ended, the duration and token count; while in progress, only the elapsed time.
   const parts = done ? [t.timeline.duration(duration), t.timeline.toggleParts.tokens(t.overview.tokens(run.usage.total))] : [t.timeline.toggleParts.running(elapsed)]
 
   return (
     <div className="flex flex-col gap-2">
-      {/* 触发条是一张分段的小票：名称｜耗时｜token，段与段之间一道虚线。读屏读的仍是连在一起的一句（sr-only），各段只给眼睛看。 */}
+      {/* The trigger is a segmented receipt: name | duration | tokens, with a dashed line between segments. Screen readers still read
+          one joined sentence (sr-only); the segments are for the eyes only. */}
       <button
         type="button"
         aria-expanded={open}
@@ -112,7 +114,7 @@ export function RunRecord({ agentId, run, defaultOpen = false }: RunRecordProps)
             {part}
           </span>
         ))}
-        {/* 换图标而不旋转：按钮内的元素也不做变换。 */}
+        {/* Swap the icon instead of rotating it: elements inside buttons get no transforms either. */}
         <span className="inline-flex items-center pr-[9px]">
           {open ? (
             <ChevronUpIcon aria-hidden="true" strokeWidth={2.8} className="size-3" />

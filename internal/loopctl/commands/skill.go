@@ -112,7 +112,7 @@ func addSkill(r *cli.Registry) {
 	})
 }
 
-// uploadArchive 以 multipart/form-data 上传 zip：--zip 直接读取文件，--dir 在本地打包。
+// uploadArchive uploads a zip as multipart/form-data: --zip reads the file directly, --dir packs it locally.
 func uploadArchive(ctx context.Context, inv *cli.Invocation, method string, path ...string) (any, error) {
 	var archive []byte
 	var err error
@@ -135,7 +135,8 @@ func uploadArchive(ctx context.Context, inv *cli.Invocation, method string, path
 	return call(ctx, inv, conn.Request{Method: method, Path: path, Body: body.Bytes(), ContentType: mw.FormDataContentType()})
 }
 
-// ZipDir 把目录打包为 zip：条目按路径排序，相对路径用 / 分隔；遇到符号链接或特殊文件时拒绝。
+// ZipDir packs a directory into a zip: entries are sorted by path and relative paths use / as separator; symbolic
+// links and special files are refused.
 func ZipDir(root string) ([]byte, error) {
 	info, err := os.Stat(root)
 	if err != nil {

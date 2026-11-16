@@ -88,7 +88,8 @@ describe('插件市场', () => {
   })
 })
 
-// 改版“一张印出来的纸”第 4 步：插件市场的页头、索引标签、粉色投影的已安装卡片、带色带的插件卡。
+// "Printed sheet" redesign, step 4: the plugin market's page header, index tabs,
+// the installed card with a pink shadow, and plugin cards with a color band.
 describe('纸张上的插件市场', () => {
   const builtin = (id: string, name: string): import('@/api/client').Schemas['BuiltinPluginSource'] => ({ id, displayName: name, description: `${name}的说明`, version: '1.0.0' })
 

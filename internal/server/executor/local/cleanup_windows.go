@@ -144,11 +144,11 @@ func removeOwnedDirectoryAt(parent *os.Root, name string) error {
 	return nil
 }
 
-// entryOwned 核对 parent 下 name（文件或符号链接本身）属于当前用户。
+// entryOwned checks that name under parent (a file, or the symlink itself) belongs to the current user.
 func entryOwned(parent *os.Root, name string) bool {
 	f, err := parent.OpenFile(name, os.O_RDONLY, 0)
 	if err != nil {
-		// 符号链接经 os.Root 打不开（O_NOFOLLOW_ANY）：按路径核对所有者。
+		// A symlink cannot be opened through os.Root (O_NOFOLLOW_ANY): check the owner by path.
 		info, lerr := parent.Lstat(name)
 		return lerr == nil && privatefs.OwnedByCurrentUserPath(filepath.Join(parent.Name(), name), info)
 	}

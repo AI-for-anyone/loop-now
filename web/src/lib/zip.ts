@@ -1,22 +1,22 @@
 import { zipSync } from 'fflate'
 import type { PickedFile } from './upload'
 
-// 目录内的相对路径：去掉最外层的目录名，使 SKILL.md 位于压缩包根目录。
+// The relative path inside the directory: strip the outermost directory name so that SKILL.md sits at the archive root.
 function innerPath(path: string): string {
   return path.includes('/') ? path.slice(path.indexOf('/') + 1) : path
 }
 
-// 服务端解压 Skill 时忽略 macOS 生成的 __MACOSX/ 与 .DS_Store（按压缩包内的路径判断）。
+// When unpacking a Skill, the server ignores the __MACOSX/ and .DS_Store that macOS generates (judged by the path inside the archive).
 function ignoredBySkillServer(inner: string): boolean {
   return inner.startsWith('__MACOSX/') || inner.split('/').at(-1) === '.DS_Store'
 }
 
-// 去掉服务端会忽略的条目，只留下实际计入上限并放进压缩包的文件。
+// Drop the entries the server would ignore, leaving only the files that actually count toward the limits and go into the archive.
 export function skillFiles(files: PickedFile[]): PickedFile[] {
   return files.filter(({ path }) => !ignoredBySkillServer(innerPath(path)))
 }
 
-// 把选择的 Skill 目录打包成 zip：去掉最外层的目录名，并排除服务端会忽略的条目。
+// Pack the chosen Skill directory into a zip: strip the outermost directory name and leave out the entries the server would ignore.
 export async function zipDirectory(files: PickedFile[]): Promise<Blob> {
   const entries: Record<string, Uint8Array> = {}
   for (const { path, file } of skillFiles(files)) {

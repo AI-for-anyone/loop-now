@@ -9,7 +9,8 @@ import { consoleKeys, patchConsoleMessage } from '@/api/console-inbox'
 import { forwardToDesktop } from '@/features/desktop/desktop'
 import { taskInboxKeys } from '@/api/task-inbox'
 
-// 重新获取各个收件箱视图：失效后只有正在显示的查询立即重新请求，其余的在下次显示时请求。
+// Refetch all inbox views: after invalidation only the queries currently shown refetch right away; the rest refetch the
+// next time they are shown.
 export function refreshInboxViews(client: QueryClient) {
   for (const queryKey of [keys.inboxThreads, ['inboxThread'], ['agentInbox'], ['identityInbox'], ['consoleMessages'], consoleKeys.pending, [taskInboxKeys.records('')[0]]]) {
     void client.invalidateQueries({ queryKey })
@@ -18,9 +19,11 @@ export function refreshInboxViews(client: QueryClient) {
 
 type MessagePatch = Pick<Schemas['InboxMessageSummary'], 'readAt'> | Pick<Schemas['InboxMessageSummary'], 'cancelledAt'>
 
-// 按消息 ID 在已加载的各个视图中更新已读或取消时间：Agent 与外部身份的收件箱、线索详情，以及展开过的全文。
+// Update the read or cancel time by message ID in every loaded view: Agent and external identity inboxes, thread details, and
+// full texts that have been opened.
 function patchMessage(client: QueryClient, messageId: string, patch: MessagePatch) {
-  // 同一前缀下还有别的形状（外部身份与你往来的线索列表），只改分页的消息列表。
+  // The same prefix also holds data of another shape (the list of threads between an external identity and you); only patch
+  // the paged message lists.
   const patchPages = (data: MessagePages | undefined) =>
     data?.pages
       ? { ...data, pages: data.pages.map((page) => ({ ...page, messages: page.messages.map((m) => (m.id === messageId ? { ...m, ...patch } : m)) })) }
@@ -35,9 +38,12 @@ function patchMessage(client: QueryClient, messageId: string, patch: MessagePatc
   }
 }
 
-// 事件覆盖全部 Inbox 消息，按发件方与收件方的类别和 ID 分发到对应的视图；地址可能为空或被新身份重用，不用它判断归属。
-// 只有发件方或收件方是操作者的消息才进入操作者的线索；平台通知等发给 Agent 的消息只会让该 Agent 的收件箱重新获取。
-// 你与 Agent、任务实例的往来（对话与节点对话里的“发给你”）以及待你处理的汇总也在这里更新：待你处理每个事件都重新获取。
+// Events cover all Inbox messages and are routed to the matching views by the sender's and recipient's kind and ID; the
+// address may be empty or reused by a new identity, so it isn't used to decide ownership.
+// Only messages whose sender or recipient is the operator go into the operator's threads; messages to an Agent such as
+// platform notifications only make that Agent's inbox refetch.
+// Your exchanges with Agents and task instances (“发给你” (For you) in chat and in node chats) and the "Needs you" summary are
+// also updated here: "Needs you" refetches on every event.
 export function applyInboxEvent(client: QueryClient, event: InboxEvent) {
   inboxUnread.set(event.data.unreadTotal)
   if (event.type !== 'snapshot') void client.invalidateQueries({ queryKey: consoleKeys.pending })
@@ -71,8 +77,9 @@ export function applyInboxEvent(client: QueryClient, event: InboxEvent) {
       const patch = event.type === 'inbox.message.read' ? { readAt: event.data.readAt } : { cancelledAt: event.data.cancelledAt }
       patchMessage(client, id, patch)
       patchConsoleMessage(client, id, patch)
-      // “只看未读”的列表要去掉这条消息，所以收件方的收件箱另外重新获取；操作者的线索列表要更新未读数。
-      // 取消的消息带选项的问题同时关闭，线索详情另外重新获取。
+      // The “只看未读” (Unread only) list has to drop this message, so the recipient's inbox is refetched as well; the operator's
+      // thread list has to update its unread count.
+      // Cancelling a message also closes its question with options, so the thread details are refetched as well.
       if (event.type === 'inbox.message.cancelled') void client.invalidateQueries({ queryKey: keys.inboxThread(event.data.threadId) })
       if (to.kind === 'console' || event.type === 'inbox.message.cancelled') void client.invalidateQueries({ queryKey: keys.inboxThreads })
       if (to.kind === 'agent' && to.id) void client.invalidateQueries({ queryKey: keys.agentInbox(to.id) })
@@ -82,8 +89,11 @@ export function applyInboxEvent(client: QueryClient, event: InboxEvent) {
   }
 }
 
-// 进入控制台后建立一条收件箱事件流，不轮询。在桌面壳的窗口里，事件也交给它显示 Dock 未读数与系统通知。永久断开后按退避间隔重建，新连接由服务端先推送快照。
-// 服务端追加事件失败时可能漏掉个别事件，所以重连成功和窗口重新获得焦点时，都重新获取正在显示的收件箱视图。
+// After entering the console, open one inbox event stream; no polling. In a desktop shell window, events are also passed to
+// the shell to show the Dock unread count and system notifications. After a permanent disconnect it is re-established at
+// backoff intervals; on a new connection the server pushes a snapshot first.
+// When the server fails to append an event, individual events may be missed, so after a successful reconnect and whenever
+// the window regains focus, the inbox views currently shown are refetched.
 export function useInboxLive() {
   const client = useQueryClient()
   useEffect(() => {

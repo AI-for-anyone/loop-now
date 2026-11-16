@@ -11,7 +11,8 @@ export const sleep = {
   instances: '任务内普通对话 sleep',
   instance: (id: string) => `运行实例 ${id}`,
   wakeReference: (id: string) => `唤醒关联 ${id}`,
-  // 对话里的唤醒行：到期唤醒一行淡色元信息；被新消息提前唤醒时只在那条消息旁标一下。sleep ID 只在悬停提示里。
+  // Wake-up rows in the conversation: a wake-up on expiry gets one faint meta row; when woken early by a
+  // new message, there is only a mark next to that message. The sleep ID appears only in the hover tooltip.
   woke: 'sleep 到期唤醒',
   wokeEarly: '提前唤醒 sleep',
   slept: (ms: number) => `睡了 ${formatSlept(ms)}`,

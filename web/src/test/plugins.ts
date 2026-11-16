@@ -2,10 +2,11 @@ import { http, HttpResponse } from 'msw'
 import type { Schemas } from '@/api/client'
 import { apiUrl, errorBody } from './api'
 
-// 插件（第二版）的测试数据：按契约构造，默认是随平台发布的 webhook 插件（只有平台侧）。
+// Test data for plugins (second version): built per the contract; by default
+// the webhook plugin shipped with the platform (platform side only).
 const at = '2026-10-27T03:19:00Z'
 
-// webhook 的配置表单：回调地址（项目可覆盖、必填）、签名密钥（密钥）、重试上限（整数，默认 5）。
+// Config form of the webhook: callback URL (overridable per project, required), signing secret (secret), retry limit (integer, default 5).
 export const webhookSchema = {
   type: 'object',
   required: ['url'],
@@ -143,7 +144,7 @@ export function makeAccount(overrides: Partial<Schemas['PluginAccount']> = {}): 
   } as Schemas['PluginAccount']
 }
 
-// 飞书账号种类：App ID（普通字段）与 App Secret（密钥）。
+// Lark account kind: App ID (plain field) and App Secret (secret).
 export const larkAccountKind: Schemas['PluginAccountKind'] = {
   kind: 'lark',
   label: '飞书应用',
@@ -155,13 +156,13 @@ export const larkAccountKind: Schemas['PluginAccountKind'] = {
   } as unknown as Record<string, never>,
 }
 
-// ---------- 假的插件后端 ----------
-// 页面测试用：按契约在内存里保存插件、配置、项目启用、账号与 Agent 授权，记下每个修改请求；
-// 保存类请求按 expectedRevision 校验，版本不对时返回 412。
+// ---------- Fake plugin backend ----------
+// For page tests: keeps plugins, config, project enablement, accounts and Agent grants in memory per the contract, and records
+// every modifying request; save requests are checked against expectedRevision and get 412 when the version doesn't match.
 export type FakePluginState = {
   details: Schemas['PluginDetail'][]
   configs: Record<string, Schemas['PluginConfig']>
-  // 项目 ID → 插件 ID → 项目里的启用与配置
+  // project ID → plugin ID → enablement and config in the project
   projects: Record<string, Record<string, Schemas['ProjectPlugin']>>
   accounts: Schemas['PluginAccount'][]
   agents: Record<string, Schemas['AgentPlugin'][]>
@@ -172,9 +173,9 @@ export type FakePluginState = {
   settings: Schemas['PluginSettings']
   builtin: Schemas['BuiltinPluginSource'][]
   markets: Schemas['PluginMarket'][]
-  // 插件 ID → 已装版本的 README；没有给出的插件没有 README。
+  // plugin ID → README of the installed version; plugins not listed have no README.
   readmes: Record<string, Schemas['PluginReadme']>
-  // 操作按钮的回应：按“插件 id/操作 id”给出；没有给出的返回一条默认提示。
+  // Responses of action buttons, keyed by "plugin id/action id"; ones not listed return a default notice.
   actions: Record<string, (body: Record<string, unknown>) => Response>
 }
 
@@ -284,7 +285,7 @@ export function fakePlugins(initial: Partial<FakePluginState> = {}) {
       const installed = detail(id)
       return HttpResponse.json(makePreview({ manifest: installed ? { ...installed.manifest, version: '1.3.0' } : makeManifest({ id }), installedVersion: installed?.plugin.version ?? null }), { status: 201 })
     }),
-    // 安装：按最近一次预览的清单装上（预览 ID 在测试里只有一个）。
+    // Install: installs from the manifest of the most recent preview (tests only ever have one preview ID).
     http.post(apiUrl('/plugins'), async ({ request }) => {
       await note(request)
       const last = [...requests].reverse().find((r) => r.path === '/plugin-previews')?.body as { source?: { kind: string; location?: string; id?: string } } | undefined
@@ -343,7 +344,7 @@ export function fakePlugins(initial: Partial<FakePluginState> = {}) {
   return { state, requests, handlers, writes: () => requests.filter((r) => r.method !== 'GET') }
 }
 
-// 市场与市场里的条目。
+// The market and the entries in it.
 export function makeMarketEntry(overrides: Partial<Schemas['PluginMarketEntry']> = {}): Schemas['PluginMarketEntry'] {
   return { id: 'usage-report', displayName: '用量周报', description: '每周一把上周的 token 和花费发到你的收件箱。', source: 'git:https://github.com/loop-now/usage-report@v0.9.0', version: '0.9.0', verified: true, installedVersion: null, updateAvailable: false, providerState: {}, ...overrides }
 }

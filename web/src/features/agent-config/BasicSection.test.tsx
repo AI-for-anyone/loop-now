@@ -15,10 +15,11 @@ const region = (name: string) => screen.getByRole('region', { name })
 const saveButton = () => within(region('基本信息')).getByRole('button', { name: '保存' })
 
 describe('未保存修改的离开确认', () => {
-  // 浏览器的后退/前进（POP 导航）中，popstate 是异步触发的；内存路由同步触发，复现不了，这里用浏览器路由。
+  // On browser back/forward (POP navigation), popstate fires asynchronously; the memory router
+  // fires it synchronously and cannot reproduce this, so a browser router is used here.
   it('浏览器后退时点“离开”能真正离开，不再弹出确认', async () => {
     const agent = makeAgent()
-    // 借用 renderConfig 注册接口处理器，再换成浏览器路由渲染。
+    // Borrow renderConfig to register the API handlers, then render again with a browser router.
     const { unmount, user } = await renderConfig({ agent })
     unmount()
     window.history.replaceState(null, '', defaultAgentPath(agent.id, 'chat'))
@@ -38,7 +39,7 @@ describe('未保存修改的离开确认', () => {
       await user.click(within(dialog).getByRole('button', { name: '离开' }))
       await waitFor(() => expect(window.location.pathname).toMatch(/\/chat$/))
       await waitFor(() => expect(router.state.location.pathname).toMatch(/\/chat$/))
-      // 等异步的 popstate 都处理完，确认没有再次被拦下。
+      // Wait until every async popstate has been handled, and confirm that navigation was not blocked again.
       await new Promise((resolve) => setTimeout(resolve, 50))
       expect(screen.queryByRole('alertdialog')).toBeNull()
       expect(window.location.pathname).toMatch(/\/chat$/)
@@ -53,7 +54,8 @@ describe('未保存修改的离开确认', () => {
     const { user, router } = await renderConfig({
       agent,
       handlers: [
-        // 删除后列表里不再有它：项目没有 Agent 了，Agent 页停在首次使用的空状态，不跳到别的 Agent。
+        // After the deletion the list no longer contains it: the project has no Agents left, so
+        // the Agent page stays on the first-use empty state instead of jumping to another Agent.
         http.get(agentsUrl, () => HttpResponse.json({ agents: deleted ? [] : [toListItem(agent)] })),
         http.delete(apiUrl(`/agents/${agent.id}`), () => {
           deleted = true
@@ -107,7 +109,8 @@ describe('跟随服务端刷新', () => {
     await user.type(screen.getByLabelText('显示名称'), '我的名字')
     current = { ...agent, name: '改名后的助手', prompt: '别处改的提示' }
     await client.invalidateQueries({ queryKey: keys.agent(agent.id) })
-    // 服务端的新提示词要经提示词编辑器的同步才进输入框，等它到达；人改过的名称一直不变，不能拿它来等。
+    // The server's new prompt reaches the input only after the prompt editor syncs it, so wait
+    // for it to arrive; the name the person edited never changes, so it can't be used to wait on.
     await waitFor(() => expect(screen.getByLabelText('Agent Prompt')).toHaveValue(current.prompt))
     expect(screen.getByLabelText('显示名称')).toHaveValue('我的名字')
     expect(within(region('基本信息')).getByText(/服务端的配置已更新/)).toBeInTheDocument()
@@ -134,7 +137,7 @@ describe('跟随服务端刷新', () => {
     await user.type(screen.getByLabelText('显示名称'), '我的名字')
     current = { ...agent, model: { provider: 'openai', modelId: 'gpt-x' } }
     await client.invalidateQueries({ queryKey: keys.agent(agent.id) })
-    // 同上：等服务端更新的提示出现，不拿一直不变的名称来等。
+    // Same as above: wait for the notice that the server config was updated, not for the name, which never changes.
     await waitFor(() => expect(within(region('基本信息')).getByText(/服务端的配置已更新/)).toBeInTheDocument())
     expect(screen.getByLabelText('显示名称')).toHaveValue('我的名字')
     expect(screen.getByLabelText('Agent Prompt')).toHaveValue(current.prompt)
@@ -276,7 +279,7 @@ describe('插件提供方', () => {
 
   it('平台 Agent：授权了插件就能选它的提供方；没授权时选项禁用，正在用的那个说明去本页授权', async () => {
     const agent = makeAgent({ scope: 'platform', projectId: null, model: { provider: 'grok-cli', modelId: 'grok-4' } })
-    // 模型凭证一节也读目录（不带 agentId），这里记下每次读取。
+    // The model credential section also reads the catalog (without agentId), so record every read here.
     const asked: (string | null)[] = []
     await renderConfig({ agent, handlers: [http.get(apiUrl('/model-providers'), ({ request }) => {
       asked.push(new URL(request.url).searchParams.get('agentId'))

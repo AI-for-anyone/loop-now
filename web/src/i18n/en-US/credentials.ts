@@ -1,7 +1,8 @@
 import type { Messages } from '..'
 import { plural } from '../format'
 
-// 状态行里几句话直接前后相接（targetFixed、openOrCancel 等），英文句末留一个空格。
+// Several sentences in the status line are joined directly one after another
+// (targetFixed, openOrCancel, etc.), so English sentences end with a trailing space.
 export const credentials = {
   clis: {
     removeProjectBody: "Removes this CLI's grant and account selection; the project's shared accounts are kept. Running tasks keep the grants and credentials they started with.",

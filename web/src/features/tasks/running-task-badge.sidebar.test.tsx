@@ -15,7 +15,7 @@ import { makeTaskDetail } from '@/test/tasks'
 const folderPath = `/p/${encodeURIComponent(defaultProject.name)}/folder`
 const tasksLink = (nav: HTMLElement = sidebar()) => within(nav).getByRole('link', { name: /^任务/ })
 
-// 计数接口：返回可变的计数，并记下被读了几次。
+// Counts endpoint: returns a mutable count and records how many times it was read.
 function counts(initial: Schemas['TaskCounts'], pending: Schemas['InboxPending'] = { questions: [], unread: [], byAgent: [], byTask: [] }) {
   const state = { value: initial, reads: 0 }
   server.use(
@@ -73,7 +73,8 @@ describe('左侧栏“任务”旁的运行数', () => {
     state.value = { preparing: 0, running: 0, waiting: 0, blocked: 0 }
     const stream = FakeEventSource.instances.find((source) => source.url.endsWith(`/projects/${defaultProject.id}/tasks/events`))!
     act(() => stream.emit('task.updated', { task: { ...detail.task, status: 'completed', version: detail.task.version + 1 } }, '9'))
-    // 定时刷新按 Agent 列表的间隔（数秒），这里在 waitFor 的默认 1 秒内更新只能来自事件触发的重读。
+    // The periodic refresh follows the Agent list's interval (several seconds), so an update
+    // within waitFor's default 1 second can only come from a re-read triggered by the event.
     await waitFor(() => expect(tasksLink()).toHaveAccessibleName('任务'))
   })
 

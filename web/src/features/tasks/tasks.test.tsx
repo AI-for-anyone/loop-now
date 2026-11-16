@@ -54,7 +54,7 @@ describe('项目任务', () => {
     expect(await screen.findByRole('link', { name: '通用任务验收' })).toHaveAttribute('href', detailPath())
     const nav = screen.getByRole('navigation', { name: '主导航' })
     expect(within(nav).getAllByRole('link').filter((l) => l.getAttribute('aria-current') === 'page').map((l) => l.textContent)).toEqual(['任务'])
-    // 改版后“阻塞”还出现在状态标签与票根里，这里只看列表中的这一行。
+    // Since the redesign, “阻塞” (Blocked) also appears in the status label and the stub, so only look at this row in the list.
     expect(within(screen.getByRole('list', { name: '任务' })).getByText('阻塞')).toBeVisible()
   })
   it('平台先选择项目，不默选默认项目', async () => {
@@ -236,9 +236,10 @@ it('流程尺上的步骤可以用键盘选中；画布的拖动、缩放与定�
   const button = within(ruler).getByRole('button', { name: /返工处理/ })
   button.focus(); await userEvent.keyboard('{Enter}')
   await waitFor(() => expect(router.state.location.search).toContain('step=revise'))
-  // 新地址在 transition 里才渲染到页面，等页面跟上。
+  // The new URL reaches the page only inside a transition; wait for the page to catch up.
   expect(await screen.findByText('这个节点尚未被访问。')).toBeVisible()
-  // 没访问过的一步没有对话面板，纸上只有一行说明，票根里照样是流程尺（换了一个元素）。
+  // A step that has not been visited has no chat panel: the sheet shows only a one-line
+  // note, and the stub still holds the workflow ruler (as a different element).
   const after = screen.getByRole('navigation', { name: '固定流程' })
   expect(within(after).getByRole('button', { name: /返工处理/ })).toHaveAttribute('aria-pressed', 'true')
   for (const name of ['适应视图', '定位当前', '放大画布', '缩小画布']) expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
@@ -270,7 +271,7 @@ it('节点资料：正在看的一次是展开的小票，其余折叠；来自�
   expect(older.open).toBe(false)
   expect(viewing.compareDocumentPosition(older) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(within(viewing).getByText('V2·A1')).toHaveClass('bg-ink')
-  // 输入、输出、产物三个小标题的黄色记号笔都只罩住文字。
+  // The yellow highlighter marks on the three subheadings Input, Output and Artifacts cover only the text.
   for (const name of ['输入', '输出', '产物']) expect(within(viewing).getByRole('heading', { name })).toHaveClass('riso-marker', 'inline-block')
   expect(within(viewing).getByRole('note')).toHaveTextContent('仅供检查，不作为成功结果')
   expect(within(viewing).getByRole('link', { name: '01 质量检查 · 第 1 次的输出' })).toHaveAttribute('href', expect.stringContaining(`record=${oldNodeId}`))
@@ -482,7 +483,8 @@ it('console_node普通消息显示你，平台初始化与提醒来源保持，�
   expect(within(screen.getByText('Inbox提醒消息').closest('li')!).getByText(/平台提醒/)).toBeVisible()
 })
 
-// 改版“一张印出来的纸”第 3 步：任务列表排在纸上，状态筛选是纸张上沿的索引标签，票根里是进度。
+// "Printed sheet" redesign, step 3: the task list sits on the sheet, the status
+// filters are index tabs along the sheet's top edge, and the progress is in the stub.
 describe('纸张上的任务列表', () => {
   const summaryOf = (detail: Schemas['TaskDetail'], overrides: Partial<Schemas['TaskSummary']>): Schemas['TaskSummary'] => ({ ...detail.task, ...overrides })
   async function renderList(counts = { preparing: 0, running: 1, waiting: 1, blocked: 1 }, nextCursor: string | null = null) {
@@ -520,7 +522,7 @@ describe('纸张上的任务列表', () => {
   it('状态筛选是纸张上沿的索引标签，带数量；选中的是黄色；只筛选已经读到的任务', async () => {
     const { list, user } = await renderList()
     const buttons = within(tabs()).getAllByRole('button')
-    // 进行中、阻塞按服务端的计数（未结束的任务）；已完成与全部按已经读到的任务。
+    // In progress and Blocked use the server's counts (unfinished tasks); Completed and All count the tasks read so far.
     expect(buttons.map((button) => button.textContent)).toEqual(['全部5', '进行中2', '阻塞1', '已完成1'])
     expect(buttons[0]).toHaveAttribute('aria-pressed', 'true')
     expect(buttons[0]).toHaveClass('bg-riso-yellow', 'h-10')
@@ -553,7 +555,7 @@ describe('纸张上的任务列表', () => {
     expect(stamp).toHaveAttribute('data-task-state', 'blocked')
     expect(stamp).toHaveClass('riso-tilt', 'text-red-text')
     expect(within(rowOf('周报初稿')).getByText('已完成')).toHaveClass('bg-tint-green', 'text-green-text')
-    // 责任 Agent 带头像（叠印的两个小圆）。
+    // The responsible Agent has an avatar (two small overprinted circles).
     expect(within(running).getByText('任务检查员').previousElementSibling).toHaveAttribute('aria-hidden', 'true')
   })
 
@@ -564,7 +566,7 @@ describe('纸张上的任务列表', () => {
     expect(header.firstElementChild).toHaveTextContent(/^编号$/)
     expect(header.firstElementChild).toHaveClass('flex-[0_0_34px]')
     const running = rowOf('整理本周用户反馈')
-    // 第一列，读屏先读列名；编号与标题放在同一个不换行的组里。
+    // First column, so screen readers read the column name first; the number and the title sit in the same non-wrapping group.
     const group = running.firstElementChild!
     expect(group).toHaveClass('flex-nowrap')
     expect(group).toContainElement(within(running).getByRole('link', { name: '整理本周用户反馈' }))

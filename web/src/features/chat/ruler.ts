@@ -3,9 +3,9 @@ import { t } from '@/i18n'
 import { sleepWakeNote } from '@/features/sleep/wake-text'
 import type { Turn } from './turns'
 
-// 刻度的名称最多取这么多字；显示时再按宽度单行截断。
+// A tick's name takes at most this many characters; on display it is further truncated to one line by width.
 const PREVIEW_CHARS = 80
-// 只处理开头的一段：每次渲染都要给每一轮算一遍名称，粘贴进来的长消息不必整条处理。
+// Only the beginning is processed: every render computes the name of every turn, and a long pasted message needn't be processed whole.
 const PREVIEW_SOURCE = 2000
 function clip(text: string) {
   const head = text.trimStart().slice(0, PREVIEW_SOURCE)
@@ -14,8 +14,9 @@ function clip(text: string) {
   return chars.join('')
 }
 
-// 一轮对话的预览：用户消息的开头；平台提醒与 sleep 唤醒写明是哪种提醒；只有图片时写图片张数；
-// 没有用户消息时用回复的开头，回复也没有文字时用通用说法。
+// Preview of a conversation turn: the start of the user message; platform reminders and sleep wakes say which kind of reminder they
+// are; with images only, the number of images;
+// without a user message, the start of the reply; when the reply has no text either, a generic phrase.
 export function turnPreview(turn: Turn): string {
   const user = turn.user
   if (user?.origin === 'inbox_reminder') return t.chat.ruler.labeled(t.chat.inboxReminder.title, t.chat.inboxReminder.received)
@@ -29,8 +30,10 @@ export function turnPreview(turn: Turn): string {
   return clip(turn.reply?.text ?? '') || t.chat.ruler.noText
 }
 
-// 对话区里哪些轮次（带 data-run-id 的轮次块）此刻有一部分在滚动区的可视范围内，返回它们的执行 ID。
-// 轮次增减时补上新的、去掉没了的观察对象（去掉的轮次没有刻度，留在结果里也不影响）；浏览器不支持 IntersectionObserver 时一条也不算可见。
+// Which turns in the conversation area (turn blocks with data-run-id) are at least partly within the scroll area's visible range right
+// now; returns their run IDs.
+// When turns are added or removed, observe the new ones and stop observing the ones that are gone (removed turns have no ticks, so it
+// does no harm if they linger in the result); if the browser doesn't support IntersectionObserver, none count as visible.
 export function useVisibleTurns(root: RefObject<HTMLElement | null>, content: RefObject<HTMLElement | null>, keys: string): ReadonlySet<string> {
   const [visible, setVisible] = useState<ReadonlySet<string>>(() => new Set())
   const observer = useRef<IntersectionObserver | null>(null)

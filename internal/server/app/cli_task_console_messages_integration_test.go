@@ -377,7 +377,7 @@ func TestTaskConsoleAppQueuedRecoveryAfterRedisLoss(t *testing.T) {
 	}
 	s.stop()
 	s = nil
-	// 重启后内存里的协调状态是空的：排队只在数据库里。
+	// After the restart the in-memory coordination state is empty: the queue exists only in the database.
 	s = w.start(nil)
 	completed := taskConsoleWaitRun(t, s, r.RunID, "completed")
 	if completed.NodeRunID != n.ID || completed.ExecutionMode != "task_conversation" {

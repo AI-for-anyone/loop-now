@@ -9,7 +9,7 @@ type Participant = Schemas['InboxParticipant']
 
 let seq = 0
 const id = () => `00000000-0000-7000-a000-${String(++seq).padStart(12, '0')}`
-// 依次递增的时间，越晚创建的消息越新。
+// Increasing timestamps: messages created later are newer.
 let clock = Date.parse('2026-10-12T08:00:00Z')
 const nextTime = () => new Date((clock += 60_000)).toISOString()
 
@@ -68,7 +68,8 @@ export function makeToken(overrides: Partial<Schemas['ExternalToken']> = {}): Sc
   const tokenId = overrides.id ?? id()
   return {
     id: tokenId,
-    // 真实的标识取 ID 去掉连字符后的前 8 位；样例 ID 前缀相同，这里取后 8 位以便区分。
+    // The real prefix is the first 8 characters of the ID without hyphens; fixture
+    // IDs share a prefix, so the last 8 are taken here to tell them apart.
     prefix: `lne_${tokenId.replace(/-/g, '').slice(-8)}`,
     createdAt: '2026-10-01T02:00:00Z',
     expiresAt: null,
@@ -85,13 +86,14 @@ const otherSide = (thread: Message[]): Participant => {
 
 interface FakeInboxOptions {
   messages?: Message[]
-  // 收件人地址或 ID 到参与方的对应，用于新建消息。
+  // Map from recipient address or ID to participant, used for new messages.
   recipients?: Record<string, Participant>
-  // 新建或回复时返回的错误；给出后请求不写入。
+  // Error returned on create or reply; when given, the request isn't stored.
   sendError?: { status: number; body: Schemas['Error'] }
 }
 
-// 假的收件箱后端：按消息推出线索、未读数与已读状态，记录新建与回复的请求体。
+// Fake inbox backend: derives threads, unread counts and read state from
+// the messages, and records the request bodies of new messages and replies.
 export function fakeInbox(options: FakeInboxOptions = {}) {
   const messages = [...(options.messages ?? [])]
   const sent: { to?: string; text?: string; whenBusy?: string; replyTo?: string; optionId?: string }[] = []
@@ -130,7 +132,7 @@ export function fakeInbox(options: FakeInboxOptions = {}) {
       for (const m of messages) if (m.threadId === params.threadId && m.to.kind === 'console' && !m.readAt) m.readAt = now
       return HttpResponse.json({ unreadTotal: unreadTotal() })
     }),
-    // 单条标为已读：返回全文，已读时间保持第一次的值。
+    // Mark a single message read: returns the full text; the read time keeps its first value.
     http.post(apiUrl('/inbox/messages/:messageId/read'), ({ params }) => {
       const message = messages.find((m) => m.id === params.messageId)
       if (!message) return HttpResponse.json(errorBody('not_found'), { status: 404 })
@@ -138,7 +140,7 @@ export function fakeInbox(options: FakeInboxOptions = {}) {
       message.readAt ??= new Date().toISOString()
       return HttpResponse.json(message)
     }),
-    // 你与一个 Agent（不含任务实例）之间的消息，新的在前。
+    // Messages between you and one Agent (excluding task instances), newest first.
     http.get(apiUrl('/agents/:agentId/console-messages'), ({ params }) => {
       const withAgent = (p: Participant) => p.kind === 'agent' && p.id === params.agentId
       const list = messages.filter((m) => m.task === null && ((m.from.kind === 'console' && withAgent(m.to)) || (m.to.kind === 'console' && withAgent(m.from))))
@@ -167,7 +169,8 @@ export function fakeInbox(options: FakeInboxOptions = {}) {
         to,
         threadId: target.threadId,
         inReplyTo: target.id,
-        // 按选项作答、没写文字时服务端自动填的正文（只是显示，前端不解析；改成英文之前是"选择：<label>"）。
+        // Body the server fills in when someone answers by option without writing text (display only; the front
+        // end doesn't parse it. Before it was changed to English it was "选择：<label>" (Selected: <label>)).
         text: body.text ?? (body.optionId ? `Selected: ${target.question?.options.find(option => option.id === body.optionId)?.label ?? body.optionId}` : ''),
         whenBusy: to.kind === 'agent' ? (body.whenBusy ?? 'queue') : null,
       })
@@ -190,7 +193,7 @@ export function fakeInbox(options: FakeInboxOptions = {}) {
     clearSendError: () => {
       sendError = undefined
     },
-    // 模拟另一方发来消息（不经过控制台）。
+    // Simulates a message arriving from the other side (not through the console).
     receive(message: Message) {
       messages.push(message)
       return message
@@ -198,7 +201,7 @@ export function fakeInbox(options: FakeInboxOptions = {}) {
   }
 }
 
-// 待你处理：发给你的 open 问题与其他未读消息（不含取消的），按发件 Agent 或任务汇总。
+// “待你处理” (Needs you): open questions sent to you and other unread messages (excluding cancelled ones), grouped by sending Agent or task.
 export function pendingOf(messages: Message[], projectOf: (message: Message) => string | null = () => null): Schemas['InboxPending'] {
   const toYou = messages.filter((m) => m.to.kind === 'console' && !m.cancelledAt)
   const item = (message: Message) => ({ message: summaryOf(message), projectId: projectOf(message) })
@@ -219,7 +222,7 @@ export function pendingOf(messages: Message[], projectOf: (message: Message) => 
   return { questions: questions.map(item), unread: unread.map(item), byAgent: [...byAgent.values()], byTask: [...byTask.values()] }
 }
 
-// 收件箱事件流：由测试推送事件、打开或中断连接。
+// Inbox event stream: tests push events and open or interrupt the connection.
 export const inboxStream = () => FakeEventSource.instances.filter((s) => s.url.endsWith('/inbox/events')).at(-1)!
 
 let eventSeq = 9000

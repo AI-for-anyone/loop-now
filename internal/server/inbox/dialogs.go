@@ -14,20 +14,21 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// Pi 扩展的对话（plugins/SPEC.md §11）：Agent 侧的扩展经 ctx.ui 发来的 confirm、select、input 变成 Agent 发给控制台的提问，
-// 出现在这个 Agent 的控制台对话里；控制台的回答交还给 Pi，请求的超时到期、这一轮结束时按取消回应。
+// Pi extension dialogs (plugins/SPEC.md §11): confirm, select and input sent by an agent-side extension through ctx.ui
+// become questions from the Agent to the console and appear in this Agent's console conversation; the console's answer
+// is handed back to Pi, and when the request's timeout expires or the turn ends, the reply is a cancel.
 
-// DefaultDialogTimeout 是请求没有带超时时提问的期限。
+// DefaultDialogTimeout is the question's deadline when the request carries no timeout.
 const DefaultDialogTimeout = 30 * time.Minute
 
-// dialogPoll 是等待回答时检查提问状态的间隔。
+// dialogPoll is how often the question state is checked while waiting for an answer.
 var dialogPoll = 500 * time.Millisecond
 
-// Dialog 是一次扩展对话请求。AgentID 是执行的 Agent（任务轮次时为任务实例 ID）。
+// Dialog is one extension dialog request. AgentID is the Agent of the run (the task instance ID for a task turn).
 type Dialog struct {
 	AgentID, RunID uuid.UUID
 	RequestID      string
-	Method         string // confirm、select、input
+	Method         string // confirm, select, input
 	Title          string
 	Message        string
 	Placeholder    string
@@ -35,8 +36,9 @@ type Dialog struct {
 	Timeout        time.Duration
 }
 
-// DialogAnswer 是交还给 Pi 的回应：Cancelled，或 confirm 的 Confirmed，或 select、input 的 Value。
-// Outcome 记入运行事件：answered（有人回答）、cancelled（回答为取消或无法提问）、expired（到期或这一轮结束）。
+// DialogAnswer is the response handed back to Pi: Cancelled, or Confirmed for confirm, or Value for select and input.
+// Outcome is recorded in the run events: answered (someone answered), cancelled (the answer was a cancel, or the
+// question could not be asked), expired (deadline reached or the turn ended).
 type DialogAnswer struct {
 	Cancelled  bool
 	Confirmed  bool
@@ -49,12 +51,13 @@ func cancelled(outcome string, question *uuid.UUID) DialogAnswer {
 	return DialogAnswer{Cancelled: true, Outcome: outcome, QuestionID: question}
 }
 
-// AskDialog 把对话作为提问发到控制台，等到有回答、到期或 ctx 结束。只有常态 Agent 的执行会提问；
-// 任务轮次、选项超过 10 个或写入失败时直接按取消回应。ctx 结束时提问到期（原因为 run_ended）。
+// AskDialog sends the dialog to the console as a question and waits for an answer, the deadline or the end of ctx. Only
+// runs of regular Agents ask questions; task turns, more than 10 options, or a failed write get a cancel response right
+// away. When ctx ends the question expires (reason run_ended).
 func (s *Service) AskDialog(ctx context.Context, d Dialog) (DialogAnswer, error) {
 	if _, err := s.St.GetAddressableAgent(ctx, d.AgentID); err != nil {
 		if store.IsNotFound(err) {
-			return cancelled("cancelled", nil), nil // 任务实例：任务轮次的对话不提问
+			return cancelled("cancelled", nil), nil // task instance: dialogs of task turns do not ask questions
 		}
 		return cancelled("cancelled", nil), err
 	}
@@ -97,14 +100,14 @@ func (s *Service) AskDialog(ctx context.Context, d Dialog) (DialogAnswer, error)
 			return cancelled("expired", &id), nil
 		case !st.ExpiresAt.After(time.Now()):
 			if err := s.ReconcileQuestions(context.WithoutCancel(ctx)); err != nil {
-				s.Log.Warn("扩展对话提问到期处理失败", "question", id, "err", err)
+				s.Log.Warn("failed to expire an extension dialog question", "question", id, "err", err)
 			}
 			return cancelled("expired", &id), nil
 		}
 	}
 }
 
-// endDialog 让仍未回答的提问到期，并把变化推给控制台。
+// endDialog expires a question that is still unanswered and pushes the change to the console.
 func (s *Service) endDialog(id uuid.UUID) {
 	ctx := context.Background()
 	changed, err := s.St.EndExtensionDialog(ctx, id)
@@ -112,12 +115,13 @@ func (s *Service) endDialog(id uuid.UUID) {
 		err = s.ReconcileQuestions(ctx)
 	}
 	if err != nil {
-		s.Log.Warn("结束扩展对话提问失败", "question", id, "err", err)
+		s.Log.Warn("failed to end an extension dialog question", "question", id, "err", err)
 	}
 }
 
-// dialogQuestion 返回提问的正文与选项：confirm 为“是／否”，select 为请求的选项（每项至多 50 字，至多 10 项），
-// input 为“取消”，直接回复文字即为输入的内容。
+// dialogQuestion returns the question's body and options: for confirm “是／否” ("Yes/No"), for select the requested
+// options (at most 50 characters each, at most 10 options), for input “取消” ("Cancel"), where replying with text
+// directly is the input.
 func dialogQuestion(d Dialog) (string, []string, bool) {
 	var lines []string
 	for _, l := range []string{d.Title, d.Message} {
@@ -167,8 +171,9 @@ func dialogQuestion(d Dialog) (string, []string, bool) {
 	return "", nil, false
 }
 
-// dialogAnswer 把控制台的回答换成 Pi 的回应：confirm 选“是／否”，select 选一项（回 Pi 原来的选项字符串），
-// input 回复文字；不合这些的（例如 confirm 回了文字、input 选了“取消”）按取消回应。
+// dialogAnswer turns the console's answer into Pi's response: confirm picks “是／否” ("Yes/No"), select picks one option
+// (Pi gets back its original option string), input replies with text; anything that does not fit (e.g. text for
+// confirm, or “取消” ("Cancel") picked for input) is answered as a cancel.
 func dialogAnswer(d Dialog, st store.DialogState, id uuid.UUID) DialogAnswer {
 	out := DialogAnswer{Outcome: "answered", QuestionID: &id}
 	option := 0

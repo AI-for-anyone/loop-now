@@ -16,7 +16,7 @@ import { useOverviewLive } from './useOverviewLive'
 import { LiveDot, PageFrame, PageHeader } from '@/components/PageHeader'
 import { Sheet } from '@/components/Sheet'
 
-// 没有任何 Agent 时：叠印插图、大标题和新建 Agent 的入口。
+// When there are no Agents at all: the overprint illustration, a large title and a way to create an Agent.
 function EmptyOverview({ onCreate }: { onCreate: () => void }) {
   const titleId = useId()
   const reachable = useSyncExternalStore(reachability.subscribe, reachability.isReachable)
@@ -38,7 +38,8 @@ function EmptyOverview({ onCreate }: { onCreate: () => void }) {
   )
 }
 
-// 选“全部”时各行的所属标签：平台为“平台”，项目取项目列表中的名称；不在列表中（已删除）的为“已删除的项目”。
+// The ownership tag on each row when “全部” (All) is selected: “平台” (Platform) for the platform, the name from the project list
+// for a project, and “已删除的项目” (Deleted project) for one not in the list (deleted).
 function labelsFor(projects: Schemas['Project'][]) {
   return (scope: Schemas['AgentScope'], projectId: string | null): ScopeLabel => {
     if (scope === 'platform') return { kind: 'platform' }
@@ -49,7 +50,8 @@ function labelsFor(projects: Schemas['Project'][]) {
 
 type Overview = ReturnType<typeof useOverviewFilter>
 
-// 页头：页面标题，面包屑写着当前范围；标题旁的元信息是范围筛选与运行状态的连接状态（连上时“运行状态实时更新中”）。
+// Header: the page title, with the current scope in the breadcrumb; the meta info next to the title is the scope filter and the
+// connection state of the run status (“运行状态实时更新中” (Run status is updating live) when connected).
 function Header({ overview, connection }: { overview: Overview; connection?: ConnectionState }) {
   const { filter } = overview
   const scopeName = filter.kind === 'all' ? t.shell.global : filter.kind === 'platform' ? t.projects.overview.platform : filter.name
@@ -61,8 +63,9 @@ function Header({ overview, connection }: { overview: Overview; connection?: Con
   )
 }
 
-// 概览的内容排在一张纸上（改版）；纸张里的这一栏自己滚动。滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）
-// 随内容滚动，不会按未滚动时的位置把整页撑高。
+// The overview content is laid out on one sheet (redesign); this column inside the sheet scrolls on its own. The scroll area is
+// the positioning container: absolutely positioned elements inside it (such as sr-only text) scroll with the content instead
+// of stretching the whole page based on their unscrolled position.
 function OverviewSheet({ children }: { children: ReactNode }) {
   return (
     <Sheet className="mt-2 flex-1">
@@ -73,9 +76,10 @@ function OverviewSheet({ children }: { children: ReactNode }) {
   )
 }
 
-// 概览页：打开控制台时的默认页，没有左侧 Agent 列表。纸张上是运行状态、用量、异常与失败三个编号分区（有发给你的
-// 消息时，“待你处理”排在最上面，不编号），不放服务健康。默认包含所有未删除项目与平台中的 Agent；可以按项目或
-// 平台筛选（写在地址中），换范围时内容区重新挂载并重新连接。
+// The overview page: the default page when the console opens, without the sidebar Agent list. The sheet holds three numbered
+// sections: run status, usage, and issues and failures (when there are messages for you, “待你处理” (Needs you) goes on top,
+// unnumbered); service health is not shown. By default it includes the Agents in all undeleted projects and the platform; it can
+// be filtered by project or platform (stored in the URL), and changing the scope remounts the content area and reconnects.
 export function OverviewPage() {
   const overview = useOverviewFilter()
   const { filter } = overview
@@ -101,7 +105,8 @@ function OverviewContent({ overview, query }: { overview: Overview; query: Scope
   const remembered = useSyncExternalStore(lastScope.subscribe, lastScope.get)
   const { filter, projects } = overview
   const noAgents = live.synced && live.agents.length === 0
-  // 没有任何 Agent 时新建在最近使用的项目或平台中，没有记录时在默认项目中，与顶部导航的“Agent”一致。
+  // With no Agents at all, create in the most recently used project or the platform, or in the default project when nothing is
+  // recorded, consistent with "Agent" in the top navigation.
   const createScope = projects ? resolveLastScope(projects, remembered) : null
   const labels = filter.kind === 'all' && projects ? labelsFor(projects) : null
 

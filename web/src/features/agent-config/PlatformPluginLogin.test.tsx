@@ -7,7 +7,8 @@ import { apiUrl, errorBody, makeAgent } from '@/test/api'
 import { pluginProvider, providers, renderConfig } from '@/test/config'
 import { makeModelAccount, makeModelLogin } from '@/test/model-auth'
 
-// 平台 Agent（不属于项目）在自己的模型凭证里登录插件注册的提供方：浏览器授权、设备码、登录中途的问题、本机登录说明。
+// A platform Agent (not part of a project) logs in, within its own model credentials, to a provider registered
+// by a plugin: browser authorization, device code, questions asked mid-login, and the local-login notes.
 const area = () => screen.getByRole('region', { name: '模型账号凭证' })
 const grokAgent = () => makeAgent({ scope: 'platform', projectId: null, model: { provider: 'grok-cli', modelId: 'grok-4' }, modelCredential: null })
 const grokLogin = (agentId: string, overrides: Partial<Schemas['ModelAuthOperation']> = {}) =>
@@ -18,7 +19,7 @@ const grokModels = http.get(apiUrl('/model-providers/:providerId/models'), ({ pa
 
 afterEach(() => vi.restoreAllMocks())
 
-// 登录状态由测试控制：发起返回 start，之后每次读取返回 box.state（回答、取消改写它）。
+// The test controls the login state: starting returns start, and every later read returns box.state (answering and cancelling rewrite it).
 async function setup(start: Schemas['ModelAuthOperation'] | ((agent: Schemas['Agent']) => Response), options: { state?: Partial<Schemas['ModelAuthState']>; answer?: (body: Schemas['ProjectModelLoginInput']) => Response | undefined } = {}) {
   const agent = grokAgent()
   const starts: unknown[] = [], answers: Schemas['ProjectModelLoginInput'][] = []

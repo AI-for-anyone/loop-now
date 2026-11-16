@@ -12,11 +12,13 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// 观察类事件：每个已加载的插件一个投递协程，同一插件串行、不同插件并行；按事件时间取到期的待投递记录，
-// 宿主回 ack 才标为完成。失败（插件报错、超时、宿主退出）按 Backoff 重投，用尽后标为 failed；
-// 重投等待期间同一插件更晚的事件照常投递，一条失败的事件不会卡住后面的。
+// Observe events: one delivery goroutine per loaded plugin, serial within a plugin and parallel across plugins. Due
+// pending deliveries are taken in event time order, and only marked done once the plugin host sends ack. Failures
+// (plugin error, timeout, host exit) are redelivered according to Backoff and marked failed once it is used up;
+// while a redelivery is waiting, later events of the same plugin are delivered as usual, so one failed event never
+// holds up the ones after it.
 
-// Notify 唤醒投递协程，在新的待投递记录提交后调用。
+// Notify wakes the delivery goroutines; it is called after new pending deliveries are committed.
 func (s *Supervisor) Notify() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -28,7 +30,8 @@ func (s *Supervisor) Notify() {
 	}
 }
 
-// startDispatcher 为刚加载的插件启动投递协程，有定时任务时再启动定时协程；两者都结束后 lp.done 关闭。
+// startDispatcher starts the delivery goroutine for a newly loaded plugin, plus the schedule goroutine when it has
+// scheduled jobs; lp.done is closed once both have finished.
 func (s *Supervisor) startDispatcher(c *conn, spec Spec) *loadedPlugin {
 	ctx, cancel := context.WithCancel(context.Background())
 	lp := &loadedPlugin{spec: spec, cancel: cancel, wake: make(chan struct{}, 1), done: make(chan struct{})}
@@ -46,7 +49,8 @@ func (s *Supervisor) startDispatcher(c *conn, spec Spec) *loadedPlugin {
 
 func (s *Supervisor) dispatch(ctx context.Context, c *conn, lp *loadedPlugin) {
 	id := lp.spec.ID
-	// 租约覆盖等待 ack 的时长：服务端在等待期间退出时，租约到期后由下次运行重投。
+	// The lease covers the time spent waiting for ack: if the server exits while waiting, the next run redelivers
+	// once the lease expires.
 	lease := 2 * s.o.EventTimeout
 	poll := time.NewTicker(s.o.PollInterval)
 	defer poll.Stop()
@@ -54,7 +58,7 @@ func (s *Supervisor) dispatch(ctx context.Context, c *conn, lp *loadedPlugin) {
 		d, err := s.o.Store.ClaimPluginDelivery(ctx, id, lease)
 		if err != nil {
 			if ctx.Err() == nil {
-				s.o.Log.Warn("读取待投递的插件事件失败", "plugin", id, "err", err)
+				s.o.Log.Warn("failed to read plugin events awaiting delivery", "plugin", id, "err", err)
 			}
 		}
 		if d == nil {
@@ -69,13 +73,14 @@ func (s *Supervisor) dispatch(ctx context.Context, c *conn, lp *loadedPlugin) {
 		sent := time.Now()
 		_, err = c.request(ctx, TypeEvent, id, payload, s.o.EventTimeout, inflight{EventID: d.ID, EventType: d.Type})
 		took := time.Since(sent)
-		// 结果写库不随卸载或宿主退出取消。
+		// Writing the result to the database is not cancelled by an unload or a plugin host exit.
 		wctx := context.WithoutCancel(ctx)
 		switch {
 		case err == nil:
 			err = s.o.Store.AckPluginDelivery(wctx, id, d.ID, took)
 		case ctx.Err() != nil:
-			// 卸载或宿主停止：不是插件的问题，立即放回队列，下次加载后重投。
+			// Unloaded or plugin host stopped: not the plugin's fault, so put it back in the queue right away and
+			// redeliver after the next load.
 			now := time.Now()
 			err = s.o.Store.FailPluginDelivery(wctx, id, d.ID, "投递中断："+err.Error(), &now)
 		default:
@@ -91,14 +96,16 @@ func (s *Supervisor) dispatch(ctx context.Context, c *conn, lp *loadedPlugin) {
 			err = s.o.Store.FailPluginDelivery(wctx, id, d.ID, reason, retry)
 		}
 		if err != nil {
-			s.o.Log.Warn("记录插件事件投递结果失败", "plugin", id, "event", d.ID, "err", err)
+			s.o.Log.Warn("failed to record the plugin event delivery result", "plugin", id, "event", d.ID, "err", err)
 		}
 	}
 }
 
-// schedule 按清单 schedule[] 触发 schedule 请求（plugins/SPEC.md §11）：每个刻度看当前这一分钟，
-// cron 匹配且这一分钟还没有触发过时触发。同一条目上一次还没有回应时跳过这一次；加载之前与宿主停止期间错过的不补，
-// 加载时所在的那一分钟也不触发（重新加载不会重复触发）。
+// schedule fires schedule requests according to the manifest's schedule[] (plugins/SPEC.md §11): on each tick it
+// looks at the current minute and fires when cron matches and this minute has not fired yet. When the previous run of
+// the same entry has not responded yet, this run is skipped; runs missed before loading or while the plugin host was
+// stopped are not made up, and the minute in which the plugin was loaded does not fire either (so a reload never
+// fires twice).
 func (s *Supervisor) schedule(ctx context.Context, c *conn, lp *loadedPlugin, wg *sync.WaitGroup) {
 	type entry struct {
 		pluginmanifest.Schedule
@@ -151,7 +158,7 @@ func (s *Supervisor) schedule(ctx context.Context, c *conn, lp *loadedPlugin, wg
 	}
 }
 
-// retryAt 返回第 attempts 次失败后的重投时间；次数用尽时返回 nil。
+// retryAt returns the redelivery time after failure number attempts; nil when the attempts are used up.
 func (s *Supervisor) retryAt(attempts int) *time.Time {
 	if attempts > len(s.o.Backoff) {
 		return nil
@@ -160,7 +167,8 @@ func (s *Supervisor) retryAt(attempts int) *time.Time {
 	return &at
 }
 
-// EventObject 把事件记录展开成发给插件的对象：固定字段加该类型自己的字段，固定字段优先。
+// EventObject expands an event record into the object sent to the plugin: the fixed fields plus the fields of that
+// event type; the fixed fields take precedence.
 func EventObject(ev store.PluginEvent) map[string]any {
 	obj := map[string]any{}
 	if len(ev.Data) > 0 {

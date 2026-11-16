@@ -10,7 +10,7 @@ import (
 	"loop-now/internal/server/executor/local/runturn"
 )
 
-// responseFrame 是 Pi 的命令响应。
+// responseFrame is a Pi command response.
 type responseFrame struct {
 	ID      string          `json:"id"`
 	Command string          `json:"command"`
@@ -19,7 +19,7 @@ type responseFrame struct {
 	Error   string          `json:"error"`
 }
 
-// wireMessage 是事件中消息字段的子集。
+// wireMessage is a subset of the message field in events.
 type wireMessage struct {
 	Role         string          `json:"role"`
 	Content      json.RawMessage `json:"content"`
@@ -27,7 +27,7 @@ type wireMessage struct {
 	ErrorMessage string          `json:"errorMessage"`
 }
 
-// handleLine 解析一行并分发；无法解析的行计数后跳过，未知类型忽略。
+// handleLine parses one line and dispatches it; unparseable lines are counted and skipped, unknown types are ignored.
 func (c *Client) handleLine(line []byte) {
 	line = bytes.TrimSuffix(line, []byte{'\n'})
 	line = bytes.TrimSuffix(line, []byte{'\r'})
@@ -120,14 +120,15 @@ func (c *Client) handleLine(line []byte) {
 
 func (c *Client) routeResponse(r *responseFrame) {
 	if r.ID == "" {
-		return // 如 parse 错误响应，无法关联
+		return // e.g. a parse error response, which cannot be matched to a command
 	}
 	c.mu.Lock()
 	ch := c.pending[r.ID]
 	delete(c.pending, r.ID)
 	t := c.turn
 	c.mu.Unlock()
-	// 先在读协程内标记本轮已被接受，保证其后的事件按本轮处理。
+	// Mark the turn as accepted inside the reader goroutine first, so the events after it are handled as part of this
+	// turn.
 	if t != nil && t.promptID == r.ID {
 		t.responseReceived(r.Success)
 	}
@@ -136,20 +137,20 @@ func (c *Client) routeResponse(r *responseFrame) {
 	}
 }
 
-// endedMessage 是一条已结束的助手消息。
+// endedMessage is an assistant message that has ended.
 type endedMessage struct {
 	text         string
 	stopReason   string
 	errorMessage string
-	superseded   bool // 出错后被自动重试的后续消息取代
+	superseded   bool // replaced by a later message from an automatic retry after an error
 }
 
-// turn 是一轮 prompt 的状态，事件处理都在读协程中进行。
+// turn is the state of one prompt turn; all event handling happens on the reader goroutine.
 type turn struct {
 	promptID  string
 	sink      TurnSink
-	responded chan struct{}   // 收到 prompt 响应或本轮结束时关闭
-	result    chan TurnResult // 容量 1
+	responded chan struct{}   // closed when the prompt response arrives or the turn ends
+	result    chan TurnResult // capacity 1
 
 	mu            sync.Mutex
 	detached      bool
@@ -157,24 +158,27 @@ type turn struct {
 	finished      bool
 	respondedShut bool
 	ended         []endedMessage
-	partial       strings.Builder // 当前尚未结束的助手消息的增量文本
-	notices       []CommandNotice // 这一轮里扩展的 ctx.ui.notify（Pi 直接处理命令时随结果交出）
+	partial       strings.Builder // delta text of the assistant message that has not ended yet
+	notices       []CommandNotice // extensions' ctx.ui.notify in this turn (returned with the result when Pi handles a command itself)
 	noticeBytes   int
 	noticesCut    bool
-	// abortRequested：平台在这一轮里发过 abort（Abort）。手动压缩据此区分平台的取消与扩展的取消。
+	// abortRequested: the platform sent abort (Abort) during this turn. Manual compaction uses it to tell a platform
+	// cancel from an extension cancel.
 	abortRequested atomic.Bool
 }
 
-// CommandNotice 是扩展在这一轮里用 ctx.ui.notify 给出的一条消息（扩展原文，纯文本）。
+// CommandNotice is one message an extension gave with ctx.ui.notify during this turn (the extension's original text,
+// plain text).
 type CommandNotice = runturn.CommandNotice
 
-// 一轮最多收集的通知：条数与合计字节数，超出的截断并标记。
+// The most notices collected per turn: by count and by total bytes; anything beyond is truncated and flagged.
 const (
 	MaxCommandNotices     = 50
 	MaxCommandNoticeBytes = 16 << 10
 )
 
-// addNotice 收集一条通知；超过上限时截断（最后一条按剩余字节截到 UTF-8 边界）并标记。
+// addNotice collects one notice; past the limit it truncates (the last one is cut to the remaining bytes at a UTF-8
+// boundary) and flags it.
 func (t *turn) addNotice(level, message string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -196,7 +200,7 @@ func (t *turn) addNotice(level, message string) {
 	t.notices = append(t.notices, CommandNotice{Level: level, Message: message})
 }
 
-// commandNotices 返回收集到的通知与是否截断。
+// commandNotices returns the collected notices and whether they were truncated.
 func (t *turn) commandNotices() ([]CommandNotice, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -214,7 +218,7 @@ func newTurn(promptID string, sink TurnSink) *turn {
 
 func (t *turn) inactive() bool { return t.detached || t.finished }
 
-// active 报告本轮是否仍在进行（用于判断用量是否属于本轮）。
+// active reports whether the turn is still in progress (used to decide whether usage belongs to this turn).
 func (t *turn) active() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -244,7 +248,7 @@ func (t *turn) responseReceived(success bool) {
 	t.closeResponded()
 }
 
-// supersedeErrors 把此前以 error 结束的助手消息标记为已被重试取代。
+// supersedeErrors marks earlier assistant messages that ended with an error as superseded by a retry.
 func (t *turn) supersedeErrors() {
 	for i := range t.ended {
 		if t.ended[i].stopReason == "error" {
@@ -320,7 +324,7 @@ func (t *turn) settled(aborted bool) {
 		return
 	}
 	if !t.accepted {
-		// prompt 响应之前的 agent_settled 属于上一次运行，丢弃已累积的状态。
+		// An agent_settled before the prompt response belongs to the previous run: discard the accumulated state.
 		t.ended = nil
 		t.partial.Reset()
 		return
@@ -341,7 +345,7 @@ func (t *turn) settled(aborted bool) {
 	t.finish(res)
 }
 
-// exited 在 stdout 结束时调用：本轮以 pi_exited 失败，保留已产生的文字。
+// exited is called when stdout ends: the turn fails with pi_exited, keeping the text produced so far.
 func (t *turn) exited() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -362,7 +366,8 @@ func (t *turn) finish(res TurnResult) {
 	t.closeResponded()
 }
 
-// text 按规则拼接本轮的回复文本：跳过被重试取代的出错消息；withPartial 时追加未结束消息的增量。
+// text joins this turn's reply text by the rules: error messages superseded by a retry are skipped; with withPartial
+// the delta of the unfinished message is appended.
 func (t *turn) text(withPartial bool) string {
 	var parts []string
 	for _, m := range t.ended {
@@ -381,7 +386,7 @@ func (t *turn) text(withPartial bool) string {
 	return strings.Join(parts, "\n\n")
 }
 
-// contentText 拼接消息内容中的文本块；content 也可能是字符串。
+// contentText joins the text blocks of a message's content; content may also be a string.
 func contentText(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""

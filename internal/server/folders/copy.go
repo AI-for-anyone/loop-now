@@ -10,15 +10,17 @@ import (
 	"time"
 )
 
-// CopyResult 记下一次文件夹复制的方式与耗时。
+// CopyResult records the method and duration of one folder copy.
 type CopyResult struct {
 	Method   string // clonefile / copy / empty
 	Duration time.Duration
 }
 
-// CopyTree 把目录 src 整体复制为 dst：先在 dst 旁边的临时名下完成，成功后再改名为 dst，失败时删除半成品。
-// 优先用写时复制的克隆（APFS clonefile，瞬间完成、不占额外空间），文件系统不支持时退回普通复制
-// （保留权限与软链接，跳过 socket、设备等特殊文件）。src 不存在时 dst 为空目录。dst 已存在时返回错误。
+// CopyTree copies directory src as a whole to dst: the copy is completed under a temporary name next to dst and then
+// renamed to dst on success; on failure the partial copy is deleted. A copy-on-write clone is preferred (APFS
+// clonefile, instant and taking no extra space); when the file system does not support it, it falls back to a plain
+// copy (keeping permissions and symlinks, skipping special files such as sockets and devices). When src does not exist,
+// dst is an empty directory. Returns an error when dst already exists.
 func CopyTree(src, dst string) (CopyResult, error) {
 	begin := time.Now()
 	if _, err := os.Lstat(dst); err == nil {
@@ -58,7 +60,8 @@ func CopyTree(src, dst string) (CopyResult, error) {
 
 var errCloneUnsupported = errors.New("文件系统不支持克隆")
 
-// plainCopy 递归复制目录：保留权限与软链接（原样复制链接内容），跳过 socket、设备等特殊文件。
+// plainCopy copies a directory recursively: it keeps permissions and symlinks (copying the link contents as is) and
+// skips special files such as sockets and devices.
 func plainCopy(src, dst string) error {
 	return filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {

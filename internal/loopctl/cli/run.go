@@ -14,7 +14,7 @@ import (
 	"loop-now/internal/loopctl/output"
 )
 
-// System 是 loopctl 与外界的全部接触面，测试可以整体替换。
+// System is everything loopctl touches in the outside world; tests can replace it as a whole.
 type System struct {
 	Stdin     io.Reader
 	Stdout    io.Writer
@@ -24,11 +24,11 @@ type System struct {
 	GOOS      string
 	GOARCH    string
 	GoVersion string
-	Dial      conn.DialFunc                                    // 为空时真实拨号
-	Sleep     func(ctx context.Context, d time.Duration) error // 为空时真实等待
+	Dial      conn.DialFunc                                    // when nil, dials for real
+	Sleep     func(ctx context.Context, d time.Duration) error // when nil, really waits
 }
 
-// OSSystem 返回使用真实进程环境的 System。
+// OSSystem returns a System that uses the real process environment.
 func OSSystem(version string) *System {
 	return &System{
 		Stdin:     os.Stdin,
@@ -42,7 +42,7 @@ func OSSystem(version string) *System {
 	}
 }
 
-// ConfigPath 返回本地连接配置文件的路径。
+// ConfigPath returns the path of the local connection config file.
 func (s *System) ConfigPath() (string, *output.Error) {
 	home, err := s.HomeDir()
 	if err != nil || home == "" {
@@ -51,29 +51,30 @@ func (s *System) ConfigPath() (string, *output.Error) {
 	return config.Path(home), nil
 }
 
-// Invocation 是一次命令调用：解析后的参数、所在环境与连接服务端的客户端。
+// Invocation is one command call: the parsed arguments, the environment it runs in and the client that connects
+// to the server.
 type Invocation struct {
 	Cmd          *Command
 	Args         []string
 	Registry     *Registry
 	Sys          *System
-	Identity     Identity     // 按环境判断的身份
-	Client       *conn.Client // 只有连接服务端的命令才有
-	Meta         *output.Meta // 命令可以补充 meta（例如本地命令选中的 profile）
+	Identity     Identity     // identity determined from the environment
+	Client       *conn.Client // only set for commands that connect to the server
+	Meta         *output.Meta // commands may add to meta (for example the profile a local command selected)
 	flags        map[string]string
 	repeated     map[string][]string
 	accessed     map[string]bool
 	secretOutput *secretOutput
 }
 
-// Has 判断选项是否在命令行中出现。
+// Has reports whether the option appeared on the command line.
 func (inv *Invocation) Has(name string) bool {
 	inv.accessed[name] = true
 	_, ok := inv.flags[name]
 	return ok
 }
 
-// String 返回选项的值；没有出现时返回声明的默认值。
+// String returns the option's value, or its declared default when it did not appear.
 func (inv *Invocation) String(name string) string {
 	inv.accessed[name] = true
 	if v, ok := inv.flags[name]; ok {
@@ -101,22 +102,23 @@ func (inv *Invocation) Strings(name string) []string {
 	return nil
 }
 
-// Bool 返回布尔选项。
+// Bool returns a boolean option.
 func (inv *Invocation) Bool(name string) bool { return inv.String(name) == "true" }
 
-// Int 返回整数选项；解析时已校验格式。
+// Int returns an integer option; its format was already checked during parsing.
 func (inv *Invocation) Int(name string) int {
 	n, _ := strconv.Atoi(inv.String(name))
 	return n
 }
 
-// Accessed 返回执行过程中读取过的选项名，供测试检查“声明的选项都被使用”。
+// Accessed returns the names of the options read while running, so tests can check that every declared option
+// is used.
 func (inv *Invocation) Accessed() map[string]bool { return inv.accessed }
 
-// Hook 在命令执行后被调用，供测试检查调用细节；生产代码中为空。
+// Hook is called after a command has run so tests can check call details; it is nil in production code.
 var Hook func(inv *Invocation)
 
-// Run 执行一次 loopctl 调用，向 sys.Stdout 写出一个 JSON 对象，返回退出码。
+// Run executes one loopctl call, writes one JSON object to sys.Stdout and returns the exit code.
 func Run(ctx context.Context, r *Registry, argv []string, sys *System) (code int) {
 	meta := output.Meta{ClientVersion: sys.Version}
 	jsonOutput := &secretOutput{Writer: sys.Stdout}
@@ -189,7 +191,8 @@ func Run(ctx context.Context, r *Registry, argv []string, sys *System) (code int
 	return 0
 }
 
-// Check 只解析不执行：检查命令行能否被解析、该身份能否使用这条命令。供内置 Skill 的测试使用。
+// Check parses without running: it checks that the command line can be parsed and that the identity may use the
+// command. It is used by the tests of the built-in Skill.
 func Check(r *Registry, argv []string, id Identity) *output.Error {
 	p, e := parse(r, argv)
 	if e != nil {
@@ -204,7 +207,7 @@ func Check(r *Registry, argv []string, id Identity) *output.Error {
 	return nil
 }
 
-// resolve 解析连接参数。
+// resolve resolves the connection settings.
 func resolve(inv *Invocation) (*conn.Settings, *output.Error) {
 	o := conn.Options{
 		Getenv:  inv.Sys.Getenv,
@@ -236,7 +239,7 @@ func clientMeta(c *conn.Client, meta *output.Meta) []output.Warning {
 	return c.Warnings()
 }
 
-// Errorf 是 output.Errorf 的简写，供命令使用。
+// Errorf is shorthand for output.Errorf, for use by commands.
 func Errorf(code, format string, args ...any) *output.Error {
 	return output.Errorf(code, format, args...)
 }

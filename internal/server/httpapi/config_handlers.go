@@ -19,7 +19,7 @@ import (
 	"loop-now/internal/server/modelauth"
 )
 
-// ---- 上下文、健康、目录 ----
+// ---- Context, health, catalog ----
 
 func (s *Server) getContext(w http.ResponseWriter, r *http.Request) {
 	var c apitypes.Context
@@ -45,13 +45,14 @@ func (s *Server) getHealth(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusServiceUnavailable
 	}
 	if p, _ := auth.From(r.Context()); p.Kind == auth.KindExternal {
-		writeJSON(w, status, h.Redacted()) // 对外只表明各依赖是否可用，不含 error 字段
+		writeJSON(w, status, h.Redacted()) // externally, only say whether each dependency is available, without the error field
 		return
 	}
 	writeJSON(w, status, h)
 }
 
-// listModelProviders 列出模型目录。带 agentId 时给插件提供方标出这个 Agent 现在不能用的原因，供模型选择器提前提示。
+// listModelProviders lists the model catalog. With agentId, plugin providers are marked with the reason this Agent
+// cannot use them right now, so the model picker can warn in advance.
 func (s *Server) listModelProviders(w http.ResponseWriter, r *http.Request) {
 	var agent *uuid.UUID
 	if raw := r.URL.Query().Get("agentId"); raw != "" {
@@ -232,7 +233,7 @@ func (s *Server) deleteAgent(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ---- 可用 CLI 与凭证 ----
+// ---- Available CLIs and credentials ----
 
 func (s *Server) addAgentCli(w http.ResponseWriter, r *http.Request) {
 	id, err := pathUUID(r, "agentId")
@@ -334,7 +335,7 @@ func (s *Server) deleteModelCredential(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ---- Skills 模板库 ----
+// ---- Skill template library ----
 
 func (s *Server) listSkillTemplates(w http.ResponseWriter, r *http.Request) {
 	ts, err := s.Config.ListSkillTemplates(r.Context())
@@ -349,7 +350,7 @@ func (s *Server) listSkillTemplates(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"skills": out})
 }
 
-// readArchive 读取 multipart 中名为 archive 的 zip 文件。
+// readArchive reads the zip file named archive from the multipart body.
 func (s *Server) readArchive(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 	r.Body = http.MaxBytesReader(w, r.Body, s.O.Limits.MaxSkillArchive+(1<<20))
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
@@ -457,7 +458,7 @@ func (s *Server) updateSkillTemplateMarkdown(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, apitypes.FromTemplate(t))
 }
 
-// ---- Agent 的 Skill 副本 ----
+// ---- The Agent's Skill copies ----
 
 func agentAndSkill(r *http.Request) (uuid.UUID, uuid.UUID, error) {
 	a, err := pathUUID(r, "agentId")

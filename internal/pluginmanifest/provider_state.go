@@ -8,19 +8,21 @@ import (
 	"unicode"
 )
 
-// ProviderState 声明插件注册的某个模型提供方有哪些状态随项目账号走（plugins/SPEC.md §13）：
-// Paths 是扩展在 HOME 下保存登录与状态的相对路径（用 / 分隔），启动 Pi 时链接到账号的状态目录。
+// ProviderState declares which state of a model provider registered by the plugin travels with the project's
+// accounts (plugins/SPEC.md §13): Paths are the paths, relative to HOME (separated by /), where the extension keeps
+// its login and state; they are linked to the account's state directory when Pi starts.
 type ProviderState struct {
 	Paths []string `json:"paths"`
 }
 
-// MaxProviderStatePaths 是一个提供方最多能声明的路径数。
+// MaxProviderStatePaths is the maximum number of paths one provider may declare.
 const MaxProviderStatePaths = 8
 
 var providerIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
-// CheckProviderState 校验 providerState 声明（清单的 loopNow.providerState 或市场条目的 providerState）。
-// 路径须是 HOME 下的相对路径：不以 / 开头、不含反斜杠与冒号、没有空段、. 或 ..，不落在平台自己的 .loop-now 下。
+// CheckProviderState validates a providerState declaration (the manifest's loopNow.providerState or a market
+// entry's providerState). Paths must be relative to HOME: not starting with /, without backslashes or colons,
+// without empty, . or .. segments, and not under the platform's own .loop-now.
 func CheckProviderState(field string, decl map[string]ProviderState) error {
 	if len(decl) > 16 {
 		return invalid(field + " 最多声明 16 个提供方")
@@ -64,8 +66,9 @@ func checkStatePath(p string) error {
 	return nil
 }
 
-// OverlappingStatePath 找出声明的状态路径与平台管理的 HOME 路径（如 CLI 模板的凭证文件）之间的重叠：
-// 相同，或一方是另一方的上级目录，都算。路径都用 / 分隔；没有重叠时 ok 为 false。
+// OverlappingStatePath finds an overlap between the declared state paths and the HOME paths the platform manages
+// (such as a CLI template's credential files): being equal, or one being a parent directory of the other, both
+// count. All paths are separated by /; ok is false when there is no overlap.
 func OverlappingStatePath(declared, managed []string) (decl, path string, ok bool) {
 	for _, d := range declared {
 		for _, m := range managed {

@@ -16,10 +16,11 @@ import (
 	"loop-now/internal/server/apperr"
 )
 
-// 插件市场（plugins/SPEC.md §11）：市场是 HTTPS 可取到的 loop-now-market.json，列出插件 id、来源与版本。
-// 官方市场由服务端配置给出，其余市场在全局插件设置里；从市场安装时按条目的 git 或 npm 来源获取。
+// Plugin markets (plugins/SPEC.md §11): a market is a loop-now-market.json reachable over HTTPS that lists plugin
+// ids, sources and versions. The official market comes from the server config; other markets are in the global
+// plugin settings. Installing from a market fetches the entry's git or npm source.
 
-// marketFile 是 loop-now-market.json。
+// marketFile is loop-now-market.json.
 type marketFile struct {
 	Name    *string       `json:"name"`
 	Plugins []marketEntry `json:"plugins"`
@@ -32,12 +33,13 @@ type marketEntry struct {
 	Description Text    `json:"description"`
 	Verified    bool    `json:"verified"`
 	Version     *string `json:"version"`
-	// ProviderState 声明这个插件注册的模型提供方有哪些状态随项目账号走（plugins/SPEC.md §13）；
-	// 第三方 Pi 包没有 loopNow 段时在这里声明，优先于包自己的 loopNow.providerState。
+	// ProviderState declares which state of the model providers registered by this plugin travels with the project's
+	// accounts (plugins/SPEC.md §13). A third-party Pi package without a loopNow section declares it here; it takes
+	// precedence over the package's own loopNow.providerState.
 	ProviderState map[string]pluginmanifest.ProviderState `json:"providerState,omitempty"`
 }
 
-// MarketEntry 是接口里的 PluginMarketEntry。
+// MarketEntry is the API's PluginMarketEntry.
 type MarketEntry struct {
 	ID               string                                  `json:"id"`
 	DisplayName      Text                                    `json:"displayName"`
@@ -50,7 +52,7 @@ type MarketEntry struct {
 	ProviderState    map[string]pluginmanifest.ProviderState `json:"providerState"`
 }
 
-// Market 是接口里的 PluginMarket。
+// Market is the API's PluginMarket.
 type Market struct {
 	URL      string        `json:"url"`
 	Name     *string       `json:"name"`
@@ -59,10 +61,11 @@ type Market struct {
 	Plugins  []MarketEntry `json:"plugins"`
 }
 
-// maxMarketBytes 是一个市场文件的大小上限。
+// maxMarketBytes is the size limit of one market file.
 const maxMarketBytes = 4 << 20
 
-// marketURLs 返回要读取的市场：官方市场在前，设置里与它相同的不重复。
+// marketURLs returns the markets to read: the official market first; a market in the settings that is the same as
+// it is not repeated.
 func (s *Service) marketURLs(ctx context.Context) ([]string, error) {
 	settings, err := s.Store.GetPluginSettings(ctx)
 	if err != nil {
@@ -80,7 +83,8 @@ func (s *Service) marketURLs(ctx context.Context) ([]string, error) {
 	return out, nil
 }
 
-// Markets 依次读取各市场，标出已安装的版本与可更新的条目；某个市场读取失败时只在它的 error 里说明。
+// Markets reads each market in turn and marks installed versions and entries with an update available; when one
+// market fails to load, only its error says so.
 func (s *Service) Markets(ctx context.Context) ([]Market, error) {
 	urls, err := s.marketURLs(ctx)
 	if err != nil {
@@ -121,7 +125,8 @@ func (s *Service) Markets(ctx context.Context) ([]Market, error) {
 	return out, nil
 }
 
-// fetchMarket 读取并检查一个市场文件；条目缺少 id 或来源写法不对的整份视为不合法。
+// fetchMarket reads and checks one market file; if any entry lacks an id or has a malformed source, the whole file
+// counts as invalid.
 func (s *Service) fetchMarket(ctx context.Context, raw string) (marketFile, error) {
 	var file marketFile
 	u, err := url.Parse(raw)
@@ -175,7 +180,8 @@ func (s *Service) fetchMarket(ctx context.Context, raw string) (marketFile, erro
 	return file, nil
 }
 
-// marketSource 把市场条目的来源写法变成 git 或 npm 来源；version 不为空时安装这个版本（只有 npm 条目可以指定）。
+// marketSource turns a market entry's source notation into a git or npm source; when version is not empty, that
+// version is installed (only npm entries can choose one).
 func marketSource(e marketEntry, version string) (Source, error) {
 	kind, loc, ok := strings.Cut(e.Source, ":")
 	if !ok || loc == "" {
@@ -184,7 +190,7 @@ func marketSource(e marketEntry, version string) (Source, error) {
 	switch kind {
 	case SourceGit:
 		src := Source{Kind: SourceGit, Location: loc}
-		// git 地址本身可能含 @（git@host:repo），只把最后一个 / 与 : 之后的 @ 视为 ref。
+		// A git address may itself contain @ (git@host:repo), so only an @ after the last / and : counts as the ref.
 		if i := strings.LastIndex(loc, "@"); i > max(strings.LastIndex(loc, "/"), strings.LastIndex(loc, ":")) {
 			ref := loc[i+1:]
 			src.Location, src.Ref = loc[:i], &ref
@@ -206,7 +212,8 @@ func marketSource(e marketEntry, version string) (Source, error) {
 	return Source{}, apperr.Invalid("source", "来源须写成 git:<地址>[@ref] 或 npm:<包规格>")
 }
 
-// resolveMarket 在市场里找到条目，返回实际来源与是否免确认（官方市场或已验证的条目）。
+// resolveMarket finds the entry in the market and returns the actual source and whether it needs no confirmation
+// (the official market or a verified entry).
 func (s *Service) resolveMarket(ctx context.Context, src Source) (Source, bool, *marketEntry, error) {
 	if src.Market == "" || src.ID == "" {
 		return Source{}, false, nil, apperr.Invalid("source", "市场来源须给出 market 与 id")
@@ -231,7 +238,8 @@ func apperrMessage(err error) string {
 	return err.Error()
 }
 
-// compareVersions 比较两个点分版本号（可带 v 前缀与 -预发布后缀）：数字段按数值比较，正式版高于同号的预发布版。
+// compareVersions compares two dotted version numbers (optionally with a v prefix and a -prerelease suffix):
+// numeric parts compare by value, and a release is higher than a prerelease of the same number.
 func compareVersions(a, b string) int {
 	split := func(v string) ([]string, string) {
 		v = strings.TrimPrefix(v, "v")

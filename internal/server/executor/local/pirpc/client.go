@@ -1,7 +1,7 @@
-// Package pirpc 实现 Pi 1.1.0 RPC 模式（pi --mode rpc）的客户端。
+// Package pirpc implements a client for Pi 1.1.0 RPC mode (pi --mode rpc).
 //
-// 协议要点：stdin/stdout 为严格 JSONL，只按 '\n' 分帧；命令带 id，响应可能乱序，按 id 关联；
-// 事件不带 id。一轮 prompt 以 agent_settled 为结束标志。
+// Protocol essentials: stdin/stdout are strict JSONL, framed only on '\n'; commands carry an id, responses may arrive
+// out of order and are matched by id; events carry no id. A prompt turn ends with agent_settled.
 package pirpc
 
 import (
@@ -22,22 +22,22 @@ import (
 	"time"
 )
 
-// ErrExited 表示 Pi 进程已退出或其 stdout 已关闭（与其他运行时共用，见 runturn）。
+// ErrExited means the Pi process has exited or its stdout has been closed (shared with other runtimes, see runturn).
 var ErrExited = runturn.ErrExited
 
 const (
-	// exitGrace 是进程退出后等待 stdout/stderr 读到 EOF 的最长时间，
-	// 防止继承了管道的孙进程使读取永久阻塞。
+	// exitGrace is the longest wait after the process exits for stdout/stderr to reach EOF,
+	// so a grandchild that inherited the pipes cannot block reading forever.
 	exitGrace = 2 * time.Second
-	// stderrLimit 是 stderr 环形缓冲保留的字节数。
+	// stderrLimit is the number of bytes the stderr ring buffer keeps.
 	stderrLimit = 64 << 10
 )
 
-// TurnSink 接收一轮执行的实时事件。调用发生在读协程上，实现必须迅速返回，
-// 且不得在回调中同步调用 Client 的方法。
+// TurnSink receives the live events of a turn. Calls happen on the reader goroutine; implementations must return
+// quickly and must not call Client methods synchronously from a callback.
 type TurnSink = runturn.Sink
 
-// Outcome 是一轮执行的结局。
+// Outcome is how a turn ended.
 type Outcome = runturn.Outcome
 
 const (
@@ -46,39 +46,40 @@ const (
 	OutcomeAborted   = runturn.OutcomeAborted
 )
 
-// 错误码。
+// Error codes.
 const (
 	ErrorCodePi       = "pi_error"
 	ErrorCodePiExited = "pi_exited"
 )
 
-// TurnResult 是一轮执行的结果；Pi 的 ErrorCode 为 "pi_error"、"pi_exited" 或空。
+// TurnResult is the result of a turn; Pi's ErrorCode is "pi_error", "pi_exited" or empty.
 type TurnResult = runturn.Result
 
-// CommandNotices 是一轮里收集到的通知，按顺序；Truncated 表示超过上限被截断。
+// CommandNotices are the notices collected in a turn, in order; Truncated means they were cut off after exceeding the
+// limit.
 type CommandNotices = runturn.CommandNotices
 
-// State 是 get_state 中平台关心的字段。
+// State holds the fields of get_state that the platform cares about.
 type State struct {
 	ThinkingLevel string
-	SessionFile   string // 无会话文件时为空
+	SessionFile   string // empty when there is no session file
 	SessionID     string
 }
 
-// Client 是一个 Pi RPC 进程的客户端。
+// Client is the client of one Pi RPC process.
 type Client struct {
 	stdin     io.WriteCloser
 	writeMu   sync.Mutex
 	pid       int
 	stderr    *ringBuffer
 	nextID    atomic.Uint64
-	busy      atomic.Bool // 是否有进行中的 Prompt
+	busy      atomic.Bool // whether a Prompt is in progress
 	malformed atomic.Int64
 
 	mu              sync.Mutex
 	pending         map[string]chan *responseFrame
 	turn            *turn
-	closed          bool // stdout 已结束
+	closed          bool // stdout has ended
 	observer        Observer
 	dialogs         Dialogs
 	compactionStart time.Time
@@ -88,9 +89,9 @@ type Client struct {
 	exitErr    error
 }
 
-// Start 以 stdin/stdout 管道启动 cmd（调用方已设置 Path/Args/Env/Dir/SysProcAttr），
-// stderr 写入有界环形缓冲（若调用方设置了 cmd.Stderr，则同时写入它）。
-// cmd.WaitDelay 为零时设为 exitGrace。
+// Start starts cmd with stdin/stdout pipes (the caller has set Path/Args/Env/Dir/SysProcAttr),
+// writing stderr into a bounded ring buffer (and also into cmd.Stderr if the caller set it).
+// When cmd.WaitDelay is zero it is set to exitGrace.
 func Start(cmd *exec.Cmd) (*Client, error) {
 	if cmd.Stdin != nil || cmd.Stdout != nil {
 		return nil, errors.New("pirpc: cmd.Stdin/cmd.Stdout 必须为空，由客户端接管")
@@ -120,7 +121,7 @@ func Start(cmd *exec.Cmd) (*Client, error) {
 		_ = stdin.Close()
 		return nil, fmt.Errorf("pirpc: 启动 Pi 失败：%w", err)
 	}
-	// 父进程不再持有写端，子进程退出后读端才能读到 EOF。
+	// The parent no longer holds the write end, so the read end sees EOF once the child exits.
 	_ = pw.Close()
 	c := newClient(stdin, pr, cmd.Wait)
 	c.pid = cmd.Process.Pid
@@ -128,7 +129,8 @@ func Start(cmd *exec.Cmd) (*Client, error) {
 	return c, nil
 }
 
-// newClient 基于给定的读写端创建客户端；wait 为空时 Done 只等待读协程结束（用于进程内测试）。
+// newClient creates a client on the given read and write ends; when wait is nil, Done only waits for the reader
+// goroutine to finish (for in-process tests).
 func newClient(stdin io.WriteCloser, stdout io.Reader, wait func() error) *Client {
 	c := &Client{
 		stdin:      stdin,
@@ -148,7 +150,7 @@ func (c *Client) finish(stdout io.Reader, wait func() error) {
 		select {
 		case <-c.readerDone:
 		case <-time.After(exitGrace):
-			// 进程已退出但 stdout 仍被占用，强制结束读取。
+			// The process has exited but stdout is still held open: force reading to stop.
 			if d, ok := stdout.(interface{ SetReadDeadline(time.Time) error }); ok {
 				_ = d.SetReadDeadline(time.Now())
 			}
@@ -164,10 +166,10 @@ func (c *Client) finish(stdout io.Reader, wait func() error) {
 	close(c.done)
 }
 
-// Done 在进程退出且读协程结束后关闭。
+// Done is closed after the process exits and the reader goroutine has finished.
 func (c *Client) Done() <-chan struct{} { return c.done }
 
-// ExitErr 返回进程的退出错误；Done 关闭前返回 nil。
+// ExitErr returns the process's exit error; nil before Done is closed.
 func (c *Client) ExitErr() error {
 	select {
 	case <-c.done:
@@ -177,10 +179,10 @@ func (c *Client) ExitErr() error {
 	}
 }
 
-// Pid 返回 Pi 进程号。
+// Pid returns the Pi process ID.
 func (c *Client) Pid() int { return c.pid }
 
-// Stderr 返回最近约 64KB 的 stderr 输出。
+// Stderr returns roughly the last 64KB of stderr output.
 func (c *Client) Stderr() string {
 	if c.stderr == nil {
 		return ""
@@ -188,11 +190,12 @@ func (c *Client) Stderr() string {
 	return c.stderr.String()
 }
 
-// CloseStdin 关闭 Pi 的 stdin，请求其有序退出。
+// CloseStdin closes Pi's stdin, asking it to exit in an orderly way.
 func (c *Client) CloseStdin() error { return c.stdin.Close() }
 
-// Call 发送一条命令并等待对应 id 的响应：成功时返回 data；success:false 时返回含 Pi 错误文本的错误；
-// 进程先结束返回 ErrExited；ctx 取消返回 ctx.Err()。
+// Call sends one command and waits for the response with the matching id: on success it returns data; on success:false
+// it returns an error containing Pi's error text; if the process ends first it returns ErrExited; if ctx is cancelled
+// it returns ctx.Err().
 func (c *Client) Call(ctx context.Context, typ string, params map[string]any) (json.RawMessage, error) {
 	resp, err := c.roundTrip(ctx, c.newID(), typ, params)
 	if err != nil {
@@ -204,7 +207,7 @@ func (c *Client) Call(ctx context.Context, typ string, params map[string]any) (j
 	return resp.Data, nil
 }
 
-// GetState 查询会话状态。
+// GetState queries the session state.
 func (c *Client) GetState(ctx context.Context) (State, error) {
 	data, err := c.Call(ctx, "get_state", nil)
 	if err != nil {
@@ -239,27 +242,29 @@ func (c *Client) SetThinkingLevel(ctx context.Context, level string) error {
 	return nil
 }
 
-// CompactResult 是手动压缩的上下文 Token 变化。EstimatedTokensAfter 是 Pi 的估算值。
-// Skipped 不为空表示 Pi 没有压缩（CompactTooSmall、CompactAlreadyDone、CompactCancelled），这时 Token 都为 0。
+// CompactResult is the change in context tokens from a manual compaction. EstimatedTokensAfter is Pi's estimate.
+// A non-empty Skipped means Pi did not compact (CompactTooSmall, CompactAlreadyDone, CompactCancelled); all token
+// counts are then 0.
 type CompactResult struct {
 	TokensBefore         int64
 	EstimatedTokensAfter int64
 	Skipped              string
 }
 
-// Pi 没有压缩的原因。Pi 以 compact 命令失败报告这几种情况（agent-session.js 的 compact），平台当作正常结果。
-// CompactCancelled 是 Pi 说“Compaction cancelled”而平台没有发 abort：扩展在 session_before_compact 取消了这次压缩。
-// 平台自己 Abort 的压缩返回 ErrCompactAborted。
+// Reasons Pi did not compact. Pi reports these cases as a failed compact command (compact in agent-session.js); the
+// platform treats them as a normal result. CompactCancelled is when Pi says "Compaction cancelled" but the platform did
+// not send abort: an extension cancelled this compaction in session_before_compact. A compaction the platform itself
+// aborted returns ErrCompactAborted.
 const (
 	CompactTooSmall    = "too_small"
 	CompactAlreadyDone = "already_compacted"
 	CompactCancelled   = "cancelled_by_extension"
 )
 
-// ErrCompactAborted 是平台 Abort 取消了进行中的手动压缩。
+// ErrCompactAborted means a platform Abort cancelled a manual compaction in progress.
 var ErrCompactAborted = errors.New("pirpc: 手动压缩已被取消")
 
-// compactSkipped 按 Pi 的错误文字判断它是不是“没有压缩”的正常结果。
+// compactSkipped tells from Pi's error text whether it is a normal "did not compact" result.
 func compactSkipped(message string) string {
 	switch {
 	case strings.HasPrefix(message, "Nothing to compact"):
@@ -272,7 +277,8 @@ func compactSkipped(message string) string {
 	return ""
 }
 
-// Compact 压缩当前会话。与 Prompt 共用互斥和事件归属，Abort 可以取消这次压缩。
+// Compact compacts the current session. It shares the mutual exclusion and event ownership with Prompt, so Abort can
+// cancel this compaction.
 func (c *Client) Compact(ctx context.Context, customInstructions string) (CompactResult, error) {
 	if !c.busy.CompareAndSwap(false, true) {
 		return CompactResult{}, errors.New("pirpc: 已有进行中的 prompt 或 compact")
@@ -289,7 +295,8 @@ func (c *Client) Compact(ctx context.Context, customInstructions string) (Compac
 	}
 	c.turn = t
 	c.mu.Unlock()
-	// compact 的响应要等压缩结束才返回；Abort 不能先等这个响应，否则无法取消压缩。
+	// The compact response only comes back after compaction finishes; Abort must not wait for this response first, or
+	// it could not cancel the compaction.
 	t.responseReceived(true)
 	defer c.clearTurn(t)
 	params := map[string]any{}
@@ -319,9 +326,10 @@ func (c *Client) Compact(ctx context.Context, customInstructions string) (Compac
 	return CompactResult{TokensBefore: data.TokensBefore, EstimatedTokensAfter: data.EstimatedTokensAfter}, nil
 }
 
-// Prompt 发送 prompt 并消费事件直到本轮结束（agent_settled），期间回调 sink。
-// 同一时刻只允许一个 Prompt 或 Compact。prompt 未能发出时返回 ErrExited；发出后进程退出则返回
-// Outcome failed / pi_exited 的结果且 error 为 nil。ctx 取消只停止等待，不会中止 Pi。
+// Prompt sends a prompt and consumes events until the turn ends (agent_settled), calling sink along the way. Only one
+// Prompt or Compact is allowed at a time. If the prompt could not be sent it returns ErrExited; if the process exits
+// after it was sent it returns a result with Outcome failed / pi_exited and a nil error. Cancelling ctx only stops
+// waiting; it does not abort Pi.
 func (c *Client) Prompt(ctx context.Context, text string, sink TurnSink, images ...messageimage.Content) (TurnResult, error) {
 	if sink == nil {
 		sink = nopSink{}
@@ -352,7 +360,8 @@ func (c *Client) Prompt(ctx context.Context, text string, sink TurnSink, images 
 	if err != nil {
 		var ns *notSentError
 		if errors.Is(err, ErrExited) && !errors.As(err, &ns) {
-			// 等待响应期间进程退出：读协程已按 pi_exited 结束本轮。
+			// The process exited while waiting for the response: the reader goroutine has already ended the turn as
+			// pi_exited.
 			return awaitResult(ctx, t)
 		}
 		return TurnResult{}, err
@@ -374,9 +383,9 @@ func (c *Client) Prompt(ctx context.Context, text string, sink TurnSink, images 
 	return awaitResult(ctx, t)
 }
 
-// Abort 先发送 clear_queue 再发送 abort，并等待 abort 响应（Pi 回到空闲）。
-// 若 prompt 已发出但尚未收到响应，先等待该响应，避免 abort 早于运行开始而失效。
-// 可与 Prompt 在不同 goroutine 并发调用。
+// Abort sends clear_queue and then abort, and waits for the abort response (Pi back to idle).
+// If the prompt has been sent but its response has not arrived yet, it waits for that response first, so the abort does
+// not come before the run starts and have no effect. It may be called concurrently with Prompt from another goroutine.
 func (c *Client) Abort(ctx context.Context) error {
 	c.mu.Lock()
 	t := c.turn
@@ -418,7 +427,7 @@ func (c *Client) newID() string {
 	return "lp-" + strconv.FormatUint(c.nextID.Add(1), 10)
 }
 
-// notSentError 表示命令未能写入 Pi 的 stdin。
+// notSentError means a command could not be written to Pi's stdin.
 type notSentError struct{ err error }
 
 func (e *notSentError) Error() string { return "pirpc: 写入命令失败：" + e.err.Error() }
@@ -490,7 +499,7 @@ func (nopSink) TextDelta(string)               {}
 func (nopSink) ToolStarted(string, string)     {}
 func (nopSink) ToolEnded(string, string, bool) {}
 
-// readLoop 按 '\n' 分帧读取 stdout，直到 EOF 或读错误。
+// readLoop reads stdout framed on '\n' until EOF or a read error.
 func (c *Client) readLoop(r io.Reader) {
 	defer close(c.readerDone)
 	br := bufio.NewReaderSize(r, 64<<10)
@@ -527,5 +536,5 @@ func (c *Client) activeTurn() *turn {
 	return c.turn
 }
 
-// malformedLines 返回被跳过的无法解析的行数。
+// malformedLines returns the number of unparseable lines that were skipped.
 func (c *Client) malformedLines() int64 { return c.malformed.Load() }

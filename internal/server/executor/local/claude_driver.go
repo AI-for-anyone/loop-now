@@ -22,23 +22,29 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// ClaudeCodeTools 是 Claude Code 运行时的 Agent 能用的内置工具（--tools 白名单），用户的决定集中在这一处。
-// 只放作用在 Agent 自身的基础工具；会作用到 Agent 之外的一律不放：给用户本机其他 Claude 会话发消息或列出它们（SendMessage、
-// ListAgents）、推送到用户手机（PushNotification）、建云端例行任务（RemoteTrigger）、建定时任务或自己定时唤醒
-// （CronCreate/Delete/List、ScheduleWakeup）、在平台的一轮之外异步唤醒会话（Monitor）、多 Agent 编排（Workflow）、
-// 切换 worktree、设计同步与审查报告。MCP 工具不受这个白名单限制。
+// ClaudeCodeTools are the built-in tools an Agent on the Claude Code runtime may use (the --tools allowlist); the
+// user's decisions are kept in this one place. Only basic tools that act on the Agent itself are included; anything
+// that acts beyond the Agent is left out: sending messages to or listing the user's other local Claude sessions
+// (SendMessage, ListAgents), pushing to the user's phone (PushNotification), creating cloud routines (RemoteTrigger),
+// creating scheduled tasks or waking itself on a timer (CronCreate/Delete/List, ScheduleWakeup), waking the session
+// asynchronously outside a platform turn (Monitor), multi-Agent orchestration (Workflow), switching worktrees, design
+// sync and review reports. MCP tools are not limited by this allowlist.
 var ClaudeCodeTools = []string{"Task", "TaskStop", "Bash", "Read", "Edit", "Write", "NotebookEdit", "Skill", "WebSearch", "ToolSearch"}
 
-// ClaudeCodeHiddenSkills 是 disableBundledSkills 之后仍会出现的 Claude Code 自带技能（2.1.322 实测），经 skillOverrides 设为 off，
-// 对模型隐藏。它们不归平台管，有的会引导模型去改用户 ~/.claude 下的设置。Agent 自己的同名 Skill 带插件命名空间（loop-now:<名>），不受影响。
-// claude 升级后多出的自带技能会在启动时记警告日志（见 checkClaudeSkills），再补进这里。
+// ClaudeCodeHiddenSkills are Claude Code's bundled Skills that still show up after disableBundledSkills (measured on
+// 2.1.322); they are set to off through skillOverrides and so hidden from the model. They are not managed by the
+// platform, and some of them lead the model to change the user's settings under ~/.claude. An Agent's own Skill with
+// the same name carries the plugin namespace (loop-now:<name>) and is not affected. Bundled Skills added by a claude
+// upgrade are logged as a warning at startup (see checkClaudeSkills) and should then be added here.
 var ClaudeCodeHiddenSkills = []string{"design", "doctor", "plugin-authoring"}
 
-// claudePluginName 是平台给 Claude Code 的插件名：其中的技能以 loop-now:<名> 出现。
+// claudePluginName is the plugin name the platform gives Claude Code: its Skills appear as loop-now:<name>.
 const claudePluginName = "loop-now"
 
-// claudeSettings 经 --settings 传给 Claude Code：关掉它自己的自动记忆（Agent 的记忆以平台的上下文文件夹为准）；关掉自带的技能
-// （disableBundledSkills，插件的技能不受影响），并隐藏关掉之后仍会出现的那几个。Agent 看到的技能只有平台给的。
+// claudeSettings is passed to Claude Code via --settings: it turns off Claude Code's own auto memory (an Agent's memory
+// lives in the platform's context folders); it turns off the bundled Skills (disableBundledSkills, which does not
+// affect plugin Skills) and hides the few that still show up after that. The only Skills an Agent sees are the ones the
+// platform gives it.
 var claudeSettings = func() string {
 	overrides := map[string]string{}
 	for _, name := range ClaudeCodeHiddenSkills {
@@ -48,11 +54,12 @@ var claudeSettings = func() string {
 	return string(b)
 }()
 
-// claudeEfforts 是能作为 --effort 传的思考等级。
+// claudeEfforts are the thinking levels that can be passed as --effort.
 var claudeEfforts = map[string]bool{"low": true, "medium": true, "high": true, "xhigh": true, "max": true}
 
-// claudeDriver 是用户本机安装的 Claude Code 运行时：从登录 shell 的 PATH 找到未经修改的 claude，以真实的 HOME 运行
-// （用用户本人在本机的登录，平台不读、不存它的凭证），stream-json 模式的常驻进程。
+// claudeDriver is the Claude Code runtime installed on the user's machine: an unmodified claude found on the login
+// shell's PATH, run with the real HOME (using the user's own local login; the platform neither reads nor stores its
+// credentials), as a long-running process in stream-json mode.
 type claudeDriver struct{ e *Executor }
 
 func isClaude(snap agentconfig.Snapshot) bool {
@@ -63,7 +70,8 @@ func (claudeDriver) name() string { return "Claude Code" }
 
 func (claudeDriver) runtime() string { return agentruntime.ClaudeCode }
 
-// identity 是模型与 effort：两者都只能在启动时给出，变了就重启（--resume 接续会话）。
+// identity is the model and effort: both can only be given at startup, so a change means restart (--resume continues
+// the session).
 func (claudeDriver) identity(snap agentconfig.Snapshot) string {
 	return snap.ModelID + "|" + claudeEffort(snap)
 }
@@ -75,10 +83,11 @@ func claudeEffort(snap agentconfig.Snapshot) string {
 	return ""
 }
 
-// refresh：Claude Code 没有平台写的模型缓存文件。
+// refresh: Claude Code has no model cache file written by the platform.
 func (claudeDriver) refresh(agentconfig.Snapshot, agentDirs) error { return nil }
 
-// claudeBinary 找到 claude：测试与显式配置用 Options.ClaudeBin，否则在用户登录 shell 的 PATH 里找（与“用本机的 CLI”开关无关）。
+// claudeBinary finds claude: tests and explicit configuration use Options.ClaudeBin; otherwise it is looked up on the
+// PATH of the user's login shell (regardless of the “用本机的 CLI” ("Use local CLIs") switch).
 func (e *Executor) claudeBinary(ctx context.Context) (string, error) {
 	if e.o.ClaudeBin != "" {
 		if info, err := os.Stat(e.o.ClaudeBin); err != nil || !info.Mode().IsRegular() {
@@ -93,8 +102,9 @@ func (e *Executor) claudeBinary(ctx context.Context) (string, error) {
 	return claudecli.Find(dirs)
 }
 
-// ClaudeProjectsDir 返回本机 Claude Code 存放会话记录的目录（任务分叉复制基线时用）：以 claude auth status 的
-// projectsDirectory 为准，找不到 claude 或问不到时按默认规则推；读不出服务端用户的主目录时为空。
+// ClaudeProjectsDir returns the directory where the local Claude Code keeps session records (used when a task fork
+// copies the baseline): projectsDirectory from claude auth status is authoritative; when claude is not found or cannot
+// be asked, it is derived by the default rule. It is empty when the server user's home directory cannot be read.
 func (e *Executor) ClaudeProjectsDir(ctx context.Context) string {
 	home, err := e.o.RealHome()
 	if err != nil || !filepath.IsAbs(home) {
@@ -107,17 +117,19 @@ func (e *Executor) ClaudeProjectsDir(ctx context.Context) string {
 	return e.claude.ProjectsDir(ctx, bin, e.claudeHelperEnv(ctx, home), home)
 }
 
-// purgeClaude 在删除 Agent、任务实例退役（都经 Release）时清理 Claude Code 为这个工作区留下的数据：只在 claude 为它建过会话记录目录时做；
-// 先把那个目录里的会话记录复制进 Agent 自己的 sessions/claude（平台的归档，同 Pi 的会话文件一样保留），再运行 claude purge <工作区> -y。
-// 目标只能是平台工作根之下、属于这个 Agent 的工作区；任何一步失败只记日志。
+// purgeClaude cleans up the data Claude Code left for this workspace when an Agent is deleted or a task instance is
+// retired (both via Release). It only acts when claude created a session record directory for it: it first copies the
+// session records in that directory into the Agent's own sessions/claude (the platform's archive, kept just like Pi's
+// session files), then runs claude purge <workspace> -y. The target can only be a workspace under the platform's work
+// root that belongs to this Agent; any failing step is only logged.
 func (e *Executor) purgeClaude(ctx context.Context, agentID uuid.UUID) {
 	if e.o.RealHome == nil || e.claude == nil || e.log == nil {
-		return // 不经 New 构造的执行器（测试用）：没有 Claude Code
+		return // executor not built by New (for tests): no Claude Code
 	}
 	d := e.dirs(agentID)
 	log := e.log.With("agentId", agentID)
 	if !within(e.o.WorkRoot, d.workspace) {
-		log.Error("工作区不在平台的工作根之下，不清理 Claude Code 的数据", "workspace", d.workspace)
+		log.Error("workspace is not under the platform's work root; not cleaning up Claude Code's data", "workspace", d.workspace)
 		return
 	}
 	home, err := e.o.RealHome()
@@ -126,7 +138,7 @@ func (e *Executor) purgeClaude(ctx context.Context, agentID uuid.UUID) {
 	}
 	bin, err := e.claudeBinary(ctx)
 	if err != nil {
-		log.Info("找不到 claude，跳过清理 Claude Code 的数据")
+		log.Info("claude not found; skipping cleanup of Claude Code's data")
 		return
 	}
 	env := e.claudeHelperEnv(ctx, home)
@@ -139,29 +151,31 @@ func (e *Executor) purgeClaude(ctx context.Context, agentID uuid.UUID) {
 		}
 		found = true
 		if err := archiveClaudeTranscripts(projectDir, filepath.Join(d.sessions, "claude")); err != nil {
-			log.Warn("归档 Claude Code 的会话记录失败，不清理它的数据", "err", err)
+			log.Warn("failed to archive the Claude Code session transcript; not cleaning up its data", "err", err)
 			return
 		}
 	}
 	if !found {
-		return // 这个工作区没用过 Claude Code
+		return // this workspace never used Claude Code
 	}
 	if err := e.purgeClaudeWorkspace(ctx, bin, env, agentID, d.workspace); err != nil {
-		log.Warn("claude purge 失败", "err", err)
+		log.Warn("claude purge failed", "err", err)
 	}
 }
 
-// purgeClaudeWorkspace 运行 claude purge <path> -y。path 必须正是这个 Agent（或任务实例）在平台工作根之下的工作区：
-// 别的路径（包括绑定给它的本机目录）一律不运行，记日志并返回错误。
+// purgeClaudeWorkspace runs claude purge <path> -y. path must be exactly this Agent's (or task instance's) workspace
+// under the platform's work root: for any other path (including local directories bound to it) nothing is run; it logs
+// and returns an error.
 func (e *Executor) purgeClaudeWorkspace(ctx context.Context, bin string, env []string, agentID uuid.UUID, path string) error {
 	if !filepath.IsAbs(path) || !within(e.o.WorkRoot, path) || filepath.Clean(path) != e.dirs(agentID).workspace {
-		e.log.Error("拒绝清理不是该 Agent 工作区的路径", "agentId", agentID, "path", path)
+		e.log.Error("refusing to clean up a path that is not this Agent's workspace", "agentId", agentID, "path", path)
 		return fmt.Errorf("路径 %s 不是该 Agent 在平台工作根之下的工作区", path)
 	}
 	return claudecli.Purge(ctx, bin, env, path)
 }
 
-// archiveClaudeTranscripts 把 claude 为这个工作区留下的会话记录（目录里第一层的 <会话 ID>.jsonl，普通文件）复制到 dst。
+// archiveClaudeTranscripts copies the session records claude left for this workspace (the <session ID>.jsonl regular
+// files at the top level of the directory) to dst.
 func archiveClaudeTranscripts(projectDir, dst string) error {
 	root, err := os.OpenRoot(projectDir)
 	if err != nil {
@@ -191,8 +205,9 @@ func archiveClaudeTranscripts(projectDir, dst string) error {
 	return nil
 }
 
-// ClaudeHelperEnv 是运行 claude 自己的短命令（--version、auth status、purge）时的环境：与 Agent 的 Claude Code 进程同一套基础变量
-// （真实 HOME、USER／LOGNAME、透传的 LANG 等），PATH 为执行 PATH 的基础部分加用户登录 shell 的 PATH。GET /runtimes 也用它。
+// ClaudeHelperEnv is the environment for running claude's own short commands (--version, auth status, purge): the same
+// base variables as the Agent's Claude Code process (real HOME, USER/LOGNAME, passed-through LANG, etc.), with PATH set
+// to the base part of the run PATH plus the PATH of the user's login shell. GET /runtimes uses it too.
 func (e *Executor) ClaudeHelperEnv(ctx context.Context, home string) []string {
 	var dirs []string
 	if e.o.UserPath != nil {
@@ -211,7 +226,7 @@ func (e *Executor) claudeHelperEnv(ctx context.Context, home string) []string {
 	return e.ClaudeHelperEnv(ctx, home)
 }
 
-// start 找到 claude、读出版本，按会话状态组装参数后启动。
+// start finds claude, reads its version, builds the arguments from the session state and starts it.
 func (cd claudeDriver) start(ctx context.Context, spec startSpec) (started, error) {
 	e, snap, d := cd.e, spec.snap, spec.d
 	bin, err := e.claudeBinary(ctx)
@@ -254,13 +269,15 @@ func (cd claudeDriver) start(ctx context.Context, spec startSpec) (started, erro
 		return started{}, fail(executor.ErrRuntimeStartFailed, "启动 Claude Code %s 失败：%v", version, err)
 	}
 	if err := procgroup.Started(cmd); err != nil {
-		e.snapshotLog(snap).Warn("Claude Code 进程没有纳入整组管理，停止时只能结束它本身", "pid", client.Pid(), "err", err)
+		e.snapshotLog(snap).Warn("Claude Code process is not under group management; stopping can only end the process itself", "pid", client.Pid(), "err", err)
 	}
 	return started{rt: client, binary: bin, version: version, sessionID: sessionID}, nil
 }
 
-// claudeSessionArgs 返回这次启动的会话 ID 与参数：有会话记录时接续（--resume <会话 ID>）；任务实例首次启动时从平台稳定复制的
-// 基线分叉（--resume <基线文件> --fork-session，新会话 ID 由平台给）；否则以平台给的新会话 ID 开始。
+// claudeSessionArgs returns the session ID and arguments for this start: with a session record it continues that
+// session (--resume <session ID>); on a task instance's first start it forks from the baseline the platform copied in a
+// stable state (--resume <baseline file> --fork-session, with the new session ID given by the platform); otherwise it
+// starts with a new session ID given by the platform.
 func claudeSessionArgs(spec startSpec) (string, []string) {
 	if spec.sessionFile != "" {
 		if id := strings.TrimSuffix(filepath.Base(spec.sessionFile), ".jsonl"); claudecli.ValidSessionID(id) {
@@ -274,8 +291,9 @@ func claudeSessionArgs(spec startSpec) (string, []string) {
 	return id, []string{"--session-id", id}
 }
 
-// claudeEnv 是交给 claude 的环境：平台公共的环境去掉 Pi 的目录变量，以及一切 Anthropic／Claude Code 的变量
-// （不论来自透传、CLI 凭证还是插件）：只用本机登录，不让 API key、令牌或配置目录改变它的认证与配置。
+// claudeEnv is the environment given to claude: the platform's common environment without Pi's directory variables and
+// without any Anthropic/Claude Code variables (whether passed through, from CLI credentials or from plugins): only the
+// local login is used, so no API key, token or config directory can change its authentication and configuration.
 func claudeEnv(env []string) []string {
 	out := make([]string, 0, len(env))
 	for _, kv := range claudecli.StripEnv(env) {
@@ -288,20 +306,22 @@ func claudeEnv(env []string) []string {
 	return out
 }
 
-// attach 接上用量与额度事件。
+// attach hooks up usage and rate limit events.
 func (cd claudeDriver) attach(p *proc) {
 	if cc, ok := p.rt.(*ccstream.Client); ok {
 		cc.SetObserver(claudeObserver{e: cd.e, p: p})
 	}
 }
 
-// ready：claude 收到第一条消息才输出 init，启动成功即进程起来了；第一轮之前退出或超时由那一轮报成启动失败。
+// ready: claude only prints init after it receives the first message, so a successful start means the process is up; an
+// exit or timeout before the first turn is reported by that turn as a start failure.
 func (claudeDriver) ready(context.Context, *proc, startSpec) error { return nil }
 
 func (claudeDriver) beforeTurn(context.Context, *proc, agentconfig.Snapshot) error { return nil }
 
-// afterTurn 记下会话记录的位置，并把需要进一步判断的失败说清楚：api_error 且没有 HTTP 状态时问 claude auth status 是不是没登录；
-// 启动失败带上版本号与错误输出末尾。
+// afterTurn records where the session record is and makes failures that need a closer look clear: for an api_error
+// without an HTTP status it asks claude auth status whether the user is logged out; a start failure gets the version
+// and the end of the error output.
 func (cd claudeDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 	e := cd.e
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -313,9 +333,10 @@ func (cd claudeDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 		p.sessionFile = path
 		p.sessMu.Unlock()
 	} else if !p.sessionUntracked.Swap(true) {
-		// 找不到 claude 写的会话记录（例如 Windows 上它对工作目录的编码与这里不同）：这一轮照常结束，不当作保存失败；
-		// 这个进程里对话照常接续，下次启动开新会话。
-		p.log.Warn("找不到 Claude Code 的会话记录，下次启动将开新会话", "sessionId", p.sessionID, "workspace", p.dirs.workspace, "version", p.runtimeVersion)
+		// The session record written by claude was not found (for example on Windows, where it encodes the working
+		// directory differently from us): the turn ends normally and this is not treated as a save failure; the
+		// conversation continues as usual in this process, and the next start opens a new session.
+		p.log.Warn("Claude Code session transcript not found; the next start opens a new session", "sessionId", p.sessionID, "workspace", p.dirs.workspace, "version", p.runtimeVersion)
 	}
 	cc, _ := p.rt.(*ccstream.Client)
 	if cc != nil {
@@ -344,8 +365,10 @@ func (cd claudeDriver) afterTurn(p *proc, tr runturn.Result) runturn.Result {
 	return tr
 }
 
-// checkClaudeSkills 核对进程报告的技能（每个进程一次）：Agent 应该只看到平台给的（loop-now:<名>）。多出来的多半是 claude 升级后
-// 新增的自带技能，记一条警告日志（带版本号与技能名），不阻断执行；据此补进 ClaudeCodeHiddenSkills。
+// checkClaudeSkills checks the Skills the process reports (once per process): an Agent should only see the ones the
+// platform gives (loop-now:<name>). Extra ones are most likely bundled Skills added by a claude upgrade; it logs one
+// warning (with the version and Skill names) and does not block the run; add them to ClaudeCodeHiddenSkills
+// accordingly.
 func checkClaudeSkills(p *proc, init *ccstream.Init) {
 	var extra []string
 	for _, s := range init.Skills {
@@ -354,7 +377,7 @@ func checkClaudeSkills(p *proc, init *ccstream.Init) {
 		}
 	}
 	if len(extra) > 0 {
-		p.log.Warn("Claude Code 报告了平台以外的技能，Agent 能看到它们；请把它们补进 ClaudeCodeHiddenSkills", "version", init.Version, "skills", extra)
+		p.log.Warn("Claude Code reported Skills from outside the platform, and the Agent can see them; add them to ClaudeCodeHiddenSkills", "version", init.Version, "skills", extra)
 	}
 }
 
@@ -366,7 +389,8 @@ func (claudeDriver) crashMessage(p *proc, stderrTail string) string {
 	return "Claude Code " + p.runtimeVersion + " 进程异常退出 " + stderrTail
 }
 
-// claudeObserver 把 Claude Code 报告的用量（每轮每个模型一条）与额度事件交给执行器的观察者。
+// claudeObserver passes the usage Claude Code reports (one per model per turn) and rate limit events to the executor's
+// observer.
 type claudeObserver struct {
 	e *Executor
 	p *proc
@@ -388,8 +412,9 @@ func (o claudeObserver) RateLimit(info map[string]any, inTurn bool) {
 	o.e.event(o.p.agentID, o.runID(inTurn), store.EventModelRateLimit, map[string]any{"info": info})
 }
 
-// syncClaudePlugin 重建平台给 Claude Code 的插件目录（--plugin-dir）：内置 Skill loopctl、Agent 的 Skill 副本与已授权插件的 Skill，
-// 每次启动整体重建。返回的技能名带插件名作命名空间（如 loop-now:loopctl）。
+// syncClaudePlugin rebuilds the plugin directory the platform gives Claude Code (--plugin-dir): the built-in Skill
+// loopctl, the Agent's Skill copies and the Skills of granted plugins, rebuilt as a whole on every start. The returned
+// Skill names carry the plugin name as their namespace (such as loop-now:loopctl).
 func (e *Executor) syncClaudePlugin(ctx context.Context, snap agentconfig.Snapshot, d agentDirs) error {
 	if err := os.RemoveAll(d.claudePlugin); err != nil {
 		return err
@@ -408,7 +433,7 @@ func (e *Executor) syncClaudePlugin(ctx context.Context, snap agentconfig.Snapsh
 	for _, src := range snap.Plugins.Skills {
 		target := filepath.Join(dir, filepath.Base(src))
 		if _, err := os.Lstat(target); err == nil {
-			e.snapshotLog(snap).Warn("插件的 Skill 与已有的 Skill 同名，已跳过", "skill", filepath.Base(src))
+			e.snapshotLog(snap).Warn("a plugin Skill has the same name as an existing Skill; skipped", "skill", filepath.Base(src))
 			continue
 		}
 		if err := copyTree(src, target); err != nil {
@@ -418,7 +443,7 @@ func (e *Executor) syncClaudePlugin(ctx context.Context, snap agentconfig.Snapsh
 	return nil
 }
 
-// copyTree 复制目录里的普通文件与子目录（不跟随软链接，跳过特殊文件）。
+// copyTree copies the regular files and subdirectories in a directory (not following symlinks, skipping special files).
 func copyTree(src, dst string) error {
 	return filepath.WalkDir(src, func(p string, de os.DirEntry, err error) error {
 		if err != nil {

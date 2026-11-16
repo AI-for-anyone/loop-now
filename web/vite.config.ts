@@ -8,8 +8,9 @@ export default defineConfig({
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
-  // 服务端默认的来源白名单是 http://localhost:5173，端口被占用时直接报错，不自动换端口。
+  // The server's default origin allowlist is http://localhost:5173, so fail right away when the port is taken instead of switching ports
+  // automatically.
   server: { host: 'localhost', port: 5173, strictPort: true },
-  // 字体切片按 unicode-range 按需下载，不内联进 CSS。
+  // Font subsets are downloaded on demand by unicode-range, not inlined into the CSS.
   build: { assetsInlineLimit: (file) => (file.endsWith('.woff2') ? false : undefined) },
 })

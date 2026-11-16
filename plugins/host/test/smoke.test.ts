@@ -1,4 +1,5 @@
-// 冒烟测试：把官方插件 webhook、hello 从它们的目录加载进构建好的宿主，走一遍真实的事件；再跑 validate 子命令。
+// Smoke tests: load the official webhook and hello plugins from their directories into the built host and run real events through them;
+// then run the validate subcommand.
 
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
@@ -16,7 +17,8 @@ const official = fileURLToPath(new URL('../../official/', import.meta.url))
 const fx = new Fixtures()
 after(() => fx.cleanup())
 
-// 与服务端一样按清单组装 load 载荷：事件、权限、渠道与 http 都取自 package.json 的 loopNow 段。
+// Build the load payload from the manifest like the server does: events, permissions, channels and http all come from the loopNow section
+// of package.json.
 function officialPayload(id: string, config?: PayloadOptions['config'], apiUrl?: string) {
   const root = path.join(official, id)
   const m = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).loopNow
@@ -94,9 +96,9 @@ describe('官方插件 webhook', () => {
       assert.equal(hit.headers['x-loop-now-delivery'], record.id)
       assert.deepEqual([record.eventId, record.eventType, record.target, record.attempts], [toExternal.id, 'inbox.received', `${base}/global`, 1])
 
-      // 至少送达一次：同一事件再来一次（第 2 次投递）不会再 POST。
+      // At-least-once delivery: the same event arriving again (2nd delivery attempt) is not POSTed again.
       assert.deepEqual((await host.event('webhook', toExternal, { attempt: 2 })).payload, { ok: true })
-      // 发给 Agent 的消息默认不推送；另一个项目配置了 all，推送到它自己的地址。
+      // Messages to Agents are not pushed by default; another project configured all, so they are pushed to its own URL.
       await host.event('webhook', { ...toExternal, id: '01JWEBHOOK00000000000000002', to: { kind: 'agent', id: 'a2', address: 'dev@demo' } })
       await host.event('webhook', { ...toExternal, id: '01JWEBHOOK00000000000000003', projectId: other, to: { kind: 'agent', id: 'a3', address: 'qa@other' } })
       await until('第二次 POST', () => received.length >= 2)

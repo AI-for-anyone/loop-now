@@ -1,5 +1,7 @@
-// Package config 读写外部身份的本地连接配置 $HOME/.config/loopctl/config.json。
-// 目录权限 0700、文件权限 0600；读取时文件权限宽于 0600 的拒绝使用；写入时先写 0600 的临时文件再改名。
+// Package config reads and writes the external identity's local connection config,
+// $HOME/.config/loopctl/config.json.
+// The directory has mode 0700 and the file 0600. On read, a file with permissions wider than 0600 is refused; on
+// write, a 0600 temporary file is written first and then renamed.
 package config
 
 import (
@@ -16,34 +18,34 @@ import (
 	"loop-now/internal/privatefs"
 )
 
-// SchemaVersion 是配置文件格式的版本。
+// SchemaVersion is the version of the config file format.
 const SchemaVersion = 1
 
-// Profile 是一组连接参数。
+// Profile is a set of connection settings.
 type Profile struct {
 	Server string `json:"server,omitempty"`
 	CAFile string `json:"caFile,omitempty"`
 	Token  string `json:"token,omitempty"`
 }
 
-// File 是配置文件的内容。
+// File is the content of the config file.
 type File struct {
 	SchemaVersion int                `json:"schemaVersion"`
 	Profiles      map[string]Profile `json:"profiles"`
 }
 
-// DefaultProfile 是没有指定 profile 时使用的名称。
+// DefaultProfile is the name used when no profile is given.
 const DefaultProfile = "default"
 
 var profileName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
-// ValidProfileName 判断 profile 名称是否合法。
+// ValidProfileName reports whether a profile name is valid.
 func ValidProfileName(name string) bool { return profileName.MatchString(name) }
 
-// Path 返回配置文件路径。
+// Path returns the path of the config file.
 func Path(home string) string { return filepath.Join(home, ".config", "loopctl", "config.json") }
 
-// Names 返回按名称排序的 profile 名称。
+// Names returns the profile names, sorted.
 func (f *File) Names() []string {
 	out := make([]string, 0, len(f.Profiles))
 	for k := range f.Profiles {
@@ -53,7 +55,7 @@ func (f *File) Names() []string {
 	return out
 }
 
-// Load 读取配置文件。文件不存在时返回空配置与 exists=false。
+// Load reads the config file. When the file does not exist, it returns an empty config and exists=false.
 func Load(path string) (f *File, exists bool, e *output.Error) {
 	empty := &File{SchemaVersion: SchemaVersion, Profiles: map[string]Profile{}}
 	info, err := os.Stat(path)
@@ -77,7 +79,8 @@ func Load(path string) (f *File, exists bool, e *output.Error) {
 	var out File
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.DisallowUnknownFields()
-	// 解析错误可能带出文件中的片段（其中有令牌），所以只报告位置无关的说明。
+	// A parse error could quote fragments of the file (which contains tokens), so only report a message that does
+	// not depend on the position.
 	if err := dec.Decode(&out); err != nil || dec.More() {
 		return nil, true, output.Errorf(output.CodeConfigInvalid, "配置文件 %s 不是合法的 JSON，或含有未知字段", path)
 	}
@@ -95,7 +98,8 @@ func Load(path string) (f *File, exists bool, e *output.Error) {
 	return &out, true, nil
 }
 
-// Save 原子地写入配置文件：确保目录为 0700，在同一目录写入 0600 的临时文件，同步后改名覆盖。
+// Save writes the config file atomically: it makes sure the directory is 0700, writes a 0600 temporary file in the
+// same directory, syncs it and renames it over the target.
 func Save(path string, f *File) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -108,7 +112,7 @@ func Save(path string, f *File) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, ".config-*.json") // CreateTemp 以 0600 创建
+	tmp, err := os.CreateTemp(dir, ".config-*.json") // CreateTemp creates it with 0600
 	if err != nil {
 		return err
 	}
@@ -143,10 +147,10 @@ func Save(path string, f *File) error {
 	return nil
 }
 
-// rename 可在测试中替换，用于注入写入失败。
+// rename can be replaced in tests to inject write failures.
 var rename = os.Rename
 
-// pathErr 去掉 *fs.PathError 中重复的路径，只保留原因。
+// pathErr strips the repeated path from a *fs.PathError and keeps only the cause.
 func pathErr(err error) error {
 	var pe *fs.PathError
 	if errors.As(err, &pe) {

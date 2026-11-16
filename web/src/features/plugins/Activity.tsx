@@ -26,8 +26,8 @@ function More({ query, label }: { query: { hasNextPage: boolean; isFetchingNextP
   )
 }
 
-// 观察类事件对插件的投递：时间、事件、状态（成功时带处理耗时）、尝试次数与失败原因。
-// compact 用在概览里：只取前几条，不分页、不筛选。projectId 只看这个项目的事件。
+// Deliveries of observation events to the plugin: time, event, status (with handling time on success), attempt count and failure reason.
+// compact is used in the overview: only the first few, no paging, no filtering. projectId shows only that project's events.
 export function DeliveriesList({ pluginId, compact, projectId }: { pluginId: string; compact?: number; projectId?: string }) {
   const [status, setStatus] = useState<DeliveryStatus | 'all'>('all')
   const text = t.plugins.events
@@ -91,7 +91,8 @@ function recordState(record: DeliveryRecord): { label: string; tone: 'done' | 'i
   }
 }
 
-// 投递记录：插件经 SDK 记在 deliveries/* 下的外发记录，按 at 新的在前；认不得的记录原样显示 JSON。
+// Deliveries: the outbound records the plugin keeps under deliveries/* via the SDK, newest first by at; unrecognized records are shown as
+// raw JSON.
 export function RecordsTable({ pluginId, compact }: { pluginId: string; compact?: number }) {
   const text = t.plugins.records
   const query = usePluginState(pluginId, RECORD_PREFIX)
@@ -149,7 +150,7 @@ export function RecordsTable({ pluginId, compact }: { pluginId: string; compact?
 
 const levelTone: Record<Schemas['PluginLogEntry']['level'], string> = { debug: 'text-white/55', info: 'text-white/85', warn: 'text-riso-yellow', error: 'text-[#FF8A80]' }
 
-// 插件的宿主日志：新的在前，保留 7 天；往下可以加载更早的。
+// The plugin's host logs: newest first, kept for 7 days; earlier ones can be loaded further down.
 export function LogsView({ pluginId, compact }: { pluginId: string; compact?: number }) {
   const text = t.plugins.logs
   const query = usePluginLogs(pluginId, compact ?? 100)

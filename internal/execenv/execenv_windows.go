@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// systemRoot 取 Windows 目录（SYSTEMROOT，通常是 C:\Windows）。
+// systemRoot returns the Windows directory (SYSTEMROOT, usually C:\Windows).
 func systemRoot() string {
 	for _, k := range []string{"SYSTEMROOT", "WINDIR"} {
 		if v := os.Getenv(k); v != "" {
@@ -18,8 +18,9 @@ func systemRoot() string {
 	return `C:\Windows`
 }
 
-// systemDirs 是 Windows 默认 PATH 里的系统部分：System32（含 git 常依赖的 cmd.exe、where.exe）、Windows 目录、
-// WMI 工具目录和 Windows PowerShell（Pi 的 bash 工具在 Windows 上对应 powershell）。
+// systemDirs is the system part of the default Windows PATH: System32 (with cmd.exe and where.exe, which git often
+// relies on), the Windows directory, the WMI tools directory and Windows PowerShell (Pi's bash tool maps to
+// powershell on Windows).
 func systemDirs() []string {
 	root := systemRoot()
 	return []string{
@@ -30,7 +31,8 @@ func systemDirs() []string {
 	}
 }
 
-// hostCommonDirs：Windows 上没有 Homebrew 那样的约定目录；git 的目录由调用方按 git.exe 的真实位置加入。
+// hostCommonDirs: Windows has no conventional directories like Homebrew's; the caller adds git's directory based on
+// where git.exe really is.
 func hostCommonDirs() []string { return nil }
 
 func systemPath() string { return strings.Join(systemDirs(), string(os.PathListSeparator)) }
@@ -67,5 +69,5 @@ func base(home, tmp string) []string {
 	return out
 }
 
-// pathKey：Windows 的路径不分大小写。
+// pathKey: Windows paths are case-insensitive.
 func pathKey(dir string) string { return strings.ToLower(dir) }

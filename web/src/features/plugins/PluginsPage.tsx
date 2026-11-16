@@ -32,8 +32,9 @@ const hostDot: Record<Schemas['PluginHostStatus']['state'], string> = {
   disabled: 'bg-ink-500',
 }
 
-// 宿主状态条：状态、已加载的插件数、启动时间、今天处理的事件；宿主停了时写出崩溃前最后在处理什么，并可重新启动。
-// 右侧是一键停用全部插件。
+// Host status strip: status, number of loaded plugins, start time, events handled today; when the host has stopped, it shows what it was
+// last handling before the crash and offers a restart.
+// On the right is the one-click switch that disables all plugins.
 function HostStrip() {
   const host = usePluginHost()
   const settings = usePluginSettings()
@@ -43,7 +44,8 @@ function HostStrip() {
   const disabled = settings.data?.disabled ?? false
   const crash = data?.lastCrash
   return (
-    // 改版：放在页头的元信息里，是一个 1.5px 虚线框，字小一号；停了时崩溃前在处理什么写在框里第二行。
+    // Redesign: placed in the page header's meta info as a 1.5px dashed box with text one size smaller; when stopped, what it was handling
+    // before the crash goes on the box's second line.
     <section aria-label={text.host.label} className="flex min-w-0 flex-col gap-1.5 rounded-[4px] border-[1.5px] border-dashed border-ink/45 px-2.5 py-1">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12.5px]">
         {data ? (
@@ -81,7 +83,8 @@ function HostStrip() {
   )
 }
 
-// 已安装的一个插件：名称、id 与版本、来源；两侧各有什么（来自详情里的清单）；启用的项目数与授权的 Agent 数；状态与入口。
+// One installed plugin: name, id and version, source; what each side contains (from the manifest in the details); the number of projects
+// that enable it and of Agents it is granted to; status and links.
 function InstalledCard({ plugin, installer }: { plugin: Schemas['Plugin']; installer: ReturnType<typeof usePluginInstaller> }) {
   const detail = usePlugin(plugin.id)
   const markets = usePluginMarkets()
@@ -89,7 +92,8 @@ function InstalledCard({ plugin, installer }: { plugin: Schemas['Plugin']; insta
   const manifest = detail.data?.manifest
   const agentHalf = manifest ? hasAgentHalf(manifest) : plugin.grantedAgents > 0
   return (
-    // 改版：白底、2px 藏青描边、荧光粉实色投影的卡片；左边一块黄底的首字母（装饰），名称是展示字。
+    // Redesign: a card with a white background, a 2px navy outline and a fluorescent-pink solid offset shadow; on the left, the initial
+    // letter on a yellow block (decorative), and the name in the display font.
     <li className="mr-1 mb-1 grid min-w-0 gap-x-5 gap-y-3 rounded-card border-2 border-ink bg-white px-[18px] py-3.5 shadow-print-pink md:grid-cols-[auto_minmax(0,1fr)_200px_auto] md:items-center">
       <span aria-hidden="true" className="hidden size-12 items-center justify-center rounded-[10px] border-2 border-ink bg-riso-yellow font-display-latin text-[20px] font-extrabold md:flex">
         {localizedText(plugin.displayName).slice(0, 1).toUpperCase()}
@@ -126,7 +130,7 @@ function InstalledCard({ plugin, installer }: { plugin: Schemas['Plugin']; insta
   )
 }
 
-// 随平台发布、还没安装的官方插件（第三阶段换成官方市场的卡片）。
+// Official plugins that ship with the platform and aren't installed yet (to be replaced by official market cards in phase three).
 function BuiltinSection({ installed }: { installed: string[] }) {
   const navigate = useNavigate()
   const sources = useBuiltinPluginSources()
@@ -134,7 +138,8 @@ function BuiltinSection({ installed }: { installed: string[] }) {
   const rest = (sources.data?.sources ?? []).filter((source) => !installed.includes(source.id))
   if (sources.isPending || (sources.isSuccess && rest.length === 0)) return null
   return (
-    // 改版：上方一道虚线，标题是 ZCOOL 加黄色记号笔；卡片顶上一条带网点的色带（蓝、粉、黄轮换）。
+    // Redesign: a dashed line above, the title in ZCOOL with a yellow highlighter mark; a color band with halftone dots across the top of
+    // each card (cycling blue, pink, yellow).
     <section aria-labelledby="builtin-title" className="flex flex-col gap-[18px] border-t-2 border-dashed border-ink/[0.22] pt-6">
       <h2 id="builtin-title" className="riso-marker self-start px-1.5 font-display-cn text-[30px] leading-[1.25] font-normal">
         {text.builtinTitle}
@@ -169,8 +174,10 @@ function BuiltinSection({ installed }: { installed: string[] }) {
 type MarketTab = 'installed' | 'official' | 'other'
 const MARKET_TABS: MarketTab[] = ['installed', 'official', 'other']
 
-// 插件市场（全局，改版“一张印出来的纸”第 4 步）：页头是共用的页面标题，旁边是宿主状态（含一键停用）与“安装插件”；
-// 三个分类（写在地址里的 ?tab=）是纸张上沿的索引标签：已安装、官方市场、其他市场。安装入口另有官方、git、本地目录三种来源。
+// Plugin market (global; step 4 of the "printed sheet" redesign): the page header is the shared page title, next to it the host status
+// (including the one-click disable) and “安装插件” (Install plugin);
+// the three categories (in the URL as ?tab=) are index tabs on the sheet's top edge: Installed, Official market, Other markets. The install
+// entry point additionally has three sources: official, git and local folder.
 export function PluginsPage() {
   const navigate = useNavigate()
   const [search] = useSearchParams()
@@ -197,7 +204,8 @@ export function PluginsPage() {
         ))}
       </IndexTabs>
       <Sheet className="flex-1">
-        {/* 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。 */}
+        {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text) scroll with the
+            content instead of stretching the whole page based on their unscrolled position. */}
         <div className="relative min-h-0 flex-1 overflow-y-auto">
           <div className="flex max-w-[1180px] flex-col gap-6 pt-6 pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,30px)]">
             {tab === 'installed' && (

@@ -2,7 +2,9 @@ package main
 
 import "testing"
 
-// 默认模式照旧回显；中性模式去掉平台加的运行 ID 一行（英文的，以及旧会话里中文的）与指令词、保留换行，用英文前缀，!text 两种模式都优先。
+// The default mode echoes as before; neutral mode removes the run ID line the platform adds (the English one, and the
+// Chinese one in old sessions) and the directive words, keeps newlines and uses an English prefix; !text wins in both
+// modes.
 func TestReply(t *testing.T) {
 	const runLine = "Run ID for this turn: 0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b.\n"
 	const legacyLine = "本轮运行ID：0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b。\n"

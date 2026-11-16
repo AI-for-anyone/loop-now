@@ -277,7 +277,7 @@ func TestCLIVerificationLarkGoogleActualNativeApp(t *testing.T) {
 	var diagnostics bytes.Buffer
 	defer func() {
 		for _, line := range strings.Split(diagnostics.String(), "\n") {
-			if strings.Contains(line, "CLI验证工具版本校验失败") {
+			if strings.Contains(line, "CLI verification tool version check failed") {
 				t.Log(line)
 			}
 		}

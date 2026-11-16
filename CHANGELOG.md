@@ -21,6 +21,11 @@
 - 其余规则和项目 Agent 相同：登录状态由扩展自己保存和刷新，不进数据库；开着“用本机的登录状态”时用的是这台电脑上该扩展自己的登录，页面会提示本机有没有这份登录；卸载插件默认保留登录，勾选“同时删除数据”时一并清除。
 - 接口：`POST /agents/{agentId}/model-auth/operations` 接受插件提供方；`ModelAuthOperation` 新增 `deviceCode`、`prompt`；新增 `POST /agents/{agentId}/model-auth/operations/{operationId}/input`；`ModelAuthState` 新增可选的 `localLogin`；`GET /model-providers` 的不可用原因去掉 `platform_agent`。
 
+### 日志改为英文
+
+- 服务端日志、桌面版的 `shell.log` 和插件宿主的日志改成英文，方便不读中文的贡献者排查问题。日志的字段名不变；错误消息和界面文案这一版不变。
+- 代码里的注释全部改成英文（不影响使用）。
+
 ## v0.2.6
 
 控制台改版继续：Agent 的配置、文件夹、收件箱，项目的概览、任务、设置，以及五个全局页面都放到了纸张上；宽窗口里对话占的地方更大；任务有了项目内编号（#12）；修复回复刚结束时马上发消息会被当成 Agent 正忙。

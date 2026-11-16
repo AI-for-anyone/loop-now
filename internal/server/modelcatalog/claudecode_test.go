@@ -7,8 +7,9 @@ import (
 	"loop-now/internal/server/modelcatalog"
 )
 
-// 发布的目录总有本机 CLI 的 claude-code：模型是 Claude Code 的别名，思考等级即 effort（没有 off），未选时为 medium，支持图片；
-// 它的 id 是保留的：models.json 里同 id 的自定义提供方不发布，插件也不能注册这个 id。
+// The published catalog always has the local CLI claude-code: its models are Claude Code aliases, its thinking levels
+// are the effort values (no off), medium when none is chosen, and images are supported; its id is reserved: a custom
+// provider with the same id in models.json is not published, and plugins cannot register this id either.
 func TestClaudeCodeProviderIsPublished(t *testing.T) {
 	base := modelcatalog.New("1.4.0", nil, []modelcatalog.Provider{
 		{ID: "anthropic", Models: []modelcatalog.Model{{ID: "claude-x", Name: "X"}}},

@@ -158,7 +158,7 @@ func TestExtractSkillZipLimits(t *testing.T) {
 	if _, _, err := ExtractSkillZip(makeZip(t, entries...), lim); !errors.Is(err, ErrTooLarge) {
 		t.Errorf("条目数超限应返回 ErrTooLarge：%v", err)
 	}
-	// 高压缩比内容：以实际解压字节计数。
+	// Highly compressible content: counted by the bytes actually extracted.
 	bomb := makeZip(t, zipEntry{name: "SKILL.md", data: goodMD}, zipEntry{name: "big", data: strings.Repeat("0", 2<<20)})
 	if _, _, err := ExtractSkillZip(bomb, lim); !errors.Is(err, ErrTooLarge) {
 		t.Errorf("解压后超限应返回 ErrTooLarge：%v", err)

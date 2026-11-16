@@ -7,7 +7,7 @@ import (
 	"loop-now/internal/server/apperr"
 )
 
-// ModelSettings 保存用户编辑的原生 models.json 文本。
+// ModelSettings stores the native models.json text the user edits.
 type ModelSettings struct {
 	ModelsJSON string
 	Revision   int64
@@ -20,7 +20,7 @@ func (s *Store) GetModelSettings(ctx context.Context) (ModelSettings, error) {
 	return out, err
 }
 
-// CompareAndSwapModelSettings 以修订号防止两个编辑器相互覆盖。
+// CompareAndSwapModelSettings uses the revision to keep two editors from overwriting each other.
 func (s *Store) CompareAndSwapModelSettings(ctx context.Context, modelsJSON string, expected int64) (ModelSettings, error) {
 	if expected < 1 {
 		return ModelSettings{}, apperr.Invalid("expectedRevision", "必须提供正整数版本")

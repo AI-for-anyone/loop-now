@@ -11,11 +11,13 @@ import (
 	"loop-now/internal/server/conversation"
 )
 
-// 对账读到一次进行中的执行、还没补设锁时，那次执行结束、驱动放开了锁；之后补设的锁属于已结束的执行，
-// 没有人会放开它，Agent 会一直显示忙（对账只为进行中的执行补锁、只为有排队的 Agent 交接）。
-// CI 上 TestCancelRacesDequeueExactlyOnce 偶发卡住就是这样：队列空了，锁却一直被占。
+// Reconciliation has read an in-flight run but not yet re-set the lock when that run ends and its driver releases the
+// lock; the lock re-set afterwards belongs to a finished run and nobody will release it, so the Agent would show as
+// busy forever (reconciliation only re-sets locks for in-flight runs and only hands off for Agents that have queued
+// runs). This is how TestCancelRacesDequeueExactlyOnce hung intermittently on CI: the queue was empty but the lock
+// stayed taken.
 func TestReconcileDoesNotLeaveLockOfFinishedRun(t *testing.T) {
-	e, _ := newMaintEnv(t) // 对账一小时一次，只有下面手动的这一次
+	e, _ := newMaintEnv(t) // reconciliation runs once an hour; only the manual one below happens
 	e.mustSend("block 当前", "")
 	e.waitStarted("block 当前")
 	reached, release := make(chan uuid.UUID, 1), make(chan struct{})
@@ -33,7 +35,7 @@ func TestReconcileDoesNotLeaveLockOfFinishedRun(t *testing.T) {
 		close(done)
 	}()
 	select {
-	case <-reached: // 对账已读到进行中的执行，正要补锁
+	case <-reached: // reconciliation has read the in-flight run and is about to re-set the lock
 	case <-time.After(5 * time.Second):
 		t.Fatal("对账没有读到进行中的执行")
 	}
@@ -42,7 +44,7 @@ func TestReconcileDoesNotLeaveLockOfFinishedRun(t *testing.T) {
 	for {
 		owner, _ := e.co.LockOwner(context.Background(), e.agent.String())
 		if owner == "" {
-			break // 执行已结束，驱动放开了锁
+			break // the run has ended and its driver has released the lock
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("执行结束后锁应放开：%q", owner)

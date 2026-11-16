@@ -18,16 +18,18 @@ import (
 	"loop-now/internal/procgroup"
 )
 
-// ErrHostExited 表示请求等待期间宿主进程已退出。
+// ErrHostExited means the plugin host process exited while the request was waiting.
 var ErrHostExited = errors.New("插件宿主已退出")
 
-// ErrTimeout 表示请求在超时前没有得到回应。
+// ErrTimeout means the request got no response before the timeout.
 var ErrTimeout = errors.New("插件宿主没有在时限内回应")
 
-// writeTimeout 是写一行消息的时限：宿主长时间不读标准输入视为卡死。
+// writeTimeout is the time limit for writing one message line: a plugin host that does not read its standard input
+// for a long time is considered stuck.
 const writeTimeout = 10 * time.Second
 
-// inflight 是已发给宿主、还没有回应的一个请求，崩溃时用来说明宿主当时在处理什么。
+// inflight is a request sent to the plugin host that has no response yet; after a crash it tells what the host was
+// handling at the time.
 type inflight struct {
 	Type      string    `json:"type"`
 	Plugin    string    `json:"plugin,omitempty"`
@@ -36,7 +38,8 @@ type inflight struct {
 	Since     time.Time `json:"since"`
 }
 
-// conn 是一次宿主进程的生命周期：标准输入输出走协议，标准错误逐行进日志。
+// conn is one lifetime of the plugin host process: standard input and output carry the protocol, and standard error
+// goes to the log line by line.
 type conn struct {
 	cmd      *exec.Cmd
 	stdin    *os.File
@@ -49,11 +52,13 @@ type conn struct {
 	ready    chan readyPayload
 	done     chan struct{}
 	exitErr  error
-	// intentional 为 true 时这次退出是服务端要求的（停用、停止或手动重启），不计入崩溃。
+	// intentional is true when this exit was requested by the server (disable, stop or manual restart); it does not
+	// count as a crash.
 	intentional atomic.Bool
 }
 
-// startConn 拉起宿主进程。onMessage 处理宿主发来的请求与日志；onStderr 处理标准错误的每一行。
+// startConn launches the plugin host process. onMessage handles requests and logs from the host; onStderr handles
+// each line of standard error.
 func startConn(command []string, dir string, env []string, onMessage func(*conn, Message), onStderr func(string)) (*conn, error) {
 	if len(command) == 0 {
 		return nil, errors.New("插件宿主命令未配置")
@@ -79,9 +84,10 @@ func startConn(command []string, dir string, env []string, onMessage func(*conn,
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Dir, cmd.Env = dir, env
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = inR, outW, errW
-	// 单独的进程组（Windows 上是 Job Object）：退出或被停止时连同平台侧拉起的子进程一起结束。
+	// A separate process group (a Job Object on Windows): when the host exits or is stopped, the child processes
+	// launched by platform sides end with it.
 	err = procgroup.Start(cmd)
-	// 子进程持有自己那一端；父进程关掉，宿主退出后读端才能读到 EOF。
+	// The child process holds its own ends; the parent closes them so that the read ends see EOF once the host exits.
 	inR.Close()
 	outW.Close()
 	errW.Close()
@@ -109,7 +115,7 @@ func startConn(command []string, dir string, env []string, onMessage func(*conn,
 	go func() {
 		c.exitErr = cmd.Wait()
 		_ = procgroup.Kill(cmd.Process.Pid)
-		// 留一点时间读完宿主退出前写下的最后几行，再关掉读端。
+		// Allow a little time to read the last lines the host wrote before exiting, then close the read ends.
 		finished := make(chan struct{})
 		go func() { readers.Wait(); close(finished) }()
 		select {
@@ -120,7 +126,8 @@ func startConn(command []string, dir string, env []string, onMessage func(*conn,
 		errR.Close()
 		inW.Close()
 		<-finished
-		// 在锁内关闭 done：之后的 request 一定能看到宿主已退出，不会挂起一个没人回应的请求。
+		// Close done inside the lock: any later request is guaranteed to see that the host has exited, and never leaves
+		// a request hanging that nobody will answer.
 		c.mu.Lock()
 		for id, ch := range c.pending {
 			close(ch)
@@ -173,13 +180,14 @@ func (c *conn) readStdout(r io.Reader, onMessage func(*conn, Message)) {
 	}
 }
 
-// readLine 读一行（不含换行）；超过 MaxLine 的行丢弃并返回错误，读取继续。
+// readLine reads one line (without the newline); a line longer than MaxLine is discarded and an error is returned,
+// and reading continues.
 func readLine(br *bufio.Reader) ([]byte, error) {
 	var buf []byte
 	for {
 		chunk, err := br.ReadSlice('\n')
 		if len(buf)+len(chunk) > MaxLine {
-			// 丢掉这一行余下的部分。
+			// Discard the rest of this line.
 			for errors.Is(err, bufio.ErrBufferFull) {
 				_, err = br.ReadSlice('\n')
 			}
@@ -202,7 +210,7 @@ func readLine(br *bufio.Reader) ([]byte, error) {
 	}
 }
 
-// send 写一行消息。
+// send writes one message line.
 func (c *conn) send(m Message) error {
 	b, err := json.Marshal(m)
 	if err != nil {
@@ -219,7 +227,7 @@ func (c *conn) send(m Message) error {
 	return err
 }
 
-// request 发出一个请求并等待 result 或 ack；回应 ok 为 false 时返回 *PluginError。
+// request sends a request and waits for result or ack; when the response has ok false it returns a *PluginError.
 func (c *conn) request(ctx context.Context, typ, plugin string, payload any, timeout time.Duration, info inflight) (json.RawMessage, error) {
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -273,7 +281,7 @@ func (c *conn) request(ctx context.Context, typ, plugin string, payload any, tim
 	}
 }
 
-// respond 回应宿主发来的请求。
+// respond answers a request from the plugin host.
 func (c *conn) respond(id, plugin string, value any, err error) {
 	r := Reply{OK: err == nil}
 	if err != nil {
@@ -284,7 +292,7 @@ func (c *conn) respond(id, plugin string, value any, err error) {
 	_ = c.send(Message{ID: id, Type: TypeResult, Plugin: plugin, Payload: mustJSON(r)})
 }
 
-// snapshot 返回当前未回应的请求与最近发出的一个请求。
+// snapshot returns the requests that currently have no response and the most recently sent request.
 func (c *conn) snapshot() ([]inflight, *inflight) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -295,7 +303,7 @@ func (c *conn) snapshot() ([]inflight, *inflight) {
 	return out, c.last
 }
 
-// stop 请宿主退出，grace 内没有退出就结束整个进程组。
+// stop asks the plugin host to exit and kills the whole process group if it has not exited within grace.
 func (c *conn) stop(grace time.Duration) {
 	c.intentional.Store(true)
 	_ = c.send(Message{Type: TypeShutdown})
@@ -308,13 +316,13 @@ func (c *conn) stop(grace time.Duration) {
 	<-c.done
 }
 
-// kill 立即结束宿主进程组（就绪超时、写入卡死）。
+// kill ends the plugin host process group immediately (ready timeout, stuck writes).
 func (c *conn) kill() {
 	_ = procgroup.Kill(c.cmd.Process.Pid)
 	<-c.done
 }
 
-// PluginError 是插件自己报告的失败（宿主回应 ok 为 false）。
+// PluginError is a failure reported by the plugin itself (the plugin host responded with ok false).
 type PluginError struct {
 	Plugin  string
 	Message string
@@ -322,7 +330,7 @@ type PluginError struct {
 
 func (e *PluginError) Error() string { return fmt.Sprintf("插件 %s：%s", e.Plugin, e.Message) }
 
-// stderrPrefix 匹配宿主在插件输出的每行前加的 [<id>]。
+// stderrPrefix matches the [<id>] the plugin host puts before each line of plugin output.
 var stderrPrefix = regexp.MustCompile(`^\[([a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?)\] ?(.*)$`)
 
 func mustJSON(v any) json.RawMessage {

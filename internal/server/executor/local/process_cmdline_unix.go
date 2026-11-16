@@ -7,7 +7,8 @@ import (
 	"strconv"
 )
 
-// processCommandLine 返回 pid 的命令行（ps），供没有记录启动时刻的旧 pi.pid 比对。
+// processCommandLine returns the command line of pid (via ps), used to check old pi.pid files that have no recorded
+// start time.
 func processCommandLine(pid int) (string, error) {
 	out, err := exec.Command("ps", "-o", "command=", "-p", strconv.Itoa(pid)).Output()
 	if err != nil {

@@ -17,28 +17,30 @@ import (
 	"loop-now/internal/server/taskmodel"
 )
 
-// unreadCond 是“发给收件方、仍待处理”的条件：未读且未被人取消。已取消的消息不计为未读。
+// unreadCond is the condition "sent to the recipient and still pending": unread and not cancelled by a person.
+// Cancelled messages do not count as unread.
 func unreadCond(alias string) string {
 	return alias + ".read_at IS NULL AND " + alias + ".cancelled_at IS NULL"
 }
 
-// queueQuerier 是事务或连接池。
+// queueQuerier is a transaction or a connection pool.
 type queueQuerier interface {
 	Query(ctx context.Context, sql string, args ...any) (*db.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) *db.Row
 	Exec(ctx context.Context, sql string, args ...any) (db.Result, error)
 }
 
-// requireLiveAgent 确认 Agent 存在且未删除。排队动作都在写事务里，与出队、结束执行、写入消息串行，不需要锁行。
+// requireLiveAgent confirms the Agent exists and is not deleted. Queue actions all run in write transactions,
+// serialized with dequeueing, ending runs and writing messages, so the row does not need to be locked.
 func requireLiveAgent(ctx context.Context, tx *db.Tx, agentID uuid.UUID) error {
 	var live bool
 	err := tx.QueryRow(ctx, `SELECT true FROM agents WHERE id = $1 AND deleted_at IS NULL`, agentID).Scan(&live)
 	return notFoundIfNoRows(err, "Agent")
 }
 
-// QueueItem 是排队列表中的一项：一条仍待处理的消息。
+// QueueItem is one item in the queue list: a message that is still pending.
 type QueueItem struct {
-	Kind      string // run：控制台在对话中发出的消息；inbox：Inbox 消息
+	Kind      string // run: a message the console sent in the conversation; inbox: an Inbox message
 	RunID     uuid.UUID
 	MessageID *uuid.UUID
 	From      PartyView
@@ -64,13 +66,13 @@ func inboxItem(m InboxMessage, run uuid.UUID, priority int) QueueItem {
 	return QueueItem{Kind: "inbox", RunID: run, MessageID: &id, From: m.From, Text: m.Text, Images: images, WhenBusy: whenBusyOf(priority), QueuedAt: m.CreatedAt}
 }
 
-// AgentQueue 返回常态 Agent 的排队列表，按实际处理顺序：执行按 priority、queue_seq，
-// 同一提醒内的消息按发送先后。sleep 唤醒执行不列出。
+// AgentQueue returns the queue list of a regular Agent in actual handling order: runs by priority and queue_seq,
+// messages within the same reminder in sending order. Sleep wake runs are not listed.
 func (s *Store) AgentQueue(ctx context.Context, agentID uuid.UUID) ([]QueueItem, error) {
 	return agentQueue(ctx, s.Pool, agentID)
 }
 
-// AgentQueueTx 在事务中读取排队列表（见 AgentQueue）。
+// AgentQueueTx reads the queue list in a transaction (see AgentQueue).
 func (s *Store) AgentQueueTx(ctx context.Context, tx *db.Tx, agentID uuid.UUID) ([]QueueItem, error) {
 	return agentQueue(ctx, tx, agentID)
 }
@@ -134,7 +136,7 @@ func agentQueue(ctx context.Context, q queueQuerier, agentID uuid.UUID) ([]Queue
 	return out, nil
 }
 
-// consoleRunItem 返回控制台执行对应的排队项（取消时的回执内容）。
+// consoleRunItem returns the queue item for a console run (the receipt content on cancellation).
 func consoleRunItem(ctx context.Context, q queueQuerier, r Run) (QueueItem, error) {
 	m, err := scanMessage(q.QueryRow(ctx, `SELECT `+messageColumns+` FROM conversation_messages WHERE id = $1`, r.UserMessageID))
 	if err != nil {
@@ -147,7 +149,8 @@ func consoleRunItem(ctx context.Context, q queueQuerier, r Run) (QueueItem, erro
 	return QueueItem{Kind: "run", RunID: r.ID, From: PartyView{Party: ConsoleParty}, Text: m.Text, Images: images, WhenBusy: whenBusyOf(r.Priority), QueuedAt: r.QueuedAt}, nil
 }
 
-// voidRunIfEmptyTx 作废没有待处理消息、也不承载 sleep 唤醒的排队提醒，并写入结束事件；返回是否作废。
+// voidRunIfEmptyTx voids a queued reminder that has no pending messages and does not carry a sleep wake, and writes the
+// end event; returns whether it was voided.
 func (s *Store) voidRunIfEmptyTx(ctx context.Context, tx *db.Tx, runID uuid.UUID, reason string) (bool, error) {
 	r, err := scanRun(tx.QueryRow(ctx, `UPDATE runs AS r SET status = 'interrupted', end_reason = $2, ended_at = $3
 		WHERE r.id = $1 AND r.status = 'queued' AND r.origin = 'inbox_reminder' AND r.wake_sleep_id IS NULL
@@ -163,12 +166,14 @@ func (s *Store) voidRunIfEmptyTx(ctx context.Context, tx *db.Tx, runID uuid.UUID
 		Data: map[string]any{"status": r.Status, "endReason": reason}})
 }
 
-// taskTurnPendingSQL 是“轮次 t 仍承载待处理消息”的条件：非严格消息看 reminder_turn_id，严格节点消息看绑定。
+// taskTurnPendingSQL is the condition "turn t still carries pending messages": non-strict messages are matched by
+// reminder_turn_id, strict node messages by their binding.
 const taskTurnPendingSQL = `(EXISTS (SELECT 1 FROM inbox_messages m WHERE m.reminder_turn_id = t.id AND m.read_at IS NULL AND m.cancelled_at IS NULL)
 	OR EXISTS (SELECT 1 FROM task_node_inbox_messages b JOIN inbox_messages m ON m.id = b.message_id
 		WHERE b.reminder_run_id = t.id AND b.not_executed_at IS NULL AND m.read_at IS NULL AND m.cancelled_at IS NULL))`
 
-// voidTaskTurnIfEmptyTx 作废没有待处理消息、也不承载 sleep 唤醒或问题结束唤醒的排队提醒轮次（TaskMessage.voidReason=reason）；返回是否作废。
+// voidTaskTurnIfEmptyTx voids a queued reminder turn that has no pending messages and carries neither a sleep wake nor
+// a question-ended wake (TaskMessage.voidReason=reason); returns whether it was voided.
 func (s *Store) voidTaskTurnIfEmptyTx(ctx context.Context, m *TaskMutation, turnID uuid.UUID, reason string) (bool, error) {
 	t, err := scanTaskTurn(m.Tx.QueryRow(ctx, `UPDATE task_turns AS t SET status = 'interrupted', ended_at = $3, void_reason = $2
 		WHERE t.id = $1 AND t.status = 'queued' AND t.origin = 'inbox_reminder' AND t.wake_sleep_id IS NULL AND NOT t.question_wakeup AND NOT `+taskTurnPendingSQL+`
@@ -189,20 +194,20 @@ func (s *Store) voidTaskTurnIfEmptyTx(ctx context.Context, m *TaskMutation, turn
 	return true, nil
 }
 
-// LinkInboxReminderTx 记下承载这条 Inbox 消息的平台提醒（常态 Agent）。
+// LinkInboxReminderTx records the platform reminder (regular Agent) that carries this Inbox message.
 func LinkInboxReminderTx(ctx context.Context, tx *db.Tx, messageID, runID uuid.UUID) error {
 	_, err := tx.Exec(ctx, `UPDATE inbox_messages SET reminder_run_id = $2, reminder_turn_id = NULL WHERE id = $1`, messageID, runID)
 	return err
 }
 
-// LinkInboxTurnTx 记下承载这条 Inbox 消息的任务轮次（任务实例的非严格消息）。
+// LinkInboxTurnTx records the task turn (non-strict message of a task instance) that carries this Inbox message.
 func LinkInboxTurnTx(ctx context.Context, tx *db.Tx, messageID, turnID uuid.UUID) error {
 	_, err := tx.Exec(ctx, `UPDATE inbox_messages SET reminder_turn_id = $2, reminder_run_id = NULL WHERE id = $1`, messageID, turnID)
 	return err
 }
 
-// AdoptTaskInboxOrphansTx 把发给任务实例、仍待处理但没有排队中承载轮次的非严格消息挂到 turn 上
-// （例如所在轮次被打断或随节点变化结束）。
+// AdoptTaskInboxOrphansTx attaches to turn the non-strict messages sent to a task instance that are still pending but
+// have no queued carrying turn (for example because their turn was interrupted or ended with a node change).
 func AdoptTaskInboxOrphansTx(ctx context.Context, tx *db.Tx, runtime, turn uuid.UUID) error {
 	_, err := tx.Exec(ctx, `UPDATE inbox_messages AS m SET reminder_turn_id = $2 WHERE m.to_kind = 'agent' AND m.to_runtime_id = $1 AND `+unreadCond("m")+`
 		AND NOT EXISTS (SELECT 1 FROM task_node_inbox_messages b WHERE b.message_id = m.id)
@@ -210,20 +215,23 @@ func AdoptTaskInboxOrphansTx(ctx context.Context, tx *db.Tx, runtime, turn uuid.
 	return err
 }
 
-// adoptAgentInboxOrphansTx 把发给常态 Agent、仍待处理但没有排队中或进行中承载提醒的消息挂到 run 上。
+// adoptAgentInboxOrphansTx attaches to run the messages sent to a regular Agent that are still pending but have no
+// queued or in-progress carrying reminder.
 func adoptAgentInboxOrphansTx(ctx context.Context, q queueQuerier, agentID, run uuid.UUID) error {
 	_, err := q.Exec(ctx, `UPDATE inbox_messages AS m SET reminder_run_id = $2 WHERE m.to_kind = 'agent' AND m.to_agent_id = $1 AND m.to_runtime_id IS NULL AND `+unreadCond("m")+`
 		AND (m.reminder_run_id IS NULL OR EXISTS (SELECT 1 FROM runs o WHERE o.id = m.reminder_run_id AND o.status IN ('completed', 'failed', 'interrupted')))`, agentID, run)
 	return err
 }
 
-// ReminderCarried 是平台提醒开始时点名的内容：本轮承载的待处理消息，以及其余仍未读的消息数。
+// ReminderCarried is what a platform reminder names when it starts: the pending messages this turn carries, and the
+// number of other messages still unread.
 type ReminderCarried struct {
 	Messages []InboxMessage
 	Others   int
 }
 
-// PrepareReminderStart 在提醒执行开始时调用：先收养没有承载提醒的待处理消息，再返回本轮承载的消息与其余未读数。
+// PrepareReminderStart is called when a reminder run starts: it first adopts pending messages that have no carrying
+// reminder, then returns the messages this turn carries and the number of other unread ones.
 func (s *Store) PrepareReminderStart(ctx context.Context, agentID, run uuid.UUID) (ReminderCarried, error) {
 	var out ReminderCarried
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -244,7 +252,8 @@ func (s *Store) PrepareReminderStart(ctx context.Context, agentID, run uuid.UUID
 	return out, err
 }
 
-// taskTurnCarriedTx 返回任务轮次承载的待处理消息（严格节点消息与非严格消息），按发送先后。
+// taskTurnCarriedTx returns the pending messages a task turn carries (strict node messages and non-strict messages),
+// in sending order.
 func taskTurnCarriedTx(ctx context.Context, tx *db.Tx, turn uuid.UUID) ([]InboxMessage, error) {
 	rows, err := tx.Query(ctx, inboxSelect(200)+` WHERE (m.reminder_turn_id = $1 OR m.id IN (SELECT b.message_id FROM task_node_inbox_messages b WHERE b.reminder_run_id = $1 AND b.not_executed_at IS NULL))
 		AND `+unreadCond("m")+` ORDER BY m.created_at, m.id`, turn)
@@ -254,7 +263,7 @@ func taskTurnCarriedTx(ctx context.Context, tx *db.Tx, turn uuid.UUID) ([]InboxM
 	return db.CollectRows(rows, func(r db.CollectableRow) (InboxMessage, error) { return scanInbox(r) })
 }
 
-// PartyLabel 是提醒中点名发件人的写法：地址优先，没有地址时用名称。
+// PartyLabel is how a reminder names the sender: the address if there is one, otherwise the name.
 func PartyLabel(v PartyView) string {
 	switch v.Kind {
 	case "console":
@@ -274,7 +283,8 @@ func PartyLabel(v PartyView) string {
 	return v.Name
 }
 
-// ReminderList 是提醒中点名的消息列表：每条一行，含消息 ID、发件人与正文摘要。
+// ReminderList is the list of messages a reminder names: one line each, with the message ID, the sender and a preview
+// of the text.
 func ReminderList(msgs []InboxMessage) string {
 	var b strings.Builder
 	for _, m := range msgs {
@@ -290,7 +300,7 @@ func ReminderList(msgs []InboxMessage) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// taskReminderText 在轮次开始时给出点名的内容；base 为轮次原有的提示。
+// taskReminderText gives the named content when a turn starts; base is the turn's original prompt.
 func taskReminderText(base string, carried []InboxMessage, others int) string {
 	text := base + "\nFirst handle the following " + fmt.Sprint(len(carried)) + " Inbox messages this turn:\n" + ReminderList(carried)
 	if others > 0 {
@@ -299,8 +309,9 @@ func taskReminderText(base string, carried []InboxMessage, others int) string {
 	return text
 }
 
-// prepareTaskReminderClaimTx 在提醒轮次被领取时调用：非严格提醒先收养没有承载轮次的待处理消息；
-// 没有待处理消息、也不承载唤醒时作废这一轮并返回 skip；否则在提示中点名本轮承载的消息。
+// prepareTaskReminderClaimTx is called when a reminder turn is claimed: a non-strict reminder first adopts pending
+// messages that have no carrying turn; when there are no pending messages and it carries no wake, this turn is voided
+// and skip is returned; otherwise the prompt names the messages this turn carries.
 func (s *Store) prepareTaskReminderClaimTx(ctx context.Context, m *TaskMutation, t *TaskTurn) (bool, error) {
 	if t.Origin != "inbox_reminder" {
 		return false, nil
@@ -334,10 +345,10 @@ func (s *Store) prepareTaskReminderClaimTx(ctx context.Context, m *TaskMutation,
 	return false, err
 }
 
-// TaskQueueItem 把排队项转为节点排队列表与回执的结构。
+// TaskQueueItem converts a queue item into the structure used for the node queue list and receipts.
 func (s *Store) TaskQueueItem(it QueueItem) taskmodel.QueueItem { return taskQueueItem(it) }
 
-// taskQueueItem 是节点排队列表中的一项（任务事件与接口的结构）。
+// taskQueueItem is one item in a node's queue list (the structure used by task events and the API).
 func taskQueueItem(it QueueItem) taskmodel.QueueItem {
 	from, _ := json.Marshal(partyWire(it.From))
 	images := it.Images
@@ -347,7 +358,8 @@ func taskQueueItem(it QueueItem) taskmodel.QueueItem {
 	return taskmodel.QueueItem{Kind: it.Kind, RunID: it.RunID, MessageID: it.MessageID, From: from, Text: it.Text, Images: images, WhenBusy: it.WhenBusy, QueuedAt: it.QueuedAt}
 }
 
-// taskQueueItemsTx 返回节点的排队列表：该节点排队中的提醒轮次承载的待处理消息，逐条，按领取顺序。
+// taskQueueItemsTx returns a node's queue list: the pending messages carried by the node's queued reminder turns, one
+// by one, in claim order.
 func taskQueueItemsTx(ctx context.Context, tx *db.Tx, task, node uuid.UUID) ([]QueueItem, error) {
 	type turn struct {
 		id       uuid.UUID
@@ -378,7 +390,7 @@ func taskQueueItemsTx(ctx context.Context, tx *db.Tx, task, node uuid.UUID) ([]Q
 	return out, nil
 }
 
-// queueNotPending 返回 run_not_queued：排队项已不在队列。
+// queueNotPending returns run_not_queued: the queue item is no longer in the queue.
 func queueNotPending(runID *uuid.UUID, status, whenBusy string, message *uuid.UUID, state string) error {
 	e := apperr.Conflict(apperr.CodeRunNotQueued, "该消息已开始处理、已读或已取消，不在排队中")
 	d := RunNotQueuedDetails{RunID: runID, MessageID: message, MessageState: state}
@@ -392,7 +404,8 @@ func queueNotPending(runID *uuid.UUID, status, whenBusy string, message *uuid.UU
 	return e
 }
 
-// MarkQuestionWakeupTx 记下这一提醒轮次还负责在节点自己的问题结束后唤醒节点：没有待处理消息时也照常执行。
+// MarkQuestionWakeupTx records that this reminder turn is also responsible for waking the node after the node's own
+// question ends: it runs as usual even without pending messages.
 func MarkQuestionWakeupTx(ctx context.Context, tx *db.Tx, turn uuid.UUID) error {
 	_, err := tx.Exec(ctx, `UPDATE task_turns SET question_wakeup = true WHERE id = $1`, turn)
 	return err

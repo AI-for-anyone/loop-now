@@ -7,14 +7,15 @@ import { ErrorAlert } from './ErrorAlert'
 
 interface SkillMdDialogProps {
   title: string
-  // 尚在加载时为 undefined。
+  // undefined while still loading.
   initial: string | undefined
   loadError?: unknown
   onSave: (content: string) => Promise<unknown>
   onClose: () => void
 }
 
-// 在线编辑 SKILL.md（Agent 的 Skill 副本）：保存失败时保留已编辑的内容。编辑器为白底等宽字，按钮在右下。
+// Edit SKILL.md in place (the Agent's copy of the Skill): edits are kept when saving fails. The editor is monospace on white, with the
+// buttons at the bottom right.
 export function SkillMdDialog({ title, initial, loadError, onSave, onClose }: SkillMdDialogProps) {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>

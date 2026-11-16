@@ -73,21 +73,25 @@ func Command(ctx context.Context, o ProcessOptions) (*exec.Cmd, error) {
 	return cmd, nil
 }
 
-// ProviderProcessOptions 是插件提供方订阅登录辅助进程的参数（plugins/SPEC.md §13）。
+// ProviderProcessOptions are the parameters of the subscription login helper process for a plugin provider
+// (plugins/SPEC.md §13).
 type ProviderProcessOptions struct {
 	NodeBin string
 	Entry   string // provider-main.mjs
-	// Home 是这次登录的新状态目录（0700，已建好）：扩展把自己的状态写在这里，登录成功后整个目录归账号。
+	// Home is the new state directory for this login (0700, already created): the extension writes its own state
+	// here, and after a successful login the whole directory belongs to the account.
 	Home string
-	// Temp 与 AgentDir 是这次操作自己的临时目录与 PI_CODING_AGENT_DIR（0700，已建好），不进状态目录。
+	// Temp and AgentDir are this operation's own temporary directory and PI_CODING_AGENT_DIR (0700, already
+	// created); they are not part of the state directory.
 	Temp, AgentDir string
 	BasePath       string
 	DrainTimeout   time.Duration
 	Input          *os.File // child fd 3
-	Output         *os.File // child fd 4（含 login 的返回值）
+	Output         *os.File // child fd 4 (including login's return value)
 }
 
-// ProviderCommand 返回未启动的登录辅助进程：空环境，只有平台基础变量、HOME、TMPDIR、PI_CODING_AGENT_DIR 与 PATH。
+// ProviderCommand returns the login helper process, not yet started: an empty environment with only the platform
+// base variables, HOME, TMPDIR, PI_CODING_AGENT_DIR and PATH.
 func ProviderCommand(ctx context.Context, o ProviderProcessOptions) (*exec.Cmd, error) {
 	for _, p := range []string{o.NodeBin, o.Entry, o.Home, o.Temp, o.AgentDir} {
 		if !filepath.IsAbs(p) || strings.ContainsRune(p, 0) {

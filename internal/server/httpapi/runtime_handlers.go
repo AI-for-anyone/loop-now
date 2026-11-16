@@ -8,7 +8,7 @@ import (
 	"loop-now/internal/server/runtimes"
 )
 
-// listRuntimes 报告各 Agent 运行时在本机是否可用；refresh=true 时不用缓存。
+// listRuntimes reports whether each Agent runtime is available on this machine; refresh=true bypasses the cache.
 func (s *Server) listRuntimes(w http.ResponseWriter, r *http.Request) {
 	refresh := false
 	if v := r.URL.Query().Get("refresh"); v != "" {

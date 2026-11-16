@@ -12,8 +12,9 @@ import (
 	"loop-now/internal/server/apitypes"
 )
 
-// 真实宿主（设置 LOOP_NOW_PLUGIN_HOST_ENTRY 时）代管外部身份：identity.inbound 按 channelId 交给渠道的 identityInbound，
-// 插件用 api.identities.read 读全文、用 api.identities.answer 以身份的名义回答，Agent 的问题记为已回答。
+// The real host (when LOOP_NOW_PLUGIN_HOST_ENTRY is set) manages an external identity: identity.inbound goes by
+// channelId to the channel's identityInbound, the plugin reads the full text with api.identities.read and answers in
+// the identity's name with api.identities.answer, and the Agent's question is marked answered.
 func TestRealHostManagesIdentity(t *testing.T) {
 	entry := os.Getenv("LOOP_NOW_PLUGIN_HOST_ENTRY")
 	if entry == "" {
@@ -79,8 +80,9 @@ func TestRealHostManagesIdentity(t *testing.T) {
 	}
 }
 
-// 真实宿主（设置 LOOP_NOW_PLUGIN_HOST_ENTRY 时）在插件线索里答题：插件经渠道发消息，Agent 在线索里提问，
-// channel.outbound 带 question 交给渠道的 outbound，插件回复这道提问即作答，问题记为已回答。
+// The real host (when LOOP_NOW_PLUGIN_HOST_ENTRY is set) answers in a plugin thread: the plugin sends a message through
+// its channel, the Agent asks a question in the thread, channel.outbound with the question goes to the channel's
+// outbound, the plugin's reply to that question is the answer, and the question is marked answered.
 func TestRealHostAnswersChannelQuestion(t *testing.T) {
 	entry := os.Getenv("LOOP_NOW_PLUGIN_HOST_ENTRY")
 	if entry == "" {

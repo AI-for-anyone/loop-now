@@ -10,8 +10,9 @@ import (
 	"loop-now/internal/server/naming"
 )
 
-// TestEntityNameSchemaMatchesNaming 确认 OpenAPI 中 EntityName 的约束与 naming.Validate 判定一致：
-// 每个码点（到 U+3100，外加几个常见的高位字符）分别放在开头、中间、结尾与单独出现，比对两边的结果。
+// TestEntityNameSchemaMatchesNaming confirms that the EntityName constraints in OpenAPI agree with naming.Validate:
+// every code point (up to U+3100, plus a few common high characters) is placed at the start, in the middle, at the end
+// and alone, and the results of both sides are compared.
 func TestEntityNameSchemaMatchesNaming(t *testing.T) {
 	doc := contracttest.Load(t)
 	ref, ok := doc.Components.Schemas["EntityName"]

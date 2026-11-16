@@ -18,7 +18,8 @@ type Candidate = Manager & { pluginName: string; channelLabel: string; status: S
 const text = t.plugins.manager
 const keyOf = (manager: Manager | null) => (manager ? `${manager.pluginId}/${manager.channelId}` : '')
 
-// 已安装插件里声明了 manageIdentities 的渠道（清单在插件详情里，与插件页共用缓存）。
+// Channels of installed plugins that declare manageIdentities (the manifest is in the plugin details, sharing the cache with the plugin
+// page).
 function useCandidates() {
   const plugins = usePlugins()
   const list = plugins.data?.plugins ?? []
@@ -38,8 +39,9 @@ function useCandidates() {
   return { candidates, pending: plugins.isPending || details.some((detail) => detail.isPending), error: plugins.error ?? details.find((detail) => detail.error)?.error ?? null }
 }
 
-// 外部身份页的“代管”：选一个插件的渠道代管这个身份（发给它的消息与提问由插件推出去，人的回复以这个身份送回），或不代管。
-// 代管插件不是运行中（停用、出错、宿主停止）时绑定保留，这里提示它没有在运行。
+// “代管” (Managed by) on the external identity page: choose a plugin channel to manage this identity (messages and questions sent to it
+// are pushed out by the plugin, and people's replies come back as this identity), or none.
+// When the managing plugin isn't running (disabled, errored, host stopped), the binding is kept, and a notice here says it isn't running.
 export function IdentityManager({ identity }: { identity: Schemas['ExternalIdentity'] }) {
   const id = useId()
   const save = useSetIdentityManager(identity.id)
@@ -47,7 +49,7 @@ export function IdentityManager({ identity }: { identity: Schemas['ExternalIdent
   const current = identity.managedBy
   const [choice, setChoice] = useState(keyOf(current))
   const [base, setBase] = useState(keyOf(current))
-  // 服务端的绑定变了（别处修改、卸载插件清空）且这里没有改动：跟着换。
+  // The server's binding changed (edited elsewhere, or cleared by uninstalling the plugin) and nothing was changed here: follow it.
   if (keyOf(current) !== base) {
     if (choice === base) setChoice(keyOf(current))
     setBase(keyOf(current))

@@ -15,7 +15,7 @@ import (
 	"loop-now/internal/testutil/sqlitetest"
 )
 
-// pluginEvents 是写入的插件事件，按 id 排序；data 只取 keys 里的字段。
+// pluginEvents are the plugin events written, sorted by id; data keeps only the fields in keys.
 type pluginEvent struct {
 	Type      string
 	ProjectID *uuid.UUID
@@ -61,8 +61,10 @@ func subscribe(t *testing.T, s *store.Store, id string, events []string) {
 	}
 }
 
-// 捕获触发器与任务事务按订阅与启用写观察类事件：项目内事件只给在该项目启用了插件的，平台（项目为空）的给全部订阅者；
-// 收件事件在提交时看得到同一事务里的提问；正文只给前 80 个字符；全局停用时不写。
+// Capture triggers and task transactions write observation events by subscription and enablement: events in a project
+// go only to plugins enabled in that project, and platform events (no project) go to all subscribers; Inbox events
+// see, at commit, the question in the same transaction; the text is limited to the first 80 characters; nothing is
+// written when disabled globally.
 func TestPluginEventProduction(t *testing.T) {
 	ctx := context.Background()
 	s := sqlitetest.NewStore(t)
@@ -79,7 +81,7 @@ func TestPluginEventProduction(t *testing.T) {
 	all := []string{"agent.created", "agent.updated", "agent.deleted", "run.queued", "run.started", "run.ended", "pi.started", "pi.exited", "model.retry", "context.compacted",
 		"inbox.received", "inbox.read", "question.asked", "question.answered", "sleep.requested", "sleep.woken", "task.blocked", "node.blocked"}
 	subscribe(t, s, "obs", all)
-	subscribe(t, s, "other", all) // 订阅了，但没有在项目里启用
+	subscribe(t, s, "other", all) // subscribed, but not enabled in the project
 	must := func(sql string, args ...any) {
 		t.Helper()
 		if _, err := s.Pool.Exec(ctx, sql, args...); err != nil {
@@ -89,7 +91,7 @@ func TestPluginEventProduction(t *testing.T) {
 	must(`INSERT INTO project_plugins(project_id,plugin_id,enabled) VALUES($1,'obs',true)`, project)
 	must(`DELETE FROM plugin_events`)
 
-	// Agent：项目内的只给 obs；平台 Agent 的给两个订阅者。
+	// Agent: events in a project go only to obs; those of a platform Agent go to both subscribers.
 	a, err := s.CreateAgent(ctx, store.ProjectScope(project), "观察员", "anthropic", "m", "")
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +100,7 @@ func TestPluginEventProduction(t *testing.T) {
 		t.Fatal(err)
 	}
 	must(`UPDATE agents SET name='观察员2', config_version=config_version+1 WHERE id=$1`, a.ID)
-	must(`UPDATE agents SET updated_at=now() WHERE id=$1`, a.ID) // 没有配置变化：不写事件
+	must(`UPDATE agents SET updated_at=now() WHERE id=$1`, a.ID) // no config change: no event is written
 	if err := s.SoftDeleteAgent(ctx, a.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +114,8 @@ func TestPluginEventProduction(t *testing.T) {
 	}
 	must(`DELETE FROM plugin_events`)
 
-	// 运行与进程：lifecycle_events 的类型名换成插件事件名，run.ended 带这一轮的 token。
+	// Runs and processes: lifecycle_events type names are replaced by plugin event names, and run.ended carries this
+	// turn's tokens.
 	run := uuid.New()
 	base := time.Date(2026, 10, 27, 9, 0, 0, 0, time.UTC)
 	must(`INSERT INTO runs(id,agent_id,user_message_id,config_version,priority,queue_seq,status,origin,queued_at,started_at,running_at,ended_at,end_reason)
@@ -131,7 +134,7 @@ func TestPluginEventProduction(t *testing.T) {
 	life("run.ended", map[string]any{"status": "interrupted", "endReason": "user_interrupt"})
 	life("pi.stopped", map[string]any{"reason": "idle_timeout"})
 	life("pi.exited", map[string]any{"stderrTail": "不应外泄"})
-	life("run.phase", nil) // 不是插件事件
+	life("run.phase", nil) // not a plugin event
 	evs = readPluginEvents(t, s)
 	if got := strings.Join(eventTypes(evs), ","); got != "run.queued,run.started,model.retry,context.compacted,run.ended,pi.exited,pi.exited" {
 		t.Fatalf("运行事件：%s", got)
@@ -147,7 +150,8 @@ func TestPluginEventProduction(t *testing.T) {
 	}
 	must(`DELETE FROM plugin_events`)
 
-	// 收件与提问：提交时触发，同一事务里的提问已可见；正文只给前 80 个字符。
+	// Inbox and questions: fired at commit, so a question in the same transaction is already visible; the text is
+	// limited to the first 80 characters.
 	msg := uuid.New()
 	text := strings.Repeat("长", 100)
 	if err := s.Pool.InTx(ctx, func(tx *db.Tx) error {
@@ -174,7 +178,7 @@ func TestPluginEventProduction(t *testing.T) {
 	}
 	must(`DELETE FROM plugin_events`)
 
-	// sleep 与全局停用。
+	// sleep, and disabled globally.
 	sleep := uuid.New()
 	must(`INSERT INTO agent_sleeps(id,scope_key,scope_kind,mode,agent_id,session_epoch,source_run_id,action_id,body_hash,receipt,state,seconds,timer_run_id,revision)
 		VALUES($1,'normal/'||$2,'normal','normal',$2,1,$3,$4,$5,'{}','requested',60,$6,1)`, sleep, agent, uuid.New(), uuid.New(), make([]byte, 32), uuid.New())
@@ -187,7 +191,7 @@ func TestPluginEventProduction(t *testing.T) {
 	}
 }
 
-// 任务事务比较前后两份文档写 task.blocked 与 node.blocked。
+// The task transaction compares the documents before and after to write task.blocked and node.blocked.
 func TestPluginTaskEvents(t *testing.T) {
 	ctx := context.Background()
 	s := taskConsoleStore(t)
@@ -200,7 +204,7 @@ func TestPluginTaskEvents(t *testing.T) {
 	if _, err := s.Pool.Exec(ctx, `INSERT INTO project_plugins(project_id,plugin_id,enabled) VALUES($1,'obs',true)`, project); err != nil {
 		t.Fatal(err)
 	}
-	// 任务与节点：任务事务比较前后两份文档。
+	// Tasks and nodes: the task transaction compares the documents before and after.
 	if _, err := s.MutateTask(ctx, task, nil, func(m *store.TaskMutation) (any, error) {
 		reason := "缺少输入"
 		m.Record.View.Task.Status, m.Record.View.Task.Reason = "blocked", &reason

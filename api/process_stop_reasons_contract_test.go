@@ -8,7 +8,8 @@ import (
 	"loop-now/internal/server/executor/local"
 )
 
-// 执行器可能记下的每一个 pi.stopped 原因都要在 ProcessExit.reason 与 TimelinePiStopped.reason 的枚举里。
+// Every pi.stopped reason the executor may record must be in the enums of ProcessExit.reason and
+// TimelinePiStopped.reason.
 func TestProcessStopReasonsInContract(t *testing.T) {
 	console, agent := contracttest.LoadFile(t, "openapi.yaml"), contracttest.LoadFile(t, "agent-openapi.yaml")
 	for _, c := range []struct{ file, schema string }{{"openapi.yaml", "ProcessExit"}, {"openapi.yaml", "TimelinePiStopped"}, {"agent-openapi.yaml", "TimelinePiStopped"}} {

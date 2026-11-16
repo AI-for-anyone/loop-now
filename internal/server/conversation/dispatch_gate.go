@@ -7,8 +7,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// PauseDispatch 等当前一轮完全退出后占用派发门禁。取消等待不会阻塞旧轮或泄漏门禁。
-// 返回的release可重复调用；门禁期间队列与锁仍由原驱动循环管理。
+// PauseDispatch takes the dispatch gate once the current turn has fully exited. Cancelling the wait neither blocks the
+// old turn nor leaks the gate. The returned release may be called repeatedly; while the gate is held, the queue and the
+// lock are still managed by the original driver loop.
 func (s *Service) PauseDispatch(ctx context.Context, agentID uuid.UUID) (func(), error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

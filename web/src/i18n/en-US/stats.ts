@@ -25,7 +25,7 @@ export const stats = {
   none: '—',
   total: 'Total',
 
-  // 图表按“万”计算；英文改写成 K、M。不到 1,000 时直接写 token 数。
+  // The charts count in “万” (wan, units of 10,000); English rewrites these as K and M. Below 1,000 the token count is written out as is.
   wan: (tokens: number) => (tokens < 1000 ? n(tokens, 'token', 'tokens') : formatCompact(tokens)),
   wanAxis: (wan: number) => formatCompact(Math.round(wan * 10) * 1000),
   number: (value: number) => grouped(value),

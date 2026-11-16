@@ -16,7 +16,7 @@ import (
 	"loop-now/internal/testutil/fsperm"
 )
 
-// makeState 建一个订阅账号的状态版本目录：auth.json 与扩展自己的状态。
+// makeState creates a state version directory for a subscription account: auth.json and the extension's own state.
 func makeState(t *testing.T, root string) (*agentconfig.ProviderState, string) {
 	t.Helper()
 	v := uuid.New()
@@ -42,8 +42,10 @@ func readLink(t *testing.T, p string) string {
 	return got
 }
 
-// 订阅账号的状态：auth.json 与声明的路径链接到账号的状态目录，两个 Agent 共用一份；换掉后链接清干净、状态目录不动；
-// 没挂载插件或状态目录不在时明确失败；释放 Agent 不会经链接删掉状态。
+// Subscription account state: auth.json and the declared paths are linked to the account's state directory, and two
+// Agents share one copy; after switching away the links are cleaned up and the state directory is untouched; it fails
+// explicitly when the plugin is not mounted or the state directory is missing; releasing an Agent does not delete the
+// state through a link.
 func TestProviderStateLinks(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows 上是目录联接与硬链接，另行验证")
@@ -67,7 +69,8 @@ func TestProviderStateLinks(t *testing.T) {
 		if got := readLink(t, filepath.Join(d.home, ".pi", "fake-oauth")); got != filepath.Join(dir, ".pi", "fake-oauth") {
 			t.Fatalf("状态路径链接：%s", got)
 		}
-		// 第二条消息复用同一个 Pi 进程：不能把 auth.json 当普通凭证重写（真实登录后第二条消息曾因此失败）。
+		// The second message reuses the same Pi process: auth.json must not be rewritten like an ordinary credential
+		// (after a real login the second message once failed because of this).
 		if res, _ := h.exec(id, "again"); res.Outcome != executor.OutcomeCompleted {
 			t.Fatalf("复用进程的第二条消息：%+v", res)
 		}
@@ -75,7 +78,8 @@ func TestProviderStateLinks(t *testing.T) {
 			t.Fatalf("复用后 auth.json 链接：%s", got)
 		}
 	}
-	// 经一个 Agent 的 HOME 写入，另一个 Agent 与状态目录都看得到（扩展自己刷新的令牌由同项目的 Agent 共用）。
+	// A write through one Agent's HOME is visible to the other Agent and in the state directory (tokens the extension
+	// refreshes itself are shared by the Agents of the same project).
 	if err := os.WriteFile(filepath.Join(h.e.dirs(a).home, ".pi", "fake-oauth", "refreshed.json"), []byte("new"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +90,8 @@ func TestProviderStateLinks(t *testing.T) {
 		t.Fatal("运行中的 Pi 在用的版本要报给清理器")
 	}
 
-	// 换成不用订阅账号：重启，链接清掉，auth.json 回到平台自己写的普通文件，状态目录原样。
+	// Switch to not using a subscription account: restart, the links are removed, auth.json goes back to an ordinary
+	// file written by the platform, and the state directory is unchanged.
 	h.src.update(a, func(s *agentconfig.Snapshot) { s.ProviderState, s.Plugins = nil, agentconfig.PluginAssets{} })
 	if res, _ := h.exec(a, "hi"); res.Outcome != executor.OutcomeCompleted {
 		t.Fatalf("换掉后：%+v", res)
@@ -102,7 +107,7 @@ func TestProviderStateLinks(t *testing.T) {
 		t.Fatal("链接记录应已删掉")
 	}
 
-	// 释放 Agent：只删它自己的目录，状态目录里的东西都还在。
+	// Release the Agent: only its own directories are deleted; everything in the state directory is still there.
 	if err := h.e.Release(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
@@ -112,18 +117,19 @@ func TestProviderStateLinks(t *testing.T) {
 		}
 	}
 
-	// 没挂载插件：明确失败。
+	// Plugin not mounted: fails explicitly.
 	c := h.agent(func(s *agentconfig.Snapshot) { st := *state; s.ProviderState = &st })
 	if res, _ := h.exec(c, "hi"); res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, "grokish") {
 		t.Fatalf("没挂载插件：%+v", res)
 	}
-	// 状态目录不在：明确失败。
+	// State directory missing: fails explicitly.
 	e := h.agent(func(s *agentconfig.Snapshot) {
 		st := *state
 		st.Dir = filepath.Join(t.TempDir(), "gone")
 		s.ProviderState, s.Plugins = &st, agentconfig.PluginAssets{IDs: []string{"grokish"}}
 	})
-	// 平台 Agent（没有项目上下文）的订阅账号是它自己的登录，提示去它的模型凭证里重登；项目 Agent 提示去项目里重登。
+	// A platform Agent's (no project context) subscription account is its own login, so the hint says to log in again
+	// in its model credentials; for a project Agent the hint says to log in again in the project.
 	if res, _ := h.exec(e, "hi"); res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, "这个 Agent 的模型凭证里重新登录") {
 		t.Fatalf("状态目录不在（平台 Agent）：%+v", res)
 	}
@@ -137,7 +143,8 @@ func TestProviderStateLinks(t *testing.T) {
 	if res, _ := h.exec(pe, "hi"); res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, "在项目里重新登录") {
 		t.Fatalf("状态目录不在（项目 Agent）：%+v", res)
 	}
-	// 声明路径盖住了任何一个 CLI 模板的凭证文件（不只是这个 Agent 配了的）：明确失败，不让每轮删写凭证文件时出错。
+	// A declared path covers the credential file of any CLI template (not only those this Agent configured): fail
+	// explicitly, rather than erroring when credential files are deleted and rewritten on every turn.
 	managed := h.e.tmpl.AllCredentialFilePaths()
 	if len(managed) == 0 {
 		t.Fatal("内置模板应有凭证文件路径")
@@ -151,7 +158,7 @@ func TestProviderStateLinks(t *testing.T) {
 	if res, _ := h.exec(g, "hi"); res.Outcome != executor.OutcomeFailed || res.ErrorCode != executor.ErrCredentialUnavailable || !strings.Contains(res.ErrorMessage, managed[0]) {
 		t.Fatalf("与模板凭证文件重叠：%+v", res)
 	}
-	// 声明的路径登录时还没写：在状态目录里建空目录再链接。
+	// A declared path not yet written at login: create an empty directory in the state directory, then link it.
 	f := h.agent(func(s *agentconfig.Snapshot) {
 		st := *state
 		st.Paths = []string{".config/fake-later"}
@@ -165,8 +172,10 @@ func TestProviderStateLinks(t *testing.T) {
 	}
 }
 
-// 声明的路径登录时还没写、要在状态目录里建空目录时：新建的每一级都只有当前用户能访问，不靠继承上级
-// （上级对所有人开放也一样）；已有的一级是链接时拒绝，不经链接建到状态目录外面。各平台都跑。
+// When a declared path was not yet written at login and an empty directory must be created in the state directory:
+// every newly created level is accessible only to the current user, not relying on inheritance from the parent (even
+// when the parent is open to everyone); an existing level that is a link is rejected, so nothing is created outside
+// the state directory through a link. Runs on all platforms.
 func TestMkdirPrivate(t *testing.T) {
 	root := t.TempDir()
 	fsperm.Open(t, root)
@@ -207,8 +216,9 @@ func TestMkdirPrivate(t *testing.T) {
 	}
 }
 
-// 开着“用本机的登录状态”：不在用户真实家目录里建任何链接、不创建也不删除；声明的路径在那里不存在时启动前就失败；
-// 存在时启动，用的是本机自己的状态，auth.json 仍链接到账号。
+// With “用本机的登录状态” ("Use local logins") on: no link is created, nothing is created or deleted in the user's
+// real home directory; when a declared path does not exist there, it fails before startup; when it exists, the process
+// starts and uses the local state, and auth.json is still linked to the account.
 func TestProviderStateWithLocalLogins(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows 上另行验证")

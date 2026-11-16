@@ -16,7 +16,7 @@ for (const [name, language] of Object.entries({ bash, css, go, ini, javascript, 
 
 const escape = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-// 文件内容的高亮 HTML（highlight.js 会转义原文）；不认识的语言只转义，不高亮。
+// Highlighted HTML for file content (highlight.js escapes the source text); an unknown language is only escaped, not highlighted.
 export function highlightCode(text: string, language: string | null): string {
   if (!language || !hljs.getLanguage(language)) return escape(text)
   return hljs.highlight(text, { language, ignoreIllegals: true }).value

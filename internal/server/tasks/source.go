@@ -39,9 +39,9 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// Source 在现有执行器前适配任务实例；正常Agent仍走原Source。
+// Source adapts task instances in front of the existing executor; regular Agents still go through the original Source.
 type Source struct {
-	// PluginAssets 返回 Agent 已授权插件交给 Pi 的东西；为空时不挂载插件。
+	// PluginAssets returns what the Agent's granted plugins hand to Pi; when nil, no plugins are mounted.
 	PluginAssets               func(context.Context, uuid.UUID) (agentconfig.PluginAssets, error)
 	ModelAuth                  *modelauth.Coordinator
 	Normal                     local.Source
@@ -58,13 +58,15 @@ type Source struct {
 	FreezeNormal  func(context.Context, uuid.UUID) error
 	CloseQuestion func(context.Context, *db.Tx, uuid.UUID, string) (string, error)
 	ViewQuestion  func(context.Context, auth.Principal, taskmodel.Question) (taskmodel.Question, error)
-	// Log 记录任务工作区复制的方式与耗时；为空时不记录。
+	// Log records how the task workspace was copied and how long it took; when nil, nothing is recorded.
 	Log *slog.Logger
-	// LocalAccess 按基础 Agent 返回本机模式交给 Pi 的东西；为空时不启用本机模式。
+	// LocalAccess returns, per base Agent, what local mode hands to Pi; when nil, local mode is not enabled.
 	LocalAccess func(context.Context, uuid.UUID) (agentconfig.LocalAccess, error)
-	// ProviderState 给出插件提供方订阅账号的状态（任务快照冻结的版本）；随账号走的路径按插件当前版本。
+	// ProviderState gives the state of plugin provider subscription accounts (the version captured by the task
+	// snapshot); paths that follow the account use the plugin's current version.
 	ProviderState agentconfig.ProviderStateFunc
-	// ClaudeProjects 返回本机 Claude Code 存放会话记录的目录（Claude Code 运行时的任务分叉从那里复制基线）；为空时不支持。
+	// ClaudeProjects returns the directory where the local Claude Code keeps its session records (task forks on the
+	// Claude Code runtime copy their baseline from there); when nil, this is not supported.
 	ClaudeProjects func(context.Context) string
 }
 
@@ -162,23 +164,26 @@ func (s *Source) ExecutionSnapshot(ctx context.Context, id uuid.UUID) (agentconf
 	for _, src := range inst.Sources {
 		out.Sources = append(out.Sources, src.Source)
 	}
-	// 可见的上下文层随基础 Agent：项目 Agent 为其项目，平台 Agent 为全局。
+	// The visible context layers follow the base Agent: its project for a project Agent, global for a platform Agent.
 	if err = s.Store.Pool.QueryRow(ctx, `SELECT project_id FROM agents WHERE id=$1`, inst.AgentID).Scan(&out.ContextProjectID); err != nil {
 		return agentconfig.Snapshot{}, err
 	}
-	// 插件按基础 Agent 当前的授权在启动 Pi 时挂载；已经启动的 Pi 继续用它启动时的文件。
+	// Plugins are mounted according to the base Agent's current grants when Pi starts; a Pi that has already started
+	// keeps using the files it started with.
 	if s.PluginAssets != nil {
 		if out.Plugins, err = s.PluginAssets(ctx, inst.AgentID); err != nil {
 			return agentconfig.Snapshot{}, err
 		}
 	}
-	// 本机目录与 PATH 同样按基础 Agent 与项目的当前设置，不进任务快照；任务里对本机目录的改动直接落在真实文件上。
+	// Local directories and PATH likewise follow the current settings of the base Agent and its project and are not
+	// part of the task snapshot; changes a task makes to local directories land directly on the real files.
 	if s.LocalAccess != nil {
 		if out.Local, err = s.LocalAccess(ctx, inst.AgentID); err != nil {
 			return agentconfig.Snapshot{}, err
 		}
 	}
-	// 插件提供方的订阅账号：快照冻结的是版本（状态目录），实例启动时同样建链接；工作区复制不带令牌。
+	// Plugin provider subscription accounts: the snapshot captures the version (state directory), and the links are
+	// likewise created when the instance starts; the workspace copy carries no tokens.
 	if out.ProviderState, err = agentconfig.ResolveProviderState(ctx, s.ProviderState, out); err != nil {
 		return agentconfig.Snapshot{}, err
 	}
@@ -289,8 +294,8 @@ func (s *Source) Prepare(ctx context.Context, inst store.TaskInstance) error {
 			}
 			base = &path
 		}
-		// 快照 v9 起：在同一窗口里复制基础 Agent 的整个文件夹（此时它的 Pi 已停、新派发已暂停），
-		// 文件夹与会话分叉取自同一时刻。
+		// From snapshot v9 on: copy the base Agent's whole folder within the same window (at that point its Pi has
+		// stopped and new dispatches are paused), so the folder and the session fork are taken at the same moment.
 		if snapshot.CopiesAgentFolder() {
 			return s.copyWorkspace(inst)
 		}
@@ -316,7 +321,8 @@ func (s *Source) Prepare(ctx context.Context, inst store.TaskInstance) error {
 	return s.commitTaskPreparation(ctx, inst, revision, base, sources)
 }
 
-// copyWorkspace 把基础 Agent 的文件夹复制为任务实例的工作区。实例尚未准备完成，之前失败留下的工作区或半成品都先删除再重做。
+// copyWorkspace copies the base Agent's folder as the task instance's workspace. The instance is not prepared yet, so a
+// workspace or partial copy left by an earlier failure is deleted first and the copy is redone.
 func (s *Source) copyWorkspace(inst store.TaskInstance) error {
 	dst := folders.AgentWorkspace(s.WorkRoot, inst.ID)
 	if err := os.RemoveAll(dst); err != nil {
@@ -330,12 +336,12 @@ func (s *Source) copyWorkspace(inst store.TaskInstance) error {
 	res, err := folders.CopyTree(folders.AgentWorkspace(s.WorkRoot, inst.AgentID), dst)
 	if err != nil {
 		if s.Log != nil {
-			s.Log.Error("任务工作目录复制失败", "taskId", inst.TaskID, "runtimeId", inst.ID, "agentId", inst.AgentID, "err", err)
+			s.Log.Error("failed to copy the task working directory", "taskId", inst.TaskID, "runtimeId", inst.ID, "agentId", inst.AgentID, "err", err)
 		}
 		return fmt.Errorf("任务工作目录复制失败：%w", err)
 	}
 	if s.Log != nil {
-		s.Log.Info("任务工作目录已复制", "taskId", inst.TaskID, "runtimeId", inst.ID, "agentId", inst.AgentID, "method", res.Method, "durationMs", res.Duration.Milliseconds())
+		s.Log.Info("copied the task working directory", "taskId", inst.TaskID, "runtimeId", inst.ID, "agentId", inst.AgentID, "method", res.Method, "durationMs", res.Duration.Milliseconds())
 	}
 	return nil
 }
@@ -383,8 +389,10 @@ func (s *Source) copyBaseline(inst store.TaskInstance, source string) (string, e
 	return s.writeBaseline(inst, data)
 }
 
-// copyClaudeBaseline 是 Claude Code 运行时的任务分叉基线：只读常态会话那一个 <会话 ID>.jsonl（必须正好在 claude 的会话记录目录下一层），
-// 不扫描、不读 ~/.claude 下别的东西；每行须是完整的 JSON。复制到平台自己的目录，任务实例首次启动时从它分叉。
+// copyClaudeBaseline makes the task fork baseline for the Claude Code runtime: it only reads the regular session's one
+// <session ID>.jsonl (which must be exactly one level below claude's session record directory), and does not scan or
+// read anything else under ~/.claude; every line must be complete JSON. The file is copied to the platform's own
+// directory, and the task instance forks from it on its first start.
 func (s *Source) copyClaudeBaseline(ctx context.Context, inst store.TaskInstance, source string) (string, error) {
 	if s.ClaudeProjects == nil {
 		return "", errors.New("Claude Code 的会话记录目录未配置")
@@ -426,7 +434,8 @@ func (s *Source) copyClaudeBaseline(ctx context.Context, inst store.TaskInstance
 	return s.writeBaseline(inst, data)
 }
 
-// writeBaseline 把基线写到平台的 task-baselines/<任务>/<Agent>.jsonl（先写临时文件再改名）。
+// writeBaseline writes the baseline to the platform's task-baselines/<task>/<Agent>.jsonl (writing a temporary file
+// first and then renaming it).
 func (s *Source) writeBaseline(inst store.TaskInstance, data []byte) (string, error) {
 	dir := filepath.Join(s.WorkRoot, "task-baselines", inst.TaskID.String())
 	if err := os.MkdirAll(dir, 0o700); err != nil {

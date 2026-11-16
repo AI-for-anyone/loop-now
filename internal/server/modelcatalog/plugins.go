@@ -18,11 +18,11 @@ import (
 //go:embed providers.mjs
 var providersScript []byte
 
-// CapturedProvider 是插件的 Pi 扩展注册的一个模型提供方（plugins/SPEC.md §13）。
+// CapturedProvider is one model provider registered by a plugin's Pi extension (plugins/SPEC.md §13).
 type CapturedProvider struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
-	// Extension 是注册它的扩展文件，相对插件目录。
+	// Extension is the extension file that registered it, relative to the plugin directory.
 	Extension        string  `json:"extension"`
 	OAuth            bool    `json:"oauth"`
 	APIKey           bool    `json:"apiKey"`
@@ -31,27 +31,29 @@ type CapturedProvider struct {
 	Models           []Model `json:"models"`
 }
 
-// CaptureError 是一个扩展文件加载失败的原因（扩展原文，已截断）。
+// CaptureError is the reason one extension file failed to load (the extension's original text, truncated).
 type CaptureError struct {
 	Path  string `json:"path"`
 	Error string `json:"error"`
 }
 
-// Capture 是一次读取的结果。
+// Capture is the result of one read.
 type Capture struct {
 	Providers []CapturedProvider `json:"providers"`
 	Errors    []CaptureError     `json:"errors"`
 }
 
-// CatalogEligible 报告这个提供方是否进模型目录：注册了 OAuth 登录的新提供方，注册时没有出错。
-// 覆盖内置提供方（与内置或 models.json 同 id）的只记录，不进目录。
+// CatalogEligible reports whether this provider goes into the model catalog: a new provider that registered an OAuth
+// login without errors at registration. Providers that override a built-in provider (same id as a built-in one or one
+// in models.json) are only recorded and do not go into the catalog.
 func (p CapturedProvider) CatalogEligible() bool {
 	return p.OAuth && !p.OverridesBuiltin && p.Error == nil && len(p.Models) > 0
 }
 
-// CaptureProviders 用固定版本 Pi 自己的扩展加载器加载 dir 下的扩展文件，读出它们注册的模型提供方。
-// 运行扩展代码，所以只能在用户确认安装之后调用。空环境、临时 HOME 与 PI_CODING_AGENT_DIR、PI_OFFLINE=1，
-// 扩展加载时的副作用只落在临时目录，结束即删除。extensions 是相对 dir 的路径。
+// CaptureProviders loads the extension files under dir with the pinned Pi's own extension loader and reads the model
+// providers they register. It runs extension code, so it may only be called after the user confirms the install. Empty
+// environment, temporary HOME and PI_CODING_AGENT_DIR, PI_OFFLINE=1; side effects of loading the extensions land only
+// in the temporary directory, which is deleted at the end. extensions are paths relative to dir.
 func CaptureProviders(ctx context.Context, o Options, dir string, extensions []string) (Capture, error) {
 	out := Capture{Providers: []CapturedProvider{}, Errors: []CaptureError{}}
 	if len(extensions) == 0 {
@@ -148,14 +150,15 @@ func clip(b []byte, max int) string {
 	return string(b)
 }
 
-// PluginProvider 是要并入模型目录的一个插件提供方。
+// PluginProvider is one plugin provider to merge into the model catalog.
 type PluginProvider struct {
 	PluginID string
 	Provider CapturedProvider
 }
 
-// withPlugins 返回 base 加上插件提供方的目录：与 base 同 id 的插件提供方跳过（内置与 models.json 优先），
-// 插件之间同 id 时先给出的为准。没有可并入的提供方时原样返回 base。
+// withPlugins returns base plus the plugin providers: a plugin provider with the same id as one in base is skipped
+// (built-in and models.json take precedence), and between plugins the first one given wins for the same id. When there
+// is no provider to merge, base is returned as is.
 func withPlugins(base *Catalog, plugins []PluginProvider) *Catalog {
 	if base == nil {
 		return nil

@@ -17,7 +17,7 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// 插件第二版的管理接口（plugins/SPEC.md §6、§7），实现在 plugins.Service。
+// Management API of plugins v2 (plugins/SPEC.md §6, §7), implemented in plugins.Service.
 
 var pluginIDPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$`)
 
@@ -80,7 +80,7 @@ func (s *Server) getPlugin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, d)
 }
 
-// readmeLocale 读查询参数 locale：没给时为空，给了但不是语言标签时 422。
+// readmeLocale reads the locale query parameter: empty when not given, 422 when given but not a language tag.
 func readmeLocale(r *http.Request) (string, error) {
 	q := r.URL.Query()
 	if !q.Has("locale") {
@@ -206,7 +206,7 @@ func (s *Server) putPluginConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, c)
 }
 
-// queryLimit 解析 limit：不传时为 def，超出 [1, max] 时返回 422。
+// queryLimit parses limit: def when not given, 422 when outside [1, max].
 func queryLimit(r *http.Request, def, max int) (int, error) {
 	v := r.URL.Query().Get("limit")
 	if v == "" {
@@ -435,7 +435,7 @@ func (s *Server) putProjectPlugin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, v)
 }
 
-// projectAndPlugin 解析路径中的项目与插件。
+// projectAndPlugin parses the project and the plugin in the path.
 func projectAndPlugin(r *http.Request) (uuid.UUID, string, error) {
 	project, err := pathUUID(r, "projectId")
 	if err != nil {
@@ -558,7 +558,8 @@ func (s *Server) putAgentPlugin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, v)
 }
 
-// folderChanged 在文件夹写入、建目录、移动或删除成功后写 folder.changed 事件；失败只记日志。
+// folderChanged writes a folder.changed event after a successful folder write, mkdir, move or delete; a failure is only
+// logged.
 func (s *Server) folderChanged(r *http.Request, path string) {
 	ctx := context.WithoutCancel(r.Context())
 	var project, agent *uuid.UUID
@@ -584,7 +585,7 @@ func (s *Server) folderChanged(r *http.Request, path string) {
 		by["address"] = p.Address
 	}
 	if err := s.Store.EmitPluginEvent(ctx, "folder.changed", project, agent, nil, nil, map[string]any{"level": level, "path": path, "by": by}); err != nil {
-		s.Log.Warn("写入文件夹变化事件失败", "err", err)
+		s.Log.Warn("failed to write the folder change event", "err", err)
 	}
 }
 
@@ -614,8 +615,10 @@ func (s *Server) listPluginMarkets(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"markets": markets})
 }
 
-// pluginIngress 是插件的 HTTP 入口（plugins/SPEC.md §11），不在契约的操作里：方法、路径、查询、头与正文（不超过 1 MiB）
-// 原样交给插件，插件的状态码、头与正文原样返回。via 为 external（对外端口 /hooks，无令牌）或 console（回环，控制台或该插件自己的令牌）。
+// pluginIngress is a plugin's HTTP entry point (plugins/SPEC.md §11), not one of the contract's operations: method,
+// path, query, headers and body (at most 1 MiB) are handed to the plugin as is, and the plugin's status code, headers
+// and body are returned as is. via is external (the external port's /hooks, no token) or console (loopback, with the
+// console or the plugin's own token).
 func (s *Server) pluginIngress(via string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("pluginId")

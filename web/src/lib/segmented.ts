@@ -1,5 +1,6 @@
-// 分段按钮（改版）：2px 藏青描边的胶囊，里面几段用 2px 竖线隔开，选中的一段是黄色（选中态一律黄色）。
-// 用在 ToggleGroup 上：segmentedClass 给 ToggleGroup，segmentedItemClass 给每个 ToggleGroupItem。
+// Segmented buttons (redesign): a pill with a 2px navy border, its segments separated by 2px vertical lines, the selected segment yellow
+// (selected states are always yellow).
+// Used on ToggleGroup: segmentedClass goes on the ToggleGroup, segmentedItemClass on each ToggleGroupItem.
 export const segmentedClass = 'h-8 flex-nowrap gap-0 overflow-hidden rounded-full border-2 border-ink bg-paper-raised p-0'
 
 export const segmentedItemClass =

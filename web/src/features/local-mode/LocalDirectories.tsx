@@ -26,7 +26,7 @@ type Target = { kind: 'add' } | { kind: 'edit'; entry: Directory }
 type Save = (body: Schemas['LocalDirectoriesPut']) => Promise<unknown>
 type Reload = () => Promise<Listing | undefined>
 
-// 与契约的 maxItems 相同。
+// Same as maxItems in the contract.
 const MAX_DIRECTORIES = 50
 const copy = t.localMode.directories
 const linkClass = 'font-black underline decoration-riso-pink decoration-2 underline-offset-4'
@@ -34,8 +34,9 @@ const linkClass = 'font-black underline decoration-riso-pink decoration-2 underl
 const toInput = (entry: Directory): DirectoryInput => ({ path: entry.path, note: entry.note })
 const isConflict = (error: unknown) => error instanceof ApiError && error.status === 412
 
-// 清单整体保存：把一次增、改、删套在最新的清单上，得到整份新清单与改动那一行的下标（用来对上服务端的字段错误）。
-// 要改或删的一项已不在清单里时为 null。
+// The list is saved as a whole: apply one add, edit or delete to the latest list to get the complete new list plus the index of
+// the changed row (used to match the server's field errors).
+// null when the entry to edit or delete is no longer in the list.
 function applyChange(listing: Listing, target: Target, value: DirectoryInput | null) {
   const current = listing.directories.map(toInput)
   if (target.kind === 'add') return value ? { directories: [...current, value], index: current.length } : null
@@ -44,7 +45,7 @@ function applyChange(listing: Listing, target: Target, value: DirectoryInput | n
   return { directories: value ? current.map((entry, i) => (i === index ? value : entry)) : current.filter((_, i) => i !== index), index }
 }
 
-// 项目设置的“本机目录”卡片内容（卡片标题由项目设置页给出）。
+// The content of the “本机目录” (Local directories) card in project settings (the project settings page provides the card title).
 export function ProjectLocalDirectories({ projectId }: { projectId: string }) {
   const query = useProjectLocalDirectories(projectId)
   const put = usePutProjectLocalDirectories(projectId)
@@ -60,7 +61,8 @@ export function ProjectLocalDirectories({ projectId }: { projectId: string }) {
   )
 }
 
-// Agent 配置的“本机目录”区块：项目 Agent 先列出继承自项目的条目（只读），再是它自己的；平台 Agent 只有自己的。
+// The “本机目录” (Local directories) block in Agent config: a project Agent first lists the entries inherited from the project
+// (read-only), then its own; a platform Agent only has its own.
 export function AgentLocalDirectoriesSection({ agent }: { agent: Schemas['Agent'] }) {
   const scope = useScope()
   const query = useAgentLocalDirectories(agent.id)
@@ -84,7 +86,7 @@ export function AgentLocalDirectoriesSection({ agent }: { agent: Schemas['Agent'
   )
 }
 
-// 页面上如实写明的两点：改动直接落在真实文件上；清单不是访问隔离。
+// Two points the page states plainly: changes land directly on the real files, and the list does not isolate access.
 function Cautions() {
   return (
     <Alert variant="warning" role="note">
@@ -101,7 +103,8 @@ function Cautions() {
   )
 }
 
-// “绑定本机目录”关着时，清单照常可改，但要说明它现在不交给 Agent。读不到开关时不提示。
+// When “绑定本机目录” (Bind local directories) is off, the list can still be edited as usual, but say that Agents aren't told
+// about it right now. No note when the switch can't be read.
 function DirectoriesOffNote() {
   const settings = useLocalModeSettings()
   if (settings.data?.directories !== false) return null
@@ -155,7 +158,8 @@ function DirectoryRows({ label, entries, actions }: { label: string; entries: Di
   )
 }
 
-// 一行：路径、备注；目录不存在、不是目录或读不了时在行内标出，这一项暂不交给 Agent，但不妨碍保存。
+// One row: path and note; when the directory doesn't exist, isn't a directory or can't be read, this is marked in the row and
+// Agents aren't told about this entry for now, but saving is not blocked.
 function DirectoryRow({ entry, actions }: { entry: Directory; actions?: ReactNode }) {
   const problem = entry.status === 'ok' ? null : entry.status
   return (
@@ -193,7 +197,8 @@ function DirectoryEditor({ listing, save, reload }: { listing: Listing; save: Sa
       await attempt(listing)
     } catch (error) {
       if (!isConflict(error)) throw error
-      // 移除的意图不因别处的修改而变：读取最新清单后再移除一次；那一项已经不在就算完成。
+      // The intent to remove doesn't change because of edits elsewhere: load the latest list and remove again; if the entry is
+      // already gone, that counts as done.
       const latest = await reload()
       if (latest) await attempt(latest)
     }
@@ -242,7 +247,7 @@ function DirectoryEditor({ listing, save, reload }: { listing: Listing; save: Sa
         body={copy.removeBody}
         confirmLabel={copy.remove}
         destructive
-        // 只从清单移除，目录和文件都还在，可以再加回来。
+        // This only removes it from the list; the directory and its files are still there and it can be added back.
         irreversible={false}
         onConfirm={() => (removing ? remove(removing) : undefined)}
       />
@@ -250,8 +255,9 @@ function DirectoryEditor({ listing, save, reload }: { listing: Listing; save: Sa
   )
 }
 
-// 添加或编辑一项。保存的是整份清单：服务端的字段错误按改动那一行的下标对到输入框下；别处改过清单（412）时读取最新内容，
-// 输入保留，再保存时套在新清单上。
+// Add or edit an entry. The whole list is saved: the server's field errors are matched to the inputs by the index of the
+// changed row; when the list was changed elsewhere (412), load the latest content, keep the input, and apply it to the new
+// list on the next save.
 function DirectoryDialog({ target, listing, save, reload, onClose }: { target: Target; listing: Listing; save: Save; reload: Reload; onClose: () => void }) {
   const initial = target.kind === 'edit' ? target.entry : null
   const [path, setPath] = useState(initial?.path ?? '')

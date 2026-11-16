@@ -14,7 +14,7 @@ import (
 
 const ()
 
-// clock 是固定不走的时钟：同一毫秒里的事件 ID 靠序号递增。
+// clock is a clock that never moves: event IDs within the same millisecond increase by sequence number.
 type clock struct {
 	mu sync.Mutex
 	t  time.Time
@@ -90,13 +90,13 @@ func TestAcquire(t *testing.T) {
 	const agent = "agent-1"
 	ownerA := coord.LockValue("run-a", "inst")
 
-	// 空闲：成功并带 TTL。
+	// Free: succeeds, with a TTL.
 	if !must[bool](t)(c.Acquire(ctx, agent, ownerA)) {
 		t.Fatal("空闲时应拿到锁")
 	}
 	assertOwner(t, c, agent, ownerA)
 
-	// 已被持有：拒绝且不改变持有者。
+	// Already held: rejected without changing the holder.
 	if must[bool](t)(c.Acquire(ctx, agent, coord.LockValue("run-b", "inst"))) {
 		t.Fatal("锁被持有时不应拿到锁")
 	}
@@ -135,7 +135,7 @@ func TestHoldRestoreRelease(t *testing.T) {
 	owner := coord.LockValue("run-a", "inst")
 	other := coord.LockValue("run-b", "inst")
 
-	// 锁空闲时 Hold 设为 owner；已是 owner 时不变。
+	// When the lock is free, Hold sets it to owner; when it is already owner, nothing changes.
 	if !must[bool](t)(c.Hold(ctx, agent, owner)) {
 		t.Fatal("锁空闲时 Hold 应拿到")
 	}
@@ -145,19 +145,19 @@ func TestHoldRestoreRelease(t *testing.T) {
 	}
 	assertOwner(t, c, agent, owner)
 
-	// 持有者不匹配时拒绝且不改动。
+	// Rejected without changes when the holder does not match.
 	if must[bool](t)(c.Hold(ctx, agent, other)) {
 		t.Fatal("持有者不匹配时 Hold 应失败")
 	}
 	assertOwner(t, c, agent, owner)
 
-	// Restore 仅在锁不存在时设置。
+	// Restore only sets the lock when it does not exist.
 	if must[bool](t)(c.Restore(ctx, agent, other)) {
 		t.Fatal("锁存在时 Restore 不应覆盖")
 	}
 	assertOwner(t, c, agent, owner)
 
-	// Release 按持有者比对删除。
+	// Release deletes after checking the holder.
 	if must[bool](t)(c.Release(ctx, agent, other)) {
 		t.Fatal("持有者不匹配时 Release 不应删除")
 	}
@@ -184,20 +184,20 @@ func TestSwap(t *testing.T) {
 	if !must[bool](t)(c.Acquire(ctx, agent, owner)) {
 		t.Fatal("应拿到锁")
 	}
-	// 持有者不匹配、或 current 为空但锁存在：不改动。
+	// Holder mismatch, or an empty current while the lock exists: no change.
 	for _, current := range []string{coord.LockValue("run-zz", "inst"), ""} {
 		if must[bool](t)(c.Swap(ctx, agent, current, "x|inst")) {
 			t.Fatalf("current=%q 时不应换锁", current)
 		}
 		assertOwner(t, c, agent, owner)
 	}
-	// 交给下一次执行：换锁并重新计 TTL。
+	// Hand over to the next run: swap the lock and restart the TTL.
 	next := coord.LockValue("run-1", "inst")
 	if !must[bool](t)(c.Swap(ctx, agent, owner, next)) {
 		t.Fatal("应换锁")
 	}
 	assertOwner(t, c, agent, next)
-	// 没有下一条：删除锁；锁不存在时非空 current 不匹配。
+	// No next run: delete the lock; when the lock does not exist, a non-empty current does not match.
 	if !must[bool](t)(c.Swap(ctx, agent, next, "")) {
 		t.Fatal("应删除锁")
 	}
@@ -205,7 +205,7 @@ func TestSwap(t *testing.T) {
 	if must[bool](t)(c.Swap(ctx, agent, next, "y|inst")) {
 		t.Fatal("锁不存在时非空 current 不应匹配")
 	}
-	// 锁不存在时 current 为空：可以直接接手，也可以什么都不做。
+	// An empty current when the lock does not exist: it can take over directly, or do nothing at all.
 	if !must[bool](t)(c.Swap(ctx, agent, "", "")) {
 		t.Fatal("空闲时空交接应成功")
 	}
@@ -256,12 +256,12 @@ func TestEventsAndText(t *testing.T) {
 	if got := must[string](t)(c.RunText(ctx, run)); got != text {
 		t.Fatalf("RunText = %q，期望 %q", got, text)
 	}
-	// runID 为空时不读文字。
+	// With an empty runID the text is not read.
 	if text2, last2, err := c.Snapshot(ctx, agent, ""); err != nil || text2 != "" || last2 != last {
 		t.Fatalf("空 runID 快照 = (%q, %q, %v)", text2, last2, err)
 	}
 
-	// 从快照位置之后读取：阻塞超时返回空结果而非错误。
+	// Read from after the snapshot position: a blocking read that times out returns an empty result, not an error.
 	start := time.Now()
 	evs, err := c.ReadEvents(ctx, agent, last, 10, 100*time.Millisecond)
 	check(t, err)
@@ -272,7 +272,7 @@ func TestEventsAndText(t *testing.T) {
 		t.Fatal("ReadEvents 应阻塞到超时")
 	}
 
-	// 阻塞读取期间追加的事件能被读到。
+	// Events appended during a blocking read are seen by it.
 	done := make(chan []coord.Event, 1)
 	go func() {
 		evs, _ := c.ReadEvents(ctx, agent, last, 10, 5*time.Second)
@@ -290,7 +290,7 @@ func TestEventsAndText(t *testing.T) {
 		t.Fatal("阻塞读取未返回")
 	}
 
-	// 从中间位置读取：按顺序返回剩余事件且不重复。
+	// Reading from a middle position: returns the remaining events in order without duplicates.
 	mid := 2
 	evs, err = c.ReadEvents(ctx, agent, ids[mid], 100, 0)
 	check(t, err)
@@ -305,7 +305,7 @@ func TestEventsAndText(t *testing.T) {
 		t.Fatalf("事件内容不符：%+v", evs[0])
 	}
 
-	// COUNT 限制条数。
+	// COUNT limits the number of entries.
 	evs, err = c.ReadEvents(ctx, agent, "0-0", 2, 0)
 	check(t, err)
 	if len(evs) != 2 || evs[0].ID != startID || evs[0].Type != "run_started" || string(evs[0].Data) != `{"runId":"run-5"}` {
@@ -366,7 +366,7 @@ func TestCompareIDs(t *testing.T) {
 		{"1-0", "0-0", 1},
 		{"0-0", "1-0", -1},
 		{"1700000000000-1", "1700000000000-0", 1},
-		{"1700000000000-2", "1700000000000-10", -1}, // 按数值而非字典序
+		{"1700000000000-2", "1700000000000-10", -1}, // numerically, not lexicographically
 		{"999-0", "1000-0", -1},
 		{"1700000000001-0", "1700000000000-99", 1},
 		{"5", "5-0", 0},
@@ -387,7 +387,7 @@ func TestInterruptPubSub(t *testing.T) {
 
 	ch, err := c.SubscribeInterrupts(ctx, agent)
 	check(t, err)
-	// 其他 Agent 的命令不应收到。
+	// Commands for other Agents must not be received.
 	check(t, c.PublishInterrupt(ctx, "agent-other", "run-x"))
 	check(t, c.PublishInterrupt(ctx, agent, "run-1"))
 	check(t, c.PublishInterrupt(ctx, agent, "run-2"))

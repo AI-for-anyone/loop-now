@@ -1,11 +1,13 @@
-// Package buildinfo 提供服务端与 loopctl 共用的版本号，用于响应头 Loop-Now-Version 与客户端的版本比对。
+// Package buildinfo provides the version number shared by the server and loopctl, used for the Loop-Now-Version
+// response header and the client's version comparison.
 //
-// 发布构建时用 ldflags 注入：
+// Release builds inject it with ldflags:
 //
-//	go build -ldflags "-X loop-now/internal/buildinfo.version=<版本>" ./cmd/...
+//	go build -ldflags "-X loop-now/internal/buildinfo.version=<version>" ./cmd/...
 //
-// 未注入时，按 Go 写入二进制的 VCS 信息生成 dev-<修订号前 12 位>，工作区有未提交改动时加 -dirty；
-// 连 VCS 信息也没有时为 dev。
+// Without injection, it is built from the VCS information Go writes into the binary as
+// dev-<first 12 characters of the revision>, with -dirty added when the work tree has uncommitted changes; when
+// there is no VCS information either, it is dev.
 package buildinfo
 
 import (
@@ -13,7 +15,7 @@ import (
 	"sync"
 )
 
-// version 由 ldflags 注入，不导出，只能通过 Version 读取。
+// version is injected with ldflags; it is not exported and can only be read through Version.
 var version string
 
 var fallback = sync.OnceValue(func() string {
@@ -21,7 +23,7 @@ var fallback = sync.OnceValue(func() string {
 	return resolve("", bi, ok)
 })
 
-// Version 返回本程序的版本。
+// Version returns the version of this program.
 func Version() string {
 	if version != "" {
 		return version
@@ -29,7 +31,7 @@ func Version() string {
 	return fallback()
 }
 
-// resolve 按注入值与构建信息计算版本。
+// resolve computes the version from the injected value and the build information.
 func resolve(injected string, bi *debug.BuildInfo, ok bool) string {
 	if injected != "" {
 		return injected

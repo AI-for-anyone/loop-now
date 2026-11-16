@@ -10,10 +10,11 @@ import (
 	"loop-now/internal/server/apitypes"
 )
 
-// invalid 标记故意违反契约的请求，契约桩不把它们记为失败。
+// invalid marks requests that deliberately violate the contract, so the contract stub does not record them as failures.
 var invalid = []string{"X-Contract-Invalid-Request", "1"}
 
-// 三类文件夹（Agent、项目上下文、全局上下文）共用同一组接口；响应都经契约校验。
+// The three kinds of folders (Agent, project context, global context) share one set of endpoints; all responses are
+// validated against the contract.
 func TestFolderEndpoints(t *testing.T) {
 	e := newEnv(t)
 	agent := decode[apitypes.Agent](t, e.expect(201, "POST", e.agents(), map[string]any{"name": "文件夹", "model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}}))
@@ -70,7 +71,7 @@ func TestFolderEndpoints(t *testing.T) {
 	e.expect(404, "GET", "/agents/"+uuid.NewString()+"/folder/entries", nil)
 	e.expect(404, "GET", "/projects/"+uuid.NewString()+"/context-folder/entries", nil)
 
-	// Git 拉取：校验、列表与查询（实际克隆见 folders 包的测试）。
+	// Git pull: validation, list and query (actual cloning is covered by the folders package tests).
 	a := roots["agent"]
 	e.expect(422, "POST", a+"/git-pulls", map[string]any{"actionId": uuid.New(), "url": "https://user:pw@example.com/r.git", "branch": "main", "path": "repo"})
 	e.expect(409, "POST", a+"/git-pulls", map[string]any{"actionId": uuid.New(), "url": "https://example.com/r.git", "branch": "main", "path": "AGENTS.md"})

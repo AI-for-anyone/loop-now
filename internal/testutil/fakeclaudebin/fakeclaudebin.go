@@ -1,4 +1,4 @@
-// Package fakeclaudebin 为测试构建 fakeclaude 二进制（每个测试进程只构建一次）。
+// Package fakeclaudebin builds the fakeclaude binary for tests (only once per test process).
 package fakeclaudebin
 
 import (
@@ -18,7 +18,7 @@ var (
 	err  error
 )
 
-// Path 返回构建好的 fakeclaude 路径；构建失败时让测试失败。
+// Path returns the path of the built fakeclaude; if the build fails, it fails the test.
 func Path(t testing.TB) string {
 	t.Helper()
 	once.Do(func() {
@@ -34,8 +34,10 @@ func Path(t testing.TB) string {
 			err = fmt.Errorf("构建 fakeclaude 失败：%v\n%s", e, out)
 			return
 		}
-		// 新构建的二进制第一次执行时，系统会先检查它（macOS 上空闲时比之后慢 10～25 倍，并行跑全部测试时可达数秒）。
-		// 构建后先执行一次，让这笔一次性开销落在这里，而不是算进第一个启动 Claude Code 的测试的就绪时限。
+		// The first time a freshly built binary runs, the system checks it first (on macOS that is 10 to 25 times
+		// slower than later runs when the machine is idle, and can take several seconds when all tests run in
+		// parallel). Run it once right after building so this one-time cost is paid here, instead of counting
+		// against the readiness deadline of the first test that starts Claude Code.
 		if out, e := exec.Command(path, "--version").CombinedOutput(); e != nil {
 			err = fmt.Errorf("预先执行 fakeclaude 失败：%v\n%s", e, out)
 		}

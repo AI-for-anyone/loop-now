@@ -15,8 +15,9 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// OpenQuestion 供统一问题服务接入：在同一事务中创建原题并绑定当前节点，保证一节点一未回答问题。
-// create只能写问题/Inbox数据，不能回调本服务再次获取任务锁。
+// OpenQuestion is the entry point for the unified question service: in one transaction it creates the original question
+// and binds it to the current node, guaranteeing at most one unanswered question per node. create may only write
+// question/Inbox data; it must not call back into this service to take the task lock again.
 func (s *Service) OpenQuestion(ctx context.Context, p auth.Principal, nodeID uuid.UUID, create func(*db.Tx) (taskmodel.Question, error)) (json.RawMessage, error) {
 	return s.Store.MutateTask(ctx, p.TaskID, nil, func(m *store.TaskMutation) (any, error) {
 		if e := nodeActor(p, m, nodeID); e != nil {
@@ -39,13 +40,14 @@ func (s *Service) OpenQuestion(ctx context.Context, p auth.Principal, nodeID uui
 		if q.ID == uuid.Nil || q.ThreadID == uuid.Nil || q.MessageID == uuid.Nil || q.Status != "open" {
 			return nil, apperr.Invalid("question", "统一问题服务返回的原题引用无效")
 		}
-		q.CanAnswer = false // 权限按读取方即时计算，不能把创建者或控制台权限缓存给其他身份。
+		q.CanAnswer = false // computed per reader on read; never cache the creator's or console's permissions for others
 		n.Question = &q
 		return q, m.Emit("node.updated", map[string]any{"node": n})
 	})
 }
 
-// QuestionChanged 由统一问题服务提交后通知，可重复执行。迟到旧题只更新历史，不唤醒新节点或结束任务。
+// QuestionChanged is called by the unified question service after its commit, and may run repeatedly. A late, older
+// question only updates the history; it does not wake a newer node or end the task.
 func (s *Service) QuestionChanged(ctx context.Context, taskID, questionID uuid.UUID, status string) error {
 	if status != "answered" && status != "expired" && status != "closed" {
 		return apperr.Invalid("status", "问题终态无效")
@@ -83,7 +85,8 @@ func (s *Service) QuestionChanged(ctx context.Context, taskID, questionID uuid.U
 	return err
 }
 
-// QuestionViews从统一问题服务按当前读取方取得可答权限；未接入时安全地显示不可回答。
+// QuestionViews gets the answer permission for the current reader from the unified question service; when that is not
+// wired in, it safely shows the question as not answerable.
 func (s *Service) QuestionViews(ctx context.Context, p auth.Principal, d taskmodel.Detail) (taskmodel.Detail, error) {
 	for i := range d.Nodes {
 		if q := d.Nodes[i].Question; q != nil {

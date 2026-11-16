@@ -42,7 +42,8 @@ func (s *Service) ResolveTaskRecipient(ctx context.Context, agentID, taskID uuid
 	return store.AgentParty(*project.ManagerAgentID), true, nil
 }
 
-// DeliverInbox 将消息与任务提醒在任务事务中一起保存；普通消息不回答原问题。
+// DeliverInbox saves the message together with the task reminder in the task transaction; a regular message does not
+// answer the original question.
 func (s *Service) DeliverInbox(ctx context.Context, msg store.NewInboxMessage) error {
 	inst, err := s.Store.TaskInstance(ctx, msg.To.RuntimeID)
 	if err != nil {
@@ -102,11 +103,13 @@ func (s *Service) DeliverInboxTx(ctx context.Context, tx *db.Tx, m *store.TaskMu
 	if e != nil {
 		return e
 	}
-	// 这条消息由这一轮承载；被这次打断结束的旧轮次里仍待处理的消息也并入它，排队列表随之显示。
+	// This message is carried by this turn; messages still pending in older turns that this interrupt ended are merged
+	// into it as well, and the queue list shows them accordingly.
 	if e = store.LinkInboxTurnTx(ctx, m.Tx, msg.ID, turn.ID); e != nil {
 		return e
 	}
-	// 原题的回答或到期通知还负责唤醒等待问题结果的节点：即使消息先被读取或被取消，这一轮也照常执行。
+	// An answer to the original question, or its expiry notice, is also responsible for waking the node waiting for the
+	// question's result: even if the message was read or cancelled first, this turn still runs as usual.
 	var resolves bool
 	if e = m.Tx.QueryRow(ctx, `SELECT answers_message_id IS NOT NULL OR notice IS NOT NULL FROM inbox_messages WHERE id=$1`, msg.ID).Scan(&resolves); e != nil {
 		return e
@@ -119,8 +122,9 @@ func (s *Service) DeliverInboxTx(ctx context.Context, tx *db.Tx, m *store.TaskMu
 	return store.AdoptTaskInboxOrphansTx(ctx, m.Tx, inst.ID, turn.ID)
 }
 
-// enqueueTaskInboxReminder 为发给任务实例的非严格消息并入或新建提醒轮次：实例是当前未阻塞节点时为节点提醒，
-// 否则为只处理对话的提醒。
+// enqueueTaskInboxReminder merges a non-strict message addressed to a task instance into a reminder turn, or creates
+// one: a node reminder when the instance is the current, unblocked node, otherwise a reminder that only handles the
+// conversation.
 func (s *Service) enqueueTaskInboxReminder(ctx context.Context, m *store.TaskMutation, inst store.TaskInstance, priority int, trigger uuid.UUID) (store.TaskTurn, error) {
 	n := m.Record.Current()
 	if n == nil || n.RuntimeID != inst.ID || n.Status == "blocked" {

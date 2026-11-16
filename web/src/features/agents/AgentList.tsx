@@ -16,20 +16,21 @@ import { cn } from '@/lib/utils'
 
 const text = t.shell
 
-// 参与搜索的文字：显示名称，以及服务端提供时的地址。
+// The text that search matches against: the display name, plus the address when the server provides one.
 function searchableText(agent: Schemas['AgentListItem']): string[] {
   const address = 'address' in agent && typeof agent.address === 'string' ? [agent.address] : []
   return [agent.name, ...address]
 }
 
-// 不区分大小写的包含匹配，搜索词去掉首尾空白；搜索词为空时全部匹配。
+// Case-insensitive substring match; the search term is trimmed of leading and trailing whitespace. An empty term matches everything.
 function matchesAgent(agent: Schemas['AgentListItem'], search: string): boolean {
   const keyword = search.trim().toLowerCase()
   return keyword === '' || searchableText(agent).some((text) => text.toLowerCase().includes(keyword))
 }
 
-// 每行右侧最多一个状态标签，按会话丢失、回复中、sleep、Manager 的优先级；空闲时不显示。
-// sleep 与 Manager 在蓝底上是半透明藏青底；所在的行被选中（黄底）时改为藏青底白字的胶囊，半透明的在黄底上看不清。
+// At most one status tag on the right of each row, by priority: session lost, replying, sleep, Manager. Nothing is shown when idle.
+// On the blue background, sleep and Manager use a semi-transparent navy background; when their row is selected (yellow
+// background) they become a pill with white text on solid navy, because the semi-transparent one is hard to read on yellow.
 function StatusTag({ agent, current }: { agent: Schemas['AgentListItem']; current: boolean }) {
   const quiet = current ? 'rounded-full bg-ink px-2 text-white' : 'bg-ink/45 text-white'
   const sleeping = !agent.busy && agent.sleep?.state === 'sleeping' && agent.sleep.wakeAt ? agent.sleep : null
@@ -51,7 +52,8 @@ function StatusTag({ agent, current }: { agent: Schemas['AgentListItem']; curren
   )
 }
 
-// 无法连接时用网点骨架占位，说明文字与列表请求失败时相同。
+// When the server can't be reached, show a halftone skeleton as a placeholder; the explanatory text is the same as when the
+// list request fails.
 function Skeleton() {
   return (
     <div className="grid gap-1.5 px-1 pt-1">
@@ -65,9 +67,11 @@ function Skeleton() {
   )
 }
 
-// 左侧栏的 Agent 分组：标题（项目里是 AGENT，全局是平台 AGENT）与新建按钮，下面是这个范围的 Agent。
-// 每行是叠印头像、名称、运行时标记（只有 Claude Code）、状态标签与“待你回复”的贴纸；搜索只影响显示，不影响定期刷新与已打开的 Agent。
-// 项目列表还没加载出来时 scope 为 null：只显示加载中，或项目列表因无法连接而失败时的骨架（listError）。
+// The Agent group in the sidebar: a heading (AGENT in a project, platform AGENT in global) and a New button, with this scope's
+// Agents below. Each row is an overprinted avatar, the name, a runtime mark (Claude Code only), a status tag and a
+// “待你回复” (Needs your reply) sticker. Search only affects what is shown, not the periodic refresh or the Agent already open.
+// While the project list hasn't loaded yet, scope is null: show only "loading", or the skeleton when the project list failed
+// because the server can't be reached (listError).
 export function AgentNavGroup({
   scope,
   title,
@@ -88,11 +92,12 @@ export function AgentNavGroup({
   const headingId = useId()
   const list = agents.data?.agents ?? []
   const shown = list.filter((agent) => matchesAgent(agent, search))
-  // 待你回复：这个 Agent 发给你、还没处理的问题与新消息（不含它的任务实例）。
+  // Needs your reply: questions and new messages this Agent sent you that haven't been handled yet (not counting its task instances).
   const pending = useInboxPending()
   const pendingByAgent = new Map((pending.data?.byAgent ?? []).map((row) => [row.agentId, row]))
-  // 无法连接且没有可用的列表（从未加载成功，或最近一次刷新因无法连接而失败）时改为网点骨架；
-  // 已加载的列表在下一次刷新失败前照常显示，个别请求失败不会让列表闪烁。
+  // Switch to the halftone skeleton when the server can't be reached and there is no usable list (it never loaded, or the
+  // latest refresh failed because the server was unreachable). A list that has loaded stays shown as usual until a later
+  // refresh fails, so an occasional failed request doesn't make the list flicker.
   const offline = (!reachable && (!agents.data || isUnreachable(agents.error))) || (!scope && isUnreachable(listError))
   const loading = scope ? agents.isPending : !offline
 
@@ -125,8 +130,9 @@ export function AgentNavGroup({
                 <li key={agent.id} className="min-w-0">
                   <Link to={agentPath(scope, agent.id)} aria-current={current ? 'page' : undefined} className={navRowClass(current, 'agent')}>
                     <AgentAvatar size="sm" id={agent.id} />
-                    {/* 名字先占满：常见长度的名字（选中时也）完整显示，右边的运行时、状态与 Manager 标记放不下时换到下一行，
-                        靠右；比整行还长的名字才截断，悬停看到全名。 */}
+                    {/* The name fills the space first: names of usual length are shown in full (also when selected), and the
+                        runtime, status and Manager marks on the right wrap to the next line, right-aligned, when they don't fit.
+                        Only a name longer than the whole row is truncated; hovering shows the full name. */}
                     <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
                       <span title={agent.name} className="max-w-full truncate">
                         {agent.name}

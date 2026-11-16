@@ -27,7 +27,8 @@ import (
 	"loop-now/internal/server/preflight"
 )
 
-// maintenanceErr 把维护操作里可以预期的失败标上 executor 的哨兵错误（原错误仍在链上）。
+// maintenanceErr marks expected failures in maintenance operations with executor's sentinel errors (the original error
+// stays in the chain).
 func maintenanceErr(err error) error {
 	if errors.Is(err, ErrRuntimeBusy) {
 		return fmt.Errorf("%w：%w", executor.ErrMaintenanceBusy, err)
@@ -35,7 +36,8 @@ func maintenanceErr(err error) error {
 	return err
 }
 
-// compact 在当前真实运行里执行手动压缩，复用中断、事件、用量和会话记录链。
+// compact runs a manual compaction inside the current real run, reusing the interrupt, event, usage and session record
+// chain.
 func (e *Executor) compact(ctx context.Context, p *proc, r *run, req executor.Request, snap agentconfig.Snapshot) executor.Result {
 	runID := req.RunID
 	result, err := p.client.Compact(ctx, req.Message)
@@ -69,7 +71,8 @@ func (e *Executor) compact(ctx context.Context, p *proc, r *run, req executor.Re
 	return res
 }
 
-// StopIdle 停止没有执行的空闲运行时；没有进程时成功返回 false。reason 是平台命令的停止原因（idleStopReasons）。
+// StopIdle stops an idle runtime that has no run; with no process it returns false without error. reason is the stop
+// reason of the platform command (idleStopReasons).
 func (e *Executor) StopIdle(ctx context.Context, agentID uuid.UUID, reason string) (bool, error) {
 	if !slices.Contains(idleStopReasons, reason) {
 		return false, fmt.Errorf("未知的停止原因 %q", reason)
@@ -77,7 +80,8 @@ func (e *Executor) StopIdle(ctx context.Context, agentID uuid.UUID, reason strin
 	return e.stopIdle(ctx, agentID, reason)
 }
 
-// stopIdle 在维护预留下停止 Agent 的空闲进程并等它退出（平台命令与任务分叉共用）。
+// stopIdle stops the Agent's idle process under a maintenance reservation and waits for it to exit (shared by platform
+// commands and task forks).
 func (e *Executor) stopIdle(ctx context.Context, agentID uuid.UUID, reason string) (bool, error) {
 	free, err := e.reserveMaintenance(ctx, agentID)
 	if err != nil {
@@ -104,9 +108,10 @@ func (e *Executor) stopIdle(ctx context.Context, agentID uuid.UUID, reason strin
 	}
 }
 
-// ExportSession 导出 Agent 的受管 Pi 会话。sessionFile 是数据库记下的当前会话文件，只接受 sessions 目录里的文件。
-// JSONL 直接读会话文件；HTML 用 `pi --export <会话文件> <输出>` 生成（exportHTML）。两者都不需要执行快照与运行准备，
-// 不启动运行时，也不碰存活的空闲进程。
+// ExportSession exports the Agent's managed Pi session. sessionFile is the current session file recorded in the
+// database; only files in the sessions directory are accepted. JSONL reads the session file directly; HTML is generated
+// with `pi --export <session file> <output>` (exportHTML). Neither needs a run snapshot or run preparation; neither
+// starts the runtime or touches a live idle process.
 func (e *Executor) ExportSession(ctx context.Context, agentID uuid.UUID, sessionFile, format string) (executor.SessionExport, error) {
 	if format != "jsonl" && format != "html" {
 		return executor.SessionExport{}, fmt.Errorf("不支持的导出格式 %q", format)
@@ -149,12 +154,14 @@ func (e *Executor) ExportSession(ctx context.Context, agentID uuid.UUID, session
 	return executor.SessionExport{Filename: name, ContentType: "text/html; charset=utf-8", Data: data}, nil
 }
 
-// exportTimeout 是 `pi --export` 的最长用时。
+// exportTimeout is the longest `pi --export` may take.
 const exportTimeout = time.Minute
 
-// exportHTML 运行 `pi --offline --export <会话文件> <输出>` 生成 HTML：Pi 只读会话文件、写出页面就退出，不调用模型。
-// 它用 Agent 自己的 HOME、临时目录与 Pi 目录（与运行时相同），只带基础环境，不带凭证、插件与 CLI 的环境变量。
-// 与 RPC 的 export_html 不同，页面里没有当前进程的系统提示词与工具定义（Pi 的 --export 本来如此）。
+// exportHTML runs `pi --offline --export <session file> <output>` to generate HTML: Pi only reads the session file,
+// writes the page and exits, without calling a model. It uses the Agent's own HOME, temp directory and Pi directory
+// (the same as the runtime), with only the base environment and no credential, plugin or CLI environment variables.
+// Unlike RPC's export_html, the page does not contain the current process's system prompt and tool definitions (that is
+// how Pi's --export works).
 func (e *Executor) exportHTML(ctx context.Context, d agentDirs, sessionFile string) ([]byte, error) {
 	if err := os.MkdirAll(d.tmp, 0o700); err != nil {
 		return nil, err
@@ -187,7 +194,8 @@ func (e *Executor) exportHTML(ctx context.Context, d agentDirs, sessionFile stri
 	return os.ReadFile(output)
 }
 
-// exportEnv 是 `pi --export` 的环境：透传变量、基础环境与 Agent 的目录。
+// exportEnv is the environment of `pi --export`: passed-through variables, the base environment and the Agent's
+// directories.
 func (e *Executor) exportEnv(d agentDirs) []string {
 	vars := map[string]string{}
 	for _, name := range e.o.Passthrough {
@@ -211,7 +219,7 @@ func (e *Executor) exportEnv(d agentDirs) []string {
 	return out
 }
 
-// limitedBuffer 只留前 max 个字节。
+// limitedBuffer keeps only the first max bytes.
 type limitedBuffer struct {
 	b   *bytes.Buffer
 	max int
@@ -224,9 +232,11 @@ func (l *limitedBuffer) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// ListSessions 列出 sessions 目录里的有效 Pi 会话（头一行是 {"type":"session","id":…}），带第一条与最后一条普通用户文字。
-// 只读文件，不获取执行快照、不启动 Pi，也不需要 Agent 空闲。标题只向前读、预览只从末尾往回读，各读一段（sessionTextWindow），
-// 按文件的大小与修改时间缓存，长会话不会每次整份解码。ID 重复的会话都不列出（无法确定恢复哪一个）。
+// ListSessions lists the valid Pi sessions in the sessions directory (whose first line is {"type":"session","id":...}),
+// with the first and the last plain user text. It only reads files: it does not take a run snapshot, does not start Pi,
+// and does not need the Agent to be idle. The title is read only forwards and the preview only backwards from the end,
+// one window each (sessionTextWindow), cached by file size and modification time, so a long session is not decoded in
+// full every time. Sessions whose ID is duplicated are all left out (there is no telling which one to resume).
 func (e *Executor) ListSessions(ctx context.Context, agentID uuid.UUID, currentFile string) ([]executor.ManagedSession, error) {
 	out, err := e.scanSessions(ctx, agentID, currentFile, true)
 	if err != nil {
@@ -244,7 +254,8 @@ func (e *Executor) ListSessions(ctx context.Context, agentID uuid.UUID, currentF
 	return out, nil
 }
 
-// ResolveSession 按完整会话 ID 找到 sessions 目录里的会话，只读各文件的头一行；找不到或 ID 重复时返回 nil。
+// ResolveSession finds the session in the sessions directory by its full session ID, reading only the first line of
+// each file; it returns nil when there is none or the ID is duplicated.
 func (e *Executor) ResolveSession(ctx context.Context, agentID uuid.UUID, sessionID, currentFile string) (*executor.ManagedSession, error) {
 	all, err := e.scanSessions(ctx, agentID, currentFile, false)
 	if err != nil {
@@ -258,7 +269,7 @@ func (e *Executor) ResolveSession(ctx context.Context, agentID uuid.UUID, sessio
 	return nil, nil
 }
 
-// sessionMeta 是一个会话文件的 ID 与用户文字摘要；size 与 mod 变了就重新读。
+// sessionMeta is a session file's ID and summary of user text; it is re-read when size or mod changes.
 type sessionMeta struct {
 	size           int64
 	mod            time.Time
@@ -267,10 +278,12 @@ type sessionMeta struct {
 	title, preview string
 }
 
-// sessionTextWindow 是找标题（向前）与预览（从末尾往回）时各读的最多字节数。
+// sessionTextWindow is the most bytes read each when looking for the title (forwards) and the preview (backwards from
+// the end).
 const sessionTextWindow = 1 << 20
 
-// scanSessions 读 sessions 目录里每个 .jsonl 的头一行（withText 时再读标题与预览），去掉无效与 ID 重复的会话。
+// scanSessions reads the first line of every .jsonl in the sessions directory (plus the title and preview with
+// withText), dropping invalid sessions and sessions with duplicated IDs.
 func (e *Executor) scanSessions(ctx context.Context, agentID uuid.UUID, currentFile string, withText bool) ([]executor.ManagedSession, error) {
 	d := e.dirs(agentID)
 	entries, err := os.ReadDir(d.sessions)
@@ -315,7 +328,8 @@ func (e *Executor) scanSessions(ctx context.Context, agentID uuid.UUID, currentF
 	return slices.DeleteFunc(out, func(m executor.ManagedSession) bool { return duplicates[m.ID] }), nil
 }
 
-// sessionMeta 返回会话文件的 ID 与（withText 时）标题与预览，文件没变时用缓存；不是有效会话时 ok 为 false。
+// sessionMeta returns a session file's ID and (with withText) its title and preview, using the cache when the file has
+// not changed; ok is false when it is not a valid session.
 func (e *Executor) sessionMeta(path string, info os.FileInfo, withText bool) (sessionMeta, bool) {
 	if v, ok := e.sessionCache.Load(path); ok {
 		m := v.(sessionMeta)
@@ -339,7 +353,7 @@ func (e *Executor) sessionMeta(path string, info os.FileInfo, withText bool) (se
 		ID   string `json:"id"`
 	}
 	if json.Unmarshal(head, &header) != nil || header.Type != "session" || header.ID == "" {
-		e.sessionCache.Store(path, m) // 无效的也缓存，文件没变就不再读
+		e.sessionCache.Store(path, m) // invalid ones are cached too, so an unchanged file is not read again
 		return m, false
 	}
 	m.id = header.ID
@@ -351,7 +365,8 @@ func (e *Executor) sessionMeta(path string, info os.FileInfo, withText bool) (se
 	return m, true
 }
 
-// firstUserText 顺序读记录，返回第一条普通用户文字（截到 80 字）；读完窗口或遇到损坏的行就停。
+// firstUserText reads records in order and returns the first plain user text (cut to 80 characters); it stops at the
+// end of the window or at a corrupt line.
 func firstUserText(r *bufio.Reader) string {
 	for {
 		line, err := r.ReadBytes('\n')
@@ -364,7 +379,8 @@ func firstUserText(r *bufio.Reader) string {
 	}
 }
 
-// lastUserText 从文件末尾往回读一段，返回其中最后一条普通用户文字（截到 160 字）。窗口开头的半行丢掉。
+// lastUserText reads one window backwards from the end of the file and returns the last plain user text in it (cut to
+// 160 characters). The partial line at the start of the window is dropped.
 func lastUserText(f *os.File, size int64) string {
 	start := max(0, size-sessionTextWindow)
 	buf := make([]byte, size-start)
@@ -383,10 +399,11 @@ func lastUserText(f *os.File, size int64) string {
 	return ""
 }
 
-// sessionLineUserText 返回一行记录里的普通用户文字（不是用户消息、以 "/" 开头的命令或无法解析时为空）。
+// sessionLineUserText returns the plain user text in one record line (empty when it is not a user message, is a command
+// starting with "/", or cannot be parsed).
 func sessionLineUserText(line []byte) string {
 	if !bytes.Contains(line, []byte(`"user"`)) {
-		return "" // 大多数行是助手消息与工具结果，不必解码
+		return "" // most lines are assistant messages and tool results, no need to decode them
 	}
 	var record struct {
 		Type    string `json:"type"`
@@ -446,7 +463,8 @@ func truncateSessionText(text string, limit int) string {
 	return string(runes[:limit]) + "…"
 }
 
-// managedSessionFile 只接受 sessions 目录内已存在的直接子文件，并解析软链接后再次验证。
+// managedSessionFile accepts only existing direct children of the sessions directory, and checks again after resolving
+// symlinks.
 func managedSessionFile(d agentDirs, path string) (string, error) {
 	if path == "" || !filepath.IsAbs(path) {
 		return "", errors.New("会话路径不受平台管理")
@@ -469,17 +487,18 @@ func managedSessionFile(d agentDirs, path string) (string, error) {
 	return resolved, nil
 }
 
-// commandsFile 是 Agent 目录里上次启动 Pi 时读到的命令列表（Pi RPC get_commands），供对话页的 "/" 菜单用；
-// 平台不会为了列命令专门拉起 Pi。
+// commandsFile is the command list (Pi RPC get_commands) read the last time the Agent started Pi, kept in the Agent
+// directory for the "/" menu on the conversation page; the platform never starts Pi just to list commands.
 const commandsFile = "pi-commands.json"
 
-// cacheCommands 读出刚启动的 Pi 的命令并写进 Agent 目录；失败只记日志，不影响执行。
+// cacheCommands reads the commands of the Pi that just started and writes them into the Agent directory; a failure is
+// only logged and does not affect the run.
 func (e *Executor) cacheCommands(p *proc) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	data, err := p.client.Call(ctx, "get_commands", nil)
 	if err != nil {
-		p.log.Warn("读取 Pi 命令列表失败", "err", err)
+		p.log.Warn("failed to read the Pi command list", "err", err)
 		return
 	}
 	var raw struct {
@@ -493,7 +512,7 @@ func (e *Executor) cacheCommands(p *proc) {
 		} `json:"commands"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
-		p.log.Warn("解析 Pi 命令列表失败", "err", err)
+		p.log.Warn("failed to parse the Pi command list", "err", err)
 		return
 	}
 	out := executor.PiCommands{CapturedAt: time.Now().UTC(), Commands: []executor.PiCommand{}}
@@ -514,16 +533,17 @@ func (e *Executor) cacheCommands(p *proc) {
 	path := filepath.Join(p.dirs.root, commandsFile)
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		p.log.Warn("保存 Pi 命令列表失败", "err", err)
+		p.log.Warn("failed to save the Pi command list", "err", err)
 		return
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		_ = os.Remove(tmp)
-		p.log.Warn("保存 Pi 命令列表失败", "err", err)
+		p.log.Warn("failed to save the Pi command list", "err", err)
 	}
 }
 
-// Commands 返回 Agent 上次启动 Pi 时读到的命令；从没启动过（或还没读到）时为 nil。
+// Commands returns the commands read the last time the Agent started Pi; nil when Pi has never started (or they have
+// not been read yet).
 func (e *Executor) Commands(agentID uuid.UUID) (*executor.PiCommands, error) {
 	b, err := os.ReadFile(filepath.Join(e.dirs(agentID).root, commandsFile))
 	if errors.Is(err, fs.ErrNotExist) {
@@ -534,7 +554,7 @@ func (e *Executor) Commands(agentID uuid.UUID) (*executor.PiCommands, error) {
 	}
 	var out executor.PiCommands
 	if err := json.Unmarshal(b, &out); err != nil {
-		return nil, nil // 写到一半或旧格式：当作没有
+		return nil, nil // half-written or old format: treat as none
 	}
 	return &out, nil
 }

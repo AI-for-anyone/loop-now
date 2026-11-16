@@ -32,7 +32,8 @@ func build(t *testing.T, version string) (*Manifest, string) {
 	return m, dir
 }
 
-// 4 个平台的二进制、SHA256SUMS 与 manifest.json；摘要与 shasum 的结果一致；本机二进制报告的版本与清单一致。
+// Binaries for 4 platforms, SHA256SUMS and manifest.json; the digests match shasum's results; the version the
+// binary for this machine reports matches the manifest.
 func TestBuild(t *testing.T) {
 	if testing.Short() {
 		t.Skip("交叉编译 4 个平台较慢")
@@ -46,7 +47,7 @@ func TestBuild(t *testing.T) {
 	if err := json.Unmarshal(b, &onDisk); err != nil || len(onDisk.Artifacts) != 5 {
 		t.Fatalf("manifest.json：%v", err)
 	}
-	if shasum, err := exec.LookPath("shasum"); err == nil && runtime.GOOS != "windows" { // runner 上的 shasum.bat 不能直接运行
+	if shasum, err := exec.LookPath("shasum"); err == nil && runtime.GOOS != "windows" { // shasum.bat on the runner cannot be run directly
 		cmd := exec.Command(shasum, "-a", "256", "-c", "SHA256SUMS")
 		cmd.Dir = dir
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -87,7 +88,7 @@ func TestBuild(t *testing.T) {
 	}
 }
 
-// 同一提交、同一版本号构建两次，SHA256SUMS 完全相同。
+// Building twice from the same commit with the same version number gives identical SHA256SUMS.
 func TestReproducible(t *testing.T) {
 	if testing.Short() {
 		t.Skip("交叉编译 4 个平台较慢")
@@ -116,8 +117,9 @@ func TestRejectsBadInput(t *testing.T) {
 	}
 }
 
-// 服务端用自己的读取逻辑（internal/server/loopctldist，只在测试中引用）接受本工具的产物：
-// 校验清单与摘要、把本机平台的二进制装进工具目录、在对外端口上提供下载（tasks 8.3）。
+// The server accepts this tool's output using its own reading logic (internal/server/loopctldist, referenced only
+// in tests): it checks the manifest and digests, installs the binary for this platform into the tools directory and
+// serves downloads on the external port (tasks 8.3).
 func TestServerAcceptsArtifacts(t *testing.T) {
 	if testing.Short() {
 		t.Skip("交叉编译 4 个平台较慢")

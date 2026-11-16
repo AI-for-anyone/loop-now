@@ -57,7 +57,8 @@ func TestLarkHistoricalVersionsTwoAgentsAndAtomicProjectPurge(t *testing.T) {
 	if account.View.LarkIdentity != nil || account.View.Status != "saved" {
 		t.Fatal("static replacement retained user identity")
 	}
-	// 删除账号会清空没有进行中任务使用的版本及其授权（迁移 030），所以这里只替换、不删除账号。
+	// Deleting an account clears the versions not used by any in-progress task together with their grants (migration
+	// 030), so here the account is only replaced, not deleted.
 	var calls atomic.Int32
 	rf := larkRefreshFunc(func(_ context.Context, c clicredential.Lark) (clicredential.Lark, error) {
 		calls.Add(1)

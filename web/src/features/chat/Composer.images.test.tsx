@@ -24,7 +24,8 @@ function accepted(body: Schemas['SendMessageInput']) {
   const run = makeRun({ status: 'starting', endedAt: null })
   return HttpResponse.json({ run, message: { ...makeMessage({ text: body.text, run }), images: (body.imageIds ?? []).map(id => refs.get(id)!) } }, { status: 202 })
 }
-// 改版后：加号、输入框、发送按钮排成一行（data-chat-composer），描边只围着输入框（data-chat-input）。
+// After the redesign: the plus button, the input and the send button sit in one row
+// (data-chat-composer), and the border surrounds only the input (data-chat-input).
 it('keeps the image plus, one-line editor and send arrow in the same composer row', async () => {
   mount()
   const editor = screen.getByRole('textbox'), row = editor.closest('[data-chat-composer]')!, border = editor.closest('[data-chat-input]')!
@@ -34,7 +35,7 @@ it('keeps the image plus, one-line editor and send arrow in the same composer ro
   expect(send.textContent).toBe('')
   expect(send.querySelector('svg')).toBeInTheDocument()
   expect(screen.getAllByRole('button', { name: '添加图片' })).toHaveLength(1)
-  // 加号和发送按钮在输入框的描边外面，分列左右。
+  // The plus and send buttons sit outside the input's border, one on the left and one on the right.
   expect(within(border as HTMLElement).queryByRole('button')).toBeNull()
   expect([...row.children].map((child) => child.contains(editor))).toEqual([false, true, false])
   await userEvent.type(editor, '第一行{Shift>}{Enter}{/Shift}第二行')

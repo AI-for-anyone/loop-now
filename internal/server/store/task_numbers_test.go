@@ -15,8 +15,9 @@ import (
 	"loop-now/internal/server/taskmodel"
 )
 
-// 任务编号按项目从 1 开始，创建时分配：并发创建不重号，失败的创建不占号，重放同一动作拿回原来的号，
-// 任务被删掉之后号也不重用；之后的改动保留编号，也不能改掉它。
+// Task numbers start at 1 per project and are assigned at creation: concurrent creations never get the same number, a
+// failed creation takes no number, replaying the same action gets the original number back, and a number is not reused
+// after its task is deleted; later changes keep the number and cannot change it.
 func TestTaskNumbersPerProject(t *testing.T) {
 	s, p, m, a, template, _ := taskFixture(t)
 	ctx := context.Background()
@@ -109,7 +110,8 @@ func TestTaskNumbersPerProject(t *testing.T) {
 		t.Fatalf("并发创建应拿到各不相同的连续编号：%v", concurrent)
 	}
 
-	// 删掉编号最大的任务（现在没有删任务的入口，直接删行），下一个编号也不重用它。
+	// Delete the task with the largest number (there is currently no way to delete a task, so the row is deleted
+	// directly); the next number still does not reuse it.
 	var last uuid.UUID
 	if err := s.Pool.QueryRow(ctx, `SELECT id FROM task_records WHERE project_id=$1 AND number=11`, p.ID).Scan(&last); err != nil {
 		t.Fatal(err)
@@ -144,7 +146,7 @@ func TestTaskNumbersPerProject(t *testing.T) {
 	for _, task := range page.Tasks {
 		listed = append(listed, task.Number)
 	}
-	slices.Sort(listed) // 测试里的任务创建时间相同，列表顺序不定
+	slices.Sort(listed) // tasks in the test have the same creation time, so the list order is undefined
 	if !slices.Equal(listed, []int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12}) {
 		t.Fatalf("列表应带编号：%v", listed)
 	}

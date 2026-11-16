@@ -1,7 +1,8 @@
-// Package config 解析与校验服务端的环境变量配置。
+// Package config parses and validates the server's environment variable configuration.
 //
-// 每一项都有默认值且可以覆盖；
-// 业务代码中的超时、上限等运行参数都应取自这里，不另行写死。
+// Every item has a default and can be overridden;
+// runtime parameters in business code such as timeouts and limits should all come from here rather than being
+// hard-coded elsewhere.
 package config
 
 import (
@@ -21,7 +22,7 @@ import (
 	"loop-now/internal/server/naming"
 )
 
-// 环境变量名。
+// Environment variable names.
 const (
 	EnvSleepScanInterval     = "LOOP_NOW_SLEEP_SCAN_INTERVAL"
 	EnvSleepScanBatch        = "LOOP_NOW_SLEEP_SCAN_BATCH"
@@ -81,8 +82,9 @@ const (
 	EnvOverviewMaxLen    = "LOOP_NOW_OVERVIEW_STREAM_MAXLEN"
 	EnvPiStderrTail      = "LOOP_NOW_PI_STDERR_TAIL_BYTES"
 	EnvShutdownTimeout   = "LOOP_NOW_SHUTDOWN_TIMEOUT"
-	// EnvStopOnStdinClose 为真时，标准输入到 EOF（或出错）即按收到 SIGTERM 处理：拉起服务端的壳关掉写端就能优雅停止，
-	// Windows 上没有可投递的终止信号，桌面壳靠它；默认关闭，交互运行不读标准输入。
+	// EnvStopOnStdinClose, when true, treats EOF (or an error) on standard input like receiving SIGTERM: the shell that
+	// started the server can stop it gracefully by closing the write end. Windows has no termination signal that can be
+	// delivered, so the desktop shell relies on this; off by default, and interactive runs do not read standard input.
 	EnvStopOnStdinClose   = "LOOP_NOW_STOP_ON_STDIN_CLOSE"
 	EnvMaxUploadFile      = "LOOP_NOW_MAX_UPLOAD_FILE"
 	EnvMaxFolderUpload    = "LOOP_NOW_MAX_FOLDER_UPLOAD"
@@ -98,8 +100,10 @@ const (
 	EnvExternalListenAddr = "LOOP_NOW_EXTERNAL_LISTEN_ADDR"
 	EnvExternalTLSCert    = "LOOP_NOW_EXTERNAL_TLS_CERT"
 	EnvExternalTLSKey     = "LOOP_NOW_EXTERNAL_TLS_KEY"
-	// EnvExternalTLSSelfSigned 是一个目录：对外端口改用服务端自己维护的自签证书（目录里的 cert.pem 与 key.pem，
-	// 没有或已过期时生成），与证书／私钥两项互斥。桌面壳用它开对外端口，loopctl 以 cert.pem 为 --ca-file。
+	// EnvExternalTLSSelfSigned is a directory: the external port uses a self-signed certificate maintained by the
+	// server itself instead (cert.pem and key.pem in the directory, generated when missing or expired). It is mutually
+	// exclusive with the certificate/private key pair. The desktop shell uses it to open the external port, and loopctl
+	// uses cert.pem as its --ca-file.
 	EnvExternalTLSSelfSigned = "LOOP_NOW_EXTERNAL_TLS_SELF_SIGNED"
 	EnvTextEditExtensions    = "LOOP_NOW_TEXT_EDIT_EXTENSIONS"
 	EnvTextEditMax           = "LOOP_NOW_TEXT_EDIT_MAX"
@@ -107,7 +111,7 @@ const (
 	EnvLogLevel              = "LOOP_NOW_LOG_LEVEL"
 )
 
-// Config 是服务端的全部配置。
+// Config is the complete server configuration.
 type Config struct {
 	MaxMessageImages                                           int
 	MaxMessageImageBytes, MaxMessageImagePixels                int64
@@ -128,22 +132,26 @@ type Config struct {
 	TaskMaxVisits                                              int
 	TaskMaxEdges                                               int
 	TaskMaxSteps                                               int
-	// DataDir 是数据根：库文件在 DataDir/db 下（见 DBDir）。默认是服务进程用户 HOME 下的 .loop_now，启动时算一次。
+	// DataDir is the data root: the database files are under DataDir/db (see DBDir). It defaults to .loop_now in the
+	// HOME of the server process's user, computed once at startup.
 	DataDir string
-	// BackupDir 是每日备份的目录，默认 DataDir/backups；BackupKeep 是保留的份数。
+	// BackupDir is the directory for daily backups, default DataDir/backups; BackupKeep is how many to keep.
 	BackupDir    string
 	BackupKeep   int
 	ListenAddr   string
 	AllowedHosts []string
-	// ConsoleOrigins 是允许跨源访问控制台接口的来源（vite 开发服务器）；服务端自己提供的控制台是同源，不需要列出。
-	// 设为 none 时为空，不允许任何跨源访问。
+	// ConsoleOrigins are the origins allowed cross-origin access to the console API (the vite dev server); the console
+	// served by the server itself is same-origin and need not be listed.
+	// Set to none it is empty, and no cross-origin access is allowed.
 	ConsoleOrigins []string
-	// WebDir 非空时从这个目录提供控制台，代替二进制里内嵌的。
+	// WebDir, when non-empty, serves the console from this directory instead of the one embedded in the binary.
 	WebDir string
-	// ReadyFile 非空时，开始提供服务后把 {"url","pid","version"} 原子地写到这个文件（桌面壳据此找到端口），退出时删除。
+	// ReadyFile, when non-empty, is where {"url","pid","version"} is written atomically once the server starts serving
+	// (the desktop shell finds the port from it); it is deleted on exit.
 	ReadyFile string
 	WorkRoot  string
-	// ContextDir 是项目与全局上下文文件夹的根（projects/<projectId>/、global/），默认是服务进程用户 HOME 下的 .loop_now。
+	// ContextDir is the root of the project and global context folders (projects/<projectId>/, global/); it defaults to
+	// .loop_now in the HOME of the server process's user.
 	ContextDir         string
 	DefaultOrgName     string
 	DefaultProjectName string
@@ -160,16 +168,19 @@ type Config struct {
 	CLIProbeTimeout     time.Duration
 	CLIInstallTimeout   time.Duration
 	CLITemplateDir      string
-	LarkUserBundleDir   string // 为空时查找同版发行内的独立用户CLI包
-	ExecBasePath        string // 为空时在启动检查中推导
+	LarkUserBundleDir   string // empty: look for the standalone user CLI bundle in the release of the same version
+	ExecBasePath        string // empty: derived during the startup checks
 	ExecEnvPassthrough  []string
 	NodeBin             string
-	PiAIDir             string // 为空时在启动检查中推导
-	// PluginHostEntry 是插件宿主的入口文件（node 运行它）；为空时插件的平台侧不运行。
+	PiAIDir             string // empty: derived during the startup checks
+	// PluginHostEntry is the plugin host's entry file (run by node); when empty, the platform side of plugins does not
+	// run.
 	PluginHostEntry string
-	// PluginOfficialDir 是随平台发布的官方插件目录；为空时没有 builtin 安装来源。
+	// PluginOfficialDir is the directory of official plugins shipped with the platform; when empty there is no builtin
+	// install source.
 	PluginOfficialDir string
-	// PluginMarketURL 是官方插件市场 loop-now-market.json 的 https 地址；默认是官方市场的索引地址，可改成别的地址。
+	// PluginMarketURL is the https URL of the official plugin market's loop-now-market.json; it defaults to the official
+	// market's index URL and can be changed to another URL.
 	PluginMarketURL string
 
 	ReconcileInterval time.Duration
@@ -178,47 +189,53 @@ type Config struct {
 	OverviewMaxLen    int64
 	PiStderrTailBytes int
 	ShutdownTimeout   time.Duration
-	StopOnStdinClose  bool // 标准输入关闭即开始优雅退出（见 EnvStopOnStdinClose）
+	StopOnStdinClose  bool // start a graceful shutdown when standard input closes (see EnvStopOnStdinClose)
 	MaxUploadFile     int64
-	MaxFolderUpload   int64 // Agent 文件夹与上下文文件夹单个上传文件的字节上限
+	MaxFolderUpload   int64 // byte limit for a single uploaded file in Agent folders and context folders
 	MaxSkillArchive   int64
 	MaxSkillEntries   int
 	MaxCredential     int64
 	MaxMessage        int64
-	MaxInboxMessage   int64 // Inbox 消息正文的字节上限
+	MaxInboxMessage   int64 // byte limit for an Inbox message body
 	InboxQuestionTTL  time.Duration
-	InboxPreviewChars int // Inbox 摘要中正文的字符数
-	InboxPageMax      int // Inbox 列表每页条数的上限
-	// LoopctlDistDir 是 loopctl 构建产物的根目录，其中 <版本>/manifest.json 必须与服务端同版本。
-	// 没有设置时取 loop-server 旁边的 loopctl-dist（发布包），都没有则拒绝启动。
+	InboxPreviewChars int // number of body characters in an Inbox preview
+	InboxPageMax      int // maximum number of items per page in the Inbox list
+	// LoopctlDistDir is the root directory of the loopctl build output; <version>/manifest.json in it must match the
+	// server's version.
+	// When unset, loopctl-dist next to loop-server (the release bundle) is used; if neither exists, startup is refused.
 	LoopctlDistDir string
-	// ExternalListenAddr 为空时不开启对外端口；开启时必须配置 TLS 证书与私钥，或者让服务端用 ExternalTLSSelfSigned 目录里的自签证书。
+	// ExternalListenAddr, when empty, keeps the external port closed; when it is open, a TLS certificate and private key
+	// must be configured, or the server uses the self-signed certificate in the ExternalTLSSelfSigned directory.
 	ExternalListenAddr    string
 	ExternalTLSCert       string
 	ExternalTLSKey        string
 	ExternalTLSSelfSigned string
 	TextEditExtensions    []string
 	TextEditMax           int64
-	LogFormat             string     // text 或 json
-	LogLevel              slog.Level // debug、info、warn、error
+	LogFormat             string     // text or json
+	LogLevel              slog.Level // debug, info, warn, error
 
-	// Warnings 是不阻止启动、但需要醒目提示的问题，例如监听非回环地址。
+	// Warnings are problems that do not block startup but need a prominent notice, such as listening on a non-loopback
+	// address.
 	Warnings []string
 }
 
-// DefaultDataDir 返回数据根的默认值：Unix 上是 HOME 下的 .loop_now，Windows 上是 %LOCALAPPDATA%\Loop Now\data；取不到时为空。
+// DefaultDataDir returns the default data root: .loop_now under HOME on Unix, %LOCALAPPDATA%\Loop Now\data on
+// Windows; empty when it cannot be determined.
 func DefaultDataDir(getenv func(string) string) string { return defaultDataDir(getenv) }
 
-// DBDir 返回数据根下存放 data.db 与 events.db 的目录。
+// DBDir returns the directory under the data root that holds data.db and events.db.
 func DBDir(dataDir string) string { return filepath.Join(dataDir, "db") }
 
-// DefaultWorkRoot 返回当前平台的工作根目录默认值：macOS /Users/Shared/loop-now，Linux /var/lib/loop-now，
-// Windows %ProgramData%\loop-now。都在用户 home 之外。
+// DefaultWorkRoot returns the platform's default work root: /Users/Shared/loop-now on macOS, /var/lib/loop-now on
+// Linux, %ProgramData%\loop-now on Windows. All of them are outside the user's home.
 func DefaultWorkRoot() string { return defaultWorkRoot() }
 
-// 发布包的布局：这些文件与 loop-server 放在同一目录下（见 scripts/release/build.sh）。对应的配置没有设置、
-// 而文件存在时，默认就用它们，所以解开发布包不必另外配置；环境变量仍然优先。
-// Windows 包里是 loop-server.exe、loopctl.exe、runtime/node/node.exe，其余相对路径相同；Pi 入口是 cli.js，由随包 node 运行。
+// Layout of the release bundle: these files sit in the same directory as loop-server (see
+// scripts/release/build.sh). When the matching setting is unset and the file exists, it is used by default, so an
+// unpacked release bundle needs no extra configuration; environment variables still take precedence.
+// The Windows bundle has loop-server.exe, loopctl.exe and runtime/node/node.exe, with the other relative paths the
+// same; the Pi entry is cli.js, run by the bundled node.
 const (
 	BundledNode           = bundledNode
 	BundledPi             = "runtime/pi/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"
@@ -227,7 +244,8 @@ const (
 	BundledPluginOfficial = "plugins/official"
 )
 
-// executableDir 返回本程序可执行文件所在的目录（解析符号链接）；取不到时为空。测试可以替换。
+// executableDir returns the directory of this program's executable (with symlinks resolved); empty when it cannot be
+// determined. Tests may replace it.
 var executableDir = func() string {
 	p, err := os.Executable()
 	if err != nil {
@@ -239,7 +257,7 @@ var executableDir = func() string {
 	return filepath.Dir(p)
 }
 
-// bundled 返回可执行文件旁边的 rel；不存在时返回 fallback。
+// bundled returns rel next to the executable, or fallback when it does not exist.
 func bundled(rel, fallback string) string {
 	dir := executableDir()
 	if dir == "" {
@@ -252,12 +270,13 @@ func bundled(rel, fallback string) string {
 	return p
 }
 
-// DefaultPluginMarketURL 是官方插件市场索引仓库 AI-for-anyone/loop-now-market 的 loop-now-market.json。
+// DefaultPluginMarketURL is loop-now-market.json in AI-for-anyone/loop-now-market, the official plugin market's
+// index repository.
 const DefaultPluginMarketURL = "https://raw.githubusercontent.com/AI-for-anyone/loop-now-market/main/loop-now-market.json"
 
 const defaultTextEditExtensions = ".md,.markdown,.txt,.json,.yaml,.yml,.toml,.ini,.csv,.xml,.html,.css,.js,.ts,.py,.go,.sh,.sql"
 
-// Load 按 getenv 读取配置。getenv 通常为 os.Getenv，测试中可替换。
+// Load reads the configuration through getenv. getenv is normally os.Getenv and may be replaced in tests.
 func Load(getenv func(string) string) (*Config, error) {
 	p := parser{getenv: getenv}
 	c := &Config{
@@ -279,7 +298,8 @@ func Load(getenv func(string) string) (*Config, error) {
 		WebDir:                p.str(EnvWebDir, ""),
 		ReadyFile:             p.str(EnvReadyFile, ""),
 		WorkRoot:              p.str(EnvWorkRoot, DefaultWorkRoot()),
-		// 只在全新安装时用来创建默认组织与项目；两者都出现在 Agent 地址里（项目名还出现在 URL 里），所以用不需要转义的英文。
+		// Only used to create the default organization and project on a fresh install; both appear in Agent addresses
+		// (the project name also appears in URLs), so they are English words that need no escaping.
 		DefaultOrgName:     p.str(EnvDefaultOrgName, "default"),
 		DefaultProjectName: p.str(EnvDefaultProjectName, "default"),
 
@@ -353,7 +373,7 @@ func Load(getenv func(string) string) (*Config, error) {
 	}
 	c.ContextDir = p.str(EnvContextDir, "")
 	if c.ContextDir == "" {
-		c.ContextDir = DefaultDataDir(getenv) // 与数据根相同的目录（Unix 上即 HOME 下的 .loop_now）
+		c.ContextDir = DefaultDataDir(getenv) // the same directory as the data root (.loop_now under HOME on Unix)
 	}
 	if !filepath.IsAbs(c.ContextDir) || filepath.Clean(c.ContextDir) != c.ContextDir || c.ContextDir == string(filepath.Separator) {
 		p.fail(EnvContextDir, "须为规范的绝对路径（当前 %q；未设置时与数据根的默认目录相同）", c.ContextDir)
@@ -404,7 +424,7 @@ func Load(getenv func(string) string) (*Config, error) {
 	return c, nil
 }
 
-// LogValue 输出生效配置，连接串中的密码脱敏。
+// LogValue outputs the effective configuration, with passwords in connection strings redacted.
 func (c *Config) LogValue() slog.Value {
 	return slog.GroupValue(
 		c.cliImportLog(),
@@ -479,7 +499,8 @@ func (c *Config) LogValue() slog.Value {
 	)
 }
 
-// NewLogger 按配置的格式与级别创建写到 w 的日志器（服务端只写 stderr，不写日志文件）。
+// NewLogger creates a logger writing to w with the configured format and level (the server only writes to stderr,
+// never to log files).
 func NewLogger(w io.Writer, format string, level slog.Level) *slog.Logger {
 	opts := &slog.HandlerOptions{Level: level}
 	if format == "json" {
@@ -504,7 +525,8 @@ func (p *parser) logLevel(name, def string) slog.Level {
 	return slog.LevelInfo
 }
 
-// RedactURL 把连接串中的密码替换为 xxxxx；无法解析时整体隐藏。
+// RedactURL replaces the password in a connection string with xxxxx; when it cannot be parsed, the whole string is
+// hidden.
 func RedactURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -513,7 +535,7 @@ func RedactURL(raw string) string {
 	return u.Redacted()
 }
 
-// IsLoopbackHost 判断主机名是否为本机回环地址。
+// IsLoopbackHost reports whether the host name is a local loopback address.
 func IsLoopbackHost(host string) bool {
 	host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
 	if strings.EqualFold(host, "localhost") {
@@ -568,7 +590,8 @@ func (p *parser) integer(name string, def int) int {
 	return n
 }
 
-// boolean 读开关：1/true/yes/on 为真，0/false/no/off 为假（不分大小写），未设置或为空取 def，其他值报错。
+// boolean reads a switch: 1/true/yes/on is true, 0/false/no/off is false (case-insensitive), unset or empty gives
+// def, and any other value is an error.
 func (p *parser) boolean(name string, def bool) bool {
 	v, ok := p.raw(name)
 	if !ok || strings.TrimSpace(v) == "" {
@@ -610,7 +633,7 @@ func (p *parser) size(name, def string) int64 {
 	return n
 }
 
-// ParseSize 解析字节数，支持纯数字或带 KiB、MiB、GiB 单位。
+// ParseSize parses a byte count, either a plain number or one with a KiB, MiB or GiB unit.
 func ParseSize(v string) (int64, error) {
 	s := strings.TrimSpace(v)
 	mult := int64(1)
@@ -656,7 +679,8 @@ func (p *parser) checkListenAddr(addr string) []string {
 	return nil
 }
 
-// checkExternal 校验对外端口：配置了监听地址时必须同时配置证书与私钥，或者只配置自签证书目录（规范的绝对路径）。
+// checkExternal validates the external port: when a listen address is configured, either both certificate and
+// private key must be configured, or only the self-signed certificate directory (a clean absolute path).
 func (p *parser) checkExternal(c *Config) {
 	if c.ExternalTLSSelfSigned != "" {
 		if !filepath.IsAbs(c.ExternalTLSSelfSigned) || filepath.Clean(c.ExternalTLSSelfSigned) != c.ExternalTLSSelfSigned {
@@ -693,7 +717,7 @@ func (p *parser) normalizeHosts(hosts []string) []string {
 			p.fail(EnvAllowedHosts, "不是合法的主机名：%q", h)
 			continue
 		}
-		// 允许的 Host 只比较主机部分，去掉可能写上的端口。
+		// Allowed hosts compare only the host part; strip a port if one was written.
 		if hh, _, err := net.SplitHostPort(h); err == nil {
 			h = hh
 		}

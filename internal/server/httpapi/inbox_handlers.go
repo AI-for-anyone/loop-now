@@ -19,13 +19,13 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// ---- 当前身份与按地址查找 ----
+// ---- Current identity and lookup by address ----
 
 func (s *Server) whoami(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apitypes.FromPrincipal(principal(r)))
 }
 
-// findAgents 按地址查找 Agent，返回 0 或 1 项；找不到时返回空列表。
+// findAgents looks up an Agent by address and returns 0 or 1 items; an empty list when nothing is found.
 func (s *Server) findAgents(w http.ResponseWriter, r *http.Request) {
 	addr := r.URL.Query().Get("address")
 	if addr == "" {
@@ -51,9 +51,9 @@ func (s *Server) findAgents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// ---- 我的 Inbox（控制台、外部身份与 Agent 共用，当前身份取自请求） ----
+// ---- My Inbox (shared by console, external identities and Agents; current identity taken from the request) ----
 
-// inboxQuery 解析列表参数 unread、cursor 与 limit。
+// inboxQuery parses the list parameters unread, cursor and limit.
 func (s *Server) inboxQuery(r *http.Request) (store.InboxListQuery, error) {
 	q := r.URL.Query()
 	unread := false
@@ -104,7 +104,7 @@ func (s *Server) sendInbox(w http.ResponseWriter, r *http.Request) {
 	p := principal(r)
 	project, agent, task := s.principalScope(r, p)
 	if project == nil && agent == nil && s.Hooks != nil {
-		// 控制台与外部身份发给 Agent：按收件 Agent 的项目决定哪些插件参与。
+		// Console or external identity sending to an Agent: the receiving Agent's project decides which plugins join.
 		if a, e := s.Inbox.FindAgent(r.Context(), in.To); e == nil && a != nil {
 			project = a.ProjectID
 		}
@@ -172,7 +172,7 @@ func (s *Server) replyInbox(w http.ResponseWriter, r *http.Request) {
 	}
 	project, agent, task := s.principalScope(r, p)
 	if project == nil && agent == nil && s.Hooks != nil {
-		// 回复给 Agent：按原消息里 Agent 一方的项目决定哪些插件参与。
+		// Reply to an Agent: the project of the Agent side of the original message decides which plugins take part.
 		if orig, e := s.Store.GetInboxMessage(r.Context(), id, 1); e == nil {
 			for _, side := range []store.PartyView{orig.From, orig.To} {
 				if side.Kind == "agent" && side.ProjectID != nil {
@@ -202,8 +202,9 @@ func (s *Server) replyInbox(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, apitypes.FromInboxMessage(m))
 }
 
-// replyAs 返回回复的身份：插件令牌带 asIdentityId 时是它代管的那个外部身份（plugins/SPEC.md §12），效果与该身份亲自回复相同，
-// 审计记下代表的身份；不带时插件须有 inbox.send 范围。其他调用方带 asIdentityId 时 422。
+// replyAs returns the identity that replies: when a plugin token carries asIdentityId, it is the external identity the
+// plugin manages (plugins/SPEC.md §12), with the same effect as that identity replying itself, and the audit records
+// the identity acted for; without it the plugin needs the inbox.send scope. Other callers sending asIdentityId get 422.
 func (s *Server) replyAs(r *http.Request, p auth.Principal, as *uuid.UUID) (auth.Principal, error) {
 	if as == nil {
 		if p.Kind == auth.KindPlugin && !slices.Contains(p.Scopes, "inbox.send") {
@@ -293,7 +294,7 @@ func (s *Server) readThread(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apitypes.InboxUnreadTotal{UnreadTotal: total})
 }
 
-// streamInbox 推送收件箱事件流，快照与续传规则同 Agent 事件流。
+// streamInbox pushes the Inbox event stream; the snapshot and resume rules are the same as for the Agent event stream.
 func (s *Server) streamInbox(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	cursor, resume := r.Header.Get("Last-Event-ID"), false
@@ -330,7 +331,7 @@ func (s *Server) streamInbox(w http.ResponseWriter, r *http.Request) {
 	}, "stream", "inbox")
 }
 
-// ---- 控制台查看 Agent 与外部身份的收件箱（只读） ----
+// ---- Console view of the Inboxes of Agents and external identities (read-only) ----
 
 func (s *Server) listAgentInbox(w http.ResponseWriter, r *http.Request) {
 	id, err := pathUUID(r, "agentId")
@@ -436,7 +437,7 @@ func (s *Server) getIdentityInboxMessage(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, apitypes.FromInboxMessage(m))
 }
 
-// ---- 外部身份与令牌（只限控制台） ----
+// ---- External identities and tokens (console only) ----
 
 func (s *Server) listIdentities(w http.ResponseWriter, r *http.Request) {
 	xs, err := s.Store.ListExternalIdentities(r.Context())
@@ -514,7 +515,8 @@ func (s *Server) listTokens(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// issueToken 签发令牌；请求体可以不传，不传或为 {} 表示永不过期。令牌明文只在这次响应中返回。
+// issueToken issues a token; the request body is optional, and no body or {} means it never expires. The plaintext
+// token is returned only in this response.
 func (s *Server) issueToken(w http.ResponseWriter, r *http.Request) {
 	id, err := pathUUID(r, "identityId")
 	if err != nil {

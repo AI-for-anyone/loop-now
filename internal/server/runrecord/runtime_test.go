@@ -8,7 +8,8 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// 进程事件带上运行时（旧记录没有，即 pi）；Claude Code 的额度事件成为 model_rate_limit 条目，info 原样。
+// Process events carry the runtime (old records have none, meaning pi); Claude Code rate limit events become
+// model_rate_limit entries, with info kept as is.
 func TestRuntimeTimelineEntries(t *testing.T) {
 	at := time.Now()
 	got, ok := eventEntry(store.LifecycleEvent{Type: store.EventPiStarted, At: at, Data: map[string]any{"pid": float64(7), "reason": "no_process", "runtime": "claude-code"}})

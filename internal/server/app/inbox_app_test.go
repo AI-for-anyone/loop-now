@@ -32,7 +32,7 @@ import (
 	"loop-now/internal/server/executor"
 )
 
-// agentGet 用 Agent 令牌调用 Agent 专用接口，返回状态码与响应体。
+// agentGet calls the Agent-only API with an Agent token and returns the status code and response body.
 func agentGet(t *testing.T, base, token, path string) (int, []byte) {
 	t.Helper()
 	req, _ := http.NewRequest("GET", base+path, nil)
@@ -70,7 +70,8 @@ func TestInboxWithFakePi(t *testing.T) {
 		c.PiIdleTimeout = 500 * time.Millisecond
 	}
 
-	// 上一次运行没有正常作废的 Agent 令牌（例如服务端被强制结束），启动时作废。
+	// Agent tokens the previous run did not revoke normally (for example, the server was killed) are revoked at
+	// startup.
 	s := w.start(setup)
 	a, ag := s.createAgent("开发助手")
 	stale := uuid.Must(uuid.NewV7())
@@ -86,7 +87,7 @@ func TestInboxWithFakePi(t *testing.T) {
 		t.Fatalf("启动时应作废上一次运行的 Agent 令牌：%v %v", revoked, err)
 	}
 
-	// 先对话一轮建立会话，等 Pi 空闲超时退出。
+	// First talk for one turn to create a session, and wait for Pi to exit on idle timeout.
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "你好"})
 	s.waitIdle(a)
 	sessionBefore, err := s.a.Store.GetAgentSession(context.Background(), ag.ID)
@@ -98,7 +99,7 @@ func TestInboxWithFakePi(t *testing.T) {
 	if env := dumpedEnv(t, dump); env["LOOPCTL_AGENT_URL"] != agentBase {
 		t.Fatalf("注入的接口地址应指向本服务端的 Agent 接口：%s，期望 %s", env["LOOPCTL_AGENT_URL"], agentBase)
 	}
-	// Agent 的 PATH 最前面是同版本的 loopctl。
+	// The first entry on the Agent's PATH is the loopctl of the same version.
 	loopctl := filepath.Join(strings.Split(dumpedEnv(t, dump)["PATH"], ":")[0], "loopctl")
 	if out, err := exec.Command(loopctl).Output(); err != nil || !strings.Contains(string(out), `"version":"`+buildinfo.Version()+`"`) {
 		t.Fatalf("Agent 运行的 loopctl 应与服务端同版本：%s %v", out, err)
@@ -107,7 +108,8 @@ func TestInboxWithFakePi(t *testing.T) {
 	for s.a.Executor.Process(ag.ID).State != executor.ProcessStopped && time.Now().Before(deadline) {
 		time.Sleep(50 * time.Millisecond)
 	}
-	// 空闲超时时先把进程移出进程表，停止的第一步作废令牌，两者相差几毫秒。
+	// On idle timeout the process is first removed from the process table, and the first step of stopping revokes the
+	// token; the two happen a few milliseconds apart.
 	code := 0
 	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		if code, _ = agentGet(t, agentBase, firstToken, "/whoami"); code == 401 {
@@ -118,7 +120,7 @@ func TestInboxWithFakePi(t *testing.T) {
 		t.Fatalf("Pi 退出后旧令牌应失效：%d", code)
 	}
 
-	// Pi 已退出时收到 Inbox 消息：启动 Pi，接着原会话开始一轮提醒。
+	// An Inbox message arrives while Pi has exited: start Pi and begin a reminder turn on the original session.
 	s.must(201, "POST", "/inbox/messages", map[string]any{"to": "默认项目/开发助手", "text": "请看一下"})
 	s.waitIdle(a)
 	reply := s.replies(a)
@@ -130,7 +132,7 @@ func TestInboxWithFakePi(t *testing.T) {
 	if sessionAfter.SessionFile != sessionBefore.SessionFile || sessionAfter.Epoch != sessionBefore.Epoch {
 		t.Fatalf("提醒应接着原会话：%+v → %+v", sessionBefore, sessionAfter)
 	}
-	// 新进程有新令牌，可以用它读取自己的收件箱。
+	// The new process has a new token and can use it to read its own Inbox.
 	tok := dumpedEnv(t, dump)["LOOPCTL_AGENT_TOKEN"]
 	if tok == "" || tok == firstToken {
 		t.Fatalf("新进程应有新令牌")
@@ -144,7 +146,7 @@ func TestInboxWithFakePi(t *testing.T) {
 		t.Fatalf("Agent 列出收件箱：%d %s", code, body)
 	}
 
-	// 服务端重启：重启前签发的令牌都不再有效。
+	// Server restart: tokens issued before the restart are no longer valid.
 	s.stop()
 	s = w.start(setup)
 	if code, _ := agentGet(t, strings.TrimSuffix(s.url, "/api/v1")+"/agent/v1", tok, "/whoami"); code != 401 {
@@ -155,7 +157,7 @@ func TestInboxWithFakePi(t *testing.T) {
 func TestStartupRejectsLoopctlMismatch(t *testing.T) {
 	w := newWorld(t)
 	cfg := w.cfg
-	cfg.LoopctlDistDir = t.TempDir() // 没有与服务端同版本的产物
+	cfg.LoopctlDistDir = t.TempDir() // no build output of the same version as the server
 	_, err := app.Build(context.Background(), &cfg, config.NewLogger(io.Discard, "text", cfg.LogLevel),
 		app.Options{HomeDirs: []string{"/nonexistent-home"}})
 	if err == nil || !strings.Contains(err.Error(), buildinfo.Version()) {
@@ -163,7 +165,8 @@ func TestStartupRejectsLoopctlMismatch(t *testing.T) {
 	}
 }
 
-// selfSigned 生成 127.0.0.1 的自签证书，返回证书与私钥文件路径以及信任它的证书池。
+// selfSigned generates a self-signed certificate for 127.0.0.1 and returns the certificate and key file paths and a
+// certificate pool that trusts it.
 func selfSigned(t *testing.T) (certFile, keyFile string, pool *x509.CertPool) {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -212,7 +215,7 @@ func TestExternalPortTLS(t *testing.T) {
 		return resp, b
 	}
 
-	// 没有令牌：401；纯 HTTP 连接不上（只有 TLS）。
+	// No token: 401; plain HTTP cannot connect (TLS only).
 	if resp, _ := get("/api/v1/context", ""); resp.StatusCode != 401 || resp.Header.Get("Loop-Now-Version") != buildinfo.Version() {
 		t.Fatalf("对外端口未带令牌应返回 401 并带版本头：%d %v", resp.StatusCode, resp.Header)
 	}
@@ -230,7 +233,8 @@ func TestExternalPortTLS(t *testing.T) {
 		t.Fatalf("只限控制台的接口在对外端口上应返回 403：%d", resp.StatusCode)
 	}
 
-	// 下载与服务端同版本的 loopctl：与清单中的 SHA-256 一致；下载同样需要令牌。
+	// Download the loopctl of the same version as the server: it matches the SHA-256 in the manifest; downloads also
+	// need a token.
 	if resp, _ := get("/downloads/loopctl/manifest.json", ""); resp.StatusCode != 401 {
 		t.Fatalf("下载也需要令牌：%d", resp.StatusCode)
 	}
@@ -257,11 +261,11 @@ func TestExternalPortTLS(t *testing.T) {
 	if resp, _ := get("/downloads/loopctl/../manifest.json", issued.Secret); resp.StatusCode == 200 {
 		t.Fatal("清单中没有的路径不应下载成功")
 	}
-	// 控制台接口不因开启对外端口而改变：仍免登录。
+	// The console API does not change when the external port is enabled: still no login needed.
 	s.must(200, "GET", "/context", nil)
 }
 
-// reminders 返回 Agent 的平台提醒执行：状态与回复。
+// reminders returns the Agent's platform reminder runs: status and replies.
 func reminders(t *testing.T, s *server, agentID uuid.UUID) (statuses []string) {
 	t.Helper()
 	rows, err := s.a.Store.Pool.Query(context.Background(), `SELECT status FROM runs WHERE agent_id = $1 AND origin = 'inbox_reminder' ORDER BY queue_seq`, agentID)
@@ -283,7 +287,7 @@ func TestReminderRecovery(t *testing.T) {
 	a, ag := s.createAgent("开发助手")
 	s.waitIdle(a)
 
-	// 重启时有排队中的提醒：重启后照常执行一次。
+	// A reminder is queued at restart: after the restart it runs once as usual.
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=30s 很长的回复"})
 	s.waitRunning(a)
 	s.must(201, "POST", "/inbox/messages", map[string]any{"to": ag.ID.String(), "text": "排队中"})
@@ -298,7 +302,7 @@ func TestReminderRecovery(t *testing.T) {
 		t.Fatalf("重启后排队中的提醒应照常执行一次：%v", got)
 	}
 
-	// 忙时排队的提醒按数据库出队，且只执行一次。
+	// Reminders queued while busy are dequeued from the database and run only once.
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=30s 又一个很长的回复"})
 	s.waitRunning(a)
 	s.must(201, "POST", "/inbox/messages", map[string]any{"to": ag.ID.String(), "text": "丢失前一"})

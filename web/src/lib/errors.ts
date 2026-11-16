@@ -2,8 +2,8 @@ import { ApiError } from '@/api/client'
 import { t } from '@/i18n'
 import { showServerText } from '@/i18n/locale'
 
-// 把任意错误转换为给人看的说明：已知错误码用文案表，未知时用服务端给出的说明。
-// 服务端的说明只有中文，界面不是中文时已知错误码不再附上它。
+// Turn any error into an explanation for people: known error codes use the message table, unknown ones use the explanation from the server.
+// The server's explanations are only in Chinese, so when the UI is not Chinese they are no longer appended to known error codes.
 export function describeError(error: unknown): string {
   if (!(error instanceof ApiError)) return t.errors.unknown
   if (error.code === 'unreachable') return t.errors.unreachable
@@ -14,7 +14,7 @@ export function describeError(error: unknown): string {
     : known
 }
 
-// 出错请求的请求编号（响应头 Loop-Now-Request-Id）；没有时为 null。
+// The request ID of the failed request (response header Loop-Now-Request-Id); null when there is none.
 export function requestIdOf(error: unknown): string | null {
   return error instanceof ApiError ? error.requestId : null
 }
@@ -31,18 +31,20 @@ export function fieldError(error: unknown, field: string): string | undefined {
   return error instanceof ApiError ? error.fieldMessage(field) : undefined
 }
 
-// 服务端对模型的校验错误可能落在 model、model.provider 或 model.modelId 上，都显示在模型选择旁。
+// The server's validation errors for the model may land on model, model.provider or model.modelId; all of them are shown next to the
+// model picker.
 export const isModelField = (field: string) => field === 'model' || field === 'model.provider' || field === 'model.modelId'
 
-// 合并匹配字段的全部校验错误，用于显示在对应输入旁。
+// Combine all validation errors of the matching fields, to show next to the corresponding input.
 export function fieldMessages(error: unknown, match: (field: string) => boolean): string | undefined {
   if (!(error instanceof ApiError)) return undefined
   const messages = error.fields.filter((f) => match(f.field)).map((f) => f.message)
   return messages.length > 0 ? messages.join(t.errors.fieldSeparator) : undefined
 }
 
-// 去掉已在输入旁显示的字段错误，返回还需要整体显示的错误：
-// 没有字段级错误时原样返回；字段错误都已显示时返回 null；否则列出全部剩余字段。
+// Remove the field errors already shown next to inputs and return the error that still needs to be shown as a whole:
+// returned as is when there are no field-level errors; null when every field error is already shown; otherwise all remaining fields are
+// listed.
 export function unmatchedFieldError(error: unknown, shown: (field: string) => boolean): unknown {
   if (!(error instanceof ApiError) || error.fields.length === 0) return error
   const rest = error.fields.filter((f) => !shown(f.field))
@@ -57,7 +59,8 @@ export function unmatchedFieldError(error: unknown, shown: (field: string) => bo
   })
 }
 
-// Agent 名称在所属项目内或平台内唯一：服务端以 409 name_conflict 拒绝，不带字段级错误，这里把它归到名称字段上。
+// Agent names are unique within their project or the platform: the server rejects a duplicate with 409 name_conflict and no field-level
+// error, so it is attributed to the name field here.
 export function agentNameError(error: unknown, scope: 'project' | 'platform' = 'project'): string | undefined {
   if (error instanceof ApiError && error.code === 'name_conflict')
     return scope === 'platform' ? t.createAgent.platformNameConflict : t.createAgent.nameConflict
@@ -68,7 +71,8 @@ export function isAgentNameConflict(error: unknown): boolean {
   return error instanceof ApiError && error.code === 'name_conflict'
 }
 
-// 项目名称在组织内唯一：重名同样以 409 name_conflict 拒绝、不带字段级错误，归到名称字段上。
+// Project names are unique within the organization: a duplicate is likewise rejected with 409 name_conflict and no field-level error, and
+// is attributed to the name field.
 export function projectNameError(error: unknown): string | undefined {
   if (error instanceof ApiError && error.code === 'name_conflict') return t.projects.create.nameConflict
   return fieldError(error, 'name')

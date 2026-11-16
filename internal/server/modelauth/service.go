@@ -300,14 +300,14 @@ func (s *Service) login(ctx context.Context, op store.ModelAuthOperation, work *
 		if errors.As(e, &failure) {
 			diagnostic = failure.provider
 		}
-		s.Log.Warn("模型登录未完成", "agentId", op.AgentID, "operationId", op.ID, "code", code, "stage", stage, "providerStage", diagnostic.Stage, "providerCategory", diagnostic.Category, "providerHTTPStatus", diagnostic.HTTPStatus)
+		s.Log.Warn("model login did not complete", "agentId", op.AgentID, "operationId", op.ID, "code", code, "stage", stage, "providerStage", diagnostic.Stage, "providerCategory", diagnostic.Category, "providerHTTPStatus", diagnostic.HTTPStatus)
 	}
 	stop()
 	failureCtx, failureStop := context.WithTimeout(context.Background(), s.Options.RecordTimeout)
 	defer failureStop()
 	_, err := s.Store.EndModelAuthOperation(failureCtx, op.ID, status, code)
 	if err != nil && s.Log != nil {
-		s.Log.Warn("保存模型登录状态失败", "agentId", op.AgentID, "operationId", op.ID, "code", "auth_unavailable")
+		s.Log.Warn("failed to save the model login status", "agentId", op.AgentID, "operationId", op.ID, "code", "auth_unavailable")
 	}
 }
 func terminal(status string) bool { return status != "pending" && status != "awaiting_authorization" }

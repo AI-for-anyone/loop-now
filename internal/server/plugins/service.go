@@ -24,35 +24,43 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// Service 管理已安装的插件。安装、更新与卸载串行执行。
+// Service manages installed plugins. Installs, updates and uninstalls run one at a time.
 type Service struct {
 	Store *store.Store
-	// Host 是宿主监护；服务端没有宿主入口时为空，平台侧不运行。
+	// Host is the plugin host supervisor; it is nil when the server has no plugin host entry point, and then platform
+	// sides do not run.
 	Host *pluginhost.Supervisor
-	// Root 是 <work root>/platform/plugins：安装目录 <Root>/<id>/<version>/，数据目录 <Root>/<id>/data/。
+	// Root is <work root>/platform/plugins: install directories are <Root>/<id>/<version>/ and the data directory is
+	// <Root>/<id>/data/.
 	Root string
-	// OfficialDir 是随平台发布的官方插件目录（每个子目录一个插件）；为空时没有 builtin 来源。
+	// OfficialDir is the official plugin directory shipped with the platform (one plugin per subdirectory); when empty
+	// there is no builtin source.
 	OfficialDir string
-	// OfficialMarket 是官方市场的 loop-now-market.json 地址，为空时只有设置里的市场；MarketClient 读取市场（默认 http.DefaultClient）。
+	// OfficialMarket is the address of the official market's loop-now-market.json; when empty only the markets in the
+	// settings are used. MarketClient reads markets (http.DefaultClient by default).
 	OfficialMarket  string
 	MarketClient    *http.Client
 	NodeBin, GitBin string
-	// APIURL 是插件令牌调用的 /api/v1 地址（回环监听器）。
+	// APIURL is the /api/v1 address that plugin tokens call (the loopback listener).
 	APIURL          string
 	PlatformVersion string
 	FetchTimeout    time.Duration
 	PreviewTTL      time.Duration
-	// RequestTimeout 是 action 与 http 请求等待插件回应的时长，默认 30 秒。
+	// RequestTimeout is how long action and http requests wait for the plugin to respond; 30 seconds by default.
 	RequestTimeout time.Duration
 	Log            *slog.Logger
-	// CaptureProviders 用随包 Pi 加载插件目录 dir 下的扩展（相对路径），读出它们注册的模型提供方；为空时不读取。
-	// 会运行插件代码，只在用户确认安装之后调用。
+	// CaptureProviders uses the bundled Pi to load the extensions under the plugin directory dir (relative paths) and
+	// reads the model providers they register; when nil, nothing is read. It runs plugin code, so it is only called
+	// after the user has confirmed the install.
 	CaptureProviders func(ctx context.Context, dir string, extensions []string) (modelcatalog.Capture, error)
-	// Models 是模型目录：安装、更新、卸载后把插件提供方并入；为空时不并入。
+	// Models is the model catalog: plugin providers are merged into it after an install, update or uninstall; when
+	// nil, nothing is merged.
 	Models *modelcatalog.Registry
-	// DeleteProviderAccounts 删除这些模型提供方的项目订阅账号（卸载并删除数据时）；为空时不删。
+	// DeleteProviderAccounts deletes the project subscription accounts of these model providers (when uninstalling
+	// with data deletion); when nil, nothing is deleted.
 	DeleteProviderAccounts func(ctx context.Context, providers []string) error
-	// ManagedHomePaths 返回平台在 Agent HOME 里管理的路径（CLI 模板的凭证文件）；安装时据此提示与之重叠的状态路径。
+	// ManagedHomePaths returns the paths the platform manages in the Agent's HOME (the credential files of CLI
+	// templates); on install it is used to point out state paths that overlap them.
 	ManagedHomePaths func() []string
 
 	mu       sync.Mutex
@@ -62,14 +70,15 @@ type Service struct {
 
 type preview struct {
 	view    Preview
-	dir     string // 插件目录：暂存区里的副本，local 来源为原目录
-	staging string // 暂存目录，local 来源为空
+	dir     string // plugin directory: the copy in the staging area, or the original directory for a local source
+	staging string // staging directory; empty for a local source
 	m       Manifest
-	// providerState 是市场条目的声明（从市场安装时）；为空时用清单的 loopNow.providerState。
+	// providerState is the market entry's declaration (when installing from a market); when nil the manifest's
+	// loopNow.providerState is used.
 	providerState map[string]pluginmanifest.ProviderState
 }
 
-// Init 清理上次运行留下的暂存目录。
+// Init cleans up the staging directories left over from the previous run.
 func (s *Service) Init() error {
 	if s.FetchTimeout <= 0 {
 		s.FetchTimeout = 10 * time.Minute
@@ -87,9 +96,9 @@ func (s *Service) Init() error {
 	return os.RemoveAll(filepath.Join(s.Root, ".staging"))
 }
 
-// ---- 接口里的结构 ----
+// ---- API structures ----
 
-// View 是接口里的 Plugin。
+// View is the API's Plugin.
 type View struct {
 	ID              string         `json:"id"`
 	DisplayName     Text           `json:"displayName"`
@@ -105,22 +114,24 @@ type View struct {
 	UpdatedAt       time.Time      `json:"updatedAt"`
 }
 
-// Detail 是接口里的 PluginDetail。
+// Detail is the API's PluginDetail.
 type Detail struct {
 	Plugin     View           `json:"plugin"`
 	Manifest   PublicManifest `json:"manifest"`
 	Versions   []VersionView  `json:"versions"`
 	InstallDir string         `json:"installDir"`
 	DataDir    string         `json:"dataDir"`
-	// Providers 是当前版本的 Pi 扩展注册的模型提供方（安装时读出）；ProvidersError 是整次读取失败的原因。
+	// Providers are the model providers registered by the current version's Pi extensions (read at install time);
+	// ProvidersError is the reason the whole read failed.
 	Providers      []ProviderView              `json:"providers"`
 	ProviderErrors []modelcatalog.CaptureError `json:"providerErrors"`
 	ProvidersError *string                     `json:"providersError"`
-	// ProviderState 是当前版本生效的 providerState 声明（市场条目优先，其次包自己的 loopNow.providerState）。
+	// ProviderState is the providerState declaration in effect for the current version (the market entry first, then
+	// the package's own loopNow.providerState).
 	ProviderState map[string]pluginmanifest.ProviderState `json:"providerState"`
 }
 
-// ProviderView 是接口里的 PluginModelProvider。
+// ProviderView is the API's PluginModelProvider.
 type ProviderView struct {
 	ID               string  `json:"id"`
 	Name             string  `json:"name"`
@@ -132,7 +143,7 @@ type ProviderView struct {
 	ModelCount       int     `json:"modelCount"`
 }
 
-// VersionView 是接口里的 PluginVersion。
+// VersionView is the API's PluginVersion.
 type VersionView struct {
 	Version     string    `json:"version"`
 	Digest      string    `json:"digest"`
@@ -140,7 +151,7 @@ type VersionView struct {
 	Current     bool      `json:"current"`
 }
 
-// Preview 是接口里的 PluginPreview。
+// Preview is the API's PluginPreview.
 type Preview struct {
 	PreviewID        uuid.UUID      `json:"previewId"`
 	ExpiresAt        time.Time      `json:"expiresAt"`
@@ -150,21 +161,21 @@ type Preview struct {
 	InstalledVersion *string        `json:"installedVersion"`
 }
 
-// ConfigView 是接口里的 PluginConfig。
+// ConfigView is the API's PluginConfig.
 type ConfigView struct {
 	Values     map[string]any `json:"values"`
 	SecretsSet []string       `json:"secretsSet"`
 	Revision   int64          `json:"revision"`
 }
 
-// ConfigInput 是接口里的 PluginConfigUpdate。
+// ConfigInput is the API's PluginConfigUpdate.
 type ConfigInput struct {
 	Values           map[string]any     `json:"values"`
 	Secrets          map[string]*string `json:"secrets"`
 	ExpectedRevision int64              `json:"expectedRevision"`
 }
 
-// ProjectView 是接口里的 ProjectPlugin。
+// ProjectView is the API's ProjectPlugin.
 type ProjectView struct {
 	PluginID      string     `json:"pluginId"`
 	DisplayName   Text       `json:"displayName"`
@@ -175,7 +186,7 @@ type ProjectView struct {
 	Config        ConfigView `json:"config"`
 }
 
-// AccountView 是接口里的 PluginAccount。
+// AccountView is the API's PluginAccount.
 type AccountView struct {
 	ID         uuid.UUID      `json:"id"`
 	PluginID   string         `json:"pluginId"`
@@ -187,7 +198,7 @@ type AccountView struct {
 	Revision   int64          `json:"revision"`
 }
 
-// AgentView 是接口里的 AgentPlugin。
+// AgentView is the API's AgentPlugin.
 type AgentView struct {
 	PluginID     string        `json:"pluginId"`
 	DisplayName  Text          `json:"displayName"`
@@ -197,7 +208,7 @@ type AgentView struct {
 	AccountKinds []AccountKind `json:"accountKinds"`
 }
 
-// HostView 是接口里的 PluginHostStatus。
+// HostView is the API's PluginHostStatus.
 type HostView struct {
 	Configured  bool              `json:"configured"`
 	State       string            `json:"state"`
@@ -213,7 +224,7 @@ type HostView struct {
 	} `json:"today"`
 }
 
-// BuiltinSource 是接口里的 BuiltinPluginSource。
+// BuiltinSource is the API's BuiltinPluginSource.
 type BuiltinSource struct {
 	ID          string `json:"id"`
 	DisplayName Text   `json:"displayName"`
@@ -234,7 +245,7 @@ func view(p store.Plugin) (View, Manifest, error) {
 		HasPlatform: m.Platform != "", EnabledProjects: p.EnabledProjects, GrantedAgents: p.GrantedAgents, InstalledAt: p.InstalledAt, UpdatedAt: p.UpdatedAt}, m, nil
 }
 
-// get 读取插件与它的清单。
+// get reads a plugin and its manifest.
 func (s *Service) get(ctx context.Context, id string) (View, Manifest, error) {
 	p, err := s.Store.GetPlugin(ctx, id)
 	if err != nil {
@@ -243,9 +254,10 @@ func (s *Service) get(ctx context.Context, id string) (View, Manifest, error) {
 	return view(p)
 }
 
-// ---- 代管外部身份 ----
+// ---- Managing external identities ----
 
-// SetIdentityManager 设置或清空代管外部身份的插件渠道（plugins/SPEC.md §12）：插件须已安装，渠道须在清单里声明 manageIdentities，否则 422。
+// SetIdentityManager sets or clears the plugin channel that manages an external identity (plugins/SPEC.md §12): the
+// plugin must be installed and the channel must declare manageIdentities in the manifest, otherwise 422.
 func (s *Service) SetIdentityManager(ctx context.Context, identity uuid.UUID, m *store.IdentityManager) (store.ExternalIdentity, error) {
 	if m != nil {
 		_, manifest, err := s.get(ctx, m.PluginID)
@@ -262,9 +274,9 @@ func (s *Service) SetIdentityManager(ctx context.Context, identity uuid.UUID, m 
 	return s.Store.SetIdentityManager(ctx, identity, m)
 }
 
-// ---- 安装、更新、卸载 ----
+// ---- Install, update, uninstall ----
 
-// List 返回全部已安装的插件。
+// List returns all installed plugins.
 func (s *Service) List(ctx context.Context) ([]View, error) {
 	ps, err := s.Store.ListPlugins(ctx)
 	if err != nil {
@@ -281,7 +293,7 @@ func (s *Service) List(ctx context.Context) ([]View, error) {
 	return out, nil
 }
 
-// Get 返回插件详情。
+// Get returns a plugin's details.
 func (s *Service) Get(ctx context.Context, id string) (Detail, error) {
 	v, m, err := s.get(ctx, id)
 	if err != nil {
@@ -315,13 +327,14 @@ func (s *Service) Get(ctx context.Context, id string) (Detail, error) {
 
 func (s *Service) dataDir(id string) string { return filepath.Join(s.Root, id, "data") }
 
-// PreviewRequest 是接口里的 PluginPreviewRequest。
+// PreviewRequest is the API's PluginPreviewRequest.
 type PreviewRequest struct {
 	Source   *Source `json:"source"`
 	PluginID string  `json:"pluginId"`
 }
 
-// Preview 取来插件并读出清单，暂存到安装或更新为止（PreviewTTL 内有效）。
+// Preview fetches a plugin, reads its manifest and keeps it staged until it is installed or updated (valid for
+// PreviewTTL).
 func (s *Service) Preview(ctx context.Context, req PreviewRequest) (Preview, error) {
 	s.expirePreviews()
 	if (req.Source == nil) == (req.PluginID == "") {
@@ -366,7 +379,9 @@ func (s *Service) Preview(ctx context.Context, req PreviewRequest) (Preview, err
 		resolved.Market = market
 		var m Manifest
 		if m, err = ReadManifest(dir, s.PlatformVersion); err == nil {
-			// 从市场安装、包自己没写 loopNow.displayName 时，用市场条目的显示名（而不是 npm 包名），随版本保存；更新时按新条目重取。
+			// When installing from a market and the package does not set its own loopNow.displayName, use the market
+			// entry's display name (instead of the npm package name); it is saved with the version and taken again from
+			// the new entry on update.
 			if entry != nil && !m.OwnDisplayName && entry.DisplayName.String() != "" {
 				m.DisplayName = entry.DisplayName
 			}
@@ -420,14 +435,15 @@ func (s *Service) expirePreviews() {
 	}
 }
 
-// InstallInput 是接口里的 PluginInstall。
+// InstallInput is the API's PluginInstall.
 type InstallInput struct {
 	PreviewID uuid.UUID `json:"previewId"`
 	Confirm   bool      `json:"confirm"`
 }
 
-// Install 按预览安装新插件；update 不为空时是对已安装插件 update 的更新。
-// 预览用过即失效；只有缺少确认时保留，便于确认后重试。
+// Install installs a new plugin from a preview; when update is not empty it is an update of the installed plugin
+// update. A preview is used up once used; it is kept only when the confirmation is missing, so the request can be
+// retried after confirming.
 func (s *Service) Install(ctx context.Context, in InstallInput, update string) (View, error) {
 	s.expirePreviews()
 	s.mu.Lock()
@@ -488,7 +504,8 @@ func (s *Service) install(ctx context.Context, pv *preview, update string) (View
 			}
 		}
 	}
-	// 依赖装好之后、文件就位之前读出模型提供方：与别的插件注册的提供方同 id 时不安装。
+	// Read the model providers after the dependencies are installed and before the files are moved into place: if one
+	// has the same id as a provider registered by another plugin, do not install.
 	providers, providersError := s.captureProviders(ctx, codeDir, m)
 	if err := s.checkProviderConflicts(ctx, m.ID, providers); err != nil {
 		return View{}, err
@@ -521,7 +538,8 @@ func (s *Service) install(ctx context.Context, pv *preview, update string) (View
 		declared = map[string]pluginmanifest.ProviderState{}
 	}
 	state, _ := json.Marshal(declared)
-	// 与平台管理的 HOME 路径重叠的状态路径：Agent 启动时会失败，安装时先在详情里提示。
+	// State paths that overlap HOME paths managed by the platform would make the Agent fail at startup, so point them
+	// out in the details at install time.
 	if s.ManagedHomePaths != nil {
 		managed := s.ManagedHomePaths()
 		for _, provider := range slices.Sorted(maps.Keys(declared)) {
@@ -539,7 +557,8 @@ func (s *Service) install(ctx context.Context, pv *preview, update string) (View
 	} else {
 		err = s.Store.UpdatePlugin(ctx, row, sum, extra)
 		if err == nil {
-			// 新版本不再声明代管的渠道，它上面的外部身份绑定清空（plugins/SPEC.md §12）。
+			// When the new version no longer declares a managing channel, the external identity bindings on it are
+			// cleared (plugins/SPEC.md §12).
 			err = s.Store.PruneIdentityManagers(ctx, m.ID, m.ManagingChannels())
 		}
 	}
@@ -552,17 +571,20 @@ func (s *Service) install(ctx context.Context, pv *preview, update string) (View
 	return v, err
 }
 
-// reloadHost 让宿主按最新的插件列表重新加载（或卸载）一个插件；宿主不在时下次启动生效。
+// reloadHost makes the plugin host reload (or unload) one plugin according to the latest plugin list; when the host
+// is not running, it takes effect on the next start.
 func (s *Service) reloadHost(ctx context.Context, id string, touched bool) {
 	if s.Host == nil || !touched {
 		return
 	}
 	if err := s.Host.Reload(ctx, id); err != nil {
-		s.Log.Warn("宿主重新加载插件失败", "plugin", id, "err", err)
+		s.Log.Warn("plugin host failed to reload the plugin", "plugin", id, "err", err)
 	}
 }
 
-// Uninstall 卸载插件：宿主内卸载，删除数据库记录与各版本的安装目录（local 来源的目录不删）；deleteData 时删数据目录。
+// Uninstall uninstalls a plugin: it unloads it in the plugin host and deletes the database records and the install
+// directories of every version (directories of a local source are not deleted); with deleteData it also deletes the
+// data directory.
 func (s *Service) Uninstall(ctx context.Context, id string, deleteData bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -572,7 +594,8 @@ func (s *Service) Uninstall(ctx context.Context, id string, deleteData bool) err
 	}
 	var src ResolvedSource
 	_ = json.Unmarshal(p.Source, &src)
-	// 删除数据时连同它注册的模型提供方的项目订阅账号一起删除（plugins/SPEC.md §13）；默认保留，重新安装后恢复。
+	// When deleting data, also delete the project subscription accounts of the model providers it registered
+	// (plugins/SPEC.md §13); by default they are kept and come back after a reinstall.
 	if deleteData && s.DeleteProviderAccounts != nil {
 		var providers []string
 		if registered, err := s.installedProviders(ctx); err == nil {
@@ -588,7 +611,7 @@ func (s *Service) Uninstall(ctx context.Context, id string, deleteData bool) err
 	}
 	if s.Host != nil {
 		if err := s.Host.Unload(ctx, id); err != nil {
-			s.Log.Warn("宿主卸载插件失败", "plugin", id, "err", err)
+			s.Log.Warn("plugin host failed to unload the plugin", "plugin", id, "err", err)
 		}
 	}
 	dirs, err := s.Store.DeletePlugin(ctx, id)
@@ -596,10 +619,11 @@ func (s *Service) Uninstall(ctx context.Context, id string, deleteData bool) err
 		return err
 	}
 	for _, d := range dirs {
-		// local 来源原地使用，目录属于作者；只删平台自己的安装目录。
+		// A local source is used in place and its directory belongs to the author; only delete the platform's own
+		// install directories.
 		if strings.HasPrefix(d, filepath.Join(s.Root, id)+string(filepath.Separator)) {
 			if err := os.RemoveAll(d); err != nil {
-				s.Log.Warn("删除插件安装目录失败", "plugin", id, "dir", d, "err", err)
+				s.Log.Warn("failed to delete the plugin install directory", "plugin", id, "dir", d, "err", err)
 			}
 		}
 	}
@@ -608,12 +632,13 @@ func (s *Service) Uninstall(ctx context.Context, id string, deleteData bool) err
 			return err
 		}
 	}
-	_ = os.Remove(filepath.Join(s.Root, id)) // 只在已空时删除
+	_ = os.Remove(filepath.Join(s.Root, id)) // only removed when already empty
 	s.publishProviders(ctx)
 	return nil
 }
 
-// BuiltinSources 列出官方插件目录里的插件；清单不合规则的跳过并记日志。
+// BuiltinSources lists the plugins in the official plugin directory; entries whose manifest breaks the rules are
+// skipped and logged.
 func (s *Service) BuiltinSources() []BuiltinSource {
 	out := []BuiltinSource{}
 	if s.OfficialDir == "" {
@@ -621,7 +646,7 @@ func (s *Service) BuiltinSources() []BuiltinSource {
 	}
 	entries, err := os.ReadDir(s.OfficialDir)
 	if err != nil {
-		s.Log.Warn("读取官方插件目录失败", "dir", s.OfficialDir, "err", err)
+		s.Log.Warn("failed to read the official plugin directory", "dir", s.OfficialDir, "err", err)
 		return out
 	}
 	for _, e := range entries {
@@ -630,7 +655,7 @@ func (s *Service) BuiltinSources() []BuiltinSource {
 		}
 		m, err := ReadManifest(filepath.Join(s.OfficialDir, e.Name()), s.PlatformVersion)
 		if err != nil || m.ID != e.Name() {
-			s.Log.Warn("跳过官方插件目录中的条目", "name", e.Name(), "err", err)
+			s.Log.Warn("skipping an entry in the official plugin directory", "name", e.Name(), "err", err)
 			continue
 		}
 		out = append(out, BuiltinSource{ID: m.ID, DisplayName: m.DisplayName, Description: m.Description, Version: m.Version})
@@ -638,7 +663,7 @@ func (s *Service) BuiltinSources() []BuiltinSource {
 	return out
 }
 
-// ---- 配置 ----
+// ---- Config ----
 
 func configView(c store.PluginConfigRow) ConfigView {
 	values := c.Values
@@ -648,7 +673,7 @@ func configView(c store.PluginConfigRow) ConfigView {
 	return ConfigView{Values: values, SecretsSet: secretsSet(c.Secrets), Revision: c.Revision}
 }
 
-// Config 返回全局配置。
+// Config returns the global config.
 func (s *Service) Config(ctx context.Context, id string) (ConfigView, error) {
 	if _, _, err := s.get(ctx, id); err != nil {
 		return ConfigView{}, err
@@ -657,7 +682,8 @@ func (s *Service) Config(ctx context.Context, id string) (ConfigView, error) {
 	return configView(c), err
 }
 
-// PutConfig 按版本保存全局配置，并把新配置交给宿主内的插件。
+// PutConfig saves the global config against the expected revision and hands the new config to the plugin in the
+// plugin host.
 func (s *Service) PutConfig(ctx context.Context, id string, in ConfigInput) (ConfigView, error) {
 	_, m, err := s.get(ctx, id)
 	if err != nil {
@@ -685,7 +711,8 @@ func (s *Service) PutConfig(ctx context.Context, id string, in ConfigInput) (Con
 	return configView(saved), nil
 }
 
-// configChanged 把插件的全部配置重新交给宿主内的插件；插件不在宿主里时不做事。
+// configChanged hands the plugin's whole config again to the plugin in the plugin host; it does nothing when the
+// plugin is not loaded in the host.
 func (s *Service) configChanged(ctx context.Context, id string) {
 	if s.Host == nil {
 		return
@@ -695,7 +722,7 @@ func (s *Service) configChanged(ctx context.Context, id string) {
 		err = s.Host.ConfigChanged(ctx, id, map[string]any{"config": cfg})
 	}
 	if err != nil && !errors.Is(err, pluginhost.ErrNotLoaded) {
-		s.Log.Warn("通知插件配置变化失败", "plugin", id, "err", err)
+		s.Log.Warn("failed to notify the plugin of a config change", "plugin", id, "err", err)
 	}
 }
 
@@ -721,9 +748,9 @@ func (s *Service) configPayload(ctx context.Context, id string) (configPayload, 
 	return out, nil
 }
 
-// ---- 项目 ----
+// ---- Projects ----
 
-// ProjectPlugins 返回项目插件页的列表。
+// ProjectPlugins returns the list for a project's plugins page.
 func (s *Service) ProjectPlugins(ctx context.Context, project uuid.UUID) ([]ProjectView, error) {
 	rows, err := s.Store.ProjectPlugins(ctx, project)
 	if err != nil {
@@ -741,7 +768,7 @@ func (s *Service) ProjectPlugins(ctx context.Context, project uuid.UUID) ([]Proj
 	return out, nil
 }
 
-// ProjectInput 是接口里的 ProjectPluginUpdate。
+// ProjectInput is the API's ProjectPluginUpdate.
 type ProjectInput struct {
 	Enabled          bool               `json:"enabled"`
 	Values           map[string]any     `json:"values"`
@@ -749,7 +776,7 @@ type ProjectInput struct {
 	ExpectedRevision int64              `json:"expectedRevision"`
 }
 
-// PutProject 保存项目的启用状态与项目级配置。
+// PutProject saves whether the plugin is enabled in the project and its project-level config.
 func (s *Service) PutProject(ctx context.Context, project uuid.UUID, id string, in ProjectInput) (ProjectView, error) {
 	_, m, err := s.get(ctx, id)
 	if err != nil {
@@ -791,7 +818,7 @@ func (s *Service) PutProject(ctx context.Context, project uuid.UUID, id string, 
 	return ProjectView{PluginID: v.ID, DisplayName: v.DisplayName, Version: v.Version, Status: v.Status, Enabled: row.Enabled, ProjectFields: fields, Config: configView(row.Config)}, err
 }
 
-// ---- 账号 ----
+// ---- Accounts ----
 
 func accountKind(m Manifest, kind string) (AccountKind, bool) {
 	for _, k := range m.Accounts {
@@ -817,7 +844,7 @@ func accountView(a store.PluginAccount, k AccountKind) AccountView {
 	return AccountView{ID: a.ID, PluginID: a.PluginID, ProjectID: a.ProjectID, Kind: a.Kind, Name: a.Name, Values: values, SecretsSet: set, Revision: a.Revision}
 }
 
-// Accounts 返回项目里这个插件的账号。
+// Accounts returns this plugin's accounts in the project.
 func (s *Service) Accounts(ctx context.Context, project uuid.UUID, id string) ([]AccountView, error) {
 	_, m, err := s.get(ctx, id)
 	if err != nil {
@@ -838,7 +865,7 @@ func (s *Service) Accounts(ctx context.Context, project uuid.UUID, id string) ([
 	return out, nil
 }
 
-// AccountCreate 是接口里的 PluginAccountCreate。
+// AccountCreate is the API's PluginAccountCreate.
 type AccountCreate struct {
 	Kind    string            `json:"kind"`
 	Name    string            `json:"name"`
@@ -846,7 +873,7 @@ type AccountCreate struct {
 	Secrets map[string]string `json:"secrets"`
 }
 
-// CreateAccount 添加账号。
+// CreateAccount adds an account.
 func (s *Service) CreateAccount(ctx context.Context, project uuid.UUID, id string, in AccountCreate) (AccountView, error) {
 	_, m, err := s.get(ctx, id)
 	if err != nil {
@@ -879,7 +906,7 @@ func (s *Service) CreateAccount(ctx context.Context, project uuid.UUID, id strin
 	return accountView(a, k), nil
 }
 
-// AccountUpdate 是接口里的 PluginAccountUpdate。
+// AccountUpdate is the API's PluginAccountUpdate.
 type AccountUpdate struct {
 	Name             string             `json:"name"`
 	Values           map[string]any     `json:"values"`
@@ -887,7 +914,7 @@ type AccountUpdate struct {
 	ExpectedRevision int64              `json:"expectedRevision"`
 }
 
-// UpdateAccount 按版本修改账号。
+// UpdateAccount changes an account against the expected revision.
 func (s *Service) UpdateAccount(ctx context.Context, project uuid.UUID, id string, account uuid.UUID, in AccountUpdate) (AccountView, error) {
 	_, m, err := s.get(ctx, id)
 	if err != nil {
@@ -927,9 +954,9 @@ func (s *Service) UpdateAccount(ctx context.Context, project uuid.UUID, id strin
 	return accountView(a, kind), nil
 }
 
-// ---- Agent 授权 ----
+// ---- Agent grants ----
 
-// AgentPlugins 返回 Agent 配置页的插件段。
+// AgentPlugins returns the plugins section of the Agent config page.
 func (s *Service) AgentPlugins(ctx context.Context, agent uuid.UUID) ([]AgentView, error) {
 	a, err := s.Store.GetAgent(ctx, agent)
 	if err != nil {
@@ -965,13 +992,13 @@ func (s *Service) AgentPlugins(ctx context.Context, agent uuid.UUID) ([]AgentVie
 	return out, nil
 }
 
-// AgentInput 是接口里的 AgentPluginUpdate。
+// AgentInput is the API's AgentPluginUpdate.
 type AgentInput struct {
 	Granted    bool        `json:"granted"`
 	AccountIDs []uuid.UUID `json:"accountIds"`
 }
 
-// PutAgentPlugin 授权或取消授权，返回保存后的这一项。
+// PutAgentPlugin grants or revokes the plugin and returns the saved item.
 func (s *Service) PutAgentPlugin(ctx context.Context, agent uuid.UUID, id string, in AgentInput) (AgentView, error) {
 	if err := s.Store.SaveAgentPluginGrant(ctx, agent, id, in.Granted, in.AccountIDs); err != nil {
 		return AgentView{}, err
@@ -988,14 +1015,14 @@ func (s *Service) PutAgentPlugin(ctx context.Context, agent uuid.UUID, id string
 	return AgentView{}, apperr.NotFound("插件")
 }
 
-// ---- 设置与宿主 ----
+// ---- Settings and plugin host ----
 
-// Settings 返回全局设置。
+// Settings returns the global settings.
 func (s *Service) Settings(ctx context.Context) (store.PluginSettings, error) {
 	return s.Store.GetPluginSettings(ctx)
 }
 
-// PutSettings 保存全局设置；一键停用立即停止或恢复宿主。
+// PutSettings saves the global settings; the "Disable all" switch stops or resumes the plugin host immediately.
 func (s *Service) PutSettings(ctx context.Context, v store.PluginSettings) (store.PluginSettings, error) {
 	for _, m := range v.Markets {
 		if strings.TrimSpace(m) == "" {
@@ -1011,7 +1038,7 @@ func (s *Service) PutSettings(ctx context.Context, v store.PluginSettings) (stor
 	return s.Store.GetPluginSettings(ctx)
 }
 
-// HostStatus 返回宿主状态与今天的投递结果。
+// HostStatus returns the plugin host status and today's delivery results.
 func (s *Service) HostStatus(ctx context.Context) (HostView, error) {
 	out := HostView{State: pluginhost.StateIdle, RecentExits: []time.Time{}, Loaded: []string{}}
 	if s.Host != nil {
@@ -1037,7 +1064,7 @@ func (s *Service) HostStatus(ctx context.Context) (HostView, error) {
 	return out, err
 }
 
-// RestartHost 人工重新启动宿主。
+// RestartHost restarts the plugin host on manual request.
 func (s *Service) RestartHost(ctx context.Context) (HostView, error) {
 	if s.Host == nil {
 		return HostView{}, apperr.Conflict(apperr.CodePluginNotEnabled, "服务端没有配置插件宿主")
@@ -1053,7 +1080,7 @@ func (s *Service) RestartHost(ctx context.Context) (HostView, error) {
 	return s.HostStatus(ctx)
 }
 
-// ---- 宿主要加载的插件 ----
+// ---- Plugins for the plugin host to load ----
 
 type loadManifest struct {
 	Events       []string              `json:"events"`
@@ -1079,8 +1106,9 @@ type loadPayload struct {
 	APIURL   string        `json:"apiUrl"`
 }
 
-// Specs 返回有平台侧的插件，按安装时间排序（宿主加载与同步调用的顺序）。
-// 每个插件的 load 载荷在加载前才组装，这时签发新的插件令牌并吊销旧的。
+// Specs returns the plugins that have a platform side, sorted by install time (the order in which the plugin host
+// loads them and makes synchronous calls). Each plugin's load payload is only assembled right before loading; at that
+// point a new plugin token is issued and the old one revoked.
 func (s *Service) Specs(ctx context.Context) ([]pluginhost.Spec, error) {
 	ps, err := s.Store.ListPlugins(ctx)
 	if err != nil {
@@ -1126,8 +1154,9 @@ func (s *Service) loadPayload(ctx context.Context, p store.Plugin, m Manifest) (
 	return json.Marshal(payload)
 }
 
-// Hook 把同步事件交给宿主里订阅了它的插件（plugins/SPEC.md §3）：项目内的事件只交给在 project 启用了插件的；
-// 没有宿主时返回空结果，操作照常进行。
+// Hook hands a synchronous event to the plugins in the plugin host that subscribe to it (plugins/SPEC.md §3): an
+// event inside a project only goes to plugins enabled in project. Without a plugin host it returns an empty result
+// and the operation proceeds as usual.
 func (s *Service) Hook(ctx context.Context, kind pluginhost.Kind, event map[string]any, project *uuid.UUID) (pluginhost.Outcome, error) {
 	if s == nil || s.Host == nil {
 		return pluginhost.Outcome{}, nil
@@ -1137,7 +1166,7 @@ func (s *Service) Hook(ctx context.Context, kind pluginhost.Kind, event map[stri
 		include = func(id string) bool {
 			on, err := s.Store.PluginEnabledIn(ctx, id, *project)
 			if err != nil {
-				s.Log.Warn("读取插件启用状态失败", "plugin", id, "err", err)
+				s.Log.Warn("failed to read plugin enablement", "plugin", id, "err", err)
 			}
 			return on
 		}
@@ -1145,8 +1174,9 @@ func (s *Service) Hook(ctx context.Context, kind pluginhost.Kind, event map[stri
 	return s.Host.Call(ctx, kind, event, include)
 }
 
-// WakeOnCommit 让写了插件事件的事务一提交就唤醒投递协程（原来靠 PostgreSQL 的 LISTEN/NOTIFY），并先唤醒一次，
-// 投递启动前已经写入的事件。重投由投递协程自己按时轮询。
+// WakeOnCommit makes a transaction that wrote plugin events wake the delivery goroutine as soon as it commits
+// (previously done with PostgreSQL's LISTEN/NOTIFY), and wakes it once right away for events written before delivery
+// started. Redelivery is driven by the delivery goroutine's own periodic polling.
 func (s *Service) WakeOnCommit() {
 	if s.Host == nil {
 		return

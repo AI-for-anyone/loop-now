@@ -62,7 +62,7 @@ func git(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// repo 建一个本地仓库：main 有 3 次提交，feature 另有 1 次提交；返回 file:// 地址。
+// repo creates a local repository: main has 3 commits and feature has 1 more; returns a file:// URL.
 func repo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -82,7 +82,7 @@ func repo(t *testing.T) string {
 	git(t, dir, "commit", "-q", "-m", "feature")
 	git(t, dir, "checkout", "-q", "main")
 	url := "file://" + filepath.ToSlash(dir)
-	if !strings.HasPrefix(dir, "/") { // Windows：file:///C:/...
+	if !strings.HasPrefix(dir, "/") { // Windows: file:///C:/...
 		url = "file:///" + filepath.ToSlash(dir)
 	}
 	return url
@@ -115,7 +115,7 @@ func errCode(err error) string {
 	return err.Error()
 }
 
-// 从 Git 一次性拉取：只拉这一个分支、保留完整历史；之后就是普通文件。
+// One-time pull from Git: only this one branch, with full history; afterwards it is just plain files.
 func TestGitPullSingleBranchFullHistory(t *testing.T) {
 	ctx := context.Background()
 	f := newFixture(t, "git", time.Minute)
@@ -154,7 +154,8 @@ func TestGitPullSingleBranchFullHistory(t *testing.T) {
 	if left, _ := os.ReadDir(filepath.Join(folders.AgentRoot(f.work, f.agent), ".git-pulls")); len(left) != 0 {
 		t.Fatalf("临时目录应清理：%v", left)
 	}
-	// 目标已不为空：受理时直接冲突，不留下拉取记录；同一 actionId 的重放仍返回原操作。
+	// The target is no longer empty: the request conflicts right away and leaves no pull record; a replay with the same
+	// actionId still returns the original operation.
 	if _, err := f.svc.StartGitPull(ctx, f.agent, folders.GitPullInput{ActionID: uuid.New(), URL: url, Branch: "main", Path: "src/app"}); errCode(err) != apperr.CodePathConflict {
 		t.Fatalf("目标不为空应冲突：%v", err)
 	}
@@ -164,7 +165,7 @@ func TestGitPullSingleBranchFullHistory(t *testing.T) {
 	if replay, err := f.svc.StartGitPull(ctx, f.agent, folders.GitPullInput{ActionID: action, URL: url, Branch: "main", Path: "src/app"}); err != nil || replay.ID != p.ID || replay.Status != "succeeded" {
 		t.Fatalf("重放应返回原操作：%v %+v", err, replay)
 	}
-	// 空目录可以作为目标。
+	// An empty directory can be a target.
 	if err := os.MkdirAll(filepath.Join(folders.AgentWorkspace(f.work, f.agent), "empty"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +184,8 @@ func TestGitPullSingleBranchFullHistory(t *testing.T) {
 	}
 }
 
-// 失败：分支不存在、超时；参数校验；服务重启时进行中的拉取标为 server_restart。
+// Failures: missing branch, timeout; parameter validation; pulls in progress at a service restart are marked
+// server_restart.
 func TestGitPullFailures(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("慢 git 夹具是 sh 脚本")
@@ -227,7 +229,7 @@ func TestGitPullFailures(t *testing.T) {
 		t.Fatalf("超时：%+v", done)
 	}
 
-	// 上次运行留下的排队记录：启动时标为 server_restart。
+	// A queued record left by the previous run: marked server_restart at startup.
 	if _, created, err := g.st.CreateFolderGitPull(ctx, store.FolderGitPull{ID: uuid.Must(uuid.NewV7()), AgentID: g.agent, ActionID: uuid.New(), URL: url, Branch: "main", Path: "y"}); err != nil || !created {
 		t.Fatal(err)
 	}
@@ -240,7 +242,8 @@ func TestGitPullFailures(t *testing.T) {
 	}
 }
 
-// 退役文件夹来源的一次性回放：从未同步的来源整体写入；已同步的只应用待写入与待删除；只执行一次，不改旧表数据。
+// One-time replay of retired folder sources: a never-synced source is written whole; a synced one applies only the
+// pending writes and deletions; it runs only once and does not change data in the old tables.
 func TestApplyLegacyFolderSourcesOnce(t *testing.T) {
 	ctx := context.Background()
 	f := newFixture(t, "git", time.Minute)

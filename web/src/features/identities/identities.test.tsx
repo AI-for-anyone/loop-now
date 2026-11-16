@@ -18,7 +18,8 @@ interface Backend {
   inbox?: Record<string, Schemas['InboxMessage'][]>
 }
 
-// 假的外部身份后端：列表只含未删除的，单个查询含已删除的；记录写操作。
+// Fake external identity backend: the list contains only identities that are not deleted,
+// while a single lookup also returns deleted ones; write operations are recorded.
 function identityBackend(backend: Backend) {
   const writes: { method: string; path: string; body?: unknown }[] = []
   const handlers = [
@@ -186,7 +187,7 @@ describe('签发令牌', () => {
     expect(result.getByText(/令牌拥有外部 CLI 的全部权限/)).toBeInTheDocument()
     await user.click(result.getByRole('button', { name: '复制' }))
     await expect(navigator.clipboard.readText()).resolves.toBe(SECRET)
-    // 关闭前要确认；选“返回”时明文仍在。
+    // Closing needs confirmation; choosing “返回” (Back) keeps the plaintext.
     await user.click(result.getByRole('button', { name: '我已保存，关闭' }))
     const confirm = within(await screen.findByRole('alertdialog', { name: '确认已保存令牌？' }))
     expect(confirm.getByText('关闭后，这个令牌的明文不会再显示，也无法找回。')).toBeInTheDocument()
@@ -201,7 +202,7 @@ describe('签发令牌', () => {
     expect(JSON.stringify({ ...window.localStorage })).not.toContain(SECRET)
     expect(JSON.stringify({ ...window.sessionStorage })).not.toContain(SECRET)
     expect(router.state.location.pathname + router.state.location.search + router.state.location.hash).not.toContain(SECRET)
-    // 再次查看令牌列表：有这个令牌的元数据，没有明文。
+    // Look at the token list again: it has this token's metadata but not the plaintext.
     const table = await tokenTable()
     expect(table.getAllByRole('row')).toHaveLength(2)
     expect(table.getByText('有效')).toBeInTheDocument()
@@ -222,7 +223,8 @@ describe('签发令牌', () => {
     expect(copy.parentElement).toHaveClass('border-dashed')
     await user.click(result.getByRole('button', { name: '关闭' }))
     expect(await screen.findByRole('alertdialog', { name: '确认已保存令牌？' })).toBeInTheDocument()
-    // 确认框打开时结果框仍在（只是暂时对读屏隐藏），明文没有丢。
+    // While the confirmation dialog is open, the result dialog is still there (only
+    // temporarily hidden from screen readers), and the plaintext is not lost.
     expect(box).toBeInTheDocument()
     expect(within(box).getByText(SECRET)).toBeInTheDocument()
   })
@@ -285,7 +287,7 @@ describe('外部身份的收件箱只读', () => {
     const gotIt = makeInboxMessage({ from: agentParty(reviewer), to: externalParty(ciBot), text: '修复已合并，麻烦重跑一次夜间构建。' })
     const sent = makeInboxMessage({ from: externalParty(ciBot), to: consoleParty, text: '夜间构建失败：naming 有 1 个用例未通过。', readAt: '2026-10-12T09:00:00Z' })
     const { user } = await renderIdentities({ identities: [ciBot], tokens: { [ciBot.id]: [] }, inbox: { [ciBot.id]: [gotIt, sent] } }, `/identities/${ciBot.id}`)
-    // 换筛选条件时列表重新加载，每次都重新查找。
+    // The list reloads when the filter changes, so look it up again each time.
     const inboxList = () => within(screen.getByRole('list', { name: '收件箱' }))
     await screen.findByRole('list', { name: '收件箱' })
     const items = inboxList().getAllByRole('listitem')
@@ -305,7 +307,7 @@ describe('外部身份的收件箱只读', () => {
   })
 })
 
-// 改版“一张印出来的纸”第 4 步：外部身份排在一张纸上，左边是列表，右边是所选身份。
+// "Printed sheet" redesign, step 4: external identities sit on a sheet, with the list on the left and the selected identity on the right.
 describe('纸张上的外部身份', () => {
   it('页头是页面标题：面包屑“全局›外部身份”，旁边是身份个数；荧光粉的“新建”在列表顶上', async () => {
     const ciBot = makeIdentity({ name: 'ci-bot' })

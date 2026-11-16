@@ -3,13 +3,14 @@ import type { Schemas } from '@/api/client'
 import { apiUrl, context, defaultProject, errorBody, makeAgent, makeMessagePage, makeStatus, toListItem } from './api'
 import { catalogHandlers } from './config'
 
-// 项目层的假服务端：在内存中保存项目与 Agent，按契约响应项目、按作用域列出与新建 Agent、Manager 与删除。
-// 测试直接修改 state 来模拟“在别处”发生的改名、删除等变化。
+// Fake server for the project layer: keeps projects and Agents in memory and answers per the
+// contract for projects, listing and creating Agents by scope, the Manager, and deletion. Tests
+// modify state directly to simulate renames, deletions and other changes made "elsewhere".
 export function projectBackend(init: { projects?: Schemas['Project'][]; agents?: Schemas['Agent'][] } = {}) {
   const state = {
     projects: init.projects ?? [defaultProject],
     agents: init.agents ?? [],
-    // 不空闲的 Agent：删除项目时以 409 agent_not_idle 拒绝。
+    // Agents that aren't idle: deleting the project is refused with 409 agent_not_idle.
     busy: new Set<string>(),
     requests: [] as { method: string; path: string; body?: unknown }[],
   }

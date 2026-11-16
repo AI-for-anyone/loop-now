@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useQuery, type QueryClient } from '@tanstack/react-query'
 import { decodeText, folderKeys, parentOf, type FolderEntry, type FolderSource, type TextFormat } from './folder-source'
 
-// 一层的内容：展开或打开时才读取，按页读取。
+// The contents of one level: read only when expanded or opened, page by page.
 export function useFolderList(source: FolderSource, path: string, enabled = true) {
   return useInfiniteQuery({
     queryKey: folderKeys.list(source.key, path),
@@ -14,7 +14,7 @@ export function useFolderList(source: FolderSource, path: string, enabled = true
 
 export type FileText = { kind: 'text'; text: string; format: TextFormat } | { kind: 'binary' }
 
-// 文件内容：读取原始内容后由客户端判断是否文本。调用方先按大小决定要不要读。
+// File content: after reading the raw content, the client decides whether it is text. Callers first decide by size whether to read it.
 export function useFolderFile(source: FolderSource, path: string, enabled = true) {
   return useQuery({
     queryKey: folderKeys.file(source.key, path),
@@ -26,7 +26,7 @@ export function useFolderFile(source: FolderSource, path: string, enabled = true
   })
 }
 
-// 最近的 Git 拉取（新的在前）：有排队或进行中的拉取时定时重新读取，刷新页面后状态仍在。
+// Recent Git pulls (newest first): re-read periodically while any pull is queued or running; the status survives a page reload.
 export function useGitPulls(source: FolderSource) {
   return useQuery({
     queryKey: folderKeys.git(source.key),
@@ -36,11 +36,11 @@ export function useGitPulls(source: FolderSource) {
   })
 }
 
-// 改动后重新读取受影响的文件夹（只读这一级，不连带子文件夹）。
+// After a change, re-read the affected folders (only that level, not their subfolders).
 export function refreshDirs(client: QueryClient, source: FolderSource, ...paths: string[]) {
   return Promise.all([...new Set(paths)].map((path) => client.invalidateQueries({ queryKey: folderKeys.list(source.key, path), exact: true })))
 }
 export const refreshParent = (client: QueryClient, source: FolderSource, path: string) => refreshDirs(client, source, parentOf(path))
 
-// 当前选中的一项：根目录没有 entry；文件带上列表里的信息（大小、修改时间、类型）。
+// The currently selected item: the root has no entry; a file carries its info from the list (size, modified time, type).
 export type Selection = { path: string; type: FolderEntry['type']; entry: FolderEntry | null }

@@ -1,4 +1,5 @@
-/* 取自 shadcn@4.21.0 的 dist/tailwind.css（2026-10-12），为 shadcn/ui 组件提供动画与 data-* 变体。不要手改。 */
+/* Taken from dist/tailwind.css of shadcn@4.21.0 (2026-10-12); provides animations and data-* variants for shadcn/ui components.
+   Do not edit by hand. */
 @theme inline {
   @keyframes accordion-down {
     from {

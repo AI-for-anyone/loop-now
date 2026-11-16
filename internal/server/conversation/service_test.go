@@ -23,16 +23,17 @@ import (
 	"loop-now/internal/testutil/sqlitetest"
 )
 
-// fakeExec 是可控的执行器替身：消息中含 "block" 时阻塞，直到被放行或打断；
-// 含 "hold" 时阻塞且不理会打断，只等放行（用来让打断消息停在打断队列里）。
+// fakeExec is a controllable executor double: when the message contains "block" it blocks until released or
+// interrupted; when it contains "hold" it blocks and ignores interrupts, waiting only for release (used to keep an
+// interrupt message sitting in the interrupt queue).
 type fakeExec struct {
 	mu       sync.Mutex
 	order    []string
-	running  map[uuid.UUID]chan string // agent -> 控制通道："release" / "interrupt"
-	runIDs   map[uuid.UUID]uuid.UUID   // agent -> 当前执行的 ID
+	running  map[uuid.UUID]chan string // agent -> control channel: "release" / "interrupt"
+	runIDs   map[uuid.UUID]uuid.UUID   // agent -> ID of the current run
 	started  chan string
 	versions map[uuid.UUID]int64
-	intr     chan struct{} // 每次调用 Interrupt 后发一个信号
+	intr     chan struct{} // signalled after every call to Interrupt
 }
 
 func newFakeExec() *fakeExec {
@@ -42,7 +43,8 @@ func newFakeExec() *fakeExec {
 func (f *fakeExec) Execute(ctx context.Context, req executor.Request, sink executor.Sink) (executor.Result, error) {
 	compact := req.Origin == executor.OriginConsoleCompact
 	prefix := executor.RunIDLine(req.RunID)
-	// 对话页的 Pi 命令原样交给 Pi（不加运行 ID）：名字带 handled 的当作扩展命令直接处理、没有回复。
+	// A Pi command from the conversation page goes to Pi verbatim (without the run ID): a name containing handled is
+	// treated as an extension command handled directly, with no reply.
 	if !compact && strings.HasPrefix(req.Message, "/") {
 		f.mu.Lock()
 		f.order = append(f.order, req.Message)
@@ -110,8 +112,9 @@ func (f *fakeExec) signal(agentID uuid.UUID, c string) bool {
 	if ctl == nil {
 		return false
 	}
-	// 执行已经返回、running 里还没来得及清掉时，没人再读 ctl：有限等待后放弃，不让一次迟到的打断把整个测试卡死
-	// （Windows runner 上调度慢，这种迟到更常见）。正在 block／hold 的执行会立刻收下。
+	// Once the run has returned but has not yet been removed from running, nobody reads ctl any more: give up after a
+	// bounded wait, so one late interrupt cannot hang the whole test (scheduling is slow on the Windows runner, where
+	// such late arrivals are more common). A run that is in block/hold takes it right away.
 	select {
 	case ctl <- c:
 		return true
@@ -120,7 +123,7 @@ func (f *fakeExec) signal(agentID uuid.UUID, c string) bool {
 	}
 }
 
-// Interrupt 与本机执行器的语义相同：只打断 ID 一致的那一次执行。
+// Interrupt has the same semantics as the local executor: it only interrupts the run whose ID matches.
 func (f *fakeExec) Interrupt(_ context.Context, agentID, runID uuid.UUID) error {
 	f.mu.Lock()
 	match := f.runIDs[agentID] == runID
@@ -214,8 +217,9 @@ func (e *env) waitStarted(msg string) {
 	}
 }
 
-// waitIdle 等到 Agent 空闲：数据库里没有进行中或排队的执行，且忙闲锁已释放（执行先记为结束、再释放锁，
-// 只看状态时紧接着的发送可能还拿不到锁）。
+// waitIdle waits until the Agent is idle: no in-flight or queued run in the database, and the busy lock released (a run
+// is first recorded as ended and the lock released afterwards, so when only looking at the status, a send right after
+// might not get the lock yet).
 func (e *env) waitIdle() {
 	e.t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -288,7 +292,8 @@ func TestQueueAndInterruptOrdering(t *testing.T) {
 		t.Fatalf("打断消息应排队并记录选择：%+v", i1.Run)
 	}
 	e.waitStarted("block 打断1")
-	// 打断进行中再来一条打断：排在打断1之后、普通消息之前。
+	// Another interrupt while an interrupt is in progress: it goes after "打断1" ("interrupt 1") and before the normal
+	// messages.
 	e.mustSend("打断2", "interrupt")
 	e.ex.signal(e.agent, "release")
 	e.waitIdle()
@@ -309,17 +314,18 @@ func TestQueueAndInterruptOrdering(t *testing.T) {
 	}
 }
 
-// 打断只作用于发起它的那一轮：确认 A 处于打断中之后、调用执行器之前，A 恰好自然结束、B 已开始，
-// 这次迟到的打断不能落到 B 上。用测试钩子把时序固定下来，不靠反复运行碰运气。
+// An interrupt only affects the turn that it was aimed at: after A is confirmed to be aborting and before the executor
+// is called, A happens to end naturally and B has started; this late interrupt must not land on B. The timing is fixed
+// with test hooks instead of hoping for luck over repeated runs.
 func TestLateInterruptDoesNotHitNextRun(t *testing.T) {
 	e := newEnv(t)
-	var target atomic.Value // 执行 A 的 ID
+	var target atomic.Value // ID of run A
 	reached := make(chan struct{}, 8)
 	release := make(chan struct{})
 	conversation.SetTestHookBeforeInterrupt(func(runID uuid.UUID) {
 		if id, _ := target.Load().(uuid.UUID); id == runID {
 			reached <- struct{}{}
-			<-release // 卡住对 A 的打断，直到 B 已经开始
+			<-release // hold the interrupt aimed at A until B has started
 		}
 	})
 	t.Cleanup(func() { conversation.SetTestHookBeforeInterrupt(nil) })
@@ -327,23 +333,23 @@ func TestLateInterruptDoesNotHitNextRun(t *testing.T) {
 	a := e.mustSend("block A", "")
 	target.Store(a.Run.ID)
 	e.waitStarted("block A")
-	e.mustSend("block B", "interrupt") // A 转为打断中，并发布针对 A 的打断命令
+	e.mustSend("block B", "interrupt") // A becomes aborting, and the interrupt command aimed at A is published
 	select {
 	case <-reached:
 	case <-time.After(5 * time.Second):
 		t.Fatal("等待针对 A 的打断到达钩子超时")
 	}
-	// 打断还没交给执行器，A 恰好自然结束；随后 B 开始。
+	// The interrupt has not reached the executor yet, and A happens to end naturally; then B starts.
 	e.ex.signal(e.agent, "release")
 	e.waitStarted("block B")
-	close(release) // 放行迟到的打断
+	close(release) // let the late interrupt through
 	select {
 	case <-e.ex.intr:
 	case <-time.After(5 * time.Second):
 		t.Fatal("等待迟到的打断交给执行器超时")
 	}
-	time.Sleep(200 * time.Millisecond) // 续期协程可能再交一次，给它时间
-	e.ex.signal(e.agent, "release")    // B 正常结束
+	time.Sleep(200 * time.Millisecond) // the renewal goroutine may deliver it once more; give it time
+	e.ex.signal(e.agent, "release")    // B ends normally
 	e.waitIdle()
 
 	status := map[string]string{}
@@ -390,17 +396,18 @@ func TestLockLoss(t *testing.T) {
 	e.waitStarted("block 当前")
 	e.mustSend("排队1", "queue")
 	e.mustSend("排队2", "queue")
-	// 忙闲锁丢了（例如没有续期、过了 TTL）。
+	// The busy lock is lost (e.g. it was not renewed and passed its TTL).
 	ctx := context.Background()
 	owner, _ := e.co.LockOwner(ctx, e.agent.String())
 	if _, err := e.co.Release(ctx, e.agent.String(), owner); err != nil {
 		t.Fatal(err)
 	}
-	// 锁丢了仍判定为忙（数据库里有进行中与排队的执行），不会开始第二次执行。
+	// With the lock lost the Agent is still judged busy (the database has in-flight and queued runs), and no second run
+	// is started.
 	if _, err := e.send("没选择", ""); !apperr.Is(err, apperr.CodeAgentBusy) {
 		t.Fatalf("锁丢了仍应判定为忙：%v", err)
 	}
-	// 按数据库补回锁（发送时或对账时）。
+	// The lock is restored from the database (on send or on reconciliation).
 	deadline := time.Now().Add(30 * time.Second)
 	for {
 		owner, _ := e.co.LockOwner(context.Background(), e.agent.String())
@@ -419,7 +426,8 @@ func TestLockLoss(t *testing.T) {
 	}
 }
 
-// 停止服务时，本实例进行中的执行按服务端重启中断收尾，已产生的回复文字写入消息（回复文字只在内存里）。
+// When the service stops, this instance's in-flight runs are closed as interrupted by a server restart, and the reply
+// text produced so far is written to the message (the reply text lives only in memory).
 func TestStopEndsInFlightRunsWithTheirText(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -458,7 +466,7 @@ func TestRestartRecovery(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	other := uuid.Must(uuid.NewV7())
-	// 模拟上一次运行遗留：一个进行中的执行与一条排队消息。
+	// Simulate leftovers from the previous process: one in-flight run and one queued message.
 	_, run, err := e.st.InsertMessageAndRun(ctx, store.NewRun{AgentID: e.agent, RunID: uuid.Must(uuid.NewV7()), Text: "旧的", Start: true, InstanceID: other})
 	if err != nil {
 		t.Fatal(err)
@@ -568,7 +576,7 @@ func TestStatusAndHistoryPaging(t *testing.T) {
 	e.waitIdle()
 }
 
-// newestEvents 返回 Agent 事件流里保留的全部事件，最新的在前。
+// newestEvents returns all events kept in the Agent's event stream, newest first.
 func (e *env) newestEvents() []coord.Event {
 	e.t.Helper()
 	evs, err := e.co.ReadEvents(context.Background(), e.agent.String(), "0-0", 0, 0)

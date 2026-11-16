@@ -10,12 +10,12 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// ListProjects 列出默认组织下未删除的项目。
+// ListProjects lists the projects in the default organization that are not deleted.
 func (s *Service) ListProjects(ctx context.Context) ([]store.Project, error) {
 	return s.Store.ListProjects(ctx, s.OrgID)
 }
 
-// CreateProject 在默认组织下新建项目。
+// CreateProject creates a project in the default organization.
 func (s *Service) CreateProject(ctx context.Context, name string) (store.Project, error) {
 	if err := validateProjectName(name); err != nil {
 		return store.Project{}, err
@@ -23,7 +23,7 @@ func (s *Service) CreateProject(ctx context.Context, name string) (store.Project
 	return s.Store.CreateProject(ctx, s.OrgID, name)
 }
 
-// RenameProject 改名；项目内 Agent 的地址随之改变。
+// RenameProject renames a project; the addresses of the Agents in the project change with it.
 func (s *Service) RenameProject(ctx context.Context, id uuid.UUID, name string) (store.Project, error) {
 	if err := validateProjectName(name); err != nil {
 		return store.Project{}, err
@@ -31,8 +31,10 @@ func (s *Service) RenameProject(ctx context.Context, id uuid.UUID, name string) 
 	return s.Store.RenameProject(ctx, id, name)
 }
 
-// DeleteProject 软删除项目：其中每个 Agent 按删除 Agent 处理（停止 Pi、删除凭证，保留工作文件夹、会话文件与对话历史）。
-// 执行器释放失败只记录日志：数据库中已删除，执行器启动时还会清理已删除 Agent 的 HOME 中的凭证。
+// DeleteProject soft-deletes a project: each of its Agents is handled as a deleted Agent (stop Pi, delete credentials,
+// keep the working folder, session files and conversation history). A failed release in the executor is only logged:
+// the data is already deleted in the database, and the executor also cleans credentials out of the HOME of deleted
+// Agents when it starts.
 func (s *Service) DeleteProject(ctx context.Context, id uuid.UUID) error {
 	ids, err := s.Store.DeleteProject(ctx, id)
 	if err != nil {
@@ -40,19 +42,19 @@ func (s *Service) DeleteProject(ctx context.Context, id uuid.UUID) error {
 	}
 	if s.ModelAuth != nil {
 		if err := s.ModelAuth.CancelProjectLogins(ctx, id, nil); err != nil && s.Logger != nil {
-			s.Logger.Warn("项目登录资源清理超时", "projectId", id, "code", "auth_cleanup_timeout")
+			s.Logger.Warn("project login resource cleanup timed out", "projectId", id, "code", "auth_cleanup_timeout")
 		}
 	}
 	if s.CancelProjectCLILogins != nil {
 		if e := s.CancelProjectCLILogins(ctx, id); e != nil && s.Logger != nil {
-			s.Logger.Warn("项目CLI登录资源清理超时", "stage", "deleted_project_login_cleanup", "projectId", id.String())
+			s.Logger.Warn("project CLI login resource cleanup timed out", "stage", "deleted_project_login_cleanup", "projectId", id.String())
 		}
 	}
 	s.cancelDeletedAgentLogins(ctx, ids)
 	for _, aid := range ids {
 		if s.Releaser != nil {
 			if err := s.Releaser.Release(ctx, aid); err != nil {
-				s.Logger.Error("释放已删除项目中 Agent 的执行资源失败", "projectId", id, "agentId", aid, "err", err)
+				s.Logger.Error("failed to release the run resources of an Agent in a deleted project", "projectId", id, "agentId", aid, "err", err)
 			}
 		}
 		if s.AgentRemoved != nil {
@@ -62,21 +64,21 @@ func (s *Service) DeleteProject(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// SetProjectManager 指定或更换项目 Manager。
+// SetProjectManager sets or changes the project's Manager.
 func (s *Service) SetProjectManager(ctx context.Context, projectID, agentID uuid.UUID) (store.Project, error) {
 	p, err := s.Store.SetProjectManager(ctx, projectID, agentID)
 	s.managerChanged(ctx, projectID)
 	return p, err
 }
 
-// ClearProjectManager 取消项目 Manager。
+// ClearProjectManager removes the project's Manager.
 func (s *Service) ClearProjectManager(ctx context.Context, projectID uuid.UUID) (store.Project, error) {
 	p, err := s.Store.ClearProjectManager(ctx, projectID)
 	s.managerChanged(ctx, projectID)
 	return p, err
 }
 
-// managerChanged 让概览刷新该项目的 Agent（isManager 可能变化）。
+// managerChanged makes the overview refresh the project's Agents (isManager may have changed).
 func (s *Service) managerChanged(ctx context.Context, projectID uuid.UUID) {
 	if s.AgentChanged == nil {
 		return

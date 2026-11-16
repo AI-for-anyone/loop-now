@@ -26,7 +26,7 @@ import { taskInbox } from './task-inbox'
 import { tasks } from './tasks'
 import { timeline } from './timeline'
 
-// 控制台的英文文案，按功能区分文件，结构与中文文案表（Messages）相同。
+// English copy for the console, split into files by feature; same structure as the Chinese copy table (Messages).
 export const enUS: Messages = {
   app,
   common,

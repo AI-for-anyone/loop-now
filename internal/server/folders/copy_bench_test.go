@@ -11,9 +11,11 @@ import (
 	"time"
 )
 
-// 真实 APFS 克隆的耗时：构造接近真实工作区形状的目录（≥20 万个小文件，嵌套的 node_modules，总计数 GB），
-// 测 CopyTree 的耗时（任务准备时它在基础 Agent 暂停派发的窗口内执行）。写入数 GB 数据，只在设置
-// LOOP_NOW_CLONE_BENCH=1 时运行；目录放在 LOOP_NOW_CLONE_BENCH_DIR（默认系统临时目录）。
+// Timing of a real APFS clone: build a directory shaped like a real workspace (>= 200,000 small files, nested
+// node_modules, several GB in total) and measure how long CopyTree takes (during task preparation it runs inside the
+// window where dispatch to the base Agent is paused). It writes several GB of data, so it runs only when
+// LOOP_NOW_CLONE_BENCH=1 is set; the directory goes in LOOP_NOW_CLONE_BENCH_DIR (default: the system temporary
+// directory).
 func TestCopyTreeLargeTreeTiming(t *testing.T) {
 	if os.Getenv("LOOP_NOW_CLONE_BENCH") != "1" {
 		t.Skip("设置 LOOP_NOW_CLONE_BENCH=1 才运行（会写入数 GB）")
@@ -32,7 +34,8 @@ func TestCopyTreeLargeTreeTiming(t *testing.T) {
 	large := bytes.Repeat([]byte("x"), 64<<20)
 	begin := time.Now()
 	files, total := 0, int64(0)
-	// 3 个仓库 × 每个 node_modules 下 400 个包，每包 3 层嵌套目录、每层约 56 个文件；外加少量大文件（构建产物、二进制）。
+	// 3 repositories x 400 packages under each node_modules, each package with 3 levels of nested directories and about
+	// 56 files per level; plus a few large files (build output, binaries).
 	for repo := range 3 {
 		for pkg := range 400 {
 			dir := filepath.Join(src, fmt.Sprintf("repo%d", repo), "node_modules", fmt.Sprintf("pkg%03d", pkg))

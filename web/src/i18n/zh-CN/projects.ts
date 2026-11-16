@@ -28,7 +28,8 @@ export const projects = {
   },
   renamed: (from: string, to: string) => `项目「${from}」已在别处改名为「${to}」，地址已随之更新。`,
   renamedDismiss: '知道了',
-  // 概览的范围筛选与所属标签（概览页本身的文案在 overview 分组，由 add-observability 维护）。
+  // Scope filter and owner tags on the overview (copy for the overview page
+  // itself is in the overview group, maintained by add-observability).
   overview: {
     range: '范围',
     all: '全部',
@@ -52,7 +53,7 @@ export const projects = {
   },
   toDefault: '进入默认项目',
   settings: {
-    // 项目设置页头里的默认项目标记（藏青底白字）。
+    // Default project badge in the project settings page header (white text on navy).
     defaultBadge: '默认项目',
     title: '项目设置',
     name: {

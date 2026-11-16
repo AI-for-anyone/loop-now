@@ -3,16 +3,17 @@ import { config } from '@/config'
 import { api, call, type ApiError, type Schemas } from './client'
 import { keys, type InboxDirection } from './queries'
 
-// 收件箱、外部身份与令牌的读取和修改。实时变化由收件箱事件流（features/inbox/useInboxLive）让这里的缓存失效或就地更新。
+// Reading and changing the inbox, external identities and tokens. Live changes come from the inbox event stream
+// (features/inbox/useInboxLive), which invalidates the caches here or updates them in place.
 
 export type ThreadPages = InfiniteData<Schemas['InboxThreadPage'], string | null>
 export type MessagePages = InfiniteData<Schemas['InboxMessagePage'], string | null>
 
 const pageQuery = (cursor: string | null) => ({ limit: config.inboxPageSize, ...(cursor ? { cursor } : {}) })
 
-// ---- 你的往来（收件箱页已去掉，见 api/console-inbox） ----
+// ---- Your exchanges (the inbox page is gone, see api/console-inbox) ----
 
-// 新建消息：每次开启新线索。收件人是外部身份时不提交 whenBusy。
+// New message: always starts a new thread. whenBusy is not submitted when the recipient is an external identity.
 export function useSendInbox() {
   const client = useQueryClient()
   return useMutation({
@@ -24,7 +25,7 @@ export function useSendInbox() {
   })
 }
 
-// 在线索中回复：回复线索中的最后一条消息，收件人由服务端确定为线索中的另一方。
+// Reply in a thread: replies to the last message in the thread; the server sets the recipient to the other party in the thread.
 export function useReplyInbox() {
   const client = useQueryClient()
   return useMutation({
@@ -37,7 +38,7 @@ export function useReplyInbox() {
   })
 }
 
-// ---- Agent 的收件箱（只读） ----
+// ---- An Agent's inbox (read-only) ----
 
 export function useAgentInbox(agentId: string, unreadOnly: boolean) {
   return useInfiniteQuery({
@@ -53,7 +54,7 @@ export function useAgentInbox(agentId: string, unreadOnly: boolean) {
   })
 }
 
-// 消息全文，展开时才请求；只读，不改变已读状态。
+// The full text of a message, requested only when expanded; read-only, it does not change the read state.
 export function useAgentInboxMessage(agentId: string, messageId: string, enabled: boolean) {
   return useQuery({
     queryKey: keys.agentInboxMessage(agentId, messageId),
@@ -62,13 +63,13 @@ export function useAgentInboxMessage(agentId: string, messageId: string, enabled
   })
 }
 
-// ---- 外部身份 ----
+// ---- External identities ----
 
 export function useIdentities() {
   return useQuery({ queryKey: keys.identities, queryFn: () => call(api.GET('/external-identities')) })
 }
 
-// 单个外部身份，已删除的也能读到（deletedAt 不为 null）。
+// A single external identity; deleted ones can be read too (deletedAt is not null).
 export function useIdentity(identityId: string) {
   return useQuery({
     queryKey: keys.identity(identityId),
@@ -99,7 +100,8 @@ export function useDeleteIdentity() {
   })
 }
 
-// 代管：把这个身份交给一个插件的渠道（null 清空）。插件停用或宿主停止时绑定保留，卸载插件时清空。
+// Managed by a plugin: hand this identity over to a plugin's channel (null clears it). The binding is kept when the plugin is disabled or
+// the host stops, and cleared when the plugin is uninstalled.
 export function useSetIdentityManager(identityId: string) {
   const client = useQueryClient()
   return useMutation<Schemas['ExternalIdentity'], ApiError, Schemas['ExternalIdentityManager'] | null>({
@@ -111,7 +113,7 @@ export function useSetIdentityManager(identityId: string) {
   })
 }
 
-// 令牌列表，含已吊销与已过期的，新的在前。已删除的身份没有令牌列表，不请求。
+// The token list, including revoked and expired tokens, newest first. A deleted identity has no token list, so nothing is requested.
 export const identityTokensQuery = (identityId: string) => ({
   queryKey: keys.identityTokens(identityId),
   queryFn: () => call(api.GET('/external-identities/{identityId}/tokens', { params: { path: { identityId } } })),
@@ -121,7 +123,8 @@ export function useIdentityTokens(identityId: string, enabled: boolean) {
   return useQuery({ ...identityTokensQuery(identityId), enabled })
 }
 
-// 签发令牌。明文只在返回值中出现一次：不经过 TanStack Query 的变更缓存（它会保留结果），由签发对话框以局部状态保存。
+// Issue a token. The plaintext appears only once, in the return value: it does not go through TanStack Query's mutation cache (which keeps
+// results); the issue dialog holds it in local state.
 export function issueToken(identityId: string, expiresAt: string | null) {
   return call(
     api.POST('/external-identities/{identityId}/tokens', {
@@ -131,7 +134,7 @@ export function issueToken(identityId: string, expiresAt: string | null) {
   )
 }
 
-// 签发成功后只刷新令牌列表（列表中只有元数据）。
+// After a token is issued, refresh only the token list (the list holds only metadata).
 export function invalidateTokens(client: QueryClient, identityId: string) {
   return client.invalidateQueries({ queryKey: keys.identityTokens(identityId) })
 }
@@ -145,7 +148,7 @@ export function useRevokeToken(identityId: string) {
   })
 }
 
-// 外部身份的收件箱（只读）：收到与发出的消息，新的在前。
+// An external identity's inbox (read-only): received and sent messages, newest first.
 export function useIdentityInbox(identityId: string, direction: InboxDirection, unreadOnly: boolean) {
   return useInfiniteQuery({
     queryKey: keys.identityInbox(identityId, direction, unreadOnly),

@@ -91,7 +91,7 @@ func projectCredentialFileFlag(purpose string) cli.Flag {
 
 func projectCredentialCommand(purpose, action string) cli.RunFunc {
 	return func(ctx context.Context, inv *cli.Invocation) (any, error) {
-		// 所有本地条件及秘密文件先验证，再执行名称解析 GET。
+		// Validate all local conditions and the secret file first, and only then send the GET that resolves names.
 		if len(inv.Args) > 1 && !IsUUID(inv.Args[1]) {
 			return nil, credentialUUIDError("accountId")
 		}
@@ -273,7 +273,8 @@ func credentialUUIDError(field string) error {
 	return output.Errorf(output.CodeInvalidArgument, "%s 必须为稳定 UUID，不能按显示名称操作", field)
 }
 
-// 严格验证唯一 credential 对象；不把 decoder 错误、未知键或输入值放入错误。
+// projectCredentialFile strictly validates the single credential object; decoder errors, unknown keys and input
+// values are never put into the error.
 func projectCredentialFile(inv *cli.Invocation, purpose string) (json.RawMessage, error) {
 	b, err := readInput(inv, "from-file")
 	if err != nil {

@@ -1,17 +1,19 @@
-// Package agentruntime 定义 Agent 的运行时：执行一个 Agent 的是随包的 Pi，还是用户本机安装的 Claude Code。
-// 运行时不单独保存，由模型提供方决定：提供方为 claude-code 时是 Claude Code，其余都是 Pi。
+// Package agentruntime defines an Agent's runtime: whether an Agent is run by the bundled Pi or by Claude Code
+// installed on the user's computer. The runtime is not stored separately; the model provider decides it: provider
+// claude-code means Claude Code, everything else is Pi.
 package agentruntime
 
-// 运行时，与 OpenAPI 的 AgentRuntime 一致。
+// Runtimes, matching AgentRuntime in the OpenAPI spec.
 const (
 	Pi         = "pi"
 	ClaudeCode = "claude-code"
 )
 
-// ClaudeCodeProvider 是 Claude Code 运行时的模型提供方 id：模型由用户本机安装的 claude 提供，用它自己的登录。
+// ClaudeCodeProvider is the model provider id of the Claude Code runtime: models come from the claude installed on the
+// user's computer, using its own login.
 const ClaudeCodeProvider = "claude-code"
 
-// ForProvider 返回选用模型提供方 provider 的 Agent 由哪个运行时执行。
+// ForProvider returns which runtime runs an Agent that uses the model provider named provider.
 func ForProvider(provider string) string {
 	if provider == ClaudeCodeProvider {
 		return ClaudeCode

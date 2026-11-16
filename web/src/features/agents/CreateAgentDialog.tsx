@@ -17,7 +17,8 @@ import { agentNameError, fieldMessages, isAgentNameConflict, isModelField, unmat
 import { nameRuleError } from '@/lib/names'
 import { agentPath, scopeKey, type Scope } from '@/lib/scope'
 
-// 新建 Agent 对话框，Agent 建在当前项目或平台中。列表头与首次使用的空状态打开的是同一个对话框，由 AgentsPage 持有开合状态。
+// The New Agent dialog; the Agent is created in the current project or the platform. The list header and the first-use empty
+// state open the same dialog, and AgentsPage holds its open/closed state.
 export function CreateAgentDialog({ scope, onClose }: { scope: Scope; onClose: () => void }) {
   const navigate = useNavigate()
   const create = useCreateAgent(scopeKey(scope))

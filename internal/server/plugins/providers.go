@@ -11,10 +11,13 @@ import (
 	"loop-now/internal/server/modelcatalog"
 )
 
-// 插件注册的模型提供方（plugins/SPEC.md §13）：安装或更新确认后用随包 Pi 加载插件的 Pi 扩展读出，随版本保存；
-// 注册了 OAuth 登录、与 Pi 目录不同 id 的新提供方并入模型目录（source 为 plugin），Agent 授权该插件后可以选用。
+// Model providers registered by plugins (plugins/SPEC.md §13): once an install or update is confirmed, the bundled Pi
+// loads the plugin's Pi extensions to read them, and they are saved with the version. New providers that register an
+// OAuth login and whose id differs from those in Pi's catalog are merged into the model catalog (source is plugin)
+// and can be chosen once the Agent has been granted the plugin.
 
-// captureProviders 读出插件扩展注册的模型提供方；读取失败不阻止安装，原因随版本保存。
+// captureProviders reads the model providers registered by the plugin's extensions; a failed read does not block the
+// install, and the reason is saved with the version.
 func (s *Service) captureProviders(ctx context.Context, dir string, m Manifest) (modelcatalog.Capture, *string) {
 	empty := modelcatalog.Capture{Providers: []modelcatalog.CapturedProvider{}, Errors: []modelcatalog.CaptureError{}}
 	if s.CaptureProviders == nil || len(m.Extensions) == 0 {
@@ -22,14 +25,15 @@ func (s *Service) captureProviders(ctx context.Context, dir string, m Manifest) 
 	}
 	c, err := s.CaptureProviders(ctx, dir, m.Extensions)
 	if err != nil {
-		s.Log.Warn("读取插件注册的模型提供方失败", "plugin", m.ID, "err", err)
+		s.Log.Warn("failed to read plugin-registered model providers", "plugin", m.ID, "err", err)
 		msg := err.Error()
 		return empty, &msg
 	}
 	return c, nil
 }
 
-// checkProviderConflicts 拒绝与其他已安装插件注册的同 id 提供方（只看会进模型目录的）。
+// checkProviderConflicts rejects providers with the same id as one registered by another installed plugin (only
+// those that would go into the model catalog count).
 func (s *Service) checkProviderConflicts(ctx context.Context, id string, c modelcatalog.Capture) error {
 	mine := map[string]bool{}
 	for _, p := range c.Providers {
@@ -52,7 +56,8 @@ func (s *Service) checkProviderConflicts(ctx context.Context, id string, c model
 	return nil
 }
 
-// installedProviders 返回各已安装插件当前版本注册的、会进模型目录的提供方。
+// installedProviders returns the providers registered by the current version of each installed plugin that go into
+// the model catalog.
 func (s *Service) installedProviders(ctx context.Context) ([]modelcatalog.PluginProvider, error) {
 	rows, err := s.Store.CurrentPluginProviders(ctx)
 	if err != nil {
@@ -73,7 +78,8 @@ func (s *Service) installedProviders(ctx context.Context) ([]modelcatalog.Plugin
 	return out, nil
 }
 
-// PublishProviders 把已安装插件注册的提供方并入模型目录；服务启动时与安装、更新、卸载后调用。
+// PublishProviders merges the providers registered by installed plugins into the model catalog; called at server
+// startup and after an install, update or uninstall.
 func (s *Service) PublishProviders(ctx context.Context) error {
 	if s.Models == nil {
 		return nil
@@ -88,11 +94,12 @@ func (s *Service) PublishProviders(ctx context.Context) error {
 
 func (s *Service) publishProviders(ctx context.Context) {
 	if err := s.PublishProviders(ctx); err != nil {
-		s.Log.Warn("把插件提供方并入模型目录失败", "err", err)
+		s.Log.Warn("failed to merge plugin providers into the model catalog", "err", err)
 	}
 }
 
-// ProviderPlugin 返回注册了模型提供方 provider 的插件；不是插件提供方时 ok 为 false。
+// ProviderPlugin returns the plugin that registered the model provider provider; ok is false when it is not a plugin
+// provider.
 func ProviderPlugin(models modelcatalog.Reader, provider string) (string, bool) {
 	if models == nil {
 		return "", false
@@ -104,7 +111,8 @@ func ProviderPlugin(models modelcatalog.Reader, provider string) (string, bool) 
 	return *p.PluginID, true
 }
 
-// providerViews 把读出的提供方变成接口里的样子；InCatalog 表示它此刻确实在模型目录里、归这个插件。
+// providerViews turns the captured providers into their API form; InCatalog means the provider is in the model
+// catalog right now and belongs to this plugin.
 func (s *Service) providerViews(id string, c modelcatalog.Capture) []ProviderView {
 	out := []ProviderView{}
 	for _, p := range c.Providers {
@@ -118,7 +126,8 @@ func (s *Service) providerViews(id string, c modelcatalog.Capture) []ProviderVie
 	return out
 }
 
-// PluginOfPath 返回判断文件属于哪个已安装插件的函数（按各版本安装目录）；不属于任何插件时 ok 为 false。
+// PluginOfPath returns a function that tells which installed plugin a file belongs to (by the install directories
+// of each version); ok is false when it belongs to no plugin.
 func (s *Service) PluginOfPath(ctx context.Context) (func(string) (string, bool), error) {
 	dirs, err := s.Store.PluginInstallDirs(ctx)
 	if err != nil {
@@ -137,7 +146,8 @@ func (s *Service) PluginOfPath(ctx context.Context) (func(string) (string, bool)
 	}, nil
 }
 
-// Extensions 返回插件当前版本 Pi 扩展的绝对路径（插件提供方登录时加载）；插件不存在时返回 not_found，没有扩展时为空。
+// Extensions returns the absolute paths of the Pi extensions of the plugin's current version (loaded for a plugin
+// provider login); it returns not_found when the plugin does not exist, and an empty list when it has no extensions.
 func (s *Service) Extensions(ctx context.Context, id string) ([]string, error) {
 	p, err := s.Store.GetPlugin(ctx, id)
 	if err != nil {
@@ -154,8 +164,9 @@ func (s *Service) Extensions(ctx context.Context, id string) ([]string, error) {
 	return out, nil
 }
 
-// ProviderStatePaths 返回插件当前版本为模型提供方 provider 声明的随账号走的 HOME 相对路径（plugins/SPEC.md §13）；
-// 没有声明或插件不存在时为空。
+// ProviderStatePaths returns the HOME-relative paths that the plugin's current version declares to travel with the
+// account for the model provider provider (plugins/SPEC.md §13); empty when nothing is declared or the plugin does
+// not exist.
 func (s *Service) ProviderStatePaths(ctx context.Context, plugin, provider string) ([]string, error) {
 	rows, err := s.Store.CurrentPluginProviders(ctx)
 	if err != nil {

@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Usage 是 Pi 报告的一次用量（Pi 1.1.0 pi-ai 的 Usage，见 dist/types.d.ts）。费用字段不解析。
+// Usage is one usage report from Pi (the Usage of Pi 1.1.0 pi-ai, see dist/types.d.ts). Cost fields are not parsed.
 type Usage struct {
 	Kind          string // assistant / tool / compaction / cache_warm / other
 	Provider      string
@@ -23,7 +23,7 @@ type Usage struct {
 	DurationMs    *int64
 }
 
-// 用量类别。
+// Usage kinds.
 const (
 	UsageAssistant  = "assistant"
 	UsageTool       = "tool"
@@ -32,36 +32,38 @@ const (
 	UsageOther      = "other"
 )
 
-// Notice 是对运行记录有用的 Pi 事件：自动重试与上下文压缩。
+// Notice is a Pi event that is useful for run records: automatic retries and context compaction.
 type Notice struct {
-	Type string // 见 Notice 常量
+	Type string // see the Notice constants
 	Data map[string]any
 }
 
-// Notice 类型。
+// Notice types.
 const (
 	NoticeRetryStarted = "retry_started"
 	NoticeRetryEnded   = "retry_ended"
 	NoticeCompaction   = "compaction"
-	// NoticeExtensionUI 是扩展的 ctx.ui 调用：通知、状态，以及平台已按默认值回应的对话。
+	// NoticeExtensionUI is an extension's ctx.ui call: notifications, status, and dialogs the platform has answered
+	// with the default value.
 	NoticeExtensionUI = "extension_ui"
 )
 
-// Observer 接收用量与事件，不论当时有没有进行中的一轮；inTurn 表示是否发生在某一轮 prompt 之中。
-// 调用发生在读协程上，实现必须迅速返回，且不得在回调中同步调用 Client 的方法。
+// Observer receives usage and events whether or not a turn is in progress; inTurn tells whether it happened during a
+// prompt turn. Calls happen on the reader goroutine; implementations must return quickly and must not call Client
+// methods synchronously from a callback.
 type Observer interface {
 	Usage(u Usage, inTurn bool)
 	Notice(n Notice, inTurn bool)
 }
 
-// SetObserver 设置观察者；之后收到的用量与事件交给它。
+// SetObserver sets the observer; usage and events received afterwards go to it.
 func (c *Client) SetObserver(o Observer) {
 	c.mu.Lock()
 	c.observer = o
 	c.mu.Unlock()
 }
 
-// observe 返回当前观察者，以及此刻是否处于一轮之中。
+// observe returns the current observer and whether a turn is in progress right now.
 func (c *Client) observe() (Observer, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -69,7 +71,7 @@ func (c *Client) observe() (Observer, bool) {
 	return c.observer, t != nil && t.active()
 }
 
-// wireUsage 是 Pi Usage 的 JSON 形状。
+// wireUsage is the JSON shape of Pi's Usage.
 type wireUsage struct {
 	Input      int64  `json:"input"`
 	Output     int64  `json:"output"`
@@ -84,7 +86,7 @@ func (w *wireUsage) toUsage(kind string) Usage {
 
 func nonNeg(n int64) int64 { return max(n, 0) }
 
-// usageMessage 是 message_end 中与用量有关的消息字段。
+// usageMessage holds the usage-related message fields of message_end.
 type usageMessage struct {
 	Role          string     `json:"role"`
 	Provider      string     `json:"provider"`
@@ -95,7 +97,8 @@ type usageMessage struct {
 	Usage         *wireUsage `json:"usage"`
 }
 
-// observeMessageEnd 从 message_end 中取出助手消息或带用量的工具结果消息的用量。
+// observeMessageEnd takes the usage of an assistant message, or of a tool result message that carries usage, from
+// message_end.
 func (c *Client) observeMessageEnd(line []byte) {
 	o, inTurn := c.observe()
 	if o == nil {
@@ -120,7 +123,7 @@ func (c *Client) observeMessageEnd(line []byte) {
 	}
 }
 
-// observeLine 处理与运行记录有关、但不影响一轮结果的事件。
+// observeLine handles events that matter for run records but do not affect a turn's result.
 func (c *Client) observeLine(typ string, line []byte) {
 	switch typ {
 	case "compaction_start":
@@ -231,24 +234,26 @@ func (c *Client) observeCompaction(line []byte) {
 	}
 }
 
-// dialogMethods 是要求回应的扩展对话。confirm、select、input 在一轮之中且设置了 Dialogs 时交给它（控制台提问），
-// 其余（editor、一轮之外、没有 Dialogs）立即按取消回应：扩展得到的值与请求自带超时到期时的默认值相同
-// （select、input、editor 为 undefined，confirm 为 false），这一轮不会被卡住。
+// dialogMethods are the extension dialogs that require an answer. confirm, select and input are handed to Dialogs
+// (console questions) when they occur during a turn and Dialogs is set; the rest (editor, outside a turn, no Dialogs)
+// are answered as cancelled right away: the extension gets the same value as when the request's own timeout expires
+// (undefined for select, input and editor; false for confirm), so the turn does not get stuck.
 var dialogMethods = map[string]bool{"select": true, "confirm": true, "input": true, "editor": true}
 
-// DialogRequest 是扩展的一次对话请求。
+// DialogRequest is one dialog request from an extension.
 type DialogRequest struct {
 	ID          string
-	Method      string // confirm、select、input
+	Method      string // confirm, select, input
 	Title       string
 	Message     string
 	Placeholder string
 	Options     []string
-	Timeout     time.Duration // 请求自带的超时；没有时为零
+	Timeout     time.Duration // the request's own timeout; zero when it has none
 }
 
-// DialogResponse 是回给 Pi 的 extension_ui_response：Cancelled，或 confirm 的 Confirmed，或 select、input 的 Value。
-// Outcome 记入运行事件的 answered（answered、cancelled、expired），QuestionID 是对应的控制台提问。
+// DialogResponse is the extension_ui_response sent back to Pi: Cancelled, or Confirmed for confirm, or Value for select
+// and input. Outcome is recorded in the run event's answered field (answered, cancelled, expired); QuestionID is the
+// matching console question.
 type DialogResponse struct {
 	Cancelled  bool
 	Confirmed  bool
@@ -257,18 +262,20 @@ type DialogResponse struct {
 	QuestionID *uuid.UUID
 }
 
-// Dialogs 处理需要人回答的扩展对话，阻塞到有回答、到期或 ctx 结束（Pi 进程退出时 ctx 结束）。
+// Dialogs handles extension dialogs that need a person to answer; it blocks until there is an answer, the dialog
+// expires or ctx ends (ctx ends when the Pi process exits).
 type Dialogs func(ctx context.Context, req DialogRequest) DialogResponse
 
-// SetDialogs 设置对话的处理者；为空时对话一律立即按取消回应。
+// SetDialogs sets the dialog handler; when nil, every dialog is answered as cancelled right away.
 func (c *Client) SetDialogs(d Dialogs) {
 	c.mu.Lock()
 	c.dialogs = d
 	c.mu.Unlock()
 }
 
-// extensionUI 处理扩展的 ctx.ui 请求（Pi RPC 的 extension_ui_request）：对话见 dialogMethods；
-// notify 与 setStatus 交给观察者记为运行事件；setWidget、setTitle、set_editor_text 忽略。
+// extensionUI handles an extension's ctx.ui requests (Pi RPC's extension_ui_request): for dialogs see dialogMethods;
+// notify and setStatus are passed to the observer and recorded as run events; setWidget, setTitle and set_editor_text
+// are ignored.
 func (c *Client) extensionUI(line []byte) {
 	var req struct {
 		ID          string   `json:"id"`
@@ -298,7 +305,8 @@ func (c *Client) extensionUI(line []byte) {
 			go c.askDialog(dialogs, d)
 			return
 		}
-		// 不在读协程里写标准输入：Pi 同时阻塞在写标准输出时会互相等待。
+		// Do not write stdin from the reader goroutine: if Pi is blocked writing stdout at the same time, each would
+		// wait on the other.
 		go c.answerDialog(req.ID, req.Method, DialogResponse{Cancelled: true})
 		data = map[string]any{"method": req.Method, "message": req.Title, "answered": "cancelled"}
 	case req.Method == "notify":
@@ -307,7 +315,8 @@ func (c *Client) extensionUI(line []byte) {
 			level = "info"
 		}
 		data = map[string]any{"method": req.Method, "message": req.Message, "level": level}
-		// 扩展命令的结果多半用 notify 给出：随这一轮收集，Pi 直接处理命令时交给调用方（运行事件会按时间清理）。
+		// Extension command results are mostly given via notify: collect them with this turn and hand them to the
+		// caller when Pi handles the command itself (run events are cleaned up over time).
 		c.mu.Lock()
 		t := c.turn
 		c.mu.Unlock()
@@ -324,7 +333,8 @@ func (c *Client) extensionUI(line []byte) {
 	}
 }
 
-// askDialog 等对话的处理者回答后回应 Pi，并把结果记为运行事件（这时这一轮通常仍在进行）。
+// askDialog waits for the dialog handler to answer, then replies to Pi and records the result as a run event (the turn
+// is usually still in progress at that point).
 func (c *Client) askDialog(dialogs Dialogs, d DialogRequest) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -349,7 +359,7 @@ func (c *Client) askDialog(dialogs Dialogs, d DialogRequest) {
 	}
 }
 
-// answerDialog 写 extension_ui_response：取消为 cancelled，confirm 为 confirmed，select 与 input 为 value。
+// answerDialog writes extension_ui_response: cancelled for a cancel, confirmed for confirm, value for select and input.
 func (c *Client) answerDialog(id, method string, res DialogResponse) {
 	m := map[string]any{"type": "extension_ui_response", "id": id}
 	switch {

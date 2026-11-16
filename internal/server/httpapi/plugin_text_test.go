@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-// localizeManifest 把插件目录清单里的 displayName 与 description 改成按语言给出的对象。
+// localizeManifest turns displayName and description in the manifest of a plugin directory into per-language objects.
 func localizeManifest(t *testing.T, dir string, name, description map[string]any) {
 	t.Helper()
 	patchManifest(t, dir, func(ln map[string]any) { ln["displayName"] = name })
@@ -32,9 +32,11 @@ func localizeManifest(t *testing.T, dir string, name, description map[string]any
 	}
 }
 
-// 插件的显示名与描述可以按语言给出（plugins/SPEC.md §2）：安装结果、列表、详情、项目与 Agent 的插件列表、官方插件来源、
-// 市场条目都原样返回对象（经契约校验），服务端不按语言翻译；插件表的显示名（插件发件人名的兜底）取 zh-CN。
-// 显示名或描述不合规则的市场条目让那份市场报错。
+// A plugin's display name and description can be given per language (plugins/SPEC.md §2): the install result, list,
+// details, the plugin lists of projects and Agents, official plugin sources and market entries all return the object as
+// is (validated against the contract), the server does not translate by language; the display name in the plugins table
+// (the fallback for the plugin's sender name) takes zh-CN. A market entry whose display name or description breaks the
+// rules makes that market report an error.
 func TestPluginLocalizedText(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()

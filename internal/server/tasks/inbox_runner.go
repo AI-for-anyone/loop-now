@@ -9,7 +9,8 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// KickInbox独立派发非当前/阻塞实例的Inbox，不把它当作workflow节点执行。
+// KickInbox dispatches Inbox work for instances that are not current or are blocked, on its own, without running it as
+// a workflow node.
 func (s *Service) KickInbox(runtime uuid.UUID) {
 	s.mu.Lock()
 	if !s.started || s.ctx.Err() != nil || s.inboxDrivers[runtime] {
@@ -63,7 +64,7 @@ func (s *Service) KickInbox(runtime uuid.UUID) {
 		}()
 		driveErr = s.driveInbox(ctx, runtime)
 		if driveErr != nil && ctx.Err() == nil && s.Log != nil {
-			s.Log.Error("任务Inbox派发失败", "runtimeId", runtime, "error", driveErr)
+			s.Log.Error("task Inbox dispatch failed", "runtimeId", runtime, "error", driveErr)
 		}
 	}()
 }
@@ -116,13 +117,14 @@ func (s *Service) driveInbox(ctx context.Context, runtime uuid.UUID) error {
 		}); e != nil {
 			return e
 		}
-		// 不调用节点settle；普通Inbox回合不会推进/重试workflow。
+		// Node settle is not called; a regular Inbox turn does not advance or retry the workflow.
 		s.Kick(inst.TaskID)
 	}
 	return ctx.Err()
 }
 
-// taskNodeRef 是日志里的 nodeRunId：没有节点时为空串（不记指针，否则日志里是地址）。
+// taskNodeRef is the nodeRunId for logs: an empty string when there is no node (not a pointer, otherwise the log would
+// show an address).
 func taskNodeRef(id uuid.UUID) string {
 	if id == uuid.Nil {
 		return ""

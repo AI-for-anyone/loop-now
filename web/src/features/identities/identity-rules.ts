@@ -1,8 +1,9 @@
 import type { Schemas } from '@/api/client'
 import { t } from '@/i18n'
 
-// 外部身份的名称规则，与契约中的 ExternalIdentityName 一致：小写字母或数字开头，只含小写字母、数字、点、下划线与连字符，
-// 最长 64 个字符；console 与 platform 是保留名称（控制台操作者与平台通知的地址）。
+// Naming rules for external identities, matching ExternalIdentityName in the contract: starts with a lowercase letter or digit,
+// contains only lowercase letters, digits, dots, underscores and hyphens, at most 64 characters; console and platform are
+// reserved names (the addresses of the console operator and of platform notifications).
 const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/
 const RESERVED = ['console', 'platform']
 
@@ -21,14 +22,15 @@ export function tokenState(token: Schemas['ExternalToken'], now = Date.now()): T
   return 'active'
 }
 
-// 签发时的有效期选项；预设天数由控制台换算为到期时间，“指定日期”取当天结束的时刻，“永不过期”不提交 expiresAt。
+// Expiry options when issuing; the console converts the preset day counts into an expiry time, “指定日期” (Pick a date) uses the
+// end of that day, and “永不过期” (Never expires) doesn't send expiresAt.
 export type ExpiryChoice = 'never' | 'd7' | 'd30' | 'd90' | 'date'
 
 const DAYS: Partial<Record<ExpiryChoice, number>> = { d7: 7, d30: 30, d90: 90 }
 
 export const defaultExpiry = (days: number): ExpiryChoice => (days === 7 ? 'd7' : days === 90 ? 'd90' : 'd30')
 
-// 返回到期时间（ISO 字符串），永不过期时为 null；指定的日期为空或早于今天时为 undefined。
+// Returns the expiry time (ISO string), null for never expires, and undefined when the picked date is empty or before today.
 export function expiresAtOf(choice: ExpiryChoice, date: string, now = new Date()): string | null | undefined {
   if (choice === 'never') return null
   const days = DAYS[choice]
@@ -39,7 +41,7 @@ export function expiresAtOf(choice: ExpiryChoice, date: string, now = new Date()
   return end.getTime() > now.getTime() ? end.toISOString() : undefined
 }
 
-// 日期输入框的最小值：今天（本地时间）。
+// The minimum value of the date input: today (local time).
 export function todayInput(now = new Date()): string {
   const pad = (value: number) => String(value).padStart(2, '0')
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`

@@ -108,7 +108,7 @@ func (s *Server) listAnomalies(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, page)
 }
 
-// queryTime 解析 RFC 3339 的查询参数；不传时返回 nil。
+// queryTime parses an RFC 3339 query parameter; nil when it is not given.
 func queryTime(r *http.Request, name string) (*time.Time, error) {
 	v := r.URL.Query().Get(name)
 	if v == "" {
@@ -121,7 +121,7 @@ func queryTime(r *http.Request, name string) (*time.Time, error) {
 	return &t, nil
 }
 
-// streamOverview 推送概览事件流，快照与续传规则同 Agent 事件流。
+// streamOverview pushes the overview event stream, with the same snapshot and resume rules as the Agent event stream.
 func (s *Server) streamOverview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	f, err := s.scopeFilter(r)

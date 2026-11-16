@@ -39,7 +39,8 @@ func pageQuery(inv *cli.Invocation) url.Values {
 	return q
 }
 
-// messageBody 组装发送与回复的请求体；不带 --when-busy 时请求中不带 whenBusy。
+// messageBody assembles the request body for sending and replying; without --when-busy the request has no
+// whenBusy.
 func messageBody(inv *cli.Invocation, to string) (map[string]any, error) {
 	body := map[string]any{}
 	if err := taskRun(inv); err != nil {
@@ -108,7 +109,7 @@ func addInbox(r *cli.Registry) {
 		Args:       []cli.Arg{{Name: "messageId", Description: "Message ID, from the result of inbox list"}},
 		Output:     "InboxMessage",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
-			// 已读动作幂等；严格消息始终保留调用者提供的原run。
+			// Marking read is idempotent; for strict messages the original run the caller provided is always kept.
 			var body []byte
 			contentType := ""
 			if inv.Has("run") {

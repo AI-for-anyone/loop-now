@@ -1,5 +1,6 @@
-// Package output 定义 loopctl 的输出信封、错误类别、退出码与错误码。
-// 错误码、类别与退出码的对应关系只在本包中定义；schema、内置 Skill 与测试都以这里为准。
+// Package output defines loopctl's output envelope, error categories, exit codes and error codes.
+// The mapping between error codes, categories and exit codes is defined only in this package; the schema, the
+// built-in Skill and the tests all treat it as authoritative.
 package output
 
 import (
@@ -11,10 +12,10 @@ import (
 	"sort"
 )
 
-// Category 是错误类别，每个类别对应一个退出码。
+// Category is an error category; each category maps to one exit code.
 type Category string
 
-// 错误类别。
+// Error categories.
 const (
 	CategoryInternal        Category = "internal"
 	CategoryUsage           Category = "usage"
@@ -28,14 +29,14 @@ const (
 	CategoryServer          Category = "server"
 )
 
-// ExitInfo 描述一个退出码。
+// ExitInfo describes one exit code.
 type ExitInfo struct {
 	Code        int      `json:"code"`
 	Category    Category `json:"category,omitempty"`
 	Description string   `json:"description"`
 }
 
-// exitTable 是退出码表，按退出码排列。
+// exitTable is the exit code table, ordered by exit code.
 var exitTable = []ExitInfo{
 	{0, "", "Success, possibly with warnings"},
 	{1, CategoryInternal, "loopctl itself failed; a successful server response could not be parsed; the server returned a redirect"},
@@ -50,10 +51,10 @@ var exitTable = []ExitInfo{
 	{10, CategoryServer, "HTTP 500 and any other status code not listed"},
 }
 
-// ExitTable 返回退出码表的副本。
+// ExitTable returns a copy of the exit code table.
 func ExitTable() []ExitInfo { return append([]ExitInfo(nil), exitTable...) }
 
-// ExitCode 返回类别对应的退出码；未知类别按 internal 处理。
+// ExitCode returns the exit code for a category; unknown categories are treated as internal.
 func ExitCode(c Category) int {
 	for _, e := range exitTable {
 		if e.Category == c && e.Code != 0 {
@@ -63,7 +64,7 @@ func ExitCode(c Category) int {
 	return 1
 }
 
-// CategoryForStatus 按 HTTP 状态码确定错误类别。
+// CategoryForStatus determines the error category from an HTTP status code.
 func CategoryForStatus(status int) Category {
 	switch {
 	case status >= 300 && status < 400:
@@ -85,7 +86,8 @@ func CategoryForStatus(status int) Category {
 	}
 }
 
-// loopctl 自身产生的错误码。服务端返回的错误码原样保留，不在此列。
+// Error codes produced by loopctl itself. Error codes returned by the server are kept as they are and are not
+// listed here.
 const (
 	CodeInternalError      = "internal_error"
 	CodeUnexpectedRedirect = "unexpected_redirect"
@@ -112,12 +114,13 @@ const (
 
 	CodeConnectionFailed = "connection_failed"
 	CodeTimeout          = "timeout"
-	CodeServerUnhealthy  = "server_unhealthy" // health：服务端报告依赖不可用（HTTP 503）
+	CodeServerUnhealthy  = "server_unhealthy" // health: the server reports that a dependency is unavailable (HTTP 503)
 
-	CodeNotFound = "not_found" // 按地址找不到 Agent；与服务端 404 的错误码相同
+	CodeNotFound = "not_found" // no Agent found at the address; same error code as the server's 404
 )
 
-// localCodes 是本地错误码到类别的对应。unexpected_response 的类别随 HTTP 状态码变化，这里记的是 2xx 时的类别。
+// localCodes maps local error codes to categories. The category of unexpected_response depends on the HTTP status
+// code; the one recorded here is the category for a 2xx.
 var localCodes = map[string]Category{
 	CodeInternalError:      CategoryInternal,
 	CodeUnexpectedRedirect: CategoryInternal,
@@ -149,13 +152,13 @@ var localCodes = map[string]Category{
 	CodeNotFound: CategoryNotFound,
 }
 
-// CodeInfo 描述一个本地错误码。
+// CodeInfo describes one local error code.
 type CodeInfo struct {
 	Code     string   `json:"code"`
 	Category Category `json:"category"`
 }
 
-// LocalCodes 返回全部本地错误码，按类别的退出码、再按名称排序。
+// LocalCodes returns all local error codes, sorted by the exit code of their category and then by name.
 func LocalCodes() []CodeInfo {
 	out := make([]CodeInfo, 0, len(localCodes))
 	for code, cat := range localCodes {
@@ -170,7 +173,7 @@ func LocalCodes() []CodeInfo {
 	return out
 }
 
-// Error 是输出中的 error 对象，也是命令返回的错误类型。
+// Error is the error object in the output, and also the error type commands return.
 type Error struct {
 	Code       string          `json:"code"`
 	Category   Category        `json:"category"`
@@ -182,7 +185,7 @@ type Error struct {
 
 func (e *Error) Error() string { return e.Code + ": " + e.Message }
 
-// Errorf 创建一个本地错误，类别由错误码决定。
+// Errorf creates a local error; its category is determined by the error code.
 func Errorf(code, format string, args ...any) *Error {
 	cat, ok := localCodes[code]
 	if !ok {
@@ -191,7 +194,7 @@ func Errorf(code, format string, args ...any) *Error {
 	return &Error{Code: code, Category: cat, Message: fmt.Sprintf(format, args...)}
 }
 
-// WithDetails 给错误附上详情；详情无法编码时保持不变。
+// WithDetails attaches details to the error; if the details cannot be encoded, the error is left unchanged.
 func (e *Error) WithDetails(v any) *Error {
 	if b, err := marshal(v); err == nil {
 		e.Details = b
@@ -199,20 +202,20 @@ func (e *Error) WithDetails(v any) *Error {
 	return e
 }
 
-// Warning 是 warnings 数组中的一项。
+// Warning is one entry in the warnings array.
 type Warning struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
 	Details any    `json:"details,omitempty"`
 }
 
-// 警告码。
+// Warning codes.
 const (
 	WarnVersionMismatch      = "version_mismatch"
 	WarnServerVersionUnknown = "server_version_unknown"
 )
 
-// Meta 是输出中的 meta 对象。
+// Meta is the meta object in the output.
 type Meta struct {
 	ClientVersion string `json:"clientVersion"`
 	Identity      string `json:"identity,omitempty"`
@@ -236,7 +239,8 @@ type failure struct {
 	Meta     Meta      `json:"meta"`
 }
 
-// WriteSuccess 写出成功信封。data 为 json.RawMessage 时原样（压缩空白后）使用，否则编码为 JSON；nil 输出为 null。
+// WriteSuccess writes a success envelope. When data is a json.RawMessage it is used as is (after compacting
+// whitespace), otherwise it is encoded as JSON; nil is written as null.
 func WriteSuccess(w io.Writer, data any, warnings []Warning, meta Meta) error {
 	raw, err := Raw(data)
 	if err != nil {
@@ -245,12 +249,13 @@ func WriteSuccess(w io.Writer, data any, warnings []Warning, meta Meta) error {
 	return writeLine(w, success{OK: true, Data: raw, Warnings: nonNil(warnings), Meta: meta})
 }
 
-// WriteFailure 写出失败信封。
+// WriteFailure writes a failure envelope.
 func WriteFailure(w io.Writer, e *Error, warnings []Warning, meta Meta) error {
 	return writeLine(w, failure{OK: false, Error: e, Warnings: nonNil(warnings), Meta: meta})
 }
 
-// Raw 把任意值转为单行 JSON；json.RawMessage 只压缩空白，校验其为合法 JSON。
+// Raw turns any value into single-line JSON; a json.RawMessage only has its whitespace compacted, which also
+// checks that it is valid JSON.
 func Raw(v any) (json.RawMessage, error) {
 	switch x := v.(type) {
 	case nil:

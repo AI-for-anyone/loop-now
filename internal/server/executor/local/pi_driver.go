@@ -19,7 +19,8 @@ import (
 	"loop-now/internal/server/preflight"
 )
 
-// piDriver 是随包 Pi 的运行时：RPC 模式的常驻进程，模型凭证经 Agent 的 Pi 目录（auth.json、models.json）与授权刷新通道。
+// piDriver is the bundled Pi runtime: a long-running process in RPC mode, with model credentials provided through the
+// Agent's Pi directory (auth.json, models.json) and the auth refresh channel.
 type piDriver struct{ e *Executor }
 
 func (piDriver) name() string { return "Pi" }
@@ -28,8 +29,10 @@ func (piDriver) runtime() string { return agentruntime.Pi }
 
 func (piDriver) identity(agentconfig.Snapshot) string { return "" }
 
-// refresh 重写 Pi 的模型凭证与 models.json 缓存。插件提供方的订阅账号：auth.json 是指向账号状态目录的链接
-// （prepare 建的，进程身份含 stateIdentity，复用时必然还是同一份），不能当普通凭证重写，否则会把链接换成文件或直接失败。
+// refresh rewrites Pi's model credentials and the models.json cache. For a plugin provider's subscription account,
+// auth.json is a link to the account's state directory (created by prepare; the process identity includes
+// stateIdentity, so on reuse it is necessarily still the same one) and must not be rewritten like an ordinary
+// credential, or the link would be replaced by a file or the write would simply fail.
 func (piDriver) refresh(snap agentconfig.Snapshot, d agentDirs) error {
 	if snap.ProviderState == nil {
 		if err := seedModelAuth(snap, d); err != nil {
@@ -42,7 +45,7 @@ func (piDriver) refresh(snap agentconfig.Snapshot, d agentDirs) error {
 	return nil
 }
 
-// start 组装 Pi 的参数（内置扩展、授权刷新通道、插件）并以 RPC 模式启动。
+// start builds Pi's arguments (built-in extensions, auth refresh channel, plugins) and starts it in RPC mode.
 func (pd piDriver) start(ctx context.Context, spec startSpec) (started, error) {
 	e, snap, d := pd.e, spec.snap, spec.d
 	env := spec.env
@@ -103,7 +106,7 @@ func (pd piDriver) start(ctx context.Context, spec startSpec) (started, error) {
 		return started{}, fail(executor.ErrPiStartFailed, "启动 Pi 失败：%v", err)
 	}
 	if err := procgroup.Started(cmd); err != nil {
-		e.snapshotLog(snap).Warn("Pi 进程没有纳入整组管理，停止时只能结束它本身", "pid", client.Pid(), "err", err)
+		e.snapshotLog(snap).Warn("Pi process is not under group management; stopping can only end the process itself", "pid", client.Pid(), "err", err)
 	}
 	if bridge != nil {
 		bridge.ChildStarted()
@@ -111,7 +114,7 @@ func (pd piDriver) start(ctx context.Context, spec startSpec) (started, error) {
 	return started{rt: client, client: client, authBridge: bridge}, nil
 }
 
-// attach 接上用量与事件的观察者，以及扩展对话。
+// attach hooks up the usage and event observers, and extension dialogs.
 func (pd piDriver) attach(p *proc) {
 	e := pd.e
 	p.client.SetObserver(procObserver{e: e, p: p})
@@ -120,7 +123,7 @@ func (pd piDriver) attach(p *proc) {
 	}
 }
 
-// ready 读出 Pi 的状态（会话文件），并在后台缓存它的命令列表。
+// ready reads Pi's state (the session file) and caches its command list in the background.
 func (pd piDriver) ready(ctx context.Context, p *proc, _ startSpec) error {
 	e := pd.e
 	stateCtx, cancel := context.WithTimeout(ctx, e.o.StartTimeout)
@@ -134,7 +137,7 @@ func (pd piDriver) ready(ctx context.Context, p *proc, _ startSpec) error {
 	return nil
 }
 
-// beforeTurn 应用本轮的思考等级。
+// beforeTurn applies this turn's thinking level.
 func (pd piDriver) beforeTurn(ctx context.Context, p *proc, snap agentconfig.Snapshot) error {
 	if snap.ThinkingLevel == nil {
 		return nil

@@ -501,8 +501,9 @@ func (s *Server) streamTasks(w http.ResponseWriter, r *http.Request, project boo
 				return
 			}
 		case <-poll.C:
-			// 中继游标只用于消费提醒。持久游标必须由数据库有序补齐推进，
-			// 新中继不能越过重连积压或超过单批100条的历史。
+			// The relay cursor is only used to consume wake-up notifications. The durable cursor must be advanced only
+			// by ordered catch-up from the database; a new relay event must not skip past the reconnection backlog or
+			// past history beyond a single batch of 100 events.
 			if s.Coord != nil {
 				if relayed, err := s.Coord.ReadEvents(ctx, streamKey, streamCursor, 100, 0); err == nil && len(relayed) > 0 {
 					streamCursor = relayed[len(relayed)-1].ID

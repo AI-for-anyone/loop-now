@@ -21,7 +21,7 @@ func (s *Service) StartSleepMaintenance(interval time.Duration, batch int, kickT
 		defer tick.Stop()
 		for {
 			if err := s.st.ReconcileSleeps(s.ctx, batch); err != nil {
-				s.log.Warn("sleep对账失败", "code", "sleep_reconcile_failed")
+				s.log.Warn("sleep reconciliation failed", "code", "sleep_reconcile_failed")
 			}
 			rows, err := s.st.Pool.Query(s.ctx, `SELECT DISTINCT agent_id,task_id FROM agent_sleeps`)
 			if err == nil {

@@ -25,7 +25,8 @@ function SubTitle({ children }: { children: string }) {
   return <h3 className="text-[13px] font-black text-ink-700">{children}</h3>
 }
 
-// 项目里的一个插件：启用开关；启用后是项目级配置（只有 x-scope: project 的项）、账号与这个项目里的事件。
+// One plugin in a project: the enable switch; once enabled, the project-level config (only the x-scope: project fields), accounts and
+// the events in this project.
 function ProjectPluginCard({ project, item }: { project: Schemas['Project']; item: Schemas['ProjectPlugin'] }) {
   const detail = usePlugin(item.pluginId)
   const global = usePluginConfig(item.pluginId)
@@ -96,7 +97,8 @@ function ProjectPluginCard({ project, item }: { project: Schemas['Project']; ite
   )
 }
 
-// 项目插件页：这个项目里每个已安装插件一张卡片，启用后填写项目级配置与账号。给 Agent 用的部分在 Agent 的配置页里授权。
+// The project plugins page: one card per installed plugin in this project; once enabled, fill in the project-level config and accounts.
+// The parts meant for Agents are granted on the Agent's config page.
 export function ProjectPluginsPage() {
   const scope = useScope()
   return scope.kind === 'project' ? <ProjectPlugins key={scope.project.id} project={scope.project} /> : null
@@ -107,7 +109,8 @@ function ProjectPlugins({ project }: { project: Schemas['Project'] }) {
   const list = plugins.data?.plugins ?? []
   return (
     <DraftNavigationGuard projectName={project.name}>
-      {/* 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。 */}
+      {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text) scroll with the
+          content instead of stretching the whole page based on their unscrolled position. */}
       <div className="relative h-full overflow-y-auto">
         <div className="mx-auto flex max-w-[1180px] flex-col gap-4 px-4 pt-[22px] pb-16 sm:px-8">
           <header className="flex flex-col gap-1.5">

@@ -1,5 +1,7 @@
-// Package selfsigned 维护对外端口的自签 TLS 证书：目录里的 cert.pem 与 key.pem，没有、读不出、已过期或没覆盖所需主机时重新生成。
-// 证书同时是自己的 CA，loopctl 把 cert.pem 当 --ca-file 即可校验。桌面壳用它开对外端口（LOOP_NOW_EXTERNAL_TLS_SELF_SIGNED）。
+// Package selfsigned maintains the self-signed TLS certificate for the external port: cert.pem and key.pem in a
+// directory, regenerated when missing, unreadable, expired or not covering the required hosts.
+// The certificate is also its own CA, so loopctl can verify it by using cert.pem as --ca-file. The desktop shell uses it
+// to open the external port (LOOP_NOW_EXTERNAL_TLS_SELF_SIGNED).
 package selfsigned
 
 import (
@@ -23,16 +25,20 @@ import (
 const (
 	CertFile = "cert.pem"
 	KeyFile  = "key.pem"
-	// 有效期十年：只有 loopctl 这类非浏览器客户端校验它，不受浏览器对证书寿命的限制。
+	// Valid for ten years: only non-browser clients such as loopctl verify it, so browser limits on certificate
+	// lifetime do not apply.
 	validity = 10 * 365 * 24 * time.Hour
 )
 
-// Load 返回目录里可用的证书与 cert.pem 的路径，必要时先生成（generated 为 true）。
-// hosts 是证书要覆盖的主机名或 IP，回环地址总是包含；空串与通配地址忽略。
+// Load returns the usable certificate in the directory and the path of cert.pem, generating it first when needed
+// (generated is then true).
+// hosts are the host names or IPs the certificate must cover; loopback addresses are always included, and empty
+// strings and wildcard addresses are ignored.
 func Load(dir string, hosts []string, now time.Time) (cert tls.Certificate, certPath string, generated bool, err error) {
 	certPath, keyPath := filepath.Join(dir, CertFile), filepath.Join(dir, KeyFile)
 	want := wanted(hosts)
-	// 读不出（没有、损坏、不成对）或不能用的证书都重新生成、覆盖掉。
+	// A certificate that cannot be read (missing, corrupt, not a matching pair) or is not usable is regenerated and
+	// overwritten.
 	if existing, loadErr := tls.LoadX509KeyPair(certPath, keyPath); loadErr == nil {
 		if leaf, parseErr := x509.ParseCertificate(existing.Certificate[0]); parseErr == nil && usable(leaf, want, now) {
 			existing.Leaf = leaf
@@ -49,7 +55,7 @@ func Load(dir string, hosts []string, now time.Time) (cert tls.Certificate, cert
 	return cert, certPath, true, nil
 }
 
-// wanted 规范化并去重要覆盖的主机：回环地址总在其中。
+// wanted normalizes and deduplicates the hosts to cover: the loopback addresses are always among them.
 func wanted(hosts []string) []string {
 	out := []string{"localhost", "127.0.0.1", "::1"}
 	for _, h := range hosts {
@@ -67,7 +73,8 @@ func wanted(hosts []string) []string {
 	return out
 }
 
-// usable 判断现有证书还能不能用：未过期（留 30 天余量）且覆盖全部所需主机。
+// usable reports whether the existing certificate can still be used: not expired (with a 30-day margin) and covering
+// all required hosts.
 func usable(leaf *x509.Certificate, want []string, now time.Time) bool {
 	if now.Before(leaf.NotBefore) || now.Add(30*24*time.Hour).After(leaf.NotAfter) {
 		return false
@@ -117,7 +124,8 @@ func generate(dir, certPath, keyPath string, hosts []string, now time.Time) erro
 	if err != nil {
 		return err
 	}
-	// 先写私钥再写证书，都是临时文件改名：读的一方要么看到成对的新文件，要么看到旧的。
+	// Write the private key first, then the certificate, each as a temp file that is renamed into place: a reader sees
+	// either the new pair or the old one.
 	if err := writeAtomic(keyPath, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}), 0o600); err != nil {
 		return err
 	}

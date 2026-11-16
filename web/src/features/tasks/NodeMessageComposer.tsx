@@ -21,7 +21,7 @@ import type { NodeDraft } from './NodeRecordPanel'
 
 const copy = t.taskInbox
 
-// 边框归共同容器所有，文字区按内容增高，上限后独立滚动。
+// The border belongs to the shared container; the text area grows with its content and scrolls on its own once it hits the limit.
 const inputClass = 'min-h-10 max-h-24 flex-1 resize-none overflow-y-auto rounded-none border-0 bg-transparent px-0.5 py-[9px] text-[15px] leading-[22px] shadow-none focus-visible:shadow-none disabled:bg-transparent'
 
 type Props = { taskId: string; draft: NodeDraft; current: boolean; disabled: boolean; capability: Schemas['TaskNodeMessageCapability'] | undefined; text: string; onChange: (text: string) => void; imageLimits?: ImageLimits | null; onImages?: (images: ImageDraft[]) => void; onAccepted: (sent: string, draftImageIds?: string[]) => void; onAction: (action: NodeDraft['action']) => void; queue?: ReactNode; stop?: StopControl; reply?: QuestionReply }
@@ -102,8 +102,9 @@ export function NodeMessageComposer({ taskId, draft, current, disabled, capabili
   const showStop = current && stop !== undefined && !reply && !unknown && !text.trim() && !draft.images?.length
   const stopLabel = stop?.pending ? t.chat.stopping : stop?.retry ? t.chat.retryStop : t.chat.stop
   // Draft images sit inside the same border, above the text row; the corners tighten when they show.
-  // 改版第 5 步（同对话页输入区）：左边圆形的加图按钮，中间藏青描边的胶囊输入框，右边荧光粉圆章发送（忙时可以停止）。
-  // 待发图片排在胶囊里、文字行上方，这时圆角收紧一些。
+  // Redesign step 5 (same as the chat page's input area): a round add-image button on the left, a pill input with a navy outline in the
+  // middle, and a fluorescent-pink round stamp for sending on the right (it can stop while busy).
+  // Images waiting to be sent sit inside the pill, above the text row, and the corners tighten a little then.
   const field = (addButton?: ReactNode, strip?: ReactNode) => <div className="flex min-w-0 items-end gap-2.5">
     {addButton && <span className="flex h-11 shrink-0 items-center">{addButton}</span>}
     <div data-node-composer className={cn('flex min-h-11 min-w-0 flex-1 flex-col border-2 border-ink bg-paper-raised px-4 focus-within:border-riso-blue focus-within:ring-2 focus-within:ring-riso-blue/25', strip || reply ? 'rounded-[18px] pt-1.5' : 'rounded-[22px]')}>

@@ -1,4 +1,4 @@
-// 头像的固定色对：蓝/粉、绿/蓝、粉/黄、黄/蓝。
+// The fixed color pairs for avatars: blue/pink, green/blue, pink/yellow, yellow/blue.
 export const AVATAR_PAIRS = [
   ['var(--riso-blue)', 'var(--riso-pink)'],
   ['var(--green)', 'var(--riso-blue)'],
@@ -6,7 +6,7 @@ export const AVATAR_PAIRS = [
   ['var(--riso-yellow)', 'var(--riso-blue)'],
 ] as const
 
-// 对 Agent ID 做 FNV-1a 哈希，按余数从固定色对中选一组；同一个 ID 总是得到同一组颜色。
+// FNV-1a hash of the Agent ID, with the remainder picking one of the fixed color pairs; the same ID always gets the same pair.
 export function avatarPair(id: string): (typeof AVATAR_PAIRS)[number] {
   let hash = 0x811c9dc5
   for (let i = 0; i < id.length; i++) {

@@ -23,10 +23,12 @@ type QuestionInput struct {
 	OptionID  *string
 	NodeRunID uuid.UUID
 	ReplyTo   uuid.UUID
-	// Channel 与 SenderName 只用于插件发件（SPEC §11）：渠道与这条消息上的发件名称。
+	// Channel and SenderName are only for messages sent by plugins (SPEC §11): the channel and the sender name on this
+	// message.
 	Channel    string
 	SenderName string
-	// ExpiresIn 与 Dialog 只用于 Pi 扩展的对话（AskDialog）：提问的期限与对话标记。
+	// ExpiresIn and Dialog are only for Pi extension dialogs (AskDialog): the question's deadline and the dialog
+	// marker.
 	ExpiresIn time.Duration
 	Dialog    *store.ExtensionDialog
 }
@@ -202,7 +204,8 @@ func (s *Service) questionDeliverOnce(ctx context.Context, p auth.Principal, msg
 			}
 		}
 		if answered {
-			// 扩展对话的回答直接交还给 Pi（AskDialog 在等），不再作为消息提醒 Agent。
+			// The answer to an extension dialog goes straight back to Pi (AskDialog is waiting), and no longer reminds
+			// the Agent as a message.
 			var err error
 			if dialogAnswer, err = store.IsExtensionDialogTx(ctx, scope.Tx, input.ReplyTo); err != nil {
 				return err

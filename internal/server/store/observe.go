@@ -9,19 +9,19 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// UsageRow 是按（Agent、提供方、模型）分组的用量统计；Provider 与 Model 都为空表示未知模型。
+// UsageRow is a usage summary grouped by (Agent, provider, model); empty Provider and Model mean an unknown model.
 type UsageRow struct {
 	AgentID      uuid.UUID
 	AgentName    string
 	AgentDeleted bool
-	ProjectID    *uuid.UUID // 平台 Agent 为空；项目可能已删除
+	ProjectID    *uuid.UUID // nil for a platform Agent; the project may have been deleted
 	Provider     string
 	Model        string
 	UsageTotals
 }
 
-// UsageSummary 统计范围内全部 Agent（含已删除的 Agent 与已删除项目中的 Agent）在 [from, to) 内的用量；
-// from、to 为空表示不限。按总数降序。
+// UsageSummary sums the usage in [from, to) of all Agents in the scope (including deleted Agents and Agents in deleted
+// projects); a nil from or to means unbounded. Ordered by total, descending.
 func (s *Store) UsageSummary(ctx context.Context, f ScopeFilter, from, to *time.Time) ([]UsageRow, error) {
 	pid, platform := f.args()
 	rows, err := s.Pool.Query(ctx, `SELECT a.id, a.name, a.deleted_at IS NOT NULL, a.project_id, coalesce(u.provider, ''), coalesce(u.model, ''),
@@ -42,21 +42,24 @@ func (s *Store) UsageSummary(ctx context.Context, f ScopeFilter, from, to *time.
 	})
 }
 
-// AnomalyRow 是一条未正常完成的执行。
+// AnomalyRow is one run that did not complete normally.
 type AnomalyRow struct {
 	Run       Run
 	AgentName string
-	ProjectID *uuid.UUID // 平台 Agent 为空
+	ProjectID *uuid.UUID // nil for a platform Agent
 }
 
-// AnomalyCursor 是异常列表的翻页位置：上一页最后一项的结束时间与执行 ID。
+// AnomalyCursor is the paging position in the anomaly list: the end time and run ID of the last item on the previous
+// page.
 type AnomalyCursor struct {
 	EndedAt time.Time
 	RunID   uuid.UUID
 }
 
-// Anomalies 按结束时间倒序返回范围内未删除 Agent 的失败与被打断的执行，以及 from 之后的总条数。
-// 已删除项目中的 Agent 都已软删除，因此不出现。手动压缩（/compact）被人取消或因服务重启中断不算异常，只列出失败的。
+// Anomalies returns, ordered by end time descending, the failed and interrupted runs of non-deleted Agents in the
+// scope, plus the total count after from. Agents in deleted projects are all soft-deleted, so they do not appear. A
+// manual compaction (/compact) cancelled by a person or interrupted by a server restart is not an anomaly; only failed
+// ones are listed.
 func (s *Store) Anomalies(ctx context.Context, f ScopeFilter, from *time.Time, cursor *AnomalyCursor, limit int) ([]AnomalyRow, int, *AnomalyCursor, error) {
 	pid, platform := f.args()
 	const scope = `FROM runs r JOIN agents a ON a.id = r.agent_id
@@ -96,7 +99,8 @@ func (s *Store) Anomalies(ctx context.Context, f ScopeFilter, from *time.Time, c
 	return items, total, next, nil
 }
 
-// LastEndedRuns 返回每个 Agent 最近一次已结束的执行（概览的“上一条回复”）。手动压缩（/compact）不是回复，不算。
+// LastEndedRuns returns each Agent's most recent ended run (the "previous reply" in the overview). A manual compaction
+// (/compact) is not a reply and does not count.
 func (s *Store) LastEndedRuns(ctx context.Context, agentIDs []uuid.UUID) (map[uuid.UUID]Run, error) {
 	out := map[uuid.UUID]Run{}
 	if len(agentIDs) == 0 {
@@ -126,13 +130,13 @@ func (s *Store) LastEndedRuns(ctx context.Context, agentIDs []uuid.UUID) (map[uu
 	return out, nil
 }
 
-// ProcessExit 是 Pi 进程最近一次停止或意外退出。
+// ProcessExit is the most recent stop or unexpected exit of a Pi process.
 type ProcessExit struct {
 	At     time.Time
-	Reason string // pi.stopped 的原因，意外退出为 unexpected_exit
+	Reason string // reason from pi.stopped; unexpected_exit for an unexpected exit
 }
 
-// LastProcessExits 返回每个 Agent 最近一次 Pi 进程停止或意外退出。
+// LastProcessExits returns each Agent's most recent Pi process stop or unexpected exit.
 func (s *Store) LastProcessExits(ctx context.Context, agentIDs []uuid.UUID) (map[uuid.UUID]ProcessExit, error) {
 	out := map[uuid.UUID]ProcessExit{}
 	if len(agentIDs) == 0 {
@@ -158,7 +162,7 @@ func (s *Store) LastProcessExits(ctx context.Context, agentIDs []uuid.UUID) (map
 	return out, rows.Err()
 }
 
-// CLIInstallResult 是某个 CLI 版本最近一次安装尝试的结果。
+// CLIInstallResult is the result of the most recent install attempt of a CLI version.
 type CLIInstallResult struct {
 	CLI       string
 	Version   string
@@ -166,7 +170,7 @@ type CLIInstallResult struct {
 	Error     string
 }
 
-// LatestCLIInstalls 返回每个 CLI 版本最近一次安装尝试的结果。
+// LatestCLIInstalls returns the result of the most recent install attempt of each CLI version.
 func (s *Store) LatestCLIInstalls(ctx context.Context) ([]CLIInstallResult, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT cli, version, succeeded, error FROM (
 			SELECT data ->> 'cli' AS cli, data ->> 'version' AS version, data ->> 'result' = 'succeeded' AS succeeded, coalesce(data ->> 'error', '') AS error,

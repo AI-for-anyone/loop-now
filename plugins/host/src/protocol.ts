@@ -1,5 +1,5 @@
-// 宿主与 Go 服务之间的 stdio 协议（api/plugin-host-protocol.md）：每行一个 JSON，{"id","type","plugin","payload"}。
-// 标准输出只写协议行；读入超过上限的行整行丢弃。
+// The stdio protocol between the host and the Go server (api/plugin-host-protocol.md): one JSON per line, {"id","type","plugin","payload"}.
+// stdout carries only protocol lines; an incoming line over the limit is dropped whole.
 
 import type { Readable } from 'node:stream'
 
@@ -39,7 +39,7 @@ export class Channel {
     this.onProblem = onProblem
   }
 
-  /** 开始读入；输入结束时调用 onEnd。 */
+  /** Starts reading; calls onEnd when the input ends. */
   listen(input: Readable, onEnd: () => void): void {
     let chunks: Buffer[] = []
     let size = 0
@@ -64,7 +64,7 @@ export class Channel {
         const rest = data.subarray(start)
         size += rest.length
         if (size >= MAX_LINE) {
-          this.onProblem(`收到一行超过 ${MAX_LINE} 字节的消息，已丢弃`)
+          this.onProblem(`Received a line longer than ${MAX_LINE} bytes; dropped it`)
           chunks = []
           size = 0
           skipping = true
@@ -83,11 +83,11 @@ export class Channel {
     try {
       m = JSON.parse(line.toString('utf8'))
     } catch {
-      this.onProblem(`收到不合协议的一行：${line.toString('utf8').slice(0, 200)}`)
+      this.onProblem(`Received a line that does not follow the protocol: ${line.toString('utf8').slice(0, 200)}`)
       return
     }
     if (typeof m !== 'object' || m === null || typeof m.type !== 'string') {
-      this.onProblem('收到缺少 type 的消息')
+      this.onProblem('Received a message without type')
       return
     }
     if (m.type === 'result' && typeof m.id === 'string' && this.pending.has(m.id)) {
@@ -102,14 +102,14 @@ export class Channel {
     this.onMessage(m)
   }
 
-  /** 写一行；超过上限时抛错，调用方改发错误回应。 */
+  /** Writes one line; throws when it exceeds the limit, and the caller then sends an error reply instead. */
   send(m: Message, done?: () => void): void {
     const line = JSON.stringify(m)
     if (Buffer.byteLength(line) + 1 > MAX_LINE) throw new Error(`消息超过 ${MAX_LINE} 字节`)
     this.write(`${line}\n`, done)
   }
 
-  /** 回应 Go 的请求；value 无法序列化或过大时改回错误。 */
+  /** Replies to a request from Go; replies with an error instead when value cannot be serialized or is too large. */
   reply(req: Message, type: 'result' | 'ack', reply: Reply): void {
     const base = { id: req.id, type, plugin: req.plugin }
     try {
@@ -119,7 +119,7 @@ export class Channel {
     }
   }
 
-  /** 发出宿主→Go 的请求（state_*），等待 result。 */
+  /** Sends a host→Go request (state_*) and waits for its result. */
   request(type: string, plugin: string, payload: unknown, timeoutMs = 30_000): Promise<unknown> {
     if (this.closed) return Promise.reject(new Error('宿主正在退出'))
     const id = `h${++this.next}`

@@ -18,7 +18,8 @@ func platformResult(command string) apitypes.ConsoleCommandResult {
 	return apitypes.ConsoleCommandResult{Handled: true, Source: "platform", Command: command}
 }
 
-// platformConsoleCommand 只认领平台内置命令；其余斜杠命令继续交给插件或普通消息链。
+// platformConsoleCommand claims only the platform's built-in commands; other slash commands go on to plugins or the
+// regular message chain.
 func (s *Server) platformConsoleCommand(r *http.Request, agentID uuid.UUID, text string) (apitypes.ConsoleCommandResult, bool, error) {
 	trimmed := strings.TrimSpace(text)
 	if !strings.HasPrefix(trimmed, "/") {

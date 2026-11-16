@@ -1,3 +1,5 @@
-// Package e2e 是 loopctl 与真实服务端的端到端测试（tasks 第 9、10 节），只有测试代码。
-// 测试在进程内启动服务端，使用临时数据目录与 fakepi，不连接本机正在运行的开发服务端。
+// Package e2e holds the end-to-end tests of loopctl against the real server (tasks sections 9 and 10); it contains
+// only test code.
+// The tests start the server in-process with a temporary data directory and fakepi, and never connect to a
+// development server running on this machine.
 package e2e

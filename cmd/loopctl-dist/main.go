@@ -1,8 +1,10 @@
-// loopctl-dist 为 macOS 与 Linux 的 arm64、amd64 交叉编译 loopctl，生成 SHA256SUMS 与 manifest.json。
+// loopctl-dist cross-compiles loopctl for arm64 and amd64 on macOS and Linux, and generates SHA256SUMS and
+// manifest.json.
 //
-//	go run ./cmd/loopctl-dist -version <版本> -out <目录>
+//	go run ./cmd/loopctl-dist -version <version> -out <dir>
 //
-// 产物写到 <目录>/<版本>/。服务端用同一个版本号构建，并读取其中的 manifest.json。
+// The output is written to <dir>/<version>/. The server is built with the same version number and reads the
+// manifest.json there.
 package main
 
 import (
@@ -23,12 +25,12 @@ import (
 	"strings"
 )
 
-// Platforms 是构建的平台。
+// Platforms are the platforms that are built.
 var Platforms = []struct{ OS, Arch string }{
 	{"darwin", "arm64"}, {"darwin", "amd64"}, {"linux", "amd64"}, {"linux", "arm64"}, {"windows", "amd64"},
 }
 
-// Manifest 是 manifest.json 的内容。
+// Manifest is the content of manifest.json.
 type Manifest struct {
 	SchemaVersion int        `json:"schemaVersion"`
 	Program       string     `json:"program"`
@@ -37,7 +39,7 @@ type Manifest struct {
 	Artifacts     []Artifact `json:"artifacts"`
 }
 
-// Artifact 是一个平台的二进制文件。
+// Artifact is the binary for one platform.
 type Artifact struct {
 	OS     string `json:"os"`
 	Arch   string `json:"arch"`
@@ -92,7 +94,8 @@ func moduleRoot(ctx context.Context) (string, error) {
 	return filepath.Dir(mod), nil
 }
 
-// Build 构建全部平台，写出二进制、SHA256SUMS 与 manifest.json，返回清单与产物目录。
+// Build builds all platforms, writes the binaries, SHA256SUMS and manifest.json, and returns the manifest and the
+// output directory.
 func Build(ctx context.Context, root, version, out string) (*Manifest, string, error) {
 	if !versionPattern.MatchString(version) {
 		return nil, "", fmt.Errorf("版本号 %q 只能含字母、数字与 . _ + -", version)
@@ -131,7 +134,7 @@ func Build(ctx context.Context, root, version, out string) (*Manifest, string, e
 	sort.Slice(m.Artifacts, func(i, j int) bool { return m.Artifacts[i].File < m.Artifacts[j].File })
 	var sums bytes.Buffer
 	for _, a := range m.Artifacts {
-		fmt.Fprintf(&sums, "%s  %s\n", a.SHA256, a.File) // 与 shasum -a 256 的输出格式相同
+		fmt.Fprintf(&sums, "%s  %s\n", a.SHA256, a.File) // same output format as shasum -a 256
 	}
 	if err := os.WriteFile(filepath.Join(dir, "SHA256SUMS"), sums.Bytes(), 0o644); err != nil {
 		return nil, "", err

@@ -13,11 +13,13 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// ReminderPlaceholder 是平台提醒那一轮排队时用户消息的正文；开始执行时改写为提醒文字。
+// ReminderPlaceholder is the body of the user message while the platform reminder turn is queued; it is rewritten to
+// the reminder text when the run starts.
 const ReminderPlaceholder = "Platform reminder"
 
-// ReminderText 生成提醒文字：点名本轮承载的待处理消息（ID、发件人与摘要），其余未读消息说明稍后另行提醒。
-// 命令取自同版本 loopctl。
+// ReminderText builds the reminder text: it names the pending messages carried by this turn (ID, sender and summary)
+// and says the remaining unread messages will be reminded about separately later. The command comes from loopctl of the
+// same version.
 func ReminderText(c store.ReminderCarried) string {
 	if len(c.Messages) == 0 {
 		return "Platform reminder: there are no Inbox messages to handle this turn."
@@ -30,9 +32,11 @@ func ReminderText(c store.ReminderCarried) string {
 	return text
 }
 
-// DeliverInbox 在一个事务中写入发给 Agent 的 Inbox 消息并安排一轮平台提醒，与控制台消息共用排队、忙闲锁与驱动循环：
-// Agent 空闲时立即开始；忙时按 whenBusy 排队，已有同优先级、排队中的提醒时并入它；打断消息仍打断当前执行。
-// 会话丢失时只保存消息，不安排提醒；人确认重开会话后由 remindUnread 补上。
+// DeliverInbox writes an Inbox message addressed to an Agent and schedules a platform reminder turn in one transaction,
+// sharing queueing, the busy lock and the driver loop with console messages: when the Agent is idle the turn starts
+// right away; when busy it is queued according to whenBusy, and merged into an already queued reminder of the same
+// priority if there is one; an interrupt message still interrupts the current run. When the session is lost only the
+// message is saved and no reminder is scheduled; remindUnread adds it after a person confirms reopening the session.
 func (s *Service) DeliverInbox(ctx context.Context, msg store.NewInboxMessage) error {
 	if msg.To.Kind != "agent" {
 		return errors.New("DeliverInbox 只用于发给 Agent 的消息")
@@ -40,19 +44,21 @@ func (s *Service) DeliverInbox(ctx context.Context, msg store.NewInboxMessage) e
 	return s.scheduleReminder(ctx, msg.To.ID, msg.ID, msg.WhenBusy, &msg)
 }
 
-// remindUnread 在人确认重开会话后调用：Agent 还有未读的 Inbox 消息时立即安排一轮提醒，
-// 触发消息记为最早的那条未读消息（它在会话丢失期间没能触发提醒）。失败只记日志，不影响重开会话。
+// remindUnread is called after a person confirms reopening the session: when the Agent still has unread Inbox messages
+// it schedules a reminder turn right away, with the trigger message set to the earliest unread message (it could not
+// trigger a reminder while the session was lost). Failures are only logged and do not affect reopening the session.
 func (s *Service) remindUnread(ctx context.Context, agentID uuid.UUID) {
 	id, ok, err := s.st.EarliestUnreadInbox(ctx, agentID)
 	if err == nil && ok {
 		err = s.scheduleReminder(ctx, agentID, id, "queue", nil)
 	}
 	if err != nil {
-		s.log.Warn("重开会话后安排平台提醒失败", "agentId", agentID, "err", err)
+		s.log.Warn("failed to schedule a platform reminder after the session was reopened", "agentId", agentID, "err", err)
 	}
 }
 
-// scheduleReminder 安排一轮平台提醒；msg 不为空时在同一事务中写入这条 Inbox 消息。
+// scheduleReminder schedules a platform reminder turn; when msg is non-nil it writes that Inbox message in the same
+// transaction.
 func (s *Service) scheduleReminder(ctx context.Context, agentID, triggerID uuid.UUID, whenBusy string, msg *store.NewInboxMessage) error {
 	if s.ctx.Err() != nil {
 		return errors.New("服务端正在停止")
@@ -74,7 +80,8 @@ func (s *Service) scheduleReminder(ctx context.Context, agentID, triggerID uuid.
 	if acquired && (err != nil || !out.Created) {
 		_, _ = s.co.Release(ctx, agentID.String(), owner)
 		if errors.Is(err, store.ErrActiveRunExists) || errors.Is(err, store.ErrQueuedRunsExist) {
-			// 锁是空的，但数据库里有进行中或排队的执行（例如刚重启、交接之间）：按数据库恢复锁，然后按“忙”排队。
+			// The lock is free, but the database has an in-flight or queued run (e.g. right after a restart, or between
+			// handoffs): restore the lock from the database, then queue as "busy".
 			s.restoreLock(ctx, agentID)
 			rem.Start, rem.RunID = false, uuid.Must(uuid.NewV7())
 			s.queueReminder(ctx, &rem, whenBusy)
@@ -87,7 +94,7 @@ func (s *Service) scheduleReminder(ctx context.Context, agentID, triggerID uuid.
 	}
 	switch {
 	case out.SessionMissing:
-		s.log.Warn("Agent 会话丢失，Inbox 消息已保存，未安排提醒；重开会话后补上", "agentId", agentID, "inboxMessageId", triggerID)
+		s.log.Warn("Agent session is missing; the Inbox message is saved but no reminder was scheduled; it is added once the session is reopened", "agentId", agentID, "inboxMessageId", triggerID)
 	case out.Created:
 		s.emitMessage(ctx, agentID, *out.Message, *out.Run)
 		s.emitRun(ctx, agentID, out.Run.ID)
@@ -109,14 +116,16 @@ func (s *Service) scheduleReminder(ctx context.Context, agentID, triggerID uuid.
 	return nil
 }
 
-// queueReminder 把提醒设为排队：按 whenBusy 排在打断或普通执行之后。
+// queueReminder makes the reminder queued: according to whenBusy it goes after the interrupt runs or the normal runs.
 func (s *Service) queueReminder(_ context.Context, rem *store.NewRun, whenBusy string) {
 	rem.WhenBusy = whenBusy
 }
 
-// prepareReminder 在平台提醒那一轮开始执行时调用：先收养没有承载提醒的待处理消息，再在提醒文字中点名本轮承载的消息，
-// 把用户消息改写为提醒文字并推送，返回交给执行器的文字。本轮已没有待处理消息、也不承载 sleep 唤醒时返回 void：
-// 这一轮作废（no_pending_messages），不启动 Pi。
+// prepareReminder is called when the platform reminder turn starts running: it first adopts pending messages not
+// carried by any reminder, then names the messages carried by this turn in the reminder text, rewrites the user message
+// to the reminder text and pushes it, and returns the text to hand to the executor. When this turn has no pending
+// messages left and does not carry a sleep wake, it returns void: the turn is voided (no_pending_messages) and Pi is
+// not started.
 func (s *Service) prepareReminder(ctx context.Context, agentID uuid.UUID, run store.Run) (text string, void bool, err error) {
 	c, err := s.st.PrepareReminderStart(ctx, agentID, run.ID)
 	if err != nil {
@@ -130,11 +139,12 @@ func (s *Service) prepareReminder(ctx context.Context, agentID uuid.UUID, run st
 	if err != nil {
 		return "", false, err
 	}
-	s.emitMessage(ctx, agentID, m, run) // 同一消息 ID 再推送一次，控制台按 ID 更新正文
+	s.emitMessage(ctx, agentID, m, run) // push the same message ID again; the console updates the body by ID
 	return text, false, nil
 }
 
-// outcomeVoided 表示提醒开始时已没有待处理消息：这一轮作废（no_pending_messages），不启动 Pi。
+// outcomeVoided means there were no pending messages left when the reminder started: the turn is voided
+// (no_pending_messages) and Pi is not started.
 const outcomeVoided = "voided"
 
 // InboxCommitted wakes durable queue work prepared by the shared Inbox transaction.

@@ -6,7 +6,8 @@ export type UsageDimension = 'agent' | 'model'
 export const USAGE_RANGES: UsageRange[] = ['today', 'week', 'month']
 export const USAGE_DIMENSIONS: UsageDimension[] = ['agent', 'model']
 
-// 时间段的开始时刻，按浏览器本地时区计算：今天从零点起，本周从周一零点起，近 30 天为当前时刻往前 30×24 小时。
+// The start of the period, in the browser's local time zone: today starts at midnight, this week at midnight on Monday, and the
+// last 30 days go back 30×24 hours from now.
 export function usageRangeStart(range: UsageRange, now: Date = new Date()): Date {
   switch (range) {
     case 'today':
@@ -26,11 +27,12 @@ export interface UsageParts {
   total: number
 }
 
-// 按所选维度汇总的一行。按 Agent 时 deleted 标明 Agent 已删除；按模型时 provider 与 model 都为 null 表示未知模型。
+// One row summed by the selected dimension. By Agent, deleted marks a deleted Agent; by model, provider and model both null
+// means an unknown model.
 export interface UsageLine extends UsageParts {
   key: string
   agentName: string | null
-  // 按 Agent 时的所属，用于“全部”时的所属标签；按模型时为 null。
+  // By Agent, where the Agent belongs, used for the ownership tag when “全部” (All) is selected; null by model.
   scope: Schemas['AgentScope'] | null
   projectId: string | null
   deleted: boolean
@@ -54,7 +56,8 @@ export function sumUsage(rows: Schemas['UsageRow'][]): UsageParts {
   return sum
 }
 
-// 服务端按（Agent、提供方、模型）分组，两种视图都在这里由同一份结果汇总，按合计从大到小排列。
+// The server groups by (Agent, provider, model); both views are summed here from the same result and sorted by total,
+// largest first.
 export function aggregateUsage(rows: Schemas['UsageRow'][], dimension: UsageDimension): UsageLine[] {
   const lines = new Map<string, UsageLine>()
   for (const row of rows) {

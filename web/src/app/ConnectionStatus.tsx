@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 
 type ConnectionState = 'checking' | 'connected' | 'degraded' | 'unreachable'
 
-// 每种状态都有文字；颜色只作辅助。
+// Every state has text; color is only an aid.
 const stateStyle: Record<ConnectionState, { label: string; chip: string; dot: string }> = {
   checking: { label: t.app.topbar.checking, chip: 'text-white', dot: 'bg-white/60' },
   connected: { label: t.app.topbar.connected, chip: 'text-white', dot: 'bg-tint-green' },
@@ -15,7 +15,7 @@ const stateStyle: Record<ConnectionState, { label: string; chip: string; dot: st
   unreachable: { label: t.app.topbar.unreachable, chip: 'bg-tint-red px-3 text-red-text', dot: 'bg-red' },
 }
 
-// 只显示 API 地址的主机和端口；地址无法解析时原样显示。
+// Show only the host and port of the API URL; show the URL as is when it cannot be parsed.
 function apiHost(apiBase: string): string {
   try {
     return new URL(apiBase).host
@@ -24,8 +24,9 @@ function apiHost(apiBase: string): string {
   }
 }
 
-// 左侧栏底部的连接状态：请求没有到达服务端，或健康接口不可用（503 以外的错误）时为无法连接；
-// 健康检查报告数据库不可用（503）时为数据库不可用；首次查询还没有结果时为检查中。
+// The connection status at the bottom of the sidebar: unreachable when a request did not reach the server or the health endpoint is not
+// available (an error other than 503); database unavailable when the health check reports the database is unavailable (503); checking
+// while the first query has no result yet.
 export function ConnectionStatus({ className }: { className?: string }) {
   const reachable = useSyncExternalStore(reachability.subscribe, reachability.isReachable)
   const health = useHealth()

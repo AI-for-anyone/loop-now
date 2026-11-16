@@ -11,7 +11,7 @@ import { isAgentNameConflict, projectNameError, unmatchedFieldError } from '@/li
 import { nameRuleError } from '@/lib/names'
 import { agentsPath } from '@/lib/scope'
 
-// 新建项目：只有名称一项。成功后进入新项目的 Agent 页。
+// New project: the name is the only field. On success, go to the new project's Agents page.
 export function CreateProjectDialog({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate()
   const create = useCreateProject()

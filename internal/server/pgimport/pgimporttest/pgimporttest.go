@@ -1,5 +1,6 @@
-// Package pgimporttest 为导入器的测试提供隔离的 PostgreSQL 源库：每次调用在测试库中创建独立 schema、
-// 执行全部 PostgreSQL 迁移，测试结束后删除。只操作 LOOP_NOW_TEST_DATABASE_URL 指向的数据库；未设置时跳过。
+// Package pgimporttest provides isolated PostgreSQL source databases for the importer's tests: each call creates a
+// separate schema in the test database and runs all PostgreSQL migrations, and the schema is dropped when the test
+// ends. It only touches the database LOOP_NOW_TEST_DATABASE_URL points to; when that is unset, the tests are skipped.
 package pgimporttest
 
 import (
@@ -26,7 +27,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 )
 
-// EnvTestDatabaseURL 指向测试库。
+// EnvTestDatabaseURL points to the test database.
 const EnvTestDatabaseURL = "LOOP_NOW_TEST_DATABASE_URL"
 
 const (
@@ -36,7 +37,7 @@ const (
 
 var sweepOnce sync.Once
 
-// URL 返回测试库连接串；未配置时跳过测试并说明原因。
+// URL returns the test database connection string; when it is not configured, it skips the test and says why.
 func URL(t testing.TB) string {
 	t.Helper()
 	u := testenv.Get(EnvTestDatabaseURL)
@@ -46,7 +47,7 @@ func URL(t testing.TB) string {
 	return u
 }
 
-// NewSchema 创建独立 schema 并返回其名称，测试结束时删除。
+// NewSchema creates a separate schema and returns its name; it is dropped when the test ends.
 func NewSchema(t testing.TB) string {
 	t.Helper()
 	url := URL(t)
@@ -79,7 +80,8 @@ func NewSchema(t testing.TB) string {
 	return name
 }
 
-// NewMigratedPool 创建独立 schema、执行全部 PostgreSQL 迁移，并返回连接到该 schema 的连接池。
+// NewMigratedPool creates a separate schema, runs all PostgreSQL migrations and returns a pool connected to that
+// schema.
 func NewMigratedPool(t testing.TB) *pgxpool.Pool {
 	t.Helper()
 	ctx := context.Background()
@@ -102,7 +104,7 @@ func NewMigratedPool(t testing.TB) *pgxpool.Pool {
 	return pool
 }
 
-// sweepStale 删除超过 24 小时的遗留测试 schema（只匹配 t_<unix>_<hex> 格式）。
+// sweepStale drops leftover test schemas older than 24 hours (only names matching t_<unix>_<hex>).
 func sweepStale(ctx context.Context, t testing.TB, conn *pgx.Conn) {
 	rows, err := conn.Query(ctx, `SELECT nspname FROM pg_namespace WHERE nspname LIKE 't\_%'`)
 	if err != nil {
@@ -128,7 +130,8 @@ func sweepStale(ctx context.Context, t testing.TB, conn *pgx.Conn) {
 	}
 }
 
-// Source 返回一个迁移到最新 PostgreSQL 版本的独立源库：连接池（写测试数据用）和指向该 schema 的连接串（交给导入器）。
+// Source returns a separate source database migrated to the latest PostgreSQL version: a pool (for writing test
+// data) and a connection string pointing to that schema (for the importer).
 func Source(t testing.TB) (*pgxpool.Pool, string) {
 	t.Helper()
 	pool := NewMigratedPool(t)

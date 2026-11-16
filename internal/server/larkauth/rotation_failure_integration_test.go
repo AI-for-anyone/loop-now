@@ -212,7 +212,8 @@ func TestLarkStartedLeaseAgentDeleteAndProjectPurge(t *testing.T) {
 			plain, _ := f.credential.Encode()
 			defer clear(plain)
 			e = f.st.CommitLarkCLIRefresh(ctx, f.binding, 1, lease, plain)
-			// 删除账号或项目会清空没有进行中任务使用的版本及其授权（迁移 030），已开始的刷新不能再写回。
+			// Deleting the account or project clears the versions not used by any in-progress task together with their
+			// grants (migration 030), so a refresh already started must not write back.
 			if scope == "account" || scope == "project" || scope == "wrong_lease" {
 				if e == nil {
 					t.Fatal("invalid late owner/lease committed")

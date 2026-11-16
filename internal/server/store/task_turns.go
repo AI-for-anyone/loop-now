@@ -28,8 +28,8 @@ type TaskTurn struct {
 	VoidReason                                                          *string
 }
 
-// insertTaskTurn 插入一个任务轮次并返回它：cols、vals 不含 queue_seq，排队号从序列 task_turns.queue_seq 取
-// （原来是 identity 列）。args 依次对应 vals 里的 $1…$n。
+// insertTaskTurn inserts a task turn and returns it: cols and vals do not include queue_seq; the queue number is taken
+// from the sequence task_turns.queue_seq (formerly an identity column). args correspond in order to $1...$n in vals.
 func insertTaskTurn(ctx context.Context, tx *db.Tx, cols, vals string, args ...any) (TaskTurn, error) {
 	seq, err := tx.NextSeq(ctx, "task_turns.queue_seq")
 	if err != nil {
@@ -140,7 +140,7 @@ func (s *Store) ClaimTaskTurn(ctx context.Context, taskID, runtimeID uuid.UUID) 
 		}
 		var t TaskTurn
 		var e error
-		// 提醒轮次领取时已没有待处理消息就作废，接着领取下一轮。
+		// When a reminder turn is claimed and no longer has pending messages, void it and claim the next turn.
 		for {
 			t, e = scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE runtime_id=$1 AND node_run_id=$2 AND status='queued' AND (origin<>'sleep_wake' OR EXISTS(SELECT 1 FROM agent_sleeps z WHERE z.id=task_turns.wake_sleep_id AND z.wake_run_id=task_turns.id AND z.state='woken' AND z.mode='task_node')) ORDER BY priority,queue_seq LIMIT 1`, runtimeID, node.ID))
 			if e == db.ErrNoRows {
@@ -198,7 +198,8 @@ func (s *Store) ClaimTaskTurn(ctx context.Context, taskID, runtimeID uuid.UUID) 
 	return turn, found, err
 }
 
-// UpdateTaskTurn 记录当前轮文字与状态；节点是否推进由协调器在完全结束后决定。
+// UpdateTaskTurn records the current turn's text and status; whether the node advances is decided by the coordinator
+// once the turn has fully ended.
 func (s *Store) UpdateTaskTurn(ctx context.Context, taskID, turnID uuid.UUID, status, reply string, errorCode, errorMessage *string) (TaskTurn, error) {
 	var turn TaskTurn
 	_, err := s.MutateTask(ctx, taskID, nil, func(m *TaskMutation) (any, error) {

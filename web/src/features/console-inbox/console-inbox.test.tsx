@@ -45,7 +45,7 @@ describe('Agent 对话里发给你的消息', () => {
     expect(within(item).getByText('server-main 已合并，请确认预期值')).toBeVisible()
     expect(consoleItem(question)).toBeTruthy()
     expect(screen.queryByText('你发给它的消息不在这里重复')).toBeNull()
-    // 排在开始时间更早的那一轮之后。
+    // Placed after the turn that started earlier.
     const log = screen.getByRole('log')
     const order = [...log.querySelectorAll('[data-run-id], [data-console-message-id]')].map((el) => el.getAttribute('data-console-message-id') ?? 'turn')
     expect(order).toEqual(['turn', note.id, question.id])

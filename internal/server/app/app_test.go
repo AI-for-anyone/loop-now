@@ -23,12 +23,13 @@ import (
 	"loop-now/internal/testutil/loopctlfake"
 )
 
-// world 是一组可在多个服务端实例之间共享的外部状态：数据库 schema、Redis 前缀、工作根目录。
+// world is a set of external state that can be shared across several server instances: database schema, Redis prefix,
+// work root directory.
 type world struct {
 	t       *testing.T
 	cfg     config.Config
 	piAIDir string
-	logTo   io.Writer // 为空时丢弃日志
+	logTo   io.Writer // logs are discarded when nil
 }
 
 func newWorld(t *testing.T) *world {
@@ -153,8 +154,9 @@ func (s *server) createAgent(name string) (string, apitypes.Agent) {
 	return "/agents/" + ag.ID.String(), ag
 }
 
-// waitIdle 等到 Agent 完全空闲：没有进行中或排队的执行，且忙闲锁已交接释放
-// （执行结束写库与交接锁之间有短暂窗口，只看状态时紧接着发送的消息可能被判为正忙）。
+// waitIdle waits until the Agent is fully idle: no running or queued runs, and the busy lock has been handed over and
+// released (there is a short window between a run writing its end to the database and handing over the lock; a message
+// sent right after checking only the status may be judged busy).
 func (s *server) waitIdle(a string) apitypes.AgentStatus {
 	s.t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
@@ -201,7 +203,7 @@ func fakepiAlive(t *testing.T, workRoot string) bool {
 	return strings.TrimSpace(string(out)) != ""
 }
 
-// TestEndToEndWithFakePi 是任务 13.1 的脚本化验收。
+// TestEndToEndWithFakePi is the scripted acceptance test for task 13.1.
 func TestEndToEndWithFakePi(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)
@@ -230,7 +232,7 @@ func TestEndToEndWithFakePi(t *testing.T) {
 		t.Fatalf("会话文件写盘后应记录：%+v", st.Session)
 	}
 
-	// 忙时排队与打断。
+	// Queue and interrupt while busy.
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=1s 很长的回复"})
 	s.waitRunning(a)
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "排队的", "whenBusy": "queue"})
@@ -254,7 +256,7 @@ func TestEndToEndWithFakePi(t *testing.T) {
 	}
 }
 
-// TestRestartGraceful 对应任务 11.2（正常停止）。
+// TestRestartGraceful covers task 11.2 (normal stop).
 func TestRestartGraceful(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)
@@ -262,7 +264,7 @@ func TestRestartGraceful(t *testing.T) {
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=10s 很长"})
 	run := s.waitRunning(a)
 	time.Sleep(300 * time.Millisecond)
-	// 多实例预留：锁的值、执行记录与 pi.pid 都带本实例 ID。
+	// Reserved for multiple instances: the lock value, run records and pi.pid all carry this instance's ID.
 	inst := s.a.InstanceID.String()
 	agentID := strings.TrimPrefix(a, "/agents/")
 	if owner, _ := s.a.Coord.LockOwner(context.Background(), agentID); owner != run.ID.String()+"|"+inst {
@@ -294,14 +296,15 @@ func TestRestartGraceful(t *testing.T) {
 	}
 }
 
-// TestRestartAfterCrash 对应任务 11.2（强制结束）：遗留的 Pi 进程在下次启动时被结束。
+// TestRestartAfterCrash covers task 11.2 (forced kill): leftover Pi processes are ended at the next startup.
 func TestRestartAfterCrash(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)
 	a, _ := s.createAgent("崩溃测试")
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=30s 很长"})
 	s.waitRunning(a)
-	// 模拟进程被强制结束：不走优雅退出，不结束 Pi 进程，只停掉对话协调与 HTTP，并像进程退出那样放开实例锁。
+	// Simulate a forced kill: no graceful exit and no ending of Pi processes; only stop conversation coordination and
+	// HTTP, and release the instance locks as a process exit would.
 	_ = s.a.Conv.Stop(context.Background())
 	s.a.ReleaseInstanceLocks()
 	if !fakepiAlive(t, w.cfg.WorkRoot) {
@@ -311,7 +314,8 @@ func TestRestartAfterCrash(t *testing.T) {
 	defer s2.stop()
 	s2.waitIdle(a)
 	if fakepiAlive(t, w.cfg.WorkRoot) {
-		// 新实例可能已为后续消息启动进程；这里没有后续消息，应没有任何 Pi 进程。
+		// The new instance might have started a process for a later message; there is no later message here, so there
+		// should be no Pi process at all.
 		t.Fatal("下次启动时应结束遗留的 Pi 进程")
 	}
 	if r := s2.replies(a); len(r) != 1 || *r[0].Run.EndReason != "server_restart" {
@@ -320,27 +324,27 @@ func TestRestartAfterCrash(t *testing.T) {
 	_ = s.a.Executor.Shutdown(context.Background())
 }
 
-// TestSessionFiles 对应任务 11.4。
+// TestSessionFiles covers task 11.4.
 func TestSessionFiles(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(func(c *config.Config) { c.PiIdleTimeout = 300 * time.Millisecond })
 	defer s.stop()
 	a, _ := s.createAgent("会话测试")
 
-	// 首条消息被 Pi 拒绝、未写会话文件：之后不算丢失。
+	// The first message is rejected by Pi and no session file is written: this does not count as lost later.
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "!rejectprompt !nosession"})
 	st := s.waitIdle(a)
 	if st.Session.State != "none" {
 		t.Fatalf("未写盘的会话不应被记录：%+v", st.Session)
 	}
-	time.Sleep(800 * time.Millisecond) // 等空闲退出
+	time.Sleep(800 * time.Millisecond) // wait for the idle exit
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "第二条"})
 	st = s.waitIdle(a)
 	if r := s.replies(a); r[len(r)-1].Run.Status != "completed" || st.Session.State != "active" {
 		t.Fatalf("应从新会话开始正常回复：%+v %+v", r[len(r)-1], st.Session)
 	}
 
-	// 已写盘的会话文件被删除：判为丢失，确认重开后恢复。
+	// A session file already written to disk is deleted: it is judged lost, and recovers after confirming a reopen.
 	time.Sleep(800 * time.Millisecond)
 	matches, _ := filepath.Glob(filepath.Join(w.cfg.WorkRoot, "agents", "*", "sessions", "*.jsonl"))
 	for _, m := range matches {
@@ -365,7 +369,8 @@ func TestSessionFiles(t *testing.T) {
 	}
 }
 
-// 项目层：默认项目改名后重启，名称保持（不按配置改回或新建）；删除项目时停止其中 Agent 的 Pi 进程，工作文件夹保留。
+// Project layer: after the default project is renamed and the server restarts, the name is kept (not reverted to the
+// config or created anew); deleting a project stops the Pi processes of its Agents and keeps the working folders.
 func TestProjectsWithFakePi(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)

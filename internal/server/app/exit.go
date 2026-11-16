@@ -6,13 +6,14 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// loop-server 启动失败时的退出码，桌面壳据此给出具体提示。配置有误为 2（见 cmd/loop-server），其他启动失败为 1。
+// Exit codes of loop-server when startup fails; the desktop shell shows a specific hint based on them. A config error
+// is 2 (see cmd/loop-server); any other startup failure is 1.
 const (
-	ExitInstanceLocked = 3 // 数据目录或工作根正被另一个服务进程使用
-	ExitAddrInUse      = 4 // 监听地址已被占用（控制台端口或对外端口）
+	ExitInstanceLocked = 3 // the data directory or the work root is in use by another server process
+	ExitAddrInUse      = 4 // the listen address is already in use (console port or external port)
 )
 
-// ExitCode 返回 Build 失败时应使用的退出码。
+// ExitCode returns the exit code to use when Build fails.
 func ExitCode(err error) int {
 	switch {
 	case errors.Is(err, db.ErrLocked):

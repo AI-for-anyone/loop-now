@@ -17,7 +17,8 @@ export function emptySelections(agent: Schemas['Agent']): Schemas['CredentialSel
     ...agent.clis.filter(cli => cli.hasTemplate).map(cli => ({ purpose: 'cli' as const, provider: null, cli: cli.name, mode: 'automatic' as const, selectedAccountId: null, resolvedAccountId: null, resolvedVersionId: null, status: 'not_configured' as const, candidates: [] })),
   ] }
 }
-// 仅测试环境默认空列表，具体场景用server.use覆盖；不进入产品或实际App驱动。
+// Test environment only: an empty list by default, and specific scenarios override
+// it with server.use; never used in the product or in real app-driven runs.
 export const emptyProjectCredentialHandlers = [
   // Unrelated credential fixtures predate the optional verification interface.
   // Tests exercising verification override this exact old-router response.

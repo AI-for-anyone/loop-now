@@ -11,8 +11,10 @@ import { matchesProvider, providerGroups, providerInitial, type ProviderEntry } 
 
 const text = t.credentials.providerPicker
 
-// 添加模型账号时选提供方：按钮打开面板，搜索框自动聚焦、输入即筛；顶部一排常用提供方（已有账号的排最前），列表按用途分组。
-// 上下键移动、回车选中、Esc 收起。选中后面板收起，换成黄色选中条：地区变体用分段按钮切换，"更换"重开面板。value 是具体的提供方 id。
+// Choosing a provider when adding a model account: a button opens the panel, the search box gets focus automatically and filters as you
+// type; a row of common providers on top (those with existing accounts first), and the list grouped by use.
+// Up/down keys move, Enter selects, Esc closes. After a selection the panel closes and is replaced by a yellow selection bar: region
+// variants switch via a segmented control, and "更换" (Change) reopens the panel. value is the concrete provider id.
 export function ProviderPicker({ label, entries, accounts, value, open, disabled, onOpenChange, onChange }: {
   label: string
   entries: ProviderEntry[]
@@ -26,7 +28,7 @@ export function ProviderPicker({ label, entries, accounts, value, open, disabled
   const id = useId(), listId = `${id}-list`, labelId = `${id}-label`
   const [query, setQuery] = useState(''), [active, setActive] = useState(-1)
   const search = useRef<HTMLInputElement>(null), trigger = useRef<HTMLButtonElement>(null), change = useRef<HTMLButtonElement>(null)
-  // 面板收起后焦点回到触发按钮（还没选）或选中条的"更换"（已选）。
+  // After the panel closes, focus returns to the trigger button (nothing chosen yet) or to "更换" (Change) on the selection bar (chosen).
   const restoreFocus = useRef(false)
   const selected = entries.find(entry => entry.options.some(option => option.id === value))
   const existing = (entry: ProviderEntry) => accounts.filter(account => entry.options.some(option => option.id === account.provider)).length
@@ -47,7 +49,7 @@ export function ProviderPicker({ label, entries, accounts, value, open, disabled
     onOpenChange(next)
   }
   const pick = (entry: ProviderEntry) => {
-    // 同一家换回来时保留原来选的变体，否则取第一个。
+    // Picking the same provider again keeps the variant chosen before; otherwise take the first one.
     onChange(entry === selected ? value : entry.options[0].id)
     setOpen(false)
   }
@@ -114,7 +116,7 @@ export function ProviderPicker({ label, entries, accounts, value, open, disabled
   </div>
 }
 
-// 认证方式徽章：登录（浏览器授权）与 API 密钥。
+// Auth method badges: login (browser authorization) and API key.
 export function AuthBadges({ methods }: { methods: readonly (string | null)[] }) {
   return <>
     {methods.includes('oauth') && <Badge tone="success">{text.oauth}</Badge>}
@@ -122,7 +124,7 @@ export function AuthBadges({ methods }: { methods: readonly (string | null)[] })
   </>
 }
 
-// 插件提供方：注册它的插件。
+// Plugin provider: the plugin that registers it.
 function PluginBadge({ name }: { name: string }) {
   return <Badge tone="neutral" title={text.plugin(name)} className="max-w-full self-center"><span className="truncate">{text.plugin(name)}</span></Badge>
 }

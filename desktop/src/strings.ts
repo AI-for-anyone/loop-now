@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import type { ServerState } from './server'
 
-// 壳自己的界面文字，按系统首选语言选中文或英文。控制台的语言由控制台自己决定。
+// The shell's own UI text, Chinese or English depending on the system's preferred language. The console decides its own language.
 const zhCN = {
   state: {
     stopped: '已停止',
@@ -16,7 +16,7 @@ const zhCN = {
   tray: {
     profile: (name: string) => `配置：${name}`,
     defaultProfile: '默认',
-    // desktop.json 指定的目录，跟在配置行后面。
+    // Directories specified by desktop.json, appended to the profile line.
     dirs: {
       workRoot: (path: string) => `工作根 ${path}`,
       dataDir: (path: string) => `数据目录 ${path}`,
@@ -45,7 +45,7 @@ const zhCN = {
     already: 'loopctl 已经安装',
     failed: '没能安装 loopctl',
     external: 'loopctl 以外部身份连接服务端的对外 TLS 端口；地址、证书与配置命令见菜单栏的"外部身份连接方式…"。',
-    // Windows：把随包的 bin 目录加进用户 PATH。
+    // Windows: add the bundled bin directory to the user PATH.
     pathConfirm: '把 loopctl 加进 PATH？',
     pathConfirmDetail: (dir: string) => `会把 ${dir} 加进你的用户 PATH（不需要管理员）。新开的终端里就能用 loopctl；已经开着的终端要重开。`,
     pathAlready: 'loopctl 已经在 PATH 里',
@@ -54,7 +54,8 @@ const zhCN = {
     pathDoneDetail: (dir: string) => `已加入 ${dir}。新开的终端里可以直接用 loopctl；已经开着的终端要重开。`,
     add: '加入',
   },
-  // 托盘"外部身份连接方式…"：对外 TLS 端口的地址、自签证书与把令牌配进 loopctl 的命令。
+  // Tray "外部身份连接方式…" (External Identity Connection…): the external TLS port's address, the self-signed certificate and the command
+  // that configures the token into loopctl.
   external: {
     title: '外部身份与 loopctl 的连接方式',
     detail: (url: string, caFile: string, command: string) =>
@@ -72,7 +73,7 @@ const zhCN = {
     message: '需要 Git',
     detail: 'Loop Now 用 Git 拉取和提交代码，但这台 Mac 还没有安装命令行工具（/usr/bin/git 只是占位）。装好后重新打开 Loop Now。',
     install: '安装命令行工具',
-    // Windows：PATH 里没有 git.exe。
+    // Windows: no git.exe on PATH.
     detailWindows: 'Loop Now 用 Git 拉取和提交代码，但这台电脑的 PATH 里没有 git.exe。从 git-scm.com 安装 Git for Windows（保留"加入 PATH"的默认选项），装好后重新打开 Loop Now。',
     installWindows: '打开 git-scm.com',
     later: '以后再说',

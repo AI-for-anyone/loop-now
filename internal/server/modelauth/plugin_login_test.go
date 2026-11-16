@@ -25,11 +25,13 @@ import (
 	"loop-now/internal/testutil/sqlitetest"
 )
 
-// fakePluginHelper 模拟插件扩展的订阅登录：在 HOME 下写自己的状态，问一个选择题，给授权地址与设备码，返回不含密钥的标记。
+// fakePluginHelper simulates a plugin extension's subscription login: it writes its own state under HOME, asks a
+// multiple-choice question, gives an authorization URL and a device code, and returns a marker that contains no secret.
 type fakePluginHelper struct {
 	fail  error
 	homes []string
-	// gate 不为空时，给出设备码后等它关上（或登录被取消）再返回，用来看进行中的视图。
+	// gate, when non-nil, makes the helper wait after giving the device code until gate is closed (or the login is
+	// cancelled) before returning; used to look at the in-progress view.
 	gate chan struct{}
 }
 
@@ -137,8 +139,10 @@ func fieldOf(err error) string {
 	return ""
 }
 
-// 插件提供方登录：问题经操作视图给出、只能回答当前那个；授权地址与设备码按通用规则显示；成功后建项目账号（oauth、已登录），
-// 版本只记下插件，状态目录以版本 ID 命名、收紧权限、带 auth.json；重登用全新目录。
+// Plugin provider login: the question is given through the operation view and only the current one can be answered; the
+// authorization URL and device code are shown by the generic rules; on success a project account is created (oauth,
+// logged in), the version records only the plugin, and the state directory is named after the version ID, has tightened
+// permissions and contains auth.json; a re-login uses a brand-new directory.
 func TestPluginProviderLogin(t *testing.T) {
 	e := newPluginEnv(t, true)
 	ctx := context.Background()
@@ -183,7 +187,8 @@ func TestPluginProviderLogin(t *testing.T) {
 		t.Fatalf("auth.json：%s %v", auth, err)
 	}
 	for path, mode := range map[string]os.FileMode{dir: 0o700, filepath.Join(dir, ".pi", "fake-oauth"): 0o700, filepath.Join(dir, ".pi", "fake-oauth", "accounts.json"): 0o600, filepath.Join(dir, providerstate.AuthFile): 0o600} {
-		// 状态目录里是订阅令牌：各平台都要只有当前用户能访问（Windows 看 DACL），Unix 上再核对确切的权限位。
+		// The state directory holds subscription tokens: on every platform only the current user may access it (Windows
+		// checks the DACL), and on Unix the exact permission bits are checked as well.
 		info, err := os.Lstat(path)
 		if err != nil {
 			t.Fatal(err)
@@ -196,13 +201,14 @@ func TestPluginProviderLogin(t *testing.T) {
 		t.Fatalf("暂存目录应已改名：%v", pending)
 	}
 
-	// 进行中的视图：等待设备码时给出（这里用列表确认同一项目可以不带 provider 列出）。
+	// In-progress view: given while waiting on the device code (here the list confirms that the same project can be
+	// listed without provider).
 	list, err := e.p.ListLogins(ctx, e.project, "", nil)
 	if err != nil || len(list.Operations) != 0 {
 		t.Fatalf("已结束的不在进行中列表：%+v %v", list, err)
 	}
 
-	// 重登：新版本、新目录，旧目录留给清理器。
+	// Re-login: new version, new directory; the old directory is left to the sweeper.
 	rev := account.Revision
 	again, err := e.p.Start(ctx, e.project, cm.LoginStart{Provider: "fake-oauth", AccountID: &account.ID, ExpectedRevision: &rev})
 	if err != nil {
@@ -223,7 +229,8 @@ func TestPluginProviderLogin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 清理：只保留账号的当前版本（运行中的 Pi 与未结束任务在用的由调用方加进来），旧版本的目录删掉。
+	// Sweep: only the account's current version is kept (versions used by running Pi processes and unfinished tasks are
+	// added by the caller), and directories of old versions are deleted.
 	keep, err := e.st.ProviderStateVersionsInUse(ctx)
 	if err != nil || !keep[*relogin.Account.CurrentVersionID] || keep[*account.CurrentVersionID] {
 		t.Fatalf("要保留的版本：%v %v", keep, err)
@@ -235,7 +242,7 @@ func TestPluginProviderLogin(t *testing.T) {
 	if _, err := os.Stat(e.states.Dir(*account.CurrentVersionID)); !os.IsNotExist(err) {
 		t.Fatal("旧版本目录应已删除")
 	}
-	// 删除账号：当前版本也不再保留。
+	// Delete the account: the current version is no longer kept either.
 	if _, err := e.p.Delete(ctx, e.project, account.ID, relogin.Account.Revision); err != nil {
 		t.Fatal(err)
 	}

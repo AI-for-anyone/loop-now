@@ -1,5 +1,7 @@
-// Package runtimes 报告 Agent 运行时在本机是否可用（GET /runtimes）：随包的 Pi 总是可用；Claude Code 看登录 shell 的 PATH 里
-// 有没有 claude、能否读出版本，以及由 claude 自己回答的登录状态（平台不读它的凭证，只取是否登录、登录方式与订阅类型）。
+// Package runtimes reports whether the Agent runtimes are available on this machine (GET /runtimes): the bundled Pi is
+// always available; for Claude Code it checks whether claude is on the login shell's PATH, whether its version can be
+// read, and the login state as answered by claude itself (the platform does not read its credentials, it only takes
+// whether it is logged in, the login method and the subscription type).
 package runtimes
 
 import (
@@ -12,23 +14,23 @@ import (
 	"loop-now/internal/server/claudecli"
 )
 
-// cacheFor 是检查结果的缓存时长；refresh 时重新检查。
+// cacheFor is how long check results are cached; refresh checks again.
 const cacheFor = 30 * time.Second
 
-// 不可用的原因。
+// Reasons for being unavailable.
 const (
 	ReasonNotFound      = "not_found"
 	ReasonVersionFailed = "version_failed"
 )
 
-// 登录状态。
+// Login states.
 const (
 	LoginLoggedIn  = "logged_in"
 	LoginLoggedOut = "logged_out"
 	LoginUnknown   = "unknown"
 )
 
-// Status 对应 OpenAPI 的 RuntimeStatus。
+// Status corresponds to RuntimeStatus in the OpenAPI spec.
 type Status struct {
 	ID                string    `json:"id"`
 	Available         bool      `json:"available"`
@@ -39,23 +41,25 @@ type Status struct {
 	CheckedAt         time.Time `json:"checkedAt"`
 }
 
-// Login 是 Claude Code 自己报告的登录状态；没有邮箱与组织等信息。
+// Login is the login state reported by Claude Code itself; it has no email, organization or similar details.
 type Login struct {
 	State            string  `json:"state"`
 	AuthMethod       *string `json:"authMethod"`
 	SubscriptionType *string `json:"subscriptionType"`
 }
 
-// Checker 检查各运行时。零值不可用：须给出 PiVersion；UserPath、RealHome 为空时 Claude Code 报找不到。
+// Checker checks each runtime. The zero value is not usable: PiVersion must be set; when UserPath or RealHome is nil,
+// Claude Code is reported as not found.
 type Checker struct {
 	PiVersion    func() string
 	UserPath     func(context.Context) []string
 	RealHome     func() (string, error)
 	ExecBasePath string
-	// HelperEnv 是运行 claude 自己的短命令时的环境（与执行器给 Agent 的 Claude Code 进程同一套基础变量，含 USER）；
-	// 为空时只有 HOME 与 PATH。
+	// HelperEnv is the environment for running claude's own short commands (the same base variables the executor
+	// gives the Agent's Claude Code process, including USER);
+	// when nil, there are only HOME and PATH.
 	HelperEnv func(ctx context.Context, home string) []string
-	// ClaudeBin 是 claude 可执行文件（测试用）；为空时在 UserPath 里找。
+	// ClaudeBin is the claude executable (for tests); when empty it is looked up in UserPath.
 	ClaudeBin string
 	Now       func() time.Time
 
@@ -65,7 +69,7 @@ type Checker struct {
 	at     time.Time
 }
 
-// List 返回各运行时的状态；refresh 为假时用缓存时长内的结果。
+// List returns the status of each runtime; when refresh is false, results within the cache duration are reused.
 func (c *Checker) List(ctx context.Context, refresh bool) []Status {
 	now := time.Now
 	if c.Now != nil {

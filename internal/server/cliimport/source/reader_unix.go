@@ -11,12 +11,12 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// sourceRoot 是按 NOFOLLOW 打开的来源 HOME 目录描述符。
+// sourceRoot is a descriptor of the source HOME directory, opened with NOFOLLOW.
 type sourceRoot struct{ f *os.File }
 
 func (r *sourceRoot) Close() error { return r.f.Close() }
 
-// id 返回来源根目录的设备号／inode，作为来源标识的一部分。
+// id returns the device number/inode of the source root directory, as part of the source identity.
 func (r *sourceRoot) id() (string, error) {
 	var st unix.Stat_t
 	if err := unix.Fstat(int(r.f.Fd()), &st); err != nil {

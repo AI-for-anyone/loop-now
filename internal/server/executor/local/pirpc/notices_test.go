@@ -6,7 +6,8 @@ import (
 	"unicode/utf8"
 )
 
-// 一轮最多收 50 条、合计 16 KiB：超出的截断（截在 UTF-8 边界）并标记；结束后的通知不收。
+// At most 50 notices and 16 KiB in total per turn: anything beyond is truncated (at a UTF-8 boundary) and flagged;
+// notices after the turn ends are not collected.
 func TestTurnNoticesLimits(t *testing.T) {
 	tr := newTurn("p", nil)
 	for i := 0; i < MaxCommandNotices+5; i++ {

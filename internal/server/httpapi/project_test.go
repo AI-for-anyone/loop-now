@@ -8,13 +8,14 @@ import (
 	"loop-now/internal/server/contracttest"
 )
 
-// waitAgentIdle 同 waitIdle：只看状态接口时，忙闲锁可能还没释放。
+// waitAgentIdle is the same as waitIdle: when only looking at the status endpoint, the busy lock may not have been
+// released yet.
 func (e *env) waitAgentIdle(a string) {
 	e.t.Helper()
 	waitIdle(e.t, e, a)
 }
 
-// 项目、Manager 与按范围的 Agent 接口（请求与响应都经契约校验）。
+// Project, Manager and scoped Agent endpoints (requests and responses are validated against the contract).
 func TestProjectsAPI(t *testing.T) {
 	e := newEnv(t)
 	model := map[string]string{"provider": "anthropic", "modelId": "claude-x"}
@@ -31,7 +32,7 @@ func TestProjectsAPI(t *testing.T) {
 		t.Fatalf("改名失败：%+v", got)
 	}
 
-	// 按范围创建与列出。
+	// Create and list by scope.
 	inProj := decode[apitypes.Agent](t, e.expect(201, "POST", pp+"/agents", map[string]any{"name": "对接员", "model": model}))
 	onPlat := decode[apitypes.Agent](t, e.expect(201, "POST", "/platform/agents", map[string]any{"name": "巡检员", "model": model}))
 	e.expect(409, "POST", "/platform/agents", map[string]any{"name": "巡检员", "model": model})
@@ -44,7 +45,7 @@ func TestProjectsAPI(t *testing.T) {
 		t.Fatalf("按范围列出不对：%+v %+v", pl, prl)
 	}
 
-	// Manager。
+	// Manager.
 	e.expect(422, "PUT", pp+"/manager", map[string]any{"agentId": onPlat.ID})
 	if got := decode[apitypes.Project](t, e.expect(200, "PUT", pp+"/manager", map[string]any{"agentId": inProj.ID})); got.ManagerAgentID == nil || *got.ManagerAgentID != inProj.ID {
 		t.Fatalf("指定 Manager 失败：%+v", got)
@@ -56,7 +57,7 @@ func TestProjectsAPI(t *testing.T) {
 		t.Fatalf("取消 Manager 失败：%+v", got)
 	}
 
-	// 删除：默认项目不能删；有忙的 Agent 时 409 并列出；空闲后删除。
+	// Delete: the default project cannot be deleted; with busy Agents it is 409 and they are listed; deleted once idle.
 	def := list.Projects[0]
 	bad := decode[apitypes.ErrorBody](t, e.expect(422, "DELETE", "/projects/"+def.ID.String(), nil))
 	if len(bad.Error.Fields) != 1 || bad.Error.Fields[0].Field != "projectId" {
@@ -77,9 +78,9 @@ func TestProjectsAPI(t *testing.T) {
 	if l := decode[apitypes.ProjectList](t, e.expect(200, "GET", "/projects", nil)); len(l.Projects) != 1 {
 		t.Fatalf("删除后列表中不应再有该项目：%+v", l)
 	}
-	decode[apitypes.Project](t, e.expect(201, "POST", "/projects", map[string]any{"name": "接入"})) // 名称可再用
+	decode[apitypes.Project](t, e.expect(201, "POST", "/projects", map[string]any{"name": "接入"})) // the name can be reused
 
-	// 用量、异常与概览的筛选参数。
+	// Filter parameters of usage, anomalies and overview.
 	q := "?projectId=" + def.ID.String() + "&platform=true"
 	e.expect(422, "GET", "/usage"+q, nil)
 	e.expect(422, "GET", "/anomalies"+q, nil)
@@ -90,7 +91,8 @@ func TestProjectsAPI(t *testing.T) {
 	e.expect(200, "GET", "/anomalies?projectId="+def.ID.String(), nil)
 }
 
-// 外部身份可以新建、改名、删除项目并指定或取消 Manager，校验与控制台相同；每个写操作都记入审计，操作者是该身份。
+// External identities can create, rename and delete projects and set or clear the Manager, with the same validation as
+// the console; every write is audited with that identity as the actor.
 func TestProjectGovernanceExternal(t *testing.T) {
 	e := newEnv(t)
 	who, tok := e.identity("ops-bot")
@@ -135,7 +137,7 @@ func TestProjectGovernanceExternal(t *testing.T) {
 	}
 }
 
-// 按范围订阅概览：只收到该范围 Agent 的事件，快照也只含该范围。
+// Subscribing to the overview by scope: only events of Agents in that scope arrive, and the snapshot only covers it.
 func TestOverviewScopeFilter(t *testing.T) {
 	e := newEnv(t)
 	_, inDefault := e.newAgent("项目内")
@@ -150,7 +152,8 @@ func TestOverviewScopeFilter(t *testing.T) {
 	if len(s.Agents) != 1 || s.Agents[0].AgentID != plat.ID || s.Agents[0].Scope != "platform" {
 		t.Fatalf("平台快照应只含平台 Agent：%+v", s)
 	}
-	// 先给项目内 Agent 发消息，再给平台 Agent 发；事件流中只应出现平台 Agent。
+	// Message an Agent in the project first, then the platform Agent; only the platform Agent should appear in the
+	// event stream.
 	e.expect(202, "POST", inDefault+"/messages", map[string]any{"text": "你好"})
 	e.waitAgentIdle(inDefault)
 	e.expect(202, "POST", pa+"/messages", map[string]any{"text": "你好"})

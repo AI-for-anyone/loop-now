@@ -1,8 +1,11 @@
 import type { ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 
-// 裁切线：图标加两段粉色虚线夹着一行说明。对话页的“会话已重开”“打断”，任务详情里同一节点各次访问之间都用它。
-// 说明可以是一段文字，也可以是一个按钮或链接（children）；有 children 时分隔线不再用 label 命名，由里面的控件自己说明。
+// Cut line: an icon plus two pink dashed segments around a line of text. Used for the “会话已切换，页面历史保留” (Session switched; page
+// history is kept) and “已打断，先处理这条” (Interrupted; handling this first) dividers on the chat page, and between visits to the same
+// node in task details.
+// The text can be plain text or a button or link (children); with children the divider is no longer named by label, and the control
+// inside describes itself.
 export function CutLine({ icon: Icon, label, children }: { icon: LucideIcon; label: string; children?: ReactNode }) {
   return (
     <div role={children ? undefined : 'separator'} aria-label={children ? undefined : label} className="flex items-center gap-2.5">

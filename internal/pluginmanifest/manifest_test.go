@@ -10,7 +10,7 @@ import (
 	"loop-now/internal/pluginmanifest"
 )
 
-// writePlugin 在临时目录写一个插件：package.json 加若干文件。
+// writePlugin writes a plugin into a temporary directory: package.json plus some files.
 func writePlugin(t *testing.T, pkg map[string]any, files ...string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -57,7 +57,8 @@ func full() map[string]any {
 	}
 }
 
-// 两侧齐全的清单读出全部字段与组成；只有 pi 段的标准 Pi 包用 npm 名得到 id。
+// A manifest with both sides reads back every field and component; a standard Pi package with only a pi section
+// gets its id from the npm name.
 func TestReadManifest(t *testing.T) {
 	dir := writePlugin(t, full(), "agent/index.ts", "skills/", "platform/index.ts", "bin/")
 	m, err := pluginmanifest.ReadManifest(dir, "2026.11.3")
@@ -90,8 +91,9 @@ func TestReadManifest(t *testing.T) {
 	}
 }
 
-// displayName 与 description 可以是字符串，或以语言标签为键的对象：原样返回（对象保留键的顺序），
-// 服务端需要单个字符串时依次取 zh-CN、en-US、第一项；其余写法拒绝。
+// displayName and description can be a string or an object keyed by language tag: they are returned as-is (an
+// object keeps its key order), and when the server needs a single string it takes zh-CN, then en-US, then the first
+// entry; any other shape is rejected.
 func TestLocalizedText(t *testing.T) {
 	pkg := full()
 	pkg["description"] = map[string]any{"en-US": "POST on new inbox messages", "zh-CN": "收件箱有新消息时 POST"}
@@ -150,7 +152,7 @@ func TestLocalizedText(t *testing.T) {
 	}
 }
 
-// 不合规则的清单逐项拒绝。
+// Manifests that break the rules are rejected, one rule at a time.
 func TestReadManifestRejects(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -200,13 +202,14 @@ func TestReadManifestRejects(t *testing.T) {
 	}
 }
 
-// mcpServers 的条目与 Pi mcp.json 相同：带非空 command 的 stdio 条目，或带 http/https url 的 streamable HTTP 条目；
-// type 可省，只能是 stdio、http 或 streamable-http，SSE 拒绝。两者都有又没有 type 时按 url（与 Pi 相同）。
+// mcpServers entries are the same as in Pi's mcp.json: a stdio entry with a non-empty command, or a streamable HTTP
+// entry with an http/https url; type may be omitted and can only be stdio, http or streamable-http, and SSE is
+// rejected. An entry with both a command and a url but no type is treated as a url entry (the same as Pi).
 func TestMCPServerEntries(t *testing.T) {
 	cases := []struct {
 		name  string
 		entry any
-		want  string // 空表示接受
+		want  string // empty means accepted
 	}{
 		{"stdio", map[string]any{"command": "node", "args": []any{"./mcp/server.js"}}, ""},
 		{"stdio 带 type", map[string]any{"type": "stdio", "command": "node"}, ""},
@@ -248,7 +251,8 @@ func asError(err error, target **pluginmanifest.Error) bool {
 	return ok
 }
 
-// 配置按 schema 校验：不填全时（不查 required）可以保存，类型不对时拒绝；账号字段查 required。
+// Config is validated against the schema: it can be saved when not fully filled in (required is not checked) and is
+// rejected when a type is wrong; account fields do check required.
 func TestValidate(t *testing.T) {
 	schema := map[string]any{"type": "object", "required": []any{"url"}, "properties": map[string]any{"url": map[string]any{"type": "string", "format": "uri"}, "n": map[string]any{"type": "integer"}}}
 	if err := pluginmanifest.Validate(schema, false, map[string]any{"n": 3}); err != nil {

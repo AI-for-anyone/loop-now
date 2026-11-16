@@ -22,7 +22,8 @@ import (
 func rejectEvent(t *testing.T, s *Service) func(string) {
 	t.Helper()
 	ctx := context.Background()
-	// lifecycle_events 在 events.db（ev）：触发器只能用同一个库里的表，所以拒绝表也建在 ev。
+	// lifecycle_events lives in events.db (ev): triggers can only use tables of the same database, so the reject table
+	// is created in ev as well.
 	for _, q := range []string{`CREATE TABLE ev.reject_task_event(kind TEXT)`,
 		`CREATE TRIGGER ev.reject_task_observation BEFORE INSERT ON lifecycle_events WHEN EXISTS(SELECT 1 FROM reject_task_event WHERE kind=NEW.type)
 		BEGIN SELECT RAISE(ABORT, 'injected observation failure'); END`} {
@@ -374,7 +375,7 @@ func TestRestartOfUnboundInboxDoesNotBlockWaitingNode(t *testing.T) {
 	}
 }
 
-// sha256Hex 是快照内容的 SHA-256 十六进制串（task_instances.snapshot_sha）。
+// sha256Hex is the hex SHA-256 of the snapshot content (task_instances.snapshot_sha).
 func sha256Hex(b []byte) string {
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])

@@ -51,7 +51,8 @@ func (s *Server) sendTaskNodeInboxMessage(w http.ResponseWriter, r *http.Request
 	writeJSON(w, 201, out)
 }
 
-// nodeQueueAction 处理节点排队动作（转为打断、取消、停止）：路径中的任务、节点与对象，body 为 TaskNodeQueueActionInput。
+// nodeQueueAction handles a node queue action (promote to interrupt, cancel, stop): the task, node and subject come
+// from the path, the body is TaskNodeQueueActionInput.
 func (s *Server) nodeQueueAction(param string, do func(ctx context.Context, p auth.Principal, task, node, subject uuid.UUID, in taskmodel.TaskNodeQueueActionInput) (json.RawMessage, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.taskReady(w, r) {

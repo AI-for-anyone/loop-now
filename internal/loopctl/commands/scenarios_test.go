@@ -25,7 +25,7 @@ func TestConfigCommands(t *testing.T) {
 	e := newEnv(t)
 	ca := writeCAFile(t)
 	rel, err := filepath.Rel(mustGetwd(t), ca)
-	if err != nil { // Windows 上临时目录与工作目录可能不在同一个盘
+	if err != nil { // on Windows the temporary directory and the working directory may be on different drives
 		rel = ca
 	}
 	e.stdin = "  " + extToken + "  \nignored second line\n"
@@ -36,7 +36,7 @@ func TestConfigCommands(t *testing.T) {
 		t.Fatalf("摘要 %v", d)
 	}
 	path := config.Path(e.home)
-	if info, _ := os.Stat(path); runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 { // Windows 上是 ACL
+	if info, _ := os.Stat(path); runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 { // on Windows it is an ACL
 		t.Fatalf("权限 %o", info.Mode().Perm())
 	}
 	f, _, _ := config.Load(path)
@@ -85,7 +85,7 @@ func TestConfigCommands(t *testing.T) {
 	e.run("config", "delete", "staging", "--yes").ok(t)
 	e.run("config", "delete", "staging", "--yes").fails(t, output.CodeProfileNotFound, 3)
 
-	if runtime.GOOS != "windows" { // chmod 在 Windows 上改不了 ACL，无法制造过宽的权限
+	if runtime.GOOS != "windows" { // chmod cannot change the ACL on Windows, so overly wide permissions cannot be produced
 		os.Chmod(path, 0o644)
 		e.run("config", "list").fails(t, output.CodeConfigInsecurePermissions, 3)
 		e.run("skill", "list").fails(t, output.CodeConfigInsecurePermissions, 3)
@@ -120,7 +120,7 @@ func TestProfileSelection(t *testing.T) {
 	if len(s.Requests()) != 1 {
 		t.Fatal("profile 不存在时不应发出请求")
 	}
-	// 环境变量优先于 profile。
+	// Environment variables take precedence over the profile.
 	e.vars[conn.EnvProfile] = "default"
 	e.vars[conn.EnvURL] = s.URL()
 	e.vars[conn.EnvCAFile] = s.CAFile()
@@ -128,7 +128,7 @@ func TestProfileSelection(t *testing.T) {
 	if r := e.run("skill", "list"); r.Code != 0 || r.Env.Meta.Profile != "default" {
 		t.Fatalf("%s", r.Stdout)
 	}
-	// Agent 身份与外部参数同时出现。
+	// The Agent identity and external parameters appear together.
 	e.vars[conn.EnvAgentToken] = agentToken
 	e.run("inbox", "list").fails(t, output.CodeIdentityConflict, 3)
 }
@@ -186,7 +186,8 @@ func TestVersionComparison(t *testing.T) {
 	if d["clientVersion"] != testVersion || d["serverVersion"] != "9.9.9" || !strings.HasPrefix(d["downloadPath"].(string), "/downloads/loopctl/loopctl-") {
 		t.Fatalf("%v", d)
 	}
-	// 契约要求每个响应都带版本头；不带版本头的服务端不符合契约，用不校验契约的桩模拟。
+	// The contract requires every response to carry the version header; a server without it breaks the contract,
+	// so simulate it with a stub that does not check the contract.
 	bare := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `{"kind":"agent","address":"dev","name":"dev"}`)
 	}))
@@ -194,7 +195,7 @@ func TestVersionComparison(t *testing.T) {
 	if r := newEnv(t).agent(bare.URL).run("whoami"); r.Code != 0 || len(r.Env.Warnings) != 1 || r.Env.Warnings[0].Code != output.WarnServerVersionUnknown {
 		t.Fatalf("%s", r.Stdout)
 	}
-	// 失败的请求同样比对版本。
+	// Failed requests compare the version too.
 	s.Version = "9.9.9"
 	s.On("GET /agents/{agentId}", clitest.Sample{Status: 404, Body: apiError("not_found", "Agent 不存在")})
 	r = e.run("agent", "get", agentUUID)
@@ -204,7 +205,8 @@ func TestVersionComparison(t *testing.T) {
 	}
 }
 
-// 时间线、对话历史的新取法、用量、异常与健康状态，按 api/openapi.yaml（含 add-observability）的契约验证。
+// Timeline, the new way of fetching conversation history, usage, anomalies and health status, checked against the
+// contract in api/openapi.yaml (including add-observability).
 func TestObservabilityCommands(t *testing.T) {
 	query := func(s *clitest.Stub) url.Values {
 		reqs := s.Requests()
@@ -287,7 +289,8 @@ func TestObservabilityCommands(t *testing.T) {
 	})
 }
 
-// 契约之外的情况：网关在 /health 上返回统一错误结构的 503；Agent 身份不能查看健康状态。
+// Cases outside the contract: a gateway returns a 503 with the common error structure on /health; the Agent
+// identity cannot view the health status.
 func TestHealthEdgeCases(t *testing.T) {
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(conn.HeaderVersion, testVersion)
@@ -309,7 +312,8 @@ func fmtJSON(v any) string {
 	return string(b)
 }
 
-// 项目层：列出与创建 Agent 必须指定范围；项目可以写名称；用量与异常的范围可选（tasks 6.12、6.13）。
+// Project layer: listing and creating Agents requires a scope; a project can be given by name; the scope for usage
+// and anomalies is optional (tasks 6.12, 6.13).
 func TestProjectScope(t *testing.T) {
 	last := func(s *clitest.Stub) clitest.Recorded {
 		reqs := s.Requests()

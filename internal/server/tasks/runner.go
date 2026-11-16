@@ -14,7 +14,8 @@ import (
 	"loop-now/internal/server/taskmodel"
 )
 
-// Start 对账持久队列；重启时执行中的轮次只阻塞，绝不重放工具。
+// Start reconciles the persistent queue; on restart, turns that were running are only blocked, and tools are never
+// replayed.
 func (s *Service) Start(ctx context.Context) error {
 	if s.Options.ReconcileInterval <= 0 {
 		return errors.New("任务对账间隔必须为正")
@@ -133,7 +134,8 @@ func (s *Service) Kick(id uuid.UUID) {
 			delete(s.drivers, id)
 			delete(s.cancels, id)
 			s.mu.Unlock()
-			// 消息在最后一次空队列检查与退出之间提交时，不能丢掉即时唤醒。
+			// When a message is committed between the last empty-queue check and exiting, its immediate wake-up must
+			// not be lost.
 			if ctx.Err() == nil && driveErr == nil {
 				if r, e := s.Store.GetTask(ctx, id); e == nil && r.Current() != nil && s.larkDispatchPaused(r.Current().RuntimeID) {
 					return
@@ -147,7 +149,7 @@ func (s *Service) Kick(id uuid.UUID) {
 		}()
 		driveErr = s.drive(ctx, id)
 		if driveErr != nil && ctx.Err() == nil && s.Log != nil {
-			s.Log.Error("任务协调失败", "task_id", id, "error", driveErr)
+			s.Log.Error("task coordination failed", "task_id", id, "error", driveErr)
 		}
 	}()
 }
@@ -160,7 +162,7 @@ func (s *Service) reconcile() {
 	}
 	for _, id := range ids {
 		if err := s.ReconcileTaskLarkInbox(s.ctx, id); err != nil && s.Log != nil {
-			s.Log.Warn("任务凭证交接延期Inbox对账失败", "task_id", id, "code", "task_lark_inbox_reconcile_failed")
+			s.Log.Warn("failed to reconcile Inbox messages deferred by a task credential handoff", "task_id", id, "code", "task_lark_inbox_reconcile_failed")
 		}
 		instances, e := s.Store.TaskInstances(s.ctx, id)
 		if e == nil {
@@ -172,7 +174,7 @@ func (s *Service) reconcile() {
 	}
 	if s.QuestionMaintenance != nil {
 		if err := s.QuestionMaintenance(s.ctx); err != nil {
-			s.Log.Warn("统一问题对账失败", "code", "question_reconcile_failed")
+			s.Log.Warn("unified question reconciliation failed", "code", "question_reconcile_failed")
 		}
 	}
 	s.deliverNotices(s.ctx)
@@ -229,7 +231,8 @@ func (s *Service) drive(ctx context.Context, id uuid.UUID) error {
 			return errors.New("任务缺少当前节点")
 		}
 		if n.Status == "queued" && s.Hooks != nil {
-			// node.before_start（plugins/SPEC.md §4）：节点第一次开始前询问插件，不在任务事务里等待；被阻止时任务进入阻塞并写明原因。
+			// node.before_start (plugins/SPEC.md §4): ask plugins before a node first starts, without waiting inside
+			// the task transaction; when blocked, the task becomes blocked with the reason written down.
 			project, agent, task, node := r.View.Task.ProjectID, n.AgentID, id, n.ID
 			o, e := s.Hooks.Hook(ctx, pluginhost.Intercept, pluginhost.Event("node.before_start", &project, &agent, &task, nil,
 				map[string]any{"nodeRunId": node, "stepId": n.StepID}), &project)
@@ -333,8 +336,10 @@ func (s *Service) settleTx(ctx context.Context, m *store.TaskMutation, t store.T
 		return nil, m.Emit("node.updated", map[string]any{"node": n})
 	}
 	if result.Outcome != executor.OutcomeCompleted {
-		// Inbox interrupt是同会话转向：后续提醒已经持久排队，不自动重放原轮。
-		// 被人停止（不发新消息）时，节点还有任意优先级的排队项就继续处理下一条，否则转阻塞。
+		// An Inbox interrupt is a change of direction within the same session: the follow-up reminder is already
+		// durably queued, so the original turn is not replayed automatically. When stopped by a person (without a new
+		// message), the node goes on to the next item if it still has queued items of any priority; otherwise it
+		// becomes blocked.
 		var next, stopped bool
 		if result.Outcome == executor.OutcomeInterrupted {
 			var e error
@@ -411,7 +416,8 @@ func (s *Service) settleTx(ctx context.Context, m *store.TaskMutation, t store.T
 	if e != nil {
 		return blocked(e.Error())
 	}
-	// 节点已提交结果时关闭仍未回答的问题，原消息历史保留。
+	// Once the node has submitted its result, close any still-unanswered question; the original message history is
+	// kept.
 	if e = s.closeQuestion(ctx, m, n, "node_completed"); e != nil {
 		return nil, e
 	}
@@ -523,7 +529,7 @@ func (t *turnSink) warn(err error) {
 		if inst, e := t.service.Store.TaskInstance(t.ctx, t.turn.RuntimeID); e == nil {
 			log = log.With("agentId", inst.AgentID)
 		}
-		log.Warn("写入任务运行记录失败", "taskId", t.turn.TaskID, "runtimeId", t.turn.RuntimeID, "nodeRunId", taskNodeRef(t.turn.NodeRunID), "runId", t.turn.ID, "instanceId", t.service.Store.InstanceID, "inboxMessageId", t.turn.TriggerInboxID, "requestId", t.turn.RequestID, "error", err)
+		log.Warn("failed to write the task run record", "taskId", t.turn.TaskID, "runtimeId", t.turn.RuntimeID, "nodeRunId", taskNodeRef(t.turn.NodeRunID), "runId", t.turn.ID, "instanceId", t.service.Store.InstanceID, "inboxMessageId", t.turn.TriggerInboxID, "requestId", t.turn.RequestID, "error", err)
 	}
 }
 func (t *turnSink) event(kind string, data map[string]any) {
@@ -576,7 +582,8 @@ func (s *Service) deliverNotices(ctx context.Context) {
 
 var _ executor.Sink = (*turnSink)(nil)
 
-// stoppedError 给被人停止的轮次记上 user_stopped（不是执行失败，也不是被新消息打断）。
+// stoppedError marks a turn stopped by a person with user_stopped (not a run failure, and not an interrupt by a new
+// message).
 func stoppedError(ctx context.Context, m *store.TaskMutation, turn uuid.UUID, outcome string, code, message *string) (*string, *string, error) {
 	if outcome != executor.OutcomeInterrupted {
 		return code, message, nil

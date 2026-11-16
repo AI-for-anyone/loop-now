@@ -1,5 +1,6 @@
-// Package conversation 协调控制台与常态 Agent 的对话：发送消息、忙闲锁、排队与打断、
-// 每个 Agent 的驱动循环、服务端重启后的处理，以及定时对账。排队就是数据库里 status='queued' 的执行。
+// Package conversation coordinates conversations between the console and regular Agents: sending messages, the busy
+// lock, queueing and interrupting, each Agent's driver loop, handling after a server restart, and periodic
+// reconciliation. A queued message is simply a run with status='queued' in the database.
 package conversation
 
 import (
@@ -24,11 +25,12 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// Options 是对话服务的参数。
+// Options holds the conversation service's parameters.
 type Options struct {
 	InstanceID uuid.UUID
 	MaxMessage int64
-	// AbortPollInterval 是回复期间检查数据库里打断标记的间隔（打断通知丢失时的兜底）；为 0 时取 10 秒。
+	// AbortPollInterval is how often the database is checked for an interrupt flag while a reply is running (a fallback
+	// for when the interrupt notification is lost); 0 means 10 seconds.
 	AbortPollInterval time.Duration
 	ReconcileInterval time.Duration
 }
@@ -45,7 +47,7 @@ type driverStart struct {
 	owner string
 }
 
-// Service 是对话服务。
+// Service is the conversation service.
 type Service struct {
 	st  *store.Store
 	co  *coord.Coord
@@ -65,22 +67,24 @@ type Service struct {
 	overviewWorkers map[uuid.UUID]*overviewWorker
 	overviewWG      sync.WaitGroup
 	sleepRevisions  sync.Map
-	dispatchGates   sync.Map // AgentID -> chan struct{}；任务分叉只阻止新轮派发，不打断当前轮
-	commands        sync.Map // RunID -> *consoleCommandRun；发起手动压缩的请求等待这次执行结束
-	sessions        sync.Map // AgentID -> apitypes.SessionInfo；最近一次推送的 session.updated
+	dispatchGates   sync.Map // AgentID -> chan struct{}; a task fork blocks dispatching new turns, not the current one
+	commands        sync.Map // RunID -> *consoleCommandRun; a manual compaction request waits for its run to end
+	sessions        sync.Map // AgentID -> apitypes.SessionInfo; the session.updated most recently pushed
 
-	// InboxCancelled 在一条 Inbox 消息被人取消、事务提交后调用（追加收件箱事件）；为空时不推送。
+	// InboxCancelled is called after an Inbox message has been cancelled by a person and the transaction has committed
+	// (it appends an Inbox event); when nil, nothing is pushed.
 	InboxCancelled func(ctx context.Context, m store.InboxMessage)
 }
 
-// New 创建对话服务；调用 Start 后才开始处理排队消息。
+// New creates the conversation service; queued messages are only processed after Start is called.
 func New(st *store.Store, co *coord.Coord, ex executor.Executor, o Options, log *slog.Logger) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Service{st: st, co: co, ex: ex, o: o, log: log, ctx: ctx, cancel: cancel, drivers: map[uuid.UUID]bool{},
 		pendingDrivers: map[uuid.UUID]driverStart{}, overviewWorkers: map[uuid.UUID]*overviewWorker{}}
 }
 
-// Start 处理上次运行遗留的进行中执行（标为“服务端重启中断”），然后启动对账协程。
+// Start handles in-flight runs left over from the previous process (marking them “服务端重启中断” ("Cut off by a server
+// restart")), then starts the reconciliation goroutine.
 func (s *Service) Start(ctx context.Context) error {
 	if err := s.recoverAfterRestart(ctx); err != nil {
 		return err
@@ -90,10 +94,12 @@ func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop 停止接收新的派发，等待驱动循环退出。进行中的执行保持原状态，下次启动时按重启中断处理。
+// Stop stops accepting new dispatches and waits for the driver loops to exit. In-flight runs keep their current status
+// and are handled as interrupted by a restart on the next start.
 func (s *Service) Stop(ctx context.Context) error {
 	s.cancel()
-	// 取消后在锁内不会再启动新的概览推送协程，此后等待它们是安全的。
+	// After cancellation no new overview push goroutines are started under the lock, so waiting for them from here on
+	// is safe.
 	s.overviewMu.Lock()
 	s.overviewMu.Unlock()
 	done := make(chan struct{})
@@ -107,12 +113,14 @@ func (s *Service) Stop(ctx context.Context) error {
 	return nil
 }
 
-// endInFlight 在驱动循环都退出之后，把本实例进行中的执行按服务端重启中断收尾，写入已产生的回复文字。
-// 回复文字只在内存里：留到下次启动再收尾（recoverAfterRestart）就丢了。进程崩溃时来不及做，那一段文字会丢失。
+// endInFlight runs after all driver loops have exited and closes this instance's in-flight runs as interrupted by a
+// server restart, saving the reply text produced so far. The reply text lives only in memory: if closing were left to
+// the next start (recoverAfterRestart) it would be lost. When the process crashes there is no time to do this, and that
+// text is lost.
 func (s *Service) endInFlight(ctx context.Context) {
 	runs, err := s.st.ActiveRuns(ctx)
 	if err != nil {
-		s.log.Warn("停止：读取进行中的执行失败，留到下次启动收尾", "err", err)
+		s.log.Warn("stop: failed to read active runs; they are finished at the next start", "err", err)
 		return
 	}
 	for _, r := range runs {
@@ -124,9 +132,10 @@ func (s *Service) endInFlight(ctx context.Context) {
 	}
 }
 
-// ---- 发送消息 ----
+// ---- Sending messages ----
 
-// Send 接收控制台消息。Agent 空闲时立即开始处理；忙时必须选择打断或排队。
+// Send accepts a console message. When the Agent is idle it starts processing right away; when it is busy the caller
+// must choose interrupt or queue.
 func (s *Service) Send(ctx context.Context, agentID uuid.UUID, text, whenBusy string, imageIDs ...uuid.UUID) (apitypes.Message, error) {
 	if strings.TrimSpace(text) == "" && len(imageIDs) == 0 {
 		return apitypes.Message{}, apperr.Invalid("text", "消息不能为空")
@@ -157,7 +166,8 @@ func (s *Service) Send(ctx context.Context, agentID uuid.UUID, text, whenBusy st
 			s.startDriver(agentID, run, owner)
 			return apitypes.FromMessage(msg, run), nil
 		case errors.Is(err, store.ErrActiveRunExists), errors.Is(err, store.ErrQueuedRunsExist):
-			// 锁是空的，但数据库里有进行中或排队的执行（例如刚重启、交接之间）：按数据库恢复锁，然后按“忙”处理。
+			// The lock is free, but the database has an in-flight or queued run (e.g. right after a restart, or between
+			// handoffs): restore the lock from the database, then treat the Agent as busy.
 			_, _ = s.co.Release(ctx, agentID.String(), owner)
 			s.restoreLock(ctx, agentID)
 		default:
@@ -223,14 +233,15 @@ func (s *Service) queueCounts(ctx context.Context, agentID uuid.UUID) (apitypes.
 	return c, queued, nil
 }
 
-// interruptActive 把进行中的执行转为打断中（byRunID 为引发打断的消息所属的执行），并通知持有它的驱动循环。
+// interruptActive turns the in-flight run into aborting (byRunID is the run of the message that caused the interrupt)
+// and notifies the driver loop that holds it.
 func (s *Service) interruptActive(ctx context.Context, agentID, byRunID uuid.UUID) {
 	if h := testHookBeforeMarkAborting.Load(); h != nil {
 		(*h)(byRunID)
 	}
 	active, err := s.st.MarkAborting(ctx, agentID, byRunID)
 	if err != nil {
-		s.log.Error("标记打断失败", "agentId", agentID, "err", err)
+		s.log.Error("failed to mark the interrupt", "agentId", agentID, "err", err)
 		return
 	}
 	if active == nil {
@@ -238,11 +249,11 @@ func (s *Service) interruptActive(ctx context.Context, agentID, byRunID uuid.UUI
 	}
 	s.emitRun(ctx, agentID, active.ID)
 	if err := s.co.PublishInterrupt(ctx, agentID.String(), active.ID.String()); err != nil {
-		s.log.Warn("发布打断命令失败，等待驱动循环的定时检查", "agentId", agentID, "err", err)
+		s.log.Warn("failed to publish the interrupt command; waiting for the driver loop's periodic check", "agentId", agentID, "err", err)
 	}
 }
 
-// restoreLock 按数据库中的进行中执行补设忙闲锁。
+// restoreLock re-sets the busy lock from the in-flight run in the database.
 func (s *Service) restoreLock(ctx context.Context, agentID uuid.UUID) {
 	active, err := s.st.ActiveRun(ctx, agentID)
 	if err != nil || active == nil {
@@ -251,11 +262,14 @@ func (s *Service) restoreLock(ctx context.Context, agentID uuid.UUID) {
 	s.restoreRunLock(ctx, agentID, *active)
 }
 
-// restoreRunLock 按数据库里读到的一次进行中执行补设忙闲锁（锁空着时才设）。
+// restoreRunLock re-sets the busy lock for an in-flight run read from the database (only when the lock is free).
 //
-// 读到“进行中”与补锁之间，这次执行可能已经结束、它的驱动已经放开了锁（锁空着才补得上，所以补上就说明驱动已不再持有它）。
-// 这时补上的锁属于已结束的执行，没有人会放开它：对账只为进行中的执行补锁、只为有排队的 Agent 交接，Agent 会一直显示忙。
-// 所以补上之后再看一眼执行的状态，已经结束就放开刚补的锁（只放开仍是它的锁），并接着处理排队。
+// Between reading "in flight" and re-setting the lock, the run may already have ended and its driver may already have
+// released the lock (the lock can only be re-set while it is free, so a successful set means the driver no longer holds
+// it). The lock just set then belongs to a finished run and nobody will ever release it: reconciliation only re-sets
+// locks for in-flight runs and only hands off for Agents that have queued runs, so the Agent would show as busy
+// forever. So after setting it, look at the run's status once more; if the run has already ended, release the lock just
+// set (only while it is still that run's lock) and go on processing the queue.
 func (s *Service) restoreRunLock(ctx context.Context, agentID uuid.UUID, run store.Run) {
 	if run.InstanceID == nil {
 		return
@@ -270,7 +284,7 @@ func (s *Service) restoreRunLock(ctx context.Context, agentID uuid.UUID, run sto
 	}
 	status, err := s.st.RunStatus(ctx, run.ID)
 	if err != nil {
-		s.log.Warn("补设忙闲锁后确认执行状态失败，保留锁", "agentId", agentID, "runId", run.ID, "err", err)
+		s.log.Warn("failed to confirm the run status after re-setting the busy lock; keeping the lock", "agentId", agentID, "runId", run.ID, "err", err)
 		return
 	}
 	switch status {
@@ -282,9 +296,10 @@ func (s *Service) restoreRunLock(ctx context.Context, agentID uuid.UUID, run sto
 	}
 }
 
-// ---- 驱动循环 ----
+// ---- Driver loop ----
 
-// kick 在本进程没有该 Agent 的驱动循环、且锁空闲时，取出队首消息开始处理。
+// kick takes the message at the head of the queue and starts processing it, when this process has no driver loop for
+// the Agent and the lock is free.
 func (s *Service) kick(ctx context.Context, agentID uuid.UUID) {
 	if s.ctx.Err() != nil {
 		return
@@ -302,10 +317,13 @@ func (s *Service) kick(ctx context.Context, agentID uuid.UUID) {
 	s.startNext(ctx, agentID, next)
 }
 
-// handoff 交接 Agent 的忙闲锁：current 为空表示锁必须空闲。按数据库选出下一条可以开始的排队执行（先打断、后普通，
-// 各自按排入顺序），把锁换给它；没有下一条时 current 非空就释放锁。锁已不是 current 时返回 ok=false，不做改动。
-// 选出与换锁之间排队有变化也无妨：换给的那条若已不在排队，StartQueuedRun 不会开始它，调用方接着交接；
-// 新排进来的执行由发送方的 kick 或驱动循环退出时的 kick 接手。
+// handoff hands off the Agent's busy lock; an empty current means the lock must be free. It picks the next queued run
+// that can start from the database (interrupts first, then normal ones, each in the order they were queued) and swaps
+// the lock to it; when there is no next run and current is non-empty it releases the lock. When the lock is no longer
+// current it returns ok=false and changes nothing. It does not matter if the queue changes between picking and
+// swapping: if the run the lock went to is no longer queued, StartQueuedRun will not start it and the caller keeps
+// handing off; runs queued in the meantime are picked up by the sender's kick or by the kick when the driver loop
+// exits.
 func (s *Service) handoff(ctx context.Context, agentID uuid.UUID, current string) (string, bool, error) {
 	id, found, err := s.st.NextQueuedRun(ctx, agentID)
 	if err != nil {
@@ -322,7 +340,8 @@ func (s *Service) handoff(ctx context.Context, agentID uuid.UUID, current string
 	return next, true, nil
 }
 
-// startNext 从刚取得锁的执行开始；它已不在排队状态时继续交接下一条。
+// startNext starts with the run that has just acquired the lock; if it is no longer queued, it keeps handing off to the
+// next one.
 func (s *Service) startNext(ctx context.Context, agentID uuid.UUID, next string) {
 	for next != "" {
 		owner := coord.LockValue(next, s.o.InstanceID.String())
@@ -336,7 +355,7 @@ func (s *Service) startNext(ctx context.Context, agentID uuid.UUID, next string)
 				return
 			}
 			if err != nil {
-				s.log.Error("开始排队执行失败", "agentId", agentID, "runId", next, "err", err)
+				s.log.Error("failed to start a queued run", "agentId", agentID, "runId", next, "err", err)
 				_, _ = s.co.Release(ctx, agentID.String(), owner)
 				return
 			}
@@ -352,8 +371,9 @@ func (s *Service) startNext(ctx context.Context, agentID uuid.UUID, next string)
 func (s *Service) startDriver(agentID uuid.UUID, run store.Run, owner string) {
 	s.mu.Lock()
 	if s.drivers[agentID] {
-		// Handoff 已释放锁、旧驱动尚未删除标记时，新运行已持锁，不能靠 kick 再接管。
-		// 暂存这次启动，旧驱动退出时直接接续；普通消息和维护运行共用此路径。
+		// Handoff has released the lock but the old driver has not yet removed its marker: the new run already holds
+		// the lock, so kick cannot take it over later. Stash this start so the old driver continues with it directly
+		// when it exits; regular messages and maintenance runs share this path.
 		s.pendingDrivers[agentID] = driverStart{run: run, owner: owner}
 		s.mu.Unlock()
 		if h := testHookAfterDriverPending.Load(); h != nil {
@@ -378,7 +398,7 @@ func (s *Service) drive(agentID uuid.UUID, run store.Run, owner string) {
 			if hasPending {
 				s.startDriver(agentID, pending.run, pending.owner)
 			} else {
-				s.kick(context.Background(), agentID) // 退出期间若有新排队消息，接着处理
+				s.kick(context.Background(), agentID) // if new messages were queued while exiting, process them next
 			}
 		}
 	}()
@@ -387,7 +407,7 @@ func (s *Service) drive(agentID uuid.UUID, run store.Run, owner string) {
 	var cur sync.Map // "run" -> uuid.UUID
 	interrupts, err := s.co.SubscribeInterrupts(subCtx, agentID.String())
 	if err != nil {
-		s.log.Warn("订阅打断命令失败，改由定时检查发现打断", "agentId", agentID, "err", err)
+		s.log.Warn("failed to subscribe to interrupt commands; periodic checks will detect interrupts instead", "agentId", agentID, "err", err)
 	} else {
 		go func() {
 			for id := range interrupts {
@@ -404,21 +424,24 @@ func (s *Service) drive(agentID uuid.UUID, run store.Run, owner string) {
 		cur.Store("run", run.ID)
 		res, command := s.execute(ctx, agentID, run, owner)
 		if ctx.Err() != nil {
-			return // 服务端停止：执行保持原状态，下次启动时标为重启中断
+			return // server stopping: the run keeps its status and is marked interrupted by restart on the next start
 		}
-		// 先把结束写进数据库、交接忙闲锁，再通知结束：收到终态事件（或手动压缩的请求返回）就发送的控制台，
-		// 不会撞上这次执行还没放开的锁、被当成“正在回复”。数据库须先记为结束：交接选下一条、新的发送开始执行，
-		// 都要求数据库里没有进行中的执行。
+		// First write the end to the database and hand off the busy lock, then announce the end: a console that sends
+		// as soon as it receives the final event (or as soon as the manual compaction request returns) then does not
+		// run into the lock this run has not yet released and get treated as "still replying". The database must record
+		// the end first: picking the next run in handoff and starting a run for a new send both require that the
+		// database has no in-flight run.
 		publish := s.finish(ctx, run, res, command)
 		next, ok, err := s.handoff(ctx, agentID, owner)
 		if err == nil && !ok {
-			// 锁已不是本执行持有（例如锁过了 TTL）：锁空闲时直接交接。
+			// The lock is no longer held by this run (e.g. the lock passed its TTL): hand off directly if the lock is
+			// free.
 			next, ok, err = s.handoff(ctx, agentID, "")
 		}
 		publish()
 		if err != nil || !ok || next == "" {
 			if err != nil {
-				s.log.Warn("交接忙闲锁失败，等待对账", "agentId", agentID, "err", err)
+				s.log.Warn("failed to hand off the busy lock; waiting for reconciliation", "agentId", agentID, "err", err)
 			}
 			if err == nil && ok && next == "" {
 				if h := testHookAfterDriveHandoff.Load(); h != nil {
@@ -434,7 +457,7 @@ func (s *Service) drive(agentID uuid.UUID, run store.Run, owner string) {
 				var serr error
 				run, started, serr = s.st.StartQueuedRun(ctx, runID, s.o.InstanceID)
 				if serr != nil {
-					s.log.Error("开始排队执行失败", "agentId", agentID, "runId", next, "err", serr)
+					s.log.Error("failed to start a queued run", "agentId", agentID, "runId", next, "err", serr)
 					_, _ = s.co.Release(ctx, agentID.String(), owner)
 					return
 				}
@@ -453,25 +476,29 @@ func (s *Service) drive(agentID uuid.UUID, run store.Run, owner string) {
 	}
 }
 
-// testHookBeforeInterrupt 只供测试使用：确认某次执行处于打断中之后、调用执行器的 Interrupt 之前调用，
-// 用来在这两步之间注入时序（例如让该执行先结束、下一次执行开始）。生产环境为空。
+// testHookBeforeInterrupt is for tests only: called after a run is confirmed to be aborting and before the executor's
+// Interrupt is called, to inject timing between those two steps (e.g. let that run end first and the next run start).
+// Nil in production.
 var testHookBeforeInterrupt atomic.Pointer[func(runID uuid.UUID)]
 
-// testHookBeforeMarkAborting 只供测试使用：引发打断的执行确定之后、标记进行中执行为打断中之前调用，
-// 用来让引发打断的那条执行先被出队并开始。生产环境为空。
+// testHookBeforeMarkAborting is for tests only: called after the run that causes the interrupt is determined and before
+// the in-flight run is marked aborting, so that the interrupting run can be dequeued and started first. Nil in
+// production.
 var testHookBeforeMarkAborting atomic.Pointer[func(byRunID uuid.UUID)]
 
-// testHookBeforeRestoreLock 只供测试使用：按读到的进行中执行补设忙闲锁之前调用（对账与 restoreLock）。
+// testHookBeforeRestoreLock is for tests only: called before re-setting the busy lock from an in-flight run that was
+// read (reconciliation and restoreLock).
 var testHookBeforeRestoreLock atomic.Pointer[func(runID uuid.UUID)]
 
-// testHookAfterDriveHandoff 只供测试使用：空队列 Handoff 已释放锁、驱动尚未删除标记时调用。
+// testHookAfterDriveHandoff is for tests only: called when a Handoff with an empty queue has released the lock and the
+// driver has not yet removed its marker.
 var testHookAfterDriveHandoff atomic.Pointer[func(agentID uuid.UUID)]
 
-// testHookAfterDriverPending 只供测试使用：新运行已登记 pendingDrivers 后调用。
+// testHookAfterDriverPending is for tests only: called after a new run has been registered in pendingDrivers.
 var testHookAfterDriverPending atomic.Pointer[func(runID uuid.UUID)]
 
-// testHookAfterRunEndPublished 只供测试使用：驱动循环把一次执行的结束通知出去（终态事件、等待中的手动压缩请求）之后、
-// 接着处理下一条之前调用。
+// testHookAfterRunEndPublished is for tests only: called after the driver loop has announced the end of a run (the
+// final event, any waiting manual compaction request) and before it goes on to the next one.
 var testHookAfterRunEndPublished atomic.Pointer[func(runID uuid.UUID)]
 
 func beforeInterrupt(runID uuid.UUID) {
@@ -480,20 +507,21 @@ func beforeInterrupt(runID uuid.UUID) {
 	}
 }
 
-// execute 调用执行器处理一次执行，期间定时检查数据库中的打断标记（防止打断通知丢失）。
-// execute 返回这次执行的结果，以及交给 Pi 的命令名（对话页 /pi:<name> 消息，不是命令时为空）。
+// execute calls the executor to process one run, periodically checking the database for the interrupt flag (in case the
+// interrupt notification is lost). execute returns the result of the run and the command name handed to Pi (from a
+// /pi:<name> message on the conversation page; empty when it is not a command).
 func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run, owner string) (executor.Result, string) {
 	attrs := []any{"runId", run.ID, "agentId", agentID, "whenBusy", run.WhenBusy}
 	if run.StartedAt != nil {
 		attrs = append(attrs, "queuedMs", run.StartedAt.Sub(run.QueuedAt).Milliseconds())
 	}
-	s.log.Info("回复开始", attrs...)
+	s.log.Info("reply started", attrs...)
 	if st, err := s.st.RunStatus(ctx, run.ID); err == nil && st == "aborting" {
 		return executor.Result{Outcome: executor.OutcomeInterrupted}, ""
 	}
 	msg := store.Message{}
 	if run.Origin == executor.OriginConsoleCompact {
-		msg.Text = store.ParseCompaction(run.Compaction).Instructions // 执行开始时记下的指令；请求已断开也照样执行
+		msg.Text = store.ParseCompaction(run.Compaction).Instructions // instructions recorded at run start; runs even if the request has disconnected
 	} else {
 		var err error
 		msg, err = s.st.GetMessage(ctx, run.UserMessageID)
@@ -544,7 +572,8 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	if run.WakeSleepID != nil && run.Origin != "sleep_wake" {
 		prompt = "Platform notice: your sleep was ended by new work (sleepId=" + run.WakeSleepID.String() + ").\n" + prompt
 	}
-	// 对话页的 Pi 命令：/pi:<name> 原样改写为 /<name> 发给 Pi，不加运行 ID 与平台通知（Pi 只认首字符为 / 的命令）。
+	// Pi command from the conversation page: /pi:<name> is rewritten verbatim to /<name> and sent to Pi, without the
+	// run ID and platform notices (Pi only recognizes commands whose first character is /).
 	command, piMessage := "", ""
 	if run.Origin == "console" {
 		command, piMessage = PiCommand(msg.Text)
@@ -575,8 +604,9 @@ func (s *Service) execute(ctx context.Context, agentID uuid.UUID, run store.Run,
 	return res, command
 }
 
-// finish 把执行的结束写进数据库，返回通知结束的函数（终态事件、会话缺失、等待中的手动压缩请求）。
-// 驱动循环在交接忙闲锁之后才调用它。
+// finish writes the end of the run to the database and returns a function that announces the end (final event, missing
+// session, waiting manual compaction request). The driver loop calls that function only after handing off the busy
+// lock.
 func (s *Service) finish(ctx context.Context, run store.Run, res executor.Result, command string) (publish func()) {
 	end := store.RunEnd{Text: res.Text, ConfigVersion: res.ConfigVersion, PiCommand: command, PiCommandHandled: command != "" && res.CommandHandled}
 	if end.PiCommandHandled {
@@ -626,14 +656,16 @@ func (s *Service) finish(ctx context.Context, run store.Run, res executor.Result
 	}
 }
 
-// endRun 结束一次不由驱动循环持锁的执行（服务端停止、重启后收尾）：记下结束并立即通知。
+// endRun ends a run whose lock is not held by a driver loop (server stop, cleanup after a restart): it records the end
+// and announces it right away.
 func (s *Service) endRun(ctx context.Context, agentID, runID uuid.UUID, end store.RunEnd) {
 	if r, msg, finished := s.recordRunEnd(ctx, agentID, runID, end); finished {
 		s.publishRunEnd(ctx, agentID, r, msg)
 	}
 }
 
-// recordRunEnd 把执行的结束写进数据库；finished 为 false 表示这次没有结束它（已经结束过，或写入失败）。
+// recordRunEnd writes the end of the run to the database; finished is false when this call did not end it (it had
+// already ended, or the write failed).
 func (s *Service) recordRunEnd(ctx context.Context, agentID, runID uuid.UUID, end store.RunEnd) (store.Run, *store.Message, bool) {
 	r, msg, finished, err := s.st.FinishRun(ctx, runID, end)
 	if errors.Is(err, store.ErrSleepSessionNotSaved) {
@@ -643,7 +675,7 @@ func (s *Service) recordRunEnd(ctx context.Context, agentID, runID uuid.UUID, en
 		r, msg, finished, err = s.st.FinishRun(ctx, runID, end)
 	}
 	if err != nil {
-		s.log.Error("结束执行失败", "agentId", agentID, "runId", runID, "err", err)
+		s.log.Error("failed to end the run", "agentId", agentID, "runId", runID, "err", err)
 		return store.Run{}, nil, false
 	}
 	if !finished {
@@ -657,14 +689,15 @@ func (s *Service) recordRunEnd(ctx context.Context, agentID, runID uuid.UUID, en
 		}
 		attrs = append(attrs, "durationMs", r.EndedAt.Sub(begin).Milliseconds())
 	}
-	s.log.Info("回复结束", attrs...)
+	s.log.Info("reply ended", attrs...)
 	return r, msg, true
 }
 
-// publishRunEnd 发出执行的终态事件并刷新概览状态。
+// publishRunEnd emits the run's final event and refreshes the overview status.
 func (s *Service) publishRunEnd(ctx context.Context, agentID uuid.UUID, r store.Run, msg *store.Message) {
 	if msg == nil {
-		// 手动压缩没有对话消息：终态以 run.updated 通知，run.ended 总带消息。
+		// A manual compaction has no conversation message: its final state is announced with run.updated, since
+		// run.ended always carries a message.
 		s.emit(ctx, agentID, apitypes.EventRunUpdated, apitypes.SseRunUpdated{Run: apitypes.FromRun(r)})
 	} else {
 		s.emit(ctx, agentID, apitypes.EventRunEnded, apitypes.SseRunEnded{Run: apitypes.FromRun(r), Message: apitypes.FromMessage(*msg, r)})
@@ -673,7 +706,7 @@ func (s *Service) publishRunEnd(ctx context.Context, agentID uuid.UUID, r store.
 	s.EmitAgentStatus(agentID)
 }
 
-// runSink 把执行器事件写入数据库与事件流。
+// runSink writes executor events to the database and the event stream.
 type runSink struct {
 	s       *Service
 	agentID uuid.UUID
@@ -683,7 +716,7 @@ type runSink struct {
 func (k *runSink) Phase(phase string) {
 	ctx := k.s.ctx
 	if err := k.s.st.SetRunPhase(ctx, k.runID, phase); err != nil {
-		k.s.log.Warn("更新执行阶段失败", "runId", k.runID, "agentId", k.agentID, "err", err)
+		k.s.log.Warn("failed to update the run phase", "runId", k.runID, "agentId", k.agentID, "err", err)
 	}
 	k.s.emitRun(ctx, k.agentID, k.runID)
 }
@@ -691,7 +724,7 @@ func (k *runSink) Phase(phase string) {
 func (k *runSink) Running(configVersion int64) {
 	ctx := k.s.ctx
 	if err := k.s.st.SetRunRunning(ctx, k.runID, configVersion); err != nil {
-		k.s.log.Warn("更新执行状态失败", "runId", k.runID, "agentId", k.agentID, "err", err)
+		k.s.log.Warn("failed to update the run status", "runId", k.runID, "agentId", k.agentID, "err", err)
 	}
 	k.s.emitRun(ctx, k.agentID, k.runID)
 }
@@ -699,7 +732,7 @@ func (k *runSink) Running(configVersion int64) {
 func (k *runSink) TextDelta(delta string) {
 	data, _ := json.Marshal(apitypes.SseRunText{RunID: k.runID, Delta: delta})
 	if _, err := k.s.co.AppendText(k.s.ctx, k.agentID.String(), k.runID.String(), delta, apitypes.EventRunText, data); err != nil {
-		k.s.log.Warn("写入文字增量失败", "runId", k.runID, "agentId", k.agentID, "err", err)
+		k.s.log.Warn("failed to write the text delta", "runId", k.runID, "agentId", k.agentID, "err", err)
 	}
 }
 
@@ -707,12 +740,12 @@ func (k *runSink) Tool(callID, name, state string) {
 	ctx := k.s.ctx
 	ev := store.ToolEvent{ToolCallID: callID, ToolName: name, State: state, At: time.Now()}
 	if err := k.s.st.AddToolEvent(ctx, k.runID, ev); err != nil {
-		k.s.log.Warn("记录工具状态失败", "runId", k.runID, "agentId", k.agentID, "err", err)
+		k.s.log.Warn("failed to record the tool status", "runId", k.runID, "agentId", k.agentID, "err", err)
 	}
 	k.s.emit(ctx, k.agentID, apitypes.EventRunTool, apitypes.SseRunTool{RunID: k.runID, ToolCallID: callID, ToolName: name, State: state, At: ev.At})
 }
 
-// ---- 重启处理与对账 ----
+// ---- Restart handling and reconciliation ----
 
 func (s *Service) recoverAfterRestart(ctx context.Context) error {
 	runs, err := s.st.ActiveRuns(ctx)
@@ -724,7 +757,7 @@ func (s *Service) recoverAfterRestart(ctx context.Context) error {
 			continue
 		}
 		text, _ := s.co.RunText(ctx, r.ID.String())
-		s.log.Warn("上次运行遗留的进行中执行，标为服务端重启中断", "agentId", r.AgentID, "runId", r.ID)
+		s.log.Warn("run left active by the previous server run; marked as interrupted by a server restart", "agentId", r.AgentID, "runId", r.ID)
 		s.endRun(ctx, r.AgentID, r.ID, store.RunEnd{Status: "interrupted", EndReason: "server_restart", Text: text})
 		if r.InstanceID != nil {
 			_, _ = s.co.Release(ctx, r.AgentID.String(), coord.LockValue(r.ID.String(), r.InstanceID.String()))
@@ -746,11 +779,11 @@ func (s *Service) reconcileLoop() {
 	}
 }
 
-// reconcile 为进行中的执行补设锁，并为无人处理的排队消息启动驱动循环。
+// reconcile re-sets locks for in-flight runs and starts driver loops for queued messages that nobody is processing.
 func (s *Service) reconcile(ctx context.Context) {
 	active, err := s.st.ActiveRuns(ctx)
 	if err != nil {
-		s.log.Warn("对账：读取进行中执行失败", "err", err)
+		s.log.Warn("reconcile: failed to read active runs", "err", err)
 		return
 	}
 	for _, r := range active {
@@ -758,7 +791,7 @@ func (s *Service) reconcile(ctx context.Context) {
 	}
 	agents, err := s.st.AgentsWithQueuedRuns(ctx)
 	if err != nil {
-		s.log.Warn("对账：读取排队执行失败", "err", err)
+		s.log.Warn("reconcile: failed to read queued runs", "err", err)
 		return
 	}
 	for _, agentID := range agents {
@@ -768,16 +801,16 @@ func (s *Service) reconcile(ctx context.Context) {
 	}
 }
 
-// ---- 事件 ----
+// ---- Events ----
 
 func (s *Service) emit(ctx context.Context, agentID uuid.UUID, typ string, payload any) bool {
 	data, err := json.Marshal(payload)
 	if err != nil {
-		s.log.Error("序列化事件失败", "type", typ, "err", err)
+		s.log.Error("failed to encode an event", "type", typ, "err", err)
 		return false
 	}
 	if _, err := s.co.AppendEvent(ctx, agentID.String(), typ, data); err != nil {
-		s.log.Warn("写入事件流失败", "agentId", agentID, "type", typ, "err", err)
+		s.log.Warn("failed to write to the event stream", "agentId", agentID, "type", typ, "err", err)
 		return false
 	}
 
@@ -792,18 +825,19 @@ func (s *Service) emitMessage(ctx context.Context, agentID uuid.UUID, m store.Me
 func (s *Service) emitRun(ctx context.Context, agentID, runID uuid.UUID) {
 	r, err := s.st.GetRun(ctx, runID)
 	if err != nil {
-		s.log.Warn("读取执行失败", "runId", runID, "err", err)
+		s.log.Warn("failed to read the run", "runId", runID, "err", err)
 		return
 	}
 	s.emit(ctx, agentID, apitypes.EventRunUpdated, apitypes.SseRunUpdated{Run: apitypes.FromRun(r)})
 	s.EmitAgentStatus(agentID)
 }
 
-// emitQueue 推送排队列表：全部排队执行与逐条排队项（与快照里的 queuedRuns、queueItems 同形同序）。
+// emitQueue pushes the queue list: all queued runs and the individual queue items (same shape and order as queuedRuns
+// and queueItems in the snapshot).
 func (s *Service) emitQueue(ctx context.Context, agentID uuid.UUID) {
 	runs, items, err := s.queueState(ctx, agentID)
 	if err != nil {
-		s.log.Warn("读取排队列表失败", "agentId", agentID, "err", err)
+		s.log.Warn("failed to read the queue", "agentId", agentID, "err", err)
 		return
 	}
 	s.emit(ctx, agentID, apitypes.EventQueueUpdated, apitypes.SseQueueUpdated{QueuedRuns: runs, Items: items})
@@ -834,9 +868,10 @@ func (s *Service) emitSession(ctx context.Context, agentID uuid.UUID) {
 	s.EmitAgentStatus(agentID)
 }
 
-// publishSession 在 Agent 的事件流里推送 session.updated。force 为 false 时只在会话状态或序号与上次推送的不同时才推：
-// 概览状态每次重算都会调用它，这样会话的每次变化都有 session.updated，包括第一轮回复后由 none 变 active、
-// 改模型换运行时导致的重开（这两处没有走会话命令）。
+// publishSession pushes session.updated on the Agent's event stream. When force is false it only pushes if the session
+// state or epoch differs from the last push: it is called on every recomputation of the overview status, so every
+// session change gets a session.updated, including none becoming active after the first reply and the reopen caused by
+// changing the model and thereby the runtime (neither goes through a session command).
 func (s *Service) publishSession(ctx context.Context, agentID uuid.UUID, info apitypes.SessionInfo, force bool) {
 	if last, ok := s.sessions.Load(agentID); ok && !force && last.(apitypes.SessionInfo) == info {
 		return
@@ -846,14 +881,17 @@ func (s *Service) publishSession(ctx context.Context, agentID uuid.UUID, info ap
 	}
 }
 
-// ---- 概览事件流 ----
+// ---- Overview event stream ----
 
-// overviewWorker 记录某个 Agent 的概览推送协程是否在运行，以及运行期间是否又有变化。
+// overviewWorker records whether an Agent's overview push goroutine is running, and whether something changed again
+// while it was running.
 type overviewWorker struct{ running, dirty bool }
 
-// EmitAgentStatus 异步推送 Agent 当前的运行状态到概览事件流（Agent 已删除时推送移除事件），不阻塞调用方，
-// 所以不会拉长执行结束到交接忙闲锁之间的时间。同一 Agent 至多一个推送协程：运行期间的新变化合并为再推一次，
-// 最后推送的总是最新状态。服务停止后不再推送。失败只记日志。
+// EmitAgentStatus asynchronously pushes the Agent's current run status to the overview event stream (a removal event
+// when the Agent has been deleted) without blocking the caller, so it does not lengthen the time between a run ending
+// and the busy lock being handed off. There is at most one push goroutine per Agent: new changes while it runs are
+// merged into one more push, so the last push always carries the latest status. Nothing is pushed after the service
+// stops. Failures are only logged.
 func (s *Service) EmitAgentStatus(agentID uuid.UUID) {
 	s.overviewMu.Lock()
 	defer s.overviewMu.Unlock()
@@ -890,17 +928,18 @@ func (s *Service) pushAgentStatus(agentID uuid.UUID) {
 	ctx := context.Background()
 	item, err := s.overviewItem(ctx, agentID)
 	if apperr.Is(err, apperr.CodeNotFound) {
-		// 已删除（含所在项目被删除）：带上原来的归属，按范围订阅的概览据此过滤。
+		// Deleted (including when its project was deleted): include the former ownership so scope-filtered overview
+		// subscriptions can filter on it.
 		pid, perr := s.st.AgentProjectAny(ctx, agentID)
 		if perr != nil && !apperr.Is(perr, apperr.CodeNotFound) {
-			s.log.Warn("读取已删除 Agent 的归属失败", "agentId", agentID, "err", perr)
+			s.log.Warn("failed to read the owner of a deleted Agent", "agentId", agentID, "err", perr)
 		}
 		s.appendOverview(ctx, apitypes.EventAgentRemoved, apitypes.SseAgentRemoved{AgentID: agentID, Scope: apitypes.ScopeOf(pid), ProjectID: pid})
 		s.sessions.Delete(agentID)
 		return
 	}
 	if err != nil {
-		s.log.Warn("计算概览状态失败", "agentId", agentID, "err", err)
+		s.log.Warn("failed to compute the overview status", "agentId", agentID, "err", err)
 		return
 	}
 	s.appendOverview(ctx, apitypes.EventAgentStatus, apitypes.SseAgentStatus{Agent: item})
@@ -910,15 +949,15 @@ func (s *Service) pushAgentStatus(agentID uuid.UUID) {
 func (s *Service) appendOverview(ctx context.Context, typ string, payload any) {
 	data, err := json.Marshal(payload)
 	if err != nil {
-		s.log.Error("序列化概览事件失败", "type", typ, "err", err)
+		s.log.Error("failed to encode an overview event", "type", typ, "err", err)
 		return
 	}
 	if _, err := s.co.AppendOverview(ctx, typ, data); err != nil {
-		s.log.Warn("写入概览事件流失败", "type", typ, "err", err)
+		s.log.Warn("failed to write to the overview event stream", "type", typ, "err", err)
 	}
 }
 
-// overviewItem 返回一个未删除 Agent 的概览状态。
+// overviewItem returns the overview status of an Agent that has not been deleted.
 func (s *Service) overviewItem(ctx context.Context, agentID uuid.UUID) (apitypes.AgentOverview, error) {
 	a, err := s.st.GetAgent(ctx, agentID)
 	if err != nil {
@@ -963,8 +1002,9 @@ func (s *Service) overviewItems(ctx context.Context, agents []store.Agent) ([]ap
 	return out, nil
 }
 
-// OverviewSnapshot 返回范围内的概览快照及其事件 ID。先取事件流的最新位置再读状态：
-// 之后的事件可能与快照重叠（状态事件是完整状态，重复无害），但不会缺失。
+// OverviewSnapshot returns the overview snapshot for the scope and its event ID. It takes the event stream's latest
+// position first and then reads the status: later events may overlap with the snapshot (status events carry the full
+// status, so duplicates are harmless), but none are missed.
 func (s *Service) OverviewSnapshot(ctx context.Context, f store.ScopeFilter) (apitypes.SseOverviewSnapshot, string, error) {
 	lastID, err := s.co.OverviewLastID(ctx)
 	if err != nil {
@@ -985,9 +1025,9 @@ func (s *Service) OverviewSnapshot(ctx context.Context, f store.ScopeFilter) (ap
 	return apitypes.SseOverviewSnapshot{Agents: items}, lastID, nil
 }
 
-// ---- 查询 ----
+// ---- Queries ----
 
-// Status 返回 Agent 的状态。
+// Status returns the Agent's status.
 func (s *Service) Status(ctx context.Context, agentID uuid.UUID) (apitypes.AgentStatus, error) {
 	if _, err := s.st.GetAgent(ctx, agentID); err != nil {
 		return apitypes.AgentStatus{}, err
@@ -1024,7 +1064,8 @@ func (s *Service) Status(ctx context.Context, agentID uuid.UUID) (apitypes.Agent
 	return out, nil
 }
 
-// Snapshot 返回 SSE 快照及其事件 ID：快照中的文字恰好包含到该 ID 为止的增量。
+// Snapshot returns the SSE snapshot and its event ID: the text in the snapshot contains exactly the deltas up to that
+// ID.
 func (s *Service) Snapshot(ctx context.Context, agentID uuid.UUID) (apitypes.SseSnapshot, string, error) {
 	st, err := s.Status(ctx, agentID)
 	if err != nil {
@@ -1048,7 +1089,7 @@ func (s *Service) Snapshot(ctx context.Context, agentID uuid.UUID) (apitypes.Sse
 	return snap, lastID, nil
 }
 
-// History 返回对话历史的一页。
+// History returns one page of conversation history.
 func (s *Service) History(ctx context.Context, agentID uuid.UUID, q store.MessageQuery) (apitypes.MessagePage, error) {
 	page, err := s.st.ListMessages(ctx, agentID, q)
 	if err != nil {
@@ -1062,17 +1103,18 @@ func (s *Service) History(ctx context.Context, agentID uuid.UUID, q store.Messag
 	return out, nil
 }
 
-// ResetSession 确认重开会话。
+// ResetSession confirms reopening the session.
 func (s *Service) ResetSession(ctx context.Context, agentID uuid.UUID) (apitypes.SessionInfo, error) {
 	sess, err := s.st.ResetSession(ctx, agentID)
 	if err != nil {
 		return apitypes.SessionInfo{}, err
 	}
-	return s.sessionChanged(ctx, agentID, sess), nil // 会话丢失期间收到的 Inbox 消息没有安排提醒，重开后补上
+	return s.sessionChanged(ctx, agentID, sess), nil // Inbox messages received while the session was lost got no reminder; add it after reopening
 }
 
-// PiCommand 识别对话页的 Pi 命令：文字以 /pi:<name> 开头（name 非空、不含空白）时返回命令名与发给 Pi 的 /<name><其余原文>；
-// 否则都为空。只改写开头的前缀，参数原样保留。
+// PiCommand recognizes a Pi command from the conversation page: when the text starts with /pi:<name> (name non-empty,
+// without whitespace) it returns the command name and /<name><rest of the original text> to send to Pi; otherwise both
+// are empty. Only the leading prefix is rewritten; arguments are kept as they are.
 func PiCommand(text string) (name, message string) {
 	rest, ok := strings.CutPrefix(text, "/pi:")
 	if !ok {

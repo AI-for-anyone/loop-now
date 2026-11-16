@@ -404,8 +404,9 @@ func TestGooglePGRequiresLoginIsStableSafeClassification(t *testing.T) {
 	}
 }
 
-// 删除账号时（迁移 030）没有进行中任务使用的版本连同授权一起清空：正在刷新的普通对话授权随之失效，
-// 刷新结果不写回、不复活已删除的账号。
+// TestGooglePGDeletedAccountDropsBoundInflightGrant: deleting an account (migration 030) clears the versions not used
+// by any in-progress task together with their grants, so the regular-conversation grant being refreshed is
+// invalidated too, and the refresh result is not written back and does not revive the deleted account.
 func TestGooglePGDeletedAccountDropsBoundInflightGrant(t *testing.T) {
 	f := newGoogleFixture(t)
 	ctx := context.Background()

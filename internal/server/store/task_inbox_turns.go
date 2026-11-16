@@ -10,7 +10,7 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// EnqueueTaskInboxTurn给非当前实例或阻塞实例排Inbox回合，不启动workflow节点。
+// EnqueueTaskInboxTurn queues an Inbox turn for a non-current or blocked instance, without starting a workflow node.
 func (s *Store) EnqueueTaskInboxTurn(ctx context.Context, m *TaskMutation, inst TaskInstance, text string, priority int, trigger *uuid.UUID) (TaskTurn, error) {
 	if m.Record.Ended() || inst.TaskID != m.Record.View.Task.ID {
 		return TaskTurn{}, apperr.Conflict(apperr.CodeTaskConflict, "任务已结束")
@@ -83,7 +83,7 @@ func (s *Store) ClaimTaskInboxTurn(ctx context.Context, taskID, runtime uuid.UUI
 		}
 		var t TaskTurn
 		var e error
-		// 提醒轮次领取时已没有待处理消息就作废，接着领取下一轮。
+		// When a reminder turn is claimed and no longer has pending messages, void it and claim the next turn.
 		for {
 			t, e = scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE runtime_id=$1 AND status='queued' AND (origin='inbox_reminder' OR (origin='console_node' AND execution_mode='task_conversation') OR (origin='sleep_wake' AND EXISTS(SELECT 1 FROM agent_sleeps z WHERE z.id=task_turns.wake_sleep_id AND z.wake_run_id=task_turns.id AND z.mode='task_conversation' AND z.state='woken'))) ORDER BY priority,queue_seq LIMIT 1`, runtime))
 			if e == db.ErrNoRows {
@@ -135,7 +135,8 @@ func (s *Store) ClaimTaskInboxTurn(ctx context.Context, taskID, runtime uuid.UUI
 	return turn, found, err
 }
 
-// InterruptTaskInboxRounds用于重试当前实例时终止没有节点归属的旧Inbox回合。
+// InterruptTaskInboxRounds is used, when the current instance is retried, to end the old Inbox turns that belong to no
+// node.
 func (s *Store) InterruptTaskInboxRounds(ctx context.Context, m *TaskMutation, runtime uuid.UUID) error {
 	return s.InterruptTaskRuntime(ctx, m, &runtime, true)
 }

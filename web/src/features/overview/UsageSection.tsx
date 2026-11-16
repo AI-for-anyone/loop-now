@@ -24,7 +24,8 @@ import {
 
 const fmt = (count: number) => t.overview.tokens(count)
 
-// 四项明细的色块：输入孔版蓝、输出荧光粉、缓存读取浅蓝描蓝边、缓存写入浅粉描粉边。
+// Swatches for the four breakdown items: riso blue for input, fluorescent pink for output, light blue with a blue outline for
+// cache read, light pink with a pink outline for cache write.
 const SWATCH = {
   input: 'bg-riso-blue',
   output: 'bg-riso-pink',
@@ -34,13 +35,14 @@ const SWATCH = {
 
 const PARTS = ['input', 'output', 'cacheRead', 'cacheWrite'] as const
 
-// 横条的网点填充（改版）：输入是孔版蓝底白网点，输出是荧光粉底藏青网点。
+// Halftone fill of the bars (redesign): white halftone dots on riso blue for input, navy halftone dots on fluorescent pink
+// for output.
 const FILL = {
   input: 'bg-riso-blue bg-[radial-gradient(rgb(255_255_255/.28)_1px,transparent_1.3px)] bg-size-[5px_5px]',
   output: 'bg-riso-pink bg-[radial-gradient(rgb(24_38_94/.22)_1px,transparent_1.3px)] bg-size-[5px_5px]',
 } as const
 
-// 合计一行：所选时间段的合计（大号数字），右边是四项明细。
+// The total line: the total for the selected period (in large figures), with the four breakdown items to the right.
 function TotalLine({ rangeLabel, sum }: { rangeLabel: string; sum: UsageParts }) {
   return (
     <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
@@ -80,8 +82,9 @@ function LineName({ line, dimension }: { line: UsageLine; dimension: UsageDimens
   return <span className="font-mono text-[12.5px] font-black [overflow-wrap:anywhere]">{t.overview.usage.model(line.provider, line.model)}</span>
 }
 
-// 一行：名称、横条（藏青描边的槽，按最多的一行算满格；网点填充，蓝为输入、粉为输出）和一直显示的合计，
-// 最多的一行后面贴一个黄色“最多”；悬停或键盘聚焦时显示四项明细。
+// One row: the name, the bar (a navy-outlined track, full at the largest row's value; halftone fill, blue for input and pink for
+// output) and the always-visible total; the largest row gets a yellow “最多” (Most) after it. Hover or keyboard focus shows the
+// four breakdown items.
 function UsageBar({ line, dimension, max, most }: { line: UsageLine; dimension: UsageDimension; max: number; most: boolean }) {
   const detailId = useId()
   const width = (value: number) => `${max > 0 ? (value / max) * 100 : 0}%`
@@ -148,8 +151,9 @@ function Empty({ rangeLabel }: { rangeLabel: string }) {
   )
 }
 
-// 用量：所选时间段的合计与按 Agent 或按模型的横条，只统计 token，不显示费用。纸张上的第 number 个编号分区；
-// 范围与分组是标题行右边的两组分段按钮。
+// Usage: the total for the selected period and bars by Agent or by model; only tokens are counted, no cost is shown. It is
+// numbered section `number` on the sheet; the period and the grouping are two segmented button groups on the right of the
+// title row.
 export function UsageSection({ scope = {}, number = 2 }: { scope?: ScopeQuery; number?: number }) {
   const [range, setRange] = useState<UsageRange>(config.overviewDefaults.usageRange)
   const [dimension, setDimension] = useState<UsageDimension>(config.overviewDefaults.usageDimension)

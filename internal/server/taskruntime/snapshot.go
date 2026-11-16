@@ -32,7 +32,7 @@ const copiedAgentFolderSchema = 9
 // latestSemantics are the rules of schema 7, applied to every new capture.
 const latestSemantics = 7
 
-// File 是显式提供的文件内容；组件不读磁盘或 Blob。
+// File is explicitly provided file content; the component does not read disk or blobs.
 type File struct {
 	Path    string `json:"path"`
 	Content []byte `json:"content"`
@@ -60,7 +60,8 @@ type Configuration struct {
 	CLIs                []string        `json:"clis"`
 }
 
-// CredentialPayload 只供显式的内部执行读取，不允许默认序列化或诊断打印。
+// CredentialPayload is only for explicit reads by the internal run; it must not be serialized by default or printed in
+// diagnostics.
 type CredentialPayload struct {
 	Env   map[string]string
 	Files []File
@@ -108,7 +109,7 @@ func (e envelope) semantics() int {
 	return latestSemantics
 }
 
-// 独立 wire 类型让默认诊断和 JSON 不会意外导出执行读取对象。
+// A separate wire type ensures default diagnostics and JSON cannot accidentally export the object read for the run.
 type payloadWire struct {
 	Env   map[string]string `json:"env"`
 	Files []File            `json:"files"`
@@ -210,7 +211,8 @@ func (s *Snapshot) Credentials() (Credentials, error) {
 	return c, nil
 }
 
-// Encode 是可保存快照的唯一编码入口；结果含明文凭证，只写入任务快照。
+// Encode is the only encoding entry point for a snapshot that can be saved; the result contains plaintext credentials
+// and is written only to the task snapshot.
 func (s *Snapshot) Encode() ([]byte, error) {
 	if s == nil || validateEnvelope(s.env) != nil {
 		return nil, ErrInvalidInput
@@ -222,15 +224,16 @@ func (s *Snapshot) Encode() ([]byte, error) {
 	return b, nil
 }
 
-// CopiesAgentFolder 报告这个任务的工作区是否复制自基础 Agent 的文件夹（schema 9 起）；
-// 否则按旧规则同步捕获时冻结的文件夹来源。
+// CopiesAgentFolder reports whether this task's workspace is copied from the base Agent's folder (schema 9 and later);
+// otherwise, by the old rules, the folder sources frozen at capture time are synced.
 func (s *Snapshot) CopiesAgentFolder() bool { return s.env.SchemaVersion >= copiedAgentFolderSchema }
 
 func supportedSchema(version int) bool {
 	return version == frozenSourcesSchema || version == copiedAgentFolderSchema || version == schemaVersion
 }
 
-// Decode 验证格式，不调用外部服务；读取凭证时再验证凭证内容。
+// Decode validates the format without calling external services; the credential content is validated when the
+// credentials are read.
 func Decode(data []byte) (*Snapshot, error) {
 	var e envelope
 	if strictJSON(data, &e) != nil {

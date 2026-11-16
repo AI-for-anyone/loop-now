@@ -7,7 +7,8 @@ import (
 	"os"
 )
 
-// loginShellPath 在 Windows 上取服务端进程的 PATH：桌面壳由资源管理器启动，进程环境里就是登录时系统与用户 PATH 的合并结果。
+// loginShellPath on Windows takes the server process's PATH: the desktop shell is started by Explorer, so the process
+// environment already holds the system and user PATH merged at login.
 func loginShellPath(context.Context) (string, string, error) {
 	return os.Getenv("PATH"), "process", nil
 }

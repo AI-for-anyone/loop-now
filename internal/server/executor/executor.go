@@ -1,5 +1,5 @@
-// Package executor 定义执行器接口。对话协调只依赖这里，不依赖本机执行器的细节，
-// 以后加入 E2B 执行器时实现同一接口即可。
+// Package executor defines the executor interface. Conversation coordination depends only on this package, not on the
+// details of the local executor; an E2B executor added later only has to implement the same interface.
 package executor
 
 import (
@@ -13,21 +13,21 @@ import (
 	"github.com/google/uuid"
 )
 
-// 执行结果。
+// Run outcomes.
 const (
 	OutcomeCompleted   = "completed"
 	OutcomeFailed      = "failed"
 	OutcomeInterrupted = "interrupted"
 )
 
-// 执行阶段（执行状态为 starting 时有效），与 OpenAPI 的 RunPhase 一致。
+// Run phases (valid while the run state is starting), matching RunPhase in the OpenAPI spec.
 const (
 	PhaseWaitingSlot = "waiting_slot"
 	PhasePreparing   = "preparing"
 	PhaseLaunching   = "launching"
 )
 
-// 失败原因，与 OpenAPI 的 RunErrorCode 一致。
+// Failure reasons, matching RunErrorCode in the OpenAPI spec.
 const (
 	ErrCredentialUnavailable = "credential_unavailable"
 	ErrCLIInstallFailed      = "cli_install_failed"
@@ -39,7 +39,7 @@ const (
 	ErrInternal              = "internal_error"
 	ErrImageUnsupported      = "image_unsupported"
 	ErrPluginBlocked         = "plugin_blocked"
-	// 以下是 Pi 以外的运行时（Claude Code）的失败；Pi 仍用 pi_*。
+	// The following are failures of runtimes other than Pi (Claude Code); Pi still uses pi_*.
 	ErrRuntimeUnavailable   = "runtime_unavailable"
 	ErrRuntimeLoginRequired = "runtime_login_required"
 	ErrRuntimeStartFailed   = "runtime_start_failed"
@@ -47,7 +47,7 @@ const (
 	ErrRuntimeError         = "runtime_error"
 )
 
-// 进程状态，与 OpenAPI 的 ProcessState 一致。
+// Process states, matching ProcessState in the OpenAPI spec.
 const (
 	ProcessStopped  = "stopped"
 	ProcessStarting = "starting"
@@ -55,53 +55,59 @@ const (
 	ProcessBusy     = "busy"
 )
 
-// 工具状态。
+// Tool states.
 const (
 	ToolStarted   = "started"
 	ToolSucceeded = "succeeded"
 	ToolFailed    = "failed"
 )
 
-// OriginConsoleCompact 是控制台手动压缩；它使用真实运行，但不产生对话消息。
+// OriginConsoleCompact is a manual compaction from the console; it uses a real run but produces no conversation
+// message.
 const OriginConsoleCompact = "console_compact"
 
-// CompactionResult 是一次手动压缩的结果。Skipped 不为空表示 Pi 没有压缩（会话太短、已经压缩过、扩展取消），
-// 这仍是正常完成，Token 都为 0；否则是压缩前后的 Token。
+// CompactionResult is the result of one manual compaction. A non-empty Skipped means Pi did not compact (the session is
+// too short, was already compacted, or an extension cancelled it); this is still a normal completion and all token
+// counts are 0. Otherwise the fields hold the token counts before and after compaction.
 type CompactionResult struct {
 	TokensBefore         int64
 	EstimatedTokensAfter int64
 	Skipped              string
 }
 
-// SessionExport 是已读取并验证来源的会话下载内容。
+// SessionExport is session download content that has been read and whose origin has been verified.
 type SessionExport struct {
 	Filename    string
 	ContentType string
 	Data        []byte
 }
 
-// 平台命令（维护操作）可以预期的失败。执行器把它们包在返回的错误里，对话服务据此转成 409。
+// Expected failures of platform commands (maintenance operations). The executor wraps them in the error it returns, and
+// the conversation service turns them into a 409.
 var (
-	// ErrMaintenanceBusy：运行时还有进行中的执行，或正在做别的维护（例如任务分叉、运行时交接）。
+	// ErrMaintenanceBusy: the runtime still has a run in progress, or is doing another maintenance operation (such as a
+	// task fork or a runtime handover).
 	ErrMaintenanceBusy = errors.New("运行时正忙")
-	// ErrNoSession：没有可以操作的会话。
+	// ErrNoSession: there is no session to operate on.
 	ErrNoSession = errors.New("当前没有可操作的会话")
-	// ErrUnsupportedRuntime：这个 Agent 的运行时不支持该命令（例如 Claude Code 没有 Pi 会话）。
+	// ErrUnsupportedRuntime: this Agent's runtime does not support the command (for example, Claude Code has no Pi
+	// session).
 	ErrUnsupportedRuntime = errors.New("当前运行时不支持这个命令")
 )
 
-// IdleProcessStopper 由支持维护操作的本机执行器实现。
+// IdleProcessStopper is implemented by local executors that support maintenance operations.
 type IdleProcessStopper interface {
 	StopIdle(ctx context.Context, agentID uuid.UUID, reason string) (bool, error)
 }
 
-// SessionExporter 由能从受管 Pi 会话导出的执行器实现。sessionFile 是数据库记下的当前会话文件；
-// 调用方已确认这是 Pi 的 Agent、会话可用。
+// SessionExporter is implemented by executors that can export from a managed Pi session. sessionFile is the current
+// session file recorded in the database; the caller has already confirmed that this is a Pi Agent and that the session
+// is available.
 type SessionExporter interface {
 	ExportSession(ctx context.Context, agentID uuid.UUID, sessionFile, format string) (SessionExport, error)
 }
 
-// ManagedSession 是受管 sessions 目录里的一个有效 Pi 会话；Path 只在服务端内部使用。
+// ManagedSession is a valid Pi session in the managed sessions directory; Path is used only inside the server.
 type ManagedSession struct {
 	ID        string
 	Path      string
@@ -111,93 +117,103 @@ type ManagedSession struct {
 	Current   bool
 }
 
-// SessionLister 枚举可恢复的 Pi 会话，不得因此启动进程。ResolveSession 按完整 ID 找一个会话（只读文件头），
-// 找不到或 ID 重复时返回 nil。
+// SessionLister enumerates resumable Pi sessions and must not start a process to do so. ResolveSession finds a session
+// by its full ID (reading only the file header) and returns nil when there is none or the ID is ambiguous.
 type SessionLister interface {
 	ListSessions(ctx context.Context, agentID uuid.UUID, currentFile string) ([]ManagedSession, error)
 	ResolveSession(ctx context.Context, agentID uuid.UUID, sessionID, currentFile string) (*ManagedSession, error)
 }
 
-// Request 是一次执行的输入。
+// Request is the input of one run.
 type Request struct {
 	Images  []messageimage.Content
 	AgentID uuid.UUID
 	RunID   uuid.UUID
 	Message string
-	// Origin 与 MessageID 交给插件的 run.before_start：触发这一轮的来源与消息（平台提醒为那条 Inbox 消息）。
+	// Origin and MessageID are passed to plugins' run.before_start: the source and the message that triggered this turn
+	// (for a platform reminder, that Inbox message).
 	Origin    string
 	MessageID uuid.UUID
 }
 
-// RunIDLine 是平台加在每条交给 Pi 的消息最前面的一行：这一轮的运行 ID（Agent 调 loopctl 时要带上）。
-// 旧会话里这一行是中文的“本轮运行ID：<ID>。”，不迁移；平台的生产代码不解析这一行。
+// RunIDLine is the line the platform puts at the very start of every message handed to Pi: the run ID of this turn
+// (the Agent must pass it when it calls loopctl). In old sessions this line is in Chinese,
+// “本轮运行ID：<ID>。” ("Run ID for this turn: <ID>."); that is not migrated, and the platform's production code does
+// not parse this line.
 func RunIDLine(id uuid.UUID) string { return "Run ID for this turn: " + id.String() + ".\n" }
 
-// Result 是一次执行的结果。
+// Result is the result of one run.
 type Result struct {
 	Outcome      string
-	Text         string // 最终回复文字（失败或打断时为已产生的部分）
+	Text         string // final reply text (on failure or interrupt, the part produced so far)
 	ErrorCode    string
 	ErrorMessage string
-	Compaction   *CompactionResult // 仅 console_compact 成功时有值
-	// ConfigVersion 是这次执行实际使用的配置版本。
+	Compaction   *CompactionResult // set only when console_compact succeeds
+	// ConfigVersion is the config version this run actually used.
 	ConfigVersion int64
-	// CommandHandled 表示 Pi 直接处理了这次的消息（扩展命令），没有交给模型、没有回复。
+	// CommandHandled means Pi handled this message itself (an extension command): it was not passed to the model and
+	// there is no reply.
 	CommandHandled bool
-	// CommandNotices 是 CommandHandled 时命令执行期间扩展用 ctx.ui.notify 给出的消息（命令的输出），按顺序；
-	// CommandNoticesTruncated 表示超过上限（50 条、合计 16 KiB）被截断。
+	// CommandNotices are the messages (the command's output) that extensions gave with ctx.ui.notify while the command
+	// ran, in order, when CommandHandled is set; CommandNoticesTruncated means they were cut off after exceeding the
+	// limit (50 notices, 16 KiB in total).
 	CommandNotices          []CommandNotice
 	CommandNoticesTruncated bool
 }
 
-// CommandNotice 是 Pi 命令执行期间扩展给出的一条通知（扩展原文，纯文本，保留换行与空格）。
+// CommandNotice is one notification an extension gave while a Pi command ran (the extension's original text, plain
+// text, with newlines and spaces preserved).
 type CommandNotice struct {
 	Level   string `json:"level"` // info / warning / error
 	Message string `json:"message"`
 }
 
-// Sink 接收执行过程中的事件。回调可能来自执行器内部的协程，实现须尽快返回。
+// Sink receives events during a run. Callbacks may come from goroutines inside the executor; implementations must
+// return quickly.
 type Sink interface {
-	// Phase 报告启动阶段的变化。
+	// Phase reports a change of startup phase.
 	Phase(phase string)
-	// Running 表示消息已交给 Pi，开始回复。
+	// Running means the message has been handed to Pi and the reply has started.
 	Running(configVersion int64)
 	TextDelta(delta string)
 	Tool(toolCallID, toolName, state string)
 }
 
-// Executor 执行 Agent 的消息。
+// Executor runs Agent messages.
 type Executor interface {
-	// Execute 处理一条消息直到这一轮结束；按需安装 CLI、同步配置、启动或重启进程，
-	// 受进程数上限约束时会先等待名额。只有基础设施故障才返回 error，
-	// 可预期的失败（凭证不可用、克隆失败等）以 Result.Outcome = failed 返回。
+	// Execute handles one message until the turn ends. It installs the CLI, syncs the config and starts or restarts the
+	// process as needed, and first waits for a slot when the process limit applies. It returns an error only for
+	// infrastructure failures; expected failures (credential unavailable, clone failed, etc.) are returned with
+	// Result.Outcome = failed.
 	Execute(ctx context.Context, req Request, sink Sink) (Result, error)
-	// Interrupt 打断该 Agent 中 ID 为 runID 的那一次执行；执行尚未开始时让它直接放弃。
-	// 该 Agent 当前没有执行，或当前执行不是 runID 时什么也不做：迟到的打断不能落到下一次执行上。
+	// Interrupt interrupts the Agent's run whose ID is runID; if that run has not started yet, it simply gives up. If
+	// the Agent has no current run, or the current run is not runID, it does nothing: a late interrupt must not land on
+	// the next run.
 	Interrupt(ctx context.Context, agentID, runID uuid.UUID) error
-	// Release 停止进程并删除独立 HOME（删除 Agent 时调用）。
+	// Release stops the process and deletes the separate HOME (called when an Agent is deleted).
 	Release(ctx context.Context, agentID uuid.UUID) error
-	// Process 返回该 Agent 的进程状态，进程存活时带进程号与启动时间。
+	// Process returns the Agent's process state, with the PID and start time while the process is alive.
 	Process(agentID uuid.UUID) ProcessInfo
-	// Shutdown 结束全部进程。
+	// Shutdown ends all processes.
 	Shutdown(ctx context.Context) error
 }
 
-// ProcessInfo 是 Agent 的进程状态。PID 与 StartedAt 只在进程存活（idle、busy）时有值。
+// ProcessInfo is an Agent's process state. PID and StartedAt are set only while the process is alive (idle, busy).
 type ProcessInfo struct {
 	State     string
 	PID       int
 	StartedAt *time.Time
 }
 
-// Event 是执行器回报的运行记录事件，类型取值见 store 包的 Event 常量。
+// Event is a run record event reported by the executor; for the values of Type see the Event constants in the store
+// package.
 type Event struct {
 	Type string
-	At   time.Time // 为零时取记录时刻
+	At   time.Time // zero means the time of recording
 	Data map[string]any
 }
 
-// Usage 是 Pi 报告的一次用量。Provider 与 Model 都为空表示未知模型。
+// Usage is one usage report from Pi. Provider and Model both empty means an unknown model.
 type Usage struct {
 	Kind          string // assistant / tool / compaction / cache_warm / other
 	Provider      string
@@ -212,43 +228,47 @@ type Usage struct {
 	DurationMs    *int64
 }
 
-// Observer 接收执行器的运行记录：事件、用量与进程状态变化。runID 为空表示与回复无关。
-// 回调可能来自执行器内部的协程，实现须尽快返回；记录失败只写日志，不影响执行。
+// Observer receives the executor's run records: events, usage and process state changes. A nil runID means the record
+// is not tied to a reply. Callbacks may come from goroutines inside the executor, so implementations must return
+// quickly; a recording failure is only logged and does not affect the run.
 type Observer interface {
 	Event(agentID uuid.UUID, runID *uuid.UUID, e Event)
 	Usage(agentID uuid.UUID, runID *uuid.UUID, u Usage)
 	ProcessChanged(agentID uuid.UUID)
 }
 
-// NopObserver 丢弃全部运行记录。
+// NopObserver discards all run records.
 type NopObserver struct{}
 
 func (NopObserver) Event(uuid.UUID, *uuid.UUID, Event) {}
 func (NopObserver) Usage(uuid.UUID, *uuid.UUID, Usage) {}
 func (NopObserver) ProcessChanged(uuid.UUID)           {}
 
-// reservedEnv 是由执行器控制、凭证不能覆盖的环境变量。
+// reservedEnv lists the environment variables the executor controls, which credentials cannot override.
 var reservedEnv = []string{"HOME", "PATH", "TMPDIR", "USER", "LOGNAME", "PI_CODING_AGENT_DIR", "PI_OFFLINE", "GIT_TERMINAL_PROMPT"}
 
-// reservedEnvPrefix 是 loopctl 读取的环境变量前缀。执行器注入 LOOPCTL_AGENT_URL 与 LOOPCTL_AGENT_TOKEN；
-// 整个前缀都不允许由凭证或透传设置，防止把 Agent 的 loopctl 指向其他服务端。
+// reservedEnvPrefix is the prefix of the environment variables loopctl reads. The executor injects LOOPCTL_AGENT_URL
+// and LOOPCTL_AGENT_TOKEN; nothing with this prefix may be set by a credential or by pass-through, so that an Agent's
+// loopctl cannot be pointed at another server.
 const reservedEnvPrefix = "LOOPCTL_"
 
-// IsReservedEnv 判断环境变量名是否由执行器保留。
+// IsReservedEnv reports whether an environment variable name is reserved by the executor.
 func IsReservedEnv(name string) bool {
 	return slices.Contains(reservedEnv, name) || strings.HasPrefix(name, reservedEnvPrefix)
 }
 
-// PiCommand 是 Pi 能执行的一条命令（Pi RPC get_commands）：扩展命令、提示模板或技能命令（name 为 skill:<名称>）。
+// PiCommand is one command Pi can run (Pi RPC get_commands): an extension command, a prompt template or a Skill command
+// (name is skill:<name>).
 type PiCommand struct {
 	Name        string  `json:"name"`
 	Description *string `json:"description"`
 	Source      string  `json:"source"` // extension / prompt / skill
-	// Path 是命令来源的文件（扩展文件、模板或技能），用来判断它属于哪个插件。
+	// Path is the file the command comes from (extension file, template or Skill); it is used to tell which plugin the
+	// command belongs to.
 	Path string `json:"path"`
 }
 
-// PiCommands 是 Agent 上次启动 Pi 时读到的命令列表。
+// PiCommands is the command list read the last time the Agent started Pi.
 type PiCommands struct {
 	CapturedAt time.Time   `json:"capturedAt"`
 	Commands   []PiCommand `json:"commands"`

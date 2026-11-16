@@ -1,7 +1,8 @@
 import type { Schemas } from '@/api/client'
 
-// 投递记录（plugins/SPEC.md §7）：插件经 SDK 写在状态键 deliveries/<ULID> 下，值是下面的形状。
-// 读出时认得这个形状的按列显示，新的在前（按 at）；认不得的原样显示 JSON。
+// Delivery records (plugins/SPEC.md §7): the plugin writes them via the SDK under the state key deliveries/<ULID>, with values of the shape
+// below.
+// When read back, records of this shape are shown in columns, newest first (by at); unrecognized ones are shown as raw JSON.
 export type DeliveryRecord = {
   id: string
   at: string
@@ -41,7 +42,7 @@ function asRecord(value: unknown): DeliveryRecord | null {
   }
 }
 
-// 认得的按 at 新的在前；认不得的排在后面，按键名。
+// Recognized records newest first by at; unrecognized ones come after, ordered by key.
 export function recordRows(entries: Schemas['PluginStateEntry'][]): RecordRow[] {
   const known: { key: string; record: DeliveryRecord }[] = []
   const raw: { key: string; raw: unknown }[] = []

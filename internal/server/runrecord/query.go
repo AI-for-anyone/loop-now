@@ -17,14 +17,15 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// Service 提供时间线、用量统计与异常列表的查询；用量与异常可按项目或平台筛选。
+// Service provides queries for the timeline, usage statistics and the anomaly list; usage and anomalies can be filtered
+// by project or platform.
 type Service struct {
 	Store *store.Store
 }
 
-// ---- 用量统计 ----
+// ---- Usage statistics ----
 
-// Usage 统计范围内 [from, to) 的用量；from、to 为空表示不限。
+// Usage sums the usage within [from, to) of the scope; a nil from or to means unbounded.
 func (s *Service) Usage(ctx context.Context, f store.ScopeFilter, from, to *time.Time) (apitypes.UsagePage, error) {
 	if from != nil && to != nil && !from.Before(*to) {
 		return apitypes.UsagePage{}, apperr.Invalid("from", "开始时间必须早于结束时间")
@@ -43,12 +44,13 @@ func (s *Service) Usage(ctx context.Context, f store.ScopeFilter, from, to *time
 	return out, nil
 }
 
-// ---- 统计页 ----
+// ---- Stats page ----
 
-// statsSteps 是统计报表可用的桶宽。
+// statsSteps are the bucket widths available for the stats report.
 var statsSteps = map[string]time.Duration{"hour": time.Hour, "day": 24 * time.Hour}
 
-// Stats 返回范围内 [from, to) 的统计报表，按 bucket（hour 或 day）分桶，最多 1000 桶。
+// Stats returns the stats report within [from, to) of the scope, bucketed by bucket (hour or day), at most 1000
+// buckets.
 func (s *Service) Stats(ctx context.Context, f store.ScopeFilter, from, to time.Time, bucket string) (store.StatsReport, error) {
 	if !from.Before(to) {
 		return store.StatsReport{}, apperr.Invalid("from", "开始时间必须早于结束时间")
@@ -65,9 +67,9 @@ func (s *Service) Stats(ctx context.Context, f store.ScopeFilter, from, to time.
 	return out, err
 }
 
-// ---- 异常与失败 ----
+// ---- Anomalies and failures ----
 
-// Anomalies 返回 from 之后结束的失败与被打断的执行，按结束时间倒序分页。
+// Anomalies returns failed and interrupted runs that ended after from, paginated by end time, newest first.
 func (s *Service) Anomalies(ctx context.Context, f store.ScopeFilter, from *time.Time, cursor string, limit int) (apitypes.AnomalyPage, error) {
 	var c *store.AnomalyCursor
 	if cursor != "" {
@@ -125,9 +127,10 @@ func decodeCursor(s string) (store.AnomalyCursor, bool) {
 	return store.AnomalyCursor{EndedAt: t, RunID: u}, true
 }
 
-// ---- 时间线 ----
+// ---- Timeline ----
 
-// Timeline 返回某个 Agent 的某次执行的时间线。执行不属于该 Agent、或 Agent 不存在或已删除时返回不存在。
+// Timeline returns the timeline of one run of an Agent. When the run does not belong to that Agent, or the Agent does
+// not exist or was deleted, it returns not found.
 func (s *Service) Timeline(ctx context.Context, agentID, runID uuid.UUID) (apitypes.RunTimeline, error) {
 	if _, err := s.Store.GetAgent(ctx, agentID); err != nil {
 		return apitypes.RunTimeline{}, err
@@ -167,7 +170,8 @@ func (s *Service) Timeline(ctx context.Context, agentID, runID uuid.UUID) (apity
 			ResponseModel: strPtr(u.ResponseModel), StopReason: strPtr(u.StopReason), Input: u.Input, Output: u.Output,
 			CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, Reasoning: u.Reasoning, Total: u.Total, DurationMs: u.DurationMs}})
 	}
-	// 时间相同时"结束"排最后：时钟粒度粗（Windows）时，最后一次工具调用可能与结束同一时刻。
+	// On equal times the "ended" entry sorts last: with a coarse clock (Windows), the last tool call can have the same
+	// time as the end.
 	sort.SliceStable(entries, func(i, j int) bool {
 		if !entries[i].at.Equal(entries[j].at) {
 			return entries[i].at.Before(entries[j].at)
@@ -195,7 +199,8 @@ func base(typ string, at time.Time) apitypes.TimelineBase {
 	return apitypes.TimelineBase{Type: typ, At: at}
 }
 
-// legacyEntries 为本变更之前、没有生命周期事件的执行按 runs 的列合成条目。
+// legacyEntries synthesizes entries from the runs columns for runs from before this change, which have no lifecycle
+// events.
 func legacyEntries(r store.Run) []timed {
 	var out []timed
 	if r.WhenBusy != "" {
@@ -217,7 +222,7 @@ func legacyEntries(r store.Run) []timed {
 	return out
 }
 
-// toolEntries 按 toolCallId 把开始与结束合并为一条，开始时间为条目时间。
+// toolEntries merges the start and end of a tool call into one entry by toolCallId; the start time is the entry's time.
 func toolEntries(tools []store.ToolEvent) []timed {
 	var out []timed
 	index := map[string]int{}
@@ -241,7 +246,8 @@ func toolEntries(tools []store.ToolEvent) []timed {
 	return out
 }
 
-// runtimeOf 是进程事件记下的运行时（pi 或 claude-code）；旧记录没有，为空（即 pi）。
+// runtimeOf is the runtime recorded by the process event (pi or claude-code); old records have none, which is nil
+// (meaning pi).
 func runtimeOf(d map[string]any) *string {
 	if v := str(d, "runtime"); v == agentruntime.Pi || v == agentruntime.ClaudeCode {
 		return &v
@@ -249,7 +255,7 @@ func runtimeOf(d map[string]any) *string {
 	return nil
 }
 
-// eventEntry 把一条生命周期事件转为时间线条目。
+// eventEntry turns one lifecycle event into a timeline entry.
 func eventEntry(ev store.LifecycleEvent) (any, bool) {
 	d := ev.Data
 	b := func(typ string) apitypes.TimelineBase { return base(typ, ev.At) }
@@ -342,7 +348,7 @@ func eventEntry(ev store.LifecycleEvent) (any, bool) {
 	return nil, false
 }
 
-// optUUID 读出 UUID 字段；没有或不合法时为空。
+// optUUID reads a UUID field; nil when missing or invalid.
 func optUUID(d map[string]any, key string) *uuid.UUID {
 	s, _ := d[key].(string)
 	id, err := uuid.Parse(s)

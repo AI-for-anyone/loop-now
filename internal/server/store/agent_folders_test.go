@@ -11,7 +11,7 @@ import (
 	"loop-now/internal/testutil/sqlitetest"
 )
 
-// 拉取记录的幂等与同一目标互斥。
+// Pull records are idempotent, and pulls to the same target exclude each other.
 func TestAgentFolderGitPulls(t *testing.T) {
 	ctx := context.Background()
 	st := sqlitetest.NewStore(t)

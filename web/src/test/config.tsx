@@ -20,12 +20,14 @@ export const providers: Schemas['ModelProviderList'] = {
 
 const model = (id: string, name: string): Schemas['Model'] => ({ id, name, reasoning: false, contextWindow: 1, maxTokens: 1, input: ['text'] })
 
-// 插件的 Pi 扩展注册的提供方：只有 OAuth；unavailableReason 只在带 agentId 读目录时可能非空。
+// Provider registered by a plugin's Pi extension: OAuth only; unavailableReason
+// can be non-null only when the catalog is read with an agentId.
 export function pluginProvider(id: string, overrides: Partial<Schemas['ModelProvider']> = {}): Schemas['ModelProvider'] {
   return { id, name: 'Grok CLI', source: 'plugin', runtime: 'pi', pluginId: 'grok', pluginDisplayName: { 'zh-CN': 'Grok 订阅', 'en-US': 'Grok subscription' }, unavailableReason: null, apiKeyEnvVars: [], modelCount: 2, authMethods: ['oauth'], ...overrides }
 }
 
-// 本机的 Claude Code（契约 ModelProvider source=local_cli）：用它自己在本机的登录，没有账号；模型是别名，思考等级 low 到 max，没有 off。
+// Local Claude Code (contract ModelProvider source=local_cli): uses its own login on
+// this machine, no account; models are aliases, thinking levels low to max, no off.
 export const claudeCodeProvider: Schemas['ModelProvider'] = { id: 'claude-code', name: 'Claude Code', source: 'local_cli', runtime: 'claude-code', pluginId: null, pluginDisplayName: null, unavailableReason: null, apiKeyEnvVars: [], modelCount: 2, authMethods: [] }
 const claudeCodeModel = (id: string, name: string): Schemas['Model'] => ({ ...model(id, name), reasoning: true, thinkingLevels: ['low', 'medium', 'high', 'xhigh', 'max'], defaultThinkingLevel: 'medium' })
 export const withClaudeCode: Schemas['ModelProviderList'] = { ...providers, providers: [...providers.providers, claudeCodeProvider] }

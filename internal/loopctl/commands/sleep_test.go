@@ -243,7 +243,7 @@ func TestSleepTimeoutNoRetry(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
 		io.Copy(io.Discard, r.Body)
-		// 等到客户端超时；不结束或重发任何平台轮次。
+		// Wait until the client times out; do not end or resend any platform turn.
 		<-r.Context().Done()
 	}))
 	defer s.Close()

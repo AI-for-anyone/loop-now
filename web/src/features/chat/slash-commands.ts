@@ -3,15 +3,18 @@ import { localizedText } from '@/lib/localized-text'
 
 export type Command = Schemas['AgentCommand']
 
-// 只有消息开头严格是 "/pi:<name>" 才交给 Pi 执行（服务端改写成 "/<name>"）；其余 "/" 开头的消息照常发出。
+// Only a message that starts with exactly "/pi:<name>" is handed to Pi to run (the server rewrites it to "/<name>"); other messages
+// starting with "/" are sent as usual.
 export const PI_PREFIX = '/pi:'
 
-// 补全时写进输入框的写法：Pi 的命令是 /pi:<name>，平台内置命令是 /<name>（菜单里平台命令显示的是它的用法 usage）。
+// What gets written into the input box on completion: Pi commands are /pi:<name>, built-in platform commands are /<name> (in the menu
+// a platform command shows its usage instead).
 export function commandText(command: Command): string {
   return command.source === 'pi' ? `${PI_PREFIX}${command.name}` : `/${command.name}`
 }
 
-// 光标还在第一个词里、这个词以 "/" 开头时，返回这个词（菜单按它筛选）；否则为 null。开头有空格不算。
+// When the caret is still in the first word and that word starts with "/", return the word (the menu filters by it); otherwise null.
+// Leading whitespace doesn't count.
 export function slashToken(text: string, caret: number): string | null {
   if (!text.startsWith('/')) return null
   const space = text.search(/\s/)
@@ -19,11 +22,13 @@ export function slashToken(text: string, caret: number): string | null {
   return caret <= end ? text.slice(0, end) : null
 }
 
-// 命令的说明（契约 AgentCommand.description）：Pi 命令是扩展给的原文，平台命令是中英两种说明，按界面语言取字；没有说明时为空串。
+// A command's description (contract AgentCommand.description): for Pi commands it's the extension's original text; platform commands
+// have a Chinese and an English description, picked by UI language; an empty string when there is none.
 export const commandDescription = (command: Command): string => (command.description === null ? '' : localizedText(command.description))
 
-// 按输入的词筛选并排序：补全后的写法（如 pi:<name>）以它开头的最前，其次是命令名以它开头的（没写 pi:），
-// 再次是名称或说明里包含它的。同一档里保持服务端给的顺序。
+// Filter and sort by the typed word: first those whose completed form (e.g. pi:<name>) starts with it, then those whose command name
+// starts with it (pi: not typed),
+// then those whose name or description contains it. Within the same tier, keep the order the server gave.
 export function matchCommands(commands: Command[], token: string): Command[] {
   const query = token.slice(1).toLowerCase()
   const rank = (command: Command) => {
@@ -40,7 +45,8 @@ export function matchCommands(commands: Command[], token: string): Command[] {
     .map((item) => item.command)
 }
 
-// 把第一个词换成命令的写法（如 "/pi:<name>"），其余文字不动；后面没有空白时补一个空格，光标停在空白之后，接着写参数。
+// Replace the first word with the command's form (e.g. "/pi:<name>") and leave the rest of the text alone; if no whitespace follows,
+// add a space; the caret lands after the whitespace, ready for arguments.
 export function applyCommand(text: string, command: Command): { text: string; caret: number } {
   const space = text.search(/\s/)
   const rest = space === -1 ? '' : text.slice(space)

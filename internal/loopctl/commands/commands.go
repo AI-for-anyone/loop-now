@@ -1,4 +1,5 @@
-// Package commands 定义 loopctl 的全部命令。命令定义是解析器、schema、--help 与内置 Skill 的唯一来源。
+// Package commands defines all loopctl commands. The command definitions are the single source for the parser, the
+// schema, --help and the built-in Skill.
 package commands
 
 import (
@@ -23,7 +24,7 @@ var (
 	externalOnly = []cli.Identity{cli.IdentityExternal}
 )
 
-// Registry 返回 loopctl 的完整命令表。
+// Registry returns loopctl's complete command table.
 func Registry() *cli.Registry {
 	r := cli.NewRegistry()
 	r.Group("config", "Local connection configuration of an external identity (~/.config/loopctl/config.json)")
@@ -62,12 +63,12 @@ func Registry() *cli.Registry {
 	return r
 }
 
-// agentArg 是引用 Agent 的位置参数。
+// agentArg is the positional argument that refers to an Agent.
 var agentArg = cli.Arg{Name: "agent", Description: "The Agent's ID, or its address: organization/project/Agent, or project/Agent within the same organization; for an Agent held by the platform, just its name"}
 
 func intp(n int) *int { return &n }
 
-// call 发出请求并返回服务端的响应体，作为命令的 data。
+// call sends the request and returns the server's response body as the command's data.
 func call(ctx context.Context, inv *cli.Invocation, r conn.Request) (any, error) {
 	resp, e := inv.Client.Do(ctx, r)
 	if e != nil {
@@ -76,12 +77,12 @@ func call(ctx context.Context, inv *cli.Invocation, r conn.Request) (any, error)
 	return resp.Data, nil
 }
 
-// get 发出可以重试的 GET 请求。
+// get sends a GET request that may be retried.
 func get(ctx context.Context, inv *cli.Invocation, query url.Values, path ...string) (any, error) {
 	return call(ctx, inv, conn.Request{Method: http.MethodGet, Path: path, Query: query, Retry: true})
 }
 
-// send 发出不重试的写请求；body 为空时不带请求体。
+// send sends a write request that is not retried; when body is nil, no request body is sent.
 func send(ctx context.Context, inv *cli.Invocation, method string, body any, path ...string) (any, error) {
 	r := conn.Request{Method: method, Path: path}
 	if body != nil {
@@ -96,10 +97,11 @@ func send(ctx context.Context, inv *cli.Invocation, method string, body any, pat
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
-// IsUUID 判断是否为 8-4-4-4-12 的十六进制 UUID 写法。
+// IsUUID reports whether s is written as an 8-4-4-4-12 hexadecimal UUID.
 func IsUUID(s string) bool { return uuidPattern.MatchString(s) }
 
-// agentID 把 <agent> 参数解析为 Agent ID：UUID 直接使用，其余按地址调用 GET /agents?address= 查找。
+// agentID resolves the <agent> argument to an Agent ID: a UUID is used directly, anything else is looked up as an
+// address with GET /agents?address=.
 func agentID(ctx context.Context, inv *cli.Invocation, ref string) (string, error) {
 	if IsUUID(ref) {
 		return ref, nil
@@ -126,7 +128,7 @@ func agentID(ctx context.Context, inv *cli.Invocation, ref string) (string, erro
 	}
 }
 
-// readInput 读取 path-or-stdin 选项指向的内容：- 表示标准输入。
+// readInput reads the content a path-or-stdin option points to; - means standard input.
 func readInput(inv *cli.Invocation, flag string) ([]byte, error) {
 	v := inv.String(flag)
 	if v == "-" {
@@ -155,7 +157,7 @@ func cause(err error) error {
 	return err
 }
 
-// text 读取 --text 或 --text-file 提供的正文，正文不能为空。
+// text reads the body text given by --text or --text-file; it may not be empty.
 func text(inv *cli.Invocation) (string, error) {
 	var s string
 	if inv.Has("text") {

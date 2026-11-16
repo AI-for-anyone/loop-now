@@ -13,13 +13,14 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// sourceRoot 是经 os.Root 打开的来源 HOME：Windows 上 os.Root 以 O_NOFOLLOW_ANY 打开，路径中任何一段是符号链接或 junction 都失败，
-// 与 Unix 上逐段 NOFOLLOW 的效果一致。
+// sourceRoot is the source HOME opened through os.Root: on Windows os.Root opens with O_NOFOLLOW_ANY, so it fails if
+// any segment of the path is a symlink or junction, which matches the effect of per-segment NOFOLLOW on Unix.
 type sourceRoot struct{ root *os.Root }
 
 func (r *sourceRoot) Close() error { return r.root.Close() }
 
-// id 返回来源根目录的卷序列号／文件索引（GetFileInformationByHandle），作为来源标识的一部分。
+// id returns the volume serial number/file index of the source root directory (GetFileInformationByHandle), as part
+// of the source identity.
 func (r *sourceRoot) id() (string, error) {
 	f, err := r.root.Open(".")
 	if err != nil {
@@ -53,7 +54,8 @@ func (r *sourceRoot) open(name string, directory bool) (*os.File, error) {
 		}
 		return nil, fail("source_unreadable", "source")
 	}
-	// 中间各段必须是目录：os.Root 打开时已经按目录解析，这里只核对最后一段的类型由调用方完成。
+	// Intermediate segments must be directories: os.Root already resolves them as directories when opening; checking
+	// the type of the last segment is left to the caller.
 	if strings.Contains(name, "\\") {
 		f.Close()
 		return nil, fail("unsupported", "source_reference")

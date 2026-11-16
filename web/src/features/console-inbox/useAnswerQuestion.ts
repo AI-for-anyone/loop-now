@@ -7,13 +7,15 @@ import { keys } from '@/api/queries'
 
 type Message = Schemas['InboxMessage']
 
-// 原题已不能回答时服务端返回的错误：只提交一次，不改成回复别的消息，也不自动重试。
+// Errors the server returns when the original question can no longer be answered: submit only once, don't turn it into a
+// reply to another message, and don't retry automatically.
 const terminal = ['already_answered', 'question_expired', 'question_closed', 'task_conflict', 'not_found']
 export const isTerminalAnswerError = (error: unknown) => error instanceof ApiError && terminal.includes(error.code)
 
-// 回答一条问题：点选项（optionId）或用输入框写文字（text），始终提交到这条原消息。
-// 是否记为答案以响应里的 answerTo 为准：answerTo 不是这条原题时，文字已存为普通留言（outcome 为 ordinary）。
-// 被拒绝时错误详情里带回最新的问题，在页面上替换原来的状态。
+// Answer a question: click an option (optionId) or write text in the composer (text); always submitted to the original message.
+// Whether it counts as the answer is decided by answerTo in the response: when answerTo isn't this original question, the
+// text was saved as an ordinary note (outcome is ordinary).
+// When rejected, the error details carry the latest question, which replaces the old state on the page.
 export function useAnswerQuestion() {
   const reply = useReplyInbox()
   const client = useQueryClient()
@@ -29,7 +31,7 @@ export function useAnswerQuestion() {
         ...(input.text?.trim() ? { text: input.text } : {}),
         ...(message.from.kind === 'agent' ? { whenBusy: input.whenBusy ?? 'queue' } : {}),
       })
-      // 先放进线索的缓存，随后的刷新失败也不丢掉这次的结果。
+      // Put it in the thread cache first, so this result isn't lost even if the following refresh fails.
       client.setQueryData<Schemas['InboxThread']>(keys.inboxThread(result.threadId), (current) =>
         current ? { ...current, messages: [...current.messages.filter((item) => item.id !== result.id), result] } : current,
       )
@@ -39,14 +41,16 @@ export function useAnswerQuestion() {
       if (isTerminalAnswerError(error)) setOutcome('rejected')
       throw error
     } finally {
-      // 原题所在的各处（线索、Agent 对话、任务节点的 Inbox 记录、任务详情）与待你处理都重新获取最新状态。
+      // Everywhere the original question appears (the thread, the Agent chat, the task node's Inbox records, the task details)
+      // and "Needs you" refetch the latest state.
       for (const queryKey of [keys.inboxThread(message.threadId), ['consoleMessages'], consoleKeys.pending, ['taskInbox'], ['task']]) void client.invalidateQueries({ queryKey })
     }
   }
   return { submit, pending: reply.isPending, error: reply.error, outcome, latest, reset: () => { reply.reset(); setOutcome(null) } }
 }
 
-// 发给操作者的未读消息大部分进入视野时标为已读。浏览器不支持 IntersectionObserver 时不自动标记。
+// An unread message to the operator is marked read once most of it scrolls into view. Browsers without IntersectionObserver
+// don't mark automatically.
 export function useReadOnView(ref: RefObject<HTMLElement | null>, message: Message) {
   const client = useQueryClient()
   const unread = message.to.kind === 'console' && !message.readAt && !message.cancelledAt
@@ -60,7 +64,7 @@ export function useReadOnView(ref: RefObject<HTMLElement | null>, message: Messa
         marked.current = true
         observer.disconnect()
         markMessageRead(client, message.id).catch(() => {
-          // 标记失败只影响已读状态；这条消息下次显示时再标。
+          // A failed mark only affects the read state; the message is marked again the next time it is shown.
           marked.current = false
         })
       },

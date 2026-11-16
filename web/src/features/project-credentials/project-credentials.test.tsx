@@ -78,7 +78,7 @@ describe('项目账号正式HTTP fixture', () => {
     await env.user.click(within(area).getByRole('button', { name: '恢复当前提供方自动取用' }))
     await within(area).findByText('自动使用唯一对应的项目账号')
     expect(writes).toEqual([{ purpose: 'model', provider: 'anthropic', accountId: null, expectedConfigVersion: 1 }])
-    // 模拟正式GET切provider后的权威返回，不从null猜mode。
+    // Simulate the authoritative response of the real GET after the provider switch, instead of guessing mode from null.
     const b = { ...agent, configVersion: 3, model: { provider: 'openai', modelId: 'gpt-x' } }
     latestAgent = b
     data = { ...data, configVersion: 3, selections: [...data.selections, { ...emptySelections(b).selections[0], mode: 'legacy_cleared', selectedAccountId: null, resolvedAccountId: null, resolvedVersionId: null, status: 'not_configured' }] }
@@ -229,7 +229,7 @@ describe('项目OAuth正式HTTP fixture，供应商不导航', () => {
     await user.click(screen.getByRole('button', { name: '登录 OpenAI Codex' }))
     await waitFor(() => expect(finish).toBeDefined())
     await act(async () => { void router.navigate('/other') })
-    // 名称草稿只有一个离开守卫；确认后卸载旧拥有者。
+    // The name draft has only one leave guard; after confirming, the old owner is unmounted.
     const dialog = await screen.findByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: '离开' }))
     await screen.findByText('另一个项目')
@@ -312,7 +312,7 @@ describe('项目OAuth正式HTTP fixture，供应商不导航', () => {
     if (failure === 'url-rejected') expect(child.location.replace).not.toHaveBeenCalled()
     else {
       await user.click(screen.getByRole('link', { name: '打开授权页' }))
-      expect(window.open).toHaveBeenCalledOnce() // 只有初次start预留；手动继续走原生链接。
+      expect(window.open).toHaveBeenCalledOnce() // Only the initial start reserves a window; continuing by hand goes through the native link.
       expect(screen.getByRole('link', { name: '打开授权页' })).toHaveAttribute('href', op.authorizationUrl)
       op.authorizationUrl += '&originator=pi'
       await act(() => client.invalidateQueries({ queryKey: credentialKeys.operations(defaultProject.id) }))
@@ -336,7 +336,7 @@ describe('项目OAuth正式HTTP fixture，供应商不导航', () => {
   })
 })
 
-// 改版“一张印出来的纸”第 3 步：项目设置里账号排在“项目账号”这个编号分区里。
+// "Printed sheet" redesign, step 3: in project settings the accounts sit in the numbered section “项目账号” (Project accounts).
 describe('嵌在项目设置的编号分区里', () => {
   it('模型账号与 CLI 账号是分区里的两块：标题小一号（h3），不是卡片，两块之间一道虚线', async () => {
     server.use(directory, http.get(apiUrl('/projects/:projectId/credential-accounts'), () => HttpResponse.json({ projectId: defaultProject.id, credentialsRevision: 1, accounts: [] })))

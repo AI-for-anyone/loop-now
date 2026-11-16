@@ -23,7 +23,8 @@ type piDump struct {
 	SystemPrompt string   `json:"systemPrompt"`
 }
 
-// real 解析软链接（macOS 的临时目录 /var 指向 /private/var，Pi 报告的工作目录是解析后的路径）。
+// real resolves symlinks (on macOS the temporary directory /var points to /private/var, and the working directory Pi
+// reports is the resolved path).
 func real(t *testing.T, p string) string {
 	t.Helper()
 	r, err := filepath.EvalSymlinks(p)
@@ -46,8 +47,9 @@ func readDump(t *testing.T, path string) piDump {
 	return d
 }
 
-// Pi 启动时，追加的系统提示带上项目（平台 Agent 为全局）上下文入口与两个文件夹的绝对路径；Pi 的工作目录就是 Agent 文件夹；
-// 入口修改要等 Pi 重启才生效；平台自有目录中的入口文件在启动时删除。
+// When Pi starts, the appended system prompt carries the context entry of the project (global for a platform Agent) and
+// the absolute paths of the two folders; Pi's working directory is the Agent folder; changes to the entry take effect
+// only after Pi restarts; entry files in the platform's own directory are deleted at startup.
 func TestFolderContextInjectionActualAppFakePi(t *testing.T) {
 	w := promoteWorld(t)
 	dump := filepath.Join(t.TempDir(), "fake-env.json")
@@ -91,7 +93,7 @@ func TestFolderContextInjectionActualAppFakePi(t *testing.T) {
 			t.Fatalf("平台目录中的入口文件应在启动时删除：%s", p)
 		}
 	}
-	// 入口修改不触发重启：复用中的 Pi 仍是旧提示。
+	// Changing the entry does not trigger a restart: the Pi being reused still has the old prompt.
 	s.must(200, "PUT", "/projects/"+project.String()+"/context-folder/content?path=AGENTS.md", []byte("项目约定 v2"))
 	if err := os.Remove(dump); err != nil {
 		t.Fatal(err)
@@ -101,7 +103,7 @@ func TestFolderContextInjectionActualAppFakePi(t *testing.T) {
 	if _, err := os.Stat(dump); !os.IsNotExist(err) {
 		t.Fatal("入口修改不应让 Pi 重启")
 	}
-	// 配置变化导致重启后读到新入口。
+	// After a config change causes a restart, the new entry is read.
 	s.must(200, "PATCH", path, map[string]any{"prompt": "新的提示", "expectedPromptVersion": agent.PromptVersion})
 	s.must(202, "POST", path+"/messages", map[string]any{"text": "!text=third"})
 	s.waitIdle(path)
@@ -109,7 +111,7 @@ func TestFolderContextInjectionActualAppFakePi(t *testing.T) {
 		t.Fatalf("重启后应读到新入口：%s", d.SystemPrompt)
 	}
 
-	// 平台 Agent：全局上下文文件夹，看不到项目的。
+	// Platform Agent: the global context folder; it cannot see the project's.
 	ppath, _ := s.createPlatformAgent("PlatformCtx")
 	s.must(200, "PUT", ppath+"/model-credential", map[string]any{"provider": "anthropic", "key": "sk-test"})
 	s.must(200, "PUT", "/context-folder/content?path=AGENTS.md", []byte("全局约定"))
@@ -121,7 +123,8 @@ func TestFolderContextInjectionActualAppFakePi(t *testing.T) {
 	}
 }
 
-// 新任务（快照 v9）开始时复制基础 Agent 的整个文件夹（APFS 克隆）：实例在副本中工作，改动不影响原文件夹；不再冻结文件夹来源。
+// A new task (snapshot v9) copies the base Agent's whole folder when it starts (APFS clone): the instance works in the
+// copy and its changes do not affect the original folder; folder sources are no longer captured.
 func TestTaskCopiesAgentFolderActualAppFakePi(t *testing.T) {
 	w := promoteWorld(t)
 	dump := filepath.Join(t.TempDir(), "fake-env.json")
@@ -181,7 +184,7 @@ func TestTaskCopiesAgentFolderActualAppFakePi(t *testing.T) {
 	if err := json.Unmarshal(snapshot, &env); err != nil || env.SchemaVersion != 10 || sources != "[]" {
 		t.Fatalf("新任务应是快照 v10、没有冻结来源：%d %s %v", env.SchemaVersion, sources, err)
 	}
-	if !strings.Contains(logs.String(), "任务工作目录已复制") || !strings.Contains(logs.String(), "clonefile") {
+	if !strings.Contains(logs.String(), "copied the task working directory") || !strings.Contains(logs.String(), "clonefile") {
 		t.Fatalf("应记录复制方式（APFS 克隆）：%s", logs.String())
 	}
 }

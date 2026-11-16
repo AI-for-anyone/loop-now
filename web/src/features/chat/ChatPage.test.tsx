@@ -25,7 +25,8 @@ function acceptSend(sent: Schemas['SendMessageInput'][], runOverrides: Partial<S
   })
 }
 
-// 发送请求停在闸门上，由测试放行；fail 为真时放行后返回 500。每次放行后为下一次请求换一道新闸门。
+// Send requests wait at a gate until the test releases them; when fail is true, a released
+// request returns 500. After each release a new gate is set up for the next request.
 function gatedSend(sent: Schemas['SendMessageInput'][], { fail = false } = {}) {
   let open = () => {}
   let gate = Promise.resolve()
@@ -111,7 +112,8 @@ describe('发送消息', () => {
   })
 
   it('Claude Code 只显示通用平台命令，Pi 的 Agent 同时支持 /pi: 菜单', async () => {
-    // 哪些命令能用由服务端的命令列表说了算：Claude Code 的 Agent 上 /compact、/export、/resume 标为不可用。
+    // The server's command list decides which commands are available: on a
+    // Claude Code Agent, /compact, /export and /resume are marked unavailable.
     const agent = makeAgent({ model: { provider: 'claude-code', modelId: 'sonnet' }, runtime: 'claude-code' })
     const claude = await renderChat({ agent, handlers: [http.get(apiUrl(`/agents/${agent.id}/commands`), () => HttpResponse.json(claudeCodeList()))] })
     await claude.user.type(screen.getByLabelText('消息'), '/')
@@ -266,13 +268,14 @@ describe('忙时发送直接排队', () => {
     })
     const existingItem = makeQueueItem({ runId: existing.id, text: '原排队' })
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: current, queued: { interrupt: 0, normal: 1 } }, '', [existing], [existingItem]))
-    // 输入框为空时是停止，有文字时是排队发送。
+    // With an empty input the button stops the current reply; with text in the input it queues the message.
     expect(screen.getByRole('button', { name: '停止当前回复' })).toBeEnabled()
     await user.type(screen.getByLabelText('消息'), '新排队')
     await user.click(screen.getByRole('button', { name: '排队发送' }))
     await waitFor(() => expect(sent).toEqual([{ text: '新排队', whenBusy: 'queue' }]))
     expect(screen.queryByRole('dialog')).toBeNull()
-    // 排队消息显示在输入框上方的排队托盘（以服务端推送的列表为准），不在对话流中。
+    // Queued messages appear in the queue tray above the input (the list
+    // pushed by the server is authoritative), not in the conversation stream.
     await emit('queue.updated', { queuedRuns: [existing], items: [existingItem, makeQueueItem({ text: '新排队' })] })
     const log = screen.getByRole('log')
     const queue = screen.getByRole('region', { name: '排队消息' })
@@ -359,7 +362,7 @@ describe('排队显示与回复状态', () => {
     expect(screen.getByText('失败：凭证不可用（gh 凭证无法解密）')).toBeInTheDocument()
     expect(screen.getByText('已打断')).toBeInTheDocument()
     expect(screen.getByText('半截')).toBeInTheDocument()
-    // 头部也显示当前阶段，这里只看对话里的那一轮。
+    // The header also shows the current phase; here we only look at the turn in the conversation.
     expect(await within(screen.getByRole('log')).findByText('等待执行名额')).toBeInTheDocument()
   })
 

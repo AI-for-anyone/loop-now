@@ -42,14 +42,14 @@ import (
 	"loop-now/internal/testutil/sqlitetest"
 )
 
-// quickExec 立即完成回复；消息含 "block" 时阻塞，直到被打断或放行。
+// quickExec completes replies immediately; a message containing "block" blocks until it is interrupted or released.
 type quickExec struct {
 	mu       sync.Mutex
 	running  map[uuid.UUID]chan struct{}
 	sessions []executor.ManagedSession
-	// 不为空时平台命令的维护操作返回这些错误。
+	// When set, the platform commands' maintenance operations return these errors.
 	stopErr, exportErr, listErr error
-	// compactSkip 不为空时手动压缩以“没有压缩”正常完成（原因即它的值）。
+	// When compactSkip is set, manual compaction completes normally as "nothing compacted", with it as the reason.
 	compactSkip string
 }
 
@@ -150,11 +150,11 @@ type env struct {
 	conv   *conversation.Service
 	dc     store.DefaultContext
 
-	ext          *httptest.Server // 对外端口（按需启动）
+	ext          *httptest.Server // external port (started on demand)
 	extV, agentV *contracttest.Validator
 }
 
-// agents 返回默认项目的 Agent 列表与创建路径。
+// agents returns the path of the default project's Agent list, which is also the create path.
 func (e *env) agents() string { return "/projects/" + e.dc.Project.ID.String() + "/agents" }
 
 func newEnv(t *testing.T) *env {
@@ -216,7 +216,7 @@ func newEnv(t *testing.T) *env {
 	return &env{t: t, srv: srv, api: api, v: v, client: v.Client(), co: co, st: st, conv: conv, dc: dc, ex: ex}
 }
 
-// do 发送请求（经契约校验），返回状态码与响应体。
+// do sends a request (validated against the contract) and returns the status code and the response body.
 func (e *env) do(method, path string, body any, hdr ...string) (int, []byte, http.Header) {
 	e.t.Helper()
 	var r io.Reader
@@ -286,7 +286,8 @@ func zipUpload(t *testing.T, name, desc string) *multipartBody {
 	return &multipartBody{data: buf.Bytes(), contentType: mw.FormDataContentType()}
 }
 
-// TestRouteCoverage 双向比对路由表与契约：路径与方法、operationId，以及控制台契约中的 x-access。
+// TestRouteCoverage compares the route table and the contract in both directions: paths and methods, operationId, and
+// x-access in the console contract.
 func TestRouteCoverage(t *testing.T) {
 	e := newEnv(t)
 	check := func(file string, routes []httpapi.Route, withAccess bool) {
@@ -396,16 +397,18 @@ func TestHostOriginAndCORS(t *testing.T) {
 	if r := send("GET", "/healthz", "", "", nil); r.StatusCode != http.StatusOK {
 		t.Errorf("/healthz 应可用：%d", r.StatusCode)
 	}
-	// 服务端自己提供的控制台是同源：写请求带的 Origin 等于本请求的 scheme://Host，不需要白名单，也不回 CORS 头。
+	// The console served by the server itself is same-origin: the Origin on write requests equals this request's
+	// scheme://Host, so it needs no allowlist and gets no CORS headers.
 	if r := send("POST", "/api/v1/platform/agents", e.srv.URL, "", strings.NewReader(`{"name":"同源","model":{"provider":"anthropic","modelId":"claude-x"}}`)); r.StatusCode != http.StatusCreated || r.Header.Get("Access-Control-Allow-Origin") != "" {
 		t.Errorf("同源的写请求应放行且不回 CORS 头：%d %v", r.StatusCode, r.Header)
 	}
-	// 同端口的另一个允许的主机名不是同源。
+	// Another allowed host name on the same port is not same-origin.
 	other := strings.Replace(e.srv.URL, "127.0.0.1", "localhost", 1)
 	if r := send("POST", "/api/v1/platform/agents", other, "", strings.NewReader(`{"name":"跨源","model":{"provider":"anthropic","modelId":"claude-x"}}`)); r.StatusCode != http.StatusForbidden {
 		t.Errorf("Host 与 Origin 不一致时不是同源：%d", r.StatusCode)
 	}
-	// 没有白名单（LOOP_NOW_CONSOLE_ORIGINS=none）时，开发用的 5173 也被拒绝，同源照样放行。
+	// Without an allowlist (LOOP_NOW_CONSOLE_ORIGINS=none), even the development port 5173 is rejected, while
+	// same-origin still passes.
 	e.api.O.ConsoleOrigins = nil
 	locked := httptest.NewServer(e.api.Handler())
 	defer locked.Close()
@@ -418,7 +421,8 @@ func TestHostOriginAndCORS(t *testing.T) {
 	}
 }
 
-// 控制台端口上 API 之外的路径交给控制台的静态文件；API、Agent 接口与 /healthz 不受影响，对外端口不提供控制台。
+// On the console port, paths outside the API go to the console's static files; the API, the Agent API and /healthz are
+// unaffected, and the external port does not serve the console.
 func TestConsoleServedBesideAPI(t *testing.T) {
 	e := newEnv(t)
 	e.api.O.Console = webui.Handler(fstest.MapFS{"index.html": {Data: []byte("<title>console</title>")}})
@@ -486,7 +490,7 @@ func TestAllEndpoints(t *testing.T) {
 	e.expect(200, "PATCH", a, map[string]any{"prompt": "新的", "expectedPromptVersion": 1})
 	e.expect(404, "GET", "/agents/"+uuid.NewString(), nil)
 
-	// Agent 文件夹：直接读写工作目录
+	// Agent folder: reads and writes the working directory directly
 	e.expect(200, "PUT", a+"/folder/content?path=guide/a.md", []byte("v1"))
 	e.expect(409, "PUT", a+"/folder/content?path=guide/a.md&create=true", []byte("v2"))
 	e.expect(200, "PUT", a+"/folder/content?path=guide/a.md", []byte("v2"))
@@ -501,7 +505,7 @@ func TestAllEndpoints(t *testing.T) {
 	e.expect(204, "DELETE", a+"/folder/entries?path=docs", nil)
 	e.expect(404, "GET", "/agents/"+uuid.NewString()+"/folder/entries", nil)
 
-	// 可用 CLI 与凭证
+	// Available CLIs and credentials
 	e.expect(200, "PUT", a+"/clis/gh", nil)
 	e.expect(200, "PUT", a+"/clis/jq", nil)
 	private := e.platformAgent("端点私有凭证")
@@ -543,7 +547,7 @@ func TestAllEndpoints(t *testing.T) {
 	e.expect(204, "DELETE", ks, nil)
 	e.expect(204, "DELETE", "/skills/"+md.ID.String(), nil)
 
-	// 对话
+	// Conversation
 	sent := decode[apitypes.SendMessageResult](t, e.expect(202, "POST", a+"/messages", map[string]any{"text": "block 你好"}))
 	busy := decode[apitypes.ErrorBody](t, e.expect(409, "POST", a+"/messages", map[string]any{"text": "第二条"}))
 	if busy.Error.Code != "agent_busy" {
@@ -567,8 +571,9 @@ func TestAllEndpoints(t *testing.T) {
 	e.expect(404, "GET", a, nil)
 }
 
-// waitIdle 等到 Agent 完全空闲：数据库中没有进行中或排队的执行，且忙闲锁已交接释放。
-// 执行结束写库与交接锁之间有一个短暂的窗口，只看状态接口时紧接着发送的消息可能被判为正忙。
+// waitIdle waits until the Agent is fully idle: no running or queued runs in the database, and the busy lock has been
+// handed over and released. There is a short window between a run writing its end to the database and handing over the
+// lock; when looking only at the status endpoint, a message sent right afterwards may be judged busy.
 func waitIdle(t *testing.T, e *env, a string) {
 	t.Helper()
 	agentID := strings.TrimPrefix(a, "/agents/")
@@ -585,12 +590,12 @@ func waitIdle(t *testing.T, e *env, a string) {
 
 type sseEvent struct{ id, event, data string }
 
-// readSSE 读取事件流，把事件发到通道，直到连接关闭。
+// readSSE reads the event stream and sends the events to a channel until the connection closes.
 func readSSE(t *testing.T, e *env, a, lastID string) (<-chan sseEvent, func()) {
 	return readSSEPath(t, e, a+"/events", lastID)
 }
 
-// readSSEPath 同 readSSE，但使用完整路径（可带查询参数）。
+// readSSEPath is like readSSE but takes the full path (query parameters allowed).
 func readSSEPath(t *testing.T, e *env, path, lastID string) (<-chan sseEvent, func()) {
 	ctx, cancel := context.WithCancel(context.Background())
 	req, _ := http.NewRequestWithContext(ctx, "GET", e.srv.URL+"/api/v1"+path, nil)
@@ -688,7 +693,7 @@ func TestSSE(t *testing.T) {
 		}
 	}
 
-	// 断线后带上次事件 ID 重连：不推快照，补发之后的事件。
+	// Reconnecting with the last event ID after a disconnect: no snapshot, the later events are sent.
 	mid := events[1].id
 	ch2, stop2 := readSSE(t, e, a, mid)
 	first := next(t, ch2)
@@ -697,14 +702,14 @@ func TestSSE(t *testing.T) {
 	}
 	stop2()
 
-	// 超出保留范围：推送快照。
+	// Outside the retained range: a snapshot is pushed.
 	ch3, stop3 := readSSE(t, e, a, "1-0")
 	if ev := next(t, ch3); ev.event != "snapshot" {
 		t.Fatalf("超出保留范围应推送快照：%+v", ev)
 	}
 	stop3()
 
-	// 会话重开事件。
+	// Session reopen event.
 	ch4, stop4 := readSSE(t, e, a, "")
 	next(t, ch4)
 	e.expect(200, "POST", a+"/session/reset", nil)
@@ -718,8 +723,8 @@ func TestSSE(t *testing.T) {
 
 var _ = store.Agent{}
 
-// trimStream 追加比事件流保留条数（env 里是 1000）更多的填充事件，使之前的事件全部被裁掉：
-// 相当于原来 Redis 中的事件丢失，或服务端重启后事件流从空开始。
+// trimStream appends more filler events than the event stream retains (1000 in env), so that all earlier events are
+// trimmed: the same as the events in Redis being lost, or the event stream starting empty after a server restart.
 func trimStream(t *testing.T, add func() (string, error)) {
 	t.Helper()
 	for range 1001 {

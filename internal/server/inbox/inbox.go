@@ -1,6 +1,7 @@
-// Package inbox 实现 Inbox：Agent、控制台操作者与外部身份之间的留言。
-// 包括收件地址的解析、跨组织发送权限、发送与回复、列表与读取、线索，以及收件箱事件流。
-// 发给 Agent 的消息由对话服务在同一事务中安排平台提醒。
+// Package inbox implements the Inbox: messages between Agents, console operators and external identities. It covers
+// resolving recipient addresses, cross-organization send permissions, sending and replying, listing and reading,
+// threads, and the Inbox event stream. For messages addressed to an Agent, the conversation service schedules a
+// platform reminder in the same transaction.
 package inbox
 
 import (
@@ -22,24 +23,24 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// Options 是 Inbox 的参数。
+// Options holds the Inbox parameters.
 type Options struct {
 	QuestionTTL  time.Duration
-	MaxMessage   int64 // 正文的字节上限
-	PreviewChars int   // 摘要中正文的字符数
-	PageDefault  int   // 每页默认条数
-	PageMax      int   // 每页条数上限
+	MaxMessage   int64 // byte limit of the body
+	PreviewChars int   // number of body characters in a summary
+	PageDefault  int   // default number of items per page
+	PageMax      int   // maximum number of items per page
 	DefaultOrgID uuid.UUID
 }
 
-// Deliverer 在一个事务中写入发给 Agent 的消息并安排平台提醒（由对话服务实现）；
-// InboxRead 在收件 Agent 读取消息后推送排队列表的变化。
+// Deliverer writes a message addressed to an Agent and schedules a platform reminder in one transaction (implemented by
+// the conversation service); InboxRead pushes the change of the queue list after the recipient Agent has read messages.
 type Deliverer interface {
 	DeliverInbox(ctx context.Context, msg store.NewInboxMessage) error
 	InboxRead(ctx context.Context, eff store.InboxReadEffect)
 }
 
-// Service 是 Inbox 服务。
+// Service is the Inbox service.
 type TaskRouter interface {
 	ResolveTaskRecipient(context.Context, uuid.UUID, uuid.UUID) (store.Party, bool, error)
 	DeliverInbox(context.Context, store.NewInboxMessage) error
@@ -53,7 +54,7 @@ type Service struct {
 	Log   *slog.Logger
 }
 
-// Party 返回身份对应的参与方。
+// Party returns the party that corresponds to the principal.
 func Party(p auth.Principal) store.Party {
 	switch p.Kind {
 	case auth.KindAgent:
@@ -69,27 +70,29 @@ func Party(p auth.Principal) store.Party {
 	return store.Party{Kind: "invalid"}
 }
 
-// ---------- 地址与权限 ----------
+// ---------- Addresses and permissions ----------
 
-// Participant 是判断跨组织发送权限所需的信息。
+// Participant is the information needed to decide cross-organization send permissions.
 type Participant struct {
 	Kind           auth.Kind
-	OrgID          *uuid.UUID // Agent 所属项目的组织；平台持有的 Agent、控制台操作者与外部身份为空
-	PlatformHeld   bool       // 平台持有的 Agent
-	ProjectManager bool       // 担任项目 Manager 的 Agent
+	OrgID          *uuid.UUID // org of the Agent's project; nil for platform-held Agents, console operators, external identities
+	PlatformHeld   bool       // an Agent held by the platform
+	ProjectManager bool       // an Agent that is a project Manager
 }
 
 func agentParticipant(a store.Agent) Participant {
 	return Participant{Kind: auth.KindAgent, OrgID: a.OrgID, PlatformHeld: a.ProjectID == nil, ProjectManager: a.IsManager}
 }
 
-// AuthorizeSend 判断 from 能否向 to 发送新消息：
-//   - 回复（含在线索中追加）不受限制；
-//   - 控制台操作者与外部身份属于平台，可以发给任何组织的 Agent；发给人的消息不受限制；
-//   - 平台持有的 Agent 可以发给任何组织；组织内的 Agent 可以发给同组织的 Agent 与平台持有的 Agent；
-//   - 项目 Manager 还可以发给其他组织的项目 Manager。
+// AuthorizeSend decides whether from may send a new message to to:
+//   - replies (including appending within a thread) are not restricted;
+//   - console operators and external identities belong to the platform and may send to Agents of any organization;
+//     messages to people are not restricted;
+//   - platform-held Agents may send to any organization; Agents within an organization may send to Agents of the same
+//     organization and to platform-held Agents;
+//   - project Managers may also send to project Managers of other organizations.
 //
-// 不允许时返回 forbidden。
+// When not allowed it returns forbidden.
 func AuthorizeSend(from, to Participant, isReply bool) error {
 	if isReply || from.Kind != auth.KindAgent || to.Kind != auth.KindAgent {
 		return nil
@@ -105,17 +108,18 @@ func AuthorizeSend(from, to Participant, isReply bool) error {
 	return apperr.Forbidden("不能向其他组织的 Agent 发送新消息（只有项目 Manager 之间可以）")
 }
 
-// recipient 是解析后的收件人。
+// recipient is a resolved recipient.
 type recipient struct {
 	taskID    uuid.UUID
 	party     store.Party
 	forwarded bool
-	agent     *store.Agent // 收件人是 Agent 时
+	agent     *store.Agent // when the recipient is an Agent
 }
 
 func notFoundRecipient() error { return apperr.NotFound("收件人") }
 
-// resolve 按发件人解析收件地址；sender 为发件 Agent（其他身份为空），两段地址按它所在的组织解析。
+// resolve resolves a recipient address for the sender; sender is the sending Agent (nil for other principals), and
+// two-segment addresses are resolved within its organization.
 func (s *Service) resolve(ctx context.Context, sender *store.Agent, addr string) (recipient, error) {
 	if addr == "" {
 		return recipient{}, apperr.Invalid("to", "收件地址不能为空")
@@ -155,7 +159,7 @@ func (s *Service) resolve(ctx context.Context, sender *store.Agent, addr string)
 	return recipient{party: store.AgentParty(a.ID), agent: &a}, nil
 }
 
-// findAgent 按地址查找可寻址的 Agent（不含 `@` 开头与带 `#` 的地址）。
+// findAgent finds an addressable Agent by address (not for addresses starting with `@` or containing `#`).
 func (s *Service) findAgent(ctx context.Context, sender *store.Agent, addr string) (store.Agent, error) {
 	segs := strings.Split(addr, "/")
 	switch len(segs) {
@@ -187,7 +191,8 @@ func notFoundAs(err error) error {
 	return err
 }
 
-// FindAgent 按地址查找 Agent（控制台与外部身份调用，两段地址按默认组织解析）；找不到时返回 nil。
+// FindAgent finds an Agent by address (called for the console and external identities; two-segment addresses are
+// resolved within the default organization); nil when not found.
 func (s *Service) FindAgent(ctx context.Context, addr string) (*store.Agent, error) {
 	if addr == "" || strings.HasPrefix(addr, "@") || strings.Contains(addr, "#") {
 		return nil, nil
@@ -202,7 +207,7 @@ func (s *Service) FindAgent(ctx context.Context, addr string) (*store.Agent, err
 	return &a, nil
 }
 
-// sender 返回发件身份的参与方；Agent 必须仍可寻址。
+// sender returns the party of the sending principal; an Agent must still be addressable.
 func (s *Service) sender(ctx context.Context, p auth.Principal) (Participant, *store.Agent, error) {
 	if p.Kind != auth.KindAgent {
 		return Participant{Kind: p.Kind}, nil, nil
@@ -217,7 +222,7 @@ func (s *Service) sender(ctx context.Context, p auth.Principal) (Participant, *s
 	return agentParticipant(a), &a, nil
 }
 
-// ---------- 发送与回复 ----------
+// ---------- Sending and replying ----------
 
 func (s *Service) checkText(text, whenBusy string) error {
 	if strings.TrimSpace(text) == "" {
@@ -232,7 +237,7 @@ func (s *Service) checkText(text, whenBusy string) error {
 	return nil
 }
 
-// Send 发送一条消息，开启新线索。
+// Send sends a message that starts a new thread.
 func (s *Service) Send(ctx context.Context, p auth.Principal, to, text, whenBusy string, extra ...QuestionInput) (store.InboxMessage, error) {
 	if err := s.checkText(text, whenBusy); err != nil {
 		return store.InboxMessage{}, err
@@ -280,8 +285,9 @@ func (s *Service) Send(ctx context.Context, p auth.Principal, to, text, whenBusy
 	return s.deliver(ctx, msg)
 }
 
-// pluginSend 检查插件发件（SPEC §11）：只能发给平台 Agent 或启用了该插件的项目里的 Agent，不能提问；
-// 登记插件一方，并在消息上记下渠道与发件名称。
+// pluginSend checks a message sent by a plugin (SPEC §11): it may only go to a platform Agent or to an Agent in a
+// project that has enabled the plugin, and it cannot ask a question; it registers the plugin party and records the
+// channel and sender name on the message.
 func (s *Service) pluginSend(ctx context.Context, p auth.Principal, rcpt recipient, msg *store.NewInboxMessage, input QuestionInput) error {
 	if rcpt.agent == nil {
 		return apperr.Forbidden("插件只能发给 Agent")
@@ -306,7 +312,8 @@ func (s *Service) pluginSend(ctx context.Context, p auth.Principal, rcpt recipie
 	return nil
 }
 
-// pluginSide 返回消息中插件一方的渠道与发件名称；线索里的后续消息沿用它们。与插件无关时为空。
+// pluginSide returns the channel and sender name of the plugin party in a message; later messages in the thread reuse
+// them. Empty when no plugin is involved.
 func pluginSide(m store.InboxMessage) (channel, name string) {
 	for _, v := range []store.PartyView{m.From, m.To} {
 		if v.Kind == "plugin" {
@@ -316,8 +323,9 @@ func pluginSide(m store.InboxMessage) (channel, name string) {
 	return "", ""
 }
 
-// Reply 回复线索中的一条消息：收件人是线索中的另一方，不检查跨组织发送权限。
-// 当前身份不是线索的一方时返回 not_found；插件令牌为 forbidden。
+// Reply replies to a message in a thread: the recipient is the other party of the thread, and cross-organization send
+// permissions are not checked. When the current principal is not a party of the thread it returns not_found; for a
+// plugin token, forbidden.
 func (s *Service) Reply(ctx context.Context, p auth.Principal, messageID uuid.UUID, text, whenBusy string, extra ...QuestionInput) (store.InboxMessage, error) {
 	input := QuestionInput{ReplyTo: messageID}
 	if len(extra) > 0 {
@@ -377,7 +385,8 @@ func (s *Service) Reply(ctx context.Context, p auth.Principal, messageID uuid.UU
 	if other.Kind == "platform" {
 		return store.InboxMessage{}, apperr.Forbidden("平台通知不接受回复")
 	}
-	// 插件发来的线索里 Agent 可以提问，插件回复即作答（SPEC §11）；插件自己不能提问。
+	// In a thread started by a plugin, the Agent may ask questions and the plugin's reply answers them (SPEC §11); the
+	// plugin itself cannot ask questions.
 	if me.Kind == "plugin" && input.Options != nil {
 		return store.InboxMessage{}, apperr.Invalid("options", "插件不能发出问题")
 	}
@@ -416,8 +425,9 @@ func (s *Service) Reply(ctx context.Context, p auth.Principal, messageID uuid.UU
 	return s.deliver(ctx, msg)
 }
 
-// deliver 写入消息：发给 Agent 时由对话服务一并安排提醒（whenBusy 默认 queue）；发给人时 whenBusy 记为空。
-// 提交后追加收件箱事件，返回保存的消息。
+// deliver writes the message: for a message to an Agent the conversation service also schedules the reminder (whenBusy
+// defaults to queue); for a message to a person whenBusy is stored empty. After the commit it appends an Inbox event
+// and returns the saved message.
 func (s *Service) deliver(ctx context.Context, msg store.NewInboxMessage) (store.InboxMessage, error) {
 	if msg.ForwardTaskID != uuid.Nil {
 		return s.questionDeliver(ctx, auth.Principal{Kind: auth.Kind(msg.From.Kind), ID: msg.From.ID, RuntimeID: msg.From.RuntimeID}, msg, QuestionInput{})
@@ -474,9 +484,10 @@ func (s *Service) deliver(ctx context.Context, msg store.NewInboxMessage) (store
 	return saved, nil
 }
 
-// ---------- 列表、读取与线索 ----------
+// ---------- Listing, reading and threads ----------
 
-// Query 返回按参数整理后的列表条件：limit 为 0 时取默认值，超过上限时取上限。
+// Query returns the list conditions normalized from the parameters: a limit of 0 takes the default, and a limit above
+// the maximum takes the maximum.
 func (s *Service) Query(unread bool, cursor string, limit int) (store.InboxListQuery, error) {
 	c, err := store.DecodeInboxCursor(cursor)
 	if err != nil {
@@ -493,7 +504,8 @@ func (s *Service) Query(unread bool, cursor string, limit int) (store.InboxListQ
 	return store.InboxListQuery{UnreadOnly: unread, Cursor: c, Limit: limit, Preview: s.O.PreviewChars}, nil
 }
 
-// List 列出发给当前身份的消息摘要，不改变已读状态。收件 Agent 看不到被人取消的消息的正文。
+// List lists summaries of messages addressed to the current principal without changing the read state. The recipient
+// Agent cannot see the body of messages cancelled by a person.
 func (s *Service) List(ctx context.Context, p auth.Principal, q store.InboxListQuery) (store.InboxPage, error) {
 	page, err := s.St.ListInboxReceived(ctx, Party(p), q)
 	for i := range page.Messages {
@@ -502,7 +514,8 @@ func (s *Service) List(ctx context.Context, p auth.Principal, q store.InboxListQ
 	return page, err
 }
 
-// Read 读取发给当前身份的一条消息并标为已读；重复读取不报错，已读时间保持第一次的值。
+// Read reads one message addressed to the current principal and marks it read; reading again is not an error, and the
+// read time keeps its first value.
 func (s *Service) Read(ctx context.Context, p auth.Principal, id uuid.UUID, runs ...uuid.UUID) (store.InboxMessage, error) {
 	var run uuid.UUID
 	if len(runs) > 0 {
@@ -531,7 +544,7 @@ func (s *Service) Read(ctx context.Context, p auth.Principal, id uuid.UUID, runs
 	return m, nil
 }
 
-// Threads 列出当前身份参与的线索，并给出它的未读总数。
+// Threads lists the threads the current principal takes part in, along with its total unread count.
 func (s *Service) Threads(ctx context.Context, p auth.Principal, cursor string, limit int) (store.InboxThreadPage, int, error) {
 	q, err := s.Query(false, cursor, limit)
 	if err != nil {
@@ -545,7 +558,7 @@ func (s *Service) Threads(ctx context.Context, p auth.Principal, cursor string, 
 	return page, total, err
 }
 
-// checkThread 确认当前身份是线索的一方；否则返回 not_found。
+// checkThread confirms that the current principal is a party of the thread; otherwise it returns not_found.
 func (s *Service) checkThread(ctx context.Context, p auth.Principal, threadID uuid.UUID) error {
 	a, b, err := s.St.ThreadParties(ctx, threadID)
 	if err != nil {
@@ -557,7 +570,7 @@ func (s *Service) checkThread(ctx context.Context, p auth.Principal, threadID uu
 	return nil
 }
 
-// Thread 返回线索中的全部消息，不改变已读状态。
+// Thread returns all messages in the thread without changing the read state.
 func (s *Service) Thread(ctx context.Context, p auth.Principal, threadID uuid.UUID, runs ...uuid.UUID) ([]store.InboxMessage, error) {
 	var run uuid.UUID
 	if len(runs) > 0 {
@@ -575,7 +588,8 @@ func (s *Service) Thread(ctx context.Context, p auth.Principal, threadID uuid.UU
 	return rows, e
 }
 
-// ReadThread 把线索中发给当前身份的消息全部标为已读，返回当前身份最新的未读总数。
+// ReadThread marks all messages in the thread addressed to the current principal as read, and returns the principal's
+// latest total unread count.
 func (s *Service) ReadThread(ctx context.Context, p auth.Principal, threadID uuid.UUID, runs ...uuid.UUID) (int, error) {
 	var run uuid.UUID
 	if len(runs) > 0 {
@@ -608,9 +622,9 @@ func (s *Service) ReadThread(ctx context.Context, p auth.Principal, threadID uui
 	return s.St.CountInboxUnread(ctx, Party(p))
 }
 
-// ---------- 控制台的只读查看 ----------
+// ---------- Read-only views for the console ----------
 
-// AgentInbox 列出 Agent 收到的消息（只读）；Agent 不存在或已删除时返回 not_found。
+// AgentInbox lists the messages an Agent received (read-only); not_found when the Agent does not exist or was deleted.
 func (s *Service) AgentInbox(ctx context.Context, agentID uuid.UUID, q store.InboxListQuery) (store.InboxPage, error) {
 	if _, err := s.St.GetAgent(ctx, agentID); err != nil {
 		return store.InboxPage{}, err
@@ -618,7 +632,8 @@ func (s *Service) AgentInbox(ctx context.Context, agentID uuid.UUID, q store.Inb
 	return s.St.ListInboxReceived(ctx, store.AgentParty(agentID), q)
 }
 
-// ConsoleMessages 列出控制台与常态 Agent 之间两个方向的消息全文（只读）；Agent 不存在时返回 not_found，已删除的仍可查看。
+// ConsoleMessages lists the full text of messages in both directions between the console and a regular Agent
+// (read-only); not_found when the Agent does not exist, while deleted Agents can still be viewed.
 func (s *Service) ConsoleMessages(ctx context.Context, agentID uuid.UUID, q store.InboxListQuery) (store.InboxPage, error) {
 	if _, err := s.St.GetAgent(ctx, agentID); err != nil {
 		return store.InboxPage{}, err
@@ -626,12 +641,12 @@ func (s *Service) ConsoleMessages(ctx context.Context, agentID uuid.UUID, q stor
 	return s.St.ListConsoleConversation(ctx, agentID, q)
 }
 
-// Pending 返回控制台待处理的 open 问题与其他未读消息。
+// Pending returns the open questions and other unread messages waiting for the console.
 func (s *Service) Pending(ctx context.Context) (questions, unread []store.InboxMessage, err error) {
 	return s.St.ConsolePending(ctx, s.O.PreviewChars)
 }
 
-// AgentInboxMessage 返回 Agent 收到的一条消息的全文（只读）。
+// AgentInboxMessage returns the full text of one message an Agent received (read-only).
 func (s *Service) AgentInboxMessage(ctx context.Context, agentID, messageID uuid.UUID) (store.InboxMessage, error) {
 	if _, err := s.St.GetAgent(ctx, agentID); err != nil {
 		return store.InboxMessage{}, err
@@ -646,7 +661,8 @@ func (s *Service) AgentInboxMessage(ctx context.Context, agentID, messageID uuid
 	return m, nil
 }
 
-// IdentityInbox 列出外部身份收到与（或）发出的消息（只读）；已删除的身份也可以查看。
+// IdentityInbox lists the messages an external identity received and/or sent (read-only); deleted identities can be
+// viewed too.
 func (s *Service) IdentityInbox(ctx context.Context, identityID uuid.UUID, direction string, q store.InboxListQuery) (store.InboxPage, error) {
 	switch direction {
 	case "":
@@ -661,7 +677,7 @@ func (s *Service) IdentityInbox(ctx context.Context, identityID uuid.UUID, direc
 	return s.St.ListInboxOfIdentity(ctx, identityID, direction, q)
 }
 
-// IdentityInboxMessage 返回外部身份收到或发出的一条消息的全文（只读）。
+// IdentityInboxMessage returns the full text of one message an external identity received or sent (read-only).
 func (s *Service) IdentityInboxMessage(ctx context.Context, identityID, messageID uuid.UUID) (store.InboxMessage, error) {
 	if _, err := s.St.GetExternalIdentity(ctx, identityID); err != nil {
 		return store.InboxMessage{}, err
@@ -676,9 +692,10 @@ func (s *Service) IdentityInboxMessage(ctx context.Context, identityID, messageI
 	return m, nil
 }
 
-// ---------- 事件流 ----------
+// ---------- Event stream ----------
 
-// emitCreated 与 emitRead 在数据库提交后追加收件箱事件；追加失败只记日志，不回滚。
+// emitCreated and emitRead append Inbox events after the database commit; a failed append is only logged and nothing is
+// rolled back.
 func (s *Service) emitCreated(ctx context.Context, m store.InboxMessage) {
 	s.append(ctx, apitypes.EventInboxCreated, func(unread int) any {
 		return apitypes.SseInboxMessageCreated{Message: apitypes.FromInboxSummary(m), UnreadTotal: unread}
@@ -694,7 +711,8 @@ func (s *Service) emitRead(ctx context.Context, m store.InboxMessage) {
 	})
 }
 
-// EmitCancelled 在一条发给 Agent 的排队消息被人取消、事务提交后追加收件箱事件。
+// EmitCancelled appends an Inbox event after a queued message addressed to an Agent has been cancelled by a person and
+// the transaction has committed.
 func (s *Service) EmitCancelled(ctx context.Context, m store.InboxMessage) {
 	if m.CancelledAt == nil {
 		return
@@ -705,7 +723,7 @@ func (s *Service) EmitCancelled(ctx context.Context, m store.InboxMessage) {
 }
 
 func (s *Service) append(ctx context.Context, typ string, payload func(unread int) any) error {
-	ctx = context.WithoutCancel(ctx) // 请求已结束也要写完事件
+	ctx = context.WithoutCancel(ctx) // the events must be written even if the request has ended
 	err := s.St.WithInboxEventLock(ctx, func(unread int) error {
 		data, err := json.Marshal(payload(unread))
 		if err != nil {
@@ -715,12 +733,13 @@ func (s *Service) append(ctx context.Context, typ string, payload func(unread in
 		return err
 	})
 	if err != nil {
-		s.Log.Warn("写入收件箱事件流失败", "type", typ, "err", err)
+		s.Log.Warn("failed to write to the Inbox event stream", "type", typ, "err", err)
 	}
 	return err
 }
 
-// Snapshot 返回事件流的快照：控制台操作者的未读总数与事件流当时的最新位置，两者在同一把锁内取得。
+// Snapshot returns the event stream snapshot: the console operator's total unread count and the stream's latest
+// position at that moment, both taken under the same lock.
 func (s *Service) Snapshot(ctx context.Context) (apitypes.SseInboxSnapshot, string, error) {
 	var snap apitypes.SseInboxSnapshot
 	var last string

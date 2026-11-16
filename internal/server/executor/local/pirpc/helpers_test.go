@@ -48,7 +48,7 @@ func buildFakepi(dir string) (string, error) {
 	return out, nil
 }
 
-// moduleRoot 从当前目录向上查找 go.mod。
+// moduleRoot looks for go.mod upwards from the current directory.
 func moduleRoot() (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {
@@ -79,7 +79,8 @@ type fakeProc struct {
 	dir string
 }
 
-// startFake 启动 fakepi RPC 进程；测试结束时关闭 stdin 并等待退出，超时则强杀。
+// startFake starts a fakepi RPC process; when the test ends it closes stdin and waits for the exit, killing it on
+// timeout.
 func startFake(t *testing.T, env []string, args ...string) *fakeProc {
 	t.Helper()
 	dir := t.TempDir()
@@ -115,7 +116,7 @@ func waitDone(t *testing.T, c *Client) {
 	}
 }
 
-// recorder 记录 TurnSink 回调。
+// recorder records TurnSink callbacks.
 type recorder struct {
 	mu     sync.Mutex
 	deltas []string

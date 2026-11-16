@@ -1,4 +1,4 @@
-// 作用域的图标：项目是文件夹，平台是中心圆加四条线。只作装饰。
+// The scope icon: a folder for a project, a center circle with four lines for the platform. Decoration only.
 export function ScopeIcon({ kind, className = 'size-4' }: { kind: 'project' | 'platform'; className?: string }) {
   return kind === 'platform' ? (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" aria-hidden="true" className={className}>

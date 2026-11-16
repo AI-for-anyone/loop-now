@@ -9,7 +9,8 @@ export const statsKeys = {
   report: (range: StatsRange, scope: string) => ['stats', range, scope] as const,
 }
 
-// 时间窗按浏览器本地时间：今天从零点起按小时分桶；近 7 天、近 30 天从往前第 6、29 天的零点起按天分桶。都截止到现在。
+// Time windows use the browser's local time: today is bucketed by hour from midnight; the last 7 and last 30 days are bucketed by day from
+// midnight 6 and 29 days back. All of them end now.
 export function statsWindow(range: StatsRange, now: Date = new Date()) {
   const days = range === 'today' ? 0 : range === 'week' ? 6 : 29
   return {
@@ -21,7 +22,7 @@ export function statsWindow(range: StatsRange, now: Date = new Date()) {
 
 const pad = (n: number) => String(Math.trunc(n)).padStart(2, '0')
 
-// RFC 3339，带本地时区的偏移，例如 2026-10-27T00:00:00+08:00。
+// RFC 3339 with the local time zone offset, e.g. 2026-10-27T00:00:00+08:00.
 export function localTime(date: Date): string {
   const offset = -date.getTimezoneOffset()
   const sign = offset >= 0 ? '+' : '-'
@@ -31,7 +32,8 @@ export function localTime(date: Date): string {
   )
 }
 
-// 统计报表：时间窗在每次请求时计算（截止时刻随时间推移）。换时间范围或范围时保留上一份报表，新的到达前淡显。
+// The stats report: the time window is computed on every request (the end moves with time). When the time range or the scope changes, the
+// previous report is kept and shown faded until the new one arrives.
 export function useStats(range: StatsRange, scope: ScopeQuery) {
   return useQuery({
     queryKey: statsKeys.report(range, scopeQueryKey(scope)),

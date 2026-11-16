@@ -15,10 +15,13 @@ const text = t.consoleInbox
 
 type Message = Schemas['InboxMessage']
 
-// Agent 发给你的一条消息，排在它的对话里：Agent 回复的样式，名称一行带“发给你”，未读时带一个圆点。
-// 带选项的问题在正文下面列出选项按钮。消息大部分进入视野时标为已读。
-// answerable 为 false 时（例如任务说当前身份不能回答）只显示问题的状态；onReply 让输入框进入回复这个问题的模式。
-// meta 接在名称一行末尾、children 排在问题下面（任务节点用来显示 Inbox 来源与关联的执行）。
+// A message an Agent sent you, placed in its chat: styled like an Agent reply, with “发给你” (For you) on the name line and a
+// dot while unread.
+// A question with options lists option buttons below the body. The message is marked read once most of it scrolls into view.
+// When answerable is false (for example, the task says the current identity can't answer), only the question's state is
+// shown; onReply puts the composer into the mode for replying to this question.
+// meta goes at the end of the name line and children below the question (task nodes use these to show the Inbox source and
+// the linked run).
 export function ConsoleMessage({ message, agent, answerable = true, onReply, meta, children }: { message: Message; agent: { id: string; name: string }; answerable?: boolean; onReply?: (message: Message) => void; meta?: ReactNode; children?: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
   useReadOnView(ref, message)
@@ -69,8 +72,9 @@ const optionStyle = {
   faded: 'border-dashed border-ink/20 bg-transparent text-ink-500',
 }
 
-// 问题的选项：待回答时每个选项是一个按钮，点了就作为答案提交；回答过的高亮所选的一项，其余变淡；
-// 到期、关闭或取消后都变淡并写明状态。文字回答走输入框的回复模式（onReply）。
+// The question's options: while waiting for an answer, each option is a button that submits itself as the answer when
+// clicked; once answered, the chosen option is highlighted and the rest fade; after expiring, closing or being cancelled, all
+// fade and the state is written out. Text answers go through the composer's reply mode (onReply).
 export function QuestionChoices({ message, answerable = true, onReply }: { message: Message; answerable?: boolean; onReply?: (message: Message) => void }) {
   const answer = useAnswerQuestion()
   const question = answer.latest ?? message.question
@@ -80,7 +84,7 @@ export function QuestionChoices({ message, answerable = true, onReply }: { messa
   const choose = (optionId: string) => {
     if (!open || answer.pending) return
     answer.submit(message, { optionId }).catch(() => {
-      // 错误显示在下方；原题已不能回答时按钮随之变淡。
+      // The error is shown below; when the original question can no longer be answered, the buttons fade accordingly.
     })
   }
   return (
@@ -137,7 +141,8 @@ function QuestionCaption({ message, question, answerable }: { message: Message; 
   return <span>{t.inbox.question.state[question.state]}{question.state === 'expired' && ` ${t.chat.metaSeparator} ${t.inbox.question.expires(question.expiresAt)}`}</span>
 }
 
-// 输入框在回复问题模式时贴在文字行上方的一行：回复谁的问题、问题摘要和取消。
+// The row attached above the text line while the composer is in reply-to-question mode: whose question is being answered,
+// a summary of the question, and cancel.
 export function ReplyChip({ name, preview, onCancel }: { name: string; preview: string; onCancel: () => void }) {
   return (
     <div className="flex min-w-0 items-center gap-2 px-1 pt-0.5 pb-1.5 text-[12.5px] leading-5">

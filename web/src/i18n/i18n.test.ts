@@ -7,7 +7,7 @@ import { zhCN } from './zh-CN'
 
 describe('文案表', () => {
   it('key 有类型检查，函数文案按参数生成', () => {
-    // @ts-expect-error 不存在的文案 key 无法通过类型检查
+    // @ts-expect-error a string key that doesn't exist fails the type check
     expect(t.common.notExist).toBeUndefined()
     expect(t.common.save).toBe('保存')
     expect(t.chat.tooLong(65536)).toContain('64.0 KiB')
@@ -25,7 +25,8 @@ describe('文案表', () => {
     expect(plural('zh-CN', 1, { other: '条' })).toBe('条')
   })
 
-  // 类型已要求同形；宽松的 Record<string, string> 映射（失败原因、思考等级等）在这里逐键核对。
+  // The types already require the same shape; loose Record<string, string>
+  // maps (failure reasons, thinking levels, etc.) are checked key by key here.
   it('英文文案表与中文的键一一对应，函数参数个数相同', () => {
     const shape = (value: unknown, path: string, out: string[]) => {
       if (typeof value === 'function') out.push(`${path}()${value.length}`)

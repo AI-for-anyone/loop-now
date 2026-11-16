@@ -6,11 +6,13 @@ import (
 	"io"
 )
 
-// lark-cli v1.0.94 读取的文件（相对执行 HOME），格式按其源码确定：
-//   - 配置文件：`$HOME/.lark-cli/config.json`（internal/core/workspace.go、internal/core/config.go）。
-//     appSecret 写明文字符串时直接使用，不经过钥匙串，也不需要解密（internal/core/secret.go）。
-//   - macOS 的主密钥文件：`$HOME/Library/Application Support/lark-cli/master.key.file`，32 字节原始数据。
-//     存在时，会保存密钥的写命令改用它，不会去碰宿主用户的登录钥匙串（internal/keychain/keychain_darwin.go）。
+// Files read by lark-cli v1.0.94 (relative to the run's HOME), with formats taken from its source code:
+//   - Config file: `$HOME/.lark-cli/config.json` (internal/core/workspace.go, internal/core/config.go).
+//     When appSecret is written as a plain string it is used directly, without going through the keychain and
+//     without decryption (internal/core/secret.go).
+//   - macOS master key file: `$HOME/Library/Application Support/lark-cli/master.key.file`, 32 bytes of raw data.
+//     When it exists, write commands that store secrets use it instead and never touch the host user's login
+//     keychain (internal/keychain/keychain_darwin.go).
 const (
 	larkConfigPath    = ".lark-cli/config.json"
 	larkMasterKeyPath = "Library/Application Support/lark-cli/master.key.file"
@@ -24,13 +26,15 @@ type larkApp struct {
 	AppID     string `json:"appId"`
 	AppSecret string `json:"appSecret"`
 	Brand     string `json:"brand"`
-	// 第一版只支持应用身份：strictMode 为 bot 时 lark-cli 拒绝 auth login 等用户身份命令。
+	// The first version supports only the app identity: with strictMode set to bot, lark-cli refuses user-identity
+	// commands such as auth login.
 	StrictMode string            `json:"strictMode"`
 	DefaultAs  string            `json:"defaultAs"`
 	Users      []json.RawMessage `json:"users"`
 }
 
-// renderLarkCLI 按录入项生成 lark-cli 的凭证文件。goos 为 darwin 时另生成随机主密钥文件。
+// renderLarkCLI generates lark-cli's credential files from the input fields. When goos is darwin it also generates a
+// random master key file.
 func renderLarkCLI(values map[string]string, goos string, random io.Reader) ([]PayloadFile, error) {
 	cfg, err := json.MarshalIndent(larkConfig{Apps: []larkApp{{
 		AppID:      values["appId"],

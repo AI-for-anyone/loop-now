@@ -17,7 +17,8 @@ func serve(t *testing.T, h http.Handler, method, target string) *httptest.Respon
 	return rec
 }
 
-// 单页应用的规则：哈希产物长缓存、缺失时 404；其余文件与 index.html 不缓存；未知路径回退到 index.html。
+// Single-page app rules: hashed assets are cached long and get a 404 when missing; other files and index.html are not
+// cached; unknown paths fall back to index.html.
 func TestHandlerServesSinglePageApp(t *testing.T) {
 	h := webui.Handler(fstest.MapFS{
 		"index.html":           {Data: []byte("<!doctype html><title>console</title>")},
@@ -55,7 +56,7 @@ func TestHandlerServesSinglePageApp(t *testing.T) {
 	}
 }
 
-// 没有控制台文件时说明怎样提供；目录里缺 index.html 时不回退。
+// Without console files the response explains how to provide them; a directory without index.html gets no fallback.
 func TestHandlerWithoutConsole(t *testing.T) {
 	if rec := serve(t, webui.Handler(nil), "GET", "/"); rec.Code != 404 || !strings.Contains(rec.Body.String(), "LOOP_NOW_WEB_DIR") {
 		t.Fatalf("%d %q", rec.Code, rec.Body.String())
@@ -65,7 +66,7 @@ func TestHandlerWithoutConsole(t *testing.T) {
 	}
 }
 
-// 不带 embedweb 构建时没有内嵌的控制台。
+// Without embedweb there is no embedded console.
 func TestEmbeddedAbsentWithoutTag(t *testing.T) {
 	if webui.Embedded() != nil {
 		t.Fatal("未带 embedweb 标签却有内嵌控制台")

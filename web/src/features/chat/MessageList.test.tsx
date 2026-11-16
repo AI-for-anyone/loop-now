@@ -9,13 +9,13 @@ import { initialLiveState, liveReducer, type LiveState } from './live-state'
 import { MessageList } from './MessageList'
 import { buildTurns } from './turns'
 
-// 回复下方的运行记录读取查询缓存，渲染时需要 QueryClient。
+// The run record under a reply reads the query cache, so rendering needs a QueryClient.
 function render(ui: ReactElement) {
   const client = createTestQueryClient()
   return rtlRender(ui, { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> })
 }
 
-// jsdom 没有布局：对话区的内容高度与可视高度由测试设定，尺寸变化由测试触发。
+// jsdom has no layout: the test sets the conversation area's content height and visible height, and triggers size changes itself.
 const metrics = { scrollHeight: 0, clientHeight: 0 }
 
 class FakeResizeObserver {
@@ -69,7 +69,7 @@ afterEach(() => {
   Reflect.deleteProperty(HTMLElement.prototype, 'scrollTop')
 })
 
-// 像浏览器一样把对话区的 scrollTop 限制在 0 到 scrollHeight - clientHeight 之间。
+// Like a browser, clamp the conversation area's scrollTop between 0 and scrollHeight - clientHeight.
 function clampScrollTop() {
   let top = 0
   Object.defineProperty(HTMLElement.prototype, 'scrollTop', {
@@ -93,7 +93,8 @@ function pagesOf(...texts: string[]): MessagePages {
 
 const agent = makeAgent()
 
-// 对话轮次由对话页用 buildTurns 合成后交给 MessageList（对话流与排队列表共用），这里照样合成。
+// The chat page builds the conversation turns with buildTurns and hands them to MessageList
+// (shared by the conversation stream and the queue list); build them the same way here.
 function List({ pages, live, ...rest }: Omit<ComponentProps<typeof MessageList>, 'agent' | 'turns'> & { pages: MessagePages; live: LiveState }) {
   return <MessageList agent={agent} turns={buildTurns(pages, live).turns} {...rest} />
 }
@@ -101,7 +102,8 @@ function List({ pages, live, ...rest }: Omit<ComponentProps<typeof MessageList>,
 const props = { live: initialLiveState, hasOlder: true, loadingOlder: false, refreshing: false }
 
 describe('对话区滚动', () => {
-  // jsdom 不排版，只能确认滚动区是定位容器；整页不被撑高由浏览器截图检查（.local-build/chat-scroll-fix）。
+  // jsdom does no layout, so we can only confirm that the scroll area is a positioning container; that the whole
+  // page does not get stretched taller is checked with browser screenshots (.local-build/chat-scroll-fix).
   it('滚动区是定位容器，里面绝对定位的说明文字（未读圆点等）不会撑高整页', () => {
     render(<List {...props} pages={pagesOf('问题')} onLoadOlder={() => {}} />)
     expect(screen.getByRole('log')).toHaveClass('relative')
@@ -121,7 +123,8 @@ describe('对话区滚动', () => {
     render(<List {...props} pages={pagesOf('问题')} onLoadOlder={() => {}} />)
     const log = screen.getByRole('log')
     expect(log.scrollTop).toBe(500)
-    // 回复结束时工具标记换行、最终文字出现，内容一次变高 300；程序贴底产生的滚动事件这时才到达。
+    // When the reply ends, the tool markers wrap and the final text appears, so the content grows by
+    // 300 at once; only then does the scroll event caused by the programmatic stick-to-bottom arrive.
     metrics.scrollHeight = 1300
     fireEvent.scroll(log)
     act(() => FakeResizeObserver.resize(log.firstElementChild!))
@@ -161,14 +164,14 @@ describe('对话区滚动', () => {
     const log = screen.getByRole('log')
     log.scrollTop = 300
     fireEvent.scroll(log)
-    // 视野内的图片加载完成，内容变高，但没有新的消息。
+    // An image in view finishes loading and the content gets taller, but there is no new message.
     metrics.scrollHeight = 1200
     act(() => FakeResizeObserver.resize(log.firstElementChild!))
     log.scrollTop = 0
     fireEvent.scroll(log)
     expect(onLoadOlder).toHaveBeenCalledTimes(1)
     rerender(<List {...props} loadingOlder pages={newer} onLoadOlder={onLoadOlder} />)
-    // 更早的一页插在顶部，内容增加 500。
+    // An older page is inserted at the top, adding 500 to the content.
     const older = pagesOf('旧问题')
     metrics.scrollHeight = 1700
     rerender(<List {...props} pages={{ pages: [...newer.pages, ...older.pages], pageParams: [null, 'x'] }} onLoadOlder={onLoadOlder} />)
@@ -313,7 +316,8 @@ describe('回复的显示', () => {
     expect(tools[1]).toHaveTextContent('bash已打断')
     expect(tools[1].querySelector('[data-interrupted]')).toHaveClass('border-dashed')
     expect(container.querySelector('[data-slot="tool-spinner"]')).toBeNull()
-    // 只在被打断的那一轮之后出现一次；上一轮正常结束的打断消息前没有。
+    // It appears only once, after the turn that was interrupted; there is
+    // none before an interrupting message whose previous turn ended normally.
     const dividers = screen.getAllByRole('separator', { name: '已打断，先处理这条' })
     expect(dividers).toHaveLength(1)
     const bubble = screen.getByText('先跑 lint')
@@ -341,7 +345,7 @@ describe('回复的显示', () => {
       for (const line of lines) expect(line).toHaveClass('border-t-2', 'border-dashed', 'border-riso-pink')
       expect(divider.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     }
-    // 裁切线左端是一把剪刀；打断分隔线的图标仍是闪电。
+    // The cut line has a pair of scissors at its left end; the interrupt divider's icon is still a lightning bolt.
     expect(session.querySelector('svg')).toHaveClass('lucide-scissors')
     expect(interrupted.querySelector('svg')).toHaveClass('lucide-zap')
     expect(session.compareDocumentPosition(screen.getByText('重开后的问题')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()

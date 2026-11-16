@@ -2,8 +2,9 @@ import { readFileSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-// 解析 index.css 中的令牌与代码高亮配色，按 WCAG 2 计算文字与底色的对比度，逐项不低于 4.5:1。
-// 测试在 web/ 目录下运行。
+// Parse the tokens and code-highlighting colors in index.css, compute the WCAG 2
+// contrast ratio between text and background, and require at least 4.5:1 for every pair.
+// The tests run from the web/ directory.
 const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8')
 const root = css.slice(css.indexOf(':root {'), css.indexOf('}', css.indexOf(':root {')))
 const tokens = Object.fromEntries([...root.matchAll(/--([a-z0-9-]+):\s*(#[0-9A-Fa-f]{6});/g)].map(([, name, hex]) => [name, hex]))
@@ -64,7 +65,7 @@ const pairs: [string, string, string][] = [
   ['按钮 destructive-link', 'red-text', 'paper-raised'],
   ['按钮 ink', 'riso-yellow', 'ink'],
   ['用户消息气泡', 'ink', 'tint-pink'],
-  // add-observability：分段控件、概览与运行记录。
+  // add-observability: segmented controls, overview and run records.
   ['分段控件：未选中', 'ink-700', 'tint-blue'],
   ['分段控件：选中', 'ink', 'riso-yellow'],
   ['概览汇总卡：回复中', 'ink-700', 'tint-pink-2'],
@@ -84,7 +85,7 @@ const pairs: [string, string, string][] = [
   ['运行记录：结局（服务端重启中断）', 'ink-700', 'tint-blue'],
   ['定位：突出显示的回复', 'ink', 'tint-yellow'],
   ['定位：突出显示的回复中的元信息', 'ink-500', 'tint-yellow'],
-  // 改版“一张印出来的纸”。
+  // "Printed sheet" redesign.
   ['索引标签：未选中', 'ink-700', 'paper-tab'],
   ['索引标签：当前页', 'ink', 'riso-yellow'],
   ['票根：小标题', 'ink-500', 'paper-raised'],
@@ -93,7 +94,7 @@ const pairs: [string, string, string][] = [
   ['输入区：正在重连', 'red-text', 'tint-yellow'],
 ]
 
-// 代码块是孔版蓝底；高亮颜色取自 index.css 中 .hljs* 的 color。
+// Code blocks have a riso-blue background; the highlight colors are taken from the color values of .hljs* in index.css.
 const hljsColors = [...css.slice(css.indexOf('.hljs {')).matchAll(/color:\s*(#[0-9A-Fa-f]{6})/g)].map(([, hex]) => hex)
 
 describe('设计令牌的对比度', () => {
@@ -106,7 +107,8 @@ describe('设计令牌的对比度', () => {
     for (const color of hljsColors) expect(contrast(color, 'riso-blue'), color).toBeGreaterThanOrEqual(4.5)
   })
 
-  // 主区米色底上的纸张颗粒：一张小的平铺图，不用整页的 SVG 滤镜（滚动时不必重算）。
+  // The paper grain on the main area's beige background: a small tiled image instead
+  // of a full-page SVG filter (so nothing needs recomputing while scrolling).
   it('纸张颗粒是一张不到 12 KB 的平铺图', () => {
     const rule = css.slice(css.indexOf('.riso-grain {'), css.indexOf('}', css.indexOf('.riso-grain {')))
     const file = /url\(['"]?([^'")]+)['"]?\)/.exec(rule)?.[1]

@@ -7,11 +7,14 @@ import (
 	"path/filepath"
 )
 
-// bundledNode 是随包 Node 在发布目录里的相对路径（官方 zip 包解开后 node.exe 直接在顶层）。
+// bundledNode is the relative path of the bundled Node in the release directory (once the official Node zip is
+// unpacked, node.exe sits directly at its top level).
 const bundledNode = "runtime/node/node.exe"
 
-// defaultDataDir：%LOCALAPPDATA%\Loop Now\data（本机、不漫游的用户数据目录，和桌面壳的目录风格一致）。
-// LOOP_NOW_DATA_DIR 环境变量仍然优先。取不到 LOCALAPPDATA 时退回 os.UserCacheDir（Windows 上同样是 LocalAppData）。
+// defaultDataDir: %LOCALAPPDATA%\Loop Now\data (the local, non-roaming user data directory, in the same style as the
+// desktop shell's directories).
+// The LOOP_NOW_DATA_DIR environment variable still takes precedence. When LOCALAPPDATA is unavailable it falls back
+// to os.UserCacheDir (which is also LocalAppData on Windows).
 func defaultDataDir(getenv func(string) string) string {
 	base := getenv("LOCALAPPDATA")
 	if base == "" {
@@ -23,9 +26,10 @@ func defaultDataDir(getenv func(string) string) string {
 	return filepath.Join(base, "Loop Now", "data")
 }
 
-// defaultWorkRoot：%ProgramData%\loop-now。工作根必须在用户配置目录之外（Pi 会向上加载工作目录所有上级目录里的
-// AGENTS.md/CLAUDE.md，LOCALAPPDATA 在用户配置目录之内），ProgramData 是 /var/lib 与 /Users/Shared 在 Windows 上的对应，
-// 普通用户可以在其中建目录，建好后由启动检查设为只有当前用户可访问。
+// defaultWorkRoot: %ProgramData%\loop-now. The work root must be outside the user profile directory (Pi loads
+// AGENTS.md/CLAUDE.md from every parent directory of the working directory upwards, and LOCALAPPDATA is inside the user
+// profile directory). ProgramData is the Windows counterpart of /var/lib and /Users/Shared; ordinary users can create
+// directories in it, and once created the startup checks restrict it to the current user.
 func defaultWorkRoot() string {
 	base := os.Getenv("ProgramData")
 	if base == "" {

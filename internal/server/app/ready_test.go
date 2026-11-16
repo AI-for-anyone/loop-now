@@ -14,7 +14,8 @@ import (
 	"loop-now/internal/server/config"
 )
 
-// 就绪文件整份写出（目录不存在时建好），再写一次是整体替换；目录里不留临时文件。
+// The ready file is written whole (creating the directory if missing); writing it again replaces it entirely; no
+// temporary files are left in the directory.
 func TestWriteReadyFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "shell", "ready.json")
 	for _, url := range []string{"http://127.0.0.1:1", "http://127.0.0.1:2"} {
@@ -33,7 +34,8 @@ func TestWriteReadyFile(t *testing.T) {
 	}
 }
 
-// 控制台目录必须有 index.html；没有配置目录、二进制也没有内嵌时没有控制台。
+// The console directory must contain index.html; with no directory configured and nothing embedded in the binary, there
+// is no console.
 func TestConsoleFiles(t *testing.T) {
 	dir := t.TempDir()
 	if _, _, err := app.ConsoleFiles(dir); err == nil || !strings.Contains(err.Error(), config.EnvWebDir) {
@@ -50,7 +52,8 @@ func TestConsoleFiles(t *testing.T) {
 	}
 }
 
-// 真实的服务端：就绪文件里的地址就是控制台端口，那里同时提供控制台与 API；停止后就绪文件被删除。
+// Real server: the address in the ready file is the console port, which serves both the console and the API; the ready
+// file is deleted after stopping.
 func TestConsoleAndReadyFileOnRealServer(t *testing.T) {
 	w := newWorld(t)
 	web := t.TempDir()

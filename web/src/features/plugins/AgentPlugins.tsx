@@ -21,7 +21,8 @@ type AgentPlugin = Schemas['AgentPlugin']
 const text = t.plugins.agent
 
 const listClass = 'grid min-w-0 divide-y divide-ink/10 overflow-hidden rounded-card bg-white @container'
-// 宽时名称占固定一列、摘要对齐成一列；窄时名称与展开标记在上、摘要占满下一行，行高都在 48–52px。
+// When wide, the name takes a fixed column and the summaries line up in one column; when narrow, the name and the expand marker are on
+// top and the summary fills the next row. Row height stays within 48–52px either way.
 const rowGrid = 'grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-1.5 text-left @min-[36rem]:h-12 @min-[36rem]:grid-cols-[11rem_minmax(0,1fr)_auto] @min-[36rem]:py-0'
 const rowName = 'col-start-1 row-start-1 truncate text-[14.5px]/[20px] font-bold'
 const rowSummary = 'col-span-2 col-start-1 row-start-2 flex min-w-0 items-center text-[13px]/[18px] @min-[36rem]:col-span-1 @min-[36rem]:col-start-2 @min-[36rem]:row-start-1'
@@ -29,8 +30,9 @@ const rowTrail = 'col-start-2 row-start-1 flex items-center gap-2 @min-[36rem]:c
 
 const usesAccounts = (agent: Schemas['Agent'], plugin: AgentPlugin) => agent.scope === 'project' && agent.projectId !== null && plugin.accountKinds.length > 0
 
-// Claude Code 的 Agent：插件 Agent 侧只有 Pi 扩展（没有技能、MCP 服务器和命令目录）时，标出它对 Claude Code 不起作用。
-// 组成取插件详情里的清单；读不到时不标。
+// For a Claude Code Agent: when the plugin's Agent side is only Pi extensions (no Skills, MCP servers or CLI folder), mark that it has no
+// effect on Claude Code.
+// The components come from the manifest in the plugin details; if that can't be read, nothing is marked.
 function PiOnlyHint({ pluginId }: { pluginId: string }) {
   const detail = usePlugin(pluginId)
   const parts = detail.data?.manifest.components
@@ -38,7 +40,7 @@ function PiOnlyHint({ pluginId }: { pluginId: string }) {
   return <span className="min-w-0 truncate font-bold text-pink-text">· {text.piOnly}</span>
 }
 
-// 一行摘要：是否授权，以及选用的账号名称（读到账号列表时）。
+// One-line summary: whether it is granted, and the names of the chosen accounts (once the account list has been read).
 function Summary({ agent, plugin }: { agent: Schemas['Agent']; plugin: AgentPlugin }) {
   const accounts = usePluginAccounts(agent.projectId ?? '', plugin.pluginId, usesAccounts(agent, plugin) && plugin.accountIds.length > 0)
   const names = (accounts.data?.accounts ?? []).filter((account) => plugin.accountIds.includes(account.id)).map((account) => account.name)
@@ -51,7 +53,8 @@ function Summary({ agent, plugin }: { agent: Schemas['Agent']; plugin: AgentPlug
   )
 }
 
-// 展开后的授权表单：授权勾选，项目 Agent 再按账号种类选账号（不支持多账号的种类只能选一个）。
+// The grant form shown when expanded: a grant checkbox, and for a project Agent, account choices per account kind (a kind that doesn't
+// support multiple accounts allows only one).
 function GrantForm({ agent, plugin, onSaved, onCancel, onDirty }: { agent: Schemas['Agent']; plugin: AgentPlugin; onSaved: () => void; onCancel: () => void; onDirty: (dirty: boolean) => void }) {
   const id = useId()
   const save = useSaveAgentPlugin(agent.id, plugin.pluginId)
@@ -119,14 +122,15 @@ function GrantForm({ agent, plugin, onSaved, onCancel, onDirty }: { agent: Schem
   )
 }
 
-// 插件给 Agent 的操作按钮（清单 where 含 agent 的），按钮作用于这个 Agent。
+// The plugin's action buttons for Agents (those whose where in the manifest includes agent); the buttons act on this Agent.
 function AgentActions({ agent, plugin }: { agent: Schemas['Agent']; plugin: AgentPlugin }) {
   const detail = usePlugin(plugin.pluginId)
   if (!detail.data) return null
   return <PluginActionButtons plugin={{ id: plugin.pluginId, displayName: localizedText(plugin.displayName) }} actions={detail.data.manifest.components.actions} page="agent" where={{ agentId: agent.id }} className="border-t border-ink/10 pt-3" />
 }
 
-// 一次只展开一个插件；展开中的表单有未保存的修改时，收起或切换到别的插件都先确认。
+// Only one plugin is expanded at a time; if the open form has unsaved changes, collapsing it or switching to another plugin asks for
+// confirmation first.
 function GrantList({ agent, plugins }: { agent: Schemas['Agent']; plugins: AgentPlugin[] }) {
   const [open, setOpen] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
@@ -180,7 +184,7 @@ function GrantList({ agent, plugins }: { agent: Schemas['Agent']; plugins: Agent
 function Row({ agent, plugin, open, saved, onToggle, onDone, onDirty }: { agent: Schemas['Agent']; plugin: AgentPlugin; open: boolean; saved: boolean; onToggle: () => void; onDone: (saved: boolean) => void; onDirty: (dirty: boolean) => void }) {
   const id = useId()
   const header = useRef<HTMLButtonElement>(null)
-  // 表单收起后焦点回到这一行，不落到页面开头。
+  // After the form collapses, focus returns to this row instead of falling to the top of the page.
   const done = (didSave: boolean) => {
     header.current?.focus()
     onDone(didSave)
@@ -216,7 +220,8 @@ function Row({ agent, plugin, open, saved, onToggle, onDone, onDirty }: { agent:
   )
 }
 
-// 项目还没启用的插件收在末尾：只显示当前是否授权，不能在这里改；附项目插件页的入口。
+// Plugins the project hasn't enabled yet are tucked away at the end: they only show whether they are currently granted, which can't be
+// changed here, plus a link to the project's plugin page.
 function NotEnabled({ plugins, link }: { plugins: AgentPlugin[]; link: string | null }) {
   const [open, setOpen] = useState(false)
   const id = useId()
@@ -257,7 +262,8 @@ function NotEnabled({ plugins, link }: { plugins: AgentPlugin[]; link: string | 
   )
 }
 
-// Agent 配置页的插件段：按插件授权，项目 Agent 再选账号；授权在下次启动（Pi 或 Claude Code）时生效。
+// The plugin section of the Agent config page: grant per plugin, and a project Agent also chooses accounts; grants take effect the next
+// time it starts (Pi or Claude Code).
 export function AgentPlugins({ agent }: { agent: Schemas['Agent'] }) {
   const scope = useScope()
   const query = useAgentPlugins(agent.id)

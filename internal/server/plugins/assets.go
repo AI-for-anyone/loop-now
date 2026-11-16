@@ -14,8 +14,9 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// AgentAssets 返回 Agent 已授权插件交给 Pi 的东西（plugins/SPEC.md §2.1）：
-// 项目 Agent 只取其项目已启用的插件；全局停用时为空。下次启动 Pi 时生效。
+// AgentAssets returns what the plugins granted to the Agent hand to Pi (plugins/SPEC.md §2.1): a project Agent only
+// gets the plugins enabled in its project; it is empty when plugins are disabled globally. Changes take effect the
+// next time Pi starts.
 func (s *Service) AgentAssets(ctx context.Context, agentID uuid.UUID) (agentconfig.PluginAssets, error) {
 	out := agentconfig.PluginAssets{}
 	settings, err := s.Store.GetPluginSettings(ctx)
@@ -74,9 +75,10 @@ func (s *Service) AgentAssets(ctx context.Context, agentID uuid.UUID) (agentconf
 	return out, nil
 }
 
-// mcpServer 把一条 mcpServers 条目变成写进 mcp.json 的样子：${LOOP_NOW_PLUGIN_ROOT}、${LOOP_NOW_PLUGIN_DATA}、
-// ${LOOP_NOW_AGENT_ID} 换成这个插件与 Agent 的值（每个插件不同，不能靠环境变量），以 ./ 或 ../ 开头的 command 与 args
-// 换成以安装目录为基准的绝对路径；其余 ${...} 留给 Pi 按环境变量展开。
+// mcpServer turns one mcpServers entry into the form written to mcp.json: ${LOOP_NOW_PLUGIN_ROOT},
+// ${LOOP_NOW_PLUGIN_DATA} and ${LOOP_NOW_AGENT_ID} are replaced with the values for this plugin and Agent (they differ
+// per plugin, so environment variables cannot carry them); a command or args starting with ./ or ../ become absolute
+// paths based on the install directory; any other ${...} is left for Pi to expand from environment variables.
 func (s *Service) mcpServer(raw json.RawMessage, root, data string, agent uuid.UUID) (json.RawMessage, error) {
 	var srv map[string]any
 	if err := json.Unmarshal(raw, &srv); err != nil {
@@ -119,7 +121,8 @@ func (s *Service) mcpServer(raw json.RawMessage, root, data string, agent uuid.U
 	return json.Marshal(srv)
 }
 
-// envName 把插件 id 或账号种类、字段名变成环境变量名的一段：大写，非字母数字换成下划线。
+// envName turns a plugin id, account kind or field name into one segment of an environment variable name: upper
+// case, with every non-alphanumeric character replaced by an underscore.
 func envName(s string) string {
 	return strings.Map(func(r rune) rune {
 		switch {
@@ -132,8 +135,10 @@ func envName(s string) string {
 	}, s)
 }
 
-// agentEnv 写入插件给这个 Agent 的环境变量：LOOP_NOW_PLUGIN_<ID>_CONFIG 是生效的配置（项目值覆盖全局值，不含 secret 字段）；
-// 账号按种类注入，单账号种类为 LOOP_NOW_ACCOUNT_<KIND>_<FIELD>，多账号种类为 LOOP_NOW_ACCOUNTS_<KIND>（JSON 数组，每项带 name）。
+// agentEnv writes the plugin's environment variables for this Agent: LOOP_NOW_PLUGIN_<ID>_CONFIG is the effective
+// config (project values override global values; secret fields are excluded). Accounts are injected per kind: a
+// single-account kind as LOOP_NOW_ACCOUNT_<KIND>_<FIELD>, a multi-account kind as LOOP_NOW_ACCOUNTS_<KIND> (a JSON
+// array, each item with a name).
 func (s *Service) agentEnv(ctx context.Context, env map[string]string, a store.Agent, p store.Plugin, m Manifest, g store.AgentPluginGrant) error {
 	global, err := s.Store.PluginConfig(ctx, p.ID, nil)
 	if err != nil {
@@ -163,7 +168,7 @@ func (s *Service) agentEnv(ctx context.Context, env map[string]string, a store.A
 		acc, err := s.Store.GetPluginAccount(ctx, *a.ProjectID, p.ID, id)
 		if err != nil {
 			if store.IsNotFound(err) {
-				continue // 账号已删除：授权里的引用随删除移除，这里只是并发时的保险
+				continue // account deleted: the grant's reference goes with it; this only guards against races
 			}
 			return err
 		}
@@ -180,7 +185,7 @@ func (s *Service) agentEnv(ctx context.Context, env map[string]string, a store.A
 		for f, v := range acc.Values {
 			key := "LOOP_NOW_ACCOUNT_" + envName(acc.Kind) + "_" + envName(f)
 			if _, set := env[key]; set {
-				continue // 单账号种类只取第一个
+				continue // a single-account kind only takes the first one
 			}
 			if str, ok := v.(string); ok {
 				env[key] = str

@@ -1,4 +1,4 @@
-// Package apperr 定义面向控制台的业务错误，错误码与 api/openapi.yaml 中的 ErrorCode 一致。
+// Package apperr defines the business errors shown to the console; the error codes match ErrorCode in api/openapi.yaml.
 package apperr
 
 import (
@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-// 错误码，与 OpenAPI 的 ErrorCode 枚举一一对应。
+// Error codes, one to one with the OpenAPI ErrorCode enum.
 const (
 	CodeVerificationInProgress          = "verification_in_progress"
 	CodeVerificationOperationConflict   = "verification_operation_conflict"
@@ -51,13 +51,13 @@ const (
 	CodeRateLimited                     = "rate_limited"
 )
 
-// FieldError 是字段级错误。
+// FieldError is a field-level error.
 type FieldError struct {
 	Field   string `json:"field"`
 	Message string `json:"message"`
 }
 
-// Error 是业务错误。
+// Error is a business error.
 type Error struct {
 	Status  int
 	Code    string
@@ -68,25 +68,25 @@ type Error struct {
 
 func (e *Error) Error() string { return fmt.Sprintf("%s: %s", e.Code, e.Message) }
 
-// As 取出业务错误。
+// As extracts a business error.
 func As(err error) (*Error, bool) {
 	var e *Error
 	ok := errors.As(err, &e)
 	return e, ok
 }
 
-// Is 判断 err 是否为指定错误码的业务错误。
+// Is reports whether err is a business error with the given code.
 func Is(err error, code string) bool {
 	e, ok := As(err)
 	return ok && e.Code == code
 }
 
-// NotFound 返回 404。
+// NotFound returns a 404.
 func NotFound(what string) *Error {
 	return &Error{Status: http.StatusNotFound, Code: CodeNotFound, Message: what + "不存在"}
 }
 
-// Validation 返回 422，带字段级错误。
+// Validation returns a 422 carrying field-level errors.
 func Validation(fields ...FieldError) *Error {
 	msg := "校验失败"
 	if len(fields) > 0 {
@@ -95,33 +95,33 @@ func Validation(fields ...FieldError) *Error {
 	return &Error{Status: http.StatusUnprocessableEntity, Code: CodeValidationFailed, Message: msg, Fields: fields}
 }
 
-// Field 构造一个字段级错误。
+// Field builds a field-level error.
 func Field(field, message string) FieldError { return FieldError{Field: field, Message: message} }
 
-// Invalid 是单字段校验失败的简写。
+// Invalid is shorthand for a validation failure on a single field.
 func Invalid(field, message string) *Error { return Validation(Field(field, message)) }
 
-// Conflict 返回 409。
+// Conflict returns a 409.
 func Conflict(code, message string) *Error {
 	return &Error{Status: http.StatusConflict, Code: code, Message: message}
 }
 
-// TooLarge 返回 413。
+// TooLarge returns a 413.
 func TooLarge(message string) *Error {
 	return &Error{Status: http.StatusRequestEntityTooLarge, Code: CodePayloadTooLarge, Message: message}
 }
 
-// PreconditionFailed 返回 412。
+// PreconditionFailed returns a 412.
 func PreconditionFailed(message string) *Error {
 	return &Error{Status: http.StatusPreconditionFailed, Code: CodePreconditionFailed, Message: message}
 }
 
-// Unauthenticated 返回 401：令牌缺失、无效、过期或已吊销。信息中不回显令牌。
+// Unauthenticated returns a 401: the token is missing, invalid, expired or revoked. The message never echoes the token.
 func Unauthenticated(message string) *Error {
 	return &Error{Status: http.StatusUnauthorized, Code: CodeUnauthenticated, Message: message}
 }
 
-// Forbidden 返回 403：身份有效，但不允许这个操作。
+// Forbidden returns a 403: the identity is valid, but it is not allowed to do this.
 func Forbidden(message string) *Error {
 	return &Error{Status: http.StatusForbidden, Code: CodeForbidden, Message: message}
 }

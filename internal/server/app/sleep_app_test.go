@@ -300,7 +300,7 @@ func TestSleepAppWakeCommitExecutionAndSessionFailure(t *testing.T) {
 				}
 			}
 			if mode == "coord-cleared" {
-				// 协调数据丢失：Agent 的忙闲锁没了。
+				// Coordination data lost: the Agent's busy lock is gone.
 				id := agent.ID.String()
 				owner, err := s.a.Coord.LockOwner(ctx, id)
 				if err != nil {
@@ -332,7 +332,8 @@ func TestSleepAppWakeCommitExecutionAndSessionFailure(t *testing.T) {
 				}
 				s.stop()
 				s = nil
-				// 协调状态在进程内，重启后旧屏障已不在；按原样放开一次（没有持有时是空操作）。
+				// Coordination state lives in the process, so the old barrier is gone after the restart; release it
+				// once as before (a no-op when it is not held).
 				s = w.start(nil)
 				if _, err = s.a.Coord.Release(ctx, agent.ID.String(), barrier); err != nil {
 					t.Fatal(err)
@@ -350,7 +351,8 @@ func TestSleepAppWakeCommitExecutionAndSessionFailure(t *testing.T) {
 				if err != nil || wake.Status != "running" {
 					t.Fatal("wake never ran", err)
 				}
-				// 事件流在进程内：重启前已经推给 SSE 的事件只在旧实例里。
+				// The event stream lives in the process: events already pushed to SSE before the restart exist only in
+				// the old instance.
 				if before, err = s.a.Coord.ReadEvents(ctx, agent.ID.String(), "0-0", 1000, -time.Millisecond); err != nil {
 					t.Fatal(err)
 				}
@@ -508,7 +510,8 @@ func TestSleepAppQuestionAnswerAndExpiryWake(t *testing.T) {
 			d := decode[taskmodel.Detail](t, raw)
 			node := d.Nodes[0]
 			p := auth.Principal{Kind: auth.KindAgent, ID: agent.ID, TaskID: d.Task.ID, RuntimeID: node.RuntimeID}
-			// Pi 先变忙，轮次随后才在库里记为 running：两个都等到。
+			// Pi becomes busy first, and the turn is recorded as running in the database only afterwards: wait for
+			// both.
 			var source uuid.UUID
 			taskWait(t, s, d.Task.ID, func(d taskmodel.Detail) bool {
 				return s.a.Executor.Process(node.RuntimeID).State == "busy" &&
@@ -572,7 +575,8 @@ func TestSleepAppTaskRequestedAndSleepingRestart(t *testing.T) {
 			d := decode[taskmodel.Detail](t, raw)
 			node := d.Nodes[0]
 			p := auth.Principal{Kind: auth.KindAgent, ID: agent.ID, TaskID: d.Task.ID, RuntimeID: node.RuntimeID}
-			// Pi 先变忙，轮次随后才在库里记为 running：两个都等到。
+			// Pi becomes busy first, and the turn is recorded as running in the database only afterwards: wait for
+			// both.
 			var source uuid.UUID
 			taskWait(t, s, d.Task.ID, func(d taskmodel.Detail) bool {
 				return s.a.Executor.Process(node.RuntimeID).State == "busy" &&

@@ -9,7 +9,8 @@ import { runStartedAt } from './time'
 
 const text = t.chat.compactionNote
 
-// 这次压缩的结果：失败写原因（印章 + 错误），取消或中断照实写，正常完成写压缩前后的 token 或没有压缩的原因。
+// The outcome of this compaction: on failure, the reason (stamp + error); when cancelled or interrupted, say so as it is;
+// when completed normally, the tokens before and after compaction, or the reason nothing was compacted.
 function Outcome({ run, compaction }: { run: Schemas['Run']; compaction: Schemas['RunCompaction'] }) {
   if (run.status === 'failed') {
     const reason = run.errorCode ? (t.chat.runError[run.errorCode] ?? t.common.unknown(run.errorCode)) : t.errors.unknown
@@ -30,8 +31,10 @@ function Outcome({ run, compaction }: { run: Schemas['Run']; compaction: Schemas
   return <p>{t.chat.commands.noReply}</p>
 }
 
-// 定位到一次手动压缩（/compact）：它没有对话消息，不是对话流里的一轮，在它开始的位置显示这张说明（与定位到的回复一样用浅黄底突出）。
-// 抬头是和命令结果一样的小票（命令｜手动压缩｜时间），下面是结果和说明，最后是展开的运行记录（取自同一次读到的时间线）。
+// Located a manual compaction (/compact): it has no conversation messages and is not a turn in the conversation flow, so this note is
+// shown where it started (highlighted with a light yellow fill, like a located reply).
+// The header is a receipt like a command result's (command | Manual compaction | time); below it are the outcome and the explanation,
+// and last the expanded run record (taken from the same timeline read).
 export function CompactionNote({ agentId, run, className }: { agentId: string; run: Schemas['Run']; className?: string }) {
   const compaction = run.compaction
   if (!compaction) return null

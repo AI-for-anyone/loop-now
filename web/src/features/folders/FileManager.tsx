@@ -19,17 +19,19 @@ import { droppedItems, useFolderUploads, type UploadRow } from './use-folder-upl
 
 interface FileManagerProps {
   source: FolderSource
-  // 根目录在树与路径栏里的名称，例如“server 的工作区”。
+  // The root's name in the tree and the path bar, e.g. “server 的工作区” (server's workspace).
   rootLabel: string
-  // Context.limits.textEdit：在线编辑的扩展名与大小上限。
+  // Context.limits.textEdit: the extensions and size limit for online editing.
   limits: TextEditLimits | undefined
-  // Context.limits.maxFolderUpload：单个上传文件的上限。
+  // Context.limits.maxFolderUpload: the limit for a single uploaded file.
   maxUpload?: number
   className?: string
-  // card：带浅边框的白底卡片（全局设置）；sheet：Agent 的文件夹页签与项目文件夹页，直接排在纸上，右侧是票根里的概况；
-  // panel：纸上一个分区里的一块（项目设置），与 sheet 同样的工具条与列表，外面一圈 2px 藏青描边，没有票根。
+  // card: a white card with a light border (global settings); sheet: the Agent's folder tab and the project folder page, laid directly
+  // on the sheet, with the overview in the stub on the right;
+  // panel: a block inside one section of a sheet (project settings), with the same toolbar and list as sheet, a 2px navy outline around
+  // it and no stub.
   variant?: 'card' | 'sheet' | 'panel'
-  // sheet 版底部说明里的第一句（例如“这是它的工作目录”）。
+  // The first sentence of the note at the bottom of the sheet variant (e.g. “这是它的工作目录” (This is its working directory)).
   note?: ReactNode
 }
 
@@ -37,15 +39,16 @@ type Dialog =
   | { type: 'remove'; entry: FolderEntry }
   | { type: 'move'; entry: FolderEntry }
   | { type: 'git' }
-  // 编辑中有未保存的修改时离开：确认后去 next，或只退出编辑。
+  // Leaving while an edit has unsaved changes: after confirming, go to next, or just exit editing.
   | { type: 'discard'; next: Selection | null }
 
 const ROOT: Selection = { path: '', type: 'dir', entry: null }
 const INTERNAL = 'application/x-loop-now-path'
 
-// 文件管理器：左边是逐级展开的文件树，右边是文件夹列表或文件内容；窄时只有右边，文件树从左侧滑出。
+// File manager: the file tree, expanded level by level, on the left; the folder list or file content on the right. When narrow, only the
+// right side shows and the file tree slides out from the left.
 export function FileManager({ source, rootLabel, limits, maxUpload, className, variant = 'card', note }: FileManagerProps) {
-  // sheet 与 panel 用改版的工具条（带字的胶囊）、底部虚线与说明；只有 sheet 有票根。
+  // sheet and panel use the redesigned toolbar (pills with labels), a dashed line and a note at the bottom; only sheet has a stub.
   const sheet = variant !== 'card'
   const client = useQueryClient()
   const [selection, setSelection] = useState<Selection>(ROOT)
@@ -66,7 +69,8 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
   const currentDir = selection.type === 'dir' ? selection.path : parentOf(selection.path)
   const dirty = !!edit && edit.text !== edit.original
 
-  // 页面打开期间进行过、随后成功了的拉取：重新读取目标文件夹所在的那一级，并在状态栏告诉人。
+  // Pulls that ran while the page was open and then succeeded: re-read the level containing the target folder and tell the person in the
+  // status bar.
   const active = useRef(new Set<string>()), [finished, setFinished] = useState<ReadonlySet<string>>(() => new Set())
   useEffect(() => {
     for (const item of pulls.data ?? []) {
@@ -77,21 +81,22 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
       }
     }
   }, [client, source, pulls.data])
-  // 状态栏显示的一次拉取：进行中的优先；否则是最近一次，失败的（刷新后仍在）或在本页成功的，直到关掉。
+  // The one pull shown in the status bar: an in-progress pull comes first; otherwise the most recent one, if it failed (still shown after a
+  // reload) or succeeded on this page, until it is dismissed.
   const latest = pulls.data?.[0]
   const pull: GitPull | undefined = pulls.data?.find((item) => item.status === 'queued' || item.status === 'running')
     ?? (latest && !dismissed.has(latest.id) && (latest.status === 'failed' || finished.has(latest.id)) ? latest : undefined)
 
   const go = (next: Selection, expandSelf = true) => {
     if (dirty) { setDialog({ type: 'discard', next }); return }
-    // 窄屏的文件树抽屉：点文件夹继续在抽屉里展开，打开文件后收起。
+    // The file tree drawer on narrow screens: clicking a folder keeps expanding it inside the drawer; opening a file closes the drawer.
     setEdit(null); setSelection(next); setError(null)
     if (next.type !== 'dir') setTreeOpen(false)
     if (next.type === 'file' || next.type === 'symlink') setMode('preview')
     setExpanded((old) => new Set([...old, ...ancestorsOf(next.path), ...(expandSelf && next.type === 'dir' && next.path ? [next.path] : [])]))
   }
   const toggle = (path: string) => setExpanded((old) => { const next = new Set(old); if (next.has(path)) next.delete(path); else next.add(path); return next })
-  // 文件夹被删除或移走：丢掉它与其中各级的缓存。
+  // A folder was deleted or moved away: drop the cache for it and every level inside it.
   const forget = (path: string) => client.removeQueries({ predicate: (query) => query.queryKey[0] === 'folder' && query.queryKey[1] === source.key && typeof query.queryKey[3] === 'string' && within(query.queryKey[3], path) })
   const run = async (work: () => Promise<unknown>) => { setError(null); try { await work() } catch (caught) { setError(caught); throw caught } }
 
@@ -210,7 +215,8 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
       <input ref={fileInput} type="file" multiple className="sr-only" tabIndex={-1} aria-hidden="true" onChange={onPick} />
       <input ref={folderInput} type="file" multiple className="sr-only" tabIndex={-1} aria-hidden="true" onChange={onPick} {...{ webkitdirectory: '' }} />
 
-      {/* 窄时路径栏独占一行，操作按钮换到第二行。纸张版是纸张顶部的工具条：没有底色与分隔线，按钮是带字的胶囊。 */}
+      {/* When narrow, the path bar takes a row of its own and the action buttons wrap to a second row. The sheet variant is a toolbar at the
+          top of the sheet: no background color or divider, and the buttons are pills with labels. */}
       <div className={cn('flex shrink-0 flex-wrap items-center', sheet ? 'gap-x-4 gap-y-2.5' : 'min-h-11 gap-x-1.5 gap-y-1 border-b border-ink/10 bg-paper-raised px-2.5 py-1.5')}>
         <ToolButton className="@min-[40rem]:hidden" icon={<PanelLeftIcon />} label={treeOpen ? t.folders.hideTree : t.folders.showTree} showLabel={false} aria-expanded={treeOpen} onClick={() => setTreeOpen((value) => !value)} />
         <Breadcrumbs className="@max-[34rem]:basis-[calc(100%-2.25rem)]" rootLabel={rootLabel} path={selection.path} onNavigate={(path) => go(path ? { path, type: 'dir', entry: null } : ROOT)} />
@@ -276,7 +282,7 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
           sheet ? 'min-h-9 flex-wrap border-t-2 border-dashed border-ink/[0.22] pt-3.5 text-[12px]' : 'min-h-8 border-t border-ink/10 bg-paper-raised px-3 text-[11.5px]',
         )}
       >
-        {/* 窄屏放不下两段：有拉取状态时只显示状态。 */}
+        {/* Narrow screens can't fit both parts: when there is a pull status, show only the status. */}
         <span className={cn('flex min-w-0 items-center gap-1.5', pull && '@max-[40rem]:hidden')}>
           {!sheet && <InfoIcon aria-hidden="true" className="size-3.5 shrink-0" />}
           <span className={cn(!sheet && 'truncate')}>
@@ -313,7 +319,8 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
       )}
       {dialog?.type === 'move' && <MoveDialog entry={dialog.entry} onClose={() => setDialog(null)} onSubmit={(dir) => moveInto(dialog.entry.path, dir)} />}
       {dialog?.type === 'git' && source.git && <GitPullDialog onClose={() => setDialog(null)} onSubmit={async (input) => {
-        // 在本页发起的拉取直接记为进行中：即使在下一次读取状态之前就已结束，成功也会显示出来。
+        // A pull started on this page is recorded as in progress right away, so its success still shows even if it finishes before the
+        // next status read.
         const started = await source.git!.start(input)
         active.current.add(started.id)
         setPullDetails(false)
@@ -333,7 +340,7 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
     </div>
   )
   if (variant !== 'sheet') return manager
-  // 纸张版：右侧是票根里的概况，窄屏不显示。
+  // Sheet variant: the overview in the stub on the right, hidden on narrow screens.
   return (
     <div className={cn('flex min-h-0', className)}>
       {manager}
@@ -342,7 +349,8 @@ export function FileManager({ source, rootLabel, limits, maxUpload, className, v
   )
 }
 
-// 票根里的概况：当前文件夹里的文件夹数、文件数与文件总大小。只算已经读到的那几页，还没读完时数字后面加“+”。
+// The overview in the stub: the number of folders, the number of files and the total file size in the current folder. Only the pages
+// read so far are counted; while not everything has been read, the numbers get a trailing "+".
 function FolderStub({ source, dir }: { source: FolderSource; dir: string }) {
   const list = useFolderList(source, dir)
   const entries = list.data?.pages.flatMap((page) => page.entries) ?? []
@@ -364,7 +372,7 @@ function FolderStub({ source, dir }: { source: FolderSource; dir: string }) {
   )
 }
 
-// 状态栏里的一次 Git 拉取：进行中、成功（可以去看）、失败（可以看 git 输出、重试）。
+// A Git pull in the status bar: in progress, succeeded (you can go and look), or failed (you can view the git output and retry).
 function PullStatus({ pull, details, onDetails, onShow, onRetry, onDismiss }: { pull: GitPull; details: boolean; onDetails: () => void; onShow: () => void; onRetry: () => void; onDismiss: () => void }) {
   const ended = pull.status === 'succeeded' || pull.status === 'failed'
   return (
@@ -381,7 +389,7 @@ function PullStatus({ pull, details, onDetails, onShow, onRetry, onDismiss }: { 
   )
 }
 
-// 路径栏：根目录与各级文件夹都能点击回到那一级；当前一项加粗。
+// Path bar: the root and every folder level can be clicked to go back to that level; the current item is bold.
 function Breadcrumbs({ rootLabel, path, onNavigate, className }: { rootLabel: string; path: string; onNavigate: (path: string) => void; className?: string }) {
   const parts = segmentsOf(path)
   return (
@@ -403,7 +411,8 @@ function Breadcrumbs({ rootLabel, path, onNavigate, className }: { rootLabel: st
   )
 }
 
-// 上传进度：右下角的小卡片，逐个列出。全部成功后过一会儿自动收起；有失败的留着，由人关掉。
+// Upload progress: a small card in the bottom-right corner, listing each file. When all succeed it closes itself after a moment; if any
+// failed it stays until the person closes it.
 function UploadPanel({ rows, onClose }: { rows: UploadRow[]; onClose: () => void }) {
   const done = rows.filter((row) => row.state === 'done').length, failed = rows.filter((row) => row.state === 'failed').length
   const total = rows.reduce((sum, row) => sum + row.size, 0), loaded = rows.reduce((sum, row) => sum + row.loaded, 0)

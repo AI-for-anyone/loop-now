@@ -2,8 +2,9 @@ import type { ComponentProps } from 'react'
 import { InfoIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-// 黄色便签：页面里的提示条。略微倾斜（只画在背景层上）、淡投影，前面一个信息图标。
-// tone="red"：浅红底、红字，用于异常（如任务节点阻塞的原因）。
+// Yellow sticky note: a hint strip on the page. Slightly tilted (drawn only on the background layer), with a faint shadow and an info
+// icon in front.
+// tone="red": light red background and red text, for problems (such as the reason a task node is blocked).
 export function StickyNote({ tone = 'yellow', className, children, ...props }: { tone?: 'yellow' | 'red' } & ComponentProps<'div'>) {
   return (
     <div

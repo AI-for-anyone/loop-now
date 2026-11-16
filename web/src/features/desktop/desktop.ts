@@ -7,7 +7,7 @@ import { keys } from '@/api/queries'
 import { tasksPath } from '@/api/tasks'
 import { t } from '@/i18n'
 
-// 桌面壳（desktop/src/preload.ts）在它的窗口里提供的接口；在浏览器里打开控制台时没有。
+// The interface the desktop shell (desktop/src/preload.ts) provides in its windows; absent when the console is opened in a browser.
 export type DesktopNotification = { id: string; title: string; body: string; path: string }
 export type DesktopBridge = {
   notify: (notification: DesktopNotification) => void
@@ -23,25 +23,28 @@ declare global {
 
 type Message = Schemas['InboxMessageSummary']
 
-// 值得发系统通知的消息：发给你、仍为 open 的新问题（待你回复），以及任务实例发给你的其他新消息（任务等待）。
+// Messages worth a system notification: new questions sent to you that are still open (waiting for your reply), and other new
+// messages a task instance sent you (task waiting).
 export function notificationKind(message: Message): 'question' | 'task' | null {
   if (message.to.kind !== 'console' || message.cancelledAt !== null) return null
   if (message.question?.state === 'open') return 'question'
   return message.task ? 'task' : null
 }
 
-// 已经通知过的消息：事件流重连后可能重放。只记最近的这么多条。
+// Messages already notified about: they may be replayed after the event stream reconnects. Only this many recent ones are kept.
 const notified = new Set<string>()
 const notifiedLimit = 500
 
-// 不在任务里的消息点开后去的地方，与“待你处理”里的链接相同：Agent 的对话、外部身份的页面，其余回到概览。
+// Where a message outside a task leads when clicked, the same as the links in “待你处理” (Needs you): the Agent's chat, the
+// external identity's page, and the overview for everything else.
 function senderPath(message: Message): string {
   if (message.from.kind === 'agent' && message.from.id) return `/agents/${message.from.id}/chat`
   if (message.from.kind === 'external' && message.from.id) return `/identities/${message.from.id}`
   return '/'
 }
 
-// 任务里的消息：任务名称与这条消息所属节点的地址；读不到任务或项目时用通用名称、回到概览。
+// A message in a task: the task name and the URL of the node this message belongs to; when the task or project can't be
+// loaded, use a generic name and go back to the overview.
 async function taskTarget(client: QueryClient, task: Schemas['InboxTaskRef']): Promise<{ title: string; path: string }> {
   try {
     const detail = await call(api.GET('/tasks/{taskId}', { params: { path: { taskId: task.taskId } } }))
@@ -54,7 +57,8 @@ async function taskTarget(client: QueryClient, task: Schemas['InboxTaskRef']): P
   }
 }
 
-// 收件箱事件交给桌面壳：Dock 上显示未读数；窗口不可见或没有焦点时，值得通知的新消息发一条系统通知，点开回到它所在的对话或任务节点。
+// Pass inbox events to the desktop shell: the Dock shows the unread count; when the window is hidden or unfocused, a new
+// message worth notifying about gets a system notification, and clicking it goes back to its chat or task node.
 export async function forwardToDesktop(client: QueryClient, event: InboxEvent): Promise<void> {
   const bridge = window.loopNowDesktop
   if (!bridge) return
@@ -79,11 +83,13 @@ export async function forwardToDesktop(client: QueryClient, event: InboxEvent): 
   )
 }
 
-// 在桌面壳的窗口里：窗口没有系统标题栏（macOS 的 hiddenInset），页面铺到窗口顶部，左上角是系统的红绿灯按钮，
-// 页面顶部要留出能拖动窗口的一条（index.css 的 window-drag）。浏览器里打开控制台时不受影响。
+// In a desktop shell window: the window has no system title bar (macOS hiddenInset), the page extends to the top of the window
+// with the system traffic-light buttons in the top-left corner, and the top of the page must leave a strip for dragging the
+// window (window-drag in index.css). Not affected when the console is opened in a browser.
 export const inDesktopWindow = () => window.loopNowDesktop !== undefined
 
-// 点了系统通知：桌面壳显示窗口后把地址交给页面，在控制台里跳转。
+// A system notification was clicked: after showing the window, the desktop shell hands the path to the page, which navigates
+// within the console.
 export function useDesktopNavigation() {
   const navigate = useNavigate()
   useEffect(() => window.loopNowDesktop?.onNavigate((path) => void navigate(path)), [navigate])

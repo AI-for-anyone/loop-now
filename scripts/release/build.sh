@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
-# 发布构建：为本机平台产出 loop-now 发行目录与压缩包，并写出校验和。发行目录里有：
-#   loop-server            内嵌控制台的服务端
-#   loopctl-dist/<版本>/    各平台的 loopctl 与它的 SHA256SUMS、manifest.json
-#   plugins/host/main.js   插件宿主；plugins/official/ 官方插件
-#   runtime/node/          官方 Node（带 npm）；runtime/pi/ 用它安装的 Pi
-# loop-server 没有另外配置时就用这些随包的文件（见 internal/server/config 的 Bundled*），解开即可运行。
+# Release build: produces the loop-now release directory and archive for this machine's platform, and writes the
+# checksum. The release directory contains:
+#   loop-server               the server, with the console embedded
+#   loopctl-dist/<version>/   loopctl for every platform, with its SHA256SUMS and manifest.json
+#   plugins/host/main.js      the plugin host; plugins/official/ holds the official plugins
+#   runtime/node/             the official Node (with npm); runtime/pi/ is the Pi installed with it
+# Unless configured otherwise, loop-server uses these bundled files (see Bundled* in internal/server/config), so it
+# runs as soon as the archive is unpacked.
 #
-#   scripts/release/build.sh [--only <os>/<arch>] [--smoke] <版本> <输出目录>
+#   scripts/release/build.sh [--only <os>/<arch>] [--smoke] <version> <output directory>
 #
-# Pi 的依赖要在目标架构上安装，所以只构建本机平台；--only 用来确认目标就是本机。--smoke 用产物实际启动一次。
-# 需要：Go、Node 24.21.0（构建控制台与插件宿主）、git、curl，以及网络（下载 Node、安装依赖与 Pi）。
+# Pi's dependencies must be installed on the target architecture, so only this machine's platform is built; --only
+# confirms that the target is this machine. --smoke starts the result once.
+# Needs: Go, Node 24.21.0 (to build the console and the plugin host), git, curl, and network access (to download Node
+# and install the dependencies and Pi).
 set -euo pipefail
 
 NODE_VERSION=24.21.0
@@ -94,13 +98,14 @@ got="$(PATH="$bundle/runtime/node/bin:/usr/bin:/bin" PI_OFFLINE=1 PI_SKIP_VERSIO
 if [ "$smoke" = 1 ]; then
 	step "用发行目录实际启动一次"
 	tmp="$(mktemp -d /tmp/loop-now-smoke.XXXXXX)"
-	# 只给数据目录、工作根目录（须在 HOME 之外）、就绪文件与随机端口；Node、Pi、loopctl、插件宿主都取随包的。
+	# Only the data directory, the work root (must be outside HOME), the ready file and a random port are given; Node,
+	# Pi, loopctl and the plugin host all come from the bundle.
 	run() {
 		exec env -i HOME="$tmp/home" PATH=/usr/bin:/bin LOOP_NOW_DATA_DIR="$tmp/data" LOOP_NOW_WORK_ROOT="$tmp/work" \
 			LOOP_NOW_LISTEN_ADDR=127.0.0.1:0 LOOP_NOW_READY_FILE="$1" LOOP_NOW_CONSOLE_ORIGINS=none "$bundle/loop-server"
 	}
 	mkdir -p "$tmp/home"
-	# exec 让后台任务的 PID 就是 loop-server 本身，下面的 TERM 才发给它。
+	# exec makes the background job's PID loop-server itself, so the TERM below reaches it.
 	(exec 2>"$tmp/server.log"; run "$tmp/ready.json") &
 	pid=$!
 	trap 'kill "$pid" 2>/dev/null || true' EXIT
@@ -110,8 +115,9 @@ if [ "$smoke" = 1 ]; then
 	curl -fsS "$url/healthz" | grep -q '"ok":true' || fail "健康检查没有通过"
 	curl -fsS "$url/" | grep -qi '<!doctype html' || fail "没有提供内嵌的控制台"
 	curl -fsS "$url/api/v1/model-providers" | grep -q "\"piVersion\":\"$PI_VERSION\"" || fail "模型目录不是随包的 Pi $PI_VERSION"
-	# 登录 helper 与旧 Anthropic 扩展（服务端刚装进工作根的那份）用随包的 Node 加载随包 Pi 的 provider；
-	# pi-ai 的位置按服务端预检的规则取：在 pi-coding-agent 之内，否则与它并列（npm --prefix 会把它提升上来）。
+	# The login helper and the legacy Anthropic extension (the copies the server just installed into the work root)
+	# load the bundled Pi's providers with the bundled Node; pi-ai is located by the server's preflight rule: inside
+	# pi-coding-agent, otherwise next to it (npm --prefix hoists it).
 	assets="$(find "$tmp/work/platform/auth-helper" -mindepth 1 -maxdepth 1 -type d ! -name '.*')"
 	pkg="$bundle/runtime/pi/node_modules/@earendil-works/pi-coding-agent"
 	ai="$pkg/node_modules/@earendil-works/pi-ai"

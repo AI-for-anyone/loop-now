@@ -10,9 +10,11 @@ import (
 	"github.com/google/uuid"
 )
 
-// 发给代管身份的消息在提交时以 identity.inbound 只投给代管的插件（不看订阅与项目启用），带发件方、项目、任务、节点、
-// 提问的选项与期限；代管的插件不再收到这条消息的 inbox.received，其他订阅者照常。发给没有代管的身份没有 identity.inbound。
-// 卸载插件时绑定一起删除。
+// A message sent to a managed identity is delivered at commit time as identity.inbound only to the managing plugin
+// (regardless of subscriptions and project enablement), with the sender, project, task, node, and the question's
+// options and deadline; the managing plugin no longer receives inbox.received for this message, while other
+// subscribers receive it as usual. A message to an identity without a manager produces no identity.inbound.
+// Uninstalling the plugin deletes the bindings as well.
 func TestIdentityInboundEvents(t *testing.T) {
 	ctx := context.Background()
 	s := taskConsoleStore(t)

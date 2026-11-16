@@ -305,7 +305,8 @@ func TestStatsAttributionWaitAndPendingQuestions(t *testing.T) {
 	}
 }
 
-// 控制台 /compact 的手动压缩是人发起的，用量计入 console；other 只留给不属于任何执行的用量。
+// A manual compaction via /compact in the console is started by a person, so its usage counts as console; other is
+// only for usage that belongs to no run.
 func TestStatsCountsManualCompactionAsConsole(t *testing.T) {
 	s := sqlitetest.NewStore(t)
 	ctx := context.Background()

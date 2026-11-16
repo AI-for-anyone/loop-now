@@ -1,5 +1,7 @@
-# 休眠的浏览器集成：在仓库根目录下跑 internal/server/app 的 TestWebSleepIntegration，普通与 -race 各一轮，再 go vet。
-# App 由测试在进程内构建，数据放在测试自己的临时 SQLite 数据目录里，测试结束时删除；不起 PostgreSQL 或 Redis。
+# Browser integration for sleep: from the repository root, run TestWebSleepIntegration in internal/server/app once
+# normally and once with -race, then go vet.
+# The test builds the App in-process and keeps its data in the test's own temporary SQLite data directory, which is
+# deleted when the test ends; no PostgreSQL or Redis is started.
 import os,subprocess,argparse
 parser=argparse.ArgumentParser();parser.add_argument("--run",default="TestWebSleepIntegration$");mode=parser.add_mutually_exclusive_group();mode.add_argument("--ordinary-only",action="store_true");mode.add_argument("--race-only",action="store_true");args=parser.parse_args();ordinary_only=args.ordinary_only;race_only=args.race_only
 env={k:os.environ[k] for k in ["PATH","HOME","TMPDIR"] if k in os.environ};env["LOOP_NOW_WEB_SLEEP_INTEGRATION"]="1";env['PATH']='/Users/ljl/.local/node-v24.21.0/bin:'+env['PATH']

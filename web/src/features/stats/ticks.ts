@@ -1,4 +1,5 @@
-// 纵轴刻度：从 0 到不小于 max 的整齐数，大约 count 格。steps 是每格可取的首位数。
+// Y-axis ticks: from 0 up to a round number no smaller than max, in about count steps. steps lists the allowed leading
+// digits of each step.
 export function niceTicks(max: number, count: number, steps = [1, 2, 2.5, 3, 5]): number[] {
   const top = max > 0 ? max : 1
   const raw = top / count
@@ -8,7 +9,7 @@ export function niceTicks(max: number, count: number, steps = [1, 2, 2.5, 3, 5])
   return Array.from({ length: n + 1 }, (_, i) => i * step)
 }
 
-// 时长的刻度取整秒、整分或整小时。
+// Duration ticks are whole seconds, whole minutes or whole hours.
 const DURATION_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400]
 export function durationTicks(max: number, count: number): number[] {
   const top = max > 0 ? max : 1

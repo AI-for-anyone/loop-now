@@ -2,7 +2,7 @@ import { t } from '@/i18n'
 // Local composer state, not a wire DTO. Files stay tied to their original draft.
 export type ImageDraft = { id: string; file: File }
 export type ImageLimits = { maxCount: number; maxImageBytes: number; maxTotalBytes: number }
-// 发送时每张图片的上传状态，显示在缩略图上；传完的图片不再标记。
+// The upload state of each image while sending, shown on its thumbnail; images that finished uploading are no longer marked.
 export type ImageUploads = Partial<Record<string, 'uploading' | 'failed'>>
 export const imageMimeTypes = ['image/png', 'image/jpeg', 'image/webp'] as const
 export function imageProblem(existing: ImageDraft[], incoming: File[], limits: ImageLimits): string | null {

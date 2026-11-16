@@ -1,5 +1,5 @@
-// Package loopctlfake 为测试生成与当前版本号相同的 loopctl 构建产物（格式同 cmd/loopctl-dist），
-// 二进制是打印版本号的小脚本，不需要交叉编译。
+// Package loopctlfake generates loopctl build output with the current version number for tests (same format as
+// cmd/loopctl-dist); the binaries are small scripts that print the version, so no cross-compiling is needed.
 package loopctlfake
 
 import (
@@ -16,7 +16,8 @@ import (
 	"loop-now/internal/buildinfo"
 )
 
-// Dir 生成产物并返回根目录（服务端的 LOOP_NOW_LOOPCTL_DIST_DIR）。产物位于 <根目录>/<版本>/。
+// Dir generates the build output and returns its root directory (the server's LOOP_NOW_LOOPCTL_DIST_DIR). The
+// output is at <root>/<version>/.
 func Dir(t testing.TB) string {
 	t.Helper()
 	root := t.TempDir()

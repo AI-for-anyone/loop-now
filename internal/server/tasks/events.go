@@ -8,13 +8,14 @@ import (
 	"loop-now/internal/server/coord"
 )
 
-// StreamEvent携带持久化序号，事件流自己的ID仅用于中继游标。
+// StreamEvent carries the persisted sequence number; the event stream's own ID is only used as the relay cursor.
 type StreamEvent struct {
 	ID   int64           `json:"id"`
 	Data json.RawMessage `json:"data"`
 }
 
-// mirrorEvents按全局提交顺序中继，项目流不会因跨任务的提交后回调调度顺序跳过事件。
+// mirrorEvents relays in global commit order, so the project stream does not skip events because of the scheduling
+// order of post-commit callbacks across tasks.
 func (s *Service) mirrorEvents() {
 	if s.Coord == nil || s.ctx.Err() != nil {
 		return

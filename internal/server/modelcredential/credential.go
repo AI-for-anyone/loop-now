@@ -65,7 +65,7 @@ type wire struct {
 	Refresh   string            `json:"refresh,omitempty"`
 	Expires   int64             `json:"expires,omitempty"`
 	AccountID string            `json:"accountId,omitempty"`
-	// Plugin 只用于 plugin_state：注册这个模型提供方的插件。
+	// Plugin is used only for plugin_state: the plugin that registered this model provider.
 	Plugin string `json:"plugin,omitempty"`
 }
 
@@ -75,19 +75,20 @@ type Credential struct{ value wire }
 
 func APIKey(key string) (Credential, error) { return validated(wire{Type: "api_key", Key: key}) }
 
-// PluginState 是插件提供方订阅登录的凭证种类：版本只记下插件，令牌与扩展的状态在以版本 ID 命名的状态目录里。
-// 数据库里它的 auth_method 为 oauth。
+// PluginState is the credential kind for subscription logins of plugin providers: the version records only the plugin,
+// and the tokens and the extension's state live in the state directory named after the version ID. Its auth_method in
+// the database is oauth.
 const PluginState = "plugin_state"
 
-// PluginStateOf 返回插件 plugin 的订阅登录凭证。
+// PluginStateOf returns the subscription login credential for the plugin named plugin.
 func PluginStateOf(plugin string) (Credential, error) {
 	return validated(wire{Type: PluginState, Plugin: plugin})
 }
 
-// Plugin 返回 plugin_state 凭证所属的插件；其他种类为空。
+// Plugin returns the plugin a plugin_state credential belongs to; empty for other kinds.
 func (c Credential) Plugin() string { return c.value.Plugin }
 
-// AuthMethod 是这个凭证在数据库里的认证方式：plugin_state 记为 oauth。
+// AuthMethod is this credential's auth method in the database: plugin_state is recorded as oauth.
 func (c Credential) AuthMethod() string {
 	if c.value.Type == PluginState {
 		return "oauth"
@@ -117,7 +118,8 @@ func validated(w wire) (Credential, error) {
 			return Credential{}, ErrInvalid
 		}
 	case PluginState:
-		// 插件提供方的订阅登录（plugins/SPEC.md §13）：令牌在以版本 ID 命名的状态目录里，由扩展自己刷新；这里不含任何秘密。
+		// Subscription login of a plugin provider (plugins/SPEC.md §13): the tokens live in the state directory named
+		// after the version ID and are refreshed by the extension itself; this holds no secret.
 		if len(w.Env) != 0 || w.Key != "" || w.Access != "" || w.Refresh != "" || w.AccountID != "" || w.Expires != 0 || w.Plugin == "" || len(w.Plugin) > 64 {
 			return Credential{}, ErrInvalid
 		}
@@ -146,7 +148,7 @@ func (c Credential) Encode() ([]byte, error) {
 }
 func (c Credential) AuthFile(provider string) ([]byte, error) {
 	if c.value.Type == PluginState {
-		return nil, ErrInvalid // 插件提供方的 auth.json 在状态目录里，不从数据库写
+		return nil, ErrInvalid // a plugin provider's auth.json is in the state directory, not written from the DB
 	}
 	if (len(c.value.Env) != 0 && provider != "anthropic") || provider == "" || strings.ContainsAny(provider, "/\\\x00\r\n\t ") {
 		return nil, ErrInvalid

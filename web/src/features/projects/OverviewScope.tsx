@@ -9,8 +9,10 @@ import { cn } from '@/lib/utils'
 import { useScopeLabel, type OverviewFilter } from './overview-filter'
 import { ScopeIcon } from './ScopeIcon'
 
-// 概览页头元信息里的范围筛选：虚线框里写着“范围 当前范围”，右边一个小箭头；仍是原生下拉（键盘与读屏照旧），
-// 选项为全部、各项目（分组）、平台（交接说明第 11.6 节）。地址中的项目找不到时，多一个不可选的“{名称}（找不到）”作为当前值。
+// The scope filter in the overview header's meta info: a dashed box reading “范围” (Scope) followed by the current scope, with a
+// small arrow on the right. It is still a native select (keyboard and screen readers work as before); the options are All, each
+// project (in a group) and Platform (handoff notes, section 11.6). When the project in the URL can't be found, an extra disabled
+// option “{名称}（找不到）” ({name} (not found)) serves as the current value.
 export function OverviewScopeSelect({
   filter,
   projects,
@@ -54,8 +56,9 @@ export function OverviewScopeSelect({
   )
 }
 
-// 所属标签：白底、细描边、6 圆角；项目带文件夹图标，平台带平台图标；已删除的项目用虚线描边。
-// 只在概览选“全部”时显示（由 ScopeLabelContext 决定），选定范围后不显示。
+// The ownership tag: white background, thin outline, radius 6; projects get a folder icon, the platform gets the platform icon;
+// deleted projects get a dashed outline.
+// Only shown when the overview is set to “全部” (All) (decided by ScopeLabelContext); not shown once a scope is selected.
 export function ScopeTag({ scope, projectId }: { scope: Schemas['AgentScope']; projectId: string | null }) {
   const labelOf = useScopeLabel()
   if (!labelOf) return null
@@ -75,10 +78,10 @@ export function ScopeTag({ scope, projectId }: { scope: Schemas['AgentScope']; p
   )
 }
 
-// 找不到与空范围的说明排在概览的纸上，不再套一层卡片。
+// The not-found and empty-scope notices sit directly on the overview sheet, without wrapping them in another card.
 const panel = 'flex flex-col items-center gap-[18px] px-6 py-14 text-center'
 
-// 地址中的项目找不到：三块内容换成说明和“回到全部”。
+// The project in the URL can't be found: the three sections are replaced by a notice and “回到全部” (Back to all).
 export function OverviewScopeNotFound({ name, onBack }: { name: string; onBack: () => void }) {
   const titleId = useId()
   return (
@@ -98,7 +101,8 @@ export function OverviewScopeNotFound({ name, onBack }: { name: string; onBack: 
   )
 }
 
-// 选定的项目或平台中还没有 Agent：说明这里只显示该范围，并提供进入它的 Agent 页的入口。
+// The selected project or the platform has no Agents yet: explain that only this scope is shown here, and offer a link to its
+// Agents page.
 export function OverviewScopeEmpty({ project }: { project: Schemas['Project'] | null }) {
   const titleId = useId()
   const text = project

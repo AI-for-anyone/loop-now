@@ -15,8 +15,10 @@ import (
 	"loop-now/internal/server/contracttest"
 )
 
-// TestSameRequestsOnExternalPort 对契约中的每个操作，在控制台与对外端口上发送同一个请求（路径参数为随机 ID，请求体为空对象）：
-// 对外开放的操作在两边得到相同的状态码，只限控制台的操作在对外端口上返回 403；两边的响应都经契约校验。
+// TestSameRequestsOnExternalPort sends the same request for every operation in the contract to both the console and the
+// external port (path parameters are random IDs, the body is an empty object): externally open operations get the same
+// status code on both, console-only operations return 403 on the external port; responses on both sides are validated
+// against the contract.
 func TestSameRequestsOnExternalPort(t *testing.T) {
 	e := newEnv(t)
 	_, tok := e.identity("ci-bot")
@@ -67,7 +69,8 @@ func TestSameRequestsOnExternalPort(t *testing.T) {
 	}
 }
 
-// TestAgentContractMatchesConsole 逐一比对 agent-openapi.yaml 与 openapi.yaml 中的同名结构，以及同名接口的 operationId。
+// TestAgentContractMatchesConsole compares each same-named structure in agent-openapi.yaml and openapi.yaml, and the
+// operationId of same-named endpoints.
 func TestAgentContractMatchesConsole(t *testing.T) {
 	agent, console := contracttest.LoadFile(t, "agent-openapi.yaml"), contracttest.LoadFile(t, "openapi.yaml")
 	for name, s := range agent.Components.Schemas {
@@ -102,7 +105,8 @@ func TestAgentContractMatchesConsole(t *testing.T) {
 	}
 }
 
-// TestAgentContractCatchesViolation 用 Agent 契约校验一个不合规的服务端，应发现问题。
+// TestAgentContractCatchesViolation validates a non-conforming server with the Agent contract and expects problems to
+// be found.
 func TestAgentContractCatchesViolation(t *testing.T) {
 	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

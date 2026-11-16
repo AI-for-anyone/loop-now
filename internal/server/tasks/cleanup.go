@@ -14,7 +14,8 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// cleanup 先持久化每个实例的完整会话，再回收目录。归档失败保留所有目录供重试。
+// cleanup first persists each instance's full session and then reclaims the directories. When archiving fails, all
+// directories are kept for a retry.
 func (s *Service) cleanup(ctx context.Context, id uuid.UUID) (err error) {
 	defer func() {
 		if err != nil && ctx.Err() == nil {
@@ -90,7 +91,7 @@ func (s *Service) cleanup(ctx context.Context, id uuid.UUID) (err error) {
 			return e
 		}
 	}
-	// 所有会话已落盘，之后任一步失败均可用数据库归档重试。
+	// All sessions are on disk now; if any later step fails, it can be retried from the database archive.
 	for _, inst := range instances {
 		if inst.Retired {
 			continue
@@ -135,8 +136,9 @@ func (s *Service) cleanup(ctx context.Context, id uuid.UUID) (err error) {
 	return err
 }
 
-// archiveSession 读出任务实例的会话做归档：Pi 的在实例自己的 sessions 目录里；Claude Code 的是 claude 为这个实例工作区留下的
-// 那一个 <会话 ID>.jsonl（只认 claude 会话记录目录下、与实例工作区对应的子目录里的文件）。
+// archiveSession reads a task instance's session for archiving: Pi's is in the instance's own sessions directory;
+// Claude Code's is the one <session ID>.jsonl that claude left for this instance's workspace (only files in the
+// subdirectory of claude's session record directory that corresponds to the instance workspace are accepted).
 func (s *Source) archiveSession(ctx context.Context, inst store.TaskInstance) ([]byte, error) {
 	if inst.SessionState == "missing" {
 		return nil, errors.New("任务会话丢失，保留目录等待修复")
@@ -185,7 +187,8 @@ func (s *Source) archiveSession(ctx context.Context, inst store.TaskInstance) ([
 	}{inst.ID, inst.SessionState, data})
 }
 
-// claudeInstanceSession 判断 file 是不是 claude 为这个任务实例的工作区留下的会话记录：是时返回会话记录目录与相对路径，否则都为空。
+// claudeInstanceSession decides whether file is a session record claude left for this task instance's workspace: if so
+// it returns the session record directory and the relative path, otherwise both are empty.
 func (s *Source) claudeInstanceSession(ctx context.Context, inst store.TaskInstance, file string) (string, string) {
 	if s.ClaudeProjects == nil {
 		return "", ""

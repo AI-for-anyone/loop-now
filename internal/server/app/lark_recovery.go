@@ -49,7 +49,7 @@ func (a *App) recoverPendingLarkSwitches(ctx context.Context, pending []store.Ta
 		err := a.recoverPendingLarkSwitch(bounded, item, native)
 		cancel()
 		if err != nil && a.Log != nil {
-			a.Log.Warn("任务凭证交接恢复未确认，保留执行屏障", "taskId", item.TaskID, "actionId", item.ActionID)
+			a.Log.Warn("task credential handoff recovery not confirmed; keeping the run barrier", "taskId", item.TaskID, "actionId", item.ActionID)
 		}
 	}
 	return ctx.Err()

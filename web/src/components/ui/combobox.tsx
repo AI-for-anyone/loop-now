@@ -7,9 +7,9 @@ import { fieldClass } from "@/lib/field"
 export interface ComboboxOption {
   value: string
   label: string
-  // 第二行的说明，例如模型 ID，用等宽字体显示。
+  // A second line of description, e.g. the model ID, shown in a monospace font.
   hint?: string
-  // 分组标题：相邻且同组的选项排在一个标题下（例如收件人中的 Agent 与外部身份）。
+  // Group heading: adjacent options in the same group sit under one heading (e.g. Agents and external identities among recipients).
   group?: string
 }
 
@@ -25,12 +25,13 @@ interface ComboboxProps {
   disabled?: boolean
   "aria-labelledby"?: string
   "aria-describedby"?: string
-  // 选项的完整说明，用作触发器上显示的文字和选项的无障碍名称；默认是 label。
+  // An option's full description, used as the text shown on the trigger and as the option's accessible name; defaults to label.
   describe?: (option: ComboboxOption) => string
 }
 
-// 可过滤的下拉：触发器的外观同输入框；浮层内是过滤框和候选列表，支持上下键、回车与 Esc。
-// 浮层为纸白底、2px 藏青描边加孔版蓝投影，选中项为黄色。
+// A filterable dropdown: the trigger looks like an input; the popover holds a filter box and the candidate list, with up/down arrow keys,
+// Enter and Esc.
+// The popover has a paper-white background, a 2px navy border and a riso-blue shadow; the selected option is yellow.
 export function Combobox({
   id,
   value,

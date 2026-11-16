@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { ApiError } from '@/api/client'
 import { useDirtyForm } from '@/features/prompts/draft-navigation'
 
-// 表单生命周期，不是 API DTO。T 只能是本地输入；版本与安全核对摘要由正式接口适配层提供。
+// The form lifecycle, not an API DTO. T may only be local input; the revision and the safe review summary are supplied by the official API
+// adapter layer.
 export function useCredentialDraft<T>({ id, initial, revision, summarize, readLatest, save, onSaved }: {
   id: string
   initial: T
@@ -33,7 +34,7 @@ export function useCredentialDraft<T>({ id, initial, revision, summarize, readLa
     finally { if (mounted.current) setReading(false) }
   }
   const submit = async (input: T = draft) => {
-    // 同一手势周期中的重复点击也不能提交第二次；CAS失败不自动重试。
+    // Repeated clicks within the same gesture cycle must not submit a second time either; a CAS failure is never retried automatically.
     if (active.current || conflict) return
     active.current = true; setPending(true); setError(null)
     try { await save(input, base.revision); if (mounted.current) onSaved() }
@@ -47,7 +48,7 @@ export function useCredentialDraft<T>({ id, initial, revision, summarize, readLa
   }
   const adopt = () => {
     if (!review || reading || review.deleted) return
-    // 仅采用人实际核对的版本；后续props刷新不能静默替换该基线。
+    // Adopt only the revision the person actually reviewed; later props refreshes must not silently replace this baseline.
     setBase({ revision: review.revision, summary: review.summary })
     setConflict(false); setReview(null); setError(null)
   }

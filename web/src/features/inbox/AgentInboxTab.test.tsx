@@ -13,7 +13,7 @@ import { baseHandlers } from '@/test/shell'
 const agent = makeAgent({ name: '代码审查助手', address: '测试组织/测试项目/代码审查助手' })
 const tester = makeAgent({ name: '测试助手', address: '测试组织/测试项目/测试助手' })
 
-// 打开 Agent 的收件箱页签，记录对收件箱接口的全部请求（方法、路径与查询参数）。
+// Open the Agent's Inbox tab and record every request to the inbox endpoints (method, path and query parameters).
 async function renderAgentInbox(messages: Schemas['InboxMessage'][]) {
   const requests: string[] = []
   server.use(
@@ -142,7 +142,7 @@ describe('显示 Agent 地址', () => {
   })
 })
 
-// 改版“一张印出来的纸”第 2 步：收件箱页签直接排在纸上，右侧票根里是未读数与总数。
+// "Printed sheet" redesign, step 2: the Inbox tab sits directly on the sheet, with the unread count and the total in the stub on the right.
 describe('纸张上的收件箱', () => {
   it('筛选是两颗胶囊：选中的一颗黄底、藏青描边加藏青投影；顶上一行与列表之间一道实线，只读说明是一行小字', async () => {
     await renderAgentInbox(received())
@@ -171,7 +171,7 @@ describe('纸张上的收件箱', () => {
     const pill = within(read).getByText(/^已读 /).closest('[data-read-state]')!
     expect(pill).toHaveAttribute('data-read-state', 'read')
     expect(pill).toHaveClass('rounded-full', 'bg-tint-blue')
-    // 已读的正文是次要文字色、不加粗。
+    // The body text of read messages uses the secondary text color and is not bold.
     expect(within(read).getByText('帮我审一下 naming 包')).not.toHaveClass('font-bold')
   })
 

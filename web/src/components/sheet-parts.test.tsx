@@ -7,7 +7,7 @@ import { HollowNumber, NumberedSection } from './NumberedSection'
 import { RulerMark, RulerTicks, Sheet, Stub } from './Sheet'
 import { StickyNote } from './StickyNote'
 
-// 改版“一张印出来的纸”的共用部件：纸张、索引标签、票根与尺子、编号分区标题、黄色便签。
+// Shared parts of the "printed sheet" redesign: sheet, index tab, stub and ruler, numbered section heading, yellow sticky note.
 describe('纸张', () => {
   it('内容放在一张纸上：浅纸底、藏青描边、大圆角、孔版蓝实色投影，右侧给投影留出位置', () => {
     render(<Sheet data-testid="sheet">正文</Sheet>)
@@ -15,7 +15,7 @@ describe('纸张', () => {
     expect(sheet).toHaveTextContent('正文')
     expect(sheet).toHaveAttribute('data-sheet')
     expect(sheet).toHaveClass('bg-paper-raised', 'border-2', 'border-ink', 'rounded-panel', 'shadow-print-dialog', 'overflow-hidden', 'mr-1.5')
-    // 纸面上也有主区那层很淡的颗粒。
+    // The sheet surface also carries the main area's very faint paper grain.
     expect(sheet).toHaveClass('riso-grain')
   })
 
@@ -107,7 +107,7 @@ describe('票根与尺子', () => {
     const mark = screen.getByTestId('mark')
     expect(mark).toHaveAttribute('aria-hidden', 'true')
     expect(mark).toHaveStyle({ top: '12px', height: '40px' })
-    // 一笔黄色记号笔，左侧一个粉色小箭头。
+    // A yellow highlighter mark with a small pink arrow on the left.
     expect(mark.querySelector('[data-ruler-band]')).toHaveClass('bg-riso-yellow')
     expect(mark.querySelector('[data-ruler-arrow]')).toHaveClass('border-l-riso-pink')
   })

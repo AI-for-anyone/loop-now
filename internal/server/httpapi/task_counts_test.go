@@ -12,7 +12,8 @@ import (
 	"loop-now/internal/server/tasks"
 )
 
-// GET /projects/{projectId}/tasks/counts：未结束的任务按状态计数，响应经契约校验；项目不存在或已删除时 404。
+// GET /projects/{projectId}/tasks/counts: unfinished tasks are counted by status and the response is validated against
+// the contract; 404 when the project does not exist or is deleted.
 func TestCountProjectTasks(t *testing.T) {
 	e := newEnv(t)
 	e.api.Tasks = &tasks.Service{Store: e.st, Options: tasks.Options{MaxRequest: 1 << 20}}

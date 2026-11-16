@@ -25,10 +25,10 @@ import (
 	"modernc.org/sqlite"
 )
 
-// events.db 里只放这四张可清理的日志表，加上 lifecycle_events 的插件事件捕获表。
+// events.db holds only these four prunable log tables, plus the plugin event capture table for lifecycle_events.
 var eventsTables = []string{"audit_log", "lifecycle_events", "plugin_host_log", "plugin_lifecycle_changes", "run_tool_events"}
 
-// 不属于业务结构的表。
+// Tables that are not part of the business schema.
 func ignoredTable(name string) bool {
 	return name == "goose_db_version" || name == "sqlite_sequence" || strings.HasPrefix(name, "sqlite_")
 }
@@ -79,7 +79,8 @@ func TestBaselineShape(t *testing.T) {
 	if !slices.Equal(inEvents, eventsTables) {
 		t.Errorf("events.db 的表 = %v，应为 %v", inEvents, eventsTables)
 	}
-	// 基线 90 张（PG 的 87 张加 sequences 与两张插件事件捕获表），迁移 2 加本机模式的 3 张。
+	// The baseline has 90 tables (the 87 tables from PG plus sequences and the two plugin event capture tables), and
+	// migration 2 adds the 3 tables for local mode.
 	if len(ts) != 93 {
 		t.Errorf("业务表共 %d 张，应为 93", len(ts))
 	}
@@ -112,7 +113,7 @@ func TestBaselineShape(t *testing.T) {
 		seqs != "conversation_messages.seq=0,runs.queue_seq=0,task_turns.queue_seq=0" {
 		t.Errorf("sequences: %q %v", seqs, err)
 	}
-	// 再迁移一次什么都不做。
+	// Migrating again does nothing.
 	before, err := schema.Version(ctx, d)
 	if err != nil || before < schema.Baseline {
 		t.Fatalf("版本 = %d %v，应不低于 %d", before, err, schema.Baseline)
@@ -125,10 +126,11 @@ func TestBaselineShape(t *testing.T) {
 	}
 }
 
-// latestVersion 是最后一条迁移的版本号；新增迁移时同步修改。
+// latestVersion is the version of the last migration; update it when adding a migration.
 const latestVersion = 11
 
-// TestMigrateToBaseline：导入旧库时先只迁到基线（没有基线之后新增的表），再迁到最新。
+// TestMigrateToBaseline: when importing an old database, first migrate only to the baseline (without the tables added
+// after the baseline), then to the latest.
 func TestMigrateToBaseline(t *testing.T) {
 	ctx := context.Background()
 	d, err := db.Open(ctx, db.Options{Dir: t.TempDir(), Logger: slog.New(slog.DiscardHandler)})
@@ -146,7 +148,7 @@ func TestMigrateToBaseline(t *testing.T) {
 	if ts := tables(t, d); len(ts) != 90 {
 		t.Fatalf("基线业务表 %d 张，应为 90", len(ts))
 	}
-	// 迁移 2 重建 agent_folder_git_pulls（失败码新增两个）：已有记录原样保留。
+	// Migration 2 rebuilds agent_folder_git_pulls (two new failure codes): existing records are kept as they are.
 	st := store.New(d)
 	dc, err := st.EnsureDefaults(ctx, "o", "p")
 	if err != nil {
@@ -191,7 +193,7 @@ func TestMigrateToBaseline(t *testing.T) {
 			t.Fatalf("迁移后应接受 %s：%v", code, err)
 		}
 	}
-	// 进行中的唯一索引仍在：同一路径不能有两个进行中的拉取。
+	// The unique index for in-progress pulls is still there: the same path cannot have two pulls in progress.
 	if _, _, err := st.CreateFolderGitPull(ctx, store.FolderGitPull{ID: uuid.Must(uuid.NewV7()), AgentID: a.ID, ActionID: uuid.New(), URL: "https://example.com/r.git", Branch: "main", Path: "queued"}); err == nil {
 		t.Fatal("同一路径的第二个进行中拉取应被唯一索引拒绝")
 	}
@@ -201,8 +203,9 @@ func TestMigrateToBaseline(t *testing.T) {
 	}
 }
 
-// 13 个正则 CHECK 换成了 GLOB；这里取出约束里由正则换来的那一段，用同样的正则（Go 与 PG 对这些模式
-// 语义相同）逐个比对。有的约束还带别的条件（如名字不能是 console），只比正则那一段。
+// The 13 regex CHECKs were replaced by GLOB; here the part of each constraint converted from a regex is extracted and
+// compared one by one with the same regex (Go and PG give these patterns the same semantics). Some constraints have
+// other conditions as well (e.g. the name must not be console); only the regex part is compared.
 var regexChecks = map[string]struct{ column, pattern string }{
 	"agent_clis_cli_name_check":                               {"cli_name", `^[a-z0-9][a-z0-9._-]{0,63}$`},
 	"blobs_sha256_check":                                      {"sha256", `^[0-9a-f]{64}$`},
@@ -219,7 +222,8 @@ var regexChecks = map[string]struct{ column, pattern string }{
 	"project_cli_auth_github_view":                            {"user_code", `^[A-Z0-9]{4}-[A-Z0-9]{4}$`},
 }
 
-// regexFragment 从建表语句里名为 name 的约束中取出由正则换来的那一段：以 "(length(列)" 或 "(列 GLOB" 开头的括号。
+// regexFragment extracts, from the constraint named name in a CREATE TABLE statement, the part converted from a regex:
+// the parenthesized group starting with "(length(column)" or "(column GLOB".
 func regexFragment(ddl, name, column string) (string, bool) {
 	i := strings.Index(ddl, "CONSTRAINT "+name+" CHECK ")
 	if i < 0 {
@@ -239,7 +243,7 @@ func regexFragment(ddl, name, column string) (string, bool) {
 	return balanced(s[j:])
 }
 
-// balanced 返回以左括号开头、到与之配对的右括号为止的前缀。
+// balanced returns the prefix that starts with an opening parenthesis and ends at its matching closing parenthesis.
 func balanced(s string) (string, bool) {
 	depth := 0
 	for j, r := range s {
@@ -273,7 +277,7 @@ func TestRegexChecksMatchPostgres(t *testing.T) {
 	for name, c := range regexChecks {
 		expr, ok := regexFragment(ddl, name, c.column)
 		if !ok {
-			// 名字对不上说明 PG 侧改了约束：先修正这张表。
+			// A name mismatch means the constraint was changed on the PG side: fix this table first.
 			t.Errorf("基线里找不到约束 %s 中由正则换来的部分", name)
 			continue
 		}
@@ -302,8 +306,10 @@ func TestRegexChecksMatchPostgres(t *testing.T) {
 	}
 }
 
-// rawConn 打开迁移后的 data.db 的一个独立连接：关外键、忽略 CHECK，便于只填 NOT NULL 列造数据。
-// rawDriver 是只给 rawConn 用的驱动：表的时间默认值调用 now()，这里按调用时刻提供它。
+// rawConn opens a separate connection to the migrated data.db with foreign keys off and CHECKs ignored, so data can be
+// made by filling only the NOT NULL columns.
+// rawDriver is the driver used only by rawConn: the tables' time defaults call now(), which it provides here as the
+// time of the call.
 var rawDriver = sync.OnceValue(func() string {
 	drv := &sqlite.Driver{}
 	if err := drv.RegisterFunction("now", &sqlite.FunctionImpl{NArgs: 0, Scalar: func(*sqlite.FunctionContext, []driver.Value) (driver.Value, error) {
@@ -326,7 +332,8 @@ func rawConn(t *testing.T, d *db.DB) *sql.DB {
 	return raw
 }
 
-// insertDummy 给表插一行：overrides 之外的 NOT NULL 且没有默认值的列按类型填占位值。
+// insertDummy inserts one row into a table: NOT NULL columns without defaults, other than those in overrides, are
+// filled with placeholder values by type.
 func insertDummy(t *testing.T, raw *sql.DB, table string, overrides map[string]any) {
 	t.Helper()
 	rows, err := raw.Query(`SELECT name, type, "notnull", dflt_value IS NOT NULL, hidden FROM pragma_table_xinfo(?)`, table)
@@ -363,7 +370,7 @@ func TestGuardTriggersAndEmulations(t *testing.T) {
 	d := sqlitetest.NewDB(t)
 	raw := rawConn(t, d)
 
-	// 飞书凭证绑定只追加。
+	// Feishu (Lark) credential bindings are append-only.
 	insertDummy(t, raw, "task_lark_credential_bindings", map[string]any{"task_id": "t1", "revision": 1})
 	insertDummy(t, raw, "task_lark_binding_members", map[string]any{"task_id": "t1", "revision": 1})
 	for _, q := range []string{
@@ -377,7 +384,8 @@ func TestGuardTriggersAndEmulations(t *testing.T) {
 		}
 	}
 
-	// 列级 SET NULL：删版本时只把 live_version_id 置空，外键开着也能删。
+	// Column-level SET NULL: deleting a version only sets live_version_id to NULL, so it can be deleted with foreign
+	// keys on.
 	insertDummy(t, raw, "project_cli_versions", map[string]any{"id": "v1", "account_id": "a1", "cli_name": "gh", "auth_method": "oauth"})
 	insertDummy(t, raw, "cli_credential_verifications", map[string]any{"id": "c1", "account_id": "a1", "version_id": "v0", "live_version_id": "v1", "cli_name": "gh", "auth_method": "oauth"})
 	insertDummy(t, raw, "cli_credential_import_receipts", map[string]any{"project_id": "p1", "provenance_key_id": "k", "origin_mac": []byte{1}, "account_id": "a1", "version_id": "v0", "live_version_id": "v1"})
@@ -399,7 +407,7 @@ func TestGuardTriggersAndEmulations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// UNIQUE NULLS NOT DISTINCT：project_id 为 NULL 的两行视为重复。
+	// UNIQUE NULLS NOT DISTINCT: two rows with a NULL project_id count as duplicates.
 	insertDummy(t, raw, "plugin_state", map[string]any{"plugin_id": "p", "project_id": nil, "key": "k"})
 	_, err := raw.Exec(`INSERT INTO plugin_state (plugin_id, project_id, key, value) VALUES ('p', NULL, 'k', 'x')`)
 	if !db.IsUniqueIndexViolation(err, "plugin_state_plugin_id_project_id_key_key") {
@@ -410,7 +418,7 @@ func TestGuardTriggersAndEmulations(t *testing.T) {
 		t.Errorf("表达式冲突目标应可用：%v", err)
 	}
 
-	// stop_requested 默认 0。
+	// stop_requested defaults to 0.
 	for _, table := range []string{"runs", "task_turns"} {
 		var dflt string
 		if err := raw.QueryRow(`SELECT dflt_value FROM pragma_table_info(?) WHERE name = 'stop_requested'`, table).Scan(&dflt); err != nil || dflt != "0" {
@@ -419,7 +427,7 @@ func TestGuardTriggersAndEmulations(t *testing.T) {
 	}
 }
 
-// v9 重建 runs 时必须保留 main 的 Pi 命令列以及引用它的对话消息。
+// When v9 rebuilds runs it must keep main's Pi command columns and the conversation messages that reference them.
 func TestConsoleCompactMigrationPreservesPiCommands(t *testing.T) {
 	ctx := context.Background()
 	log := slog.New(slog.DiscardHandler)
@@ -440,7 +448,8 @@ func TestConsoleCompactMigrationPreservesPiCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 版本 8 的数据用 SQL 直接写：现在的 store 读写的是最新的列（例如 runs.compaction），不能用在旧库上。
+	// Version 8 data is written directly in SQL: the current store reads and writes the latest columns (e.g.
+	// runs.compaction), so it cannot be used on an old database.
 	runID, userID, replyID := uuid.New(), uuid.New(), uuid.New()
 	notices := []byte(`{"notices":[{"message":"kept","level":"info"}],"truncated":false}`)
 	for _, q := range []struct {
@@ -493,8 +502,9 @@ func TestConsoleCompactMigrationPreservesPiCommands(t *testing.T) {
 	}
 }
 
-// v11 按项目给已有任务补编号（创建时间相同时按 id），并给保存下来的任务对象（task.updated 事件、幂等动作的响应）补上编号；
-// 之后编号必有、为正、在项目内唯一，且不能改。
+// v11 backfills numbers for existing tasks per project (by id when creation times are equal), and adds the numbers to
+// the stored task objects (task.updated events, responses of idempotent actions); afterwards a number is always
+// present, positive, unique within the project, and cannot be changed.
 func TestTaskNumberMigration(t *testing.T) {
 	ctx := context.Background()
 	log := slog.New(slog.DiscardHandler)
@@ -519,7 +529,8 @@ func TestTaskNumberMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 版本 10 的数据用 SQL 直接写。默认项目里两条任务创建时间相同，按 id 排序；插入顺序故意与编号顺序不同。
+	// Version 10 data is written directly in SQL. Two tasks in the default project have the same creation time and are
+	// ordered by id; the insert order deliberately differs from the number order.
 	a, b, c := uuid.MustParse("00000000-0000-7000-8000-00000000000a"), uuid.MustParse("00000000-0000-7000-8000-00000000000b"), uuid.MustParse("00000000-0000-7000-8000-00000000000c")
 	x := uuid.New()
 	tasks := []struct {

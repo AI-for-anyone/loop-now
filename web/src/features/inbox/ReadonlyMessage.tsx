@@ -13,12 +13,15 @@ import { partyDisplay } from './participants'
 import { QuestionSummary } from './Question'
 import { InboxNotice } from './InboxNotice'
 
-// 只读收件箱中的一条消息属于谁：某个 Agent 的收件箱，或某个外部身份的收件箱。
+// Whose read-only inbox a message is shown in: an Agent's inbox or an external identity's inbox.
 export type InboxOwner = { kind: 'agent'; agentId: string } | { kind: 'identity'; identityId: string }
 
-// 只读收件箱中的一条消息：点开后请求全文，查看不改变已读状态，也没有标记已读的操作。
-// Agent 的收件箱只列收到的消息，显示发件人；外部身份的收件箱另有方向，显示对方。
-// layout：card 是一张张卡片（外部身份的收件箱）；row 是纸张上的一行（Agent 的收件箱页签，改版通用规则第 9 条）。
+// One message in a read-only inbox: opening it fetches the full text; viewing doesn't change the read state, and there is no
+// action to mark it read.
+// An Agent's inbox only lists received messages and shows the sender; an external identity's inbox also has a direction and
+// shows the other party.
+// layout: card renders separate cards (external identity inbox); row is one row on the sheet (the Agent's Inbox tab, redesign
+// general rule 9).
 export function ReadonlyMessage({ owner, message, layout = 'card' }: { owner: InboxOwner; message: Schemas['InboxMessageSummary']; layout?: 'card' | 'row' }) {
   const [open, setOpen] = useState(false)
   const bodyId = useId()
@@ -26,11 +29,12 @@ export function ReadonlyMessage({ owner, message, layout = 'card' }: { owner: In
   const identityFull = useIdentityInboxMessage(owner.kind === 'identity' ? owner.identityId : '', message.id, open && owner.kind === 'identity')
   const full = owner.kind === 'agent' ? agentFull : identityFull
 
-  // 外部身份的收件箱中，收件方是该身份的为收到，其余为发出；按 ID 判断，地址可能被新身份重用。
+  // In an external identity's inbox, messages whose recipient is this identity are received and the rest are sent; decided by
+  // ID, because the address may be reused by a new identity.
   const received = owner.kind === 'agent' || message.to.id === owner.identityId
   const party = received ? message.from : message.to
   const shown = partyDisplay(party)
-  // 被人取消的消息不计为未读，标明已取消。
+  // A message someone cancelled doesn't count as unread and is marked as cancelled.
   const cancelled = message.cancelledAt !== null
   const read = message.readAt !== null || cancelled
   const readText = cancelled
@@ -63,7 +67,7 @@ export function ReadonlyMessage({ owner, message, layout = 'card' }: { owner: In
           onClick={() => setOpen((value) => !value)}
           className="flex w-full flex-wrap items-center gap-x-[18px] gap-y-1.5 px-1 py-[15px] text-left text-ink outline-none focus-visible:shadow-focus"
         >
-          {/* 发件方：头像、名称，下面是等宽的地址。 */}
+          {/* Sender: avatar and name, with the monospace address below. */}
           <span className="flex min-w-0 flex-[0_0_214px] items-center gap-2.5">
             <SenderMark party={party} />
             <span className="flex min-w-0 flex-col leading-[1.35]">
@@ -79,7 +83,7 @@ export function ReadonlyMessage({ owner, message, layout = 'card' }: { owner: In
           <time dateTime={message.createdAt} className="ml-auto w-[92px] shrink-0 text-right font-mono text-[12px] text-ink-700">
             {t.inbox.time(message.createdAt)}
           </time>
-          {/* 未读是略微倾斜的粉色描边印章；已读、已取消是浅蓝胶囊。 */}
+          {/* Unread is a slightly tilted stamp with a pink outline; read and cancelled are light blue pills. */}
           {read ? (
             <span data-read-state="read" className="shrink-0 rounded-full bg-tint-blue px-[9px] text-[12px] leading-[22px] font-bold whitespace-nowrap text-ink-700">
               {readText}
@@ -147,7 +151,8 @@ export function ReadonlyMessage({ owner, message, layout = 'card' }: { owner: In
   )
 }
 
-// 行里发件方的小头像：Agent 是两个叠印的小圆（同对话里的头像），平台、控制台与外部身份是一个藏青小方块，里面一个黄色信封。
+// The sender's small avatar in a row: an Agent gets two small overprinted circles (same as its avatar in chat); the platform,
+// the console and external identities get a small navy square with a yellow envelope inside.
 function SenderMark({ party }: { party: Schemas['InboxParticipant'] }) {
   if (party.kind === 'agent' && party.id) {
     const [back, front] = avatarPair(party.id)

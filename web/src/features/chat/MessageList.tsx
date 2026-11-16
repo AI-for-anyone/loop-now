@@ -35,14 +35,17 @@ function sleptBefore(previous: Turn | undefined, turn: Turn) {
   return Number.isFinite(ms) && ms >= 0 ? ms : undefined
 }
 
-// Agent 回复不加卡片：上方一行是头像、名称、时间（进行中时为阶段）和结局印章，下面直接排正文，最后是运行记录。
-// 未正常完成的回复保留已产生的文字，用次要文字色显示。
+// Agent replies have no card: a top line with the avatar, name, time (the phase while in progress) and the outcome stamp, the body
+// directly below, and the run record last.
+// A reply that didn't complete normally keeps the text it produced, shown in the secondary text color.
 function ReplyBubble({ turn, agent, located }: { turn: Turn; agent: Pick<Schemas['Agent'], 'id' | 'name'>; located: boolean }) {
   const { run, reply } = turn
   const ended = run.status === 'completed' || run.status === 'failed' || run.status === 'interrupted'
   const streaming = reply?.live === true && run.status === 'running'
-  // /pi: 扩展命令由 Pi 直接处理、没有交给模型：这一轮正常结束、没有助手回复。命令的输出是扩展 notify 的消息，
-  // 在回复的位置按顺序显示；没有消息（含升级前跑完的旧执行）才说明一句"命令已执行，没有回复"。
+  // /pi: an extension command handled directly by Pi and never passed to the model: the turn ends normally with no assistant reply.
+  // The command's output is the messages the extension sent via notify, shown in order where the reply would be; only when there
+  // are no messages (including old runs that finished before the upgrade) is a single line
+  // "命令已执行，没有回复" (Command ran; no reply) shown.
   const command = run.piCommand?.handled === true && run.status === 'completed' && (!reply || reply.text === '') ? run.piCommand : null
   return (
     <AgentChatReply agent={agent} metadata={<>{ended && <span>{t.chat.time(run.endedAt ?? runStartedAt(run))}</span>}<RunStatusBadge run={run} /></>}>
@@ -77,7 +80,8 @@ const noticeTone: Record<Notice['level'], string> = {
   error: 'bg-tint-red text-red-text',
 }
 
-// 扩展命令的输出：每条 notify 一块纯文本，等宽、保留换行与空格（输出里常有缩进对齐）；警告与错误另用底色，并写明级别，不只靠颜色。
+// Output of an extension command: one block of plain text per notify, monospaced, keeping line breaks and spaces (the output often
+// aligns with indentation); warnings and errors get their own background color and spell out the level, not relying on color alone.
 function PiCommandNotices({ notices, truncated }: { notices: Notice[]; truncated: boolean }) {
   return (
     <div data-pi-command-notices className="grid min-w-0 gap-1.5">
@@ -92,52 +96,59 @@ function PiCommandNotices({ notices, truncated }: { notices: Notice[]; truncated
   )
 }
 
-// 上一轮被打断、这一轮是打断发出的消息时，两轮之间画一道裁切线。
+// When the previous turn was interrupted and this turn is the message sent as the interrupt, draw a cut line between the two turns.
 function interruptedBy(previous: Turn, turn: Turn) {
   return turn.run.whenBusy === 'interrupt' && previous.run.status === 'interrupted' && previous.run.endReason === 'user_interrupt'
 }
 
-// 裁切线：对话流里的分隔线。左端一个图标，两段 2px 的粉色虚线夹着一句说明；“会话已重开”左端是剪刀，“已打断”是闪电。
-// 设置滚动位置并记下实际结果（浏览器会把位置限制在可滚动的范围内）。
+// Dividers between turns (CutLine, components/CutLine.tsx): “会话已切换，页面历史保留” (Session switched; page history is kept)
+// with scissors where the session changes, and “已打断，先处理这条” (Interrupted; handling this first) with a lightning bolt.
+
+// Set the scroll position and record the actual result (the browser clamps the position to the scrollable range).
 function scrollTo(el: HTMLElement, top: number, last: { current: number }) {
   el.scrollTop = top
   last.current = el.scrollTop
 }
 
 interface MessageListProps {
-  // 当前 Agent，用于回复上方的头像与名称。
+  // The current Agent, for the avatar and name above replies.
   agent: Pick<Schemas['Agent'], 'id' | 'name'>
-  // 已开始的对话轮次（见 buildTurns）。排队中的消息显示在输入框上方的排队列表，不在这里。
+  // Conversation turns that have started (see buildTurns). Queued messages show in the queue list above the input box, not here.
   turns: Turn[]
-  // 有排队中的消息时，对话流为空也不显示“还没有对话”。
+  // When there are queued messages, “还没有对话” (No conversation yet) isn't shown even if the conversation flow is empty.
   hasQueued?: boolean
   hasOlder: boolean
   loadingOlder: boolean
-  // 整页重新获取进行中；此时不加载更早的消息。
+  // A full refetch is in progress; earlier messages aren't loaded meanwhile.
   refreshing: boolean
   onLoadOlder: () => void
-  // 定位到某条回复时：滚动到它、突出显示并展开它的运行记录；下方还有更新的消息时可以向下加载。
+  // When locating a reply: scroll to it, highlight it and expand its run record; when there are newer messages below, they can be
+  // loaded downward.
   targetRunId?: string | null
   hasNewer?: boolean
   loadingNewer?: boolean
   onLoadNewer?: () => void
-  // 不属于对话轮次、按时间插进对话流的内容（Agent 发给你的消息与问题）。
+  // Content that isn't part of a conversation turn and is placed into the conversation flow by time (messages and questions the
+  // Agent sent you).
   inserts?: TimelineInsert[]
-  // 轮次编号（契约 MessagePage）：已加载的第一轮之前还有多少轮，取已加载的最早一页的 turnsBefore，这里按它接着编号。
-  // 历史还没取到时不知道，不给：不显示编号和刻度尺上的数字，只显示刻度。
+  // Turn numbering (contract MessagePage): how many turns come before the first loaded turn, taken from turnsBefore of the earliest
+  // loaded page; numbering here continues from it.
+  // Unknown, and not passed, while the history hasn't been fetched: then no numbers are shown, neither on the turns nor on the ruler,
+  // only the ticks.
   turnsBefore?: number
-  // 刻度尺底部的总轮数，由对话页算好；不知道时不给。
+  // The total turn count at the bottom of the ruler, computed by the chat page; not passed when unknown.
   turnsTotal?: number
 }
 
-// 编号那一栏宽 46px，离正文还有 18px：三位数以内用 34px 的字；四位数、五位数以上缩小字号，不挤到右边的正文。
-// 编号栏 36px 宽：两位数 26px，三位数起逐级缩小，到五位数也放得进这一栏，不挤到右边的正文。
+// The number column is 36px wide: two digits at 26px, shrinking step by step from three digits on, so even five digits fit in the
+// column without pushing into the body on the right.
 const numberSize = (number: number) => (number >= 10000 ? 'text-[12px]' : number >= 1000 ? 'text-[15px]' : number >= 100 ? 'text-[20px]' : 'text-[26px]')
 
-// 每一轮左侧的空心编号：比分区编号小一号（26px、描边 1.3px），栏宽 36px，离正文 12px。
+// The hollow number to the left of each turn: one size smaller than section numbers (26px, 1.3px stroke), in a 36px column, 12px from
+// the body.
 const turnNumberClass = 'w-9 pt-[22px] tracking-[-0.03em] [-webkit-text-stroke:1.3px_var(--riso-blue)]'
 
-// 插进对话流的内容与各轮的正文左对齐：宽屏时让出编号那一栏。
+// Content placed into the conversation flow lines up with the body of the turns: on wide screens it leaves room for the number column.
 function Insert({ children }: { children: ReactNode }) {
   return <div className="flex min-w-0 flex-col nav:pl-12">{children}</div>
 }
@@ -150,8 +161,10 @@ export interface TimelineInsert {
 
 const turnAt = (turn: Turn) => Date.parse(turn.user?.createdAt ?? turn.run.queuedAt ?? '')
 
-// 每条插入内容排在开始时间不晚于它的最后一轮之后（那一轮进行中发出的消息排在这一轮的回复后面）。
-// 早于已加载的第一轮、而更早的历史还没加载时先不显示，免得排到顶部；定位时晚于已加载的最后一轮、而更新的历史还没加载时同样先不显示。
+// Each inserted item goes after the last turn that started no later than it (a message sent while that turn was in progress goes after
+// that turn's reply).
+// Items earlier than the first loaded turn are held back while older history hasn't been loaded yet, so they don't pile up at the top;
+// likewise, while locating, items later than the last loaded turn are held back while newer history hasn't been loaded yet.
 function placeInserts(turns: Turn[], inserts: TimelineInsert[], hasOlder: boolean, hasNewer: boolean) {
   const last = turns.length ? turnAt(turns[turns.length - 1]) : -Infinity
   const placed = new Map<number, TimelineInsert[]>()
@@ -185,26 +198,30 @@ export function MessageList({
   const content = useRef<HTMLDivElement>(null)
   const firstKey = turns[0]?.key
   const lastKey = turns.at(-1)?.key
-  // 进行中的回复是最后一轮，它的文字随增量变长。
+  // The reply in progress is the last turn, and its text grows with each delta.
   const lastText = turns.at(-1)?.reply?.text
   const wasLoadingOlder = useRef(false)
-  // 开始加载更早的消息时的内容高度。之后内容可能因图片加载等原因变高，补偿位置要以开始时为准。
+  // Content height when loading earlier messages started. The content may grow afterwards (images loading, etc.), so the position
+  // compensation must be based on the height at the start.
   const olderFrom = useRef<number | null>(null)
-  // 定位时从目标回复开始看，不贴底；加载到最新、人滚到底部后才恢复贴底。
+  // While locating, start viewing from the target reply and don't stick to the bottom; sticking to the bottom resumes only once
+  // everything up to the latest is loaded and the person has scrolled to the bottom.
   const stickToBottom = useRef(targetRunId === null)
   const located = useRef(false)
-  // 最近一次滚动后的位置。程序设置的位置也记下，用来区分人往上滚和程序滚动后迟到的滚动事件。
+  // The position after the most recent scroll. Positions set by code are recorded too, to tell a person scrolling up apart from a late
+  // scroll event after a programmatic scroll.
   const lastScrollTop = useRef(0)
-  // 从刻度尺跳转到的位置：这次跳转带来的滚动事件不加载更早或更新的消息（刻度尺本身不触发加载）。
+  // The position reached by a jump from the ruler: scroll events caused by that jump don't load earlier or newer messages (the ruler
+  // itself never triggers loading).
   const rulerJump = useRef<number | null>(null)
   const visibleTurns = useVisibleTurns(container, content, turns.map((turn) => turn.run.id).join(','))
 
-  // 加载更早的消息后保持当前位置；在底部时跟随新内容滚动。
+  // Keep the current position after loading earlier messages; when at the bottom, follow new content.
   useLayoutEffect(() => {
     const el = container.current
     if (!el) return
     if (olderFrom.current !== null && wasLoadingOlder.current && !loadingOlder) {
-      // 加载结束：更早的消息插在顶部，按增加的高度补偿。
+      // Loading finished: the earlier messages were inserted at the top, so compensate by the added height.
       scrollTo(el, el.scrollTop + el.scrollHeight - olderFrom.current, lastScrollTop)
       olderFrom.current = null
     } else if (stickToBottom.current) {
@@ -213,7 +230,8 @@ export function MessageList({
     wasLoadingOlder.current = loadingOlder
   }, [firstKey, lastKey, lastText, loadingOlder])
 
-  // 定位：目标回复第一次出现时滚动到它，让它出现在对话区上部。目标也可能是插进对话流的内容（定位到的手动压缩），它出现得晚一些。
+  // Locating: when the target reply first appears, scroll to it so it shows in the upper part of the conversation area. The target can
+  // also be content placed into the conversation flow (a located manual compaction), which appears a bit later.
   useLayoutEffect(() => {
     const el = container.current
     if (!el || targetRunId === null || located.current) return
@@ -223,8 +241,9 @@ export function MessageList({
     scrollTo(el, el.scrollTop + target.getBoundingClientRect().top - el.getBoundingClientRect().top - 24, lastScrollTop)
   }, [targetRunId, turns, inserts.length])
 
-  // 对话区或内容的尺寸变化不一定伴随上面的更新：顶部出现或去掉会话丢失的说明、图片加载完成、
-  // 工具标记换行、状态文字变化。原本停在底部时继续贴底。
+  // Size changes of the conversation area or its content don't always come with the updates above: the missing-session notice
+  // appearing or going away at the top, images finishing loading, tool marks wrapping, status text changing.
+  // If it was at the bottom, keep sticking to the bottom.
   useEffect(() => {
     const el = container.current
     const inner = content.current
@@ -238,7 +257,7 @@ export function MessageList({
   }, [])
 
   const placed = placeInserts(turns, inserts, hasOlder, hasNewer)
-  // 轮次编号：第一轮是第几轮；不知道时为 null。
+  // Turn numbering: the number of the first turn; null when unknown.
   const firstNumber = turnsBefore === undefined ? null : turnsBefore + 1
 
   const loadOlder = () => {
@@ -258,8 +277,9 @@ export function MessageList({
     if (!el) return
     const jumped = rulerJump.current !== null && el.scrollTop === rulerJump.current
     rulerJump.current = null
-    // 回到底部附近就贴底；只有人往上滚才离开底部。程序贴底后内容又一下子变高时，
-    // 迟到的滚动事件里位置没有变小，不能据此取消贴底。下方还有更新的消息时不贴底，而是继续向下加载。
+    // Back near the bottom means stick to the bottom; only a person scrolling up leaves the bottom. When the content suddenly grows
+    // right after code stuck to the bottom, the position in the late scroll event hasn't decreased, so that can't be a reason to stop
+    // sticking. When there are newer messages below, don't stick to the bottom; keep loading downward instead.
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
     if (nearBottom && hasNewer) {
       if (!jumped) loadNewer()
@@ -269,8 +289,9 @@ export function MessageList({
     if (el.scrollTop < 80 && !jumped) loadOlder()
   }
 
-  // 刻度尺跳到某一轮：让这一轮的开头出现在对话区上部（与定位相同的位置），并离开贴底，免得新内容把位置拉回底部。
-  // 立即跳转，不平滑滚动。
+  // The ruler jumps to a turn: bring the start of that turn to the upper part of the conversation area (the same position as locating)
+  // and stop sticking to the bottom, so new content doesn't pull the position back to the bottom.
+  // Jump instantly, without smooth scrolling.
   const jumpTo = (runId: string) => {
     const el = container.current
     const target = Array.from(content.current?.children ?? []).find((child) => child instanceof HTMLElement && child.dataset.runId === runId)
@@ -281,24 +302,29 @@ export function MessageList({
   }
 
   return (
-    // 对话区右侧是票根里的刻度尺，不随消息滚动，取代原生滚动条（滚轮、触控板、键盘滚动不变）；
-    // 只有一轮或没有对话时票根里没有刻度，左侧栏收进抽屉的窄屏不显示票根：这两种情况都保留原生滚动条。
+    // To the right of the conversation area is the ruler in the stub; it doesn't scroll with the messages and replaces the native
+    // scrollbar (scrolling by wheel, trackpad and keyboard is unchanged);
+    // with only one turn or no conversation the stub has no ticks, and on narrow screens where the sidebar folds into a drawer the stub
+    // isn't shown: both cases keep the native scrollbar.
     <div className="flex h-full min-h-0">
-      {/* 滚动区本身是定位容器：里面绝对定位的元素（未读圆点、脚注标题的 sr-only 说明等）随内容滚动并被裁剪，
-          否则它们按未滚动时的位置排在整页里，把页面撑高，输入框下面能拖出一大片空白。 */}
+      {/* The scroll area itself is the positioning container: absolutely positioned elements inside it (unread dots, the sr-only
+          caption of the footnote heading, etc.) scroll with the content and get clipped; otherwise they'd be laid out in the whole
+          page at their unscrolled positions, making the page taller, so a large blank area could be dragged out below the input box. */}
       <div
         ref={container}
         onScroll={onScroll}
         className={cn(
-          // 左侧留白宽屏时收窄一些（编号栏也收窄了），正文左移；窄屏照旧。
+          // On wide screens the left padding is a bit narrower (the number column got narrower too), moving the body left; narrow
+          // screens are unchanged.
           'relative h-full min-w-0 flex-1 overflow-y-auto pt-[26px] pr-[clamp(14px,3vw,44px)] pb-[22px] pl-[clamp(12px,2vw,28px)] nav:pl-[clamp(12px,1.4vw,20px)]',
-          // 有刻度尺时（至少两轮、宽屏）隐藏原生滚动条；没有刻度时保留，一条很长的回复也看得出滚到哪了。
+          // With a ruler (at least two turns, wide screen) hide the native scrollbar; without ticks keep it, so you can still tell how far
+          // you've scrolled through one very long reply.
           turns.length > 1 && 'nav:no-scrollbar',
         )}
         role="log"
         aria-label={t.chat.messagesLabel}
       >
-        {/* 右侧的留白也给气泡、代码块的印刷投影留出位置，免得被滚动区域裁掉。 */}
+        {/* The right padding also leaves room for the print shadows of bubbles and code blocks, so the scroll area doesn't clip them. */}
         <div ref={content} className="flex min-w-0 w-full flex-col gap-7">
           {loadingOlder && <p className="text-center text-[12.5px] font-bold text-ink-500">{t.chat.loadingOlder}</p>}
           {hasOlder && !loadingOlder && (
@@ -314,8 +340,9 @@ export function MessageList({
               <Fragment key={turn.key}>
                 {index > 0 && turns[index - 1].sessionEpoch !== turn.sessionEpoch && <CutLine icon={ScissorsIcon} label={t.chat.sessionDivider} />}
                 {index > 0 && interruptedBy(turns[index - 1], turn) && <CutLine icon={ZapIcon} label={t.chat.interruptDivider} />}
-                {/* 一轮对话：左侧空白处是这一轮的空心编号（与刻度尺上的数字一致，不知道编号时留空），右侧是用户消息与回复。
-                    定位到的那一轮用浅黄底突出显示。 */}
+                {/* One conversation turn: in the blank space on the left is the turn's hollow number (matching the number on the
+                    ruler; left empty when the number is unknown), and on the right the user message and the reply.
+                    The located turn is highlighted with a light yellow fill. */}
                 <div data-run-id={turn.run.id} data-located={isTarget || undefined} className={cn('flex gap-3', isTarget && 'rounded-panel bg-tint-yellow p-4')}>
                   <HollowNumber data-turn-number className={cn(turnNumberClass, numberSize(firstNumber === null ? 0 : firstNumber + index))}>
                     {firstNumber === null ? '' : firstNumber + index}
@@ -328,7 +355,8 @@ export function MessageList({
                       ) : (
                         <UserBubble message={turn.user} run={turn.run} />
                       ))}
-                    {/* 回复的正文跟着对话列走，宽屏时最宽 1100px：宽窗口里不浪费，代码块、表格、图片随之变宽。窄屏照旧 760px。 */}
+                    {/* The reply body follows the conversation column, up to 1100px on wide screens: no wasted space in a wide window,
+                        and code blocks, tables and images widen with it. Narrow screens keep 760px. */}
                     <div className="max-w-[760px] min-w-0 nav:max-w-[1100px]">
                       <ReplyBubble turn={turn} agent={agent} located={isTarget} />
                     </div>

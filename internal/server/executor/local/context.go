@@ -15,15 +15,20 @@ import (
 	"loop-now/internal/server/folders"
 )
 
-// entryCandidates 是 Pi 在 PI_CODING_AGENT_DIR、工作目录及其每一级上级目录中查找的上下文入口文件名（按顺序取第一个存在的）。
+// entryCandidates are the context entry file names Pi looks for in PI_CODING_AGENT_DIR, in the working directory and in
+// each of its parent directories (the first one that exists wins, in this order).
 var entryCandidates = []string{"AGENTS.override.md", "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD"}
 
-// contextPrompt 返回在 Pi 启动时追加到系统提示的“文件夹与上下文”一节：自己的文件夹与可见的上下文文件夹的绝对路径，
-// 生效的本机目录，以及项目（平台 Agent 为全局）上下文入口 AGENTS.md 的原文（不截断）。自己的入口由 Pi 从工作目录读取，不在这里重复。
-// 只在启动时读取，入口的修改要等 Pi 下次重启才生效；也不参与是否重启的判断（本机目录清单的变化由 snap.Local.Identity 决定重启）。
+// contextPrompt returns the "Folders and context" section appended to the system prompt when Pi starts: the absolute
+// paths of the Agent's own folder and of the context folders it can see, the local directories in effect, and the
+// verbatim text (not truncated) of the project's (for a platform Agent, the global) context entry AGENTS.md. The
+// Agent's own entry is read by Pi from the working directory and is not repeated here. It is read only at startup, so
+// changes to an entry take effect only the next time Pi restarts; it also plays no part in deciding whether to restart
+// (changes to the list of local directories trigger a restart through snap.Local.Identity).
 //
-// Claude Code 不读 AGENTS.md（平台也让它不读工作目录里的 CLAUDE.md），所以 Claude Code 运行时把自己的入口原文也放进这一节，
-// 候选名与 Pi 相同，取第一个存在的。
+// Claude Code does not read AGENTS.md (and the platform also stops it from reading CLAUDE.md in the working directory),
+// so for the Claude Code runtime the verbatim text of the Agent's own entry goes into this section too, using the same
+// candidate names as Pi and taking the first one that exists.
 func (e *Executor) contextPrompt(snap agentconfig.Snapshot, d agentDirs, loginHome string) (string, error) {
 	local := localDirectoriesPrompt(snap) + loginsPrompt(loginHome) + providerLoginPrompt(snap, loginHome)
 	ownEntry, ownContent := "", ""
@@ -74,15 +79,17 @@ func (e *Executor) contextPrompt(snap agentconfig.Snapshot, d agentDirs, loginHo
 	return b.String(), nil
 }
 
-// writeEntry 把一个上下文入口的原文放进这一节；内容为空时不写。
+// writeEntry puts the verbatim text of one context entry into this section; nothing is written when the content is
+// empty.
 func writeEntry(b *strings.Builder, path, content string) {
 	if strings.TrimSpace(content) != "" {
 		fmt.Fprintf(b, "\n<context_entry path=%q>\n%s\n</context_entry>\n", path, content)
 	}
 }
 
-// readOwnEntry 读取自己文件夹根目录的上下文入口：按 entryCandidates 的顺序取第一个存在的普通文件（经 os.Root，不跟随越界的软链接），
-// 返回它的路径与原文；没有时都为空。
+// readOwnEntry reads the context entry at the root of the Agent's own folder: the first regular file that exists, in
+// the order of entryCandidates (via os.Root, not following symlinks that escape it), and returns its path and text;
+// both are empty when there is none.
 func readOwnEntry(workspace string) (string, string, error) {
 	root, err := os.OpenRoot(workspace)
 	if err != nil {
@@ -112,8 +119,10 @@ func readOwnEntry(workspace string) (string, string, error) {
 	return "", "", nil
 }
 
-// localDirectoriesPrompt 返回“本机目录”一条（含末尾换行）：只列此刻存在且是目录的条目，没有时为空。
-// Pi 不在沙箱里，这是告知而不是授权：如实说明 Agent 对这些目录有完整读写权限、改动直接落在真实文件上。
+// localDirectoriesPrompt returns the "Local directories" item (with a trailing newline): it lists only entries that
+// exist right now and are directories, and is empty when there are none. Pi is not sandboxed, so this informs rather
+// than authorizes: it states truthfully that the Agent has full read and write access to these directories and that
+// changes land directly on the real files.
 func localDirectoriesPrompt(snap agentconfig.Snapshot) string {
 	var items strings.Builder
 	for _, dir := range snap.Local.Directories {
@@ -141,9 +150,12 @@ func localDirectoriesPrompt(snap agentconfig.Snapshot) string {
 	return b.String()
 }
 
-// loginsPrompt 返回“本机登录”一条（含末尾换行）：开着“用本机的登录状态”时告诉 Agent 它以用户本人的身份使用本机工具，
-// 以及遇到需要交互授权的工具时不要反复重试（Pi 没有终端，弹窗或口令提示只会一直等到超时）；关着时为空。
-// providerLoginPrompt 在开着“用本机的登录状态”、模型提供方来自插件且状态随账号走时说明：用的是本机该扩展自己的登录。
+// loginsPrompt returns the "Local logins" item (with a trailing newline): when
+// “用本机的登录状态” ("Use local logins") is on, it tells the Agent that it uses local tools as the user, and that it
+// should not keep retrying tools that need interactive authorization (Pi has no terminal, so a popup or password prompt
+// just waits until it times out); empty when the setting is off.
+// providerLoginPrompt explains, when “用本机的登录状态” ("Use local logins") is on and the model provider comes from a
+// plugin whose state follows the account, that the extension's own local login is what is used.
 func providerLoginPrompt(snap agentconfig.Snapshot, home string) string {
 	if home == "" || snap.ProviderState == nil || len(snap.ProviderState.Paths) == 0 {
 		return ""
@@ -160,7 +172,8 @@ func loginsPrompt(home string) string {
 		"When a local tool needs interactive authorization (a popup, a browser login, a password or a confirmation), do not keep retrying; tell the user to complete the authorization once on this machine first.\n"
 }
 
-// readEntry 读取上下文文件夹根目录的 AGENTS.md（经 os.Root，不跟随指向文件夹之外的软链接）；不存在或不是普通文件时为空。
+// readEntry reads AGENTS.md at the root of a context folder (via os.Root, not following symlinks that point outside the
+// folder); empty when it does not exist or is not a regular file.
 func readEntry(dir string) (string, error) {
 	root, err := os.OpenRoot(dir)
 	if err != nil {
@@ -172,7 +185,7 @@ func readEntry(dir string) (string, error) {
 		return "", nil
 	}
 	if err != nil {
-		return "", nil // 越界的软链接等：当作没有入口
+		return "", nil // a symlink escaping the folder or the like: treat as no entry
 	}
 	defer f.Close()
 	if info, err := f.Stat(); err != nil || !info.Mode().IsRegular() {
@@ -182,8 +195,8 @@ func readEntry(dir string) (string, error) {
 	return strings.TrimPrefix(string(data), "\ufeff"), err
 }
 
-// removeStrayEntries 删除平台自有目录（Agent 根目录、PI_CODING_AGENT_DIR）中的上下文入口文件：
-// Pi 会把它们读进系统提示，而这些目录不是任何一层上下文。
+// removeStrayEntries deletes context entry files from the platform's own directories (the Agent root directory and
+// PI_CODING_AGENT_DIR): Pi would read them into the system prompt, yet these directories are not any layer of context.
 func removeStrayEntries(d agentDirs) error {
 	for _, dir := range []string{d.root, d.pi} {
 		for _, name := range entryCandidates {
@@ -195,8 +208,9 @@ func removeStrayEntries(d agentDirs) error {
 	return nil
 }
 
-// AncestorEntryFiles 返回工作根目录的 agents 目录及其每一级上级目录中的上下文入口文件。
-// Pi 会把它们读进每个 Agent 的系统提示；这些目录不归平台管理，只在启动时检查并提示。
+// AncestorEntryFiles returns the context entry files in the agents directory of the work root and in each of its parent
+// directories. Pi reads them into every Agent's system prompt; these directories are not managed by the platform, so
+// they are only checked and reported at startup.
 func AncestorEntryFiles(workRoot string) []string {
 	var found []string
 	dir := filepath.Join(workRoot, "agents")

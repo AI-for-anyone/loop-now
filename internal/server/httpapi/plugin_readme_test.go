@@ -8,8 +8,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// 插件的 README（plugins/SPEC.md §2.3）：安装前经预览读，安装后按插件读；按 locale 选文件，locale 不合法 422，
-// 预览不存在或已用于安装 404；没有 README 时 file 与 markdown 为 null。请求与响应都经契约校验。
+// A plugin's README (plugins/SPEC.md §2.3): read through the preview before install, by plugin after install; the file
+// is chosen by locale, an invalid locale gives 422, a preview that does not exist or was already used for an install
+// gives 404; without a README, file and markdown are null. Requests and responses are validated against the contract.
 func TestPluginReadmeAPI(t *testing.T) {
 	e := newEnv(t)
 	dir := writePluginDir(t, "guide")

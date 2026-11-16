@@ -10,7 +10,7 @@ import { runtimeList } from '@/test/runtimes'
 import { server } from '@/test/server'
 import { RuntimesCard } from './RuntimesCard'
 
-// 全局设置里的 Agent 运行时（GET /runtimes）。
+// Agent runtimes in global settings (GET /runtimes).
 function setup(list: Schemas['RuntimeList'] | (() => Response)) {
   const queries: string[] = []
   server.use(

@@ -9,37 +9,40 @@ import (
 	"path/filepath"
 )
 
-// checkpointBusyMS 是检查点期间写连接等待读者的上限（毫秒）。
+// checkpointBusyMS is how long (in milliseconds) the write connection waits for readers during a checkpoint.
 const checkpointBusyMS = 200
 
-// CheckpointMode 是 wal_checkpoint 的模式。
+// CheckpointMode is a wal_checkpoint mode.
 type CheckpointMode string
 
 const (
-	// CheckpointPassive 不等待读者，尽量把 WAL 写回主文件；平时周期性执行。
+	// CheckpointPassive does not wait for readers and writes back as much of the WAL into the main file as it can;
+	// it runs periodically in normal operation.
 	CheckpointPassive CheckpointMode = "PASSIVE"
-	// CheckpointTruncate 写回全部帧并把 WAL 截为 0；有读者占着旧快照时做不完（Busy）。
+	// CheckpointTruncate writes back all frames and truncates the WAL to 0; it cannot finish (Busy) while a reader
+	// holds an old snapshot.
 	CheckpointTruncate CheckpointMode = "TRUNCATE"
 )
 
-// CheckpointResult 是一个库的检查点结果。
+// CheckpointResult is the checkpoint result for one database.
 type CheckpointResult struct {
 	Schema string
-	// Busy 表示有读者或写者挡住，没能做完。
+	// Busy means a reader or writer was in the way and the checkpoint did not finish.
 	Busy bool
-	// LogFrames 是 WAL 中的帧数，Checkpointed 是已写回的帧数。
+	// LogFrames is the number of frames in the WAL; Checkpointed is the number of frames written back.
 	LogFrames, Checkpointed int64
 }
 
-// Checkpoint 对 data.db 与 events.db 各执行一次检查点。在写连接上执行，与写事务互斥。
+// Checkpoint runs one checkpoint each on data.db and events.db. It runs on the write connection, so it excludes
+// write transactions.
 func (d *DB) Checkpoint(ctx context.Context, mode CheckpointMode) ([]CheckpointResult, error) {
 	c, release, err := d.acquireWriter(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
-	// TRUNCATE 遇到占着旧快照的读者会按 busy_timeout（10s）等待，而它占着唯一的写连接；
-	// 检查点期间把等待缩短，做不完就报 Busy，下次再做。
+	// TRUNCATE waits up to busy_timeout (10s) for a reader holding an old snapshot, all the while holding the single
+	// write connection; shorten the wait during the checkpoint, and if it cannot finish report Busy and try next time.
 	bg := context.WithoutCancel(ctx)
 	if _, err := c.ExecContext(bg, fmt.Sprintf("PRAGMA busy_timeout=%d", checkpointBusyMS)); err != nil {
 		return nil, err
@@ -62,17 +65,19 @@ func (d *DB) Checkpoint(ctx context.Context, mode CheckpointMode) ([]CheckpointR
 	return out, nil
 }
 
-// Optimize 执行 PRAGMA optimize，让 SQLite 按需更新统计信息。与 TRUNCATE 检查点一起每天执行一次。
+// Optimize runs PRAGMA optimize so SQLite updates statistics as needed. It runs once a day together with the
+// TRUNCATE checkpoint.
 func (d *DB) Optimize(ctx context.Context) error {
 	_, err := d.Exec(ctx, "PRAGMA optimize")
 	return err
 }
 
-// WALWarnBytes 是单个 WAL 被认为过大的阈值：超过时通常是长时间不结束的读事务挡住了检查点。
-// 后台维护据此记告警，健康接口据此给出 walWarning。
+// WALWarnBytes is the size above which a single WAL is considered too large: exceeding it usually means a read
+// transaction that never ends is blocking the checkpoint.
+// Background maintenance logs a warning based on it, and the health endpoint reports walWarning based on it.
 const WALWarnBytes int64 = 256 << 20
 
-// WALSize 返回两个库 -wal 文件的字节数（不存在时为 0），供告警与状态页使用。
+// WALSize returns the byte size of the two databases' -wal files (0 when missing), for warnings and the status page.
 func (d *DB) WALSize() (data, events int64) {
 	size := func(name string) int64 {
 		st, err := os.Stat(filepath.Join(d.dir, name+"-wal"))
@@ -84,8 +89,10 @@ func (d *DB) WALSize() (data, events int64) {
 	return size(DataFile), size(EventsFile)
 }
 
-// BackupTo 用 VACUUM INTO 把两个库各写成 dir 下的一个完整、一致的新文件（data.db、events.db）。
-// 在只读连接上执行，不挡写；目标文件已存在时拒绝，不覆盖。
+// BackupTo uses VACUUM INTO to write each of the two databases as a complete, consistent new file in dir (data.db,
+// events.db).
+// It runs on a read-only connection and does not block writes; it refuses, rather than overwrites, when a target
+// file already exists.
 func (d *DB) BackupTo(ctx context.Context, dir string) error {
 	targets := map[string]string{"main": filepath.Join(dir, DataFile), EventsSchema: filepath.Join(dir, EventsFile)}
 	for _, p := range targets {
@@ -100,7 +107,8 @@ func (d *DB) BackupTo(ctx context.Context, dir string) error {
 		return err
 	}
 	defer c.Close()
-	// VACUUM INTO 不改源库，但 query_only 也会拦它；只在这次借用期间放开，恢复失败就让连接池丢弃这个连接。
+	// VACUUM INTO does not change the source database, but query_only blocks it anyway; lift it only for this
+	// borrow, and if restoring it fails, make the pool discard this connection.
 	if _, err := c.ExecContext(ctx, "PRAGMA query_only=0"); err != nil {
 		return err
 	}

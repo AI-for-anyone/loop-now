@@ -14,7 +14,7 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// fakeHooks 记录同步 Hook 的调用，按事件类型返回预设的结果。
+// fakeHooks records synchronous Hook calls and returns preset results by event type.
 type fakeHooks struct {
 	mu       sync.Mutex
 	calls    []hookCall
@@ -40,7 +40,7 @@ func (f *fakeHooks) set(typ string, o pluginhost.Outcome) {
 	f.outcomes[typ] = o
 }
 
-// last 返回某类事件最近一次调用。
+// last returns the most recent call for an event type.
 func (f *fakeHooks) last(t *testing.T, typ string) hookCall {
 	t.Helper()
 	f.mu.Lock()
@@ -66,9 +66,10 @@ func (f *fakeHooks) count(typ string) int {
 	return n
 }
 
-// 控制台消息：/ 开头的先给认领类 console.command，被认领时不发给 Agent、返回插件的回复；其余经 message.before_enqueue 改写。
-// Inbox：inbox.before_send 可以阻止；Agent 发出的经 inbox.before_deliver 改写。sleep.before_schedule 可以改时长。
-// 每个事件都带固定字段与 Agent 所在的项目。
+// Console messages: those starting with / go to the claim Hook console.command first; when claimed they are not sent to
+// the Agent and the plugin's reply is returned; the rest are rewritten through message.before_enqueue. Inbox:
+// inbox.before_send can block; messages sent by Agents are rewritten through inbox.before_deliver.
+// sleep.before_schedule can change the duration. Every event carries the fixed fields and the Agent's project.
 func TestPluginHookCallSites(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -130,7 +131,8 @@ func TestPluginHookCallSites(t *testing.T) {
 	}
 }
 
-// 任务创建与节点提交前的拦截：被阻止时 409 plugin_blocked；同一动作 ID 的重放直接返回原结果，不再询问插件。
+// Intercepting before task creation and node submission: 409 plugin_blocked when blocked; a replay with the same action
+// ID returns the original result directly without asking plugins again.
 func TestPluginHookTaskCallSites(t *testing.T) {
 	e, manager, d := taskEnv(t)
 	hooks := &fakeHooks{outcomes: map[string]pluginhost.Outcome{}}

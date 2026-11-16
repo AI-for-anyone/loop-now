@@ -11,8 +11,9 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// 这组测试按控制台对话流（web/src/features/chat/turns.ts 的 buildTurns）的做法把已加载的历史排成轮次，
-// 检查“已加载的最早一页的 turnsBefore + 轮次在已加载历史中的位置”等于它在整个对话里的下标。
+// These tests arrange the loaded history into turns the same way the console conversation stream does (buildTurns in
+// web/src/features/chat/turns.ts), and check that "turnsBefore of the earliest loaded page + the turn's position in
+// the loaded history" equals its index in the whole conversation.
 
 func voidedRun(r store.Run) bool {
 	switch r.EndReason {
@@ -22,8 +23,9 @@ func voidedRun(r store.Run) bool {
 	return false
 }
 
-// refTurns 是 buildTurns 的 Go 版本：按消息出现的先后列出执行，补上实时状态里进行中的那一轮（current，可为空），
-// 去掉排队中的与作废的，按开始时间（没有时按入队时间）稳定排序。
+// refTurns is a Go version of buildTurns: it lists runs in the order their messages appear, adds the turn in progress
+// from the live status (current, may be nil), drops queued and voided runs, and stable-sorts by start time (queue
+// time when there is none).
 func refTurns(items []store.MessageWithRun, current *store.Run) []uuid.UUID {
 	seen := map[uuid.UUID]bool{}
 	var runs []store.Run
@@ -56,7 +58,7 @@ func refTurns(items []store.MessageWithRun, current *store.Run) []uuid.UUID {
 type turnFixture struct {
 	*recEnv
 	all     []store.MessageWithRun
-	global  map[uuid.UUID]int // 每一轮在整个对话里的下标
+	global  map[uuid.UUID]int // index of each turn in the whole conversation
 	order   []uuid.UUID
 	names   map[uuid.UUID]string
 	current *store.Run
@@ -85,18 +87,20 @@ func (e *recEnv) finish(r store.Run, status, reason string) {
 	}
 }
 
-// newTurnFixture 写出一段覆盖各种情况的对话，返回它的全部消息与按 buildTurns 排好的全部轮次：
+// newTurnFixture writes a conversation covering the various cases, and returns all its messages and all turns ordered
+// as buildTurns would:
 //
-//	a    完成
-//	b    进行中时收到排队的 q1、随即撤回的 q2（作废）、打断 i1；b 被打断
-//	i1   打断消息先于更早排队的 q1 执行
-//	q1   完成
-//	v    开始后发现没有待处理消息而作废（no_pending_messages）
-//	——   会话重开（epoch 2），编号继续
-//	w    排队中被 sleep 的新工作承接（sleep_superseded），没有开始时间，按入队时间排
-//	c    完成
-//	——   一次手动压缩（console_compact，没有对话消息，不算）
-//	d    进行中；e 仍在排队（不算）
+//	a    completed
+//	b    while in progress, receives queued q1, q2 which is withdrawn right away (voided), and interrupt i1; b is
+//	     interrupted
+//	i1   the interrupt message runs before q1, which was queued earlier
+//	q1   completed
+//	v    voided after starting because there were no pending messages (no_pending_messages)
+//	--   session restart (epoch 2); numbering continues
+//	w    taken over while queued by new sleep work (sleep_superseded); has no start time, ordered by queue time
+//	c    completed
+//	--   a manual compaction (console_compact; no conversation messages, does not count)
+//	d    in progress; e is still queued (does not count)
 func newTurnFixture(t *testing.T) *turnFixture {
 	e := newRecEnv(t)
 	a := e.send(true, "")
@@ -129,7 +133,8 @@ func newTurnFixture(t *testing.T) *turnFixture {
 	mustExec(t, e.s, `UPDATE runs SET status = 'interrupted', end_reason = 'sleep_superseded', ended_at = now() WHERE id = $1 AND status = 'queued'`, w.ID)
 	c := e.send(true, "")
 	e.finish(c, "completed", "")
-	// 手动压缩（/compact）的执行没有用户消息也没有回复，不进对话流，不算一轮。
+	// A manual compaction (/compact) run has no user message and no reply, does not enter the conversation stream, and
+	// does not count as a turn.
 	mustExec(t, e.s, `INSERT INTO runs (id, agent_id, user_message_id, config_version, priority, queue_seq, status, origin, queued_at, started_at, running_at, ended_at)
 		VALUES ($1, $2, NULL, 1, 1, (SELECT coalesce(max(queue_seq), 0) + 1 FROM runs), 'completed', 'console_compact', now(), now(), now(), now())`, uuid.Must(uuid.NewV7()), e.agent)
 	d := e.send(true, "")
@@ -169,8 +174,9 @@ func newTurnFixture(t *testing.T) *turnFixture {
 	return f
 }
 
-// window 是已加载的连续几页（pages[0] 最早）；atLatest 表示已加载到最新，这时控制台把进行中的那一轮补在末尾。
-// 返回编号与整个对话里的下标不一致的轮次数。
+// window is the loaded consecutive pages (pages[0] is the earliest); atLatest means the latest has been loaded, in
+// which case the console appends the turn in progress at the end.
+// Returns the number of turns whose numbering does not match their index in the whole conversation.
 func (f *turnFixture) numbering(pages []store.MessagePage, atLatest bool) (wrong int, detail string) {
 	var items []store.MessageWithRun
 	for _, p := range pages {
@@ -189,7 +195,7 @@ func (f *turnFixture) numbering(pages []store.MessagePage, atLatest bool) (wrong
 	return wrong, detail
 }
 
-// name 是轮次在这组夹具里的名字（a、b、i1……），用于报错。
+// name is the turn's name in this fixture (a, b, i1, ...), used in error messages.
 func (f *turnFixture) name(id uuid.UUID) string {
 	if n, ok := f.names[id]; ok {
 		return n
@@ -209,8 +215,9 @@ func seqs(pages []store.MessagePage) (first, last int64) {
 	return first, last
 }
 
-// 从最新一页起向更早翻页（控制台的普通取法），每种页大小、每加载一页后编号都与整个对话一致；
-// 打断消息先执行、作废的执行、排队中的执行、会话重开、没有开始时间的轮次夹在中间都不影响。
+// Paging from the latest page towards older ones (the console's normal fetch): for every page size, after each page
+// is loaded, the numbering matches the whole conversation; interrupt messages running first, voided runs, queued runs,
+// a session restart and turns without a start time in between do not affect it.
 func TestMessagePageTurnNumbersWhilePaging(t *testing.T) {
 	f := newTurnFixture(t)
 	for limit := 1; limit <= len(f.all); limit++ {
@@ -236,12 +243,15 @@ func TestMessagePageTurnNumbersWhilePaging(t *testing.T) {
 	}
 }
 
-// 定位取法：定位页及向两边翻出的每一页，turnsBefore 都与普通取法从同一条消息起的一页相同；
-// 向后翻到最新之后，编号与整个对话一致。还没有加载到最新时，只有已加载历史之后的打断消息
-// 先于其中排队的消息执行这一种情况会让排在后面的编号偏小（见 MessagePage.turnsBefore 的说明）。
+// Around-run fetch: for the anchored page and every page paged out to either side, turnsBefore equals that of the page
+// a normal fetch returns starting from the same message; after paging forward to the latest, the numbering matches the
+// whole conversation. Before the latest has been loaded, the only case that makes later numbers too small is an
+// interrupt message after the loaded history running before a message queued within it (see the note on
+// MessagePage.turnsBefore).
 func TestMessagePageTurnNumbersAroundRun(t *testing.T) {
 	f := newTurnFixture(t)
-	// fromHere 是普通取法下从 seq 起向后全部加载时这一页应给的 turnsBefore：那时第一轮在整个对话里的下标。
+	// fromHere is the turnsBefore this page should give under the normal fetch when everything from seq onward is
+	// loaded: the index of the first turn in the whole conversation at that point.
 	fromHere := func(seq int64) int64 {
 		i := slices.IndexFunc(f.all, func(it store.MessageWithRun) bool { return it.Seq >= seq })
 		if turns := refTurns(f.all[i:], f.current); len(turns) > 0 {
@@ -274,7 +284,7 @@ func TestMessagePageTurnNumbersAroundRun(t *testing.T) {
 					}
 					knownGaps++
 				}
-				// 先向更新翻到最新，再向更早翻到最早，每加载一页检查一次。
+				// First page forward to the latest, then back to the earliest, checking after each page is loaded.
 				switch {
 				case newest.HasMoreAfter:
 					after := newest.Items[len(newest.Items)-1].ID
@@ -294,9 +304,11 @@ func TestMessagePageTurnNumbersAroundRun(t *testing.T) {
 	t.Logf("定位取法还没有加载到最新、已加载范围之后有排在前面的轮次的窗口：%d 个", knownGaps)
 }
 
-// hiddenAbove 判断已加载历史（seq first..last）是否有这种情况：一轮在已加载范围里没有消息、却有比 last 更晚的消息
-// （打断消息发在已加载范围之后、先于其中排队的消息执行；或一轮在整个已加载范围期间都在进行，回复在之后），
-// 并且它排在已加载历史中的某一轮之前。这时控制台不显示它，后面的轮次编号偏小，加载到它的消息后恢复。
+// hiddenAbove reports whether the loaded history (seq first..last) has this case: a turn that has no messages in the
+// loaded range but has messages later than last (an interrupt message sent after the loaded range that ran before a
+// message queued within it; or a turn in progress during the whole loaded range, with its reply afterwards), and that
+// is ordered before some turn in the loaded history. The console then does not show it, and later turn numbers are
+// too small until its messages are loaded.
 func (f *turnFixture) hiddenAbove(first, last int64) bool {
 	shown := map[uuid.UUID]bool{}
 	maxShown := -1
@@ -314,7 +326,8 @@ func (f *turnFixture) hiddenAbove(first, last int64) bool {
 	return false
 }
 
-// 空页与空对话：没有消息时 turnsBefore 按这一页本该开始的位置计算。
+// Empty page and empty conversation: with no messages, turnsBefore is computed from the position where this page would
+// have started.
 func TestMessagePageTurnNumbersEmpty(t *testing.T) {
 	e := newRecEnv(t)
 	if p := e.list(store.MessageQuery{Limit: 50}); len(p.Items) != 0 || p.TurnsBefore != 0 || p.TurnsTotal != 0 || p.HasMore {
@@ -326,11 +339,13 @@ func TestMessagePageTurnNumbersEmpty(t *testing.T) {
 	if p := f.list(store.MessageQuery{Before: &first, Limit: 5}); len(p.Items) != 0 || p.TurnsBefore != 0 || p.TurnsTotal != 7 {
 		t.Fatalf("最早一条之前：%+v", p)
 	}
-	// 最新一条之后：之后的消息里只有进行中的 d 所在的一轮（由实时状态补上），它之前有 6 轮。
+	// After the latest message: the messages after it only contain the turn of d in progress (added from the live
+	// status), and there are 6 turns before it.
 	if p := f.list(store.MessageQuery{After: &last, Limit: 5}); len(p.Items) != 0 || p.TurnsBefore != 6 || p.TurnsTotal != 7 {
 		t.Fatalf("最新一条之后：%+v", p)
 	}
-	// 只有一条仍在排队的消息的最新一页：进行中的 d 的用户消息在更早的页里，它仍是这一页之后的第一轮。
+	// The latest page with only one message still queued: the user message of d (in progress) is on an earlier page,
+	// and d is still the first turn after this page.
 	if p := f.list(store.MessageQuery{Limit: 1}); len(p.Items) != 1 || p.Items[0].Run.Status != "queued" || p.TurnsBefore != 6 {
 		t.Fatalf("只有排队消息的一页：%+v", p)
 	}

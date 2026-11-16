@@ -242,7 +242,8 @@ func TestTaskUploadDefaultMetadata(t *testing.T) {
 	}
 }
 
-// 流式成果下载不受JSON上限影响，读取中断后重新写临时文件，不拼接两次内容。
+// Streaming artifact downloads are not subject to the JSON size limit; after an interrupted read the temporary
+// file is written again from the start instead of concatenating the content twice.
 func TestTaskArtifactReadRecovery(t *testing.T) {
 	data := bytes.Repeat([]byte("成果"), 2048)
 	sum := sha256.Sum256(data)

@@ -11,7 +11,8 @@ import (
 
 var update = flag.Bool("update", false, "更新 golden 文件")
 
-// 完整的 schema 输出固定在 golden 文件中，命令的任何变化都会在评审时显示为差异。
+// The complete schema output is pinned in a golden file, so any change to the commands shows up as a diff in
+// review.
 func TestSchemaGolden(t *testing.T) {
 	r := newEnv(t).run("schema")
 	r.ok(t)

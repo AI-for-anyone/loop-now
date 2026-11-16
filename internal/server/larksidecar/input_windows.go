@@ -13,8 +13,9 @@ import (
 	"loop-now/internal/privatefs"
 )
 
-// scopeRoot 是经 os.Root 打开的目录：Windows 上 os.Root 以 O_NOFOLLOW_ANY 打开，路径中任何一段是符号链接或 junction 都失败。
-// 根目录自身的路径按普通方式解析后，再逐段核对没有 reparse point。
+// scopeRoot is a directory opened through os.Root: on Windows os.Root opens with O_NOFOLLOW_ANY, so it fails if any
+// segment of the path is a symlink or junction.
+// The root directory's own path is resolved the normal way, and then every segment is checked for reparse points.
 type scopeRoot struct {
 	path string
 	root *os.Root
@@ -22,7 +23,8 @@ type scopeRoot struct {
 
 func (r *scopeRoot) Close() error { return r.root.Close() }
 
-// private 报告目录是否只有当前用户能访问（受保护的 DACL 只含当前用户）。
+// private reports whether only the current user can access the directory (a protected DACL containing only the
+// current user).
 func (r *scopeRoot) private() bool {
 	f, e := r.root.Open(".")
 	if e != nil {
@@ -32,7 +34,8 @@ func (r *scopeRoot) private() bool {
 	return privatefs.IsPrivateFile(f)
 }
 
-// openScopeRoot 从卷根开始逐级经 os.Root 打开 root 的每一段（每级都拒绝 reparse point），最后核对目录属于当前用户。
+// openScopeRoot opens every segment of root through os.Root level by level starting from the volume root (rejecting
+// reparse points at every level), and finally verifies that the directory belongs to the current user.
 func openScopeRoot(root string) (*scopeRoot, error) {
 	vol := filepath.VolumeName(root)
 	if vol == "" || !filepath.IsAbs(root) {
@@ -71,7 +74,7 @@ func openScopeRoot(root string) (*scopeRoot, error) {
 	return &scopeRoot{path: root, root: cur}, nil
 }
 
-// openInputAt 在 root 之下打开 rel（os.Root 拒绝路径中任何符号链接），必须是普通文件。
+// openInputAt opens rel under root (os.Root rejects any symlink in the path); it must be a regular file.
 func openInputAt(root *scopeRoot, rel string) (*os.File, error) {
 	for _, part := range strings.Split(rel, string(filepath.Separator)) {
 		if part == "" || part == "." || part == ".." {
@@ -90,7 +93,8 @@ func openInputAt(root *scopeRoot, rel string) (*os.File, error) {
 	return f, nil
 }
 
-// privateDescriptor 核对已打开的启动描述文件：属于当前用户、只有当前用户能访问、只有一个硬链接、大小在 (0, limit]。
+// privateDescriptor checks the opened launch descriptor file: owned by the current user, accessible only by the
+// current user, a single hard link, and size in (0, limit].
 func privateDescriptor(f *os.File, limit int64) bool {
 	var info windows.ByHandleFileInformation
 	if windows.GetFileInformationByHandle(windows.Handle(f.Fd()), &info) != nil {

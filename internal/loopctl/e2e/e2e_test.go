@@ -13,7 +13,8 @@ import (
 	"loop-now/internal/server/executor"
 )
 
-// 9.1 Agent 身份：服务端为 Pi 注入地址与令牌；Agent 用 loopctl 查询身份、列出、读取、回复、主动发信。
+// 9.1 Agent identity: the server injects the address and token for Pi; the Agent uses loopctl to look up its
+// identity, list, read, reply and send messages on its own initiative.
 func TestAgentIdentity(t *testing.T) {
 	w := newWorld(t, false)
 	s := w.start(nil)
@@ -21,7 +22,8 @@ func TestAgentIdentity(t *testing.T) {
 	dev := s.createAgent("开发助手")
 	reviewer := s.createAgent("审查助手")
 
-	// 控制台给开发助手发 Inbox 消息：Agent 被唤醒，Pi 启动时注入 Agent 令牌。
+	// The console sends an Inbox message to the dev assistant Agent: the Agent is woken, and the Agent token is
+	// injected when Pi starts.
 	sent := s.console(201, "POST", "/inbox/messages", map[string]any{"to": "默认项目/开发助手", "text": "请看一下构建"})
 	s.waitIdle(dev)
 	ag := newLoopctl(t, w.agentEnv())
@@ -31,14 +33,14 @@ func TestAgentIdentity(t *testing.T) {
 		t.Fatalf("%s", who.Stdout)
 	}
 
-	// 列出摘要两次都不改变已读状态。
+	// Listing the summaries twice does not change the read state either time.
 	for i := 0; i < 2; i++ {
 		msgs := ag.run("inbox", "list", "--unread").ok(t)["messages"].([]any)
 		if len(msgs) != 1 || msgs[0].(map[string]any)["id"] != sent["id"] {
 			t.Fatalf("第 %d 次列出未读：%v", i+1, msgs)
 		}
 	}
-	// 读取后标为已读；重复读取结果相同、已读时间不变。
+	// Reading marks the message read; reading again gives the same result and the read time does not change.
 	first := ag.run("inbox", "read", sent["id"].(string)).ok(t)
 	if first["text"] != "请看一下构建" || first["from"].(map[string]any)["address"] != "@console" || first["readAt"] == nil {
 		t.Fatalf("%v", first)
@@ -53,7 +55,7 @@ func TestAgentIdentity(t *testing.T) {
 		t.Fatalf("默认列出全部，并标出已读：%v", msgs)
 	}
 
-	// 回复留在原线索中，收件人是控制台操作者。
+	// The reply stays in the original thread, and the recipient is the console operator.
 	ag.stdin = "构建正常\n"
 	reply := ag.run("inbox", "reply", sent["id"].(string), "--text-file", "-").ok(t)
 	if reply["threadId"] != sent["threadId"] || reply["to"].(map[string]any)["kind"] != "console" || reply["whenBusy"] != nil {
@@ -64,13 +66,13 @@ func TestAgentIdentity(t *testing.T) {
 		t.Fatalf("控制台应收到回复：%v", consoleInbox)
 	}
 
-	// 主动发给控制台操作者：开启新线索。
+	// Sending to the console operator on the Agent's own initiative starts a new thread.
 	ag.stdin = ""
 	toConsole := ag.run("inbox", "send", "@console", "--text", "构建完成").ok(t)
 	if toConsole["threadId"] == sent["threadId"] || toConsole["whenBusy"] != nil {
 		t.Fatalf("%v", toConsole)
 	}
-	// 发给另一个 Agent：不指定时排队，指定时打断。
+	// Sending to another Agent: queue when not specified, interrupt when specified.
 	if m := ag.run("inbox", "send", "默认项目/审查助手", "--text", "请审查").ok(t); m["whenBusy"] != "queue" {
 		t.Fatalf("%v", m)
 	}
@@ -78,16 +80,18 @@ func TestAgentIdentity(t *testing.T) {
 		t.Fatalf("%v", m)
 	}
 	s.waitIdle(reviewer)
-	// 地址解析不到，以及带 #任务ID 的地址（第一版不支持）。
+	// An address that cannot be resolved, and an address with #taskID (not supported in the first version).
 	ag.run("inbox", "send", "默认项目/不存在", "--text", "x").fails(t, "not_found", 7)
 	ag.run("inbox", "send", "默认项目/审查助手#0192f1a2", "--text", "x").fails(t, "not_found", 7)
-	// Agent 身份不能用管理命令，也不能按线索查看。
+	// The Agent identity cannot use admin commands, and cannot view by thread either.
 	ag.run("agent", "list", "--platform").fails(t, "command_not_allowed", 2)
 	ag.run("inbox", "threads").fails(t, "command_not_allowed", 2)
 }
 
-// 9.2 外部身份经 TLS 对外端口管理 Agent、录入凭证、管理 Skill、查看状态与历史、确认重开会话、与 Agent 往来；
-// 9.3 每个写操作都能按 loopctl 输出的请求 ID 找到审计记录，操作者是该外部身份。
+// 9.2 Through the TLS external port the external identity manages Agents, enters credentials, manages Skills,
+// views status and history, confirms a session reset, and exchanges messages with the Agent;
+// 9.3 for every write operation the audit record can be found by the request ID loopctl printed, and the actor is
+// that external identity.
 func TestExternalIdentity(t *testing.T) {
 	w := newWorld(t, true)
 	s := w.start(nil)
@@ -108,7 +112,7 @@ func TestExternalIdentity(t *testing.T) {
 		t.Fatalf("%v", d)
 	}
 
-	var writes []string // 写操作的请求 ID
+	var writes []string // request IDs of write operations
 	write := func(args ...string) map[string]any {
 		t.Helper()
 		r := ext.run(args...)
@@ -133,12 +137,12 @@ func TestExternalIdentity(t *testing.T) {
 	if list := ext.run("agent", "list", "--project", "默认项目").ok(t)["agents"].([]any); len(list) != 1 {
 		t.Fatalf("%v", list)
 	}
-	// 用地址引用 Agent（GET /agents?address=）。
+	// Refer to the Agent by address (GET /agents?address=).
 	if d := ext.run("agent", "get", addr).ok(t); d["id"] != agentID {
 		t.Fatalf("%v", d)
 	}
 
-	// 项目账号只写不读，唯一账号由项目 Agent 自动取用。
+	// Project accounts are write-only; the only account is picked up automatically by the project Agent.
 	ext.stdin = `{"type":"api_key","key":"model-secret-value"}`
 	cred := ext.run("project", "model-account", "create", "默认项目", "--provider", provider, "--name", "外部助手账号", "--from-file", "-")
 	ext.stdin = ""
@@ -151,7 +155,7 @@ func TestExternalIdentity(t *testing.T) {
 		t.Fatalf("Agent 详情只应有凭证的元数据：%s", detail.Stdout)
 	}
 
-	// 上传 Skill 并复制给 Agent。
+	// Upload a Skill and copy it to the Agent.
 	skillDir := t.TempDir()
 	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: e2e-review\ndescription: 端到端测试用的 Skill\n---\n正文\n"), 0o644)
 	skill := write("skill", "create", "--dir", skillDir)
@@ -160,13 +164,14 @@ func TestExternalIdentity(t *testing.T) {
 		t.Fatalf("%v", copied)
 	}
 
-	// 状态、确认重开会话。
+	// Status, and confirming a session reset.
 	if st := ext.run("agent", "status", addr).ok(t); st["busy"] != false {
 		t.Fatalf("%v", st)
 	}
 	write("agent", "session", "reset", addr, "--yes")
 
-	// 给 Agent 发 Inbox 消息；Agent 被唤醒后用自己的令牌回复；外部身份按线索查看往来。
+	// Send the Agent an Inbox message; once woken, the Agent replies with its own token; the external identity views
+	// the exchange by thread.
 	sent := write("inbox", "send", addr, "--text", "请检查构建")
 	s.waitIdle(agentID)
 	ag := newLoopctl(t, w.agentEnv())
@@ -185,7 +190,7 @@ func TestExternalIdentity(t *testing.T) {
 		t.Fatalf("查看线索不应改变已读状态：%v", unread)
 	}
 
-	// 对话历史、运行记录、用量、异常与健康状态。
+	// Conversation history, run records, usage, anomalies and health status.
 	history := ext.run("agent", "history", addr, "--limit", "10").ok(t)["messages"].([]any)
 	if len(history) == 0 {
 		t.Fatal("提醒那一轮应出现在对话历史中")
@@ -200,10 +205,11 @@ func TestExternalIdentity(t *testing.T) {
 	if d := h.ok(t); d["ok"] != true || strings.Contains(h.Stdout, `"error"`) {
 		t.Fatalf("对外端口的健康状态不应带错误字段：%s", h.Stdout)
 	}
-	// 只限控制台的操作在对外端口上被拒绝；回环上的控制台接口仍免登录。
+	// Console-only operations are refused on the external port; the console API on loopback still needs no login.
 	s.console(200, "GET", "/context", nil)
 
-	// 9.3 审计：每个写操作都能按请求 ID 找到记录，操作者是这个外部身份；记录中没有令牌与凭证。
+	// 9.3 Audit: for every write operation the record can be found by request ID, the actor is this external
+	// identity, and the record contains no tokens or credentials.
 	for _, id := range writes {
 		var kind, actor string
 		var status int
@@ -221,8 +227,10 @@ func TestExternalIdentity(t *testing.T) {
 	}
 }
 
-// 10.1 服务端在命令执行中途停止：读请求按配置重试后返回退出码 4，写请求不重试；服务端恢复后照常执行。
-// 10.3 外部令牌被吊销或过期后返回退出码 5，同一身份的其他令牌不受影响。
+// 10.1 The server stops in the middle of a command: read requests are retried as configured and then return exit
+// code 4, write requests are not retried; once the server is back, commands run as usual.
+// 10.3 An external token that has been revoked or has expired returns exit code 5; other tokens of the same
+// identity are not affected.
 func TestExternalRecovery(t *testing.T) {
 	w := newWorld(t, true)
 	s := w.start(nil)
@@ -254,12 +262,12 @@ func TestExternalRecovery(t *testing.T) {
 		t.Fatalf("%v", d)
 	}
 
-	// 吊销一个令牌：它返回 401，同一身份的其他令牌照常可用。
+	// Revoke one token: it returns 401, while the other tokens of the same identity keep working.
 	conn(revoked).run("whoami").ok(t)
 	s.console(204, "DELETE", "/external-identities/"+identity+"/tokens/"+revokeID, nil)
 	conn(revoked).run("whoami").fails(t, "unauthenticated", 5)
 	conn(keep).run("whoami").ok(t)
-	// 过期的令牌返回 401。
+	// An expired token returns 401.
 	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(200 * time.Millisecond) {
 		if conn(short).run("whoami").Code == 5 {
 			conn(keep).run("whoami").ok(t)
@@ -269,7 +277,7 @@ func TestExternalRecovery(t *testing.T) {
 	t.Fatal("过期的令牌应返回 401")
 }
 
-// 10.2 Pi 进程重启后，旧的 Agent 令牌返回退出码 5，新注入的令牌可以使用。
+// 10.2 After the Pi process restarts, the old Agent token returns exit code 5 and the newly injected token works.
 func TestAgentTokenAfterPiRestart(t *testing.T) {
 	w := newWorld(t, false)
 	s := w.start(nil)
@@ -280,7 +288,8 @@ func TestAgentTokenAfterPiRestart(t *testing.T) {
 	old := w.agentEnv()
 	newLoopctl(t, old).run("whoami").ok(t)
 
-	// Pi 在回复中途异常退出（fakepi 的 !crash），进程被丢弃，令牌随之作废。
+	// Pi exits abnormally in the middle of a reply (fakepi's !crash); the process is discarded and its token becomes
+	// invalid with it.
 	s.console(202, "POST", "/agents/"+dev+"/messages", map[string]any{"text": "!crash 这一轮会崩溃"})
 	s.waitIdle(dev)
 	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
@@ -296,7 +305,7 @@ func TestAgentTokenAfterPiRestart(t *testing.T) {
 	}
 	r.fails(t, "unauthenticated", 5)
 
-	// 下一条消息重新启动 Pi，注入新令牌；新令牌可用，旧令牌仍然无效。
+	// The next message starts Pi again and injects a new token; the new token works and the old one stays invalid.
 	s.console(202, "POST", "/agents/"+dev+"/messages", map[string]any{"text": "再来一次"})
 	s.waitIdle(dev)
 	fresh := w.agentEnv()

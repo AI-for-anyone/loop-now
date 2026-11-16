@@ -21,7 +21,8 @@ func (h *nodeHooks) Hook(_ context.Context, kind pluginhost.Kind, event map[stri
 	return pluginhost.Outcome{Blocked: h.block, Plugin: "gate", Reason: "需要人工批准"}, nil
 }
 
-// node.before_start 在节点第一次开始前询问插件：被阻止时任务进入阻塞，原因写明插件与说明，节点不开始。
+// node.before_start asks plugins before a node first starts: when blocked, the task becomes blocked with a reason
+// naming the plugin and its explanation, and the node does not start.
 func TestNodeBeforeStartBlocksTask(t *testing.T) {
 	s, id, _ := fixture(t, false)
 	ctx := context.Background()

@@ -14,7 +14,8 @@ func envOf(m map[string]string) func(string) string {
 	return func(k string) string { return m[k] }
 }
 
-// fixturePath 把测试里写死的 Unix 绝对路径换成本平台的绝对路径（Windows 上加 C: 并换分隔符），只用于不真正访问的路径。
+// fixturePath turns an absolute Unix path hard-coded in a test into an absolute path for this platform (on Windows it
+// adds C: and switches separators); only for paths that are never actually accessed.
 func fixturePath(p string) string {
 	if runtime.GOOS == "windows" {
 		return "C:" + filepath.FromSlash(p)
@@ -46,7 +47,8 @@ func TestExternalPortConfig(t *testing.T) {
 	if _, err := Load(envOf(env)); err == nil {
 		t.Fatal("对外监听地址格式不对时应拒绝启动")
 	}
-	// 自签证书目录：代替证书与私钥，与它们互斥，须为规范的绝对路径。
+	// Self-signed certificate directory: replaces the certificate and private key, is mutually exclusive with them,
+	// and must be a clean absolute path.
 	env[EnvExternalListenAddr] = "127.0.0.1:0"
 	env[EnvExternalTLSSelfSigned] = fixturePath("/var/loop-now/tls")
 	if _, err := Load(envOf(env)); err == nil || !strings.Contains(err.Error(), EnvExternalTLSSelfSigned) {
@@ -225,7 +227,8 @@ func TestLoadOverrides(t *testing.T) {
 	}
 }
 
-// 控制台来源可以设为 none（不允许任何跨源访问）；控制台目录与就绪文件按原样取用。
+// The console origins can be set to none (no cross-origin access at all); the console directory and the ready file
+// are taken as given.
 func TestStopOnStdinClose(t *testing.T) {
 	env := requiredEnv()
 	if c, err := Load(envOf(env)); err != nil || c.StopOnStdinClose {
@@ -376,7 +379,8 @@ func TestPiMaxProcessesZeroAndPositive(t *testing.T) {
 	}
 }
 
-// 旧部署环境里残留的主密钥变量不再读取，也不会进入日志。
+// TestLegacyMasterKeyVariableIgnored checks that a master key variable left over in an old deployment's environment
+// is no longer read and never reaches the logs.
 func TestLegacyMasterKeyVariableIgnored(t *testing.T) {
 	env := requiredEnv()
 	env["LOOP_NOW_MASTER_KEY"] = "legacy-master-key-marker"
@@ -417,8 +421,9 @@ func TestDataDirDefaultAndDBDir(t *testing.T) {
 	}
 }
 
-// 发布包里与 loop-server 并列的 runtime、loopctl-dist 与插件目录在没有配置时自动取用；环境变量仍然优先；
-// 什么都没有时 loopctl-dist 是必需配置。
+// TestBundledDefaults checks that the runtime, loopctl-dist and plugin directories next to loop-server in the release
+// bundle are picked up automatically when not configured; environment variables still take precedence; with nothing
+// present, loopctl-dist is a required setting.
 func TestBundledDefaults(t *testing.T) {
 	dir := t.TempDir()
 	old := executableDir

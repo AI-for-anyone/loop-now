@@ -11,18 +11,19 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// scopeRoot 是一个按 NOFOLLOW 逐级打开、已核对归属的目录描述符。
+// scopeRoot is a directory descriptor opened level by level with NOFOLLOW, with its ownership verified.
 type scopeRoot struct{ fd int }
 
 func (r *scopeRoot) Close() error { return unix.Close(r.fd) }
 
-// private 报告目录本身是否只有所有者能访问。
+// private reports whether only the owner can access the directory itself.
 func (r *scopeRoot) private() bool {
 	var st unix.Stat_t
 	return unix.Fstat(r.fd, &st) == nil && st.Mode&0077 == 0
 }
 
-// openScopeRoot 从 / 开始逐级 openat，每一段都不跟随符号链接，最后核对目录属于当前用户。
+// openScopeRoot calls openat level by level starting from /, never following a symlink in any segment, and finally
+// verifies that the directory belongs to the current user.
 func openScopeRoot(root string) (*scopeRoot, error) {
 	fd, e := unix.Open("/", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 	if e != nil {
@@ -51,7 +52,8 @@ func openScopeRoot(root string) (*scopeRoot, error) {
 	return &scopeRoot{fd: fd}, nil
 }
 
-// openInputAt 在 root 之下逐级 openat 打开 rel，每一段都不跟随符号链接；最后一段以 O_NONBLOCK 打开（FIFO 不阻塞），且必须是普通文件。
+// openInputAt opens rel under root with openat level by level, never following a symlink in any segment; the last
+// segment is opened with O_NONBLOCK (so a FIFO does not block) and must be a regular file.
 func openInputAt(root *scopeRoot, rel string) (*os.File, error) {
 	fd, e := unix.Openat(root.fd, ".", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 	if e != nil {
@@ -84,7 +86,8 @@ func openInputAt(root *scopeRoot, rel string) (*os.File, error) {
 	return os.NewFile(uintptr(fd), "scope-input"), nil
 }
 
-// privateDescriptor 核对已打开的启动描述文件：属于当前用户、模式恰为 0600、只有一个硬链接、大小在 (0, limit]。
+// privateDescriptor checks the opened launch descriptor file: owned by the current user, mode exactly 0600, a single
+// hard link, and size in (0, limit].
 func privateDescriptor(f *os.File, limit int64) bool {
 	var st unix.Stat_t
 	if unix.Fstat(int(f.Fd()), &st) != nil {

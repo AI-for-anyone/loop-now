@@ -8,15 +8,17 @@ import { isNotFound } from '@/lib/errors'
 import { initialLiveState, liveReducer } from './live-state'
 import { applyNormalSleep, sleepProjections } from '@/features/sleep/projection'
 
-// 快照要求历史与服务端重新对齐，需要一次在快照之后才开始的获取。首次加载尚未完成时，
-// invalidateQueries 会并入这次更早开始的请求，所以先取消进行中的请求再重新获取。
+// A snapshot requires the history to be realigned with the server, which needs a fetch that starts after the snapshot. While the
+// first load hasn't finished,
+// invalidateQueries would merge into that earlier request, so cancel the request in flight first and then refetch.
 async function resyncHistory(client: QueryClient, agentId: string) {
   await client.cancelQueries({ queryKey: keys.messages(agentId) })
   await client.invalidateQueries({ queryKey: keys.messages(agentId) })
 }
 
-// 把事件同步到查询缓存：历史中的消息与执行、Agent 详情与列表中的忙闲和会话状态。
-// 历史请求进行中时写入的消息与执行会被请求结果覆盖，对话页另以实时部分记下的内容为准（见 live-state）。
+// Sync events into the query cache: messages and runs in the history, and busy/idle and session state in the Agent details and list.
+// Messages and runs written while a history request is in flight get overwritten by the request's result, so the chat page also
+// relies on what the live part recorded (see live-state).
 function syncCache(client: QueryClient, agentId: string, event: AgentEvent) {
   switch (event.type) {
     case 'snapshot':
@@ -51,13 +53,14 @@ function syncCache(client: QueryClient, agentId: string, event: AgentEvent) {
     case 'session.updated':
       void client.invalidateQueries({ queryKey: keys.agent(agentId) })
       void client.invalidateQueries({ queryKey: keys.agents })
-      // 平台命令此刻能不能用只取决于运行时与会话状态，两者每次变化都会推这个事件（契约 AgentCommand.available）。
+      // Whether platform commands can be used right now depends only on the runtime and the session state, and every change to
+      // either pushes this event (contract AgentCommand.available).
       void client.invalidateQueries({ queryKey: keys.agentCommands(agentId) })
       break
   }
 }
 
-// 事件涉及的执行；文字增量不算，工具状态与执行状态变化才会让运行记录多出条目。
+// The run an event concerns; text deltas don't count, since only tool state and run state changes add entries to the run record.
 function eventRunId(event: AgentEvent): string | null {
   switch (event.type) {
     case 'run.updated':
@@ -70,8 +73,9 @@ function eventRunId(event: AgentEvent): string | null {
   }
 }
 
-// 展开中的运行记录随回复的进展重新获取：同一执行两次获取之间至少间隔 timelineRefreshMinMs，
-// 间隔内的变化合并到间隔结束时的那一次。只有正在显示的时间线会真正发出请求。
+// An expanded run record is refetched as the reply progresses: two fetches for the same run are at least timelineRefreshMinMs apart,
+// and changes within that interval are merged into the fetch at the end of the interval. Only timelines being displayed actually send
+// requests.
 function createTimelineRefresher(client: QueryClient, agentId: string) {
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
   const last = new Map<string, number>()
@@ -97,7 +101,8 @@ function createTimelineRefresher(client: QueryClient, agentId: string) {
 const nextFrame = (callback: () => void) =>
   typeof requestAnimationFrame === 'function' ? requestAnimationFrame(callback) : setTimeout(callback, 16)
 
-// 订阅所选 Agent 的事件流。事件按动画帧合并后再更新界面，避免每个文字增量都重新渲染 Markdown。
+// Subscribe to the selected Agent's event stream. Events are batched per animation frame before updating the UI, so Markdown isn't
+// re-rendered for every text delta.
 export function useAgentLive(agentId: string) {
   const client = useQueryClient()
   const [live, dispatch] = useReducer(liveReducer, initialLiveState)
@@ -150,7 +155,7 @@ export function useAgentLive(agentId: string) {
     }
   }, [agentId, client])
 
-  // 发送结果与事件一样记入实时部分；结果到达前已切换到其他 Agent 时忽略。
+  // Send results are recorded in the live part just like events; ignored if another Agent was selected before the result arrived.
   const recordSent = useCallback(
     (result: Schemas['SendMessageResult']) => {
       if (activeAgent.current === agentId) dispatch({ type: 'sent', result })
@@ -158,7 +163,8 @@ export function useAgentLive(agentId: string) {
     [agentId],
   )
 
-  // 排队动作（打断、撤回、停止）的回执同样只在仍是这个 Agent 时记入；seq 为动作开始时的 live.queueSeq。
+  // Receipts of queue actions (interrupt, withdraw, stop) are likewise recorded only while it's still this Agent; seq is live.queueSeq
+  // when the action started.
   const recordQueueAction = useCallback(
     (receipt: Schemas['AgentQueueActionReceipt'], seq: number) => {
       if (activeAgent.current === agentId && receipt.agentId === agentId) dispatch({ type: 'queueAction', receipt, seq })

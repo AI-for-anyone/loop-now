@@ -154,7 +154,8 @@ func TestTaskNodeInboxPromoteSplitMergeVoidAndClaimOrder(t *testing.T) {
 	}
 	normal := q.Items[0].RunID
 
-	// 一组里拆出一条：新建打断组排在前面，并打断当前回复。
+	// Split one message out of a group: a new interrupt group is created at the front, and it interrupts the current
+	// reply.
 	r2 := f.mustPromote(m2)
 	if r2.Status != "accepted" || r2.RunID == normal || len(f.calls.calls) != 1 || f.calls.calls[0] != [2]uuid.UUID{f.runtime, f.active.ID} {
 		t.Fatalf("拆出：%+v 打断 %v", r2, f.calls.calls)
@@ -162,7 +163,8 @@ func TestTaskNodeInboxPromoteSplitMergeVoidAndClaimOrder(t *testing.T) {
 	if got := shape(f.queue()); !sameShape(got, []queueShape{{"interrupt", []uuid.UUID{m2}, 0}, {"queue", []uuid.UUID{m1, m3}, 0}}) {
 		t.Fatalf("拆出后的排队：%+v", got)
 	}
-	// 并入已有打断组；当前回复已在打断中，不再重复打断。
+	// Merged into the existing interrupt group; the current reply is already being interrupted, so it is not
+	// interrupted again.
 	r1 := f.mustPromote(m1)
 	if r1.RunID != r2.RunID || len(f.calls.calls) != 1 {
 		t.Fatalf("应并入已有打断组：%+v %v", r1, f.calls.calls)
@@ -170,7 +172,8 @@ func TestTaskNodeInboxPromoteSplitMergeVoidAndClaimOrder(t *testing.T) {
 	if got := shape(f.queue()); !sameShape(got, []queueShape{{"interrupt", []uuid.UUID{m1, m2}, 0}, {"queue", []uuid.UUID{m3}, 0}}) {
 		t.Fatalf("并入后的排队：%+v", got)
 	}
-	// 拆空：原组作废并标记 merged_into_interrupt，web 据此隐藏。
+	// Splitting leaves the group empty: the original group is voided and marked merged_into_interrupt, which the web
+	// uses to hide it.
 	action := uuid.New()
 	raw3, r3, e := f.promote(m3, action)
 	if e != nil || r3.RunID != r2.RunID {
@@ -198,7 +201,8 @@ func TestTaskNodeInboxPromoteSplitMergeVoidAndClaimOrder(t *testing.T) {
 	if got := shape(f.queue()); !sameShape(got, []queueShape{{"interrupt", []uuid.UUID{m1, m2, m3}, 0}}) {
 		t.Fatalf("拆空后的排队：%+v", got)
 	}
-	// 同一 actionId 重放返回原响应；已是打断的消息用新 actionId 返回 already_interrupt；都不再打断。
+	// Replaying the same actionId returns the original response; a message that is already an interrupt returns
+	// already_interrupt for a new actionId; neither interrupts again.
 	again, _, e := f.promote(m3, action)
 	if e != nil || string(again) != string(raw3) {
 		t.Fatal("同一动作重放应返回原响应", e)
@@ -225,7 +229,7 @@ func TestTaskNodeInboxPromoteSplitMergeVoidAndClaimOrder(t *testing.T) {
 		t.Fatalf("消息 whenBusy 与 run.promoted 记录：%v %d", whenBusy, promoted)
 	}
 
-	// 实际领取顺序与排队列表一致；领取后列表清空并推送空列表。
+	// The actual claim order matches the queue list; after the claim the list is emptied and an empty list is pushed.
 	if _, e = f.s.UpdateTaskTurn(ctx, f.task, f.active.ID, "interrupted", "", nil, nil); e != nil {
 		t.Fatal(e)
 	}
@@ -236,7 +240,7 @@ func TestTaskNodeInboxPromoteSplitMergeVoidAndClaimOrder(t *testing.T) {
 	if got := f.queue(); len(got.Items) != 0 {
 		t.Fatalf("领取后排队应为空：%+v", got)
 	}
-	// 已被领取：冲突并带上所在轮次与状态。
+	// Already claimed: conflict, carrying the turn it is in and its status.
 	_, _, e = f.promote(m1, uuid.New())
 	ae, isApp := apperr.As(e)
 	if !isApp || ae.Code != apperr.CodeTaskConflict {
@@ -252,10 +256,10 @@ func TestTaskNodeInboxPromoteQueueOrderMatchesClaims(t *testing.T) {
 	ctx := context.Background()
 	f := newPromoteFixture(t, 0)
 	a := f.send("a", "queue")
-	b := f.send("b", "interrupt") // 新建打断组并打断当前回复
-	c := f.send("c", "queue")     // 并入 a 所在普通组
-	f.mustPromote(a)              // 并入 b 所在打断组
-	d := f.send("d", "queue")     // 并入 c 所在普通组
+	b := f.send("b", "interrupt") // creates a new interrupt group and interrupts the current reply
+	c := f.send("c", "queue")     // merged into the normal group that a is in
+	f.mustPromote(a)              // merged into the interrupt group that b is in
+	d := f.send("d", "queue")     // merged into the normal group that c is in
 	q := f.queue()
 	if !sameShape(shape(q), []queueShape{{"interrupt", []uuid.UUID{a, b}, 0}, {"queue", []uuid.UUID{c, d}, 0}}) {
 		t.Fatalf("排队列表：%+v", shape(q))
@@ -283,12 +287,13 @@ func TestTaskNodeInboxPromoteImageLimit(t *testing.T) {
 	f := newPromoteFixture(t, 2)
 	i0 := f.send("打断带一图", "interrupt", f.image())
 	ma := f.send("普通两图", "queue", f.image(), f.image())
-	mb := f.send("普通一图", "queue", f.image()) // 普通组已满两图，另开一组
+	mb := f.send("普通一图", "queue", f.image()) // the normal group already has two images, so another group is opened
 	q := f.queue()
 	if !sameShape(shape(q), []queueShape{{"interrupt", []uuid.UUID{i0}, 1}, {"queue", []uuid.UUID{ma}, 2}, {"queue", []uuid.UUID{mb}, 1}}) {
 		t.Fatalf("初始排队：%+v", shape(q))
 	}
-	// 1+2 超过上限：不能并入已有打断组，新建打断组排在它之后；原普通组拆空作废。
+	// 1+2 exceeds the limit: it cannot be merged into the existing interrupt group, so a new interrupt group is created
+	// after it; the original normal group is emptied and voided.
 	ra := f.mustPromote(ma)
 	if ra.RunID == q.Items[0].RunID {
 		t.Fatal("超过图片上限仍并入了已有打断组")
@@ -296,7 +301,7 @@ func TestTaskNodeInboxPromoteImageLimit(t *testing.T) {
 	if v := f.turn(q.Items[1].RunID); v.VoidReason == nil {
 		t.Fatal("拆空的普通组应作废")
 	}
-	// 1+1 不超上限：并入最早的打断组。
+	// 1+1 does not exceed the limit: merged into the earliest interrupt group.
 	rb := f.mustPromote(mb)
 	if rb.RunID != q.Items[0].RunID {
 		t.Fatal("应并入最早、仍有余量的打断组")

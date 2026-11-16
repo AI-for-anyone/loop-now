@@ -7,7 +7,7 @@ import (
 	"loop-now/internal/loopctl/output"
 )
 
-// CommandSchema 是 schema 中一条命令的说明。
+// CommandSchema describes one command in the schema.
 type CommandSchema struct {
 	Path        string       `json:"path"`
 	Summary     string       `json:"summary"`
@@ -22,28 +22,28 @@ type CommandSchema struct {
 	Output      string       `json:"output"`
 }
 
-// GroupSchema 是 schema 中一个命令组的说明。
+// GroupSchema describes one command group in the schema.
 type GroupSchema struct {
 	Path     string `json:"path"`
 	Summary  string `json:"summary"`
-	Commands []any  `json:"commands"` // 直接子项：CommandSchema 或子命令组的 GroupRef
+	Commands []any  `json:"commands"` // direct children: a CommandSchema, or a GroupRef for a sub-group
 }
 
-// GroupRef 是命令组中的子命令组。
+// GroupRef is a sub-group inside a command group.
 type GroupRef struct {
 	Path    string `json:"path"`
 	Summary string `json:"summary"`
 	Group   bool   `json:"group"`
 }
 
-// IdentitySchema 说明一种身份。
+// IdentitySchema describes one identity.
 type IdentitySchema struct {
 	Name        Identity `json:"name"`
 	Description string   `json:"description"`
 	TokenPrefix string   `json:"tokenPrefix"`
 }
 
-// FullSchema 是 loopctl schema 的完整输出。
+// FullSchema is the complete output of loopctl schema.
 type FullSchema struct {
 	Program     string            `json:"program"`
 	Version     string            `json:"version"`
@@ -56,13 +56,13 @@ type FullSchema struct {
 	Commands    []CommandSchema   `json:"commands"`
 }
 
-// GlobalFlag 是全局选项及其适用范围。
+// GlobalFlag is a global option together with the commands it applies to.
 type GlobalFlag struct {
 	Flag
 	AppliesTo string `json:"appliesTo"`
 }
 
-// Describe 返回一条命令的说明。
+// Describe returns the description of one command.
 func Describe(c *Command) CommandSchema {
 	ids := c.Identities
 	if ids == nil {
@@ -83,7 +83,8 @@ func Describe(c *Command) CommandSchema {
 	}
 }
 
-// schemaFor 返回完整说明、某条命令或某个命令组的说明。filter 不为空时只保留该身份可用的命令。
+// schemaFor returns the full description, or the description of one command or one command group. When filter is
+// not empty, only the commands that identity may use are kept.
 func schemaFor(r *Registry, sys *System, path []string, filter Identity) (any, *output.Error) {
 	if len(path) == 0 {
 		return Full(r, sys.Version, filter), nil
@@ -114,7 +115,7 @@ func schemaFor(r *Registry, sys *System, path []string, filter Identity) (any, *
 	return g, nil
 }
 
-// groupHas 判断命令组下是否有该身份可用的命令。
+// groupHas reports whether the command group contains a command the identity may use.
 func (r *Registry) groupHas(path []string, id Identity) bool {
 	for _, c := range r.commands {
 		if equalPrefix(c.Path, path) && c.AllowedFor(id) {
@@ -124,7 +125,7 @@ func (r *Registry) groupHas(path []string, id Identity) bool {
 	return false
 }
 
-// Full 返回完整说明。
+// Full returns the full description.
 func Full(r *Registry, version string, filter Identity) FullSchema {
 	s := FullSchema{
 		Program: "loopctl",
@@ -158,7 +159,7 @@ func Full(r *Registry, version string, filter Identity) FullSchema {
 	return s
 }
 
-// Schema 供 schema 命令调用。
+// Schema is called by the schema command.
 func Schema(inv *Invocation, path []string, filter Identity) (any, *output.Error) {
 	return schemaFor(inv.Registry, inv.Sys, path, filter)
 }

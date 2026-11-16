@@ -13,13 +13,14 @@ import { MessageList } from './MessageList'
 import { turnPreview } from './ruler'
 import { buildTurns, type Turn } from './turns'
 
-// 回复下方的运行记录读取查询缓存，渲染时需要 QueryClient。
+// The run record under a reply reads the query cache, so rendering needs a QueryClient.
 function render(ui: ReactElement) {
   const client = createTestQueryClient()
   return rtlRender(ui, { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> })
 }
 
-// jsdom 没有布局：对话区与刻度尺的尺寸由测试设定，并像浏览器一样把对话区的 scrollTop 限制在可滚动范围内。
+// jsdom has no layout: the test sets the sizes of the conversation area and the ruler, and
+// clamps the conversation area's scrollTop to the scrollable range like a browser does.
 const log = { scrollHeight: 2000, clientHeight: 500, top: 0 }
 const ruler = { scrollHeight: 0, clientHeight: 0 }
 
@@ -124,7 +125,7 @@ describe('对话区右侧的刻度尺', () => {
     })
     const current = () => ticks().filter((tick) => tick.getAttribute('aria-current') === 'true').map((tick) => tick.getAttribute('aria-label'))
     expect(current()).toEqual(['三', '四'])
-    // 可见的轮次用一笔黄色记号笔罩住：从第一条可见刻度画到最后一条。
+    // The visible turns are covered by one yellow highlighter mark, drawn from the first visible tick to the last.
     expect(mark()!.closest('li')).toContainElement(within(nav()).getByRole('button', { name: '三' }))
     expect(mark()).toHaveAttribute('data-count', '2')
     act(() => {
@@ -142,20 +143,20 @@ describe('对话区右侧的刻度尺', () => {
     const { rerender } = render(<List pages={pages} onLoadOlder={onLoadOlder} />)
     const el = screen.getByRole('log')
     expect(el.scrollTop).toBe(1500)
-    // 第一轮的开头在对话区顶端下方 -1420px（在视野之上很远）。
+    // The start of the first turn is -1420px below the top of the conversation area (far above the view).
     el.getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 100, width: 600, height: 500 })
     turnBlock('一').getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 100 - 1420, width: 600, height: 300 })
     await userEvent.setup().click(within(nav()).getByRole('button', { name: '一' }))
     expect(el.scrollTop).toBe(1500 - 1420 - 24)
     fireEvent.scroll(el)
     expect(onLoadOlder).not.toHaveBeenCalled()
-    // 最后一轮的回复变长、内容变高：不贴底。
+    // The last turn's reply grows longer and the content gets taller: do not stick to the bottom.
     log.scrollHeight = 2400
     const messages = pages.pages[0].messages
     rerender(<List pages={{ ...pages, pages: [{ ...pages.pages[0], messages: [...messages.slice(0, -1), { ...messages.at(-1)!, text: '三的回答，更长了' }] }] }} onLoadOlder={onLoadOlder} />)
     expect(screen.getByText('三的回答，更长了')).toBeInTheDocument()
     expect(el.scrollTop).toBe(56)
-    // 之后人自己滚到顶部附近，照常加载更早的消息。
+    // When the person later scrolls near the top themselves, older messages load as usual.
     el.scrollTop = 20
     fireEvent.scroll(el)
     expect(onLoadOlder).toHaveBeenCalledTimes(1)
@@ -192,7 +193,7 @@ describe('对话区右侧的刻度尺', () => {
     expect(preview()).toHaveTextContent('再跑一次测试')
     await user.tab()
     expect(preview()).toBeNull()
-    // 鼠标点击也会聚焦刻度，但移开鼠标后预览不留着。
+    // A mouse click also focuses the tick, but the preview does not stay once the mouse moves away.
     await user.click(within(nav()).getByRole('button', { name: '再跑一次测试' }))
     expect(within(nav()).getByRole('button', { name: '再跑一次测试' })).toHaveFocus()
     expect(preview()).toHaveTextContent('再跑一次测试')
@@ -201,7 +202,7 @@ describe('对话区右侧的刻度尺', () => {
   })
 
   it('轮次多到刻度尺放不下时，刻度尺自己滚动，并让可见轮的刻度留在可视范围里', () => {
-    // 60 轮压缩到最小间距 8px：刻度从 24px 开始排，刻度尺可视高度 200px。
+    // 60 turns compressed to the minimum spacing of 8px: the ticks start at 24px, and the ruler's visible height is 200px.
     ruler.scrollHeight = 24 + 60 * 8 + 24
     ruler.clientHeight = 200
     Object.defineProperty(HTMLElement.prototype, 'offsetTop', {
@@ -223,19 +224,19 @@ describe('对话区右侧的刻度尺', () => {
       FakeIntersectionObserver.trigger(turnBlock('问题59'), true)
       FakeIntersectionObserver.trigger(turnBlock('问题60'), true)
     })
-    // 第 59、60 轮的刻度在 24+58*8=488 到 24+60*8=504，下方留 16px：滚到 520-200=320。
+    // The ticks for turns 59 and 60 span 24+58*8=488 to 24+60*8=504; leaving 16px below means scrolling to 520-200=320.
     expect(list.scrollTop).toBe(320)
     act(() => {
       FakeIntersectionObserver.trigger(turnBlock('问题59'), false)
       FakeIntersectionObserver.trigger(turnBlock('问题60'), false)
       FakeIntersectionObserver.trigger(turnBlock('问题2'), true)
     })
-    // 第 2 轮的刻度在 32，上方留 16px。
+    // The tick for turn 2 is at 32; leave 16px above it.
     expect(list.scrollTop).toBe(16)
   })
 })
 
-// 改版“一张印出来的纸”：刻度尺放在纸张右侧的票根里，取代灰色刻度条和原生滚动条。
+// "Printed sheet" redesign: the ruler sits in the stub on the right of the sheet, replacing the gray tick bar and the native scrollbar.
 describe('票根里的刻度尺', () => {
   it('是纸张右侧的票根：导航区的名称不变，顶上的小标题“轮次”读屏不重复读', () => {
     render(<List pages={pagesOf(['一', '二'])} />)
@@ -248,7 +249,7 @@ describe('票根里的刻度尺', () => {
     expect(ticks()).toHaveLength(12)
     expect(longTicks().map((tick) => tick.getAttribute('aria-label'))).toEqual(['问题5', '问题10'])
     expect(numbers()).toEqual(['', '', '', '', '5', '', '', '', '', '10', '', ''])
-    // 数字只是刻度上的标注，按钮的名称仍是这一轮的开头。
+    // The numbers are only labels on the ticks; the button's name is still the start of the turn.
     expect(within(nav()).getByRole('button', { name: '问题5' }).querySelector('[data-ruler-number]')).toHaveAttribute('aria-hidden', 'true')
     expect(total()).toHaveTextContent('12')
     expect(total()).toHaveTextContent('共 12 轮')
@@ -286,7 +287,7 @@ describe('票根里的刻度尺', () => {
     expect(mark()!.closest('li')).toContainElement(within(nav()).getByRole('button', { name: '问题6' }))
     expect(mark()).toHaveAttribute('data-count', '3')
     expect(mark()).toHaveAttribute('aria-hidden', 'true')
-    // 高度按刻度间距算：罩住 3 条刻度，上下各多出一点。
+    // The height is computed from the tick spacing: it covers 3 ticks, with a little extra above and below.
     expect(mark()!.style.height).toBe('calc(200% + 19px)')
     expect(mark()!.querySelector('[data-ruler-band]')).toHaveClass('bg-riso-yellow')
     expect(mark()!.querySelector('[data-ruler-arrow]')).toHaveClass('border-l-riso-pink')
@@ -299,7 +300,7 @@ describe('票根里的刻度尺', () => {
   it('刻度间距上限 23px、下限 8px，放不下时刻度尺自己滚动', () => {
     render(<List pages={pagesOf(['一', '二'])} />)
     const list = nav().querySelector('ol')!
-    // 记号笔略微伸出右缘：刻度尺只上下滚动，左右裁掉。
+    // The highlighter mark sticks out slightly past the right edge: the ruler scrolls only vertically and clips horizontally.
     expect(list).toHaveClass('overflow-y-auto', 'overflow-x-hidden', 'no-scrollbar')
     for (const item of list.querySelectorAll('li')) expect(item).toHaveClass('flex-[0_1_23px]', 'min-h-2')
   })
@@ -353,8 +354,9 @@ describe('每一轮的空心编号', () => {
     expect(turnNumbers()).toEqual(['25', '26'])
   })
 
-  // 编号栏 36px 宽（改版后收窄）：两位数 26px，三位数起逐级缩小，四位数、五位数也放得进这一栏。
-  // jsdom 不排版，实际宽度由浏览器检查确认。
+  // The number column is 36px wide (narrowed in the redesign): two-digit numbers are 26px, and from
+  // three digits up the size steps down so that four- and five-digit numbers also fit in the column.
+  // jsdom does no layout; the actual widths are confirmed with a browser check.
   it('编号栏收窄到 36px，离正文 12px；编号到三位数、四位数、五位数时缩小字号，不挤到右边的正文', () => {
     const sizeOf = (text: string) => [...turnBlock(text).querySelector('[data-turn-number]')!.classList].filter((name) => name.startsWith('text-['))
     const tens = render(<List pages={pagesOf(texts(2))} hasOlder turnsBefore={98} />)
@@ -407,7 +409,8 @@ describe('刻度的名称', () => {
   })
 })
 
-// 对话占比更大（v0.2.5 之后用户的意见）：回复正文跟着对话列走，上限放宽到 1100px；用户气泡放宽到对话列的 88%。
+// The conversation gets a larger share (user feedback after v0.2.5): reply text follows the conversation
+// column, with the cap widened to 1100px; user bubbles are widened to 88% of the conversation column.
 describe('对话占比', () => {
   it('宽屏时回复正文最宽 1100px（原来是 760px），代码块、表格、图片随之变宽；窄屏照旧 760px', () => {
     render(<List pages={pagesOf(texts(2))} turnsBefore={0} turnsTotal={2} />)

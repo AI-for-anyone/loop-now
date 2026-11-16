@@ -1,4 +1,4 @@
-// 展示层编辑状态，不是HTTP schema。API原文/版本由调用方映射为这对值。
+// Presentation-layer edit state, not an HTTP schema. Callers map the API's original text/version to this pair of values.
 export type PromptText = Readonly<{ text: string; version: number }>
 export interface PromptDraft {
   base: PromptText

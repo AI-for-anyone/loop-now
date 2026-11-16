@@ -1,10 +1,11 @@
-// 与固定Pi1.1.0及后端safe URL契约一致：token字样的组织开关不是令牌载荷。
-// 精确列出允许的参数，未知键（含code/token/verifier秘密键）仍拒绝。
+// Matches the pinned Pi 1.1.0 and the backend's safe URL contract: the organization switch with "token" in its name is not a token payload.
+// The allowed parameters are listed exactly; unknown keys (including the secret keys code/token/verifier) are still rejected.
 const authorizationParameters = new Set(['response_type', 'client_id', 'redirect_uri', 'scope', 'code_challenge', 'code_challenge_method', 'state', 'id_token_add_organizations', 'codex_cli_simplified_flow', 'originator'])
-// 授权地址或输入代码的地址的主机名，用在链接文字里；解析不了时原样返回。
+// The host name of the authorization URL or of the code-entry URL, used in link text; returned unchanged if it can't be parsed.
 export const hostOf = (url: string) => { try { return new URL(url).host } catch { return url } }
 
-// 插件提供方的地址由扩展给出、服务端已校验；这里只做通用检查：https、没有用户名密码、没有 fragment。
+// A plugin provider's URL comes from the extension and has already been validated by the server; only the generic check is done here:
+// https, no username or password, no fragment.
 export function pluginAuthorizationUrl(value: string): boolean {
   try {
     const url = new URL(value)

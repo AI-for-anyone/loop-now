@@ -5,7 +5,8 @@ import (
 	"testing"
 )
 
-// skipWithoutCLITemplates 跳过要安装 CLI 模板（gh、lark-cli 等）的测试：模板目前没有 Windows 安装包。
+// skipWithoutCLITemplates skips tests that need to install CLI templates (gh, lark-cli, etc.): the templates have no
+// Windows install package for now.
 func skipWithoutCLITemplates(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -13,7 +14,7 @@ func skipWithoutCLITemplates(t *testing.T) {
 	}
 }
 
-// skipOnWindows 跳过依赖 Unix 专有能力（/bin/sleep、权限位）的测试。
+// skipOnWindows skips tests that rely on Unix-only features (/bin/sleep, permission bits).
 func skipOnWindows(t *testing.T, reason string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {

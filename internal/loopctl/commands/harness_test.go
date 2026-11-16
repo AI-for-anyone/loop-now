@@ -31,7 +31,7 @@ const (
 	testVersion = "test-version"
 )
 
-// result 是一次调用的结果。
+// result is the result of one call.
 type result struct {
 	Code   int
 	Stdout string
@@ -44,13 +44,14 @@ type result struct {
 	}
 }
 
-// env 是一次测试的运行环境：环境变量、HOME、标准输入与网络拨号记录。
+// env is the environment of one test run: environment variables, HOME, standard input and a record of network
+// dials.
 type env struct {
 	t     *testing.T
 	vars  map[string]string
 	home  string
 	stdin string
-	block bool // 为 true 时任何拨号都失败并被记录
+	block bool // when true, every dial fails and is recorded
 
 	mu    sync.Mutex
 	dials []string
@@ -60,7 +61,7 @@ func newEnv(t *testing.T) *env {
 	return &env{t: t, vars: map[string]string{}, home: t.TempDir()}
 }
 
-// external 设置外部身份的环境变量，连接到契约桩。
+// external sets the environment variables for the external identity, connecting to the contract stub.
 func (e *env) external(s *clitest.Stub) *env {
 	e.vars[conn.EnvURL] = s.URL()
 	e.vars[conn.EnvToken] = extToken
@@ -68,7 +69,7 @@ func (e *env) external(s *clitest.Stub) *env {
 	return e
 }
 
-// agent 设置 Agent 身份的环境变量。
+// agent sets the environment variables for the Agent identity.
 func (e *env) agent(url string) *env {
 	e.vars[conn.EnvAgentURL] = url + "/agent/v1"
 	e.vars[conn.EnvAgentToken] = agentToken
@@ -125,7 +126,7 @@ func (e *env) dialCount() int {
 	return len(e.dials)
 }
 
-// ok 断言成功并返回 data 解码后的值。
+// ok asserts success and returns the decoded value of data.
 func (r result) ok(t *testing.T) map[string]any {
 	t.Helper()
 	if r.Code != 0 {
@@ -136,7 +137,7 @@ func (r result) ok(t *testing.T) map[string]any {
 	return m
 }
 
-// fails 断言以指定错误码与退出码失败。
+// fails asserts a failure with the given error code and exit code.
 func (r result) fails(t *testing.T, code string, exit int) {
 	t.Helper()
 	if r.Code != exit || r.Env.Error == nil || r.Env.Error.Code != code {
@@ -156,7 +157,7 @@ func writeFile(t *testing.T, name, content string) string {
 	return p
 }
 
-// lastBody 解码桩服务收到的最后一个请求的 JSON 请求体。
+// lastBody decodes the JSON request body of the last request the stub server received.
 func lastBody(t *testing.T, s *clitest.Stub) map[string]any {
 	t.Helper()
 	reqs := s.Requests()
@@ -170,7 +171,7 @@ func lastBody(t *testing.T, s *clitest.Stub) map[string]any {
 	return m
 }
 
-// ops 返回桩服务收到的请求对应的契约操作。
+// ops returns the contract operations of the requests the stub server received.
 func ops(s *clitest.Stub) []string {
 	var out []string
 	for _, r := range s.Requests() {

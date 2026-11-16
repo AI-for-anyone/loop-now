@@ -105,7 +105,8 @@ func (c *Coordinator) Resolve(ctx context.Context, b modelcredential.Binding) (m
 			if e != nil || value.AuthMethod() != v.AuthMethod {
 				return modelcredential.Credential{}, ErrCredentialUnavailable
 			}
-			// 插件提供方的订阅登录由扩展自己在状态目录里刷新，平台不刷新。
+			// Subscription logins of plugin providers are refreshed by the extension itself in the state directory; the
+			// platform does not refresh them.
 			if value.Kind() == "api_key" || value.Kind() == modelcredential.PluginState || value.ExpiresAt().After(c.Options.Now().Add(c.Options.RefreshSkew)) {
 				return value, nil
 			}
@@ -166,7 +167,7 @@ func (c *Coordinator) fail(v store.ModelAuthVersion, attempt uuid.UUID, code str
 	defer cancel()
 	e := c.Store.FailModelAuthRefresh(ctx, v.ID, attempt, code)
 	if c.Log != nil {
-		c.Log.Warn("模型授权刷新不可用", "agentId", v.AgentID, "versionId", v.ID, "provider", v.Provider, "attemptId", attempt, "code", code, "recorded", e == nil)
+		c.Log.Warn("model authorization refresh is unavailable", "agentId", v.AgentID, "versionId", v.ID, "provider", v.Provider, "attemptId", attempt, "code", code, "recorded", e == nil)
 	}
 }
 func (c *Coordinator) Close(ctx context.Context) error {
@@ -200,7 +201,7 @@ func (c *Coordinator) recoverAbandoned(ctx context.Context) {
 			count, err := c.Store.RecoverStaleModelAuthRefresh(record, time.Now().Add(-horizon))
 			stop()
 			if c.Log != nil && ctx.Err() == nil && (err != nil || count > 0) {
-				c.Log.Warn("模型授权刷新恢复检查", "recorded", err == nil, "unavailableCount", count)
+				c.Log.Warn("model authorization refresh recovery check", "recorded", err == nil, "unavailableCount", count)
 			}
 		}
 	}

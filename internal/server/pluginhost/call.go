@@ -15,27 +15,29 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// Kind 是同步 Hook 的种类（plugins/SPEC.md §0.2、§3）。
+// Kind is the kind of a synchronous hook (plugins/SPEC.md §0.2, §3).
 type Kind string
 
 const (
-	// Intercept 可阻止：第一个返回 block 的插件生效；超时或出错时放行，清单声明 failClosed 的插件改为阻止。
+	// Intercept can block: the first plugin that returns block wins; on timeout or error the operation is allowed,
+	// except that a plugin whose manifest declares failClosed blocks instead.
 	Intercept Kind = "intercept"
-	// Modify 顺序合并：每个插件看到前面插件改过的事件，patch 按字段合并；超时或出错时跳过该插件。
+	// Modify merges in order: each plugin sees the event as changed by the plugins before it, and patches are merged
+	// field by field; on timeout or error that plugin is skipped.
 	Modify Kind = "modify"
-	// Claim 认领：第一个返回 handled 的插件生效；超时或出错时当作未处理。
+	// Claim claims: the first plugin that returns handled wins; on timeout or error it counts as not handled.
 	Claim Kind = "claim"
 )
 
-// Outcome 是一次同步调用的结果。
+// Outcome is the result of one synchronous call.
 type Outcome struct {
-	// Blocked 与 Reason：拦截类被阻止；Plugin 是阻止者。
+	// Blocked and Reason: an intercept was blocked; Plugin is the plugin that blocked it.
 	Blocked bool
 	Reason  string
 	Plugin  string
-	// Patch 是修改类各插件 patch 按顺序合并的结果；没有修改时为空。
+	// Patch is the result of merging the modify plugins' patches in order; nil when nothing was changed.
 	Patch map[string]any
-	// Handled 与 Value：认领类被认领，Value 是认领者返回的整个对象。
+	// Handled and Value: a claim was claimed; Value is the whole object returned by the claiming plugin.
 	Handled bool
 	Value   json.RawMessage
 }
@@ -53,9 +55,10 @@ type claimResult struct {
 	Handled bool `json:"handled"`
 }
 
-// Call 按加载顺序把同步事件交给订阅了 event["type"] 的插件，按 kind 的策略汇总。
-// include 决定插件是否参与（例如事件所在项目是否启用了它），为空时全部参与。
-// 全局停用时没有插件参与；订阅了但当前未加载（加载失败、宿主停止）的插件按超时处理。
+// Call hands a synchronous event, in load order, to the plugins subscribed to event["type"] and combines the results
+// using the policy of kind. include decides whether a plugin takes part (for example, whether the event's project has
+// it enabled); when nil, all take part. When plugins are disabled globally no plugin takes part; a plugin that is
+// subscribed but not currently loaded (load failed, plugin host stopped) is treated as a timeout.
 func (s *Supervisor) Call(ctx context.Context, kind Kind, event map[string]any, include func(plugin string) bool) (Outcome, error) {
 	typ, _ := event["type"].(string)
 	if typ == "" {
@@ -141,13 +144,15 @@ func fallbackName(kind Kind, failClosed bool) string {
 	}
 }
 
-// Hooker 是业务代码调用同步 Hook 的入口（plugins.Service 实现）：项目内的事件只交给在 project 启用了插件的订阅者，
-// project 为空时交给全部订阅者。没有宿主或全局停用时返回空结果。
+// Hooker is the entry point business code uses to call synchronous hooks (implemented by plugins.Service): an event
+// inside a project only goes to subscribers that have the plugin enabled in project; when project is nil it goes to
+// all subscribers. Without a plugin host, or when plugins are disabled globally, it returns an empty result.
 type Hooker interface {
 	Hook(ctx context.Context, kind Kind, event map[string]any, project *uuid.UUID) (Outcome, error)
 }
 
-// Event 组装一个同步事件：固定字段（新的 id、type、at、projectId、agentId、taskId、runId）加该类型自己的字段，固定字段优先。
+// Event assembles a synchronous event: the fixed fields (a new id, type, at, projectId, agentId, taskId, runId) plus
+// the fields of that event type; the fixed fields take precedence.
 func Event(typ string, project, agent, task, run *uuid.UUID, fields map[string]any) map[string]any {
 	ev := maps.Clone(fields)
 	if ev == nil {
@@ -158,7 +163,7 @@ func Event(typ string, project, agent, task, run *uuid.UUID, fields map[string]a
 	return ev
 }
 
-// BlockedError 是拦截类 Hook 阻止时返回给调用方的错误（409 plugin_blocked）。
+// BlockedError is the error returned to the caller when an intercept hook blocks (409 plugin_blocked).
 func BlockedError(o Outcome) error {
 	reason := o.Reason
 	if reason == "" {

@@ -1,5 +1,7 @@
-// Package localmode 实现个人版“本机模式”：绑定本机目录、“从 Git 拉取”用本机的 git 身份、执行 PATH 接上用户的 PATH。
-// 三项各有一个全局开关（默认开启）。Pi 不在沙箱里，本机目录清单是告知与管理，不是权限隔离。
+// Package localmode implements the personal edition's "local mode": binding local directories, using the local git
+// identity for "Pull from Git", and appending the user's PATH to the execution PATH. Each of the three has a global
+// switch (on by default). Pi is not sandboxed: the list of local directories is for disclosure and management, not
+// permission isolation.
 package localmode
 
 import (
@@ -19,14 +21,14 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// 清单的上限，与 api/openapi.yaml 的 LocalDirectoriesPut、LocalDirectoryInput 一致。
+// Limits of the list, matching LocalDirectoriesPut and LocalDirectoryInput in api/openapi.yaml.
 const (
 	MaxDirectories = 50
 	MaxPathBytes   = 4096
 	MaxNoteRunes   = 200
 )
 
-// 目录状态，与 api/openapi.yaml 的 LocalDirectory.status 一致。
+// Directory statuses, matching LocalDirectory.status in api/openapi.yaml.
 const (
 	StatusOK           = "ok"
 	StatusMissing      = "missing"
@@ -34,15 +36,17 @@ const (
 	StatusInaccessible = "inaccessible"
 )
 
-// DirectoryInput 是保存时的一项。
+// DirectoryInput is one entry when saving.
 type DirectoryInput struct {
 	Path string  `json:"path"`
 	Note *string `json:"note"`
 }
 
-// Validate 校验整份清单并给出要保存的条目：路径必须是规范的绝对路径（filepath.Clean 不改变它）、不含控制字符、
-// 同一清单内不重复（Windows 上不分大小写）；备注去掉首尾空白，不含控制字符。字段错误按下标定位，形如 directories[2].path。
-// 目录是否存在不影响保存。
+// Validate checks a whole list and returns the entries to save: a path must be a canonical absolute path
+// (filepath.Clean does not change it), contain no control characters, and not repeat within the same list
+// (case-insensitive on Windows); notes are trimmed of leading and trailing whitespace and contain no control
+// characters. Field errors are located by index, as in directories[2].path. Whether a directory exists does not affect
+// saving.
 func Validate(in []DirectoryInput) ([]store.LocalDirectoryEntry, error) {
 	if in == nil {
 		return nil, apperr.Invalid("directories", "必须提供清单（可以为空数组）")
@@ -111,10 +115,10 @@ func checkNote(note string) string {
 	return ""
 }
 
-// pathKey 是判断两项是否重复的键：Windows 的路径不分大小写。
+// pathKey is the key for deciding whether two entries are duplicates: Windows paths are case-insensitive.
 func pathKey(p string) string { return execenv.PathKey(p) }
 
-// Status 返回路径此刻的状态（跟随符号链接）。
+// Status returns the current status of a path (following symlinks).
 func Status(p string) string {
 	info, err := os.Stat(p)
 	switch {
@@ -123,7 +127,7 @@ func Status(p string) string {
 	case err == nil:
 		return StatusNotDirectory
 	case errors.Is(err, fs.ErrNotExist), errors.Is(err, syscall.ENOTDIR):
-		// 路径中间某一级是文件（Unix 上报 ENOTDIR）同样算不存在。
+		// A path with a file somewhere in the middle (reported as ENOTDIR on Unix) also counts as missing.
 		return StatusMissing
 	}
 	return StatusInaccessible

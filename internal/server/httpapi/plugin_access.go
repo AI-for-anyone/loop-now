@@ -11,7 +11,8 @@ import (
 	"loop-now/internal/server/auth"
 )
 
-// pluginScopes 是插件令牌可以调用的操作及所需范围，与契约中的 x-plugin-scope 一致（TestRouteCoverage 核对）。
+// pluginScopes lists the operations plugin tokens may call and the scope each needs, matching x-plugin-scope in the
+// contract (checked by TestRouteCoverage).
 var pluginScopes = map[string]string{
 	"getAgent": "agents.read", "getAgentStatus": "agents.read", "listProjectAgents": "agents.read", "listPlatformAgents": "agents.read", "getProject": "agents.read",
 	"updateAgent": "agents.write", "sendMessage": "agents.write",
@@ -30,15 +31,16 @@ var pluginScopes = map[string]string{
 	"listExternalIdentities": "identities.read", "getExternalIdentity": "identities.read",
 }
 
-// managedIdentityOps 是代管外部身份的插件（plugins/SPEC.md §12）凭 identities.manage 也能调用的操作：
-// 读路径里的身份要由这个插件代管（pluginGate 核对），回复只能带它代管的 asIdentityId（replyInbox 核对）。
+// managedIdentityOps are the operations a plugin that manages external identities (plugins/SPEC.md §12) may also call
+// with identities.manage: the identity in a read path must be managed by this plugin (checked by pluginGate), and a
+// reply may only carry an asIdentityId the plugin manages (checked by replyInbox).
 var managedIdentityOps = map[string]bool{"listExternalIdentityInbox": true, "getExternalIdentityInboxMessage": true, "replyInboxMessage": true}
 
-// PluginScopes 返回插件令牌可以调用的操作及所需范围（契约测试用）。
+// PluginScopes returns the operations plugin tokens may call and the scope each needs (for contract tests).
 func PluginScopes() map[string]string { return pluginScopes }
 
-// consoleAuth 把回环 /api/v1 的请求身份设为控制台操作者；带 lnp_ 插件令牌的设为该插件，
-// 其余带 Authorization 头的请求返回 403。
+// consoleAuth sets the identity of loopback /api/v1 requests to the console operator; requests with an lnp_ plugin
+// token get that plugin as identity, and any other request with an Authorization header gets a 403.
 func (s *Server) consoleAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tok, present := auth.BearerToken(r)
@@ -64,19 +66,22 @@ func (s *Server) consoleAuth(next http.Handler) http.Handler {
 	})
 }
 
-// pluginAllowed 检查插件令牌能否调用这条路由：操作须有 x-plugin-scope 且在令牌范围内；路径中的项目、Agent、任务
-// 须属于启用了该插件的项目（平台 Agent、全局上下文文件夹与外部身份不受项目限制）。拒绝时记入插件日志。
+// pluginAllowed checks whether a plugin token may call this route: the operation must have an x-plugin-scope that is
+// within the token's scopes; a project, Agent or task in the path must belong to a project that has the plugin enabled
+// (platform Agents, the global context folder and external identities are not limited by project). Rejections are
+// written to the plugin log.
 func (s *Server) pluginAllowed(r *http.Request, rt Route, p auth.Principal) error {
 	err := s.pluginGate(r, rt, p)
 	if err != nil && apperr.Is(err, apperr.CodeForbidden) {
 		if lerr := s.Store.AppendPluginHostLog(context.WithoutCancel(r.Context()), p.Plugin, "warn", "调用 "+rt.Op+" 被拒绝："+err.Error()); lerr != nil {
-			s.Log.Warn("写入插件日志失败", "plugin", p.Plugin, "err", lerr)
+			s.Log.Warn("failed to write the plugin log", "plugin", p.Plugin, "err", lerr)
 		}
 	}
 	return err
 }
 
-// checkManaged 要求外部身份由这个插件代管，且插件清单有 identities.manage 范围；否则 403。
+// checkManaged requires the external identity to be managed by this plugin and the plugin manifest to have the
+// identities.manage scope; otherwise 403.
 func (s *Server) checkManaged(ctx context.Context, p auth.Principal, identity uuid.UUID) error {
 	if !slices.Contains(p.Scopes, "identities.manage") {
 		return apperr.Forbidden("插件清单没有声明 identities.manage 范围")

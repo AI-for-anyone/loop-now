@@ -24,7 +24,8 @@ type pauseTaskPrompt struct {
 	entered, release chan struct{}
 }
 
-// hook 在第一个 Agent 的采集读它的 CLI 时停住：这时项目规则和第一个 Agent 已读，第二个还没读，创建事务还开着。
+// hook pauses when the first Agent's capture reads its CLIs: by then the project rules and the first Agent have been
+// read, the second has not, and the create transaction is still open.
 func (p *pauseTaskPrompt) hook(ctx context.Context, q string) {
 	if strings.Contains(q, "SELECT cli_name FROM agent_clis WHERE agent_id=$1") {
 		p.once.Do(func() {
@@ -73,7 +74,7 @@ func TestTaskPromptSingleProjectVersionAndFrozenRestore(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("second Agent capture not reached", ctx.Err())
 	}
-	// 创建事务占着唯一的写连接：项目 UPDATE 要等它提交。
+	// The create transaction holds the only write connection: the project UPDATE has to wait for it to commit.
 	updated := make(chan error, 1)
 	go func() {
 		_, err := e.st.Pool.Exec(ctx, `UPDATE projects SET prompt='project-new',prompt_version=prompt_version+1 WHERE id=$1`, e.dc.Project.ID)

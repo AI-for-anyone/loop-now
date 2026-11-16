@@ -52,7 +52,7 @@ it('转为打断显示为一步，带时间与 whenBusy 的变化；没有这一
   ]
   const steps = buildSteps(run, entries)
   expect(steps.map(step => step.label)).toEqual(['入队', '已转为打断', '派发'])
-  // 入队那一步保留发送时的排队方式。
+  // The enqueue step keeps the queueing mode chosen when the message was sent.
   expect(steps[0].detail).toBe('Agent 正忙，排在普通排队消息末尾。')
   renderWithQuery(<TimelineSteps steps={steps} />)
   const promoted = screen.getByText('已转为打断').closest('li')!

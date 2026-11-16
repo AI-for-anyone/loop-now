@@ -13,7 +13,8 @@ import (
 	"loop-now/internal/testutil/fsperm"
 )
 
-// assertPrivate 核对 path 只有当前用户能访问：各平台都看 privatefs（Windows 上是 DACL），Unix 上再核对确切的权限位。
+// assertPrivate checks that only the current user can access path: on every platform it asks privatefs (the DACL on
+// Windows), and on Unix it also checks the exact permission bits.
 func assertPrivate(t *testing.T, path string, mode os.FileMode) {
 	t.Helper()
 	info, err := os.Lstat(path)
@@ -25,9 +26,11 @@ func assertPrivate(t *testing.T, path string, mode os.FileMode) {
 	}
 }
 
-// 发布：写 auth.json、收紧权限、改名为正式目录，再提交；提交失败或不是有效条目时目录删除。软链接不跟随。
+// Publish writes auth.json, tightens permissions, renames to the final directory and then commits; when the commit
+// fails or the entry is not valid, the directory is deleted. Symlinks are not followed.
 func TestPublish(t *testing.T) {
-	// 上级目录对所有人开放：状态目录的私有不能靠继承上级（Windows 的临时目录本来就私有）。
+	// The parent directory is open to everyone: the state directory must not rely on inheriting privacy from its
+	// parent (on Windows the temporary directory is already private).
 	parent := t.TempDir()
 	fsperm.Open(t, parent)
 	m := &Manager{Root: filepath.Join(parent, "states")}
@@ -38,7 +41,7 @@ func TestPublish(t *testing.T) {
 	}
 	assertPrivate(t, m.Root, 0o700)
 	assertPrivate(t, home, 0o700)
-	// 扩展在 HOME 里写下对所有人开放的目录与文件，发布时要收紧。
+	// The extension writes directories and files open to everyone into HOME; publishing must tighten them.
 	nested := filepath.Join(home, ".pi", "x")
 	if err := os.MkdirAll(nested, 0o755); err != nil {
 		t.Fatal(err)
@@ -68,7 +71,8 @@ func TestPublish(t *testing.T) {
 	if err != nil || string(b) != `{"p":{"type":"oauth","access":"m"}}` {
 		t.Fatalf("auth.json：%s %v", b, err)
 	}
-	// 状态目录里是订阅令牌：发布后整棵树只有当前用户能访问。
+	// The state directory holds subscription tokens: after publishing, only the current user can access the whole
+	// tree.
 	final := m.Dir(v)
 	for path, mode := range map[string]os.FileMode{final: 0o700, filepath.Join(final, ".pi"): 0o700, filepath.Join(final, ".pi", "x"): 0o700, filepath.Join(final, ".pi", "x", "a.json"): 0o600, filepath.Join(final, AuthFile): 0o600} {
 		assertPrivate(t, path, mode)

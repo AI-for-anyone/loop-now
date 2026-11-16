@@ -83,7 +83,8 @@ func TestInstalledPi14CompactSkips(t *testing.T) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	user := map[string]any{"type": "message", "id": "user-entry", "parentId": nil, "timestamp": now,
 		"message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "text", "text": "hello"}}, "timestamp": time.Now().UnixMilli()}}
-	// Pi 打开已有会话时，缺少思考级别记录就补一条：先写上，压缩才是最后一条记录。
+	// When Pi opens an existing session that lacks a thinking level record, it adds one: write it first, so the
+	// compaction is the last record.
 	model := map[string]any{"type": "model_change", "id": "model-entry", "parentId": "user-entry", "timestamp": now, "provider": "openai-codex", "modelId": "gpt-6.1-sol"}
 	thinking := map[string]any{"type": "thinking_level_change", "id": "thinking-entry", "parentId": "model-entry", "timestamp": now, "thinkingLevel": "medium"}
 	compaction := map[string]any{"type": "compaction", "id": "compaction-entry", "parentId": "thinking-entry", "timestamp": now,

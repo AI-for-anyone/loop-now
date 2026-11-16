@@ -8,13 +8,13 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// Agent 的归属。
+// Agent scopes (who owns an Agent).
 const (
 	ScopeProject  = "project"
 	ScopePlatform = "platform"
 )
 
-// ScopeOf 由所属项目得出归属：没有项目即为平台持有。
+// ScopeOf derives the scope from the owning project: no project means the platform owns the Agent.
 func ScopeOf(projectID *uuid.UUID) string {
 	if projectID == nil {
 		return ScopePlatform
@@ -22,7 +22,7 @@ func ScopeOf(projectID *uuid.UUID) string {
 	return ScopeProject
 }
 
-// Project 对应 Project。
+// Project mirrors the Project schema.
 type Project struct {
 	ID             uuid.UUID  `json:"id"`
 	OrganizationID uuid.UUID  `json:"organizationId"`
@@ -34,27 +34,27 @@ type Project struct {
 	UpdatedAt      time.Time  `json:"updatedAt"`
 }
 
-// ProjectList 是 GET /projects 的响应。
+// ProjectList is the response of GET /projects.
 type ProjectList struct {
 	Projects []Project `json:"projects"`
 }
 
-// AgentList 对应 AgentList。
+// AgentList mirrors the AgentList schema.
 type AgentList struct {
 	Agents []AgentListItem `json:"agents"`
 }
 
-// ProjectCreate 对应 ProjectCreate 与 ProjectUpdate。
+// ProjectCreate mirrors the ProjectCreate and ProjectUpdate schemas.
 type ProjectCreate struct {
 	Name string `json:"name"`
 }
 
-// ProjectManagerSet 对应 ProjectManagerSet。
+// ProjectManagerSet mirrors the ProjectManagerSet schema.
 type ProjectManagerSet struct {
 	AgentID uuid.UUID `json:"agentId"`
 }
 
-// FromProject 转换项目。
+// FromProject converts a project.
 func FromProject(p store.Project) Project {
 	return Project{ID: p.ID, OrganizationID: p.OrganizationID, Name: p.Name, IsDefault: p.IsDefault, ManagerAgentID: p.ManagerAgentID,
 		AgentCount: p.AgentCount, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}

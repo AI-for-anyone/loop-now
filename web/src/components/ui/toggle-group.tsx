@@ -2,8 +2,10 @@ import * as React from "react"
 import { ToggleGroup as ToggleGroupPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 
-// 分段控件：浅蓝轨道，选中项黄底加粉色投影；单选，左右方向键在选项之间移动焦点，空格或回车选中。
-// 选中项不能通过再按一次取消，总有一项选中。用于概览的时间段与维度，收件箱的筛选也复用它。
+// Segmented control: a light blue track, the selected item yellow with a pink shadow; single choice, the left and right arrow keys move
+// focus between options, Space or Enter selects.
+// Pressing the selected item again does not deselect it; one item is always selected. Used for the overview's time range and dimension,
+// and reused by the inbox filters.
 function ToggleGroup({
   className,
   value,

@@ -13,7 +13,8 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// AgentAction 是一次控制台排队动作的幂等键与内容，契约同任务动作：同一动作 ID 重放返回首次回执，换了内容返回 409。
+// AgentAction is the idempotency key and content of one console queue action, with the same contract as task actions:
+// replaying the same action ID returns the first receipt, and changing the content returns 409.
 type AgentAction struct {
 	ActorKey  string
 	ID        uuid.UUID
@@ -21,8 +22,10 @@ type AgentAction struct {
 	Body      []byte
 }
 
-// AgentQueueAction 在一个事务里执行排队动作 fn 并记下它返回的回执。同一动作重放时返回首次回执（replayed=true），
-// 不再调用 fn；同一动作 ID 换了内容返回 409 action_conflict。fn 返回错误时事务回滚，不记回执。
+// AgentQueueAction runs the queue action fn in one transaction and records the receipt it returns. Replaying the same
+// action returns the first receipt (replayed=true) without calling fn again; reusing the same action ID with different
+// content returns 409 action_conflict. When fn returns an error the transaction is rolled back and no receipt is
+// recorded.
 func (s *Store) AgentQueueAction(ctx context.Context, agentID uuid.UUID, a AgentAction, fn func(tx *db.Tx) (any, error)) (json.RawMessage, bool, error) {
 	if a.ID == uuid.Nil || a.ActorKey == "" || a.Operation == "" {
 		return nil, false, apperr.Invalid("actionId", "必须提供有效动作ID")
@@ -53,7 +56,7 @@ func (s *Store) AgentQueueAction(ctx context.Context, agentID uuid.UUID, a Agent
 		if err != nil {
 			return err
 		}
-		// 返回存下的回执，首次响应与重放逐字节相同。
+		// Return the stored receipt, so the first response and a replay are byte-for-byte identical.
 		return tx.QueryRow(ctx, `INSERT INTO agent_actions (actor_key, action_id, operation, agent_id, body_hash, response) VALUES ($1, $2, $3, $4, $5, $6) RETURNING response`,
 			a.ActorKey, a.ID, a.Operation, agentID, hash[:], json.RawMessage(b)).Scan(&out)
 	})
@@ -72,8 +75,9 @@ func runNotQueued(r Run) error {
 	return queueNotPending(&r.ID, r.Status, r.WhenBusy, nil, "")
 }
 
-// PromoteQueuedRunTx 把控制台发出、仍在普通排队的执行改为打断：queue_seq 取新值，排到已有打断之后、全部普通排队之前。
-// 已经是打断时 changed=false（不做任何改动）。item 是转换前的排队项。
+// PromoteQueuedRunTx turns a run sent from the console that is still in the normal queue into an interrupt: queue_seq
+// takes a new value, placing it after the existing interrupts and before all normal queued items.
+// When it is already an interrupt, changed=false (nothing is changed). item is the queue item before the conversion.
 func (s *Store) PromoteQueuedRunTx(ctx context.Context, tx *db.Tx, agentID, runID uuid.UUID) (Run, QueueItem, bool, error) {
 	r, err := lockAgentRunTx(ctx, tx, agentID, runID)
 	if err != nil {
@@ -102,8 +106,9 @@ func (s *Store) PromoteQueuedRunTx(ctx context.Context, tx *db.Tx, agentID, runI
 	return r, item, true, s.insertEvent(ctx, tx, LifecycleEvent{AgentID: agentID, RunID: &r.ID, Type: EventRunPromoted, Data: map[string]any{"from": "queue", "to": "interrupt"}})
 }
 
-// CancelQueuedRunTx 撤回控制台发出、仍在排队的执行：以 interrupted、user_cancelled 结束，Agent 不会收到。
-// 已经撤回时 changed=false。item 是这条消息的内容，供“编辑”回填。
+// CancelQueuedRunTx withdraws a run sent from the console that is still queued: it ends as interrupted with
+// user_cancelled, and the Agent never receives it.
+// When already withdrawn, changed=false. item is this message's content, which "编辑" ("Edit") puts back into the input.
 func (s *Store) CancelQueuedRunTx(ctx context.Context, tx *db.Tx, agentID, runID uuid.UUID) (Run, QueueItem, bool, error) {
 	r, err := lockAgentRunTx(ctx, tx, agentID, runID)
 	if err != nil {
@@ -129,9 +134,10 @@ func (s *Store) CancelQueuedRunTx(ctx context.Context, tx *db.Tx, agentID, runID
 		Data: map[string]any{"status": r.Status, "endReason": r.EndReason}})
 }
 
-// StopRunTx 停止这一次进行中的执行：置为 aborting 并记下停止（stop_requested，事件 abort_requested 带 stop:true），
-// 结束原因随后记为 user_stopped。
-// 已在停止或打断中时 changed=false；执行不在进行中时返回 409 run_not_active。
+// StopRunTx stops this run in progress: sets it to aborting and records the stop (stop_requested; the
+// abort_requested event carries stop:true); the end reason is later recorded as user_stopped.
+// When it is already stopping or being interrupted, changed=false; returns 409 run_not_active when the run is not in
+// progress.
 func (s *Store) StopRunTx(ctx context.Context, tx *db.Tx, agentID, runID uuid.UUID) (Run, bool, error) {
 	r, err := lockAgentRunTx(ctx, tx, agentID, runID)
 	if err != nil {
@@ -152,13 +158,15 @@ func (s *Store) StopRunTx(ctx context.Context, tx *db.Tx, agentID, runID uuid.UU
 	return r, true, s.insertEvent(ctx, tx, LifecycleEvent{AgentID: agentID, RunID: &r.ID, Type: EventRunAbortRequested, Data: map[string]any{"stop": true}})
 }
 
-// lockAgentInboxTx 读出发给常态 Agent 的一条 Inbox 消息（写事务串行，不需要锁）；不存在或不是发给它时返回 not_found。
+// lockAgentInboxTx reads one Inbox message sent to a regular Agent (write transactions are serialized, so no lock is
+// needed); returns not_found when it does not exist or was not sent to this Agent.
 func lockAgentInboxTx(ctx context.Context, tx *db.Tx, agentID, messageID uuid.UUID) (InboxMessage, error) {
 	m, err := scanInbox(tx.QueryRow(ctx, inboxSelect(200)+` WHERE m.id = $1 AND m.to_kind = 'agent' AND m.to_agent_id = $2 AND m.to_runtime_id IS NULL`, messageID, agentID))
 	return m, notFoundIfNoRows(err, "消息")
 }
 
-// queuedCarrierTx 返回承载这条消息、仍在排队的提醒；消息已取消、已读、没有承载提醒或提醒已开始时返回 run_not_queued。
+// queuedCarrierTx returns the still-queued reminder that carries this message; returns run_not_queued when the
+// message is cancelled or read, has no carrying reminder, or the reminder has already started.
 func queuedCarrierTx(ctx context.Context, tx *db.Tx, m InboxMessage) (Run, error) {
 	var run *Run
 	if m.ReminderRunID != nil {
@@ -187,18 +195,20 @@ func queuedCarrierTx(ctx context.Context, tx *db.Tx, m InboxMessage) (Run, error
 	return *run, nil
 }
 
-// InboxPromotion 是一条 Inbox 消息逐条转为打断的结果。
+// InboxPromotion is the result of turning one Inbox message individually into an interrupt.
 type InboxPromotion struct {
-	Item    QueueItem  // 转换前的排队项
-	Target  Run        // 现在承载它的打断提醒
-	Created bool       // Target 是这次新建的
-	Voided  *uuid.UUID // 因此没有待处理消息而作废的原提醒
+	Item    QueueItem  // queue item before the conversion
+	Target  Run        // the interrupt reminder that now carries it
+	Created bool       // Target was newly created by this call
+	Voided  *uuid.UUID // the original reminder, voided because it no longer has pending messages
 	Changed bool
 }
 
-// PromoteInboxMessageTx 把一条排队中的 Inbox 消息（任何发件人）移到排队中的打断提醒：没有就新建一个，
-// queue_seq 新取值，排在已有打断之后、全部普通排队之前；消息的 whenBusy 改为 interrupt，原提醒空了即作废（merged_into_interrupt）。
-// 已经由打断提醒承载时 Changed=false。
+// PromoteInboxMessageTx moves one queued Inbox message (from any sender) to a queued interrupt reminder, creating one
+// if there is none: queue_seq takes a new value, placing it after the existing interrupts and before all normal queued
+// items; the message's whenBusy becomes interrupt, and the original reminder is voided once empty
+// (merged_into_interrupt).
+// When it is already carried by an interrupt reminder, Changed=false.
 func (s *Store) PromoteInboxMessageTx(ctx context.Context, tx *db.Tx, agentID, messageID, instanceID uuid.UUID) (InboxPromotion, error) {
 	var out InboxPromotion
 	if err := requireLiveAgent(ctx, tx, agentID); err != nil {
@@ -245,17 +255,19 @@ func (s *Store) PromoteInboxMessageTx(ctx context.Context, tx *db.Tx, agentID, m
 	return out, nil
 }
 
-// InboxCancellation 是取消一条排队 Inbox 消息的结果。
+// InboxCancellation is the result of cancelling one queued Inbox message.
 type InboxCancellation struct {
-	Message InboxMessage // 取消后的消息
-	Item    QueueItem    // 取消前的排队项，供“编辑”回填
-	Run     *Run         // 承载它的提醒（取消后的状态）
-	Voided  bool         // 承载提醒因此作废
+	Message InboxMessage // the message after cancellation
+	Item    QueueItem    // the queue item before cancellation, used to refill the input for "编辑" ("Edit")
+	Run     *Run         // the reminder that carries it (state after cancellation)
+	Voided  bool         // the carrying reminder was voided as a result
 	Changed bool
 }
 
-// CancelInboxMessageTx 由人取消一条排队中的 Inbox 消息（任何发件人）：记 cancelled_at，不再计为未读，收件方不会处理；
-// 带选项的问题同时变为 cancelled。承载它的提醒没有其他待处理消息时作废（user_cancelled）。已经取消时 Changed=false。
+// CancelInboxMessageTx lets a person cancel one queued Inbox message (from any sender): records cancelled_at, so it no
+// longer counts as unread and the recipient will not handle it; a question with options becomes cancelled at the same
+// time. The carrying reminder is voided (user_cancelled) when it has no other pending messages. When already cancelled,
+// Changed=false.
 func (s *Store) CancelInboxMessageTx(ctx context.Context, tx *db.Tx, agentID, messageID uuid.UUID) (InboxCancellation, error) {
 	var out InboxCancellation
 	if err := requireLiveAgent(ctx, tx, agentID); err != nil {
@@ -302,7 +314,8 @@ func (s *Store) CancelInboxMessageTx(ctx context.Context, tx *db.Tx, agentID, me
 	return out, nil
 }
 
-// cancelInboxTx 记下消息被人取消；带选项且仍开放的问题同时变为 cancelled。
+// cancelInboxTx records that a person cancelled the message; a question with options that is still open becomes
+// cancelled at the same time.
 func cancelInboxTx(ctx context.Context, tx *db.Tx, messageID uuid.UUID) error {
 	if _, err := tx.Exec(ctx, `UPDATE inbox_messages SET cancelled_at = $2 WHERE id = $1 AND read_at IS NULL AND cancelled_at IS NULL`, messageID, tx.Now()); err != nil {
 		return err

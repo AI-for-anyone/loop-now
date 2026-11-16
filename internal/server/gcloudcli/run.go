@@ -103,7 +103,7 @@ func Run(ctx context.Context, args []string, o Options) int {
 	if e != nil {
 		return fail()
 	}
-	// macOS 用私有 Python 解释 lib/gcloud.py；Linux 自包含安装直接执行 bin/gcloud。
+	// On macOS the private Python interprets lib/gcloud.py; a self-contained Linux install runs bin/gcloud directly.
 	entry := filepath.Join(sdk, "lib/gcloud.py")
 	if selfContained {
 		entry = filepath.Join(sdk, "bin", "gcloud")
@@ -140,10 +140,11 @@ func Run(ctx context.Context, args []string, o Options) int {
 	}
 	var script string
 	if !selfContained {
-		// macOS：固定版本的私有 Python.framework 以隔离模式解释 SDK 入口。
+		// macOS: the pinned private Python.framework interprets the SDK entry point in isolated mode.
 		script = "export DYLD_FRAMEWORK_PATH=" + quote(filepath.Dir(fw)) + " DYLD_LIBRARY_PATH=" + quote(filepath.Join(fw, "Versions/3.13/lib")) + " PYTHONHOME=" + quote(filepath.Join(fw, "Versions/3.13")) + "; exec " + quote(filepath.Join(fw, "Versions/3.13/bin/python3.13")) + " -S " + quote(entry)
 	} else {
-		// Linux 自包含安装：普通调用直接执行 bin/gcloud；OAuth helper 必须由系统 Python 解释。
+		// Self-contained Linux install: ordinary calls run bin/gcloud directly; the OAuth helper must be interpreted by
+		// the system Python.
 		python := clitemplate.ResolveGooglePython()
 		if python != "" {
 			env = append(env, "CLOUDSDK_PYTHON="+python)

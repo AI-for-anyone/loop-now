@@ -19,7 +19,8 @@ func TestLarkLoginCommitSourceLockCrossesDeadlineWithoutSeal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 测试占住唯一的写连接，提交登录结果的写事务只能在它放开之后开始；放开时操作的期限已过。
+	// The test holds the single write connection, so the write transaction committing the login result can only start
+	// after it lets go; by the time it lets go, the operation's deadline has passed.
 	held, release, released := make(chan struct{}), make(chan struct{}), make(chan error, 1)
 	go func() {
 		released <- f.st.Pool.InTx(ctx, func(*db.Tx) error {

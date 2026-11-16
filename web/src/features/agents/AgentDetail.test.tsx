@@ -16,7 +16,8 @@ import { baseHandlers } from '@/test/shell'
 const heading = (name: string) => screen.findByRole('heading', { level: 1, name })
 
 describe('切换 Agent', () => {
-  // 项目 Agent 的模型账号在项目里维护；直接录入 API Key 的对话框只在平台 Agent 上。
+  // A project Agent's model accounts are managed in the project; the dialog
+  // for entering an API Key directly exists only on platform Agents.
   it('后退到已缓存的 Agent 时，不保留上一个 Agent 的凭证对话框，也不会提交到这个 Agent', async () => {
     const a = makeAgent({ name: 'A 助手', scope: 'platform', projectId: null })
     const b = makeAgent({ name: 'B 助手', scope: 'platform', projectId: null })
@@ -42,7 +43,7 @@ describe('切换 Agent', () => {
     const dialog = await screen.findByRole('dialog')
     await user.type(within(dialog).getByLabelText('API Key'), 'sk-for-a')
 
-    // 浏览器后退（POP）到之前看过、已在缓存中的 B。
+    // Browser back (POP) to B, which was viewed earlier and is already in the cache.
     await act(() => router.navigate(-1))
     await heading('B 助手')
     expect(router.state.location.pathname).toBe(configPath(b))
@@ -124,7 +125,7 @@ describe('头部的运行时标记', () => {
 describe('头部的状态标签', () => {
   const sticker = () => document.querySelector<HTMLElement>('[data-agent-status]')
 
-  // 在配置页签打开 Agent，状态标签取定期查询的状态接口。
+  // Open the Agent on the Config tab; the status label comes from the periodically polled status endpoint.
   async function renderConfigWith(status: Partial<Schemas['AgentStatus']>) {
     const agent = makeAgent({ name: 'A 助手' })
     if (status.sleep) status = { ...status, sleep: { ...status.sleep, agentId: agent.id } }
@@ -163,7 +164,7 @@ describe('头部的状态标签', () => {
 
   it('对话页收到快照后以实时状态为准，离开对话页后回到定期查询的状态', async () => {
     const agent = makeAgent({ name: 'A 助手' })
-    // 状态接口一直报告空闲（例如还没有轮到下一次查询）。
+    // The status endpoint keeps reporting idle (e.g. the next poll hasn't come around yet).
     const { router, emit } = await renderChat({ agent, handlers: baseHandlers([agent]) })
     await waitFor(() => expect(sticker()?.textContent).toBe('空闲'))
 
@@ -188,7 +189,7 @@ describe('头部的状态标签', () => {
   })
 })
 
-// 改版“一张印出来的纸”：页头、索引标签与纸张。
+// "Printed sheet" redesign: page header, index tabs and sheet.
 describe('头部与页签的版式', () => {
   async function open(agent: Schemas['Agent'], tab: 'chat' | 'config' = 'config') {
     server.use(...baseHandlers([agent]))
@@ -230,11 +231,13 @@ describe('头部与页签的版式', () => {
     const deco = header.querySelector<HTMLElement>('[data-overprint-deco]')!
     expect(deco).toHaveAttribute('aria-hidden', 'true')
     expect(deco).toHaveClass('pointer-events-none', 'hidden', '@[820px]:block')
-    // 宽屏的紧凑页头里装饰缩小到和页头同高（整体缩到 0.6 倍，贴着右上角）。
+    // In the compact header on wide screens, the decoration shrinks to the
+    // header's height (scaled to 0.6 as a whole, pinned to the top-right corner).
     expect(deco).toHaveClass('nav:top-2', 'nav:scale-[0.6]', 'origin-top-right')
-    // 页头是容器：按它自己的宽度决定，而不是按窗口宽度。
+    // The header is a container: the layout follows its own width, not the window width.
     expect(header).toHaveClass('@container')
-    // 标题、标记、模型与地址所在的那一块给装饰让出位置：窄屏照旧 316px，宽屏装饰缩小后让出 196px。
+    // The block holding the title, badges, model and address leaves room for the decoration: 316px
+    // on narrow screens as before, and 196px on wide screens once the decoration has shrunk.
     const row = title.closest('[data-agent-title-row]')!
     expect(row).toHaveClass('@[820px]:pr-[316px]', 'nav:@[820px]:pr-[196px]')
     expect(row).toContainElement(within(header).getByText('anthropic · claude-sonnet-5-5'))
@@ -244,7 +247,8 @@ describe('头部与页签的版式', () => {
     const { title, header } = await open(makeAgent({ name: 'manager', isManager: true, address: '测试组织/测试项目/manager' }))
     expect(header).toHaveClass('nav:gap-1.5', 'nav:pt-3', 'nav:pb-2.5')
     const row = title.closest('[data-agent-title-row]')!
-    // 窄屏照旧两行（标题与标记一行，模型与地址一行）；宽屏两行的内容排进同一行，放不下时换行。
+    // Narrow screens keep two rows as before (title and badges in one, model and address in the other);
+    // on wide screens the content of both rows goes into a single row that wraps when it doesn't fit.
     expect(row).toHaveClass('flex-col', 'nav:flex-row', 'nav:flex-wrap', 'nav:items-center')
     const rows = [...row.children]
     expect(rows).toHaveLength(2)

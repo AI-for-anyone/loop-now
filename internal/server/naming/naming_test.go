@@ -9,8 +9,8 @@ func TestValidate(t *testing.T) {
 	ok := []string{
 		"开发助手", "a", "dev assistant", "前端-助手_1.0", "x@y", "C++ 助手",
 		strings.Repeat("长", MaxLen),
-		"{0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b}", // 带花括号不算 UUID 写法
-		"0190a1b2c3d47e5f8a9b0c1d2e3f4a5b",       // 不带连字符不算 UUID 写法
+		"{0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b}", // with braces it is not the UUID form
+		"0190a1b2c3d47e5f8a9b0c1d2e3f4a5b",       // without hyphens it is not the UUID form
 	}
 	for _, n := range ok {
 		if msg := Validate("名称", n); msg != "" {

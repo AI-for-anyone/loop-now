@@ -31,7 +31,7 @@ func render(t *testing.T) string {
 	return string(b)
 }
 
-// 同一版本的内容不受时区与环境影响，逐字节相同。
+// The content of one version does not depend on time zone or environment and is byte-for-byte identical.
 func TestDeterministic(t *testing.T) {
 	a := render(t)
 	t.Setenv("TZ", "Pacific/Kiritimati")
@@ -75,7 +75,8 @@ var (
 	inline = regexp.MustCompile("`([^`\n]+)`")
 )
 
-// commandLines 取出说明中每一条以 loopctl 开头的命令：代码块中的行与行内代码；去掉 heredoc。
+// commandLines extracts every command in the instructions that starts with loopctl: lines in code blocks and inline
+// code; heredocs are removed.
 func commandLines(md string) []string {
 	var out []string
 	for _, m := range fence.FindAllStringSubmatch(md, -1) {
@@ -99,7 +100,7 @@ func commandLines(md string) []string {
 	return out
 }
 
-// shellWords 按 shell 规则切分单引号与双引号。
+// shellWords splits single- and double-quoted words following shell rules.
 func shellWords(s string) []string {
 	var out []string
 	var cur strings.Builder
@@ -129,7 +130,8 @@ func shellWords(s string) []string {
 	return out
 }
 
-// 说明中的每条命令都能被同一版本以 Agent 身份解析；每条 Agent 命令都写进了说明；外部专用命令一条也不出现。
+// Every command in the instructions can be parsed by the same version with the Agent identity; every Agent command
+// is written into the instructions; not a single external-only command appears.
 func TestCommandsInGuide(t *testing.T) {
 	md := string(Files()["SKILL.md"])
 	r := commands.Registry()
@@ -171,7 +173,7 @@ func TestReminderCommand(t *testing.T) {
 	}
 }
 
-// 模板引用不存在或 Agent 不能用的命令时，生成失败。
+// Generation fails when the template refers to a command that does not exist or that the Agent cannot use.
 func TestTemplateReferenceChecked(t *testing.T) {
 	orig := skillTemplate
 	t.Cleanup(func() { skillTemplate = orig })
@@ -191,7 +193,8 @@ func TestShellWords(t *testing.T) {
 	}
 }
 
-// 使用说明中的完整JSON示例与正式API一致，防止Manager照着Skill得到无效流程。
+// The complete JSON examples in the instructions match the real API, so that a Manager following the Skill does
+// not end up with an invalid workflow.
 func TestTaskJSONExamplesMatchContract(t *testing.T) {
 	doc := clitest.Load(t, "agent-openapi.yaml")
 	md := strings.ReplaceAll(render(t), "<新动作UUID>", "0192f1a2-0000-7000-8000-000000000053")

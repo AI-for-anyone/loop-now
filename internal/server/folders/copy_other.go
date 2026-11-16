@@ -2,5 +2,5 @@
 
 package folders
 
-// cloneTree 在没有 clonefile 的平台上总是退回普通复制。
+// cloneTree always falls back to a plain copy on platforms without clonefile.
 func cloneTree(src, dst string) error { return errCloneUnsupported }

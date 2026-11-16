@@ -6,10 +6,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// clonefile 可在测试中替换，用来覆盖退回普通复制的路径。
+// clonefile can be replaced in tests to cover the fallback path to a plain copy.
 var clonefile = unix.Clonefile
 
-// cloneTree 用 APFS clonefile 递归克隆目录（写时复制）；不支持时返回 errCloneUnsupported。
+// cloneTree clones a directory recursively with APFS clonefile (copy-on-write); returns errCloneUnsupported when that
+// is not supported.
 func cloneTree(src, dst string) error {
 	err := clonefile(src, dst, unix.CLONE_NOFOLLOW)
 	if errors.Is(err, unix.ENOTSUP) || errors.Is(err, unix.EXDEV) || errors.Is(err, unix.ENOSYS) {

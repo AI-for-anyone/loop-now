@@ -3,13 +3,14 @@ import { t } from '@/i18n'
 
 type Manifest = Schemas['PluginManifest']
 
-// 清单里有没有 Agent 侧：Pi 扩展、Skill、MCP 服务器或 CLI 目录，有任一项就要按 Agent 授权。
+// Whether the manifest has an Agent side: Pi extensions, Skills, MCP servers or a CLI folder; if it has any of these, it must be granted
+// per Agent.
 export const hasAgentHalf = (manifest: Manifest) => {
   const c = manifest.components
   return c.agentExtensions > 0 || c.skills.length > 0 || c.mcpServers.length > 0 || c.bin.length > 0
 }
 
-// 卡片上的一行小标签：两侧各有什么、订阅几个事件、要几项权限。
+// The row of small tags on a card: what each side contains, how many events it subscribes to, how many permissions it asks for.
 export function componentChips(manifest: Manifest): string[] {
   const c = manifest.components, chips = t.plugins.chips
   return [

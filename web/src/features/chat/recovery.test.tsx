@@ -23,7 +23,8 @@ describe('断线续传与快照', () => {
     act(() => source.interrupt())
     expect(await screen.findByText('连接中断，正在重连…')).toBeInTheDocument()
 
-    // 浏览器带 Last-Event-ID 重连后，服务端从 11-0 之后续传；网络抖动导致 11-0 被重复投递一次。
+    // After the browser reconnects with Last-Event-ID, the server resumes
+    // from after 11-0; network jitter makes 11-0 get delivered a second time.
     act(() => source.open())
     await emit('run.text', { runId: run.id, delta: '明月' }, '11-0')
     await emit('run.text', { runId: run.id, delta: '光' }, '12-0')
@@ -58,7 +59,8 @@ describe('服务端重启与竞态', () => {
       ],
     })
     expect(await screen.findByText('排队的')).toBeInTheDocument()
-    // 服务端重启：历史中原回复已标为服务端重启中断，并保存了已产生的文字。
+    // Server restart: in the history the original reply is already marked as
+    // interrupted by the server restart, and the text produced so far has been saved.
     history = [
       makeMessage({ text: '长任务', run: interrupted }),
       makeMessage({ role: 'assistant', text: '做了一半的回复', run: interrupted }),
@@ -69,9 +71,9 @@ describe('服务端重启与竞态', () => {
     expect(screen.getByText('做了一半的回复')).toBeInTheDocument()
     await emit('run.updated', { run: { ...queued, status: 'starting', phase: 'launching' } }, '2-0')
     await emit('queue.updated', { queuedRuns: [], items: [] }, '3-0')
-    // 头部也显示当前阶段，这里只看对话里的那一轮。
+    // The header also shows the current phase; here we only look at the turn in the conversation.
     expect(await within(screen.getByRole('log')).findByText('启动中')).toBeInTheDocument()
-    // 开始执行的消息离开排队列表，作为一轮对话出现在对话流中。
+    // The message that started running leaves the queue list and appears as a turn in the conversation stream.
     expect(screen.queryByRole('region', { name: '排队消息' })).toBeNull()
     expect(within(screen.getByRole('log')).getByText('排队的')).toBeInTheDocument()
   })

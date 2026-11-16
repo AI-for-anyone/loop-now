@@ -1,5 +1,6 @@
-// 插件宿主：按 Go 的 load 加载平台侧，分发观察类事件（回 ack）与同步调用（回 result），state_* 经 Go 读写，
-// 插件的日志与输出归到插件。任何插件的错误都只回成 {ok:false}，不让宿主退出。
+// Plugin host: loads platform sides on Go's load, dispatches observe events (answered with ack) and synchronous calls (answered
+// with result), reads and writes state_* through Go, and attributes plugin logs and output to the plugin.
+// Any plugin error is only answered as {ok:false}; it never makes the host exit.
 
 import path from 'node:path'
 
@@ -17,7 +18,8 @@ function envMs(name: string, fallback: number): number {
   return Number.isFinite(v) && v > 0 ? v : fallback
 }
 
-// Go 等 load 30 秒；宿主在那之前自己放弃，把插件清理干净再回失败，免得 Go 已判失败而插件仍在宿主里。
+// Go waits 30 seconds for load; the host gives up on its own before that, cleans up the plugin and then replies with a failure,
+// so that Go never considers the load failed while the plugin is still in the host.
 const LOAD_TIMEOUT = envMs('LOOP_NOW_PLUGIN_HOST_LOAD_TIMEOUT_MS', 25_000)
 const STOP_TIMEOUT = envMs('LOOP_NOW_PLUGIN_HOST_STOP_TIMEOUT_MS', 10_000)
 const SHUTDOWN_TIMEOUT = 4_000
@@ -53,9 +55,9 @@ async function within<T>(ms: number, what: string, work: Promise<T>): Promise<T>
 export class Host {
   private readonly output: Output
   private readonly channel: Channel
-  /** 已就绪的插件，按加载顺序。 */
+  /** Ready plugins, in load order. */
   private readonly plugins = new Map<string, PluginRuntime>()
-  /** 加载中与已就绪的插件，用于日志归属与遮蔽。 */
+  /** Plugins that are loading or ready, used to attribute and mask logs. */
   private readonly runtimes = new Map<string, PluginRuntime>()
   private readonly ops = new Map<string, Promise<unknown>>()
   private shuttingDown = false
@@ -70,8 +72,8 @@ export class Host {
       (m) => this.handle(m),
       (problem) => this.output.hostError(problem),
     )
-    process.on('uncaughtException', (err) => this.unhandled(err, '未捕获的异常'))
-    process.on('unhandledRejection', (err) => this.unhandled(err, '未处理的 Promise 拒绝'))
+    process.on('uncaughtException', (err) => this.unhandled(err, 'Uncaught exception'))
+    process.on('unhandledRejection', (err) => this.unhandled(err, 'Unhandled promise rejection'))
   }
 
   start(): void {
@@ -83,7 +85,7 @@ export class Host {
     try {
       this.channel.send({ type: 'log', plugin, payload: { level, message: this.mask(plugin, message) } })
     } catch (err) {
-      this.output.hostError(`[${plugin}] 日志无法发送：${describeError(err)}`)
+      this.output.hostError(`[${plugin}] failed to send log: ${describeError(err)}`)
     }
   }
 
@@ -97,7 +99,8 @@ export class Host {
     return out
   }
 
-  // 插件在定时器等处抛出的错误：按异步上下文或调用栈里的插件目录归到插件，宿主继续运行。
+  // Errors a plugin throws from timers and the like: attributed to the plugin by its async context or by the plugin directory in the call stack;
+  // the host keeps running.
   private unhandled(err: unknown, what: string): void {
     const stack = err instanceof Error && err.stack ? err.stack : describeError(err)
     let owner: string | undefined
@@ -105,14 +108,14 @@ export class Host {
       if (stack.includes(rt.payload.root + path.sep)) owner = rt.id
     }
     const rt = owner ? this.runtimes.get(owner) : undefined
-    if (rt) this.pluginLog(rt.id, 'error', `${what}：${briefError(err, rt.payload.root)}`)
-    else this.output.hostError(`${what}：${stack}`)
+    if (rt) this.pluginLog(rt.id, 'error', `${what}: ${briefError(err, rt.payload.root)}`)
+    else this.output.hostError(`${what}: ${stack}`)
   }
 
-  // 同一插件的 load、unload、config_changed 依次处理。
+  // load, unload and config_changed for the same plugin are handled one after another.
   private serialize(plugin: string, fn: () => Promise<void>): void {
     const prev = this.ops.get(plugin) ?? Promise.resolve()
-    const next = prev.then(fn, fn).catch((err) => this.output.hostError(`处理插件 ${plugin} 的请求出错：${describeError(err)}`))
+    const next = prev.then(fn, fn).catch((err) => this.output.hostError(`Error handling a request for plugin ${plugin}: ${describeError(err)}`))
     this.ops.set(plugin, next)
     void next.finally(() => {
       if (this.ops.get(plugin) === next) this.ops.delete(plugin)
@@ -165,7 +168,7 @@ export class Host {
     const id = payload.id
     const previous = this.runtimes.get(id)
     if (previous) {
-      this.pluginLog(id, 'warn', '收到 load 时插件仍在宿主里，先卸载旧的')
+      this.pluginLog(id, 'warn', 'Received load while the plugin is still in the host; unloading the old one first')
       await this.stopRuntime(previous)
     }
     const rt = new PluginRuntime(payload, {
@@ -259,7 +262,7 @@ export class Host {
     this.channel.reply(m, 'result', reply)
   }
 
-  // action、http、schedule：交给插件注册的处理函数，回 result。
+  // action, http, schedule: handed to the handler the plugin registered; answered with result.
   private async request(m: Message): Promise<void> {
     const rt = this.plugins.get(m.plugin ?? '')
     const p = isObject(m.payload) ? m.payload : {}
@@ -271,7 +274,7 @@ export class Host {
     this.channel.reply(m, 'result', reply)
   }
 
-  /** 并行卸载全部插件（最多等 4 秒）后退出；Go 在 shutdown 5 秒后会结束进程组。 */
+  /** Unloads all plugins in parallel (waiting at most 4 seconds), then exits; Go kills the process group 5 seconds after shutdown. */
   async shutdown(): Promise<void> {
     if (this.shuttingDown) return
     this.shuttingDown = true

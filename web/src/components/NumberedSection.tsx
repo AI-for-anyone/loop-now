@@ -1,7 +1,8 @@
 import { useId, type ComponentProps, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
-// 空心编号：Bricolage 800、孔版蓝描边、不填色。分区的 01、02 与对话里每一轮的编号都用它。纯装饰，窄屏不显示。
+// Outlined number: Bricolage 800, riso-blue outline, no fill. Used for the 01, 02 of sections and for the number of each turn in the
+// conversation. Purely decorative, hidden on narrow screens.
 export function HollowNumber({ className, ...props }: ComponentProps<'span'>) {
   return (
     <span
@@ -15,9 +16,11 @@ export function HollowNumber({ className, ...props }: ComponentProps<'span'>) {
   )
 }
 
-// 编号分区：长页面按 01、02…分区（改版通用规则第 4 条）。标题一行：左侧空心编号，标题是 ZCOOL 30px 加一笔黄色记号笔
-// （下半部黄色条），后面可以跟一段说明（meta）和靠右的操作（actions）；内容排在下面，占满宽度。
-// 从第二个分区起，上方一道 2px 虚线。
+// Numbered section: long pages are split into sections 01, 02… (rule 4 of the redesign's general rules). The title line: an outlined
+// number on the left, and a ZCOOL 30px title with a stroke of yellow highlighter mark
+// (a yellow bar over the lower half), which can be followed by a note (meta) and right-aligned actions (actions); the content sits below
+// and fills the width.
+// From the second section on, there is a 2px dashed line above.
 export function NumberedSection({
   number,
   title,

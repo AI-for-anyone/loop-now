@@ -1,5 +1,6 @@
-// Package agentconfig 是 Agent 配置的业务层：输入校验、模型目录与 CLI 模板校验、凭证保存，
-// 以及删除 Agent 时通知执行器释放。控制台接口调用这里，不直接访问 store。
+// Package agentconfig is the business layer for Agent configuration: input validation, model catalog and CLI template
+// validation, saving credentials, and telling the executor to release an Agent when it is deleted. The console API
+// calls this package and never accesses store directly.
 package agentconfig
 
 import (
@@ -20,12 +21,12 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// Releaser 停止 Agent 的 Pi 进程并删除其独立 HOME（删除 Agent 时调用）。
+// Releaser stops an Agent's Pi process and deletes its own HOME (called when an Agent is deleted).
 type Releaser interface {
 	Release(ctx context.Context, agentID uuid.UUID) error
 }
 
-// Limits 是业务层使用的上限，取自配置。
+// Limits are the limits used by the business layer, taken from the config.
 type Limits struct {
 	MaxUploadFile   int64
 	MaxSkillArchive int64
@@ -34,9 +35,9 @@ type Limits struct {
 	Text            content.TextRules
 }
 
-// Service 是 Agent 配置的业务层。
+// Service is the business layer for Agent configuration.
 type Service struct {
-	// PluginAssets 返回 Agent 已授权插件交给 Pi 的东西；为空时不挂载插件。
+	// PluginAssets returns what the Agent's granted plugins hand to Pi; when nil, no plugins are mounted.
 	PluginAssets           func(context.Context, uuid.UUID) (PluginAssets, error)
 	CancelProjectCLILogins func(context.Context, uuid.UUID) error
 	ModelAuth              *modelauth.Service
@@ -44,15 +45,17 @@ type Service struct {
 	Models                 modelcatalog.Reader
 	Templates              *clitemplate.Catalog
 	Releaser               Releaser
-	OrgID                  uuid.UUID // 默认组织：项目都建在这里（第一版只有默认组织）
+	OrgID                  uuid.UUID // default organization holding all projects (the first version has no other)
 	Limits                 Limits
 	Logger                 *slog.Logger
-	// AgentChanged 在 Agent 新建或修改后调用，AgentRemoved 在删除后调用，用于推送概览；都可为空。
+	// AgentChanged is called after an Agent is created or changed and AgentRemoved after it is deleted, to push the
+	// overview; both may be nil.
 	AgentChanged func(id uuid.UUID)
 	AgentRemoved func(id uuid.UUID)
-	// LocalAccess 返回本机模式交给该 Agent 的 Pi 的东西；为空时不启用本机模式。
+	// LocalAccess returns what local mode hands to this Agent's Pi; when nil, local mode is not enabled.
 	LocalAccess func(context.Context, uuid.UUID) (LocalAccess, error)
-	// ProviderState 给出插件提供方订阅账号的状态目录与随账号走的路径（plugins/SPEC.md §13）。
+	// ProviderState returns the state directory of a plugin provider subscription account and the paths that travel
+	// with the account (plugins/SPEC.md §13).
 	ProviderState ProviderStateFunc
 }
 
@@ -83,7 +86,8 @@ func (s *Service) validateModel(provider, modelID string) *apperr.FieldError {
 	return nil
 }
 
-// pluginProvider 返回注册了模型提供方 provider 的插件；不是插件提供方时 ok 为 false。
+// pluginProvider returns the plugin that registered the model provider named provider; ok is false when it is not a
+// plugin provider.
 func (s *Service) pluginProvider(provider string) (string, bool) {
 	if s.Models == nil {
 		return "", false
@@ -95,8 +99,9 @@ func (s *Service) pluginProvider(provider string) (string, bool) {
 	return *p.PluginID, true
 }
 
-// PluginProviderUnusable 报告 Agent 现在能否选用插件注册的模型提供方 provider：不是插件提供方或能用时 reason 为空，
-// 否则 reason 是 store.PluginUnusable* 之一，plugin 是注册它的插件。
+// PluginProviderUnusable reports whether the Agent can use the plugin-registered model provider named provider now:
+// reason is empty when it is not a plugin provider or it can be used; otherwise reason is one of store.PluginUnusable*
+// and plugin is the plugin that registered it.
 func (s *Service) PluginProviderUnusable(ctx context.Context, agent uuid.UUID, provider string) (plugin, reason string, err error) {
 	plugin, ok := s.pluginProvider(provider)
 	if !ok {
@@ -143,7 +148,7 @@ func collect(errs ...*apperr.FieldError) error {
 	return apperr.Validation(out...)
 }
 
-// CreateAgent 在项目或平台中创建 Agent；归属之后不能改变。
+// CreateAgent creates an Agent in a project or on the platform; where it belongs cannot change afterwards.
 func (s *Service) CreateAgent(ctx context.Context, scope store.Scope, name, provider, modelID, prompt string, modelOptions ...*string) (store.Agent, error) {
 	if err := collect(s.validateName(name), s.validateModel(provider, modelID)); err != nil {
 		return store.Agent{}, err
@@ -174,7 +179,8 @@ func (s *Service) CreateAgent(ctx context.Context, scope store.Scope, name, prov
 	return a, err
 }
 
-// AgentPatch 是修改 Agent 的输入；nil 表示不改。模型须提供方与模型 ID 一起给出。
+// AgentPatch is the input for changing an Agent; nil means no change. A model must be given as provider and model ID
+// together.
 type AgentPatch struct {
 	ServiceTier           *string
 	ServiceTierSet        bool
@@ -187,7 +193,7 @@ type AgentPatch struct {
 	Prompt                *string
 }
 
-// UpdateAgent 修改 Agent。
+// UpdateAgent changes an Agent.
 func (s *Service) UpdateAgent(ctx context.Context, id uuid.UUID, p AgentPatch) (store.Agent, error) {
 	var errs []*apperr.FieldError
 	if p.Name != nil {
@@ -228,8 +234,9 @@ func (s *Service) UpdateAgent(ctx context.Context, id uuid.UUID, p AgentPatch) (
 	return a, err
 }
 
-// DeleteAgent 软删除空闲的 Agent，并通知执行器停止进程、删除独立 HOME。
-// 执行器释放失败只记录日志：数据库中已删除，执行器启动时还会清理已删除 Agent 的 HOME。
+// DeleteAgent soft-deletes an idle Agent and tells the executor to stop its process and delete its own HOME. A failed
+// release in the executor is only logged: the Agent is already deleted in the database, and the executor also cleans up
+// the HOME of deleted Agents when it starts.
 func (s *Service) DeleteAgent(ctx context.Context, id uuid.UUID) error {
 	if err := s.Store.SoftDeleteAgent(ctx, id); err != nil {
 		return err
@@ -237,7 +244,7 @@ func (s *Service) DeleteAgent(ctx context.Context, id uuid.UUID) error {
 	s.cancelDeletedAgentLogins(ctx, []uuid.UUID{id})
 	if s.Releaser != nil {
 		if err := s.Releaser.Release(ctx, id); err != nil {
-			s.Logger.Error("释放已删除 Agent 的执行资源失败", "agentId", id, "err", err)
+			s.Logger.Error("failed to release the run resources of a deleted Agent", "agentId", id, "err", err)
 		}
 	}
 	if s.AgentRemoved != nil {
@@ -246,7 +253,7 @@ func (s *Service) DeleteAgent(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// AgentDetail 是 Agent 详情。
+// AgentDetail is the detail of an Agent.
 type AgentDetail struct {
 	Agent           store.Agent
 	Busy            bool
@@ -255,14 +262,14 @@ type AgentDetail struct {
 	ModelCredential *CredentialView
 }
 
-// CLIView 是可用 CLI 的展示信息。
+// CLIView is the display information of an available CLI.
 type CLIView struct {
 	Name        string
 	HasTemplate bool
 	Credential  *CredentialView
 }
 
-// CredentialView 是凭证元数据，不含明文。
+// CredentialView is credential metadata, without plaintext.
 type CredentialView struct {
 	ProjectID, AccountID               *uuid.UUID
 	Provider, AuthMethod, AccountLabel *string
@@ -276,7 +283,7 @@ type CredentialView struct {
 	row                                store.CredentialRow
 }
 
-// GetAgentDetail 返回 Agent 详情。
+// GetAgentDetail returns the detail of an Agent.
 func (s *Service) GetAgentDetail(ctx context.Context, id uuid.UUID) (AgentDetail, error) {
 	var d AgentDetail
 	var err error
@@ -376,7 +383,7 @@ func nonNil(s []string) []string {
 	return s
 }
 
-// ---- 可用 CLI 与凭证 ----
+// ---- Available CLIs and credentials ----
 
 func validateCLIName(name string) error {
 	if !cliNamePattern.MatchString(name) {
@@ -385,7 +392,7 @@ func validateCLIName(name string) error {
 	return nil
 }
 
-// AddCLI 把 CLI 加入可用列表，返回它的展示信息。
+// AddCLI adds a CLI to the available list and returns its display information.
 func (s *Service) AddCLI(ctx context.Context, agentID uuid.UUID, name string) (CLIView, error) {
 	if err := validateCLIName(name); err != nil {
 		return CLIView{}, err
@@ -405,7 +412,7 @@ func (s *Service) AddCLI(ctx context.Context, agentID uuid.UUID, name string) (C
 	return CLIView{}, apperr.NotFound("可用 CLI " + name)
 }
 
-// RemoveCLI 从可用列表移除 CLI，并删除它的凭证。
+// RemoveCLI removes a CLI from the available list and deletes its credential.
 func (s *Service) RemoveCLI(ctx context.Context, agentID uuid.UUID, name string) error {
 	if err := validateCLIName(name); err != nil {
 		return err
@@ -413,7 +420,7 @@ func (s *Service) RemoveCLI(ctx context.Context, agentID uuid.UUID, name string)
 	return s.Store.RemoveAgentCLI(ctx, agentID, name)
 }
 
-// PutCLICredential 按模板渲染并保存 CLI 凭证。
+// PutCLICredential renders a CLI credential from the template and saves it.
 func (s *Service) PutCLICredential(ctx context.Context, agentID uuid.UUID, cli string, fields map[string]string) (*CredentialView, error) {
 	if err := validateCLIName(cli); err != nil {
 		return nil, err
@@ -430,7 +437,7 @@ func (s *Service) PutCLICredential(ctx context.Context, agentID uuid.UUID, cli s
 	return s.putCredential(ctx, agentID, store.PurposeCLI, cli, payload, meta)
 }
 
-// PutModelCredential 保存模型账号凭证（环境变量）。
+// PutModelCredential saves a model account credential (environment variables).
 func (s *Service) PutModelCredential(ctx context.Context, agentID uuid.UUID, env map[string]string) (*CredentialView, error) {
 	if len(env) == 0 {
 		return nil, apperr.Invalid("env", "至少需要一个环境变量")
@@ -471,7 +478,7 @@ func (s *Service) putCredential(ctx context.Context, agentID uuid.UUID, purpose,
 	return s.view(row), nil
 }
 
-// DeleteCLICredential 删除 CLI 凭证（CLI 仍在可用列表中）。
+// DeleteCLICredential deletes a CLI credential (the CLI stays in the available list).
 func (s *Service) DeleteCLICredential(ctx context.Context, agentID uuid.UUID, cli string) error {
 	if err := validateCLIName(cli); err != nil {
 		return err
@@ -479,7 +486,7 @@ func (s *Service) DeleteCLICredential(ctx context.Context, agentID uuid.UUID, cl
 	return s.Store.DeleteCredential(ctx, agentID, store.PurposeCLI, cli)
 }
 
-// DeleteModelCredential 删除模型账号凭证。
+// DeleteModelCredential deletes the model account credential.
 func (s *Service) DeleteModelCredential(ctx context.Context, agentID uuid.UUID) error {
 	return s.Store.DeleteCredential(ctx, agentID, store.PurposeModel, "")
 }

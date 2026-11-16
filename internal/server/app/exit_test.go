@@ -10,7 +10,7 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// 数据目录或工作根被锁、监听地址被占用各有固定的退出码；其他失败为 1。
+// A locked data directory or work root and a listen address in use each have a fixed exit code; other failures are 1.
 func TestExitCode(t *testing.T) {
 	dir := t.TempDir()
 	held, err := db.LockDir(dir)

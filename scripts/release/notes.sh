@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# 发布说明：输出 tag 对应的 GitHub Release 说明。先取 CHANGELOG.md 里这个版本的一节（二级标题的第一个词是
-# tag 或去掉 v 的版本号，可带方括号，例如 "## v0.2.0"、"## [0.2.0] - 2026-11-05"、"## v0.3.0-beta.1"），到下一个二级标题为止；
-# 没有就取 tag 的注解。两处都没有内容（注解只写了 tag 名也算没有）时失败，不发空说明的 Release。
+# Release notes: prints the GitHub Release notes for a tag. First it takes this version's section of CHANGELOG.md (a
+# level-2 heading whose first word is the tag or the version without v, optionally in brackets, e.g. "## v0.2.0",
+# "## [0.2.0] - 2026-11-05", "## v0.3.0-beta.1"), up to the next level-2 heading; failing that, the tag annotation.
+# If both are empty (an annotation that only repeats the tag name counts as empty) it fails, so no Release goes out
+# with empty notes.
 #
 #   scripts/release/notes.sh <tag>
 #
-# 注解要从附注 tag 读：actions/checkout 拉下来的 tag 是轻量的，调用前先 git fetch 一次这个 tag。
+# The annotation must be read from an annotated tag: the tag actions/checkout fetches is lightweight, so fetch this
+# tag once with git fetch before calling.
 set -euo pipefail
 
 if [ $# -ne 1 ]; then
@@ -37,5 +40,5 @@ if [ -z "${notes//[[:space:]]/}" ]; then
 	echo "发布说明为空：在 CHANGELOG.md 加一节 \"## $tag\"，或用 git tag -a $tag 写上注解" >&2
 	exit 1
 fi
-# 去掉开头的空行（结尾的换行已被命令替换去掉）。
+# Drop leading blank lines (command substitution has already removed the trailing newlines).
 printf '%s\n' "$notes" | sed '/[^[:space:]]/,$!d'

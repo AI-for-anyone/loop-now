@@ -27,7 +27,7 @@ describe('全局设置页草稿导航', () => {
   })
 })
 
-// 改版“一张印出来的纸”第 4 步：全局设置排在一张纸上，编号分区与票根里的目录尺。
+// "Printed sheet" redesign, step 4: global settings sit on a sheet, with numbered sections and the section ruler in the stub.
 describe('纸张上的全局设置', () => {
   const titles = ['界面语言', '本机模式', 'Agent 运行时', '模型配置', '全局文件夹', '服务端', 'CLI 模板']
   const region = (name: string) => screen.getByRole('region', { name })

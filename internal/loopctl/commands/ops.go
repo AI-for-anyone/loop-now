@@ -80,7 +80,8 @@ func addOps(r *cli.Registry) {
 	})
 }
 
-// unhealthy 把 /health 的 503 响应转为 server_unhealthy，并在说明中列出不可用的依赖。
+// unhealthy turns a 503 response from /health into server_unhealthy and lists the unavailable dependencies in the
+// message.
 func unhealthy(e *output.Error) *output.Error {
 	var h map[string]json.RawMessage
 	if json.Unmarshal(e.Details, &h) != nil {

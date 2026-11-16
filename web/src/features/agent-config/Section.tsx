@@ -5,15 +5,16 @@ import { SECTION_KEYS, sectionId, sectionTitleId, type SectionKey } from './sect
 interface SectionProps {
   id: SectionKey
   title: string
-  // 标题旁的条目数，只作视觉提示；区块名称仍是标题本身。
+  // Item count next to the title, a visual hint only; the section's name is still just the title.
   count?: number
   actions?: ReactNode
-  // danger：删除 Agent 一区，编号与标题红色，内容放在红色斜纹的底上。
+  // danger: the Delete Agent section; number and title in red, content on a red diagonal-stripe background.
   tone?: 'default' | 'danger'
   children: ReactNode
 }
 
-// 配置页的编号分区：共用的 SheetSection（项目设置也用它），编号按 SECTION_KEYS 的顺序，与目录尺上的编号一致。
+// A numbered section of the config page: the shared SheetSection (project settings use it too); numbers follow the order of SECTION_KEYS
+// and match the numbers on the section ruler.
 export function Section({ id, ...props }: SectionProps) {
   return <SheetSection id={sectionId(id)} titleId={sectionTitleId(id)} index={SECTION_KEYS.indexOf(id)} {...props} />
 }

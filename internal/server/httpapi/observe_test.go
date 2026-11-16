@@ -37,7 +37,7 @@ func (e *env) lastReply(a string) apitypes.Message {
 	return apitypes.Message{}
 }
 
-// 每种运行记录事件与用量都插入一条，时间线接口的响应必须符合契约。
+// Insert one of every run record event and usage; the timeline endpoint's response must conform to the contract.
 func TestRunTimelineContract(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -114,19 +114,19 @@ func TestRunTimelineContract(t *testing.T) {
 		t.Error("时间线不应含费用")
 	}
 
-	// 回复的执行信息带时间点、用量合计与所用模型。
+	// The run info of a reply carries timestamps, usage totals and the model used.
 	run := e.lastReply(a).Run
 	if run.RunningAt == nil || run.StartedAt == nil || run.Usage.Calls != 4 || run.Model == nil || run.Model.ModelID != "claude-x" {
 		t.Errorf("执行信息不对：%+v", run)
 	}
 
-	// 回复不属于该 Agent、Agent 不存在：404。
+	// Reply not belonging to the Agent, Agent missing: 404.
 	_, b := e.newAgent("other")
 	e.expect(404, "GET", b+"/runs/"+runID.String()+"/timeline", nil)
 	e.expect(404, "GET", "/agents/"+uuid.Must(uuid.NewV7()).String()+"/runs/"+runID.String()+"/timeline", nil)
 }
 
-// 本变更之前的执行没有生命周期事件：按 runs 的列合成条目。
+// Runs from before this change have no lifecycle events: entries are synthesized from the columns of runs.
 func TestRunTimelineLegacy(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -209,7 +209,7 @@ func TestUsageAndAnomalies(t *testing.T) {
 	e.expect(422, "GET", "/usage?from="+from+"&to="+to, nil, "X-Contract-Invalid-Request", "1")
 	e.expect(422, "GET", "/usage?from=yesterday", nil, "X-Contract-Invalid-Request", "1")
 
-	// 已删除的 Agent：用量照常统计并标明已删除。
+	// Deleted Agent: usage is counted as usual and marked as deleted.
 	e.expect(204, "DELETE", b, nil)
 	page = decode[apitypes.UsagePage](t, e.expect(200, "GET", "/usage?from="+since, nil))
 	deleted := false
@@ -222,7 +222,7 @@ func TestUsageAndAnomalies(t *testing.T) {
 		t.Errorf("已删除 Agent 的用量应标明已删除：%+v", page.Rows)
 	}
 
-	// 异常列表：A 的失败在列，B 已删除不在列。
+	// Anomaly list: A's failure is listed, B is deleted and not listed.
 	for i := range 3 {
 		e.expect(202, "POST", a+"/messages", map[string]any{"text": fmt.Sprintf("fail %d", i)})
 		waitIdle(t, e, a)
@@ -268,7 +268,8 @@ func TestOverviewEvents(t *testing.T) {
 		t.Fatalf("快照不对：%+v", snap)
 	}
 
-	// 新建 Agent 推送状态（推送是异步的，A 创建时的状态可能在快照之后才到）。
+	// Creating an Agent pushes its status (pushes are asynchronous, so the status from A's creation may arrive after
+	// the snapshot).
 	agentB, b := e.newAgent("B")
 	var resumeFrom string
 	for {
@@ -283,7 +284,8 @@ func TestOverviewEvents(t *testing.T) {
 		}
 	}
 
-	// 发送消息：最终推送空闲并带上一条回复的结果（推送合并了中间变化，不保证每个中间状态都出现）；文字增量不推送。
+	// Sending a message: the final push is idle and carries the result of one reply (pushes merge intermediate changes,
+	// so not every intermediate state is guaranteed to appear); text deltas are not pushed.
 	e.expect(202, "POST", a+"/messages", map[string]any{"text": "你好"})
 	for idle := false; !idle; {
 		ev := next(t, ch)
@@ -295,7 +297,7 @@ func TestOverviewEvents(t *testing.T) {
 		idle = !st.Status.Busy && st.LastRun != nil && st.LastRun.Status == "completed"
 	}
 
-	// 删除 Agent：推送移除事件。
+	// Deleting an Agent: pushes a removal event.
 	e.expect(204, "DELETE", b, nil)
 	for {
 		ev := next(t, ch)
@@ -309,13 +311,13 @@ func TestOverviewEvents(t *testing.T) {
 	}
 	stop()
 
-	// 续传：带上次事件 ID 重连，不推快照。
+	// Resume: reconnecting with the last event ID pushes no snapshot.
 	ch2, stop2 := readSSE(t, e, "/overview", resumeFrom)
 	defer stop2()
 	if first := next(t, ch2); first.event == "snapshot" {
 		t.Fatalf("续传不应推送快照：%+v", first)
 	}
-	// 超出保留范围：推送快照。
+	// Outside the retained range: a snapshot is pushed.
 	ch3, stop3 := readSSE(t, e, "/overview", "1-0")
 	defer stop3()
 	if ev := next(t, ch3); ev.event != "snapshot" {
@@ -334,16 +336,17 @@ func TestMessagesPaging(t *testing.T) {
 	if len(all.Messages) != 30 || all.HasMore || all.HasMoreAfter || all.TurnsBefore != 0 || all.TurnsTotal != 15 {
 		t.Fatalf("全部消息不对：%d %v %v %d %d", len(all.Messages), all.HasMore, all.HasMoreAfter, all.TurnsBefore, all.TurnsTotal)
 	}
-	// 轮次计数：每页的 turnsBefore 是它第一条消息所属的轮次之前的轮次数（这里每轮一问一答，按顺序执行）。
+	// Turn counts: each page's turnsBefore is the number of turns before the turn of its first message (here every turn
+	// is one question and one answer, run in order).
 	if raw := e.expect(200, "GET", a+"/messages?limit=4", nil); !strings.Contains(string(raw), `"turnsBefore":13`) || !strings.Contains(string(raw), `"turnsTotal":15`) {
 		t.Fatalf("最新一页的轮次计数不对：%s", raw)
 	}
-	target := all.Messages[6] // 第 4 条用户消息
+	target := all.Messages[6] // the 4th user message
 	around := decode[apitypes.MessagePage](t, e.expect(200, "GET", a+"/messages?limit=6&aroundRun="+target.Run.ID.String(), nil))
 	if len(around.Messages) != 6 || !around.HasMore || !around.HasMoreAfter || around.Messages[2].ID != target.ID || around.TurnsBefore != 2 || around.TurnsTotal != 15 {
 		t.Fatalf("定位页不对：%d %v %v %d %d", len(around.Messages), around.HasMore, around.HasMoreAfter, around.TurnsBefore, around.TurnsTotal)
 	}
-	// 从定位页向后连续翻到最新：不重不漏。
+	// Page forward from the located page to the newest without gaps or duplicates.
 	got := append([]apitypes.Message(nil), around.Messages...)
 	page := around
 	for page.HasMoreAfter {
@@ -366,21 +369,21 @@ func TestMessagesPaging(t *testing.T) {
 			t.Fatalf("第 %d 条不对", i)
 		}
 	}
-	// 定位最后一条回复：之后没有更多。
+	// Locate the last reply: nothing more after it.
 	lastRun := all.Messages[29].Run.ID
 	tail := decode[apitypes.MessagePage](t, e.expect(200, "GET", a+"/messages?limit=6&aroundRun="+lastRun.String(), nil))
 	if tail.HasMoreAfter || len(tail.Messages) != 6 || tail.Messages[5].ID != all.Messages[29].ID {
 		t.Fatalf("定位到最新时不对：%+v", tail.HasMoreAfter)
 	}
-	// 参数互斥、执行不属于该 Agent。
+	// Mutually exclusive parameters; a run that does not belong to the Agent.
 	e.expect(422, "GET", a+"/messages?before="+target.ID.String()+"&after="+target.ID.String(), nil)
 	_, b := e.newAgent("other")
 	e.expect(404, "GET", b+"/messages?aroundRun="+target.Run.ID.String(), nil)
 	_ = agent
 }
 
-// 每个响应（含错误、健康检查与被拒绝的 Host）都带请求编号，跨源访问的控制台能读到它；
-// 发送消息的请求编号记入该执行的派发或入队事件。
+// Every response (including errors, health checks and rejected Hosts) carries a request ID that a cross-origin console
+// can read; the request ID of sending a message is recorded in that run's dispatch or enqueue event.
 func TestRequestID(t *testing.T) {
 	e := newEnv(t)
 	ids := map[string]bool{}

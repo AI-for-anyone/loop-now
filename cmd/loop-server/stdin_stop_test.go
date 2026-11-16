@@ -7,7 +7,8 @@ import (
 	"time"
 )
 
-// 标准输入关闭才取消：之前写进来的内容不触发，关掉写端后 ctx 结束且回调恰好一次。
+// Only closing standard input cancels: content written before does not trigger it; after the write end is closed,
+// ctx ends and the callback runs exactly once.
 func TestStopOnStdinClose(t *testing.T) {
 	pr, pw := io.Pipe()
 	calls := 0
@@ -31,7 +32,7 @@ func TestStopOnStdinClose(t *testing.T) {
 	}
 }
 
-// 父 ctx 先结束时不再报告"stdin 关闭"。
+// When the parent ctx ends first, "stdin closed" is no longer reported.
 func TestStopOnStdinCloseParentFirst(t *testing.T) {
 	pr, pw := io.Pipe()
 	parent, cancel := context.WithCancel(context.Background())

@@ -12,8 +12,9 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// /model-providers 列出插件提供方（source=plugin、显示名、插件 id 与插件显示名）；带 agentId 时标出这个 Agent 不能用的原因，
-// 选它的 422 字段为 model.provider；项目启用、授权之后原因消失、可以选。
+// /model-providers lists plugin providers (source=plugin, display name, plugin id and plugin display name); with
+// agentId, the reason this Agent cannot use one is marked, and picking it gives a 422 on field model.provider; once the
+// project enables it and it is granted, the reason disappears and it can be picked.
 func TestPluginProvidersInCatalogAPI(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()

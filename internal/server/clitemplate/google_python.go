@@ -2,9 +2,10 @@ package clitemplate
 
 import "os/exec"
 
-// ResolveGooglePython 返回运行 Google SDK 的 Python 解释器路径。
-// 优先使用 python3.13（gcloud 568 的验证辅助按 3.13.7 审阅固定），找不到时退回 python3
-// （仅用于 --version 这类不加载 SDK 依赖的检查），都没有则返回空字符串。
+// ResolveGooglePython returns the path of the Python interpreter that runs the Google SDK.
+// It prefers python3.13 (the verification helpers for gcloud 568 were reviewed and pinned against 3.13.7), falls
+// back to python3 when that is missing (only for checks such as --version that do not load the SDK dependencies),
+// and returns an empty string when neither exists.
 func ResolveGooglePython() string {
 	for _, name := range []string{"python3.13", "python3"} {
 		if p, e := exec.LookPath(name); e == nil {

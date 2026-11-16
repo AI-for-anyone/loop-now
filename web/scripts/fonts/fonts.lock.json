@@ -1,5 +1,5 @@
 {
-  "description": "控制台自托管字体的来源与输出。来源固定到提交或 Release，并记录 SHA-256；outputs 由 build_fonts.py 写入，check:fonts 据此核对仓库中的文件。",
+  "description": "Sources and outputs of the console's self-hosted fonts. Sources are pinned to a commit or release and recorded with their SHA-256; outputs are written by build_fonts.py, and check:fonts checks the files in the repository against them.",
   "sliceTable": {
     "repo": "googlefonts/nam-files",
     "ref": "2a68014b16056e965c18fd47de1f3fde9a5b0095",
@@ -309,6 +309,6 @@
     "src/assets/fonts/zcool-qingke-huangyou/zcool-qingke-huangyou-113.woff2": "2943337ef645ab9d5ea739e92741b51a7d1d1bd028a1e8a013e9f1ed074dbe51",
     "src/assets/fonts/zcool-qingke-huangyou/zcool-qingke-huangyou-114.woff2": "3d8c5259d0481471278d05babdf428bc92a736765c06d8f9bacd83530f064c8d",
     "src/assets/fonts/zcool-qingke-huangyou/zcool-qingke-huangyou-latin.woff2": "a453182b0db518b2c6a2e4e392a99364ecc90c3414d4c0c0bf4ba96e6232de18",
-    "src/styles/fonts.css": "89782490e9e1c537370bcd28cfd62a0a284c97f1747f14b2d54769d004b853be"
+    "src/styles/fonts.css": "50a61a328c9fe2df82611f58a7b6cb859317f2a0ba1b4e0b1b1f6473adb8f040"
   }
 }

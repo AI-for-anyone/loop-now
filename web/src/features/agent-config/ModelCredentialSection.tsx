@@ -21,9 +21,11 @@ import { LoginFeedback } from './LoginFeedback'
 import { reserveAuthorizationWindow } from './authorizationWindow'
 import { useSecretSubmit } from './useSecretSubmit'
 
-// 不属于项目的 Agent 自己的模型凭证：API Key，或浏览器登录订阅账号（Codex，或插件注册的带 OAuth 的提供方）。
-// Codex：点登录时先开一个空白窗口（防弹窗拦截），拿到授权地址后导航过去。
-// 插件提供方：与项目登录相同，不预开窗口，地址通过通用检查后给原生链接（写明目标主机）；还可能给设备码，或中途问一个问题。
+// The own model credential of an Agent that doesn't belong to a project: an API key, or a subscription account logged in through the
+// browser (Codex, or a plugin-registered provider with OAuth).
+// Codex: on clicking log in, first open a blank window (to get past popup blockers), then navigate it once the authorization URL arrives.
+// Plugin providers: same as project login; no window is opened in advance, and a URL that passes the generic check is given as a native
+// link (naming the target host); there may also be a device code, or a question asked mid-way.
 export function ModelCredentialSection({ agent }: { agent: Schemas['Agent'] }) {
   const client = useQueryClient(), auth = useModelAuth(agent), providers = useModelProviders()
   const queryKey = modelAuthKey(agent.id, agent.model.provider, agent.configVersion)
@@ -37,7 +39,7 @@ export function ModelCredentialSection({ agent }: { agent: Schemas['Agent'] }) {
   const opened = useRef<string | null>(null), saved = useRef<string | null>(null)
   const [previousOperation, setPreviousOperation] = useState<string | null>(null)
   const credential = auth.data === undefined ? agent.modelCredential : auth.data.credential
-  // 最新操作可能属于改模型前的提供方；不把它显示成当前提供方的操作。
+  // The latest operation may belong to the provider from before the model was changed; don't show it as the current provider's operation.
   const candidate = auth.data?.operation
   const operation = candidate?.agentId === agent.id && candidate.provider === agent.model.provider ? candidate : null
   const active = loginActive(operation)
@@ -49,7 +51,8 @@ export function ModelCredentialSection({ agent }: { agent: Schemas['Agent'] }) {
   const unavailable = !auth.data || !!auth.error || !!providers.error || starting || active || cancelling
   const copy = t.config.modelLogin, steps = t.credentials.projectLogin
   const loginLabel = plugin && current ? t.credentials.providerPicker.login(providerName(current.id, current)) : copy.login
-  // 插件提供方的授权地址、设备码与问题只在登录进行中显示；地址由服务端校验过，这里再做通用检查。
+  // A plugin provider's authorization URL, device code and question are shown only while the login is in progress; the server has
+  // validated the URL, and the generic check is applied here again.
   const authorizationHref = plugin && active && operation?.authorizationUrl && pluginAuthorizationUrl(operation.authorizationUrl) ? operation.authorizationUrl : undefined
   const rejectedAuthorization = plugin && active && !!operation?.authorizationUrl && !authorizationHref
   const device = plugin && active ? operation?.deviceCode ?? null : null
@@ -78,11 +81,11 @@ export function ModelCredentialSection({ agent }: { agent: Schemas['Agent'] }) {
   const refresh = () => client.invalidateQueries({ queryKey })
   const applyOperation = async (next: Schemas['ModelAuthOperation'], newLogin = false) => {
     if (!mounted.current) return
-    // 取消先前的轮询，避免较早的等待响应覆盖取消或发起的结果。
+    // Cancel earlier polling so that an older in-flight response can't overwrite the result of the cancel or the start.
     await client.cancelQueries({ queryKey })
     if (!mounted.current) return
     client.setQueryData<Schemas['ModelAuthState']>(queryKey, old => {
-      // 其他控制台若已开始更新的操作，旧取消响应不能把它换回旧操作。
+      // If another console has already started a newer operation, a stale cancel response must not switch it back to the old operation.
       if (!newLogin && old?.operation?.id !== next.id) return old
       return { credential: old?.credential ?? credential, operation: next }
     })
@@ -116,7 +119,8 @@ export function ModelCredentialSection({ agent }: { agent: Schemas['Agent'] }) {
     catch (e) { if (mounted.current) { setError(e); void refresh() } }
     finally { submitting.current = false; if (mounted.current) setCancelling(false) }
   }
-  // 回答登录中途的问题：回答只随这次请求发出，不进任何缓存；服务端清空 prompt 后，下一步可能带来新问题或地址。
+  // Answer a question asked mid-login: the answer is sent only with this request and never goes into any cache; after the server clears
+  // the prompt, the next step may bring a new question or URL.
   const answer = async (promptId: string, value: string) => {
     if (!operation || !active || submitting.current) return
     const id = operation.id
@@ -137,7 +141,8 @@ export function ModelCredentialSection({ agent }: { agent: Schemas['Agent'] }) {
     setBlocked(!target.navigate(operation.authorizationUrl)); target.closeUnused()
   }
   const failedToStart = startFailed && (!operation || operation.id === previousOperation)
-  // 409 plugin_not_enabled：插件没有授权给这个 Agent（平台 Agent 没有项目启用这一层），写进登录结果，不再另显示通用错误。
+  // 409 plugin_not_enabled: the plugin isn't granted to this Agent (platform Agents have no project-enable layer); report it in the login
+  // result instead of also showing a generic error.
   const notGranted = failedToStart && plugin && error instanceof ApiError && error.code === 'plugin_not_enabled'
   const view = starting ? 'opening' : failedToStart ? 'failed' : operation?.status === 'pending' ? (prompt ? 'waiting' : 'opening') : operation?.status === 'awaiting_authorization' ? 'waiting' : operation?.status === 'succeeded' ? 'success' : operation?.status
   const detail = notGranted && current ? copy.notGranted(pluginName(current))

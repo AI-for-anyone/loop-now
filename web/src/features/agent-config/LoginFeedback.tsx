@@ -3,10 +3,11 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { t } from '@/i18n'
 
-// 仅是展示状态，正式接口状态由调用方转换；这里不定义 API 数据格式。
+// Display states only; callers convert the actual API states. No API data format is defined here.
 type LoginView = 'opening' | 'waiting' | 'success' | 'failed' | 'cancelled' | 'expired'
 
-// title：替换这一状态的标题（例如登录中途等人回答）；openLabel：替换"打开授权页"的文字（例如带上目标主机名）。
+// title: replaces this state's title (e.g. when the login is waiting mid-way for the person to answer); openLabel: replaces the
+// "打开授权页" (Open authorization page) text (e.g. to include the target host name).
 export function LoginFeedback({ view, title, hasAccount = false, blocked = false, cancelling = false, detail, authorizationHref, openLabel, retryLabel, onOpen, onCancel, onRetry }: {
   view: LoginView
   title?: string

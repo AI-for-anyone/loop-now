@@ -7,9 +7,10 @@ import (
 	"loop-now/internal/server/modelcatalog"
 )
 
-// 模型目录里有本机 CLI 的 claude-code（runtime 为 claude-code，不需要账号）；Agent 的 runtime 由提供方派生、只读：
-// 项目与平台 Agent 都能直接选 claude-code，思考等级只能是 effort 的取值，不能设 Codex 速度；
-// Pi 的 Agent 改到 claude-code 时运行时随之切换，会话重置（序号加一）。
+// The model catalog has claude-code backed by the local CLI (runtime claude-code, no account needed); an Agent's
+// runtime is derived from the provider and read-only: both project and platform Agents can pick claude-code directly,
+// the thinking level can only take effort values, and the Codex speed cannot be set; when a Pi Agent moves to
+// claude-code its runtime switches with it and the session is reset (epoch plus one).
 func TestClaudeCodeRuntimeAPI(t *testing.T) {
 	e := newEnv(t)
 	reg := modelcatalog.NewRegistry(e.api.Models.Snapshot())

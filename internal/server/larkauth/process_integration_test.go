@@ -33,7 +33,7 @@ func TestLarkCoordinatorChildProcess(t *testing.T) {
 	if e != nil || endpoint.Scheme != "http" || endpoint.Hostname() != "127.0.0.1" {
 		t.Fatal("child endpoint not owned loopback")
 	}
-	// 子进程打开父进程的数据目录：几个进程的写入由 SQLite 的文件锁排队。
+	// The child process opens the parent's data directory: SQLite's file lock queues the writes of the processes.
 	st, e := store.Open(ctx, db.Options{Dir: os.Getenv("LARK_TEST_DB_DIR")})
 	if e != nil {
 		t.Fatal("TEST store open failed")

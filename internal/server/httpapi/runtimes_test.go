@@ -10,7 +10,7 @@ import (
 	"loop-now/internal/testutil/fakeclaudebin"
 )
 
-// GET /runtimes 只给控制台：pi 与 claude-code 的状态按契约返回；refresh 只能是布尔值。
+// GET /runtimes is console only: the status of pi and claude-code is returned per the contract; refresh must be a boolean.
 func TestListRuntimes(t *testing.T) {
 	e := newEnv(t)
 	home := t.TempDir()

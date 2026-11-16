@@ -57,8 +57,9 @@ func queueKinds(items []apitypes.QueueItem) []string {
 	return out
 }
 
-// 普通对话的排队重做，真实 App + fakePi：逐条列表与快照、取消（收件 Agent 只看到取消说明、发件方与控制台看到全文）、
-// 逐条转为打断、停止当前回复后队列继续。
+// The reworked queue for regular conversations, real App + fakePi: per-item list and snapshot, cancel (the receiving
+// Agent sees only a cancellation note, the sender and the console see the full text), converting a single item to an
+// interrupt, and the queue continuing after the current reply is stopped.
 func TestQueueActualAppFakePi(t *testing.T) {
 	w := promoteWorld(t)
 	s := w.start(nil)
@@ -100,7 +101,8 @@ func TestQueueActualAppFakePi(t *testing.T) {
 		t.Fatalf("SSE 快照的逐条列表：%+v", snap.QueueItems)
 	}
 
-	// 取消别人发来的一条：收件 Agent 只看到取消说明，发件方与控制台看到全文；Inbox 事件流推送取消。
+	// Cancel a message sent by someone else: the receiving Agent sees only a cancellation note, the sender and the
+	// console see the full text; the Inbox event stream pushes the cancellation.
 	r := decode[apitypes.AgentQueueActionReceipt](t, s.must(200, "POST", path+"/inbox-messages/"+m2.String()+"/cancel", map[string]any{"actionId": uuid.New()}))
 	if r.Status != "accepted" || r.Item == nil || r.Item.Text != "第二条留言" || r.Operation != "cancel_inbox_message" {
 		t.Fatalf("取消回执：%+v", r)
@@ -128,7 +130,8 @@ func TestQueueActualAppFakePi(t *testing.T) {
 		t.Fatalf("应推送 inbox.message.cancelled：%v", err)
 	}
 
-	// 逐条转为打断：别人发来的消息先于自己排队的消息处理，当前回复被打断。
+	// Convert a single item to an interrupt: the message from someone else is handled before the Agent's own queued
+	// message, and the current reply is interrupted.
 	r = decode[apitypes.AgentQueueActionReceipt](t, s.must(200, "POST", path+"/inbox-messages/"+m1.String()+"/promote-to-interrupt", map[string]any{"actionId": uuid.New()}))
 	if r.Status != "accepted" || r.Run == nil || r.Run.WhenBusy == nil || *r.Run.WhenBusy != "interrupt" || !slices.Equal(queueKinds(r.Queue), []string{"inbox:请看构建结果:interrupt", "run:!text=mine:queue"}) {
 		t.Fatalf("转换回执：%+v", r)
@@ -154,7 +157,8 @@ func TestQueueActualAppFakePi(t *testing.T) {
 		t.Fatalf("排队应已清空：%+v", q.Items)
 	}
 
-	// 停止当前回复：以 user_stopped 结束，之后排队的消息照常处理；已结束的回复不能再停止。
+	// Stop the current reply: it ends as user_stopped and queued messages are handled as usual afterwards; a reply that
+	// has ended cannot be stopped again.
 	long := send("!sleep=30s !noabort !text=long", "")
 	waitFor(t, "长回复进入运行", func() bool {
 		v, e := s.a.Store.GetRun(ctx, long.ID)
@@ -179,7 +183,7 @@ func TestQueueActualAppFakePi(t *testing.T) {
 	if !bytes.Contains(tl, []byte(`"stop":true`)) || !bytes.Contains(tl, []byte(`"user_stopped"`)) {
 		t.Fatalf("时间线应记下停止：%s", tl)
 	}
-	// 撤回自己排队的消息：Agent 不会收到，从队列移除。
+	// Withdraw a message you queued yourself: the Agent never receives it and it is removed from the queue.
 	busy := send("!sleep=30s !noabort !text=busy", "")
 	waitFor(t, "再次进入运行", func() bool {
 		v, e := s.a.Store.GetRun(ctx, busy.ID)
@@ -206,7 +210,8 @@ func runOf(t *testing.T, s *server, id uuid.UUID) store.Run {
 	return r
 }
 
-// 节点停止，真实 App + fakePi：有排队项时节点继续处理下一条；没有排队项时节点转阻塞（已被人停止）。
+// Node stop, real App + fakePi: with queued items the node goes on to the next one; without queued items the node
+// becomes blocked (stopped by a person).
 func TestQueueNodeStopActualAppFakePi(t *testing.T) {
 	w := promoteWorld(t)
 	s := w.start(nil)
@@ -242,7 +247,7 @@ func TestQueueNodeStopActualAppFakePi(t *testing.T) {
 		return status, code
 	}
 
-	// 没有排队项：停止后节点转阻塞。
+	// No queued items: after the stop the node becomes blocked.
 	task, worker, active := start("Alone")
 	base := "/tasks/" + task.Task.ID.String() + "/nodes/" + task.Nodes[0].ID.String()
 	r := decode[taskmodel.TaskNodeQueueActionReceipt](t, s.must(200, "POST", base+"/runs/"+active.String()+"/stop", body(worker, task)))
@@ -264,7 +269,7 @@ func TestQueueNodeStopActualAppFakePi(t *testing.T) {
 		t.Fatalf("已结束的轮次不能停止：%d %s", code, raw)
 	}
 
-	// 有排队项：停止后节点继续处理下一条。
+	// Queued items: after the stop the node goes on to the next one.
 	task, worker, active = start("Busy")
 	base = "/tasks/" + task.Task.ID.String() + "/nodes/" + task.Nodes[0].ID.String()
 	s.must(201, "POST", base+"/inbox-messages", map[string]any{"actionId": uuid.New(), "expectedAgentId": worker.ID, "expectedRuntimeId": task.Nodes[0].RuntimeID, "text": "!text=next", "whenBusy": "queue"})

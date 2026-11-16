@@ -20,8 +20,10 @@ export function Chips({ items, className }: { items: string[]; className?: strin
   )
 }
 
-// table：插件详情概览里的样子（改版第 5 步）——每组一行，左边组名，右边每项一个小标签（黄色；“无”是米灰色）加一句说明；
-// 表头下一道实线，行间虚线。groups：安装前确认里的样子，每组一个小标题、每项一行。
+// table: how it looks in the plugin detail overview (redesign step 5): one row per group, group name on the left, and on the right each
+// item as a small tag (yellow; “无” (None) is beige-gray) plus a one-sentence explanation;
+// a solid line under the header and dashed lines between rows. groups: how it looks in the pre-install confirmation, with a small heading
+// per group and one row per item.
 type Layout = 'groups' | 'table'
 const LayoutContext = createContext<Layout>('groups')
 
@@ -61,8 +63,10 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 
 const list = text.list
 
-// 安装前确认与插件详情共用：两侧各有什么、订阅的事件、要的权限，每项一行说明。
-// preview：安装或更新前的预览，Pi 扩展一行另说明注册的模型提供方在确认后才读取。
+// Shared by the pre-install confirmation and the plugin details: what each side contains, the events it subscribes to and the permissions
+// it asks for, one line of explanation per item.
+// preview: the preview before installing or updating; the Pi extension row additionally explains that the model providers it registers are
+// read only after confirming.
 export function ManifestSummary({ manifest, columns = true, preview, layout = 'groups' }: { manifest: Manifest; columns?: boolean; preview?: 'install' | 'update'; layout?: Layout }) {
   const c = manifest.components
   const configFields = fieldsOf(manifest.configSchema)

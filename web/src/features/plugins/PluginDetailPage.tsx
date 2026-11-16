@@ -55,14 +55,15 @@ const more = (to: string, label: string) => (
   </Link>
 )
 
-// 有没有模型提供方可说：带 Pi 扩展，或者读出了提供方、出了错。
+// Whether there is anything to say about model providers: it has Pi extensions, or providers were read, or errors occurred.
 const hasProviderInfo = (detail: Detail) =>
   detail.manifest.components.agentExtensions > 0 || detail.providers.length > 0 || detail.providerErrors.length > 0 || detail.providersError !== null
 
-// 只算已经读到的条数，后面还有就加“+”（接口不给总数，同文件夹页）。
+// Count only the items read so far, adding "+" if there are more (the API gives no total; same as the folder page).
 const loaded = (count: number, more: boolean) => `${count}${more ? '+' : ''}`
 
-// 概览第 04 区“最近动静”：原来分开的事件、投递记录、日志合成三栏，每栏一个大数字、一行说明和“看全部”链接。
+// Section 04 of the overview, “最近动静” (Recent activity): events, deliveries and logs, formerly separate, combined into three columns,
+// each with a big number, one line of explanation and a “看全部” (All ...) link.
 function RecentActivity({ pluginId }: { pluginId: string }) {
   const deliveries = usePluginDeliveries(pluginId)
   const records = usePluginState(pluginId, RECORD_PREFIX)
@@ -92,8 +93,10 @@ function RecentActivity({ pluginId }: { pluginId: string }) {
   )
 }
 
-// 概览（改版第 5 步）：按 01–05 编号分区排在纸上——它包含什么、模型提供方（有才显示）、在哪些项目启用、最近动静、
-// 说明（有 README 才显示）；右侧票根是目录尺，底部写当前版本与更新状态。
+// Overview (redesign step 5): laid out on the sheet as numbered sections 01–05: what it contains, model providers (only if any), which
+// projects enable it, recent activity,
+// and About (only if there is a README); the stub on the right is the section ruler, with the current version and update status at the
+// bottom.
 function Overview({ detail, footer }: { detail: Detail; footer: ReactNode }) {
   const id = detail.plugin.id
   const readme = usePluginReadme(id)
@@ -122,7 +125,8 @@ function Overview({ detail, footer }: { detail: Detail; footer: ReactNode }) {
   const partId = (key: string) => `plugin-${key}`
   return (
     <div className="flex min-h-0 flex-1">
-      {/* 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。 */}
+      {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text) scroll with the
+          content instead of stretching the whole page based on their unscrolled position. */}
       <div className="relative h-full min-w-0 flex-1 overflow-y-auto">
         <div className="flex max-w-[1000px] flex-col gap-6 pt-6 pr-[clamp(14px,3vw,40px)] pb-16 pl-[clamp(12px,2vw,34px)]">
           {parts.map((part, index) => (
@@ -137,7 +141,8 @@ function Overview({ detail, footer }: { detail: Detail; footer: ReactNode }) {
   )
 }
 
-// 一个项目对 x-scope: project 字段的覆盖：覆盖了的列出字段与值，没有覆盖的写“用全局值”。
+// One project's overrides of x-scope: project fields: overridden ones list the field and value; without overrides it says “用全局值”
+// (Use global value).
 function OverrideRow({ project, detail }: { project: Schemas['Project']; detail: Detail }) {
   const { item } = useProjectPlugin(project.id, detail.plugin.id)
   if (!item?.enabled) return null
@@ -200,7 +205,7 @@ function ConfigTab({ detail }: { detail: Detail }) {
   )
 }
 
-// 账号按项目：列出启用了这个插件的项目，每个项目里管理它的账号。
+// Accounts are per project: list the projects that enable this plugin, and manage its accounts in each project.
 function AccountsTab({ detail }: { detail: Detail }) {
   const projects = useProjects()
   if (!detail.manifest.accounts.length) return <Quiet>{text.accounts.none}</Quiet>
@@ -224,7 +229,8 @@ function ProjectAccounts({ project, detail }: { project: Schemas['Project']; det
   )
 }
 
-// 更新：从市场装的按市场里的版本（有新版本才能点）；其他来源按记录的来源重新取预览，看有没有新版本。
+// Update: a plugin installed from a market goes by the market's version (clickable only when there is a new version); other sources fetch
+// a new preview from the recorded source to see whether there is a new version.
 function UpdateButton({ plugin, installer }: { plugin: Schemas['Plugin']; installer: ReturnType<typeof usePluginInstaller> }) {
   const markets = usePluginMarkets()
   const busy = installer.pending !== null
@@ -248,7 +254,8 @@ function UpdateButton({ plugin, installer }: { plugin: Schemas['Plugin']; instal
   )
 }
 
-// 插件详情：页头（名称、来源、版本、状态，检查更新与卸载）与六个页签，页签写在地址里（/plugins/<id>/<页签>）。
+// Plugin details: the page header (name, source, version, status, check for updates and uninstall) and six tabs; the tab is part of the
+// URL (/plugins/<id>/<tab>).
 export function PluginDetailPage() {
   const { pluginId = '', tab: tabParam } = useParams()
   const navigate = useNavigate()
@@ -270,12 +277,13 @@ export function PluginDetailPage() {
     )
   if (!detail) return <Quiet>{text.loading}</Quiet>
   const { plugin, manifest } = detail
-  // git 来源的仓库：有网页时给链接；SSH 写法没有网页，只显示地址。
+  // The repository of a git source: linked when it has a web page; the SSH form has no web page, so only the address is shown.
   const repository = plugin.source.kind === 'git' ? { location: plugin.source.location, href: repositoryUrl(plugin.source.location, plugin.source.ref) } : null
   const tabs = TABS.filter((value) => value !== 'accounts' || manifest.accounts.length > 0)
   const name = localizedText(plugin.displayName)
   const entry = plugin.source.market ? marketEntryOf(markets.data?.markets, plugin) : undefined
-  // 票根底部：当前版本号，下面写更新状态（从市场装的才知道有没有新版本）。
+  // Bottom of the stub: the current version number, with the update status below it (only a plugin installed from a market knows whether
+  // there is a new version).
   const versionFooter = (
     <>
       <span className="font-display-latin text-[30px] leading-none font-extrabold text-riso-blue [overflow-wrap:anywhere]">v{plugin.version}</span>
@@ -284,8 +292,10 @@ export function PluginDetailPage() {
   )
   return (
     <DraftNavigationGuard>
-      {/* 插件详情（改版第 5 步）：紧凑页头（黄色首字母方块、名称、来源与版本、状态，右边是更新状态与红色描边的“卸载”，
-          下一行是一句说明和来源）；页签贴在纸张上沿，纸张顶边一条孔版蓝网点色带（同插件市场的卡片）。 */}
+      {/* Plugin details (redesign step 5): a compact page header (yellow initial-letter square, name, source and version, status, and on
+          the right the update status and a red-outlined “卸载” (Uninstall),
+          with a one-sentence description and the source on the next line); the tabs sit on the sheet's top edge, and along the sheet's top
+          edge runs a riso-blue halftone-dot color band (same as the plugin market cards). */}
       <PageFrame>
         <PageHeader
           crumbs={[{ label: t.shell.global }, { label: copy.crumb, to: '/plugins' }]}

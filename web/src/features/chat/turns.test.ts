@@ -19,7 +19,7 @@ describe('buildTurns', () => {
   })
 
   it('按时间数值排列：小数位数不同、以 Z 结尾的时间不按字符串比较', () => {
-    // Go 的 RFC3339Nano 去掉末尾的 0：05.120000 输出为 05.12Z，06.000000 输出为 06Z。
+    // Go's RFC3339Nano drops trailing zeros: 05.120000 is printed as 05.12Z, and 06.000000 as 06Z.
     const r1 = makeRun({ startedAt: '2026-10-12T10:00:05.12Z' })
     const r2 = makeRun({ startedAt: '2026-10-12T10:00:05.123456Z' })
     const r3 = makeRun({ startedAt: '2026-10-12T10:00:06Z' })
@@ -40,7 +40,8 @@ describe('buildTurns', () => {
   })
 
   it('历史中的执行比实时副本更新时以历史为准，状态不倒退', () => {
-    // 历史请求在执行结束后才读取，结束事件尚未到达：实时部分仍认为它在回复中。
+    // The history request reads only after the run has ended, but the end event
+    // has not arrived yet: the live part still thinks the run is replying.
     const run = makeRun({ status: 'running', endedAt: null })
     const ended = { ...run, status: 'completed' as const }
     const live: LiveState = { ...initialLiveState, current: { run, text: '写到一半' } }
@@ -59,7 +60,7 @@ describe('buildTurns', () => {
     const sent = makeMessage({ text: '刚发出的', run: queuedRun })
     let live = liveReducer(initialLiveState, { type: 'event', event: { type: 'run.ended', id: '1-0', data: { run: ended, message: reply } } })
     live = liveReducer(live, { type: 'sent', result: { message: sent, run: queuedRun } })
-    // 历史请求在执行结束之前读取：执行仍在回复中，没有回复，也没有刚发出的消息。
+    // The history request read before the run ended: the run is still replying, with no reply and without the message that was just sent.
     const { turns, queued } = buildTurns(page([question]), live)
     expect(turns).toHaveLength(1)
     expect(turns[0].user?.text).toBe('问题')
@@ -78,7 +79,8 @@ describe('buildTurns', () => {
     expect(turns[0].reply?.text).toBe('回复')
   })
 
-  // 手动压缩（/compact）进行中时，状态里的当前执行是这次压缩（run.compaction 不为 null）。它没有对话消息，不是一轮。
+  // While a manual compaction (/compact) is in progress, the current run in the status is this
+  // compaction (run.compaction is not null). It has no conversation messages and is not a turn.
   it('进行中的手动压缩不是一轮：不进对话流，定位时也不算“有新消息”', () => {
     const asked = makeRun({ startedAt: '2026-10-12T10:00:00Z' })
     const compacting = makeRun({ status: 'running', startedAt: '2026-10-12T10:05:00Z', endedAt: null, compaction: { instructions: '', outcome: null, skipReason: null, tokensBefore: null, estimatedTokensAfter: null } })

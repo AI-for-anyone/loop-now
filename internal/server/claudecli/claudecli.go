@@ -1,5 +1,6 @@
-// Package claudecli 找到并询问用户本机安装的 Claude Code（claude）：只运行它自己的命令（--version、auth status、purge），
-// 不读、不复制、不保存它的凭证（不碰钥匙串，也不碰 ~/.claude 里的凭证文件）。用的是用户本人在这台机器上的登录。
+// Package claudecli finds and queries the Claude Code (claude) installed on the user's machine: it only runs claude's
+// own commands (--version, auth status, purge) and never reads, copies or stores its credentials (it touches neither
+// the keychain nor the credential files in ~/.claude). What it uses is the user's own login on this machine.
 package claudecli
 
 import (
@@ -21,13 +22,14 @@ import (
 	"loop-now/internal/procgroup"
 )
 
-// ErrNotFound 表示在给定的 PATH 里找不到 claude。
+// ErrNotFound means claude cannot be found in the given PATH.
 var ErrNotFound = errors.New("在登录 shell 的 PATH 里找不到 claude")
 
-// commandTimeout 是 claude 自己的短命令（--version、auth status、purge）的时限。
+// commandTimeout is the time limit for claude's own short commands (--version, auth status, purge).
 const commandTimeout = 30 * time.Second
 
-// names 是要找的可执行文件名：Windows 上原生安装是 claude.exe，npm 全局安装是 claude.cmd。
+// names are the executable names to look for: on Windows a native install is claude.exe and a global npm install is
+// claude.cmd.
 func names() []string {
 	if runtime.GOOS == "windows" {
 		return []string{"claude.exe", "claude.cmd"}
@@ -35,7 +37,8 @@ func names() []string {
 	return []string{"claude"}
 }
 
-// Find 按顺序在 dirs（用户登录 shell 的 PATH）里找 claude，返回解析符号链接后的绝对路径。
+// Find looks for claude in dirs (the PATH of the user's login shell) in order and returns its absolute path with
+// symlinks resolved.
 func Find(dirs []string) (string, error) {
 	for _, dir := range dirs {
 		if dir == "" || !filepath.IsAbs(dir) {
@@ -57,8 +60,9 @@ func Find(dirs []string) (string, error) {
 	return "", ErrNotFound
 }
 
-// forbiddenEnv 报告这个环境变量不能交给 claude：平台只用本机登录，不让任何 Anthropic／Claude Code 的变量
-// （API key、令牌、配置目录、嵌套会话标记等）改变它的认证或配置。Windows 上变量名不分大小写。
+// forbiddenEnv reports whether this environment variable must not be passed to claude: the platform only uses the
+// local login and does not let any Anthropic/Claude Code variable (API key, token, config directory, nested-session
+// marker and so on) change its authentication or configuration. Variable names are case-insensitive on Windows.
 func forbiddenEnv(name string) bool {
 	if runtime.GOOS == "windows" {
 		name = strings.ToUpper(name)
@@ -66,7 +70,7 @@ func forbiddenEnv(name string) bool {
 	return strings.HasPrefix(name, "ANTHROPIC_") || strings.HasPrefix(name, "CLAUDE")
 }
 
-// StripEnv 去掉 env（KEY=VALUE 列表）里不能交给 claude 的变量。
+// StripEnv removes the variables that must not be passed to claude from env (a KEY=VALUE list).
 func StripEnv(env []string) []string {
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
@@ -78,19 +82,21 @@ func StripEnv(env []string) []string {
 	return out
 }
 
-// EnvOptions 是运行 claude 自己的短命令（--version、auth status、purge）时的环境，与 Agent 的 Claude Code 进程同一套基础变量。
+// EnvOptions is the environment for running claude's own short commands (--version, auth status, purge), with the
+// same base variables as the Agent's Claude Code process.
 type EnvOptions struct {
 	Home string
 	Tmp  string
-	// User 是 USER 与 LOGNAME：claude 按它找本机的登录，缺了 auth status 会报未登录。
+	// User is USER and LOGNAME: claude uses it to find the local login; without it, auth status reports not logged in.
 	User string
 	Path []string
-	// Extra 是其他基础变量（K=V），如透传的 LANG、LC_ALL、TZ；不覆盖上面几项。
+	// Extra are other base variables (K=V), such as the passed-through LANG, LC_ALL and TZ; they do not override the
+	// fields above.
 	Extra []string
 }
 
-// Env 是运行 claude 自己的短命令时的环境：Windows 上的系统变量、透传的基础变量、真实的 HOME、USER／LOGNAME 与给定的 PATH，
-// 不带任何 Anthropic／Claude 的变量。
+// Env is the environment for running claude's own short commands: the system variables on Windows, the passed-through
+// base variables, the real HOME, USER/LOGNAME and the given PATH, without any Anthropic/Claude variables.
 func Env(o EnvOptions) []string {
 	env := execenv.Base(o.Home, o.Tmp)
 	for _, kv := range o.Extra {
@@ -110,8 +116,10 @@ func Env(o EnvOptions) []string {
 	return StripEnv(env)
 }
 
-// run 运行 claude 的一条短命令，返回标准输出；退出状态不为 0 时同时返回错误（输出照样返回：auth status 未登录时以 1 退出）。
-// 错误里只有退出状态，不带输出：auth status 的输出里有邮箱与组织，不能进日志、事件或错误消息。
+// run runs one short claude command and returns its standard output; on a non-zero exit status it also returns an
+// error (the output is still returned: auth status exits with 1 when not logged in).
+// The error only carries the exit status, never the output: the output of auth status contains the email and
+// organization, which must not reach logs, events or error messages.
 func run(ctx context.Context, bin string, env []string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
@@ -137,7 +145,7 @@ func run(ctx context.Context, bin string, env []string, args ...string) ([]byte,
 
 var versionPattern = regexp.MustCompile(`^\d+\.\d+\.\d+[0-9A-Za-z.+-]*`)
 
-// Version 运行 claude --version，返回版本号（如 2.1.322）。
+// Version runs claude --version and returns the version number (such as 2.1.322).
 func Version(ctx context.Context, bin string, env []string) (string, error) {
 	out, err := run(ctx, bin, env, "--version")
 	if err != nil {
@@ -150,8 +158,8 @@ func Version(ctx context.Context, bin string, env []string) (string, error) {
 	return v, nil
 }
 
-// Auth 是 claude auth status --json 里平台用到的字段。其余字段（email、orgId、orgName 等）在解码时就丢弃，
-// 不进日志、事件或错误消息。
+// Auth holds the fields of claude auth status --json that the platform uses. The other fields (email, orgId, orgName
+// and so on) are dropped during decoding and never reach logs, events or error messages.
 type Auth struct {
 	LoggedIn          bool   `json:"loggedIn"`
 	AuthMethod        string `json:"authMethod"`
@@ -160,8 +168,10 @@ type Auth struct {
 	ProjectsDirectory string `json:"projectsDirectory"`
 }
 
-// AuthStatus 运行 claude auth status --json：由 claude 自己判断是否登录，平台拿不到令牌。未登录时它以 1 退出但照常输出 JSON，
-// 所以只要输出可以识别就按输出判断；运行不了或输出无法识别时返回错误（调用方当作“不知道”）。
+// AuthStatus runs claude auth status --json: claude itself decides whether it is logged in, and the platform never
+// gets the token. When not logged in it exits with 1 but still prints JSON, so whenever the output is recognizable the
+// result is based on the output; when it cannot run or the output is unrecognizable it returns an error (which callers
+// treat as "unknown").
 func AuthStatus(ctx context.Context, bin string, env []string) (Auth, error) {
 	out, runErr := run(ctx, bin, env, "auth", "status", "--json")
 	if len(bytes.TrimSpace(out)) == 0 && runErr != nil {
@@ -189,24 +199,28 @@ func AuthStatus(ctx context.Context, bin string, env []string) (Auth, error) {
 	return a, nil
 }
 
-// Purge 运行 claude purge <path> -y：删除 claude 为这个目录留下的会话记录（只是这个路径对应的数据）。
+// Purge runs claude purge <path> -y: it deletes the session transcripts claude kept for this directory (only the data
+// belonging to this path).
 func Purge(ctx context.Context, bin string, env []string, path string) error {
 	_, err := run(ctx, bin, env, "purge", path, "-y")
 	return err
 }
 
-// DefaultProjectsDir 是没有设置 CLAUDE_CONFIG_DIR 时 claude 存放会话记录的目录。
+// DefaultProjectsDir is the directory where claude keeps session transcripts when CLAUDE_CONFIG_DIR is not set.
 func DefaultProjectsDir(home string) string { return filepath.Join(home, ".claude", "projects") }
 
 var nonAlnum = regexp.MustCompile(`[^A-Za-z0-9]`)
 
-// EncodeProjectDir 是 claude 把工作目录的路径编成会话记录子目录名的规则：非字母数字都换成 -（/a/b.c → -a-b-c，
-// C:\Users\x → C--Users-x）。路径要不要先解析由调用方决定，见 ProjectDirNames。
+// EncodeProjectDir is claude's rule for encoding a working directory path into a session transcript subdirectory
+// name: every non-alphanumeric character becomes - (/a/b.c -> -a-b-c, C:\Users\x -> C--Users-x). Whether the path
+// is resolved first is up to the caller; see ProjectDirNames.
 func EncodeProjectDir(path string) string { return nonAlnum.ReplaceAllString(path, "-") }
 
-// ProjectDirNames 返回工作目录 cwd 可能对应的会话记录子目录名：先是解析之后的（符号链接；Windows 上还会把 8.3 短名展开为长名），
-// 再是原样的；两者相同时只有一个。macOS 上实测 claude 用解析之后的（/tmp 记成 /private/tmp）；Windows 上它用哪一种没有核实，
-// 所以两种都认。调用方只看这一两个确定的路径，不扫描。
+// ProjectDirNames returns the session transcript subdirectory names the working directory cwd may map to: first the
+// resolved one (symlinks; on Windows 8.3 short names are also expanded to long names), then the one as given; when
+// the two are equal there is only one. On macOS claude was observed to use the resolved one (/tmp is recorded as
+// /private/tmp); which one it uses on Windows has not been verified, so both are accepted. Callers only look at these
+// one or two known paths and never scan.
 func ProjectDirNames(cwd string) []string { return projectDirNames(cwd, filepath.EvalSymlinks) }
 
 func projectDirNames(cwd string, resolve func(string) (string, error)) []string {
@@ -219,11 +233,12 @@ func projectDirNames(cwd string, resolve func(string) (string, error)) []string 
 	return []string{raw}
 }
 
-// ProjectDirName 是 ProjectDirNames 的第一个（解析之后的）。
+// ProjectDirName is the first of ProjectDirNames (the resolved one).
 func ProjectDirName(cwd string) string { return ProjectDirNames(cwd)[0] }
 
-// TranscriptPath 返回 projects 目录里会话 id 在工作目录 cwd 下的会话记录：按 ProjectDirNames 的顺序取第一个存在的普通文件，
-// 都不存在时为空。只看这一两个文件，不扫描别的目录。
+// TranscriptPath returns the transcript of session id under working directory cwd in the projects directory: the
+// first regular file that exists, in ProjectDirNames order, or empty when none exists. It only looks at these one or
+// two files and never scans other directories.
 func TranscriptPath(projects, cwd, id string) string {
 	if !ValidSessionID(id) {
 		return ""
@@ -239,10 +254,11 @@ func TranscriptPath(projects, cwd, id string) string {
 
 var sessionIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-// ValidSessionID 报告 id 是平台给 claude 的会话 ID（小写 UUID）。
+// ValidSessionID reports whether id is a session ID the platform gives claude (a lowercase UUID).
 func ValidSessionID(id string) bool { return sessionIDPattern.MatchString(id) }
 
-// InProjects 报告 path 是 projects 目录下一层子目录里的 <会话 ID>.jsonl（claude 会话记录的位置）。
+// InProjects reports whether path is a <session ID>.jsonl in a direct subdirectory of the projects directory (where
+// claude keeps session transcripts).
 func InProjects(projects, path string) bool {
 	rel, err := filepath.Rel(projects, path)
 	if err != nil || filepath.IsAbs(rel) || strings.HasPrefix(rel, "..") {
@@ -252,7 +268,8 @@ func InProjects(projects, path string) bool {
 	return len(parts) == 2 && parts[0] != "." && parts[0] != ".." && strings.HasSuffix(parts[1], ".jsonl") && ValidSessionID(strings.TrimSuffix(parts[1], ".jsonl"))
 }
 
-// Probe 缓存 claude 的版本（按可执行文件的路径、大小与修改时间）与 projects 目录，避免每次启动都运行一遍。
+// Probe caches claude's version (keyed by the executable's path, size and modification time) and its projects
+// directory, so they are not run again on every start.
 type Probe struct {
 	mu       sync.Mutex
 	versions map[string]string
@@ -267,7 +284,7 @@ func fileKey(bin string) string {
 	return fmt.Sprintf("%s|%d|%d", bin, info.Size(), info.ModTime().UnixNano())
 }
 
-// Version 返回 bin 的版本号，按文件身份缓存。
+// Version returns the version number of bin, cached by file identity.
 func (p *Probe) Version(ctx context.Context, bin string, env []string) (string, error) {
 	key := fileKey(bin)
 	p.mu.Lock()
@@ -289,7 +306,8 @@ func (p *Probe) Version(ctx context.Context, bin string, env []string) (string, 
 	return v, nil
 }
 
-// ProjectsDir 返回 claude 存放会话记录的目录：以 claude auth status 报告的 projectsDirectory 为准，拿不到时按默认规则推。
+// ProjectsDir returns the directory where claude keeps session transcripts: the projectsDirectory reported by claude
+// auth status wins, and when that is unavailable it is derived by the default rule.
 func (p *Probe) ProjectsDir(ctx context.Context, bin string, env []string, home string) string {
 	key := fileKey(bin) + "|" + home
 	p.mu.Lock()

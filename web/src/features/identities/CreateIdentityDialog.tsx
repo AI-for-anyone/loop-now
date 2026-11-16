@@ -11,14 +11,15 @@ import { fieldClass } from '@/lib/field'
 import { cn } from '@/lib/utils'
 import { identityNameError } from './identity-rules'
 
-// 服务端对名称的拒绝：重名为 409，不符合规则为 422 且字段为 name；其余错误显示在表单下方。
+// The server's rejections of the name: 409 for a duplicate name, 422 with field name for a rule violation; other errors are
+// shown below the form.
 function serverNameError(error: unknown): string | undefined {
   if (!(error instanceof ApiError)) return undefined
   if (error.code === 'name_conflict') return t.identities.nameTaken
   return error.fieldMessage('name')
 }
 
-// 新建外部身份：只有名称一项，地址为 @名称。成功后进入它的详情。
+// New external identity: the name is the only field, and the address is @name. On success, open its details.
 export function CreateIdentityDialog({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate()
   const create = useCreateIdentity()

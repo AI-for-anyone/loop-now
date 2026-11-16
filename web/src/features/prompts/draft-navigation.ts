@@ -1,7 +1,8 @@
 import { createContext, useContext, useLayoutEffect } from 'react'
 export const DirtyContext = createContext<((id: string, dirty: boolean | null) => void) | null>(null)
 
-// currentProjectName来自当前已解析projectId对应的项目，不按任意新路径猜测归属。
+// currentProjectName comes from the project matching the currently resolved projectId; ownership is never guessed from an
+// arbitrary new path.
 export function sameRenamedProjectPage(current: string, next: string, currentProjectName?: string) {
   if (!currentProjectName) return false
   const from = current.split('/'), to = next.split('/')

@@ -27,7 +27,7 @@ func TestSaveAndLoad(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if runtime.GOOS != "windows" && info.Mode().Perm() != want { // Windows 上是 ACL，见 privatefs
+		if runtime.GOOS != "windows" && info.Mode().Perm() != want { // on Windows it is an ACL; see privatefs
 			t.Errorf("%s 的权限为 %o，应为 %o", p, info.Mode().Perm(), want)
 		}
 	}
@@ -94,7 +94,7 @@ func TestLoadRejectsInvalidContent(t *testing.T) {
 	}
 }
 
-// 写入过程中失败时，原文件保持不变，目录中没有残留的临时文件。
+// When writing fails midway, the original file stays unchanged and no temporary file is left in the directory.
 func TestSaveFailureKeepsOriginal(t *testing.T) {
 	path := Path(t.TempDir())
 	orig := &File{SchemaVersion: 1, Profiles: map[string]Profile{"default": {Server: "https://old.example"}}}

@@ -10,24 +10,26 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// Compaction 是手动压缩的指令与结果，存在 runs.compaction（JSON）。Outcome 在执行结束前、失败或被打断时为空。
+// Compaction holds the instructions and result of a manual compaction, stored in runs.compaction (JSON). Outcome is
+// empty before the run ends, and when it failed or was interrupted.
 type Compaction struct {
 	Instructions string `json:"instructions"`
-	// Outcome：compacted 已压缩；skipped 没有压缩（SkipReason：too_small 会话太短、already_compacted 已经压缩过、
-	// cancelled_by_extension 扩展取消了这次压缩），执行仍算正常完成。
+	// Outcome: compacted means it was compacted; skipped means it was not compacted (SkipReason: too_small means the
+	// session is too short, already_compacted means it was already compacted, cancelled_by_extension means an extension
+	// cancelled this compaction), and the run still counts as completed normally.
 	Outcome              string `json:"outcome,omitempty"`
 	SkipReason           string `json:"skipReason,omitempty"`
 	TokensBefore         *int64 `json:"tokensBefore,omitempty"`
 	EstimatedTokensAfter *int64 `json:"estimatedTokensAfter,omitempty"`
 }
 
-// 手动压缩的结果。
+// Results of a manual compaction.
 const (
 	CompactionCompacted = "compacted"
 	CompactionSkipped   = "skipped"
 )
 
-// ParseCompaction 解析 runs.compaction；为空或无法解析时返回零值。
+// ParseCompaction parses runs.compaction; returns the zero value when it is empty or cannot be parsed.
 func ParseCompaction(raw []byte) Compaction {
 	var c Compaction
 	if len(raw) > 0 {
@@ -36,8 +38,10 @@ func ParseCompaction(raw []byte) Compaction {
 	return c
 }
 
-// InsertConsoleCompactRun 在 Agent 行锁内再次确认空闲和活动会话，插入不带对话消息的压缩运行，记下压缩指令（可为空）。
-// 写事务串行，确认空闲与插入在同一事务里，不会违反“每个 Agent 至多一次进行中的执行”。
+// InsertConsoleCompactRun re-confirms, under the Agent row lock, that the Agent is idle and has an active session,
+// inserts a compaction run without conversation messages, and records the compaction instructions (may be empty).
+// Write transactions are serialized and the idle check and the insert are in the same transaction, so "at most one
+// run in progress per Agent" cannot be violated.
 func (s *Store) InsertConsoleCompactRun(ctx context.Context, agentID, runID, instanceID uuid.UUID, instructions string) (Run, error) {
 	raw, err := json.Marshal(Compaction{Instructions: instructions})
 	if err != nil {
@@ -79,7 +83,8 @@ func (s *Store) InsertConsoleCompactRun(ctx context.Context, agentID, runID, ins
 	return run, err
 }
 
-// IdleSession 在数据库内确认 Agent 没有进行中或排队工作，并返回当前会话。
+// IdleSession confirms in the database that the Agent has no work in progress or queued, and returns the current
+// session.
 func (s *Store) IdleSession(ctx context.Context, agentID uuid.UUID) (AgentSession, error) {
 	var sess AgentSession
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -102,8 +107,10 @@ func (s *Store) IdleSession(ctx context.Context, agentID uuid.UUID) (AgentSessio
 	return sess, err
 }
 
-// LatestCompletedAssistant 返回最近一条属于成功运行、有文字的助手回复；没有时返回 nil。
-// 没有文字的回复（Pi 直接处理的 /pi: 命令、只调用了工具的一轮）跳过，复制它们没有意义。
+// LatestCompletedAssistant returns the latest assistant reply with text that belongs to a successful run; returns nil
+// when there is none.
+// Replies without text (/pi: commands Pi handled directly, a turn that only called tools) are skipped; copying them
+// would be pointless.
 func (s *Store) LatestCompletedAssistant(ctx context.Context, agentID uuid.UUID) (*Message, error) {
 	if _, err := s.GetAgent(ctx, agentID); err != nil {
 		return nil, err
@@ -121,7 +128,7 @@ func (s *Store) LatestCompletedAssistant(ctx context.Context, agentID uuid.UUID)
 	return &m, nil
 }
 
-// LatestCompactRun 返回 Agent 最近一次手动压缩的执行（任何状态）；没有时为 nil。
+// LatestCompactRun returns the Agent's latest manual compaction run (in any status); nil when there is none.
 func (s *Store) LatestCompactRun(ctx context.Context, agentID uuid.UUID) (*Run, error) {
 	r, err := scanRun(s.Pool.QueryRow(ctx, `SELECT `+runColumns+` FROM runs WHERE agent_id = $1 AND origin = 'console_compact'
 		ORDER BY queued_at DESC, id DESC LIMIT 1`, agentID))

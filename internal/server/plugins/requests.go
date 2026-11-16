@@ -17,13 +17,15 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// 控制台操作按钮与 HTTP 入口（plugins/SPEC.md §11）：Go 把请求交给宿主里的插件，30 秒内的回应原样返回。
+// Console action buttons and the HTTP entry point (plugins/SPEC.md §11): Go hands the request to the plugin in the
+// plugin host and returns its response as-is if it arrives within 30 seconds.
 
-// DefaultRequestTimeout 是 action 与 http 请求等待插件回应的默认时长（Service.RequestTimeout）。
+// DefaultRequestTimeout is the default time action and http requests wait for the plugin to respond
+// (Service.RequestTimeout).
 const DefaultRequestTimeout = 30 * time.Second
 
-// hostRequest 向已加载的插件发请求；把宿主的失败换成接口错误：插件不在宿主里时为 notLoaded，
-// 超时 504 plugin_timeout，插件报错 502 plugin_failed。
+// hostRequest sends a request to a loaded plugin and turns plugin host failures into API errors: notLoaded when the
+// plugin is not in the host, 504 plugin_timeout on timeout, and 502 plugin_failed when the plugin reports an error.
 func (s *Service) hostRequest(ctx context.Context, typ, plugin string, payload any, notLoaded error) (json.RawMessage, error) {
 	if s.Host == nil {
 		return nil, notLoaded
@@ -45,9 +47,9 @@ func (s *Service) hostRequest(ctx context.Context, typ, plugin string, payload a
 	return nil, err
 }
 
-// ---- 操作按钮 ----
+// ---- Action buttons ----
 
-// ActionWhere 是按钮所在的页面对象（接口里 PluginActionInput.where）。
+// ActionWhere is the page object the button is on (PluginActionInput.where in the API).
 type ActionWhere struct {
 	ProjectID  *uuid.UUID `json:"projectId,omitempty"`
 	AgentID    *uuid.UUID `json:"agentId,omitempty"`
@@ -55,14 +57,15 @@ type ActionWhere struct {
 	IdentityID *uuid.UUID `json:"identityId,omitempty"`
 }
 
-// ActionResult 是接口里的 PluginActionResult。
+// ActionResult is the API's PluginActionResult.
 type ActionResult struct {
 	Notice string  `json:"notice"`
 	URL    *string `json:"url"`
 }
 
-// Action 执行插件的操作按钮：操作须在清单 actions 里且 where 的页面种类在它的 where 内，input 按 fields 校验；
-// where 所在的项目（Agent、任务所在的项目）须启用了插件。
+// Action runs a plugin's action button: the action must be in the manifest's actions and the page kind of where must
+// be in its where; input is validated against fields. The project of where (the project the Agent or task belongs
+// to) must have the plugin enabled.
 func (s *Service) Action(ctx context.Context, plugin, action string, where ActionWhere, input map[string]any) (ActionResult, error) {
 	_, m, err := s.get(ctx, plugin)
 	if err != nil {
@@ -105,7 +108,8 @@ func (s *Service) Action(ctx context.Context, plugin, action string, where Actio
 	return out, nil
 }
 
-// actionScope 返回 where 的页面种类与所在的项目（平台 Agent 与外部身份、全局页面没有项目）；对象不存在时 404。
+// actionScope returns the page kind of where and its project (platform Agents, external identities and the global
+// page have no project); 404 when the object does not exist.
 func (s *Service) actionScope(ctx context.Context, w ActionWhere) (string, *uuid.UUID, error) {
 	switch {
 	case w.IdentityID != nil:
@@ -131,14 +135,14 @@ func (s *Service) actionScope(ctx context.Context, w ActionWhere) (string, *uuid
 	return "global", nil, nil
 }
 
-// ---- HTTP 入口 ----
+// ---- HTTP entry point ----
 
-// MaxHTTPBody 是 HTTP 入口请求正文的上限。
+// MaxHTTPBody is the limit on the request body of the HTTP entry point.
 const MaxHTTPBody = 1 << 20
 
-// HTTPRequest 是交给插件的一次 HTTP 请求（宿主 http 请求的载荷）。
+// HTTPRequest is one HTTP request handed to a plugin (the payload of the plugin host's http request).
 type HTTPRequest struct {
-	Via     string              `json:"via"` // external（对外端口 /hooks）或 console（回环 /api/v1/plugins/<id>/http）
+	Via     string              `json:"via"` // external (public port /hooks) or console (loopback /api/v1/plugins/<id>/http)
 	Method  string              `json:"method"`
 	Path    string              `json:"path"`
 	Query   string              `json:"query"`
@@ -146,18 +150,19 @@ type HTTPRequest struct {
 	Body    []byte              `json:"body"`
 }
 
-// HTTPResponse 是插件的回应，原样返回给调用方。
+// HTTPResponse is the plugin's response, returned to the caller as-is.
 type HTTPResponse struct {
 	Status  int                 `json:"status"`
 	Headers map[string][]string `json:"headers"`
 	Body    []byte              `json:"body"`
 }
 
-// hopHeaders 是不转发的逐跳头与由服务端决定的头。
+// hopHeaders are the hop-by-hop headers and the headers decided by the server, which are not forwarded.
 var hopHeaders = []string{"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "proxy-connection", "te", "trailer",
 	"transfer-encoding", "upgrade", "content-length"}
 
-// HTTPRequestHeaders 把调用方的请求头整理成交给插件的形式：头名小写，去掉 Authorization、Cookie 与逐跳头。
+// HTTPRequestHeaders turns the caller's request headers into the form handed to the plugin: lower-case header
+// names, without Authorization, Cookie and hop-by-hop headers.
 func HTTPRequestHeaders(h http.Header) map[string][]string {
 	out := map[string][]string{}
 	for k, v := range h {
@@ -170,8 +175,8 @@ func HTTPRequestHeaders(h http.Header) map[string][]string {
 	return out
 }
 
-// HTTP 把请求交给声明了 http: true 的插件；插件不存在、没有 HTTP 入口或不在宿主里时 404，
-// 每个插件每秒最多 HTTPRate 次（超出 429）。
+// HTTP hands the request to a plugin that declares http: true; 404 when the plugin does not exist, has no HTTP
+// entry point or is not in the plugin host. Each plugin gets at most HTTPRate requests per second (429 beyond that).
 func (s *Service) HTTP(ctx context.Context, plugin string, req HTTPRequest) (HTTPResponse, error) {
 	_, m, err := s.get(ctx, plugin)
 	if err != nil || !m.Components.HTTP {
@@ -209,10 +214,11 @@ func (s *Service) HTTP(ctx context.Context, plugin string, req HTTPRequest) (HTT
 	return out, nil
 }
 
-// HTTPRate 是每个插件 HTTP 入口每秒允许的请求数（令牌桶，容量同为 HTTPRate）。
+// HTTPRate is the number of requests per second allowed for each plugin's HTTP entry point (a token bucket whose
+// capacity is also HTTPRate).
 const HTTPRate = 20
 
-// rateLimiter 是按插件的令牌桶。
+// rateLimiter is a per-plugin token bucket.
 type rateLimiter struct {
 	mu      sync.Mutex
 	buckets map[string]*bucket

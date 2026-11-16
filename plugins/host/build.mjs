@@ -1,4 +1,4 @@
-// 打包成一个自带全部依赖的 dist/main.js（Node 24，ESM）：Go 用 `node dist/main.js` 启动，不需要 node_modules。
+// Bundle into a single dist/main.js with all dependencies included (Node 24, ESM): Go starts it with `node dist/main.js`, no node_modules needed.
 import { readFileSync, rmSync } from 'node:fs'
 
 import { build } from 'esbuild'
@@ -16,7 +16,7 @@ await build({
   target: 'node24',
   legalComments: 'linked',
   define: { __HOST_VERSION__: JSON.stringify(version) },
-  // jiti 是 CommonJS，打进 ESM 后需要 require。
+  // jiti is CommonJS, so it needs require once bundled into ESM.
   banner: { js: "import { createRequire as __loopNowCreateRequire } from 'node:module'; const require = __loopNowCreateRequire(import.meta.url);" },
   logLevel: 'warning',
 })

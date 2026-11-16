@@ -14,7 +14,8 @@ import (
 	"loop-now/internal/testutil/sqlitetest"
 )
 
-// CountTasks 只数未结束的任务，按状态分组；别的项目、已结束的任务不计入；项目不存在或已删除时 404。
+// CountTasks counts only unfinished tasks, grouped by status; tasks in other projects and finished tasks are not
+// counted; 404 when the project does not exist or is deleted.
 func TestCountTasks(t *testing.T) {
 	ctx := context.Background()
 	s := sqlitetest.NewStore(t)
@@ -64,7 +65,7 @@ func TestCountTasks(t *testing.T) {
 	}
 }
 
-// 计数走部分索引 task_records_unfinished，不扫已结束的任务。
+// The count uses the partial index task_records_unfinished and does not scan finished tasks.
 func TestCountTasksUsesUnfinishedIndex(t *testing.T) {
 	s := sqlitetest.NewStore(t)
 	rows, err := s.Pool.Query(context.Background(), `EXPLAIN QUERY PLAN SELECT status, count(*) FROM task_records WHERE project_id=$1 AND ended_at IS NULL GROUP BY status`, uuid.New())

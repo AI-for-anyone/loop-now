@@ -1,8 +1,11 @@
-// Package providerstate 管理插件提供方订阅账号的状态目录（plugins/SPEC.md §13）。
+// Package providerstate manages the state directories of plugin provider subscription accounts
+// (plugins/SPEC.md §13).
 //
-// 一次成功登录产生一个状态版本，目录 <Root>/<版本 ID>/（0700，文件 0600），里面是扩展自己写下的东西（它的 HOME 就是这里）
-// 与平台写的 auth.json（login 的返回值，Pi 认证条目）。令牌不进数据库；数据库里的版本只记下插件。
-// 登录进行中的目录叫 .pending-<版本 ID>，登录成功并与数据库提交在同一把锁下改名为正式目录；清理与提交互斥。
+// Each successful login produces one state version, the directory <Root>/<version ID>/ (0700, files 0600). It holds
+// whatever the extension itself wrote (this is its HOME) and the auth.json the platform writes (the return value of
+// login, a Pi auth entry). Tokens never go into the database; the version in the database only records the plugin.
+// While a login is in progress its directory is called .pending-<version ID>; once the login succeeds it is renamed to
+// the final directory under the same lock as the database commit. Sweeping and committing are mutually exclusive.
 package providerstate
 
 import (
@@ -19,28 +22,31 @@ import (
 	"loop-now/internal/privatefs"
 )
 
-// AuthFile 是状态目录里 Pi 认证条目的文件名；启动 Pi 时 Agent 的 auth.json 链接到它。
+// AuthFile is the file name of the Pi auth entry in a state directory; when Pi starts, the Agent's auth.json is
+// linked to it.
 const AuthFile = "auth.json"
 
 const pendingPrefix = ".pending-"
 
-// ErrNotSaved 表示登录结果没有保存（操作已结束、账号已变）：状态目录随之删除。
+// ErrNotSaved means the login result was not saved (the operation has ended, or the account has changed); the state
+// directory is deleted along with it.
 var ErrNotSaved = errors.New("登录结果没有保存")
 
-// Manager 管理状态目录。零值不可用，须给出 Root。
+// Manager manages state directories. The zero value is not usable; Root must be set.
 type Manager struct {
 	Root string
 	mu   sync.Mutex
 }
 
-// Dir 返回状态版本的目录。
+// Dir returns the directory of a state version.
 func (m *Manager) Dir(version uuid.UUID) string { return filepath.Join(m.Root, version.String()) }
 
 func (m *Manager) pending(version uuid.UUID) string {
 	return filepath.Join(m.Root, pendingPrefix+version.String())
 }
 
-// Begin 为一次登录建好暂存的状态目录（0700）并返回它；登录辅助进程以它为 HOME。
+// Begin creates the staging state directory (0700) for one login and returns it; the login helper process uses it
+// as HOME.
 func (m *Manager) Begin(version uuid.UUID) (string, error) {
 	if err := os.MkdirAll(m.Root, 0o700); err != nil {
 		return "", err
@@ -55,11 +61,13 @@ func (m *Manager) Begin(version uuid.UUID) (string, error) {
 	return dir, privatefs.MakePrivate(dir)
 }
 
-// Discard 删除登录没有成功的暂存目录。
+// Discard deletes the staging directory of a login that did not succeed.
 func (m *Manager) Discard(version uuid.UUID) { _ = os.RemoveAll(m.pending(version)) }
 
-// Publish 把登录成功的暂存目录变成正式的状态版本：写入 auth.json（{provider: entry}），把目录收紧为 0700、文件 0600，
-// 改名为正式目录，再调用 commit 写数据库；commit 失败（包括 ErrNotSaved）时删除目录。entry 是 Pi 认证条目（JSON 对象）。
+// Publish turns the staging directory of a successful login into a final state version: it writes auth.json
+// ({provider: entry}), tightens directories to 0700 and files to 0600, renames it to the final directory, and then
+// calls commit to write the database; when commit fails (including with ErrNotSaved) the directory is deleted. entry
+// is a Pi auth entry (a JSON object).
 func (m *Manager) Publish(version uuid.UUID, provider string, entry []byte, commit func() error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -97,7 +105,8 @@ func (m *Manager) Publish(version uuid.UUID, provider string, entry []byte, comm
 	return nil
 }
 
-// tighten 把目录树收紧为目录 0700、普通文件 0600；软链接与特殊文件原样不动（不跟随）。
+// tighten tightens a directory tree to 0700 for directories and 0600 for regular files; symlinks and special files
+// are left untouched (not followed).
 func tighten(root string) error {
 	return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -110,8 +119,10 @@ func tighten(root string) error {
 	})
 }
 
-// Sweep 删除不再需要的状态目录：keep 在锁内给出要保留的版本（与 Publish 互斥，刚提交的版本不会被误删）。
-// pending 为 true 时也删除登录暂存目录（只在启动时，没有进行中的登录）。返回删除的版本。
+// Sweep deletes state directories that are no longer needed: keep returns, inside the lock, the versions to keep
+// (mutually exclusive with Publish, so a version that was just committed is never deleted by mistake). When pending
+// is true it also deletes login staging directories (only at startup, when no login is in progress). It returns the
+// deleted versions.
 func (m *Manager) Sweep(keep func() (map[uuid.UUID]bool, error), pending bool) ([]uuid.UUID, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

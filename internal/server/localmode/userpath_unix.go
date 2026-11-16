@@ -20,8 +20,9 @@ const (
 	pathEnd   = "__LOOP_NOW_USER_PATH_END__"
 )
 
-// loginShellPath 以交互式登录 shell 运行 printenv PATH，读到用户在 .zprofile、.zshrc 等里设置的 PATH。
-// rc 文件可能输出别的内容，所以用前后标记截取；标准输入是空设备，超时后结束整个进程组。
+// loginShellPath runs printenv PATH in an interactive login shell to get the PATH the user set in .zprofile, .zshrc and
+// the like. rc files may print other output, so the value is cut out between begin and end markers; standard input is
+// the null device, and the whole process group is ended on timeout.
 func loginShellPath(ctx context.Context) (string, string, error) {
 	shell := os.Getenv("SHELL")
 	if !filepath.IsAbs(shell) {
@@ -33,7 +34,7 @@ func loginShellPath(ctx context.Context) (string, string, error) {
 	script := "echo " + pathBegin + "; printenv PATH; echo " + pathEnd
 	args := []string{"-l", "-i", "-c", script}
 	if base := filepath.Base(shell); base == "csh" || base == "tcsh" {
-		args = []string{"-c", script} // csh 的 -l 只能单独使用；.cshrc 对所有 csh 都会读取
+		args = []string{"-c", script} // csh's -l can only be used on its own; .cshrc is read by every csh anyway
 	}
 	cmd := exec.CommandContext(ctx, shell, args...)
 	cmd.Env = os.Environ()
@@ -51,7 +52,7 @@ func loginShellPath(ctx context.Context) (string, string, error) {
 		}
 		return "", shell, err
 	}
-	// 读到了就用，即使 shell 因为 rc 里的其他命令以非零状态退出。
+	// If it was read, use it, even if the shell exited non-zero because of other commands in the rc files.
 	return strings.TrimSpace(raw), shell, nil
 }
 

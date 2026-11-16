@@ -20,8 +20,9 @@ import (
 	"loop-now/internal/server/pluginhost"
 )
 
-// 已授权插件交给 Pi：每个扩展一条 -e、每个 Skill 一条 --skill，有 MCP 服务器时写 mcp.json 并加 -e builtin:mcp；
-// CLI 目录在模板 CLI 之后、执行基础 PATH 之前；插件变量不覆盖平台的目录变量。没有插件时删除旧的 mcp.json。
+// Granted plugins are passed to Pi: one -e per extension and one --skill per Skill; with MCP servers, mcp.json is
+// written and -e builtin:mcp is added; the CLI directories come after the template CLIs and before the base run PATH;
+// plugin variables do not override the platform's directory variables. Without plugins the old mcp.json is deleted.
 func TestPluginAssetsReachPi(t *testing.T) {
 	e := &Executor{o: Options{ExecBasePath: "/usr/bin", Username: "u", WorkRoot: t.TempDir()}}
 	d := e.dirs([16]byte{1})
@@ -77,7 +78,8 @@ func (b *blockingHooks) Hook(_ context.Context, kind pluginhost.Kind, event map[
 	return pluginhost.Outcome{Blocked: b.block, Plugin: "guard", Reason: "维护中"}, nil
 }
 
-// run.before_start 被阻止时这一轮以 plugin_blocked 失败，不启动 Pi；放行时照常执行。事件带来源与触发消息。
+// When run.before_start blocks, this turn fails with plugin_blocked and Pi is not started; when it allows, the run goes
+// ahead as usual. The event carries the source and the triggering message.
 func TestRunBeforeStartHook(t *testing.T) {
 	hooks := &blockingHooks{block: true}
 	h := newHarness(t, func(o *Options) { o.Hooks = hooks }, "")
@@ -99,7 +101,8 @@ func TestRunBeforeStartHook(t *testing.T) {
 	}
 }
 
-// 扩展对话经 Options.Dialogs 回答：带执行的 Agent 与这一轮的 ID，回答交还给 Pi；这一轮被打断时 Dialogs 的 ctx 结束，Pi 收到取消。
+// Extension dialogs are answered through Options.Dialogs: called with the Agent that runs and this turn's ID, and the
+// answer is handed back to Pi; when this turn is interrupted, the ctx given to Dialogs ends and Pi receives a cancel.
 func TestExtensionDialogsReachPi(t *testing.T) {
 	type call struct {
 		agent, run uuid.UUID

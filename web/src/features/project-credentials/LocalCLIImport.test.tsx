@@ -92,7 +92,8 @@ describe('本机导入正式合同 Web fixture', () => {
   it.each(['import_scan_expired','import_source_changed','precondition_failed'] as const)('%s拒绝不自动重扫/重发且保选项', async code => {
     const user = userEvent.setup(), env = setup(); let calls = 0
     server.use(http.post(apiUrl(`${base}/imports`), () => { calls++; return HttpResponse.json(errorBody(code), { status: code === 'import_scan_expired' ? 409 : 412 }) }))
-    // 被拒后从地址里去掉操作号是路由的过渡更新，可能比错误提示晚一次渲染，所以等返回按钮出现再点。
+    // After the rejection, removing the operation ID from the URL is a router transition update and may
+    // render one pass later than the error message, so wait for the back button to appear before clicking it.
     render(); await discover(user); await confirm(user); await screen.findByRole('alert'); expect(calls).toBe(1); expect(env.scanCalls()).toBe(1); await user.click(await screen.findByRole('button', { name: copy.back })); expect(screen.getByRole('checkbox')).toBeChecked()
   })
   it('过期scan不能发Start，未知GET失败不当未提交', async () => {

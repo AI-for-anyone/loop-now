@@ -105,14 +105,14 @@ func TestProjectDirectoriesRevisionAndStatus(t *testing.T) {
 		got.Directories[1].Status != localmode.StatusMissing || got.Directories[1].Note != nil {
 		t.Fatalf("保存结果不对：%+v", got)
 	}
-	// 用旧的 revision 再存：412，不覆盖。
+	// Saving again with an old revision: 412, nothing is overwritten.
 	if _, err := f.svc.PutProjectDirectories(f.ctx, f.project, localmode.PutInput{ExpectedRevision: i64(0), Directories: []localmode.DirectoryInput{}}); !apperr.Is(err, apperr.CodePreconditionFailed) {
 		t.Fatalf("旧 revision 应为 412：%v", err)
 	}
 	if _, err := f.svc.PutProjectDirectories(f.ctx, f.project, localmode.PutInput{ExpectedRevision: i64(5), Directories: []localmode.DirectoryInput{}}); !apperr.Is(err, apperr.CodePreconditionFailed) {
 		t.Fatalf("对不上的 revision 应为 412：%v", err)
 	}
-	// 目录后来被建出来，读回时状态跟着变。
+	// The directory is created later, and the status read back changes with it.
 	if err := os.MkdirAll(missing, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestProjectDirectoriesRevisionAndStatus(t *testing.T) {
 	if _, err := f.svc.ProjectDirectories(f.ctx, uuid.Must(uuid.NewV7())); !apperr.Is(err, apperr.CodeNotFound) {
 		t.Fatalf("不存在的项目应为 404：%v", err)
 	}
-	// 校验失败带下标字段，缺 expectedRevision 一并报出。
+	// Validation failures carry indexed fields, and a missing expectedRevision is reported along with them.
 	_, err = f.svc.PutProjectDirectories(f.ctx, f.project, localmode.PutInput{Directories: []localmode.DirectoryInput{{Path: "rel"}}})
 	ae, ok := apperr.As(err)
 	if !ok || ae.Code != apperr.CodeValidationFailed || len(ae.Fields) != 2 || ae.Fields[0].Field != "expectedRevision" || ae.Fields[1].Field != "directories[0].path" {
@@ -149,7 +149,7 @@ func TestAgentDirectoriesInheritProject(t *testing.T) {
 	if err != nil || got.Revision != 1 || len(got.Directories) != 2 || len(got.Inherited) != 1 {
 		t.Fatalf("Agent 保存不对：%+v %v", got, err)
 	}
-	// 平台 Agent：没有继承，自己的清单照常可用。
+	// Platform Agent: nothing is inherited, and its own list works as usual.
 	got, err = f.svc.PutAgentDirectories(f.ctx, f.platform, localmode.PutInput{ExpectedRevision: i64(0), Directories: []localmode.DirectoryInput{{Path: own}}})
 	if err != nil || got.ProjectID != nil || len(got.Inherited) != 0 || len(got.Directories) != 1 {
 		t.Fatalf("平台 Agent 不对：%+v %v", got, err)
@@ -183,7 +183,7 @@ func TestAccessMergesListsAndFollowsSwitches(t *testing.T) {
 		}
 	}
 	first := got.Identity()
-	// 清单变了，指纹跟着变；没变时稳定。
+	// When the list changes, the fingerprint changes; when it does not, it stays stable.
 	again, _ := f.svc.Access(f.ctx, f.agent)
 	if again.Identity() != first || first == "" {
 		t.Fatalf("指纹应稳定且非空：%q %q", first, again.Identity())
@@ -195,7 +195,8 @@ func TestAccessMergesListsAndFollowsSwitches(t *testing.T) {
 	if changed.Identity() == first {
 		t.Fatal("备注变化应改变指纹")
 	}
-	// 关掉绑定本机目录：不交出任何目录；关掉 CLI：不接用户 PATH。
+	// Turn off binding local directories: no directories are handed over; turn off CLI: the user's PATH is not
+	// appended.
 	if _, err := f.svc.UpdateSettings(f.ctx, localmode.SettingsPatch{Directories: bp(false)}); err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +210,7 @@ func TestAccessMergesListsAndFollowsSwitches(t *testing.T) {
 	if off, _ = f.svc.Access(f.ctx, f.agent); off.UserPath || off.Identity() != "" {
 		t.Fatalf("全关后应为空：%+v", off)
 	}
-	// 只开登录状态也有指纹（开关变化要重启 Pi）。
+	// Turning on only logins also yields a fingerprint (a switch change requires restarting Pi).
 	if _, err := f.svc.UpdateSettings(f.ctx, localmode.SettingsPatch{Logins: bp(true)}); err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +220,8 @@ func TestAccessMergesListsAndFollowsSwitches(t *testing.T) {
 }
 
 func TestAccessForDeletedBaseAgent(t *testing.T) {
-	// 任务仍在进行时基础 Agent 可能已被删除：照样按它的记录给出清单，不让任务的执行失败。
+	// The base Agent may already be deleted while its task is still running: its list is still given from its record,
+	// so the task's runs do not fail.
 	f := newFixture(t)
 	own := f.dir(t, "own")
 	if _, err := f.svc.PutAgentDirectories(f.ctx, f.agent, localmode.PutInput{ExpectedRevision: i64(0), Directories: []localmode.DirectoryInput{{Path: own}}}); err != nil {

@@ -21,7 +21,7 @@ import { useTaskLive } from './useTaskLive'
 type Task = Schemas['TaskSummary']
 type Filter = 'all' | 'active' | 'blocked' | 'completed'
 
-// 状态筛选：进行中包括准备中、执行中、等待回复；已取消的任务只在“全部”里。
+// Status filters: In progress covers preparing, running and waiting for reply; cancelled tasks appear only under “全部” (All).
 const FILTERS: Filter[] = ['all', 'active', 'blocked', 'completed']
 const ACTIVE: Schemas['TaskStatus'][] = ['preparing', 'running', 'waiting']
 const inFilter = (filter: Filter, task: Task) =>
@@ -33,9 +33,12 @@ export function TasksPage() {
   return <ProjectTasks project={scope.project} />
 }
 
-// 项目任务（改版“一张印出来的纸”第 3 步）：页面标题下面是纸张上沿的状态筛选（索引标签，带数量），纸上是任务列表，
-// 右侧票根里是进行中、阻塞、已完成三个大数字。列表接口不能按状态筛选，筛选只作用于已经读到的任务；
-// 进行中与阻塞的数量取自未结束任务的计数接口（与左侧栏一致），已完成与全部按已经读到的任务算，还有更多页时加“+”。
+// Project tasks (step 3 of the "printed sheet" redesign): below the page title, the status filters on the sheet's top edge (index tabs,
+// with counts); on the sheet, the task list;
+// in the stub on the right, three big numbers: in progress, blocked, completed. The list API can't filter by status, so the filters
+// apply only to the tasks read so far;
+// the in-progress and blocked counts come from the API that counts unfinished tasks (consistent with the sidebar), while completed and
+// all are counted from the tasks read so far, with a trailing "+" while there are more pages.
 function ProjectTasks({ project }: { project: Schemas['Project'] }) {
   const tasks = useProjectTasks(project.id)
   const counts = useProjectTaskCounts(project.id)
@@ -74,7 +77,8 @@ function ProjectTasks({ project }: { project: Schemas['Project'] }) {
       </div>
       <Sheet className="flex-1">
         <div className="flex min-h-0 flex-1">
-          {/* 滚动区是定位容器：里面绝对定位的元素（如 sr-only 说明）随内容滚动，不会按未滚动时的位置把整页撑高。 */}
+          {/* The scroll area is the positioning container: absolutely positioned elements inside it (such as sr-only text) scroll with
+              the content instead of stretching the whole page based on their unscrolled position. */}
           <div className="relative h-full min-w-0 flex-1 overflow-y-auto pt-[22px] pr-[clamp(14px,3vw,40px)] pb-14 pl-[clamp(12px,2vw,34px)]">
             <ErrorAlert error={tasks.error} />
             {tasks.isPending && <p className="text-[14px] text-ink-500">{t.tasks.loading}</p>}
@@ -90,7 +94,7 @@ function ProjectTasks({ project }: { project: Schemas['Project'] }) {
             )}
             {rows.length > 0 && (
               <>
-                {/* 表头（装饰，列名在每行里有读屏说明）：下面一道 2px 实线。 */}
+                {/* Table header (decorative; each row carries screen-reader text for the column names): a 2px solid line below it. */}
                 <div aria-hidden="true" className="flex items-center gap-[18px] border-b-2 border-ink px-1 pb-2 text-[12px] font-black text-ink-500 max-sm:hidden">
                   <span className="flex-[0_0_34px]">{t.tasks.number}</span>
                   <span className="flex-[1_1_280px]">{t.tasks.task}</span>
@@ -128,12 +132,14 @@ function ProjectTasks({ project }: { project: Schemas['Project'] }) {
   )
 }
 
-// 一个任务一行：等宽的编号，标题（链接到详情）加副标题（等待或失败原因），状态，等宽的当前节点，责任 Agent（带头像），等宽的更新时间。
-// 行与行之间 1.5px 虚线；窄时各列换行。
+// One row per task: monospace number, title (linking to the details) plus subtitle (wait or failure reason), status, monospace current
+// node, responsible Agent (with avatar), monospace updated time.
+// 1.5px dashed lines between rows; the columns wrap when narrow.
 function TaskRow({ task, projectName, agentName, pending }: { task: Task; projectName: string; agentName: (id: string) => string; pending?: Parameters<typeof PendingBadge>[0]['counts'] }) {
   return (
     <li className="flex flex-wrap items-center gap-x-[18px] gap-y-1.5 border-b-[1.5px] border-dashed border-ink/25 px-1 py-3.5">
-      {/* 编号与标题是一组（宽度 = 编号 34px + 间距 18px + 标题 280px 起），不换行：窄屏时编号仍在标题左边。 */}
+      {/* Number and title form one group (width = number 34px + gap 18px + title from 280px) that doesn't wrap: on narrow screens the
+          number stays to the left of the title. */}
       <span className="flex min-w-0 flex-[1_1_332px] flex-nowrap items-center gap-x-[18px] max-sm:items-start max-sm:gap-x-2.5">
         <span className="flex-[0_0_34px] font-mono text-[12px] font-bold text-ink-500 max-sm:leading-[21px]">
           <span className="sr-only">{t.tasks.number}</span>

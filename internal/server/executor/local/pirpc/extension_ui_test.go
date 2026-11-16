@@ -9,8 +9,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// 扩展的对话请求立即按取消回应（与请求超时到期的默认值相同），不管有没有 timeout；notify 与 setStatus 交给观察者，
-// 其余 fire-and-forget 方法忽略。
+// An extension's dialog requests are answered as cancelled right away (the same default as when the request's timeout
+// expires), whether or not there is a timeout; notify and setStatus are passed to the observer, and the other
+// fire-and-forget methods are ignored.
 func TestExtensionUIDialogsAnsweredWithDefault(t *testing.T) {
 	f := newPipeFake(t)
 	o := &obsRec{}
@@ -65,8 +66,9 @@ func TestExtensionUIDialogsAnsweredWithDefault(t *testing.T) {
 	}
 }
 
-// 设置了 Dialogs 时，一轮之中的 confirm、select、input 交给它，按它的回答回应 Pi（confirm 为 confirmed，select、input 为 value），
-// 回答后才记为运行事件（带 answered 与 questionId）；editor 与一轮之外的对话仍立即取消，不交给它。
+// When Dialogs is set, confirm, select and input during a turn are handed to it, and Pi gets its answer (confirmed for
+// confirm, value for select and input); the run event is recorded only after the answer (with answered and
+// questionId); editor and dialogs outside a turn are still cancelled right away and not handed to it.
 func TestExtensionUIDialogsGoToHandler(t *testing.T) {
 	f := newPipeFake(t)
 	o := &obsRec{}

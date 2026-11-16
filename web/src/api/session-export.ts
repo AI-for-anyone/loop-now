@@ -20,10 +20,12 @@ function filenameFromDisposition(header: string | null, fallback: string): strin
   return filename && !unsafe ? filename : fallback
 }
 
-// 浏览器在点击之后才异步开始读取 blob：立刻撤销地址，Firefox 和 Safari 可能还没读到内容，下载失败却照样提示成功。留足时间再撤销。
+// The browser only starts reading the blob asynchronously after the click: if the URL is revoked right away, Firefox and Safari may not
+// have read the content yet, and the download fails while success is still reported. Leave plenty of time before revoking.
 const REVOKE_AFTER_MS = 60_000
 
-// 下载当前会话。只有文件已取得并交给浏览器后才算成功，调用方才显示命令结果。
+// Download the current session. It only counts as a success once the file has been fetched and handed to the browser, and only then
+// does the caller show the command result.
 export async function downloadAgentSession(agentId: string, format: SessionExportFormat): Promise<void> {
   let response: Response
   try {
@@ -34,7 +36,7 @@ export async function downloadAgentSession(agentId: string, format: SessionExpor
   if (!response.ok) {
     const text = await response.text()
     let body: unknown = text
-    try { body = JSON.parse(text) } catch { /* 非 JSON 错误保留原文。 */ }
+    try { body = JSON.parse(text) } catch { /* A non-JSON error keeps its original text. */ }
     throw toApiError(response.status, body, requestIdOf(response))
   }
   const blob = await response.blob()

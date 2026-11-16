@@ -28,7 +28,8 @@ type hostEnv struct {
 	sup     *pluginhost.Supervisor
 }
 
-// newHostEnv 建一个迁移好的测试库，登记 specs 里的插件，并准备以假宿主运行的监护（尚未 Start）。
+// newHostEnv creates a migrated test database, registers the plugins in specs, and prepares a supervisor that runs
+// the fake plugin host (not yet started).
 func newHostEnv(t *testing.T, mode string, specs []pluginhost.Spec, tune func(*pluginhost.Options)) *hostEnv {
 	t.Helper()
 	e := &hostEnv{t: t, st: sqlitetest.NewStore(t), journal: filepath.Join(t.TempDir(), "journal.jsonl"), specs: specs}
@@ -80,7 +81,7 @@ func (e *hostEnv) scalar(sql string, args ...any) string {
 	return *v
 }
 
-// eventually 在 10 秒内反复检查 cond，返回 cond 最后一次的说明。
+// eventually checks cond repeatedly for up to 10 seconds and returns cond's last description.
 func (e *hostEnv) eventually(what string, cond func() (bool, string)) {
 	e.t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -95,7 +96,7 @@ func (e *hostEnv) eventually(what string, cond func() (bool, string)) {
 	e.t.Fatalf("等待%s超时：%s", what, last)
 }
 
-// entries 读出假宿主的记录。
+// entries reads the fake plugin host's journal.
 func (e *hostEnv) entries() []map[string]any {
 	f, err := os.Open(e.journal)
 	if err != nil {
@@ -138,21 +139,24 @@ func spec(id string, behaviour map[string]any, events ...string) pluginhost.Spec
 	return pluginhost.Spec{ID: id, Events: events, Permissions: []string{"state"}, Load: raw}
 }
 
-// 宿主就绪后按顺序加载插件；加载失败的插件进入错误状态。观察类事件按事件时间逐条投递，ack 后标为完成，
-// 插件报错的按 Backoff 重投、用尽后标为 failed，不挡住后面的事件。state_* 经 Go 写库，标准错误与 log 进宿主日志。
+// Once the plugin host is ready, plugins are loaded in order; a plugin that fails to load goes into the error status.
+// Observe events are delivered one by one in event time order and marked done after ack; events the plugin reports
+// errors for are redelivered according to Backoff and marked failed once it is used up, without holding up later
+// events. state_* writes go to the database through Go, and standard error and log go to the plugin host log.
 func TestHostLoadsDeliversEventsAndKeepsState(t *testing.T) {
 	e := newHostEnv(t, "", []pluginhost.Spec{
 		spec("alpha", map[string]any{"stateProbe": true, "failEvents": []string{"x.fail"}}, "inbox.received", "x.fail", "run.ended"),
 		spec("beta", map[string]any{"fail": "清单与代码订阅不符"}, "inbox.received"),
 	}, nil)
 	base := time.Date(2026, 10, 27, 8, 0, 0, 0, time.UTC)
-	// 写入顺序与事件时间相反：投递按事件时间。
+	// Written in the reverse order of event time: delivery follows event time.
 	late := e.addEvent("run.ended", base.Add(2*time.Second), "alpha")
 	failing := e.addEvent("x.fail", base.Add(time.Second), "alpha")
 	early := e.addEvent("inbox.received", base, "alpha", "beta")
 
 	e.sup.Start(false)
-	// alpha 加载后就开始投递，这时 beta 可能还没加载完；全部加载完（状态都已写库）宿主才进入运行中。
+	// alpha starts delivering as soon as it is loaded, when beta may not be loaded yet; the plugin host only becomes
+	// running once all are loaded (and their statuses written to the database).
 	e.eventually("加载与投递完成", func() (bool, string) {
 		s := e.scalar(`SELECT string_agg(event_id||'='||status||'/'||attempts, ',' ORDER BY event_id) FROM plugin_event_deliveries WHERE plugin_id='alpha'`)
 		st := e.sup.Status().State
@@ -202,8 +206,9 @@ func TestHostLoadsDeliversEventsAndKeepsState(t *testing.T) {
 	}
 }
 
-// 宿主意外退出后重启，未确认的事件在重启后重投（至少一次）；5 分钟内第 3 次退出后不再重启，
-// 插件标为宿主已停止，崩溃记录说明当时在处理哪个插件的哪个事件。人工重启后恢复。
+// After an unexpected exit the plugin host restarts, and unacknowledged events are redelivered after the restart (at
+// least once); after the 3rd exit within 5 minutes it is no longer restarted, plugins are marked host stopped, and
+// the crash record tells which event of which plugin was being handled. A manual restart recovers.
 func TestHostRestartPolicyAndCrashReport(t *testing.T) {
 	e := newHostEnv(t, "", []pluginhost.Spec{spec("alpha", map[string]any{"crashEvents": []string{"boom"}}, "boom", "inbox.received")},
 		func(o *pluginhost.Options) {
@@ -225,12 +230,12 @@ func TestHostRestartPolicyAndCrashReport(t *testing.T) {
 	if n := e.count("event", "alpha", "boom"); n != 3 {
 		t.Fatalf("未确认的事件每次重启后都应重投：%d", n)
 	}
-	// 先记为已停止，再把插件写成宿主已停止。
+	// First recorded as stopped, then the plugins are written as host stopped.
 	e.eventually("插件标为宿主已停止", func() (bool, string) {
 		s := e.scalar(`SELECT status FROM plugins WHERE id='alpha'`)
 		return s == "host_stopped", s
 	})
-	// 停止后不再拉起：过一会儿投递次数不变。
+	// Not launched again after stopping: after a while the delivery count is unchanged.
 	time.Sleep(200 * time.Millisecond)
 	if n := e.count("load", "alpha", ""); n != 3 {
 		t.Fatalf("停止后不应再启动：加载了 %d 次", n)
@@ -252,7 +257,7 @@ func TestHostRestartPolicyAndCrashReport(t *testing.T) {
 	})
 }
 
-// 就绪超时与协议版本不符都算一次失败，按重启策略计数。
+// A ready timeout and a protocol version mismatch each count as one failure under the restart policy.
 func TestHostReadyTimeoutAndProtocolMismatch(t *testing.T) {
 	for _, c := range []struct{ mode, want string }{{"no-ready", "就绪"}, {"bad-protocol", "协议版本为 99"}, {"crash-after-ready", "exit status 3"}} {
 		t.Run(c.mode, func(t *testing.T) {
@@ -275,8 +280,9 @@ func TestHostReadyTimeoutAndProtocolMismatch(t *testing.T) {
 	}
 }
 
-// 全局停用让宿主退出、不计入崩溃，插件回到已安装；重新启用后拉起并加载。Reload 先卸载再加载，Unload 只卸载。
-// 宿主收到 shutdown 后自行退出。
+// Disabling globally makes the plugin host exit without counting as a crash, and plugins go back to installed;
+// re-enabling launches the host and loads them. Reload unloads then loads, Unload only unloads. The host exits on its
+// own after receiving shutdown.
 func TestHostDisableReloadAndUnload(t *testing.T) {
 	e := newHostEnv(t, "", []pluginhost.Spec{spec("alpha", nil, "inbox.received")}, nil)
 	e.sup.Start(true)
@@ -339,9 +345,10 @@ func TestHostDisableReloadAndUnload(t *testing.T) {
 	}
 }
 
-// 同步调用按加载顺序进行：拦截类第一个 block 生效，超时或出错默认放行、failClosed 改为阻止（未加载的也一样）；
-// 修改类每个插件看到前面的修改，patch 按字段合并，超时跳过；认领类第一个 handled 生效，超时当作未处理。
-// include 排除的插件不参与；全局停用时没有插件参与。
+// Synchronous calls go in load order: for intercept the first block wins, and a timeout or error allows by default
+// but blocks with failClosed (the same for plugins that are not loaded); for modify each plugin sees the earlier
+// changes, patches merge field by field, and a timeout is skipped; for claim the first handled wins, and a timeout
+// counts as not handled. Plugins excluded by include do not take part; when disabled globally no plugin takes part.
 func TestHostCallPolicies(t *testing.T) {
 	e := newHostEnv(t, "", []pluginhost.Spec{
 		spec("a", map[string]any{"intercept": "allow", "patch": map[string]any{"durationSeconds": 600}, "claim": "hang"}, "run.before_start", "sleep.before_schedule", "console.command"),
@@ -400,13 +407,14 @@ func TestHostCallPolicies(t *testing.T) {
 	}
 }
 
-// 监护启动时与之后每小时清理：观察类事件（连同投递记录）保留 30 天，宿主日志保留 7 天。
+// Cleanup runs when the supervisor starts and every hour after that: observe events (with their delivery records)
+// are kept for 30 days, plugin host logs for 7 days.
 func TestHostPrunesOldEventsAndLogs(t *testing.T) {
 	e := newHostEnv(t, "", []pluginhost.Spec{spec("alpha", nil, "inbox.received")}, nil)
 	old := e.addEvent("inbox.received", time.Now().Add(-31*24*time.Hour), "alpha")
 	recent := e.addEvent("inbox.received", time.Now().Add(-29*24*time.Hour), "alpha")
 	e.exec(`INSERT INTO plugin_host_log(at,plugin_id,level,line) VALUES(now()-691200000000,'alpha','info','旧'),(now()-518400000000,'alpha','info','新')`)
-	e.sup.Start(true) // 停用时也清理
+	e.sup.Start(true) // cleans up even when disabled
 	e.eventually("清理", func() (bool, string) {
 		s := e.scalar(`SELECT string_agg(id, ',' ORDER BY id) FROM plugin_events`) + " " + e.scalar(`SELECT string_agg(line, ',') FROM plugin_host_log`)
 		return s == recent+" 新", s
@@ -416,8 +424,9 @@ func TestHostPrunesOldEventsAndLogs(t *testing.T) {
 	}
 }
 
-// 定时任务：时钟走到 cron 匹配的那一分钟时发 schedule 请求，每分钟至多一次；加载时所在的那一分钟不触发。
-// 上一次还没有回应的条目跳过这一次并记入日志；错过的分钟不补。
+// Scheduled jobs: when the clock reaches a minute that cron matches, a schedule request is sent, at most once per
+// minute; the minute in which the plugin was loaded does not fire. An entry whose previous run has not responded yet
+// skips this run and logs it; missed minutes are not made up.
 func TestHostSchedules(t *testing.T) {
 	var now, reads atomic.Int64
 	base := time.Date(2026, 10, 27, 9, 0, 30, 0, time.Local)
@@ -429,8 +438,9 @@ func TestHostSchedules(t *testing.T) {
 		o.ScheduleTick = 10 * time.Millisecond
 	})
 	e.sup.Start(false)
-	// 定时协程启动时每个条目读一次时钟记下加载的那一分钟，之后每个刻度读一次：多读两次说明已按 09:00 走完一个刻度，
-	// 这之后再拨钟才不会被当成加载时所在的那一分钟。
+	// When the schedule goroutine starts, it reads the clock once per entry to record the load minute, then once per
+	// tick: two extra reads mean one tick has completed at 09:00, and only after that can the clock be moved without
+	// it being taken as the load minute.
 	e.eventually("定时协程开始", func() (bool, string) {
 		return reads.Load() >= int64(len(sp.Schedules))+2, fmt.Sprint(reads.Load())
 	})
@@ -454,7 +464,7 @@ func TestHostSchedules(t *testing.T) {
 	if schedules("sweep") != 1 {
 		t.Fatal("同一分钟只触发一次")
 	}
-	now.Store(base.Add(59 * time.Minute).UnixNano()) // 跳到 09:59：中间的分钟不补
+	now.Store(base.Add(59 * time.Minute).UnixNano()) // jump to 09:59: the minutes in between are not made up
 	e.eventually("09:59 触发", func() (bool, string) { return schedules("sweep") == 2, fmt.Sprint(schedules("sweep")) })
 	if schedules("slow") != 1 || schedules("hourly") != 0 {
 		t.Fatalf("slow 上一次没有回应应跳过，hourly 未到：%d %d", schedules("slow"), schedules("hourly"))

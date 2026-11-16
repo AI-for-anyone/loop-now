@@ -32,7 +32,7 @@ type commandList struct {
 	} `json:"commands"`
 }
 
-// platformAvailability 把列表里的平台命令写成 名字=可用 或 名字:原因。
+// platformAvailability writes the platform commands in the list as name=available or name:reason.
 func platformAvailability(l commandList) []string {
 	var out []string
 	for _, c := range l.Commands {
@@ -48,7 +48,7 @@ func platformAvailability(l commandList) []string {
 	return out
 }
 
-// 平台内置命令排在最前，按运行时与会话状态标出此刻能不能用。
+// The platform's built-in commands come first, marked as usable right now or not by runtime and session state.
 func TestListAgentCommandsPlatform(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -64,7 +64,8 @@ func TestListAgentCommandsPlatform(t *testing.T) {
 	if c := l.Commands[2]; c.Usage == nil || *c.Usage != "/compact [instructions]" || c.PiSource != "" {
 		t.Fatalf("平台命令的字段：%+v", c)
 	}
-	// 每个平台命令都有中英两种说明，用法里方括号中的占位词在两种说明里都出现。
+	// Every platform command has both a Chinese and an English description, and the placeholder words in brackets in
+	// the usage appear in both descriptions.
 	for _, c := range l.Commands {
 		var desc struct {
 			Zh string `json:"zh-CN"`
@@ -102,7 +103,8 @@ func TestListAgentCommandsPlatform(t *testing.T) {
 	if got := strings.Join(platformAvailability(get()), " "); got != "session new compact:runtime_unsupported reload copy export:runtime_unsupported resume:runtime_unsupported" {
 		t.Fatalf("Claude Code：%s", got)
 	}
-	// 换成 Claude Code 之前启动 Pi 时缓存的命令不再列出，capturedAt 为 null，runtime 写明不是 Pi。
+	// After switching to Claude Code, the commands cached from the earlier Pi start are no longer listed, capturedAt is
+	// null, and runtime states that it is not Pi.
 	e.api.PiCommands = func(uuid.UUID) (*executor.PiCommands, error) {
 		return &executor.PiCommands{CapturedAt: time.Now().UTC(), Commands: []executor.PiCommand{{Name: "stale", Source: "extension"}}}, nil
 	}
@@ -111,7 +113,8 @@ func TestListAgentCommandsPlatform(t *testing.T) {
 	}
 }
 
-// GET /agents/{id}/commands：没读到过 Pi 命令时只有平台命令；读到后按来源文件所在的安装目录标出插件与插件显示名。
+// GET /agents/{id}/commands: only platform commands while no Pi commands have been read; once read, each is tagged with
+// its plugin and plugin display name based on the install directory of its source file.
 func TestListAgentCommands(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -154,7 +157,8 @@ func TestListAgentCommands(t *testing.T) {
 	e.expect(404, "GET", "/agents/"+uuid.NewString()+"/commands", nil)
 }
 
-// 改模型换了运行时，会话随之重开：Agent 的事件流里有 session.updated，控制台据此重读命令清单。
+// Changing the model switched the runtime, so the session is reopened: the Agent's event stream has session.updated,
+// and the console reloads the command list on it.
 func TestRuntimeSwitchPushesSessionUpdated(t *testing.T) {
 	e := newEnv(t)
 	reg := modelcatalog.NewRegistry(e.api.Models.Snapshot())

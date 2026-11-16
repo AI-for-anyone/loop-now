@@ -5,7 +5,7 @@ type S = components['schemas']
 
 export const overview = {
   title: '概览',
-  // 走动的时长与 token 数，概览与运行记录共用。
+  // Ticking duration and token count, shared by the overview and the run log.
   elapsed: (ms: number) => formatElapsed(ms),
   tokens: (count: number) => formatCount(count),
   live: '运行状态实时更新中',
@@ -57,7 +57,8 @@ export const overview = {
       released: 'Agent 删除时停止',
       shutdown: '服务端停止时退出',
       abort_timeout: '打断超时后强制结束',
-      // 平台命令停掉空闲的进程；console_export 只在旧记录里有（早先 /export html 为导出临时启动的进程）。
+      // A platform command stopped the idle process; console_export appears only in old
+      // records (earlier, /export html started a temporary process for the export).
       session_reset: '重开会话（/new）后停止',
       console_reload: '重新加载（/reload）时停止',
       session_resumed: '恢复会话（/resume）后停止',
@@ -68,7 +69,7 @@ export const overview = {
   usage: {
     title: '用量',
     unit: '单位：token',
-    // 用量横条里用得最多的一行后面的黄色小标签。
+    // Small yellow tag after the most-used row in the usage bars.
     most: '最多',
     rangeLabel: '时间段',
     dimensionLabel: '统计维度',
@@ -98,7 +99,8 @@ export const overview = {
     restartReason: '服务端在回复过程中重启，回复未完成。',
     view: '查看回复',
     handle: '去处理',
-    // 失败的手动压缩（Anomaly.compaction 不为 null）：印章与操作换成压缩的说法，原因后面写上这次压缩的命令。
+    // Failed manual compaction (Anomaly.compaction is not null): the stamp and the actions switch
+    // to compaction wording, and the command of this compaction is written after the reason.
     compactionFailed: '压缩失败',
     viewCompaction: '查看压缩',
     loadMore: '加载更多',

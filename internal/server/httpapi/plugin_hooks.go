@@ -11,9 +11,10 @@ import (
 	"loop-now/internal/server/pluginhost"
 )
 
-// 同步 Hook 的调用点（plugins/SPEC.md §4）：在写入之前、不在数据库事务里调用，超时与失败按 §3 的策略处理。
+// Call sites of synchronous Hooks (plugins/SPEC.md §4): called before the write and outside any database transaction;
+// timeouts and failures are handled by the policy in §3.
 
-// hook 调用一个同步 Hook；没有配置插件时返回空结果。
+// hook calls one synchronous Hook; returns an empty result when no plugins are configured.
 func (s *Server) hook(r *http.Request, kind pluginhost.Kind, typ string, project, agent, task, run *uuid.UUID, fields map[string]any) (pluginhost.Outcome, error) {
 	if s.Hooks == nil {
 		return pluginhost.Outcome{}, nil
@@ -21,7 +22,7 @@ func (s *Server) hook(r *http.Request, kind pluginhost.Kind, typ string, project
 	return s.Hooks.Hook(r.Context(), kind, pluginhost.Event(typ, project, agent, task, run, fields), project)
 }
 
-// intercept 调用拦截类 Hook，被阻止时返回 409 plugin_blocked。
+// intercept calls an intercept Hook and returns 409 plugin_blocked when the action is blocked.
 func (s *Server) intercept(r *http.Request, typ string, project, agent, task, run *uuid.UUID, fields map[string]any) error {
 	o, err := s.hook(r, pluginhost.Intercept, typ, project, agent, task, run, fields)
 	if err != nil {
@@ -33,7 +34,8 @@ func (s *Server) intercept(r *http.Request, typ string, project, agent, task, ru
 	return nil
 }
 
-// modifyText 调用修改类 Hook，返回插件改过的 text；patch 里的 text 不是字符串时忽略。
+// modifyText calls a modify Hook and returns the text as changed by plugins; a text in the patch that is not a string
+// is ignored.
 func (s *Server) modifyText(r *http.Request, typ string, project, agent, task *uuid.UUID, text string, fields map[string]any) (string, error) {
 	if fields == nil {
 		fields = map[string]any{}
@@ -49,7 +51,7 @@ func (s *Server) modifyText(r *http.Request, typ string, project, agent, task *u
 	return text, nil
 }
 
-// party 是事件里的一方（PluginEventParty）。
+// party is one party in an event (PluginEventParty).
 func party(p auth.Principal) map[string]any {
 	out := map[string]any{"kind": string(p.Kind), "id": nil, "address": nil}
 	if p.ID != uuid.Nil {
@@ -61,7 +63,7 @@ func party(p auth.Principal) map[string]any {
 	return out
 }
 
-// agentProject 返回 Agent 所在的项目；平台 Agent 或找不到时为空。
+// agentProject returns the Agent's project; nil for a platform Agent or when the Agent is not found.
 func (s *Server) agentProject(r *http.Request, agent uuid.UUID) *uuid.UUID {
 	a, err := s.Store.GetAgent(r.Context(), agent)
 	if err != nil {
@@ -70,7 +72,7 @@ func (s *Server) agentProject(r *http.Request, agent uuid.UUID) *uuid.UUID {
 	return a.ProjectID
 }
 
-// taskProject 返回任务所在的项目。
+// taskProject returns the task's project.
 func (s *Server) taskProject(r *http.Request, task uuid.UUID) *uuid.UUID {
 	var pid uuid.UUID
 	if err := s.Store.Pool.QueryRow(r.Context(), `SELECT project_id FROM task_records WHERE id=$1`, task).Scan(&pid); err != nil {
@@ -79,7 +81,7 @@ func (s *Server) taskProject(r *http.Request, task uuid.UUID) *uuid.UUID {
 	return &pid
 }
 
-// principalScope 返回请求身份对应的项目、Agent 与任务（只有 Agent 身份有）。
+// principalScope returns the project, Agent and task of the request identity (only Agent identities have them).
 func (s *Server) principalScope(r *http.Request, p auth.Principal) (project, agent, task *uuid.UUID) {
 	if p.Kind != auth.KindAgent {
 		return nil, nil, nil
@@ -93,7 +95,8 @@ func (s *Server) principalScope(r *http.Request, p auth.Principal) (project, age
 	return s.agentProject(r, id), agent, task
 }
 
-// consoleCommand 先处理平台内置命令，再把其余斜杠消息交给认领类 Hook console.command。
+// consoleCommand handles the platform's built-in commands first, then hands other slash messages to the claim Hook
+// console.command.
 func (s *Server) consoleCommand(w http.ResponseWriter, r *http.Request, agent uuid.UUID, project *uuid.UUID, text string) bool {
 	trimmed := strings.TrimSpace(text)
 	if !strings.HasPrefix(trimmed, "/") || strings.HasPrefix(trimmed, "/pi:") {
@@ -127,7 +130,8 @@ func (s *Server) consoleCommand(w http.ResponseWriter, r *http.Request, agent uu
 	return true
 }
 
-// skipReplayedHook 报告任务动作是否已经执行过：重放直接返回原结果，不再询问插件。
+// skipReplayedHook reports whether a task action has already been performed: a replay returns the original result
+// directly without asking plugins again.
 func (s *Server) skipReplayedHook(r *http.Request, p auth.Principal, action uuid.UUID) (bool, error) {
 	if s.Hooks == nil || action == uuid.Nil {
 		return s.Hooks == nil, nil

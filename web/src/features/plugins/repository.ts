@@ -1,7 +1,8 @@
-// 插件 git 来源的仓库网页。
+// The repository web page of a plugin's git source.
 
-// 只有 http(s) 地址有网页（git@host:repo 这类 SSH 写法没有，调用方只显示文字）；链接里不带地址中的账号口令。
-// GitHub 地址去掉结尾的 .git，给了 ref 时链到 /tree/<ref>。
+// Only http(s) addresses have a web page (SSH forms like git@host:repo don't, and callers show them as plain text); the link never
+// carries the account credentials contained in the address.
+// GitHub addresses drop the trailing .git, and link to /tree/<ref> when a ref is given.
 export function repositoryUrl(location: string, ref: string | null): string | null {
   let url: URL
   try {
@@ -15,8 +16,9 @@ export function repositoryUrl(location: string, ref: string | null): string | nu
   return ref ? `${base}/tree/${ref.split('/').map(encodeURIComponent).join('/')}` : base
 }
 
-// 市场条目的来源写法 git:<地址>[@ref]，按服务端的规则拆：git 地址本身可能含 @（git@host:repo），
-// 只把最后一个 / 与 : 之后的 @ 视为 ref。不是 git 来源时为 null。
+// A market entry's source is written git:<address>[@ref] and split by the server's rules: the git address itself may contain @
+// (git@host:repo),
+// so only an @ after the last / and : counts as the ref. null when it isn't a git source.
 export function marketGitSource(source: string): { location: string; ref: string | null } | null {
   if (!source.startsWith('git:')) return null
   const location = source.slice('git:'.length)

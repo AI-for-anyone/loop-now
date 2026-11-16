@@ -21,12 +21,13 @@ import { LocalLoginNote } from './LocalLoginNote'
 export function ProjectModelSelection({ agent }: { agent: Schemas['Agent'] }) {
   const result = useCredentialSelections(agent.id)
   const synchronized = useSelectionSynchronization(agent.id, agent.configVersion, result.data?.configVersion)
-  // 已打开的provider保持挂载，远端切换模型不会无声丢掉其独立草稿。
+  // Providers already opened stay mounted, so a remote model switch doesn't silently drop their separate drafts.
   const [providers, setProviders] = useState([agent.model.provider])
   const [known, setKnown] = useState<{ source: typeof result.data; values: Map<string, Schemas['CredentialSelection']> }>({ source: undefined, values: new Map() })
   if (result.data !== known.source) { const values = new Map(known.values); for (const item of result.data?.selections ?? []) if (item.purpose === 'model' && item.provider) values.set(item.provider, item); setKnown({ source: result.data, values }) }
   if (!providers.includes(agent.model.provider)) setProviders([...providers, agent.model.provider])
-  // Claude Code 用本机自己的登录，没有项目账号可选：不显示它的取用来源，只说明。之前打开过的其他提供方照常保留。
+  // Claude Code uses this machine's own login and has no project account to choose: don't show where it takes an account from, just
+  // explain. Other providers opened earlier are kept as usual.
   return <Section id="model-credential" title={t.credentials.agentSelection.title}>
     <p className="text-[13.5px]">{agent.runtime === 'claude-code' ? t.runtime.account : t.credentials.agentSelection.intro}</p>
     <ErrorAlert error={result.error} />
@@ -70,7 +71,8 @@ function SelectionEditor({ agentId, data, selection, current = true, synchronize
   const [session, setSession] = useState(0)
   const [observed, setObserved] = useState(data.configVersion)
   const [editing, setEditing] = useState(false)
-  // 干净表单跟随远端配置；有草稿时继续使用原版本，CAS冲突后显式核对。
+  // A clean form follows the remote config; with a draft it keeps using the original version, and after a CAS conflict the person reviews
+  // explicitly.
   if (data.configVersion !== observed) {
     setObserved(data.configVersion)
     if (!editing) setSession(v => v + 1)
@@ -103,7 +105,7 @@ function SelectionForm({ id, agentId, projectId, configVersion, selection, setti
     {selection.purpose === 'model' && selection.localLogin && <LocalLoginNote state={selection.localLogin} />}
     {form.conflict && <CredentialConflict base={form.base.summary} latest={form.review} reading={form.reading} error={form.readError} onRefresh={() => void form.refresh()} onAdopt={form.adopt} />}
     {!form.conflict && <ErrorAlert error={form.error} />}
-    {/* projectId只作来源标识，不从其他项目候选推导账号。 */}
+    {/* projectId only identifies the source; accounts are never derived from candidates of other projects. */}
     <span className="sr-only">{t.credentials.agentSelection.projectSourcePrefix}{projectId}</span>
   </div>
 }

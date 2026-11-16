@@ -13,12 +13,12 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// ErrorBody 对应 Error。
+// ErrorBody mirrors the Error schema.
 type ErrorBody struct {
 	Error ErrorDetail `json:"error"`
 }
 
-// ErrorDetail 是 Error.error。
+// ErrorDetail is Error.error.
 type ErrorDetail struct {
 	Code    string       `json:"code"`
 	Message string       `json:"message"`
@@ -26,13 +26,13 @@ type ErrorDetail struct {
 	Fields  []FieldError `json:"fields,omitempty"`
 }
 
-// FieldError 对应 FieldError。
+// FieldError mirrors the FieldError schema.
 type FieldError struct {
 	Field   string `json:"field"`
 	Message string `json:"message"`
 }
 
-// Context 对应 Context。
+// Context mirrors the Context schema.
 type Context struct {
 	Organization struct {
 		ID   uuid.UUID `json:"id"`
@@ -46,7 +46,7 @@ type Context struct {
 	Limits Limits `json:"limits"`
 }
 
-// Limits 对应 Limits。
+// Limits mirrors the Limits schema.
 type Limits struct {
 	MaxMessageImages      int      `json:"maxMessageImages"`
 	MaxMessageImageBytes  int64    `json:"maxMessageImageBytes"`
@@ -61,19 +61,19 @@ type Limits struct {
 	TextEdit              TextEdit `json:"textEdit"`
 }
 
-// TextEdit 是 Limits.textEdit。
+// TextEdit is Limits.textEdit.
 type TextEdit struct {
 	MaxBytes   int64    `json:"maxBytes"`
 	Extensions []string `json:"extensions"`
 }
 
-// Health 对应 Health。
+// Health mirrors the Health schema.
 type Health struct {
 	OK       bool           `json:"ok"`
 	Database DatabaseHealth `json:"database"`
 }
 
-// DatabaseHealth 对应 DatabaseHealth。
+// DatabaseHealth mirrors the DatabaseHealth schema.
 type DatabaseHealth struct {
 	OK         bool     `json:"ok"`
 	Error      *string  `json:"error"`
@@ -81,43 +81,45 @@ type DatabaseHealth struct {
 	WALWarning bool     `json:"walWarning"`
 }
 
-// WALBytes 是 DatabaseHealth.walBytes。
+// WALBytes is DatabaseHealth.walBytes.
 type WALBytes struct {
 	Data   int64 `json:"data"`
 	Events int64 `json:"events"`
 }
 
-// RedactedHealth 是给外部身份的健康状态：结构相同，但库只表明是否可用。
+// RedactedHealth is the health status shown to external identities: same structure, but the database part only says
+// whether it is available.
 type RedactedHealth struct {
 	OK       bool               `json:"ok"`
 	Database RedactedDependency `json:"database"`
 }
 
-// RedactedDependency 只表明依赖是否可用。
+// RedactedDependency only says whether a dependency is available.
 type RedactedDependency struct {
 	OK bool `json:"ok"`
 }
 
-// Redacted 返回去掉错误原文与 WAL 信息的健康状态。
+// Redacted returns the health status without the raw error text and the WAL information.
 func (h Health) Redacted() RedactedHealth {
 	return RedactedHealth{OK: h.OK, Database: RedactedDependency{OK: h.Database.OK}}
 }
 
-// ModelProviderList 对应 ModelProviderList。
+// ModelProviderList mirrors the ModelProviderList schema.
 type ModelProviderList struct {
 	PiVersion          string          `json:"piVersion"`
 	CatalogGeneratedAt *time.Time      `json:"catalogGeneratedAt"`
 	Providers          []ModelProvider `json:"providers"`
 }
 
-// ModelProvider 对应 ModelProvider。
+// ModelProvider mirrors the ModelProvider schema.
 type ModelProvider struct {
 	ID       string  `json:"id"`
 	Name     *string `json:"name"`
 	Source   string  `json:"source"`
 	Runtime  string  `json:"runtime"`
 	PluginID *string `json:"pluginId"`
-	// PluginDisplayName 是注册它的插件的显示名（清单原样，可按语言）；UnavailableReason 只在带 agentId 查询时给出。
+	// PluginDisplayName is the display name of the plugin that registered the provider (verbatim from the manifest, may
+	// be per language); UnavailableReason is only given when the query includes agentId.
 	PluginDisplayName json.RawMessage `json:"pluginDisplayName"`
 	UnavailableReason *string         `json:"unavailableReason"`
 	APIKeyEnvVars     []string        `json:"apiKeyEnvVars"`
@@ -125,13 +127,13 @@ type ModelProvider struct {
 	ModelCount        int             `json:"modelCount"`
 }
 
-// ModelList 对应 ModelList。
+// ModelList mirrors the ModelList schema.
 type ModelList struct {
 	ProviderID string  `json:"providerId"`
 	Models     []Model `json:"models"`
 }
 
-// Model 对应 Model。
+// Model mirrors the Model schema.
 type Model struct {
 	ThinkingLevels       []string `json:"thinkingLevels,omitempty"`
 	DefaultThinkingLevel string   `json:"defaultThinkingLevel,omitempty"`
@@ -143,7 +145,7 @@ type Model struct {
 	Input                []string `json:"input"`
 }
 
-// CliTemplate 对应 CliTemplate。
+// CliTemplate mirrors the CliTemplate schema.
 type CliTemplate struct {
 	Name      string                `json:"name"`
 	Version   string                `json:"version"`
@@ -153,19 +155,19 @@ type CliTemplate struct {
 	Warnings  []clitemplate.Warning `json:"warnings"`
 }
 
-// CliInstall 是 CliTemplate.install。
+// CliInstall is CliTemplate.install.
 type CliInstall struct {
 	Status string  `json:"status"`
 	Error  *string `json:"error"`
 }
 
-// ModelRef 对应 ModelRef。
+// ModelRef mirrors the ModelRef schema.
 type ModelRef struct {
 	Provider string `json:"provider"`
 	ModelID  string `json:"modelId"`
 }
 
-// AgentListItem 对应 AgentListItem。
+// AgentListItem mirrors the AgentListItem schema.
 type AgentListItem struct {
 	ServiceTier   *string            `json:"serviceTier"`
 	ThinkingLevel *string            `json:"thinkingLevel"`
@@ -186,7 +188,7 @@ type AgentListItem struct {
 	UpdatedAt     time.Time          `json:"updatedAt"`
 }
 
-// Agent 对应 Agent。
+// Agent mirrors the Agent schema.
 type Agent struct {
 	ServiceTier     *string         `json:"serviceTier"`
 	ThinkingLevel   *string         `json:"thinkingLevel"`
@@ -209,7 +211,7 @@ type Agent struct {
 	UpdatedAt       time.Time       `json:"updatedAt"`
 }
 
-// CredentialMeta 对应 CredentialMeta。
+// CredentialMeta mirrors the CredentialMeta schema.
 type CredentialMeta struct {
 	ProjectID    *uuid.UUID            `json:"projectId,omitempty"`
 	AccountID    *uuid.UUID            `json:"accountId,omitempty"`
@@ -225,21 +227,21 @@ type CredentialMeta struct {
 	Warnings     []clitemplate.Warning `json:"warnings"`
 }
 
-// AgentCli 对应 AgentCli。
+// AgentCli mirrors the AgentCli schema.
 type AgentCli struct {
 	Name        string          `json:"name"`
 	HasTemplate bool            `json:"hasTemplate"`
 	Credential  *CredentialMeta `json:"credential"`
 }
 
-// SkillFile 对应 SkillFile。
+// SkillFile mirrors the SkillFile schema.
 type SkillFile struct {
 	Path   string `json:"path"`
 	Size   int64  `json:"size"`
 	SHA256 string `json:"sha256"`
 }
 
-// SkillTemplateSummary 对应 SkillTemplateSummary。
+// SkillTemplateSummary mirrors the SkillTemplateSummary schema.
 type SkillTemplateSummary struct {
 	ID          uuid.UUID `json:"id"`
 	Name        string    `json:"name"`
@@ -249,7 +251,7 @@ type SkillTemplateSummary struct {
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
-// SkillTemplate 对应 SkillTemplate。
+// SkillTemplate mirrors the SkillTemplate schema.
 type SkillTemplate struct {
 	ID          uuid.UUID   `json:"id"`
 	Name        string      `json:"name"`
@@ -260,7 +262,7 @@ type SkillTemplate struct {
 	UpdatedAt   time.Time   `json:"updatedAt"`
 }
 
-// AgentSkillSummary 对应 AgentSkillSummary。
+// AgentSkillSummary mirrors the AgentSkillSummary schema.
 type AgentSkillSummary struct {
 	ID               uuid.UUID  `json:"id"`
 	Name             string     `json:"name"`
@@ -271,7 +273,7 @@ type AgentSkillSummary struct {
 	UpdatedAt        time.Time  `json:"updatedAt"`
 }
 
-// AgentSkill 对应 AgentSkill。
+// AgentSkill mirrors the AgentSkill schema.
 type AgentSkill struct {
 	ID               uuid.UUID   `json:"id"`
 	Name             string      `json:"name"`
@@ -283,7 +285,7 @@ type AgentSkill struct {
 	UpdatedAt        time.Time   `json:"updatedAt"`
 }
 
-// MessagePage 对应 MessagePage。
+// MessagePage mirrors the MessagePage schema.
 type MessagePage struct {
 	Messages     []Message `json:"messages"`
 	HasMore      bool      `json:"hasMore"`
@@ -292,15 +294,15 @@ type MessagePage struct {
 	TurnsTotal   int64     `json:"turnsTotal"`
 }
 
-// SendMessageResult 对应 SendMessageResult。
+// SendMessageResult mirrors the SendMessageResult schema.
 type SendMessageResult struct {
 	Message Message `json:"message"`
 	Run     Run     `json:"run"`
 }
 
-// ---- 转换 ----
+// ---- Conversions ----
 
-// AgentAddress 返回 Agent 的地址；名称不满足命名规则时为 nil。
+// AgentAddress returns the Agent's address; nil when the name does not satisfy the naming rules.
 func AgentAddress(a store.Agent) *string {
 	if addr, ok := a.Address(); ok {
 		return &addr
@@ -308,14 +310,14 @@ func AgentAddress(a store.Agent) *string {
 	return nil
 }
 
-// FromAgentListItem 转换列表项。
+// FromAgentListItem converts a list item.
 func FromAgentListItem(a store.AgentListItem) AgentListItem {
 	return AgentListItem{Sleep: a.Sleep, SleepRevision: a.SleepRevision, ID: a.ID, Scope: ScopeOf(a.ProjectID), ProjectID: a.ProjectID, IsManager: a.IsManager,
 		Name: a.Name, Address: AgentAddress(a.Agent), Model: ModelRef{a.ModelProvider, a.ModelID}, Runtime: agentruntime.ForProvider(a.ModelProvider), ConfigVersion: a.ConfigVersion, ThinkingLevel: a.ThinkingLevel, ServiceTier: a.ServiceTier,
 		Busy: a.Busy, SessionState: a.SessionState, CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt}
 }
 
-// FromAgentDetail 转换 Agent 详情。
+// FromAgentDetail converts Agent details.
 func FromAgentDetail(d agentconfig.AgentDetail) Agent {
 	out := Agent{ID: d.Agent.ID, Scope: ScopeOf(d.Agent.ProjectID), ProjectID: d.Agent.ProjectID, IsManager: d.Agent.IsManager, Name: d.Agent.Name, Address: AgentAddress(d.Agent), Model: ModelRef{d.Agent.ModelProvider, d.Agent.ModelID}, Runtime: agentruntime.ForProvider(d.Agent.ModelProvider),
 		Prompt: d.Agent.Prompt, PromptVersion: d.Agent.PromptVersion, ConfigVersion: d.Agent.ConfigVersion, Busy: d.Busy, ThinkingLevel: d.Agent.ThinkingLevel, ServiceTier: d.Agent.ServiceTier,
@@ -327,12 +329,12 @@ func FromAgentDetail(d agentconfig.AgentDetail) Agent {
 	return out
 }
 
-// FromCLI 转换可用 CLI。
+// FromCLI converts an available CLI.
 func FromCLI(c agentconfig.CLIView) AgentCli {
 	return AgentCli{Name: c.Name, HasTemplate: c.HasTemplate, Credential: FromCredential(c.Credential)}
 }
 
-// FromCredential 转换凭证元数据。
+// FromCredential converts credential metadata.
 func FromCredential(v *agentconfig.CredentialView) *CredentialMeta {
 	if v == nil {
 		return nil
@@ -348,22 +350,22 @@ func skillFiles(files []store.SkillFile) []SkillFile {
 	return out
 }
 
-// FromTemplateSummary 转换模板列表项。
+// FromTemplateSummary converts a template list item.
 func FromTemplateSummary(t store.SkillTemplate) SkillTemplateSummary {
 	return SkillTemplateSummary{ID: t.ID, Name: t.Name, Description: t.Description, FileCount: t.FileCount, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt}
 }
 
-// FromTemplate 转换模板详情。
+// FromTemplate converts template details.
 func FromTemplate(t agentconfig.TemplateDetail) SkillTemplate {
 	return SkillTemplate{ID: t.ID, Name: t.Name, Description: t.Description, Files: skillFiles(t.Files), SkillMD: t.SkillMD, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt}
 }
 
-// FromAgentSkillSummary 转换副本列表项。
+// FromAgentSkillSummary converts a list item of an Agent's Skill copy.
 func FromAgentSkillSummary(k store.AgentSkill) AgentSkillSummary {
 	return AgentSkillSummary{ID: k.ID, Name: k.Name, Description: k.Description, SourceTemplateID: k.SourceTemplateID, FileCount: k.FileCount, CopiedAt: k.CopiedAt, UpdatedAt: k.UpdatedAt}
 }
 
-// FromAgentSkill 转换副本详情。
+// FromAgentSkill converts the details of an Agent's Skill copy.
 func FromAgentSkill(k agentconfig.AgentSkillDetail) AgentSkill {
 	return AgentSkill{ID: k.ID, Name: k.Name, Description: k.Description, SourceTemplateID: k.SourceTemplateID, Files: skillFiles(k.Files), SkillMD: k.SkillMD, CopiedAt: k.CopiedAt, UpdatedAt: k.UpdatedAt}
 }

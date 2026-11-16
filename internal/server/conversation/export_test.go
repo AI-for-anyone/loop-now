@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// SetTestHookBeforeInterrupt 设置打断前的测试钩子；传 nil 清除。
+// SetTestHookBeforeInterrupt sets the test hook called before an interrupt; nil clears it.
 func SetTestHookBeforeInterrupt(h func(runID uuid.UUID)) {
 	if h == nil {
 		testHookBeforeInterrupt.Store(nil)
@@ -15,7 +15,7 @@ func SetTestHookBeforeInterrupt(h func(runID uuid.UUID)) {
 	testHookBeforeInterrupt.Store(&h)
 }
 
-// SetTestHookBeforeMarkAborting 设置标记打断前的测试钩子；传 nil 清除。
+// SetTestHookBeforeMarkAborting sets the test hook called before marking a run aborting; nil clears it.
 func SetTestHookBeforeMarkAborting(h func(byRunID uuid.UUID)) {
 	if h == nil {
 		testHookBeforeMarkAborting.Store(nil)
@@ -24,7 +24,7 @@ func SetTestHookBeforeMarkAborting(h func(byRunID uuid.UUID)) {
 	testHookBeforeMarkAborting.Store(&h)
 }
 
-// SetTestHookAfterDriveHandoff 设置空队列交接后的测试钩子；传 nil 清除。
+// SetTestHookAfterDriveHandoff sets the test hook called after a handoff with an empty queue; nil clears it.
 func SetTestHookAfterDriveHandoff(h func(agentID uuid.UUID)) {
 	if h == nil {
 		testHookAfterDriveHandoff.Store(nil)
@@ -33,7 +33,7 @@ func SetTestHookAfterDriveHandoff(h func(agentID uuid.UUID)) {
 	testHookAfterDriveHandoff.Store(&h)
 }
 
-// SetTestHookAfterDriverPending 设置 pendingDrivers 登记后的测试钩子；传 nil 清除。
+// SetTestHookAfterDriverPending sets the test hook called after a pendingDrivers registration; nil clears it.
 func SetTestHookAfterDriverPending(h func(runID uuid.UUID)) {
 	if h == nil {
 		testHookAfterDriverPending.Store(nil)
@@ -42,7 +42,7 @@ func SetTestHookAfterDriverPending(h func(runID uuid.UUID)) {
 	testHookAfterDriverPending.Store(&h)
 }
 
-// SetTestHookBeforeRestoreLock 设置补设忙闲锁之前的测试钩子；传 nil 清除。
+// SetTestHookBeforeRestoreLock sets the test hook called before re-setting the busy lock; nil clears it.
 func SetTestHookBeforeRestoreLock(h func(runID uuid.UUID)) {
 	if h == nil {
 		testHookBeforeRestoreLock.Store(nil)
@@ -51,7 +51,7 @@ func SetTestHookBeforeRestoreLock(h func(runID uuid.UUID)) {
 	testHookBeforeRestoreLock.Store(&h)
 }
 
-// SetTestHookAfterRunEndPublished 设置执行结束已通知出去之后的测试钩子；传 nil 清除。
+// SetTestHookAfterRunEndPublished sets the test hook called after a run's end has been announced; nil clears it.
 func SetTestHookAfterRunEndPublished(h func(runID uuid.UUID)) {
 	if h == nil {
 		testHookAfterRunEndPublished.Store(nil)
@@ -60,5 +60,5 @@ func SetTestHookAfterRunEndPublished(h func(runID uuid.UUID)) {
 	testHookAfterRunEndPublished.Store(&h)
 }
 
-// ReconcileForTest 立即做一次对账。
+// ReconcileForTest runs one reconciliation right away.
 func (s *Service) ReconcileForTest(ctx context.Context) { s.reconcile(ctx) }

@@ -37,7 +37,7 @@ func (s *Service) executeTurn(ctx context.Context, turn store.TaskTurn, sink exe
 		if turn.Priority == 0 {
 			whenBusy = "interrupt"
 		}
-		log.Info("任务回复开始", "whenBusy", whenBusy, "queuedMs", queuedMs)
+		log.Info("task reply started", "whenBusy", whenBusy, "queuedMs", queuedMs)
 		defer func() {
 			durationMs := time.Since(begin).Milliseconds()
 			timeout := s.Options.RecordTimeout
@@ -73,12 +73,12 @@ func (s *Service) executeTurn(ctx context.Context, turn store.TaskTurn, sink exe
 			}
 			attrs := []any{"outcome", outcome, "status", outcome, "endReason", endReason, "durationMs", durationMs, "errorCode", code}
 			if e != nil {
-				log.Warn("汇总任务回复用量失败", "error", e)
+				log.Warn("failed to sum up task reply usage", "error", e)
 			}
 			if e == nil {
 				attrs = append(attrs, "input", input, "output", output, "cacheRead", read, "cacheWrite", write, "total", input+output+read+write, "tokens", input+output+read+write)
 			}
-			log.Info("任务回复结束", attrs...)
+			log.Info("task reply ended", attrs...)
 		}()
 	}
 
@@ -146,7 +146,8 @@ func taskWakeText(turn store.TaskTurn) string {
 	return turn.Text
 }
 
-// turnTrigger 是触发这一轮的消息：Inbox 提醒为那条 Inbox 消息，其余为这一轮的用户消息。
+// turnTrigger is the message that triggered this turn: the Inbox message for an Inbox reminder, otherwise the turn's
+// user message.
 func turnTrigger(turn store.TaskTurn) uuid.UUID {
 	if turn.TriggerInboxID != nil {
 		return *turn.TriggerInboxID

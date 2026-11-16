@@ -66,7 +66,7 @@ it('忙时 Enter 排队，⌘／Ctrl+Enter 作为打断发送；空闲时才发�
   }))
   const view = renderWithQuery(<Composer agentId="sleep-agent" agentName="开发助手" busy disabled={false} maxMessageBytes={4096} onSent={() => {}} />)
   const box = screen.getByRole('textbox', { name: '消息' })
-  // 忙时输入框下方说明按键。
+  // When busy, the key hints appear below the input.
   expect(screen.getByText('立即打断')).toBeVisible()
   await userEvent.type(box, '排在后面{Enter}')
   await waitFor(() => expect(sent).toEqual([{ text: '排在后面', whenBusy: 'queue' }]))
@@ -84,14 +84,14 @@ it('忙时 Enter 排队，⌘／Ctrl+Enter 作为打断发送；空闲时才发�
   await waitFor(() => expect(sent.slice(-2)).toEqual([{ text: '以为空闲' }, { text: '以为空闲', whenBusy: 'interrupt' }]))
 })
 
-// 改版“一张印出来的纸”：输入区并入纸张底部。
+// "Printed sheet" redesign: the input area merges into the bottom of the sheet.
 const mountBar = (busy = false) => renderWithQuery(<Composer agentId="bar-agent" agentName="开发助手" busy={busy} disabled={false} maxMessageBytes={4096} onSent={() => {}} stop={busy ? { onStop: () => {}, pending: false, retry: false } : undefined} />)
 
 it('输入区是纸张底部的一条浅黄色栏，上缘一道 2px 的藏青线', () => {
   mountBar()
   const bar = screen.getByRole('textbox', { name: '消息' }).closest('[data-chat-bar]')
   expect(bar).toHaveClass('bg-tint-yellow', 'border-t-2', 'border-ink')
-  // 宽屏时上下留白收紧（窄屏不变）；按键说明那一行保留。
+  // On wide screens the vertical padding tightens (narrow screens are unchanged); the key-hint row stays.
   expect(bar).toHaveClass('pt-3.5', 'pb-3', 'gap-2.5', 'nav:pt-2.5', 'nav:pb-2', 'nav:gap-1.5')
 })
 
@@ -118,10 +118,10 @@ it('空闲时输入框下面写着回车发送、Shift + 回车换行', () => {
 it('忙时按键说明换成排队与打断，输入框为空时发送按钮换成藏青色的停止按钮', () => {
   mountBar(true)
   const hint = screen.getByText('排队', { selector: 'span' }).closest('p')!
-  // 中文界面里按键统一写“回车”，修饰键写法不变。
+  // The Chinese UI always writes the Enter key as “回车” (Enter); modifier keys are written as before.
   expect(hint).toHaveTextContent('回车排队·Ctrl 回车立即打断')
   expect(hint).not.toHaveTextContent('Enter')
-  // 在输入区里靠左，用输入区的按键样式。
+  // Left-aligned inside the input area, using the input area's key style.
   expect(hint).toHaveClass('justify-start', 'text-ink-700')
   expect(hint.querySelector('kbd')).toHaveClass('border-ink', 'bg-paper-raised')
   expect(screen.queryByText('换行')).toBeNull()
@@ -133,7 +133,7 @@ it('忙时按键说明换成排队与打断，输入框为空时发送按钮换�
 it('排队托盘贴在输入框上沿：左右让出加号与发送按钮的位置', () => {
   renderWithQuery(<Composer agentId="bar-agent" agentName="开发助手" busy disabled={false} maxMessageBytes={4096} imageLimits={{ maxCount: 4, maxImageBytes: 1024, maxTotalBytes: 4096 }} onSent={() => {}} queue={<section aria-label="排队的消息">排队 1</section>} />)
   const slot = screen.getByRole('region', { name: '排队的消息' }).parentElement!
-  // 手机宽度下托盘占满一行，不再让位，否则太窄。
+  // At phone width the tray spans the full row and no longer leaves room at the sides; otherwise it would be too narrow.
   expect(slot).toHaveClass('sm:pl-[50px]', 'sm:pr-[57px]')
   expect(slot).not.toHaveClass('pl-[50px]')
   expect(slot.nextElementSibling).toContainElement(screen.getByRole('textbox', { name: '消息' }))
@@ -144,7 +144,7 @@ it('别处（任务节点的输入框）用的按键说明保持原样：居中�
   const hint = screen.getByText('排队', { selector: 'span' }).closest('p')!
   expect(hint).toHaveClass('justify-center', 'text-ink-500')
   expect(hint.querySelector('kbd')).toHaveClass('bg-white', 'border-ink/25', 'font-mono')
-  // 按键的写法也保持原样。
+  // The key names are also written as before.
   expect(hint).toHaveTextContent('Enter排队·Ctrl Enter立即打断')
   expect(hint).not.toHaveTextContent('回车')
 })

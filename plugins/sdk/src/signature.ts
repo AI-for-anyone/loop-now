@@ -1,7 +1,8 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
-// 外发请求的签名：HMAC-SHA256(secret, "<timestamp>.<body>")，十六进制，头的值为 "sha256=<hex>"。
-// 时间戳是发出这一次尝试时的 Unix 秒，每次重试重新签名，接收方可以拒绝过旧的请求防重放。
+// Signature for outgoing requests: HMAC-SHA256(secret, "<timestamp>.<body>") in hex; the header value is "sha256=<hex>".
+// The timestamp is the Unix seconds when this attempt is sent and every retry is signed again, so receivers can reject stale requests
+// to prevent replay.
 
 export const DELIVERY_HEADER = 'x-loop-now-delivery'
 export const TIMESTAMP_HEADER = 'x-loop-now-timestamp'
@@ -16,17 +17,17 @@ export function signBody(secret: string, timestamp: number | string, body: strin
 
 export interface VerifyInput {
   secret: string
-  /** 收到的原始正文（不要先解析再序列化）。 */
+  /** The raw body as received (do not parse and re-serialize it). */
   body: string | Uint8Array
-  /** 签名头与时间头的值。 */
+  /** Values of the signature header and the timestamp header. */
   signature: string | null | undefined
   timestamp: string | null | undefined
-  /** 允许的时钟偏差，默认 300 秒；0 表示不检查时间。 */
+  /** Allowed clock skew, 300 seconds by default; 0 disables the time check. */
   toleranceSeconds?: number
   now?: number
 }
 
-/** 接收方校验签名；时间超出容差或签名不符时返回 false。 */
+/** For receivers to verify a signature; returns false when the time is outside the tolerance or the signature does not match. */
 export function verifySignature(input: VerifyInput): boolean {
   const { secret, body, signature, timestamp } = input
   if (!signature || !timestamp || !/^\d+$/.test(timestamp)) return false

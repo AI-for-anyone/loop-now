@@ -164,7 +164,7 @@ func (e *env) executed(substr string) int {
 	return n
 }
 
-// queued 报告执行是否还在数据库的排队里。
+// queued reports whether the run is still in the database queue.
 func (e *env) queued(id uuid.UUID) bool {
 	e.t.Helper()
 	queued, err := e.st.QueuedRuns(context.Background(), e.agent)
@@ -194,8 +194,9 @@ func (e *env) read(message uuid.UUID) store.InboxReadEffect {
 	return eff
 }
 
-// 逐条列出：控制台消息每条一项，提醒承载的 Inbox 消息每条一项，顺序与实际处理顺序一致；
-// 提醒开始时只点名它承载的消息，其余未读消息说明稍后另行提醒。
+// Listed item by item: one item per console message, one item per Inbox message carried by a reminder, in the same
+// order as the actual processing order; when the reminder starts it only names the messages it carries, and says the
+// other unread messages will be reminded about separately later.
 func TestQueueListsEachMessageInProcessingOrder(t *testing.T) {
 	e := newEnv(t)
 	e.mustSend("hold 当前", "")
@@ -218,7 +219,9 @@ func TestQueueListsEachMessageInProcessingOrder(t *testing.T) {
 	e.expectQueue()
 }
 
-// 逐条转为打断：消息移到打断提醒（没有就新建），原提醒空了即作废；同一 actionId 重放返回首次回执且没有副作用。
+// Promoting item by item: the message moves into the interrupt reminder (created if there is none), the original
+// reminder is voided if it becomes empty; replaying the same actionId returns the first receipt and has no side
+// effects.
 func TestPromoteInboxMessageMovesItAndVoidsEmptiedReminder(t *testing.T) {
 	e := newEnv(t)
 	cur := e.mustSend("hold 当前", "")
@@ -275,7 +278,8 @@ func TestPromoteInboxMessageMovesItAndVoidsEmptiedReminder(t *testing.T) {
 	}
 }
 
-// 撤回控制台消息与取消 Inbox 消息：Agent 不会收到；回执带原文；承载提醒空了即作废；已取消的消息不计为未读。
+// Withdrawing a console message and cancelling an Inbox message: the Agent will not receive them; the receipt carries
+// the original text; a carrying reminder that becomes empty is voided; cancelled messages do not count as unread.
 func TestCancelQueuedRunAndInboxMessage(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -339,7 +343,8 @@ func TestCancelQueuedRunAndInboxMessage(t *testing.T) {
 	}
 }
 
-// 读后离队：收件 Agent 读走的消息立即离开列表；提醒没有待处理消息时随即作废，不再等到开始时跳过。
+// Leaving the queue on read: messages read by the recipient Agent leave the list immediately; a reminder with no
+// pending messages left is voided right then, instead of being skipped later when it starts.
 func TestReadLeavesQueueAndVoidsReminder(t *testing.T) {
 	e := newEnv(t)
 	e.mustSend("hold 当前", "")
@@ -358,7 +363,8 @@ func TestReadLeavesQueueAndVoidsReminder(t *testing.T) {
 		t.Fatalf("作废的提醒：%s %s", r.Status, r.EndReason)
 	}
 	e.expectQueue()
-	// 兜底：绕过读取路径直接标为已读，提醒开始时发现没有待处理消息，作废而不启动 Pi。
+	// Fallback: marked as read directly, bypassing the read path; when the reminder starts it finds no pending messages
+	// and is voided without starting Pi.
 	c := e.deliver("收件C", "queue")
 	late := e.carrier(c)
 	if _, err := e.st.Pool.Exec(context.Background(), `UPDATE inbox_messages SET read_at=now() WHERE id=$1`, c); err != nil {
@@ -371,7 +377,8 @@ func TestReadLeavesQueueAndVoidsReminder(t *testing.T) {
 	}
 }
 
-// 停止只作用于这一次回复：以 user_stopped 结束，之后排队的消息照常处理；已结束时返回 run_not_active。
+// Stop only affects this one reply: it ends with user_stopped and queued messages after it are processed as usual; when
+// the run has already ended it returns run_not_active.
 func TestStopOnlyStopsThisReplyAndQueueContinues(t *testing.T) {
 	e := newEnv(t)
 	cur := e.mustSend("block 当前", "")
@@ -405,7 +412,8 @@ func TestStopOnlyStopsThisReplyAndQueueContinues(t *testing.T) {
 	}
 }
 
-// 撤回与出队并发：同一条消息要么被撤回且从未执行，要么已开始（撤回得到 run_not_queued）且只执行一次。
+// Withdrawing racing with dequeue: the same message is either withdrawn and never run, or already started (withdrawing
+// gets run_not_queued) and run exactly once.
 func TestCancelRacesDequeueExactlyOnce(t *testing.T) {
 	e := newEnv(t)
 	for i := range 15 {
@@ -431,7 +439,8 @@ func TestCancelRacesDequeueExactlyOnce(t *testing.T) {
 	}
 }
 
-// 逐条转换与提醒开始并发：消息恰好被处理一次（由原提醒或打断提醒点名），没有丢失或重复。
+// Promoting an item racing with the reminder starting: the message is handled exactly once (named by the original
+// reminder or by the interrupt reminder), never lost or duplicated.
 func TestPromoteMessageRacesReminderStart(t *testing.T) {
 	e := newEnv(t)
 	for i := range 15 {
@@ -456,12 +465,13 @@ func TestPromoteMessageRacesReminderStart(t *testing.T) {
 		if e2 := e.st.Pool.QueryRow(context.Background(), `SELECT count(*) FROM runs WHERE agent_id=$1 AND status='queued'`, e.agent).Scan(&open); e2 != nil || open != 0 {
 			t.Fatalf("第 %d 轮：仍有排队执行 %d", i, open)
 		}
-		// 本轮已处理，标为已读，避免下一轮的提醒统计到它。
+		// Handled in this round; mark it read so the next round's reminder does not count it.
 		e.read(m)
 	}
 }
 
-// 取消与收件 Agent 读取并发：恰好一方生效，消息不会既已读又已取消。
+// Cancelling racing with the recipient Agent reading: exactly one side takes effect, and a message is never both read
+// and cancelled.
 func TestCancelRacesRead(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -501,7 +511,8 @@ func TestCancelRacesRead(t *testing.T) {
 	}
 }
 
-// 读后作废与提醒开始并发：提醒要么在读取时作废，要么开始后因没有待处理消息作废，要么照常执行一次；不会卡在队列里。
+// Voiding on read racing with the reminder starting: the reminder is either voided on read, or voided after starting
+// because there are no pending messages, or runs once as usual; it never gets stuck in the queue.
 func TestReadVoidRacesReminderStart(t *testing.T) {
 	e := newEnv(t)
 	for i := range 15 {
@@ -527,7 +538,8 @@ func TestReadVoidRacesReminderStart(t *testing.T) {
 	}
 }
 
-// 停止与回复结束、下一条开始并发：停止只作用于路径中的那一次执行，下一条从不被停止。
+// Stopping racing with the reply ending and the next one starting: the stop only affects the run in the path, and the
+// next one is never stopped.
 func TestStopRacesFinishAndNextStart(t *testing.T) {
 	e := newEnv(t)
 	for i := range 15 {
@@ -554,7 +566,8 @@ func TestStopRacesFinishAndNextStart(t *testing.T) {
 	}
 }
 
-// 收件 Agent 在回复中读取 Inbox 与执行结束、开始并发：读取路径先锁 Agent 行，与 FinishRun 同一加锁顺序，不会死锁。
+// The recipient Agent reading the Inbox during a reply, racing with runs ending and starting: the read path locks the
+// Agent row first, in the same lock order as FinishRun, so it cannot deadlock.
 func TestReadsConcurrentWithFinishRun(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)

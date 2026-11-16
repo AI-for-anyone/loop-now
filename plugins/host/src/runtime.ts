@@ -1,5 +1,6 @@
-// 一个已加载插件的运行时：它的 PluginAPI、全部注册（都可释放）、观察类事件的串行队列与同步调用。
-// 清单说了算（plugins/SPEC.md §2）：订阅清单外的事件、注册清单外的按钮／定时／渠道会抛错，加载期间出现即加载失败。
+// The runtime of one loaded plugin: its PluginAPI, all its registrations (each can be released), the serial queue of observe events, and
+// synchronous calls. The manifest is authoritative (plugins/SPEC.md §2): subscribing to an event, or registering a button/schedule/channel,
+// that the manifest does not declare throws; if that happens during loading, the load fails.
 
 import { format } from 'node:util'
 
@@ -40,10 +41,10 @@ export interface LoadManifest {
   events: string[]
   permissions: string[]
   failClosed: boolean
-  /** 清单 accounts 声明的账号种类。 */
+  /** Account kinds declared in the manifest's accounts. */
   accountKinds: string[]
   actions: { id: string }[]
-  /** manageIdentities：这个渠道能代管外部身份（plugins/SPEC.md §12）。 */
+  /** manageIdentities: this channel can manage external identities (plugins/SPEC.md §12). */
   channels: { id: string; manageIdentities: boolean }[]
   schedules: { id: string }[]
   http: boolean
@@ -76,7 +77,7 @@ const FIXED_FIELDS = ['id', 'type', 'at', 'projectId', 'agentId', 'taskId', 'run
 const KEY_MAX = 512
 const VALUE_MAX = 1 << 20
 const LOG_MAX = 64 << 10
-// 宿主回应一行最多 16 MiB；HTTP 正文按 base64 放进去，留出余量。
+// A host reply line is at most 16 MiB; the HTTP body goes in as base64, so leave headroom.
 const HTTP_BODY_MAX = 8 << 20
 const HOP_BY_HOP = ['connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade']
 
@@ -114,7 +115,7 @@ export function parseConfig(v: unknown): ConfigPayload {
   return { ...base, projects }
 }
 
-/** 检查 load 载荷；不合规则时抛错，错误文字直接回给 Go。 */
+/** Checks the load payload; throws when it breaks the rules, and the error text goes straight back to Go. */
 export function parseLoad(plugin: string | undefined, payload: unknown): LoadPayload {
   if (!isObject(payload)) throw new Error('load 载荷须是对象')
   const id = payload.id
@@ -151,7 +152,7 @@ export function describeError(err: unknown): string {
 }
 
 
-/** 日志里的错误：说明加插件自己代码里的第一帧（没有时取第一帧），不带宿主内部的调用栈。 */
+/** Error text for logs: the message plus the first frame in the plugin's own code (or the first frame if none), without host-internal frames. */
 export function briefError(err: unknown, root: string): string {
   const message = describeError(err)
   const frames = err instanceof Error && err.stack ? err.stack.split('\n').filter((l) => /^\s+at /.test(l)) : []
@@ -176,7 +177,7 @@ export class PluginRuntime {
   readonly payload: LoadPayload
   config: ConfigPayload
   status: 'loading' | 'active' | 'unloading' | 'unloaded' = 'loading'
-  /** 加载期间违反清单的注册；不为空时加载失败。 */
+  /** Registrations during loading that break the manifest; the load fails when this is not empty. */
   readonly violations: string[] = []
   readonly api: PluginAPI
 
@@ -201,7 +202,7 @@ export class PluginRuntime {
     this.api = this.buildApi()
   }
 
-  /** 这个插件需要在日志里遮住的值：全部 secret 与插件令牌。 */
+  /** Values to mask in this plugin's logs: all secrets and the plugin token. */
   secretValues(): string[] {
     const out = new Set<string>()
     const add = (r: ConfigRows) => Object.values(r.secrets).forEach((s) => s && out.add(s))
@@ -220,7 +221,7 @@ export class PluginRuntime {
   }
 
   private log(level: Level, message: string): void {
-    this.deps.log(this.id, level, message.length > LOG_MAX ? `${message.slice(0, LOG_MAX)}…（已截断）` : message)
+    this.deps.log(this.id, level, message.length > LOG_MAX ? `${message.slice(0, LOG_MAX)}… (truncated)` : message)
   }
 
   private track(remove: () => void): Disposer {
@@ -284,7 +285,8 @@ export class PluginRuntime {
       }
       return fetch(p.apiUrl.replace(/\/+$/, '') + path, { ...init, headers, body: body as RequestInit['body'] })
     }
-    // 渠道与代管身份的辅助：调用收件箱接口，非 2xx 时抛出平台的错误说明（带 status 与 code）。
+    // Helper for channels and managed identities: calls the inbox API and, on a non-2xx response, throws the platform's error message
+    // (with status and code).
     const platformJson = async (method: 'GET' | 'POST', path: string, body?: unknown): Promise<InboxMessage> => {
       const res = await platformFetch(path, method === 'GET' ? { method } : { method, body: body as Record<string, unknown> })
       const text = await res.text()
@@ -292,7 +294,7 @@ export class PluginRuntime {
       try {
         data = text ? JSON.parse(text) : null
       } catch {
-        // 非 JSON 的错误正文原样放进说明。
+        // A non-JSON error body goes into the message as is.
       }
       if (!res.ok) {
         const e = isObject(data) && isObject(data.error) ? data.error : null
@@ -306,7 +308,7 @@ export class PluginRuntime {
       if (!m.permissions.includes(permission)) throw new Error(`清单没有声明 ${permission} 权限`)
       return platformJson('POST', path, body)
     }
-    // 回答提问的正文：选项（可另附文字），或只有文字。
+    // Body for answering a question: an option (optionally with text), or text only.
     const answerBody = (input: QuestionAnswer): Record<string, unknown> => {
       const text = isObject(input) && typeof input.text === 'string' && input.text !== '' ? input.text : undefined
       if (isObject(input) && input.text !== undefined && text === undefined) throw new TypeError('text 须是非空字符串')
@@ -494,7 +496,7 @@ export class PluginRuntime {
     } satisfies PluginAPI) as PluginAPI
   }
 
-  /** 在插件上下文里运行 fn，到 timeoutMs 或插件停用时触发 signal 并不再等待；fn 之后的结果被丢弃。 */
+  /** Runs fn in the plugin context; on timeoutMs or plugin disable, fires the signal and stops waiting; fn's later result is discarded. */
   private async withDeadline<T>(timeoutMs: number, what: string, fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
     const controller = new AbortController()
     this.controllers.add(controller)
@@ -529,7 +531,7 @@ export class PluginRuntime {
     })
   }
 
-  /** 观察类事件：同一插件串行，处理完（或超时）才轮到下一条。 */
+  /** Observe events: serial per plugin; the next one starts only after this one is handled (or times out). */
   event(event: Record<string, unknown>, attempt: number, timeoutMs: number): Promise<Reply> {
     const run = this.queue.then(() => this.runEvent(event, attempt, timeoutMs))
     this.queue = run.catch(() => undefined)
@@ -540,8 +542,8 @@ export class PluginRuntime {
     if (this.status !== 'active') return { ok: false, error: '插件未加载' }
     const type = String(event.type)
     const list = [...(this.handlers.get(type) ?? [])]
-    // 按渠道投递的事件：channel.outbound 交给渠道的 outbound，identity.inbound 交给 identityInbound。
-    // 没有任何处理函数时回失败，让平台重投并在插件页显示，不悄悄丢掉。
+    // Events delivered per channel: channel.outbound goes to the channel's outbound, identity.inbound to identityInbound.
+    // With no handler at all, reply with a failure so the platform redelivers and shows it on the plugin page, instead of silently dropping it.
     const routed = type === 'channel.outbound' ? 'outbound' : type === 'identity.inbound' ? 'identityInbound' : null
     if (routed) {
       const handler = typeof event.channelId === 'string' ? this.channels.get(event.channelId)?.[routed] : undefined
@@ -559,7 +561,7 @@ export class PluginRuntime {
             await handler(structuredClone(event), ctx)
           } catch (err) {
             if (signal.aborted) throw signal.reason
-            this.log('warn', `${type} 的处理函数出错：${this.brief(err)}`)
+            this.log('warn', `Handler for ${type} failed: ${this.brief(err)}`)
             failures.push(describeError(err))
           }
         }
@@ -571,7 +573,7 @@ export class PluginRuntime {
     }
   }
 
-  /** 同步调用（拦截、修改、认领）：按注册顺序逐个调用本插件的处理函数，汇总成一个结果。 */
+  /** Synchronous calls (intercept, modify, claim): runs this plugin's handlers in registration order, combined into one result. */
   async call(kind: CallKind, event: Record<string, unknown>, timeoutMs: number): Promise<Reply> {
     if (this.status !== 'active') return { ok: false, error: '插件未加载' }
     const type = String(event.type)
@@ -596,7 +598,7 @@ export class PluginRuntime {
               if (!isObject(r) || !isObject(r.patch)) continue
               for (const [k, v] of Object.entries(r.patch)) {
                 if (FIXED_FIELDS.includes(k)) {
-                  this.log('warn', `${type} 的 patch 不能改固定字段 ${k}，已忽略`)
+                  this.log('warn', `Ignored a ${type} patch that changes the fixed field ${k}`)
                   continue
                 }
                 patch[k] = v
@@ -617,12 +619,12 @@ export class PluginRuntime {
       })
       return { ok: true, value }
     } catch (err) {
-      if (!(err instanceof TimeoutError)) this.log('warn', `${type} 的处理函数出错：${this.brief(err)}`)
+      if (!(err instanceof TimeoutError)) this.log('warn', `Handler for ${type} failed: ${this.brief(err)}`)
       return { ok: false, error: describeError(err) }
     }
   }
 
-  /** 控制台操作按钮（action）：返回 {notice, url?}。 */
+  /** Console action buttons (action): returns {notice, url?}. */
   async action(payload: Record<string, unknown>, timeoutMs: number): Promise<Reply> {
     if (this.status !== 'active') return { ok: false, error: '插件未加载' }
     const actionId = String(payload.actionId)
@@ -636,12 +638,12 @@ export class PluginRuntime {
       if (r.url !== undefined && typeof r.url !== 'string') throw new Error('操作返回的 url 须是字符串')
       return { ok: true, value: r.url === undefined ? { notice: r.notice } : { notice: r.notice, url: r.url } }
     } catch (err) {
-      if (!(err instanceof TimeoutError)) this.log('warn', `操作 ${actionId} 出错：${this.brief(err)}`)
+      if (!(err instanceof TimeoutError)) this.log('warn', `Action ${actionId} failed: ${this.brief(err)}`)
       return { ok: false, error: describeError(err) }
     }
   }
 
-  /** HTTP 入口（http）：把请求交给 api.http.handle 的处理函数，原样返回状态码、头与正文（base64）。 */
+  /** HTTP entry (http): passes the request to the api.http.handle handler and returns its status, headers and body (base64) as is. */
   async http(payload: Record<string, unknown>, timeoutMs: number): Promise<Reply> {
     if (this.status !== 'active') return { ok: false, error: '插件未加载' }
     const handler = this.httpHandler
@@ -679,12 +681,12 @@ export class PluginRuntime {
       })
       return { ok: true, value }
     } catch (err) {
-      if (!(err instanceof TimeoutError)) this.log('warn', `HTTP ${method} ${path} 出错：${this.brief(err)}`)
+      if (!(err instanceof TimeoutError)) this.log('warn', `HTTP ${method} ${path} failed: ${this.brief(err)}`)
       return { ok: false, error: describeError(err) }
     }
   }
 
-  /** 定时任务（schedule）：处理完回 ok。 */
+  /** Scheduled jobs (schedule): replies ok once handled. */
   async schedule(payload: Record<string, unknown>, timeoutMs: number): Promise<Reply> {
     if (this.status !== 'active') return { ok: false, error: '插件未加载' }
     const scheduleId = String(payload.scheduleId)
@@ -696,12 +698,12 @@ export class PluginRuntime {
       await this.withDeadline(timeoutMs, `定时任务 ${scheduleId} `, async (signal) => handler(Object.freeze({ scheduleId, cron, at, signal })))
       return { ok: true }
     } catch (err) {
-      if (!(err instanceof TimeoutError)) this.log('warn', `定时任务 ${scheduleId} 出错：${this.brief(err)}`)
+      if (!(err instanceof TimeoutError)) this.log('warn', `Scheduled job ${scheduleId} failed: ${this.brief(err)}`)
       return { ok: false, error: describeError(err) }
     }
   }
 
-  /** register 之后运行 start 处理函数（按注册顺序）。 */
+  /** Runs the start handlers after register (in registration order). */
   async start(): Promise<void> {
     for (const handler of [...this.lifecycle.start]) {
       await runAs(this.id, async () => handler({ signal: this.lifecycleController.signal }))
@@ -714,12 +716,12 @@ export class PluginRuntime {
       try {
         await this.withDeadline(timeoutMs, '配置监听', async () => listener())
       } catch (err) {
-        this.log('warn', `配置监听出错：${this.brief(err)}`)
+        this.log('warn', `Config listener failed: ${this.brief(err)}`)
       }
     }
   }
 
-  /** 停用：触发所有进行中的 signal，按注册的逆序运行 stop，然后释放全部注册。可重复调用。 */
+  /** Disable: fires all in-flight signals, runs stop in reverse registration order, then releases every registration. Can be called again. */
   async stop(timeoutMs: number): Promise<void> {
     if (this.status === 'unloading' || this.status === 'unloaded') return
     this.status = 'unloading'
@@ -730,20 +732,20 @@ export class PluginRuntime {
     for (const handler of [...this.lifecycle.stop].reverse()) {
       const left = deadline - Date.now()
       if (left <= 0) {
-        this.log('warn', 'stop 处理函数超时，其余的不再等待')
+        this.log('warn', 'stop handler timed out; not waiting for the remaining ones')
         break
       }
       try {
         await this.withDeadline(left, 'stop ', async (signal) => handler({ signal }))
       } catch (err) {
-        this.log('warn', `stop 处理函数出错：${this.brief(err)}`)
+        this.log('warn', `stop handler failed: ${this.brief(err)}`)
       }
     }
     for (const dispose of [...this.disposers].reverse()) {
       try {
         dispose()
       } catch (err) {
-        this.log('warn', `释放注册出错：${this.brief(err)}`)
+        this.log('warn', `Failed to release a registration: ${this.brief(err)}`)
       }
     }
     this.handlers.clear()
@@ -751,7 +753,7 @@ export class PluginRuntime {
     this.status = 'unloaded'
   }
 
-  /** 校验用：插件注册了哪些东西。 */
+  /** For validation: what the plugin registered. */
   registrations(): { events: string[]; actions: string[]; schedules: string[]; channels: string[]; http: boolean } {
     return {
       events: [...this.handlers.entries()].filter(([, l]) => l.length > 0).map(([t]) => t),

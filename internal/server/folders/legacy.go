@@ -12,19 +12,21 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// LegacySummary 是退役文件夹来源一次性回放的结果。
+// LegacySummary is the result of the one-time replay of retired folder sources.
 type LegacySummary struct {
-	Sources         int // 这次回放的上传资料来源
+	Sources         int // upload sources replayed this time
 	FilesWritten    int
 	FilesDeleted    int
-	FilesSkipped    int // 路径无效或目标是软链接、目录，未写入
-	UnclonedGitDirs int // 从未克隆成功的代码仓库来源（目录不存在）
+	FilesSkipped    int // not written: invalid path, or the target is a symlink or a directory
+	UnclonedGitDirs int // code repository sources that never cloned successfully (directory missing)
 }
 
-// ApplyLegacyFolderSources 把退役的上传资料来源里尚未落到磁盘的人工修改，一次性写入各 Agent 的文件夹：
-// 从未同步过的来源写入全部文件；已同步过的只写待写入的文件、删除待删除的文件。每个来源回放后记一行，之后不再处理。
-// 代码仓库来源不处理：已克隆的目录原样保留为普通文件，从未克隆成功的只计数。旧表的数据不修改。
-// 须在任何 Pi 启动之前调用。
+// ApplyLegacyFolderSources writes, once, the manual edits in retired upload sources that never reached disk into each
+// Agent's folder: for a source that was never synced, all files are written; for one already synced, only the files
+// pending write are written and the files pending deletion are deleted. After each source is replayed, a row is
+// recorded and it is never processed again. Code repository sources are not processed: directories already cloned stay
+// as plain files, and those that never cloned successfully are only counted. Data in the old tables is not modified.
+// Must be called before any Pi starts.
 func (s *Service) ApplyLegacyFolderSources(ctx context.Context) (LegacySummary, error) {
 	var sum LegacySummary
 	sources, err := s.Store.PendingLegacyFolderSources(ctx)
@@ -90,7 +92,8 @@ func (s *Service) applyLegacySource(ctx context.Context, f Folder, src store.Leg
 	return written, deleted, skipped, nil
 }
 
-// removeFile 删除一个普通文件或软链接本身；不存在时视为已删除，目录不删除。
+// removeFile deletes a regular file or a symlink itself; a missing file counts as deleted, and directories are not
+// deleted.
 func (f Folder) removeFile(rel string) error {
 	root, err := f.open()
 	if err != nil {

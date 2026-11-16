@@ -4,9 +4,9 @@ type S = components['schemas']
 
 export const settings = {
   title: '全局设置',
-  // 界面语言只保存在这个浏览器里，不是服务端配置。
+  // The UI language is saved only in this browser; it isn't server config.
   language: { title: '界面语言', hint: '只影响这个浏览器；切换后页面会重新加载。' },
-  // 页头元信息：服务端版本与连接状态。
+  // Page header meta: server version and connection status.
   product: (version: string) => `Loop Now ${version}`,
   serverStatus: { ok: '服务端连接正常', degraded: '服务端数据库不可用' },
   readonlyHint: '模型配置、本机模式与文件夹可在这里修改；服务端的环境配置保持只读。',

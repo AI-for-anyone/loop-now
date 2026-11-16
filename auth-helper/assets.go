@@ -160,7 +160,8 @@ func verifyAssets(parent *os.Root, name string) error {
 }
 
 func openAssetDirectory(path string) (*os.Root, error) {
-	// Windows 上从卷根（如 C:\）开始逐级打开；Unix 上卷名为空，就是 /。
+	// On Windows, open level by level starting from the volume root (such as C:\); on Unix the volume name is empty,
+	// so it is just /.
 	top := filepath.VolumeName(path) + string(filepath.Separator)
 	directory, err := os.OpenRoot(top)
 	if err != nil {

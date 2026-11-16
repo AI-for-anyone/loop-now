@@ -15,7 +15,8 @@ import (
 	"loop-now/internal/testutil/fakeclaudebin"
 )
 
-// Find 在给定目录里按顺序找 claude，跳过不可执行的，返回解析符号链接后的路径；找不到时为 ErrNotFound。
+// TestFind: Find looks for claude in the given directories in order, skips non-executable files and returns the path
+// with symlinks resolved; when nothing is found it returns ErrNotFound.
 func TestFind(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows 上按扩展名找，另行验证")
@@ -54,8 +55,9 @@ func TestStripEnvAndEnv(t *testing.T) {
 	}
 }
 
-// Version 与 AuthStatus 只运行 claude 自己的命令；AuthStatus 只取 loggedIn、authMethod、subscriptionType、loginExpiresAt 与
-// projectsDirectory，邮箱与组织在解码时就丢掉；失败时的错误不带输出（错误输出里同样可能有邮箱）。
+// TestVersionAndAuthStatus: Version and AuthStatus only run claude's own commands; AuthStatus only takes loggedIn,
+// authMethod, subscriptionType, loginExpiresAt and projectsDirectory, and drops the email and organization during
+// decoding; errors on failure carry no output (the error output may contain the email too).
 func TestVersionAndAuthStatus(t *testing.T) {
 	bin := fakeclaudebin.Path(t)
 	home := t.TempDir()
@@ -73,7 +75,8 @@ func TestVersionAndAuthStatus(t *testing.T) {
 			t.Fatalf("不应保留 %q：%s", secret, b)
 		}
 	}
-	// 与真的 claude 一样：没有 USER 时找不到登录，以 1 退出但照常输出 JSON；按输出判断为未登录，而不是出错。
+	// Like the real claude: without USER it cannot find the login and exits with 1 but still prints JSON; going by the
+	// output this is "not logged in", not an error.
 	noUser := claudecli.Env(claudecli.EnvOptions{Home: home, Path: []string{"/usr/bin", "/bin"}})
 	if a, err = claudecli.AuthStatus(context.Background(), bin, noUser); err != nil || a.LoggedIn || a.AuthMethod != "none" {
 		t.Fatalf("没有 USER：%+v %v", a, err)
@@ -93,7 +96,8 @@ func TestVersionAndAuthStatus(t *testing.T) {
 	}
 }
 
-// 会话记录的位置：projects 目录下一层子目录里的 <会话 ID>.jsonl。
+// TestTranscriptPaths covers where session transcripts live: <session ID>.jsonl in a direct subdirectory of the
+// projects directory.
 func TestTranscriptPaths(t *testing.T) {
 	projects, cwd := t.TempDir(), t.TempDir()
 	id := uuid.NewString()

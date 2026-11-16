@@ -25,26 +25,28 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// GitEnv 是一次拉取所用的 git 环境与放在 clone 之前的参数（-c 配置，例如凭证助手）。
+// GitEnv is the git environment for one pull and the arguments placed before clone (-c config, such as credential
+// helpers).
 type GitEnv struct {
 	Env  []string
 	Args []string
 }
 
-// GitAccess 返回从 Git 拉取时使用的环境：该 Agent 当前配置里的 gh CLI 凭证（项目 GitHub 账号），
-// 本机模式的 git 开关开启时另沿用本机的 git 身份（见 app 的 folderGitAccess）。
+// GitAccess returns the environment used when pulling from Git: the gh CLI credential in the Agent's current config
+// (the project GitHub account), plus the local git identity when the local mode git switch is on (see folderGitAccess
+// in app).
 type GitAccess func(ctx context.Context, agentID uuid.UUID) (GitEnv, error)
 
-// Options 是文件夹服务的参数。
+// Options are the parameters of the folder service.
 type Options struct {
-	WorkRoot     string // <WORK_ROOT>：Agent 文件夹在 agents/<id>/workspace
-	ContextDir   string // 项目与全局上下文文件夹的根
-	MaxUpload    int64  // 单个上传文件的字节上限
+	WorkRoot     string // <WORK_ROOT>: the Agent folder is at agents/<id>/workspace
+	ContextDir   string // root of the project and global context folders
+	MaxUpload    int64  // byte limit for a single uploaded file
 	GitBin       string
 	CloneTimeout time.Duration
 }
 
-// Service 是文件夹服务。
+// Service is the folder service.
 type Service struct {
 	Store *store.Store
 	Git   GitAccess
@@ -56,23 +58,23 @@ type Service struct {
 	wg     sync.WaitGroup
 }
 
-// New 创建文件夹服务；Start 之后才执行 Git 拉取。
+// New creates the folder service; Git pulls run only after Start.
 func New(st *store.Store, git GitAccess, o Options, log *slog.Logger) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Service{Store: st, Git: git, O: o, Log: log, ctx: ctx, cancel: cancel}
 }
 
-// AgentRoot 返回 Agent（或任务实例）在工作根目录下的目录。
+// AgentRoot returns the directory of an Agent (or task instance) under the work root directory.
 func AgentRoot(workRoot string, id uuid.UUID) string {
 	return filepath.Join(workRoot, "agents", id.String())
 }
 
-// AgentWorkspace 返回 Agent（或任务实例）的文件夹，也就是 Pi 的工作目录。
+// AgentWorkspace returns the folder of an Agent (or task instance), which is Pi's working directory.
 func AgentWorkspace(workRoot string, id uuid.UUID) string {
 	return filepath.Join(AgentRoot(workRoot, id), "workspace")
 }
 
-// ContextFolder 返回上下文文件夹：projectID 为空时为全局，否则为该项目的。
+// ContextFolder returns a context folder: the global one when projectID is nil, otherwise the project's.
 func ContextFolder(contextDir string, projectID *uuid.UUID) string {
 	if projectID == nil {
 		return filepath.Join(contextDir, "global")
@@ -80,7 +82,7 @@ func ContextFolder(contextDir string, projectID *uuid.UUID) string {
 	return filepath.Join(contextDir, "projects", projectID.String())
 }
 
-// AgentFolder 返回未删除的常态或平台 Agent 的文件夹。
+// AgentFolder returns the folder of a regular or platform Agent that is not deleted.
 func (s *Service) AgentFolder(ctx context.Context, agentID uuid.UUID) (Folder, error) {
 	if _, err := s.Store.GetAgent(ctx, agentID); err != nil {
 		return Folder{}, err
@@ -88,7 +90,8 @@ func (s *Service) AgentFolder(ctx context.Context, agentID uuid.UUID) (Folder, e
 	return Folder{Dir: AgentWorkspace(s.O.WorkRoot, agentID), Trash: filepath.Join(AgentRoot(s.O.WorkRoot, agentID), ".trash")}, nil
 }
 
-// ProjectContextFolder 返回未删除项目的上下文文件夹（不存在时在首次使用时创建）。
+// ProjectContextFolder returns the context folder of a project that is not deleted (created on first use if it does not
+// exist).
 func (s *Service) ProjectContextFolder(ctx context.Context, projectID uuid.UUID) (Folder, error) {
 	if _, err := s.Store.GetProject(ctx, projectID); err != nil {
 		return Folder{}, err
@@ -96,14 +99,14 @@ func (s *Service) ProjectContextFolder(ctx context.Context, projectID uuid.UUID)
 	return Folder{Dir: ContextFolder(s.O.ContextDir, &projectID), Trash: filepath.Join(s.O.ContextDir, ".trash")}, nil
 }
 
-// GlobalContextFolder 返回全局上下文文件夹。
+// GlobalContextFolder returns the global context folder.
 func (s *Service) GlobalContextFolder() Folder {
 	return Folder{Dir: ContextFolder(s.O.ContextDir, nil), Trash: filepath.Join(s.O.ContextDir, ".trash")}
 }
 
-// ---------- 从 Git 拉取 ----------
+// ---------- Pull from Git ----------
 
-// GitPullInput 是一次拉取的请求。
+// GitPullInput is the request for one pull.
 type GitPullInput struct {
 	ActionID uuid.UUID
 	URL      string
@@ -111,7 +114,8 @@ type GitPullInput struct {
 	Path     string
 }
 
-// StartGitPull 校验并登记一次拉取，在后台执行。同一 actionId 返回原操作；目标不是空目录时返回 path_conflict。
+// StartGitPull validates and registers a pull and runs it in the background. The same actionId returns the original
+// operation; when the target is not an empty directory it returns path_conflict.
 func (s *Service) StartGitPull(ctx context.Context, agentID uuid.UUID, in GitPullInput) (store.FolderGitPull, error) {
 	var errs []apperr.FieldError
 	if in.ActionID == uuid.Nil {
@@ -134,7 +138,8 @@ func (s *Service) StartGitPull(ctx context.Context, agentID uuid.UUID, in GitPul
 	if err != nil {
 		return store.FolderGitPull{}, err
 	}
-	// 同一 actionId 的重放返回原操作（原拉取可能已经把目标填上），不再检查目标。
+	// A replay with the same actionId returns the original operation (the original pull may already have filled the
+	// target), without checking the target again.
 	if prior, ok, err := s.Store.FindFolderGitPull(ctx, agentID, in.ActionID); err != nil {
 		return store.FolderGitPull{}, err
 	} else if ok {
@@ -143,7 +148,8 @@ func (s *Service) StartGitPull(ctx context.Context, agentID uuid.UUID, in GitPul
 		}
 		return prior, nil
 	}
-	// 目标不是空目录时直接返回冲突，不留下拉取记录：列表只显示真正受理了的拉取。
+	// When the target is not an empty directory, return a conflict right away and leave no pull record: the list shows
+	// only pulls that were actually accepted.
 	if err := f.checkEmptyTarget(target); err != nil {
 		return store.FolderGitPull{}, err
 	}
@@ -155,7 +161,7 @@ func (s *Service) StartGitPull(ctx context.Context, agentID uuid.UUID, in GitPul
 	return p, nil
 }
 
-// GitPull 返回一次拉取的状态。
+// GitPull returns the status of one pull.
 func (s *Service) GitPull(ctx context.Context, agentID, id uuid.UUID) (store.FolderGitPull, error) {
 	if _, err := s.Store.GetAgent(ctx, agentID); err != nil {
 		return store.FolderGitPull{}, err
@@ -163,7 +169,7 @@ func (s *Service) GitPull(ctx context.Context, agentID, id uuid.UUID) (store.Fol
 	return s.Store.GetFolderGitPull(ctx, agentID, id)
 }
 
-// GitPulls 返回 Agent 最近的 limit 次拉取，新的在前（页面刷新后恢复状态用）。
+// GitPulls returns the Agent's most recent limit pulls, newest first (used to restore state after a page reload).
 func (s *Service) GitPulls(ctx context.Context, agentID uuid.UUID, limit int) ([]store.FolderGitPull, error) {
 	if _, err := s.Store.GetAgent(ctx, agentID); err != nil {
 		return nil, err
@@ -171,7 +177,7 @@ func (s *Service) GitPulls(ctx context.Context, agentID uuid.UUID, limit int) ([
 	return s.Store.ListFolderGitPulls(ctx, agentID, limit)
 }
 
-// checkEmptyTarget 确认目标不存在或是空目录。
+// checkEmptyTarget confirms that the target does not exist or is an empty directory.
 func (f Folder) checkEmptyTarget(rel string) error {
 	root, err := f.open()
 	if err != nil {
@@ -210,16 +216,17 @@ func (s *Service) runGitPull(p store.FolderGitPull, f Folder) {
 	}
 	code, message := s.clone(ctx, p, f)
 	if code != "" {
-		log.Warn("从 Git 拉取失败", "errorCode", code)
+		log.Warn("pull from Git failed", "errorCode", code)
 	} else {
-		log.Info("从 Git 拉取完成")
+		log.Info("pull from Git finished")
 	}
 	if err := s.Store.FinishFolderGitPull(context.WithoutCancel(ctx), p.ID, code, message); err != nil {
-		log.Error("记录拉取结果失败", "err", err)
+		log.Error("failed to record the pull result", "err", err)
 	}
 }
 
-// clone 拉取这一个分支的完整历史（--single-branch，不截断），先放在文件夹之外的临时目录，成功后再移入目标。
+// clone fetches the full history of this one branch (--single-branch, not shallow), first into a temporary directory
+// outside the folder, then moves it into the target on success.
 func (s *Service) clone(ctx context.Context, p store.FolderGitPull, f Folder) (code, message string) {
 	tmp := s.gitPullTemp(p.AgentID, p.ID)
 	defer os.RemoveAll(tmp)
@@ -264,7 +271,8 @@ func (s *Service) clone(ctx context.Context, p store.FolderGitPull, f Folder) (c
 	return "", ""
 }
 
-// classifyCloneFailure 按 git（与 ssh）的输出给出失败码；输出按 C 区域设置（不传 LANG），都是英文。
+// classifyCloneFailure derives the failure code from the output of git (and ssh); the output uses the C locale (LANG is
+// not passed), so it is all English.
 func classifyCloneFailure(url, out string) (code, message string) {
 	lower := strings.ToLower(out)
 	switch {
@@ -295,7 +303,8 @@ func containsAny(s string, subs ...string) bool {
 	return false
 }
 
-// sshTarget 从 SSH 地址取出 ssh -T 的目标（user@host，带端口时加 -p）；不是 SSH 地址时为空。
+// sshTarget extracts the target for ssh -T from an SSH address (user@host, plus -p when there is a port); empty when it
+// is not an SSH address.
 func sshTarget(raw string) string {
 	if strings.HasPrefix(raw, "ssh://") || strings.HasPrefix(raw, "git+ssh://") || strings.HasPrefix(raw, "ssh+git://") {
 		u, err := neturl.Parse(raw)
@@ -314,14 +323,15 @@ func sshTarget(raw string) string {
 	if strings.Contains(raw, "://") {
 		return ""
 	}
-	// scp 式地址 user@host:path
+	// scp-style address user@host:path
 	if i := strings.Index(raw, ":"); i > 0 && !strings.Contains(raw[:i], "/") {
 		return raw[:i]
 	}
 	return ""
 }
 
-// place 把文件夹之外的目录 src 移入文件夹内的 rel：目标必须不存在或是空目录（空目录先删除）。
+// place moves the directory src outside the folder to rel inside the folder: the target must not exist or must be an
+// empty directory (an empty directory is deleted first).
 func (f Folder) place(src, rel string) error {
 	root, err := f.open()
 	if err != nil {
@@ -339,7 +349,8 @@ func (f Folder) place(src, rel string) error {
 	if err := mkdirAll(root, path.Dir(rel)); err != nil {
 		return err
 	}
-	// 目标的上级目录经 os.Root 打开，按目录句柄改名，不经由任何路径重新解析。
+	// The target's parent directory is opened through os.Root and the rename goes through the directory handle, without
+	// re-resolving any path.
 	parent, err := root.Open(path.Dir(rel))
 	if err != nil {
 		return mapErr("path", err)
@@ -361,9 +372,10 @@ func tail(s string, n int) string {
 	return s
 }
 
-// ---------- 启动与停止 ----------
+// ---------- Start and stop ----------
 
-// Start 处理上次运行留下的状态：中断的拉取标为失败并删除其临时目录，清空各回收区。
+// Start handles state left by the previous run: interrupted pulls are marked failed and their temporary directories
+// deleted, and every trash directory is emptied.
 func (s *Service) Start(ctx context.Context) error {
 	pulls, err := s.Store.FailInterruptedFolderGitPulls(ctx)
 	if err != nil {
@@ -380,7 +392,8 @@ func (s *Service) Start(ctx context.Context) error {
 			}
 		}
 	}
-	// 删除可能很慢（大目录），不阻塞启动与停止；没删完的下次启动继续。
+	// Deletion may be slow (large directories), so it does not block startup or shutdown; whatever is not deleted
+	// continues at the next startup.
 	go func() {
 		for _, t := range trashes {
 			_ = os.RemoveAll(t)
@@ -389,7 +402,7 @@ func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop 取消进行中的拉取并等待它们记录结果。
+// Stop cancels pulls in progress and waits for them to record their results.
 func (s *Service) Stop(ctx context.Context) error {
 	s.cancel()
 	done := make(chan struct{})

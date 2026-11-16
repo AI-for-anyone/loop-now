@@ -14,7 +14,7 @@ const globalNavigation = () => within(sidebar()).queryAllByRole('link').filter(l
 const navLink = (name: string) => within(sidebar()).getByRole('link', { name })
 const query = (name: string) => `/?${new URLSearchParams({ project: name })}`
 
-// 概览事件流：按范围筛选时地址带查询参数，所以按包含而不是结尾查找。
+// Overview event stream: when filtering by scope the URL carries query parameters, so match by "contains" rather than by suffix.
 const stream = () => FakeEventSource.instances.filter((s) => s.url.includes('/overview/events')).at(-1)!
 async function snapshot(agents: Schemas['AgentOverview'][]) {
   await act(async () => stream().open())
@@ -24,7 +24,7 @@ async function snapshot(agents: Schemas['AgentOverview'][]) {
   })
 }
 
-// 记录用量与异常请求的查询参数。
+// Record the query parameters of the usage and anomaly requests.
 function recordingHandlers(usage: Schemas['UsagePage'] = usagePage([]), anomalies: Schemas['AnomalyPage'] = anomalyPage([])) {
   const queries = { usage: [] as URLSearchParams[], anomalies: [] as URLSearchParams[] }
   return {
@@ -56,7 +56,7 @@ describe('概览按项目或平台筛选', () => {
     expect(navLink('概览')).toHaveAttribute('aria-current', 'page')
     expect(navLink('任务')).toHaveAttribute('href', `${base(other.name)}/tasks`)
     expect(navLink('项目设置')).toHaveAttribute('href', `${base(other.name)}/settings`)
-    // 全局入口在项目里照样可达。
+    // The global entries are still reachable inside a project.
     expect(globalNavigation()).toHaveLength(4)
     const table = await screen.findByRole('table', { name: /Agent/ })
     expect(within(table).getByText('规划助手')).toBeInTheDocument()
@@ -120,7 +120,7 @@ describe('概览按项目或平台筛选', () => {
     expect(within(sidebar()).queryByRole('list', { name: 'Agent' })).toBeNull()
     await user.click(screen.getByRole('button', { name: '回到全部' }))
     await waitFor(() => expect(router.state.location.search).toBe(''))
-    // 新地址在 transition 里才渲染到页面，等页面跟上。
+    // The new URL reaches the page only inside a transition; wait for the page to catch up.
     await waitFor(() => expect(screen.getByRole('combobox', { name: '范围' })).toHaveDisplayValue('全部'))
   })
 

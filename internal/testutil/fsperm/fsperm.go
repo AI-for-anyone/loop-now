@@ -1,11 +1,15 @@
-// Package fsperm 给测试用：把目录或文件放开给所有人，用来核对被测代码确实会把它收紧。
-// Windows 的临时目录在用户目录下，本来就只有当前用户能访问，不先放开就分不出是代码收紧的还是从上级继承来的。
+// Package fsperm is for tests: it opens a directory or file up to everyone, so a test can check that the code under
+// test really tightens it again.
+// On Windows the temporary directory lives under the user directory and is already accessible only to the current
+// user; without opening it up first, there is no telling whether the code tightened it or it was inherited from the
+// parent.
 package fsperm
 
 import "testing"
 
-// Open 让 path 对所有人可访问：Unix 上目录 0777、文件 0666；Windows 上加一条允许 Everyone 完全访问的 ACE，
-// 目录上的这条可继承，之后在其中新建的东西也对所有人可访问。
+// Open makes path accessible to everyone: on Unix 0777 for a directory and 0666 for a file; on Windows it adds an
+// ACE that allows Everyone full access, inheritable on a directory, so anything created in it later is also
+// accessible to everyone.
 func Open(t testing.TB, path string) {
 	t.Helper()
 	if err := open(path); err != nil {

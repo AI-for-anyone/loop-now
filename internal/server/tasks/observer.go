@@ -12,7 +12,7 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// Observer 将实例进程记录关联到真实Agent和任务轮次；常态记录保持原路径。
+// Observer links instance process records to the real Agent and task turn; regular records keep their original path.
 type Observer struct {
 	Store   *store.Store
 	Normal  executor.Observer
@@ -123,7 +123,7 @@ func (o *Observer) failed(runtime uuid.UUID, run *uuid.UUID, err error) {
 			attrs = append(attrs, "nodeRunId", taskNodeRef(t.NodeRunID), "inboxMessageId", t.TriggerInboxID, "requestId", t.RequestID)
 		}
 	}
-	o.Log.Warn("写入任务运行记录失败", attrs...)
+	o.Log.Warn("failed to write the task run record", attrs...)
 }
 
 var _ executor.Observer = (*Observer)(nil)

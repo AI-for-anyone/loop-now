@@ -18,10 +18,12 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// ErrCredentialUnavailable 表示该 Agent 至少有一条凭证当前无法使用（需要重新录入或已失效）。
+// ErrCredentialUnavailable means at least one credential of the Agent cannot be used right now (it must be entered
+// again or has expired).
 var ErrCredentialUnavailable = errors.New("凭证不可用")
 
-// Snapshot 是执行器启动 Pi 所需的配置快照，含凭证内容。只在内存中使用。
+// Snapshot is the config snapshot the executor needs to start Pi, including credential contents. It is used only in
+// memory.
 type Snapshot struct {
 	// Resolved level for this round. Nil is reserved for legacy task snapshots.
 	ThinkingLevel   *string
@@ -41,7 +43,8 @@ type Snapshot struct {
 	Provider             string
 	ModelID              string
 	PromptLayers         *prompts.Layers
-	// ContextProjectID 是可见的上下文层：项目 Agent（含任务内实例）为其项目，平台 Agent 为空（全局）。
+	// ContextProjectID is the visible context layer: the project for a project Agent (including instances inside a
+	// task), nil (global) for a platform Agent.
 	ContextProjectID *uuid.UUID
 	Prompt           string
 	Skills           []SkillSnapshot
@@ -50,37 +53,43 @@ type Snapshot struct {
 	ModelEnv         map[string]string
 	CLIPayloads      map[string]clitemplate.Payload
 	Session          store.AgentSession
-	// ForkSessionFile 仅任务实例首次启动使用，由平台稳定复制生成，不来自用户配置。
+	// ForkSessionFile is used only on the first start of a task instance; the platform produces it by a stable copy,
+	// and it never comes from user config.
 	ForkSessionFile string
-	// Plugins 是已授权插件交给 Pi 的东西，启动 Pi 时读取。
+	// Plugins is what the granted plugins hand to Pi; it is read when Pi starts.
 	Plugins PluginAssets
-	// ProviderState 是插件提供方订阅账号的状态（plugins/SPEC.md §13）：模型凭证为 plugin_state 时才有。
+	// ProviderState is the state of a plugin provider subscription account (plugins/SPEC.md §13); present only when the
+	// model credential is plugin_state.
 	ProviderState *ProviderState
-	// Local 是个人版“本机模式”交给 Pi 的东西：按基础 Agent 与其项目的当前设置在启动 Pi 时读取（任务内实例也一样，
-	// 不进任务快照）；它的 Identity 变化时 Pi 在下一次派发重启。
+	// Local is what the personal edition's "local mode" hands to Pi: read when Pi starts, from the current settings of
+	// the base Agent and its project (the same for instances inside a task; it does not go into the task snapshot);
+	// when its Identity changes, Pi restarts at the next dispatch.
 	Local LocalAccess
 }
 
-// LocalAccess 是本机模式在启动 Pi 时生效的部分。
+// LocalAccess is the part of local mode that takes effect when Pi starts.
 type LocalAccess struct {
-	// Directories 是生效的本机目录（“绑定本机目录”关闭时为空）：项目的在前、Agent 自己的在后，同一路径只出现一次。
-	// 目录是否存在在写系统提示时判断，只列出存在的。
+	// Directories are the effective local directories (empty when "Bind local directories" is off): the project's
+	// first, then the Agent's own, each path only once. Whether a directory exists is decided when the system prompt is
+	// written, and only existing ones are listed.
 	Directories []LocalDirectory
-	// UserPath 为真时把用户的 PATH 接在执行 PATH 之后（“用本机的 CLI”）。
+	// UserPath, when true, appends the user's PATH after the execution PATH ("Use local CLIs").
 	UserPath bool
-	// Logins 为真时 Pi 及其子进程的 HOME（Windows 上另有 USERPROFILE、APPDATA、LOCALAPPDATA）是服务端用户真实的
-	// （“用本机的登录状态”）；Loop Now 给 Agent 配了账号的 CLI 仍以 Agent 的独立 HOME 运行。
+	// Logins, when true, makes the HOME of Pi and its child processes (plus USERPROFILE, APPDATA and LOCALAPPDATA on
+	// Windows) the real one of the server's user ("Use local logins"); CLIs for which Loop Now configured an account
+	// for the Agent still run with the Agent's own HOME.
 	Logins bool `json:"logins,omitempty"`
 }
 
-// LocalDirectory 是一个生效的本机目录。
+// LocalDirectory is one effective local directory.
 type LocalDirectory struct {
 	Path      string `json:"path"`
 	Note      string `json:"note,omitempty"`
-	Inherited bool   `json:"inherited,omitempty"` // 来自项目的清单
+	Inherited bool   `json:"inherited,omitempty"` // from the project's list
 }
 
-// Identity 是决定 Pi 是否需要重启的指纹：目录（含备注与来源）、PATH 与登录状态两个开关，不含目录此刻是否存在。
+// Identity is the fingerprint that decides whether Pi needs a restart: directories (including notes and origin) and the
+// PATH and logins switches, but not whether the directories exist right now.
 func (l LocalAccess) Identity() string {
 	if len(l.Directories) == 0 && !l.UserPath && !l.Logins {
 		return ""
@@ -90,18 +99,20 @@ func (l LocalAccess) Identity() string {
 	return hex.EncodeToString(sum[:])
 }
 
-// PluginAssets 是 Agent 已授权插件的 Agent 侧（plugins/SPEC.md §2.1），路径都是绝对路径；没有授权插件或全局停用时为空。
+// PluginAssets is the agent side of the Agent's granted plugins (plugins/SPEC.md §2.1); all paths are absolute. It is
+// empty when no plugin is granted or plugins are disabled globally.
 type PluginAssets struct {
-	IDs        []string                   // 挂载的插件
-	Extensions []string                   // 每个一条 -e，在平台自己的 -e 之后
-	Skills     []string                   // 每个一条 --skill
-	MCPServers map[string]json.RawMessage // 合并写入 Pi 目录的 mcp.json，并加 -e builtin:mcp
-	Bin        []string                   // 加入 PATH
-	Env        map[string]string          // 插件配置与账号
+	IDs        []string                   // mounted plugins
+	Extensions []string                   // one -e each, after the platform's own -e
+	Skills     []string                   // one --skill each
+	MCPServers map[string]json.RawMessage // merged into mcp.json in the Pi directory, plus -e builtin:mcp
+	Bin        []string                   // added to PATH
+	Env        map[string]string          // plugin config and accounts
 }
 
-// ProviderState 是插件提供方订阅账号的一个状态版本：启动 Pi 前 Agent 的 auth.json 链接到 Dir 里的 auth.json，
-// Paths（HOME 下的相对路径，/ 分隔）链接到 Dir 里的同名路径；开着“用本机的登录状态”时不建 HOME 下的链接。
+// ProviderState is one state version of a plugin provider subscription account: before Pi starts, the Agent's auth.json
+// is linked to the auth.json in Dir, and Paths (relative paths under HOME, / separated) are linked to the same-named
+// paths in Dir; while "Use local logins" is on, no links are created under HOME.
 type ProviderState struct {
 	PluginID  string
 	VersionID uuid.UUID
@@ -109,7 +120,7 @@ type ProviderState struct {
 	Paths     []string
 }
 
-// Identity 是状态的进程身份：换版本、换路径都要重启 Pi。
+// Identity is the process identity of the state: a change of version or of paths requires restarting Pi.
 func (p *ProviderState) Identity() string {
 	if p == nil {
 		return ""
@@ -119,17 +130,18 @@ func (p *ProviderState) Identity() string {
 	return hex.EncodeToString(sum[:])
 }
 
-// ProviderStateFunc 返回模型凭证为 plugin_state 时的状态：plugin 是凭证所属插件，version 是绑定的版本。
+// ProviderStateFunc returns the state when the model credential is plugin_state: plugin is the plugin the credential
+// belongs to, version is the bound version.
 type ProviderStateFunc func(ctx context.Context, plugin, provider string, version uuid.UUID) (*ProviderState, error)
 
-// SkillSnapshot 是一个 Skill 副本的文件清单。
+// SkillSnapshot is the file list of one Skill copy.
 type SkillSnapshot struct {
 	Name  string
 	Files []store.SkillFile
 }
 
-// ExecutionSnapshot 读取 Agent 的执行配置。任一凭证不可用时返回 ErrCredentialUnavailable，
-// 不会只返回部分凭证。
+// ExecutionSnapshot reads the Agent's execution config. When any credential is unavailable it returns
+// ErrCredentialUnavailable and never returns only some of the credentials.
 func (s *Service) ExecutionSnapshot(ctx context.Context, agentID uuid.UUID) (Snapshot, error) {
 	captured, err := s.Store.CaptureExecutionIdentity(ctx, agentID)
 	if err != nil {
@@ -171,7 +183,8 @@ func (s *Service) ExecutionSnapshot(ctx context.Context, agentID uuid.UUID) (Sna
 		}
 		snap.Skills = append(snap.Skills, SkillSnapshot{Name: full.Name, Files: full.Files})
 	}
-	// 文件夹来源已退役：常态与平台 Agent 的文件夹就是它的工作目录，启动时不再同步任何来源。
+	// Folder sources are retired: the folder of a regular or platform Agent is its working directory, and no source is
+	// synced at startup any more.
 	snap.CLIs = captured.CLIs
 	managed := captured.ModelAuthManaged
 	if managed {
@@ -271,7 +284,8 @@ func (s *Service) ExecutionSnapshot(ctx context.Context, agentID uuid.UUID) (Sna
 	return snap, nil
 }
 
-// ResolveProviderState 在模型凭证为 plugin_state 时给出状态目录与随账号走的路径；其余凭证返回 nil。
+// ResolveProviderState returns the state directory and the paths that travel with the account when the model credential
+// is plugin_state; nil for any other credential.
 func ResolveProviderState(ctx context.Context, fn ProviderStateFunc, snap Snapshot) (*ProviderState, error) {
 	if snap.ModelCredential.Kind() != modelcredential.PluginState {
 		return nil, nil
@@ -282,32 +296,32 @@ func ResolveProviderState(ctx context.Context, fn ProviderStateFunc, snap Snapsh
 	return fn(ctx, snap.ModelCredential.Plugin(), snap.Provider, snap.ModelBinding.VersionID)
 }
 
-// ReadBlob 读取内容。
+// ReadBlob reads content.
 func (s *Service) ReadBlob(ctx context.Context, sha string) ([]byte, error) {
 	return s.Store.ReadBlob(ctx, sha)
 }
 
-// SourceFilesForSync 返回来源的全部文件记录（含待删除）。
+// SourceFilesForSync returns all file records of a source (including those pending deletion).
 func (s *Service) SourceFilesForSync(ctx context.Context, sourceID uuid.UUID) ([]store.SyncFile, error) {
 	return s.Store.ListSourceFilesForSync(ctx, sourceID)
 }
 
-// MarkSourceSynced 记录来源已同步，并清除已处理的人工修改记录。
+// MarkSourceSynced records that a source has been synced and clears the processed records of manual edits.
 func (s *Service) MarkSourceSynced(ctx context.Context, sourceID uuid.UUID, processed []store.SyncFile) error {
 	return s.Store.MarkSourceSynced(ctx, sourceID, processed)
 }
 
-// RecordSessionFile 记录已写入磁盘的会话文件。
+// RecordSessionFile records a session file that has been written to disk.
 func (s *Service) RecordSessionFile(ctx context.Context, agentID uuid.UUID, path string) error {
 	return s.Store.RecordSessionFile(ctx, agentID, path)
 }
 
-// MarkSessionMissing 把会话标记为丢失，runID 为发现丢失的那次执行。
+// MarkSessionMissing marks the session as lost; runID is the run that found it missing.
 func (s *Service) MarkSessionMissing(ctx context.Context, agentID uuid.UUID, runID *uuid.UUID) error {
 	return s.Store.MarkSessionMissing(ctx, agentID, runID)
 }
 
-// DeletedAgentIDs 返回已删除的 Agent。
+// DeletedAgentIDs returns the deleted Agents.
 func (s *Service) DeletedAgentIDs(ctx context.Context) ([]uuid.UUID, error) {
 	return s.Store.DeletedAgentIDs(ctx)
 }

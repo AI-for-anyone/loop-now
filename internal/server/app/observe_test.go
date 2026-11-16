@@ -65,7 +65,7 @@ func indexOf(list []string, s string) int {
 	return -1
 }
 
-// 运行记录、用量与异常列表走完整链路：执行器 → 记录器 → 数据库 → 接口。
+// Run records, usage and the anomaly list go through the full chain: executor -> recorder -> database -> API.
 func TestObservabilityWithFakePi(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)
@@ -119,7 +119,8 @@ func TestObservabilityWithFakePi(t *testing.T) {
 	}
 }
 
-// 重启前后：CLI 安装失败仍可见；进行中的回复以服务端重启中断出现在异常列表中。
+// Across a restart: CLI install failures stay visible; a reply in progress shows up in the anomaly list as interrupted
+// by a server restart.
 func TestObservabilityAcrossRestart(t *testing.T) {
 	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("not a zip")) }))
 	defer bad.Close()
@@ -200,7 +201,8 @@ func (s *syncBuffer) String() string {
 	return s.b.String()
 }
 
-// 记录 Pi 进程启动事件时数据库写入失败：回复照常完成，日志中有警告。
+// Writing to the database fails while recording a Pi process start event: the reply completes as usual and the log has
+// a warning.
 func TestRecordFailureDoesNotAffectRun(t *testing.T) {
 	w := newWorld(t)
 	logs := &syncBuffer{}
@@ -222,7 +224,7 @@ func TestRecordFailureDoesNotAffectRun(t *testing.T) {
 	if r := s.replies(a); len(r) != 1 || r[0].Run.Status != "completed" {
 		t.Fatalf("记录失败不应影响回复：%+v", r)
 	}
-	if !strings.Contains(logs.String(), "写入运行记录失败") || !strings.Contains(logs.String(), "pi.started") {
+	if !strings.Contains(logs.String(), "failed to write the run record") || !strings.Contains(logs.String(), "pi.started") {
 		t.Fatalf("日志中应有记录失败的警告：\n%s", logs.String())
 	}
 }
@@ -245,7 +247,8 @@ func parseLogs(t *testing.T, raw string) []logLine {
 	return out
 }
 
-// 服务端日志：每条回复开始与结束各一行 info，统一带 runId、agentId；接口错误带 requestId；不含消息正文，不写日志文件。
+// Server logs: one info line at the start and one at the end of each reply, all with runId and agentId; API errors
+// carry requestId; no message bodies; no log files are written.
 func TestServerLogs(t *testing.T) {
 	w := newWorld(t)
 	w.cfg.LogFormat = "json"
@@ -267,7 +270,7 @@ func TestServerLogs(t *testing.T) {
 			info = append(info, l)
 		}
 	}
-	if len(info) != 2 || info[0]["msg"] != "回复开始" || info[1]["msg"] != "回复结束" {
+	if len(info) != 2 || info[0]["msg"] != "reply started" || info[1]["msg"] != "reply ended" {
 		t.Fatalf("这条回复在 info 级别应只有开始与结束两行：%v", info)
 	}
 	end := info[1]
@@ -281,13 +284,13 @@ func TestServerLogs(t *testing.T) {
 		t.Fatal("日志中不应出现消息正文")
 	}
 
-	// 失败的回复：结束日志带错误码。
+	// A failed reply: the end log carries the error code.
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "!error=模拟失败 再来"})
 	s.waitIdle(a)
 	failed := s.replies(a)[2].Run
 	found := false
 	for _, l := range parseLogs(t, logs.String()) {
-		if l["msg"] == "回复结束" && l["runId"] == failed.ID.String() {
+		if l["msg"] == "reply ended" && l["runId"] == failed.ID.String() {
 			found = l["status"] == "failed" && l["errorCode"] == "pi_error"
 		}
 	}
@@ -295,7 +298,7 @@ func TestServerLogs(t *testing.T) {
 		t.Fatalf("失败回复的结束日志应带错误码：%+v", failed)
 	}
 
-	// 接口内部出错：错误日志带请求编号，与响应头一致。
+	// Internal API error: the error log carries the request ID, matching the response header.
 	st, err := store.Open(context.Background(), db.Options{Dir: config.DBDir(w.cfg.DataDir)})
 	if err != nil {
 		t.Fatal(err)
@@ -327,7 +330,7 @@ func TestServerLogs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 不写日志文件。
+	// No log files are written.
 	_ = filepath.WalkDir(w.cfg.WorkRoot, func(p string, d os.DirEntry, err error) error {
 		if err == nil && !d.IsDir() && strings.HasSuffix(p, ".log") {
 			t.Errorf("服务端不应写日志文件：%s", p)
@@ -336,7 +339,8 @@ func TestServerLogs(t *testing.T) {
 	})
 }
 
-// readOverviewSnapshot 连接概览事件流（可带 Last-Event-ID），返回首个事件。
+// readOverviewSnapshot connects to the overview event stream (optionally with Last-Event-ID) and returns the first
+// event.
 func (s *server) firstOverviewEvent(lastID string) (event string, data []byte) {
 	s.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -365,7 +369,8 @@ func (s *server) firstOverviewEvent(lastID string) (event string, data []byte) {
 	return "", nil
 }
 
-// 8.1：强制结束后重启，遗留回复记为服务端重启中断并出现在异常列表；概览快照显示正确状态。
+// 8.1: restart after a forced kill: leftover replies are recorded as interrupted by a server restart and show up in the
+// anomaly list; the overview snapshot shows the correct status.
 func TestRecoveryCrashRecords(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)
@@ -373,7 +378,7 @@ func TestRecoveryCrashRecords(t *testing.T) {
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "!sleep=30s 很长"})
 	s.waitRunning(a)
 	s.must(202, "POST", a+"/messages", map[string]any{"text": "排队的", "whenBusy": "queue"})
-	_ = s.a.Conv.Stop(context.Background()) // 模拟强制结束：不走优雅退出
+	_ = s.a.Conv.Stop(context.Background()) // simulate a forced kill: no graceful exit
 	s.a.ReleaseInstanceLocks()
 	s2 := w.start(nil)
 	defer s2.stop()
@@ -399,7 +404,8 @@ func TestRecoveryCrashRecords(t *testing.T) {
 	}
 }
 
-// 8.2：客户端带着事件流里没有的位置重连（例如服务端重启过、事件已裁掉）：得到快照，数据库中的运行记录与用量不受影响。
+// 8.2: the client reconnects with a position not in the event stream (for example, the server restarted and the events
+// were trimmed): it gets a snapshot, and run records and usage in the database are not affected.
 func TestRecoveryUnknownStreamPosition(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(nil)
@@ -421,7 +427,8 @@ func TestRecoveryUnknownStreamPosition(t *testing.T) {
 	s.waitIdle(a)
 }
 
-// 8.3：打断超时强制结束：记录停止原因，回复以已打断结束，时间线以强制结束与结束条目收尾。
+// 8.3: forced kill after an interrupt timeout: the stop reason is recorded, the reply ends as interrupted, and the
+// timeline ends with a forced-kill entry and an end entry.
 func TestRecoveryAbortTimeout(t *testing.T) {
 	w := newWorld(t)
 	s := w.start(func(c *config.Config) { c.AbortTimeout = time.Second })

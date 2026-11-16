@@ -77,7 +77,8 @@ func signalDeadline(s *Service) chan struct{} {
 // expireInDB makes the operation's DB deadline due now.
 func expireInDB(t *testing.T, pool *db.DB, id uuid.UUID) {
 	t.Helper()
-	// 紧跟在 created_at 之后 1 微秒：CHECK 要求 deadline_at > created_at，而 Windows 的时钟粒度可能让 clock_timestamp() 与 created_at 相等。
+	// 1 microsecond right after created_at: the CHECK requires deadline_at > created_at, and Windows clock granularity can
+	// make clock_timestamp() equal to created_at.
 	if _, err := pool.Exec(context.Background(), `UPDATE cli_credential_import_operations SET deadline_at=created_at+1 WHERE id=$1`, id); err != nil {
 		t.Fatal(err)
 	}
@@ -280,8 +281,11 @@ func TestCLIImportPublicCAOnlyBeforeExtraction(t *testing.T) {
 	}
 }
 
-// 到期的操作在写库失败时由只碰数据库的维护循环继续重试，恢复后过期；Close 停掉维护循环。
-// （SQLite 是进程内的库，没有“提交已生效但回执丢失”的情形，原来基于此构造的未决接收不再出现。）
+// TestCLIImportExpiryMaintenanceRetriesAfterWriteFailure: when writing to the database fails, an expired operation
+// keeps being retried by the maintenance loop, which only touches the database, and it expires once writes recover;
+// Close stops the maintenance loop.
+// (SQLite is an in-process database, so there is no "commit took effect but the acknowledgement was lost" case, and
+// the pending receipt formerly constructed on that basis no longer occurs.)
 func TestCLIImportExpiryMaintenanceRetriesAfterWriteFailure(t *testing.T) {
 	e := newImportEnv(t)
 	ctx := context.Background()
@@ -293,7 +297,7 @@ func TestCLIImportExpiryMaintenanceRetriesAfterWriteFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	expireInDB(t, e.st.Pool, id)
-	// 写库失败：拒绝改动导入操作的任何 UPDATE。
+	// Database write failure: reject any UPDATE to import operations.
 	if _, err := e.st.Pool.Exec(ctx, `CREATE TRIGGER deny_import_update BEFORE UPDATE ON cli_credential_import_operations BEGIN SELECT RAISE(ABORT, 'synthetic outage'); END`); err != nil {
 		t.Fatal(err)
 	}
@@ -301,7 +305,7 @@ func TestCLIImportExpiryMaintenanceRetriesAfterWriteFailure(t *testing.T) {
 	s.startMaintenanceLocked()
 	done := s.maintenanceDone
 	s.mu.Unlock()
-	time.Sleep(600 * time.Millisecond) // 至少两轮维护
+	time.Sleep(600 * time.Millisecond) // at least two maintenance rounds
 	if op, err := s.Get(ctx, e.project, id); err != nil || op.Status != "pending" {
 		t.Fatal("expiry committed during the outage", err)
 	}

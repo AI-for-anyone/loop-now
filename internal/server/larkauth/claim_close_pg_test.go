@@ -77,7 +77,8 @@ func testLarkClaimClose(t *testing.T, expired bool) {
 	case <-ctx.Done():
 		t.Fatal("ready claim not entered")
 	}
-	// 测试占住写连接：放行后领取续期的写事务停在等写连接上。
+	// The test holds the write connection: once released, the write transaction that claims the renewal blocks waiting
+	// for the write connection.
 	release := sqlitetest.HoldWriter(t, f.st.Pool)
 	releaseClaim()
 	sqlitetest.WaitWriteWaiters(t, ctx, f.st.Pool, 1)

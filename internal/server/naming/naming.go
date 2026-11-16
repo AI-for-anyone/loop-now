@@ -1,8 +1,9 @@
-// Package naming 定义组织名、项目名与 Agent 名的共同规则。
-// 这些名称会组成 Inbox 地址（`组织名/项目名/Agent名`，任务内再加 `#任务ID`），
-// 所以不能含分隔符，不能与 `@` 开头的人员地址或形如 UUID 的内部 ID 混淆。
+// Package naming defines the rules shared by organization, project and Agent names.
+// These names make up Inbox addresses (`org/project/agent`, plus `#taskID` inside a task),
+// so they must not contain separators and must not be confusable with person addresses starting with `@` or with
+// UUID-shaped internal IDs.
 //
-// api/openapi.yaml 中 EntityName 的 pattern 与本包等价，由 httpapi 的测试比对。
+// The pattern of EntityName in api/openapi.yaml is equivalent to this package; httpapi's tests compare the two.
 package naming
 
 import (
@@ -12,17 +13,17 @@ import (
 	"unicode/utf8"
 )
 
-// MaxLen 是名称的最大字符数（按 Unicode 码点计）。
+// MaxLen is the maximum number of characters in a name (counted in Unicode code points).
 const MaxLen = 100
 
 var uuidForm = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
-// IsUUIDForm 报告 s 是否为 8-4-4-4-12 的十六进制 UUID 写法（不区分大小写）。
-// 名称不能取这种写法；地址中这种写法的单段值按 Agent 内部 ID 解析。
+// IsUUIDForm reports whether s is written as an 8-4-4-4-12 hex UUID (case-insensitive).
+// Names cannot take this form; a single-segment address value in this form is resolved as an Agent's internal ID.
 func IsUUIDForm(s string) bool { return uuidForm.MatchString(s) }
 
-// Validate 检查名称，返回第一条违反的规则；满足全部规则时返回空字符串。
-// what 是出现在提示中的名称类别，例如“Agent 名称”。
+// Validate checks a name and returns the first rule it breaks, or an empty string when it satisfies all rules.
+// what is the kind of name shown in the message, for example "Agent 名称" ("Agent name").
 func Validate(what, name string) string {
 	switch {
 	case name == "":
@@ -45,8 +46,10 @@ func Validate(what, name string) string {
 	return ""
 }
 
-// AgentAddress 返回 Agent 的 Inbox 地址：项目内的 Agent 为 `组织名/项目名/Agent名`，平台持有的 Agent 为名称本身。
-// 任一段名称不满足规则（规则生效前创建）时 ok 为 false，此时只能用 Agent 的内部 ID 寻址。
+// AgentAddress returns an Agent's Inbox address: `org/project/agent` for an Agent in a project, and the name itself for
+// a platform Agent.
+// When any segment breaks the rules (created before the rules took effect) ok is false, and the Agent can then only
+// be addressed by its internal ID.
 func AgentAddress(org, project, agent string, platform bool) (addr string, ok bool) {
 	if Validate("", agent) != "" {
 		return "", false

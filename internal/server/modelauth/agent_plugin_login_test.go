@@ -18,7 +18,8 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// platformAgent 建一个平台 Agent（模型提供方为 provider），granted 时把插件 grokish 授权给它。
+// platformAgent creates a platform Agent whose model provider is provider and, when granted is true, grants it the
+// plugin grokish.
 func (e *pluginEnv) platformAgent(t *testing.T, name, provider string, granted bool) store.Agent {
 	t.Helper()
 	ctx := context.Background()
@@ -48,7 +49,8 @@ func (e *pluginEnv) waitAgent(t *testing.T, agent, id uuid.UUID, ok func(Operati
 	return last
 }
 
-// login 跑完一次平台 Agent 的插件提供方登录（回答选择题）并返回成功后的凭证。
+// loginAgent runs one plugin provider login of a platform Agent to the end (answering the multiple-choice question) and
+// returns the credential after success.
 func (e *pluginEnv) loginAgent(t *testing.T, a store.Agent) Metadata {
 	t.Helper()
 	ctx := context.Background()
@@ -74,9 +76,11 @@ func (e *pluginEnv) loginAgent(t *testing.T, a store.Agent) Metadata {
 	return *st.Credential
 }
 
-// 平台 Agent 在自己的模型凭证里登录插件提供方：问题、授权地址与设备码经操作视图给出（设备码只在内存里），
-// 只能回答当前那个问题；成功后在这个 Agent 的模型认证版本里加一个版本，“凭证”只记下插件，状态目录以版本 ID 命名；
-// 清理器保留当前版本，重登、清除凭证、删除 Agent 后旧目录可以删。
+// A platform Agent logs in to a plugin provider in its own model credential: questions, the authorization URL and the
+// device code are given through the operation view (the device code only in memory), and only the current question can
+// be answered; on success one version is added to this Agent's model auth versions, the "credential" records only the
+// plugin, and the state directory is named after the version ID; the sweeper keeps the current version, and old
+// directories can be deleted after a re-login, clearing the credential or deleting the Agent.
 func TestPlatformAgentPluginLogin(t *testing.T) {
 	e := newPluginEnv(t, false)
 	ctx := context.Background()
@@ -121,12 +125,13 @@ func TestPlatformAgentPluginLogin(t *testing.T) {
 		waiting.DeviceCode.ExpiresAt == nil || waiting.AuthorizationURL == nil || *waiting.AuthorizationURL != "https://accounts.example.test/authorize?state=s" {
 		t.Fatalf("进行中的视图：%+v", waiting)
 	}
-	close(e.helper.gate) // 关上后之后的登录不再停
+	close(e.helper.gate) // once closed, later logins no longer pause
 	done := e.waitAgent(t, a.ID, op.ID, func(o Operation) bool { return terminal(o.Status) })
 	if done.Status != "succeeded" || done.DeviceCode != nil || done.Prompt != nil || done.AuthorizationURL != nil || done.ErrorCode != nil {
 		t.Fatalf("登录结果：%+v", done)
 	}
-	// 提交之后才通知（与操作变成终态不在同一时刻），等到它。
+	// The notification comes only after the commit (not at the same moment the operation becomes terminal); wait for
+	// it.
 	waitAuth(t, func() bool { return changed.Load() == 1 })
 	st, err := e.svc.State(ctx, a.ID)
 	if err != nil || st.Credential == nil {
@@ -152,7 +157,7 @@ func TestPlatformAgentPluginLogin(t *testing.T) {
 		t.Fatalf("暂存目录应已改名：%v", pending)
 	}
 
-	// 重登：新版本、全新状态目录；清理器只保留当前版本。
+	// Re-login: new version, brand-new state directory; the sweeper keeps only the current version.
 	second := *e.loginAgent(t, a).VersionID
 	if second == first || e.helper.homes[0] == e.helper.homes[1] {
 		t.Fatal("重登要用新版本与全新状态目录")
@@ -165,14 +170,14 @@ func TestPlatformAgentPluginLogin(t *testing.T) {
 	if err != nil || len(removed) != 1 || removed[0] != first {
 		t.Fatalf("清理旧版本：%v %v", removed, err)
 	}
-	// 清除凭证：当前版本也不再保留。
+	// Clear the credential: the current version is no longer kept either.
 	if err := e.svc.Clear(ctx, a.ID); err != nil {
 		t.Fatal(err)
 	}
 	if keep, _ = e.st.ProviderStateVersionsInUse(ctx); keep[second] {
 		t.Fatal("清除凭证后不再保留")
 	}
-	// 删除 Agent：它的当前版本不再保留。
+	// Delete the Agent: its current version is no longer kept.
 	third := *e.loginAgent(t, a).VersionID
 	if keep, _ = e.st.ProviderStateVersionsInUse(ctx); !keep[third] {
 		t.Fatal("当前版本要保留")
@@ -185,8 +190,10 @@ func TestPlatformAgentPluginLogin(t *testing.T) {
 	}
 }
 
-// 平台 Agent 登录插件提供方的拒绝与失败：没授权 409、提供方不对 422、组件没装配不可用；扩展加载失败与插件不可用以错误码结束，
-// 删掉暂存目录；取消后不能再回答。项目 Agent 照旧用项目账号。
+// Refusals and failures when a platform Agent logs in to a plugin provider: not granted is 409, wrong provider is 422,
+// components not assembled is unavailable; extension load failure and plugin unavailable end with an error code and
+// delete the staging directory; after cancelling, no more answers are accepted. A project Agent still uses the project
+// account as before.
 func TestPlatformAgentPluginLoginRefusalsAndFailures(t *testing.T) {
 	e := newPluginEnv(t, false)
 	ctx := context.Background()

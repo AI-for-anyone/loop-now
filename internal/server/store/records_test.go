@@ -66,7 +66,7 @@ func (e *recEnv) send(start bool, whenBusy string) store.Run {
 	return r
 }
 
-// 执行状态的变化与对应事件在同一事务中写入，时间点写入 runs。
+// A run's status change and its event are written in the same transaction, and the timestamps are written to runs.
 func TestRunLifecycleEventsAndTimes(t *testing.T) {
 	e := newRecEnv(t)
 	active := e.send(true, "")
@@ -90,7 +90,7 @@ func TestRunLifecycleEventsAndTimes(t *testing.T) {
 	if err := e.s.SetRunRunning(e.ctx, active.ID, 1); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.s.SetRunRunning(e.ctx, active.ID, 1); err != nil { // 重复调用不重复记录
+	if err := e.s.SetRunRunning(e.ctx, active.ID, 1); err != nil { // repeated calls do not record again
 		t.Fatal(err)
 	}
 	if _, err := e.s.MarkAborting(e.ctx, e.agent, queued.ID); err != nil {
@@ -128,11 +128,12 @@ func TestRunLifecycleEventsAndTimes(t *testing.T) {
 	_ = started
 }
 
-// 事件插入失败时，状态变化一并回滚。
+// When inserting the event fails, the status change is rolled back with it.
 func TestEventFailureRollsBackState(t *testing.T) {
 	e := newRecEnv(t)
 	r := e.send(true, "")
-	// 让结束事件的插入失败（instance_id 外的列都受约束保护，这里用触发器模拟写入失败）。
+	// Make inserting the end event fail (every column except instance_id is protected by constraints, so a trigger is
+	// used here to simulate a write failure).
 	if _, err := e.s.Pool.Exec(e.ctx, `CREATE TRIGGER ev.fail_event BEFORE INSERT ON lifecycle_events BEGIN SELECT RAISE(ABORT, 'boom'); END`); err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +150,7 @@ func TestMigrationConstraints(t *testing.T) {
 	bad := []store.UsageRecord{
 		{AgentID: e.agent, Kind: "assistant", Input: -1},
 		{AgentID: e.agent, Kind: "bogus"},
-		{AgentID: e.agent, Kind: "assistant", Provider: "anthropic"}, // 只有提供方没有模型
+		{AgentID: e.agent, Kind: "assistant", Provider: "anthropic"}, // a provider only, no model
 	}
 	for i, u := range bad {
 		if err := e.s.AddUsage(e.ctx, u); err == nil {
@@ -189,7 +190,7 @@ func TestSessionEvents(t *testing.T) {
 	if err := e.s.MarkSessionMissing(e.ctx, e.agent, &r.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.s.MarkSessionMissing(e.ctx, e.agent, &r.ID); err != nil { // 已是丢失状态：不重复记录
+	if err := e.s.MarkSessionMissing(e.ctx, e.agent, &r.ID); err != nil { // already missing: not recorded again
 		t.Fatal(err)
 	}
 	if _, _, _, err := e.s.FinishRun(e.ctx, r.ID, store.RunEnd{Status: "failed", ErrorCode: "session_missing"}); err != nil {
@@ -325,8 +326,9 @@ func TestTaskProcessExitsDoNotOverrideNormalOverview(t *testing.T) {
 	}
 }
 
-// 改模型提供方换了运行时（Pi 与 Claude Code 之间）：有进行中的回复时拒绝；否则会话重置（序号加一、记重置事件，原因 runtime_changed），
-// 同一运行时内换模型不动会话。
+// Changing the model provider switches the runtime (between Pi and Claude Code): rejected while a reply is in progress;
+// otherwise the session is reset (sequence number plus one, a reset event recorded with reason runtime_changed), while
+// changing the model within the same runtime leaves the session alone.
 func TestRuntimeSwitchResetsSession(t *testing.T) {
 	e := newRecEnv(t)
 	provider, model := func(p string) *string { return &p }, func(m string) *string { return &m }
@@ -372,7 +374,8 @@ func TestRuntimeSwitchResetsSession(t *testing.T) {
 	}
 }
 
-// 有排队（还没开始）的消息时也能切换运行时：它们之后由新运行时处理；会话照常重置。没有会话行时切换照常保存。
+// The runtime can also be switched while there are queued (not yet started) messages: they are later handled by the
+// new runtime, and the session is reset as usual. Without a session row the switch is saved as usual.
 func TestRuntimeSwitchWithQueuedMessages(t *testing.T) {
 	e := newRecEnv(t)
 	provider, model := func(p string) *string { return &p }, func(m string) *string { return &m }

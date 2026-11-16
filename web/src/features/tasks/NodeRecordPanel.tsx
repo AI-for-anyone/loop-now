@@ -39,7 +39,8 @@ import { SleepUntil } from '@/features/sleep/SleepUntil'
 
 const inboxCopy = t.taskInbox
 
-// 节点的待回答问题：问题本身作为“发给你”的消息排在节点对话里，在那里点选项或回复；这里只写明状态，并可以跳到它。
+// The node's open question: the question itself sits in the node conversation as a “发给你” (For you) message, where options are clicked
+// or a reply is written; this only states its status and can jump to it.
 export function PendingQuestion({ question }: { question: Schemas['TaskQuestionRef'] }) {
   const locate = () => document.querySelector(`[data-console-message-id="${question.messageId}"]`)?.scrollIntoView({ block: 'center' })
   return <section className="grid gap-3 rounded-card bg-tint-yellow p-4"><h3 className="font-bold">{t.tasks.question}</h3><Badge>{t.tasks.questionState[question.status]}</Badge><Markdown text={question.text} />
@@ -48,8 +49,9 @@ export function PendingQuestion({ question }: { question: Schemas['TaskQuestionR
 }
 type Node = Schemas['TaskNodeRun']
 export type NodeDraft = { text: string; images?: ImageDraft[]; agentId: string; runtimeId: string; nodeRunId: string; agentName: string; action?: { body: Schemas['TaskNodeInboxInput']; draftImageIds?: string[]; state: 'sending' | 'unknown' | 'rejected' | 'accepted'; error?: unknown; receipt?: Schemas['TaskNodeInboxReceipt'] } }
-// 任务详情的纸张（改版第 5 步）：纸张上沿两张索引标签（对话、节点资料），纸上左边是所选节点这一次访问的内容，
-// 右边是调用方给的票根（流程尺，stub）。
+// The task detail sheet (redesign step 5): two index tabs on the sheet's top edge (Conversation, Node materials); on the sheet, the content
+// of this visit of the selected node on the left,
+// and on the right the stub supplied by the caller (the workflow ruler, stub).
 export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAccepted, onAction, drafts, disabled, stub }: { detail: Schemas['ConsoleTaskDetail']; node: Node; draft: NodeDraft; onDraft: (text: string) => void; onImages?: (images: ImageDraft[]) => void; onAccepted: (text: string, draftImageIds?: string[]) => void; onAction: (action: NodeDraft['action']) => void; drafts: NodeDraft[]; disabled: boolean; stub?: ReactNode }) {
   const records = detail.nodes.filter(n => n.stepId === node.stepId).sort((a, b) => a.visit - b.visit || a.attempt - b.attempt || a.id.localeCompare(b.id))
   const [tab, setTab] = useState<'conversation' | 'materials'>('conversation')
@@ -132,7 +134,8 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
   const stepTitle = detail.workflow.steps[stepIndex]?.title
   const number = stepNumber(stepIndex)
   const [reasonHead, ...reasonRest] = (statusReason ?? '').split('\n')
-  // 节点资料：正在看的那一次排在最前面，其余按新到旧；只有展开过的（默认是正在看的那一次）打开。
+  // Node materials: the visit being viewed comes first, the rest newest to oldest; only the ones that have been expanded (by default the
+  // one being viewed) are open.
   const materialRecords = [...records.filter(r => r.id === node.id), ...records.filter(r => r.id !== node.id).reverse()]
   const artifactCount = detail.artifacts.filter(a => records.some(r => r.id === a.nodeRunId)).length
   const backToConversation = (id: string) => {
@@ -144,24 +147,28 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
   }
   const pad = 'px-[clamp(14px,3vw,34px)]'
   return <>
-    {/* 两张索引标签贴在纸张上沿：对话、节点资料。左右方向键在两者之间切换。 */}
+    {/* Two index tabs on the sheet's top edge: Conversation and Node materials. The left/right arrow keys switch between them. */}
     <div role="tablist" className={indexTabsClass} aria-label={t.tasks.record} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); const next = tab === 'conversation' ? 'materials' : 'conversation'; setTab(next); event.currentTarget.querySelector<HTMLButtonElement>(`[data-tab="${next}"]`)?.focus() } }}>
       {(['conversation', 'materials'] as const).map(value => <button key={value} type="button" role="tab" data-tab={value} aria-selected={tab === value} aria-controls={`task-${value}`} tabIndex={tab === value ? 0 : -1} className={cn(indexTabClass(tab === value), 'cursor-pointer')} onClick={() => setTab(value)}>{value === 'conversation' ? t.tasks.conversationTab : t.tasks.materials}</button>)}
     </div>
-    {/* 窄屏时整页滚动，纸张给一个固定高度（约一屏），对话仍在纸里自己滚动。 */}
+    {/* On narrow screens the whole page scrolls and the sheet gets a fixed height (about one screen); the conversation still scrolls on its
+        own inside the sheet. */}
     <Sheet className="min-h-0 flex-1 max-nav:h-[max(560px,calc(100dvh-72px))] max-nav:flex-none">
       <div className="flex min-h-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div id="task-conversation" role="tabpanel" aria-label={t.tasks.conversation} hidden={tab !== 'conversation'} className="flex min-h-0 flex-1 flex-col">
-            {/* 节点头：空心步号加步名（黄色记号笔）、Agent、第几次访问、“当前节点”藏青小标签、状态印章；
-                下面是原因（阻塞时红色便签）和恢复动作（荧光粉“重试当前节点”，其余是次要按钮）。 */}
+            {/* Node header: hollow step number plus step name (yellow highlighter mark), Agent, which visit, a navy “当前节点” (Current node)
+                tag, status stamp;
+                below it the reason (a red sticky note when blocked) and recovery actions (fluorescent-pink “重试当前节点” (Retry current
+                node); the others are secondary buttons). */}
             <div className={cn('flex max-h-[45%] min-h-0 shrink-0 flex-col gap-3 overflow-y-auto border-b-2 border-ink pt-[22px] pb-4 max-nav:pt-4', pad)} data-node-status>
               <NodeHeading number={number} title={stepTitle} agentId={node.agentId} agentName={node.agentName}>
                 <span className="font-mono text-[12px] text-ink-500">{t.tasks.visit(node.visit, node.attempt)}</span>
                 {current ? <span className="rounded-[4px] bg-ink px-2 text-[11.5px] leading-5 font-black text-white">{t.tasks.currentNode}</span> : <span className="text-[12px] font-bold text-ink-500">{t.tasks.readonly}</span>}
                 <TaskBadge className="ml-auto" status={node.status} />
               </NodeHeading>
-              {/* 原因便签旁边是恢复动作：荧光粉“重试当前节点”，旁边是“更换 Lark 账号并继续 QA”（次要按钮，点开在下面展开表单）。 */}
+              {/* Next to the reason note are the recovery actions: fluorescent-pink “重试当前节点” (Retry current node), and beside it
+                  “更换 Lark 账号并继续 QA” (Switch Lark account and continue QA) (a secondary button that expands the form below when clicked). */}
               <TaskLarkSwitchController detail={detail} node={node} disabled={disabled}>
                 {(lark) => <>
                   {(statusReason || current) && <div className="flex flex-wrap items-start gap-x-[22px] gap-y-3">
@@ -184,7 +191,7 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
               </div>
             </div>
             {newMessages && <Button variant="secondary" size="sm" className="mx-4 mb-2 shrink-0 self-center" onClick={() => { const el = conversation.current; if (el) el.scrollTop = el.scrollHeight; following.current = true; setNewMessages(false) }}>{t.tasks.newMessages}</Button>}
-            {/* 输入区：纸张底部的浅黄色栏（同对话页），上方一行写清发给谁。 */}
+            {/* Input area: a light-yellow bar at the bottom of the sheet (same as the chat page), with a line above it saying who it goes to. */}
             <div className="flex max-h-[45dvh] min-h-0 shrink-0 flex-col gap-2 overflow-y-auto border-t-2 border-ink bg-tint-yellow px-[clamp(12px,2vw,22px)] pt-2.5 pb-3" data-node-draft>
               <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] font-bold text-ink-700 sm:pl-[52px]">
                 <span>{t.tasks.page.sendTo}</span>
@@ -223,7 +230,8 @@ export function NodeRecordPanel({ detail, node, draft, onDraft, onImages, onAcce
   </>
 }
 
-// 节点头的第一行：空心步号、步名（ZCOOL 30px 加黄色记号笔）、Agent，后面跟调用方给的说明（第几次访问、状态……）。
+// The first line of the node header: hollow step number, step name (ZCOOL 30px with a yellow highlighter mark), Agent, followed by the
+// details the caller supplies (which visit, status...).
 function NodeHeading({ number, title, agentId, agentName, children }: { number: string; title: string | undefined; agentId: string; agentName: string; children?: ReactNode }) {
   return <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
     <HollowNumber className="w-auto">{number}</HollowNumber>
@@ -233,9 +241,10 @@ function NodeHeading({ number, title, agentId, agentName, children }: { number: 
   </div>
 }
 
-// 节点资料里的一次访问：一张“小票”。顶上一行是版本号（V2·A1）、第几次访问、状态、起止时间；
-// 打开后是输入（键值表，来自其他访问的值做成链接）、输出（浅蓝底的 JSON）、产物（带下载按钮的文件卡片）。
-// 被退回的那次（阻塞但有输出）顶上一条红色提醒。没在看的访问默认折叠。
+// One visit in the node materials: a "receipt". The top line has the version (V2·A1), which visit, status, start and end time;
+// when opened: inputs (a key-value table, where values from other visits become links), output (JSON on a light-blue background), and
+// artifacts (file cards with a download button).
+// A visit that was sent back (blocked but with output) gets a red warning on top. Visits not being viewed are collapsed by default.
 function MaterialRecord({ detail, record, viewing, divided, open, onToggle, onConversation }: { detail: Schemas['TaskDetail']; record: Node; viewing: boolean; divided: boolean; open: boolean; onToggle: (open: boolean) => void; onConversation: () => void }) {
   const values = Object.entries(record.inputs)
   const versions = new Map(record.inputVersions.map(v => [v.input, v.nodeRunId]))
@@ -298,7 +307,7 @@ function MessageSegment({ detail, node, onMaterials, suppressInboxError, onReply
         {record.notExecuted && <p role="status" className="rounded-input bg-tint-yellow p-2 text-sm [overflow-wrap:anywhere]">{inboxCopy.notExecuted} · {record.notExecuted.reason}</p>}
         {record.runLinks.length > 0 && <details className="text-xs [overflow-wrap:anywhere]"><summary>{inboxCopy.links}</summary><ul>{record.runLinks.map(link => <li key={`${link.runId}:${link.role}`}>{link.role === 'notification' ? inboxCopy.notification : link.role === 'read' ? inboxCopy.readLink : inboxCopy.replyLink} · {link.runId}</li>)}</ul></details>}
       </>
-      // Messages this node's instance sent you show as 发给你 (with options when it asked a question); the rest keep the Inbox bubble.
+      // Messages this node's instance sent you show as “发给你” (For you) (with options when it asked a question); the rest keep the Inbox bubble.
       const body = record.message.from.kind === 'agent' && record.message.to.kind === 'console'
         ? <div data-inbox-message-id={record.message.id}><ConsoleMessage message={record.message} agent={{ id: node.agentId, name: node.agentName }} answerable={answerableFor(node, record.message)} onReply={onReply} meta={<Badge tone="info">{record.message.inReplyTo ? inboxCopy.reply : inboxCopy.message}</Badge>}>{extras}</ConsoleMessage></div>
         : <TaskInboxMessageBubble message={record.message}>{extras}</TaskInboxMessageBubble>
@@ -307,7 +316,8 @@ function MessageSegment({ detail, node, onMaterials, suppressInboxError, onReply
   ].sort((a, b) => a.at.localeCompare(b.at) || a.key.localeCompare(b.key))
   const cutLabel = `${t.tasks.visit(node.visit, node.attempt)} · ${t.tasks.nodeStatuses[node.status]} · ${t.tasks.page.seeMaterials}`
   return <section data-record={node.id} data-reading-anchor={`record:${node.id}`} className="mb-7 min-w-0">
-    {/* 同一节点的各次访问之间是剪刀裁切线（同对话页“会话已重开”），中间的说明点开是这一次的节点资料。 */}
+    {/* Between visits of the same node is a scissors cut line (like the chat page's “会话已重开” (session reopened) line); clicking the
+        label in the middle opens this visit's node materials. */}
     <div className="mb-[18px]"><CutLine icon={ScissorsIcon} label={t.tasks.execution}><button type="button" className="min-w-0 cursor-pointer text-center text-[12.5px] font-black text-ink underline decoration-dotted underline-offset-4 [overflow-wrap:anywhere]" aria-label={`${t.tasks.execution} · ${cutLabel}`} onClick={onMaterials}>{cutLabel}</button></CutLine></div>
     <ErrorAlert error={messages.error} />{(messages.isPending || inbox.isPending) && <p>{t.common.loading}</p>}{messages.isSuccess && inbox.isSuccess && rows.length === 0 && <p>{t.tasks.noMessages}</p>}
     {!suppressInboxError && !nodeMessagesUnsupported(inbox.error) && <ErrorAlert error={inbox.error} />}
@@ -316,7 +326,7 @@ function MessageSegment({ detail, node, onMaterials, suppressInboxError, onReply
     {messages.hasNextPage && <div className="mt-4"><p className="text-sm">{t.tasks.incomplete}</p><Button variant="secondary" disabled={messages.isFetching} onClick={() => void messages.fetchNextPage({ cancelRefetch: false })}>{t.tasks.more}</Button></div>}
   </section>
 }
-// 产物：带下载按钮的文件卡片（黄色文件图标、等宽文件名、类型与大小）。
+// Artifacts: file cards with a download button (yellow file icon, monospace file name, type and size).
 export function Artifacts({ artifacts }: { artifacts: Schemas['TaskArtifact'][] }) {
   return <section className="min-w-0">
     <h3 className="riso-marker mb-3 inline-block px-1 font-display-cn text-[20px] leading-[1.3] font-normal">{t.tasks.page.artifacts}</h3>

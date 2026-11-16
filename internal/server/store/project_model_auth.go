@@ -138,7 +138,8 @@ func (s *Store) SetProjectModelAuthURL(ctx context.Context, project, id uuid.UUI
 	return out, err
 }
 
-// SetProjectModelAuthDeviceCode 记下设备码登录给人看的验证码与验证地址（插件提供方，plugins/SPEC.md §13）。
+// SetProjectModelAuthDeviceCode records the user code and verification URL shown to a person for a device code login
+// (plugin providers, plugins/SPEC.md §13).
 func (s *Store) SetProjectModelAuthDeviceCode(ctx context.Context, project, id uuid.UUID, code, uri string, expires *time.Time) (cm.Operation, error) {
 	var out cm.Operation
 	err := s.inTx(ctx, func(tx *db.Tx) error {
