@@ -362,6 +362,15 @@ describe('Agent 的 Skills 副本', () => {
     expect(within(item).getByRole('button', { name: '移除' })).toBeEnabled()
   })
 
+  it('从 Agent 移除 Skill 会删掉这个 Agent 自己的副本（连同改过的 SKILL.md），确认框盖“不可撤销”印章', async () => {
+    const { user } = await renderConfig({ agentSkills: [copy()] })
+    const item = await within(region('Skills')).findByRole('listitem', { name: 'pdf-tools' })
+    await user.click(within(item).getByRole('button', { name: '移除' }))
+    const dialog = await screen.findByRole('alertdialog', { name: '从 Agent 移除 Skill「pdf-tools」？' })
+    expect(dialog.querySelector('[data-dialog-tab]')).toHaveTextContent('危险操作')
+    expect(within(dialog).getByText('不可撤销')).toBeInTheDocument()
+  })
+
   it('在线编辑副本的 SKILL.md', async () => {
     let content: unknown = null
     const agent = makeAgent()

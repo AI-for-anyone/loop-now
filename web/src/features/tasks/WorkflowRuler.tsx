@@ -148,7 +148,8 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
             return (
               <Fragment key={view.step.id}>
                 <div data-ruler-step={view.step.id} className="relative">
-                  {isSelected && <RulerMark className="top-0.5 right-1 left-[62px] h-[46px]" />}
+                  {/* 记号笔罩住整一步（英文换成三行时也罩得住）。 */}
+                  {isSelected && <RulerMark className="top-0.5 right-1 bottom-0.5 left-[62px]" />}
                   <button
                     type="button"
                     aria-pressed={isSelected}
@@ -163,8 +164,11 @@ export function WorkflowRuler({ detail, selected, record, onSelect, onRecord, ag
                     <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] font-bold text-ink-700">
                       <AgentAvatar size="sm" id={view.step.agentId} />
                       <span className="min-w-0 truncate">{name}</span>
-                      <StepStatus view={view} />
-                      {view.records.length > 1 && <span className="font-mono text-[11px] text-ink-500">×{view.records.length}</span>}
+                      {/* 状态和访问次数是一个整体：放不下时一起换到下一行，“×2”不会单独落下。 */}
+                      <span data-step-state className="inline-flex items-baseline gap-x-1.5 whitespace-nowrap">
+                        <StepStatus view={view} />
+                        {view.records.length > 1 && <span className="font-mono text-[11px] text-ink-500">×{view.records.length}</span>}
+                      </span>
                     </span>
                   </button>
                   <StepDot view={view} />

@@ -27,6 +27,9 @@ describe('流程尺', () => {
     expect(current).toHaveAttribute('aria-current', 'step')
     expect(current).toHaveAttribute('aria-pressed', 'true')
     expect(current).toHaveTextContent('01质量检查任务检查员· 阻塞×2')
+    // 状态和访问次数包在一起，换行时一起走。
+    expect(current.querySelector('[data-step-state]')).toHaveTextContent('· 阻塞×2')
+    expect(current.querySelector('[data-step-state]')).toHaveClass('whitespace-nowrap')
     expect(nav.querySelector('[data-step-dot="0"]')).toHaveTextContent('01')
     expect(nav.querySelector('[data-step-dot="0"]')).toHaveClass('bg-riso-yellow')
     const todo = within(nav).getByRole('button', { name: /提交报告/ })
