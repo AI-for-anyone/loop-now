@@ -24,9 +24,10 @@ jobs:
           node-version: 24.21.0
       - name: go vet
         run: go vet ./cmd/... ./internal/... ./api/...
-      # Go comments, log messages and the API contracts (api/*.yaml) must be in English (a quoted Chinese original
-      # followed by its English is allowed in Go comments); see scripts/check-english for the exact rule.
-      - name: English comments, log messages and API contracts
+      # Go comments, string literals (tests included) and the API contracts (api/*.yaml) must be in English (a quoted
+      # Chinese original followed by its English is allowed in Go comments; a literal that must stay Chinese is marked
+      # "check-english: zh (reason)"); see scripts/check-english for the exact rule.
+      - name: English comments, strings and API contracts
         run: go run ./scripts/check-english
       # The whole server must cross-compile to Windows (process groups, locks, permissions and no-follow opens each have a Windows implementation); real runs are in server-windows.
       - name: go vet (windows cross)
