@@ -11,7 +11,7 @@ import { renderChat } from '@/test/chat'
 const at = (minute: number) => new Date(Date.UTC(2026, 10, 12, 8, minute)).toISOString()
 const turn = (question: string, minute: number) => {
   const run = makeRun({ queuedAt: at(minute), startedAt: at(minute), runningAt: at(minute), endedAt: at(minute) })
-  return [makeMessage({ text: question, createdAt: at(minute), run }), makeMessage({ role: 'assistant', text: `${question}的回答`, createdAt: at(minute), run })]
+  return [makeMessage({ text: question, createdAt: at(minute), run }), makeMessage({ role: 'assistant', text: `Answer to ${question}`, createdAt: at(minute), run })]
 }
 const compactionRun = (overrides: Partial<Schemas['Run']> = {}) =>
   makeRun({
@@ -22,13 +22,13 @@ const compactionRun = (overrides: Partial<Schemas['Run']> = {}) =>
     startedAt: at(5),
     runningAt: at(5),
     endedAt: at(6),
-    compaction: { instructions: '保留关键决定', outcome: null, skipReason: null, tokensBefore: null, estimatedTokensAfter: null },
+    compaction: { instructions: 'Keep the key decisions', outcome: null, skipReason: null, tokensBefore: null, estimatedTokensAfter: null },
     ...overrides,
   })
 
 async function openCompaction(run: Schemas['Run'], timeline: () => Response = () => HttpResponse.json({ run, entries: [{ type: 'ended', at: run.endedAt, status: run.status, endReason: run.endReason, errorCode: run.errorCode }], usage: run.usage })) {
   const agent = makeAgent()
-  const messages = [...turn('压缩前的问题', 1), ...turn('压缩后的问题', 9)]
+  const messages = [...turn('Question before compaction', 1), ...turn('Question after compaction', 9)]
   let timelineReads = 0
   const result = await renderChat({
     agent,
@@ -43,8 +43,8 @@ async function openCompaction(run: Schemas['Run'], timeline: () => Response = ()
 
 const card = () => document.querySelector<HTMLElement>('[data-compaction-run]')
 
-describe('定位到一次手动压缩', () => {
-  it('在它发生的位置显示一张突出的说明：压缩失败、指令、原因，运行记录展开；它不算一轮', async () => {
+describe('Locating a manual compaction', () => {
+  it('shows a highlighted note where it happened: compaction failed, the instructions, the reason, the run log expanded; it does not count as a turn', async () => {
     const run = compactionRun()
     await openCompaction(run)
     await waitFor(() => expect(card()).not.toBeNull())
@@ -52,37 +52,37 @@ describe('定位到一次手动压缩', () => {
     expect(note).toHaveAttribute('data-run-id', run.id)
     expect(note).toHaveAttribute('data-located')
     expect(note).toHaveClass('bg-tint-yellow')
-    expect(within(note).getByText('定位到的手动压缩')).toHaveClass('sr-only')
-    expect(note).toHaveTextContent('/compact 保留关键决定')
-    expect(note).toHaveTextContent('手动压缩')
-    expect(within(note).getByText('压缩失败')).toBeInTheDocument()
-    expect(note).toHaveTextContent('Agent 报告错误：compaction failed')
-    expect(note).toHaveTextContent('手动压缩不是对话里的一轮，没有消息')
+    expect(within(note).getByText('The located manual compaction')).toHaveClass('sr-only')
+    expect(note).toHaveTextContent('/compact Keep the key decisions')
+    expect(note).toHaveTextContent('Manual compaction')
+    expect(within(note).getByText('Compaction failed')).toBeInTheDocument()
+    expect(note).toHaveTextContent('Agent reported an error: compaction failed')
+    expect(note).toHaveTextContent('A manual compaction isn\'t a turn of the conversation and has no messages')
     // The run record is expanded by default and reuses the timeline from that same fetch.
-    const toggle = within(note).getByRole('button', { name: /^运行记录/ })
+    const toggle = within(note).getByRole('button', { name: /^Run log/ })
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
     // Placed between the two turns before and after the compaction.
-    const before = screen.getByText('压缩前的问题')
-    const after = screen.getByText('压缩后的问题')
+    const before = screen.getByText('Question before compaction')
+    const after = screen.getByText('Question after compaction')
     expect(before.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(note.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     // It takes no number and no tick: there are still two turns, numbered on from 3.
     expect([...document.querySelectorAll('[data-turn-number]')].map((n) => n.textContent)).toEqual(['4', '5'])
-    expect(within(screen.getByRole('navigation', { name: '对话轮次' })).getAllByRole('button')).toHaveLength(2)
+    expect(within(screen.getByRole('navigation', { name: 'Conversation turns' })).getAllByRole('button')).toHaveLength(2)
   })
 
-  it('压缩没有失败时照实写：压缩了写前后 token，没压缩写原因', async () => {
+  it('when the compaction did not fail, says what happened: tokens before and after if it compacted, the reason if it did not', async () => {
     const run = compactionRun({ status: 'completed', errorCode: null, errorMessage: null, compaction: { instructions: '', outcome: 'skipped', skipReason: 'too_small', tokensBefore: null, estimatedTokensAfter: null } })
     await openCompaction(run)
     await waitFor(() => expect(card()).not.toBeNull())
-    expect(card()).toHaveTextContent('会话内容太少，不用压缩')
+    expect(card()).toHaveTextContent('The session is too short to need compacting')
     expect(card()).toHaveTextContent(/\/compact(?! )/)
-    expect(within(card()!).queryByText('压缩失败')).toBeNull()
+    expect(within(card()!).queryByText('Compaction failed')).toBeNull()
   })
 
-  it('定位的是一轮普通回复时不另取运行记录', async () => {
+  it('does not fetch an extra run log when the located run is a normal reply', async () => {
     const agent = makeAgent()
-    const messages = turn('普通的问题', 1)
+    const messages = turn('A normal question', 1)
     let timelineReads = 0
     await renderChat({
       agent,
@@ -99,7 +99,7 @@ describe('定位到一次手动压缩', () => {
     expect(card()).toBeNull()
   })
 
-  it('取到的执行不是手动压缩（或取不到）时不显示说明', async () => {
+  it('shows no note when the fetched run is not a manual compaction (or cannot be fetched)', async () => {
     const run = compactionRun({ compaction: undefined })
     const { timelineReads } = await openCompaction(run)
     await waitFor(() => expect(timelineReads()).toBe(1))

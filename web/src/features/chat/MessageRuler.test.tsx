@@ -67,7 +67,7 @@ afterEach(() => {
 function pagesOf(texts: string[], hasMore = true): MessagePages {
   const messages = texts.flatMap((text, i) => {
     const run = makeRun({ startedAt: new Date(Date.parse('2026-11-12T08:00:00Z') + i * 1000).toISOString() })
-    return [makeMessage({ text, run }), makeMessage({ role: 'assistant', text: `${text}的回答`, run })]
+    return [makeMessage({ text, run }), makeMessage({ role: 'assistant', text: `Answer to ${text}`, run })]
   })
   return { pages: [makeMessagePage(messages, { hasMore })], pageParams: [null] }
 }
@@ -80,81 +80,81 @@ function List({ pages, ...rest }: Omit<ComponentProps<typeof MessageList>, 'agen
   return <MessageList agent={agent} turns={buildTurns(pages, initialLiveState).turns} {...props} {...rest} />
 }
 
-const nav = () => screen.getByRole('navigation', { name: '对话轮次' })
+const nav = () => screen.getByRole('navigation', { name: 'Conversation turns' })
 const ticks = () => within(nav()).getAllByRole('button')
 const turnBlock = (text: string) => screen.getByText(text).closest<HTMLElement>('[data-run-id]')!
 const mark = () => nav().querySelector<HTMLElement>('[data-ruler-mark]')
 const longTicks = () => ticks().filter((tick) => tick.querySelector('[data-ruler-long]'))
 const numbers = () => ticks().map((tick) => tick.querySelector('[data-ruler-number]')?.textContent ?? '')
 const total = () => nav().querySelector<HTMLElement>('[data-ruler-total]')
-const texts = (count: number) => Array.from({ length: count }, (_, i) => `问题${i + 1}`)
+const texts = (count: number) => Array.from({ length: count }, (_, i) => `Question ${i + 1}`)
 
-describe('对话区右侧的刻度尺', () => {
-  it('一条刻度一轮（已开始的轮次），名称是用户消息的开头；排队中的消息不算；加载更早的消息后刻度增加', () => {
-    const pages = pagesOf(['第一问', '第二问', '第三问'])
+describe('ruler on the right of the conversation area', () => {
+  it('one tick per turn (turns that have started), named by the start of the user message; queued messages do not count; ticks are added after loading earlier messages', () => {
+    const pages = pagesOf(['First question', 'Second question', 'Third question'])
     const queuedRun = makeRun({ status: 'queued', startedAt: null, runningAt: null, endedAt: null })
-    pages.pages[0].messages.push(makeMessage({ text: '排队中的问题', run: queuedRun }))
+    pages.pages[0].messages.push(makeMessage({ text: 'Queued question', run: queuedRun }))
     const { rerender } = render(<List pages={pages} />)
-    expect(ticks().map((tick) => tick.getAttribute('aria-label'))).toEqual(['第一问', '第二问', '第三问'])
+    expect(ticks().map((tick) => tick.getAttribute('aria-label'))).toEqual(['First question', 'Second question', 'Third question'])
 
-    const older = pagesOf(['更早一', '更早二'])
+    const older = pagesOf(['Earlier one', 'Earlier two'])
     for (const [i, message] of older.pages[0].messages.entries()) message.run.startedAt = new Date(Date.parse('2026-11-11T08:00:00Z') + i).toISOString()
     rerender(<List pages={{ pages: [...pages.pages, ...older.pages], pageParams: [null, 'x'] }} />)
-    expect(ticks().map((tick) => tick.getAttribute('aria-label'))).toEqual(['更早一', '更早二', '第一问', '第二问', '第三问'])
+    expect(ticks().map((tick) => tick.getAttribute('aria-label'))).toEqual(['Earlier one', 'Earlier two', 'First question', 'Second question', 'Third question'])
   })
 
-  it('只有一轮或没有对话时不显示', () => {
-    const { rerender } = render(<List pages={pagesOf(['唯一的问题'])} />)
+  it('not shown with only one turn or no conversation', () => {
+    const { rerender } = render(<List pages={pagesOf(['The only question'])} />)
     expect(screen.queryByRole('navigation')).toBeNull()
     rerender(<List pages={pagesOf([])} />)
     expect(screen.queryByRole('navigation')).toBeNull()
-    rerender(<List pages={pagesOf(['一', '二'])} />)
+    rerender(<List pages={pagesOf(['One', 'Two'])} />)
     expect(ticks()).toHaveLength(2)
   })
 
-  it('窄屏（左侧栏收进抽屉时）隐藏', () => {
-    render(<List pages={pagesOf(['一', '二'])} />)
+  it('hidden on narrow screens (when the sidebar folds into a drawer)', () => {
+    render(<List pages={pagesOf(['One', 'Two'])} />)
     expect(nav()).toHaveClass('max-nav:hidden')
   })
 
-  it('对话区里看得到的那几轮，刻度标为当前并加深；滚动后跟着变', () => {
-    render(<List pages={pagesOf(['一', '二', '三', '四'])} />)
+  it('ticks of the turns visible in the conversation area are marked current and darker; they follow scrolling', () => {
+    render(<List pages={pagesOf(['One', 'Two', 'Three', 'Four'])} />)
     act(() => {
-      FakeIntersectionObserver.trigger(turnBlock('三'), true)
-      FakeIntersectionObserver.trigger(turnBlock('四'), true)
+      FakeIntersectionObserver.trigger(turnBlock('Three'), true)
+      FakeIntersectionObserver.trigger(turnBlock('Four'), true)
     })
     const current = () => ticks().filter((tick) => tick.getAttribute('aria-current') === 'true').map((tick) => tick.getAttribute('aria-label'))
-    expect(current()).toEqual(['三', '四'])
+    expect(current()).toEqual(['Three', 'Four'])
     // The visible turns are covered by one yellow highlighter mark, drawn from the first visible tick to the last.
-    expect(mark()!.closest('li')).toContainElement(within(nav()).getByRole('button', { name: '三' }))
+    expect(mark()!.closest('li')).toContainElement(within(nav()).getByRole('button', { name: 'Three' }))
     expect(mark()).toHaveAttribute('data-count', '2')
     act(() => {
-      FakeIntersectionObserver.trigger(turnBlock('四'), false)
-      FakeIntersectionObserver.trigger(turnBlock('二'), true)
+      FakeIntersectionObserver.trigger(turnBlock('Four'), false)
+      FakeIntersectionObserver.trigger(turnBlock('Two'), true)
     })
-    expect(current()).toEqual(['二', '三'])
-    expect(mark()!.closest('li')).toContainElement(within(nav()).getByRole('button', { name: '二' }))
+    expect(current()).toEqual(['Two', 'Three'])
+    expect(mark()!.closest('li')).toContainElement(within(nav()).getByRole('button', { name: 'Two' }))
     expect(mark()).toHaveAttribute('data-count', '2')
   })
 
-  it('点击刻度跳到那一轮的开头；之后内容变高不被贴底拉回，跳转带来的滚动也不加载更早的消息', async () => {
+  it('clicking a tick jumps to the start of that turn; content growing afterwards does not pull back to the bottom, and the scroll from the jump does not load earlier messages', async () => {
     const onLoadOlder = vi.fn()
-    const pages = pagesOf(['一', '二', '三'])
+    const pages = pagesOf(['One', 'Two', 'Three'])
     const { rerender } = render(<List pages={pages} onLoadOlder={onLoadOlder} />)
     const el = screen.getByRole('log')
     expect(el.scrollTop).toBe(1500)
     // The start of the first turn is -1420px below the top of the conversation area (far above the view).
     el.getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 100, width: 600, height: 500 })
-    turnBlock('一').getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 100 - 1420, width: 600, height: 300 })
-    await userEvent.setup().click(within(nav()).getByRole('button', { name: '一' }))
+    turnBlock('One').getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 100 - 1420, width: 600, height: 300 })
+    await userEvent.setup().click(within(nav()).getByRole('button', { name: 'One' }))
     expect(el.scrollTop).toBe(1500 - 1420 - 24)
     fireEvent.scroll(el)
     expect(onLoadOlder).not.toHaveBeenCalled()
     // The last turn's reply grows longer and the content gets taller: do not stick to the bottom.
     log.scrollHeight = 2400
     const messages = pages.pages[0].messages
-    rerender(<List pages={{ ...pages, pages: [{ ...pages.pages[0], messages: [...messages.slice(0, -1), { ...messages.at(-1)!, text: '三的回答，更长了' }] }] }} onLoadOlder={onLoadOlder} />)
-    expect(screen.getByText('三的回答，更长了')).toBeInTheDocument()
+    rerender(<List pages={{ ...pages, pages: [{ ...pages.pages[0], messages: [...messages.slice(0, -1), { ...messages.at(-1)!, text: 'Answer to Three, now longer' }] }] }} onLoadOlder={onLoadOlder} />)
+    expect(screen.getByText('Answer to Three, now longer')).toBeInTheDocument()
     expect(el.scrollTop).toBe(56)
     // When the person later scrolls near the top themselves, older messages load as usual.
     el.scrollTop = 20
@@ -162,46 +162,46 @@ describe('对话区右侧的刻度尺', () => {
     expect(onLoadOlder).toHaveBeenCalledTimes(1)
   })
 
-  it('定位模式下跳到最后一轮靠近底部，不因此加载更新的消息；回车也能跳转', async () => {
+  it('in locate mode jumping to the last turn near the bottom does not load newer messages; Enter jumps too', async () => {
     const onLoadNewer = vi.fn()
-    const pages = pagesOf(['一', '二', '三'])
+    const pages = pagesOf(['One', 'Two', 'Three'])
     render(<List pages={pages} targetRunId={pages.pages[0].messages[0].run.id} hasNewer onLoadNewer={onLoadNewer} />)
     const el = screen.getByRole('log')
     el.getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 0, width: 600, height: 500 })
-    turnBlock('三').getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 1800, width: 600, height: 200 })
+    turnBlock('Three').getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 1800, width: 600, height: 200 })
     const user = userEvent.setup()
-    within(nav()).getByRole('button', { name: '三' }).focus()
+    within(nav()).getByRole('button', { name: 'Three' }).focus()
     await user.keyboard('{Enter}')
     expect(el.scrollTop).toBe(1500)
     fireEvent.scroll(el)
     expect(onLoadNewer).not.toHaveBeenCalled()
   })
 
-  it('悬停或键盘聚焦刻度时在左侧显示这一轮的开头，移开后消失', async () => {
-    render(<List pages={pagesOf(['帮我看看构建为什么失败', '再跑一次测试'])} />)
+  it('hovering or keyboard-focusing a tick shows the start of that turn on the left, and it goes away when moving off', async () => {
+    render(<List pages={pagesOf(['Help me see why the build failed', 'Run the tests again'])} />)
     const user = userEvent.setup()
     const preview = () => nav().querySelector('[data-ruler-preview]')
-    await user.hover(within(nav()).getByRole('button', { name: '帮我看看构建为什么失败' }))
-    expect(preview()).toHaveTextContent('帮我看看构建为什么失败')
+    await user.hover(within(nav()).getByRole('button', { name: 'Help me see why the build failed' }))
+    expect(preview()).toHaveTextContent('Help me see why the build failed')
     expect(preview()).toHaveAttribute('aria-hidden', 'true')
-    await user.unhover(within(nav()).getByRole('button', { name: '帮我看看构建为什么失败' }))
+    await user.unhover(within(nav()).getByRole('button', { name: 'Help me see why the build failed' }))
     expect(preview()).toBeNull()
-    act(() => within(nav()).getByRole('button', { name: '帮我看看构建为什么失败' }).focus())
-    expect(preview()).toHaveTextContent('帮我看看构建为什么失败')
+    act(() => within(nav()).getByRole('button', { name: 'Help me see why the build failed' }).focus())
+    expect(preview()).toHaveTextContent('Help me see why the build failed')
     await user.tab()
-    expect(within(nav()).getByRole('button', { name: '再跑一次测试' })).toHaveFocus()
-    expect(preview()).toHaveTextContent('再跑一次测试')
+    expect(within(nav()).getByRole('button', { name: 'Run the tests again' })).toHaveFocus()
+    expect(preview()).toHaveTextContent('Run the tests again')
     await user.tab()
     expect(preview()).toBeNull()
     // A mouse click also focuses the tick, but the preview does not stay once the mouse moves away.
-    await user.click(within(nav()).getByRole('button', { name: '再跑一次测试' }))
-    expect(within(nav()).getByRole('button', { name: '再跑一次测试' })).toHaveFocus()
-    expect(preview()).toHaveTextContent('再跑一次测试')
-    await user.unhover(within(nav()).getByRole('button', { name: '再跑一次测试' }))
+    await user.click(within(nav()).getByRole('button', { name: 'Run the tests again' }))
+    expect(within(nav()).getByRole('button', { name: 'Run the tests again' })).toHaveFocus()
+    expect(preview()).toHaveTextContent('Run the tests again')
+    await user.unhover(within(nav()).getByRole('button', { name: 'Run the tests again' }))
     expect(preview()).toBeNull()
   })
 
-  it('轮次多到刻度尺放不下时，刻度尺自己滚动，并让可见轮的刻度留在可视范围里', () => {
+  it('when there are too many turns for the ruler, the ruler scrolls itself and keeps the ticks of visible turns in view', () => {
     // 60 turns compressed to the minimum spacing of 8px: the ticks start at 24px, and the ruler's visible height is 200px.
     ruler.scrollHeight = 24 + 60 * 8 + 24
     ruler.clientHeight = 200
@@ -217,19 +217,19 @@ describe('对话区右侧的刻度尺', () => {
         return this.tagName === 'LI' ? 8 : 0
       },
     })
-    const texts = Array.from({ length: 60 }, (_, i) => `问题${i + 1}`)
+    const texts = Array.from({ length: 60 }, (_, i) => `Question ${i + 1}`)
     render(<List pages={pagesOf(texts)} />)
     const list = nav().querySelector('ol')!
     act(() => {
-      FakeIntersectionObserver.trigger(turnBlock('问题59'), true)
-      FakeIntersectionObserver.trigger(turnBlock('问题60'), true)
+      FakeIntersectionObserver.trigger(turnBlock('Question 59'), true)
+      FakeIntersectionObserver.trigger(turnBlock('Question 60'), true)
     })
     // The ticks for turns 59 and 60 span 24+58*8=488 to 24+60*8=504; leaving 16px below means scrolling to 520-200=320.
     expect(list.scrollTop).toBe(320)
     act(() => {
-      FakeIntersectionObserver.trigger(turnBlock('问题59'), false)
-      FakeIntersectionObserver.trigger(turnBlock('问题60'), false)
-      FakeIntersectionObserver.trigger(turnBlock('问题2'), true)
+      FakeIntersectionObserver.trigger(turnBlock('Question 59'), false)
+      FakeIntersectionObserver.trigger(turnBlock('Question 60'), false)
+      FakeIntersectionObserver.trigger(turnBlock('Question 2'), true)
     })
     // The tick for turn 2 is at 32; leave 16px above it.
     expect(list.scrollTop).toBe(16)
@@ -237,25 +237,25 @@ describe('对话区右侧的刻度尺', () => {
 })
 
 // "Printed sheet" redesign: the ruler sits in the stub on the right of the sheet, replacing the gray tick bar and the native scrollbar.
-describe('票根里的刻度尺', () => {
-  it('是纸张右侧的票根：导航区的名称不变，顶上的小标题“轮次”读屏不重复读', () => {
-    render(<List pages={pagesOf(['一', '二'])} />)
+describe('ruler in the stub', () => {
+  it('is the stub on the right of the sheet: the navigation name is unchanged, and screen readers do not repeat the small “TURNS” heading at the top', () => {
+    render(<List pages={pagesOf(['One', 'Two'])} />)
     expect(nav()).toHaveClass('border-l-2', 'border-dashed')
-    expect(within(nav()).getByText('轮次')).toHaveAttribute('aria-hidden', 'true')
+    expect(within(nav()).getByText('TURNS')).toHaveAttribute('aria-hidden', 'true')
   })
 
-  it('前面没有轮次时从 1 编号：每 5 轮一条长刻度带数字，底部是总轮数', () => {
+  it('numbers from 1 when there are no turns before: every 5th turn gets a long tick with a number, the total is at the bottom', () => {
     render(<List pages={pagesOf(texts(12))} turnsBefore={0} turnsTotal={12} />)
     expect(ticks()).toHaveLength(12)
-    expect(longTicks().map((tick) => tick.getAttribute('aria-label'))).toEqual(['问题5', '问题10'])
+    expect(longTicks().map((tick) => tick.getAttribute('aria-label'))).toEqual(['Question 5', 'Question 10'])
     expect(numbers()).toEqual(['', '', '', '', '5', '', '', '', '', '10', '', ''])
     // The numbers are only labels on the ticks; the button's name is still the start of the turn.
-    expect(within(nav()).getByRole('button', { name: '问题5' }).querySelector('[data-ruler-number]')).toHaveAttribute('aria-hidden', 'true')
+    expect(within(nav()).getByRole('button', { name: 'Question 5' }).querySelector('[data-ruler-number]')).toHaveAttribute('aria-hidden', 'true')
     expect(total()).toHaveTextContent('12')
-    expect(total()).toHaveTextContent('共 12 轮')
+    expect(total()).toHaveTextContent('12 turns in total')
   })
 
-  it('还不知道轮次计数时（历史还没取到）：只有刻度，没有数字、长刻度和总数；不再因为“没有更早的消息”就从 1 编号', () => {
+  it('while the turn count is unknown (history not fetched yet): only ticks, no numbers, long ticks or total; no longer numbers from 1 just because there are “no earlier messages”', () => {
     render(<List pages={pagesOf(texts(12))} hasOlder={false} />)
     expect(ticks()).toHaveLength(12)
     expect(longTicks()).toHaveLength(0)
@@ -263,28 +263,28 @@ describe('票根里的刻度尺', () => {
     expect(total()).toBeNull()
   })
 
-  it('前面还有轮次时接着编号（更早的消息没加载也一样）', () => {
+  it('numbers on when there are turns before (also when earlier messages are not loaded)', () => {
     render(<List pages={pagesOf(texts(4))} hasOlder turnsBefore={22} turnsTotal={26} />)
     expect(numbers()).toEqual(['', '', '25', ''])
-    expect(longTicks().map((tick) => tick.getAttribute('aria-label'))).toEqual(['问题3'])
+    expect(longTicks().map((tick) => tick.getAttribute('aria-label'))).toEqual(['Question 3'])
     expect(total()).toHaveTextContent('26')
   })
 
-  it('底部写的是给它的总轮数，不按已加载的轮数算（定位时后面还有没加载的轮次）', () => {
+  it('the bottom shows the total it was given, not the number of loaded turns (when locating there are unloaded turns after)', () => {
     const pages = pagesOf(texts(6))
     render(<List pages={pages} hasOlder={false} targetRunId={pages.pages[0].messages[0].run.id} hasNewer onLoadNewer={() => {}} turnsBefore={0} turnsTotal={150} />)
     expect(numbers()).toEqual(['', '', '', '', '5', ''])
     expect(total()).toHaveTextContent('150')
-    expect(total()).toHaveTextContent('共 150 轮')
+    expect(total()).toHaveTextContent('150 turns in total')
   })
 
-  it('黄色记号笔从第一条可见刻度罩到最后一条，左侧一个粉色箭头；没有可见轮时不画', () => {
+  it('a yellow highlighter covers the first visible tick to the last with a pink arrow on the left; not drawn when no turn is visible', () => {
     render(<List pages={pagesOf(texts(8))} turnsBefore={0} turnsTotal={8} />)
     expect(mark()).toBeNull()
     act(() => {
-      for (const text of ['问题6', '问题7', '问题8']) FakeIntersectionObserver.trigger(turnBlock(text), true)
+      for (const text of ['Question 6', 'Question 7', 'Question 8']) FakeIntersectionObserver.trigger(turnBlock(text), true)
     })
-    expect(mark()!.closest('li')).toContainElement(within(nav()).getByRole('button', { name: '问题6' }))
+    expect(mark()!.closest('li')).toContainElement(within(nav()).getByRole('button', { name: 'Question 6' }))
     expect(mark()).toHaveAttribute('data-count', '3')
     expect(mark()).toHaveAttribute('aria-hidden', 'true')
     // The height is computed from the tick spacing: it covers 3 ticks, with a little extra above and below.
@@ -292,39 +292,39 @@ describe('票根里的刻度尺', () => {
     expect(mark()!.querySelector('[data-ruler-band]')).toHaveClass('bg-riso-yellow')
     expect(mark()!.querySelector('[data-ruler-arrow]')).toHaveClass('border-l-riso-pink')
     act(() => {
-      for (const text of ['问题6', '问题7', '问题8']) FakeIntersectionObserver.trigger(turnBlock(text), false)
+      for (const text of ['Question 6', 'Question 7', 'Question 8']) FakeIntersectionObserver.trigger(turnBlock(text), false)
     })
     expect(mark()).toBeNull()
   })
 
-  it('刻度间距上限 23px、下限 8px，放不下时刻度尺自己滚动', () => {
-    render(<List pages={pagesOf(['一', '二'])} />)
+  it('tick spacing is at most 23px and at least 8px; the ruler scrolls itself when they do not fit', () => {
+    render(<List pages={pagesOf(['One', 'Two'])} />)
     const list = nav().querySelector('ol')!
     // The highlighter mark sticks out slightly past the right edge: the ruler scrolls only vertically and clips horizontally.
     expect(list).toHaveClass('overflow-y-auto', 'overflow-x-hidden', 'no-scrollbar')
     for (const item of list.querySelectorAll('li')) expect(item).toHaveClass('flex-[0_1_23px]', 'min-h-2')
   })
 
-  it('只有一轮或没有对话时票根还在（纸张的版式不变），但里面没有刻度，也不是导航区', () => {
-    const { rerender } = render(<List pages={pagesOf(['唯一的问题'])} hasOlder={false} />)
+  it('with only one turn or no conversation the stub stays (the sheet layout is unchanged) but has no ticks and is not a navigation region', () => {
+    const { rerender } = render(<List pages={pagesOf(['The only question'])} hasOlder={false} />)
     const stub = document.querySelector<HTMLElement>('[data-turn-stub]')!
-    expect(stub).toHaveTextContent('轮次')
+    expect(stub).toHaveTextContent('TURNS')
     expect(stub).toHaveAttribute('aria-hidden', 'true')
     expect(stub).toHaveClass('max-nav:hidden')
     expect(within(stub).queryByRole('button')).toBeNull()
-    rerender(<List pages={pagesOf(['一', '二'])} hasOlder={false} />)
+    rerender(<List pages={pagesOf(['One', 'Two'])} hasOlder={false} />)
     expect(document.querySelector('[data-turn-stub]')).toBe(nav())
   })
 
-  it('宽屏时对话区的原生滚动条隐藏，由刻度尺代替；窄屏没有票根，保留原生滚动条；滚动区仍然可以滚动', () => {
-    render(<List pages={pagesOf(['一', '二'])} />)
+  it('on wide screens the conversation area hides its native scrollbar in favor of the ruler; narrow screens have no stub and keep it; the scroll area still scrolls', () => {
+    render(<List pages={pagesOf(['One', 'Two'])} />)
     const log = screen.getByRole('log')
     expect(log).toHaveClass('nav:no-scrollbar', 'overflow-y-auto')
     expect(log).not.toHaveClass('no-scrollbar')
   })
 
-  it('只有一轮或没有对话时票根里没有刻度，原生滚动条保留（一条很长的回复也看得出滚到哪了）', () => {
-    const { rerender } = render(<List pages={pagesOf(['唯一的问题'])} />)
+  it('with only one turn or no conversation the stub has no ticks and the native scrollbar stays (so a very long reply still shows the scroll position)', () => {
+    const { rerender } = render(<List pages={pagesOf(['The only question'])} />)
     expect(screen.getByRole('log')).not.toHaveClass('nav:no-scrollbar')
     rerender(<List pages={pagesOf([])} />)
     expect(screen.getByRole('log')).not.toHaveClass('nav:no-scrollbar')
@@ -332,24 +332,24 @@ describe('票根里的刻度尺', () => {
   })
 })
 
-describe('每一轮的空心编号', () => {
+describe('outlined number of each turn', () => {
   const turnNumbers = () => [...document.querySelectorAll('[data-turn-number]')].map((node) => node.textContent)
 
-  it('每一轮左侧有空心编号，与尺子上的数字一致', () => {
+  it('each turn has an outlined number on the left, matching the number on the ruler', () => {
     render(<List pages={pagesOf(texts(6))} turnsBefore={0} turnsTotal={6} />)
     expect(turnNumbers()).toEqual(['1', '2', '3', '4', '5', '6'])
-    const number = turnBlock('问题5').querySelector('[data-turn-number]')!
+    const number = turnBlock('Question 5').querySelector('[data-turn-number]')!
     expect(number).toHaveAttribute('aria-hidden', 'true')
     expect(number).toHaveClass('max-nav:hidden')
     expect(numbers()[4]).toBe('5')
   })
 
-  it('还不知道轮次计数时不显示编号', () => {
+  it('shows no numbers while the turn count is unknown', () => {
     render(<List pages={pagesOf(texts(3))} hasOlder={false} />)
     expect(turnNumbers()).toEqual(['', '', ''])
   })
 
-  it('前面还有轮次时接着编号', () => {
+  it('numbers on when there are turns before', () => {
     render(<List pages={pagesOf(texts(2))} hasOlder turnsBefore={24} turnsTotal={26} />)
     expect(turnNumbers()).toEqual(['25', '26'])
   })
@@ -357,29 +357,29 @@ describe('每一轮的空心编号', () => {
   // The number column is 36px wide (narrowed in the redesign): two-digit numbers are 26px, and from
   // three digits up the size steps down so that four- and five-digit numbers also fit in the column.
   // jsdom does no layout; the actual widths are confirmed with a browser check.
-  it('编号栏收窄到 36px，离正文 12px；编号到三位数、四位数、五位数时缩小字号，不挤到右边的正文', () => {
+  it('the number column narrows to 36px, 12px from the text; three-, four- and five-digit numbers get a smaller font so they do not push into the text on the right', () => {
     const sizeOf = (text: string) => [...turnBlock(text).querySelector('[data-turn-number]')!.classList].filter((name) => name.startsWith('text-['))
     const tens = render(<List pages={pagesOf(texts(2))} hasOlder turnsBefore={98} />)
     expect(turnNumbers()).toEqual(['99', '100'])
-    expect(sizeOf('问题1')).toEqual(['text-[26px]'])
-    expect(sizeOf('问题2')).toEqual(['text-[20px]'])
-    const number = turnBlock('问题1').querySelector('[data-turn-number]')!
+    expect(sizeOf('Question 1')).toEqual(['text-[26px]'])
+    expect(sizeOf('Question 2')).toEqual(['text-[20px]'])
+    const number = turnBlock('Question 1').querySelector('[data-turn-number]')!
     expect(number).toHaveClass('w-9')
     expect(number.parentElement).toHaveClass('gap-3')
     tens.unmount()
     const thousands = render(<List pages={pagesOf(texts(3))} hasOlder turnsBefore={998} />)
     expect(turnNumbers()).toEqual(['999', '1000', '1001'])
-    expect(sizeOf('问题1')).toEqual(['text-[20px]'])
-    expect(sizeOf('问题2')).toEqual(['text-[15px]'])
+    expect(sizeOf('Question 1')).toEqual(['text-[20px]'])
+    expect(sizeOf('Question 2')).toEqual(['text-[15px]'])
     thousands.unmount()
     render(<List pages={pagesOf(texts(2))} hasOlder turnsBefore={9998} />)
     expect(turnNumbers()).toEqual(['9999', '10000'])
-    expect(sizeOf('问题1')).toEqual(['text-[15px]'])
-    expect(sizeOf('问题2')).toEqual(['text-[12px]'])
+    expect(sizeOf('Question 1')).toEqual(['text-[15px]'])
+    expect(sizeOf('Question 2')).toEqual(['text-[12px]'])
   })
 })
 
-describe('刻度的名称', () => {
+describe('tick names', () => {
   const turn = (user: Partial<Schemas['Message']> | null, reply: string | null = null): Turn => ({
     key: 'k',
     user: user && makeMessage(user),
@@ -388,44 +388,44 @@ describe('刻度的名称', () => {
     sessionEpoch: 1,
   })
 
-  it('用户消息合并空白；太长时截断', () => {
-    expect(turnPreview(turn({ text: '  第一行\n\n第二行\t结尾 ' }))).toBe('第一行 第二行 结尾')
-    expect(turnPreview(turn({ text: '字'.repeat(100) }))).toBe(`${'字'.repeat(80)}…`)
+  it('collapses whitespace in the user message; truncates when too long', () => {
+    expect(turnPreview(turn({ text: '  First line\n\nSecond line\tend ' }))).toBe('First line Second line end')
+    expect(turnPreview(turn({ text: '字'.repeat(100) }))).toBe(`${'字'.repeat(80)}…`) // check-english: zh (truncation counts characters of multibyte text, not bytes)
   })
 
-  it('只有图片时写图片张数；平台提醒与 sleep 唤醒写明是哪种', () => {
+  it('with only images gives the image count; platform reminders and sleep wakes say which kind they are', () => {
     const image: Schemas['MessageImage'] = { id: '00000000-0000-4000-8000-000000000001', mimeType: 'image/png', size: 1, width: 1, height: 1 }
-    expect(turnPreview(turn({ text: '', images: [image, image] }))).toBe('2 张图片')
-    expect(turnPreview(turn({ origin: 'inbox_reminder', text: '[platform] inbox' }))).toBe('平台提醒：收到 Inbox 消息')
+    expect(turnPreview(turn({ text: '', images: [image, image] }))).toBe('2 images')
+    expect(turnPreview(turn({ origin: 'inbox_reminder', text: '[platform] inbox' }))).toBe('Platform reminder: Received an Inbox message')
     const wake = 'Platform notice: your sleep is due; continue in the original conversation. sleepId=0b0c'
-    expect(turnPreview(turn({ origin: 'sleep_wake', text: `${wake}; note: 看看  构建\n结果` }))).toBe('sleep 到期唤醒：看看 构建 结果')
-    expect(turnPreview(turn({ origin: 'sleep_wake', text: wake }))).toBe('sleep 到期唤醒')
+    expect(turnPreview(turn({ origin: 'sleep_wake', text: `${wake}; note: check  the build\nresult` }))).toBe('Woke up on schedule: check the build result')
+    expect(turnPreview(turn({ origin: 'sleep_wake', text: wake }))).toBe('Woke up on schedule')
   })
 
-  it('没有用户消息时用回复的开头；回复也没有文字时用通用说法', () => {
-    expect(turnPreview(turn(null, '构建已经修好了'))).toBe('构建已经修好了')
-    expect(turnPreview(turn(null, ''))).toBe('没有文字的一轮')
-    expect(turnPreview(turn({ text: '' }, null))).toBe('没有文字的一轮')
+  it('without a user message uses the start of the reply; when the reply has no text either, a generic phrase', () => {
+    expect(turnPreview(turn(null, 'The build is fixed now'))).toBe('The build is fixed now')
+    expect(turnPreview(turn(null, ''))).toBe('Turn without text')
+    expect(turnPreview(turn({ text: '' }, null))).toBe('Turn without text')
   })
 })
 
 // The conversation gets a larger share (user feedback after v0.2.5): reply text follows the conversation
 // column, with the cap widened to 1100px; user bubbles are widened to 88% of the conversation column.
-describe('对话占比', () => {
-  it('宽屏时回复正文最宽 1100px（原来是 760px），代码块、表格、图片随之变宽；窄屏照旧 760px', () => {
+describe('conversation share', () => {
+  it('on wide screens reply text is at most 1100px wide (it was 760px), and code blocks, tables and images widen with it; narrow screens keep 760px', () => {
     render(<List pages={pagesOf(texts(2))} turnsBefore={0} turnsTotal={2} />)
-    const body = turnBlock('问题1').querySelector('article')!.parentElement!
+    const body = turnBlock('Question 1').querySelector('article')!.parentElement!
     expect(body).toHaveClass('nav:max-w-[1100px]', 'max-w-[760px]', 'min-w-0')
   })
 
-  it('宽屏时用户气泡最宽是对话列的 88%，也不超过回复正文的上限；窄屏照旧 80%', () => {
+  it('on wide screens user bubbles are at most 88% of the conversation column and no wider than the reply text cap; narrow screens keep 80%', () => {
     render(<List pages={pagesOf(texts(2))} turnsBefore={0} turnsTotal={2} />)
-    expect(screen.getByText('问题1')).toHaveClass('nav:max-w-[min(88%,1100px)]', 'max-w-[80%]')
+    expect(screen.getByText('Question 1')).toHaveClass('nav:max-w-[min(88%,1100px)]', 'max-w-[80%]')
   })
 
-  it('插进对话流的内容（发给你的消息、问题）仍与各轮的正文左对齐', () => {
-    const inserts = [{ key: 'note', at: '2026-10-25T09:00:30Z', node: <p>一条插进来的消息</p> }]
+  it('content inserted into the conversation flow (messages to you, questions) stays left-aligned with the text of the turns', () => {
+    const inserts = [{ key: 'note', at: '2026-10-25T09:00:30Z', node: <p>A message inserted into the flow</p> }]
     render(<List pages={pagesOf(texts(2))} turnsBefore={0} turnsTotal={2} inserts={inserts} />)
-    expect(screen.getByText('一条插进来的消息').parentElement).toHaveClass('nav:pl-12')
+    expect(screen.getByText('A message inserted into the flow').parentElement).toHaveClass('nav:pl-12')
   })
 })

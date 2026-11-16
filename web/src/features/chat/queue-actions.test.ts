@@ -6,18 +6,18 @@ const conflict = (reason: string) => new ApiError({ status: 409, code: 'task_con
 
 describe('nodeConflictNotice', () => {
   it.each([
-    ['node_changed', '任务已经不在这个节点上'],
-    ['task_ended', '任务已经结束'],
-    ['target_mismatch', '这个节点的 Agent 或实例已经换了'],
-    ['instance_unavailable', '这个节点的 Agent 实例已不可用'],
-    ['chat_unavailable', '现在不能给这个节点发消息'],
-    ['action_conflict', '节点状态刚刚变了，这次操作没有生效'],
-  ])('names the node guard reason %s in Chinese', (reason, text) => {
+    ['node_changed', 'The task has moved off this node'],
+    ['task_ended', 'The task has ended'],
+    ['target_mismatch', 'This node\'s Agent or instance has changed'],
+    ['instance_unavailable', 'This node\'s Agent instance is no longer available'],
+    ['chat_unavailable', 'This node can\'t take messages right now'],
+    ['action_conflict', 'The node changed just now, so this action didn\'t take effect'],
+  ])('names the node guard reason %s in plain words', (reason, text) => {
     expect(nodeConflictNotice(conflict(reason), 'cancel')).toBe(text)
   })
 
   it('keeps the queue-specific wording and leaves other errors to describeError', () => {
-    expect(nodeConflictNotice(conflict('message_read'), 'cancel')).toBe('这条消息已被读取，不在排队中了')
+    expect(nodeConflictNotice(conflict('message_read'), 'cancel')).toBe('This message was already read and is no longer queued')
     expect(nodeConflictNotice(new ApiError({ status: 409, code: 'agent_busy' }), 'stop')).toBeNull()
   })
 })

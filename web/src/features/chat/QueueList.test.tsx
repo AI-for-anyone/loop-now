@@ -13,7 +13,7 @@ function snapshot(agentId: string, status: Partial<Schemas['AgentStatus']>, queu
   return { status: makeStatus(agentId, status), currentText: '', queuedRuns, queueItems }
 }
 
-const queueList = () => screen.getByRole('region', { name: '排队消息' })
+const queueList = () => screen.getByRole('region', { name: 'Queued messages' })
 // One row per queued message; image thumbnails inside a row are listitems too and don't count.
 const rows = () => within(queueList()).getAllByRole('listitem').filter((item) => item.hasAttribute('data-kind'))
 const texts = () => rows().map((item) => within(item).getByRole('button', { expanded: false }).textContent)
@@ -24,15 +24,15 @@ function receipt(agentId: string, actionId: string, operation: Schemas['AgentQue
   return { actionId, agentId, operation, status: 'accepted', item, run, queue }
 }
 
-describe('输入框上方的排队托盘', () => {
-  it('逐条列出：打断在前标明下一条处理；自己发的可编辑，Inbox 消息带发送方；每行都能取消，普通排队的行能打断', async () => {
+describe('queue tray above the input box', () => {
+  it('lists one by one: interrupts first, marked up next; your own can be edited, Inbox messages show the sender; every row can be cancelled, normal queued rows can interrupt', async () => {
     const current = makeRun({ status: 'running', endedAt: null })
     const sent: Schemas['SendMessageInput'][] = []
-    const interrupt = makeQueueItem({ text: '插队', whenBusy: 'interrupt' })
-    const own = makeQueueItem({ text: '顺便把 lint 也跑一下' })
-    const inbox = makeQueueItem({ kind: 'inbox', messageId: '58000000-0000-7000-8000-000000000001', from: manager, text: 'fixture 已更新，请先拉取 server-main' })
+    const interrupt = makeQueueItem({ text: 'Cut in line', whenBusy: 'interrupt' })
+    const own = makeQueueItem({ text: 'Run lint while you are at it' })
+    const inbox = makeQueueItem({ kind: 'inbox', messageId: '58000000-0000-7000-8000-000000000001', from: manager, text: 'The fixture is updated; pull server-main first' })
     const { agent, user, emit } = await renderChat({
-      messages: [makeMessage({ text: '当前', run: current })],
+      messages: [makeMessage({ text: 'Current', run: current })],
       handlers: [
         http.post(apiUrl('/agents/:agentId/messages'), async ({ request }) => {
           const body = (await request.json()) as Schemas['SendMessageInput']
@@ -43,78 +43,78 @@ describe('输入框上方的排队托盘', () => {
       ],
     })
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: current }, [], [interrupt, own, inbox]))
-    expect(within(queueList()).getByRole('heading', { name: '排队 3' })).toBeInTheDocument()
-    expect(within(queueList()).getByText('当前回复结束后按顺序处理')).toBeInTheDocument()
+    expect(within(queueList()).getByRole('heading', { name: 'Queued · 3' })).toBeInTheDocument()
+    expect(within(queueList()).getByText('Handled in order after the current reply')).toBeInTheDocument()
     expect(rows().map((item) => item.getAttribute('data-kind'))).toEqual(['interrupt', 'queue', 'queue'])
-    expect(texts()).toEqual(['插队', '顺便把 lint 也跑一下', 'fixture 已更新，请先拉取 server-main'])
+    expect(texts()).toEqual(['Cut in line', 'Run lint while you are at it', 'The fixture is updated; pull server-main first'])
     const [first, second, third] = rows()
-    expect(within(first).getByText('下一条处理')).toBeInTheDocument()
-    expect(within(first).queryByRole('button', { name: '打断' })).toBeNull()
-    expect(within(first).getByRole('button', { name: '编辑这条排队消息' })).toBeEnabled()
-    expect(within(second).getByRole('button', { name: '打断' })).toBeEnabled()
-    expect(within(second).getByRole('button', { name: '编辑这条排队消息' })).toBeEnabled()
+    expect(within(first).getByText('Up next')).toBeInTheDocument()
+    expect(within(first).queryByRole('button', { name: 'Interrupt' })).toBeNull()
+    expect(within(first).getByRole('button', { name: 'Edit this queued message' })).toBeEnabled()
+    expect(within(second).getByRole('button', { name: 'Interrupt' })).toBeEnabled()
+    expect(within(second).getByRole('button', { name: 'Edit this queued message' })).toBeEnabled()
     // An Inbox message sent by someone else: it names the sender and can be promoted to interrupt or cancelled, but not edited.
     expect(within(third).getByText('test')).toBeInTheDocument()
-    expect(within(third).getByRole('button', { name: '打断' })).toBeEnabled()
-    expect(within(third).queryByRole('button', { name: '编辑这条排队消息' })).toBeNull()
-    for (const row of rows()) expect(within(row).getByRole('button', { name: '取消这条排队消息' })).toBeEnabled()
-    expect(within(log()).queryByText(/^(插队|顺便把 lint 也跑一下)$/)).toBeNull()
+    expect(within(third).getByRole('button', { name: 'Interrupt' })).toBeEnabled()
+    expect(within(third).queryByRole('button', { name: 'Edit this queued message' })).toBeNull()
+    for (const row of rows()) expect(within(row).getByRole('button', { name: 'Cancel this queued message' })).toBeEnabled()
+    expect(within(log()).queryByText(/^(Cut in line|Run lint while you are at it)$/)).toBeNull()
 
     // When busy, a message is queued directly without asking for a choice; the tray updates with queue.updated.
-    expect(screen.getByLabelText('消息')).toHaveAttribute('placeholder', '开发助手 正在回复，新消息会排队')
-    await user.type(screen.getByLabelText('消息'), '再补一句{Enter}')
-    await waitFor(() => expect(sent).toEqual([{ text: '再补一句', whenBusy: 'queue' }]))
+    expect(screen.getByLabelText('Message')).toHaveAttribute('placeholder', '开发助手 is replying; new messages will queue')
+    await user.type(screen.getByLabelText('Message'), 'One more thing{Enter}')
+    await waitFor(() => expect(sent).toEqual([{ text: 'One more thing', whenBusy: 'queue' }]))
     expect(screen.queryByRole('dialog')).toBeNull()
-    await emit('queue.updated', { queuedRuns: [], items: [interrupt, own, inbox, makeQueueItem({ text: '再补一句' })] })
-    await waitFor(() => expect(within(queueList()).getByRole('heading', { name: '排队 4' })).toBeInTheDocument())
-    expect(texts().at(-1)).toBe('再补一句')
+    await emit('queue.updated', { queuedRuns: [], items: [interrupt, own, inbox, makeQueueItem({ text: 'One more thing' })] })
+    await waitFor(() => expect(within(queueList()).getByRole('heading', { name: 'Queued · 4' })).toBeInTheDocument())
+    expect(texts().at(-1)).toBe('One more thing')
     // The tray sits right above the input; the key hints are below the input, and the busy status does not repeat the queue count.
-    expect(queueList().compareDocumentPosition(screen.getByLabelText('消息')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(screen.getByText('Agent 正忙（回复中）')).toBeInTheDocument()
-    expect(screen.getByText('只停止当前回复')).toBeInTheDocument()
+    expect(queueList().compareDocumentPosition(screen.getByLabelText('Message')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByText('Agent is busy (Replying)')).toBeInTheDocument()
+    expect(screen.getByText('Stop the current reply only')).toBeInTheDocument()
   })
 
-  it('正文截成一行，悬停可见全文，点击展开；图片显示缩略图', async () => {
+  it('the text is cut to one line, the full text shows on hover, a click expands it; images show as thumbnails', async () => {
     const current = makeRun({ status: 'running', endedAt: null })
-    const text = '第一行说明\n第二行补充'
+    const text = 'First line explains\nSecond line adds'
     const image: Schemas['MessageImage'] = { id: '00000000-0000-7000-8000-000000000301', mimeType: 'image/png', size: 1024, width: 640, height: 480 }
     const { agent, user, emit } = await renderChat()
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: current }, [], [makeQueueItem({ text, images: [image] })]))
-    const body = within(queueList()).getByRole('button', { name: /第一行说明/ })
+    const body = within(queueList()).getByRole('button', { name: /First line explains/ })
     expect(body).toHaveAttribute('title', text)
     expect(body).toHaveAttribute('aria-expanded', 'false')
     await user.click(body)
     expect(body).toHaveAttribute('aria-expanded', 'true')
     expect(body).not.toHaveAttribute('title')
-    expect(within(queueList()).getByRole('img', { name: '图片 1 · 640×480' })).toBeInTheDocument()
+    expect(within(queueList()).getByRole('img', { name: 'Image 1 · 640×480' })).toBeInTheDocument()
   })
 
-  it('没有排队消息：不显示托盘，对话仍正常显示', async () => {
+  it('no queued messages: no tray, the conversation shows as usual', async () => {
     const run = makeRun()
     const { agent, emit } = await renderChat({
-      messages: [makeMessage({ text: '你好', run }), makeMessage({ role: 'assistant', text: '你好呀', run })],
+      messages: [makeMessage({ text: 'Hello', run }), makeMessage({ role: 'assistant', text: 'Hi there', run })],
     })
     await emit('snapshot', snapshot(agent.id, {}))
-    expect(screen.queryByRole('region', { name: '排队消息' })).toBeNull()
-    expect(within(log()).getByText('你好呀')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Queued messages' })).toBeNull()
+    expect(within(log()).getByText('Hi there')).toBeInTheDocument()
   })
 
-  it('收到快照之前，托盘取自排队接口；收到快照后以快照为准', async () => {
+  it('before the snapshot arrives the tray comes from the queue API; after it the snapshot wins', async () => {
     const current = makeRun({ status: 'running', endedAt: null })
     const { agent, emit } = await renderChat({
       status: { busy: true, currentRun: current },
-      handlers: [http.get(apiUrl('/agents/:agentId/queue'), ({ params }) => HttpResponse.json({ agentId: String(params.agentId), items: [makeQueueItem({ text: '接口里的排队' })] }))],
+      handlers: [http.get(apiUrl('/agents/:agentId/queue'), ({ params }) => HttpResponse.json({ agentId: String(params.agentId), items: [makeQueueItem({ text: 'Queued from the API' })] }))],
     })
-    expect(await within(queueList()).findByText('接口里的排队')).toBeInTheDocument()
+    expect(await within(queueList()).findByText('Queued from the API')).toBeInTheDocument()
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: current }))
-    await waitFor(() => expect(screen.queryByRole('region', { name: '排队消息' })).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Queued messages' })).toBeNull())
   })
 
-  it('打断：带 actionId 点一下直接生效，进行中禁用；按回执的列表移到前面；Inbox 消息按消息转换', async () => {
+  it('interrupt: one click with an actionId takes effect, disabled while in flight; moves to the front by the receipt list; Inbox messages are promoted by message', async () => {
     const current = makeRun({ status: 'running', endedAt: null })
     const runA = makeRun({ status: 'queued', whenBusy: 'queue', startedAt: null, endedAt: null })
-    const a = makeQueueItem({ runId: runA.id, text: '普通一' })
-    const b = makeQueueItem({ kind: 'inbox', messageId: '58000000-0000-7000-8000-000000000002', from: manager, text: '来自 test' })
+    const a = makeQueueItem({ runId: runA.id, text: 'Normal one' })
+    const b = makeQueueItem({ kind: 'inbox', messageId: '58000000-0000-7000-8000-000000000002', from: manager, text: 'From test' })
     const posts: { url: string; body: Schemas['AgentQueueActionInput'] }[] = []
     let release!: () => void
     const gate = new Promise<void>((resolve) => (release = resolve))
@@ -129,26 +129,26 @@ describe('输入框上方的排队托盘', () => {
       ],
     })
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: current }, [runA], [a, b]))
-    expect(texts()).toEqual(['普通一', '来自 test'])
+    expect(texts()).toEqual(['Normal one', 'From test'])
     const row = rows()[1]
-    await user.click(within(row).getByRole('button', { name: '打断' }))
-    const busyButton = within(row).getByRole('button', { name: '打断中…' })
+    await user.click(within(row).getByRole('button', { name: 'Interrupt' }))
+    const busyButton = within(row).getByRole('button', { name: 'Interrupting…' })
     expect(busyButton).toBeDisabled()
-    expect(within(row).getByRole('button', { name: '取消这条排队消息' })).toBeDisabled()
+    expect(within(row).getByRole('button', { name: 'Cancel this queued message' })).toBeDisabled()
     await user.click(busyButton)
     expect(posts).toEqual([{ url: `inbox:${b.messageId}`, body: { actionId: expect.stringMatching(/^[\da-f-]{36}$/) } }])
     expect(screen.queryByRole('dialog')).toBeNull()
 
     await act(async () => release())
-    await waitFor(() => expect(texts()).toEqual(['来自 test', '普通一']))
+    await waitFor(() => expect(texts()).toEqual(['From test', 'Normal one']))
     expect(rows()[0]).toHaveAttribute('data-kind', 'interrupt')
-    expect(within(rows()[0]).getByText('下一条处理')).toBeInTheDocument()
-    expect(within(rows()[0]).queryByRole('button', { name: '打断' })).toBeNull()
+    expect(within(rows()[0]).getByText('Up next')).toBeInTheDocument()
+    expect(within(rows()[0]).queryByRole('button', { name: 'Interrupt' })).toBeNull()
   })
 
-  it('queue.updated 整体替换托盘；回执晚于它到达时不用回执里的旧列表覆盖', async () => {
+  it('queue.updated replaces the whole tray; a receipt arriving later does not overwrite it with its old list', async () => {
     const current = makeRun({ status: 'running', endedAt: null })
-    const a = makeQueueItem({ text: '普通一' }), b = makeQueueItem({ text: '普通二' })
+    const a = makeQueueItem({ text: 'Normal one' }), b = makeQueueItem({ text: 'Normal two' })
     let release!: () => void
     const gate = new Promise<void>((resolve) => (release = resolve))
     const { agent, user, emit } = await renderChat({
@@ -161,19 +161,19 @@ describe('输入框上方的排队托盘', () => {
       ],
     })
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: current }, [], [a, b]))
-    await user.click(within(rows()[1]).getByRole('button', { name: '打断' }))
-    // Before the receipt arrives: “普通一” (normal one) has started and the server has pushed a new list.
+    await user.click(within(rows()[1]).getByRole('button', { name: 'Interrupt' }))
+    // Before the receipt arrives: “Normal one” has started and the server has pushed a new list.
     await emit('queue.updated', { queuedRuns: [], items: [{ ...b, whenBusy: 'interrupt' }] })
-    await waitFor(() => expect(texts()).toEqual(['普通二']))
+    await waitFor(() => expect(texts()).toEqual(['Normal two']))
     await act(async () => release())
-    await waitFor(() => expect(within(rows()[0]).queryByRole('button', { name: '打断中…' })).toBeNull())
-    expect(texts()).toEqual(['普通二'])
+    await waitFor(() => expect(within(rows()[0]).queryByRole('button', { name: 'Interrupting…' })).toBeNull())
+    expect(texts()).toEqual(['Normal two'])
   })
 
-  it('已不在队列时 409：一行轻提示（已开始、已被读取），不弹窗、不报错，并重新读取', async () => {
+  it('409 when no longer queued: a light one-line notice (already started, already read), no dialog, no error, and a reread', async () => {
     const current = makeRun({ status: 'running', endedAt: null })
-    const own = makeQueueItem({ text: '普通一' })
-    const inbox = makeQueueItem({ kind: 'inbox', messageId: '58000000-0000-7000-8000-000000000003', from: manager, text: '刚被读取' })
+    const own = makeQueueItem({ text: 'Normal one' })
+    const inbox = makeQueueItem({ kind: 'inbox', messageId: '58000000-0000-7000-8000-000000000003', from: manager, text: 'Just read' })
     let statusReads = 0
     const { agent, user, emit } = await renderChat({
       handlers: [
@@ -191,21 +191,21 @@ describe('输入框上方的排队托盘', () => {
     })
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: current }, [], [own, inbox]))
     const before = statusReads
-    await user.click(within(rows()[0]).getByRole('button', { name: '打断' }))
-    expect(await screen.findByText('已开始处理，无法转为打断')).toHaveAttribute('role', 'status')
+    await user.click(within(rows()[0]).getByRole('button', { name: 'Interrupt' }))
+    expect(await screen.findByText('Already started; can\'t promote to interrupt')).toHaveAttribute('role', 'status')
     expect(screen.queryByRole('alert')).toBeNull()
     expect(screen.queryByRole('dialog')).toBeNull()
     await waitFor(() => expect(statusReads).toBeGreaterThan(before))
-    expect(within(rows()[0]).getByRole('button', { name: '打断' })).toBeEnabled()
-    await user.click(within(rows()[1]).getByRole('button', { name: '取消这条排队消息' }))
-    expect(await screen.findByText('这条消息已被读取，不在排队中了')).toHaveAttribute('role', 'status')
+    expect(within(rows()[0]).getByRole('button', { name: 'Interrupt' })).toBeEnabled()
+    await user.click(within(rows()[1]).getByRole('button', { name: 'Cancel this queued message' }))
+    expect(await screen.findByText('This message was already read and is no longer queued')).toHaveAttribute('role', 'status')
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
-  it('取消：结果不明时按钮改为重试，重试沿用同一 actionId；成功后按回执去掉这一行', async () => {
+  it('cancel: when the result is unknown the button turns into retry, which reuses the same actionId; on success the row goes by the receipt', async () => {
     const current = makeRun({ status: 'running', endedAt: null })
     const runA = makeRun({ status: 'queued', whenBusy: 'queue', startedAt: null, endedAt: null })
-    const a = makeQueueItem({ runId: runA.id, text: '不要了' }), b = makeQueueItem({ text: '留着' })
+    const a = makeQueueItem({ runId: runA.id, text: 'Not needed' }), b = makeQueueItem({ text: 'Keep this' })
     const bodies: Schemas['AgentQueueActionInput'][] = []
     const { agent, user, emit } = await renderChat({
       handlers: [
@@ -219,19 +219,19 @@ describe('输入框上方的排队托盘', () => {
       ],
     })
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: current }, [runA], [a, b]))
-    await user.click(within(rows()[0]).getByRole('button', { name: '取消这条排队消息' }))
-    await user.click(await within(rows()[0]).findByRole('button', { name: '重试取消这条排队消息' }))
-    await waitFor(() => expect(texts()).toEqual(['留着']))
+    await user.click(within(rows()[0]).getByRole('button', { name: 'Cancel this queued message' }))
+    await user.click(await within(rows()[0]).findByRole('button', { name: 'Retry cancelling this queued message' }))
+    await waitFor(() => expect(texts()).toEqual(['Keep this']))
     expect(bodies).toHaveLength(2)
     expect(bodies[1]).toEqual(bodies[0])
     // The withdrawn turn never ran, so it does not enter the conversation stream.
-    expect(within(log()).queryByText('不要了')).toBeNull()
+    expect(within(log()).queryByText('Not needed')).toBeNull()
   })
 
-  it('编辑：先取回图片，再撤回这条消息，把原文与图片放回输入框，输入框里已有的文字保留在前面', async () => {
+  it('edit: fetches the images first, then withdraws the message and puts its text and images back into the input box, keeping text already there in front', async () => {
     const current = makeRun({ status: 'running', endedAt: null })
     const image: Schemas['MessageImage'] = { id: '00000000-0000-7000-8000-000000000302', mimeType: 'image/png', size: 8, width: 2, height: 2 }
-    const item = makeQueueItem({ text: '原来的话', images: [image] })
+    const item = makeQueueItem({ text: 'Original words', images: [image] })
     const order: string[] = []
     const { agent, user, emit } = await renderChat({
       handlers: [
@@ -248,16 +248,16 @@ describe('输入框上方的排队托盘', () => {
       ],
     })
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: current }, [], [item]))
-    await user.type(screen.getByLabelText('消息'), '先写的')
-    await user.click(within(rows()[0]).getByRole('button', { name: '编辑这条排队消息' }))
-    await waitFor(() => expect(screen.getByLabelText('消息')).toHaveValue('先写的\n原来的话'))
+    await user.type(screen.getByLabelText('Message'), 'Written first')
+    await user.click(within(rows()[0]).getByRole('button', { name: 'Edit this queued message' }))
+    await waitFor(() => expect(screen.getByLabelText('Message')).toHaveValue('Written first\nOriginal words'))
     expect(order).toEqual([`image:${image.id}`, 'cancel'])
-    expect(await screen.findByRole('list', { name: '待发送图片' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '移除图片 1' })).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: '排队消息' })).toBeNull()
+    expect(await screen.findByRole('list', { name: 'Images to send' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove image 1' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Queued messages' })).toBeNull()
   })
 
-  it('停止：忙时输入框为空，发送按钮换成停止，只停这一次回复；已经结束时一行轻提示', async () => {
+  it('stop: when busy with an empty input the send button becomes stop and stops only this reply; a light one-line notice when it has already ended', async () => {
     const current = makeRun({ status: 'running', endedAt: null })
     const bodies: { runId: string; body: Schemas['AgentQueueActionInput'] }[] = []
     const { agent, user, emit } = await renderChat({
@@ -271,31 +271,31 @@ describe('输入框上方的排队托盘', () => {
       ],
     })
     await emit('snapshot', snapshot(agent.id, { busy: true, currentRun: current }))
-    await user.click(screen.getByRole('button', { name: '停止当前回复' }))
+    await user.click(screen.getByRole('button', { name: 'Stop the current reply' }))
     await waitFor(() => expect(bodies).toEqual([{ runId: current.id, body: { actionId: expect.stringMatching(/^[\da-f-]{36}$/) } }]))
     // With text in the input, the button queues the message.
-    await user.type(screen.getByLabelText('消息'), '新消息')
-    expect(screen.queryByRole('button', { name: '停止当前回复' })).toBeNull()
-    expect(screen.getByRole('button', { name: '排队发送' })).toBeEnabled()
-    await user.clear(screen.getByLabelText('消息'))
-    await user.click(screen.getByRole('button', { name: '停止当前回复' }))
-    expect(await screen.findByText('这次回复已经结束')).toHaveAttribute('role', 'status')
+    await user.type(screen.getByLabelText('Message'), 'New message')
+    expect(screen.queryByRole('button', { name: 'Stop the current reply' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Queue' })).toBeEnabled()
+    await user.clear(screen.getByLabelText('Message'))
+    await user.click(screen.getByRole('button', { name: 'Stop the current reply' }))
+    expect(await screen.findByText('This reply has already ended')).toHaveAttribute('role', 'status')
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
-  it('对话流：被人停止的回复标明已停止；排队中即作废的轮次不显示', async () => {
+  it('conversation flow: a reply stopped by a person is marked stopped; turns voided while queued are not shown', async () => {
     const stopped = makeRun({ status: 'interrupted', endReason: 'user_stopped', endedAt: '2026-10-12T08:01:00Z' })
     const merged = makeRun({ status: 'interrupted', endReason: 'merged_into_interrupt', startedAt: null, endedAt: '2026-10-12T08:01:00Z' })
     const { agent, emit } = await renderChat({
       messages: [
-        makeMessage({ text: '跑一下测试', run: stopped }),
-        makeMessage({ role: 'assistant', text: '正在跑', run: stopped }),
-        makeMessage({ origin: 'inbox_reminder', text: '已并入打断的提醒', run: merged }),
+        makeMessage({ text: 'Run the tests', run: stopped }),
+        makeMessage({ role: 'assistant', text: 'Running them', run: stopped }),
+        makeMessage({ origin: 'inbox_reminder', text: 'Reminder merged into an interrupt', run: merged }),
       ],
     })
     await emit('snapshot', snapshot(agent.id, {}))
-    expect(within(log()).getByText('已停止')).toBeInTheDocument()
-    expect(within(log()).queryByText('已并入打断的提醒')).toBeNull()
+    expect(within(log()).getByText('Stopped')).toBeInTheDocument()
+    expect(within(log()).queryByText('Reminder merged into an interrupt')).toBeNull()
     expect(within(log()).getAllByRole('article')).toHaveLength(1)
   })
 })
