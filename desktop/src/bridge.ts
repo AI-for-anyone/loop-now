@@ -1,9 +1,10 @@
-// 页面经 preload 发来的内容（不可信）：系统通知与 Dock 未读数。不合规的一律丢掉。
+// Content the page sends through preload (untrusted): system notifications and the Dock unread count. Anything malformed is dropped.
 export type DesktopNotification = { id: string; title: string; body: string; path: string }
 
 const text = (value: unknown, max: number) => (typeof value === 'string' ? value.slice(0, max) : undefined)
 
-// path 是控制台里的地址：以单个 / 开头，不含反斜杠，点通知后由页面自己的路由跳转。
+// path is an address inside the console: it starts with a single / and has no backslash; once the notification is clicked, the page's own
+// router navigates to it.
 export function parseNotification(value: unknown): DesktopNotification | undefined {
   if (!value || typeof value !== 'object') return undefined
   const v = value as Record<string, unknown>

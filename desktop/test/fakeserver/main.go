@@ -1,12 +1,13 @@
-// 桌面壳测试用的假服务端：和 loop-server 一样按 LOOP_NOW_LISTEN_ADDR 监听、把 {url,pid,version} 原子地写进 LOOP_NOW_READY_FILE、
-// 回答 GET /healthz，收到 Interrupt／SIGTERM 时删掉就绪文件退出。没有任何业务。
-// 桌面壳的单测（src/server.test.ts）用 go build 把它编出来拉起；CI 里 Windows 的 NSIS 打包也拿它充当 loop-server.exe。
+// Fake server for the desktop shell tests: like loop-server, it listens on LOOP_NOW_LISTEN_ADDR, atomically writes {url,pid,version} to
+// LOOP_NOW_READY_FILE, answers GET /healthz, and on Interrupt/SIGTERM deletes the ready file and exits. No business logic at all.
+// The desktop shell's unit tests (src/server.test.ts) build it with go build and launch it; Windows NSIS packaging in CI also uses it as
+// loop-server.exe.
 //
-//	LOOP_NOW_FAKE_EXIT_CODE=<n>          启动后不监听，直接以 n 退出（测试就绪前退出的失败路径）。
-//	LOOP_NOW_STOP_ON_STDIN_CLOSE=1      和真服务端一样：读 stdin，读到 EOF 就走优雅停机（Windows 上壳靠这个停它）。
-//	LOOP_NOW_EXTERNAL_LISTEN_ADDR=<地址> 和真服务端一样再监听一个对外端口（这里不做 TLS，只占着端口），
-//	                                    就绪文件里多一项 externalUrl（https://<实际地址>）；LOOP_NOW_EXTERNAL_TLS_SELF_SIGNED
-//	                                    指定的目录会建出来并放一个占位的 cert.pem。
+//	LOOP_NOW_FAKE_EXIT_CODE=<n>          does not listen; exits with n right after starting (tests the failure path of exiting before ready).
+//	LOOP_NOW_STOP_ON_STDIN_CLOSE=1       like the real server: reads stdin and shuts down gracefully on EOF (on Windows the shell stops it this way).
+//	LOOP_NOW_EXTERNAL_LISTEN_ADDR=<addr> like the real server, also listens on an external port (no TLS here, the port is only held),
+//	                                     and the ready file gets an extra externalUrl (https://<actual-addr>); the directory given by
+//	                                     LOOP_NOW_EXTERNAL_TLS_SELF_SIGNED is created and gets a placeholder cert.pem.
 package main
 
 import (

@@ -1,8 +1,8 @@
 import { closeSync, existsSync, mkdirSync, openSync, renameSync, rmSync, statSync, writeSync } from 'node:fs'
 import { dirname } from 'node:path'
 
-// 追加写的日志文件，超过 maxBytes 就轮转：file → file.1 → … → file.<keep>，最旧的删掉。
-// 另在内存里留最近一段输出，启动失败时把末尾几行显示给人看。
+// An append-only log file that rotates once it exceeds maxBytes: file → file.1 → … → file.<keep>, and the oldest is deleted.
+// It also keeps the most recent output in memory, so the last few lines can be shown to the user when startup fails.
 export class RotatingLog {
   private fd = -1
   private size = 0
@@ -25,17 +25,17 @@ export class RotatingLog {
     this.recent = (this.recent + data.toString('utf8')).slice(-32 * 1024)
   }
 
-  // 带时间的一行，壳自己的记录用它。
+  // A timestamped line; used for the shell's own records.
   line(text: string): void {
     this.write(`${new Date().toISOString()} ${text}\n`)
   }
 
-  // 最近输出的末尾若干行。
+  // The last few lines of the recent output.
   tail(lines: number): string {
     return this.recent.trimEnd().split('\n').slice(-lines).join('\n')
   }
 
-  // 新一次运行开始时清空内存里的末尾，免得把上一次的输出当成这次的。
+  // Clears the in-memory tail when a new run starts, so the previous run's output is not taken for this one's.
   resetTail(): void {
     this.recent = ''
   }

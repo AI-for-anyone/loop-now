@@ -2,18 +2,19 @@ import { ipcMain, Notification, type IpcMainEvent } from 'electron'
 import { parseBadge, parseNotification } from './bridge'
 
 type Options = {
-  // 调用是否来自窗口里服务端提供的控制台页面。
+  // Whether the call comes from the console page that the server serves in the window.
   trusted: (event: IpcMainEvent) => boolean
-  // 点了通知：显示窗口，让控制台跳到 path。
+  // A notification was clicked: show the window and have the console navigate to path.
   open: (path: string) => void
-  // 未读数（Dock 角标或任务栏 overlay，见 badge.ts）。
+  // Unread count (Dock badge or taskbar overlay, see badge.ts).
   badge: (count: number) => void
 }
 
-// 最多留着这么多条通知的引用：macOS 上通知对象被回收后，点它不再回调。
+// Keep references to at most this many notifications: on macOS, once a notification object is garbage-collected, clicking it no longer
+// calls back.
 const keep = 100
 
-// 接收页面发来的系统通知与未读数。发什么、什么时候发都由页面决定，壳只负责显示。
+// Receives system notifications and the unread count from the page. The page decides what to send and when; the shell only displays them.
 export function handleNotifications(o: Options): void {
   const shown = new Map<string, Notification>()
   ipcMain.on('loop-now:notify', (event, value: unknown) => {

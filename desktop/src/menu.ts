@@ -2,10 +2,13 @@ import { app, Menu } from 'electron'
 import { current, type PlatformId } from './platform'
 import { strings } from './strings'
 
-// 应用菜单：macOS 上和 Electron 的默认菜单一样，只把"退出"换成自己的菜单项（Cmd+Q），由它弹退出确认框。
-// 默认的 role: 'quit' 直接走 app.quit()，和信号、关机注销、Dock 菜单这些不该弹框的途径分不开。
-// Windows 没有这样的应用菜单：不放菜单栏（系统标题栏下面不多一条 File／Edit），退出只从托盘走；关窗口（含 Alt+F4）只是收进托盘，
-// 编辑快捷键由 Chromium 自己处理，不需要菜单里的 role。
+// Application menu: on macOS the same as Electron's default menu, except that "退出" (Quit) is replaced with our own menu item (Cmd+Q),
+// which shows the quit confirmation dialog.
+// The default role: 'quit' goes straight to app.quit() and cannot be told apart from the paths that must not show a dialog: signals,
+// shutdown/log off, the Dock menu.
+// Windows has no such application menu: no menu bar (no extra File/Edit strip below the system title bar), and quitting only goes through
+// the tray; closing the window (including Alt+F4) just tucks it into the tray, and Chromium handles the editing shortcuts itself, so no
+// menu roles are needed.
 export function setAppMenu(quit: () => void, p: PlatformId = current): void {
   if (p !== 'darwin') {
     Menu.setApplicationMenu(null)

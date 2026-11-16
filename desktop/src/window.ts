@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { classifyNavigation, handOffOnce } from './links'
 import { current, windowChrome, type PlatformId } from './platform'
 
-// 壳自带的状态页（启动中、启动失败）显示的内容；文字已按语言选好。
+// What the shell's built-in status page (starting, failed to start) shows; the text is already in the chosen language.
 export type StatusView = {
   title: string
   body: string
@@ -15,13 +15,13 @@ export type StatusView = {
 export type StatusAction = 'retry' | 'logs'
 
 type Options = {
-  // 隔离配置的名字，显示在窗口标题后面，免得和默认配置的窗口混淆。
+  // The name of a separate profile, shown after the window title so the window is not confused with the default profile's.
   profile?: string
-  // 后台启动：人第一次要求显示之前不显示窗口，也不占 Dock。
+  // Background start: no window and no Dock icon until the user first asks to see the window.
   background: boolean
-  // 窗口第一次显示出来时调用。
+  // Called when the window is shown for the first time.
   onFirstShow?: (win: BrowserWindow) => void
-  // 已确认退出时关窗口才真正关闭，否则只是隐藏，服务端照常运行。
+  // Closing the window really closes it only once quitting is confirmed; otherwise it just hides and the server keeps running.
   quitting: () => boolean
   onAction: (action: StatusAction) => void
   note: (text: string) => void
@@ -30,12 +30,12 @@ type Options = {
 
 const statusPage = join(__dirname, '..', 'static', 'status.html')
 
-// 唯一的主窗口：加载服务端提供的控制台，就绪前显示状态页。
+// The single main window: loads the console the server serves, and shows the status page until the server is ready.
 export class MainWindow {
   private win: BrowserWindow | undefined
-  // 当前加载的控制台地址；显示状态页时为空。
+  // The console address currently loaded; undefined while the status page is shown.
   private consoleURL: string | undefined
-  // 人是否已经打开过窗口（后台启动时第一次 show 之前为 false）。
+  // Whether the user has opened the window yet (false before the first show in a background start).
   private opened: boolean
 
   constructor(private readonly o: Options) {
@@ -50,7 +50,7 @@ export class MainWindow {
     return this.win && !this.win.isDestroyed() ? this.win : undefined
   }
 
-  // 人要求显示窗口（菜单栏、Dock、再次打开 app）。
+  // The user asks to see the window (menu bar, Dock, opening the app again).
   show(): void {
     this.opened = true
     void app.dock?.show()
@@ -60,7 +60,8 @@ export class MainWindow {
     win.focus()
   }
 
-  // 需要人注意时（启动失败、多次崩溃）：人打开过窗口才把它拿到前面；后台启动且还没打开过时只在菜单栏里显示状态。
+  // When the user's attention is needed (failed start, repeated crashes): bring the window to the front only if the user has opened it
+  // before; in a background start where it has not been opened yet, the state shows only in the menu bar.
   attention(): void {
     if (this.opened) this.show()
   }
@@ -75,7 +76,8 @@ export class MainWindow {
     void win.loadFile(statusPage, { query })
   }
 
-  // 页面经 preload 发来的调用是否来自窗口里服务端提供的控制台（主框架、同源），不是状态页或别处。
+  // Whether a call the page sends through preload comes from the console the server serves in the window (main frame, same origin), not
+  // from the status page or anywhere else.
   trusts(event: IpcMainEvent): boolean {
     const frame = event.senderFrame
     if (!this.win || this.win.isDestroyed() || event.sender !== this.win.webContents || !frame || frame.parent || !this.consoleURL) return false
@@ -86,7 +88,7 @@ export class MainWindow {
     }
   }
 
-  // 点了系统通知：显示窗口，让控制台在自己的路由里跳到 path。
+  // A system notification was clicked: show the window and have the console navigate to path with its own router.
   navigate(path: string): void {
     this.show()
     if (this.consoleURL !== undefined) this.win?.webContents.send('loop-now:navigate', path)
@@ -96,7 +98,7 @@ export class MainWindow {
     const win = this.ensure()
     if (this.consoleURL === url) return
     this.consoleURL = url
-    win.loadURL(url).catch((err: Error) => this.o.note(`控制台加载失败：${err.message}`))
+    win.loadURL(url).catch((err: Error) => this.o.note(`Console failed to load: ${err.message}`))
   }
 
   private ensure(): BrowserWindow {
@@ -109,17 +111,19 @@ export class MainWindow {
       minHeight: 600,
       show: false,
       title: this.o.profile ? `Loop Now · ${this.o.profile}` : 'Loop Now',
-      // macOS 不要系统标题栏：页面铺到窗口顶部，四角由系统圆角裁切。红绿灯放在页面顶部 48px 那条拖动区的正中，
-      // 与控制台左侧栏的标志左对齐（web/src/app/Sidebar.tsx、static/status.html）。Windows 用系统标题栏（见 platform.ts）。
+      // No system title bar on macOS: the page extends to the top of the window and the system clips the corners to rounded ones. The
+      // traffic lights sit in the middle of the 48px drag strip at the top of the page, left-aligned with the logo in the console's left
+      // sidebar (web/src/app/Sidebar.tsx, static/status.html). Windows uses the system title bar (see platform.ts).
       ...windowChrome(this.o.platform ?? current),
-      // 开发时 Windows 的窗口图标取自 exe（Electron 的）；打包后 exe 里是 app 的图标，这里再给一次，任务栏与标题栏都用它。
+      // In development, the Windows window icon comes from the exe (Electron's); once packaged, the exe carries the app's icon. It is given
+      // again here so the taskbar and the title bar both use it.
       icon: join(__dirname, '..', 'assets', 'icon.png'),
       backgroundColor: '#FBF9F4',
       webPreferences: {
         contextIsolation: true,
         sandbox: true,
         nodeIntegration: false,
-        // 窗口隐藏时控制台的事件流照常工作（系统通知靠它）。
+        // Keeps the console's event stream working while the window is hidden (system notifications rely on it).
         backgroundThrottling: false,
         preload: join(__dirname, 'preload.js'),
         spellcheck: false,
@@ -147,7 +151,7 @@ export class MainWindow {
     contents.on('did-create-window', (child) => this.handOffWhenNavigated(child))
     contents.on('will-navigate', (event) => {
       if (event.url.startsWith('file:')) {
-        // 状态页上的按钮是带 action 的链接。
+        // The buttons on the status page are links carrying an action.
         event.preventDefault()
         const action = new URL(event.url).searchParams.get('action')
         if (action === 'retry' || action === 'logs') this.o.onAction(action)
@@ -162,8 +166,10 @@ export class MainWindow {
     return win
   }
 
-  // 授权登录先同步开一个空白弹窗，再把它导航到 https 的授权地址（web/src/features/agent-config/authorizationWindow.ts）。
-  // 壳不在自己的窗口里登录：弹窗一开始导航，就把地址交给系统浏览器（只交一次，见 handOffOnce）并关掉它；页面不以弹窗是否关闭判断成败。
+  // Authorization login first opens a blank popup synchronously, then navigates it to the https authorization address
+  // (web/src/features/agent-config/authorizationWindow.ts).
+  // The shell does not log in inside its own windows: as soon as the popup starts navigating, the address is handed to the system browser
+  // (only once, see handOffOnce) and the popup is closed; the page does not judge success or failure by whether the popup closed.
   private handOffWhenNavigated(child: BrowserWindow): void {
     const handOff = handOffOnce((url) => {
       this.openExternal(url)
@@ -183,7 +189,7 @@ export class MainWindow {
   }
 
   private openExternal(url: string): void {
-    if (classifyNavigation(url) !== 'external') return this.o.note(`不打开这个地址：${url.slice(0, 200)}`)
-    shell.openExternal(url).catch((err: Error) => this.o.note(`系统浏览器打不开地址：${err.message}`))
+    if (classifyNavigation(url) !== 'external') return this.o.note(`Not opening this address: ${url.slice(0, 200)}`)
+    shell.openExternal(url).catch((err: Error) => this.o.note(`The system browser could not open the address: ${err.message}`))
   }
 }

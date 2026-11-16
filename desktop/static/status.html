@@ -1,5 +1,6 @@
 <!doctype html>
-<!-- 壳自带的状态页：服务端就绪前与启动失败时显示。文字由壳按语言选好放在查询参数里；按钮是带 action 的链接，由壳拦下处理。 -->
+<!-- The shell's built-in status page: shown before the server is ready and when it fails to start. The shell picks the text by language and
+     puts it in the query parameters; the buttons are links carrying an action, which the shell intercepts and handles. -->
 <html>
   <head>
     <meta charset="utf-8" />
@@ -27,7 +28,8 @@
         margin: 0;
         box-sizing: border-box;
         min-height: 100vh;
-        /* 顶部 48px 是拖动窗口的那一条（窗口没有系统标题栏，红绿灯在这一条里），内容在它下面居中。 */
+        /* The top 48px is the strip for dragging the window (the window has no system title bar, and the traffic lights sit in this strip);
+           the content is centered below it. */
         padding-top: 48px;
         display: grid;
         place-items: center;

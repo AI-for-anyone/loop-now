@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 
-// 用到的 electron-updater 的那几样；单测换成假的。
+// The parts of electron-updater in use; unit tests swap in a fake.
 export type Updater = {
   autoDownload: boolean
   autoInstallOnAppQuit: boolean
@@ -17,8 +17,10 @@ export const checkIntervalMs = 6 * 60 * 60_000
 
 export const releasePage = (version: string) => `https://github.com/AI-for-anyone/loop-now/releases/tag/v${version}`
 
-// 自动更新（GitHub Releases，正式版与预发布）：启动 10 秒后与每 6 小时检查一次，有新版本时由菜单栏提示去下载页，
-// 不自动下载、不自动安装——macOS 上安装更新要求 app 有正式签名，签名到位之前装不上。开发模式下不检查（由调用方决定是否 start）。
+// Automatic updates (GitHub Releases, stable and pre-release): checks 10 seconds after start and then every 6 hours; when there is a new
+// version, the menu bar points to the download page.
+// No automatic download and no automatic install: on macOS, installing an update requires a properly signed app, so it cannot work until
+// signing is in place. No checks in development mode (the caller decides whether to call start).
 export class UpdateChecker extends EventEmitter<{ available: [version: string] }> {
   available: string | undefined
   private readonly timers: NodeJS.Timeout[] = []
@@ -30,14 +32,15 @@ export class UpdateChecker extends EventEmitter<{ available: [version: string] }
     super()
     updater.autoDownload = false
     updater.autoInstallOnAppQuit = false
-    // 允许预发布、不设通道：electron-updater 的 GitHub 提供方设了通道时只认预发布段等于通道名的 tag
-    // （'dev' 只认 v0.2.0-dev.N，'latest' 一个也不认），正式版 v0.2.0 和 v0.2.0-rc.N 都会被跳过。不设通道时，
-    // 已装正式版取 Releases 里最新的一个，正式版或预发布都算；已装的是预发布时通道取自它的版本号：
-    // 装的是 rc 只认 rc 的 tag，装的是 beta 或 alpha 另外也认正式版。
+    // Allow pre-releases and set no channel: with a channel set, electron-updater's GitHub provider only accepts tags whose pre-release part
+    // equals the channel name ('dev' only accepts v0.2.0-dev.N, 'latest' accepts none at all), so both the stable v0.2.0 and v0.2.0-rc.N
+    // get skipped. With no channel, an installed stable release takes the newest one in Releases, stable or pre-release alike; when the
+    // installed version is a pre-release, the channel comes from its version number:
+    // an installed rc only accepts rc tags, an installed beta or alpha also accepts stable releases.
     updater.allowPrerelease = true
-    // 只要更新的版本。
+    // Only newer versions.
     updater.allowDowngrade = false
-    const log = (message?: unknown) => note(`更新：${String(message)}`)
+    const log = (message?: unknown) => note(`Updater: ${String(message)}`)
     updater.logger = { info: log, warn: log, error: log, debug: () => undefined }
     updater.on('update-available', (info) => {
       if (this.available === info.version) return

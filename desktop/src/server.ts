@@ -8,11 +8,13 @@ import { current, type PlatformId } from './platform'
 import { isOurServer, processInfo, spawnPlan, terminateChild, terminateStale, type Stamp } from './process'
 import { RestartPolicy } from './restart'
 
-// stopped：没有进程；starting：已拉起、等就绪；running／degraded：就绪，健康接口 200／503；
-// restarting：崩溃后等待重启；failed：就绪前退出或超时；crashed：崩溃次数超限，不再重启；stopping：正在停。
+// stopped: no process; starting: launched, waiting until ready; running/degraded: ready, the health endpoint returns 200/503;
+// restarting: waiting to restart after a crash; failed: exited or timed out before ready; crashed: too many crashes, no more restarts;
+// stopping: being stopped.
 export type ServerState = 'stopped' | 'starting' | 'running' | 'degraded' | 'restarting' | 'failed' | 'crashed' | 'stopping'
 
-// 启动失败的原因，由界面换成文字。服务端的退出码：2 配置错误，3 数据目录或工作根被另一个实例占用，4 监听地址被占用。
+// Why a start failed; the UI turns it into text. Server exit codes: 2 configuration error, 3 data directory or work root held by another
+// instance, 4 listen address in use.
 export type StartFailure =
   | { kind: 'spawn'; message: string }
   | { kind: 'config' }
@@ -27,36 +29,39 @@ const exitAddressInUse = 4
 export type ServerOptions = {
   bin: string
   readyFile: string
-  // 壳记下的服务端 pid 与启动时刻（就绪后写），下次启动清理孤儿时和就绪文件里的 pid 核对，免得 pid 被复用时认错。
+  // The server pid and start time recorded by the shell (written once ready); on the next start, orphan cleanup checks them against the pid
+  // in the ready file, so a reused pid is not misidentified.
   stampFile: string
   env: NodeJS.ProcessEnv
-  // 服务端的 stdout、stderr 原样写进这里。
+  // The server's stdout and stderr are written here as is.
   log: RotatingLog
-  // 壳自己的一行记录。
+  // One line of the shell's own log.
   note: (text: string) => void
-  // 这次监听的端口；0 表示交给系统选。
+  // The port to listen on this time; 0 means the system picks.
   choosePort: () => Promise<number>
-  // 对外 TLS 端口（外部身份与 loopctl 用）：给了目录就开，服务端在目录里维护自签证书（LOOP_NOW_EXTERNAL_TLS_SELF_SIGNED），
-  // 只监听 127.0.0.1；端口同样 0 表示交给系统选，实际地址从就绪文件的 externalUrl 读。不给就不开。
+  // External TLS port (for external identities and loopctl): opened when a directory is given; the server maintains a self-signed
+  // certificate in that directory (LOOP_NOW_EXTERNAL_TLS_SELF_SIGNED) and listens only on 127.0.0.1. Port 0 again means the system picks,
+  // and the actual address is read from externalUrl in the ready file. Not opened when omitted.
   external?: { tlsDir: string; choosePort: () => Promise<number> }
   platform?: PlatformId
 }
 
 export const readyTimeoutMs = 90_000
-// 服务端 LOOP_NOW_SHUTDOWN_TIMEOUT 默认 15 秒，再留 5 秒。
+// The server's LOOP_NOW_SHUTDOWN_TIMEOUT defaults to 15 seconds; allow 5 more.
 const stopGraceMs = 20_000
 const healthIntervalMs = 10_000
 
 type Ready = { url: string; pid: number; version: string; externalUrl?: string }
 type Exit = { code: number | null; signal: NodeJS.Signals | null }
-// externalPort 为 undefined 表示没开对外端口。
+// externalPort undefined means the external port is not open.
 type Run = { child: ChildProcess; port: number; externalPort: number | undefined; exited: Promise<Exit>; spawnError?: string }
 
-// 拉起并守护 loop-server：等就绪文件与健康接口，就绪后定时查健康，崩溃按 RestartPolicy 重启。
+// Launches and supervises loop-server: waits for the ready file and the health endpoint, checks health periodically once ready, and
+// restarts after crashes according to RestartPolicy.
 export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [url: string] }> {
   state: ServerState = 'stopped'
   url: string | undefined
-  // 对外 TLS 端口的 https 地址；没开或还没就绪时为空。
+  // The https address of the external TLS port; undefined when it is not open or not ready yet.
   externalUrl: string | undefined
   failure: StartFailure | undefined
   private run: Run | undefined
@@ -72,7 +77,7 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
     this.platform = o.platform ?? current
   }
 
-  // 有没有服务端进程（包括还没就绪的）。
+  // Whether there is a server process (including one that is not ready yet).
   get alive(): boolean {
     return this.run !== undefined
   }
@@ -85,7 +90,7 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
     await this.clearStale()
     const port = await this.o.choosePort()
     const externalPort = this.o.external ? await this.o.external.choosePort() : undefined
-    if ((this.state as ServerState) !== 'starting') return // 等待期间被停掉了
+    if ((this.state as ServerState) !== 'starting') return // stopped while waiting
     this.launch(port, externalPort)
   }
 
@@ -98,7 +103,8 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
       externalPort === undefined || !this.o.external
         ? {}
         : { LOOP_NOW_EXTERNAL_LISTEN_ADDR: `127.0.0.1:${externalPort}`, LOOP_NOW_EXTERNAL_TLS_SELF_SIGNED: this.o.external.tlsDir }
-    // Windows 握着 stdin、带 LOOP_NOW_STOP_ON_STDIN_CLOSE=1，退出时关掉 stdin 让服务端优雅停机（见 process.ts）。
+    // On Windows the shell holds stdin and sets LOOP_NOW_STOP_ON_STDIN_CLOSE=1; on exit it closes stdin so the server shuts down gracefully
+    // (see process.ts).
     const plan = spawnPlan(this.platform)
     const child = spawn(this.o.bin, [], {
       cwd: dirname(this.o.bin),
@@ -111,8 +117,9 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
         ...externalEnv,
       },
       stdio: [plan.stdin, 'pipe', 'pipe'],
-      // 自成进程组：终端里按 Ctrl+C 不会直接打到服务端，由壳按顺序停它。Windows 上 detached 会给控制台程序开一个窗口，不用；
-      // windowsHide 不让服务端出现控制台窗口。
+      // Its own process group: Ctrl+C in a terminal does not hit the server directly, and the shell stops it in order. On Windows, detached
+      // opens a window for console programs, so it is not used there;
+      // windowsHide keeps the server from showing a console window.
       detached: this.platform !== 'win32',
       windowsHide: true,
     })
@@ -120,7 +127,7 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
     run.exited = new Promise<Exit>((resolve) => {
       child.once('exit', (code, signal) => resolve({ code, signal }))
       child.on('error', (err) => {
-        if (child.pid !== undefined) return this.o.note(`服务端进程出错：${err.message}`)
+        if (child.pid !== undefined) return this.o.note(`Server process error: ${err.message}`)
         run.spawnError = err.message
         resolve({ code: null, signal: null })
       })
@@ -146,7 +153,7 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
     this.setState('stopped')
   }
 
-  // 人手动重启：崩溃计数清零。
+  // Manual restart by the user: the crash count is reset.
   async restart(): Promise<void> {
     this.policy.reset()
     await this.stop()
@@ -156,7 +163,7 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
   private async supervise(run: Run): Promise<void> {
     const ready = await this.waitReady(run)
     if (ready === 'timeout') {
-      this.o.note(`服务端 ${readyTimeoutMs / 1000} 秒内没有就绪，停掉它`)
+      this.o.note(`Server not ready within ${readyTimeoutMs / 1000} seconds, stopping it`)
       await this.terminate(run)
     }
     if (ready === 'exited' || ready === 'timeout') {
@@ -165,9 +172,10 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
       if (this.stopRequested.has(run.child)) return
       if (ready === 'timeout') return this.fail({ kind: 'timeout' })
       if (run.spawnError !== undefined) return this.fail({ kind: 'spawn', message: run.spawnError })
-      // 试探之后、服务端监听之前端口被别人拿走（不知道是哪一个）：两个端口都改由系统选一次。
+      // A port was taken by someone else after the probe but before the server listened (we don't know which one): let the system pick
+      // both ports this once.
       if (exit.code === exitAddressInUse && (run.port !== 0 || (run.externalPort !== undefined && run.externalPort !== 0))) {
-        this.o.note(`端口 ${run.port}${run.externalPort ? ` 或对外 TLS 端口 ${run.externalPort}` : ''} 已被占用，改由系统选择`)
+        this.o.note(`Port ${run.port}${run.externalPort ? ` or external TLS port ${run.externalPort}` : ''} is in use, letting the system choose`)
         return this.launch(0, run.externalPort === undefined ? undefined : 0)
       }
       if (exit.code === exitConfig) return this.fail({ kind: 'config' })
@@ -187,10 +195,10 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
     clearInterval(this.healthTimer)
     this.run = undefined
     if (this.stopRequested.has(run.child)) return
-    this.o.note(`服务端意外退出：${describeExit(exit)}`)
+    this.o.note(`Server exited unexpectedly: ${describeExit(exit)}`)
     const delay = this.policy.next(Date.now())
     if (delay === null) {
-      this.o.note('5 分钟内崩溃超过 3 次，不再自动重启')
+      this.o.note('Crashed more than 3 times within 5 minutes, no more automatic restarts')
       this.setState('crashed')
       return
     }
@@ -198,7 +206,8 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
     this.restartTimer = setTimeout(() => void this.start(), delay)
   }
 
-  // 等就绪文件里出现这个进程的 pid，并且健康接口有回答（200 可用，503 库不可用，都算就绪）。
+  // Waits until the ready file holds this process's pid and the health endpoint answers (200 available, 503 database unavailable; both
+  // count as ready).
   private async waitReady(run: Run): Promise<(Ready & { healthy: boolean }) | 'exited' | 'timeout'> {
     let exited = false
     void run.exited.then(() => (exited = true))
@@ -221,7 +230,8 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
     if (healthy !== undefined && (this.state === 'running' || this.state === 'degraded')) this.setState(healthy ? 'running' : 'degraded')
   }
 
-  // 先让它自己收尾（macOS SIGTERM，Windows 关 stdin），超时再强制结束（平台差异见 process.ts）。
+  // Lets it wind down by itself first (SIGTERM on macOS, close stdin on Windows), and forces it to end on timeout (platform differences:
+  // see process.ts).
   private async terminate(run: Run): Promise<void> {
     const { child } = run
     if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return
@@ -229,7 +239,8 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
     if (!inTime) this.o.note(`服务端 ${stopGraceMs / 1000} 秒内没有退出，强制结束`)
   }
 
-  // 壳上次异常退出时留下的服务端会占着数据目录：就绪文件里的 pid 还活着、正是这个可执行文件、启动时刻也对得上壳记下的，就先停掉它。
+  // A server left behind when the shell last exited abnormally would hold the data directory: if the pid in the ready file is still alive,
+  // runs exactly this executable, and its start time matches what the shell recorded, stop it first.
   private async clearStale(): Promise<void> {
     const ready = readReady(this.o.readyFile)
     if (ready && isOurServer(await processInfo(ready.pid, this.platform), this.o.bin, ready.pid, readStamp(this.o.stampFile), this.platform)) {
@@ -247,13 +258,13 @@ export class ServerProcess extends EventEmitter<{ state: [ServerState]; ready: [
       mkdirSync(dirname(this.o.stampFile), { recursive: true })
       writeFileSync(this.o.stampFile, JSON.stringify({ pid, started: info.started } satisfies Stamp))
     } catch (err) {
-      this.o.note(`记不下服务端的启动时刻：${(err as Error).message}`)
+      this.o.note(`Could not record the server start time: ${(err as Error).message}`)
     }
   }
 
   private fail(failure: StartFailure): void {
     this.failure = failure
-    this.o.note(`服务端启动失败：${JSON.stringify(failure)}`)
+    this.o.note(`Server failed to start: ${JSON.stringify(failure)}`)
     this.setState('failed')
   }
 
@@ -271,12 +282,12 @@ function readReady(file: string): Ready | undefined {
       return { url: value.url, pid: value.pid, version: value.version, externalUrl: typeof value.externalUrl === 'string' ? value.externalUrl : undefined }
     }
   } catch {
-    // 还没写出来，或不是这个格式
+    // not written yet, or not in this format
   }
   return undefined
 }
 
-// GET /healthz：200 为 true，503 为 false，没有回答或其他状态为 undefined。
+// GET /healthz: true for 200, false for 503, undefined for no answer or any other status.
 async function probeHealth(url: string): Promise<boolean | undefined> {
   try {
     const response = await fetch(new URL('/healthz', url), { signal: AbortSignal.timeout(3_000) })
@@ -288,7 +299,7 @@ async function probeHealth(url: string): Promise<boolean | undefined> {
 }
 
 function describeExit(exit: Exit): string {
-  return exit.signal ? `信号 ${exit.signal}` : `退出码 ${exit.code}`
+  return exit.signal ? `signal ${exit.signal}` : `exit code ${exit.code}`
 }
 
 function readStamp(file: string): Stamp | undefined {
@@ -296,7 +307,7 @@ function readStamp(file: string): Stamp | undefined {
     const value = JSON.parse(readFileSync(file, 'utf8')) as Partial<Stamp>
     if (typeof value.pid === 'number' && typeof value.started === 'string') return { pid: value.pid, started: value.started }
   } catch {
-    // 没记过
+    // never recorded
   }
   return undefined
 }

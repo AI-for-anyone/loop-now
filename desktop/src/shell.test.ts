@@ -1,5 +1,6 @@
-// 壳里不依赖 Electron 运行的纯逻辑：重启计数、端口选择、日志轮转、导航分类、隔离配置、设置文件、托盘菜单，以及 Windows 的分支
-// （路径、git 检测、PATH 安装、进程核对、未读数）——平台通过参数注入，在哪个系统上都跑同一套。
+// Pure logic in the shell that runs without Electron: restart counting, port choice, log rotation, navigation classification, separate
+// profiles, the settings file, the tray menu, and the Windows branches (paths, git detection, PATH install, process checks, unread count).
+// The platform is injected as a parameter, so the same suite runs on any OS.
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
@@ -219,10 +220,10 @@ describe('配置', () => {
       LOOP_NOW_WORK_ROOT: 'C:\\ProgramData\\loop-now-desktop\\try',
     })
     assert.equal(p.workRoot, `${windowsWorkRootBase('C:\\ProgramData')}\\try`)
-    // 工作根不得在 %USERPROFILE% 之内（服务端的 PrepareWorkRoot 会拒绝）；ProgramData 挪了位置时跟着走。
+    // The work root must not be inside %USERPROFILE% (the server's PrepareWorkRoot would reject it); it follows ProgramData when that has moved.
     assert.ok(!p.workRoot.toLowerCase().startsWith('c:\\users\\someone\\'))
     assert.equal(resolveProfile('try', 'C:\\Users\\someone', {}, 'win32', { ...env, ProgramData: 'D:\\ProgramData' }).workRoot, 'D:\\ProgramData\\loop-now-desktop\\try')
-    // 没有 LOCALAPPDATA 时按 HOME 推。
+    // Without LOCALAPPDATA, it is derived from HOME.
     assert.equal(resolveProfile('try', 'C:\\Users\\someone', {}, 'win32', {}).dataDir, 'C:\\Users\\someone\\AppData\\Local\\Loop Now\\try\\data')
   })
 
@@ -262,8 +263,8 @@ describe('平台差异', () => {
     assert.deepEqual(badgePlan(2, 0, 'win32'), { overlay: false, flash: false })
     const dot = dotBitmap(16)
     assert.equal(dot.length, 16 * 16 * 4)
-    assert.equal(dot[0 * 4 + 3], 0) // 角上透明
-    assert.equal(dot[(8 * 16 + 8) * 4 + 3], 255) // 中心不透明
+    assert.equal(dot[0 * 4 + 3], 0) // corner transparent
+    assert.equal(dot[(8 * 16 + 8) * 4 + 3], 255) // center opaque
   })
 })
 
@@ -334,7 +335,7 @@ describe('托盘菜单', () => {
       '—',
       '退出 Loop Now',
     ])
-    // 没开对外端口（旧服务端的就绪文件没有 externalUrl）时不可点。
+    // Disabled when the external port is not open (an older server's ready file has no externalUrl).
     assert.equal(labels(trayItems('running', 'http://127.0.0.1:8780', profile(defaultProfile), s))[8], '外部身份连接方式…（不可点）')
   })
 
@@ -378,7 +379,7 @@ describe('托盘菜单', () => {
 
 describe('外部身份连接方式', () => {
   test('证书在壳的 tls 目录下；loopctl 配置命令带 https 地址、加引号的 CA 路径，令牌从标准输入读', () => {
-    // 路径分隔符跟着运行的平台走（Windows 上是反斜杠），所以期望值也用 join 拼。
+    // The path separator follows the running platform (backslash on Windows), so the expected value is built with join too.
     const tlsDir = join('/Users/someone/Library/Application Support/Loop Now/default/shell', 'tls')
     const caFile = externalCertPath(tlsDir)
     assert.equal(caFile, join(tlsDir, 'cert.pem'))
@@ -451,7 +452,7 @@ describe('页面发来的通知与未读数', () => {
 })
 
 describe('安装命令行工具', () => {
-  // macOS 专用（Windows 走 PATH，不建链接；Windows 上 readlink 还会把相对目标解析成绝对路径）。
+  // macOS only (Windows goes through PATH and creates no link; on Windows, readlink would also resolve a relative target to an absolute path).
   test('看出链接是不存在、已指向自带的 loopctl，还是别的', { skip: process.platform === 'win32' && 'macOS 专用' }, async () => {
     const target = '/Applications/Loop Now.app/Contents/Resources/bin/loopctl'
     const link = join(dir, 'cli', 'loopctl')
@@ -507,7 +508,8 @@ describe('检查更新', () => {
     return updater
   }
 
-  // 打包配置的 publish 会写进 app-update.yml，提供方的 options 就是它。读配置要求有发行包目录，读的时候临时给一个。
+  // The packaging config's publish is written into app-update.yml and becomes the provider's options. Reading the config requires a release
+  // bundle directory, so one is provided temporarily while reading.
   const publish = () => {
     const saved = process.env.LOOP_NOW_DESKTOP_BUNDLE
     process.env.LOOP_NOW_DESKTOP_BUNDLE = dir
@@ -519,8 +521,9 @@ describe('检查更新', () => {
     }
   }
 
-  // 用 electron-updater 真实的 GitHub 提供方读一份假的 releases.atom（tags 从新到旧）：每个 release 里只有 latest-mac.yml
-  // 与 latest.yml，别的文件一律 404。updater 的设置来自 UpdateChecker，提供方的 options 来自打包配置。
+  // Uses electron-updater's real GitHub provider to read a fake releases.atom (tags from newest to oldest): each release only has
+  // latest-mac.yml and latest.yml, and every other file is a 404. The updater settings come from UpdateChecker, the provider options from the
+  // packaging config.
   const latestRelease = async (current: string, tags: string[], platform: 'darwin' | 'win32' = 'darwin') => {
     const updater = fake()
     new UpdateChecker(updater, () => undefined)
@@ -535,7 +538,7 @@ describe('检查更新', () => {
         throw new Error(`404 ${path}`)
       },
     }
-    // 提供方只用到 updater 的 allowPrerelease、channel 与当前版本（semver 也认字符串）。
+    // The provider only uses the updater's allowPrerelease, channel and current version (semver accepts strings too).
     const provider = new GitHubProvider(publish(), { ...updater, currentVersion: current, fullChangelog: false } as unknown as AppUpdater, {
       executor: executor as unknown as ProviderRuntimeOptions['executor'],
       platform,
@@ -568,7 +571,7 @@ describe('检查更新', () => {
   })
 
   test('已装正式版：最新的是预发布或正式版都检查得到', async () => {
-    // 预发布的 release 先找 rc-mac.yml，没有就读 latest-mac.yml。
+    // For a pre-release, rc-mac.yml is looked up first, falling back to latest-mac.yml.
     assert.deepEqual(await latestRelease('0.2.0', ['v0.3.0-rc.1', 'v0.2.1', 'v0.2.0']), {
       version: '0.3.0-rc.1',
       fetched: ['.atom', '/download/v0.3.0-rc.1/rc-mac.yml', '/download/v0.3.0-rc.1/latest-mac.yml'],

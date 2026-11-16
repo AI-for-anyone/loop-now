@@ -2,33 +2,35 @@ import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { current, defaultProgramData, pathOf, windowsWorkRootBase, type PlatformId } from './platform'
 
-// 配置：用 --profile=<名字或绝对路径>、LOOP_NOW_DESKTOP_PROFILE，或 ~/Library/Application Support/Loop Now/desktop.json
-// （Windows：%APPDATA%\Loop Now\desktop.json，即 Electron 的 userData）的 profile 选择
-// （依次优先），都没选时是名为 default 的默认配置。壳的设置、日志，服务端的数据目录、上下文目录与工作根都放在配置自己的位置，
-// 显式交给服务端、覆盖环境里的同名变量：桌面版不使用服务端的默认目录（~/.loop_now、/Users/Shared/loop-now），
-// 那是单独部署的服务端在用的；除非 desktop.json 为这个配置明确指定了目录（见 overridesFromFile）。
+// Profiles: chosen with --profile=<name or absolute path>, LOOP_NOW_DESKTOP_PROFILE, or the profile field of
+// ~/Library/Application Support/Loop Now/desktop.json (Windows: %APPDATA%\Loop Now\desktop.json, i.e. Electron's userData)
+// (in that order of precedence); when none is chosen, it is the default profile named default. The shell's settings and logs, and the
+// server's data directory, context directory and work root all live in the profile's own location and are handed to the server
+// explicitly, overriding same-named variables in the environment: the desktop app does not use the server's default directories
+// (~/.loop_now, /Users/Shared/loop-now), which belong to a standalone server deployment, unless desktop.json explicitly specifies
+// directories for this profile (see overridesFromFile).
 export type Profile = {
-  // 显示在窗口标题与菜单栏里的名字：配置名，或绝对路径的最后一段。
+  // The name shown in the window title and the menu bar: the profile name, or the last segment of the absolute path.
   label: string
-  // 这个配置的根目录（完整路径只出现在失败页正文与壳的日志里）。
+  // This profile's root directory (the full path only appears in the failure page body and the shell log).
   root: string
-  // 壳的 userData（设置、就绪文件、浏览器存储、单实例锁）。
+  // The shell's userData (settings, ready file, browser storage, single-instance lock).
   shellDir: string
   logDir: string
   dataDir: string
   contextDir: string
-  // 工作根必须在 HOME 之外。
+  // The work root must be outside HOME.
   workRoot: string
-  // desktop.json 指定、换掉了默认位置的目录（日志首行与托盘据此标出）。
+  // Directories specified by desktop.json that replace the default locations (the first log line and the tray mark them based on this).
   overrides: DirOverrides
 }
 
-// desktop.json 里能为配置指定的目录。
+// The directories desktop.json can specify for a profile.
 export const overridableDirs = ['workRoot', 'dataDir', 'contextDir'] as const
 export type DirOverrides = Partial<Record<(typeof overridableDirs)[number], string>>
 
 const namePattern = /^[a-z0-9][a-z0-9_-]{0,31}$/
-// 去掉末尾的分隔符（Windows 两种都算），盘符根与 / 保留。
+// Strips trailing separators (both kinds count on Windows); a drive root and / are kept.
 const trimSlashes = (path: string, p: PlatformId) => pathOf(p).normalize(path).replace(/([^:/\\])[/\\]+$/, '$1')
 
 export const defaultProfile = 'default'
@@ -40,7 +42,8 @@ export function profileArg(argv: string[], env: NodeJS.ProcessEnv): string | und
   return env.LOOP_NOW_DESKTOP_PROFILE || undefined
 }
 
-// 从 Finder、Dock 打开或登录时启动带不了参数，就读这个文件：{"profile": "<名字或绝对路径>"}。读不到或没写时为空。
+// Opening from Finder or the Dock, or starting at login, cannot pass arguments, so this file is read: {"profile": "<name or absolute path>"}.
+// Undefined when it cannot be read or does not set one.
 export function profileFromFile(file: string): string | undefined {
   try {
     const value = (JSON.parse(readFileSync(file, 'utf8')) as { profile?: unknown }).profile
@@ -50,9 +53,10 @@ export function profileFromFile(file: string): string | undefined {
   }
 }
 
-// desktop.json 的 profiles.<配置> 为这个配置指定目录，用于从源码安装迁移过来时沿用原来的工作根等：
-// {"profiles": {"default": {"workRoot": "/Users/Shared/loop-now"}}}。键是 --profile 里写的名字或绝对路径，只认 workRoot、dataDir、
-// contextDir，值是绝对路径。文件读不到、不是 JSON 或没有这一项时不指定；这一项写错时报错，不悄悄用回默认目录。
+// profiles.<profile> in desktop.json specifies directories for this profile, used to keep the original work root etc. when migrating from
+// a source install: {"profiles": {"default": {"workRoot": "/Users/Shared/loop-now"}}}. The key is the name or absolute path given to
+// --profile; only workRoot, dataDir and contextDir are accepted, and the values are absolute paths. Nothing is specified when the file cannot
+// be read, is not JSON or has no such entry; a malformed entry is an error rather than a silent fallback to the default directories.
 export function overridesFromFile(file: string, profile: string, p: PlatformId = current): DirOverrides {
   let profiles: unknown
   try {
@@ -74,12 +78,13 @@ export function overridesFromFile(file: string, profile: string, p: PlatformId =
   return overrides
 }
 
-// 名字：macOS 放在 ~/Library/Application Support/Loop Now/<名字>（壳的文件在其中的 shell），日志在 ~/Library/Logs/Loop Now/<名字>，
-// 工作根在 /Users/Shared/loop-now-desktop/<名字>（服务端要求工作根在 HOME 之外）。
-// Windows 放在 %LOCALAPPDATA%\Loop Now\<名字>（shell、data、context、logs 都在其中），工作根在 %ProgramData%\loop-now-desktop\<名字>
-// （%LOCALAPPDATA% 在 %USERPROFILE% 之内，服务端不接受；见 platform.ts 的 windowsWorkRootBase）。
-// 绝对路径：所有东西都放在这个目录下（工作根是其中的 work，目录本身须在 HOME 之外），用于临时目录里联调。
-// overrides（desktop.json 指定的目录）换掉对应的默认位置。
+// A name: on macOS it goes in ~/Library/Application Support/Loop Now/<name> (the shell's files in its shell subdirectory), logs in
+// ~/Library/Logs/Loop Now/<name>, and the work root in /Users/Shared/loop-now-desktop/<name> (the server requires the work root to be outside HOME).
+// On Windows it goes in %LOCALAPPDATA%\Loop Now\<name> (shell, data, context and logs all inside it), and the work root in
+// %ProgramData%\loop-now-desktop\<name> (%LOCALAPPDATA% is inside %USERPROFILE%, which the server does not accept; see windowsWorkRootBase in platform.ts).
+// An absolute path: everything goes under that directory (the work root is its work subdirectory, and the directory itself must be outside
+// HOME), for integration testing in a temporary directory.
+// overrides (directories specified by desktop.json) replace the corresponding default locations.
 export function resolveProfile(value: string, home = homedir(), overrides: DirOverrides = {}, p: PlatformId = current, env: NodeJS.ProcessEnv = process.env): Profile {
   const { join, basename, isAbsolute } = pathOf(p)
   if (isAbsolute(value)) {
@@ -126,12 +131,13 @@ export function resolveProfile(value: string, home = homedir(), overrides: DirOv
   }
 }
 
-// 交给服务端的目录变量。
+// The directory variables handed to the server.
 export function profileEnv(profile: Profile): NodeJS.ProcessEnv {
   return { LOOP_NOW_DATA_DIR: profile.dataDir, LOOP_NOW_CONTEXT_DIR: profile.contextDir, LOOP_NOW_WORK_ROOT: profile.workRoot }
 }
 
-// 壳日志每次启动的第一行里的配置部分：配置名与交给服务端的三个目录，desktop.json 指定的标出来。
+// The profile part of the first shell log line on every start: the profile name and the three directories handed to the server, with those
+// specified by desktop.json marked.
 export function profileSummary(profile: Profile): string {
   const dir = (path: string, key: keyof DirOverrides) => (profile.overrides[key] ? `${path}（desktop.json 指定）` : path)
   return `配置 ${profile.label}，数据目录 ${dir(profile.dataDir, 'dataDir')}，上下文目录 ${dir(profile.contextDir, 'contextDir')}，工作根 ${dir(profile.workRoot, 'workRoot')}`

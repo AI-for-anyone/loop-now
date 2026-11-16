@@ -1,11 +1,11 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
-// 壳自己的设置（userData/settings.json）。只有壳的事，业务设置都在服务端。
+// The shell's own settings (userData/settings.json). Only shell concerns; all business settings live in the server.
 export type Settings = {
-  // 上次服务端实际监听的端口。
+  // The port the server actually listened on last time.
   port?: number
-  // 上次对外 TLS 端口（外部身份与 loopctl 用）实际监听的端口。
+  // The port the external TLS port (for external identities and loopctl) actually listened on last time.
   externalPort?: number
 }
 
