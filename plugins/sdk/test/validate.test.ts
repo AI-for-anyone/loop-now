@@ -222,6 +222,67 @@ describe('validatePlugin', () => {
     assert.deepEqual(good.manifest!.identityChannels, ['mail'])
   })
 
+  it('labels and JSON Schema titles and descriptions may be LocalizedText (English first, with Chinese)', () => {
+    const t = (english: string, chinese: string) => ({ 'en-US': english, 'zh-CN': chinese })
+    const loopNow = {
+      id: 'i18n-labels',
+      displayName: t('Labels', '标签'),
+      platform: './platform/index.ts',
+      permissions: ['state'],
+      configSchema: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', title: t('Callback URL', '回调地址'), description: t('Events are POSTed here', '事件会 POST 到这里') },
+          brand: { type: 'string', title: 'Brand', oneOf: [{ const: 'feishu', title: t('Feishu', '飞书') }, { const: 'lark', title: 'Lark' }] },
+          advanced: { type: 'object', title: t('Advanced', '高级'), properties: { region: { type: 'string', title: t('Region', '区域') } } },
+        },
+      },
+      accounts: [{ kind: 'bot', label: t('Bot account', '机器人账号'), fields: { type: 'object', properties: { appId: { type: 'string', title: t('App ID', '应用 ID') } } } }],
+      actions: [{ id: 'resend', label: t('Resend', '重发'), where: ['global'], fields: { type: 'object', properties: { note: { type: 'string', title: t('Note', '备注') } } } }],
+      channels: [{ id: 'lark', label: t('Lark group', '飞书群') }],
+    }
+    const ok = validatePlugin(plugin('i18n-labels', { name: 'i18n-labels', version: '1.0.0', description: t('Labels in two languages', '两种语言的标签'), keywords: ['loop-now-plugin'], loopNow }, { 'README.md': '', 'platform/index.ts': 'export default () => {}\n' }))
+    assert.deepEqual(ok.findings, [])
+    assert.equal(ok.ok, true)
+  })
+
+  it('a label or title that is neither a string nor a valid per-language object is reported at its path', () => {
+    const rule = 'must be a string, or an object with language tags (such as zh-CN, en-US) as keys and non-empty strings as values, with at least one entry.'
+    for (const [name, bad] of [['empty', {}], ['bad_key', { english: 'x' }], ['blank', { 'en-US': ' ' }], ['number', 42]] as const) {
+      const loopNow = {
+        id: `bad-${name.replace('_', '-')}`,
+        platform: './platform/index.ts',
+        configSchema: { type: 'object', properties: { url: { type: 'string', title: bad, description: bad, oneOf: [{ const: 'a', title: bad }] } } },
+        accounts: [{ kind: 'bot', label: bad, fields: { type: 'object', properties: {} } }],
+        actions: [{ id: 'resend', label: bad, where: ['global'] }],
+        channels: [{ id: 'lark', label: bad }],
+      }
+      const r = validatePlugin(plugin(`i18n-bad-${name}`, { name: 'x', version: '1.0.0', description: 'x', keywords: ['loop-now-plugin'], loopNow }, { 'README.md': '', 'platform/index.ts': 'export default () => {}\n' }))
+      assert.equal(r.ok, false, name)
+      const at = (path: string) => [path, `${path} ${rule}`]
+      assert.deepEqual(
+        r.findings.filter((f) => f.level === 'error').map((f) => [f.path, f.message]),
+        [
+          at('loopNow.configSchema.properties.url.title'),
+          at('loopNow.configSchema.properties.url.description'),
+          at('loopNow.configSchema.properties.url.oneOf[0].title'),
+          at('loopNow.accounts[0].label'),
+          at('loopNow.actions[0].label'),
+          at('loopNow.channels[0].label'),
+        ],
+        name,
+      )
+    }
+  })
+
+  it('plain string labels work as before; a missing or empty action or channel label keeps the old error', () => {
+    const base = { name: 'x', version: '1.0.0', description: 'x', keywords: ['loop-now-plugin'] }
+    const ok = validatePlugin(plugin('labels-plain', { ...base, loopNow: { id: 'labels-plain', displayName: 'Plain', platform: './platform/index.ts', actions: [{ id: 'a', label: 'Resend', where: ['global'] }], channels: [{ id: 'c', label: 'Lark' }] } }, { 'README.md': '', 'platform/index.ts': 'export default () => {}\n' }))
+    assert.deepEqual(ok.findings, [])
+    const empty = validatePlugin(plugin('labels-empty', { ...base, loopNow: { id: 'labels-empty', platform: './platform/index.ts', actions: [{ id: 'a', label: '', where: ['global'] }], channels: [{ id: 'c' }] } }, { 'README.md': '', 'platform/index.ts': 'export default () => {}\n' }))
+    assert.deepEqual(empty.findings.filter((f) => f.level === 'error').map((f) => f.message), ['Each entry in loopNow.actions must have a unique id, a label and where.', 'Each entry in loopNow.channels must have an id and a label.'])
+  })
+
   it('平台版本比较', () => {
     assert.equal(versionAtLeast('2026.11', '2026.11'), true)
     assert.equal(versionAtLeast('2026.12.1', '2026.11'), true)
