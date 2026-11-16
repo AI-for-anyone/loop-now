@@ -134,7 +134,7 @@ func TestRealHostLoadsDeliversEventsAndKeepsState(t *testing.T) {
 	if got := e.scalar(`SELECT last_error FROM plugin_event_deliveries WHERE plugin_id='alpha' AND event_id=$1`, failing); !strings.Contains(got, "boom") {
 		t.Errorf("failure reason: %s", got)
 	}
-	if got := e.scalar(`SELECT value FROM plugin_state WHERE plugin_id='alpha' AND project_id IS NULL AND key='probe/a'`); got != `{"n": 1}` {
+	if got := e.scalar(`SELECT value FROM plugin_state WHERE plugin_id='alpha' AND project_id IS NULL AND key='probe/a'`); got != `{"n":1}` {
 		t.Errorf("state value: %s", got)
 	}
 	e.eventually("host log", func() (bool, string) {
