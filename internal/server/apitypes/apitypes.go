@@ -108,6 +108,17 @@ type AgentBusyDetails struct {
 	Queued       QueueCounts `json:"queued"`
 }
 
+// NotFoundDetails mirrors the NotFoundDetails schema: the details of a not_found that is not about a missing resource.
+// Reason is NotFoundUnknownEndpoint when no endpoint matches the method and path (for example a console that is newer
+// than the server); clients must use it, not the message, to tell "this server has no such endpoint" from "the
+// resource does not exist".
+type NotFoundDetails struct {
+	Reason string `json:"reason"`
+}
+
+// NotFoundUnknownEndpoint is NotFoundDetails.Reason when no endpoint matches the method and path.
+const NotFoundUnknownEndpoint = "unknown_endpoint"
+
 // SSE event names.
 const (
 	EventSnapshot       = "snapshot"

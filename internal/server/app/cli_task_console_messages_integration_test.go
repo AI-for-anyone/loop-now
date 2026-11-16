@@ -126,7 +126,7 @@ func TestTaskConsoleAppAcceptedSwitchStrictHistory(t *testing.T) {
 		t.Fatal("rejected target/input wrote a console turn", e)
 	}
 	missingStatus, missingBody := s.call("GET", taskConsoleRoute(d.Task.ID, uuid.New())+"/message-capability", nil)
-	if missingStatus != 404 || strings.Contains(string(missingBody), "接口不存在") {
+	if missingStatus != 404 || strings.Contains(string(missingBody), apitypes.NotFoundUnknownEndpoint) {
 		t.Fatal("missing node confused with unsupported route")
 	}
 	old, e := s.a.Store.TaskTurn(ctx, receipt.RunID)

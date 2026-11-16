@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"loop-now/internal/server/apitypes"
 	"loop-now/internal/server/apperr"
 	"loop-now/internal/server/auth"
 	"loop-now/internal/server/reqid"
@@ -31,9 +32,17 @@ func (s *Server) newMux(prefix string, routes []Route) *http.ServeMux {
 		m.HandleFunc(rt.Method+" "+prefix+rt.Pattern, s.guard(rt))
 	}
 	m.HandleFunc(prefix+"/", func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, apperr.NotFound("接口"))
+		writeError(w, unknownEndpoint())
 	})
 	return m
+}
+
+// unknownEndpoint is the 404 for a request that matches no endpoint. Its details (reason unknown_endpoint) let clients
+// tell an unsupported endpoint from a missing resource without reading the message.
+func unknownEndpoint() error {
+	e := apperr.NotFound("接口")
+	e.Details = apitypes.NotFoundDetails{Reason: apitypes.NotFoundUnknownEndpoint}
+	return e
 }
 
 // ExternalHandler returns the handler for the external port: the same /api/v1 routes as the console, the plugins'
@@ -46,7 +55,7 @@ func (s *Server) ExternalHandler(downloads http.Handler) http.Handler {
 		root.Handle("GET /downloads/loopctl/", downloads)
 	}
 	root.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, apperr.NotFound("接口"))
+		writeError(w, unknownEndpoint())
 	})
 	// The plugins' HTTP entry point needs no token: the plugin verifies the signature itself (plugins/SPEC.md §11).
 	outer := http.NewServeMux()
