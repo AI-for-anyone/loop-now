@@ -69,7 +69,7 @@ func TestBaselineShape(t *testing.T) {
 	var inEvents []string
 	for name, ti := range ts {
 		if !ti.strict {
-			t.Errorf("%s 不是 STRICT 表", name)
+			t.Errorf("%s is not a STRICT table", name)
 		}
 		if ti.schema == db.EventsSchema {
 			inEvents = append(inEvents, name)
@@ -77,17 +77,17 @@ func TestBaselineShape(t *testing.T) {
 	}
 	slices.Sort(inEvents)
 	if !slices.Equal(inEvents, eventsTables) {
-		t.Errorf("events.db 的表 = %v，应为 %v", inEvents, eventsTables)
+		t.Errorf("events.db tables = %v, want %v", inEvents, eventsTables)
 	}
 	// The baseline has 90 tables (the 87 tables from PG plus sequences and the two plugin event capture tables), and
 	// migration 2 adds the 3 tables for local mode.
 	if len(ts) != 93 {
-		t.Errorf("业务表共 %d 张，应为 93", len(ts))
+		t.Errorf("%d tables in total, want 93", len(ts))
 	}
 	for _, name := range eventsTables {
 		var n int
 		if err := d.QueryRow(ctx, `SELECT count(*) FROM pragma_foreign_key_list(?, ?)`, name, db.EventsSchema).Scan(&n); err != nil || n != 0 {
-			t.Errorf("events.db 的 %s 不应有外键：%d %v", name, n, err)
+			t.Errorf("%s in events.db should have no foreign keys: %d %v", name, n, err)
 		}
 	}
 	for _, s := range []string{"main", db.EventsSchema} {
@@ -100,13 +100,13 @@ func TestBaselineShape(t *testing.T) {
 			t.Fatalf("%s foreign_key_check: %v", s, err)
 		}
 		if rows.Next() {
-			t.Errorf("%s foreign_key_check 应为空", s)
+			t.Errorf("%s foreign_key_check should be empty", s)
 		}
 		rows.Close()
 	}
 	var dirs, git, cli, logins bool
 	if err := d.QueryRow(ctx, `SELECT directories, git, cli, logins FROM local_mode_settings`).Scan(&dirs, &git, &cli, &logins); err != nil || !dirs || !git || !cli || logins {
-		t.Errorf("本机模式开关：目录、git、CLI 应默认开启，登录状态默认关闭：%v %v %v %v %v", dirs, git, cli, logins, err)
+		t.Errorf("local mode switches: directories, git and CLI should default to on, logins to off: %v %v %v %v %v", dirs, git, cli, logins, err)
 	}
 	var seqs string
 	if err := d.QueryRow(ctx, `SELECT group_concat(name || '=' || value, ',') FROM (SELECT * FROM sequences ORDER BY name)`).Scan(&seqs); err != nil ||
@@ -116,13 +116,13 @@ func TestBaselineShape(t *testing.T) {
 	// Migrating again does nothing.
 	before, err := schema.Version(ctx, d)
 	if err != nil || before < schema.Baseline {
-		t.Fatalf("版本 = %d %v，应不低于 %d", before, err, schema.Baseline)
+		t.Fatalf("version = %d %v, want at least %d", before, err, schema.Baseline)
 	}
 	if err := schema.Migrate(ctx, d, slog.New(slog.DiscardHandler)); err != nil {
 		t.Fatal(err)
 	}
 	if v, err := schema.Version(ctx, d); err != nil || v != latestVersion {
-		t.Fatalf("版本 = %d %v，应为 %d", v, err, latestVersion)
+		t.Fatalf("version = %d %v, want %d", v, err, latestVersion)
 	}
 }
 
@@ -143,10 +143,10 @@ func TestMigrateToBaseline(t *testing.T) {
 		t.Fatal(err)
 	}
 	if v, err := schema.Version(ctx, d); err != nil || v != schema.Baseline {
-		t.Fatalf("版本 = %d %v，应为 %d", v, err, schema.Baseline)
+		t.Fatalf("version = %d %v, want %d", v, err, schema.Baseline)
 	}
 	if ts := tables(t, d); len(ts) != 90 {
-		t.Fatalf("基线业务表 %d 张，应为 90", len(ts))
+		t.Fatalf("the baseline has %d tables, want 90", len(ts))
 	}
 	// Migration 2 rebuilds agent_folder_git_pulls (two new failure codes): existing records are kept as they are.
 	st := store.New(d)
@@ -170,36 +170,36 @@ func TestMigrateToBaseline(t *testing.T) {
 		return p.ID
 	}
 	old, queued := pull("old"), pull("queued")
-	if err := st.FinishFolderGitPull(ctx, old, "clone_failed", "原来的失败"); err != nil {
+	if err := st.FinishFolderGitPull(ctx, old, "clone_failed", "original failure"); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.FinishFolderGitPull(ctx, queued, "auth_failed", "x"); err == nil {
-		t.Fatal("基线不应接受 auth_failed")
+		t.Fatal("the baseline should not accept auth_failed")
 	}
 	if err := schema.Migrate(ctx, d, log); err != nil {
 		t.Fatal(err)
 	}
 	if v, err := schema.Version(ctx, d); err != nil || v != latestVersion {
-		t.Fatalf("版本 = %d %v，应为 %d", v, err, latestVersion)
+		t.Fatalf("version = %d %v, want %d", v, err, latestVersion)
 	}
-	if got, err := st.GetFolderGitPull(ctx, a.ID, old); err != nil || got.Status != "failed" || *got.ErrorCode != "clone_failed" || *got.ErrorMessage != "原来的失败" {
-		t.Fatalf("重建后旧记录：%+v %v", got, err)
+	if got, err := st.GetFolderGitPull(ctx, a.ID, old); err != nil || got.Status != "failed" || *got.ErrorCode != "clone_failed" || *got.ErrorMessage != "original failure" {
+		t.Fatalf("old record after the rebuild: %+v %v", got, err)
 	}
 	if got, err := st.GetFolderGitPull(ctx, a.ID, queued); err != nil || got.Status != "running" {
-		t.Fatalf("重建后进行中的记录：%+v %v", got, err)
+		t.Fatalf("in-progress record after the rebuild: %+v %v", got, err)
 	}
 	for _, code := range []string{"auth_failed", "host_key_unverified"} {
 		if err := st.FinishFolderGitPull(ctx, pull(code), code, "x"); err != nil {
-			t.Fatalf("迁移后应接受 %s：%v", code, err)
+			t.Fatalf("%s should be accepted after the migration: %v", code, err)
 		}
 	}
 	// The unique index for in-progress pulls is still there: the same path cannot have two pulls in progress.
 	if _, _, err := st.CreateFolderGitPull(ctx, store.FolderGitPull{ID: uuid.Must(uuid.NewV7()), AgentID: a.ID, ActionID: uuid.New(), URL: "https://example.com/r.git", Branch: "main", Path: "queued"}); err == nil {
-		t.Fatal("同一路径的第二个进行中拉取应被唯一索引拒绝")
+		t.Fatal("the unique index should reject a second in-progress pull of the same path")
 	}
 	var fk string
 	if err := d.QueryRow(ctx, `SELECT count(*) FROM pragma_foreign_key_list('agent_folder_git_pulls')`).Scan(&fk); err != nil || fk != "1" {
-		t.Fatalf("外键应保留：%q %v", fk, err)
+		t.Fatalf("the foreign key should be kept: %q %v", fk, err)
 	}
 }
 
@@ -270,7 +270,7 @@ func TestRegexChecksMatchPostgres(t *testing.T) {
 	}
 	ddl := strings.Join(all, "\n")
 	if n := strings.Count(ddl, " GLOB "); n == 0 {
-		t.Fatal("基线里没有 GLOB 检查")
+		t.Fatal("the baseline has no GLOB checks")
 	}
 	r := rand.New(rand.NewPCG(1, 2))
 	alphabet := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._- é\n")
@@ -278,7 +278,7 @@ func TestRegexChecksMatchPostgres(t *testing.T) {
 		expr, ok := regexFragment(ddl, name, c.column)
 		if !ok {
 			// A name mismatch means the constraint was changed on the PG side: fix this table first.
-			t.Errorf("基线里找不到约束 %s 中由正则换来的部分", name)
+			t.Errorf("cannot find the part of constraint %s converted from a regex in the baseline", name)
 			continue
 		}
 		re := regexp.MustCompile(c.pattern)
@@ -300,7 +300,7 @@ func TestRegexChecksMatchPostgres(t *testing.T) {
 				t.Fatalf("%s: %v", name, err)
 			}
 			if want := re.MatchString(s); got != want {
-				t.Errorf("%s(%q) = %v，PG 正则 %s 为 %v", name, s, got, c.pattern, want)
+				t.Errorf("%s(%q) = %v, PG regex %s gives %v", name, s, got, c.pattern, want)
 			}
 		}
 	}
@@ -380,7 +380,7 @@ func TestGuardTriggersAndEmulations(t *testing.T) {
 		`DELETE FROM task_lark_binding_members`,
 	} {
 		if _, err := raw.Exec(q); !db.IsRaise(err, "task_lark_binding_is_append_only") {
-			t.Errorf("%s 应被拒绝，得到 %v", q, err)
+			t.Errorf("%s should be rejected, got %v", q, err)
 		}
 	}
 
@@ -393,7 +393,7 @@ func TestGuardTriggersAndEmulations(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := raw.Exec(`DELETE FROM project_cli_versions WHERE id = 'v1'`); err != nil {
-		t.Fatalf("删除被引用的版本应由触发器先置空引用：%v", err)
+		t.Fatalf("deleting a referenced version should have the trigger clear the references first: %v", err)
 	}
 	var live1, live2 sql.NullString
 	var account string
@@ -401,7 +401,7 @@ func TestGuardTriggersAndEmulations(t *testing.T) {
 		t.Fatal(err)
 	}
 	if live1.Valid || live2.Valid || account != "a1" {
-		t.Errorf("应只置空 live_version_id：%v %q %v", live1, account, live2)
+		t.Errorf("only live_version_id should be cleared: %v %q %v", live1, account, live2)
 	}
 	if _, err := raw.Exec(`PRAGMA foreign_keys = 0`); err != nil {
 		t.Fatal(err)
@@ -411,18 +411,18 @@ func TestGuardTriggersAndEmulations(t *testing.T) {
 	insertDummy(t, raw, "plugin_state", map[string]any{"plugin_id": "p", "project_id": nil, "key": "k"})
 	_, err := raw.Exec(`INSERT INTO plugin_state (plugin_id, project_id, key, value) VALUES ('p', NULL, 'k', 'x')`)
 	if !db.IsUniqueIndexViolation(err, "plugin_state_plugin_id_project_id_key_key") {
-		t.Errorf("NULL 项目的重复键应冲突：%v", err)
+		t.Errorf("duplicate keys with a NULL project should conflict: %v", err)
 	}
 	if _, err := raw.Exec(`INSERT INTO plugin_state (plugin_id, project_id, key, value) VALUES ('p', 'proj', 'k', 'x')
 		ON CONFLICT (plugin_id, coalesce(project_id, ''), key) DO UPDATE SET value = excluded.value`); err != nil {
-		t.Errorf("表达式冲突目标应可用：%v", err)
+		t.Errorf("the expression conflict target should work: %v", err)
 	}
 
 	// stop_requested defaults to 0.
 	for _, table := range []string{"runs", "task_turns"} {
 		var dflt string
 		if err := raw.QueryRow(`SELECT dflt_value FROM pragma_table_info(?) WHERE name = 'stop_requested'`, table).Scan(&dflt); err != nil || dflt != "0" {
-			t.Errorf("%s.stop_requested 默认值：%q %v", table, dflt, err)
+			t.Errorf("%s.stop_requested default: %q %v", table, dflt, err)
 		}
 	}
 }
@@ -471,23 +471,23 @@ func TestConsoleCompactMigrationPreservesPiCommands(t *testing.T) {
 	}
 	got, err := st.GetRun(ctx, run.ID)
 	if err != nil || got.PiCommand == nil || *got.PiCommand != "review" || !got.PiCommandHandled || string(got.PiCommandNotices) != string(notices) || got.UserMessageID != user.ID {
-		t.Fatalf("Pi 命令信息应保留：%+v %v", got, err)
+		t.Fatalf("the Pi command details should be kept: %+v %v", got, err)
 	}
 	for _, id := range []uuid.UUID{user.ID, reply.ID} {
 		msg, err := st.GetMessage(ctx, id)
 		if err != nil || msg.RunID != run.ID {
-			t.Fatalf("对话消息应保留：%+v %v", msg, err)
+			t.Fatalf("conversation messages should be kept: %+v %v", msg, err)
 		}
 	}
 	if err := st.RecordSessionFile(ctx, agent.ID, "/tmp/session.jsonl"); err != nil {
 		t.Fatal(err)
 	}
-	compact, err := st.InsertConsoleCompactRun(ctx, agent.ID, uuid.New(), uuid.New(), "保留决定")
-	if err != nil || compact.UserMessageID != uuid.Nil || compact.Origin != "console_compact" || store.ParseCompaction(compact.Compaction).Instructions != "保留决定" {
-		t.Fatalf("压缩运行：%+v %v", compact, err)
+	compact, err := st.InsertConsoleCompactRun(ctx, agent.ID, uuid.New(), uuid.New(), "keep the decisions")
+	if err != nil || compact.UserMessageID != uuid.Nil || compact.Origin != "console_compact" || store.ParseCompaction(compact.Compaction).Instructions != "keep the decisions" {
+		t.Fatalf("compaction run: %+v %v", compact, err)
 	}
 	if _, err := d.Exec(ctx, `UPDATE runs SET compaction = '{}' WHERE id = $1`, runID); err == nil {
-		t.Fatal("不是手动压缩的执行不能有 compaction")
+		t.Fatal("a run that is not a manual compaction must not have compaction")
 	}
 	rows, err := d.Query(ctx, "PRAGMA foreign_key_check")
 	if err != nil {
@@ -495,7 +495,7 @@ func TestConsoleCompactMigrationPreservesPiCommands(t *testing.T) {
 	}
 	defer rows.Close()
 	if rows.Next() {
-		t.Fatal("迁移后不应有外键错误")
+		t.Fatal("there should be no foreign key errors after the migration")
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
@@ -521,11 +521,11 @@ func TestTaskNumberMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := st.CreateProject(ctx, defaults.Organization.ID, "另一个")
+	other, err := st.CreateProject(ctx, defaults.Organization.ID, "Another")
 	if err != nil {
 		t.Fatal(err)
 	}
-	empty, err := st.CreateProject(ctx, defaults.Organization.ID, "没有任务")
+	empty, err := st.CreateProject(ctx, defaults.Organization.ID, "No tasks")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -566,27 +566,27 @@ func TestTaskNumberMigration(t *testing.T) {
 	for id, n := range want {
 		var column, inDoc int64
 		if err := d.QueryRow(ctx, `SELECT number, document->'$.view.task'->>'number' FROM task_records WHERE id=$1`, id).Scan(&column, &inDoc); err != nil || column != n || inDoc != n {
-			t.Errorf("任务 %s 的编号 = %d（文档 %d），应为 %d：%v", id, column, inDoc, n, err)
+			t.Errorf("task %s number = %d (document %d), want %d: %v", id, column, inDoc, n, err)
 		}
 	}
 	for project, n := range map[uuid.UUID]int64{defaults.Project.ID: 3, other.ID: 1, empty.ID: 0} {
 		var last int64
 		if err := d.QueryRow(ctx, `SELECT last_task_number FROM projects WHERE id=$1`, project).Scan(&last); err != nil || last != n {
-			t.Errorf("项目 %s 的 last_task_number = %d，应为 %d：%v", project, last, n, err)
+			t.Errorf("project %s last_task_number = %d, want %d: %v", project, last, n, err)
 		}
 	}
 	var event, node, created, message string
 	if err := d.QueryRow(ctx, `SELECT data FROM task_events WHERE type='task.updated'`).Scan(&event); err != nil || event != fmt.Sprintf(`{"task":{"id":%q,"title":"t","number":3}}`, c) {
-		t.Errorf("task.updated 事件应补上编号：%s %v", event, err)
+		t.Errorf("task.updated events should get the number: %s %v", event, err)
 	}
 	if err := d.QueryRow(ctx, `SELECT data FROM task_events WHERE type='node.updated'`).Scan(&node); err != nil || node != `{"node":{"id":"n"}}` {
-		t.Errorf("别的事件不应改动：%s %v", node, err)
+		t.Errorf("other events should not change: %s %v", node, err)
 	}
 	if err := d.QueryRow(ctx, `SELECT response FROM task_actions WHERE action_id='create'`).Scan(&created); err != nil || created != fmt.Sprintf(`{"task":{"id":%q,"number":2},"nodes":[]}`, b) {
-		t.Errorf("记下的任务详情应补上编号：%s %v", created, err)
+		t.Errorf("recorded task details should get the number: %s %v", created, err)
 	}
 	if err := d.QueryRow(ctx, `SELECT response FROM task_actions WHERE action_id='message'`).Scan(&message); err != nil || message != `{"messageId":"m1"}` {
-		t.Errorf("不含任务的响应不应改动：%s %v", message, err)
+		t.Errorf("responses without a task should not change: %s %v", message, err)
 	}
 
 	insert := func(number string) error {
@@ -596,21 +596,21 @@ func TestTaskNumberMigration(t *testing.T) {
 		return err
 	}
 	if err := insert(""); err == nil || !strings.Contains(err.Error(), "NOT NULL constraint failed: task_records.number") {
-		t.Errorf("没有编号的任务应被拒绝：%v", err)
+		t.Errorf("a task without a number should be rejected: %v", err)
 	}
 	if err := insert(`,"number":0`); err == nil || !strings.Contains(err.Error(), "CHECK constraint failed: number > 0") {
-		t.Errorf("编号 0 应被拒绝：%v", err)
+		t.Errorf("number 0 should be rejected: %v", err)
 	}
 	if err := insert(`,"number":2`); !db.IsUniqueViolation(err, "task_records", "project_id", "number") {
-		t.Errorf("同一项目的重复编号应被拒绝：%v", err)
+		t.Errorf("a duplicate number in the same project should be rejected: %v", err)
 	}
 	if err := insert(`,"number":4`); err != nil {
-		t.Errorf("新编号应可写入：%v", err)
+		t.Errorf("a new number should be writable: %v", err)
 	}
 	if _, err := d.Exec(ctx, `UPDATE task_records SET document=json_set(document,'$.view.task.number',9) WHERE id=$1`, a); !db.IsRaise(err, "task_number_is_immutable") {
-		t.Errorf("编号不能改：%v", err)
+		t.Errorf("the number must not change: %v", err)
 	}
-	if _, err := d.Exec(ctx, `UPDATE task_records SET document=json_set(document,'$.view.task.title','改名') WHERE id=$1`, a); err != nil {
-		t.Errorf("改文档的其他部分不受影响：%v", err)
+	if _, err := d.Exec(ctx, `UPDATE task_records SET document=json_set(document,'$.view.task.title','renamed') WHERE id=$1`, a); err != nil {
+		t.Errorf("changing other parts of the document should still work: %v", err)
 	}
 }

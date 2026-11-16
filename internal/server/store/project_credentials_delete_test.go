@@ -25,13 +25,13 @@ func TestProjectCredentialDeletionPurgesWholeOwnerAtomically(t *testing.T) {
 			if err := e.s.Pool.QueryRow(ctx, `SELECT organization_id FROM projects WHERE id=$1`, e.project).Scan(&org); err != nil {
 				t.Fatal(err)
 			}
-			p, err := e.s.CreateProject(ctx, org, "待删除")
+			p, err := e.s.CreateProject(ctx, org, "To be deleted")
 			if err != nil {
 				t.Fatal(err)
 			}
 			var agent uuid.UUID
 			if withAgent {
-				a, err := e.s.CreateAgent(ctx, store.ProjectScope(p.ID), "归属Agent", "openai", "fixture", "")
+				a, err := e.s.CreateAgent(ctx, store.ProjectScope(p.ID), "Owned Agent", "openai", "fixture", "")
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -54,16 +54,16 @@ func TestProjectCredentialDeletionPurgesWholeOwnerAtomically(t *testing.T) {
 				}
 				return r
 			}
-			model := create(p.ID, "model", "openai", "当前与历史")
+			model := create(p.ID, "model", "openai", "Current and history")
 			old := *model.View.CurrentVersionID
 			if _, err = e.s.MutateProjectCredential(ctx, p.ID, model.View.ID, 1, nil, &write, false); err != nil {
 				t.Fatal(err)
 			}
 			// Accounts deleted before account deletion wiped their versions still
 			// hold secrets; the project purge must cover them too.
-			removed := create(p.ID, "model", "openai", "已删除模型")
+			removed := create(p.ID, "model", "openai", "Deleted model")
 			mustExec(t, e.s, `UPDATE project_credential_accounts SET deleted_at=now() WHERE id=$1`, removed.View.ID)
-			cli := create(p.ID, "cli", "gh", "已删除CLI")
+			cli := create(p.ID, "cli", "gh", "Deleted CLI")
 			cw := write
 			cw.AuthMethod = "static"
 			cw.TemplateSource = "builtin"
@@ -73,14 +73,14 @@ func TestProjectCredentialDeletionPurgesWholeOwnerAtomically(t *testing.T) {
 				t.Fatal(err)
 			}
 			mustExec(t, e.s, `UPDATE project_credential_accounts SET deleted_at=now() WHERE id=$1`, cli.View.ID)
-			other := create(e.project, "model", "openai", "别的项目")
-			otherCLI := create(e.project, "cli", "gh", "别的项目CLI")
-			platform, err := e.s.CreateAgent(ctx, store.PlatformScope(), "私有平台", "openai", "fixture", "")
+			other := create(e.project, "model", "openai", "Other project")
+			otherCLI := create(e.project, "cli", "gh", "Other project CLI")
+			platform, err := e.s.CreateAgent(ctx, store.PlatformScope(), "Private platform", "openai", "fixture", "")
 			if err != nil {
 				t.Fatal(err)
 			}
 			private := e.version(t, platform.ID, "openai", 1)
-			name := "待取消登录"
+			name := "Login to cancel"
 			op, _, err := e.s.NewProjectModelAuthOperation(ctx, p.ID, cm.LoginStart{Provider: "openai-codex", Name: &name}, time.Now().Add(time.Minute))
 			if err != nil {
 				t.Fatal(err)

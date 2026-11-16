@@ -68,12 +68,12 @@ func subscribe(t *testing.T, s *store.Store, id string, events []string) {
 func TestPluginEventProduction(t *testing.T) {
 	ctx := context.Background()
 	s := sqlitetest.NewStore(t)
-	dc, err := s.EnsureDefaults(ctx, "组织", "项目")
+	dc, err := s.EnsureDefaults(ctx, "Organization", "Project")
 	if err != nil {
 		t.Fatal(err)
 	}
 	project := dc.Project.ID
-	owner, err := s.CreateAgent(ctx, store.ProjectScope(project), "运行者", "anthropic", "m", "")
+	owner, err := s.CreateAgent(ctx, store.ProjectScope(project), "runner", "anthropic", "m", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,32 +85,32 @@ func TestPluginEventProduction(t *testing.T) {
 	must := func(sql string, args ...any) {
 		t.Helper()
 		if _, err := s.Pool.Exec(ctx, sql, args...); err != nil {
-			t.Fatalf("%s：%v", sql, err)
+			t.Fatalf("%s: %v", sql, err)
 		}
 	}
 	must(`INSERT INTO project_plugins(project_id,plugin_id,enabled) VALUES($1,'obs',true)`, project)
 	must(`DELETE FROM plugin_events`)
 
 	// Agent: events in a project go only to obs; those of a platform Agent go to both subscribers.
-	a, err := s.CreateAgent(ctx, store.ProjectScope(project), "观察员", "anthropic", "m", "")
+	a, err := s.CreateAgent(ctx, store.ProjectScope(project), "observer", "anthropic", "m", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateAgent(ctx, store.PlatformScope(), "巡检", "anthropic", "m", ""); err != nil {
+	if _, err := s.CreateAgent(ctx, store.PlatformScope(), "patrol", "anthropic", "m", ""); err != nil {
 		t.Fatal(err)
 	}
-	must(`UPDATE agents SET name='观察员2', config_version=config_version+1 WHERE id=$1`, a.ID)
+	must(`UPDATE agents SET name='observer2', config_version=config_version+1 WHERE id=$1`, a.ID)
 	must(`UPDATE agents SET updated_at=now() WHERE id=$1`, a.ID) // no config change: no event is written
 	if err := s.SoftDeleteAgent(ctx, a.ID); err != nil {
 		t.Fatal(err)
 	}
 	evs := readPluginEvents(t, s)
 	if got := strings.Join(eventTypes(evs), ","); got != "agent.created,agent.created,agent.updated,agent.deleted" {
-		t.Fatalf("Agent 事件：%s", got)
+		t.Fatalf("Agent events: %s", got)
 	}
 	if !slices.Equal(evs[0].To, []string{"obs"}) || evs[1].ProjectID != nil || !slices.Equal(evs[1].To, []string{"obs", "other"}) ||
-		evs[0].Data["name"] != "观察员" || !strings.HasSuffix(evs[0].Data["address"].(string), "/观察员") || evs[2].Data["name"] != "观察员2" {
-		t.Fatalf("Agent 事件内容：%+v", evs)
+		evs[0].Data["name"] != "observer" || !strings.HasSuffix(evs[0].Data["address"].(string), "/observer") || evs[2].Data["name"] != "observer2" {
+		t.Fatalf("Agent event contents: %+v", evs)
 	}
 	must(`DELETE FROM plugin_events`)
 
@@ -129,31 +129,31 @@ func TestPluginEventProduction(t *testing.T) {
 	must(`INSERT INTO usage_records(id,at,agent_id,run_id,kind,input,output,cache_read) VALUES($1,$2,$3,$4,'assistant',100,20,300)`, uuid.New(), base, agent, run)
 	life("run.dispatched", nil)
 	life("run.running", nil)
-	life("model.retry_started", map[string]any{"attempt": 2, "delayMs": 4000, "errorMessage": "不应外泄"})
+	life("model.retry_started", map[string]any{"attempt": 2, "delayMs": 4000, "errorMessage": "must not leak"})
 	life("context.compaction", map[string]any{"reason": "threshold"})
 	life("run.ended", map[string]any{"status": "interrupted", "endReason": "user_interrupt"})
 	life("pi.stopped", map[string]any{"reason": "idle_timeout"})
-	life("pi.exited", map[string]any{"stderrTail": "不应外泄"})
+	life("pi.exited", map[string]any{"stderrTail": "must not leak"})
 	life("run.phase", nil) // not a plugin event
 	evs = readPluginEvents(t, s)
 	if got := strings.Join(eventTypes(evs), ","); got != "run.queued,run.started,model.retry,context.compacted,run.ended,pi.exited,pi.exited" {
-		t.Fatalf("运行事件：%s", got)
+		t.Fatalf("run events: %s", got)
 	}
 	ended := evs[4]
 	tokens, _ := ended.Data["tokens"].(map[string]any)
 	if ended.Data["origin"] != "console" || ended.Data["status"] != "interrupted" || ended.Data["endReason"] != "user_interrupt" || tokens["total"] != float64(420) ||
 		*ended.RunID != run || *ended.ProjectID != project {
-		t.Fatalf("run.ended：%+v", ended)
+		t.Fatalf("run.ended: %+v", ended)
 	}
 	if evs[2].Data["attempt"] != float64(2) || evs[2].Data["errorMessage"] != nil || evs[5].Data["reason"] != "idle_timeout" || evs[6].Data["reason"] != "unexpected_exit" || evs[6].Data["stderrTail"] != nil {
-		t.Fatalf("进程与重试事件：%+v", evs)
+		t.Fatalf("process and retry events: %+v", evs)
 	}
 	must(`DELETE FROM plugin_events`)
 
 	// Inbox and questions: fired at commit, so a question in the same transaction is already visible; the text is
 	// limited to the first 80 characters.
 	msg := uuid.New()
-	text := strings.Repeat("长", 100)
+	text := strings.Repeat("长", 100) // check-english: zh (multi-byte text for the rune-based 80-character excerpt)
 	if err := s.Pool.InTx(ctx, func(tx *db.Tx) error {
 		if _, err := tx.Exec(ctx, `INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,to_kind,text,created_at) VALUES($1,$1,'agent',$2,'console',$3,$4)`, msg, agent, text, base); err != nil {
 			return err
@@ -167,14 +167,14 @@ func TestPluginEventProduction(t *testing.T) {
 	must(`UPDATE inbox_questions SET state='answered', answer_option_id='yes', answered_at=now() WHERE message_id=$1`, msg)
 	evs = readPluginEvents(t, s)
 	if got := strings.Join(eventTypes(evs), ","); got != "inbox.received,question.asked,inbox.read,question.answered" {
-		t.Fatalf("收件事件：%s", got)
+		t.Fatalf("inbox events: %s", got)
 	}
 	rec := evs[0].Data
 	from, _ := rec["from"].(map[string]any)
 	to, _ := rec["to"].(map[string]any)
 	if rec["isQuestion"] != true || len([]rune(rec["excerpt"].(string))) != 80 || from["kind"] != "agent" || from["id"] != agent.String() || to["kind"] != "console" ||
 		*evs[0].AgentID != agent || evs[3].Data["optionId"] != "yes" {
-		t.Fatalf("收件事件内容：%+v", evs)
+		t.Fatalf("inbox event contents: %+v", evs)
 	}
 	must(`DELETE FROM plugin_events`)
 
@@ -187,7 +187,7 @@ func TestPluginEventProduction(t *testing.T) {
 	must(`UPDATE agent_sleeps SET state='woken', ended_at=now(), end_reason='deadline', wake_run_id=$2 WHERE id=$1`, sleep, uuid.New())
 	evs = readPluginEvents(t, s)
 	if got := strings.Join(eventTypes(evs), ","); got != "sleep.requested" || evs[0].Data["sleepId"] != sleep.String() {
-		t.Fatalf("sleep 与停用：%s %+v", got, evs)
+		t.Fatalf("sleep and disabling: %s %+v", got, evs)
 	}
 }
 
@@ -206,7 +206,7 @@ func TestPluginTaskEvents(t *testing.T) {
 	}
 	// Tasks and nodes: the task transaction compares the documents before and after.
 	if _, err := s.MutateTask(ctx, task, nil, func(m *store.TaskMutation) (any, error) {
-		reason := "缺少输入"
+		reason := "missing input"
 		m.Record.View.Task.Status, m.Record.View.Task.Reason = "blocked", &reason
 		for i := range m.Record.View.Nodes {
 			if m.Record.View.Nodes[i].ID == node {
@@ -219,9 +219,9 @@ func TestPluginTaskEvents(t *testing.T) {
 	}
 	evs := readPluginEvents(t, s)
 	if got := strings.Join(eventTypes(evs), ","); got != "task.blocked,node.blocked" {
-		t.Fatalf("任务事件：%s", got)
+		t.Fatalf("task events: %s", got)
 	}
-	if *evs[0].TaskID != task || evs[0].Data["reason"] != "缺少输入" || evs[1].Data["nodeRunId"] != node.String() || *evs[1].AgentID != agent {
-		t.Fatalf("任务事件内容：%+v", evs)
+	if *evs[0].TaskID != task || evs[0].Data["reason"] != "missing input" || evs[1].Data["nodeRunId"] != node.String() || *evs[1].AgentID != agent {
+		t.Fatalf("task event contents: %+v", evs)
 	}
 }

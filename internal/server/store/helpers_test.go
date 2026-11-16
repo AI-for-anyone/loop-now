@@ -46,7 +46,7 @@ type projectMigrationEnv struct {
 func projectMigrationFixture(t *testing.T) projectMigrationEnv {
 	t.Helper()
 	s := sqlitetest.NewStore(t)
-	dc, err := s.EnsureDefaults(context.Background(), "组织", "项目")
+	dc, err := s.EnsureDefaults(context.Background(), "Organization", "Project")
 	if err != nil {
 		t.Fatal(err)
 	}

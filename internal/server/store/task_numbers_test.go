@@ -21,7 +21,7 @@ import (
 func TestTaskNumbersPerProject(t *testing.T) {
 	s, p, m, a, template, _ := taskFixture(t)
 	ctx := context.Background()
-	other, err := s.CreateProject(ctx, p.OrganizationID, "另一个项目")
+	other, err := s.CreateProject(ctx, p.OrganizationID, "Another project")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestTaskNumbersPerProject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oa, err := s.CreateAgent(ctx, store.ProjectScope(other.ID), "执行者", "example", "model", "")
+	oa, err := s.CreateAgent(ctx, store.ProjectScope(other.ID), "executor", "example", "model", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,21 +70,21 @@ func TestTaskNumbersPerProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	if first.Task.Number != 1 || second.Task.Number != 2 {
-		t.Fatalf("编号应从 1 起依次分配：%d %d", first.Task.Number, second.Task.Number)
+		t.Fatalf("numbers should be assigned in order from 1: %d %d", first.Task.Number, second.Task.Number)
 	}
 	if got := mustCreate(other.ID, om, oa); got.Task.Number != 1 {
-		t.Fatalf("另一个项目应从 1 开始：%d", got.Task.Number)
+		t.Fatalf("another project should start at 1: %d", got.Task.Number)
 	}
 	if replay, err := create(p.ID, m, a, replayAction); err != nil || replay.Task.ID != second.Task.ID || replay.Task.Number != 2 {
-		t.Fatalf("重放同一动作应拿回原来的任务和编号：%+v %v", replay.Task, err)
+		t.Fatalf("replaying the same action should return the original task and number: %+v %v", replay.Task, err)
 	}
 	if _, err := s.CreateTask(ctx, p.ID, m.ID, newAction(), func(*db.Tx) (taskmodel.Record, []store.TaskInstance, error) {
 		return taskmodel.Record{}, nil, errors.New("build failed")
 	}); err == nil {
-		t.Fatal("构造失败的创建应报错")
+		t.Fatal("a creation whose build fails should return an error")
 	}
 	if got := mustCreate(p.ID, m, a); got.Task.Number != 3 {
-		t.Fatalf("重放与失败的创建不应占号：%d", got.Task.Number)
+		t.Fatalf("replays and failed creations should not take a number: %d", got.Task.Number)
 	}
 
 	var wg sync.WaitGroup
@@ -107,7 +107,7 @@ func TestTaskNumbersPerProject(t *testing.T) {
 	}
 	slices.Sort(concurrent)
 	if !slices.Equal(concurrent, []int64{4, 5, 6, 7, 8, 9, 10, 11}) {
-		t.Fatalf("并发创建应拿到各不相同的连续编号：%v", concurrent)
+		t.Fatalf("concurrent creations should get distinct consecutive numbers: %v", concurrent)
 	}
 
 	// Delete the task with the largest number (there is currently no way to delete a task, so the row is deleted
@@ -120,7 +120,7 @@ func TestTaskNumbersPerProject(t *testing.T) {
 		mustExec(t, s, q, last)
 	}
 	if got := mustCreate(p.ID, m, a); got.Task.Number != 12 {
-		t.Fatalf("删掉的任务的编号不应重用：%d", got.Task.Number)
+		t.Fatalf("the number of a deleted task should not be reused: %d", got.Task.Number)
 	}
 
 	if _, err := s.MutateTask(ctx, first.Task.ID, nil, func(tx *store.TaskMutation) (any, error) {
@@ -130,13 +130,13 @@ func TestTaskNumbersPerProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got, err := s.GetTask(ctx, first.Task.ID); err != nil || got.View.Task.Number != 1 || got.View.Task.Version != 2 {
-		t.Fatalf("改动后编号应保留：%+v %v", got.View.Task, err)
+		t.Fatalf("the number should be kept after a change: %+v %v", got.View.Task, err)
 	}
 	if _, err := s.MutateTask(ctx, first.Task.ID, nil, func(tx *store.TaskMutation) (any, error) {
 		tx.Record.View.Task.Number = 99
 		return nil, nil
 	}); !db.IsRaise(err, "task_number_is_immutable") {
-		t.Fatalf("改编号应被拒绝：%v", err)
+		t.Fatalf("changing the number should be rejected: %v", err)
 	}
 	page, err := s.ListTasks(ctx, p.ID, "", 100)
 	if err != nil {
@@ -148,6 +148,6 @@ func TestTaskNumbersPerProject(t *testing.T) {
 	}
 	slices.Sort(listed) // tasks in the test have the same creation time, so the list order is undefined
 	if !slices.Equal(listed, []int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12}) {
-		t.Fatalf("列表应带编号：%v", listed)
+		t.Fatalf("the list should carry numbers: %v", listed)
 	}
 }

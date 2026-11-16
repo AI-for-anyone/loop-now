@@ -222,7 +222,7 @@ func TestTaskConsoleServiceAtomicIdempotenceAndGuard(t *testing.T) {
 	svc := tasks.New(s, nil, nil, tasks.Options{}, quietLogger())
 	t.Cleanup(func() { _ = svc.Stop(ctx) })
 	p := auth.Principal{Kind: auth.KindConsole}
-	in := taskmodel.TaskNodeMessageInput{ActionID: uuid.New(), ExpectedAgentID: agent, ExpectedRuntimeID: turn.RuntimeID, Text: "原节点正文"}
+	in := taskmodel.TaskNodeMessageInput{ActionID: uuid.New(), ExpectedAgentID: agent, ExpectedRuntimeID: turn.RuntimeID, Text: "original node message"}
 	before, err := s.GetTask(ctx, id)
 	if err != nil {
 		t.Fatal(err)
@@ -258,7 +258,7 @@ func TestTaskConsoleServiceAtomicIdempotenceAndGuard(t *testing.T) {
 	if _, err = svc.SendConsoleMessage(ctx, p, id, node, in, 4096); !apperr.Is(err, apperr.CodeTaskConflict) {
 		t.Fatal("different action body accepted", err)
 	}
-	in.Text = "原节点正文"
+	in.Text = "original node message"
 	_, err = s.MutateTask(ctx, id, nil, func(m *store.TaskMutation) (any, error) {
 		next := *m.Record.Current()
 		next.ID = uuid.New()
@@ -334,7 +334,7 @@ func TestTaskConsoleBlockedPredicateAndModeDoNotDrift(t *testing.T) {
 	if err != nil || !cap.CanSend {
 		t.Fatal("causal prepared original session could not chat", cap, err)
 	}
-	in := taskmodel.TaskNodeMessageInput{ActionID: uuid.New(), ExpectedAgentID: agent, ExpectedRuntimeID: source.RuntimeID, Text: "排查原异常"}
+	in := taskmodel.TaskNodeMessageInput{ActionID: uuid.New(), ExpectedAgentID: agent, ExpectedRuntimeID: source.RuntimeID, Text: "investigate the original failure"}
 	b, err := svc.SendConsoleMessage(ctx, p, id, node, in, 4096)
 	if err != nil {
 		t.Fatal(err)
@@ -381,7 +381,7 @@ func TestTaskConsoleConcurrentReplaySingleReceipt(t *testing.T) {
 	ctx := context.Background()
 	svc := tasks.New(s, nil, nil, tasks.Options{}, quietLogger())
 	t.Cleanup(func() { _ = svc.Stop(ctx) })
-	in := taskmodel.TaskNodeMessageInput{ActionID: uuid.New(), ExpectedAgentID: agent, ExpectedRuntimeID: turn.RuntimeID, Text: "只接收一次", WhenBusy: "queue"}
+	in := taskmodel.TaskNodeMessageInput{ActionID: uuid.New(), ExpectedAgentID: agent, ExpectedRuntimeID: turn.RuntimeID, Text: "accepted only once", WhenBusy: "queue"}
 	const callers = 8
 	results := make([]string, callers)
 	errs := make([]error, callers)

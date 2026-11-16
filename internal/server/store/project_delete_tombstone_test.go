@@ -42,14 +42,14 @@ func TestDeleteProjectKeepsLarkBoundVersionAsTombstone(t *testing.T) {
 	// account no task ever bound.
 	c, _ := modelcredential.APIKey("synthetic-model-secret")
 	plain, _ := c.Encode()
-	model, err := s.CreateProjectCredential(ctx, project, "model", "openai", "模型", store.ProjectCredentialWrite{AuthMethod: "api_key", Secret: plain})
+	model, err := s.CreateProjectCredential(ctx, project, "model", "openai", "Model", store.ProjectCredentialWrite{AuthMethod: "api_key", Secret: plain})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.MutateProjectCredential(ctx, project, model.View.ID, model.View.Revision, nil, &store.ProjectCredentialWrite{AuthMethod: "api_key", Secret: plain}, false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.CreateProjectCredential(ctx, project, "cli", "gh", "静态CLI", store.ProjectCredentialWrite{AuthMethod: "static", TemplateSource: "builtin", Meta: store.CredentialMeta{TemplateVersion: "1"}, Secret: []byte(`{"GH_TOKEN":"synthetic-cli-secret"}`)}); err != nil {
+	if _, err = s.CreateProjectCredential(ctx, project, "cli", "gh", "Static CLI", store.ProjectCredentialWrite{AuthMethod: "static", TemplateSource: "builtin", Meta: store.CredentialMeta{TemplateVersion: "1"}, Secret: []byte(`{"GH_TOKEN":"synthetic-cli-secret"}`)}); err != nil {
 		t.Fatal(err)
 	}
 	unbound := larkSwitchTargetWithScopes(t, s, project, time.Now().Add(time.Hour), []string{"offline_access"})

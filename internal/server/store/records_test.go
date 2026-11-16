@@ -32,7 +32,7 @@ func newRecEnv(t *testing.T) *recEnv {
 	instance := uuid.Must(uuid.NewV7())
 	s.InstanceID = &instance
 	ctx := context.Background()
-	dc, err := s.EnsureDefaults(ctx, "默认组织", "默认项目")
+	dc, err := s.EnsureDefaults(ctx, "Default organization", "Default project")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,15 +73,15 @@ func TestRunLifecycleEventsAndTimes(t *testing.T) {
 	queued := e.send(false, "interrupt")
 
 	if got := e.types(active.ID); strings.Join(got, ",") != store.EventRunDispatched {
-		t.Fatalf("立即开始的执行应只有派发事件：%v", got)
+		t.Fatalf("a run started immediately should only have a dispatch event: %v", got)
 	}
 	evs, _ := e.s.RunEvents(e.ctx, queued.ID)
 	if len(evs) != 1 || evs[0].Type != store.EventRunQueued || evs[0].Data["whenBusy"] != "interrupt" || evs[0].Data["requestId"] != "req-1" {
-		t.Fatalf("排队执行应有入队事件并带忙时选择与请求编号：%+v", evs)
+		t.Fatalf("a queued run should have a queued event with the busy choice and request ID: %+v", evs)
 	}
 	var instance *uuid.UUID
 	if err := e.s.Pool.QueryRow(e.ctx, `SELECT instance_id FROM lifecycle_events WHERE run_id = $1`, queued.ID).Scan(&instance); err != nil || instance == nil || *instance != *e.s.InstanceID {
-		t.Fatalf("事件应记录实例 ID：%v %v", instance, err)
+		t.Fatalf("events should record the instance ID: %v %v", instance, err)
 	}
 
 	if err := e.s.SetRunPhase(e.ctx, active.ID, "preparing"); err != nil {
@@ -98,32 +98,32 @@ func TestRunLifecycleEventsAndTimes(t *testing.T) {
 	}
 	r, _, finished, err := e.s.FinishRun(e.ctx, active.ID, store.RunEnd{Status: "interrupted", EndReason: "user_interrupt"})
 	if err != nil || !finished {
-		t.Fatalf("结束失败：%v", err)
+		t.Fatalf("finish failed: %v", err)
 	}
 	if got := strings.Join(e.types(active.ID), ","); got != "run.dispatched,run.phase,run.running,run.abort_requested,run.ended" {
-		t.Fatalf("事件序列不对：%s", got)
+		t.Fatalf("wrong event sequence: %s", got)
 	}
 	if r.StartedAt == nil || r.RunningAt == nil || r.AbortRequestedAt == nil || r.EndedAt == nil ||
 		r.RunningAt.Before(*r.StartedAt) || r.AbortRequestedAt.Before(*r.RunningAt) || r.EndedAt.Before(*r.AbortRequestedAt) {
-		t.Fatalf("时间点不对：%+v", r)
+		t.Fatalf("wrong timestamps: %+v", r)
 	}
 	evs, _ = e.s.RunEvents(e.ctx, active.ID)
 	if evs[3].Data["byRunId"] != queued.ID.String() || evs[4].Data["status"] != "interrupted" || evs[4].Data["endReason"] != "user_interrupt" {
-		t.Fatalf("事件数据不对：%+v %+v", evs[3], evs[4])
+		t.Fatalf("wrong event data: %+v %+v", evs[3], evs[4])
 	}
 
 	started, ok, err := e.s.StartQueuedRun(e.ctx, queued.ID, uuid.Must(uuid.NewV7()))
 	if err != nil || !ok {
-		t.Fatalf("开始排队执行失败：%v", err)
+		t.Fatalf("starting the queued run failed: %v", err)
 	}
 	if got := strings.Join(e.types(queued.ID), ","); got != "run.queued,run.dispatched" {
-		t.Fatalf("出队后应有派发事件：%s", got)
+		t.Fatalf("a dispatch event should follow dequeuing: %s", got)
 	}
 	if _, ok, _ := e.s.StartQueuedRun(e.ctx, queued.ID, uuid.Must(uuid.NewV7())); ok {
-		t.Fatal("已开始的执行不应再次派发")
+		t.Fatal("a started run should not be dispatched again")
 	}
 	if got := len(e.types(queued.ID)); got != 2 {
-		t.Fatalf("重复出队不应重复记录：%d", got)
+		t.Fatalf("dequeuing again should not record again: %d", got)
 	}
 	_ = started
 }
@@ -138,10 +138,10 @@ func TestEventFailureRollsBackState(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, _, _, err := e.s.FinishRun(e.ctx, r.ID, store.RunEnd{Status: "completed"}); err == nil {
-		t.Fatal("事件写入失败时结束应失败")
+		t.Fatal("finishing should fail when writing the event fails")
 	}
 	if st, _ := e.s.RunStatus(e.ctx, r.ID); st != "starting" {
-		t.Fatalf("事件写入失败时状态应回滚：%s", st)
+		t.Fatalf("the status should roll back when writing the event fails: %s", st)
 	}
 }
 
@@ -154,7 +154,7 @@ func TestMigrationConstraints(t *testing.T) {
 	}
 	for i, u := range bad {
 		if err := e.s.AddUsage(e.ctx, u); err == nil {
-			t.Errorf("第 %d 条非法用量应被拒绝", i)
+			t.Errorf("invalid usage record %d should be rejected", i)
 		}
 	}
 	if err := e.s.AddUsage(e.ctx, store.UsageRecord{AgentID: e.agent, Kind: "assistant", Provider: "p", Model: "m", Input: 1, Output: 2, CacheRead: 3, CacheWrite: 4}); err != nil {
@@ -162,10 +162,10 @@ func TestMigrationConstraints(t *testing.T) {
 	}
 	us, _ := e.s.AgentUsage(e.ctx, e.agent)
 	if len(us) != 1 || us[0].Total != 10 {
-		t.Fatalf("总数应为四项之和：%+v", us)
+		t.Fatalf("the total should be the sum of the four parts: %+v", us)
 	}
 	if err := e.s.AddEvent(e.ctx, store.LifecycleEvent{AgentID: e.agent, Type: "Bad Type"}); err == nil {
-		t.Error("非法的事件类型应被拒绝")
+		t.Error("an invalid event type should be rejected")
 	}
 	var task, node, inbox *string
 	var source string
@@ -177,7 +177,7 @@ func TestMigrationConstraints(t *testing.T) {
 		t.Fatal(err)
 	}
 	if task != nil || node != nil || inbox != nil || source != "platform" {
-		t.Fatalf("预留字段应为空、来源为平台：%v %v %v %s", task, node, inbox, source)
+		t.Fatalf("reserved fields should be empty and the source platform: %v %v %v %s", task, node, inbox, source)
 	}
 }
 
@@ -209,7 +209,7 @@ func TestSessionEvents(t *testing.T) {
 	if len(sess) != 2 || sess[0].Type != store.EventSessionMissing || sess[0].RunID == nil || *sess[0].RunID != r.ID ||
 		sess[0].Data["sessionFile"] != "/tmp/s.jsonl" || sess[1].Type != store.EventSessionReset ||
 		sess[1].Data["fromEpoch"] != float64(1) || sess[1].Data["toEpoch"] != float64(2) {
-		t.Fatalf("会话事件不对：%+v", sess)
+		t.Fatalf("wrong session events: %+v", sess)
 	}
 }
 
@@ -238,18 +238,18 @@ func TestAnomaliesQuery(t *testing.T) {
 
 	items, total, next, err := e.s.Anomalies(e.ctx, store.ScopeFilter{ProjectID: &e.dc.Project.ID}, nil, nil, 2)
 	if err != nil || total != 3 || len(items) != 2 || next == nil {
-		t.Fatalf("第一页不对：%d %d %v %v", total, len(items), next, err)
+		t.Fatalf("wrong first page: %d %d %v %v", total, len(items), next, err)
 	}
 	if items[0].Run.ID != s1.ID || items[1].Run.ID != i1.ID || items[0].AgentName != "A" {
-		t.Fatalf("应按结束时间倒序：%v %v", items[0].Run.ID, items[1].Run.ID)
+		t.Fatalf("should be ordered by end time, newest first: %v %v", items[0].Run.ID, items[1].Run.ID)
 	}
 	rest, total2, next2, err := e.s.Anomalies(e.ctx, store.ScopeFilter{ProjectID: &e.dc.Project.ID}, nil, next, 2)
 	if err != nil || total2 != 3 || len(rest) != 1 || next2 != nil || rest[0].Run.ID != f1.ID {
-		t.Fatalf("第二页不对：%+v %v", rest, err)
+		t.Fatalf("wrong second page: %+v %v", rest, err)
 	}
 	future := time.Now().Add(time.Hour)
 	if items, total, _, _ := e.s.Anomalies(e.ctx, store.ScopeFilter{ProjectID: &e.dc.Project.ID}, &future, nil, 10); total != 0 || len(items) != 0 {
-		t.Fatalf("开始时间之后没有异常：%d", total)
+		t.Fatalf("there should be no anomalies after the start time: %d", total)
 	}
 }
 
@@ -260,25 +260,25 @@ func TestOverviewQueries(t *testing.T) {
 		{AgentID: e.agent, Type: store.EventPiStopped, At: now.Add(-3 * time.Minute), Data: map[string]any{"reason": "config_changed"}},
 		{AgentID: e.agent, Type: store.EventPiExited, At: now.Add(-2 * time.Minute)},
 		{AgentID: e.agent, Type: store.EventPiStopped, At: now.Add(-time.Minute), Data: map[string]any{"reason": "idle_timeout"}},
-		{AgentID: e.agent, Type: store.EventCLIInstall, At: now.Add(-time.Minute), Data: map[string]any{"cli": "gh", "version": "2.100.0", "result": "failed", "error": "摘要不符"}},
+		{AgentID: e.agent, Type: store.EventCLIInstall, At: now.Add(-time.Minute), Data: map[string]any{"cli": "gh", "version": "2.100.0", "result": "failed", "error": "checksum mismatch"}},
 		{AgentID: e.agent, Type: store.EventCLIInstall, At: now, Data: map[string]any{"cli": "gh", "version": "2.100.0", "result": "succeeded"}},
 		{AgentID: e.agent, Type: store.EventCLIInstall, At: now, Data: map[string]any{"cli": "lark-cli", "version": "1.0.94", "result": "failed", "error": "HTTP 404"}},
 	} {
 		if err := e.s.AddEvent(e.ctx, ev); err != nil {
-			t.Fatalf("第 %d 条：%v", i, err)
+			t.Fatalf("event %d: %v", i, err)
 		}
 	}
 	exits, err := e.s.LastProcessExits(e.ctx, []uuid.UUID{e.agent})
 	if err != nil || exits[e.agent].Reason != "idle_timeout" {
-		t.Fatalf("上次退出应取最近一条：%+v %v", exits, err)
+		t.Fatalf("the last exit should be the latest one: %+v %v", exits, err)
 	}
 	installs, err := e.s.LatestCLIInstalls(e.ctx)
 	if err != nil || len(installs) != 2 {
-		t.Fatalf("安装结果不对：%+v %v", installs, err)
+		t.Fatalf("wrong install results: %+v %v", installs, err)
 	}
 	for _, r := range installs {
 		if (r.CLI == "gh" && !r.Succeeded) || (r.CLI == "lark-cli" && (r.Succeeded || r.Error != "HTTP 404")) {
-			t.Fatalf("应取每个版本最近一次的结果：%+v", installs)
+			t.Fatalf("should take the latest result of each version: %+v", installs)
 		}
 	}
 	r := e.send(true, "")
@@ -287,7 +287,7 @@ func TestOverviewQueries(t *testing.T) {
 	}
 	last, err := e.s.LastEndedRuns(e.ctx, []uuid.UUID{e.agent})
 	if err != nil || last[e.agent].ID != r.ID || last[e.agent].Status != "completed" {
-		t.Fatalf("最近一次结束的执行不对：%+v %v", last, err)
+		t.Fatalf("wrong latest ended run: %+v %v", last, err)
 	}
 }
 
@@ -334,7 +334,7 @@ func TestRuntimeSwitchResetsSession(t *testing.T) {
 	provider, model := func(p string) *string { return &p }, func(m string) *string { return &m }
 	r := e.send(true, "")
 	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("claude-code"), ModelID: model("sonnet")}); !apperr.Is(err, apperr.CodeAgentNotIdle) {
-		t.Fatalf("有进行中的回复时应拒绝切换运行时：%v", err)
+		t.Fatalf("switching the runtime should be rejected while a reply is in progress: %v", err)
 	}
 	if _, _, _, err := e.s.FinishRun(e.ctx, r.ID, store.RunEnd{Status: "completed"}); err != nil {
 		t.Fatal(err)
@@ -346,14 +346,14 @@ func TestRuntimeSwitchResetsSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	if sess, _ := e.s.GetAgentSession(e.ctx, e.agent); sess.State != "active" || sess.Epoch != 1 || sess.SessionFile != "/tmp/pi-session.jsonl" {
-		t.Fatalf("同一运行时内换模型不动会话：%+v", sess)
+		t.Fatalf("changing the model within the same runtime should leave the session alone: %+v", sess)
 	}
 	a, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("claude-code"), ModelID: model("sonnet")})
 	if err != nil || a.ModelProvider != "claude-code" {
-		t.Fatalf("切换到 Claude Code：%+v %v", a, err)
+		t.Fatalf("switch to Claude Code: %+v %v", a, err)
 	}
 	if sess, _ := e.s.GetAgentSession(e.ctx, e.agent); sess.State != "none" || sess.Epoch != 2 || sess.SessionFile != "" {
-		t.Fatalf("切换运行时应重置会话：%+v", sess)
+		t.Fatalf("switching the runtime should reset the session: %+v", sess)
 	}
 	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("claude-code"), ModelID: model("opus")}); err != nil {
 		t.Fatal(err)
@@ -370,7 +370,7 @@ func TestRuntimeSwitchResetsSession(t *testing.T) {
 	}
 	if len(resets) != 2 || resets[0].Data["reason"] != "runtime_changed" || resets[0].Data["fromRuntime"] != "pi" || resets[0].Data["toRuntime"] != "claude-code" ||
 		resets[0].Data["toEpoch"] != float64(2) || resets[1].Data["fromRuntime"] != "claude-code" || resets[1].Data["toEpoch"] != float64(3) {
-		t.Fatalf("重置事件：%+v", resets)
+		t.Fatalf("reset events: %+v", resets)
 	}
 }
 
@@ -382,7 +382,7 @@ func TestRuntimeSwitchWithQueuedMessages(t *testing.T) {
 	r := e.send(true, "")
 	queued := e.send(false, "")
 	if queued.Status != "queued" {
-		t.Fatalf("第二条应排队：%+v", queued.Status)
+		t.Fatalf("the second message should be queued: %+v", queued.Status)
 	}
 	if _, _, _, err := e.s.FinishRun(e.ctx, r.ID, store.RunEnd{Status: "completed"}); err != nil {
 		t.Fatal(err)
@@ -391,15 +391,15 @@ func TestRuntimeSwitchWithQueuedMessages(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("claude-code"), ModelID: model("sonnet")}); err != nil {
-		t.Fatalf("有排队消息时切换：%v", err)
+		t.Fatalf("switch with queued messages: %v", err)
 	}
 	if sess, _ := e.s.GetAgentSession(e.ctx, e.agent); sess.State != "none" || sess.Epoch != 2 {
-		t.Fatalf("会话应重置：%+v", sess)
+		t.Fatalf("the session should be reset: %+v", sess)
 	}
 	if _, err := e.s.Pool.Exec(e.ctx, `DELETE FROM agent_sessions WHERE agent_id = $1`, e.agent); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.s.UpdateAgent(e.ctx, e.agent, store.AgentPatch{ModelProvider: provider("anthropic"), ModelID: model("claude-x")}); err != nil {
-		t.Fatalf("没有会话行时切换照常保存：%v", err)
+		t.Fatalf("without a session row the switch should be saved as usual: %v", err)
 	}
 }

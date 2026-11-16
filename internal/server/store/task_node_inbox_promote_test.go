@@ -129,7 +129,7 @@ func (f *promoteFixture) queue() taskmodel.TaskNodeQueue {
 		f.t.Fatal(e)
 	}
 	if !sameShape(shape(q), shape(ev)) || q.RuntimeID != f.runtime || ev.NodeRunID != f.node {
-		f.t.Fatalf("最新的 task.node.queue.updated 与读取结果不一致：%+v / %+v", ev, q)
+		f.t.Fatalf("the latest task.node.queue.updated does not match the read result: %+v / %+v", ev, q)
 	}
 	return q
 }
@@ -147,10 +147,10 @@ func (f *promoteFixture) turn(id uuid.UUID) store.TaskTurn {
 func TestTaskNodeInboxPromoteSplitMergeVoidAndClaimOrder(t *testing.T) {
 	ctx := context.Background()
 	f := newPromoteFixture(t, 0)
-	m1, m2, m3 := f.send("一", "queue"), f.send("二", "queue"), f.send("三", "queue")
+	m1, m2, m3 := f.send("one", "queue"), f.send("two", "queue"), f.send("three", "queue")
 	q := f.queue()
 	if !sameShape(shape(q), []queueShape{{"queue", []uuid.UUID{m1, m2, m3}, 0}}) {
-		t.Fatalf("三条普通消息应合并在一组：%+v", q)
+		t.Fatalf("three normal messages should be merged into one group: %+v", q)
 	}
 	normal := q.Items[0].RunID
 
@@ -158,29 +158,29 @@ func TestTaskNodeInboxPromoteSplitMergeVoidAndClaimOrder(t *testing.T) {
 	// reply.
 	r2 := f.mustPromote(m2)
 	if r2.Status != "accepted" || r2.RunID == normal || len(f.calls.calls) != 1 || f.calls.calls[0] != [2]uuid.UUID{f.runtime, f.active.ID} {
-		t.Fatalf("拆出：%+v 打断 %v", r2, f.calls.calls)
+		t.Fatalf("split out: %+v interrupts %v", r2, f.calls.calls)
 	}
 	if got := shape(f.queue()); !sameShape(got, []queueShape{{"interrupt", []uuid.UUID{m2}, 0}, {"queue", []uuid.UUID{m1, m3}, 0}}) {
-		t.Fatalf("拆出后的排队：%+v", got)
+		t.Fatalf("queue after splitting out: %+v", got)
 	}
 	// Merged into the existing interrupt group; the current reply is already being interrupted, so it is not
 	// interrupted again.
 	r1 := f.mustPromote(m1)
 	if r1.RunID != r2.RunID || len(f.calls.calls) != 1 {
-		t.Fatalf("应并入已有打断组：%+v %v", r1, f.calls.calls)
+		t.Fatalf("should be merged into the existing interrupt group: %+v %v", r1, f.calls.calls)
 	}
 	if got := shape(f.queue()); !sameShape(got, []queueShape{{"interrupt", []uuid.UUID{m1, m2}, 0}, {"queue", []uuid.UUID{m3}, 0}}) {
-		t.Fatalf("并入后的排队：%+v", got)
+		t.Fatalf("queue after merging: %+v", got)
 	}
 	// Splitting leaves the group empty: the original group is voided and marked merged_into_interrupt, which the web
 	// uses to hide it.
 	action := uuid.New()
 	raw3, r3, e := f.promote(m3, action)
 	if e != nil || r3.RunID != r2.RunID {
-		t.Fatal("拆空", e)
+		t.Fatal("split that empties the group", e)
 	}
 	if v := f.turn(normal); v.Status != "interrupted" || v.VoidReason == nil || *v.VoidReason != "merged_into_interrupt" {
-		t.Fatalf("拆空的组应作废：%+v", v)
+		t.Fatalf("a group left empty should be voided: %+v", v)
 	}
 	page, e := f.s.TaskNodeMessages(ctx, f.task, f.node, "", 100)
 	if e != nil {
@@ -192,23 +192,23 @@ func TestTaskNodeInboxPromoteSplitMergeVoidAndClaimOrder(t *testing.T) {
 			hidden = true
 		}
 		if m.RunID != normal && m.VoidReason != nil {
-			t.Fatalf("其他轮次不应带 voidReason：%+v", m)
+			t.Fatalf("other turns should not carry voidReason: %+v", m)
 		}
 	}
 	if !hidden {
-		t.Fatal("作废组的 TaskMessage 缺少 voidReason")
+		t.Fatal("the TaskMessage of the voided group lacks voidReason")
 	}
 	if got := shape(f.queue()); !sameShape(got, []queueShape{{"interrupt", []uuid.UUID{m1, m2, m3}, 0}}) {
-		t.Fatalf("拆空后的排队：%+v", got)
+		t.Fatalf("queue after emptying the group: %+v", got)
 	}
 	// Replaying the same actionId returns the original response; a message that is already an interrupt returns
 	// already_interrupt for a new actionId; neither interrupts again.
 	again, _, e := f.promote(m3, action)
 	if e != nil || string(again) != string(raw3) {
-		t.Fatal("同一动作重放应返回原响应", e)
+		t.Fatal("replaying the same action should return the original response", e)
 	}
 	if _, r, e := f.promote(m3, uuid.New()); e != nil || r.Status != "already_interrupt" || r.RunID != r2.RunID || len(f.calls.calls) != 1 {
-		t.Fatalf("已是打断应幂等：%+v %v", r, e)
+		t.Fatalf("an existing interrupt should be idempotent: %+v %v", r, e)
 	}
 	var whenBusy []string
 	rows, e := f.s.Pool.Query(ctx, `SELECT when_busy FROM inbox_messages WHERE id IN (SELECT value FROM json_each($1)) ORDER BY created_at`, []uuid.UUID{m1, m2, m3})
@@ -226,7 +226,7 @@ func TestTaskNodeInboxPromoteSplitMergeVoidAndClaimOrder(t *testing.T) {
 		t.Fatal(e)
 	}
 	if !slices.Equal(whenBusy, []string{"interrupt", "interrupt", "interrupt"}) || promoted != 3 {
-		t.Fatalf("消息 whenBusy 与 run.promoted 记录：%v %d", whenBusy, promoted)
+		t.Fatalf("message whenBusy and run.promoted records: %v %d", whenBusy, promoted)
 	}
 
 	// The actual claim order matches the queue list; after the claim the list is emptied and an empty list is pushed.
@@ -235,20 +235,20 @@ func TestTaskNodeInboxPromoteSplitMergeVoidAndClaimOrder(t *testing.T) {
 	}
 	claimed, ok, e := f.s.ClaimTaskTurn(ctx, f.task, f.runtime)
 	if e != nil || !ok || claimed.ID != r2.RunID {
-		t.Fatalf("应先领取打断组：%v %v", claimed.ID, e)
+		t.Fatalf("the interrupt group should be claimed first: %v %v", claimed.ID, e)
 	}
 	if got := f.queue(); len(got.Items) != 0 {
-		t.Fatalf("领取后排队应为空：%+v", got)
+		t.Fatalf("the queue should be empty after the claim: %+v", got)
 	}
 	// Already claimed: conflict, carrying the turn it is in and its status.
 	_, _, e = f.promote(m1, uuid.New())
 	ae, isApp := apperr.As(e)
 	if !isApp || ae.Code != apperr.CodeTaskConflict {
-		t.Fatalf("已领取应冲突：%v", e)
+		t.Fatalf("an already claimed message should conflict: %v", e)
 	}
 	d := ae.Details.(taskmodel.TaskNodeMessageConflictDetails)
 	if d.Reason != "message_dispatched" || d.MessageID == nil || *d.MessageID != m1 || d.RunID == nil || *d.RunID != r2.RunID || d.RunStatus == nil || *d.RunStatus != "starting" {
-		t.Fatalf("冲突详情：%+v", d)
+		t.Fatalf("conflict details: %+v", d)
 	}
 }
 
@@ -262,7 +262,7 @@ func TestTaskNodeInboxPromoteQueueOrderMatchesClaims(t *testing.T) {
 	d := f.send("d", "queue")     // merged into the normal group that c is in
 	q := f.queue()
 	if !sameShape(shape(q), []queueShape{{"interrupt", []uuid.UUID{a, b}, 0}, {"queue", []uuid.UUID{c, d}, 0}}) {
-		t.Fatalf("排队列表：%+v", shape(q))
+		t.Fatalf("queue list: %+v", shape(q))
 	}
 	if _, e := f.s.UpdateTaskTurn(ctx, f.task, f.active.ID, "interrupted", "", nil, nil); e != nil {
 		t.Fatal(e)
@@ -279,60 +279,60 @@ func TestTaskNodeInboxPromoteQueueOrderMatchesClaims(t *testing.T) {
 		}
 	}
 	if !slices.Equal(order, []uuid.UUID{q.Items[0].RunID, q.Items[2].RunID}) {
-		t.Fatalf("实际领取顺序与排队列表不一致：%v / %+v", order, q.Items)
+		t.Fatalf("the actual claim order does not match the queue list: %v / %+v", order, q.Items)
 	}
 }
 
 func TestTaskNodeInboxPromoteImageLimit(t *testing.T) {
 	f := newPromoteFixture(t, 2)
-	i0 := f.send("打断带一图", "interrupt", f.image())
-	ma := f.send("普通两图", "queue", f.image(), f.image())
-	mb := f.send("普通一图", "queue", f.image()) // the normal group already has two images, so another group is opened
+	i0 := f.send("interrupt with one image", "interrupt", f.image())
+	ma := f.send("normal with two images", "queue", f.image(), f.image())
+	mb := f.send("normal with one image", "queue", f.image()) // the normal group already has two images, so another group is opened
 	q := f.queue()
 	if !sameShape(shape(q), []queueShape{{"interrupt", []uuid.UUID{i0}, 1}, {"queue", []uuid.UUID{ma}, 2}, {"queue", []uuid.UUID{mb}, 1}}) {
-		t.Fatalf("初始排队：%+v", shape(q))
+		t.Fatalf("initial queue: %+v", shape(q))
 	}
 	// 1+2 exceeds the limit: it cannot be merged into the existing interrupt group, so a new interrupt group is created
 	// after it; the original normal group is emptied and voided.
 	ra := f.mustPromote(ma)
 	if ra.RunID == q.Items[0].RunID {
-		t.Fatal("超过图片上限仍并入了已有打断组")
+		t.Fatal("merged into the existing interrupt group despite exceeding the image limit")
 	}
 	if v := f.turn(q.Items[1].RunID); v.VoidReason == nil {
-		t.Fatal("拆空的普通组应作废")
+		t.Fatal("a normal group left empty should be voided")
 	}
 	// 1+1 does not exceed the limit: merged into the earliest interrupt group.
 	rb := f.mustPromote(mb)
 	if rb.RunID != q.Items[0].RunID {
-		t.Fatal("应并入最早、仍有余量的打断组")
+		t.Fatal("should be merged into the earliest interrupt group with room left")
 	}
 	if got := shape(f.queue()); !sameShape(got, []queueShape{{"interrupt", []uuid.UUID{i0, mb}, 2}, {"interrupt", []uuid.UUID{ma}, 2}}) {
-		t.Fatalf("图片上限下的排队：%+v", got)
+		t.Fatalf("queue under the image limit: %+v", got)
 	}
 }
 
 func TestTaskNodeInboxPromoteRejects(t *testing.T) {
 	ctx := context.Background()
 	f := newPromoteFixture(t, 0)
-	m := f.send("普通", "queue")
+	m := f.send("normal", "queue")
 	if _, _, e := f.promote(uuid.New(), uuid.New()); !apperr.Is(e, apperr.CodeNotFound) {
-		t.Fatalf("不存在的消息应 404：%v", e)
+		t.Fatalf("a missing message should be 404: %v", e)
 	}
 	_, e := f.svc.PromoteNodeInboxMessage(ctx, auth.Console(), f.task, f.node, m, taskmodel.TaskNodeQueueActionInput{ActionID: uuid.New(), ExpectedAgentID: f.agent, ExpectedRuntimeID: uuid.New()})
 	if ae, ok := apperr.As(e); !ok || ae.Details.(taskmodel.TaskNodeMessageConflictDetails).Reason != "target_mismatch" {
-		t.Fatalf("目标不一致应冲突：%v", e)
+		t.Fatalf("a target mismatch should conflict: %v", e)
 	}
 	if _, e = f.s.Pool.Exec(ctx, `UPDATE task_node_inbox_messages SET not_executed_reason='node_changed',not_executed_at=now() WHERE message_id=$1`, m); e != nil {
 		t.Fatal(e)
 	}
 	_, _, e = f.promote(m, uuid.New())
 	if ae, ok := apperr.As(e); !ok || ae.Details.(taskmodel.TaskNodeMessageConflictDetails).Reason != "message_not_executed" {
-		t.Fatalf("已失效的消息应冲突：%v", e)
+		t.Fatalf("a message that is no longer valid should conflict: %v", e)
 	}
 	if len(f.calls.calls) != 0 {
-		t.Fatal("被拒绝的请求不应打断")
+		t.Fatal("a rejected request should not interrupt")
 	}
 	if _, e = f.svc.PromoteNodeInboxMessage(ctx, auth.Principal{Kind: auth.KindAgent, ID: f.agent}, f.task, f.node, m, taskmodel.TaskNodeQueueActionInput{ActionID: uuid.New(), ExpectedAgentID: f.agent, ExpectedRuntimeID: f.runtime}); !apperr.Is(e, apperr.CodeForbidden) {
-		t.Fatalf("非控制台应 403：%v", e)
+		t.Fatalf("a caller other than the console should get 403: %v", e)
 	}
 }

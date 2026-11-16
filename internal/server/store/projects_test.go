@@ -26,7 +26,7 @@ func newProjEnv(t *testing.T) *projEnv {
 	t.Helper()
 	s := sqlitetest.NewStore(t)
 	ctx := context.Background()
-	dc, err := s.EnsureDefaults(ctx, "默认组织", "默认项目")
+	dc, err := s.EnsureDefaults(ctx, "Default organization", "Default project")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,28 +54,28 @@ func (e *projEnv) agent(scope store.Scope, name string) store.Agent {
 func wantErrCode(t *testing.T, err error, code string) {
 	t.Helper()
 	if !apperr.Is(err, code) {
-		t.Fatalf("期望错误码 %s，实际 %v", code, err)
+		t.Fatalf("want error code %s, got %v", code, err)
 	}
 }
 
 func TestProjectsCRUDAndNameReuse(t *testing.T) {
 	e := newProjEnv(t)
-	p := e.project("模型接入")
+	p := e.project("Model integration")
 	if p.IsDefault || p.AgentCount != 0 || p.ManagerAgentID != nil {
-		t.Fatalf("新项目的字段不对：%+v", p)
+		t.Fatalf("wrong fields on the new project: %+v", p)
 	}
-	_, err := e.s.CreateProject(e.ctx, e.dc.Organization.ID, "模型接入")
+	_, err := e.s.CreateProject(e.ctx, e.dc.Organization.ID, "Model integration")
 	wantErrCode(t, err, apperr.CodeNameConflict)
-	_, err = e.s.RenameProject(e.ctx, p.ID, "默认项目")
+	_, err = e.s.RenameProject(e.ctx, p.ID, "Default project")
 	wantErrCode(t, err, apperr.CodeNameConflict)
-	renamed, err := e.s.RenameProject(e.ctx, p.ID, "接入")
-	if err != nil || renamed.Name != "接入" {
-		t.Fatalf("改名失败：%+v %v", renamed, err)
+	renamed, err := e.s.RenameProject(e.ctx, p.ID, "Integration")
+	if err != nil || renamed.Name != "Integration" {
+		t.Fatalf("rename failed: %+v %v", renamed, err)
 	}
-	e.agent(store.ProjectScope(p.ID), "对接员")
+	e.agent(store.ProjectScope(p.ID), "liaison")
 	list, err := e.s.ListProjects(e.ctx, e.dc.Organization.ID)
-	if err != nil || len(list) != 2 || !list[0].IsDefault || list[1].Name != "接入" || list[1].AgentCount != 1 {
-		t.Fatalf("项目列表不对：%+v %v", list, err)
+	if err != nil || len(list) != 2 || !list[0].IsDefault || list[1].Name != "Integration" || list[1].AgentCount != 1 {
+		t.Fatalf("wrong project list: %+v %v", list, err)
 	}
 	if _, err := e.s.DeleteProject(e.ctx, p.ID); err != nil {
 		t.Fatal(err)
@@ -84,8 +84,8 @@ func TestProjectsCRUDAndNameReuse(t *testing.T) {
 	wantErrCode(t, err, apperr.CodeNotFound)
 	_, err = e.s.RenameProject(e.ctx, p.ID, "x")
 	wantErrCode(t, err, apperr.CodeNotFound)
-	if again := e.project("接入"); again.ID == p.ID {
-		t.Fatal("已删除项目的名称应可以再用，并且是新项目")
+	if again := e.project("Integration"); again.ID == p.ID {
+		t.Fatal("the name of a deleted project should be reusable, by a new project")
 	}
 }
 
@@ -95,11 +95,11 @@ func TestDefaultProjectCannotBeDeleted(t *testing.T) {
 	wantErrCode(t, err, apperr.CodeValidationFailed)
 	// The database constraint is the safety net.
 	if _, err := e.s.Pool.Exec(e.ctx, `UPDATE projects SET deleted_at = $1 WHERE is_default`, time.Now()); err == nil {
-		t.Fatal("数据库应拒绝删除默认项目")
+		t.Fatal("the database should refuse to delete the default project")
 	}
 	// The default project can be renamed.
-	if p, err := e.s.RenameProject(e.ctx, e.dc.Project.ID, "主项目"); err != nil || p.Name != "主项目" || !p.IsDefault {
-		t.Fatalf("默认项目应可以改名：%+v %v", p, err)
+	if p, err := e.s.RenameProject(e.ctx, e.dc.Project.ID, "Main project"); err != nil || p.Name != "Main project" || !p.IsDefault {
+		t.Fatalf("the default project should be renamable: %+v %v", p, err)
 	}
 }
 
@@ -107,14 +107,14 @@ func TestDefaultProjectCannotBeDeleted(t *testing.T) {
 
 func TestPlatformAgentsAndScopes(t *testing.T) {
 	e := newProjEnv(t)
-	other := e.project("其他")
-	inDefault := e.agent(store.ProjectScope(e.dc.Project.ID), "助手")
-	inOther := e.agent(store.ProjectScope(other.ID), "助手") // different projects can use the same name
-	platform := e.agent(store.PlatformScope(), "助手")       // the platform and a project can use the same name
+	other := e.project("Other")
+	inDefault := e.agent(store.ProjectScope(e.dc.Project.ID), "assistant")
+	inOther := e.agent(store.ProjectScope(other.ID), "assistant") // different projects can use the same name
+	platform := e.agent(store.PlatformScope(), "assistant")       // the platform and a project can use the same name
 	if platform.ProjectID != nil || inDefault.ProjectID == nil || *inDefault.ProjectID != e.dc.Project.ID {
-		t.Fatalf("归属不对：平台 %v，项目 %v", platform.ProjectID, inDefault.ProjectID)
+		t.Fatalf("wrong ownership: platform %v, project %v", platform.ProjectID, inDefault.ProjectID)
 	}
-	_, err := e.s.CreateAgent(e.ctx, store.PlatformScope(), "助手", "anthropic", "claude-x", "")
+	_, err := e.s.CreateAgent(e.ctx, store.PlatformScope(), "assistant", "anthropic", "claude-x", "")
 	wantErrCode(t, err, apperr.CodeNameConflict)
 	_, err = e.s.CreateAgent(e.ctx, store.ProjectScope(uuid.Must(uuid.NewV7())), "x", "anthropic", "claude-x", "")
 	wantErrCode(t, err, apperr.CodeNotFound)
@@ -130,31 +130,31 @@ func TestPlatformAgentsAndScopes(t *testing.T) {
 		t.Helper()
 		got := ids(items)
 		if err != nil || len(got) != len(want) {
-			t.Fatalf("%s：得到 %v（%v），期望 %v", what, got, err, want)
+			t.Fatalf("%s: got %v (%v), want %v", what, got, err, want)
 		}
 		for i := range want {
 			if got[i] != want[i] {
-				t.Fatalf("%s：得到 %v，期望 %v", what, got, want)
+				t.Fatalf("%s: got %v, want %v", what, got, want)
 			}
 		}
 	}
 	l, err := e.s.ListAgents(e.ctx, store.PlatformScope())
-	check("平台列表", l, err, platform.ID)
+	check("platform list", l, err, platform.ID)
 	l, err = e.s.ListAgents(e.ctx, store.ProjectScope(other.ID))
-	check("项目列表", l, err, inOther.ID)
+	check("project list", l, err, inOther.ID)
 	l, err = e.s.ListAgentsFiltered(e.ctx, store.ScopeFilter{})
-	check("全部", l, err, inDefault.ID, inOther.ID, platform.ID)
+	check("all", l, err, inDefault.ID, inOther.ID, platform.ID)
 	l, err = e.s.ListAgentsFiltered(e.ctx, store.ScopeFilter{Platform: true})
-	check("筛选平台", l, err, platform.ID)
+	check("platform filter", l, err, platform.ID)
 	l, err = e.s.ListAgentsFiltered(e.ctx, store.ScopeFilter{ProjectID: &other.ID})
-	check("筛选项目", l, err, inOther.ID)
+	check("project filter", l, err, inOther.ID)
 	if _, err := e.s.DeleteProject(e.ctx, other.ID); err != nil {
 		t.Fatal(err)
 	}
 	l, err = e.s.ListAgentsFiltered(e.ctx, store.ScopeFilter{})
-	check("删除项目后的全部", l, err, inDefault.ID, platform.ID)
+	check("all after deleting the project", l, err, inDefault.ID, platform.ID)
 	if pid, err := e.s.AgentProjectAny(e.ctx, inOther.ID); err != nil || pid == nil || *pid != other.ID {
-		t.Fatalf("已删除 Agent 的归属仍应可查：%v %v", pid, err)
+		t.Fatalf("a deleted Agent's project should still be readable: %v %v", pid, err)
 	}
 }
 
@@ -162,24 +162,24 @@ func TestPlatformAgentsAndScopes(t *testing.T) {
 
 func TestProjectManager(t *testing.T) {
 	e := newProjEnv(t)
-	other := e.project("其他")
-	a := e.agent(store.ProjectScope(e.dc.Project.ID), "开发助手")
-	b := e.agent(store.ProjectScope(e.dc.Project.ID), "规划助手")
-	foreign := e.agent(store.ProjectScope(other.ID), "外人")
-	platform := e.agent(store.PlatformScope(), "巡检员")
+	other := e.project("Other")
+	a := e.agent(store.ProjectScope(e.dc.Project.ID), "dev assistant")
+	b := e.agent(store.ProjectScope(e.dc.Project.ID), "planning assistant")
+	foreign := e.agent(store.ProjectScope(other.ID), "outsider")
+	platform := e.agent(store.PlatformScope(), "inspector")
 
 	p, err := e.s.SetProjectManager(e.ctx, e.dc.Project.ID, a.ID)
 	if err != nil || p.ManagerAgentID == nil || *p.ManagerAgentID != a.ID {
-		t.Fatalf("指定 Manager 失败：%+v %v", p, err)
+		t.Fatalf("setting the Manager failed: %+v %v", p, err)
 	}
 	if got, _ := e.s.GetAgent(e.ctx, a.ID); !got.IsManager {
-		t.Fatal("Agent 应标为 Manager")
+		t.Fatal("the Agent should be marked as Manager")
 	}
 	if p, err = e.s.SetProjectManager(e.ctx, e.dc.Project.ID, b.ID); err != nil || *p.ManagerAgentID != b.ID {
-		t.Fatalf("更换 Manager 失败：%+v %v", p, err)
+		t.Fatalf("changing the Manager failed: %+v %v", p, err)
 	}
 	if got, _ := e.s.GetAgent(e.ctx, a.ID); got.IsManager {
-		t.Fatal("原 Manager 不应再标为 Manager")
+		t.Fatal("the previous Manager should no longer be marked as Manager")
 	}
 	for _, x := range []store.Agent{foreign, platform} {
 		_, err := e.s.SetProjectManager(e.ctx, e.dc.Project.ID, x.ID)
@@ -188,7 +188,7 @@ func TestProjectManager(t *testing.T) {
 	// The database foreign key is the safety net: writing an Agent from another project or the platform directly fails.
 	for _, x := range []store.Agent{foreign, platform} {
 		if _, err := e.s.Pool.Exec(e.ctx, `UPDATE projects SET manager_agent_id = $1 WHERE id = $2`, x.ID, e.dc.Project.ID); err == nil {
-			t.Fatalf("数据库应拒绝把 %s 设为 Manager", x.Name)
+			t.Fatalf("the database should refuse to make %s the Manager", x.Name)
 		}
 	}
 	// Deleting the Agent that is the Manager: the Manager is cleared too.
@@ -196,13 +196,13 @@ func TestProjectManager(t *testing.T) {
 		t.Fatal(err)
 	}
 	if p, _ = e.s.GetProject(e.ctx, e.dc.Project.ID); p.ManagerAgentID != nil {
-		t.Fatalf("删除 Manager 后项目不应再有 Manager：%v", p.ManagerAgentID)
+		t.Fatalf("the project should have no Manager after the Manager is deleted: %v", p.ManagerAgentID)
 	}
 	if _, err = e.s.SetProjectManager(e.ctx, e.dc.Project.ID, b.ID); !apperr.Is(err, apperr.CodeValidationFailed) {
-		t.Fatalf("已删除的 Agent 不能设为 Manager：%v", err)
+		t.Fatalf("a deleted Agent must not become the Manager: %v", err)
 	}
 	if p, err = e.s.ClearProjectManager(e.ctx, e.dc.Project.ID); err != nil || p.ManagerAgentID != nil {
-		t.Fatalf("没有 Manager 时取消也应成功：%+v %v", p, err)
+		t.Fatalf("clearing should also succeed without a Manager: %+v %v", p, err)
 	}
 }
 
@@ -210,9 +210,9 @@ func TestProjectManager(t *testing.T) {
 
 func TestDeleteProject(t *testing.T) {
 	e := newProjEnv(t)
-	p := e.project("临时")
-	idle := e.agent(store.ProjectScope(p.ID), "空闲")
-	busy := e.agent(store.ProjectScope(p.ID), "排队中")
+	p := e.project("Temporary")
+	idle := e.agent(store.ProjectScope(p.ID), "idle")
+	busy := e.agent(store.ProjectScope(p.ID), "queued")
 	if _, err := e.s.SetProjectManager(e.ctx, p.ID, idle.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -234,10 +234,10 @@ func TestDeleteProject(t *testing.T) {
 	ae, _ := apperr.As(err)
 	details, _ := ae.Details.(store.ProjectNotIdleDetails)
 	if ae == nil || ae.Code != apperr.CodeAgentNotIdle || len(details.Agents) != 1 || details.Agents[0].ID != busy.ID {
-		t.Fatalf("应以 agent_not_idle 拒绝并列出排队中的 Agent：%+v", ae)
+		t.Fatalf("should be rejected with agent_not_idle, listing the queued Agent: %+v", ae)
 	}
 	if got, err := e.s.GetProject(e.ctx, p.ID); err != nil || got.ManagerAgentID == nil || got.AgentCount != 2 {
-		t.Fatalf("被拒绝的删除不应改动项目：%+v %v", got, err)
+		t.Fatalf("a rejected delete should not change the project: %+v %v", got, err)
 	}
 
 	// Deleting after the run ends: Agents are soft-deleted, encrypted credentials are deleted, the Manager is cleared,
@@ -247,7 +247,7 @@ func TestDeleteProject(t *testing.T) {
 	}
 	ids, err := e.s.DeleteProject(e.ctx, p.ID)
 	if err != nil || len(ids) != 2 {
-		t.Fatalf("删除失败：%v %v", ids, err)
+		t.Fatalf("delete failed: %v %v", ids, err)
 	}
 	var live, creds int
 	_ = e.s.Pool.QueryRow(e.ctx, `SELECT count(*) FROM agents WHERE project_id = $1 AND deleted_at IS NULL`, p.ID).Scan(&live)
@@ -255,14 +255,14 @@ func TestDeleteProject(t *testing.T) {
 	var mgr *uuid.UUID
 	_ = e.s.Pool.QueryRow(e.ctx, `SELECT manager_agent_id FROM projects WHERE id = $1`, p.ID).Scan(&mgr)
 	if live != 0 || creds != 0 || mgr != nil {
-		t.Fatalf("删除后应没有未删除的 Agent、凭证密文与 Manager：%d %d %v", live, creds, mgr)
+		t.Fatalf("after the delete there should be no live Agents, encrypted credentials or Manager: %d %d %v", live, creds, mgr)
 	}
 	var msgs int
 	_ = e.s.Pool.QueryRow(e.ctx, `SELECT count(*) FROM conversation_messages WHERE agent_id = $1`, busy.ID).Scan(&msgs)
 	if msgs == 0 {
-		t.Fatal("对话历史应保留")
+		t.Fatal("the conversation history should be kept")
 	}
-	_, err = e.s.CreateAgent(e.ctx, store.ProjectScope(p.ID), "新来的", "anthropic", "claude-x", "")
+	_, err = e.s.CreateAgent(e.ctx, store.ProjectScope(p.ID), "newcomer", "anthropic", "claude-x", "")
 	wantErrCode(t, err, apperr.CodeNotFound)
 }
 
@@ -277,7 +277,7 @@ func TestSkillTemplatesAreGlobal(t *testing.T) {
 	wantErrCode(t, err, apperr.CodeNameConflict)
 	list, err := e.s.ListSkillTemplates(e.ctx)
 	if err != nil || len(list) != 1 {
-		t.Fatalf("全局库应只有一个 pdf：%+v %v", list, err)
+		t.Fatalf("the global library should have a single pdf: %+v %v", list, err)
 	}
 }
 
@@ -288,8 +288,8 @@ func TestSkillTemplatesAreGlobal(t *testing.T) {
 func TestDeleteProjectConcurrency(t *testing.T) {
 	e := newProjEnv(t)
 	for round := range 10 {
-		p := e.project("并发-" + uuid.NewString()[:8])
-		a := e.agent(store.ProjectScope(p.ID), "甲")
+		p := e.project("concurrent-" + uuid.NewString()[:8])
+		a := e.agent(store.ProjectScope(p.ID), "alpha")
 		var wg sync.WaitGroup
 		errs := make(chan error, 8)
 		wg.Go(func() {
@@ -299,7 +299,7 @@ func TestDeleteProjectConcurrency(t *testing.T) {
 		})
 		for i := range 3 {
 			wg.Go(func() {
-				_, err := e.s.CreateAgent(e.ctx, store.ProjectScope(p.ID), "乙"+strconv.Itoa(i), "anthropic", "claude-x", "")
+				_, err := e.s.CreateAgent(e.ctx, store.ProjectScope(p.ID), "beta"+strconv.Itoa(i), "anthropic", "claude-x", "")
 				if err != nil && !apperr.Is(err, apperr.CodeNotFound) {
 					errs <- err
 				}
@@ -315,7 +315,7 @@ func TestDeleteProjectConcurrency(t *testing.T) {
 		wg.Wait()
 		close(errs)
 		for err := range errs {
-			t.Fatalf("第 %d 轮出现意外错误：%v", round, err)
+			t.Fatalf("round %d: unexpected error: %v", round, err)
 		}
 		var deleted bool
 		var live, active int
@@ -324,10 +324,10 @@ func TestDeleteProjectConcurrency(t *testing.T) {
 		_ = e.s.Pool.QueryRow(e.ctx, `SELECT count(*) FROM runs r JOIN agents a ON a.id = r.agent_id
 			WHERE a.project_id = $1 AND r.status IN ('queued', 'starting', 'running', 'aborting')`, p.ID).Scan(&active)
 		if deleted && (live != 0 || active != 0) {
-			t.Fatalf("第 %d 轮：已删除的项目中仍有 %d 个未删除 Agent、%d 个进行中的执行", round, live, active)
+			t.Fatalf("round %d: the deleted project still has %d live Agents and %d active runs", round, live, active)
 		}
 		if !deleted && active == 0 {
-			t.Fatalf("第 %d 轮：删除被拒绝时应有排队的执行", round)
+			t.Fatalf("round %d: a rejected delete should leave a queued run", round)
 		}
 	}
 }
@@ -337,19 +337,19 @@ func TestDeleteProjectConcurrency(t *testing.T) {
 func TestSetManagerVsDeleteAgent(t *testing.T) {
 	e := newProjEnv(t)
 	for round := range 20 {
-		a := e.agent(store.ProjectScope(e.dc.Project.ID), "候选-"+uuid.NewString()[:8])
+		a := e.agent(store.ProjectScope(e.dc.Project.ID), "candidate-"+uuid.NewString()[:8])
 		var wg sync.WaitGroup
 		var setErr, delErr error
 		wg.Go(func() { _, setErr = e.s.SetProjectManager(e.ctx, e.dc.Project.ID, a.ID) })
 		wg.Go(func() { delErr = e.s.SoftDeleteAgent(e.ctx, a.ID) })
 		wg.Wait()
 		if delErr != nil || (setErr != nil && !apperr.Is(setErr, apperr.CodeValidationFailed)) {
-			t.Fatalf("第 %d 轮出现意外错误：set=%v delete=%v", round, setErr, delErr)
+			t.Fatalf("round %d: unexpected error: set=%v delete=%v", round, setErr, delErr)
 		}
 		var mgr *uuid.UUID
 		_ = e.s.Pool.QueryRow(e.ctx, `SELECT manager_agent_id FROM projects WHERE id = $1`, e.dc.Project.ID).Scan(&mgr)
 		if mgr != nil && *mgr == a.ID {
-			t.Fatalf("第 %d 轮：Manager 指向了已删除的 Agent", round)
+			t.Fatalf("round %d: the Manager points to a deleted Agent", round)
 		}
 	}
 }

@@ -18,7 +18,7 @@ func TestPluginEventIDsAreSortableULIDs(t *testing.T) {
 	for range 2000 {
 		id := store.NewPluginEventID()
 		if !ulid.MatchString(id) || id <= prev {
-			t.Fatalf("ID %q（前一个 %q）", id, prev)
+			t.Fatalf("ID %q (previous %q)", id, prev)
 		}
 		prev = id
 	}
@@ -31,6 +31,6 @@ func TestPluginEventIDsAreSortableULIDs(t *testing.T) {
 	// (2000 is less than 4096, so it borrows at most 1); Windows's wall clock is coarse-grained and does reach this
 	// case.
 	if after := time.Now().UnixMilli() + 1; ms < before || ms > after {
-		t.Fatalf("时间前缀 %d 不在 [%d, %d]", ms, before, after)
+		t.Fatalf("time prefix %d not in [%d, %d]", ms, before, after)
 	}
 }

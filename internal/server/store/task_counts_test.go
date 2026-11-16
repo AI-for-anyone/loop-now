@@ -39,7 +39,7 @@ func TestCountTasks(t *testing.T) {
 	}
 
 	if got, err := s.CountTasks(ctx, dc.Project.ID); err != nil || got != (taskmodel.Counts{}) {
-		t.Fatalf("没有任务时应全为 0：%+v %v", got, err)
+		t.Fatalf("should be all 0 without tasks: %+v %v", got, err)
 	}
 	for status, n := range map[string]int{"preparing": 1, "running": 3, "waiting": 2, "completed": 4, "cancelled": 1} {
 		for range n {
@@ -50,18 +50,18 @@ func TestCountTasks(t *testing.T) {
 	insert(other.ID, "running")
 	got, err := s.CountTasks(ctx, dc.Project.ID)
 	if err != nil || got != (taskmodel.Counts{Preparing: 1, Running: 3, Waiting: 2, Blocked: 0}) {
-		t.Fatalf("计数 = %+v %v", got, err)
+		t.Fatalf("counts = %+v %v", got, err)
 	}
 	if got, err := s.CountTasks(ctx, other.ID); err != nil || got != (taskmodel.Counts{Running: 1, Blocked: 1}) {
-		t.Fatalf("另一个项目 = %+v %v", got, err)
+		t.Fatalf("another project = %+v %v", got, err)
 	}
 
 	if _, err := s.CountTasks(ctx, uuid.New()); !apperr.Is(err, apperr.CodeNotFound) {
-		t.Fatalf("不存在的项目应 404：%v", err)
+		t.Fatalf("a missing project should be 404: %v", err)
 	}
 	mustExec(t, s, `UPDATE projects SET deleted_at=now() WHERE id=$1`, other.ID)
 	if _, err := s.CountTasks(ctx, other.ID); !apperr.Is(err, apperr.CodeNotFound) {
-		t.Fatalf("已删除的项目应 404：%v", err)
+		t.Fatalf("a deleted project should be 404: %v", err)
 	}
 }
 
@@ -83,6 +83,6 @@ func TestCountTasksUsesUnfinishedIndex(t *testing.T) {
 		plan = append(plan, detail)
 	}
 	if text := strings.Join(plan, "\n"); !strings.Contains(text, "USING INDEX task_records_unfinished") {
-		t.Fatalf("应使用 task_records_unfinished：\n%s", text)
+		t.Fatalf("should use task_records_unfinished:\n%s", text)
 	}
 }

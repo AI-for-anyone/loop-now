@@ -113,45 +113,45 @@ func TestResumeSessionCancelsSleepAndKeepsHistoryEpoch(t *testing.T) {
 	}
 	sess, err := e.s.ResumeSession(ctx, e.agent, "/managed/old.jsonl", "/managed/target.jsonl")
 	if err != nil || sess.State != "active" || sess.SessionFile != "/managed/target.jsonl" || sess.Epoch != 2 {
-		t.Fatalf("恢复后的指针、状态或 epoch 不符：%+v %v", sess, err)
+		t.Fatalf("wrong pointer, state or epoch after resuming: %+v %v", sess, err)
 	}
 	var sleepState, endReason string
 	if err = e.s.Pool.QueryRow(ctx, `SELECT state,end_reason FROM agent_sleeps WHERE id=$1`, receipt.Sleep.ID).Scan(&sleepState, &endReason); err != nil || sleepState != "cancelled" || endReason != "session_reopened" {
-		t.Fatalf("恢复应取消旧 sleep：%s %s %v", sleepState, endReason, err)
+		t.Fatalf("resuming should cancel the old sleep: %s %s %v", sleepState, endReason, err)
 	}
 	events, err := e.s.AgentEvents(ctx, e.agent)
 	if err != nil || len(events) == 0 {
-		t.Fatalf("恢复应记录会话事件：%+v %v", events, err)
+		t.Fatalf("resuming should record a session event: %+v %v", events, err)
 	}
 	last := events[len(events)-1]
 	if last.Type != store.EventSessionReset || last.Data["fromEpoch"] != float64(1) || last.Data["toEpoch"] != float64(2) {
-		t.Fatalf("恢复事件或 epoch 不符：%+v", last)
+		t.Fatalf("wrong resume event or epoch: %+v", last)
 	}
 	old, err := e.s.GetAgentSession(ctx, e.agent)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err = e.s.ResumeSession(ctx, e.agent, "/managed/stale.jsonl", "/managed/other.jsonl"); err == nil {
-		t.Fatal("当前指针变化后必须拒绝过期恢复")
+		t.Fatal("a stale resume must be rejected after the current pointer changed")
 	}
 	after, _ := e.s.GetAgentSession(ctx, e.agent)
 	if after != old {
-		t.Fatalf("失败恢复不得改变当前会话：before=%+v after=%+v", old, after)
+		t.Fatalf("a failed resume must not change the current session: before=%+v after=%+v", old, after)
 	}
 	next := e.send(true, "")
 	var epoch int
 	if err = e.s.Pool.QueryRow(ctx, `SELECT session_epoch FROM conversation_messages WHERE run_id=$1`, next.ID).Scan(&epoch); err != nil || epoch != 2 {
-		t.Fatalf("新消息应使用新 epoch：%d %v", epoch, err)
+		t.Fatalf("a new message should use the new epoch: %d %v", epoch, err)
 	}
 	page, err := e.s.ListMessages(ctx, e.agent, store.MessageQuery{Limit: 10})
 	if err != nil || len(page.Items) != 3 {
-		t.Fatalf("恢复不得删除页面历史：%+v %v", page, err)
+		t.Fatalf("resuming must not delete the page history: %+v %v", page, err)
 	}
 	wantRoles := []string{"user", "assistant", "user"}
 	wantEpochs := []int{1, 1, 2}
 	for i, item := range page.Items {
 		if item.Message.Role != wantRoles[i] || item.Message.SessionEpoch != wantEpochs[i] {
-			t.Fatalf("第 %d 条历史的角色或 epoch 不符：got=%s/%d want=%s/%d", i, item.Message.Role, item.Message.SessionEpoch, wantRoles[i], wantEpochs[i])
+			t.Fatalf("history item %d has the wrong role or epoch: got=%s/%d want=%s/%d", i, item.Message.Role, item.Message.SessionEpoch, wantRoles[i], wantEpochs[i])
 		}
 	}
 }
@@ -164,22 +164,22 @@ func TestResumeSessionFromNoneAfterReset(t *testing.T) {
 	}
 	reset, err := e.s.ResetSession(ctx, e.agent)
 	if err != nil || reset.State != "none" || reset.Epoch != 2 {
-		t.Fatalf("重开后应为 none：%+v %v", reset, err)
+		t.Fatalf("should be none after reopening: %+v %v", reset, err)
 	}
 	sess, err := e.s.ResumeSession(ctx, e.agent, "", "/managed/old.jsonl")
 	if err != nil || sess.State != "active" || sess.SessionFile != "/managed/old.jsonl" || sess.Epoch != 3 {
-		t.Fatalf("none 应能按 NULL 当前指针恢复：%+v %v", sess, err)
+		t.Fatalf("none should resume with a NULL current pointer: %+v %v", sess, err)
 	}
 	before, err := e.s.GetAgentSession(ctx, e.agent)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err = e.s.ResumeSession(ctx, e.agent, "", "/managed/other.jsonl"); err == nil {
-		t.Fatal("none 恢复后，过期 NULL 指针仍必须拒绝")
+		t.Fatal("after resuming from none, a stale NULL pointer must still be rejected")
 	}
 	after, err := e.s.GetAgentSession(ctx, e.agent)
 	if err != nil || after != before {
-		t.Fatalf("过期 NULL 指针不得覆盖新会话：before=%+v after=%+v %v", before, after, err)
+		t.Fatalf("a stale NULL pointer must not overwrite the new session: before=%+v after=%+v %v", before, after, err)
 	}
 }
 

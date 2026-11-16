@@ -160,7 +160,7 @@ func TestPluginEventsGolden(t *testing.T) {
 	exec := func(sql string, args ...any) {
 		t.Helper()
 		if _, err := s.Pool.Exec(ctx, sql, args...); err != nil {
-			t.Fatalf("%s：%v", sql, err)
+			t.Fatalf("%s: %v", sql, err)
 		}
 	}
 	must := func(err error) {
@@ -171,7 +171,7 @@ func TestPluginEventsGolden(t *testing.T) {
 	}
 	at := func(minutes int) time.Time { return goldenBase.Add(time.Duration(minutes) * time.Minute) }
 
-	dc, err := s.EnsureDefaults(ctx, "组织", "项目")
+	dc, err := s.EnsureDefaults(ctx, "组织", "项目") // check-english: zh (matches the recorded golden file from 647fe00)
 	must(err)
 	project := dc.Project.ID
 	l.add(project, "project")
@@ -192,13 +192,13 @@ func TestPluginEventsGolden(t *testing.T) {
 	}
 
 	// Agent: in a project, on the platform, renamed, an unrelated update, deleted.
-	a1, err := s.CreateAgent(ctx, store.ProjectScope(project), "甲", "anthropic", "m", "")
+	a1, err := s.CreateAgent(ctx, store.ProjectScope(project), "甲", "anthropic", "m", "") // check-english: zh (matches the recorded golden file from 647fe00)
 	must(err)
-	l.add(a1.ID, "agent:甲")
-	p1, err := s.CreateAgent(ctx, store.PlatformScope(), "乙", "anthropic", "m", "")
+	l.add(a1.ID, "agent:甲")                                                         // check-english: zh (matches the recorded golden file from 647fe00)
+	p1, err := s.CreateAgent(ctx, store.PlatformScope(), "乙", "anthropic", "m", "") // check-english: zh (matches the recorded golden file from 647fe00)
 	must(err)
-	l.add(p1.ID, "agent:乙")
-	name := "甲2"
+	l.add(p1.ID, "agent:乙") // check-english: zh (matches the recorded golden file from 647fe00)
+	name := "甲2"            // check-english: zh (matches the recorded golden file from 647fe00)
 	_, err = s.UpdateAgent(ctx, a1.ID, store.AgentPatch{Name: &name})
 	must(err)
 	exec(`UPDATE agents SET updated_at=$2 WHERE id=$1`, a1.ID, at(1))
@@ -206,35 +206,35 @@ func TestPluginEventsGolden(t *testing.T) {
 
 	// Runs: queued, dispatched, started replying, usage, retry, compaction, process, ended; a turn started directly is
 	// interrupted.
-	w, err := s.CreateAgent(ctx, store.ProjectScope(project), "工", "anthropic", "m", "")
+	w, err := s.CreateAgent(ctx, store.ProjectScope(project), "工", "anthropic", "m", "") // check-english: zh (matches the recorded golden file from 647fe00)
 	must(err)
-	l.add(w.ID, "agent:工")
+	l.add(w.ID, "agent:工") // check-english: zh (matches the recorded golden file from 647fe00)
 	instance := uuid.New()
 	l.add(instance, "instance")
 	r1 := uuid.New()
 	l.add(r1, "run:1")
-	_, _, err = s.InsertMessageAndRun(ctx, store.NewRun{AgentID: w.ID, RunID: r1, Text: "你好", WhenBusy: "queue", InstanceID: instance})
+	_, _, err = s.InsertMessageAndRun(ctx, store.NewRun{AgentID: w.ID, RunID: r1, Text: "Hello", WhenBusy: "queue", InstanceID: instance})
 	must(err)
 	_, started, err := s.StartQueuedRun(ctx, r1, instance)
 	must(err)
 	if !started {
-		t.Fatal("排队的执行应能开始")
+		t.Fatal("the queued run should be able to start")
 	}
 	must(s.SetRunRunning(ctx, r1, 1))
 	must(s.AddUsage(ctx, store.UsageRecord{AgentID: w.ID, RunID: &r1, Kind: "assistant", Input: 100, Output: 20, CacheRead: 300, At: at(2)}))
-	must(s.AddEvent(ctx, store.LifecycleEvent{AgentID: w.ID, RunID: &r1, Type: "model.retry_started", At: at(3), Data: map[string]any{"attempt": 2, "delayMs": 4000, "errorMessage": "不外泄"}}))
+	must(s.AddEvent(ctx, store.LifecycleEvent{AgentID: w.ID, RunID: &r1, Type: "model.retry_started", At: at(3), Data: map[string]any{"attempt": 2, "delayMs": 4000, "errorMessage": "not leaked"}}))
 	must(s.AddEvent(ctx, store.LifecycleEvent{AgentID: w.ID, RunID: &r1, Type: "context.compaction", At: at(4), Data: map[string]any{"reason": "threshold"}}))
 	must(s.AddEvent(ctx, store.LifecycleEvent{AgentID: w.ID, Type: "pi.started", At: at(5)}))
-	_, _, _, err = s.FinishRun(ctx, r1, store.RunEnd{Status: "completed", Text: "好的"})
+	_, _, _, err = s.FinishRun(ctx, r1, store.RunEnd{Status: "completed", Text: "OK"})
 	must(err)
 	r2 := uuid.New()
 	l.add(r2, "run:2")
-	_, _, err = s.InsertMessageAndRun(ctx, store.NewRun{AgentID: w.ID, RunID: r2, Text: "直接开始", Start: true, InstanceID: instance})
+	_, _, err = s.InsertMessageAndRun(ctx, store.NewRun{AgentID: w.ID, RunID: r2, Text: "start directly", Start: true, InstanceID: instance})
 	must(err)
 	_, _, _, err = s.FinishRun(ctx, r2, store.RunEnd{Status: "interrupted", EndReason: "user_interrupt", ErrorCode: "x"})
 	must(err)
 	must(s.AddEvent(ctx, store.LifecycleEvent{AgentID: w.ID, Type: "pi.stopped", At: at(6), Data: map[string]any{"reason": "idle_timeout"}}))
-	must(s.AddEvent(ctx, store.LifecycleEvent{AgentID: w.ID, Type: "pi.exited", At: at(7), Data: map[string]any{"stderrTail": "不外泄"}}))
+	must(s.AddEvent(ctx, store.LifecycleEvent{AgentID: w.ID, Type: "pi.exited", At: at(7), Data: map[string]any{"stderrTail": "not leaked"}}))
 	must(s.AddEvent(ctx, store.LifecycleEvent{AgentID: w.ID, RunID: &r2, Type: "run.phase", At: at(8)}))
 
 	// Inbox and questions: a message and a question written in the same transaction (visible at commit); read,
@@ -243,12 +243,12 @@ func TestPluginEventsGolden(t *testing.T) {
 	l.add(m1, "msg:1")
 	l.add(m2, "msg:2")
 	goldenTx(t, s, func(exec func(string, ...any)) {
-		exec(`INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,to_kind,text,created_at) VALUES($1,$1,'agent',$2,'console',$3,$4)`, m1, w.ID, strings.Repeat("长", 100), at(10))
-		exec(`INSERT INTO inbox_questions(message_id,options,expires_at) VALUES($1,$2,$3)`, m1, `[{"id":"yes","label":"好"},{"id":"no","label":"不"}]`, at(70))
+		exec(`INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,to_kind,text,created_at) VALUES($1,$1,'agent',$2,'console',$3,$4)`, m1, w.ID, strings.Repeat("长", 100), at(10)) // check-english: zh (matches the recorded golden file from 647fe00)
+		exec(`INSERT INTO inbox_questions(message_id,options,expires_at) VALUES($1,$2,$3)`, m1, `[{"id":"yes","label":"Yes"},{"id":"no","label":"No"}]`, at(70))
 	})
 	exec(`UPDATE inbox_messages SET read_at=$2 WHERE id=$1`, m1, at(11))
 	exec(`UPDATE inbox_questions SET state='answered', answer_option_id='yes', answered_at=$2 WHERE message_id=$1`, m1, at(12))
-	exec(`INSERT INTO inbox_messages(id,thread_id,from_kind,to_kind,to_agent_id,when_busy,text,created_at) VALUES($1,$1,'console','agent',$2,'queue','稍后处理',$3)`, m2, w.ID, at(13))
+	exec(`INSERT INTO inbox_messages(id,thread_id,from_kind,to_kind,to_agent_id,when_busy,text,created_at) VALUES($1,$1,'console','agent',$2,'queue','稍后处理',$3)`, m2, w.ID, at(13)) // check-english: zh (matches the recorded golden file from 647fe00)
 	exec(`UPDATE inbox_messages SET cancelled_at=$2 WHERE id=$1`, m2, at(14))
 
 	// Managed identity: identity.inbound goes only to the managing plugin, which no longer receives inbox.received; an
@@ -266,25 +266,25 @@ func TestPluginEventsGolden(t *testing.T) {
 	l.add(m4, "msg:4")
 	l.add(m5, "msg:5")
 	goldenTx(t, s, func(exec func(string, ...any)) {
-		exec(`INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,to_kind,to_identity_id,text,created_at) VALUES($1,$1,'agent',$2,'external',$3,'上线吗？',$4)`, m3, w.ID, boss.ID, at(20))
-		exec(`INSERT INTO inbox_questions(message_id,options,expires_at) VALUES($1,$2,$3)`, m3, `[{"id":"1","label":"上线"}]`, at(80))
+		exec(`INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,to_kind,to_identity_id,text,created_at) VALUES($1,$1,'agent',$2,'external',$3,'上线吗？',$4)`, m3, w.ID, boss.ID, at(20)) // check-english: zh (matches the recorded golden file from 647fe00)
+		exec(`INSERT INTO inbox_questions(message_id,options,expires_at) VALUES($1,$2,$3)`, m3, `[{"id":"1","label":"上线"}]`, at(80))                                                                // check-english: zh (matches the recorded golden file from 647fe00)
 	})
-	exec(`INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,to_kind,to_identity_id,text,created_at) VALUES($1,$1,'agent',$2,'external',$3,'没人代管',$4)`, m4, w.ID, ops.ID, at(21))
+	exec(`INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,to_kind,to_identity_id,text,created_at) VALUES($1,$1,'agent',$2,'external',$3,'没人代管',$4)`, m4, w.ID, ops.ID, at(21)) // check-english: zh (matches the recorded golden file from 647fe00)
 
 	// Plugin thread: a message to a plugin goes only to that plugin as channel.outbound.
 	party := uuid.New()
 	l.add(party, "party:chat")
-	exec(`INSERT INTO plugin_parties(id,plugin_id,display_name) VALUES($1,'chat','聊天')`, party)
-	exec(`INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,to_kind,to_plugin_party_id,plugin_channel,text,created_at) VALUES($1,$1,'agent',$2,'plugin',$3,'c1','回复线索',$4)`, m5, w.ID, party, at(22))
+	exec(`INSERT INTO plugin_parties(id,plugin_id,display_name) VALUES($1,'chat','Chat')`, party)
+	exec(`INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,to_kind,to_plugin_party_id,plugin_channel,text,created_at) VALUES($1,$1,'agent',$2,'plugin',$3,'c1','回复线索',$4)`, m5, w.ID, party, at(22)) // check-english: zh (matches the recorded golden file from 647fe00)
 
 	// Mixed in one transaction: Inbox changes (originally a deferred trigger) are handled last at commit; immediate
 	// changes from both databases follow statement order.
 	m6 := uuid.New()
 	l.add(m6, "msg:6")
 	goldenTx(t, s, func(exec func(string, ...any)) {
-		exec(`INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,to_kind,text,created_at) VALUES($1,$1,'agent',$2,'console','混合',$3)`, m6, w.ID, at(23))
+		exec(`INSERT INTO inbox_messages(id,thread_id,from_kind,from_agent_id,to_kind,text,created_at) VALUES($1,$1,'agent',$2,'console','混合',$3)`, m6, w.ID, at(23)) // check-english: zh (matches the recorded golden file from 647fe00)
 		exec(`INSERT INTO lifecycle_events(id,agent_id,type,at,data) VALUES($1,$2,'pi.stopped',$3,'{"reason":"idle_timeout"}')`, uuid.New(), w.ID, at(24))
-		exec(`UPDATE agents SET name='工2', config_version=config_version+1 WHERE id=$1`, w.ID)
+		exec(`UPDATE agents SET name='工2', config_version=config_version+1 WHERE id=$1`, w.ID) // check-english: zh (matches the recorded golden file from 647fe00)
 		exec(`INSERT INTO lifecycle_events(id,agent_id,type,at,data) VALUES($1,$2,'pi.exited',$3,'{}')`, uuid.New(), w.ID, at(25))
 	})
 
@@ -311,7 +311,7 @@ func TestPluginEventsGolden(t *testing.T) {
 
 	// Disabled globally: later writes produce no events.
 	exec(`UPDATE plugin_settings SET disabled=true`)
-	_, err = s.CreateAgent(ctx, store.ProjectScope(project), "丙", "anthropic", "m", "")
+	_, err = s.CreateAgent(ctx, store.ProjectScope(project), "C", "anthropic", "m", "")
 	must(err)
 
 	got := goldenEvents(t, s, l)
@@ -319,7 +319,7 @@ func TestPluginEventsGolden(t *testing.T) {
 	must(err)
 	if path := os.Getenv("LOOP_NOW_GOLDEN_WRITE"); path != "" {
 		must(os.WriteFile(path, append(raw, '\n'), 0o644))
-		t.Logf("写入 %d 条事件到 %s", len(got), path)
+		t.Logf("wrote %d events to %s", len(got), path)
 		return
 	}
 	want, err := os.ReadFile("testdata/plugin_events_golden.json")
@@ -338,10 +338,10 @@ func TestPluginEventsGolden(t *testing.T) {
 			g = string(b)
 		}
 		if w != g {
-			t.Errorf("第 %d 条事件不同：\n  旧：%s\n  新：%s", i+1, w, g)
+			t.Errorf("event %d differs:\n  old: %s\n  new: %s", i+1, w, g)
 		}
 	}
 	if !t.Failed() {
-		t.Logf("%d 条事件与旧实现逐条相同", len(got))
+		t.Logf("all %d events match the old implementation one by one", len(got))
 	}
 }

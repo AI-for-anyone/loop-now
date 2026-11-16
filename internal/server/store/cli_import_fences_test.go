@@ -25,24 +25,24 @@ func TestCLIImportRevisionAndDeletedProjectFences(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			p, err := e.s.CreateProject(ctx, base.OrganizationID, "导入目标")
+			p, err := e.s.CreateProject(ctx, base.OrganizationID, "Import target")
 			if err != nil {
 				t.Fatal(err)
 			}
 			candidate, owner := uuid.New(), uuid.New()
 			hash := sha256.Sum256([]byte("fence-request"))
-			in := store.CLIImportBegin{ID: uuid.New(), ProjectID: p.ID, ScanID: uuid.New(), InstanceID: owner, RequestFingerprint: hash[:], ExpectedRevision: 1, ProvenanceKeyID: "key", Deadline: time.Now().Add(time.Minute), Items: []store.CLIImportItem{{CandidateID: candidate, CLI: "gh", Label: "合成来源"}}}
+			in := store.CLIImportBegin{ID: uuid.New(), ProjectID: p.ID, ScanID: uuid.New(), InstanceID: owner, RequestFingerprint: hash[:], ExpectedRevision: 1, ProvenanceKeyID: "key", Deadline: time.Now().Add(time.Minute), Items: []store.CLIImportItem{{CandidateID: candidate, CLI: "gh", Label: "synthetic source"}}}
 			if _, _, err = e.s.BeginCLIImport(ctx, in); err != nil {
 				t.Fatal(err)
 			}
-			v := store.CLIImportPreparedItem{CandidateID: candidate, AccountID: uuid.New(), VersionID: uuid.New(), CLI: "gh", Name: "合成", TemplateSource: "builtin", CredentialFormat: "1", AuthMethod: "static", ProvenanceKeyID: "key", OriginMAC: bytes.Repeat([]byte{1}, 32), ContentMAC: bytes.Repeat([]byte{2}, 32)}
+			v := store.CLIImportPreparedItem{CandidateID: candidate, AccountID: uuid.New(), VersionID: uuid.New(), CLI: "gh", Name: "synthetic", TemplateSource: "builtin", CredentialFormat: "1", AuthMethod: "static", ProvenanceKeyID: "key", OriginMAC: bytes.Repeat([]byte{1}, 32), ContentMAC: bytes.Repeat([]byte{2}, 32)}
 			v.Secret = []byte(`{"env":{"GH_TOKEN":"synthetic"},"files":[]}`)
 			if deleted {
 				if _, err = e.s.DeleteProject(ctx, p.ID); err != nil {
 					t.Fatal(err)
 				}
 			} else {
-				_, err = e.s.CreateProjectCredential(ctx, p.ID, "cli", "gh", "并发管理写", store.ProjectCredentialWrite{TemplateSource: "builtin", AuthMethod: "static", Meta: store.CredentialMeta{TemplateVersion: "1"}, Secret: []byte(`{"env":{"GH_TOKEN":"different-synthetic"},"files":[]}`)})
+				_, err = e.s.CreateProjectCredential(ctx, p.ID, "cli", "gh", "concurrent admin write", store.ProjectCredentialWrite{TemplateSource: "builtin", AuthMethod: "static", Meta: store.CredentialMeta{TemplateVersion: "1"}, Secret: []byte(`{"env":{"GH_TOKEN":"different-synthetic"},"files":[]}`)})
 				if err != nil {
 					t.Fatal(err)
 				}
