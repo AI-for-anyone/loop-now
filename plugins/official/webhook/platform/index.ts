@@ -53,7 +53,7 @@ export default function register(api: PluginAPI) {
   const target = (config: WebhookConfig): string | null => {
     if (!config.url) return null
     if (!URL.canParse(config.url)) {
-      api.log.error(`回调地址不是合法的地址：${config.url}`)
+      api.log.error(`Callback URL is invalid: ${config.url}`)
       return null
     }
     return config.url
@@ -89,12 +89,12 @@ export default function register(api: PluginAPI) {
     identityInbound: async (event) => {
       const config = api.config.get<WebhookConfig>(event.projectId)
       if (!api.config.get<WebhookConfig>().manageIdentities) {
-        api.log.warn(`外部身份 ${event.identityId} 交给了本插件代管，但没有打开“代管外部身份”，消息 ${event.messageId} 没有推送`)
+        api.log.warn(`External identity ${event.identityId} is managed by this plugin, but manageIdentities is off; message ${event.messageId} was not pushed`)
         return
       }
       const url = target(config)
       if (!url) {
-        api.log.warn(`没有设置回调地址，代管身份 ${event.identityId} 的消息 ${event.messageId} 没有推送`)
+        api.log.warn(`No callback URL is set; message ${event.messageId} for managed identity ${event.identityId} was not pushed`)
         return
       }
       const signed = api.secrets.get('secret', event.projectId) !== undefined
@@ -122,35 +122,35 @@ export default function register(api: PluginAPI) {
   // Answer endpoint: POST /hooks/webhook/answer with body { messageId, questionId?, optionId? | text }, signed with the same secret as the push.
   api.http.handle(async (request) => {
     const path = new URL(request.url).pathname
-    if (path !== '/answer') return fail(404, 'not_found', `没有 ${path}`)
-    if (request.method !== 'POST') return fail(405, 'method_not_allowed', '只接受 POST')
-    if (!api.config.get<WebhookConfig>().manageIdentities) return fail(403, 'forbidden', '没有打开“代管外部身份”')
+    if (path !== '/answer') return fail(404, 'not_found', `No such path: ${path}`)
+    if (request.method !== 'POST') return fail(405, 'method_not_allowed', 'Only POST is accepted')
+    if (!api.config.get<WebhookConfig>().manageIdentities) return fail(403, 'forbidden', 'manageIdentities is off')
     const raw = await request.text()
     let body: AnswerBody
     try {
       body = JSON.parse(raw) as AnswerBody
     } catch {
-      return fail(400, 'bad_request', '正文须是 JSON')
+      return fail(400, 'bad_request', 'Body must be JSON')
     }
     const str = (v: unknown) => (typeof v === 'string' && v !== '' ? v : undefined)
     const messageId = str(body?.messageId)
     const questionId = str(body?.questionId)
     const optionId = str(body?.optionId)
     const text = str(body?.text)
-    if (!messageId) return fail(422, 'validation_failed', '缺少 messageId')
-    if ((optionId === undefined) === (text === undefined)) return fail(422, 'validation_failed', 'optionId 与 text 须给出其中一个')
+    if (!messageId) return fail(422, 'validation_failed', 'messageId is required')
+    if ((optionId === undefined) === (text === undefined)) return fail(422, 'validation_failed', 'Exactly one of optionId and text is required')
     const pushed = await api.state.get<PushedMessage>(PUSHED + messageId)
-    if (!pushed) return fail(404, 'not_found', '这条消息不是本插件推送的，或已过期')
+    if (!pushed) return fail(404, 'not_found', 'This message was not pushed by this plugin, or it has expired')
     const secret = api.secrets.get('secret', pushed.projectId)
-    if (!secret) return fail(403, 'forbidden', '没有设置签名密钥，不接受回答')
+    if (!secret) return fail(403, 'forbidden', 'No signing secret is set, so answers are not accepted')
     if (!verifySignature({ secret, body: raw, signature: request.headers.get(SIGNATURE_HEADER), timestamp: request.headers.get(TIMESTAMP_HEADER) })) {
-      return fail(401, 'bad_signature', '签名不对或已过期')
+      return fail(401, 'bad_signature', 'Signature is invalid or expired')
     }
     const question = questionId ?? pushed.questionId
     let result: InboxMessage
     try {
       if (optionId !== undefined) {
-        if (!question) return fail(422, 'validation_failed', '这条消息不是提问，不能选选项')
+        if (!question) return fail(422, 'validation_failed', 'This message is not a question, so it has no options to choose')
         result = await api.identities.answer(pushed.identityId, question, { optionId })
       } else if (question) {
         result = await api.identities.answer(pushed.identityId, question, { text: text! })
@@ -164,7 +164,7 @@ export default function register(api: PluginAPI) {
     }
     // When the question is closed, a text answer is saved as a plain reply and answers no question.
     if (question && !result.answerTo) {
-      return json(409, { ok: false, messageId: result.id, error: { code: 'question_closed', message: '回复已保存，但提问已关闭或已过期，没有被回答' } })
+      return json(409, { ok: false, messageId: result.id, error: { code: 'question_closed', message: 'Reply saved, but the question is closed or expired, so it was not answered' } })
     }
     return json(200, { ok: true, messageId: result.id, answered: Boolean(result.answerTo) })
   })

@@ -71,6 +71,6 @@ node <插件目录>/setup.mjs <work root>/platform/plugins/playwright/data
 
   有问题时它会立即退出，并打印一条以 `[playwright]` 开头的说明，告诉你怎么做，通常是重新运行 `setup.mjs`。如果它一直在运行，说明没问题，按 Ctrl-C 结束。修好后，工具在该 Agent 下次启动 Pi 时出现。
 - **没有出现窗口**：窗口开在 Loop Now 那台机器的桌面上，而且要等 Agent 调用浏览器工具才会打开。
-- **`[playwright] 配置目录 … 正被另一个浏览器使用，这次使用临时配置`**：这个 Agent 的另一个执行正开着它的浏览器，这次看不到已保存的 Cookie 和登录状态。
+- **`[playwright] Profile … is in use by another browser; using a temporary profile this time`**（配置目录正被另一个浏览器使用，这次使用临时配置）：这个 Agent 的另一个执行正开着它的浏览器，这次看不到已保存的 Cookie 和登录状态。
 - **让某个 Agent 的浏览器从头开始**：在该 Agent 没有使用浏览器时，删除 `data/profiles/<Agent id>/`。
 - 卸载插件时，数据目录（浏览器和所有配置目录）默认保留；卸载对话框里勾选 **同时删除数据目录** 才会删除。

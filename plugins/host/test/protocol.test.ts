@@ -54,10 +54,10 @@ describe('启动与加载', () => {
     const good = fx.write('good', { 'index.ts': `export default function (api) { api.on('run.ended', () => api.log.info('good ran')) }` }, { events: ['run.ended'] })
     const r1 = await host.load(broken)
     assert.equal(r1.payload.ok, false)
-    assert.match(r1.payload.error, /加载 index\.ts 失败：坏掉的模块/)
+    assert.match(r1.payload.error, /load index\.ts failed: 坏掉的模块/)
     const r2 = await host.load(syntax)
     assert.equal(r2.payload.ok, false)
-    assert.match(r2.payload.error, /加载 index\.ts 失败/)
+    assert.match(r2.payload.error, /load index\.ts failed/)
     assert.deepEqual((await host.load(good)).payload, { ok: true })
     assert.deepEqual((await host.event('good', { type: 'run.ended' })).payload, { ok: true })
     await host.waitLog('good', /good ran/)
@@ -71,14 +71,14 @@ describe('启动与加载', () => {
     const none = fx.write('none', { 'index.ts': `export const x = 1` })
     const missing = { ...fx.write('missing', { 'other.ts': '' }) }
     const r1 = await host.load(throws)
-    assert.deepEqual(r1.payload, { ok: false, error: 'register 失败：register 不行' })
+    assert.deepEqual(r1.payload, { ok: false, error: 'register failed: register 不行' })
     const r2 = await host.load(none)
     assert.equal(r2.payload.ok, false)
-    assert.match(r2.payload.error, /没有默认导出 register 函数/)
+    assert.match(r2.payload.error, /index\.ts does not export a default register function/)
     const r3 = await host.load(missing)
     assert.equal(r3.payload.ok, false)
     const r4 = await host.request('load', 'other', { ...throws })
-    assert.deepEqual(r4.payload, { ok: false, error: 'load 载荷的 id 须与消息的 plugin 一致' })
+    assert.deepEqual(r4.payload, { ok: false, error: 'load payload id must match the message plugin' })
   })
 
   it('订阅清单外的事件时加载失败', async () => {
@@ -95,11 +95,11 @@ describe('启动与加载', () => {
     )
     const r = await host.load(p)
     assert.equal(r.payload.ok, false)
-    assert.match(r.payload.error, /没有声明的事件 inbox\.received/)
+    assert.match(r.payload.error, /Subscribed to inbox\.received, which is not declared in the manifest's loopNow\.events/)
     const act = fx.write('action', { 'index.ts': `export default function (api) { api.actions.register('resend', async () => ({ notice: 'x' })) }` })
     const r2 = await host.load(act)
     assert.equal(r2.payload.ok, false)
-    assert.match(r2.payload.error, /操作按钮 resend 没有在清单 loopNow\.actions 中声明/)
+    assert.match(r2.payload.error, /Registered action resend, which is not declared in the manifest's loopNow\.actions/)
   })
 
   it('支持 TypeScript（含 enum）、相对导入与宿主提供的 SDK', async () => {
@@ -195,10 +195,10 @@ describe('观察类事件', () => {
     const next = host.event('slowpoke', { type: 'run.ended', status: 'ok' })
     const ack = await hung
     assert.equal(ack.payload.ok, false)
-    assert.match(ack.payload.error, /超过 300 毫秒/)
+    assert.match(ack.payload.error, /^Handling run\.ended timed out after 300 ms$/)
     assert.ok(Date.now() - started < 2_000)
     assert.deepEqual((await next).payload, { ok: true })
-    assert.match((await host.waitLog('slowpoke', /aborted/)).message, /超过 300 毫秒/)
+    assert.match((await host.waitLog('slowpoke', /aborted/)).message, /timed out after 300 ms/)
   })
 })
 
@@ -257,7 +257,7 @@ describe('状态', () => {
       }`,
     })
     await host.load(p)
-    assert.equal((await host.waitLog('nostate', /权限/)).message, '清单没有声明 state 权限 | 清单没有声明 state 权限')
+    assert.equal((await host.waitLog('nostate', /permission/)).message, 'Manifest does not declare the state permission | Manifest does not declare the state permission')
     assert.equal(host.messages.filter((m) => m.type.startsWith('state_')).length, 0)
     const keys = fx.write(
       'badkeys',
@@ -308,11 +308,11 @@ describe('账号', () => {
     )
     assert.deepEqual((await host.load(p)).payload, { ok: true })
     assert.equal((await host.waitLog('acct', /^names/)).message, 'names 机器人一:cli_1,机器人二:cli_2')
-    assert.equal((await host.waitLog('acct', /^errors/)).message, 'errors 清单没有声明账号种类 github | projectId 无效 | 插件没有在这个项目里启用')
+    assert.equal((await host.waitLog('acct', /^errors/)).message, 'errors Manifest does not declare account kind github | projectId is invalid | 插件没有在这个项目里启用')
     assert.equal(host.messages.filter((m) => m.type === 'accounts_list').length, 2, '本地能判断的不发给 Go')
     const noPerm = fx.write('noacct', { 'index.ts': `export default function (api) { api.lifecycle.on('start', async () => { try { await api.accounts.list('${project}', 'lark') } catch (e) { api.log.info(e.message) } }) }` }, { manifest: { accounts: [{ kind: 'lark', label: '飞书', fields: {}, multiple: false }] } })
     await host.load(noPerm)
-    assert.equal((await host.waitLog('noacct', /权限/)).message, '清单没有声明 accounts.read 权限')
+    assert.equal((await host.waitLog('noacct', /permission/)).message, 'Manifest does not declare the accounts.read permission')
   })
 })
 
@@ -475,11 +475,11 @@ describe('同步调用', () => {
     const t0 = Date.now()
     const r = await host.call('stuck', 'intercept', { type: 'run.before_start', origin: 'console', messageId: String(t0) }, 250)
     assert.equal(r.payload.ok, false)
-    assert.match(r.payload.error, /超过 250 毫秒/)
+    assert.match(r.payload.error, /^Handling run\.before_start timed out after 250 ms$/)
     const elapsed = Number(/after (\d+)ms/.exec((await host.waitLog('stuck', /signal fired/)).message)![1])
     assert.ok(elapsed >= 240 && elapsed < 2_000, `signal 在 ${elapsed}ms 触发`)
     assert.deepEqual((await host.call('stuck', 'intercept', { type: 'run.before_start', origin: 'boom' })).payload, { ok: false, error: '检查出错' })
-    assert.deepEqual((await host.call('stuck', 'veto', { type: 'run.before_start' })).payload, { ok: false, error: '未知的调用种类 veto' })
+    assert.deepEqual((await host.call('stuck', 'veto', { type: 'run.before_start' })).payload, { ok: false, error: 'Unknown call kind veto' })
     assert.deepEqual((await host.call('nobody', 'intercept', { type: 'run.before_start' })).payload, { ok: false, error: '插件未加载' })
   })
 })
@@ -503,11 +503,11 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
     const r = await host.request('action', 'actor', { actionId: 'resend', where: { projectId: 'p1' }, input: { id: 'd1' }, timeoutMs: 1000 })
     assert.deepEqual(r.payload, { ok: true, value: { notice: 'resent d1 in p1 via resend', url: '/x' } })
     assert.deepEqual((await host.request('action', 'actor', { actionId: 'plain', where: {}, input: {} })).payload, { ok: true, value: { notice: 'ok' } })
-    assert.deepEqual((await host.request('action', 'actor', { actionId: 'broken', where: {}, input: {} })).payload, { ok: false, error: '操作的返回值须是 { notice, url? }' })
-    assert.deepEqual((await host.request('action', 'actor', { actionId: 'missing', where: {}, input: {} })).payload, { ok: false, error: '插件没有注册操作按钮 missing' })
+    assert.deepEqual((await host.request('action', 'actor', { actionId: 'broken', where: {}, input: {} })).payload, { ok: false, error: 'Action must return { notice, url? }' })
+    assert.deepEqual((await host.request('action', 'actor', { actionId: 'missing', where: {}, input: {} })).payload, { ok: false, error: 'Plugin has not registered action missing' })
     const slow = await host.request('action', 'actor', { actionId: 'slow', where: {}, input: {}, timeoutMs: 150 })
     assert.equal(slow.payload.ok, false)
-    assert.match(slow.payload.error, /超过 150 毫秒/)
+    assert.match(slow.payload.error, /^Action slow timed out after 150 ms$/)
   })
 
   it('http：请求的方法、路径、查询、头与 base64 正文原样交给插件，回应原样带回', async () => {
@@ -548,10 +548,10 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
     })
     const get = await host.request('http', 'hooky', { via: 'console', method: 'GET', path: '/x', query: '', headers: {}, body: '' })
     assert.equal(JSON.parse(Buffer.from(get.payload.value.body, 'base64').toString()).via, 'console')
-    assert.deepEqual((await host.request('http', 'hooky', { method: 'GET', path: '/bad', headers: {}, body: '' })).payload, { ok: false, error: 'HTTP 处理函数须返回 Response' })
+    assert.deepEqual((await host.request('http', 'hooky', { method: 'GET', path: '/bad', headers: {}, body: '' })).payload, { ok: false, error: 'HTTP handler must return a Response' })
     const none = fx.write('nohttp', { 'index.ts': 'export default function () {}' }, { manifest: { http: true } })
     await host.load(none)
-    assert.deepEqual((await host.request('http', 'nohttp', { method: 'GET', path: '/', headers: {}, body: '' })).payload, { ok: false, error: '插件没有注册 HTTP 处理函数' })
+    assert.deepEqual((await host.request('http', 'nohttp', { method: 'GET', path: '/', headers: {}, body: '' })).payload, { ok: false, error: 'Plugin has not registered an HTTP handler' })
   })
 
   it('schedule：处理完回 ok；抛错回失败；未注册的条目拒绝', async () => {
@@ -571,7 +571,7 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
     assert.deepEqual(r.payload, { ok: true })
     assert.equal((await host.waitLog('cron', /^sweep/)).message, 'sweep sweep */10 * * * * 2026-10-27T10:00:00Z')
     assert.deepEqual((await host.request('schedule', 'cron', { scheduleId: 'fail', cron: '* * * * *', at: '' })).payload, { ok: false, error: '清理失败' })
-    assert.deepEqual((await host.request('schedule', 'cron', { scheduleId: 'other' })).payload, { ok: false, error: '插件没有注册定时任务 other' })
+    assert.deepEqual((await host.request('schedule', 'cron', { scheduleId: 'other' })).payload, { ok: false, error: 'Plugin has not registered scheduled job other' })
   })
 
   it('渠道：channel.outbound 按 channelId 交给 outbound；send/reply/read/answer 以插件身份调用收件箱接口', async () => {
@@ -627,8 +627,8 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
       )
       assert.deepEqual((await host.load(p)).payload, { ok: true })
       await host.waitLog('lark', /^sent m-new$/)
-      await host.waitLog('lark', /^undeclared: 渠道 wechat 没有在清单 loopNow\.channels 中声明$/)
-      await host.waitLog('lark', /^missing: 平台返回 404：消息不存在 404$/)
+      await host.waitLog('lark', /^undeclared: Channel wechat is not declared in the manifest's loopNow\.channels$/)
+      await host.waitLog('lark', /^missing: Platform returned 404: 消息不存在 404$/)
       const ack = await host.event('lark', { type: 'channel.outbound', channelId: 'lark', messageId: 'm9', threadId: 't1', from: { kind: 'agent', id: 'a', address: 'demo/manager' }, excerpt: '好的' }, { attempt: 2 })
       assert.deepEqual(ack.payload, { ok: true })
       assert.equal((await host.waitLog('lark', /^outbound/)).message, 'outbound lark 好的 -> full body attempt 2')
@@ -648,7 +648,7 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
       await host.waitLog('lark', /^answered true$/)
       assert.deepEqual(
         host.logs('lark').filter((l) => /^bad /.test(l.message)).map((l) => l.message),
-        ['bad answer: 须给出 optionId 或 text', 'bad answer: text 须是非空字符串', 'bad answer: text 须是非空字符串', 'bad channel: 渠道 wechat 没有在清单 loopNow.channels 中声明'],
+        ['bad answer: optionId or text is required', 'bad answer: text must be a non-empty string', 'bad answer: text must be a non-empty string', "bad channel: Channel wechat is not declared in the manifest's loopNow.channels"],
         '本地校验，不发请求',
       )
       assert.deepEqual(
@@ -660,14 +660,14 @@ describe('操作按钮、HTTP 入口、定时与渠道', () => {
         ],
       )
       const stray = await host.event('lark', { type: 'channel.outbound', channelId: 'other', messageId: 'm10' })
-      assert.deepEqual(stray.payload, { ok: false, error: '没有渠道处理 channel.outbound（channelId other）' }, '没有处理者时回失败，平台重投')
+      assert.deepEqual(stray.payload, { ok: false, error: 'No channel handles channel.outbound (channelId other)' }, '没有处理者时回失败，平台重投')
       const noPerm = fx.write('mute', { 'index.ts': `export default function (api) { api.lifecycle.on('start', async () => {
         try { await api.channels.send('c', { to: 'a', text: 'b' }) } catch (e) { api.log.info(e.message) }
         try { await api.channels.answer('c', 'q1', { optionId: 'o1' }) } catch (e) { api.log.info('answer: ' + e.message) }
       }) }` }, { manifest: { channels: [{ id: 'c' }] }, apiUrl })
       await host.load(noPerm)
-      await host.waitLog('mute', /^清单没有声明 inbox\.send 权限$/)
-      await host.waitLog('mute', /^answer: 清单没有声明 inbox\.send 权限$/)
+      await host.waitLog('mute', /^Manifest does not declare the inbox\.send permission$/)
+      await host.waitLog('mute', /^answer: Manifest does not declare the inbox\.send permission$/)
     } finally {
       server.close()
     }
@@ -730,7 +730,7 @@ describe('代管外部身份', () => {
         { attempt: 3 },
       )
       assert.deepEqual(ack.payload, { ok: true })
-      assert.equal((await host.waitLog('mailer', /^inbound/)).message, 'inbound mail 要不要发布？ -> 发布 attempt 3 errors 须给出 optionId 或 text | text 须是非空字符串 | 须给出 messageId')
+      assert.equal((await host.waitLog('mailer', /^inbound/)).message, 'inbound mail 要不要发布？ -> 发布 attempt 3 errors optionId or text is required | text must be a non-empty string | messageId is required')
       assert.equal((await host.waitLog('mailer', /^closed/)).message, 'closed 409 question_closed closed')
       assert.deepEqual(
         seen.map((s) => [s.method, s.url, s.auth, s.body]),
@@ -743,7 +743,7 @@ describe('代管外部身份', () => {
         ],
       )
       const stray = await host.event('mailer', { type: 'identity.inbound', identityId: identity, channelId: 'gone', messageId: 'm2' })
-      assert.deepEqual(stray.payload, { ok: false, error: '没有渠道处理 identity.inbound（channelId gone）' })
+      assert.deepEqual(stray.payload, { ok: false, error: 'No channel handles identity.inbound (channelId gone)' })
     } finally {
       server.close()
     }
@@ -753,9 +753,9 @@ describe('代管外部身份', () => {
     host = await HostHarness.start()
     const onPlain = fx.write('onplain', { 'index.ts': `export default function (api) { api.channels.register('plain', { identityInbound: () => {} }) }` }, { permissions: ['identities.manage'], manifest })
     const r1 = await host.load(onPlain)
-    assert.deepEqual(r1.payload, { ok: false, error: '渠道 plain 没有在清单里声明 manageIdentities，不能注册 identityInbound' })
+    assert.deepEqual(r1.payload, { ok: false, error: 'Cannot register identityInbound: channel plain does not declare manageIdentities in the manifest' })
     const noPerm = fx.write('noperm', { 'index.ts': `export default function (api) { api.channels.register('mail', { identityInbound: () => {} }) }` }, { manifest })
-    assert.deepEqual((await host.load(noPerm)).payload, { ok: false, error: '注册 identityInbound 须在清单里声明 identities.manage 权限' })
+    assert.deepEqual((await host.load(noPerm)).payload, { ok: false, error: 'Registering identityInbound requires the identities.manage permission in the manifest' })
     const calls = fx.write(
       'calls',
       {
@@ -768,14 +768,14 @@ describe('代管外部身份', () => {
       { manifest: { channels: [{ id: 'plain', manageIdentities: false }] } as never },
     )
     await host.load(calls)
-    assert.equal((await host.waitLog('calls', /权限/)).message, '清单没有声明 identities.manage 权限')
+    assert.equal((await host.waitLog('calls', /permission/)).message, 'Manifest does not declare the identities.manage permission')
     const noChannel = fx.write(
       'nochannel',
       { 'index.ts': `export default function (api) { api.lifecycle.on('start', async () => { try { await api.identities.reply('${identity}', 'm1', { text: 'x' }) } catch (e) { api.log.info(e.message) } }) }` },
       { permissions: ['identities.manage'] },
     )
     await host.load(noChannel)
-    assert.equal((await host.waitLog('nochannel', /渠道/)).message, '清单 loopNow.channels 里没有声明 manageIdentities 的渠道')
+    assert.equal((await host.waitLog('nochannel', /manageIdentities/)).message, "No channel in the manifest's loopNow.channels declares manageIdentities")
   })
 })
 

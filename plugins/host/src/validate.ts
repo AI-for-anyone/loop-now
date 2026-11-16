@@ -63,14 +63,14 @@ async function dryRun(root: string, m: Manifest): Promise<Finding[]> {
   })
   const rt = new PluginRuntime(payload, {
     request: async (type) => {
-      throw new Error(`校验时不连接平台（${type}）；状态读写请放到 lifecycle start 或处理函数里`)
+      throw new Error(`Validation does not connect to the platform (${type}); read and write state in lifecycle start or in handlers instead`)
     },
     log: (plugin, level, message) => process.stderr.write(`[${plugin}] ${level}: ${message}\n`),
   })
   const error = (message: string) => findings.push({ level: 'error', path: 'loopNow.platform', message })
   const warn = (p: string, message: string) => findings.push({ level: 'warning', path: p, message })
   try {
-    const mod = await withTimeout(runAs(m.id, () => importEntry(entry)), `加载 ${m.platform}`)
+    const mod = await withTimeout(runAs(m.id, () => importEntry(entry)), `load ${m.platform}`)
     const register = pickRegister(mod)
     if (!register) {
       error(`${m.platform} 没有默认导出 register 函数`)
@@ -97,7 +97,7 @@ async function withTimeout<T>(work: Promise<T>, what: string): Promise<T> {
     return await Promise.race([
       work,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`${what}超过 ${LOAD_TIMEOUT} 毫秒`)), LOAD_TIMEOUT)
+        timer = setTimeout(() => reject(new Error(`${what} timed out after ${LOAD_TIMEOUT} ms`)), LOAD_TIMEOUT)
       }),
     ])
   } finally {

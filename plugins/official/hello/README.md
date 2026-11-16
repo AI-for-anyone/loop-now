@@ -37,7 +37,7 @@ Grants take effect the next time that Agent's Pi starts; the current reply is no
 ## Use it
 
 - Ask the Agent, for example, "Use the hello tool to greet Ada." It calls `hello` and gets back `Hello, Ada!`, or your greeting in place of `Hello`.
-- When any reply in the project ends, open **Plugin market** › **Hello example** › **Details** › **Logs**. You will see a line like `Agent <Agent id> 的一轮结束：completed，用了 1234 个 token` ("Agent …'s reply ended: completed, 1234 tokens used"). The status is `completed`, `failed` or `interrupted`. The **Events** tab lists each `run.ended` event the plugin received.
+- When any reply in the project ends, open **Plugin market** › **Hello example** › **Details** › **Logs**. You will see a line like `Agent <Agent id> finished a run: completed, 1234 tokens`. The status is `completed`, `failed` or `interrupted`. The **Events** tab lists each `run.ended` event the plugin received.
 
 ## Troubleshooting
 

@@ -31,7 +31,7 @@ function increment(digits: number[]): number[] {
     }
     next[i] = 0
   }
-  throw new Error('同一毫秒内生成的 ULID 超出上限')
+  throw new Error('Too many ULIDs generated within the same millisecond')
 }
 
 export function ulid(now: number = Date.now()): string {

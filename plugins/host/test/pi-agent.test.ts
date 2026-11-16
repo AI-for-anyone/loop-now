@@ -103,9 +103,9 @@ describe('官方插件的 Agent 侧', { skip: noPi }, () => {
     try {
       const err = await promisify(execFile)(process.execPath, [launch, '--data', empty, '--agent', 'a1']).catch((e) => e as { code: number; stderr: string })
       assert.equal((err as { code: number }).code, 1)
-      assert.match((err as { stderr: string }).stderr, /专用浏览器还没有准备：在服务端所在机器上运行 node .*setup\.mjs/)
+      assert.match((err as { stderr: string }).stderr, /The dedicated browser is not prepared yet: on the server's machine, run node .*setup\.mjs/)
       const bad = await promisify(execFile)(process.execPath, [launch, '--data', 'relative', '--agent', 'a1']).catch((e) => e as { stderr: string })
-      assert.match((bad as { stderr: string }).stderr, /--data 须是插件数据目录的绝对路径/)
+      assert.match((bad as { stderr: string }).stderr, /--data must be the absolute path of the plugin data directory/)
     } finally {
       rmSync(empty, { recursive: true, force: true })
     }
@@ -162,11 +162,11 @@ describe('官方插件的 Agent 侧', { skip: noPi }, () => {
       await new Promise<void>((resolve, reject) => {
         child.stderr.on('data', (d) => {
           stderr += d
-          if (stderr.includes('这次使用临时配置')) resolve()
+          if (stderr.includes('using a temporary profile this time')) resolve()
         })
         child.once('exit', (code) => reject(new Error(`启动器退出 ${code}：${stderr}`)))
       })
-      assert.match(stderr, /正被另一个浏览器使用/)
+      assert.match(stderr, /is in use by another browser/)
     } finally {
       child.kill('SIGTERM')
       rmSync(profile, { recursive: true, force: true })

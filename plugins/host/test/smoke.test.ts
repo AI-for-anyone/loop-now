@@ -235,7 +235,7 @@ describe('官方插件 webhook 代管外部身份', () => {
       await host.load(officialPayload('webhook', { values: { url: 'http://127.0.0.1:9/in' }, secrets: { secret: 'whsec-x-0001' }, projects: {} }))
       const ack = await host.event('webhook', { type: 'identity.inbound', identityId: 'i1', channelId: 'identity', messageId: 'm1', question: null })
       assert.deepEqual(ack.payload, { ok: true })
-      await host.waitLog('webhook', /没有打开“代管外部身份”，消息 m1 没有推送/)
+      await host.waitLog('webhook', /manageIdentities is off; message m1 was not pushed/)
       const r = await host.request('http', 'webhook', { via: 'external', method: 'POST', path: '/answer', headers: {}, body: '' })
       assert.equal(r.payload.value.status, 403)
     } finally {
@@ -259,7 +259,7 @@ describe('官方插件 hello', () => {
         tokens: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, total: 15 },
       })
       assert.deepEqual(ack.payload, { ok: true })
-      assert.equal((await host.waitLog('hello', /一轮结束/)).message, 'Agent agent-1 的一轮结束：completed，用了 15 个 token')
+      assert.equal((await host.waitLog('hello', /finished a run/)).message, 'Agent agent-1 finished a run: completed, 15 tokens')
       assert.deepEqual(host.badLines, [])
     } finally {
       await host.close()
@@ -309,7 +309,7 @@ describe('validate 子命令', () => {
     assert.deepEqual(
       result.findings.map((f: { level: string; message: string }) => [f.level, f.message]),
       [
-        ['error', '订阅了清单 loopNow.events 中没有声明的事件 inbox.received'],
+        ['error', "Subscribed to inbox.received, which is not declared in the manifest's loopNow.events"],
         ['warning', '声明了 run.started，但 register 里没有订阅（可能在 start 里订阅）'],
       ],
     )
