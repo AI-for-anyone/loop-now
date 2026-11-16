@@ -58,38 +58,38 @@ func Load(root, version string) (*Dist, error) {
 	dir := filepath.Join(root, version)
 	raw, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
 	if err != nil {
-		return nil, fmt.Errorf("读取 loopctl 构建清单失败（需要与服务端同版本 %s 的产物，用 go run ./cmd/loopctl-dist -version %s -out %s 生成）：%w",
+		return nil, fmt.Errorf("read the loopctl build manifest (artifacts of server version %s are needed; generate them with go run ./cmd/loopctl-dist -version %s -out %s): %w",
 			version, version, root, err)
 	}
 	var m Manifest
 	if err := json.Unmarshal(raw, &m); err != nil {
-		return nil, fmt.Errorf("loopctl 构建清单不是合法的 JSON：%w", err)
+		return nil, fmt.Errorf("loopctl build manifest is not valid JSON: %w", err)
 	}
 	switch {
 	case m.SchemaVersion != SchemaVersion:
-		return nil, fmt.Errorf("loopctl 构建清单的格式版本为 %d，服务端只支持 %d", m.SchemaVersion, SchemaVersion)
+		return nil, fmt.Errorf("loopctl build manifest has schema version %d, but the server supports only %d", m.SchemaVersion, SchemaVersion)
 	case m.Program != Program:
-		return nil, fmt.Errorf("构建清单的程序为 %q，应为 %q", m.Program, Program)
+		return nil, fmt.Errorf("build manifest is for program %q, want %q", m.Program, Program)
 	case m.Version != version:
-		return nil, fmt.Errorf("loopctl 构建清单的版本 %s 与服务端版本 %s 不一致", m.Version, version)
+		return nil, fmt.Errorf("loopctl build manifest version %s does not match server version %s", m.Version, version)
 	}
 	d := &Dist{Dir: dir, Manifest: m, sums: map[string]string{"manifest.json": sum(raw)}}
 	for _, a := range m.Artifacts {
 		if a.File == "" || filepath.Base(a.File) != a.File || strings.HasPrefix(a.File, ".") || a.File == "manifest.json" || a.File == "SHA256SUMS" {
-			return nil, fmt.Errorf("构建清单中的文件名不合法：%q", a.File)
+			return nil, fmt.Errorf("invalid file name in the build manifest: %q", a.File)
 		}
 		got, size, err := fileSum(filepath.Join(dir, a.File))
 		if err != nil {
-			return nil, fmt.Errorf("读取 %s 失败：%w", a.File, err)
+			return nil, fmt.Errorf("read %s: %w", a.File, err)
 		}
 		if size != a.Size || got != a.SHA256 {
-			return nil, fmt.Errorf("%s 与构建清单不符：大小 %d（清单 %d），SHA-256 %s（清单 %s）", a.File, size, a.Size, got, a.SHA256)
+			return nil, fmt.Errorf("%s does not match the build manifest: size %d (manifest %d), SHA-256 %s (manifest %s)", a.File, size, a.Size, got, a.SHA256)
 		}
 		d.sums[a.File] = a.SHA256
 	}
 	sums, err := os.ReadFile(filepath.Join(dir, "SHA256SUMS"))
 	if err != nil {
-		return nil, fmt.Errorf("读取 SHA256SUMS 失败：%w", err)
+		return nil, fmt.Errorf("read SHA256SUMS: %w", err)
 	}
 	if err := d.checkSums(sums); err != nil {
 		return nil, err
@@ -112,16 +112,16 @@ func (d *Dist) checkSums(b []byte) error {
 		}
 		h, f, ok := strings.Cut(line, "  ")
 		if !ok {
-			return fmt.Errorf("SHA256SUMS 格式不对：%q", line)
+			return fmt.Errorf("malformed SHA256SUMS line: %q", line)
 		}
 		listed[f] = h
 	}
 	if len(listed) != len(d.Manifest.Artifacts) {
-		return fmt.Errorf("SHA256SUMS 有 %d 个文件，构建清单有 %d 个", len(listed), len(d.Manifest.Artifacts))
+		return fmt.Errorf("SHA256SUMS lists %d files, but the build manifest has %d", len(listed), len(d.Manifest.Artifacts))
 	}
 	for _, a := range d.Manifest.Artifacts {
 		if listed[a.File] != a.SHA256 {
-			return fmt.Errorf("SHA256SUMS 中 %s 的摘要与构建清单不一致", a.File)
+			return fmt.Errorf("SHA256SUMS digest of %s does not match the build manifest", a.File)
 		}
 	}
 	return nil
@@ -131,7 +131,7 @@ func (d *Dist) checkSums(b []byte) error {
 func (d *Dist) Local() (Artifact, error) {
 	i := slices.IndexFunc(d.Manifest.Artifacts, func(a Artifact) bool { return a.OS == runtime.GOOS && a.Arch == runtime.GOARCH })
 	if i < 0 {
-		return Artifact{}, fmt.Errorf("loopctl 构建产物中没有本机平台 %s/%s 的二进制", runtime.GOOS, runtime.GOARCH)
+		return Artifact{}, fmt.Errorf("loopctl build artifacts have no binary for the local platform %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
 	return d.Manifest.Artifacts[i], nil
 }
@@ -174,7 +174,7 @@ func (d *Dist) Install(workRoot string) (string, error) {
 		return "", err
 	}
 	if got, _, err := fileSum(tmp.Name()); err != nil || got != a.SHA256 {
-		return "", fmt.Errorf("安装 loopctl 后摘要不符：%s（清单 %s）%v", got, a.SHA256, err)
+		return "", fmt.Errorf("installed loopctl digest does not match: %s (manifest %s) %v", got, a.SHA256, err)
 	}
 	if err := os.Rename(tmp.Name(), target); err != nil {
 		return "", err
@@ -191,18 +191,18 @@ func (d *Dist) Handler() http.Handler {
 		if !ok {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(http.StatusNotFound)
-			_, _ = io.WriteString(w, `{"error":{"code":"not_found","message":"文件不存在"}}`+"\n")
+			_, _ = io.WriteString(w, `{"error":{"code":"not_found","message":"File not found."}}`+"\n")
 			return
 		}
 		f, err := os.Open(filepath.Join(d.Dir, name))
 		if err != nil {
-			http.Error(w, "读取文件失败", http.StatusInternalServerError)
+			http.Error(w, "Could not read the file.", http.StatusInternalServerError)
 			return
 		}
 		defer f.Close()
 		st, err := f.Stat()
 		if err != nil {
-			http.Error(w, "读取文件失败", http.StatusInternalServerError)
+			http.Error(w, "Could not read the file.", http.StatusInternalServerError)
 			return
 		}
 		ct := "application/octet-stream"

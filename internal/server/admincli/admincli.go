@@ -65,17 +65,17 @@ const (
 	exitUsage = 2
 )
 
-const usage = `用法：
+const usage = `Usage:
   loop-server version
-  loop-server identity create <名称>
+  loop-server identity create <name>
   loop-server identity list
-  loop-server identity delete <名称>
-  loop-server token issue <身份名称> [--expires-in 720h]
-  loop-server token list <身份名称>
-  loop-server token revoke <令牌 ID>
-  loop-server backup <目录>        在目录下以当前时刻命名的子目录里写一份完整备份（服务运行中也可以）
-  loop-server import-postgres      把 LOOP_NOW_DATABASE_URL 指向的 PostgreSQL 库一次性导入到数据目录的新库
-                                   （源库须已由最后一个 PostgreSQL 版本完成迁移，服务须已停下）
+  loop-server identity delete <name>
+  loop-server token issue <identity-name> [--expires-in 720h]
+  loop-server token list <identity-name>
+  loop-server token revoke <token-id>
+  loop-server backup <directory>   Write a full backup to a new subdirectory named after the current time (works while the server runs)
+  loop-server import-postgres      One-time import of the PostgreSQL database at LOOP_NOW_DATABASE_URL into a new database in the data directory
+                                   (the source database must already be migrated by the last PostgreSQL release, and the server must be stopped)
 `
 
 // Options is the environment needed to run a subcommand. The database is in the db subdirectory of LOOP_NOW_DATA_DIR
@@ -114,12 +114,12 @@ func Run(ctx context.Context, args []string, o Options) int {
 	// Only open a database the server has already created: a mistyped data directory must not silently create an
 	// empty database.
 	if _, err := os.Stat(filepath.Join(dbDir, db.DataFile)); err != nil {
-		fmt.Fprintf(o.Stderr, "数据目录 %s 里没有库（%s 设置对了吗？）\n", dbDir, config.EnvDataDir)
+		fmt.Fprintf(o.Stderr, "There is no database in data directory %s. Is %s set correctly?\n", dbDir, config.EnvDataDir)
 		return exitUsage
 	}
 	st, err := store.Open(ctx, db.Options{Dir: dbDir})
 	if err != nil {
-		fmt.Fprintln(o.Stderr, "打开数据库失败：", err)
+		fmt.Fprintln(o.Stderr, "Could not open the database:", err)
 		return exitFail
 	}
 	defer st.Close()
@@ -135,7 +135,7 @@ func Run(ctx context.Context, args []string, o Options) int {
 		}
 		path, err := maintenance.Backup(ctx, st.Pool, dir, time.Now())
 		if err != nil {
-			fmt.Fprintln(o.Stderr, "备份失败：", err)
+			fmt.Fprintln(o.Stderr, "Could not back up the database:", err)
 			return exitFail
 		}
 		fmt.Fprintln(o.Stdout, path)
@@ -168,7 +168,7 @@ func Run(ctx context.Context, args []string, o Options) int {
 		if e, ok := apperr.As(err); ok {
 			fmt.Fprintln(o.Stderr, e.Message)
 			for _, f := range e.Fields {
-				fmt.Fprintf(o.Stderr, "  %s：%s\n", f.Field, f.Message)
+				fmt.Fprintf(o.Stderr, "  %s: %s\n", f.Field, f.Message)
 			}
 		} else {
 			fmt.Fprintln(o.Stderr, err)
@@ -178,7 +178,7 @@ func Run(ctx context.Context, args []string, o Options) int {
 	return exitOK
 }
 
-var errUsage = errors.New("用法错误")
+var errUsage = errors.New("usage error")
 
 func dataDir(o Options) string {
 	if d := o.Getenv(config.EnvDataDir); d != "" {
@@ -197,13 +197,13 @@ func importPostgres(ctx context.Context, args []string, o Options) int {
 	}
 	src := o.Getenv(pgimport.EnvSourceURL)
 	if src == "" {
-		fmt.Fprintf(o.Stderr, "设置 %s 为原来的 PostgreSQL 库的连接串再导入\n", pgimport.EnvSourceURL)
+		fmt.Fprintf(o.Stderr, "Set %s to the connection string of the old PostgreSQL database, then run the import again.\n", pgimport.EnvSourceURL)
 		return exitUsage
 	}
 	dbDir := config.DBDir(dataDir(o))
 	report, err := pgimport.Import(ctx, pgimport.Options{SourceURL: src, DBDir: dbDir, Log: slog.New(slog.NewTextHandler(o.Stderr, nil))})
 	if err != nil {
-		fmt.Fprintln(o.Stderr, "导入失败（新库没有留下）：", err)
+		fmt.Fprintln(o.Stderr, "Could not import the database (no new database was left behind):", err)
 		return exitFail
 	}
 	var rows int64
@@ -211,7 +211,7 @@ func importPostgres(ctx context.Context, args []string, o Options) int {
 		fmt.Fprintf(o.Stdout, "%s\t%d\n", t.Name, t.Rows)
 		rows += t.Rows
 	}
-	fmt.Fprintf(o.Stderr, "导入完成：源库迁移版本 %d，%d 张表，共 %d 行，新库在 %s\n", report.Version, len(report.Tables), rows, dbDir)
+	fmt.Fprintf(o.Stderr, "Import complete: source migration version %d, %d tables, %d rows in total; the new database is in %s\n", report.Version, len(report.Tables), rows, dbDir)
 	return exitOK
 }
 
@@ -230,7 +230,7 @@ func (c *cmd) audit(op string, target map[string]string, err error) {
 	}
 	if aerr := c.st.InsertAudit(context.WithoutCancel(c.ctx), store.AuditEntry{ActorKind: "cli", ActorAddress: "cli", Method: "CLI",
 		Operation: op, Target: target, Status: status}); aerr != nil {
-		fmt.Fprintln(c.o.Stderr, "写入审计失败：", aerr)
+		fmt.Fprintln(c.o.Stderr, "Could not write the audit entry:", aerr)
 	}
 }
 
@@ -271,7 +271,7 @@ func (c *cmd) identityList(args []string) error {
 		return err
 	}
 	w := tabwriter.NewWriter(c.o.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\t名称\t创建时间")
+	fmt.Fprintln(w, "ID\tName\tCreated")
 	for _, x := range xs {
 		fmt.Fprintf(w, "%s\t%s\t%s\n", x.ID, x.Name, x.CreatedAt.Format(time.RFC3339))
 	}
@@ -291,7 +291,7 @@ func (c *cmd) identityDelete(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(c.o.Stderr, "已删除外部身份 @%s，它的令牌已全部吊销\n", name)
+	fmt.Fprintf(c.o.Stderr, "Deleted external identity @%s and revoked all of its tokens.\n", name)
 	return nil
 }
 
@@ -305,7 +305,7 @@ func idOrEmpty(id uuid.UUID) string {
 func (c *cmd) tokenIssue(args []string) error {
 	fs := flag.NewFlagSet("token issue", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	expiresIn := fs.Duration("expires-in", 0, "有效期，例如 720h；不传表示永不过期")
+	expiresIn := fs.Duration("expires-in", 0, "Validity period, for example 720h; without it the token never expires")
 	var name string
 	// The identity name may come before or after the options.
 	if len(args) > 0 && len(args[0]) > 0 && args[0][0] != '-' {
@@ -320,7 +320,7 @@ func (c *cmd) tokenIssue(args []string) error {
 		return errUsage
 	}
 	if *expiresIn < 0 {
-		return apperr.Invalid("expires-in", "有效期必须大于 0")
+		return apperr.Invalid("expires-in", "Must be a positive duration. Leave it out for a token that never expires.")
 	}
 	x, err := c.st.GetLiveExternalIdentityByName(c.ctx, name)
 	if err != nil {
@@ -342,11 +342,11 @@ func (c *cmd) tokenIssue(args []string) error {
 		return err
 	}
 	fmt.Fprintln(c.o.Stdout, secret)
-	exp := "永不过期"
+	exp := "never expires"
 	if t.ExpiresAt != nil {
-		exp = "过期时间 " + t.ExpiresAt.Format(time.RFC3339)
+		exp = "expires at " + t.ExpiresAt.Format(time.RFC3339)
 	}
-	fmt.Fprintf(c.o.Stderr, "已为 @%s 签发令牌 %s（前缀 %s，%s）。令牌只显示这一次，请妥善保存。\n", name, t.ID, t.Prefix, exp)
+	fmt.Fprintf(c.o.Stderr, "Issued a token for @%s with ID %s (prefix %s, %s). The token is shown only this once. Store it safely.\n", name, t.ID, t.Prefix, exp)
 	return nil
 }
 
@@ -364,9 +364,9 @@ func (c *cmd) tokenList(args []string) error {
 		return err
 	}
 	w := tabwriter.NewWriter(c.o.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\t前缀\t创建时间\t过期时间\t吊销时间\t最近使用")
+	fmt.Fprintln(w, "ID\tPrefix\tCreated\tExpires\tRevoked\tLast used")
 	for _, t := range ts {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, t.Prefix, t.CreatedAt.Format(time.RFC3339), timeOr(t.ExpiresAt, "永不过期"),
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, t.Prefix, t.CreatedAt.Format(time.RFC3339), timeOr(t.ExpiresAt, "never"),
 			timeOr(t.RevokedAt, "-"), timeOr(t.LastUsedAt, "-"))
 	}
 	return w.Flush()
@@ -386,7 +386,7 @@ func (c *cmd) tokenRevoke(args []string) error {
 	}
 	id, err := uuid.Parse(raw)
 	if err != nil {
-		return apperr.Invalid("tokenId", "不是合法的令牌 ID")
+		return apperr.Invalid("tokenId", "Must be a valid token ID (a UUID).")
 	}
 	a, err := c.st.LookupExternalToken(c.ctx, id)
 	if err == nil && a.Identity.DeletedAt == nil {
@@ -396,6 +396,6 @@ func (c *cmd) tokenRevoke(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(c.o.Stderr, "令牌 %s 已吊销\n", id)
+	fmt.Fprintf(c.o.Stderr, "Token %s has been revoked.\n", id)
 	return nil
 }

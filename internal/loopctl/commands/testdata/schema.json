@@ -2,11 +2,11 @@
   "program": "loopctl",
   "version": "test-version",
   "envelope": {
-    "data": "直接调用服务端 API 的命令，data 为服务端的响应体，204 时为 null",
-    "description": "每次调用只向标准输出写一个以换行结尾的 JSON 对象；标准错误不输出内容",
-    "error": "服务端返回错误时，code、message、details、fields 原样取自服务端，并附 httpStatus；类别按 HTTP 状态码确定",
+    "data": "For commands that call a server API directly, data is the server's response body, or null for 204",
+    "description": "Each call writes exactly one newline-terminated JSON object to standard output; nothing is written to standard error",
+    "error": "When the server returns an error, code, message, details and fields are taken from the server as is, and httpStatus is added; the category follows the HTTP status code",
     "failure": "{\"ok\":false,\"error\":{code,category,message,httpStatus?,details?,fields?},\"warnings\":[...],\"meta\":{...}}",
-    "meta": "clientVersion 总是有；identity 在选定身份时有；profile 在使用了配置文件中的 profile 时有；serverVersion、requestId、attempts 在发出过请求时有",
+    "meta": "clientVersion is always present; identity when an identity was selected; profile when a profile from the config file was used; serverVersion, requestId and attempts when a request was sent",
     "success": "{\"ok\":true,\"data\":<JSON>,\"warnings\":[{code,message,details?}],\"meta\":{...}}"
   },
   "exitCodes": [
@@ -166,12 +166,12 @@
   "identities": [
     {
       "name": "agent",
-      "description": "平台内 Agent：由服务端注入 LOOPCTL_AGENT_URL 与 LOOPCTL_AGENT_TOKEN，只能使用 Agent 命令，不读取配置文件",
+      "description": "Agent running in the platform: the server injects LOOPCTL_AGENT_URL and LOOPCTL_AGENT_TOKEN; can use only the Agent commands and does not read the config file",
       "tokenPrefix": "lna_"
     },
     {
       "name": "external",
-      "description": "外部身份：从命令行选项、环境变量、配置文件中的 profile 依次取服务端地址、令牌与 CA 文件，能使用管理命令",
+      "description": "External identity: takes the server address, token and CA file from the command-line options, then the environment variables, then a profile in the config file; can use the management commands",
       "tokenPrefix": "lne_"
     }
   ],
@@ -179,58 +179,58 @@
     {
       "name": "LOOPCTL_AGENT_URL",
       "identity": "agent",
-      "description": "Agent 接口的基址，由服务端注入，例如 http://127.0.0.1:<端口>/agent/v1"
+      "description": "Base address of the Agent API, injected by the server, for example http://127.0.0.1:<port>/agent/v1"
     },
     {
       "name": "LOOPCTL_AGENT_TOKEN",
       "identity": "agent",
-      "description": "Agent 令牌（lna_ 开头），由服务端注入；不为空时使用 Agent 身份，且不读取配置文件"
+      "description": "Agent token (starting with lna_), injected by the server; when set, the Agent identity is used and the config file is not read"
     },
     {
       "name": "LOOPCTL_PROFILE",
       "identity": "external",
       "default": "default",
-      "description": "选择配置文件中的 profile"
+      "description": "Choose a profile from the config file"
     },
     {
       "name": "LOOPCTL_URL",
       "identity": "external",
-      "description": "对外端口的根地址（https://），优先于 profile"
+      "description": "Root address of the external port (https://); takes precedence over the profile"
     },
     {
       "name": "LOOPCTL_TOKEN",
       "identity": "external",
-      "description": "外部令牌（lne_ 开头），优先于 profile"
+      "description": "External token (starting with lne_); takes precedence over the profile"
     },
     {
       "name": "LOOPCTL_CA_FILE",
       "identity": "external",
-      "description": "PEM 格式的 CA 证书，指定后只信任其中的 CA，优先于 profile"
+      "description": "CA certificate in PEM format; when set, only the CAs in it are trusted; takes precedence over the profile"
     },
     {
       "name": "LOOPCTL_TIMEOUT",
       "default": "1m0s",
-      "description": "单次请求的超时"
+      "description": "Timeout for a single request"
     },
     {
       "name": "LOOPCTL_MAX_RESPONSE",
       "default": "64MiB",
-      "description": "JSON 响应的大小上限；下载文件不受此限制"
+      "description": "Size limit for JSON responses; file downloads are not subject to it"
     },
     {
       "name": "LOOPCTL_RETRY_MAX",
       "default": "2",
-      "description": "读请求遇到连接失败、超时或 502/503/504 时的最多重试次数，0 表示不重试"
+      "description": "Maximum number of retries for read requests after a connection failure, a timeout or 502/503/504; 0 means no retries"
     },
     {
       "name": "LOOPCTL_RETRY_INITIAL",
       "default": "500ms",
-      "description": "首次重试前的等待，之后逐次加倍"
+      "description": "Wait before the first retry; it doubles for each later retry"
     },
     {
       "name": "LOOPCTL_RETRY_MAX_INTERVAL",
       "default": "5s",
-      "description": "两次重试之间的最长等待"
+      "description": "Longest wait between two retries"
     }
   ],
   "globalFlags": [
@@ -240,7 +240,7 @@
       "required": false,
       "repeatable": false,
       "description": "External identity: choose a profile from the config file; defaults to LOOPCTL_PROFILE, then default",
-      "appliesTo": "连接服务端的命令（network 为 true）"
+      "appliesTo": "Commands that connect to the server (network is true)"
     },
     {
       "name": "server",
@@ -248,7 +248,7 @@
       "required": false,
       "repeatable": false,
       "description": "External identity: root address of the external port (https://); takes precedence over LOOPCTL_URL and the profile",
-      "appliesTo": "连接服务端的命令（network 为 true）"
+      "appliesTo": "Commands that connect to the server (network is true)"
     },
     {
       "name": "ca-file",
@@ -256,7 +256,7 @@
       "required": false,
       "repeatable": false,
       "description": "External identity: CA certificate in PEM format; when given, only the CAs in it are trusted; takes precedence over LOOPCTL_CA_FILE and the profile",
-      "appliesTo": "连接服务端的命令（network 为 true）"
+      "appliesTo": "Commands that connect to the server (network is true)"
     },
     {
       "name": "timeout",
@@ -264,7 +264,7 @@
       "required": false,
       "repeatable": false,
       "description": "Timeout for a single request, for example 30s; takes precedence over LOOPCTL_TIMEOUT; default 60s",
-      "appliesTo": "连接服务端的命令（network 为 true）"
+      "appliesTo": "Commands that connect to the server (network is true)"
     },
     {
       "name": "help",
@@ -272,7 +272,7 @@
       "required": false,
       "repeatable": false,
       "description": "Print this command's description (same as schema <command path>) without running it",
-      "appliesTo": "全部命令"
+      "appliesTo": "All commands"
     }
   ],
   "commands": [
@@ -389,7 +389,7 @@
             "project",
             "platform"
           ],
-          "hint": "用 loopctl project list 查看项目"
+          "hint": "Run loopctl project list to see the projects."
         }
       ],
       "destructive": false,
@@ -897,7 +897,7 @@
       "destructive": false,
       "stdin": false,
       "retry": true,
-      "output": "MessagePage（hasMore 表示之前还有更早的消息，hasMoreAfter 表示之后还有更新的消息）"
+      "output": "MessagePage (hasMore means there are older messages before this page; hasMoreAfter means there are newer messages after it)"
     },
     {
       "path": "agent list",
@@ -930,13 +930,13 @@
             "project",
             "platform"
           ],
-          "hint": "用 loopctl project list 查看项目"
+          "hint": "Run loopctl project list to see the projects."
         }
       ],
       "destructive": false,
       "stdin": false,
       "retry": true,
-      "output": "AgentList {agents: AgentListItem[]}，每项带 scope、projectId、isManager"
+      "output": "AgentList {agents: AgentListItem[]}; each item has scope, projectId and isManager"
     },
     {
       "path": "agent session reset",
@@ -1243,7 +1243,7 @@
             "prompt-file",
             "expected-prompt-version"
           ],
-          "hint": "先用 agent get 查看 prompt 与 promptVersion，核对编辑基线后显式提交；冲突时保留本地草稿，不自动覆盖"
+          "hint": "Run agent get first to see prompt and promptVersion, check the version your edit is based on, then submit explicitly. On a conflict, nothing is overwritten automatically. Keep your local draft."
         }
       ],
       "destructive": false,
@@ -1309,7 +1309,7 @@
       "destructive": false,
       "stdin": false,
       "retry": true,
-      "output": "{items: Anomaly[], total, nextCursor}；total 为 from 之后符合条件的总条数；每项带 scope 与 projectId"
+      "output": "{items: Anomaly[], total, nextCursor}; total is the number of matching items after from; each item has scope and projectId"
     },
     {
       "path": "cli-template list",
@@ -1372,7 +1372,7 @@
       "destructive": false,
       "stdin": false,
       "retry": false,
-      "output": "{path, exists, profiles: [profile 摘要], selected: {name, by, exists}, envOverrides: [环境变量名]}"
+      "output": "{path, exists, profiles: [profile summary], selected: {name, by, exists}, envOverrides: [environment variable name]}"
     },
     {
       "path": "config set",
@@ -1438,7 +1438,7 @@
       "destructive": false,
       "stdin": true,
       "retry": false,
-      "output": "profile 摘要 {name, server, caFile, tokenSet, tokenId, tokenPrefix}，不含令牌的密钥部分"
+      "output": "Profile summary {name, server, caFile, tokenSet, tokenId, tokenPrefix}, without the secret part of the token"
     },
     {
       "path": "health",
@@ -1452,7 +1452,7 @@
       "destructive": false,
       "stdin": false,
       "retry": true,
-      "output": "Health（对外端口只返回 database.ok，不含错误原文与 WAL 信息）"
+      "output": "Health (the external port returns only database.ok, without the original error text or WAL information)"
     },
     {
       "path": "inbox list",
@@ -1604,7 +1604,7 @@
             "text-file",
             "answer"
           ],
-          "hint": "没有 --answer 时需要 --text 或 --text-file"
+          "hint": "Without --answer, --text or --text-file is required."
         }
       ],
       "destructive": false,
@@ -2415,7 +2415,7 @@
       "destructive": false,
       "stdin": false,
       "retry": true,
-      "output": "Agent: PlatformProjectDirectory；external: {projects: Project[]}"
+      "output": "Agent: PlatformProjectDirectory; external: {projects: Project[]}"
     },
     {
       "path": "project manager clear",
@@ -2925,7 +2925,7 @@
       "destructive": false,
       "stdin": false,
       "retry": false,
-      "output": "完整说明 {program, version, envelope, exitCodes, errorCodes, identities, environment, globalFlags, commands}；指定路径时为该命令或命令组的说明"
+      "output": "Full description {program, version, envelope, exitCodes, errorCodes, identities, environment, globalFlags, commands}; with a path, the description of that command or command group"
     },
     {
       "path": "skill create",
@@ -3639,7 +3639,7 @@
       "destructive": false,
       "stdin": false,
       "retry": true,
-      "output": "{from, to, rows: UsageRow[]}，每行带 scope 与 projectId；不指定范围时为全部项目与平台"
+      "output": "{from, to, rows: UsageRow[]}; each row has scope and projectId; without a scope, all projects and the platform"
     },
     {
       "path": "version",
@@ -3666,7 +3666,7 @@
       "destructive": false,
       "stdin": false,
       "retry": true,
-      "output": "{kind, address, name}；服务端版本见 meta.serverVersion"
+      "output": "{kind, address, name}; the server version is in meta.serverVersion"
     }
   ]
 }

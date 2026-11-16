@@ -91,12 +91,12 @@ func schemaFor(r *Registry, sys *System, path []string, filter Identity) (any, *
 	}
 	if c := r.Find(path...); c != nil {
 		if filter != "" && !c.AllowedFor(filter) {
-			return nil, output.Errorf(output.CodeUnknownCommand, "%s 身份没有命令 %s", filter, c.Name())
+			return nil, output.Errorf(output.CodeUnknownCommand, "The %s identity has no %s command.", filter, c.Name())
 		}
 		return Describe(c), nil
 	}
 	if !r.isGroup(path) {
-		return nil, output.Errorf(output.CodeUnknownCommand, "没有命令或命令组 %q，运行 loopctl schema 查看全部命令", strings.Join(path, " "))
+		return nil, output.Errorf(output.CodeUnknownCommand, "There is no command or command group %q. Run loopctl schema to see all commands.", strings.Join(path, " "))
 	}
 	g := GroupSchema{Path: strings.Join(path, " "), Summary: r.groups[strings.Join(path, " ")], Commands: []any{}}
 	for _, name := range r.children(path) {
@@ -131,26 +131,26 @@ func Full(r *Registry, version string, filter Identity) FullSchema {
 		Program: "loopctl",
 		Version: version,
 		Envelope: map[string]any{
-			"description": "每次调用只向标准输出写一个以换行结尾的 JSON 对象；标准错误不输出内容",
+			"description": "Each call writes exactly one newline-terminated JSON object to standard output; nothing is written to standard error",
 			"success":     `{"ok":true,"data":<JSON>,"warnings":[{code,message,details?}],"meta":{...}}`,
 			"failure":     `{"ok":false,"error":{code,category,message,httpStatus?,details?,fields?},"warnings":[...],"meta":{...}}`,
-			"meta":        "clientVersion 总是有；identity 在选定身份时有；profile 在使用了配置文件中的 profile 时有；serverVersion、requestId、attempts 在发出过请求时有",
-			"data":        "直接调用服务端 API 的命令，data 为服务端的响应体，204 时为 null",
-			"error":       "服务端返回错误时，code、message、details、fields 原样取自服务端，并附 httpStatus；类别按 HTTP 状态码确定",
+			"meta":        "clientVersion is always present; identity when an identity was selected; profile when a profile from the config file was used; serverVersion, requestId and attempts when a request was sent",
+			"data":        "For commands that call a server API directly, data is the server's response body, or null for 204",
+			"error":       "When the server returns an error, code, message, details and fields are taken from the server as is, and httpStatus is added; the category follows the HTTP status code",
 		},
 		ExitCodes:   output.ExitTable(),
 		ErrorCodes:  output.LocalCodes(),
 		Environment: conn.EnvDocs(),
 		Identities: []IdentitySchema{
-			{IdentityAgent, "平台内 Agent：由服务端注入 " + conn.EnvAgentURL + " 与 " + conn.EnvAgentToken + "，只能使用 Agent 命令，不读取配置文件", conn.AgentTokenPrefix},
-			{IdentityExternal, "外部身份：从命令行选项、环境变量、配置文件中的 profile 依次取服务端地址、令牌与 CA 文件，能使用管理命令", conn.ExternalTokenPrefix},
+			{IdentityAgent, "Agent running in the platform: the server injects " + conn.EnvAgentURL + " and " + conn.EnvAgentToken + "; can use only the Agent commands and does not read the config file", conn.AgentTokenPrefix},
+			{IdentityExternal, "External identity: takes the server address, token and CA file from the command-line options, then the environment variables, then a profile in the config file; can use the management commands", conn.ExternalTokenPrefix},
 		},
 		Commands: []CommandSchema{},
 	}
 	for _, f := range ConnectionFlags {
-		s.GlobalFlags = append(s.GlobalFlags, GlobalFlag{f, "连接服务端的命令（network 为 true）"})
+		s.GlobalFlags = append(s.GlobalFlags, GlobalFlag{f, "Commands that connect to the server (network is true)"})
 	}
-	s.GlobalFlags = append(s.GlobalFlags, GlobalFlag{HelpFlag, "全部命令"})
+	s.GlobalFlags = append(s.GlobalFlags, GlobalFlag{HelpFlag, "All commands"})
 	for _, c := range r.Commands() {
 		if filter == "" || c.AllowedFor(filter) {
 			s.Commands = append(s.Commands, Describe(c))

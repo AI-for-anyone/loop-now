@@ -22,7 +22,7 @@ func addSleep(r *cli.Registry) {
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			for _, name := range []string{"run", "action-id"} {
 				if !IsUUID(inv.String(name)) {
-					return nil, output.Errorf(output.CodeInvalidArgument, "--%s 必须为 UUID", name)
+					return nil, output.Errorf(output.CodeInvalidArgument, "--%s must be a UUID.", name)
 				}
 			}
 			body := map[string]any{"runId": inv.String("run"), "actionId": inv.String("action-id"), "seconds": inv.Int("seconds")}
@@ -33,7 +33,7 @@ func addSleep(r *cli.Registry) {
 			var e *output.Error
 			if errors.As(err, &e) && e.HTTPStatus == 0 && (e.Code == output.CodeTimeout || e.Code == output.CodeConnectionFailed) {
 				copy := *e
-				copy.Message += "；sleep 可能已登记，先运行 loopctl sleep status；人工重发须保持相同 action-id、run 和内容"
+				copy.Message += " The sleep may already be registered. Run loopctl sleep status first. When resending by hand, keep the same action-id, run and content."
 				err = &copy
 			}
 			return data, err

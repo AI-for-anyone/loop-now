@@ -29,7 +29,7 @@ func addLocal(r *cli.Registry) {
 		Flags: []cli.Flag{
 			{Name: "identity", Type: cli.TypeEnum, Values: []string{"agent", "external"}, Description: "Print only the commands available to this identity"},
 		},
-		Output: "完整说明 {program, version, envelope, exitCodes, errorCodes, identities, environment, globalFlags, commands}；指定路径时为该命令或命令组的说明",
+		Output: "Full description {program, version, envelope, exitCodes, errorCodes, identities, environment, globalFlags, commands}; with a path, the description of that command or command group",
 		Run: func(_ context.Context, inv *cli.Invocation) (any, error) {
 			data, e := cli.Schema(inv, inv.Args, cli.Identity(inv.String("identity")))
 			if e != nil {
@@ -44,7 +44,7 @@ func addLocal(r *cli.Registry) {
 		Identities: both,
 		Network:    true,
 		Retry:      true,
-		Output:     "{kind, address, name}；服务端版本见 meta.serverVersion",
+		Output:     "{kind, address, name}; the server version is in meta.serverVersion",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			return get(ctx, inv, nil, "whoami")
 		},
@@ -66,7 +66,7 @@ func addLocal(r *cli.Registry) {
 			{Kind: cli.AtLeastOne, Flags: []string{"server", "ca-file", "clear-ca", "token-stdin"}},
 			{Kind: cli.AtMostOne, Flags: []string{"ca-file", "clear-ca"}},
 		},
-		Output: "profile 摘要 {name, server, caFile, tokenSet, tokenId, tokenPrefix}，不含令牌的密钥部分",
+		Output: "Profile summary {name, server, caFile, tokenSet, tokenId, tokenPrefix}, without the secret part of the token",
 		Run:    configSet,
 	})
 	r.Add(&cli.Command{
@@ -76,7 +76,7 @@ func addLocal(r *cli.Registry) {
 		Flags: []cli.Flag{
 			{Name: "profile", Type: cli.TypeString, Description: "Compute the selection with this profile, the same as --profile of the connecting commands"},
 		},
-		Output: "{path, exists, profiles: [profile 摘要], selected: {name, by, exists}, envOverrides: [环境变量名]}",
+		Output: "{path, exists, profiles: [profile summary], selected: {name, by, exists}, envOverrides: [environment variable name]}",
 		Run:    configList,
 	})
 	r.Add(&cli.Command{
@@ -122,7 +122,7 @@ func loadConfig(inv *cli.Invocation) (string, *config.File, bool, error) {
 
 func saveConfig(path string, f *config.File) error {
 	if err := config.Save(path, f); err != nil {
-		return output.Errorf(output.CodeOutputUnwritable, "无法写入配置文件 %s：%v", path, cause(err))
+		return output.Errorf(output.CodeOutputUnwritable, "Could not write config file %s: %v", path, cause(err))
 	}
 	return nil
 }
@@ -130,7 +130,7 @@ func saveConfig(path string, f *config.File) error {
 func profileArg(inv *cli.Invocation) (string, error) {
 	name := inv.Args[0]
 	if !config.ValidProfileName(name) {
-		return "", output.Errorf(output.CodeInvalidArgument, "profile 名称 %q 不合法：字母或数字开头，可含 . _ -，最长 64 个字符", name)
+		return "", output.Errorf(output.CodeInvalidArgument, "Profile name %q is invalid. It must start with a letter or digit, may contain . _ -, and must be at most 64 characters.", name)
 	}
 	return name, nil
 }
@@ -152,7 +152,7 @@ func configSet(_ context.Context, inv *cli.Invocation) (any, error) {
 	if inv.Has("ca-file") {
 		abs, err := filepath.Abs(inv.String("ca-file"))
 		if err != nil {
-			return nil, output.Errorf(output.CodeCAFileUnreadable, "无法确定 CA 文件的绝对路径：%v", err)
+			return nil, output.Errorf(output.CodeCAFileUnreadable, "Could not determine the absolute path of the CA file: %v", err)
 		}
 		if _, e := conn.LoadCA(abs); e != nil {
 			return nil, e
@@ -193,19 +193,19 @@ func configSet(_ context.Context, inv *cli.Invocation) (any, error) {
 func readToken(inv *cli.Invocation) (string, error) {
 	line, err := bufio.NewReaderSize(inv.Sys.Stdin, 4096).ReadString('\n')
 	if err != nil && line == "" {
-		return "", output.Errorf(output.CodeInvalidArgument, "标准输入中没有令牌")
+		return "", output.Errorf(output.CodeInvalidArgument, "There is no token on standard input.")
 	}
 	tok := strings.TrimSpace(line)
 	switch {
 	case tok == "":
-		return "", output.Errorf(output.CodeInvalidArgument, "标准输入中没有令牌")
+		return "", output.Errorf(output.CodeInvalidArgument, "There is no token on standard input.")
 	case strings.HasPrefix(tok, conn.AgentTokenPrefix):
-		return "", output.Errorf(output.CodeTokenKindMismatch, "读到的是 Agent 令牌；配置文件只保存外部令牌（%s 开头）", conn.ExternalTokenPrefix)
+		return "", output.Errorf(output.CodeTokenKindMismatch, "Standard input holds an Agent token. The config file stores only external tokens (starting with %s).", conn.ExternalTokenPrefix)
 	case !strings.HasPrefix(tok, conn.ExternalTokenPrefix):
-		return "", output.Errorf(output.CodeInvalidArgument, "读到的不是外部令牌：外部令牌以 %s 开头", conn.ExternalTokenPrefix)
+		return "", output.Errorf(output.CodeInvalidArgument, "Standard input does not hold an external token (external tokens start with %s).", conn.ExternalTokenPrefix)
 	}
 	if _, _, ok := conn.TokenID(tok); !ok {
-		return "", output.Errorf(output.CodeInvalidArgument, "外部令牌的格式不正确：应为 %s<32 位十六进制 ID>_<密钥>", conn.ExternalTokenPrefix)
+		return "", output.Errorf(output.CodeInvalidArgument, "The external token has the wrong format. Expected %s<32 hexadecimal digit ID>_<secret>.", conn.ExternalTokenPrefix)
 	}
 	return tok, nil
 }
@@ -251,7 +251,7 @@ func configDelete(_ context.Context, inv *cli.Invocation) (any, error) {
 		return nil, err
 	}
 	if _, ok := f.Profiles[name]; !ok {
-		return nil, output.Errorf(output.CodeProfileNotFound, "配置文件中没有 profile %q", name)
+		return nil, output.Errorf(output.CodeProfileNotFound, "The config file has no profile %q.", name)
 	}
 	delete(f.Profiles, name)
 	if err := saveConfig(path, f); err != nil {

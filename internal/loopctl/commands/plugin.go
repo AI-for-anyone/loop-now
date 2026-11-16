@@ -161,12 +161,12 @@ func previewForInstall(ctx context.Context, inv *cli.Invocation, body map[string
 		} `json:"manifest"`
 	}
 	if err := json.Unmarshal(raw, &pv); err != nil || pv.PreviewID == "" {
-		return "", output.Errorf(output.CodeUnexpectedResponse, "预览的响应无法解析")
+		return "", output.Errorf(output.CodeUnexpectedResponse, "Could not parse the preview response.")
 	}
 	if !pv.Trusted && !force {
 		m := pv.Manifest
 		return "", output.Errorf(output.CodeConfirmationRequired,
-			"插件 %s %s 来自非官方来源（%s %s）：Agent 扩展 %d 个、Skill %d 个、MCP 服务器 %v、CLI 目录 %v、平台侧 %v；订阅 %v；权限 %v。确认后加 --force 重新执行",
+			"Plugin %s %s comes from an unofficial source (%s %s): Agent extensions %d, Skills %d, MCP servers %v, CLI directories %v, platform side %v; subscriptions %v; permissions %v. After reviewing this, run the command again with --force.",
 			m.ID, m.Version, pv.Source.Kind, pv.Source.Location, m.Components.AgentExtensions, len(m.Components.Skills), m.Components.MCPServers,
 			m.Components.Bin, m.Components.Platform, m.Events, m.Permissions)
 	}
@@ -188,12 +188,12 @@ func pluginSource(arg string) (map[string]any, error) {
 	case strings.HasPrefix(arg, "/") || strings.HasPrefix(arg, "./") || strings.HasPrefix(arg, "../") || arg == ".":
 		abs, err := filepath.Abs(arg)
 		if err != nil {
-			return nil, output.Errorf(output.CodeInvalidArgument, "目录无效：%v", err)
+			return nil, output.Errorf(output.CodeInvalidArgument, "Invalid directory: %v", err)
 		}
 		return map[string]any{"kind": "local", "location": abs}, nil
 	}
 	if !pluginmanifest.ValidID(arg) {
-		return nil, output.Errorf(output.CodeInvalidArgument, "无法识别来源 %q：官方插件写 id，npm 包写 npm:<包名>，git 写仓库地址，本机目录写绝对路径或 ./ 开头", arg)
+		return nil, output.Errorf(output.CodeInvalidArgument, "Cannot recognize source %q. Use the id for an official plugin, npm:<package> for an npm package, the repository address for git, or an absolute path or a path starting with ./ for a local directory.", arg)
 	}
 	return map[string]any{"kind": "builtin", "location": arg}, nil
 }
@@ -213,11 +213,11 @@ func gitSource(s string) map[string]any {
 
 func readPluginDir(dir, version string) (pluginmanifest.Manifest, error) {
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-		return pluginmanifest.Manifest{}, output.Errorf(output.CodeInputUnreadable, "插件目录 %s 不存在", dir)
+		return pluginmanifest.Manifest{}, output.Errorf(output.CodeInputUnreadable, "Plugin directory %s does not exist.", dir)
 	}
 	m, err := pluginmanifest.ReadManifest(dir, version)
 	if err != nil {
-		return m, output.Errorf(output.CodeInvalidArgument, "清单不合规则：%v", err)
+		return m, output.Errorf(output.CodeInvalidArgument, "The manifest is invalid: %v", err)
 	}
 	return m, nil
 }
@@ -227,7 +227,7 @@ func readPluginDir(dir, version string) (pluginmanifest.Manifest, error) {
 func packPlugin(dir, out string) (string, int64, error) {
 	f, err := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
-		return "", 0, output.Errorf(output.CodeOutputUnwritable, "无法写入 %s：%v", out, cause(err))
+		return "", 0, output.Errorf(output.CodeOutputUnwritable, "Could not write %s: %v", out, cause(err))
 	}
 	h := sha256.New()
 	gz := gzip.NewWriter(io.MultiWriter(f, h))
@@ -274,7 +274,7 @@ func packPlugin(dir, out string) (string, int64, error) {
 	}
 	if err != nil {
 		_ = os.Remove(out)
-		return "", 0, output.Errorf(output.CodeOutputUnwritable, "打包失败：%v", err)
+		return "", 0, output.Errorf(output.CodeOutputUnwritable, "Could not pack the plugin: %v", err)
 	}
 	info, err := os.Stat(out)
 	if err != nil {

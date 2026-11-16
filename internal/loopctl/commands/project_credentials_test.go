@@ -135,7 +135,7 @@ func TestProjectCredentialUnknownWriteNotRetried(t *testing.T) {
 	if r.Code == 0 || count.Load() != 1 {
 		t.Fatalf("unknown POST: calls=%d %s", count.Load(), r.Stdout)
 	}
-	if !strings.Contains(r.Stdout, "写入结果未知") {
+	if !strings.Contains(r.Stdout, "The write result is unknown") {
 		t.Fatal("must state uncertain outcome")
 	}
 	if strings.Contains(r.Stdout, "synthetic-key") {

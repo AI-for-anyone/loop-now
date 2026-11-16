@@ -35,7 +35,7 @@ func TestStubCatchesViolations(t *testing.T) {
 			t.Fatal(err)
 		}
 		resp.Body.Close()
-		expectFailure(t, s, "请求不符合契约")
+		expectFailure(t, s, "the request does not match the contract")
 	})
 	t.Run("契约中没有的路径", func(t *testing.T) {
 		resp, err := c.Get(s.URL() + "/api/v1/no-such-thing")
@@ -43,15 +43,15 @@ func TestStubCatchesViolations(t *testing.T) {
 			t.Fatal(err)
 		}
 		resp.Body.Close()
-		expectFailure(t, s, "契约中没有这个操作")
+		expectFailure(t, s, "the operation is not in the contract")
 	})
 	t.Run("不合契约的样例", func(t *testing.T) {
 		s.On("GET /platform/agents", Sample{Status: 200, Body: map[string]any{"agents": []any{map[string]any{"id": "not-a-uuid"}}}})
-		expectFailure(t, s, "样例 GET /platform/agents → 200 不符合契约")
+		expectFailure(t, s, "Sample GET /platform/agents → 200 does not match the contract")
 	})
 	t.Run("契约中没有的状态码", func(t *testing.T) {
 		s.On("GET /platform/agents", Sample{Status: 418, Body: map[string]any{}})
-		expectFailure(t, s, "契约中没有状态码 418")
+		expectFailure(t, s, "the contract has no status code 418")
 	})
 	t.Run("没有设置样例", func(t *testing.T) {
 		resp, err := c.Get(s.URL() + "/api/v1/skills")
@@ -59,7 +59,7 @@ func TestStubCatchesViolations(t *testing.T) {
 			t.Fatal(err)
 		}
 		resp.Body.Close()
-		expectFailure(t, s, "没有为这个操作设置样例响应")
+		expectFailure(t, s, "no sample response for this operation")
 	})
 	t.Run("合规的请求与样例", func(t *testing.T) {
 		s.On("GET /cli-templates", Sample{Status: 200, Body: map[string]any{"templates": []any{}}})

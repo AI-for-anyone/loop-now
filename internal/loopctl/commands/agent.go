@@ -85,7 +85,7 @@ func addAgent(r *cli.Registry) {
 		Retry:       true,
 		Flags:       scopeFlags,
 		Constraints: []cli.Constraint{scopeRequired},
-		Output:      "AgentList {agents: AgentListItem[]}，每项带 scope、projectId、isManager",
+		Output:      "AgentList {agents: AgentListItem[]}; each item has scope, projectId and isManager",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			path, err := scopePath(ctx, inv)
 			if err != nil {
@@ -150,7 +150,7 @@ func addAgent(r *cli.Registry) {
 		Constraints: []cli.Constraint{
 			{Kind: cli.AtLeastOne, Flags: []string{"name", "provider", "prompt-file"}},
 			{Kind: cli.Together, Flags: []string{"provider", "model"}},
-			{Kind: cli.Together, Flags: []string{"prompt-file", "expected-prompt-version"}, Hint: "先用 agent get 查看 prompt 与 promptVersion，核对编辑基线后显式提交；冲突时保留本地草稿，不自动覆盖"},
+			{Kind: cli.Together, Flags: []string{"prompt-file", "expected-prompt-version"}, Hint: "Run agent get first to see prompt and promptVersion, check the version your edit is based on, then submit explicitly. On a conflict, nothing is overwritten automatically. Keep your local draft."},
 		},
 		Output: "Agent",
 		Run: withAgent(func(ctx context.Context, inv *cli.Invocation, id string) (any, error) {
@@ -207,7 +207,7 @@ func addAgent(r *cli.Registry) {
 			{Name: "limit", Type: cli.TypeInt, Min: intp(1), Description: "Items per page; the default and maximum are set by the server"},
 		},
 		Constraints: []cli.Constraint{{Kind: cli.AtMostOne, Flags: []string{"before", "after", "around-run"}}},
-		Output:      "MessagePage（hasMore 表示之前还有更早的消息，hasMoreAfter 表示之后还有更新的消息）",
+		Output:      "MessagePage (hasMore means there are older messages before this page; hasMoreAfter means there are newer messages after it)",
 		Run: withAgent(func(ctx context.Context, inv *cli.Invocation, id string) (any, error) {
 			q := url.Values{}
 			for flag, param := range map[string]string{"before": "before", "after": "after", "around-run": "aroundRun"} {

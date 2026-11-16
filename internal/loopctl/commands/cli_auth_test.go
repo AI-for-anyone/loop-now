@@ -183,7 +183,7 @@ func TestCLIAuthUnknownWriteNotRetried(t *testing.T) {
 				args = append(args, actionUUID, "--yes")
 			}
 			r := e.run(args...)
-			if r.Code == 0 || count.Load() != 1 || !strings.Contains(r.Stdout, "写入结果未知") || !strings.Contains(r.Stdout, "login-status") {
+			if r.Code == 0 || count.Load() != 1 || !strings.Contains(r.Stdout, "The write result is unknown") || !strings.Contains(r.Stdout, "login-status") {
 				t.Fatalf("unknown POST replayed: calls=%d %s", count.Load(), r.Stdout)
 			}
 		})

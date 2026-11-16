@@ -197,18 +197,18 @@ func modelCredentialFile(inv *cli.Invocation) (json.RawMessage, error) {
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.DisallowUnknownFields()
 	if !utf8.Valid(b) || dec.Decode(&in) != nil || dec.Decode(new(any)) != io.EOF || in.Provider == nil || in.Key == nil || *in.Key == "" || (in.ExpectedConfigVersion != nil && *in.ExpectedConfigVersion < 1) {
-		return nil, output.Errorf(output.CodeInvalidArgument, "模型凭证文件必须包含字符串 provider/key 及可选正整数 expectedConfigVersion；不接受环境变量或 OAuth 凭证")
+		return nil, output.Errorf(output.CodeInvalidArgument, "The model credential file must contain the strings provider and key, and optionally a positive integer expectedConfigVersion. Environment variables and OAuth credentials are not accepted.")
 	}
 	// Explicit null is not an integer and is not part of the formal optional version field.
 	var fields map[string]json.RawMessage
 	_ = json.Unmarshal(b, &fields)
 	for name := range fields {
 		if name != "provider" && name != "key" && name != "expectedConfigVersion" {
-			return nil, output.Errorf(output.CodeInvalidArgument, "模型凭证文件仅接受 provider/key/expectedConfigVersion 字段")
+			return nil, output.Errorf(output.CodeInvalidArgument, "The model credential file accepts only the fields provider, key and expectedConfigVersion.")
 		}
 	}
 	if v, ok := fields["expectedConfigVersion"]; ok && bytes.Equal(bytes.TrimSpace(v), []byte("null")) {
-		return nil, output.Errorf(output.CodeInvalidArgument, "expectedConfigVersion 必须为正整数或省略")
+		return nil, output.Errorf(output.CodeInvalidArgument, "expectedConfigVersion must be a positive integer or be left out.")
 	}
 	return json.RawMessage(b), nil
 }
@@ -222,7 +222,7 @@ func credentialFile(inv *cli.Invocation) (map[string]string, error) {
 	}
 	var m map[string]string
 	if json.Unmarshal(b, &m) != nil || m == nil {
-		return nil, output.Errorf(output.CodeInvalidArgument, "凭证文件必须是 JSON 对象，形如 {\"名称\":\"值\"}，值为字符串")
+		return nil, output.Errorf(output.CodeInvalidArgument, "The credential file must be a JSON object like {\"name\":\"value\"} whose values are strings.")
 	}
 	return m, nil
 }
@@ -237,10 +237,10 @@ func skillMarkdown(inv *cli.Invocation) (string, error) {
 		return "", err
 	}
 	if !utf8.Valid(b) {
-		return "", output.Errorf(output.CodeInvalidArgument, "SKILL.md 必须是 UTF-8 文本")
+		return "", output.Errorf(output.CodeInvalidArgument, "SKILL.md must be UTF-8 text.")
 	}
 	if strings.TrimSpace(string(b)) == "" {
-		return "", output.Errorf(output.CodeInvalidArgument, "SKILL.md 不能为空")
+		return "", output.Errorf(output.CodeInvalidArgument, "SKILL.md must not be empty.")
 	}
 	return string(b), nil
 }

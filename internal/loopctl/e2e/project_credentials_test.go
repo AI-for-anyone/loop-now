@@ -241,7 +241,7 @@ func TestProjectCredentialUnknownWriteWithApp(t *testing.T) {
 	external.stdin = `{"type":"api_key","key":"synthetic-response-loss-key"}`
 	result := external.run("project", "model-account", "create", project, "--provider", provider, "--name", "nonunique label", "--from-file", "-")
 	result.fails(t, "connection_failed", 4)
-	if !strings.Contains(result.Stdout, "写入结果未知") || forwards.Load() != 1 {
+	if !strings.Contains(result.Stdout, "The write result is unknown") || forwards.Load() != 1 {
 		t.Fatal("response loss was retried or claimed known")
 	}
 	if strings.Contains(result.Stdout, "synthetic-response-loss-key") {

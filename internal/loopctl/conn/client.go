@@ -164,7 +164,7 @@ func (c *Client) attempt(ctx context.Context, r Request) (*Response, *output.Err
 	u := c.url(r)
 	req, err := http.NewRequestWithContext(actx, r.Method, u.String(), bytes.NewReader(r.Body))
 	if err != nil {
-		return nil, output.Errorf(output.CodeInternalError, "无法构造请求：%v", err)
+		return nil, output.Errorf(output.CodeInternalError, "Could not build the request: %v", err)
 	}
 	if r.Body == nil {
 		req.Body, req.ContentLength = http.NoBody, 0
@@ -195,7 +195,7 @@ func (c *Client) attempt(ctx context.Context, r Request) (*Response, *output.Err
 
 	switch {
 	case resp.StatusCode >= 300 && resp.StatusCode < 400:
-		e := output.Errorf(output.CodeUnexpectedRedirect, "服务端返回重定向 HTTP %d，loopctl 不跟随重定向", resp.StatusCode)
+		e := output.Errorf(output.CodeUnexpectedRedirect, "The server returned a redirect (HTTP %d). loopctl does not follow redirects.", resp.StatusCode)
 		e.HTTPStatus = resp.StatusCode
 		return nil, e
 	case resp.StatusCode >= 200 && resp.StatusCode < 300:
@@ -215,7 +215,7 @@ func (c *Client) attempt(ctx context.Context, r Request) (*Response, *output.Err
 		}
 		data, err := output.Raw(json.RawMessage(bytes.TrimSpace(body)))
 		if err != nil {
-			e := output.Errorf(output.CodeUnexpectedResponse, "服务端返回 HTTP %d，但响应体不是合法的 JSON", resp.StatusCode)
+			e := output.Errorf(output.CodeUnexpectedResponse, "The server returned HTTP %d, but the response body is not valid JSON.", resp.StatusCode)
 			e.HTTPStatus = resp.StatusCode
 			return nil, e
 		}
@@ -249,7 +249,7 @@ func (c *Client) readBody(ctx context.Context, resp *http.Response) ([]byte, *ou
 		return nil, c.transportError(ctx, err)
 	}
 	if int64(len(body)) > c.s.MaxResponse {
-		e := output.Errorf(output.CodeUnexpectedResponse, "响应超过 %s 的上限（%d 字节）", EnvMaxResponse, c.s.MaxResponse)
+		e := output.Errorf(output.CodeUnexpectedResponse, "The response exceeds the %s limit (%d bytes).", EnvMaxResponse, c.s.MaxResponse)
 		e.HTTPStatus = resp.StatusCode
 		if resp.StatusCode >= 300 {
 			e.Category = output.CategoryForStatus(resp.StatusCode)
@@ -284,7 +284,7 @@ func serverError(status int, body []byte) *output.Error {
 	e := &output.Error{
 		Code:       output.CodeUnexpectedResponse,
 		Category:   cat,
-		Message:    fmt.Sprintf("服务端返回 HTTP %d，响应体不是统一的错误结构", status),
+		Message:    fmt.Sprintf("The server returned HTTP %d, and the response body is not the common error structure.", status),
 		HTTPStatus: status,
 	}
 	// When the response body is a JSON object, put it into details as is (for example the dependency status /health
@@ -308,11 +308,11 @@ func (c *Client) transportError(ctx context.Context, err error) *output.Error {
 	)
 	switch {
 	case errors.As(err, &verr), errors.As(err, &uaerr), errors.As(err, &herr), errors.As(err, &cierr):
-		return output.Errorf(output.CodeTLSVerifyFailed, "服务端证书校验失败：%v；如果服务端使用自签证书，请用 --ca-file 或 %s 指定 CA", rootCause(err), EnvCAFile)
+		return output.Errorf(output.CodeTLSVerifyFailed, "Could not verify the server certificate: %v. If the server uses a self-signed certificate, give its CA with --ca-file or %s.", rootCause(err), EnvCAFile)
 	case errors.Is(ctx.Err(), context.DeadlineExceeded), isTimeout(err):
-		return output.Errorf(output.CodeTimeout, "请求在 %s 内没有完成", c.s.Timeout)
+		return output.Errorf(output.CodeTimeout, "The request did not complete within %s.", c.s.Timeout)
 	default:
-		return output.Errorf(output.CodeConnectionFailed, "无法连接服务端：%v", rootCause(err))
+		return output.Errorf(output.CodeConnectionFailed, "Could not connect to the server (%v).", rootCause(err))
 	}
 }
 
@@ -342,7 +342,7 @@ func (c *Client) Warnings() []output.Warning {
 		return nil
 	}
 	if c.serverVersion == "" {
-		return []output.Warning{{Code: output.WarnServerVersionUnknown, Message: "服务端响应中没有 " + HeaderVersion + "，无法比对版本"}}
+		return []output.Warning{{Code: output.WarnServerVersionUnknown, Message: "The server response has no " + HeaderVersion + " header, so the versions cannot be compared."}}
 	}
 	if c.serverVersion == c.opts.Version {
 		return nil
@@ -353,12 +353,12 @@ func (c *Client) Warnings() []output.Warning {
 		"os":            c.opts.GOOS,
 		"arch":          c.opts.GOARCH,
 	}
-	msg := fmt.Sprintf("loopctl 版本 %s 与服务端版本 %s 不一致，命令照常执行", c.opts.Version, c.serverVersion)
+	msg := fmt.Sprintf("loopctl version %s differs from server version %s. The command runs as usual.", c.opts.Version, c.serverVersion)
 	if c.s.Identity == IdentityExternal && c.s.Root != nil {
 		details["downloadPath"] = DownloadPath(c.s.Root, c.opts.GOOS, c.opts.GOARCH)
-		msg += "；请从服务端下载同版本的 loopctl，并按 SHA256SUMS 校验"
+		msg += " Download the loopctl of the same version from the server and verify it against SHA256SUMS."
 	} else {
-		msg += "；平台会更新 Agent 使用的 loopctl"
+		msg += " The platform will update the loopctl that Agents use."
 	}
 	return []output.Warning{{Code: output.WarnVersionMismatch, Message: msg, Details: details}}
 }

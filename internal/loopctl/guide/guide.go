@@ -47,7 +47,7 @@ func Files() map[string][]byte {
 func InboxReminderCommand() string {
 	c := commands.Registry().Find("inbox", "list")
 	if c == nil {
-		panic("命令 inbox list 不存在")
+		panic("command inbox list does not exist")
 	}
 	return "loopctl " + c.Name() + " --unread"
 }
@@ -57,7 +57,7 @@ func InboxReminderCommand() string {
 func InboxReadCommand() string {
 	c := commands.Registry().Find("inbox", "read")
 	if c == nil {
-		panic("命令 inbox read 不存在")
+		panic("command inbox read does not exist")
 	}
 	return "loopctl " + c.Name()
 }
@@ -72,10 +72,10 @@ func Render(version string) ([]byte, error) {
 		"cmd": func(path string) (string, error) {
 			c := r.Find(strings.Fields(path)...)
 			if c == nil {
-				return "", fmt.Errorf("说明模板引用了不存在的命令 %q", path)
+				return "", fmt.Errorf("guide template refers to unknown command %q", path)
 			}
 			if !c.AllowedFor(cli.IdentityAgent) {
-				return "", fmt.Errorf("说明模板引用了 Agent 身份不能使用的命令 %q", path)
+				return "", fmt.Errorf("guide template refers to command %q, which the Agent identity cannot use", path)
 			}
 			return "loopctl " + c.Name(), nil
 		},

@@ -20,7 +20,7 @@ var (
 	}
 	// Listing and creating Agents requires a scope: an Agent's owner cannot be changed, so the default project is not
 	// used as an implicit scope.
-	scopeRequired = cli.Constraint{Kind: cli.ExactlyOne, Flags: []string{"project", "platform"}, Hint: "用 loopctl project list 查看项目"}
+	scopeRequired = cli.Constraint{Kind: cli.ExactlyOne, Flags: []string{"project", "platform"}, Hint: "Run loopctl project list to see the projects."}
 	// For usage and anomalies the scope is a filter; when neither is given, everything is included.
 	scopeOptional = cli.Constraint{Kind: cli.AtMostOne, Flags: []string{"project", "platform"}}
 )
@@ -32,7 +32,7 @@ func addProject(r *cli.Registry) {
 		Identities: both,
 		Network:    true,
 		Retry:      true,
-		Output:     "Agent: PlatformProjectDirectory；external: {projects: Project[]}",
+		Output:     "Agent: PlatformProjectDirectory; external: {projects: Project[]}",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			return get(ctx, inv, nil, "projects")
 		},
@@ -148,14 +148,14 @@ func projectID(ctx context.Context, inv *cli.Invocation, ref string) (string, er
 		} `json:"projects"`
 	}
 	if err := json.Unmarshal(resp.Data, &body); err != nil {
-		return "", output.Errorf(output.CodeUnexpectedResponse, "项目列表的响应无法解析")
+		return "", output.Errorf(output.CodeUnexpectedResponse, "Could not parse the project list response.")
 	}
 	for _, p := range body.Projects {
 		if p.Name == ref {
 			return p.ID, nil
 		}
 	}
-	return "", output.Errorf(output.CodeNotFound, "没有名为 %q 的项目，用 loopctl project list 查看项目", ref)
+	return "", output.Errorf(output.CodeNotFound, "There is no project named %q. Run loopctl project list to see the projects.", ref)
 }
 
 // scopePath returns the path for listing and creating Agents: /projects/{projectId}/agents or /platform/agents.

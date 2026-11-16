@@ -43,7 +43,7 @@ func dbConnectionsCommand(action string) cli.RunFunc {
 		for _, raw := range inv.Strings("account-id") {
 			id := strings.ToLower(raw)
 			if !IsUUID(id) || id == "00000000-0000-0000-0000-000000000000" || seen[id] {
-				return nil, output.Errorf(output.CodeInvalidArgument, "account-id 必须是互不重复的非零 UUID")
+				return nil, output.Errorf(output.CodeInvalidArgument, "Each --account-id must be a distinct, non-zero UUID.")
 			}
 			seen[id] = true
 			ids = append(ids, id)
@@ -68,7 +68,7 @@ func dbConnectionsCommand(action string) cli.RunFunc {
 		var e *output.Error
 		if errors.As(err, &e) && (e.Code == output.CodeConnectionFailed || e.Code == output.CodeTimeout || e.Code == output.CodeUnexpectedResponse) {
 			copy := *e
-			copy.Message += "；写入结果未知，未自动重发。请显式运行 agent db-connections show 核对集合及 configVersion，不自动合并或覆盖"
+			copy.Message += " The write result is unknown, and the request was not resent automatically. Nothing is merged or overwritten automatically. Run agent db-connections show to check the set and its configVersion."
 			return nil, &copy
 		}
 		return data, err

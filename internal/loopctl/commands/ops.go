@@ -24,7 +24,7 @@ func addOps(r *cli.Registry) {
 			scopeFlags[0], scopeFlags[1],
 		},
 		Constraints: []cli.Constraint{scopeOptional},
-		Output:      "{from, to, rows: UsageRow[]}，每行带 scope 与 projectId；不指定范围时为全部项目与平台",
+		Output:      "{from, to, rows: UsageRow[]}; each row has scope and projectId; without a scope, all projects and the platform",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			q := url.Values{}
 			for _, f := range []string{"from", "to"} {
@@ -50,7 +50,7 @@ func addOps(r *cli.Registry) {
 			scopeFlags[0], scopeFlags[1],
 		},
 		Constraints: []cli.Constraint{scopeOptional},
-		Output:      "{items: Anomaly[], total, nextCursor}；total 为 from 之后符合条件的总条数；每项带 scope 与 projectId",
+		Output:      "{items: Anomaly[], total, nextCursor}; total is the number of matching items after from; each item has scope and projectId",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			q := pageQuery(inv)
 			if inv.Has("from") {
@@ -68,7 +68,7 @@ func addOps(r *cli.Registry) {
 		Identities: externalOnly,
 		Network:    true,
 		Retry:      true,
-		Output:     "Health（对外端口只返回 database.ok，不含错误原文与 WAL 信息）",
+		Output:     "Health (the external port returns only database.ok, without the original error text or WAL information)",
 		Run: func(ctx context.Context, inv *cli.Invocation) (any, error) {
 			data, err := get(ctx, inv, nil, "health")
 			var e *output.Error
@@ -98,7 +98,7 @@ func unhealthy(e *output.Error) *output.Error {
 			down = append(down, dep)
 		}
 	}
-	out := output.Errorf(output.CodeServerUnhealthy, "服务端依赖不可用：%s", strings.Join(down, "、"))
+	out := output.Errorf(output.CodeServerUnhealthy, "Server dependencies are unavailable: %s", strings.Join(down, ", "))
 	out.HTTPStatus, out.Details = e.HTTPStatus, e.Details
 	return out
 }
