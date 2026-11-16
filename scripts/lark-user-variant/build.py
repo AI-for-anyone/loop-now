@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""发行阶段构建；不是运行机 installer。只使用固定官方源码、仅 authsidecar tag。"""
+"""Release-stage build, not an installer for the target machine. Uses only the pinned official sources and only the authsidecar tag."""
 import argparse, gzip, hashlib, io, json, os, pathlib, subprocess, tarfile, urllib.request
 COMMIT = "f065bf5b645af381f9b7475ce721451e6ca36a23"
 SOURCE_SHA = "997aaddb0e74cc17903ee463c9bd6554ee671d7bdd5e0aa58343e74219ee46dd"

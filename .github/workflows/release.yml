@@ -1,10 +1,14 @@
 name: release
 
-# 发布构建：每个平台在对应架构的机器上运行 scripts/release/build.sh（Pi 的依赖要在目标架构上安装），
-# 用产物实际启动一次，再把压缩包与校验和作为 artifact 上传。macOS arm64 另把服务端发行包装进桌面壳，出 DMG 与更新用的 zip，
-# 只做 ad-hoc 签名，都不公证；Windows x64 的桌面版（NSIS，不签名）等服务端的 Windows 包，见 desktop-win。最后汇总全部产物写 SHA256SUMS；推 v* tag 时据此创建 GitHub Release，tag 带 - 的标为预发布
-# （预发布一律用 -beta.N，如 v0.3.0-beta.1）。说明取自 CHANGELOG.md 里该版本的一节或 tag 注解（scripts/release/notes.sh）。
-# 手动运行只构建，不建 Release。
+# Release build: each platform runs scripts/release/build.sh on a machine of that architecture (Pi's dependencies
+# must be installed on the target architecture), starts the result once, then uploads the archive and its checksum as
+# artifacts. macOS arm64 also wraps the server release in the desktop shell and produces a DMG plus the zip used for
+# updates, ad-hoc signed only and never notarized; the Windows x64 desktop app (NSIS, unsigned) waits for the server's
+# Windows package, see desktop-win. Finally all artifacts are collected into SHA256SUMS; pushing a v* tag creates a
+# GitHub Release from them, and a tag containing - is marked as a pre-release (pre-releases always use -beta.N, e.g.
+# v0.3.0-beta.1). The notes come from that version's section in CHANGELOG.md or the tag annotation
+# (scripts/release/notes.sh).
+# A manual run only builds; it does not create a Release.
 on:
   workflow_dispatch:
     inputs:
@@ -22,7 +26,7 @@ permissions:
   contents: read
 
 jobs:
-  # 推 tag 时先确认发布说明有内容，没有就不开始构建。actions/checkout 拉下的 tag 是轻量的，注解要另外取一次。
+  # When a tag is pushed, first confirm the release notes are not empty; if they are, do not start building. The tag that actions/checkout fetches is lightweight, so the annotation has to be fetched separately.
   notes:
     name: release notes
     runs-on: ubuntu-24.04
@@ -76,8 +80,8 @@ jobs:
             out/*.tar.gz.sha256
           if-no-files-found: error
 
-  # 桌面版（macOS arm64）：把上面 darwin/arm64 的服务端发行包整个放进 app 的 Resources/server，
-  # 出 DMG、更新用的 zip、两者的 blockmap 与 latest-mac.yml（electron-updater 读的更新信息）。x64 以后再加。
+  # Desktop app (macOS arm64): put the whole darwin/arm64 server release from above into the app's Resources/server,
+  # and produce the DMG, the zip used for updates, the blockmaps of both and latest-mac.yml (the update info electron-updater reads). x64 comes later.
   desktop-mac:
     name: desktop (darwin/arm64)
     needs: build
@@ -117,7 +121,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
-      # 版本号以 tag（或手动输入）为准，打包前写进 package.json 与 lock；DMG、zip 的文件名和 latest-mac.yml 都从这里取。
+      # The version comes from the tag (or the manual input) and is written into package.json and the lock file before packaging; the DMG and zip file names and latest-mac.yml all take it from there.
       - name: set version
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -133,10 +137,10 @@ jobs:
             .local-build/desktop/latest-mac.yml
           if-no-files-found: error
 
-  # 桌面版（Windows x64）：把 windows/amd64 的服务端发行包（loop-server.exe 那一套）放进 resources\server，出 NSIS 安装包、
-  # blockmap 与 latest.yml（electron-updater 在 Windows 上读的更新信息）。不签名：SmartScreen 会提示"仍要运行"。
-  # 服务端的 Windows 包还没有（build 矩阵里没有 windows/amd64），这个 job 先只在手动运行且勾了 desktop_win 时跑；
-  # 服务端包合入后：把 windows/amd64 加进 build 矩阵，去掉这里的条件。
+  # Desktop app (Windows x64): put the windows/amd64 server release (the loop-server.exe set) into resources\server and produce the NSIS installer,
+  # its blockmap and latest.yml (the update info electron-updater reads on Windows). Unsigned: SmartScreen shows "Run anyway".
+  # There is no server Windows package yet (the build matrix has no windows/amd64), so for now this job only runs on a manual run with desktop_win checked;
+  # once the server package lands: add windows/amd64 to the build matrix and remove the condition here.
   desktop-win:
     name: desktop (windows/amd64)
     needs: build
@@ -194,9 +198,9 @@ jobs:
             .local-build/desktop/latest.yml
           if-no-files-found: error
 
-  # 汇总：全部 artifact（四个平台的服务端包、桌面版的 DMG、zip、blockmap、latest-mac.yml，启用后还有 Windows 的 exe 与 latest.yml）
-  # 平铺到一个目录，构建时写的单个校验和核对后并进 SHA256SUMS（不另外挂出）；推 tag 时把目录里的文件全部挂到 GitHub Release。
-  # desktop-win 被跳过时照常汇总（它的 result 是 skipped）。
+  # Collect: all artifacts (the server packages of the four platforms; the desktop DMG, zip, blockmaps and latest-mac.yml; once enabled, the Windows exe and latest.yml)
+  # go flat into one directory; the single checksums written during the builds are verified and merged into SHA256SUMS (not published separately); on a tag push every file in the directory is attached to the GitHub Release.
+  # Collects as usual when desktop-win was skipped (its result is skipped).
   release:
     name: release
     needs: [notes, build, desktop-mac, desktop-win]
