@@ -82,7 +82,8 @@ func conflictReason(t *testing.T, e error) string {
 	return ae.Details.(taskmodel.TaskNodeMessageConflictDetails).Reason
 }
 
-// 其他 Agent 发给任务实例的消息也逐条列入节点排队，可以逐条转为打断；领取时提醒只点名本轮承载的消息。
+// Messages other Agents send to a task instance are also listed one by one in the node queue and can be turned into
+// interrupts one by one; when claimed, the reminder only names the messages this turn carries.
 func TestTaskNodeQueueListsAgentMessagesAndPromotesThem(t *testing.T) {
 	ctx := context.Background()
 	f := newPromoteFixture(t, 0)
@@ -131,7 +132,8 @@ func TestTaskNodeQueueListsAgentMessagesAndPromotesThem(t *testing.T) {
 	}
 }
 
-// 取消节点排队中的消息（控制台发的与其他 Agent 发的）：不再执行、不计为未读；所在轮次拆空即作废。
+// Cancelling messages in the node queue (sent by the console and by other Agents): they no longer run and do not count
+// as unread; a turn left empty is voided.
 func TestTaskNodeQueueCancelBothKinds(t *testing.T) {
 	ctx := context.Background()
 	f := newPromoteFixture(t, 0)
@@ -187,7 +189,8 @@ func TestTaskNodeQueueCancelBothKinds(t *testing.T) {
 	}
 }
 
-// 节点 Agent 在回复中读走排队消息：消息离开排队，所在轮次没有待处理消息即作废（no_pending_messages）。
+// The node Agent reads a queued message during its reply: the message leaves the queue, and its turn, left with no
+// pending messages, is voided (no_pending_messages).
 func TestTaskNodeQueueReadVoidsTurn(t *testing.T) {
 	ctx := context.Background()
 	f := newPromoteFixture(t, 0)
@@ -220,7 +223,8 @@ func TestTaskNodeQueueReadVoidsTurn(t *testing.T) {
 	}
 }
 
-// 停止节点当前这一轮：置为 aborting 并通知执行器；重复停止为 already_stopping；已结束的轮次返回 run_not_active。
+// Stopping the node's current turn: set to aborting and the executor is notified; stopping again gives
+// already_stopping; an ended turn returns run_not_active.
 func TestTaskNodeStopMarksOnlyThisTurn(t *testing.T) {
 	ctx := context.Background()
 	f := newPromoteFixture(t, 0)

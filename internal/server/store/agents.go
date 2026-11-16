@@ -14,13 +14,13 @@ import (
 	"loop-now/internal/server/sleepmodel"
 )
 
-// Agent 是常态 Agent 的基础配置。
+// Agent is the base configuration of a regular Agent.
 type Agent struct {
 	ThinkingLevel *string
 	ServiceTier   *string
 	ID            uuid.UUID
-	ProjectID     *uuid.UUID // 为空表示平台持有
-	IsManager     bool       // 是否担任所属项目的 Manager
+	ProjectID     *uuid.UUID // nil means the platform owns it
+	IsManager     bool       // whether it is the Manager of its project
 	Name          string
 	ModelProvider string
 	ModelID       string
@@ -29,25 +29,25 @@ type Agent struct {
 	ConfigVersion int64
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
-	OrgID         *uuid.UUID // 所属项目的组织；平台 Agent 为空
-	OrgName       string     // 所属项目的组织名与项目名，组成地址用；平台 Agent 为空
+	OrgID         *uuid.UUID // organization of its project; empty for a platform Agent
+	OrgName       string     // organization and project names of its project, for the address; empty for a platform Agent
 	ProjectName   string
 }
 
-// Address 返回 Agent 的 Inbox 地址；名称不满足命名规则时 ok 为 false。
+// Address returns the Agent's Inbox address; ok is false when the name does not satisfy the naming rules.
 func (a Agent) Address() (string, bool) {
 	return naming.AgentAddress(a.OrgName, a.ProjectName, a.Name, a.ProjectID == nil)
 }
 
-// AgentSession 是 Agent 的会话记录。
+// AgentSession is the Agent's session record.
 type AgentSession struct {
-	SessionFile string // 为空表示还没有会话
+	SessionFile string // empty means there is no session yet
 	State       string // none / active / missing
 	Epoch       int
 	UpdatedAt   time.Time
 }
 
-// AgentListItem 是列表项：配置加轻量状态。
+// AgentListItem is a list item: the configuration plus lightweight status.
 type AgentListItem struct {
 	Sleep         *sleepmodel.Record
 	SleepRevision int64
@@ -56,11 +56,12 @@ type AgentListItem struct {
 	SessionState string
 }
 
-// 进行中执行的状态集合（与 runs_one_active_per_agent 索引一致）。
+// The set of statuses of a run in progress (consistent with the runs_one_active_per_agent index).
 const activeRunStatuses = `('starting', 'running', 'aborting')`
 
-// agentColumns 引用表名 agents（查询中不能给 agents 起别名）。最后四列：是否担任项目 Manager，
-// 所属项目的组织 ID、组织名与项目名（平台 Agent 为空）。
+// agentColumns refers to the table name agents (queries must not alias agents). The last four columns: whether it is
+// the project's Manager, and the organization ID, organization name and project name of its project (empty for a
+// platform Agent).
 const agentColumns = `agents.id, agents.project_id, agents.name, agents.model_provider, agents.model_id, agents.prompt,
 	agents.config_version, agents.created_at, agents.updated_at, agents.prompt_version,
 	EXISTS (SELECT 1 FROM projects mp WHERE mp.manager_agent_id = agents.id),
@@ -86,8 +87,9 @@ func notFoundIfNoRows(err error, what string) error {
 	return err
 }
 
-// CreateAgent 在指定范围内创建 Agent 及其会话记录。项目范围时，项目必须未删除；
-// 与删除项目同在写事务里串行，不会在刚删除的项目中建出 Agent。
+// CreateAgent creates an Agent and its session record in the given scope. In a project scope the project must not be
+// deleted; this is serialized with project deletion in write transactions, so an Agent cannot be created in a project
+// that was just deleted.
 func (s *Store) CreateAgent(ctx context.Context, scope Scope, name, provider, modelID, prompt string, modelOptions ...*string) (Agent, error) {
 	var a Agent
 	var level, tier *string
@@ -116,18 +118,18 @@ func (s *Store) CreateAgent(ctx context.Context, scope Scope, name, provider, mo
 	return a, err
 }
 
-// GetAgent 返回未删除的 Agent。
+// GetAgent returns a non-deleted Agent.
 func (s *Store) GetAgent(ctx context.Context, id uuid.UUID) (Agent, error) {
 	a, err := scanAgent(s.Pool.QueryRow(ctx, `SELECT `+agentColumns+` FROM agents WHERE id = $1 AND deleted_at IS NULL`, id))
 	return a, notFoundIfNoRows(err, "Agent")
 }
 
-// ListAgents 列出某个范围内未删除的 Agent，附带是否忙碌与会话状态。
+// ListAgents lists the non-deleted Agents in a scope, with whether each is busy and its session state.
 func (s *Store) ListAgents(ctx context.Context, scope Scope) ([]AgentListItem, error) {
 	return s.listAgents(ctx, `agents.project_id IS $1`, scope.projectArg())
 }
 
-// GetAgentListItem 返回一个未删除 Agent 的列表项。
+// GetAgentListItem returns the list item of one non-deleted Agent.
 func (s *Store) GetAgentListItem(ctx context.Context, id uuid.UUID) (AgentListItem, error) {
 	items, err := s.listAgents(ctx, `agents.id = $1`, id)
 	if err != nil {
@@ -139,7 +141,8 @@ func (s *Store) GetAgentListItem(ctx context.Context, id uuid.UUID) (AgentListIt
 	return items[0], nil
 }
 
-// ListAgentsFiltered 按筛选条件列出所有未删除项目与平台中未删除的 Agent（概览使用）。
+// ListAgentsFiltered lists, by filter, the non-deleted Agents in all non-deleted projects and on the platform (used by
+// the overview).
 func (s *Store) ListAgentsFiltered(ctx context.Context, f ScopeFilter) ([]AgentListItem, error) {
 	pid, platform := f.args()
 	return s.listAgents(ctx, `($1 IS NULL OR agents.project_id = $1) AND (NOT $2 OR agents.project_id IS NULL)
@@ -173,7 +176,7 @@ func (s *Store) listAgents(ctx context.Context, where string, args ...any) ([]Ag
 	return items, nil
 }
 
-// AgentPatch 是修改 Agent 的字段；nil 表示不改。
+// AgentPatch holds the fields to change on an Agent; nil means unchanged.
 type AgentPatch struct {
 	ServiceTier           *string
 	ServiceTierSet        bool
@@ -187,7 +190,7 @@ type AgentPatch struct {
 	Prompt                *string
 }
 
-// UpdateAgent 修改 Agent；除显示名称外的修改会递增配置版本。
+// UpdateAgent changes an Agent; any change other than the display name increments the config version.
 func (s *Store) UpdateAgent(ctx context.Context, id uuid.UUID, p AgentPatch) (Agent, error) {
 	var a Agent
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -252,9 +255,11 @@ func (s *Store) UpdateAgent(ctx context.Context, id uuid.UUID, p AgentPatch) (Ag
 
 func sameThinking(a, b *string) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
 
-// switchRuntimeTx 在模型提供方的改动换了运行时（Pi 与 Claude Code 之间）时调用：新运行时从新会话开始，
-// 旧会话不迁移也不删除。会话重置（会话序号加一）并取消这个会话里的 sleep，与确认重开会话相同；
-// 有进行中的执行时返回 agent_not_idle，否则它结束时会把旧运行时的会话记回来。
+// switchRuntimeTx is called when a model provider change switches the runtime (between Pi and Claude Code): the new
+// runtime starts from a new session, and the old session is neither migrated nor deleted. The session is reset
+// (session sequence number plus one) and any sleep in this session is cancelled, the same as a confirmed session
+// restart; returns agent_not_idle when a run is in progress, because otherwise that run would record the old
+// runtime's session back when it ends.
 func (s *Store) switchRuntimeTx(ctx context.Context, tx *db.Tx, agentID uuid.UUID, from, to string) error {
 	var active bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM runs WHERE agent_id = $1 AND status IN `+activeRunStatuses+`)`, agentID).Scan(&active); err != nil {
@@ -270,7 +275,7 @@ func (s *Store) switchRuntimeTx(ctx context.Context, tx *db.Tx, agentID uuid.UUI
 	err := tx.QueryRow(ctx, `UPDATE agent_sessions SET session_file = NULL, state = 'none', epoch = epoch + 1, updated_at = $2
 		WHERE agent_id = $1 RETURNING epoch`, agentID, tx.Now()).Scan(&epoch)
 	if errors.Is(err, db.ErrNoRows) {
-		return nil // 没有会话行（不应出现，新建 Agent 时就有）：没有可重置的会话
+		return nil // no session row (should not happen; it exists from Agent creation): no session to reset
 	}
 	if err != nil {
 		return err
@@ -280,15 +285,15 @@ func (s *Store) switchRuntimeTx(ctx context.Context, tx *db.Tx, agentID uuid.UUI
 			"fromRuntime": agentruntime.ForProvider(from), "toRuntime": agentruntime.ForProvider(to)}})
 }
 
-// AgentBusy 判断 Agent 是否有进行中的执行。
+// AgentBusy reports whether the Agent has a run in progress.
 func (s *Store) AgentBusy(ctx context.Context, id uuid.UUID) (bool, error) {
 	var busy bool
 	err := s.Pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM runs WHERE agent_id = $1 AND status IN `+activeRunStatuses+`)`, id).Scan(&busy)
 	return busy, err
 }
 
-// SoftDeleteAgent 软删除空闲的 Agent：设置 deleted_at 并删除其凭证密文。
-// 有进行中的执行或排队消息时返回 agent_not_idle。
+// SoftDeleteAgent soft-deletes an idle Agent: sets deleted_at and deletes its encrypted credentials.
+// Returns agent_not_idle when it has a run in progress or queued messages.
 func (s *Store) SoftDeleteAgent(ctx context.Context, id uuid.UUID) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
 		if _, err := lockAgent(ctx, tx, id); err != nil {
@@ -310,7 +315,7 @@ func (s *Store) SoftDeleteAgent(ctx context.Context, id uuid.UUID) error {
 		if err := scrubAgentSnapshotsTx(ctx, tx, id); err != nil {
 			return err
 		}
-		// 担任项目 Manager 时，同时取消。
+		// If it is a project's Manager, clear that as well.
 		if _, err := tx.Exec(ctx, `UPDATE projects SET manager_agent_id = NULL, updated_at = $2 WHERE manager_agent_id = $1`, id, tx.Now()); err != nil {
 			return err
 		}
@@ -322,7 +327,7 @@ func (s *Store) SoftDeleteAgent(ctx context.Context, id uuid.UUID) error {
 	})
 }
 
-// agentNameConflict 把同一范围内重名的唯一约束冲突转为 name_conflict。
+// agentNameConflict turns a unique constraint violation for a duplicate name in the same scope into name_conflict.
 func agentNameConflict(err error, name string) error {
 	switch {
 	case isUniqueViolation(err, "agents_name_per_project"):
@@ -333,13 +338,14 @@ func agentNameConflict(err error, name string) error {
 	return err
 }
 
-// lockAgent 在写事务里读出未删除的 Agent。名字沿用 PostgreSQL 时的行锁；写事务本身串行，不再需要锁。
+// lockAgent reads a non-deleted Agent inside a write transaction. The name is kept from the PostgreSQL days, when it
+// took a row lock; write transactions are now serialized, so no lock is needed anymore.
 func lockAgent(ctx context.Context, tx *db.Tx, id uuid.UUID) (Agent, error) {
 	a, err := scanAgent(tx.QueryRow(ctx, `SELECT `+agentColumns+` FROM agents WHERE id = $1 AND deleted_at IS NULL`, id))
 	return a, notFoundIfNoRows(err, "Agent")
 }
 
-// ensureIdle 在 Agent 有进行中的执行或排队消息时返回 agent_not_idle。
+// ensureIdle returns agent_not_idle when the Agent has a run in progress or queued messages.
 func ensureIdle(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
 	var busy bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM runs WHERE agent_id = $1 AND status IN ('queued', 'starting', 'running', 'aborting') AND NOT(status='queued' AND origin='sleep_wake'))`, id).Scan(&busy); err != nil {
@@ -351,13 +357,13 @@ func ensureIdle(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
 	return nil
 }
 
-// bumpConfig 递增配置版本；调用前须已用 lockAgent 锁定该 Agent。
+// bumpConfig increments the config version; the caller must already have locked the Agent with lockAgent.
 func bumpConfig(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
 	_, err := tx.Exec(ctx, `UPDATE agents SET config_version = config_version + 1, updated_at = $2 WHERE id = $1`, id, tx.Now())
 	return err
 }
 
-// GetAgentSession 返回 Agent 的会话记录。
+// GetAgentSession returns the Agent's session record.
 func (s *Store) GetAgentSession(ctx context.Context, agentID uuid.UUID) (AgentSession, error) {
 	var sess AgentSession
 	var file *string
@@ -369,13 +375,14 @@ func (s *Store) GetAgentSession(ctx context.Context, agentID uuid.UUID) (AgentSe
 	return sess, notFoundIfNoRows(err, "Agent 会话")
 }
 
-// RecordSessionFile 记录已确认写入磁盘的会话文件，状态设为 active。
+// RecordSessionFile records a session file confirmed to be written to disk and sets the state to active.
 func (s *Store) RecordSessionFile(ctx context.Context, agentID uuid.UUID, path string) error {
 	_, err := s.Pool.Exec(ctx, `UPDATE agent_sessions SET session_file = $2, state = 'active', updated_at = $3 WHERE agent_id = $1`, agentID, path, s.Pool.Now())
 	return err
 }
 
-// MarkSessionMissing 把会话标记为丢失（只对 active 会话生效），并记录会话丢失事件；runID 为发现丢失的那次执行。
+// MarkSessionMissing marks the session as missing (only takes effect for an active session) and records a
+// session-missing event; runID is the run that discovered it was missing.
 func (s *Store) MarkSessionMissing(ctx context.Context, agentID uuid.UUID, runID *uuid.UUID) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
 		var file *string
@@ -396,8 +403,9 @@ func (s *Store) MarkSessionMissing(ctx context.Context, agentID uuid.UUID, runID
 	})
 }
 
-// ResetSession 确认重开会话：清除会话文件、状态设为 none、会话序号加一。
-// 有进行中的执行时返回 agent_not_idle。
+// ResetSession confirms a session restart: clears the session file, sets the state to none and increments the
+// session sequence number.
+// Returns agent_not_idle when a run is in progress.
 func (s *Store) ResetSession(ctx context.Context, agentID uuid.UUID) (AgentSession, error) {
 	var sess AgentSession
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -420,8 +428,9 @@ func (s *Store) ResetSession(ctx context.Context, agentID uuid.UUID) (AgentSessi
 	return sess, err
 }
 
-// ResumeSession 在空闲门禁内切换到已验证的受管会话，保留历史并递增 epoch。
-// expectedFile 防止读取当前指针后又被其他维护操作改变；失败时整个事务回滚。
+// ResumeSession switches, inside the idle gate, to a verified managed session, keeping the history and incrementing
+// the epoch. expectedFile guards against the current pointer being changed by another maintenance operation after it
+// was read; on failure the whole transaction is rolled back.
 func (s *Store) ResumeSession(ctx context.Context, agentID uuid.UUID, expectedFile, targetFile string) (AgentSession, error) {
 	var sess AgentSession
 	var expectedFileArg any
@@ -451,7 +460,7 @@ func (s *Store) ResumeSession(ctx context.Context, agentID uuid.UUID, expectedFi
 	return sess, err
 }
 
-// DeletedAgentIDs 返回已软删除的 Agent，供执行器启动时清理其独立 HOME。
+// DeletedAgentIDs returns the soft-deleted Agents, so the executor can clean up their separate HOME at startup.
 func (s *Store) DeletedAgentIDs(ctx context.Context) ([]uuid.UUID, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT id FROM agents WHERE deleted_at IS NOT NULL`)
 	if err != nil {
@@ -460,7 +469,8 @@ func (s *Store) DeletedAgentIDs(ctx context.Context) ([]uuid.UUID, error) {
 	return db.CollectRows(rows, db.RowTo[uuid.UUID])
 }
 
-// AgentProjectAny 返回 Agent 的所属项目（平台 Agent 为 nil），已删除的 Agent 也能查到；不存在时返回 not_found。
+// AgentProjectAny returns the Agent's project (nil for a platform Agent); deleted Agents are found too. Returns
+// not_found when it does not exist.
 func (s *Store) AgentProjectAny(ctx context.Context, id uuid.UUID) (*uuid.UUID, error) {
 	var pid *uuid.UUID
 	err := s.Pool.QueryRow(ctx, `SELECT project_id FROM agents WHERE id = $1`, id).Scan(&pid)

@@ -287,8 +287,9 @@ func TestTaskLarkPublishFinalCASFailuresPreserveOriginalBinding(t *testing.T) {
 	}
 }
 
-// 发布组完整的核对拒绝没有成员的发布（原来由 PostgreSQL 的延迟约束触发器拦截裸 SQL；
-// 现在发布在提交前调用同一个谓词，这里直接对裸写入的状态调用它）。
+// The complete-published-group check rejects a publication without members (this used to be caught for raw SQL by a
+// PostgreSQL deferred constraint trigger; now publishing calls the same predicate before commit, and here it is called
+// directly on the state written raw).
 func TestTaskLarkPublishedGroupCheckRejectsIncompleteGroup(t *testing.T) {
 	s, in, next, turn := larkPublishFixture(t)
 	ctx := context.Background()

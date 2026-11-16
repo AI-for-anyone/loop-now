@@ -13,18 +13,19 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// 插件宿主读写的数据（plugins/SPEC.md §3、§8）：持久状态、宿主日志、插件状态与观察类事件的投递。
+// Data the plugin host reads and writes (plugins/SPEC.md §3, §8): persistent state, plugin host logs, plugin status
+// and delivery of observation events.
 
-// PluginStateEntry 是插件持久状态的一项。
+// PluginStateEntry is one item of a plugin's persistent state.
 type PluginStateEntry struct {
 	Key   string          `json:"key"`
 	Value json.RawMessage `json:"value"`
 }
 
-// PluginStateListLimit 是一次列出状态的最多项数。
+// PluginStateListLimit is the maximum number of items one state listing returns.
 const PluginStateListLimit = 1000
 
-// PluginStateGet 读取一项状态；不存在时返回 nil。project 为空表示插件全局。
+// PluginStateGet reads one state item; returns nil when it does not exist. A nil project means plugin-global.
 func (s *Store) PluginStateGet(ctx context.Context, plugin string, project *uuid.UUID, key string) (json.RawMessage, error) {
 	var v json.RawMessage
 	err := s.Pool.QueryRow(ctx, `SELECT value FROM plugin_state WHERE plugin_id=$1 AND project_id IS $2 AND key=$3`, plugin, project, key).Scan(&v)
@@ -34,20 +35,21 @@ func (s *Store) PluginStateGet(ctx context.Context, plugin string, project *uuid
 	return v, err
 }
 
-// PluginStateSet 写入一项状态，已有则覆盖。
+// PluginStateSet writes one state item, overwriting any existing one.
 func (s *Store) PluginStateSet(ctx context.Context, plugin string, project *uuid.UUID, key string, value json.RawMessage) error {
 	_, err := s.Pool.Exec(ctx, `INSERT INTO plugin_state(plugin_id,project_id,key,value) VALUES($1,$2,$3,$4)
 		ON CONFLICT (plugin_id, coalesce(project_id, ''), key) DO UPDATE SET value=excluded.value, updated_at=now()`, plugin, project, key, value)
 	return err
 }
 
-// PluginStateDelete 删除一项状态；不存在时也成功。
+// PluginStateDelete deletes one state item; also succeeds when it does not exist.
 func (s *Store) PluginStateDelete(ctx context.Context, plugin string, project *uuid.UUID, key string) error {
 	_, err := s.Pool.Exec(ctx, `DELETE FROM plugin_state WHERE plugin_id=$1 AND project_id IS $2 AND key=$3`, plugin, project, key)
 	return err
 }
 
-// PluginStateList 按键排序列出以 prefix 开头的状态，最多 PluginStateListLimit 项。
+// PluginStateList lists, sorted by key, the state items whose key starts with prefix, at most PluginStateListLimit
+// items.
 func (s *Store) PluginStateList(ctx context.Context, plugin string, project *uuid.UUID, prefix string) ([]PluginStateEntry, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT key,value FROM plugin_state WHERE plugin_id=$1 AND project_id IS $2 AND substr(key,1,length($3))=$3
 		ORDER BY key LIMIT $4`, plugin, project, prefix, PluginStateListLimit)
@@ -60,10 +62,10 @@ func (s *Store) PluginStateList(ctx context.Context, plugin string, project *uui
 	})
 }
 
-// pluginLogLineMax 是一行宿主日志保存的最多字节数，超出部分截断。
+// pluginLogLineMax is the maximum number of bytes kept for one plugin host log line; the excess is truncated.
 const pluginLogLineMax = 8 << 10
 
-// AppendPluginHostLog 记录一行宿主日志；plugin 为空表示宿主自身。
+// AppendPluginHostLog records one plugin host log line; an empty plugin means the plugin host itself.
 func (s *Store) AppendPluginHostLog(ctx context.Context, plugin, level, line string) error {
 	if len(line) > pluginLogLineMax {
 		cut := pluginLogLineMax
@@ -80,25 +82,25 @@ func (s *Store) AppendPluginHostLog(ctx context.Context, plugin, level, line str
 	return err
 }
 
-// PrunePluginHostLog 删除 before 之前的宿主日志。
+// PrunePluginHostLog deletes the plugin host logs before before.
 func (s *Store) PrunePluginHostLog(ctx context.Context, before time.Time) error {
 	_, err := s.Pool.Exec(ctx, `DELETE FROM plugin_host_log WHERE at < $1`, before)
 	return err
 }
 
-// PrunePluginEvents 删除 before 之前的观察类事件及其投递记录。
+// PrunePluginEvents deletes the observation events before before, along with their delivery records.
 func (s *Store) PrunePluginEvents(ctx context.Context, before time.Time) error {
 	_, err := s.Pool.Exec(ctx, `DELETE FROM plugin_events WHERE at < $1`, before)
 	return err
 }
 
-// SetPluginStatus 更新插件的运行状态；lastError 为空时清除上次的错误。
+// SetPluginStatus updates a plugin's running status; a nil lastError clears the previous error.
 func (s *Store) SetPluginStatus(ctx context.Context, plugin, status string, lastError *string) error {
 	_, err := s.Pool.Exec(ctx, `UPDATE plugins SET status=$2, last_error=$3, updated_at=now() WHERE id=$1`, plugin, status, lastError)
 	return err
 }
 
-// PluginEvent 是一条观察类事件。Data 是该类型自己的字段（JSON 对象），不含正文。
+// PluginEvent is one observation event. Data holds the type's own fields (a JSON object), without message text.
 type PluginEvent struct {
 	ID        string
 	Type      string
@@ -110,14 +112,15 @@ type PluginEvent struct {
 	Data      json.RawMessage
 }
 
-// PluginDelivery 是取出待投递的一条事件，Attempts 已含本次。
+// PluginDelivery is one event claimed for delivery; Attempts already includes this attempt.
 type PluginDelivery struct {
 	PluginEvent
 	Attempts int
 }
 
-// AddPluginEvent 在调用方提交业务事务之后写入事件，并为 plugins 中的每个插件生成一条待投递记录。
-// ev.ID 为空时生成 ULID。
+// AddPluginEvent writes an event after the caller has committed its business transaction, and creates one pending
+// delivery record for each plugin in plugins.
+// A ULID is generated when ev.ID is empty.
 func (s *Store) AddPluginEvent(ctx context.Context, ev PluginEvent, plugins []string) (string, error) {
 	if ev.ID == "" {
 		ev.ID = NewPluginEventID()
@@ -136,8 +139,9 @@ func (s *Store) AddPluginEvent(ctx context.Context, ev PluginEvent, plugins []st
 	return ev.ID, err
 }
 
-// ClaimPluginDelivery 取出该插件最早（按事件时间）到期的一条待投递事件：次数加一，下次时间推到 lease 之后，
-// 这样服务端在等待确认期间退出时，租约到期后会重投。没有到期的事件时返回 nil。
+// ClaimPluginDelivery claims the plugin's earliest due pending event (by event time): the attempt count goes up by
+// one and the next attempt time is pushed past lease, so that if the server exits while waiting for the ack, the
+// event is redelivered once the lease expires. Returns nil when no event is due.
 func (s *Store) ClaimPluginDelivery(ctx context.Context, plugin string, lease time.Duration) (*PluginDelivery, error) {
 	var d *PluginDelivery
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -165,15 +169,16 @@ func (s *Store) ClaimPluginDelivery(ctx context.Context, plugin string, lease ti
 	return d, nil
 }
 
-// AckPluginDelivery 记录宿主已确认处理完成，duration 是从发出到收到 ack 的时长。
+// AckPluginDelivery records that the plugin host confirmed it finished handling the event; duration is the time from
+// sending to receiving the ack.
 func (s *Store) AckPluginDelivery(ctx context.Context, plugin, eventID string, duration time.Duration) error {
 	_, err := s.Pool.Exec(ctx, `UPDATE plugin_event_deliveries SET status='delivered', acked_at=now(), last_error=NULL, duration_ms=$3
 		WHERE plugin_id=$1 AND event_id=$2 AND status='pending'`, plugin, eventID, duration.Milliseconds())
 	return err
 }
 
-// PluginDeliveryCounts 返回 since 以来送达与失败的投递数（全部插件）。失败按最后一次尝试的时间计，
-// 即 next_attempt_at（失败时不再推进）。
+// PluginDeliveryCounts returns the number of delivered and failed deliveries since since (all plugins). Failures are
+// counted by the time of the last attempt, i.e. next_attempt_at (which no longer advances on failure).
 func (s *Store) PluginDeliveryCounts(ctx context.Context, since time.Time) (delivered, failed int, err error) {
 	err = s.Pool.QueryRow(ctx, `SELECT
 		(SELECT count(*) FROM plugin_event_deliveries WHERE acked_at >= $1),
@@ -181,7 +186,8 @@ func (s *Store) PluginDeliveryCounts(ctx context.Context, since time.Time) (deli
 	return delivered, failed, err
 }
 
-// FailPluginDelivery 记录一次投递失败：retryAt 不为空时到时重投，为空时标为 failed、不再重投。
+// FailPluginDelivery records a failed delivery: when retryAt is not nil the event is redelivered at that time; when it
+// is nil it is marked failed and never redelivered.
 func (s *Store) FailPluginDelivery(ctx context.Context, plugin, eventID, reason string, retryAt *time.Time) error {
 	_, err := s.Pool.Exec(ctx, `UPDATE plugin_event_deliveries SET last_error=$3,
 			status=CASE WHEN $4 IS NULL THEN 'failed' ELSE 'pending' END, next_attempt_at=coalesce($4,next_attempt_at)
@@ -189,15 +195,15 @@ func (s *Store) FailPluginDelivery(ctx context.Context, plugin, eventID, reason 
 	return err
 }
 
-// crockford 是 ULID 使用的 Crockford base32 字母表。
+// crockford is the Crockford base32 alphabet that ULID uses.
 const crockford = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
-// NewPluginEventID 返回一个 ULID：取 UUIDv7 的 128 位按 Crockford base32 编码，
-// 前 48 位是毫秒时间，同一毫秒内单调递增，所以按字符串排序就是按时间排序。
+// NewPluginEventID returns a ULID: the 128 bits of a UUIDv7 encoded in Crockford base32. The first 48 bits are the
+// millisecond time and are monotonically increasing within a millisecond, so sorting as strings sorts by time.
 func NewPluginEventID() string {
 	id := uuid.Must(uuid.NewV7())
 	var out [26]byte
-	// 128 位在高位补 2 个 0 位后正好是 26 组 5 位。
+	// 128 bits, padded with 2 zero bits at the top, are exactly 26 groups of 5 bits.
 	var acc uint64
 	bits := 2
 	i := 0
@@ -213,11 +219,13 @@ func NewPluginEventID() string {
 	return string(out[:])
 }
 
-// eventLogTables 是 events.db 里按时间清理的日志表（plugin_host_log 由插件宿主自己按 7 天清理）。
+// eventLogTables are the log tables in events.db pruned by time (plugin_host_log is pruned to 7 days by the plugin
+// host itself).
 var eventLogTables = []string{"lifecycle_events", "run_tool_events", "audit_log"}
 
-// PruneEventLogs 删除三张日志表里 before 之前的行，每次最多删 batch 行一个事务，避免长时间占住写连接。
-// 返回删掉的行数。
+// PruneEventLogs deletes the rows before before from the three log tables, at most batch rows per transaction, so as
+// not to hold the write connection for long.
+// Returns the number of rows deleted.
 func (s *Store) PruneEventLogs(ctx context.Context, before time.Time, batch int) (int64, error) {
 	var total int64
 	for _, table := range eventLogTables {

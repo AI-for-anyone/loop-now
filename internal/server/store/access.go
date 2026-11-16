@@ -12,9 +12,10 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// ---------- 外部身份 ----------
+// ---------- External identities ----------
 
-// ExternalIdentity 是外部身份；DeletedAt 不为空表示已软删除。ManagedBy 是代管它的插件渠道（plugins/SPEC.md §12），没有时为空。
+// ExternalIdentity is an external identity; a non-nil DeletedAt means it has been soft-deleted. ManagedBy is the
+// plugin channel that manages it (plugins/SPEC.md §12), or empty when there is none.
 type ExternalIdentity struct {
 	ID        uuid.UUID
 	Name      string
@@ -23,7 +24,7 @@ type ExternalIdentity struct {
 	ManagedBy *IdentityManager
 }
 
-// IdentityManager 是代管外部身份的插件渠道。
+// IdentityManager is the plugin channel that manages an external identity.
 type IdentityManager struct {
 	PluginID  string `json:"pluginId"`
 	ChannelID string `json:"channelId"`
@@ -38,7 +39,8 @@ func scanIdentity(row db.Scanner) (ExternalIdentity, error) {
 	return x, err
 }
 
-// SetIdentityManager 设置（m 为空时清空）代管外部身份的插件渠道；身份不存在或已删除时返回 not_found。插件与渠道由调用方校验。
+// SetIdentityManager sets the plugin channel that manages an external identity (clears it when m is nil); returns
+// not_found when the identity does not exist or has been deleted. The caller validates the plugin and channel.
 func (s *Store) SetIdentityManager(ctx context.Context, identity uuid.UUID, m *IdentityManager) (ExternalIdentity, error) {
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if err := requireLiveIdentity(ctx, tx, identity); err != nil {
@@ -58,14 +60,15 @@ func (s *Store) SetIdentityManager(ctx context.Context, identity uuid.UUID, m *I
 	return s.GetExternalIdentity(ctx, identity)
 }
 
-// IdentityManagedBy 报告外部身份是不是由这个插件代管。
+// IdentityManagedBy reports whether the external identity is managed by this plugin.
 func (s *Store) IdentityManagedBy(ctx context.Context, identity uuid.UUID, plugin string) (bool, error) {
 	var ok bool
 	err := s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM identity_managers WHERE identity_id=$1 AND plugin_id=$2)`, identity, plugin).Scan(&ok)
 	return ok, err
 }
 
-// PruneIdentityManagers 清掉这个插件不再声明代管的渠道上的绑定（插件更新后）。
+// PruneIdentityManagers removes the bindings on channels this plugin no longer declares it manages (after a plugin
+// update).
 func (s *Store) PruneIdentityManagers(ctx context.Context, plugin string, channels []string) error {
 	if channels == nil {
 		channels = []string{}
@@ -74,7 +77,8 @@ func (s *Store) PruneIdentityManagers(ctx context.Context, plugin string, channe
 	return err
 }
 
-// CreateExternalIdentity 新建外部身份；与未删除的身份重名时返回 name_conflict。名称格式由调用方校验。
+// CreateExternalIdentity creates an external identity; returns name_conflict when the name clashes with an identity
+// that has not been deleted. The caller validates the name format.
 func (s *Store) CreateExternalIdentity(ctx context.Context, name string) (ExternalIdentity, error) {
 	x, err := scanIdentity(s.Pool.QueryRow(ctx, `INSERT INTO external_identities (id, name) VALUES ($1, $2) RETURNING `+identityColumns,
 		uuid.Must(uuid.NewV7()), name))
@@ -84,7 +88,7 @@ func (s *Store) CreateExternalIdentity(ctx context.Context, name string) (Extern
 	return x, err
 }
 
-// ListExternalIdentities 列出未删除的外部身份，按创建时间正序。
+// ListExternalIdentities lists the external identities that have not been deleted, oldest first.
 func (s *Store) ListExternalIdentities(ctx context.Context) ([]ExternalIdentity, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT `+identityColumns+` FROM external_identities WHERE deleted_at IS NULL ORDER BY created_at, id`)
 	if err != nil {
@@ -93,19 +97,20 @@ func (s *Store) ListExternalIdentities(ctx context.Context) ([]ExternalIdentity,
 	return db.CollectRows(rows, func(r db.CollectableRow) (ExternalIdentity, error) { return scanIdentity(r) })
 }
 
-// GetExternalIdentity 返回外部身份，已删除的也返回。
+// GetExternalIdentity returns an external identity, including a deleted one.
 func (s *Store) GetExternalIdentity(ctx context.Context, id uuid.UUID) (ExternalIdentity, error) {
 	x, err := scanIdentity(s.Pool.QueryRow(ctx, `SELECT `+identityColumns+` FROM external_identities WHERE id = $1`, id))
 	return x, notFoundIfNoRows(err, "外部身份")
 }
 
-// GetLiveExternalIdentityByName 按名称返回未删除的外部身份。
+// GetLiveExternalIdentityByName returns the non-deleted external identity with this name.
 func (s *Store) GetLiveExternalIdentityByName(ctx context.Context, name string) (ExternalIdentity, error) {
 	x, err := scanIdentity(s.Pool.QueryRow(ctx, `SELECT `+identityColumns+` FROM external_identities WHERE name = $1 AND deleted_at IS NULL`, name))
 	return x, notFoundIfNoRows(err, "外部身份")
 }
 
-// DeleteExternalIdentity 软删除外部身份并吊销它的全部令牌；已删除或不存在时返回 not_found。
+// DeleteExternalIdentity soft-deletes an external identity and revokes all of its tokens; returns not_found when it is
+// already deleted or does not exist.
 func (s *Store) DeleteExternalIdentity(ctx context.Context, id uuid.UUID) (ExternalIdentity, error) {
 	var x ExternalIdentity
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -121,9 +126,9 @@ func (s *Store) DeleteExternalIdentity(ctx context.Context, id uuid.UUID) (Exter
 	return x, err
 }
 
-// ---------- 外部令牌 ----------
+// ---------- External tokens ----------
 
-// ExternalToken 是外部令牌的元数据（不含密钥）。
+// ExternalToken is the metadata of an external token (without the secret).
 type ExternalToken struct {
 	ID         uuid.UUID
 	IdentityID uuid.UUID
@@ -142,14 +147,16 @@ func scanToken(row db.Scanner) (ExternalToken, error) {
 	return t, err
 }
 
-// requireLiveIdentity 确认外部身份存在且未删除（写事务串行，不需要锁行）。
+// requireLiveIdentity confirms that the external identity exists and is not deleted (write transactions are
+// serialized, so the row does not need to be locked).
 func requireLiveIdentity(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
 	var one int
 	err := tx.QueryRow(ctx, `SELECT 1 FROM external_identities WHERE id = $1 AND deleted_at IS NULL`, id).Scan(&one)
 	return notFoundIfNoRows(err, "外部身份")
 }
 
-// InsertExternalToken 为未删除的外部身份保存令牌；身份已删除或不存在时返回 not_found。
+// InsertExternalToken stores a token for a non-deleted external identity; returns not_found when the identity is
+// deleted or does not exist.
 func (s *Store) InsertExternalToken(ctx context.Context, identityID, tokenID uuid.UUID, hash []byte, prefix string, expiresAt *time.Time) (ExternalToken, error) {
 	var t ExternalToken
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -164,7 +171,8 @@ func (s *Store) InsertExternalToken(ctx context.Context, identityID, tokenID uui
 	return t, err
 }
 
-// ListExternalTokens 列出未删除外部身份的全部令牌（含已吊销与已过期），新的在前。
+// ListExternalTokens lists all tokens of a non-deleted external identity (including revoked and expired ones),
+// newest first.
 func (s *Store) ListExternalTokens(ctx context.Context, identityID uuid.UUID) ([]ExternalToken, error) {
 	var out []ExternalToken
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -181,7 +189,8 @@ func (s *Store) ListExternalTokens(ctx context.Context, identityID uuid.UUID) ([
 	return out, err
 }
 
-// RevokeExternalToken 吊销令牌；已吊销时保持原吊销时间。身份已删除、令牌不存在或不属于该身份时返回 not_found。
+// RevokeExternalToken revokes a token; an already revoked token keeps its original revocation time. Returns not_found
+// when the identity is deleted, or the token does not exist or does not belong to that identity.
 func (s *Store) RevokeExternalToken(ctx context.Context, identityID, tokenID uuid.UUID) (ExternalToken, error) {
 	var t ExternalToken
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -196,14 +205,15 @@ func (s *Store) RevokeExternalToken(ctx context.Context, identityID, tokenID uui
 	return t, err
 }
 
-// ExternalTokenAuth 是校验外部令牌所需的数据。
+// ExternalTokenAuth is the data needed to check an external token.
 type ExternalTokenAuth struct {
 	Token    ExternalToken
 	Hash     []byte
 	Identity ExternalIdentity
 }
 
-// LookupExternalToken 按 ID 读取令牌与所属身份；不存在时返回 not_found。是否有效由调用方判断。
+// LookupExternalToken reads a token and the identity it belongs to by ID; returns not_found when it does not exist.
+// The caller decides whether it is valid.
 func (s *Store) LookupExternalToken(ctx context.Context, tokenID uuid.UUID) (ExternalTokenAuth, error) {
 	var a ExternalTokenAuth
 	t, x := &a.Token, &a.Identity
@@ -215,16 +225,16 @@ func (s *Store) LookupExternalToken(ctx context.Context, tokenID uuid.UUID) (Ext
 	return a, notFoundIfNoRows(err, "令牌")
 }
 
-// TouchExternalToken 记录令牌的最近使用时间，最多每分钟更新一次。
+// TouchExternalToken records when the token was last used, updating it at most once a minute.
 func (s *Store) TouchExternalToken(ctx context.Context, tokenID uuid.UUID) error {
 	_, err := s.Pool.Exec(ctx, `UPDATE external_tokens SET last_used_at = now()
 		WHERE id = $1 AND (last_used_at IS NULL OR last_used_at < now() - 60000000)`, tokenID)
 	return err
 }
 
-// ---------- Agent 令牌 ----------
+// ---------- Agent tokens ----------
 
-// InsertAgentToken 保存为某次 Pi 进程签发的 Agent 令牌。
+// InsertAgentToken stores an Agent token issued for one Pi process.
 func (s *Store) InsertAgentToken(ctx context.Context, tokenID, agentID, instanceID uuid.UUID, hash []byte) error {
 	inst, err := s.TaskInstance(ctx, agentID)
 	if err != nil && !IsNotFound(err) {
@@ -241,19 +251,20 @@ func (s *Store) InsertAgentToken(ctx context.Context, tokenID, agentID, instance
 	return err
 }
 
-// RevokeAgentToken 作废 Agent 令牌；已作废时不变。
+// RevokeAgentToken revokes an Agent token; does nothing when it is already revoked.
 func (s *Store) RevokeAgentToken(ctx context.Context, tokenID uuid.UUID) error {
 	_, err := s.Pool.Exec(ctx, `UPDATE agent_tokens SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL`, tokenID)
 	return err
 }
 
-// RevokeAgentTokensNotFrom 作废不是由指定实例签发的全部 Agent 令牌（服务端启动时调用），返回作废的数量。
+// RevokeAgentTokensNotFrom revokes every Agent token not issued by the given instance (called at server startup) and
+// returns how many were revoked.
 func (s *Store) RevokeAgentTokensNotFrom(ctx context.Context, instanceID uuid.UUID) (int64, error) {
 	tag, err := s.Pool.Exec(ctx, `UPDATE agent_tokens SET revoked_at = now() WHERE revoked_at IS NULL AND instance_id <> $1`, instanceID)
 	return tag.RowsAffected(), err
 }
 
-// AgentTokenAuth 是校验 Agent 令牌所需的数据。
+// AgentTokenAuth is the data needed to check an Agent token.
 type AgentTokenAuth struct {
 	RuntimeID, TaskID *uuid.UUID
 	AgentID           uuid.UUID
@@ -262,7 +273,7 @@ type AgentTokenAuth struct {
 	Revoked           bool
 }
 
-// LookupAgentToken 按 ID 读取 Agent 令牌；不存在时返回 not_found。
+// LookupAgentToken reads an Agent token by ID; returns not_found when it does not exist.
 func (s *Store) LookupAgentToken(ctx context.Context, tokenID uuid.UUID) (AgentTokenAuth, error) {
 	var a AgentTokenAuth
 	err := s.Pool.QueryRow(ctx, `SELECT t.agent_id,t.instance_id,t.secret_hash,(t.revoked_at IS NOT NULL OR coalesce(i.retired,false)),t.runtime_id,t.task_id FROM agent_tokens t LEFT JOIN task_instances i ON i.id=t.runtime_id WHERE t.id=$1`, tokenID).
@@ -270,24 +281,24 @@ func (s *Store) LookupAgentToken(ctx context.Context, tokenID uuid.UUID) (AgentT
 	return a, notFoundIfNoRows(err, "令牌")
 }
 
-// ---------- 审计 ----------
+// ---------- Audit ----------
 
-// AuditEntry 是一条审计记录；不含请求体、凭证与令牌。
+// AuditEntry is one audit record; it contains no request body, credentials or tokens.
 type AuditEntry struct {
 	ID           uuid.UUID
 	At           time.Time
-	RequestID    *uuid.UUID // 服务端命令行的操作没有请求 ID
+	RequestID    *uuid.UUID // Operations from the server command line have no request ID
 	ActorKind    string     // console / external / agent / cli / plugin
 	ActorID      *uuid.UUID
-	OnBehalfOf   *uuid.UUID // 插件以代管的外部身份的名义调用时，那个身份
+	OnBehalfOf   *uuid.UUID // When a plugin calls on behalf of an external identity it manages, that identity
 	ActorAddress string
-	Method       string // HTTP 方法；命令行为 CLI
-	Operation    string // 契约中的 operationId；命令行为子命令，例如 identity.create
+	Method       string // HTTP method; CLI for the command line
+	Operation    string // operationId in the contract; for the command line, the subcommand, e.g. identity.create
 	Target       map[string]string
-	Status       int // HTTP 状态码；命令行成功为 0
+	Status       int // HTTP status code; 0 for a successful command-line operation
 }
 
-// InsertAudit 写入一条审计记录。
+// InsertAudit writes one audit record.
 func (s *Store) InsertAudit(ctx context.Context, e AuditEntry) error {
 	if e.Target == nil {
 		e.Target = map[string]string{}
@@ -302,7 +313,7 @@ func (s *Store) InsertAudit(ctx context.Context, e AuditEntry) error {
 	return err
 }
 
-// ListAudit 返回最近的审计记录，新的在前（测试与排查用）。
+// ListAudit returns the most recent audit records, newest first (for tests and troubleshooting).
 func (s *Store) ListAudit(ctx context.Context, limit int) ([]AuditEntry, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT id, at, request_id, actor_kind, actor_id, coalesce(actor_address, ''), method, operation, target, status
 		FROM audit_log ORDER BY at DESC, id DESC LIMIT $1`, limit)

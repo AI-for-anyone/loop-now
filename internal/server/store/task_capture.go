@@ -24,7 +24,8 @@ type TaskCapture struct {
 	Sources          []TaskFrozenSource
 }
 
-// CaptureTaskAgent 在调用者创建事务中锁住Agent，配置变更同样锁Agent，因此本次读取不混版本。
+// CaptureTaskAgent locks the Agent in the caller's create transaction; config changes lock the Agent as well, so this
+// read never mixes versions.
 func (s *Store) CaptureTaskAgent(ctx context.Context, tx *db.Tx, agentID, runtimeID uuid.UUID, project prompts.ProjectRules, credentialRevision ...int64) (TaskCapture, error) {
 	var out TaskCapture
 	var err error
@@ -84,7 +85,8 @@ func (s *Store) CaptureTaskAgent(ctx context.Context, tx *db.Tx, agentID, runtim
 		}
 	}
 	out.Configuration.CredentialIdentity = projectCredentialIdentity(out.Configuration.CLIs, resolved, out.CredentialRows)
-	// 快照 v9 起任务工作区复制自基础 Agent 的文件夹，不再冻结文件夹来源。
+	// From snapshot v9 on, the task workspace is copied from the base Agent's folders, and folder sources are no longer
+	// captured (frozen).
 	out.Sources = []TaskFrozenSource{}
 	return out, nil
 }

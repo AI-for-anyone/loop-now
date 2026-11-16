@@ -168,7 +168,8 @@ func TestGitHubStoreLockWaitPastExpiryAndFinalFence(t *testing.T) {
 		e := githubStoreFixture(t)
 		ctx := context.Background()
 		op := githubOperation(t, e, nil, time.Now().Add(time.Second))
-		// 测试占住写连接：完成登录的写事务停在等写连接上，放开时操作已过期。
+		// The test holds the write connection: the write transaction that completes the login waits for the write
+		// connection, and by the time it is released the operation has expired.
 		release := sqlitetest.HoldWriter(t, e.s.Pool)
 		w := githubWrite(e, "1", "alice", "fixture", nil)
 		done := make(chan error, 1)
@@ -197,7 +198,8 @@ func TestGitHubStoreLockWaitPastExpiryAndFinalFence(t *testing.T) {
 		ctx := context.Background()
 		op := githubOperation(t, e, nil, time.Now().Add(time.Second))
 		w := githubWrite(e, "1", "alice", "fixture", nil)
-		// 停在写身份的语句前（已过第一次期限检查、还没到最后的期限检查），直到操作过期。
+		// Stop before the statement that writes the identity (past the first deadline check, before the final deadline
+		// check) until the operation expires.
 		entered, unblock := make(chan struct{}), make(chan struct{})
 		var once sync.Once
 		e.s.Pool.SetQueryHook(func(_ context.Context, q string) {

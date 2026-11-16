@@ -164,7 +164,8 @@ func (s *Store) PublishTaskLarkSwitchTx(ctx context.Context, m *TaskMutation, ac
 	if _, err = m.Tx.Exec(ctx, `DELETE FROM task_lark_switch_fences WHERE actor_key=$1 AND action_id=$2 AND task_id=$3`, actor, action, next.TaskID); err != nil {
 		return 0, false, err
 	}
-	// 提交前按事务最终的状态再核对一次发布组（原来是 PostgreSQL 的延迟约束触发器 task_lark_complete_group）。
+	// Before commit, check the published group once more against the transaction's final state (formerly the PostgreSQL
+	// deferred constraint trigger task_lark_complete_group).
 	taskID := next.TaskID
 	m.Tx.BeforeCommit(func(ctx context.Context, tx *db.Tx) error {
 		return checkTaskLarkPublishedGroupTx(ctx, tx, taskID, revision)
@@ -173,11 +174,12 @@ func (s *Store) PublishTaskLarkSwitchTx(ctx context.Context, m *TaskMutation, ac
 	return revision, true, nil
 }
 
-// errIncompleteLarkGroup 与原来的触发器报同样的错误。
+// errIncompleteLarkGroup reports the same error as the former trigger.
 var errIncompleteLarkGroup = errors.New("task_lark_switch_requires_complete_published_group")
 
-// checkTaskLarkPublishedGroupTx 核对一次发布的组完整：恰好两个成员，续接轮次属于发布方成员、
-// 节点与版本对得上，原动作已成功。不完整时返回 errIncompleteLarkGroup，使整个发布回滚。
+// checkTaskLarkPublishedGroupTx checks that a publication's group is complete: exactly two members, the continuation
+// turn belongs to the publishing member, the node and revision match, and the original action succeeded. When it is
+// incomplete it returns errIncompleteLarkGroup, so the whole publication is rolled back.
 func checkTaskLarkPublishedGroupTx(ctx context.Context, tx *db.Tx, task uuid.UUID, revision int64) error {
 	var complete bool
 	err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM task_lark_binding_members WHERE task_id=b.task_id AND revision=b.revision)=2

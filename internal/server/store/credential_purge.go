@@ -192,7 +192,7 @@ func settleDeletedAccountTx(ctx context.Context, tx *db.Tx, project, account uui
 	for id := range payloads {
 		versions = append(versions, id.String())
 	}
-	// 快照是 JSON 文本的字节（BLOB），先转成文本再按 JSON 读。
+	// The snapshot is the bytes of JSON text (a BLOB); cast it to text first, then read it as JSON.
 	rows, e = tx.Query(ctx, `SELECT DISTINCT v FROM (
 			SELECT json_extract(CAST(i.snapshot AS TEXT), '$.credentials.' || k.value || '.versionId') v FROM task_instances i JOIN task_records r ON r.id=i.task_id
 			CROSS JOIN json_each('["modelAuth","googleBinding","larkBinding"]') k
@@ -369,7 +369,8 @@ func scrubSnapshotsTx(ctx context.Context, tx *db.Tx, instances []uuid.UUID, cli
 	if len(instances) == 0 {
 		return nil
 	}
-	// 快照是 JSON 文本的字节（BLOB）：转成文本改完再存回字节。没有 credentials 对象的快照不动（与 jsonb_set 相同）。
+	// The snapshot is the bytes of JSON text (a BLOB): cast it to text, edit it, then store it back as bytes. A
+	// snapshot without a credentials object is left alone (the same as jsonb_set).
 	set, args := `json_set(CAST(snapshot AS TEXT),'$.credentials.model',json('{}'),'$.credentials.cli',json('{}'))`, []any{instances}
 	if cli != nil {
 		paths := make([]string, len(cli))
@@ -385,5 +386,5 @@ func scrubSnapshotsTx(ctx context.Context, tx *db.Tx, instances []uuid.UUID, cli
 	return e
 }
 
-// versionHoldsSecret 是 project_cli_versions 一行还留有密文或布局的条件。
+// versionHoldsSecret is the condition for a project_cli_versions row that still holds ciphertext or a layout.
 const versionHoldsSecret = `length(secret)>0 OR json_array_length(field_names)>0 OR json_array_length(env_names)>0 OR json_array_length(file_paths)>0`

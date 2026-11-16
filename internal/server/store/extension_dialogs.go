@@ -9,30 +9,31 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// Pi 扩展的对话（plugins/SPEC.md §11）：confirm、select、input 作为 Agent 发给控制台的提问，extension_dialogs 标出这类提问。
+// Pi extension dialogs (plugins/SPEC.md §11): confirm, select and input are questions the Agent sends to the console,
+// and extension_dialogs marks such questions.
 
-// ExtensionDialog 是提问对应的扩展对话。
+// ExtensionDialog is the extension dialog behind a question.
 type ExtensionDialog struct {
 	RunID     uuid.UUID
 	RequestID string
 	Method    string
 }
 
-// InsertExtensionDialogTx 在写入提问的事务里标出它是扩展对话。
+// InsertExtensionDialogTx marks a question as an extension dialog, in the transaction that writes the question.
 func InsertExtensionDialogTx(ctx context.Context, tx *db.Tx, question uuid.UUID, d ExtensionDialog) error {
 	_, err := tx.Exec(ctx, `INSERT INTO extension_dialogs(question_message_id,run_id,request_id,method) VALUES($1,$2,$3,$4)`, question, d.RunID, d.RequestID, d.Method)
 	return err
 }
 
-// IsExtensionDialogTx 报告提问是不是扩展对话。
+// IsExtensionDialogTx reports whether a question is an extension dialog.
 func IsExtensionDialogTx(ctx context.Context, tx *db.Tx, question uuid.UUID) (bool, error) {
 	var ok bool
 	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM extension_dialogs WHERE question_message_id=$1)`, question).Scan(&ok)
 	return ok, err
 }
 
-// DialogState 是扩展对话提问的当前状态：State 为 open、answered、expired 或 closed；
-// 回答了的带选项与回答的全文。
+// DialogState is the current state of an extension dialog question: State is open, answered, expired or closed;
+// an answered one carries the full options and answer.
 type DialogState struct {
 	State     string
 	ExpiresAt time.Time
@@ -40,7 +41,7 @@ type DialogState struct {
 	Text      string
 }
 
-// GetDialogState 读取扩展对话提问的状态。
+// GetDialogState reads the state of an extension dialog question.
 func (s *Store) GetDialogState(ctx context.Context, question uuid.UUID) (DialogState, error) {
 	var d DialogState
 	err := s.Pool.QueryRow(ctx, `SELECT q.state,q.expires_at,q.answer_option_id,coalesce(a.text,'') FROM inbox_questions q
@@ -48,7 +49,8 @@ func (s *Store) GetDialogState(ctx context.Context, question uuid.UUID) (DialogS
 	return d, notFoundIfNoRows(err, "提问")
 }
 
-// EndExtensionDialog 在这一轮结束（或 Pi 不再等待）时让仍未回答的扩展对话提问到期，原因为 run_ended；changed 表示这次由未回答变为到期。
+// EndExtensionDialog expires an extension dialog question that is still unanswered when this turn ends (or Pi stops
+// waiting), with reason run_ended; changed means this call moved it from unanswered to expired.
 func (s *Store) EndExtensionDialog(ctx context.Context, question uuid.UUID) (changed bool, err error) {
 	err = s.inTx(ctx, func(tx *db.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE inbox_questions SET state='expired',expired_reason='run_ended',notice_state='skipped' WHERE message_id=$1 AND state='open'`, question)

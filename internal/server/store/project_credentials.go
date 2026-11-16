@@ -26,7 +26,8 @@ type ProjectCredentialRecord struct {
 	TemplateSource string
 }
 type ProjectCredentialWrite struct {
-	// VersionID 不为空时用作新版本的 ID（插件提供方的状态目录以它命名，登录前就要定下来）。
+	// When VersionID is not nil it is used as the ID of the new version (a plugin provider's state directory is named
+	// after it, so it must be fixed before login).
 	VersionID      uuid.UUID
 	AuthMethod     string
 	AccountLabel   *string
@@ -37,8 +38,10 @@ type ProjectCredentialWrite struct {
 	Secret         []byte
 }
 
-// lockCredentialProject 返回项目的凭证版本；项目不存在或已删除时返回 not_found。
-// 最后一个参数原来决定行锁强度，写事务串行后不起作用（读事务里也不需要）。
+// lockCredentialProject returns the project's credential version; returns not_found when the project does not exist
+// or is deleted.
+// The last parameter used to decide the row lock strength; it has no effect now that write transactions are
+// serialized (and no lock is needed in read transactions either).
 func lockCredentialProject(ctx context.Context, tx *db.Tx, id uuid.UUID, _ bool) (int64, error) {
 	var rev int64
 	err := tx.QueryRow(ctx, `SELECT credentials_revision FROM projects WHERE id=$1 AND deleted_at IS NULL`, id).Scan(&rev)
@@ -801,14 +804,15 @@ func (s *Store) ProviderStateVersionsInUse(ctx context.Context) (map[uuid.UUID]b
 	return out, rows.Err()
 }
 
-// ProviderAccount 是一个项目模型账号的定位。
+// ProviderAccount identifies one project model account.
 type ProviderAccount struct {
 	ProjectID uuid.UUID
 	ID        uuid.UUID
 	Revision  int64
 }
 
-// ModelAccountsOf 返回这些模型提供方未删除的项目账号（卸载插件并删除数据时用）。
+// ModelAccountsOf returns the non-deleted project accounts of these model providers (used when uninstalling a plugin
+// and deleting its data).
 func (s *Store) ModelAccountsOf(ctx context.Context, providers []string) ([]ProviderAccount, error) {
 	if len(providers) == 0 {
 		return nil, nil

@@ -14,7 +14,7 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// Run 是对一条用户消息的处理记录。
+// Run is the record of handling one user message.
 type Run struct {
 	ID               uuid.UUID
 	AgentID          uuid.UUID
@@ -30,27 +30,30 @@ type Run struct {
 	ErrorCode        string
 	ErrorMessage     string
 	QueuedAt         time.Time
-	StartedAt        *time.Time // 派发时间
-	RunningAt        *time.Time // 消息交给 Pi 的时间
+	StartedAt        *time.Time // dispatch time
+	RunningAt        *time.Time // time the message was handed to Pi
 	AbortRequestedAt *time.Time
 	EndedAt          *time.Time
 	Origin           string // console / inbox_reminder
 	WakeSleepID      *uuid.UUID
-	TriggerInboxID   *uuid.UUID // 平台提醒：创建这次排队提醒的 Inbox 消息
-	// PiCommand 是对话页 /pi:<name> 消息交给 Pi 的命令名（不带 "/"），不是命令时为空；
-	// PiCommandHandled 表示 Pi 直接处理了命令、没有交给模型。
+	TriggerInboxID   *uuid.UUID // platform reminder: the Inbox message that created this queued reminder
+	// PiCommand is the command name (without "/") of a /pi:<name> message from the conversation page handed to Pi, or
+	// empty when it is not a command; PiCommandHandled means Pi handled the command directly without passing it to the
+	// model.
 	PiCommand        *string
 	PiCommandHandled bool
-	// PiCommandNotices 是 Pi 直接处理命令时扩展给出的通知（{"notices":[...],"truncated":bool}），否则为空。
+	// PiCommandNotices holds the notices an extension gave when Pi handled a command directly
+	// ({"notices":[...],"truncated":bool}); empty otherwise.
 	PiCommandNotices []byte
-	// Compaction 是手动压缩（origin console_compact）的指令与结果（JSON，见 Compaction），否则为空。
+	// Compaction holds the instructions and result of a manual compaction (origin console_compact) (JSON, see
+	// Compaction); empty otherwise.
 	Compaction []byte
 	Tools      []ToolEvent
 	Usage      UsageTotals
-	Model      *ModelRef // 最后一次 assistant 调用的提供方与模型；没有时为空
+	Model      *ModelRef // provider and model of the last assistant call; nil when there is none
 }
 
-// ToolEvent 是一次工具调用的状态记录（不含参数与输出）。
+// ToolEvent is the status record of one tool call (without arguments or output).
 type ToolEvent struct {
 	ToolCallID string
 	ToolName   string
@@ -58,7 +61,7 @@ type ToolEvent struct {
 	At         time.Time
 }
 
-// Message 是对话中的一条消息。
+// Message is one message in a conversation.
 type Message struct {
 	Images       []messageimage.Ref
 	ID           uuid.UUID
@@ -71,16 +74,18 @@ type Message struct {
 	CreatedAt    time.Time
 }
 
-// ErrActiveRunExists 表示该 Agent 已有进行中的执行（单一执行约束）。
+// ErrActiveRunExists means the Agent already has a run in progress (the single-run constraint).
 var ErrActiveRunExists = errors.New("Agent 已有进行中的执行")
 
-// ErrQueuedRunsExist 表示该 Agent 还有可以开始的排队执行：新消息不能越过它们直接开始。
+// ErrQueuedRunsExist means the Agent still has queued runs that can start: a new message must not skip ahead of them
+// and start directly.
 var ErrQueuedRunsExist = errors.New("Agent 还有排队的执行")
 
-// dispatchableQueued 是可以开始的排队执行的条件（表名 runs，不用别名）：sleep 唤醒那一轮要等 sleep 真的醒来，与 StartQueuedRun 的判断相同。
+// dispatchableQueued is the condition for a queued run that can start (table name runs, no alias): the sleep wake
+// turn must wait until the sleep has actually woken, the same check as in StartQueuedRun.
 const dispatchableQueued = `runs.status = 'queued' AND (runs.origin <> 'sleep_wake' OR EXISTS(SELECT 1 FROM agent_sleeps z WHERE z.id = runs.wake_sleep_id AND z.wake_run_id = runs.id AND z.state = 'woken'))`
 
-// runColumnsOf 返回 runs 的列，按 runFields 的顺序；prefix 为表别名加点，例如 "r."。
+// runColumnsOf returns the columns of runs, in the order of runFields; prefix is the table alias plus a dot, e.g. "r.".
 func runColumnsOf(prefix string) string {
 	return strings.NewReplacer("$.", prefix).Replace(`$.id, $.agent_id, coalesce($.user_message_id, '00000000-0000-0000-0000-000000000000'), $.config_version, $.instance_id, $.priority,
 	coalesce($.when_busy, ''), $.queue_seq, $.status, coalesce($.phase, ''), coalesce($.end_reason, ''), coalesce($.error_code, ''),
@@ -115,27 +120,30 @@ func scanMessage(row db.Scanner) (Message, error) {
 	return m, err
 }
 
-// NewRun 是插入用户消息与执行时的参数。
+// NewRun holds the parameters for inserting a user message and its run.
 type NewRun struct {
 	ImageIDs   []uuid.UUID
 	MaxImages  int
 	AgentID    uuid.UUID
 	RunID      uuid.UUID
 	Text       string
-	Start      bool   // true：直接以 starting 开始；false：排队
-	WhenBusy   string // interrupt / queue / 空
+	Start      bool   // true: start directly as starting; false: queue
+	WhenBusy   string // interrupt / queue / empty
 	InstanceID uuid.UUID
-	// RequestID 是发起这条消息的接口请求编号，记入入队或派发事件；可为空。
+	// RequestID is the ID of the API request that sent this message, recorded in the queued or dispatched event; may be
+	// empty.
 	RequestID string
-	// TriggerInboxID 不为空表示这是一轮平台提醒（origin = inbox_reminder），记下创建它的 Inbox 消息。
+	// A non-nil TriggerInboxID means this is a platform reminder turn (origin = inbox_reminder); it records the Inbox
+	// message that created it.
 	TriggerInboxID *uuid.UUID
 	Origin         string
 	WakeSleepID    *uuid.UUID
 }
 
-// InsertMessageAndRun 在一个事务中写入用户消息、对应执行，以及入队或派发事件。
-// Agent 不存在或已删除返回 not_found；会话丢失返回 session_missing；
-// Start 为 true 但已有进行中的执行时返回 ErrActiveRunExists，还有可以开始的排队执行时返回 ErrQueuedRunsExist。
+// InsertMessageAndRun writes, in one transaction, the user message, its run, and the queued or dispatched event.
+// Returns not_found when the Agent does not exist or is deleted, and session_missing when the session is missing;
+// when Start is true, returns ErrActiveRunExists if a run is already in progress and ErrQueuedRunsExist if there are
+// still queued runs that can start.
 func (s *Store) InsertMessageAndRun(ctx context.Context, in NewRun) (Message, Run, error) {
 	var msg Message
 	var run Run
@@ -249,18 +257,20 @@ func (s *Store) insertMessageAndRunTx(ctx context.Context, tx *db.Tx, in NewRun)
 	return msg, run, err
 }
 
-// ReminderOutcome 是写入 Inbox 消息时安排提醒的结果。
+// ReminderOutcome is the result of arranging a reminder when writing an Inbox message.
 type ReminderOutcome struct {
-	Created        bool     // 新建了一轮提醒：Message 与 Run 为它的用户消息与执行
-	Merged         bool     // 已有同优先级的排队提醒，本条消息并入其中：Run 为那一轮
-	SessionMissing bool     // 会话丢失，没有安排提醒；消息照常保存
-	Message        *Message // 新建时的用户消息
+	Created        bool     // a new reminder turn was created: Message and Run are its user message and run
+	Merged         bool     // merged into an existing queued reminder of the same priority: Run is that turn
+	SessionMissing bool     // the session is missing, so no reminder was arranged; the message is saved as usual
+	Message        *Message // the user message, when a new one was created
 	Run            *Run
 }
 
-// InsertInboxWithReminder 在一个事务中写入发给 Agent 的 Inbox 消息（msg 为空时不写消息）并安排提醒：
-// 锁住 Agent 行后，已有同优先级、排队中的提醒时并入它（不改动其触发消息）；否则按 rem 新建一轮。
-// 会话丢失时不安排提醒，消息照常保存。rem.Start 为 true 时调用方已取得忙闲锁。
+// InsertInboxWithReminder writes, in one transaction, an Inbox message for an Agent (no message is written when msg is
+// nil) and arranges a reminder: after locking the Agent row, if there is already a queued reminder with the same
+// priority, the message is merged into it (its trigger message is left unchanged); otherwise a new turn is created
+// from rem. When the session is missing no reminder is arranged and the message is saved as usual. When rem.Start is
+// true, the caller already holds the busy lock.
 func (s *Store) InsertInboxWithReminder(ctx context.Context, msg *NewInboxMessage, rem NewRun) (ReminderOutcome, error) {
 	var out ReminderOutcome
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -311,13 +321,14 @@ func (s *Store) InsertInboxWithReminder(ctx context.Context, msg *NewInboxMessag
 	return out, err
 }
 
-// SetMessageText 改写用户消息的正文（平台提醒那一轮开始执行时写入提醒文字）。
+// SetMessageText rewrites the text of a user message (the reminder text is written in when a platform reminder turn
+// starts running).
 func (s *Store) SetMessageText(ctx context.Context, id uuid.UUID, text string) (Message, error) {
 	m, err := scanMessage(s.Pool.QueryRow(ctx, `UPDATE conversation_messages SET text = $2 WHERE id = $1 RETURNING `+messageColumns, id, text))
 	return m, notFoundIfNoRows(err, "消息")
 }
 
-// GetRun 返回执行记录及其工具状态、用量合计与所用模型。
+// GetRun returns a run record with its tool status, total usage and the model used.
 func (s *Store) GetRun(ctx context.Context, id uuid.UUID) (Run, error) {
 	r, err := scanRun(s.Pool.QueryRow(ctx, `SELECT `+runColumns+` FROM runs WHERE id = $1`, id))
 	if err != nil {
@@ -326,13 +337,13 @@ func (s *Store) GetRun(ctx context.Context, id uuid.UUID) (Run, error) {
 	return r, s.fillRuns(ctx, &r)
 }
 
-// GetMessage 返回一条消息。
+// GetMessage returns one message.
 func (s *Store) GetMessage(ctx context.Context, id uuid.UUID) (Message, error) {
 	m, err := scanMessage(s.Pool.QueryRow(ctx, `SELECT `+messageColumns+` FROM conversation_messages WHERE id = $1`, id))
 	return m, notFoundIfNoRows(err, "消息")
 }
 
-// ActiveRun 返回 Agent 进行中的执行；没有时返回 nil。
+// ActiveRun returns the Agent's run in progress; nil when there is none.
 func (s *Store) ActiveRun(ctx context.Context, agentID uuid.UUID) (*Run, error) {
 	r, err := scanRun(s.Pool.QueryRow(ctx, `SELECT `+runColumns+` FROM runs WHERE agent_id = $1 AND status IN `+activeRunStatuses, agentID))
 	if errors.Is(err, db.ErrNoRows) {
@@ -344,7 +355,8 @@ func (s *Store) ActiveRun(ctx context.Context, agentID uuid.UUID) (*Run, error) 
 	return &r, nil
 }
 
-// QueuedRuns 按处理顺序（先打断、后普通，各自先到先处理）返回排队中的执行。
+// QueuedRuns returns the queued runs in handling order (interrupts first, then normal ones, each first come first
+// served).
 func (s *Store) QueuedRuns(ctx context.Context, agentID uuid.UUID) ([]Run, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT `+runColumns+` FROM runs WHERE agent_id = $1 AND status = 'queued' ORDER BY priority, queue_seq`, agentID)
 	if err != nil {
@@ -353,7 +365,8 @@ func (s *Store) QueuedRuns(ctx context.Context, agentID uuid.UUID) ([]Run, error
 	return db.CollectRows(rows, func(r db.CollectableRow) (Run, error) { return scanRun(r) })
 }
 
-// NextQueuedRun 返回 Agent 下一条可以开始的排队执行（先打断、后普通，各自按排入顺序）；没有时 ok 为 false。
+// NextQueuedRun returns the Agent's next queued run that can start (interrupts first, then normal ones, each in queue
+// order); ok is false when there is none.
 func (s *Store) NextQueuedRun(ctx context.Context, agentID uuid.UUID) (id uuid.UUID, ok bool, err error) {
 	err = s.Pool.QueryRow(ctx, `SELECT id FROM runs WHERE agent_id = $1 AND `+dispatchableQueued+` ORDER BY priority, queue_seq LIMIT 1`, agentID).Scan(&id)
 	if errors.Is(err, db.ErrNoRows) {
@@ -362,7 +375,7 @@ func (s *Store) NextQueuedRun(ctx context.Context, agentID uuid.UUID) (id uuid.U
 	return id, err == nil, err
 }
 
-// AgentsWithQueuedRuns 返回有排队执行的 Agent。
+// AgentsWithQueuedRuns returns the Agents that have queued runs.
 func (s *Store) AgentsWithQueuedRuns(ctx context.Context) ([]uuid.UUID, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT DISTINCT agent_id FROM runs WHERE status = 'queued'`)
 	if err != nil {
@@ -371,7 +384,7 @@ func (s *Store) AgentsWithQueuedRuns(ctx context.Context) ([]uuid.UUID, error) {
 	return db.CollectRows(rows, db.RowTo[uuid.UUID])
 }
 
-// ActiveRuns 返回全部进行中的执行。
+// ActiveRuns returns all runs in progress.
 func (s *Store) ActiveRuns(ctx context.Context) ([]Run, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT `+runColumns+` FROM runs WHERE status IN `+activeRunStatuses)
 	if err != nil {
@@ -380,7 +393,8 @@ func (s *Store) ActiveRuns(ctx context.Context) ([]Run, error) {
 	return db.CollectRows(rows, func(r db.CollectableRow) (Run, error) { return scanRun(r) })
 }
 
-// StartQueuedRun 把排队中的执行转为 starting 并记录派发事件；已不在排队状态时返回 false（已被处理），保证恰好处理一次。
+// StartQueuedRun turns a queued run into starting and records the dispatched event; returns false when it is no longer
+// queued (already handled), guaranteeing it is handled exactly once.
 func (s *Store) StartQueuedRun(ctx context.Context, runID, instanceID uuid.UUID) (Run, bool, error) {
 	var r Run
 	started := false
@@ -420,7 +434,7 @@ func (s *Store) StartQueuedRun(ctx context.Context, runID, instanceID uuid.UUID)
 	return r, started, nil
 }
 
-// SetRunPhase 更新 starting 状态下的阶段，并记录阶段开始事件。
+// SetRunPhase updates the phase while in the starting state and records a phase-started event.
 func (s *Store) SetRunPhase(ctx context.Context, runID uuid.UUID, phase string) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
 		var agentID uuid.UUID
@@ -435,7 +449,8 @@ func (s *Store) SetRunPhase(ctx context.Context, runID uuid.UUID, phase string) 
 	})
 }
 
-// SetRunRunning 把执行转为 running（打断中的执行保持 aborting），记录实际使用的配置版本、进入回复的时间与事件。
+// SetRunRunning turns a run into running (a run being interrupted stays aborting), and records the config version
+// actually used, the time it started replying, and the event.
 func (s *Store) SetRunRunning(ctx context.Context, runID uuid.UUID, configVersion int64) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
 		var agentID uuid.UUID
@@ -454,8 +469,10 @@ func (s *Store) SetRunRunning(ctx context.Context, runID uuid.UUID, configVersio
 	})
 }
 
-// MarkAborting 把 Agent 进行中的执行转为 aborting，记录发起打断的时间与事件（byRunID 为引发打断的消息所属的执行），
-// 返回该执行；没有进行中的执行时返回 nil。引发打断的执行若已被出队并开始，它不会打断自己。
+// MarkAborting turns the Agent's run in progress into aborting, records the time the interrupt was requested and the
+// event (byRunID is the run whose message caused the interrupt), and returns that run; returns nil when there is no
+// run in progress. If the run that caused the interrupt has already been dequeued and started, it does not interrupt
+// itself.
 func (s *Store) MarkAborting(ctx context.Context, agentID, byRunID uuid.UUID) (*Run, error) {
 	var out *Run
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -481,8 +498,9 @@ func (s *Store) MarkAborting(ctx context.Context, agentID, byRunID uuid.UUID) (*
 	return out, err
 }
 
-// RunNotQueuedDetails 是 run_not_queued 冲突的详情：排队项的当前状态。针对 Inbox 消息时带 MessageID 与 MessageState
-// （read / cancelled / dispatched / not_queued），RunID 为消息当前的承载执行，没有时为空。
+// RunNotQueuedDetails are the details of a run_not_queued conflict: the current state of the queue item. For an Inbox
+// message it carries MessageID and MessageState (read / cancelled / dispatched / not_queued), and RunID is the run
+// currently carrying the message, or nil when there is none.
 type RunNotQueuedDetails struct {
 	RunID        *uuid.UUID `json:"runId"`
 	Status       *string    `json:"status"`
@@ -491,37 +509,41 @@ type RunNotQueuedDetails struct {
 	MessageState string     `json:"messageState,omitempty"`
 }
 
-// RunNotActiveDetails 是 run_not_active 冲突的详情：要停止的执行当前的状态。
+// RunNotActiveDetails are the details of a run_not_active conflict: the current status of the run to stop.
 type RunNotActiveDetails struct {
 	RunID  uuid.UUID `json:"runId"`
 	Status string    `json:"status"`
 }
 
-// RunStatus 返回执行的当前状态。
+// RunStatus returns the current status of a run.
 func (s *Store) RunStatus(ctx context.Context, runID uuid.UUID) (string, error) {
 	var st string
 	err := s.Pool.QueryRow(ctx, `SELECT status FROM runs WHERE id = $1`, runID).Scan(&st)
 	return st, err
 }
 
-// RunEnd 是执行结束时的结果。
+// RunEnd is the result of a run when it ends.
 type RunEnd struct {
 	Status        string // completed / failed / interrupted
-	EndReason     string // user_interrupt / server_restart（仅 interrupted）
+	EndReason     string // user_interrupt / server_restart (only for interrupted)
 	ErrorCode     string
 	ErrorMessage  string
 	Text          string
-	ConfigVersion int64 // 为 0 时不改
-	// PiCommand 不为空时记下这一轮交给 Pi 的命令名；PiCommandHandled 表示 Pi 直接处理了命令。
+	ConfigVersion int64 // unchanged when 0
+	// When PiCommand is not empty, it records the command name this turn handed to Pi; PiCommandHandled means Pi
+	// handled the command directly.
 	PiCommand        string
 	PiCommandHandled bool
-	// PiCommandNotices 是 Pi 直接处理命令时扩展给出的通知（JSON 对象），为空时不记。
+	// PiCommandNotices holds the notices an extension gave when Pi handled a command directly (a JSON object); nothing
+	// is recorded when it is empty.
 	PiCommandNotices []byte
-	// Compaction 是手动压缩的结果（Outcome 等），并入执行开始时记下的指令；不是手动压缩或没有结果时为空。
+	// Compaction is the result of a manual compaction (Outcome and so on), merged into the instructions recorded when
+	// the run started; nil when it is not a manual compaction or has no result.
 	Compaction *Compaction
 }
 
-// FinishRun 结束一次进行中的执行，写入回复与结束事件。执行已结束时返回 (run, nil, false, nil)，不重复写入。
+// FinishRun ends a run in progress, writing the reply and the end event. When the run has already ended it returns
+// (run, nil, false, nil) and writes nothing again.
 func (s *Store) FinishRun(ctx context.Context, runID uuid.UUID, end RunEnd) (Run, *Message, bool, error) {
 	var run Run
 	var msg *Message
@@ -535,7 +557,8 @@ func (s *Store) FinishRun(ctx context.Context, runID uuid.UUID, end RunEnd) (Run
 			return err
 		}
 		var err error
-		// 被人停止的执行（stop_requested）以 user_stopped 结束，而不是被新消息打断的 user_interrupt。
+		// A run stopped by a person (stop_requested) ends as user_stopped, not as user_interrupt (interrupted by a new
+		// message).
 		run, err = scanRun(tx.QueryRow(ctx, `UPDATE runs SET status = $2, end_reason = CASE WHEN $3 = 'user_interrupt' AND stop_requested THEN 'user_stopped' ELSE $3 END,
 				error_code = $4, error_message = $5, phase = NULL, ended_at = $7, config_version = CASE WHEN $6 > 0 THEN $6 ELSE config_version END,
 				pi_command = coalesce($8, pi_command), pi_command_handled = $9, pi_command_notices = $10
@@ -596,7 +619,7 @@ func (s *Store) FinishRun(ctx context.Context, runID uuid.UUID, end RunEnd) (Run
 	return run, msg, finished, err
 }
 
-// AddToolEvent 记录一次工具状态。
+// AddToolEvent records one tool status.
 func (s *Store) AddToolEvent(ctx context.Context, runID uuid.UUID, ev ToolEvent) error {
 	_, err := s.Pool.Exec(ctx, `INSERT INTO run_tool_events (run_id, seq, tool_call_id, tool_name, state, at)
 		VALUES ($1, coalesce((SELECT max(seq) FROM run_tool_events WHERE run_id = $1), 0) + 1, $2, $3, $4, $5)`,
@@ -625,13 +648,14 @@ func (s *Store) toolsFor(ctx context.Context, runIDs []uuid.UUID) (map[uuid.UUID
 	return out, rows.Err()
 }
 
-// MessageWithRun 是历史中的一条消息及其所属执行。
+// MessageWithRun is one message in the history together with the run it belongs to.
 type MessageWithRun struct {
 	Message
 	Run Run
 }
 
-// MessageQuery 是对话历史的查询方式：Before、After、AroundRun 至多一个；都为空时取最新一页。
+// MessageQuery is how the conversation history is queried: at most one of Before, After and AroundRun; when all are
+// empty, the latest page is fetched.
 type MessageQuery struct {
 	Before    *uuid.UUID
 	After     *uuid.UUID
@@ -639,12 +663,13 @@ type MessageQuery struct {
 	Limit     int
 }
 
-// MessagePage 是一页消息及前后是否还有消息。
+// MessagePage is one page of messages, plus whether there are more messages before and after it.
 type MessagePage struct {
 	Items        []MessageWithRun
-	HasMore      bool // 这一页之前还有更早的消息
-	HasMoreAfter bool // 这一页之后还有更新的消息
-	// TurnsBefore 是排在这一页的轮次之前的轮次数，TurnsTotal 是对话的全部轮次数，口径见 turnCountsTx。
+	HasMore      bool // there are older messages before this page
+	HasMoreAfter bool // there are newer messages after this page
+	// TurnsBefore is the number of turns before the turns on this page, and TurnsTotal is the total number of turns in
+	// the conversation; see turnCountsTx for how they are counted.
 	TurnsBefore int64
 	TurnsTotal  int64
 }
@@ -653,7 +678,8 @@ var historySelect = `SELECT m.id, m.agent_id, m.seq, m.role, m.text, m.run_id, m
 		` + runColumnsOf("r.") + `
 	FROM conversation_messages m JOIN runs r ON r.id = m.run_id`
 
-// ListMessages 按查询方式返回一页消息，按时间正序，并给出轮次计数。消息与计数取自同一个快照。
+// ListMessages returns one page of messages for the query, oldest first, along with the turn counts. The messages and
+// the counts come from the same snapshot.
 func (s *Store) ListMessages(ctx context.Context, agentID uuid.UUID, q MessageQuery) (MessagePage, error) {
 	var page MessagePage
 	if _, err := s.GetAgent(ctx, agentID); err != nil {
@@ -688,7 +714,8 @@ func listMessagesTx(ctx context.Context, tx *db.Tx, agentID uuid.UUID, q Message
 		return seq, notFoundIfNoRows(err, "消息")
 	}
 	var items []MessageWithRun
-	// from 是这一页起点的消息序号：这一页有消息时为第一条的序号；没有时为它本该开始的位置。
+	// from is the message sequence number where this page starts: the sequence number of the first message when the
+	// page has messages; otherwise the position where it would have started.
 	var from int64
 	switch {
 	case q.AroundRun != nil:
@@ -725,7 +752,7 @@ func listMessagesTx(ctx context.Context, tx *db.Tx, agentID uuid.UUID, q Message
 		if len(items) > q.Limit {
 			items, page.HasMoreAfter = items[:q.Limit], true
 		}
-		page.HasMore = true // 锚点消息本身更早
+		page.HasMore = true // the anchor message itself is older
 		from = seq + 1
 	default:
 		seq := int64(1<<62 - 1)
@@ -734,7 +761,7 @@ func listMessagesTx(ctx context.Context, tx *db.Tx, agentID uuid.UUID, q Message
 			if seq, err = seqOf(*q.Before); err != nil {
 				return page, err
 			}
-			page.HasMoreAfter = true // 锚点消息本身更新
+			page.HasMoreAfter = true // the anchor message itself is newer
 		}
 		var err error
 		if items, err = historyPage(ctx, tx, agentID, `m.seq < $2 ORDER BY m.seq DESC`, seq, q.Limit+1); err != nil {
@@ -755,9 +782,11 @@ func listMessagesTx(ctx context.Context, tx *db.Tx, agentID uuid.UUID, q Message
 	return page, err
 }
 
-// aroundRunAnchor 返回定位取法的分界序号：分界及之后的消息排在定位页的后半，之前的排在前半。
-// 普通执行以它的用户消息为分界。手动压缩（console_compact）没有对话消息，以它开始时的位置为分界：
-// 之前的最后一条消息之后。执行不属于该 Agent 时返回 not_found。
+// aroundRunAnchor returns the boundary sequence number for the "around a run" query: messages at or after the
+// boundary go in the second half of the page, earlier ones in the first half.
+// A normal run uses its user message as the boundary. A manual compaction (console_compact) has no conversation
+// messages, so it uses its position at the time it started as the boundary: just after the last message before it.
+// Returns not_found when the run does not belong to this Agent.
 func aroundRunAnchor(ctx context.Context, q queueQuerier, agentID, runID uuid.UUID) (int64, error) {
 	var origin string
 	var queuedAt time.Time
@@ -778,22 +807,29 @@ func aroundRunAnchor(ctx context.Context, q queueQuerier, agentID, runID uuid.UU
 	return last + 1, err
 }
 
-// voidedRunCond 是“排队中即作废、没有真正执行”的执行（撤回、消息全部转为打断、消息已被读取或取消），
-// 与控制台对话流的 isVoidedRun 一致：这些执行不算轮次。
+// voidedRunCond matches runs "voided while queued, never actually run" (withdrawn, all messages turned into
+// interrupts, messages already read or cancelled), consistent with isVoidedRun in the console conversation stream:
+// these runs do not count as turns.
 const voidedRunCond = `r.end_reason IN ('user_cancelled', 'merged_into_interrupt', 'no_pending_messages')`
 
-// turnCountsTx 返回对话的轮次计数，口径与控制台对话流（web/src/features/chat/turns.ts 的 buildTurns）一致：
-// 一次执行算一轮，排队中的与作废的不算，会话重开不重新计数；轮次按实际开始执行的时间排列，没有开始时间的按入队时间。
+// turnCountsTx returns the turn counts of the conversation, counted the same way as the console conversation stream
+// (buildTurns in web/src/features/chat/turns.ts): one run is one turn, queued and voided runs do not count, and a
+// session restart does not reset the count; turns are ordered by the time they actually started running, or by queue
+// time when they have no start time.
 //
-// total 是全部轮次数。before 是排在“序号 from 及之后的消息所属的轮次”之前的轮次数：已经结束、
-// 所有消息（用户消息与回复）的序号都小于 from 的轮次。进行中的那一轮没有回复，用户消息再早也不计入：
-// 它总是最后一轮，由控制台的实时状态补在末尾。
+// total is the number of all turns. before is the number of turns ordered before "the turns that messages with
+// sequence number from or later belong to": turns that have ended and whose messages (user message and replies) all
+// have sequence numbers below from. The turn in progress has no reply, and is not counted however early its user
+// message is: it is always the last turn, and the console appends it at the end from its live status.
 //
-// 同一 Agent 同时只有一次执行在进行；sleep 唤醒只在空闲时排入。所以一轮排在另一轮之后时，它总有一条消息
-// 比前一轮的全部消息都晚（回复在开始之后写入，或入队晚于前一轮结束）；from 及之后的消息所属的轮次（加上进行中的那一轮）
-// 正好是全部轮次按上述顺序的一段后缀，before 就是这段后缀中第一轮的下标。
+// Only one run per Agent is in progress at a time, and a sleep wake is only queued while idle. So when one turn is
+// ordered after another, it always has a message later than all messages of the previous turn (replies are written
+// after it starts, or it was queued after the previous turn ended); the turns that messages from from on belong to
+// (plus the turn in progress) are exactly a suffix of all turns in the order above, and before is the index of the
+// first turn in that suffix.
 //
-// 计数按这个 Agent 的用户消息（每次执行恰好一条）逐条连接执行，开销与对话的轮次数成正比。
+// The count joins runs through this Agent's user messages (exactly one per run), so the cost is proportional to the
+// number of turns in the conversation.
 func turnCountsTx(ctx context.Context, tx *db.Tx, agentID uuid.UUID, from int64) (before, total int64, err error) {
 	err = tx.QueryRow(ctx, `SELECT count(*),
 			coalesce(sum(CASE WHEN m.seq < $2 AND r.status IN ('completed', 'failed', 'interrupted')

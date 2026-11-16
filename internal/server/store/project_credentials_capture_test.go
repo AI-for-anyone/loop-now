@@ -15,7 +15,8 @@ type projectCaptureGate struct {
 	entered, release chan struct{}
 }
 
-// hook 让采集停在读 Agent 行之前：采集所在的写事务已经开始（项目已读），还没结束。
+// hook stops the capture before it reads the Agent row: the write transaction the capture runs in has started (the
+// project has been read) but not finished.
 func (g *projectCaptureGate) hook(ctx context.Context, q string) {
 	if strings.Contains(q, "agents.prompt_version") && strings.Contains(q, "FROM agents WHERE id=$1") {
 		g.once.Do(func() {
@@ -78,7 +79,8 @@ func TestProjectCredentialCaptureSerializesEffectiveChanges(t *testing.T) {
 					written <- err
 				}
 			}()
-			// 写入停在等写连接上，证明它到了采集的写事务后面。
+			// The write is waiting for the write connection, proving it is queued behind the capture's write
+			// transaction.
 			sqlitetest.WaitWriteWaiters(t, ctx, e.s.Pool, 1)
 			select {
 			case err := <-written:

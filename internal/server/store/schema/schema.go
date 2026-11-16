@@ -1,12 +1,14 @@
-// Package schema 持有 SQLite 的表结构迁移并负责执行。版本 1 是基线（等同于 PostgreSQL 迁移 001–034
-// 执行完后的结构），之后的迁移照常追加。
+// Package schema holds the SQLite schema migrations and runs them. Version 1 is the baseline (equivalent to the schema
+// after PostgreSQL migrations 001-034 have run), and later migrations are appended as usual.
 //
-// 迁移由 goose（sqlite3 方言）在唯一的写连接上执行，每条迁移一个 BEGIN IMMEDIATE 事务。同一数据目录只有
-// 持实例锁的进程（服务或导入）执行迁移，所以不需要 goose 的表锁。
+// Migrations are run by goose (sqlite3 dialect) on the single write connection, one BEGIN IMMEDIATE transaction per
+// migration. Within one data directory only the process holding the instance lock (the server or an import) runs
+// migrations, so goose's table lock is not needed.
 //
-// 以后写迁移要记住 SQLite 的 ALTER TABLE 能力有限：改列类型、删改约束要按“新建表、复制、删旧表、改名”
-// 重建（https://sqlite.org/lang_altertable.html#otheralter），这类迁移标 -- +goose NO TRANSACTION，
-// 在迁移里自己处理 PRAGMA foreign_keys。
+// When writing future migrations, remember that SQLite's ALTER TABLE is limited: changing a column type, or dropping
+// or changing a constraint, requires a rebuild as "create a new table, copy, drop the old table, rename"
+// (https://sqlite.org/lang_altertable.html#otheralter); such migrations are marked -- +goose NO TRANSACTION and handle
+// PRAGMA foreign_keys themselves.
 package schema
 
 import (
@@ -24,7 +26,7 @@ import (
 //go:embed migrations/*.sql
 var migrationFiles embed.FS
 
-// Baseline 是基线迁移的版本号。
+// Baseline is the version of the baseline migration.
 const Baseline = 1
 
 func provider(d *db.DB, logger *slog.Logger) (*goose.Provider, error) {
@@ -38,7 +40,7 @@ func provider(d *db.DB, logger *slog.Logger) (*goose.Provider, error) {
 	)
 }
 
-// Migrate 按顺序执行尚未执行的迁移。
+// Migrate runs the migrations that have not run yet, in order.
 func Migrate(ctx context.Context, d *db.DB, logger *slog.Logger) error {
 	p, err := provider(d, logger)
 	if err != nil {
@@ -54,7 +56,8 @@ func Migrate(ctx context.Context, d *db.DB, logger *slog.Logger) error {
 	return nil
 }
 
-// MigrateTo 只执行到 version（含）为止的迁移；导入旧库时先停在基线，导入完再用 Migrate 执行其余迁移。
+// MigrateTo runs only the migrations up to and including version; when importing an old database it first stops at the
+// baseline, and after the import Migrate runs the remaining migrations.
 func MigrateTo(ctx context.Context, d *db.DB, logger *slog.Logger, version int64) error {
 	p, err := provider(d, logger)
 	if err != nil {
@@ -70,7 +73,7 @@ func MigrateTo(ctx context.Context, d *db.DB, logger *slog.Logger, version int64
 	return nil
 }
 
-// Version 返回已执行到的版本号；还没迁移时为 0。
+// Version returns the version migrated to so far; 0 when nothing has been migrated yet.
 func Version(ctx context.Context, d *db.DB) (int64, error) {
 	p, err := provider(d, slog.New(slog.DiscardHandler))
 	if err != nil {

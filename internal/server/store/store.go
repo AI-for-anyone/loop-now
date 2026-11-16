@@ -1,4 +1,5 @@
-// Package store 是服务端对 SQLite 的访问层（经 internal/server/db）：启动时迁移，以及各业务表的读写。
+// Package store is the server's access layer to SQLite (through internal/server/db): migrations at startup, and reads
+// and writes of the business tables.
 package store
 
 import (
@@ -13,12 +14,13 @@ import (
 	"loop-now/internal/server/store/schema"
 )
 
-// Store 持有连接池。
+// Store holds the connection pool.
 type Store struct {
 	ImageMaxCount int
 	// sleepScan tracks a bounded round of due candidates; it is not sleep authority.
 	sleepScan sleepScanProgress
-	// TaskCommitted在任务事务提交后唤醒事件流中继；启动时配置，运行中不修改。
+	// TaskCommitted wakes the event stream relay after a task transaction commits; configured at startup and not
+	// changed while running.
 	TaskCommitted func()
 	// VerificationInvalidated runs only after a credential/project mutation commits.
 	VerificationInvalidated func(uuid.UUID, *uuid.UUID)
@@ -27,13 +29,14 @@ type Store struct {
 	CLIImportDeletingTx func(context.Context, *db.Tx, uuid.UUID) error
 	CLIImportDeleted    func(uuid.UUID)
 	Pool                *db.DB
-	// InstanceID 写入运行记录事件，表示由哪个服务端实例记录（多实例预留）；为空时不记录。
+	// InstanceID is written into run record events to show which server instance recorded them (reserved for multiple
+	// instances); nothing is recorded when it is nil.
 	InstanceID *uuid.UUID
-	// pluginWake 在写了插件事件的事务提交后调用，见 SetPluginEventsCommitted。
+	// pluginWake is called after a transaction that wrote plugin events commits; see SetPluginEventsCommitted.
 	pluginWake atomic.Pointer[func()]
 }
 
-// Open 打开数据目录下的库。迁移由调用方另外调用 Migrate。
+// Open opens the databases in the data directory. The caller runs migrations separately with Migrate.
 func Open(ctx context.Context, o db.Options) (*Store, error) {
 	d, err := db.Open(ctx, o)
 	if err != nil {
@@ -42,31 +45,34 @@ func Open(ctx context.Context, o db.Options) (*Store, error) {
 	return New(d), nil
 }
 
-// New 在已打开的库上建 Store，并装上每个写事务提交前执行的钩子。
+// New builds a Store on already opened databases, and installs the hook that runs before each write transaction
+// commits.
 func New(d *db.DB) *Store {
 	s := &Store{Pool: d}
 	d.SetWriteHook(s.beforeCommit)
 	return s
 }
 
-// Close 关闭连接池。
+// Close closes the connection pool.
 func (s *Store) Close() { _ = s.Pool.Close() }
 
-// Ping 用于健康检查。
+// Ping is used for health checks.
 func (s *Store) Ping(ctx context.Context) error { return s.Pool.Ping(ctx) }
 
-// Migrate 按顺序执行尚未执行的迁移。每个迁移在一个写事务中执行，失败时库保持在该迁移之前的状态。
+// Migrate runs the migrations that have not run yet, in order. Each migration runs in one write transaction, and on
+// failure the database stays in its state before that migration.
 func (s *Store) Migrate(ctx context.Context, logger *slog.Logger) error {
 	return schema.Migrate(ctx, s.Pool, logger)
 }
 
-// MigrateTo 只执行到 version（含）为止的迁移。
+// MigrateTo runs only the migrations up to and including version.
 func (s *Store) MigrateTo(ctx context.Context, logger *slog.Logger, version int64) error {
 	return schema.MigrateTo(ctx, s.Pool, logger, version)
 }
 
-// uniqueTargets 把代码里沿用的 PostgreSQL 约束名对应到 SQLite 报唯一冲突时给出的表与列：
-// SQLite 对普通唯一约束和部分唯一索引只报列，不报约束名。新增按名判断时在这里登记。
+// uniqueTargets maps the PostgreSQL constraint names still used in the code to the table and columns SQLite reports
+// for a unique violation: for plain unique constraints and partial unique indexes SQLite reports only the columns, not
+// the constraint name. Register new name-based checks here.
 var uniqueTargets = map[string]struct {
 	table string
 	cols  []string
@@ -81,7 +87,8 @@ var uniqueTargets = map[string]struct {
 	"runs_one_active_per_agent":             {"runs", []string{"agent_id"}},
 }
 
-// isUniqueViolation 判断错误是否为指定约束的唯一冲突；constraint 为空时匹配任意唯一冲突。
+// isUniqueViolation reports whether the error is a unique violation of the given constraint; an empty constraint
+// matches any unique violation.
 func isUniqueViolation(err error, constraint string) bool {
 	if constraint == "" {
 		return db.IsAnyUniqueViolation(err)
@@ -93,7 +100,7 @@ func isUniqueViolation(err error, constraint string) bool {
 	return db.IsUniqueViolation(err, target.table, target.cols...)
 }
 
-// inTx 在写事务中执行 fn。
+// inTx runs fn in a write transaction.
 func (s *Store) inTx(ctx context.Context, fn func(*db.Tx) error) error {
 	return s.Pool.InTx(ctx, fn)
 }

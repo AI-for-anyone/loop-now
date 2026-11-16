@@ -1,6 +1,7 @@
 package store_test
 
-// 多个测试文件共用的辅助函数。原来散在已删除的 PostgreSQL 迁移测试里，改到 SQLite 时集中到这里。
+// Helper functions shared by several test files. They used to be scattered over the deleted PostgreSQL migration
+// tests and were gathered here when moving to SQLite.
 
 import (
 	"context"
@@ -40,7 +41,8 @@ type projectMigrationEnv struct {
 	project   uuid.UUID
 }
 
-// projectMigrationFixture 返回基线上的默认项目与模板目录（名字沿用 PostgreSQL 时期：那时先停在 011 再升级）。
+// projectMigrationFixture returns the default project and template directory on the baseline (the name is kept from
+// the PostgreSQL days, when the test first stopped at 011 and then upgraded).
 func projectMigrationFixture(t *testing.T) projectMigrationEnv {
 	t.Helper()
 	s := sqlitetest.NewStore(t)
@@ -64,7 +66,7 @@ func (e projectMigrationEnv) agent(t *testing.T, name, provider string) uuid.UUI
 	return a.ID
 }
 
-// insertCredentialRow 按当前结构写一行明文凭证（secret 列）。
+// insertCredentialRow writes one plaintext credential row (the secret column) using the current structure.
 func insertCredentialRow(t *testing.T, s *store.Store, table string, columns []string, values []any, plain []byte) {
 	t.Helper()
 	columns = append(columns, "secret")
@@ -160,14 +162,15 @@ func (e projectMigrationEnv) oldTask(t *testing.T, agent uuid.UUID, version int,
 	return runtime, task, raw
 }
 
-// sha256Hex 是快照内容的 SHA-256 十六进制串（task_instances.snapshot_sha）。
+// sha256Hex is the hex SHA-256 of the snapshot content (task_instances.snapshot_sha).
 func sha256Hex(b []byte) string {
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
 }
 
-// sleepPastWall 睡到墙钟（库里 clock_timestamp() 用的同一个时钟）过了 deadline 20ms 之后。
-// 只按单调时钟睡不够：虚拟机里墙钟会被校时往回拨几秒，期限在库看来还没到。
+// sleepPastWall sleeps until the wall clock (the same clock the database's clock_timestamp() uses) is 20ms past
+// deadline. Sleeping only by the monotonic clock is not enough: in a VM, time sync can set the wall clock back a few
+// seconds, so from the database's point of view the deadline has not passed yet.
 func sleepPastWall(deadline time.Time) {
 	target := deadline.Round(0).Add(20 * time.Millisecond)
 	for now := time.Now().Round(0); now.Before(target); now = time.Now().Round(0) {

@@ -93,24 +93,24 @@ func TestDefaultProjectCannotBeDeleted(t *testing.T) {
 	e := newProjEnv(t)
 	_, err := e.s.DeleteProject(e.ctx, e.dc.Project.ID)
 	wantErrCode(t, err, apperr.CodeValidationFailed)
-	// 数据库约束兜底。
+	// The database constraint is the safety net.
 	if _, err := e.s.Pool.Exec(e.ctx, `UPDATE projects SET deleted_at = $1 WHERE is_default`, time.Now()); err == nil {
 		t.Fatal("数据库应拒绝删除默认项目")
 	}
-	// 默认项目可以改名。
+	// The default project can be renamed.
 	if p, err := e.s.RenameProject(e.ctx, e.dc.Project.ID, "主项目"); err != nil || p.Name != "主项目" || !p.IsDefault {
 		t.Fatalf("默认项目应可以改名：%+v %v", p, err)
 	}
 }
 
-// ---- 平台 Agent 与范围 ----
+// ---- Platform Agents and scopes ----
 
 func TestPlatformAgentsAndScopes(t *testing.T) {
 	e := newProjEnv(t)
 	other := e.project("其他")
 	inDefault := e.agent(store.ProjectScope(e.dc.Project.ID), "助手")
-	inOther := e.agent(store.ProjectScope(other.ID), "助手") // 不同项目可以同名
-	platform := e.agent(store.PlatformScope(), "助手")       // 平台与项目可以同名
+	inOther := e.agent(store.ProjectScope(other.ID), "助手") // different projects can use the same name
+	platform := e.agent(store.PlatformScope(), "助手")       // the platform and a project can use the same name
 	if platform.ProjectID != nil || inDefault.ProjectID == nil || *inDefault.ProjectID != e.dc.Project.ID {
 		t.Fatalf("归属不对：平台 %v，项目 %v", platform.ProjectID, inDefault.ProjectID)
 	}
@@ -185,13 +185,13 @@ func TestProjectManager(t *testing.T) {
 		_, err := e.s.SetProjectManager(e.ctx, e.dc.Project.ID, x.ID)
 		wantErrCode(t, err, apperr.CodeValidationFailed)
 	}
-	// 数据库外键兜底：直接写入其他项目或平台的 Agent 会失败。
+	// The database foreign key is the safety net: writing an Agent from another project or the platform directly fails.
 	for _, x := range []store.Agent{foreign, platform} {
 		if _, err := e.s.Pool.Exec(e.ctx, `UPDATE projects SET manager_agent_id = $1 WHERE id = $2`, x.ID, e.dc.Project.ID); err == nil {
 			t.Fatalf("数据库应拒绝把 %s 设为 Manager", x.Name)
 		}
 	}
-	// 删除担任 Manager 的 Agent：同时取消 Manager。
+	// Deleting the Agent that is the Manager: the Manager is cleared too.
 	if err := e.s.SoftDeleteAgent(e.ctx, b.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +206,7 @@ func TestProjectManager(t *testing.T) {
 	}
 }
 
-// ---- 删除项目 ----
+// ---- Deleting projects ----
 
 func TestDeleteProject(t *testing.T) {
 	e := newProjEnv(t)
@@ -229,7 +229,7 @@ func TestDeleteProject(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 有排队消息：拒绝并列出不空闲的 Agent，项目与 Agent 都不变。
+	// With queued messages: rejected, listing the Agents that are not idle; neither the project nor the Agents change.
 	_, err = e.s.DeleteProject(e.ctx, p.ID)
 	ae, _ := apperr.As(err)
 	details, _ := ae.Details.(store.ProjectNotIdleDetails)
@@ -240,7 +240,8 @@ func TestDeleteProject(t *testing.T) {
 		t.Fatalf("被拒绝的删除不应改动项目：%+v %v", got, err)
 	}
 
-	// 执行结束后删除：Agent 软删除、凭证密文删除、Manager 取消、名称可再用。
+	// Deleting after the run ends: Agents are soft-deleted, encrypted credentials are deleted, the Manager is cleared,
+	// and the names can be reused.
 	if _, err := e.s.Pool.Exec(e.ctx, `UPDATE runs SET status = 'completed', ended_at = $2 WHERE id = $1`, run.ID, time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +266,7 @@ func TestDeleteProject(t *testing.T) {
 	wantErrCode(t, err, apperr.CodeNotFound)
 }
 
-// ---- 全局 Skills 库 ----
+// ---- Global Skills library ----
 
 func TestSkillTemplatesAreGlobal(t *testing.T) {
 	e := newProjEnv(t)
@@ -280,9 +281,10 @@ func TestSkillTemplatesAreGlobal(t *testing.T) {
 	}
 }
 
-// ---- 并发与边界（5.1）----
+// ---- Concurrency and edge cases (5.1) ----
 
-// 删除项目与在其中创建 Agent、向其中的 Agent 发消息并发：不会留下“已删除项目中有未删除 Agent”或已删除项目中有进行中的执行。
+// Deleting a project concurrently with creating an Agent in it and sending messages to its Agents: never leaves
+// "a non-deleted Agent in a deleted project" or a run in progress in a deleted project.
 func TestDeleteProjectConcurrency(t *testing.T) {
 	e := newProjEnv(t)
 	for round := range 10 {
@@ -330,7 +332,8 @@ func TestDeleteProjectConcurrency(t *testing.T) {
 	}
 }
 
-// 指定 Manager 与删除该 Agent 并发：不会死锁，也不会留下指向已删除 Agent 的 Manager。
+// Setting the Manager concurrently with deleting that Agent: no deadlock, and no Manager left pointing to a deleted
+// Agent.
 func TestSetManagerVsDeleteAgent(t *testing.T) {
 	e := newProjEnv(t)
 	for round := range 20 {

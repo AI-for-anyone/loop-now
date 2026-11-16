@@ -10,7 +10,7 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// projectColumns 返回项目及其未删除 Agent 的数量。
+// projectColumns returns the project and the number of its non-deleted Agents.
 const projectColumns = `p.id, p.organization_id, p.name, p.created_at, p.is_default, p.manager_agent_id, p.updated_at,
 	(SELECT count(*) FROM agents ca WHERE ca.project_id = p.id AND ca.deleted_at IS NULL)`
 
@@ -20,18 +20,18 @@ func scanProject(row db.Scanner) (Project, error) {
 	return p, err
 }
 
-// ProjectBusyAgent 是删除项目被拒绝时列出的不空闲 Agent。
+// ProjectBusyAgent is an Agent that is not idle, listed when deleting a project is rejected.
 type ProjectBusyAgent struct {
 	ID   uuid.UUID `json:"id"`
 	Name string    `json:"name"`
 }
 
-// ProjectNotIdleDetails 是删除项目时 agent_not_idle 错误的 details。
+// ProjectNotIdleDetails are the details of the agent_not_idle error when deleting a project.
 type ProjectNotIdleDetails struct {
 	Agents []ProjectBusyAgent `json:"agents"`
 }
 
-// ListProjects 列出组织下未删除的项目：默认项目在前，其余按名称排序。
+// ListProjects lists the non-deleted projects of an organization: the default project first, the rest sorted by name.
 func (s *Store) ListProjects(ctx context.Context, orgID uuid.UUID) ([]Project, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT `+projectColumns+` FROM projects p
 		WHERE p.organization_id = $1 AND p.deleted_at IS NULL ORDER BY p.is_default DESC, p.name COLLATE NOCASE, p.name, p.id`, orgID)
@@ -41,13 +41,13 @@ func (s *Store) ListProjects(ctx context.Context, orgID uuid.UUID) ([]Project, e
 	return db.CollectRows(rows, func(row db.CollectableRow) (Project, error) { return scanProject(row) })
 }
 
-// GetProject 返回未删除的项目。
+// GetProject returns a non-deleted project.
 func (s *Store) GetProject(ctx context.Context, id uuid.UUID) (Project, error) {
 	p, err := scanProject(s.Pool.QueryRow(ctx, `SELECT `+projectColumns+` FROM projects p WHERE p.id = $1 AND p.deleted_at IS NULL`, id))
 	return p, notFoundIfNoRows(err, "项目")
 }
 
-// CreateProject 在组织下新建项目。
+// CreateProject creates a project in an organization.
 func (s *Store) CreateProject(ctx context.Context, orgID uuid.UUID, name string) (Project, error) {
 	id := uuid.Must(uuid.NewV7())
 	if _, err := s.Pool.Exec(ctx, `INSERT INTO projects (id, organization_id, name) VALUES ($1, $2, $3)`, id, orgID, name); err != nil {
@@ -56,7 +56,8 @@ func (s *Store) CreateProject(ctx context.Context, orgID uuid.UUID, name string)
 	return s.GetProject(ctx, id)
 }
 
-// RenameProject 改名。地址由名称拼出，Agent 的地址随之变化，不需要改其他数据。
+// RenameProject renames a project. Addresses are built from the names, so Agent addresses change with it and no other
+// data needs to change.
 func (s *Store) RenameProject(ctx context.Context, id uuid.UUID, name string) (Project, error) {
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if err := requireLiveProject(ctx, tx, id); err != nil {
@@ -71,10 +72,12 @@ func (s *Store) RenameProject(ctx context.Context, id uuid.UUID, name string) (P
 	return s.GetProject(ctx, id)
 }
 
-// DeleteProject 软删除项目，返回随之删除的 Agent。
-// 任一未删除的 Agent 有进行中的执行或排队消息时返回 agent_not_idle（details 列出这些 Agent）。
-// 通过后：删除这些 Agent 的凭证密文，软删除 Agent 与项目，并取消 Manager。默认项目不能删除。
-// 停止 Pi 进程与删除凭证文件由调用方在提交后完成。
+// DeleteProject soft-deletes a project and returns the Agents deleted with it.
+// Returns agent_not_idle (details lists those Agents) when any non-deleted Agent has a run in progress or queued
+// messages.
+// Once that passes: deletes the encrypted credentials of these Agents, soft-deletes the Agents and the project, and
+// clears the Manager. The default project cannot be deleted.
+// The caller stops the Pi processes and deletes the credential files after commit.
 func (s *Store) DeleteProject(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error) {
 	var ids []uuid.UUID
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -113,7 +116,7 @@ func (s *Store) DeleteProject(ctx context.Context, id uuid.UUID) ([]uuid.UUID, e
 			}{id, active}
 			return conflict
 		}
-		// 写事务串行：从这里查忙闲到软删除之间不会有新的执行排进来。
+		// Write transactions are serialized: no new run can be queued between this busy check and the soft delete.
 		agentRows, err := tx.Query(ctx, `SELECT id FROM agents WHERE project_id = $1 AND deleted_at IS NULL ORDER BY id`, id)
 		if err != nil {
 			return err
@@ -183,14 +186,15 @@ func (s *Store) DeleteProject(ctx context.Context, id uuid.UUID) ([]uuid.UUID, e
 	return ids, nil
 }
 
-// SetProjectManager 指定或更换项目 Manager。Agent 必须是本项目内未删除的 Agent，否则字段 agentId 校验失败。
+// SetProjectManager sets or replaces the project's Manager. The Agent must be a non-deleted Agent of this project,
+// otherwise validation of the agentId field fails.
 func (s *Store) SetProjectManager(ctx context.Context, projectID, agentID uuid.UUID) (Project, error) {
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if err := requireLiveProject(ctx, tx, projectID); err != nil {
 			return err
 		}
 		var ok bool
-		// 与删除 Agent 同在写事务里串行，不会把已删除的 Agent 设为 Manager。
+		// Serialized with Agent deletion in write transactions, so a deleted Agent cannot be made Manager.
 		err := tx.QueryRow(ctx, `SELECT true FROM agents WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL`, agentID, projectID).Scan(&ok)
 		if err != nil {
 			if errors.Is(err, db.ErrNoRows) {
@@ -207,7 +211,7 @@ func (s *Store) SetProjectManager(ctx context.Context, projectID, agentID uuid.U
 	return s.GetProject(ctx, projectID)
 }
 
-// ClearProjectManager 取消项目 Manager；原本没有时也成功。
+// ClearProjectManager clears the project's Manager; also succeeds when there was none.
 func (s *Store) ClearProjectManager(ctx context.Context, projectID uuid.UUID) (Project, error) {
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if err := requireLiveProject(ctx, tx, projectID); err != nil {
@@ -222,14 +226,16 @@ func (s *Store) ClearProjectManager(ctx context.Context, projectID uuid.UUID) (P
 	return s.GetProject(ctx, projectID)
 }
 
-// requireLiveProject 确认项目存在且未删除。写事务串行，不需要锁行。
+// requireLiveProject confirms the project exists and is not deleted. Write transactions are serialized, so the row
+// does not need to be locked.
 func requireLiveProject(ctx context.Context, tx *db.Tx, id uuid.UUID) error {
 	var ok bool
 	err := tx.QueryRow(ctx, `SELECT true FROM projects WHERE id = $1 AND deleted_at IS NULL`, id).Scan(&ok)
 	return notFoundIfNoRows(err, "项目")
 }
 
-// projectNameConflict 把组织内重名的唯一约束冲突转为 name_conflict。
+// projectNameConflict turns a unique constraint violation for a duplicate name within an organization into
+// name_conflict.
 func projectNameConflict(err error, name string) error {
 	if isUniqueViolation(err, "projects_name_live") {
 		return apperr.Conflict(apperr.CodeNameConflict, "已有名为 "+name+" 的项目")

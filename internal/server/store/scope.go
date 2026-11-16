@@ -2,19 +2,20 @@ package store
 
 import "github.com/google/uuid"
 
-// Scope 是 Agent 的归属：某个项目，或平台（不属于任何组织或项目）。Agent 创建后归属不变。
+// Scope is where an Agent belongs: a project, or the platform (not in any organization or project). An Agent's scope
+// never changes after creation.
 type Scope struct {
-	ProjectID uuid.UUID // Platform 为 false 时有效
+	ProjectID uuid.UUID // valid when Platform is false
 	Platform  bool
 }
 
-// ProjectScope 返回项目范围。
+// ProjectScope returns a project scope.
 func ProjectScope(id uuid.UUID) Scope { return Scope{ProjectID: id} }
 
-// PlatformScope 返回平台范围。
+// PlatformScope returns the platform scope.
 func PlatformScope() Scope { return Scope{Platform: true} }
 
-// projectArg 返回写入 agents.project_id 的值：平台为 NULL。
+// projectArg returns the value written to agents.project_id: NULL for the platform.
 func (s Scope) projectArg() *uuid.UUID {
 	if s.Platform {
 		return nil
@@ -23,11 +24,13 @@ func (s Scope) projectArg() *uuid.UUID {
 	return &id
 }
 
-// ScopeFilter 是概览、用量与异常的筛选条件；零值表示全部（所有项目与平台）。
+// ScopeFilter is the filter for the overview, usage and anomalies; the zero value means everything (all projects and
+// the platform).
 type ScopeFilter struct {
-	ProjectID *uuid.UUID // 只看这个项目
-	Platform  bool       // 只看平台 Agent
+	ProjectID *uuid.UUID // only this project
+	Platform  bool       // only platform Agents
 }
 
-// args 返回 SQL 条件 `($n IS NULL OR a.project_id = $n) AND (NOT $m OR a.project_id IS NULL)` 的两个参数。
+// args returns the two arguments of the SQL condition
+// `($n IS NULL OR a.project_id = $n) AND (NOT $m OR a.project_id IS NULL)`.
 func (f ScopeFilter) args() (*uuid.UUID, bool) { return f.ProjectID, f.Platform }

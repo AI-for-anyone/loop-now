@@ -8,15 +8,15 @@ import (
 	"loop-now/internal/server/apperr"
 )
 
-// LocalModeSettings 是个人版“本机模式”的三个全局开关。
+// LocalModeSettings are the three global switches of "本机模式" ("Local mode") in the personal edition.
 type LocalModeSettings struct {
-	Directories bool `json:"directories"` // 绑定本机目录
-	Git         bool `json:"git"`         // “从 Git 拉取”用本机的 git 身份
-	CLI         bool `json:"cli"`         // 执行 PATH 之后接上用户的 PATH
-	Logins      bool `json:"logins"`      // Pi 的执行环境沿用用户真实的 HOME（默认关闭）
+	Directories bool `json:"directories"` // bind local directories
+	Git         bool `json:"git"`         // "从 Git 拉取" ("Pull from Git") uses the local git identity
+	CLI         bool `json:"cli"`         // append the user's PATH after the run PATH
+	Logins      bool `json:"logins"`      // Pi's run environment keeps the user's real HOME (off by default)
 }
 
-// LocalModeSettingsPatch 只改非空的字段。
+// LocalModeSettingsPatch changes only the non-nil fields.
 type LocalModeSettingsPatch struct {
 	Directories *bool
 	Git         *bool
@@ -24,26 +24,26 @@ type LocalModeSettingsPatch struct {
 	Logins      *bool
 }
 
-// LocalDirectoryEntry 是本机目录清单的一项；备注为空表示没有备注。
+// LocalDirectoryEntry is one item in a local directory list; an empty note means there is no note.
 type LocalDirectoryEntry struct {
 	Path string `json:"path"`
 	Note string `json:"note,omitempty"`
 }
 
-// LocalDirectoryList 是一份本机目录清单；从未保存过时 Revision 为 0、清单为空。
+// LocalDirectoryList is a local directory list; when it has never been saved, Revision is 0 and the list is empty.
 type LocalDirectoryList struct {
 	Revision    int64
 	Directories []LocalDirectoryEntry
 }
 
-// GetLocalModeSettings 读取本机模式开关。
+// GetLocalModeSettings reads the local mode switches.
 func (s *Store) GetLocalModeSettings(ctx context.Context) (LocalModeSettings, error) {
 	var out LocalModeSettings
 	err := s.Pool.QueryRow(ctx, `SELECT directories, git, cli, logins FROM local_mode_settings WHERE singleton`).Scan(&out.Directories, &out.Git, &out.CLI, &out.Logins)
 	return out, err
 }
 
-// UpdateLocalModeSettings 修改 p 中给出的开关，返回修改后的全部开关。
+// UpdateLocalModeSettings changes the switches given in p and returns all switches after the change.
 func (s *Store) UpdateLocalModeSettings(ctx context.Context, p LocalModeSettingsPatch) (LocalModeSettings, error) {
 	var out LocalModeSettings
 	err := s.Pool.QueryRow(ctx, `UPDATE local_mode_settings SET directories = coalesce($1, directories), git = coalesce($2, git), cli = coalesce($3, cli), logins = coalesce($4, logins), updated_at = now()
@@ -51,7 +51,7 @@ func (s *Store) UpdateLocalModeSettings(ctx context.Context, p LocalModeSettings
 	return out, err
 }
 
-// localDirectoryOwner 是清单所在的表与主键列。
+// localDirectoryOwner is the table and primary key column that hold the list.
 type localDirectoryOwner struct{ table, column string }
 
 var (
@@ -59,22 +59,24 @@ var (
 	agentLocalDirectories   = localDirectoryOwner{"agent_local_directories", "agent_id"}
 )
 
-// ProjectLocalDirectories 读取项目的本机目录清单（不检查项目是否存在）。
+// ProjectLocalDirectories reads the project's local directory list (without checking that the project exists).
 func (s *Store) ProjectLocalDirectories(ctx context.Context, projectID uuid.UUID) (LocalDirectoryList, error) {
 	return s.localDirectories(ctx, projectLocalDirectories, projectID)
 }
 
-// AgentLocalDirectories 读取 Agent 自己的本机目录清单（不检查 Agent 是否存在）。
+// AgentLocalDirectories reads the Agent's own local directory list (without checking that the Agent exists).
 func (s *Store) AgentLocalDirectories(ctx context.Context, agentID uuid.UUID) (LocalDirectoryList, error) {
 	return s.localDirectories(ctx, agentLocalDirectories, agentID)
 }
 
-// PutProjectLocalDirectories 在修订号仍为 expected 时整体替换项目的清单；否则返回 412。
+// PutProjectLocalDirectories replaces the project's list as a whole while the revision is still expected; otherwise
+// returns 412.
 func (s *Store) PutProjectLocalDirectories(ctx context.Context, projectID uuid.UUID, expected int64, dirs []LocalDirectoryEntry) (LocalDirectoryList, error) {
 	return s.putLocalDirectories(ctx, projectLocalDirectories, projectID, expected, dirs)
 }
 
-// PutAgentLocalDirectories 在修订号仍为 expected 时整体替换 Agent 自己的清单；否则返回 412。
+// PutAgentLocalDirectories replaces the Agent's own list as a whole while the revision is still expected; otherwise
+// returns 412.
 func (s *Store) PutAgentLocalDirectories(ctx context.Context, agentID uuid.UUID, expected int64, dirs []LocalDirectoryEntry) (LocalDirectoryList, error) {
 	return s.putLocalDirectories(ctx, agentLocalDirectories, agentID, expected, dirs)
 }
@@ -110,7 +112,8 @@ func (s *Store) putLocalDirectories(ctx context.Context, o localDirectoryOwner, 
 	return out, err
 }
 
-// AgentProjectID 返回 Agent（含已删除的，任务可能仍在用它的配置）所属的项目；平台 Agent 为 nil。
+// AgentProjectID returns the project the Agent belongs to (including deleted Agents, whose configuration a task may
+// still be using); nil for a platform Agent.
 func (s *Store) AgentProjectID(ctx context.Context, agentID uuid.UUID) (*uuid.UUID, error) {
 	var projectID *uuid.UUID
 	err := s.Pool.QueryRow(ctx, `SELECT project_id FROM agents WHERE id = $1`, agentID).Scan(&projectID)

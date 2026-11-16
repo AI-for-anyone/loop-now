@@ -12,13 +12,13 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// 凭证用途。
+// Credential purposes.
 const (
 	PurposeModel = "model"
 	PurposeCLI   = "cli"
 )
 
-// CredentialRow 是一条凭证（明文）及其元数据。
+// CredentialRow is one credential (plaintext) with its metadata.
 type CredentialRow struct {
 	LarkBinding     *clicredential.LarkBinding
 	GoogleBinding   *clicredential.Binding
@@ -36,7 +36,7 @@ type CredentialRow struct {
 	UpdatedAt       time.Time
 }
 
-// CredentialMeta 是写入时附带的元数据。
+// CredentialMeta is the metadata attached when writing.
 type CredentialMeta struct {
 	TemplateVersion string
 	FieldNames      []string
@@ -44,7 +44,7 @@ type CredentialMeta struct {
 	FilePaths       []string
 }
 
-// ListAgentCLIs 返回 Agent 的可用 CLI 名称。
+// ListAgentCLIs returns the names of the Agent's available CLIs.
 func (s *Store) ListAgentCLIs(ctx context.Context, agentID uuid.UUID) ([]string, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT cli_name FROM agent_clis WHERE agent_id = $1 ORDER BY cli_name`, agentID)
 	if err != nil {
@@ -53,7 +53,7 @@ func (s *Store) ListAgentCLIs(ctx context.Context, agentID uuid.UUID) ([]string,
 	return db.CollectRows(rows, db.RowTo[string])
 }
 
-// AddAgentCLI 把 CLI 加入可用列表；已存在时不变。
+// AddAgentCLI adds a CLI to the available list; does nothing when it is already there.
 func (s *Store) AddAgentCLI(ctx context.Context, agentID uuid.UUID, name string) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
 		if err := lockAgentProjectTx(ctx, tx, agentID); err != nil {
@@ -73,7 +73,7 @@ func (s *Store) AddAgentCLI(ctx context.Context, agentID uuid.UUID, name string)
 	})
 }
 
-// RemoveAgentCLI 从可用列表移除 CLI，其凭证经外键级联删除。
+// RemoveAgentCLI removes a CLI from the available list; its credentials are deleted by the foreign key cascade.
 func (s *Store) RemoveAgentCLI(ctx context.Context, agentID uuid.UUID, name string) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
 		if err := lockAgentProjectTx(ctx, tx, agentID); err != nil {
@@ -106,7 +106,7 @@ func scanCredential(row db.Scanner) (CredentialRow, error) {
 	return c, err
 }
 
-// ListCredentials 返回 Agent 的全部凭证（内容与元数据）。
+// ListCredentials returns all of the Agent's credentials (content and metadata).
 func (s *Store) ListCredentials(ctx context.Context, agentID uuid.UUID) ([]CredentialRow, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT `+credentialColumns+` FROM agent_credentials WHERE agent_id = $1 ORDER BY purpose, cli_name`, agentID)
 	if err != nil {
@@ -115,8 +115,8 @@ func (s *Store) ListCredentials(ctx context.Context, agentID uuid.UUID) ([]Crede
 	return db.CollectRows(rows, func(r db.CollectableRow) (CredentialRow, error) { return scanCredential(r) })
 }
 
-// PutCredential 整体覆盖 Agent 的一条凭证。
-// CLI 凭证要求该 CLI 已在可用列表中。
+// PutCredential overwrites one of the Agent's credentials as a whole.
+// A CLI credential requires the CLI to be in the available list already.
 func (s *Store) PutCredential(ctx context.Context, agentID uuid.UUID, purpose, cliName string, meta CredentialMeta,
 	secret []byte) (CredentialRow, error) {
 	var row CredentialRow
@@ -159,7 +159,7 @@ func (s *Store) PutCredential(ctx context.Context, agentID uuid.UUID, purpose, c
 	return row, err
 }
 
-// DeleteCredential 删除一条凭证。
+// DeleteCredential deletes one credential.
 func (s *Store) DeleteCredential(ctx context.Context, agentID uuid.UUID, purpose, cliName string) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
 		if a, err := lockAgent(ctx, tx, agentID); err != nil {

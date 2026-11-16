@@ -55,7 +55,8 @@ type TaskMutation struct {
 	unchanged bool
 }
 
-// Unchanged 表示仅检查/读状态，不产生版本和通知风暴。
+// Unchanged marks that the mutation only checked/read state, so it produces no new version and no storm of
+// notifications.
 func (m *TaskMutation) Unchanged() { m.unchanged = true }
 func (m *TaskMutation) Changed()   { m.unchanged = false }
 
@@ -113,7 +114,8 @@ func saveTask(ctx context.Context, tx *db.Tx, r *taskmodel.Record) error {
 	return settleProjectWipesTx(ctx, tx, project)
 }
 func emitTaskEvents(ctx context.Context, tx *db.Tx, m *TaskMutation) error {
-	// 项目事件跨任务续传：序号分配与事务提交必须串行，否则后提交的小序号会被游标跳过。
+	// Project events are resumable across tasks: sequence number allocation and transaction commit must be serialized,
+	// otherwise a smaller sequence number committed later would be skipped by the cursor.
 	if err := m.Emit("task.updated", map[string]any{"task": m.Record.View.Task}); err != nil {
 		return err
 	}
@@ -137,8 +139,10 @@ func emitTaskEvents(ctx context.Context, tx *db.Tx, m *TaskMutation) error {
 	return nil
 }
 
-// emitTaskPluginEventsTx 比较任务前后两份文档（新建时 before 为空），为任务与节点的状态变化写插件的观察类事件。
-// task.started 只在第一次从 preparing 进入 running 时写；node.started 在节点新出现或从 queued 进入 running 时写。
+// emitTaskPluginEventsTx compares the task documents before and after (before is nil on creation) and writes plugin
+// observation events for state changes of the task and its nodes.
+// task.started is written only the first time the task goes from preparing to running; node.started is written when a
+// node newly appears or goes from queued to running.
 func emitTaskPluginEventsTx(ctx context.Context, tx *db.Tx, before, after *taskmodel.Record) error {
 	t := after.View.Task
 	project, task := t.ProjectID, t.ID
@@ -187,14 +191,16 @@ func emitTaskPluginEventsTx(ctx context.Context, tx *db.Tx, before, after *taskm
 	return nil
 }
 
-// TaskActionRecorded 报告这个身份的动作 ID 是否已经执行过（重放时直接返回原结果，不再询问插件）。
+// TaskActionRecorded reports whether this identity's action ID has already run (a replay returns the original result
+// directly, without asking the plugin again).
 func (s *Store) TaskActionRecorded(ctx context.Context, actorKey string, id uuid.UUID) (bool, error) {
 	var found bool
 	err := s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM task_actions WHERE actor_key=$1 AND action_id=$2)`, actorKey, id).Scan(&found)
 	return found, err
 }
 
-// MutateTask 锁顺序：动作幂等锁 → 项目SHARE → 任务UPDATE。函数内不得倒锁项目/Agent。
+// MutateTask lock order: action idempotency lock -> project SHARE -> task UPDATE. Inside the function the
+// project/Agent must not be locked in reverse order.
 func (s *Store) MutateTask(ctx context.Context, id uuid.UUID, action *TaskAction, fn func(*TaskMutation) (any, error)) (json.RawMessage, error) {
 	var out json.RawMessage
 	changed := false
@@ -273,7 +279,8 @@ func (s *Store) MutateTask(ctx context.Context, id uuid.UUID, action *TaskAction
 			}
 			changed = true
 		}
-		// 返回视图必须在version/time更新后编码，避免幂等响应里的版本落后一轮。
+		// The returned view must be encoded after version/time are updated, so the version in an idempotent response is
+		// not one revision behind.
 		switch value.(type) {
 		case taskmodel.Detail, *taskmodel.Detail:
 			projected := record.View
@@ -325,7 +332,9 @@ func (s *Store) CreateTask(ctx context.Context, projectID, managerID uuid.UUID, 
 		if r.View.Task.Status != "preparing" || r.View.Task.Version != 1 {
 			return apperr.Invalid("task", "任务初始状态无效")
 		}
-		// 编号取项目计数器的下一个：写事务串行，同一项目并发创建也不会拿到同一个号；失败回滚时计数器一起回滚。
+		// The number is the next value of the project counter: write transactions are serialized, so concurrent
+		// creations in the same project never get the same number; if the creation fails and rolls back, the counter
+		// rolls back with it.
 		if err = tx.QueryRow(ctx, `UPDATE projects SET last_task_number=last_task_number+1 WHERE id=$1 RETURNING last_task_number`, projectID).Scan(&r.View.Task.Number); err != nil {
 			return err
 		}
@@ -412,8 +421,9 @@ func parseTaskCursor(cursor string) (time.Time, uuid.UUID, error) {
 	return time.Time{}, uuid.Nil, apperr.Invalid("cursor", "游标无效")
 }
 
-// CountTasks 按状态统计未删除项目里未结束的任务。ended_at 为空恰好是这四种状态（task_records_check），
-// 条件写成 ended_at IS NULL 才能用部分索引 task_records_unfinished，只读未结束的行。
+// CountTasks counts, by status, the unfinished tasks in non-deleted projects. A nil ended_at corresponds exactly to
+// these four statuses (task_records_check); the condition is written as ended_at IS NULL so that the partial index
+// task_records_unfinished can be used and only unfinished rows are read.
 func (s *Store) CountTasks(ctx context.Context, projectID uuid.UUID) (taskmodel.Counts, error) {
 	if _, err := s.GetProject(ctx, projectID); err != nil {
 		return taskmodel.Counts{}, err
@@ -556,7 +566,8 @@ func decodeTaskJSON(raw []byte, out any) error {
 }
 func encodeTaskJSON(value any) ([]byte, error) { return json.Marshal(value) }
 
-// TaskSnapshot 锁住任务聚合读取快照与事件检查点，避免两次独立查询漏掉并发更新。
+// TaskSnapshot reads the task aggregate's snapshot and the event checkpoint under a lock, so that two independent
+// queries cannot miss a concurrent update.
 func (s *Store) TaskSnapshot(ctx context.Context, id uuid.UUID) (taskmodel.Detail, int64, error) {
 	var detail taskmodel.Detail
 	var position int64

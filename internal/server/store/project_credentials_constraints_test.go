@@ -24,7 +24,7 @@ type credentialConstraintCase struct {
 
 func TestProjectCredentialNativeConstraints(t *testing.T) {
 	ctx := context.Background()
-	st := sqlitetest.NewStore(t) // 基线即全部结构（包括原来 PostgreSQL 的 012 凭证约束）。
+	st := sqlitetest.NewStore(t) // the baseline is the whole schema (incl. the old PostgreSQL 012 credential constraints)
 	templates, err := clitemplate.Load("")
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +114,8 @@ func TestProjectCredentialNativeConstraints(t *testing.T) {
 			t.Fatal("CLI credential control failed")
 		}
 	}
-	// 约束名沿用 PostgreSQL 的（包括自动生成的）；按表与定义开头在基线的建表语句里找到唯一的那个。
+	// Constraint names are kept from PostgreSQL (including generated ones); find the unique one in the baseline's
+	// CREATE TABLE statements by table and the start of the definition.
 	native := func(table, definition string) string {
 		t.Helper()
 		var ddl string
@@ -241,8 +242,10 @@ func TestProjectCredentialNativeConstraints(t *testing.T) {
 	})
 }
 
-// nativeRejection 报告 err 是否为用例期望的那种约束失败。SQLite 的 CHECK 报约束名、NOT NULL 报表与列；
-// 外键失败不报约束名，只看结果码（约束名已由基线与 PostgreSQL 的对照测试核对）。
+// nativeRejection reports whether err is the kind of constraint failure the case expects. SQLite's CHECK reports the
+// constraint name and NOT NULL reports the table and column; a foreign key failure reports no constraint name, so only
+// the result code is checked (constraint names have already been verified by the test comparing the baseline with
+// PostgreSQL).
 func nativeRejection(err error, c credentialConstraintCase) bool {
 	if err == nil {
 		return false

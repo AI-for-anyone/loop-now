@@ -1,9 +1,11 @@
 package store
 
-// 插件事件的生成。PostgreSQL 时由触发器（plugin_on_agent、plugin_on_sleep、plugin_on_lifecycle、plugin_on_inbox_message、
-// plugin_on_inbox_question）与 plugin_emit 在写入的同一事务里直接写 plugin_events；SQLite 下捕获触发器只在
-// plugin_changes（events.db 的生命周期事件在 plugin_lifecycle_changes）记下“发生了什么”，每个写事务提交前由
-// beforeCommit 读出、在同一事务里生成事件并清空。规则与原来的 PL/pgSQL 逐条对应。
+// Generating plugin events. Under PostgreSQL, triggers (plugin_on_agent, plugin_on_sleep, plugin_on_lifecycle,
+// plugin_on_inbox_message, plugin_on_inbox_question) and plugin_emit wrote plugin_events directly in the same
+// transaction as the write; under SQLite, capture triggers only record "what happened" in plugin_changes (lifecycle
+// events of events.db go to plugin_lifecycle_changes), and before each write transaction commits, beforeCommit reads
+// them, generates the events in the same transaction and clears them. The rules correspond one to one to the
+// original PL/pgSQL.
 
 import (
 	"context"
@@ -18,8 +20,8 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// SetPluginEventsCommitted 设置写了插件事件的事务提交后要调用的函数（插件服务把它设为唤醒宿主投递，
-// 代替 PostgreSQL 的 LISTEN/NOTIFY）。
+// SetPluginEventsCommitted sets the function to call after a transaction that wrote plugin events commits (the plugin
+// service sets it to wake the plugin host for delivery, replacing PostgreSQL's LISTEN/NOTIFY).
 func (s *Store) SetPluginEventsCommitted(f func()) { s.pluginWake.Store(&f) }
 
 func (s *Store) pluginEventsCommitted() {
@@ -28,7 +30,8 @@ func (s *Store) pluginEventsCommitted() {
 	}
 }
 
-// pluginEventsWritten 是事务上的标记：这个事务写了插件事件，提交后要唤醒宿主。
+// pluginEventsWritten is a marker on a transaction: this transaction wrote plugin events, so the plugin host must be
+// woken after commit.
 type pluginEventsWritten struct{}
 
 type pluginChange struct {
@@ -37,13 +40,15 @@ type pluginChange struct {
 	data  map[string]json.RawMessage
 }
 
-// deferred 报告这类变更原来是否由延迟到提交时的触发器处理（Inbox 消息与提问）。
+// deferred reports whether this kind of change was originally handled by a trigger deferred to commit time (Inbox
+// messages and questions).
 func (c pluginChange) deferred() bool {
 	return strings.HasPrefix(c.kind, "inbox.") || strings.HasPrefix(c.kind, "question.")
 }
 
-// beforeCommit 在每个写事务提交前执行（见 db.SetWriteHook）：把捕获触发器记下的变更变成插件事件。
-// 没有变更时只有一次查询。
+// beforeCommit runs before each write transaction commits (see db.SetWriteHook): it turns the changes recorded by the
+// capture triggers into plugin events.
+// When there are no changes it costs a single query.
 func (s *Store) beforeCommit(ctx context.Context, tx *db.Tx) error {
 	rows, err := tx.Query(ctx, `SELECT 0, ord, kind, row_id, data FROM plugin_changes
 		UNION ALL SELECT 1, ord, 'lifecycle', row_id, '{}' FROM plugin_lifecycle_changes ORDER BY 2`)
@@ -94,8 +99,9 @@ func (s *Store) beforeCommit(ctx context.Context, tx *db.Tx) error {
 		}
 	}
 	e := &pluginEmitter{tx: tx}
-	// 原来的立即触发器在语句结束时执行，延迟触发器（Inbox 消息与提问）在提交时执行：
-	// 先按写入顺序处理前者（两个库的变更按 ord 合在一起），再处理后者。
+	// The original immediate triggers ran at the end of each statement, and the deferred triggers (Inbox messages and
+	// questions) at commit: handle the former first in write order (changes from both databases are merged by ord),
+	// then the latter.
 	for _, c := range append(immediate, deferred...) {
 		if err := e.change(ctx, c); err != nil {
 			return fmt.Errorf("生成插件事件（%s %s）失败：%w", c.kind, c.rowID, err)
@@ -104,7 +110,7 @@ func (s *Store) beforeCommit(ctx context.Context, tx *db.Tx) error {
 	return nil
 }
 
-// pluginEmitter 在一个写事务里生成插件事件。
+// pluginEmitter generates plugin events within one write transaction.
 type pluginEmitter struct {
 	tx       *db.Tx
 	disabled *bool
@@ -128,7 +134,7 @@ func (e *pluginEmitter) change(ctx context.Context, c pluginChange) error {
 	return fmt.Errorf("未知的变更类型 %q", c.kind)
 }
 
-// ---------- 基础：订阅、启用、写入 ----------
+// ---------- Basics: subscriptions, enablement, writing ----------
 
 func (e *pluginEmitter) pluginsDisabled(ctx context.Context) (bool, error) {
 	if e.disabled == nil {
@@ -141,7 +147,7 @@ func (e *pluginEmitter) pluginsDisabled(ctx context.Context) (bool, error) {
 	return *e.disabled, nil
 }
 
-// subscribed 对应 plugin_subscribed：有插件在清单里订阅了这类事件。
+// subscribed corresponds to plugin_subscribed: some plugin subscribes to this kind of event in its manifest.
 func (e *pluginEmitter) subscribed(ctx context.Context, typ string) (bool, error) {
 	var ok bool
 	err := e.tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM plugins p, json_each(p.manifest, '$.events') ev WHERE ev.value = $1)`, typ).Scan(&ok)
@@ -155,8 +161,9 @@ type pluginEvent struct {
 	data                      any
 }
 
-// emit 对应 plugin_emit_excluding：插件总开关关闭时不写；按订阅与项目启用选出插件（排除 exclude），
-// 没有订阅者时不写；否则写事件与每个订阅者的投递记录。
+// emit corresponds to plugin_emit_excluding: writes nothing when the plugin master switch is off; picks plugins by
+// subscription and project enablement (excluding exclude), and writes nothing when there are no subscribers; otherwise
+// writes the event and a delivery record for each subscriber.
 func (e *pluginEmitter) emit(ctx context.Context, ev pluginEvent, exclude string) error {
 	if off, err := e.pluginsDisabled(ctx); err != nil || off {
 		return err
@@ -179,7 +186,7 @@ func (e *pluginEmitter) emit(ctx context.Context, ev pluginEvent, exclude string
 	return e.write(ctx, ev, subscribers)
 }
 
-// write 写一条事件与给定插件的投递记录，并在提交后唤醒宿主。
+// write writes one event and the delivery records for the given plugins, and wakes the plugin host after commit.
 func (e *pluginEmitter) write(ctx context.Context, ev pluginEvent, plugins []string) error {
 	id := NewPluginEventID()
 	data := ev.data
@@ -202,7 +209,7 @@ func (e *pluginEmitter) write(ctx context.Context, ev pluginEvent, plugins []str
 	return nil
 }
 
-// ---------- 取数 ----------
+// ---------- Fetching data ----------
 
 func (e *pluginEmitter) agentProject(ctx context.Context, agent *uuid.UUID) (*uuid.UUID, error) {
 	if agent == nil {
@@ -228,7 +235,8 @@ func (e *pluginEmitter) runtimeTask(ctx context.Context, runtime *uuid.UUID) (*u
 	return t, err
 }
 
-// party 对应 plugin_party：消息一方的 kind、id 与地址（Agent 为 组织/项目/名称#任务，外部身份为 @名称，插件为 plugin:id/频道）。
+// party corresponds to plugin_party: the kind, id and address of one side of a message (for an Agent
+// org/project/name#task, for an external identity @name, for a plugin plugin:id/channel).
 func (e *pluginEmitter) party(ctx context.Context, kind string, agent, identity, runtime, pluginParty *uuid.UUID, channel *string) (map[string]any, error) {
 	out := map[string]any{"kind": kind, "id": nil, "address": nil}
 	var address *string
@@ -290,7 +298,7 @@ func (e *pluginEmitter) idField(c pluginChange, key string) *uuid.UUID {
 	return &id
 }
 
-// jsonTime 把捕获下来的微秒时间转成事件里的时间值；为空时为 null。
+// jsonTime turns a captured microsecond time into the time value in the event; null when empty.
 func jsonTime(c pluginChange, key string) any {
 	var us *int64
 	if raw, ok := c.data[key]; ok {
@@ -310,7 +318,7 @@ func excerpt(text string) string {
 	return string(r[:80])
 }
 
-// ---------- Agent（plugin_on_agent） ----------
+// ---------- Agent (plugin_on_agent) ----------
 
 func (e *pluginEmitter) agent(ctx context.Context, c pluginChange) error {
 	if ok, err := e.subscribed(ctx, c.kind); err != nil || !ok {
@@ -330,7 +338,7 @@ func (e *pluginEmitter) agent(ctx context.Context, c pluginChange) error {
 		data: map[string]any{"name": name, "address": party["address"]}}, "")
 }
 
-// ---------- sleep（plugin_on_sleep） ----------
+// ---------- sleep (plugin_on_sleep) ----------
 
 func (e *pluginEmitter) sleep(ctx context.Context, c pluginChange) error {
 	if ok, err := e.subscribed(ctx, c.kind); err != nil || !ok {
@@ -351,7 +359,7 @@ func (e *pluginEmitter) sleep(ctx context.Context, c pluginChange) error {
 		task: e.idField(c, "taskId"), run: e.idField(c, "runId"), data: data}, "")
 }
 
-// ---------- 生命周期（plugin_on_lifecycle） ----------
+// ---------- Lifecycle (plugin_on_lifecycle) ----------
 
 var lifecyclePluginTypes = map[string]string{
 	"run.queued": "run.queued", "run.dispatched": "run.queued", "run.running": "run.started", "run.ended": "run.ended",
@@ -386,7 +394,8 @@ func (e *pluginEmitter) lifecycle(ctx context.Context, id uuid.UUID) error {
 		}
 		return json.RawMessage("null")
 	}
-	// text 对应 data ->> key：字符串取其值，其他 JSON 值取其文本，缺失或 null 为 nil。
+	// text corresponds to data ->> key: a string yields its value, other JSON values yield their text, and a missing
+	// key or null yields nil.
 	text := func(key string) *string {
 		v, ok := fields[key]
 		var x any
@@ -452,7 +461,7 @@ func (e *pluginEmitter) lifecycle(ctx context.Context, id uuid.UUID) error {
 	return e.emit(ctx, pluginEvent{typ: t, at: at, project: project, agent: &agent, task: task, run: run, data: data}, "")
 }
 
-// ---------- Inbox 消息（plugin_on_inbox_message） ----------
+// ---------- Inbox messages (plugin_on_inbox_message) ----------
 
 type inboxEventRow struct {
 	id, thread                                       uuid.UUID
@@ -474,7 +483,7 @@ func (e *pluginEmitter) inboxRow(ctx context.Context, id uuid.UUID) (inboxEventR
 	return m, err
 }
 
-// questionWire 是提问在事件里的形状；没有提问时为 nil。
+// questionWire is the shape of a question in an event; nil when there is no question.
 func (e *pluginEmitter) questionWire(ctx context.Context, id uuid.UUID) (map[string]any, error) {
 	var options json.RawMessage
 	var deadline *time.Time
@@ -498,8 +507,9 @@ func (e *pluginEmitter) inboxInserted(ctx context.Context, id uuid.UUID) error {
 		return err
 	}
 	exclude := ""
-	// 发给代管身份的消息以 identity.inbound 只送给代管的插件（plugins/SPEC.md §12），不看订阅与项目启用；
-	// 这个插件不再收到这条消息的 inbox.received。
+	// A message to a managed identity goes as identity.inbound only to the managing plugin (plugins/SPEC.md §12),
+	// regardless of subscriptions and project enablement; that plugin no longer receives inbox.received for this
+	// message.
 	if m.toKind == "external" && !off && m.toIdentity != nil {
 		var plugin, channel *string
 		err := e.tx.QueryRow(ctx, `SELECT plugin_id, channel_id FROM identity_managers WHERE identity_id = $1`, *m.toIdentity).Scan(&plugin, &channel)
@@ -513,7 +523,8 @@ func (e *pluginEmitter) inboxInserted(ctx context.Context, id uuid.UUID) error {
 			}
 		}
 	}
-	// 发给插件的消息（Agent 回复插件发来的线索）只给那个插件，以 channel.outbound 送达，不看订阅。
+	// A message to a plugin (an Agent replying to a thread the plugin started) goes only to that plugin, delivered as
+	// channel.outbound, regardless of subscriptions.
 	if m.toKind == "plugin" && !off && m.toPlugin != nil {
 		var plugin string
 		err := e.tx.QueryRow(ctx, `SELECT pp.plugin_id FROM plugin_parties pp JOIN plugins p ON p.id = pp.plugin_id WHERE pp.id = $1`, *m.toPlugin).Scan(&plugin)
@@ -615,7 +626,8 @@ func (e *pluginEmitter) inboxGeneric(ctx context.Context, id uuid.UUID, typ stri
 	return e.inboxGenericRow(ctx, m, typ, at, exclude)
 }
 
-// inboxGenericRow 是 inbox.received / inbox.read / inbox.cancelled：按订阅送达，归属取收件或发件的 Agent。
+// inboxGenericRow handles inbox.received / inbox.read / inbox.cancelled: delivered by subscription, attributed to the
+// recipient or sender Agent.
 func (e *pluginEmitter) inboxGenericRow(ctx context.Context, m inboxEventRow, typ string, at time.Time, exclude string) error {
 	if ok, err := e.subscribed(ctx, typ); err != nil || !ok {
 		return err
@@ -651,7 +663,7 @@ func (e *pluginEmitter) inboxGenericRow(ctx context.Context, m inboxEventRow, ty
 	return e.emit(ctx, pluginEvent{typ: typ, at: at, project: project, agent: agent, task: task, data: data}, exclude)
 }
 
-// ---------- 提问（plugin_on_inbox_question） ----------
+// ---------- Questions (plugin_on_inbox_question) ----------
 
 func (e *pluginEmitter) question(ctx context.Context, c pluginChange) error {
 	if ok, err := e.subscribed(ctx, c.kind); err != nil || !ok {
@@ -699,15 +711,16 @@ func (e *pluginEmitter) question(ctx context.Context, c pluginChange) error {
 	return e.emit(ctx, pluginEvent{typ: c.kind, at: at, project: project, agent: agent, task: task, data: data}, "")
 }
 
-// ---------- 代码直接发出的观察类事件 ----------
+// ---------- Observation events emitted directly by code ----------
 
-// emitPluginEventTx 在当前写事务里写一条观察类事件（按订阅与启用生成投递，原 plugin_emit）。
+// emitPluginEventTx writes one observation event in the current write transaction (generating deliveries by
+// subscription and enablement; formerly plugin_emit).
 func emitPluginEventTx(ctx context.Context, tx *db.Tx, typ string, project, agent, task, run *uuid.UUID, data map[string]any) error {
 	e := &pluginEmitter{tx: tx}
 	return e.emit(ctx, pluginEvent{typ: typ, at: tx.Now(), project: project, agent: agent, task: task, run: run, data: data}, "")
 }
 
-// EmitPluginEvent 写一条观察类事件（事务外的改动，例如文件夹变化）。
+// EmitPluginEvent writes one observation event (for changes outside a transaction, e.g. folder changes).
 func (s *Store) EmitPluginEvent(ctx context.Context, typ string, project, agent, task, run *uuid.UUID, data map[string]any) error {
 	return s.inTx(ctx, func(tx *db.Tx) error { return emitPluginEventTx(ctx, tx, typ, project, agent, task, run, data) })
 }

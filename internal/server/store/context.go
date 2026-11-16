@@ -9,14 +9,15 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// Organization 是组织。
+// Organization is an organization.
 type Organization struct {
 	ID        uuid.UUID
 	Name      string
 	CreatedAt time.Time
 }
 
-// Project 是项目。IsDefault、ManagerAgentID、AgentCount、UpdatedAt 只在项目查询（projects.go）中填写。
+// Project is a project. IsDefault, ManagerAgentID, AgentCount and UpdatedAt are filled in only by project queries
+// (projects.go).
 type Project struct {
 	ID             uuid.UUID
 	OrganizationID uuid.UUID
@@ -28,14 +29,14 @@ type Project struct {
 	UpdatedAt      time.Time
 }
 
-// DefaultContext 是第一个闭环使用的默认组织与默认项目。
+// DefaultContext is the default organization and default project used by the first closed loop.
 type DefaultContext struct {
 	Organization Organization
 	Project      Project
 }
 
-// EnsureDefaults 确保恰好存在一个默认组织，且其下恰好存在一个默认项目；
-// 重复或并发调用不会产生重复记录。名称只在首次创建时使用。
+// EnsureDefaults makes sure exactly one default organization exists, with exactly one default project under it;
+// repeated or concurrent calls do not create duplicate records. The names are used only on first creation.
 func (s *Store) EnsureDefaults(ctx context.Context, orgName, projectName string) (DefaultContext, error) {
 	var dc DefaultContext
 	err := s.inTx(ctx, func(tx *db.Tx) error {

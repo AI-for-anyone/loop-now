@@ -50,7 +50,8 @@ func (s *Store) QuestionBinding(ctx context.Context, id uuid.UUID) (*QuestionBin
 	return &b, err
 }
 
-// GetQuestionTx 读出提问。第四个参数原来决定是否锁行；写事务串行后不再需要，保留只为调用方不变。
+// GetQuestionTx reads a question. The fourth parameter used to decide whether to lock the row; that is no longer
+// needed now that write transactions are serialized, and it is kept only so callers stay unchanged.
 func GetQuestionTx(ctx context.Context, tx *db.Tx, id uuid.UUID, _ bool, preview ...int) (*InboxQuestion, error) {
 	size := 200
 	if len(preview) > 0 {

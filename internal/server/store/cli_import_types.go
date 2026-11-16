@@ -86,8 +86,9 @@ func IsCLIImportCommitUnknown(err error) bool {
 	return errors.As(err, &e)
 }
 
-// cliImportTx 在写事务中执行 fn。SQLite 的提交不可取消，提交返回的错误就是确定的失败，不再有“结果未知”；
-// CLIImportCommitUnknown 留给导入服务的既有分支，这里不再产生。
+// cliImportTx runs fn in a write transaction. A SQLite commit cannot be cancelled, so an error returned by the commit
+// is a definite failure and there is no "result unknown" case anymore; CLIImportCommitUnknown is kept for the
+// existing branch in the import service and is no longer produced here.
 func (s *Store) cliImportTx(ctx context.Context, fn func(*db.Tx) error) error {
 	return s.Pool.InTx(ctx, fn)
 }

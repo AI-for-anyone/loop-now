@@ -10,25 +10,27 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// TaskNodeQueueResult 是节点排队动作的结果。
+// TaskNodeQueueResult is the result of a node queue action.
 type TaskNodeQueueResult struct {
-	Item        *QueueItem  // 消息动作针对的排队项（动作前）
-	Turn        TaskTurn    // 转为打断：现在承载消息的打断轮次；取消：原承载轮次；停止：被停止的轮次
-	Changed     bool        // false：已经是请求的状态（already_*）
-	Interrupted []uuid.UUID // 提交后要通知执行器打断的轮次
+	Item        *QueueItem  // the queue item the message action targeted (before the action)
+	Turn        TaskTurn    // promote: interrupt turn now carrying the message; cancel: original carrying turn; stop: stopped turn
+	Changed     bool        // false: already in the requested state (already_*)
+	Interrupted []uuid.UUID // turns the executor must be told to interrupt after commit
 }
 
-// taskNodeMessage 是节点排队中的一条消息及其承载轮次。
+// taskNodeMessage is one message in the node queue together with its carrying turn.
 type taskNodeMessage struct {
 	msg     InboxMessage
 	turn    *TaskTurn
-	strict  bool // 控制台发给节点的严格消息（task_node_inbox_messages）
+	strict  bool // a strict message the console sent to the node (task_node_inbox_messages)
 	mode    string
 	expired bool
 }
 
-// lockTaskNodeMessageTx 锁住节点的一条排队消息：严格消息按绑定定位，其他 Agent 发来的消息按承载它的轮次定位。
-// 不属于这个节点时返回 not_found，目标 Agent 或实例不一致时返回 target_mismatch。
+// lockTaskNodeMessageTx locks one queued message of the node: a strict message is located by its binding, a message
+// from another Agent by the turn that carries it.
+// Returns not_found when it does not belong to this node, and target_mismatch when the target Agent or instance does
+// not match.
 func (s *Store) lockTaskNodeMessageTx(ctx context.Context, m *TaskMutation, target TaskConsoleLineage, message uuid.UUID) (taskNodeMessage, error) {
 	var out taskNodeMessage
 	var task, node, agent, runtime uuid.UUID
@@ -73,7 +75,8 @@ func (s *Store) lockTaskNodeMessageTx(ctx context.Context, m *TaskMutation, targ
 	return out, nil
 }
 
-// queuedTurn 返回承载消息、仍在排队的轮次；消息已取消、已读、已失效或轮次已开始时返回对应的 task_conflict。
+// queuedTurn returns the still-queued turn that carries the message; returns the corresponding task_conflict when the
+// message is cancelled, read or no longer valid, or the turn has already started.
 func (x taskNodeMessage) queuedTurn(m *TaskMutation, target TaskConsoleLineage) (TaskTurn, error) {
 	id := x.msg.ID
 	switch {
@@ -89,7 +92,8 @@ func (x taskNodeMessage) queuedTurn(m *TaskMutation, target TaskConsoleLineage) 
 	return *x.turn, nil
 }
 
-// taskNodeTargetGuard 只确认目标仍是当前节点与实例：取消与停止不要求节点对话可用。
+// taskNodeTargetGuard only confirms that the target is still the current node and instance: cancel and stop do not
+// require the node conversation to be available.
 func taskNodeTargetGuard(m *TaskMutation, target TaskConsoleLineage) string {
 	if m.Record.Ended() {
 		return "task_ended"
@@ -104,11 +108,16 @@ func taskNodeTargetGuard(m *TaskMutation, target TaskConsoleLineage) string {
 	return ""
 }
 
-// PromoteTaskNodeMessageTx 把节点排队中的一条消息（任何发件人）转为打断，然后打断节点当前的回复。
-//   - 控制台发给节点的严格消息：按发送打断时的合并规则（同节点、同执行模式、图片总数不超上限）并入已在排队的打断轮次，没有就新建；
-//   - 其他 Agent 发来的消息：由 newTurn 并入或新建该节点的打断提醒轮次（与投递时同一规则）。
+// PromoteTaskNodeMessageTx turns one message in the node queue (from any sender) into an interrupt, then interrupts
+// the node's current reply.
+//   - A strict message the console sent to the node: merged, following the merge rules for sending as an interrupt
+//     (same node, same run mode, total images not over the limit), into the interrupt turn already queued, or a new
+//     one is created if there is none;
+//   - A message from another Agent: newTurn merges it into, or creates, the node's interrupt reminder turn (the same
+//     rule as at delivery).
 //
-// 原轮次没有其他待处理消息即作废（merged_into_interrupt）。已经由打断轮次承载时 Changed=false。
+// The original turn is voided when it has no other pending messages (merged_into_interrupt). When it is already
+// carried by an interrupt turn, Changed=false.
 func (s *Store) PromoteTaskNodeMessageTx(ctx context.Context, m *TaskMutation, target TaskConsoleLineage, message uuid.UUID, newTurn func(trigger uuid.UUID) (TaskTurn, error)) (TaskNodeQueueResult, error) {
 	var out TaskNodeQueueResult
 	x, e := s.lockTaskNodeMessageTx(ctx, m, target, message)
@@ -185,8 +194,10 @@ func (s *Store) PromoteTaskNodeMessageTx(ctx context.Context, m *TaskMutation, t
 	return out, nil
 }
 
-// CancelTaskNodeMessageTx 由人取消节点排队中的一条消息（任何发件人）：记 cancelled_at，严格消息另记 not_executed_reason=cancelled；
-// 带选项的问题同时变为 cancelled。承载轮次没有其他待处理消息即作废（user_cancelled）。已经取消时 Changed=false。
+// CancelTaskNodeMessageTx lets a person cancel one message in the node queue (from any sender): records cancelled_at,
+// and for a strict message also not_executed_reason=cancelled; a question with options becomes cancelled at the same
+// time. The carrying turn is voided when it has no other pending messages (user_cancelled). When already cancelled,
+// Changed=false.
 func (s *Store) CancelTaskNodeMessageTx(ctx context.Context, m *TaskMutation, target TaskConsoleLineage, message uuid.UUID) (TaskNodeQueueResult, error) {
 	var out TaskNodeQueueResult
 	x, e := s.lockTaskNodeMessageTx(ctx, m, target, message)
@@ -233,8 +244,10 @@ func (s *Store) CancelTaskNodeMessageTx(ctx context.Context, m *TaskMutation, ta
 	return out, nil
 }
 
-// StopTaskNodeRunTx 停止节点这一轮进行中的回复（abort_requested 带 stop:true），不发送新消息。
-// 已在停止或打断中时 Changed=false；这一轮已结束时返回 task_conflict，reason=run_not_active。
+// StopTaskNodeRunTx stops the reply in progress in this turn of the node (abort_requested carries stop:true), without
+// sending a new message.
+// When it is already stopping or being interrupted, Changed=false; when this turn has already ended, returns
+// task_conflict with reason=run_not_active.
 func (s *Store) StopTaskNodeRunTx(ctx context.Context, m *TaskMutation, target TaskConsoleLineage, run uuid.UUID) (TaskNodeQueueResult, error) {
 	var out TaskNodeQueueResult
 	t, e := scanTaskTurn(m.Tx.QueryRow(ctx, `SELECT `+taskTurnColumns+` FROM task_turns WHERE id=$1 AND task_id=$2 AND node_run_id=$3`, run, target.TaskID, target.NodeRunID))
@@ -266,14 +279,15 @@ func (s *Store) StopTaskNodeRunTx(ctx context.Context, m *TaskMutation, target T
 	return out, m.Emit("message.created", taskMessage(out.Turn, false))
 }
 
-// TaskTurnStoppedTx 报告这一轮是否被人停止（abort_requested 带 stop:true）。
+// TaskTurnStoppedTx reports whether this turn was stopped by a person (abort_requested carries stop:true).
 func TaskTurnStoppedTx(ctx context.Context, tx *db.Tx, turn uuid.UUID) (bool, error) {
 	var stopped bool
 	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM lifecycle_events WHERE task_turn_id=$1 AND type='run.abort_requested' AND data->'stop'='true')`, turn).Scan(&stopped)
 	return stopped, err
 }
 
-// voidReadTaskTurnTx 在严格节点消息被读取后调用：承载它的轮次仍在排队且已没有待处理消息时作废（no_pending_messages）。
+// voidReadTaskTurnTx is called after a strict node message is read: the turn carrying it is voided
+// (no_pending_messages) when it is still queued and has no pending messages left.
 func (s *Store) voidReadTaskTurnTx(ctx context.Context, m *TaskMutation, message uuid.UUID) error {
 	var turn *uuid.UUID
 	if e := m.Tx.QueryRow(ctx, `SELECT reminder_run_id FROM task_node_inbox_messages WHERE message_id=$1`, message).Scan(&turn); e != nil || turn == nil {

@@ -14,9 +14,10 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// 插件第二版的安装、配置、启用、授权、账号、令牌与全局设置（plugins/SPEC.md §6、§8）。
+// Installation, configuration, enablement, grants, accounts, tokens and global settings for version 2 plugins
+// (plugins/SPEC.md §6, §8).
 
-// Plugin 是一个已安装的插件。Manifest 是插件服务保存的清单（JSON 对象）。
+// Plugin is an installed plugin. Manifest is the manifest stored by the plugin service (a JSON object).
 type Plugin struct {
 	ID              string
 	DisplayName     string
@@ -32,17 +33,18 @@ type Plugin struct {
 	GrantedAgents   int
 }
 
-// PluginVersion 是装过的一个版本。
+// PluginVersion is one version that has been installed.
 type PluginVersion struct {
 	Version     string
 	Manifest    json.RawMessage
 	InstallDir  string
 	Digest      string
 	InstalledAt time.Time
-	// Providers 是安装时读出的模型提供方（modelcatalog.Capture 的 JSON）；ProvidersError 是整次读取失败的原因。
+	// Providers are the model providers read at install time (JSON of modelcatalog.Capture); ProvidersError is the
+	// reason the whole read failed.
 	Providers      json.RawMessage
 	ProvidersError *string
-	// ProviderState 是生效的 providerState 声明（JSON 对象）。
+	// ProviderState is the effective providerState declaration (a JSON object).
 	ProviderState json.RawMessage
 }
 
@@ -56,7 +58,7 @@ func scanPlugin(r db.Scanner) (Plugin, error) {
 	return p, err
 }
 
-// ListPlugins 按 id 返回全部已安装的插件。
+// ListPlugins returns all installed plugins by id.
 func (s *Store) ListPlugins(ctx context.Context) ([]Plugin, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT `+pluginColumns+` FROM plugins p ORDER BY p.id`)
 	if err != nil {
@@ -65,13 +67,13 @@ func (s *Store) ListPlugins(ctx context.Context) ([]Plugin, error) {
 	return db.CollectRows(rows, func(r db.CollectableRow) (Plugin, error) { return scanPlugin(r) })
 }
 
-// GetPlugin 返回一个插件；不存在时返回 not_found。
+// GetPlugin returns a plugin; returns not_found when it does not exist.
 func (s *Store) GetPlugin(ctx context.Context, id string) (Plugin, error) {
 	p, err := scanPlugin(s.Pool.QueryRow(ctx, `SELECT `+pluginColumns+` FROM plugins p WHERE p.id=$1`, id))
 	return p, notFoundIfNoRows(err, "插件")
 }
 
-// PluginVersions 返回插件装过的版本，新的在前。
+// PluginVersions returns the versions a plugin has installed, newest first.
 func (s *Store) PluginVersions(ctx context.Context, id string) ([]PluginVersion, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT version,manifest,install_dir,digest,installed_at,providers,providers_error,provider_state FROM plugin_versions WHERE plugin_id=$1 ORDER BY installed_at DESC, version DESC`, id)
 	if err != nil {
@@ -83,7 +85,8 @@ func (s *Store) PluginVersions(ctx context.Context, id string) ([]PluginVersion,
 	})
 }
 
-// PluginInstallDirs 返回各已安装插件全部版本的安装目录（插件 id → 目录），用来判断某个文件属于哪个插件。
+// PluginInstallDirs returns the install directories of all versions of each installed plugin (plugin id ->
+// directories), used to tell which plugin a file belongs to.
 func (s *Store) PluginInstallDirs(ctx context.Context) (map[string][]string, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT plugin_id,install_dir FROM plugin_versions ORDER BY plugin_id`)
 	if err != nil {
@@ -102,7 +105,7 @@ func (s *Store) PluginInstallDirs(ctx context.Context) (map[string][]string, err
 	return out, rows.Err()
 }
 
-// PluginProviders 是一个已安装插件当前版本读出的模型提供方。
+// PluginProviders are the model providers read from the current version of an installed plugin.
 type PluginProviders struct {
 	PluginID       string
 	Providers      json.RawMessage
@@ -110,7 +113,8 @@ type PluginProviders struct {
 	ProviderState  json.RawMessage
 }
 
-// CurrentPluginProviders 返回各已安装插件当前版本读出的模型提供方，按插件 id 排序。
+// CurrentPluginProviders returns the model providers read from the current version of each installed plugin, sorted
+// by plugin id.
 func (s *Store) CurrentPluginProviders(ctx context.Context) ([]PluginProviders, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT p.id,v.providers,v.providers_error,v.provider_state FROM plugins p JOIN plugin_versions v ON v.plugin_id=p.id AND v.version=p.version ORDER BY p.id`)
 	if err != nil {
@@ -122,9 +126,11 @@ func (s *Store) CurrentPluginProviders(ctx context.Context) ([]PluginProviders, 
 	})
 }
 
-// InstallPlugin 登记新安装的插件与它的第一个版本；id 已存在时返回 name_conflict。
-// PluginVersionExtras 是随版本保存的、安装时才得到的东西（plugins/SPEC.md §13）：读出的模型提供方
-// （modelcatalog.Capture 的 JSON）、整次读取失败的原因，与生效的 providerState 声明（JSON 对象）。
+// InstallPlugin registers a newly installed plugin and its first version; returns name_conflict when the id already
+// exists.
+// PluginVersionExtras are the things stored with a version that are only obtained at install time
+// (plugins/SPEC.md §13): the model providers read (JSON of modelcatalog.Capture), the reason the whole read failed,
+// and the effective providerState declaration (a JSON object).
 type PluginVersionExtras struct {
 	Providers      json.RawMessage
 	ProvidersError *string
@@ -158,7 +164,8 @@ func (s *Store) InstallPlugin(ctx context.Context, p Plugin, digest string, extr
 	return err
 }
 
-// UpdatePlugin 切换到新版本：同一版本号已装且内容不同时返回 plugin_version_conflict，内容相同时直接切回。
+// UpdatePlugin switches to a new version: returns plugin_version_conflict when the same version number is already
+// installed with different content, and switches straight back when the content is the same.
 func (s *Store) UpdatePlugin(ctx context.Context, p Plugin, digest string, extra PluginVersionExtras) error {
 	providers, providersError, state := extra.values()
 	return s.inTx(ctx, func(tx *db.Tx) error {
@@ -187,7 +194,8 @@ func (s *Store) UpdatePlugin(ctx context.Context, p Plugin, digest string, extra
 	})
 }
 
-// DeletePlugin 删除插件及其配置、启用、授权、账号、状态、投递与令牌，返回各版本的安装目录。
+// DeletePlugin deletes a plugin with its configuration, enablement, grants, accounts, state, deliveries and tokens,
+// and returns the install directories of its versions.
 func (s *Store) DeletePlugin(ctx context.Context, id string) ([]string, error) {
 	var dirs []string
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -207,14 +215,14 @@ func (s *Store) DeletePlugin(ctx context.Context, id string) ([]string, error) {
 	return dirs, err
 }
 
-// PluginConfigRow 是全局或某个项目的配置；Revision 为 0 表示还没有保存过。
+// PluginConfigRow is the global or a project's configuration; a Revision of 0 means it has never been saved.
 type PluginConfigRow struct {
 	Values   map[string]any
 	Secrets  map[string]string
 	Revision int64
 }
 
-// PluginConfig 读取全局（project 为空）或项目级配置。
+// PluginConfig reads the global (nil project) or project-level configuration.
 func (s *Store) PluginConfig(ctx context.Context, plugin string, project *uuid.UUID) (PluginConfigRow, error) {
 	return pluginConfigTx(ctx, s.Pool, plugin, project)
 }
@@ -223,7 +231,8 @@ type queryer interface {
 	QueryRow(ctx context.Context, sql string, args ...any) *db.Row
 }
 
-// pluginConfigTx 读出插件的全局（project 为空）或项目配置；没有时返回空配置。
+// pluginConfigTx reads the plugin's global (nil project) or project configuration; returns an empty configuration
+// when there is none.
 func pluginConfigTx(ctx context.Context, q queryer, plugin string, project *uuid.UUID) (PluginConfigRow, error) {
 	c := PluginConfigRow{Values: map[string]any{}, Secrets: map[string]string{}}
 	err := q.QueryRow(ctx, `SELECT "values",secrets,revision FROM plugin_config WHERE plugin_id=$1 AND project_id IS $2`, plugin, project).
@@ -234,13 +243,15 @@ func pluginConfigTx(ctx context.Context, q queryer, plugin string, project *uuid
 	return c, err
 }
 
-// PluginConfigUpdate 是一次配置保存：Apply 在写事务里按当前配置算出要保存的值，返回错误时不保存。
+// PluginConfigUpdate is one configuration save: Apply computes, inside the write transaction, the value to save from
+// the current configuration; nothing is saved when it returns an error.
 type PluginConfigUpdate struct {
 	ExpectedRevision int64
 	Apply            func(current PluginConfigRow) (PluginConfigRow, error)
 }
 
-// SavePluginConfig 按版本保存配置：版本不一致返回 412。返回保存后的配置。
+// SavePluginConfig saves the configuration by revision: returns 412 when the revision does not match. Returns the
+// configuration after saving.
 func (s *Store) SavePluginConfig(ctx context.Context, plugin string, project *uuid.UUID, u PluginConfigUpdate) (PluginConfigRow, error) {
 	var out PluginConfigRow
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -267,7 +278,7 @@ func (s *Store) savePluginConfigTx(ctx context.Context, tx *db.Tx, plugin string
 		return PluginConfigRow{}, err
 	}
 	if reflect.DeepEqual(nonEmpty(cur.Values), nonEmpty(next.Values)) && maps.Equal(cur.Secrets, next.Secrets) {
-		// 没有变化（例如只改了项目的启用状态）：不加版本、不发事件。
+		// Nothing changed (e.g. only the project's enablement changed): do not bump the revision or emit an event.
 		return cur, nil
 	}
 	next.Revision = cur.Revision + 1
@@ -286,14 +297,17 @@ func nonEmpty(m map[string]any) map[string]any {
 	return m
 }
 
-// requirePlugin 确认插件存在（写事务串行，与卸载、更新互斥，不需要锁行）；不存在时返回 not_found。
+// requirePlugin confirms the plugin exists (write transactions are serialized and exclude uninstall and update, so the
+// row does not need to be locked); returns not_found when it does not exist.
 func requirePlugin(ctx context.Context, tx *db.Tx, plugin string) error {
 	var id string
 	return notFoundIfNoRows(tx.QueryRow(ctx, `SELECT id FROM plugins WHERE id=$1`, plugin).Scan(&id), "插件")
 }
 
-// PluginConfigs 返回插件的全局配置与启用了它的各项目的配置（宿主加载时一起交给平台侧）：
-// 只含启用了插件、未删除的项目，没有项目级配置的项目为空配置；停用或删除的项目即使留有配置也不含。
+// PluginConfigs returns the plugin's global configuration and the configurations of the projects that enabled it
+// (handed to the platform side together when the plugin host loads): only non-deleted projects that enabled the
+// plugin are included, a project without a project-level configuration gets an empty one, and projects that disabled
+// the plugin or are deleted are excluded even if they still have a configuration.
 func (s *Store) PluginConfigs(ctx context.Context, plugin string) (PluginConfigRow, map[uuid.UUID]PluginConfigRow, error) {
 	global := PluginConfigRow{Values: map[string]any{}, Secrets: map[string]string{}}
 	projects := map[uuid.UUID]PluginConfigRow{}
@@ -322,14 +336,15 @@ func (s *Store) PluginConfigs(ctx context.Context, plugin string) (PluginConfigR
 	return global, projects, rows.Err()
 }
 
-// ProjectPluginRow 是插件在一个项目里的启用状态与项目级配置。
+// ProjectPluginRow is a plugin's enablement and project-level configuration in one project.
 type ProjectPluginRow struct {
 	Plugin  Plugin
 	Enabled bool
 	Config  PluginConfigRow
 }
 
-// ProjectPlugins 返回每个已安装插件在项目里的启用状态与项目级配置；项目不存在时返回 not_found。
+// ProjectPlugins returns, for each installed plugin, its enablement and project-level configuration in the project;
+// returns not_found when the project does not exist.
 func (s *Store) ProjectPlugins(ctx context.Context, project uuid.UUID) ([]ProjectPluginRow, error) {
 	if _, err := s.GetProject(ctx, project); err != nil {
 		return nil, err
@@ -352,7 +367,8 @@ func (s *Store) ProjectPlugins(ctx context.Context, project uuid.UUID) ([]Projec
 	return out, nil
 }
 
-// SaveProjectPlugin 在一个事务里保存项目的启用状态与项目级配置，返回保存后的状态与启用是否变化。
+// SaveProjectPlugin saves the project's enablement and project-level configuration in one transaction, and returns
+// the state after saving and whether the enablement changed.
 func (s *Store) SaveProjectPlugin(ctx context.Context, project uuid.UUID, plugin string, enabled bool, u PluginConfigUpdate) (ProjectPluginRow, bool, error) {
 	var row ProjectPluginRow
 	changed := false
@@ -379,7 +395,8 @@ func (s *Store) SaveProjectPlugin(ctx context.Context, project uuid.UUID, plugin
 				return err
 			}
 		}
-		// 先改启用状态再存配置：刚启用时这次的 plugin.config_changed 也发给它。
+		// Change the enablement first, then save the configuration: when the plugin was just enabled, it also receives
+		// this plugin.config_changed.
 		cfg, err := s.savePluginConfigTx(ctx, tx, plugin, &project, u)
 		if err != nil {
 			return err
@@ -401,7 +418,7 @@ func orNoRows(err error, missing bool) error {
 	return err
 }
 
-// PluginEnabledIn 报告插件是否在项目里启用。
+// PluginEnabledIn reports whether the plugin is enabled in the project.
 func (s *Store) PluginEnabledIn(ctx context.Context, plugin string, project uuid.UUID) (bool, error) {
 	var on bool
 	err := s.Pool.QueryRow(ctx, `SELECT coalesce((SELECT enabled FROM project_plugins WHERE project_id=$1 AND plugin_id=$2),false)`, project, plugin).Scan(&on)
@@ -436,13 +453,13 @@ func (s *Store) AgentPluginUsability(ctx context.Context, agent uuid.UUID, plugi
 	return "", nil
 }
 
-// AgentPluginGrant 是 Agent 对一个插件的授权。
+// AgentPluginGrant is an Agent's grant for one plugin.
 type AgentPluginGrant struct {
 	PluginID   string
 	AccountIDs []uuid.UUID
 }
 
-// AgentPluginGrants 返回 Agent 的全部授权，按插件 id 排序。
+// AgentPluginGrants returns all of the Agent's grants, sorted by plugin id.
 func (s *Store) AgentPluginGrants(ctx context.Context, agent uuid.UUID) ([]AgentPluginGrant, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT plugin_id,account_ids FROM agent_plugin_grants WHERE agent_id=$1 ORDER BY plugin_id`, agent)
 	if err != nil {
@@ -454,8 +471,8 @@ func (s *Store) AgentPluginGrants(ctx context.Context, agent uuid.UUID) ([]Agent
 	})
 }
 
-// SaveAgentPluginGrant 授权（granted）或取消授权。项目 Agent 只能授权项目已启用的插件；
-// 账号须是该项目这个插件未删除的账号。
+// SaveAgentPluginGrant grants (granted) or revokes a grant. A project Agent can only be granted plugins enabled in the
+// project; the account must be a non-deleted account of this plugin in that project.
 func (s *Store) SaveAgentPluginGrant(ctx context.Context, agent uuid.UUID, plugin string, granted bool, accounts []uuid.UUID) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
 		var project *uuid.UUID
@@ -500,7 +517,7 @@ func (s *Store) SaveAgentPluginGrant(ctx context.Context, agent uuid.UUID, plugi
 	})
 }
 
-// PluginAccount 是项目里一个插件的账号。Values 含全部字段（包括 secret 字段）。
+// PluginAccount is an account of a plugin in a project. Values holds all fields (including secret fields).
 type PluginAccount struct {
 	ID        uuid.UUID
 	PluginID  string
@@ -519,7 +536,7 @@ func scanPluginAccount(r db.Scanner) (PluginAccount, error) {
 	return a, err
 }
 
-// PluginAccounts 返回项目里这个插件未删除的账号，按种类、名称排序。
+// PluginAccounts returns the non-deleted accounts of this plugin in the project, sorted by kind and name.
 func (s *Store) PluginAccounts(ctx context.Context, project uuid.UUID, plugin string) ([]PluginAccount, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT `+pluginAccountColumns+` FROM plugin_accounts WHERE project_id=$1 AND plugin_id=$2 AND NOT deleted ORDER BY kind,name,id`, project, plugin)
 	if err != nil {
@@ -528,7 +545,8 @@ func (s *Store) PluginAccounts(ctx context.Context, project uuid.UUID, plugin st
 	return db.CollectRows(rows, func(r db.CollectableRow) (PluginAccount, error) { return scanPluginAccount(r) })
 }
 
-// PluginAccountsOfKind 返回项目里这个插件某个种类未删除的账号，按添加的先后（宿主的 accounts_list）。
+// PluginAccountsOfKind returns the non-deleted accounts of one kind of this plugin in the project, in the order they
+// were added (the plugin host's accounts_list).
 func (s *Store) PluginAccountsOfKind(ctx context.Context, project uuid.UUID, plugin, kind string) ([]PluginAccount, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT `+pluginAccountColumns+` FROM plugin_accounts WHERE project_id=$1 AND plugin_id=$2 AND kind=$3 AND NOT deleted ORDER BY id`, project, plugin, kind)
 	if err != nil {
@@ -537,13 +555,14 @@ func (s *Store) PluginAccountsOfKind(ctx context.Context, project uuid.UUID, plu
 	return db.CollectRows(rows, func(r db.CollectableRow) (PluginAccount, error) { return scanPluginAccount(r) })
 }
 
-// GetPluginAccount 返回一个未删除的账号。
+// GetPluginAccount returns a non-deleted account.
 func (s *Store) GetPluginAccount(ctx context.Context, project uuid.UUID, plugin string, id uuid.UUID) (PluginAccount, error) {
 	a, err := scanPluginAccount(s.Pool.QueryRow(ctx, `SELECT `+pluginAccountColumns+` FROM plugin_accounts WHERE id=$1 AND project_id=$2 AND plugin_id=$3 AND NOT deleted`, id, project, plugin))
 	return a, notFoundIfNoRows(err, "账号")
 }
 
-// CreatePluginAccount 添加账号；single 为 true（该种类不支持多账号）且已有账号时返回 name_conflict。
+// CreatePluginAccount adds an account; returns name_conflict when single is true (the kind does not support multiple
+// accounts) and an account already exists.
 func (s *Store) CreatePluginAccount(ctx context.Context, a PluginAccount, single bool) (PluginAccount, error) {
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		var deleted *time.Time
@@ -553,7 +572,8 @@ func (s *Store) CreatePluginAccount(ctx context.Context, a PluginAccount, single
 		if err := requirePlugin(ctx, tx, a.PluginID); err != nil {
 			return err
 		}
-		// 同一项目同一插件的账号创建串行，单账号检查才可靠。
+		// Account creation for the same plugin in the same project is serialized, which is what makes the
+		// single-account check reliable.
 		var dup bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM plugin_accounts WHERE project_id=$1 AND plugin_id=$2 AND kind=$3 AND NOT deleted AND ($4 OR name=$5))`,
 			a.ProjectID, a.PluginID, a.Kind, single, a.Name).Scan(&dup); err != nil {
@@ -573,7 +593,8 @@ func (s *Store) CreatePluginAccount(ctx context.Context, a PluginAccount, single
 	return a, err
 }
 
-// UpdatePluginAccount 按版本修改账号；apply 在锁住当前行后算出新的名称与字段。
+// UpdatePluginAccount changes an account by revision; apply computes the new name and fields after the current row is
+// locked.
 func (s *Store) UpdatePluginAccount(ctx context.Context, project uuid.UUID, plugin string, id uuid.UUID, expected int64, apply func(PluginAccount) (PluginAccount, error)) (PluginAccount, error) {
 	var out PluginAccount
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -602,7 +623,7 @@ func (s *Store) UpdatePluginAccount(ctx context.Context, project uuid.UUID, plug
 	return out, err
 }
 
-// DeletePluginAccount 删除账号（字段清空），并从各 Agent 的授权中移除对它的引用。
+// DeletePluginAccount deletes an account (clearing its fields) and removes references to it from all Agents' grants.
 func (s *Store) DeletePluginAccount(ctx context.Context, project uuid.UUID, plugin string, id uuid.UUID) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE plugin_accounts SET deleted=true, "values"='{}', revision=revision+1 WHERE id=$1 AND project_id=$2 AND plugin_id=$3 AND NOT deleted`, id, project, plugin)
@@ -618,7 +639,7 @@ func (s *Store) DeletePluginAccount(ctx context.Context, project uuid.UUID, plug
 	})
 }
 
-// PluginTokenRecord 是插件令牌的服务端记录。
+// PluginTokenRecord is the server-side record of a plugin token.
 type PluginTokenRecord struct {
 	PluginID string
 	Hash     []byte
@@ -626,7 +647,7 @@ type PluginTokenRecord struct {
 	Revoked  bool
 }
 
-// IssuePluginToken 吊销插件现有的令牌并登记新的一个。
+// IssuePluginToken revokes the plugin's existing tokens and registers a new one.
 func (s *Store) IssuePluginToken(ctx context.Context, plugin string, id uuid.UUID, hash []byte, scopes []string) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
 		if _, err := tx.Exec(ctx, `UPDATE plugin_tokens SET revoked_at=now() WHERE plugin_id=$1 AND revoked_at IS NULL`, plugin); err != nil {
@@ -637,27 +658,27 @@ func (s *Store) IssuePluginToken(ctx context.Context, plugin string, id uuid.UUI
 	})
 }
 
-// LookupPluginToken 按 ID 查找插件令牌；不存在时返回 not_found。
+// LookupPluginToken looks up a plugin token by ID; returns not_found when it does not exist.
 func (s *Store) LookupPluginToken(ctx context.Context, id uuid.UUID) (PluginTokenRecord, error) {
 	var t PluginTokenRecord
 	err := s.Pool.QueryRow(ctx, `SELECT plugin_id,token_hash,scopes,revoked_at IS NOT NULL FROM plugin_tokens WHERE id=$1`, id).Scan(&t.PluginID, &t.Hash, &t.Scopes, &t.Revoked)
 	return t, notFoundIfNoRows(err, "令牌")
 }
 
-// PluginSettings 是全局插件设置。
+// PluginSettings are the global plugin settings.
 type PluginSettings struct {
 	Disabled bool     `json:"disabled"`
 	Markets  []string `json:"markets"`
 }
 
-// GetPluginSettings 读取全局插件设置。
+// GetPluginSettings reads the global plugin settings.
 func (s *Store) GetPluginSettings(ctx context.Context) (PluginSettings, error) {
 	var out PluginSettings
 	err := s.Pool.QueryRow(ctx, `SELECT disabled,markets FROM plugin_settings`).Scan(&out.Disabled, &out.Markets)
 	return out, err
 }
 
-// PutPluginSettings 保存全局插件设置。
+// PutPluginSettings saves the global plugin settings.
 func (s *Store) PutPluginSettings(ctx context.Context, v PluginSettings) error {
 	if v.Markets == nil {
 		v.Markets = []string{}
@@ -666,7 +687,7 @@ func (s *Store) PutPluginSettings(ctx context.Context, v PluginSettings) error {
 	return err
 }
 
-// PluginLogEntry 是一行宿主日志。
+// PluginLogEntry is one plugin host log line.
 type PluginLogEntry struct {
 	ID    int64     `json:"id"`
 	At    time.Time `json:"at"`
@@ -674,7 +695,7 @@ type PluginLogEntry struct {
 	Line  string    `json:"line"`
 }
 
-// PluginLogs 返回插件的宿主日志，新的在前；before 为 0 时从最新开始。
+// PluginLogs returns the plugin's plugin host logs, newest first; starts from the latest when before is 0.
 func (s *Store) PluginLogs(ctx context.Context, plugin string, before int64, limit int) ([]PluginLogEntry, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT id,at,level,line FROM plugin_host_log WHERE plugin_id=$1 AND ($2=0 OR id<$2) ORDER BY id DESC LIMIT $3`, plugin, before, limit)
 	if err != nil {
@@ -686,7 +707,7 @@ func (s *Store) PluginLogs(ctx context.Context, plugin string, before int64, lim
 	})
 }
 
-// PluginDeliveryRow 是一条投递记录。
+// PluginDeliveryRow is one delivery record.
 type PluginDeliveryRow struct {
 	PluginEvent
 	Status     string
@@ -696,7 +717,7 @@ type PluginDeliveryRow struct {
 	DurationMs *int64
 }
 
-// PluginDeliveryQuery 是投递记录的筛选与分页；空值表示不筛选。
+// PluginDeliveryQuery holds the filters and paging for delivery records; empty values mean no filter.
 type PluginDeliveryQuery struct {
 	Status  string
 	Project *uuid.UUID
@@ -704,7 +725,7 @@ type PluginDeliveryQuery struct {
 	Limit   int
 }
 
-// PluginDeliveries 返回插件的投递记录，按事件 id（即时间）新的在前。
+// PluginDeliveries returns the plugin's delivery records, newest first by event id (that is, by time).
 func (s *Store) PluginDeliveries(ctx context.Context, plugin string, q PluginDeliveryQuery) ([]PluginDeliveryRow, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT e.id,e.type,e.at,e.project_id,e.agent_id,e.task_id,e.run_id,d.status,d.attempts,d.last_error,d.acked_at,d.duration_ms
 		FROM plugin_event_deliveries d JOIN plugin_events e ON e.id=d.event_id

@@ -75,8 +75,9 @@ func (l *larkOperationNativeLease) Seal(context.Context) error {
 }
 func (l *larkOperationNativeLease) Release() { l.owner.releases.Add(1) }
 
-// requireRuntimeRecovery 跳过要完成运行时交接的用例：交接要记下本机启动标识与进程身份，
-// 目前只在 darwin 上实现，其他平台按无法确认处理（停在 handoff）。
+// requireRuntimeRecovery skips cases that need to complete the runtime handoff: the handoff must record the local boot
+// identifier and the process identity, which is currently implemented only on darwin; other platforms treat it as
+// unconfirmable (stopping at handoff).
 func requireRuntimeRecovery(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS != "darwin" {

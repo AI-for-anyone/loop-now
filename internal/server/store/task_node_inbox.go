@@ -33,7 +33,7 @@ func (s *Store) TaskNodeInboxBinding(ctx context.Context, id uuid.UUID) (TaskNod
 	return s.taskNodeInboxBinding(ctx, s.Pool, id)
 }
 
-// partyWire 是 InboxParticipant 的结构（节点 Inbox 与节点排队列表共用）。
+// partyWire is the structure of InboxParticipant (shared by the node Inbox and the node queue list).
 func partyWire(v PartyView) map[string]any {
 	var id *uuid.UUID
 	var addr *string
@@ -471,7 +471,8 @@ func (s *Store) interruptTaskNodeTx(ctx context.Context, m *TaskMutation, target
 	return interrupted, nil
 }
 
-// taskNodeMessageConflict 返回节点排队动作的 task_conflict；message 为空时（停止）不带 messageId。
+// taskNodeMessageConflict returns task_conflict for a node queue action; without a message (stop), messageId is
+// omitted.
 func taskNodeMessageConflict(m *TaskMutation, target TaskConsoleLineage, reason string, message uuid.UUID, run *TaskTurn) error {
 	text := map[string]string{"message_read": "这条节点消息已被读取，不在排队中", "message_cancelled": "这条节点消息已被取消",
 		"run_not_active": "这一轮回复已经结束，不能再停止"}[reason]

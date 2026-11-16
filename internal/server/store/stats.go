@@ -12,7 +12,8 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// StatsReport 是统计页报表（GET /stats）。秒数为小数；比例为 0 到 1，分母为 0 时为空。
+// StatsReport is the report for the stats page (GET /stats). Seconds are fractional; ratios are between 0 and 1, and
+// nil when the denominator is 0.
 type StatsReport struct {
 	From        time.Time          `json:"from"`
 	To          time.Time          `json:"to"`
@@ -31,7 +32,7 @@ type StatsReport struct {
 	Concurrency []*float64         `json:"concurrency"`
 }
 
-// StatsAgent 是报表中按 Agent 汇总的一行所属的 Agent。
+// StatsAgent is the Agent that a per-Agent summary row in the report belongs to.
 type StatsAgent struct {
 	AgentID   uuid.UUID  `json:"agentId"`
 	Name      string     `json:"name"`
@@ -59,7 +60,7 @@ type StatsModelTokens struct {
 	Total    int64   `json:"total"`
 }
 
-// StatsOriginTokens 是按触发来源分的 token。
+// StatsOriginTokens are tokens split by trigger origin.
 type StatsOriginTokens struct {
 	Console       int64 `json:"console"`
 	InboxReminder int64 `json:"inboxReminder"`
@@ -192,15 +193,17 @@ type StatsProcess struct {
 	PiColdStartAvgMs *float64 `json:"piColdStartAvgMs"`
 }
 
-// statsScope 是范围内未删除 Agent 的条件，a 为 agents，$1、$2 为 ScopeFilter.args()。
+// statsScope is the condition for non-deleted Agents in the scope; a is agents, and $1 and $2 are ScopeFilter.args().
 const statsScope = `a.deleted_at IS NULL AND ($1 IS NULL OR a.project_id = $1) AND (NOT $2 OR a.project_id IS NULL)`
 
-// statsBucket 返回时间 x 所在桶的序号：$3 为 from，$5 为桶宽微秒；x 不早于 from。
+// statsBucket returns the index of the bucket that time x falls in: $3 is from and $5 is the bucket width in
+// microseconds; x is not earlier than from.
 func statsBucket(x string) string {
 	return `((` + x + `) - $3) / $5`
 }
 
-// statsRuns 汇总一组执行：结果计数、等待与回复时长（秒）、唤醒次数与首末唤醒的排入时间。
+// statsRuns summarizes a set of runs: outcome counts, wait and reply durations (seconds), the number of wakes, and the
+// queue times of the first and last wake.
 type statsRuns struct {
 	count               int64
 	outcome             StatsOutcomeCounts
@@ -236,7 +239,7 @@ func (r *statsRuns) add(status, origin string, queued time.Time, wait, duration 
 	}
 }
 
-// wakeSpan 是首末两次唤醒排入的间隔秒数；没有唤醒时为空。
+// wakeSpan is the interval in seconds between when the first and last wakes were queued; nil when there are no wakes.
 func (r *statsRuns) wakeSpan() *float64 {
 	if r.wakes == 0 {
 		return nil
@@ -245,11 +248,14 @@ func (r *statsRuns) wakeSpan() *float64 {
 	return &v
 }
 
-// Stats 汇总范围内未删除 Agent 在 [from, to) 内的统计，按 step 分桶（第一桶从 from 开始，最后一桶截止于 to）。
-// 用量按记录时间、执行（常态执行与任务轮次，只算派发过的）按排入时间、提问按发出时间计入；
-// 并发按服务端本地时间的小时汇总，只观察到现在为止。所有语句在同一只读事务中执行：每个库各是一个快照，
-// 运行记录事件与工具事件在 events.db，它的快照与 data.db 的可能相差几个事务，报表不受影响。
-// 各种分组与分位数在 Go 里汇总：SQL 只按最细的组合分组，或返回逐条执行。
+// Stats summarizes the statistics of non-deleted Agents in the scope within [from, to), bucketed by step (the first
+// bucket starts at from, the last bucket ends at to).
+// Usage counts by record time, runs (regular runs and task turns, only those that were dispatched) by queue time, and
+// questions by send time; concurrency is summarized by hour in the server's local time, observed only up to now. All
+// statements run in the same read-only transaction: each database is one snapshot; run record events and tool events
+// are in events.db, whose snapshot may differ from data.db's by a few transactions, which does not affect the report.
+// The various groupings and percentiles are summarized in Go: SQL only groups by the finest combination, or returns
+// runs one by one.
 func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, step time.Duration) (StatsReport, error) {
 	now := time.Now()
 	pid, platform := f.args()
@@ -274,7 +280,7 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 	agents := map[uuid.UUID]StatsAgent{}
 	usage := map[uuid.UUID]*agentUsage{}
 	runs := map[uuid.UUID]*statsRuns{}
-	bucketCtx := make([][2]int64, n) // 每桶的调用数与上下文之和
+	bucketCtx := make([][2]int64, n) // per bucket: number of calls and sum of context
 	var totalCalls, totalCtx int64
 
 	err := s.Pool.ReadTx(ctx, func(tx *db.Tx) error {
@@ -287,7 +293,8 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 			return err
 		}
 
-		// 用量：按（桶、来源、提供方、模型、Agent）分组，再在 Go 里汇总成按桶与来源、按模型、按 Agent 与全部。
+		// Usage: grouped by (bucket, origin, provider, model, Agent), then summarized in Go by bucket and origin, by
+		// model, by Agent, and overall.
 		rows, err = tx.Query(ctx, `WITH x AS (
 			SELECT u.agent_id, `+statsBucket("u.at")+` AS bucket,
 				CASE WHEN r.id IS NOT NULL THEN CASE r.origin WHEN 'console' THEN 'console' WHEN 'console_compact' THEN 'console' WHEN 'inbox_reminder' THEN 'inboxReminder' WHEN 'sleep_wake' THEN 'sleepWake' ELSE 'other' END
@@ -368,8 +375,9 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 			out.Tokens.ByModel = append(out.Tokens.ByModel, m)
 		}
 
-		// 执行：常态执行与派发过的任务轮次，按排入时间计入；逐条读出，在 Go 里按桶、Agent、未完成原因与全部汇总。
-		// 被人停止的常态执行以 endReason user_stopped 结束，任务轮次以 errorCode user_stopped 结束。
+		// Runs: regular runs and dispatched task turns, counted by queue time; read one by one and summarized in Go by
+		// bucket, Agent, incompletion reason and overall. A regular run stopped by a person ends with endReason
+		// user_stopped, and a task turn with errorCode user_stopped.
 		rows, err = tx.Query(ctx, `SELECT r.agent_id, r.origin, r.status, r.queued_at,
 				CASE WHEN r.origin = 'console' THEN (r.running_at - r.queued_at) / 1e6 END,
 				(r.ended_at - r.running_at) / 1e6,
@@ -436,7 +444,8 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 		out.Outcomes.Totals = all.outcome
 		out.Wait = StatsWait{P50: statsPercentile(all.waits, 0.5), P90: statsPercentile(all.waits, 0.9), DurationP50: statsPercentile(all.durations, 0.5), Series: out.Wait.Series}
 
-		// 提问：Agent 发给控制台的问题，按发出时间计入；按桶分组，全部由各桶相加。
+		// Questions: questions an Agent sent to the console, counted by send time; grouped by bucket, with the overall
+		// total being the sum of the buckets.
 		rows, err = tx.Query(ctx, `SELECT bucket, count(*), count(answered), sum(answered), max(answered)
 			FROM (SELECT `+statsBucket("m.created_at")+` AS bucket,
 					CASE WHEN q.state = 'answered' THEN (q.answered_at - m.created_at) / 1e6 END AS answered
@@ -484,7 +493,8 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 			return err
 		}
 
-		// 工具：时间窗内排入并开始回复的常态执行；每次调用按（执行、调用 ID）计一次。
+		// Tools: regular runs queued within the time window that started replying; each call is counted once per (run,
+		// call ID).
 		rows, err = tx.Query(ctx, `WITH r AS (
 			SELECT r.id FROM runs r JOIN agents a ON a.id = r.agent_id
 			WHERE `+statsScope+` AND r.running_at IS NOT NULL AND r.queued_at >= $3 AND r.queued_at < $4),
@@ -514,7 +524,7 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 			return err
 		}
 
-		// 进程：时间窗内的运行记录事件。
+		// Processes: run record events within the time window.
 		err = tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE e.type = 'model.retry_started'),
 				count(*) FILTER (WHERE e.type = 'pi.exited' OR (e.type = 'pi.stopped' AND e.data ->> 'reason' = 'abort_timeout')),
 				count(*) FILTER (WHERE e.type = 'pi.started'),
@@ -526,14 +536,16 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 			return err
 		}
 
-		// 并发：每段回复按服务端本地整点切成小时段，汇总每段内的回复秒数。SQL 读出截在窗口内的回复区间（微秒），切段在 Go 里做。
+		// Concurrency: each reply span is cut into hour segments at whole hours of the server's local time, and the
+		// reply seconds within each segment are summed. SQL reads the reply intervals clipped to the window
+		// (microseconds), and the cutting is done in Go.
 		end := to
 		if now.Before(end) {
 			end = now
 		}
 		l := from.In(time.Local)
 		align := time.Date(l.Year(), l.Month(), l.Day(), l.Hour(), 0, 0, 0, time.Local)
-		if align.After(from) { // 夏令时回拨的重复小时
+		if align.After(from) { // the repeated hour when daylight saving time falls back
 			align = align.Add(-time.Hour)
 		}
 		busy := map[int64]float64{}
@@ -551,7 +563,7 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 			base := align.UnixMicro()
 			var lo, hi int64
 			_, err = db.ForEachRow(rows, []any{&lo, &hi}, func() error {
-				// lo 不早于 from，因此不早于 align。
+				// lo is not earlier than from, and therefore not earlier than align.
 				for slot := (lo - base) / hour; base+slot*hour < hi; slot++ {
 					s := base + slot*hour
 					busy[slot] += float64(min(s+hour, hi)-max(s, lo)) / 1e6
@@ -646,7 +658,8 @@ func (s *Store) Stats(ctx context.Context, f ScopeFilter, from, to time.Time, st
 	return out, nil
 }
 
-// statsPercentile 按 PostgreSQL percentile_cont 的线性插值返回 vals 的 p 分位（会排序 vals）；vals 为空时为空。
+// statsPercentile returns the p-th percentile of vals using the linear interpolation of PostgreSQL's percentile_cont
+// (sorts vals); nil when vals is empty.
 func statsPercentile(vals []float64, p float64) *float64 {
 	if len(vals) == 0 {
 		return nil
@@ -658,7 +671,7 @@ func statsPercentile(vals []float64, p float64) *float64 {
 	return &v
 }
 
-// statsRatio 返回 n ÷ d；d 为 0 时为空。
+// statsRatio returns n / d; nil when d is 0.
 func statsRatio(n, d float64) *float64 {
 	if d == 0 {
 		return nil
@@ -667,7 +680,7 @@ func statsRatio(n, d float64) *float64 {
 	return &v
 }
 
-// cmpNullLast 比较两个可空字符串，空值排在后面。
+// cmpNullLast compares two nullable strings, with nil sorted last.
 func cmpNullLast(a, b *string) int {
 	switch {
 	case a == nil && b == nil:

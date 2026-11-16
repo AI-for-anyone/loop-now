@@ -185,7 +185,8 @@ func TestTaskLarkQuestionFirstAnswerRacesPublication(t *testing.T) {
 			}
 			pubDone, answerDone := make(chan error, 1), make(chan error, 1)
 			if winner == "publish" {
-				// C 的写事务停在任务事务里（占着写连接），回答停在等写连接上。
+				// C's write transaction is paused inside the task transaction (holding the write connection), and the
+				// answer is waiting for the write connection.
 				held, release := make(chan struct{}, 1), make(chan struct{})
 				go func() { pubDone <- publish(held, release) }()
 				<-held
@@ -193,7 +194,8 @@ func TestTaskLarkQuestionFirstAnswerRacesPublication(t *testing.T) {
 				sqlitetest.WaitWriteWaiters(t, ctx, s.Pool, 1)
 				close(release)
 			} else {
-				// 回答的写事务在把提问改成已回答时停住（占着写连接）；C 只能等它提交。
+				// The answer's write transaction pauses while changing the question to answered (holding the write
+				// connection); C can only wait for it to commit.
 				paused, resume := make(chan struct{}), make(chan struct{})
 				var once sync.Once
 				s.Pool.SetQueryHook(func(_ context.Context, q string) {

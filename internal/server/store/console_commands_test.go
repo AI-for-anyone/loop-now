@@ -10,7 +10,8 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// /copy 取最近一条有文字的成功回复：没有文字的回复（Pi 直接处理的命令）和失败的回复都跳过，都没有时为 nil。
+// /copy takes the latest successful reply that has text: replies without text (commands Pi handled directly) and
+// failed replies are skipped; nil when there is none.
 func TestLatestCompletedAssistantSkipsEmptyReplies(t *testing.T) {
 	e := newRecEnv(t)
 	reply := func(status, text string) {
@@ -41,7 +42,7 @@ func TestLatestCompletedAssistantSkipsEmptyReplies(t *testing.T) {
 	}
 }
 
-// compactRun 插入一次手动压缩并以 end 结束。
+// compactRun inserts one manual compaction and ends it with end.
 func (e *recEnv) compactRun(instructions string, end store.RunEnd) store.Run {
 	e.t.Helper()
 	mustExec(e.t, e.s, `UPDATE agent_sessions SET state = 'active', session_file = 'session.jsonl' WHERE agent_id = $1`, e.agent)
@@ -59,7 +60,8 @@ func (e *recEnv) compactRun(instructions string, end store.RunEnd) store.Run {
 	return ended
 }
 
-// 手动压缩的指令在开始时记下，结果在结束时并入，执行记录里一直能读到；失败或被取消时没有结果。
+// The instructions of a manual compaction are recorded when it starts and the result is merged in when it ends, so
+// both can always be read from the run record; a failed or cancelled compaction has no result.
 func TestCompactionRecordedOnRun(t *testing.T) {
 	e := newRecEnv(t)
 	before, after := int64(4200), int64(350)
@@ -82,7 +84,8 @@ func TestCompactionRecordedOnRun(t *testing.T) {
 	}
 }
 
-// 手动压缩不是回复：不进概览的“上一条回复”；被取消的不算异常，失败的照常列出。
+// A manual compaction is not a reply: it does not count as the "previous reply" in the overview; a cancelled one is
+// not an anomaly, while a failed one is listed as usual.
 func TestCompactionInOverviewAndAnomalies(t *testing.T) {
 	e := newRecEnv(t)
 	normal := e.send(true, "")
@@ -109,7 +112,8 @@ func TestCompactionInOverviewAndAnomalies(t *testing.T) {
 	}
 }
 
-// 定位到手动压缩：它没有对话消息，以它开始时的位置为中心；之后没有消息时只有之前的部分。
+// Locating a manual compaction: it has no conversation messages, so it is centred on its position at the time it
+// started; when there are no messages after it, there is only the part before it.
 func TestAroundCompactionRun(t *testing.T) {
 	e := newRecEnv(t)
 	reply := func() store.Run {

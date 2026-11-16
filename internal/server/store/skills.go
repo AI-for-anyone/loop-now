@@ -11,25 +11,25 @@ import (
 	"loop-now/internal/server/db"
 )
 
-// SkillFile 是 Skill 中的一个文件。
+// SkillFile is one file in a Skill.
 type SkillFile struct {
 	Path   string
 	Size   int64
 	SHA256 string
 }
 
-// SkillTemplate 是模板库中的 Skill。
+// SkillTemplate is a Skill in the template library.
 type SkillTemplate struct {
 	ID          uuid.UUID
 	Name        string
 	Description string
 	FileCount   int
-	Files       []SkillFile // 仅详情查询填充
+	Files       []SkillFile // filled only by the detail query
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
 
-// AgentSkill 是复制到 Agent 上的 Skill 副本。
+// AgentSkill is a copy of a Skill made onto an Agent.
 type AgentSkill struct {
 	ID               uuid.UUID
 	AgentID          uuid.UUID
@@ -37,7 +37,7 @@ type AgentSkill struct {
 	Description      string
 	SourceTemplateID *uuid.UUID
 	FileCount        int
-	Files            []SkillFile // 仅详情查询填充
+	Files            []SkillFile // filled only by the detail query
 	CopiedAt         time.Time
 	UpdatedAt        time.Time
 }
@@ -73,7 +73,7 @@ func listSkillFiles(ctx context.Context, q interface {
 	})
 }
 
-// ---- 模板库 ----
+// ---- Template library ----
 
 const templateColumns = `t.id, t.name, t.description, (SELECT count(*) FROM skill_template_files f WHERE f.template_id = t.id), t.created_at, t.updated_at`
 
@@ -83,7 +83,7 @@ func scanTemplate(row db.Scanner) (SkillTemplate, error) {
 	return t, err
 }
 
-// ListSkillTemplates 列出项目的模板库。
+// ListSkillTemplates lists the project's template library.
 func (s *Store) ListSkillTemplates(ctx context.Context) ([]SkillTemplate, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT `+templateColumns+` FROM skill_templates t ORDER BY t.name`)
 	if err != nil {
@@ -92,7 +92,7 @@ func (s *Store) ListSkillTemplates(ctx context.Context) ([]SkillTemplate, error)
 	return db.CollectRows(rows, func(r db.CollectableRow) (SkillTemplate, error) { return scanTemplate(r) })
 }
 
-// GetSkillTemplate 返回模板及其文件列表。
+// GetSkillTemplate returns a template and its file list.
 func (s *Store) GetSkillTemplate(ctx context.Context, id uuid.UUID) (SkillTemplate, error) {
 	t, err := scanTemplate(s.Pool.QueryRow(ctx, `SELECT `+templateColumns+` FROM skill_templates t WHERE t.id = $1`, id))
 	if err != nil {
@@ -102,7 +102,7 @@ func (s *Store) GetSkillTemplate(ctx context.Context, id uuid.UUID) (SkillTempla
 	return t, err
 }
 
-// CreateSkillTemplate 创建模板；名称在项目内重复时返回 name_conflict。
+// CreateSkillTemplate creates a template; returns name_conflict when the name is already used within the project.
 func (s *Store) CreateSkillTemplate(ctx context.Context, meta content.SkillMeta, files []content.File) (SkillTemplate, error) {
 	id := uuid.Must(uuid.NewV7())
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -121,7 +121,7 @@ func (s *Store) CreateSkillTemplate(ctx context.Context, meta content.SkillMeta,
 	return s.GetSkillTemplate(ctx, id)
 }
 
-// ReplaceSkillTemplate 用新文件整体替换模板内容。
+// ReplaceSkillTemplate replaces the template's content as a whole with new files.
 func (s *Store) ReplaceSkillTemplate(ctx context.Context, id uuid.UUID, meta content.SkillMeta, files []content.File) (SkillTemplate, error) {
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if err := updateTemplateMeta(ctx, tx, id, meta); err != nil {
@@ -138,7 +138,7 @@ func (s *Store) ReplaceSkillTemplate(ctx context.Context, id uuid.UUID, meta con
 	return s.GetSkillTemplate(ctx, id)
 }
 
-// UpdateSkillTemplateMarkdown 只替换模板的 SKILL.md，保留其他文件。
+// UpdateSkillTemplateMarkdown replaces only the template's SKILL.md, keeping the other files.
 func (s *Store) UpdateSkillTemplateMarkdown(ctx context.Context, id uuid.UUID, meta content.SkillMeta, md []byte) (SkillTemplate, error) {
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if err := updateTemplateMeta(ctx, tx, id, meta); err != nil {
@@ -177,7 +177,7 @@ func upsertSkillMD(ctx context.Context, tx *db.Tx, table, idCol string, id uuid.
 	return err
 }
 
-// DeleteSkillTemplate 删除模板；已复制给 Agent 的副本保留，来源置空。
+// DeleteSkillTemplate deletes a template; copies already made onto Agents are kept, with their source cleared.
 func (s *Store) DeleteSkillTemplate(ctx context.Context, id uuid.UUID) error {
 	tag, err := s.Pool.Exec(ctx, `DELETE FROM skill_templates WHERE id = $1`, id)
 	if err != nil {
@@ -189,7 +189,7 @@ func (s *Store) DeleteSkillTemplate(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// ---- Agent 的副本 ----
+// ---- Agent copies ----
 
 const agentSkillColumns = `k.id, k.agent_id, k.name, k.description, k.source_template_id, (SELECT count(*) FROM agent_skill_files f WHERE f.agent_skill_id = k.id), k.copied_at, k.updated_at`
 
@@ -199,7 +199,7 @@ func scanAgentSkill(row db.Scanner) (AgentSkill, error) {
 	return k, err
 }
 
-// ListAgentSkills 列出 Agent 的 Skill 副本。
+// ListAgentSkills lists the Agent's Skill copies.
 func (s *Store) ListAgentSkills(ctx context.Context, agentID uuid.UUID) ([]AgentSkill, error) {
 	if _, err := s.GetAgent(ctx, agentID); err != nil {
 		return nil, err
@@ -211,7 +211,7 @@ func (s *Store) ListAgentSkills(ctx context.Context, agentID uuid.UUID) ([]Agent
 	return db.CollectRows(rows, func(r db.CollectableRow) (AgentSkill, error) { return scanAgentSkill(r) })
 }
 
-// GetAgentSkill 返回副本及其文件列表。
+// GetAgentSkill returns a copy and its file list.
 func (s *Store) GetAgentSkill(ctx context.Context, agentID, skillID uuid.UUID) (AgentSkill, error) {
 	if _, err := s.GetAgent(ctx, agentID); err != nil {
 		return AgentSkill{}, err
@@ -241,7 +241,7 @@ func agentSkillNameConflict(ctx context.Context, tx *db.Tx, agentID uuid.UUID, n
 	return nil
 }
 
-// AddAgentSkill 把模板当前内容复制给 Agent。
+// AddAgentSkill copies the template's current content onto the Agent.
 func (s *Store) AddAgentSkill(ctx context.Context, agentID, templateID uuid.UUID) (AgentSkill, error) {
 	id := uuid.Must(uuid.NewV7())
 	err := s.inTx(ctx, func(tx *db.Tx) error {
@@ -275,7 +275,7 @@ func lockAgentSkill(ctx context.Context, tx *db.Tx, agentID, skillID uuid.UUID) 
 	return k, notFoundIfNoRows(err, "Skill")
 }
 
-// UpdateAgentSkillMarkdown 只替换副本的 SKILL.md，保留其他文件。
+// UpdateAgentSkillMarkdown replaces only the copy's SKILL.md, keeping the other files.
 func (s *Store) UpdateAgentSkillMarkdown(ctx context.Context, agentID, skillID uuid.UUID, meta content.SkillMeta, md []byte) (AgentSkill, error) {
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, err := lockAgent(ctx, tx, agentID); err != nil {
@@ -301,7 +301,8 @@ func (s *Store) UpdateAgentSkillMarkdown(ctx context.Context, agentID, skillID u
 	return s.GetAgentSkill(ctx, agentID, skillID)
 }
 
-// RecopyAgentSkill 用来源模板的当前内容整体覆盖副本；来源已删除时返回 template_deleted。
+// RecopyAgentSkill overwrites the copy as a whole with the current content of its source template; returns
+// template_deleted when the source has been deleted.
 func (s *Store) RecopyAgentSkill(ctx context.Context, agentID, skillID uuid.UUID) (AgentSkill, error) {
 	err := s.inTx(ctx, func(tx *db.Tx) error {
 		if _, err := lockAgent(ctx, tx, agentID); err != nil {
@@ -341,7 +342,7 @@ func (s *Store) RecopyAgentSkill(ctx context.Context, agentID, skillID uuid.UUID
 	return s.GetAgentSkill(ctx, agentID, skillID)
 }
 
-// RemoveAgentSkill 从 Agent 上移除副本。
+// RemoveAgentSkill removes a copy from the Agent.
 func (s *Store) RemoveAgentSkill(ctx context.Context, agentID, skillID uuid.UUID) error {
 	return s.inTx(ctx, func(tx *db.Tx) error {
 		if _, err := lockAgent(ctx, tx, agentID); err != nil {
