@@ -59,10 +59,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 只列存活可选账号，不探测供应商。provider只允许与purpose=model同用，cli只允许purpose=cli；不分页，按createdAt,id稳定排序。 */
+        /** @description Lists only live, selectable accounts and does not probe the provider. `provider` may only be used with purpose=model, and `cli` only with purpose=cli. Not paginated; stable order by createdAt, id. */
         get: operations["listProjectCredentialAccounts"];
         put?: never;
-        /** @description 仅保存API Key或模板CLI credential，名称可重。秘密仅credential部分；保存不表示远端已验证，未知响应不可按同名认定成功或自动重发。 */
+        /** @description Saves only an API key or a template CLI credential; names may repeat. Only the `credential` part is secret. Saving does not mean the remote side has verified it; after an unknown response, do not treat an account with the same name as success, and do not resend automatically. */
         post: operations["createProjectCredentialAccount"];
         delete?: never;
         options?: never;
@@ -77,11 +77,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 包含本项目已删除安全tombstone，跨项目或已删项目404。 */
+        /** @description Includes the safe tombstones of deleted accounts in this project; an account of another project, or of a deleted project, returns 404. */
         get: operations["getProjectCredentialAccount"];
         put?: never;
         post?: never;
-        /** @description 停止新取用，保留历史版本与tombstone。先CAS；旧revision重复请求仍412。 */
+        /** @description Stops new use of the account and keeps its historical versions and a tombstone. Compare-and-set on the revision comes first; repeating the request with the old revision still returns 412. */
         delete: operations["deleteProjectCredentialAccount"];
         options?: never;
         head?: never;
@@ -96,7 +96,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description 整体替换秘密生成新版本，purpose/provider/cli/name不可由此修改。 */
+        /** @description Replaces the whole secret and creates a new version; purpose/provider/cli/name cannot be changed through this call. */
         put: operations["replaceProjectCredentialAccount"];
         post?: never;
         delete?: never;
@@ -112,7 +112,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 一致当前配置的explicit/automatic Agent。model仅当前已保存provider，cli必须有权限；无accountId用于新增第二账号影响，不含历史任务或legacy_cleared。 */
+        /** @description The explicit/automatic Agents, consistent with the current config. For model, only the currently saved provider counts; for cli, the Agent must have permission for the CLI. Without accountId it gives the impact of adding a second account. Historical tasks and legacy_cleared are not included. */
         get: operations["getProjectCredentialAccountImpact"];
         put?: never;
         post?: never;
@@ -129,9 +129,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 项目Agent：当前已保存模型provider、已保存其他provider记录及允许模板CLI。无provider筛选；platform Agent422。全部候选不按可用性过滤。 */
+        /** @description For a project Agent, returns the currently saved model provider, the saved records of other providers and the allowed template CLIs. There is no provider filter; a platform Agent returns 422. Candidates are never filtered by availability. */
         get: operations["getAgentCredentialSelections"];
-        /** @description 仅更新一项，必有accountId。null恢复该provider automatic：迁移屏障Agent保存该项override且其他provider屏障不变；普通Agent删除该项。CLI null仅删该项，不删除共享账号或增加权限。DB集合模式下该CLI写返回409 credential_selection_mode_conflict且不改变旧值。 */
+        /** @description Updates exactly one item; accountId is required. For a provider, null restores automatic; an Agent behind the migration barrier saves an override for that item and the barrier for other providers stays unchanged, while other Agents have the item deleted. For a CLI, null only deletes that item; it does not delete the shared account or add permissions. In database set mode, a write for that CLI returns 409 credential_selection_mode_conflict and leaves the old value unchanged. */
         put: operations["putAgentCredentialSelection"];
         post?: never;
         delete?: never;
@@ -147,10 +147,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 仅活动操作。无accountId包括新建与重登，可用于无账号ID时页面/未知start响应恢复。授权URL只在活动操作视图，禁止日志/普通元数据/持久化。provider省略时列出全部（Codex与插件提供方），每条带provider。 */
+        /** @description Active operations only. Without accountId, both new logins and re-logins are included, so the page can recover when it has no account ID or the start response was unknown. The authorization URL appears only in the active operation view; it must never be logged, put in ordinary metadata or persisted. When provider is omitted, all are listed (Codex and plugin providers), each with its provider. */
         get: operations["listProjectModelAuthOperations"];
         put?: never;
-        /** @description 新建(name)或重登(accountId+expectedRevision)互斥。相同活动输入返回原operation；输入不同409。当前仅本机浏览器/server localhost1455回调，无远程转发或人工code入口；旧platform OAuth仍console-only。 */
+        /** @description A new login (name) and a re-login (accountId + expectedRevision) are mutually exclusive. The same input while the operation is active returns the original operation; different input returns 409. For now only the local browser with the callback to the server's localhost port 1455 is supported, with no remote forwarding or manual code entry; the older platform OAuth stays console-only. */
         post: operations["startProjectModelAuthLogin"];
         delete?: never;
         options?: never;
@@ -165,7 +165,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 成功account视图不早于成功提交；终态authorizationUrl必为null。 */
+        /** @description A succeeded account view never appears before the success is committed; in a final state authorizationUrl is always null. */
         get: operations["getProjectModelAuthLogin"];
         put?: never;
         post?: never;
@@ -184,7 +184,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 无请求体。终态幂等返回原状态；迟到helper结果不得seal或复活。 */
+        /** @description No request body. In a final state the call is idempotent and returns the original state; a late helper result must not seal or revive the operation. */
         post: operations["cancelProjectModelAuthLogin"];
         delete?: never;
         options?: never;
@@ -202,8 +202,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * @description 回答插件提供方登录中正在等的问题（操作的 prompt）。只能回答当前那一个问题；select 的 value 须是某个选项的 id。
-         *     没有在等回答、promptId 不对或回答不合规返回 422（字段 promptId 或 value）。回答只在内存里转交，不保存、不记日志。
+         * @description Answers the question a plugin provider's login is waiting on (the operation's prompt). Only the current question can
+         *     be answered; for select, the value must be the id of one of the options.
+         *     Returns 422 (field promptId or value) when no answer is awaited, the promptId is wrong or the answer is invalid. The
+         *     answer is only handed on in memory; it is not stored or logged.
          */
         post: operations["answerProjectModelAuthLogin"];
         delete?: never;
@@ -238,10 +240,14 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * @description 平台 Agent 在自己的模型凭证里登录订阅账号；provider 须是 Agent 当前的模型提供方。项目 Agent 用项目模型账号（/projects/{projectId}/model-auth/operations）。
-         *     插件提供方（plugins/SPEC.md §13）：插件须已授权给这个 Agent，否则返回 409 plugin_not_enabled（消息说明没有授权）。
-         *     一次登录一个辅助进程，HOME 是全新的状态目录；授权地址、设备码与要回答的问题（prompt）经操作视图给出，问题用 …/input 回答。
-         *     成功后在这个 Agent 的模型认证版本里加一个版本，“凭证”只记下插件，令牌与扩展的状态在以版本 ID 命名的状态目录里，不进数据库。
+         * @description A platform Agent logs in to a subscription account in its own model credential; provider must be the Agent's current
+         *     model provider. Project Agents use project model accounts (/projects/{projectId}/model-auth/operations).
+         *     Plugin providers (plugins/SPEC.md §13): the plugin must be granted to this Agent, otherwise 409 plugin_not_enabled
+         *     (the message says it is not granted).
+         *     Each login runs one helper process whose HOME is a fresh state directory; the authorization URL, the device code and
+         *     the question to answer (prompt) are given in the operation view, and the question is answered with …/input.
+         *     On success a version is added to this Agent's model auth versions; the "credential" only records the plugin, and the
+         *     token and the extension's state live in a state directory named after the version ID, not in the database.
          */
         post: operations["startModelAuthLogin"];
         delete?: never;
@@ -292,8 +298,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * @description 回答插件提供方登录中正在等的问题（操作的 prompt）。只能回答当前那一个问题；select 的 value 须是某个选项的 id。
-         *     没有在等回答、promptId 不对或回答不合规返回 422（字段 promptId 或 value）。回答只在内存里转交，不保存、不记日志。
+         * @description Answers the question a plugin provider's login is waiting on (the operation's prompt). Only the current question can
+         *     be answered; for select, the value must be the id of one of the options.
+         *     Returns 422 (field promptId or value) when no answer is awaited, the promptId is wrong or the answer is invalid. The
+         *     answer is only handed on in memory; it is not stored or logged.
          */
         post: operations["answerModelAuthLogin"];
         delete?: never;
@@ -309,7 +317,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 读取默认组织、默认项目与控制台预检用的各项上限 */
+        /** Read the default organization, the default project and the limits the console uses for pre-checks */
         get: operations["getContext"];
         put?: never;
         post?: never;
@@ -327,9 +335,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 当前请求的身份
-         * @description 控制台接口返回控制台操作者 `{kind: console, address: "@console", name: "控制台"}`；
-         *     对外端口返回令牌所属的外部身份，例如 `{kind: external, address: "@ci-bot", name: "ci-bot"}`。
+         * Identity of the current request
+         * @description The console API returns the console operator `{kind: console, address: "@console", name: ...}`, where `name` is
+         *     the console's fixed display name (currently the Chinese word for "console");
+         *     the external port returns the external identity that owns the token, for example
+         *     `{kind: external, address: "@ci-bot", name: "ci-bot"}`.
          */
         get: operations["getWhoami"];
         put?: never;
@@ -347,7 +357,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 本地数据库的健康状态（含 WAL 大小） */
+        /** Health of the local database (including WAL size) */
         get: operations["getHealth"];
         put?: never;
         post?: never;
@@ -365,9 +375,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 固定版本 Pi 合并原生 models.json 后的提供方目录，加已安装插件注册的提供方
-         * @description 目录在插件安装、更新、卸载与保存 models.json 后变化（没有版本号或推送事件，控制台在这些操作后重新读取）。
-         *     带 agentId 时，source 为 plugin 的提供方另给出这个 Agent 现在不能用的原因 `unavailableReason`（项目启用与授权变化后也要重新读取）。
+         * Provider catalog of the pinned Pi version after merging the native models.json, plus the providers registered by installed plugins
+         * @description The catalog changes after a plugin is installed, updated or uninstalled and after models.json is saved (there is no
+         *     version number or push event; the console reads it again after these operations).
+         *     With agentId, providers whose source is plugin also give `unavailableReason`, the reason this Agent cannot use them
+         *     right now (read it again after project enablement or grants change, too).
          */
         get: operations["listModelProviders"];
         put?: never;
@@ -385,9 +397,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 读取全局原生 models.json 文档 */
+        /** Read the global native models.json document */
         get: operations["getModelSettings"];
-        /** 由固定版本 Pi 校验并保存原生 models.json */
+        /** Validate the native models.json with the pinned Pi version and save it */
         put: operations["putModelSettings"];
         post?: never;
         delete?: never;
@@ -404,16 +416,27 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 读取本机模式的四个开关
-         * @description 个人版“本机模式”：让 Agent 直接使用用户本机已有的东西，四项各有一个开关。directories、git、cli 在新装与升级后默认开启；
-         *     logins 等于让 Agent 以用户本人的身份使用本机工具，新装与升级后都默认关闭，须用户主动打开。
-         *     - directories：绑定本机目录。项目与 Agent 登记的本机目录写进 Pi 系统提示的“文件夹与上下文”一节；关闭时清单照常保存，但不交给任何 Agent。
-         *     - git：用本机的 git 身份。“从 Git 拉取”沿用服务端进程用户真实的 HOME、SSH_AUTH_SOCK 与本机的 credential helper；Agent 的 gh 凭证仍专用于 github.com。
-         *     - cli：用本机的 CLI。把用户的 PATH 接在执行 PATH 之后（随包 Node、loopctl、CLI 模板目录仍排在前面）；不改变 HOME 与登录态。
-         *     - logins：用本机的登录状态。Pi 及其子进程的 HOME（Windows 上另有 USERPROFILE、APPDATA、LOCALAPPDATA）改为服务端进程用户真实的，
-         *       本机各工具已有的登录可以直接使用；在 Loop Now 里给 Agent 配了账号的 CLI 仍用配置的账号（经各工具自己的配置目录变量指回 Agent 目录），
-         *       Pi 的会话与配置、Loop Now 的凭证文件和插件数据都不落到用户目录。与 cli 相互独立：只开 logins 时，只有执行 PATH 里已有的命令能用上本机登录。
-         *     directories、cli 与 logins 的改动在 Pi 下次启动时生效（下一次派发发现变化即重启，不打断进行中的回复，任务内的实例同样）；git 从下一次拉取生效。
+         * Read the four local mode switches
+         * @description Personal edition "Local mode": lets Agents directly use what already exists on the user's computer, with one switch for
+         *     each of four items. directories, git and cli are on by default after a fresh install and after an upgrade;
+         *     logins amounts to letting Agents use local tools as the user in person, so it is off by default after both a fresh
+         *     install and an upgrade, and the user must turn it on.
+         *     - directories: "Bind local directories". The local directories registered for projects and Agents are written into
+         *       the "Folders and context" section of the Pi system prompt; when off, the lists are still saved but given to no Agent.
+         *     - git: "Use local git identity". "Pull from Git" uses the server process user's real HOME, SSH_AUTH_SOCK and the local
+         *       credential helper; the Agent's gh credential is still used only for github.com.
+         *     - cli: "Use local CLIs". Appends the user's PATH after the execution PATH (the bundled Node, loopctl and the CLI
+         *       template directories still come first); does not change HOME or login state.
+         *     - logins: "Use local logins". HOME of Pi and its child processes (plus USERPROFILE, APPDATA and LOCALAPPDATA on
+         *       Windows) becomes the server process user's real one,
+         *       so the existing logins of the local tools can be used directly; a CLI with an account configured for the Agent in
+         *       Loop Now still uses the configured account (pointed back to the Agent directory through each tool's own config
+         *       directory variable),
+         *       and Pi's sessions and config, Loop Now's credential files and plugin data never land in the user's directory.
+         *       Independent of cli: with only logins on, only commands already in the execution PATH can use the local logins.
+         *     Changes to directories, cli and logins take effect the next time Pi starts (the next dispatch that detects a change
+         *     restarts it without interrupting a reply in progress; the same goes for instances inside tasks); git takes effect
+         *     from the next pull.
          */
         get: operations["getLocalModeSettings"];
         put?: never;
@@ -421,7 +444,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** 修改本机模式开关（只改请求里带的字段） */
+        /** Change local mode switches (only the fields in the request are changed) */
         patch: operations["updateLocalModeSettings"];
         trace?: never;
     };
@@ -433,10 +456,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Agent 运行时在本机是否可用
-         * @description pi 为随包的 Pi，总是可用。claude-code 为用户本机安装的 Claude Code：在服务端用户登录 shell 的 PATH 里找 claude、运行 claude --version；
-         *     登录状态由 claude auth status 自己回答（平台不读、不保存它的凭证），只给出是否登录、登录方式与订阅类型，邮箱与组织不返回。
-         *     判断不了登录状态时 state 为 unknown，此时只在运行失败时如实报错（runtime_login_required 等）。结果缓存 30 秒，refresh=true 时重新检查。
+         * Whether each Agent runtime is available on this computer
+         * @description pi is the bundled Pi and is always available. claude-code is the Claude Code installed on the user's computer: claude
+         *     is looked up in the PATH of the server user's login shell and claude --version is run;
+         *     the login state is answered by claude auth status itself (the platform neither reads nor stores its credentials), and
+         *     only whether it is logged in, the login method and the subscription type are given; email and organization are not
+         *     returned.
+         *     When the login state cannot be determined, state is unknown, and errors are then reported as they are only when a run
+         *     fails (runtime_login_required and so on). Results are cached for 30 seconds; refresh=true checks again.
          */
         get: operations["listRuntimes"];
         put?: never;
@@ -456,7 +483,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 某个提供方下的模型 */
+        /** Models of one provider */
         get: operations["listModels"];
         put?: never;
         post?: never;
@@ -473,7 +500,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 内置 CLI 模板目录 */
+        /** Built-in CLI template catalog */
         get: operations["listCliTemplates"];
         put?: never;
         post?: never;
@@ -490,10 +517,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 默认组织下所有未删除的项目 */
+        /** All non-deleted projects in the default organization */
         get: operations["listProjects"];
         put?: never;
-        /** 在默认组织下新建项目 */
+        /** Create a project in the default organization */
         post: operations["createProject"];
         delete?: never;
         options?: never;
@@ -510,20 +537,22 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 项目详情；已删除的项目返回 404 */
+        /** Project details; a deleted project returns 404 */
         get: operations["getProject"];
         put?: never;
         post?: never;
         /**
-         * 软删除项目
-         * @description 要求项目下所有未删除的 Agent 都空闲（没有进行中的回复，也没有排队消息），否则返回 409 `agent_not_idle`，
-         *     details 为 ProjectNotIdleDetails。删除后，项目与其中的 Agent 按“删除 Agent”处理（停止 Pi、删除凭证密文与凭证文件，
-         *     保留工作文件夹、会话文件与对话历史），Manager 被取消，名称可以再用。默认项目不能删除，返回 422 `validation_failed`（字段 `projectId`）。
+         * Soft delete a project
+         * @description Requires every non-deleted Agent in the project to be idle (no reply in progress and no queued messages), otherwise
+         *     returns 409 `agent_not_idle` with details of type ProjectNotIdleDetails. After deletion, the project and its Agents are
+         *     handled as in "Delete Agent" (Pi is stopped and the credential ciphertext and credential files are deleted, while the
+         *     working folder, session files and conversation history are kept), the Manager is cleared, and the name can be reused.
+         *     The default project cannot be deleted; that returns 422 `validation_failed` (field `projectId`).
          */
         delete: operations["deleteProject"];
         options?: never;
         head?: never;
-        /** 改名；改名后项目内 Agent 的地址随之改变；项目内有 Agent 忙时也可以改名 */
+        /** Rename; the addresses of the Agents in the project change with it; renaming works even while Agents in the project are busy */
         patch: operations["updateProject"];
         trace?: never;
     };
@@ -536,11 +565,11 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 读取项目公共 Prompt 与编辑版本 */
+        /** Read the shared project Prompt and its edit version */
         get: operations["getProjectPrompt"];
         /**
-         * 按编辑版本保存项目公共 Prompt
-         * @description 先核对版本再判断同文本幂等；412后另行GET最新文本，禁止无条件覆盖。
+         * Save the shared project Prompt against its edit version
+         * @description Checks the version first, then treats identical text as idempotent. After a 412, GET the latest text separately; never overwrite unconditionally.
          */
         put: operations["putProjectPrompt"];
         post?: never;
@@ -560,10 +589,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 指定或更换项目 Manager；必须是本项目内未删除的 Agent，否则 422（字段 agentId） */
+        /** Set or change the project Manager; it must be a non-deleted Agent in this project, otherwise 422 (field agentId) */
         put: operations["setProjectManager"];
         post?: never;
-        /** 取消项目 Manager；原本没有 Manager 时也成功 */
+        /** Clear the project Manager; also succeeds when there was no Manager */
         delete: operations["clearProjectManager"];
         options?: never;
         head?: never;
@@ -579,10 +608,10 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 项目内所有未删除的 Agent；项目已删除时 404 */
+        /** All non-deleted Agents in the project; 404 if the project is deleted */
         get: operations["listProjectAgents"];
         put?: never;
-        /** 在项目中创建常态 Agent；名称在本项目内唯一 */
+        /** Create a regular Agent in the project; the name is unique within the project */
         post: operations["createProjectAgent"];
         delete?: never;
         options?: never;
@@ -597,10 +626,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 平台持有的所有未删除的 Agent */
+        /** All non-deleted Agents held by the platform */
         get: operations["listPlatformAgents"];
         put?: never;
-        /** 创建平台持有的常态 Agent；名称在平台内唯一，地址就是名称 */
+        /** Create a regular Agent held by the platform; the name is unique on the platform, and the address is the name */
         post: operations["createPlatformAgent"];
         delete?: never;
         options?: never;
@@ -616,10 +645,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 按地址查找 Agent，返回 0 或 1 项
-         * @description 地址的写法与 Inbox 的收件地址相同（见 `InboxSendInput.to`），由服务端解析；也接受 Agent 的内部 ID。
-         *     找不到、Agent 已删除、所在项目已删除、地址以 `@` 开头（不指向 Agent），或带 `#任务ID` 时，返回空列表，不返回 404。
-         *     地址放在查询参数中，必须按 URL 规则编码，否则 `#` 之后的部分会被当作 URL 片段丢失。
+         * Find an Agent by address; returns 0 or 1 item
+         * @description The address is written the same way as an Inbox recipient address (see `InboxSendInput.to`) and is resolved by the
+         *     server; an Agent's internal ID is also accepted.
+         *     When nothing is found, the Agent is deleted, its project is deleted, the address starts with `@` (it does not point to
+         *     an Agent) or it carries `#<task ID>`, an empty list is returned, not 404.
+         *     The address goes in a query parameter and must be URL-encoded, otherwise the part after `#` is taken as the URL
+         *     fragment and lost.
          */
         get: operations["findAgents"];
         put?: never;
@@ -639,15 +671,15 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Agent 详情（含配置、可用 CLI、凭证元数据） */
+        /** Agent details (including config, available CLIs and credential metadata) */
         get: operations["getAgent"];
         put?: never;
         post?: never;
-        /** 软删除空闲的 Agent */
+        /** Soft delete an idle Agent */
         delete: operations["deleteAgent"];
         options?: never;
         head?: never;
-        /** 修改显示名称、模型或 Prompt */
+        /** Change the display name, model or Prompt */
         patch: operations["updateAgent"];
         trace?: never;
     };
@@ -661,16 +693,19 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 列出 Agent 文件夹中的一层（懒加载）
-         * @description 只列 `path` 这一层，不递归、不统计目录大小；目录在前，同类按名称排序。`limit` 默认 500、上限 2000，
-         *     有更多时返回 `nextCursor`，原样传回取下一页。Agent 文件夹就是它的工作目录（Pi 的 cwd），也是它自己的上下文；常态与平台 Agent 各有一个。
+         * List one level of an Agent folder (lazy loading)
+         * @description Lists only the `path` level, with no recursion and no directory sizes; directories first, each kind sorted by name.
+         *     `limit` defaults to 500, at most 2000;
+         *     when there are more, `nextCursor` is returned; pass it back unchanged to get the next page. The Agent folder is the
+         *     Agent's working directory (Pi's cwd) and also its own context; every regular Agent and platform Agent has one.
          */
         get: operations["listAgentFolderEntries"];
         put?: never;
         post?: never;
         /**
-         * 删除 Agent 文件夹中的一个文件或目录（含其全部内容）
-         * @description 先移到文件夹外的回收区（立即返回），再在后台删除，不提供恢复。软链接只删链接本身。不能删除文件夹根。
+         * Delete a file or directory (with all its contents) in an Agent folder
+         * @description First moves it to a trash area outside the folder (returns immediately), then deletes it in the background; there is
+         *     no restore. For a symlink only the link itself is deleted. The folder root cannot be deleted.
          */
         delete: operations["deleteAgentFolderEntry"];
         options?: never;
@@ -688,15 +723,18 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 下载 Agent 文件夹中的一个文件（原始字节）
-         * @description 支持 Range；只下载单个文件，不提供目录打包。文本与否由客户端判断，在线编辑的大小上限见 `Context.limits.textEdit`。
+         * Download a file from an Agent folder (raw bytes)
+         * @description Supports Range; downloads a single file only, with no directory archive. The client decides whether a file is text; for the size limit of online editing see `Context.limits.textEdit`.
          */
         get: operations["getAgentFolderFileContent"];
         /**
-         * 上传、新建或保存（在线编辑） Agent 文件夹中的一个文件
-         * @description 请求体为文件的原始字节，流式写入同目录的临时文件后改名，读取方不会看到写了一半的文件；缺少的上级目录自动创建。
-         *     没有锁，最后一次写入为准。`create=true` 时目标已存在返回 409 `path_conflict`（新建文件用）。
-         *     目标是软链接或目录时返回 422。单个文件上限见 `Context.limits.maxFolderUpload`，超过返回 413。上传文件夹时客户端按相对路径逐个上传。
+         * Upload, create or save (online editing) a file in an Agent folder
+         * @description The request body is the file's raw bytes, streamed into a temporary file in the same directory and then renamed, so
+         *     readers never see a half-written file; missing parent directories are created automatically.
+         *     There is no lock; the last write wins. With `create=true`, an existing target returns 409 `path_conflict` (used for
+         *     creating new files).
+         *     Returns 422 when the target is a symlink or a directory. The per-file limit is `Context.limits.maxFolderUpload`;
+         *     larger returns 413. To upload a folder, the client uploads the files one by one by relative path.
          */
         put: operations["putAgentFolderFileContent"];
         post?: never;
@@ -717,7 +755,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 在 Agent 文件夹中新建目录（含缺少的上级目录） */
+        /** Create a directory in an Agent folder (including missing parent directories) */
         post: operations["createAgentFolderDirectory"];
         delete?: never;
         options?: never;
@@ -737,8 +775,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 在 Agent 文件夹内改名或移动一个文件或目录
-         * @description 只在同一文件夹内移动；目标已存在返回 409 `path_conflict`，不覆盖。不能移动文件夹根，也不能移到自身之下。
+         * Rename or move a file or directory within an Agent folder
+         * @description Moves only within the same folder; an existing target returns 409 `path_conflict` and is not overwritten. The folder root cannot be moved, and nothing can be moved under itself.
          */
         post: operations["moveAgentFolderEntry"];
         delete?: never;
@@ -757,21 +795,28 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 列出 Agent 最近的 Git 拉取，新的在前
-         * @description 用于页面刷新后恢复进行中或失败的拉取的状态。`limit` 默认 20、上限 100。
+         * List the Agent's recent Git pulls, newest first
+         * @description Used to restore the state of in-progress or failed pulls after a page reload. `limit` defaults to 20, at most 100.
          */
         get: operations["listAgentFolderGitPulls"];
         put?: never;
         /**
-         * 从 Git 一次性拉取一个分支到 Agent 文件夹的子目录
-         * @description 只拉取这一个分支，保留它的完整历史（`clone --single-branch --branch`，不截断），之后就是普通文件，不再同步。
-         *     本机模式的 git 开关关闭时：只使用该 Agent 当前配置里的 gh CLI 凭证（项目 GitHub 账号），没有配置 gh 时匿名克隆，只能拉公开仓库；
-         *     HOME 是 Agent 的独立目录，SSH 地址读不到用户的密钥与 known_hosts。
-         *     开关开启时（默认）：沿用服务端进程用户真实的 HOME、SSH_AUTH_SOCK、git 配置与 credential helper，SSH 地址和本机已存的 HTTPS 凭证可用；
-         *     Agent 配置了 gh 时，github.com 的 HTTPS 只用它的凭证（不读也不写本机为 github.com 存的凭证），其他主机走本机的 helper。
-         *     两种情况都不做任何交互式询问：git 不弹终端提示与 askpass，SSH 以 BatchMode 运行，未知主机直接失败（`host_key_unverified`）。
-         *     `path` 必须不存在或是空目录，否则返回 409 `path_conflict`；同一目标已有进行中的拉取时同样返回 409。
-         *     异步执行，返回 202 与操作；用 GET 查询状态。actionId 幂等：同一 actionId 返回同一操作，换了内容返回 409 `action_conflict`。
+         * Pull one branch from Git, once, into a subdirectory of the Agent folder
+         * @description Pulls only this one branch and keeps its full history (`clone --single-branch --branch`, not shallow); afterwards
+         *     it is ordinary files and is not synced again.
+         *     When the local mode git switch is off: only the gh CLI credential in the Agent's current config (the project GitHub
+         *     account) is used; without gh configured the clone is anonymous and only public repositories can be pulled;
+         *     HOME is the Agent's own directory, so SSH addresses cannot read the user's keys and known_hosts.
+         *     When the switch is on (the default): the server process user's real HOME, SSH_AUTH_SOCK, git config and credential
+         *     helper are used, so SSH addresses and the HTTPS credentials already stored on this computer work;
+         *     when the Agent has gh configured, HTTPS to github.com uses only its credential (the credentials stored on this
+         *     computer for github.com are neither read nor written), and other hosts go through the local helper.
+         *     In both cases nothing is ever asked interactively: git shows no terminal prompt and no askpass, SSH runs in
+         *     BatchMode, and an unknown host fails immediately (`host_key_unverified`).
+         *     `path` must not exist or must be an empty directory, otherwise 409 `path_conflict`; a pull already in progress for
+         *     the same target also returns 409.
+         *     Runs asynchronously and returns 202 with the operation; query its status with GET. actionId is idempotent: the same
+         *     actionId returns the same operation, and different content returns 409 `action_conflict`.
          */
         post: operations["startAgentFolderGitPull"];
         delete?: never;
@@ -790,7 +835,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 查询一次 Git 拉取的状态 */
+        /** Get the status of a Git pull */
         get: operations["getAgentFolderGitPull"];
         put?: never;
         post?: never;
@@ -810,16 +855,21 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 列出项目上下文文件夹中的一层（懒加载）
-         * @description 只列 `path` 这一层，不递归、不统计目录大小；目录在前，同类按名称排序。`limit` 默认 500、上限 2000，
-         *     有更多时返回 `nextCursor`，原样传回取下一页。项目上下文文件夹由本项目的 Agent（含任务内实例）与人共同读写，不存在时自动创建；项目删除后保留在磁盘上但不再可访问。
+         * List one level of the project context folder (lazy loading)
+         * @description Lists only the `path` level: not recursive, and directory sizes are not computed. Directories come first;
+         *     entries of the same kind are sorted by name. `limit` defaults to 500, maximum 2000; when there are more entries,
+         *     `nextCursor` is returned; pass it back unchanged to get the next page. The project context folder is read and
+         *     written by both this project's Agents (including their instances in tasks) and people, and is created
+         *     automatically if it does not exist; after the project is deleted it stays on disk but is no longer accessible.
          */
         get: operations["listProjectContextFolderEntries"];
         put?: never;
         post?: never;
         /**
-         * 删除项目上下文文件夹中的一个文件或目录（含其全部内容）
-         * @description 先移到文件夹外的回收区（立即返回），再在后台删除，不提供恢复。软链接只删链接本身。不能删除文件夹根。
+         * Delete a file or directory (with all its contents) from the project context folder
+         * @description Moves the entry to a trash area outside the folder first (returns immediately), then deletes it in the
+         *     background; it cannot be restored. For a symlink, only the link itself is deleted. The folder root cannot be
+         *     deleted.
          */
         delete: operations["deleteProjectContextFolderEntry"];
         options?: never;
@@ -837,15 +887,18 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 下载项目上下文文件夹中的一个文件（原始字节）
-         * @description 支持 Range；只下载单个文件，不提供目录打包。文本与否由客户端判断，在线编辑的大小上限见 `Context.limits.textEdit`。
+         * Download a file from the project context folder (raw bytes)
+         * @description Supports Range. Downloads a single file only; directories cannot be downloaded as an archive. The client decides whether a file is text; the size limit for online editing is `Context.limits.textEdit`.
          */
         get: operations["getProjectContextFolderFileContent"];
         /**
-         * 上传、新建或保存（在线编辑）项目上下文文件夹中的一个文件
-         * @description 请求体为文件的原始字节，流式写入同目录的临时文件后改名，读取方不会看到写了一半的文件；缺少的上级目录自动创建。
-         *     没有锁，最后一次写入为准。`create=true` 时目标已存在返回 409 `path_conflict`（新建文件用）。
-         *     目标是软链接或目录时返回 422。单个文件上限见 `Context.limits.maxFolderUpload`，超过返回 413。上传文件夹时客户端按相对路径逐个上传。
+         * Upload, create or save (online editing) a file in the project context folder
+         * @description The request body is the file's raw bytes. They are streamed to a temporary file in the same directory, which is
+         *     then renamed, so readers never see a half-written file; missing parent directories are created automatically.
+         *     There is no locking; the last write wins. With `create=true`, an existing target returns 409 `path_conflict`
+         *     (used for creating new files). Returns 422 when the target is a symlink or a directory. The per-file limit is
+         *     `Context.limits.maxFolderUpload`; larger files return 413. To upload a folder, the client uploads its files one
+         *     by one by relative path.
          */
         put: operations["putProjectContextFolderFileContent"];
         post?: never;
@@ -866,7 +919,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 在项目上下文文件夹中新建目录（含缺少的上级目录） */
+        /** Create a directory in the project context folder (including missing parent directories) */
         post: operations["createProjectContextFolderDirectory"];
         delete?: never;
         options?: never;
@@ -886,8 +939,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 在项目上下文文件夹内改名或移动一个文件或目录
-         * @description 只在同一文件夹内移动；目标已存在返回 409 `path_conflict`，不覆盖。不能移动文件夹根，也不能移到自身之下。
+         * Rename or move a file or directory within the project context folder
+         * @description Moves only within the same folder. An existing target returns 409 `path_conflict` and is not overwritten. The folder root cannot be moved, and an entry cannot be moved under itself.
          */
         post: operations["moveProjectContextFolderEntry"];
         delete?: never;
@@ -906,18 +959,22 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 项目的本机目录清单（对项目内所有 Agent 生效，含任务内的实例）
-         * @description 每项带服务端读取时的 status。从未保存过的项目返回 revision 0 与空清单。
-         *     本机目录是“额外挂载”：Agent 自己的文件夹、任务复制与回收站都不变；Pi 不在沙箱里，清单是告知与管理，不是权限隔离，
-         *     Agent（含任务内的实例）对这些目录有完整读写权限，改动直接落在用户的真实文件上。
+         * The project's local directory list (applies to every Agent in the project, including instances in tasks)
+         * @description Each entry carries its status as read by the server at request time. A project that has never saved a list
+         *     returns revision 0 and an empty list. Local directories are "extra mounts": the Agent's own folder, task copies
+         *     and the trash stay unchanged. Pi is not sandboxed, so the list informs and manages; it does not isolate
+         *     permissions. Agents (including instances in tasks) have full read and write access to these directories, and
+         *     changes land directly on the user's real files.
          */
         get: operations["getProjectLocalDirectories"];
         /**
-         * 整体替换项目的本机目录清单
-         * @description `expectedRevision` 必须等于当前 revision（从未保存过为 0），否则 412 `precondition_failed`；成功后 revision 加一。
-         *     校验规则见 `LocalDirectoryInput`；校验失败返回 422 `validation_failed`，字段错误的 field 形如 `directories[2].path`、
-         *     `directories[2].note`，条目过多时为 `directories`。目录不存在或不是目录不拒绝保存，响应里的 status 标出。
-         *     清单变化后，相关 Agent 的 Pi 在下一次派发时按新清单重启（不打断进行中的回复）。
+         * Replace the project's whole local directory list
+         * @description `expectedRevision` must equal the current revision (0 if never saved), otherwise 412 `precondition_failed`; on
+         *     success the revision increases by one. Validation rules are in `LocalDirectoryInput`. A validation failure
+         *     returns 422 `validation_failed`; the field of a field error looks like `directories[2].path` or
+         *     `directories[2].note`, and is `directories` when there are too many entries. A path that does not exist or is
+         *     not a directory does not block saving; the status in the response marks it. After the list changes, the Pi of
+         *     each affected Agent restarts with the new list at its next dispatch (a reply in progress is not interrupted).
          */
         put: operations["putProjectLocalDirectories"];
         post?: never;
@@ -937,15 +994,17 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Agent 自己的本机目录清单，以及继承自项目的条目
-         * @description `directories` 是 Agent 自己的（可编辑），`inherited` 是所属项目的（只读，与项目接口返回的相同）；平台 Agent 没有项目，
-         *     `projectId` 为 null、`inherited` 为空，自己的清单照常可用。生效时项目的在前、Agent 自己的在后，同一路径只算一次。
-         *     常态 Agent 的清单同样用于它在任务中的实例。从未保存过时 revision 为 0。
+         * The Agent's own local directory list, plus the entries inherited from its project
+         * @description `directories` is the Agent's own list (editable); `inherited` is its project's list (read-only, the same as the
+         *     project endpoint returns). A platform Agent has no project: `projectId` is null and `inherited` is empty, and
+         *     its own list works as usual. In effect, the project's entries come first and the Agent's own after them; the
+         *     same path counts only once. A regular Agent's list also applies to its instances in tasks. Revision is 0 if
+         *     never saved.
          */
         get: operations["getAgentLocalDirectories"];
         /**
-         * 整体替换 Agent 自己的本机目录清单
-         * @description 规则与 `putProjectLocalDirectories` 相同，只替换 `directories`；响应同 GET（含 inherited）。
+         * Replace the Agent's own whole local directory list
+         * @description Same rules as `putProjectLocalDirectories`; only `directories` is replaced. The response is the same as GET (with inherited).
          */
         put: operations["putAgentLocalDirectories"];
         post?: never;
@@ -963,16 +1022,20 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 列出全局上下文文件夹中的一层（懒加载）
-         * @description 只列 `path` 这一层，不递归、不统计目录大小；目录在前，同类按名称排序。`limit` 默认 500、上限 2000，
-         *     有更多时返回 `nextCursor`，原样传回取下一页。全局上下文文件夹由平台 Agent 与人共同读写，不存在时自动创建。
+         * List one level of the global context folder (lazy loading)
+         * @description Lists only the `path` level: not recursive, and directory sizes are not computed. Directories come first;
+         *     entries of the same kind are sorted by name. `limit` defaults to 500, maximum 2000; when there are more entries,
+         *     `nextCursor` is returned; pass it back unchanged to get the next page. The global context folder is read and
+         *     written by both platform Agents and people, and is created automatically if it does not exist.
          */
         get: operations["listGlobalContextFolderEntries"];
         put?: never;
         post?: never;
         /**
-         * 删除全局上下文文件夹中的一个文件或目录（含其全部内容）
-         * @description 先移到文件夹外的回收区（立即返回），再在后台删除，不提供恢复。软链接只删链接本身。不能删除文件夹根。
+         * Delete a file or directory (with all its contents) from the global context folder
+         * @description Moves the entry to a trash area outside the folder first (returns immediately), then deletes it in the
+         *     background; it cannot be restored. For a symlink, only the link itself is deleted. The folder root cannot be
+         *     deleted.
          */
         delete: operations["deleteGlobalContextFolderEntry"];
         options?: never;
@@ -988,15 +1051,18 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 下载全局上下文文件夹中的一个文件（原始字节）
-         * @description 支持 Range；只下载单个文件，不提供目录打包。文本与否由客户端判断，在线编辑的大小上限见 `Context.limits.textEdit`。
+         * Download a file from the global context folder (raw bytes)
+         * @description Supports Range. Downloads a single file only; directories cannot be downloaded as an archive. The client decides whether a file is text; the size limit for online editing is `Context.limits.textEdit`.
          */
         get: operations["getGlobalContextFolderFileContent"];
         /**
-         * 上传、新建或保存（在线编辑）全局上下文文件夹中的一个文件
-         * @description 请求体为文件的原始字节，流式写入同目录的临时文件后改名，读取方不会看到写了一半的文件；缺少的上级目录自动创建。
-         *     没有锁，最后一次写入为准。`create=true` 时目标已存在返回 409 `path_conflict`（新建文件用）。
-         *     目标是软链接或目录时返回 422。单个文件上限见 `Context.limits.maxFolderUpload`，超过返回 413。上传文件夹时客户端按相对路径逐个上传。
+         * Upload, create or save (online editing) a file in the global context folder
+         * @description The request body is the file's raw bytes. They are streamed to a temporary file in the same directory, which is
+         *     then renamed, so readers never see a half-written file; missing parent directories are created automatically.
+         *     There is no locking; the last write wins. With `create=true`, an existing target returns 409 `path_conflict`
+         *     (used for creating new files). Returns 422 when the target is a symlink or a directory. The per-file limit is
+         *     `Context.limits.maxFolderUpload`; larger files return 413. To upload a folder, the client uploads its files one
+         *     by one by relative path.
          */
         put: operations["putGlobalContextFolderFileContent"];
         post?: never;
@@ -1015,7 +1081,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 在全局上下文文件夹中新建目录（含缺少的上级目录） */
+        /** Create a directory in the global context folder (including missing parent directories) */
         post: operations["createGlobalContextFolderDirectory"];
         delete?: never;
         options?: never;
@@ -1033,8 +1099,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 在全局上下文文件夹内改名或移动一个文件或目录
-         * @description 只在同一文件夹内移动；目标已存在返回 409 `path_conflict`，不覆盖。不能移动文件夹根，也不能移到自身之下。
+         * Rename or move a file or directory within the global context folder
+         * @description Moves only within the same folder. An existing target returns 409 `path_conflict` and is not overwritten. The folder root cannot be moved, and an entry cannot be moved under itself.
          */
         post: operations["moveGlobalContextFolderEntry"];
         delete?: never;
@@ -1054,10 +1120,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 把 CLI 加入可用列表（已存在时不变） */
+        /** Add a CLI to the available list (no change if it is already there) */
         put: operations["addAgentCli"];
         post?: never;
-        /** 从可用列表移除 CLI，同时删除其凭证 */
+        /** Remove a CLI from the available list and delete its credential */
         delete: operations["removeAgentCli"];
         options?: never;
         head?: never;
@@ -1076,14 +1142,14 @@ export interface paths {
         };
         get?: never;
         /**
-         * 按模板录入或覆盖该 CLI 的凭证
-         * @description 项目Agent返回409 project_credential_required，不修改共享账号；平台Agent保留私有行为。
+         * Enter or overwrite the CLI's credential using its template
+         * @description A project Agent returns 409 `project_credential_required` and the shared account is not modified; a platform Agent keeps the private (per-Agent) behavior.
          */
         put: operations["putCliCredential"];
         post?: never;
         /**
-         * 删除该 CLI 的凭证（CLI 仍在可用列表中）
-         * @description 项目Agent返回409 project_credential_required，不修改共享账号；平台Agent保留私有行为。
+         * Delete the CLI's credential (the CLI stays in the available list)
+         * @description A project Agent returns 409 `project_credential_required` and the shared account is not modified; a platform Agent keeps the private (per-Agent) behavior.
          */
         delete: operations["deleteCliCredential"];
         options?: never;
@@ -1102,14 +1168,14 @@ export interface paths {
         };
         get?: never;
         /**
-         * 录入或覆盖模型账号凭证（环境变量）
-         * @description 项目Agent返回409 project_credential_required，不修改共享账号；平台Agent保留私有行为。
+         * Enter or overwrite the model account credential (environment variables)
+         * @description A project Agent returns 409 `project_credential_required` and the shared account is not modified; a platform Agent keeps the private (per-Agent) behavior.
          */
         put: operations["putModelCredential"];
         post?: never;
         /**
-         * 删除模型账号凭证
-         * @description 项目Agent返回409 project_credential_required，不修改共享账号；平台Agent保留私有行为。
+         * Delete the model account credential
+         * @description A project Agent returns 409 `project_credential_required` and the shared account is not modified; a platform Agent keeps the private (per-Agent) behavior.
          */
         delete: operations["deleteModelCredential"];
         options?: never;
@@ -1124,10 +1190,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Skills 模板库 */
+        /** Skill template library */
         get: operations["listSkillTemplates"];
         put?: never;
-        /** 上传 zip 创建模板，或只提交 SKILL.md 新建模板 */
+        /** Create a template by uploading a zip, or by submitting only a SKILL.md */
         post: operations["createSkillTemplate"];
         delete?: never;
         options?: never;
@@ -1144,12 +1210,12 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 模板详情（文件列表与 SKILL.md 内容） */
+        /** Template details (file list and SKILL.md content) */
         get: operations["getSkillTemplate"];
-        /** 用 zip 整体替换模板内容 */
+        /** Replace the template's whole content with a zip */
         put: operations["replaceSkillTemplate"];
         post?: never;
-        /** 删除模板（已复制给 Agent 的副本不受影响） */
+        /** Delete a template (copies already given to Agents are not affected) */
         delete: operations["deleteSkillTemplate"];
         options?: never;
         head?: never;
@@ -1166,7 +1232,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 在线编辑模板的 SKILL.md（只改这个文件） */
+        /** Edit the template's SKILL.md online (changes only this file) */
         put: operations["updateSkillTemplateMarkdown"];
         post?: never;
         delete?: never;
@@ -1184,10 +1250,10 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Agent 的 Skill 副本 */
+        /** The Agent's Skill copies */
         get: operations["listAgentSkills"];
         put?: never;
-        /** 把模板复制给 Agent */
+        /** Copy a template to the Agent */
         post: operations["addAgentSkill"];
         delete?: never;
         options?: never;
@@ -1205,11 +1271,11 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 副本详情（文件列表与 SKILL.md 内容） */
+        /** Copy details (file list and SKILL.md content) */
         get: operations["getAgentSkill"];
         put?: never;
         post?: never;
-        /** 从 Agent 上移除副本 */
+        /** Remove a copy from the Agent */
         delete: operations["removeAgentSkill"];
         options?: never;
         head?: never;
@@ -1227,7 +1293,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 在线编辑副本的 SKILL.md（只改这个文件） */
+        /** Edit the copy's SKILL.md online (changes only this file) */
         put: operations["updateAgentSkillMarkdown"];
         post?: never;
         delete?: never;
@@ -1248,7 +1314,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 用来源模板的当前内容整体覆盖副本 */
+        /** Overwrite the whole copy with the source template's current content */
         post: operations["recopyAgentSkill"];
         delete?: never;
         options?: never;
@@ -1265,20 +1331,28 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 分页查询对话历史（按时间正序返回一页） */
+        /** Page through the conversation history (each page in chronological order) */
         get: operations["listMessages"];
         put?: never;
         /**
-         * 发送消息；Agent 忙时必须选择打断或排队
-         * @description 以 `/` 开头且不带图片的消息先匹配平台内置命令 `/session`、`/new`、`/compact [instructions]`、`/reload`、`/copy`、`/export [html|jsonl]`、`/resume [完整ID]`；
-         *     未匹配时交给插件 `console.command`。`/compact`、`/export`、`/resume` 只适用于 Pi 会话：Claude Code 的 Agent 发这几个命令返回 409 `console_command_failed`，不产生执行。
-         *     平台命令在 Agent 不空闲（有进行中的回复、有排队消息，或运行时正在做别的维护，例如任务分叉）时一律返回 409 `agent_not_idle`，不带 details，
-         *     不会返回 `agent_busy`（那是普通消息“选择打断或排队”用的）：`/new`、`/reload`、`/compact`、`/resume`（列出与恢复都是）。
-         *     `/session`、`/copy` 只读，忙时照常可用；`/export` 本身只返回格式，忙闲在下载（GET /agents/{agentId}/session/export）时检查，同样是 `agent_not_idle`。命令被认领时不作为普通消息保存，返回 200 ConsoleCommandResult；
-         *     其余消息经修改类 Hook `message.before_enqueue`，插件可以改写正文。
-         *     以 `/pi:<name>` 开头的消息是交给 Pi 的命令（plugins/SPEC.md §14）：不给插件认领，照原文保存与显示，执行时发给 Pi 的是 `/<name>` 加其余原文，
-         *     不加运行 ID 与平台通知；带图片时图片照常交给 Pi（Pi 执行扩展命令时不用图片，技能命令与提示模板展开后随提示交给模型）。
-         *     结果见执行的 `piCommand`。可用的命令见 `GET /agents/{agentId}/commands`。任务节点的消息不做这个改写。
+         * Send a message; when the Agent is busy, the caller must choose interrupt or queue
+         * @description A message that starts with `/` and has no images is first matched against the built-in platform commands
+         *     `/session`, `/new`, `/compact [instructions]`, `/reload`, `/copy`, `/export [html|jsonl]` and
+         *     `/resume [full ID]`; if none matches, it goes to the plugin `console.command`. `/compact`, `/export` and
+         *     `/resume` apply only to Pi sessions: for a Claude Code Agent these commands return 409 `console_command_failed`
+         *     and create no run. When the Agent is not idle (a reply in progress, queued messages, or the runtime doing other
+         *     maintenance such as a task fork), these platform commands always return 409 `agent_not_idle` without details,
+         *     never `agent_busy` (which is for ordinary messages, to "choose interrupt or queue"): `/new`, `/reload`,
+         *     `/compact`, `/resume` (both listing and resuming). `/session` and `/copy` are read-only and work as usual while
+         *     busy; `/export` itself only returns the format, and busy/idle is checked at download time (GET
+         *     /agents/{agentId}/session/export), also as `agent_not_idle`. A claimed command is not saved as an ordinary
+         *     message and returns 200 ConsoleCommandResult; other messages go through the modify Hook
+         *     `message.before_enqueue`, where plugins can rewrite the text. A message starting with `/pi:<name>` is a command
+         *     for Pi (plugins/SPEC.md §14): plugins cannot claim it, it is saved and displayed as written, and at run time Pi
+         *     receives `/<name>` plus the rest of the original text, without the run ID or platform notices; attached images
+         *     are passed to Pi as usual (Pi does not use images when running extension commands; skill commands and prompt
+         *     templates are expanded and go to the model with the images). See the run's `piCommand` for the result. For the
+         *     available commands, see `GET /agents/{agentId}/commands`. Messages of task nodes do not get this rewrite.
          */
         post: operations["sendMessage"];
         delete?: never;
@@ -1296,7 +1370,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Agent 的忙闲、排队、进程与会话状态 */
+        /** The Agent's busy state, queue, process and session state */
         get: operations["getAgentStatus"];
         put?: never;
         post?: never;
@@ -1317,7 +1391,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 确认重开会话（解除会话丢失标记，会话序号加一） */
+        /** Confirm starting a new session (clears the session-lost flag and increments the session epoch) */
         post: operations["resetSession"];
         delete?: never;
         options?: never;
@@ -1335,10 +1409,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 导出当前受管 Pi 会话
-         * @description jsonl 是会话文件原样；html 由 Pi 的 `--export` 从会话文件生成（不启动 Pi 运行时，也不动存活的空闲进程），页面里没有系统提示词与工具定义。
-         *     Agent 不空闲时返回 409 `agent_not_idle`（不带 details）。
-         *     Claude Code 的 Agent 没有 Pi 会话，返回 409 `console_command_failed`；会话文件不在了返回 409 `session_none`。
+         * Export the current managed Pi session
+         * @description jsonl is the session file as is; html is generated from the session file by Pi's `--export` (without starting
+         *     the Pi runtime or touching a live idle process), and the page contains no system prompt or tool definitions.
+         *     Returns 409 `agent_not_idle` (without details) when the Agent is not idle. A Claude Code Agent has no Pi session
+         *     and returns 409 `console_command_failed`; when the session file no longer exists, returns 409 `session_none`.
          */
         get: operations["exportAgentSession"];
         put?: never;
@@ -1359,17 +1434,26 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Agent 事件流（SSE）
-         * @description `text/event-stream`，每条事件都带 `id`（事件流条目 ID，形如 `<毫秒>-<序号>`，服务端重启后从头编号），事件名与 data 结构的对应见 `x-sse-events`，保活为注释行。
+         * Agent event stream (SSE)
+         * @description `text/event-stream`. Every event carries an `id` (the event stream entry ID, of the form
+         *     `<milliseconds>-<sequence>`, numbered from the start again after a server restart); `x-sse-events` maps event
+         *     names to data structures. Keep-alives are comment lines.
          *
-         *     - 不带 `Last-Event-ID`，或它已超出保留范围：先发一条 `snapshot`，其 `id` 是快照时刻事件流的最新位置；
-         *       `snapshot.currentText` 恰好包含到这个位置为止的全部文字增量。之后只发送这个位置之后的事件，不重放之前的事件。
-         *     - 带 `Last-Event-ID` 且仍在保留范围内：不发 `snapshot`，直接从该 ID 之后续传。
+         *     - Without `Last-Event-ID`, or when it is beyond the retention range: a `snapshot` is sent first, whose `id` is
+         *       the latest position of the event stream at snapshot time; `snapshot.currentText` contains exactly all text
+         *       deltas up to that position. After that only events after this position are sent; earlier events are not
+         *       replayed.
+         *     - With a `Last-Event-ID` still within the retention range: no `snapshot` is sent; the stream resumes right after
+         *       that ID.
          *
-         *     平台提醒那一轮（`Message.origin = inbox_reminder`）排队时，用户消息的正文是占位文字；开始执行时改写为提醒文字，并以同一消息 ID 再推送一次 `message.created`，控制台按 ID 更新。
+         *     While a platform reminder turn (`Message.origin = inbox_reminder`) is queued, the user message text is a
+         *     placeholder; when the run starts it is rewritten to the reminder text and `message.created` is pushed again with
+         *     the same message ID, and the console updates the message by ID.
          *
-         *     `queue.updated` 在排队列表任何变化时推送完整列表（入队、合并、开始、转为打断、撤回或取消、消息被读取后离队、提醒作废）。
-         *     未执行即作废的执行（Run.endReason 为 user_cancelled、merged_into_interrupt、no_pending_messages）在对话流中应隐藏，运行记录照常显示。
+         *     `queue.updated` pushes the full list on any change to the queue (enqueue, merge, start, promote to interrupt,
+         *     withdraw or cancel, a message leaving the queue after it is read, a reminder becoming void). Runs voided before
+         *     they ran (Run.endReason is user_cancelled, merged_into_interrupt or no_pending_messages) should be hidden in the
+         *     conversation stream; run records show them as usual.
          */
         get: operations["streamAgentEvents"];
         put?: never;
@@ -1391,9 +1475,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 一次执行的运行记录时间线
-         * @description 条目按时间排序：生命周期事件、每个工具调用（开始与结束合并为一条）、每次模型调用的用量。
-         *     执行进行中时返回到目前为止的条目。本变更之前的执行没有详细事件，按执行信息中的时间合成条目。
+         * The run record timeline of one run
+         * @description Entries are sorted by time: lifecycle events, each tool call (start and end merged into one entry), and the
+         *     usage of each model call. While the run is in progress, returns the entries so far. Runs from before this change
+         *     have no detailed events; entries are synthesized from the times in the run information.
          */
         get: operations["getRunTimeline"];
         put?: never;
@@ -1414,11 +1499,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 普通对话的排队列表，逐条列出，按实际处理顺序
-         * @description 控制台在对话中发出、仍在排队的消息每条一项（kind=run）；平台提醒承载的 Inbox 消息每条一项（kind=inbox），
-         *     只列仍待处理的：未读、未取消、承载它的提醒仍在排队。消息被读取或取消后立即离开列表。
-         *     顺序与实际处理顺序一致：先按承载执行的 priority、queue_seq，同一提醒内按消息发送先后。sleep 唤醒执行不列出。
-         *     变化时 Agent SSE 推送 `queue.updated`（items 同本接口），snapshot 带 `queueItems`。
+         * The queue of the ordinary conversation, one item per message, in actual processing order
+         * @description One item (kind=run) for each message the console sent in the conversation that is still queued; one item
+         *     (kind=inbox) for each Inbox message carried by a platform reminder, listing only those still pending: unread,
+         *     not cancelled, and with the reminder carrying it still queued. A message leaves the list as soon as it is read
+         *     or cancelled. The order matches the actual processing order: first by the carrying run's priority and queue_seq,
+         *     then, within one reminder, by the order the messages were sent. Sleep wake runs are not listed. On changes, the
+         *     Agent SSE pushes `queue.updated` (items as in this endpoint), and snapshot carries `queueItems`.
          */
         get: operations["getAgentQueue"];
         put?: never;
@@ -1442,13 +1529,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 把控制台发出、仍在排队的消息转为打断
-         * @description 效果与发送时选择打断一致：执行改为 `whenBusy=interrupt`，排到已有打断之后、全部普通排队之前（连续转换多条时按转换先后排列），
-         *     然后打断进行中的回复。只对控制台发出的执行开放；平台提醒承载的 Inbox 消息用 `POST /agents/{agentId}/inbox-messages/{messageId}/promote-to-interrupt` 逐条转换，
-         *     对提醒执行或 sleep 唤醒调用本接口返回 422。
-         *     已被领取、开始或结束时返回 409 `run_not_queued`，details 为 `RunNotQueuedDetails`。已经是打断时返回 status=already_interrupt，不重复打断。
-         *     actionId 幂等：同一 actionId 重放返回首次结果，同一 actionId 不同内容返回 409 `action_conflict`。
-         *     成功后推送 `run.updated` 与 `queue.updated`；运行记录时间线追加 `promoted` 条目。
+         * Promote a still-queued message sent from the console to an interrupt
+         * @description Same effect as choosing interrupt when sending: the run changes to `whenBusy=interrupt` and is placed after
+         *     existing interrupts and before all ordinary queued items (several promoted in a row are ordered by when they
+         *     were promoted), then the reply in progress is interrupted. Only open to runs sent from the console; Inbox
+         *     messages carried by a platform reminder are promoted one at a time with
+         *     `POST /agents/{agentId}/inbox-messages/{messageId}/promote-to-interrupt`, and calling this endpoint on a
+         *     reminder run or a sleep wake returns 422. Returns 409 `run_not_queued`, with details `RunNotQueuedDetails`, when
+         *     the run has already been claimed, started or ended. When it is already an interrupt, returns
+         *     status=already_interrupt and does not interrupt again. actionId is idempotent: replaying the same actionId
+         *     returns the first result; the same actionId with different content returns 409 `action_conflict`. On success,
+         *     `run.updated` and `queue.updated` are pushed, and a `promoted` entry is appended to the run record timeline.
          */
         post: operations["promoteRunToInterrupt"];
         delete?: never;
@@ -1470,11 +1561,14 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 撤回控制台发出、仍在排队的消息
-         * @description 执行以 interrupted、endReason=user_cancelled 结束，从队列移除，Agent 不会收到。回执的 item 带原文与图片引用，供“编辑”回填输入框；
-         *     图片已属于这条消息，重新发送时需按 ID 读取内容后以新 ID 上传。
-         *     已被领取、开始或结束时返回 409 `run_not_queued`；已经撤回时返回 status=already_cancelled。平台提醒或 sleep 唤醒执行返回 422。
-         *     actionId 规则同转为打断。成功后推送 `run.updated`、`queue.updated`。
+         * Withdraw a still-queued message sent from the console
+         * @description The run ends as interrupted with endReason=user_cancelled and is removed from the queue; the Agent never
+         *     receives it. The receipt's item carries the original text and image references so that "Edit" can put them back
+         *     in the input box; the images already belong to this message, so to send again, read their content by ID and
+         *     upload it under new IDs. Returns 409 `run_not_queued` when the run has already been claimed, started or ended;
+         *     returns status=already_cancelled when it has already been withdrawn. Platform reminder and sleep wake runs
+         *     return 422. actionId rules are the same as for promoting to an interrupt. On success, `run.updated` and
+         *     `queue.updated` are pushed.
          */
         post: operations["cancelQueuedRun"];
         delete?: never;
@@ -1496,10 +1590,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 只停止这一次进行中的回复，不发送新消息
-         * @description 沿用打断路径（清空 Pi 队列、abort、超时强制结束），执行以 interrupted、endReason=user_stopped 结束；之后排队的消息照常按顺序处理。
-         *     只作用于路径中的这一次执行：它已结束时返回 409 `run_not_active`（details 为 `RunNotActiveDetails`），不会停到下一条；
-         *     已在停止或打断中时返回 status=already_stopping。actionId 规则同转为打断。
+         * Stop only this reply in progress, without sending a new message
+         * @description Uses the interrupt path (clear the Pi queue, abort, force-end on timeout); the run ends as interrupted with
+         *     endReason=user_stopped. Messages queued after it are processed in order as usual. Applies only to the run in the
+         *     path: when it has already ended, returns 409 `run_not_active` (details `RunNotActiveDetails`) and does not stop
+         *     the next one; when it is already stopping or being interrupted, returns status=already_stopping. actionId rules
+         *     are the same as for promoting to an interrupt.
          */
         post: operations["stopRun"];
         delete?: never;
@@ -1521,12 +1617,15 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 把排队中的单条 Inbox 消息转为打断（任何发件人）
-         * @description 把消息从承载它的普通提醒移到排队中的打断提醒（没有就新建一个，排在已有打断之后、全部普通排队之前），消息的 whenBusy 改为 interrupt；
-         *     原提醒没有其他待处理消息时作废（endReason=merged_into_interrupt）。随后打断进行中的回复。
-         *     提醒开始时只点名它承载的消息，其余未读消息由各自的提醒稍后处理。
-         *     消息不在队列中时返回 409 `run_not_queued`：details.messageState 为 read、cancelled、dispatched 或 not_queued。
-         *     已经是打断时返回 status=already_interrupt。actionId 规则同 `promoteRunToInterrupt`。
+         * Promote a single queued Inbox message to an interrupt (any sender)
+         * @description Moves the message from the ordinary reminder carrying it to a queued interrupt reminder (creating one if there
+         *     is none, placed after existing interrupts and before all ordinary queued items), and changes the message's
+         *     whenBusy to interrupt. The original reminder is voided (endReason=merged_into_interrupt) when it has no other
+         *     pending messages. Then the reply in progress is interrupted. When a reminder starts, it names only the messages
+         *     it carries; other unread messages are handled later by their own reminders. Returns 409 `run_not_queued` when
+         *     the message is not in the queue; details.messageState is read, cancelled, dispatched or not_queued. Returns
+         *     status=already_interrupt when it is already an interrupt. actionId rules are the same as
+         *     `promoteRunToInterrupt`.
          */
         post: operations["promoteAgentInboxMessage"];
         delete?: never;
@@ -1548,11 +1647,14 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 取消排队中的单条 Inbox 消息（任何发件人）
-         * @description 消息记 `cancelledAt`，不再计为未读，收件 Agent 不会处理：收件 Agent 读取或列出时只得到取消说明，不含原文与图片；
-         *     发件方与控制台仍看到全文与 `cancelledAt`。带选项的问题同时变为 state=cancelled，不能再回答。
-         *     承载它的提醒没有其他待处理消息时作废（endReason=user_cancelled）。Inbox 事件流推送 `inbox.message.cancelled`。
-         *     消息不在队列中时返回 409 `run_not_queued`（messageState 同上）；已经取消时返回 status=already_cancelled。actionId 规则同上。
+         * Cancel a single queued Inbox message (any sender)
+         * @description The message gets `cancelledAt`, no longer counts as unread, and the receiving Agent will not process it: when
+         *     the receiving Agent reads or lists it, it gets only a cancellation notice, without the original text or images;
+         *     the sender and the console still see the full text and `cancelledAt`. A question with options also changes to
+         *     state=cancelled and can no longer be answered. The reminder carrying it is voided (endReason=user_cancelled)
+         *     when it has no other pending messages. The Inbox event stream pushes `inbox.message.cancelled`. Returns 409
+         *     `run_not_queued` when the message is not in the queue (messageState as above); returns status=already_cancelled
+         *     when it is already cancelled. actionId rules are the same as above.
          */
         post: operations["cancelAgentInboxMessage"];
         delete?: never;
@@ -1570,7 +1672,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 查看 Agent 收到的消息摘要，新的在前；只读，不改变已读状态 */
+        /** View summaries of the messages the Agent received, newest first; read-only, does not change the read state */
         get: operations["listAgentInbox"];
         put?: never;
         post?: never;
@@ -1590,10 +1692,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 控制台与 Agent（常态，不含它的任务实例）之间的 Inbox 消息全文，两个方向都有，新的在前；只读，不改变已读状态
-         * @description 供 Agent 对话按时间合并显示。每条消息带问题（选项、状态、回答）与已读状态。
-         *     任务实例与控制台之间的消息不在这里，见 `GET /tasks/{taskId}/nodes/{nodeRunId}/inbox-messages`。
-         *     Agent 不存在时返回 404；已删除的 Agent 仍可查看。
+         * Full text of the Inbox messages between the console and the Agent (regular, not its task instances), in both directions, newest first; read-only, does not change the read state
+         * @description For merging into the Agent conversation by time. Each message carries its question (options, state, answer) and
+         *     read state. Messages between task instances and the console are not here; see
+         *     `GET /tasks/{taskId}/nodes/{nodeRunId}/inbox-messages`. Returns 404 when the Agent does not exist; deleted
+         *     Agents can still be viewed.
          */
         get: operations["listAgentConsoleMessages"];
         put?: never;
@@ -1614,7 +1717,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 查看 Agent 收到的一条消息的全文；只读，不改变已读状态 */
+        /** View the full text of one message the Agent received; read-only, does not change the read state */
         get: operations["getAgentInboxMessage"];
         put?: never;
         post?: never;
@@ -1632,10 +1735,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 概览事件流（SSE）：所有未删除项目与平台中未删除 Agent 的运行状态，可按项目或平台筛选
-         * @description `text/event-stream`，快照与续传规则同 `GET /agents/{agentId}/events`。
-         *     `agent.status` 带 Agent 完整的新状态；文字增量与工具状态不触发推送。
-         *     按范围筛选时，快照与后续事件都只含该范围的 Agent；项目被删除时，其中每个 Agent 推送 `agent.removed`。
+         * Overview event stream (SSE) with the run state of the non-deleted Agents in all non-deleted projects and on the platform; can be filtered by project or platform
+         * @description `text/event-stream`; snapshot and resume rules are the same as for `GET /agents/{agentId}/events`.
+         *     `agent.status` carries the Agent's complete new status; text deltas and tool states do not trigger a push. When
+         *     filtered by scope, both the snapshot and later events include only the Agents in that scope; when a project is
+         *     deleted, `agent.removed` is pushed for each of its Agents.
          */
         get: operations["streamOverviewEvents"];
         put?: never;
@@ -1653,7 +1757,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 按（Agent、提供方、模型）统计 token 用量；只统计 token，不提供费用；可按项目或平台筛选 */
+        /** Token usage per (Agent, provider, model); counts tokens only, no cost; can be filtered by project or platform */
         get: operations["getUsage"];
         put?: never;
         post?: never;
@@ -1671,8 +1775,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 异常与失败列表：未正常完成的执行，按结束时间倒序分页，不含已删除的 Agent（含已删除项目中的 Agent）；可按项目或平台筛选
-         * @description 手动压缩（/compact）被人取消或因服务重启中断不算异常，只列出失败的手动压缩；Pi 没有压缩（会话太短、已经压缩过）是正常完成。
+         * List of anomalies and failures (runs that did not complete normally), paged by end time, newest first, excluding deleted Agents (including Agents in deleted projects); can be filtered by project or platform
+         * @description A manual compaction (/compact) cancelled by a person or interrupted by a service restart is not an anomaly; only failed manual compactions are listed. Pi not compacting (session too short, already compacted) is a normal completion.
          */
         get: operations["listAnomalies"];
         put?: never;
@@ -1691,11 +1795,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 统计页报表：时间窗内的 token、触发来源、唤醒、上下文、提问、等待、结果、工具、进程与并发；可按项目或平台筛选
-         * @description 只读汇总已有记录，不含已删除的 Agent（含已删除项目中的 Agent）。
-         *     时间窗为 [from, to)，按 bucket 切成连续的桶：第一桶从 from 开始，每桶 1 小时或 24 小时，最后一桶截止于 to。
-         *     计入时间窗与桶的依据：用量按记录时间；执行（常态执行与任务轮次）按排入时间（发出消息、唤醒到期的时刻）；提问按发出时间。
-         *     各处 `series` 与 `buckets` 等长、一一对应。
+         * Stats page report for a time window covering tokens, trigger sources, wakes, context, questions, waiting, outcomes, tools, processes and concurrency; can be filtered by project or platform
+         * @description A read-only summary of existing records, excluding deleted Agents (including Agents in deleted projects). The
+         *     time window is [from, to), cut by bucket into consecutive buckets: the first bucket starts at from, each bucket
+         *     is 1 hour or 24 hours, and the last bucket ends at to. What places a record in the window and in a bucket: usage
+         *     by its record time; runs (regular runs and task turns) by their enqueue time (when the message was sent or the
+         *     wake came due); questions by when they were sent. Every `series` has the same length as `buckets`, and their
+         *     entries correspond one to one.
          */
         get: operations["getStats"];
         put?: never;
@@ -1713,20 +1819,26 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 已安装的插件（插件市场页），按 id 排序 */
+        /** Installed plugins (plugin market page), sorted by id */
         get: operations["listPlugins"];
         put?: never;
         /**
-         * 按预览安装插件
-         * @description 先用 `POST /plugin-previews` 取得预览并展示给人，再带 previewId 安装。非官方来源（本地目录、git、npm）须带 `confirm: true`，
-         *     否则返回 409 `plugin_confirmation_required`。插件 id 已安装时返回 409 `name_conflict`（更新用 `POST /plugins/{pluginId}/update`）。
-         *     git 与 npm 来源在这一步执行 `npm ci --ignore-scripts --omit=dev --omit=peer`（没有锁文件时 `npm install`，参数相同），失败返回 422 `plugin_source_failed`；
-         *     不装 peer 依赖，插件的运行依赖要用的 peer 依赖须直接列进插件自己的 `dependencies`。
-         *     本地目录来源原地使用，不安装依赖、不修改。预览过期或不存在返回 404。
-         *     插件带 Pi 扩展（`pi.extensions`）时，依赖装好后用随包 Pi 加载这些扩展，读出它们注册的模型提供方（plugins/SPEC.md §13；
-         *     会运行插件代码，所以在这一步、而不是预览时做），结果见插件详情的 `providers`。读取失败不阻止安装，原因见 `providersError`。
-         *     注册了 OAuth 登录、与 Pi 目录（内置与 models.json）不同 id 的提供方并入模型目录（`listModelProviders` 里 source 为 plugin）；
-         *     与另一个已安装插件并入目录的提供方同 id 时返回 409 `name_conflict`，不安装。
+         * Install a plugin from a preview
+         * @description First get a preview with `POST /plugin-previews` and show it to a person, then install with the previewId.
+         *     Unofficial sources (local directory, git, npm) require `confirm: true`; otherwise returns 409
+         *     `plugin_confirmation_required`. Returns 409 `name_conflict` when the plugin id is already installed (to update,
+         *     use `POST /plugins/{pluginId}/update`). For git and npm sources, this step runs
+         *     `npm ci --ignore-scripts --omit=dev --omit=peer` (`npm install` with the same flags when there is no lockfile);
+         *     failure returns 422 `plugin_source_failed`. Peer dependencies are not installed: peer dependencies that the
+         *     plugin's runtime dependencies need must be listed directly in the plugin's own `dependencies`. Local directory
+         *     sources are used in place, with no dependency install and no changes. Returns 404 when the preview has expired
+         *     or does not exist. When the plugin has Pi extensions (`pi.extensions`), after dependencies are installed the
+         *     bundled Pi loads those extensions to read the model providers they register (plugins/SPEC.md §13; this runs
+         *     plugin code, so it happens at this step rather than at preview time); the result is in the plugin detail's
+         *     `providers`. A read failure does not block installation; the reason is in `providersError`. Providers that
+         *     register an OAuth login and whose id differs from those in the Pi catalog (built-in and models.json) are merged
+         *     into the model catalog (source is plugin in `listModelProviders`); when such a provider has the same id as a
+         *     provider another installed plugin merged into the catalog, returns 409 `name_conflict` and nothing is installed.
          */
         post: operations["installPlugin"];
         delete?: never;
@@ -1745,10 +1857,13 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 取来插件并读出清单，供安装或更新前展示
-         * @description `source` 与 `pluginId` 二选一：`source` 是新安装的来源；`pluginId` 按已安装插件记录的来源重新获取（更新前预览）。
-         *     获取（git 克隆、npm 打包下载）与清单校验在这一步完成，不安装依赖；预览保留 30 分钟。
-         *     来源无法获取返回 422 `plugin_source_failed`；清单不合规则或 minPlatformVersion 高于平台版本返回 422 `validation_failed`。
+         * Fetch a plugin and read its manifest, to show before installing or updating
+         * @description Pass exactly one of `source` and `pluginId`: `source` is the source for a new installation; `pluginId` fetches
+         *     again from the source recorded for the installed plugin (preview before an update). Fetching (git clone, npm
+         *     package download) and manifest validation happen at this step; dependencies are not installed. Previews are kept
+         *     for 30 minutes. Returns 422 `plugin_source_failed` when the source cannot be fetched; returns 422
+         *     `validation_failed` when the manifest breaks the rules or minPlatformVersion is higher than the platform
+         *     version.
          */
         post: operations["previewPlugin"];
         delete?: never;
@@ -1762,14 +1877,14 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description 预览 id（`POST /plugin-previews` 返回） */
+                /** @description Preview id (returned by `POST /plugin-previews`) */
                 previewId: components["parameters"]["PluginPreviewId"];
             };
             cookie?: never;
         };
         /**
-         * 预览里插件的 README，供安装或更新前阅读
-         * @description 读预览取来的插件目录，选择规则同 `GET /plugins/{pluginId}/readme`。预览过期、已用于安装或不存在返回 404。
+         * The README of the plugin in a preview, to read before installing or updating
+         * @description Reads the plugin directory the preview fetched, with the same selection rules as `GET /plugins/{pluginId}/readme`. Returns 404 when the preview has expired, has already been used for an install, or does not exist.
          */
         get: operations["getPluginPreviewReadme"];
         put?: never;
@@ -1785,22 +1900,26 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
         };
-        /** 插件详情：清单、来源、状态与已装版本 */
+        /** Plugin details (manifest, source, status and installed version) */
         get: operations["getPlugin"];
         put?: never;
         post?: never;
         /**
-         * 卸载插件
-         * @description 宿主内卸载平台侧，删除插件的配置、启用、授权、账号、状态、事件投递与令牌，删除各版本的安装目录（本地目录来源不删）。
-         *     数据目录 `<work root>/platform/plugins/<id>/data/` 只在 `deleteData=true` 时删除。已经启动的 Pi 继续使用已加载的 Agent 侧，直到下次启动。
-         *     插件注册的模型提供方从模型目录里消失；它们在各项目里的订阅账号与平台 Agent 自己的登录默认保留（重新安装后恢复），
-         *     `deleteData=true` 时一并删除（与删除账号相同：未结束任务绑定的版本保留到任务结束，之后状态目录由清理器删除；
-         *     平台 Agent 的登录与清除凭证相同，清掉后这个 Agent 没有模型凭证）。
+         * Uninstall a plugin
+         * @description Unloads the platform side in the plugin host; deletes the plugin's config, enablements, grants, accounts, state,
+         *     event deliveries and tokens; deletes the install directory of every version (not for local directory sources).
+         *     The data directory `<work root>/platform/plugins/<id>/data/` is deleted only with `deleteData=true`. Pi
+         *     processes that have already started keep using the loaded agent side until their next start. The model providers
+         *     the plugin registered disappear from the model catalog; their subscription accounts in each project and platform
+         *     Agents' own logins are kept by default (restored after reinstalling), and are deleted too with `deleteData=true`
+         *     (the same as deleting an account: versions bound by unfinished tasks are kept until the task ends, after which
+         *     the sweeper deletes the state directory; for a platform Agent's login it is the same as clearing the credential,
+         *     after which that Agent has no model credential).
          */
         delete: operations["uninstallPlugin"];
         options?: never;
@@ -1813,17 +1932,19 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
         };
         /**
-         * 插件的 README（当前已装版本）
-         * @description 读当前已装版本的安装目录（本地目录来源为该目录），只看直接子文件，基名不区分大小写（plugins/SPEC.md §2.3）：
-         *     给了 `locale` 时依次找 `README.<locale>.md`、`README.<主语言>.md`（如 zh-CN 的 zh）、`README.md`，没给时先找 `README.md`；
-         *     都没有时取按语言标签排序的第一个 `README.<语言>.md`。软链接解析后须仍在该目录内，否则当作没有。
-         *     超过 1 MiB 时只返回前 1 MiB，`truncated` 为 true；没有任何 README 时 `file` 与 `markdown` 为 null。
+         * The plugin's README (currently installed version)
+         * @description Reads the install directory of the currently installed version (for a local directory source, that directory),
+         *     looking only at direct child files, with case-insensitive base names (plugins/SPEC.md §2.3): with `locale`, it
+         *     looks for `README.<locale>.md`, then `README.<primary language>.md` (such as zh for zh-CN), then `README.md`;
+         *     without it, `README.md` first. If none of these exists, it takes the first `README.<language>.md` in language
+         *     tag order. A symlink must still resolve inside that directory, otherwise it is treated as absent. Over 1 MiB,
+         *     only the first 1 MiB is returned and `truncated` is true; with no README at all, `file` and `markdown` are null.
          */
         get: operations["getPluginReadme"];
         put?: never;
@@ -1839,7 +1960,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
@@ -1847,9 +1968,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 按预览安装插件的新版本
-         * @description 预览须是同一插件 id。新版本装到自己的目录，宿主内先卸载旧版本再加载新版本；任务里已经启动的 Pi 继续用旧文件直到自然重启。
-         *     版本号与已装版本相同但内容不同时返回 409 `plugin_version_conflict`。其余规则同安装（包括重新读取模型提供方与同 id 的 409）。
+         * Install a new version of a plugin from a preview
+         * @description The preview must have the same plugin id. The new version is installed to its own directory; in the plugin host
+         *     the old version is unloaded and then the new one is loaded. Pi processes already started in tasks keep using the
+         *     old files until they restart naturally. Returns 409 `plugin_version_conflict` when the version number equals the
+         *     installed version but the content differs. Other rules are the same as for installing (including reading the
+         *     model providers again and the 409 for the same id).
          */
         post: operations["updatePlugin"];
         delete?: never;
@@ -1863,17 +1987,18 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
         };
-        /** 插件的全局配置；secret 字段只给出是否已设置 */
+        /** The plugin's global config; secret fields only show whether they are set */
         get: operations["getPluginConfig"];
         /**
-         * 按版本保存全局配置
-         * @description values 按清单 configSchema 校验（不含 x-secret 字段），不合规则返回 422；secrets 只写，省略的保留原值、null 清除。
-         *     expectedRevision 与当前不同返回 412。保存后宿主内的插件收到 config_changed。
+         * Save the global config against its revision
+         * @description values are validated against the manifest's configSchema (excluding x-secret fields); invalid values return 422.
+         *     secrets are write-only: omitted ones keep their value and null clears one. Returns 412 when expectedRevision
+         *     differs from the current revision. After saving, the plugin in the host receives config_changed.
          */
         put: operations["putPluginConfig"];
         post?: never;
@@ -1888,12 +2013,12 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
         };
-        /** 插件的宿主日志，新的在前，保留 7 天 */
+        /** The plugin's host logs, newest first, kept for 7 days */
         get: operations["listPluginLogs"];
         put?: never;
         post?: never;
@@ -1908,12 +2033,12 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
         };
-        /** 观察类事件对这个插件的投递，按事件时间新的在前 */
+        /** Deliveries of observation events to this plugin, newest event time first */
         get: operations["listPluginDeliveries"];
         put?: never;
         post?: never;
@@ -1928,12 +2053,12 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
         };
-        /** 读插件的持久状态（只读），例如投递记录约定的 `deliveries/` 前缀 */
+        /** Reads a plugin's persistent state (read-only), for example the `deliveries/` prefix of the delivery-record convention */
         get: operations["listPluginState"];
         put?: never;
         post?: never;
@@ -1948,7 +2073,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
                 actionId: string;
             };
@@ -1957,10 +2082,14 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 执行插件的控制台操作按钮
-         * @description 操作须是清单 actions 声明的，where 给出按钮所在的页面对象：项目、Agent、任务或外部身份；页面只在清单 where 包含该种页面时显示按钮。
-         *     input 按该操作的 fields 校验（不合规则 422），交给宿主 `action` 请求，30 秒超时（504 plugin_timeout）；插件报错时 502 plugin_failed。
-         *     where 指向的项目（Agent、任务所在的项目）没有启用插件，或插件不在宿主里时返回 409 plugin_not_enabled。
+         * Runs a plugin's console action button
+         * @description The action must be declared in the manifest's `actions`; `where` gives the page object the button sits on: a
+         *     project, an Agent, a task or an external identity. A page shows the button only when the manifest's `where`
+         *     includes that kind of page.
+         *     `input` is validated against the action's `fields` (422 if invalid) and passed to the plugin host as an `action`
+         *     request with a 30-second timeout (504 plugin_timeout); 502 plugin_failed when the plugin reports an error.
+         *     Returns 409 plugin_not_enabled when the project `where` points to (for an Agent or a task, its project) has not
+         *     enabled the plugin, or the plugin is not in the plugin host.
          */
         post: operations["invokePluginAction"];
         delete?: never;
@@ -1977,10 +2106,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 汇总各市场的插件，标出已安装与可更新
-         * @description 市场是 HTTPS 可取到的 `loop-now-market.json`：`{ "name", "plugins": [{ "id", "source": "git:<地址>[@ref]" | "npm:<包规格>", "displayName", "description", "verified", "version" }] }`。
-         *     依次读取官方市场（服务端配置）与全局设置里的市场；某个市场读取失败时它的 error 不为空，其余照常。
-         *     已安装的插件给出已装版本；市场条目的 version 高于已装版本时 updateAvailable 为 true。安装用 `POST /plugin-previews`，来源 `{kind: market, market, id}`。
+         * Aggregates the plugins of every market, marking the installed ones and those with an update available
+         * @description A market is a `loop-now-market.json` reachable over HTTPS: `{ "name", "plugins": [{ "id", "source":
+         *     "git:<url>[@ref]" | "npm:<package spec>", "displayName", "description", "verified", "version" }] }`.
+         *     Reads the official market (configured on the server) and then the markets in the global settings; when one
+         *     market fails to load, its `error` is set and the others load as usual.
+         *     Installed plugins show the installed version; `updateAvailable` is true when the market entry's `version` is
+         *     higher than the installed one. Install with `POST /plugin-previews`, source `{kind: market, market, id}`.
          */
         get: operations["listPluginMarkets"];
         put?: never;
@@ -1999,8 +2131,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 随平台发布、可作为 builtin 来源安装的官方插件
-         * @description 服务端没有官方插件目录时为空列表。安装用 `POST /plugin-previews`，source 为 `{kind: builtin, location: <id>}`。
+         * Official plugins shipped with the platform that can be installed from the builtin source
+         * @description An empty list when the server has no official plugin directory. Install with `POST /plugin-previews`, with source `{kind: builtin, location: <id>}`.
          */
         get: operations["listBuiltinPluginSources"];
         put?: never;
@@ -2018,7 +2150,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 插件宿主的状态与最近一次崩溃 */
+        /** Plugin host status and its most recent crash */
         get: operations["getPluginHost"];
         put?: never;
         post?: never;
@@ -2037,7 +2169,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 重新启动插件宿主，清零崩溃计数；全局停用时返回 409 `plugin_not_enabled` */
+        /** Restarts the plugin host and resets the crash count; returns 409 `plugin_not_enabled` when plugins are disabled globally */
         post: operations["restartPluginHost"];
         delete?: never;
         options?: never;
@@ -2052,12 +2184,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 全局插件设置：一键停用与额外的市场 */
+        /** Global plugin settings (the "Disable all" switch and extra markets) */
         get: operations["getPluginSettings"];
         /**
-         * 保存全局插件设置
-         * @description disabled 为 true 时停止宿主、不再给新启动的 Pi 挂载任何 Agent 侧（已经启动的不受影响，下次启动生效）；改回 false 时恢复。
-         *     markets 在第三阶段使用，现在只保存。
+         * Saves the global plugin settings
+         * @description When `disabled` is true, stops the plugin host and no longer mounts any agent side into newly started Pi
+         *     processes (Pi processes already running are not affected; the change applies at their next start); setting it
+         *     back to false restores this.
+         *     `markets` is used in phase three; for now it is only saved.
          */
         put: operations["putPluginSettings"];
         post?: never;
@@ -2076,7 +2210,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 项目插件页：每个已安装插件在这个项目的启用状态与项目级配置 */
+        /** For the project plugins page, each installed plugin's enable state and project-level config in this project */
         get: operations["listProjectPlugins"];
         put?: never;
         post?: never;
@@ -2092,17 +2226,20 @@ export interface paths {
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
         };
         get?: never;
         /**
-         * 在项目里启用或停用插件，并保存项目级配置
-         * @description values 只能包含清单 configSchema 中标了 `x-scope: project` 的字段；secrets 只写，省略的保留原值、null 清除。
-         *     expectedRevision 与当前不同返回 412（还没有项目级配置时为 0）。
-         *     停用后这个项目不再产生事件给该插件，项目内 Agent 的授权保留但不生效（下次启动 Pi 时不再挂载）。
+         * Enables or disables a plugin in the project and saves its project-level config
+         * @description `values` may contain only the fields marked `x-scope: project` in the manifest's `configSchema`; `secrets` are
+         *     write-only: omitted ones keep their value and null clears them.
+         *     Returns 412 when `expectedRevision` differs from the current one (0 while the project has no project-level
+         *     config).
+         *     After the plugin is disabled, the project no longer produces events for it; the grants of the project's Agents
+         *     are kept but have no effect (the plugin is no longer mounted the next time Pi starts).
          */
         put: operations["putProjectPlugin"];
         post?: never;
@@ -2118,17 +2255,17 @@ export interface paths {
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
         };
-        /** 项目里这个插件的账号；secret 字段只给出是否已设置 */
+        /** This plugin's accounts in the project; secret fields only show whether they are set */
         get: operations["listPluginAccounts"];
         put?: never;
         /**
-         * 添加账号
-         * @description kind 须是清单 accounts 声明的种类，values 与 secrets 按该种类的 fields 校验；不支持多账号的种类已有账号时返回 409 `name_conflict`。
+         * Adds an account
+         * @description The `kind` must be a kind declared in the manifest's `accounts`, and `values` and `secrets` are validated against that kind's `fields`. Returns 409 `name_conflict` when the kind does not support multiple accounts and already has one.
          */
         post: operations["createPluginAccount"];
         delete?: never;
@@ -2143,17 +2280,17 @@ export interface paths {
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
                 accountId: components["parameters"]["PluginAccountId"];
             };
             cookie?: never;
         };
         get?: never;
-        /** 按版本修改账号的名称与字段；secrets 省略的保留、null 清除，版本不同返回 412 */
+        /** Updates the account's name and fields at the expected revision; omitted secrets are kept and null clears them; returns 412 when the revision differs */
         put: operations["updatePluginAccount"];
         post?: never;
-        /** 删除账号；各 Agent 授权里对它的引用随之移除，下次启动 Pi 生效 */
+        /** Deletes the account; references to it in Agent grants are removed as well, taking effect the next time Pi starts */
         delete: operations["deletePluginAccount"];
         options?: never;
         head?: never;
@@ -2169,7 +2306,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Agent 配置页插件段：每个已安装插件对这个 Agent 是否可授权、是否已授权及选用的账号 */
+        /** For the plugins section of the Agent config page, whether each installed plugin can be granted to this Agent, whether it is granted, and the selected accounts */
         get: operations["listAgentPlugins"];
         put?: never;
         post?: never;
@@ -2187,12 +2324,18 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 对话页 "/" 菜单的命令：平台内置命令与 Pi 命令
-         * @description 先是平台内置命令（source 为 platform，固定顺序 session、new、compact、reload、copy、export、resume），按 Agent 的运行时与会话状态标出此刻能不能用
-         *     （available、unavailableReason）；Agent 正忙这类随时变化的情况不在这里判断，发送时照常返回 409。控制台显示与补全时写成 `/<name>`，用法见 usage。
-         *     然后是 Agent 上次启动 Pi 时（Pi RPC get_commands）读到的扩展命令、提示模板与技能命令（plugins/SPEC.md §14）。平台不为列命令专门启动 Pi：
-         *     从没启动过时 capturedAt 为 null、没有 Pi 命令；授权的插件变了之后，要等 Pi 下次启动才更新。控制台显示与补全时写成 `/pi:<name>`。
-         *     插件平台侧认领的 console.command 是认领型 Hook，没有可列举的命令名，不在这里列出。
+         * Commands for the "/" menu on the conversation page (built-in platform commands and Pi commands)
+         * @description First come the built-in platform commands (`source` is `platform`, in the fixed order session, new, compact,
+         *     reload, copy, export, resume), each marked with whether it can be used right now given the Agent's runtime and
+         *     session state (`available`, `unavailableReason`). Conditions that change at any moment, such as the Agent being
+         *     busy, are not checked here; sending still returns 409 as usual. The console displays and completes them as
+         *     `/<name>`; see `usage` for how to use them.
+         *     Then come the extension commands, prompt templates and Skill commands read when the Agent last started Pi (Pi
+         *     RPC `get_commands`; plugins/SPEC.md §14). The platform does not start Pi just to list commands: if Pi has never
+         *     started, `capturedAt` is null and there are no Pi commands; after the granted plugins change, the list updates
+         *     only at Pi's next start. The console displays and completes them as `/pi:<name>`.
+         *     `console.command`, which plugins claim on the platform side, is a claim Hook with no command names to list,
+         *     so it is not listed here.
          */
         get: operations["listAgentCommands"];
         put?: never;
@@ -2209,16 +2352,17 @@ export interface paths {
             header?: never;
             path: {
                 agentId: components["parameters"]["AgentId"];
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
         };
         get?: never;
         /**
-         * 授权或取消授权，并选择账号；下次启动 Pi 生效，不打断当前回合
-         * @description 项目 Agent 只能授权其项目已启用的插件，否则返回 409 `plugin_not_enabled`；平台 Agent 不受项目启用限制，没有账号。
-         *     accountIds 须是该项目这个插件未删除的账号，否则返回 422（字段 accountIds）。
+         * Grants or revokes a plugin and selects accounts; takes effect the next time Pi starts and does not interrupt the current turn
+         * @description A project Agent can be granted only plugins its project has enabled, otherwise 409 `plugin_not_enabled`; a
+         *     platform Agent is not limited by project enablement and has no accounts.
+         *     `accountIds` must be undeleted accounts of this plugin in the project, otherwise 422 (field `accountIds`).
          */
         put: operations["putAgentPlugin"];
         post?: never;
@@ -2235,14 +2379,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列出发给当前身份的消息摘要，新的在前；默认含已读与未读，不改变已读状态 */
+        /** Lists summaries of the messages sent to the current identity, newest first; includes read and unread messages by default and does not change read state */
         get: operations["listInboxMessages"];
         put?: never;
         /**
-         * 发送消息，总是开启新线索；回复用 `POST /inbox/messages/{messageId}/reply`
-         * @description 收件地址不存在、Agent 已删除或外部身份已删除时返回 404，不保存消息。
-         *     发给其他组织的 Agent 不被允许时返回 403 `forbidden`；控制台操作者与外部身份属于平台，可以发给任何组织的 Agent。
-         *     收件人是 Agent 时安排一轮平台提醒；收件人是人时忽略 whenBusy，记为 null。
+         * Sends a message, always starting a new thread; to reply, use `POST /inbox/messages/{messageId}/reply`
+         * @description Returns 404 and saves nothing when the recipient address does not exist, or the Agent or external identity has
+         *     been deleted.
+         *     Returns 403 `forbidden` when sending to an Agent of another organization is not allowed; the console operator
+         *     and external identities belong to the platform and can message Agents of any organization.
+         *     When the recipient is an Agent, schedules a platform reminder turn; when the recipient is a person, `whenBusy`
+         *     is ignored and recorded as null.
          */
         post: operations["sendInboxMessage"];
         delete?: never;
@@ -2263,8 +2410,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 读取发给当前身份的一条消息的全文，并标为已读；重复读取返回同样的内容，已读时间保持第一次的值
-         * @description 严格任务 Inbox 的 Agent 必须提供所属实际运行中的 runId；普通旧 Inbox 可省略。失效或跨节点不改投、不推断当前 run。
+         * Reads the full text of one message sent to the current identity and marks it read; reading it again returns the same content, and the read time keeps its first value
+         * @description An Agent on a strict task Inbox must give the runId of the run it actually belongs to; the ordinary legacy Inbox may omit it. A stale or cross-node runId is not redirected, and the current run is not inferred.
          */
         post: operations["readInboxMessage"];
         delete?: never;
@@ -2285,16 +2432,30 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 回复线索中的一条消息；收件人为线索中的另一方
-         * @description 线索的任一方都可以回复其中任意一条消息，包括自己发出的（在线索中追加）。不是线索参与方时返回 404。
-         *     回复不检查跨组织发送权限。收件人已删除时返回 404，不保存消息。
-         *     原问题的收件方回复仍为 open 的问题时，问题记为 answered：带 `optionId` 时 `answer.optionId`/`optionLabel` 为所选项；只有正文时二者为 null、`answer.textPreview` 为正文。两种回答对问题与任务节点的效果相同。控制台回答时，原问题消息在同一事务中标为已读（未读时），并推送 `inbox.message.read`。
-         *     插件代管外部身份（plugins/SPEC.md §12）：插件令牌带 `asIdentityId` 时以该外部身份的名义回复，效果与该身份亲自回复完全相同（回答问题、任务由等待转回、提醒 Agent）。
-         *     只能是这个插件代管的身份，清单须有 `identities.manage` 范围，这时不需要 `inbox.send`；否则 403。身份已删除或消息不在它的线索里时 404。
-         *     审计记操作者为插件、代表的身份。其他调用方带 `asIdentityId` 时 422。
-         *     插件作为发件方（plugins/SPEC.md §11）：Agent 在插件发来的线索里回复时可以提问（带 `options`），提问以 `channel.outbound` 送给该插件（带 `question`）。
-         *     插件令牌（`inbox.send` 范围）直接回复这道提问即作答，带 `optionId` 或只有正文，效果与外部身份作答相同（回答问题、任务由等待转回、提醒 Agent），审计记操作者为插件。
-         *     插件不能在线索里提问（带 `options` 时 422）；插件令牌回复不属于它的线索时 403。
+         * Replies to a message in a thread; the recipient is the other party of the thread
+         * @description Either party of a thread can reply to any message in it, including its own (appending to the thread). Returns
+         *     404 when the caller is not a party to the thread.
+         *     Replies do not check cross-organization sending permission. Returns 404 and saves nothing when the recipient has
+         *     been deleted.
+         *     When the recipient of the original question replies while the question is still open, the question is marked
+         *     answered: with `optionId`, `answer.optionId`/`optionLabel` are the chosen option; with only a body, both are
+         *     null and `answer.textPreview` is the body. Both kinds of answer have the same effect on the question and the
+         *     task node. When the console answers, the original question message is marked read in the same transaction (if it
+         *     was unread) and `inbox.message.read` is pushed.
+         *     Plugins managing external identities (plugins/SPEC.md §12): a plugin token with `asIdentityId` replies in the
+         *     name of that external identity, with exactly the same effect as the identity replying itself (answers the
+         *     question, moves the task out of waiting, reminds the Agent).
+         *     The identity must be one this plugin manages and the manifest must have the `identities.manage` scope, in which
+         *     case `inbox.send` is not needed; otherwise 403. Returns 404 when the identity has been deleted or the message is
+         *     not in its threads.
+         *     The audit log records the plugin as actor, on behalf of the identity. Other callers with `asIdentityId` get 422.
+         *     Plugins as senders (plugins/SPEC.md §11): when an Agent replies in a thread a plugin started, it may ask a
+         *     question (with `options`); the question goes to that plugin as `channel.outbound` (with `question`).
+         *     A plugin token (`inbox.send` scope) answers the question by replying to it directly, with `optionId` or with
+         *     only a body, with the same effect as an external identity answering (answers the question, moves the task out of
+         *     waiting, reminds the Agent); the audit log records the plugin as the actor.
+         *     Plugins cannot ask questions in a thread (422 with `options`); a plugin token replying in a thread that is not
+         *     its own gets 403.
          */
         post: operations["replyInboxMessage"];
         delete?: never;
@@ -2310,7 +2471,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列出当前身份参与的线索，按最后一条消息的时间倒序 */
+        /** Lists the threads the current identity takes part in, by time of the last message, newest first */
         get: operations["listInboxThreads"];
         put?: never;
         post?: never;
@@ -2330,8 +2491,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 线索中的全部消息，按时间正序；不改变已读状态
-         * @description 严格任务 Inbox 的 Agent 必须提供所属实际运行中的 runId；普通旧 Inbox 可省略。失效或跨节点不改投、不推断当前 run。
+         * All messages in the thread, oldest first; does not change read state
+         * @description An Agent on a strict task Inbox must give the runId of the run it actually belongs to; the ordinary legacy Inbox may omit it. A stale or cross-node runId is not redirected, and the current run is not inferred.
          */
         get: operations["getInboxThread"];
         put?: never;
@@ -2354,8 +2515,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 把线索中发给当前身份的消息全部标为已读
-         * @description 严格任务 Inbox 的 Agent 必须提供所属实际运行中的 runId；普通旧 Inbox 可省略。失效或跨节点不改投、不推断当前 run。
+         * Marks every message in the thread that was sent to the current identity as read
+         * @description An Agent on a strict task Inbox must give the runId of the run it actually belongs to; the ordinary legacy Inbox may omit it. A stale or cross-node runId is not redirected, and the current run is not inferred.
          */
         post: operations["readInboxThread"];
         delete?: never;
@@ -2372,8 +2533,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 控制台待处理的 Inbox：发给 @console 的 open 问题与其他未读消息，带发件项目与任务归属，并按 Agent、任务汇总；只读
-         * @description 不分页。收件箱事件流（`GET /inbox/events`）的任何事件都可能改变结果，客户端据此重新获取；没有单独的事件。
+         * Pending Inbox items for the console (open questions and other unread messages sent to @console), with the sending project and task, summarized by Agent and task; read-only
+         * @description Not paginated. Any event on the Inbox event stream (`GET /inbox/events`) may change the result, and the client
+         *     re-fetches on it; there is no separate event.
          */
         get: operations["getInboxPending"];
         put?: never;
@@ -2392,9 +2554,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 收件箱事件流（SSE），覆盖全部 Inbox 消息
-         * @description `text/event-stream`，快照与续传规则同 `GET /agents/{agentId}/events`：不带 `Last-Event-ID` 或它已超出保留范围时，先发一条 `snapshot`。
-         *     事件在消息写入数据库并提交之后发布，只带摘要；`unreadTotal` 都是控制台操作者的未读总数，越靠后的事件越新。
+         * Inbox event stream (SSE), covering all Inbox messages
+         * @description `text/event-stream`, with the same snapshot and resume rules as `GET /agents/{agentId}/events`: without
+         *     `Last-Event-ID`, or when it is beyond the retention range, a `snapshot` is sent first.
+         *     Events are published after the message is written to the database and committed, and carry only summaries; every
+         *     `unreadTotal` is the console operator's unread total, and later events are newer.
          */
         get: operations["streamInboxEvents"];
         put?: never;
@@ -2412,10 +2576,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 外部身份列表，不含已删除的身份 */
+        /** Lists external identities, excluding deleted ones */
         get: operations["listExternalIdentities"];
         put?: never;
-        /** 新建外部身份；与未删除的身份重名时返回 409 name_conflict */
+        /** Creates an external identity; returns 409 name_conflict when the name matches an identity that is not deleted */
         post: operations["createExternalIdentity"];
         delete?: never;
         options?: never;
@@ -2432,11 +2596,11 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 读取一个外部身份，已删除的也返回（`deletedAt` 不为空） */
+        /** Reads one external identity, deleted ones included (`deletedAt` is set) */
         get: operations["getExternalIdentity"];
         put?: never;
         post?: never;
-        /** 软删除外部身份：吊销它的全部令牌并释放名称，保留消息与审计 */
+        /** Soft-deletes an external identity, revoking all its tokens and releasing its name; messages and audit records are kept */
         delete: operations["deleteExternalIdentity"];
         options?: never;
         head?: never;
@@ -2454,10 +2618,14 @@ export interface paths {
         };
         get?: never;
         /**
-         * 设置或清空代管这个外部身份的插件渠道
-         * @description plugins/SPEC.md §12：代管的插件收到发给这个身份的消息与提问（identity.inbound），并能以它的名义回复。一个身份最多一个代管者，设置即替换。
-         *     插件须已安装，渠道须在它的清单里声明 `manageIdentities: true`，否则 422；身份不存在或已删除时 404。
-         *     插件停用或宿主停止时绑定保留；卸载插件，或更新后渠道不再声明代管时，绑定清空。
+         * Sets or clears the plugin channel that manages this external identity
+         * @description plugins/SPEC.md §12: the managing plugin receives the messages and questions sent to this identity
+         *     (`identity.inbound`) and can reply in its name. An identity has at most one manager; setting one replaces the
+         *     previous one.
+         *     The plugin must be installed and the channel must declare `manageIdentities: true` in its manifest, otherwise
+         *     422; 404 when the identity does not exist or has been deleted.
+         *     The binding is kept when the plugin is disabled or the plugin host stops; it is cleared when the plugin is
+         *     uninstalled, or when after an update the channel no longer declares management.
          */
         put: operations["setExternalIdentityManager"];
         post?: never;
@@ -2476,10 +2644,10 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 外部身份的令牌元数据（含已吊销与已过期的），不含令牌明文 */
+        /** Token metadata of an external identity (revoked and expired tokens included), without the plaintext token */
         get: operations["listExternalTokens"];
         put?: never;
-        /** 为外部身份签发令牌；令牌明文只在这一次响应中返回 */
+        /** Issues a token for an external identity; the plaintext token is returned only in this response */
         post: operations["issueExternalToken"];
         delete?: never;
         options?: never;
@@ -2500,7 +2668,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** 吊销令牌；已吊销的令牌再次吊销也返回 204，吊销时间保持不变 */
+        /** Revokes a token; revoking an already revoked token also returns 204 and keeps the revocation time */
         delete: operations["revokeExternalToken"];
         options?: never;
         head?: never;
@@ -2517,8 +2685,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 查看外部身份收到与发出的消息摘要，新的在前；只读，已删除的身份也可以查看
-         * @description 插件令牌需要 `inbox.read` 范围；代管这个身份的插件有 `identities.manage` 范围也可以（plugins/SPEC.md §12）。
+         * Views summaries of the messages an external identity received and sent, newest first; read-only, and also works for deleted identities
+         * @description Plugin tokens need the `inbox.read` scope; a plugin that manages this identity may also use its `identities.manage` scope (plugins/SPEC.md §12).
          */
         get: operations["listExternalIdentityInbox"];
         put?: never;
@@ -2540,8 +2708,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 查看外部身份收到或发出的一条消息的全文；只读，不改变已读状态
-         * @description 插件令牌需要 `inbox.read` 范围；代管这个身份的插件有 `identities.manage` 范围也可以（plugins/SPEC.md §12）。
+         * Views the full text of one message an external identity received or sent; read-only, does not change read state
+         * @description Plugin tokens need the `inbox.read` scope; a plugin that manages this identity may also use its `identities.manage` scope (plugins/SPEC.md §12).
          */
         get: operations["getExternalIdentityInboxMessage"];
         put?: never;
@@ -2559,7 +2727,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 任务详情，含全部节点访问与重试记录 */
+        /** Task details, including every node visit and retry record */
         get: operations["getTask"];
         put?: never;
         post?: never;
@@ -2576,7 +2744,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 指定节点运行/尝试详情 */
+        /** Details of one node run (attempt) */
         get: operations["getTaskNodeRun"];
         put?: never;
         post?: never;
@@ -2594,12 +2762,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 只列该节点运行/尝试的会话轮次
-         * @description 按createdAt/id从旧到新。cursor为最后一条已返回消息的不透明位置；默认20、最多100，nextCursor为空表示该次查询已到末尾。只返回该nodeRunId各run的用户与助手消息。后续实时更新来自任务SSE，历史分页不标读Inbox。
+         * Lists only the conversation turns of this node run (attempt)
+         * @description Ordered by `createdAt`/`id`, oldest first. `cursor` is the opaque position of the last returned message; default 20, at most 100; an empty `nextCursor` means this query has reached the end. Returns only the user and assistant messages of the runs of this `nodeRunId`. Later live updates come from the task SSE; paging through history does not mark Inbox messages read.
          */
         get: operations["listTaskNodeMessages"];
         put?: never;
-        /** 向严格绑定的当前节点发送消息 */
+        /** Sends a message strictly bound to the current node */
         post: operations["sendTaskNodeMessage"];
         delete?: never;
         options?: never;
@@ -2616,7 +2784,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 人或当前项目Manager重试阻塞节点，关闭旧题、沿用实例会话 */
+        /** A person or the project's current Manager retries the blocked node, closing the old question and keeping the task instance's session */
         post: operations["retryTask"];
         delete?: never;
         options?: never;
@@ -2633,7 +2801,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 取消任务并关闭待答问题，迟到事件不得复活 */
+        /** Cancels the task and closes its pending questions; late events must not revive it */
         post: operations["cancelTask"];
         delete?: never;
         options?: never;
@@ -2648,7 +2816,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 下载任务显式发布的成果 */
+        /** Downloads an artifact the task explicitly published */
         get: operations["downloadTaskArtifact"];
         put?: never;
         post?: never;
@@ -2665,7 +2833,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 项目任务列表，新的在前 */
+        /** Tasks of the project, newest first */
         get: operations["listProjectTasks"];
         put?: never;
         post?: never;
@@ -2683,8 +2851,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 任务SSE，snapshot及task/node/artifact更新
-         * @description 初次连接或无效位置发snapshot，原子快照对应事件ID后仅发之后事件。有效Last-Event-ID从其后续传，ID为十进制持久化事件序号。节点question变化发node.updated；任何任务/cleanup变化发task.updated，客户端据此重新取详情；message.created按ID全文upsert，清理失败也发task.updated。 task.inbox.updated 为按 Inbox message.id 全文 upsert 的持久关联记录，PG 事件 ID 续传；部分分页不作删除清单。 task.node.queue.updated 为某节点排队列表（逐条消息）的全文替换（结构同 GET …/nodes/{nodeRunId}/queue），仅在列表变化时推送。
+         * Task SSE, with snapshot and task/node/artifact updates
+         * @description Sends a snapshot on first connect or when the position is invalid; the snapshot is atomic with an event ID, and only events after that ID follow. A valid Last-Event-ID resumes after that event; IDs are decimal sequence numbers of persisted events. A change to a node's question sends node.updated; any task or cleanup change sends task.updated, after which the client re-fetches the details; message.created is a full upsert by ID; a cleanup failure also sends task.updated. task.inbox.updated is a persisted link record, upserted in full by Inbox message.id and resumed by PG event ID; a partial page is not a deletion list. task.node.queue.updated fully replaces a node's queue (one entry per message; same structure as GET …/nodes/{nodeRunId}/queue) and is pushed only when the queue changes.
          */
         get: operations["streamTaskEvents"];
         put?: never;
@@ -2703,10 +2871,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 项目里未结束的任务按状态计数
-         * @description 统计该项目未结束（ended_at 为空）的任务，按 status 分组；没有该状态的任务时为 0。已结束的 completed、cancelled 不计入。
-         *     只读；供左侧栏“任务”旁的徽标使用，可在收到 `GET /projects/{projectId}/tasks/events` 的失效通知后重新读取。
-         *     项目不存在或已删除时返回 404 `not_found`（与 `listProjectTasks` 相同）。
+         * Counts of the project's unfinished tasks by status
+         * @description Counts the project's unfinished tasks (`ended_at` is null), grouped by `status`; a status with no tasks is 0.
+         *     Ended tasks (completed, cancelled) are not counted.
+         *     Read-only; feeds the badge next to "Tasks" in the left sidebar, and can be re-read after an invalidation notice
+         *     from `GET /projects/{projectId}/tasks/events`.
+         *     Returns 404 `not_found` when the project does not exist or has been deleted (same as `listProjectTasks`).
          */
         get: operations["countProjectTasks"];
         put?: never;
@@ -2725,8 +2895,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 项目任务列表实时失效通知，包括新任务
-         * @description snapshot带projectId，客户端重取列表；task.updated覆盖新建/状态/结束/清理变化，客户端重取当前分页。支持同样Last-Event-ID续传。
+         * Live invalidation notices for the project's task list, new tasks included
+         * @description The snapshot event carries projectId and the client re-fetches the list; task.updated covers creation, status, end and cleanup changes, and the client re-fetches the current page. Resumes with Last-Event-ID the same way.
          */
         get: operations["streamProjectTaskEvents"];
         put?: never;
@@ -2744,12 +2914,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 仅项目Agent；无集合沿旧single解析，有集合只列授权ID。旧single GET不是集合执行投影。 */
+        /** @description Project Agents only. Without a set, resolves through the legacy single selection; with a set, lists only the granted account IDs. The legacy single-selection GET is not a projection of what set mode runs with. */
         get: operations["getAgentDBConnections"];
-        /** @description 原子替换独立授权集合，空数组保存无授权marker，拒绝null/重复/零UUID。集合模式旧single PUT含null返回409 credential_selection_mode_conflict，不改原值。 */
+        /** @description Atomically replaces the separate set of granted accounts; an empty array saves a marker meaning no account is granted; null, duplicate and zero UUIDs are rejected. In set mode, a legacy single-selection PUT, including one with null, returns 409 credential_selection_mode_conflict and leaves the existing values unchanged. */
         put: operations["putAgentDBConnections"];
         post?: never;
-        /** @description CAS删除集合marker恢复原single模式；不删账号/旧single值。无marker仍校验CAS，幂等不增版本。 */
+        /** @description Deletes the set marker under CAS and returns to the original single-selection mode; does not delete accounts or the legacy single value. Without a marker the CAS is still checked; the call is idempotent and does not bump the version. */
         delete: operations["deleteAgentDBConnections"];
         options?: never;
         head?: never;
@@ -2763,10 +2933,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 项目CLI登录：Google个人浏览器回调与GitHub官方device flow独立；console-and-external白名单，Agent/Manager无管理权限，平台私有OAuth仍console-only。授权由人完成，不自动授权；授权URL及gh用户码仅活动视图展示，终态清除，响应no-store。只列活动操作；不能用它恢复已终态的未知start。客户端必须在POST前将非秘密operationId写入项目+CLI限定路由；刷新仅GET原ID（含已终态），404展示未找到/未能确认原操作，不自动新建、不重试POST、不换ID。authorizationUrl/userCode/device秘密不得进入路由或持久化。查询缓存必须区分project+CLI；list保持仅活动，不能代替原ID恢复。 Lark沿同一console/external白名单管理，Agent/Manager拒绝；仅活动操作公开经校验的官方入口/可选官方用户码，终态清除，设备secret从不公开。 */
+        /** @description Project CLI login. The Google personal browser-callback flow and the official GitHub device flow are independent. Allowed for the console-and-external allowlist; Agents and the Manager have no management rights, and the platform's private OAuth stays console-only. A person completes the authorization; nothing is authorized automatically. The authorization URL and the gh user code are shown only in the active view and cleared at the terminal state; responses are no-store. Lists active operations only; it cannot be used to recover a start with an unknown outcome that has already reached a terminal state. The client must write the non-secret operationId into a route scoped to the project and CLI before the POST; a refresh only GETs the original ID (terminal ones included), and a 404 is shown as "not found / the original operation could not be confirmed", without automatically creating a new one, retrying the POST or switching IDs. authorizationUrl, userCode and device secrets must never enter the route or be persisted. Query caches must be keyed by project and CLI; the list stays active-only and cannot replace recovery by the original ID. Lark is managed through the same console/external allowlist, and Agents and the Manager are refused; only an active operation exposes the verified official entry point and the optional official user code, which are cleared at the terminal state; the device secret is never exposed. */
         get: operations["listProjectCLIAuthOperations"];
         put?: never;
-        /** @description 项目CLI登录：Google个人浏览器回调与GitHub官方device flow独立；console-and-external白名单，Agent/Manager无管理权限，平台私有OAuth仍console-only。授权由人完成，不自动授权；授权URL及gh用户码仅活动视图展示，终态清除，响应no-store。稳定operationId同请求幂等，异内容409 cli_auth_in_progress；CAS过期412。gh新建无name，成功以核实login初始化备注；重登允许不同GitHub userId且保备注，旧PAT也可转OAuth；身份及凭证保存为新版本，旧回复/任务保持原捕获，不设同userId门禁。未知响应只GET原ID，不自动重复POST。仅身份核实且事务条件通过才创建/替换账号。 Lark沿同一console/external白名单管理，Agent/Manager拒绝；仅活动操作公开经校验的官方入口/可选官方用户码，终态清除，设备secret从不公开。 */
+        /** @description Project CLI login. The Google personal browser-callback flow and the official GitHub device flow are independent. Allowed for the console-and-external allowlist; Agents and the Manager have no management rights, and the platform's private OAuth stays console-only. A person completes the authorization; nothing is authorized automatically. The authorization URL and the gh user code are shown only in the active view and cleared at the terminal state; responses are no-store. A stable operationId makes the same request idempotent; the same ID with different content returns 409 cli_auth_in_progress; a stale CAS returns 412. A new gh account has no name; on success its label is initialized from the verified login. Logging in again may switch to a different GitHub userId and keeps the label, and an old PAT account can also switch to OAuth; the identity and credential are saved as a new version, earlier replies and tasks keep what they captured, and there is no same-userId gate. On an unknown response, only GET the original ID; never repeat the POST automatically. An account is created or replaced only when the identity is verified and the transaction conditions hold. Lark is managed through the same console/external allowlist, and Agents and the Manager are refused; only an active operation exposes the verified official entry point and the optional official user code, which are cleared at the terminal state; the device secret is never exposed. */
         post: operations["startProjectCLIAuthOperation"];
         delete?: never;
         options?: never;
@@ -2781,7 +2951,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 项目CLI登录：Google个人浏览器回调与GitHub官方device flow独立；console-and-external白名单，Agent/Manager无管理权限，平台私有OAuth仍console-only。授权由人完成，不自动授权；授权URL及gh用户码仅活动视图展示，终态清除，响应no-store。按原operationId恢复所有状态；成功账号投影不早于该成功提交。多缓存观察终态后不得被迟到活动回包复活URL或userCode。 Lark沿同一console/external白名单管理，Agent/Manager拒绝；仅活动操作公开经校验的官方入口/可选官方用户码，终态清除，设备secret从不公开。 */
+        /** @description Project CLI login. The Google personal browser-callback flow and the official GitHub device flow are independent. Allowed for the console-and-external allowlist; Agents and the Manager have no management rights, and the platform's private OAuth stays console-only. A person completes the authorization; nothing is authorized automatically. The authorization URL and the gh user code are shown only in the active view and cleared at the terminal state; responses are no-store. Recovers every state by the original operationId; the account shown for a succeeded operation is never older than the commit of that success. Once a terminal state has been observed in any of several caches, a late active response must not bring back the URL or userCode. Lark is managed through the same console/external allowlist, and Agents and the Manager are refused; only an active operation exposes the verified official entry point and the optional official user code, which are cleared at the terminal state; the device secret is never exposed. */
         get: operations["getProjectCLIAuthOperation"];
         put?: never;
         post?: never;
@@ -2800,7 +2970,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 项目CLI登录：Google个人浏览器回调与GitHub官方device flow独立；console-and-external白名单，Agent/Manager无管理权限，平台私有OAuth仍console-only。授权由人完成，不自动授权；授权URL及gh用户码仅活动视图展示，终态清除，响应no-store。无请求体；重复取消返回既有终态。取消本地操作不等于撤销供应商已批准的授权，失败保留旧账号。 Lark沿同一console/external白名单管理，Agent/Manager拒绝；仅活动操作公开经校验的官方入口/可选官方用户码，终态清除，设备secret从不公开。 */
+        /** @description Project CLI login. The Google personal browser-callback flow and the official GitHub device flow are independent. Allowed for the console-and-external allowlist; Agents and the Manager have no management rights, and the platform's private OAuth stays console-only. A person completes the authorization; nothing is authorized automatically. The authorization URL and the gh user code are shown only in the active view and cleared at the terminal state; responses are no-store. No request body; cancelling again returns the existing terminal state. Cancelling the local operation does not revoke an authorization the provider has already approved; on failure the old account is kept. Lark is managed through the same console/external allowlist, and Agents and the Manager are refused; only an active operation exposes the verified official entry point and the optional official user code, which are cleared at the terminal state; the device secret is never exposed. */
         post: operations["cancelProjectCLIAuthOperation"];
         delete?: never;
         options?: never;
@@ -2815,7 +2985,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 查询原节点本地发送前提 */
+        /** Checks the local preconditions for sending a message to the original node */
         get: operations["getTaskNodeMessageCapability"];
         put?: never;
         post?: never;
@@ -2832,10 +3002,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 读取当前版本最新操作；null表示未测试，GET不派发 */
+        /** @description Reads the latest operation for the current version; null means not tested yet. GET never dispatches a test. */
         get: operations["getProjectCLIVerificationState"];
         put?: never;
-        /** @description 手动测试已保存当前版本；operationId幂等，不接受秘密/命令/SQL */
+        /** @description Manually tests the saved current version; idempotent by operationId. Accepts no secrets, commands or SQL. */
         post: operations["startProjectCLIVerification"];
         delete?: never;
         options?: never;
@@ -2850,7 +3020,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description 读取指定操作，历史结果仅属原版本 */
+        /** @description Reads the given operation; a historical result belongs only to its original version. */
         get: operations["getProjectCLIVerificationOperation"];
         put?: never;
         post?: never;
@@ -2869,7 +3039,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description 幂等取消；不覆盖已经完成的结果，已开始Google轮换仍独立保存 */
+        /** @description Idempotent cancel; does not overwrite a result that has already completed, and a Google token rotation that has already started is still saved independently. */
         post: operations["cancelProjectCLIVerificationOperation"];
         delete?: never;
         options?: never;
@@ -2882,7 +3052,7 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description runtime另拒绝零UUID */
+                /** @description The zero UUID is also rejected at runtime. */
                 projectId: string;
             };
             cookie?: never;
@@ -2890,11 +3060,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 接受稳定导入操作，整批原子保存
-         * @description 同operationId同规范请求先恢复原持久操作，不再次提取/加密，且不要求旧scan仍存活。
-         *     仅新操作接受受scan TTL约束；202是接受/原回执，不代表已保存。
-         *     candidateIds唯一且同scan/project；仅可补supplementableFields中的源缺失非秘密字段，不要求属于当前必填missingFields。
-         *     无TLS时可补TLS和公开CA；组合最终过正式模板校验，不准覆盖原字段或补secret。
+         * Accept a stable import operation; the whole batch is saved atomically
+         * @description A repeat of the same canonical request with the same operationId first restores the original durable operation: it does not extract or encrypt again and does not require the old scan to still exist.
+         *     Only accepting a new operation is bound by the scan TTL; 202 is the acceptance or the original receipt and does not mean the credentials are saved.
+         *     candidateIds must be unique and belong to the same scan and project; supplements may only fill non-secret fields that are missing from the source and listed in supplementableFields, which need not be among the currently required missingFields.
+         *     When there is no TLS, TLS settings and a public CA may be supplied; the combined result must still pass the CLI's official template validation, and supplements may not overwrite original fields or supply secrets.
          */
         post: operations["startProjectCLICredentialImport"];
         delete?: never;
@@ -2908,14 +3078,14 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description runtime另拒绝零UUID */
+                /** @description The zero UUID is also rejected at runtime. */
                 projectId: string;
-                /** @description runtime另拒绝零UUID */
+                /** @description The zero UUID is also rejected at runtime. */
                 operationId: string;
             };
             cookie?: never;
         };
-        /** 只读原持久操作，不扫描/提取/重新执行 */
+        /** Read the original durable operation without scanning, extracting or re-running */
         get: operations["getProjectCLICredentialImport"];
         put?: never;
         post?: never;
@@ -2930,16 +3100,16 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description runtime另拒绝零UUID */
+                /** @description The zero UUID is also rejected at runtime. */
                 projectId: string;
-                /** @description runtime另拒绝零UUID */
+                /** @description The zero UUID is also rejected at runtime. */
                 operationId: string;
             };
             cookie?: never;
         };
         get?: never;
         put?: never;
-        /** 持久条件取消；成功先提交时返回真实成功 */
+        /** Durable conditional cancel; returns the real success when the success was committed first */
         post: operations["cancelProjectCLICredentialImport"];
         delete?: never;
         options?: never;
@@ -2952,14 +3122,14 @@ export interface paths {
             query?: never;
             header?: never;
             path: {
-                /** @description runtime另拒绝零UUID；现path解码不支持not */
+                /** @description The zero UUID is also rejected at runtime; the current path parameter decoding does not support `not`. */
                 projectId: string;
             };
             cookie?: never;
         };
         get?: never;
         put?: never;
-        /** 显式扫描本机固定来源的安全候选 */
+        /** Explicitly scan fixed local sources for safe candidates */
         post: operations["scanProjectCLICredentialImports"];
         delete?: never;
         options?: never;
@@ -2978,11 +3148,15 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 节点的排队列表，逐条消息，按服务端实际领取顺序
-         * @description 逐条列出该节点仍待处理的 Inbox 消息（kind=inbox）：控制台发给节点的消息，以及其他 Agent 发给该任务实例、由本节点处理的消息。
-         *     只列未读、未取消、承载它的轮次仍在排队的消息；先按轮次的 priority、queue_seq，同一轮内按发送先后，与实际执行顺序一致。
-         *     sleep 唤醒、飞书切换续行等不带消息的轮次不列出（它们按优先级插在中间执行）。
-         *     变化时任务 SSE 推送 `task.node.queue.updated`（同一结构）；SSE 首次连接或重连收到 snapshot 后请重新读取本接口。
+         * The node's queue, one entry per message, in the order the server actually picks them up
+         * @description Lists, one per entry, the Inbox messages (kind=inbox) the node still has to handle: messages the console sent to
+         *     the node, and messages other Agents sent to this task instance that this node handles.
+         *     Lists only messages that are unread, not cancelled, and whose carrying turn is still queued; ordered by the
+         *     turn's priority and queue_seq, then by send order within a turn, which matches the actual execution order.
+         *     Turns that carry no message, such as sleep wake-ups and Lark switch continuations, are not listed (they run in
+         *     between according to their priority).
+         *     On changes the task SSE stream pushes `task.node.queue.updated` (same structure); when the first SSE connection
+         *     or a reconnect receives a snapshot, read this endpoint again.
          */
         get: operations["getTaskNodeQueue"];
         put?: never;
@@ -3007,13 +3181,20 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 把节点排队中的单条消息转为打断（任何发件人）
-         * @description 控制台发给节点的消息：从所在的普通优先级提醒轮次拆出，按发送打断时的合并规则（同节点、同执行模式、图片总数不超上限）并入已在排队的打断轮次，
-         *     没有可并入的就新建一个；其他 Agent 发来的消息：移到该节点排队中的打断提醒（没有就新建）。都排在已有打断之后、全部普通排队之前；
-         *     原轮次没有其他待处理消息即作废（TaskMessage.voidReason=merged_into_interrupt）。随后打断该节点当前的回复。
-         *     actionId 幂等：同一 actionId 重放返回原响应，同一 actionId 不同内容返回 409 action_conflict。
-         *     已经是打断时返回 status=already_interrupt，不重复打断。所在轮次已被领取、开始或结束时返回 409 task_conflict，
-         *     reason=message_dispatched 并带 runId、runStatus；已读为 message_read，已取消为 message_cancelled，已失效为 message_not_executed。
+         * Promote one queued message of the node to an interrupt (any sender)
+         * @description A message the console sent to the node is taken out of the normal-priority reminder turn that carries it and,
+         *     following the merge rules for sending as an interrupt (same node, same execution mode, total images within the
+         *     limit), merged into an interrupt turn already in the queue, or into a new one when none can take it. A message
+         *     from another Agent moves to the node's queued interrupt reminder (created when there is none). Either way it
+         *     goes after the existing interrupts and before all normal queued items; the original turn is voided when it has
+         *     no other pending messages (TaskMessage.voidReason=merged_into_interrupt). Then the node's current reply is
+         *     interrupted.
+         *     Idempotent by actionId: replaying the same actionId returns the original response, and the same actionId with
+         *     different content returns 409 action_conflict.
+         *     When the message is already an interrupt, returns status=already_interrupt and does not interrupt again. When
+         *     its turn has already been picked up, started or finished, returns 409 task_conflict with
+         *     reason=message_dispatched plus runId and runStatus; the reason is message_read when the message has been read,
+         *     message_cancelled when it has been cancelled, and message_not_executed when it is no longer valid.
          */
         post: operations["promoteTaskNodeInboxMessage"];
         delete?: never;
@@ -3036,10 +3217,15 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 取消节点排队中的单条消息（任何发件人）
-         * @description 消息记 `cancelledAt`，不再计为未读，节点 Agent 不会处理（读取时只得到取消说明）；控制台发给节点的消息另记 notExecuted.reason=cancelled。
-         *     带选项的问题同时变为 state=cancelled。所在轮次没有其他待处理消息即作废（TaskMessage.voidReason=user_cancelled）。
-         *     回执的 item 带原文与图片引用，供“编辑”回填输入框。冲突与 actionId 规则同转为打断；已经取消时返回 status=already_cancelled。
+         * Cancel one queued message of the node (any sender)
+         * @description The message gets `cancelledAt`, no longer counts as unread, and the node's Agent will not handle it (reading it
+         *     returns only a cancellation note); a message the console sent to the node also records
+         *     notExecuted.reason=cancelled.
+         *     A question with options also changes to state=cancelled. The carrying turn is voided when it has no other
+         *     pending messages (TaskMessage.voidReason=user_cancelled).
+         *     The receipt's item carries the original text and image references so that "Edit" can put them back into the
+         *     input box. Conflict and actionId rules are the same as for promoting to an interrupt; returns
+         *     status=already_cancelled when the message is already cancelled.
          */
         post: operations["cancelTaskNodeInboxMessage"];
         delete?: never;
@@ -3062,11 +3248,14 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 只停止节点当前这一轮回复，不发送新消息
-         * @description 沿用节点打断路径，这一轮以 interrupted 结束、errorCode=user_stopped。节点还有排队项（任意优先级）时继续处理下一条；
-         *     没有排队项时节点转为阻塞，原因“已被人停止”，之后可以继续给它发消息或重试。
-         *     这一轮已结束时返回 409 task_conflict，reason=run_not_active 并带 runId、runStatus；已在停止或打断中时返回 status=already_stopping。
-         *     actionId 规则同转为打断。
+         * Stop only the node's current reply, without sending a new message
+         * @description Uses the node interrupt path: the turn ends as interrupted with errorCode=user_stopped. When the node still has
+         *     queued items (of any priority), it goes on with the next one; when it has none, the node becomes blocked with
+         *     a reason saying it was stopped by a person (that text is still sent in Chinese for now), and you can still send
+         *     it messages or retry afterwards.
+         *     When the turn has already ended, returns 409 task_conflict with reason=run_not_active plus runId and runStatus;
+         *     when a stop or interrupt is already in progress, returns status=already_stopping.
+         *     actionId rules are the same as for promoting to an interrupt.
          */
         post: operations["stopTaskNodeRun"];
         delete?: never;
@@ -3084,13 +3273,13 @@ export interface paths {
         };
         /**
          * listTaskNodeInboxMessages
-         * @description 仅控制台；按持久 task/node/runtime 归属读取，历史不依赖当前节点或存活 Agent。按时间正序，除严格节点消息外，还包括该节点的任务实例与控制台或外部身份之间、message.task.nodeRunId 为本节点的其他消息（如它发给 @console 或外部身份的消息与提问、控制台或该身份（含代管插件以它的名义）对这些消息的回复）；这类条目的 runLinks 为空、notExecuted 为 null，变化不推送 task.inbox.updated，由收件箱事件流通知。
+         * @description Console only. Reads by the durable task/node/runtime ownership; the history does not depend on the current node or on a live Agent. In chronological order. Besides the strict node messages, it also includes the other messages between this node's task instance and the console or an external identity whose message.task.nodeRunId is this node (such as messages and questions it sent to @console or to an external identity, and replies to them from the console or that identity, including the plugin that manages the identity acting on its behalf); for these entries runLinks is empty and notExecuted is null, and their changes do not push task.inbox.updated but are announced through the Inbox event stream.
          */
         get: operations["listTaskNodeInboxMessages"];
         put?: never;
         /**
          * sendTaskNodeInboxMessage
-         * @description 仅控制台；事务内严格绑定原 task/node/Agent/runtime。接收不表示已读或已执行；未知结果只 GET 原 action，不自动换 ID 重发。
+         * @description Console only. Strictly bound to the original task/node/Agent/runtime within the transaction. Acceptance does not mean read or executed; when the result is unknown, only GET the original action and never resend automatically with a new ID.
          */
         post: operations["sendTaskNodeInboxMessage"];
         delete?: never;
@@ -3108,7 +3297,7 @@ export interface paths {
         };
         /**
          * getTaskNodeInboxAction
-         * @description 仅控制台；按持久 task/node/runtime 归属读取，历史不依赖当前节点或存活 Agent。
+         * @description Console only. Reads by the durable task/node/runtime ownership; the history does not depend on the current node or on a live Agent.
          */
         get: operations["getTaskNodeInboxAction"];
         put?: never;
@@ -3128,7 +3317,7 @@ export interface paths {
         };
         /**
          * getTaskNodeRunTimeline
-         * @description 仅控制台；按持久 task/node/runtime 归属读取，历史不依赖当前节点或存活 Agent。 时间线按 at/id 正序，usage 为整个 turn 汇总；不读常态运行或当前账号补旧数据。
+         * @description Console only. Reads by the durable task/node/runtime ownership; the history does not depend on the current node or on a live Agent. The timeline is in ascending at/id order, and usage is the total for the whole turn; regular runs and the current account are never read to fill in old data.
          */
         get: operations["getTaskNodeRunTimeline"];
         put?: never;
@@ -3149,8 +3338,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 更换固定两成员Lark账号并继续当前QA
-         * @description 仅控制台；Agent、Manager令牌及外部端口不可调用。原操作结果未知或页面刷新只GET原actionId，404不自动重发。保持原task/step/visit/runtime/session，独立新QA attempt，旧node历史不改；followup沿原workflow不额外唤醒。
+         * Switch the Lark account of the task's two fixed members and continue the current QA
+         * @description Console only; Agent tokens, Manager tokens and the external port cannot call it. When the original operation's result is unknown or the page was refreshed, only GET the original actionId; a 404 does not trigger an automatic resend. Keeps the original task/step/visit/runtime/session and starts a separate new QA attempt without changing the old node history; the follow-up continues along the original workflow without an extra wake-up.
          */
         post: operations["switchTaskLarkAccount"];
         delete?: never;
@@ -3167,8 +3356,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 读取原Lark切换动作及真实派发状态
-         * @description 仅控制台；Agent、Manager令牌及外部端口不可调用。原操作结果未知或页面刷新只GET原actionId，404不自动重发。保持原task/step/visit/runtime/session，独立新QA attempt，旧node历史不改；followup沿原workflow不额外唤醒。
+         * Read the original Lark switch action and its actual dispatch state
+         * @description Console only; Agent tokens, Manager tokens and the external port cannot call it. When the original operation's result is unknown or the page was refreshed, only GET the original actionId; a 404 does not trigger an automatic resend. Keeps the original task/step/visit/runtime/session and starts a separate new QA attempt without changing the old node history; the follow-up continues along the original workflow without an extra wake-up.
          */
         get: operations["getTaskLarkAccountSwitch"];
         put?: never;
@@ -3188,12 +3377,12 @@ export interface components {
             actionId: string;
             /**
              * Format: uuid
-             * @description 平台本轮说明中提供的运行 ID；不能用状态查询悄悄替换旧轮 ID
+             * @description The run ID given in the platform's instructions for this turn; a status query must not be used to silently swap in an old turn's ID
              */
             runId: string;
             /** Format: int64 */
             seconds: number;
-            /** @description 可选说明，非空文本遵循服务端消息长度上限 */
+            /** @description Optional note; non-empty text is subject to the server's message length limit */
             reason?: string | null;
         };
         SleepRecord: {
@@ -3230,7 +3419,7 @@ export interface components {
             reason: string | null;
             /**
              * Format: int64
-             * @description 所属 scope 的单调版本；新 sleep 延续原 scope 版本
+             * @description Monotonic revision of the owning scope; a new sleep continues the scope's existing revision
              */
             revision: number;
         };
@@ -3243,7 +3432,7 @@ export interface components {
         SleepState: {
             /** Format: uuid */
             currentRunId: string | null;
-            /** @description 自身 requested 或 sleeping 记录；没有时为 null */
+            /** @description The caller's own requested or sleeping record; null when there is none */
             sleep: components["schemas"]["SleepRecord"] | null;
         };
         SseSleepUpdated: {
@@ -3259,7 +3448,7 @@ export interface components {
             nodeRunId: string | null;
             /**
              * Format: int64
-             * @description 任务事务提交后的 task.version；常态为 null。用于拒绝旧任务快照的空列表
+             * @description task.version after the task transaction commits; null for the regular scope. Used to reject an empty list from an older task snapshot
              */
             taskVersion: number | null;
             /** Format: int64 */
@@ -3284,32 +3473,32 @@ export interface components {
             error: {
                 code: components["schemas"]["ErrorCode"];
                 message: string;
-                /** @description 按 code 定义：agent_busy 带 AgentBusyDetails；删除项目时的 agent_not_idle 带 ProjectNotIdleDetails，其余 agent_not_idle（包括平台命令）不带 */
+                /** @description Depends on the code; agent_busy carries AgentBusyDetails, agent_not_idle when deleting a project carries ProjectNotIdleDetails, and other agent_not_idle errors (including platform commands) carry none */
                 details?: components["schemas"]["VerificationVersionConflictDetails"] | components["schemas"]["VerificationConflictDetails"] | components["schemas"]["VerificationUnsupportedDetails"] | components["schemas"]["TaskNodeMessageConflictDetails"] | components["schemas"]["CredentialPreconditionDetails"] | components["schemas"]["CLIAuthInProgressDetails"] | components["schemas"]["CredentialSelectionModeConflictDetails"] | components["schemas"]["CredentialResolutionDetails"] | components["schemas"]["CredentialAccountDeletedDetails"] | components["schemas"]["ProjectCredentialRequiredDetails"] | components["schemas"]["ProjectModelAuthInProgressDetails"] | components["schemas"]["ProjectActiveTasksDetails"] | components["schemas"]["QuestionClosedDetails"] | components["schemas"]["AgentBusyDetails"] | components["schemas"]["RunNotQueuedDetails"] | components["schemas"]["RunNotActiveDetails"] | components["schemas"]["ProjectNotIdleDetails"];
                 fields?: components["schemas"]["FieldError"][];
             };
         };
         /**
-         * @description - not_found：资源不存在（404） - validation_failed：校验失败（422） - precondition_failed：请求前置版本条件不一致（If-Match 或 Prompt 编辑版本，412） - payload_too_large：超过大小上限（413） - agent_busy：Agent 正忙且未选择打断或排队（409） - agent_not_idle：需要 Agent 空闲的操作（删除 Agent、删除项目、重开会话、平台命令 /new /reload /compact /resume、导出会话）在忙时被拒绝（409） - session_missing：Agent 处于会话丢失状态，需要先确认重开会话（409） - session_none：当前还没有可压缩或导出的 Pi 会话（409） - console_command_failed：平台命令已执行但未能完成（409） - template_deleted：来源模板已删除，不能重新复制（409） - name_conflict：名称重复（409）：项目内或平台内 Agent 重名、项目重名、Skill 名称重复或使用了内置 Skill 的名称 `loopctl`、外部身份重名 - path_conflict：文件夹来源子目录重复或互相包含（409） - forbidden_origin：Origin 不在白名单（403） - invalid_host：Host 不在允许名单（403） - unauthenticated：令牌缺失、无效、过期或已吊销，或所属身份已删除（401） - forbidden：身份有效，但不允许这个操作（403） - sleep_conflict：运行过期、动作内容冲突、已提交节点或已有不同有效 sleep（409） - run_not_queued：转为打断、撤回或取消的排队项已不在队列：执行已被领取、开始或结束，或消息已读、已取消（409） - run_not_active：停止回复时，这一次执行已经结束（409） - action_conflict：同一 actionId 被用于不同内容的动作（409） - plugin_source_failed：插件来源无法获取，或依赖安装失败（422） - plugin_confirmation_required：非官方来源的插件安装或更新须确认（409） - plugin_version_conflict：同一插件已装同版本号但内容不同（409） - plugin_not_enabled：插件没有在项目里启用，或全局停用（409） - plugin_blocked：插件的拦截类 Hook 阻止了这个操作，message 带插件 id 与原因（409） - plugin_failed：插件处理请求时报错，message 带插件给出的原因（502） - plugin_timeout：插件没有在时限内回应（504） - internal_error：服务端内部错误（500）
+         * @description - not_found: the resource does not exist (404) - validation_failed: validation failed (422) - precondition_failed: a version precondition of the request does not match (If-Match or the Prompt edit version, 412) - payload_too_large: exceeds the size limit (413) - agent_busy: the Agent is busy and the request chose neither interrupt nor queue (409) - agent_not_idle: an operation that needs the Agent to be idle (deleting an Agent, deleting a project, reopening the session, the platform commands /new /reload /compact /resume, exporting the session) was rejected because it is busy (409) - session_missing: the Agent's session is missing, and reopening the session must be confirmed first (409) - session_none: there is no Pi session yet to compact or export (409) - console_command_failed: the platform command ran but could not finish (409) - template_deleted: the source template has been deleted and cannot be copied again (409) - name_conflict: duplicate name (409): an Agent name already used in the project or on the platform, a duplicate project name, a duplicate Skill name or the name of the built-in Skill `loopctl`, or a duplicate external identity name - path_conflict: folder source subdirectories duplicate or contain each other (409) - forbidden_origin: the Origin is not on the allowlist (403) - invalid_host: the Host is not on the allowlist (403) - unauthenticated: the token is missing, invalid, expired or revoked, or its identity has been deleted (401) - forbidden: the identity is valid but not allowed to do this (403) - sleep_conflict: the run is stale, the action content conflicts, the node has already been submitted, or a different active sleep already exists (409) - run_not_queued: the queued item to promote to an interrupt, withdraw or cancel is no longer in the queue: its run has been picked up, started or finished, or the message has been read or cancelled (409) - run_not_active: when stopping a reply, this run has already ended (409) - action_conflict: the same actionId was used for an action with different content (409) - plugin_source_failed: the plugin source could not be fetched, or installing its dependencies failed (422) - plugin_confirmation_required: installing or updating a plugin from an unofficial source must be confirmed (409) - plugin_version_conflict: the same plugin is already installed with the same version number but different content (409) - plugin_not_enabled: the plugin is not enabled in the project, or is disabled globally (409) - plugin_blocked: a blocking Hook of a plugin stopped this operation; message carries the plugin id and the reason (409) - plugin_failed: the plugin reported an error while handling the request; message carries the reason the plugin gave (502) - plugin_timeout: the plugin did not respond in time (504) - internal_error: internal server error (500)
          * @enum {string}
          */
         ErrorCode: "verification_in_progress" | "verification_operation_conflict" | "verification_unsupported" | "already_answered" | "question_expired" | "question_closed" | "not_found" | "validation_failed" | "precondition_failed" | "payload_too_large" | "agent_busy" | "agent_not_idle" | "session_missing" | "session_none" | "console_command_failed" | "template_deleted" | "name_conflict" | "path_conflict" | "forbidden_origin" | "invalid_host" | "unauthenticated" | "forbidden" | "internal_error" | "sleep_conflict" | "task_conflict" | "run_not_queued" | "run_not_active" | "action_conflict" | "task_not_idle" | "model_auth_busy" | "credential_selection_required" | "cli_auth_in_progress" | "credential_selection_mode_conflict" | "credential_account_deleted" | "credential_scope_mismatch" | "project_credential_required" | "model_auth_in_progress" | "import_operation_conflict" | "import_in_progress" | "import_scan_expired" | "import_source_conflict" | "import_provenance_key_changed" | "import_duplicate_source" | "import_source_changed" | "plugin_source_failed" | "plugin_confirmation_required" | "plugin_version_conflict" | "plugin_not_enabled" | "plugin_blocked" | "plugin_failed" | "plugin_timeout";
         /**
-         * @description - credential_unavailable：凭证不可用（需要重新录入或已失效）
-         *     - cli_install_failed：CLI 安装失败
-         *     - workspace_sync_failed：工作区同步失败（如克隆失败）
-         *     - session_missing：会话文件丢失
-         *     - pi_start_failed：Pi 启动失败或启动超时
-         *     - pi_exited：Pi 进程异常退出
-         *     - pi_error：Pi 报告这一轮以错误结束
-         *     - internal_error：服务端内部错误（如数据库暂时不可用），这次回复未能执行
-         *     - plugin_blocked：插件拒绝本轮操作或运行条件已变化
-         *     - image_unsupported：本轮实际模型不支持图片，未发送图片或切换模型
-         *     - runtime_unavailable：Claude Code 运行时在本机不可用（登录 shell 的 PATH 里找不到 claude，或读不出它的版本）
-         *     - runtime_login_required：本机的 Claude Code 没有登录，需要用户在本机登录后再试
-         *     - runtime_start_failed：Claude Code 在第一轮开始前退出或启动超时（消息带版本号与错误输出末尾）
-         *     - runtime_exited：Claude Code 进程在这一轮中意外退出
-         *     - runtime_error：Claude Code 报告这一轮以错误结束（如用量额度用尽）
+         * @description - credential_unavailable: the credential is unavailable (it must be entered again, or it has become invalid)
+         *     - cli_install_failed: installing the CLI failed
+         *     - workspace_sync_failed: syncing the workspace failed (such as a failed clone)
+         *     - session_missing: the session file is missing
+         *     - pi_start_failed: Pi failed to start or timed out while starting
+         *     - pi_exited: the Pi process exited unexpectedly
+         *     - pi_error: Pi reported that this turn ended with an error
+         *     - internal_error: internal server error (such as the database being temporarily unavailable); this reply could not run
+         *     - plugin_blocked: a plugin rejected this turn's operation, or the run conditions changed
+         *     - image_unsupported: the model actually used for this turn does not support images; the turn neither sent the images nor switched models
+         *     - runtime_unavailable: the Claude Code runtime is not available on this computer (claude is not on the login shell's PATH, or its version cannot be read)
+         *     - runtime_login_required: Claude Code on this computer is not logged in; the user must log in on this computer and try again
+         *     - runtime_start_failed: Claude Code exited before the first turn started, or timed out while starting (the message includes the version and the tail of the error output)
+         *     - runtime_exited: the Claude Code process exited unexpectedly during this turn
+         *     - runtime_error: Claude Code reported that this turn ended with an error (such as the usage limit being used up)
          * @enum {string}
          */
         RunErrorCode: "credential_unavailable" | "cli_install_failed" | "workspace_sync_failed" | "session_missing" | "pi_start_failed" | "pi_exited" | "pi_error" | "internal_error" | "plugin_blocked" | "image_unsupported" | "runtime_unavailable" | "runtime_login_required" | "runtime_start_failed" | "runtime_exited" | "runtime_error";
@@ -3320,7 +3509,7 @@ export interface components {
         AgentBusyDetails: {
             /**
              * Format: uuid
-             * @description 进行中的执行；没有时是最早的排队执行。两样都没有时为 null：忙闲锁被不产生执行的平台命令（/new、/reload、/resume、导出）占着，或一次执行正要开始、刚刚结束。这时仍可按 whenBusy 打断或排队，消息在锁放开后开始。
+             * @description The run in progress, or the earliest queued run when none is in progress. Null when there is neither, because the busy lock is held by a platform command that produces no run (/new, /reload, /resume, export), or a run is just about to start or has just ended. The request can still interrupt or queue per whenBusy, and the message starts once the lock is released.
              */
             currentRunId: string | null;
             queued: components["schemas"]["QueueCounts"];
@@ -3330,7 +3519,7 @@ export interface components {
             normal: number;
         };
         Warning: {
-            /** @description 例如 host_keychain_risk */
+            /** @description For example host_keychain_risk */
             code: string;
             message: string;
         };
@@ -3350,22 +3539,22 @@ export interface components {
             limits: components["schemas"]["Limits"];
         };
         Limits: {
-            /** @description 单个上传文件的字节上限 */
+            /** @description Byte limit for a single uploaded file */
             maxUploadFile: number;
             /**
              * Format: int64
-             * @description Agent 文件夹与上下文文件夹单个上传文件的字节上限
+             * @description Byte limit for a single file uploaded to an Agent folder or a context folder
              */
             maxFolderUpload: number;
-            /** @description 单条消息的字节上限 */
+            /** @description Byte limit for a single message */
             maxMessage: number;
-            /** @description 单条 Inbox 消息正文的字节上限 */
+            /** @description Byte limit for the body of a single Inbox message */
             maxInboxMessage: number;
-            /** @description Skill 压缩包解压后的总字节上限 */
+            /** @description Total byte limit of a Skill archive after extraction */
             maxSkillArchive: number;
-            /** @description Skill 压缩包的条目数上限 */
+            /** @description Maximum number of entries in a Skill archive */
             maxSkillEntries: number;
-            /** @description 单条凭证的字节上限 */
+            /** @description Byte limit for a single credential */
             maxCredential: number;
             textEdit: {
                 maxBytes: number;
@@ -3377,31 +3566,31 @@ export interface components {
             /** Format: int64 */
             maxMessageImagePixels?: number;
         };
-        /** @description 外部身份查询时，结构与状态码规则相同，但 `database` 只有 `ok`，没有错误原文与 WAL 信息 */
+        /** @description For an external identity the structure and status code rules are the same, but `database` has only `ok`, without the raw error text or WAL details */
         Health: {
             ok: boolean;
             database: components["schemas"]["DatabaseHealth"];
         };
-        /** @description 本地 SQLite 库（data.db 与 events.db）是否可用。WAL 只影响告警，不影响 `ok` 与状态码。 */
+        /** @description Whether the local SQLite databases (data.db and events.db) are available. WAL affects only the warning, not `ok` or the status code. */
         DatabaseHealth: {
             ok: boolean;
             error?: string | null;
-            /** @description 两个库当前 -wal 文件的字节数 */
+            /** @description Current size in bytes of the -wal file of each database */
             walBytes?: {
                 /** Format: int64 */
                 data: number;
                 /** Format: int64 */
                 events: number;
             };
-            /** @description 任一 WAL 超过告警阈值（256 MiB）：通常是有长时间不结束的读事务挡住了检查点 */
+            /** @description Either WAL exceeds the warning threshold (256 MiB), usually because a long-running read transaction is blocking checkpoints */
             walWarning?: boolean;
         };
         ModelSettings: {
-            /** @description Pi 原生 models.json 文本；API Key 仍由项目或 Agent 账号管理。 */
+            /** @description Pi's native models.json text; API keys are still managed by project or Agent accounts. */
             modelsJson: string;
             /** Format: int64 */
             revision: number;
-            /** @description 已保存配置未通过当前 Pi 校验时的警告；此时运行中目录已退回内置配置。 */
+            /** @description Warning when the saved configuration fails the current Pi validation; the live catalog has then fallen back to the built-in configuration. */
             loadError?: string;
         };
         ModelSettingsPut: {
@@ -3417,47 +3606,61 @@ export interface components {
         };
         ModelProvider: {
             id: string;
-            /** @description 提供方自己给的显示名；目前只有插件提供方有（扩展原文，按纯文本显示），其余为 null。 */
+            /** @description Display name given by the provider itself; currently only plugin providers have one (the extension's original text, shown as plain text), null for the rest. */
             name: string | null;
             /**
-             * @description builtin 为纯内置目录；config 表示该 Provider 有原生 models.json 配置或覆盖；
-             *     plugin 为已安装插件的 Pi 扩展注册的提供方（plugins/SPEC.md §13）：项目 Agent 选它须项目已启用该插件、Agent 已获授权，
-             *     账号用项目里登录的订阅账号；平台 Agent 选它须插件已授权给这个 Agent，账号在这个 Agent 自己的模型凭证里登录
-             *     （POST /agents/{agentId}/model-auth/operations）。不满足时修改 Agent 返回 422，新建 Agent 时不能直接选。
-             *     local_cli 为用户本机安装的 CLI 提供的模型（目前只有 claude-code：本机的 Claude Code），用 CLI 自己在本机的登录，
-             *     不需要账号，平台不保存令牌；项目 Agent 与平台 Agent 都能选。模型 id 是 Claude Code 的别名（fable、opus、sonnet、haiku），
-             *     思考等级即 Claude Code 的 effort（low 到 max）。本机是否装了、是否登录见 GET /runtimes，没装时照常可选，运行时以 runtime_* 失败。
+             * @description builtin is the pure built-in catalog; config means the provider has a native models.json configuration or
+             *     override;
+             *     plugin is a provider registered by the Pi extension of an installed plugin (plugins/SPEC.md §13): a project
+             *     Agent can choose it only when the project has enabled the plugin and the Agent has been granted it, and the
+             *     account is a subscription account logged in within the project; a platform Agent can choose it only when the
+             *     plugin has been granted to that Agent, and the account is logged in under that Agent's own model credential
+             *     (POST /agents/{agentId}/model-auth/operations). Otherwise updating the Agent returns 422, and it cannot be
+             *     chosen directly when creating an Agent.
+             *     local_cli is a model provided by a CLI installed on the user's computer (currently only claude-code, the
+             *     local Claude Code); it uses the CLI's own local login, needs no account, and the platform stores no token;
+             *     both project Agents and platform Agents can choose it. Model ids are Claude Code aliases (fable, opus,
+             *     sonnet, haiku), and the thinking level is Claude Code's effort (low to max). Whether it is installed and
+             *     logged in on this computer is shown by GET /runtimes; it can be chosen even when not installed, and runs
+             *     then fail with runtime_*.
              * @enum {string}
              */
             source: "builtin" | "config" | "plugin" | "local_cli";
-            /** @description 选这个提供方的 Agent 由哪个运行时执行。 */
+            /** @description The runtime that executes Agents that choose this provider. */
             runtime: components["schemas"]["AgentRuntime"];
-            /** @description source 为 plugin 时是注册它的插件 id，其余为 null。 */
+            /** @description When source is plugin, the id of the plugin that registered it; otherwise null. */
             pluginId: string | null;
-            /** @description source 为 plugin 时是注册它的插件的显示名（清单原样），其余为 null。 */
+            /** @description When source is plugin, the display name of the plugin that registered it (as in the manifest); otherwise null. */
             pluginDisplayName: components["schemas"]["LocalizedText"] | null;
             /**
-             * @description 只在带 agentId 查询、且 source 为 plugin 时可能非空：这个 Agent 现在不能用它的原因。
-             *     plugin_not_enabled：Agent 所在项目没有启用该插件（只有项目 Agent；平台 Agent 没有项目启用这一层）；
-             *     agent_not_granted：插件没有授权给这个 Agent；plugins_disabled：全局停用了全部插件（不挡保存，但 Pi 启动会失败）。
-             *     前两种情形下修改 Agent 选它返回 422（validation_failed，字段 model.provider，消息说明是哪一种）。
-             *     插件被卸载后它的提供方从目录里消失（已选它的 Agent 启动时明确失败）。
+             * @description Can be non-null only when the query has agentId and source is plugin: why this Agent cannot use it now.
+             *     plugin_not_enabled: the Agent's project has not enabled the plugin (project Agents only; platform Agents
+             *     have no project enable step);
+             *     agent_not_granted: the plugin has not been granted to this Agent; plugins_disabled: all plugins are disabled
+             *     globally (this does not block saving, but Pi fails to start).
+             *     In the first two cases, updating the Agent to choose it returns 422 (validation_failed, field
+             *     model.provider, with a message saying which case).
+             *     Once the plugin is uninstalled, its provider disappears from the catalog (Agents that chose it fail
+             *     explicitly at start).
              * @enum {string|null}
              */
             unavailableReason: "plugin_not_enabled" | "agent_not_granted" | "plugins_disabled" | null;
             /**
              * @deprecated
-             * @description 旧环境凭证兼容诊断元数据，不能作为模型凭证录入字段。
+             * @description Diagnostic metadata kept for compatibility with legacy environment credentials; not a field for entering model credentials.
              */
             apiKeyEnvVars: string[];
             modelCount: number;
-            /** @description 平台支持的显式认证方式；OAuth登录仅控制台，当前支持openai-codex与插件提供方（插件提供方只有oauth）。 */
+            /** @description Explicit authentication methods the platform supports; OAuth login is console only and currently supports openai-codex and plugin providers (plugin providers support only oauth). */
             authMethods: components["schemas"]["ModelAuthMethod"][];
         };
         /**
-         * @description 执行 Agent 的运行时：pi 为随包的 Pi；claude-code 为用户本机安装、未经修改的 Claude Code（从登录 shell 的 PATH 找 claude），
-         *     用它在本机自己的登录，平台不读取、不保存它的凭证。运行时由模型提供方决定，不单独设置：model.provider 为 claude-code 时是
-         *     claude-code，其余为 pi。Claude Code 下没有 Pi 扩展（/pi: 命令、扩展对话、插件提供方），插件的 Skill 与 MCP 服务器照常。
+         * @description The runtime that executes the Agent: pi is the bundled Pi; claude-code is the unmodified Claude Code installed
+         *     on the user's computer (claude is looked up on the login shell's PATH), using its own local login; the platform
+         *     neither reads nor stores its credentials. The runtime follows from the model provider and is not set separately:
+         *     it is claude-code when model.provider is claude-code, and pi otherwise. Under Claude Code there are no Pi
+         *     extensions (/pi: commands, extension conversations, plugin providers); plugin Skills and MCP servers work as
+         *     usual.
          * @enum {string}
          */
         AgentRuntime: "pi" | "claude-code";
@@ -3466,31 +3669,31 @@ export interface components {
         };
         RuntimeStatus: {
             id: components["schemas"]["AgentRuntime"];
-            /** @description claude-code 为找到了 claude 且读得出版本（是否登录另见 login） */
+            /** @description For claude-code, true when claude was found and its version could be read (see login for whether it is logged in) */
             available: boolean;
-            /** @description pi 为随包 Pi 的版本；claude-code 为 claude --version 的版本号 */
+            /** @description For pi, the version of the bundled Pi; for claude-code, the version number from claude --version */
             version: string | null;
-            /** @description claude 解析符号链接后的真实路径；pi 与没找到时为 null */
+            /** @description The real path of claude after resolving symlinks; null for pi and when claude was not found */
             binaryPath: string | null;
             /**
-             * @description not_found：登录 shell 的 PATH 里找不到 claude；version_failed：运行 claude --version 失败
+             * @description not_found means claude is not on the login shell's PATH; version_failed means running claude --version failed
              * @enum {string|null}
              */
             unavailableReason: "not_found" | "version_failed" | null;
-            /** @description 只有 claude-code 且找到了 claude 时有；pi 与没找到时为 null */
+            /** @description Present only for claude-code when claude was found; null for pi and when claude was not found */
             login: components["schemas"]["RuntimeLogin"] | null;
             /** Format: date-time */
             checkedAt: string;
         };
         RuntimeLogin: {
             /**
-             * @description 来自 claude auth status；运行不了或输出无法识别时为 unknown
+             * @description From claude auth status; unknown when it cannot run or its output is not recognized
              * @enum {string}
              */
             state: "logged_in" | "logged_out" | "unknown";
-            /** @description 登录方式，如 claude.ai */
+            /** @description Login method, such as claude.ai */
             authMethod: string | null;
-            /** @description 订阅类型，如 max */
+            /** @description Subscription type, such as max */
             subscriptionType: string | null;
         };
         ModelList: {
@@ -3498,7 +3701,7 @@ export interface components {
             models: components["schemas"]["Model"][];
         };
         /**
-         * @description Codex请求速度档位；default为标准，priority为Fast，ultrafast为Ultrafast。供应商决定账号和模型资格，不静默降档。
+         * @description Codex request speed tier; default is Standard, priority is Fast, ultrafast is Ultrafast. The vendor decides account and model eligibility; the tier is never silently downgraded.
          * @enum {string}
          */
         CodexServiceTier: "default" | "priority" | "ultrafast";
@@ -3508,9 +3711,9 @@ export interface components {
             id: string;
             name: string;
             reasoning: boolean;
-            /** @description 固定Pi按该具体模型计算的真实可用等级；缺省表示旧服务未提供此能力。 */
+            /** @description The levels actually available for this specific model, as computed by the pinned Pi; absent means an older server that does not provide this capability. */
             thinkingLevels?: components["schemas"]["ThinkingLevel"][];
-            /** @description 固定Pi官方clampThinkingLevel(model, medium)的结果；不读取会话或宿主settings。 */
+            /** @description The result of the pinned Pi's official clampThinkingLevel(model, medium); does not read the session or the host settings. */
             defaultThinkingLevel?: components["schemas"]["ThinkingLevel"];
             contextWindow: number;
             maxTokens: number;
@@ -3522,11 +3725,11 @@ export interface components {
             label: string;
             /** @enum {string} */
             type: "string" | "secret" | "enum";
-            /** @description type 为 enum 时的可选值 */
+            /** @description Allowed values when type is enum */
             options?: string[];
             default?: string;
             required: boolean;
-            /** @description 多行文本输入；缺省false，不改变secret遮蔽规则 */
+            /** @description Multi-line text input; defaults to false and does not change how secret values are masked */
             multiline?: boolean;
         };
         CliTemplate: {
@@ -3553,7 +3756,7 @@ export interface components {
             epoch: number;
         };
         AgentListItem: {
-            /** @description 当前作用域正在生效的 sleep；登记尚未收尾或没有等待时为 null */
+            /** @description The sleep currently in effect for this scope; null while its registration is not yet finalized or when nothing is waiting */
             sleep: components["schemas"]["SleepInfo"] | null;
             /** Format: int64 */
             sleepRevision: number;
@@ -3565,16 +3768,19 @@ export interface components {
             isManager: boolean;
             name: string;
             /**
-             * @description Inbox 地址：项目内的 Agent 为完整地址 `组织名/项目名/Agent名`，平台持有的 Agent 为名称本身，随项目改名而变。
-             *     名称不满足命名规则（规则生效前创建的 Agent）时为 null，此时用 Agent ID 寻址。
+             * @description Inbox address: for an Agent in a project, the full address
+             *     `<organization name>/<project name>/<Agent name>`; for a platform-owned Agent, the name itself. It changes
+             *     when the project is renamed.
+             *     Null when a name does not meet the naming rules (Agents created before the rules took effect); address such
+             *     an Agent by its Agent ID.
              */
             address: string | null;
             model: components["schemas"]["ModelRef"];
-            /** @description 由 model.provider 派生，只读。 */
+            /** @description Derived from model.provider; read-only. */
             runtime: components["schemas"]["AgentRuntime"];
-            /** @description 仅openai-codex可设非null值；null为标准。创建缺省同null，更新缺省保留、null重置。常态下一轮生效，新任务冻结具体值；旧快照缺省保持原行为。 */
+            /** @description Only openai-codex accepts a non-null value; null means Standard. Omitting it on create is the same as null; omitting it on update keeps the current value, and null resets it. For regular (non-task) runs it takes effect from the next turn; new tasks capture the concrete value, and older snapshots that lack it keep their original behavior. */
             serviceTier?: components["schemas"]["CodexServiceTier"] | null;
-            /** @description null为当前模型官方clamp(medium)默认；创建缺省同null，更新缺省保留原值，显式等级须由该模型支持。常态下一轮生效，新任务冻结实际解析值，旧任务不重写。 */
+            /** @description null means the current model's official clamp(medium) default. Omitting it on create is the same as null, omitting it on update keeps the current value, and an explicit level must be supported by the model. For regular (non-task) runs it takes effect from the next turn; new tasks capture the resolved value, and existing tasks are not rewritten. */
             thinkingLevel?: components["schemas"]["ThinkingLevel"] | null;
             configVersion: number;
             busy: boolean;
@@ -3585,18 +3791,19 @@ export interface components {
             updatedAt: string;
         };
         /**
-         * @description 组织名、项目名与 Agent 名的共同规则（会组成 Inbox 地址）：
-         *     - 1 到 100 个字符（按 Unicode 码点计）；
-         *     - 不含 `/` 或 `#`，不含控制字符（U+0000–U+001F、U+007F–U+009F）；
-         *     - 不以 `@` 开头；
-         *     - 首尾不能是空白，空白指 U+0009–U+000D、U+0020、U+0085、U+00A0、U+1680、U+2000–U+200A、U+2028、U+2029、U+202F、U+205F、U+3000；
-         *     - 不能是 8-4-4-4-12 的十六进制 UUID 写法（不区分大小写）。
-         *     不满足时返回 422 validation_failed，字段级错误指向 `name`。
-         *     pattern 只用 Go RE2 与 ECMA-262 含义相同的写法。
+         * @description Rules shared by organization, project and Agent names (they make up Inbox addresses):
+         *     - 1 to 100 characters (counted in Unicode code points);
+         *     - no `/` or `#`, and no control characters (U+0000–U+001F, U+007F–U+009F);
+         *     - does not start with `@`;
+         *     - no leading or trailing whitespace, where whitespace means U+0009–U+000D, U+0020, U+0085, U+00A0, U+1680,
+         *       U+2000–U+200A, U+2028, U+2029, U+202F, U+205F, U+3000;
+         *     - not a hexadecimal UUID in 8-4-4-4-12 form (case-insensitive).
+         *     A name that breaks these rules returns 422 validation_failed with a field-level error on `name`.
+         *     pattern uses only syntax that means the same in Go RE2 and ECMA-262.
          */
         EntityName: string;
         /**
-         * @description Agent 的归属：project 为某个项目，platform 为平台持有（不属于任何组织或项目）
+         * @description Where the Agent belongs; project means a project, platform means owned by the platform (not in any organization or project)
          * @enum {string}
          */
         AgentScope: "project" | "platform";
@@ -3609,21 +3816,21 @@ export interface components {
             /** Format: uuid */
             organizationId: string;
             name: string;
-            /** @description 默认项目可以改名，不能删除 */
+            /** @description The default project can be renamed but not deleted */
             isDefault: boolean;
             /**
              * Format: uuid
-             * @description 担任 Manager 的 Agent；没有指定时为 null
+             * @description The Agent acting as Manager; null when none is set
              */
             managerAgentId: string | null;
-            /** @description 项目内未删除的 Agent 数量 */
+            /** @description Number of non-deleted Agents in the project */
             agentCount: number;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
         };
-        /** @description 项目名在组织内未删除的项目中唯一，重名返回 409 name_conflict；已删除项目的名字可以再用 */
+        /** @description The project name is unique among the organization's non-deleted projects, and a duplicate returns 409 name_conflict; names of deleted projects can be reused */
         ProjectCreate: {
             name: components["schemas"]["EntityName"];
         };
@@ -3634,7 +3841,7 @@ export interface components {
             /** Format: uuid */
             agentId: string;
         };
-        /** @description 删除项目被拒绝时，列出不空闲的 Agent */
+        /** @description When deleting a project is rejected, lists the Agents that are not idle */
         ProjectNotIdleDetails: {
             agents: {
                 /** Format: uuid */
@@ -3642,13 +3849,13 @@ export interface components {
                 name: string;
             }[];
         };
-        /** @description Agent 名称在所属范围（本项目或平台）内唯一，重名返回 409 name_conflict；已删除的 Agent 不占用名字；所属范围由请求路径决定，创建后不能改变 */
+        /** @description The Agent name is unique within its scope (this project or the platform), and a duplicate returns 409 name_conflict; deleted Agents do not hold their names; the scope comes from the request path and cannot change after creation */
         AgentCreate: {
             name: components["schemas"]["EntityName"];
             model: components["schemas"]["ModelRef"];
-            /** @description 仅openai-codex可设非null值；null为标准。创建缺省同null，更新缺省保留、null重置。常态下一轮生效，新任务冻结具体值；旧快照缺省保持原行为。 */
+            /** @description Only openai-codex accepts a non-null value; null means Standard. Omitting it on create is the same as null; omitting it on update keeps the current value, and null resets it. For regular (non-task) runs it takes effect from the next turn; new tasks capture the concrete value, and older snapshots that lack it keep their original behavior. */
             serviceTier?: components["schemas"]["CodexServiceTier"] | null;
-            /** @description null为当前模型官方clamp(medium)默认；创建缺省同null，更新缺省保留原值，显式等级须由该模型支持。常态下一轮生效，新任务冻结实际解析值，旧任务不重写。 */
+            /** @description null means the current model's official clamp(medium) default. Omitting it on create is the same as null, omitting it on update keeps the current value, and an explicit level must be supported by the model. For regular (non-task) runs it takes effect from the next turn; new tasks capture the resolved value, and existing tasks are not rewritten. */
             thinkingLevel?: components["schemas"]["ThinkingLevel"] | null;
             prompt?: string;
         };
@@ -3663,20 +3870,22 @@ export interface components {
             expectedPromptVersion: number;
         };
         /**
-         * @description model.provider 在 claude-code 与其他提供方之间改动即切换运行时（见 AgentRuntime）：新运行时从新会话开始，会话序号加一
-         *     （会话重置事件的 reason 为 runtime_changed），这个会话里的 sleep 取消，旧会话不迁移也不删除；Agent 有进行中的回复时返回 409 agent_not_idle。
+         * @description Changing model.provider between claude-code and another provider switches the runtime (see AgentRuntime): the
+         *     new runtime starts with a new session and the session number goes up by one (the session reset event's reason is
+         *     runtime_changed), any sleep in the current session is cancelled, and the old session is neither migrated nor
+         *     deleted. Returns 409 agent_not_idle while the Agent has a reply in progress.
          */
         AgentUpdate: {
             name?: components["schemas"]["EntityName"];
             model?: components["schemas"]["ModelRef"];
-            /** @description 仅openai-codex可设非null值；null为标准。创建缺省同null，更新缺省保留、null重置。常态下一轮生效，新任务冻结具体值；旧快照缺省保持原行为。 */
+            /** @description Only openai-codex accepts a non-null value; null means Standard. Omitting it on create is the same as null; omitting it on update keeps the current value, and null resets it. For regular (non-task) runs it takes effect from the next turn; new tasks capture the concrete value, and older snapshots that lack it keep their original behavior. */
             serviceTier?: components["schemas"]["CodexServiceTier"] | null;
-            /** @description null为当前模型官方clamp(medium)默认；创建缺省同null，更新缺省保留原值，显式等级须由该模型支持。常态下一轮生效，新任务冻结实际解析值，旧任务不重写。 */
+            /** @description null means the current model's official clamp(medium) default. Omitting it on create is the same as null, omitting it on update keeps the current value, and an explicit level must be supported by the model. For regular (non-task) runs it takes effect from the next turn; new tasks capture the resolved value, and existing tasks are not rewritten. */
             thinkingLevel?: components["schemas"]["ThinkingLevel"] | null;
             prompt?: string;
             /**
              * Format: int64
-             * @description 含prompt时必填（包括空文本和同文本）；独立于configVersion，过期返回412。
+             * @description Required when prompt is present (including empty text and unchanged text); independent of configVersion, and a stale value returns 412.
              */
             expectedPromptVersion?: number;
         };
@@ -3686,23 +3895,26 @@ export interface components {
             scope: components["schemas"]["AgentScope"];
             /**
              * Format: uuid
-             * @description 所属项目；平台持有的 Agent 为 null
+             * @description The owning project; null for platform-owned Agents
              */
             projectId: string | null;
-            /** @description 是否担任所属项目的 Manager；平台 Agent 恒为 false */
+            /** @description Whether the Agent is the Manager of its project; always false for platform Agents */
             isManager: boolean;
             name: string;
             /**
-             * @description Inbox 地址：项目内的 Agent 为完整地址 `组织名/项目名/Agent名`，平台持有的 Agent 为名称本身，随项目改名而变。
-             *     名称不满足命名规则（规则生效前创建的 Agent）时为 null，此时用 Agent ID 寻址。
+             * @description Inbox address: for an Agent in a project, the full address
+             *     `<organization name>/<project name>/<Agent name>`; for a platform-owned Agent, the name itself. It changes
+             *     when the project is renamed.
+             *     Null when a name does not meet the naming rules (Agents created before the rules took effect); address such
+             *     an Agent by its Agent ID.
              */
             address: string | null;
             model: components["schemas"]["ModelRef"];
-            /** @description 由 model.provider 派生，只读。 */
+            /** @description Derived from model.provider; read-only. */
             runtime: components["schemas"]["AgentRuntime"];
-            /** @description 仅openai-codex可设非null值；null为标准。创建缺省同null，更新缺省保留、null重置。常态下一轮生效，新任务冻结具体值；旧快照缺省保持原行为。 */
+            /** @description Only openai-codex accepts a non-null value; null means Standard. Omitting it on create is the same as null; omitting it on update keeps the current value, and null resets it. For regular (non-task) runs it takes effect from the next turn; new tasks capture the concrete value, and older snapshots that lack it keep their original behavior. */
             serviceTier?: components["schemas"]["CodexServiceTier"] | null;
-            /** @description null为当前模型官方clamp(medium)默认；创建缺省同null，更新缺省保留原值，显式等级须由该模型支持。常态下一轮生效，新任务冻结实际解析值，旧任务不重写。 */
+            /** @description null means the current model's official clamp(medium) default. Omitting it on create is the same as null, omitting it on update keeps the current value, and an explicit level must be supported by the model. For regular (non-task) runs it takes effect from the next turn; new tasks capture the resolved value, and existing tasks are not rewritten. */
             thinkingLevel?: components["schemas"]["ThinkingLevel"] | null;
             prompt: string;
             /** Format: int64 */
@@ -3718,31 +3930,31 @@ export interface components {
             updatedAt: string;
         };
         /**
-         * @description 已退役的文件夹来源类型，只用于旧任务运行记录中的工作区同步条目
+         * @description Retired folder source kind, used only by workspace sync entries in old task run records
          * @enum {string}
          */
         FolderSourceKind: "git" | "files";
         FolderEntry: {
             name: string;
-            /** @description 文件夹内的相对路径 */
+            /** @description Relative path within the folder */
             path: string;
             /**
-             * @description other 为 socket、设备等不能操作的条目
+             * @description other is an entry that cannot be operated on, such as a socket or a device
              * @enum {string}
              */
             type: "file" | "dir" | "symlink" | "other";
             /**
              * Format: int64
-             * @description 文件的字节数；目录与其他类型为 null（不递归统计）
+             * @description File size in bytes; null for directories and other types (sizes are not computed recursively)
              */
             size: number | null;
             /** Format: date-time */
             modifiedAt: string;
-            /** @description 软链接指向的路径（原样）；其他类型为 null。只能经由指向文件夹内部的链接读取 */
+            /** @description The path the symlink points to (as stored); null for other types. Reading through a link works only when it points inside the folder */
             symlinkTarget: string | null;
         };
         FolderEntryPage: {
-            /** @description 列出的目录；根为空串 */
+            /** @description The listed directory; an empty string for the root */
             path: string;
             entries: components["schemas"]["FolderEntry"][];
             nextCursor: string | null;
@@ -3757,20 +3969,20 @@ export interface components {
         FolderGitPullInput: {
             /** Format: uuid */
             actionId: string;
-            /** @description 仓库地址；不能带用户名或密码 */
+            /** @description Repository URL; must not contain a username or password */
             url: string;
             branch: string;
-            /** @description Agent 文件夹内的目标子目录，必须不存在或是空目录 */
+            /** @description Target subdirectory in the Agent folder; it must not exist yet or must be an empty directory */
             path: string;
         };
         LocalModeSettings: {
-            /** @description 绑定本机目录 */
+            /** @description Bind local directories */
             directories: boolean;
-            /** @description “从 Git 拉取”用本机的 git 身份 */
+            /** @description "Pull from Git" uses the local git identity */
             git: boolean;
-            /** @description 执行 PATH 之后接上用户的 PATH */
+            /** @description The user's PATH is appended after the execution PATH */
             cli: boolean;
-            /** @description Pi 的执行环境沿用用户真实的 HOME，本机工具的登录可用（默认关闭） */
+            /** @description Pi runs with the user's real HOME, so the logins of local tools are available (off by default) */
             logins: boolean;
         };
         LocalModeSettingsPatch: {
@@ -3781,18 +3993,21 @@ export interface components {
         };
         LocalDirectoryInput: {
             /**
-             * @description 本机目录的绝对路径，必须是规范形式（Go 的 filepath.Clean 不改变它）：不含 `.`、`..` 段、重复分隔符或结尾分隔符。
-             *     macOS/Linux 以 `/` 开头；Windows 带盘符（`C:\Users\me\code`）或 UNC（`\\server\share\dir`），分隔符用 `\`（`C:/x` 视为不规范）。
-             *     不得含控制字符（含换行、制表符），最长 4096 字节；同一清单内不得重复（Windows 上不分大小写）。
+             * @description Absolute path of the local directory, in canonical form (Go's filepath.Clean leaves it unchanged): no `.` or
+             *     `..` segments, no repeated separators and no trailing separator.
+             *     On macOS/Linux it starts with `/`; on Windows it has a drive letter (`C:\Users\me\code`) or is a UNC path
+             *     (`\\server\share\dir`), with `\` as the separator (`C:/x` counts as non-canonical).
+             *     Must not contain control characters (including newlines and tabs); at most 4096 bytes; no duplicates within
+             *     one list (case-insensitive on Windows).
              */
             path: string;
-            /** @description 可选备注，会随路径写进系统提示；去掉首尾空白后为空视同 null。最长 200 字符，不得含控制字符。 */
+            /** @description Optional note, written into the system prompt together with the path; a note that is empty after trimming leading and trailing whitespace counts as null. At most 200 characters; must not contain control characters. */
             note?: string | null;
         };
         LocalDirectoriesPut: {
             /**
              * Format: int64
-             * @description 读到的 revision；从未保存过为 0
+             * @description The revision you read; 0 if never saved
              */
             expectedRevision: number;
             directories: components["schemas"]["LocalDirectoryInput"][];
@@ -3801,11 +4016,12 @@ export interface components {
             path: string;
             note: string | null;
             /**
-             * @description 服务端读取时（读与保存的响应里）对该路径 stat 的结果，跟随符号链接：
-             *     - ok：是目录；只有 ok 的条目会写进 Agent 的系统提示
-             *     - missing：不存在
-             *     - not_directory：存在但不是目录
-             *     - inaccessible：无法读取其状态（如没有权限）
+             * @description Result of a stat on the path, following symlinks, taken when the server reads it (in both read and save
+             *     responses):
+             *     - ok: a directory; only ok entries are written into the Agent's system prompt
+             *     - missing: does not exist
+             *     - not_directory: exists but is not a directory
+             *     - inaccessible: its status cannot be read (for example, no permission)
              * @enum {string}
              */
             status: "ok" | "missing" | "not_directory" | "inaccessible";
@@ -3818,21 +4034,21 @@ export interface components {
         AgentLocalDirectories: {
             /**
              * Format: int64
-             * @description Agent 自己清单的修订号
+             * @description Revision of the Agent's own list
              */
             revision: number;
-            /** @description Agent 自己的条目 */
+            /** @description The Agent's own entries */
             directories: components["schemas"]["LocalDirectory"][];
             /**
              * Format: uuid
-             * @description 所属项目；平台 Agent 为 null
+             * @description The project it belongs to; null for a platform Agent
              */
             projectId: string | null;
-            /** @description 继承自所属项目的条目（只读）；平台 Agent 为空 */
+            /** @description Entries inherited from its project (read-only); empty for a platform Agent */
             inherited: components["schemas"]["LocalDirectory"][];
         };
         FolderGitPullList: {
-            /** @description 新的在前 */
+            /** @description Newest first */
             pulls: components["schemas"]["FolderGitPull"][];
         };
         FolderGitPull: {
@@ -3846,18 +4062,21 @@ export interface components {
             /** @enum {string} */
             status: "queued" | "running" | "succeeded" | "failed";
             /**
-             * @description - target_exists：开始时目标已不是空目录
-             *     - branch_not_found：分支不存在
-             *     - timeout：超过克隆时限
-             *     - auth_failed：认证失败（HTTPS 没有可用凭证或凭证被拒、SSH 公钥被拒等），errorMessage 带 git 输出
-             *     - host_key_unverified：SSH 主机密钥未经确认（known_hosts 里没有这台主机或指纹已变）；拉取不会替用户确认，
-             *       须在本机终端先连一次该主机核对指纹（例如 `ssh -T git@主机`）
-             *     - clone_failed：其他失败（地址无效、仓库不存在、网络等），详见 errorMessage
-             *     - server_restart：服务重启时仍在进行，已中止
+             * @description - target_exists: the target was no longer an empty directory when the pull started
+             *     - branch_not_found: the branch does not exist
+             *     - timeout: the clone time limit was exceeded
+             *     - auth_failed: authentication failed (no usable HTTPS credential or the credential was rejected, the SSH
+             *       public key was rejected, and so on); errorMessage carries the git output
+             *     - host_key_unverified: the SSH host key is not confirmed (the host is not in known_hosts, or its fingerprint
+             *       has changed); the pull does not confirm it on the user's behalf. Connect to the host once from a local
+             *       terminal and check the fingerprint first (for example `ssh -T git@<host>`)
+             *     - clone_failed: any other failure (invalid URL, repository does not exist, network, and so on); see
+             *       errorMessage
+             *     - server_restart: still in progress when the server restarted; aborted
              * @enum {string|null}
              */
             errorCode: "target_exists" | "branch_not_found" | "timeout" | "auth_failed" | "host_key_unverified" | "clone_failed" | "server_restart" | null;
-            /** @description git 输出的末尾（最多 2000 字符）或失败原因；成功时为 null */
+            /** @description Tail of the git output (at most 2000 characters) or the failure reason; null on success */
             errorMessage: string | null;
             /** Format: date-time */
             createdAt: string;
@@ -3867,12 +4086,12 @@ export interface components {
         CredentialMeta: {
             /**
              * Format: uuid
-             * @description 项目共享来源；平台私有历史省略
+             * @description The project it is shared from; omitted for platform-private history
              */
             projectId?: string | null;
             /**
              * Format: uuid
-             * @description 稳定项目账号ID；平台私有历史省略
+             * @description Stable project account ID; omitted for platform-private history
              */
             accountId?: string | null;
             /** @enum {string} */
@@ -3888,7 +4107,7 @@ export interface components {
             authMethod?: "api_key" | "oauth" | "legacy" | null;
             /** Format: uuid */
             versionId?: string | null;
-            /** @description 允许展示的非秘密账号标识，不包含token或授权码。 */
+            /** @description Non-secret account label that may be displayed; contains no token or authorization code. */
             accountLabel?: string | null;
         };
         AgentCli: {
@@ -3914,7 +4133,7 @@ export interface components {
         SkillArchiveUpload: {
             /**
              * Format: binary
-             * @description Skill 目录的 zip 压缩包
+             * @description Zip archive of the Skill directory
              */
             archive: string;
         };
@@ -3954,7 +4173,7 @@ export interface components {
             description: string;
             /**
              * Format: uuid
-             * @description 来源模板；模板已删除时为 null，此时不能重新复制
+             * @description Source template; null when the template has been deleted, in which case the Skill cannot be copied again
              */
             sourceTemplateId: string | null;
             fileCount: number;
@@ -3982,16 +4201,21 @@ export interface components {
         /** @enum {string} */
         RunStatus: "queued" | "starting" | "running" | "aborting" | "completed" | "failed" | "interrupted";
         /**
-         * @description 仅 status 为 starting 时有值
+         * @description Set only when status is starting
          * @enum {string|null}
          */
         RunPhase: "waiting_slot" | "preparing" | "launching" | null;
         /**
-         * @description 执行中断或尚未领取的排队执行失效的原因：
-         *     - user_interrupt：被新消息打断；user_stopped：被人停止（只停这一次回复）；server_restart：服务重启。
-         *     - sleep_superseded：sleep timer 被真实工作承接；sleep_invalidated：所属生命周期失效。
-         *     - user_cancelled：排队中被人撤回或取消；merged_into_interrupt：其中的消息已全部转入打断提醒；no_pending_messages：提醒承载的消息已全部被读取或取消。
-         *     后五种都没有执行工具或模型，对话流中应隐藏 user_cancelled、merged_into_interrupt、no_pending_messages 三种。
+         * @description Why a run was interrupted, or why a queued run that was not yet picked up became void:
+         *     - user_interrupt: interrupted by a new message; user_stopped: stopped by a person (stops only this one reply);
+         *       server_restart: the server restarted.
+         *     - sleep_superseded: the sleep timer was taken over by real work; sleep_invalidated: the lifecycle it belongs to
+         *       became invalid.
+         *     - user_cancelled: withdrawn or cancelled by a person while queued; merged_into_interrupt: all of its messages
+         *       were moved into an interrupt reminder; no_pending_messages: all messages the reminder carried were already
+         *       read or cancelled.
+         *     None of the last five ran any tool or model; the conversation stream should hide user_cancelled,
+         *     merged_into_interrupt and no_pending_messages.
          * @enum {string|null}
          */
         RunEndReason: "user_interrupt" | "user_stopped" | "server_restart" | "sleep_superseded" | "sleep_invalidated" | "user_cancelled" | "merged_into_interrupt" | "no_pending_messages" | null;
@@ -4007,77 +4231,85 @@ export interface components {
         Run: {
             /**
              * Format: uuid
-             * @description 触发本轮平台提醒的原 Inbox 消息 ID；无触发消息的历史及普通来源省略
+             * @description ID of the original Inbox message that triggered this turn's platform reminder; omitted for history without a triggering message and for ordinary sources
              */
             triggerInboxMessageId?: string;
             /**
-             * @description 这一轮交给 Pi 的命令（plugins/SPEC.md §14）：对话页消息以 `/pi:<name>` 开头时，服务端发给 Pi 的是 `/<name>`（其余原样），
-             *     消息本身照原文保存与显示。handled 为 true 表示 Pi 直接处理了命令（扩展命令）、没有交给模型，这一轮以 completed 结束、没有助手回复
-             *     （助手消息正文为空，可显示“命令已执行，没有回复”；命令里的通知与状态照常记为运行事件）；false 表示命令展开成了普通提示（技能命令、提示模板）
-             *     或 Pi 不认识这个命令、当作普通文字交给了模型。不是命令的执行省略此字段。
+             * @description The command handed to Pi in this turn (plugins/SPEC.md §14): when a message on the conversation page starts
+             *     with `/pi:<name>`, the server sends `/<name>` to Pi (the rest unchanged); the message itself is stored and
+             *     shown as written. handled true means Pi handled the command itself (an extension command) without passing it
+             *     to the model: the turn ends as completed with no assistant reply (the assistant message text is empty and
+             *     the UI can show "Command ran; no reply"; notifications and statuses from the command are recorded as run
+             *     events as usual). false means the command expanded into an ordinary prompt (a Skill command or a prompt
+             *     template), or Pi did not recognize the command and passed it to the model as plain text. Runs that are not
+             *     commands omit this field.
              */
             piCommand?: {
-                /** @description 命令名，不带 "/"（技能命令为 skill:<名称>） */
+                /** @description Command name without the leading "/" (for a Skill command, skill:<name>) */
                 name: string;
                 handled: boolean;
                 /**
-                 * @description handled 为 true 时，命令执行期间扩展用 ctx.ui.notify 给出的消息（扩展命令的输出多半在这里），按先后顺序，随执行记录保存，
-                 *     重新打开历史与执行结束的 SSE 里都带着；message 是扩展原文，按纯文本显示，保留换行与空格。setStatus 等状态不在这里。
-                 *     handled 为 false 时为空数组（照常有模型回复）。最多 50 条、message 合计 16 KiB，超出的截断，truncated 为 true。
+                 * @description When handled is true, the messages the extension posted with ctx.ui.notify while the command ran (most
+                 *     extension command output lands here), in order. They are saved with the run record and included both
+                 *     when history is reopened and in the SSE event sent when the run ends; message is the extension's
+                 *     original text, shown as plain text with line breaks and spaces kept. Statuses such as setStatus are not
+                 *     included.
+                 *     When handled is false, this is an empty array (the model replies as usual). At most 50 items and 16 KiB
+                 *     of message text in total; anything beyond that is truncated and truncated is true.
                  */
                 notices: {
                     /** @enum {string} */
                     level: "info" | "warning" | "error";
                     message: string;
                 }[];
-                /** @description notices 是否因超过上限被截断 */
+                /** @description Whether notices was truncated for exceeding the limit */
                 truncated: boolean;
             };
             /**
              * Format: uuid
-             * @description 本轮有效承接的 sleep；普通历史可省略或为 null
+             * @description The sleep this turn validly took over; may be omitted or null in ordinary history
              */
             wakeSleepId?: string | null;
-            /** @description 只在手动压缩（/compact）的执行上有，其余执行省略 */
+            /** @description Present only on manual compaction runs (/compact); omitted on other runs */
             compaction?: components["schemas"]["RunCompaction"];
             /** Format: uuid */
             id: string;
             status: components["schemas"]["RunStatus"];
             phase: components["schemas"]["RunPhase"];
             endReason: components["schemas"]["RunEndReason"];
-            /** @description 仅 status 为 failed 时有值 */
+            /** @description Set only when status is failed */
             errorCode: components["schemas"]["RunErrorCode"] | null;
             errorMessage: string | null;
-            /** @description 开始执行时使用的配置版本；排队中为发送时的配置版本 */
+            /** @description Config version used when the run started; while queued, the config version at send time */
             configVersion: number;
-            /** @description 发送时 Agent 正忙所做的选择；空闲时发送为 null */
+            /** @description The choice made because the Agent was busy at send time; null when sent while the Agent was idle */
             whenBusy: components["schemas"]["WhenBusy"] | null;
             /** Format: date-time */
             queuedAt: string;
             /**
              * Format: date-time
-             * @description 派发时间：离开队列、开始处理
+             * @description Dispatch time, when the run left the queue and processing began
              */
             startedAt: string | null;
             /**
              * Format: date-time
-             * @description 进入回复的时间：消息已交给 Pi
+             * @description When the reply began, that is, when the message was handed to Pi
              */
             runningAt: string | null;
             /**
              * Format: date-time
-             * @description 发起打断的时间；没有被打断时为 null
+             * @description When the interrupt was requested; null if the run was not interrupted
              */
             abortRequestedAt: string | null;
             /** Format: date-time */
             endedAt: string | null;
             tools: components["schemas"]["ToolEvent"][];
-            /** @description 这次执行全部用量之和（含压缩、缓存预热与工具用量） */
+            /** @description Sum of all usage of this run (including compaction, cache warming and tool usage) */
             usage: components["schemas"]["UsageTotals"];
-            /** @description 这次执行实际使用的提供方与模型（最后一次模型调用报告的值）；没有模型调用时为 null */
+            /** @description Provider and model this run actually used (as reported by the last model call); null when there was no model call */
             model: components["schemas"]["ModelRef"] | null;
         };
-        /** @description 若干条用量之和；total 按 输入 + 输出 + 缓存读 + 缓存写 计算 */
+        /** @description Sum of a number of usage records; total = input + output + cacheRead + cacheWrite */
         UsageTotals: {
             calls: number;
             input: number;
@@ -4089,7 +4321,7 @@ export interface components {
         /** @enum {string} */
         MessageRole: "user" | "assistant";
         /**
-         * @description 对话消息的来源：console 为控制台发送；inbox_reminder 为收到 Inbox 消息后的平台提醒；sleep_wake 为到期后接续原会话的平台唤醒
+         * @description Source of a conversation message. console means sent from the console; inbox_reminder means a platform reminder after an Inbox message arrived; sleep_wake means a platform wake that continues the original session when the sleep is due
          * @enum {string}
          */
         MessageOrigin: "console" | "inbox_reminder" | "sleep_wake";
@@ -4097,47 +4329,58 @@ export interface components {
             /** Format: uuid */
             id: string;
             role: components["schemas"]["MessageRole"];
-            /** @description 取自所属执行，用户消息与对应的回复相同。平台提醒那一轮的用户消息正文是开始执行时生成的提醒文字 */
+            /** @description Taken from the run the message belongs to; a user message and its reply have the same value. For a platform reminder turn, the user message text is the reminder text generated when the run starts */
             origin: components["schemas"]["MessageOrigin"];
             text: string;
             /** Format: date-time */
             createdAt: string;
             sessionEpoch: number;
-            /** @description 该消息所属的执行；用户消息与对应回复带同一个执行 */
+            /** @description The run this message belongs to; a user message and its reply carry the same run */
             run: components["schemas"]["Run"];
             images?: components["schemas"]["MessageImage"][];
         };
         /**
-         * @description 一页对话历史与轮次计数。轮次的口径与控制台对话流一致：一次执行算一轮；排队中的、排队中即作废没有真正执行的
-         *     （endReason 为 user_cancelled、merged_into_interrupt、no_pending_messages）不算；会话重开不重新计数，编号在整个对话里连续；
-         *     轮次按实际开始执行的时间排列，没有开始时间的按入队时间。消息与计数取自同一时刻的数据。
+         * @description A page of conversation history plus turn counts. Turns are counted the same way as in the console's conversation
+         *     stream: one run is one turn; runs still queued, or voided while queued without ever running (endReason
+         *     user_cancelled, merged_into_interrupt or no_pending_messages), do not count; reopening the session does not
+         *     restart the count, so numbering is continuous across the whole conversation; turns are ordered by when they
+         *     actually started running, or by queue time when they have no start time. Messages and counts come from the same
+         *     point in time.
          */
         MessagePage: {
             messages: components["schemas"]["Message"][];
-            /** @description 这一页之前还有更早的消息 */
+            /** @description There are older messages before this page */
             hasMore: boolean;
-            /** @description 这一页之后还有更新的消息；取最新一页时恒为 false */
+            /** @description There are newer messages after this page; always false when fetching the latest page */
             hasMoreAfter: boolean;
             /**
              * Format: int64
-             * @description 排在这一页的轮次之前的轮次数，即从这一页起向后的消息（这一页及之后各页）所属的轮次中排在最前的一轮在整个对话里的下标（从 0 起）。
-             *     等于已经结束、全部消息（用户消息与回复）都早于这一页第一条消息的轮次数；进行中的一轮不计入。
-             *     从最新一页起向更早翻页时，用已加载的最早一页的 turnsBefore 加上轮次在已加载历史中的位置，就是它在整个对话里的下标。
-             *     定位取法（aroundRun）向后加载到最新之后同样成立；还没有加载到最新时，若有一轮在已加载范围里没有消息、却排在其中某一轮之前
-             *     （打断消息发在已加载范围之后却先于其中排队的消息执行，或一轮在整个已加载范围期间都在进行、回复在之后），其后的编号会偏小，加载到那一轮的消息后恢复。
-             *     这一页没有消息时按它本该开始的位置计算：before 之前没有消息时为 0。
+             * @description Number of turns ordered before this page's turns, that is, the index (from 0) within the whole conversation
+             *     of the earliest turn among the turns that the messages from this page onward (this page and all later pages)
+             *     belong to.
+             *     Equals the number of turns that have ended and whose messages (user messages and replies) are all earlier
+             *     than this page's first message; a turn in progress is not counted.
+             *     When paging from the latest page toward older ones, the turnsBefore of the earliest loaded page plus a
+             *     turn's position in the loaded history gives that turn's index in the whole conversation.
+             *     The same holds for the positioning mode (aroundRun) once it has loaded forward to the latest page. Before
+             *     the latest page is loaded, if a turn has no messages in the loaded range yet is ordered before one of the
+             *     turns in it (an interrupting message sent after the loaded range ran before a message queued inside it, or a
+             *     turn was in progress throughout the loaded range and replied afterwards), the numbers after it come out too
+             *     small; they are correct again once that turn's messages are loaded.
+             *     A page with no messages is computed from the position where it would have started: 0 when there are no
+             *     messages before `before`.
              */
             turnsBefore: number;
             /**
              * Format: int64
-             * @description 查询时这个 Agent 的对话一共有多少轮（含进行中的一轮）
+             * @description Total number of turns in this Agent's conversation at query time (including a turn in progress)
              */
             turnsTotal: number;
         };
         SendMessageInput: {
             text: string;
             whenBusy?: components["schemas"]["WhenBusy"];
-            /** @description 先在当前会话上传的图片ID；不得跨Agent/任务/节点复用。纯图片text传空字符串，数量上限取context.limits。 */
+            /** @description IDs of images uploaded beforehand in the current session; must not be reused across Agents, tasks or nodes. For an image-only message send text as an empty string; the maximum count comes from context.limits. */
             imageIds?: string[];
         } & ({
             text?: unknown;
@@ -4151,7 +4394,7 @@ export interface components {
         /** @enum {string} */
         ProcessState: "stopped" | "starting" | "idle" | "busy";
         AgentStatus: {
-            /** @description 当前作用域正在生效的 sleep；登记尚未收尾或没有等待时为 null */
+            /** @description The sleep currently in effect for this scope; null while its registration is not yet finalized or when nothing is waiting */
             sleep: components["schemas"]["SleepInfo"] | null;
             /** Format: int64 */
             sleepRevision: number;
@@ -4161,22 +4404,22 @@ export interface components {
             currentRun: components["schemas"]["Run"] | null;
             queued: components["schemas"]["QueueCounts"];
             processState: components["schemas"]["ProcessState"];
-            /** @description Pi 进程号；进程存活（idle、busy）时有值 */
+            /** @description Pi process ID; set while the process is alive (idle, busy) */
             processPid: number | null;
             /**
              * Format: date-time
-             * @description Pi 进程的启动时间；进程存活时有值
+             * @description Start time of the Pi process; set while the process is alive
              */
             processStartedAt: string | null;
             session: components["schemas"]["SessionInfo"];
         };
         SseSnapshot: {
             status: components["schemas"]["AgentStatus"];
-            /** @description 当前执行已产生的文字；没有进行中的执行时为 null */
+            /** @description Text produced so far by the current run; null when no run is in progress */
             currentText: string | null;
-            /** @description 排队中的执行，按处理顺序排列 */
+            /** @description Queued runs, in processing order */
             queuedRuns: components["schemas"]["Run"][];
-            /** @description 逐条排队列表，结构同 `GET /agents/{agentId}/queue` 的 items */
+            /** @description Per-message queue list, same structure as the items of `GET /agents/{agentId}/queue` */
             queueItems: components["schemas"]["QueueItem"][];
         };
         SseMessageCreated: {
@@ -4185,51 +4428,51 @@ export interface components {
         SseRunUpdated: {
             run: components["schemas"]["Run"];
         };
-        /** @description 排队列表发生了变化；客户端用 items 整体替换逐条列表，queuedRuns 同 snapshot.queuedRuns */
+        /** @description The queue changed; the client replaces its per-message list with items as a whole; queuedRuns is the same as snapshot.queuedRuns */
         SseQueueUpdated: {
-            /** @description 全部排队中的执行，按实际出队顺序排列 */
+            /** @description All queued runs, in actual dequeue order */
             queuedRuns: components["schemas"]["Run"][];
-            /** @description 逐条排队列表，结构同 `GET /agents/{agentId}/queue` 的 items */
+            /** @description Per-message queue list, same structure as the items of `GET /agents/{agentId}/queue` */
             items: components["schemas"]["QueueItem"][];
         };
-        /** @description 排队列表中的一项：一条仍待处理的消息 */
+        /** @description One entry of the queue list, a message still waiting to be handled */
         QueueItem: {
             /**
-             * @description run 为控制台在对话中发出的消息（一次执行一条）；inbox 为 Inbox 消息（由平台提醒或节点轮次承载）
+             * @description run is a message the console sent in the conversation (one per run); inbox is an Inbox message (carried by a platform reminder or a node turn)
              * @enum {string}
              */
             kind: "run" | "inbox";
             /**
              * Format: uuid
-             * @description 承载它的排队执行（任务节点为轮次）
+             * @description The queued run carrying it (a turn for task nodes)
              */
             runId: string;
             /**
              * Format: uuid
-             * @description kind=inbox 时为 Inbox 消息 ID；kind=run 时为 null
+             * @description Inbox message ID when kind=inbox; null when kind=run
              */
             messageId: string | null;
             from: components["schemas"]["InboxParticipant"];
-            /** @description 全文；纯图片消息为空字符串 */
+            /** @description Full text; empty string for an image-only message */
             text: string;
             images: components["schemas"]["MessageImage"][];
             whenBusy: components["schemas"]["WhenBusy"];
             /**
              * Format: date-time
-             * @description kind=run 为入队时间，kind=inbox 为消息发送时间
+             * @description Queue time for kind=run; message send time for kind=inbox
              */
             queuedAt: string;
         };
         AgentQueue: {
             /** Format: uuid */
             agentId: string;
-            /** @description 按实际处理顺序排列 */
+            /** @description In actual processing order */
             items: components["schemas"]["QueueItem"][];
         };
         AgentQueueActionInput: {
             /**
              * Format: uuid
-             * @description 客户端生成；结果未知时用同一 actionId 重试
+             * @description Generated by the client; when the outcome is unknown, retry with the same actionId
              */
             actionId: string;
         };
@@ -4242,18 +4485,18 @@ export interface components {
             operation: "promote_run" | "cancel_run" | "stop_run" | "promote_inbox_message" | "cancel_inbox_message";
             /** @enum {string} */
             status: "accepted" | "already_interrupt" | "already_cancelled" | "already_stopping";
-            /** @description 动作针对的排队项在动作时的内容（撤回或取消时供“编辑”回填）；停止为 null */
+            /** @description The queued item the action targeted, as it was at action time (used to refill the input for "Edit" after a withdraw or cancel); null for stop */
             item: components["schemas"]["QueueItem"] | null;
-            /** @description 动作后的相关执行：转为打断时为现在承载它的执行，撤回、取消时为原承载执行，停止时为被停止的执行 */
+            /** @description The related run after the action. For promotion to interrupt, the run that now carries the item; for withdraw or cancel, the run that originally carried it; for stop, the stopped run */
             run: components["schemas"]["Run"] | null;
-            /** @description 动作完成时的排队列表；之后的变化以 queue.updated 为准 */
+            /** @description The queue list when the action completed; later changes come through queue.updated */
             queue: components["schemas"]["QueueItem"][];
         };
-        /** @description run_not_queued 的详情：排队项的当前状态 */
+        /** @description Details for run_not_queued, the current state of the queued item */
         RunNotQueuedDetails: {
             /**
              * Format: uuid
-             * @description 执行，或 Inbox 消息当前的承载执行；消息没有承载执行时为 null
+             * @description The run, or the run currently carrying the Inbox message; null when the message has no carrying run
              */
             runId: string | null;
             /** @enum {string|null} */
@@ -4261,16 +4504,16 @@ export interface components {
             whenBusy: components["schemas"]["WhenBusy"] | null;
             /**
              * Format: uuid
-             * @description 针对 Inbox 消息的动作时给出
+             * @description Given for actions on an Inbox message
              */
             messageId?: string;
             /**
-             * @description read：已读；cancelled：已取消；dispatched：承载执行已开始或结束；not_queued：没有排队中的承载执行
+             * @description read: already read; cancelled: already cancelled; dispatched: the carrying run has started or ended; not_queued: no queued carrying run
              * @enum {string}
              */
             messageState?: "read" | "cancelled" | "dispatched" | "not_queued";
         };
-        /** @description run_not_active 的详情：要停止的执行当前的状态 */
+        /** @description Details for run_not_active, the current state of the run to be stopped */
         RunNotActiveDetails: {
             /** Format: uuid */
             runId: string;
@@ -4293,24 +4536,28 @@ export interface components {
         };
         SseRunEnded: {
             run: components["schemas"]["Run"];
-            /** @description 这次执行的回复；以其中的文字为最终回复 */
+            /** @description This run's reply; its text is the final reply */
             message: components["schemas"]["Message"];
         };
         /**
-         * @description 会话状态或会话序号变化时推送：重开会话、/new、/resume、会话文件丢失、第一轮回复后由 none 变 active、改模型换了运行时（会话随之重开）。
-         *     服务端重启后第一次推送状态时可能重复推送当前值。
+         * @description Pushed when the session state or session epoch changes: the session is reopened, /new, /resume, the session file
+         *     goes missing, the state changes from none to active after the first reply, or a model change switches the
+         *     runtime (which reopens the session).
+         *     The first state push after a server restart may repeat the current value.
          */
         SseSessionUpdated: {
             state: components["schemas"]["SessionState"];
             epoch: number;
         };
-        /** @description Pi 进程最近一次停止或意外退出 */
+        /** @description The most recent stop or unexpected exit of the Pi process */
         ProcessExit: {
             /** Format: date-time */
             at: string;
             /**
-             * @description 停止原因；意外退出为 unexpected_exit。session_reset、console_reload、session_resumed 是平台命令 /new、/reload、/resume 停止空闲进程；
-             *     console_export 是早先的 /export html 为导出临时启动的进程用完后停止（现在导出不启动进程，只出现在旧记录里）。
+             * @description Why it stopped; an unexpected exit is unexpected_exit. session_reset, console_reload and session_resumed are
+             *     the platform commands /new, /reload and /resume stopping an idle process; console_export is a process that
+             *     the earlier /export html started temporarily for an export, stopped once it was done (exports no longer
+             *     start a process, so it appears only in old records).
              * @enum {string}
              */
             reason: "idle_timeout" | "config_changed" | "evicted" | "released" | "fork_snapshot" | "shutdown" | "abort_timeout" | "session_reset" | "console_reload" | "session_resumed" | "console_export" | "unexpected_exit";
@@ -4324,9 +4571,9 @@ export interface components {
             name: string;
             model: components["schemas"]["ModelRef"];
             status: components["schemas"]["AgentStatus"];
-            /** @description 最近一次已结束的执行；没有时为 null。手动压缩（/compact）不是回复，不算 */
+            /** @description The most recent run that has ended; null if none. A manual compaction (/compact) is not a reply and does not count */
             lastRun: components["schemas"]["Run"] | null;
-            /** @description Pi 进程未运行时，上次停止或意外退出；进程存活或从未退出时为 null */
+            /** @description When the Pi process is not running, its last stop or unexpected exit; null when the process is alive or has never exited */
             lastProcessExit: components["schemas"]["ProcessExit"] | null;
         };
         SseOverviewSnapshot: {
@@ -4335,7 +4582,7 @@ export interface components {
         SseAgentStatus: {
             agent: components["schemas"]["AgentOverview"];
         };
-        /** @description Agent 被删除（含所在项目被删除）；带它原来的归属，按范围订阅时据此过滤 */
+        /** @description The Agent was deleted (including through deletion of its project); carries its former ownership so that scoped subscriptions can filter on it */
         SseAgentRemoved: {
             /** Format: uuid */
             agentId: string;
@@ -4343,14 +4590,14 @@ export interface components {
             /** Format: uuid */
             projectId: string | null;
         };
-        /** @description 按（Agent、提供方、模型）分组的用量；provider 与 model 都为 null 表示未知模型 */
+        /** @description Usage grouped by (Agent, provider, model); provider and model both null means an unknown model */
         UsageRow: {
             /** Format: uuid */
             agentId: string;
             scope: components["schemas"]["AgentScope"];
             /**
              * Format: uuid
-             * @description Agent 所属项目（项目可能已删除，此时 agentDeleted 为 true）；平台 Agent 为 null
+             * @description The Agent's project (the project may have been deleted, in which case agentDeleted is true); null for a platform Agent
              */
             projectId: string | null;
             agentName: string;
@@ -4372,7 +4619,7 @@ export interface components {
             rows: components["schemas"]["UsageRow"][];
         };
         /**
-         * @description run_failed 为失败（由 errorCode 区分原因），run_interrupted 为用户打断，server_restart 为服务端重启中断
+         * @description run_failed is a failure (errorCode tells the reason), run_interrupted is a user interrupt, server_restart is an interruption by a server restart
          * @enum {string}
          */
         AnomalyKind: "run_failed" | "run_interrupted" | "server_restart";
@@ -4385,7 +4632,7 @@ export interface components {
             kind: components["schemas"]["AnomalyKind"];
             /**
              * Format: date-time
-             * @description 执行的结束时间
+             * @description When the run ended
              */
             at: string;
             /** Format: uuid */
@@ -4395,22 +4642,27 @@ export interface components {
             errorMessage: string | null;
             endReason: components["schemas"]["RunEndReason"];
             /**
-             * @description 这条异常是一次失败的手动压缩（/compact）时为它的指令与结果（与 Run.compaction 相同，失败时 outcome 为 null），其余为 null。
-             *     手动压缩没有对话消息，不是对话流里的一轮：定位到它时（GET /agents/{agentId}/messages?aroundRun=runId）返回它开始时所在位置的一页，
-             *     页里没有它；要显示这次压缩本身，用 GET /agents/{agentId}/runs/{runId}/timeline 取执行与时间线。
+             * @description When this anomaly is a failed manual compaction (/compact), its instructions and result (same as
+             *     Run.compaction; outcome is null on failure); null otherwise.
+             *     A manual compaction has no conversation messages and is not a turn in the conversation stream: positioning
+             *     on it (GET /agents/{agentId}/messages?aroundRun=runId) returns the page at the position where it started,
+             *     and that page does not contain it; to show the compaction itself, fetch the run and its timeline with
+             *     GET /agents/{agentId}/runs/{runId}/timeline.
              */
             compaction: components["schemas"]["RunCompaction"] | null;
         };
         AnomalyPage: {
             items: components["schemas"]["Anomaly"][];
-            /** @description from 之后符合条件的总条数，与游标无关 */
+            /** @description Total number of matching items after from, independent of the cursor */
             total: number;
-            /** @description 下一页的游标；没有更多时为 null */
+            /** @description Cursor for the next page; null when there are no more */
             nextCursor: string | null;
         };
         /**
-         * @description 统计页报表。秒数为小数；比例为 0 到 1 的小数，分母为 0 时为 null。
-         *     执行指常态执行（runs）与任务轮次（task_turns），只算真正派发过的；排队中被取消、合并或作废的不算。
+         * @description Report for the stats page. Seconds are decimals; ratios are decimals from 0 to 1, null when the denominator
+         *     is 0.
+         *     "Runs" means regular runs (runs) and task turns (task_turns), counting only those actually dispatched; runs
+         *     cancelled, merged or voided while queued do not count.
          */
         StatsReport: {
             /** Format: date-time */
@@ -4419,24 +4671,26 @@ export interface components {
             to: string;
             /** @enum {string} */
             bucket: "hour" | "day";
-            /** @description 每个桶的开始时间，按时间先后 */
+            /** @description Start time of each bucket, in chronological order */
             buckets: string[];
             tokens: components["schemas"]["StatsTokens"];
             byOrigin: components["schemas"]["StatsOrigins"];
-            /** @description 定时唤醒（sleep 到期）的执行，按 Agent 汇总，按 tokens 降序；没有唤醒的 Agent 不出现 */
+            /** @description Runs from scheduled wakes (sleep expiry), aggregated per Agent, in descending order of tokens; Agents without wakes are left out */
             wakes: components["schemas"]["StatsAgentWakes"][];
             context: components["schemas"]["StatsContext"];
             questions: components["schemas"]["StatsQuestions"];
             wait: components["schemas"]["StatsWait"];
             outcomes: components["schemas"]["StatsOutcomes"];
-            /** @description Agent 体检，时间窗内有执行或用量的 Agent 各一行，按 tokens 降序 */
+            /** @description Agent health, one row per Agent with runs or usage in the time window, in descending order of tokens */
             agents: components["schemas"]["StatsAgentHealth"][];
             tools: components["schemas"]["StatsTools"];
             process: components["schemas"]["StatsProcess"];
             /**
-             * @description 服务端本地时间 0 点到 23 点，每个小时内同时在回复的执行数的平均值（时间窗内该小时的总回复时长 ÷ 该小时被观察到的总时长）。
-             *     回复时长：常态执行从开始回复到结束，任务轮次从派发到结束（任务轮次不单独记录开始回复时间），未结束的算到现在。
-             *     时间窗内该小时尚未到来（晚于现在）时为 null。
+             * @description For each hour from 0 to 23 in the server's local time, the average number of runs replying at the same time
+             *     during that hour (total reply time in that hour within the time window ÷ total observed time of that hour).
+             *     Reply time: for regular runs, from the start of the reply to the end; for task turns, from dispatch to the
+             *     end (task turns do not record a separate reply start time); runs that have not ended count up to now.
+             *     null when that hour has not yet come within the time window (it is later than now).
              */
             concurrency: (number | null)[];
         };
@@ -4447,14 +4701,14 @@ export interface components {
             cacheWrite: number;
             total: number;
         };
-        /** @description 时间窗内的全部用量（含任务与回复之外的用量） */
+        /** @description All usage in the time window (including usage outside tasks and replies) */
         StatsTokens: {
             totals: components["schemas"]["StatsTokenCounts"];
             /** @description cacheRead ÷ (input + cacheRead) */
             cacheHitRate: number | null;
-            /** @description 按（提供方、模型）汇总，按 total 降序；provider 与 model 都为 null 表示未知模型 */
+            /** @description Aggregated by (provider, model), in descending order of total; provider and model both null means an unknown model */
             byModel: components["schemas"]["StatsModelTokens"][];
-            /** @description 每桶的 total */
+            /** @description The total of each bucket */
             series: number[];
         };
         StatsModelTokens: {
@@ -4463,9 +4717,11 @@ export interface components {
             total: number;
         };
         /**
-         * @description 按触发执行的来源分的 token。常态执行按 runs.origin：console（你发的消息，以及控制台 /compact 的手动压缩）、inbox_reminder（Inbox 提醒）、sleep_wake（定时唤醒）；
-         *     任务轮次按其 origin：console_node 计入 console，inbox_reminder 计入 inboxReminder，sleep_wake 计入 sleepWake，task_node 计入 task；
-         *     不属于任何执行的用量（例如两轮之间的缓存预热）计入 other。五项之和等于 tokens.totals.total。
+         * @description Tokens split by the source that triggered the run. Regular runs go by runs.origin: console (your messages, plus
+         *     manual compactions with /compact from the console), inbox_reminder (Inbox reminders), sleep_wake (scheduled
+         *     wakes); task turns go by their origin: console_node counts toward console, inbox_reminder toward inboxReminder,
+         *     sleep_wake toward sleepWake, task_node toward task; usage that belongs to no run (for example cache warming
+         *     between two turns) counts toward other. The five fields sum to tokens.totals.total.
          */
         StatsOriginTokens: {
             console: number;
@@ -4476,9 +4732,9 @@ export interface components {
         };
         StatsOrigins: {
             totals: components["schemas"]["StatsOriginTokens"];
-            /** @description sleepWake ÷ 全部 token */
+            /** @description sleepWake ÷ all tokens */
             unrequestedShare: number | null;
-            /** @description 每桶各来源的 token */
+            /** @description Tokens per source for each bucket */
             series: components["schemas"]["StatsOriginTokens"][];
         };
         StatsAgentWakes: {
@@ -4487,24 +4743,24 @@ export interface components {
             name: string;
             /**
              * Format: uuid
-             * @description 平台 Agent 为 null
+             * @description null for a platform Agent
              */
             projectId: string | null;
-            /** @description 时间窗内排入的定时唤醒执行数（常态执行与任务轮次） */
+            /** @description Number of scheduled wake runs queued in the time window (regular runs and task turns) */
             count: number;
-            /** @description 这些唤醒执行的全部用量 */
+            /** @description All usage of these wake runs */
             tokens: number;
             avgTokens: number;
-            /** @description 相邻两次唤醒的平均间隔（最后一次与第一次之差 ÷ (count − 1)）；只有一次时为 null */
+            /** @description Average interval between consecutive wakes ((last − first) ÷ (count − 1)); null when there was only one */
             avgIntervalSeconds: number | null;
         };
-        /** @description 每次模型调用送进去的上下文（input + cacheRead），只算 kind 为 assistant 的用量；压缩为 kind 为 compaction 的用量条数 */
+        /** @description Context sent into each model call (input + cacheRead), counting only usage with kind assistant; compactions is the number of usage records with kind compaction */
         StatsContext: {
             avgInputPerCall: number | null;
             compactions: number;
-            /** @description 每桶的 avgInputPerCall；该桶没有调用时为 null */
+            /** @description avgInputPerCall of each bucket; null when the bucket has no calls */
             series: (number | null)[];
-            /** @description 时间窗内有模型调用的 Agent，按 avgInputPerCall 降序 */
+            /** @description Agents with model calls in the time window, in descending order of avgInputPerCall */
             agents: components["schemas"]["StatsAgentContext"][];
         };
         StatsAgentContext: {
@@ -4517,18 +4773,18 @@ export interface components {
             avgInputPerCall: number;
             compactions: number;
         };
-        /** @description Agent（含任务实例）发给 `@console` 的问题 */
+        /** @description Questions sent to `@console` by Agents (including task instances) */
         StatsQuestions: {
-            /** @description 时间窗内发出的问题数 */
+            /** @description Number of questions sent in the time window */
             asked: number;
-            /** @description 其中已被回答的数目 */
+            /** @description How many of them have been answered */
             answered: number;
-            /** @description 已回答问题从发出到回答（answered_at）的平均秒数；没有时为 null */
+            /** @description Average seconds from sending to answering (answered_at) for answered questions; null when there are none */
             avgAnswerSeconds: number | null;
             maxAnswerSeconds: number | null;
-            /** @description 每桶发出的问题数 */
+            /** @description Questions sent per bucket */
             series: number[];
-            /** @description 现在仍为 open 且未过期的问题，不受时间窗限制，先发出的在前 */
+            /** @description Questions that are still open and not expired now, regardless of the time window, oldest first */
             pending: components["schemas"]["StatsPendingQuestion"][];
         };
         StatsPendingQuestion: {
@@ -4539,14 +4795,16 @@ export interface components {
             name: string;
             /** Format: uuid */
             projectId: string | null;
-            /** @description 问题正文的前 80 个字符 */
+            /** @description First 80 characters of the question text */
             text: string;
             /** Format: date-time */
             askedAt: string;
         };
         /**
-         * @description 等待：你发的消息（origin 为 console 的常态执行）从排入到开始回复的秒数，含排在别的执行后面的时间。
-         *     回复时长：执行从开始回复到结束的秒数（任务轮次从派发算起），含各种来源与结果。
+         * @description Wait: seconds from queueing your message (a regular run with origin console) to the start of its reply,
+         *     including time spent queued behind other runs.
+         *     Reply duration: seconds from the start of a run's reply to its end (for task turns, counted from dispatch),
+         *     across all sources and outcomes.
          */
         StatsWait: {
             p50: number | null;
@@ -4558,7 +4816,7 @@ export interface components {
             p50: number | null;
             p90: number | null;
         };
-        /** @description 已结束执行的结果；interrupted 含被打断与被停止 */
+        /** @description Outcomes of ended runs; interrupted includes both interrupted and stopped runs */
         StatsOutcomeCounts: {
             completed: number;
             interrupted: number;
@@ -4567,16 +4825,16 @@ export interface components {
         StatsOutcomes: {
             totals: components["schemas"]["StatsOutcomeCounts"];
             series: components["schemas"]["StatsOutcomeCounts"][];
-            /** @description 没完成的原因，按 count 降序 */
+            /** @description Reasons for not completing, in descending order of count */
             reasons: components["schemas"]["StatsOutcomeReason"][];
         };
         StatsOutcomeReason: {
             /**
-             * @description stopped 为你按了停止；interrupted 为其他打断（新消息打断、服务重启等）；failed 为失败
+             * @description stopped means you pressed stop; interrupted means any other interruption (a new message, a server restart and so on); failed means a failure
              * @enum {string}
              */
             kind: "interrupted" | "stopped" | "failed";
-            /** @description 被打断或停止时为结束原因（常态执行的 endReason，任务轮次的 errorCode，停止为 user_stopped），失败时为 errorCode；没有记录时为 null */
+            /** @description For interrupted or stopped, the end reason (endReason for regular runs, errorCode for task turns, user_stopped for a stop); for failed, the errorCode; null when nothing was recorded */
             code: string | null;
             count: number;
         };
@@ -4586,25 +4844,25 @@ export interface components {
             name: string;
             /** Format: uuid */
             projectId: string | null;
-            /** @description 已结束的执行数（同 outcomes） */
+            /** @description Number of ended runs (same as outcomes) */
             runs: number;
             completionRate: number | null;
-            /** @description 同 wait.p90，只算该 Agent */
+            /** @description Same as wait.p90, for this Agent only */
             waitP90: number | null;
             durationP50: number | null;
             wakes: number;
             wakeTokens: number;
-            /** @description 同 context.agents[].avgInputPerCall */
+            /** @description Same as context.agents[].avgInputPerCall */
             avgContext: number | null;
             compactions: number;
             tokens: number;
             cacheHitRate: number | null;
         };
-        /** @description 常态执行的工具调用（任务轮次不记录工具调用）；按时间窗内排入并开始回复的执行统计 */
+        /** @description Tool calls of regular runs (task turns do not record tool calls); counts the runs queued in the time window that started replying */
         StatsTools: {
-            /** @description 按工具名汇总，按 calls 降序 */
+            /** @description Aggregated by tool name, in descending order of calls */
             byName: components["schemas"]["StatsTool"][];
-            /** @description 每次执行的平均调用数（含没有调用的执行）；没有执行时为 null */
+            /** @description Average number of calls per run (including runs without calls); null when there are no runs */
             callsPerRunAvg: number | null;
             callsPerRunMax: number | null;
         };
@@ -4613,29 +4871,33 @@ export interface components {
             calls: number;
             failures: number;
         };
-        /** @description 时间窗内的运行记录事件（常态与任务） */
+        /** @description Run record events in the time window (regular and task) */
         StatsProcess: {
-            /** @description 模型请求重试次数（model.retry_started） */
+            /** @description Number of model request retries (model.retry_started) */
             modelRetries: number;
-            /** @description Pi 进程异常结束次数：意外退出（pi.exited）加打断超时被强制停止（pi.stopped，原因 abort_timeout） */
+            /** @description Number of abnormal Pi process ends, that is, unexpected exits (pi.exited) plus forced stops after an interrupt timed out (pi.stopped with reason abort_timeout) */
             piExits: number;
-            /** @description Pi 进程启动次数（pi.started） */
+            /** @description Number of Pi process starts (pi.started) */
             piColdStarts: number;
             piColdStartAvgMs: number | null;
         };
         RunTimeline: {
             run: components["schemas"]["Run"];
-            /** @description 按时间排序 */
+            /** @description Sorted by time */
             entries: components["schemas"]["TimelineEntry"][];
             usage: components["schemas"]["UsageTotals"];
         };
         TimelineEntry: components["schemas"]["TimelineSleepEntry"] | components["schemas"]["TimelineQueued"] | components["schemas"]["TimelinePromoted"] | components["schemas"]["TimelineMessageCancelled"] | components["schemas"]["TimelineMarker"] | components["schemas"]["TimelinePhase"] | components["schemas"]["TimelineCliInstall"] | components["schemas"]["TimelineWorkspaceSync"] | components["schemas"]["TimelinePiStarted"] | components["schemas"]["TimelinePiReused"] | components["schemas"]["TimelinePiStopped"] | components["schemas"]["TimelinePiExited"] | components["schemas"]["TimelineTool"] | components["schemas"]["TimelineModelCall"] | components["schemas"]["TimelineModelRetryStarted"] | components["schemas"]["TimelineModelRetryEnded"] | components["schemas"]["TimelineCompaction"] | components["schemas"]["TimelineAbortRequested"] | components["schemas"]["TimelineEnded"] | components["schemas"]["TimelineSessionMissing"] | components["schemas"]["TimelineExtensionUI"] | components["schemas"]["TimelineModelRateLimit"];
         /**
-         * @description Agent 侧的扩展经 ctx.ui 发来的请求（Pi RPC 的 extension_ui_request）。notify 是通知（level 为 info、warning、error），
-         *     setStatus 设置或清除一条状态（message 为空时清除）。select、confirm、input、editor 是对话，message 为对话标题：
-         *     常态 Agent 一轮之中的 confirm、select、input 成为这个 Agent 发给控制台的提问（questionId，期限为请求的超时，没有时 30 分钟），
-         *     回答后交还给扩展，这条记录在对话结束时写入，answered 为 answered（有人回答）、cancelled（回答为取消）或 expired（到期或这一轮结束，
-         *     扩展收到取消）；editor、任务轮次与无法提问的对话立即按取消回应（answered 为 cancelled，questionId 为 null）。
+         * @description A request from an agent-side extension through ctx.ui (extension_ui_request in Pi RPC). notify is a notification
+         *     (level info, warning or error); setStatus sets or clears a status (cleared when message is empty). select,
+         *     confirm, input and editor are dialogs, and message is the dialog title: a confirm, select or input during a
+         *     regular Agent's turn becomes a question from that Agent to the console (questionId; the deadline is the
+         *     request's timeout, or 30 minutes when it has none), and the answer is handed back to the extension. This entry
+         *     is written when the dialog ends, with answered set to answered (someone answered), cancelled (the answer was a
+         *     cancel) or expired (the deadline passed or the turn ended, and the extension received a cancel); editor, task
+         *     turns and dialogs that cannot become questions are answered with a cancel right away (answered is cancelled,
+         *     questionId is null).
          */
         TimelineExtensionUI: {
             /**
@@ -4655,11 +4917,11 @@ export interface components {
             answered: "answered" | "cancelled" | "expired" | null;
             /**
              * Format: uuid
-             * @description 对话对应的控制台提问（Inbox 消息 ID）
+             * @description The console question for the dialog (an Inbox message ID)
              */
             questionId: string | null;
         };
-        /** @description sleep 登记、生效、提前结束、到期安排或失效的持久记录；不包含内部调度字段 */
+        /** @description Persistent record of a sleep being registered, taking effect, ending early, being scheduled on expiry or becoming invalid; contains no internal scheduling fields */
         TimelineSleepEntry: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -4670,7 +4932,7 @@ export interface components {
             at: string;
             sleep: components["schemas"]["SleepRecord"];
         };
-        /** @description 入队：发送时 Agent 正忙 */
+        /** @description Queued because the Agent was busy at send time */
         TimelineQueued: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -4681,7 +4943,7 @@ export interface components {
             at: string;
             whenBusy: components["schemas"]["WhenBusy"];
         };
-        /** @description 排队中的消息改变了排队方式（目前只有普通排队转为打断）；之前的 queued 条目保留原值。Inbox 消息逐条转换时记在接收它的打断提醒上，并带 messageId */
+        /** @description A queued message changed how it is queued (currently only from ordinary queueing to interrupt); the earlier queued entry keeps its original value. When Inbox messages are converted one by one, the entry is recorded on the interrupt reminder that receives the message and carries messageId */
         TimelinePromoted: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -4694,11 +4956,11 @@ export interface components {
             to: components["schemas"]["WhenBusy"];
             /**
              * Format: uuid
-             * @description 逐条转换的 Inbox 消息；控制台执行整条转换时省略
+             * @description The Inbox message converted individually; omitted when a console run is converted as a whole
              */
             messageId?: string;
         };
-        /** @description 这一执行承载的一条 Inbox 消息被人取消；执行本身若因此作废另有 ended 条目 */
+        /** @description An Inbox message carried by this run was cancelled by a person; if the run itself becomes void as a result, there is a separate ended entry */
         TimelineMessageCancelled: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -4710,7 +4972,7 @@ export interface components {
             /** Format: uuid */
             messageId: string;
         };
-        /** @description dispatched 为派发（离开队列、开始处理），running 为进入回复（消息已交给 Pi） */
+        /** @description dispatched is the dispatch (the run left the queue and processing began); running is the start of the reply (the message was handed to Pi) */
         TimelineMarker: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -4720,7 +4982,7 @@ export interface components {
             /** Format: date-time */
             at: string;
         };
-        /** @description 启动阶段开始 */
+        /** @description A startup phase began */
         TimelinePhase: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -4732,7 +4994,7 @@ export interface components {
             /** @enum {string} */
             phase: "waiting_slot" | "preparing" | "launching";
         };
-        /** @description 一次实际进行的 CLI 安装；已安装、无需安装时没有这一条 */
+        /** @description A CLI installation that actually ran; there is no such entry when the CLI was already installed or needed no installation */
         TimelineCliInstall: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -4752,17 +5014,17 @@ export interface components {
             path: string;
             kind: components["schemas"]["FolderSourceKind"];
             /**
-             * @description cloned 为新克隆，kept 为已存在的仓库保持不动，files_synced 为资料已同步，failed 为失败
+             * @description cloned is a fresh clone, kept means the existing repository was left untouched, files_synced means the files were synced, failed is a failure
              * @enum {string}
              */
             outcome: "cloned" | "kept" | "files_synced" | "failed";
-            /** @description 仅资料来源：写入磁盘的文件数 */
+            /** @description Only for `files` sources; number of files written to disk */
             filesWritten: number | null;
-            /** @description 仅资料来源：从磁盘删除的文件数 */
+            /** @description Only for `files` sources; number of files deleted from disk */
             filesDeleted: number | null;
             error: string | null;
         };
-        /** @description 准备运行环境时的配置同步（Skills、Prompt、凭证文件与文件夹来源） */
+        /** @description Config sync while preparing the runtime environment (Skills, Prompt, credential files and folder sources) */
         TimelineWorkspaceSync: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -4777,7 +5039,7 @@ export interface components {
             error: string | null;
             sources: components["schemas"]["TimelineSyncSource"][];
         };
-        /** @description 新启动了 Pi 进程 */
+        /** @description A new Pi process was started */
         TimelinePiStarted: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -4787,18 +5049,18 @@ export interface components {
             /** Format: date-time */
             at: string;
             pid: number;
-            /** @description 从启动进程到 Pi 就绪的用时 */
+            /** @description Time from starting the process until Pi was ready */
             startupMs: number;
             /**
-             * @description no_process 为没有存活的进程，config_changed 为配置变化后重启
+             * @description no_process means there was no live process; config_changed means a restart after a config change
              * @enum {string}
              */
             reason: "no_process" | "config_changed";
             configVersion: number;
-            /** @description 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。 */
+            /** @description Runtime of this process (Claude Code processes are recorded in these event types too); absent in old records, meaning pi. */
             runtime?: components["schemas"]["AgentRuntime"];
         };
-        /** @description 复用了已运行的 Pi 进程 */
+        /** @description An already running Pi process was reused */
         TimelinePiReused: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -4810,10 +5072,10 @@ export interface components {
             pid: number;
             /** Format: date-time */
             processStartedAt: string | null;
-            /** @description 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。 */
+            /** @description Runtime of this process (Claude Code processes are recorded in these event types too); absent in old records, meaning pi. */
             runtime?: components["schemas"]["AgentRuntime"];
         };
-        /** @description 平台停止了 Pi 进程 */
+        /** @description The platform stopped the Pi process */
         TimelinePiStopped: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -4824,15 +5086,15 @@ export interface components {
             at: string;
             pid: number;
             /**
-             * @description 含义同 ProcessExit.reason
+             * @description Same meaning as ProcessExit.reason
              * @enum {string}
              */
             reason: "idle_timeout" | "config_changed" | "evicted" | "released" | "fork_snapshot" | "shutdown" | "abort_timeout" | "session_reset" | "console_reload" | "session_resumed" | "console_export";
             uptimeMs: number;
-            /** @description 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。 */
+            /** @description Runtime of this process (Claude Code processes are recorded in these event types too); absent in old records, meaning pi. */
             runtime?: components["schemas"]["AgentRuntime"];
         };
-        /** @description Pi 进程意外退出 */
+        /** @description The Pi process exited unexpectedly */
         TimelinePiExited: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -4844,12 +5106,12 @@ export interface components {
             pid: number;
             uptimeMs: number;
             exit: string;
-            /** @description Pi 错误输出的末尾片段（有长度上限） */
+            /** @description Tail of Pi's error output (length-limited) */
             stderrTail: string;
-            /** @description 这个进程的运行时（Claude Code 的进程也记在这几类事件里）；旧记录没有，即 pi。 */
+            /** @description Runtime of this process (Claude Code processes are recorded in these event types too); absent in old records, meaning pi. */
             runtime?: components["schemas"]["AgentRuntime"];
         };
-        /** @description Claude Code 报告的订阅额度状态（rate_limit_event），info 原样（如 status、rateLimitType、resetsAt）；只记录，不影响执行。 */
+        /** @description Subscription quota status reported by Claude Code (rate_limit_event); info is passed through as is (for example status, rateLimitType, resetsAt). Recorded only; it does not affect the run. */
         TimelineModelRateLimit: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -4860,7 +5122,7 @@ export interface components {
             at: string;
             info: Record<string, never>;
         };
-        /** @description 一次工具调用，at 为开始时间；仅 bash 可含有界、脱敏后的 command；不含其他参数与输出 */
+        /** @description One tool call; at is the start time. Only bash may include a length-bounded, redacted command; no other arguments or output are included */
         TimelineTool: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -4871,14 +5133,14 @@ export interface components {
             at: string;
             toolCallId: string;
             toolName: string;
-            /** @description 实际 bash 命令的安全显示文本，最多4096字符；敏感命令隐藏，旧记录及其他工具省略。 */
+            /** @description Safe display text of the actual bash command, at most 4096 characters; hidden for sensitive commands; omitted in old records and for other tools. */
             command?: string;
             state: components["schemas"]["ToolState"];
             /** Format: date-time */
             endedAt: string | null;
             durationMs: number | null;
         };
-        /** @description 一次用量：模型调用（assistant）、工具自身（tool）、上下文压缩（compaction）、缓存预热（cache_warm）或其他（other） */
+        /** @description One usage record from a model call (assistant), the tool itself (tool), context compaction (compaction), cache warming (cache_warm) or something else (other) */
         TimelineModelCall: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -4891,14 +5153,14 @@ export interface components {
             kind: "assistant" | "tool" | "compaction" | "cache_warm" | "other";
             provider: string | null;
             model: string | null;
-            /** @description 提供方返回的实际模型名 */
+            /** @description Actual model name returned by the provider */
             responseModel: string | null;
             stopReason: string | null;
             input: number;
             output: number;
             cacheRead: number;
             cacheWrite: number;
-            /** @description 推理 token，是 output 的一部分 */
+            /** @description Reasoning tokens, part of output */
             reasoning: number | null;
             total: number;
             durationMs: number | null;
@@ -4944,7 +5206,7 @@ export interface components {
             errorMessage: string | null;
             durationMs: number | null;
         };
-        /** @description 发起打断或停止 */
+        /** @description An interrupt or stop was requested */
         TimelineAbortRequested: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -4955,10 +5217,10 @@ export interface components {
             at: string;
             /**
              * Format: uuid
-             * @description 引发打断的那条消息所属的执行；被人停止或本变更之前的执行为 null
+             * @description The run of the message that caused the interrupt; null when stopped by a person, and for runs recorded before this change
              */
             byRunId: string | null;
-            /** @description 为 true 表示被人停止（不发送新消息） */
+            /** @description When true, the run was stopped by a person (no new message was sent) */
             stop?: boolean;
         };
         TimelineEnded: {
@@ -4985,36 +5247,45 @@ export interface components {
             sessionFile: string | null;
         };
         /**
-         * @description 身份类别：console 为控制台操作者，external 为外部身份，agent 为 Agent
+         * @description Identity kind. console is the console operator, external is an external identity, agent is an Agent
          * @enum {string}
          */
         PrincipalKind: "console" | "external" | "agent";
         Whoami: {
             kind: components["schemas"]["PrincipalKind"];
-            /** @description 当前身份的地址：`@console`、`@<外部身份名>`，或 Agent 的地址（写法同 `Agent.address`；名称不满足命名规则时为 null） */
+            /** @description Address of the current identity: `@console`, `@<external identity name>`, or the Agent's address (same form as `Agent.address`; null when the name does not satisfy the naming rules) */
             address: string | null;
-            /** @description 显示名称：控制台操作者为“控制台”，外部身份为其名称，Agent 为 Agent 名 */
+            /** @description Display name: the fixed console name for the console operator (still sent in Chinese for now), its name for an external identity, the Agent name for an Agent */
             name: string;
             /**
              * Format: uuid
-             * @description 任务实例绑定；常态Agent与人员身份为空或不返回
+             * @description The bound task instance; null or omitted for regular Agents and human identities
              */
             taskId?: string | null;
             /**
              * Format: uuid
-             * @description 任务运行实例ID；不授予额外权限
+             * @description Task runtime instance ID; grants no extra permissions
              */
             runtimeId?: string | null;
         };
         /**
-         * @description 消息的一方。
-         *     - `address`：控制台操作者为 `@console`，外部身份为 `@<名称>`，Agent 的写法同 `Agent.address`。参与方已删除时仍给出原地址（外部身份的名称释放后可能被新身份使用，以 `deleted` 区分）；名称不满足命名规则的 Agent 为 null。
-         *     - `name`：显示名称：控制台操作者为“控制台”，外部身份为其名称，Agent 为 Agent 名；已删除时为“已删除身份”或“已删除 Agent”。
-         *     - `deleted`：外部身份已删除，或 Agent 已删除（含随项目删除）。
-         *     - `id`：Agent ID 或外部身份 ID，控制台操作者与插件为 null。地址不唯一或为 null 时，用它定位到具体的 Agent 或外部身份。
-         *     - `plugin`：插件经插件令牌以 inbox.send 发来的消息（plugins/SPEC.md §11），在对话里像外部身份一样显示：`pluginId` 为插件 id，
-         *       `channelId` 为插件里的渠道（没有时为 null），`address` 为 `plugin:<插件 id>` 或 `plugin:<插件 id>/<渠道>`，`name` 为插件给出的发件名称；
-         *       插件已卸载时 `deleted` 为 true。其他参与方的 `pluginId` 与 `channelId` 为 null。
+         * @description One party of a message.
+         *     - `address`: `@console` for the console operator, `@<name>` for an external identity, and the same form as
+         *       `Agent.address` for an Agent. A deleted party still gets its original address (once released, an external
+         *       identity's name may be taken by a new identity; `deleted` tells them apart); null for an Agent whose name does
+         *       not satisfy the naming rules.
+         *     - `name`: display name: the fixed console name for the console operator, its name for an external identity, the
+         *       Agent name for an Agent; a fixed placeholder name once the identity or Agent is deleted. The fixed names are
+         *       still sent in Chinese for now.
+         *     - `deleted`: the external identity has been deleted, or the Agent has been deleted (including along with its
+         *       project).
+         *     - `id`: Agent ID or external identity ID; null for the console operator and for plugins. When the address is not
+         *       unique or is null, use it to find the specific Agent or external identity.
+         *     - `plugin`: a message a plugin sent with inbox.send using its plugin token (plugins/SPEC.md §11), shown in the
+         *       conversation like an external identity: `pluginId` is the plugin id, `channelId` is the channel within the
+         *       plugin (null when none), `address` is `plugin:<plugin id>` or `plugin:<plugin id>/<channel>`, and `name` is
+         *       the sender name the plugin gave; `deleted` is true once the plugin is uninstalled. For other parties
+         *       `pluginId` and `channelId` are null.
          */
         InboxParticipant: {
             /** @enum {string} */
@@ -5027,23 +5298,27 @@ export interface components {
             pluginId: string | null;
             channelId: string | null;
         };
-        /** @description 消息所属的任务实例，由消息两端的任务实例记录得出，不解析地址文字：发件方是任务实例时取发件方，否则取收件方；两端都不是任务实例时整个字段为 null。 */
+        /**
+         * @description The task instance the message belongs to, derived from the task instance records of the message's two ends, not
+         *     by parsing address text: the sender if the sender is a task instance, otherwise the recipient; the whole field
+         *     is null when neither end is a task instance.
+         */
         InboxTaskRef: {
             /** Format: uuid */
             taskId: string;
             /**
              * Format: uuid
-             * @description 消息归属的节点运行，按顺序取第一个能确定的：
-             *     - 严格节点消息：绑定的节点；
-             *     - 任务实例提出的问题，以及回复该问题的消息：问题绑定的节点；
-             *     - 发给任务实例的其他消息：承载它的提醒轮次所属节点；
-             *     - 否则：该任务实例在消息时间或之前最近一次开始的轮次所属节点。
-             *     都无法确定时为 null。
+             * @description The node run the message belongs to; the first of these that can be determined, in order:
+             *     - strict node message: the bound node;
+             *     - a question asked by the task instance, and messages replying to it: the node the question is bound to;
+             *     - other messages to the task instance: the node of the reminder turn carrying it;
+             *     - otherwise: the node of the task instance's most recent turn that started at or before the message time.
+             *     null when none can be determined.
              */
             nodeRunId: string | null;
             /**
              * Format: uuid
-             * @description 任务实例（运行实例）ID
+             * @description Task instance (runtime instance) ID
              */
             runtimeId: string;
         };
@@ -5052,40 +5327,40 @@ export interface components {
             id: string;
             /**
              * Format: uuid
-             * @description 线索 ID，等于线索中第一条消息的 ID
+             * @description Thread ID; equals the ID of the first message in the thread
              */
             threadId: string;
             /**
              * Format: uuid
-             * @description 回复的是哪条消息；线索的第一条为 null
+             * @description The message this one replies to; null for the first message of a thread
              */
             inReplyTo: string | null;
             from: components["schemas"]["InboxParticipant"];
             to: components["schemas"]["InboxParticipant"];
-            /** @description 正文的前若干个字符（默认 200，可配置） */
+            /** @description The first characters of the text (200 by default, configurable) */
             preview: string;
-            /** @description 发给 Agent 的消息为 interrupt 或 queue；发给人的消息为 null */
+            /** @description interrupt or queue for messages to an Agent; null for messages to a person */
             whenBusy: components["schemas"]["WhenBusy"] | null;
             /** Format: date-time */
             createdAt: string;
             /**
              * Format: date-time
-             * @description 收件方第一次读取的时间；未读为 null
+             * @description When the recipient first read it; null while unread
              */
             readAt: string | null;
             /**
              * Format: date-time
-             * @description 被人取消的时间；未取消为 null。取消后不计为未读；收件 Agent 读取或列出时 text、preview 为取消说明、images 为空，发件方与控制台仍看到全文
+             * @description When a person cancelled it; null if not cancelled. A cancelled message no longer counts as unread; when the recipient Agent reads or lists it, text and preview hold a cancellation notice and images is empty, while the sender and the console still see the full text
              */
             cancelledAt: string | null;
             question?: components["schemas"]["InboxQuestion"] | null;
             answerTo?: components["schemas"]["InboxAnswerTo"] | null;
             notice?: components["schemas"]["InboxNotice"] | null;
             images?: components["schemas"]["MessageImage"][];
-            /** @description 消息所属的任务实例；与任务实例无关时为 null */
+            /** @description The task instance the message belongs to; null when it is not related to a task instance */
             task: components["schemas"]["InboxTaskRef"] | null;
         };
-        /** @description 消息全文：InboxMessageSummary 的全部字段加 text */
+        /** @description Full message: all fields of InboxMessageSummary plus text */
         InboxMessage: {
             /** Format: uuid */
             id: string;
@@ -5104,19 +5379,19 @@ export interface components {
             text: string;
             /**
              * Format: date-time
-             * @description 被人取消的时间；未取消为 null。取消后不计为未读；收件 Agent 读取或列出时 text、preview 为取消说明、images 为空，发件方与控制台仍看到全文
+             * @description When a person cancelled it; null if not cancelled. A cancelled message no longer counts as unread; when the recipient Agent reads or lists it, text and preview hold a cancellation notice and images is empty, while the sender and the console still see the full text
              */
             cancelledAt: string | null;
             question?: components["schemas"]["InboxQuestion"] | null;
             answerTo?: components["schemas"]["InboxAnswerTo"] | null;
             notice?: components["schemas"]["InboxNotice"] | null;
             images?: components["schemas"]["MessageImage"][];
-            /** @description 消息所属的任务实例；与任务实例无关时为 null */
+            /** @description The task instance the message belongs to; null when it is not related to a task instance */
             task: components["schemas"]["InboxTaskRef"] | null;
         };
         InboxMessagePage: {
             messages: components["schemas"]["InboxMessageSummary"][];
-            /** @description 下一页的游标；没有更多时为 null */
+            /** @description Cursor for the next page; null when there are no more */
             nextCursor: string | null;
         };
         InboxQuestionOptions: string[];
@@ -5161,129 +5436,133 @@ export interface components {
         InboxSendInput: {
             /**
              * Format: uuid
-             * @description 普通Inbox调用可省略；专用QA恢复节点提问须携本轮准确runId，缺失或错归属在原事务内拒绝，不作为workflow重试。
+             * @description Ordinary Inbox calls may omit it. A question from a dedicated QA recovery node must carry the exact runId of the current turn; a missing runId or one that belongs elsewhere is rejected inside the original transaction and is not treated as a workflow retry.
              */
             runId?: string;
             /**
-             * @description 收件地址，由服务端解析，名称逐段精确匹配、区分大小写：
-             *     - `@console`：控制台操作者；`@<名称>`：未删除的外部身份；
-             *     - 三段 `组织名/项目名/Agent名`：只在未删除的项目中查找；
-             *     - 两段 `项目名/Agent名`：发件人所在组织中的项目；控制台操作者、外部身份与平台持有的 Agent 按默认组织解析；
-             *     - 形如 UUID 的单段值：Agent 的内部 ID；
-             *     - 其他单段值：平台持有的 Agent 的名称；
-             *     - 带 `#任务ID` 的地址解析任务实例；任务已结束时转当前Manager并注明原收件人。
+             * @description Recipient address, resolved by the server; names match segment by segment, exactly and case-sensitively:
+             *     - `@console`: the console operator; `@<name>`: an external identity that is not deleted;
+             *     - three segments `<organization>/<project>/<Agent>`: looked up only among projects that are not deleted;
+             *     - two segments `<project>/<Agent>`: a project in the sender's organization; for the console operator,
+             *       external identities and platform-held Agents, resolved in the default organization;
+             *     - a single segment shaped like a UUID: the Agent's internal ID;
+             *     - any other single segment: the name of a platform-held Agent;
+             *     - an address with `#<task ID>` resolves to a task instance; when the task has ended, the message goes to the
+             *       current Manager with the original recipient noted.
              */
             to: string;
-            /** @description 正文，不能为空；超过 limits.maxInboxMessage 字节时返回 413 */
+            /** @description Message text, must not be empty; returns 413 when it exceeds limits.maxInboxMessage bytes */
             text: string;
-            /** @description 收件人是 Agent 时生效，不传为 queue；收件人是人时忽略 */
+            /** @description Applies when the recipient is an Agent, defaulting to queue when omitted; ignored when the recipient is a person */
             whenBusy?: components["schemas"]["WhenBusy"];
             options?: components["schemas"]["InboxQuestionOptions"];
             /**
              * Format: uuid
-             * @description 任务实例提问时必填，须匹配当前节点访问；普通身份不传。不授予task/runtime权限。
+             * @description Required when a task instance asks a question and must match the current node access; ordinary identities omit it. Grants no task/runtime permissions.
              */
             nodeRunId?: string;
-            /** @description 只在插件令牌调用时有效（其他身份传入返回 422）：消息来自插件的哪个渠道，Agent 的回复按线索回到这个渠道。 */
+            /** @description Valid only for calls with a plugin token (other identities get 422). The plugin channel the message comes from; the Agent's reply goes back to this channel through the thread. */
             channelId?: string;
-            /** @description 只在插件令牌调用时有效：在对话里显示的发件名称，默认为插件的显示名称。 */
+            /** @description Valid only for calls with a plugin token. Sender name shown in the conversation; defaults to the plugin's display name. */
             senderName?: string;
         };
         InboxReplyInput: {
             /**
              * Format: uuid
-             * @description 只用于插件令牌：以它代管的外部身份的名义回复（plugins/SPEC.md §12）
+             * @description Plugin token only: reply on behalf of an external identity the plugin manages (plugins/SPEC.md §12)
              */
             asIdentityId?: string;
             /**
              * Format: uuid
-             * @description 任务实例提出新问题时必填，匹配当前节点访问。
+             * @description Required when a task instance asks a new question; must match the current node access.
              */
             nodeRunId?: string;
-            /** @description 显式回答路径指定的原题，须为收件身份且原题open；省略正文时自动记选择文字。 */
+            /** @description On the explicit answer path, the chosen option of the original question; the caller must be the question's recipient and the question must be open. When text is omitted, the chosen option's text is recorded automatically. */
             optionId?: string;
             options?: components["schemas"]["InboxQuestionOptions"];
-            /** @description 正文，不能为空；超过 limits.maxInboxMessage 字节时返回 413 */
+            /** @description Message text, must not be empty; returns 413 when it exceeds limits.maxInboxMessage bytes */
             text?: string;
-            /** @description 收件人是 Agent 时生效，不传为 queue；收件人是人时忽略 */
+            /** @description Applies when the recipient is an Agent, defaulting to queue when omitted; ignored when the recipient is a person */
             whenBusy?: components["schemas"]["WhenBusy"];
             /**
              * Format: uuid
-             * @description 严格任务 Inbox 的 Agent 回复必须传原 task/node/runtime 下实际运行中的轮次 ID；不从最近运行推测。
+             * @description An Agent reply in a strict task Inbox must pass the ID of the turn actually running under the original task/node/runtime; it is not inferred from the most recent run.
              */
             runId?: string;
         };
         InboxThreadSummary: {
             /** Format: uuid */
             threadId: string;
-            /** @description 线索的两方（第一条消息的发件人与收件人），包含当前身份自己 */
+            /** @description The two parties of the thread (sender and recipient of the first message), including the current identity itself */
             participants: components["schemas"]["InboxParticipant"][];
             lastMessage: components["schemas"]["InboxMessageSummary"];
-            /** @description 线索中发给当前身份的未读消息数 */
+            /** @description Number of unread messages in the thread addressed to the current identity */
             unreadCount: number;
             /**
              * Format: date-time
-             * @description 最后一条消息的时间
+             * @description Time of the last message
              */
             updatedAt: string;
         };
         InboxThreadPage: {
             threads: components["schemas"]["InboxThreadSummary"][];
-            /** @description 当前身份全部线索的未读总数 */
+            /** @description Total unread count across all threads of the current identity */
             unreadTotal: number;
             nextCursor: string | null;
         };
         InboxThread: {
             /** Format: uuid */
             threadId: string;
-            /** @description 按时间正序 */
+            /** @description In chronological order */
             messages: components["schemas"]["InboxMessage"][];
         };
         InboxUnreadTotal: {
-            /** @description 当前身份最新的未读总数 */
+            /** @description The current identity's latest unread total */
             unreadTotal: number;
         };
         InboxConversationPage: {
-            /** @description 消息全文，新的在前 */
+            /** @description Full messages, newest first */
             messages: components["schemas"]["InboxMessage"][];
-            /** @description 下一页的游标；没有更多时为 null */
+            /** @description Cursor for the next page; null when there are no more */
             nextCursor: string | null;
         };
         InboxPendingItem: {
             message: components["schemas"]["InboxMessageSummary"];
             /**
              * Format: uuid
-             * @description 发件 Agent 所属的项目；平台持有的 Agent、外部身份与平台通知为 null
+             * @description Project of the sending Agent; null for platform-held Agents, external identities and platform notices
              */
             projectId: string | null;
         };
-        /** @description 发件方是常态 Agent（不在任务中，message.task 为 null）的待处理条数 */
+        /** @description Pending item counts where the sender is a regular Agent (not in a task, message.task is null) */
         InboxPendingAgentCount: {
             /** Format: uuid */
             agentId: string;
             /** Format: uuid */
             projectId: string | null;
-            /** @description questions 中来自它的条数 */
+            /** @description Number of items in questions from this Agent */
             questions: number;
-            /** @description unread 中来自它的条数 */
+            /** @description Number of items in unread from this Agent */
             unread: number;
         };
-        /** @description 发件方是任务实例（message.task 不为 null）的待处理条数，按任务汇总；节点级数字可由各项的 message.task.nodeRunId 自行汇总 */
+        /** @description Pending item counts where the sender is a task instance (message.task is not null), aggregated per task; node-level numbers can be aggregated from each item's message.task.nodeRunId */
         InboxPendingTaskCount: {
             /** Format: uuid */
             taskId: string;
             /** Format: uuid */
             projectId: string | null;
-            /** @description questions 中属于该任务的条数 */
+            /** @description Number of items in questions that belong to this task */
             questions: number;
-            /** @description unread 中属于该任务的条数 */
+            /** @description Number of items in unread that belong to this task */
             unread: number;
         };
         /**
-         * @description 控制台待处理的 Inbox，两张列表互不重复，都是新的在前：
-         *     - `questions`：发给 `@console`、仍为 open 且未过期的问题（不论是否已读）；
-         *     - `unread`：发给 `@console` 的其他未读消息（不含被人取消的）。
-         *     `byAgent` 与 `byTask` 汇总两张列表中的条目：发件方是常态 Agent 的计入 byAgent，是任务实例的计入 byTask；外部身份与平台通知只出现在列表中。
+         * @description The console's pending Inbox items, in two lists that never overlap, both newest first:
+         *     - `questions`: questions to `@console` that are still open and not expired (whether read or not);
+         *     - `unread`: other unread messages to `@console` (excluding those cancelled by a person).
+         *     `byAgent` and `byTask` aggregate the entries of both lists: entries whose sender is a regular Agent count toward
+         *     byAgent, entries whose sender is a task instance count toward byTask; external identities and platform notices
+         *     appear only in the lists.
          */
         InboxPending: {
             questions: components["schemas"]["InboxPendingItem"][];
@@ -5292,12 +5571,12 @@ export interface components {
             byTask: components["schemas"]["InboxPendingTaskCount"][];
         };
         SseInboxSnapshot: {
-            /** @description 控制台操作者的未读总数，与快照位置在同一时刻统计 */
+            /** @description Unread total for the console operator, counted at the same moment as the snapshot position */
             unreadTotal: number;
         };
         SseInboxMessageCreated: {
             message: components["schemas"]["InboxMessageSummary"];
-            /** @description 控制台操作者最新的未读总数 */
+            /** @description Latest unread total for the console operator */
             unreadTotal: number;
         };
         SseInboxMessageRead: {
@@ -5308,10 +5587,10 @@ export interface components {
             to: components["schemas"]["InboxParticipant"];
             /** Format: date-time */
             readAt: string;
-            /** @description 控制台操作者最新的未读总数 */
+            /** @description Latest unread total for the console operator */
             unreadTotal: number;
         };
-        /** @description 发给 Agent 的一条排队消息被人取消 */
+        /** @description A queued message sent to an Agent was cancelled by a person */
         SseInboxMessageCancelled: {
             /** Format: uuid */
             id: string;
@@ -5321,27 +5600,28 @@ export interface components {
             to: components["schemas"]["InboxParticipant"];
             /** Format: date-time */
             cancelledAt: string;
-            /** @description 控制台操作者最新的未读总数 */
+            /** @description Latest unread total for the console operator */
             unreadTotal: number;
         };
         /**
-         * @description 外部身份的名称：以小写字母或数字开头，只含小写字母、数字、点、下划线与连字符，最长 64 个字符，不能是 `console` 或 `platform`。
-         *     不满足时返回 422，字段级错误指向 `name`。
+         * @description External identity name: starts with a lowercase letter or digit, contains only lowercase letters, digits, dots,
+         *     underscores and hyphens, is at most 64 characters, and must not be `console` or `platform`.
+         *     Otherwise returns 422 with a field-level error on `name`.
          */
         ExternalIdentityName: string;
         ExternalIdentity: {
             /** Format: uuid */
             id: string;
             name: string;
-            /** @description 代管这个身份的插件渠道（plugins/SPEC.md §12）；没有时为 null。插件是否在运行见插件的 status */
+            /** @description The plugin channel that manages this identity (plugins/SPEC.md §12); null when there is none. Whether the plugin is running is shown in the plugin's status */
             managedBy: components["schemas"]["ExternalIdentityManager"] | null;
-            /** @description Inbox 地址 `@<名称>`；已删除的身份仍给出原地址，名称释放后可能被新身份使用 */
+            /** @description Inbox address `@<name>`; deleted identities still report their original address, and once the name is released a new identity may take it */
             address: string;
             /** Format: date-time */
             createdAt: string;
             /**
              * Format: date-time
-             * @description 删除时间；未删除为 null。只有 `GET /external-identities/{identityId}` 会返回已删除的身份
+             * @description Deletion time; null if not deleted. Only `GET /external-identities/{identityId}` returns deleted identities
              */
             deletedAt: string | null;
         };
@@ -5350,7 +5630,7 @@ export interface components {
             channelId: string;
         };
         ExternalIdentityManagerInput: {
-            /** @description 代管的插件渠道；null 清空 */
+            /** @description The managing plugin channel; null clears it */
             managedBy: components["schemas"]["ExternalIdentityManager"] | null;
         };
         ExternalIdentityList: {
@@ -5362,26 +5642,26 @@ export interface components {
         ExternalToken: {
             /**
              * Format: uuid
-             * @description 令牌 ID（UUIDv7）
+             * @description Token ID (UUIDv7)
              */
             id: string;
-            /** @description 可识别的前缀：`lne_` 加 ID 去掉连字符后的前 8 位十六进制，与 `loopctl config list` 的 `tokenPrefix` 一致 */
+            /** @description Recognizable prefix, `lne_` followed by the first 8 hex digits of the ID with hyphens removed; matches `tokenPrefix` in `loopctl config list` */
             prefix: string;
             /** Format: date-time */
             createdAt: string;
             /**
              * Format: date-time
-             * @description 过期时间；永不过期为 null
+             * @description Expiry time; null if it never expires
              */
             expiresAt: string | null;
             /**
              * Format: date-time
-             * @description 吊销时间；未吊销为 null。身份删除时它的令牌一并吊销
+             * @description Revocation time; null if not revoked. Deleting the identity also revokes its tokens
              */
             revokedAt: string | null;
             /**
              * Format: date-time
-             * @description 最近使用时间，最多每分钟更新一次；从未使用为 null
+             * @description Last used time, updated at most once a minute; null if never used
              */
             lastUsedAt: string | null;
         };
@@ -5391,13 +5671,13 @@ export interface components {
         ExternalTokenCreate: {
             /**
              * Format: date-time
-             * @description 过期时间（RFC 3339），必须晚于当前时间，否则返回 422；不传表示永不过期
+             * @description Expiry time (RFC 3339); must be later than the current time, otherwise returns 422. Omit it for a token that never expires
              */
             expiresAt?: string;
         };
         ExternalTokenIssued: {
             token: components["schemas"]["ExternalToken"];
-            /** @description 令牌明文，只在签发时返回这一次；服务端只保存摘要 */
+            /** @description The plaintext token, returned only this once at issue time; the server stores only a digest */
             secret: string;
         };
         /** @enum {string} */
@@ -5452,13 +5732,13 @@ export interface components {
             status: "open" | "answered" | "expired" | "closed";
             canAnswer: boolean;
         };
-        /** @description currentAgentId为当前节点责任Agent，等待/阻塞时也保留，不表示Pi正在执行；运行事实看节点messages/run状态。 */
+        /** @description currentAgentId is the Agent responsible for the current node; it is kept while waiting or blocked and does not mean Pi is running. For what is actually running, see the node's messages and run status. */
         TaskSummary: {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
             projectId: string;
-            /** @description 任务在项目里的编号（控制台显示为 #12）：每个项目从 1 开始，创建时分配，之后不变、不重用（任务被删除也不重用）。 */
+            /** @description The task's number within its project (shown in the console as #12): starts at 1 in each project, assigned at creation, and never changes or gets reused (not even after the task is deleted). */
             number: number;
             title: string;
             status: components["schemas"]["TaskStatus"];
@@ -5478,7 +5758,7 @@ export interface components {
             version: number;
         };
         TaskNodeRun: {
-            /** @description 当前作用域正在生效的 sleep；登记尚未收尾或没有等待时为 null */
+            /** @description The sleep currently in effect for this scope; null while its registration is not yet finalized or when nothing is waiting */
             sleep: components["schemas"]["SleepInfo"] | null;
             /** Format: int64 */
             sleepRevision: number;
@@ -5509,7 +5789,7 @@ export interface components {
             /** Format: date-time */
             endedAt: string | null;
             inputVersions: components["schemas"]["TaskInputVersion"][];
-            /** @description 节点创建时保存的历史名称，不依赖Agent当前改名或删除 */
+            /** @description The Agent name saved when the node was created; unaffected by later renaming or deletion of the Agent */
             agentName: string;
         };
         TaskArtifact: {
@@ -5535,7 +5815,7 @@ export interface components {
             /** Format: int64 */
             expectedBindingRevision: number;
         };
-        /** @description 控制台一个幂等动作：明确两原runtime与选定user固定版本，更换Lark并继续当前QA。重复同action同内容不新增attempt；不同内容/失效目标拒绝。不修改Agent或项目选择，不重跑build/deploy。 */
+        /** @description An idempotent console action: names the two original runtimes and the pinned version of the chosen user account, switches the Lark account and continues the current QA. Repeating the same action with the same content does not add an attempt; different content or a stale target is rejected. It does not change the Agent or project selection and does not rerun build/deploy. */
         TaskLarkSwitchInput: {
             /** Format: uuid */
             actionId: string;
@@ -5549,7 +5829,7 @@ export interface components {
             expectedRuntimeId: string;
             /** Format: int64 */
             expectedLarkBindingRevision: number;
-            /** @description 恰好两个已确认的原任务成员：publisher与followup；两Agent和runtime分别唯一。原快照SHA由事务内权威捕获，不接收客户端SHA。 */
+            /** @description Exactly two confirmed members of the original task, publisher and followup; the two Agents and the two runtimes must each be distinct. The original snapshot SHA is captured authoritatively inside the transaction; a client-supplied SHA is not accepted. */
             expectedMembers: components["schemas"]["TaskLarkSwitchExpectedMember"][];
             /** Format: uuid */
             targetAccountId: string;
@@ -5588,7 +5868,7 @@ export interface components {
             /** Format: uuid */
             runId: string;
         };
-        /** @description 原action持久回执。成功仅表示两成员固定绑定及publisher唯一continuation已提交，不代表QA发送成功。dispatchStatus来自该原run；失败/未知只GET原action，不改ID重发。grantedScopes为实际授予，null不等于空数组。 */
+        /** @description Durable receipt of the original action. Success only means the pinned binding of the two members and the publisher's single continuation were committed; it does not mean the QA message was sent. dispatchStatus comes from that original run. On failure or an unknown outcome, only GET the original action; never resend it under a different ID. grantedScopes are the scopes actually granted; null is not the same as an empty array. */
         TaskLarkSwitchReceipt: {
             /** Format: uuid */
             actionId: string;
@@ -5650,33 +5930,33 @@ export interface components {
             /** Format: date-time */
             finishedAt?: string;
         });
-        /** @description 仅控制台从本task冻结实例/原snapshot及有效overlay读取；可用不保证后续POST成功，不自动选成员。 */
+        /** @description Read only by the console, from this task's captured instances, the original snapshot and the effective overlay. Being available does not guarantee that a later POST succeeds; members are never selected automatically. */
         TaskLarkSwitchParticipant: {
             /** Format: uuid */
             agentId: string;
             /** Format: uuid */
             runtimeId: string;
             baseSnapshotSHA: string;
-            /** @description 原冻结snapshot的Lark许可；原snapshot无法可靠校验时为null，绝不读取当前Agent权限补齐。 */
+            /** @description Lark permission in the original captured snapshot; null when the original snapshot cannot be verified reliably. The Agent's current permissions are never read to fill it in. */
             larkAllowed: boolean | null;
             /**
              * Format: int64
-             * @description 本task当前有效覆盖revision，无覆盖为0；最终POST仍须锁内CAS。
+             * @description Revision of the override currently in effect for this task; 0 when there is no override. The final POST still does a compare-and-swap under the lock.
              */
             bindingRevision: number;
-            /** @description 现有实例准备状态；未准备的未来followup也必须返回，GET不准备它。 */
+            /** @description Whether the existing instance is prepared. A future followup that is not prepared yet must still be returned; GET does not prepare it. */
             prepared: boolean;
-            /** @description 只读静态资格提示，不代表进程/队列已锁定或POST必然成功。 */
+            /** @description Read-only static eligibility hint; it does not mean the process or queue is locked or that a POST will succeed. */
             available: boolean;
-            /** @description 不可用时的固定安全原因码；不含路径、上游错误或秘密，可用时为null。 */
+            /** @description Fixed, safe reason code when unavailable; contains no paths, upstream errors or secrets. null when available. */
             unavailableReason: string | null;
-            /** @description 原冻结workflow中引用此Agent的step ID，仅供人确认，不据名称推断publisher/followup。 */
+            /** @description IDs of the steps in the original captured workflow that reference this Agent, for human confirmation only; publisher/followup is never inferred from names. */
             stepIds: string[];
         };
         ConsoleTaskDetail: {
-            /** @description 可选的控制台只读成员投影；缺省表示能力未就绪，空数组表示已读取但无实例；不得自动选择两成员。 */
+            /** @description Optional read-only projection of members for the console. Absent means the capability is not ready; an empty array means it was read but there are no instances. The two members must never be selected automatically. */
             larkSwitchParticipants?: components["schemas"]["TaskLarkSwitchParticipant"][];
-            /** @description 本任务正在 sleeping 的实例；含普通对话模式，不据此推进 workflow */
+            /** @description Instances of this task that are sleeping, including those in regular conversation mode; the workflow is not advanced based on this */
             sleepingInstances: components["schemas"]["SleepRecord"][];
             task: components["schemas"]["TaskSummary"];
             request: {
@@ -5689,7 +5969,7 @@ export interface components {
             cleanup: "none" | "pending" | "archived" | "failed";
         };
         TaskDetail: {
-            /** @description 本任务正在 sleeping 的实例；含普通对话模式，不据此推进 workflow */
+            /** @description Instances of this task that are sleeping, including those in regular conversation mode; the workflow is not advanced based on this */
             sleepingInstances: components["schemas"]["SleepRecord"][];
             task: components["schemas"]["TaskSummary"];
             request: {
@@ -5702,28 +5982,28 @@ export interface components {
             cleanup: "none" | "pending" | "archived" | "failed";
         };
         TaskCounts: {
-            /** @description 准备中 */
+            /** @description Preparing */
             preparing: number;
-            /** @description 运行中 */
+            /** @description Running */
             running: number;
-            /** @description 等待中（sleep、提问等） */
+            /** @description Waiting (sleep, questions, etc.) */
             waiting: number;
-            /** @description 已阻塞 */
+            /** @description Blocked */
             blocked: number;
         };
         TaskPage: {
             tasks: components["schemas"]["TaskSummary"][];
             nextCursor: string | null;
         };
-        /** @description message.created是按id的全文upsert：入队、文字累计更新、状态变化及终态均发同一id；runId/nodeRunId归属不可变，客户端按id更新，不追加重复气泡。 */
+        /** @description message.created is a full-content upsert by id. Enqueueing, incremental text updates, status changes and the final state are all sent with the same id; the runId/nodeRunId it belongs to never changes. Clients update by id and do not append duplicate bubbles. */
         TaskMessage: {
             /**
              * Format: uuid
-             * @description 本轮有效承接的 sleep；普通历史可省略或为 null
+             * @description The sleep this turn validly took over; may be omitted or null in ordinary history
              */
             wakeSleepId?: string | null;
             /**
-             * @description 未执行即作废的排队轮次的原因，控制台应隐藏：merged_into_interrupt 为其中的消息已全部转入打断轮次；user_cancelled 为其中的消息已全部被人取消；no_pending_messages 为其中的消息已全部被读取或取消。其他原因作废的轮次不带此字段。
+             * @description Why a queued turn was voided without running; the console should hide such turns. merged_into_interrupt means all its messages were moved into an interrupt turn; user_cancelled means all its messages were cancelled by a person; no_pending_messages means all its messages were already read or cancelled. Turns voided for other reasons do not carry this field.
              * @enum {string}
              */
             voidReason?: "merged_into_interrupt" | "user_cancelled" | "no_pending_messages";
@@ -5742,9 +6022,9 @@ export interface components {
             createdAt: string;
             /** Format: uuid */
             nodeRunId: string;
-            /** @description 该回复的执行错误码；无错误时省略。 */
+            /** @description Run error code of this reply; omitted when there is no error. */
             errorCode?: string | null;
-            /** @description 该回复按错误码生成的脱敏执行错误描述，不回显原始stderr、凭证或私有路径；无错误时省略。 */
+            /** @description Redacted run error description for this reply, generated from the error code; never echoes raw stderr, credentials or private paths. Omitted when there is no error. */
             errorMessage?: string | null;
         };
         TaskMessagePage: {
@@ -5765,7 +6045,7 @@ export interface components {
         TaskSubmitInput: {
             /**
              * Format: uuid
-             * @description 普通既有调用可省略；专用QA恢复节点必须携带本轮准确运行ID，锁内校验原action、node、runtime与绑定版本。不得从最新run猜测，显式null无效。
+             * @description May be omitted by ordinary existing callers. The dedicated QA recovery node must send the exact run ID of the current turn; the original action, node, runtime and binding version are checked under the lock. Never guess it from the latest run; an explicit null is invalid.
              */
             runId?: string;
             /** Format: uuid */
@@ -5778,7 +6058,7 @@ export interface components {
         TaskFailInput: {
             /**
              * Format: uuid
-             * @description 普通既有调用可省略；专用QA恢复节点必须携带本轮准确运行ID，锁内校验原action、node、runtime与绑定版本。不得从最新run猜测，显式null无效。
+             * @description May be omitted by ordinary existing callers. The dedicated QA recovery node must send the exact run ID of the current turn; the original action, node, runtime and binding version are checked under the lock. Never guess it from the latest run; an explicit null is invalid.
              */
             runId?: string;
             /** Format: uuid */
@@ -5822,7 +6102,10 @@ export interface components {
         /** @enum {string} */
         ModelAuthErrorCode: "auth_failed" | "auth_port_busy" | "auth_timeout" | "auth_unavailable" | "configuration_changed" | "server_restarted" | "invalid_authorization_url" | "helper_unavailable" | "plugin_unavailable" | "extension_load_failed";
         ModelAuthLoginInput: {
-            /** @description 须是 Agent 当前的模型提供方：openai-codex，或模型目录里 source 为 plugin、authMethods 含 oauth 的插件提供方（plugins/SPEC.md §13）。 */
+            /**
+             * @description Must be the Agent's current model provider: openai-codex, or a plugin provider in the model catalog whose
+             *     source is plugin and whose authMethods include oauth (plugins/SPEC.md §13).
+             */
             provider: string;
             expectedConfigVersion: number;
         };
@@ -5832,7 +6115,7 @@ export interface components {
             id: string;
             /** Format: uuid */
             agentId: string;
-            /** @description openai-codex，或插件注册的模型提供方（plugins/SPEC.md §13）。 */
+            /** @description openai-codex, or a model provider registered by a plugin (plugins/SPEC.md §13). */
             provider: string;
             configVersion: number;
             /** @enum {string} */
@@ -5845,21 +6128,25 @@ export interface components {
             completedAt: string | null;
             /**
              * Format: uri
-             * @description 仅console-only当前活动登录操作可重复取得的授权URL。Codex 固定HTTPS issuer/path且query禁止token/code；插件提供方是扩展给的 https 地址，服务端已校验（无用户名密码与 fragment、不含授权码或令牌）。 终态清除，不进AgentDetail/日志/审计/浏览器持久存储。
+             * @description Authorization URL that can be fetched repeatedly only for the currently active, console-only login operation. For Codex it uses a fixed HTTPS issuer/path and the query must not contain token/code; for a plugin provider it is an https address supplied by the extension and validated by the server (no username/password or fragment, no authorization code or token). Cleared in a final state; never stored in AgentDetail, logs, audit records or persistent browser storage.
              */
             authorizationUrl: string | null;
             /**
-             * @description 插件提供方登录另有 plugin_unavailable（插件已卸载或停用）与 extension_load_failed（插件扩展加载失败或没有注册这个提供方的登录），
-             *     其余与项目插件登录相同；用户取消为 status=cancelled、errorCode 为 null。
+             * @description Plugin provider logins additionally have plugin_unavailable (the plugin was uninstalled or disabled) and
+             *     extension_load_failed (the plugin extension failed to load or did not register a login for this provider);
+             *     the rest are the same as for project plugin logins. A user cancellation gives status=cancelled with
+             *     errorCode null.
              */
             errorCode: components["schemas"]["ModelAuthErrorCode"] | null;
-            /** @description 安全固定描述，不回显provider异常、授权码或令牌。 */
+            /** @description Fixed, safe description; never echoes provider exceptions, authorization codes or tokens. */
             errorMessage: string | null;
-            /** @description 设备码登录（只有插件提供方）：打开 verificationUri 输入 userCode；地址已由服务端校验。只在内存里，终态与 Codex 登录为 null。 */
+            /** @description Device-code login (plugin providers only); open verificationUri and enter userCode. The address has been validated by the server. Held only in memory; null in a final state and for Codex logins. */
             deviceCode: components["schemas"]["ProjectModelLoginDeviceCode"] | null;
             /**
-             * @description 插件提供方登录中等人回答的问题（选择、文字或手工粘贴授权码），用 POST …/operations/{operationId}/input 回答；
-             *     message 与选项是扩展给的文字，按不可信纯文本显示。只在内存里，终态与 Codex 登录为 null。
+             * @description A question the plugin provider login is waiting for a person to answer (a choice, text, or a manually pasted
+             *     authorization code); answer it with POST …/operations/{operationId}/input. message and the options are text
+             *     from the extension; show them as untrusted plain text. Held only in memory; null in a final state and for
+             *     Codex logins.
              */
             prompt: components["schemas"]["ProjectModelLoginPrompt"] | null;
         };
@@ -5867,10 +6154,12 @@ export interface components {
             credential: components["schemas"]["CredentialMeta"] | null;
             operation: components["schemas"]["ModelAuthOperation"] | null;
             /**
-             * @description 只在 Agent 当前的模型提供方来自插件、且声明了随账号走的状态路径时给出（plugins/SPEC.md §13），其余省略。
-             *     开着“用本机的登录状态”时，这个提供方用的是本机主目录里该扩展自己的登录，不是这个 Agent 的登录：
-             *     active 表示本机有这份登录；missing 表示本机没有，Pi 启动前会以 credential_unavailable 失败（关闭开关或在本机登录后再试）。
-             *     开关关着时省略。
+             * @description Given only when the Agent's current model provider comes from a plugin and declares state paths that follow
+             *     the account (plugins/SPEC.md §13); omitted otherwise.
+             *     With "Use local logins" on, this provider uses the extension's own login in the local home directory, not
+             *     this Agent's login: active means that login exists locally; missing means it does not, and Pi fails with
+             *     credential_unavailable before starting (turn the switch off, or log in locally and try again).
+             *     Omitted when the switch is off.
              * @enum {string}
              */
             localLogin?: "active" | "missing";
@@ -5888,36 +6177,36 @@ export interface components {
             warnings: components["schemas"]["Warning"][];
             status: string;
         };
-        /** @description 应用配置的安全元数据，不含App Secret；仅用于人显式选择来源，不自动选择唯一/first应用。 */
+        /** @description Safe metadata of the app config, without the App Secret. Used only when a person explicitly chooses the source; the only app or the first app is never chosen automatically. */
         LarkApplication: {
             /** @enum {string} */
             brand: "feishu" | "lark";
             appId: string;
         };
-        /** @description 本次官方user_info核实的版本绑定身份。备注独立，不能推断目标群可访问或QA已发送。 */
+        /** @description Identity bound to the version, verified this time through the official user_info call. The label is independent; it does not imply that the target group chat is reachable or that the QA message was sent. */
         LarkIdentity: {
             /** @enum {string} */
             brand: "feishu" | "lark";
             appId: string;
             openId: string;
             displayName: string;
-            /** @description null为实际授予未知；[]为可靠取得空范围，不能用请求范围代替。 */
+            /** @description null means the actually granted scopes are unknown; [] means an empty scope list was reliably obtained. The requested scopes must not be used in their place. */
             grantedScopes: string[] | null;
             /** Format: date-time */
             verifiedAt: string;
         };
-        /** @description 服务端在本次授权后核实的安全身份，绑定不可变凭证版本。备注独立；不代表仓库/SSO或业务动作授权。 */
+        /** @description Safe identity verified by the server after this authorization, bound to an immutable credential version. The label is independent; this does not imply authorization for repositories, SSO or business actions. */
         GitHubIdentity: {
             /** @constant */
             host: "github.com";
             userId: string;
             login: string;
-            /** @description null为可靠范围未知；[]为已可靠取得的空范围。不得以请求scope填充，也不混同两者。 */
+            /** @description null means the reliable scope list is unknown; [] means an empty scope list was reliably obtained. Never fill it with the requested scopes, and never conflate the two. */
             grantedScopes: string[] | null;
             /** Format: date-time */
             verifiedAt: string;
         };
-        /** @description githubIdentity仅对应当前gh OAuth版本；新响应明确输出对象或null。PAT替换后当前identity为null，旧版本历史保留；备注不冒充身份。 Lark用户身份仅当前lark-cli OAuth版本可非空；静态bot当前identity=null。larkApplication为应用安全元数据；两属性可省略以兼容旧响应，秘密不进入投影。 */
+        /** @description githubIdentity applies only to the current gh OAuth version; new responses always output either an object or null. After replacement with a PAT the current identity is null, and the history of old versions is kept; the label never stands in for an identity. A Lark user identity can be non-null only for the current lark-cli OAuth version; for a static bot the current identity is null. larkApplication is safe app metadata. These two properties may be omitted for compatibility with older responses; secrets never enter the projection. */
         ProjectCredentialAccount: {
             githubIdentity?: components["schemas"]["GitHubIdentity"] | null;
             /** Format: uuid */
@@ -6028,10 +6317,12 @@ export interface components {
             status: components["schemas"]["CredentialSelectionStatus"];
             candidates: components["schemas"]["ProjectCredentialAccount"][];
             /**
-             * @description 只对 purpose=model、提供方来自插件且声明了随账号走的状态路径时给出（plugins/SPEC.md §13），其余省略。
-             *     开着“用本机的登录状态”时，这个提供方用的是本机主目录里该扩展自己的登录，不是项目账号：
-             *     active 表示本机有这份登录；missing 表示本机没有，Pi 启动前会以 credential_unavailable 失败（关闭开关或在本机登录后再试）。
-             *     开关关着时省略。
+             * @description Given only for purpose=model when the provider comes from a plugin and declares state paths that follow
+             *     the account (plugins/SPEC.md §13); omitted otherwise.
+             *     With "Use local logins" on, this provider uses the extension's own login in the local home directory, not
+             *     the project account: active means that login exists locally; missing means it does not, and Pi fails with
+             *     credential_unavailable before starting (turn the switch off, or log in locally and try again).
+             *     Omitted when the switch is off.
              * @enum {string}
              */
             localLogin?: "active" | "missing";
@@ -6048,10 +6339,12 @@ export interface components {
             status: components["schemas"]["CredentialSelectionStatus"];
             candidates: components["schemas"]["ProjectCredentialAccount"][];
             /**
-             * @description 只对 purpose=model、提供方来自插件且声明了随账号走的状态路径时给出（plugins/SPEC.md §13），其余省略。
-             *     开着“用本机的登录状态”时，这个提供方用的是本机主目录里该扩展自己的登录，不是项目账号：
-             *     active 表示本机有这份登录；missing 表示本机没有，Pi 启动前会以 credential_unavailable 失败（关闭开关或在本机登录后再试）。
-             *     开关关着时省略。
+             * @description Given only for purpose=model when the provider comes from a plugin and declares state paths that follow
+             *     the account (plugins/SPEC.md §13); omitted otherwise.
+             *     With "Use local logins" on, this provider uses the extension's own login in the local home directory, not
+             *     the project account: active means that login exists locally; missing means it does not, and Pi fails with
+             *     credential_unavailable before starting (turn the switch off, or log in locally and try again).
+             *     Omitted when the switch is off.
              * @enum {string}
              */
             localLogin?: "active" | "missing";
@@ -6068,10 +6361,12 @@ export interface components {
             status: "not_configured";
             candidates: components["schemas"]["ProjectCredentialAccount"][];
             /**
-             * @description 只对 purpose=model、提供方来自插件且声明了随账号走的状态路径时给出（plugins/SPEC.md §13），其余省略。
-             *     开着“用本机的登录状态”时，这个提供方用的是本机主目录里该扩展自己的登录，不是项目账号：
-             *     active 表示本机有这份登录；missing 表示本机没有，Pi 启动前会以 credential_unavailable 失败（关闭开关或在本机登录后再试）。
-             *     开关关着时省略。
+             * @description Given only for purpose=model when the provider comes from a plugin and declares state paths that follow
+             *     the account (plugins/SPEC.md §13); omitted otherwise.
+             *     With "Use local logins" on, this provider uses the extension's own login in the local home directory, not
+             *     the project account: active means that login exists locally; missing means it does not, and Pi fails with
+             *     credential_unavailable before starting (turn the switch off, or log in locally and try again).
+             *     Omitted when the switch is off.
              * @enum {string}
              */
             localLogin?: "active" | "missing";
@@ -6131,12 +6426,17 @@ export interface components {
             expectedRevision: number;
         };
         /**
-         * @description openai-codex，或模型目录里 source 为 plugin、authMethods 含 oauth 的插件提供方（plugins/SPEC.md §13）。
-         *     插件提供方须在这个项目里启用了插件，否则开始登录返回 409 plugin_not_enabled；不在目录里返回 422。
-         *     插件提供方登录成功后账号的 authMethod 为 oauth；令牌与扩展的状态在服务端的状态目录里，不进数据库。
-         *     插件提供方登录的 errorCode：auth_failed（未完成）、auth_port_busy（扩展的本机回调端口被占用）、auth_timeout（超时，status=expired）、
-         *     extension_load_failed（插件扩展加载失败或没有注册这个提供方的登录）、plugin_unavailable（插件已卸载或停用）、
-         *     invalid_authorization_url（扩展给出的地址不合规）、helper_unavailable、server_restarted；用户取消为 status=cancelled、errorCode 为 null。
+         * @description openai-codex, or a plugin provider in the model catalog whose source is plugin and whose authMethods include
+         *     oauth (plugins/SPEC.md §13).
+         *     A plugin provider requires the plugin to be enabled in this project; otherwise starting the login returns 409
+         *     plugin_not_enabled. A provider that is not in the catalog returns 422.
+         *     After a successful plugin provider login the account's authMethod is oauth; the tokens and the extension's state
+         *     are kept in the server's state directory, not in the database.
+         *     errorCode values for plugin provider logins: auth_failed (not completed), auth_port_busy (the extension's local
+         *     callback port is in use), auth_timeout (timed out, status=expired), extension_load_failed (the plugin extension
+         *     failed to load or did not register a login for this provider), plugin_unavailable (the plugin was uninstalled or
+         *     disabled), invalid_authorization_url (the address supplied by the extension is not compliant),
+         *     helper_unavailable, server_restarted. A user cancellation gives status=cancelled with errorCode null.
          */
         ProjectModelLoginProvider: string;
         ProjectModelLoginDeviceCode: {
@@ -6148,7 +6448,7 @@ export interface components {
         ProjectModelLoginPrompt: {
             id: string;
             /**
-             * @description select 从 options 里选一个 id；text 填文字；manual_code 是浏览器回调到不了时手工粘贴的回调地址或授权码（message 可能为空）。
+             * @description select picks one id from options; text takes free text; manual_code takes a callback URL or authorization code pasted by hand when the browser callback cannot get through (message may be empty).
              * @enum {string}
              */
             kind: "select" | "text" | "manual_code";
@@ -6160,7 +6460,7 @@ export interface components {
         };
         ProjectModelLoginInput: {
             promptId: string;
-            /** @description 回答；只在内存里转给登录辅助进程，不保存、不记日志 */
+            /** @description The answer; passed only in memory to the login helper process, never saved or logged */
             value: string;
         };
         ProjectModelAuthOperation: {
@@ -6180,13 +6480,13 @@ export interface components {
             /** Format: date-time */
             expiresAt: string;
             completedAt: string | null;
-            /** @description Codex 只会是 https://auth.openai.com/oauth/authorize?…；插件提供方是扩展给的 https 地址，服务端已校验（无用户名密码与 fragment、不含授权码或令牌），控制台显示目标主机名。 */
+            /** @description For Codex it is always https://auth.openai.com/oauth/authorize?…; for a plugin provider it is an https address supplied by the extension and validated by the server (no username/password or fragment, no authorization code or token). The console shows the target host name. */
             authorizationUrl: string | null;
             errorCode: string | null;
             errorMessage: string | null;
-            /** @description 设备码登录（只有插件提供方）：打开 verificationUri 输入 userCode；地址已由服务端校验（https、无用户名密码与 fragment、不含秘密）。终态为 null。 */
+            /** @description Device-code login (plugin providers only); open verificationUri and enter userCode. The address has been validated by the server (https, no username/password or fragment, no secrets). null in a final state. */
             deviceCode: components["schemas"]["ProjectModelLoginDeviceCode"] | null;
-            /** @description 登录中等人回答的问题（只有插件提供方）；用 answerProjectModelAuthLogin 回答。message 与 options 是扩展原文，服务端已限长，按纯文本显示。终态为 null。 */
+            /** @description A question the login is waiting for a person to answer (plugin providers only); answer it with answerProjectModelAuthLogin. message and options are the extension's original text, length-limited by the server; show them as plain text. null in a final state. */
             prompt: components["schemas"]["ProjectModelLoginPrompt"] | null;
         };
         ProjectModelAuthState: {
@@ -6287,7 +6587,7 @@ export interface components {
         };
         /** @enum {string} */
         CLIAuthErrorCode: "callback_unavailable" | "auth_cancelled" | "auth_timeout" | "network_error" | "oauth_failed" | "invalid_response" | "account_mismatch" | "requires_login" | "helper_unavailable" | "version_conflict" | "server_restarted";
-        /** @description Google分支保持原输入；GitHub新建不接受name（含null），重登保持原备注。GitHub固定github.com和gh v2.100.0官方OAuth应用，仅请求repo/read:org；客户端不得提交host/clientId/scopes。必须先用项目+CLI路由定位非秘密operationId再POST，未知start刷新仅GET原ID（含已终态），404不自动新建、重试POST或换ID；URL/userCode/device秘密不持久化。用户已确认重登允许不同GitHub userId；保留已有备注，提交本次核实身份和新凭证版本；旧PAT可转OAuth，不从备注推旧身份，不设同userId门禁，已有回复/任务保持原捕获。 Lark新建必须显式sourceAccountId+expectedSourceRevision（同项目现有静态应用账号），服务端捕获sourceVersionId；禁止name/null/额外Secret/scopes/brand。重登沿目标user保存原应用配置并保备注，不重新选source。不同Lark用户重登替换政策单独待确认，不能借GitHub政策推定。 */
+        /** @description The Google branches keep their original input. A new GitHub login does not accept name (not even null), and a GitHub re-login keeps the existing label. GitHub always uses github.com and the official OAuth app of gh v2.100.0 and requests only repo/read:org; clients must not send host/clientId/scopes. The client must first locate the non-secret operationId through the project + CLI route and then POST; when the outcome of a start is unknown, a refresh only GETs the original ID (including one already in a final state), and a 404 never leads to automatically creating a new one, retrying the POST or switching IDs. The URL, userCode and device secrets are not persisted. The user has confirmed that a re-login may switch to a different GitHub userId: the existing label is kept, and the identity verified this time and a new credential version are committed; an old PAT may be converted to OAuth, the old identity is not inferred from the label, there is no same-userId gate, and existing replies and tasks keep what they captured. A new Lark login must explicitly give sourceAccountId + expectedSourceRevision (an existing static app account in the same project), and the server captures sourceVersionId; name (even as null), an extra Secret, scopes and brand are forbidden. A Lark re-login reuses the original app config saved on the target user account and keeps the label; the source is not chosen again. The replacement policy for re-logging in as a different Lark user is pending separate confirmation and must not be inferred from the GitHub policy. */
         CLIAuthStart: {
             /** Format: uuid */
             operationId: string;
@@ -6348,7 +6648,7 @@ export interface components {
             /** Format: int64 */
             expectedRevision: number;
         };
-        /** @description 仅GitHub分支必有nullable userCode；Google原分支不添加此键。GitHub pending时URL/code均null，awaiting时成对出现，终态均null。终态按同一project/CLI/operation吸收，迟到活动响应不得复活短期数据；不得持久化URL或用户码。 */
+        /** @description Only the GitHub branches always have a nullable userCode; the original Google branches do not add this key. For GitHub, the URL and code are both null while pending, appear together while awaiting authorization, and are both null in a final state. A final state is absorbed per project/CLI/operation, and a late active response must not bring short-lived data back. The URL and user code must never be persisted. */
         CLIAuthOperation: {
             /** Format: uuid */
             id: string;
@@ -6584,12 +6884,12 @@ export interface components {
             completedAt: null;
             /**
              * Format: uri
-             * @description 必须通过对应brand固定issuer/路径/query白名单的真实校验；schema pattern不代替安全校验，设备secret绝不返回。
+             * @description Must pass real validation against the fixed issuer/path/query allowlist for the matching brand; the schema pattern does not replace that security check. The device secret is never returned.
              */
             authorizationUrl: string;
             errorCode: null;
             errorMessage: null;
-            /** @description 官方确实提供时显示；允许null，不套用GitHub码格式或URL+码必有pair。 */
+            /** @description Shown when the official flow actually provides one; null is allowed. The GitHub code format and the GitHub rule that the URL and code always come as a pair do not apply. */
             userCode: string | null;
             sourceAccountId: string | null;
             sourceVersionId: string | null;
@@ -6750,16 +7050,16 @@ export interface components {
             reason: "node_changed" | "task_ended" | "target_mismatch" | "instance_unavailable" | "chat_unavailable" | "action_conflict" | "message_dispatched" | "message_not_executed" | "message_read" | "message_cancelled" | "run_not_active";
             /**
              * Format: uuid
-             * @description 仅针对单条节点消息的动作时给出
+             * @description Given only for actions on a single node message
              */
             messageId?: string;
             /**
              * Format: uuid
-             * @description message_dispatched 时消息所在的轮次；run_not_active 时要停止的轮次
+             * @description For message_dispatched, the turn the message is in; for run_not_active, the turn that was to be stopped
              */
             runId?: string;
             /**
-             * @description message_dispatched、run_not_active 时该轮次的当前状态
+             * @description For message_dispatched and run_not_active, the current status of that turn
              * @enum {string}
              */
             runStatus?: "queued" | "starting" | "running" | "aborting" | "completed" | "failed" | "interrupted";
@@ -6771,7 +7071,7 @@ export interface components {
             nodeRunId: string;
             /** Format: uuid */
             runtimeId: string;
-            /** @description 逐条消息，按服务端实际领取顺序排列（轮次的 priority、queue_seq，同一轮内按发送先后）；kind 恒为 inbox，runId 为承载它的轮次 */
+            /** @description One entry per message, in the order the server actually picks them up (by the turn's priority and queue_seq, then by send order within a turn); kind is always inbox, and runId is the turn that carries it */
             items: components["schemas"]["QueueItem"][];
         };
         TaskNodeQueueActionInput: {
@@ -6799,15 +7099,15 @@ export interface components {
             status: "accepted" | "already_interrupt" | "already_cancelled" | "already_stopping";
             /**
              * Format: uuid
-             * @description 消息动作的消息；停止为 null
+             * @description The message for message actions; null for stop
              */
             messageId: string | null;
             /**
              * Format: uuid
-             * @description 转为打断时为现在承载这条消息的打断轮次；取消时为原承载轮次；停止时为被停止的轮次
+             * @description For promote to interrupt, the interrupt turn that now carries this message; for cancel, the turn that carried it; for stop, the turn that was stopped
              */
             runId: string;
-            /** @description 动作针对的排队项在动作时的内容（取消时供“编辑”回填）；停止为 null */
+            /** @description Content of the targeted queue item at the time of the action (on cancel, used to refill the input box for "Edit"); null for stop */
             item: components["schemas"]["QueueItem"] | null;
         };
         /** @enum {string} */
@@ -6983,15 +7283,15 @@ export interface components {
             candidateId: components["schemas"]["CLIImportUUID"];
             cli: components["schemas"]["CLIImportCLI"];
             label: string;
-            /** @description 当前必填缺失的固定模板字段名，秘密字段名字不是可补填权限 */
+            /** @description Names of required fixed-template fields that are currently missing; a secret field name here does not grant permission to supply it */
             missingFields: string[];
-            /** @description 只表示origin历史，不证明内容同版本 */
+            /** @description Only reflects origin history; does not prove the content is the same version */
             previouslyImported: boolean;
             reasonCode: null | ("unsupported" | "source_unreadable" | "missing_field" | "tool_unavailable" | "template_mismatch" | "requires_platform_login" | "unsupported_cli_store" | "cached_token_not_credential" | "keyring_version_unavailable");
             sourceKind: string;
             /** @enum {string} */
             status: "may_import" | "needs_fields" | "unsupported" | "unreadable" | "requires_platform_login";
-            /** @description 源缺失的允许补项，不必为missingFields子集；无TLS时可补CA，原有值不可覆盖 */
+            /** @description Fields missing in the source that may be supplied; not necessarily a subset of missingFields. A CA may be supplied when there is no TLS; existing values cannot be overwritten */
             supplementableFields: ("database" | "sslMode" | "caCert")[];
         };
         CLIImportItem: {
@@ -7009,7 +7309,7 @@ export interface components {
             completedAt: string | null;
             /** Format: date-time */
             createdAt: string;
-            /** @description succeeded所提交或确认的项目revision，其余null */
+            /** @description The project revision committed or confirmed when succeeded; null otherwise */
             credentialsRevision: number | null;
             /** Format: date-time */
             deadlineAt: string;
@@ -7031,7 +7331,7 @@ export interface components {
             expiresAt: string;
             projectId: components["schemas"]["CLIImportUUID"];
             scanId: components["schemas"]["CLIImportUUID"];
-            /** @description 每CLI恰一项，实际能力由已签收source适配器确定 */
+            /** @description Exactly one entry per CLI; actual capabilities are determined by the signed-off source adapters */
             sources: {
                 cli: components["schemas"]["CLIImportCLI"];
                 reasonCode: null | ("unsupported" | "source_unreadable" | "tool_unavailable" | "template_mismatch");
@@ -7050,16 +7350,16 @@ export interface components {
             operation: components["schemas"]["CLIImportOperation"];
         };
         CLIImportSupplement: {
-            /** @description 仅公开CA PEM，拒绝任何私钥和路径 */
+            /** @description Public CA PEM only; any private key or path is rejected */
             caCert?: string;
             candidateId: components["schemas"]["CLIImportUUID"];
             database?: string;
-            /** @description 按实际CLI正式模板验证且须原缺失 */
+            /** @description Validated against the actual CLI's official template, and must have been missing in the source */
             sslMode?: string;
         };
         /** Format: uuid */
         CLIImportUUID: string;
-        /** @description 固定原节点目标的真实 Inbox 发送；正文沿服务端 Inbox 配置上限。actionId 同内容重放只返回原接收快照，不重复提醒或打断。 */
+        /** @description A real Inbox send pinned to the original node's target; the body follows the server's configured Inbox size limit. Replaying an actionId with the same content only returns the original acceptance snapshot, without reminding or interrupting again. */
         TaskNodeInboxInput: {
             /** Format: uuid */
             actionId: string;
@@ -7073,7 +7373,7 @@ export interface components {
              * @enum {string}
              */
             whenBusy: "queue" | "interrupt";
-            /** @description 先在当前会话上传的图片ID；不得跨Agent/任务/节点复用。纯图片text传空字符串，数量上限取context.limits。 */
+            /** @description IDs of images uploaded beforehand in the current session; must not be reused across Agents, tasks or nodes. For an image-only message send text as an empty string; the maximum count comes from context.limits. */
             imageIds?: string[];
         } & ({
             text?: unknown;
@@ -7129,7 +7429,7 @@ export interface components {
             /** @enum {string} */
             origin: "task_node" | "inbox_reminder" | "sleep_wake" | "console_node";
             /**
-             * @description 空字符串仅为历史未知值，不授予执行资格。
+             * @description The empty string is only a legacy unknown value and grants no execution eligibility.
              * @enum {string}
              */
             executionMode: "" | "task_node" | "task_conversation";
@@ -7155,24 +7455,29 @@ export interface components {
             usage: components["schemas"]["UsageTotals"];
             nextCursor: string | null;
         };
-        /** @description 可省略整个请求体以兼容普通 Inbox；严格任务消息的 Agent 读取必须显式传真实当前 runId。null/零 UUID 均无效。 */
+        /** @description The whole request body may be omitted for compatibility with the regular Inbox; an Agent reading a strict task message must explicitly pass the real current runId. null and the zero UUID are both invalid. */
         InboxReadInput: {
             /** Format: uuid */
             runId?: string;
         };
         /**
-         * @description - installed：已安装，平台侧没有在宿主里（没有平台侧、全局停用或宿主尚未启动）
-         *     - active：平台侧已在宿主里加载
-         *     - error：加载失败（清单与代码不符、register 抛错等），原因见 lastError
-         *     - host_stopped：宿主崩溃次数达到上限，已停止
+         * @description - installed: installed; the platform side is not in the plugin host (there is no platform side, plugins are
+         *       disabled globally, or the plugin host has not started yet)
+         *     - active: the platform side is loaded in the plugin host
+         *     - error: loading failed (the manifest does not match the code, register threw, etc.); see lastError for the
+         *       reason
+         *     - host_stopped: the plugin host reached its crash limit and was stopped
          * @enum {string}
          */
         PluginStatus: "installed" | "active" | "error" | "host_stopped";
         /**
-         * @description 安装来源。builtin 为随平台发布的官方插件（location 为插件 id），local 为服务端本机目录的绝对路径（原地使用），
-         *     git 为仓库地址（ref 为分支、标签或提交，省略时为默认分支），npm 为包规格（名称，可带 @版本），
-         *     market 为市场里的条目（market 为市场地址，id 为条目的插件 id，version 省略时取市场里的版本；实际按条目的 git 或 npm 来源获取）。
-         *     builtin、local、git、npm 须给出 location；market 须给出 market 与 id。
+         * @description Install source. builtin is an official plugin shipped with the platform (location is the plugin id); local is
+         *     the absolute path of a directory on the server machine (used in place); git is a repository address (ref is a
+         *     branch, tag or commit; the default branch when omitted); npm is a package spec (a name, optionally with
+         *     @version); market is an entry in a market (market is the market address, id is the entry's plugin id, and
+         *     version defaults to the version listed in the market; the plugin is actually fetched from the entry's git or npm
+         *     source).
+         *     builtin, local, git and npm require location; market requires market and id.
          */
         PluginSource: {
             /** @enum {string} */
@@ -7183,7 +7488,7 @@ export interface components {
             id?: string;
             version?: string;
         };
-        /** @description 安装时记录的精确来源：git 为提交，npm 为版本；builtin 与 local 两者都为 null。从市场安装时 market 为市场地址（kind 为条目的 git 或 npm），否则为 null。 */
+        /** @description The exact source recorded at install time (commit for git, npmVersion for npm; both null for builtin and local). When installed from a market, market is the market address (and kind is the entry's git or npm); otherwise null. */
         PluginResolvedSource: {
             market: string | null;
             /** @enum {string} */
@@ -7196,34 +7501,34 @@ export interface components {
         PluginAccountKind: {
             kind: string;
             label: string;
-            /** @description 账号字段的 JSON Schema；secret 字段带 `x-secret: true` */
+            /** @description JSON Schema of the account fields; secret fields carry `x-secret: true` */
             fields: Record<string, never>;
             multiple: boolean;
         };
         PluginAction: {
             id: string;
             label: string;
-            /** @description 操作表单的 JSON Schema（对象）；没有输入时为空对象 */
+            /** @description JSON Schema of the action form (an object); an empty object when there is no input */
             fields: Record<string, never>;
             where: ("agent" | "task" | "project" | "identity" | "global")[];
         };
-        /** @description 安装前展示的组成：两侧各有什么。 */
+        /** @description Components shown before install, i.e. what each side contains. */
         PluginComponents: {
-            /** @description pi.extensions 的文件数 */
+            /** @description Number of files in pi.extensions */
             agentExtensions: number;
-            /** @description pi.skills 的目录 */
+            /** @description Directories in pi.skills */
             skills: string[];
-            /** @description loopNow.mcpServers 的名称 */
+            /** @description Names in loopNow.mcpServers */
             mcpServers: string[];
-            /** @description loopNow.bin 的目录 */
+            /** @description Directories in loopNow.bin */
             bin: string[];
-            /** @description 是否有平台侧 */
+            /** @description Whether there is a platform side */
             platform: boolean;
             actions: components["schemas"]["PluginAction"][];
             channels: {
                 id: string;
                 label: string;
-                /** @description 这个渠道能代管外部身份（plugins/SPEC.md §12），需要 identities.manage 范围 */
+                /** @description This channel can manage external identities (plugins/SPEC.md §12); requires the identities.manage scope */
                 manageIdentities: boolean;
             }[];
             http: boolean;
@@ -7232,37 +7537,37 @@ export interface components {
                 cron: string;
             }[];
         };
-        /** @description 插件清单与市场条目里可以按语言给出的文字（displayName、description）：字符串，或以语言标签（如 `zh-CN`、`en-US`）为键、 去掉首尾空白后非空的字符串为值的对象，至少一项。服务端原样返回（对象保留作者写的键顺序），不按语言翻译； 控制台按当前语言 → zh-CN → en-US → 第一项取字。缺省时为空字符串。 */
+        /** @description Text in plugin manifests and market entries that can be given per language (displayName, description): a string, or an object keyed by language tag (such as `zh-CN`, `en-US`) whose values are strings that are non-empty after trimming, with at least one entry. The server returns it as is (objects keep the author's key order) and does not translate it; the console picks the current language → zh-CN → en-US → the first entry. An empty string when absent. */
         LocalizedText: string | {
             [key: string]: string;
         };
-        /** @description 从插件 `package.json` 读出的清单（pi 段与 loopNow 段），已按规则校验。 */
+        /** @description The manifest read from the plugin's `package.json` (the pi and loopNow sections), validated against the rules. */
         PluginManifest: {
             id: string;
-            /** @description npm 包名 */
+            /** @description npm package name */
             name: string;
             version: string;
             displayName: components["schemas"]["LocalizedText"];
             description: components["schemas"]["LocalizedText"];
             minPlatformVersion: string | null;
-            /** @description 订阅的事件 */
+            /** @description Subscribed events */
             events: string[];
             permissions: components["schemas"]["PluginPermission"][];
-            /** @description 拦截类 Hook 超时或出错时阻止而不是放行 */
+            /** @description Block rather than allow when an intercepting Hook times out or errors */
             failClosed: boolean;
-            /** @description 配置表单的 JSON Schema；没有配置时为空对象 */
+            /** @description JSON Schema of the config form; an empty object when there is no config */
             configSchema: Record<string, never>;
             accounts: components["schemas"]["PluginAccountKind"][];
             components: components["schemas"]["PluginComponents"];
         };
         /**
-         * @description 插件令牌可用的平台接口范围（plugins/SPEC.md §5）；接口上的 `x-plugin-scope` 标明所需范围。
+         * @description Scopes of platform endpoints a plugin token may use (plugins/SPEC.md §5); `x-plugin-scope` on an endpoint gives the scope it requires.
          * @enum {string}
          */
         PluginPermission: "agents.read" | "agents.write" | "tasks.read" | "tasks.write" | "runs.read" | "inbox.read" | "inbox.send" | "folders.read" | "folders.write" | "identities.read" | "identities.manage" | "state" | "accounts.read";
         PluginPreviewRequest: {
             source?: components["schemas"]["PluginSource"];
-            /** @description 按已安装插件记录的来源重新获取（更新前预览） */
+            /** @description Re-fetch from the source recorded for an installed plugin (preview before an update) */
             pluginId?: string;
         };
         PluginPreview: {
@@ -7271,25 +7576,25 @@ export interface components {
             /** Format: date-time */
             expiresAt: string;
             source: components["schemas"]["PluginResolvedSource"];
-            /** @description 官方来源；为 false 时安装要带 confirm */
+            /** @description Official source; when false, the install must include confirm */
             trusted: boolean;
             manifest: components["schemas"]["PluginManifest"];
-            /** @description 同 id 已安装的版本；没有安装时为 null */
+            /** @description Installed version with the same id; null when not installed */
             installedVersion: string | null;
         };
-        /** @description 插件的 README（plugins/SPEC.md §2.3），Markdown 原文；相对链接与图片不解析。 */
+        /** @description The plugin's README (plugins/SPEC.md §2.3) as raw Markdown; relative links and images are not resolved. */
         PluginReadme: {
-            /** @description 选中的文件名（如 README.zh-CN.md）；没有任何 README 时为 null */
+            /** @description Selected file name (such as README.zh-CN.md); null when there is no README at all */
             file: string | null;
-            /** @description 文件内容；没有 README 时为 null */
+            /** @description File content; null when there is no README */
             markdown: string | null;
-            /** @description 文件超过 1 MiB，只返回了前 1 MiB */
+            /** @description The file exceeds 1 MiB and only the first 1 MiB is returned */
             truncated: boolean;
         };
         PluginInstall: {
             /** Format: uuid */
             previewId: string;
-            /** @description 确认安装非官方来源 */
+            /** @description Confirms installing from an unofficial source */
             confirm?: boolean;
         };
         Plugin: {
@@ -7301,9 +7606,9 @@ export interface components {
             status: components["schemas"]["PluginStatus"];
             lastError: string | null;
             hasPlatform: boolean;
-            /** @description 已启用的未删除项目数 */
+            /** @description Number of non-deleted projects that have it enabled */
             enabledProjects: number;
-            /** @description 已授权的未删除 Agent 数 */
+            /** @description Number of non-deleted Agents it is granted to */
             grantedAgents: number;
             /** Format: date-time */
             installedAt: string;
@@ -7315,7 +7620,7 @@ export interface components {
         };
         PluginVersion: {
             version: string;
-            /** @description 安装内容的 sha256 */
+            /** @description sha256 of the installed content */
             digest: string;
             /** Format: date-time */
             installedAt: string;
@@ -7324,23 +7629,26 @@ export interface components {
         PluginDetail: {
             plugin: components["schemas"]["Plugin"];
             manifest: components["schemas"]["PluginManifest"];
-            /** @description 新的在前 */
+            /** @description Newest first */
             versions: components["schemas"]["PluginVersion"][];
             installDir: string;
             dataDir: string;
-            /** @description 当前版本的 Pi 扩展注册的模型提供方（安装或更新时读出）；没有 Pi 扩展或没有注册时为空 */
+            /** @description Model providers registered by the current version's Pi extensions (read at install or update); empty when there is no Pi extension or none is registered */
             providers: components["schemas"]["PluginModelProvider"][];
-            /** @description 读取时加载失败的扩展文件与原因（扩展原文，已截断，按纯文本显示） */
+            /** @description Extension files that failed to load during the read, with reasons (the extension's original text, truncated; show as plain text) */
             providerErrors: components["schemas"]["PluginProviderCaptureError"][];
-            /** @description 整次读取失败的原因（如 Pi 不可用、超时）；为空表示读取成功或插件没有 Pi 扩展 */
+            /** @description Why the whole read failed (such as Pi unavailable or a timeout); empty means the read succeeded or the plugin has no Pi extension */
             providersError: string | null;
             providerState: components["schemas"]["PluginProviderState"];
         };
         /**
-         * @description 插件注册的模型提供方有哪些状态随项目账号走（plugins/SPEC.md §13）：键是提供方 id，paths 是扩展在 HOME 下保存登录与状态的相对路径
-         *     （/ 分隔，1 到 8 个，不含 ..，不在 .loop-now 下）。启动 Pi 前这些路径链接到账号的状态目录，同项目多个 Agent 共用一份。
-         *     插件详情里是当前版本生效的声明：从市场安装时取市场条目的 providerState，否则取包自己的 loopNow.providerState；都没有时为空对象，
-         *     这时只有 Pi 的认证条目随账号走。只读展示。
+         * @description Which state of the model providers registered by the plugin follows the project account (plugins/SPEC.md §13):
+         *     keys are provider ids, and paths are the relative paths under HOME where the extension saves its login and state
+         *     (/-separated, 1 to 8 of them, no .., not under .loop-now). Before Pi starts, these paths are linked to the
+         *     account's state directory, shared by all Agents in the same project.
+         *     In plugin details this is the declaration in effect for the current version: the market entry's providerState
+         *     when installed from a market, otherwise the package's own loopNow.providerState; an empty object when neither
+         *     exists, in which case only Pi's auth entry follows the account. Display only.
          */
         PluginProviderState: {
             [key: string]: {
@@ -7348,84 +7656,90 @@ export interface components {
             };
         };
         AgentCommandList: {
-            /** @description Agent 当前的运行时。只有 pi 有 Pi 命令；其余运行时（claude-code）不列 Pi 命令，capturedAt 恒为 null */
+            /** @description The Agent's current runtime. Only pi has Pi commands; other runtimes (claude-code) list no Pi commands, and capturedAt is always null */
             runtime: components["schemas"]["AgentRuntime"];
             /**
              * Format: date-time
-             * @description 读到 Pi 命令的时间（Pi 启动时）。runtime 为 pi 而它为 null 表示 Pi 还没启动过；runtime 不是 pi 时恒为 null
+             * @description When the Pi commands were read (at Pi startup). null while runtime is pi means Pi has not started yet; always null when runtime is not pi
              */
             capturedAt: string | null;
             commands: components["schemas"]["AgentCommand"][];
         };
         AgentCommand: {
-            /** @description 命令名，不带 "/"；技能命令为 skill:<名称> */
+            /** @description Command name without "/"; Skill commands are named skill:<name> */
             name: string;
             /**
-             * @description platform 平台内置命令（发送时写成 /<name>）；pi 交给 Pi 执行（发送时写成 /pi:<name>）
+             * @description platform is a built-in platform command (sent as /<name>); pi is handed to Pi to run (sent as /pi:<name>)
              * @enum {string}
              */
             source: "platform" | "pi";
-            /** @description Pi 给的来源（原样）：extension 扩展命令、prompt 提示模板、skill 技能命令；平台命令为空字符串 */
+            /** @description Source reported by Pi (verbatim): extension for an extension command, prompt for a prompt template, skill for a Skill command; an empty string for platform commands */
             piSource: string;
             /**
-             * @description 命令的说明，按纯文本显示。Pi 命令是扩展给的原文（字符串）；平台命令是中英两种说明（LocalizedText 对象，键为 zh-CN 与 en-US），
-             *     控制台按当前语言取字，用法里的占位词（instructions、html|jsonl、session-id）在说明里写法相同。没有说明时为 null
+             * @description Command description, shown as plain text. For Pi commands it is the extension's original text (a string);
+             *     for platform commands it is a Chinese and an English description (a LocalizedText object keyed by zh-CN and
+             *     en-US), and the console picks the current language. Placeholders from the usage (instructions, html|jsonl,
+             *     session-id) are written the same way in the description. null when there is no description
              */
             description: components["schemas"]["LocalizedText"] | null;
-            /** @description 平台命令的用法，方括号里是可省略的参数：`/compact [instructions]`、`/export [html|jsonl]`、`/resume [session-id]`（完整的会话 ID）；Pi 命令为 null */
+            /** @description Usage of a platform command; arguments in square brackets are optional: `/compact [instructions]`, `/export [html|jsonl]`, `/resume [session-id]` (the full session ID). null for Pi commands */
             usage: string | null;
             /**
-             * @description 此刻能不能用。平台命令只取决于 Agent 的运行时（AgentCommandList.runtime）与会话状态（SessionState），规则见 unavailableReason；
-             *     Agent 正忙不在这里判断，发送时返回 409。两者的每次变化都会在 Agent 的事件流（GET /agents/{agentId}/events）里推送 session.updated：
-             *     重开、恢复、会话文件丢失、第一轮回复后会话由 none 变 active、改模型换了运行时（会话随之重开）。收到 session.updated 后重读本接口即可。
-             *     Pi 命令恒为 true。
+             * @description Whether it can be used right now. Platform commands depend only on the Agent's runtime
+             *     (AgentCommandList.runtime) and session state (SessionState); see unavailableReason for the rules. Whether
+             *     the Agent is busy is not judged here; sending then returns 409. Every change of either is pushed as
+             *     session.updated on the Agent's event stream (GET /agents/{agentId}/events): reopen, resume, session file
+             *     lost, the session going from none to active after the first reply, and a model change that switches the
+             *     runtime (the session is reopened with it). After session.updated, just read this endpoint again.
+             *     Always true for Pi commands.
              */
             available: boolean;
             /**
-             * @description 不能用的原因：runtime_unsupported 运行时不支持（Claude Code 的 Agent 没有 Pi 会话，不能 /compact、/export、/resume）；
-             *     session_none 还没有会话（/compact、/export）；session_missing 会话文件丢失（/compact、/export，先 /new 或 /resume）。能用时为 null
+             * @description Why it cannot be used: runtime_unsupported, the runtime does not support it (Claude Code Agents have no Pi
+             *     session, so no /compact, /export or /resume); session_none, there is no session yet (/compact, /export);
+             *     session_missing, the session file is lost (/compact, /export; run /new or /resume first). null when usable
              * @enum {string|null}
              */
             unavailableReason: "runtime_unsupported" | "session_none" | "session_missing" | null;
-            /** @description 命令来自哪个已安装插件（按来源文件所在的安装目录）；平台自己的或判断不出时为 null */
+            /** @description The installed plugin the command comes from (by the install directory that contains its source file); null for platform commands or when it cannot be determined */
             pluginId: string | null;
             pluginDisplayName: components["schemas"]["LocalizedText"] | null;
         };
         PluginModelProvider: {
             id: string;
-            /** @description 扩展给的显示名（不可信文本，按纯文本显示） */
+            /** @description Display name given by the extension (untrusted text; show as plain text) */
             name: string;
-            /** @description 注册它的扩展文件，相对插件目录 */
+            /** @description The extension file that registered it, relative to the plugin directory */
             extension: string;
-            /** @description 是否注册了 OAuth 订阅登录 */
+            /** @description Whether it registers an OAuth subscription login */
             oauth: boolean;
-            /** @description 与 Pi 内置提供方同 id（扩展覆盖内置提供方的设置），不进模型目录 */
+            /** @description Same id as a built-in Pi provider (the extension overrides the built-in provider's settings); not added to the model catalog */
             overridesBuiltin: boolean;
-            /** @description 此刻在模型目录里、归这个插件；只有带 OAuth、与内置和 models.json 都不同 id、注册无误的才会进 */
+            /** @description Currently in the model catalog and owned by this plugin; only providers with OAuth, an id different from both the built-in providers and models.json, and a clean registration get in */
             inCatalog: boolean;
-            /** @description 注册时出错的原因（扩展原文，已截断） */
+            /** @description Why registration failed (the extension's original text, truncated) */
             error: string | null;
             modelCount: number;
         };
         PluginProviderCaptureError: {
-            /** @description 扩展文件，相对插件目录 */
+            /** @description Extension file, relative to the plugin directory */
             path: string;
             error: string;
         };
         PluginConfig: {
-            /** @description 非 secret 字段 */
+            /** @description Non-secret fields */
             values: Record<string, never>;
-            /** @description 已设置的 secret 字段名 */
+            /** @description Names of secret fields that are set */
             secretsSet: string[];
             /**
              * Format: int64
-             * @description 还没有保存过时为 0
+             * @description 0 when never saved
              */
             revision: number;
         };
         PluginConfigUpdate: {
             values: Record<string, never>;
-            /** @description 只写；省略的字段保留原值，null 清除 */
+            /** @description Write-only; omitted fields keep their value, null clears one */
             secrets?: {
                 [key: string]: string | null;
             };
@@ -7445,7 +7759,7 @@ export interface components {
             entries: components["schemas"]["PluginLogEntry"][];
             /**
              * Format: int64
-             * @description 还有更早的日志时为下一页的 before
+             * @description The before value for the next page when there are older log entries
              */
             nextBefore: number | null;
         };
@@ -7470,7 +7784,7 @@ export interface components {
             ackedAt: string | null;
             /**
              * Format: int64
-             * @description 成功那一次从发出事件到收到 ack 的时长；未送达时为 null
+             * @description For the successful attempt, the time from sending the event to receiving the ack; null when not delivered
              */
             durationMs: number | null;
         };
@@ -7480,7 +7794,7 @@ export interface components {
         };
         PluginStateEntry: {
             key: string;
-            /** @description 插件保存的任意 JSON */
+            /** @description Any JSON saved by the plugin */
             value: unknown;
         };
         PluginStateList: {
@@ -7498,15 +7812,15 @@ export interface components {
             /** Format: date-time */
             at: string;
             error: string;
-            /** @description 退出时没有回应的请求 */
+            /** @description Requests that had no response at exit */
             inFlight: components["schemas"]["PluginHostRequest"][];
-            /** @description 退出前最后发给宿主的请求 */
+            /** @description The last request sent to the plugin host before exit */
             last: components["schemas"]["PluginHostRequest"] | null;
-            /** @description 最后几行标准错误 */
+            /** @description Last few lines of standard error */
             stderr: string[];
         };
         PluginHostStatus: {
-            /** @description 服务端是否有宿主入口；为 false 时插件的平台侧不运行 */
+            /** @description Whether the server has a plugin host entry point; when false, the platform sides of plugins do not run */
             configured: boolean;
             /** @enum {string} */
             state: "disabled" | "starting" | "running" | "restarting" | "stopped" | "idle";
@@ -7514,18 +7828,18 @@ export interface components {
             /** Format: date-time */
             startedAt: string | null;
             hostVersion: string | null;
-            /** @description 5 分钟内的意外退出时间 */
+            /** @description Unexpected exit times within the last 5 minutes */
             recentExits: string[];
             lastCrash: components["schemas"]["PluginHostCrash"] | null;
             loaded: string[];
-            /** @description 服务端本地时间今天零点以来的投递结果（全部插件） */
+            /** @description Delivery results since midnight today in server local time (all plugins) */
             today: {
                 delivered: number;
                 failed: number;
             };
         };
         PluginActionInput: {
-            /** @description 按钮所在的页面对象；global 的按钮为空对象 */
+            /** @description The page object the button is on; an empty object for global buttons */
             where: {
                 /** Format: uuid */
                 projectId?: string;
@@ -7536,13 +7850,13 @@ export interface components {
                 /** Format: uuid */
                 identityId?: string;
             };
-            /** @description 按操作的 fields 生成的表单值 */
+            /** @description Form values generated from the action's fields */
             input: Record<string, never>;
         };
         PluginActionResult: {
-            /** @description 以提示显示的结果 */
+            /** @description Result shown as a notice */
             notice: string;
-            /** @description 可选的跳转链接 */
+            /** @description Optional link to navigate to */
             url: string | null;
         };
         PluginMarketEntry: {
@@ -7550,10 +7864,10 @@ export interface components {
             id: string;
             displayName: components["schemas"]["LocalizedText"];
             description: components["schemas"]["LocalizedText"];
-            /** @description 条目的来源写法：git:<地址>[@ref] 或 npm:<包规格> */
+            /** @description How the entry's source is written: git:<address>[@ref] or npm:<package spec> */
             source: string;
             version: string | null;
-            /** @description 市场标为已验证；官方市场与已验证的条目安装时不需确认 */
+            /** @description Marked as verified by the market; installs from the official market and verified entries need no confirmation */
             verified: boolean;
             installedVersion: string | null;
             updateAvailable: boolean;
@@ -7562,7 +7876,7 @@ export interface components {
             url: string;
             name: string | null;
             official: boolean;
-            /** @description 读取失败的原因；成功时为 null */
+            /** @description Why reading failed; null on success */
             error: string | null;
             plugins: components["schemas"]["PluginMarketEntry"][];
         };
@@ -7579,9 +7893,9 @@ export interface components {
             sources: components["schemas"]["BuiltinPluginSource"][];
         };
         PluginSettings: {
-            /** @description 停用全部插件 */
+            /** @description Disable all plugins globally */
             disabled: boolean;
-            /** @description 官方市场之外的市场仓库地址 */
+            /** @description Market repository addresses besides the official market */
             markets: string[];
         };
         ProjectPlugin: {
@@ -7590,7 +7904,7 @@ export interface components {
             version: string;
             status: components["schemas"]["PluginStatus"];
             enabled: boolean;
-            /** @description configSchema 中可在项目覆盖（x-scope project）的字段名 */
+            /** @description Field names in configSchema that can be overridden per project (x-scope project) */
             projectFields: string[];
             config: components["schemas"]["PluginConfig"];
         };
@@ -7614,7 +7928,7 @@ export interface components {
             projectId: string;
             kind: string;
             name: string;
-            /** @description 非 secret 字段 */
+            /** @description Non-secret fields */
             values: Record<string, never>;
             secretsSet: string[];
             /** Format: int64 */
@@ -7643,7 +7957,7 @@ export interface components {
         AgentPlugin: {
             pluginId: string;
             displayName: components["schemas"]["LocalizedText"];
-            /** @description 可授权：平台 Agent 总是可以，项目 Agent 要项目已启用 */
+            /** @description Can be granted: always for platform Agents; project Agents need the plugin enabled in their project */
             available: boolean;
             granted: boolean;
             accountIds: string[];
@@ -7660,44 +7974,47 @@ export interface components {
             status: components["schemas"]["AgentStatus"];
             model: components["schemas"]["ModelRef"];
             thinkingLevel: string;
-            /** @description 最近一次手动压缩（/compact）的执行，任何状态；没有时为 null。发起压缩的请求断开（刷新页面、代理超时）后从这里读结果 */
+            /** @description The run of the most recent manual compaction (/compact), in any status; null when there is none. If the request that started the compaction disconnects (page refresh, proxy timeout), read the result here */
             lastCompaction: components["schemas"]["Run"] | null;
         };
         /**
-         * @description 手动压缩（/compact）的指令与结果，随执行保存。执行的状态：completed 是正常完成（outcome 为 compacted 或 skipped）；
-         *     interrupted 是被人取消（停止或打断）或服务重启中断；failed 是压缩出错（Pi 报错、进程退出等），errorMessage 是原因。
-         *     这种执行没有对话消息，不算对话轮次，不进概览的“上一条回复”。
+         * @description Instructions and result of a manual compaction (/compact), saved with the run. Run status: completed means it
+         *     finished normally (outcome is compacted or skipped); interrupted means it was cancelled by a person (stop or
+         *     interrupt) or cut off by a server restart; failed means the compaction errored (a Pi error, the process exiting,
+         *     etc.), with the reason in errorMessage.
+         *     Such a run has no conversation messages, does not count as a conversation turn, and does not show up as the
+         *     overview's "last reply".
          */
         RunCompaction: {
-            /** @description 压缩时附带的指令（/compact 之后的文字）；没有时为空字符串 */
+            /** @description Instructions given with the compaction (the text after /compact); an empty string when there are none */
             instructions: string;
             /**
-             * @description compacted 已压缩；skipped 没有压缩但正常完成（原因见 skipReason）；执行结束前、被取消或失败时为 null
+             * @description compacted means it was compacted; skipped means it was not compacted but finished normally (see skipReason); null before the run ends, or when it was cancelled or failed
              * @enum {string|null}
              */
             outcome: "compacted" | "skipped" | null;
             /**
-             * @description too_small 会话内容太少、不需要压缩；already_compacted 上次压缩之后还没有新内容；cancelled_by_extension 扩展取消了这次压缩。outcome 不是 skipped 时为 null
+             * @description too_small, the session has too little content to need compaction; already_compacted, nothing new since the last compaction; cancelled_by_extension, an extension cancelled this compaction. null when outcome is not skipped
              * @enum {string|null}
              */
             skipReason: "too_small" | "already_compacted" | "cancelled_by_extension" | null;
             /**
              * Format: int64
-             * @description 压缩前的上下文 token；只在 compacted 时有值
+             * @description Context tokens before compaction; set only when compacted
              */
             tokensBefore: number | null;
             /**
              * Format: int64
-             * @description Pi 估算的压缩后上下文 token；只在 compacted 时有值
+             * @description Context tokens after compaction as estimated by Pi; set only when compacted
              */
             estimatedTokensAfter: number | null;
         };
         ConsoleResumeSession: {
-            /** @description Pi 会话头中的完整会话 ID */
+            /** @description Full session ID from the Pi session header */
             id: string;
-            /** @description 第一条普通用户消息的截短文本；没有文字消息时为空字符串 */
+            /** @description Truncated text of the first regular user message; an empty string when there are no text messages */
             title?: string;
-            /** @description 最后一条普通用户消息的截短文本；没有文字消息时为空字符串 */
+            /** @description Truncated text of the last regular user message; an empty string when there are no text messages */
             preview?: string;
             /** Format: date-time */
             updatedAt: string;
@@ -7708,42 +8025,43 @@ export interface components {
             handled: true;
             /** @enum {string} */
             source: "platform" | "plugin";
-            /** @description 认领命令的插件 id；平台命令为空字符串 */
+            /** @description id of the plugin that claimed the command; an empty string for platform commands */
             plugin: string;
-            /** @description 插件返回的回复文字；平台命令或没有回复时为 null */
+            /** @description Reply text returned by the plugin; null for platform commands or when there is no reply */
             reply: string | null;
-            /** @description 平台命令名；插件命令为空字符串 */
+            /** @description Platform command name; an empty string for plugin commands */
             command: string;
             session?: components["schemas"]["ConsoleSessionStatus"] | null;
-            /** @description /copy 待复制的最近一条有文字的成功回复（没有文字的回复，例如 Pi 直接处理的 /pi 命令，跳过）；没有时为 null */
+            /** @description For /copy, the most recent successful reply with text, to be copied (replies without text, such as /pi commands handled directly by Pi, are skipped); null when there is none */
             copyText?: string | null;
             /** @enum {string|null} */
             exportFormat?: "html" | "jsonl" | null;
-            /** @description /reload 是否停止了旧进程 */
+            /** @description Whether /reload stopped the old process */
             processStopped?: boolean | null;
             resetSession?: components["schemas"]["SessionInfo"] | null;
-            /** @description /resume 的可恢复会话；按文件修改时间倒序，不含本机路径 */
+            /** @description Resumable sessions for /resume, newest file modification time first; contains no local paths */
             resumeSessions?: components["schemas"]["ConsoleResumeSession"][] | null;
             resumedSession?: components["schemas"]["SessionInfo"] | null;
             /**
-             * @description /compact 正常完成后的执行（compaction 里是指令与结果，Pi 没有压缩时 outcome 为 skipped）；其他命令省略。
-             *     压缩被取消或失败时命令返回 409 console_command_failed，没有这个字段
+             * @description The run after /compact completes normally (compaction holds the instructions and result; outcome is skipped
+             *     when Pi did not compact); omitted for other commands.
+             *     When the compaction is cancelled or fails, the command returns 409 console_command_failed without this field
              */
             compactRun?: components["schemas"]["Run"];
             /**
              * Format: int64
              * @deprecated
-             * @description 已弃用，改读 compactRun.compaction.tokensBefore（值相同）。/compact 实际压缩时为压缩前的上下文 token，其余为 null
+             * @description Deprecated; read compactRun.compaction.tokensBefore instead (same value). For a /compact that actually compacted, the context tokens before compaction; null otherwise
              */
             tokensBefore?: number | null;
             /**
              * Format: int64
              * @deprecated
-             * @description 已弃用，改读 compactRun.compaction.estimatedTokensAfter（值相同）
+             * @description Deprecated; read compactRun.compaction.estimatedTokensAfter instead (same value)
              */
             estimatedTokensAfter?: number | null;
         };
-        /** @description 参与方；agent 带 id 与地址，external 带 id 与 @名称，plugin（插件令牌，只出现在 folder.changed 的 by）带 plugin:<id> 地址，console 与 platform 只有 kind 与控制台地址。 */
+        /** @description A participant. agent carries its id and address; external carries its id and @name; plugin (a plugin token, appears only in the by field of folder.changed) carries a plugin:<id> address; console and platform have only kind and the console address. */
         PluginEventParty: {
             /** @enum {string} */
             kind: "agent" | "console" | "external" | "platform" | "plugin";
@@ -7752,38 +8070,51 @@ export interface components {
             address: string | null;
         };
         /**
-         * @description 发给平台侧的事件（plugins/SPEC.md §4），给插件作者的合同：固定字段加该类型自己的字段；正文一律不带，用权限范围内的接口另取。
-         *     观察类事件至少送达一次，按 `id` 去重。各类型的字段：
-         *     - run.queued、run.started、run.ended：origin（console、inbox_reminder、sleep_wake、console_compact、task_node、console_node）；
-         *       run.ended 另有 status（completed、failed、interrupted）、endReason、errorCode 与 tokens（这一轮的 input、output、cacheRead、cacheWrite、total）
-         *     - task.started、task.waiting、task.blocked、task.completed、task.cancelled：title、reason（阻塞、取消的原因，没有时为 null）
-         *     - node.started、node.submitted、node.blocked：nodeRunId、stepId、reason
-         *     - inbox.received、inbox.read、inbox.cancelled：messageId、threadId、from、to（PluginEventParty）、isQuestion、excerpt（正文前 80 个字符）
-         *     - question.asked、question.answered：messageId、threadId、from、to；answered 另有 optionId
-         *     - sleep.requested、sleep.woken：sleepId、wakeAt；woken 另有 endReason
-         *     - agent.created、agent.updated、agent.deleted：name、address
-         *     - pi.started、pi.exited：reason（启动原因或停止原因，意外退出为 unexpected_exit）
-         *     - model.retry：attempt、delayMs
-         *     - context.compacted：reason
-         *     - folder.changed：level（agent、project、global）、path、by（PluginEventParty）
-         *     - plugin.enabled、plugin.disabled、plugin.config_changed：pluginId
-         *     - channel.outbound：只发给消息线索所属的插件；messageId、threadId、channelId、from（回复的 Agent）、isQuestion、
-         *       question（与 identity.inbound 相同：id 即提问消息的 ID、options、allowText、deadline，不是提问时为 null）、excerpt（正文前 80 个字符），正文用 inbox.read 范围另取；
-         *       插件以 `POST /inbox/messages/{messageId}/reply`（messageId 为 question.id，带 optionId 或正文）作答
-         *     - identity.inbound：发给外部身份的消息，只发给代管这个身份的插件（不看订阅与项目启用；这个插件不再收到这条消息的 inbox.received）：
-         *       identityId、channelId（代管的渠道）、messageId、threadId、from（kind、agentId 或 null、name）、projectId、taskId、nodeRunId（可为 null）、isQuestion、
-         *       question（id 即提问消息的 ID、options、allowText、deadline，不是提问时为 null）、excerpt（正文前 80 个字符）；正文用代管身份的收件箱接口另取
-         *     同步事件经宿主 `call` 交给插件（不持久化），字段：
-         *     - run.before_start：origin、messageId（拦截）
-         *     - task.before_start：title、stepCount、sourceInboxMessageId（拦截）
-         *     - node.before_start：nodeRunId、stepId（拦截，阻止时任务进入阻塞）
-         *     - node.before_submit：nodeRunId、edgeId（拦截，阻止时这次提交被拒绝，节点不变）
-         *     - inbox.before_send：from、to 或 replyTo、isQuestion（拦截）
-         *     - message.before_enqueue：text、from、imageCount，任务节点消息另有 nodeRunId（修改，patch 可改 text）
-         *     - inbox.before_deliver：text、from、to 或 replyTo（修改，Agent 发出的消息，patch 可改 text）
-         *     - sleep.before_schedule：durationSeconds、reason（修改，patch 可改 durationSeconds）
-         *     - console.command：command（/ 之后第一个词）、text、from（认领，结果可带 reply）
-         *     projectId：项目内的事件为该项目；平台 Agent 与全局事件为 null。项目内事件只发给在该项目启用了插件的订阅者，null 的发给全部订阅者。
+         * @description Events sent to the platform side (plugins/SPEC.md §4), the contract for plugin authors: fixed fields plus each
+         *     type's own fields. The body text is never included; fetch it through endpoints within the plugin's scopes.
+         *     Observation events are delivered at least once; deduplicate by `id`. Fields of each type:
+         *     - run.queued, run.started, run.ended: origin (console, inbox_reminder, sleep_wake, console_compact, task_node,
+         *       console_node); run.ended also has status (completed, failed, interrupted), endReason, errorCode and tokens
+         *       (input, output, cacheRead, cacheWrite, total for this turn)
+         *     - task.started, task.waiting, task.blocked, task.completed, task.cancelled: title, reason (why it was blocked or
+         *       cancelled; null when there is none)
+         *     - node.started, node.submitted, node.blocked: nodeRunId, stepId, reason
+         *     - inbox.received, inbox.read, inbox.cancelled: messageId, threadId, from, to (PluginEventParty), isQuestion,
+         *       excerpt (the first 80 characters of the body)
+         *     - question.asked, question.answered: messageId, threadId, from, to; answered also has optionId
+         *     - sleep.requested, sleep.woken: sleepId, wakeAt; woken also has endReason
+         *     - agent.created, agent.updated, agent.deleted: name, address
+         *     - pi.started, pi.exited: reason (the start or stop reason; unexpected_exit for an unexpected exit)
+         *     - model.retry: attempt, delayMs
+         *     - context.compacted: reason
+         *     - folder.changed: level (agent, project, global), path, by (PluginEventParty)
+         *     - plugin.enabled, plugin.disabled, plugin.config_changed: pluginId
+         *     - channel.outbound: sent only to the plugin that owns the message's thread; messageId, threadId, channelId, from
+         *       (the replying Agent), isQuestion, question (same as in identity.inbound: id is the ID of the question message,
+         *       options, allowText, deadline; null when it is not a question), excerpt (the first 80 characters of the body);
+         *       fetch the body with the inbox.read scope. The plugin answers with `POST /inbox/messages/{messageId}/reply`
+         *       (messageId is question.id, with optionId or a body)
+         *     - identity.inbound: a message sent to an external identity, sent only to the plugin that manages that identity
+         *       (regardless of subscriptions and project enablement; this plugin then no longer receives inbox.received for
+         *       this message): identityId, channelId (the managing channel), messageId, threadId, from (kind, agentId or null,
+         *       name), projectId, taskId, nodeRunId (may be null), isQuestion, question (id is the ID of the question message,
+         *       options, allowText, deadline; null when it is not a question), excerpt (the first 80 characters of the body);
+         *       fetch the body through the Inbox endpoints of the managed identity
+         *     Synchronous events are handed to the plugin through the plugin host's `call` (not persisted), with these fields:
+         *     - run.before_start: origin, messageId (intercept)
+         *     - task.before_start: title, stepCount, sourceInboxMessageId (intercept)
+         *     - node.before_start: nodeRunId, stepId (intercept; if blocked, the task becomes blocked)
+         *     - node.before_submit: nodeRunId, edgeId (intercept; if blocked, this submit is rejected and the node is
+         *       unchanged)
+         *     - inbox.before_send: from, to or replyTo, isQuestion (intercept)
+         *     - message.before_enqueue: text, from, imageCount, plus nodeRunId for task node messages (modify; patch can
+         *       change text)
+         *     - inbox.before_deliver: text, from, to or replyTo (modify, for messages sent by an Agent; patch can change text)
+         *     - sleep.before_schedule: durationSeconds, reason (modify; patch can change durationSeconds)
+         *     - console.command: command (the first word after /), text, from (claim; the result can carry reply)
+         *     projectId: the project for events inside a project; null for platform Agent and global events. Events inside a
+         *     project go only to subscribers that have the plugin enabled in that project; events with null go to all
+         *     subscribers.
          */
         PluginEvent: {
             /** @description ULID */
@@ -7813,7 +8144,7 @@ export interface components {
         };
     };
     responses: {
-        /** @description 令牌缺失、无效、过期或已吊销，或所属身份已删除（`unauthenticated`）。只出现在对外端口与 Agent 专用接口上；错误信息不回显令牌 */
+        /** @description The token is missing, invalid, expired or revoked, or its identity has been deleted (`unauthenticated`). Occurs only on the external port and on Agent-only endpoints; the error message never echoes the token */
         Unauthenticated: {
             headers: {
                 "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -7825,9 +8156,11 @@ export interface components {
             };
         };
         /**
-         * @description `error.code` 取值：
-         *     - `forbidden`：身份有效，但不允许这个操作：外部身份调用 `x-access: console` 的操作，跨组织发送被拒绝，或在控制台接口上带了令牌；
-         *     - `forbidden_origin`、`invalid_host`：控制台接口的 Origin 或 Host 不在允许名单。
+         * @description `error.code` values:
+         *     - `forbidden`: the identity is valid but not allowed to do this: an external identity called an
+         *       `x-access: console` operation, a cross-organization send was rejected, or a token was sent to a console
+         *       endpoint;
+         *     - `forbidden_origin`, `invalid_host`: the Origin or Host of a console endpoint request is not on the allowlist.
          */
         Forbidden: {
             headers: {
@@ -7839,7 +8172,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description 资源不存在（含已删除的 Agent） */
+        /** @description The resource does not exist (including deleted Agents) */
         NotFound: {
             headers: {
                 "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -7851,8 +8184,9 @@ export interface components {
             };
         };
         /**
-         * @description 与当前状态冲突。`error.code` 取值：
-         *     `agent_busy`（details 为 AgentBusyDetails）、`agent_not_idle`（删除项目时 details 为 ProjectNotIdleDetails，其余不带 details）、`session_missing`、`template_deleted`、`name_conflict`、`path_conflict`。
+         * @description Conflicts with the current state. `error.code` values:
+         *     `agent_busy` (details is AgentBusyDetails), `agent_not_idle` (details is ProjectNotIdleDetails when deleting a
+         *     project, otherwise no details), `session_missing`, `template_deleted`, `name_conflict`, `path_conflict`.
          */
         Conflict: {
             headers: {
@@ -7864,7 +8198,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description 校验失败，尽量带字段级错误 */
+        /** @description Validation failed, with field-level errors where possible */
         ValidationFailed: {
             headers: {
                 "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -7875,7 +8209,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description If-Match 与当前内容不一致 */
+        /** @description If-Match does not match the current content */
         PreconditionFailed: {
             headers: {
                 "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -7886,7 +8220,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description 超过大小上限 */
+        /** @description Exceeds the size limit */
         PayloadTooLarge: {
             headers: {
                 "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -7897,7 +8231,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description 安全化internal_error；不能以失败响应推断提交已回滚 */
+        /** @description Sanitized internal_error; a failure response does not mean the commit was rolled back. */
         CLIImportInternalError: {
             headers: {
                 "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -7908,7 +8242,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description precondition_failed或import_source_changed，需核对revision/重新扫描 */
+        /** @description precondition_failed or import_source_changed; check the revision or scan again. */
         CLIImportPreconditionFailed: {
             headers: {
                 "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -7919,7 +8253,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description HTTP503同样使用现internal_error；提交未知只查询原operation，不重发工作 */
+        /** @description HTTP 503 also uses the existing internal_error code; when the commit outcome is unknown, only query the original operation and do not resend the work. */
         CLIImportUnavailable: {
             headers: {
                 "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -7934,21 +8268,21 @@ export interface components {
     parameters: {
         AgentId: string;
         ProjectId: string;
-        /** @description 插件 id（清单 loopNow.id） */
+        /** @description Plugin id (loopNow.id in the manifest) */
         PluginId: string;
-        /** @description 预览 id（`POST /plugin-previews` 返回） */
+        /** @description Preview id (returned by `POST /plugin-previews`) */
         PluginPreviewId: string;
-        /** @description 想读的语言，写法同插件文字的语言键（如 zh-CN、en-US）；不合法返回 422 */
+        /** @description The language to read, written like the locale keys of plugin text (such as zh-CN or en-US); an invalid value returns 422 */
         PluginReadmeLocale: string;
         PluginAccountId: string;
-        /** @description 只看这个项目（未删除）中的 Agent；与 platform 二选一，同时给出时返回 422；都不给表示所有未删除项目与平台 */
+        /** @description Only Agents in this (non-deleted) project; mutually exclusive with platform, and giving both returns 422. Giving neither means all non-deleted projects and the platform */
         ScopeProjectId: string;
-        /** @description 为 true 时只看平台持有的 Agent；与 projectId 二选一 */
+        /** @description When true, only platform-owned Agents; mutually exclusive with projectId */
         ScopePlatform: boolean;
         RunId: string;
-        /** @description 文件夹内的相对路径；缺省或空串表示文件夹根 */
+        /** @description Relative path within the folder; omitted or an empty string means the folder root */
         FolderPath: string;
-        /** @description 文件夹内的相对路径，例如 `docs/intro.md`；不能为空，不能含 `..` 或以 `/` 开头 */
+        /** @description Relative path within the folder, such as `docs/intro.md`; must not be empty, contain `..` or start with `/` */
         FolderEntryPath: string;
         SkillId: string;
         AgentSkillId: string;
@@ -7958,18 +8292,18 @@ export interface components {
         ThreadId: string;
         IdentityId: string;
         TokenId: string;
-        /** @description 为 true 时只列未读（已读时间为空）的消息；默认包含已读与未读 */
+        /** @description When true, lists only unread messages (no read time); by default both read and unread messages are included */
         InboxUnread: boolean;
-        /** @description 上一页返回的 nextCursor；不透明字符串，无效时返回 422 */
+        /** @description The nextCursor returned by the previous page; an opaque string, and an invalid one returns 422 */
         PageCursor: string;
-        /** @description 每页条数，默认 20；超过服务端的上限（默认 100，可配置）时按上限返回 */
+        /** @description Items per page, default 20; a value over the server limit (default 100, configurable) is capped at that limit */
         PageLimit: number;
     };
     requestBodies: never;
     headers: {
-        /** @description 本次请求的唯一编号（UUIDv7），与服务端日志中的 requestId 一致；控制台出错时显示它 */
+        /** @description Unique ID of this request (UUIDv7), the same as requestId in the server logs; the console shows it on errors */
         RequestId: string;
-        /** @description 服务端版本（与 loopctl 共用的版本包），loopctl 据此比对版本；跨源访问时与 `Loop-Now-Request-Id`、`ETag` 一起列在 `Access-Control-Expose-Headers` 中 */
+        /** @description Server version (from the version package shared with loopctl), which loopctl compares against its own; for cross-origin access it is listed in `Access-Control-Expose-Headers` together with `Loop-Now-Request-Id` and `ETag` */
         Version: string;
     };
     pathItems: never;
@@ -7994,7 +8328,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 稳定imageId上传，同scope同内容可重传；上传不发消息、不标已读。 */
+            /** @description Uploads under a stable imageId; the same content in the same scope may be uploaded again. Uploading does not send a message or mark anything as read. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -8003,7 +8337,7 @@ export interface operations {
                     "application/json": components["schemas"]["MessageImage"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8012,7 +8346,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8021,7 +8355,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -8030,7 +8364,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8039,7 +8373,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             412: {
                 headers: {
                     [name: string]: unknown;
@@ -8048,7 +8382,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -8057,7 +8391,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8066,7 +8400,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -8075,7 +8409,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -8105,7 +8439,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 稳定imageId上传，同scope同内容可重传；上传不发消息、不标已读。 */
+            /** @description Uploads under a stable imageId; the same content in the same scope may be uploaded again. Uploading does not send a message or mark anything as read. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -8114,7 +8448,7 @@ export interface operations {
                     "application/json": components["schemas"]["MessageImage"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8123,7 +8457,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8132,7 +8466,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -8141,7 +8475,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8150,7 +8484,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             412: {
                 headers: {
                     [name: string]: unknown;
@@ -8159,7 +8493,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -8168,7 +8502,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8177,7 +8511,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -8186,7 +8520,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -8208,7 +8542,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 仅按原消息可读边界读取已绑定图片。 */
+            /** @description Reads a bound image only within the read boundary of its original message. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8219,7 +8553,7 @@ export interface operations {
                     "image/webp": string;
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8228,7 +8562,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8237,7 +8571,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -8246,7 +8580,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8255,7 +8589,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             412: {
                 headers: {
                     [name: string]: unknown;
@@ -8264,7 +8598,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -8273,7 +8607,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8282,7 +8616,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -8291,7 +8625,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 错误 */
+            /** @description Error */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -8317,7 +8651,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8335,7 +8669,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8346,7 +8680,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8374,7 +8708,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             201: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8392,7 +8726,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8403,7 +8737,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8428,7 +8762,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8446,7 +8780,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8457,7 +8791,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8484,7 +8818,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8502,7 +8836,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8513,7 +8847,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8542,7 +8876,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8560,7 +8894,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8571,7 +8905,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8600,7 +8934,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8618,7 +8952,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8629,7 +8963,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8658,7 +8992,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8676,7 +9010,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8687,7 +9021,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8711,7 +9045,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8729,7 +9063,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8740,7 +9074,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8768,7 +9102,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8786,7 +9120,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8797,7 +9131,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8824,7 +9158,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8842,7 +9176,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8853,7 +9187,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8881,7 +9215,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             202: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8899,7 +9233,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8910,7 +9244,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8935,7 +9269,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8953,7 +9287,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8964,7 +9298,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -8989,7 +9323,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9007,7 +9341,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9018,7 +9352,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9047,7 +9381,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 回答已交给登录；prompt 清空，扩展的下一步可能带来新的 prompt 或地址 */
+            /** @description The answer was handed to the login; prompt is cleared, and the extension's next step may bring a new prompt or URL */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9063,7 +9397,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 服务端错误或组件暂不可用；固定安全消息 */
+            /** @description Server error or component temporarily unavailable; fixed safe message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9087,7 +9421,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9096,7 +9430,7 @@ export interface operations {
                     "application/json": components["schemas"]["ModelAuthState"];
                 };
             };
-            /** @description 请求无效 */
+            /** @description Invalid request */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9106,7 +9440,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
-            /** @description 仅控制台 */
+            /** @description Console only */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9115,7 +9449,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Agent或操作不存在 */
+            /** @description Agent or operation not found */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -9124,7 +9458,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 已有登录操作 */
+            /** @description A login operation already exists */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -9133,7 +9467,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 配置版本变化 */
+            /** @description Config version changed */
             412: {
                 headers: {
                     [name: string]: unknown;
@@ -9142,7 +9476,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 请求过大 */
+            /** @description Request too large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -9151,7 +9485,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 字段校验失败 */
+            /** @description Field validation failed */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -9160,7 +9494,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 内部错误 */
+            /** @description Internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -9169,7 +9503,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 认证组件未装配或不可用 */
+            /** @description Auth component not wired up or unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -9195,7 +9529,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9204,7 +9538,7 @@ export interface operations {
                     "application/json": components["schemas"]["ModelAuthOperation"];
                 };
             };
-            /** @description 请求无效 */
+            /** @description Invalid request */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9214,7 +9548,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
-            /** @description 仅控制台 */
+            /** @description Console only */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9223,7 +9557,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Agent或操作不存在 */
+            /** @description Agent or operation not found */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -9232,7 +9566,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 已有登录操作 */
+            /** @description A login operation already exists */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -9241,7 +9575,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 配置版本变化 */
+            /** @description Config version changed */
             412: {
                 headers: {
                     [name: string]: unknown;
@@ -9250,7 +9584,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 请求过大 */
+            /** @description Request too large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -9259,7 +9593,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 字段校验失败 */
+            /** @description Field validation failed */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -9268,7 +9602,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 内部错误 */
+            /** @description Internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -9277,7 +9611,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 认证组件未装配或不可用 */
+            /** @description Auth component not wired up or unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -9300,7 +9634,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9309,7 +9643,7 @@ export interface operations {
                     "application/json": components["schemas"]["ModelAuthOperation"];
                 };
             };
-            /** @description 请求无效 */
+            /** @description Invalid request */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9319,7 +9653,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
-            /** @description 仅控制台 */
+            /** @description Console only */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9328,7 +9662,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Agent或操作不存在 */
+            /** @description Agent or operation not found */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -9337,7 +9671,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 已有登录操作 */
+            /** @description A login operation already exists */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -9346,7 +9680,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 配置版本变化 */
+            /** @description Config version changed */
             412: {
                 headers: {
                     [name: string]: unknown;
@@ -9355,7 +9689,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 请求过大 */
+            /** @description Request too large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -9364,7 +9698,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 字段校验失败 */
+            /** @description Field validation failed */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -9373,7 +9707,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 内部错误 */
+            /** @description Internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -9382,7 +9716,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 认证组件未装配或不可用 */
+            /** @description Auth component not wired up or unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -9409,7 +9743,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9418,7 +9752,7 @@ export interface operations {
                     "application/json": components["schemas"]["ModelAuthOperation"];
                 };
             };
-            /** @description 请求无效 */
+            /** @description Invalid request */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9428,7 +9762,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
-            /** @description 仅控制台 */
+            /** @description Console only */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9437,7 +9771,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Agent或操作不存在 */
+            /** @description Agent or operation not found */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -9446,7 +9780,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 已有登录操作 */
+            /** @description A login operation already exists */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -9455,7 +9789,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 配置版本变化 */
+            /** @description Config version changed */
             412: {
                 headers: {
                     [name: string]: unknown;
@@ -9464,7 +9798,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 请求过大 */
+            /** @description Request too large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -9473,7 +9807,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 字段校验失败 */
+            /** @description Field validation failed */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -9482,7 +9816,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 内部错误 */
+            /** @description Internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -9491,7 +9825,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 认证组件未装配或不可用 */
+            /** @description Auth component not wired up or unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -9518,7 +9852,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 回答已交给登录；prompt 清空，扩展的下一步可能带来新的 prompt 或地址 */
+            /** @description The answer was handed to the login; prompt is cleared, and the extension's next step may bring a new prompt or URL */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9527,7 +9861,7 @@ export interface operations {
                     "application/json": components["schemas"]["ModelAuthState"];
                 };
             };
-            /** @description 请求无效 */
+            /** @description Invalid request */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9537,7 +9871,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
-            /** @description 仅控制台 */
+            /** @description Console only */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -9546,7 +9880,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Agent或操作不存在 */
+            /** @description Agent or operation not found */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -9555,7 +9889,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 请求过大 */
+            /** @description Request too large */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -9564,7 +9898,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 字段校验失败 */
+            /** @description Field validation failed */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -9573,7 +9907,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 内部错误 */
+            /** @description Internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -9593,7 +9927,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 默认上下文 */
+            /** @description Default context */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9617,7 +9951,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 当前身份 */
+            /** @description Current identity */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9641,7 +9975,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 全部可用 */
+            /** @description All available */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9654,7 +9988,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
-            /** @description 至少一项不可用 */
+            /** @description At least one item unavailable */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9670,7 +10004,7 @@ export interface operations {
     listModelProviders: {
         parameters: {
             query?: {
-                /** @description 给插件提供方标出这个 Agent 能否用；Agent 不存在返回 404 */
+                /** @description Marks for plugin providers whether this Agent can use them; returns 404 if the Agent does not exist */
                 agentId?: string;
             };
             header?: never;
@@ -9679,7 +10013,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 提供方列表 */
+            /** @description Provider list */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9705,7 +10039,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 当前文档与修订号 */
+            /** @description Current document and revision */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9733,7 +10067,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 保存后的文档与修订号 */
+            /** @description Saved document and revision */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9760,7 +10094,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 当前开关 */
+            /** @description Current switches */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9788,7 +10122,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 修改后的全部开关 */
+            /** @description All switches after the change */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9807,7 +10141,7 @@ export interface operations {
     listRuntimes: {
         parameters: {
             query?: {
-                /** @description 为 true 时不用缓存，重新检查 */
+                /** @description When true, skip the cache and check again */
                 refresh?: boolean;
             };
             header?: never;
@@ -9816,7 +10150,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 各运行时的状态，pi 在前 */
+            /** @description Status of each runtime, pi first */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9843,7 +10177,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 模型列表 */
+            /** @description Model list */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9868,7 +10202,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 模板列表 */
+            /** @description Template list */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9894,7 +10228,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 项目列表，默认项目在前，其余按名称排序 */
+            /** @description Project list; the default project first, the rest sorted by name */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9924,7 +10258,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已创建 */
+            /** @description Created */
             201: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9952,7 +10286,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 项目 */
+            /** @description Project */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -9979,7 +10313,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 已删除 */
+            /** @description Deleted */
             204: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10010,7 +10344,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 修改后的项目 */
+            /** @description The updated project */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10039,7 +10373,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 当前已保存的项目 Prompt（不是旧任务快照） */
+            /** @description The currently saved project Prompt (not an old task snapshot) */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10069,7 +10403,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 保存后的文本与版本 */
+            /** @description Saved text and version */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10102,7 +10436,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 修改后的项目 */
+            /** @description The updated project */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10130,7 +10464,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 修改后的项目 */
+            /** @description The updated project */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10157,7 +10491,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Agent 列表 */
+            /** @description Agent list */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10188,7 +10522,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已创建 */
+            /** @description Created */
             201: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10216,7 +10550,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Agent 列表 */
+            /** @description Agent list */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10244,7 +10578,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已创建 */
+            /** @description Created */
             201: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10273,7 +10607,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 匹配的 Agent（0 或 1 项） */
+            /** @description Matching Agents (0 or 1 item) */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10300,7 +10634,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Agent 详情 */
+            /** @description Agent details */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10327,7 +10661,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 已删除 */
+            /** @description Deleted */
             204: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10357,7 +10691,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 修改后的 Agent */
+            /** @description The updated Agent */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10380,7 +10714,7 @@ export interface operations {
     listAgentFolderEntries: {
         parameters: {
             query?: {
-                /** @description 文件夹内的相对路径；缺省或空串表示文件夹根 */
+                /** @description Relative path within the folder; omitted or an empty string means the folder root */
                 path?: components["parameters"]["FolderPath"];
                 cursor?: string;
                 limit?: number;
@@ -10393,7 +10727,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 这一层的条目 */
+            /** @description Entries at this level */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10413,7 +10747,7 @@ export interface operations {
     deleteAgentFolderEntry: {
         parameters: {
             query: {
-                /** @description 文件夹内的相对路径，例如 `docs/intro.md`；不能为空，不能含 `..` 或以 `/` 开头 */
+                /** @description Relative path within the folder, such as `docs/intro.md`; must not be empty, contain `..` or start with `/` */
                 path: components["parameters"]["FolderEntryPath"];
             };
             header?: never;
@@ -10424,7 +10758,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 已删除 */
+            /** @description Deleted */
             204: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10442,7 +10776,7 @@ export interface operations {
     getAgentFolderFileContent: {
         parameters: {
             query: {
-                /** @description 文件夹内的相对路径，例如 `docs/intro.md`；不能为空，不能含 `..` 或以 `/` 开头 */
+                /** @description Relative path within the folder, such as `docs/intro.md`; must not be empty, contain `..` or start with `/` */
                 path: components["parameters"]["FolderEntryPath"];
             };
             header?: never;
@@ -10453,7 +10787,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 文件内容 */
+            /** @description File content */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10464,7 +10798,7 @@ export interface operations {
                     "application/octet-stream": string;
                 };
             };
-            /** @description 请求的字节范围 */
+            /** @description The requested byte range */
             206: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10484,7 +10818,7 @@ export interface operations {
     putAgentFolderFileContent: {
         parameters: {
             query: {
-                /** @description 文件夹内的相对路径，例如 `docs/intro.md`；不能为空，不能含 `..` 或以 `/` 开头 */
+                /** @description Relative path within the folder, such as `docs/intro.md`; must not be empty, contain `..` or start with `/` */
                 path: components["parameters"]["FolderEntryPath"];
                 create?: boolean;
             };
@@ -10500,7 +10834,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已保存 */
+            /** @description Saved */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10534,7 +10868,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已新建（已存在的目录同样返回） */
+            /** @description Created (an existing directory is returned the same way) */
             201: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10567,7 +10901,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 移动后的条目 */
+            /** @description The moved entry */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10598,7 +10932,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 最近的拉取 */
+            /** @description Recent pulls */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10630,7 +10964,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已受理 */
+            /** @description Accepted */
             202: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10660,7 +10994,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 操作状态 */
+            /** @description Operation status */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10679,7 +11013,7 @@ export interface operations {
     listProjectContextFolderEntries: {
         parameters: {
             query?: {
-                /** @description 文件夹内的相对路径；缺省或空串表示文件夹根 */
+                /** @description Relative path within the folder; omitted or an empty string means the folder root */
                 path?: components["parameters"]["FolderPath"];
                 cursor?: string;
                 limit?: number;
@@ -10692,7 +11026,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 这一层的条目 */
+            /** @description Entries at this level */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10712,7 +11046,7 @@ export interface operations {
     deleteProjectContextFolderEntry: {
         parameters: {
             query: {
-                /** @description 文件夹内的相对路径，例如 `docs/intro.md`；不能为空，不能含 `..` 或以 `/` 开头 */
+                /** @description Relative path within the folder, such as `docs/intro.md`; must not be empty, contain `..` or start with `/` */
                 path: components["parameters"]["FolderEntryPath"];
             };
             header?: never;
@@ -10723,7 +11057,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 已删除 */
+            /** @description Deleted */
             204: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10741,7 +11075,7 @@ export interface operations {
     getProjectContextFolderFileContent: {
         parameters: {
             query: {
-                /** @description 文件夹内的相对路径，例如 `docs/intro.md`；不能为空，不能含 `..` 或以 `/` 开头 */
+                /** @description Relative path within the folder, such as `docs/intro.md`; must not be empty, contain `..` or start with `/` */
                 path: components["parameters"]["FolderEntryPath"];
             };
             header?: never;
@@ -10752,7 +11086,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 文件内容 */
+            /** @description File content */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10763,7 +11097,7 @@ export interface operations {
                     "application/octet-stream": string;
                 };
             };
-            /** @description 请求的字节范围 */
+            /** @description The requested byte range */
             206: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10783,7 +11117,7 @@ export interface operations {
     putProjectContextFolderFileContent: {
         parameters: {
             query: {
-                /** @description 文件夹内的相对路径，例如 `docs/intro.md`；不能为空，不能含 `..` 或以 `/` 开头 */
+                /** @description Relative path within the folder, such as `docs/intro.md`; must not be empty, contain `..` or start with `/` */
                 path: components["parameters"]["FolderEntryPath"];
                 create?: boolean;
             };
@@ -10799,7 +11133,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已保存 */
+            /** @description Saved */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10833,7 +11167,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已新建（已存在的目录同样返回） */
+            /** @description Created (an existing directory is returned the same way) */
             201: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10866,7 +11200,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 移动后的条目 */
+            /** @description The moved entry */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10895,7 +11229,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 清单 */
+            /** @description The list */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10926,7 +11260,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 保存后的清单（含 status） */
+            /** @description The saved list (with status) */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10955,7 +11289,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 清单 */
+            /** @description The list */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -10986,7 +11320,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 保存后的清单（含 status） */
+            /** @description The saved list (with status) */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11007,7 +11341,7 @@ export interface operations {
     listGlobalContextFolderEntries: {
         parameters: {
             query?: {
-                /** @description 文件夹内的相对路径；缺省或空串表示文件夹根 */
+                /** @description Relative path within the folder; omitted or an empty string means the folder root */
                 path?: components["parameters"]["FolderPath"];
                 cursor?: string;
                 limit?: number;
@@ -11018,7 +11352,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 这一层的条目 */
+            /** @description Entries at this level */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11038,7 +11372,7 @@ export interface operations {
     deleteGlobalContextFolderEntry: {
         parameters: {
             query: {
-                /** @description 文件夹内的相对路径，例如 `docs/intro.md`；不能为空，不能含 `..` 或以 `/` 开头 */
+                /** @description Relative path within the folder, such as `docs/intro.md`; must not be empty, contain `..` or start with `/` */
                 path: components["parameters"]["FolderEntryPath"];
             };
             header?: never;
@@ -11047,7 +11381,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 已删除 */
+            /** @description Deleted */
             204: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11065,7 +11399,7 @@ export interface operations {
     getGlobalContextFolderFileContent: {
         parameters: {
             query: {
-                /** @description 文件夹内的相对路径，例如 `docs/intro.md`；不能为空，不能含 `..` 或以 `/` 开头 */
+                /** @description Relative path within the folder, such as `docs/intro.md`; must not be empty, contain `..` or start with `/` */
                 path: components["parameters"]["FolderEntryPath"];
             };
             header?: never;
@@ -11074,7 +11408,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 文件内容 */
+            /** @description File content */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11085,7 +11419,7 @@ export interface operations {
                     "application/octet-stream": string;
                 };
             };
-            /** @description 请求的字节范围 */
+            /** @description The requested byte range */
             206: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11105,7 +11439,7 @@ export interface operations {
     putGlobalContextFolderFileContent: {
         parameters: {
             query: {
-                /** @description 文件夹内的相对路径，例如 `docs/intro.md`；不能为空，不能含 `..` 或以 `/` 开头 */
+                /** @description Relative path within the folder, such as `docs/intro.md`; must not be empty, contain `..` or start with `/` */
                 path: components["parameters"]["FolderEntryPath"];
                 create?: boolean;
             };
@@ -11119,7 +11453,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已保存 */
+            /** @description Saved */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11151,7 +11485,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已新建（已存在的目录同样返回） */
+            /** @description Created (an existing directory is returned the same way) */
             201: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11182,7 +11516,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 移动后的条目 */
+            /** @description The moved entry */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11212,7 +11546,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 该 CLI 的状态 */
+            /** @description The CLI's status */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11241,7 +11575,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 已移除 */
+            /** @description Removed */
             204: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11272,7 +11606,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 凭证元数据 */
+            /** @description Credential metadata */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11303,7 +11637,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 已删除 */
+            /** @description Deleted */
             204: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11334,7 +11668,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 凭证元数据 */
+            /** @description Credential metadata */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11352,7 +11686,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 认证组件不可用 */
+            /** @description Authentication component unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -11374,7 +11708,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 已删除 */
+            /** @description Deleted */
             204: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11388,7 +11722,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             412: components["responses"]["PreconditionFailed"];
-            /** @description 认证组件不可用 */
+            /** @description Authentication component unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -11408,7 +11742,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 模板列表 */
+            /** @description Template list */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11439,7 +11773,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已创建 */
+            /** @description Created */
             201: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11468,7 +11802,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 模板详情 */
+            /** @description Template details */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11499,7 +11833,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 替换后的模板 */
+            /** @description The template after replacement */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11529,7 +11863,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 已删除 */
+            /** @description Deleted */
             204: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11558,7 +11892,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 修改后的模板 */
+            /** @description The updated template */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11588,7 +11922,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 副本列表 */
+            /** @description List of copies */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11624,7 +11958,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已复制 */
+            /** @description Copied */
             201: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11655,7 +11989,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 副本详情 */
+            /** @description Copy details */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11683,7 +12017,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 已移除 */
+            /** @description Removed */
             204: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11713,7 +12047,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 修改后的副本 */
+            /** @description The updated copy */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11744,7 +12078,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 覆盖后的副本 */
+            /** @description The copy after overwriting */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11764,13 +12098,14 @@ export interface operations {
     listMessages: {
         parameters: {
             query?: {
-                /** @description 返回这条消息之前的消息。before、after、aroundRun 最多只能传一个，都不传时返回最新一页 */
+                /** @description Returns the messages before this message. Pass at most one of before, after and aroundRun; with none of them, the latest page is returned */
                 before?: string;
-                /** @description 返回这条消息之后更新的消息 */
+                /** @description Returns the newer messages after this message */
                 after?: string;
                 /**
-                 * @description 返回包含该执行的一页：以它的用户消息为中心，前后各取一部分；执行不属于该 Agent 时返回 404。
-                 *     手动压缩（/compact）的执行没有对话消息，以它开始时的位置为中心：之前的最后一条消息之后。
+                 * @description Returns the page containing this run, centered on its user message with some messages on each side; returns
+                 *     404 when the run does not belong to this Agent. A manual compaction (/compact) run has no conversation
+                 *     message, so the page is centered on where it started: just after the last message before it.
                  */
                 aroundRun?: string;
                 limit?: number;
@@ -11783,7 +12118,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 一页消息 */
+            /** @description A page of messages */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11815,7 +12150,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 以 / 开头的命令被插件认领；消息没有发给 Agent */
+            /** @description A command starting with / was claimed by a plugin; the message was not sent to the Agent */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11826,7 +12161,7 @@ export interface operations {
                     "application/json": components["schemas"]["ConsoleCommandResult"];
                 };
             };
-            /** @description 已接收（已开始处理或已排队） */
+            /** @description Accepted (processing has started, or the message is queued) */
             202: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11856,7 +12191,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 状态 */
+            /** @description Status */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11883,7 +12218,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 新的会话状态 */
+            /** @description The new session state */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11913,7 +12248,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 当前会话的 HTML 或 JSONL 文件 */
+            /** @description The current session as an HTML or JSONL file */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11945,7 +12280,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 事件流 */
+            /** @description Event stream */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -11973,7 +12308,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 时间线 */
+            /** @description Timeline */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12000,7 +12335,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 排队列表 */
+            /** @description The queue */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12032,7 +12367,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 动作结果；同一 actionId 重放返回首次结果 */
+            /** @description Action result; replaying the same actionId returns the first result */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12066,7 +12401,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 动作结果；同一 actionId 重放返回首次结果 */
+            /** @description Action result; replaying the same actionId returns the first result */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12100,7 +12435,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 动作结果；同一 actionId 重放返回首次结果 */
+            /** @description Action result; replaying the same actionId returns the first result */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12134,7 +12469,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 动作结果；同一 actionId 重放返回首次结果 */
+            /** @description Action result; replaying the same actionId returns the first result */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12168,7 +12503,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 动作结果；同一 actionId 重放返回首次结果 */
+            /** @description Action result; replaying the same actionId returns the first result */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12189,11 +12524,11 @@ export interface operations {
     listAgentInbox: {
         parameters: {
             query?: {
-                /** @description 为 true 时只列未读（已读时间为空）的消息；默认包含已读与未读 */
+                /** @description When true, lists only unread messages (no read time); by default both read and unread messages are included */
                 unread?: components["parameters"]["InboxUnread"];
-                /** @description 上一页返回的 nextCursor；不透明字符串，无效时返回 422 */
+                /** @description The nextCursor returned by the previous page; an opaque string, and an invalid one returns 422 */
                 cursor?: components["parameters"]["PageCursor"];
-                /** @description 每页条数，默认 20；超过服务端的上限（默认 100，可配置）时按上限返回 */
+                /** @description Items per page, default 20; a value over the server limit (default 100, configurable) is capped at that limit */
                 limit?: components["parameters"]["PageLimit"];
             };
             header?: never;
@@ -12204,7 +12539,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 一页消息摘要 */
+            /** @description A page of message summaries */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12224,9 +12559,9 @@ export interface operations {
     listAgentConsoleMessages: {
         parameters: {
             query?: {
-                /** @description 上一页返回的 nextCursor；不透明字符串，无效时返回 422 */
+                /** @description The nextCursor returned by the previous page; an opaque string, and an invalid one returns 422 */
                 cursor?: components["parameters"]["PageCursor"];
-                /** @description 每页条数，默认 20；超过服务端的上限（默认 100，可配置）时按上限返回 */
+                /** @description Items per page, default 20; a value over the server limit (default 100, configurable) is capped at that limit */
                 limit?: components["parameters"]["PageLimit"];
             };
             header?: never;
@@ -12237,7 +12572,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 一页消息全文 */
+            /** @description A page of full messages */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12266,7 +12601,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 消息全文 */
+            /** @description The full message */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12285,9 +12620,9 @@ export interface operations {
     streamOverviewEvents: {
         parameters: {
             query?: {
-                /** @description 只看这个项目（未删除）中的 Agent；与 platform 二选一，同时给出时返回 422；都不给表示所有未删除项目与平台 */
+                /** @description Only Agents in this (non-deleted) project; mutually exclusive with platform, and giving both returns 422. Giving neither means all non-deleted projects and the platform */
                 projectId?: components["parameters"]["ScopeProjectId"];
-                /** @description 为 true 时只看平台持有的 Agent；与 projectId 二选一 */
+                /** @description When true, only platform-owned Agents; mutually exclusive with projectId */
                 platform?: components["parameters"]["ScopePlatform"];
             };
             header?: {
@@ -12298,7 +12633,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 事件流 */
+            /** @description Event stream */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12318,13 +12653,13 @@ export interface operations {
     getUsage: {
         parameters: {
             query?: {
-                /** @description 只看这个项目（未删除）中的 Agent；与 platform 二选一，同时给出时返回 422；都不给表示所有未删除项目与平台 */
+                /** @description Only Agents in this (non-deleted) project; mutually exclusive with platform, and giving both returns 422. Giving neither means all non-deleted projects and the platform */
                 projectId?: components["parameters"]["ScopeProjectId"];
-                /** @description 为 true 时只看平台持有的 Agent；与 projectId 二选一 */
+                /** @description When true, only platform-owned Agents; mutually exclusive with projectId */
                 platform?: components["parameters"]["ScopePlatform"];
-                /** @description 开始时间（含），RFC 3339；不传表示不限 */
+                /** @description Start time (inclusive), RFC 3339; omit for no limit */
                 from?: string;
-                /** @description 结束时间（不含），RFC 3339；不传表示不限。from 不早于 to 时返回 422 */
+                /** @description End time (exclusive), RFC 3339; omit for no limit. Returns 422 when from is not earlier than to */
                 to?: string;
             };
             header?: never;
@@ -12333,7 +12668,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 用量统计，按总数降序 */
+            /** @description Usage statistics, sorted by total, descending */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12353,13 +12688,13 @@ export interface operations {
     listAnomalies: {
         parameters: {
             query?: {
-                /** @description 只看这个项目（未删除）中的 Agent；与 platform 二选一，同时给出时返回 422；都不给表示所有未删除项目与平台 */
+                /** @description Only Agents in this (non-deleted) project; mutually exclusive with platform, and giving both returns 422. Giving neither means all non-deleted projects and the platform */
                 projectId?: components["parameters"]["ScopeProjectId"];
-                /** @description 为 true 时只看平台持有的 Agent；与 projectId 二选一 */
+                /** @description When true, only platform-owned Agents; mutually exclusive with projectId */
                 platform?: components["parameters"]["ScopePlatform"];
-                /** @description 只返回此后结束的执行，RFC 3339；不传表示不限 */
+                /** @description Return only runs that ended after this time, RFC 3339; omit for no limit */
                 from?: string;
-                /** @description 上一页返回的 nextCursor */
+                /** @description The nextCursor returned with the previous page */
                 cursor?: string;
                 limit?: number;
             };
@@ -12369,7 +12704,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 一页异常 */
+            /** @description A page of anomalies */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12389,15 +12724,15 @@ export interface operations {
     getStats: {
         parameters: {
             query: {
-                /** @description 只看这个项目（未删除）中的 Agent；与 platform 二选一，同时给出时返回 422；都不给表示所有未删除项目与平台 */
+                /** @description Only Agents in this (non-deleted) project; mutually exclusive with platform, and giving both returns 422. Giving neither means all non-deleted projects and the platform */
                 projectId?: components["parameters"]["ScopeProjectId"];
-                /** @description 为 true 时只看平台持有的 Agent；与 projectId 二选一 */
+                /** @description When true, only platform-owned Agents; mutually exclusive with projectId */
                 platform?: components["parameters"]["ScopePlatform"];
-                /** @description 开始时间（含），RFC 3339 */
+                /** @description Start time (inclusive), RFC 3339 */
                 from: string;
-                /** @description 结束时间（不含），RFC 3339。from 不早于 to 时返回 422 */
+                /** @description End time (exclusive), RFC 3339. Returns 422 when from is not earlier than to */
                 to: string;
-                /** @description 桶的宽度；桶数超过 1000 时返回 422 */
+                /** @description Bucket width; returns 422 when there would be more than 1000 buckets */
                 bucket: "hour" | "day";
             };
             header?: never;
@@ -12406,7 +12741,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 统计报表 */
+            /** @description Stats report */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12432,7 +12767,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 插件列表 */
+            /** @description Plugin list */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12460,7 +12795,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已安装 */
+            /** @description Installed */
             201: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12491,7 +12826,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 预览 */
+            /** @description Preview */
             201: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12511,12 +12846,12 @@ export interface operations {
     getPluginPreviewReadme: {
         parameters: {
             query?: {
-                /** @description 想读的语言，写法同插件文字的语言键（如 zh-CN、en-US）；不合法返回 422 */
+                /** @description The language to read, written like the locale keys of plugin text (such as zh-CN or en-US); an invalid value returns 422 */
                 locale?: components["parameters"]["PluginReadmeLocale"];
             };
             header?: never;
             path: {
-                /** @description 预览 id（`POST /plugin-previews` 返回） */
+                /** @description Preview id (returned by `POST /plugin-previews`) */
                 previewId: components["parameters"]["PluginPreviewId"];
             };
             cookie?: never;
@@ -12545,14 +12880,14 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 插件 */
+            /** @description Plugin */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12571,19 +12906,19 @@ export interface operations {
     uninstallPlugin: {
         parameters: {
             query?: {
-                /** @description 同时删除插件的数据目录，默认 false */
+                /** @description Also delete the plugin's data directory; default false */
                 deleteData?: boolean;
             };
             header?: never;
             path: {
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 已卸载 */
+            /** @description Uninstalled */
             204: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12600,12 +12935,12 @@ export interface operations {
     getPluginReadme: {
         parameters: {
             query?: {
-                /** @description 想读的语言，写法同插件文字的语言键（如 zh-CN、en-US）；不合法返回 422 */
+                /** @description The language to read, written like the locale keys of plugin text (such as zh-CN or en-US); an invalid value returns 422 */
                 locale?: components["parameters"]["PluginReadmeLocale"];
             };
             header?: never;
             path: {
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
@@ -12634,7 +12969,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
@@ -12645,7 +12980,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 更新后的插件 */
+            /** @description The updated plugin */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12668,14 +13003,14 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 全局配置 */
+            /** @description Global config */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12696,7 +13031,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
@@ -12707,7 +13042,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 保存后的配置 */
+            /** @description The saved config */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12728,21 +13063,21 @@ export interface operations {
     listPluginLogs: {
         parameters: {
             query?: {
-                /** @description 上一页的 nextBefore */
+                /** @description The nextBefore of the previous page */
                 before?: number;
-                /** @description 1 到 500，默认 100 */
+                /** @description 1 to 500, default 100 */
                 limit?: number;
             };
             header?: never;
             path: {
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 一页日志 */
+            /** @description A page of logs */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12763,23 +13098,23 @@ export interface operations {
         parameters: {
             query?: {
                 status?: "pending" | "delivered" | "failed";
-                /** @description 只看这个项目的事件 */
+                /** @description Only events of this project */
                 projectId?: string;
-                /** @description 上一页的 nextBefore（事件 id） */
+                /** @description The nextBefore of the previous page (an event id) */
                 before?: string;
-                /** @description 1 到 200，默认 50 */
+                /** @description 1 to 200, default 50 */
                 limit?: number;
             };
             header?: never;
             path: {
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 一页投递 */
+            /** @description A page of deliveries */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12800,19 +13135,19 @@ export interface operations {
         parameters: {
             query?: {
                 prefix?: string;
-                /** @description 项目级状态；不传时为插件全局状态 */
+                /** @description Project-level state; omit for the plugin's global state */
                 projectId?: string;
             };
             header?: never;
             path: {
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 按 key 排序，最多 1000 项 */
+            /** @description Sorted by key, at most 1000 entries */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12833,7 +13168,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
                 actionId: string;
             };
@@ -12845,7 +13180,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 插件的回应，以提示显示 */
+            /** @description The plugin's response, shown as a toast */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12861,7 +13196,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 插件报错（plugin_failed） */
+            /** @description The plugin reported an error (plugin_failed) */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -12870,7 +13205,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 插件没有在时限内回应（plugin_timeout） */
+            /** @description The plugin did not respond in time (plugin_timeout) */
             504: {
                 headers: {
                     [name: string]: unknown;
@@ -12890,7 +13225,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 各市场的插件 */
+            /** @description Plugins of each market */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12914,7 +13249,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 按 id 排序 */
+            /** @description Sorted by id */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12938,7 +13273,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 宿主状态 */
+            /** @description Plugin host status */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12962,7 +13297,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 已请求重启，宿主状态随后变化 */
+            /** @description Restart requested; the plugin host status changes afterwards */
             202: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -12987,7 +13322,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 设置 */
+            /** @description Settings */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13015,7 +13350,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 保存后的设置 */
+            /** @description The saved settings */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13042,7 +13377,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 按插件 id 排序 */
+            /** @description Sorted by plugin id */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13064,7 +13399,7 @@ export interface operations {
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
@@ -13075,7 +13410,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 保存后的项目插件 */
+            /** @description The saved project plugin */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13099,14 +13434,14 @@ export interface operations {
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 按种类、名称排序 */
+            /** @description Sorted by kind, then name */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13128,7 +13463,7 @@ export interface operations {
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
@@ -13139,7 +13474,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已添加 */
+            /** @description Added */
             201: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13163,7 +13498,7 @@ export interface operations {
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
                 accountId: components["parameters"]["PluginAccountId"];
             };
@@ -13175,7 +13510,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 修改后的账号 */
+            /** @description The updated account */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13199,7 +13534,7 @@ export interface operations {
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
                 accountId: components["parameters"]["PluginAccountId"];
             };
@@ -13207,7 +13542,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 已删除 */
+            /** @description Deleted */
             204: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13232,7 +13567,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 按插件 id 排序 */
+            /** @description Sorted by plugin id */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13259,7 +13594,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 命令列表 */
+            /** @description Command list */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13281,7 +13616,7 @@ export interface operations {
             header?: never;
             path: {
                 agentId: components["parameters"]["AgentId"];
-                /** @description 插件 id（清单 loopNow.id） */
+                /** @description Plugin id (loopNow.id in the manifest) */
                 pluginId: components["parameters"]["PluginId"];
             };
             cookie?: never;
@@ -13292,7 +13627,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 保存后的授权 */
+            /** @description The saved grant */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13313,11 +13648,11 @@ export interface operations {
     listInboxMessages: {
         parameters: {
             query?: {
-                /** @description 为 true 时只列未读（已读时间为空）的消息；默认包含已读与未读 */
+                /** @description When true, lists only unread messages (no read time); by default both read and unread messages are included */
                 unread?: components["parameters"]["InboxUnread"];
-                /** @description 上一页返回的 nextCursor；不透明字符串，无效时返回 422 */
+                /** @description The nextCursor returned by the previous page; an opaque string, and an invalid one returns 422 */
                 cursor?: components["parameters"]["PageCursor"];
-                /** @description 每页条数，默认 20；超过服务端的上限（默认 100，可配置）时按上限返回 */
+                /** @description Items per page, default 20; a value over the server limit (default 100, configurable) is capped at that limit */
                 limit?: components["parameters"]["PageLimit"];
             };
             header?: never;
@@ -13326,7 +13661,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 一页消息摘要 */
+            /** @description A page of message summaries */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13355,7 +13690,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已保存的消息 */
+            /** @description The saved message */
             201: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13369,7 +13704,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description 已回答/到期/关闭的选项回答或任务节点冲突，返回固定错误码及安全最新问题。 */
+            /** @description An option answer to a question that is already answered, expired or closed, or a task node conflict; returns a fixed error code and the latest safe view of the question. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -13397,7 +13732,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 消息全文 */
+            /** @description The full message */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13430,7 +13765,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已保存的回复 */
+            /** @description The saved reply */
             201: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13444,7 +13779,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description 已回答/到期/关闭的选项回答或任务节点冲突，返回固定错误码及安全最新问题。 */
+            /** @description An option answer to a question that is already answered, expired or closed, or a task node conflict; returns a fixed error code and the latest safe view of the question. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -13460,9 +13795,9 @@ export interface operations {
     listInboxThreads: {
         parameters: {
             query?: {
-                /** @description 上一页返回的 nextCursor；不透明字符串，无效时返回 422 */
+                /** @description The nextCursor returned by the previous page; an opaque string, and an invalid one returns 422 */
                 cursor?: components["parameters"]["PageCursor"];
-                /** @description 每页条数，默认 20；超过服务端的上限（默认 100，可配置）时按上限返回 */
+                /** @description Items per page, default 20; a value over the server limit (default 100, configurable) is capped at that limit */
                 limit?: components["parameters"]["PageLimit"];
             };
             header?: never;
@@ -13471,7 +13806,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 一页线索 */
+            /** @description A page of threads */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13500,7 +13835,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 线索 */
+            /** @description The thread */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13533,7 +13868,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 当前身份最新的未读总数 */
+            /** @description The current identity's latest unread total */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13560,7 +13895,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 待处理汇总 */
+            /** @description Pending summary */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13586,7 +13921,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 事件流 */
+            /** @description Event stream */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13610,7 +13945,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 外部身份列表，按创建时间正序（先创建的在前） */
+            /** @description External identities by creation time, oldest first */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13638,7 +13973,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 已创建 */
+            /** @description Created */
             201: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13666,7 +14001,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 外部身份 */
+            /** @description The external identity */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13693,7 +14028,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 已删除 */
+            /** @description Deleted */
             204: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13722,7 +14057,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 更新后的外部身份 */
+            /** @description The updated external identity */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13750,7 +14085,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 令牌列表，按签发时间倒序 */
+            /** @description Tokens by issue time, newest first */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13775,14 +14110,14 @@ export interface operations {
             };
             cookie?: never;
         };
-        /** @description 不传或为 `{}` 表示永不过期 */
+        /** @description Omit it, or send `{}`, for a token that never expires */
         requestBody?: {
             content: {
                 "application/json": components["schemas"]["ExternalTokenCreate"];
             };
         };
         responses: {
-            /** @description 已签发 */
+            /** @description Issued */
             201: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13811,7 +14146,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 已吊销 */
+            /** @description Revoked */
             204: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13828,13 +14163,13 @@ export interface operations {
     listExternalIdentityInbox: {
         parameters: {
             query?: {
-                /** @description received 只看发给它的，sent 只看它发出的，all（默认）两者都有 */
+                /** @description Which messages to list - `received` (sent to it), `sent` (sent by it) or `all` (both, the default) */
                 direction?: "received" | "sent" | "all";
-                /** @description 为 true 时只列未读（已读时间为空）的消息；默认包含已读与未读 */
+                /** @description When true, lists only unread messages (no read time); by default both read and unread messages are included */
                 unread?: components["parameters"]["InboxUnread"];
-                /** @description 上一页返回的 nextCursor；不透明字符串，无效时返回 422 */
+                /** @description The nextCursor returned by the previous page; an opaque string, and an invalid one returns 422 */
                 cursor?: components["parameters"]["PageCursor"];
-                /** @description 每页条数，默认 20；超过服务端的上限（默认 100，可配置）时按上限返回 */
+                /** @description Items per page, default 20; a value over the server limit (default 100, configurable) is capped at that limit */
                 limit?: components["parameters"]["PageLimit"];
             };
             header?: never;
@@ -13845,7 +14180,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 一页消息摘要 */
+            /** @description A page of message summaries */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13874,7 +14209,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 消息全文 */
+            /** @description The full message */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13901,7 +14236,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13912,7 +14247,7 @@ export interface operations {
                     "application/json": components["schemas"]["ConsoleTaskDetail"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             401: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13923,7 +14258,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             403: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13934,7 +14269,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             404: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13945,7 +14280,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             409: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13956,7 +14291,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             413: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13967,7 +14302,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             422: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -13978,7 +14313,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14003,7 +14338,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14014,7 +14349,7 @@ export interface operations {
                     "application/json": components["schemas"]["TaskNodeRun"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             401: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14025,7 +14360,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             403: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14036,7 +14371,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             404: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14047,7 +14382,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             409: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14058,7 +14393,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             413: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14069,7 +14404,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             422: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14080,7 +14415,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14108,7 +14443,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14119,7 +14454,7 @@ export interface operations {
                     "application/json": components["schemas"]["TaskMessagePage"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             401: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14130,7 +14465,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             403: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14141,7 +14476,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             404: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14152,7 +14487,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             409: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14163,7 +14498,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             413: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14174,7 +14509,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             422: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14185,7 +14520,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14214,7 +14549,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 接收成功 */
+            /** @description Accepted */
             201: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14225,7 +14560,7 @@ export interface operations {
                     "application/json": components["schemas"]["TaskNodeMessageReceipt"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             401: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14236,7 +14571,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             403: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14247,7 +14582,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             404: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14258,7 +14593,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             409: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14269,7 +14604,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             413: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14280,7 +14615,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             422: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14291,7 +14626,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14302,7 +14637,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14330,7 +14665,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14341,7 +14676,7 @@ export interface operations {
                     "application/json": components["schemas"]["TaskDetail"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             401: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14352,7 +14687,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             403: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14363,7 +14698,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             404: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14374,7 +14709,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             409: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14385,7 +14720,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             413: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14396,7 +14731,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             422: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14407,7 +14742,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14435,7 +14770,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14446,7 +14781,7 @@ export interface operations {
                     "application/json": components["schemas"]["TaskDetail"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             401: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14457,7 +14792,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             403: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14468,7 +14803,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             404: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14479,7 +14814,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             409: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14490,7 +14825,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             413: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14501,7 +14836,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             422: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14512,7 +14847,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14537,13 +14872,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 产物内容 */
+            /** @description Artifact content */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
                     "Loop-Now-Version": components["headers"]["Version"];
                     "X-Content-SHA256"?: string;
-                    /** @description attachment，按安全文件名编码 */
+                    /** @description attachment, with the file name safely encoded */
                     "Content-Disposition"?: string;
                     "X-Content-Type-Options"?: "nosniff";
                     [name: string]: unknown;
@@ -14552,7 +14887,7 @@ export interface operations {
                     "application/octet-stream": string;
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             401: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14563,7 +14898,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             403: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14574,7 +14909,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             404: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14585,7 +14920,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             409: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14596,7 +14931,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             413: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14607,7 +14942,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             422: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14618,7 +14953,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14645,7 +14980,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14656,7 +14991,7 @@ export interface operations {
                     "application/json": components["schemas"]["TaskPage"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             401: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14667,7 +15002,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             403: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14678,7 +15013,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             404: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14689,7 +15024,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             409: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14700,7 +15035,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             413: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14711,7 +15046,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             422: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14722,7 +15057,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14748,7 +15083,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description SSE流 */
+            /** @description SSE stream */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14759,7 +15094,7 @@ export interface operations {
                     "text/event-stream": string;
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             401: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14770,7 +15105,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             403: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14781,7 +15116,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             404: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14792,7 +15127,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             409: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14803,7 +15138,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             413: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14814,7 +15149,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             422: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14825,7 +15160,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14849,7 +15184,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 计数 */
+            /** @description Counts */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14878,7 +15213,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description SSE流 */
+            /** @description SSE stream */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14889,7 +15224,7 @@ export interface operations {
                     "text/event-stream": string;
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             401: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14900,7 +15235,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             403: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14911,7 +15246,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             404: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14922,7 +15257,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             409: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14933,7 +15268,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             413: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14944,7 +15279,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             422: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14955,7 +15290,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14980,7 +15315,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description DB有效模式与安全连接元数据；无secret，不验证远端 */
+            /** @description Effective database mode and safe connection metadata; contains no secrets and does not verify the remote server */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -14998,7 +15333,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 服务端组件暂不可用或内部错误；固定安全消息 */
+            /** @description A server component is temporarily unavailable or an internal error occurred; fixed safe message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15009,7 +15344,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 服务端组件暂不可用或内部错误；固定安全消息 */
+            /** @description A server component is temporarily unavailable or an internal error occurred; fixed safe message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15038,7 +15373,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description DB有效模式与安全连接元数据；无secret，不验证远端 */
+            /** @description Effective database mode and safe connection metadata; contains no secrets and does not verify the remote server */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15056,7 +15391,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 服务端组件暂不可用或内部错误；固定安全消息 */
+            /** @description A server component is temporarily unavailable or an internal error occurred; fixed safe message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15067,7 +15402,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 服务端组件暂不可用或内部错误；固定安全消息 */
+            /** @description A server component is temporarily unavailable or an internal error occurred; fixed safe message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15094,7 +15429,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description DB有效模式与安全连接元数据；无secret，不验证远端 */
+            /** @description Effective database mode and safe connection metadata; contains no secrets and does not verify the remote server */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15112,7 +15447,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 服务端组件暂不可用或内部错误；固定安全消息 */
+            /** @description A server component is temporarily unavailable or an internal error occurred; fixed safe message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15123,7 +15458,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 服务端组件暂不可用或内部错误；固定安全消息 */
+            /** @description A server component is temporarily unavailable or an internal error occurred; fixed safe message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15140,7 +15475,7 @@ export interface operations {
         parameters: {
             query?: {
                 accountId?: string;
-                /** @description 缺省保留gcloud兼容；GitHub必须显式cli=gh，单值非空。查询缓存以project+CLI及目标区分。 Lark必须显式cli=lark-cli。 */
+                /** @description Defaults to gcloud for compatibility; GitHub requires an explicit cli=gh, a single non-empty value. Query caches are keyed by project and CLI and by target. Lark requires an explicit cli=lark-cli. */
                 cli?: "gcloud" | "gh" | "lark-cli";
             };
             header?: never;
@@ -15151,7 +15486,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 当前操作与安全账号状态；只有活动操作包含授权URL */
+            /** @description Current operations and safe account state; only active operations include the authorization URL */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15169,7 +15504,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 固定安全失败信息 */
+            /** @description Fixed safe failure message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15180,7 +15515,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 固定安全失败信息 */
+            /** @description Fixed safe failure message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15208,7 +15543,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 当前操作与安全账号状态；只有活动操作包含授权URL */
+            /** @description Current operations and safe account state; only active operations include the authorization URL */
             202: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15226,7 +15561,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 固定安全失败信息 */
+            /** @description Fixed safe failure message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15237,7 +15572,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 固定安全失败信息 */
+            /** @description Fixed safe failure message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15262,7 +15597,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 当前操作与安全账号状态；只有活动操作包含授权URL */
+            /** @description Current operations and safe account state; only active operations include the authorization URL */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15280,7 +15615,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 固定安全失败信息 */
+            /** @description Fixed safe failure message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15291,7 +15626,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 固定安全失败信息 */
+            /** @description Fixed safe failure message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15316,7 +15651,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 当前操作与安全账号状态；只有活动操作包含授权URL */
+            /** @description Current operations and safe account state; only active operations include the authorization URL */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15334,7 +15669,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 固定安全失败信息 */
+            /** @description Fixed safe failure message */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15345,7 +15680,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 固定安全失败信息 */
+            /** @description Fixed safe failure message */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15370,7 +15705,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 接收成功 */
+            /** @description Accepted */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15381,7 +15716,7 @@ export interface operations {
                     "application/json": components["schemas"]["TaskNodeMessageCapability"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             401: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15392,7 +15727,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             403: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15403,7 +15738,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             404: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15414,7 +15749,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             409: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15425,7 +15760,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             413: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15436,7 +15771,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             422: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15447,7 +15782,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15458,7 +15793,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15483,7 +15818,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15501,7 +15836,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 固定安全错误；组件未装配不得假成功 */
+            /** @description Fixed safe error; a component that is not wired up never reports a false success. */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15512,7 +15847,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 固定安全错误；组件未装配不得假成功 */
+            /** @description Fixed safe error; a component that is not wired up never reports a false success. */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15541,7 +15876,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             202: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15559,7 +15894,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 固定安全错误；组件未装配不得假成功 */
+            /** @description Fixed safe error; a component that is not wired up never reports a false success. */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15570,7 +15905,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 固定安全错误；组件未装配不得假成功 */
+            /** @description Fixed safe error; a component that is not wired up never reports a false success. */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15596,7 +15931,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15614,7 +15949,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 固定安全错误；组件未装配不得假成功 */
+            /** @description Fixed safe error; a component that is not wired up never reports a false success. */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15625,7 +15960,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 固定安全错误；组件未装配不得假成功 */
+            /** @description Fixed safe error; a component that is not wired up never reports a false success. */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15651,7 +15986,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15669,7 +16004,7 @@ export interface operations {
             412: components["responses"]["PreconditionFailed"];
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ValidationFailed"];
-            /** @description 固定安全错误；组件未装配不得假成功 */
+            /** @description Fixed safe error; a component that is not wired up never reports a false success. */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15680,7 +16015,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 固定安全错误；组件未装配不得假成功 */
+            /** @description Fixed safe error; a component that is not wired up never reports a false success. */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15698,7 +16033,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description runtime另拒绝零UUID */
+                /** @description The zero UUID is also rejected at runtime. */
                 projectId: string;
             };
             cookie?: never;
@@ -15709,7 +16044,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 新接受操作或原操作回执（可为已终态），不能据此重复创建 */
+            /** @description Receipt of the newly accepted operation or of the original operation (possibly already terminal); a repeat does not create another operation. */
             202: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15736,16 +16071,16 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description runtime另拒绝零UUID */
+                /** @description The zero UUID is also rejected at runtime. */
                 projectId: string;
-                /** @description runtime另拒绝零UUID */
+                /** @description The zero UUID is also rejected at runtime. */
                 operationId: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 原操作安全状态；失败/取消/expired操作仍返回200 */
+            /** @description Safe state of the original operation; failed, cancelled and expired operations still return 200. */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15769,9 +16104,9 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description runtime另拒绝零UUID */
+                /** @description The zero UUID is also rejected at runtime. */
                 projectId: string;
-                /** @description runtime另拒绝零UUID */
+                /** @description The zero UUID is also rejected at runtime. */
                 operationId: string;
             };
             cookie?: never;
@@ -15782,7 +16117,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 实际操作状态，不删除已保存账号或假报回滚 */
+            /** @description The actual operation state; does not delete saved accounts or falsely report a rollback. */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15807,7 +16142,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description runtime另拒绝零UUID；现path解码不支持not */
+                /** @description The zero UUID is also rejected at runtime; the current path parameter decoding does not support `not`. */
                 projectId: string;
             };
             cookie?: never;
@@ -15818,7 +16153,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 当前实例/项目的内存scan，仅安全候选，默认不选 */
+            /** @description In-memory scan for the current instance and project; only safe candidates, none selected by default. */
             201: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15851,7 +16186,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 排队列表 */
+            /** @description The queue */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15884,7 +16219,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 动作结果；同一 actionId 重放返回首次结果 */
+            /** @description Action result; replaying the same actionId returns the first result */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15919,7 +16254,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 动作结果；同一 actionId 重放返回首次结果 */
+            /** @description Action result; replaying the same actionId returns the first result */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15954,7 +16289,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 动作结果；同一 actionId 重放返回首次结果 */
+            /** @description Action result; replaying the same actionId returns the first result */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15987,7 +16322,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -15998,7 +16333,7 @@ export interface operations {
                     "application/json": components["schemas"]["TaskNodeInboxPage"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             401: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16009,7 +16344,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             403: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16020,7 +16355,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             404: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16031,7 +16366,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             409: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16042,7 +16377,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             413: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16053,7 +16388,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             422: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16064,7 +16399,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16075,7 +16410,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16104,7 +16439,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 接收成功 */
+            /** @description Accepted */
             201: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16115,7 +16450,7 @@ export interface operations {
                     "application/json": components["schemas"]["TaskNodeInboxReceipt"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             401: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16126,7 +16461,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             403: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16137,7 +16472,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             404: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16148,7 +16483,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             409: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16159,7 +16494,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             413: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16170,7 +16505,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             422: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16181,7 +16516,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16192,7 +16527,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16218,7 +16553,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16229,7 +16564,7 @@ export interface operations {
                     "application/json": components["schemas"]["TaskNodeInboxReceipt"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             401: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16240,7 +16575,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             403: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16251,7 +16586,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             404: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16262,7 +16597,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             409: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16273,7 +16608,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             413: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16284,7 +16619,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             422: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16295,7 +16630,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16306,7 +16641,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16335,7 +16670,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 成功 */
+            /** @description Success */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16346,7 +16681,7 @@ export interface operations {
                     "application/json": components["schemas"]["TaskNodeRunTimeline"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             401: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16357,7 +16692,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             403: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16368,7 +16703,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             404: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16379,7 +16714,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             409: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16390,7 +16725,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             413: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16401,7 +16736,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             422: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16412,7 +16747,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16423,7 +16758,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一安全错误 */
+            /** @description Standard safe error */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16451,7 +16786,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 原操作的安全持久回执；接受与QA发送结果分开 */
+            /** @description Safe durable receipt of the original operation; acceptance is reported separately from the QA send result. */
             202: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16462,7 +16797,7 @@ export interface operations {
                     "application/json": components["schemas"]["TaskLarkSwitchReceipt"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             401: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16473,7 +16808,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             403: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16484,7 +16819,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             404: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16495,7 +16830,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             409: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16506,7 +16841,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             413: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16517,7 +16852,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             422: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16528,7 +16863,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16539,7 +16874,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             503: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16564,7 +16899,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 原操作的安全持久回执；接受与QA发送结果分开 */
+            /** @description Safe durable receipt of the original operation; acceptance is reported separately from the QA send result. */
             200: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16575,7 +16910,7 @@ export interface operations {
                     "application/json": components["schemas"]["TaskLarkSwitchReceipt"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             401: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16586,7 +16921,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             403: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16597,7 +16932,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             404: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16608,7 +16943,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             422: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
@@ -16619,7 +16954,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description 统一错误响应 */
+            /** @description Standard error response */
             500: {
                 headers: {
                     "Loop-Now-Request-Id": components["headers"]["RequestId"];
