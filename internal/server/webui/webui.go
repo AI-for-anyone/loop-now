@@ -1,5 +1,6 @@
-// Package webui 提供控制台的静态文件。发布构建用 embedweb 标签把 web 的构建产物嵌进二进制；
-// 也可以用 LOOP_NOW_WEB_DIR 指定一个目录代替。服务端在控制台端口上把 API 之外的路径都交给这里。
+// Package webui serves the console's static files. Release builds embed the web build output in the binary with the
+// embedweb tag; a directory given by LOOP_NOW_WEB_DIR can be used instead. On the console port the server hands every
+// path outside the API to this package.
 package webui
 
 import (
@@ -13,15 +14,16 @@ import (
 	"time"
 )
 
-// Embedded 返回嵌入的控制台文件；不带 embedweb 标签构建时为 nil。
+// Embedded returns the embedded console files; nil when built without the embedweb tag.
 func Embedded() fs.FS { return embedded() }
 
-// Handler 按单页应用的规则提供 fsys 里的文件：
-//   - assets/ 下是文件名带内容哈希的产物，长期缓存；不存在时 404，不回退，免得把 HTML 当脚本或样式返回；
-//   - 其他存在的文件与 index.html 不缓存，更新后刷新即生效；
-//   - 其他不存在的路径回退到 index.html，由前端路由处理。
+// Handler serves the files in fsys following single-page app rules:
+//   - files under assets/ have a content hash in their name and are cached long-term; a missing one gets a 404 with
+//     no fallback, so HTML is never returned as a script or stylesheet;
+//   - other existing files and index.html are not cached, so a reload picks up an update;
+//   - other missing paths fall back to index.html and are handled by the front-end router.
 //
-// 只接受 GET 与 HEAD。fsys 为 nil 时一律 404，并说明怎样提供控制台。
+// Only GET and HEAD are accepted. When fsys is nil every request gets a 404 explaining how to provide the console.
 func Handler(fsys fs.FS) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
@@ -58,12 +60,12 @@ func Handler(fsys fs.FS) http.Handler {
 		} else {
 			h.Set("Cache-Control", "no-cache")
 		}
-		// 不给修改时间：嵌入的文件没有它，index.html 本来也不缓存。
+		// No modification time: embedded files do not have one, and index.html is not cached anyway.
 		http.ServeContent(w, r, name, time.Time{}, bytes.NewReader(data))
 	})
 }
 
-// readFile 读出 fsys 里的普通文件；目录与不合法的路径当作不存在。
+// readFile reads a regular file from fsys; directories and invalid paths count as nonexistent.
 func readFile(fsys fs.FS, name string) ([]byte, error) {
 	if !fs.ValidPath(name) {
 		return nil, fs.ErrNotExist

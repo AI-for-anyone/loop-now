@@ -8,7 +8,7 @@ import (
 	"loop-now/internal/server/apitypes"
 )
 
-// pluginToken 返回唯一已安装插件的新令牌（宿主启动前准备的那一份）。
+// pluginToken returns a new token for the only installed plugin (the one prepared before the host starts).
 func (e *env) pluginToken() string {
 	e.t.Helper()
 	specs, err := e.api.Plugins.Specs(context.Background())
@@ -26,9 +26,10 @@ func (e *env) pluginToken() string {
 	return p.Token
 }
 
-// 插件作为发件方（SPEC §11）：带渠道与发件名称发给启用了它的项目里的 Agent；发给其他项目的 Agent 或人时 403，
-// 其他身份不能指定渠道。Agent 回复时只给这个插件产生 channel.outbound，插件在自己的 Inbox 里读到回复并能继续回复，
-// 线索沿用渠道与发件名称。
+// A plugin as sender (SPEC §11): it sends with a channel and a sender name to Agents in projects that have it enabled;
+// sending to Agents of other projects or to people gives 403, and other identities cannot specify a channel. An Agent's
+// reply produces channel.outbound for this plugin only; the plugin reads the reply in its own Inbox and can reply
+// again, with the thread keeping the channel and sender name.
 func TestPluginInboxSender(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -75,9 +76,10 @@ func TestPluginInboxSender(t *testing.T) {
 	}
 }
 
-// 插件发来的线索里 Agent 可以提问（SPEC §11）：channel.outbound 带 isQuestion 与 question（形状与 identity.inbound 相同）；
-// 插件回复这道提问即作答，效果与外部身份作答相同（问题记为已回答、提醒 Agent），审计记操作者为插件。
-// 插件不能提问（422），别的插件作答 403，再答 409。
+// An Agent can ask questions in a thread started by a plugin (SPEC §11): channel.outbound carries isQuestion and
+// question (same shape as in identity.inbound); the plugin replying to that question answers it, with the same effect
+// as an external identity answering (the question is marked answered and the Agent is reminded), and the audit records
+// the plugin as the actor. A plugin cannot ask questions (422), another plugin answering gets 403, a second answer 409.
 func TestPluginThreadQuestions(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()

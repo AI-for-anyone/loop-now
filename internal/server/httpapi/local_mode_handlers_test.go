@@ -12,7 +12,8 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// 本机模式的接口：开关按字段修改；项目与 Agent 的清单整体替换、带 revision、读回带 status；所有响应经契约校验。
+// Local mode endpoints: the switches are changed per field; the project and Agent lists are replaced as a whole, carry
+// a revision, and read back with status; all responses are validated against the contract.
 func TestLocalModeEndpoints(t *testing.T) {
 	e := newEnv(t)
 	settings := decode[store.LocalModeSettings](t, e.expect(200, "GET", "/local-mode-settings", nil))
@@ -74,7 +75,7 @@ func TestLocalModeEndpoints(t *testing.T) {
 	e.expect(412, "PUT", agentPath, map[string]any{"expectedRevision": 7, "directories": []any{}})
 	e.expect(404, "PUT", "/agents/"+uuid.Must(uuid.NewV7()).String()+"/local-directories", map[string]any{"expectedRevision": 0, "directories": []any{}})
 
-	// 平台 Agent：projectId 为 null、没有继承。
+	// Platform Agent: projectId is null, nothing is inherited.
 	platform, err := e.st.CreateAgent(t.Context(), store.PlatformScope(), "平台本机", "anthropic", "claude-x", "")
 	if err != nil {
 		t.Fatal(err)

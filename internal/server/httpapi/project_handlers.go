@@ -15,7 +15,7 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// ---- 项目 ----
+// ---- Projects ----
 
 func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) {
 	ps, err := s.Config.ListProjects(r.Context())
@@ -129,9 +129,9 @@ func (s *Server) clearProjectManager(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apitypes.FromProject(p))
 }
 
-// ---- 按范围列出与创建 Agent ----
+// ---- Listing and creating Agents by scope ----
 
-// projectScope 解析路径中的项目，并确认项目未删除。
+// projectScope parses the project in the path and checks that it is not deleted.
 func (s *Server) projectScope(r *http.Request) (store.Scope, error) {
 	id, err := pathUUID(r, "projectId")
 	if err != nil {
@@ -219,9 +219,10 @@ func (s *Server) createAgentIn(w http.ResponseWriter, r *http.Request, scope sto
 	s.writeAgent(w, r, http.StatusCreated, a.ID)
 }
 
-// ---- 概览、用量与异常的范围 ----
+// ---- Scope of the overview, usage and anomalies ----
 
-// scopeFilter 解析 projectId 与 platform 查询参数：二选一，都不给表示全部；projectId 必须是未删除的项目。
+// scopeFilter parses the projectId and platform query parameters: at most one of them; neither means everything;
+// projectId must be a project that is not deleted.
 func (s *Server) scopeFilter(r *http.Request) (store.ScopeFilter, error) {
 	q := r.URL.Query()
 	var f store.ScopeFilter
@@ -248,7 +249,8 @@ func (s *Server) scopeFilter(r *http.Request) (store.ScopeFilter, error) {
 	return f, nil
 }
 
-// overviewKeep 返回概览事件的过滤函数：只保留范围内 Agent 的事件；不筛选时保留全部。
+// overviewKeep returns the filter for overview events: keep only events of Agents in scope; keep everything when not
+// filtering.
 func overviewKeep(f store.ScopeFilter) func(coord.Event) bool {
 	if f.ProjectID == nil && !f.Platform {
 		return nil
@@ -276,7 +278,8 @@ func overviewKeep(f store.ScopeFilter) func(coord.Event) bool {
 	}
 }
 
-// readOverviewFiltered 读取概览事件并按范围过滤；被过滤的事件仍推进游标（见 pumpEventsFiltered）。
+// readOverviewFiltered reads overview events and filters them by scope; filtered-out events still advance the cursor
+// (see pumpEventsFiltered).
 func (s *Server) readOverview(ctx context.Context, after string, block time.Duration) ([]coord.Event, error) {
 	return s.Coord.ReadOverview(ctx, after, 100, block)
 }

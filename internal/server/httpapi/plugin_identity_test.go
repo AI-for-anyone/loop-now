@@ -13,7 +13,8 @@ import (
 	"loop-now/internal/server/tasks"
 )
 
-// installManager 安装一个能代管外部身份的插件：渠道 lark 声明了 manageIdentities，渠道 plain 没有。
+// installManager installs a plugin that can manage external identities: channel lark declares manageIdentities, channel
+// plain does not.
 func (e *env) installManager(id string) {
 	e.t.Helper()
 	dir := writePluginDir(e.t, id, "identities.manage")
@@ -23,9 +24,11 @@ func (e *env) installManager(id string) {
 	e.installPlugin(dir)
 }
 
-// 插件代管外部身份（plugins/SPEC.md §12）：绑定只接受已安装、渠道声明了代管的插件；发给代管身份的提问以 identity.inbound 送到代管插件；
-// 代管插件凭 identities.manage 读这个身份的收件箱、以它的名义回答（不需要 inbox.send），审计记下代表的身份；
-// 不是代管者、没有 asIdentityId 又没有 inbox.send、非插件带 asIdentityId 都被拒绝。卸载插件后绑定清空。
+// Plugins managing external identities (plugins/SPEC.md §12): binding only accepts installed plugins whose channel
+// declares managing; questions sent to a managed identity reach the managing plugin as identity.inbound; the managing
+// plugin reads that identity's Inbox with identities.manage and answers in its name (no inbox.send needed), and the
+// audit records the identity acted for; a plugin that is not the manager, a plugin with neither asIdentityId nor
+// inbox.send, and a non-plugin caller with asIdentityId are all rejected. Uninstalling the plugin clears the binding.
 func TestPluginManagesIdentity(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -108,8 +111,9 @@ func TestPluginManagesIdentity(t *testing.T) {
 	}
 }
 
-// 任务节点向代管身份提问后，插件以身份的名义回答与身份亲自回答效果相同：问题记为已回答，任务里的问题不再 open，
-// 节点恰好得到一次 inbox_reminder 轮次（由等待转回运行）。
+// After a task node asks a managed identity, a plugin answering in the identity's name has the same effect as the
+// identity answering itself: the question is marked answered, the question in the task is no longer open, and the node
+// gets exactly one inbox_reminder turn (from waiting back to running).
 func TestPluginAnswersTaskQuestionAsIdentity(t *testing.T) {
 	for _, by := range []string{"plugin", "identity"} {
 		t.Run(by, func(t *testing.T) {
@@ -139,7 +143,7 @@ func TestPluginAnswersTaskQuestionAsIdentity(t *testing.T) {
 			} else {
 				answer = decode[apitypes.InboxMessage](t, e.external(token).expect(201, "POST", reply, map[string]any{"optionId": "1"}))
 			}
-			// 节点的 Inbox 历史里有任务实例与外部身份之间的这一问一答。
+			// The node's Inbox history holds this Q&A between the task instance and the external identity.
 			page := decode[map[string]any](t, e.expect(200, "GET", "/tasks/"+d.Task.ID.String()+"/nodes/"+node.ID.String()+"/inbox-messages", nil))
 			var ids []string
 			for _, it := range page["items"].([]any) {

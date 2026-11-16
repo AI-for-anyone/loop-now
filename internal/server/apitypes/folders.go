@@ -9,7 +9,7 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// FolderEntry 对应 FolderEntry。
+// FolderEntry mirrors the FolderEntry schema.
 type FolderEntry struct {
 	Name          string    `json:"name"`
 	Path          string    `json:"path"`
@@ -19,19 +19,19 @@ type FolderEntry struct {
 	SymlinkTarget *string   `json:"symlinkTarget"`
 }
 
-// FromFolderEntry 转换文件夹条目。
+// FromFolderEntry converts a folder entry.
 func FromFolderEntry(e folders.Entry) FolderEntry {
 	return FolderEntry{Name: e.Name, Path: e.Path, Type: e.Type, Size: e.Size, ModifiedAt: e.ModifiedAt, SymlinkTarget: e.SymlinkTarget}
 }
 
-// FolderEntryPage 对应 FolderEntryPage。
+// FolderEntryPage mirrors the FolderEntryPage schema.
 type FolderEntryPage struct {
 	Path       string        `json:"path"`
 	Entries    []FolderEntry `json:"entries"`
 	NextCursor *string       `json:"nextCursor"`
 }
 
-// FromFolderPage 转换列出的一层。
+// FromFolderPage converts one listed level.
 func FromFolderPage(p folders.Page) FolderEntryPage {
 	out := FolderEntryPage{Path: p.Path, Entries: make([]FolderEntry, 0, len(p.Entries)), NextCursor: p.NextCursor}
 	for _, e := range p.Entries {
@@ -40,7 +40,7 @@ func FromFolderPage(p folders.Page) FolderEntryPage {
 	return out
 }
 
-// FolderPathInput 与 FolderMoveInput 对应同名请求体。
+// FolderPathInput and FolderMoveInput mirror the request bodies of the same names.
 type FolderPathInput struct {
 	Path string `json:"path"`
 }
@@ -50,7 +50,7 @@ type FolderMoveInput struct {
 	To   string `json:"to"`
 }
 
-// FolderGitPullInput 对应 FolderGitPullInput。
+// FolderGitPullInput mirrors the FolderGitPullInput schema.
 type FolderGitPullInput struct {
 	ActionID uuid.UUID `json:"actionId"`
 	URL      string    `json:"url"`
@@ -58,7 +58,7 @@ type FolderGitPullInput struct {
 	Path     string    `json:"path"`
 }
 
-// FolderGitPull 对应 FolderGitPull。
+// FolderGitPull mirrors the FolderGitPull schema.
 type FolderGitPull struct {
 	ID           uuid.UUID  `json:"id"`
 	AgentID      uuid.UUID  `json:"agentId"`
@@ -72,12 +72,12 @@ type FolderGitPull struct {
 	FinishedAt   *time.Time `json:"finishedAt"`
 }
 
-// FromFolderGitPull 转换拉取操作。
+// FromFolderGitPull converts a pull operation.
 func FromFolderGitPull(p store.FolderGitPull) FolderGitPull {
 	return FolderGitPull{ID: p.ID, AgentID: p.AgentID, URL: p.URL, Branch: p.Branch, Path: p.Path, Status: p.Status, ErrorCode: p.ErrorCode, ErrorMessage: p.ErrorMessage, CreatedAt: p.CreatedAt, FinishedAt: p.FinishedAt}
 }
 
-// FolderGitPullList 对应 FolderGitPullList。
+// FolderGitPullList mirrors the FolderGitPullList schema.
 type FolderGitPullList struct {
 	Pulls []FolderGitPull `json:"pulls"`
 }

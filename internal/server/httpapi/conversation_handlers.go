@@ -108,7 +108,7 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, apitypes.SendMessageResult{Message: msg, Run: msg.Run})
 }
 
-// getAgentQueue 返回普通对话的排队列表，逐条，按实际处理顺序。
+// getAgentQueue returns the queue list of the regular conversation, item by item, in actual processing order.
 func (s *Server) getAgentQueue(w http.ResponseWriter, r *http.Request) {
 	id, err := pathUUID(r, "agentId")
 	if err != nil {
@@ -123,7 +123,8 @@ func (s *Server) getAgentQueue(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// queueAction 处理普通对话的排队动作：路径中的 Agent 与对象（执行或 Inbox 消息），body 为 {actionId}。
+// queueAction handles a queue action of the regular conversation: the Agent and the subject (a run or an Inbox message)
+// come from the path, the body is {actionId}.
 func (s *Server) queueAction(param string, do func(ctx context.Context, agentID, subject, actionID uuid.UUID) (json.RawMessage, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := pathUUID(r, "agentId")
@@ -182,9 +183,9 @@ func (s *Server) resetSession(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, sess)
 }
 
-// streamEvents 推送 SSE 事件流。
-// 不带 Last-Event-ID 或它已超出保留范围时，先推送快照，快照的事件 ID 是当时事件流的最新位置；
-// 带 Last-Event-ID 且仍在保留范围内时，不推快照，直接从它之后续传。
+// streamEvents pushes the SSE event stream. Without Last-Event-ID, or when it is outside the retained range, a snapshot
+// is pushed first; the snapshot's event ID is the latest position of the event stream at that moment; with a
+// Last-Event-ID still inside the retained range, no snapshot is pushed and the stream resumes right after it.
 func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := pathUUID(r, "agentId")
@@ -232,18 +233,21 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 	}, "agentId", agent)
 }
 
-// pumpEvents 从 cursor 之后持续读取事件流并推送，按间隔保活，直到连接或服务端关闭。
+// pumpEvents keeps reading the event stream after cursor and pushing it, with periodic keepalives, until the connection
+// or the server closes.
 func (s *Server) pumpEvents(w http.ResponseWriter, r *http.Request, cursor string,
 	read func(ctx context.Context, after string, block time.Duration) ([]coord.Event, error), logAttrs ...any) {
 	s.pumpEventsFiltered(w, r, cursor, read, nil, logAttrs...)
 }
 
-// pumpEventsFiltered 同 pumpEvents；keep 不为空时只写出它保留的事件，被过滤的事件同样推进游标，不会反复读取。
+// pumpEventsFiltered is like pumpEvents; when keep is not nil only the events it keeps are written, and filtered-out
+// events still advance the cursor so they are not read again and again.
 func (s *Server) pumpEventsFiltered(w http.ResponseWriter, r *http.Request, cursor string,
 	read func(ctx context.Context, after string, block time.Duration) ([]coord.Event, error), keep func(coord.Event) bool, logAttrs ...any) {
 	ctx := r.Context()
 	rc := http.NewResponseController(w)
-	// 每次最多阻塞 1 秒，保活按时间间隔判断，连接或服务端关闭时能及时退出。
+	// Block at most 1 second per read and decide on keepalives by elapsed time, so the loop exits promptly when the
+	// connection or the server closes.
 	block := min(s.O.SSEKeepalive, time.Second)
 	lastWrite := time.Now()
 	for ctx.Err() == nil {

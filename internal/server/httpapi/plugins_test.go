@@ -12,7 +12,7 @@ import (
 	"loop-now/internal/server/apitypes"
 )
 
-// writePluginDir 写一个本地插件目录；permissions 为平台侧的权限范围。
+// writePluginDir writes a local plugin directory; permissions are the platform-side permission scopes.
 func writePluginDir(t *testing.T, id string, permissions ...string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -33,15 +33,16 @@ func writePluginDir(t *testing.T, id string, permissions ...string) string {
 	return dir
 }
 
-// installPlugin 经接口预览并确认安装本地插件。
+// installPlugin previews and confirms the install of a local plugin through the API.
 func (e *env) installPlugin(dir string) map[string]any {
 	e.t.Helper()
 	pv := decode[map[string]any](e.t, e.expect(201, "POST", "/plugin-previews", map[string]any{"source": map[string]any{"kind": "local", "location": dir}}))
 	return decode[map[string]any](e.t, e.expect(201, "POST", "/plugins", map[string]any{"previewId": pv["previewId"], "confirm": true}))
 }
 
-// 插件管理接口走一遍：预览与确认安装、详情、全局与项目配置、账号、Agent 授权、日志、投递、状态、宿主与全局设置、卸载；
-// 请求与响应都经契约校验。
+// A walk through the plugin management API: preview and confirm install, details, global and project config, accounts,
+// Agent grants, logs, deliveries, status, host and global settings, uninstall; requests and responses are validated
+// against the contract.
 func TestPluginsAPI(t *testing.T) {
 	e := newEnv(t)
 	project := e.dc.Project.ID.String()
@@ -101,7 +102,8 @@ func TestPluginsAPI(t *testing.T) {
 		t.Fatalf("删除账号：%v", l)
 	}
 
-	// 投递：项目启用后新建的两个 Agent（通知员、新来的）各产生一条 agent.created 给这个插件。
+	// Deliveries: the two Agents created after the project enabled the plugin (“通知员” ("notifier") and “新来的”
+	// ("newcomer")) each produce one agent.created for this plugin.
 	e.newAgent("新来的")
 	dl := decode[map[string]any](t, e.expect(200, "GET", "/plugins/notify/deliveries?projectId="+project, nil))
 	items := dl["deliveries"].([]any)
@@ -142,8 +144,10 @@ func TestPluginsAPI(t *testing.T) {
 	_ = agentID
 }
 
-// 插件令牌只能调用标了 x-plugin-scope 且在范围内的操作；路径里的项目、Agent、任务须属于启用了插件的项目（平台 Agent 除外）；
-// 拒绝记入插件日志；写操作的审计操作者为 plugin；吊销的令牌 401；插件令牌在对外端口上无效，其他令牌在控制台上照旧 403。
+// Plugin tokens can only call operations marked with x-plugin-scope and within their scopes; a project, Agent or task
+// in the path must belong to a project that has the plugin enabled (except platform Agents); rejections are written to
+// the plugin log; the audit actor of writes is plugin; a revoked token gives 401; plugin tokens are invalid on the
+// external port, and other tokens still get 403 on the console.
 func TestPluginTokenScopes(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -192,8 +196,9 @@ func TestPluginTokenScopes(t *testing.T) {
 	e.console().expectError(403, "forbidden", "GET", "/context", nil, bearer(ext)...)
 }
 
-// 清单里 schema 的属性先后就是表单字段的先后：configSchema、accounts[].fields、actions[].fields 经安装、存储与各接口都保持清单的写法，
-// projectFields 也按这个先后。
+// The order of properties in a manifest schema is the order of form fields: configSchema, accounts[].fields and
+// actions[].fields keep the manifest's order through install, storage and every endpoint, and projectFields follow the
+// same order.
 func TestPluginSchemaOrder(t *testing.T) {
 	e := newEnv(t)
 	dir := t.TempDir()

@@ -19,10 +19,11 @@ import (
 	"loop-now/internal/server/contracttest"
 )
 
-// caller 以某个身份调用某个入口：控制台（无令牌）、对外端口（外部令牌）或 Agent 接口（Agent 令牌）。
+// caller calls an entry point as some identity: the console (no token), the external port (external token) or the Agent
+// API (Agent token).
 type caller struct {
 	t      *testing.T
-	base   string // 含 /api/v1 或 /agent/v1
+	base   string // includes /api/v1 or /agent/v1
 	client *http.Client
 	token  string
 }
@@ -80,12 +81,12 @@ func (c caller) expectError(status int, code, method, path string, body any, hdr
 	}
 }
 
-// console 返回经契约校验的控制台调用方。
+// console returns a console caller whose calls are validated against the contract.
 func (e *env) console() caller {
 	return caller{t: e.t, base: e.srv.URL + "/api/v1", client: e.client}
 }
 
-// external 启动对外端口的处理器（测试中不加 TLS），返回以 token 调用它的方法。
+// external starts the external port's handler (without TLS in tests) and returns a way to call it with token.
 func (e *env) external(token string) caller {
 	e.t.Helper()
 	if e.ext == nil {
@@ -96,7 +97,7 @@ func (e *env) external(token string) caller {
 	return caller{t: e.t, base: e.ext.URL + "/api/v1", client: e.extV.Client(), token: token}
 }
 
-// agentCaller 为 Agent 签发一个令牌，返回以它调用 /agent/v1 的方法。
+// agentCaller issues a token for an Agent and returns a way to call /agent/v1 with it.
 func (e *env) agentCaller(agentID uuid.UUID) caller {
 	e.t.Helper()
 	tok, err := auth.NewToken(auth.AgentPrefix)
@@ -112,7 +113,7 @@ func (e *env) agentCaller(agentID uuid.UUID) caller {
 	return caller{t: e.t, base: e.srv.URL + "/agent/v1", client: e.agentV.Client(), token: tok.Plain}
 }
 
-// identity 新建外部身份并签发一个令牌。
+// identity creates an external identity and issues a token for it.
 func (e *env) identity(name string) (apitypes.ExternalIdentity, string) {
 	e.t.Helper()
 	x := decode[apitypes.ExternalIdentity](e.t, e.expect(201, "POST", "/external-identities", map[string]any{"name": name}))
@@ -142,7 +143,7 @@ func strOf(p *string) string {
 	return *p
 }
 
-// ---- 地址与发送 ----
+// ---- Addresses and sending ----
 
 func TestInboxAddressing(t *testing.T) {
 	e := newEnv(t)
@@ -183,17 +184,17 @@ func TestInboxAddressing(t *testing.T) {
 	con.expectError(422, "validation_failed", "POST", "/inbox/messages", map[string]any{"to": "巡检员", "text": "x", "whenBusy": "now"},
 		"X-Contract-Invalid-Request", "1")
 
-	// 发给人：whenBusy 记为空，不产生提醒。
+	// Sending to a person: whenBusy is recorded as empty and no reminder is created.
 	ci, _ := e.identity("ci-bot")
 	got := sendInbox(con, "@ci-bot", "给外部身份", "interrupt")
 	if got.WhenBusy != nil || got.To.Kind != "external" || *got.To.ID != ci.ID || strOf(got.To.Address) != "@ci-bot" {
 		t.Fatalf("发给外部身份：%+v", got)
 	}
-	// 已删除的外部身份不能再收信。
+	// A deleted external identity can no longer receive messages.
 	e.expect(204, "DELETE", "/external-identities/"+ci.ID.String(), nil)
 	con.expectError(404, "not_found", "POST", "/inbox/messages", map[string]any{"to": "@ci-bot", "text": "x"})
 
-	// 按地址查找：两种写法、平台 Agent、找不到与带 # 时为空列表。
+	// Lookup by address: both notations, platform Agents, and an empty list when not found or when the address has #.
 	for addr, want := range map[string]uuid.UUID{"默认组织/默认项目/开发助手": dev.ID, "默认项目/开发助手": dev.ID, "巡检员": plat.ID, dev.ID.String(): dev.ID} {
 		l := decode[apitypes.AgentList](t, e.expect(200, "GET", "/agents?address="+urlQuery(addr), nil))
 		if len(l.Agents) != 1 || l.Agents[0].ID != want || l.Agents[0].Address == nil {
@@ -207,7 +208,7 @@ func TestInboxAddressing(t *testing.T) {
 	}
 	e.expect(422, "GET", "/agents", nil, "X-Contract-Invalid-Request", "1")
 
-	// 已删除项目中的 Agent 不可寻址。
+	// Agents in a deleted project are not addressable.
 	p := decode[apitypes.Project](t, e.expect(201, "POST", "/projects", map[string]any{"name": "临时"}))
 	tmp := decode[apitypes.Agent](t, e.expect(201, "POST", "/projects/"+p.ID.String()+"/agents", map[string]any{"name": "甲",
 		"model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}}))
@@ -216,7 +217,8 @@ func TestInboxAddressing(t *testing.T) {
 	con.expectError(404, "not_found", "POST", "/inbox/messages", map[string]any{"to": "临时/甲", "text": "x"})
 	con.expectError(404, "not_found", "POST", "/inbox/messages", map[string]any{"to": tmp.ID.String(), "text": "x"})
 
-	// 规则生效前创建、名称不合规的 Agent：地址为空，只能按 ID 寻址。
+	// An Agent created before the rules took effect, with a non-conforming name: its address is empty and it can only
+	// be addressed by ID.
 	legacy := uuid.Must(uuid.NewV7())
 	if _, err := e.st.Pool.Exec(context.Background(), `INSERT INTO agents (id, project_id, name, model_provider, model_id) VALUES ($1, $2, 'a/b', 'anthropic', 'claude-x')`,
 		legacy, e.dc.Project.ID); err != nil {
@@ -233,7 +235,8 @@ func TestInboxAddressing(t *testing.T) {
 	}
 	waitIdle(t, e, "/agents/"+legacy.String())
 
-	// 项目 Agent 与平台 Agent 互发（同组织与平台持有的分支实际走到）。
+	// A project Agent and a platform Agent message each other (so the same-organization and platform-owned branches are
+	// actually exercised).
 	devC, platC := e.agentCaller(dev.ID), e.agentCaller(plat.ID)
 	if got := sendInbox(devC, "巡检员", "项目到平台"); got.From.Kind != "agent" || *got.From.ID != dev.ID || *got.To.ID != plat.ID {
 		t.Fatalf("项目 Agent 发给平台 Agent：%+v", got)
@@ -246,7 +249,7 @@ func TestInboxAddressing(t *testing.T) {
 	}
 	waitIdle(t, e, a)
 
-	// 项目改名后地址随之改变。
+	// After a project is renamed, the address changes with it.
 	e.expect(200, "PATCH", "/projects/"+e.dc.Project.ID.String(), map[string]any{"name": "主项目"})
 	if got := decode[apitypes.Agent](t, e.expect(200, "GET", a, nil)); strOf(got.Address) != "默认组织/主项目/开发助手" {
 		t.Fatalf("项目改名后地址应改变：%s", strOf(got.Address))
@@ -258,7 +261,7 @@ func urlQuery(s string) string {
 	return r.Replace(s)
 }
 
-// ---- 提醒 ----
+// ---- Reminders ----
 
 func reminderRuns(t *testing.T, e *env, agentID uuid.UUID) (queued map[int]int, triggers []uuid.UUID) {
 	t.Helper()
@@ -290,7 +293,8 @@ func TestInboxReminder(t *testing.T) {
 	dev, a := e.newAgent("开发助手")
 	waitIdle(t, e, a)
 
-	// 空闲时立即开始一轮提醒，历史中标为平台提醒，正文是提醒文字。
+	// When idle, a reminder turn starts immediately, marked in the history as a platform reminder, with the reminder
+	// text as its body.
 	m1 := sendInbox(con, dev.ID.String(), "第一条")
 	waitIdle(t, e, a)
 	page := decode[apitypes.MessagePage](t, e.expect(200, "GET", a+"/messages", nil))
@@ -311,7 +315,7 @@ func TestInboxReminder(t *testing.T) {
 		t.Fatalf("提醒那一轮的运行记录事件应记下触发的消息：%v %v", trig, err)
 	}
 
-	// 普通对话的事件中 Inbox 消息字段为空。
+	// In events of the regular conversation, the Inbox message field is empty.
 	e.expect(202, "POST", a+"/messages", map[string]any{"text": "普通对话"})
 	waitIdle(t, e, a)
 	normal := e.lastReply(a)
@@ -320,7 +324,7 @@ func TestInboxReminder(t *testing.T) {
 		t.Fatalf("普通对话不应记 Inbox 消息：%d %v %s", n, err, normal.Origin)
 	}
 
-	// 忙时三条 queue 消息只排入一轮提醒，触发消息是第一条。
+	// While busy, three queue messages are queued into just one reminder turn, triggered by the first one.
 	agent := e.agentCaller(dev.ID)
 	for _, s := range decode[apitypes.InboxMessagePage](t, agent.expect(200, "GET", "/inbox/messages?unread=true", nil)).Messages {
 		agent.expect(200, "POST", "/inbox/messages/"+s.ID.String()+"/read", nil)
@@ -332,7 +336,7 @@ func TestInboxReminder(t *testing.T) {
 	if queued, _ := reminderRuns(t, e, dev.ID); queued[1] != 1 || queued[0] != 0 {
 		t.Fatalf("三条 queue 消息应只排入一轮普通提醒：%v", queued)
 	}
-	// 并发 20 条也只有一轮。
+	// 20 concurrent ones also give only one turn.
 	var wg sync.WaitGroup
 	for i := range 20 {
 		wg.Go(func() { sendInbox(con, dev.ID.String(), "并发"+string(rune('a'+i))) })
@@ -341,7 +345,8 @@ func TestInboxReminder(t *testing.T) {
 	if queued, _ := reminderRuns(t, e, dev.ID); queued[1] != 1 {
 		t.Fatalf("并发的 queue 消息应只有一轮普通提醒：%v", queued)
 	}
-	// 打断消息打断当前执行，单独排一轮打断提醒，先于普通提醒执行。
+	// An interrupt message interrupts the current run and gets its own interrupt reminder turn, which runs before the
+	// regular reminder.
 	sendInbox(con, dev.ID.String(), "打断", "interrupt")
 	waitIdle(t, e, a)
 	_, triggers := reminderRuns(t, e, dev.ID)
@@ -353,7 +358,7 @@ func TestInboxReminder(t *testing.T) {
 		WHERE m.text = 'block' AND r.agent_id = $1`, dev.ID).Scan(&blockStatus); err != nil || blockStatus != "interrupted" {
 		t.Fatalf("打断消息应打断当前执行：%s %v", blockStatus, err)
 	}
-	// 执行顺序：打断提醒在普通提醒之前。
+	// Run order: the interrupt reminder before the regular reminder.
 	rows, _ := e.st.Pool.Query(context.Background(), `SELECT priority FROM runs WHERE agent_id = $1 AND origin = 'inbox_reminder' ORDER BY started_at`, dev.ID)
 	var order []int
 	for rows.Next() {
@@ -366,7 +371,8 @@ func TestInboxReminder(t *testing.T) {
 		t.Fatalf("打断提醒应先于普通提醒执行：%v", order)
 	}
 
-	// 排队期间已读完全部消息：读走的消息离队，这一轮提醒随即作废（no_pending_messages），不启动 Pi。
+	// All messages were read while queued: read messages leave the queue, so this reminder turn is voided at once
+	// (no_pending_messages) and Pi is not started.
 	e.expect(202, "POST", a+"/messages", map[string]any{"text": "block"})
 	sendInbox(con, dev.ID.String(), "很快读掉")
 	for _, s := range decode[apitypes.InboxMessagePage](t, agent.expect(200, "GET", "/inbox/messages?unread=true&limit=100", nil)).Messages {
@@ -382,7 +388,7 @@ func TestInboxReminder(t *testing.T) {
 	}
 }
 
-// ---- 线索、读取与查看 ----
+// ---- Threads, reading and viewing ----
 
 func TestInboxThreadsAndViews(t *testing.T) {
 	e := newEnv(t)
@@ -396,7 +402,7 @@ func TestInboxThreadsAndViews(t *testing.T) {
 	m := sendInbox(con, "默认项目/开发助手", "请处理")
 	waitIdle(t, e, a)
 
-	// 控制台查看 Agent 的收件箱不改变已读状态。
+	// The console viewing an Agent's Inbox does not change the read state.
 	view := decode[apitypes.InboxMessagePage](t, e.expect(200, "GET", a+"/inbox", nil))
 	if len(view.Messages) != 1 || view.Messages[0].ReadAt != nil {
 		t.Fatalf("Agent 收件箱：%+v", view)
@@ -405,7 +411,8 @@ func TestInboxThreadsAndViews(t *testing.T) {
 	if full.Text != "请处理" || full.ReadAt != nil {
 		t.Fatalf("控制台查看全文后仍应未读：%+v", full)
 	}
-	// Agent 列摘要不算已读；逐条读取标为已读，重复读取已读时间不变。
+	// An Agent listing summaries does not count as reading; reading one by one marks them read, and reading again does
+	// not change the read time.
 	l := decode[apitypes.InboxMessagePage](t, agent.expect(200, "GET", "/inbox/messages", nil))
 	if len(l.Messages) != 1 || l.Messages[0].ReadAt != nil || l.Messages[0].Preview != "请处理" {
 		t.Fatalf("Agent 列出收件箱：%+v", l)
@@ -415,10 +422,10 @@ func TestInboxThreadsAndViews(t *testing.T) {
 	if r1.ReadAt == nil || !r1.ReadAt.Equal(*r2.ReadAt) || r2.Text != "请处理" {
 		t.Fatalf("重复读取：%v %v", r1.ReadAt, r2.ReadAt)
 	}
-	// 不是发给自己的消息不能读取。
+	// Messages not sent to oneself cannot be read.
 	ext.expectError(404, "not_found", "POST", "/inbox/messages/"+m.ID.String()+"/read", nil)
 
-	// Agent 回复控制台；控制台在线索中追加；不是参与方的身份不能回复。
+	// An Agent replies to the console; the console adds to the thread; a non-participant identity cannot reply.
 	reply := decode[apitypes.InboxMessage](t, agent.expect(201, "POST", "/inbox/messages/"+m.ID.String()+"/reply", map[string]any{"text": "收到", "whenBusy": "interrupt"}))
 	if reply.To.Kind != "console" || reply.ThreadID != m.ID || *reply.InReplyTo != m.ID || reply.WhenBusy != nil {
 		t.Fatalf("Agent 的回复：%+v", reply)
@@ -430,7 +437,8 @@ func TestInboxThreadsAndViews(t *testing.T) {
 	ext.expectError(404, "not_found", "POST", "/inbox/messages/"+m.ID.String()+"/reply", map[string]any{"text": "插话"})
 	waitIdle(t, e, a)
 
-	// 控制台的线索：参与方含自己，未读数只算发给自己的；查看线索不改变已读；整条标为已读后未读总数减少。
+	// The console's threads: the participants include itself, the unread count only counts messages sent to it; viewing
+	// a thread does not change read state; marking a whole thread read lowers the unread total.
 	threads := decode[apitypes.InboxThreadPage](t, con.expect(200, "GET", "/inbox/threads", nil))
 	if len(threads.Threads) != 1 || threads.UnreadTotal != 1 || threads.Threads[0].UnreadCount != 1 || len(threads.Threads[0].Participants) != 2 ||
 		threads.Threads[0].LastMessage.ID != more.ID {
@@ -448,7 +456,8 @@ func TestInboxThreadsAndViews(t *testing.T) {
 		t.Fatalf("外部身份只看到自己参与的线索：%+v", l)
 	}
 
-	// 外部身份的往来与控制台的只读查看；方向与未读筛选；删除后仍可查看，显示为已删除身份。
+	// Exchanges with an external identity and the console's read-only view; direction and unread filters; still
+	// viewable after deletion, shown as a deleted identity.
 	toCi := sendInbox(con, "@ci-bot", "给你")
 	fromCi := sendInbox(ext, "默认项目/开发助手", "外部来信")
 	waitIdle(t, e, a)
@@ -470,7 +479,7 @@ func TestInboxThreadsAndViews(t *testing.T) {
 		t.Fatalf("控制台查看外部身份的消息后仍应未读：%+v", got)
 	}
 	e.expect(404, "GET", "/external-identities/"+ci.ID.String()+"/inbox/"+m.ID.String(), nil)
-	// 外部身份只能看到自己的收件箱：只列出发给它的。
+	// An external identity can only see its own Inbox: only messages sent to it are listed.
 	mine := decode[apitypes.InboxMessagePage](t, ext.expect(200, "GET", "/inbox/messages?unread=true", nil))
 	if len(mine.Messages) != 1 || mine.Messages[0].ID != toCi.ID {
 		t.Fatalf("外部身份的收件箱：%+v", mine)
@@ -489,7 +498,7 @@ func TestInboxThreadsAndViews(t *testing.T) {
 	if l := decode[apitypes.ExternalIdentityList](t, e.expect(200, "GET", "/external-identities", nil)); len(l.Identities) != 0 {
 		t.Fatalf("列表不含已删除的身份：%+v", l)
 	}
-	// 名称释放后可以再用。
+	// A name can be reused after it is released.
 	e.identity("ci-bot")
 }
 
@@ -527,7 +536,7 @@ func TestInboxPaging(t *testing.T) {
 	}
 }
 
-// ---- 收件箱事件流 ----
+// ---- Inbox event stream ----
 
 func TestInboxEvents(t *testing.T) {
 	e := newEnv(t)
@@ -561,7 +570,7 @@ func TestInboxEvents(t *testing.T) {
 	e.v.ValidateStreamSSE(contracttest.InboxEventsPath, read.event, []byte(read.data))
 	stop()
 
-	// 带仍在保留范围内的 ID 续传：不发快照，不丢不重。
+	// Resuming with an ID still inside the retained range: no snapshot, nothing lost or duplicated.
 	agent.expect(201, "POST", "/inbox/messages", map[string]any{"to": "@console", "text": "断线期间"})
 	evs2, stop2 := readSSEPath(t, e, "/inbox/events", read.id)
 	defer stop2()
@@ -570,7 +579,7 @@ func TestInboxEvents(t *testing.T) {
 		t.Fatalf("续传应从断开处继续：%+v", first)
 	}
 	stop2()
-	// 续传位置超出范围（事件已被裁掉，或服务端重启过）：先发快照。
+	// The resume position is outside the range (events were trimmed, or the server restarted): a snapshot comes first.
 	trimStream(t, func() (string, error) { return e.co.AppendInbox(context.Background(), "test.filler", []byte(`{}`)) })
 	evs3, stop3 := readSSEPath(t, e, "/inbox/events", first.id)
 	defer stop3()
@@ -579,7 +588,7 @@ func TestInboxEvents(t *testing.T) {
 	}
 }
 
-// ---- 对外端口与 Agent 接口 ----
+// ---- External port and Agent API ----
 
 func TestExternalAccess(t *testing.T) {
 	e := newEnv(t)
@@ -588,16 +597,16 @@ func TestExternalAccess(t *testing.T) {
 	ci, tok := e.identity("ci-bot")
 	ext := e.external(tok)
 
-	// 未带令牌、格式不对、拿 Agent 令牌：401。
+	// No token, a malformed one, or an Agent token: 401.
 	anon := e.external("")
 	anon.expectError(401, "unauthenticated", "GET", "/context", nil)
 	e.external("lne_bad").expectError(401, "unauthenticated", "GET", "/context", nil)
 	agentTok := e.agentCaller(dev.ID).token
 	e.external(agentTok).expectError(401, "unauthenticated", "GET", "/context", nil)
-	// 令牌放在 URL 中不被读取。
+	// A token in the URL is not read.
 	anon.expectError(401, "unauthenticated", "GET", "/context?access_token="+tok, nil)
 
-	// 当前身份与对外开放的接口。
+	// Current identity and externally open endpoints.
 	who := decode[apitypes.Whoami](t, ext.expect(200, "GET", "/whoami", nil))
 	if who.Kind != "external" || strOf(who.Address) != "@ci-bot" || who.Name != "ci-bot" {
 		t.Fatalf("whoami：%+v", who)
@@ -617,7 +626,7 @@ func TestExternalAccess(t *testing.T) {
 		t.Fatalf("外部身份的修改应记审计：%+v %v", audits, err)
 	}
 
-	// 健康状态对外脱敏：库只有 ok，没有错误原文与 WAL 信息。
+	// External health status is redacted: the database part only has ok, no raw error text or WAL information.
 	_, hb, _ := ext.do("GET", "/health", nil)
 	var raw map[string]map[string]any
 	_ = json.Unmarshal(hb, &raw)
@@ -628,7 +637,7 @@ func TestExternalAccess(t *testing.T) {
 		t.Fatalf("控制台的健康状态应含 error 与 WAL 信息：%s", cb)
 	}
 
-	// 只限控制台的接口：403。
+	// Console-only endpoints: 403.
 	for _, c := range []struct{ method, path string }{
 		{"POST", a + "/messages"}, {"GET", a + "/events"}, {"GET", "/overview/events"}, {"GET", "/inbox/events"},
 		{"GET", a + "/inbox"}, {"GET", "/external-identities"}, {"POST", "/external-identities"},
@@ -639,14 +648,14 @@ func TestExternalAccess(t *testing.T) {
 	if n := countRuns(t, e, dev.ID); n != 0 {
 		t.Fatalf("被拒绝的直接对话不应保存消息：%d", n)
 	}
-	// 外部身份发送：whenBusy 默认 queue。
+	// External identity sending: whenBusy defaults to queue.
 	got := sendInbox(ext, "默认项目/开发助手", "外部来信")
 	if got.From.Kind != "external" || strOf(got.WhenBusy) != "queue" {
 		t.Fatalf("外部身份发送：%+v", got)
 	}
 	waitIdle(t, e, a)
 
-	// 吊销后 401，其他令牌不受影响；过期令牌 401；身份删除后 401。
+	// 401 after revocation (other tokens unaffected), for an expired token, and after the identity is deleted.
 	tokens := decode[apitypes.ExternalTokenList](t, e.expect(200, "GET", "/external-identities/"+ci.ID.String()+"/tokens", nil))
 	if len(tokens.Tokens) != 1 || !strings.HasPrefix(tok, tokens.Tokens[0].Prefix) || tokens.Tokens[0].LastUsedAt == nil {
 		t.Fatalf("令牌列表只有元数据：%+v", tokens)
@@ -670,14 +679,14 @@ func TestExternalAccess(t *testing.T) {
 	e.expect(204, "DELETE", "/external-identities/"+ci.ID.String(), nil)
 	e.external(second.Secret).expectError(401, "unauthenticated", "GET", "/whoami", nil)
 
-	// 名称规则。
+	// Naming rules.
 	for _, name := range []string{"console", "platform", "CI", ".ci", strings.Repeat("a", 65), "a b"} {
 		e.expect(422, "POST", "/external-identities", map[string]any{"name": name}, "X-Contract-Invalid-Request", "1")
 	}
 	e.identity("ci.bot_2-x")
 	e.expect(409, "POST", "/external-identities", map[string]any{"name": "ci.bot_2-x"})
 
-	// 审计中没有令牌与请求体。
+	// The audit contains no tokens and no request bodies.
 	rows, err := e.st.Pool.Query(context.Background(), `SELECT concat_ws('|', id, at, request_id, actor_kind, actor_id, actor_address, method, operation, target, status, on_behalf_of) FROM audit_log`)
 	if err != nil {
 		t.Fatal(err)
@@ -710,13 +719,13 @@ func TestTokensOnConsoleAndAgentEntries(t *testing.T) {
 	_, extTok := e.identity("ci-bot")
 	agent := e.agentCaller(dev.ID)
 
-	// 控制台接口不接受任何令牌。
+	// The console API accepts no tokens at all.
 	for _, tok := range []string{extTok, agent.token} {
 		c := e.console()
 		c.token = tok
 		c.expectError(403, "forbidden", "GET", "/context", nil)
 	}
-	// Agent 接口只认 Agent 令牌；带 Origin 的请求被拒绝。
+	// The Agent API only accepts Agent tokens; requests with an Origin are rejected.
 	who := decode[apitypes.Whoami](t, agent.expect(200, "GET", "/whoami", nil))
 	if who.Kind != "agent" || strOf(who.Address) != "默认组织/默认项目/开发助手" || who.Name != "开发助手" {
 		t.Fatalf("Agent 的 whoami：%+v", who)
@@ -727,12 +736,13 @@ func TestTokensOnConsoleAndAgentEntries(t *testing.T) {
 	other.token = ""
 	other.expectError(401, "unauthenticated", "GET", "/whoami", nil)
 	agent.expectError(403, "forbidden_origin", "GET", "/whoami", nil, "Origin", "http://localhost:5173")
-	// Agent 接口只有 5 个接口，其他路径为 404（不在契约中，用不校验契约的客户端请求）。
+	// The Agent API has only 5 endpoints; other paths give 404 (not in the contract, so requested with a client that
+	// does not validate against the contract).
 	raw := agent
 	raw.client = http.DefaultClient
 	raw.expect(404, "GET", "/inbox/threads", nil)
 
-	// 作废后 401；Agent 删除后 401。
+	// 401 after revocation; 401 after the Agent is deleted.
 	_, id, _, _ := auth.ParseToken(agent.token)
 	if err := e.st.RevokeAgentToken(context.Background(), id); err != nil {
 		t.Fatal(err)
@@ -744,7 +754,7 @@ func TestTokensOnConsoleAndAgentEntries(t *testing.T) {
 	fresh.expectError(401, "unauthenticated", "GET", "/inbox/messages", nil)
 }
 
-// ---- 内置 Skill 的名称 ----
+// ---- Names of built-in Skills ----
 
 func (e *env) expectError(status int, code, method, path string, body any) {
 	e.t.Helper()
@@ -766,7 +776,7 @@ func TestBuiltinSkillNameReserved(t *testing.T) {
 	e.expectError(409, "name_conflict", "PUT", a+"/skills/"+k.ID.String()+"/skill-md", map[string]any{"content": "---\nname: loopctl\ndescription: 改名\n---\n"})
 }
 
-// ---- 会话丢失 ----
+// ---- Lost session ----
 
 func TestInboxSessionMissing(t *testing.T) {
 	e := newEnv(t)
@@ -776,7 +786,7 @@ func TestInboxSessionMissing(t *testing.T) {
 	if _, err := e.st.Pool.Exec(context.Background(), `UPDATE agent_sessions SET state = 'missing', session_file = '/nonexistent/session.jsonl' WHERE agent_id = $1`, dev.ID); err != nil {
 		t.Fatal(err)
 	}
-	// 会话丢失时：消息照常保存，不安排提醒。
+	// While the session is lost: messages are saved as usual, no reminder is scheduled.
 	first := sendInbox(con, dev.ID.String(), "会话丢失期间一")
 	sendInbox(con, dev.ID.String(), "会话丢失期间二")
 	if queued, triggers := reminderRuns(t, e, dev.ID); len(triggers) != 0 || len(queued) != 0 {
@@ -785,7 +795,8 @@ func TestInboxSessionMissing(t *testing.T) {
 	if page := decode[apitypes.InboxMessagePage](t, e.expect(200, "GET", a+"/inbox?unread=true", nil)); len(page.Messages) != 2 {
 		t.Fatalf("消息应照常保存：%+v", page)
 	}
-	// 人确认重开会话后：有未读消息，立即安排一轮提醒，触发消息为最早的未读消息。
+	// After a person confirms reopening the session: with unread messages, a reminder turn is scheduled at once,
+	// triggered by the earliest unread message.
 	e.expect(200, "POST", a+"/session/reset", nil)
 	waitIdle(t, e, a)
 	_, triggers := reminderRuns(t, e, dev.ID)
@@ -802,7 +813,7 @@ func TestInboxSessionMissing(t *testing.T) {
 	if user.Origin != "inbox_reminder" || !strings.Contains(user.Text, "the following 2 Inbox messages") || user.Run.Status != "completed" {
 		t.Fatalf("重开会话后的提醒：%+v", user)
 	}
-	// 没有未读消息时重开会话，不安排提醒。
+	// Reopening the session with no unread messages schedules no reminder.
 	agent := e.agentCaller(dev.ID)
 	for _, s := range decode[apitypes.InboxMessagePage](t, agent.expect(200, "GET", "/inbox/messages?unread=true", nil)).Messages {
 		agent.expect(200, "POST", "/inbox/messages/"+s.ID.String()+"/read", nil)

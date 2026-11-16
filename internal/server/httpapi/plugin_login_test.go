@@ -37,7 +37,7 @@ func (httpPluginHelper) Login(ctx context.Context, req modelauth.PluginLoginRequ
 	return []byte(`{"type":"oauth","access":"m","refresh":"m","expires":1}`), nil
 }
 
-// 插件提供方的项目登录经 HTTP：开始、问题、设备码、回答、成功；列表可以不带 provider。
+// A plugin provider's project login over HTTP: start, question, device code, answer, success; list without provider.
 func TestPluginProviderLoginAPI(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -90,7 +90,8 @@ func TestPluginProviderLoginAPI(t *testing.T) {
 	e.expect(422, "POST", op+"/input", map[string]any{"promptId": "2", "value": "late"})
 	e.expect(422, "POST", base, map[string]any{"provider": "nope", "name": "x"})
 
-	// Agent 选这个提供方并绑定账号；开着“用本机的登录状态”时选择里带 localLogin。
+	// An Agent picks this provider and binds an account; with “用本机的登录状态” ("Use local logins") on, the selection carries
+	// localLogin.
 	agent := decode[apitypes.Agent](t, e.expect(201, "POST", e.agents(), map[string]any{"name": "订阅助手", "model": map[string]string{"provider": "anthropic", "modelId": "claude-x"}}))
 	if err := e.st.SaveAgentPluginGrant(ctx, agent.ID, plugin, true, nil); err != nil {
 		t.Fatal(err)
@@ -116,8 +117,10 @@ func TestPluginProviderLoginAPI(t *testing.T) {
 	}
 }
 
-// 平台 Agent 经 HTTP 用插件提供方：目录里的原因只看授权；没授权时不能选、不能登录（409）；授权后选用并在 Agent 自己的
-// 模型凭证里登录，问题、设备码与手工输入经操作视图与回答接口交给控制台；成功后凭证是这个 Agent 的版本，状态里带 localLogin。
+// A platform Agent uses a plugin provider over HTTP: the reason in the catalog depends only on the grant; without a
+// grant it cannot be picked or logged in (409); after the grant it is picked and logged in within the Agent's own model
+// credential, with questions, device codes and manual input handed to the console through the operation view and the
+// answer endpoint; on success the credential is this Agent's version, and the status carries localLogin.
 func TestPlatformAgentPluginLoginAPI(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()

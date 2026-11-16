@@ -1,5 +1,6 @@
-// Package contracttest 为测试提供 OpenAPI 契约校验：加载并校验 api/openapi.yaml，
-// 用 RoundTripper 校验每个请求与响应，按事件名校验 SSE 数据，并列出契约中的全部操作。
+// Package contracttest provides OpenAPI contract validation for tests: it loads and validates api/openapi.yaml,
+// validates every request and response through a RoundTripper, validates SSE data by event name, and lists all
+// operations in the contract.
 package contracttest
 
 import (
@@ -23,7 +24,7 @@ import (
 	"loop-now/internal/testutil/testenv"
 )
 
-// Validator 校验请求、响应与 SSE 数据。
+// Validator validates requests, responses and SSE data.
 type Validator struct {
 	t      testing.TB
 	doc    *openapi3.T
@@ -36,10 +37,10 @@ func schemaOpts() []openapi3.SchemaValidationOption {
 	return []openapi3.SchemaValidationOption{openapi3.EnableJSONSchema2020()}
 }
 
-// Load 加载并校验控制台契约 api/openapi.yaml。
+// Load loads and validates the console contract api/openapi.yaml.
 func Load(t testing.TB) *openapi3.T { return LoadFile(t, "openapi.yaml") }
 
-// LoadFile 加载并校验 api 目录下的契约文件。
+// LoadFile loads and validates a contract file in the api directory.
 func LoadFile(t testing.TB, file string) *openapi3.T {
 	t.Helper()
 	loader := openapi3.NewLoader()
@@ -53,14 +54,14 @@ func LoadFile(t testing.TB, file string) *openapi3.T {
 	return doc
 }
 
-// OperationMeta 是契约中一个操作的 operationId、x-access 与 x-plugin-scope。
+// OperationMeta holds the operationId, x-access and x-plugin-scope of one operation in the contract.
 type OperationMeta struct {
 	OperationID string
-	Access      string // x-access；没有时为空
-	PluginScope string // x-plugin-scope；插件令牌不能调用时为空
+	Access      string // x-access; empty when absent
+	PluginScope string // x-plugin-scope; empty when plugin tokens cannot call it
 }
 
-// LoadOperations 返回契约文件中的全部操作，键形如 "GET /agents/{agentId}"。
+// LoadOperations returns all operations in a contract file, keyed like "GET /agents/{agentId}".
 func LoadOperations(t testing.TB, file string) map[string]OperationMeta {
 	t.Helper()
 	doc := LoadFile(t, file)
@@ -75,17 +76,17 @@ func LoadOperations(t testing.TB, file string) map[string]OperationMeta {
 	return out
 }
 
-// New 创建控制台契约的校验器；baseURL 是测试服务的地址（不含 /api/v1）。
+// New creates a validator for the console contract; baseURL is the address of the test server (without /api/v1).
 func New(t testing.TB, baseURL string) *Validator {
 	return NewFor(t, baseURL, "openapi.yaml", "/api/v1")
 }
 
-// NewAgent 创建 Agent 专用接口契约（api/agent-openapi.yaml，基址 /agent/v1）的校验器。
+// NewAgent creates a validator for the Agent-only API contract (api/agent-openapi.yaml, base path /agent/v1).
 func NewAgent(t testing.TB, baseURL string) *Validator {
 	return NewFor(t, baseURL, "agent-openapi.yaml", "/agent/v1")
 }
 
-// NewFor 创建指定契约文件与基址的校验器。
+// NewFor creates a validator for the given contract file and base path.
 func NewFor(t testing.TB, baseURL, file, base string) *Validator {
 	t.Helper()
 	doc := LoadFile(t, file)
@@ -109,7 +110,7 @@ func (v *Validator) record(format string, args ...any) {
 	v.failed = append(v.failed, fmt.Sprintf(format, args...))
 }
 
-// Failures 返回已记录的校验失败（用于测试“故意违约时校验会失败”）。
+// Failures returns the recorded validation failures (for testing that a deliberate contract violation fails validation).
 func (v *Validator) Failures() []string {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -118,7 +119,7 @@ func (v *Validator) Failures() []string {
 	return out
 }
 
-// Client 返回经契约校验的 HTTP 客户端。
+// Client returns an HTTP client whose traffic is validated against the contract.
 func (v *Validator) Client() *http.Client {
 	return &http.Client{Transport: &roundTripper{v: v, base: http.DefaultTransport}}
 }
@@ -142,11 +143,13 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	opts := &openapi3filter.Options{AuthenticationFunc: openapi3filter.NoopAuthenticationFunc, SchemaValidationOptions: schemaOpts(), MultiError: true}
 	in := &openapi3filter.RequestValidationInput{Request: req, PathParams: params, Route: route, Options: opts}
-	// 请求校验只用于发现测试本身的错误；故意发送非法请求的用例会在这里报出，所以只记录合法请求的问题。
+	// Request validation only serves to find mistakes in the tests themselves; cases that deliberately send invalid
+	// requests would be reported here, so only problems with valid requests are recorded.
 	if err := openapi3filter.ValidateRequest(req.Context(), in); err != nil && req.Header.Get("X-Contract-Invalid-Request") == "" {
 		v.record("%s %s：请求不符合契约：%v", req.Method, req.URL.Path, err)
 	}
-	// 没有请求体的请求保持没有请求体：换成空读取器会让传输层按长度未知发送。
+	// A request without a body keeps having no body: replacing it with an empty reader would make the transport send it
+	// with an unknown length.
 	if req.Body != nil {
 		req.Body = io.NopCloser(bytes.NewReader(reqBody))
 	}
@@ -155,7 +158,7 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		return resp, err
 	}
 	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
-		return resp, nil // 事件流由 ValidateSSE 单独校验
+		return resp, nil // event streams are validated separately by ValidateSSE
 	}
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
@@ -175,17 +178,17 @@ func truncate(b []byte) string {
 	return string(b)
 }
 
-// AgentEventsPath、OverviewEventsPath 与 InboxEventsPath 是契约中三条事件流的路径（不含 /api/v1）。
+// AgentEventsPath, OverviewEventsPath and InboxEventsPath are the contract's three event stream paths (without /api/v1).
 const (
 	AgentEventsPath    = "/agents/{agentId}/events"
 	OverviewEventsPath = "/overview/events"
 	InboxEventsPath    = "/inbox/events"
 )
 
-// SSEEventSchemas 返回 Agent 事件流 x-sse-events 中事件名到 schema 名的映射。
+// SSEEventSchemas returns the mapping from event name to schema name in x-sse-events of the Agent event stream.
 func (v *Validator) SSEEventSchemas() map[string]string { return v.StreamEventSchemas(AgentEventsPath) }
 
-// StreamEventSchemas 返回指定事件流 x-sse-events 中事件名到 schema 名的映射。
+// StreamEventSchemas returns the mapping from event name to schema name in x-sse-events of the given event stream.
 func (v *Validator) StreamEventSchemas(path string) map[string]string {
 	op := v.doc.Paths.Find(path).Get
 	raw, _ := json.Marshal(op.Extensions["x-sse-events"])
@@ -200,12 +203,12 @@ func (v *Validator) StreamEventSchemas(path string) map[string]string {
 	return out
 }
 
-// ValidateSSE 按事件名校验 Agent 事件流中一条 SSE 事件的数据。
+// ValidateSSE validates the data of one SSE event of the Agent event stream by its event name.
 func (v *Validator) ValidateSSE(event string, data []byte) {
 	v.ValidateStreamSSE(AgentEventsPath, event, data)
 }
 
-// ValidateStreamSSE 按事件名校验指定事件流中一条 SSE 事件的数据。
+// ValidateStreamSSE validates the data of one SSE event of the given event stream by its event name.
 func (v *Validator) ValidateStreamSSE(path, event string, data []byte) {
 	name, ok := v.StreamEventSchemas(path)[event]
 	if !ok {
@@ -223,7 +226,7 @@ func (v *Validator) ValidateStreamSSE(path, event string, data []byte) {
 	}
 }
 
-// Operations 返回契约中的全部操作，形如 "GET /agents/{agentId}"（不含 /api/v1）。
+// Operations returns all operations in the contract, like "GET /agents/{agentId}" (without /api/v1).
 func (v *Validator) Operations() []string {
 	var out []string
 	for path, item := range v.doc.Paths.Map() {

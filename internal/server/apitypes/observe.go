@@ -7,15 +7,15 @@ import (
 	"github.com/google/uuid"
 )
 
-// ---- 概览 ----
+// ---- Overview ----
 
-// ProcessExit 对应 ProcessExit。
+// ProcessExit mirrors the ProcessExit schema.
 type ProcessExit struct {
 	At     time.Time `json:"at"`
 	Reason string    `json:"reason"`
 }
 
-// AgentOverview 对应 AgentOverview。
+// AgentOverview mirrors the AgentOverview schema.
 type AgentOverview struct {
 	AgentID         uuid.UUID    `json:"agentId"`
 	Scope           string       `json:"scope"`
@@ -27,33 +27,33 @@ type AgentOverview struct {
 	LastProcessExit *ProcessExit `json:"lastProcessExit"`
 }
 
-// 概览事件流的事件名。
+// Event names of the overview event stream.
 const (
 	EventOverviewSnapshot = "snapshot"
 	EventAgentStatus      = "agent.status"
 	EventAgentRemoved     = "agent.removed"
 )
 
-// SseOverviewSnapshot 对应 SseOverviewSnapshot。
+// SseOverviewSnapshot mirrors the SseOverviewSnapshot schema.
 type SseOverviewSnapshot struct {
 	Agents []AgentOverview `json:"agents"`
 }
 
-// SseAgentStatus 对应 SseAgentStatus。
+// SseAgentStatus mirrors the SseAgentStatus schema.
 type SseAgentStatus struct {
 	Agent AgentOverview `json:"agent"`
 }
 
-// SseAgentRemoved 对应 SseAgentRemoved。
+// SseAgentRemoved mirrors the SseAgentRemoved schema.
 type SseAgentRemoved struct {
 	AgentID   uuid.UUID  `json:"agentId"`
 	Scope     string     `json:"scope"`
 	ProjectID *uuid.UUID `json:"projectId"`
 }
 
-// ---- 用量 ----
+// ---- Usage ----
 
-// UsageRow 对应 UsageRow。
+// UsageRow mirrors the UsageRow schema.
 type UsageRow struct {
 	AgentID      uuid.UUID  `json:"agentId"`
 	AgentName    string     `json:"agentName"`
@@ -70,23 +70,23 @@ type UsageRow struct {
 	Total        int64      `json:"total"`
 }
 
-// UsagePage 对应 UsagePage。
+// UsagePage mirrors the UsagePage schema.
 type UsagePage struct {
 	From *time.Time `json:"from"`
 	To   *time.Time `json:"to"`
 	Rows []UsageRow `json:"rows"`
 }
 
-// ---- 异常与失败 ----
+// ---- Anomalies and failures ----
 
-// 异常类别。
+// Anomaly kinds.
 const (
 	AnomalyRunFailed      = "run_failed"
 	AnomalyRunInterrupted = "run_interrupted"
 	AnomalyServerRestart  = "server_restart"
 )
 
-// Anomaly 对应 Anomaly。
+// Anomaly mirrors the Anomaly schema.
 type Anomaly struct {
 	RunID        uuid.UUID  `json:"runId"`
 	Kind         string     `json:"kind"`
@@ -98,27 +98,27 @@ type Anomaly struct {
 	ErrorCode    *string    `json:"errorCode"`
 	ErrorMessage *string    `json:"errorMessage"`
 	EndReason    *string    `json:"endReason"`
-	// Compaction 只在手动压缩（/compact）的执行上有，其余为 null。
+	// Compaction is set only on manual compaction (/compact) runs; null otherwise.
 	Compaction *RunCompaction `json:"compaction"`
 }
 
-// AnomalyPage 对应 AnomalyPage。
+// AnomalyPage mirrors the AnomalyPage schema.
 type AnomalyPage struct {
 	Items      []Anomaly `json:"items"`
 	Total      int       `json:"total"`
 	NextCursor *string   `json:"nextCursor"`
 }
 
-// ---- 时间线 ----
+// ---- Timeline ----
 
-// RunTimeline 对应 RunTimeline。Entries 中每项是下面某个 Timeline* 结构，按时间排序。
+// RunTimeline mirrors the RunTimeline schema. Each item in Entries is one of the Timeline* structures below, in time order.
 type RunTimeline struct {
 	Run     Run         `json:"run"`
 	Entries []any       `json:"entries"`
 	Usage   UsageTotals `json:"usage"`
 }
 
-// 时间线条目的类型。
+// Timeline entry types.
 const (
 	TimelineQueued            = "queued"
 	TimelineDispatched        = "dispatched"
@@ -144,19 +144,20 @@ const (
 	TimelineModelRateLimit    = "model_rate_limit"
 )
 
-// TimelineBase 是每个条目共有的字段。
+// TimelineBase holds the fields every entry has.
 type TimelineBase struct {
 	Type string    `json:"type"`
 	At   time.Time `json:"at"`
 }
 
-// TimelineQueuedEntry 对应 TimelineQueued。
+// TimelineQueuedEntry mirrors the TimelineQueued schema.
 type TimelineQueuedEntry struct {
 	TimelineBase
 	WhenBusy string `json:"whenBusy"`
 }
 
-// TimelinePromotedEntry 记录排队中的消息改变了排队方式（目前只有普通排队转为打断）。
+// TimelinePromotedEntry records that a queued message changed how it is queued (currently only a regular queue turning
+// into an interrupt).
 type TimelinePromotedEntry struct {
 	TimelineBase
 	From      string     `json:"from"`
@@ -164,19 +165,20 @@ type TimelinePromotedEntry struct {
 	MessageID *uuid.UUID `json:"messageId,omitempty"`
 }
 
-// TimelineMessageCancelledEntry 对应 TimelineMessageCancelled：这一执行承载的一条 Inbox 消息被人取消。
+// TimelineMessageCancelledEntry mirrors the TimelineMessageCancelled schema: someone cancelled an Inbox message carried
+// by this run.
 type TimelineMessageCancelledEntry struct {
 	TimelineBase
 	MessageID uuid.UUID `json:"messageId"`
 }
 
-// TimelinePhaseEntry 对应 TimelinePhase。
+// TimelinePhaseEntry mirrors the TimelinePhase schema.
 type TimelinePhaseEntry struct {
 	TimelineBase
 	Phase string `json:"phase"`
 }
 
-// TimelineCLIInstallEntry 对应 TimelineCliInstall。
+// TimelineCLIInstallEntry mirrors the TimelineCliInstall schema.
 type TimelineCLIInstallEntry struct {
 	TimelineBase
 	CLI        string  `json:"cli"`
@@ -186,7 +188,7 @@ type TimelineCLIInstallEntry struct {
 	Error      *string `json:"error"`
 }
 
-// TimelineSyncSource 对应 TimelineSyncSource。
+// TimelineSyncSource mirrors the TimelineSyncSource schema.
 type TimelineSyncSource struct {
 	Path         string  `json:"path"`
 	Kind         string  `json:"kind"`
@@ -196,7 +198,7 @@ type TimelineSyncSource struct {
 	Error        *string `json:"error"`
 }
 
-// TimelineWorkspaceSyncEntry 对应 TimelineWorkspaceSync。
+// TimelineWorkspaceSyncEntry mirrors the TimelineWorkspaceSync schema.
 type TimelineWorkspaceSyncEntry struct {
 	TimelineBase
 	Result     string               `json:"result"`
@@ -205,7 +207,7 @@ type TimelineWorkspaceSyncEntry struct {
 	Sources    []TimelineSyncSource `json:"sources"`
 }
 
-// TimelinePiStartedEntry 对应 TimelinePiStarted。
+// TimelinePiStartedEntry mirrors the TimelinePiStarted schema.
 type TimelinePiStartedEntry struct {
 	TimelineBase
 	PID           int64   `json:"pid"`
@@ -215,7 +217,7 @@ type TimelinePiStartedEntry struct {
 	Runtime       *string `json:"runtime,omitempty"`
 }
 
-// TimelinePiReusedEntry 对应 TimelinePiReused。
+// TimelinePiReusedEntry mirrors the TimelinePiReused schema.
 type TimelinePiReusedEntry struct {
 	TimelineBase
 	PID              int64      `json:"pid"`
@@ -223,7 +225,7 @@ type TimelinePiReusedEntry struct {
 	Runtime          *string    `json:"runtime,omitempty"`
 }
 
-// TimelinePiStoppedEntry 对应 TimelinePiStopped。
+// TimelinePiStoppedEntry mirrors the TimelinePiStopped schema.
 type TimelinePiStoppedEntry struct {
 	TimelineBase
 	PID      int64   `json:"pid"`
@@ -232,7 +234,7 @@ type TimelinePiStoppedEntry struct {
 	Runtime  *string `json:"runtime,omitempty"`
 }
 
-// TimelinePiExitedEntry 对应 TimelinePiExited。
+// TimelinePiExitedEntry mirrors the TimelinePiExited schema.
 type TimelinePiExitedEntry struct {
 	TimelineBase
 	PID        int64   `json:"pid"`
@@ -242,13 +244,14 @@ type TimelinePiExitedEntry struct {
 	Runtime    *string `json:"runtime,omitempty"`
 }
 
-// TimelineModelRateLimitEntry 对应 TimelineModelRateLimit：Claude Code 报告的订阅额度状态，原样。
+// TimelineModelRateLimitEntry mirrors the TimelineModelRateLimit schema: the subscription quota status reported by
+// Claude Code, verbatim.
 type TimelineModelRateLimitEntry struct {
 	TimelineBase
 	Info map[string]any `json:"info"`
 }
 
-// TimelineToolEntry 对应 TimelineTool：At 为开始时间。
+// TimelineToolEntry mirrors the TimelineTool schema: At is the start time.
 type TimelineToolEntry struct {
 	TimelineBase
 	ToolCallID string     `json:"toolCallId"`
@@ -259,7 +262,7 @@ type TimelineToolEntry struct {
 	DurationMs *int64     `json:"durationMs"`
 }
 
-// TimelineModelCallEntry 对应 TimelineModelCall。
+// TimelineModelCallEntry mirrors the TimelineModelCall schema.
 type TimelineModelCallEntry struct {
 	TimelineBase
 	Kind          string  `json:"kind"`
@@ -276,7 +279,7 @@ type TimelineModelCallEntry struct {
 	DurationMs    *int64  `json:"durationMs"`
 }
 
-// TimelineRetryStartedEntry 对应 TimelineModelRetryStarted。
+// TimelineRetryStartedEntry mirrors the TimelineModelRetryStarted schema.
 type TimelineRetryStartedEntry struct {
 	TimelineBase
 	Attempt      int64  `json:"attempt"`
@@ -285,7 +288,7 @@ type TimelineRetryStartedEntry struct {
 	ErrorMessage string `json:"errorMessage"`
 }
 
-// TimelineRetryEndedEntry 对应 TimelineModelRetryEnded。
+// TimelineRetryEndedEntry mirrors the TimelineModelRetryEnded schema.
 type TimelineRetryEndedEntry struct {
 	TimelineBase
 	Success    bool    `json:"success"`
@@ -293,7 +296,7 @@ type TimelineRetryEndedEntry struct {
 	FinalError *string `json:"finalError"`
 }
 
-// TimelineExtensionUIEntry 对应 TimelineExtensionUI。
+// TimelineExtensionUIEntry mirrors the TimelineExtensionUI schema.
 type TimelineExtensionUIEntry struct {
 	TimelineBase
 	Method     string     `json:"method"`
@@ -304,7 +307,7 @@ type TimelineExtensionUIEntry struct {
 	QuestionID *uuid.UUID `json:"questionId"`
 }
 
-// TimelineCompactionEntry 对应 TimelineCompaction。
+// TimelineCompactionEntry mirrors the TimelineCompaction schema.
 type TimelineCompactionEntry struct {
 	TimelineBase
 	Reason               string  `json:"reason"`
@@ -315,14 +318,14 @@ type TimelineCompactionEntry struct {
 	DurationMs           *int64  `json:"durationMs"`
 }
 
-// TimelineAbortRequestedEntry 对应 TimelineAbortRequested。
+// TimelineAbortRequestedEntry mirrors the TimelineAbortRequested schema.
 type TimelineAbortRequestedEntry struct {
 	TimelineBase
 	ByRunID *uuid.UUID `json:"byRunId"`
 	Stop    bool       `json:"stop,omitempty"`
 }
 
-// TimelineEndedEntry 对应 TimelineEnded。
+// TimelineEndedEntry mirrors the TimelineEnded schema.
 type TimelineEndedEntry struct {
 	TimelineBase
 	Status    string  `json:"status"`
@@ -330,7 +333,7 @@ type TimelineEndedEntry struct {
 	ErrorCode *string `json:"errorCode"`
 }
 
-// TimelineSessionMissingEntry 对应 TimelineSessionMissing。
+// TimelineSessionMissingEntry mirrors the TimelineSessionMissing schema.
 type TimelineSessionMissingEntry struct {
 	TimelineBase
 	SessionFile *string `json:"sessionFile"`

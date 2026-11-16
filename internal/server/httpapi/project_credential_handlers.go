@@ -272,7 +272,7 @@ func (s *Server) listProjectModelAuthOperations(w http.ResponseWriter, r *http.R
 		s.fail(w, r, e)
 		return
 	}
-	// provider 可省，省略时列出全部进行中的登录（Codex 与插件提供方），每条带 provider。
+	// provider is optional; without it all logins in progress are listed (Codex and plugin providers), each with provider.
 	provider := r.URL.Query().Get("provider")
 	var account *uuid.UUID
 	if raw := r.URL.Query().Get("accountId"); raw != "" {
@@ -318,7 +318,8 @@ func (s *Server) startProjectModelAuthLogin(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, 202, out)
 }
 
-// answerProjectModelAuthLogin 回答插件提供方登录中正在等的问题（plugins/SPEC.md §13）。回答只在内存里转给登录辅助进程。
+// answerProjectModelAuthLogin answers the question a plugin provider login is waiting on (plugins/SPEC.md §13). The
+// answer is only passed in memory to the login helper process.
 func (s *Server) answerProjectModelAuthLogin(w http.ResponseWriter, r *http.Request) {
 	project, id, e := projectOperationIDs(r)
 	if e != nil {

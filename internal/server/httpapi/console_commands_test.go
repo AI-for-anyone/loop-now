@@ -144,13 +144,13 @@ func TestPlatformConsoleCompactCopyExportAndEndEventContract(t *testing.T) {
 	e.expectError(409, "session_missing", "GET", path+"/session/export?format=html", nil)
 }
 
-// 平台命令（/new、/reload、/resume、导出）占着忙闲锁时没有执行可报：agent_busy 的 currentRunId 是 null，不是全零的 ID。
-// 按 whenBusy 排队的消息在锁放开后开始。
+// While a platform command (/new, /reload, /resume, export) holds the busy lock there is no run to report: the
+// currentRunId of agent_busy is null, not an all-zero ID. Messages queued per whenBusy start once the lock is released.
 func TestAgentBusyWithoutRunReportsNullCurrentRun(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	agent, path := e.newAgent("忙碌助手")
-	owner := coord.LockValue(uuid.NewString(), uuid.NewString()) // 代替一条不产生执行的平台命令持锁
+	owner := coord.LockValue(uuid.NewString(), uuid.NewString()) // holds the lock in place of a platform command that creates no run
 	if ok, err := e.co.Acquire(ctx, agent.ID.String(), owner); err != nil || !ok {
 		t.Fatalf("取锁失败：%v %v", ok, err)
 	}
@@ -298,8 +298,9 @@ func TestPlatformConsoleNewThenResume(t *testing.T) {
 	}
 }
 
-// 有可以开始的排队消息时平台命令不做维护（agent_not_idle），并且立即开始那条消息，而不是等下一次对账；
-// 它开始之后，命令拿不到忙闲锁，同样是 agent_not_idle（平台命令不用 agent_busy）。
+// When there are queued messages that can start, platform commands do no maintenance (agent_not_idle) and that message
+// starts immediately instead of waiting for the next reconciliation; once it has started, the commands cannot get the
+// busy lock, which is also agent_not_idle (platform commands do not use agent_busy).
 func TestPlatformConsoleQueuedWorkAlsoBlocksMaintenance(t *testing.T) {
 	e := newEnv(t)
 	agent, path := e.newAgent("排队门禁")
@@ -319,7 +320,7 @@ func TestPlatformConsoleQueuedWorkAlsoBlocksMaintenance(t *testing.T) {
 	}
 	e.expectError(409, "agent_not_idle", "GET", path+"/session/export?format=jsonl", nil)
 	for _, command := range []string{"/session", "/copy"} {
-		consoleCommand(t, e, path, command) // 只读命令忙时照常可用
+		consoleCommand(t, e, path, command) // read-only commands keep working while busy
 	}
 }
 
@@ -339,7 +340,8 @@ func TestClaudeCannotResumePiSession(t *testing.T) {
 	}
 }
 
-// 执行器维护操作里用户可以碰到的失败（运行时正忙、没有会话、运行时不支持）是 409，不是 500 internal_error。
+// Failures of executor maintenance operations that users can run into (runtime busy, no session, runtime unsupported)
+// are 409, not 500 internal_error.
 func TestPlatformConsoleMaintenanceErrorsAreConflicts(t *testing.T) {
 	e := newEnv(t)
 	agent, path := e.newAgent("维护失败")
@@ -363,8 +365,8 @@ func TestPlatformConsoleMaintenanceErrorsAreConflicts(t *testing.T) {
 	}
 }
 
-// Claude Code 的 Agent 支持 /session、/new、/reload、/copy；/compact、/export、/resume 只适用于 Pi 会话，
-// 直接以 409 console_command_failed 拒绝，不产生执行。
+// Claude Code Agents support /session, /new, /reload and /copy; /compact, /export and /resume only apply to Pi
+// sessions, and are rejected directly with 409 console_command_failed, without creating a run.
 func TestClaudeCodeConsoleCommandSupport(t *testing.T) {
 	e := newEnv(t)
 	reg := modelcatalog.NewRegistry(e.api.Models.Snapshot())
@@ -399,7 +401,8 @@ func TestClaudeCodeConsoleCommandSupport(t *testing.T) {
 	}
 }
 
-// /compact 的结果记在执行上：命令返回结束后的执行；Pi 没有压缩时也是 200，写明原因；/session 能读到最近一次压缩。
+// The result of /compact is recorded on the run: the command returns the run after it ended; it is 200 even when Pi did
+// not compact, with the reason stated; /session can read the most recent compaction.
 func TestPlatformConsoleCompactResultOnRun(t *testing.T) {
 	e := newEnv(t)
 	agent, path := e.newAgent("压缩结果")
@@ -430,7 +433,8 @@ func TestPlatformConsoleCompactResultOnRun(t *testing.T) {
 	}
 }
 
-// 异常列表里失败的手动压缩带 compaction（指令；失败时 outcome 为 null），普通执行的为 null。
+// In the anomaly list, a failed manual compaction carries compaction (the instructions; outcome is null on failure),
+// and a regular run has null.
 func TestAnomalyMarksFailedCompaction(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()

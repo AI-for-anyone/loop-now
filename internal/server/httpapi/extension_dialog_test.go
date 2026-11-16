@@ -11,9 +11,10 @@ import (
 	"loop-now/internal/server/inbox"
 )
 
-// 扩展对话（plugins/SPEC.md §11）：confirm、select、input 成为 Agent 发给控制台的提问，期限为请求的超时；
-// 控制台的回答交还给扩展，回答消息记为已读、不提醒 Agent；到期与这一轮结束按取消回应，不给 Agent 发到期通知；
-// 任务轮次与选项超过 10 个的对话不提问。
+// Extension dialogs (plugins/SPEC.md §11): confirm, select and input become questions the Agent sends to the console,
+// with the request's timeout as the deadline; the console's answer is handed back to the extension, and the answer
+// message is marked read without notifying the Agent; expiry and the end of the turn are answered as a cancel, and the
+// Agent gets no expiry notice; task turns and dialogs with more than 10 options do not ask.
 func TestExtensionDialogQuestions(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()

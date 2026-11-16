@@ -1,4 +1,4 @@
-// Package httpapi 实现控制台 HTTP 接口（以 api/openapi.yaml 为契约）与 SSE 事件流。
+// Package httpapi implements the console HTTP API (with api/openapi.yaml as the contract) and the SSE event streams.
 package httpapi
 
 import (
@@ -41,11 +41,12 @@ import (
 	"loop-now/internal/server/tasks"
 )
 
-// Options 是 HTTP 层的参数。
+// Options are the parameters of the HTTP layer.
 type Options struct {
 	AllowedHosts   []string
 	ConsoleOrigins []string
-	// Console 回答控制台端口上 API 之外的路径（控制台的静态文件）；为空时这些路径 404。
+	// Console answers paths outside the API on the console port (the console's static files); when nil these paths get
+	// a 404.
 	Console       http.Handler
 	SSEKeepalive  time.Duration
 	TaskEventPoll time.Duration
@@ -53,12 +54,12 @@ type Options struct {
 	Defaults      store.DefaultContext
 }
 
-// Server 持有各业务服务。
+// Server holds the business services.
 type Server struct {
-	// Runtimes 报告 Agent 运行时在本机是否可用；为空时列表为空。
+	// Runtimes reports whether Agent runtimes are available on this machine; when nil the list is empty.
 	Runtimes *runtimes.Checker
 	Plugins  *plugins.Service
-	// Hooks 是同步 Hook 的入口（plugins.Service）；为空时不调用插件。
+	// Hooks is the entry point for synchronous Hooks (plugins.Service); when nil, plugins are not called.
 	Hooks              pluginhost.Hooker
 	CLIImport          CLIImportController
 	CLIVerification    cliverify.Controller
@@ -80,19 +81,21 @@ type Server struct {
 	LocalMode          *localmode.Service
 	Tasks              *tasks.Service
 	Log                *slog.Logger
-	// PiCommands 返回 Agent 上次启动 Pi 时读到的命令列表（从没启动过时为 nil）；为空时命令列表恒为空。
+	// PiCommands returns the command list Pi reported the last time the Agent started it (nil if Pi has never been
+	// started); when PiCommands is nil the command list is always empty.
 	PiCommands func(uuid.UUID) (*executor.PiCommands, error)
 }
 
-// Access 是路由允许的身份范围；零值为只限控制台，新增的路由默认不对外开放。
+// Access is the set of identities a route allows; the zero value is console only, so new routes are not externally open
+// by default.
 type Access int
 
 const (
-	ConsoleOnly        Access = iota // 只限控制台（契约中 x-access: console）
-	ConsoleAndExternal               // 控制台与外部身份（契约中 x-access: console-and-external）
+	ConsoleOnly        Access = iota // console only (x-access: console in the contract)
+	ConsoleAndExternal               // console and external identities (x-access: console-and-external in the contract)
 )
 
-// String 返回契约中 x-access 的写法。
+// String returns how x-access is written in the contract.
 func (a Access) String() string {
 	if a == ConsoleAndExternal {
 		return "console-and-external"
@@ -100,16 +103,16 @@ func (a Access) String() string {
 	return "console"
 }
 
-// Route 是一条接口路由，供契约测试比对。
+// Route is one API route, for comparison by the contract tests.
 type Route struct {
 	Method  string
-	Pattern string // 不含 /api/v1 或 /agent/v1 前缀
-	Op      string // 契约中的 operationId，审计记录使用
+	Pattern string // without the /api/v1 or /agent/v1 prefix
+	Op      string // operationId in the contract, used by audit records
 	Access  Access
 	handler func(http.ResponseWriter, *http.Request)
 }
 
-// Routes 返回全部控制台接口路由。
+// Routes returns all console API routes.
 func (s *Server) Routes() []Route {
 	return []Route{
 		{"PUT", "/agents/{agentId}/message-images/{imageId}", "uploadAgentMessageImage", ConsoleOnly, s.uploadMessageImage},
@@ -317,8 +320,9 @@ func (s *Server) Routes() []Route {
 	}
 }
 
-// AgentRoutes 返回 Agent 专用接口（/agent/v1）的路由，契约为 api/agent-openapi.yaml。
-// 处理函数与控制台的同名接口相同，当前身份由 Agent 令牌决定。
+// AgentRoutes returns the routes of the Agent-only API (/agent/v1), whose contract is api/agent-openapi.yaml. The
+// handlers are the same as for the console endpoints of the same name; the current identity is determined by the Agent
+// token.
 func (s *Server) AgentRoutes() []Route {
 	return []Route{
 		{"GET", "/agents/status", "getProjectAgentStatus", ConsoleOnly, s.getProjectAgentStatus},
@@ -350,7 +354,8 @@ func (s *Server) AgentRoutes() []Route {
 	}
 }
 
-// Handler 返回回环监听器的处理器：控制台接口 /api/v1、Agent 专用接口 /agent/v1，其余路径交给控制台的静态文件。
+// Handler returns the handler for the loopback listener: the console API /api/v1, the Agent-only API /agent/v1, and
+// every other path goes to the console's static files.
 func (s *Server) Handler() http.Handler {
 	root := http.NewServeMux()
 	root.Handle("/api/v1/", s.cors(s.consoleAuth(s.newMux("/api/v1", s.Routes()))))
@@ -365,14 +370,16 @@ func (s *Server) Handler() http.Handler {
 	return withCommonHeaders(s.logRequests(s.checkHost(root)))
 }
 
-// RequestIDHeader 是返回请求编号的响应头；VersionHeader 是返回服务端版本的响应头。
+// RequestIDHeader is the response header that returns the request ID; VersionHeader is the response header that returns
+// the server version.
 const (
 	RequestIDHeader = "Loop-Now-Request-Id"
 	VersionHeader   = "Loop-Now-Version"
 )
 
-// withCommonHeaders 是每个入口的最外层中间件：为请求生成请求编号（UUIDv7）放进 context，
-// 并在响应中写入请求编号与服务端版本，成功与失败的响应都带。
+// withCommonHeaders is the outermost middleware of every entry point: it generates a request ID (UUIDv7) for the
+// request and puts it in the context, and writes the request ID and the server version into the response, on both
+// successful and failed responses.
 func withCommonHeaders(next http.Handler) http.Handler {
 	version := buildinfo.Version()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -383,9 +390,9 @@ func withCommonHeaders(next http.Handler) http.Handler {
 	})
 }
 
-// ---- 中间件 ----
+// ---- Middleware ----
 
-// checkHost 拒绝 Host 不在允许名单中的请求，防止 DNS 重绑定。
+// checkHost rejects requests whose Host is not on the allowlist, to prevent DNS rebinding.
 func (s *Server) checkHost(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host := r.Host
@@ -401,9 +408,10 @@ func (s *Server) checkHost(next http.Handler) http.Handler {
 	})
 }
 
-// cors 只对白名单来源回 CORS 头；带有不在白名单中的 Origin 的请求一律拒绝，且不执行任何写入。
-// 同源请求（服务端自己提供的控制台）不需要白名单：浏览器在同源的写请求上也带 Origin，它等于本请求的
-// scheme://Host，而 Host 已经过 checkHost 的白名单。
+// cors sends CORS headers only for allowlisted origins; a request with an Origin not on the allowlist is always
+// rejected, and no write is performed. Same-origin requests (the console served by the server itself) need no
+// allowlist: browsers also send Origin on same-origin write requests, and it equals this request's scheme://Host, while
+// Host has already passed the checkHost allowlist.
 func (s *Server) cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
@@ -428,7 +436,7 @@ func (s *Server) cors(next http.Handler) http.Handler {
 	})
 }
 
-// sameOrigin 报告 origin 是否就是本请求的来源。
+// sameOrigin reports whether origin is the origin of this request itself.
 func sameOrigin(r *http.Request, origin string) bool {
 	scheme := "http"
 	if r.TLS != nil {
@@ -455,7 +463,8 @@ func (r *statusRecorder) Flush() {
 
 func (r *statusRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
 
-// logRequests 记录方法、路径、状态与耗时；不记录请求体，也不记录 Authorization 等头。
+// logRequests logs the method, path, status and duration; it never logs the request body, nor headers such as
+// Authorization.
 func (s *Server) logRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -465,7 +474,7 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 	})
 }
 
-// ---- 公共处理 ----
+// ---- Common handling ----
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	var buf bytes.Buffer
@@ -497,7 +506,7 @@ func writeError(w http.ResponseWriter, err error) {
 	writeJSON(w, e.Status, body)
 }
 
-// handle 统一处理内部错误的日志。
+// handle logs internal errors in one place.
 func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 	if _, ok := apperr.As(err); !ok {
 		var tooLarge *http.MaxBytesError
@@ -508,7 +517,7 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 	writeError(w, err)
 }
 
-// readJSON 解析 JSON 请求体，拒绝未知字段与超大请求体。
+// readJSON parses a JSON request body, rejecting unknown fields and oversized bodies.
 func readJSON(w http.ResponseWriter, r *http.Request, limit int64, v any) error {
 	body := http.MaxBytesReader(w, r.Body, limit)
 	dec := json.NewDecoder(body)
@@ -541,10 +550,10 @@ func readBody(w http.ResponseWriter, r *http.Request, limit int64) ([]byte, erro
 func pathUUID(r *http.Request, name string) (uuid.UUID, error) {
 	id, err := uuid.Parse(r.PathValue(name))
 	if err != nil {
-		return uuid.Nil, apperr.NotFound("资源") // 格式不对的 ID 不可能对应任何资源
+		return uuid.Nil, apperr.NotFound("资源") // a malformed ID cannot match any resource
 	}
 	return id, nil
 }
 
-// jsonLimit 是 JSON 请求体的通用上限。
+// jsonLimit is the general limit for JSON request bodies.
 const jsonLimit = 1 << 20

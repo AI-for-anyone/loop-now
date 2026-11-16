@@ -14,14 +14,17 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// 三个入口：
-//   - 回环监听器上的 /api/v1：控制台，免登录；带 Authorization 头的请求只接受插件令牌（lnp_，按 x-plugin-scope 限定），其余一律拒绝；
-//   - 回环监听器上的 /agent/v1：Agent，必须带有效的 lna_ 令牌，拒绝带 Origin 的请求；
-//   - 对外监听器：外部身份，每个请求都必须带有效的 lne_ 令牌，只能调用声明为对外开放的路由。
+// Three entry points:
+//   - /api/v1 on the loopback listener: the console, no login; a request with an Authorization header is accepted
+//     only with a plugin token (lnp_, limited by x-plugin-scope), anything else is rejected;
+//   - /agent/v1 on the loopback listener: Agents, a valid lna_ token is required, requests with an Origin are rejected;
+//   - the external listener: external identities, every request must carry a valid lne_ token and may only call
+//     routes declared as externally open.
 //
-// 中间件顺序：请求 ID 与版本头 → 身份认证 → 权限表 → 审计 → 处理函数。
+// Middleware order: request ID and version headers -> authentication -> permission table -> audit -> handler.
 
-// newMux 按前缀注册路由；每条路由先检查权限表，改变状态的请求再记审计。
+// newMux registers routes under a prefix; each route first checks the permission table, and state-changing requests are
+// then audited.
 func (s *Server) newMux(prefix string, routes []Route) *http.ServeMux {
 	m := http.NewServeMux()
 	for _, rt := range routes {
@@ -33,8 +36,9 @@ func (s *Server) newMux(prefix string, routes []Route) *http.ServeMux {
 	return m
 }
 
-// ExternalHandler 返回对外端口的处理器：与控制台同一组 /api/v1 路由、插件的 /hooks 入口，外加 loopctl 下载（downloads 为空时不提供）。
-// 对外端口不校验 Host 与 Origin，靠令牌与 TLS 保护。
+// ExternalHandler returns the handler for the external port: the same /api/v1 routes as the console, the plugins'
+// /hooks entry point, plus the loopctl downloads (not served when downloads is nil). The external port does not check
+// Host or Origin; it relies on tokens and TLS for protection.
 func (s *Server) ExternalHandler(downloads http.Handler) http.Handler {
 	root := http.NewServeMux()
 	root.Handle("/api/v1/", s.newMux("/api/v1", s.Routes()))
@@ -44,7 +48,7 @@ func (s *Server) ExternalHandler(downloads http.Handler) http.Handler {
 	root.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, apperr.NotFound("接口"))
 	})
-	// 插件的 HTTP 入口不要令牌：签名由插件自己校验（plugins/SPEC.md §11）。
+	// The plugins' HTTP entry point needs no token: the plugin verifies the signature itself (plugins/SPEC.md §11).
 	outer := http.NewServeMux()
 	outer.Handle("/hooks/{pluginId}", s.pluginIngress("external"))
 	outer.Handle("/hooks/{pluginId}/{path...}", s.pluginIngress("external"))
@@ -56,7 +60,7 @@ func unauthenticated() error {
 	return apperr.Unauthenticated("令牌缺失、无效、已过期或已吊销")
 }
 
-// externalAuth 校验外部令牌，把请求的身份设为令牌所属的外部身份。
+// externalAuth verifies an external token and sets the request identity to the external identity the token belongs to.
 func (s *Server) externalAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p, err := s.authenticate(r, auth.ExternalPrefix)
@@ -68,7 +72,8 @@ func (s *Server) externalAuth(next http.Handler) http.Handler {
 	})
 }
 
-// agentAuth 校验 Agent 令牌，把请求的身份设为令牌所属的 Agent；带 Origin 的请求返回 403。
+// agentAuth verifies an Agent token and sets the request identity to the Agent the token belongs to; requests with an
+// Origin get a 403.
 func (s *Server) agentAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Origin") != "" {
@@ -84,7 +89,8 @@ func (s *Server) agentAuth(next http.Handler) http.Handler {
 	})
 }
 
-// authenticate 按前缀校验 Bearer 令牌：先按 ID 查表，再用常量时间比较密钥。错误信息不回显令牌。
+// authenticate verifies a Bearer token by prefix: look it up by ID first, then compare the secret in constant time.
+// Error messages never echo the token.
 func (s *Server) authenticate(r *http.Request, prefix string) (auth.Principal, error) {
 	ctx := r.Context()
 	tok, _ := auth.BearerToken(r)
@@ -134,7 +140,8 @@ func unauthenticatedIfNotFound(err error) error {
 	return err
 }
 
-// guard 包装一条路由：外部身份只能调用声明为对外开放的路由；改变状态的请求在处理后记审计。
+// guard wraps a route: external identities may only call routes declared as externally open; state-changing requests
+// are audited after they are handled.
 func (s *Server) guard(rt Route) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		p, _ := auth.From(r.Context())
@@ -159,12 +166,13 @@ func (s *Server) guard(rt Route) http.HandlerFunc {
 	}
 }
 
-// auditNote 是处理函数补给审计的信息：插件以代管的外部身份的名义调用时记下那个身份。
+// auditNote is information a handler adds for the audit: when a plugin calls on behalf of an external identity it
+// manages, that identity is recorded.
 type auditNote struct{ onBehalfOf *uuid.UUID }
 
 type auditNoteKey struct{}
 
-// noteOnBehalfOf 记下这次调用代表的外部身份（写进审计）。
+// noteOnBehalfOf records the external identity this call acts on behalf of (written to the audit).
 func noteOnBehalfOf(r *http.Request, identity uuid.UUID) {
 	if n, ok := r.Context().Value(auditNoteKey{}).(*auditNote); ok {
 		n.onBehalfOf = &identity
@@ -173,7 +181,8 @@ func noteOnBehalfOf(r *http.Request, identity uuid.UUID) {
 
 var pathParam = regexp.MustCompile(`\{(\w+)\}`)
 
-// audit 写一条审计：时间、请求 ID、操作者、操作与路径参数、状态码；不含请求体、凭证与令牌。写入失败只记日志。
+// audit writes one audit entry: time, request ID, actor, operation and path parameters, status code; no request body,
+// credentials or tokens. A failed write is only logged.
 func (s *Server) audit(r *http.Request, rt Route, p auth.Principal, status int) {
 	e := store.AuditEntry{ActorKind: string(p.Kind), ActorAddress: p.Address, Method: r.Method, Operation: rt.Op,
 		Target: map[string]string{}, Status: status}
@@ -195,7 +204,8 @@ func (s *Server) audit(r *http.Request, rt Route, p auth.Principal, status int) 
 	}
 }
 
-// principal 返回请求的身份；没有经过认证中间件时（只在测试中出现）视为控制台操作者。
+// principal returns the identity of the request; without the authentication middleware (only happens in tests) it is
+// treated as the console operator.
 func principal(r *http.Request) auth.Principal {
 	if p, ok := auth.From(r.Context()); ok {
 		return p

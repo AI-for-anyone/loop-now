@@ -1,4 +1,5 @@
-// Package identity 是外部身份的名称规则与令牌签发，控制台接口与服务端命令行共用。
+// Package identity holds the naming rules and token issuing for external identities, shared by the console API and the
+// server command line.
 package identity
 
 import (
@@ -15,7 +16,8 @@ import (
 
 var namePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 
-// ValidateName 检查外部身份的名称，规则与契约 ExternalIdentityName 相同；满足时返回空字符串。
+// ValidateName checks an external identity name with the same rules as ExternalIdentityName in the contract; it returns
+// an empty string when the name is valid.
 func ValidateName(name string) string {
 	switch {
 	case !namePattern.MatchString(name):
@@ -26,7 +28,8 @@ func ValidateName(name string) string {
 	return ""
 }
 
-// IssueToken 为未删除的外部身份签发令牌；expiresAt 不为空时必须晚于当前时间。返回令牌元数据与只出现这一次的明文。
+// IssueToken issues a token for an external identity that has not been deleted; expiresAt, when set, must be later than
+// now. It returns the token metadata and the plaintext, which appears only this once.
 func IssueToken(ctx context.Context, st *store.Store, identityID uuid.UUID, expiresAt *time.Time) (store.ExternalToken, string, error) {
 	if expiresAt != nil && !expiresAt.After(time.Now()) {
 		return store.ExternalToken{}, "", apperr.Invalid("expiresAt", "过期时间必须晚于当前时间")

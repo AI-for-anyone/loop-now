@@ -11,7 +11,7 @@ import (
 	"loop-now/internal/server/folders"
 )
 
-// folderOf 从请求中解析要操作的文件夹（Agent 文件夹、项目或全局上下文文件夹）。
+// folderOf resolves the folder a request operates on (an Agent folder, or the project or global context folder).
 type folderOf func(r *http.Request) (folders.Folder, error)
 
 func (s *Server) agentFolder(r *http.Request) (folders.Folder, error) {

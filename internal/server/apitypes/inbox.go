@@ -15,7 +15,7 @@ import (
 	"loop-now/internal/server/store"
 )
 
-// 收件箱事件流的事件名。
+// Event names of the Inbox event stream.
 const (
 	EventInboxSnapshot  = "snapshot"
 	EventInboxCreated   = "inbox.message.created"
@@ -23,13 +23,13 @@ const (
 	EventInboxCancelled = "inbox.message.cancelled"
 )
 
-// 已删除参与方的显示名称。
+// Display names of deleted participants.
 const (
 	DeletedIdentityName = "已删除身份"
 	DeletedAgentName    = "已删除 Agent"
 )
 
-// Whoami 对应 Whoami。
+// Whoami mirrors the Whoami schema.
 type Whoami struct {
 	TaskID    *uuid.UUID `json:"taskId,omitempty"`
 	RuntimeID *uuid.UUID `json:"runtimeId,omitempty"`
@@ -38,7 +38,7 @@ type Whoami struct {
 	Name      string     `json:"name"`
 }
 
-// FromPrincipal 转换当前身份。
+// FromPrincipal converts the current identity.
 func FromPrincipal(p auth.Principal) Whoami {
 	w := Whoami{Kind: string(p.Kind), Name: p.Name}
 	if p.TaskID != uuid.Nil {
@@ -51,7 +51,7 @@ func FromPrincipal(p auth.Principal) Whoami {
 	return w
 }
 
-// InboxParticipant 对应 InboxParticipant。
+// InboxParticipant mirrors the InboxParticipant schema.
 type InboxParticipant struct {
 	Kind      string     `json:"kind"`
 	ID        *uuid.UUID `json:"id"`
@@ -62,7 +62,8 @@ type InboxParticipant struct {
 	ChannelID *string    `json:"channelId"`
 }
 
-// FromParty 转换参与方：按当前名称生成地址；已删除时显示名称换成“已删除身份”或“已删除 Agent”。
+// FromParty converts a participant: the address is built from the current name; for a deleted participant the display
+// name becomes "已删除身份" ("Deleted identity") or "已删除 Agent" ("Deleted Agent").
 func FromParty(v store.PartyView) InboxParticipant {
 	out := InboxParticipant{Kind: v.Kind, Deleted: v.Deleted}
 	switch v.Kind {
@@ -102,7 +103,7 @@ func FromParty(v store.PartyView) InboxParticipant {
 	return out
 }
 
-// InboxMessageSummary 对应 InboxMessageSummary。
+// InboxMessageSummary mirrors the InboxMessageSummary schema.
 type InboxMessageSummary struct {
 	Images    []messageimage.Ref   `json:"images,omitempty"`
 	Question  *store.InboxQuestion `json:"question,omitempty"`
@@ -117,36 +118,37 @@ type InboxMessageSummary struct {
 	WhenBusy  *string              `json:"whenBusy"`
 	CreatedAt time.Time            `json:"createdAt"`
 	ReadAt    *time.Time           `json:"readAt"`
-	// CancelledAt 不为空表示被人取消；收件 Agent 自己读到的正文为取消说明，不含原文与图片。
+	// CancelledAt is non-null when someone cancelled the message; the body the receiving Agent itself reads is then a
+	// cancellation note, without the original text or images.
 	CancelledAt *time.Time `json:"cancelledAt"`
-	// Task 是消息所属的任务实例；与任务实例无关时为 null。
+	// Task is the task instance the message belongs to; null when it has nothing to do with a task instance.
 	Task *store.InboxTaskRef `json:"task"`
 }
 
-// InboxMessage 对应 InboxMessage：摘要加全文。
+// InboxMessage mirrors the InboxMessage schema: the summary plus the full text.
 type InboxMessage struct {
 	InboxMessageSummary
 	Text string `json:"text"`
 }
 
-// FromInboxSummary 转换消息摘要。
+// FromInboxSummary converts a message summary.
 func FromInboxSummary(m store.InboxMessage) InboxMessageSummary {
 	return InboxMessageSummary{Images: m.Images, Question: m.Question, AnswerTo: m.AnswerTo, Notice: m.Notice, ID: m.ID, ThreadID: m.ThreadID, InReplyTo: m.InReplyTo, From: FromParty(m.From), To: FromParty(m.To),
 		Preview: m.Preview, WhenBusy: strPtr(m.WhenBusy), CreatedAt: m.CreatedAt, ReadAt: m.ReadAt, CancelledAt: m.CancelledAt, Task: m.Task}
 }
 
-// FromInboxMessage 转换消息全文。
+// FromInboxMessage converts a full message.
 func FromInboxMessage(m store.InboxMessage) InboxMessage {
 	return InboxMessage{InboxMessageSummary: FromInboxSummary(m), Text: m.Text}
 }
 
-// InboxMessagePage 对应 InboxMessagePage。
+// InboxMessagePage mirrors the InboxMessagePage schema.
 type InboxMessagePage struct {
 	Messages   []InboxMessageSummary `json:"messages"`
 	NextCursor *string               `json:"nextCursor"`
 }
 
-// FromInboxPage 转换一页消息。
+// FromInboxPage converts a page of messages.
 func FromInboxPage(p store.InboxPage) InboxMessagePage {
 	out := InboxMessagePage{Messages: make([]InboxMessageSummary, 0, len(p.Messages)), NextCursor: encodeCursor(p.Next)}
 	for _, m := range p.Messages {
@@ -163,13 +165,13 @@ func encodeCursor(c *store.InboxCursor) *string {
 	return &s
 }
 
-// InboxConversationPage 对应 InboxConversationPage：一页消息全文。
+// InboxConversationPage mirrors the InboxConversationPage schema: a page of full messages.
 type InboxConversationPage struct {
 	Messages   []InboxMessage `json:"messages"`
 	NextCursor *string        `json:"nextCursor"`
 }
 
-// FromConversationPage 转换一页消息全文。
+// FromConversationPage converts a page of full messages.
 func FromConversationPage(p store.InboxPage) InboxConversationPage {
 	out := InboxConversationPage{Messages: make([]InboxMessage, 0, len(p.Messages)), NextCursor: encodeCursor(p.Next)}
 	for _, m := range p.Messages {
@@ -178,7 +180,8 @@ func FromConversationPage(p store.InboxPage) InboxConversationPage {
 	return out
 }
 
-// InboxPending 对应 InboxPending；InboxPendingItem、InboxPendingAgentCount、InboxPendingTaskCount 是其中的项。
+// InboxPending mirrors the InboxPending schema; InboxPendingItem, InboxPendingAgentCount and InboxPendingTaskCount are
+// its items.
 type InboxPending struct {
 	Questions []InboxPendingItem       `json:"questions"`
 	Unread    []InboxPendingItem       `json:"unread"`
@@ -205,7 +208,8 @@ type InboxPendingTaskCount struct {
 	Unread    int        `json:"unread"`
 }
 
-// FromPending 转换待处理列表，并按发件的常态 Agent 与任务汇总；分组按首次出现（最新的一条）排序。
+// FromPending converts the pending lists and totals them per sending regular Agent and per task; groups are ordered by
+// first appearance (the newest message).
 func FromPending(questions, unread []store.InboxMessage) InboxPending {
 	out := InboxPending{Questions: []InboxPendingItem{}, Unread: []InboxPendingItem{}, ByAgent: []InboxPendingAgentCount{}, ByTask: []InboxPendingTaskCount{}}
 	agents, tasks := map[uuid.UUID]int{}, map[uuid.UUID]int{}
@@ -247,7 +251,7 @@ func FromPending(questions, unread []store.InboxMessage) InboxPending {
 	return out
 }
 
-// InboxThreadSummary 对应 InboxThreadSummary。
+// InboxThreadSummary mirrors the InboxThreadSummary schema.
 type InboxThreadSummary struct {
 	ThreadID     uuid.UUID           `json:"threadId"`
 	Participants []InboxParticipant  `json:"participants"`
@@ -256,14 +260,14 @@ type InboxThreadSummary struct {
 	UpdatedAt    time.Time           `json:"updatedAt"`
 }
 
-// InboxThreadPage 对应 InboxThreadPage。
+// InboxThreadPage mirrors the InboxThreadPage schema.
 type InboxThreadPage struct {
 	Threads     []InboxThreadSummary `json:"threads"`
 	UnreadTotal int                  `json:"unreadTotal"`
 	NextCursor  *string              `json:"nextCursor"`
 }
 
-// FromThreadPage 转换一页线索。
+// FromThreadPage converts a page of threads.
 func FromThreadPage(p store.InboxThreadPage, unreadTotal int) InboxThreadPage {
 	out := InboxThreadPage{Threads: make([]InboxThreadSummary, 0, len(p.Threads)), UnreadTotal: unreadTotal, NextCursor: encodeCursor(p.Next)}
 	for _, t := range p.Threads {
@@ -274,18 +278,18 @@ func FromThreadPage(p store.InboxThreadPage, unreadTotal int) InboxThreadPage {
 	return out
 }
 
-// InboxThread 对应 InboxThread。
+// InboxThread mirrors the InboxThread schema.
 type InboxThread struct {
 	ThreadID uuid.UUID      `json:"threadId"`
 	Messages []InboxMessage `json:"messages"`
 }
 
-// InboxUnreadTotal 对应 InboxUnreadTotal。
+// InboxUnreadTotal mirrors the InboxUnreadTotal schema.
 type InboxUnreadTotal struct {
 	UnreadTotal int `json:"unreadTotal"`
 }
 
-// InboxSendInput 与 InboxReplyInput 是发送与回复的请求体。
+// InboxSendInput and InboxReplyInput are the request bodies for sending and replying.
 type InboxSendInput struct {
 	RunID      *uuid.UUID   `json:"runId,omitempty"`
 	Options    InboxOptions `json:"options,omitempty"`
@@ -307,7 +311,7 @@ type InboxReplyInput struct {
 	WhenBusy     string       `json:"whenBusy"`
 }
 
-// SseInboxSnapshot、SseInboxMessageCreated、SseInboxMessageRead 是收件箱事件流的数据。
+// SseInboxSnapshot, SseInboxMessageCreated and SseInboxMessageRead are the data of the Inbox event stream.
 type SseInboxSnapshot struct {
 	UnreadTotal int `json:"unreadTotal"`
 }
@@ -325,7 +329,7 @@ type SseInboxMessageRead struct {
 	UnreadTotal int              `json:"unreadTotal"`
 }
 
-// ExternalIdentity 对应 ExternalIdentity。
+// ExternalIdentity mirrors the ExternalIdentity schema.
 type ExternalIdentity struct {
 	ID        uuid.UUID              `json:"id"`
 	Name      string                 `json:"name"`
@@ -335,22 +339,22 @@ type ExternalIdentity struct {
 	ManagedBy *store.IdentityManager `json:"managedBy"`
 }
 
-// FromIdentity 转换外部身份。
+// FromIdentity converts an external identity.
 func FromIdentity(x store.ExternalIdentity) ExternalIdentity {
 	return ExternalIdentity{ID: x.ID, Name: x.Name, Address: "@" + x.Name, CreatedAt: x.CreatedAt, DeletedAt: x.DeletedAt, ManagedBy: x.ManagedBy}
 }
 
-// ExternalIdentityList 对应 ExternalIdentityList。
+// ExternalIdentityList mirrors the ExternalIdentityList schema.
 type ExternalIdentityList struct {
 	Identities []ExternalIdentity `json:"identities"`
 }
 
-// ExternalIdentityCreate 是新建外部身份的请求体。
+// ExternalIdentityCreate is the request body for creating an external identity.
 type ExternalIdentityCreate struct {
 	Name string `json:"name"`
 }
 
-// ExternalToken 对应 ExternalToken。
+// ExternalToken mirrors the ExternalToken schema.
 type ExternalToken struct {
 	ID         uuid.UUID  `json:"id"`
 	Prefix     string     `json:"prefix"`
@@ -360,22 +364,22 @@ type ExternalToken struct {
 	LastUsedAt *time.Time `json:"lastUsedAt"`
 }
 
-// FromToken 转换令牌元数据。
+// FromToken converts token metadata.
 func FromToken(t store.ExternalToken) ExternalToken {
 	return ExternalToken{ID: t.ID, Prefix: t.Prefix, CreatedAt: t.CreatedAt, ExpiresAt: t.ExpiresAt, RevokedAt: t.RevokedAt, LastUsedAt: t.LastUsedAt}
 }
 
-// ExternalTokenList 对应 ExternalTokenList。
+// ExternalTokenList mirrors the ExternalTokenList schema.
 type ExternalTokenList struct {
 	Tokens []ExternalToken `json:"tokens"`
 }
 
-// ExternalTokenCreate 是签发令牌的请求体。
+// ExternalTokenCreate is the request body for issuing a token.
 type ExternalTokenCreate struct {
 	ExpiresAt *time.Time `json:"expiresAt"`
 }
 
-// ExternalTokenIssued 对应 ExternalTokenIssued；Secret 只在签发时返回一次。
+// ExternalTokenIssued mirrors the ExternalTokenIssued schema; Secret is returned only once, when the token is issued.
 type ExternalTokenIssued struct {
 	Token  ExternalToken `json:"token"`
 	Secret string        `json:"secret"`
@@ -472,7 +476,7 @@ func (in *InboxReadInput) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// SseInboxMessageCancelled 对应 SseInboxMessageCancelled：发给 Agent 的一条排队消息被人取消。
+// SseInboxMessageCancelled mirrors the SseInboxMessageCancelled schema: someone cancelled a queued message to an Agent.
 type SseInboxMessageCancelled struct {
 	ID          uuid.UUID        `json:"id"`
 	ThreadID    uuid.UUID        `json:"threadId"`

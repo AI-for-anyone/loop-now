@@ -596,12 +596,14 @@ func TestInboxQuestionManagerCommitBoundaryAndNoticeIdempotency(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// 不能有后台写入来抢写连接，否则下面的等待计数不准。
+			// No background writes may compete for the write connection, or the wait count below would be off.
 			if err = e.conv.Stop(ctx); err != nil {
 				t.Fatal(err)
 			}
-			// 回复/通知先在事务外读出路由线索，再等唯一的写连接。测试先占住写连接，等它停在等写连接上，
-			// 再在占着的事务里换 Manager、改项目名并提交：它进入写事务后必须按新的 Manager 与名字路由。
+			// A reply/notice first reads its routing hints outside a transaction, then waits for the only write
+			// connection. The test holds the write connection first and waits until the reply is parked waiting for it,
+			// then, inside the held transaction, changes the Manager, renames the project and commits: once the reply
+			// enters its write transaction it must route by the new Manager and name.
 			held, proceed := make(chan struct{}), make(chan struct{})
 			changed := make(chan error, 1)
 			go func() {

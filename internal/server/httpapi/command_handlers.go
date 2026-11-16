@@ -8,12 +8,12 @@ import (
 	"loop-now/internal/server/agentruntime"
 )
 
-// agentCommand 是接口里的 AgentCommand：对话页 "/" 菜单里的一条命令。
+// agentCommand is AgentCommand in the API: one command in the "/" menu of the conversation page.
 type agentCommand struct {
 	Name              string          `json:"name"`
 	Source            string          `json:"source"`
 	PiSource          string          `json:"piSource"`
-	Description       json.RawMessage `json:"description"` // LocalizedText 或 null：Pi 命令是字符串，平台命令是中英对象
+	Description       json.RawMessage `json:"description"` // LocalizedText or null: a string for Pi commands, a Chinese/English object for platform commands
 	PluginID          *string         `json:"pluginId"`
 	PluginDisplayName json.RawMessage `json:"pluginDisplayName"`
 	Usage             *string         `json:"usage"`
@@ -21,9 +21,11 @@ type agentCommand struct {
 	UnavailableReason *string         `json:"unavailableReason"`
 }
 
-// listAgentCommands 列出对话页 "/" 菜单的命令：先是平台内置命令（按运行时与会话状态标出此刻能不能用），
-// 再是 Pi 命令（plugins/SPEC.md §14）：Agent 上次启动 Pi 时读到的扩展命令、提示模板与技能命令，
-// 按命令来源文件所在的安装目录标出所属插件。不为列命令专门启动 Pi，从没启动过时没有 Pi 命令。
+// listAgentCommands lists the commands of the "/" menu on the conversation page: first the platform's built-in commands
+// (marked as usable right now or not, by runtime and session state), then the Pi commands (plugins/SPEC.md §14): the
+// extension commands, prompt templates and Skill commands Pi reported the last time the Agent started it, each tagged
+// with its plugin based on the install directory of the command's source file. Pi is never started just to list
+// commands; if it has never been started there are no Pi commands.
 func (s *Server) listAgentCommands(w http.ResponseWriter, r *http.Request) {
 	id, err := pathUUID(r, "agentId")
 	if err != nil {
@@ -59,7 +61,8 @@ func (s *Server) listAgentCommands(w http.ResponseWriter, r *http.Request) {
 		}
 		out.Commands = append(out.Commands, item)
 	}
-	// 只有 Pi 的 Agent 有 Pi 命令；换成别的运行时后，之前启动 Pi 时缓存的命令也不再列出。
+	// Only Pi Agents have Pi commands; after switching to another runtime, the commands cached from the earlier Pi
+	// start are no longer listed either.
 	if s.PiCommands != nil && out.Runtime == agentruntime.Pi {
 		cached, err := s.PiCommands(id)
 		if err != nil {

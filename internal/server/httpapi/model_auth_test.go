@@ -79,7 +79,7 @@ func TestModelAuthConsoleContractAndIdentityBoundary(t *testing.T) {
 	}
 	e.expect(200, "POST", routes[1].path, routes[1].body)
 	e.expect(200, "GET", routes[2].path, nil)
-	// 插件提供方登录的回答：经同一控制台边界，返回 ModelAuthState。
+	// Answering a plugin provider login: goes through the same console boundary and returns ModelAuthState.
 	stub.operation.Provider = "fake-oauth"
 	stub.operation.Prompt = &cm.LoginPrompt{ID: "1", Kind: "select", Message: "Pick", Options: []cm.LoginPromptOption{{ID: "device", Label: "Device"}}}
 	answered := decode[modelauth.State](t, e.expect(200, "POST", routes[4].path, routes[4].body))

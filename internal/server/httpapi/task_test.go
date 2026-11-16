@@ -92,14 +92,14 @@ func TestTaskHTTPPermissionsMessagesArtifactAndCancel(t *testing.T) {
 	if len(messages.Messages) != 0 {
 		t.Fatal("unexpected node messages")
 	}
-	// 二进制发布经同一契约校验；成果ID属于任务而非执行目录。
+	// Binary publishing goes through the same contract validation; artifact IDs belong to the task, not the run directory.
 	url := path + "/artifacts?actionId=" + uuid.NewString() + "&nodeRunId=" + node.ID.String() + "&name=result.txt&contentType=text%2Fplain"
 	artifact := decode[taskmodel.Artifact](t, instance.expect(201, "POST", url, []byte("retained")))
 	e.expect(200, "GET", path+"/artifacts/"+artifact.ID.String(), nil)
 	instance.expect(200, "POST", path+"/nodes/"+node.ID.String()+"/submit", map[string]any{"actionId": uuid.New(), "output": map[string]any{}, "edgeId": nil})
 	e.expect(200, "POST", path+"/cancel", map[string]any{"actionId": uuid.New()})
 	instance.expectError(409, "task_conflict", "POST", path+"/nodes/"+node.ID.String()+"/submit", map[string]any{"actionId": uuid.New(), "output": map[string]any{}, "edgeId": nil})
-	// 任务实例Inbox与常态隔离，即使同一个Agent配置也不能代读。
+	// Task instance Inboxes are isolated from the regular one; even the same Agent config cannot read them on its behalf.
 	normalMessage := sendInbox(e.console(), "默认项目/Manager", "常态")
 	taskMessage := sendInbox(e.console(), "默认项目/Manager#"+d.Task.ID.String(), "已结束转Manager")
 	if taskMessage.To.Address == nil || *taskMessage.To.Address != "默认组织/默认项目/Manager" {
@@ -211,7 +211,8 @@ func TestTaskInboxIsSeparateFromNormalAndOtherTask(t *testing.T) {
 	}
 }
 
-// 重连接积压与首轮poll前的新Redis中继并存时，不能让新ID越过PG历史。
+// When a reconnection backlog coexists with a new Redis relay event before the first poll, the new ID must not skip
+// past the PG history.
 func TestTaskSSEResumeBacklogBeforeNewRelay(t *testing.T) {
 	cases := []struct {
 		name                string
@@ -276,7 +277,7 @@ func TestTaskSSEResumeBacklogBeforeNewRelay(t *testing.T) {
 			if response.StatusCode != 200 {
 				t.Fatal("SSE connection failed", response.StatusCode)
 			}
-			// Headers已flush，但首次500ms poll尚未发生。此时插入新事件并中继。
+			// The headers are flushed, but the first 500ms poll has not happened yet. Insert and relay a new event now.
 			mutate(ids[len(ids)-1], 1000)
 			expected, err := e.st.TaskEvents(ctx, taskID, projectID, checkpoint, 1000)
 			if err != nil {
