@@ -75,7 +75,7 @@ describe('formal ConsoleTaskDetail participants -> explicit switch submission', 
   it('a known unavailable reason is named in the UI language', () => {
     const value = detail(); value.larkSwitchParticipants![1].available = false; value.larkSwitchParticipants![1].unavailableReason = 'session_unavailable'
     renderController(value)
-    expect(screen.getByRole('option', { name: /实例的会话不可用/ })).toBeDisabled()
+    expect(screen.getByRole('option', { name: /The instance's session isn't available/ })).toBeDisabled()
     expect(screen.queryByRole('option', { name: /session_unavailable/ })).toBeNull()
   })
   it('commits original route before a single exact body, preserves future runtime and effective revisions', async () => {
@@ -132,13 +132,13 @@ describe('formal ConsoleTaskDetail participants -> explicit switch submission', 
   })
 })
 
-describe('摆放：节点头里只是一个次要按钮，点开才展开表单', () => {
+describe('placement: only a secondary button in the node header, and the form opens when it is clicked', () => {
   const render = (value = detail(), query = '') => {
     setup()
     return renderRoutes([{ path: '/', element: <TaskLarkSwitchController detail={value} node={value.nodes[1]} disabled={false} /> }], '/' + query)
   }
   const toggle = () => screen.getByRole('button', { name: copy.switch, expanded: false })
-  it('默认收起：只有按钮（aria-expanded=false，aria-controls 指向收起的面板），看不到成员选择', () => {
+  it('collapsed by default: only the button (aria-expanded=false, aria-controls pointing to the collapsed panel), with no member choice in sight', () => {
     render()
     const button = toggle()
     expect(button).toBeEnabled()
@@ -146,7 +146,7 @@ describe('摆放：节点头里只是一个次要按钮，点开才展开表单'
     expect(panel).toHaveAttribute('hidden')
     expect(screen.queryByRole('combobox', { name: copy.choosePublisher })).not.toBeInTheDocument()
   })
-  it('点开后在下面展开原来的表单；再点收起', async () => {
+  it('clicking it opens the original form below; clicking again collapses it', async () => {
     render()
     await userEvent.click(toggle())
     const button = screen.getByRole('button', { name: copy.switch, expanded: true })
@@ -155,14 +155,14 @@ describe('摆放：节点头里只是一个次要按钮，点开才展开表单'
     await userEvent.click(button)
     expect(toggle()).toBeInTheDocument()
   })
-  it('能力未就绪：按钮禁用，原因是旁边的一行小字，没有卡片', () => {
+  it('capability not ready: the button is disabled with the reason as one line of small text beside it, no card', () => {
     const value = detail(); delete value.larkSwitchParticipants
     render(value)
     expect(toggle()).toBeDisabled()
     expect(toggle().parentElement).toHaveTextContent(copy.switchUnavailable)
     expect(screen.queryByRole('region', { name: copy.switch })).not.toBeInTheDocument()
   })
-  it('已有原操作 ID：不用点开，原操作和“核对原操作”直接可见', async () => {
+  it('with an original action ID: without opening it, the original action and “Check the original operation” are visible right away', async () => {
     server.use(http.get(endpoint + '/:id', ({ params }) => HttpResponse.json({ ...larkSwitchReceipt('succeeded'), actionId: params.id })))
     const id = '30000000-0000-7000-8000-000000000009'
     render(detail(), `?${taskLarkSwitchLocatorKey(taskId)}=${id}`)

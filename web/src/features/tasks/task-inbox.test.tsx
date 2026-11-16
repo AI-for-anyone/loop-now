@@ -13,7 +13,7 @@ import { baseHandlers } from '@/test/shell'
 import { routes } from '@/app/routes'
 import { tasksPath } from '@/api/tasks'
 
-it('真实Inbox记录SSE直接合并，通知/已读/回复分开，工作输出不冒充Inbox回复且不按正文猜重', async () => {
+it('real Inbox record SSE events merge directly, notification, read and reply stay separate, and work output neither poses as an Inbox reply nor is de-duplicated by its text', async () => {
   const detail = makeTaskDetail(defaultProject.id), node = detail.nodes[1], root = taskInboxRecord()
   let records = [root], reads = 0, readPosts = 0
   server.use(...baseHandlers([]), http.get(projectsUrl, () => HttpResponse.json({ projects: [defaultProject] })),
@@ -23,24 +23,24 @@ it('真实Inbox记录SSE直接合并，通知/已读/回复分开，工作输出
     http.get(apiUrl(`/tasks/${taskId}/nodes/:node/inbox-messages`), ({ params }) => { reads++; return HttpResponse.json({ items: params.node === nodeId ? records : [], nextCursor: null }) }),
     http.post(apiUrl('/inbox/messages/:id/read'), () => { readPosts++; return HttpResponse.json({}) }))
   renderRoutes(routes, `${tasksPath(defaultProject.name)}/${taskId}`)
-  await screen.findByText('真实Inbox输入'); expect(screen.getByText('已接收，Agent 未读')).toBeVisible()
+  await screen.findByText('真实Inbox输入'); expect(screen.getByText('Received; unread by the Agent')).toBeVisible()
   const es = FakeEventSource.instances.find(source => source.url.endsWith(`/tasks/${taskId}/events`))!
   const notified = { ...root, runLinks: [{ runId, role: 'notification' as const }] }
   records = [notified]; const before = reads
   act(() => es.emit('task.inbox.updated', notified, '10'))
   await waitFor(() => expect(document.querySelector('[data-inbox-message-id] details')).not.toBeNull())
-  expect(screen.getByText('已接收，Agent 未读')).toBeVisible(); expect(reads).toBe(before)
+  expect(screen.getByText('Received; unread by the Agent')).toBeVisible(); expect(reads).toBe(before)
   const read = { ...notified, message: { ...root.message, readAt: '2026-10-18T00:01:00Z' }, runLinks: [...notified.runLinks, { runId, role: 'read' as const }] }
-  const reply: Schemas['TaskNodeInboxRecord'] = { ...root, message: { ...root.message, id: '52000000-0000-7000-8000-000000000001', inReplyTo: root.message.id, from: root.message.to, to: root.message.from, text: '相同的实际正文', whenBusy: null, readAt: null }, runLinks: [{ runId, role: 'reply' }] }
+  const reply: Schemas['TaskNodeInboxRecord'] = { ...root, message: { ...root.message, id: '52000000-0000-7000-8000-000000000001', inReplyTo: root.message.id, from: root.message.to, to: root.message.from, text: 'same actual text', whenBusy: null, readAt: null }, runLinks: [{ runId, role: 'reply' }] }
   records = [read, reply]
-  act(() => { es.emit('task.inbox.updated', read, '11'); es.emit('task.inbox.updated', root, '9'); es.emit('task.inbox.updated', reply, '12'); es.emit('message.created', makeTaskMessage(nodeId, '相同的实际正文'), '13') })
-  await screen.findByText('Agent 已读取'); await waitFor(() => expect(screen.getAllByText('相同的实际正文')).toHaveLength(2))
-  expect(screen.getByText('Inbox 回复')).toBeVisible(); expect(screen.getByText('Agent 工作输出')).toBeVisible()
+  act(() => { es.emit('task.inbox.updated', read, '11'); es.emit('task.inbox.updated', root, '9'); es.emit('task.inbox.updated', reply, '12'); es.emit('message.created', makeTaskMessage(nodeId, 'same actual text'), '13') })
+  await screen.findByText('Read by the Agent'); await waitFor(() => expect(screen.getAllByText('same actual text')).toHaveLength(2))
+  expect(screen.getByText('Inbox reply')).toBeVisible(); expect(screen.getByText('Agent work output')).toBeVisible()
   expect(document.querySelectorAll(`[data-inbox-message-id="${root.message.id}"]`)).toHaveLength(1); expect(readPosts).toBe(0)
-  expect(within(screen.getByText('真实Inbox输入').closest<HTMLElement>('[data-inbox-message-id]')!).queryByText('Inbox 回复')).toBeNull()
+  expect(within(screen.getByText('真实Inbox输入').closest<HTMLElement>('[data-inbox-message-id]')!).queryByText('Inbox reply')).toBeNull()
 })
 
-it('Inbox读取请求起点保护已读/关联/未执行，fresh部分页不删除或降级事实', () => {
+it('the Inbox read request start protects read, links and not-run facts, and a fresh partial page neither deletes nor downgrades them', () => {
   const store = taskInboxProjection(createTestQueryClient()), root = taskInboxRecord(), stamp = store.begin()
   store.scope(taskId, nodeId, root.agentId, root.runtimeId)
   const newer = { ...root, message: { ...root.message, readAt: '2026-10-18T00:01:00Z' }, runLinks: [{ runId, role: 'read' as const }], notExecuted: { reason: 'node_changed', at: '2026-10-18T00:02:00Z' } }
@@ -53,7 +53,7 @@ it('Inbox读取请求起点保护已读/关联/未执行，fresh部分页不删�
   expect(store.rows(taskId, oldNodeId)).toEqual([])
 })
 
-it('原节点每页独立cursor，过滤不匹配scope响应，不丢已加载ID', async () => {
+it('each page of the original node has its own cursor, responses with a mismatched scope are filtered out, and loaded IDs are not lost', async () => {
   const root = taskInboxRecord(), node = makeTaskDetail(defaultProject.id).nodes[1]
   function Probe() { const q = useTaskInboxMessages(taskId, nodeId, node.agentId, node.runtimeId); return <><p>{q.data?.items.length}</p><button onClick={() => void q.fetchNextPage()}>more</button></> }
   const cursors: (string | null)[] = []
